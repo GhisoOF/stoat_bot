@@ -1,0 +1,551 @@
+# Stoat Bot — moderação para Stoat/Revolt
+
+Bot de moderação para a plataforma **Stoat** (fork/rebrand do Revolt), escrito em
+Node.js (ESM) com a biblioteca [`stoat.js`](https://www.npmjs.com/package/stoat.js).
+Prefixo padrão: **`&`**.
+
+Funciona em **vários servidores ao mesmo tempo**, cada um com sua própria
+configuração, punições e chat de logs. Tudo é persistido num banco **SQLite**
+embutido (nada de serviço externo), então as configurações e punições
+**sobrevivem a reinícios e atualizações**.
+
+---
+
+## Sumário
+
+- [Recursos](#recursos)
+- [Requisitos](#requisitos)
+- [Permissões necessárias](#permissões-necessárias) ⭐
+- [Instalação rápida (local)](#instalação-rápida-local)
+- [Comandos](#comandos)
+- [AutoMod](#automod)
+- [Política de punição](#política-de-punição)
+- [Chat de logs (`&log`)](#chat-de-logs-log)
+- [Lista global de banimentos (`&banglobal`)](#lista-global-de-banimentos-banglobal)
+- [Assistente `&setup`](#assistente-setup)
+- [Persistência (SQLite)](#persistência-sqlite)
+- [Deploy com Docker / umbrelOS](#deploy-com-docker--umbrelos)
+- [Estrutura do projeto](#estrutura-do-projeto)
+
+---
+
+## Recursos
+
+- **Multi-servidor**: cada servidor tem config, punições e logs independentes.
+- **AutoMod**: anti-spam, anti-mass-spam, anti-invite, anti-mass-mention,
+  anti-caps, anti-link (listas estilo Pi-hole) e detecção de conteúdo proibido
+  por pontuação (0–10).
+- **Punições persistentes**: avisos e silêncios ficam no banco, por
+  `(servidor, usuário)`. Se o usuário **sai e volta**, o silêncio é
+  **reaplicado** automaticamente (não dá mais para escapar saindo e entrando).
+- **Chat de logs configurável** (`&log`): punições, entradas/saídas, mensagens
+  apagadas/editadas, cargos e uso de comandos — cada categoria liga/desliga.
+- **Lista global de banimentos** (`&banglobal`): compartilhada entre servidores,
+  com modos `off` / `avisar` / `banir`.
+- **Moderação manual**: `&kick`, `&ban` (por menção **ou** ID), `&limpar`.
+- **Panorama**: `&config` mostra todas as configurações de uma vez.
+- **Assistente `&setup`**: configuração guiada por reações de emoji (pode **criar o cargo de silêncio** para você).
+- **Embed customizável** (`&embed`): o bot publica uma mensagem embed com título, descrição, cor, rodapé e imagem.
+- **Cargos por reação** (`&reactionrole`): reagir num emoji dá um cargo configurado.
+- **Anti-caracteres**: bloqueia zalgo e caracteres invisíveis. **Anti-repetição** (separado, off por padrão) bloqueia letras repetidas ignorando o `kkkk` brasileiro.
+- **Chat com IA local** (`&chat` ou menção): conversa com um LLM rodando no seu servidor, com busca na internet via SearXNG — sem chaves externas. Requer a stack opcional em `ia-stack/`.
+- **Curadoria de notícias por RSS** (`&rss`): resume feeds a cada hora usando a IA.
+- **Sistema de níveis** (`&game`): XP por mensagem, cargos por nível (posicionados abaixo do mute), leaderboard e setup configurável.
+- **Comando `&sobre`**: informações resumidas do bot.
+- **Ativar/desativar comandos** por servidor (`&comando`).
+- **Criar cargo de silêncio** com um comando (`&cargomudo`) — todas as permissões negadas.
+
+---
+
+## Requisitos
+
+- **Node.js 22+** (o banco usa o módulo embutido `node:sqlite`, disponível no
+  Node 22+). Testado em 22 e 24.
+- Um **token de bot** do seu Stoat/Revolt.
+- Dependências: `stoat.js` e `dotenv` (via `npm install`). Nenhuma dependência
+  nativa — o SQLite já vem dentro do Node.
+
+---
+
+## Permissões necessárias
+
+> ⚠️ **A causa nº 1 de "o comando não funciona" é falta de permissão.** Leia esta seção.
+
+Há **dois** conjuntos de permissões: as que o **bot** precisa ter no servidor
+(para conseguir agir) e as que um **moderador/admin** precisa ter para poder
+**usar** cada comando.
+
+### 1) Permissões do BOT (no cargo do bot)
+
+Dê estas permissões ao **cargo do bot** no seu servidor. Sem elas, o bot até
+recebe o comando, mas falha ao executar a ação.
+
+| Permissão | Para quê | Sem ela… |
+|---|---|---|
+| **ViewChannel** | ver os canais onde atua | não lê nem responde nada |
+| **ReadMessageHistory** | ler mensagens (automod, `&limpar`) | não analisa nem apaga mensagens |
+| **SendMessage** | enviar respostas e avisos | fica mudo |
+| **SendEmbeds** | enviar os cartões de resposta | respostas não aparecem |
+| **React** | reações do assistente `&setup` | o `&setup` não funciona |
+| **KickMembers** | executar `&kick` | kick falha |
+| **BanMembers** | banir (automod, `&ban`, ban global) | bans falham |
+| **ManageMessages** | apagar mensagens (automod, `&limpar`) | não remove mensagens |
+| **AssignRoles** (ou **ManageRole**) | aplicar/remover o **cargo de silêncio** | modo "confirmar" e a reaplicação de silêncio não funcionam |
+
+> **Hierarquia de cargos importa:** o cargo do bot precisa estar **acima** do
+> cargo do usuário-alvo. O bot não consegue kickar/banir/silenciar quem tem um
+> cargo igual ou superior ao dele — nem o dono do servidor.
+
+**Cargo de silêncio:** o modo `confirmar`, a reaplicação de silêncio no rejoin e a
+funcionalidade de **revogar permissões** de um usuário dependem de um **cargo de
+silêncio**. Você pode:
+
+- **Criar automaticamente** com `&cargomudo [nome]` — o bot cria um cargo com
+  **todas as permissões negadas** e já o define como cargo de silêncio; ou
+- criar manualmente um cargo que remova `SendMessage` e informar o ID com
+  `&punicao silencerole <idDoCargo>`; ou
+- deixar o `&setup` criar para você (ele oferece essa opção no modo `confirmar`).
+
+> ⚠️ **Sem um cargo de silêncio configurado, não há como "revogar as permissões"
+> de um usuário** — o silêncio (e a reaplicação ao reentrar) simplesmente não
+> acontece. O bot precisa de **AssignRoles**/**ManageRole** para aplicar e
+> remover esse cargo, e o cargo do bot deve estar **acima** do alvo.
+
+### 2) Permissões do MODERADOR/ADMIN (para usar os comandos)
+
+Cada comando exige uma permissão de quem o **executa**. O **dono do servidor**
+sempre pode usar tudo.
+
+| Permissão exigida | Comandos liberados |
+|---|---|
+| *(nenhuma)* | `&help`, `&sobre` — informações resumidas do bot
+- `&ping`, `&repete`, `&userinfo`, `&warnings` |
+| **ManageMessages** | `&limpar` (`&clear`, `&purge`), `&embed` |
+| **ManageRole** | `&reactionrole` (`&rr`) |
+| **KickMembers** | `&kick` |
+| **BanMembers** | `&ban`, `&banglobal` |
+| **ManagePermissions** | `&setup`, `&config`, `&automod`, `&punicao`, `&log`, `&scam`, `&whitelist`, `&blocklist`, `&clearwarnings`, `&comando`, `&cargomudo` |
+
+> Resumo prático: para **configurar** o bot, um admin precisa de
+> **ManagePermissions**. Para **moderar** (kick/ban/limpar), precisa das
+> permissões de moderação correspondentes. Um "moderador completo" costuma ter
+> `KickMembers` + `BanMembers` + `ManageMessages` + `ManagePermissions`.
+
+---
+
+## Instalação rápida (local)
+
+```bash
+# 1. Instale as dependências
+npm install
+
+# 2. Crie o arquivo .env com o token
+cp .env.example .env
+#   edite .env e cole seu token em BOT_TOKEN=
+
+# 3. Rode (a flag silencia o aviso "experimental" do node:sqlite)
+node --disable-warning=ExperimentalWarning main.js
+```
+
+Na primeira execução o bot cria o banco (`stoat.db`) com os padrões (nada
+punitivo ligado). Se existir um `automod-config.json` antigo, ele é **migrado
+automaticamente** para o banco na primeira subida. Configure pelo chat com
+`&setup` ou pelos comandos abaixo.
+
+---
+
+## Comandos
+
+Prefixo: `&`. Aliases entre parênteses.
+
+### Gerais (qualquer um)
+
+| Comando | Descrição |
+|---|---|
+| `&help [comando]` | lista os comandos, ou detalha um específico |
+| `&ping` | latência do bot |
+| `&userinfo [@usuário]` | informações + **histórico de moderação** (avisos e lista global) |
+| `&warnings [@usuário]` | avisos acumulados neste servidor |
+| `&repete <texto>` | repete o texto |
+| `&sobre` | informações resumidas do bot (recursos, comandos, linhas de código) |
+| `&game` | seu nível e XP · `&game top` para o ranking |
+
+### Moderação (exige permissão)
+
+| Comando | Permissão | Descrição |
+|---|---|---|
+| `&kick @usuário [motivo]` | KickMembers | expulsa (aceita menção **ou** ID) |
+| `&ban @usuário [motivo]` | BanMembers | bane e registra na lista global |
+| `&limpar <n> [@usuário]` | ManageMessages | apaga as últimas `n` mensagens (1–100) |
+| `&clearwarnings @usuário` | ManagePermissions | zera os avisos do usuário |
+
+### Administração (ManagePermissions)
+
+| Comando | Descrição |
+|---|---|
+| `&comando` | lista os comandos e seu estado (ativo/desativado) |
+| `&comando disable <nome>` | desativa um comando neste servidor |
+| `&comando enable <nome>` | reativa um comando |
+| `&cargomudo [nome]` | cria um cargo com **todas as permissões negadas** (no servidor **e em cada canal**) e o define como cargo de silêncio |
+| `&cargomudo canais` | reaplica a negação do cargo de silêncio em todos os canais |
+| `&embed` | publica uma mensagem embed customizável *(ManageMessages)* |
+| `&reactionrole add\|remove\|list` | cargos por reação *(ManageRole)* |
+
+> `help` e `comando` não podem ser desativados (para o admin não se trancar para fora).
+
+### Configuração (ManagePermissions)
+
+| Comando | Descrição |
+|---|---|
+| `&setup` | assistente guiado por emojis (recomendado) |
+| `&config` | mostra **todas** as configurações atuais |
+| `&automod <status\|módulo on/off\|debug on/off>` | liga/desliga módulos |
+| `&punicao <modo\|warns\|silencerole>` | política de punição |
+| `&log <here\|id\|off\|evento on/off>` | chat de logs |
+| `&banglobal <off\|avisar\|banir\|...>` | lista global (exige **BanMembers**) |
+| `&scam <config\|sensitivity\|channel\|test\|...>` | detecção de conteúdo (0–10) |
+| `&whitelist <add\|remove\|list> [convite]` | convites permitidos |
+| `&blocklist <add\|remove\|list\|clear\|reload> [url]` | listas anti-link |
+
+---
+
+## AutoMod
+
+Cada módulo é ligado/desligado **por servidor** com `&automod <módulo> <on|off>`:
+
+- **antispam** — muitas mensagens em pouco tempo
+- **antimassspam** — flood (limite maior, janela maior)
+- **antiinvite** — convites `stt.gg` de outros servidores
+- **antimassmention** — menções em excesso numa mensagem
+- **anticaps** — CAIXA ALTA em excesso
+- **antilink** — domínios de listas estilo Pi-hole (baixadas ao iniciar)
+- **anticaracteres** — bloqueia zalgo (acentos empilhados) e caracteres invisíveis/de controle de direção (coisas que travam front-ends)
+- **antirepeticao** — bloqueia a mesma letra repetida muitas vezes (ex.: `aaaaaaaaaa`). **Desligado por padrão** e, quando ligado, ignora o `k` (a risada BR `kkkkk` não é punida). Configure com `&automod antirepeticao set ignorar <letras>`
+- **antiscam** — detecção de conteúdo proibido por pontuação (ver abaixo)
+
+A detecção de conteúdo dá uma **nota de 0 a 10** (golpe, +18, gore, apologia a
+ilícito e abuso, tudo numa categoria) e age conforme a sensibilidade
+(`baixa`/`media`/`alta`). Configure com `&scam`.
+
+---
+
+## Configuração individual por módulo
+
+Cada módulo do AutoMod pode ser ajustado separadamente:
+
+```
+&automod antispam set mensagens 3      # limite de mensagens
+&automod antispam set tempo 10000      # janela em milissegundos
+&automod anticaps set limiar 80        # % de maiúsculas (aceita 0–1 ou 0–100)
+&automod antimassmention set mencoes 4 # máximo de menções
+&automod anticaracteres set zalgo 0.6   # sensibilidade a zalgo
+&automod antirepeticao on               # bloqueia letra repetida (ex.: aaaa)
+&automod antirepeticao set ignorar k    # mas ignora o kkkk (risada BR)
+```
+
+E cada módulo pode ter uma **punição própria**, independente da global:
+
+```
+&automod antilink punicao apagar       # anti-link só apaga a mensagem
+&automod antiscam punicao banir        # scam bane direto
+&automod antispam punicao herdar       # volta a usar a punição global
+```
+
+Veja os parâmetros e a punição atual de um módulo com `&automod <módulo>` (sem argumentos).
+
+## Política de punição
+
+Definida por servidor com `&punicao`. Vale para **todos** os módulos do automod:
+
+| Modo | O que faz |
+|---|---|
+| `avisar` | só avisa (não remove nem pune) |
+| `apagar` | só remove a mensagem, sem punir o usuário |
+| `confirmar` | remove a mensagem, **silencia** (se houver cargo) e espera um moderador aprovar/liberar |
+| `acumular` | soma avisos; ao atingir o limite, bane |
+| `banir` | ban imediato |
+
+- `&punicao modo <avisar\|confirmar\|acumular\|banir>`
+- `&punicao warns <n>` — quantos avisos até o ban (modo `acumular`)
+- `&punicao silencerole <idDoCargo>` — cargo usado para silenciar
+
+**Avisos e silêncios são persistentes** (banco, por `(servidor, usuário)`).
+Se o usuário sai e volta, o silêncio é reaplicado no evento de entrada.
+
+---
+
+## Embed customizável (`&embed`)
+
+O bot publica uma mensagem embed a partir de campos `chave: valor`:
+
+```
+&embed
+titulo: Regras do servidor
+descricao: Seja legal com todos.
+Pode usar várias linhas.
+cor: #5865F2
+rodape: Equipe de moderação
+canal: 01ABC...        (opcional; padrão = canal atual)
+imagem: https://...    (opcional)
+```
+
+Cores por hex (`#5865F2`) ou nome (`azul`, `verde`, `vermelho`, …). Exige **ManageMessages**.
+
+---
+
+## Cargos por reação (`&reactionrole`)
+
+Reagir num emoji de uma mensagem concede um cargo. Alias: `&rr`. Exige **ManageRole**.
+
+```
+&reactionrole add <idMensagem> <emoji> <idCargo>   # o bot reage; quem clicar ganha o cargo
+&reactionrole remove <idMensagem>                  # remove os vínculos da mensagem
+&reactionrole list                                 # lista os vínculos do servidor
+```
+
+> 💡 Crie a mensagem-painel com `&embed` e depois vincule os emojis a ela com o ID da mensagem.
+> Para pegar o ID: `...` na mensagem → *Copiar ID*. O bot precisa de **React** e **ManageRole**.
+
+---
+
+## Cargo de silêncio e permissões revogadas
+
+O bot "silencia" um usuário aplicando um **cargo de silêncio** — um cargo com
+**todas as permissões negadas**. É isso que efetivamente **revoga as permissões**
+da pessoa (ela não consegue mais enviar mensagens nem interagir).
+
+Formas de configurar:
+
+```
+&cargomudo                 # cria "Silenciado", nega no servidor E em todos os canais, e já usa como cargo de silêncio
+&cargomudo Castigo         # idem, com o nome que você escolher
+&cargomudo canais          # reaplica a negação em todos os canais (útil após criar canais novos)
+&punicao silencerole <id>  # usar um cargo que você já tem
+```
+
+Ao criar o cargo, o bot nega as permissões **no nível do servidor e também em cada
+canal de texto e voz** (categorias são ignoradas). Isso cobre inclusive canais que
+tenham permissões próprias sobrescrevendo as do servidor. Se você **criar canais
+novos** depois, rode `&cargomudo canais` para bloqueá-los também.
+
+No `&setup`, ao escolher o modo **Confirmar**, o assistente pergunta se você quer
+**criar um cargo novo** (🆕), **usar um existente** (📌) ou **pular** (⏭️).
+
+> ⚠️ **Revogar permissões exige o cargo de silêncio.** O modo `confirmar` e a
+> reaplicação de silêncio ao reentrar só funcionam se houver um cargo de silêncio
+> definido. Se não houver, o bot avisa e não consegue silenciar. O bot precisa de
+> **AssignRoles**/**ManageRole**, e o cargo dele deve estar **acima** do alvo.
+
+---
+
+## Chat de logs (`&log`)
+
+Registra eventos num canal do servidor. **Por servidor**, cada categoria
+liga/desliga separadamente.
+
+```
+&log                     # status e canal atual
+&log here                # usa o canal atual
+&log <idDoCanal>         # define por ID (ULID de 26 caracteres)
+&log off                 # desativa
+&log <evento> <on|off>   # liga/desliga uma categoria
+```
+
+Categorias: `punicoes`, `membros`, `mensagens`, `cargos`, `comandos`
+(esta última começa desligada, por ser ruidosa).
+
+> **Nota da plataforma:** o Stoat só emite eventos de mensagem apagada/editada
+> para mensagens que o bot tem em cache (enviadas **depois** de ele subir).
+> Mensagens muito antigas podem não gerar log — é limitação da API, não do bot.
+
+---
+
+## Lista global de banimentos (`&banglobal`)
+
+Lista de banidos **compartilhada entre os servidores** onde o bot está. Cada
+servidor decide o que fazer quando um usuário da lista entra:
+
+| Modo | Comportamento |
+|---|---|
+| `off` | ignora a lista (**padrão**) |
+| `avisar` | alerta os mods (motivo + em quantos servidores) — não age |
+| `banir` | bane automaticamente |
+
+Todo ban (automod e `&ban` manual) alimenta a lista, guardando **servidor de
+origem** e **motivo**. Comandos:
+
+```
+&banglobal                      # status
+&banglobal <off|avisar|banir>   # define o modo
+&banglobal historico <@user|id> # em quais servidores foi banido e por quê
+&banglobal importar             # importa os bans JÁ EXISTENTES deste servidor
+&banglobal esquecer <@user|id>  # remove um usuário da lista
+```
+
+> ⚠️ O modo `banir` age com base em bans de **outros** servidores. Comece com
+> `avisar`, popule a lista com `importar`, observe alguns dias e só então
+> mude para `banir` se confiar na origem.
+
+---
+
+## Assistente `&setup`
+
+Configuração guiada por **reações de emoji** — o jeito mais fácil de começar.
+Pergunta o modo de punição, se acumula avisos, sensibilidade da detecção e o
+canal de avisos. Exige `ManagePermissions` (e o bot precisa de `React`).
+
+---
+
+## Chat com IA local (`&chat`)
+
+Recurso **opcional** que adiciona conversação com um LLM pequeno rodando 100%
+local, com busca na internet via SearXNG self-hosted — **sem nenhuma chave ou
+API externa**.
+
+```
+&chat me explique o que é RAID 5
+&chat quem ganhou a última corrida de F1?     (dispara uma busca)
+@Cobaia qual a capital da Austrália?
+```
+
+O bot decide sozinho se precisa buscar (fatos atuais) ou responde direto. Também
+responde quando **mencionado** (@).
+
+**Limitações:** processa **1 mensagem por vez** e funciona **apenas no servidor
+configurado** (padrão: `01KH9SJYWVD7XAHJ28TP0YP4Q0`; ajuste com a variável
+`CHAT_SERVIDORES`).
+
+> ⚠️ Roda em CPU no seu servidor: respostas levam **segundos** e a qualidade é de
+> **assistente básico** — não um ChatGPT. Ajustado para o Aocwei A7 (Qwen3 0.6B).
+
+### Curadoria de notícias (RSS)
+
+Usando o mesmo LLM local, o bot pode resumir notícias de feeds RSS a cada hora e
+postar num canal à sua escolha:
+
+```
+&rss add https://exemplo.com/feed.xml
+&rss canal aqui
+&rss agora            # testa um ciclo na hora
+```
+
+Junta as novidades num resumo único com as fontes no fim. Restrito ao servidor
+configurado; teto de itens por ciclo para proteger o hardware. Detalhes no guia
+da stack de IA.
+
+**Como ativar:** siga o guia em [`ia-stack/README-ia.md`](ia-stack/README-ia.md)
+— sobe três containers (Ollama + SearXNG + Redis) e configura as variáveis
+`OLLAMA_URL`, `OLLAMA_MODEL` e `SEARXNG_URL` no bot.
+
+---
+
+## Sistema de níveis (`&game`)
+
+XP por mensagem (com cooldown anti-farm). Ao acumular XP, o usuário sobe de
+nível; a cada N níveis, pode ganhar um cargo.
+
+```
+&game                 # seu nível, XP e progresso
+&game rank @usuário    # perfil de outra pessoa
+&game top              # ranking (XP + nível)
+&game setup            # configurar (ou &setup game)
+&game criarcargos      # cria os cargos de nível automaticamente
+&game on | off         # liga/desliga
+```
+
+Configurável via `&game setup`: **multiplicador de dificuldade**, **nível
+máximo**, **intervalo de cargos** (5 ou 10 níveis), XP por mensagem, cooldown e
+canal de anúncio.
+
+**Segurança de hierarquia:** todos os cargos de nível são posicionados **abaixo**
+do cargo de mute (se existir), impedindo que sejam usados para escapar do
+silenciamento.
+
+> ⚠️ **XP por call não é suportado** — a SDK do Stoat não emite eventos de voz.
+> Todo o XP vem de mensagens.
+
+## Persistência (SQLite)
+
+Todo o estado fica em um único arquivo de banco (`stoat.db`), usando o módulo
+**embutido** `node:sqlite` — sem dependências nativas, sem serviço externo.
+
+- `config` — configuração por servidor (+ linhas `__global__` e `__default__`)
+- `punicoes` — avisos e silêncios por `(servidor, usuário)`
+- `bans_globais` — histórico da lista global
+
+No Docker, o banco fica em `/data/stoat.db`, dentro do volume persistente, então
+sobrevive a restart, update e redeploy. O caminho é configurável via `DB_PATH`.
+
+---
+
+## Deploy com Docker / umbrelOS
+
+O bot roda a partir de uma **imagem pré-construída** (recomendado no umbrelOS,
+onde o `npm install` no build costuma falhar). O fluxo:
+
+1. Faça push do código para o GitHub.
+2. O GitHub Actions (`.github/workflows/build.yml`) constrói a imagem
+   **multi-arquitetura** (amd64 + arm64) e publica no GitHub Container Registry.
+3. No Portainer/Dockge, use um compose com `image:` apontando para a imagem
+   (veja `docker-compose.image.yml`) e defina a variável **`BOT_TOKEN`**.
+
+Variáveis de ambiente:
+
+| Variável | Padrão | Descrição |
+|---|---|---|
+| `BOT_TOKEN` | — | **obrigatória** — token do bot |
+| `DB_PATH` | `/data/stoat.db` | caminho do banco SQLite |
+| `CONFIG_PATH` | `/data/automod-config.json` | (legado) migrado uma vez, se existir |
+| `TZ` | — | fuso para os horários nos logs (ex.: `Europe/Madrid`) |
+
+O `Dockerfile` já inclui a flag `--disable-warning=ExperimentalWarning` (silencia
+o aviso do `node:sqlite`) e define `DB_PATH`. O volume `/data` guarda o banco.
+
+> Após atualizar o código: push → aguarde o Actions ficar verde → no Portainer,
+> **Pull and redeploy** para puxar a imagem nova.
+
+---
+
+## Estrutura do projeto
+
+O código é organizado em quatro áreas, sob `modulos/`:
+
+```
+.
+├── main.js                     # bootstrap: cliente, rotas, eventos, auto-recuperação
+├── modulos/
+│   ├── core/                   # base compartilhada
+│   │   ├── db.js               # SQLite (config, punições, bans, RSS, XP)
+│   │   ├── config-store.js     # configuração por servidor + global
+│   │   └── log.js              # chat de logs configurável (&log)
+│   ├── moderacao/              # moderação e automod
+│   │   ├── automod-engine.js   # motor: runAutomod, punição, blocklist, spam
+│   │   ├── automod-comandos.js # configuração do automod
+│   │   ├── scorecard.js        # pontuação 0–10 (anti-scam)
+│   │   ├── caracteres.js       # anti-zalgo/invisíveis e anti-repetição
+│   │   ├── ban-global.js       # lista global de banimentos
+│   │   ├── comandos-admin.js   # &comando, &cargomudo
+│   │   ├── config-comando.js   # &config (panorama)
+│   │   ├── limpar.js           # &limpar
+│   │   ├── embed.js            # &embed
+│   │   ├── reaction-roles.js   # &reactionrole
+│   │   ├── debug-comando.js    # &debug (diagnóstico)
+│   │   ├── setup.js            # assistente &setup (reações)
+│   │   └── geral.js            # help, ping, sobre, userinfo, kick, ban
+│   ├── ai/                     # LLM e RSS
+│   │   ├── chat.js             # chat com IA (&chat)
+│   │   └── rss.js              # curadoria de notícias (&rss)
+│   ├── game/                   # sistema de níveis
+│   │   └── game.js             # XP, cargos por nível, leaderboard (&game)
+│   └── economia/               # reservado para o futuro
+├── ia-stack/                   # stack opcional de IA (Ollama + SearXNG)
+├── Dockerfile
+├── docker-compose.image.yml    # imagem pré-construída (Portainer/umbrelOS)
+└── .github/workflows/build.yml # build multi-arch → GHCR
+```
+
+---
+
+## Licença
+
+MIT (veja `LICENSE`). As dependências (`stoat.js`, `dotenv`) são permissivas.

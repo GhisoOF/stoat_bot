@@ -1,0 +1,28 @@
+# ══════════════════════════════════════════════════════════
+#  SearXNG para a MÁQUINA FORTE (onde o Ollama já roda)
+#
+#  Sobe só o SearXNG + Redis. O Ollama você já tem lá.
+#  Coloque este arquivo numa pasta, com o settings.yml em ./searxng/
+#
+#  Suba com:  docker compose up -d
+# ══════════════════════════════════════════════════════════
+
+services:
+  searxng:
+    image: searxng/searxng:latest
+    container_name: searxng
+    restart: unless-stopped
+    ports:
+      - "8080:8080"          # publica na máquina → acessível pela Tailscale
+    volumes:
+      - ./searxng:/etc/searxng:rw
+    environment:
+      - SEARXNG_BASE_URL=http://localhost:8080/
+    depends_on:
+      - redis
+
+  redis:
+    image: redis:alpine
+    container_name: searxng-redis
+    restart: unless-stopped
+    command: redis-server --save "" --appendonly no

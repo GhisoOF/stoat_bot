@@ -1,0 +1,20 @@
+services:
+  stoat-bot:
+    # Opção A: construir a imagem a partir deste diretório
+    build: .
+    # Opção B: usar uma imagem publicada (comente o "build: ." acima)
+    # image: SEU_USUARIO/stoat-bot:latest
+    container_name: stoat-bot
+    restart: unless-stopped        # volta sozinho após reiniciar o host
+    environment:
+      # ⬇️ O TOKEN VAI AQUI. Em Portainer/Dockge, você pode preencher isto
+      #    pelo campo de variáveis de ambiente da stack (recomendado).
+      - BOT_TOKEN=${BOT_TOKEN}
+      - CONFIG_PATH=/data/automod-config.json
+      - TZ=America/Sao_Paulo
+    volumes:
+      - stoat_data:/data           # VOLUME NOMEADO (não use bind mount no Umbrel)
+    # Sem "ports": o bot só faz conexões de saída ao gateway.
+
+volumes:
+  stoat_data:

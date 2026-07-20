@@ -1,0 +1,28 @@
+services:
+  stoat-bot:
+    image: ghcr.io/ghisoof/stoat_bot:latest   # imagem construída pelo GitHub
+    container_name: stoat-bot
+    restart: unless-stopped
+    environment:
+      - BOT_TOKEN=${BOT_TOKEN}                 # preencha no campo de variáveis do Portainer
+      - CONFIG_PATH=/data/automod-config.json
+      - TZ=America/Sao_Paulo
+      # ── Conexão com a stack de IA (máquina Void, via Tailscale) ──
+      # 100.106.52.86 = IP Tailscale da máquina que roda o Ollama + SearXNG.
+      # (Se o IP mudar, atualize aqui ou nas variáveis do Portainer.)
+      - OLLAMA_URL=http://100.106.52.86:11434
+      - OLLAMA_MODEL=gemma4:12b                # nome exato do modelo baixado (ollama list)
+      - SEARXNG_URL=http://100.106.52.86:8080
+      # ── Ajuste fino da IA (opcional) ──
+      - CHAT_NUM_CTX=16384                     # contexto (entrada+saída); RX9060XT aguenta
+      - CHAT_MAX_TOKENS=4096                   # teto de resposta (aumente p/ código longo)
+      - CHAT_TIMEOUT=300000                    # ms; geração longa demora
+      - CHAT_DEBUG=1                            # 1 = log detalhado no Portainer (diagnóstico)
+      # ── Observabilidade / estabilidade da conexão ──
+      - HEARTBEAT_MS=300000                    # intervalo do log "[VIVO]" (prova de vida)
+      - INATIVIDADE_MS=600000                  # sem eventos > isso (10min) → reinicia sozinho
+    volumes:
+      - stoat_data:/data
+
+volumes:
+  stoat_data:

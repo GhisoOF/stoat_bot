@@ -58,15 +58,13 @@ function extrairAlvo(message, args) {
   return { id, motivo: resto.join(" ").trim() };
 }
 
-export async function cmdHelp(message, args, ctx) {
-  const { sendEmbed, COR, PREFIXO } = ctx;
-  const P = PREFIXO;
-
-  // Ajuda detalhada por comando: &help <comando>
-  const DETALHES = {
+// Referência dos comandos (usada pelo &help e também pela IA como base
+// de conhecimento para assistir na configuração).
+export function construirDetalhes(P) {
+  return {
     setup: {
       uso: `${P}setup`,
-      desc: "Assistente passo a passo: o bot faz perguntas e você responde clicando nos emojis. A forma mais fácil de configurar a proteção.\n\n`&setup` configura a moderação; `&setup game` configura o sistema de níveis.",
+      desc: "Assistentes passo a passo, guiados por reações.\n\n`&setup` — política de punição e automod\n`&setup servidor` — monta a ESTRUTURA do servidor: cargo Staff, categorias Staff/Geral/Principal com canais e permissões, e te guia pelos demais setups. Ideal para servidor recém-criado (mas funciona sempre; não duplica o que já existe)\n`&setup game` — sistema de níveis",
       perm: "ManagePermissions",
     },
     hello: {
@@ -138,8 +136,13 @@ export async function cmdHelp(message, args, ctx) {
     },
     rss: {
       uso: `${P}rss [add|remove|list|canal|agora]`,
-      desc: "Curadoria de notícias por RSS. `add <url>` cadastra um feed, `canal aqui` define onde os resumos saem, `agora` força um ciclo. A cada hora o bot resume as notícias novas dos feeds e posta no canal. Só funciona no servidor configurado.",
+      desc: "Notícias por RSS, sem IA. `add <url>` cadastra um feed, `canal aqui` define o canal de destino, `list` mostra os feeds, `remove <url|n>` remove, `agora` força um ciclo. A cada hora o bot posta os itens novos (título, feed, horário e link) no canal configurado.",
       perm: "ManagePermissions", ex: `${P}rss add https://exemplo.com/feed.xml`,
+    },
+    autorole: {
+      uso: `${P}autorole [set <@cargo>|off]`,
+      desc: "Dá um cargo automaticamente a todo novo membro que entra no servidor. `set` define o cargo, `off` desativa. Útil para dar um cargo de 'Membro' a todos automaticamente.",
+      perm: "ManageRole", ex: `${P}autorole set <@Membro>`,
     },
     sobre: {
       uso: `${P}sobre`,
@@ -148,7 +151,7 @@ export async function cmdHelp(message, args, ctx) {
     },
     chat: {
       uso: `${P}chat <mensagem>`,
-      desc: "Conversa com uma IA (Ollama). Se a pergunta envolver fatos atuais, busca na internet automaticamente. Você também pode mencionar o bot (@).\n\n**Subcomandos:**\n`&chat status` — mostra se o servidor de IA está no ar\n`&chat modelo` — lista os modelos instalados e marca o ativo\n`&chat modelo <número|nome>` — troca o modelo *(ManagePermissions)*\n\nRespostas podem levar alguns segundos; código longo é dividido em partes.",
+      desc: "Conversa com uma IA (Ollama). Busca na internet quando necessário, lembra de você entre conversas, e sabe explicar como configurar este bot.\n\n**Subcomandos:**\n`&chat status` — mostra se o servidor de IA está no ar\n`&chat modelo [número|nome]` — lista/troca o modelo *(ManagePermissions p/ trocar)*\n`&chat esquecer` — apaga o que a IA lembra de você\n\nRespostas podem levar alguns segundos; código longo é dividido em partes.",
       perm: null, ex: `${P}chat modelo qwen3`,
     },
     debug: {
@@ -202,6 +205,14 @@ export async function cmdHelp(message, args, ctx) {
       perm: "BanMembers",
     },
   };
+}
+
+export async function cmdHelp(message, args, ctx) {
+  const { sendEmbed, COR, PREFIXO } = ctx;
+  const P = PREFIXO;
+
+  // Ajuda detalhada por comando: &help <comando>
+  const DETALHES = construirDetalhes(P);
 
   // ── Subtópicos: &help <comando> <subtópico> ──
   const SUBTOPICOS = {
@@ -350,8 +361,10 @@ export async function cmdHelp(message, args, ctx) {
       linhas: [
         `\`${P}embed\` — publica um embed customizável *(ManageMessages)*`,
         `\`${P}reactionrole <add|remove|list>\` — cargos por reação *(ManageRole)*`,
-        `\`${P}rss <add|remove|list|canal|agora>\` — curadoria de notícias`,
+        `\`${P}autorole <set|off>\` — cargo automático a quem entra *(ManageRole)*`,
+        `\`${P}rss <add|remove|list|canal|agora>\` — notícias no canal configurado`,
         `\`${P}chat <mensagem>\` — conversa com a IA local`,
+        `\`${P}chat esquecer\` — apaga o que a IA lembra de você`,
       ],
     },
     game: {

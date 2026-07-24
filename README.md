@@ -49,8 +49,11 @@ embutido (nada de serviço externo), então as configurações e punições
 - **Cargos por reação** (`&reactionrole`): reagir num emoji dá um cargo configurado.
 - **Anti-caracteres**: bloqueia zalgo e caracteres invisíveis. **Anti-repetição** (separado, off por padrão) bloqueia letras repetidas ignorando o `kkkk` brasileiro.
 - **Chat com IA local** (`&chat` ou menção): conversa com um LLM rodando no seu servidor, com busca na internet via SearXNG — sem chaves externas. Requer a stack opcional em `ia-stack/`.
-- **Curadoria de notícias por RSS** (`&rss`): resume feeds a cada hora usando a IA.
+- **Notícias por RSS** (`&rss`): posta os itens novos dos feeds no canal configurado, a cada hora. (Sem IA — lista direta.)
 - **Sistema de níveis** (`&game`): XP por mensagem, cargos por nível (posicionados abaixo do mute), leaderboard e setup configurável.
+- **Autorole** (`&autorole`): dá um cargo automaticamente a quem entra no servidor.
+- **Setup geral do servidor** (`&setup servidor`): monta a estrutura completa de um servidor novo — cargo Staff com permissões de moderação, categorias **Staff** (privada), **Geral** (aberta) e **Principal** (somente leitura+reação), com seus canais de texto e voz — e depois guia você pelos demais setups. Não duplica o que já existe.
+- **IA com memória**: o `&chat` lembra de cada usuário entre conversas e funciona como assistente de configuração do próprio bot (conhece este README). Use `&chat esquecer` para apagar sua memória.
 - **Comando `&sobre`**: informações resumidas do bot.
 - **Ativar/desativar comandos** por servidor (`&comando`).
 - **Criar cargo de silêncio** com um comando (`&cargomudo`) — todas as permissões negadas.
@@ -528,13 +531,16 @@ O código é organizado em quatro áreas, sob `modulos/`:
 │   │   ├── config-comando.js   # &config (panorama)
 │   │   ├── limpar.js           # &limpar
 │   │   ├── embed.js            # &embed
-│   │   ├── reaction-roles.js   # &reactionrole
 │   │   ├── debug-comando.js    # &debug (diagnóstico)
 │   │   ├── setup.js            # assistente &setup (reações)
 │   │   └── geral.js            # help, ping, sobre, userinfo, kick, ban
-│   ├── ai/                     # LLM e RSS
-│   │   ├── chat.js             # chat com IA (&chat)
-│   │   └── rss.js              # curadoria de notícias (&rss)
+│   ├── ai/                     # LLM
+│   │   └── chat.js             # chat com IA (&chat) — memória + assistente de config
+│   ├── ferramentas/            # utilidades de engajamento
+│   │   ├── nivel.js            # XP por mensagem (&game/&nivel)
+│   │   ├── reaction-roles.js   # cargos por reação (&reactionrole)
+│   │   ├── autorole.js         # cargo automático a quem entra (&autorole)
+│   │   └── rss.js              # notícias no canal (&rss) — sem IA
 │   ├── game/                   # sistema de níveis
 │   │   └── game.js             # XP, cargos por nível, leaderboard (&game)
 │   └── economia/               # reservado para o futuro

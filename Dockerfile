@@ -17,6 +17,11 @@ RUN npm install --omit=dev --no-audit --no-fund
 # 2) Código da aplicação
 COPY . .
 
+# 2b) Sanidade: se o repositório estiver incompleto (ex.: modulos/ faltando
+# após uma atualização malfeita), o build FALHA AQUI — em vermelho no GitHub
+# Actions — em vez de gerar um container que morre em crash-loop.
+RUN node scripts/verificar-build.js
+
 # Config persistente FORA do código (montada como volume)
 ENV CONFIG_PATH=/data/automod-config.json \
     DB_PATH=/data/stoat.db \

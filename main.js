@@ -18,11 +18,13 @@ import * as banGlobal from "./modulos/moderacao/ban-global.js";
 import * as limpar    from "./modulos/moderacao/limpar.js";
 import * as admin     from "./modulos/moderacao/comandos-admin.js";
 import * as embedCmd  from "./modulos/moderacao/embed.js";
-import * as reactionRoles from "./modulos/moderacao/reaction-roles.js";
+import * as reactionRoles from "./modulos/ferramentas/reaction-roles.js";
+import * as autorole  from "./modulos/ferramentas/autorole.js";
+import * as setupServidor from "./modulos/moderacao/setup-servidor.js";
 import * as debugCmd  from "./modulos/moderacao/debug-comando.js";
 import * as chat      from "./modulos/ai/chat.js";
-import * as rss       from "./modulos/ai/rss.js";
-import * as game      from "./modulos/game/game.js";
+import * as rss       from "./modulos/ferramentas/rss.js";
+import * as nivel     from "./modulos/ferramentas/nivel.js";
 
 const PREFIXO     = "&";
 const CONFIG_PATH = process.env.CONFIG_PATH || "./automod-config.json";
@@ -155,12 +157,25 @@ async function getServer(message) {
   throw new Error("Servidor não encontrado.");
 }
 
+// ── Super-admin (o dono do bot) ────────────────────────────
+// IDs com controle TOTAL em qualquer servidor, ignorando permissões.
+// Validado pelo authorId real da mensagem (garantido pelo Stoat, não forjável).
+// Configurável por env SUPER_ADMINS (IDs separados por vírgula); o padrão é você.
+const SUPER_ADMINS = new Set(
+  (process.env.SUPER_ADMINS || "01K9JKP85D5EP2ZTEHS8DT797A")
+    .split(",").map((s) => s.trim()).filter(Boolean)
+);
+function ehSuperAdmin(userId) {
+  return !!userId && SUPER_ADMINS.has(userId);
+}
+
 // Verifica se o AUTOR da mensagem tem determinada permissão.
-// Estratégia defensiva: dono do servidor sempre passa; senão tenta
-// o método hasPermission() e, por fim, o bitfield de permissões.
+// Estratégia defensiva: super-admin sempre passa; dono do servidor sempre passa;
+// senão tenta hasPermission() e, por fim, o bitfield de permissões.
 function membroTemPermissao(message, server, permName) {
   try {
     const userId = message.authorId;
+    if (ehSuperAdmin(userId)) return true;              // dono do bot: controle total
     if (server?.ownerId && server.ownerId === userId) return true;
 
     const member = message.member;
@@ -200,7 +215,7 @@ function criarContexto(serverId = null) {
   const config = store.configDoServidor(serverId);
   return {
     client, config, cfgGlobal, COR, PERM, PREFIXO,
-    sendEmbed, getServer, membroTemPermissao,
+    sendEmbed, getServer, membroTemPermissao, ehSuperAdmin,
     salvarConfig: () => store.salvarConfigServidor(serverId),
     salvarGlobal: store.salvarGlobal,
     configDoServidor: store.configDoServidor,
@@ -262,9 +277,10 @@ const rotas = {
   ia:            chat.cmdChat,
   rss:           rss.cmdRss,
   feed:          rss.cmdRss,
-  game:          game.cmdGame,
-  nivel:         game.cmdGame,
-  level:         game.cmdGame,
+  autorole:      autorole.cmdAutorole,
+  game:          nivel.cmdGame,
+  nivel:         nivel.cmdGame,
+  level:         nivel.cmdGame,
 };
 
 // Roteador de setup: `&setup` abre o assistente de moderação; `&setup <área>`
@@ -272,8 +288,11 @@ const rotas = {
 // que o usuário lembre se é `&setup` ou `&game setup`.
 async function cmdSetupRouter(message, args, ctx) {
   const area = args[0]?.toLowerCase();
+  if (area === "servidor" || area === "server" || area === "geral") {
+    return setupServidor.iniciarSetupServidor(message, args.slice(1), ctx);
+  }
   if (area === "game" || area === "nivel" || area === "niveis" || area === "level") {
-    return game.cmdGame(message, ["setup", ...args.slice(1)], ctx);
+    return nivel.cmdGame(message, ["setup", ...args.slice(1)], ctx);
   }
   if (area === "rss" || area === "noticias" || area === "feed") {
     return rss.cmdRss(message, [], ctx);   // mostra o status/ajuda do RSS
@@ -300,7 +319,7 @@ const CANONICO = {
 const COMANDOS_GERENCIAVEIS = [
   "ping", "repete", "userinfo", "kick", "ban", "limpar",
   "warnings", "clearwarnings", "automod", "whitelist", "blocklist",
-  "scam", "punicao", "setup", "log", "banglobal", "embed", "reactionrole", "chat", "rss", "game",
+  "scam", "punicao", "setup", "log", "banglobal", "embed", "reactionrole", "chat", "rss", "game", "autorole",
 ];
 // exportado via ctx para o comando &comando consultar
 estado.CANONICO = CANONICO;
@@ -373,6 +392,9 @@ client.on("messageCreate", async (message) => {
       (meuId && message.content?.includes(`<@${meuId}>`));
     if (mencionado && chat.servidorPermitido(serverId) && !(ctx.config.comandosDesativados ?? []).includes("chat")) {
       const pergunta = (message.content || "").replace(new RegExp(`<@${meuId}>`, "g"), "").trim();
+      // conversa com a IA conta XP (é interação legítima)
+      try { await nivel.aoMensagem(message, { ...ctx, client }); }
+      catch (e) { console.error("[NIVEL]", e.message); }
       await chat.conversar(message, pergunta, ctx);
       return;
     }
@@ -389,8 +411,8 @@ client.on("messageCreate", async (message) => {
   // Game: concede XP por mensagem (só em mensagens normais que sobreviveram
   // ao automod; não conta comandos do bot).
   if (!command) {
-    try { await game.aoMensagem(message, { ...ctx, client }); }
-    catch (e) { console.error("[GAME]", e.message); }
+    try { await nivel.aoMensagem(message, { ...ctx, client }); }
+    catch (e) { console.error("[NIVEL]", e.message); }
   }
 
   if (!command) return;            // mensagem normal, sem prefixo
@@ -436,6 +458,11 @@ client.on("messageCreate", async (message) => {
 
   try {
     await handler(message, args, ctx);
+    // Conversar com a IA via comando (&chat) também conta XP — é interação.
+    if ((CANONICO[command] ?? command) === "chat") {
+      try { await nivel.aoMensagem(message, { ...ctx, client }); }
+      catch (e) { console.error("[NIVEL]", e.message); }
+    }
   } catch (err) {
     console.error(`[CMD:${command}] Erro:`, err);
     await sendEmbed(message.channel, {
@@ -476,6 +503,11 @@ client.on("messageReactionAdd", async (...a) => {
     const sessao = estado.setupSessions.get(msgId);
     const ctxSetup = criarContexto(sessao?.serverId ?? null);
     await setup.handleReaction(msgId, userId, emoji, ctxSetup);
+
+    // 1b) Assistente &setup servidor
+    const sessaoSrv = estado.setupServidorSessions?.get(msgId);
+    const ctxSrv = criarContexto(sessaoSrv?.serverId ?? null);
+    await setupServidor.handleReaction(msgId, userId, emoji, ctxSrv);
 
     // 2) Reaction roles — dá o cargo se a (mensagem, emoji) estiver registrada.
     //    O objeto da mensagem (a0) traz o id; passamos ctx com acesso à config.
@@ -528,8 +560,9 @@ client.on("serverMemberJoin", async (member) => {
 
     // Lista global: pode banir automaticamente (se o servidor optou por isso)
     const banido = await banGlobal.verificarEntrada(member, ctx);
-    if (banido) return;   // já foi banido: não faz sentido reaplicar silêncio
+    if (banido) return;   // já foi banido: não faz sentido dar cargo/reaplicar silêncio
 
+    await autorole.aoEntrar(member, ctx);          // ← cargo automático (se configurado)
     await engine.reaplicarPunicao(member, ctx);   // ← reaplica o silêncio, se houver
   } catch (err) { console.error("[EVENTO][JOIN]", err?.message); }
 });

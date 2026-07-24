@@ -99,6 +99,25 @@ export function abrirBanco(caminho) {
     )
   `);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_gamexp_rank ON game_xp (serverId, xp DESC)`);
+  // (IA) memória persistente por usuário (global — vale em qualquer servidor)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS ia_memoria (
+      userId     TEXT PRIMARY KEY,
+      nome       TEXT,
+      fatos      TEXT,           -- JSON: lista de fatos que a IA aprendeu
+      atualizado TEXT
+    )
+  `);
+  // (IA) histórico curto de conversa por usuário (para continuidade)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS ia_historico (
+      userId    TEXT NOT NULL,
+      papel     TEXT NOT NULL,   -- 'user' ou 'assistant'
+      conteudo  TEXT NOT NULL,
+      momento   TEXT NOT NULL
+    )
+  `);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_iahist_user ON ia_historico (userId, momento)`);
   // (Game) cargos de nível: qual cargo dar em qual nível
   db.exec(`
     CREATE TABLE IF NOT EXISTS game_cargos (
@@ -346,6 +365,48 @@ export function cargoDoNivel(serverId, nivel) {
 
 export function limparCargosNivel(serverId) {
   return db.prepare("DELETE FROM game_cargos WHERE serverId = ?").run(serverId).changes ?? 0;
+}
+
+// ── IA: memória por usuário (global) ───────────────────────
+export function getMemoria(userId) {
+  const r = db.prepare("SELECT nome, fatos, atualizado FROM ia_memoria WHERE userId = ?").get(userId);
+  if (!r) return { nome: null, fatos: [], atualizado: null };
+  let fatos = [];
+  try { fatos = JSON.parse(r.fatos || "[]"); } catch {}
+  return { nome: r.nome, fatos, atualizado: r.atualizado };
+}
+
+export function setMemoria(userId, { nome, fatos }) {
+  const fatosJson = JSON.stringify((fatos || []).slice(-20));  // guarda os últimos 20 fatos
+  db.prepare(`INSERT INTO ia_memoria (userId, nome, fatos, atualizado)
+              VALUES (?, ?, ?, ?)
+              ON CONFLICT(userId) DO UPDATE SET nome = COALESCE(?, nome), fatos = ?, atualizado = ?`)
+    .run(userId, nome ?? null, fatosJson, new Date().toISOString(), nome ?? null, fatosJson, new Date().toISOString());
+}
+
+export function limparMemoria(userId) {
+  return db.prepare("DELETE FROM ia_memoria WHERE userId = ?").run(userId).changes ?? 0;
+}
+
+// ── IA: histórico curto de conversa (continuidade) ─────────
+export function addHistorico(userId, papel, conteudo) {
+  db.prepare("INSERT INTO ia_historico (userId, papel, conteudo, momento) VALUES (?, ?, ?, ?)")
+    .run(userId, papel, conteudo.slice(0, 2000), new Date().toISOString());
+  // mantém só as últimas 12 entradas (6 trocas) por usuário
+  db.prepare(`DELETE FROM ia_historico WHERE userId = ? AND rowid NOT IN (
+    SELECT rowid FROM ia_historico WHERE userId = ? ORDER BY momento DESC LIMIT 12
+  )`).run(userId, userId);
+}
+
+export function getHistorico(userId, limite = 6) {
+  const linhas = db.prepare(
+    "SELECT papel, conteudo FROM ia_historico WHERE userId = ? ORDER BY momento DESC LIMIT ?"
+  ).all(userId, limite * 2);
+  return linhas.reverse();   // cronológico (mais antigo primeiro)
+}
+
+export function limparHistorico(userId) {
+  return db.prepare("DELETE FROM ia_historico WHERE userId = ?").run(userId).changes ?? 0;
 }
 
 // ── Acesso cru ─────────────────────────────────────────────

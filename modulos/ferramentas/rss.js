@@ -9,7 +9,7 @@
 //  &rss agora                 → força um ciclo imediato (teste)
 //
 //  A cada hora, o bot busca os itens NOVOS de cada feed, resume tudo num
-//  texto só (via Ollama) e posta no canal configurado, com as fontes no fim.
+//  Posta os itens novos diretamente no canal configurado (sem IA).
 //
 //  Restrições:
 //   • só funciona no servidor permitido (mesma allowlist do &chat)
@@ -19,7 +19,14 @@
 
 import * as db from "../core/db.js";
 import * as log from "../core/log.js";
-import { ollamaChat, limpar, servidorPermitido, ollamaDisponivel } from "./chat.js";
+
+// Allowlist de servidores para o RSS (mesma lógica do antigo import do chat).
+const RSS_SERVIDORES = (process.env.RSS_SERVIDORES || process.env.CHAT_SERVIDORES || "")
+  .split(",").map((x) => x.trim()).filter(Boolean);
+function servidorPermitido(serverId) {
+  if (!RSS_SERVIDORES.length) return true;   // sem allowlist = liberado
+  return RSS_SERVIDORES.includes(serverId);
+}
 
 const MAX_ITENS   = Number(process.env.RSS_MAX_ITENS || 50);
 const INTERVALO_MS = Number(process.env.RSS_INTERVALO_MS || 3600_000);  // 1 hora
@@ -114,18 +121,8 @@ async function coletarNovos(serverId) {
   return novos;
 }
 
-// ── Resume um lote de notícias num texto só (via Ollama) ───
-async function resumirLote(itens) {
-  const lista = itens
-    .map((it, i) => `[${i + 1}] (${it.feedTitulo}) ${it.titulo}\n${it.resumo}`)
-    .join("\n\n");
-  const sys = "Você é um curador de notícias. Resuma o conjunto de manchetes a seguir em um panorama coeso e conciso em português do Brasil, agrupando temas relacionados. Não invente fatos além do fornecido.";
-  const user = `Notícias novas desta hora:\n\n${lista}\n\nEscreva um resumo curto (algumas frases) destacando o que há de mais relevante.`;
-  const txt = await ollamaChat([{ role: "system", content: sys }, { role: "user", content: user }]);
-  return limpar(txt).trim();
-}
-
 // ── Executa um ciclo de curadoria para um servidor ─────────
+// (Sem IA: apenas posta os itens novos no canal configurado.)
 export async function rodarCiclo(serverId, ctx, { forcado = false } = {}) {
   if (!servidorPermitido(serverId)) return { ok: false, motivo: "servidor não permitido" };
 
@@ -137,22 +134,10 @@ export async function rodarCiclo(serverId, ctx, { forcado = false } = {}) {
     ?? await ctx.client.channels.fetch(canalId).catch(() => null);
   if (!canal) return { ok: false, motivo: "canal inacessível" };
 
-  // Servidor de IA sob demanda: se estiver offline, não tenta resumir.
-  // No ciclo automático, sai em silêncio; no forçado, avisa.
-  const disp = await ollamaDisponivel();
-  if (!disp.ok) {
-    if (forcado) {
-      await canal.sendMessage({ embeds: [{ title: "💤 IA indisponível",
-        description: "O servidor de IA está desligado — não é possível resumir agora. Ligue a máquina do Ollama e tente de novo.",
-        colour: "#FEE75C" }] });
-    }
-    return { ok: false, motivo: "ia offline" };
-  }
-
   let novos = await coletarNovos(serverId);
   if (!novos.length) {
     if (forcado) {
-      await canal.sendMessage({ embeds: [{ title: "📰 Curadoria RSS",
+      await canal.sendMessage({ embeds: [{ title: "📰 RSS",
         description: "Nenhuma notícia nova desde o último ciclo.", colour: "#5865F2" }] });
     }
     return { ok: true, quantidade: 0 };
@@ -162,33 +147,33 @@ export async function rodarCiclo(serverId, ctx, { forcado = false } = {}) {
   let cortados = 0;
   if (novos.length > MAX_ITENS) { cortados = novos.length - MAX_ITENS; novos = novos.slice(0, MAX_ITENS); }
 
-  const resumo = await resumirLote(novos);
-  const agora = new Date().toLocaleString("pt-BR", { timeZone: process.env.TZ || "UTC" });
-
-  // Fontes no final: título • feed • horário • link
-  const fontes = novos.map((it, i) => {
+  // Posta cada notícia como um item (título, feed, horário, link). Sem resumo de IA.
+  // Agrupa em blocos para não exceder o limite do embed.
+  const linhas = novos.map((it) => {
     const quando = it.data ? new Date(it.data).toLocaleString("pt-BR", { timeZone: process.env.TZ || "UTC" }) : "—";
-    return `**[${i + 1}]** ${it.titulo}\n${it.feedTitulo} · ${quando}${it.link ? `\n${it.link}` : ""}`;
-  }).join("\n\n");
+    return `**${it.titulo}**\n${it.feedTitulo} · ${quando}${it.link ? `\n${it.link}` : ""}`;
+  });
 
-  const rodape = cortados ? `\n\n_(+${cortados} notícia(s) além do limite deste ciclo)_` : "";
+  // fragmenta em mensagens de até ~3500 chars
+  const blocos = [];
+  let atual = "";
+  for (const l of linhas) {
+    if ((atual + "\n\n" + l).length > 3500 && atual) { blocos.push(atual); atual = ""; }
+    atual = atual ? atual + "\n\n" + l : l;
+  }
+  if (atual) blocos.push(atual);
 
-  await canal.sendMessage({ embeds: [{
-    title: `📰 Curadoria RSS — ${agora}`,
-    description: (resumo || "_(sem resumo)_") + rodape,
-    colour: "#5865F2",
-  }] });
-  // fontes em mensagem separada (evita estourar o limite do embed)
-  await canal.sendMessage({ embeds: [{
-    title: "🔗 Fontes",
-    description: fontes.slice(0, 3800),
-    colour: "#5865F2",
-  }] });
+  const agora = new Date().toLocaleString("pt-BR", { timeZone: process.env.TZ || "UTC" });
+  for (let i = 0; i < blocos.length; i++) {
+    const titulo = blocos.length > 1 ? `📰 Notícias (${i + 1}/${blocos.length}) — ${agora}` : `📰 Notícias — ${agora}`;
+    const rodape = (i === blocos.length - 1 && cortados) ? `\n\n_(+${cortados} além do limite deste ciclo)_` : "";
+    await canal.sendMessage({ embeds: [{ title: titulo, description: blocos[i] + rodape, colour: "#5865F2" }] });
+  }
 
   try {
     await log.registrar({ ...ctx, serverId, config }, "mensagens", {
-      titulo: "📰 Curadoria RSS publicada",
-      descricao: `Resumo de ${novos.length} notícia(s) postado em <#${canalId}>.`,
+      titulo: "📰 RSS publicado",
+      descricao: `${novos.length} notícia(s) postada(s) em <#${canalId}>.`,
     });
   } catch {}
 

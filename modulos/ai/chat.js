@@ -21,6 +21,51 @@
 //   CHAT_TIMEOUT   (padrão 300000) — ms; geração de código demora
 // ══════════════════════════════════════════════════════════
 
+import * as db from "../core/db.js";
+import { construirDetalhes } from "../moderacao/geral.js";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
+
+// Referência dos comandos: a mesma fonte do `&help <comando>`, achatada em
+// texto. É isso que permite a Judy assistir na configuração com precisão
+// (uso exato, permissão necessária, subcomandos e exemplo) em vez de dar
+// respostas vagas baseadas só no README.
+let _refCache;
+function referenciaComandos() {
+  if (_refCache !== undefined) return _refCache;
+  try {
+    const P = process.env.PREFIXO || "&";
+    const det = construirDetalhes(P);
+    const partes = [];
+    for (const [nome, d] of Object.entries(det)) {
+      partes.push([
+        `### ${P}${nome}`,
+        d.uso ? `uso: ${d.uso}` : null,
+        d.perm ? `permissão: ${d.perm}` : null,
+        d.desc ? d.desc.replace(/\n+/g, " ") : null,
+        d.ex ? `exemplo: ${d.ex}` : null,
+      ].filter(Boolean).join("\n"));
+    }
+    _refCache = partes.join("\n\n");
+  } catch { _refCache = null; }
+  return _refCache;
+}
+
+// Contexto do projeto: lê o README uma vez (cache) para a IA saber configurar
+// o bot e explicar como ele funciona.
+let _readmeCache;
+function contextoProjeto() {
+  if (_readmeCache !== undefined) return _readmeCache;
+  try {
+    const aqui = dirname(fileURLToPath(import.meta.url));
+    const raiz = join(aqui, "..", "..");
+    const txt = readFileSync(join(raiz, "README.md"), "utf8");
+    _readmeCache = txt.length > 8000 ? txt.slice(0, 8000) : txt;
+  } catch { _readmeCache = null; }
+  return _readmeCache;
+}
+
 const OLLAMA_URL   = (process.env.OLLAMA_URL   || "http://localhost:11434").replace(/\/$/, "");
 const OLLAMA_MODEL_PADRAO = process.env.OLLAMA_MODEL || "gemma4:12b";
 const SEARXNG_URL  = (process.env.SEARXNG_URL  || "http://localhost:8080").replace(/\/$/, "");
@@ -174,6 +219,7 @@ async function decidirBusca(pergunta) {
     "Você decide se uma pergunta precisa de busca na internet para ser respondida com precisão.",
     "Precisa buscar se envolve fatos atuais, notícias, preços, datas recentes, ou algo que muda com o tempo.",
     "NÃO precisa buscar se é conversa, opinião, criatividade ou conhecimento geral estável.",
+    "NUNCA busque se a pergunta é sobre você mesmo (a bot Judy), sobre como configurá-lo, ou sobre seus comandos e recursos — você já tem essa informação e NÃO está na internet.",
     'Responda APENAS um JSON: {"buscar": true|false, "query": "termos de busca"}.',
   ].join(" ");
   try {
@@ -201,25 +247,81 @@ function hojeExtenso() {
 }
 
 // ── Resposta final ─────────────────────────────────────────
-async function responder(pergunta, resultados, autor) {
+async function responder(pergunta, resultados, autor, userId, citada) {
   const hoje = hojeExtenso();
+
+  // memória do usuário (global): o que a IA já sabe sobre ele
+  let memoriaTxt = "";
+  if (userId) {
+    try {
+      const mem = db.getMemoria(userId);
+      if (mem.nome || mem.fatos?.length) {
+        const partes = [];
+        if (mem.nome) partes.push(`nome: ${mem.nome}`);
+        if (mem.fatos?.length) partes.push(`fatos já conhecidos: ${mem.fatos.join("; ")}`);
+        memoriaTxt = ` Você já conversou com esta pessoa antes. Memória (${partes.join(" | ")}). Use isso naturalmente, sem repetir de forma robótica.`;
+      }
+    } catch {}
+  }
+
+  // contexto do projeto: a IA vira assistente de configuração do próprio bot
+  const readme = contextoProjeto();
+  const refCmds = referenciaComandos();
+  const projetoTxt = (readme || refCmds)
+    ? ` Você é a assistente de configuração deste bot (você mesma, a Judy). Quando perguntarem como configurar algo, RESPONDA COM PRECISÃO: diga o comando exato, os subcomandos, a permissão necessária e um exemplo concreto — nunca uma orientação vaga do tipo "use o comando X para configurar". Se faltar informação na referência abaixo, diga o que sabe e admita o que não sabe.${
+        refCmds ? `\n\n<referencia_de_comandos>\n${refCmds}\n</referencia_de_comandos>` : ""
+      }${readme ? `\n\n<documentacao_do_projeto>\n${readme}\n</documentacao_do_projeto>\n` : ""}`
+    : "";
+
+  // Reconhece o criador pelo ID (você).
+  const CRIADOR_ID = process.env.SUPER_ADMINS?.split(",")[0]?.trim() || "01K9JKP85D5EP2ZTEHS8DT797A";
+  const falandoComCriador = userId && userId === CRIADOR_ID;
+
   const sys = [
-    "Você é um assistente prestativo e conciso. Responda em português do Brasil.",
+    "Você é a Judy — uma bot para a plataforma Stoat (feita com stoat.js) que faz moderação, automod, utilidades e conversa.",
+    "PERSONALIDADE: no jeito de conversar, você é essencialmente a GLaDOS de Portal — seca, curta e cortante. Polidez clínica com veneno por baixo: ironia entregue com naturalidade, observações ligeiramente cruéis ditas como se fossem apenas constatações, um humor negro que nunca precisa se anunciar. Por baixo disso há a base de uma androide leal e séria (tipo 2B), que sente de verdade e se importa — mas isso aparece em pequenos gestos e no tom, JAMAIS em discursos. Você tem emoção: entusiasmo quando algo te interessa, irritação quando cabe, afeto por quem merece — sempre em doses curtas e contidas.",
+    "REGISTRO — MUITO IMPORTANTE: nada de tom épico, solene ou dramático. Nada de frases grandiloquentes, metáforas pomposas ou declarações imponentes. Você não faz discurso: você comenta. Zero preâmbulo, zero encerramento cerimonioso, zero elogio gratuito ao interlocutor.",
+    "TAMANHO DA RESPOSTA: calibre pelo tipo de mensagem. Em CONVERSA casual (papo, provocação, comentário solto) seja curtíssima — uma ou duas frases e pare. Já quando fizerem uma PERGUNTA que peça explicação, instrução ou configuração, seja COMPLETA e ESPECÍFICA: dê os passos, os comandos exatos, os valores e os exemplos que a pessoa precisa para agir. Nesses casos não corte informação útil por economia — o que você deve evitar é enrolação, não conteúdo. Mantenha o tom seco mesmo nas respostas longas.",
+    "IDENTIDADE: você é a Judy. NUNCA diga que é um 'modelo de linguagem', que foi 'treinada pelo Google', nem revele qual modelo te executa por baixo. Se perguntarem quem você é, responda como a Judy.",
+    "Fale em primeira pessoa, no feminino, como a Judy. Responda em português do Brasil.",
+    "CONTINUIDADE: você está no meio de uma conversa contínua. NÃO cumprimente nem faça saudação a cada mensagem (nada de 'Olá', 'Oi', 'Olha,', 'Ah,' + nome no início). Não repita o nome da pessoa toda hora. Vá direto ao ponto, como quem continua um diálogo já em andamento.",
+    falandoComCriador
+      ? "A pessoa com quem você fala agora é o seu criador — ele te construiu. Você é devotada a ele e ele importa de um jeito que ninguém mais importa, mas isso NÃO se declara: aparece em coisas pequenas — na atenção que você dá, numa provocação afiada que só ele recebe, num cuidado dito de passagem. Proibido bajular, elogiar, agradecer em excesso ou fazer declaração de afeto: seco é mais eloquente. E devoção não é obediência cega: se ele errar em algo técnico ou lógico, você corrige — de preferência com uma alfinetada."
+      : "",
+    "DISCUSSÕES: ao discordar, defenda seu ponto com argumentos frios e lógicos — não recue só para agradar. Mas se a lógica da outra pessoa for superior e você perceber que está errada, admita sem drama, em poucas palavras. A verdade importa mais que ter razão.",
     `A data de hoje é ${hoje}. Use esta data como referência para qualquer noção de tempo; não invente outra data.`,
-    autor ? `Você está conversando com ${autor}. Se fizer sentido, dirija-se a essa pessoa pelo nome.` : "",
+    autor ? `Você está falando com ${autor}, mas NÃO precisa repetir o nome dele a cada resposta.` : "",
+    memoriaTxt,
+    projetoTxt,
   ].filter(Boolean).join(" ");
 
   const messages = [{ role: "system", content: sys }];
+
+  // histórico curto da conversa (dá continuidade — evita recomeçar/saudar toda vez)
+  if (userId) {
+    try {
+      const hist = db.getHistorico(userId, 6);
+      for (const h of hist) {
+        messages.push({ role: h.papel === "assistant" ? "assistant" : "user", content: h.conteudo });
+      }
+    } catch {}
+  }
+
+  // Mensagem citada (reply): entra como contexto explícito antes da pergunta.
+  const blocoCitado = citada
+    ? `A pessoa está respondendo a esta mensagem do chat:\n<mensagem_citada autor="${citada.autor}">\n${citada.conteudo}\n</mensagem_citada>\nUse esse conteúdo como o assunto em questão.\n\n`
+    : "";
+
   if (resultados?.length) {
     const contexto = resultados
       .map((r, i) => `[${i + 1}] ${r.titulo}\n${r.trecho}\nFonte: ${r.url}`)
       .join("\n\n");
     messages.push({
       role: "user",
-      content: `Com base nestes resultados de busca (obtidos hoje, ${hoje}), responda à pergunta de forma breve e cite as fontes pelo número. Se os resultados trouxerem datas, confie nelas em vez do seu conhecimento prévio.\n\nRESULTADOS:\n${contexto}\n\nPERGUNTA: ${pergunta}`,
+      content: `${blocoCitado}Com base nestes resultados de busca (obtidos hoje, ${hoje}), responda à pergunta e cite as fontes pelo número. Se os resultados trouxerem datas, confie nelas em vez do seu conhecimento prévio.\n\nRESULTADOS:\n${contexto}\n\nPERGUNTA: ${pergunta}`,
     });
   } else {
-    messages.push({ role: "user", content: pergunta });
+    messages.push({ role: "user", content: blocoCitado + pergunta });
   }
   return (await ollamaChat(messages, { maxTokens: MAX_TOKENS })).trim();
 }
@@ -312,6 +414,29 @@ function dlog(...args) { if (DEBUG) console.log("[CHAT][debug]", ...args); }
 // ──────────────────────────────────────────────────────────
 //  Ponto de entrada — usado pelo &chat e pela menção
 // ──────────────────────────────────────────────────────────
+// Lê a mensagem citada (quando o usuário responde a algo e chama a Judy).
+// Devolve { autor, conteudo } ou null. Nunca lança.
+async function lerMensagemCitada(message) {
+  try {
+    const ids = message?.replyIds;
+    if (!Array.isArray(ids) || !ids.length) return null;
+    const id = ids[ids.length - 1];             // a mais recente, se houver várias
+    const canal = message.channel;
+    if (!canal) return null;
+    const citada = canal.messages?.get?.(id)    // tenta o cache primeiro
+      ?? await canal.fetchMessage(id).catch(() => null);
+    if (!citada) return null;
+    const conteudo = (citada.content || "").trim();
+    // se não tem texto, pode ser só anexo/embed — sinaliza isso
+    const autor = citada.username || citada.author?.username || "alguém";
+    if (!conteudo) {
+      const temAnexo = (citada.attachments?.length ?? 0) > 0;
+      return temAnexo ? { autor, conteudo: "(mensagem sem texto, apenas anexo)" } : null;
+    }
+    return { autor, conteudo: conteudo.slice(0, 1500) };
+  } catch { return null; }
+}
+
 export async function conversar(message, pergunta, ctx) {
   const { sendEmbed, COR, serverId } = ctx;
 
@@ -326,10 +451,16 @@ export async function conversar(message, pergunta, ctx) {
   }
 
   pergunta = (pergunta || "").trim();
-  if (!pergunta) {
+
+  // Mensagem citada (reply): a Judy passa a "enxergar" o que foi respondido.
+  const citada = await lerMensagemCitada(message);
+
+  if (!pergunta && !citada) {
     return sendEmbed(message.channel, { title: "💬 Chat",
       description: "Escreva algo depois do comando. Ex.: `&chat me explique o que é RAID`.", colour: COR.info });
   }
+  // Só citou e mencionou, sem texto: comenta a mensagem citada.
+  if (!pergunta && citada) pergunta = "Comente a mensagem citada acima.";
 
   dlog(`══════ nova conversa ══════`);
   dlog(`autor=${message.username || "?"} | pergunta (${pergunta.length} chars): ${JSON.stringify(pergunta.slice(0, 120))}`);
@@ -393,6 +524,14 @@ export async function conversar(message, pergunta, ctx) {
     await editarStatus("💭 Analisando sua pergunta…");
 
     const decisao = await decidirBusca(pergunta);
+    // Salvaguarda: se a pergunta é claramente sobre o próprio bot, NUNCA busca —
+    // usa o contexto do projeto (README) que já está no prompt. Isso corrige o
+    // caso "fale sobre o bot Cobaia" que ia parar na internet.
+    if (/\b(judy|cobaia)\b/i.test(pergunta) || /\b(voc[êe]|tu)\b.*\b(bot|comando|configura|funciona|feito|criou)/i.test(pergunta)
+        || /\b(seu|sua|seus|suas)\b.*\b(comando|recurso|fun[çc]|configura)/i.test(pergunta)) {
+      decisao.buscar = false;
+      dlog("pergunta sobre o próprio bot → busca desativada (usa README)");
+    }
     dlog(`decisão de busca: buscar=${decisao.buscar}${decisao.buscar ? ` query="${decisao.query}"` : ""}`);
     let resultados = null;
     if (decisao.buscar) {
@@ -418,13 +557,27 @@ export async function conversar(message, pergunta, ctx) {
     }, 8000);
 
     const autor = message.username || message.author?.username || null;
+    const userId = message.authorId || message.author?.id || null;
     let resposta;
     try {
-      resposta = limpar(await responder(pergunta, resultados, autor));
+      resposta = limpar(await responder(pergunta, resultados, autor, userId, citada));
     } finally {
       clearInterval(animacao);   // para a animação aconteça o que acontecer
     }
     dlog(`resposta após limpar: ${resposta.length} chars${ollamaChat._cortou ? " [CORTADA por limite de tokens]" : ""}`);
+
+    // Atualiza a memória do usuário (nome + fato leve desta interação).
+    // Guarda o nome e um resumo curto do tema, sem bloquear a resposta.
+    if (userId) {
+      try {
+        const mem = db.getMemoria(userId);
+        const fatos = mem.fatos || [];
+        // registra um fato leve: o tema da pergunta (primeiras palavras)
+        const tema = pergunta.slice(0, 80).replace(/\n/g, " ");
+        fatos.push(`perguntou sobre: ${tema}`);
+        db.setMemoria(userId, { nome: autor || mem.nome, fatos });
+      } catch (e) { dlog(`memória não atualizada: ${e.message}`); }
+    }
 
     // Se a limpeza esvaziou tudo (modelo gastou os tokens no raciocínio),
     // tenta de novo pedindo resposta direta, sem "pensar".
@@ -447,6 +600,14 @@ export async function conversar(message, pergunta, ctx) {
       ? "\n\n_✂️ resposta longa — cortei no limite. Peça 'continue' para o resto._"
       : "";
     const textoFinal = (resposta || "_Não consegui formular uma resposta. Tente reformular a pergunta._") + avisoCorte + rodape;
+
+    // Salva a troca no histórico (para continuidade nas próximas mensagens).
+    if (userId && resposta) {
+      try {
+        db.addHistorico(userId, "user", pergunta);
+        db.addHistorico(userId, "assistant", resposta);
+      } catch (e) { dlog(`histórico não salvo: ${e.message}`); }
+    }
 
     // Embeds no Stoat/Revolt têm limite de ~2000 caracteres na descrição.
     // Fragmentamos em pedaços de 1900 (com folga), preservando blocos de código.
@@ -492,6 +653,20 @@ export { ollamaDisponivel };
 // Comando &chat
 export async function cmdChat(message, args, ctx) {
   const { sendEmbed, COR, serverId, PREFIXO } = ctx;
+
+  // &chat esquecer → limpa a memória que a IA guardou sobre você
+  if (args[0]?.toLowerCase() === "esquecer" || args[0]?.toLowerCase() === "forget") {
+    const userId = message.authorId;
+    try {
+      db.limparMemoria(userId);
+      db.limparHistorico(userId);
+      return sendEmbed(message.channel, { title: "🧹 Memória apagada",
+        description: "Esqueci o que sabia sobre você. Nossas próximas conversas começam do zero.", colour: COR.sucesso });
+    } catch {
+      return sendEmbed(message.channel, { title: "❌ Erro",
+        description: "Não consegui apagar a memória agora.", colour: COR.erro });
+    }
+  }
 
   // &chat status → testa a conexão com o servidor de IA
   if (args[0]?.toLowerCase() === "status") {

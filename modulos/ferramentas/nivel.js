@@ -126,23 +126,28 @@ async function aplicarCargoNivel(server, member, serverId, nivel, config) {
 export async function aoMensagem(message, ctx) {
   const { config, serverId } = ctx;
   const g = config.game;
-  if (!g?.enabled) return;
-  if (!serverId) return;
+  const DBG = process.env.XP_DEBUG === "1";
+  if (!g?.enabled) { if (DBG) console.log(`[XP] pulado: sistema desligado (serverId=${serverId})`); return; }
+  if (!serverId) { if (DBG) console.log("[XP] pulado: serverId nulo"); return; }
 
   const userId = message.authorId;
-  if (!userId) return;
+  if (!userId) { if (DBG) console.log("[XP] pulado: authorId nulo"); return; }
 
   const agora = Date.now();
   const atual = db.getXp(serverId, userId);
 
   // cooldown: só ganha XP a cada g.cooldownMs
-  if (atual.ultimaMsg && agora - new Date(atual.ultimaMsg).getTime() < g.cooldownMs) return;
+  if (atual.ultimaMsg && agora - new Date(atual.ultimaMsg).getTime() < g.cooldownMs) {
+    if (DBG) console.log(`[XP] pulado: cooldown (faltam ${Math.round((g.cooldownMs - (agora - new Date(atual.ultimaMsg).getTime()))/1000)}s) user=${userId}`);
+    return;
+  }
 
   const ganho = Math.floor(g.xpMin + Math.random() * (g.xpMax - g.xpMin + 1));
   const novoXp = atual.xp + ganho;
   const novoNivel = nivelPorXp(novoXp, g.multiplicador, g.nivelMaximo);
 
   db.setXp(serverId, userId, novoXp, novoNivel, new Date(agora).toISOString());
+  if (DBG) console.log(`[XP] +${ganho} para ${userId} → ${novoXp} XP (nível ${novoNivel}) em ${serverId}`);
 
   // subiu de nível?
   if (novoNivel > atual.nivel) {
@@ -180,9 +185,17 @@ export async function cmdGame(message, args, ctx) {
   const g = config.game;
   const sub = args[0]?.toLowerCase();
 
-  // ── top / leaderboard ──
-  if (sub === "top" || sub === "rank" && !args[1] && false) { /* rank tratado abaixo */ }
+  // Aviso: se o sistema está desligado, quase nada faz sentido. Avisa (exceto
+  // para 'on', 'setup' e 'criarcargos', que são justamente para configurá-lo).
+  if (!g?.enabled && !["on", "setup", "config", "configurar", "criarcargos", "criar"].includes(sub)) {
+    return sendEmbed(message.channel, {
+      title: "💤 Sistema de níveis desligado",
+      description: `O sistema de XP está **desativado** neste servidor, por isso ninguém está ganhando XP.\n\nPara ativar: \`${PREFIXO}game on\` *(precisa de ManagePermissions)*.\nDepois, configure com \`${PREFIXO}game setup\` se quiser.`,
+      colour: COR.aviso,
+    });
+  }
 
+  // ── top / leaderboard ──
   if (sub === "top" || sub === "leaderboard" || sub === "ranking") {
     const top = db.topXp(serverId, 10);
     if (!top.length)

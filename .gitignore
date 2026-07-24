@@ -4,4 +4,3 @@ node_modules/
 !.env.example
 automod-config.json
 npm-debug.log*
-*.zip

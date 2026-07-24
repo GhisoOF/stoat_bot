@@ -17,7 +17,10 @@ services:
       - CHAT_NUM_CTX=16384                     # contexto (entrada+saída); RX9060XT aguenta
       - CHAT_MAX_TOKENS=4096                   # teto de resposta (aumente p/ código longo)
       - CHAT_TIMEOUT=300000                    # ms; geração longa demora
-      - CHAT_DEBUG=1                            # 1 = log detalhado no Portainer (diagnóstico)
+      - CHAT_DEBUG=1
+      - XP_DEBUG=1
+      # ── Super-admin (dono do bot, controle total em qualquer servidor) ──
+      - SUPER_ADMINS=01K9JKP85D5EP2ZTEHS8DT797A                            # 1 = log detalhado no Portainer (diagnóstico)
       # ── Observabilidade / estabilidade da conexão ──
       - HEARTBEAT_MS=300000                    # intervalo do log "[VIVO]" (prova de vida)
       - INATIVIDADE_MS=600000                  # sem eventos > isso (10min) → reinicia sozinho

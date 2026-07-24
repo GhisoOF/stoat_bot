@@ -44,6 +44,7 @@ export const padraoServidor = {
   comandosDesativados: [],
   // ── Curadoria RSS ──
   rss: { canalId: null },
+  autorole: { roleId: null },   // cargo dado automaticamente a quem entra
   // ── Game (sistema de níveis por XP de mensagem) ──
   game: {
     enabled: false,
@@ -84,6 +85,7 @@ function mesclarServidor(salvo, tpl) {
     banGlobal: { ...tpl.banGlobal, ...(salvo.banGlobal ?? {}) },
     comandosDesativados: [...(salvo.comandosDesativados ?? tpl.comandosDesativados)],
     rss: { ...tpl.rss, ...(salvo.rss ?? {}) },
+    autorole: { ...tpl.autorole, ...(salvo.autorole ?? {}) },
     game: { ...tpl.game, ...(salvo.game ?? {}) },
     automod: {
       ...am, ...s,

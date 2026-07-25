@@ -415,6 +415,13 @@ client.on("messageCreate", async (message) => {
     catch (e) { console.error("[NIVEL]", e.message); }
   }
 
+  // Conversa livre: a Judy pode entrar em canais configurados quando o assunto
+  // vale (decisão dela). Se chegou aqui, a mensagem não é comando nem menção
+  // (menção já teria retornado acima).
+  if (!command) {
+    chat.talvezResponderLivre(message, { ...ctx, client }).catch(() => {});
+  }
+
   if (!command) return;            // mensagem normal, sem prefixo
 
   if (!handler) {                  // tinha prefixo, mas o comando não existe

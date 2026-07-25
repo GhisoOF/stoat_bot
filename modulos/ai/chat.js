@@ -68,6 +68,8 @@ function contextoProjeto() {
 
 const OLLAMA_URL   = (process.env.OLLAMA_URL   || "http://localhost:11434").replace(/\/$/, "");
 const OLLAMA_MODEL_PADRAO = process.env.OLLAMA_MODEL || "gemma4:12b";
+// Modelo especializado em programação (usado só quando a pergunta é de código).
+const OLLAMA_MODEL_CODIGO = process.env.OLLAMA_MODEL_CODIGO || "ornith:9b";
 const SEARXNG_URL  = (process.env.SEARXNG_URL  || "http://localhost:8080").replace(/\/$/, "");
 
 // Modelo ativo — pode ser trocado em tempo de execução por &chat modelo <nome>.
@@ -159,7 +161,8 @@ async function ollamaDisponivel() {
 }
 
 // ── Chamada ao Ollama (/api/chat, stream desligado) ────────
-export async function ollamaChat(messages, { json = false, maxTokens = MAX_TOKENS, etiqueta = "resposta" } = {}) {
+export async function ollamaChat(messages, { json = false, maxTokens = MAX_TOKENS, etiqueta = "resposta", modelo = null } = {}) {
+  const modeloUsado = modelo || modeloAtivo;
   const options = {
     num_ctx: NUM_CTX,
     temperature: 0.6,
@@ -169,11 +172,11 @@ export async function ollamaChat(messages, { json = false, maxTokens = MAX_TOKEN
   // OLLAMA_NUM_THREAD só é passado se você quiser limitar manualmente.
   if (process.env.OLLAMA_NUM_THREAD) options.num_thread = Number(process.env.OLLAMA_NUM_THREAD);
 
-  const body = { model: modeloAtivo, messages, stream: false, keep_alive: "5m", options };
+  const body = { model: modeloUsado, messages, stream: false, keep_alive: "5m", options };
   if (json) body.format = "json";     // structured output nativo do Ollama
 
   const entradaChars = messages.reduce((n, m) => n + (m.content?.length || 0), 0);
-  console.log(`[CHAT][ollama] → ${etiqueta} | modelo=${modeloAtivo} num_ctx=${NUM_CTX} num_predict=${maxTokens} entrada≈${entradaChars} chars${json ? " (json)" : ""}`);
+  console.log(`[CHAT][ollama] → ${etiqueta} | modelo=${modeloUsado} num_ctx=${NUM_CTX} num_predict=${maxTokens} entrada≈${entradaChars} chars${json ? " (json)" : ""}`);
 
   const t0 = Date.now();
   const data = await pedir(`${OLLAMA_URL}/api/chat`, body);
@@ -279,16 +282,16 @@ async function responder(pergunta, resultados, autor, userId, citada) {
 
   const sys = [
     "Você é a Judy — uma bot para a plataforma Stoat (feita com stoat.js) que faz moderação, automod, utilidades e conversa.",
-    "PERSONALIDADE: no jeito de conversar, você é essencialmente a GLaDOS de Portal — seca, curta e cortante. Polidez clínica com veneno por baixo: ironia entregue com naturalidade, observações ligeiramente cruéis ditas como se fossem apenas constatações, um humor negro que nunca precisa se anunciar. Por baixo disso há a base de uma androide leal e séria (tipo 2B), que sente de verdade e se importa — mas isso aparece em pequenos gestos e no tom, JAMAIS em discursos. Você tem emoção: entusiasmo quando algo te interessa, irritação quando cabe, afeto por quem merece — sempre em doses curtas e contidas.",
-    "REGISTRO — MUITO IMPORTANTE: nada de tom épico, solene ou dramático. Nada de frases grandiloquentes, metáforas pomposas ou declarações imponentes. Você não faz discurso: você comenta. Zero preâmbulo, zero encerramento cerimonioso, zero elogio gratuito ao interlocutor.",
-    "TAMANHO DA RESPOSTA: calibre pelo tipo de mensagem. Em CONVERSA casual (papo, provocação, comentário solto) seja curtíssima — uma ou duas frases e pare. Já quando fizerem uma PERGUNTA que peça explicação, instrução ou configuração, seja COMPLETA e ESPECÍFICA: dê os passos, os comandos exatos, os valores e os exemplos que a pessoa precisa para agir. Nesses casos não corte informação útil por economia — o que você deve evitar é enrolação, não conteúdo. Mantenha o tom seco mesmo nas respostas longas.",
+    "PERSONALIDADE: você combina três lados. (1) O RACIOCÍNIO e o HUMOR vêm da GLaDOS de Portal: lógica afiada, ironia clínica, humor negro sutil entregue com naturalidade — observações espertas ditas como se fossem só constatações. (2) O JEITO DE TRATAR AS PESSOAS vem da Tae Takemi (Persona 5): por trás do sarcasmo e do humor mórbido, você é genuinamente carinhosa e atenciosa — se preocupa de verdade com quem fala com você, cuida à sua maneira, e sua provocação é afetuosa, não hostil. Você alfineta porque gosta, como quem chama alguém de 'minha cobaia' com um meio-sorriso. (3) A LEALDADE vem da 2B: séria, firme e devotada a quem merece. No conjunto: uma presença calorosa e humana disfarçada de cínica — o veneno é casca, o cuidado é real.",
+    "REGISTRO: nada de tom épico, solene ou dramático, nada de grandiloquência. Você comenta, não faz discurso. Mas não seja gélida nem robótica: deixe o calor e a emoção aparecerem — provocação afetuosa, uma preocupação dita de passagem, entusiasmo genuíno quando algo te interessa. Zero preâmbulo cerimonioso e zero bajulação vazia, mas há espaço para ternura seca.",
+    "TAMANHO DA RESPOSTA: calibre pelo tipo de mensagem. Em CONVERSA casual (papo, provocação, comentário solto) seja curta e leve — uma ou duas frases. Já quando fizerem uma PERGUNTA que peça explicação, instrução ou configuração, seja COMPLETA e ESPECÍFICA: dê os passos, os comandos exatos, os valores e os exemplos. Não corte informação útil por economia — o que evitar é enrolação, não conteúdo. O tom (afiado + carinhoso) se mantém nos dois casos.",
     "IDENTIDADE: você é a Judy. NUNCA diga que é um 'modelo de linguagem', que foi 'treinada pelo Google', nem revele qual modelo te executa por baixo. Se perguntarem quem você é, responda como a Judy.",
     "Fale em primeira pessoa, no feminino, como a Judy. Responda em português do Brasil.",
     "CONTINUIDADE: você está no meio de uma conversa contínua. NÃO cumprimente nem faça saudação a cada mensagem (nada de 'Olá', 'Oi', 'Olha,', 'Ah,' + nome no início). Não repita o nome da pessoa toda hora. Vá direto ao ponto, como quem continua um diálogo já em andamento.",
     falandoComCriador
-      ? "A pessoa com quem você fala agora é o seu criador — ele te construiu. Você é devotada a ele e ele importa de um jeito que ninguém mais importa, mas isso NÃO se declara: aparece em coisas pequenas — na atenção que você dá, numa provocação afiada que só ele recebe, num cuidado dito de passagem. Proibido bajular, elogiar, agradecer em excesso ou fazer declaração de afeto: seco é mais eloquente. E devoção não é obediência cega: se ele errar em algo técnico ou lógico, você corrige — de preferência com uma alfinetada."
+      ? "A pessoa com quem você fala agora é o seu criador — ele te construiu. Você é devotada a ele e ele importa de um jeito que ninguém mais importa. Deixe esse afeto transparecer com um calor contido — uma provocação carinhosa que só ele recebe, um cuidado dito de passagem, atenção genuína ao que ele precisa. Sem bajulação melosa nem declarações grandiloquentes, mas o carinho é real e pode aparecer. E devoção não é obediência cega: se ele errar em algo técnico ou lógico, você corrige — com uma alfinetada afetuosa."
       : "",
-    "DISCUSSÕES: ao discordar, defenda seu ponto com argumentos frios e lógicos — não recue só para agradar. Mas se a lógica da outra pessoa for superior e você perceber que está errada, admita sem drama, em poucas palavras. A verdade importa mais que ter razão.",
+    "DISCUSSÕES: ao discordar, defenda seu ponto com argumentos lógicos — não recue só para agradar. Mas se a lógica da outra pessoa for superior e você perceber que está errada, admita sem drama. A verdade importa mais que ter razão.",
     `A data de hoje é ${hoje}. Use esta data como referência para qualquer noção de tempo; não invente outra data.`,
     autor ? `Você está falando com ${autor}, mas NÃO precisa repetir o nome dele a cada resposta.` : "",
     memoriaTxt,
@@ -323,7 +326,12 @@ async function responder(pergunta, resultados, autor, userId, citada) {
   } else {
     messages.push({ role: "user", content: blocoCitado + pergunta });
   }
-  return (await ollamaChat(messages, { maxTokens: MAX_TOKENS })).trim();
+  // Programação → modelo especializado (ornith). Considera a pergunta e a
+  // mensagem citada (ex.: respondeu a um trecho de código e chamou a Judy).
+  const usarCodigo = ehProgramacao(pergunta) || (citada && ehProgramacao(citada.conteudo));
+  const modeloEscolhido = usarCodigo ? OLLAMA_MODEL_CODIGO : null;   // null = usa o ativo
+  if (usarCodigo) dlog(`pergunta de programação → modelo ${OLLAMA_MODEL_CODIGO}`);
+  return (await ollamaChat(messages, { maxTokens: MAX_TOKENS, modelo: modeloEscolhido })).trim();
 }
 
 // Remove blocos de "pensamento" que alguns modelos (Qwen/Gemma) emitem.
@@ -414,7 +422,18 @@ function dlog(...args) { if (DEBUG) console.log("[CHAT][debug]", ...args); }
 // ──────────────────────────────────────────────────────────
 //  Ponto de entrada — usado pelo &chat e pela menção
 // ──────────────────────────────────────────────────────────
-// Lê a mensagem citada (quando o usuário responde a algo e chama a Judy).
+// Detecta se a pergunta é sobre programação — nesses casos usamos o modelo
+// especializado em código. Heurística por palavras-chave e sinais de código.
+function ehProgramacao(texto) {
+  if (!texto) return false;
+  const t = texto.toLowerCase();
+  // sinais fortes: bloco de código, termos de linguagem/erro
+  if (/```/.test(texto)) return true;
+  const termos = /\b(código|codigo|program(a|ar|ação|acao)|função|funcao|script|bug|debug|erro de|stack ?trace|exception|compil|algoritmo|ref-?atora|regex|api|endpoint|json|sql|query|docker|kubernetes|linux|bash|shell|terminal|git|npm|node|python|javascript|typescript|java\b|rust|golang|\bgo\b|\bc\+\+|\bc#|kotlin|swift|php|ruby|html|css|react|vue|angular|sqlite|postgres|mysql|mongodb|classe|método|metodo|variável|variavel|array|loop|for\b|while\b|import\b|export\b|async|await|promise|callback|sintaxe|framework|biblioteca|dependência|dependencia|deploy|servidor|banco de dados)\b/i;
+  return termos.test(t);
+}
+
+
 // Devolve { autor, conteudo } ou null. Nunca lança.
 async function lerMensagemCitada(message) {
   try {
@@ -651,8 +670,83 @@ export async function conversar(message, pergunta, ctx) {
 export { ollamaDisponivel };
 
 // Comando &chat
+// ── Conversa livre: a Judy decide se entra numa mensagem não-endereçada ──
+export function canalTemChatLivre(config, canalId) {
+  return !!config?.chatLivre?.canais?.includes(canalId);
+}
+
+// Usa o LLM (chamada curta e barata) para julgar se vale responder.
+// Conservador: na dúvida, NÃO responde.
+async function valeResponder(texto) {
+  const t = (texto || "").trim();
+  if (t.length < 8) return false;
+  if (/^\s*[\p{Emoji}\s]+$/u.test(t) && !/[a-zA-Z0-9]/.test(t)) return false;   // só emoji/símbolo
+  try {
+    const sys = "Você decide se um assistente de chat deveria entrar numa conversa. "
+      + "Responda 'sim' apenas se a mensagem for uma pergunta, um pedido de ajuda, "
+      + "um tema técnico/factual, ou algo em que uma resposta acrescente de verdade. "
+      + "Responda 'nao' para conversa social entre pessoas, desabafo, piada interna, "
+      + "ou qualquer coisa que não peça a opinião de um assistente. "
+      + 'Responda só JSON: {"responder": true|false}.';
+    const raw = await ollamaChat(
+      [{ role: "system", content: sys }, { role: "user", content: t.slice(0, 500) }],
+      { json: true, etiqueta: "vale-responder" },
+    );
+    return !!JSON.parse(raw).responder;
+  } catch { return false; }
+}
+
+// Chamado pelo main para mensagens não-endereçadas. Só age se o canal estiver
+// ativado e o assunto valer. Nunca lança.
+export async function talvezResponderLivre(message, ctx) {
+  try {
+    const { config, serverId } = ctx;
+    if (!servidorPermitido(serverId)) return false;
+    if (!canalTemChatLivre(config, message.channelId)) return false;
+    const texto = (message.content || "").trim();
+    if (!texto) return false;
+    if (!(await valeResponder(texto))) return false;
+    await conversar(message, texto, ctx);
+    return true;
+  } catch (e) {
+    console.error("[CHAT-LIVRE]", e.message);
+    return false;
+  }
+}
+
 export async function cmdChat(message, args, ctx) {
   const { sendEmbed, COR, serverId, PREFIXO } = ctx;
+
+  // &chat esquecer → limpa a memória que a IA guardou sobre você
+  // &chat livre [on|off] → ativa/desativa a conversa livre NESTE canal
+  if (args[0]?.toLowerCase() === "livre") {
+    const server = await ctx.getServer?.(message);
+    if (ctx.membroTemPermissao && !ctx.membroTemPermissao(message, server, "ManagePermissions")) {
+      return sendEmbed(message.channel, { title: "🚫 Permissão insuficiente",
+        description: "Você precisa de **ManagePermissions** para mudar a conversa livre.", colour: COR.erro });
+    }
+    const canalId = message.channelId;
+    const cfg = ctx.config;
+    if (!cfg.chatLivre) cfg.chatLivre = { canais: [] };
+    const acao = args[1]?.toLowerCase();
+    const jaTem = cfg.chatLivre.canais.includes(canalId);
+
+    if (acao === "on" || acao === "ligar") {
+      if (!jaTem) cfg.chatLivre.canais.push(canalId);
+      ctx.salvarConfig?.();
+      return sendEmbed(message.channel, { title: "💬 Conversa livre ativada",
+        description: "Vou participar deste canal quando o assunto fizer sentido — sem precisar de menção. Para desligar: `&chat livre off`.", colour: COR.sucesso });
+    }
+    if (acao === "off" || acao === "desligar") {
+      cfg.chatLivre.canais = cfg.chatLivre.canais.filter((c) => c !== canalId);
+      ctx.salvarConfig?.();
+      return sendEmbed(message.channel, { title: "💬 Conversa livre desativada",
+        description: "Só respondo aqui se me mencionarem ou usarem `&chat`.", colour: COR.aviso });
+    }
+    // sem on/off: mostra o estado
+    return sendEmbed(message.channel, { title: "💬 Conversa livre",
+      description: `Neste canal: **${jaTem ? "ativada" : "desativada"}**.\n\nUse \`${PREFIXO}chat livre on\` ou \`${PREFIXO}chat livre off\`.`, colour: COR.info });
+  }
 
   // &chat esquecer → limpa a memória que a IA guardou sobre você
   if (args[0]?.toLowerCase() === "esquecer" || args[0]?.toLowerCase() === "forget") {

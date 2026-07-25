@@ -19,6 +19,8 @@ services:
       - CHAT_TIMEOUT=300000                    # ms; geração longa demora
       - CHAT_DEBUG=1
       - XP_DEBUG=1
+      # Modelo especializado em programação (a Judy alterna sozinha)
+      - OLLAMA_MODEL_CODIGO=ornith:9b
       # ── Super-admin (dono do bot, controle total em qualquer servidor) ──
       - SUPER_ADMINS=01K9JKP85D5EP2ZTEHS8DT797A                            # 1 = log detalhado no Portainer (diagnóstico)
       # ── Observabilidade / estabilidade da conexão ──

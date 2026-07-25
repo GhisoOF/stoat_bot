@@ -45,6 +45,7 @@ export const padraoServidor = {
   // ── Curadoria RSS ──
   rss: { canalId: null },
   autorole: { roleId: null },   // cargo dado automaticamente a quem entra
+  chatLivre: { canais: [] },    // canais onde a Judy conversa sem ser mencionada
   // ── Game (sistema de níveis por XP de mensagem) ──
   game: {
     enabled: false,
@@ -86,6 +87,7 @@ function mesclarServidor(salvo, tpl) {
     comandosDesativados: [...(salvo.comandosDesativados ?? tpl.comandosDesativados)],
     rss: { ...tpl.rss, ...(salvo.rss ?? {}) },
     autorole: { ...tpl.autorole, ...(salvo.autorole ?? {}) },
+    chatLivre: { ...tpl.chatLivre, ...(salvo.chatLivre ?? {}) },
     game: { ...tpl.game, ...(salvo.game ?? {}) },
     automod: {
       ...am, ...s,

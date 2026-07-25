@@ -151,7 +151,7 @@ export function construirDetalhes(P) {
     },
     chat: {
       uso: `${P}chat <mensagem>`,
-      desc: "Conversa com uma IA (Ollama). Busca na internet quando necessário, lembra de você entre conversas, e sabe explicar como configurar este bot.\n\n**Subcomandos:**\n`&chat status` — mostra se o servidor de IA está no ar\n`&chat modelo [número|nome]` — lista/troca o modelo *(ManagePermissions p/ trocar)*\n`&chat esquecer` — apaga o que a IA lembra de você\n\nRespostas podem levar alguns segundos; código longo é dividido em partes.",
+      desc: "Conversa com uma IA (Ollama). Busca na internet quando necessário, lembra de você entre conversas, e sabe explicar como configurar este bot.\n\n**Subcomandos:**\n`&chat status` — mostra se o servidor de IA está no ar\n`&chat modelo [número|nome]` — lista/troca o modelo *(ManagePermissions p/ trocar)*\n`&chat esquecer` — apaga o que a IA lembra de você\n`&chat livre on|off` — deixa a Judy conversar sozinha neste canal *(ManagePermissions)*\n\nRespostas podem levar alguns segundos; código longo é dividido em partes.",
       perm: null, ex: `${P}chat modelo qwen3`,
     },
     debug: {

@@ -148,7 +148,21 @@ export async function handleReaction(messageId, userId, emoji, ctx) {
   return true;
 }
 
-// Lista os canais do servidor (ChannelCollection NÃO é iterável com for..of).
+// Envio resiliente: tenta o canal preferido; se falhar (bot sem permissão de
+// escrever ali, ex.: o canal virou restrito no meio do setup), cai para
+// alternativas que o bot controla. Nunca deixa o setup "sumir".
+async function enviarResiliente(ctx, canaisPreferidos, embed) {
+  for (const ch of canaisPreferidos) {
+    if (!ch) continue;
+    try { await ch.sendMessage({ embeds: [embed] }); return true; }
+    catch { /* tenta o próximo */ }
+  }
+  // último recurso: manda no privado de quem iniciou (se a SDK permitir)
+  console.error("[SETUP-SERVIDOR] não consegui enviar:", embed.title);
+  return false;
+}
+
+
 function listarCanais(ctx, serverId) {
   const col = ctx.client?.channels;
   if (!col) return [];
@@ -221,6 +235,7 @@ async function executarTudo(sessao, ctx) {
         catch (e) { rel.push(`⚠️ Canal ${c.nome}: ${e?.message ?? e}`); continue; }
       } else if (!c.ehStaffPrincipal) rel.push(`📁 Canal **${c.nome}** já existia.`);
       ids.push(ch.id);
+      if (c.ehStaffPrincipal) refs.staffId = ch.id;
       if (c.ehLog) refs.logId = ch.id;
       if (c.ehRegistro) refs.registroId = ch.id;
 
@@ -246,15 +261,24 @@ async function executarTudo(sessao, ctx) {
     rel.push("🗂️ Categorias organizadas: **Staff → Principal → Geral**.");
   } catch (e) { rel.push(`⚠️ Categorias: ${e?.message ?? e}`); }
 
-  await enviar({ title: "✅ Estrutura pronta", description: rel.join("\n").slice(0, 1800), colour: ctx.COR.sucesso });
+  // "Estrutura pronta" vem DEPOIS de aplicar as permissões restritivas, então
+  // o canal do comando pode ter ficado sem escrita — usa envio resiliente.
+  const canaisRelatorio = [canal, refs.staffId ? ctx.client.channels.get(refs.staffId) : null, refs.logId ? ctx.client.channels.get(refs.logId) : null];
+  await enviarResiliente(ctx, canaisRelatorio, { title: "✅ Estrutura pronta", description: rel.join("\n").slice(0, 1800), colour: ctx.COR.sucesso });
 
   // 4. Configuração contínua dos módulos
   await configurarModulos(server, sessao, ctx, refs, staffRoleId);
 }
 
 async function configurarModulos(server, sessao, ctx, refs, staffRoleId) {
-  const canal = ctx.client.channels.get(sessao.channelId);
-  const enviar = (embed) => ctx.sendEmbed(canal, embed);
+  const canalCmd = ctx.client.channels.get(sessao.channelId);
+  const canalStaff = refs.staffId ? ctx.client.channels.get(refs.staffId) : null;
+  const canalLog = refs.logId ? ctx.client.channels.get(refs.logId) : null;
+  // ordem de preferência para os relatórios: onde o comando foi dado →
+  // #staff → #log. Assim, se o canal do comando ficou restrito, cai para um
+  // canal que o bot controla e não perde o relatório.
+  const preferidos = [canalCmd, canalStaff, canalLog];
+  const enviar = (embed) => enviarResiliente(ctx, preferidos, embed);
   const feito = [];
   const cfg = ctx.configDoServidor ? ctx.configDoServidor(sessao.serverId) : ctx.config;
   const salvar = () => (ctx.salvarConfigServidor ? ctx.salvarConfigServidor(sessao.serverId) : ctx.salvarConfig?.());
@@ -281,24 +305,38 @@ async function configurarModulos(server, sessao, ctx, refs, staffRoleId) {
 
   salvar();
 
-  // 4f. Reaction-roles: instruções no #registro
+  // 4f. Reaction-roles: instruções COMPLETAS no #registro
   try {
     if (refs.registroId) {
       const chReg = ctx.client.channels.get(refs.registroId);
       if (chReg) {
+        const P0 = ctx.PREFIXO;
         await chReg.sendMessage({ embeds: [{
-          title: "📝 Registro — cargos por reação",
+          title: "📝 Como configurar o registro por reação (passo a passo)",
           description: [
-            "Para dar cargos quando alguém reage aqui:",
+            "Este é o canal de registro. A ideia: a pessoa reage numa mensagem e ganha um cargo automaticamente. Te guio:",
             "",
-            `1. Publique a mensagem: \`${ctx.PREFIXO}embed\` (título + texto).`,
-            `2. Ligue reação→cargo: \`${ctx.PREFIXO}reactionrole add <emoji> <@cargo>\` na mensagem publicada.`,
+            "**Passo 1 — tenha os cargos prontos.**",
+            "Crie em Configurações → Cargos os cargos que quer dar (ex.: *Jogos*, *Avisos*), ou use cargos que já existem.",
             "",
-            "Posso criar os cargos que faltarem — peça com `&reactionrole`.",
+            "**Passo 2 — publique a mensagem de registro.**",
+            `Use \`${P0}embed\` e escreva o texto, por exemplo:`,
+            "> Reaja abaixo para pegar seus cargos:",
+            "> 🎮 — Jogos   ·   📢 — Avisos",
+            "",
+            "**Passo 3 — ligue cada emoji a um cargo.**",
+            "Na mensagem que você publicou, use:",
+            `\`${P0}reactionrole add <id-da-mensagem> 🎮 @Jogos\``,
+            `\`${P0}reactionrole add <id-da-mensagem> 📢 @Avisos\``,
+            `(veja o formato exato com \`${P0}help reactionrole\`)`,
+            "",
+            "**Pronto.** Quem reagir com 🎮 ganha o cargo Jogos. Ajuste quando quiser com `reactionrole add/remove/list`.",
+            "",
+            "Travou em algo? Me chame aqui neste canal que eu explico o passo em que você está.",
           ].join("\n"),
           colour: ctx.COR?.mod ?? "#5865F2",
         }] });
-        feito.push("🎯 **Reaction-roles**: instruções publicadas em **#registro**.");
+        feito.push("🎯 **Reaction-roles**: guia completo publicado em **#registro**.");
       }
     }
   } catch (e) { feito.push(`⚠️ Reaction-roles: ${e?.message ?? e}`); }

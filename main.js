@@ -288,7 +288,7 @@ const rotas = {
 // que o usuário lembre se é `&setup` ou `&game setup`.
 async function cmdSetupRouter(message, args, ctx) {
   const area = args[0]?.toLowerCase();
-  if (area === "servidor" || area === "server" || area === "geral") {
+  if (area === "servidor" || area === "server" || area === "sever" || area === "srv" || area === "geral") {
     return setupServidor.iniciarSetupServidor(message, args.slice(1), ctx);
   }
   if (area === "game" || area === "nivel" || area === "niveis" || area === "level") {

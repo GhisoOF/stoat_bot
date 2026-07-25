@@ -117,6 +117,7 @@ export function servidorPermitido(serverId) {
 // processa uma inferência por vez, e servir duas ao mesmo tempo brigaria
 // pela VRAM. Mantém as respostas rápidas e previsíveis.
 let ocupado = false;
+export function estaOcupado() { return ocupado; }
 
 // ── HTTP helper com timeout ────────────────────────────────
 async function pedir(url, body) {
@@ -498,18 +499,20 @@ export async function conversar(message, pergunta, ctx) {
     return sendEmbed(message.channel, { title: "⏳ Um momento",
       description: "Estou processando outra conversa agora. Tente de novo em alguns segundos.", colour: COR.aviso });
   }
+  // Marca ocupado JÁ AQUI, antes de qualquer await, para fechar a janela de
+  // corrida: duas mensagens quase simultâneas não passam mais as duas.
+  ocupado = true;
 
   // Servidor de IA sob demanda: se estiver desligado, avisa na hora
   // (em vez de esperar o timeout longo).
   const disp = await ollamaDisponivel();
   if (!disp.ok) {
+    ocupado = false;   // libera: não vamos gerar nada
     const msg = disp.motivo === "offline"
       ? "O servidor de IA está **desligado ou inacessível**. Ligue a máquina que roda o Ollama (e confirme que o Tailscale está ativo nela) e tente de novo."
       : `O servidor de IA respondeu, mas ${disp.motivo}.`;
     return sendEmbed(message.channel, { title: "💤 IA indisponível", description: msg, colour: COR.aviso });
   }
-
-  ocupado = true;
 
   // Mensagem de status única, que vamos EDITANDO conforme o progresso.
   // Assim o usuário vê o andamento e nunca fica sem retorno.
@@ -696,6 +699,10 @@ async function valeResponder(texto) {
   } catch { return false; }
 }
 
+// Cooldown por canal para a conversa livre (evita avaliar toda mensagem).
+const _ultimaAvaliacaoLivre = new Map();   // canalId → timestamp
+const LIVRE_COOLDOWN_MS = Number(process.env.CHAT_LIVRE_COOLDOWN || 20000);
+
 // Chamado pelo main para mensagens não-endereçadas. Só age se o canal estiver
 // ativado e o assunto valer. Nunca lança.
 export async function talvezResponderLivre(message, ctx) {
@@ -703,9 +710,25 @@ export async function talvezResponderLivre(message, ctx) {
     const { config, serverId } = ctx;
     if (!servidorPermitido(serverId)) return false;
     if (!canalTemChatLivre(config, message.channelId)) return false;
+
+    // Se já estou gerando outra resposta, NÃO avalio agora — senão a checagem
+    // compete com a geração na GPU e trava tudo. Simplesmente ignoro esta.
+    if (ocupado) return false;
+
+    // Cooldown por canal: no máximo uma avaliação a cada LIVRE_COOLDOWN_MS.
+    const agora = Date.now();
+    const ultima = _ultimaAvaliacaoLivre.get(message.channelId) || 0;
+    if (agora - ultima < LIVRE_COOLDOWN_MS) return false;
+
     const texto = (message.content || "").trim();
     if (!texto) return false;
+
+    // marca a tentativa ANTES da avaliação (conta como uso do cooldown)
+    _ultimaAvaliacaoLivre.set(message.channelId, agora);
+
     if (!(await valeResponder(texto))) return false;
+    // reconfere: pode ter ficado ocupado durante a avaliação
+    if (ocupado) return false;
     await conversar(message, texto, ctx);
     return true;
   } catch (e) {

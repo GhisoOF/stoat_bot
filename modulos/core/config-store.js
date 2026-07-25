@@ -45,7 +45,7 @@ export const padraoServidor = {
   // ── Curadoria RSS ──
   rss: { canalId: null },
   autorole: { roleId: null },   // cargo dado automaticamente a quem entra
-  chatLivre: { canais: [] },    // canais onde a Judy conversa sem ser mencionada
+  chatLivre: { canais: [], modo: "relevante" },    // "relevante" = só o que julgar importante; "todas" = toda mensagem
   // ── Game (sistema de níveis por XP de mensagem) ──
   game: {
     enabled: false,

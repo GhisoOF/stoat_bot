@@ -711,24 +711,31 @@ export async function talvezResponderLivre(message, ctx) {
     if (!servidorPermitido(serverId)) return false;
     if (!canalTemChatLivre(config, message.channelId)) return false;
 
-    // Se já estou gerando outra resposta, NÃO avalio agora — senão a checagem
-    // compete com a geração na GPU e trava tudo. Simplesmente ignoro esta.
+    // "Parar de ler enquanto responde": se já estou gerando algo, ignoro a
+    // mensagem por completo. Assim foco só na resposta em andamento e não
+    // acumulo trabalho nem compito na GPU.
     if (ocupado) return false;
-
-    // Cooldown por canal: no máximo uma avaliação a cada LIVRE_COOLDOWN_MS.
-    const agora = Date.now();
-    const ultima = _ultimaAvaliacaoLivre.get(message.channelId) || 0;
-    if (agora - ultima < LIVRE_COOLDOWN_MS) return false;
 
     const texto = (message.content || "").trim();
     if (!texto) return false;
 
-    // marca a tentativa ANTES da avaliação (conta como uso do cooldown)
-    _ultimaAvaliacaoLivre.set(message.channelId, agora);
+    const modo = config?.chatLivre?.modo || "relevante";
 
-    if (!(await valeResponder(texto))) return false;
-    // reconfere: pode ter ficado ocupado durante a avaliação
-    if (ocupado) return false;
+    // No modo "relevante", aplica cooldown + julgamento do LLM.
+    // No modo "todas", responde toda mensagem com texto (respeitando só o ocupado).
+    if (modo !== "todas") {
+      const agora = Date.now();
+      const ultima = _ultimaAvaliacaoLivre.get(message.channelId) || 0;
+      if (agora - ultima < LIVRE_COOLDOWN_MS) return false;
+      _ultimaAvaliacaoLivre.set(message.channelId, agora);
+      if (!(await valeResponder(texto))) return false;
+      if (ocupado) return false;   // pode ter ficado ocupado durante a avaliação
+    }
+
+    // Notifica que ESTA mensagem foi escolhida para resposta: reage com 👀.
+    // Assim as pessoas sabem qual mensagem a Judy está respondendo.
+    try { await message.react?.(encodeURIComponent("👀")); } catch {}
+
     await conversar(message, texto, ctx);
     return true;
   } catch (e) {
@@ -757,14 +764,28 @@ export async function cmdChat(message, args, ctx) {
     if (acao === "on" || acao === "ligar") {
       if (!jaTem) cfg.chatLivre.canais.push(canalId);
       ctx.salvarConfig?.();
+      const modo = cfg.chatLivre.modo || "relevante";
       return sendEmbed(message.channel, { title: "💬 Conversa livre ativada",
-        description: "Vou participar deste canal quando o assunto fizer sentido — sem precisar de menção. Para desligar: `&chat livre off`.", colour: COR.sucesso });
+        description: `Vou participar deste canal sem precisar de menção.\nModo atual: **${modo === "todas" ? "responder todas as mensagens" : "responder só o que eu julgar relevante"}**.\n\nTroque o modo com \`${PREFIXO}chat livre modo todas\` ou \`${PREFIXO}chat livre modo relevante\`. Desligar: \`${PREFIXO}chat livre off\`.`, colour: COR.sucesso });
     }
     if (acao === "off" || acao === "desligar") {
       cfg.chatLivre.canais = cfg.chatLivre.canais.filter((c) => c !== canalId);
       ctx.salvarConfig?.();
       return sendEmbed(message.channel, { title: "💬 Conversa livre desativada",
         description: "Só respondo aqui se me mencionarem ou usarem `&chat`.", colour: COR.aviso });
+    }
+    if (acao === "modo") {
+      const novo = args[2]?.toLowerCase();
+      if (novo !== "todas" && novo !== "relevante") {
+        return sendEmbed(message.channel, { title: "💬 Modo da conversa livre",
+          description: `Modo atual: **${cfg.chatLivre.modo || "relevante"}**.\n\n\`${PREFIXO}chat livre modo todas\` — responde toda mensagem\n\`${PREFIXO}chat livre modo relevante\` — responde só o que julgar importante`, colour: COR.info });
+      }
+      cfg.chatLivre.modo = novo;
+      ctx.salvarConfig?.();
+      return sendEmbed(message.channel, { title: "💬 Modo alterado",
+        description: novo === "todas"
+          ? "Agora respondo **todas** as mensagens dos canais com conversa livre (uma de cada vez)."
+          : "Agora respondo **só o que julgar relevante** nos canais com conversa livre.", colour: COR.sucesso });
     }
     // sem on/off: mostra o estado
     return sendEmbed(message.channel, { title: "💬 Conversa livre",

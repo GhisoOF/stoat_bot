@@ -73,12 +73,13 @@ const LEX_GORE = [
 const LEX_GRAVE = [
   /\ball\s+ages\b/i,
   /\b(little|young|under-?age|pre-?teens?)\s+(girls?|boys?|kids?|ones?|teens?)\b/i,
-  /\b(underage|jailbait|lolit[ao]|loli|shota|preteen)\b/i,
+  /\b(underage|jailbait|lolit[ao]|loli|shota|preteen|cunny|toddlercon|lolicon|shotacon)\b/i,
+  /\b(cp|c[\W_]?p|childp)\b/i,
   /\b(brother|bro)\s*(and|&|\/|\+)\s*sister\b/i,
   /\b(mom|mother)\s*(and|&|\/|\+)\s*son\b/i,
   /\b(dad|father)\s*(and|&|\/|\+)\s*(daughter|son)\b/i,
   /\bincest\b/i,
-  /\b(rape|estupro|abuso\s+(infantil|de\s+menor))\b/i,
+  /\b(rape|estupro|abuso\s+(infantil|de\s+menor)|pedofil|pedô|pedo)\b/i,
   /\bfamily\s+(fun|content|vids?|videos?|collection)\b/i,
 ];
 
@@ -102,7 +103,10 @@ const PERGUNTA  = /\?/;
 // ── Pesos (à mão; calibráveis) ────────────────────────────
 export const PESOS = {
   vies:            0,
-  grave:           6,    // indicador grave sozinho → já cai na faixa de alerta
+  // Palavra sensível SOZINHA pesa pouco (evita punir "loli"/"cunny" numa
+  // conversa casual). Ela só vira grave de verdade quando acompanhada de
+  // contexto de oferta/link/venda — ver conj_grave_* abaixo.
+  grave:           1.5,
   adulto:          1.5,
   gore:            2.5,
   scam:            1.5,
@@ -118,8 +122,9 @@ export const PESOS = {
   pergunta:       -3,
   negacao:        -4,
   taxa_alta:       1.5,
-  conj_grave_oferta: 4,  // grave + oferta = anúncio de material → topo
-  conj_topico_cta:   2,  // tópico proibido + contato = divulgação
+  conj_grave_oferta:   6,  // grave + oferta = anúncio de material → topo
+  conj_grave_contexto: 5,  // grave + link/cta/venda = contexto suspeito → alerta
+  conj_topico_cta:     2,  // tópico proibido + contato = divulgação
 };
 
 const contar = (txt, lista, cap = 99) => {
@@ -161,7 +166,9 @@ function extrairFeatures(texto, opts = {}) {
   if ((opts.rate ?? 1) >= 3) f.taxa_alta = 1;
 
   // Conjunções (o "E" que o somatório linear sozinho não captura)
+  const temContexto = (f.oferta > 0 || f.cta > 0 || f.link_filehost || f.link_encurtador || f.link_convite || f.link_simples || f.afirmacao > 0);
   if (f.grave > 0 && f.oferta > 0) f.conj_grave_oferta = 1;
+  else if (f.grave > 0 && temContexto) f.conj_grave_contexto = 1;
   if ((f.adulto > 0 || f.gore > 0 || f.scam > 0) && (f.cta > 0 || f.oferta > 0)) f.conj_topico_cta = 1;
 
   return f;
@@ -179,7 +186,9 @@ export function pontuar(features, pesos = PESOS) {
 export function analisarConteudo(texto, opts = {}) {
   const f = extrairFeatures(texto, opts);
   const nota = pontuar(f);
-  const grave = (f.grave > 0) || (f.conj_grave_oferta > 0);
+  // "grave" (que aciona ação forte) agora exige CONTEXTO: palavra sensível
+  // sozinha não é mais tratada como grave — só quando vem com oferta/link/cta.
+  const grave = (f.conj_grave_oferta > 0) || (f.conj_grave_contexto > 0);
   const sinais = Object.entries(f)
     .filter(([, v]) => v)
     .map(([k, v]) => `${k}${v > 1 ? "×" + v : ""}`);

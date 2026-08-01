@@ -66,11 +66,53 @@ function contextoProjeto() {
   return _readmeCache;
 }
 
-const OLLAMA_URL   = (process.env.OLLAMA_URL   || "http://localhost:11434").replace(/\/$/, "");
 const OLLAMA_MODEL_PADRAO = process.env.OLLAMA_MODEL || "gemma4:12b";
 // Modelo especializado em programação (usado só quando a pergunta é de código).
 const OLLAMA_MODEL_CODIGO = process.env.OLLAMA_MODEL_CODIGO || "ornith:9b";
-const SEARXNG_URL  = (process.env.SEARXNG_URL  || "http://localhost:8080").replace(/\/$/, "");
+// ── Dispositivos de IA (PC, laptop, etc.) selecionáveis em runtime ──
+// Cada dispositivo é um par de URLs (Ollama + SearXNG). Definidos por env:
+//   AI_DISPOSITIVOS='pc=http://100.x:11434|http://100.x:8080;laptop=http://100.y:11434|http://100.y:8080'
+// Se não houver, cai para OLLAMA_URL/SEARXNG_URL soltos (dispositivo "padrao").
+const norm = (u) => (u || "").trim().replace(/\/$/, "");
+function parseDispositivos() {
+  const raw = process.env.AI_DISPOSITIVOS || "";
+  const mapa = {};
+  for (const parte of raw.split(";").map((s) => s.trim()).filter(Boolean)) {
+    const [nome, urls] = parte.split("=");
+    if (!nome || !urls) continue;
+    const [ollama, searxng] = urls.split("|").map(norm);
+    if (ollama) mapa[nome.trim().toLowerCase()] = { ollama, searxng: searxng || "" };
+  }
+  // sempre garante um "padrao" com os envs soltos
+  if (!mapa.padrao) {
+    mapa.padrao = {
+      ollama: norm(process.env.OLLAMA_URL) || "http://localhost:11434",
+      searxng: norm(process.env.SEARXNG_URL) || "http://localhost:8080",
+    };
+  }
+  return mapa;
+}
+const DISPOSITIVOS = parseDispositivos();
+
+// Dispositivo ativo (mutável). Começa pelo env AI_DISPOSITIVO_PADRAO ou "padrao".
+let dispositivoAtivo = (process.env.AI_DISPOSITIVO_PADRAO || "padrao").toLowerCase();
+if (!DISPOSITIVOS[dispositivoAtivo]) dispositivoAtivo = "padrao";
+
+// URLs correntes derivam do dispositivo ativo (por isso são getters, não const).
+function OLLAMA_URL_ATUAL()  { return DISPOSITIVOS[dispositivoAtivo]?.ollama  || "http://localhost:11434"; }
+function SEARXNG_URL_ATUAL() { return DISPOSITIVOS[dispositivoAtivo]?.searxng || "http://localhost:8080"; }
+
+export function getDispositivo() { return dispositivoAtivo; }
+export function listarDispositivos() { return Object.keys(DISPOSITIVOS); }
+export function setDispositivo(nome) {
+  const n = String(nome || "").trim().toLowerCase();
+  if (!DISPOSITIVOS[n]) return null;
+  dispositivoAtivo = n;
+  return n;
+}
+export function infoDispositivo(nome = dispositivoAtivo) {
+  return DISPOSITIVOS[nome] || null;
+}
 
 // Modelo ativo — pode ser trocado em tempo de execução por &chat modelo <nome>.
 // Inicia pelo env; se houver um salvo na config global, o main aplica no boot.
@@ -83,7 +125,7 @@ export async function listarModelos() {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), 6000);
   try {
-    const r = await fetch(`${OLLAMA_URL}/api/tags`, { signal: ctrl.signal });
+    const r = await fetch(`${OLLAMA_URL_ATUAL()}/api/tags`, { signal: ctrl.signal });
     if (!r.ok) return { ok: false, motivo: `HTTP ${r.status}`, modelos: [] };
     const data = await r.json().catch(() => ({}));
     // o campo varia entre versões do Ollama: name ou model
@@ -151,7 +193,7 @@ async function ollamaDisponivel() {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), 4000);
   try {
-    const r = await fetch(`${OLLAMA_URL}/api/tags`, { signal: ctrl.signal });
+    const r = await fetch(`${OLLAMA_URL_ATUAL()}/api/tags`, { signal: ctrl.signal });
     if (!r.ok) return { ok: false, motivo: `respondeu HTTP ${r.status}` };
     return { ok: true };
   } catch {
@@ -180,7 +222,7 @@ export async function ollamaChat(messages, { json = false, maxTokens = MAX_TOKEN
   console.log(`[CHAT][ollama] → ${etiqueta} | modelo=${modeloUsado} num_ctx=${NUM_CTX} num_predict=${maxTokens} entrada≈${entradaChars} chars${json ? " (json)" : ""}`);
 
   const t0 = Date.now();
-  const data = await pedir(`${OLLAMA_URL}/api/chat`, body);
+  const data = await pedir(`${OLLAMA_URL_ATUAL()}/api/chat`, body);
   const dur = ((Date.now() - t0) / 1000).toFixed(1);
 
   const conteudo = data?.message?.content ?? "";
@@ -201,7 +243,7 @@ export async function ollamaChat(messages, { json = false, maxTokens = MAX_TOKEN
 
 // ── Busca no SearXNG (JSON) ────────────────────────────────
 async function buscar(query, n = 4) {
-  const url = `${SEARXNG_URL}/search?q=${encodeURIComponent(query)}&format=json&language=pt-BR`;
+  const url = `${SEARXNG_URL_ATUAL()}/search?q=${encodeURIComponent(query)}&format=json&language=pt-BR`;
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), 30000);
   try {
@@ -815,9 +857,9 @@ export async function cmdChat(message, args, ctx) {
     return sendEmbed(message.channel, {
       title: disp.ok ? "🟢 IA disponível" : "🔴 IA indisponível",
       description: [
-        `**Ollama:** ${OLLAMA_URL}`,
+        `**Ollama:** ${OLLAMA_URL_ATUAL()}`,
         `**Modelo:** ${modeloAtivo}`,
-        `**SearXNG:** ${SEARXNG_URL}`,
+        `**SearXNG:** ${SEARXNG_URL_ATUAL()}`,
         "",
         disp.ok ? "Tudo pronto — pode conversar." : `Status: ${disp.motivo === "offline" ? "**offline** (máquina desligada?)" : disp.motivo}`,
       ].join("\n"),
@@ -826,6 +868,48 @@ export async function cmdChat(message, args, ctx) {
   }
 
   // &chat modelo [nome|número] → lista os modelos e permite escolher
+  // &chat dispositivo [nome] → mostra/troca o dispositivo de IA (PC, laptop…)
+  if (["dispositivo", "device", "aparelho", "maquina", "máquina"].includes(args[0]?.toLowerCase())) {
+    const server = await ctx.getServer?.(message);
+    if (ctx.membroTemPermissao && !ctx.membroTemPermissao(message, server, "ManagePermissions")) {
+      return sendEmbed(message.channel, { title: "🚫 Permissão insuficiente",
+        description: "Você precisa de **ManagePermissions** para trocar o dispositivo de IA.", colour: COR.erro });
+    }
+    const nomes = listarDispositivos();
+    const escolha = args[1]?.toLowerCase();
+
+    if (!escolha) {
+      const lista = nomes.map((n) => {
+        const info = infoDispositivo(n);
+        const marca = n === getDispositivo() ? "▶️" : "•";
+        return `${marca} **${n}**${n === getDispositivo() ? " *(ativo)*" : ""}\n   Ollama: \`${info.ollama}\`${info.searxng ? `\n   SearXNG: \`${info.searxng}\`` : ""}`;
+      });
+      return sendEmbed(message.channel, { title: "🖥️ Dispositivos de IA",
+        description: `${lista.join("\n\n")}\n\nTroque com \`${PREFIXO}chat dispositivo <nome>\`.`, colour: COR.info });
+    }
+
+    const aplicado = setDispositivo(escolha);
+    if (!aplicado) {
+      return sendEmbed(message.channel, { title: "❌ Dispositivo desconhecido",
+        description: `Não conheço "${escolha}". Disponíveis: ${nomes.map((n) => `\`${n}\``).join(", ")}.`, colour: COR.erro });
+    }
+    // persiste a escolha na config global
+    try {
+      if (ctx.getGlobal) { ctx.getGlobal().chatDispositivo = aplicado; ctx.salvarGlobal?.(); }
+    } catch {}
+    const info = infoDispositivo(aplicado);
+    const disp = await ollamaDisponivel();
+    return sendEmbed(message.channel, { title: "🖥️ Dispositivo trocado",
+      description: [
+        `Agora usando **${aplicado}**.`,
+        `Ollama: \`${info.ollama}\``,
+        info.searxng ? `SearXNG: \`${info.searxng}\`` : null,
+        "",
+        disp.ok ? "🟢 O Ollama deste dispositivo respondeu." : `🔴 Atenção: não obtive resposta do Ollama (${disp.motivo}). Confirme que ele está ligado.`,
+      ].filter((x) => x !== null).join("\n"),
+      colour: disp.ok ? COR.sucesso : COR.aviso });
+  }
+
   if (["modelo", "model", "modelos"].includes(args[0]?.toLowerCase())) {
     if (!servidorPermitido(serverId))
       return sendEmbed(message.channel, { title: "🚫 Indisponível aqui",

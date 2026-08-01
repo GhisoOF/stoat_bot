@@ -21,6 +21,10 @@ services:
       - XP_DEBUG=1
       # Modelo especializado em programação (a Judy alterna sozinha)
       - OLLAMA_MODEL_CODIGO=ornith:9b
+      # Dispositivos de IA selecionaveis (&chat dispositivo). Formato:
+      #   nome=URL_OLLAMA|URL_SEARXNG;outro=URL_OLLAMA|URL_SEARXNG
+      - AI_DISPOSITIVOS=pc=http://100.106.52.86:11434|http://100.106.52.86:8080;laptop=http://LAPTOP_IP:11434|http://LAPTOP_IP:8080
+      - AI_DISPOSITIVO_PADRAO=pc
       # Conversa livre: intervalo mínimo entre avaliações por canal (ms)
       - CHAT_LIVRE_COOLDOWN=20000
       # ── Super-admin (dono do bot, controle total em qualquer servidor) ──

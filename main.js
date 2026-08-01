@@ -218,6 +218,7 @@ function criarContexto(serverId = null) {
     sendEmbed, getServer, membroTemPermissao, ehSuperAdmin,
     salvarConfig: () => store.salvarConfigServidor(serverId),
     salvarGlobal: store.salvarGlobal,
+    getGlobal: store.getGlobal,
     configDoServidor: store.configDoServidor,
     estado, serverId,
   };
@@ -350,6 +351,11 @@ client.on("ready", async () => {
   if (cfgGlobal.chatModelo) {
     chat.setModelo(cfgGlobal.chatModelo);
     console.info(`[CHAT] modelo restaurado da config: ${cfgGlobal.chatModelo}`);
+  }
+  // Se houver um dispositivo de IA salvo (via &chat dispositivo), aplica-o
+  if (cfgGlobal.chatDispositivo) {
+    const ok = chat.setDispositivo(cfgGlobal.chatDispositivo);
+    if (ok) console.info(`[CHAT] dispositivo restaurado da config: ${ok}`);
   }
   const ctx = criarContexto();    // contexto sem servidor (tarefas globais)
   engine.agendarLimpezaSpam(ctx); // limpeza periódica do rastreio de spam

@@ -65,6 +65,7 @@ export const padraoGlobal = {
   linkBlocklistSources: [],   // recurso pesado (milhões de domínios) — compartilhado
   linkBlocklistManual:  [],
   chatModelo:           null, // modelo de IA escolhido via &chat modelo (null = usa o env)
+  chatDispositivo:      null, // dispositivo de IA escolhido via &chat dispositivo (null = usa o env)
 };
 
 let templateServidor = structuredClone(padraoServidor);

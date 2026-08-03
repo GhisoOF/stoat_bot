@@ -1,0 +1,36 @@
+# ── Serviço de IA da Judy (judy-ia) ───────────────────────
+# Roda no COMPUTADOR, ao lado do Ollama. Contém as ferramentas
+# e o laço de tool-calling. O bot no homelab aponta para cá.
+services:
+  judy-ia:
+    build: .
+    # depois de publicar no GHCR, troque 'build: .' por:
+    # image: ghcr.io/ghisoof/judy-ia:latest
+    container_name: judy-ia
+    restart: unless-stopped
+    ports:
+      - "8090:8090"          # o bot no homelab acessa esta porta
+    environment:
+      # ── LLM (Ollama roda NATIVO no host) ──
+      # O container NÃO enxerga o localhost do host: use o IP da
+      # máquina na LAN ou no Tailscale. Ex.: Tailscale do voidpc.
+      - OLLAMA_URL=http://100.106.52.86:11434
+      - OLLAMA_MODEL=qwen3.5:9b          # PRECISA suportar tool calling (Gemma NÃO suporta)
+      - NUM_CTX=16384
+      - MAX_TOKENS=4096
+
+      # ── Leitura do código via GitHub (o repo vive no homelab) ──
+      - GITHUB_REPO=GhisoOF/stoat_bot
+      - GITHUB_BRANCH=main
+      # - GITHUB_TOKEN=ghp_xxx           # opcional: só se bater o limite de 60 req/h
+
+      # ── Ferramentas ──
+      - MAX_VOLTAS_FERRAMENTA=5
+      - CALC_TIMEOUT_MS=5000
+      # - FERRAMENTAS_OFF=calcular       # desliga ferramentas específicas
+      - RSS_FEEDS=                       # feeds padrão p/ "resuma as notícias"
+
+      # ── Segurança (recomendado, já que a porta fica exposta) ──
+      # - IA_CHAVE=uma-chave-secreta     # exige header x-chave; use a MESMA no bot (IA_SERVICO_CHAVE)
+
+      - TZ=Europe/Madrid

@@ -1,0 +1,9 @@
+{
+  "name": "judy-ia-servico",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Serviço de IA da Judy: LLM + ferramentas, em container próprio",
+  "main": "servidor.js",
+  "scripts": { "start": "node servidor.js" },
+  "dependencies": { "rss-parser": "^3.13.0" }
+}

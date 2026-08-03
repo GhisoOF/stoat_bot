@@ -66,66 +66,37 @@ function contextoProjeto() {
   return _readmeCache;
 }
 
-const OLLAMA_MODEL_PADRAO = process.env.OLLAMA_MODEL || "gemma4:12b";
-// Modelo especializado em programação (usado só quando a pergunta é de código).
-const OLLAMA_MODEL_CODIGO = process.env.OLLAMA_MODEL_CODIGO || "ornith:9b";
-// ── Dispositivos de IA (PC, laptop, etc.) selecionáveis em runtime ──
-// Cada dispositivo é um par de URLs (Ollama + SearXNG). Definidos por env:
-//   AI_DISPOSITIVOS='pc=http://100.x:11434|http://100.x:8080;laptop=http://100.y:11434|http://100.y:8080'
-// Se não houver, cai para OLLAMA_URL/SEARXNG_URL soltos (dispositivo "padrao").
-const norm = (u) => (u || "").trim().replace(/\/$/, "");
-function parseDispositivos() {
-  const raw = process.env.AI_DISPOSITIVOS || "";
-  const mapa = {};
-  for (const parte of raw.split(";").map((s) => s.trim()).filter(Boolean)) {
-    const [nome, urls] = parte.split("=");
-    if (!nome || !urls) continue;
-    const [ollama, searxng] = urls.split("|").map(norm);
-    if (ollama) mapa[nome.trim().toLowerCase()] = { ollama, searxng: searxng || "" };
-  }
-  // sempre garante um "padrao" com os envs soltos
-  if (!mapa.padrao) {
-    mapa.padrao = {
-      ollama: norm(process.env.OLLAMA_URL) || "http://localhost:11434",
-      searxng: norm(process.env.SEARXNG_URL) || "http://localhost:8080",
-    };
-  }
-  return mapa;
-}
-const DISPOSITIVOS = parseDispositivos();
+// ── Modelos por função (fixos; cada tipo de tarefa usa o seu) ──
+// Conversa/geral (padrão): tom e fluidez.
+const OLLAMA_MODEL_PADRAO  = process.env.OLLAMA_MODEL         || "gemma4:12b";
+// Programação: código, erros, refatoração.
+const OLLAMA_MODEL_CODIGO  = process.env.OLLAMA_MODEL_CODIGO  || "ornith:9b";
+// Lógica/matemática/raciocínio (respostas ao usuário que exigem rigor).
+const OLLAMA_MODEL_LOGICA  = process.env.OLLAMA_MODEL_LOGICA  || "qwen3.5:9b";
+// Decisões internas do bot (buscar? responder?) — modelo PEQUENO e rápido.
+const OLLAMA_MODEL_DECISAO = process.env.OLLAMA_MODEL_DECISAO || "qwen3.5:0.8b";
 
-// Dispositivo ativo (mutável). Começa pelo env AI_DISPOSITIVO_PADRAO ou "padrao".
-let dispositivoAtivo = (process.env.AI_DISPOSITIVO_PADRAO || "padrao").toLowerCase();
-if (!DISPOSITIVOS[dispositivoAtivo]) dispositivoAtivo = "padrao";
+// URLs dos serviços de IA (fixas por env; troque o IP pelo Portainer).
+const OLLAMA_URL  = (process.env.OLLAMA_URL  || "http://localhost:11434").replace(/\/$/, "");
+const SEARXNG_URL = (process.env.SEARXNG_URL || "http://localhost:8080").replace(/\/$/, "");
 
-// URLs correntes derivam do dispositivo ativo (por isso são getters, não const).
-function OLLAMA_URL_ATUAL()  { return DISPOSITIVOS[dispositivoAtivo]?.ollama  || "http://localhost:11434"; }
-function SEARXNG_URL_ATUAL() { return DISPOSITIVOS[dispositivoAtivo]?.searxng || "http://localhost:8080"; }
+// Serviço de IA com ferramentas (judy-ia). Quando definido, o bot manda as
+// mensagens para lá (que roda o laço de tool-calling) em vez de falar direto
+// com o Ollama. Vazio = comportamento antigo (Ollama direto, sem ferramentas).
+const IA_SERVICO_URL = (process.env.IA_SERVICO_URL || "").replace(/\/$/, "");
+const IA_SERVICO_CHAVE = process.env.IA_SERVICO_CHAVE || "";
 
-export function getDispositivo() { return dispositivoAtivo; }
-export function listarDispositivos() { return Object.keys(DISPOSITIVOS); }
-export function setDispositivo(nome) {
-  const n = String(nome || "").trim().toLowerCase();
-  if (!DISPOSITIVOS[n]) return null;
-  dispositivoAtivo = n;
-  return n;
-}
-export function infoDispositivo(nome = dispositivoAtivo) {
-  return DISPOSITIVOS[nome] || null;
-}
-
-// Modelo ativo — pode ser trocado em tempo de execução por &chat modelo <nome>.
 // Inicia pelo env; se houver um salvo na config global, o main aplica no boot.
-let modeloAtivo = OLLAMA_MODEL_PADRAO;
-export function getModelo() { return modeloAtivo; }
-export function setModelo(nome) { modeloAtivo = String(nome).trim(); return modeloAtivo; }
+// Modelo de conversa é fixo (gemma). A escolha por função é automática:
+// ver escolherModelo() e o roteamento em responder()/decisões internas.
+export function getModelo() { return OLLAMA_MODEL_PADRAO; }
 
 // Lista os modelos baixados no Ollama (via /api/tags).
 export async function listarModelos() {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), 6000);
   try {
-    const r = await fetch(`${OLLAMA_URL_ATUAL()}/api/tags`, { signal: ctrl.signal });
+    const r = await fetch(`${OLLAMA_URL}/api/tags`, { signal: ctrl.signal });
     if (!r.ok) return { ok: false, motivo: `HTTP ${r.status}`, modelos: [] };
     const data = await r.json().catch(() => ({}));
     // o campo varia entre versões do Ollama: name ou model
@@ -193,7 +164,7 @@ async function ollamaDisponivel() {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), 4000);
   try {
-    const r = await fetch(`${OLLAMA_URL_ATUAL()}/api/tags`, { signal: ctrl.signal });
+    const r = await fetch(`${OLLAMA_URL}/api/tags`, { signal: ctrl.signal });
     if (!r.ok) return { ok: false, motivo: `respondeu HTTP ${r.status}` };
     return { ok: true };
   } catch {
@@ -204,8 +175,29 @@ async function ollamaDisponivel() {
 }
 
 // ── Chamada ao Ollama (/api/chat, stream desligado) ────────
+// Chama o serviço judy-ia (que roda o laço de ferramentas) e devolve o texto.
+// Cai para erro tratado se o serviço estiver fora — o chamador decide o fallback.
+async function chamarServicoIA(messages, { modelo = null } = {}) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), TIMEOUT);
+  try {
+    const headers = { "Content-Type": "application/json" };
+    if (IA_SERVICO_CHAVE) headers["x-chave"] = IA_SERVICO_CHAVE;
+    const r = await fetch(`${IA_SERVICO_URL}/chat`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ messages, modelo: modelo || undefined }),
+      signal: ctrl.signal,
+    });
+    if (!r.ok) throw new Error(`serviço IA HTTP ${r.status}`);
+    const data = await r.json();
+    if (data?.usos?.length) dlog(`judy-ia usou: ${data.usos.map((u) => u.ferramenta).join(", ")}`);
+    return (data?.resposta || "").trim();
+  } finally { clearTimeout(t); }
+}
+
 export async function ollamaChat(messages, { json = false, maxTokens = MAX_TOKENS, etiqueta = "resposta", modelo = null } = {}) {
-  const modeloUsado = modelo || modeloAtivo;
+  const modeloUsado = modelo || OLLAMA_MODEL_PADRAO;
   const options = {
     num_ctx: NUM_CTX,
     temperature: 0.6,
@@ -222,7 +214,7 @@ export async function ollamaChat(messages, { json = false, maxTokens = MAX_TOKEN
   console.log(`[CHAT][ollama] → ${etiqueta} | modelo=${modeloUsado} num_ctx=${NUM_CTX} num_predict=${maxTokens} entrada≈${entradaChars} chars${json ? " (json)" : ""}`);
 
   const t0 = Date.now();
-  const data = await pedir(`${OLLAMA_URL_ATUAL()}/api/chat`, body);
+  const data = await pedir(`${OLLAMA_URL}/api/chat`, body);
   const dur = ((Date.now() - t0) / 1000).toFixed(1);
 
   const conteudo = data?.message?.content ?? "";
@@ -243,7 +235,7 @@ export async function ollamaChat(messages, { json = false, maxTokens = MAX_TOKEN
 
 // ── Busca no SearXNG (JSON) ────────────────────────────────
 async function buscar(query, n = 4) {
-  const url = `${SEARXNG_URL_ATUAL()}/search?q=${encodeURIComponent(query)}&format=json&language=pt-BR`;
+  const url = `${SEARXNG_URL}/search?q=${encodeURIComponent(query)}&format=json&language=pt-BR`;
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), 30000);
   try {
@@ -271,7 +263,7 @@ async function decidirBusca(pergunta) {
   try {
     const raw = await ollamaChat(
       [{ role: "system", content: sys }, { role: "user", content: pergunta }],
-      { json: true },
+      { json: true, modelo: OLLAMA_MODEL_DECISAO, etiqueta: "decidir-busca" },
     );
     const obj = JSON.parse(raw);
     return { buscar: !!obj.buscar, query: String(obj.query || pergunta).slice(0, 200) };
@@ -371,9 +363,21 @@ async function responder(pergunta, resultados, autor, userId, citada) {
   }
   // Programação → modelo especializado (ornith). Considera a pergunta e a
   // mensagem citada (ex.: respondeu a um trecho de código e chamou a Judy).
-  const usarCodigo = ehProgramacao(pergunta) || (citada && ehProgramacao(citada.conteudo));
-  const modeloEscolhido = usarCodigo ? OLLAMA_MODEL_CODIGO : null;   // null = usa o ativo
-  if (usarCodigo) dlog(`pergunta de programação → modelo ${OLLAMA_MODEL_CODIGO}`);
+  const { modelo: modeloEscolhido, tipo } = escolherModelo(pergunta, citada);
+  if (tipo !== "conversa") dlog(`pergunta de ${tipo} → modelo ${modeloEscolhido}`);
+
+  // Se o serviço judy-ia estiver configurado, mandamos para lá (ele roda o laço
+  // de ferramentas). Se falhar, caímos para o Ollama direto — a conversa não
+  // pode ficar sem resposta só porque o serviço de ferramentas está fora.
+  if (IA_SERVICO_URL) {
+    try {
+      const r = await chamarServicoIA(messages, { modelo: modeloEscolhido });
+      if (r) return r.trim();
+      dlog("serviço IA devolveu vazio — caindo para Ollama direto");
+    } catch (e) {
+      dlog(`serviço IA falhou (${e.message}) — caindo para Ollama direto`);
+    }
+  }
   return (await ollamaChat(messages, { maxTokens: MAX_TOKENS, modelo: modeloEscolhido })).trim();
 }
 
@@ -465,6 +469,27 @@ function dlog(...args) { if (DEBUG) console.log("[CHAT][debug]", ...args); }
 // ──────────────────────────────────────────────────────────
 //  Ponto de entrada — usado pelo &chat e pela menção
 // ──────────────────────────────────────────────────────────
+// Detecta pergunta de lógica / matemática / raciocínio — usa o modelo forte
+// em raciocínio (qwen). Heurística: operadores, números com operação, termos.
+function ehLogica(texto) {
+  if (!texto) return false;
+  const t = texto.toLowerCase();
+  if (/\d\s*[+\-*/×÷^%]\s*\d/.test(texto)) return true;             // 12 * 7
+  if (/\d+\s*(por cento|%)/.test(t)) return true;                   // 15% / 30 por cento
+  // termos (sem \b após palavras acentuadas — o \b não casa bem com acento em JS)
+  const termos = /(calcul|quanto (é|vale|da|fica|custa|sao|são)|resolv|equa[çc]|f[óo]rmula|porcentagem|m[ée]dia|probabilidade|estat[íi]stica|raiz quadrada|fatorial|logaritmo|derivada|integral|matem[áa]tica|l[óo]gica|silogismo|deduz|prove que|demonstre|conta de|somar|subtrair|multiplicar|dividir)/i;
+  return termos.test(t);
+}
+
+// Escolhe o modelo pela natureza da mensagem do usuário.
+// Programação > Lógica > Conversa (ordem de prioridade).
+function escolherModelo(pergunta, citada) {
+  const alvo = `${pergunta || ""} ${citada?.conteudo || ""}`;
+  if (ehProgramacao(alvo)) return { modelo: OLLAMA_MODEL_CODIGO, tipo: "código" };
+  if (ehLogica(alvo))      return { modelo: OLLAMA_MODEL_LOGICA, tipo: "lógica" };
+  return { modelo: OLLAMA_MODEL_PADRAO, tipo: "conversa" };
+}
+
 // Detecta se a pergunta é sobre programação — nesses casos usamos o modelo
 // especializado em código. Heurística por palavras-chave e sinais de código.
 function ehProgramacao(texto) {
@@ -587,7 +612,11 @@ export async function conversar(message, pergunta, ctx) {
   try {
     await editarStatus("💭 Analisando sua pergunta…");
 
-    const decisao = await decidirBusca(pergunta);
+    // Interruptor global: BUSCA_ATIVA=false desliga a busca web por completo
+    // (útil quando o SearXNG está indisponível — evita tentativas que vazam a
+    // query como texto). Nesse caso, nem consulta o LLM sobre buscar.
+    const buscaLigada = process.env.BUSCA_ATIVA !== "false" && process.env.BUSCA_ATIVA !== "0";
+    const decisao = buscaLigada ? await decidirBusca(pergunta) : { buscar: false };
     // Salvaguarda: se a pergunta é claramente sobre o próprio bot, NUNCA busca —
     // usa o contexto do projeto (README) que já está no prompt. Isso corrige o
     // caso "fale sobre o bot Cobaia" que ia parar na internet.
@@ -696,7 +725,7 @@ export async function conversar(message, pergunta, ctx) {
     dlog(`ERRO no fluxo: ${err.stack || err.message}`);
     let dica;
     if (/HTTP 404|not found|no such model|try pulling/i.test(err.message)) {
-      dica = `O modelo \`${modeloAtivo}\` não foi encontrado no Ollama. Veja os disponíveis com \`${ctx.PREFIXO}chat modelo\` e escolha um.`;
+      dica = `Um dos modelos configurados não foi encontrado no Ollama. Confira com \`ollama list\` se os modelos das envs (OLLAMA_MODEL, OLLAMA_MODEL_CODIGO, OLLAMA_MODEL_LOGICA, OLLAMA_MODEL_DECISAO) estão baixados.`;
     } else if (/aborted|The operation was aborted|timeout/i.test(err.message)) {
       dica = "A IA demorou demais e o tempo esgotou. O modelo pode ser grande demais para a máquina, ou a pergunta pediu uma resposta muito longa. Tente algo mais curto, ou um modelo menor.";
     } else if (/fetch failed|ECONNREFUSED|HTTP 5/.test(err.message)) {
@@ -735,7 +764,7 @@ async function valeResponder(texto) {
       + 'Responda só JSON: {"responder": true|false}.';
     const raw = await ollamaChat(
       [{ role: "system", content: sys }, { role: "user", content: t.slice(0, 500) }],
-      { json: true, etiqueta: "vale-responder" },
+      { json: true, modelo: OLLAMA_MODEL_DECISAO, etiqueta: "vale-responder" },
     );
     return !!JSON.parse(raw).responder;
   } catch { return false; }
@@ -857,133 +886,15 @@ export async function cmdChat(message, args, ctx) {
     return sendEmbed(message.channel, {
       title: disp.ok ? "🟢 IA disponível" : "🔴 IA indisponível",
       description: [
-        `**Ollama:** ${OLLAMA_URL_ATUAL()}`,
-        `**Modelo:** ${modeloAtivo}`,
-        `**SearXNG:** ${SEARXNG_URL_ATUAL()}`,
+        `**Ollama:** ${OLLAMA_URL}`,
+        `**Conversa:** ${OLLAMA_MODEL_PADRAO}`,
+        `**Código:** ${OLLAMA_MODEL_CODIGO} · **Lógica:** ${OLLAMA_MODEL_LOGICA} · **Decisão:** ${OLLAMA_MODEL_DECISAO}`,
+        `**SearXNG:** ${SEARXNG_URL}`,
         "",
         disp.ok ? "Tudo pronto — pode conversar." : `Status: ${disp.motivo === "offline" ? "**offline** (máquina desligada?)" : disp.motivo}`,
       ].join("\n"),
       colour: disp.ok ? COR.sucesso : COR.aviso,
     });
-  }
-
-  // &chat modelo [nome|número] → lista os modelos e permite escolher
-  // &chat dispositivo [nome] → mostra/troca o dispositivo de IA (PC, laptop…)
-  if (["dispositivo", "device", "aparelho", "maquina", "máquina"].includes(args[0]?.toLowerCase())) {
-    const server = await ctx.getServer?.(message);
-    if (ctx.membroTemPermissao && !ctx.membroTemPermissao(message, server, "ManagePermissions")) {
-      return sendEmbed(message.channel, { title: "🚫 Permissão insuficiente",
-        description: "Você precisa de **ManagePermissions** para trocar o dispositivo de IA.", colour: COR.erro });
-    }
-    const nomes = listarDispositivos();
-    const escolha = args[1]?.toLowerCase();
-
-    if (!escolha) {
-      const lista = nomes.map((n) => {
-        const info = infoDispositivo(n);
-        const marca = n === getDispositivo() ? "▶️" : "•";
-        return `${marca} **${n}**${n === getDispositivo() ? " *(ativo)*" : ""}\n   Ollama: \`${info.ollama}\`${info.searxng ? `\n   SearXNG: \`${info.searxng}\`` : ""}`;
-      });
-      return sendEmbed(message.channel, { title: "🖥️ Dispositivos de IA",
-        description: `${lista.join("\n\n")}\n\nTroque com \`${PREFIXO}chat dispositivo <nome>\`.`, colour: COR.info });
-    }
-
-    const aplicado = setDispositivo(escolha);
-    if (!aplicado) {
-      return sendEmbed(message.channel, { title: "❌ Dispositivo desconhecido",
-        description: `Não conheço "${escolha}". Disponíveis: ${nomes.map((n) => `\`${n}\``).join(", ")}.`, colour: COR.erro });
-    }
-    // persiste a escolha na config global
-    try {
-      if (ctx.getGlobal) { ctx.getGlobal().chatDispositivo = aplicado; ctx.salvarGlobal?.(); }
-    } catch {}
-    const info = infoDispositivo(aplicado);
-    const disp = await ollamaDisponivel();
-    return sendEmbed(message.channel, { title: "🖥️ Dispositivo trocado",
-      description: [
-        `Agora usando **${aplicado}**.`,
-        `Ollama: \`${info.ollama}\``,
-        info.searxng ? `SearXNG: \`${info.searxng}\`` : null,
-        "",
-        disp.ok ? "🟢 O Ollama deste dispositivo respondeu." : `🔴 Atenção: não obtive resposta do Ollama (${disp.motivo}). Confirme que ele está ligado.`,
-      ].filter((x) => x !== null).join("\n"),
-      colour: disp.ok ? COR.sucesso : COR.aviso });
-  }
-
-  if (["modelo", "model", "modelos"].includes(args[0]?.toLowerCase())) {
-    if (!servidorPermitido(serverId))
-      return sendEmbed(message.channel, { title: "🚫 Indisponível aqui",
-        description: "O chat com IA não está habilitado neste servidor.", colour: COR.aviso });
-
-    const membroPode = ctx.membroTemPermissao
-      ? ctx.membroTemPermissao(message, await ctx.getServer?.(message), "ManagePermissions")
-      : true;
-
-    const { ok, modelos, motivo } = await listarModelos();
-    if (!ok)
-      return sendEmbed(message.channel, { title: "🔴 IA indisponível",
-        description: motivo === "offline"
-          ? "O servidor de IA está desligado — não consigo listar os modelos."
-          : `Não consegui listar os modelos (${motivo}).`, colour: COR.aviso });
-    if (!modelos.length)
-      return sendEmbed(message.channel, { title: "📦 Nenhum modelo",
-        description: "Nenhum modelo baixado no Ollama. Baixe um com `ollama pull <nome>` na máquina do Ollama.", colour: COR.aviso });
-
-    const escolha = args[1];
-    // sem escolha → lista (marca o ativo)
-    if (!escolha) {
-      const lista = modelos.map((m, i) => `${m === modeloAtivo ? "▶️" : `\`${i + 1}\``} ${m}${m === modeloAtivo ? " *(ativo)*" : ""}`);
-      return sendEmbed(message.channel, {
-        title: "📦 Modelos disponíveis",
-        description: [
-          lista.join("\n"),
-          "",
-          membroPode
-            ? `Para trocar: \`${PREFIXO}chat modelo <número|nome>\``
-            : "_(só quem tem ManagePermissions pode trocar o modelo)_",
-        ].join("\n"),
-        colour: COR.mod,
-      });
-    }
-
-    // trocar exige permissão
-    if (!membroPode)
-      return sendEmbed(message.channel, { title: "🚫 Permissão insuficiente",
-        description: "Você precisa de **ManagePermissions** para trocar o modelo.", colour: COR.erro });
-
-    // resolve por número ou nome (exato, prefixo, ou trecho em qualquer posição)
-    let alvo = null;
-    if (/^\d+$/.test(escolha)) alvo = modelos[Number(escolha) - 1] ?? null;
-    else {
-      const e = escolha.toLowerCase();
-      alvo = modelos.find((m) => m === escolha)
-          ?? modelos.find((m) => m.toLowerCase() === e)
-          ?? modelos.find((m) => m.toLowerCase().startsWith(e))
-          ?? modelos.find((m) => m.toLowerCase().includes(e));
-      // se o trecho casar com mais de um, é ambíguo — pede para ser específico
-      if (!/^\d+$/.test(escolha)) {
-        const casam = modelos.filter((m) => m.toLowerCase().includes(e));
-        if (casam.length > 1 && !modelos.some((m) => m.toLowerCase() === e)) {
-          return sendEmbed(message.channel, { title: "🤔 Vários modelos casam",
-            description: `\`${escolha}\` casa com: ${casam.map((m) => `\`${m}\``).join(", ")}.\nSeja mais específico ou use o número.`,
-            colour: COR.aviso });
-        }
-      }
-    }
-
-    if (!alvo)
-      return sendEmbed(message.channel, { title: "❌ Modelo não encontrado",
-        description: `\`${escolha}\` não está na lista. Use \`${PREFIXO}chat modelo\` para ver os disponíveis.`, colour: COR.erro });
-
-    setModelo(alvo);
-    // persiste na config global para sobreviver a restart
-    try {
-      if (ctx.cfgGlobal && ctx.salvarGlobal) { ctx.cfgGlobal.chatModelo = alvo; ctx.salvarGlobal(); }
-    } catch (e) { console.error("[CHAT][modelo] persist:", e.message); }
-
-    console.log(`[CHAT] modelo trocado para ${alvo} por ${message.authorId}`);
-    return sendEmbed(message.channel, { title: "✅ Modelo alterado",
-      description: `Agora usando **${alvo}**.`, colour: COR.sucesso });
   }
 
   return conversar(message, args.join(" "), ctx);

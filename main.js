@@ -347,16 +347,6 @@ client.on("ready", async () => {
   store.inicializar(CONFIG_PATH); // abre o banco e migra o config antigo
   cfgGlobal = store.getGlobal();
 
-  // Se houver um modelo de chat salvo (via &chat modelo), aplica-o
-  if (cfgGlobal.chatModelo) {
-    chat.setModelo(cfgGlobal.chatModelo);
-    console.info(`[CHAT] modelo restaurado da config: ${cfgGlobal.chatModelo}`);
-  }
-  // Se houver um dispositivo de IA salvo (via &chat dispositivo), aplica-o
-  if (cfgGlobal.chatDispositivo) {
-    const ok = chat.setDispositivo(cfgGlobal.chatDispositivo);
-    if (ok) console.info(`[CHAT] dispositivo restaurado da config: ${ok}`);
-  }
   const ctx = criarContexto();    // contexto sem servidor (tarefas globais)
   engine.agendarLimpezaSpam(ctx); // limpeza periódica do rastreio de spam
   engine.rebuildBlocklist(ctx);   // baixa as listas anti-link (assíncrono)

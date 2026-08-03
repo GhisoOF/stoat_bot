@@ -11,7 +11,15 @@ services:
       # 100.106.52.86 = IP Tailscale da máquina que roda o Ollama + SearXNG.
       # (Se o IP mudar, atualize aqui ou nas variáveis do Portainer.)
       - OLLAMA_URL=http://100.106.52.86:11434
-      - OLLAMA_MODEL=gemma4:12b                # nome exato do modelo baixado (ollama list)
+      - OLLAMA_MODEL=gemma4:12b            # conversa
+      - OLLAMA_MODEL_CODIGO=ornith:9b      # programação
+      - OLLAMA_MODEL_LOGICA=qwen3.5:9b     # lógica/matemática
+      - OLLAMA_MODEL_DECISAO=qwen3.5:0.8b  # decisões internas (rápido)
+      # Serviço judy-ia (ferramentas). Se definido, a conversa passa por ele;
+      # se ele cair, o bot volta a falar direto com o Ollama.
+      # Aponta para o computador onde roda o judy-ia + Ollama.
+      - IA_SERVICO_URL=http://100.106.52.86:8090
+      # - IA_SERVICO_CHAVE=uma-chave-secreta   # se ativar IA_CHAVE no judy-ia
       - SEARXNG_URL=http://100.106.52.86:8080
       # ── Ajuste fino da IA (opcional) ──
       - CHAT_NUM_CTX=16384                     # contexto (entrada+saída); RX9060XT aguenta
@@ -19,12 +27,6 @@ services:
       - CHAT_TIMEOUT=300000                    # ms; geração longa demora
       - CHAT_DEBUG=1
       - XP_DEBUG=1
-      # Modelo especializado em programação (a Judy alterna sozinha)
-      - OLLAMA_MODEL_CODIGO=ornith:9b
-      # Dispositivos de IA selecionaveis (&chat dispositivo). Formato:
-      #   nome=URL_OLLAMA|URL_SEARXNG;outro=URL_OLLAMA|URL_SEARXNG
-      - AI_DISPOSITIVOS=pc=http://100.106.52.86:11434|http://100.106.52.86:8080;laptop=http://LAPTOP_IP:11434|http://LAPTOP_IP:8080
-      - AI_DISPOSITIVO_PADRAO=pc
       # Conversa livre: intervalo mínimo entre avaliações por canal (ms)
       - CHAT_LIVRE_COOLDOWN=20000
       # ── Super-admin (dono do bot, controle total em qualquer servidor) ──

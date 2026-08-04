@@ -1,5 +1,15 @@
 # Stack de IA local para o Cobaia (Ollama + SearXNG)
 
+> ⚠️ **DOCUMENTO HISTÓRICO / OBSOLETO.** Esta stack (Ollama + SearXNG + Redis num
+> container só, com LLM pequeno em CPU) foi **substituída** pela arquitetura atual:
+> **Ollama nativo** na máquina com GPU + o serviço **`ia-servico/`** (com ferramentas
+> e tool-calling). Para configurar a IA hoje, veja
+> [`ia-servico/README.md`](../ia-servico/README.md) e a seção "Chat com IA local"
+> do README principal. O conteúdo abaixo fica só como referência do que existiu.
+
+---
+
+
 Adiciona ao bot um comando `&chat` (e resposta por menção) com um **LLM pequeno
 rodando 100% local** e **busca na internet via SearXNG self-hosted** — sem
 nenhuma chave ou API externa.

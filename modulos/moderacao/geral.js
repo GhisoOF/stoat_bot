@@ -136,7 +136,7 @@ export function construirDetalhes(P) {
     },
     rss: {
       uso: `${P}rss [add|remove|list|canal|agora]`,
-      desc: "Notícias por RSS, sem IA. `add <url>` cadastra um feed, `canal aqui` define o canal de destino, `list` mostra os feeds, `remove <url|n>` remove, `agora` força um ciclo. A cada hora o bot posta os itens novos (título, feed, horário e link) no canal configurado.",
+      desc: "Curadoria de notícias por RSS, com resumo da Judy. `add <url>` cadastra um feed, `canal aqui` define o destino, `list` mostra os feeds, `remove <url|n>` remove, `agora` força um ciclo. A cada hora a Judy posta um resumo geral no tom dela e depois os itens novos (título, feed, horário, link).",
       perm: "ManagePermissions", ex: `${P}rss add https://exemplo.com/feed.xml`,
     },
     autorole: {
@@ -151,8 +151,13 @@ export function construirDetalhes(P) {
     },
     chat: {
       uso: `${P}chat <mensagem>`,
-      desc: "Conversa com uma IA (Ollama). Busca na internet quando necessário, lembra de você entre conversas, e sabe explicar como configurar este bot.\n\n**Subcomandos:**\n`&chat status` — mostra se o servidor de IA está no ar\n`&chat esquecer` — apaga o que a IA lembra de você\n`&chat livre on|off` — Judy conversa sozinha neste canal\n`&chat livre modo todas|relevante` — responder tudo ou só o importante *(ManagePermissions)*\n\nRespostas podem levar alguns segundos; código longo é dividido em partes.",
+      desc: "Conversa com a IA local (a Judy). Ela busca na internet quando precisa, faz contas exatas, lê o próprio código, lembra de você entre conversas e sabe explicar como configurar o bot. O modelo é escolhido sozinho conforme o tipo (conversa leve, código, lógica).\n\n**Subcomandos:**\n`&chat status` — mostra se o serviço de IA está no ar\n`&chat esquecer` — apaga o que a Judy lembra de você\n`&chat livre on|off` — a Judy participa sozinha deste canal *(ManagePermissions)*\n`&chat livre modo todas|relevante` — responder tudo ou só o que valer *(ManagePermissions)*\n`&chat comentar aqui|off|pordia <n>` — a Judy comenta por iniciativa neste canal, com freios *(ManagePermissions)*\n\nQuando responde alguém, mantém o papo fluido por um tempo (não precisa mencionar a cada mensagem).",
       perm: null, ex: `${P}chat status`,
+    },
+    modia: {
+      uso: `${P}modia <on|off|criterios|canal|status|limpar>`,
+      desc: "Moderação por IA na conversa. Você escreve os CRITÉRIOS em texto livre e a Judy avalia cada mensagem; se violar, ela APAGA e te marca no #log com o conteúdo e as opções (avisar/silenciar/banir) já com o comando pronto. Ela nunca bane sozinha — a decisão é sua. O dono do bot é imune.\n\n`&modia criterios <texto>` — define o que moderar\n`&modia on|off` — liga/desliga\n`&modia canal add|remove` — limita a canais (sem isso, vale em todos)\n`&modia limpar` — zera tudo",
+      perm: "ManageServer", ex: `${P}modia criterios Apague divulgacao de outros servidores e ataques pessoais`,
     },
     debug: {
       uso: `${P}debug`,
@@ -331,6 +336,7 @@ export async function cmdHelp(message, args, ctx) {
         `\`${P}warnings [@usuário]\` — ver avisos`,
         `\`${P}clearwarnings @usuário\` — limpa avisos *(ManagePermissions)*`,
         `\`${P}banglobal <off|avisar|banir|...>\` — lista global *(BanMembers)*`,
+        `\`${P}modia <on|off|criterios|...>\` — moderação por IA na conversa *(ManageServer)*`,
       ],
     },
     automod: {
@@ -362,9 +368,11 @@ export async function cmdHelp(message, args, ctx) {
         `\`${P}embed\` — publica um embed customizável *(ManageMessages)*`,
         `\`${P}reactionrole <add|remove|list>\` — cargos por reação *(ManageRole)*`,
         `\`${P}autorole <set|off>\` — cargo automático a quem entra *(ManageRole)*`,
-        `\`${P}rss <add|remove|list|canal|agora>\` — notícias no canal configurado`,
-        `\`${P}chat <mensagem>\` — conversa com a IA local`,
-        `\`${P}chat esquecer\` — apaga o que a IA lembra de você`,
+        `\`${P}rss <add|remove|list|canal|agora>\` — notícias com resumo da Judy`,
+        `\`${P}chat <mensagem>\` — conversa com a Judy (ou mencione o bot)`,
+        `\`${P}chat livre on|off\` — a Judy participa sozinha do canal`,
+        `\`${P}chat comentar aqui|off\` — a Judy comenta por iniciativa`,
+        `\`${P}chat esquecer\` — apaga o que a Judy lembra de você`,
       ],
     },
     game: {

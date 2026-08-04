@@ -9,8 +9,9 @@ ele só passa a mandar as mensagens para cá em vez de falar direto com o Ollama
 │ (Stoat/chat) │  POST /chat     │  ferramentas │  /api/chat     │  (GPU)   │
 └──────────────┘                 └──────────────┘                └──────────┘
                                         │
-                                        ├── ler_codigo   (/codigo, somente leitura)
+                                        ├── ler_codigo   (do GitHub, somente leitura)
                                         ├── calcular     (sandbox isolado)
+                                        ├── buscar_web   (SearXNG)
                                         └── buscar_rss   (feeds)
 ```
 
@@ -36,14 +37,19 @@ memória e histórico). Este serviço acrescenta as ferramentas e o laço de exe
 **`ler_codigo`** — lê o código-fonte do próprio bot direto do **GitHub**
 (o repositório vive no homelab, não na máquina do judy-ia). Configure
 `GITHUB_REPO` (ex.: `GhisoOF/stoat_bot`) e opcionalmente `GITHUB_BRANCH` e
-`GITHUB_TOKEN`. Repositório público não precisa de token — ele só eleva o
-limite de 60 para 5000 requisições/hora. Ações: `estatisticas`, `listar`, `ler`.
+`GITHUB_TOKEN`. **Repositório privado exige token** (fine-grained, com permissão
+Contents: Read-only no repo). Repositório público funciona sem token — nesse caso
+o token só eleva o limite de 60 para 5000 requisições/hora. Ações: `estatisticas`, `listar`, `ler`.
 Bloqueia `.env`, tokens e arquivos binários.
 
 **`calcular`** — executa JavaScript para fazer contas de verdade. Roda em processo
 separado com o **modelo de permissões do Node** (`--permission`), que bloqueia
 sistema de arquivos, `child_process` e workers — inclusive por `import()` dinâmico.
 Sem rede, sem variáveis de ambiente, timeout de 5s e memória limitada.
+
+**`buscar_web`** — busca na internet via SearXNG (`SEARXNG_URL`) quando a Judy
+precisa de informação atual. Devolve os resultados; ela escreve a resposta. Exige
+o formato JSON habilitado no SearXNG.
 
 **`buscar_rss`** — busca os itens dos feeds e devolve crus; quem escreve o resumo
 é a própria Judy, na voz dela. Com `RSS_FEEDS` configurado, funciona sem passar URL.

@@ -48,12 +48,14 @@ embutido (nada de serviço externo), então as configurações e punições
 - **Embed customizável** (`&embed`): o bot publica uma mensagem embed com título, descrição, cor, rodapé e imagem.
 - **Cargos por reação** (`&reactionrole`): reagir num emoji dá um cargo configurado.
 - **Anti-caracteres**: bloqueia zalgo e caracteres invisíveis. **Anti-repetição** (separado, off por padrão) bloqueia letras repetidas ignorando o `kkkk` brasileiro.
-- **Chat com IA local** (`&chat` ou menção): conversa com um LLM rodando no seu servidor, com busca na internet via SearXNG — sem chaves externas. Requer a stack opcional em `ia-stack/`.
-- **Notícias por RSS** (`&rss`): posta os itens novos dos feeds no canal configurado, a cada hora. (Sem IA — lista direta.)
+- **Chat com IA local** (`&chat` ou menção): conversa com a **Judy**, um LLM rodando na sua máquina, sem chaves externas. Ela escolhe o modelo conforme o tipo de mensagem (conversa, código, lógica), faz **contas exatas** e **lê o próprio código** através de um serviço de ferramentas (`ia-servico/`). Busca na internet via SearXNG quando precisa.
+- **Notícias por RSS** (`&rss`): a cada hora, a Judy posta um **resumo geral no tom dela** e depois os itens novos dos feeds no canal configurado.
 - **Sistema de níveis** (`&game`): XP por mensagem, cargos por nível (posicionados abaixo do mute), leaderboard e setup configurável.
 - **Autorole** (`&autorole`): dá um cargo automaticamente a quem entra no servidor.
 - **Setup geral do servidor** (`&setup servidor`): monta a estrutura completa de um servidor novo — cargo Staff com permissões de moderação, categorias **Staff** (privada), **Geral** (aberta) e **Principal** (somente leitura+reação), com seus canais de texto e voz — e depois guia você pelos demais setups. Não duplica o que já existe.
-- **IA com memória**: o `&chat` lembra de cada usuário entre conversas e funciona como assistente de configuração do próprio bot (conhece este README). Use `&chat esquecer` para apagar sua memória.
+- **IA com memória de longo prazo**: um agente observa o chat e vai aprendendo fatos sobre as pessoas e o servidor, que a Judy usa nas conversas. `&chat esquecer` apaga o que ela guardou de você.
+- **Conversa livre e iniciativa**: `&chat livre` deixa a Judy participar das conversas por conta própria (quando o assunto vale); `&chat comentar` deixa ela soltar comentários espontâneos num canal, com freios. Quando conversa com alguém, mantém o papo fluido sem exigir menção a cada mensagem.
+- **Moderação por IA** (`&modia`): você escreve os critérios em texto livre e a Judy apaga o que violar, marcando o dono no log com as opções — ela nunca bane sozinha.
 - **Comando `&sobre`**: informações resumidas do bot.
 - **Ativar/desativar comandos** por servidor (`&comando`).
 - **Criar cargo de silêncio** com um comando (`&cargomudo`) — todas as permissões negadas.
@@ -127,7 +129,8 @@ sempre pode usar tudo.
 | **ManageRole** | `&reactionrole` (`&rr`) |
 | **KickMembers** | `&kick` |
 | **BanMembers** | `&ban`, `&banglobal` |
-| **ManagePermissions** | `&setup`, `&config`, `&automod`, `&punicao`, `&log`, `&scam`, `&whitelist`, `&blocklist`, `&clearwarnings`, `&comando`, `&cargomudo` |
+| **ManagePermissions** | `&setup`, `&config`, `&automod`, `&punicao`, `&log`, `&scam`, `&whitelist`, `&blocklist`, `&clearwarnings`, `&comando`, `&cargomudo`, `&chat livre`, `&chat comentar` |
+| **ManageServer** | `&modia` (moderação por IA) |
 
 > Resumo prático: para **configurar** o bot, um admin precisa de
 > **ManagePermissions**. Para **moderar** (kick/ban/limpar), precisa das
@@ -206,6 +209,9 @@ Prefixo: `&`. Aliases entre parênteses.
 | `&punicao <modo\|warns\|silencerole>` | política de punição |
 | `&log <here\|id\|off\|evento on/off>` | chat de logs |
 | `&banglobal <off\|avisar\|banir\|...>` | lista global (exige **BanMembers**) |
+| `&modia <on\|off\|criterios\|canal\|limpar>` | moderação por IA na conversa (exige **ManageServer**) |
+| `&chat livre <on\|off\|modo>` | conversa livre da Judy no canal |
+| `&chat comentar <aqui\|off\|pordia>` | comentários espontâneos da Judy |
 | `&scam <config\|sensitivity\|channel\|test\|...>` | detecção de conteúdo (0–10) |
 | `&whitelist <add\|remove\|list> [convite]` | convites permitidos |
 | `&blocklist <add\|remove\|list\|clear\|reload> [url]` | listas anti-link |
@@ -399,32 +405,60 @@ canal de avisos. Exige `ManagePermissions` (e o bot precisa de `React`).
 
 ---
 
-## Chat com IA local (`&chat`)
+## Chat com IA local — a Judy (`&chat`)
 
-Recurso **opcional** que adiciona conversação com um LLM pequeno rodando 100%
-local, com busca na internet via SearXNG self-hosted — **sem nenhuma chave ou
-API externa**.
+Conversação com a **Judy**, um LLM rodando 100% local, **sem nenhuma chave ou API
+externa**. A arquitetura tem duas partes:
+
+- **O bot** (este repositório) monta a personalidade, a memória e o contexto, e
+  decide qual modelo usar.
+- **O serviço `ia-servico/`** (rodando na máquina com GPU, ao lado do Ollama)
+  executa as **ferramentas** e o laço de tool-calling. O bot fala com ele por HTTP
+  (`IA_SERVICO_URL`). Se o serviço cair, o bot fala direto com o Ollama.
 
 ```
 &chat me explique o que é RAID 5
-&chat quem ganhou a última corrida de F1?     (dispara uma busca)
-@Cobaia qual a capital da Austrália?
+&chat quanto é 4783 × 921?          (faz a conta exata via ferramenta)
+@Judy qual a capital da Austrália?
 ```
 
-O bot decide sozinho se precisa buscar (fatos atuais) ou responde direto. Também
-responde quando **mencionado** (@).
+### Modelos por função (escolha automática)
 
-**Limitações:** processa **1 mensagem por vez** e funciona **apenas no servidor
-configurado** (padrão: `01KH9SJYWVD7XAHJ28TP0YP4Q0`; ajuste com a variável
-`CHAT_SERVIDORES`).
+O tipo de mensagem define o modelo — sem troca manual:
 
-> ⚠️ Roda em CPU no seu servidor: respostas levam **segundos** e a qualidade é de
-> **assistente básico** — não um ChatGPT. Ajustado para o Aocwei A7 (Qwen3 0.6B).
+| Tipo | Variável | Uso |
+|---|---|---|
+| Conversa simples | `OLLAMA_MODEL_LEVE` | papo curto, rápido |
+| Conversa complexa | `OLLAMA_MODEL` | explicações, debate |
+| Programação | `OLLAMA_MODEL_CODIGO` | código, erros |
+| Lógica/matemática | `OLLAMA_MODEL_LOGICA` | contas, raciocínio |
+| Decisões internas | `OLLAMA_MODEL_DECISAO` | buscar? responder? (modelo pequeno, rápido) |
+
+### Ferramentas (via `ia-servico`)
+
+- **calcular** — executa JS num sandbox isolado para contas exatas.
+- **ler_codigo** — lê o próprio código do repositório no GitHub (requer
+  `GITHUB_TOKEN` se o repo for privado).
+- **buscar_web** — busca na internet via SearXNG.
+- **buscar_rss** — resumo de feeds sob demanda.
+
+### Memória, participação e moderação
+
+- **Memória de longo prazo**: um agente observa o chat e aprende fatos sobre as
+  pessoas e o servidor. `&chat esquecer` apaga o que ela guardou de você.
+- **Conversa livre** (`&chat livre on`): a Judy participa por conta própria quando
+  o assunto vale. Modo `todas` responde tudo; `relevante` só o que importa.
+  Depois de responder alguém, mantém o papo fluido por um tempo.
+- **Comentário espontâneo** (`&chat comentar aqui`): ela solta comentários por
+  iniciativa num canal, com freios (teto diário, cooldown, chance).
+- **Moderação por IA** (`&modia`): critérios em texto livre; ela apaga o que
+  violar e marca o dono no log — nunca bane sozinha.
+
+**Escopo:** funciona **apenas nos servidores configurados** em `CHAT_SERVIDORES`.
 
 ### Curadoria de notícias (RSS)
 
-Usando o mesmo LLM local, o bot pode resumir notícias de feeds RSS a cada hora e
-postar num canal à sua escolha:
+A cada hora, a Judy posta um **resumo geral no tom dela** e depois os itens novos:
 
 ```
 &rss add https://exemplo.com/feed.xml
@@ -432,13 +466,9 @@ postar num canal à sua escolha:
 &rss agora            # testa um ciclo na hora
 ```
 
-Junta as novidades num resumo único com as fontes no fim. Restrito ao servidor
-configurado; teto de itens por ciclo para proteger o hardware. Detalhes no guia
-da stack de IA.
-
-**Como ativar:** siga o guia em [`ia-stack/README-ia.md`](ia-stack/README-ia.md)
-— sobe três containers (Ollama + SearXNG + Redis) e configura as variáveis
-`OLLAMA_URL`, `OLLAMA_MODEL` e `SEARXNG_URL` no bot.
+**Como ativar a IA:** suba o Ollama na máquina com GPU, suba o `ia-servico/`
+(veja [`ia-servico/README.md`](ia-servico/README.md)), e aponte o bot para ele
+com `IA_SERVICO_URL` + as variáveis `OLLAMA_MODEL_*`.
 
 ---
 
@@ -533,18 +563,26 @@ O código é organizado em quatro áreas, sob `modulos/`:
 │   │   ├── embed.js            # &embed
 │   │   ├── debug-comando.js    # &debug (diagnóstico)
 │   │   ├── setup.js            # assistente &setup (reações)
+│   │   ├── setup-servidor.js   # &setup servidor (estrutura completa)
+│   │   ├── moderacao-ia.js     # moderação por IA (apaga + marca o dono)
+│   │   ├── modia-comando.js    # &modia (configura a moderação por IA)
 │   │   └── geral.js            # help, ping, sobre, userinfo, kick, ban
-│   ├── ai/                     # LLM
-│   │   └── chat.js             # chat com IA (&chat) — memória + assistente de config
+│   ├── ai/                     # LLM (a Judy)
+│   │   ├── chat.js             # chat, roteamento de modelos, conversa livre
+│   │   ├── memoria-agente.js   # aprende fatos observando o chat
+│   │   └── comentario-espontaneo.js  # comentários por iniciativa (com freios)
 │   ├── ferramentas/            # utilidades de engajamento
 │   │   ├── nivel.js            # XP por mensagem (&game/&nivel)
 │   │   ├── reaction-roles.js   # cargos por reação (&reactionrole)
 │   │   ├── autorole.js         # cargo automático a quem entra (&autorole)
-│   │   └── rss.js              # notícias no canal (&rss) — sem IA
+│   │   └── rss.js              # notícias com resumo da Judy (&rss)
 │   ├── game/                   # sistema de níveis
 │   │   └── game.js             # XP, cargos por nível, leaderboard (&game)
 │   └── economia/               # reservado para o futuro
-├── ia-stack/                   # stack opcional de IA (Ollama + SearXNG)
+├── ia-servico/                 # serviço de IA (ferramentas + tool-calling)
+│   ├── servidor.js             # HTTP: /chat, /saude, /ferramentas
+│   └── ferramentas/            # calcular, ler_codigo, buscar_web, buscar_rss
+├── ia-stack/                   # stack de IA legada (superada pelo ia-servico)
 ├── Dockerfile
 ├── docker-compose.image.yml    # imagem pré-construída (Portainer/umbrelOS)
 └── .github/workflows/build.yml # build multi-arch → GHCR

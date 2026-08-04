@@ -892,6 +892,24 @@ async function valeResponder(texto) {
 const _ultimaAvaliacaoLivre = new Map();   // canalId → timestamp
 const LIVRE_COOLDOWN_MS = Number(process.env.CHAT_LIVRE_COOLDOWN || 20000);
 
+// Engajamento ativo: depois que a Judy responde alguém num canal, ela trata as
+// próximas mensagens DESSA pessoa como continuação da conversa por um tempo —
+// respondendo direto, sem o julgamento severo nem cooldown. É o que deixa a
+// conversa fluida em vez de robótica.
+const _engajamento = new Map();   // `${canalId}:${userId}` → expira em (timestamp)
+const ENGAJAMENTO_MS = Number(process.env.CHAT_ENGAJAMENTO_MS || 90000);   // 90s
+const chaveEng = (canalId, userId) => `${canalId}:${userId}`;
+
+function estaEngajado(canalId, userId) {
+  const exp = _engajamento.get(chaveEng(canalId, userId));
+  if (!exp) return false;
+  if (Date.now() > exp) { _engajamento.delete(chaveEng(canalId, userId)); return false; }
+  return true;
+}
+function marcarEngajado(canalId, userId) {
+  _engajamento.set(chaveEng(canalId, userId), Date.now() + ENGAJAMENTO_MS);
+}
+
 // Chamado pelo main para mensagens não-endereçadas. Só age se o canal estiver
 // ativado e o assunto valer. Nunca lança.
 export async function talvezResponderLivre(message, ctx) {
@@ -909,10 +927,16 @@ export async function talvezResponderLivre(message, ctx) {
     if (!texto) return false;
 
     const modo = config?.chatLivre?.modo || "relevante";
+    const userId = message.authorId;
 
-    // No modo "relevante", aplica cooldown + julgamento do LLM.
-    // No modo "todas", responde toda mensagem com texto (respeitando só o ocupado).
-    if (modo !== "todas") {
+    // Se a pessoa está ENGAJADA (a Judy acabou de conversar com ela neste canal),
+    // trata como continuação: responde direto, sem cooldown nem julgamento.
+    // É o que torna o vai-e-vem natural — ela "sabe" que ainda está no papo.
+    const engajado = estaEngajado(message.channelId, userId);
+
+    // No modo "relevante", aplica cooldown + julgamento do LLM — a MENOS que a
+    // pessoa esteja engajada. No modo "todas", responde toda mensagem.
+    if (modo !== "todas" && !engajado) {
       const agora = Date.now();
       const ultima = _ultimaAvaliacaoLivre.get(message.channelId) || 0;
       if (agora - ultima < LIVRE_COOLDOWN_MS) return false;
@@ -921,9 +945,13 @@ export async function talvezResponderLivre(message, ctx) {
       if (ocupado) return false;   // pode ter ficado ocupado durante a avaliação
     }
 
+    // Marca (ou renova) o engajamento: as próximas mensagens desta pessoa neste
+    // canal, por ~90s, entram direto como continuação.
+    marcarEngajado(message.channelId, userId);
+
     // Notifica que ESTA mensagem foi escolhida para resposta: reage com 👀.
-    // Assim as pessoas sabem qual mensagem a Judy está respondendo.
-    try { await message.react?.(encodeURIComponent("👀")); } catch {}
+    // (Só na primeira da sequência; em continuação já é óbvio que ela está ali.)
+    if (!engajado) { try { await message.react?.(encodeURIComponent("👀")); } catch {} }
 
     await conversar(message, texto, ctx);
     return true;

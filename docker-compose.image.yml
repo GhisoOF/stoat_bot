@@ -39,6 +39,7 @@ services:
       - XP_DEBUG=1
       # Conversa livre: intervalo mínimo entre avaliações por canal (ms)
       - CHAT_LIVRE_COOLDOWN=20000
+      - CHAT_ENGAJAMENTO_MS=90000          # após responder alguém, trata as próximas msgs dele como continuação (90s)
       # ── Super-admin (dono do bot, controle total em qualquer servidor) ──
       - SUPER_ADMINS=01K9JKP85D5EP2ZTEHS8DT797A                            # 1 = log detalhado no Portainer (diagnóstico)
       # ── Observabilidade / estabilidade da conexão ──

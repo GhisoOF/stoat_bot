@@ -34,7 +34,7 @@ async function api(caminho) {
   const url = `https://api.github.com/repos/${REPO}/contents/${caminho}?ref=${BRANCH}`;
   const r = await fetch(url, { headers: cabecalhos(), signal: AbortSignal.timeout(15000) });
   if (r.status === 403) throw new Error("limite de requisições do GitHub atingido (adicione GITHUB_TOKEN).");
-  if (r.status === 404) throw new Error("caminho não encontrado no repositório.");
+  if (r.status === 404) throw new Error("repositório ou caminho não encontrado — se o repo for privado, é preciso um GITHUB_TOKEN com acesso a ele.");
   if (!r.ok) throw new Error(`GitHub HTTP ${r.status}`);
   return r.json();
 }

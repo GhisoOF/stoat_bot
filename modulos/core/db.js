@@ -118,6 +118,31 @@ export function abrirBanco(caminho) {
     )
   `);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_iahist_user ON ia_historico (userId, momento)`);
+  // (IA) memória de LONGO PRAZO — fatos aprendidos observando o chat.
+  // Fatos sobre PESSOAS (por usuário) e sobre o SERVIDOR (piadas internas, eventos).
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS ia_fatos_pessoa (
+      id        INTEGER PRIMARY KEY AUTOINCREMENT,
+      serverId  TEXT NOT NULL,
+      userId    TEXT NOT NULL,
+      fato      TEXT NOT NULL,
+      confianca REAL NOT NULL DEFAULT 0.5,   -- 0..1; fatos repetidos sobem
+      vezes     INTEGER NOT NULL DEFAULT 1,  -- quantas vezes foi observado
+      momento   TEXT NOT NULL
+    )
+  `);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_fatospessoa ON ia_fatos_pessoa (serverId, userId)`);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS ia_fatos_servidor (
+      id        INTEGER PRIMARY KEY AUTOINCREMENT,
+      serverId  TEXT NOT NULL,
+      fato      TEXT NOT NULL,
+      confianca REAL NOT NULL DEFAULT 0.5,
+      vezes     INTEGER NOT NULL DEFAULT 1,
+      momento   TEXT NOT NULL
+    )
+  `);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_fatosservidor ON ia_fatos_servidor (serverId)`);
   // (Game) cargos de nível: qual cargo dar em qual nível
   db.exec(`
     CREATE TABLE IF NOT EXISTS game_cargos (
@@ -407,6 +432,76 @@ export function getHistorico(userId, limite = 6) {
 
 export function limparHistorico(userId) {
   return db.prepare("DELETE FROM ia_historico WHERE userId = ?").run(userId).changes ?? 0;
+}
+
+// ── Memória de longo prazo: FATOS sobre pessoas ────────────
+// Registra um fato observado. Se um fato muito parecido já existe (mesmo
+// começo), reforça (sobe confiança, incrementa vezes) em vez de duplicar.
+export function addFatoPessoa(serverId, userId, fato, confianca = 0.5) {
+  const f = String(fato || "").trim();
+  if (!f) return;
+  const existentes = db.prepare(
+    "SELECT id, fato, confianca, vezes FROM ia_fatos_pessoa WHERE serverId = ? AND userId = ?"
+  ).all(serverId, userId);
+  const norm = (s) => s.toLowerCase().replace(/\s+/g, " ").trim();
+  const parecido = existentes.find((e) => {
+    const a = norm(e.fato), b = norm(f);
+    return a === b || a.includes(b) || b.includes(a);
+  });
+  const agora = new Date().toISOString();
+  if (parecido) {
+    const novaConf = Math.min(1, parecido.confianca + 0.15);
+    db.prepare("UPDATE ia_fatos_pessoa SET confianca = ?, vezes = vezes + 1, momento = ? WHERE id = ?")
+      .run(novaConf, agora, parecido.id);
+  } else {
+    db.prepare("INSERT INTO ia_fatos_pessoa (serverId, userId, fato, confianca, vezes, momento) VALUES (?, ?, ?, ?, 1, ?)")
+      .run(serverId, userId, f, confianca, agora);
+  }
+}
+
+// Fatos de uma pessoa, dos mais confiáveis para os menos. `minConf` filtra ruído.
+export function getFatosPessoa(serverId, userId, { limite = 12, minConf = 0.4 } = {}) {
+  return db.prepare(
+    `SELECT fato, confianca, vezes FROM ia_fatos_pessoa
+     WHERE serverId = ? AND userId = ? AND confianca >= ?
+     ORDER BY confianca DESC, vezes DESC, momento DESC LIMIT ?`
+  ).all(serverId, userId, minConf, limite);
+}
+
+export function limparFatosPessoa(serverId, userId) {
+  return db.prepare("DELETE FROM ia_fatos_pessoa WHERE serverId = ? AND userId = ?")
+    .run(serverId, userId).changes ?? 0;
+}
+
+// ── Memória de longo prazo: FATOS sobre o servidor ─────────
+export function addFatoServidor(serverId, fato, confianca = 0.5) {
+  const f = String(fato || "").trim();
+  if (!f) return;
+  const existentes = db.prepare(
+    "SELECT id, fato, confianca FROM ia_fatos_servidor WHERE serverId = ?"
+  ).all(serverId);
+  const norm = (s) => s.toLowerCase().replace(/\s+/g, " ").trim();
+  const parecido = existentes.find((e) => {
+    const a = norm(e.fato), b = norm(f);
+    return a === b || a.includes(b) || b.includes(a);
+  });
+  const agora = new Date().toISOString();
+  if (parecido) {
+    const novaConf = Math.min(1, parecido.confianca + 0.15);
+    db.prepare("UPDATE ia_fatos_servidor SET confianca = ?, vezes = vezes + 1, momento = ? WHERE id = ?")
+      .run(novaConf, agora, parecido.id);
+  } else {
+    db.prepare("INSERT INTO ia_fatos_servidor (serverId, fato, confianca, vezes, momento) VALUES (?, ?, ?, 1, ?)")
+      .run(serverId, f, confianca, agora);
+  }
+}
+
+export function getFatosServidor(serverId, { limite = 15, minConf = 0.4 } = {}) {
+  return db.prepare(
+    `SELECT fato, confianca, vezes FROM ia_fatos_servidor
+     WHERE serverId = ? AND confianca >= ?
+     ORDER BY confianca DESC, vezes DESC, momento DESC LIMIT ?`
+  ).all(serverId, minConf, limite);
 }
 
 // ── Acesso cru ─────────────────────────────────────────────

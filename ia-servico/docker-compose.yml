@@ -1,6 +1,10 @@
 # ── Serviço de IA da Judy (judy-ia) ───────────────────────
-# Roda no COMPUTADOR, ao lado do Ollama. Contém as ferramentas
-# e o laço de tool-calling. O bot no homelab aponta para cá.
+# Roda no COMPUTADOR, ao lado do Ollama.
+#
+# network_mode: host → o container usa a rede do host diretamente.
+# Assim ele fala com o Ollama por localhost:11434, SEM passar pela
+# rede do Docker (docker0/gateway) — o que evita o conflito UFW×Docker
+# que trava o forwarding. A porta 8090 fica exposta na rede do host.
 services:
   judy-ia:
     build: .
@@ -8,16 +12,15 @@ services:
     # image: ghcr.io/ghisoof/judy-ia:latest
     container_name: judy-ia
     restart: unless-stopped
-    ports:
-      - "8090:8090"          # o bot no homelab acessa esta porta
+    network_mode: host          # usa a rede do host (localhost = a própria máquina)
     environment:
-      # ── LLM (Ollama roda NATIVO no host) ──
-      # O container NÃO enxerga o localhost do host: use o IP da
-      # máquina na LAN ou no Tailscale. Ex.: Tailscale do voidpc.
-      - OLLAMA_URL=http://100.106.52.86:11434
+      # ── LLM (Ollama nativo, mesma máquina) ──
+      # Com network_mode host, localhost é o próprio host.
+      - OLLAMA_URL=http://localhost:11434
       - OLLAMA_MODEL=qwen3.5:9b          # PRECISA suportar tool calling (Gemma NÃO suporta)
       - NUM_CTX=16384
       - MAX_TOKENS=4096
+      - PORTA=8090                        # porta do serviço (na rede do host)
 
       # ── Leitura do código via GitHub (o repo vive no homelab) ──
       - GITHUB_REPO=GhisoOF/stoat_bot

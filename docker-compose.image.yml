@@ -15,6 +15,10 @@ services:
       - OLLAMA_MODEL_CODIGO=ornith:9b      # programação
       - OLLAMA_MODEL_LOGICA=qwen3.5:9b     # lógica/matemática
       - OLLAMA_MODEL_DECISAO=qwen3.5:0.8b  # decisões internas (rápido)
+      # ── Agente de memória (aprende fatos observando o chat) ──
+      - MEMORIA_AGENTE=on                  # 'off' desliga o agente
+      - MEMORIA_DEBOUNCE_MS=8000           # agrupa rajadas de msgs numa extração
+      - MEMORIA_MIN_CHARS=12               # ignora mensagens curtas (kkk, oi)
       # Serviço judy-ia (ferramentas). Se definido, a conversa passa por ele;
       # se ele cair, o bot volta a falar direto com o Ollama.
       # Aponta para o computador onde roda o judy-ia + Ollama.

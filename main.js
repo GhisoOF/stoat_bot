@@ -347,6 +347,8 @@ client.on("ready", async () => {
   store.inicializar(CONFIG_PATH); // abre o banco e migra o config antigo
   cfgGlobal = store.getGlobal();
 
+  chat.iniciarMemoria();          // liga o agente de memória (extração em background)
+
   const ctx = criarContexto();    // contexto sem servidor (tarefas globais)
   engine.agendarLimpezaSpam(ctx); // limpeza periódica do rastreio de spam
   engine.rebuildBlocklist(ctx);   // baixa as listas anti-link (assíncrono)
@@ -409,6 +411,16 @@ client.on("messageCreate", async (message) => {
   if (!command) {
     try { await nivel.aoMensagem(message, { ...ctx, client }); }
     catch (e) { console.error("[NIVEL]", e.message); }
+
+    // Agente de memória: observa a mensagem (extração roda em background,
+    // com debounce; não trava nada aqui). Só onde o chat é permitido.
+    if (chat.servidorPermitido(serverId)) {
+      const nome = message.author?.username ?? message.member?.nickname ?? message.authorId;
+      chat.observarMensagem({
+        serverId, userId: message.authorId, nome,
+        texto: message.content, ehBot: !!message.author?.bot,
+      });
+    }
   }
 
   // Conversa livre: a Judy pode entrar em canais configurados quando o assunto

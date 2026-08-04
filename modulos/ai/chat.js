@@ -22,6 +22,7 @@
 // ══════════════════════════════════════════════════════════
 
 import * as db from "../core/db.js";
+import * as memoria from "./memoria-agente.js";
 import { construirDetalhes } from "../moderacao/geral.js";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -89,6 +90,20 @@ const IA_SERVICO_CHAVE = process.env.IA_SERVICO_CHAVE || "";
 // Inicia pelo env; se houver um salvo na config global, o main aplica no boot.
 // Modelo de conversa é fixo (gemma). A escolha por função é automática:
 // ver escolherModelo() e o roteamento em responder()/decisões internas.
+
+// Liga o agente de memória, dando a ele o LLM pequeno (rápido/barato) para
+// extrair fatos em background. Chamado uma vez no boot pelo main.
+export function iniciarMemoria() {
+  memoria.configurar({
+    chamarModelo: (messages) =>
+      ollamaChat(messages, { json: true, modelo: OLLAMA_MODEL_DECISAO, etiqueta: "memoria" }),
+  });
+}
+
+// Chamado pelo bot a cada mensagem do chat (não-comando) para alimentar a memória.
+export function observarMensagem(dados) {
+  try { memoria.observar(dados); } catch {}
+}
 export function getModelo() { return OLLAMA_MODEL_PADRAO; }
 
 // Lista os modelos baixados no Ollama (via /api/tags).
@@ -285,7 +300,7 @@ function hojeExtenso() {
 }
 
 // ── Resposta final ─────────────────────────────────────────
-async function responder(pergunta, resultados, autor, userId, citada) {
+async function responder(pergunta, resultados, autor, userId, citada, serverId) {
   const hoje = hojeExtenso();
 
   // memória do usuário (global): o que a IA já sabe sobre ele
@@ -301,6 +316,13 @@ async function responder(pergunta, resultados, autor, userId, citada) {
       }
     } catch {}
   }
+
+  // memória de LONGO PRAZO: fatos que o agente acumulou observando o chat
+  let fatosTxt = "";
+  try {
+    const bloco = memoria.contextoMemoria(serverId, userId);
+    if (bloco) fatosTxt = `\n\n<memoria_longo_prazo>\n${bloco}\n</memoria_longo_prazo>`;
+  } catch {}
 
   // contexto do projeto: a IA vira assistente de configuração do próprio bot
   const readme = contextoProjeto();
@@ -330,6 +352,7 @@ async function responder(pergunta, resultados, autor, userId, citada) {
     `A data de hoje é ${hoje}. Use esta data como referência para qualquer noção de tempo; não invente outra data.`,
     autor ? `Você está falando com ${autor}, mas NÃO precisa repetir o nome dele a cada resposta.` : "",
     memoriaTxt,
+    fatosTxt,
     projetoTxt,
   ].filter(Boolean).join(" ");
 
@@ -653,7 +676,7 @@ export async function conversar(message, pergunta, ctx) {
     const userId = message.authorId || message.author?.id || null;
     let resposta;
     try {
-      resposta = limpar(await responder(pergunta, resultados, autor, userId, citada));
+      resposta = limpar(await responder(pergunta, resultados, autor, userId, citada, serverId));
     } finally {
       clearInterval(animacao);   // para a animação aconteça o que acontecer
     }
@@ -869,6 +892,7 @@ export async function cmdChat(message, args, ctx) {
     try {
       db.limparMemoria(userId);
       db.limparHistorico(userId);
+      try { memoria.esquecerPessoa(ctx.serverId, userId); } catch {}
       return sendEmbed(message.channel, { title: "🧹 Memória apagada",
         description: "Esqueci o que sabia sobre você. Nossas próximas conversas começam do zero.", colour: COR.sucesso });
     } catch {

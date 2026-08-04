@@ -11,7 +11,8 @@ services:
       # 100.106.52.86 = IP Tailscale da máquina que roda o Ollama + SearXNG.
       # (Se o IP mudar, atualize aqui ou nas variáveis do Portainer.)
       - OLLAMA_URL=http://100.106.52.86:11434
-      - OLLAMA_MODEL=gemma4:12b            # conversa
+      - OLLAMA_MODEL=gemma4:12b            # conversa complexa (explicações, debate)
+      - OLLAMA_MODEL_LEVE=gemma4:e4b       # conversa simples (papo curto) — rápido
       - OLLAMA_MODEL_CODIGO=ornith:9b      # programação
       - OLLAMA_MODEL_LOGICA=qwen3.5:9b     # lógica/matemática
       - OLLAMA_MODEL_DECISAO=qwen3.5:0.8b  # decisões internas (rápido)

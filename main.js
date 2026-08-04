@@ -353,6 +353,7 @@ client.on("ready", async () => {
 
   chat.iniciarMemoria();          // liga o agente de memória (extração em background)
   modIA.configurar({ avaliar: chat.avaliarModeracao });   // moderação por IA usa o modelo pequeno
+  rss.configurarResumo(chat.resumirRSS);   // RSS agendado passa a resumir com o tom da Judy
 
   const ctx = criarContexto();    // contexto sem servidor (tarefas globais)
   engine.agendarLimpezaSpam(ctx); // limpeza periódica do rastreio de spam

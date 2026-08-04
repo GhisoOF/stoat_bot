@@ -112,6 +112,26 @@ export function observarMensagem(dados) {
 export function avaliarModeracao(messages) {
   return ollamaChat(messages, { json: true, modelo: OLLAMA_MODEL_DECISAO, etiqueta: "moderacao-ia" });
 }
+
+// Resumo de RSS com o tom da Judy. Recebe o material (lista de notícias) e
+// devolve um resumo geral curto, na voz dela. Usa o modelo leve (rápido).
+export async function resumirRSS(material, quantidade) {
+  const sys = [
+    "Você é a Judy: afiada, irônica e com humor seco, mas calorosa por baixo (mistura de GLaDOS e Tae Takemi).",
+    "Escreva um RESUMO GERAL curto das notícias abaixo — 2 a 4 frases — no SEU tom: espirituoso, direto, com um toque de deboche elegante. Nada de tom jornalístico neutro nem lista; é um comentário seu sobre o apanhado das notícias.",
+    "Destaque o que for mais relevante ou curioso. Não invente nada além do que está nas notícias. Não repita os títulos um a um — sintetize o panorama.",
+    `São ${quantidade} notícia(s) novas.`,
+  ].join(" ");
+  try {
+    return await ollamaChat(
+      [{ role: "system", content: sys }, { role: "user", content: material.slice(0, 6000) }],
+      { modelo: OLLAMA_MODEL_LEVE, maxTokens: 500, etiqueta: "resumo-rss" },
+    );
+  } catch (e) {
+    dlog(`resumo RSS falhou: ${e.message}`);
+    return "";
+  }
+}
 export function getModelo() { return OLLAMA_MODEL_PADRAO; }
 
 // Lista os modelos baixados no Ollama (via /api/tags).

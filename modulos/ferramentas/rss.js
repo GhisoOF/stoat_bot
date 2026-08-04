@@ -8,8 +8,8 @@
 //  &rss canal [aqui|<id>|off] → define o canal onde os resumos são postados
 //  &rss agora                 → força um ciclo imediato (teste)
 //
-//  A cada hora, o bot busca os itens NOVOS de cada feed, resume tudo num
-//  Posta os itens novos diretamente no canal configurado (sem IA).
+//  A cada hora, o bot busca os itens NOVOS de cada feed. Se a IA estiver
+//  ligada, a Judy escreve um resumo geral (no tom dela) e depois lista os itens.
 //
 //  Restrições:
 //   • só funciona no servidor permitido (mesma allowlist do &chat)
@@ -19,6 +19,11 @@
 
 import * as db from "../core/db.js";
 import * as log from "../core/log.js";
+
+// Resumo por IA (injetado pelo main, usando o pipeline do chat). Se não for
+// configurado, o RSS posta os itens sem resumo (comportamento antigo).
+let resumirIA = null;
+export function configurarResumo(fn) { resumirIA = fn; }
 
 // Allowlist de servidores para o RSS (mesma lógica do antigo import do chat).
 const RSS_SERVIDORES = (process.env.RSS_SERVIDORES || process.env.CHAT_SERVIDORES || "")
@@ -147,7 +152,28 @@ export async function rodarCiclo(serverId, ctx, { forcado = false } = {}) {
   let cortados = 0;
   if (novos.length > MAX_ITENS) { cortados = novos.length - MAX_ITENS; novos = novos.slice(0, MAX_ITENS); }
 
-  // Posta cada notícia como um item (título, feed, horário, link). Sem resumo de IA.
+  const agora = new Date().toLocaleString("pt-BR", { timeZone: process.env.TZ || "UTC" });
+
+  // ── Resumo geral com IA (tom da Judy), se configurado ──
+  if (resumirIA) {
+    try {
+      const material = novos.map((it, i) =>
+        `${i + 1}. [${it.feedTitulo}] ${it.titulo}${it.resumo ? ` — ${it.resumo.slice(0, 200)}` : ""}`
+      ).join("\n");
+      const resumo = await resumirIA(material, novos.length);
+      if (resumo && resumo.trim()) {
+        await canal.sendMessage({ embeds: [{
+          title: `📰 O resumo da Judy — ${agora}`,
+          description: resumo.trim().slice(0, 1900),
+          colour: "#a78bfa",
+        }] });
+      }
+    } catch (e) {
+      console.error("[RSS] resumo IA falhou:", e.message);   // segue postando os itens
+    }
+  }
+
+  // Posta cada notícia como um item (título, feed, horário, link).
   // Agrupa em blocos para não exceder o limite do embed.
   const linhas = novos.map((it) => {
     const quando = it.data ? new Date(it.data).toLocaleString("pt-BR", { timeZone: process.env.TZ || "UTC" }) : "—";
@@ -163,7 +189,6 @@ export async function rodarCiclo(serverId, ctx, { forcado = false } = {}) {
   }
   if (atual) blocos.push(atual);
 
-  const agora = new Date().toLocaleString("pt-BR", { timeZone: process.env.TZ || "UTC" });
   for (let i = 0; i < blocos.length; i++) {
     const titulo = blocos.length > 1 ? `📰 Notícias (${i + 1}/${blocos.length}) — ${agora}` : `📰 Notícias — ${agora}`;
     const rodape = (i === blocos.length - 1 && cortados) ? `\n\n_(+${cortados} além do limite deste ciclo)_` : "";

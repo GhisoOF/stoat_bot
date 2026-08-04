@@ -431,6 +431,11 @@ client.on("messageCreate", async (message) => {
         serverId, userId: message.authorId, nome,
         texto: message.content, ehBot: !!message.author?.bot,
       });
+      // Cache do canal: registra o fio da conversa (quem falou, a quem respondeu).
+      const respNome = message.reply_ids?.length ? "uma mensagem anterior" : null;
+      chat.registrarNoCanal(message.channelId, {
+        nome, userId: message.authorId, texto: message.content, respondeuA: respNome,
+      });
       // Comentário espontâneo: talvez a Judy dê um pitaco (só no canal escolhido,
       // com freios). Não bloqueia; roda em background.
       if (!message.author?.bot) {

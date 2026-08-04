@@ -143,6 +143,31 @@ export function abrirBanco(caminho) {
     )
   `);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_fatosservidor ON ia_fatos_servidor (serverId)`);
+  // (IA) categoria nos fatos de pessoa: 'personalidade' | 'gosto' | 'info' | 'geral'.
+  // Migração segura: adiciona a coluna se ainda não existir.
+  try {
+    const cols = db.prepare("PRAGMA table_info(ia_fatos_pessoa)").all().map((c) => c.name);
+    if (!cols.includes("categoria")) {
+      db.exec("ALTER TABLE ia_fatos_pessoa ADD COLUMN categoria TEXT DEFAULT 'geral'");
+    }
+  } catch (e) { console.error("[DB] migração categoria:", e.message); }
+  // (IA) perfil do usuário: dados do cartão (bio, grupos, jogos, status) + flag
+  // opt-in de "tratar com extra cuidado". Um registro por (servidor, usuário).
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS ia_perfil (
+      serverId    TEXT NOT NULL,
+      userId      TEXT NOT NULL,
+      nome        TEXT,
+      bio         TEXT,
+      grupos      TEXT,
+      jogos       TEXT,
+      status      TEXT,
+      entrou      TEXT,
+      cuidado     INTEGER NOT NULL DEFAULT 0,   -- 1 = tratar com gentileza extra (opt-in)
+      atualizado  TEXT,
+      PRIMARY KEY (serverId, userId)
+    )
+  `);
   // (Game) cargos de nível: qual cargo dar em qual nível
   db.exec(`
     CREATE TABLE IF NOT EXISTS game_cargos (
@@ -437,7 +462,7 @@ export function limparHistorico(userId) {
 // ── Memória de longo prazo: FATOS sobre pessoas ────────────
 // Registra um fato observado. Se um fato muito parecido já existe (mesmo
 // começo), reforça (sobe confiança, incrementa vezes) em vez de duplicar.
-export function addFatoPessoa(serverId, userId, fato, confianca = 0.5) {
+export function addFatoPessoa(serverId, userId, fato, confianca = 0.5, categoria = "geral") {
   const f = String(fato || "").trim();
   if (!f) return;
   const existentes = db.prepare(
@@ -454,15 +479,15 @@ export function addFatoPessoa(serverId, userId, fato, confianca = 0.5) {
     db.prepare("UPDATE ia_fatos_pessoa SET confianca = ?, vezes = vezes + 1, momento = ? WHERE id = ?")
       .run(novaConf, agora, parecido.id);
   } else {
-    db.prepare("INSERT INTO ia_fatos_pessoa (serverId, userId, fato, confianca, vezes, momento) VALUES (?, ?, ?, ?, 1, ?)")
-      .run(serverId, userId, f, confianca, agora);
+    db.prepare("INSERT INTO ia_fatos_pessoa (serverId, userId, fato, confianca, vezes, momento, categoria) VALUES (?, ?, ?, ?, 1, ?, ?)")
+      .run(serverId, userId, f, confianca, agora, categoria);
   }
 }
 
 // Fatos de uma pessoa, dos mais confiáveis para os menos. `minConf` filtra ruído.
 export function getFatosPessoa(serverId, userId, { limite = 12, minConf = 0.4 } = {}) {
   return db.prepare(
-    `SELECT fato, confianca, vezes FROM ia_fatos_pessoa
+    `SELECT fato, confianca, vezes, categoria, momento FROM ia_fatos_pessoa
      WHERE serverId = ? AND userId = ? AND confianca >= ?
      ORDER BY confianca DESC, vezes DESC, momento DESC LIMIT ?`
   ).all(serverId, userId, minConf, limite);
@@ -471,6 +496,55 @@ export function getFatosPessoa(serverId, userId, { limite = 12, minConf = 0.4 } 
 export function limparFatosPessoa(serverId, userId) {
   return db.prepare("DELETE FROM ia_fatos_pessoa WHERE serverId = ? AND userId = ?")
     .run(serverId, userId).changes ?? 0;
+}
+
+// ── Perfil do usuário (cartão: bio, grupos, jogos, status + flag de cuidado) ──
+export function getPerfil(serverId, userId) {
+  return db.prepare("SELECT * FROM ia_perfil WHERE serverId = ? AND userId = ?").get(serverId, userId) || null;
+}
+
+export function setPerfil(serverId, userId, dados = {}) {
+  const atual = getPerfil(serverId, userId) || {};
+  const merge = {
+    nome:   dados.nome   ?? atual.nome   ?? null,
+    bio:    dados.bio    ?? atual.bio    ?? null,
+    grupos: dados.grupos ?? atual.grupos ?? null,
+    jogos:  dados.jogos  ?? atual.jogos  ?? null,
+    status: dados.status ?? atual.status ?? null,
+    entrou: dados.entrou ?? atual.entrou ?? null,
+    cuidado: dados.cuidado != null ? (dados.cuidado ? 1 : 0) : (atual.cuidado ?? 0),
+  };
+  db.prepare(`INSERT INTO ia_perfil (serverId, userId, nome, bio, grupos, jogos, status, entrou, cuidado, atualizado)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(serverId, userId) DO UPDATE SET
+      nome=excluded.nome, bio=excluded.bio, grupos=excluded.grupos, jogos=excluded.jogos,
+      status=excluded.status, entrou=excluded.entrou, cuidado=excluded.cuidado, atualizado=excluded.atualizado`)
+    .run(serverId, userId, merge.nome, merge.bio, merge.grupos, merge.jogos, merge.status, merge.entrou, merge.cuidado, new Date().toISOString());
+  return getPerfil(serverId, userId);
+}
+
+// Flag opt-in "tratar com gentileza extra" (acessibilidade; controlada por comando).
+export function setCuidado(serverId, userId, ligado) {
+  setPerfil(serverId, userId, { cuidado: ligado ? 1 : 0 });
+  return !!ligado;
+}
+
+// Apaga TUDO que a IA sabe de uma pessoa (fatos + perfil + histórico).
+export function apagarTudoDaPessoa(serverId, userId) {
+  const f = db.prepare("DELETE FROM ia_fatos_pessoa WHERE serverId = ? AND userId = ?").run(serverId, userId).changes ?? 0;
+  const p = db.prepare("DELETE FROM ia_perfil WHERE serverId = ? AND userId = ?").run(serverId, userId).changes ?? 0;
+  let h = 0, m = 0;
+  try { h = db.prepare("DELETE FROM ia_historico WHERE userId = ?").run(userId).changes ?? 0; } catch {}
+  try { m = db.prepare("DELETE FROM ia_memoria WHERE userId = ?").run(userId).changes ?? 0; } catch {}
+  return { fatos: f, perfil: p, historico: h, memoria: m };
+}
+
+// Apaga TODA a memória da IA no servidor (fatos de pessoas, de servidor, perfis).
+export function apagarMemoriaServidor(serverId) {
+  const fp = db.prepare("DELETE FROM ia_fatos_pessoa WHERE serverId = ?").run(serverId).changes ?? 0;
+  const fs = db.prepare("DELETE FROM ia_fatos_servidor WHERE serverId = ?").run(serverId).changes ?? 0;
+  const pf = db.prepare("DELETE FROM ia_perfil WHERE serverId = ?").run(serverId).changes ?? 0;
+  return { fatosPessoa: fp, fatosServidor: fs, perfis: pf };
 }
 
 // ── Memória de longo prazo: FATOS sobre o servidor ─────────

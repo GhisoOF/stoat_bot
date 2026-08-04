@@ -53,7 +53,9 @@ embutido (nada de serviço externo), então as configurações e punições
 - **Sistema de níveis** (`&game`): XP por mensagem, cargos por nível (posicionados abaixo do mute), leaderboard e setup configurável.
 - **Autorole** (`&autorole`): dá um cargo automaticamente a quem entra no servidor.
 - **Setup geral do servidor** (`&setup servidor`): monta a estrutura completa de um servidor novo — cargo Staff com permissões de moderação, categorias **Staff** (privada), **Geral** (aberta) e **Principal** (somente leitura+reação), com seus canais de texto e voz — e depois guia você pelos demais setups. Não duplica o que já existe.
-- **IA com memória de longo prazo**: um agente observa o chat e vai aprendendo fatos sobre as pessoas e o servidor, que a Judy usa nas conversas. `&chat esquecer` apaga o que ela guardou de você.
+- **IA com perfil e memória de longo prazo**: um agente observa o chat e monta um **perfil** de cada pessoa — personalidade, gostos e informações, cada fato com a **data** em que foi aprendido. A Judy usa isso para **adaptar o tom** a cada um (mais leve com quem é sério, mais afiada com quem curte). `&chat perfil` mostra o que ela sabe; `&chat esquecer` apaga o seu, `&chat esquecer tudo` zera o servidor.
+- **Tom modular e acessibilidade**: o tom base é caloroso; a acidez fica para quem já é próximo. `&chat cuidado @user on` marca alguém (opt-in) para tratamento gentil e paciente — sem a Judy inferir nada sozinha.
+- **Cache de conversa do canal**: ela acompanha as últimas mensagens do canal (quem falou, a quem respondeu) e percebe quando o assunto mudou, evitando responder fora de contexto.
 - **Conversa livre e iniciativa**: `&chat livre` deixa a Judy participar das conversas por conta própria (quando o assunto vale); `&chat comentar` deixa ela soltar comentários espontâneos num canal, com freios. Quando conversa com alguém, mantém o papo fluido sem exigir menção a cada mensagem.
 - **Moderação por IA** (`&modia`): você escreve os critérios em texto livre e a Judy apaga o que violar, marcando o dono no log com as opções — ela nunca bane sozinha.
 - **Comando `&sobre`**: informações resumidas do bot.
@@ -210,6 +212,10 @@ Prefixo: `&`. Aliases entre parênteses.
 | `&log <here\|id\|off\|evento on/off>` | chat de logs |
 | `&banglobal <off\|avisar\|banir\|...>` | lista global (exige **BanMembers**) |
 | `&modia <on\|off\|criterios\|canal\|limpar>` | moderação por IA na conversa (exige **ManageServer**) |
+| `&chat perfil [@user]` | o que a Judy sabe sobre alguém |
+| `&chat mapear [@user]` | captura bio/status do cartão do Stoat |
+| `&chat cuidado [@user] on\|off` | tratamento gentil opt-in (acessibilidade) |
+| `&chat esquecer [tudo]` | apaga sua memória (ou a do servidor, com ManageServer) |
 | `&chat livre <on\|off\|modo>` | conversa livre da Judy no canal |
 | `&chat comentar <aqui\|off\|pordia>` | comentários espontâneos da Judy |
 | `&scam <config\|sensitivity\|channel\|test\|...>` | detecção de conteúdo (0–10) |
@@ -442,10 +448,21 @@ O tipo de mensagem define o modelo — sem troca manual:
 - **buscar_web** — busca na internet via SearXNG.
 - **buscar_rss** — resumo de feeds sob demanda.
 
-### Memória, participação e moderação
+### Memória, perfil e participação
 
-- **Memória de longo prazo**: um agente observa o chat e aprende fatos sobre as
-  pessoas e o servidor. `&chat esquecer` apaga o que ela guardou de você.
+- **Perfil do usuário**: a Judy monta um perfil de cada pessoa com fatos
+  categorizados (**personalidade**, **gostos**, **informações**), cada um com a
+  data em que foi aprendido. `&chat perfil [@user]` mostra o perfil;
+  `&chat mapear [@user]` tenta capturar bio/status do cartão do Stoat.
+- **Tom modular**: o tom base é caloroso, e a Judy lê o perfil para decidir o
+  quão afiada ser com cada pessoa. `&chat cuidado [@user] on` marca alguém
+  (opt-in) para tratamento gentil — pensado para acessibilidade, sem o bot
+  inferir condições por conta própria.
+- **Cache do canal**: acompanha as últimas ~20 mensagens do canal (quem falou, a
+  quem respondeu) para perceber quando o assunto muda e não responder fora de
+  contexto.
+- **Apagar memória**: `&chat esquecer` apaga tudo sobre você;
+  `&chat esquecer tudo` zera a memória do servidor inteiro (exige ManageServer).
 - **Conversa livre** (`&chat livre on`): a Judy participa por conta própria quando
   o assunto vale. Modo `todas` responde tudo; `relevante` só o que importa.
   Depois de responder alguém, mantém o papo fluido por um tempo.
@@ -568,8 +585,9 @@ O código é organizado em quatro áreas, sob `modulos/`:
 │   │   ├── modia-comando.js    # &modia (configura a moderação por IA)
 │   │   └── geral.js            # help, ping, sobre, userinfo, kick, ban
 │   ├── ai/                     # LLM (a Judy)
-│   │   ├── chat.js             # chat, roteamento de modelos, conversa livre
-│   │   ├── memoria-agente.js   # aprende fatos observando o chat
+│   │   ├── chat.js             # chat, roteamento de modelos, conversa livre, tom modular
+│   │   ├── memoria-agente.js   # aprende fatos (personalidade/gostos/info) + perfil
+│   │   ├── cache-canal.js      # memória curta da conversa de cada canal (~20 msgs)
 │   │   └── comentario-espontaneo.js  # comentários por iniciativa (com freios)
 │   ├── ferramentas/            # utilidades de engajamento
 │   │   ├── nivel.js            # XP por mensagem (&game/&nivel)

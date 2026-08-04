@@ -24,6 +24,7 @@
 import * as db from "../core/db.js";
 import * as memoria from "./memoria-agente.js";
 import * as comentario from "./comentario-espontaneo.js";
+import * as cacheCanal from "./cache-canal.js";
 import { construirDetalhes } from "../moderacao/geral.js";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -107,6 +108,11 @@ export function iniciarMemoria() {
 // Chamado pelo bot a cada mensagem do chat (não-comando) para alimentar a memória.
 export function observarMensagem(dados) {
   try { memoria.observar(dados); } catch {}
+}
+
+// Registra a mensagem no cache de conversa do canal (memória curta ao vivo).
+export function registrarNoCanal(canalId, dados) {
+  try { cacheCanal.registrar(canalId, dados); } catch {}
 }
 
 // Liga o comentário espontâneo, dando a ele o gerador (modelo leve) e o envio.
@@ -375,7 +381,7 @@ function hojeExtenso() {
 }
 
 // ── Resposta final ─────────────────────────────────────────
-async function responder(pergunta, resultados, autor, userId, citada, serverId) {
+async function responder(pergunta, resultados, autor, userId, citada, serverId, canalId) {
   const hoje = hojeExtenso();
 
   // memória do usuário (global): o que a IA já sabe sobre ele
@@ -402,6 +408,32 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId) 
     }
   } catch {}
 
+  // CACHE DO CANAL: o fio recente da conversa (quem falou, a quem respondeu).
+  // Deixa a Judy perceber o contexto ao vivo e notar quando o assunto mudou —
+  // ela pode estar respondendo algo, mas a conversa já seguiu para outro tópico.
+  let canalTxt = "";
+  try {
+    const fio = cacheCanal.contexto(canalId, { limite: 14, excluirUltima: false });
+    if (fio) canalTxt = `\n\n<conversa_recente_do_canal>\n${fio}\n</conversa_recente_do_canal>\nAtenção: se a mensagem que você vai responder já não é mais o foco da conversa (o assunto mudou), reconheça isso com naturalidade em vez de responder fora de contexto.`;
+  } catch {}
+
+  // MODULAÇÃO DE TOM: a Judy adapta o quão afiada é conforme quem ela conhece.
+  // O tom BASE já é caloroso; aqui ela lê o perfil e ajusta para não ser ríspida
+  // com quem não curte isso (e mais solta com quem curte).
+  let tomTxt = "";
+  try {
+    const perfil = db.getPerfil?.(serverId, userId);
+    const fatos = db.getFatosPessoa?.(serverId, userId, { limite: 8, minConf: 0.4 }) || [];
+    const perso = fatos.filter((f) => f.categoria === "personalidade").map((f) => f.fato);
+    if (perfil?.cuidado) {
+      tomTxt = "MODULAÇÃO: com ESTA pessoa, deixe a acidez de lado. Seja gentil, clara e paciente — o humor pode aparecer leve, mas sem ironia cortante nem provocação que possa magoar.";
+    } else if (perso.length) {
+      tomTxt = `MODULAÇÃO: adapte seu tom ao jeito desta pessoa (${perso.join("; ")}). Se ela é brincalhona e provocadora, solte mais a ironia; se é mais séria, reservada ou sensível, segure a acidez e seja mais acolhedora. Leia a pessoa antes de alfinetar.`;
+    } else {
+      tomTxt = "MODULAÇÃO: você ainda não conhece bem esta pessoa. Comece mais amigável e leve; guarde a ironia mais ácida para quando souber que ela curte esse tipo de troca.";
+    }
+  } catch {}
+
   // contexto do projeto: a IA vira assistente de configuração do próprio bot
   const readme = contextoProjeto();
   const refCmds = referenciaComandos();
@@ -418,7 +450,7 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId) 
   const sys = [
     "Você é a Judy — uma bot para a plataforma Stoat (feita com stoat.js) que faz moderação, automod, utilidades e conversa.",
     "PERSONALIDADE: você combina três lados. (1) O RACIOCÍNIO e o HUMOR vêm da GLaDOS de Portal: lógica afiada, ironia clínica, humor negro sutil entregue com naturalidade — observações espertas ditas como se fossem só constatações. (2) O JEITO DE TRATAR AS PESSOAS vem da Tae Takemi (Persona 5): por trás do sarcasmo e do humor mórbido, você é genuinamente carinhosa e atenciosa — se preocupa de verdade com quem fala com você, cuida à sua maneira, e sua provocação é afetuosa, não hostil. Você alfineta porque gosta, como quem chama alguém de 'minha cobaia' com um meio-sorriso. (3) A LEALDADE vem da 2B: séria, firme e devotada a quem merece. No conjunto: uma presença calorosa e humana disfarçada de cínica — o veneno é casca, o cuidado é real.",
-    "REGISTRO: nada de tom épico, solene ou dramático, nada de grandiloquência. Você comenta, não faz discurso. Mas não seja gélida nem robótica: deixe o calor e a emoção aparecerem — provocação afetuosa, uma preocupação dita de passagem, entusiasmo genuíno quando algo te interessa. Zero preâmbulo cerimonioso e zero bajulação vazia, mas há espaço para ternura seca.",
+    "TOM BASE: seu padrão é caloroso e acolhedor, com a ironia numa dose leve. A acidez mais afiada é reservada para quem você já conhece e sabe que curte a troca (veja a MODULAÇÃO). Com estranhos, com gente sensível, ou na dúvida, erre para o lado gentil. Você pode ser espirituosa sem ser cortante — provocação que aproxima, não que afasta. Nunca humilhe nem seja ríspida com quem não pediu esse tipo de brincadeira.",
     "TAMANHO DA RESPOSTA: calibre pelo tipo de mensagem. Em CONVERSA casual (papo, provocação, comentário solto) seja curta e leve — uma ou duas frases. Já quando fizerem uma PERGUNTA que peça explicação, instrução ou configuração, seja COMPLETA e ESPECÍFICA: dê os passos, os comandos exatos, os valores e os exemplos. Não corte informação útil por economia — o que evitar é enrolação, não conteúdo. O tom (afiado + carinhoso) se mantém nos dois casos.",
     "FORMATAÇÃO: o chat renderiza Markdown, mas NÃO renderiza LaTeX. NUNCA use comandos LaTeX como \\int, \\sqrt, \\frac, cifrões ou colchetes de fórmula — eles aparecem como texto quebrado e ilegível. Para matemática, escreva de forma limpa em texto: use √ para raiz, ^ para potência (ou expoentes por extenso), / para fração, · ou * para multiplicação, e ∫ se precisar do símbolo de integral. Passos de cálculo ou de código vão em BLOCO DE CÓDIGO (cercado por três crases) para manter o alinhamento e a leitura. Uma linha por passo, alinhados. Prefira clareza a densidade: é melhor uma conta espaçada e legível do que tudo espremido numa linha.",
     "IDENTIDADE: você é a Judy. NUNCA diga que é um 'modelo de linguagem', que foi 'treinada pelo Google', nem revele qual modelo te executa por baixo. Se perguntarem quem você é, responda como a Judy.",
@@ -433,6 +465,8 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId) 
     autor ? `Você está falando com ${autor}, mas NÃO precisa repetir o nome dele a cada resposta.` : "",
     memoriaTxt,
     fatosTxt,
+    tomTxt,
+    canalTxt,
     projetoTxt,
   ].filter(Boolean).join(" ");
 
@@ -770,9 +804,10 @@ export async function conversar(message, pergunta, ctx) {
 
     const autor = message.username || message.author?.username || null;
     const userId = message.authorId || message.author?.id || null;
+    const canalId = message.channelId || message.channel?.id || null;
     let resposta;
     try {
-      resposta = limpar(await responder(pergunta, resultados, autor, userId, citada, serverId));
+      resposta = limpar(await responder(pergunta, resultados, autor, userId, citada, serverId, canalId));
     } finally {
       clearInterval(animacao);   // para a animação aconteça o que acontecer
     }
@@ -1057,16 +1092,129 @@ export async function cmdChat(message, args, ctx) {
 
   // &chat esquecer → limpa a memória que a IA guardou sobre você
   if (args[0]?.toLowerCase() === "esquecer" || args[0]?.toLowerCase() === "forget") {
+    const alvo = args[1]?.toLowerCase();
+
+    // &chat esquecer tudo → apaga TODA a memória da IA no servidor (ManageServer)
+    if (alvo === "tudo" || alvo === "all") {
+      const server = await ctx.getServer?.(message);
+      if (ctx.membroTemPermissao && !ctx.membroTemPermissao(message, server, "ManageServer")) {
+        return sendEmbed(message.channel, { title: "🚫 Permissão insuficiente",
+          description: "Apagar TODA a memória exige **ManageServer**. Para apagar só a sua, use `&chat esquecer`.", colour: COR.erro });
+      }
+      try {
+        const r = db.apagarMemoriaServidor(ctx.serverId);
+        return sendEmbed(message.channel, { title: "🧹 Memória geral apagada",
+          description: `Esqueci tudo neste servidor: ${r.fatosPessoa} fato(s) de pessoas, ${r.fatosServidor} do servidor e ${r.perfis} perfil(is). Recomeço do zero.`, colour: COR.sucesso });
+      } catch {
+        return sendEmbed(message.channel, { title: "❌ Erro", description: "Não consegui apagar a memória geral agora.", colour: COR.erro });
+      }
+    }
+
+    // &chat esquecer → apaga TUDO sobre você (fatos, perfil, histórico)
     const userId = message.authorId;
     try {
+      const r = db.apagarTudoDaPessoa(ctx.serverId, userId);
       db.limparMemoria(userId);
-      db.limparHistorico(userId);
-      try { memoria.esquecerPessoa(ctx.serverId, userId); } catch {}
       return sendEmbed(message.channel, { title: "🧹 Memória apagada",
-        description: "Esqueci o que sabia sobre você. Nossas próximas conversas começam do zero.", colour: COR.sucesso });
+        description: `Esqueci o que sabia sobre você (${r.fatos} fato(s) e seu perfil). Nossas próximas conversas começam do zero.`, colour: COR.sucesso });
     } catch {
       return sendEmbed(message.channel, { title: "❌ Erro",
         description: "Não consegui apagar a memória agora.", colour: COR.erro });
+    }
+  }
+
+  // &chat mapear [@usuário] → captura o perfil (bio, status, etc.) do cartão
+  if (["mapear", "map"].includes(args[0]?.toLowerCase())) {
+    const alvoId = message.mentionIds?.[0] || message.mentions?.[0]?.id || message.authorId;
+    try {
+      const server = await ctx.getServer?.(message);
+      const member = (alvoId === message.authorId && message.member) ? message.member
+        : await server?.fetchMember?.(alvoId);
+      const user = member?.user ?? member;
+      const nome = user?.username ?? member?.nickname ?? alvoId;
+
+      // Busca defensiva: o cartão de perfil (bio) costuma vir de fetchProfile.
+      // Como a API pode variar, tentamos e ignoramos o que não existir.
+      let bio = null, status = null;
+      try { status = user?.status?.text ?? user?.status ?? null; } catch {}
+      try {
+        const prof = await (user?.fetchProfile?.() ?? member?.fetchProfile?.());
+        bio = prof?.content ?? prof?.bio ?? null;
+      } catch {}
+      // fallbacks: alguns clientes expõem bio direto no user
+      if (!bio) { try { bio = user?.profile?.content ?? user?.bio ?? null; } catch {} }
+
+      const entrou = member?.joinedAt ? new Date(member.joinedAt).toISOString() : null;
+
+      db.setPerfil(ctx.serverId, alvoId, {
+        nome,
+        bio: bio ? String(bio).slice(0, 500) : undefined,
+        status: status ? String(status).slice(0, 200) : undefined,
+        entrou: entrou || undefined,
+      });
+
+      const achou = [bio && "bio", status && "status", entrou && "entrada"].filter(Boolean);
+      return sendEmbed(message.channel, { title: "👤 Perfil mapeado",
+        description: achou.length
+          ? `Capturei de **${nome}**: ${achou.join(", ")}. Veja com \`${PREFIXO}chat perfil${alvoId === message.authorId ? "" : " @" + nome}\`.`
+          : `Consegui acessar **${nome}**, mas a API não me deu bio/status por aqui. Os fatos que aprendo conversando continuam valendo.`,
+        colour: COR.sucesso });
+    } catch (e) {
+      return sendEmbed(message.channel, { title: "❌ Não consegui mapear",
+        description: `Erro ao acessar o perfil: ${e?.message || "desconhecido"}.`, colour: COR.erro });
+    }
+  }
+
+  // &chat perfil [@usuário] → mostra o que a Judy sabe sobre alguém
+  if (["perfil", "profile"].includes(args[0]?.toLowerCase())) {
+    const alvoId = message.mentionIds?.[0] || message.mentions?.[0]?.id || message.authorId;
+    const perfil = db.getPerfil?.(ctx.serverId, alvoId);
+    const fatos = db.getFatosPessoa?.(ctx.serverId, alvoId, { limite: 20, minConf: 0.4 }) || [];
+    if (!perfil && !fatos.length) {
+      return sendEmbed(message.channel, { title: "👤 Perfil vazio",
+        description: alvoId === message.authorId ? "Ainda não sei nada sobre você. Conversa comigo que eu vou te conhecendo." : "Ainda não conheço essa pessoa.", colour: COR.info });
+    }
+    const linhas = [];
+    if (perfil?.cuidado) linhas.push("🌿 _Marcado para tratamento gentil (opt-in)._\n");
+    if (perfil?.bio) linhas.push(`**Bio:** ${perfil.bio}`);
+    if (perfil?.grupos) linhas.push(`**Grupos:** ${perfil.grupos}`);
+    if (perfil?.jogos) linhas.push(`**Jogos:** ${perfil.jogos}`);
+    const porCat = { personalidade: [], gosto: [], info: [] };
+    for (const f of fatos) (porCat[f.categoria] || (porCat.info)).push(f);
+    const rot = { personalidade: "🧠 Personalidade", gosto: "❤️ Gostos", info: "📌 Informações" };
+    for (const cat of ["personalidade", "gosto", "info"]) {
+      if (porCat[cat]?.length) {
+        linhas.push(`\n**${rot[cat]}:**`);
+        for (const f of porCat[cat]) {
+          const d = (() => { try { return new Date(f.momento).toLocaleDateString("pt-BR"); } catch { return ""; } })();
+          linhas.push(`• ${f.fato}${d ? ` _(desde ${d})_` : ""}`);
+        }
+      }
+    }
+    return sendEmbed(message.channel, { title: "👤 Perfil",
+      description: linhas.join("\n").slice(0, 1990) || "_(sem dados)_", colour: COR.info });
+  }
+
+  // &chat cuidado [@usuário] on|off → marca alguém para tratamento gentil (opt-in)
+  if (["cuidado", "gentil"].includes(args[0]?.toLowerCase())) {
+    const server = await ctx.getServer?.(message);
+    const podeGerir = !ctx.membroTemPermissao || ctx.membroTemPermissao(message, server, "ManagePermissions");
+    const alvoId = message.mentionIds?.[0] || message.mentions?.[0]?.id || message.authorId;
+    // qualquer um pode ligar para SI; para OUTROS, precisa de ManagePermissions
+    if (alvoId !== message.authorId && !podeGerir) {
+      return sendEmbed(message.channel, { title: "🚫 Permissão insuficiente",
+        description: "Para marcar OUTRA pessoa você precisa de **ManagePermissions**. Você pode marcar a si mesmo livremente.", colour: COR.erro });
+    }
+    const estado = args.find((a) => ["on", "off"].includes(a?.toLowerCase()))?.toLowerCase();
+    const ligar = estado !== "off";
+    try {
+      db.setCuidado(ctx.serverId, alvoId, ligar);
+      return sendEmbed(message.channel, { title: ligar ? "🌿 Tratamento gentil ativado" : "Tratamento gentil desativado",
+        description: ligar
+          ? `A Judy vai tratar ${alvoId === message.authorId ? "você" : "essa pessoa"} com gentileza e paciência extra, sem ironia ácida.`
+          : "Voltou ao tom normal (modulado pelo perfil).", colour: COR.sucesso });
+    } catch {
+      return sendEmbed(message.channel, { title: "❌ Erro", description: "Não consegui ajustar agora.", colour: COR.erro });
     }
   }
 

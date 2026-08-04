@@ -52,14 +52,18 @@ export function observar({ serverId, userId, nome, texto, ehBot }) {
 
 const PROMPT_EXTRACAO = `Você extrai fatos duráveis de mensagens de chat para a memória de um bot.
 Leia as mensagens de UM usuário e devolva SÓ um JSON:
-{"pessoa": ["fato curto", ...], "servidor": ["fato curto", ...]}
+{"personalidade": ["..."], "gosto": ["..."], "info": ["..."], "servidor": ["..."]}
+
+CATEGORIAS (sobre quem escreveu):
+- "personalidade": traços de como a pessoa é ou se comunica ("é sarcástica", "é paciente", "gosta de debater", "é tímida").
+- "gosto": preferências e interesses ("gosta de Souls games", "curte cyberpunk", "prefere café").
+- "info": fatos concretos ("trabalha com X", "mora em Y", "estuda Z", "tem um gato").
+- "servidor": fatos gerais da comunidade (piadas internas, eventos, apelidos). NÃO sobre a pessoa.
 
 REGRAS:
-- "pessoa": fatos sobre QUEM ESCREVEU (gostos, profissão, onde mora, o que faz, preferências). Frases curtas em 3ª pessoa: "gosta de X", "trabalha com Y", "mora em Z".
-- "servidor": fatos gerais úteis à comunidade (piadas internas, eventos combinados, apelidos, regras informais). NÃO sobre a pessoa.
-- Só fatos DURÁVEIS. Ignore conversa passageira, saudações, reações, o clima do momento.
-- Se não houver nada que valha lembrar, devolva {"pessoa": [], "servidor": []}.
-- Máximo 3 fatos por categoria. Em português. Nada além do JSON.`;
+- Frases curtas em 3ª pessoa. Só fatos DURÁVEIS — ignore saudações, reações e o clima do momento.
+- Se não houver nada que valha lembrar numa categoria, deixe a lista vazia.
+- Máximo 2 fatos por categoria. Em português. Nada além do JSON.`;
 
 async function processar(k) {
   const buf = buffers.get(k);
@@ -83,37 +87,68 @@ async function processar(k) {
     obj = JSON.parse(limpo);
   } catch { log("JSON inválido do extrator; ignorando"); return; }
 
-  const pessoa = Array.isArray(obj?.pessoa) ? obj.pessoa : [];
-  const servidor = Array.isArray(obj?.servidor) ? obj.servidor : [];
-
-  for (const f of pessoa.slice(0, 3)) {
-    if (typeof f === "string" && f.trim()) db.addFatoPessoa(serverId, userId, f.trim());
+  const cats = { personalidade: "personalidade", gosto: "gosto", info: "info" };
+  let total = 0;
+  for (const [chave, categoria] of Object.entries(cats)) {
+    const lista = Array.isArray(obj?.[chave]) ? obj[chave] : [];
+    for (const f of lista.slice(0, 2)) {
+      if (typeof f === "string" && f.trim()) { db.addFatoPessoa(serverId, userId, f.trim(), 0.5, categoria); total++; }
+    }
   }
-  for (const f of servidor.slice(0, 3)) {
+  const servidor = Array.isArray(obj?.servidor) ? obj.servidor : [];
+  for (const f of servidor.slice(0, 2)) {
     if (typeof f === "string" && f.trim()) db.addFatoServidor(serverId, f.trim());
   }
-  if (pessoa.length || servidor.length) {
-    log(`extraiu p/ ${nome}: ${pessoa.length} pessoais, ${servidor.length} de servidor`);
+  if (total || servidor.length) {
+    log(`extraiu p/ ${nome}: ${total} pessoais, ${servidor.length} de servidor`);
   }
 }
 
 // Monta o bloco de memória para injetar no prompt da Judy ao conversar.
 export function contextoMemoria(serverId, userId) {
   if (!serverId) return "";
-  const pessoa = db.getFatosPessoa(serverId, userId, { limite: 10, minConf: 0.4 });
+  const pessoa = db.getFatosPessoa(serverId, userId, { limite: 14, minConf: 0.4 });
   const servidor = db.getFatosServidor(serverId, { limite: 12, minConf: 0.45 });
-  if (!pessoa.length && !servidor.length) return "";
+  const perfil = db.getPerfil?.(serverId, userId);
+  if (!pessoa.length && !servidor.length && !perfil) return "";
 
+  const dataCurta = (iso) => { try { return new Date(iso).toLocaleDateString("pt-BR"); } catch { return ""; } };
   const linhas = [];
-  if (pessoa.length) {
-    linhas.push("Sobre esta pessoa (do que você já observou):");
-    for (const f of pessoa) linhas.push(`- ${f.fato}`);
+
+  // Perfil (cartão) primeiro, se houver
+  if (perfil) {
+    const p = [];
+    if (perfil.bio) p.push(`bio: ${perfil.bio}`);
+    if (perfil.grupos) p.push(`grupos: ${perfil.grupos}`);
+    if (perfil.jogos) p.push(`jogos: ${perfil.jogos}`);
+    if (p.length) { linhas.push("Perfil desta pessoa:"); for (const x of p) linhas.push(`- ${x}`); }
   }
+
+  // Fatos agrupados por categoria, com a data em que você percebeu
+  if (pessoa.length) {
+    const porCat = { personalidade: [], gosto: [], info: [], geral: [] };
+    for (const f of pessoa) (porCat[f.categoria] || porCat.geral).push(f);
+    const rotulo = { personalidade: "Personalidade", gosto: "Gostos", info: "Informações", geral: "Outros" };
+    linhas.push("O que você já observou:");
+    for (const cat of ["personalidade", "gosto", "info", "geral"]) {
+      for (const f of porCat[cat]) {
+        const d = dataCurta(f.momento);
+        linhas.push(`- [${rotulo[cat]}${d ? `, desde ${d}` : ""}] ${f.fato}`);
+      }
+    }
+  }
+
   if (servidor.length) {
     linhas.push("Sobre este servidor:");
     for (const f of servidor) linhas.push(`- ${f.fato}`);
   }
-  linhas.push("(Use isso com naturalidade; não recite. Pode estar desatualizado.)");
+
+  // Sinal de acessibilidade (opt-in): orienta o tom, sem rótulos médicos.
+  if (perfil?.cuidado) {
+    linhas.push("IMPORTANTE: trate esta pessoa com gentileza e paciência extra, de forma clara e acolhedora. Sem ironia ácida com ela.");
+  }
+
+  linhas.push("(Use com naturalidade; não recite. Pode estar desatualizado.)");
   return linhas.join("\n");
 }
 

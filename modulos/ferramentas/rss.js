@@ -180,11 +180,11 @@ export async function rodarCiclo(serverId, ctx, { forcado = false } = {}) {
     return `**${it.titulo}**\n${it.feedTitulo} · ${quando}${it.link ? `\n${it.link}` : ""}`;
   });
 
-  // fragmenta em mensagens de até ~3500 chars
+  // fragmenta em mensagens de até ~1800 chars (o limite de embed do Stoat é ~2000)
   const blocos = [];
   let atual = "";
   for (const l of linhas) {
-    if ((atual + "\n\n" + l).length > 3500 && atual) { blocos.push(atual); atual = ""; }
+    if ((atual + "\n\n" + l).length > 1800 && atual) { blocos.push(atual); atual = ""; }
     atual = atual ? atual + "\n\n" + l : l;
   }
   if (atual) blocos.push(atual);
@@ -192,7 +192,11 @@ export async function rodarCiclo(serverId, ctx, { forcado = false } = {}) {
   for (let i = 0; i < blocos.length; i++) {
     const titulo = blocos.length > 1 ? `📰 Notícias (${i + 1}/${blocos.length}) — ${agora}` : `📰 Notícias — ${agora}`;
     const rodape = (i === blocos.length - 1 && cortados) ? `\n\n_(+${cortados} além do limite deste ciclo)_` : "";
-    await canal.sendMessage({ embeds: [{ title: titulo, description: blocos[i] + rodape, colour: "#5865F2" }] });
+    try {
+      await canal.sendMessage({ embeds: [{ title: titulo, description: (blocos[i] + rodape).slice(0, 1990), colour: "#5865F2" }] });
+    } catch (e) {
+      console.error("[RSS] falha ao postar bloco de itens:", e?.message || e);
+    }
   }
 
   try {

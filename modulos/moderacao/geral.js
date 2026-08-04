@@ -151,7 +151,7 @@ export function construirDetalhes(P) {
     },
     chat: {
       uso: `${P}chat <mensagem>`,
-      desc: "Conversa com a IA local (a Judy). Ela busca na internet quando precisa, faz contas exatas, lê o próprio código, lembra de você entre conversas e sabe explicar como configurar o bot. O modelo é escolhido sozinho conforme o tipo (conversa leve, código, lógica).\n\n**Subcomandos:**\n`&chat status` — mostra se o serviço de IA está no ar\n`&chat esquecer` — apaga o que a Judy lembra de você\n`&chat livre on|off` — a Judy participa sozinha deste canal *(ManagePermissions)*\n`&chat livre modo todas|relevante` — responder tudo ou só o que valer *(ManagePermissions)*\n`&chat comentar aqui|off|pordia <n>` — a Judy comenta por iniciativa neste canal, com freios *(ManagePermissions)*\n\nQuando responde alguém, mantém o papo fluido por um tempo (não precisa mencionar a cada mensagem).",
+      desc: "Conversa com a IA local (a Judy). Ela busca na internet, faz contas exatas, lê o próprio código, monta um perfil de quem conversa com ela e adapta o tom a cada pessoa. O modelo é escolhido sozinho conforme o tipo (conversa leve, código, lógica).\n\n**Subcomandos:**\n`&chat status` — se o serviço de IA está no ar\n`&chat perfil [@user]` — o que a Judy sabe sobre alguém\n`&chat mapear [@user]` — captura bio/status do cartão\n`&chat cuidado [@user] on|off` — trata a pessoa com gentileza extra (opt-in)\n`&chat esquecer` — apaga tudo que a Judy sabe de você\n`&chat esquecer tudo` — zera a memória do servidor *(ManageServer)*\n`&chat livre on|off|modo` — a Judy participa sozinha do canal *(ManagePermissions)*\n`&chat comentar aqui|off|pordia <n>` — comentários por iniciativa *(ManagePermissions)*\n\nQuando responde alguém, mantém o papo fluido por um tempo.",
       perm: null, ex: `${P}chat status`,
     },
     modia: {
@@ -372,7 +372,9 @@ export async function cmdHelp(message, args, ctx) {
         `\`${P}chat <mensagem>\` — conversa com a Judy (ou mencione o bot)`,
         `\`${P}chat livre on|off\` — a Judy participa sozinha do canal`,
         `\`${P}chat comentar aqui|off\` — a Judy comenta por iniciativa`,
-        `\`${P}chat esquecer\` — apaga o que a Judy lembra de você`,
+        `\`${P}chat perfil [@user]\` — o que a Judy sabe de alguém`,
+        `\`${P}chat cuidado [@user] on\` — tratamento gentil (opt-in)`,
+        `\`${P}chat esquecer [tudo]\` — apaga sua memória (ou a do servidor)`,
       ],
     },
     game: {

@@ -20,6 +20,8 @@ services:
       - MEMORIA_AGENTE=on                  # 'off' desliga o agente
       - MEMORIA_DEBOUNCE_MS=8000           # agrupa rajadas de msgs numa extração
       - MEMORIA_MIN_CHARS=12               # ignora mensagens curtas (kkk, oi)
+      # ── Moderação por IA (critérios em texto livre; &modia) ──
+      - MODIA_MIN_CHARS=3
       # Serviço judy-ia (ferramentas). Se definido, a conversa passa por ele;
       # se ele cair, o bot volta a falar direto com o Ollama.
       # Aponta para o computador onde roda o judy-ia + Ollama.

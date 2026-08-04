@@ -24,6 +24,12 @@ export const padraoServidor = {
     antiScam:        { enabled: false, sensitivity: "media", alertChannelId: null, punicao: null },
     punicao:         { modo: "avisar", warnsParaBan: 3, silenceRoleId: null },
   },
+  // ── Moderação por IA na conversa (a Judy avalia por critérios) ──
+  moderacaoIA: {
+    ativa:     false,          // liga/desliga (&modia on|off)
+    criterios: "",             // texto livre: o que a Judy deve moderar
+    canais:    [],             // canais onde vigia ([] = todos os permitidos)
+  },
   inviteWhitelist:      [],
   // ── Chat de logs (configurável com &log) ──
   log: {

@@ -107,6 +107,11 @@ export function iniciarMemoria() {
 export function observarMensagem(dados) {
   try { memoria.observar(dados); } catch {}
 }
+
+// Avaliador para a moderação por IA: usa o modelo pequeno (rápido) em JSON.
+export function avaliarModeracao(messages) {
+  return ollamaChat(messages, { json: true, modelo: OLLAMA_MODEL_DECISAO, etiqueta: "moderacao-ia" });
+}
 export function getModelo() { return OLLAMA_MODEL_PADRAO; }
 
 // Lista os modelos baixados no Ollama (via /api/tags).

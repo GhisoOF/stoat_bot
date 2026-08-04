@@ -21,6 +21,8 @@ import * as embedCmd  from "./modulos/moderacao/embed.js";
 import * as reactionRoles from "./modulos/ferramentas/reaction-roles.js";
 import * as autorole  from "./modulos/ferramentas/autorole.js";
 import * as setupServidor from "./modulos/moderacao/setup-servidor.js";
+import * as modIA      from "./modulos/moderacao/moderacao-ia.js";
+import * as modiaCmd   from "./modulos/moderacao/modia-comando.js";
 import * as debugCmd  from "./modulos/moderacao/debug-comando.js";
 import * as chat      from "./modulos/ai/chat.js";
 import * as rss       from "./modulos/ferramentas/rss.js";
@@ -276,6 +278,8 @@ const rotas = {
   // Conversa com IA local
   chat:          chat.cmdChat,
   ia:            chat.cmdChat,
+  modia:         modiaCmd.cmdModIA,
+  moderacaoia:   modiaCmd.cmdModIA,
   rss:           rss.cmdRss,
   feed:          rss.cmdRss,
   autorole:      autorole.cmdAutorole,
@@ -348,6 +352,7 @@ client.on("ready", async () => {
   cfgGlobal = store.getGlobal();
 
   chat.iniciarMemoria();          // liga o agente de memória (extração em background)
+  modIA.configurar({ avaliar: chat.avaliarModeracao });   // moderação por IA usa o modelo pequeno
 
   const ctx = criarContexto();    // contexto sem servidor (tarefas globais)
   engine.agendarLimpezaSpam(ctx); // limpeza periódica do rastreio de spam
@@ -404,6 +409,10 @@ client.on("messageCreate", async (message) => {
   // pelo anti-invite antes de o comando rodar.
   if (!handler) {
     if (await engine.runAutomod(message, ctx)) return;
+    // Moderação por IA (critérios em texto livre). Se apagou, para aqui.
+    try {
+      if (await modIA.moderar(message, { ...ctx, client })) return;
+    } catch (e) { console.error("[MOD-IA]", e.message); }
   }
 
   // Game: concede XP por mensagem (só em mensagens normais que sobreviveram

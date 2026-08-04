@@ -25,6 +25,9 @@ services:
       # ── Leitura do código via GitHub (o repo vive no homelab) ──
       - GITHUB_REPO=GhisoOF/stoat_bot
       - GITHUB_BRANCH=main
+      # ── Busca web (SearXNG) ──
+      - SEARXNG_URL=http://localhost:8080
+      - SEARXNG_IDIOMA=pt-BR
       # - GITHUB_TOKEN=ghp_xxx           # opcional: só se bater o limite de 60 req/h
 
       # ── Ferramentas ──

@@ -9,8 +9,9 @@
 import * as lerCodigo from "./ler-codigo.js";
 import * as calcular  from "./calcular.js";
 import * as rss       from "./rss.js";
+import * as buscarWeb from "./buscar-web.js";
 
-const MODULOS = [lerCodigo, calcular, rss];
+const MODULOS = [lerCodigo, calcular, rss, buscarWeb];
 
 // Ferramentas podem ser desligadas por env: FERRAMENTAS_OFF=calcular,buscar_rss
 const desligadas = new Set(

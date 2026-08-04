@@ -23,6 +23,7 @@
 
 import * as db from "../core/db.js";
 import * as memoria from "./memoria-agente.js";
+import * as comentario from "./comentario-espontaneo.js";
 import { construirDetalhes } from "../moderacao/geral.js";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -108,6 +109,22 @@ export function observarMensagem(dados) {
   try { memoria.observar(dados); } catch {}
 }
 
+// Liga o comentário espontâneo, dando a ele o gerador (modelo leve) e o envio.
+export function iniciarComentario(client) {
+  comentario.configurar({
+    gerar: (contexto) => gerarComentarioEspontaneo(contexto),
+    enviar: async (canalId, texto) => {
+      const canal = client.channels.get(canalId) ?? await client.channels.fetch(canalId).catch(() => null);
+      if (canal) await canal.sendMessage(texto);
+    },
+  });
+}
+
+// Chamado pelo bot a cada mensagem do canal para talvez comentar por iniciativa.
+export function observarParaComentario(message, ctx) {
+  try { comentario.observar(message, ctx); } catch {}
+}
+
 // Avaliador para a moderação por IA: usa o modelo pequeno (rápido) em JSON.
 export function avaliarModeracao(messages) {
   return ollamaChat(messages, { json: true, modelo: OLLAMA_MODEL_DECISAO, etiqueta: "moderacao-ia" });
@@ -129,6 +146,30 @@ export async function resumirRSS(material, quantidade) {
     );
   } catch (e) {
     dlog(`resumo RSS falhou: ${e.message}`);
+    return "";
+  }
+}
+
+// Comentário espontâneo: a Judy dá um pitaco sobre a conversa recente do canal,
+// por iniciativa (ninguém a chamou). Tom Judy, curtíssimo, modelo leve.
+export async function gerarComentarioEspontaneo(contextoCanal) {
+  const sys = [
+    "Você é a Judy — afiada, irônica, humor seco, mas com um calor real por baixo (GLaDOS + Tae Takemi).",
+    "Abaixo está um trecho da conversa recente de um canal. Solte UM comentário espontâneo e curto (1 frase, no máximo 2) sobre o que está rolando — como alguém que estava ali e resolveu dar um pitaco.",
+    "REGRAS: não cumprimente, não se apresente, não responda a ninguém especificamente, não faça pergunta cerimoniosa. Seja natural e espirituosa, um comentário solto que soma ou provoca de leve. Se a conversa não der margem para um comentário bom, responda apenas com a palavra PULAR.",
+    "Nada de emojis em excesso. Nada de explicar que você é uma IA. Fale como a Judy, direto.",
+  ].join(" ");
+  try {
+    const r = await ollamaChat(
+      [{ role: "system", content: sys }, { role: "user", content: contextoCanal.slice(0, 4000) }],
+      { modelo: OLLAMA_MODEL_LEVE, maxTokens: 200, etiqueta: "comentario-espontaneo" },
+    );
+    const limpo = (r || "").trim();
+    // a Judy pode decidir que não vale comentar
+    if (!limpo || /^pular$/i.test(limpo) || limpo.length < 2) return "";
+    return limpo;
+  } catch (e) {
+    dlog(`comentário espontâneo falhou: ${e.message}`);
     return "";
   }
 }
@@ -897,6 +938,51 @@ export async function cmdChat(message, args, ctx) {
 
   // &chat esquecer → limpa a memória que a IA guardou sobre você
   // &chat livre [on|off] → ativa/desativa a conversa livre NESTE canal
+  // &chat comentar [aqui|off|status] → comentário espontâneo neste canal
+  if (["comentar", "comentario", "comentário", "espontaneo", "espontâneo"].includes(args[0]?.toLowerCase())) {
+    const server = await ctx.getServer?.(message);
+    if (ctx.membroTemPermissao && !ctx.membroTemPermissao(message, server, "ManagePermissions")) {
+      return sendEmbed(message.channel, { title: "🚫 Permissão insuficiente",
+        description: "Você precisa de **ManagePermissions** para configurar o comentário espontâneo.", colour: COR.erro });
+    }
+    ctx.config.comentarioEspontaneo ??= { canalId: null, porDia: 4, minParaFalar: 4 };
+    const ce = ctx.config.comentarioEspontaneo;
+    const acao = args[1]?.toLowerCase();
+
+    if (!acao || acao === "status") {
+      return sendEmbed(message.channel, { title: "💬 Comentário espontâneo",
+        description: [
+          ce.canalId ? `🟢 Ativo em <#${ce.canalId}>` : "🔴 Desligado",
+          `**Máximo por dia:** ${ce.porDia ?? 4}`,
+          "",
+          "A Judy solta comentários por conta própria sobre a conversa em andamento, só neste canal, com freios contra virar spam.",
+          "",
+          `\`${PREFIXO}chat comentar aqui\` (liga neste canal) · \`${PREFIXO}chat comentar off\` · \`${PREFIXO}chat comentar pordia <n>\``,
+        ].join("\n"), colour: COR.info });
+    }
+    if (acao === "aqui" || acao === "on") {
+      ce.canalId = message.channelId;
+      ctx.salvarConfig?.();
+      return sendEmbed(message.channel, { title: "💬 Comentário espontâneo ligado",
+        description: `A Judy vai comentar de vez em quando neste canal (até ${ce.porDia ?? 4}× por dia, quando houver conversa). Ela não puxa assunto do nada — só comenta o que já rola.`, colour: COR.sucesso });
+    }
+    if (acao === "off") {
+      ce.canalId = null;
+      ctx.salvarConfig?.();
+      return sendEmbed(message.channel, { title: "💬 Comentário espontâneo desligado",
+        description: "A Judy parou de comentar por iniciativa.", colour: COR.aviso });
+    }
+    if (acao === "pordia") {
+      const n = Math.max(1, Math.min(20, parseInt(args[2], 10) || 4));
+      ce.porDia = n;
+      ctx.salvarConfig?.();
+      return sendEmbed(message.channel, { title: "💬 Frequência ajustada",
+        description: `Até **${n}** comentário(s) espontâneo(s) por dia.`, colour: COR.sucesso });
+    }
+    return sendEmbed(message.channel, { title: "Uso",
+      description: `\`${PREFIXO}chat comentar aqui|off|pordia <n>|status\``, colour: COR.info });
+  }
+
   if (args[0]?.toLowerCase() === "livre") {
     const server = await ctx.getServer?.(message);
     if (ctx.membroTemPermissao && !ctx.membroTemPermissao(message, server, "ManagePermissions")) {

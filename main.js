@@ -352,6 +352,7 @@ client.on("ready", async () => {
   cfgGlobal = store.getGlobal();
 
   chat.iniciarMemoria();          // liga o agente de memória (extração em background)
+  chat.iniciarComentario(client); // liga o comentário espontâneo
   modIA.configurar({ avaliar: chat.avaliarModeracao });   // moderação por IA usa o modelo pequeno
   rss.configurarResumo(chat.resumirRSS);   // RSS agendado passa a resumir com o tom da Judy
 
@@ -430,6 +431,11 @@ client.on("messageCreate", async (message) => {
         serverId, userId: message.authorId, nome,
         texto: message.content, ehBot: !!message.author?.bot,
       });
+      // Comentário espontâneo: talvez a Judy dê um pitaco (só no canal escolhido,
+      // com freios). Não bloqueia; roda em background.
+      if (!message.author?.bot) {
+        chat.observarParaComentario(message, { ...ctx, client });
+      }
     }
   }
 

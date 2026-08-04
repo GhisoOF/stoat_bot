@@ -22,6 +22,9 @@ services:
       - MEMORIA_MIN_CHARS=12               # ignora mensagens curtas (kkk, oi)
       # ── Moderação por IA (critérios em texto livre; &modia) ──
       - MODIA_MIN_CHARS=3
+      # ── Comentário espontâneo (a Judy comenta por iniciativa; &chat comentar) ──
+      - COMENTARIO_COOLDOWN_MS=2700000     # 45 min entre comentários
+      - COMENTARIO_CHANCE=0.25             # 25% de chance quando elegível
       # Serviço judy-ia (ferramentas). Se definido, a conversa passa por ele;
       # se ele cair, o bot volta a falar direto com o Ollama.
       # Aponta para o computador onde roda o judy-ia + Ollama.

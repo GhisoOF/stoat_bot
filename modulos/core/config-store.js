@@ -52,6 +52,13 @@ export const padraoServidor = {
   rss: { canalId: null },
   autorole: { roleId: null },   // cargo dado automaticamente a quem entra
   chatLivre: { canais: [], modo: "relevante" },    // "relevante" = só o que julgar importante; "todas" = toda mensagem
+  // Comentário espontâneo: a Judy solta um comentário sobre a conversa em
+  // andamento, por iniciativa, num canal escolhido. Com freios de frequência.
+  comentarioEspontaneo: {
+    canalId:    null,     // canal único onde ela comenta (null = desligado)
+    porDia:     4,        // teto de comentários espontâneos por dia
+    minParaFalar: 4,      // quantas mensagens de conversa antes de considerar comentar
+  },
   // ── Game (sistema de níveis por XP de mensagem) ──
   game: {
     enabled: false,

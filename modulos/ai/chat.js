@@ -615,7 +615,7 @@ function ehProgramacao(texto) {
   const t = texto.toLowerCase();
   // sinais fortes: bloco de código, termos de linguagem/erro
   if (/```/.test(texto)) return true;
-  const termos = /\b(código|codigo|program(a|ar|ação|acao)|função|funcao|script|bug|debug|erro de|stack ?trace|exception|compil|algoritmo|ref-?atora|regex|api|endpoint|json|sql|query|docker|kubernetes|linux|bash|shell|terminal|git|npm|node|python|javascript|typescript|java\b|rust|golang|\bgo\b|\bc\+\+|\bc#|kotlin|swift|php|ruby|html|css|react|vue|angular|sqlite|postgres|mysql|mongodb|classe|método|metodo|variável|variavel|array|loop|for\b|while\b|import\b|export\b|async|await|promise|callback|sintaxe|framework|biblioteca|dependência|dependencia|deploy|servidor|banco de dados)\b/i;
+  const termos = /\b(código|codigo|program(a|ar|ação|acao)|função|funcao|script|bug|debug|erro de|stack ?trace|exception|compil|algoritmo|ref-?atora|regex|api|endpoint|json|sql|query|docker|kubernetes|linux|bash|shell|terminal|git|npm|node|python|javascript|typescript|java\b|rust|golang|\bc\+\+|\bc#|kotlin|swift|php|ruby|html|css|react|vue|angular|sqlite|postgres|mysql|mongodb|classe|método|metodo|variável|variavel|array|loop|for\b|while\b|import\b|export\b|async|await|promise|callback|sintaxe|framework|biblioteca|dependência|dependencia)\b/i;
   return termos.test(t);
 }
 
@@ -874,11 +874,11 @@ async function valeResponder(texto) {
   if (t.length < 8) return false;
   if (/^\s*[\p{Emoji}\s]+$/u.test(t) && !/[a-zA-Z0-9]/.test(t)) return false;   // só emoji/símbolo
   try {
-    const sys = "Você decide se um assistente de chat deveria entrar numa conversa. "
-      + "Responda 'sim' apenas se a mensagem for uma pergunta, um pedido de ajuda, "
-      + "um tema técnico/factual, ou algo em que uma resposta acrescente de verdade. "
-      + "Responda 'nao' para conversa social entre pessoas, desabafo, piada interna, "
-      + "ou qualquer coisa que não peça a opinião de um assistente. "
+    const sys = "Você é a Judy, uma personagem que participa de um servidor de chat como se fosse mais uma pessoa da turma — espirituosa e presente, não um assistente formal. "
+      + "Decida se vale a pena você entrar NESTA mensagem com um comentário ou resposta. "
+      + "Responda 'sim' se: for pergunta, pedido, tema interessante, algo em que você tenha o que comentar, provocação, ou uma deixa boa para um comentário seu. "
+      + "Responda 'nao' apenas para: mensagens muito curtas sem conteúdo (ok, kkk, sim), conversa claramente privada entre duas pessoas específicas, ou quando entrar seria intrusivo. "
+      + "Na dúvida, prefira 'sim' — você é participativa. "
       + 'Responda só JSON: {"responder": true|false}.';
     const raw = await ollamaChat(
       [{ role: "system", content: sys }, { role: "user", content: t.slice(0, 500) }],

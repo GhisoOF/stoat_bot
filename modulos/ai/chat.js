@@ -142,7 +142,7 @@ export async function resumirRSS(material, quantidade) {
   try {
     return await ollamaChat(
       [{ role: "system", content: sys }, { role: "user", content: material.slice(0, 6000) }],
-      { modelo: OLLAMA_MODEL_LEVE, maxTokens: 500, etiqueta: "resumo-rss" },
+      { modelo: OLLAMA_MODEL_LEVE, maxTokens: 800, etiqueta: "resumo-rss" },
     );
   } catch (e) {
     dlog(`resumo RSS falhou: ${e.message}`);

@@ -324,9 +324,15 @@ export async function cmdRss(message, args, ctx) {
         description: `Defina primeiro com \`${PREFIXO}rss canal aqui\`.`, colour: COR.erro });
     await sendEmbed(message.channel, { title: "⏳ Rodando curadoria…",
       description: "Buscando e resumindo as novidades. Pode levar um tempo.", colour: COR.info });
-    const r = await rodarCiclo(serverId, ctx, { forcado: true });
-    if (!r.ok)
-      return sendEmbed(message.channel, { title: "❌ Falhou", description: r.motivo, colour: COR.erro });
+    try {
+      const r = await rodarCiclo(serverId, ctx, { forcado: true });
+      if (!r.ok)
+        return sendEmbed(message.channel, { title: "❌ Falhou", description: r.motivo, colour: COR.erro });
+    } catch (err) {
+      console.error("[RSS] erro no ciclo forçado:", err);
+      return sendEmbed(message.channel, { title: "❌ Erro na curadoria",
+        description: `O resumo pode ter sido postado, mas algo falhou depois.\n**Erro:** ${err.message}`, colour: COR.erro });
+    }
     return; // o próprio ciclo já postou
   }
 

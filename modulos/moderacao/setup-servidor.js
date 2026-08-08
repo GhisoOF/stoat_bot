@@ -97,7 +97,7 @@ export async function iniciarSetupServidor(message, args, ctx) {
 
   // Atalho sem reação: `&setup servidor confirmar` executa direto.
   // Útil quando as reações não chegam (cliente/plataforma) ou para automatizar.
-  if (["confirmar", "ja", "já", "agora", "-y"].includes(args[1]?.toLowerCase())) {
+  if (args.some((a) => ["confirmar", "ja", "já", "agora", "-y"].includes(String(a).toLowerCase()))) {
     const sessao = { userId: message.authorId, serverId: ctx.serverId, channelId: message.channelId, etapa: "confirmar" };
     try {
       await executarTudo(sessao, ctx);
@@ -329,10 +329,10 @@ async function configurarModulos(server, sessao, ctx, refs, staffRoleId) {
   try { if (refs.logId) { if (!cfg.log) cfg.log = {}; cfg.log.canalId = refs.logId; cfg.log.eventos = cfg.log.eventos ?? { membros: true, mensagens: true, moderacao: true }; feito.push("📋 **Log** configurado em **#log**."); } } catch {}
 
   // 4d. XP ligado
-  try { if (cfg.game) { cfg.game.enabled = true; feito.push("🎮 **XP/níveis** ativado. Crie os cargos com `&game criarcargos`."); } } catch {}
+  try { if (cfg.game) { cfg.game.enabled = true; feito.push("🎮 **XP/níveis** ativado (os cargos de nível eu ofereço a seguir)."); } } catch {}
 
   // 4e. RSS pronto
-  feito.push("📰 **RSS** pronto — `&rss canal` no canal desejado e `&rss add <url>`.");
+  feito.push("📰 **RSS** pronto (configuro o canal e o feed a seguir).");
 
   salvar();
 
@@ -372,16 +372,29 @@ async function configurarModulos(server, sessao, ctx, refs, staffRoleId) {
     }
   } catch (e) { feito.push(`⚠️ Reaction-roles: ${e?.message ?? e}`); }
 
-  await enviar({ title: "🧭 Configuração automática concluída", description: feito.join("\n").slice(0, 1800), colour: ctx.COR.sucesso });
-  await enviar({ title: "🔧 Ajustes finos (opcionais)",
-    description: [
-      "Tudo acima usa padrões seguros. Para ajustar:",
-      `• \`${ctx.PREFIXO}setup\` — punição do automod`,
-      `• \`${ctx.PREFIXO}game setup\` — dificuldade e cargos de XP`,
-      `• \`${ctx.PREFIXO}rss canal\` + \`${ctx.PREFIXO}rss add <url>\``,
-      `• \`${ctx.PREFIXO}autorole\` — trocar o cargo automático`,
-      `• **#registro** tem o passo-a-passo dos cargos por reação`,
-      "",
-      "Pode pular qualquer um — nada é obrigatório.",
-    ].join("\n"), colour: ctx.COR.mod });
+  await enviar({ title: "🧭 Estrutura criada", description: feito.join("\n").slice(0, 1800), colour: ctx.COR.sucesso });
+
+  // Em vez de mandar o usuário decorar comandos, seguimos direto no assistente:
+  // ele configura punição, automod, log, XP, RSS, IA e moderação por aqui mesmo.
+  try {
+    const wizard = await import("./wizard.js");
+    const msgFalsa = {
+      channel: ctx.client.channels.get(sessao.channelId),
+      channelId: sessao.channelId,
+      authorId: sessao.userId,
+      serverId: sessao.serverId,
+    };
+    if (msgFalsa.channel) {
+      await enviar({ title: "🔧 Agora vamos ajustar o resto",
+        description: "Vou te perguntar item a item (punição, automod, logs, XP, notícias, IA…).\nPode **pular** qualquer etapa digitando `pular`, ou sair com `sair`.",
+        colour: ctx.COR.mod });
+      return wizard.iniciar(msgFalsa, ["completo"], ctx);
+    }
+  } catch (e) {
+    console.error("[SETUP-SERVIDOR] não consegui abrir o assistente:", e?.message ?? e);
+  }
+
+  await enviar({ title: "🔧 Ajustes finos",
+    description: `Rode \`${ctx.PREFIXO}setup\` para configurar punição, automod, logs, XP, notícias e IA — tudo por lá, passo a passo.`,
+    colour: ctx.COR.mod });
 }

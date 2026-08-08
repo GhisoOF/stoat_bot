@@ -64,8 +64,9 @@ export function construirDetalhes(P) {
   return {
     setup: {
       uso: `${P}setup`,
-      desc: "Assistentes passo a passo, guiados por reações.\n\n`&setup` — política de punição e automod\n`&setup servidor` — monta a ESTRUTURA do servidor: cargo Staff, categorias Staff/Geral/Principal com canais e permissões, e te guia pelos demais setups. Ideal para servidor recém-criado (mas funciona sempre; não duplica o que já existe)\n`&setup game` — sistema de níveis\n\n⚠️ Para criar canais e cargos, o **cargo do bot** precisa de **ManageChannel** e **ManageRole** (e **AssignRoles** para aplicar cargos em membros).",
+      desc: "Assistente que configura **tudo** por aqui — sem precisar de outros comandos.\n\n`&setup` — abre o menu:\n• 🚀 **Rápido** — escolhe um perfil pronto (tranquilo / equilibrado / rígido) e aplica tudo\n• 🧭 **Completo** — passo a passo por todas as áreas: punição, cargo de silêncio, automod, detecção de conteúdo, logs, autorole, XP e cargos de nível, RSS, conversa da Judy, moderação por IA e ban global\n• 🏗️ **Estrutura do servidor** — cria categorias, canais e cargos\n\nAtalhos: `&setup rapido` · `&setup completo` · `&setup servidor`\n\n**Em cada etapa** você pode reagir **ou digitar** o número da opção. `pular` salta a etapa, `sair` encerra. Nada é obrigatório.\n\n⚠️ Para criar canais e cargos, o cargo do bot precisa de **ManageChannel**, **ManageRole** e **AssignRoles**.",
       perm: "ManagePermissions",
+      ex: `${P}setup completo`,
     },
     hello: {
       uso: `${P}hello`,
@@ -175,9 +176,9 @@ export function construirDetalhes(P) {
       perm: "ManagePermissions", ex: `${P}cargomudo Silenciado`,
     },
     embed: {
-      uso: `${P}embed` + " (campos `titulo:`, `descricao:`, `cor:`, `rodape:`, `canal:`, `imagem:`)",
-      desc: "Publica uma mensagem embed customizável. Escreva os campos em linhas separadas. Cor por hex (#5865F2) ou nome (azul, verde…). `canal:` opcional envia em outro canal.",
-      perm: "ManageMessages", ex: `${P}embed`,
+      uso: `${P}embed` + " → depois `campo: valor`, um por linha",
+      desc: "Publica uma mensagem embed customizável.\n\n**Escreva assim** (sem parênteses, sem vírgula no fim):\n```\n&embed\ntitulo: Idade\ndescricao: Você tem +18 ou -18 anos?\ncor: #FF00FF\n```\n**Campos:** `titulo:` `descricao:` `cor:` `rodape:` `imagem:` (URL) `canal:` (ID p/ publicar em outro canal).\nCor por hex (`#5865F2`) ou nome (azul, verde, rosa…).\nTambém aceita tudo numa linha separando com `|`.",
+      perm: "ManageMessages", ex: `${P}embed titulo: Idade | descricao: +18 ou -18? | cor: rosa`,
     },
     reactionrole: {
       uso: `${P}reactionrole <add|remove|list> ...`,

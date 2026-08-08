@@ -367,7 +367,7 @@ function erro(ctx, message, texto) {
 // ──────────────────────────────────────────────────────────
 //  Criar cargos automaticamente (a cada N níveis)
 // ──────────────────────────────────────────────────────────
-async function criarCargos(message, ctx) {
+export async function criarCargos(message, ctx) {
   const { sendEmbed, COR, config, serverId } = ctx;
   if (!(await podeConfigurar(message, ctx))) return;
 

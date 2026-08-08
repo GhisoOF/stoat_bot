@@ -27,9 +27,14 @@ const CORES_NOMEADAS = {
 
 function normalizarCor(v) {
   if (!v) return null;
-  const t = v.trim().toLowerCase();
+  // limpa pontuação que as pessoas deixam colada: vírgula, parênteses, aspas, ponto
+  const t = v.trim().toLowerCase().replace(/^["'`]|["'`]$/g, "").replace(/[,;.)\]}]+$/g, "").trim();
   if (CORES_NOMEADAS[t]) return CORES_NOMEADAS[t];
   if (/^#?[0-9a-f]{6}$/i.test(t)) return t.startsWith("#") ? t : `#${t}`;
+  if (/^#?[0-9a-f]{3}$/i.test(t)) {           // #f0f → #ff00ff
+    const h = t.replace("#", "");
+    return `#${h[0]}${h[0]}${h[1]}${h[1]}${h[2]}${h[2]}`;
+  }
   return null;
 }
 
@@ -53,39 +58,71 @@ export async function cmdEmbed(message, args, ctx) {
     return sendEmbed(message.channel, {
       title: "📝 Como usar o &embed",
       description: [
-        "Envie campos `chave: valor`, um por linha:",
+        "Cada campo numa **linha**, no formato `campo: valor`. **Sem parênteses e sem vírgulas no fim.**",
+        "",
+        "**Exemplo — copie e edite:**",
         "```",
         `${PREFIXO}embed`,
-        "titulo: Bem-vindo!",
-        "descricao: Leia as regras no canal fixado.",
-        "Pode usar várias linhas.",
-        "cor: #5865F2",
-        "rodape: Equipe",
-        "canal: (opcional, ID do canal)",
-        "imagem: (opcional, URL)",
+        "titulo: Idade",
+        "descricao: Você tem +18 ou -18 anos?",
+        "cor: #FF00FF",
         "```",
-        "**Cores:** hex (`#5865F2`) ou nomes: " + Object.keys(CORES_NOMEADAS).map((c) => `\`${c}\``).join(", "),
+        "",
+        "**Campos** (só `titulo` ou `descricao` é obrigatório):",
+        "`titulo:` · `descricao:` (aceita várias linhas) · `cor:` · `rodape:` · `imagem:` (URL) · `canal:` (ID, para publicar em outro canal)",
+        "",
+        "**Cores:** hex `#RRGGBB` ou nomes: " + Object.keys(CORES_NOMEADAS).map((c) => `\`${c}\``).join(", "),
+        "",
+        `_Também aceito tudo numa linha separando com \`|\`:_ \`${PREFIXO}embed titulo: Idade | descricao: +18 ou -18? | cor: rosa\``,
       ].join("\n"),
       colour: COR.info,
     });
   }
 
-  // Faz o parse linha a linha; a primeira chave desconhecida vira parte da descrição
-  const campos = { titulo: null, descricao: [], cor: null, rodape: null, canal: null, imagem: null };
-  const CHAVES = ["titulo", "título", "descricao", "descrição", "cor", "rodape", "rodapé", "canal", "imagem"];
-  let emDescricao = false;
+  // ── Normalização tolerante ────────────────────────────────
+  // As pessoas escrevem de tudo: com parênteses/chaves em volta, vírgula no
+  // fim de cada campo, tudo numa linha só, chaves em inglês. Em vez de falhar
+  // silenciosamente, a gente aceita e limpa.
+  let corpoLimpo = corpo;
+  // 1) tira um par de ( ), { } ou [ ] envolvendo o bloco inteiro
+  const env = corpoLimpo.match(/^\s*[([{]\s*([\s\S]*?)\s*[)\]}]\s*$/);
+  if (env) corpoLimpo = env[1];
+  // 2) se veio tudo numa linha só com "|" ou ";" separando, vira multi-linha
+  if (!corpoLimpo.includes("\n") && /[|;]/.test(corpoLimpo)) {
+    corpoLimpo = corpoLimpo.split(/\s*[|;]\s*/).join("\n");
+  }
 
-  for (const linha of corpo.split("\n")) {
-    const m = linha.match(/^(\w+[áéíóúâ]?\w*)\s*:\s*(.*)$/);
-    const chave = m ? m[1].toLowerCase() : null;
-    if (m && CHAVES.includes(chave)) {
-      const valor = m[2];
-      if (chave === "titulo" || chave === "título") campos.titulo = valor;
-      else if (chave === "descricao" || chave === "descrição") { campos.descricao.push(valor); emDescricao = true; }
-      else if (chave === "cor") campos.cor = valor;
-      else if (chave === "rodape" || chave === "rodapé") campos.rodape = valor;
-      else if (chave === "canal") campos.canal = valor.replace(/[<#>]/g, "").trim();
-      else if (chave === "imagem") campos.imagem = valor.trim();
+  const campos = { titulo: null, descricao: [], cor: null, rodape: null, canal: null, imagem: null };
+  // aceita também as chaves em inglês e variações sem acento
+  const MAPA = {
+    titulo: "titulo", "título": "titulo", title: "titulo",
+    descricao: "descricao", "descrição": "descricao", desc: "descricao", description: "descricao",
+    cor: "cor", color: "cor", colour: "cor",
+    rodape: "rodape", "rodapé": "rodape", footer: "rodape",
+    canal: "canal", channel: "canal",
+    imagem: "imagem", image: "imagem", img: "imagem",
+  };
+  let emDescricao = false;
+  const avisos = [];
+
+  for (const linhaBruta of corpoLimpo.split("\n")) {
+    // tira vírgula solta no fim da linha (padrão "campo: valor,")
+    const linha = linhaBruta.replace(/,\s*$/, "");
+    const m = linha.match(/^\s*([\wáéíóúâêôãõç]+)\s*[:=]\s*(.*)$/i);
+    const chaveBruta = m ? m[1].toLowerCase() : null;
+    const chave = chaveBruta ? MAPA[chaveBruta] : null;
+    if (m && chave) {
+      const valor = m[2].trim();
+      if (chave === "titulo") { campos.titulo = valor; emDescricao = false; }
+      else if (chave === "descricao") { campos.descricao.push(valor); emDescricao = true; }
+      else if (chave === "cor") { campos.cor = valor; emDescricao = false; }
+      else if (chave === "rodape") { campos.rodape = valor; emDescricao = false; }
+      else if (chave === "canal") { campos.canal = valor.replace(/[<#>]/g, "").trim(); emDescricao = false; }
+      else if (chave === "imagem") { campos.imagem = valor.trim(); emDescricao = false; }
+    } else if (m && chaveBruta && !chave) {
+      // parece um campo, mas a chave não existe — avisa em vez de engolir
+      avisos.push(`\`${chaveBruta}\` não é um campo válido`);
+      if (emDescricao) campos.descricao.push(linha);
     } else if (emDescricao) {
       campos.descricao.push(linha);   // continuação da descrição (multi-linha)
     } else if (!campos.titulo && linha.trim()) {
@@ -113,6 +150,9 @@ export async function cmdEmbed(message, args, ctx) {
   }
 
   const cor = normalizarCor(campos.cor) ?? "#5865F2";
+  if (campos.cor && !normalizarCor(campos.cor)) {
+    avisos.push(`a cor \`${campos.cor}\` não é válida — usei o azul padrão (use \`#RRGGBB\` ou um nome: ${Object.keys(CORES_NOMEADAS).slice(0, 5).join(", ")}…)`);
+  }
 
   // Monta e envia o embed
   const embed = {
@@ -131,6 +171,12 @@ export async function cmdEmbed(message, args, ctx) {
     if (campos.canal && campos.canal !== message.channelId) {
       await sendEmbed(message.channel, { title: "✅ Embed enviado",
         description: `A mensagem foi publicada em <#${campos.canal}>.`, colour: COR.sucesso });
+    }
+    // Avisa sobre o que foi ignorado/corrigido — melhor que falhar em silêncio.
+    if (avisos.length) {
+      await sendEmbed(message.channel, { title: "⚠️ Enviei, mas repare nisto",
+        description: avisos.map((a) => `• ${a}`).join("\n") + `\n\nVeja a sintaxe com \`${PREFIXO}embed\` (sem argumentos).`,
+        colour: COR.aviso });
     }
   } catch (err) {
     console.error("[EMBED]", err.message);

@@ -44,7 +44,7 @@ embutido (nada de serviço externo), então as configurações e punições
   com modos `off` / `avisar` / `banir`.
 - **Moderação manual**: `&kick`, `&ban` (por menção **ou** ID), `&limpar`.
 - **Panorama**: `&config` mostra todas as configurações de uma vez.
-- **Assistente `&setup`**: configuração guiada por reações de emoji (pode **criar o cargo de silêncio** para você).
+- **Assistente `&setup`**: configura **tudo** num só lugar — perfil pronto ou passo a passo por todas as áreas (punição, cargo de silêncio, automod, logs, autorole, XP, RSS, IA, moderação). Responda por reação **ou** digitando; qualquer etapa é pulável.
 - **Embed customizável** (`&embed`): o bot publica uma mensagem embed com título, descrição, cor, rodapé e imagem.
 - **Cargos por reação** (`&reactionrole`): reagir num emoji dá um cargo configurado.
 - **Anti-caracteres**: bloqueia zalgo e caracteres invisíveis. **Anti-repetição** (separado, off por padrão) bloqueia letras repetidas ignorando o `kkkk` brasileiro.
@@ -300,7 +300,8 @@ Se o usuário sai e volta, o silêncio é reaplicado no evento de entrada.
 
 ## Embed customizável (`&embed`)
 
-O bot publica uma mensagem embed a partir de campos `chave: valor`:
+O bot publica uma mensagem embed a partir de campos `campo: valor`, **um por
+linha** — sem parênteses e sem vírgula no fim:
 
 ```
 &embed
@@ -313,7 +314,23 @@ canal: 01ABC...        (opcional; padrão = canal atual)
 imagem: https://...    (opcional)
 ```
 
-Cores por hex (`#5865F2`) ou nome (`azul`, `verde`, `vermelho`, …). Exige **ManageMessages**.
+Também funciona **tudo numa linha**, separando com `|`:
+
+```
+&embed titulo: Idade | descricao: +18 ou -18? | cor: rosa
+```
+
+Detalhes úteis:
+
+- Só `titulo` **ou** `descricao` é obrigatório; o resto é opcional.
+- Cores por hex (`#5865F2`, `#f0f`) ou nome (`azul`, `verde`, `rosa`, …).
+- As chaves também funcionam em inglês (`title`, `description`, `color`).
+- O parser é tolerante: ignora parênteses em volta do bloco e vírgulas no fim
+  das linhas. Se algo for ignorado (cor inválida, campo inexistente), o bot
+  **avisa** em vez de falhar em silêncio.
+- `&embed` sem argumentos mostra a ajuda com um exemplo copiável.
+
+Exige **ManageMessages**.
 
 ---
 
@@ -414,9 +431,46 @@ origem** e **motivo**. Comandos:
 
 ## Assistente `&setup`
 
-Configuração guiada por **reações de emoji** — o jeito mais fácil de começar.
-Pergunta o modo de punição, se acumula avisos, sensibilidade da detecção e o
-canal de avisos. Exige `ManagePermissions` (e o bot precisa de `React`).
+O `&setup` é o **assistente único**: configura tudo por dentro, sem exigir que
+você decore outros comandos. Ao rodar `&setup`, aparece o menu:
+
+| Opção | O que faz |
+|---|---|
+| 🚀 **Rápido** | escolhe um **perfil pronto** e aplica tudo de uma vez |
+| 🧭 **Completo** | passo a passo por **todas** as áreas |
+| 🏗️ **Estrutura do servidor** | cria categorias, canais e cargos |
+
+Atalhos: `&setup rapido`, `&setup completo`, `&setup servidor`.
+
+### Perfis prontos (caminho rápido)
+
+- **🕊️ Tranquilo** — comunidade pequena: só avisa, filtros leves, detecção baixa.
+- **⚖️ Equilibrado** — recomendado: apaga a mensagem, filtros médios, XP ligado.
+- **🛡️ Rígido** — servidor grande: acumula avisos e bane, todos os filtros,
+  detecção alta, ban global ativo.
+
+### Caminho completo (passo a passo)
+
+Passa por: política de punição → avisos até o ban → **criação do cargo de
+silêncio** → pacote do automod → detecção de conteúdo e sensibilidade → canal de
+logs → autorole → XP e **criação dos cargos de nível** → canal e feed de RSS →
+conversa livre da Judy → comentários espontâneos → **moderação por IA e seus
+critérios** → lista global de banimentos.
+
+### Como responder
+
+Cada etapa aceita **reação** _ou_ **texto digitado**:
+
+- clique no emoji, **ou** digite o **número** da opção (`1`, `2`, …);
+- digite o valor pedido quando a etapa aceita texto (ID de canal/cargo, URL de
+  feed, critérios de moderação);
+- `pular` salta a etapa · `sair` encerra (o que já foi configurado permanece).
+
+> Aceitar texto não é um detalhe: se o Stoat falhar em adicionar as reações
+> (acontece por limite de taxa), o assistente continua totalmente usável.
+
+Exige `ManagePermissions`. Para criar canais e cargos, o **bot** precisa de
+`ManageChannel`, `ManageRole` e `AssignRoles`.
 
 ---
 
@@ -589,7 +643,8 @@ O código é organizado em quatro áreas, sob `modulos/`:
 │   │   ├── embed.js            # &embed
 │   │   ├── debug-comando.js    # &debug (diagnóstico)
 │   │   ├── setup.js            # assistente &setup (reações)
-│   │   ├── setup-servidor.js   # &setup servidor (estrutura completa)
+│   │   ├── wizard.js           # &setup — assistente único (perfis + passo a passo)
+│   │   ├── setup-servidor.js   # estrutura do servidor (canais, categorias, cargos)
 │   │   ├── moderacao-ia.js     # moderação por IA (apaga + marca o dono)
 │   │   ├── modia-comando.js    # &modia (configura a moderação por IA)
 │   │   └── geral.js            # help, ping, sobre, userinfo, kick, ban

@@ -9,6 +9,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import * as engine   from "./modulos/moderacao/automod-engine.js";
 import * as automodCmd from "./modulos/moderacao/automod-comandos.js";
 import * as setup      from "./modulos/moderacao/setup.js";
+import * as wizard     from "./modulos/moderacao/wizard.js";
 import * as geral   from "./modulos/moderacao/geral.js";
 import * as db       from "./modulos/core/db.js";
 import * as store    from "./modulos/core/config-store.js";
@@ -293,20 +294,14 @@ const rotas = {
 // que o usuário lembre se é `&setup` ou `&game setup`.
 async function cmdSetupRouter(message, args, ctx) {
   const area = args[0]?.toLowerCase();
-  if (area === "servidor" || area === "server" || area === "sever" || area === "srv" || area === "geral") {
-    return setupServidor.iniciarSetupServidor(message, args.slice(1), ctx);
+  // Estrutura do servidor (criar canais/cargos) continua no módulo próprio,
+  // mas o wizard também o oferece no menu — ninguém precisa decorar isso.
+  if (["servidor", "server", "sever", "srv", "estrutura"].includes(area)) {
+    return setupServidor.iniciarSetupServidor(message, args, ctx);
   }
-  if (area === "game" || area === "nivel" || area === "niveis" || area === "level") {
-    return nivel.cmdGame(message, ["setup", ...args.slice(1)], ctx);
-  }
-  if (area === "rss" || area === "noticias" || area === "feed") {
-    return rss.cmdRss(message, [], ctx);   // mostra o status/ajuda do RSS
-  }
-  if (area === "chat" || area === "ia" || area === "ai") {
-    return chat.cmdChat(message, ["status"], ctx);
-  }
-  // padrão: assistente de moderação (emojis)
-  return setup.iniciarSetup(message, args, ctx);
+  // Todo o resto (inclusive `&setup game`, `&setup rss`…) passa pelo wizard,
+  // que configura tudo por dentro sem exigir outros comandos.
+  return wizard.iniciar(message, args, ctx);
 }
 
 // Aliases → nome canônico (para desativar um comando desativa todos os apelidos).
@@ -378,6 +373,17 @@ client.on("messageCreate", async (message) => {
   // Cada servidor tem sua própria config
   const serverId = message.serverId ?? message.server?.id ?? message.server?._id ?? null;
   const ctx = criarContexto(serverId);
+
+  // Wizard (&setup): se há uma sessão esperando resposta em TEXTO desta pessoa
+  // neste canal, a mensagem é a resposta. Isso é o que permite configurar
+  // coisas que não cabem em reação (IDs, URLs, critérios) e faz o assistente
+  // funcionar mesmo quando as reações falham.
+  if (!message.content.startsWith(PREFIXO)) {
+    try {
+      ctx.client = client;
+      if (await wizard.handleMensagem(message, ctx)) return;
+    } catch (e) { console.error("[WIZARD]", e?.message ?? e); }
+  }
 
   // Identifica se a mensagem é um COMANDO reconhecido
   let command = null, args = [];
@@ -534,6 +540,14 @@ client.on("messageReactionAdd", async (...a) => {
                         ?? ((typeof a1 === "string") ? a2 : undefined);
 
     if (userId && client.user && userId === client.user.id) return; // ignora o próprio bot
+
+    // 0) Wizard novo (&setup) — tem prioridade
+    const sessaoWiz = estado.wizardSessions?.get(msgId);
+    if (sessaoWiz) {
+      const ctxWiz = criarContexto(sessaoWiz.serverId ?? null);
+      ctxWiz.client = client;
+      if (await wizard.handleReaction(msgId, userId, emoji, ctxWiz)) return;
+    }
 
     // 1) Assistente &setup (usa o servidor guardado na sessão)
     const sessao = estado.setupSessions.get(msgId);

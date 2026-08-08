@@ -64,7 +64,7 @@ export function construirDetalhes(P) {
   return {
     setup: {
       uso: `${P}setup`,
-      desc: "Assistentes passo a passo, guiados por reações.\n\n`&setup` — política de punição e automod\n`&setup servidor` — monta a ESTRUTURA do servidor: cargo Staff, categorias Staff/Geral/Principal com canais e permissões, e te guia pelos demais setups. Ideal para servidor recém-criado (mas funciona sempre; não duplica o que já existe)\n`&setup game` — sistema de níveis",
+      desc: "Assistentes passo a passo, guiados por reações.\n\n`&setup` — política de punição e automod\n`&setup servidor` — monta a ESTRUTURA do servidor: cargo Staff, categorias Staff/Geral/Principal com canais e permissões, e te guia pelos demais setups. Ideal para servidor recém-criado (mas funciona sempre; não duplica o que já existe)\n`&setup game` — sistema de níveis\n\n⚠️ Para criar canais e cargos, o **cargo do bot** precisa de **ManageChannel** e **ManageRole** (e **AssignRoles** para aplicar cargos em membros).",
       perm: "ManagePermissions",
     },
     hello: {

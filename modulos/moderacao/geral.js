@@ -64,7 +64,7 @@ export function construirDetalhes(P) {
   return {
     setup: {
       uso: `${P}setup`,
-      desc: "Assistente que configura **tudo** por aqui — sem precisar de outros comandos.\n\n`&setup` — abre o menu:\n• 🚀 **Rápido** — escolhe um perfil pronto (tranquilo / equilibrado / rígido) e aplica tudo\n• 🧭 **Completo** — passo a passo por todas as áreas: punição, cargo de silêncio, automod, detecção de conteúdo, logs, autorole, XP e cargos de nível, RSS, conversa da Judy, moderação por IA e ban global\n• 🏗️ **Estrutura do servidor** — cria categorias, canais e cargos\n\nAtalhos: `&setup rapido` · `&setup completo` · `&setup servidor`\n\n**Em cada etapa** você pode reagir **ou digitar** o número da opção. `pular` salta a etapa, `sair` encerra. Nada é obrigatório.\n\n⚠️ Para criar canais e cargos, o cargo do bot precisa de **ManageChannel**, **ManageRole** e **AssignRoles**.",
+      desc: "Assistente que configura **tudo** por aqui — sem precisar de outros comandos.\n\n`&setup` — abre o menu:\n• 🚀 **Rápido** — perfil pronto (tranquilo / equilibrado / rígido)\n• 🧭 **Completo** — passo a passo: punição, cargo de silêncio, automod, detecção de conteúdo, logs, autorole, XP e cargos de nível, RSS, conversa da Judy, moderação por IA e ban global\n• 🏗️ **Estrutura** — cria categorias, canais e os cargos **Staff** (bane/expulsa) e **Ajudante** (só avisa)\n\nAtalhos: `&setup rapido` · `&setup completo` · `&setup servidor`\n\n**Em cada etapa** reaja **ou digite** o número. Nas etapas de canal dá para criar o canal na hora; no autorole os cargos aparecem numerados. `pular` salta, `sair` encerra.\n\n⚠️ O bot precisa de **ManageChannel**, **ManageRole** e **AssignRoles**.",
       perm: "ManagePermissions",
       ex: `${P}setup completo`,
     },

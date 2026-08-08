@@ -50,8 +50,8 @@ function casaEmoji(recebido, alvo) {
 const PASSOS = {
   // ── PUNIÇÃO ────────────────────────────────────────────
   punicao_modo: {
-    titulo: "⚖️ Como punir quem quebra as regras?",
-    ajuda: "Vale para todos os automods.",
+    titulo: "⚖️ Política de punição",
+    ajuda: "**Como punir quem quebra as regras?**\nVale para todos os automods.",
     opcoes: [
       { emoji: "👁️", rotulo: "Só avisar", valor: "avisar", nota: "não remove nada — bom para testar" },
       { emoji: "🧹", rotulo: "Só apagar", valor: "apagar", nota: "remove a mensagem, não pune a pessoa" },
@@ -63,7 +63,7 @@ const PASSOS = {
   },
 
   punicao_warns: {
-    titulo: "🔢 Quantos avisos até banir?",
+    titulo: "🔢 Avisos até o ban",
     quando: (r) => r.punicao_modo === "acumular",
     opcoes: [
       { emoji: "3️⃣", rotulo: "3 avisos", valor: 3 },
@@ -74,8 +74,8 @@ const PASSOS = {
   },
 
   punicao_cargomudo: {
-    titulo: "🔇 Criar o cargo de silêncio?",
-    ajuda: "É o cargo que cala alguém sem banir. Necessário para o modo Confirmar e para o `&silence`. Eu crio com todas as permissões negadas.",
+    titulo: "🔇 Cargo de silêncio",
+    ajuda: "**Criar o cargo de silêncio agora?**\nÉ o cargo que cala alguém sem banir. Necessário para o modo Confirmar e para o `&silence`. Eu crio com todas as permissões negadas.",
     opcoes: [
       { emoji: "🆕", rotulo: "Criar agora", valor: "criar" },
       { emoji: "⏭️", rotulo: "Pular", valor: "pular" },
@@ -95,8 +95,8 @@ const PASSOS = {
 
   // ── AUTOMOD ────────────────────────────────────────────
   automod_pacote: {
-    titulo: "🛡️ Quão rígido deve ser o automod?",
-    ajuda: "Liga/desliga os filtros de uma vez. Dá para ajustar cada um depois com `&automod`.",
+    titulo: "🛡️ Automod",
+    ajuda: "**Quão rígido deve ser o automod?**\nLiga/desliga os filtros de uma vez. Dá para ajustar cada um depois com `&automod`.",
     opcoes: [
       { emoji: "🕊️", rotulo: "Leve", valor: "leve", nota: "só convites e spam pesado" },
       { emoji: "⚖️", rotulo: "Equilibrado", valor: "equilibrado", nota: "recomendado" },
@@ -123,8 +123,8 @@ const PASSOS = {
   },
 
   conteudo_ativar: {
-    titulo: "🔍 Ativar a detecção de conteúdo proibido?",
-    ajuda: "Analisa o texto em busca de golpes, divulgação e conteúdo grave — por pontuação, não por palavra solta.",
+    titulo: "🔍 Detecção de conteúdo",
+    ajuda: "**Ativar a detecção de conteúdo proibido?**\nAnalisa o texto em busca de golpes, divulgação e conteúdo grave — por pontuação, não por palavra solta.",
     opcoes: [
       { emoji: "✅", rotulo: "Ativar", valor: true },
       { emoji: "❌", rotulo: "Não", valor: false },
@@ -146,44 +146,74 @@ const PASSOS = {
   // ── LOG ────────────────────────────────────────────────
   log_canal: {
     titulo: "📋 Canal de logs",
-    ajuda: "Onde eu registro punições, entradas/saídas e mudanças. Reaja com 📍 para usar ESTE canal, ou **digite o ID** de outro.",
+    ajuda: "**Onde eu registro punições, entradas/saídas e mudanças?**",
     textoLivre: true,
-    dicaTexto: "ID do canal (ou `aqui`)",
+    dicaTexto: "o ID de outro canal",
     opcoes: [
+      { emoji: "🆕", rotulo: "Criar um canal #log", valor: "criar" },
       { emoji: "📍", rotulo: "Usar este canal", valor: "aqui" },
       { emoji: "⏭️", rotulo: "Pular", valor: "pular" },
     ],
-    aplicar: (v, ctx, sessao) => {
+    aplicar: async (v, ctx, sessao) => {
       if (v === "pular") return null;
-      const id = v === "aqui" ? sessao.channelId : String(v).replace(/[<#>]/g, "").trim();
-      if (!ULID.test(id)) return "⚠️ ID de canal inválido — log não configurado";
+      let id = null;
+      if (v === "criar") {
+        try {
+          const server = await ctx.client.servers.fetch(sessao.serverId);
+          const canal = await server.createChannel({ type: "Text", name: "log" });
+          id = canal?.id ?? canal?._id;
+          if (!id) return "⚠️ criei o canal mas não obtive o ID — configure com `&log canal`";
+        } catch (e) {
+          return `⚠️ não consegui criar o canal (${e?.message ?? e}) — falta ManageChannel?`;
+        }
+      } else {
+        id = v === "aqui" ? sessao.channelId : String(v).replace(/[<#>]/g, "").trim();
+      }
+      if (!ULID.test(id)) return "⚠️ canal inválido — log não configurado";
       ctx.config.log ??= { canalId: null, eventos: {} };
       ctx.config.log.canalId = id;
-      return `logs em <#${id}>`;
+      return `logs em <#${id}>${v === "criar" ? " (canal criado)" : ""}`;
     },
   },
 
   // ── AUTOROLE ───────────────────────────────────────────
   autorole_cargo: {
-    titulo: "🎭 Cargo automático para quem entrar",
-    ajuda: "Todo mundo que entrar recebe este cargo. **Digite o ID do cargo** (Configurações → Cargos → Copy role ID) ou pule.",
+    titulo: "🎭 Cargo automático",
+    ajuda: "**Quem entrar no servidor recebe este cargo.**",
     textoLivre: true,
-    dicaTexto: "ID do cargo",
+    dicaTexto: "o número do cargo (ou o ID)",
+    // Lista os cargos do servidor numerados — ninguém precisa caçar ID.
+    opcoesDinamicas: async (ctx, sessao) => {
+      const ops = [];
+      try {
+        const server = await ctx.client.servers.fetch(sessao.serverId);
+        const roles = server?.roles;
+        if (roles) {
+          const lista = typeof roles.entries === "function" ? [...roles.entries()] : Object.entries(roles);
+          for (const [id, role] of lista.slice(0, 15)) {
+            const nome = role?.name ?? role?.nome ?? id;
+            ops.push({ emoji: null, rotulo: nome, valor: id });
+          }
+        }
+      } catch (e) { log("não consegui listar cargos:", e?.message ?? e); }
+      ops.push({ emoji: "⏭️", rotulo: "Pular", valor: "pular" });
+      return ops;
+    },
     opcoes: [{ emoji: "⏭️", rotulo: "Pular", valor: "pular" }],
     aplicar: (v, ctx) => {
       if (v === "pular") return null;
       const id = String(v).replace(/[<@&>]/g, "").trim();
-      if (!ULID.test(id)) return "⚠️ ID de cargo inválido — autorole não configurado";
+      if (!ULID.test(id)) return "⚠️ cargo inválido — autorole não configurado";
       ctx.config.autorole ??= { roleId: null };
       ctx.config.autorole.roleId = id;
-      return `autorole: cargo \`${id}\``;
+      return `autorole: <@&${id}>`;
     },
   },
 
   // ── XP / NÍVEIS ────────────────────────────────────────
   game_ativar: {
-    titulo: "🎮 Ativar o sistema de XP e níveis?",
-    ajuda: "As pessoas ganham XP conversando e sobem de nível.",
+    titulo: "🎮 XP e níveis",
+    ajuda: "**Ativar o sistema de XP e níveis?**\nAs pessoas ganham XP conversando e sobem de nível.",
     opcoes: [
       { emoji: "✅", rotulo: "Ativar", valor: true },
       { emoji: "❌", rotulo: "Não", valor: false },
@@ -192,7 +222,7 @@ const PASSOS = {
   },
 
   game_cargos: {
-    titulo: "🏅 Criar os cargos de nível agora?",
+    titulo: "🏅 Cargos de nível",
     quando: (r) => r.game_ativar === true,
     ajuda: "Crio um cargo a cada 10 níveis e já ligo a entrega automática.",
     opcoes: [
@@ -214,25 +244,38 @@ const PASSOS = {
   // ── RSS ────────────────────────────────────────────────
   rss_canal: {
     titulo: "📰 Canal de notícias (RSS)",
-    ajuda: "Onde eu posto o resumo das notícias. Reaja 📍 para usar ESTE canal ou digite o ID de outro.",
+    ajuda: "**Onde eu posto o resumo das notícias?**",
     textoLivre: true,
-    dicaTexto: "ID do canal (ou `aqui`)",
+    dicaTexto: "o ID de outro canal",
     opcoes: [
+      { emoji: "🆕", rotulo: "Criar um canal #noticias", valor: "criar" },
       { emoji: "📍", rotulo: "Usar este canal", valor: "aqui" },
       { emoji: "⏭️", rotulo: "Pular", valor: "pular" },
     ],
-    aplicar: (v, ctx, sessao) => {
+    aplicar: async (v, ctx, sessao) => {
       if (v === "pular") return null;
-      const id = v === "aqui" ? sessao.channelId : String(v).replace(/[<#>]/g, "").trim();
-      if (!ULID.test(id)) return "⚠️ ID de canal inválido — RSS não configurado";
+      let id = null;
+      if (v === "criar") {
+        try {
+          const server = await ctx.client.servers.fetch(sessao.serverId);
+          const canal = await server.createChannel({ type: "Text", name: "noticias" });
+          id = canal?.id ?? canal?._id;
+          if (!id) return "⚠️ criei o canal mas não obtive o ID — configure com `&rss canal`";
+        } catch (e) {
+          return `⚠️ não consegui criar o canal (${e?.message ?? e}) — falta ManageChannel?`;
+        }
+      } else {
+        id = v === "aqui" ? sessao.channelId : String(v).replace(/[<#>]/g, "").trim();
+      }
+      if (!ULID.test(id)) return "⚠️ canal inválido — RSS não configurado";
       ctx.config.rss ??= { canalId: null };
       ctx.config.rss.canalId = id;
-      return `RSS em <#${id}>`;
+      return `RSS em <#${id}>${v === "criar" ? " (canal criado)" : ""}`;
     },
   },
 
   rss_feed: {
-    titulo: "🔗 Adicionar um feed agora?",
+    titulo: "🔗 Feed de notícias",
     quando: (r) => r.rss_canal && r.rss_canal !== "pular",
     ajuda: "**Cole a URL** de um feed RSS (ex.: `https://g1.globo.com/rss/g1/`) ou pule.",
     textoLivre: true,
@@ -252,8 +295,8 @@ const PASSOS = {
 
   // ── IA / JUDY ──────────────────────────────────────────
   ia_livre: {
-    titulo: "💬 A Judy pode participar das conversas deste canal?",
-    ajuda: "Ela entra sozinha quando o assunto vale a pena, sem precisar ser chamada.",
+    titulo: "💬 Conversa livre da Judy",
+    ajuda: "**A Judy pode participar das conversas deste canal?**\nEla entra sozinha quando o assunto vale a pena, sem precisar ser chamada.",
     opcoes: [
       { emoji: "🎯", rotulo: "Sim, só o relevante", valor: "relevante" },
       { emoji: "💬", rotulo: "Sim, responder tudo", valor: "todas" },
@@ -274,8 +317,8 @@ const PASSOS = {
   },
 
   ia_comentar: {
-    titulo: "🗨️ A Judy pode comentar por iniciativa neste canal?",
-    ajuda: "De vez em quando ela solta um comentário sobre o que está rolando (com limite diário e cooldown).",
+    titulo: "🗨️ Comentários espontâneos",
+    ajuda: "**A Judy pode comentar por iniciativa neste canal?**\nDe vez em quando ela solta um comentário sobre o que está rolando (com limite diário e cooldown).",
     opcoes: [
       { emoji: "✅", rotulo: "Sim, aqui", valor: "aqui" },
       { emoji: "❌", rotulo: "Não", valor: "off" },
@@ -289,8 +332,8 @@ const PASSOS = {
 
   // ── MODERAÇÃO POR IA ───────────────────────────────────
   modia_ativar: {
-    titulo: "🤖 Ativar a moderação por IA?",
-    ajuda: "Você escreve os critérios e a Judy apaga o que violar, marcando o dono no log. Ela nunca bane sozinha.",
+    titulo: "🤖 Moderação por IA",
+    ajuda: "**Ativar a moderação por IA?**\nVocê escreve os critérios e a Judy apaga o que violar, marcando o dono no log. Ela nunca bane sozinha.",
     opcoes: [
       { emoji: "✅", rotulo: "Ativar", valor: true },
       { emoji: "❌", rotulo: "Não", valor: false },
@@ -388,18 +431,19 @@ const PERFIS = {
 // ══════════════════════════════════════════════════════════
 //  Renderização
 // ══════════════════════════════════════════════════════════
-function montarEmbed(passo, sessao, ctx) {
+function montarEmbed(passo, sessao, ctx, opcoes) {
   const linhas = [];
   if (passo.ajuda) linhas.push(passo.ajuda, "");
-  passo.opcoes.forEach((o, i) => {
-    linhas.push(`${o.emoji} **${i + 1}. ${o.rotulo}**${o.nota ? ` — _${o.nota}_` : ""}`);
+  opcoes.forEach((o, i) => {
+    const marca = o.emoji ? `${o.emoji} ` : "";
+    linhas.push(`${marca}**${i + 1}. ${o.rotulo}**${o.nota ? ` — _${o.nota}_` : ""}`);
   });
   if (passo.textoLivre) {
     linhas.push("", `✍️ ou **digite** ${passo.dicaTexto ?? "sua resposta"}.`);
   }
   linhas.push("", `_Reaja ou digite o número. \`pular\` salta a etapa · \`sair\` encerra._`);
   const pos = sessao.trilha.length > 1 ? ` (${sessao.idx + 1}/${sessao.trilha.length})` : "";
-  return { title: `${passo.titulo}${pos}`, description: linhas.join("\n"), colour: ctx.COR?.mod ?? "#5865F2" };
+  return { title: `${passo.titulo}${pos}`.slice(0, 90), description: linhas.join("\n"), colour: ctx.COR?.mod ?? "#5865F2" };
 }
 
 async function enviarPasso(ctx, sessao) {
@@ -414,8 +458,16 @@ async function enviarPasso(ctx, sessao) {
     return sessao.idx >= sessao.trilha.length ? finalizar(ctx, sessao) : enviarPasso(ctx, sessao);
   }
 
+  // opções podem ser dinâmicas (ex.: lista de cargos do servidor)
+  let opcoes = passo.opcoes;
+  if (passo.opcoesDinamicas) {
+    try { opcoes = await passo.opcoesDinamicas(ctx, sessao); }
+    catch (e) { log("opções dinâmicas falharam:", e?.message ?? e); }
+  }
+  sessao.opcoesAtuais = opcoes;
+
   const canal = sessao.canalObj;
-  const msg = await canal.sendMessage({ embeds: [montarEmbed(passo, sessao, ctx)] });
+  const msg = await canal.sendMessage({ embeds: [montarEmbed(passo, sessao, ctx, opcoes)] });
 
   if (sessao.msgId) porMsg.delete(sessao.msgId);
   sessao.msgId = msg.id;
@@ -423,7 +475,8 @@ async function enviarPasso(ctx, sessao) {
   porUser.set(chaveUser(sessao.channelId, sessao.userId), sessao);
 
   // Reações são um CONFORTO, não um requisito: se falharem, o texto resolve.
-  for (const o of passo.opcoes) {
+  for (const o of opcoes) {
+    if (!o.emoji) continue;   // opções numeradas (cargos) são só por texto
     try { await msg.react(encodeURIComponent(o.emoji)); }
     catch (e) { log(`não consegui reagir com ${o.emoji}: ${e?.message ?? e}`); }
   }
@@ -612,7 +665,7 @@ export async function handleReaction(messageId, userId, emoji, ctx) {
 
   const passo = PASSOS[sessao.trilha[sessao.idx]];
   if (!passo) return true;
-  const op = passo.opcoes.find((o) => casaEmoji(emoji, o.emoji));
+  const op = (sessao.opcoesAtuais ?? passo.opcoes).find((o) => o.emoji && casaEmoji(emoji, o.emoji));
   if (!op) return true;
   const valor = op.valor === "pular" ? "__pular__" : op.valor;
   return aplicarEAvancar(ctx, sessao, valor);
@@ -658,14 +711,15 @@ export async function handleMensagem(message, ctx) {
 
   // número da opção — SÓ se a resposta for apenas dígitos (um ULID como
   // "01ABC..." começa com número e não pode ser confundido com "opção 1").
+  const opcoes = sessao.opcoesAtuais ?? passo.opcoes;
   const n = /^\d{1,2}$/.test(txt) ? parseInt(txt, 10) : NaN;
-  if (!isNaN(n) && passo.opcoes[n - 1]) {
-    const v = passo.opcoes[n - 1].valor;
+  if (!isNaN(n) && opcoes[n - 1]) {
+    const v = opcoes[n - 1].valor;
     await aplicarEAvancar(ctx, sessao, v === "pular" ? "__pular__" : v);
     return true;
   }
   // palavra da opção
-  const porPalavra = passo.opcoes.find((o) =>
+  const porPalavra = opcoes.find((o) =>
     String(o.valor).toLowerCase() === txt.toLowerCase() ||
     o.rotulo.toLowerCase() === txt.toLowerCase());
   if (porPalavra) {

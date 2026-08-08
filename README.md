@@ -52,7 +52,7 @@ embutido (nada de serviço externo), então as configurações e punições
 - **Notícias por RSS** (`&rss`): a cada hora, a Judy posta um **resumo geral no tom dela** e depois os itens novos dos feeds no canal configurado.
 - **Sistema de níveis** (`&game`): XP por mensagem, cargos por nível (posicionados abaixo do mute), leaderboard e setup configurável.
 - **Autorole** (`&autorole`): dá um cargo automaticamente a quem entra no servidor.
-- **Setup geral do servidor** (`&setup servidor`): monta a estrutura completa de um servidor novo — cargo Staff com permissões de moderação, categorias **Staff** (privada), **Geral** (aberta) e **Principal** (somente leitura+reação), com seus canais de texto e voz — e depois guia você pelos demais setups. Não duplica o que já existe. ⚠️ Exige que o cargo do bot tenha **ManageChannel** e **ManageRole**.
+- **Setup geral do servidor** (`&setup servidor`): monta a estrutura de um servidor novo — cargos **Staff** (modera, expulsa e bane) e **Ajudante** (avisa e silencia, sem kick/ban), categorias **Staff** (privada), **Geral** (aberta) e **Principal** (somente leitura), com canais de texto e voz — e emenda direto no assistente para configurar o resto. Não duplica o que já existe. ⚠️ Exige **ManageChannel**, **ManageRole** e **AssignRoles** no cargo do bot.
 - **IA com perfil e memória de longo prazo**: um agente observa o chat e monta um **perfil** de cada pessoa — personalidade, gostos e informações, cada fato com a **data** em que foi aprendido. A Judy usa isso para **adaptar o tom** a cada um (mais leve com quem é sério, mais afiada com quem curte). `&chat perfil` mostra o que ela sabe; `&chat esquecer` apaga o seu, `&chat esquecer tudo` zera o servidor.
 - **Tom modular e acessibilidade**: o tom base é caloroso; a acidez fica para quem já é próximo. `&chat cuidado @user on` marca alguém (opt-in) para tratamento gentil e paciente — sem a Judy inferir nada sozinha.
 - **Cache de conversa do canal**: ela acompanha as últimas mensagens do canal (quem falou, a quem respondeu) e percebe quando o assunto mudou, evitando responder fora de contexto.
@@ -457,13 +457,27 @@ logs → autorole → XP e **criação dos cargos de nível** → canal e feed d
 conversa livre da Judy → comentários espontâneos → **moderação por IA e seus
 critérios** → lista global de banimentos.
 
+### Cargos de equipe criados pela estrutura
+
+| Cargo | Pode | Não pode |
+|---|---|---|
+| **Staff** | apagar mensagens, silenciar, **expulsar e banir**, mover em call | administrar o servidor |
+| **Ajudante** | apagar mensagens, silenciar/timeout, dar aviso (`&warn`) | **expulsar ou banir** |
+
+Os canais da categoria **Staff** ficam visíveis só para esses dois cargos e para
+o bot. Se a lib não permitir alterar o `@everyone` do canal, o relatório **avisa
+explicitamente** que o canal não ficou privado — em vez de fingir que ficou.
+
 ### Como responder
 
 Cada etapa aceita **reação** _ou_ **texto digitado**:
 
 - clique no emoji, **ou** digite o **número** da opção (`1`, `2`, …);
-- digite o valor pedido quando a etapa aceita texto (ID de canal/cargo, URL de
-  feed, critérios de moderação);
+- nas etapas de canal (logs, RSS) dá para **criar o canal na hora**;
+- na etapa de autorole os **cargos do servidor aparecem numerados** — é só
+  escolher o número, sem caçar ID;
+- digite o valor pedido quando a etapa aceita texto (URL de feed, critérios de
+  moderação, ou um ID específico);
 - `pular` salta a etapa · `sair` encerra (o que já foi configurado permanece).
 
 > Aceitar texto não é um detalhe: se o Stoat falhar em adicionar as reações

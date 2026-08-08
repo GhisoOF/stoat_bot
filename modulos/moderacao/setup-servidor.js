@@ -42,13 +42,41 @@ const PERMS_BOT = somar(
   P.KickMembers, P.BanMembers, P.TimeoutMembers,
   P.MuteMembers, P.DeafenMembers, P.MoveMembers,
 );
-// Cargo Staff: moderação, sem administração do servidor.
+// Cargo Staff PLENO: modera de verdade — apaga, silencia, expulsa e bane.
 const PERMS_STAFF = somar(
   P.ViewChannel, P.SendMessage, P.React, P.Connect, P.Speak,
   P.ManageMessages, P.KickMembers, P.BanMembers,
   P.TimeoutMembers, P.AssignRoles, P.MuteMembers, P.DeafenMembers, P.MoveMembers,
 );
+// Cargo Ajudante: modera o dia a dia (apaga e silencia), mas NÃO expulsa nem bane.
+// Serve para quem dá aviso (&warn) sem poder de vida e morte sobre membros.
+const PERMS_AJUDANTE = somar(
+  P.ViewChannel, P.SendMessage, P.React, P.Connect, P.Speak,
+  P.ManageMessages, P.TimeoutMembers, P.MuteMembers,
+);
 const PERMS_LER_ESCREVER = somar(P.ViewChannel, P.SendMessage, P.React);
+
+// ── Permissão do @everyone num canal ──────────────────────
+// A forma de mexer no "cargo padrão" varia conforme a versão da lib, e chutar
+// a API é justamente o que deixa canal de staff aberto para todo mundo. Então
+// tentamos os caminhos conhecidos e devolvemos qual funcionou (ou o erro).
+async function permissaoPadraoDoCanal(ch, { allow, deny }) {
+  const tentativas = [
+    ["setDefaultPermissions", () => ch.setDefaultPermissions?.({ allow: Number(allow), deny: Number(deny) })],
+    ["setPermissions(default)", () => ch.setPermissions?.("default", { allow: Number(allow), deny: Number(deny) })],
+    ["setPermissions(undefined)", () => ch.setPermissions?.(undefined, { allow: Number(allow), deny: Number(deny) })],
+  ];
+  const erros = [];
+  for (const [nome, fn] of tentativas) {
+    try {
+      const r = fn();
+      if (r === undefined && !ch.setDefaultPermissions && nome === "setDefaultPermissions") continue;
+      await r;
+      return { ok: true, via: nome };
+    } catch (e) { erros.push(`${nome}: ${e?.message ?? e}`); }
+  }
+  return { ok: false, erro: erros.join(" | ") };
+}
 
 // Estrutura: ordem Staff → Principal → Geral.
 const ESTRUTURA = [
@@ -233,20 +261,42 @@ async function executarTudo(sessao, ctx) {
     } catch (e) { rel.push(`⚠️ Auto-cargo: ${e?.message ?? e}`); }
   }
 
-  // 2. Cargo Staff
-  let staffRoleId = null;
-  for (const [id, role] of server.roles ?? []) if (/^staff$/i.test(role.name || "")) { staffRoleId = id; break; }
+  // 2. Cargos de equipe: Staff (pleno) e Ajudante (só avisa)
+  let staffRoleId = null, ajudanteRoleId = null;
+  for (const [id, role] of server.roles ?? []) {
+    const n = (role.name || "").toLowerCase();
+    if (n === "staff") staffRoleId = id;
+    if (n === "ajudante") ajudanteRoleId = id;
+  }
   if (!staffRoleId) {
-    try { const { id } = await server.createRole("Staff"); staffRoleId = id; rel.push("👥 Cargo **Staff** criado."); }
+    try { const { id } = await server.createRole("Staff"); staffRoleId = id; rel.push("👥 Cargo **Staff** criado (modera, expulsa e bane)."); }
     catch (e) { rel.push(`⚠️ Cargo Staff: ${e?.message ?? e}`); }
   } else rel.push("👥 Cargo **Staff** já existia.");
   if (staffRoleId) {
-    try { await server.setPermissions(staffRoleId, { allow: Number(PERMS_STAFF), deny: 0 }); } catch (e) { rel.push(`⚠️ Permissões do Staff: ${e?.message ?? e}`); }
+    try {
+      await server.setPermissions(staffRoleId, { allow: Number(PERMS_STAFF), deny: 0 });
+      rel.push("   ↳ permissões do Staff aplicadas ✅");
+    } catch (e) { rel.push(`   ↳ ⚠️ permissões do Staff falharam: ${e?.message ?? e}`); }
   }
 
-  try { if (botRoleId && staffRoleId) await server.setRoleOrdering([botRoleId, staffRoleId]); } catch {}
+  if (!ajudanteRoleId) {
+    try { const { id } = await server.createRole("Ajudante"); ajudanteRoleId = id; rel.push("🙋 Cargo **Ajudante** criado (avisa e silencia, **não** expulsa nem bane)."); }
+    catch (e) { rel.push(`⚠️ Cargo Ajudante: ${e?.message ?? e}`); }
+  } else rel.push("🙋 Cargo **Ajudante** já existia.");
+  if (ajudanteRoleId) {
+    try {
+      await server.setPermissions(ajudanteRoleId, { allow: Number(PERMS_AJUDANTE), deny: 0 });
+      rel.push("   ↳ permissões do Ajudante aplicadas ✅");
+    } catch (e) { rel.push(`   ↳ ⚠️ permissões do Ajudante falharam: ${e?.message ?? e}`); }
+  }
+
+  try {
+    const ordem = [botRoleId, staffRoleId, ajudanteRoleId].filter(Boolean);
+    if (ordem.length > 1) await server.setRoleOrdering(ordem);
+  } catch {}
 
   // 3. Canais e categorias (Staff → Principal → Geral)
+  let avisouVia = false;   // avisa só uma vez qual método de permissão funcionou
   const existentes = new Map();
   for (const ch of listarCanais(ctx, sessao.serverId)) existentes.set(ch.name.toLowerCase(), ch);
   const general = existentes.get("general");
@@ -272,13 +322,22 @@ async function executarTudo(sessao, ctx) {
 
       try {
         if (bloco.somenteStaff) {
-          await ch.setPermissions(undefined, { allow: 0, deny: Number(P.ViewChannel) });
-          if (staffRoleId) await ch.setPermissions(staffRoleId, { allow: Number(somar(P.ViewChannel, P.SendMessage, P.React, P.Connect, P.Speak)), deny: 0 });
-          if (botRoleId)   await ch.setPermissions(botRoleId,   { allow: Number(PERMS_LER_ESCREVER), deny: 0 });
+          // Esconde de todo mundo…
+          const r = await permissaoPadraoDoCanal(ch, { allow: 0, deny: P.ViewChannel });
+          if (!r.ok) rel.push(`⚠️ **${c.nome}** NÃO ficou privado (não consegui mexer no @everyone): ${r.erro}`);
+          else if (!avisouVia) { rel.push(`🔒 Canais de staff isolados _(via ${r.via})_.`); avisouVia = true; }
+          // …e libera para a equipe e para mim.
+          const permEquipe = Number(somar(P.ViewChannel, P.SendMessage, P.React, P.Connect, P.Speak));
+          if (staffRoleId)    await ch.setPermissions(staffRoleId,    { allow: permEquipe, deny: 0 });
+          if (ajudanteRoleId) await ch.setPermissions(ajudanteRoleId, { allow: permEquipe, deny: 0 });
+          if (botRoleId)      await ch.setPermissions(botRoleId,      { allow: Number(PERMS_LER_ESCREVER), deny: 0 });
         } else if (bloco.somenteLeitura) {
-          await ch.setPermissions(undefined, { allow: Number(somar(P.ViewChannel, P.React)), deny: Number(P.SendMessage) });
-          if (staffRoleId) await ch.setPermissions(staffRoleId, { allow: Number(somar(P.ViewChannel, P.SendMessage, P.React)), deny: 0 });
-          if (botRoleId)   await ch.setPermissions(botRoleId,   { allow: Number(PERMS_LER_ESCREVER), deny: 0 });
+          const r = await permissaoPadraoDoCanal(ch, { allow: somar(P.ViewChannel, P.React), deny: P.SendMessage });
+          if (!r.ok) rel.push(`⚠️ **${c.nome}** não ficou somente-leitura: ${r.erro}`);
+          const permEscrita = Number(somar(P.ViewChannel, P.SendMessage, P.React));
+          if (staffRoleId)    await ch.setPermissions(staffRoleId,    { allow: permEscrita, deny: 0 });
+          if (ajudanteRoleId) await ch.setPermissions(ajudanteRoleId, { allow: permEscrita, deny: 0 });
+          if (botRoleId)      await ch.setPermissions(botRoleId,      { allow: Number(PERMS_LER_ESCREVER), deny: 0 });
         }
       } catch (e) { rel.push(`⚠️ Permissões de ${c.nome}: ${e?.message ?? e}`); }
     }

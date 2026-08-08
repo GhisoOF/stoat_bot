@@ -95,6 +95,21 @@ export async function iniciarSetupServidor(message, args, ctx) {
       description: "Você precisa de **ManagePermissions** para o setup do servidor.", colour: COR.erro });
   }
 
+  // Atalho sem reação: `&setup servidor confirmar` executa direto.
+  // Útil quando as reações não chegam (cliente/plataforma) ou para automatizar.
+  if (["confirmar", "ja", "já", "agora", "-y"].includes(args[1]?.toLowerCase())) {
+    const sessao = { userId: message.authorId, serverId: ctx.serverId, channelId: message.channelId, etapa: "confirmar" };
+    try {
+      await executarTudo(sessao, ctx);
+    } catch (e) {
+      console.error("[SETUP-SERVIDOR]", e);
+      return sendEmbed(message.channel, { title: "❌ O setup falhou",
+        description: `Quebrou no meio:\n\`\`\`\n${(e?.message ?? e).toString().slice(0, 400)}\n\`\`\`\nO que já foi criado permanece. Rode de novo — não duplico o que já existe.`,
+        colour: COR.erro });
+    }
+    return;
+  }
+
   const msg = await message.channel.sendMessage({ embeds: [{
     title: "🏗️ Setup completo do servidor",
     description: [
@@ -108,6 +123,8 @@ export async function iniciarSetupServidor(message, args, ctx) {
       "**Antes:** deixe o meu cargo o mais **alto** possível em Configurações → Cargos, senão não consigo gerir os outros cargos.",
       "",
       "✅ — **Começar tudo**   ·   ❌ — **Cancelar**",
+      "",
+      `_Se as reações não funcionarem no seu cliente, use:_ \`${ctx.PREFIXO}setup servidor confirmar\``,
     ].join("\n"),
     colour: COR.mod,
   }] });
@@ -116,17 +133,31 @@ export async function iniciarSetupServidor(message, args, ctx) {
   estado.setupServidorSessions.set(msg.id, {
     userId: message.authorId, serverId: ctx.serverId, channelId: message.channelId, etapa: "confirmar",
   });
-  try { await msg.react(encodeURIComponent("✅")); await msg.react(encodeURIComponent("❌")); } catch {}
+  console.log(`[SETUP-SERVIDOR] sessão criada na mensagem ${msg.id} para ${message.authorId}`);
+  try { await msg.react(encodeURIComponent("✅")); await msg.react(encodeURIComponent("❌")); } catch (e) {
+    console.error("[SETUP-SERVIDOR] falha ao reagir:", e?.message || e);
+  }
 }
 
 // ── Reações ────────────────────────────────────────────────
 export async function handleReaction(messageId, userId, emoji, ctx) {
   const sessoes = ctx.estado.setupServidorSessions;
-  if (!sessoes?.has(messageId)) return false;
+  if (!sessoes?.has(messageId)) {
+    // Diagnóstico: ajuda a descobrir descasamento de ID entre a mensagem
+    // enviada e o evento de reação (causa clássica de "cliquei e nada aconteceu").
+    if (process.env.SETUP_DEBUG || sessoes?.size) {
+      console.log(`[SETUP-SERVIDOR][debug] reação em ${messageId} sem sessão. Sessões abertas: [${[...(sessoes?.keys() ?? [])].join(", ")}]`);
+    }
+    return false;
+  }
   const sessao = sessoes.get(messageId);
-  if (sessao.userId !== userId) return true;
+  if (sessao.userId !== userId) {
+    console.log(`[SETUP-SERVIDOR][debug] reação de ${userId}, mas a sessão é de ${sessao.userId} — ignorando.`);
+    return true;
+  }
 
-  const decoded = decodeURIComponent(emoji);
+  const decoded = (() => { try { return decodeURIComponent(emoji); } catch { return emoji; } })();
+  console.log(`[SETUP-SERVIDOR] reação "${decoded}" aceita de ${userId} — etapa=${sessao.etapa}`);
   sessoes.delete(messageId);
 
   if (sessao.etapa === "confirmar") {

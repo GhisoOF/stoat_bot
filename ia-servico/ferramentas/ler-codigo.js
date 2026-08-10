@@ -110,6 +110,16 @@ export async function executar({ acao, caminho }) {
 
     return { erro: "Ação desconhecida." };
   } catch (e) {
-    return { erro: (e?.message ?? String(e)).slice(0, 300) };
+    const msg = (e?.message ?? String(e));
+    const causa = e?.cause?.code ?? "";
+    // "fetch failed" é opaco: pode ser DNS, sem rota, firewall ou timeout.
+    // Distinguir isso do erro de token poupa muito tempo de diagnóstico.
+    if (/fetch failed/i.test(msg) || /ENOTFOUND|EAI_AGAIN|ECONNREFUSED|ETIMEDOUT|UND_ERR/i.test(causa)) {
+      return { erro: `Não consegui alcançar a API do GitHub (${causa || "rede"}). Isso é problema de REDE do serviço de IA, não do token: confira se o container tem internet e DNS (teste: docker exec judy-ia node -e "fetch('https://api.github.com').then(r=>console.log(r.status))").` };
+    }
+    if (/aborted|timeout/i.test(msg)) {
+      return { erro: "A API do GitHub demorou demais para responder (timeout de 15s). Tente de novo." };
+    }
+    return { erro: msg.slice(0, 300) };
   }
 }

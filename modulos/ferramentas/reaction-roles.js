@@ -72,14 +72,40 @@ export async function aoReagir(message, userId, emoji, ctx) {
 
     const atuais = (member.roles ?? []).map((r) => r?.id ?? r).filter(Boolean);
     if (atuais.includes(alvo.roleId)) return false;  // já tem o cargo
-    atuais.push(alvo.roleId);
-    await member.edit({ roles: atuais });
 
-    console.log(`[REACTIONROLE] +cargo ${alvo.roleId} para ${userId} (msg ${messageId})`);
+    // MODO EXCLUSIVO: escolher um emoji desta mensagem TROCA o cargo anterior
+    // (para "escolha sua cor"), em vez de acumular ("escolha seus interesses").
+    let removidos = [];
+    let novos = atuais;
+    if (db.isReactionRoleExclusivo(messageId)) {
+      const daMensagem = db.listReactionRoles(messageId)
+        .map((r) => r.roleId)
+        .filter((id) => id !== alvo.roleId);
+      removidos = atuais.filter((id) => daMensagem.includes(id));
+      novos = atuais.filter((id) => !daMensagem.includes(id));
+    }
+    novos = [...novos, alvo.roleId];
+    await member.edit({ roles: novos });
+
+    // Tira as reações antigas da pessoa, para o painel refletir a escolha.
+    // Se a lib/permissão não permitir, o cargo já foi trocado — não é crítico.
+    if (removidos.length) {
+      try {
+        const paraTirar = db.listReactionRoles(messageId)
+          .filter((r) => removidos.includes(r.roleId))
+          .map((r) => r.emoji);
+        for (const e of paraTirar) {
+          await message.unreact?.(encodeURIComponent(e), userId).catch(() => {});
+        }
+      } catch (e) { console.log("[REACTIONROLE] não consegui limpar as reações antigas:", e?.message); }
+    }
+
+    console.log(`[REACTIONROLE] +cargo ${alvo.roleId} para ${userId} (msg ${messageId})${removidos.length ? ` | trocou ${removidos.length} cargo(s)` : ""}`);
     const rctx = { ...ctx, serverId, config: ctx.configDoServidor?.(serverId) ?? ctx.config };
     await log.registrar(rctx, "cargos", {
       titulo: "🎭 Cargo por reação",
-      descricao: `<@${userId}> recebeu o cargo \`${alvo.roleId}\` ao reagir.`,
+      descricao: `<@${userId}> recebeu o cargo \`${alvo.roleId}\` ao reagir.`
+        + (removidos.length ? `\n_Modo exclusivo: perdeu ${removidos.map((r) => `\`${r}\``).join(", ")}._` : ""),
     });
     return true;
   } catch (err) {
@@ -113,12 +139,46 @@ export async function cmdReactionRole(message, args, ctx) {
     return sendEmbed(message.channel, {
       title: "🎭 Cargos por reação",
       description: Object.entries(porMsg)
-        .map(([mid, arr]) => `**Mensagem \`${mid}\`**\n${arr.join("\n")}`).join("\n\n"),
+        .map(([mid, arr]) => {
+          const modo = db.isReactionRoleExclusivo(mid) ? " — 🎯 _exclusivo (troca o cargo)_" : "";
+          return `**Mensagem \`${mid}\`**${modo}\n${arr.join("\n")}`;
+        }).join("\n\n")
+        + `\n\n_Use \`${PREFIXO}reactionrole exclusivo <mensagem> on\` para que a escolha troque o cargo anterior._`,
       colour: COR.mod,
     });
   }
 
-  // ── remove <idMensagem> ──
+  // ── exclusivo <mensagem> on|off ──
+  if (["exclusivo", "exclusive", "unico", "único"].includes(sub)) {
+    const mid = extrairIdMensagem(args[1]).id;
+    if (!mid) {
+      return sendEmbed(message.channel, { title: "❌ Uso incorreto",
+        description: [
+          `\`${PREFIXO}reactionrole exclusivo <mensagem> on|off\``,
+          "",
+          "**on** — escolher um emoji **troca** o cargo anterior (ex.: escolha sua cor)",
+          "**off** — os cargos **acumulam** (ex.: escolha seus interesses)",
+          "",
+          "A mensagem pode ser o **ID** ou o **link**.",
+        ].join("\n"), colour: COR.erro });
+    }
+    const regras = db.listReactionRoles(mid);
+    if (!regras.length) {
+      return sendEmbed(message.channel, { title: "❌ Sem regras nessa mensagem",
+        description: `Não há cargos por reação registrados em \`${mid}\`. Adicione com \`${PREFIXO}reactionrole add\` primeiro.`,
+        colour: COR.erro });
+    }
+    const estado = (args[2] ?? "on").toLowerCase();
+    const ligar = !["off", "nao", "não", "0"].includes(estado);
+    db.setReactionRoleExclusivo(mid, ligar);
+    return sendEmbed(message.channel, {
+      title: ligar ? "🎯 Modo exclusivo ligado" : "➕ Modo acumulativo",
+      description: ligar
+        ? `Nessa mensagem (**${regras.length}** opções), escolher um emoji **remove** o cargo escolhido antes. Bom para cor, idade, time — coisas em que só uma vale.`
+        : `Nessa mensagem, a pessoa pode ter **vários** cargos ao mesmo tempo.`,
+      colour: COR.sucesso });
+  }
+
   if (sub === "remove" || sub === "remover") {
     const mid = extrairIdMensagem(args[1]).id;
     if (!mid)

@@ -98,6 +98,8 @@ function AREAS(P) {
         `2. Ligue emoji → cargo: \`${P}reactionrole add <mensagem> 🎮 <id-do-cargo>\``,
         "   A **mensagem** pode ser o ID **ou o link** (menu `...` → *Copiar link*).",
         `3. Confira com \`${P}reactionrole list\``,
+        `4. Se só uma opção pode valer (cor, time, idade): \`${P}reactionrole exclusivo <mensagem> on\``,
+        "   Aí escolher um emoji **troca** o cargo anterior em vez de acumular.",
         "",
         `**Cargo de silêncio** (para \`${P}silence\`): \`${P}cargomudo\``,
         "Cria um cargo com tudo negado e já bloqueia nos canais.",

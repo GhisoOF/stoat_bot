@@ -64,6 +64,14 @@ export function abrirBanco(caminho) {
     )
   `);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_rr_msg ON reaction_roles (messageId)`);
+  // Modo EXCLUSIVO por mensagem: 1 = escolher um emoji troca o cargo anterior
+  // (útil para "escolha sua cor"); 0 = acumula (útil para "seus interesses").
+  try {
+    const cols = db.prepare("PRAGMA table_info(reaction_roles)").all().map((c) => c.name);
+    if (!cols.includes("exclusivo")) {
+      db.exec("ALTER TABLE reaction_roles ADD COLUMN exclusivo INTEGER NOT NULL DEFAULT 0");
+    }
+  } catch (e) { console.error("[DB] migração exclusivo:", e.message); }
 
   // (Curadoria RSS) feeds cadastrados por servidor
   db.exec(`
@@ -304,8 +312,23 @@ export function usuariosBanidosDistintos() {
 
 // ── Reaction roles ─────────────────────────────────────────
 export function addReactionRole(serverId, messageId, emoji, roleId) {
-  db.prepare(`INSERT OR REPLACE INTO reaction_roles (serverId, messageId, emoji, roleId)
-              VALUES (?, ?, ?, ?)`).run(serverId, messageId, emoji, roleId);
+  // herda o modo já definido para esta mensagem (não zera ao adicionar mais um emoji)
+  const atual = db.prepare("SELECT exclusivo FROM reaction_roles WHERE messageId = ? LIMIT 1").get(messageId);
+  const exclusivo = atual?.exclusivo ?? 0;
+  db.prepare(`INSERT OR REPLACE INTO reaction_roles (serverId, messageId, emoji, roleId, exclusivo)
+              VALUES (?, ?, ?, ?, ?)`).run(serverId, messageId, emoji, roleId, exclusivo);
+}
+
+// Liga/desliga o modo exclusivo de uma mensagem inteira.
+export function setReactionRoleExclusivo(messageId, ligado) {
+  const r = db.prepare("UPDATE reaction_roles SET exclusivo = ? WHERE messageId = ?")
+    .run(ligado ? 1 : 0, messageId);
+  return r.changes ?? 0;
+}
+
+export function isReactionRoleExclusivo(messageId) {
+  const r = db.prepare("SELECT exclusivo FROM reaction_roles WHERE messageId = ? LIMIT 1").get(messageId);
+  return !!r?.exclusivo;
 }
 
 export function getReactionRole(messageId, emoji) {
@@ -314,7 +337,7 @@ export function getReactionRole(messageId, emoji) {
 }
 
 export function listReactionRoles(messageId) {
-  return db.prepare("SELECT emoji, roleId FROM reaction_roles WHERE messageId = ?").all(messageId);
+  return db.prepare("SELECT emoji, roleId, exclusivo FROM reaction_roles WHERE messageId = ?").all(messageId);
 }
 
 export function listReactionRolesServidor(serverId) {

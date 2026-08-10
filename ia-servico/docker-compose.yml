@@ -1,0 +1,42 @@
+# ── Serviço de IA da Judy (judy-ia) ───────────────────────
+# Roda no COMPUTADOR, ao lado do Ollama.
+#
+# network_mode: host → o container usa a rede do host diretamente.
+# Assim ele fala com o Ollama por localhost:11434, SEM passar pela
+# rede do Docker (docker0/gateway) — o que evita o conflito UFW×Docker
+# que trava o forwarding. A porta 8090 fica exposta na rede do host.
+services:
+  judy-ia:
+    build: .
+    # depois de publicar no GHCR, troque 'build: .' por:
+    # image: ghcr.io/ghisoof/judy-ia:latest
+    container_name: judy-ia
+    restart: unless-stopped
+    network_mode: host          # usa a rede do host (localhost = a própria máquina)
+    environment:
+      # ── LLM (Ollama nativo, mesma máquina) ──
+      # Com network_mode host, localhost é o próprio host.
+      - OLLAMA_URL=http://localhost:11434
+      - OLLAMA_MODEL=qwen3.5:9b          # PRECISA suportar tool calling (Gemma NÃO suporta)
+      - NUM_CTX=16384
+      - MAX_TOKENS=4096
+      - PORTA=8090                        # porta do serviço (na rede do host)
+
+      # ── Leitura do código via GitHub (o repo vive no homelab) ──
+      - GITHUB_REPO=GhisoOF/stoat_bot
+      - GITHUB_BRANCH=main
+      # ── Busca web (SearXNG) ──
+      - SEARXNG_URL=http://localhost:8080
+      - SEARXNG_IDIOMA=pt-BR
+      # - GITHUB_TOKEN=ghp_xxx           # opcional: só se bater o limite de 60 req/h
+
+      # ── Ferramentas ──
+      - MAX_VOLTAS_FERRAMENTA=5
+      - CALC_TIMEOUT_MS=5000
+      # - FERRAMENTAS_OFF=calcular       # desliga ferramentas específicas
+      - RSS_FEEDS=                       # feeds padrão p/ "resuma as notícias"
+
+      # ── Segurança (recomendado, já que a porta fica exposta) ──
+      # - IA_CHAVE=uma-chave-secreta     # exige header x-chave; use a MESMA no bot (IA_SERVICO_CHAVE)
+
+      - TZ=Europe/Madrid

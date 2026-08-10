@@ -340,9 +340,9 @@ Exige **ManageMessages**.
 Reagir num emoji de uma mensagem concede um cargo. Alias: `&rr`. Exige **ManageRole**.
 
 ```
-&reactionrole add <idMensagem> <emoji> <idCargo>   # o bot reage; quem clicar ganha o cargo
-&reactionrole remove <idMensagem>                  # remove os vínculos da mensagem
-&reactionrole list                                 # lista os vínculos do servidor
+&reactionrole add <mensagem> <emoji> <idCargo>   # o bot reage; quem clicar ganha o cargo
+&reactionrole remove <mensagem>                  # remove os vínculos da mensagem
+&reactionrole list        # a <mensagem> pode ser o ID OU o link dela                                 # lista os vínculos do servidor
 ```
 
 > 💡 Crie a mensagem-painel com `&embed` e depois vincule os emojis a ela com o ID da mensagem.

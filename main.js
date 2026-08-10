@@ -20,6 +20,7 @@ import * as embedCmd  from "./modulos/moderacao/embed.js";
 import * as reactionRoles from "./modulos/ferramentas/reaction-roles.js";
 import * as autorole  from "./modulos/ferramentas/autorole.js";
 import * as tutorial   from "./modulos/moderacao/tutorial.js";
+import * as corCargo   from "./modulos/moderacao/cor-cargo.js";
 import * as modIA      from "./modulos/moderacao/moderacao-ia.js";
 import * as modiaCmd   from "./modulos/moderacao/modia-comando.js";
 import * as debugCmd  from "./modulos/moderacao/debug-comando.js";
@@ -266,6 +267,9 @@ const rotas = {
   comando:       admin.cmdComando,
   comandos:      admin.cmdComando,
   cargomudo:     admin.cmdCargoMudo,
+  cor:           corCargo.cmdCor,
+  cores:         corCargo.cmdCor,
+  cargocor:      corCargo.cmdCor,
   criarcargomudo: admin.cmdCargoMudo,
   // Embed customizável e cargos por reação
   embed:         embedCmd.cmdEmbed,
@@ -290,6 +294,8 @@ const rotas = {
 
 // Aliases → nome canônico (para desativar um comando desativa todos os apelidos).
 const CANONICO = {
+  cores: "cor",
+  cargocor: "cor",
   guia: "tutorial",
   comecar: "tutorial",
   inicio: "tutorial",
@@ -305,7 +311,7 @@ const CANONICO = {
 const COMANDOS_GERENCIAVEIS = [
   "ping", "repete", "userinfo", "kick", "ban", "limpar",
   "warnings", "clearwarnings", "automod", "whitelist", "blocklist",
-  "scam", "punicao", "tutorial", "log", "banglobal", "embed", "reactionrole", "chat", "rss", "game", "autorole",
+  "scam", "punicao", "tutorial", "cor", "log", "banglobal", "embed", "reactionrole", "chat", "rss", "game", "autorole",
 ];
 // exportado via ctx para o comando &comando consultar
 estado.CANONICO = CANONICO;

@@ -22,6 +22,7 @@ embutido (nada de serviço externo), então as configurações e punições
 - [Política de punição](#política-de-punição)
 - [Chat de logs (`&log`)](#chat-de-logs-log)
 - [Lista global de banimentos (`&banglobal`)](#lista-global-de-banimentos-banglobal)
+- [Cor dos cargos (`&cor`)](#cor-dos-cargos-cor)
 - [Guia `&tutorial`](#guia-tutorial)
 - [Persistência (SQLite)](#persistência-sqlite)
 - [Deploy com Docker / umbrelOS](#deploy-com-docker--umbrelos)
@@ -44,6 +45,7 @@ embutido (nada de serviço externo), então as configurações e punições
   com modos `off` / `avisar` / `banir`.
 - **Moderação manual**: `&kick`, `&ban` (por menção **ou** ID), `&limpar`.
 - **Panorama**: `&config` mostra todas as configurações de uma vez.
+- **Cor dos cargos com gradiente** (`&cor`): o cliente do Stoat só deixa escolher cor sólida; o bot fala direto com a API e aplica **gradientes** (montados por você ou de uma lista de prontos).
 - **Guia `&tutorial`**: mostra **por onde começar** — o roteiro de áreas na ordem recomendada, com os comandos exatos de cada uma. Não altera nada sozinho; só te diz o caminho.
 - **Embed customizável** (`&embed`): o bot publica uma mensagem embed com título, descrição, cor, rodapé e imagem.
 - **Cargos por reação** (`&reactionrole`): reagir num emoji dá um cargo configurado.
@@ -213,6 +215,7 @@ Prefixo: `&`. Aliases entre parênteses.
 | Comando | Descrição |
 |---|---|
 | `&tutorial [área]` | guia de primeiros passos (por onde começar) |
+| `&cor <cargo> <cor\|gradiente>` | cor dos cargos, com gradiente (exige **ManageRole**) |
 | `&config` | mostra **todas** as configurações atuais |
 | `&automod <status\|módulo on/off\|debug on/off>` | liga/desliga módulos |
 | `&punicao <modo\|warns\|silencerole>` | política de punição |
@@ -428,6 +431,37 @@ origem** e **motivo**. Comandos:
 
 ---
 
+## Cor dos cargos (`&cor`)
+
+O cliente do Stoat só permite cor sólida nos cargos. O campo `colour` do cargo,
+porém, aceita **qualquer valor CSS válido** — então o bot fala direto com a API
+(`PATCH /servers/{id}/roles/{id}`) e aplica gradientes.
+
+```
+&cor VIP #FF00AA                                  # sólida por hex
+&cor VIP roxo                                     # sólida por nome
+&cor VIP gradiente #FF0000 #00FF00 #0000FF        # gradiente (2+ cores)
+&cor VIP gradiente 45 vermelho azul               # o número inicial é o ângulo
+&cor VIP preset vaporwave                         # gradientes prontos
+&cor VIP linear-gradient(90deg, #f00 0%, #00f 100%)   # CSS na mão
+&cor VIP remover                                  # volta ao padrão
+&cor lista                                        # cargos e cores atuais
+&cor presets                                      # ver os prontos
+```
+
+**Prontos disponíveis:** `arco-iris`, `fogo`, `oceano`, `neon`, `vaporwave`,
+`poente`, `floresta`, `ouro`, `cyberpunk`, `sangue`, `gelo`, `trans`.
+
+O cargo pode ser informado pelo **nome** (mesmo parcial) ou pelo ID.
+
+> ⚠️ Erro mais comum: escrever `gradient(...)` em vez de `linear-gradient(...)` —
+> a API devolve 400. O bot detecta isso antes de enviar e avisa.
+>
+> O cargo do **bot** precisa de `ManageRole` e estar **acima** do cargo editado,
+> senão a API responde 403.
+
+---
+
 ## Guia `&tutorial`
 
 O bot não tem assistente que configura sozinho: cada área tem seu próprio comando
@@ -632,6 +666,7 @@ O código é organizado em quatro áreas, sob `modulos/`:
 │   │   ├── embed.js            # &embed
 │   │   ├── debug-comando.js    # &debug (diagnóstico)
 │   │   ├── tutorial.js         # &tutorial — guia de primeiros passos
+│   │   ├── cor-cargo.js        # &cor — cores de cargo, com gradiente (via API)
 │   │   ├── moderacao-ia.js     # moderação por IA (apaga + marca o dono)
 │   │   ├── modia-comando.js    # &modia (configura a moderação por IA)
 │   │   └── geral.js            # help, ping, sobre, userinfo, kick, ban

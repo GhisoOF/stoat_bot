@@ -62,6 +62,12 @@ function extrairAlvo(message, args) {
 // de conhecimento para assistir na configuração).
 export function construirDetalhes(P) {
   return {
+    cor: {
+      uso: `${P}cor <cargo> <cor|gradiente|preset>`,
+      desc: "Customiza a cor dos cargos — inclusive com **gradiente**, que o cliente do Stoat não oferece na interface.\n\n**Sólida:** `&cor VIP #FF00AA` ou `&cor VIP roxo`\n**Gradiente:** `&cor VIP gradiente #FF0000 #0000FF` (aceita 2+ cores; um número no início vira o ângulo)\n**Pronto:** `&cor VIP preset vaporwave` — veja todos com `&cor presets`\n**CSS na mão:** `&cor VIP linear-gradient(90deg, #f00 0%, #00f 100%)`\n**Limpar:** `&cor VIP remover` · **Ver:** `&cor lista`\n\nO cargo pode ser pelo nome (mesmo parcial) ou pelo ID. O cargo do bot precisa de **ManageRole** e estar **acima** do cargo editado.",
+      perm: "ManageRole",
+      ex: `${P}cor VIP gradiente #FF71CE #01CDFE #05FFA1`,
+    },
     tutorial: {
       uso: `${P}tutorial [área]`,
       desc: "Guia de primeiros passos: mostra **por onde começar** e qual comando usar em cada área — não altera nada sozinho.\n\n`&tutorial` — o roteiro na ordem recomendada\n`&tutorial <área>` — a página daquela área com os comandos exatos\n\n**Áreas:** `permissoes` (o que o bot precisa), `moderacao`, `logs`, `cargos`, `xp`, `ia`, `noticias`, `mensagens`, `ajustes`.\n\nCada página termina indicando a próxima. Também responde por `&guia` e `&comecar`.",
@@ -360,6 +366,7 @@ export async function cmdHelp(message, args, ctx) {
         `\`${P}log <here|id|off|<evento> <on|off>>\` — chat de logs`,
         `\`${P}comando <disable|enable> <nome>\` — ativa/desativa comandos`,
         `\`${P}cargomudo [nome]\` — cria cargo de silêncio`,
+        `\`${P}cor <cargo> <cor|gradiente>\` — cor dos cargos, com gradiente *(ManageRole)*`,
         `\`${P}debug\` — diagnóstico de todos os comandos`,
       ],
     },

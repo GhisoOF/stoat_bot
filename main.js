@@ -8,8 +8,6 @@ import { readFileSync, writeFileSync } from "node:fs";
 
 import * as engine   from "./modulos/moderacao/automod-engine.js";
 import * as automodCmd from "./modulos/moderacao/automod-comandos.js";
-import * as setup      from "./modulos/moderacao/setup.js";
-import * as wizard     from "./modulos/moderacao/wizard.js";
 import * as geral   from "./modulos/moderacao/geral.js";
 import * as db       from "./modulos/core/db.js";
 import * as store    from "./modulos/core/config-store.js";
@@ -21,7 +19,7 @@ import * as admin     from "./modulos/moderacao/comandos-admin.js";
 import * as embedCmd  from "./modulos/moderacao/embed.js";
 import * as reactionRoles from "./modulos/ferramentas/reaction-roles.js";
 import * as autorole  from "./modulos/ferramentas/autorole.js";
-import * as setupServidor from "./modulos/moderacao/setup-servidor.js";
+import * as tutorial   from "./modulos/moderacao/tutorial.js";
 import * as modIA      from "./modulos/moderacao/moderacao-ia.js";
 import * as modiaCmd   from "./modulos/moderacao/modia-comando.js";
 import * as debugCmd  from "./modulos/moderacao/debug-comando.js";
@@ -208,7 +206,6 @@ const estado = {
   spamData:       new Map(),   // userId → number[]  (timestamps)
   // avisos/silêncios agora ficam no BANCO (tabela punicoes), por (servidor, usuário)
   blockedDomains: new Set(),   // domínios bloqueados (anti-link)
-  setupSessions:  new Map(),   // sessões do assistente &setup
 };
 
 // Objeto de contexto entregue a todas as funções dos módulos.
@@ -252,7 +249,9 @@ const rotas = {
   scam:          automodCmd.cmdScam,
   punicao:       automodCmd.cmdPunicao,
   punição:       automodCmd.cmdPunicao,
-  setup:         cmdSetupRouter,
+  tutorial:      tutorial.cmdTutorial,
+  guia:          tutorial.cmdTutorial,
+  comecar:       tutorial.cmdTutorial,
   configurar:    cmdSetupRouter,
   // Logs
   log:           log.cmdLog,
@@ -289,24 +288,11 @@ const rotas = {
   level:         nivel.cmdGame,
 };
 
-// Roteador de setup: `&setup` abre o assistente de moderação; `&setup <área>`
-// (ex.: `&setup game`) abre o setup daquela área. Mais amigável que exigir
-// que o usuário lembre se é `&setup` ou `&game setup`.
-async function cmdSetupRouter(message, args, ctx) {
-  const area = args[0]?.toLowerCase();
-  // Estrutura do servidor (criar canais/cargos) continua no módulo próprio,
-  // mas o wizard também o oferece no menu — ninguém precisa decorar isso.
-  if (["servidor", "server", "sever", "srv", "estrutura"].includes(area)) {
-    return setupServidor.iniciarSetupServidor(message, args, ctx);
-  }
-  // Todo o resto (inclusive `&setup game`, `&setup rss`…) passa pelo wizard,
-  // que configura tudo por dentro sem exigir outros comandos.
-  return wizard.iniciar(message, args, ctx);
-}
-
 // Aliases → nome canônico (para desativar um comando desativa todos os apelidos).
 const CANONICO = {
-  configurar: "setup",
+  guia: "tutorial",
+  comecar: "tutorial",
+  inicio: "tutorial",
   logs: "log",
   clear: "limpar", purge: "limpar", limpiar: "limpar",
   punição: "punicao",
@@ -319,7 +305,7 @@ const CANONICO = {
 const COMANDOS_GERENCIAVEIS = [
   "ping", "repete", "userinfo", "kick", "ban", "limpar",
   "warnings", "clearwarnings", "automod", "whitelist", "blocklist",
-  "scam", "punicao", "setup", "log", "banglobal", "embed", "reactionrole", "chat", "rss", "game", "autorole",
+  "scam", "punicao", "tutorial", "log", "banglobal", "embed", "reactionrole", "chat", "rss", "game", "autorole",
 ];
 // exportado via ctx para o comando &comando consultar
 estado.CANONICO = CANONICO;
@@ -373,17 +359,6 @@ client.on("messageCreate", async (message) => {
   // Cada servidor tem sua própria config
   const serverId = message.serverId ?? message.server?.id ?? message.server?._id ?? null;
   const ctx = criarContexto(serverId);
-
-  // Wizard (&setup): se há uma sessão esperando resposta em TEXTO desta pessoa
-  // neste canal, a mensagem é a resposta. Isso é o que permite configurar
-  // coisas que não cabem em reação (IDs, URLs, critérios) e faz o assistente
-  // funcionar mesmo quando as reações falham.
-  if (!message.content.startsWith(PREFIXO)) {
-    try {
-      ctx.client = client;
-      if (await wizard.handleMensagem(message, ctx)) return;
-    } catch (e) { console.error("[WIZARD]", e?.message ?? e); }
-  }
 
   // Identifica se a mensagem é um COMANDO reconhecido
   let command = null, args = [];
@@ -515,7 +490,7 @@ client.on("messageCreate", async (message) => {
   }
 });
 
-// ── Reações (assistente &setup) ────────────────────────────
+// ── Reações (cargos por reação) ────────────────────────────
 // A assinatura exata do evento na stoat.js pode variar; extraímos
 // de forma defensiva e logamos os argumentos crus para diagnóstico.
 client.on("messageReactionAdd", async (...a) => {
@@ -541,25 +516,7 @@ client.on("messageReactionAdd", async (...a) => {
 
     if (userId && client.user && userId === client.user.id) return; // ignora o próprio bot
 
-    // 0) Wizard novo (&setup) — tem prioridade
-    const sessaoWiz = estado.wizardSessions?.get(msgId);
-    if (sessaoWiz) {
-      const ctxWiz = criarContexto(sessaoWiz.serverId ?? null);
-      ctxWiz.client = client;
-      if (await wizard.handleReaction(msgId, userId, emoji, ctxWiz)) return;
-    }
-
-    // 1) Assistente &setup (usa o servidor guardado na sessão)
-    const sessao = estado.setupSessions.get(msgId);
-    const ctxSetup = criarContexto(sessao?.serverId ?? null);
-    await setup.handleReaction(msgId, userId, emoji, ctxSetup);
-
-    // 1b) Assistente &setup servidor
-    const sessaoSrv = estado.setupServidorSessions?.get(msgId);
-    const ctxSrv = criarContexto(sessaoSrv?.serverId ?? null);
-    await setupServidor.handleReaction(msgId, userId, emoji, ctxSrv);
-
-    // 2) Reaction roles — dá o cargo se a (mensagem, emoji) estiver registrada.
+    // Reaction roles — dá o cargo se a (mensagem, emoji) estiver registrada.
     //    O objeto da mensagem (a0) traz o id; passamos ctx com acesso à config.
     const msgObj = (a0 && typeof a0 === "object") ? a0 : { id: msgId };
     const ctxRR = criarContexto(null);

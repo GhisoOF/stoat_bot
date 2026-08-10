@@ -111,7 +111,7 @@ export async function cmdConfig(message, args, ctx) {
       "**🌐 Global** *(compartilhado entre servidores)*",
       `Debug: ${sim(cfgGlobal.debug !== false)} · Listas anti-link: ${cfgGlobal.linkBlocklistSources.length} fonte(s), ${cfgGlobal.linkBlocklistManual.length} domínio(s) manual(is)`,
       "",
-      `💡 Ajuste com \`${PREFIXO}automod\`, \`${PREFIXO}punicao\`, \`${PREFIXO}log\`, \`${PREFIXO}scam\` — ou \`${PREFIXO}setup\` para o assistente.`,
+      `💡 Ajuste com \`${PREFIXO}automod\`, \`${PREFIXO}punicao\`, \`${PREFIXO}log\`, \`${PREFIXO}scam\` — e \`${PREFIXO}tutorial\` mostra o caminho completo.`,
     ].join("\n"),
     colour: COR.info,
   });

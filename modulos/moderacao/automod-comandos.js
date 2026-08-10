@@ -501,7 +501,7 @@ export async function cmdPunicao(message, args, ctx) {
         "• `acumular` — dá avisos; ao atingir o limite, bane",
         "• `banir` — bane na hora",
         "",
-        `_Prefere um assistente? \`${PREFIXO}setup\` configura isso e o resto._`,
+        `_Não sabe por onde começar? \`${PREFIXO}tutorial moderacao\` explica o caminho._`,
         "",
         "**Comandos:**",
         `\`${PREFIXO}punicao modo <avisar|apagar|confirmar|acumular|banir>\``,

@@ -22,7 +22,7 @@ embutido (nada de serviço externo), então as configurações e punições
 - [Política de punição](#política-de-punição)
 - [Chat de logs (`&log`)](#chat-de-logs-log)
 - [Lista global de banimentos (`&banglobal`)](#lista-global-de-banimentos-banglobal)
-- [Assistente `&setup`](#assistente-setup)
+- [Guia `&tutorial`](#guia-tutorial)
 - [Persistência (SQLite)](#persistência-sqlite)
 - [Deploy com Docker / umbrelOS](#deploy-com-docker--umbrelos)
 - [Estrutura do projeto](#estrutura-do-projeto)
@@ -44,15 +44,14 @@ embutido (nada de serviço externo), então as configurações e punições
   com modos `off` / `avisar` / `banir`.
 - **Moderação manual**: `&kick`, `&ban` (por menção **ou** ID), `&limpar`.
 - **Panorama**: `&config` mostra todas as configurações de uma vez.
-- **Assistente `&setup`**: configura **tudo** num só lugar — perfil pronto ou passo a passo por todas as áreas (punição, cargo de silêncio, automod, logs, autorole, XP, RSS, IA, moderação). Responda por reação **ou** digitando; qualquer etapa é pulável.
+- **Guia `&tutorial`**: mostra **por onde começar** — o roteiro de áreas na ordem recomendada, com os comandos exatos de cada uma. Não altera nada sozinho; só te diz o caminho.
 - **Embed customizável** (`&embed`): o bot publica uma mensagem embed com título, descrição, cor, rodapé e imagem.
 - **Cargos por reação** (`&reactionrole`): reagir num emoji dá um cargo configurado.
 - **Anti-caracteres**: bloqueia zalgo e caracteres invisíveis. **Anti-repetição** (separado, off por padrão) bloqueia letras repetidas ignorando o `kkkk` brasileiro.
 - **Chat com IA local** (`&chat` ou menção): conversa com a **Judy**, um LLM rodando na sua máquina, sem chaves externas. Ela escolhe o modelo conforme o tipo de mensagem (conversa, código, lógica), faz **contas exatas** e **lê o próprio código** através de um serviço de ferramentas (`ia-servico/`). Busca na internet via SearXNG quando precisa.
 - **Notícias por RSS** (`&rss`): a cada hora, a Judy posta um **resumo geral no tom dela** e depois os itens novos dos feeds no canal configurado.
-- **Sistema de níveis** (`&game`): XP por mensagem, cargos por nível (posicionados abaixo do mute), leaderboard e setup configurável.
+- **Sistema de níveis** (`&game`): XP por mensagem, cargos por nível (posicionados abaixo do mute), leaderboard e parâmetros configuráveis.
 - **Autorole** (`&autorole`): dá um cargo automaticamente a quem entra no servidor.
-- **Setup geral do servidor** (`&setup servidor`): monta a estrutura de um servidor novo — cargos **Staff** (modera, expulsa e bane) e **Ajudante** (avisa e silencia, sem kick/ban), categorias **Staff** (privada), **Geral** (aberta) e **Principal** (somente leitura), com canais de texto e voz — e emenda direto no assistente para configurar o resto. Não duplica o que já existe. ⚠️ Exige **ManageChannel**, **ManageRole** e **AssignRoles** no cargo do bot.
 - **IA com perfil e memória de longo prazo**: um agente observa o chat e monta um **perfil** de cada pessoa — personalidade, gostos e informações, cada fato com a **data** em que foi aprendido. A Judy usa isso para **adaptar o tom** a cada um (mais leve com quem é sério, mais afiada com quem curte). `&chat perfil` mostra o que ela sabe; `&chat esquecer` apaga o seu, `&chat esquecer tudo` zera o servidor.
 - **Tom modular e acessibilidade**: o tom base é caloroso; a acidez fica para quem já é próximo. `&chat cuidado @user on` marca alguém (opt-in) para tratamento gentil e paciente — sem a Judy inferir nada sozinha.
 - **Cache de conversa do canal**: ela acompanha as últimas mensagens do canal (quem falou, a quem respondeu) e percebe quando o assunto mudou, evitando responder fora de contexto.
@@ -93,8 +92,8 @@ recebe o comando, mas falha ao executar a ação.
 | **ReadMessageHistory** | ler mensagens (automod, `&limpar`) | não analisa nem apaga mensagens |
 | **SendMessage** | enviar respostas e avisos | fica mudo |
 | **SendEmbeds** | enviar os cartões de resposta | respostas não aparecem |
-| **React** | reações do assistente `&setup` e o 👀 da conversa livre | o `&setup` não funciona |
-| **ManageChannel** | **criar canais e categorias** no `&setup servidor` | ⚠️ o `&setup servidor` **não cria nada** |
+| **React** | cargos por reação e o 👀 da conversa livre | reaction roles não funcionam |
+| **ManageChannel** | editar canais (permissões do cargo de silêncio) | o silêncio pode vazar em canais próprios |
 | **ManageRole** | criar cargos (`&cargomudo`, cargos por nível, reaction role) | não consegue criar os cargos |
 | **AssignRoles** | **aplicar/remover** cargos em membros (autorole, nível, silêncio, reaction role) | cria o cargo mas não consegue dar a ninguém |
 | **KickMembers** | executar `&kick` | kick falha |
@@ -102,11 +101,10 @@ recebe o comando, mas falha ao executar a ação.
 | **ManageMessages** | apagar mensagens (automod, `&limpar`, `&modia`) | não remove mensagens |
 | **TimeoutMembers** | silenciar via timeout nativo (se usar esse modo) | só o silêncio por cargo funciona |
 
-> ⚠️ **As mais esquecidas:** `ManageChannel` (sem ela o `&setup servidor` não cria
-> os canais) e `AssignRoles` (sem ela o bot cria cargos mas não consegue
-> atribuí-los — autorole, cargos por nível e reaction roles falham na hora de
-> aplicar). `ManageRole` e `AssignRoles` são coisas diferentes: uma cria, a
-> outra dá a alguém.
+> ⚠️ **A mais esquecida:** `AssignRoles`. Sem ela o bot **cria** os cargos mas
+> não consegue **atribuí-los** — autorole, cargos por nível e reaction roles
+> falham na hora de aplicar. `ManageRole` e `AssignRoles` são coisas diferentes:
+> uma cria o cargo, a outra o entrega a alguém.
 
 > **Hierarquia de cargos importa:** o cargo do bot precisa estar **acima** do
 > cargo do usuário-alvo. O bot não consegue kickar/banir/silenciar quem tem um
@@ -120,7 +118,7 @@ silêncio**. Você pode:
   **todas as permissões negadas** e já o define como cargo de silêncio; ou
 - criar manualmente um cargo que remova `SendMessage` e informar o ID com
   `&punicao silencerole <idDoCargo>`; ou
-- deixar o `&setup` criar para você (ele oferece essa opção no modo `confirmar`).
+- deixar o `&cargomudo` criar um pronto para você (com tudo negado).
 
 > ⚠️ **Sem um cargo de silêncio configurado, não há como "revogar as permissões"
 > de um usuário** — o silêncio (e a reaplicação ao reentrar) simplesmente não
@@ -140,7 +138,7 @@ sempre pode usar tudo.
 | **ManageRole** | `&reactionrole` (`&rr`) |
 | **KickMembers** | `&kick` |
 | **BanMembers** | `&ban`, `&banglobal` |
-| **ManagePermissions** | `&setup`, `&config`, `&automod`, `&punicao`, `&log`, `&scam`, `&whitelist`, `&blocklist`, `&clearwarnings`, `&comando`, `&cargomudo`, `&chat livre`, `&chat comentar` |
+| **ManagePermissions** | `&config`, `&automod`, `&punicao`, `&log`, `&scam`, `&whitelist`, `&blocklist`, `&clearwarnings`, `&comando`, `&cargomudo`, `&chat livre`, `&chat comentar` |
 | **ManageServer** | `&modia` (moderação por IA) |
 
 > Resumo prático: para **configurar** o bot, um admin precisa de
@@ -167,7 +165,7 @@ node --disable-warning=ExperimentalWarning main.js
 Na primeira execução o bot cria o banco (`stoat.db`) com os padrões (nada
 punitivo ligado). Se existir um `automod-config.json` antigo, ele é **migrado
 automaticamente** para o banco na primeira subida. Configure pelo chat com
-`&setup` ou pelos comandos abaixo.
+`&tutorial` mostra o caminho; os comandos abaixo fazem o trabalho.
 
 ---
 
@@ -214,7 +212,7 @@ Prefixo: `&`. Aliases entre parênteses.
 
 | Comando | Descrição |
 |---|---|
-| `&setup` | assistente guiado por emojis (recomendado) |
+| `&tutorial [área]` | guia de primeiros passos (por onde começar) |
 | `&config` | mostra **todas** as configurações atuais |
 | `&automod <status\|módulo on/off\|debug on/off>` | liga/desliga módulos |
 | `&punicao <modo\|warns\|silencerole>` | política de punição |
@@ -369,8 +367,9 @@ canal de texto e voz** (categorias são ignoradas). Isso cobre inclusive canais 
 tenham permissões próprias sobrescrevendo as do servidor. Se você **criar canais
 novos** depois, rode `&cargomudo canais` para bloqueá-los também.
 
-No `&setup`, ao escolher o modo **Confirmar**, o assistente pergunta se você quer
-**criar um cargo novo** (🆕), **usar um existente** (📌) ou **pular** (⏭️).
+`&cargomudo` cria um cargo de silêncio pronto (todas as permissões negadas) e já
+o bloqueia em cada canal. Se preferir usar um cargo que já existe, informe o ID
+com `&punicao silencerole <id>`.
 
 > ⚠️ **Revogar permissões exige o cargo de silêncio.** O modo `confirmar` e a
 > reaplicação de silêncio ao reentrar só funcionam se houver um cargo de silêncio
@@ -429,62 +428,38 @@ origem** e **motivo**. Comandos:
 
 ---
 
-## Assistente `&setup`
+## Guia `&tutorial`
 
-O `&setup` é o **assistente único**: configura tudo por dentro, sem exigir que
-você decore outros comandos. Ao rodar `&setup`, aparece o menu:
+O bot não tem assistente que configura sozinho: cada área tem seu próprio comando
+e o `&tutorial` é o **mapa** que diz por onde passar e o que rodar em cada etapa.
+Ele nunca altera nada — só explica.
 
-| Opção | O que faz |
-|---|---|
-| 🚀 **Rápido** | escolhe um **perfil pronto** e aplica tudo de uma vez |
-| 🧭 **Completo** | passo a passo por **todas** as áreas |
-| 🏗️ **Estrutura do servidor** | cria categorias, canais e cargos |
+```
+&tutorial              # o roteiro, na ordem recomendada
+&tutorial moderacao    # a página daquela área, com os comandos exatos
+```
 
-Atalhos: `&setup rapido`, `&setup completo`, `&setup servidor`.
+Também responde por `&guia` e `&comecar`.
 
-### Perfis prontos (caminho rápido)
+### As áreas, na ordem sugerida
 
-- **🕊️ Tranquilo** — comunidade pequena: só avisa, filtros leves, detecção baixa.
-- **⚖️ Equilibrado** — recomendado: apaga a mensagem, filtros médios, XP ligado.
-- **🛡️ Rígido** — servidor grande: acumula avisos e bane, todos os filtros,
-  detecção alta, ban global ativo.
-
-### Caminho completo (passo a passo)
-
-Passa por: política de punição → avisos até o ban → **criação do cargo de
-silêncio** → pacote do automod → detecção de conteúdo e sensibilidade → canal de
-logs → autorole → XP e **criação dos cargos de nível** → canal e feed de RSS →
-conversa livre da Judy → comentários espontâneos → **moderação por IA e seus
-critérios** → lista global de banimentos.
-
-### Cargos de equipe criados pela estrutura
-
-| Cargo | Pode | Não pode |
+| # | Área | O que cobre |
 |---|---|---|
-| **Staff** | apagar mensagens, silenciar, **expulsar e banir**, mover em call | administrar o servidor |
-| **Ajudante** | apagar mensagens, silenciar/timeout, dar aviso (`&warn`) | **expulsar ou banir** |
+| ⚠️ | `permissoes` | o que o **bot** precisa para funcionar — comece por aqui |
+| 1 | `moderacao` | filtros do automod, política de punição, detecção de conteúdo |
+| 2 | `logs` | canal de registro e quais eventos anotar |
+| 3 | `cargos` | autorole, cargos por reação, cargo de silêncio |
+| 4 | `xp` | níveis, cargos por nível, dificuldade |
+| 5 | `ia` | conversa da Judy, memória, perfil, moderação por IA |
+| 6 | `noticias` | feeds RSS e o resumo automático |
+| 7 | `mensagens` | `&embed` para avisos e regras |
+| 8 | `ajustes` | panorama, comandos desativados, ban global |
 
-Os canais da categoria **Staff** ficam visíveis só para esses dois cargos e para
-o bot. Se a lib não permitir alterar o `@everyone` do canal, o relatório **avisa
-explicitamente** que o canal não ficou privado — em vez de fingir que ficou.
+Cada página termina apontando a próxima, então dá para seguir em sequência. Nada
+é obrigatório: pule o que não fizer sentido para o seu servidor.
 
-### Como responder
-
-Cada etapa aceita **reação** _ou_ **texto digitado**:
-
-- clique no emoji, **ou** digite o **número** da opção (`1`, `2`, …);
-- nas etapas de canal (logs, RSS) dá para **criar o canal na hora**;
-- na etapa de autorole os **cargos do servidor aparecem numerados** — é só
-  escolher o número, sem caçar ID;
-- digite o valor pedido quando a etapa aceita texto (URL de feed, critérios de
-  moderação, ou um ID específico);
-- `pular` salta a etapa · `sair` encerra (o que já foi configurado permanece).
-
-> Aceitar texto não é um detalhe: se o Stoat falhar em adicionar as reações
-> (acontece por limite de taxa), o assistente continua totalmente usável.
-
-Exige `ManagePermissions`. Para criar canais e cargos, o **bot** precisa de
-`ManageChannel`, `ManageRole` e `AssignRoles`.
+> 💡 `&config` mostra o **estado atual** de tudo que está configurado, e
+> `&help <comando>` detalha qualquer comando citado no guia.
 
 ---
 
@@ -575,7 +550,7 @@ nível; a cada N níveis, pode ganhar um cargo.
 &game                 # seu nível, XP e progresso
 &game rank @usuário    # perfil de outra pessoa
 &game top              # ranking (XP + nível)
-&game setup            # configurar (ou &setup game)
+&game setup            # configurar
 &game criarcargos      # cria os cargos de nível automaticamente
 &game on | off         # liga/desliga
 ```
@@ -656,9 +631,7 @@ O código é organizado em quatro áreas, sob `modulos/`:
 │   │   ├── limpar.js           # &limpar
 │   │   ├── embed.js            # &embed
 │   │   ├── debug-comando.js    # &debug (diagnóstico)
-│   │   ├── setup.js            # assistente &setup (reações)
-│   │   ├── wizard.js           # &setup — assistente único (perfis + passo a passo)
-│   │   ├── setup-servidor.js   # estrutura do servidor (canais, categorias, cargos)
+│   │   ├── tutorial.js         # &tutorial — guia de primeiros passos
 │   │   ├── moderacao-ia.js     # moderação por IA (apaga + marca o dono)
 │   │   ├── modia-comando.js    # &modia (configura a moderação por IA)
 │   │   └── geral.js            # help, ping, sobre, userinfo, kick, ban

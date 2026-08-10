@@ -62,11 +62,11 @@ function extrairAlvo(message, args) {
 // de conhecimento para assistir na configuração).
 export function construirDetalhes(P) {
   return {
-    setup: {
-      uso: `${P}setup`,
-      desc: "Assistente que configura **tudo** por aqui — sem precisar de outros comandos.\n\n`&setup` — abre o menu:\n• 🚀 **Rápido** — perfil pronto (tranquilo / equilibrado / rígido)\n• 🧭 **Completo** — passo a passo: punição, cargo de silêncio, automod, detecção de conteúdo, logs, autorole, XP e cargos de nível, RSS, conversa da Judy, moderação por IA e ban global\n• 🏗️ **Estrutura** — cria categorias, canais e os cargos **Staff** (bane/expulsa) e **Ajudante** (só avisa)\n\nAtalhos: `&setup rapido` · `&setup completo` · `&setup servidor`\n\n**Em cada etapa** reaja **ou digite** o número. Nas etapas de canal dá para criar o canal na hora; no autorole os cargos aparecem numerados. `pular` salta, `sair` encerra.\n\n⚠️ O bot precisa de **ManageChannel**, **ManageRole** e **AssignRoles**.",
-      perm: "ManagePermissions",
-      ex: `${P}setup completo`,
+    tutorial: {
+      uso: `${P}tutorial [área]`,
+      desc: "Guia de primeiros passos: mostra **por onde começar** e qual comando usar em cada área — não altera nada sozinho.\n\n`&tutorial` — o roteiro na ordem recomendada\n`&tutorial <área>` — a página daquela área com os comandos exatos\n\n**Áreas:** `permissoes` (o que o bot precisa), `moderacao`, `logs`, `cargos`, `xp`, `ia`, `noticias`, `mensagens`, `ajustes`.\n\nCada página termina indicando a próxima. Também responde por `&guia` e `&comecar`.",
+      perm: null,
+      ex: `${P}tutorial moderacao`,
     },
     hello: {
       uso: `${P}hello`,
@@ -320,7 +320,7 @@ export async function cmdHelp(message, args, ctx) {
     geral: {
       titulo: "Comandos gerais",
       linhas: [
-        `\`${P}setup\` — ⭐ assistente de configuração guiado`,
+        `\`${P}tutorial\` — ⭐ por onde começar (guia de configuração)`,
         `\`${P}ping\` — latência do bot`,
         `\`${P}repete <texto>\` — repete o texto`,
         `\`${P}chat <mensagem>\` — conversa com a IA (ou mencione o bot)`,

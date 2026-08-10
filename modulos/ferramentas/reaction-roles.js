@@ -14,6 +14,7 @@
 
 import * as db  from "../core/db.js";
 import * as log from "../core/log.js";
+import { idValido, descreverProblemaDeId } from "../core/ids.js";
 
 const ULID = /^[0-9A-HJKMNP-TV-Z]{26}$/i;
 
@@ -134,9 +135,9 @@ export async function cmdReactionRole(message, args, ctx) {
     const ref   = extrairIdMensagem(args[1]);
     const mid   = ref.id;
     const emoji = normalizarEmoji(args[2]);
-    const role  = (args[3] ?? "").replace(/[<@#>]/g, "");
+    const role  = idValido(args[3]);
 
-    if (!mid || !emoji || !ULID.test(role)) {
+    if (!mid || !emoji || !role) {
       // aponta exatamente o que está errado, em vez de repetir a sintaxe seca
       const problemas = [];
       if (!mid) {
@@ -145,7 +146,7 @@ export async function cmdReactionRole(message, args, ctx) {
           : "• não achei o **ID da mensagem** (aceito o ID puro ou o **link** da mensagem)");
       }
       if (!emoji) problemas.push("• faltou o **emoji**");
-      if (!ULID.test(role)) problemas.push(`• o **ID do cargo** está inválido${args[3] ? ` (\`${args[3]}\`)` : ""} — pegue em Configurações → Cargos → *Copy role ID*`);
+      if (!role) problemas.push(`• o **cargo**: ${descreverProblemaDeId(args[3], "cargo")} — mencione o cargo ou cole o ID (Configurações → Cargos → *Copy role ID*)`);
 
       return sendEmbed(message.channel, { title: "❌ Uso incorreto",
         description: [

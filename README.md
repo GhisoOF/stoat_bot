@@ -454,7 +454,7 @@ porém, aceita **qualquer valor CSS válido** — então o bot fala direto com a
 **Prontos disponíveis:** `arco-iris`, `fogo`, `oceano`, `neon`, `vaporwave`,
 `poente`, `floresta`, `ouro`, `cyberpunk`, `sangue`, `gelo`, `trans`.
 
-O cargo pode ser informado pelo **nome** (mesmo parcial) ou pelo ID.
+O cargo pode ser informado pelo **nome** (mesmo parcial), **mencionando** (`<%Cargo>`) ou pelo ID.
 
 > ⚠️ Erro mais comum: escrever `gradient(...)` em vez de `linear-gradient(...)` —
 > a API devolve 400. O bot detecta isso antes de enviar e avisa.

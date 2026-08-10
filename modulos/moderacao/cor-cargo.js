@@ -1,3 +1,4 @@
+import { limparId } from "../core/ids.js";
 // ══════════════════════════════════════════════════════════
 //  cor-cargo.js — &cor
 //
@@ -84,7 +85,7 @@ function validarCss(txt) {
 
 // ── Acha o cargo por ID ou por nome ───────────────────────
 function acharCargo(server, alvo) {
-  const limpo = String(alvo).replace(/[<@&>]/g, "").trim();
+  const limpo = limparId(alvo);
   if (ULID.test(limpo)) {
     const r = server.roles?.get?.(limpo);
     return r ? { id: limpo, nome: r.name ?? limpo } : { id: limpo, nome: limpo };

@@ -28,6 +28,7 @@
 // ══════════════════════════════════════════════════════════
 
 import * as db from "../core/db.js";
+import { limparId } from "../core/ids.js";
 
 const ULID = /^[0-9A-HJKMNP-TV-Z]{26}$/i;
 
@@ -255,7 +256,7 @@ export async function cmdGame(message, args, ctx) {
   // ── rank [@usuário] ou perfil próprio (padrão) ──
   let alvoId = message.authorId;
   if (sub === "rank" && args[1]) {
-    const bruto = args[1].replace(/[<@>]/g, "");
+    const bruto = limparId(args[1]);
     if (ULID.test(bruto)) alvoId = bruto;
   }
 

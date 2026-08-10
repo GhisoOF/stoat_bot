@@ -5,6 +5,7 @@
 // ══════════════════════════════════════════════════════════
 import { rebuildBlocklist, DOMINIO_VALIDO, simularDeteccao, removerCargoSilence } from "./automod-engine.js";
 import * as db  from "../core/db.js";
+import { limparId } from "../core/ids.js";
 import * as log from "../core/log.js";
 import { analisarConteudo } from "./scorecard.js";
 
@@ -530,7 +531,7 @@ export async function cmdPunicao(message, args, ctx) {
 
   if (sub === "silencerole" || sub === "cargo") {
     if (!val) return sendEmbed(message.channel, { title: "❌ Uso", description: `\`${PREFIXO}punicao silencerole <id>\``, colour: COR.erro });
-    pol.silenceRoleId = val.replace(/[<@&>]/g, ""); salvarConfig();
+    pol.silenceRoleId = limparId(val); salvarConfig();
     return sendEmbed(message.channel, { title: "✅ Cargo de silêncio",
       description: `Cargo para silenciar: \`${pol.silenceRoleId}\` (usado no modo \`confirmar\`).`, colour: COR.sucesso });
   }

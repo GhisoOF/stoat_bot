@@ -120,9 +120,10 @@ export async function cmdEmbed(message, args, ctx) {
       else if (chave === "canal") { campos.canal = valor.replace(/[<#>]/g, "").trim(); emDescricao = false; }
       else if (chave === "imagem") { campos.imagem = valor.trim(); emDescricao = false; }
     } else if (m && chaveBruta && !chave) {
-      // parece um campo, mas a chave não existe — avisa em vez de engolir
-      avisos.push(`\`${chaveBruta}\` não é um campo válido`);
+      // Dentro da descrição, "Palavra: algo" é texto normal (ex.: "Exemplo: X").
+      // Só avisa quando a linha parece um campo mal escrito fora da descrição.
       if (emDescricao) campos.descricao.push(linha);
+      else avisos.push(`\`${chaveBruta}\` não é um campo válido`);
     } else if (emDescricao) {
       campos.descricao.push(linha);   // continuação da descrição (multi-linha)
     } else if (!campos.titulo && linha.trim()) {

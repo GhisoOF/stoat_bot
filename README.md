@@ -419,7 +419,9 @@ origem** e **motivo**. Comandos:
 
 ```
 &banglobal                      # status
-&banglobal <off|avisar|banir>   # define o modo
+&banglobal <off|avisar|banir>
+&banglobal varrer          # confere quem JÁ está no servidor (os modos só agem em quem entra)
+&banglobal varrer ver     # simula, sem banir   # define o modo
 &banglobal historico <@user|id> # em quais servidores foi banido e por quê
 &banglobal importar             # importa os bans JÁ EXISTENTES deste servidor
 &banglobal esquecer <@user|id>  # remove um usuário da lista

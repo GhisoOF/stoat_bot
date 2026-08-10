@@ -100,6 +100,91 @@ export async function verificarEntrada(member, ctx) {
 // ──────────────────────────────────────────────────────────
 //  Comando &banglobal
 // ──────────────────────────────────────────────────────────
+// Resolve um usuário a partir de menção, ID ou NOME (com ou sem #tag).
+// Sem isso, `&banglobal historico Fulano#1234` nunca acha nada — o comando
+// tratava o texto como se já fosse o ID.
+async function resolverUsuario(entrada, message, ctx) {
+  const bruto = String(entrada ?? "").replace(/[<@>]/g, "").trim();
+  if (message.mentionIds?.[0]) return message.mentionIds[0];
+  if (!bruto) return null;
+  if (/^[0-9A-HJKMNP-TV-Z]{26}$/i.test(bruto)) return bruto;   // já é um ULID
+  // Não é ULID canônico, mas se já houver histórico com essa string, é um ID
+  // válido para nós (ids antigos/importados podem fugir do padrão).
+  try { if (db.historicoBans(bruto)?.length) return bruto; } catch {}
+
+  // procura pelo nome entre os membros do servidor
+  const alvo = bruto.split("#")[0].toLowerCase();   // "Fulano#1234" → "fulano"
+  try {
+    const server = await ctx.getServer?.(message);
+    const membros = await server?.fetchMembers?.().catch(() => null);
+    const lista = membros?.members ?? membros ?? [];
+    for (const m of lista) {
+      const nome = (m?.user?.username ?? m?.username ?? "").toLowerCase();
+      const apelido = (m?.nickname ?? "").toLowerCase();
+      if (nome === alvo || apelido === alvo) return m?.id?.user ?? m?.user?.id ?? m?.id;
+    }
+    for (const m of lista) {   // segunda passada: parcial
+      const nome = (m?.user?.username ?? m?.username ?? "").toLowerCase();
+      if (nome.includes(alvo)) return m?.id?.user ?? m?.user?.id ?? m?.id;
+    }
+  } catch {}
+  return null;
+}
+
+// ──────────────────────────────────────────────────────────
+//  Varredura: confere os membros que JÁ ESTÃO no servidor.
+//
+//  O verificarEntrada() só age quando alguém entra. Quem já estava aqui
+//  quando foi banido em outro servidor passava despercebido — este é o
+//  ponto cego que a varredura fecha.
+// ──────────────────────────────────────────────────────────
+export async function varrer(ctx, message, { aplicar = true } = {}) {
+  const serverId = ctx.serverId;
+  const modo = ctx.config?.banGlobal?.modo ?? "off";
+  const server = await ctx.getServer?.(message);
+  if (!server) return { erro: "não consegui acessar o servidor" };
+
+  let membros = [];
+  try {
+    const r = await server.fetchMembers();
+    membros = r?.members ?? r ?? [];
+  } catch (e) {
+    return { erro: `não consegui listar os membros (${e?.message ?? e})` };
+  }
+
+  const achados = [];
+  for (const m of membros) {
+    const uid = m?.id?.user ?? m?.user?.id ?? m?.id;
+    if (!uid) continue;
+    const hist = db.historicoBans(uid).filter((b) => b.serverId !== serverId);
+    if (!hist.length) continue;
+    const nome = m?.user?.username ?? m?.nickname ?? uid;
+    achados.push({ uid, nome, n: hist.length, membro: m });
+  }
+
+  if (!aplicar || modo !== "banir") return { total: membros.length, achados, aplicados: [], modo };
+
+  const aplicados = [];
+  for (const a of achados) {
+    try {
+      await server.banUser(a.uid, { reason: `[Ban global] banido em ${a.n} outro(s) servidor(es)` });
+      db.registrarBanGlobal(a.uid, serverId, `ban global (${a.n} servidores, varredura)`, "banglobal");
+      aplicados.push({ ...a, ok: true });
+      console.log(`[BANGLOBAL] 🔨 ${a.uid} banido na varredura de ${serverId}`);
+    } catch (e) {
+      aplicados.push({ ...a, ok: false, erro: e?.message ?? String(e) });
+      console.error(`[BANGLOBAL][varredura] falha em ${a.uid}:`, e?.message);
+    }
+  }
+  if (aplicados.length) {
+    await log.registrar(ctx, "punicoes", {
+      titulo: "🔨 Varredura da lista global",
+      descricao: aplicados.map((a) => `${a.ok ? "🔨" : "❌"} <@${a.uid}> (${a.nome}) — ${a.n} servidor(es)${a.ok ? "" : ` — erro: ${a.erro}`}`).join("\n").slice(0, 1800),
+    });
+  }
+  return { total: membros.length, achados, aplicados, modo };
+}
+
 export async function cmdBanGlobal(message, args, ctx) {
   const { config, sendEmbed, COR, getServer, membroTemPermissao, salvarConfig, PREFIXO, serverId } = ctx;
 
@@ -131,6 +216,8 @@ export async function cmdBanGlobal(message, args, ctx) {
         "**Comandos:**",
         `\`${PREFIXO}banglobal <off|avisar|banir>\` — define o modo`,
         `\`${PREFIXO}banglobal historico <@usuário|id>\` — histórico de um usuário`,
+        `\`${PREFIXO}banglobal varrer\` — **confere quem JÁ está no servidor** e age`,
+        `\`${PREFIXO}banglobal varrer ver\` — só mostra, sem banir ninguém`,
         `\`${PREFIXO}banglobal importar\` — importa os bans já existentes deste servidor`,
         `\`${PREFIXO}banglobal esquecer <@usuário|id>\` — remove um usuário da lista`,
         "",
@@ -160,9 +247,15 @@ export async function cmdBanGlobal(message, args, ctx) {
 
   // ── &banglobal historico <usuário> ──
   if (sub === "historico" || sub === "histórico") {
-    const uid = (args[1] ?? "").replace(/[<@>]/g, "") || message.mentionIds?.[0];
-    if (!uid) return sendEmbed(message.channel, { title: "❌ Uso incorreto",
-      description: `\`${PREFIXO}banglobal historico <@usuário|id>\``, colour: COR.erro });
+    const uid = await resolverUsuario(args[1], message, ctx);
+    if (!uid) return sendEmbed(message.channel, { title: "❌ Não achei esse usuário",
+      description: [
+        `\`${PREFIXO}banglobal historico <@usuário|id|nome>\``,
+        "",
+        args[1] ? `Procurei por **${args[1]}** entre os membros e não encontrei.` : "",
+        "Aceito uma **menção**, o **ID** ou o **nome** de alguém que esteja no servidor.",
+        "_Se a pessoa já saiu, só o ID funciona._",
+      ].filter(Boolean).join("\n"), colour: COR.erro });
 
     const hist = db.historicoBans(uid);
     if (!hist.length) return sendEmbed(message.channel, { title: "🌐 Histórico global",
@@ -183,6 +276,58 @@ export async function cmdBanGlobal(message, args, ctx) {
 
   // ── &banglobal importar ──
   // Traz os bans JÁ EXISTENTES deste servidor para a lista global.
+  // ── varrer: confere quem JÁ está no servidor ──
+  if (["varrer", "varredura", "revisar", "scan"].includes(sub)) {
+    const soVer = ["ver", "listar", "simular", "dry"].includes((args[1] ?? "").toLowerCase());
+    const modo = config?.banGlobal?.modo ?? "off";
+
+    if (modo === "off" && !soVer) {
+      return sendEmbed(message.channel, { title: "🌐 Lista global desligada",
+        description: `O modo está \`off\`. Ligue com \`${PREFIXO}banglobal avisar\` ou \`${PREFIXO}banglobal banir\` antes de varrer — ou use \`${PREFIXO}banglobal varrer ver\` só para conferir quem apareceria.`,
+        colour: COR.aviso });
+    }
+
+    await sendEmbed(message.channel, { title: "🔎 Varrendo os membros…",
+      description: "Conferindo quem já está no servidor contra a lista global. Pode levar um instante.", colour: COR.info });
+
+    const r = await varrer(ctx, message, { aplicar: !soVer });
+    if (r.erro) {
+      return sendEmbed(message.channel, { title: "❌ Varredura falhou",
+        description: `${r.erro}\n\n_O bot precisa de permissão para ver os membros._`, colour: COR.erro });
+    }
+
+    if (!r.achados.length) {
+      return sendEmbed(message.channel, { title: "✅ Nenhum encontrado",
+        description: `Conferi **${r.total}** membro(s) e ninguém consta na lista global.`, colour: COR.sucesso });
+    }
+
+    const lista = r.achados.slice(0, 15)
+      .map((a) => `• <@${a.uid}> (**${a.nome}**) — banido em ${a.n} servidor(es)`).join("\n");
+    const extra = r.achados.length > 15 ? `\n_… e mais ${r.achados.length - 15}._` : "";
+
+    if (soVer || modo !== "banir") {
+      return sendEmbed(message.channel, {
+        title: `🔎 ${r.achados.length} na lista global`,
+        description: [
+          `De **${r.total}** membro(s) do servidor:`, "", lista + extra, "",
+          soVer ? `_Simulação: nada foi feito. Rode \`${PREFIXO}banglobal varrer\` para agir._`
+                : `_Modo **${modo}**: nenhuma ação automática. Use \`${PREFIXO}banglobal banir\` e varra de novo para banir._`,
+        ].join("\n").slice(0, 1900), colour: COR.aviso });
+    }
+
+    const ok = r.aplicados.filter((a) => a.ok).length;
+    const falhas = r.aplicados.filter((a) => !a.ok);
+    return sendEmbed(message.channel, {
+      title: `🔨 Varredura concluída — ${ok} banido(s)`,
+      description: [
+        `Conferi **${r.total}** membro(s); **${r.achados.length}** constavam na lista.`, "",
+        lista + extra,
+        falhas.length ? `\n**Falhas (${falhas.length}):**\n` + falhas.slice(0, 5).map((f) => `• ${f.nome}: ${f.erro}`).join("\n") : "",
+        falhas.length ? "_Falha comum: o cargo do bot precisa de **BanMembers** e estar acima do cargo da pessoa._" : "",
+      ].filter(Boolean).join("\n").slice(0, 1900),
+      colour: falhas.length ? COR.aviso : COR.sucesso });
+  }
+
   if (sub === "importar") {
     try {
       const bans = await server.fetchBans();

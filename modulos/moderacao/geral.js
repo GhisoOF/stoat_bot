@@ -132,9 +132,10 @@ export function construirDetalhes(P) {
       perm: "ManagePermissions", ex: `${P}scam test ganhe dinheiro fácil chama no pv`,
     },
     banglobal: {
-      uso: `${P}banglobal [off|avisar|banir | historico <id> | importar | esquecer <id>]`,
-      desc: "Lista de banimentos compartilhada entre servidores. `off` ignora; `avisar` alerta os mods quando alguém da lista entra; `banir` bane automaticamente. `importar` traz os bans já existentes DESTE servidor para a lista. Todo ban (automod e manual) alimenta a lista, com servidor de origem e motivo.",
-      perm: "BanMembers", ex: `${P}banglobal avisar`,
+      uso: `${P}banglobal <off|avisar|banir|varrer|historico|importar|esquecer>`,
+      desc: "Lista global de banimentos compartilhada entre os servidores onde o bot está.\n\n`off` — ignora · `avisar` — alerta os moderadores · `banir` — bane automaticamente\n\n⚠️ **Importante:** os modos acima só agem quando a pessoa **entra**. Para quem **já está** no servidor, use:\n`&banglobal varrer` — confere todos os membros atuais e age\n`&banglobal varrer ver` — só mostra quem apareceria, sem banir\n\n`&banglobal historico <@usuário|id|nome>` — onde a pessoa foi banida\n`&banglobal importar` — traz os bans já existentes deste servidor\n`&banglobal esquecer <@usuário|id>` — tira alguém da lista",
+      perm: "BanMembers",
+      ex: `${P}banglobal varrer ver`,
     },
     game: {
       uso: `${P}game [rank|top|setup|cargos|criarcargos|on|off]`,

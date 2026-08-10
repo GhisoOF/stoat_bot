@@ -73,6 +73,33 @@ if (!existsSync(modulosDir)) {
   console.log(`  ✓ ${arquivos.length} módulos verificados`);
 }
 
+// ── Rotas: cada comando aponta para algo que existe? ──────
+// `node --check` só valida sintaxe; uma rota apontando para uma função
+// removida (ex.: `configurar: cmdSetupRouter` depois de apagar o setup) só
+// explode em runtime, no boot. Esta checagem pega isso antes do deploy.
+{
+  const src = readFileSync(resolve(RAIZ, "main.js"), "utf8");
+  const conhecidos = new Set();
+  for (const m of src.matchAll(/import\s+\*\s+as\s+(\w+)\s+from/g)) conhecidos.add(m[1]);
+  for (const m of src.matchAll(/import\s+\{([^}]+)\}\s+from/g))
+    m[1].split(",").forEach((x) => conhecidos.add(x.trim().split(/\s+as\s+/).pop()));
+  for (const m of src.matchAll(/import\s+(\w+)\s+from/g)) conhecidos.add(m[1]);
+  for (const m of src.matchAll(/(?:async\s+)?function\s+(\w+)/g)) conhecidos.add(m[1]);
+  for (const m of src.matchAll(/(?:const|let|var)\s+(\w+)\s*=/g)) conhecidos.add(m[1]);
+
+  const ini = src.indexOf("const rotas");
+  const fim = src.indexOf("// Aliases");
+  if (ini !== -1 && fim > ini) {
+    const bloco = src.slice(ini, fim);
+    const ruins = new Set();
+    for (const m of bloco.matchAll(/^\s*[\wáéíóúâêôãõç]+:\s*([A-Za-z_$][\w$]*)(?:\.\w+)?\s*,/gm)) {
+      if (!conhecidos.has(m[1])) ruins.add(m[1]);
+    }
+    for (const r of ruins) falha(`main.js: rota aponta para "${r}", que não existe (import removido?)`);
+    if (!ruins.size) console.log("  ✓ rotas de comandos consistentes");
+  }
+}
+
 if (erros) {
   console.error(`\nBUILD ABORTADO: ${erros} problema(s) de integridade. O repositório está incompleto ou inconsistente.`);
   process.exit(1);

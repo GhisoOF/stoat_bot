@@ -252,7 +252,7 @@ const rotas = {
   tutorial:      tutorial.cmdTutorial,
   guia:          tutorial.cmdTutorial,
   comecar:       tutorial.cmdTutorial,
-  configurar:    cmdSetupRouter,
+  inicio:        tutorial.cmdTutorial,
   // Logs
   log:           log.cmdLog,
   logs:          log.cmdLog,

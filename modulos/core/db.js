@@ -71,7 +71,12 @@ export function abrirBanco(caminho) {
     if (!cols.includes("exclusivo")) {
       db.exec("ALTER TABLE reaction_roles ADD COLUMN exclusivo INTEGER NOT NULL DEFAULT 0");
     }
-  } catch (e) { console.error("[DB] migração exclusivo:", e.message); }
+    // Guardar o canal permite recarregar a mensagem no boot: sem ela em cache,
+    // a lib não emite o evento de reação e os cargos param de ser entregues.
+    if (!cols.includes("channelId")) {
+      db.exec("ALTER TABLE reaction_roles ADD COLUMN channelId TEXT");
+    }
+  } catch (e) { console.error("[DB] migração reaction_roles:", e.message); }
 
   // (Curadoria RSS) feeds cadastrados por servidor
   db.exec(`
@@ -311,12 +316,24 @@ export function usuariosBanidosDistintos() {
 }
 
 // ── Reaction roles ─────────────────────────────────────────
-export function addReactionRole(serverId, messageId, emoji, roleId) {
-  // herda o modo já definido para esta mensagem (não zera ao adicionar mais um emoji)
-  const atual = db.prepare("SELECT exclusivo FROM reaction_roles WHERE messageId = ? LIMIT 1").get(messageId);
+export function addReactionRole(serverId, messageId, emoji, roleId, channelId = null) {
+  // herda o modo e o canal já definidos para esta mensagem
+  const atual = db.prepare("SELECT exclusivo, channelId FROM reaction_roles WHERE messageId = ? LIMIT 1").get(messageId);
   const exclusivo = atual?.exclusivo ?? 0;
-  db.prepare(`INSERT OR REPLACE INTO reaction_roles (serverId, messageId, emoji, roleId, exclusivo)
-              VALUES (?, ?, ?, ?, ?)`).run(serverId, messageId, emoji, roleId, exclusivo);
+  const canal = channelId ?? atual?.channelId ?? null;
+  db.prepare(`INSERT OR REPLACE INTO reaction_roles (serverId, messageId, emoji, roleId, exclusivo, channelId)
+              VALUES (?, ?, ?, ?, ?, ?)`).run(serverId, messageId, emoji, roleId, exclusivo, canal);
+}
+
+// Grava/atualiza o canal de uma mensagem já registrada.
+export function setReactionRoleCanal(messageId, channelId) {
+  return db.prepare("UPDATE reaction_roles SET channelId = ? WHERE messageId = ?")
+    .run(channelId, messageId).changes ?? 0;
+}
+
+// Mensagens distintas com reaction role (para recarregar no boot).
+export function mensagensComReactionRole() {
+  return db.prepare("SELECT DISTINCT messageId, serverId, channelId FROM reaction_roles").all();
 }
 
 // Liga/desliga o modo exclusivo de uma mensagem inteira.

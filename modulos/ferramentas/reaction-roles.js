@@ -115,6 +115,54 @@ export async function aoReagir(message, userId, emoji, ctx) {
 }
 
 // ──────────────────────────────────────────────────────────
+//  Pré-carga no boot
+//
+//  Sintoma clássico: "funcionava, o bot reiniciou, parou de entregar
+//  cargos — mas os emojis continuam lá". A causa é que a lib só emite
+//  o evento de reação para mensagens que ela conhece; depois de um
+//  restart, as mensagens antigas não estão em cache e a reação passa
+//  em branco.
+//
+//  Aqui buscamos cada mensagem com reaction role uma vez, no boot,
+//  para que voltem ao cache. Quando o canal não está gravado (regras
+//  antigas), procuramos nos canais do servidor e gravamos para a
+//  próxima vez.
+// ──────────────────────────────────────────────────────────
+export async function precarregarMensagens(client) {
+  let ok = 0, perdidas = 0;
+  const registros = db.mensagensComReactionRole();
+  if (!registros.length) return { ok, perdidas, total: 0 };
+
+  for (const reg of registros) {
+    let msg = null;
+    try {
+      if (reg.channelId) {
+        const canal = client.channels.get(reg.channelId)
+          ?? await client.channels.fetch(reg.channelId).catch(() => null);
+        if (canal) msg = await canal.fetchMessage(reg.messageId).catch(() => null);
+      }
+      if (!msg && reg.serverId) {
+        // sem canal gravado: procura e memoriza para não repetir a busca
+        const server = await client.servers.fetch(reg.serverId).catch(() => null);
+        for (const ch of server?.channels ?? []) {
+          const canal = typeof ch === "string"
+            ? (client.channels.get(ch) ?? await client.channels.fetch(ch).catch(() => null))
+            : ch;
+          if (!canal?.fetchMessage) continue;
+          msg = await canal.fetchMessage(reg.messageId).catch(() => null);
+          if (msg) { db.setReactionRoleCanal(reg.messageId, canal.id ?? canal._id); break; }
+        }
+      }
+    } catch (e) {
+      console.error(`[REACTIONROLE][boot] ${reg.messageId}:`, e?.message);
+    }
+    if (msg) ok++; else { perdidas++; console.log(`[REACTIONROLE][boot] não achei a mensagem ${reg.messageId} (canal apagado ou sem acesso?)`); }
+  }
+  console.log(`[REACTIONROLE] ${ok} mensagem(ns) recarregada(s)${perdidas ? `, ${perdidas} não encontrada(s)` : ""}`);
+  return { ok, perdidas, total: registros.length };
+}
+
+// ──────────────────────────────────────────────────────────
 //  Comando &reactionrole
 // ──────────────────────────────────────────────────────────
 export async function cmdReactionRole(message, args, ctx) {
@@ -179,6 +227,22 @@ export async function cmdReactionRole(message, args, ctx) {
       colour: COR.sucesso });
   }
 
+  // ── recarregar: força a re-leitura das mensagens (diagnóstico) ──
+  if (["recarregar", "reload", "reparar"].includes(sub)) {
+    await sendEmbed(message.channel, { title: "🔄 Recarregando…",
+      description: "Buscando as mensagens de cargos por reação para voltarem ao cache.", colour: COR.info });
+    const r = await precarregarMensagens(client);
+    return sendEmbed(message.channel, {
+      title: r.perdidas ? "⚠️ Recarregado com pendências" : "✅ Recarregado",
+      description: [
+        `**${r.ok}** de **${r.total}** mensagem(ns) voltaram ao cache.`,
+        r.perdidas ? `**${r.perdidas}** não foram encontradas — o canal pode ter sido apagado, ou falta \`ViewChannel\`/\`ReadMessageHistory\` para o bot.` : "",
+        "",
+        "_Isso é feito sozinho a cada reinício do bot._",
+      ].filter(Boolean).join("\n"),
+      colour: r.perdidas ? COR.aviso : COR.sucesso });
+  }
+
   if (sub === "remove" || sub === "remover") {
     const mid = extrairIdMensagem(args[1]).id;
     if (!mid)
@@ -240,7 +304,9 @@ export async function cmdReactionRole(message, args, ctx) {
           colour: COR.erro });
       }
 
-      db.addReactionRole(serverId, mid, emoji, role);
+      // grava o canal junto: é o que permite recarregar a mensagem no boot
+      const canalDaMsg = ref.canalId ?? msg?.channelId ?? msg?.channel?.id ?? null;
+      db.addReactionRole(serverId, mid, emoji, role, canalDaMsg);
       try { await msg.react(encodeURIComponent(emoji)); } catch (e) {
         console.error("[REACTIONROLE][react]", e?.message);
       }

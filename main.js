@@ -338,6 +338,10 @@ client.on("ready", async () => {
   store.inicializar(CONFIG_PATH); // abre o banco e migra o config antigo
   cfgGlobal = store.getGlobal();
 
+  // Recarrega as mensagens de reaction role: sem isso, depois de um restart a
+  // lib não emite eventos de reação para elas e os cargos param de ser dados.
+  reactionRoles.precarregarMensagens(client).catch((e) => console.error("[REACTIONROLE][boot]", e?.message));
+
   chat.iniciarMemoria();          // liga o agente de memória (extração em background)
   chat.iniciarComentario(client); // liga o comentário espontâneo
   modIA.configurar({ avaliar: chat.avaliarModeracao });   // moderação por IA usa o modelo pequeno

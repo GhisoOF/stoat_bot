@@ -168,9 +168,10 @@ export function construirDetalhes(P) {
       perm: "ManageServer", ex: `${P}modia criterios Apague divulgacao de outros servidores e ataques pessoais`,
     },
     debug: {
-      uso: `${P}debug`,
-      desc: "Relatório completo dos comandos: quais estão funcionando e quais não, com o motivo (handler quebrado, comando desativado, ou o bot sem a permissão necessária). Mostra também a permissão que o bot precisa e a que o admin precisa para cada comando.",
-      perm: "ManagePermissions", ex: `${P}debug`,
+      uso: `${P}debug [canais|silence]`,
+      desc: "Diagnóstico do bot neste servidor.\n\n`&debug` — testa todos os comandos e aponta o que está desativado ou sem permissão\n`&debug canais` — **o que eu enxergo e o que consigo fazer em cada canal**. No Stoat a permissão do canal vence a do cargo, então dá para eu ter permissão no servidor e estar mudo num canal específico\n`&debug silence [@pessoa]` — se o cargo de silêncio realmente cala: mostra em quais canais falta a negação e, com uma pessoa marcada, avisa se ela tem cargo **acima** do silêncio que anula o efeito",
+      perm: "ManagePermissions",
+      ex: `${P}debug canais`,
     },
     comando: {
       uso: `${P}comando [disable|enable <nome>]`,

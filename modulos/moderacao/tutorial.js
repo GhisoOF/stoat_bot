@@ -196,6 +196,8 @@ function AREAS(P) {
         `\`${P}comando <nome> on|off\` — liga/desliga um comando aqui`,
         `\`${P}banglobal <off|avisar|banir>\` — o que fazer quando entra alguém banido em outro servidor`,
         `\`${P}debug\` — diagnóstico quando algo não funciona`,
+        `\`${P}debug canais\` — o que o bot enxerga e pode fazer em CADA canal`,
+        `\`${P}debug silence @pessoa\` — checa se o silêncio vai funcionar mesmo`,
         "",
         `E \`${P}help\` lista tudo, com \`${P}help <comando>\` para detalhes.`,
       ],

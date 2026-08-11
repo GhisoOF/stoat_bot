@@ -215,6 +215,8 @@ Prefixo: `&`. Aliases entre parênteses.
 | Comando | Descrição |
 |---|---|
 | `&tutorial [área]` | guia de primeiros passos (por onde começar) |
+| `&debug canais` | o que o bot enxerga e pode fazer em cada canal |
+| `&debug silence [@pessoa]` | checa se o cargo de silêncio realmente cala |
 | `&cor <cargo> <cor\|gradiente>` | cor dos cargos, com gradiente (exige **ManageRole**) |
 | `&config` | mostra **todas** as configurações atuais |
 | `&automod <status\|módulo on/off\|debug on/off>` | liga/desliga módulos |

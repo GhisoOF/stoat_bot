@@ -224,6 +224,18 @@ async function aplicarPunicao(ctx, opts) {
       try {
         await aplicarCargoSilence(server, userId, pol.silenceRoleId, ctx);
         acao = "usuário silenciado";
+        // A permissão do canal e o rank dos cargos vencem o cargo de silêncio.
+        // Se a pessoa tem cargo acima que libera falar, avisamos AGORA — senão
+        // você só descobre quando ela continuar conversando normalmente.
+        try {
+          const perms = await import("./permissoes.js");
+          const membro = await server.fetchMember(userId).catch(() => null);
+          const c = membro ? perms.conflitosDeSilencio(server, membro, pol.silenceRoleId) : null;
+          if (c?.conflitantes?.length) {
+            acao = `silenciado, mas **o silêncio não deve funcionar** (cargo(s) acima: ${c.conflitantes.map((x) => x.nome).join(", ")})`;
+            console.log(`[PUNIÇÃO][SILENCE] ⚠️ ${userId} tem cargo acima do silêncio: ${c.conflitantes.map((x) => x.nome).join(", ")}`);
+          }
+        } catch {}
         // Marca no banco: se ele sair e voltar, o cargo é REAPLICADO.
         db.definirSilenciado(ctx.serverId ?? server?.id, userId, true, motivo);
       }

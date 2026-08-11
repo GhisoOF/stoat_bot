@@ -1,3 +1,4 @@
+import * as perms from "./permissoes.js";
 // ══════════════════════════════════════════════════════════
 //  debug-comando.js — &debug
 //
@@ -55,6 +56,91 @@ export async function cmdDebug(message, args, ctx) {
   if (!membroTemPermissao(message, server, "ManagePermissions")) {
     return sendEmbed(message.channel, { title: "🚫 Permissão insuficiente",
       description: "Você precisa de **ManagePermissions** para ver o diagnóstico.", colour: COR.erro });
+  }
+
+  const sub = args[0]?.toLowerCase();
+
+  // ── &debug canais → o que o bot enxerga e pode fazer em cada canal ──
+  // No Stoat a permissão do canal vence a do cargo: dá para ter SendMessage
+  // no servidor e estar mudo num canal. É isso que este relatório expõe.
+  if (["canais", "canal", "permissoes", "permissões", "perms"].includes(sub)) {
+    const r = perms.diagnosticarCanais(server, ctx.client);
+    if (!r.linhas.length) {
+      return sendEmbed(message.channel, { title: "🔍 Canais",
+        description: "Não consegui listar os canais deste servidor.", colour: COR.aviso });
+    }
+    const resumo = [
+      `**${r.vistos}** canal(is) visível(is)`
+        + (r.cegos ? ` · **${r.cegos}** invisível(is) para mim` : "")
+        + (r.mudos ? ` · **${r.mudos}** com permissão faltando` : "")
+        + (r.desconhecidos ? ` · **${r.desconhecidos}** não consegui avaliar` : ""),
+      "",
+      ...r.linhas.slice(0, 30),
+      r.linhas.length > 30 ? `_… e mais ${r.linhas.length - 30} canal(is)._` : "",
+      "",
+      r.problemas.length
+        ? "⚠️ **Onde eu vou falhar:**\n" + r.problemas.slice(0, 8).map((p) => `• ${p}`).join("\n")
+        : "✅ Tenho o necessário em todos os canais que enxergo.",
+      "",
+      "_Legenda: ✅ tudo certo · 🟡 falta algo opcional · ⚠️ falta o essencial · 🚫 não enxergo_",
+    ].filter(Boolean).join("\n");
+    return sendEmbed(message.channel, { title: "🔍 Permissões por canal",
+      description: resumo.slice(0, 1950), colour: r.problemas.length ? COR.aviso : COR.sucesso });
+  }
+
+  // ── &debug silence [@usuário] → o silêncio vai funcionar mesmo? ──
+  if (["silence", "silencio", "silêncio", "mudo"].includes(sub)) {
+    const silenceRoleId = config?.automod?.punicao?.silenceRoleId;
+    if (!silenceRoleId) {
+      return sendEmbed(message.channel, { title: "🔇 Sem cargo de silêncio",
+        description: `Nenhum cargo de silêncio configurado. Crie um com \`${PREFIXO}cargomudo\`.`, colour: COR.aviso });
+    }
+
+    const linhas = [`**Cargo de silêncio:** <%${silenceRoleId}>`, ""];
+
+    // (a) o cargo está negado em todos os canais?
+    const canais = (server?.channels ?? []).filter(Boolean);
+    let comOverride = 0, semOverride = [];
+    for (const c of canais) {
+      const canal = typeof c === "string" ? (ctx.client?.channels?.get?.(c) ?? null) : c;
+      if (!canal) continue;
+      const ov = canal.role_permissions?.[silenceRoleId] ?? canal.rolePermissions?.[silenceRoleId];
+      if (ov) comOverride++;
+      else semOverride.push(canal.name ?? canal.id);
+    }
+    linhas.push(comOverride
+      ? `📋 Negado explicitamente em **${comOverride}** canal(is).`
+      : "⚠️ Não achei negação por canal — o silêncio pode vazar em canais com permissão própria.");
+    if (semOverride.length) {
+      linhas.push(`⚠️ **Sem negação em:** ${semOverride.slice(0, 10).join(", ")}${semOverride.length > 10 ? "…" : ""}`);
+      linhas.push(`_Corrija com_ \`${PREFIXO}cargomudo canais\``);
+    }
+
+    // (b) o alvo tem cargo acima que anula o silêncio?
+    const alvoId = message.mentionIds?.[0] ?? (args[1] ? args[1].replace(/[<@%>]/g, "") : null);
+    if (alvoId) {
+      const member = await server?.fetchMember?.(alvoId).catch(() => null);
+      if (!member) linhas.push("", `❔ Não achei o membro \`${alvoId}\` para checar os cargos dele.`);
+      else {
+        const c = perms.conflitosDeSilencio(server, member, silenceRoleId);
+        linhas.push("", `**Checando <@${alvoId}>:**`);
+        if (c.erro) linhas.push(`❔ ${c.erro}`);
+        else if (c.conflitantes.length) {
+          linhas.push(`❌ **O silêncio NÃO vai calar essa pessoa.**`);
+          linhas.push(`Ela tem cargo(s) acima do silêncio que liberam falar:`);
+          for (const x of c.conflitantes) linhas.push(`• <%${x.id}> (${x.nome})`);
+          linhas.push("", "_Suba o cargo de silêncio acima desses na lista de cargos, ou tire a permissão de SendMessage deles._");
+        } else {
+          linhas.push("✅ Nenhum cargo dela anula o silêncio.");
+        }
+      }
+    } else {
+      linhas.push("", `_Para checar alguém:_ \`${PREFIXO}debug silence @pessoa\``);
+    }
+
+    return sendEmbed(message.channel, { title: "🔇 Diagnóstico do silêncio",
+      description: linhas.join("\n").slice(0, 1950),
+      colour: semOverride.length ? COR.aviso : COR.info });
   }
 
   const rotas = estado.rotas ?? {};

@@ -449,7 +449,16 @@ porém, aceita **qualquer valor CSS válido** — então o bot fala direto com a
 &cor VIP remover                                  # volta ao padrão
 &cor lista                                        # cargos e cores atuais
 &cor presets                                      # ver os prontos
+&cor criar                                        # cria um cargo por preset, já colorido
+&cor criar fogo gelo neon                         # só alguns
 ```
+
+### Criar todos de uma vez
+
+`&cor criar` cria um cargo para cada preset, aplica o gradiente e devolve, pronto
+para colar, o `&embed` do painel e os comandos `&reactionrole add` com os emojis
+já escolhidos. Cargos que já existem com o mesmo nome são **reaproveitados** (só
+recebem a cor), então dá para rodar de novo sem duplicar nada.
 
 **Prontos disponíveis:** `arco-iris`, `fogo`, `oceano`, `neon`, `vaporwave`,
 `poente`, `floresta`, `ouro`, `cyberpunk`, `sangue`, `gelo`, `trans`.

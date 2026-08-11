@@ -65,6 +65,10 @@ function AREAS(P) {
         "",
         `**Detecção de conteúdo** (golpes, divulgação): \`${P}scam on\` e \`${P}scam sensibilidade <baixa|media|alta>\`.`,
         `**Links permitidos:** \`${P}whitelist add <domínio>\`.`,
+        "",
+        `**Aviso manual:** \`${P}warn @pessoa <motivo>\` — conta junto com os avisos do automod.`,
+        `**Quem pode moderar:** \`${P}acesso cargo add <@cargo>\` dá poder de moderação a um cargo, sem precisar mexer nas permissões do Stoat.`,
+        `**Onde os comandos valem:** \`${P}acesso canal somente\` + \`${P}acesso canal add\` limita os comandos a canais escolhidos.`,
       ],
     },
 

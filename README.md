@@ -46,6 +46,8 @@ embutido (nada de serviço externo), então as configurações e punições
 - **Moderação manual**: `&kick`, `&ban` (por menção **ou** ID), `&limpar`.
 - **Panorama**: `&config` mostra todas as configurações de uma vez.
 - **Cor dos cargos com gradiente** (`&cor`): o cliente do Stoat só deixa escolher cor sólida; o bot fala direto com a API e aplica **gradientes** (montados por você ou de uma lista de prontos).
+- **Controle de acesso** (`&acesso`): marque **cargos como staff** (moderam sem precisar de permissão nativa do Stoat) e limite **em quais canais** os comandos funcionam.
+- **Aviso manual** (`&warn`): staff dá avisos à mão; eles somam com os do automod, então o modo `acumular` bane no limite.
 - **Guia `&tutorial`**: mostra **por onde começar** — o roteiro de áreas na ordem recomendada, com os comandos exatos de cada uma. Não altera nada sozinho; só te diz o caminho.
 - **Embed customizável** (`&embed`): o bot publica uma mensagem embed com título, descrição, cor, rodapé e imagem.
 - **Cargos por reação** (`&reactionrole`): reagir num emoji dá um cargo configurado.
@@ -222,6 +224,8 @@ Prefixo: `&`. Aliases entre parênteses.
 | `&automod <status\|módulo on/off\|debug on/off>` | liga/desliga módulos |
 | `&punicao <modo\|warns\|silencerole>` | política de punição |
 | `&log <here\|id\|off\|evento on/off>` | chat de logs |
+| `&warn <@pessoa> [motivo]` | aviso manual (conta para o ban no modo acumular) |
+| `&acesso <cargo\|canal>` | quem pode usar comandos e em quais canais |
 | `&banglobal <off\|avisar\|banir\|...>` | lista global (exige **BanMembers**) |
 | `&modia <on\|off\|criterios\|canal\|limpar>` | moderação por IA na conversa (exige **ManageServer**) |
 | `&chat perfil [@user]` | o que a Judy sabe sobre alguém |

@@ -102,6 +102,18 @@ export function construirDetalhes(P) {
       desc: "Bane permanentemente o usuário mencionado.",
       perm: "BanMembers", ex: `${P}ban @fulano divulgação`,
     },
+    warn: {
+      uso: `${P}warn <@pessoa|id|nome> [motivo]`,
+      desc: "Dá um aviso manual a alguém. Usa o **mesmo contador** do automod, então no modo `acumular` o aviso manual conta para o ban automático — e o bot avisa quantos faltam.\n\nVer os avisos: `&warnings @pessoa` · Zerar: `&clearwarnings @pessoa`",
+      perm: "KickMembers",
+      ex: `${P}warn @Fulano flood no chat de arte`,
+    },
+    acesso: {
+      uso: `${P}acesso <cargo|canal|staffignora|status>`,
+      desc: "Define **quem** pode usar os comandos e **onde**.\n\n**Cargos de staff** — quem tiver um deles usa os comandos de moderação mesmo sem a permissão nativa do Stoat:\n`&acesso cargo add <@cargo>` · `&acesso cargo remove <@cargo>` · `&acesso cargo limpar`\n\n**Canais** — onde os comandos funcionam:\n`&acesso canal todos` — em qualquer canal\n`&acesso canal somente` — só nos da lista\n`&acesso canal exceto` — em todos, menos os da lista\n`&acesso canal add|remove [#canal]` — mexe na lista\n\n`&acesso staffignora on|off` — se o staff escapa da restrição de canal (padrão: sim)\n\n_`&acesso`, `&debug`, `&help` e `&tutorial` funcionam sempre, para você não se trancar fora._",
+      perm: "ManagePermissions",
+      ex: `${P}acesso canal somente`,
+    },
     warnings: {
       uso: `${P}warnings [@usuário]`,
       desc: "Mostra quantos avisos (0 a 3) o usuário acumulou no AutoMod. 3 avisos = ban.",
@@ -343,6 +355,8 @@ export async function cmdHelp(message, args, ctx) {
         `\`${P}kick @usuário [motivo]\` — expulsa *(KickMembers)*`,
         `\`${P}ban @usuário [motivo]\` — bane *(BanMembers)*`,
         `\`${P}limpar <n> [@usuário]\` — apaga mensagens *(ManageMessages)*`,
+        `\`${P}warn <@pessoa> [motivo]\` — aviso manual *(KickMembers)*`,
+        `\`${P}acesso <cargo|canal>\` — quem pode usar comandos e onde *(ManagePermissions)*`,
         `\`${P}warnings [@usuário]\` — ver avisos`,
         `\`${P}clearwarnings @usuário\` — limpa avisos *(ManagePermissions)*`,
         `\`${P}banglobal <off|avisar|banir|...>\` — lista global *(BanMembers)*`,

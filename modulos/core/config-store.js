@@ -42,6 +42,19 @@ export const padraoServidor = {
       comandos:  false,       // ruidoso: começa desligado
     },
   },
+  // ── Acesso aos comandos ────────────────────────────────
+  acesso: {
+    // Cargos que valem como "staff": quem tiver um deles usa os comandos de
+    // moderação mesmo sem a permissão nativa do Stoat. Vazio = só as permissões.
+    cargosStaff: [],
+    // Onde os comandos funcionam:
+    //   "todos"   → em qualquer canal (padrão)
+    //   "somente" → só nos canais da lista
+    //   "exceto"  → em todos, menos os da lista
+    canais: { modo: "todos", lista: [] },
+    // Staff escapa da restrição de canal (para moderar de qualquer lugar).
+    staffIgnoraCanais: true,
+  },
   // ── Lista global de banimentos (&banglobal) ──
   banGlobal: {
     modo: "off",              // off | avisar | banir  (padrão: nada automático)
@@ -100,6 +113,11 @@ function mesclarServidor(salvo, tpl) {
     rss: { ...tpl.rss, ...(salvo.rss ?? {}) },
     autorole: { ...tpl.autorole, ...(salvo.autorole ?? {}) },
     chatLivre: { ...tpl.chatLivre, ...(salvo.chatLivre ?? {}) },
+    acesso: {
+      ...tpl.acesso,
+      ...(salvo.acesso ?? {}),
+      canais: { ...tpl.acesso.canais, ...(salvo.acesso?.canais ?? {}) },
+    },
     game: { ...tpl.game, ...(salvo.game ?? {}) },
     automod: {
       ...am, ...s,

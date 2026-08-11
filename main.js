@@ -21,6 +21,8 @@ import * as reactionRoles from "./modulos/ferramentas/reaction-roles.js";
 import * as autorole  from "./modulos/ferramentas/autorole.js";
 import * as tutorial   from "./modulos/moderacao/tutorial.js";
 import * as corCargo   from "./modulos/moderacao/cor-cargo.js";
+import * as acessoMod  from "./modulos/moderacao/acesso.js";
+import * as warnMod    from "./modulos/moderacao/warn.js";
 import * as modIA      from "./modulos/moderacao/moderacao-ia.js";
 import * as modiaCmd   from "./modulos/moderacao/modia-comando.js";
 import * as debugCmd  from "./modulos/moderacao/debug-comando.js";
@@ -180,6 +182,17 @@ function membroTemPermissao(message, server, permName) {
     if (ehSuperAdmin(userId)) return true;              // dono do bot: controle total
     if (server?.ownerId && server.ownerId === userId) return true;
 
+    // Cargos marcados como STAFF (&acesso cargo add) valem como permissão de
+    // moderação. Serve para dar poder de moderar sem entregar permissões reais
+    // do Stoat. Não cobre ManageServer, que é administração de verdade.
+    if (permName !== "ManageServer") {
+      try {
+        const serverId = message.serverId ?? message.server?.id ?? null;
+        const cfg = serverId ? store.configDoServidor(serverId) : null;
+        if (cfg && acessoMod.temCargoStaff(message, cfg)) return true;
+      } catch {}
+    }
+
     const member = message.member;
     if (!member) return false;
 
@@ -242,6 +255,9 @@ const rotas = {
   purge:         limpar.cmdLimpar,
   limpiar:       limpar.cmdLimpar,
   // AutoMod
+  warn:          warnMod.cmdWarn,
+  avisar:        warnMod.cmdWarn,
+  acesso:        acessoMod.cmdAcesso,
   warnings:      automodCmd.cmdWarnings,
   clearwarnings: automodCmd.cmdClearwarnings,
   automod:       automodCmd.cmdAutomod,
@@ -294,6 +310,7 @@ const rotas = {
 
 // Aliases → nome canônico (para desativar um comando desativa todos os apelidos).
 const CANONICO = {
+  avisar: "warn",
   cores: "cor",
   cargocor: "cor",
   guia: "tutorial",
@@ -310,7 +327,7 @@ const CANONICO = {
 // Comandos que o admin pode ligar/desligar (nomes canônicos, sem os essenciais).
 const COMANDOS_GERENCIAVEIS = [
   "ping", "repete", "userinfo", "kick", "ban", "limpar",
-  "warnings", "clearwarnings", "automod", "whitelist", "blocklist",
+  "warnings", "clearwarnings", "warn", "acesso", "automod", "whitelist", "blocklist",
   "scam", "punicao", "tutorial", "cor", "log", "banglobal", "embed", "reactionrole", "chat", "rss", "game", "autorole",
 ];
 // exportado via ctx para o comando &comando consultar
@@ -471,6 +488,24 @@ client.on("messageCreate", async (message) => {
       description: `O comando \`${PREFIXO}${canonico}\` está desativado neste servidor.`,
       colour: COR.aviso,
     });
+  }
+
+  // ── Restrição por canal ──
+  // Quem tem cargo de staff (ou permissão nativa) pode escapar disso, conforme
+  // a config. `acesso` e `debug` sempre passam, senão dá para se trancar fora.
+  const SEMPRE_LIBERADOS = new Set(["acesso", "debug", "help", "tutorial"]);
+  if (!SEMPRE_LIBERADOS.has(canonico)) {
+    const ehStaff = acessoMod.temCargoStaff(message, ctx.config)
+      || membroTemPermissao(message, await getServer(message).catch(() => null), "ManagePermissions");
+    const permitido = acessoMod.canalPermitido(message, ctx.config, { ehStaff });
+    if (!permitido.ok) {
+      console.log(`[ACESSO] ${message.authorId} usou ${canonico} em canal restrito`);
+      return sendEmbed(message.channel, {
+        title: "🔐 Aqui não",
+        description: `${permitido.motivo.charAt(0).toUpperCase()}${permitido.motivo.slice(1)}.`,
+        colour: COR.aviso,
+      });
+    }
   }
 
   // Log de tentativa de uso de comando (categoria "comandos")

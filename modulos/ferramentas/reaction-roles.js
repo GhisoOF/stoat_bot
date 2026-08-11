@@ -55,6 +55,25 @@ export function normalizarEmoji(e) {
 //  Handler: chamado no messageReactionAdd
 //  Dá o cargo se a (mensagem, emoji) estiver registrada.
 // ──────────────────────────────────────────────────────────
+// A lib às vezes lança OBJETOS (resposta HTTP), não Error — aí `err.message`
+// é undefined e o log fica inútil ("[REACTIONROLE] undefined"). Isto extrai
+// alguma coisa legível de qualquer formato.
+function descreverErro(e) {
+  if (!e) return "erro desconhecido";
+  if (typeof e === "string") return e;
+  const partes = [];
+  if (e.message) partes.push(e.message);
+  if (e.type) partes.push(`type=${e.type}`);
+  if (e.error) partes.push(`error=${typeof e.error === "string" ? e.error : JSON.stringify(e.error)}`);
+  if (e.status ?? e.statusCode) partes.push(`status=${e.status ?? e.statusCode}`);
+  if (e.response?.status) partes.push(`http=${e.response.status}`);
+  if (e.permission) partes.push(`permissão=${e.permission}`);
+  if (!partes.length) {
+    try { partes.push(JSON.stringify(e).slice(0, 300)); } catch { partes.push(String(e)); }
+  }
+  return partes.join(" | ");
+}
+
 export async function aoReagir(message, userId, emoji, ctx) {
   try {
     const messageId = message?.id ?? message?._id;
@@ -65,10 +84,14 @@ export async function aoReagir(message, userId, emoji, ctx) {
     if (!alvo) return false;
 
     const serverId = alvo.serverId;
-    const server = await ctx.client.servers.fetch(serverId).catch(() => null);
+    const server = await ctx.client.servers.fetch(serverId).catch((e) => {
+      console.error(`[REACTIONROLE] não consegui carregar o servidor ${serverId}:`, descreverErro(e)); return null;
+    });
     if (!server) return false;
-    const member = await server.fetchMember(userId).catch(() => null);
-    if (!member) return false;
+    const member = await server.fetchMember(userId).catch((e) => {
+      console.error(`[REACTIONROLE] não consegui carregar o membro ${userId}:`, descreverErro(e)); return null;
+    });
+    if (!member) { console.log(`[REACTIONROLE] membro ${userId} não encontrado no servidor`); return false; }
 
     const atuais = (member.roles ?? []).map((r) => r?.id ?? r).filter(Boolean);
     if (atuais.includes(alvo.roleId)) return false;  // já tem o cargo
@@ -85,7 +108,13 @@ export async function aoReagir(message, userId, emoji, ctx) {
       novos = atuais.filter((id) => !daMensagem.includes(id));
     }
     novos = [...novos, alvo.roleId];
-    await member.edit({ roles: novos });
+    try {
+      await member.edit({ roles: novos });
+    } catch (e) {
+      console.error(`[REACTIONROLE] ❌ falhei ao dar o cargo ${alvo.roleId} para ${userId}: ${descreverErro(e)}`);
+      console.error("[REACTIONROLE]    → confira: o bot tem **AssignRoles**? o cargo dele está ACIMA de <@&" + alvo.roleId + "> na lista de cargos?");
+      return false;
+    }
 
     // Tira as reações antigas da pessoa, para o painel refletir a escolha.
     // Se a lib/permissão não permitir, o cargo já foi trocado — não é crítico.
@@ -109,7 +138,44 @@ export async function aoReagir(message, userId, emoji, ctx) {
     });
     return true;
   } catch (err) {
-    console.error("[REACTIONROLE]", err?.message);
+    console.error("[REACTIONROLE] erro inesperado:", descreverErro(err));
+    if (err?.stack) console.error(err.stack.split("\n").slice(0, 3).join("\n"));
+    return false;
+  }
+}
+
+// Chamado quando alguém TIRA a reação: remove o cargo correspondente.
+export async function aoDesreagir(message, userId, emoji, ctx) {
+  try {
+    const messageId = message?.id ?? message?._id;
+    if (!messageId || !userId) return false;
+    if (userId === ctx.client?.user?.id) return false;
+
+    const alvo = db.getReactionRole(messageId, normalizarEmoji(emoji));
+    if (!alvo) return false;
+
+    const server = await ctx.client.servers.fetch(alvo.serverId).catch(() => null);
+    if (!server) return false;
+    const member = await server.fetchMember(userId).catch(() => null);
+    if (!member) return false;
+
+    const atuais = (member.roles ?? []).map((r) => r?.id ?? r).filter(Boolean);
+    if (!atuais.includes(alvo.roleId)) return false;   // já não tem
+    try {
+      await member.edit({ roles: atuais.filter((id) => id !== alvo.roleId) });
+    } catch (e) {
+      console.error(`[REACTIONROLE] ❌ falhei ao remover o cargo ${alvo.roleId} de ${userId}: ${descreverErro(e)}`);
+      return false;
+    }
+    console.log(`[REACTIONROLE] -cargo ${alvo.roleId} de ${userId} (msg ${messageId})`);
+    const rctx = { ...ctx, serverId: alvo.serverId, config: ctx.configDoServidor?.(alvo.serverId) ?? ctx.config };
+    await log.registrar(rctx, "cargos", {
+      titulo: "🎭 Cargo por reação",
+      descricao: `<@${userId}> perdeu o cargo \`${alvo.roleId}\` ao tirar a reação.`,
+    });
+    return true;
+  } catch (err) {
+    console.error("[REACTIONROLE][desreagir]", descreverErro(err));
     return false;
   }
 }
@@ -326,9 +392,9 @@ export async function cmdReactionRole(message, args, ctx) {
         colour: COR.sucesso,
       });
     } catch (err) {
-      console.error("[REACTIONROLE][add]", err.message);
+      console.error("[REACTIONROLE][add]", descreverErro(err));
       return sendEmbed(message.channel, { title: "❌ Falha",
-        description: `**Erro:** ${err.message}\n\n_O bot precisa de **React** e **ManageRole**._`, colour: COR.erro });
+        description: `**Erro:** ${descreverErro(err)}\n\n_O bot precisa de **React**, **ManageRole** e **AssignRoles**._`, colour: COR.erro });
     }
   }
 

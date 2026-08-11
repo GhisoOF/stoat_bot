@@ -537,6 +537,41 @@ client.on("messageReactionAdd", async (...a) => {
   }
 });
 
+// Tirar a reação devolve o cargo (espelho do handler acima).
+client.on("messageReactionRemove", async (...a) => {
+  ultimoEvento = Date.now();
+  try {
+    if (cfgGlobal.debug !== false) {
+      console.log("[REAÇÃO-] args:", a.map((x) =>
+        (x && typeof x === "object") ? (x.id ?? x._id ?? Object.keys(x)) : x));
+    }
+
+    let msgId, userId, emoji;
+    const [a0, a1, a2] = a;
+
+    if (typeof a0 === "string") msgId = a0;
+    else if (a0 && typeof a0 === "object") {
+      msgId  = a0.id ?? a0._id ?? a0.messageId ?? a0.message?.id ?? a0.message?._id;
+      userId = a0.userId ?? a0.user_id ?? a0.user?.id;
+      emoji  = a0.emoji ?? a0.emojiId ?? a0.emoji_id;
+    }
+    if (!userId) userId = (typeof a1 === "string") ? a1 : (a1?.id ?? a1?.userId ?? a1?.user_id);
+    if (!emoji)  emoji  = (typeof a2 === "string") ? a2 : (a2?.emoji ?? a2?.id ?? a2?.emoji_id)
+                        ?? ((typeof a1 === "string") ? a2 : undefined);
+
+    if (userId && client.user && userId === client.user.id) return; // ignora o próprio bot
+
+    // Reaction roles — dá o cargo se a (mensagem, emoji) estiver registrada.
+    //    O objeto da mensagem (a0) traz o id; passamos ctx com acesso à config.
+    const msgObj = (a0 && typeof a0 === "object") ? a0 : { id: msgId };
+    const ctxRR = criarContexto(null);
+    ctxRR.configDoServidor = store.configDoServidor;   // p/ o log usar a config certa
+    await reactionRoles.aoDesreagir(msgObj, userId, emoji, ctxRR);
+  } catch (err) {
+    console.error("[REAÇÃO-] erro:", err.message);
+  }
+});
+
 // ══════════════════════════════════════════════════════════
 //  EVENTOS DE SERVIDOR (punição persistente + chat de logs)
 //  Assinaturas conferidas na stoat.js 7.3.6:

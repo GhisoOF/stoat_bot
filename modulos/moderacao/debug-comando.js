@@ -64,28 +64,40 @@ export async function cmdDebug(message, args, ctx) {
   // No Stoat a permissão do canal vence a do cargo: dá para ter SendMessage
   // no servidor e estar mudo num canal. É isso que este relatório expõe.
   if (["canais", "canal", "permissoes", "permissões", "perms"].includes(sub)) {
-    const r = perms.diagnosticarCanais(server, ctx.client);
-    if (!r.linhas.length) {
+    // O cálculo precisa do MEMBRO do bot (os cargos dele). Sem isso não há
+    // como saber o que ele pode em cada canal.
+    const botId = ctx.client?.user?.id;
+    const botMember = botId ? await server?.fetchMember?.(botId).catch(() => null) : null;
+
+    // modo cru: mostra o que a API devolve, para descobrir o formato
+    if (["cru", "raw", "bruto"].includes(args[1]?.toLowerCase())) {
+      const primeiro = (server?.channels ?? []).find(Boolean);
+      const canal = typeof primeiro === "string" ? ctx.client?.channels?.get?.(primeiro) : primeiro;
+      const insp = perms.inspecionarCanal(canal);
+      return sendEmbed(message.channel, { title: "🔬 Formato dos dados",
+        description: [
+          `**Membro do bot:** ${botMember ? `ok (${(botMember.roles ?? []).length} cargo(s))` : "❌ não consegui buscar"}`,
+          `**Dono do servidor:** \`${server?.owner ?? server?.ownerId ?? "?"}\``,
+          "",
+          "**Um canal, como a API me entrega:**",
+          "```json",
+          typeof insp === "string" ? insp : JSON.stringify(insp, null, 1).slice(0, 1200),
+          "```",
+        ].join("\n").slice(0, 1950), colour: COR.info });
+    }
+
+    const r = perms.diagnosticarCanais(server, ctx.client, botMember);
+    if (!r.total) {
       return sendEmbed(message.channel, { title: "🔍 Canais",
         description: "Não consegui listar os canais deste servidor.", colour: COR.aviso });
     }
-    const resumo = [
-      `**${r.vistos}** canal(is) visível(is)`
-        + (r.cegos ? ` · **${r.cegos}** invisível(is) para mim` : "")
-        + (r.mudos ? ` · **${r.mudos}** com permissão faltando` : "")
-        + (r.desconhecidos ? ` · **${r.desconhecidos}** não consegui avaliar` : ""),
-      "",
-      ...r.linhas.slice(0, 30),
-      r.linhas.length > 30 ? `_… e mais ${r.linhas.length - 30} canal(is)._` : "",
-      "",
-      r.problemas.length
-        ? "⚠️ **Onde eu vou falhar:**\n" + r.problemas.slice(0, 8).map((p) => `• ${p}`).join("\n")
-        : "✅ Tenho o necessário em todos os canais que enxergo.",
-      "",
-      "_Legenda: ✅ tudo certo · 🟡 falta algo opcional · ⚠️ falta o essencial · 🚫 não enxergo_",
-    ].filter(Boolean).join("\n");
+    const corpo = perms.formatarRelatorio(r, PREFIXO);
+    const aviso = !botMember
+      ? "\n\n⚠️ _Não consegui buscar meu próprio membro no servidor — sem isso não sei quais cargos eu tenho._"
+      : "";
     return sendEmbed(message.channel, { title: "🔍 Permissões por canal",
-      description: resumo.slice(0, 1950), colour: r.problemas.length ? COR.aviso : COR.sucesso });
+      description: (corpo + aviso).slice(0, 1950),
+      colour: r.problemas.length || r.desconhecidos ? COR.aviso : COR.sucesso });
   }
 
   // ── &debug silence [@usuário] → o silêncio vai funcionar mesmo? ──
@@ -125,6 +137,7 @@ export async function cmdDebug(message, args, ctx) {
         const c = perms.conflitosDeSilencio(server, member, silenceRoleId);
         linhas.push("", `**Checando <@${alvoId}>:**`);
         if (c.erro) linhas.push(`❔ ${c.erro}`);
+        else if (c.dono) linhas.push(`👑 ${c.aviso}`);
         else if (c.conflitantes.length) {
           linhas.push(`❌ **O silêncio NÃO vai calar essa pessoa.**`);
           linhas.push(`Ela tem cargo(s) acima do silêncio que liberam falar:`);

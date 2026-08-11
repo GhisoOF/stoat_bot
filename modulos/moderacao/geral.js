@@ -169,7 +169,7 @@ export function construirDetalhes(P) {
     },
     debug: {
       uso: `${P}debug [canais|silence]`,
-      desc: "Diagnóstico do bot neste servidor.\n\n`&debug` — testa todos os comandos e aponta o que está desativado ou sem permissão\n`&debug canais` — **o que eu enxergo e o que consigo fazer em cada canal**. No Stoat a permissão do canal vence a do cargo, então dá para eu ter permissão no servidor e estar mudo num canal específico\n`&debug silence [@pessoa]` — se o cargo de silêncio realmente cala: mostra em quais canais falta a negação e, com uma pessoa marcada, avisa se ela tem cargo **acima** do silêncio que anula o efeito",
+      desc: "Diagnóstico do bot neste servidor.\n\n`&debug` — testa todos os comandos e aponta o que está desativado ou sem permissão\n`&debug canais` — **o que eu enxergo e o que consigo fazer em cada canal**. No Stoat a permissão do canal vence a do cargo, então dá para eu ter permissão no servidor e estar mudo num canal específico\n`&debug canais cru` — mostra o formato dos dados (quando o diagnóstico não consegue avaliar)\n`&debug silence [@pessoa]` — se o cargo de silêncio realmente cala: mostra em quais canais falta a negação e, com uma pessoa marcada, avisa se ela tem cargo **acima** do silêncio que anula o efeito",
       perm: "ManagePermissions",
       ex: `${P}debug canais`,
     },

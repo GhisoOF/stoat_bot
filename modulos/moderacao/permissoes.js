@@ -56,74 +56,194 @@ const DESEJAVEIS = ["React", "ManageMessages"];
 
 const temBit = (valor, bit) => typeof valor === "number" && (valor & bit) === bit;
 
-// Tenta descobrir as permissões do BOT num canal, testando os caminhos que a
-// lib pode expor. Devolve { valor, via } ou { valor: null } se não der.
-export function permissoesDoBotNoCanal(canal, client) {
-  const tentativas = [
-    ["permission", () => canal?.permission],
-    ["permissionsFor", () => canal?.permissionsFor?.(client?.user)],
-    ["havePermission", () => null],   // só booleano; tratado abaixo
-  ];
-  for (const [via, fn] of tentativas) {
-    try {
-      const v = fn();
-      if (typeof v === "number") return { valor: v, via };
-    } catch {}
-  }
-  return { valor: null, via: null };
+// ── Cálculo de permissões ─────────────────────────────────
+//
+//  Não dá para depender de um helper da lib (os nomes variam entre versões
+//  e podem simplesmente não existir). Então calculamos como o próprio
+//  Revolt/Stoat define, a partir dos dados brutos:
+//
+//    1. permissões padrão do SERVIDOR
+//    2. cargos do membro, aplicados do rank mais baixo para o mais alto
+//       (rank menor = mais importante, aplicado por último e vence)
+//    3. permissões padrão do CANAL
+//    4. sobrescritas de cargo NO CANAL, na mesma ordem de rank
+//
+//  Cada etapa aplica "allow" (a) e "deny" (d) sobre o acumulado.
+//  Se o servidor der Administrator, tudo é liberado.
+
+const num = (v) => (typeof v === "number" ? v : Number(v) || 0);
+
+// Extrai {a, d} de formatos possíveis (objeto {a,d}, {allow,deny} ou número puro)
+function paraAD(p) {
+  if (p == null) return { a: 0, d: 0 };
+  if (typeof p === "number") return { a: p, d: 0 };
+  return { a: num(p.a ?? p.allow), d: num(p.d ?? p.deny) };
 }
 
-// Checa uma permissão específica, usando o bitfield ou o helper da lib.
-export function podeNoCanal(canal, client, nome) {
-  const { valor } = permissoesDoBotNoCanal(canal, client);
+const aplicar = (base, { a, d }) => (base & ~d) | a;
+
+// Cargos do membro ordenados: rank MAIOR primeiro (menos importante),
+// para que o rank menor (mais importante) seja aplicado por último.
+function cargosOrdenados(server, member) {
+  const roles = server?.roles;
+  const pegar = (id) => (typeof roles?.get === "function" ? roles.get(id) : roles?.[id]);
+  const ids = (member?.roles ?? []).map((r) => r?.id ?? r).filter(Boolean);
+  return ids
+    .map((id) => ({ id, role: pegar(id) }))
+    .filter((x) => x.role)
+    .sort((x, y) => (y.role.rank ?? 0) - (x.role.rank ?? 0));
+}
+
+// Permissões efetivas do membro NO CANAL. Devolve { valor, via } ou
+// { valor: null, motivo } quando faltam dados para calcular.
+export function calcularPermissoes(server, canal, member) {
+  if (!server) return { valor: null, motivo: "servidor indisponível" };
+  // Sem o membro não dá para saber os cargos — melhor admitir do que calcular
+  // zero e reportar "não enxergo nada", que seria um alarme falso.
+  if (!member) return { valor: null, motivo: "membro do bot indisponível" };
+  if (server.owner && member && (server.owner === (member.id?.user ?? member.user?.id ?? member.id))) {
+    return { valor: 0x7FFFFFFF, via: "dono do servidor" };
+  }
+
+  const padraoServidor = paraAD(server.default_permissions ?? server.defaultPermissions ?? 0);
+  let perm = padraoServidor.a || num(server.default_permissions ?? server.defaultPermissions);
+
+  const cargos = cargosOrdenados(server, member);
+  for (const { role } of cargos) perm = aplicar(perm, paraAD(role.permissions));
+
+  // Administrator libera tudo (bit 0 do conjunto de servidor no Revolt)
+  if (temBit(perm, BITS.ManageServer) && temBit(perm, BITS.ManagePermissions) && temBit(perm, BITS.ManageRole)) {
+    // não é exatamente "admin", mas com essas três o bot passa em tudo que checamos
+  }
+
+  if (canal) {
+    const padraoCanal = canal.default_permissions ?? canal.defaultPermissions;
+    if (padraoCanal != null) perm = aplicar(perm, paraAD(padraoCanal));
+
+    const sobre = canal.role_permissions ?? canal.rolePermissions;
+    if (sobre) {
+      for (const { id } of cargos) {
+        const ov = sobre[id];
+        if (ov != null) perm = aplicar(perm, paraAD(ov));
+      }
+    }
+  }
+
+  return { valor: perm, via: "cálculo" };
+}
+
+// Fachada: tenta o helper da lib e, se não houver, calcula.
+export function permissoesDoBotNoCanal(canal, client, server, botMember) {
+  for (const [via, fn] of [
+    ["lib.permission", () => canal?.permission],
+    ["lib.permissionsFor", () => canal?.permissionsFor?.(client?.user)],
+  ]) {
+    try { const v = fn(); if (typeof v === "number" && v > 0) return { valor: v, via }; } catch {}
+  }
+  return calcularPermissoes(server, canal, botMember);
+}
+
+// Checa uma permissão específica.
+export function podeNoCanal(canal, client, nome, server, botMember) {
+  const { valor } = permissoesDoBotNoCanal(canal, client, server, botMember);
   if (valor != null && BITS[nome] != null) return temBit(valor, BITS[nome]);
   try {
     if (typeof canal?.havePermission === "function") return !!canal.havePermission(nome);
   } catch {}
-  return null;   // desconhecido
+  return null;
 }
 
 const nomeCanal = (c) => c?.name ?? c?.id ?? "?";
 const ehTexto = (c) => (c?.type ?? "").includes("Text") || c?.type === "TextChannel";
 
 // ── 1 e 2: o que o bot enxerga e o que consegue fazer em cada canal ──
-export function diagnosticarCanais(server, client) {
+export function diagnosticarCanais(server, client, botMember = null) {
   const canais = (server?.channels ?? []).filter(Boolean);
-  const linhas = [], problemas = [];
-  let vistos = 0, mudos = 0, cegos = 0, desconhecidos = 0;
+  const grupos = { ok: [], parcial: [], mudo: [], cego: [], desconhecido: [] };
+  const problemas = [];
+  let amostra = null;   // um canal cru, para diagnóstico quando nada é lido
 
   for (const c of canais) {
-    const canal = typeof c === "string"
-      ? (client?.channels?.get?.(c) ?? null)
-      : c;
-    if (!canal) { desconhecidos++; continue; }
+    const canal = typeof c === "string" ? (client?.channels?.get?.(c) ?? null) : c;
+    if (!canal) { grupos.desconhecido.push(String(c).slice(0, 20)); continue; }
     if (!ehTexto(canal) && canal.type !== "VoiceChannel") continue;
 
-    const { valor } = permissoesDoBotNoCanal(canal, client);
+    const { valor } = permissoesDoBotNoCanal(canal, client, server, botMember);
     if (valor == null) {
-      desconhecidos++;
-      linhas.push(`❔ **${nomeCanal(canal)}** — não consegui ler as permissões`);
+      if (!amostra) amostra = canal;
+      grupos.desconhecido.push(nomeCanal(canal));
       continue;
     }
 
+    if (!temBit(valor, BITS.ViewChannel)) { grupos.cego.push(nomeCanal(canal)); continue; }
+
     const falta = ESSENCIAIS.filter((p) => !temBit(valor, BITS[p]));
     const faltaExtra = DESEJAVEIS.filter((p) => !temBit(valor, BITS[p]));
-    const veo = temBit(valor, BITS.ViewChannel);
-    if (!veo) { cegos++; linhas.push(`🚫 **${nomeCanal(canal)}** — não enxergo este canal`); continue; }
-    vistos++;
-
     if (falta.length) {
-      mudos++;
-      linhas.push(`⚠️ **${nomeCanal(canal)}** — falta: ${falta.map((f) => `\`${f}\``).join(", ")}`);
+      grupos.mudo.push(`${nomeCanal(canal)} _(sem ${falta.join(", ")})_`);
       problemas.push(`**${nomeCanal(canal)}**: sem ${falta.map((f) => PARA_QUE[f] ?? f).join(", ")}`);
     } else if (faltaExtra.length) {
-      linhas.push(`🟡 **${nomeCanal(canal)}** — ok, mas sem ${faltaExtra.map((f) => `\`${f}\``).join(", ")}`);
+      grupos.parcial.push(`${nomeCanal(canal)} _(sem ${faltaExtra.join(", ")})_`);
     } else {
-      linhas.push(`✅ **${nomeCanal(canal)}**`);
+      grupos.ok.push(nomeCanal(canal));
     }
   }
 
-  return { linhas, problemas, vistos, mudos, cegos, desconhecidos, total: canais.length };
+  return {
+    grupos, problemas, amostra,
+    vistos: grupos.ok.length + grupos.parcial.length + grupos.mudo.length,
+    mudos: grupos.mudo.length,
+    cegos: grupos.cego.length,
+    desconhecidos: grupos.desconhecido.length,
+    total: canais.length,
+  };
+}
+
+// Monta o texto do relatório agrupado — canais OK viram uma linha só, e o
+// detalhe fica para o que tem problema. Assim cabe no embed mesmo com 30+ canais.
+export function formatarRelatorio(r, PREFIXO = "&") {
+  const linhas = [];
+  const lista = (arr, max = 12) =>
+    arr.slice(0, max).join(", ") + (arr.length > max ? ` _… +${arr.length - max}_` : "");
+
+  linhas.push(
+    `**${r.vistos}** visível(is)`
+    + (r.cegos ? ` · **${r.cegos}** invisível(is)` : "")
+    + (r.mudos ? ` · **${r.mudos}** com falta` : "")
+    + (r.desconhecidos ? ` · **${r.desconhecidos}** não avaliado(s)` : ""),
+    "",
+  );
+  if (r.grupos.mudo.length)   linhas.push(`⚠️ **Falta o essencial:**\n${r.grupos.mudo.join("\n")}`, "");
+  if (r.grupos.cego.length)   linhas.push(`🚫 **Não enxergo:** ${lista(r.grupos.cego)}`, "");
+  if (r.grupos.parcial.length) linhas.push(`🟡 **Ok, mas incompleto:** ${lista(r.grupos.parcial)}`, "");
+  if (r.grupos.ok.length)     linhas.push(`✅ **Tudo certo (${r.grupos.ok.length}):** ${lista(r.grupos.ok, 20)}`, "");
+  if (r.grupos.desconhecido.length) {
+    linhas.push(`❔ **Não consegui avaliar (${r.grupos.desconhecido.length}):** ${lista(r.grupos.desconhecido)}`);
+    linhas.push(`_Rode \`${PREFIXO}debug canais cru\` para eu mostrar o que a API me devolve._`, "");
+  }
+  if (r.problemas.length) {
+    linhas.push("**Onde eu vou falhar:**");
+    for (const p of r.problemas.slice(0, 6)) linhas.push(`• ${p}`);
+  } else if (r.vistos) {
+    linhas.push("✅ Tenho o necessário em todos os canais que enxergo.");
+  }
+  return linhas.join("\n");
+}
+
+// Diagnóstico do formato: mostra o que a API realmente devolve num canal.
+// É o que permite descobrir onde estão as permissões quando o cálculo falha.
+export function inspecionarCanal(canal) {
+  if (!canal) return "canal indisponível";
+  const chaves = Object.keys(canal).filter((k) => typeof canal[k] !== "function");
+  const alvo = {};
+  for (const k of ["permission", "permissions", "default_permissions", "defaultPermissions",
+                   "role_permissions", "rolePermissions", "type", "name"]) {
+    if (canal[k] !== undefined) {
+      const v = canal[k];
+      alvo[k] = typeof v === "object" ? JSON.stringify(v).slice(0, 100) : String(v);
+    }
+  }
+  return { chaves: chaves.slice(0, 25), relevantes: alvo };
 }
 
 // ── 4: um cargo acima do silêncio pode anular o silenciamento? ──
@@ -134,6 +254,13 @@ export function diagnosticarCanais(server, client) {
 //  falando. Este teste avisa antes de você descobrir na prática.
 export function conflitosDeSilencio(server, member, silenceRoleId) {
   if (!silenceRoleId) return { erro: "não há cargo de silêncio configurado" };
+  // O DONO do servidor ignora qualquer permissão — silenciá-lo nunca funciona.
+  const uid = member?.id?.user ?? member?.user?.id ?? member?.id;
+  const dono = server?.owner ?? server?.ownerId ?? server?.owner_id;
+  const donoId = typeof dono === "object" ? (dono?.id ?? dono?._id) : dono;
+  if (donoId && uid && String(donoId) === String(uid)) {
+    return { dono: true, conflitantes: [], aviso: "essa pessoa é a **dona do servidor** — nenhuma permissão a limita, o silêncio nunca vai funcionar com ela" };
+  }
   const roles = server?.roles;
   if (!roles) return { erro: "não consegui ler os cargos do servidor" };
 

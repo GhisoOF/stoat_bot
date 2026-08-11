@@ -108,7 +108,7 @@ function AREAS(P) {
         `Aceita hex, nome, e até **gradiente** — que o cliente do Stoat não oferece:`,
         `\`${P}cor VIP gradiente #FF71CE #01CDFE #05FFA1\``,
         `\`${P}cor VIP preset vaporwave\` · \`${P}cor presets\` lista os prontos`,
-        `\`${P}cor criar\` — cria **todos** os cargos de cor de uma vez e já monta o painel de escolha`,
+        `\`${P}cor painel aqui\` — **faz tudo**: cria os cargos coloridos, publica a mensagem de escolha, reage e liga os cargos por reação`,
       ],
     },
 

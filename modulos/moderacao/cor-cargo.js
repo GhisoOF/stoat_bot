@@ -1,4 +1,5 @@
 import { limparId } from "../core/ids.js";
+import * as db from "../core/db.js";
 // ══════════════════════════════════════════════════════════
 //  cor-cargo.js — &cor
 //
@@ -158,9 +159,11 @@ export async function cmdCor(message, args, ctx) {
         `\`${P}cor <cargo> gradiente #FF0000 #00FF00 #0000FF\``,
         `\`${P}cor <cargo> gradiente 45 vermelho azul\` — o número no início é o ângulo`,
         "",
-        "**Criar tudo de uma vez**",
-        `\`${P}cor criar\` — cria um cargo para CADA preset, já colorido, e te dá o painel pronto`,
-        `\`${P}cor criar fogo gelo neon\` — só os que você quiser`,
+        "**Automático — faz tudo sozinho**",
+        `\`${P}cor painel aqui\` — cria os cargos, publica a mensagem de escolha, reage e liga os cargos por reação`,
+        `\`${P}cor painel <id-do-canal>\` — publica o painel em outro canal`,
+        `\`${P}cor criar\` — só cria/pinta os cargos, sem publicar nada`,
+        `\`${P}cor painel aqui fogo gelo neon\` — só as cores escolhidas`,
         "",
         "**Prontos**",
         `\`${P}cor <cargo> preset <nome>\` — ${Object.keys(PRESETS).map((k) => `\`${k}\``).join(", ")}`,
@@ -204,15 +207,23 @@ export async function cmdCor(message, args, ctx) {
       description: linhas.join("\n").slice(0, 1900), colour: COR.info });
   }
 
-  // ── criar [preset...] → cria um cargo por preset, já colorido ──
-  if (["criar", "criarpresets", "criartodos", "gerar"].includes(sub)) {
+  // ── painel / criar → cria os cargos, publica o embed e liga tudo ──
+  if (["painel", "criar", "criarpresets", "criartodos", "gerar"].includes(sub)) {
     if (membroTemPermissao && !membroTemPermissao(message, server, "ManageRole")) {
       return sendEmbed(message.channel, { title: "🚫 Permissão insuficiente",
         description: "Você precisa de **ManageRole** para criar cargos.", colour: COR.erro });
     }
 
-    // quais presets: os pedidos, ou todos
-    const pedidos = args.slice(1).map((a) => a.toLowerCase()).filter((a) => a !== "todos");
+    // Argumentos: um canal (menção/ID/"aqui") e/ou nomes de preset.
+    let canalAlvoId = null;
+    const pedidos = [];
+    for (const a of args.slice(1)) {
+      const t = a.toLowerCase();
+      if (["aqui", "here"].includes(t)) { canalAlvoId = message.channelId; continue; }
+      const id = limparId(a);
+      if (ULID.test(id)) { canalAlvoId = id; continue; }
+      if (t !== "todos") pedidos.push(t);
+    }
     const invalidos = pedidos.filter((p) => !PRESETS[p]);
     if (invalidos.length) {
       return sendEmbed(message.channel, { title: "❌ Preset desconhecido",
@@ -220,76 +231,116 @@ export async function cmdCor(message, args, ctx) {
         colour: COR.erro });
     }
     const alvos = pedidos.length ? pedidos : Object.keys(PRESETS);
+    const soCargos = !canalAlvoId && ["criar", "criarpresets", "criartodos", "gerar"].includes(sub);
 
-    // cargos que já existem (por nome) não são duplicados
+    // ── 1. Cargos ──
     const existentes = new Map();
     for (const [id, r] of (server.roles ?? [])) existentes.set((r?.name ?? "").toLowerCase(), id);
 
-    await sendEmbed(message.channel, { title: "🎨 Criando os cargos…",
-      description: `Vou criar **${alvos.length}** cargo(s) e pintar cada um com o gradiente. Pode levar alguns segundos.`,
+    await sendEmbed(message.channel, { title: "🎨 Preparando…",
+      description: `Criando/pintando **${alvos.length}** cargo(s)${soCargos ? "" : " e montando o painel"}. Pode levar alguns segundos.`,
       colour: COR.info });
 
-    const criados = [], reaproveitados = [], falhas = [];
+    const prontos = [], falhas = [];
+    let novosCargos = 0;
     for (const nome of alvos) {
       const jaExiste = existentes.get(nome);
       let roleId = jaExiste ?? null;
-
       if (!roleId) {
         try {
           const r = await server.createRole(nome);
           roleId = r?.id ?? r?._id ?? r;
-        } catch (e) {
-          falhas.push({ nome, erro: `não consegui criar (${e?.message ?? e})` });
-          continue;
-        }
+          novosCargos++;
+        } catch (e) { falhas.push({ nome, erro: `não consegui criar (${e?.message ?? e})` }); continue; }
       }
-
       const r = await aplicarCor(serverId, roleId, PRESETS[nome]);
       if (!r.ok) { falhas.push({ nome, erro: r.erro.split("\n")[0] }); continue; }
-      (jaExiste ? reaproveitados : criados).push({ nome, roleId });
-
-      await new Promise((s) => setTimeout(s, 350));   // respeita o limite de taxa
+      prontos.push({ nome, roleId });
+      await new Promise((s) => setTimeout(s, 350));   // limite de taxa
     }
 
-    const linhas = [];
-    if (criados.length) linhas.push(`**Criados (${criados.length}):** ${criados.map((c) => c.nome).join(", ")}`);
-    if (reaproveitados.length) linhas.push(`**Já existiam, só pintei (${reaproveitados.length}):** ${reaproveitados.map((c) => c.nome).join(", ")}`);
-    if (falhas.length) {
-      linhas.push("", `**Falharam (${falhas.length}):**`);
-      for (const f of falhas.slice(0, 6)) linhas.push(`• \`${f.nome}\` — ${f.erro}`);
-      linhas.push("_Falha comum: o cargo do bot precisa de **ManageRole** e estar **acima** dos cargos que cria._");
+    if (!prontos.length) {
+      return sendEmbed(message.channel, { title: "❌ Não consegui preparar os cargos",
+        description: falhas.slice(0, 8).map((f) => `• \`${f.nome}\` — ${f.erro}`).join("\n")
+          + "\n\n_O cargo do bot precisa de **ManageRole** e estar **acima** dos cargos que cria._",
+        colour: COR.erro });
     }
 
-    await sendEmbed(message.channel, {
-      title: falhas.length ? "🎨 Terminei, com pendências" : "🎨 Cargos prontos",
-      description: linhas.join("\n").slice(0, 1900),
-      colour: falhas.length ? COR.aviso : COR.sucesso,
-    });
-
-    // Monta o painel pronto: o embed e os comandos de cargo por reação.
-    const prontos = [...criados, ...reaproveitados];
-    if (prontos.length) {
-      const listaEmbed = prontos.map((c) => `${EMOJI_PRESET[c.nome] ?? "•"} ${c.nome}`).join("\\n");
-      const cmds = prontos.map((c) =>
-        `${P}reactionrole add <link-da-mensagem> ${EMOJI_PRESET[c.nome] ?? "❔"} ${c.roleId}`).join("\n");
-      await sendEmbed(message.channel, {
-        title: "📋 Monte o painel de escolha",
+    // ── 2. Só os cargos? termina aqui ──
+    if (soCargos) {
+      return sendEmbed(message.channel, {
+        title: falhas.length ? "🎨 Cargos prontos (com pendências)" : "🎨 Cargos prontos",
         description: [
-          "**1.** Publique a mensagem de escolha:",
-          "```",
-          `${P}embed titulo: Cores | descricao: Qual cor deseja?\\n${listaEmbed} | cor: #FF00FF`,
-          "```",
-          "**2.** Copie o **link** dela e rode (trocando `<link-da-mensagem>`):",
-          "```",
-          cmds.slice(0, 900),
-          "```",
-          "**3.** Como só uma cor vale por vez:",
-          `\`${P}reactionrole exclusivo <link-da-mensagem> on\``,
-        ].join("\n").slice(0, 1950),
-        colour: COR.info,
-      });
+          `**${novosCargos}** criado(s), **${prontos.length - novosCargos}** já existia(m) e foi(ram) pintado(s).`,
+          prontos.map((c) => `${EMOJI_PRESET[c.nome] ?? "•"} <%${c.roleId}>`).join("  "),
+          falhas.length ? `\n**Falharam:** ${falhas.map((f) => f.nome).join(", ")}` : "",
+          "",
+          `_Para publicar o painel de escolha automaticamente:_ \`${P}cor painel aqui\``,
+        ].filter(Boolean).join("\n").slice(0, 1900),
+        colour: falhas.length ? COR.aviso : COR.sucesso });
     }
-    return;
+
+    // ── 3. Publica o painel no canal escolhido ──
+    const destinoId = canalAlvoId ?? message.channelId;
+    let canal = null;
+    try {
+      canal = destinoId === message.channelId ? message.channel
+        : (ctx.client?.channels?.get?.(destinoId) ?? await ctx.client?.channels?.fetch?.(destinoId));
+    } catch {}
+    if (!canal?.sendMessage) {
+      return sendEmbed(message.channel, { title: "❌ Canal inválido",
+        description: `Não consegui acessar <#${destinoId}>. Use \`${P}cor painel aqui\` ou passe o ID de um canal onde eu possa escrever.`,
+        colour: COR.erro });
+    }
+
+    // O embed lista os CARGOS mencionados (aparecem coloridos), não os nomes.
+    const linhasPainel = prontos.map((c) => `${EMOJI_PRESET[c.nome] ?? "•"}  <%${c.roleId}>`);
+    let painelMsg;
+    try {
+      painelMsg = await canal.sendMessage({ embeds: [{
+        title: "🎨 Escolha sua cor",
+        description: ["Reaja no emoji da cor que você quer.", "", ...linhasPainel,
+          "", "_Só uma cor por vez: escolher outra troca a anterior._"].join("\n").slice(0, 1990),
+        colour: "#FF00FF",
+      }] });
+    } catch (e) {
+      return sendEmbed(message.channel, { title: "❌ Não consegui publicar",
+        description: `Erro ao enviar no canal: ${e?.message ?? e}\n\n_Falta **SendMessage**/**SendEmbeds** ali?_`, colour: COR.erro });
+    }
+
+    const painelId = painelMsg?.id ?? painelMsg?._id;
+    if (!painelId) {
+      return sendEmbed(message.channel, { title: "⚠️ Publiquei, mas…",
+        description: "não consegui o ID da mensagem para ligar as reações. Ligue à mão com `&reactionrole add`.", colour: COR.aviso });
+    }
+
+    // ── 4. Reage e registra cada cor ──
+    let ligados = 0; const semReacao = [];
+    for (const c of prontos) {
+      const emoji = EMOJI_PRESET[c.nome];
+      if (!emoji) continue;
+      try {
+        db.addReactionRole(serverId, painelId, emoji.replace(/\uFE0F/g, ""), c.roleId, destinoId);
+        await painelMsg.react(encodeURIComponent(emoji));
+        ligados++;
+      } catch (e) {
+        semReacao.push(`${c.nome} (${e?.message ?? e})`);
+      }
+      await new Promise((s) => setTimeout(s, 300));   // limite de taxa das reações
+    }
+    db.setReactionRoleExclusivo(painelId, true);
+
+    return sendEmbed(message.channel, {
+      title: "✅ Painel publicado",
+      description: [
+        `Painel em <#${destinoId}> com **${ligados}** cor(es) prontas para escolher.`,
+        `**${novosCargos}** cargo(s) criado(s), **${prontos.length - novosCargos}** reaproveitado(s).`,
+        "🎯 Modo **exclusivo** ligado: escolher uma cor troca a anterior.",
+        falhas.length ? `\n⚠️ **Não entraram:** ${falhas.map((f) => f.nome).join(", ")}` : "",
+        semReacao.length ? `\n⚠️ **Sem reação:** ${semReacao.slice(0, 4).join(", ")}` : "",
+        semReacao.length ? "_O bot precisa de **React** nesse canal._" : "",
+      ].filter(Boolean).join("\n").slice(0, 1900),
+      colour: (falhas.length || semReacao.length) ? COR.aviso : COR.sucesso });
   }
 
   // A partir daqui mexe em cargo → precisa de permissão

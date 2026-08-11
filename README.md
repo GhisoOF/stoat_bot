@@ -453,12 +453,24 @@ porém, aceita **qualquer valor CSS válido** — então o bot fala direto com a
 &cor criar fogo gelo neon                         # só alguns
 ```
 
-### Criar todos de uma vez
+### Painel de cores automático
 
-`&cor criar` cria um cargo para cada preset, aplica o gradiente e devolve, pronto
-para colar, o `&embed` do painel e os comandos `&reactionrole add` com os emojis
-já escolhidos. Cargos que já existem com o mesmo nome são **reaproveitados** (só
-recebem a cor), então dá para rodar de novo sem duplicar nada.
+Um comando monta tudo:
+
+```
+&cor painel aqui              # neste canal
+&cor painel <id-do-canal>     # em outro canal
+&cor painel aqui fogo gelo    # só algumas cores
+&cor criar                    # só cria/pinta os cargos, sem publicar
+```
+
+O `&cor painel` faz, em sequência: cria um cargo por preset e aplica o gradiente,
+publica a mensagem de escolha **mencionando os cargos** (aparecem já coloridos),
+reage com o emoji de cada cor, registra os cargos por reação e liga o **modo
+exclusivo** — escolher uma cor troca a anterior.
+
+Cargos que já existem com o mesmo nome são **reaproveitados** (só recebem a cor),
+então dá para rodar de novo sem duplicar nada.
 
 **Prontos disponíveis:** `arco-iris`, `fogo`, `oceano`, `neon`, `vaporwave`,
 `poente`, `floresta`, `ouro`, `cyberpunk`, `sangue`, `gelo`, `trans`.

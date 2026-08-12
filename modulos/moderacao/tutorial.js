@@ -1,3 +1,4 @@
+import { servidorPermitido as temIA } from "../ai/chat.js";
 // ══════════════════════════════════════════════════════════
 //  tutorial.js — &tutorial
 //
@@ -121,21 +122,22 @@ function AREAS(P) {
       ordem: 4,
       resumo: "As pessoas ganham XP conversando e sobem de nível.",
       corpo: [
-        `**Ligar:** \`${P}game on\``,
-        `**Criar os cargos de nível:** \`${P}game criarcargos\` (um a cada 10 níveis)`,
-        `**Ajustar:** \`${P}game setup\` mostra tudo que dá para mudar:`,
-        `• \`${P}game setup intervalo <5|10>\` — de quantos em quantos níveis dar cargo`,
-        `• \`${P}game setup xp <min> <max>\` — quanto ganha por mensagem`,
-        `• \`${P}game setup cooldown <segundos>\` — evita farm por spam`,
-        `• \`${P}game setup canal aqui|off\` — onde anunciar o level up`,
+        `**Ligar:** \`${P}xp on\``,
+        `**Criar os cargos de nível:** \`${P}xp criarcargos\` (um a cada 10 níveis)`,
+        `**Ajustar:** \`${P}xp setup\` mostra tudo que dá para mudar:`,
+        `• \`${P}xp setup intervalo <5|10>\` — de quantos em quantos níveis dar cargo`,
+        `• \`${P}xp setup xp <min> <max>\` — quanto ganha por mensagem`,
+        `• \`${P}xp setup cooldown <segundos>\` — evita farm por spam`,
+        `• \`${P}xp setup canal aqui|off\` — onde anunciar o level up`,
         "",
-        `**Ver o ranking:** \`${P}game top\` · **seu perfil:** \`${P}nivel\``,
+        `**Ver o ranking:** \`${P}xp top\` · **seu perfil:** \`${P}nivel\``,
       ],
     },
 
     ia: {
       titulo: "🤖 A Judy (IA)",
       ordem: 5,
+      soComIA: true,
       resumo: "Conversa, memória, participação e moderação por IA.",
       corpo: [
         `**Testar:** \`${P}chat status\` mostra se o serviço de IA está no ar.`,
@@ -159,7 +161,7 @@ function AREAS(P) {
     noticias: {
       titulo: "📰 Notícias (RSS)",
       ordem: 6,
-      resumo: "A Judy resume as notícias dos feeds a cada hora.",
+      resumo: "O bot posta as novidades dos feeds a cada hora.",
       corpo: [
         "Crie um canal (ex.: **#noticias**) e, **dentro dele**:",
         "",
@@ -168,7 +170,7 @@ function AREAS(P) {
         `\`${P}rss list\` — feeds cadastrados`,
         `\`${P}rss agora\` — força um ciclo para testar`,
         "",
-        "A cada hora ela posta um resumo geral no tom dela e depois os itens novos.",
+        "A cada hora o bot posta os itens novos. Onde a IA está disponível, a Judy escreve também um resumo geral no tom dela.",
       ],
     },
 
@@ -223,7 +225,17 @@ const APELIDOS = {
 
 export async function cmdTutorial(message, args, ctx) {
   const { sendEmbed, COR, PREFIXO: P } = ctx;
-  const areas = AREAS(P);
+
+  // A IA só roda nos servidores da allowlist. Mostrar essa área onde ela não
+  // funciona é pior que omitir: a pessoa tenta e nada acontece.
+  const comIA = (() => { try { return temIA(ctx.serverId); } catch { return false; } })();
+
+  const todas = AREAS(P);
+  const areas = {};
+  for (const [k, v] of Object.entries(todas)) {
+    if (v.soComIA && !comIA) continue;
+    areas[k] = v;
+  }
   const pedido = args[0]?.toLowerCase();
 
   // ── Página de uma área ──

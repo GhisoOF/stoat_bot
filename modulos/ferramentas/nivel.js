@@ -1,5 +1,5 @@
 // ══════════════════════════════════════════════════════════
-//  game.js — sistema de níveis por XP (mensagens)
+//  nivel.js — sistema de XP e níveis (&xp)
 //
 //  Cada mensagem dá XP (com cooldown p/ não farmar por spam). Ao juntar XP
 //  suficiente, o usuário sobe de nível. A cada N níveis, pode ganhar um cargo.
@@ -9,16 +9,16 @@
 //     confiável. Todo o XP vem de mensagens.
 //
 //  Comandos:
-//   &game                    → seu nível, XP e progresso
-//   &game rank [@usuário]     → idem, de outra pessoa
-//   &game top                 → leaderboard (ranking + XP + nível)
-//   &game setup               → assistente de configuração
-//   &game cargos              → lista os cargos de nível
-//   &game criarcargos         → cria os cargos automaticamente
-//   &game reset               → zera o XP do servidor (cuidado!)
-//   &game on | off            → liga/desliga o sistema
+//   &xp                    → seu nível, XP e progresso
+//   &xp rank [@usuário]     → idem, de outra pessoa
+//   &xp top                 → leaderboard (ranking + XP + nível)
+//   &xp setup               → assistente de configuração
+//   &xp cargos              → lista os cargos de nível
+//   &xp criarcargos         → cria os cargos automaticamente
+//   &xp reset               → zera o XP do servidor (cuidado!)
+//   &xp on | off            → liga/desliga o sistema
 //
-//  Config (via &game setup): multiplicador de dificuldade, nível máximo,
+//  Config (via &xp setup): multiplicador de dificuldade, nível máximo,
 //  intervalo de cargos (5 ou 10), canal de anúncio.
 //
 //  ── Segurança de hierarquia ──
@@ -126,7 +126,7 @@ async function aplicarCargoNivel(server, member, serverId, nivel, config) {
 // ──────────────────────────────────────────────────────────
 export async function aoMensagem(message, ctx) {
   const { config, serverId } = ctx;
-  const g = config.game;
+  const g = config.xp;
   const DBG = process.env.XP_DEBUG === "1";
   if (!g?.enabled) { if (DBG) console.log(`[XP] pulado: sistema desligado (serverId=${serverId})`); return; }
   if (!serverId) { if (DBG) console.log("[XP] pulado: serverId nulo"); return; }
@@ -179,11 +179,11 @@ export async function aoMensagem(message, ctx) {
 }
 
 // ──────────────────────────────────────────────────────────
-//  Comando &game
+//  Comando &xp
 // ──────────────────────────────────────────────────────────
-export async function cmdGame(message, args, ctx) {
+export async function cmdXp(message, args, ctx) {
   const { sendEmbed, COR, PREFIXO, config, serverId, getServer, membroTemPermissao } = ctx;
-  const g = config.game;
+  const g = config.xp;
   const sub = args[0]?.toLowerCase();
 
   // Aviso: se o sistema está desligado, quase nada faz sentido. Avisa (exceto
@@ -191,7 +191,7 @@ export async function cmdGame(message, args, ctx) {
   if (!g?.enabled && !["on", "setup", "config", "configurar", "criarcargos", "criar"].includes(sub)) {
     return sendEmbed(message.channel, {
       title: "💤 Sistema de níveis desligado",
-      description: `O sistema de XP está **desativado** neste servidor, por isso ninguém está ganhando XP.\n\nPara ativar: \`${PREFIXO}game on\` *(precisa de ManagePermissions)*.\nDepois, configure com \`${PREFIXO}game setup\` se quiser.`,
+      description: `O sistema de XP está **desativado** neste servidor, por isso ninguém está ganhando XP.\n\nPara ativar: \`${PREFIXO}xp on\` *(precisa de ManagePermissions)*.\nDepois, configure com \`${PREFIXO}xp setup\` se quiser.`,
       colour: COR.aviso,
     });
   }
@@ -221,7 +221,7 @@ export async function cmdGame(message, args, ctx) {
   // ── on / off ──
   if (sub === "on" || sub === "off") {
     if (!(await podeConfigurar(message, ctx))) return;
-    config.game.enabled = (sub === "on");
+    config.xp.enabled = (sub === "on");
     ctx.salvarConfig();
     return sendEmbed(message.channel, { title: "🎮 Sistema de níveis",
       description: `Sistema **${sub === "on" ? "ativado 🟢" : "desativado 🔴"}**.`, colour: COR.mod });
@@ -232,7 +232,7 @@ export async function cmdGame(message, args, ctx) {
     const cargos = db.listarCargosNivel(serverId);
     if (!cargos.length)
       return sendEmbed(message.channel, { title: "🎖 Cargos de nível",
-        description: `Nenhum cargo configurado. Use \`${PREFIXO}game criarcargos\` para criar automaticamente.`, colour: COR.mod });
+        description: `Nenhum cargo configurado. Use \`${PREFIXO}xp criarcargos\` para criar automaticamente.`, colour: COR.mod });
     return sendEmbed(message.channel, { title: "🎖 Cargos de nível",
       description: cargos.map((c) => `Nível **${c.nivel}** → <@&${c.roleId}>`).join("\n"), colour: COR.mod });
   }
@@ -247,7 +247,7 @@ export async function cmdGame(message, args, ctx) {
     if (!(await podeConfigurar(message, ctx))) return;
     if (args[1] !== "confirmar")
       return sendEmbed(message.channel, { title: "⚠️ Confirmar reset",
-        description: `Isso apaga TODO o XP do servidor. Para confirmar: \`${PREFIXO}game reset confirmar\``, colour: COR.aviso });
+        description: `Isso apaga TODO o XP do servidor. Para confirmar: \`${PREFIXO}xp reset confirmar\``, colour: COR.aviso });
     const n = db.resetXp(serverId);
     return sendEmbed(message.channel, { title: "🧹 XP zerado",
       description: `Removido o XP de ${n} usuário(s).`, colour: COR.sucesso });
@@ -291,7 +291,7 @@ async function podeConfigurar(message, ctx) {
 }
 
 // ──────────────────────────────────────────────────────────
-//  Setup do game
+//  Setup do XP
 // ──────────────────────────────────────────────────────────
 async function setupGame(message, args, ctx) {
   const { sendEmbed, COR, PREFIXO, config } = ctx;
@@ -301,7 +301,7 @@ async function setupGame(message, args, ctx) {
   const valor = args[1];
 
   if (!param) {
-    const g = config.game;
+    const g = config.xp;
     return sendEmbed(message.channel, {
       title: "🎮 Configuração do sistema de níveis",
       description: [
@@ -314,21 +314,21 @@ async function setupGame(message, args, ctx) {
         `**Anúncio de level up:** ${g.anunciarLevelUp ? "sim" : "não"}${g.canalAnuncio ? ` (canal definido)` : ""}`,
         "",
         "**Ajustar:**",
-        `\`${PREFIXO}game setup multiplicador <número>\` (ex.: 1.5)`,
-        `\`${PREFIXO}game setup nivelmaximo <número>\``,
-        `\`${PREFIXO}game setup intervalo <5|10>\``,
-        `\`${PREFIXO}game setup xp <min> <max>\``,
-        `\`${PREFIXO}game setup cooldown <segundos>\``,
-        `\`${PREFIXO}game setup canal <aqui|off>\``,
-        `\`${PREFIXO}game setup anuncio <on|off>\``,
+        `\`${PREFIXO}xp setup multiplicador <número>\` (ex.: 1.5)`,
+        `\`${PREFIXO}xp setup nivelmaximo <número>\``,
+        `\`${PREFIXO}xp setup intervalo <5|10>\``,
+        `\`${PREFIXO}xp setup xp <min> <max>\``,
+        `\`${PREFIXO}xp setup cooldown <segundos>\``,
+        `\`${PREFIXO}xp setup canal <aqui|off>\``,
+        `\`${PREFIXO}xp setup anuncio <on|off>\``,
         "",
-        `Depois: \`${PREFIXO}game criarcargos\` e \`${PREFIXO}game on\`.`,
+        `Depois: \`${PREFIXO}xp criarcargos\` e \`${PREFIXO}xp on\`.`,
       ].join("\n"),
       colour: COR.mod,
     });
   }
 
-  const g = config.game;
+  const g = config.xp;
   const num = Number(valor);
   switch (param) {
     case "multiplicador": case "mult":
@@ -342,7 +342,7 @@ async function setupGame(message, args, ctx) {
       g.intervaloCargos = num; break;
     case "xp":
       { const mn = Number(args[1]), mx = Number(args[2]);
-        if (!(mn > 0 && mx >= mn)) return erro(ctx, message, "Uso: `game setup xp <min> <max>` (max ≥ min).");
+        if (!(mn > 0 && mx >= mn)) return erro(ctx, message, "Uso: `xp setup xp <min> <max>` (max ≥ min).");
         g.xpMin = Math.floor(mn); g.xpMax = Math.floor(mx); } break;
     case "cooldown":
       if (!(num >= 0)) return erro(ctx, message, "Cooldown em segundos (número positivo).");
@@ -372,7 +372,7 @@ export async function criarCargos(message, ctx) {
   const { sendEmbed, COR, config, serverId } = ctx;
   if (!(await podeConfigurar(message, ctx))) return;
 
-  const g = config.game;
+  const g = config.xp;
   const server = await ctx.getServer(message);
   const intervalo = g.intervaloCargos;
   const niveis = [];
@@ -401,7 +401,7 @@ export async function criarCargos(message, ctx) {
   const ord = await ordenarAbaixoDoMute(server, config, todosIds);
 
   const notaMute = ord.semMute
-    ? "\n\n⚠️ Nenhum cargo de mute detectado — quando você criar/definir um, rode `&game criarcargos` de novo para reordenar."
+    ? "\n\n⚠️ Nenhum cargo de mute detectado — quando você criar/definir um, rode `&xp criarcargos` de novo para reordenar."
     : ord.ok
       ? "\n\n🔒 Todos os cargos de nível foram posicionados **abaixo** do cargo de mute."
       : `\n\n⚠️ Não consegui reordenar abaixo do mute (${ord.motivo}). Ajuste manualmente.`;

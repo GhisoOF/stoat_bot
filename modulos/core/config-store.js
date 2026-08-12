@@ -73,7 +73,7 @@ export const padraoServidor = {
     minParaFalar: 4,      // quantas mensagens de conversa antes de considerar comentar
   },
   // ── Game (sistema de níveis por XP de mensagem) ──
-  game: {
+  xp: {
     enabled: false,
     xpMin: 15, xpMax: 25,        // XP ganho por mensagem (aleatório na faixa)
     cooldownMs: 60000,           // 1 min entre ganhos (evita farm por spam)
@@ -118,7 +118,9 @@ function mesclarServidor(salvo, tpl) {
       ...(salvo.acesso ?? {}),
       canais: { ...tpl.acesso.canais, ...(salvo.acesso?.canais ?? {}) },
     },
-    game: { ...tpl.game, ...(salvo.game ?? {}) },
+    // A chave era "game"; virou "xp". Aceitamos a antiga para não perder a
+    // configuração de quem já usava (migração silenciosa, sem quebrar nada).
+    xp: { ...tpl.xp, ...(salvo.xp ?? salvo.game ?? {}) },
     automod: {
       ...am, ...s,
       antiSpam:        { ...am.antiSpam,        ...(s.antiSpam ?? {}) },

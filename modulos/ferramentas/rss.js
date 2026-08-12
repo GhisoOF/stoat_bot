@@ -25,8 +25,12 @@ import * as log from "../core/log.js";
 let resumirIA = null;
 export function configurarResumo(fn) { resumirIA = fn; }
 
-// Allowlist de servidores para o RSS (mesma lógica do antigo import do chat).
-const RSS_SERVIDORES = (process.env.RSS_SERVIDORES || process.env.CHAT_SERVIDORES || "")
+// Allowlist do RSS. Só limita se você definir RSS_SERVIDORES explicitamente.
+//
+// Antes isto herdava CHAT_SERVIDORES, o que prendia o RSS aos servidores com IA
+// sem motivo: o resumo da Judy é opcional — sem IA, o bot posta os itens do
+// mesmo jeito. Quem quiser limitar o RSS define RSS_SERVIDORES.
+const RSS_SERVIDORES = (process.env.RSS_SERVIDORES || "")
   .split(",").map((x) => x.trim()).filter(Boolean);
 function servidorPermitido(serverId) {
   if (!RSS_SERVIDORES.length) return true;   // sem allowlist = liberado

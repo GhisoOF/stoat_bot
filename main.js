@@ -303,13 +303,17 @@ const rotas = {
   rss:           rss.cmdRss,
   feed:          rss.cmdRss,
   autorole:      autorole.cmdAutorole,
-  game:          nivel.cmdGame,
-  nivel:         nivel.cmdGame,
-  level:         nivel.cmdGame,
+  xp:            nivel.cmdXp,
+  nivel:         nivel.cmdXp,
+  level:         nivel.cmdXp,
+  game:          nivel.cmdXp,   // nome antigo, mantido como apelido
 };
 
 // Aliases → nome canônico (para desativar um comando desativa todos os apelidos).
 const CANONICO = {
+  game: "xp",
+  nivel: "xp",
+  level: "xp",
   avisar: "warn",
   cores: "cor",
   cargocor: "cor",
@@ -328,7 +332,7 @@ const CANONICO = {
 const COMANDOS_GERENCIAVEIS = [
   "ping", "repete", "userinfo", "kick", "ban", "limpar",
   "warnings", "clearwarnings", "warn", "acesso", "automod", "whitelist", "blocklist",
-  "scam", "punicao", "tutorial", "cor", "log", "banglobal", "embed", "reactionrole", "chat", "rss", "game", "autorole",
+  "scam", "punicao", "tutorial", "cor", "log", "banglobal", "embed", "reactionrole", "chat", "rss", "xp", "autorole",
 ];
 // exportado via ctx para o comando &comando consultar
 estado.CANONICO = CANONICO;

@@ -1,3 +1,4 @@
+import { servidorPermitido as temIA } from "../ai/chat.js";
 // ══════════════════════════════════════════════════════════
 //  modulos/geral.js — Comandos gerais e de moderação manual:
 //  help, ping, repete, userinfo, kick, ban.
@@ -149,10 +150,10 @@ export function construirDetalhes(P) {
       perm: "BanMembers",
       ex: `${P}banglobal varrer ver`,
     },
-    game: {
-      uso: `${P}game [rank|top|setup|cargos|criarcargos|on|off]`,
+    xp: {
+      uso: `${P}xp [rank|top|setup|cargos|criarcargos|on|off]`,
       desc: "Sistema de níveis por XP de mensagens. Cada mensagem dá XP (com cooldown), e ao juntar XP você sobe de nível. A cada N níveis pode ganhar um cargo. `top` mostra o ranking. `setup` configura dificuldade, nível máximo e intervalo de cargos. (XP por call não é suportado pelo Stoat.)",
-      perm: "ManagePermissions (para configurar)", ex: `${P}game top`,
+      perm: "ManagePermissions (para configurar)", ex: `${P}xp top`,
     },
     rss: {
       uso: `${P}rss [add|remove|list|canal|agora]`,
@@ -234,9 +235,19 @@ export function construirDetalhes(P) {
   };
 }
 
+// Marca invisível nas linhas que só valem onde a IA está ativa. O filtro
+// remove essas linhas nos servidores sem IA, em vez de anunciar o que não roda.
+const IA_TAG = "\u200b[ia]";
+function filtrarIA(linhas, comIA) {
+  return linhas
+    .filter((l) => comIA || !String(l).includes(IA_TAG))
+    .map((l) => String(l).replace(IA_TAG, ""));
+}
+
 export async function cmdHelp(message, args, ctx) {
   const { sendEmbed, COR, PREFIXO } = ctx;
   const P = PREFIXO;
+  const comIA = (() => { try { return temIA(ctx.serverId); } catch { return false; } })();
 
   // Ajuda detalhada por comando: &help <comando>
   const DETALHES = construirDetalhes(P);
@@ -344,7 +355,7 @@ export async function cmdHelp(message, args, ctx) {
         `\`${P}tutorial\` — ⭐ por onde começar (guia de configuração)`,
         `\`${P}ping\` — latência do bot`,
         `\`${P}repete <texto>\` — repete o texto`,
-        `\`${P}chat <mensagem>\` — conversa com a IA (ou mencione o bot)`,
+        `\`${P}chat <mensagem>\` — conversa com a IA (ou mencione o bot)` + IA_TAG,
         `\`${P}userinfo [@usuário]\` — info de um usuário`,
         `\`${P}sobre\` — informações do bot`,
       ],
@@ -360,7 +371,7 @@ export async function cmdHelp(message, args, ctx) {
         `\`${P}warnings [@usuário]\` — ver avisos`,
         `\`${P}clearwarnings @usuário\` — limpa avisos *(ManagePermissions)*`,
         `\`${P}banglobal <off|avisar|banir|...>\` — lista global *(BanMembers)*`,
-        `\`${P}modia <on|off|criterios|...>\` — moderação por IA na conversa *(ManageServer)*`,
+        `\`${P}modia <on|off|criterios|...>\` — moderação por IA na conversa *(ManageServer)*` + IA_TAG,
       ],
     },
     automod: {
@@ -393,25 +404,25 @@ export async function cmdHelp(message, args, ctx) {
         `\`${P}embed\` — publica um embed customizável *(ManageMessages)*`,
         `\`${P}reactionrole <add|remove|list>\` — cargos por reação *(ManageRole)*`,
         `\`${P}autorole <set|off>\` — cargo automático a quem entra *(ManageRole)*`,
-        `\`${P}rss <add|remove|list|canal|agora>\` — notícias com resumo da Judy`,
-        `\`${P}chat <mensagem>\` — conversa com a Judy (ou mencione o bot)`,
-        `\`${P}chat livre on|off\` — a Judy participa sozinha do canal`,
-        `\`${P}chat comentar aqui|off\` — a Judy comenta por iniciativa`,
-        `\`${P}chat perfil [@user]\` — o que a Judy sabe de alguém`,
-        `\`${P}chat cuidado [@user] on\` — tratamento gentil (opt-in)`,
-        `\`${P}chat esquecer [tudo]\` — apaga sua memória (ou a do servidor)`,
+        `\`${P}rss <add|remove|list|canal|agora>\` — curadoria de notícias por RSS`,
+        `\`${P}chat <mensagem>\` — conversa com a Judy (ou mencione o bot)` + IA_TAG,
+        `\`${P}chat livre on|off\` — a Judy participa sozinha do canal` + IA_TAG,
+        `\`${P}chat comentar aqui|off\` — a Judy comenta por iniciativa` + IA_TAG,
+        `\`${P}chat perfil [@user]\` — o que a Judy sabe de alguém` + IA_TAG,
+        `\`${P}chat cuidado [@user] on\` — tratamento gentil (opt-in)` + IA_TAG,
+        `\`${P}chat esquecer [tudo]\` — apaga sua memória (ou a do servidor)` + IA_TAG,
       ],
     },
-    game: {
+    xp: {
       titulo: "Sistema de níveis (XP)",
       linhas: [
-        `\`${P}game\` — seu nível, XP e progresso`,
-        `\`${P}game rank [@usuário]\` — perfil de outra pessoa`,
-        `\`${P}game top\` — ranking do servidor`,
-        `\`${P}game setup\` — configurar *(ManagePermissions)*`,
-        `\`${P}game cargos\` — lista os cargos de nível`,
-        `\`${P}game criarcargos\` — cria os cargos automaticamente`,
-        `\`${P}game on | off\` — liga/desliga o sistema`,
+        `\`${P}xp\` — seu nível, XP e progresso`,
+        `\`${P}xp rank [@usuário]\` — perfil de outra pessoa`,
+        `\`${P}xp top\` — ranking do servidor`,
+        `\`${P}xp setup\` — configurar *(ManagePermissions)*`,
+        `\`${P}xp cargos\` — lista os cargos de nível`,
+        `\`${P}xp criarcargos\` — cria os cargos automaticamente`,
+        `\`${P}xp on | off\` — liga/desliga o sistema`,
         "",
         "_XP é ganho por mensagens (o Stoat não permite medir call)._",
       ],
@@ -421,14 +432,14 @@ export async function cmdHelp(message, args, ctx) {
   // aliases de categoria
   const ALIAS_CAT = { "moderação": "moderacao", mod: "moderacao", "configuração": "config",
     configuracao: "config", tools: "ferramentas", ferramenta: "ferramentas",
-    nivel: "game", niveis: "game", level: "game", xp: "game" };
+    nivel: "xp", niveis: "xp", level: "xp", game: "xp" };
   const cat = CATEGORIAS[alvo] ? alvo : ALIAS_CAT[alvo];
 
   if (alvo && CATEGORIAS[cat]) {
     const c = CATEGORIAS[cat];
     return sendEmbed(message.channel, { title: `📋 ${c.titulo}`,
       colour: COR.info,
-      description: c.linhas.join("\n") + `\n\n💡 \`${P}help <comando>\` para detalhes.`,
+      description: filtrarIA(c.linhas, comIA).join("\n") + `\n\n💡 \`${P}help <comando>\` para detalhes.`,
     });
   }
 
@@ -469,7 +480,7 @@ export async function cmdHelp(message, args, ctx) {
       `⚙️ \`${P}help automod\` — proteção automática e punições`,
       `🔧 \`${P}help config\` — configuração e administração`,
       `🧰 \`${P}help ferramentas\` — embed, reaction roles, RSS, IA`,
-      `🎮 \`${P}help game\` — sistema de níveis por XP`,
+      `🎮 \`${P}help xp\` — sistema de níveis por XP`,
       "",
       `💡 Detalhes de um comando: \`${P}help <comando>\` (ex.: \`${P}help scam\`)`,
       `💡 Alguns têm subtópicos: \`${P}help scam sensitivity\``,
@@ -513,7 +524,7 @@ export async function cmdSobre(message, args, ctx) {
     description: [
       "Bot de moderação, automod, IA e níveis para o Stoat.",
       "",
-      `**Recursos:** moderação · automod · anti-scam · chat com IA · curadoria RSS · sistema de níveis`,
+      `**Recursos:** moderação · automod · anti-scam · curadoria RSS · sistema de níveis${temIA(ctx.serverId) ? " · chat com IA" : ""}`,
       nComandos ? `**Comandos:** ${nComandos}` : null,
       nLinhas ? `**Linhas de código:** ${nLinhas.toLocaleString("pt-BR")}` : null,
       `**No ar há:** ${uptime}`,

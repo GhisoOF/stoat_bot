@@ -1,3 +1,4 @@
+import { servidorPermitido as temIA } from "../ai/chat.js";
 // ══════════════════════════════════════════════════════════
 //  config-comando.js — &config
 //  Mostra, num só lugar, TODAS as configurações atuais:
@@ -108,6 +109,17 @@ export async function cmdConfig(message, args, ctx) {
       "**🚨 Punições ativas** *(top 5)*",
       ativas,
       "",
+      "**🔐 Acesso aos comandos**",
+      `Cargos de staff: ${config.acesso?.cargosStaff?.length ? config.acesso.cargosStaff.map((r)=>`<%${r}>`).join(" ") : "_(só permissões nativas)_"}`,
+      `Canais: ${(config.acesso?.canais?.modo ?? "todos") === "todos" ? "qualquer um" : `\`${config.acesso.canais.modo}\` ${config.acesso.canais.lista?.length ? config.acesso.canais.lista.map((c)=>`<#${c}>`).join(", ") : "_(lista vazia)_"}`}`,
+      "",
+      ...(temIA(serverId) ? [
+        "**🤖 IA (Judy)**",
+        `Conversa livre: ${config.chatLivre?.canais?.length ? config.chatLivre.canais.map((c)=>`<#${c}>`).join(", ") + ` (modo \`${config.chatLivre.modo ?? "relevante"}\`)` : "_(desligada)_"}`,
+        `Comentários espontâneos: ${config.comentarioEspontaneo?.canalId ? `<#${config.comentarioEspontaneo.canalId}> (até ${config.comentarioEspontaneo.porDia ?? 4}/dia)` : "_(desligados)_"}`,
+        `Moderação por IA: ${config.moderacaoIA?.ativa ? "🟢 ativa" : "🔴 desligada"}${config.moderacaoIA?.criterios ? "" : " _(sem critérios)_"}`,
+        "",
+      ] : []),
       "**🌐 Global** *(compartilhado entre servidores)*",
       `Debug: ${sim(cfgGlobal.debug !== false)} · Listas anti-link: ${cfgGlobal.linkBlocklistSources.length} fonte(s), ${cfgGlobal.linkBlocklistManual.length} domínio(s) manual(is)`,
       "",

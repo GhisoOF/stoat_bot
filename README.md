@@ -53,8 +53,8 @@ embutido (nada de serviço externo), então as configurações e punições
 - **Cargos por reação** (`&reactionrole`): reagir num emoji dá um cargo configurado.
 - **Anti-caracteres**: bloqueia zalgo e caracteres invisíveis. **Anti-repetição** (separado, off por padrão) bloqueia letras repetidas ignorando o `kkkk` brasileiro.
 - **Chat com IA local** (`&chat` ou menção): conversa com a **Judy**, um LLM rodando na sua máquina, sem chaves externas. Ela escolhe o modelo conforme o tipo de mensagem (conversa, código, lógica), faz **contas exatas** e **lê o próprio código** através de um serviço de ferramentas (`ia-servico/`). Busca na internet via SearXNG quando precisa.
-- **Notícias por RSS** (`&rss`): a cada hora, a Judy posta um **resumo geral no tom dela** e depois os itens novos dos feeds no canal configurado.
-- **Sistema de níveis** (`&game`): XP por mensagem, cargos por nível (posicionados abaixo do mute), leaderboard e parâmetros configuráveis.
+- **Notícias por RSS** (`&rss`): a cada hora o bot posta os itens novos dos feeds no canal configurado. Onde a IA está ativa, a Judy escreve também um **resumo geral no tom dela**.
+- **Sistema de níveis** (`&xp`): XP por mensagem, cargos por nível (posicionados abaixo do mute), leaderboard e parâmetros configuráveis.
 - **Autorole** (`&autorole`): dá um cargo automaticamente a quem entra no servidor.
 - **IA com perfil e memória de longo prazo**: um agente observa o chat e monta um **perfil** de cada pessoa — personalidade, gostos e informações, cada fato com a **data** em que foi aprendido. A Judy usa isso para **adaptar o tom** a cada um (mais leve com quem é sério, mais afiada com quem curte). `&chat perfil` mostra o que ela sabe; `&chat esquecer` apaga o seu, `&chat esquecer tudo` zera o servidor.
 - **Tom modular e acessibilidade**: o tom base é caloroso; a acidez fica para quem já é próximo. `&chat cuidado @user on` marca alguém (opt-in) para tratamento gentil e paciente — sem a Judy inferir nada sozinha.
@@ -187,7 +187,7 @@ Prefixo: `&`. Aliases entre parênteses.
 | `&warnings [@usuário]` | avisos acumulados neste servidor |
 | `&repete <texto>` | repete o texto |
 | `&sobre` | informações resumidas do bot (recursos, comandos, linhas de código) |
-| `&game` | seu nível e XP · `&game top` para o ranking |
+| `&xp` | seu nível e XP · `&xp top` para o ranking |
 
 ### Moderação (exige permissão)
 
@@ -586,7 +586,13 @@ O tipo de mensagem define o modelo — sem troca manual:
 - **Moderação por IA** (`&modia`): critérios em texto livre; ela apaga o que
   violar e marca o dono no log — nunca bane sozinha.
 
-**Escopo:** funciona **apenas nos servidores configurados** em `CHAT_SERVIDORES`.
+**Escopo:** a IA funciona **apenas nos servidores** de `CHAT_SERVIDORES`. Nos
+demais, os comandos e as áreas de IA **não aparecem** no `&help`, `&config` nem
+no `&tutorial` — em vez de anunciar algo que não roda ali.
+
+O **RSS não depende da IA**: sem ela, o bot posta os itens dos feeds normalmente;
+onde a IA está disponível, a Judy escreve também o resumo. Se quiser limitar o
+RSS a servidores específicos, use `RSS_SERVIDORES` (independente de `CHAT_SERVIDORES`).
 
 ### Curadoria de notícias (RSS)
 
@@ -604,21 +610,21 @@ com `IA_SERVICO_URL` + as variáveis `OLLAMA_MODEL_*`.
 
 ---
 
-## Sistema de níveis (`&game`)
+## Sistema de níveis (`&xp`)
 
 XP por mensagem (com cooldown anti-farm). Ao acumular XP, o usuário sobe de
 nível; a cada N níveis, pode ganhar um cargo.
 
 ```
-&game                 # seu nível, XP e progresso
-&game rank @usuário    # perfil de outra pessoa
-&game top              # ranking (XP + nível)
-&game setup            # configurar
-&game criarcargos      # cria os cargos de nível automaticamente
-&game on | off         # liga/desliga
+&xp                 # seu nível, XP e progresso
+&xp rank @usuário    # perfil de outra pessoa
+&xp top              # ranking (XP + nível)
+&xp setup             # configurar
+&xp criarcargos      # cria os cargos de nível automaticamente
+&xp on | off         # liga/desliga
 ```
 
-Configurável via `&game setup`: **multiplicador de dificuldade**, **nível
+Configurável via `&xp setup`: **multiplicador de dificuldade**, **nível
 máximo**, **intervalo de cargos** (5 ou 10 níveis), XP por mensagem, cooldown e
 canal de anúncio.
 
@@ -705,12 +711,12 @@ O código é organizado em quatro áreas, sob `modulos/`:
 │   │   ├── cache-canal.js      # memória curta da conversa de cada canal (~20 msgs)
 │   │   └── comentario-espontaneo.js  # comentários por iniciativa (com freios)
 │   ├── ferramentas/            # utilidades de engajamento
-│   │   ├── nivel.js            # XP por mensagem (&game/&nivel)
+│   │   ├── nivel.js            # XP por mensagem (&xp/&nivel)
 │   │   ├── reaction-roles.js   # cargos por reação (&reactionrole)
 │   │   ├── autorole.js         # cargo automático a quem entra (&autorole)
 │   │   └── rss.js              # notícias com resumo da Judy (&rss)
 │   ├── game/                   # sistema de níveis
-│   │   └── game.js             # XP, cargos por nível, leaderboard (&game)
+│   │   └── game.js             # XP, cargos por nível, leaderboard (&xp)
 │   └── economia/               # reservado para o futuro
 ├── ia-servico/                 # serviço de IA (ferramentas + tool-calling)
 │   ├── servidor.js             # HTTP: /chat, /saude, /ferramentas

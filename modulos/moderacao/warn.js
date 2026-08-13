@@ -11,29 +11,8 @@
 
 import * as db from "../core/db.js";
 import * as log from "../core/log.js";
-import { limparId, ULID } from "../core/ids.js";
+import { limparId, ULID, resolverUsuario } from "../core/ids.js";
 
-// Resolve a pessoa a partir de menção, ID ou nome.
-async function resolverAlvo(message, args, ctx) {
-  if (message.mentionIds?.[0]) return message.mentionIds[0];
-  const bruto = args[0] ?? "";
-  const id = limparId(bruto);
-  if (ULID.test(id)) return id;
-  // por nome, entre os membros
-  const alvo = String(bruto).split("#")[0].toLowerCase();
-  if (!alvo) return null;
-  try {
-    const server = await ctx.getServer?.(message);
-    const r = await server?.fetchMembers?.();
-    for (const m of (r?.members ?? r ?? [])) {
-      const nome = (m?.user?.username ?? m?.username ?? "").toLowerCase();
-      if (nome === alvo || (m?.nickname ?? "").toLowerCase() === alvo) {
-        return m?.id?.user ?? m?.user?.id ?? m?.id;
-      }
-    }
-  } catch {}
-  return null;
-}
 
 export async function cmdWarn(message, args, ctx) {
   const { sendEmbed, COR, PREFIXO: P, config, serverId, getServer } = ctx;
@@ -44,7 +23,7 @@ export async function cmdWarn(message, args, ctx) {
       description: "Este comando só funciona dentro de um servidor.", colour: COR.erro });
   }
 
-  const alvoId = await resolverAlvo(message, args, ctx);
+  const alvoId = await resolverUsuario(args[0], { message, server });
   if (!alvoId) {
     return sendEmbed(message.channel, { title: "❌ Quem devo avisar?",
       description: [

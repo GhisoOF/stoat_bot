@@ -8,7 +8,6 @@
 //   &autorole off          → desativa
 // ══════════════════════════════════════════════════════════
 
-const ULID = /^[0-9A-HJKMNP-TV-Z]{26}$/i;
 
 // Extrai um ID de cargo de "<@&ID>", "<%ID>" ou ID cru.
 function extrairRoleId(txt) {

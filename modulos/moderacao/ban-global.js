@@ -17,6 +17,7 @@
 
 import * as db  from "../core/db.js";
 import * as log from "../core/log.js";
+import { resolverUsuario as resolverUser } from "../core/ids.js";
 
 export const MODOS = {
   off:    "ignora a lista global",
@@ -100,36 +101,6 @@ export async function verificarEntrada(member, ctx) {
 // ──────────────────────────────────────────────────────────
 //  Comando &banglobal
 // ──────────────────────────────────────────────────────────
-// Resolve um usuário a partir de menção, ID ou NOME (com ou sem #tag).
-// Sem isso, `&banglobal historico Fulano#1234` nunca acha nada — o comando
-// tratava o texto como se já fosse o ID.
-async function resolverUsuario(entrada, message, ctx) {
-  const bruto = String(entrada ?? "").replace(/[<@>]/g, "").trim();
-  if (message.mentionIds?.[0]) return message.mentionIds[0];
-  if (!bruto) return null;
-  if (/^[0-9A-HJKMNP-TV-Z]{26}$/i.test(bruto)) return bruto;   // já é um ULID
-  // Não é ULID canônico, mas se já houver histórico com essa string, é um ID
-  // válido para nós (ids antigos/importados podem fugir do padrão).
-  try { if (db.historicoBans(bruto)?.length) return bruto; } catch {}
-
-  // procura pelo nome entre os membros do servidor
-  const alvo = bruto.split("#")[0].toLowerCase();   // "Fulano#1234" → "fulano"
-  try {
-    const server = await ctx.getServer?.(message);
-    const membros = await server?.fetchMembers?.().catch(() => null);
-    const lista = membros?.members ?? membros ?? [];
-    for (const m of lista) {
-      const nome = (m?.user?.username ?? m?.username ?? "").toLowerCase();
-      const apelido = (m?.nickname ?? "").toLowerCase();
-      if (nome === alvo || apelido === alvo) return m?.id?.user ?? m?.user?.id ?? m?.id;
-    }
-    for (const m of lista) {   // segunda passada: parcial
-      const nome = (m?.user?.username ?? m?.username ?? "").toLowerCase();
-      if (nome.includes(alvo)) return m?.id?.user ?? m?.user?.id ?? m?.id;
-    }
-  } catch {}
-  return null;
-}
 
 // ──────────────────────────────────────────────────────────
 //  Varredura: confere os membros que JÁ ESTÃO no servidor.
@@ -247,7 +218,8 @@ export async function cmdBanGlobal(message, args, ctx) {
 
   // ── &banglobal historico <usuário> ──
   if (sub === "historico" || sub === "histórico") {
-    const uid = await resolverUsuario(args[1], message, ctx);
+    const server = await ctx.getServer?.(message);
+    const uid = await resolverUser(args[1], { message, server });
     if (!uid) return sendEmbed(message.channel, { title: "❌ Não achei esse usuário",
       description: [
         `\`${PREFIXO}banglobal historico <@usuário|id|nome>\``,

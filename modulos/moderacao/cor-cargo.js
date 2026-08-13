@@ -1,5 +1,6 @@
-import { limparId } from "../core/ids.js";
+import { limparId, ULID } from "../core/ids.js";
 import * as db from "../core/db.js";
+import { CORES as NOMES, normalizarCor as corSolida, nomesDeCor } from "../core/cores.js";
 // ══════════════════════════════════════════════════════════
 //  cor-cargo.js — &cor
 //
@@ -19,15 +20,7 @@ import * as db from "../core/db.js";
 // ══════════════════════════════════════════════════════════
 
 const API = (process.env.STOAT_API || "https://api.stoat.chat").replace(/\/$/, "");
-const ULID = /^[0-9A-HJKMNP-TV-Z]{26}$/i;
 
-// Cores nomeadas para quem não quer pensar em hex.
-const NOMES = {
-  vermelho: "#EF4444", laranja: "#F97316", amarelo: "#EAB308", verde: "#22C55E",
-  esmeralda: "#10B981", ciano: "#06B6D4", azul: "#3B82F6", indigo: "#6366F1",
-  roxo: "#A855F7", rosa: "#EC4899", magenta: "#FF00FF", branco: "#FFFFFF",
-  preto: "#111111", cinza: "#6B7280", dourado: "#D4AF37", prata: "#C0C0C0",
-};
 
 // Gradientes prontos — o atalho para o efeito bonito sem montar nada.
 const PRESETS = {
@@ -53,19 +46,6 @@ const EMOJI_PRESET = {
   gelo: "🧊", trans: "🏳️‍⚧️",
 };
 
-// ── Normalização de uma cor sólida ────────────────────────
-function corSolida(txt) {
-  if (!txt) return null;
-  const t = txt.trim().toLowerCase().replace(/^["'`]|["'`]$/g, "").replace(/[,;.]+$/, "");
-  if (NOMES[t]) return NOMES[t];
-  if (/^#?[0-9a-f]{6}$/i.test(t)) return t.startsWith("#") ? t.toUpperCase() : `#${t.toUpperCase()}`;
-  if (/^#?[0-9a-f]{3}$/i.test(t)) {
-    const h = t.replace("#", "");
-    return `#${h[0]}${h[0]}${h[1]}${h[1]}${h[2]}${h[2]}`.toUpperCase();
-  }
-  if (/^rgba?\([\d\s.,%]+\)$/i.test(t)) return t;   // rgb()/rgba() são CSS válidos
-  return null;
-}
 
 // ── Monta um linear-gradient a partir de 2+ cores ─────────
 function montarGradiente(cores, angulo = 90) {

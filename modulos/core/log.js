@@ -140,16 +140,17 @@ export async function cmdLog(message, args, ctx) {
     });
   }
 
-  // ── &log <idDoCanal> ──
-  // IDs do Stoat são ULIDs: 26 caracteres alfanuméricos maiúsculos.
-  const id = args[0].replace(/[<#>]/g, "");   // aceita <#ID> colado do cliente
-  if (!/^[0-9A-HJKMNP-TV-Z]{26}$/i.test(id)) {
+  // ── &log <canal> ── aceita menção, link, ID ou nome do canal
+  const srv = await ctx.getServer?.(message).catch(() => null);
+  const id = resolverCanal(args[0], { message, server: srv });
+  if (!id) {
     return sendEmbed(message.channel, {
       title: "❌ Canal inválido",
       description: [
-        `\`${id}\` não parece um ID de canal válido.`,
+        `Não consegui identificar um canal em \`${args[0]}\`.`,
         "",
-        `Use \`${PREFIXO}log here\` para usar o canal atual, ou informe um ID de 26 caracteres.`,
+        `Aceito: **menção** (\`#canal\`), **link** do canal, **ID** ou o **nome**.`,
+        `Ou use \`${PREFIXO}log here\` para usar o canal atual.`,
         `Eventos disponíveis: ${Object.keys(EVENTOS).map((e) => `\`${e}\``).join(", ")}`,
       ].join("\n"),
       colour: COR.erro,

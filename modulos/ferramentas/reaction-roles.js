@@ -14,34 +14,12 @@
 
 import * as db  from "../core/db.js";
 import * as log from "../core/log.js";
-import { idValido, descreverProblemaDeId } from "../core/ids.js";
+import { idValido, descreverProblemaDeId, resolverMensagem, resolverCargo } from "../core/ids.js";
 
 const ULID = /^[0-9A-HJKMNP-TV-Z]{26}$/i;
 
-// Aceita ID puro ou o LINK da mensagem. No Stoat o link é
-// https://stoat.chat/server/<sid>/channel/<cid>/<messageId>
-// — pegar o ID pelo cliente nem sempre é possível, mas copiar o link é.
-// Devolve { id, canalId } (canalId só quando veio do link).
-export function extrairIdMensagem(txt) {
-  const bruto = String(txt ?? "").trim().replace(/[<>]/g, "");
-  if (!bruto) return { id: "" };
-  if (ULID.test(bruto)) return { id: bruto };
-
-  // link completo: pega o último segmento que for um ULID, e o canal se houver
-  if (/^https?:\/\//i.test(bruto) || bruto.includes("/channel/")) {
-    const partes = bruto.split(/[/?#]/).filter(Boolean);
-    const ulids = partes.filter((p) => ULID.test(p));
-    if (ulids.length) {
-      const id = ulids[ulids.length - 1];
-      const iCanal = partes.indexOf("channel");
-      const canalId = iCanal !== -1 && ULID.test(partes[iCanal + 1] ?? "") ? partes[iCanal + 1] : null;
-      // se o último ULID for o próprio canal, não temos o ID da mensagem
-      if (canalId && id === canalId) return { id: "", canalId };
-      return { id, canalId };
-    }
-  }
-  return { id: "" };
-}
+// Reexporta o resolvedor central, para quem já importava daqui.
+export { resolverMensagem as extrairIdMensagem } from "../core/ids.js";
 
 // Normaliza emoji recebido (pode vir URL-encoded / com seletor de variação)
 export function normalizarEmoji(e) {
@@ -264,7 +242,7 @@ export async function cmdReactionRole(message, args, ctx) {
 
   // ── exclusivo <mensagem> on|off ──
   if (["exclusivo", "exclusive", "unico", "único"].includes(sub)) {
-    const mid = extrairIdMensagem(args[1]).id;
+    const mid = resolverMensagem(args[1]).id;
     if (!mid) {
       return sendEmbed(message.channel, { title: "❌ Uso incorreto",
         description: [
@@ -310,7 +288,7 @@ export async function cmdReactionRole(message, args, ctx) {
   }
 
   if (sub === "remove" || sub === "remover") {
-    const mid = extrairIdMensagem(args[1]).id;
+    const mid = resolverMensagem(args[1]).id;
     if (!mid)
       return sendEmbed(message.channel, { title: "❌ Uso incorreto",
         description: `\`${PREFIXO}reactionrole remove <mensagem>\`\n\nAceito o **ID** ou o **link** da mensagem.`, colour: COR.erro });
@@ -322,7 +300,7 @@ export async function cmdReactionRole(message, args, ctx) {
 
   // ── add <idMensagem|link> <emoji> <idCargo> ──
   if (sub === "add" || sub === "adicionar") {
-    const ref   = extrairIdMensagem(args[1]);
+    const ref   = resolverMensagem(args[1]);
     const mid   = ref.id;
     const emoji = normalizarEmoji(args[2]);
     const role  = idValido(args[3]);

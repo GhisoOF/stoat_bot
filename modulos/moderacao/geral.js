@@ -109,6 +109,12 @@ export function construirDetalhes(P) {
       perm: "KickMembers",
       ex: `${P}warn @Fulano flood no chat de arte`,
     },
+    servidores: {
+      uso: `${P}servidores`,
+      desc: "Panorama de onde o bot está: nome de cada servidor, quantidade de membros e ritmo de mensagens por minuto.\n\n_Restrito ao dono do bot._",
+      perm: null,
+      ex: `${P}servidores`,
+    },
     acesso: {
       uso: `${P}acesso <cargo|canal|staffignora|status>`,
       desc: "Define **quem** pode usar os comandos e **onde**.\n\n**Cargos de staff** — quem tiver um deles usa os comandos de moderação mesmo sem a permissão nativa do Stoat:\n`&acesso cargo add <@cargo>` · `&acesso cargo remove <@cargo>` · `&acesso cargo limpar`\n\n**Canais** — onde os comandos funcionam:\n`&acesso canal todos` — em qualquer canal\n`&acesso canal somente` — só nos da lista\n`&acesso canal exceto` — em todos, menos os da lista\n`&acesso canal add|remove [#canal]` — mexe na lista\n\n`&acesso staffignora on|off` — se o staff escapa da restrição de canal (padrão: sim)\n\n_`&acesso`, `&debug`, `&help` e `&tutorial` funcionam sempre, para você não se trancar fora._",

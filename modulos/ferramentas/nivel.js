@@ -28,9 +28,8 @@
 // ══════════════════════════════════════════════════════════
 
 import * as db from "../core/db.js";
-import { limparId } from "../core/ids.js";
+import { limparId, ULID } from "../core/ids.js";
 
-const ULID = /^[0-9A-HJKMNP-TV-Z]{26}$/i;
 
 // ── Fórmula de progressão ──────────────────────────────────
 // XP total necessário para ATINGIR um nível N.

@@ -18,6 +18,7 @@
 // ══════════════════════════════════════════════════════════
 
 import * as db from "../core/db.js";
+import { ULID } from "../core/ids.js";
 import * as log from "../core/log.js";
 
 // Resumo por IA (injetado pelo main, usando o pipeline do chat). Se não for
@@ -39,7 +40,6 @@ function servidorPermitido(serverId) {
 
 const MAX_ITENS   = Number(process.env.RSS_MAX_ITENS || 50);
 const INTERVALO_MS = Number(process.env.RSS_INTERVALO_MS || 3600_000);  // 1 hora
-const ULID = /^[0-9A-HJKMNP-TV-Z]{26}$/i;
 
 // O canal de destino por servidor fica na config (rss.canalId).
 function getCanalId(config) { return config?.rss?.canalId ?? null; }

@@ -1,3 +1,5 @@
+import { CORES as CORES_NOMEADAS, normalizarCor } from "../core/cores.js";
+import { ULID } from "../core/ids.js";
 // ══════════════════════════════════════════════════════════
 //  embed.js — &embed (mensagem embed customizável)
 //
@@ -19,26 +21,8 @@
 import * as log from "../core/log.js";
 
 // Converte "#RRGGBB" ou nome comum em cor aceita pelo embed
-const CORES_NOMEADAS = {
-  vermelho: "#ED4245", verde: "#57F287", azul: "#5865F2",
-  amarelo: "#FEE75C", laranja: "#E67E22", roxo: "#9B59B6",
-  rosa: "#EB459E", cinza: "#95A5A6", preto: "#23272A", branco: "#FFFFFF",
-};
 
-function normalizarCor(v) {
-  if (!v) return null;
-  // limpa pontuação que as pessoas deixam colada: vírgula, parênteses, aspas, ponto
-  const t = v.trim().toLowerCase().replace(/^["'`]|["'`]$/g, "").replace(/[,;.)\]}]+$/g, "").trim();
-  if (CORES_NOMEADAS[t]) return CORES_NOMEADAS[t];
-  if (/^#?[0-9a-f]{6}$/i.test(t)) return t.startsWith("#") ? t : `#${t}`;
-  if (/^#?[0-9a-f]{3}$/i.test(t)) {           // #f0f → #ff00ff
-    const h = t.replace("#", "");
-    return `#${h[0]}${h[0]}${h[1]}${h[1]}${h[2]}${h[2]}`;
-  }
-  return null;
-}
 
-const ULID = /^[0-9A-HJKMNP-TV-Z]{26}$/i;
 
 export async function cmdEmbed(message, args, ctx) {
   const { sendEmbed, COR, getServer, membroTemPermissao, PREFIXO, client } = ctx;

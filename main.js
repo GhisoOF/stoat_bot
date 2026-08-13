@@ -23,6 +23,7 @@ import * as tutorial   from "./modulos/moderacao/tutorial.js";
 import * as corCargo   from "./modulos/moderacao/cor-cargo.js";
 import * as acessoMod  from "./modulos/moderacao/acesso.js";
 import * as warnMod    from "./modulos/moderacao/warn.js";
+import * as srvStats   from "./modulos/moderacao/servidores.js";
 import * as modIA      from "./modulos/moderacao/moderacao-ia.js";
 import * as modiaCmd   from "./modulos/moderacao/modia-comando.js";
 import * as debugCmd  from "./modulos/moderacao/debug-comando.js";
@@ -258,6 +259,8 @@ const rotas = {
   warn:          warnMod.cmdWarn,
   avisar:        warnMod.cmdWarn,
   acesso:        acessoMod.cmdAcesso,
+  servidores:    srvStats.cmdServidores,
+  servers:       srvStats.cmdServidores,
   warnings:      automodCmd.cmdWarnings,
   clearwarnings: automodCmd.cmdClearwarnings,
   automod:       automodCmd.cmdAutomod,
@@ -363,6 +366,7 @@ client.on("ready", async () => {
   // lib não emite eventos de reação para elas e os cargos param de ser dados.
   reactionRoles.precarregarMensagens(client).catch((e) => console.error("[REACTIONROLE][boot]", e?.message));
 
+  srvStats.marcarInicio();
   chat.iniciarMemoria();          // liga o agente de memória (extração em background)
   chat.iniciarComentario(client); // liga o comentário espontâneo
   modIA.configurar({ avaliar: chat.avaliarModeracao });   // moderação por IA usa o modelo pequeno
@@ -389,6 +393,7 @@ client.on("messageCreate", async (message) => {
 
   // Cada servidor tem sua própria config
   const serverId = message.serverId ?? message.server?.id ?? message.server?._id ?? null;
+  srvStats.registrar(serverId);   // métrica de ritmo (memória, janela deslizante)
   const ctx = criarContexto(serverId);
 
   // Identifica se a mensagem é um COMANDO reconhecido

@@ -573,9 +573,14 @@ Três escopos, porque "apagar tudo" significa coisas diferentes:
 | `tudo` | ambos | nada — volta ao estado de recém-instalado |
 
 Sem `confirmar`, o comando mostra uma **prévia** do que será perdido (quantos
-personagens, followers, moedas e ofertas abertas). A moeda padrão e o catálogo
-genérico são recriados automaticamente, então o jogo continua utilizável logo
-depois.
+personagens, followers, moedas e ofertas abertas).
+
+A **moeda padrão não é recriada** de propósito: quem reseta normalmente vai
+aplicar um conjunto em seguida (`&game admin moeda modelo mundo`), e uma moeda
+automática ficaria sobrando ao lado das novas. Se você não escolher nenhum
+conjunto, ela nasce sozinha no primeiro uso do jogo.
+
+O catálogo genérico é recriado no reset de `catalogo` e `tudo`.
 
 > As **ofertas abertas** do mercado são apagadas junto no reset de servidor. Se
 > ficassem, seriam ofertas órfãs segurando itens que já não existem.

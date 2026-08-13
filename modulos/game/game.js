@@ -1137,11 +1137,24 @@ export async function cmdGame(message, args, ctx) {
           description: linhas.join("\n"), colour: COR.aviso });
       }
 
+      // Nome de tabela não diz nada a quem lê — e chega a parecer comando.
+      const ROTULO = {
+        rpg_personagem: "personagem(ns)",
+        rpg_inventario: "item(ns) em mochilas",
+        rpg_equipado: "equipamento(s)",
+        rpg_carteira: "carteira(s)",
+        rpg_estoque: "linha(s) de estoque",
+        rpg_moedas: "moeda(s)",
+        rpg_ofertas: "oferta(s) do mercado",
+        rpg_followers: "companheiro(s)",
+        rpg_itens: "item(ns) do catálogo",
+        rpg_followers_catalogo: "companheiro(s) do catálogo",
+      };
       const apagados = [];
       const apagar = (tabela, where, ...p) => {
         try {
           const n = d.prepare(`DELETE FROM ${tabela} WHERE ${where}`).run(...p).changes ?? 0;
-          if (n) apagados.push(`${n} de \`${tabela}\``);
+          if (n) apagados.push(`**${n}** ${ROTULO[tabela] ?? tabela}`);
         } catch (e) { console.error(`[RPG][reset] ${tabela}:`, e.message); }
       };
 
@@ -1163,21 +1176,30 @@ export async function cmdGame(message, args, ctx) {
         iniciarCatalogo();
       }
 
-      // o servidor precisa de pelo menos a moeda padrão para funcionar
-      const moedaNova = garantirMoeda(serverId);
+      // A moeda padrão NÃO é recriada aqui de propósito.
+      //
+      // Quem reseta normalmente quer aplicar um conjunto de moedas em seguida
+      // (`moeda modelo mundo`), e uma "Ouro" criada automaticamente ficaria
+      // sobrando ao lado das novas — confundindo e bagunçando a economia.
+      // Se ninguém escolher nada, ela nasce sozinha no primeiro uso do jogo.
+      const mexeuNoCatalogo = ["catalogo", "catálogo", "tudo"].includes(escopo);
 
       return sendEmbed(message.channel, {
         title: "🔄 Reset concluído",
         description: [
           `**Escopo:** ${escopo}`,
           "",
-          apagados.length ? apagados.map((x) => `• ${x}`).join("\n") : "_Nada havia para apagar._",
+          apagados.length ? "**Apagado:**\n" + apagados.map((x) => `• ${x}`).join("\n") : "_Nada havia para apagar._",
+          mexeuNoCatalogo
+            ? `\n✅ Catálogo genérico recriado: ${db.listarItens().length} itens, ${db.listarFollowersCatalogo().length} companheiros` : "",
           "",
-          `✅ Moeda padrão recriada: ${moedaNova.simbolo} **${moedaNova.nome}**`,
-          (escopo === "catalogo" || escopo === "catálogo" || escopo === "tudo")
-            ? `✅ Catálogo genérico recriado (${db.listarItens().length} itens, ${db.listarFollowersCatalogo().length} followers)` : "",
+          "**Próximo passo — escolha as moedas:**",
+          `\`${P}game admin moeda modelo mundo\` — Real, Dólar, Euro, Prata, Ouro, Bitcoin`,
+          `\`${P}game admin moeda modelo fantasia\` — Cobre, Prata, Ouro, Cristal`,
+          `\`${P}game admin moeda modelo simples\` — uma moeda só`,
           "",
-          `_Comece com \`${P}game criar\`._`,
+          `_Se você não escolher, uma moeda padrão nasce sozinha quando alguém jogar._`,
+          `_Depois é só \`${P}game criar\`._`,
         ].filter(Boolean).join("\n"),
         colour: COR.sucesso });
     }

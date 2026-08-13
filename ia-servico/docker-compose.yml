@@ -13,6 +13,12 @@ services:
     container_name: judy-ia
     restart: unless-stopped
     network_mode: host          # usa a rede do host (localhost = a própria máquina)
+    volumes:
+      # DNS: com network_mode host, o Docker COPIA o resolv.conf ao criar o
+      # container e às vezes descarta os nameservers (o do Tailscale, por
+      # exemplo). Montar o arquivo garante que o container sempre veja o DNS
+      # real da máquina. Sem isso: EAI_AGAIN em tudo que depende de rede.
+      - /etc/resolv.conf:/etc/resolv.conf:ro
     environment:
       # ── LLM (Ollama nativo, mesma máquina) ──
       # Com network_mode host, localhost é o próprio host.
@@ -22,13 +28,23 @@ services:
       - MAX_TOKENS=4096
       - PORTA=8090                        # porta do serviço (na rede do host)
 
-      # ── Leitura do código via GitHub (o repo vive no homelab) ──
+      # ── Leitura do código via GitHub ──
+      #
+      # O token vem do arquivo .env AO LADO deste compose — nunca escrito aqui.
+      # Motivo: este arquivo é versionado e sobrescrito a cada atualização; o
+      # .env não é (está no .gitignore), então o token sobrevive aos deploys.
+      #
+      # Crie uma vez:  echo "GITHUB_TOKEN=github_pat_..." > .env
+      #
+      # É OBRIGATÓRIO para repositório privado — sem ele a API responde 404
+      # (não 401), o que engana: parece "não existe" e é "sem permissão".
+      - GITHUB_TOKEN=${GITHUB_TOKEN:-}
       - GITHUB_REPO=GhisoOF/stoat_bot
       - GITHUB_BRANCH=main
+
       # ── Busca web (SearXNG) ──
       - SEARXNG_URL=http://localhost:8080
       - SEARXNG_IDIOMA=pt-BR
-      # - GITHUB_TOKEN=ghp_xxx           # opcional: só se bater o limite de 60 req/h
 
       # ── Ferramentas ──
       - MAX_VOLTAS_FERRAMENTA=5

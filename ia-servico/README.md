@@ -78,6 +78,37 @@ A saída de `/saude` diz na hora se o Ollama está acessível e quais modelos ex
 
 ---
 
+## Token do GitHub
+
+O repositório é privado, então a leitura de código **exige** um token. Sem ele a
+API responde **404** (não 401) — o que engana: parece "não existe" e é "sem
+permissão".
+
+O token vive num arquivo `.env` **ao lado deste compose**, nunca dentro dele:
+
+```bash
+cd ia-servico
+cp .env.example .env
+nano .env          # cole o token em GITHUB_TOKEN=
+docker compose up -d --force-recreate
+```
+
+**Por que num arquivo separado:** o `docker-compose.yml` é versionado e
+sobrescrito a cada atualização do bot. O `.env` está no `.gitignore` e não vai
+no pacote — então ele é o único lugar onde uma configuração sua sobrevive aos
+deploys.
+
+Crie o token em *github.com/settings/tokens* (fine-grained), com acesso ao
+repositório e permissão **Contents: Read-only**. Prefira sem data de expiração:
+token expirado devolve o mesmo 404 enganoso.
+
+Confira que pegou:
+
+```bash
+docker exec judy-ia sh -c 'echo ${GITHUB_TOKEN:+ok}'
+docker logs judy-ia | grep "\[IA\]"
+```
+
 ## Diagnóstico
 
 O serviço se autodiagnostica no boot e grita no log quando algo está errado:

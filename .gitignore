@@ -1,6 +1,11 @@
 node_modules/
+# Segredos e config de máquina — NUNCA versionados.
+# O padrão `.env` do Git só cobre a raiz; os subdiretórios precisam ser
+# listados. Sem isso o token do ia-servico entraria no repositório.
 .env
 .env.*
 !.env.example
+ia-servico/.env
+**/.env
 automod-config.json
 npm-debug.log*

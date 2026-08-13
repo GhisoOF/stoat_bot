@@ -14,6 +14,7 @@
 import * as db from "../core/db.js";
 import { resolverUsuario } from "../core/ids.js";
 import { semear as semearItens } from "./itens-genericos.js";
+import * as MISS from "./missoes.js";
 
 const XP_BASE = 100;
 const CRESCIMENTO = 1.5;
@@ -146,6 +147,15 @@ export function bonusEquipados(serverId, userId) {
     }
   }
   return total;
+}
+
+// Atributos efetivos: os do personagem + o que o equipamento acrescenta.
+// É isto que vai para o cálculo da missão — equipar tem que importar.
+export function atributosComEquipamento(p, serverId, userId) {
+  const extra = bonusEquipados(serverId, userId);
+  const out = {};
+  for (const a of db.ATRIBUTOS) out[a] = (p[a] ?? 0) + (extra[a] ?? 0);
+  return out;
 }
 
 // Em qual slot este item cabe? Acessório tem 3 vagas — usa a primeira livre,
@@ -490,6 +500,122 @@ export async function cmdGame(message, args, ctx) {
       rodape: "_♾️ = estoque infinito_",
       colour: COR.info,
     });
+  }
+
+  // ── missões ──
+  if (["missao", "missão", "missoes", "missões", "quest"].includes(sub)) {
+    const p = db.getPersonagem(serverId, eu);
+    if (!p) {
+      return sendEmbed(message.channel, { title: "🎭 Você não tem personagem",
+        description: `Crie com \`${P}game criar\`.`, colour: COR.aviso });
+    }
+
+    const acao = args.slice(1).join(" ").trim();
+
+    // sem argumento: lista as missões disponíveis com a chance de cada uma
+    if (!acao) {
+      const attr = atributosComEquipamento(p, serverId, eu);
+      const agora = Date.now();
+      const espera = Math.max(p.ultimaMissao + 0, 0);
+      const linhas = [];
+
+      if (p.recuperandoAte > agora) {
+        const min = Math.ceil((p.recuperandoAte - agora) / 60000);
+        linhas.push(`🩹 **Você está se recuperando.** Volta em ~${min} min.`, "");
+      }
+
+      const porTipo = { mercado: [], facil: [], medio: [], dificil: [] };
+      for (const m of MISS.MISSOES) {
+        (porTipo[m.tipo === "mercado" ? "mercado" : m.dificuldade] ??= []).push(m);
+      }
+
+      linhas.push("🏪 **Mercado** — sem risco, paga pouco");
+      for (const m of porTipo.mercado.slice(0, 4)) linhas.push(`   • **${m.nome}**`);
+
+      for (const d of ["facil", "medio", "dificil"]) {
+        const info = MISS.DIFICULDADE_INFO[d];
+        linhas.push("", `${info.emoji} **${info.rotulo}**`);
+        for (const m of porTipo[d] ?? []) {
+          const v = MISS.previsao(attr, m);
+          linhas.push(`   • **${m.nome}** — êxito ${(v.exito * 100).toFixed(0)}% · sobrevive ${(v.sobrevivencia * 100).toFixed(0)}%`);
+        }
+      }
+      linhas.push("", `_\`${P}game missao <nome>\` para partir · as chances já contam seu equipamento._`);
+      return enviarLista(sendEmbed, message.channel, {
+        titulo: "🗺️ Missões disponíveis", linhas, colour: COR.info });
+    }
+
+    const missao = MISS.acharMissao(acao);
+    if (!missao) {
+      return sendEmbed(message.channel, { title: "❌ Missão desconhecida",
+        description: `Não achei **${acao}**. Veja a lista com \`${P}game missao\`.`, colour: COR.erro });
+    }
+
+    // cooldown e recuperação
+    const agora = Date.now();
+    if (p.recuperandoAte > agora) {
+      const min = Math.ceil((p.recuperandoAte - agora) / 60000);
+      return sendEmbed(message.channel, { title: "🩹 Ainda se recuperando",
+        description: `Você caiu na última missão. Volte em **~${min} min**.`, colour: COR.aviso });
+    }
+    const prontoEm = (p.ultimaMissao ?? 0) + MISS.cooldownMs(missao);
+    if (prontoEm > agora) {
+      const min = Math.ceil((prontoEm - agora) / 60000);
+      return sendEmbed(message.channel, { title: "⏳ Descansando",
+        description: `Você acabou de voltar de uma missão. Pode partir de novo em **~${min} min**.`, colour: COR.aviso });
+    }
+
+    // ── resolve ──
+    const attr = atributosComEquipamento(p, serverId, eu);
+    const r = MISS.resolver(attr, missao);
+
+    // XP com o bônus de INT/Sorte
+    const xpFinal = Math.round(r.xp * bonusXp(attr.inteligencia, attr.sorte));
+    const depois = aplicarXp(p, xpFinal);
+
+    const campos = {
+      xp: depois.xp, nivel: depois.nivel, pontos: depois.pontos,
+      ultimaMissao: agora,
+      missoesFeitas: (p.missoesFeitas ?? 0) + 1,
+    };
+    if (r.desfecho === "caiu") campos.recuperandoAte = agora + 30 * 60_000;
+    db.salvarPersonagem(serverId, eu, campos);
+
+    // ── loot ──
+    let ganhou = null;
+    if (r.exito && r.sobreviveu) {
+      const raridade = MISS.sortearRaridade(missao, attr.sorte);
+      if (raridade) {
+        const candidatos = db.listarItens({ raridade });
+        if (candidatos.length) {
+          ganhou = candidatos[Math.floor(Math.random() * candidatos.length)];
+          db.darItem(serverId, eu, ganhou.id);
+        }
+      }
+    }
+
+    // ── relato ──
+    const titulo = { sucesso: "🏆 Missão cumprida", falha: "😐 Não deu certo", caiu: "💀 Você caiu" }[r.desfecho];
+    const cor = { sucesso: COR.sucesso, falha: COR.aviso, caiu: COR.erro }[r.desfecho];
+    const linhas = [`**${missao.nome}**`, `_${missao.descricao}_`, ""];
+
+    if (r.desfecho === "sucesso") linhas.push("Você venceu e voltou inteiro.");
+    else if (r.desfecho === "falha") linhas.push("Não conseguiu completar, mas voltou vivo — e mais experiente.");
+    else linhas.push("Você não aguentou. Voltou de mãos vazias, mas **inteiro**: nada de nível ou equipamento se perde.");
+
+    linhas.push("", `✨ **+${xpFinal} XP**`);
+    if (depois.subiu) {
+      linhas.push(`🎉 **Subiu para o nível ${depois.nivel}!** (+${(depois.pontos - (p.pontos ?? 0)).toFixed(2)} ponto(s))`);
+    }
+    if (ganhou) {
+      const ri = RARIDADE_INFO[ganhou.raridade] ?? {};
+      linhas.push("", `🎁 **Loot:** ${ri.emoji ?? ""} **${ganhou.nome}** — ${descreverBonus(ganhou.bonus)}`);
+    } else if (r.desfecho === "sucesso" && missao.tipo !== "mercado") {
+      linhas.push("", "_Nenhum item desta vez._");
+    }
+    if (r.desfecho === "caiu") linhas.push("", "_Você precisa de ~30 min para se recuperar._");
+
+    return sendEmbed(message.channel, { title: titulo, description: linhas.join("\n"), colour: cor });
   }
 
   // ── ranking ──

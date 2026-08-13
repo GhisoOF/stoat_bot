@@ -452,6 +452,8 @@ distribui pontos em 9 atributos.
 &game                      # sua ficha (atributos + equipamento)
 &game ficha @pessoa        # a ficha de outra pessoa
 &game pontos int 3         # distribui pontos (aceita abreviação)
+&game missao               # missões disponíveis e suas chances
+&game missao Caçar o Lobo Branco
 &game itens                # sua mochila
 &game equipar Espada de Ferro
 &game desequipar arma      # ou pelo nome do item
@@ -474,6 +476,30 @@ distribui pontos em 9 atributos.
 | 🧠 Inteligência | dano mágico · +XP · +pontos por nível |
 | 🍀 Sorte | dinheiro, drop, sobrevivência · +XP · +pontos por nível |
 | ✨ Carisma | buffa a party · melhora preços |
+
+### Missões
+
+Dois tipos, ambos com nome próprio:
+
+- 🏪 **Mercado** — sem risco de cair. Paga pouco, em valor **fixo**: é a rede de
+  segurança de quem não quer arriscar, e deixa de compensar naturalmente conforme
+  a curva de XP cresce. Nenhuma trava artificial é necessária.
+- 🟢🟡🔴 **Dungeon** — três dificuldades, com risco real e loot por raridade.
+
+O resultado sai de **duas rolagens** (êxito e sobrevivência), calculadas a partir
+dos seus atributos **mais o equipamento**:
+
+```
+Poder       = (Força + Inteligência×0,70) × precisão(Destreza) + Carisma×0,30
+Resiliência = Vida × Resistência × Agilidade (fatores multiplicativos) + Sorte×0,60
+```
+
+As três defesas se multiplicam de propósito: **espalhar rende mais que empilhar**
+(10/10/10 sobrevive mais que 30/0/0), sem nenhuma regra proibindo nada.
+
+Cair **não** custa nível nem equipamento — você volta de mãos vazias e leva um
+tempo se recuperando. O XP das missões acompanha a curva de 1,5×, então cada
+nível leva mais ou menos o mesmo tempo a vida inteira.
 
 ### Itens e equipamento
 

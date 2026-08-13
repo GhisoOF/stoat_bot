@@ -158,7 +158,7 @@ export function construirDetalhes(P) {
     },
     game: {
       uso: `${P}game [criar|ficha|pontos|top|apagar]`,
-      desc: "RPG do servidor: crie um personagem, suba de nível e distribua pontos em 9 atributos.\n\n`&game criar [nome]` — cria seu personagem\n`&game` — sua ficha\n`&game ficha @pessoa` — a ficha de outro\n`&game pontos <atributo> [quantos]` — distribui pontos (aceita abreviação: for, int, sor…)\n`&game itens` — sua mochila\n`&game equipar <item>` / `&game desequipar <slot|item>`\n`&game catalogo` — resumo dos itens · `&game catalogo <raridade|slot>` — a lista completa daquele grupo\n`&game top` — ranking do servidor\n`&game apagar confirmar` — recomeça do zero\n\n**Atributos:** Força, Destreza, Resistência, Agilidade, Vida, Mana, Inteligência, Sorte, Carisma.\n\n_Inteligência e Sorte aumentam o XP ganho e os pontos por nível, com retorno decrescente — nunca param de valer._\n\n⚠️ Não confundir com `&xp`, que é o sistema de níveis por mensagem.",
+      desc: "RPG do servidor: crie um personagem, suba de nível e distribua pontos em 9 atributos.\n\n`&game criar [nome]` — cria seu personagem\n`&game` — sua ficha\n`&game ficha @pessoa` — a ficha de outro\n`&game pontos <atributo> [quantos]` — distribui pontos (aceita abreviação: for, int, sor…)\n`&game missao` — missões disponíveis (com sua chance em cada uma)\n`&game missao <nome>` — parte para a missão\n`&game itens` — sua mochila\n`&game equipar <item>` / `&game desequipar <slot|item>`\n`&game catalogo` — resumo dos itens · `&game catalogo <raridade|slot>` — a lista completa daquele grupo\n`&game top` — ranking do servidor\n`&game apagar confirmar` — recomeça do zero\n\n**Atributos:** Força, Destreza, Resistência, Agilidade, Vida, Mana, Inteligência, Sorte, Carisma.\n\n_Inteligência e Sorte aumentam o XP ganho e os pontos por nível, com retorno decrescente — nunca param de valer._\n\n⚠️ Não confundir com `&xp`, que é o sistema de níveis por mensagem.",
       perm: null,
       ex: `${P}game criar Kael`,
     },
@@ -433,6 +433,8 @@ export async function cmdHelp(message, args, ctx) {
         `\`${P}game\` — sua ficha (nível, XP e os 9 atributos)`,
         `\`${P}game ficha [@pessoa]\` — a ficha de outra pessoa`,
         `\`${P}game pontos <atributo> [quantos]\` — distribui pontos`,
+        `\`${P}game missao\` — missões e suas chances`,
+        `\`${P}game missao <nome>\` — parte para a missão`,
         `\`${P}game itens\` — sua mochila`,
         `\`${P}game equipar <item>\` — equipa um item`,
         `\`${P}game desequipar <slot|item>\` — tira do lugar`,

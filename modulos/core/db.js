@@ -248,6 +248,14 @@ export function abrirBanco(caminho) {
     )
   `);
 
+  // Colunas de missão no personagem (migração: adiciona se faltar)
+  try {
+    const cols = db.prepare("PRAGMA table_info(rpg_personagem)").all().map((c) => c.name);
+    if (!cols.includes("ultimaMissao"))   db.exec("ALTER TABLE rpg_personagem ADD COLUMN ultimaMissao INTEGER NOT NULL DEFAULT 0");
+    if (!cols.includes("recuperandoAte")) db.exec("ALTER TABLE rpg_personagem ADD COLUMN recuperandoAte INTEGER NOT NULL DEFAULT 0");
+    if (!cols.includes("missoesFeitas"))  db.exec("ALTER TABLE rpg_personagem ADD COLUMN missoesFeitas INTEGER NOT NULL DEFAULT 0");
+  } catch (e) { console.error("[DB] migração missões:", e.message); }
+
   migrarTabelasGame();   // XP: game_* → xp_* (preserva os dados)
 
   console.info("[DB] Banco aberto em", DB_PATH);
@@ -716,7 +724,8 @@ export function criarPersonagem(serverId, userId, nome) {
 
 // Grava campos avulsos. Só aceita colunas conhecidas — nada de SQL montado
 // com nome vindo do usuário.
-const COLUNAS_OK = new Set([...ATRIBUTOS, "nome", "nivel", "xp", "pontos"]);
+const COLUNAS_OK = new Set([...ATRIBUTOS, "nome", "nivel", "xp", "pontos",
+  "ultimaMissao", "recuperandoAte", "missoesFeitas"]);
 export function salvarPersonagem(serverId, userId, campos = {}) {
   const entradas = Object.entries(campos).filter(([k]) => COLUNAS_OK.has(k));
   if (!entradas.length) return getPersonagem(serverId, userId);

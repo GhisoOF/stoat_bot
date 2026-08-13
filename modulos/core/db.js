@@ -280,6 +280,42 @@ export function abrirBanco(caminho) {
   `);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_folw_dono ON rpg_followers (serverId, donoId)`);
 
+  // ── RPG: economia ──
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS rpg_moedas (
+      serverId   TEXT NOT NULL,
+      id         TEXT NOT NULL,
+      nome       TEXT NOT NULL,
+      simbolo    TEXT NOT NULL DEFAULT '🪙',
+      finita     INTEGER NOT NULL DEFAULT 1,
+      mercado    REAL NOT NULL DEFAULT 10000,   -- quanto o mercado tem agora
+      dungeon    REAL NOT NULL DEFAULT 0,       -- o pote acumulado
+      pSuave     REAL NOT NULL DEFAULT 0.5,     -- P suavizado (média móvel)
+      pEm        INTEGER NOT NULL DEFAULT 0,
+      padrao     INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (serverId, id)
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS rpg_carteira (
+      serverId   TEXT NOT NULL,
+      userId     TEXT NOT NULL,
+      moedaId    TEXT NOT NULL,
+      quantidade REAL NOT NULL DEFAULT 0,
+      PRIMARY KEY (serverId, userId, moedaId)
+    )
+  `);
+  // Estoque de itens FINITOS no mercado (os infinitos nem entram aqui)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS rpg_estoque (
+      serverId   TEXT NOT NULL,
+      itemId     TEXT NOT NULL,
+      quantidade INTEGER NOT NULL DEFAULT 0,
+      base       INTEGER NOT NULL DEFAULT 10,
+      PRIMARY KEY (serverId, itemId)
+    )
+  `);
+
   // Colunas de missão no personagem (migração: adiciona se faltar)
   try {
     const cols = db.prepare("PRAGMA table_info(rpg_personagem)").all().map((c) => c.name);
@@ -997,6 +1033,102 @@ export function resgatarFollower(id, novoDono) {
   db.prepare("UPDATE rpg_followers SET capturado=0, donoId=?, capturadoEm=0, energia=1, energiaEm=? WHERE id=?")
     .run(novoDono, Date.now(), id);
   return getFollower(id);
+}
+
+// ══════════════════════════════════════════════════════════
+//  RPG — economia
+// ══════════════════════════════════════════════════════════
+export function upsertMoeda(serverId, m) {
+  db.prepare(`INSERT INTO rpg_moedas (serverId, id, nome, simbolo, finita, mercado, dungeon, pSuave, pEm, padrao)
+    VALUES (?, ?, ?, ?, ?, ?, 0, 0.5, ?, ?)
+    ON CONFLICT(serverId, id) DO UPDATE SET nome=excluded.nome, simbolo=excluded.simbolo,
+      finita=excluded.finita, padrao=excluded.padrao`)
+    .run(serverId, m.id, m.nome, m.simbolo ?? "🪙", m.finita === false ? 0 : 1,
+         m.mercado ?? 10000, Date.now(), m.padrao ? 1 : 0);
+  return getMoeda(serverId, m.id);
+}
+
+export function getMoeda(serverId, id) {
+  return db.prepare("SELECT * FROM rpg_moedas WHERE serverId=? AND id=?").get(serverId, id) ?? null;
+}
+
+export function listarMoedas(serverId) {
+  return db.prepare("SELECT * FROM rpg_moedas WHERE serverId=? ORDER BY padrao DESC, nome").all(serverId);
+}
+
+export function moedaPadrao(serverId) {
+  return db.prepare("SELECT * FROM rpg_moedas WHERE serverId=? ORDER BY padrao DESC LIMIT 1").get(serverId) ?? null;
+}
+
+export function acharMoeda(serverId, txt) {
+  const alvo = String(txt ?? "").trim().toLowerCase();
+  if (!alvo) return moedaPadrao(serverId);
+  const todas = listarMoedas(serverId);
+  return todas.find((m) => m.id === alvo)
+      ?? todas.find((m) => m.nome.toLowerCase() === alvo)
+      ?? todas.find((m) => m.nome.toLowerCase().includes(alvo))
+      ?? null;
+}
+
+const CAMPOS_MOEDA = new Set(["mercado", "dungeon", "pSuave", "pEm", "nome", "simbolo", "finita", "padrao"]);
+export function salvarMoeda(serverId, id, campos = {}) {
+  const e = Object.entries(campos).filter(([k]) => CAMPOS_MOEDA.has(k));
+  if (!e.length) return getMoeda(serverId, id);
+  db.prepare(`UPDATE rpg_moedas SET ${e.map(([k]) => `${k} = ?`).join(", ")} WHERE serverId=? AND id=?`)
+    .run(...e.map(([, v]) => v), serverId, id);
+  return getMoeda(serverId, id);
+}
+
+// ── Carteira ──
+export function getSaldo(serverId, userId, moedaId) {
+  return db.prepare("SELECT quantidade FROM rpg_carteira WHERE serverId=? AND userId=? AND moedaId=?")
+    .get(serverId, userId, moedaId)?.quantidade ?? 0;
+}
+
+export function creditar(serverId, userId, moedaId, qtd) {
+  db.prepare(`INSERT INTO rpg_carteira (serverId, userId, moedaId, quantidade) VALUES (?, ?, ?, ?)
+    ON CONFLICT(serverId, userId, moedaId) DO UPDATE SET quantidade = quantidade + excluded.quantidade`)
+    .run(serverId, userId, moedaId, qtd);
+  return getSaldo(serverId, userId, moedaId);
+}
+
+export function debitar(serverId, userId, moedaId, qtd) {
+  const atual = getSaldo(serverId, userId, moedaId);
+  const tirar = Math.min(atual, qtd);
+  if (tirar <= 0) return 0;
+  db.prepare("UPDATE rpg_carteira SET quantidade = quantidade - ? WHERE serverId=? AND userId=? AND moedaId=?")
+    .run(tirar, serverId, userId, moedaId);
+  return tirar;
+}
+
+export function carteiraDe(serverId, userId) {
+  return db.prepare("SELECT moedaId, quantidade FROM rpg_carteira WHERE serverId=? AND userId=? AND quantidade > 0")
+    .all(serverId, userId);
+}
+
+// Quanto TODOS os jogadores têm dessa moeda — numerador do P.
+export function totalNasCarteiras(serverId, moedaId) {
+  return db.prepare("SELECT COALESCE(SUM(quantidade),0) AS t FROM rpg_carteira WHERE serverId=? AND moedaId=?")
+    .get(serverId, moedaId)?.t ?? 0;
+}
+
+// ── Estoque de itens no mercado ──
+export function getEstoque(serverId, itemId) {
+  return db.prepare("SELECT * FROM rpg_estoque WHERE serverId=? AND itemId=?").get(serverId, itemId) ?? null;
+}
+
+export function setEstoque(serverId, itemId, quantidade, base = null) {
+  const atual = getEstoque(serverId, itemId);
+  db.prepare(`INSERT INTO rpg_estoque (serverId, itemId, quantidade, base) VALUES (?, ?, ?, ?)
+    ON CONFLICT(serverId, itemId) DO UPDATE SET quantidade=excluded.quantidade, base=excluded.base`)
+    .run(serverId, itemId, Math.max(0, quantidade), base ?? atual?.base ?? 10);
+  return getEstoque(serverId, itemId);
+}
+
+export function ajustarEstoque(serverId, itemId, delta) {
+  const e = getEstoque(serverId, itemId);
+  const base = e?.base ?? 10;
+  return setEstoque(serverId, itemId, Math.max(0, (e?.quantidade ?? base) + delta), base);
 }
 
 // ── Acesso cru ─────────────────────────────────────────────

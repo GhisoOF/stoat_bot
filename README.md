@@ -452,6 +452,10 @@ distribui pontos em 9 atributos.
 &game                      # sua ficha (atributos + equipamento)
 &game ficha @pessoa        # a ficha de outra pessoa
 &game pontos int 3         # distribui pontos (aceita abreviação)
+&game carteira             # saldo e estado da economia
+&game comprar Espada de Ferro
+&game vender Adaga Simples
+&game contratar Mercenário Novato
 &game followers            # seus companheiros
 &game follower levar Aprendiz de Magia
 &game recrutas             # companheiros que existem no jogo
@@ -480,6 +484,46 @@ distribui pontos em 9 atributos.
 | 🧠 Inteligência | dano mágico · +XP · +pontos por nível |
 | 🍀 Sorte | dinheiro, drop, sobrevivência · +XP · +pontos por nível |
 | ✨ Carisma | buffa a party · melhora preços |
+
+### Economia
+
+Uma moeda por servidor (o dono pode criar outras). Tudo gira em torno do **P** —
+quanto da moeda está com os jogadores versus no mercado:
+
+| | Itens | Cair custa |
+|---|---|---|
+| **P alto** (jogadores ricos) | baratos | caro |
+| **P baixo** (mercado cheio) | caros | pouco |
+
+Isso empurra quem tem dinheiro a gastar e quem não tem a arriscar — o mercado se
+regula sozinho, sem ninguém ajustar nada. O P é **suavizado** (média móvel), para
+uma compra grande não sacudir tudo de uma vez.
+
+O NPC recompra **sempre abaixo** do preço de venda; o ✨ Carisma melhora a oferta
+e dá desconto ao contratar mercenários.
+
+> ⚠️ O fator de recompra tem teto **estritamente abaixo de 1**. Isso não é
+> balanceamento: com itens de estoque infinito, recomprar por ≥ o preço de venda
+> viraria máquina de dinheiro infinito. Com o teto, todo ciclo comprar→revender
+> dá prejuízo.
+
+Ao cair você perde uma fração do que carrega, e ela vai para o **pote da dungeon**
+— a moeda é realocada, não destruída. Quanto mais cheio o pote, maior a fatia que
+o vencedor leva.
+
+### Modo admin
+
+Restrito ao dono do bot, para testar e depurar sem jogar horas:
+
+```
+&game admin moeda 5000 [@pessoa]
+&game admin item <nome> · &game admin follower <nome> [nível]
+&game admin nivel 20 · &game admin pontos 50
+&game admin energia · &game admin cooldown
+&game admin eco                      # números da economia
+&game admin simular <missao> [n]     # roda n vezes sem efeito real
+&game admin zerar confirmar          # apaga o RPG do servidor
+```
 
 ### Companheiros (party)
 

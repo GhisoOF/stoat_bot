@@ -17,6 +17,7 @@ import { semear as semearItens } from "./itens-genericos.js";
 import * as MISS from "./missoes.js";
 import * as FOL from "./followers.js";
 import { semear as semearFollowers } from "./followers.js";
+import * as ECO from "./economia.js";
 
 const XP_BASE = 100;
 const CRESCIMENTO = 1.5;
@@ -151,6 +152,44 @@ export function bonusEquipados(serverId, userId) {
   }
   return total;
 }
+
+// ── Economia ──────────────────────────────────────────────
+// Garante que o servidor tenha ao menos a moeda padrão.
+export function garantirMoeda(serverId) {
+  let m = db.moedaPadrao(serverId);
+  if (!m) {
+    m = db.upsertMoeda(serverId, { id: "ouro", nome: "Ouro", simbolo: "🪙",
+      finita: true, mercado: 10000, padrao: true });
+  }
+  return m;
+}
+
+// P atual (recalculado) e o P suavizado que as fórmulas usam.
+export function pDaMoeda(serverId, moeda) {
+  const comPlayers = db.totalNasCarteiras(serverId, moeda.id);
+  const pAgora = ECO.calcularP(comPlayers, moeda.mercado);
+  const pSuave = ECO.suavizar(moeda.pSuave, pAgora);
+  db.salvarMoeda(serverId, moeda.id, { pSuave, pEm: Date.now() });
+  return { pAgora, pSuave, comPlayers };
+}
+
+// Transfere do mercado para o jogador (recompensa) e vice-versa (compra).
+function pagarAoJogador(serverId, userId, moeda, qtd) {
+  const disponivel = moeda.finita ? Math.min(qtd, moeda.mercado) : qtd;
+  if (disponivel <= 0) return 0;
+  if (moeda.finita) db.salvarMoeda(serverId, moeda.id, { mercado: moeda.mercado - disponivel });
+  db.creditar(serverId, userId, moeda.id, disponivel);
+  return disponivel;
+}
+
+function jogadorPaga(serverId, userId, moeda, qtd) {
+  const pago = db.debitar(serverId, userId, moeda.id, qtd);
+  const atual = db.getMoeda(serverId, moeda.id);
+  db.salvarMoeda(serverId, moeda.id, { mercado: (atual?.mercado ?? 0) + pago });
+  return pago;
+}
+
+function fmt(n) { return Math.round(n).toLocaleString("pt-BR"); }
 
 // ── Followers ─────────────────────────────────────────────
 const ENERGIA_MAX = 5;
@@ -567,6 +606,370 @@ export async function cmdGame(message, args, ctx) {
     });
   }
 
+  // ── admin (só o dono do bot) ──
+  //
+  // Existe para testar e depurar sem precisar jogar horas: dar item,
+  // moeda, follower, forçar nível e inspecionar os números da economia.
+  if (["admin", "debug"].includes(sub)) {
+    if (!ctx.ehSuperAdmin?.(eu)) {
+      return sendEmbed(message.channel, { title: "🚫 Comando restrito",
+        description: "Só o dono do bot usa o modo admin.", colour: COR.erro });
+    }
+    const acao = args[1]?.toLowerCase();
+    const resto = args.slice(2);
+    const alvoId = message.mentionIds?.[0] ?? eu;
+
+    if (!acao || acao === "ajuda") {
+      return sendEmbed(message.channel, { title: "🔧 Admin do RPG",
+        description: [
+          `\`${P}game admin moeda <qtd> [@pessoa]\` — credita moeda`,
+          `\`${P}game admin item <nome> [@pessoa]\` — dá um item`,
+          `\`${P}game admin follower <nome> [nível] [@pessoa]\` — dá um companheiro`,
+          `\`${P}game admin nivel <n> [@pessoa]\` — força o nível`,
+          `\`${P}game admin pontos <n> [@pessoa]\` — dá pontos livres`,
+          `\`${P}game admin energia [@pessoa]\` — enche a energia dos companheiros`,
+          `\`${P}game admin cooldown [@pessoa]\` — zera cooldown e recuperação`,
+          `\`${P}game admin eco\` — números da economia`,
+          `\`${P}game admin simular <missao> [n]\` — roda a missão n vezes sem efeito`,
+          `\`${P}game admin dungeon <qtd>\` — põe moeda no pote da dungeon`,
+          `\`${P}game admin zerar confirmar\` — apaga TODO o RPG deste servidor`,
+        ].join("\n"), colour: COR.mod });
+    }
+
+    if (acao === "moeda") {
+      const qtd = parseInt(resto[0], 10);
+      if (!Number.isFinite(qtd)) return sendEmbed(message.channel, { title: "❌ Quanto?",
+        description: `\`${P}game admin moeda 1000\``, colour: COR.erro });
+      const m = garantirMoeda(serverId);
+      db.creditar(serverId, alvoId, m.id, qtd);
+      return sendEmbed(message.channel, { title: "🔧 Moeda creditada",
+        description: `${m.simbolo} ${fmt(qtd)} para <@${alvoId}> · saldo: ${fmt(db.getSaldo(serverId, alvoId, m.id))}`,
+        colour: COR.mod });
+    }
+
+    if (acao === "item") {
+      const nome = resto.filter((x) => !/^<[@%#]/.test(x)).join(" ");
+      const item = db.acharItemPorNome(nome);
+      if (!item) return sendEmbed(message.channel, { title: "❌ Item desconhecido",
+        description: `Não achei **${nome}**.`, colour: COR.erro });
+      db.darItem(serverId, alvoId, item.id);
+      return sendEmbed(message.channel, { title: "🔧 Item entregue",
+        description: `**${item.nome}** para <@${alvoId}>`, colour: COR.mod });
+    }
+
+    if (acao === "follower") {
+      const argsLimpos = resto.filter((x) => !/^<[@%#]/.test(x));
+      const nivel = /^\d+$/.test(argsLimpos[argsLimpos.length - 1] ?? "")
+        ? parseInt(argsLimpos.pop(), 10) : 1;
+      const cat = db.acharFollowerCatalogo(argsLimpos.join(" "));
+      if (!cat) return sendEmbed(message.channel, { title: "❌ Follower desconhecido",
+        description: `Não achei **${argsLimpos.join(" ")}**.`, colour: COR.erro });
+      db.recrutarFollower(serverId, alvoId, cat.id, nivel);
+      return sendEmbed(message.channel, { title: "🔧 Companheiro entregue",
+        description: `**${cat.nome}** (nv ${nivel}) para <@${alvoId}>`, colour: COR.mod });
+    }
+
+    if (acao === "nivel" || acao === "pontos") {
+      const n = parseInt(resto[0], 10);
+      if (!Number.isFinite(n)) return sendEmbed(message.channel, { title: "❌ Quanto?",
+        description: `\`${P}game admin ${acao} 10\``, colour: COR.erro });
+      const alvo = db.getPersonagem(serverId, alvoId);
+      if (!alvo) return sendEmbed(message.channel, { title: "❌ Sem personagem",
+        description: `<@${alvoId}> não tem personagem.`, colour: COR.erro });
+      db.salvarPersonagem(serverId, alvoId, acao === "nivel" ? { nivel: n, xp: 0 } : { pontos: (alvo.pontos ?? 0) + n });
+      return sendEmbed(message.channel, { title: "🔧 Ajustado",
+        description: `<@${alvoId}>: ${acao} → ${n}`, colour: COR.mod });
+    }
+
+    if (acao === "energia") {
+      const meus = db.listarFollowersDe(serverId, alvoId);
+      for (const f of meus) db.salvarFollower(f.id, { energia: 5, energiaEm: Date.now() });
+      return sendEmbed(message.channel, { title: "🔧 Energia cheia",
+        description: `${meus.length} companheiro(s) de <@${alvoId}>`, colour: COR.mod });
+    }
+
+    if (acao === "cooldown") {
+      db.salvarPersonagem(serverId, alvoId, { ultimaMissao: 0, recuperandoAte: 0 });
+      return sendEmbed(message.channel, { title: "🔧 Cooldown zerado",
+        description: `<@${alvoId}> pode partir agora.`, colour: COR.mod });
+    }
+
+    if (acao === "dungeon") {
+      const qtd = parseInt(resto[0], 10) || 0;
+      const m = garantirMoeda(serverId);
+      db.salvarMoeda(serverId, m.id, { dungeon: (m.dungeon ?? 0) + qtd });
+      const atual = db.getMoeda(serverId, m.id);
+      return sendEmbed(message.channel, { title: "🔧 Pote da dungeon",
+        description: `Agora tem ${m.simbolo}${fmt(atual.dungeon)} · prêmio seria ${fmt(ECO.premioDungeon(atual.dungeon))}`,
+        colour: COR.mod });
+    }
+
+    if (acao === "eco") {
+      const m = garantirMoeda(serverId);
+      const { pAgora, pSuave, comPlayers } = pDaMoeda(serverId, m);
+      const exemplo = db.listarItens({ raridade: "comum" })[0];
+      const linhas = [
+        `**${m.nome}** ${m.simbolo} ${m.finita ? "(finita)" : "(infinita)"}`,
+        `Carteiras: ${fmt(comPlayers)} · Mercado: ${fmt(m.mercado)} · Dungeon: ${fmt(m.dungeon)}`,
+        `P agora: ${(pAgora * 100).toFixed(1)}% · P suavizado: ${(pSuave * 100).toFixed(1)}%`,
+        "",
+        `mult(P) = **${ECO.mult(pSuave).toFixed(3)}**`,
+        `perda(P) = **${(ECO.perda(pSuave) * 100).toFixed(1)}%** do que se carrega`,
+        `fração da dungeon = ${(ECO.fracaoDungeon(m.dungeon) * 100).toFixed(1)}% → prêmio ${fmt(ECO.premioDungeon(m.dungeon))}`,
+        "",
+        exemplo ? `Ex.: **${exemplo.nome}** custa ${fmt(ECO.precoDeVenda(exemplo, db.getEstoque(serverId, exemplo.id), pSuave))}` : "",
+        exemplo ? `   recompra com carisma 0: ${fmt(ECO.precoDeRecompra(ECO.precoDeVenda(exemplo, null, pSuave), 0))}` : "",
+        exemplo ? `   recompra com carisma 50: ${fmt(ECO.precoDeRecompra(ECO.precoDeVenda(exemplo, null, pSuave), 50))}` : "",
+      ].filter(Boolean);
+      return sendEmbed(message.channel, { title: "🔧 Economia",
+        description: linhas.join("\n"), colour: COR.mod });
+    }
+
+    if (acao === "simular") {
+      const nomeM = resto.filter((x) => !/^\d+$/.test(x)).join(" ");
+      const vezes = Math.min(1000, parseInt(resto.find((x) => /^\d+$/.test(x)) ?? "100", 10));
+      const missao = MISS.acharMissao(nomeM);
+      if (!missao) return sendEmbed(message.channel, { title: "❌ Missão desconhecida",
+        description: `\`${P}game admin simular <missao> [vezes]\``, colour: COR.erro });
+      const alvo = db.getPersonagem(serverId, alvoId);
+      if (!alvo) return sendEmbed(message.channel, { title: "❌ Sem personagem", description: "-", colour: COR.erro });
+      const { attr, magias, tamanhoParty } = atributosDaParty(alvo, serverId, alvoId);
+      let ok = 0, falha = 0, caiu = 0, xpTotal = 0, loot = 0;
+      for (let i = 0; i < vezes; i++) {
+        const r = MISS.resolver(attr, missao, Math.random, magias, tamanhoParty);
+        if (r.desfecho === "sucesso") ok++; else if (r.desfecho === "falha") falha++; else caiu++;
+        xpTotal += r.xp;
+        if (r.exito && r.sobreviveu && MISS.sortearRaridade(missao, attr.sorte, Math.random, tamanhoParty)) loot++;
+      }
+      const prev = MISS.previsao(attr, missao, magias, tamanhoParty);
+      return sendEmbed(message.channel, { title: `🔧 Simulação — ${missao.nome}`,
+        description: [
+          `**${vezes}** tentativas${tamanhoParty ? ` · party de ${tamanhoParty}` : " · solo"}`,
+          "",
+          `✅ Sucesso: **${(ok / vezes * 100).toFixed(1)}%** _(previsto ${(prev.exito * prev.sobrevivencia * 100).toFixed(1)}%)_`,
+          `😐 Falhou vivo: ${(falha / vezes * 100).toFixed(1)}%`,
+          `💀 Caiu: **${(caiu / vezes * 100).toFixed(1)}%**`,
+          `🎁 Loot: ${(loot / vezes * 100).toFixed(1)}% das tentativas`,
+          `✨ XP médio: ${(xpTotal / vezes).toFixed(0)}`,
+          "",
+          `_Poder ${prev.poder.toFixed(1)} vs ${(missao.poder * prev.escala).toFixed(1)} · Resiliência ${prev.resil.toFixed(1)} vs ${(missao.risco * prev.escala).toFixed(1)}_`,
+        ].join("\n"), colour: COR.mod });
+    }
+
+    if (acao === "zerar") {
+      if (resto[0]?.toLowerCase() !== "confirmar") {
+        return sendEmbed(message.channel, { title: "⚠️ Apaga TUDO",
+          description: `Personagens, itens, followers e moedas deste servidor.\n\n\`${P}game admin zerar confirmar\``,
+          colour: COR.aviso });
+      }
+      const d = db.getDb();
+      for (const t of ["rpg_personagem", "rpg_inventario", "rpg_equipado", "rpg_followers", "rpg_carteira", "rpg_estoque", "rpg_moedas"]) {
+        try { d.prepare(`DELETE FROM ${t} WHERE serverId = ?`).run(serverId); } catch {}
+      }
+      return sendEmbed(message.channel, { title: "🔧 RPG zerado",
+        description: "Tudo apagado neste servidor. O catálogo (itens/followers) continua.", colour: COR.mod });
+    }
+
+    return sendEmbed(message.channel, { title: "❓ Ação desconhecida",
+      description: `\`${P}game admin\` lista o que dá para fazer.`, colour: COR.erro });
+  }
+
+  // ── carteira / economia ──
+  if (["carteira", "saldo", "moedas", "economia"].includes(sub)) {
+    const moeda = garantirMoeda(serverId);
+    const { pAgora, pSuave, comPlayers } = pDaMoeda(serverId, moeda);
+    const saldo = db.getSaldo(serverId, eu, moeda.id);
+    const linhas = [
+      `${moeda.simbolo} **${fmt(saldo)} ${moeda.nome}**`,
+      "",
+      "**Estado da economia**",
+      `Com os jogadores: ${fmt(comPlayers)} · No mercado: ${fmt(moeda.mercado)}`,
+      `Concentração (P): **${(pSuave * 100).toFixed(0)}%**`,
+      `Preços estão **${ECO.mult(pSuave) > 1.5 ? "altos" : ECO.mult(pSuave) > 1 ? "médios" : "baixos"}** (×${ECO.mult(pSuave).toFixed(2)})`,
+      `Cair custa **${(ECO.perda(pSuave) * 100).toFixed(0)}%** do que você carrega`,
+      "",
+      `🕳️ Na dungeon: ${fmt(moeda.dungeon)} ${moeda.simbolo}`,
+      moeda.dungeon > 0 ? `_Vencer a dungeon devolve ~${fmt(ECO.premioDungeon(moeda.dungeon))}._` : "",
+      "",
+      `_P alto = players ricos → itens baratos, morrer caro._`,
+      `_P baixo = mercado cheio → itens caros, morrer barato._`,
+    ].filter(Boolean);
+    return sendEmbed(message.channel, { title: "💰 Sua carteira",
+      description: linhas.join("\n"), colour: COR.info });
+  }
+
+  // ── loja: comprar e vender ──
+  if (["comprar", "loja"].includes(sub)) {
+    const p = db.getPersonagem(serverId, eu);
+    if (!p) return sendEmbed(message.channel, { title: "🎭 Sem personagem",
+      description: `Crie com \`${P}game criar\`.`, colour: COR.aviso });
+
+    const moeda = garantirMoeda(serverId);
+    const { pSuave } = pDaMoeda(serverId, moeda);
+    const busca = args.slice(1).join(" ").trim();
+
+    if (!busca) {
+      const itens = db.listarItens().slice(0, 40);
+      const linhas = itens.map((i) => {
+        const est = db.getEstoque(serverId, i.id);
+        const preco = ECO.precoDeVenda(i, est, pSuave);
+        const qtd = i.infinito ? "♾️" : `${est?.quantidade ?? est?.base ?? 10}un`;
+        const r = RARIDADE_INFO[i.raridade] ?? {};
+        return `${r.emoji ?? ""} **${i.nome}** — ${moeda.simbolo}${fmt(preco)} _(${qtd})_`;
+      });
+      linhas.push("", `_\`${P}game comprar <item>\` · seu saldo: ${moeda.simbolo}${fmt(db.getSaldo(serverId, eu, moeda.id))}_`);
+      return enviarLista(sendEmbed, message.channel, { titulo: "🏪 Mercado", linhas, colour: COR.info });
+    }
+
+    const item = db.acharItemPorNome(busca);
+    if (!item) return sendEmbed(message.channel, { title: "❌ Item desconhecido",
+      description: `Não achei **${busca}** no mercado.`, colour: COR.erro });
+
+    const est = db.getEstoque(serverId, item.id);
+    if (!item.infinito && (est?.quantidade ?? est?.base ?? 10) <= 0) {
+      return sendEmbed(message.channel, { title: "📦 Esgotado",
+        description: `**${item.nome}** acabou no mercado. Itens finitos voltam quando alguém vende.`, colour: COR.aviso });
+    }
+    const preco = ECO.precoDeVenda(item, est, pSuave);
+    const saldo = db.getSaldo(serverId, eu, moeda.id);
+    if (saldo < preco) {
+      return sendEmbed(message.channel, { title: "💸 Saldo insuficiente",
+        description: `**${item.nome}** custa ${moeda.simbolo}${fmt(preco)} — você tem ${moeda.simbolo}${fmt(saldo)}.`,
+        colour: COR.erro });
+    }
+    jogadorPaga(serverId, eu, moeda, preco);
+    db.darItem(serverId, eu, item.id);
+    if (!item.infinito) db.ajustarEstoque(serverId, item.id, -1);
+    return sendEmbed(message.channel, { title: "🛒 Comprado",
+      description: [
+        `${RARIDADE_INFO[item.raridade]?.emoji ?? ""} **${item.nome}** — ${descreverBonus(item.bonus)}`,
+        `Pagou ${moeda.simbolo}${fmt(preco)} · resta ${moeda.simbolo}${fmt(db.getSaldo(serverId, eu, moeda.id))}`,
+        "",
+        `_Equipe com \`${P}game equipar ${item.nome}\`._`,
+      ].join("\n"), colour: COR.sucesso });
+  }
+
+  if (["vender"].includes(sub)) {
+    const p = db.getPersonagem(serverId, eu);
+    if (!p) return sendEmbed(message.channel, { title: "🎭 Sem personagem",
+      description: `Crie com \`${P}game criar\`.`, colour: COR.aviso });
+    const busca = args.slice(1).join(" ").trim();
+    if (!busca) return sendEmbed(message.channel, { title: "❌ Vender o quê?",
+      description: `\`${P}game vender <item>\`\n\nO mercado paga **abaixo** do preço de venda — seu ✨Carisma melhora a oferta.`,
+      colour: COR.erro });
+
+    const item = db.acharItemPorNome(busca);
+    if (!item || !db.temItem(serverId, eu, item.id)) {
+      return sendEmbed(message.channel, { title: "❌ Você não tem isso",
+        description: `**${busca}** não está na sua mochila.`, colour: COR.erro });
+    }
+    const slot = db.slotDoItem(serverId, eu, item.id);
+    if (slot) db.desequipar(serverId, eu, slot);
+
+    const moeda = garantirMoeda(serverId);
+    const { pSuave } = pDaMoeda(serverId, moeda);
+    const attr = atributosComEquipamento(p, serverId, eu);
+    const precoVenda = ECO.precoDeVenda(item, db.getEstoque(serverId, item.id), pSuave);
+    const recebe = ECO.precoDeRecompra(precoVenda, attr.carisma);
+
+    db.tirarItem(serverId, eu, item.id, 1);
+    if (!item.infinito) db.ajustarEstoque(serverId, item.id, +1);
+    const pago = pagarAoJogador(serverId, eu, db.getMoeda(serverId, moeda.id), recebe);
+
+    return sendEmbed(message.channel, { title: "💵 Vendido",
+      description: [
+        `**${item.nome}** → ${moeda.simbolo}${fmt(pago)}`,
+        `_O mercado vende por ${moeda.simbolo}${fmt(precoVenda)}; com seu Carisma (${attr.carisma}) você tirou ${(ECO.fatorRecompra(attr.carisma) * 100).toFixed(0)}%._`,
+        slot ? "\n_Estava equipado — foi desequipado._" : "",
+      ].filter(Boolean).join("\n"), colour: COR.sucesso });
+  }
+
+  // ── contratar mercenário ──
+  if (["contratar", "recrutar"].includes(sub)) {
+    const p = db.getPersonagem(serverId, eu);
+    if (!p) return sendEmbed(message.channel, { title: "🎭 Sem personagem",
+      description: `Crie com \`${P}game criar\`.`, colour: COR.aviso });
+    const busca = args.slice(1).join(" ").trim();
+    const moeda = garantirMoeda(serverId);
+    const { pSuave } = pDaMoeda(serverId, moeda);
+    const attr = atributosComEquipamento(p, serverId, eu);
+    // Carisma reduz o preço do mercenário (§2 do design)
+    const desconto = 1 - 0.30 * (Math.sqrt(Math.max(0, attr.carisma)) / (Math.sqrt(Math.max(0, attr.carisma)) + 8));
+
+    if (!busca) {
+      const lista = db.listarFollowersCatalogo({ soVendidos: true });
+      const linhas = lista.map((f) => {
+        const cls = FOL.CLASSES[f.classe] ?? {};
+        const r = RARIDADE_INFO[f.raridade] ?? {};
+        const preco = Math.round(f.preco * ECO.mult(pSuave) * desconto);
+        return `${r.emoji ?? ""}${cls.emoji ?? ""} **${f.nome}** _(${cls.rotulo})_ — ${moeda.simbolo}${fmt(preco)}`;
+      });
+      linhas.push("", `_Seu Carisma (${attr.carisma}) dá **${((1 - desconto) * 100).toFixed(0)}%** de desconto._`,
+        `_Saldo: ${moeda.simbolo}${fmt(db.getSaldo(serverId, eu, moeda.id))} · \`${P}game contratar <nome>\`_`);
+      return enviarLista(sendEmbed, message.channel, { titulo: "🤝 Mercenários disponíveis", linhas, colour: COR.info });
+    }
+
+    const cat = db.acharFollowerCatalogo(busca);
+    if (!cat) return sendEmbed(message.channel, { title: "❌ Não conheço",
+      description: `Não achei **${busca}**.`, colour: COR.erro });
+    if (cat.soDungeon || !cat.preco) {
+      return sendEmbed(message.channel, { title: "🗝️ Não está à venda",
+        description: `**${cat.nome}** só aparece como loot de dungeon.`, colour: COR.aviso });
+    }
+    const preco = Math.round(cat.preco * ECO.mult(pSuave) * desconto);
+    const saldo = db.getSaldo(serverId, eu, moeda.id);
+    if (saldo < preco) {
+      return sendEmbed(message.channel, { title: "💸 Saldo insuficiente",
+        description: `**${cat.nome}** custa ${moeda.simbolo}${fmt(preco)} — você tem ${moeda.simbolo}${fmt(saldo)}.`,
+        colour: COR.erro });
+    }
+    jogadorPaga(serverId, eu, moeda, preco);
+    const novo = db.recrutarFollower(serverId, eu, cat.id, 1);
+    const cls = FOL.CLASSES[cat.classe] ?? {};
+    return sendEmbed(message.channel, { title: "🤝 Contratado",
+      description: [
+        `${cls.emoji ?? ""} **${cat.nome}** _(${cls.rotulo}, nv 1)_ entrou para o seu grupo.`,
+        `Pagou ${moeda.simbolo}${fmt(preco)} · resta ${moeda.simbolo}${fmt(db.getSaldo(serverId, eu, moeda.id))}`,
+        "",
+        `_Leve com \`${P}game follower levar ${cat.nome}\`._`,
+      ].join("\n"), colour: COR.sucesso });
+  }
+
+  // ── descanso pago ──
+  if (["descansar", "descanso"].includes(sub)) {
+    const meus = db.listarFollowersDe(serverId, eu);
+    const cansados = meus.filter((f) => energiaAtual(f) < 5);
+    if (!cansados.length) {
+      return sendEmbed(message.channel, { title: "😌 Todos descansados",
+        description: "Ninguém precisa de descanso agora.", colour: COR.info });
+    }
+    const moeda = garantirMoeda(serverId);
+    const { pSuave } = pDaMoeda(serverId, moeda);
+    const faltando = cansados.reduce((acc, f) => acc + (5 - energiaAtual(f)), 0);
+    const custo = Math.max(1, Math.round(faltando * 25 * ECO.mult(pSuave)));
+    const saldo = db.getSaldo(serverId, eu, moeda.id);
+
+    if (args[1]?.toLowerCase() !== "confirmar") {
+      return sendEmbed(message.channel, { title: "🛏️ Descanso pago",
+        description: [
+          `Restaurar **${faltando}** ponto(s) de energia de **${cansados.length}** companheiro(s).`,
+          `Custo: ${moeda.simbolo}${fmt(custo)} · seu saldo: ${moeda.simbolo}${fmt(saldo)}`,
+          "",
+          `Confirme com \`${P}game descansar confirmar\`.`,
+          "_A energia também volta sozinha: 1 por hora._",
+        ].join("\n"), colour: COR.aviso });
+    }
+    if (saldo < custo) {
+      return sendEmbed(message.channel, { title: "💸 Saldo insuficiente",
+        description: `Precisa de ${moeda.simbolo}${fmt(custo)}.`, colour: COR.erro });
+    }
+    jogadorPaga(serverId, eu, moeda, custo);
+    for (const f of cansados) db.salvarFollower(f.id, { energia: 5, energiaEm: Date.now() });
+    return sendEmbed(message.channel, { title: "🛏️ Descansaram",
+      description: `**${cansados.length}** companheiro(s) com energia cheia. Pagou ${moeda.simbolo}${fmt(custo)}.`,
+      colour: COR.sucesso });
+  }
+
   // ── followers ──
   if (["follower", "followers", "companheiro", "companheiros", "party", "equipe"].includes(sub)) {
     const p = db.getPersonagem(serverId, eu);
@@ -804,6 +1207,27 @@ export async function cmdGame(message, args, ctx) {
     if (r.desfecho === "caiu") campos.recuperandoAte = agora + 30 * 60_000;
     db.salvarPersonagem(serverId, eu, campos);
 
+    // ── moeda ──
+    const moeda = garantirMoeda(serverId);
+    const { pSuave } = pDaMoeda(serverId, moeda);
+    let moedaGanha = 0, moedaPerdida = 0;
+
+    if (r.exito && r.sobreviveu) {
+      const bruto = ECO.moedaDaMissao(missao, pSuave, attr.sorte);
+      // party divide: a parte deles vai para o mercado, não para o NPC
+      const meu = tamanhoParty ? Math.round(bruto / (1 + 0.30 * tamanhoParty)) : bruto;
+      moedaGanha = pagarAoJogador(serverId, eu, db.getMoeda(serverId, moeda.id), meu);
+    } else if (r.desfecho === "caiu") {
+      // perde uma fração do que carrega — e vai para a DUNGEON
+      const carrega = db.getSaldo(serverId, eu, moeda.id);
+      moedaPerdida = Math.floor(carrega * ECO.perda(pSuave));
+      if (moedaPerdida > 0) {
+        db.debitar(serverId, eu, moeda.id, moedaPerdida);
+        const m = db.getMoeda(serverId, moeda.id);
+        db.salvarMoeda(serverId, moeda.id, { dungeon: (m?.dungeon ?? 0) + moedaPerdida });
+      }
+    }
+
     // followers gastam energia em dungeon
     if (missao.tipo !== "mercado") for (const f of party) gastarEnergia(f, 1);
 
@@ -864,6 +1288,10 @@ export async function cmdGame(message, args, ctx) {
     else linhas.push("Você não aguentou. Voltou de mãos vazias, mas **inteiro**: nada de nível ou equipamento se perde.");
 
     linhas.push("", `✨ **+${xpFinal} XP**`);
+    if (moedaGanha > 0) linhas.push(`${moeda.simbolo} **+${fmt(moedaGanha)} ${moeda.nome}**`);
+    if (moedaPerdida > 0) {
+      linhas.push(`${moeda.simbolo} **−${fmt(moedaPerdida)}** _(${(ECO.perda(pSuave) * 100).toFixed(0)}% do que carregava, foi para a dungeon)_`);
+    }
     if (depois.subiu) {
       linhas.push(`🎉 **Subiu para o nível ${depois.nivel}!** (+${(depois.pontos - (p.pontos ?? 0)).toFixed(2)} ponto(s))`);
     }

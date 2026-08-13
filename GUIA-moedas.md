@@ -29,14 +29,31 @@ claramente acima do anterior, mas todos permanecem alcançáveis.
 
 ## 2. Configuração recomendada
 
-| Moeda | `dificuldade` | `nivelMin` | `finita` | `suprimentoBase` | Papel |
+| Moeda | `dificuldade` | `nivelMin` | `finita` | referência | Papel |
 |---|---|---|---|---|---|
-| 🇧🇷 BRL | 1 | 1 | sim | 200.000 | moeda do dia a dia |
-| 💵 USD | 5 | 1 | sim | 40.000 | moeda forte comum |
-| 💶 EUR | 6 | 3 | sim | 30.000 | levemente acima do dólar |
-| 🥈 XAG | 20 | 5 | sim | 8.000 | reserva de valor acessível |
-| 🥇 XAU | 90 | 12 | sim | 1.200 | reserva de valor séria |
-| ₿ BTC | 400 | 18 | sim | **210** | raríssima, teto duro |
+| 🇧🇷 BRL | 1 | 1 | ♾️ não | 200.000 | moeda do dia a dia |
+| 💵 USD | 5 | 1 | ♾️ não | 40.000 | moeda forte comum |
+| 💶 EUR | 6 | 3 | ♾️ não | 30.000 | levemente acima do dólar |
+| 🥈 XAG | 45 | 5 | ♾️ não | 9.000 | metal: geração lenta |
+| 🥇 XAU | 200 | 12 | ♾️ não | 2.000 | metal: geração muito lenta |
+| ₿ BTC | 400 | 18 | 🔒 **sim** | **210** | única com teto real |
+
+### Por que quase todas são infinitas
+
+**Fiat não acaba:** banco central imprime. **Metal também não, na prática:**
+ninguém sabe quanto ouro ainda há no subsolo — o que existe é uma taxa de
+extração, não um estoque conhecido que se esgota.
+
+Então o que separa o Real do Ouro no jogo **não é estoque, é velocidade de
+geração** — o campo `dificuldade`. Ouro tem dificuldade 200 contra 1 do Real:
+aparece 200× menos e rende 200× menos por vez.
+
+**O Bitcoin é a única exceção** e continua finito, porque o teto de 21 milhões é
+real. Quando o suprimento acaba, ele só volta a circular se alguém gastar.
+
+> Em moeda infinita, o campo `mercado` deixa de ser estoque e vira **volume de
+> referência**: é contra ele que o `P` mede a concentração. Não use valores
+> muito baixos — o P travaria perto de 100% e os preços ficariam no extremo.
 
 ### Por que esses valores
 

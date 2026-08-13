@@ -550,7 +550,13 @@ em qualquer ordem.
 | `dificuldade` | 1 = comum. Maior = **aparece menos** em missão e **rende menos unidades** |
 | `nivelMin` | só cai em missões desse nível para cima |
 | `finita` | finita entra no cálculo do P; infinita não se esgota |
-| `suprimentoBase` · `mercado` | quanto o mercado tem |
+| `finita` | `sim` = o estoque se esgota · `nao` = nunca acaba |
+| `suprimentoBase` · `mercado` | em moeda finita, o estoque; em infinita, o **volume de referência** do `P` |
+
+**Finita ou infinita?** Moedas fiat e metais funcionam melhor como **infinitas** —
+o que as separa não é estoque, é a velocidade de geração (`dificuldade`). Reserve
+`finita` para moedas com teto real, como Bitcoin: quando o suprimento acaba, ela
+só volta a circular se alguém gastar.
 
 A dificuldade é o que cria a hierarquia entre moedas: uma moeda de dificuldade 20
 com `nivelMin` 15 vira algo raro, que só aparece em missões avançadas e em

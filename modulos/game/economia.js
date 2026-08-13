@@ -35,9 +35,13 @@ export const CFG = {
 
 // ── P ─────────────────────────────────────────────────────
 export function calcularP(comPlayers, noMercado) {
-  const total = (comPlayers ?? 0) + (noMercado ?? 0);
+  // Em moeda INFINITA o "mercado" é volume de referência, não estoque. Se
+  // alguém o zerar, o P travaria em 100% para sempre (denominador = só os
+  // jogadores) e os preços/perda ficariam presos no extremo. O piso evita isso.
+  const referencia = Math.max(1, noMercado ?? 0);
+  const total = (comPlayers ?? 0) + referencia;
   if (total <= 0) return 0.5;
-  return Math.max(0, Math.min(1, comPlayers / total));
+  return Math.max(0, Math.min(1, (comPlayers ?? 0) / total));
 }
 
 // P suavizado: média móvel, para uma compra grande não sacudir o

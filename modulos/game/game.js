@@ -764,6 +764,63 @@ export async function cmdGame(message, args, ctx) {
     }
 
     // ── programar moedas ──
+    if (acao === "eco") {
+      const m = garantirMoeda(serverId);
+      const { pAgora, pSuave, comPlayers } = pDaMoeda(serverId, m);
+      const exemplo = db.listarItens({ raridade: "comum" })[0];
+      const linhas = [
+        `**${m.nome}** ${m.simbolo} ${m.finita ? "🔒 finita" : "♾️ infinita"}`,
+        `Carteiras: ${fmt(comPlayers)} · ${m.finita ? "Mercado" : "Referência"}: ${fmt(m.mercado)} · Dungeon: ${fmt(m.dungeon)}`,
+        `P agora: ${(pAgora * 100).toFixed(1)}% · P suavizado: ${(pSuave * 100).toFixed(1)}%`,
+        "",
+        `mult(P) = **${ECO.mult(pSuave).toFixed(3)}**`,
+        `perda(P) = **${(ECO.perda(pSuave) * 100).toFixed(1)}%** do que se carrega`,
+        `fração da dungeon = ${(ECO.fracaoDungeon(m.dungeon) * 100).toFixed(1)}% → prêmio ${fmt(ECO.premioDungeon(m.dungeon))}`,
+        `taxa do bazar = ${(ECO.taxaMercado(db.volumeRecente(serverId)) * 100).toFixed(2)}%`,
+        "",
+        exemplo ? `Ex.: **${exemplo.nome}** custa ${fmt(ECO.precoDeVenda(exemplo, db.getEstoque(serverId, exemplo.id), pSuave))}` : "",
+        exemplo ? `   recompra com carisma 0: ${fmt(ECO.precoDeRecompra(ECO.precoDeVenda(exemplo, null, pSuave), 0))}` : "",
+        exemplo ? `   recompra com carisma 50: ${fmt(ECO.precoDeRecompra(ECO.precoDeVenda(exemplo, null, pSuave), 50))}` : "",
+        "",
+        db.listarMoedas(serverId).length > 1
+          ? `_${db.listarMoedas(serverId).length} moedas no servidor — \`${P}game admin moeda\` vê todas._` : "",
+      ].filter(Boolean);
+      return sendEmbed(message.channel, { title: "🔧 Economia",
+        description: linhas.join("\n"), colour: COR.mod });
+    }
+
+    if (acao === "simular") {
+      const nomeM = resto.filter((x) => !/^\d+$/.test(x)).join(" ");
+      const vezes = Math.min(1000, parseInt(resto.find((x) => /^\d+$/.test(x)) ?? "100", 10));
+      const missao = MISS.acharMissao(nomeM);
+      if (!missao) return sendEmbed(message.channel, { title: "❌ Missão desconhecida",
+        description: `\`${P}game admin simular <missao> [vezes]\`\n\nVeja os nomes com \`${P}game missao\`.`, colour: COR.erro });
+      const alvo = db.getPersonagem(serverId, alvoId);
+      if (!alvo) return sendEmbed(message.channel, { title: "❌ Sem personagem",
+        description: `${quem === "você" ? "Você" : quem} não tem personagem.`, colour: COR.erro });
+      const { attr, magias, tamanhoParty } = atributosDaParty(alvo, serverId, alvoId);
+      let ok = 0, falha = 0, caiu = 0, xpTotal = 0, loot = 0;
+      for (let i = 0; i < vezes; i++) {
+        const r = MISS.resolver(attr, missao, Math.random, magias, tamanhoParty);
+        if (r.desfecho === "sucesso") ok++; else if (r.desfecho === "falha") falha++; else caiu++;
+        xpTotal += r.xp;
+        if (r.exito && r.sobreviveu && MISS.sortearRaridade(missao, attr.sorte, Math.random, tamanhoParty)) loot++;
+      }
+      const prev = MISS.previsao(attr, missao, magias, tamanhoParty);
+      return sendEmbed(message.channel, { title: `🔧 Simulação — ${missao.nome}`,
+        description: [
+          `**${vezes}** tentativas${tamanhoParty ? ` · party de ${tamanhoParty}` : " · solo"}`,
+          "",
+          `✅ Sucesso: **${(ok / vezes * 100).toFixed(1)}%** _(previsto ${(prev.exito * prev.sobrevivencia * 100).toFixed(1)}%)_`,
+          `😐 Falhou vivo: ${(falha / vezes * 100).toFixed(1)}%`,
+          `💀 Caiu: **${(caiu / vezes * 100).toFixed(1)}%**`,
+          `🎁 Loot: ${(loot / vezes * 100).toFixed(1)}% das tentativas`,
+          `✨ XP médio: ${(xpTotal / vezes).toFixed(0)}`,
+          "",
+          `_Poder ${prev.poder.toFixed(1)} vs ${(missao.poder * prev.escala).toFixed(1)} · Resiliência ${prev.resil.toFixed(1)} vs ${(missao.risco * prev.escala).toFixed(1)}_`,
+        ].join("\n"), colour: COR.mod });
+    }
+
     if (["moeda", "moedas"].includes(acao)) {
       const op = resto[0]?.toLowerCase();
       const args2 = resto.slice(1);
@@ -777,7 +834,7 @@ export async function cmdGame(message, args, ctx) {
         nivelMin:       { tipo: "int",   desc: "só cai em missões desse nível para cima" },
         suprimentoBase: { tipo: "num",   desc: "quanto existe no total (limita o que pode ser pago)" },
         mercado:        { tipo: "num",   desc: "quanto o mercado tem AGORA" },
-        finita:         { tipo: "bool",  desc: "sim = entra no cálculo do P; nao = nunca esgota" },
+        finita:         { tipo: "bool",  desc: "sim = o estoque do mercado se esgota; nao = nunca acaba (a geração é limitada só pela dificuldade)" },
       };
       const APELIDOS_CAMPO = { nivel: "nivelMin", dif: "dificuldade", suprimento: "suprimentoBase",
         simbolo: "simbolo", "símbolo": "simbolo", estoque: "mercado" };
@@ -812,10 +869,19 @@ export async function cmdGame(message, args, ctx) {
 
       const fichaDaMoeda = (m) => {
         const { pSuave } = pDaMoeda(serverId, m);
+        // Em moeda infinita o "mercado" não é estoque que acaba — é o volume de
+        // referência que o P usa para medir concentração. Chamar de estoque
+        // confundiria: parece que vai esgotar, e não vai.
+        const volume = m.finita
+          ? `mercado ${fmt(m.mercado)}`
+          : `referência ${fmt(m.mercado)}`;
+        const ritmo = m.dificuldade <= 2 ? "geração alta"
+          : m.dificuldade <= 20 ? "geração média"
+          : m.dificuldade <= 100 ? "geração baixa" : "geração raríssima";
         return [
           `${m.simbolo} **${m.nome}** \`${m.id}\`${m.padrao ? " ⭐ padrão" : ""}`,
-          `   ${m.finita ? "finita" : "infinita"} · dificuldade **${m.dificuldade}** · a partir do nível **${m.nivelMin}**`,
-          `   mercado ${fmt(m.mercado)} · com jogadores ${fmt(db.totalNasCarteiras(serverId, m.id))} · dungeon ${fmt(m.dungeon)}`,
+          `   ${m.finita ? "🔒 finita" : "♾️ infinita"} · **${ritmo}** (dificuldade ${m.dificuldade}) · nível ${m.nivelMin}+`,
+          `   ${volume} · com jogadores ${fmt(db.totalNasCarteiras(serverId, m.id))} · dungeon ${fmt(m.dungeon)}`,
           `   P ${(pSuave * 100).toFixed(0)}% → preços ×${ECO.mult(pSuave).toFixed(2)}`,
         ].join("\n");
       };
@@ -865,28 +931,34 @@ export async function cmdGame(message, args, ctx) {
         const MODELOS = {
           mundo: {
             rotulo: "Mundo real", desc: "Real, Dólar, Euro, Prata, Ouro e Bitcoin",
+            // Fiat e metais são INFINITOS: banco central imprime, e ninguém sabe
+            // quanto ouro ainda há no subsolo. O que os separa não é estoque, é
+            // a VELOCIDADE de geração — controlada pela dificuldade.
+            // O Bitcoin é a exceção: tem teto real de 21 milhões, então é a
+            // única finita de verdade aqui.
             moedas: [
-              { id: "brl", nome: "Real",     simbolo: "🇧🇷", dificuldade: 1,   nivelMin: 1,  suprimentoBase: 200000, padrao: true },
-              { id: "usd", nome: "Dólar",    simbolo: "💵", dificuldade: 5,   nivelMin: 1,  suprimentoBase: 40000 },
-              { id: "eur", nome: "Euro",     simbolo: "💶", dificuldade: 6,   nivelMin: 3,  suprimentoBase: 30000 },
-              { id: "xag", nome: "Prata",    simbolo: "🥈", dificuldade: 20,  nivelMin: 5,  suprimentoBase: 8000 },
-              { id: "xau", nome: "Ouro",     simbolo: "🥇", dificuldade: 90,  nivelMin: 12, suprimentoBase: 1200 },
-              { id: "btc", nome: "Bitcoin",  simbolo: "₿",  dificuldade: 400, nivelMin: 18, suprimentoBase: 210 },
+              { id: "brl", nome: "Real",     simbolo: "🇧🇷", dificuldade: 1,   nivelMin: 1,  suprimentoBase: 200000, finita: false, padrao: true },
+              { id: "usd", nome: "Dólar",    simbolo: "💵", dificuldade: 5,   nivelMin: 1,  suprimentoBase: 40000,  finita: false },
+              { id: "eur", nome: "Euro",     simbolo: "💶", dificuldade: 6,   nivelMin: 3,  suprimentoBase: 30000,  finita: false },
+              { id: "xag", nome: "Prata",    simbolo: "🥈", dificuldade: 45,  nivelMin: 5,  suprimentoBase: 9000,   finita: false },
+              { id: "xau", nome: "Ouro",     simbolo: "🥇", dificuldade: 200, nivelMin: 12, suprimentoBase: 2000,   finita: false },
+              { id: "btc", nome: "Bitcoin",  simbolo: "₿",  dificuldade: 400, nivelMin: 18, suprimentoBase: 210,    finita: true },
             ],
           },
           fantasia: {
             rotulo: "Fantasia", desc: "Cobre, Prata, Ouro e Cristal Arcano",
+            // Todas infinitas; o que muda é o ritmo de geração.
             moedas: [
-              { id: "cobre",   nome: "Cobre",          simbolo: "🟤", dificuldade: 1,   nivelMin: 1,  suprimentoBase: 150000, padrao: true },
-              { id: "prata",   nome: "Prata",          simbolo: "⚪", dificuldade: 8,   nivelMin: 4,  suprimentoBase: 20000 },
-              { id: "ouro",    nome: "Ouro",           simbolo: "🟡", dificuldade: 40,  nivelMin: 10, suprimentoBase: 3000 },
-              { id: "cristal", nome: "Cristal Arcano", simbolo: "💠", dificuldade: 200, nivelMin: 16, suprimentoBase: 400 },
+              { id: "cobre",   nome: "Cobre",          simbolo: "🟤", dificuldade: 1,   nivelMin: 1,  suprimentoBase: 150000, finita: false, padrao: true },
+              { id: "prata",   nome: "Prata",          simbolo: "⚪", dificuldade: 15,  nivelMin: 4,  suprimentoBase: 20000,  finita: false },
+              { id: "ouro",    nome: "Ouro",           simbolo: "🟡", dificuldade: 70,  nivelMin: 10, suprimentoBase: 4000,   finita: false },
+              { id: "cristal", nome: "Cristal Arcano", simbolo: "💠", dificuldade: 300, nivelMin: 16, suprimentoBase: 600,    finita: true },
             ],
           },
           simples: {
             rotulo: "Simples", desc: "uma moeda só — o mínimo para jogar",
             moedas: [
-              { id: "ouro", nome: "Ouro", simbolo: "🪙", dificuldade: 1, nivelMin: 1, suprimentoBase: 100000, padrao: true },
+              { id: "ouro", nome: "Ouro", simbolo: "🪙", dificuldade: 1, nivelMin: 1, suprimentoBase: 100000, finita: false, padrao: true },
             ],
           },
         };
@@ -914,7 +986,7 @@ export async function cmdGame(message, args, ctx) {
         const criadas = [], existentes = [];
         for (const m of mod.moedas) {
           if (db.getMoeda(serverId, m.id)) { existentes.push(m.nome); continue; }
-          db.upsertMoeda(serverId, { ...m, finita: true, mercado: m.suprimentoBase });
+          db.upsertMoeda(serverId, { ...m, finita: m.finita !== false, mercado: m.suprimentoBase });
           criadas.push(m);
         }
         if (criadas.some((m) => m.padrao)) {
@@ -1024,12 +1096,19 @@ export async function cmdGame(message, args, ctx) {
         }
         db.salvarMoeda(serverId, m.id, pares);
         const atual = db.getMoeda(serverId, m.id);
+        // Referência baixa demais numa moeda infinita empurra o P para o teto
+        // e trava os preços no extremo — vale avisar antes de a economia azedar.
+        const avisos = [];
+        if (!atual.finita && atual.mercado < 100) {
+          avisos.push(`⚠️ A referência (${fmt(atual.mercado)}) está muito baixa para uma moeda infinita — o P vai ficar perto de 100% e os preços travam no mínimo. Use algo próximo do total que os jogadores devem acumular.`);
+        }
         return sendEmbed(message.channel, { title: "🪙 Ajustado",
           description: [
             Object.entries(pares).map(([k, v]) => `\`${k}\` → **${v}**`).join(" · "),
             "",
             fichaDaMoeda(atual),
-          ].join("\n"), colour: COR.mod });
+            ...(avisos.length ? ["", ...avisos] : []),
+          ].join("\n"), colour: avisos.length ? COR.aviso : COR.mod });
       }
 
       if (["padrao", "padrão", "principal"].includes(op)) {

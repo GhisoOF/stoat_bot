@@ -521,9 +521,22 @@ Restrito ao dono do bot, para testar e depurar sem jogar horas:
 &game admin nivel 20 · &game admin pontos 50
 &game admin energia · &game admin cooldown
 &game admin eco                      # números da economia
+&game admin missao <nome>            # roda a missão ignorando cooldown
+&game admin teste                   # roda o jogo INTEIRO e diz o que funcionou
 &game admin simular <missao> [n]     # roda n vezes sem efeito real
 &game admin zerar confirmar          # apaga o RPG do servidor
 ```
+
+#### `&game admin teste` — teste de fumaça
+
+Roda o jogo de ponta a ponta num personagem **descartável** e devolve um relatório
+com ✅/❌ por etapa: criar, comprar, equipar, contratar, montar party, 12 missões,
+subir de nível, morrer, capturar e resgatar follower, energia e dungeon.
+
+O personagem de teste é apagado no fim, a moeda dele volta ao mercado, e ele não
+aparece no ranking — seu progresso real não é tocado. Útil depois de cada deploy:
+confirma em segundos que nada quebrou, e mostra os números reais de balanceamento
+(taxa de sucesso, XP e moeda ganhos, chance de loot).
 
 ### Companheiros (party)
 
@@ -595,6 +608,10 @@ depois sem parar o jogo.
 
 - `xpParaNivel(n) = 100 × 1,5^(n−2)` — nível 2 custa 100 XP, nível 10 custa 2.563.
 - `pontosPorNivel = 1 + 0,25 × √(Inteligência + Sorte)`
+- A cada **2 níveis**, todos os 9 atributos sobem **+1** automaticamente
+
+A distribuição é híbrida: a base automática garante que ninguém fique inviável, e
+os **pontos livres** é que fazem a build.
 
 Inteligência e Sorte aumentam o XP ganho **e** os pontos por nível, com **retorno
 decrescente**: investir sempre rende mais, mas nunca vira bola de neve que torna

@@ -18,6 +18,7 @@ import * as MISS from "./missoes.js";
 import * as FOL from "./followers.js";
 import { semear as semearFollowers } from "./followers.js";
 import * as ECO from "./economia.js";
+import { rodarTesteGeral } from "./teste-geral.js";
 
 const XP_BASE = 100;
 const CRESCIMENTO = 1.5;
@@ -63,11 +64,21 @@ export function bonusXp(int, sorte) {
   return 1 + 0.02 * Math.sqrt(Math.max(0, (int ?? 0) + (sorte ?? 0)));
 }
 
+// A cada quantos níveis TODOS os atributos sobem 1 sozinhos.
+// A distribuição é híbrida (§2 do design): a base garante que ninguém fique
+// inviável, e os pontos livres é que fazem a build.
+const NIVEIS_POR_BASE = 2;
+
+// Quanto de base o personagem já deveria ter no nível dado.
+export function baseDoNivel(nivel) {
+  return Math.floor((Math.max(1, nivel) - 1) / NIVEIS_POR_BASE);
+}
+
 // Aplica o XP ganho, subindo de nível quantas vezes for preciso.
-// Devolve { subiu, niveisGanhos, pontosGanhos }.
 export function aplicarXp(p, xpGanho) {
   let xp = (p.xp ?? 0) + Math.max(0, Math.round(xpGanho));
-  let nivel = p.nivel ?? 1;
+  const nivelAntes = p.nivel ?? 1;
+  let nivel = nivelAntes;
   let pontos = p.pontos ?? 0;
   let niveisGanhos = 0;
 
@@ -76,9 +87,16 @@ export function aplicarXp(p, xpGanho) {
     nivel++;
     niveisGanhos++;
     pontos += pontosPorNivel(p.inteligencia, p.sorte);
-    if (niveisGanhos > 500) break;   // trava de segurança contra laço infinito
+    if (niveisGanhos > 500) break;   // trava contra laço infinito
   }
-  return { xp, nivel, pontos: Math.round(pontos * 100) / 100, niveisGanhos, subiu: niveisGanhos > 0 };
+
+  // Crescimento automático da base: o que faltou desde o nível anterior.
+  const ganhoBase = baseDoNivel(nivel) - baseDoNivel(nivelAntes);
+
+  return {
+    xp, nivel, pontos: Math.round(pontos * 100) / 100,
+    niveisGanhos, subiu: niveisGanhos > 0, ganhoBase,
+  };
 }
 
 // ── Itens ─────────────────────────────────────────────────
@@ -618,6 +636,9 @@ export async function cmdGame(message, args, ctx) {
     const acao = args[1]?.toLowerCase();
     const resto = args.slice(2);
     const alvoId = message.mentionIds?.[0] ?? eu;
+    // A menção <@id> aparece vazia no cliente quando é o próprio autor.
+    // Dizer "você" é mais claro do que uma menção que não renderiza.
+    const quem = alvoId === eu ? "você" : `<@${alvoId}>`;
 
     if (!acao || acao === "ajuda") {
       return sendEmbed(message.channel, { title: "🔧 Admin do RPG",
@@ -629,6 +650,7 @@ export async function cmdGame(message, args, ctx) {
           `\`${P}game admin pontos <n> [@pessoa]\` — dá pontos livres`,
           `\`${P}game admin energia [@pessoa]\` — enche a energia dos companheiros`,
           `\`${P}game admin cooldown [@pessoa]\` — zera cooldown e recuperação`,
+          `\`${P}game admin teste\` — **roda o jogo inteiro** e diz o que funcionou`,
           `\`${P}game admin eco\` — números da economia`,
           `\`${P}game admin simular <missao> [n]\` — roda a missão n vezes sem efeito`,
           `\`${P}game admin dungeon <qtd>\` — põe moeda no pote da dungeon`,
@@ -643,7 +665,7 @@ export async function cmdGame(message, args, ctx) {
       const m = garantirMoeda(serverId);
       db.creditar(serverId, alvoId, m.id, qtd);
       return sendEmbed(message.channel, { title: "🔧 Moeda creditada",
-        description: `${m.simbolo} ${fmt(qtd)} para <@${alvoId}> · saldo: ${fmt(db.getSaldo(serverId, alvoId, m.id))}`,
+        description: `${m.simbolo} ${fmt(qtd)} para ${quem} · saldo: ${fmt(db.getSaldo(serverId, alvoId, m.id))}`,
         colour: COR.mod });
     }
 
@@ -654,7 +676,7 @@ export async function cmdGame(message, args, ctx) {
         description: `Não achei **${nome}**.`, colour: COR.erro });
       db.darItem(serverId, alvoId, item.id);
       return sendEmbed(message.channel, { title: "🔧 Item entregue",
-        description: `**${item.nome}** para <@${alvoId}>`, colour: COR.mod });
+        description: `**${item.nome}** para ${quem}`, colour: COR.mod });
     }
 
     if (acao === "follower") {
@@ -666,7 +688,7 @@ export async function cmdGame(message, args, ctx) {
         description: `Não achei **${argsLimpos.join(" ")}**.`, colour: COR.erro });
       db.recrutarFollower(serverId, alvoId, cat.id, nivel);
       return sendEmbed(message.channel, { title: "🔧 Companheiro entregue",
-        description: `**${cat.nome}** (nv ${nivel}) para <@${alvoId}>`, colour: COR.mod });
+        description: `**${cat.nome}** (nv ${nivel}) para ${quem}`, colour: COR.mod });
     }
 
     if (acao === "nivel" || acao === "pontos") {
@@ -675,23 +697,32 @@ export async function cmdGame(message, args, ctx) {
         description: `\`${P}game admin ${acao} 10\``, colour: COR.erro });
       const alvo = db.getPersonagem(serverId, alvoId);
       if (!alvo) return sendEmbed(message.channel, { title: "❌ Sem personagem",
-        description: `<@${alvoId}> não tem personagem.`, colour: COR.erro });
+        description: `${quem === "você" ? "Você" : quem} não tem personagem.`, colour: COR.erro });
       db.salvarPersonagem(serverId, alvoId, acao === "nivel" ? { nivel: n, xp: 0 } : { pontos: (alvo.pontos ?? 0) + n });
       return sendEmbed(message.channel, { title: "🔧 Ajustado",
-        description: `<@${alvoId}>: ${acao} → ${n}`, colour: COR.mod });
+        description: `${quem === "você" ? "Você" : quem}: ${acao} → ${n}`, colour: COR.mod });
     }
 
     if (acao === "energia") {
       const meus = db.listarFollowersDe(serverId, alvoId);
       for (const f of meus) db.salvarFollower(f.id, { energia: 5, energiaEm: Date.now() });
       return sendEmbed(message.channel, { title: "🔧 Energia cheia",
-        description: `${meus.length} companheiro(s) de <@${alvoId}>`, colour: COR.mod });
+        description: `${meus.length} companheiro(s) de ${quem}`, colour: COR.mod });
+    }
+
+    // Rodar a missão de verdade ignorando cooldown — o que você tentou fazer
+    // duas vezes no teste. Zerar o cooldown e repetir o comando funcionava,
+    // mas eram dois passos para algo que é de teste.
+    if (acao === "missao" || acao === "missão") {
+      db.salvarPersonagem(serverId, alvoId, { ultimaMissao: 0, recuperandoAte: 0 });
+      // reentra no próprio comando, agora sem cooldown
+      return cmdGame(message, ["missao", ...resto], ctx);
     }
 
     if (acao === "cooldown") {
       db.salvarPersonagem(serverId, alvoId, { ultimaMissao: 0, recuperandoAte: 0 });
       return sendEmbed(message.channel, { title: "🔧 Cooldown zerado",
-        description: `<@${alvoId}> pode partir agora.`, colour: COR.mod });
+        description: `${quem === "você" ? "Você pode" : quem + " pode"} partir agora.`, colour: COR.mod });
     }
 
     if (acao === "dungeon") {
@@ -702,6 +733,31 @@ export async function cmdGame(message, args, ctx) {
       return sendEmbed(message.channel, { title: "🔧 Pote da dungeon",
         description: `Agora tem ${m.simbolo}${fmt(atual.dungeon)} · prêmio seria ${fmt(ECO.premioDungeon(atual.dungeon))}`,
         colour: COR.mod });
+    }
+
+    // ── teste geral: roda o jogo inteiro num personagem descartável ──
+    if (["teste", "smoke", "testar"].includes(acao)) {
+      await sendEmbed(message.channel, { title: "🧪 Rodando o teste geral…",
+        description: "Criando um personagem de teste e passando por tudo. Alguns segundos.",
+        colour: COR.mod });
+
+      const r = await rodarTesteGeral(ctx, serverId, eu, {
+        db,
+        G: { garantirMoeda, pDaMoeda, bonusEquipados, atributosComEquipamento,
+             atributosDaParty, aplicarXp, bonusXp, baseDoNivel, energiaAtual },
+        MISS, FOL, ECO,
+      });
+
+      const cabecalho = r.falhas === 0
+        ? `✅ **${r.ok} verificações, tudo passou.**`
+        : `⚠️ **${r.ok} passaram, ${r.falhas} falharam.**`;
+
+      return enviarLista(sendEmbed, message.channel, {
+        titulo: r.falhas === 0 ? "🧪 Teste geral — tudo certo" : "🧪 Teste geral — com falhas",
+        linhas: [cabecalho, "", ...r.linhas],
+        rodape: `_Personagem de teste apagado${r.devolvido ? ` · ${fmt(r.devolvido)} devolvido(s) ao mercado` : ""}._`,
+        colour: r.falhas === 0 ? COR.sucesso : COR.erro,
+      });
     }
 
     if (acao === "eco") {
@@ -1204,6 +1260,10 @@ export async function cmdGame(message, args, ctx) {
       ultimaMissao: agora,
       missoesFeitas: (p.missoesFeitas ?? 0) + 1,
     };
+    // base sobe sozinha com o nível (§2 do design)
+    if (depois.ganhoBase > 0) {
+      for (const a of db.ATRIBUTOS) campos[a] = (p[a] ?? 1) + depois.ganhoBase;
+    }
     if (r.desfecho === "caiu") campos.recuperandoAte = agora + 30 * 60_000;
     db.salvarPersonagem(serverId, eu, campos);
 
@@ -1294,6 +1354,7 @@ export async function cmdGame(message, args, ctx) {
     }
     if (depois.subiu) {
       linhas.push(`🎉 **Subiu para o nível ${depois.nivel}!** (+${(depois.pontos - (p.pontos ?? 0)).toFixed(2)} ponto(s))`);
+      if (depois.ganhoBase > 0) linhas.push(`   _+${depois.ganhoBase} em **todos** os atributos (crescimento natural)_`);
     }
     if (ganhou) {
       const ri = RARIDADE_INFO[ganhou.raridade] ?? {};

@@ -509,6 +509,23 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
   const { modelo: modeloEscolhido, tipo } = escolherModelo(pergunta, citada);
   dlog(`roteamento: tipo=${tipo} → modelo=${modeloEscolhido}`);
 
+  // Quando o pedido depende de ferramenta, MANDAMOS usá-la.
+  //
+  // Sem isso, o modelo às vezes responde sobre a própria capacidade em vez de
+  // agir: "poderia ler o main.js?" vira "não consigo" — uma resposta literal e
+  // inútil, já que a ferramenta estava disponível o tempo todo. Perguntas assim
+  // são pedidos disfarçados de pergunta, e é preciso dizer isso ao modelo.
+  if (tipo === "ferramenta") {
+    messages.splice(1, 0, {
+      role: "system",
+      content: [
+        "ESTE PEDIDO EXIGE FERRAMENTA. Use `ler_codigo` (ou a ferramenta adequada) AGORA, antes de responder.",
+        "Perguntas do tipo 'você consegue ler X?', 'poderia ver o arquivo Y?' ou 'dá para consultar Z?' são PEDIDOS, não perguntas sobre você. A resposta certa é EXECUTAR e mostrar o resultado — nunca responder se você é capaz.",
+        "Se a ferramenta devolver erro, diga em uma frase que não conseguiu acessar e pare. Não teorize o motivo e não descreva o conteúdo de memória.",
+      ].join(" "),
+    });
+  }
+
   // Se o serviço judy-ia estiver configurado, mandamos para lá (ele roda o laço
   // de ferramentas). Se falhar, caímos para o Ollama direto — a conversa não
   // pode ficar sem resposta só porque o serviço de ferramentas está fora.
@@ -667,6 +684,11 @@ export function precisaFerramenta(texto) {
   if (/\b(l[eê]r?|leia|abre|abrir|mostra|mostrar|consulta|consultar|verifica|verificar|analisa|analisar)\b[^.?!]{0,50}\b(main\.js|package\.json|arquivo|m[oó]dulo|c[oó]digo|reposit[oó]rio|repo)\b/.test(t)) return true;
   // arquivo com extensão citado explicitamente
   if (/\b[\w-]+\.(js|json|md|ya?ml|ts)\b/.test(t) && /\b(l[eê]r?|leia|abre|mostra|explica|descreve|analisa|o que faz)\b/.test(t)) return true;
+  // "você consegue ler X?" / "poderia ver o arquivo Y?" — pergunta na forma,
+  // pedido no conteúdo. É onde o modelo mais escorrega, respondendo sobre a
+  // própria capacidade em vez de agir.
+  if (/\b(consegue|consegues|poderia|pode|d[aá] para|dá pra|tem como)\b[^?]{0,60}\b(l[eê]r?|ver|abrir|acessar|consultar|mostrar|checar|verificar)\b/.test(t)
+      && /\b(main\.js|package\.json|arquivo|reposit[oó]rio|repo|c[oó]digo|m[oó]dulo|\.js\b|\.json\b|\.md\b)/.test(t)) return true;
   // cálculo explícito
   if (/\b(calcul[ae]|quanto [eé]|resultado de)\b.*\d/.test(t)) return true;
   return false;

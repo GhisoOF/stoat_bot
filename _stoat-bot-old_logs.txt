@@ -1,1000 +1,1000 @@
-2026-08-13T17:20:34.525837224Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
-2026-08-13T17:20:34.525868215Z [AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
-2026-08-13T17:20:34.526003952Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-13T17:20:34.526022776Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-13T17:20:34.526033726Z [AUTOMOD]   [anti-caps] OFF
-2026-08-13T17:20:34.526204136Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-13T17:20:34.526301297Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-13T17:20:34.526624990Z [AUTOMOD]   [anti-mass-spam] ON → 3 msg em 8000ms (limite 12)
-2026-08-13T17:20:34.526658053Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-13T17:20:34.526672138Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-13T17:20:35.790420223Z [MSG] 01KZFAN7ZRE6QTVFTKHNDPTBJB no canal 01KQ566RHQC8V8YAFH79G67MSJ: "aquele jogo la de luta recente"
-2026-08-13T17:20:35.790487991Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-13T17:20:35.790502648Z [AUTOMOD] ▶ Analisando mensagem de 01KZFAN7ZRE6QTVFTKHNDPTBJB
-2026-08-13T17:20:35.790569692Z [AUTOMOD]   conteúdo: "aquele jogo la de luta recente"
-2026-08-13T17:20:35.790890633Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-13T17:20:35.791204035Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
-2026-08-13T17:20:35.791232270Z [AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
-2026-08-13T17:20:35.791245042Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-13T17:20:35.791308273Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-13T17:20:35.791472080Z [AUTOMOD]   [anti-caps] OFF
-2026-08-13T17:20:35.791497277Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-13T17:20:35.791985121Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-13T17:20:35.792017754Z [AUTOMOD]   [anti-mass-spam] ON → 2 msg em 8000ms (limite 12)
-2026-08-13T17:20:35.792030232Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-13T17:20:35.792040175Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-13T17:20:37.522625395Z [MSG] 01KZQHNTFVF02X3E6WWD4X1B87 no canal 01KZN3X0A6NKXBA7KRENQRQ27B: "Pegou :3"
-2026-08-13T17:20:37.522680625Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-13T17:20:37.522770920Z [AUTOMOD] ▶ Analisando mensagem de 01KZQHNTFVF02X3E6WWD4X1B87
-2026-08-13T17:20:37.522804823Z [AUTOMOD]   conteúdo: "Pegou :3"
-2026-08-13T17:20:37.523128452Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-13T17:20:37.523392970Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 6) sinais: [nenhum]
-2026-08-13T17:20:37.523420010Z [AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
-2026-08-13T17:20:37.523452448Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-13T17:20:37.523542833Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-13T17:20:37.523639167Z [AUTOMOD]   [anti-caps] OFF
-2026-08-13T17:20:37.523763498Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-13T17:20:37.523811270Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-13T17:20:37.524007095Z [AUTOMOD]   [anti-mass-spam] ON → 2 msg em 8000ms (limite 12)
-2026-08-13T17:20:37.524026210Z [AUTOMOD]   [anti-spam] ON → 1 msg em 4000ms (limite 5)
-2026-08-13T17:20:37.524036877Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-13T17:20:37.829541893Z [MSG] 01KZFAN7ZRE6QTVFTKHNDPTBJB no canal 01KQ566RHQC8V8YAFH79G67MSJ: "marvel tokon"
-2026-08-13T17:20:37.829785126Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-13T17:20:37.829811825Z [AUTOMOD] ▶ Analisando mensagem de 01KZFAN7ZRE6QTVFTKHNDPTBJB
-2026-08-13T17:20:37.829823841Z [AUTOMOD]   conteúdo: "marvel tokon"
-2026-08-13T17:20:37.830682705Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-13T17:20:37.830719742Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
-2026-08-13T17:20:37.831080150Z [AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
-2026-08-13T17:20:37.831105240Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-13T17:20:37.831116811Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-13T17:20:37.831127802Z [AUTOMOD]   [anti-caps] OFF
-2026-08-13T17:20:37.831137567Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-13T17:20:37.831570654Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-13T17:20:37.831597062Z [AUTOMOD]   [anti-mass-spam] ON → 2 msg em 8000ms (limite 12)
-2026-08-13T17:20:37.831626672Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-13T17:20:37.831638164Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-13T17:20:39.904711465Z [MSG] 01KZFAN7ZRE6QTVFTKHNDPTBJB no canal 01KQ566RHQC8V8YAFH79G67MSJ: "é um exemplo"
-2026-08-13T17:20:39.904770133Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-13T17:20:39.904808724Z [AUTOMOD] ▶ Analisando mensagem de 01KZFAN7ZRE6QTVFTKHNDPTBJB
-2026-08-13T17:20:39.904821099Z [AUTOMOD]   conteúdo: "é um exemplo"
-2026-08-13T17:20:39.905178615Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-13T17:20:39.905448201Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
-2026-08-13T17:20:39.905475541Z [AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
-2026-08-13T17:20:39.905661348Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-13T17:20:39.905688137Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-13T17:20:39.905700606Z [AUTOMOD]   [anti-caps] OFF
-2026-08-13T17:20:39.905814295Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-13T17:20:39.905841557Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-13T17:20:39.905884092Z [AUTOMOD]   [anti-mass-spam] ON → 3 msg em 8000ms (limite 12)
-2026-08-13T17:20:39.906030455Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-13T17:20:39.906057480Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-13T17:20:50.645608461Z [MSG] 01KZFAN7ZRE6QTVFTKHNDPTBJB no canal 01KQ566RHQC8V8YAFH79G67MSJ: "sou do ramo dessa porra ai e é inaceitavel o estado daquele jogo"
-2026-08-13T17:20:50.645683627Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-13T17:20:50.645699867Z [AUTOMOD] ▶ Analisando mensagem de 01KZFAN7ZRE6QTVFTKHNDPTBJB
-2026-08-13T17:20:50.645799734Z [AUTOMOD]   conteúdo: "sou do ramo dessa porra ai e é inaceitavel o estado daquele jogo"
-2026-08-13T17:20:50.646131937Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-13T17:20:50.646481355Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
-2026-08-13T17:20:50.646582827Z [AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
-2026-08-13T17:20:50.646728607Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-13T17:20:50.646753883Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-13T17:20:50.646769232Z [AUTOMOD]   [anti-caps] OFF
-2026-08-13T17:20:50.646890711Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-13T17:20:50.646911559Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-13T17:20:50.646941415Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
-2026-08-13T17:20:50.646972920Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-13T17:20:50.647075846Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-13T17:20:52.627322295Z [MSG] 01KZFAN7ZRE6QTVFTKHNDPTBJB no canal 01KQ566RHQC8V8YAFH79G67MSJ: "podre viado"
-2026-08-13T17:20:52.627382571Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-13T17:20:52.627529012Z [AUTOMOD] ▶ Analisando mensagem de 01KZFAN7ZRE6QTVFTKHNDPTBJB
-2026-08-13T17:20:52.627553519Z [AUTOMOD]   conteúdo: "podre viado"
-2026-08-13T17:20:52.627746720Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-13T17:20:52.628157537Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
-2026-08-13T17:20:52.628194553Z [AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
-2026-08-13T17:20:52.628233287Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-13T17:20:52.628250192Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-13T17:20:52.628279825Z [AUTOMOD]   [anti-caps] OFF
-2026-08-13T17:20:52.628538200Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-13T17:20:52.628576150Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-13T17:20:52.628592864Z [AUTOMOD]   [anti-mass-spam] ON → 2 msg em 8000ms (limite 12)
-2026-08-13T17:20:52.628647650Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-13T17:20:52.628672317Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-13T17:20:58.271346042Z [MSG] 01KZXZ53BGGGT2EMK33P5XNBEQ no canal 01KQ566RHQC8V8YAFH79G67MSJ: "uns 500 jogos por dia sendo lançados na UE5 que só tem gráfico foto realista kkkk"
-2026-08-13T17:20:58.271476203Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-13T17:20:58.271642301Z [AUTOMOD] ▶ Analisando mensagem de 01KZXZ53BGGGT2EMK33P5XNBEQ
-2026-08-13T17:20:58.271732016Z [AUTOMOD]   conteúdo: "uns 500 jogos por dia sendo lançados na UE5 que só tem gráfico foto realista kkkk"
-2026-08-13T17:20:58.272258965Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-13T17:20:58.272642976Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
-2026-08-13T17:20:58.272815420Z [AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
-2026-08-13T17:20:58.273112822Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-13T17:20:58.273122924Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-13T17:20:58.273126516Z [AUTOMOD]   [anti-caps] OFF
-2026-08-13T17:20:58.273129530Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-13T17:20:58.273849753Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-13T17:20:58.273855557Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
-2026-08-13T17:20:58.273909888Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-13T17:20:58.273947740Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-13T17:21:06.350915248Z [MSG] 01KZXSJFSG2P21R4ZB50R41FFF no canal 01KQ566RHQC8V8YAFH79G67MSJ: "bem nesse caminho mesmo"
-2026-08-13T17:21:06.350972292Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-13T17:21:06.350987151Z [AUTOMOD] ▶ Analisando mensagem de 01KZXSJFSG2P21R4ZB50R41FFF
-2026-08-13T17:21:06.350997145Z [AUTOMOD]   conteúdo: "bem nesse caminho mesmo"
-2026-08-13T17:21:06.351341944Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-13T17:21:06.351642385Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
-2026-08-13T17:21:06.351723422Z [AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
-2026-08-13T17:21:06.351745584Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-13T17:21:06.351875065Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-13T17:21:06.351895764Z [AUTOMOD]   [anti-caps] OFF
-2026-08-13T17:21:06.351986198Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-13T17:21:06.352000355Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-13T17:21:06.352142401Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
-2026-08-13T17:21:06.352210167Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-13T17:21:06.352225325Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-13T17:21:06.658205141Z [MSG] 00000000000000000000000000 no canal 01KZMZFG804Q5KY4G9MY071RWD: ""
-2026-08-13T17:21:06.658372859Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-13T17:21:06.658402239Z [AUTOMOD] ▶ Analisando mensagem de 00000000000000000000000000
-2026-08-13T17:21:06.658414861Z [AUTOMOD]   conteúdo: ""
-2026-08-13T17:21:06.658777648Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-13T17:21:06.659077699Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 6) sinais: [nenhum]
-2026-08-13T17:21:06.659106230Z [AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
-2026-08-13T17:21:06.659283121Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-13T17:21:06.659302750Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-13T17:21:06.659314549Z [AUTOMOD]   [anti-caps] OFF
-2026-08-13T17:21:06.659997889Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-13T17:21:06.660035441Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-13T17:21:06.660047912Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
-2026-08-13T17:21:06.660058473Z [AUTOMOD]   [anti-spam] ON → 1 msg em 4000ms (limite 5)
-2026-08-13T17:21:06.660068217Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-13T17:21:32.085558835Z [MSG] 01KZVQQ3XED060R302GRZRANFK no canal 01KQ566RHQC8V8YAFH79G67MSJ: "eu sinto falta da época do unreal engine 3 onde ainda tinhamos estilos artísticos marcantes e únicos. borderlands 2 foi feito inteiramente no UE3."
-2026-08-13T17:21:32.085627006Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-13T17:21:32.085834091Z [AUTOMOD] ▶ Analisando mensagem de 01KZVQQ3XED060R302GRZRANFK
-2026-08-13T17:21:32.085872250Z [AUTOMOD]   conteúdo: "eu sinto falta da época do unreal engine 3 onde ainda tinhamos estilos artísticos marcantes e únicos. borderlands 2 foi feito inteiramente no UE3."
-2026-08-13T17:21:32.086209114Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-13T17:21:32.086495773Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
-2026-08-13T17:21:32.086644235Z [AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
-2026-08-13T17:21:32.086682071Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-13T17:21:32.086767799Z [AUTOMOD]   [anti-mass-mention] ON → 1 menção(ões) (limite 5)
-2026-08-13T17:21:32.086968058Z [AUTOMOD]   [anti-caps] OFF
-2026-08-13T17:21:32.087026258Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-13T17:21:32.087935158Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-13T17:21:32.088020551Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
-2026-08-13T17:21:32.088035833Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-13T17:21:32.088045806Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-13T17:21:38.670392507Z [MSG] 01KZPYWWPTZCB7S6A3ABGWGPJV no canal 01KQ566RHQC8V8YAFH79G67MSJ: "Curte jogo de luta também?"
-2026-08-13T17:21:38.670448979Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-13T17:21:38.670548435Z [AUTOMOD] ▶ Analisando mensagem de 01KZPYWWPTZCB7S6A3ABGWGPJV
-2026-08-13T17:21:38.670577815Z [AUTOMOD]   conteúdo: "Curte jogo de luta também?"
-2026-08-13T17:21:38.670925842Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-13T17:21:38.671206932Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [pergunta]
-2026-08-13T17:21:38.671251253Z [AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
-2026-08-13T17:21:38.671317360Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-13T17:21:38.671376581Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-13T17:21:38.671517657Z [AUTOMOD]   [anti-caps] OFF
-2026-08-13T17:21:38.671718757Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-13T17:21:38.671734277Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-13T17:21:38.671899420Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
-2026-08-13T17:21:38.672057023Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-13T17:21:38.672128274Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-13T17:21:42.305375559Z [MSG] 01KZXSJFSG2P21R4ZB50R41FFF no canal 01KQ566RHQC8V8YAFH79G67MSJ: "igual o bglh do opera gx que todo mundo jura que apertar o botazinho escrito OTIMIZAR vai transformar o i5 de terceira geração em um threadreaper"
-2026-08-13T17:21:42.305436467Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-13T17:21:42.305449988Z [AUTOMOD] ▶ Analisando mensagem de 01KZXSJFSG2P21R4ZB50R41FFF
-2026-08-13T17:21:42.305481983Z [AUTOMOD]   conteúdo: "igual o bglh do opera gx que todo mundo jura que apertar o botazinho escrito OTIMIZAR vai transformar o i5 de terceira geração em um threadreaper"
-2026-08-13T17:21:42.305819342Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-13T17:21:42.306161843Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
-2026-08-13T17:21:42.306353450Z [AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
-2026-08-13T17:21:42.306379553Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-13T17:21:42.306411981Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-13T17:21:42.306424504Z [AUTOMOD]   [anti-caps] OFF
-2026-08-13T17:21:42.306655567Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-13T17:21:42.306732021Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-13T17:21:42.306752201Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
-2026-08-13T17:21:42.306797313Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-13T17:21:42.306823760Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-13T17:21:43.697535287Z [MSG] 01KZXSJFSG2P21R4ZB50R41FFF no canal 01KQ566RHQC8V8YAFH79G67MSJ: "KKK"
-2026-08-13T17:21:43.697590633Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-13T17:21:43.697612608Z [AUTOMOD] ▶ Analisando mensagem de 01KZXSJFSG2P21R4ZB50R41FFF
-2026-08-13T17:21:43.697869261Z [AUTOMOD]   conteúdo: "KKK"
-2026-08-13T17:21:43.698205591Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-13T17:21:43.698417387Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
-2026-08-13T17:21:43.698614015Z [AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
-2026-08-13T17:21:43.698633009Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-13T17:21:43.698651249Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-13T17:21:43.698662344Z [AUTOMOD]   [anti-caps] OFF
-2026-08-13T17:21:43.698718711Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-13T17:21:43.698850444Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-13T17:21:43.698875610Z [AUTOMOD]   [anti-mass-spam] ON → 2 msg em 8000ms (limite 12)
-2026-08-13T17:21:43.698967182Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-13T17:21:43.698983127Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-13T17:21:54.960679705Z [MSG] 01KZFAN7ZRE6QTVFTKHNDPTBJB no canal 01KQ566RHQC8V8YAFH79G67MSJ: "sou desse ramo, eu sou master no sf6 e quase imortal no kofxv"
-2026-08-13T17:21:54.960833867Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-13T17:21:54.960869181Z [AUTOMOD] ▶ Analisando mensagem de 01KZFAN7ZRE6QTVFTKHNDPTBJB
-2026-08-13T17:21:54.960964293Z [AUTOMOD]   conteúdo: "sou desse ramo, eu sou master no sf6 e quase imortal no kofxv"
-2026-08-13T17:21:54.961455163Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-13T17:21:54.961772955Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
-2026-08-13T17:21:54.961858883Z [AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
-2026-08-13T17:21:54.961936397Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-13T17:21:54.961951360Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-13T17:21:54.962031135Z [AUTOMOD]   [anti-caps] OFF
-2026-08-13T17:21:54.962127263Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-13T17:21:54.962189335Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-13T17:21:54.962283098Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
-2026-08-13T17:21:54.962310853Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-13T17:21:54.962427547Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-13T17:22:04.106545161Z [MSG] 01KZFAN7ZRE6QTVFTKHNDPTBJB no canal 01KQ566RHQC8V8YAFH79G67MSJ: "so nn sou imortal pq eu parei mrm"
-2026-08-13T17:22:04.106758576Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-13T17:22:04.106787785Z [AUTOMOD] ▶ Analisando mensagem de 01KZFAN7ZRE6QTVFTKHNDPTBJB
-2026-08-13T17:22:04.106799713Z [AUTOMOD]   conteúdo: "so nn sou imortal pq eu parei mrm"
-2026-08-13T17:22:04.107080298Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-13T17:22:04.107378407Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
-2026-08-13T17:22:04.107438904Z [AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
-2026-08-13T17:22:04.107452234Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-13T17:22:04.107961472Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-13T17:22:04.107994684Z [AUTOMOD]   [anti-caps] OFF
-2026-08-13T17:22:04.108006590Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-13T17:22:04.108017236Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-13T17:22:04.108027085Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
-2026-08-13T17:22:04.108037199Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-13T17:22:04.108046534Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-13T17:22:06.134912028Z [MSG] 01KZJ5H587KV8GSQVNVMXKMWT1 no canal 01KQ566RHQC8V8YAFH79G67MSJ: "alguém que usa arch aq, sabe pq nao consigo escutar nada nas call do stoat?"
-2026-08-13T17:22:06.134976744Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-13T17:22:06.134993052Z [AUTOMOD] ▶ Analisando mensagem de 01KZJ5H587KV8GSQVNVMXKMWT1
-2026-08-13T17:22:06.135006416Z [AUTOMOD]   conteúdo: "alguém que usa arch aq, sabe pq nao consigo escutar nada nas call do stoat?"
-2026-08-13T17:22:06.135330488Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-13T17:22:06.135684267Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [pergunta]
-2026-08-13T17:22:06.135722732Z [AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
-2026-08-13T17:22:06.135970998Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-13T17:22:06.136006816Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-13T17:22:06.136023396Z [AUTOMOD]   [anti-caps] OFF
-2026-08-13T17:22:06.136042310Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-13T17:22:06.136096657Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-13T17:22:06.136245269Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
-2026-08-13T17:22:06.136284290Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-13T17:22:06.136296925Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-13T17:22:09.039504497Z [MSG] 01KZVQQ3XED060R302GRZRANFK no canal 01KQ566RHQC8V8YAFH79G67MSJ: "king of fighters XV?"
-2026-08-13T17:22:09.039559402Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-13T17:22:09.039581427Z [AUTOMOD] ▶ Analisando mensagem de 01KZVQQ3XED060R302GRZRANFK
-2026-08-13T17:22:09.039848992Z [AUTOMOD]   conteúdo: "king of fighters XV?"
-2026-08-13T17:22:09.040222662Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-13T17:22:09.040512206Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [pergunta]
-2026-08-13T17:22:09.040540036Z [AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
-2026-08-13T17:22:09.040572452Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-13T17:22:09.040600938Z [AUTOMOD]   [anti-mass-mention] ON → 1 menção(ões) (limite 5)
-2026-08-13T17:22:09.040725590Z [AUTOMOD]   [anti-caps] OFF
-2026-08-13T17:22:09.040758938Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-13T17:22:09.040804707Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-13T17:22:09.040923671Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
-2026-08-13T17:22:09.040951128Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-13T17:22:09.041037652Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-13T17:22:14.220366976Z [MSG] 01KZFAN7ZRE6QTVFTKHNDPTBJB no canal 01KQ566RHQC8V8YAFH79G67MSJ: "uhum"
-2026-08-13T17:22:14.221411810Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-13T17:22:14.222455426Z [AUTOMOD] ▶ Analisando mensagem de 01KZFAN7ZRE6QTVFTKHNDPTBJB
-2026-08-13T17:22:14.222468745Z [AUTOMOD]   conteúdo: "uhum"
-2026-08-13T17:22:14.222472485Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-13T17:22:14.222475359Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
-2026-08-13T17:22:14.222478240Z [AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
-2026-08-13T17:22:14.222481053Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-13T17:22:14.222483721Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-13T17:22:14.222486610Z [AUTOMOD]   [anti-caps] OFF
-2026-08-13T17:22:14.222489090Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-13T17:22:14.222491631Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-13T17:22:14.222613097Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
-2026-08-13T17:22:14.222619105Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-13T17:22:14.222622507Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-13T17:22:14.592447097Z [MSG] 01KZJ5H587KV8GSQVNVMXKMWT1 no canal 01KQ566RHQC8V8YAFH79G67MSJ: "Linux no geral "
-2026-08-13T17:22:14.592529685Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-13T17:22:14.592558331Z [AUTOMOD] ▶ Analisando mensagem de 01KZJ5H587KV8GSQVNVMXKMWT1
-2026-08-13T17:22:14.592570539Z [AUTOMOD]   conteúdo: "Linux no geral "
-2026-08-13T17:22:14.592964850Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-13T17:22:14.593199581Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
-2026-08-13T17:22:14.593251270Z [AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
-2026-08-13T17:22:14.593265118Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-13T17:22:14.593430525Z [AUTOMOD]   [anti-mass-mention] ON → 1 menção(ões) (limite 5)
-2026-08-13T17:22:14.593458048Z [AUTOMOD]   [anti-caps] OFF
-2026-08-13T17:22:14.593566510Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-13T17:22:14.593593330Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-13T17:22:14.593681857Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
-2026-08-13T17:22:14.593698941Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-13T17:22:14.593709825Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-13T17:22:26.518988567Z [MSG] 01KZFAN7ZRE6QTVFTKHNDPTBJB no canal 01KQ566RHQC8V8YAFH79G67MSJ: "eu vi que o app ta uma merda no linux"
-2026-08-13T17:22:26.519043804Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-13T17:22:26.519059386Z [AUTOMOD] ▶ Analisando mensagem de 01KZFAN7ZRE6QTVFTKHNDPTBJB
-2026-08-13T17:22:26.519091181Z [AUTOMOD]   conteúdo: "eu vi que o app ta uma merda no linux"
-2026-08-13T17:22:26.519507322Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-13T17:22:26.519843939Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
-2026-08-13T17:22:26.519872366Z [AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
-2026-08-13T17:22:26.519946799Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-13T17:22:26.520065331Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-13T17:22:26.520093334Z [AUTOMOD]   [anti-caps] OFF
-2026-08-13T17:22:26.520240815Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-13T17:22:26.520267091Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-13T17:22:26.520323750Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
-2026-08-13T17:22:26.520386247Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-13T17:22:26.520399684Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-13T17:22:29.409935642Z [MSG] 01KZPYWWPTZCB7S6A3ABGWGPJV no canal 01KQ566RHQC8V8YAFH79G67MSJ: "Eu jogo apenas KOF dai, e o jogo de luta que mais tenho contato. Além de Blazblue e Guilty Gear."
-2026-08-13T17:22:29.409993826Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-13T17:22:29.410012202Z [AUTOMOD] ▶ Analisando mensagem de 01KZPYWWPTZCB7S6A3ABGWGPJV
-2026-08-13T17:22:29.412038652Z [AUTOMOD]   conteúdo: "Eu jogo apenas KOF dai, e o jogo de luta que mais tenho contato. Além de Blazblue e Guilty Gear."
-2026-08-13T17:22:29.412075963Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-13T17:22:29.412088937Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
-2026-08-13T17:22:29.412099864Z [AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
-2026-08-13T17:22:29.412109340Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-13T17:22:29.412119507Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-13T17:22:29.412129509Z [AUTOMOD]   [anti-caps] OFF
-2026-08-13T17:22:29.412139023Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-13T17:22:29.412148431Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-13T17:22:29.412157388Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
-2026-08-13T17:22:29.412166989Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-13T17:22:29.412176248Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-13T17:22:31.022914463Z [MSG] 00000000000000000000000000 no canal 01KXSG80TZ0YNA78PK83XWNK1S: ""
-2026-08-13T17:22:31.023122271Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-13T17:22:31.023247419Z [AUTOMOD] ▶ Analisando mensagem de 00000000000000000000000000
-2026-08-13T17:22:31.023266086Z [AUTOMOD]   conteúdo: ""
-2026-08-13T17:22:31.023677635Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-13T17:22:31.024034944Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
-2026-08-13T17:22:31.024067941Z [AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
-2026-08-13T17:22:31.024104342Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-13T17:22:31.024189198Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-13T17:22:31.024204945Z [AUTOMOD]   [anti-caps] OFF
-2026-08-13T17:22:31.024270358Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-13T17:22:31.024398718Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-13T17:22:31.024413067Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
-2026-08-13T17:22:31.024522948Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-13T17:22:31.024536826Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-13T17:22:37.514589227Z [MSG] 01KZXSJFSG2P21R4ZB50R41FFF no canal 01KQ566RHQC8V8YAFH79G67MSJ: "melhor foi o Ark, o Ark survival evolved ja era podre pra rodar em qualquer cosia desde sempre, ai trouxeram o remaster dele que é o Ascend E O JOGO É INJOGAVEL NUMA 4090 VELHO"
-2026-08-13T17:22:37.514664794Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-13T17:22:37.514684055Z [AUTOMOD] ▶ Analisando mensagem de 01KZXSJFSG2P21R4ZB50R41FFF
-2026-08-13T17:22:37.514698899Z [AUTOMOD]   conteúdo: "melhor foi o Ark, o Ark survival evolved ja era podre pra rodar em qualquer cosia desde sempre, ai trouxeram o remaster dele que é o Ascend E O JOGO É INJOGAVEL NUMA 4090 VELHO"
-2026-08-13T17:22:37.515253874Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-13T17:22:37.515572760Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
-2026-08-13T17:22:37.515989589Z [AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
-2026-08-13T17:22:37.516051395Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-13T17:22:37.516066561Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-13T17:22:37.516080597Z [AUTOMOD]   [anti-caps] OFF
-2026-08-13T17:22:37.517381759Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-13T17:22:37.517425188Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-13T17:22:37.517439434Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
-2026-08-13T17:22:37.517452918Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-13T17:22:37.517465487Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-13T17:22:38.260878619Z [MSG] 01KZJ5H587KV8GSQVNVMXKMWT1 no canal 01KQ566RHQC8V8YAFH79G67MSJ: "só as call q n funciona direito "
-2026-08-13T17:22:38.260950698Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-13T17:22:38.260986578Z [AUTOMOD] ▶ Analisando mensagem de 01KZJ5H587KV8GSQVNVMXKMWT1
-2026-08-13T17:22:38.261153367Z [AUTOMOD]   conteúdo: "só as call q n funciona direito "
-2026-08-13T17:22:38.261727460Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-13T17:22:38.261996363Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
-2026-08-13T17:22:38.262364417Z [AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
-2026-08-13T17:22:38.262404262Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-13T17:22:38.262461382Z [AUTOMOD]   [anti-mass-mention] ON → 1 menção(ões) (limite 5)
-2026-08-13T17:22:38.262631550Z [AUTOMOD]   [anti-caps] OFF
-2026-08-13T17:22:38.262863745Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-13T17:22:38.262883939Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-13T17:22:38.262894825Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
-2026-08-13T17:22:38.262966520Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-13T17:22:38.262978290Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-13T17:22:40.229906201Z [MSG] 01KZJ5H587KV8GSQVNVMXKMWT1 no canal 01KQ566RHQC8V8YAFH79G67MSJ: "de resto"
-2026-08-13T17:22:40.229962110Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-13T17:22:40.229980439Z [AUTOMOD] ▶ Analisando mensagem de 01KZJ5H587KV8GSQVNVMXKMWT1
-2026-08-13T17:22:40.230161927Z [AUTOMOD]   conteúdo: "de resto"
-2026-08-13T17:22:40.230596316Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-13T17:22:40.230741818Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
-2026-08-13T17:22:40.230870121Z [AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
-2026-08-13T17:22:40.230886525Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-13T17:22:40.230956457Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-13T17:22:40.231092679Z [AUTOMOD]   [anti-caps] OFF
-2026-08-13T17:22:40.231106972Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-13T17:22:40.231211004Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-13T17:22:40.231224721Z [AUTOMOD]   [anti-mass-spam] ON → 2 msg em 8000ms (limite 12)
-2026-08-13T17:22:40.231267508Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-13T17:22:40.231339508Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-13T17:22:40.363301834Z [MSG] 01KZXSJFSG2P21R4ZB50R41FFF no canal 01KQ566RHQC8V8YAFH79G67MSJ: "e pra piorar"
-2026-08-13T17:22:40.363358337Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-13T17:22:40.363395531Z [AUTOMOD] ▶ Analisando mensagem de 01KZXSJFSG2P21R4ZB50R41FFF
-2026-08-13T17:22:40.363407296Z [AUTOMOD]   conteúdo: "e pra piorar"
-2026-08-13T17:22:40.363769899Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-13T17:22:40.364091724Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
-2026-08-13T17:22:40.364110625Z [AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
-2026-08-13T17:22:40.364138498Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-13T17:22:40.364234676Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-13T17:22:40.364256301Z [AUTOMOD]   [anti-caps] OFF
-2026-08-13T17:22:40.364387535Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-13T17:22:40.364402546Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-13T17:22:40.364623549Z [AUTOMOD]   [anti-mass-spam] ON → 2 msg em 8000ms (limite 12)
-2026-08-13T17:22:40.364652564Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-13T17:22:40.364664069Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-13T17:22:45.891167592Z [MSG] 01KZFAN7ZRE6QTVFTKHNDPTBJB no canal 01KQ566RHQC8V8YAFH79G67MSJ: "massa, qualquer coisa da um toq na steam do pai ai"
-2026-08-13T17:22:45.891230869Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-13T17:22:45.891351826Z [AUTOMOD] ▶ Analisando mensagem de 01KZFAN7ZRE6QTVFTKHNDPTBJB
-2026-08-13T17:22:45.891389946Z [AUTOMOD]   conteúdo: "massa, qualquer coisa da um toq na steam do pai ai"
-2026-08-13T17:22:45.891713202Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-13T17:22:45.891992789Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
-2026-08-13T17:22:45.892060171Z [AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
-2026-08-13T17:22:45.892139839Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-13T17:22:45.892193800Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-13T17:22:45.892254715Z [AUTOMOD]   [anti-caps] OFF
-2026-08-13T17:22:45.892360436Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-13T17:22:45.892459449Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-13T17:22:45.892475110Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
-2026-08-13T17:22:45.892502365Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-13T17:22:45.892571832Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-13T17:22:48.866375336Z [MSG] 01KZFAN7ZRE6QTVFTKHNDPTBJB no canal 01KQ566RHQC8V8YAFH79G67MSJ: "ohirrr mrm"
-2026-08-13T17:22:48.866432527Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-13T17:22:48.866456382Z [AUTOMOD] ▶ Analisando mensagem de 01KZFAN7ZRE6QTVFTKHNDPTBJB
-2026-08-13T17:22:48.866467630Z [AUTOMOD]   conteúdo: "ohirrr mrm"
-2026-08-13T17:22:48.866884395Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-13T17:22:48.867133287Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
-2026-08-13T17:22:48.867182366Z [AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
-2026-08-13T17:22:48.867195929Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-13T17:22:48.867223030Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-13T17:22:48.867388957Z [AUTOMOD]   [anti-caps] OFF
-2026-08-13T17:22:48.867405294Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-13T17:22:48.867442421Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-13T17:22:48.867587207Z [AUTOMOD]   [anti-mass-spam] ON → 2 msg em 8000ms (limite 12)
-2026-08-13T17:22:48.867615240Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-13T17:22:48.867647458Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-13T17:22:50.099201865Z [MSG] 01KZXSJFSG2P21R4ZB50R41FFF no canal 01KQ566RHQC8V8YAFH79G67MSJ: "roubaram mods da comunidade e colocaram como dlc paga"
-2026-08-13T17:22:50.099257243Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-13T17:22:50.099272086Z [AUTOMOD] ▶ Analisando mensagem de 01KZXSJFSG2P21R4ZB50R41FFF
-2026-08-13T17:22:50.099378407Z [AUTOMOD]   conteúdo: "roubaram mods da comunidade e colocaram como dlc paga"
-2026-08-13T17:22:50.099649609Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-13T17:22:50.099984267Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
-2026-08-13T17:22:50.100068280Z [AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
-2026-08-13T17:22:50.100095219Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-13T17:22:50.100207612Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-13T17:22:50.100292364Z [AUTOMOD]   [anti-caps] OFF
-2026-08-13T17:22:50.100373137Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-13T17:22:50.100399373Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-13T17:22:50.100437099Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
-2026-08-13T17:22:50.100503824Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-13T17:22:50.100599985Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-13T17:22:52.877517127Z [MSG] 01KZXSJFSG2P21R4ZB50R41FFF no canal 01KQ566RHQC8V8YAFH79G67MSJ: "absurdo demais"
-2026-08-13T17:22:52.877574541Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-13T17:22:52.877596217Z [AUTOMOD] ▶ Analisando mensagem de 01KZXSJFSG2P21R4ZB50R41FFF
-2026-08-13T17:22:52.877607354Z [AUTOMOD]   conteúdo: "absurdo demais"
-2026-08-13T17:22:52.877998876Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-13T17:22:52.878174651Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
-2026-08-13T17:22:52.878268026Z [AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
-2026-08-13T17:22:52.878446074Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-13T17:22:52.878508372Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-13T17:22:52.878571290Z [AUTOMOD]   [anti-caps] OFF
-2026-08-13T17:22:52.878590802Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-13T17:22:52.878649744Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-13T17:22:52.878662270Z [AUTOMOD]   [anti-mass-spam] ON → 2 msg em 8000ms (limite 12)
-2026-08-13T17:22:52.878839518Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-13T17:22:52.878856976Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-13T17:22:54.067858480Z [MSG] 01KZXZ53BGGGT2EMK33P5XNBEQ no canal 01KQ566RHQC8V8YAFH79G67MSJ: "é gritante ver a diferença artística do BL2 pro 4 por exemplo, um tem identidade e outro tem SABOR identidade própria"
-2026-08-13T17:22:54.067914676Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-13T17:22:54.068127582Z [AUTOMOD] ▶ Analisando mensagem de 01KZXZ53BGGGT2EMK33P5XNBEQ
-2026-08-13T17:22:54.068156963Z [AUTOMOD]   conteúdo: "é gritante ver a diferença artística do BL2 pro 4 por exemplo, um tem identidade e outro tem SABOR identidade própria"
-2026-08-13T17:22:54.068335521Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-13T17:22:54.068759070Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
-2026-08-13T17:22:54.068866372Z [AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
-2026-08-13T17:22:54.068926769Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-13T17:22:54.068951419Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-13T17:22:54.068963742Z [AUTOMOD]   [anti-caps] OFF
-2026-08-13T17:22:54.069203522Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-13T17:22:54.069225288Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-13T17:22:54.069264867Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
-2026-08-13T17:22:54.069426791Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-13T17:22:54.069454641Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-13T17:22:56.683515627Z [MSG] 01KZVQQ3XED060R302GRZRANFK no canal 01KQ566RHQC8V8YAFH79G67MSJ: "THAT IS BULLSHIT BLAZING STILL MY HEART IS BLAZING\nIF THE WORDS KILLED ME I DON'T NEED A NEW WORLD ORDER\nYOU, SOON YOU WILL KNOW\nWE ALREADY KNOW THE SMELL OF THE GAME"
-2026-08-13T17:22:56.683573223Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-13T17:22:56.683594646Z [AUTOMOD] ▶ Analisando mensagem de 01KZVQQ3XED060R302GRZRANFK
-2026-08-13T17:22:56.683882677Z [AUTOMOD]   conteúdo: "THAT IS BULLSHIT BLAZING STILL MY HEART IS BLAZING\nIF THE WORDS KILLED ME I DON'T NEED A NEW WORLD ORDER\nYOU, SOON YOU WILL KNOW\nWE ALREADY KNOW THE SMELL OF THE GAME"
-2026-08-13T17:22:56.684178363Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-13T17:22:56.684517529Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
-2026-08-13T17:22:56.684719317Z [AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
-2026-08-13T17:22:56.684746006Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-13T17:22:56.684869672Z [AUTOMOD]   [anti-mass-mention] ON → 1 menção(ões) (limite 5)
-2026-08-13T17:22:56.684945891Z [AUTOMOD]   [anti-caps] OFF
-2026-08-13T17:22:56.684961960Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-13T17:22:56.684973857Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-13T17:22:56.685043754Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
-2026-08-13T17:22:56.685119096Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-13T17:22:56.685201222Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-13T17:23:12.325674318Z [MSG] 01KZPYWWPTZCB7S6A3ABGWGPJV no canal 01KQ566RHQC8V8YAFH79G67MSJ: "Faz mó cota que joguei então não sei se terá jogo ou serei amassado."
-2026-08-13T17:23:12.325740171Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-13T17:23:12.325761503Z [AUTOMOD] ▶ Analisando mensagem de 01KZPYWWPTZCB7S6A3ABGWGPJV
-2026-08-13T17:23:12.325995632Z [AUTOMOD]   conteúdo: "Faz mó cota que joguei então não sei se terá jogo ou serei amassado."
-2026-08-13T17:23:12.326284492Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-13T17:23:12.326575136Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
-2026-08-13T17:23:12.326633119Z [AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
-2026-08-13T17:23:12.326668593Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-13T17:23:12.326757362Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-13T17:23:12.326829479Z [AUTOMOD]   [anti-caps] OFF
-2026-08-13T17:23:12.326984259Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-13T17:23:12.327019583Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-13T17:23:12.327065526Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
-2026-08-13T17:23:12.327120814Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-13T17:23:12.327268061Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-13T17:23:18.597362209Z [MSG] 01KZXSJFSG2P21R4ZB50R41FFF no canal 01KQ566RHQC8V8YAFH79G67MSJ: "he knows balls"
-2026-08-13T17:23:18.597419282Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-13T17:23:18.597436873Z [AUTOMOD] ▶ Analisando mensagem de 01KZXSJFSG2P21R4ZB50R41FFF
-2026-08-13T17:23:18.597562584Z [AUTOMOD]   conteúdo: "he knows balls"
-2026-08-13T17:23:18.597964362Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-13T17:23:18.598140650Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
-2026-08-13T17:23:18.598325078Z [AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
-2026-08-13T17:23:18.598361156Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-13T17:23:18.598377068Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-13T17:23:18.598461554Z [AUTOMOD]   [anti-caps] OFF
-2026-08-13T17:23:18.598474450Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-13T17:23:18.598500328Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-13T17:23:18.598594544Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
-2026-08-13T17:23:18.598698702Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-13T17:23:18.598852150Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-13T17:23:33.059622806Z [MSG] 01KZFAN7ZRE6QTVFTKHNDPTBJB no canal 01KQ566RHQC8V8YAFH79G67MSJ: "cara eu vi essa porra, o ark é uma merda de otimização"
-2026-08-13T17:23:33.059682526Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-13T17:23:33.059811155Z [AUTOMOD] ▶ Analisando mensagem de 01KZFAN7ZRE6QTVFTKHNDPTBJB
-2026-08-13T17:23:33.059848396Z [AUTOMOD]   conteúdo: "cara eu vi essa porra, o ark é uma merda de otimização"
-2026-08-13T17:23:33.060223486Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-13T17:23:33.060503922Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
-2026-08-13T17:23:33.060715196Z [AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
-2026-08-13T17:23:33.060742411Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-13T17:23:33.060754543Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-13T17:23:33.060823313Z [AUTOMOD]   [anti-caps] OFF
-2026-08-13T17:23:33.060936219Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-13T17:23:33.061111823Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-13T17:23:33.061142073Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
-2026-08-13T17:23:33.061171887Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-13T17:23:33.061202018Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-13T17:23:38.842556541Z [MSG] 01KZFAN7ZRE6QTVFTKHNDPTBJB no canal 01KQ566RHQC8V8YAFH79G67MSJ: "a sequencia dele é PIOR AINDA"
-2026-08-13T17:23:38.842614105Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-13T17:23:38.842659528Z [AUTOMOD] ▶ Analisando mensagem de 01KZFAN7ZRE6QTVFTKHNDPTBJB
-2026-08-13T17:23:38.842734558Z [AUTOMOD]   conteúdo: "a sequencia dele é PIOR AINDA"
-2026-08-13T17:23:38.842981479Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-13T17:23:38.843213049Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
-2026-08-13T17:23:38.843358555Z [AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
-2026-08-13T17:23:38.843377777Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-13T17:23:38.843478033Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-13T17:23:38.843542029Z [AUTOMOD]   [anti-caps] OFF
-2026-08-13T17:23:38.843640952Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-13T17:23:38.843667174Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-13T17:23:38.843697022Z [AUTOMOD]   [anti-mass-spam] ON → 2 msg em 8000ms (limite 12)
-2026-08-13T17:23:38.843732960Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-13T17:23:38.843846349Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-13T17:23:45.388999114Z [MSG] 01KZXSJFSG2P21R4ZB50R41FFF no canal 01KQ566RHQC8V8YAFH79G67MSJ: "sempre foi zuado as otimização"
-2026-08-13T17:23:45.389072000Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-13T17:23:45.389096674Z [AUTOMOD] ▶ Analisando mensagem de 01KZXSJFSG2P21R4ZB50R41FFF
-2026-08-13T17:23:45.389186707Z [AUTOMOD]   conteúdo: "sempre foi zuado as otimização"
-2026-08-13T17:23:45.389568889Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-13T17:23:45.389852259Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
-2026-08-13T17:23:45.389890281Z [AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
-2026-08-13T17:23:45.389931940Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-13T17:23:45.389948440Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-13T17:23:45.389984285Z [AUTOMOD]   [anti-caps] OFF
-2026-08-13T17:23:45.390137639Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-13T17:23:45.390356629Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-13T17:23:45.390381323Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
-2026-08-13T17:23:45.390405881Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-13T17:23:45.390419325Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-13T17:23:49.258597871Z [MSG] 01KZXSJFSG2P21R4ZB50R41FFF no canal 01KQ566RHQC8V8YAFH79G67MSJ: "dps que veio o ascend"
-2026-08-13T17:23:49.258688721Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-13T17:23:49.258709637Z [AUTOMOD] ▶ Analisando mensagem de 01KZXSJFSG2P21R4ZB50R41FFF
-2026-08-13T17:23:49.258724463Z [AUTOMOD]   conteúdo: "dps que veio o ascend"
-2026-08-13T17:23:49.259111115Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-13T17:23:49.259351072Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
-2026-08-13T17:23:49.259522211Z [AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
-2026-08-13T17:23:49.259544410Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-13T17:23:49.259723081Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-13T17:23:49.259751363Z [AUTOMOD]   [anti-caps] OFF
-2026-08-13T17:23:49.259842174Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-13T17:23:49.260053118Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-13T17:23:49.260075114Z [AUTOMOD]   [anti-mass-spam] ON → 2 msg em 8000ms (limite 12)
-2026-08-13T17:23:49.260331471Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-13T17:23:49.260356956Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-13T17:23:50.567866940Z [MSG] 01KZFAN7ZRE6QTVFTKHNDPTBJB no canal 01KQ566RHQC8V8YAFH79G67MSJ: "ou o jogo pegar 1tb só de mod"
-2026-08-13T17:23:50.567927605Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-13T17:23:50.567941743Z [AUTOMOD] ▶ Analisando mensagem de 01KZFAN7ZRE6QTVFTKHNDPTBJB
-2026-08-13T17:23:50.567952021Z [AUTOMOD]   conteúdo: "ou o jogo pegar 1tb só de mod"
-2026-08-13T17:23:50.568311194Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-13T17:23:50.568420735Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
-2026-08-13T17:23:50.568565478Z [AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
-2026-08-13T17:23:50.568698373Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-13T17:23:50.568717478Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-13T17:23:50.568729150Z [AUTOMOD]   [anti-caps] OFF
-2026-08-13T17:23:50.568837527Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-13T17:23:50.568981609Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-13T17:23:50.569053269Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
-2026-08-13T17:23:50.569212858Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-13T17:23:50.569229969Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-13T17:23:59.405191429Z [MSG] 01KZXSJFSG2P21R4ZB50R41FFF no canal 01KQ566RHQC8V8YAFH79G67MSJ: "o ark ascend virou a porra do crysis da nova geração"
-2026-08-13T17:23:59.405292853Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-13T17:23:59.405421089Z [AUTOMOD] ▶ Analisando mensagem de 01KZXSJFSG2P21R4ZB50R41FFF
-2026-08-13T17:23:59.405682984Z [AUTOMOD]   conteúdo: "o ark ascend virou a porra do crysis da nova geração"
-2026-08-13T17:23:59.405906729Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-13T17:23:59.406201023Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
-2026-08-13T17:23:59.406416850Z [AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
-2026-08-13T17:23:59.406439696Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-13T17:23:59.406462737Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-13T17:23:59.406555226Z [AUTOMOD]   [anti-caps] OFF
-2026-08-13T17:23:59.406659749Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-13T17:23:59.406690045Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-13T17:23:59.406922501Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
-2026-08-13T17:23:59.407034075Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-13T17:23:59.407052487Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-13T17:24:03.766053049Z [MSG] 01KZXSJFSG2P21R4ZB50R41FFF no canal 01KQ566RHQC8V8YAFH79G67MSJ: "quem é velho sabe doq eu to flnd"
-2026-08-13T17:24:03.766119439Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-13T17:24:03.766133067Z [AUTOMOD] ▶ Analisando mensagem de 01KZXSJFSG2P21R4ZB50R41FFF
-2026-08-13T17:24:03.766147082Z [AUTOMOD]   conteúdo: "quem é velho sabe doq eu to flnd"
-2026-08-13T17:24:03.766535803Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-13T17:24:03.766772268Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
-2026-08-13T17:24:03.766825741Z [AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
-2026-08-13T17:24:03.767015540Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-13T17:24:03.767042836Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-13T17:24:03.767055549Z [AUTOMOD]   [anti-caps] OFF
-2026-08-13T17:24:03.767128916Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-13T17:24:03.767308104Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-13T17:24:03.767326417Z [AUTOMOD]   [anti-mass-spam] ON → 2 msg em 8000ms (limite 12)
-2026-08-13T17:24:03.767338483Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-13T17:24:03.767436145Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-13T17:24:08.384628788Z [MSG] 01KZFAN7ZRE6QTVFTKHNDPTBJB no canal 01KQ566RHQC8V8YAFH79G67MSJ: "eu vi que a situação das call ta precaria mesmo, principalmente o screen share"
-2026-08-13T17:24:08.384712435Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-13T17:24:08.384728109Z [AUTOMOD] ▶ Analisando mensagem de 01KZFAN7ZRE6QTVFTKHNDPTBJB
-2026-08-13T17:24:08.384739542Z [AUTOMOD]   conteúdo: "eu vi que a situação das call ta precaria mesmo, principalmente o screen share"
-2026-08-13T17:24:08.385189212Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-13T17:24:08.385491905Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
-2026-08-13T17:24:08.385540124Z [AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
-2026-08-13T17:24:08.385553894Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-13T17:24:08.385658774Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-13T17:24:08.385728415Z [AUTOMOD]   [anti-caps] OFF
-2026-08-13T17:24:08.385837341Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-13T17:24:08.385886838Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-13T17:24:08.386014394Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
-2026-08-13T17:24:08.386034937Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-13T17:24:08.386075734Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-13T17:24:10.297546186Z [MSG] 01KZXSJFSG2P21R4ZB50R41FFF no canal 01KQ566RHQC8V8YAFH79G67MSJ: "\"seu pc é bom mas roda crysis?\""
-2026-08-13T17:24:10.297603587Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-13T17:24:10.297624412Z [AUTOMOD] ▶ Analisando mensagem de 01KZXSJFSG2P21R4ZB50R41FFF
-2026-08-13T17:24:10.297888441Z [AUTOMOD]   conteúdo: "\"seu pc é bom mas roda crysis?\""
-2026-08-13T17:24:10.298191715Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-13T17:24:10.298490746Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [pergunta]
-2026-08-13T17:24:10.298518918Z [AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
-2026-08-13T17:24:10.298596921Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-13T17:24:10.298702142Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-13T17:24:10.298720315Z [AUTOMOD]   [anti-caps] OFF
-2026-08-13T17:24:10.298792786Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-13T17:24:10.299004376Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-13T17:24:10.299029929Z [AUTOMOD]   [anti-mass-spam] ON → 2 msg em 8000ms (limite 12)
-2026-08-13T17:24:10.299077406Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-13T17:24:10.299242587Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-13T17:24:13.953676211Z [MSG] 01KZVQQ3XED060R302GRZRANFK no canal 01KQ566RHQC8V8YAFH79G67MSJ: "handsome jack here. go fuck yourself, bandit.\n[ THIS AIN'T NO PLACE FOR NO HERO, THIS AIN'T NO PLACE FOR NO BETTER MAN"
-2026-08-13T17:24:13.953734059Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-13T17:24:13.953753081Z [AUTOMOD] ▶ Analisando mensagem de 01KZVQQ3XED060R302GRZRANFK
-2026-08-13T17:24:13.953826926Z [AUTOMOD]   conteúdo: "handsome jack here. go fuck yourself, bandit.\n[ THIS AIN'T NO PLACE FOR NO HERO, THIS AIN'T NO PLACE FOR NO BETTER MAN"
-2026-08-13T17:24:13.954199187Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-13T17:24:13.954530505Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
-2026-08-13T17:24:13.954641195Z [AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
-2026-08-13T17:24:13.954756227Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-13T17:24:13.954774336Z [AUTOMOD]   [anti-mass-mention] ON → 1 menção(ões) (limite 5)
-2026-08-13T17:24:13.954851532Z [AUTOMOD]   [anti-caps] OFF
-2026-08-13T17:24:13.954878990Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-13T17:24:13.954977884Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-13T17:24:13.955137937Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
-2026-08-13T17:24:13.955164853Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-13T17:24:13.955177001Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-13T17:24:14.418881051Z [MSG] 01KZFAN7ZRE6QTVFTKHNDPTBJB no canal 01KQ566RHQC8V8YAFH79G67MSJ: "todo mundo se ouve tb"
-2026-08-13T17:24:14.418937985Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-13T17:24:14.418956924Z [AUTOMOD] ▶ Analisando mensagem de 01KZFAN7ZRE6QTVFTKHNDPTBJB
-2026-08-13T17:24:14.418969347Z [AUTOMOD]   conteúdo: "todo mundo se ouve tb"
-2026-08-13T17:24:14.419375100Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-13T17:24:14.419650628Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
-2026-08-13T17:24:14.419905740Z [AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
-2026-08-13T17:24:14.419940466Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-13T17:24:14.419953180Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-13T17:24:14.419963694Z [AUTOMOD]   [anti-caps] OFF
-2026-08-13T17:24:14.419990108Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-13T17:24:14.420254419Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-13T17:24:14.420280295Z [AUTOMOD]   [anti-mass-spam] ON → 2 msg em 8000ms (limite 12)
-2026-08-13T17:24:14.420331513Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-13T17:24:14.420359500Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-13T17:24:14.761409322Z [MSG] 01K9JKP85D5EP2ZTEHS8DT797A no canal 01KKRZV7Y4GF7XA9P94AEKAPJK: "<@01KHBPN31QT1THM1A0CEM8JA91> quero que leia e descreva para mim o que faz o arquivo, do seu repositório, main.js"
-2026-08-13T17:24:14.765813375Z [CHAT][debug] ══════ nova conversa ══════
-2026-08-13T17:24:14.766542851Z [CHAT][debug] autor=Ghiso | pergunta (83 chars): "quero que leia e descreva para mim o que faz o arquivo, do seu repositório, main.js"
-2026-08-13T17:24:15.089323761Z [CHAT][ollama] → decidir-busca | modelo=qwen3.5:0.8b num_ctx=16384 num_predict=200 entrada≈657 chars (json, think=off)
-2026-08-13T17:24:19.000148568Z [CHAT][ollama] ← decidir-busca | done=stop tokens_prompt=185 tokens_gerados=17 veloc=59.0 tok/s saída=36 chars tempo=3.9s
-2026-08-13T17:24:19.001656800Z [CHAT][debug] decisão de busca: buscar=false
-2026-08-13T17:24:19.092922629Z [CHAT][debug] memória: 26 fato(s) injetado(s)
-2026-08-13T17:24:19.102346391Z [CHAT][debug] roteamento: tipo=conversa-simples → modelo=gemma4:e4b
-2026-08-13T17:24:22.278056168Z [MSG] 01KZXY5RGA5SZVPCMY1NHTVM62 no canal 01KQ566RHQC8V8YAFH79G67MSJ: "nem 5090 roda essa bomba"
-2026-08-13T17:24:22.278113190Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-13T17:24:22.278128290Z [AUTOMOD] ▶ Analisando mensagem de 01KZXY5RGA5SZVPCMY1NHTVM62
-2026-08-13T17:24:22.278213953Z [AUTOMOD]   conteúdo: "nem 5090 roda essa bomba"
-2026-08-13T17:24:22.278580270Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-13T17:24:22.278829328Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
-2026-08-13T17:24:22.278857417Z [AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
-2026-08-13T17:24:22.278969614Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-13T17:24:22.278996213Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-13T17:24:22.279027428Z [AUTOMOD]   [anti-caps] OFF
-2026-08-13T17:24:22.279160286Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-13T17:24:22.279176796Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-13T17:24:22.280000783Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
-2026-08-13T17:24:22.280034053Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-13T17:24:22.280046071Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-13T17:24:25.275456296Z [MSG] 01KZPYWWPTZCB7S6A3ABGWGPJV no canal 01KQ566RHQC8V8YAFH79G67MSJ: "KKKK"
-2026-08-13T17:24:25.275512020Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-13T17:24:25.275526360Z [AUTOMOD] ▶ Analisando mensagem de 01KZPYWWPTZCB7S6A3ABGWGPJV
-2026-08-13T17:24:25.275559758Z [AUTOMOD]   conteúdo: "KKKK"
-2026-08-13T17:24:25.276212287Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-13T17:24:25.276419848Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
-2026-08-13T17:24:25.276614693Z [AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
-2026-08-13T17:24:25.276641678Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-13T17:24:25.276653566Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-13T17:24:25.276664180Z [AUTOMOD]   [anti-caps] OFF
-2026-08-13T17:24:25.276720123Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-13T17:24:25.276810366Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-13T17:24:25.276825582Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
-2026-08-13T17:24:25.276911730Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-13T17:24:25.276937019Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-13T17:24:27.086644975Z [CHAT][debug] ainda gerando… 8s decorridos
-2026-08-13T17:24:27.833334526Z [MSG] 01KZXSJFSG2P21R4ZB50R41FFF no canal 01KQ566RHQC8V8YAFH79G67MSJ: "roda sim"
-2026-08-13T17:24:27.833421265Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-13T17:24:27.833438294Z [AUTOMOD] ▶ Analisando mensagem de 01KZXSJFSG2P21R4ZB50R41FFF
-2026-08-13T17:24:27.833449238Z [AUTOMOD]   conteúdo: "roda sim"
-2026-08-13T17:24:27.833880456Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-13T17:24:27.834125357Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
-2026-08-13T17:24:27.834173533Z [AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
-2026-08-13T17:24:27.834187840Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-13T17:24:27.834272963Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-13T17:24:27.834289167Z [AUTOMOD]   [anti-caps] OFF
-2026-08-13T17:24:27.834484959Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-13T17:24:27.834511063Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-13T17:24:27.834523387Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
-2026-08-13T17:24:27.834552579Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-13T17:24:27.834579827Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-13T17:24:29.406198971Z [MSG] 01KZXSJFSG2P21R4ZB50R41FFF no canal 01KQ566RHQC8V8YAFH79G67MSJ: "a 30fps"
-2026-08-13T17:24:29.406255050Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-13T17:24:29.406278363Z [AUTOMOD] ▶ Analisando mensagem de 01KZXSJFSG2P21R4ZB50R41FFF
-2026-08-13T17:24:29.406290130Z [AUTOMOD]   conteúdo: "a 30fps"
-2026-08-13T17:24:29.406766411Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-13T17:24:29.407042080Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
-2026-08-13T17:24:29.407069023Z [AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
-2026-08-13T17:24:29.407081758Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-13T17:24:29.407113149Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-13T17:24:29.407139704Z [AUTOMOD]   [anti-caps] OFF
-2026-08-13T17:24:29.407241478Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-13T17:24:29.407276040Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-13T17:24:29.407404064Z [AUTOMOD]   [anti-mass-spam] ON → 2 msg em 8000ms (limite 12)
-2026-08-13T17:24:29.407420784Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-13T17:24:29.407451945Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-13T17:24:30.007319840Z [MSG] 01KZFAN7ZRE6QTVFTKHNDPTBJB no canal 01KQ566RHQC8V8YAFH79G67MSJ: "cara, vai de você"
-2026-08-13T17:24:30.007551317Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-13T17:24:30.007583181Z [AUTOMOD] ▶ Analisando mensagem de 01KZFAN7ZRE6QTVFTKHNDPTBJB
-2026-08-13T17:24:30.007596233Z [AUTOMOD]   conteúdo: "cara, vai de você"
-2026-08-13T17:24:30.008053009Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-13T17:24:30.008384452Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
-2026-08-13T17:24:30.008414446Z [AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
-2026-08-13T17:24:30.008571348Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-13T17:24:30.008590462Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-13T17:24:30.008601149Z [AUTOMOD]   [anti-caps] OFF
-2026-08-13T17:24:30.008667894Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-13T17:24:30.008681113Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-13T17:24:30.008811838Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
-2026-08-13T17:24:30.008830683Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-13T17:24:30.008841073Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-13T17:24:31.297262759Z [MSG] 01KZXSJFSG2P21R4ZB50R41FFF no canal 01KQ566RHQC8V8YAFH79G67MSJ: "KKKKKKKKKKKKKKKKKK"
-2026-08-13T17:24:31.297319763Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-13T17:24:31.297335258Z [AUTOMOD] ▶ Analisando mensagem de 01KZXSJFSG2P21R4ZB50R41FFF
-2026-08-13T17:24:31.297563931Z [AUTOMOD]   conteúdo: "KKKKKKKKKKKKKKKKKK"
-2026-08-13T17:24:31.297984908Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-13T17:24:31.298214115Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
-2026-08-13T17:24:31.298274964Z [AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
-2026-08-13T17:24:31.298289241Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-13T17:24:31.298326509Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-13T17:24:31.298646462Z [AUTOMOD]   [anti-caps] OFF
-2026-08-13T17:24:31.298672257Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-13T17:24:31.298684191Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-13T17:24:31.298782961Z [AUTOMOD]   [anti-mass-spam] ON → 3 msg em 8000ms (limite 12)
-2026-08-13T17:24:31.298799867Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-13T17:24:31.298810076Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-13T17:24:31.615204002Z [MSG] 01KZFAN7ZRE6QTVFTKHNDPTBJB no canal 01KQ566RHQC8V8YAFH79G67MSJ: "só chamar"
-2026-08-13T17:24:31.615261638Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-13T17:24:31.615347390Z [AUTOMOD] ▶ Analisando mensagem de 01KZFAN7ZRE6QTVFTKHNDPTBJB
-2026-08-13T17:24:31.615361109Z [AUTOMOD]   conteúdo: "só chamar"
-2026-08-13T17:24:31.615701236Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-13T17:24:31.616071253Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
-2026-08-13T17:24:31.616104641Z [AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
-2026-08-13T17:24:31.616118169Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-13T17:24:31.616241054Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-13T17:24:31.616259726Z [AUTOMOD]   [anti-caps] OFF
-2026-08-13T17:24:31.616322166Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-13T17:24:31.616466643Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-13T17:24:31.616492744Z [AUTOMOD]   [anti-mass-spam] ON → 2 msg em 8000ms (limite 12)
-2026-08-13T17:24:31.616610045Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-13T17:24:31.616627760Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-13T17:24:35.086338556Z [CHAT][debug] ainda gerando… 16s decorridos
-2026-08-13T17:24:35.180001526Z [MSG] 01KZFAN7ZRE6QTVFTKHNDPTBJB no canal 01KQ566RHQC8V8YAFH79G67MSJ: "eu jogo qualquer merda"
-2026-08-13T17:24:35.180187916Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-13T17:24:35.180218749Z [AUTOMOD] ▶ Analisando mensagem de 01KZFAN7ZRE6QTVFTKHNDPTBJB
-2026-08-13T17:24:35.180321747Z [AUTOMOD]   conteúdo: "eu jogo qualquer merda"
-2026-08-13T17:24:35.180763141Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-13T17:24:35.181004510Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
-2026-08-13T17:24:35.181057112Z [AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
-2026-08-13T17:24:35.181088991Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-13T17:24:35.181175176Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-13T17:24:35.181289472Z [AUTOMOD]   [anti-caps] OFF
-2026-08-13T17:24:35.181318990Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-13T17:24:35.181489092Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-13T17:24:35.181561726Z [AUTOMOD]   [anti-mass-spam] ON → 3 msg em 8000ms (limite 12)
-2026-08-13T17:24:35.181778519Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-13T17:24:35.181807015Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-13T17:24:40.056517751Z [MSG] 01KZFAN7ZRE6QTVFTKHNDPTBJB no canal 01KQ566RHQC8V8YAFH79G67MSJ: "tenho guilty e blaz tb"
-2026-08-13T17:24:40.056637114Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-13T17:24:40.056983165Z [AUTOMOD] ▶ Analisando mensagem de 01KZFAN7ZRE6QTVFTKHNDPTBJB
-2026-08-13T17:24:40.057279011Z [AUTOMOD]   conteúdo: "tenho guilty e blaz tb"
-2026-08-13T17:24:40.057837678Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-13T17:24:40.058115363Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
-2026-08-13T17:24:40.058811901Z [AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
-2026-08-13T17:24:40.058853074Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-13T17:24:40.058865881Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-13T17:24:40.062881701Z [AUTOMOD]   [anti-caps] OFF
-2026-08-13T17:24:40.062904132Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-13T17:24:40.062908664Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-13T17:24:40.062911544Z [AUTOMOD]   [anti-mass-spam] ON → 2 msg em 8000ms (limite 12)
-2026-08-13T17:24:40.062914349Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-13T17:24:40.062916995Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-13T17:24:41.227067003Z [MSG] 01KZXY5RGA5SZVPCMY1NHTVM62 no canal 01KQ566RHQC8V8YAFH79G67MSJ: "ai tu pegou leve. no mxm, uns 12"
-2026-08-13T17:24:41.227121923Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-13T17:24:41.227136549Z [AUTOMOD] ▶ Analisando mensagem de 01KZXY5RGA5SZVPCMY1NHTVM62
-2026-08-13T17:24:41.227146606Z [AUTOMOD]   conteúdo: "ai tu pegou leve. no mxm, uns 12"
-2026-08-13T17:24:41.227409257Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-13T17:24:41.227686993Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
-2026-08-13T17:24:41.227763485Z [AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
-2026-08-13T17:24:41.227847680Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-13T17:24:41.228121465Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-13T17:24:41.228149913Z [AUTOMOD]   [anti-caps] OFF
-2026-08-13T17:24:41.228161986Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-13T17:24:41.228172143Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-13T17:24:41.228274865Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
-2026-08-13T17:24:41.228301808Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-13T17:24:41.228314178Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-13T17:24:43.086551738Z [CHAT][debug] ainda gerando… 24s decorridos
-2026-08-13T17:24:43.759021119Z [MSG] 01KZF4MQM1KWE2C2E6BX0BAK4A no canal 01KZRZCJTYNK1PE529XBEAECN3: "<@01KZXQ491VBP1DT5AASWQ9Z05M> tipo isso"
-2026-08-13T17:24:43.759121700Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-13T17:24:43.759137603Z [AUTOMOD] ▶ Analisando mensagem de 01KZF4MQM1KWE2C2E6BX0BAK4A
-2026-08-13T17:24:43.759152773Z [AUTOMOD]   conteúdo: "<@01KZXQ491VBP1DT5AASWQ9Z05M> tipo isso"
-2026-08-13T17:24:43.759596979Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-13T17:24:43.759885536Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
-2026-08-13T17:24:43.759995015Z [AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
-2026-08-13T17:24:43.760035248Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-13T17:24:43.760086970Z [AUTOMOD]   [anti-mass-mention] ON → 1 menção(ões) (limite 5)
-2026-08-13T17:24:43.760101518Z [AUTOMOD]   [anti-caps] OFF
-2026-08-13T17:24:43.760227106Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-13T17:24:43.760253701Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-13T17:24:43.760292470Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
-2026-08-13T17:24:43.760338349Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-13T17:24:43.760376144Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-13T17:24:44.354143349Z [REAÇÃO] args: [ '01KZY2EBEM8QF6XPYD2KDYMDDY', '01KZXZ53BGGGT2EMK33P5XNBEQ', '🔥' ]
-2026-08-13T17:24:50.717942163Z [MSG] 01KZXSJFSG2P21R4ZB50R41FFF no canal 01KQ566RHQC8V8YAFH79G67MSJ: "tu paga a melhor placa atual pra rodar o jogo malemal a 30 fps olhando pro chao"
-2026-08-13T17:24:50.718006626Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-13T17:24:50.718024482Z [AUTOMOD] ▶ Analisando mensagem de 01KZXSJFSG2P21R4ZB50R41FFF
-2026-08-13T17:24:50.718038488Z [AUTOMOD]   conteúdo: "tu paga a melhor placa atual pra rodar o jogo malemal a 30 fps olhando pro chao"
-2026-08-13T17:24:50.718399797Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-13T17:24:50.718710197Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
-2026-08-13T17:24:50.720059320Z [AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
-2026-08-13T17:24:50.720102719Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-13T17:24:50.720118808Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-13T17:24:50.720134979Z [AUTOMOD]   [anti-caps] OFF
-2026-08-13T17:24:50.720148628Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-13T17:24:50.720161597Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-13T17:24:50.720174522Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
-2026-08-13T17:24:50.720188229Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-13T17:24:50.720200707Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-13T17:24:51.087209389Z [CHAT][debug] ainda gerando… 32s decorridos
-2026-08-13T17:24:51.103442732Z [MSG] 01KZFAN7ZRE6QTVFTKHNDPTBJB no canal 01KQ566RHQC8V8YAFH79G67MSJ: "centralfiction, rev 2 e strive"
-2026-08-13T17:24:51.103499686Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-13T17:24:51.103514064Z [AUTOMOD] ▶ Analisando mensagem de 01KZFAN7ZRE6QTVFTKHNDPTBJB
-2026-08-13T17:24:51.103534301Z [AUTOMOD]   conteúdo: "centralfiction, rev 2 e strive"
-2026-08-13T17:24:51.103917568Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-13T17:24:51.104252700Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
-2026-08-13T17:24:51.104281631Z [AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
-2026-08-13T17:24:51.104315903Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-13T17:24:51.104401901Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-13T17:24:51.104476054Z [AUTOMOD]   [anti-caps] OFF
-2026-08-13T17:24:51.104507741Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-13T17:24:51.104628412Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-13T17:24:51.104648587Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
-2026-08-13T17:24:51.104747296Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-13T17:24:51.104762991Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-13T17:24:52.864701477Z [MSG] 01KZXSJFSG2P21R4ZB50R41FFF no canal 01KQ566RHQC8V8YAFH79G67MSJ: "jogao"
-2026-08-13T17:24:52.864756265Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-13T17:24:52.864780029Z [AUTOMOD] ▶ Analisando mensagem de 01KZXSJFSG2P21R4ZB50R41FFF
-2026-08-13T17:24:52.865000772Z [AUTOMOD]   conteúdo: "jogao"
-2026-08-13T17:24:52.865336497Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-13T17:24:52.865484006Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
-2026-08-13T17:24:52.865568253Z [AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
-2026-08-13T17:24:52.865800922Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-13T17:24:52.865827169Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-13T17:24:52.865839398Z [AUTOMOD]   [anti-caps] OFF
-2026-08-13T17:24:52.865868441Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-13T17:24:52.865947600Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-13T17:24:52.866037717Z [AUTOMOD]   [anti-mass-spam] ON → 2 msg em 8000ms (limite 12)
-2026-08-13T17:24:52.866053039Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-13T17:24:52.866100084Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-13T17:24:57.904289179Z [MSG] 01KZXSJFSG2P21R4ZB50R41FFF no canal 01KQ566RHQC8V8YAFH79G67MSJ: "isso em full hd"
-2026-08-13T17:24:57.904351869Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-13T17:24:57.904369573Z [AUTOMOD] ▶ Analisando mensagem de 01KZXSJFSG2P21R4ZB50R41FFF
-2026-08-13T17:24:57.904382776Z [AUTOMOD]   conteúdo: "isso em full hd"
-2026-08-13T17:24:57.904760641Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-13T17:24:57.904939216Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
-2026-08-13T17:24:57.905049469Z [AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
-2026-08-13T17:24:57.905189750Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-13T17:24:57.905227875Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-13T17:24:57.905244328Z [AUTOMOD]   [anti-caps] OFF
-2026-08-13T17:24:57.905301136Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-13T17:24:57.905335450Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-13T17:24:57.905435870Z [AUTOMOD]   [anti-mass-spam] ON → 3 msg em 8000ms (limite 12)
-2026-08-13T17:24:57.905459386Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-13T17:24:57.905487699Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-13T17:24:59.088310867Z [CHAT][debug] ainda gerando… 40s decorridos
-2026-08-13T17:25:02.915555311Z [MSG] 01KZXSJFSG2P21R4ZB50R41FFF no canal 01KQ566RHQC8V8YAFH79G67MSJ: "to nem falando de res alta ainda"
-2026-08-13T17:25:02.915616834Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-13T17:25:02.915634100Z [AUTOMOD] ▶ Analisando mensagem de 01KZXSJFSG2P21R4ZB50R41FFF
-2026-08-13T17:25:02.915647717Z [AUTOMOD]   conteúdo: "to nem falando de res alta ainda"
-2026-08-13T17:25:02.916079814Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-13T17:25:02.916499176Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
-2026-08-13T17:25:02.916541831Z [AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
-2026-08-13T17:25:02.916708535Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-13T17:25:02.916734639Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-13T17:25:02.916802475Z [AUTOMOD]   [anti-caps] OFF
-2026-08-13T17:25:02.916815944Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-13T17:25:02.916836642Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-13T17:25:02.917052219Z [AUTOMOD]   [anti-mass-spam] ON → 2 msg em 8000ms (limite 12)
-2026-08-13T17:25:02.917092577Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-13T17:25:02.917109162Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-13T17:25:04.314817988Z [MSG] 01KZF4MQM1KWE2C2E6BX0BAK4A no canal 01KZRZCJTYNK1PE529XBEAECN3: "e so gerar em um site que goste do estilo do nome e colocar que ele funciona"
-2026-08-13T17:25:04.314874021Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-13T17:25:04.315147563Z [AUTOMOD] ▶ Analisando mensagem de 01KZF4MQM1KWE2C2E6BX0BAK4A
-2026-08-13T17:25:04.315177402Z [AUTOMOD]   conteúdo: "e so gerar em um site que goste do estilo do nome e colocar que ele funciona"
-2026-08-13T17:25:04.315260304Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-13T17:25:04.315638323Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
-2026-08-13T17:25:04.315772900Z [AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
-2026-08-13T17:25:04.315879164Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-13T17:25:04.315937627Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-13T17:25:04.316103259Z [AUTOMOD]   [anti-caps] OFF
-2026-08-13T17:25:04.316231024Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-13T17:25:04.316246603Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-13T17:25:04.316272707Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
-2026-08-13T17:25:04.316363537Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-13T17:25:04.316385682Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-13T17:25:07.088466497Z [CHAT][debug] ainda gerando… 48s decorridos
-2026-08-13T17:25:10.374639419Z [MSG] 01KZFAN7ZRE6QTVFTKHNDPTBJB no canal 01KQ566RHQC8V8YAFH79G67MSJ: "o novo ark lá?"
-2026-08-13T17:25:10.374701089Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-13T17:25:10.374718005Z [AUTOMOD] ▶ Analisando mensagem de 01KZFAN7ZRE6QTVFTKHNDPTBJB
-2026-08-13T17:25:10.374734996Z [AUTOMOD]   conteúdo: "o novo ark lá?"
-2026-08-13T17:25:10.375133394Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-13T17:25:10.375478287Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [pergunta]
-2026-08-13T17:25:10.375515682Z [AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
-2026-08-13T17:25:10.375531740Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-13T17:25:10.375567469Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-13T17:25:10.375583173Z [AUTOMOD]   [anti-caps] OFF
-2026-08-13T17:25:10.375748379Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-13T17:25:10.375771022Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-13T17:25:10.375867969Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
-2026-08-13T17:25:10.375893240Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-13T17:25:10.375973391Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-13T17:25:12.001235289Z [MSG] 01KZJ5H587KV8GSQVNVMXKMWT1 no canal 01KY0GXDK7DDG8ZDDRKPWY7600: "ooiiii"
-2026-08-13T17:25:12.001300776Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-13T17:25:12.001362451Z [AUTOMOD] ▶ Analisando mensagem de 01KZJ5H587KV8GSQVNVMXKMWT1
-2026-08-13T17:25:12.001403656Z [AUTOMOD]   conteúdo: "ooiiii"
-2026-08-13T17:25:12.001729943Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-13T17:25:12.001923125Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
-2026-08-13T17:25:12.002096501Z [AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
-2026-08-13T17:25:12.002132267Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-13T17:25:12.002147834Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-13T17:25:12.002161763Z [AUTOMOD]   [anti-caps] OFF
-2026-08-13T17:25:12.002209515Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-13T17:25:12.002382283Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-13T17:25:12.002417755Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
-2026-08-13T17:25:12.002454537Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-13T17:25:12.002536102Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-13T17:25:12.209162187Z [MSG] 01KZFAN7ZRE6QTVFTKHNDPTBJB no canal 01KQ566RHQC8V8YAFH79G67MSJ: "porra"
-2026-08-13T17:25:12.209222388Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-13T17:25:12.209241325Z [AUTOMOD] ▶ Analisando mensagem de 01KZFAN7ZRE6QTVFTKHNDPTBJB
-2026-08-13T17:25:12.209258968Z [AUTOMOD]   conteúdo: "porra"
-2026-08-13T17:25:12.209647460Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-13T17:25:12.209929398Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
-2026-08-13T17:25:12.209972316Z [AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
-2026-08-13T17:25:12.210096712Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-13T17:25:12.210134756Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-13T17:25:12.210151140Z [AUTOMOD]   [anti-caps] OFF
-2026-08-13T17:25:12.210164762Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-13T17:25:12.210179390Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-13T17:25:12.210206606Z [AUTOMOD]   [anti-mass-spam] ON → 2 msg em 8000ms (limite 12)
-2026-08-13T17:25:12.210222331Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-13T17:25:12.210319276Z [AUTOMOD]   ✓ Nenhuma violação detectada
+[AUTOMOD]   ✓ Nenhuma violação detectada
+[MSG] 01KYJWHP0MZ55CJZYGGX7TVWA0 no canal 01KZPWPJ9BK3YPS7EBEBDQFPP6: ""
+[AUTOMOD] ────────────────────────────────────────────
+[AUTOMOD] ▶ Analisando mensagem de 01KYJWHP0MZ55CJZYGGX7TVWA0
+[AUTOMOD]   conteúdo: ""
+[AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+[AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
+[AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
+[AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+[AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
+[AUTOMOD]   [anti-caps] OFF
+[AUTOMOD]   [anti-caracteres] ON → ok
+[AUTOMOD]   [anti-repeticao] OFF
+[AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
+[AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
+[AUTOMOD]   ✓ Nenhuma violação detectada
+[MSG] 01KZFAN7ZRE6QTVFTKHNDPTBJB no canal 01KQ566RHQC8V8YAFH79G67MSJ: "mas eu digo tb de navegação por ele, tem umas coisas que eu acho dele muito precarias até mesmo pra aprender no jogo"
+[AUTOMOD] ────────────────────────────────────────────
+[AUTOMOD] ▶ Analisando mensagem de 01KZFAN7ZRE6QTVFTKHNDPTBJB
+[AUTOMOD]   conteúdo: "mas eu digo tb de navegação por ele, tem umas coisas que eu acho dele muito precarias até mesmo pra aprender no jogo"
+[AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+[AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
+[AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
+[AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+[AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
+[AUTOMOD]   [anti-caps] OFF
+[AUTOMOD]   [anti-caracteres] ON → ok
+[AUTOMOD]   [anti-repeticao] OFF
+[AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
+[AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
+[AUTOMOD]   ✓ Nenhuma violação detectada
+[MSG] 01KZFPRRJS2CFEQ2HSJBH8S7MW no canal 01KQ566RHQC8V8YAFH79G67MSJ: "PS3 me lembra muito uncharted "
+[AUTOMOD] ────────────────────────────────────────────
+[AUTOMOD] ▶ Analisando mensagem de 01KZFPRRJS2CFEQ2HSJBH8S7MW
+[AUTOMOD]   conteúdo: "PS3 me lembra muito uncharted "
+[AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+[AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
+[AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
+[AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+[AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
+[AUTOMOD]   [anti-caps] OFF
+[AUTOMOD]   [anti-caracteres] ON → ok
+[AUTOMOD]   [anti-repeticao] OFF
+[AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
+[AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
+[AUTOMOD]   ✓ Nenhuma violação detectada
+[MSG] 01KZQ2KQGCYZ7FKSA8H3C88KJG no canal 01KQ566RHQC8V8YAFH79G67MSJ: "Glr tem limite de mb q pd mandar em um vídeo no stoat?"
+[AUTOMOD] ────────────────────────────────────────────
+[AUTOMOD] ▶ Analisando mensagem de 01KZQ2KQGCYZ7FKSA8H3C88KJG
+[AUTOMOD]   conteúdo: "Glr tem limite de mb q pd mandar em um vídeo no stoat?"
+[AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+[AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [pergunta]
+[AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
+[AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+[AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
+[AUTOMOD]   [anti-caps] OFF
+[AUTOMOD]   [anti-caracteres] ON → ok
+[AUTOMOD]   [anti-repeticao] OFF
+[AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
+[AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
+[AUTOMOD]   ✓ Nenhuma violação detectada
+[MSG] 01KVTS6DMVNBH7B4C3R2M8SXWE no canal 01KQ566RHQC8V8YAFH79G67MSJ: "joga bubsy 3d"
+[AUTOMOD] ────────────────────────────────────────────
+[AUTOMOD] ▶ Analisando mensagem de 01KVTS6DMVNBH7B4C3R2M8SXWE
+[AUTOMOD]   conteúdo: "joga bubsy 3d"
+[AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+[AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
+[AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
+[AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+[AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
+[AUTOMOD]   [anti-caps] OFF
+[AUTOMOD]   [anti-caracteres] ON → ok
+[AUTOMOD]   [anti-repeticao] OFF
+[AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
+[AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
+[AUTOMOD]   ✓ Nenhuma violação detectada
+[MSG] 01KZXZWWSJS5TFMPZ9Y7TDNY1G no canal 01KYWXRYH6TWJZFHYNTJB5C98M: "nao estou conseguindo compartilhar tela, alguem sabe oque pode ser?"
+[AUTOMOD] ────────────────────────────────────────────
+[AUTOMOD] ▶ Analisando mensagem de 01KZXZWWSJS5TFMPZ9Y7TDNY1G
+[AUTOMOD]   conteúdo: "nao estou conseguindo compartilhar tela, alguem sabe oque pode ser?"
+[AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+[AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [pergunta]
+[AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
+[AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+[AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
+[AUTOMOD]   [anti-caps] OFF
+[AUTOMOD]   [anti-caracteres] ON → ok
+[AUTOMOD]   [anti-repeticao] OFF
+[AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
+[AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
+[AUTOMOD]   ✓ Nenhuma violação detectada
+[MSG] 01KZ16ENP4RFZ79HZ2H8JX5GCD no canal 01KZF3T0AWQ4FZ5P8TVW93D0Q4: "meh"
+[AUTOMOD] ────────────────────────────────────────────
+[AUTOMOD] ▶ Analisando mensagem de 01KZ16ENP4RFZ79HZ2H8JX5GCD
+[AUTOMOD]   conteúdo: "meh"
+[AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+[AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
+[AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
+[AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+[AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
+[AUTOMOD]   [anti-caps] OFF
+[AUTOMOD]   [anti-caracteres] ON → ok
+[AUTOMOD]   [anti-repeticao] OFF
+[AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
+[AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
+[AUTOMOD]   ✓ Nenhuma violação detectada
+[MSG] 01KZFAN7ZRE6QTVFTKHNDPTBJB no canal 01KQ566RHQC8V8YAFH79G67MSJ: "yeh, aqui é a mesma coisa do discord"
+[AUTOMOD] ────────────────────────────────────────────
+[AUTOMOD] ▶ Analisando mensagem de 01KZFAN7ZRE6QTVFTKHNDPTBJB
+[AUTOMOD]   conteúdo: "yeh, aqui é a mesma coisa do discord"
+[AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+[AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
+[AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
+[AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+[AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
+[AUTOMOD]   [anti-caps] OFF
+[AUTOMOD]   [anti-caracteres] ON → ok
+[AUTOMOD]   [anti-repeticao] OFF
+[AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
+[AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
+[AUTOMOD]   ✓ Nenhuma violação detectada
+[MSG] 01KVTS6DMVNBH7B4C3R2M8SXWE no canal 01KQ566RHQC8V8YAFH79G67MSJ: "20mb"
+[AUTOMOD] ────────────────────────────────────────────
+[AUTOMOD] ▶ Analisando mensagem de 01KVTS6DMVNBH7B4C3R2M8SXWE
+[AUTOMOD]   conteúdo: "20mb"
+[AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+[AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
+[AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
+[AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+[AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
+[AUTOMOD]   [anti-caps] OFF
+[AUTOMOD]   [anti-caracteres] ON → ok
+[AUTOMOD]   [anti-repeticao] OFF
+[AUTOMOD]   [anti-mass-spam] ON → 2 msg em 8000ms (limite 12)
+[AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
+[AUTOMOD]   ✓ Nenhuma violação detectada
+[MSG] 01KZQ2KQGCYZ7FKSA8H3C88KJG no canal 01KQ566RHQC8V8YAFH79G67MSJ: "O meu é um de 18 segundos"
+[AUTOMOD] ────────────────────────────────────────────
+[AUTOMOD] ▶ Analisando mensagem de 01KZQ2KQGCYZ7FKSA8H3C88KJG
+[AUTOMOD]   conteúdo: "O meu é um de 18 segundos"
+[AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+[AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
+[AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
+[AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+[AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
+[AUTOMOD]   [anti-caps] OFF
+[AUTOMOD]   [anti-caracteres] ON → ok
+[AUTOMOD]   [anti-repeticao] OFF
+[AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
+[AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
+[AUTOMOD]   ✓ Nenhuma violação detectada
+[MSG] 01KZFAN7ZRE6QTVFTKHNDPTBJB no canal 01KQ566RHQC8V8YAFH79G67MSJ: "tu se acostuma rapido"
+[AUTOMOD] ────────────────────────────────────────────
+[AUTOMOD] ▶ Analisando mensagem de 01KZFAN7ZRE6QTVFTKHNDPTBJB
+[AUTOMOD]   conteúdo: "tu se acostuma rapido"
+[AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+[AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
+[AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
+[AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+[AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
+[AUTOMOD]   [anti-caps] OFF
+[AUTOMOD]   [anti-caracteres] ON → ok
+[AUTOMOD]   [anti-repeticao] OFF
+[AUTOMOD]   [anti-mass-spam] ON → 2 msg em 8000ms (limite 12)
+[AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
+[AUTOMOD]   ✓ Nenhuma violação detectada
+Skipping key pronouns during hydration!
+[MSG] 01KZWZPPZ941SXH5QSVRQNGTAA no canal 01KQ566RHQC8V8YAFH79G67MSJ: "oi gente, voltei"
+[AUTOMOD] ────────────────────────────────────────────
+[AUTOMOD] ▶ Analisando mensagem de 01KZWZPPZ941SXH5QSVRQNGTAA
+[AUTOMOD]   conteúdo: "oi gente, voltei"
+[AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+[AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
+[AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
+[AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+[AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
+[AUTOMOD]   [anti-caps] OFF
+[AUTOMOD]   [anti-caracteres] ON → ok
+[AUTOMOD]   [anti-repeticao] OFF
+[AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
+[AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
+[AUTOMOD]   ✓ Nenhuma violação detectada
+[MSG] 01KZ16ENP4RFZ79HZ2H8JX5GCD no canal 01KQ566RHQC8V8YAFH79G67MSJ: "opa"
+[AUTOMOD] ────────────────────────────────────────────
+[AUTOMOD] ▶ Analisando mensagem de 01KZ16ENP4RFZ79HZ2H8JX5GCD
+[AUTOMOD]   conteúdo: "opa"
+[AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+[AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
+[AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
+[AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+[AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
+[AUTOMOD]   [anti-caps] OFF
+[AUTOMOD]   [anti-caracteres] ON → ok
+[AUTOMOD]   [anti-repeticao] OFF
+[AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
+[AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
+[AUTOMOD]   ✓ Nenhuma violação detectada
+[MSG] 01KVTS6DMVNBH7B4C3R2M8SXWE no canal 01KQ566RHQC8V8YAFH79G67MSJ: "opa"
+[AUTOMOD] ────────────────────────────────────────────
+[AUTOMOD] ▶ Analisando mensagem de 01KVTS6DMVNBH7B4C3R2M8SXWE
+[AUTOMOD]   conteúdo: "opa"
+[AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+[AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
+[AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
+[AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+[AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
+[AUTOMOD]   [anti-caps] OFF
+[AUTOMOD]   [anti-caracteres] ON → ok
+[AUTOMOD]   [anti-repeticao] OFF
+[AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
+[AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
+[AUTOMOD]   ✓ Nenhuma violação detectada
+[MSG] 01KZVBWFG1CM8Z0TJ6Z3EG6XTF no canal 01KQ566RHQC8V8YAFH79G67MSJ: "Oooiiii"
+[AUTOMOD] ────────────────────────────────────────────
+[AUTOMOD] ▶ Analisando mensagem de 01KZVBWFG1CM8Z0TJ6Z3EG6XTF
+[AUTOMOD]   conteúdo: "Oooiiii"
+[AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+[AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
+[AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
+[AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+[AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
+[AUTOMOD]   [anti-caps] OFF
+[AUTOMOD]   [anti-caracteres] ON → ok
+[AUTOMOD]   [anti-repeticao] OFF
+[AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
+[AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
+[AUTOMOD]   ✓ Nenhuma violação detectada
+[MSG] 01KZFAN7ZRE6QTVFTKHNDPTBJB no canal 01KQ566RHQC8V8YAFH79G67MSJ: "é o jogo que marcou essa geração, faz sentido"
+[AUTOMOD] ────────────────────────────────────────────
+[AUTOMOD] ▶ Analisando mensagem de 01KZFAN7ZRE6QTVFTKHNDPTBJB
+[AUTOMOD]   conteúdo: "é o jogo que marcou essa geração, faz sentido"
+[AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+[AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
+[AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
+[AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+[AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
+[AUTOMOD]   [anti-caps] OFF
+[AUTOMOD]   [anti-caracteres] ON → ok
+[AUTOMOD]   [anti-repeticao] OFF
+[AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
+[AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
+[AUTOMOD]   ✓ Nenhuma violação detectada
+[MSG] 01KZQ2KQGCYZ7FKSA8H3C88KJG no canal 01KQ566RHQC8V8YAFH79G67MSJ: "Tmnc"
+[AUTOMOD] ────────────────────────────────────────────
+[AUTOMOD] ▶ Analisando mensagem de 01KZQ2KQGCYZ7FKSA8H3C88KJG
+[AUTOMOD]   conteúdo: "Tmnc"
+[AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+[AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
+[AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
+[AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+[AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
+[AUTOMOD]   [anti-caps] OFF
+[AUTOMOD]   [anti-caracteres] ON → ok
+[AUTOMOD]   [anti-repeticao] OFF
+[AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
+[AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
+[AUTOMOD]   ✓ Nenhuma violação detectada
+[MSG] 01KZVQQ3XED060R302GRZRANFK no canal 01KQ566RHQC8V8YAFH79G67MSJ: "uncharted é para o ps3 do mesmo jeito que halo é para o xbox, eu acho"
+[AUTOMOD] ────────────────────────────────────────────
+[AUTOMOD] ▶ Analisando mensagem de 01KZVQQ3XED060R302GRZRANFK
+[AUTOMOD]   conteúdo: "uncharted é para o ps3 do mesmo jeito que halo é para o xbox, eu acho"
+[AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+[AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
+[AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
+[AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+[AUTOMOD]   [anti-mass-mention] ON → 1 menção(ões) (limite 5)
+[AUTOMOD]   [anti-caps] OFF
+[AUTOMOD]   [anti-caracteres] ON → ok
+[AUTOMOD]   [anti-repeticao] OFF
+[AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
+[AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
+[AUTOMOD]   ✓ Nenhuma violação detectada
+[MSG] 01KZ16ENP4RFZ79HZ2H8JX5GCD no canal 01KQ566RHQC8V8YAFH79G67MSJ: "de boas sanic-?-"
+[AUTOMOD] ────────────────────────────────────────────
+[AUTOMOD] ▶ Analisando mensagem de 01KZ16ENP4RFZ79HZ2H8JX5GCD
+[AUTOMOD]   conteúdo: "de boas sanic-?-"
+[AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+[AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [pergunta]
+[AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
+[AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+[AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
+[AUTOMOD]   [anti-caps] OFF
+[AUTOMOD]   [anti-caracteres] ON → ok
+[AUTOMOD]   [anti-repeticao] OFF
+[AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
+[AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
+[AUTOMOD]   ✓ Nenhuma violação detectada
+[MSG] 01KVTS6DMVNBH7B4C3R2M8SXWE no canal 01KQ566RHQC8V8YAFH79G67MSJ: "opa"
+[AUTOMOD] ────────────────────────────────────────────
+[AUTOMOD] ▶ Analisando mensagem de 01KVTS6DMVNBH7B4C3R2M8SXWE
+[AUTOMOD]   conteúdo: "opa"
+[AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+[AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
+[AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
+[AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+[AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
+[AUTOMOD]   [anti-caps] OFF
+[AUTOMOD]   [anti-caracteres] ON → ok
+[AUTOMOD]   [anti-repeticao] OFF
+[AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
+[AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
+[AUTOMOD]   ✓ Nenhuma violação detectada
+[MSG] 01KZFAN7ZRE6QTVFTKHNDPTBJB no canal 01KQ566RHQC8V8YAFH79G67MSJ: "me lembra little big planet"
+[AUTOMOD] ────────────────────────────────────────────
+[AUTOMOD] ▶ Analisando mensagem de 01KZFAN7ZRE6QTVFTKHNDPTBJB
+[AUTOMOD]   conteúdo: "me lembra little big planet"
+[AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+[AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
+[AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
+[AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+[AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
+[AUTOMOD]   [anti-caps] OFF
+[AUTOMOD]   [anti-caracteres] ON → ok
+[AUTOMOD]   [anti-repeticao] OFF
+[AUTOMOD]   [anti-mass-spam] ON → 2 msg em 8000ms (limite 12)
+[AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
+[AUTOMOD]   ✓ Nenhuma violação detectada
+[MSG] 01KZVBWFG1CM8Z0TJ6Z3EG6XTF no canal 01KQ566RHQC8V8YAFH79G67MSJ: "Oii slyy"
+[AUTOMOD] ────────────────────────────────────────────
+[AUTOMOD] ▶ Analisando mensagem de 01KZVBWFG1CM8Z0TJ6Z3EG6XTF
+[AUTOMOD]   conteúdo: "Oii slyy"
+[AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+[AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
+[AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
+[AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+[AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
+[AUTOMOD]   [anti-caps] OFF
+[AUTOMOD]   [anti-caracteres] ON → ok
+[AUTOMOD]   [anti-repeticao] OFF
+[AUTOMOD]   [anti-mass-spam] ON → 2 msg em 8000ms (limite 12)
+[AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
+[AUTOMOD]   ✓ Nenhuma violação detectada
+[MSG] 01KZQ2KQGCYZ7FKSA8H3C88KJG no canal 01KQ566RHQC8V8YAFH79G67MSJ: "O bgl ta 20.08m"
+[AUTOMOD] ────────────────────────────────────────────
+[AUTOMOD] ▶ Analisando mensagem de 01KZQ2KQGCYZ7FKSA8H3C88KJG
+[AUTOMOD]   conteúdo: "O bgl ta 20.08m"
+[AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+[AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
+[AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
+[AUTOMOD]   [anti-link] domínios extraídos da mensagem: [20.08m]
+[AUTOMOD]   [anti-link] nenhum domínio da mensagem está na lista
+[AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
+[AUTOMOD]   [anti-caps] OFF
+[AUTOMOD]   [anti-caracteres] ON → ok
+[AUTOMOD]   [anti-repeticao] OFF
+[AUTOMOD]   [anti-mass-spam] ON → 2 msg em 8000ms (limite 12)
+[AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
+[AUTOMOD]   ✓ Nenhuma violação detectada
+[MSG] 01KZQ2KQGCYZ7FKSA8H3C88KJG no canal 01KQ566RHQC8V8YAFH79G67MSJ: "Mb"
+[AUTOMOD] ────────────────────────────────────────────
+[AUTOMOD] ▶ Analisando mensagem de 01KZQ2KQGCYZ7FKSA8H3C88KJG
+[AUTOMOD]   conteúdo: "Mb"
+[AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+[AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
+[AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
+[AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+[AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
+[AUTOMOD]   [anti-caps] OFF
+[AUTOMOD]   [anti-caracteres] ON → ok
+[AUTOMOD]   [anti-repeticao] OFF
+[AUTOMOD]   [anti-mass-spam] ON → 3 msg em 8000ms (limite 12)
+[AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
+[AUTOMOD]   ✓ Nenhuma violação detectada
+[MSG] 01KZY0Z192FWQTWBC39DNSVAAD no canal 01KQ566RHQC8V8YAFH79G67MSJ: "Pior q eu mal usava la tbm kkkkk, sou meio idosa pra isso"
+[AUTOMOD] ────────────────────────────────────────────
+[AUTOMOD] ▶ Analisando mensagem de 01KZY0Z192FWQTWBC39DNSVAAD
+[AUTOMOD]   conteúdo: "Pior q eu mal usava la tbm kkkkk, sou meio idosa pra isso"
+[AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+[AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
+[AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
+[AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+[AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
+[AUTOMOD]   [anti-caps] OFF
+[AUTOMOD]   [anti-caracteres] ON → ok
+[AUTOMOD]   [anti-repeticao] OFF
+[AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
+[AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
+[AUTOMOD]   ✓ Nenhuma violação detectada
+[MSG] 01KVTS6DMVNBH7B4C3R2M8SXWE no canal 01KQ566RHQC8V8YAFH79G67MSJ: "tô sim e tu snudderboy?"
+[AUTOMOD] ────────────────────────────────────────────
+[AUTOMOD] ▶ Analisando mensagem de 01KVTS6DMVNBH7B4C3R2M8SXWE
+[AUTOMOD]   conteúdo: "tô sim e tu snudderboy?"
+[AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+[AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [pergunta]
+[AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
+[AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+[AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
+[AUTOMOD]   [anti-caps] OFF
+[AUTOMOD]   [anti-caracteres] ON → ok
+[AUTOMOD]   [anti-repeticao] OFF
+[AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
+[AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
+[AUTOMOD]   ✓ Nenhuma violação detectada
+[MSG] 01KZFPRRJS2CFEQ2HSJBH8S7MW no canal 01KQ566RHQC8V8YAFH79G67MSJ: "Simmm"
+[AUTOMOD] ────────────────────────────────────────────
+[AUTOMOD] ▶ Analisando mensagem de 01KZFPRRJS2CFEQ2HSJBH8S7MW
+[AUTOMOD]   conteúdo: "Simmm"
+[AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+[AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
+[AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
+[AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+[AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
+[AUTOMOD]   [anti-caps] OFF
+[AUTOMOD]   [anti-caracteres] ON → ok
+[AUTOMOD]   [anti-repeticao] OFF
+[AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
+[AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
+[AUTOMOD]   ✓ Nenhuma violação detectada
+[MSG] 01KZ16ENP4RFZ79HZ2H8JX5GCD no canal 01KQ566RHQC8V8YAFH79G67MSJ: "hii"
+[AUTOMOD] ────────────────────────────────────────────
+[AUTOMOD] ▶ Analisando mensagem de 01KZ16ENP4RFZ79HZ2H8JX5GCD
+[AUTOMOD]   conteúdo: "hii"
+[AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+[AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
+[AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
+[AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+[AUTOMOD]   [anti-mass-mention] ON → 1 menção(ões) (limite 5)
+[AUTOMOD]   [anti-caps] OFF
+[AUTOMOD]   [anti-caracteres] ON → ok
+[AUTOMOD]   [anti-repeticao] OFF
+[AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
+[AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
+[AUTOMOD]   ✓ Nenhuma violação detectada
+[MSG] 01KZY0Z192FWQTWBC39DNSVAAD no canal 01KQ566RHQC8V8YAFH79G67MSJ: "Ai tomara, achei mt legal"
+[AUTOMOD] ────────────────────────────────────────────
+[AUTOMOD] ▶ Analisando mensagem de 01KZY0Z192FWQTWBC39DNSVAAD
+[AUTOMOD]   conteúdo: "Ai tomara, achei mt legal"
+[AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+[AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
+[AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
+[AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+[AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
+[AUTOMOD]   [anti-caps] OFF
+[AUTOMOD]   [anti-caracteres] ON → ok
+[AUTOMOD]   [anti-repeticao] OFF
+[AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
+[AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
+[AUTOMOD]   ✓ Nenhuma violação detectada
+[MSG] 01KZFPRRJS2CFEQ2HSJBH8S7MW no canal 01KQ566RHQC8V8YAFH79G67MSJ: "E Black é pra ps2"
+[AUTOMOD] ────────────────────────────────────────────
+[AUTOMOD] ▶ Analisando mensagem de 01KZFPRRJS2CFEQ2HSJBH8S7MW
+[AUTOMOD]   conteúdo: "E Black é pra ps2"
+[AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+[AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
+[AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
+[AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+[AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
+[AUTOMOD]   [anti-caps] OFF
+[AUTOMOD]   [anti-caracteres] ON → ok
+[AUTOMOD]   [anti-repeticao] OFF
+[AUTOMOD]   [anti-mass-spam] ON → 2 msg em 8000ms (limite 12)
+[AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
+[AUTOMOD]   ✓ Nenhuma violação detectada
+[MSG] 01KZ16ENP4RFZ79HZ2H8JX5GCD no canal 01KQ566RHQC8V8YAFH79G67MSJ: "Kkkk tô de boas"
+[AUTOMOD] ────────────────────────────────────────────
+[AUTOMOD] ▶ Analisando mensagem de 01KZ16ENP4RFZ79HZ2H8JX5GCD
+[AUTOMOD]   conteúdo: "Kkkk tô de boas"
+[AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+[AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
+[AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
+[AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+[AUTOMOD]   [anti-mass-mention] ON → 1 menção(ões) (limite 5)
+[AUTOMOD]   [anti-caps] OFF
+[AUTOMOD]   [anti-caracteres] ON → ok
+[AUTOMOD]   [anti-repeticao] OFF
+[AUTOMOD]   [anti-mass-spam] ON → 2 msg em 8000ms (limite 12)
+[AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
+[AUTOMOD]   ✓ Nenhuma violação detectada
+[MSG] 01KZFAN7ZRE6QTVFTKHNDPTBJB no canal 01KQ566RHQC8V8YAFH79G67MSJ: "ih, ent relaxa que tu se acostuma usando"
+[AUTOMOD] ────────────────────────────────────────────
+[AUTOMOD] ▶ Analisando mensagem de 01KZFAN7ZRE6QTVFTKHNDPTBJB
+[AUTOMOD]   conteúdo: "ih, ent relaxa que tu se acostuma usando"
+[AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+[AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
+[AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
+[AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+[AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
+[AUTOMOD]   [anti-caps] OFF
+[AUTOMOD]   [anti-caracteres] ON → ok
+[AUTOMOD]   [anti-repeticao] OFF
+[AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
+[AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
+[AUTOMOD]   ✓ Nenhuma violação detectada
+[MSG] 01KZS973MMTSPQ005EB71VA998 no canal 01KZPWPJ9BK3YPS7EBEBDQFPP6: "Entendo, Entendo, vou tomar cuidado. "
+[AUTOMOD] ────────────────────────────────────────────
+[AUTOMOD] ▶ Analisando mensagem de 01KZS973MMTSPQ005EB71VA998
+[AUTOMOD]   conteúdo: "Entendo, Entendo, vou tomar cuidado. "
+[AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+[AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [negacao]
+[AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
+[AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+[AUTOMOD]   [anti-mass-mention] ON → 1 menção(ões) (limite 5)
+[AUTOMOD]   [anti-caps] OFF
+[AUTOMOD]   [anti-caracteres] ON → ok
+[AUTOMOD]   [anti-repeticao] OFF
+[AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
+[AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
+[AUTOMOD]   ✓ Nenhuma violação detectada
+[MSG] 01KYJWHP0MZ55CJZYGGX7TVWA0 no canal 01KZPWPJ9BK3YPS7EBEBDQFPP6: ""
+[AUTOMOD] ────────────────────────────────────────────
+[AUTOMOD] ▶ Analisando mensagem de 01KYJWHP0MZ55CJZYGGX7TVWA0
+[AUTOMOD]   conteúdo: ""
+[AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+[AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
+[AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
+[AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+[AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
+[AUTOMOD]   [anti-caps] OFF
+[AUTOMOD]   [anti-caracteres] ON → ok
+[AUTOMOD]   [anti-repeticao] OFF
+[AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
+[AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
+[AUTOMOD]   ✓ Nenhuma violação detectada
+[MSG] 01KZXSJFSG2P21R4ZB50R41FFF no canal 01KQ566RHQC8V8YAFH79G67MSJ: "meu sonic riders ngm lembra 😢 😢 😢 😢"
+[AUTOMOD] ────────────────────────────────────────────
+[AUTOMOD] ▶ Analisando mensagem de 01KZXSJFSG2P21R4ZB50R41FFF
+[AUTOMOD]   conteúdo: "meu sonic riders ngm lembra 😢 😢 😢 😢"
+[AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+[AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
+[AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
+[AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+[AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
+[AUTOMOD]   [anti-caps] OFF
+[AUTOMOD]   [anti-caracteres] ON → ok
+[AUTOMOD]   [anti-repeticao] OFF
+[AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
+[AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
+[AUTOMOD]   ✓ Nenhuma violação detectada
+[MSG] 01KZS973MMTSPQ005EB71VA998 no canal 01KZPWPJ9BK3YPS7EBEBDQFPP6: "?ia stop"
+[AUTOMOD] ────────────────────────────────────────────
+[AUTOMOD] ▶ Analisando mensagem de 01KZS973MMTSPQ005EB71VA998
+[AUTOMOD]   conteúdo: "?ia stop"
+[AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+[AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [pergunta]
+[AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
+[AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+[AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
+[AUTOMOD]   [anti-caps] OFF
+[AUTOMOD]   [anti-caracteres] ON → ok
+[AUTOMOD]   [anti-repeticao] OFF
+[AUTOMOD]   [anti-mass-spam] ON → 2 msg em 8000ms (limite 12)
+[AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
+[AUTOMOD]   ✓ Nenhuma violação detectada
+[MSG] 01KYJWHP0MZ55CJZYGGX7TVWA0 no canal 01KZPWPJ9BK3YPS7EBEBDQFPP6: ""
+[AUTOMOD] ────────────────────────────────────────────
+[AUTOMOD] ▶ Analisando mensagem de 01KYJWHP0MZ55CJZYGGX7TVWA0
+[AUTOMOD]   conteúdo: ""
+[AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+[AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
+[AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
+[AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+[AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
+[AUTOMOD]   [anti-caps] OFF
+[AUTOMOD]   [anti-caracteres] ON → ok
+[AUTOMOD]   [anti-repeticao] OFF
+[AUTOMOD]   [anti-mass-spam] ON → 2 msg em 8000ms (limite 12)
+[AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
+[AUTOMOD]   ✓ Nenhuma violação detectada
+[MSG] 01KZXWVXYQ2SJZ4N43HAF1QVQY no canal 01KQ566RHQC8V8YAFH79G67MSJ: ":01KZPZ9RA005RVTF7XQ7ZH3GW8:"
+[AUTOMOD] ────────────────────────────────────────────
+[AUTOMOD] ▶ Analisando mensagem de 01KZXWVXYQ2SJZ4N43HAF1QVQY
+[AUTOMOD]   conteúdo: ":01KZPZ9RA005RVTF7XQ7ZH3GW8:"
+[AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+[AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
+[AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
+[AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+[AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
+[AUTOMOD]   [anti-caps] OFF
+[AUTOMOD]   [anti-caracteres] ON → ok
+[AUTOMOD]   [anti-repeticao] OFF
+[AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
+[AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
+[AUTOMOD]   ✓ Nenhuma violação detectada
+[MSG] 01KZWZPPZ941SXH5QSVRQNGTAA no canal 01KQ566RHQC8V8YAFH79G67MSJ: "tô entendendo nada do assunto"
+[AUTOMOD] ────────────────────────────────────────────
+[AUTOMOD] ▶ Analisando mensagem de 01KZWZPPZ941SXH5QSVRQNGTAA
+[AUTOMOD]   conteúdo: "tô entendendo nada do assunto"
+[AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+[AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
+[AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
+[AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+[AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
+[AUTOMOD]   [anti-caps] OFF
+[AUTOMOD]   [anti-caracteres] ON → ok
+[AUTOMOD]   [anti-repeticao] OFF
+[AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
+[AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
+[AUTOMOD]   ✓ Nenhuma violação detectada
+[MSG] 01KZ16ENP4RFZ79HZ2H8JX5GCD no canal 01KQ566RHQC8V8YAFH79G67MSJ: ":01KYR1AJZ8S6RJWM0ZPNM4A85D:"
+[AUTOMOD] ────────────────────────────────────────────
+[AUTOMOD] ▶ Analisando mensagem de 01KZ16ENP4RFZ79HZ2H8JX5GCD
+[AUTOMOD]   conteúdo: ":01KYR1AJZ8S6RJWM0ZPNM4A85D:"
+[AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+[AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
+[AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
+[AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+[AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
+[AUTOMOD]   [anti-caps] OFF
+[AUTOMOD]   [anti-caracteres] ON → ok
+[AUTOMOD]   [anti-repeticao] OFF
+[AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
+[AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
+[AUTOMOD]   ✓ Nenhuma violação detectada
+[MSG] 01KZWZPPZ941SXH5QSVRQNGTAA no canal 01KQ566RHQC8V8YAFH79G67MSJ: "amém "
+[AUTOMOD] ────────────────────────────────────────────
+[AUTOMOD] ▶ Analisando mensagem de 01KZWZPPZ941SXH5QSVRQNGTAA
+[AUTOMOD]   conteúdo: "amém "
+[AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+[AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
+[AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
+[AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+[AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
+[AUTOMOD]   [anti-caps] OFF
+[AUTOMOD]   [anti-caracteres] ON → ok
+[AUTOMOD]   [anti-repeticao] OFF
+[AUTOMOD]   [anti-mass-spam] ON → 2 msg em 8000ms (limite 12)
+[AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
+[AUTOMOD]   ✓ Nenhuma violação detectada
+[MSG] 00000000000000000000000000 no canal 01KXSGGT26VS4XHRXREDW8JQNR: ""
+[AUTOMOD] ────────────────────────────────────────────
+[AUTOMOD] ▶ Analisando mensagem de 00000000000000000000000000
+[AUTOMOD]   conteúdo: ""
+[AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+[AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
+[AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
+[AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+[AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
+[AUTOMOD]   [anti-caps] OFF
+[AUTOMOD]   [anti-caracteres] ON → ok
+[AUTOMOD]   [anti-repeticao] OFF
+[AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
+[AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
+[AUTOMOD]   ✓ Nenhuma violação detectada
+[MSG] 01KZVBWFG1CM8Z0TJ6Z3EG6XTF no canal 01KQ566RHQC8V8YAFH79G67MSJ: "Eu tinha o sonic riders do gamecubekkk"
+[AUTOMOD] ────────────────────────────────────────────
+[AUTOMOD] ▶ Analisando mensagem de 01KZVBWFG1CM8Z0TJ6Z3EG6XTF
+[AUTOMOD]   conteúdo: "Eu tinha o sonic riders do gamecubekkk"
+[AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+[AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
+[AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
+[AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+[AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
+[AUTOMOD]   [anti-caps] OFF
+[AUTOMOD]   [anti-caracteres] ON → ok
+[AUTOMOD]   [anti-repeticao] OFF
+[AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
+[AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
+[AUTOMOD]   ✓ Nenhuma violação detectada
+[MSG] 01KZXSJFSG2P21R4ZB50R41FFF no canal 01KQ566RHQC8V8YAFH79G67MSJ: "jogo do sonic com mais drip possivel"
+[AUTOMOD] ────────────────────────────────────────────
+[AUTOMOD] ▶ Analisando mensagem de 01KZXSJFSG2P21R4ZB50R41FFF
+[AUTOMOD]   conteúdo: "jogo do sonic com mais drip possivel"
+[AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+[AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
+[AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
+[AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+[AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
+[AUTOMOD]   [anti-caps] OFF
+[AUTOMOD]   [anti-caracteres] ON → ok
+[AUTOMOD]   [anti-repeticao] OFF
+[AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
+[AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
+[AUTOMOD]   ✓ Nenhuma violação detectada
+Skipping key system during hydration!
+[MSG] 01KZFAN7ZRE6QTVFTKHNDPTBJB no canal 01KQ566RHQC8V8YAFH79G67MSJ: "tu é parceria mrm"
+[AUTOMOD] ────────────────────────────────────────────
+[AUTOMOD] ▶ Analisando mensagem de 01KZFAN7ZRE6QTVFTKHNDPTBJB
+[AUTOMOD]   conteúdo: "tu é parceria mrm"
+[AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+[AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
+[AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
+[AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+[AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
+[AUTOMOD]   [anti-caps] OFF
+[AUTOMOD]   [anti-caracteres] ON → ok
+[AUTOMOD]   [anti-repeticao] OFF
+[AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
+[AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
+[AUTOMOD]   ✓ Nenhuma violação detectada
+[REAÇÃO] args: [
+  '01KZR9JW1QTE4FXMMAN08VNXKW',
+  '01KZY0S70NTSDMZK2NN957XG5Q',
+  '🏳️‍🌈'
+]
+[REACTIONROLE] +cargo 01KZR8FC5N9SDKCJ9XMQ1TX7C5 para 01KZY0S70NTSDMZK2NN957XG5Q (msg 01KZR9JW1QTE4FXMMAN08VNXKW)
+[REAÇÃO] args: [
+  '01KZR9JW1QTE4FXMMAN08VNXKW',
+  '01KZY0S70NTSDMZK2NN957XG5Q',
+  '🏳️‍⚧️'
+]
+[REACTIONROLE] +cargo 01KZR8FJ5MHXBSJR8TDXB2SHTT para 01KZY0S70NTSDMZK2NN957XG5Q (msg 01KZR9JW1QTE4FXMMAN08VNXKW) | trocou 1 cargo(s)
+[MSG] 01KVTS6DMVNBH7B4C3R2M8SXWE no canal 01KQ566RHQC8V8YAFH79G67MSJ: "eu nunca joguei o riders"
+[AUTOMOD] ────────────────────────────────────────────
+[AUTOMOD] ▶ Analisando mensagem de 01KVTS6DMVNBH7B4C3R2M8SXWE
+[AUTOMOD]   conteúdo: "eu nunca joguei o riders"
+[AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+[AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
+[AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
+[AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+[AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
+[AUTOMOD]   [anti-caps] OFF
+[AUTOMOD]   [anti-caracteres] ON → ok
+[AUTOMOD]   [anti-repeticao] OFF
+[AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
+[AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
+[AUTOMOD]   ✓ Nenhuma violação detectada
+[MSG] 01KZWZPPZ941SXH5QSVRQNGTAA no canal 01KQ566RHQC8V8YAFH79G67MSJ: "unica coisa que eu entendo é de mariposas"
+[AUTOMOD] ────────────────────────────────────────────
+[AUTOMOD] ▶ Analisando mensagem de 01KZWZPPZ941SXH5QSVRQNGTAA
+[AUTOMOD]   conteúdo: "unica coisa que eu entendo é de mariposas"
+[AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+[AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
+[AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
+[AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+[AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
+[AUTOMOD]   [anti-caps] OFF
+[AUTOMOD]   [anti-caracteres] ON → ok
+[AUTOMOD]   [anti-repeticao] OFF
+[AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
+[AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
+[AUTOMOD]   ✓ Nenhuma violação detectada
+[MSG] 01KZFAN7ZRE6QTVFTKHNDPTBJB no canal 01KQ566RHQC8V8YAFH79G67MSJ: "mas esse jogo é muito nichado viado"
+[AUTOMOD] ────────────────────────────────────────────
+[AUTOMOD] ▶ Analisando mensagem de 01KZFAN7ZRE6QTVFTKHNDPTBJB
+[AUTOMOD]   conteúdo: "mas esse jogo é muito nichado viado"
+[AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+[AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
+[AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
+[AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+[AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
+[AUTOMOD]   [anti-caps] OFF
+[AUTOMOD]   [anti-caracteres] ON → ok
+[AUTOMOD]   [anti-repeticao] OFF
+[AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
+[AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
+[AUTOMOD]   ✓ Nenhuma violação detectada
+[MSG] 01KZY0Z192FWQTWBC39DNSVAAD no canal 01KQ566RHQC8V8YAFH79G67MSJ: "Kkkkkkkk obg obg"
+[AUTOMOD] ────────────────────────────────────────────
+[AUTOMOD] ▶ Analisando mensagem de 01KZY0Z192FWQTWBC39DNSVAAD
+[AUTOMOD]   conteúdo: "Kkkkkkkk obg obg"
+[AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+[AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
+[AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
+[AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+[AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
+[AUTOMOD]   [anti-caps] OFF
+[AUTOMOD]   [anti-caracteres] ON → ok
+[AUTOMOD]   [anti-repeticao] OFF
+[AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
+[AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
+[AUTOMOD]   ✓ Nenhuma violação detectada
+[MSG] 01KZWZPPZ941SXH5QSVRQNGTAA no canal 01KQ566RHQC8V8YAFH79G67MSJ: "bah"
+[AUTOMOD] ────────────────────────────────────────────
+[AUTOMOD] ▶ Analisando mensagem de 01KZWZPPZ941SXH5QSVRQNGTAA
+[AUTOMOD]   conteúdo: "bah"
+[AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+[AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
+[AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
+[AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+[AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
+[AUTOMOD]   [anti-caps] OFF
+[AUTOMOD]   [anti-caracteres] ON → ok
+[AUTOMOD]   [anti-repeticao] OFF
+[AUTOMOD]   [anti-mass-spam] ON → 2 msg em 8000ms (limite 12)
+[AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
+[AUTOMOD]   ✓ Nenhuma violação detectada
+[MSG] 01KVTS6DMVNBH7B4C3R2M8SXWE no canal 01KQ566RHQC8V8YAFH79G67MSJ: "sim"
+[AUTOMOD] ────────────────────────────────────────────
+[AUTOMOD] ▶ Analisando mensagem de 01KVTS6DMVNBH7B4C3R2M8SXWE
+[AUTOMOD]   conteúdo: "sim"
+[AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+[AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
+[AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
+[AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+[AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
+[AUTOMOD]   [anti-caps] OFF
+[AUTOMOD]   [anti-caracteres] ON → ok
+[AUTOMOD]   [anti-repeticao] OFF
+[AUTOMOD]   [anti-mass-spam] ON → 2 msg em 8000ms (limite 12)
+[AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
+[AUTOMOD]   ✓ Nenhuma violação detectada
+[MSG] 01KZ16ENP4RFZ79HZ2H8JX5GCD no canal 01KZPWPJ9BK3YPS7EBEBDQFPP6: "Kkkkkk"
+[AUTOMOD] ────────────────────────────────────────────
+[AUTOMOD] ▶ Analisando mensagem de 01KZ16ENP4RFZ79HZ2H8JX5GCD
+[AUTOMOD]   conteúdo: "Kkkkkk"
+[AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+[AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
+[AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
+[AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+[AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
+[AUTOMOD]   [anti-caps] OFF
+[AUTOMOD]   [anti-caracteres] ON → ok
+[AUTOMOD]   [anti-repeticao] OFF
+[AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
+[AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
+[AUTOMOD]   ✓ Nenhuma violação detectada
+[MSG] 01KZFAN7ZRE6QTVFTKHNDPTBJB no canal 01KQ566RHQC8V8YAFH79G67MSJ: "riders é dificil pra caralho tb"
+[AUTOMOD] ────────────────────────────────────────────
+[AUTOMOD] ▶ Analisando mensagem de 01KZFAN7ZRE6QTVFTKHNDPTBJB
+[AUTOMOD]   conteúdo: "riders é dificil pra caralho tb"
+[AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+[AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
+[AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
+[AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+[AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
+[AUTOMOD]   [anti-caps] OFF
+[AUTOMOD]   [anti-caracteres] ON → ok
+[AUTOMOD]   [anti-repeticao] OFF
+[AUTOMOD]   [anti-mass-spam] ON → 2 msg em 8000ms (limite 12)
+[AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
+[AUTOMOD]   ✓ Nenhuma violação detectada
+[MSG] 01KHFWRVQ0Z4VHTKTTPWV6XFC1 no canal 01KXSGNQRB0KXXBMB8216W2GZ4: "que pica"
+[AUTOMOD] ────────────────────────────────────────────
+[AUTOMOD] ▶ Analisando mensagem de 01KHFWRVQ0Z4VHTKTTPWV6XFC1
+[AUTOMOD]   conteúdo: "que pica"
+[AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+[AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
+[AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
+[AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+[AUTOMOD]   [anti-mass-mention] ON → 1 menção(ões) (limite 5)
+[AUTOMOD]   [anti-caps] OFF
+[AUTOMOD]   [anti-caracteres] ON → ok
+[AUTOMOD]   [anti-repeticao] OFF
+[AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
+[AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
+[AUTOMOD]   ✓ Nenhuma violação detectada
+[MSG] 01K9JKP85D5EP2ZTEHS8DT797A no canal 01KKRZV7Y4GF7XA9P94AEKAPJK: "<@01KHBPN31QT1THM1A0CEM8JA91> poderia me dizer agora se consegue ler o main.js?"
+[CHAT][debug] ══════ nova conversa ══════
+[CHAT][debug] autor=Ghiso | pergunta (49 chars): "poderia me dizer agora se consegue ler o main.js?"
+[CHAT][ollama] → decidir-busca | modelo=qwen3.5:0.8b num_ctx=16384 num_predict=200 entrada≈623 chars (json, think=off)
+[MSG] 01KZXSJFSG2P21R4ZB50R41FFF no canal 01KQ566RHQC8V8YAFH79G67MSJ: "po"
+[AUTOMOD] ────────────────────────────────────────────
+[AUTOMOD] ▶ Analisando mensagem de 01KZXSJFSG2P21R4ZB50R41FFF
+[AUTOMOD]   conteúdo: "po"
+[AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+[AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
+[AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
+[AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+[AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
+[AUTOMOD]   [anti-caps] OFF
+[AUTOMOD]   [anti-caracteres] ON → ok
+[AUTOMOD]   [anti-repeticao] OFF
+[AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
+[AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
+[AUTOMOD]   ✓ Nenhuma violação detectada
+[CHAT][ollama] ← decidir-busca | done=stop tokens_prompt=173 tokens_gerados=6 veloc=66.4 tok/s saída=17 chars tempo=0.6s
+[CHAT][debug] decisão de busca: buscar=false
+[CHAT][debug] memória: 26 fato(s) injetado(s)
+[CHAT][debug] roteamento: tipo=ferramenta → modelo=qwen3.5:9b
+[MSG] 01KZY0Z192FWQTWBC39DNSVAAD no canal 01KQ566RHQC8V8YAFH79G67MSJ: "Estamos na mesma"
+[AUTOMOD] ────────────────────────────────────────────
+[AUTOMOD] ▶ Analisando mensagem de 01KZY0Z192FWQTWBC39DNSVAAD
+[AUTOMOD]   conteúdo: "Estamos na mesma"
+[AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+[AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
+[AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
+[AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+[AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
+[AUTOMOD]   [anti-caps] OFF
+[AUTOMOD]   [anti-caracteres] ON → ok
+[AUTOMOD]   [anti-repeticao] OFF
+[AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
+[AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
+[AUTOMOD]   ✓ Nenhuma violação detectada
+[MSG] 01KZWZPPZ941SXH5QSVRQNGTAA no canal 01KQ566RHQC8V8YAFH79G67MSJ: "OXI O GAARA"
+[AUTOMOD] ────────────────────────────────────────────
+[AUTOMOD] ▶ Analisando mensagem de 01KZWZPPZ941SXH5QSVRQNGTAA
+[AUTOMOD]   conteúdo: "OXI O GAARA"
+[AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+[AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
+[AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
+[AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+[AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
+[AUTOMOD]   [anti-caps] OFF
+[AUTOMOD]   [anti-caracteres] ON → ok
+[AUTOMOD]   [anti-repeticao] OFF
+[AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
+[AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
+[AUTOMOD]   ✓ Nenhuma violação detectada
+[MSG] 01KZFAN7ZRE6QTVFTKHNDPTBJB no canal 01KQ566RHQC8V8YAFH79G67MSJ: "nem fudendo que ninguem vai lembrar"
+[AUTOMOD] ────────────────────────────────────────────
+[AUTOMOD] ▶ Analisando mensagem de 01KZFAN7ZRE6QTVFTKHNDPTBJB
+[AUTOMOD]   conteúdo: "nem fudendo que ninguem vai lembrar"
+[AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+[AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
+[AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
+[AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+[AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
+[AUTOMOD]   [anti-caps] OFF
+[AUTOMOD]   [anti-caracteres] ON → ok
+[AUTOMOD]   [anti-repeticao] OFF
+[AUTOMOD]   [anti-mass-spam] ON → 2 msg em 8000ms (limite 12)
+[AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
+[AUTOMOD]   ✓ Nenhuma violação detectada
+[MSG] 01KQANJDQ7QJY6T4A37HBRZJFS no canal 01KZPWPJ9BK3YPS7EBEBDQFPP6: "?ia Por que PI é 3,1416... (eu sei)"
+[AUTOMOD] ────────────────────────────────────────────
+[AUTOMOD] ▶ Analisando mensagem de 01KQANJDQ7QJY6T4A37HBRZJFS
+[AUTOMOD]   conteúdo: "?ia Por que PI é 3,1416... (eu sei)"
+[AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+[AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [pergunta]
+[AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
+[AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+[AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
+[AUTOMOD]   [anti-caps] OFF
+[AUTOMOD]   [anti-caracteres] ON → ok
+[AUTOMOD]   [anti-repeticao] OFF
+[AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
+[AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
+[AUTOMOD]   ✓ Nenhuma violação detectada
+[MSG] 01KYJWHP0MZ55CJZYGGX7TVWA0 no canal 01KZPWPJ9BK3YPS7EBEBDQFPP6: ""
+[AUTOMOD] ────────────────────────────────────────────
+[AUTOMOD] ▶ Analisando mensagem de 01KYJWHP0MZ55CJZYGGX7TVWA0
+[AUTOMOD]   conteúdo: ""
+[AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+[AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
+[AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
+[AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+[AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
+[AUTOMOD]   [anti-caps] OFF
+[AUTOMOD]   [anti-caracteres] ON → ok
+[AUTOMOD]   [anti-repeticao] OFF
+[AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
+[AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
+[AUTOMOD]   ✓ Nenhuma violação detectada
+[MSG] 01KZ16ENP4RFZ79HZ2H8JX5GCD no canal 01KZPWPJ9BK3YPS7EBEBDQFPP6: "?cacar"
+[AUTOMOD] ────────────────────────────────────────────
+[AUTOMOD] ▶ Analisando mensagem de 01KZ16ENP4RFZ79HZ2H8JX5GCD
+[AUTOMOD]   conteúdo: "?cacar"
+[AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+[AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [pergunta]
+[AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
+[AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+[AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
+[AUTOMOD]   [anti-caps] OFF
+[AUTOMOD]   [anti-caracteres] ON → ok
+[AUTOMOD]   [anti-repeticao] OFF
+[AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
+[AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
+[AUTOMOD]   ✓ Nenhuma violação detectada
+[MSG] 01KYJWHP0MZ55CJZYGGX7TVWA0 no canal 01KZPWPJ9BK3YPS7EBEBDQFPP6: ""
+[AUTOMOD] ────────────────────────────────────────────
+[AUTOMOD] ▶ Analisando mensagem de 01KYJWHP0MZ55CJZYGGX7TVWA0
+[AUTOMOD]   conteúdo: ""
+[AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+[AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
+[AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
+[AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+[AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
+[AUTOMOD]   [anti-caps] OFF
+[AUTOMOD]   [anti-caracteres] ON → ok
+[AUTOMOD]   [anti-repeticao] OFF
+[AUTOMOD]   [anti-mass-spam] ON → 2 msg em 8000ms (limite 12)
+[AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
+[AUTOMOD]   ✓ Nenhuma violação detectada
+[CHAT][debug] ainda gerando… 8s decorridos
+[MSG] 01KZXSJFSG2P21R4ZB50R41FFF no canal 01KQ566RHQC8V8YAFH79G67MSJ: "mas é tão bom"
+[AUTOMOD] ────────────────────────────────────────────
+[AUTOMOD] ▶ Analisando mensagem de 01KZXSJFSG2P21R4ZB50R41FFF
+[AUTOMOD]   conteúdo: "mas é tão bom"
+[AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+[AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
+[AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
+[AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+[AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
+[AUTOMOD]   [anti-caps] OFF
+[AUTOMOD]   [anti-caracteres] ON → ok
+[AUTOMOD]   [anti-repeticao] OFF
+[AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
+[AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
+[AUTOMOD]   ✓ Nenhuma violação detectada
+[MSG] 01KHFWRVQ0Z4VHTKTTPWV6XFC1 no canal 01KXSGNQRB0KXXBMB8216W2GZ4: "demais né KKKKKKKKKKKK "
+[AUTOMOD] ────────────────────────────────────────────
+[AUTOMOD] ▶ Analisando mensagem de 01KHFWRVQ0Z4VHTKTTPWV6XFC1
+[AUTOMOD]   conteúdo: "demais né KKKKKKKKKKKK "
+[AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+[AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
+[AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
+[AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+[AUTOMOD]   [anti-mass-mention] ON → 1 menção(ões) (limite 5)
+[AUTOMOD]   [anti-caps] OFF
+[AUTOMOD]   [anti-caracteres] ON → ok
+[AUTOMOD]   [anti-repeticao] OFF
+[AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
+[AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
+[AUTOMOD]   ✓ Nenhuma violação detectada
+[MSG] 01KZFAN7ZRE6QTVFTKHNDPTBJB no canal 01KQ566RHQC8V8YAFH79G67MSJ: "kkkkkkk"
+[AUTOMOD] ────────────────────────────────────────────
+[AUTOMOD] ▶ Analisando mensagem de 01KZFAN7ZRE6QTVFTKHNDPTBJB
+[AUTOMOD]   conteúdo: "kkkkkkk"
+[AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+[AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
+[AUTOMOD]   [anti-link] ON → lista tem 3259607 domínio(s)
+[AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+[AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
+[AUTOMOD]   [anti-caps] OFF
+[AUTOMOD]   [anti-caracteres] ON → ok
+[AUTOMOD]   [anti-repeticao] OFF
+[AUTOMOD]   [anti-mass-spam] ON → 2 msg em 8000ms (limite 12)
+[AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
+[AUTOMOD]   ✓ Nenhuma violação detectada

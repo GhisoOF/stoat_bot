@@ -655,7 +655,7 @@ export async function cmdGame(message, args, ctx) {
           `\`${P}game admin eco\` — números da economia`,
           `\`${P}game admin simular <missao> [n]\` — roda a missão n vezes sem efeito`,
           `\`${P}game admin dungeon <qtd>\` — põe moeda no pote da dungeon`,
-          `\`${P}game admin zerar confirmar\` — apaga TODO o RPG deste servidor`,
+          `\`${P}game admin reset <servidor|catalogo|tudo>\` — recomeça do zero`,
         ].join("\n"), colour: COR.mod });
     }
 
@@ -931,18 +931,105 @@ export async function cmdGame(message, args, ctx) {
         ].join("\n"), colour: COR.mod });
     }
 
-    if (acao === "zerar") {
-      if (resto[0]?.toLowerCase() !== "confirmar") {
-        return sendEmbed(message.channel, { title: "⚠️ Apaga TUDO",
-          description: `Personagens, itens, followers e moedas deste servidor.\n\n\`${P}game admin zerar confirmar\``,
-          colour: COR.aviso });
+    // ── reset ──
+    //
+    // Três escopos, porque "apagar tudo" significa coisas diferentes:
+    //   servidor — progresso das pessoas (personagens, itens, moedas, ofertas)
+    //   catalogo — o que EXISTE no jogo (volta só aos genéricos)
+    //   tudo     — os dois
+    if (["zerar", "reset", "resetar"].includes(acao)) {
+      const escopo = (resto[0] ?? "servidor").toLowerCase();
+      const confirmou = resto.includes("confirmar");
+      const escopos = { servidor: 1, catalogo: 1, "catálogo": 1, tudo: 1 };
+      if (!escopos[escopo]) {
+        return sendEmbed(message.channel, { title: "❓ Resetar o quê?",
+          description: [
+            `\`${P}game admin reset servidor confirmar\``,
+            "   apaga o **progresso**: personagens, mochilas, followers, moedas e ofertas",
+            "",
+            `\`${P}game admin reset catalogo confirmar\``,
+            "   apaga o que você **curou**, voltando só aos itens/followers genéricos",
+            "",
+            `\`${P}game admin reset tudo confirmar\``,
+            "   os dois — o jogo volta ao estado de recém-instalado",
+          ].join("\n"), colour: COR.info });
       }
+
       const d = db.getDb();
-      for (const t of ["rpg_personagem", "rpg_inventario", "rpg_equipado", "rpg_followers", "rpg_carteira", "rpg_estoque", "rpg_moedas"]) {
-        try { d.prepare(`DELETE FROM ${t} WHERE serverId = ?`).run(serverId); } catch {}
+      const conta = (sql, ...p) => { try { return d.prepare(sql).get(...p)?.n ?? 0; } catch { return 0; } };
+
+      // prévia do estrago, para a confirmação ser informada
+      const nPers = conta("SELECT COUNT(*) n FROM rpg_personagem WHERE serverId=?", serverId);
+      const nFol  = conta("SELECT COUNT(*) n FROM rpg_followers WHERE serverId=?", serverId);
+      const nOfe  = conta("SELECT COUNT(*) n FROM rpg_ofertas WHERE serverId=? AND estado='aberta'", serverId);
+      const nMoe  = conta("SELECT COUNT(*) n FROM rpg_moedas WHERE serverId=?", serverId);
+      const nCur  = conta("SELECT COUNT(*) n FROM rpg_itens WHERE origem != 'generico'")
+                  + conta("SELECT COUNT(*) n FROM rpg_followers_catalogo WHERE origem != 'generico'");
+
+      if (!confirmou) {
+        const linhas = ["**Isso não tem volta.**", ""];
+        if (escopo !== "catalogo" && escopo !== "catálogo") {
+          linhas.push("**Progresso que será apagado:**",
+            `• ${nPers} personagem(ns) — nível, atributos e XP`,
+            `• ${nFol} companheiro(s) recrutado(s)`,
+            `• ${nMoe} moeda(s) e **todos os saldos**`,
+            `• ${nOfe} oferta(s) aberta(s) no mercado`,
+            "• mochilas, equipamentos e o pote da dungeon", "");
+        }
+        if (escopo === "catalogo" || escopo === "catálogo" || escopo === "tudo") {
+          linhas.push("**Catálogo:**",
+            nCur ? `• ${nCur} item(ns)/follower(s) **curados por você** serão removidos`
+                 : "• nada curado ainda — só os genéricos, que serão recriados",
+            "");
+        }
+        linhas.push(`Confirme com \`${P}game admin reset ${escopo} confirmar\`.`);
+        return sendEmbed(message.channel, { title: `⚠️ Resetar: ${escopo}`,
+          description: linhas.join("\n"), colour: COR.aviso });
       }
-      return sendEmbed(message.channel, { title: "🔧 RPG zerado",
-        description: "Tudo apagado neste servidor. O catálogo (itens/followers) continua.", colour: COR.mod });
+
+      const apagados = [];
+      const apagar = (tabela, where, ...p) => {
+        try {
+          const n = d.prepare(`DELETE FROM ${tabela} WHERE ${where}`).run(...p).changes ?? 0;
+          if (n) apagados.push(`${n} de \`${tabela}\``);
+        } catch (e) { console.error(`[RPG][reset] ${tabela}:`, e.message); }
+      };
+
+      if (escopo !== "catalogo" && escopo !== "catálogo") {
+        // progresso do servidor — inclui as OFERTAS, que ficariam órfãs
+        // segurando itens que já não existem
+        for (const t of ["rpg_personagem", "rpg_inventario", "rpg_equipado",
+                         "rpg_carteira", "rpg_estoque", "rpg_moedas", "rpg_ofertas"]) {
+          apagar(t, "serverId = ?", serverId);
+        }
+        apagar("rpg_followers", "serverId = ?", serverId);
+      }
+
+      if (escopo === "catalogo" || escopo === "catálogo" || escopo === "tudo") {
+        // remove tudo do catálogo: os genéricos são recriados logo abaixo
+        apagar("rpg_itens", "1 = 1");
+        apagar("rpg_followers_catalogo", "1 = 1");
+        semeado = false;
+        iniciarCatalogo();
+      }
+
+      // o servidor precisa de pelo menos a moeda padrão para funcionar
+      const moedaNova = garantirMoeda(serverId);
+
+      return sendEmbed(message.channel, {
+        title: "🔄 Reset concluído",
+        description: [
+          `**Escopo:** ${escopo}`,
+          "",
+          apagados.length ? apagados.map((x) => `• ${x}`).join("\n") : "_Nada havia para apagar._",
+          "",
+          `✅ Moeda padrão recriada: ${moedaNova.simbolo} **${moedaNova.nome}**`,
+          (escopo === "catalogo" || escopo === "catálogo" || escopo === "tudo")
+            ? `✅ Catálogo genérico recriado (${db.listarItens().length} itens, ${db.listarFollowersCatalogo().length} followers)` : "",
+          "",
+          `_Comece com \`${P}game criar\`._`,
+        ].filter(Boolean).join("\n"),
+        colour: COR.sucesso });
     }
 
     return sendEmbed(message.channel, { title: "❓ Ação desconhecida",

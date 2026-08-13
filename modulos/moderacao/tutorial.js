@@ -194,9 +194,9 @@ function AREAS(P) {
     },
 
     rpg: {
-      titulo: "🎲 RPG — personagem",
-      ordem: 8,
-      resumo: "Cria seu personagem, distribui pontos e monta a build.",
+      titulo: "🎲 RPG — como jogar",
+      ordem: 9,
+      resumo: "_(para os jogadores)_ criar personagem, atributos e build.",
       corpo: [
         `**Criar:** \`${P}game criar <nome>\` · **Ficha:** \`${P}game\``,
         `Ficha de outra pessoa: \`${P}game ficha @pessoa\``,
@@ -231,8 +231,8 @@ function AREAS(P) {
 
     aventura: {
       titulo: "⚔️ RPG — missões e companheiros",
-      ordem: 9,
-      resumo: "Missões, itens, party e a dungeon.",
+      ordem: 10,
+      resumo: "_(para os jogadores)_ missões, itens, party e dungeon.",
       corpo: [
         "**Missões**",
         `\`${P}game missao\` — lista com sua chance em cada uma`,
@@ -266,8 +266,8 @@ function AREAS(P) {
 
     economia: {
       titulo: "💰 RPG — economia",
-      ordem: 10,
-      resumo: "Moeda, mercado e como os preços se movem sozinhos.",
+      ordem: 11,
+      resumo: "_(para os jogadores)_ moeda, mercado e preços.",
       corpo: [
         `\`${P}game carteira\` — saldo e o estado da economia`,
         `\`${P}game comprar [item]\` · \`${P}game vender <item>\``,
@@ -310,9 +310,48 @@ function AREAS(P) {
       ],
     },
 
+    game: {
+      titulo: "🎲 Configurar o RPG",
+      ordem: 8,
+      resumo: "Deixar o jogo pronto no servidor — comece por aqui.",
+      corpo: [
+        "_Esta página é para quem **administra**. Para jogar, veja_",
+        `\`${P}tutorial rpg\`, \`${P}tutorial aventura\` e \`${P}tutorial economia\`.`,
+        "",
+        "**1. Não precisa instalar nada**",
+        "O RPG já funciona: o catálogo de itens e companheiros e a moeda padrão",
+        `são criados sozinhos. Alguém pode digitar \`${P}game criar\` agora mesmo.`,
+        "",
+        "**2. Escolha onde se joga**",
+        "As mensagens do jogo são longas e frequentes. Vale limitar a um canal:",
+        `\`${P}acesso canal somente\` e depois \`${P}acesso canal add\` no canal do jogo.`,
+        "_A moderação continua funcionando nos outros canais normalmente._",
+        "",
+        "**3. Confira que está tudo de pé**",
+        `\`${P}game admin teste\` — roda o jogo inteiro num personagem descartável`,
+        "e devolve ✅/❌ por etapa. Use depois de cada atualização do bot.",
+        "",
+        "**4. Programe as moedas** _(opcional)_",
+        `\`${P}game admin moeda\` — cria e configura. Cada moeda tem:`,
+        "• `dificuldade` — 1 é comum; maior aparece menos e rende menos unidades",
+        "• `nivelMin` — só cai em missões desse nível para cima",
+        "• `suprimentoBase` — quanto existe no mercado (limita o que é pago)",
+        "",
+        "**5. Calibre antes de abrir**",
+        `\`${P}game admin simular <missão> 500\` mostra a taxa real de sucesso e`,
+        "morte. Se estiver duro ou fácil demais, me avise que ajusto os números.",
+        "",
+        "**6. Limpe os testes**",
+        `\`${P}game admin reset servidor confirmar\` — apaga o progresso e recomeça.`,
+        `\`${P}game admin reset tudo confirmar\` — apaga também o catálogo curado.`,
+        "",
+        `_Ferramentas de teste: \`${P}game admin\` lista todas._`,
+      ],
+    },
+
     ajustes: {
       titulo: "⚙️ Ajustes gerais",
-      ordem: 11,
+      ordem: 12,
       resumo: "Panorama, comandos desativados e lista global.",
       corpo: [
         `\`${P}config\` — panorama de tudo que está configurado neste servidor`,
@@ -334,7 +373,8 @@ const APELIDOS = {
   log: "logs", registro: "logs",
   cargo: "cargos", autorole: "cargos", reactionrole: "cargos", roles: "cargos",
   nivel: "xp", niveis: "xp", "níveis": "xp", level: "xp",
-  game: "rpg", personagem: "rpg", jogo: "rpg",
+  personagem: "rpg", jogo: "rpg", ficha: "rpg",
+  configurar: "game", "configuração": "game", admin: "game", setup: "game",
   missao: "aventura", missoes: "aventura", itens: "aventura",
   moeda: "economia", mercado: "economia", loja: "economia", carteira: "economia",
   followers: "aventura", party: "aventura", dungeon: "aventura",

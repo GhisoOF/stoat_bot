@@ -540,6 +540,30 @@ A dificuldade é o que cria a hierarquia entre moedas: uma moeda de dificuldade 
 com `nivelMin` 15 vira algo raro, que só aparece em missões avançadas e em
 pequena quantidade — enquanto a moeda padrão sustenta o dia a dia.
 
+#### Resetar
+
+Três escopos, porque "apagar tudo" significa coisas diferentes:
+
+```
+&game admin reset servidor confirmar   # o progresso das pessoas
+&game admin reset catalogo confirmar   # volta o catálogo só aos genéricos
+&game admin reset tudo confirmar       # os dois
+```
+
+| Escopo | Apaga | Mantém |
+|---|---|---|
+| `servidor` | personagens, mochilas, followers, moedas, saldos, ofertas, dungeon | o catálogo (itens e followers que existem no jogo) |
+| `catalogo` | itens e followers **curados por você** | o progresso das pessoas |
+| `tudo` | ambos | nada — volta ao estado de recém-instalado |
+
+Sem `confirmar`, o comando mostra uma **prévia** do que será perdido (quantos
+personagens, followers, moedas e ofertas abertas). A moeda padrão e o catálogo
+genérico são recriados automaticamente, então o jogo continua utilizável logo
+depois.
+
+> As **ofertas abertas** do mercado são apagadas junto no reset de servidor. Se
+> ficassem, seriam ofertas órfãs segurando itens que já não existem.
+
 ### Mercado entre jogadores
 
 Três formas de negociar, **todas com custódia** — o que está em jogo sai da sua
@@ -575,7 +599,7 @@ Restrito ao dono do bot, para testar e depurar sem jogar horas:
 &game admin moeda                    # cria e configura as moedas do servidor
 &game admin teste                   # roda o jogo INTEIRO e diz o que funcionou
 &game admin simular <missao> [n]     # roda n vezes sem efeito real
-&game admin zerar confirmar          # apaga o RPG do servidor
+&game admin reset <escopo> confirmar # recomeça do zero (ver abaixo)
 ```
 
 #### `&game admin teste` — teste de fumaça
@@ -671,7 +695,12 @@ os outros atributos irrelevantes. Não há teto — só curva.
 > ⚠️ `&game` (RPG) é diferente de `&xp` (nível por mensagens do servidor). São
 > sistemas separados, com progressões independentes.
 
-`&help rpg` lista os comandos e `&tutorial rpg` explica passo a passo.
+**Para configurar no servidor:** `&tutorial game` — guia passo a passo de tudo
+que dá para ajustar (canal do jogo, moedas, verificação, calibragem, reset).
+
+**Para os jogadores:** `&tutorial rpg` (personagem), `&tutorial aventura`
+(missões e companheiros) e `&tutorial economia` (moeda e mercado).
+`&help game` lista todos os comandos.
 
 O design completo — missões, itens, economia, followers, mercado entre jogadores
 — está em [`DESIGN-rpg-economia.md`](DESIGN-rpg-economia.md). As próximas etapas

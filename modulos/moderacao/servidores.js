@@ -53,16 +53,50 @@ function tempoDePe() {
   return d ? `${d}d ${h}h` : h ? `${h}h ${m}min` : `${m}min`;
 }
 
-// Extrai a contagem de membros, aceitando os vários nomes que a lib pode usar.
-function contarMembros(server) {
+// Contagem de membros.
+//
+// O objeto de servidor em cache normalmente NÃO traz esse número — é preciso
+// buscar a lista. Então tentamos primeiro os campos diretos (grátis) e, se não
+// houver, chamamos fetchMembers() de verdade.
+function contarDireto(server) {
   const direto = server?.memberCount ?? server?.member_count
     ?? server?.approximate_member_count ?? server?.approximateMemberCount;
   if (typeof direto === "number") return direto;
   try {
     const m = server?.members;
-    if (m?.size != null) return m.size;
-    if (Array.isArray(m)) return m.length;
+    if (typeof m?.size === "number" && m.size > 0) return m.size;
+    if (Array.isArray(m) && m.length) return m.length;
   } catch {}
+  return null;
+}
+
+// Cache: buscar membros é caro, e o número não muda a cada segundo.
+const cacheMembros = new Map();   // serverId → { n, quando }
+const CACHE_MS = 10 * 60_000;
+
+async function contarMembros(server) {
+  const id = server?.id ?? server?._id;
+  const direto = contarDireto(server);
+  if (typeof direto === "number") return direto;
+
+  const cache = cacheMembros.get(id);
+  if (cache && agora() - cache.quando < CACHE_MS) return cache.n;
+
+  // Sem o método não há como contar — melhor dizer "?" do que mostrar 0,
+  // que pareceria um servidor vazio.
+  if (typeof server?.fetchMembers !== "function") return null;
+
+  try {
+    const r = await Promise.race([
+      server.fetchMembers(),
+      new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 8000)),
+    ]);
+    const lista = r?.members ?? r?.users ?? r ?? [];
+    const n = Array.isArray(lista) ? lista.length : (lista?.size ?? null);
+    if (typeof n === "number") { cacheMembros.set(id, { n, quando: agora() }); return n; }
+  } catch (e) {
+    console.log(`[SERVIDORES] não consegui contar membros de ${id}: ${e?.message ?? e}`);
+  }
   return null;
 }
 
@@ -72,6 +106,35 @@ export async function cmdServidores(message, args, ctx) {
   if (!ehSuperAdmin?.(message.authorId)) {
     return sendEmbed(message.channel, { title: "🚫 Comando restrito",
       description: "Só o dono do bot pode ver isso.", colour: COR.erro });
+  }
+
+  // Modo cru: mostra o que a API entrega, para descobrir onde está a contagem.
+  if (["cru", "raw", "bruto"].includes(args[0]?.toLowerCase())) {
+    let um = null;
+    try {
+      const s = client?.servers;
+      um = s?.values ? [...s.values()][0] : (Array.isArray(s) ? s[0] : Object.values(s ?? {})[0]);
+    } catch {}
+    if (!um) {
+      return sendEmbed(message.channel, { title: "🔬 Diagnóstico",
+        description: "Não consegui pegar nenhum servidor do cliente.", colour: COR.erro });
+    }
+    const chaves = Object.keys(um).filter((k) => typeof um[k] !== "function");
+    const metodos = Object.getOwnPropertyNames(Object.getPrototypeOf(um) ?? {})
+      .filter((k) => typeof um[k] === "function").slice(0, 20);
+    const amostra = {};
+    for (const k of ["name", "memberCount", "member_count", "approximate_member_count", "members"]) {
+      if (um[k] !== undefined) {
+        const v = um[k];
+        amostra[k] = typeof v === "object" ? `${v?.constructor?.name ?? "obj"}(size=${v?.size ?? "?"})` : String(v);
+      }
+    }
+    return sendEmbed(message.channel, { title: "🔬 Como a API entrega o servidor",
+      description: [
+        "**Campos:**", "```", chaves.join(", ").slice(0, 500), "```",
+        "**Métodos:**", "```", metodos.join(", ").slice(0, 400), "```",
+        "**Relevantes:**", "```json", JSON.stringify(amostra, null, 1).slice(0, 500), "```",
+      ].join("\n").slice(0, 1950), colour: COR.info });
   }
 
   // Coleta os servidores conhecidos pelo cliente.
@@ -94,14 +157,15 @@ export async function cmdServidores(message, args, ctx) {
   const linhas = [];
   let totalMembros = 0, totalMpm = 0, semContagem = 0;
 
-  const dados = lista.map((srv) => {
+  // Busca em paralelo: com poucos servidores é rápido, e evita somar timeouts.
+  const dados = (await Promise.all(lista.map(async (srv) => {
     const id = srv?.id ?? srv?._id;
     const nome = srv?.name ?? nomes.get(id) ?? id ?? "?";
     if (id && srv?.name) nomes.set(id, srv.name);
-    const membros = contarMembros(srv);
+    const membros = await contarMembros(srv);
     const mpm = porMinuto(id);
     return { id, nome, membros, mpm };
-  }).sort((a, b) => b.mpm - a.mpm || (b.membros ?? 0) - (a.membros ?? 0));
+  }))).sort((a, b) => b.mpm - a.mpm || (b.membros ?? 0) - (a.membros ?? 0));
 
   for (const d of dados) {
     if (typeof d.membros === "number") totalMembros += d.membros; else semContagem++;

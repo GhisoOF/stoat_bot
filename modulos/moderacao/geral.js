@@ -111,7 +111,7 @@ export function construirDetalhes(P) {
     },
     servidores: {
       uso: `${P}servidores`,
-      desc: "Panorama de onde o bot está: nome de cada servidor, quantidade de membros e ritmo de mensagens por minuto.\n\n_Restrito ao dono do bot._",
+      desc: "Panorama de onde o bot está: nome de cada servidor, quantidade de membros e ritmo de mensagens por minuto.\n\n`&servidores cru` mostra como a API entrega os dados (diagnóstico).\n\n_Restrito ao dono do bot._",
       perm: null,
       ex: `${P}servidores`,
     },

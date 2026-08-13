@@ -22,6 +22,7 @@ embutido (nada de serviço externo), então as configurações e punições
 - [Política de punição](#política-de-punição)
 - [Chat de logs (`&log`)](#chat-de-logs-log)
 - [Lista global de banimentos (`&banglobal`)](#lista-global-de-banimentos-banglobal)
+- [RPG (`&game`)](#rpg-game)
 - [Cor dos cargos (`&cor`)](#cor-dos-cargos-cor)
 - [Guia `&tutorial`](#guia-tutorial)
 - [Persistência (SQLite)](#persistência-sqlite)
@@ -46,6 +47,7 @@ embutido (nada de serviço externo), então as configurações e punições
 - **Moderação manual**: `&kick`, `&ban` (por menção **ou** ID), `&limpar`.
 - **Panorama**: `&config` mostra todas as configurações de uma vez.
 - **Cor dos cargos com gradiente** (`&cor`): o cliente do Stoat só deixa escolher cor sólida; o bot fala direto com a API e aplica **gradientes** (montados por você ou de uma lista de prontos).
+- **RPG** (`&game`): cada pessoa cria um personagem com 9 atributos, sobe de nível e monta sua build. Sistema próprio, separado do XP por mensagem.
 - **Controle de acesso** (`&acesso`): marque **cargos como staff** (moderam sem precisar de permissão nativa do Stoat) e limite **em quais canais** os comandos funcionam.
 - **Aviso manual** (`&warn`): staff dá avisos à mão; eles somam com os do automod, então o modo `acumular` bane no limite.
 - **Guia `&tutorial`**: mostra **por onde começar** — o roteiro de áreas na ordem recomendada, com os comandos exatos de cada uma. Não altera nada sozinho; só te diz o caminho.
@@ -224,6 +226,7 @@ Prefixo: `&`. Aliases entre parênteses.
 | `&automod <status\|módulo on/off\|debug on/off>` | liga/desliga módulos |
 | `&punicao <modo\|warns\|silencerole>` | política de punição |
 | `&log <here\|id\|off\|evento on/off>` | chat de logs |
+| `&game [criar\|ficha\|pontos\|top]` | RPG: personagem, atributos e progressão |
 | `&warn <@pessoa> [motivo]` | aviso manual (conta para o ban no modo acumular) |
 | `&acesso <cargo\|canal>` | quem pode usar comandos e em quais canais |
 | `&banglobal <off\|avisar\|banir\|...>` | lista global (exige **BanMembers**) |
@@ -436,6 +439,52 @@ origem** e **motivo**. Comandos:
 > ⚠️ O modo `banir` age com base em bans de **outros** servidores. Comece com
 > `avisar`, popule a lista com `importar`, observe alguns dias e só então
 > mude para `banir` se confiar na origem.
+
+---
+
+## RPG (`&game`)
+
+Sistema de RPG por servidor: cada pessoa cria um personagem, sobe de nível e
+distribui pontos em 9 atributos.
+
+```
+&game criar Kael          # cria seu personagem
+&game                     # sua ficha
+&game ficha @pessoa       # a ficha de outra pessoa
+&game pontos int 3        # distribui pontos (aceita abreviação)
+&game top                 # ranking do servidor
+&game apagar confirmar    # recomeça do zero
+```
+
+### Atributos
+
+| Atributo | Efeito |
+|---|---|
+| 💪 Força | dano físico |
+| 🎯 Destreza | precisão (multiplica o dano) |
+| 🛡️ Resistência | reduz o dano que passa |
+| 💨 Agilidade | chance de evitar o golpe |
+| ❤️ Vida | quanto dano aguenta |
+| 🔷 Mana | quantas magias por missão |
+| 🧠 Inteligência | dano mágico · +XP · +pontos por nível |
+| 🍀 Sorte | dinheiro, drop, sobrevivência · +XP · +pontos por nível |
+| ✨ Carisma | buffa a party · melhora preços |
+
+### Progressão
+
+- `xpParaNivel(n) = 100 × 1,5^(n−2)` — nível 2 custa 100 XP, nível 10 custa 2.563.
+- `pontosPorNivel = 1 + 0,25 × √(Inteligência + Sorte)`
+
+Inteligência e Sorte aumentam o XP ganho **e** os pontos por nível, com **retorno
+decrescente**: investir sempre rende mais, mas nunca vira bola de neve que torna
+os outros atributos irrelevantes. Não há teto — só curva.
+
+> ⚠️ `&game` (RPG) é diferente de `&xp` (nível por mensagens do servidor). São
+> sistemas separados, com progressões independentes.
+
+O design completo — missões, itens, economia, followers, mercado entre jogadores
+— está em [`DESIGN-rpg-economia.md`](DESIGN-rpg-economia.md). As próximas etapas
+são itens, missões e economia.
 
 ---
 
@@ -715,8 +764,8 @@ O código é organizado em quatro áreas, sob `modulos/`:
 │   │   ├── reaction-roles.js   # cargos por reação (&reactionrole)
 │   │   ├── autorole.js         # cargo automático a quem entra (&autorole)
 │   │   └── rss.js              # notícias com resumo da Judy (&rss)
-│   ├── game/                   # sistema de níveis
-│   │   └── game.js             # XP, cargos por nível, leaderboard (&xp)
+│   ├── game/                   # RPG
+│   │   └── game.js             # &game — personagem, 9 atributos, progressão
 │   └── economia/               # reservado para o futuro
 ├── ia-servico/                 # serviço de IA (ferramentas + tool-calling)
 │   ├── servidor.js             # HTTP: /chat, /saude, /ferramentas

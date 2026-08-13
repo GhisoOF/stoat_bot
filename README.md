@@ -519,15 +519,31 @@ o vencedor leva.
 
 Cada servidor pode ter várias moedas, configuráveis pelo dono do bot:
 
+**O jeito rápido — conjuntos prontos:**
+
 ```
-&game admin moeda                              # lista e mostra a configuração
-&game admin moeda criar prata Prata 🥈
-&game admin moeda set prata dificuldade 5
-&game admin moeda set prata nivelMin 10
-&game admin moeda set prata finita nao
-&game admin moeda padrao ouro                  # define a principal
-&game admin moeda remover prata confirmar
+&game admin moeda modelo           # lista os conjuntos
+&game admin moeda modelo mundo     # Real, Dólar, Euro, Prata, Ouro e Bitcoin
+&game admin moeda modelo fantasia  # Cobre, Prata, Ouro e Cristal Arcano
+&game admin moeda modelo simples   # uma moeda só
 ```
+
+Cada conjunto já vem balanceado — dificuldade, nível mínimo e suprimento
+calculados para fazerem sentido entre si.
+
+**Ou à mão, tudo numa linha:**
+
+```
+&game admin moeda ajuda                       # o que cada campo significa
+&game admin moeda criar btc Bitcoin ₿ dificuldade=400 nivel=18 suprimento=210
+&game admin moeda set btc dificuldade=300 nivel=20    # vários de uma vez
+&game admin moeda ver btc                     # ficha: quanto rende por nível
+&game admin moeda padrao brl
+&game admin moeda remover btc confirmar
+```
+
+Os campos aceitam apelidos (`nivel`, `dif`, `suprimento`, `estoque`) e podem vir
+em qualquer ordem.
 
 | Campo | O que faz |
 |---|---|

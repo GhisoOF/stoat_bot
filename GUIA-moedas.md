@@ -77,7 +77,20 @@ assunto no servidor quando acontece.
 
 ---
 
-## 3. Comandos (copiar e colar)
+## 3. O atalho
+
+Tudo o que está descrito acima já vem pronto num conjunto:
+
+```
+&game admin moeda modelo mundo
+```
+
+Um comando cria as seis moedas com estes mesmos valores. As seções abaixo
+continuam valendo se você quiser ajustar algo ou entender as escolhas.
+
+---
+
+## 3.1 Comandos (copiar e colar)
 
 ```
 &game admin moeda criar brl Real 🇧🇷

@@ -271,6 +271,37 @@ async function ollamaDisponivel() {
 // ── Chamada ao Ollama (/api/chat, stream desligado) ────────
 // Chama o serviço judy-ia (que roda o laço de ferramentas) e devolve o texto.
 // Cai para erro tratado se o serviço estiver fora — o chamador decide o fallback.
+// Executa uma ferramenta do judy-ia DIRETAMENTE, sem passar pelo modelo.
+// Usado quando já sabemos que o pedido depende dela — não dá para deixar um
+// modelo de 9B decidir se vai ou não usar, porque às vezes ele responde
+// "não consigo" e inventa um motivo.
+async function executarFerramenta(nome, args) {
+  if (!IA_SERVICO_URL) return null;
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), 20000);
+  try {
+    const headers = { "Content-Type": "application/json" };
+    if (IA_SERVICO_CHAVE) headers["x-chave"] = IA_SERVICO_CHAVE;
+    const r = await fetch(`${IA_SERVICO_URL}/ferramenta`, {
+      method: "POST", headers, body: JSON.stringify({ nome, args }), signal: ctrl.signal,
+    });
+    if (!r.ok) return null;
+    const d = await r.json();
+    return d?.resultado ?? null;
+  } catch (e) {
+    dlog(`ferramenta direta falhou: ${e?.message ?? e}`);
+    return null;
+  } finally { clearTimeout(t); }
+}
+
+// Extrai um caminho de arquivo citado na pergunta ("leia o modulos/x/y.js").
+export function caminhoCitado(texto) {
+  const t = String(texto ?? "");
+  const m = t.match(/([\w./-]*\b[\w-]+\.(?:js|json|md|ya?ml|ts))\b/i);
+  if (!m) return null;
+  return m[1].replace(/^\/+/, "");   // tira a barra inicial: /modulos/x → modulos/x
+}
+
 async function chamarServicoIA(messages, { modelo = null } = {}) {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), TIMEOUT);
@@ -516,6 +547,28 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
   // inútil, já que a ferramenta estava disponível o tempo todo. Perguntas assim
   // são pedidos disfarçados de pergunta, e é preciso dizer isso ao modelo.
   if (tipo === "ferramenta") {
+    // Se um arquivo foi citado, buscamos o conteúdo NÓS MESMOS e entregamos
+    // pronto. Assim o modelo não precisa decidir nada — ele só lê o que já
+    // está na frente dele. Foi o que resolveu o "não consigo ler o main.js".
+    const caminho = caminhoCitado(pergunta) ?? caminhoCitado(citada?.conteudo);
+    if (caminho) {
+      const r = await executarFerramenta("ler_codigo", { acao: "ler", caminho });
+      if (r?.conteudo) {
+        dlog(`ferramenta direta: li ${caminho} (${String(r.conteudo).length} chars)`);
+        messages.splice(1, 0, {
+          role: "system",
+          content: `CONTEÚDO REAL do arquivo \`${caminho}\`, lido agora do repositório. Responda com base NELE:\n\n${String(r.conteudo).slice(0, 12000)}`,
+        });
+      } else {
+        const motivo = r?.erro ?? "não consegui acessar";
+        dlog(`ferramenta direta falhou em ${caminho}: ${motivo}`);
+        messages.splice(1, 0, {
+          role: "system",
+          content: `A leitura de \`${caminho}\` FALHOU: ${motivo}. Diga à pessoa, em UMA frase, que não conseguiu ler o arquivo agora. NÃO invente o motivo, NÃO descreva o conteúdo de memória e NÃO ofereça análise do que você "acha" que ele faz.`,
+        });
+      }
+    }
+
     messages.splice(1, 0, {
       role: "system",
       content: [

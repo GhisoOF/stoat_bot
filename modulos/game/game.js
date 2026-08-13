@@ -768,99 +768,287 @@ export async function cmdGame(message, args, ctx) {
       const op = resto[0]?.toLowerCase();
       const args2 = resto.slice(1);
 
-      if (!op || op === "listar") {
-        // se ainda não há moeda, cria a padrão e já mostra a lista —
-        // pedir para rodar de novo seria um passo à toa
-        if (!db.listarMoedas(serverId).length) garantirMoeda(serverId);
-        const lista = db.listarMoedas(serverId);
-        const linhas = lista.map((m) => {
-          const { pSuave } = pDaMoeda(serverId, m);
-          return [
-            `${m.simbolo} **${m.nome}** \`${m.id}\`${m.padrao ? " ⭐ _padrão_" : ""}`,
-            `   ${m.finita ? "finita" : "infinita"} · dificuldade ${m.dificuldade} · a partir do nível ${m.nivelMin}`,
-            `   mercado ${fmt(m.mercado)} · dungeon ${fmt(m.dungeon)} · P ${(pSuave * 100).toFixed(0)}%`,
-          ].join("\n");
+      // Campos configuráveis, com explicação — usada tanto na ajuda quanto
+      // nas mensagens de erro, para não haver duas versões da verdade.
+      const CAMPOS = {
+        nome:           { tipo: "texto", desc: "como aparece nas mensagens" },
+        simbolo:        { tipo: "texto", desc: "emoji ou símbolo (🪙, $, ₿)" },
+        dificuldade:    { tipo: "num",   desc: "1 = comum. Maior → aparece menos e rende menos unidades" },
+        nivelMin:       { tipo: "int",   desc: "só cai em missões desse nível para cima" },
+        suprimentoBase: { tipo: "num",   desc: "quanto existe no total (limita o que pode ser pago)" },
+        mercado:        { tipo: "num",   desc: "quanto o mercado tem AGORA" },
+        finita:         { tipo: "bool",  desc: "sim = entra no cálculo do P; nao = nunca esgota" },
+      };
+      const APELIDOS_CAMPO = { nivel: "nivelMin", dif: "dificuldade", suprimento: "suprimentoBase",
+        simbolo: "simbolo", "símbolo": "simbolo", estoque: "mercado" };
+
+      // Compara sem diferenciar maiúsculas: `nivelMin`, `nivelmin` e `NivelMin`
+      // devem funcionar igual — quem digita não deve precisar acertar o camelCase.
+      const normalizarCampo = (c) => {
+        const k = String(c ?? "").toLowerCase();
+        const exato = Object.keys(CAMPOS).find((x) => x.toLowerCase() === k);
+        return exato ?? APELIDOS_CAMPO[k] ?? null;
+      };
+      const converter = (campo, valor) => {
+        const t = CAMPOS[campo]?.tipo;
+        if (t === "num") return Number(String(valor).replace(/[._]/g, ""));
+        if (t === "int") return parseInt(valor, 10);
+        if (t === "bool") return ["sim", "true", "1", "finita", "s"].includes(String(valor).toLowerCase()) ? 1 : 0;
+        return String(valor);
+      };
+
+      // Aceita `campo=valor` soltos em qualquer ordem, para criar e configurar
+      // numa linha só em vez de cinco comandos.
+      const extrairPares = (lista) => {
+        const pares = {}, sobra = [];
+        for (const a of lista) {
+          const m = String(a).match(/^([\wíáéó]+)[=:](.+)$/);
+          const campo = m ? normalizarCampo(m[1]) : null;
+          if (campo) pares[campo] = converter(campo, m[2]);
+          else sobra.push(a);
+        }
+        return { pares, sobra };
+      };
+
+      const fichaDaMoeda = (m) => {
+        const { pSuave } = pDaMoeda(serverId, m);
+        return [
+          `${m.simbolo} **${m.nome}** \`${m.id}\`${m.padrao ? " ⭐ padrão" : ""}`,
+          `   ${m.finita ? "finita" : "infinita"} · dificuldade **${m.dificuldade}** · a partir do nível **${m.nivelMin}**`,
+          `   mercado ${fmt(m.mercado)} · com jogadores ${fmt(db.totalNasCarteiras(serverId, m.id))} · dungeon ${fmt(m.dungeon)}`,
+          `   P ${(pSuave * 100).toFixed(0)}% → preços ×${ECO.mult(pSuave).toFixed(2)}`,
+        ].join("\n");
+      };
+
+      // ── ajuda / guia ──
+      if (op === "ajuda" || op === "guia" || op === "help") {
+        return enviarLista(sendEmbed, message.channel, {
+          titulo: "🪙 Guia — moedas",
+          linhas: [
+            "**Criar uma moeda**",
+            `\`${P}game admin moeda criar <id> <nome> [símbolo] [campo=valor …]\``,
+            "```",
+            `${P}game admin moeda criar prata Prata 🥈 dificuldade=20 nivel=5 suprimento=8000`,
+            "```",
+            "_O `id` é o nome curto usado nos comandos (sem espaço). Os campos podem_",
+            "_vir em qualquer ordem, e o que você não passar usa o padrão._",
+            "",
+            "**Mudar depois**",
+            `\`${P}game admin moeda set <id> <campo> <valor>\``,
+            `\`${P}game admin moeda set <id> dificuldade=8 nivel=12\`  ← vários de uma vez`,
+            "",
+            "**Os campos**",
+            ...Object.entries(CAMPOS).map(([k, v]) => `\`${k}\` — ${v.desc}`),
+            "_Apelidos aceitos: `nivel`, `dif`, `suprimento`, `estoque`._",
+            "",
+            "**Como a dificuldade funciona**",
+            "É o que separa uma moeda comum de uma rara. Ela controla duas coisas",
+            "ao mesmo tempo: a chance de a moeda cair numa missão **e** quantas",
+            "unidades saem. Dificuldade 20 aparece ~20× menos que a 1, e rende",
+            "~20× menos por vez — então cada unidade vale muito mais.",
+            "",
+            "**Conjuntos prontos**",
+            `\`${P}game admin moeda modelo\` — cria um conjunto inteiro de uma vez`,
+            "",
+            "**Outros**",
+            `\`${P}game admin moeda\` — lista o que existe`,
+            `\`${P}game admin moeda ver <id>\` — ficha de uma moeda`,
+            `\`${P}game admin moeda padrao <id>\` — define a principal`,
+            `\`${P}game admin moeda remover <id> confirmar\``,
+          ],
+          colour: COR.mod,
         });
-        linhas.push("", "**Criar / configurar**",
-          `\`${P}game admin moeda criar <id> <nome> <símbolo>\``,
-          `\`${P}game admin moeda set <id> <campo> <valor>\``,
-          `   campos: \`nome\` \`simbolo\` \`finita\` \`dificuldade\` \`nivelMin\` \`mercado\` \`suprimentoBase\``,
-          `\`${P}game admin moeda padrao <id>\` — define a principal`,
-          `\`${P}game admin moeda remover <id> confirmar\``,
-          "",
-          "_**dificuldade**: 1 = comum. Maior = aparece menos em missão e rende menos unidades._",
-          "_**nivelMin**: só cai em missões desse nível para cima._");
-        return enviarLista(sendEmbed, message.channel, { titulo: "🪙 Moedas do servidor", linhas, colour: COR.mod });
       }
 
-      if (op === "criar") {
-        const [id, nome, simbolo] = args2;
+      // ── modelos prontos ──
+      if (["modelo", "modelos", "preset"].includes(op)) {
+        const MODELOS = {
+          mundo: {
+            rotulo: "Mundo real", desc: "Real, Dólar, Euro, Prata, Ouro e Bitcoin",
+            moedas: [
+              { id: "brl", nome: "Real",     simbolo: "🇧🇷", dificuldade: 1,   nivelMin: 1,  suprimentoBase: 200000, padrao: true },
+              { id: "usd", nome: "Dólar",    simbolo: "💵", dificuldade: 5,   nivelMin: 1,  suprimentoBase: 40000 },
+              { id: "eur", nome: "Euro",     simbolo: "💶", dificuldade: 6,   nivelMin: 3,  suprimentoBase: 30000 },
+              { id: "xag", nome: "Prata",    simbolo: "🥈", dificuldade: 20,  nivelMin: 5,  suprimentoBase: 8000 },
+              { id: "xau", nome: "Ouro",     simbolo: "🥇", dificuldade: 90,  nivelMin: 12, suprimentoBase: 1200 },
+              { id: "btc", nome: "Bitcoin",  simbolo: "₿",  dificuldade: 400, nivelMin: 18, suprimentoBase: 210 },
+            ],
+          },
+          fantasia: {
+            rotulo: "Fantasia", desc: "Cobre, Prata, Ouro e Cristal Arcano",
+            moedas: [
+              { id: "cobre",   nome: "Cobre",          simbolo: "🟤", dificuldade: 1,   nivelMin: 1,  suprimentoBase: 150000, padrao: true },
+              { id: "prata",   nome: "Prata",          simbolo: "⚪", dificuldade: 8,   nivelMin: 4,  suprimentoBase: 20000 },
+              { id: "ouro",    nome: "Ouro",           simbolo: "🟡", dificuldade: 40,  nivelMin: 10, suprimentoBase: 3000 },
+              { id: "cristal", nome: "Cristal Arcano", simbolo: "💠", dificuldade: 200, nivelMin: 16, suprimentoBase: 400 },
+            ],
+          },
+          simples: {
+            rotulo: "Simples", desc: "uma moeda só — o mínimo para jogar",
+            moedas: [
+              { id: "ouro", nome: "Ouro", simbolo: "🪙", dificuldade: 1, nivelMin: 1, suprimentoBase: 100000, padrao: true },
+            ],
+          },
+        };
+        const escolha = args2[0]?.toLowerCase();
+        const mod = MODELOS[escolha];
+
+        if (!mod) {
+          return enviarLista(sendEmbed, message.channel, {
+            titulo: "🪙 Conjuntos prontos",
+            linhas: [
+              "Criam várias moedas já balanceadas, de uma vez.",
+              "",
+              ...Object.entries(MODELOS).flatMap(([k, v]) => [
+                `**${v.rotulo}** \`${k}\` — ${v.desc}`,
+                `   ${v.moedas.map((x) => `${x.simbolo}${x.nome}`).join(" · ")}`,
+                `   \`${P}game admin moeda modelo ${k}\``,
+                "",
+              ]),
+              "_As moedas existentes NÃO são apagadas — o conjunto é acrescentado._",
+              `_Para começar limpo: \`${P}game admin reset servidor confirmar\` antes._`,
+            ],
+            colour: COR.mod });
+        }
+
+        const criadas = [], existentes = [];
+        for (const m of mod.moedas) {
+          if (db.getMoeda(serverId, m.id)) { existentes.push(m.nome); continue; }
+          db.upsertMoeda(serverId, { ...m, finita: true, mercado: m.suprimentoBase });
+          criadas.push(m);
+        }
+        if (criadas.some((m) => m.padrao)) {
+          const padraoId = criadas.find((m) => m.padrao).id;
+          for (const x of db.listarMoedas(serverId)) db.salvarMoeda(serverId, x.id, { padrao: x.id === padraoId ? 1 : 0 });
+        }
+        return sendEmbed(message.channel, { title: `🪙 Conjunto "${mod.rotulo}" aplicado`,
+          description: [
+            criadas.length ? `**Criadas (${criadas.length}):**\n` + criadas.map((m) =>
+              `${m.simbolo} **${m.nome}** — dificuldade ${m.dificuldade}, nível ${m.nivelMin}+, suprimento ${fmt(m.suprimentoBase)}`).join("\n") : "",
+            existentes.length ? `\n_Já existiam e foram mantidas: ${existentes.join(", ")}_` : "",
+            "",
+            `_Veja com \`${P}game admin moeda\` · ajuste com \`${P}game admin moeda set\`._`,
+          ].filter(Boolean).join("\n").slice(0, 1900),
+          colour: COR.sucesso });
+      }
+
+      // ── ficha de uma moeda ──
+      if (["ver", "detalhe", "info"].includes(op)) {
+        const m = db.acharMoeda(serverId, args2[0]);
+        if (!m) return sendEmbed(message.channel, { title: "❌ Moeda desconhecida",
+          description: `\`${P}game admin moeda\` lista as existentes.`, colour: COR.erro });
+        const exemploNv = [3, 10, 20].map((nv) =>
+          `   nível ${String(nv).padStart(2)}: ~${fmt(ECO.moedaDaMissao({ tipo: "dungeon", dificuldade: "medio", nivel: nv }, 0.5, 0, m.dificuldade))} por missão`);
+        return sendEmbed(message.channel, { title: `${m.simbolo} ${m.nome}`,
+          description: [
+            fichaDaMoeda(m),
+            "",
+            "**Quanto rende**",
+            ...exemploNv,
+            m.nivelMin > 1 ? `   _(não aparece abaixo do nível ${m.nivelMin})_` : "",
+            "",
+            `_Mudar: \`${P}game admin moeda set ${m.id} <campo> <valor>\`_`,
+            `_Campos: ${Object.keys(CAMPOS).join(", ")}_`,
+          ].filter(Boolean).join("\n"), colour: COR.mod });
+      }
+
+      // ── criar ──
+      if (["criar", "nova", "add"].includes(op)) {
+        const { pares, sobra } = extrairPares(args2);
+        const [id, nome, simbolo] = sobra;
         if (!id || !nome) {
-          return sendEmbed(message.channel, { title: "❌ Uso",
-            description: `\`${P}game admin moeda criar <id> <nome> [símbolo]\`\n\nEx.: \`${P}game admin moeda criar prata Prata 🥈\``,
-            colour: COR.erro });
+          return sendEmbed(message.channel, { title: "❌ Faltou o básico",
+            description: [
+              `\`${P}game admin moeda criar <id> <nome> [símbolo] [campo=valor …]\``,
+              "",
+              "**Exemplos**",
+              `\`${P}game admin moeda criar prata Prata 🥈\``,
+              `\`${P}game admin moeda criar btc Bitcoin ₿ dificuldade=400 nivel=18 suprimento=210\``,
+              "",
+              `_Não quer configurar à mão? \`${P}game admin moeda modelo\` tem conjuntos prontos._`,
+              `_Explicação dos campos: \`${P}game admin moeda ajuda\`._`,
+            ].join("\n"), colour: COR.erro });
         }
         const chave = id.toLowerCase().replace(/[^a-z0-9_]/g, "");
         if (!chave) return sendEmbed(message.channel, { title: "❌ ID inválido",
-          description: "Use letras e números, sem espaço. Ex.: `prata`, `cristal_negro`.", colour: COR.erro });
+          description: "O `id` é o nome curto usado nos comandos: letras e números, sem espaço.\nEx.: `prata`, `btc`, `cristal_negro`.", colour: COR.erro });
         if (db.getMoeda(serverId, chave)) {
           return sendEmbed(message.channel, { title: "❌ Já existe",
-            description: `Já há uma moeda \`${chave}\`. Ajuste com \`${P}game admin moeda set\`.`, colour: COR.erro });
+            description: `Já há uma moeda \`${chave}\`.\nAjuste com \`${P}game admin moeda set ${chave} <campo> <valor>\`.`, colour: COR.erro });
         }
         const primeira = db.listarMoedas(serverId).length === 0;
-        const m = db.upsertMoeda(serverId, { id: chave, nome, simbolo: simbolo ?? "🪙",
-          finita: true, suprimentoBase: 10000, dificuldade: 1, nivelMin: 1, padrao: primeira });
+        const base = { id: chave, nome, simbolo: simbolo ?? "🪙", finita: true,
+          suprimentoBase: 10000, dificuldade: 1, nivelMin: 1, padrao: primeira, ...pares };
+        base.mercado = pares.mercado ?? base.suprimentoBase;
+        const m = db.upsertMoeda(serverId, base);
+        const ajustados = Object.keys(pares);
         return sendEmbed(message.channel, { title: "🪙 Moeda criada",
           description: [
-            `${m.simbolo} **${m.nome}** \`${m.id}\`${primeira ? " ⭐ _(virou a padrão)_" : ""}`,
-            `finita · suprimento ${fmt(m.mercado)} · dificuldade 1 · nível mínimo 1`,
-            "",
-            `_Ajuste com \`${P}game admin moeda set ${m.id} dificuldade 4\`._`,
-          ].join("\n"), colour: COR.sucesso });
+            fichaDaMoeda(m),
+            primeira ? "\n_Virou a moeda padrão do servidor._" : "",
+            ajustados.length ? `\n_Aplicado: ${ajustados.join(", ")}_` : `\n_Nos padrões. Ajuste com \`${P}game admin moeda set ${chave} dificuldade=5\`._`,
+          ].filter(Boolean).join("\n"), colour: COR.sucesso });
       }
 
-      if (op === "set" || op === "editar") {
-        const [idM, campo, ...valores] = args2;
-        const m = db.acharMoeda(serverId, idM);
+      // ── set ──
+      if (["set", "editar", "config"].includes(op)) {
+        const m = db.acharMoeda(serverId, args2[0]);
+        if (!m) return sendEmbed(message.channel, { title: "❌ Qual moeda?",
+          description: `\`${P}game admin moeda set <id> <campo> <valor>\`\n\n\`${P}game admin moeda\` lista as existentes.`, colour: COR.erro });
+
+        const { pares, sobra } = extrairPares(args2.slice(1));
+        // formato antigo: `set <id> <campo> <valor>`
+        if (!Object.keys(pares).length && sobra.length >= 2) {
+          const campo = normalizarCampo(sobra[0]);
+          if (!campo) {
+            return sendEmbed(message.channel, { title: "❌ Campo desconhecido",
+              description: ["**Campos:**", ...Object.entries(CAMPOS).map(([k, v]) => `\`${k}\` — ${v.desc}`)].join("\n"),
+              colour: COR.erro });
+          }
+          pares[campo] = converter(campo, sobra.slice(1).join(" "));
+        }
+        if (!Object.keys(pares).length) {
+          return sendEmbed(message.channel, { title: "❌ Mudar o quê?",
+            description: [
+              `\`${P}game admin moeda set ${m.id} dificuldade 20\``,
+              `\`${P}game admin moeda set ${m.id} dificuldade=20 nivel=5\`  ← vários de uma vez`,
+              "",
+              "**Campos:**",
+              ...Object.entries(CAMPOS).map(([k, v]) => `\`${k}\` — ${v.desc}`),
+            ].join("\n"), colour: COR.erro });
+        }
+        const invalidos = Object.entries(pares).filter(([, v]) => typeof v === "number" && !Number.isFinite(v));
+        if (invalidos.length) {
+          return sendEmbed(message.channel, { title: "❌ Valor inválido",
+            description: `**${invalidos.map(([k]) => k).join(", ")}** precisa(m) de número.`, colour: COR.erro });
+        }
+        db.salvarMoeda(serverId, m.id, pares);
+        const atual = db.getMoeda(serverId, m.id);
+        return sendEmbed(message.channel, { title: "🪙 Ajustado",
+          description: [
+            Object.entries(pares).map(([k, v]) => `\`${k}\` → **${v}**`).join(" · "),
+            "",
+            fichaDaMoeda(atual),
+          ].join("\n"), colour: COR.mod });
+      }
+
+      if (["padrao", "padrão", "principal"].includes(op)) {
+        const m = db.acharMoeda(serverId, args2[0]);
         if (!m) return sendEmbed(message.channel, { title: "❌ Moeda desconhecida",
           description: `\`${P}game admin moeda\` lista as existentes.`, colour: COR.erro });
-        const valor = valores.join(" ");
-        const campos = { nome: "texto", simbolo: "texto", finita: "bool",
-          dificuldade: "num", nivelMin: "int", mercado: "num", suprimentoBase: "num" };
-        if (!campos[campo]) {
-          return sendEmbed(message.channel, { title: "❌ Campo desconhecido",
-            description: `Campos: ${Object.keys(campos).map((c) => `\`${c}\``).join(", ")}`, colour: COR.erro });
-        }
-        let v = valor;
-        if (campos[campo] === "num") v = Number(valor);
-        if (campos[campo] === "int") v = parseInt(valor, 10);
-        if (campos[campo] === "bool") v = ["sim", "true", "1", "finita"].includes(valor.toLowerCase()) ? 1 : 0;
-        if ((campos[campo] === "num" || campos[campo] === "int") && !Number.isFinite(v)) {
-          return sendEmbed(message.channel, { title: "❌ Valor inválido",
-            description: `**${campo}** precisa de um número.`, colour: COR.erro });
-        }
-        db.salvarMoeda(serverId, m.id, { [campo]: v });
-        const atual = db.getMoeda(serverId, m.id);
-        return sendEmbed(message.channel, { title: "🪙 Moeda ajustada",
-          description: `${atual.simbolo} **${atual.nome}**: \`${campo}\` → **${v}**`, colour: COR.mod });
-      }
-
-      if (op === "padrao" || op === "padrão") {
-        const m = db.acharMoeda(serverId, args2[0]);
-        if (!m) return sendEmbed(message.channel, { title: "❌ Moeda desconhecida", description: "-", colour: COR.erro });
         for (const x of db.listarMoedas(serverId)) db.salvarMoeda(serverId, x.id, { padrao: x.id === m.id ? 1 : 0 });
         return sendEmbed(message.channel, { title: "⭐ Moeda padrão",
-          description: `${m.simbolo} **${m.nome}** é a principal do servidor.`, colour: COR.mod });
+          description: `${m.simbolo} **${m.nome}** é a principal — é nela que os preços do mercado aparecem.`, colour: COR.mod });
       }
 
-      if (op === "remover") {
+      if (["remover", "apagar", "deletar"].includes(op)) {
         const m = db.acharMoeda(serverId, args2[0]);
-        if (!m) return sendEmbed(message.channel, { title: "❌ Moeda desconhecida", description: "-", colour: COR.erro });
-        if (args2[1]?.toLowerCase() !== "confirmar") {
-          const total = db.totalNasCarteiras(serverId, m.id);
+        if (!m) return sendEmbed(message.channel, { title: "❌ Moeda desconhecida",
+          description: `\`${P}game admin moeda\` lista as existentes.`, colour: COR.erro });
+        if (!args2.includes("confirmar")) {
           return sendEmbed(message.channel, { title: "⚠️ Apaga a moeda e os saldos",
             description: [
-              `${m.simbolo} **${m.nome}** — há ${fmt(total)} nas carteiras dos jogadores.`,
+              `${m.simbolo} **${m.nome}** — ${fmt(db.totalNasCarteiras(serverId, m.id))} nas carteiras dos jogadores.`,
               "Tudo isso será **perdido**.",
               "",
               `\`${P}game admin moeda remover ${m.id} confirmar\``,
@@ -868,67 +1056,29 @@ export async function cmdGame(message, args, ctx) {
         }
         if (m.padrao && db.listarMoedas(serverId).length > 1) {
           return sendEmbed(message.channel, { title: "❌ É a moeda padrão",
-            description: `Defina outra como padrão antes: \`${P}game admin moeda padrao <id>\`.`, colour: COR.erro });
+            description: `Escolha outra antes: \`${P}game admin moeda padrao <id>\`.`, colour: COR.erro });
         }
         db.removerMoeda(serverId, m.id);
-        return sendEmbed(message.channel, { title: "🗑️ Moeda removida",
+        return sendEmbed(message.channel, { title: "🗑️ Removida",
           description: `${m.simbolo} **${m.nome}** e todos os saldos dela.`, colour: COR.mod });
       }
 
-      return sendEmbed(message.channel, { title: "❓ Operação desconhecida",
-        description: `\`${P}game admin moeda\` lista o que dá para fazer.`, colour: COR.erro });
-    }
-
-    if (acao === "eco") {
-      const m = garantirMoeda(serverId);
-      const { pAgora, pSuave, comPlayers } = pDaMoeda(serverId, m);
-      const exemplo = db.listarItens({ raridade: "comum" })[0];
-      const linhas = [
-        `**${m.nome}** ${m.simbolo} ${m.finita ? "(finita)" : "(infinita)"}`,
-        `Carteiras: ${fmt(comPlayers)} · Mercado: ${fmt(m.mercado)} · Dungeon: ${fmt(m.dungeon)}`,
-        `P agora: ${(pAgora * 100).toFixed(1)}% · P suavizado: ${(pSuave * 100).toFixed(1)}%`,
-        "",
-        `mult(P) = **${ECO.mult(pSuave).toFixed(3)}**`,
-        `perda(P) = **${(ECO.perda(pSuave) * 100).toFixed(1)}%** do que se carrega`,
-        `fração da dungeon = ${(ECO.fracaoDungeon(m.dungeon) * 100).toFixed(1)}% → prêmio ${fmt(ECO.premioDungeon(m.dungeon))}`,
-        "",
-        exemplo ? `Ex.: **${exemplo.nome}** custa ${fmt(ECO.precoDeVenda(exemplo, db.getEstoque(serverId, exemplo.id), pSuave))}` : "",
-        exemplo ? `   recompra com carisma 0: ${fmt(ECO.precoDeRecompra(ECO.precoDeVenda(exemplo, null, pSuave), 0))}` : "",
-        exemplo ? `   recompra com carisma 50: ${fmt(ECO.precoDeRecompra(ECO.precoDeVenda(exemplo, null, pSuave), 50))}` : "",
-      ].filter(Boolean);
-      return sendEmbed(message.channel, { title: "🔧 Economia",
-        description: linhas.join("\n"), colour: COR.mod });
-    }
-
-    if (acao === "simular") {
-      const nomeM = resto.filter((x) => !/^\d+$/.test(x)).join(" ");
-      const vezes = Math.min(1000, parseInt(resto.find((x) => /^\d+$/.test(x)) ?? "100", 10));
-      const missao = MISS.acharMissao(nomeM);
-      if (!missao) return sendEmbed(message.channel, { title: "❌ Missão desconhecida",
-        description: `\`${P}game admin simular <missao> [vezes]\``, colour: COR.erro });
-      const alvo = db.getPersonagem(serverId, alvoId);
-      if (!alvo) return sendEmbed(message.channel, { title: "❌ Sem personagem", description: "-", colour: COR.erro });
-      const { attr, magias, tamanhoParty } = atributosDaParty(alvo, serverId, alvoId);
-      let ok = 0, falha = 0, caiu = 0, xpTotal = 0, loot = 0;
-      for (let i = 0; i < vezes; i++) {
-        const r = MISS.resolver(attr, missao, Math.random, magias, tamanhoParty);
-        if (r.desfecho === "sucesso") ok++; else if (r.desfecho === "falha") falha++; else caiu++;
-        xpTotal += r.xp;
-        if (r.exito && r.sobreviveu && MISS.sortearRaridade(missao, attr.sorte, Math.random, tamanhoParty)) loot++;
-      }
-      const prev = MISS.previsao(attr, missao, magias, tamanhoParty);
-      return sendEmbed(message.channel, { title: `🔧 Simulação — ${missao.nome}`,
-        description: [
-          `**${vezes}** tentativas${tamanhoParty ? ` · party de ${tamanhoParty}` : " · solo"}`,
+      // ── painel (padrão) ──
+      if (!db.listarMoedas(serverId).length) garantirMoeda(serverId);
+      const lista = db.listarMoedas(serverId);
+      return enviarLista(sendEmbed, message.channel, {
+        titulo: `🪙 Moedas do servidor (${lista.length})`,
+        linhas: [
+          ...lista.map(fichaDaMoeda),
           "",
-          `✅ Sucesso: **${(ok / vezes * 100).toFixed(1)}%** _(previsto ${(prev.exito * prev.sobrevivencia * 100).toFixed(1)}%)_`,
-          `😐 Falhou vivo: ${(falha / vezes * 100).toFixed(1)}%`,
-          `💀 Caiu: **${(caiu / vezes * 100).toFixed(1)}%**`,
-          `🎁 Loot: ${(loot / vezes * 100).toFixed(1)}% das tentativas`,
-          `✨ XP médio: ${(xpTotal / vezes).toFixed(0)}`,
-          "",
-          `_Poder ${prev.poder.toFixed(1)} vs ${(missao.poder * prev.escala).toFixed(1)} · Resiliência ${prev.resil.toFixed(1)} vs ${(missao.risco * prev.escala).toFixed(1)}_`,
-        ].join("\n"), colour: COR.mod });
+          "**O que dá para fazer**",
+          `\`${P}game admin moeda ajuda\` — 📖 o que cada campo significa`,
+          `\`${P}game admin moeda modelo\` — ⚡ conjuntos prontos (mundo real, fantasia…)`,
+          `\`${P}game admin moeda criar <id> <nome> [símbolo] [campo=valor]\``,
+          `\`${P}game admin moeda set <id> <campo> <valor>\``,
+          `\`${P}game admin moeda ver <id>\` · \`padrao <id>\` · \`remover <id> confirmar\``,
+        ],
+        colour: COR.mod });
     }
 
     // ── reset ──

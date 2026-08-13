@@ -142,6 +142,26 @@ const servidor = createServer(async (req, res) => {
       return json(res, 200, { ok: problemas.length === 0, problemas });
     }
 
+    // Executa uma ferramenta DIRETO, sem passar pelo modelo.
+    //
+    // Existe porque modelos pequenos às vezes respondem "não consigo ler o
+    // arquivo" em vez de chamar a ferramenta — sobretudo quando o pedido vem
+    // na forma de pergunta ("consegue ler o X?"). Quando o bot já sabe que o
+    // pedido exige a ferramenta, ele chama por aqui e entrega o conteúdo
+    // pronto ao modelo. Determinístico, sem depender de o modelo decidir.
+    if (req.method === "POST" && req.url === "/ferramenta") {
+      const body = await lerCorpo(req);
+      const { nome, args } = body ?? {};
+      if (!nome) return json(res, 400, { erro: "informe { nome, args }" });
+      try {
+        const resultado = await ferramentas.executar(nome, args ?? {});
+        log(`ferramenta direta: ${nome} ${JSON.stringify(args ?? {}).slice(0, 120)}`);
+        return json(res, 200, { ok: !resultado?.erro, resultado });
+      } catch (e) {
+        return json(res, 200, { ok: false, resultado: { erro: e?.message ?? String(e) } });
+      }
+    }
+
     if (req.method === "GET" && req.url === "/ferramentas") {
       return json(res, 200, { ferramentas: ferramentas.definicoes() });
     }

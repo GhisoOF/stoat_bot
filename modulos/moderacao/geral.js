@@ -156,6 +156,12 @@ export function construirDetalhes(P) {
       perm: "BanMembers",
       ex: `${P}banglobal varrer ver`,
     },
+    game: {
+      uso: `${P}game [criar|ficha|pontos|top|apagar]`,
+      desc: "RPG do servidor: crie um personagem, suba de nível e distribua pontos em 9 atributos.\n\n`&game criar [nome]` — cria seu personagem\n`&game` — sua ficha\n`&game ficha @pessoa` — a ficha de outro\n`&game pontos <atributo> [quantos]` — distribui pontos (aceita abreviação: for, int, sor…)\n`&game top` — ranking do servidor\n`&game apagar confirmar` — recomeça do zero\n\n**Atributos:** Força, Destreza, Resistência, Agilidade, Vida, Mana, Inteligência, Sorte, Carisma.\n\n_Inteligência e Sorte aumentam o XP ganho e os pontos por nível, com retorno decrescente — nunca param de valer._\n\n⚠️ Não confundir com `&xp`, que é o sistema de níveis por mensagem.",
+      perm: null,
+      ex: `${P}game criar Kael`,
+    },
     xp: {
       uso: `${P}xp [rank|top|setup|cargos|criarcargos|on|off]`,
       desc: "Sistema de níveis por XP de mensagens. Cada mensagem dá XP (com cooldown), e ao juntar XP você sobe de nível. A cada N níveis pode ganhar um cargo. `top` mostra o ranking. `setup` configura dificuldade, nível máximo e intervalo de cargos. (XP por call não é suportado pelo Stoat.)",
@@ -419,10 +425,19 @@ export async function cmdHelp(message, args, ctx) {
         `\`${P}chat esquecer [tudo]\` — apaga sua memória (ou a do servidor)` + IA_TAG,
       ],
     },
+    game: {
+      uso: `${P}game [criar|ficha|pontos|top|apagar]`,
+      desc: "RPG do servidor: crie um personagem, suba de nível e distribua pontos em 9 atributos.\n\n`&game criar [nome]` — cria seu personagem\n`&game` — sua ficha\n`&game ficha @pessoa` — a ficha de outro\n`&game pontos <atributo> [quantos]` — distribui pontos (aceita abreviação: for, int, sor…)\n`&game top` — ranking do servidor\n`&game apagar confirmar` — recomeça do zero\n\n**Atributos:** Força, Destreza, Resistência, Agilidade, Vida, Mana, Inteligência, Sorte, Carisma.\n\n_Inteligência e Sorte aumentam o XP ganho e os pontos por nível, com retorno decrescente — nunca param de valer._\n\n⚠️ Não confundir com `&xp`, que é o sistema de níveis por mensagem.",
+      perm: null,
+      ex: `${P}game criar Kael`,
+    },
     xp: {
       titulo: "Sistema de níveis (XP)",
       linhas: [
-        `\`${P}xp\` — seu nível, XP e progresso`,
+        `\`${P}game\` — 🎲 seu personagem de RPG (ficha, atributos)`,
+        `\`${P}game criar [nome]\` — cria o personagem`,
+        `\`${P}game pontos <atributo>\` — distribui pontos`,
+        `\`${P}xp\` — seu nível, XP e progresso (por mensagem)`,
         `\`${P}xp rank [@usuário]\` — perfil de outra pessoa`,
         `\`${P}xp top\` — ranking do servidor`,
         `\`${P}xp setup\` — configurar *(ManagePermissions)*`,

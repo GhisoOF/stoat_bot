@@ -102,7 +102,7 @@ export function abrirBanco(caminho) {
 
   // (Game) XP e nível por usuário/servidor
   db.exec(`
-    CREATE TABLE IF NOT EXISTS game_xp (
+    CREATE TABLE IF NOT EXISTS xp_usuarios (
       serverId  TEXT NOT NULL,
       userId    TEXT NOT NULL,
       xp        INTEGER NOT NULL DEFAULT 0,
@@ -111,7 +111,7 @@ export function abrirBanco(caminho) {
       PRIMARY KEY (serverId, userId)
     )
   `);
-  db.exec(`CREATE INDEX IF NOT EXISTS idx_gamexp_rank ON game_xp (serverId, xp DESC)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_xp_rank ON xp_usuarios (serverId, xp DESC)`);
   // (IA) memória persistente por usuário (global — vale em qualquer servidor)
   db.exec(`
     CREATE TABLE IF NOT EXISTS ia_memoria (
@@ -183,13 +183,38 @@ export function abrirBanco(caminho) {
   `);
   // (Game) cargos de nível: qual cargo dar em qual nível
   db.exec(`
-    CREATE TABLE IF NOT EXISTS game_cargos (
+    CREATE TABLE IF NOT EXISTS xp_cargos (
       serverId  TEXT NOT NULL,
       nivel     INTEGER NOT NULL,
       roleId    TEXT NOT NULL,
       PRIMARY KEY (serverId, nivel)
     )
   `);
+
+  // ── RPG: personagem (por servidor) ──
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS rpg_personagem (
+      serverId    TEXT NOT NULL,
+      userId      TEXT NOT NULL,
+      nome        TEXT,
+      nivel       INTEGER NOT NULL DEFAULT 1,
+      xp          INTEGER NOT NULL DEFAULT 0,
+      pontos      REAL    NOT NULL DEFAULT 0,   -- livres para distribuir
+      forca       INTEGER NOT NULL DEFAULT 1,
+      destreza    INTEGER NOT NULL DEFAULT 1,
+      resistencia INTEGER NOT NULL DEFAULT 1,
+      agilidade   INTEGER NOT NULL DEFAULT 1,
+      vida        INTEGER NOT NULL DEFAULT 1,
+      mana        INTEGER NOT NULL DEFAULT 1,
+      inteligencia INTEGER NOT NULL DEFAULT 1,
+      sorte       INTEGER NOT NULL DEFAULT 1,
+      carisma     INTEGER NOT NULL DEFAULT 1,
+      criadoEm    INTEGER NOT NULL,
+      PRIMARY KEY (serverId, userId)
+    )
+  `);
+
+  migrarTabelasGame();   // XP: game_* → xp_* (preserva os dados)
 
   console.info("[DB] Banco aberto em", DB_PATH);
   return db;
@@ -411,50 +436,50 @@ export function limparVistosAntigos(dias = 30) {
 
 // ── Game (XP / níveis) ─────────────────────────────────────
 export function getXp(serverId, userId) {
-  return db.prepare("SELECT xp, nivel, ultimaMsg FROM game_xp WHERE serverId = ? AND userId = ?")
+  return db.prepare("SELECT xp, nivel, ultimaMsg FROM xp_usuarios WHERE serverId = ? AND userId = ?")
            .get(serverId, userId) ?? { xp: 0, nivel: 0, ultimaMsg: null };
 }
 
 export function setXp(serverId, userId, xp, nivel, ultimaMsg) {
-  db.prepare(`INSERT INTO game_xp (serverId, userId, xp, nivel, ultimaMsg)
+  db.prepare(`INSERT INTO xp_usuarios (serverId, userId, xp, nivel, ultimaMsg)
               VALUES (?, ?, ?, ?, ?)
               ON CONFLICT(serverId, userId) DO UPDATE SET xp = ?, nivel = ?, ultimaMsg = ?`)
     .run(serverId, userId, xp, nivel, ultimaMsg, xp, nivel, ultimaMsg);
 }
 
 export function topXp(serverId, limite = 10) {
-  return db.prepare("SELECT userId, xp, nivel FROM game_xp WHERE serverId = ? ORDER BY xp DESC LIMIT ?")
+  return db.prepare("SELECT userId, xp, nivel FROM xp_usuarios WHERE serverId = ? ORDER BY xp DESC LIMIT ?")
            .all(serverId, limite);
 }
 
 export function posicaoXp(serverId, userId) {
-  const r = db.prepare(`SELECT COUNT(*) + 1 AS pos FROM game_xp
-    WHERE serverId = ? AND xp > (SELECT xp FROM game_xp WHERE serverId = ? AND userId = ?)`)
+  const r = db.prepare(`SELECT COUNT(*) + 1 AS pos FROM xp_usuarios
+    WHERE serverId = ? AND xp > (SELECT xp FROM xp_usuarios WHERE serverId = ? AND userId = ?)`)
     .get(serverId, serverId, userId);
   return r?.pos ?? null;
 }
 
 export function resetXp(serverId) {
-  return db.prepare("DELETE FROM game_xp WHERE serverId = ?").run(serverId).changes ?? 0;
+  return db.prepare("DELETE FROM xp_usuarios WHERE serverId = ?").run(serverId).changes ?? 0;
 }
 
 // cargos de nível
 export function setCargoNivel(serverId, nivel, roleId) {
-  db.prepare(`INSERT INTO game_cargos (serverId, nivel, roleId) VALUES (?, ?, ?)
+  db.prepare(`INSERT INTO xp_cargos (serverId, nivel, roleId) VALUES (?, ?, ?)
               ON CONFLICT(serverId, nivel) DO UPDATE SET roleId = ?`)
     .run(serverId, nivel, roleId, roleId);
 }
 
 export function listarCargosNivel(serverId) {
-  return db.prepare("SELECT nivel, roleId FROM game_cargos WHERE serverId = ? ORDER BY nivel").all(serverId);
+  return db.prepare("SELECT nivel, roleId FROM xp_cargos WHERE serverId = ? ORDER BY nivel").all(serverId);
 }
 
 export function cargoDoNivel(serverId, nivel) {
-  return db.prepare("SELECT roleId FROM game_cargos WHERE serverId = ? AND nivel = ?").get(serverId, nivel)?.roleId ?? null;
+  return db.prepare("SELECT roleId FROM xp_cargos WHERE serverId = ? AND nivel = ?").get(serverId, nivel)?.roleId ?? null;
 }
 
 export function limparCargosNivel(serverId) {
-  return db.prepare("DELETE FROM game_cargos WHERE serverId = ?").run(serverId).changes ?? 0;
+  return db.prepare("DELETE FROM xp_cargos WHERE serverId = ?").run(serverId).changes ?? 0;
 }
 
 // ── IA: memória por usuário (global) ───────────────────────
@@ -616,6 +641,65 @@ export function getFatosServidor(serverId, { limite = 15, minConf = 0.4 } = {}) 
      WHERE serverId = ? AND confianca >= ?
      ORDER BY confianca DESC, vezes DESC, momento DESC LIMIT ?`
   ).all(serverId, minConf, limite);
+}
+
+
+// Migração: as tabelas de XP se chamavam game_* (o nome "game" passou a ser do
+// RPG). Renomeamos preservando os dados — ninguém perde o XP acumulado.
+function migrarTabelasGame() {
+  for (const [antiga, nova] of [["game_xp", "xp_usuarios"], ["game_cargos", "xp_cargos"]]) {
+    try {
+      const existe = db.prepare(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name = ?"
+      ).get(antiga);
+      if (!existe) continue;
+      const linhas = db.prepare(`SELECT COUNT(*) AS n FROM ${antiga}`).get()?.n ?? 0;
+      if (linhas) {
+        db.exec(`INSERT OR IGNORE INTO ${nova} SELECT * FROM ${antiga}`);
+        console.log(`[DB] migrados ${linhas} registro(s) de ${antiga} → ${nova}`);
+      }
+      db.exec(`DROP TABLE ${antiga}`);
+    } catch (e) { console.error(`[DB] migração ${antiga}:`, e.message); }
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+//  RPG — personagem
+// ══════════════════════════════════════════════════════════
+export const ATRIBUTOS = ["forca", "destreza", "resistencia", "agilidade",
+  "vida", "mana", "inteligencia", "sorte", "carisma"];
+
+export function getPersonagem(serverId, userId) {
+  return db.prepare("SELECT * FROM rpg_personagem WHERE serverId = ? AND userId = ?")
+    .get(serverId, userId) ?? null;
+}
+
+export function criarPersonagem(serverId, userId, nome) {
+  db.prepare(`INSERT INTO rpg_personagem (serverId, userId, nome, criadoEm)
+              VALUES (?, ?, ?, ?)`).run(serverId, userId, nome ?? null, Date.now());
+  return getPersonagem(serverId, userId);
+}
+
+// Grava campos avulsos. Só aceita colunas conhecidas — nada de SQL montado
+// com nome vindo do usuário.
+const COLUNAS_OK = new Set([...ATRIBUTOS, "nome", "nivel", "xp", "pontos"]);
+export function salvarPersonagem(serverId, userId, campos = {}) {
+  const entradas = Object.entries(campos).filter(([k]) => COLUNAS_OK.has(k));
+  if (!entradas.length) return getPersonagem(serverId, userId);
+  const sets = entradas.map(([k]) => `${k} = ?`).join(", ");
+  db.prepare(`UPDATE rpg_personagem SET ${sets} WHERE serverId = ? AND userId = ?`)
+    .run(...entradas.map(([, v]) => v), serverId, userId);
+  return getPersonagem(serverId, userId);
+}
+
+export function apagarPersonagem(serverId, userId) {
+  return db.prepare("DELETE FROM rpg_personagem WHERE serverId = ? AND userId = ?")
+    .run(serverId, userId).changes ?? 0;
+}
+
+export function listarPersonagens(serverId, limite = 10) {
+  return db.prepare(`SELECT userId, nome, nivel, xp FROM rpg_personagem
+    WHERE serverId = ? ORDER BY nivel DESC, xp DESC LIMIT ?`).all(serverId, limite);
 }
 
 // ── Acesso cru ─────────────────────────────────────────────

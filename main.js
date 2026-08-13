@@ -24,6 +24,7 @@ import * as corCargo   from "./modulos/moderacao/cor-cargo.js";
 import * as acessoMod  from "./modulos/moderacao/acesso.js";
 import * as warnMod    from "./modulos/moderacao/warn.js";
 import * as srvStats   from "./modulos/moderacao/servidores.js";
+import * as rpg        from "./modulos/game/game.js";
 import * as modIA      from "./modulos/moderacao/moderacao-ia.js";
 import * as modiaCmd   from "./modulos/moderacao/modia-comando.js";
 import * as debugCmd  from "./modulos/moderacao/debug-comando.js";
@@ -306,18 +307,21 @@ const rotas = {
   rss:           rss.cmdRss,
   feed:          rss.cmdRss,
   autorole:      autorole.cmdAutorole,
+  game:          rpg.cmdGame,
+  rpg:           rpg.cmdGame,
+  personagem:    rpg.cmdGame,
   xp:            nivel.cmdXp,
   nivel:         nivel.cmdXp,
   level:         nivel.cmdXp,
-  game:          nivel.cmdXp,   // nome antigo, mantido como apelido
 };
 
 // Aliases → nome canônico (para desativar um comando desativa todos os apelidos).
 const CANONICO = {
-  game: "xp",
   nivel: "xp",
   level: "xp",
   avisar: "warn",
+  rpg: "game",
+  personagem: "game",
   cores: "cor",
   cargocor: "cor",
   guia: "tutorial",
@@ -335,7 +339,7 @@ const CANONICO = {
 const COMANDOS_GERENCIAVEIS = [
   "ping", "repete", "userinfo", "kick", "ban", "limpar",
   "warnings", "clearwarnings", "warn", "acesso", "automod", "whitelist", "blocklist",
-  "scam", "punicao", "tutorial", "cor", "log", "banglobal", "embed", "reactionrole", "chat", "rss", "xp", "autorole",
+  "scam", "punicao", "tutorial", "cor", "log", "banglobal", "embed", "reactionrole", "chat", "rss", "xp", "game", "autorole",
 ];
 // exportado via ctx para o comando &comando consultar
 estado.CANONICO = CANONICO;

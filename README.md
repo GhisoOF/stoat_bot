@@ -456,6 +456,10 @@ distribui pontos em 9 atributos.
 &game comprar Espada de Ferro
 &game vender Adaga Simples
 &game contratar Mercenário Novato
+&game mercado              # bazar entre jogadores
+&game mercado vender Lâmina Aurora 5000
+&game cambio 100 ouro por 5 prata
+&game trocar @amigo Elmo do Dragão por Manto Estelar
 &game followers            # seus companheiros
 &game follower levar Aprendiz de Magia
 &game recrutas             # companheiros que existem no jogo
@@ -511,17 +515,64 @@ Ao cair você perde uma fração do que carrega, e ela vai para o **pote da dung
 — a moeda é realocada, não destruída. Quanto mais cheio o pote, maior a fatia que
 o vencedor leva.
 
+### Programar as moedas
+
+Cada servidor pode ter várias moedas, configuráveis pelo dono do bot:
+
+```
+&game admin moeda                              # lista e mostra a configuração
+&game admin moeda criar prata Prata 🥈
+&game admin moeda set prata dificuldade 5
+&game admin moeda set prata nivelMin 10
+&game admin moeda set prata finita nao
+&game admin moeda padrao ouro                  # define a principal
+&game admin moeda remover prata confirmar
+```
+
+| Campo | O que faz |
+|---|---|
+| `dificuldade` | 1 = comum. Maior = **aparece menos** em missão e **rende menos unidades** |
+| `nivelMin` | só cai em missões desse nível para cima |
+| `finita` | finita entra no cálculo do P; infinita não se esgota |
+| `suprimentoBase` · `mercado` | quanto o mercado tem |
+
+A dificuldade é o que cria a hierarquia entre moedas: uma moeda de dificuldade 20
+com `nivelMin` 15 vira algo raro, que só aparece em missões avançadas e em
+pequena quantidade — enquanto a moeda padrão sustenta o dia a dia.
+
+### Mercado entre jogadores
+
+Três formas de negociar, **todas com custódia** — o que está em jogo sai da sua
+mochila e fica com o bot até fechar ou ser cancelado:
+
+| | Comando |
+|---|---|
+| **Bazar** (item por moeda) | `&game mercado vender <item> <preço>` · `&game mercado comprar <#>` |
+| **Balcão de câmbio** | `&game cambio <qtd> <moeda> por <qtd> <moeda>` |
+| **Escambo** (item por item) | `&game trocar [@pessoa] <seu item> por <item dela>` |
+
+Sem custódia, qualquer um poderia anunciar o que não tem e sumir. No câmbio, a
+taxa do sistema aparece ao lado da oferta como referência, para ninguém aceitar
+um negócio ruim sem perceber.
+
+A **taxa** começa em 0,5% e sobe com o volume recente, como custo de
+congestionamento — saturando em 8%, para nunca inviabilizar negociar.
+
+> Nenhuma dessas operações cria ou destrói moeda: são transferências entre
+> jogadores. O `P` não muda, então não há risco de inflação.
+
 ### Modo admin
 
 Restrito ao dono do bot, para testar e depurar sem jogar horas:
 
 ```
-&game admin moeda 5000 [@pessoa]
+&game admin dar 5000 [@pessoa]         # credita moeda
 &game admin item <nome> · &game admin follower <nome> [nível]
 &game admin nivel 20 · &game admin pontos 50
 &game admin energia · &game admin cooldown
 &game admin eco                      # números da economia
 &game admin missao <nome>            # roda a missão ignorando cooldown
+&game admin moeda                    # cria e configura as moedas do servidor
 &game admin teste                   # roda o jogo INTEIRO e diz o que funcionou
 &game admin simular <missao> [n]     # roda n vezes sem efeito real
 &game admin zerar confirmar          # apaga o RPG do servidor

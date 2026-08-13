@@ -316,6 +316,40 @@ export function abrirBanco(caminho) {
     )
   `);
 
+  // ── RPG: mercado entre jogadores ──
+  //
+  // Toda oferta guarda o que está em jogo em CUSTÓDIA: o item/moeda sai da
+  // carteira de quem anuncia e só volta se cancelar. Sem isso, dá para
+  // anunciar o que não se tem e dar calote.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS rpg_ofertas (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      serverId      TEXT NOT NULL,
+      tipo          TEXT NOT NULL,          -- venda | cambio | troca
+      autorId       TEXT NOT NULL,
+      alvoId        TEXT,                   -- troca direcionada a alguém
+      itemOferecido TEXT,
+      moedaOferecida TEXT,
+      qtdOferecida  REAL NOT NULL DEFAULT 0,
+      itemPedido    TEXT,
+      moedaPedida   TEXT,
+      qtdPedida     REAL NOT NULL DEFAULT 0,
+      estado        TEXT NOT NULL DEFAULT 'aberta',
+      valorFinal    REAL NOT NULL DEFAULT 0,
+      criadoEm      INTEGER NOT NULL,
+      fechadoEm     INTEGER NOT NULL DEFAULT 0
+    )
+  `);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_ofertas_srv ON rpg_ofertas (serverId, estado)`);
+
+  // Campos de configuração da moeda (migração: adiciona se faltar)
+  try {
+    const cols = db.prepare("PRAGMA table_info(rpg_moedas)").all().map((c) => c.name);
+    if (!cols.includes("dificuldade"))   db.exec("ALTER TABLE rpg_moedas ADD COLUMN dificuldade REAL NOT NULL DEFAULT 1");
+    if (!cols.includes("suprimentoBase")) db.exec("ALTER TABLE rpg_moedas ADD COLUMN suprimentoBase REAL NOT NULL DEFAULT 10000");
+    if (!cols.includes("nivelMin"))      db.exec("ALTER TABLE rpg_moedas ADD COLUMN nivelMin INTEGER NOT NULL DEFAULT 1");
+  } catch (e) { console.error("[DB] migração moedas:", e.message); }
+
   // Colunas de missão no personagem (migração: adiciona se faltar)
   try {
     const cols = db.prepare("PRAGMA table_info(rpg_personagem)").all().map((c) => c.name);
@@ -1039,13 +1073,22 @@ export function resgatarFollower(id, novoDono) {
 //  RPG — economia
 // ══════════════════════════════════════════════════════════
 export function upsertMoeda(serverId, m) {
-  db.prepare(`INSERT INTO rpg_moedas (serverId, id, nome, simbolo, finita, mercado, dungeon, pSuave, pEm, padrao)
-    VALUES (?, ?, ?, ?, ?, ?, 0, 0.5, ?, ?)
+  db.prepare(`INSERT INTO rpg_moedas
+    (serverId, id, nome, simbolo, finita, mercado, dungeon, pSuave, pEm, padrao,
+     dificuldade, suprimentoBase, nivelMin)
+    VALUES (?, ?, ?, ?, ?, ?, 0, 0.5, ?, ?, ?, ?, ?)
     ON CONFLICT(serverId, id) DO UPDATE SET nome=excluded.nome, simbolo=excluded.simbolo,
-      finita=excluded.finita, padrao=excluded.padrao`)
+      finita=excluded.finita, padrao=excluded.padrao, dificuldade=excluded.dificuldade,
+      suprimentoBase=excluded.suprimentoBase, nivelMin=excluded.nivelMin`)
     .run(serverId, m.id, m.nome, m.simbolo ?? "🪙", m.finita === false ? 0 : 1,
-         m.mercado ?? 10000, Date.now(), m.padrao ? 1 : 0);
+         m.mercado ?? m.suprimentoBase ?? 10000, Date.now(), m.padrao ? 1 : 0,
+         m.dificuldade ?? 1, m.suprimentoBase ?? 10000, m.nivelMin ?? 1);
   return getMoeda(serverId, m.id);
+}
+
+export function removerMoeda(serverId, id) {
+  db.prepare("DELETE FROM rpg_carteira WHERE serverId=? AND moedaId=?").run(serverId, id);
+  return db.prepare("DELETE FROM rpg_moedas WHERE serverId=? AND id=?").run(serverId, id).changes ?? 0;
 }
 
 export function getMoeda(serverId, id) {
@@ -1070,7 +1113,8 @@ export function acharMoeda(serverId, txt) {
       ?? null;
 }
 
-const CAMPOS_MOEDA = new Set(["mercado", "dungeon", "pSuave", "pEm", "nome", "simbolo", "finita", "padrao"]);
+const CAMPOS_MOEDA = new Set(["mercado", "dungeon", "pSuave", "pEm", "nome", "simbolo",
+  "finita", "padrao", "dificuldade", "suprimentoBase", "nivelMin"]);
 export function salvarMoeda(serverId, id, campos = {}) {
   const e = Object.entries(campos).filter(([k]) => CAMPOS_MOEDA.has(k));
   if (!e.length) return getMoeda(serverId, id);
@@ -1129,6 +1173,46 @@ export function ajustarEstoque(serverId, itemId, delta) {
   const e = getEstoque(serverId, itemId);
   const base = e?.base ?? 10;
   return setEstoque(serverId, itemId, Math.max(0, (e?.quantidade ?? base) + delta), base);
+}
+
+// ══════════════════════════════════════════════════════════
+//  RPG — ofertas do mercado entre jogadores
+// ══════════════════════════════════════════════════════════
+export function criarOferta(o) {
+  const r = db.prepare(`INSERT INTO rpg_ofertas
+    (serverId, tipo, autorId, alvoId, itemOferecido, moedaOferecida, qtdOferecida,
+     itemPedido, moedaPedida, qtdPedida, estado, criadoEm)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'aberta', ?)`)
+    .run(o.serverId, o.tipo, o.autorId, o.alvoId ?? null,
+         o.itemOferecido ?? null, o.moedaOferecida ?? null, o.qtdOferecida ?? 0,
+         o.itemPedido ?? null, o.moedaPedida ?? null, o.qtdPedida ?? 0, Date.now());
+  return getOferta(r.lastInsertRowid);
+}
+
+export function getOferta(id) {
+  return db.prepare("SELECT * FROM rpg_ofertas WHERE id = ?").get(id) ?? null;
+}
+
+export function listarOfertas(serverId, { tipo = null, autorId = null, alvoId = null } = {}) {
+  let sql = "SELECT * FROM rpg_ofertas WHERE serverId=? AND estado='aberta'";
+  const p = [serverId];
+  if (tipo) { sql += " AND tipo=?"; p.push(tipo); }
+  if (autorId) { sql += " AND autorId=?"; p.push(autorId); }
+  if (alvoId) { sql += " AND (alvoId=? OR alvoId IS NULL)"; p.push(alvoId); }
+  return db.prepare(sql + " ORDER BY id DESC LIMIT 50").all(...p);
+}
+
+export function fecharOferta(id, estado = "fechada", valorFinal = 0) {
+  db.prepare("UPDATE rpg_ofertas SET estado=?, valorFinal=?, fechadoEm=? WHERE id=?")
+    .run(estado, valorFinal, Date.now(), id);
+  return getOferta(id);
+}
+
+// Volume negociado na última hora — alimenta a taxa dinâmica.
+export function volumeRecente(serverId, janelaMs = 3600_000) {
+  return db.prepare(`SELECT COALESCE(SUM(valorFinal),0) AS v FROM rpg_ofertas
+    WHERE serverId=? AND estado='fechada' AND fechadoEm > ?`)
+    .get(serverId, Date.now() - janelaMs)?.v ?? 0;
 }
 
 // ── Acesso cru ─────────────────────────────────────────────

@@ -126,14 +126,60 @@ export function converter(quantidade, pDe, pPara) {
   return { recebe: Math.max(0, Math.floor(bruto - taxa)), taxa: Math.ceil(taxa) };
 }
 
+// ── Taxa do mercado entre jogadores ───────────────────────
+// Quase nada em movimento normal; sobe com o volume recente, como custo de
+// congestionamento. A raiz faz subir sem nunca inviabilizar negociar.
+export const TAXA_BASE = 0.005;   // 0,5%
+export const VOLUME_REF = 20000;
+export const TAXA_K = 1.5;
+
+// Satura numa fração razoável: mesmo com volume absurdo a taxa se aproxima do
+// TAXA_TETO sem passar dele. Sem isso, volume alto o bastante levaria a taxa
+// acima de 100% — o vendedor pagaria para vender, o que é sem sentido.
+export const TAXA_TETO = 0.08;   // 8%
+
+export function taxaMercado(volumeRecente = 0) {
+  const razao = Math.max(0, volumeRecente) / VOLUME_REF;
+  const cresc = Math.sqrt(razao) / (Math.sqrt(razao) + 3);   // 0 → 1, nunca chega a 1
+  return TAXA_BASE + (TAXA_TETO - TAXA_BASE) * cresc;
+}
+
+export function calcularTaxa(valor, volumeRecente = 0) {
+  const pct = taxaMercado(volumeRecente);
+  return { pct, valor: Math.max(0, Math.floor(valor * pct)) };
+}
+
 // ── Recompensa de missão ──────────────────────────────────
 // Escala com a dificuldade e com o valor da moeda (P baixo = moeda cara,
 // então paga menos unidades).
-export function moedaDaMissao(missao, P, sorte = 0) {
+// Qual moeda sai desta missão.
+//
+// A `dificuldade` da moeda é o que a torna rara: quanto maior, menor a chance
+// de aparecer, e só em missões de nível alto o bastante. A moeda padrão
+// (dificuldade 1) é o piso — sempre pode cair, para ninguém ficar sem nada.
+export function sortearMoeda(moedas, missao, aleatorio = Math.random) {
+  const nivel = missao.nivel ?? 1;
+  const elegiveis = (moedas ?? []).filter((m) => (m.nivelMin ?? 1) <= nivel);
+  if (!elegiveis.length) return null;
+
+  // peso inversamente proporcional à dificuldade
+  const pesos = elegiveis.map((m) => 1 / Math.max(0.1, m.dificuldade ?? 1));
+  const total = pesos.reduce((a, b) => a + b, 0);
+  let r = aleatorio() * total;
+  for (let i = 0; i < elegiveis.length; i++) {
+    if (r < pesos[i]) return elegiveis[i];
+    r -= pesos[i];
+  }
+  return elegiveis[0];
+}
+
+// Quanto sai. Moeda difícil rende MENOS unidades — ela vale mais.
+export function moedaDaMissao(missao, P, sorte = 0, dificuldade = 1) {
   const base = { mercado: 8, facil: 20, medio: 60, dificil: 180 }[
     missao.tipo === "mercado" ? "mercado" : missao.dificuldade] ?? 10;
   const escala = missao.tipo === "mercado" ? 1 : Math.pow(1.35, (missao.nivel ?? 1) - 1);
   const bonusSorte = 1 + 0.04 * Math.sqrt(Math.max(0, sorte));
-  const ajusteP = 0.6 + 0.8 * (1 - (P ?? 0.5));   // moeda escassa rende mais unidades? não: menos
-  return Math.max(1, Math.round(base * escala * bonusSorte * ajusteP));
+  const ajusteP = 0.6 + 0.8 * (1 - (P ?? 0.5));
+  const ajusteDif = 1 / Math.max(0.1, dificuldade);
+  return Math.max(1, Math.round(base * escala * bonusSorte * ajusteP * ajusteDif));
 }

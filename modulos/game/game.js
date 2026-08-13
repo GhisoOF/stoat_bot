@@ -643,14 +643,15 @@ export async function cmdGame(message, args, ctx) {
     if (!acao || acao === "ajuda") {
       return sendEmbed(message.channel, { title: "🔧 Admin do RPG",
         description: [
-          `\`${P}game admin moeda <qtd> [@pessoa]\` — credita moeda`,
+          `\`${P}game admin dar <qtd> [@pessoa]\` — credita moeda`,
           `\`${P}game admin item <nome> [@pessoa]\` — dá um item`,
           `\`${P}game admin follower <nome> [nível] [@pessoa]\` — dá um companheiro`,
           `\`${P}game admin nivel <n> [@pessoa]\` — força o nível`,
           `\`${P}game admin pontos <n> [@pessoa]\` — dá pontos livres`,
           `\`${P}game admin energia [@pessoa]\` — enche a energia dos companheiros`,
           `\`${P}game admin cooldown [@pessoa]\` — zera cooldown e recuperação`,
-          `\`${P}game admin teste\` — **roda o jogo inteiro** e diz o que funcionou`,
+          `\`${P}game admin moeda\` — **cria e configura as moedas** do servidor`,
+          `\`${P}game admin teste\` — roda o jogo inteiro e diz o que funcionou`,
           `\`${P}game admin eco\` — números da economia`,
           `\`${P}game admin simular <missao> [n]\` — roda a missão n vezes sem efeito`,
           `\`${P}game admin dungeon <qtd>\` — põe moeda no pote da dungeon`,
@@ -658,7 +659,9 @@ export async function cmdGame(message, args, ctx) {
         ].join("\n"), colour: COR.mod });
     }
 
-    if (acao === "moeda") {
+    // `admin dar <qtd>` credita moeda. Mantemos `admin moeda <número>` por
+    // compatibilidade — mas `admin moeda` sem número abre a configuração.
+    if (acao === "dar" || (acao === "moeda" && /^\d+$/.test(resto[0] ?? ""))) {
       const qtd = parseInt(resto[0], 10);
       if (!Number.isFinite(qtd)) return sendEmbed(message.channel, { title: "❌ Quanto?",
         description: `\`${P}game admin moeda 1000\``, colour: COR.erro });
@@ -760,6 +763,122 @@ export async function cmdGame(message, args, ctx) {
       });
     }
 
+    // ── programar moedas ──
+    if (["moeda", "moedas"].includes(acao)) {
+      const op = resto[0]?.toLowerCase();
+      const args2 = resto.slice(1);
+
+      if (!op || op === "listar") {
+        // se ainda não há moeda, cria a padrão e já mostra a lista —
+        // pedir para rodar de novo seria um passo à toa
+        if (!db.listarMoedas(serverId).length) garantirMoeda(serverId);
+        const lista = db.listarMoedas(serverId);
+        const linhas = lista.map((m) => {
+          const { pSuave } = pDaMoeda(serverId, m);
+          return [
+            `${m.simbolo} **${m.nome}** \`${m.id}\`${m.padrao ? " ⭐ _padrão_" : ""}`,
+            `   ${m.finita ? "finita" : "infinita"} · dificuldade ${m.dificuldade} · a partir do nível ${m.nivelMin}`,
+            `   mercado ${fmt(m.mercado)} · dungeon ${fmt(m.dungeon)} · P ${(pSuave * 100).toFixed(0)}%`,
+          ].join("\n");
+        });
+        linhas.push("", "**Criar / configurar**",
+          `\`${P}game admin moeda criar <id> <nome> <símbolo>\``,
+          `\`${P}game admin moeda set <id> <campo> <valor>\``,
+          `   campos: \`nome\` \`simbolo\` \`finita\` \`dificuldade\` \`nivelMin\` \`mercado\` \`suprimentoBase\``,
+          `\`${P}game admin moeda padrao <id>\` — define a principal`,
+          `\`${P}game admin moeda remover <id> confirmar\``,
+          "",
+          "_**dificuldade**: 1 = comum. Maior = aparece menos em missão e rende menos unidades._",
+          "_**nivelMin**: só cai em missões desse nível para cima._");
+        return enviarLista(sendEmbed, message.channel, { titulo: "🪙 Moedas do servidor", linhas, colour: COR.mod });
+      }
+
+      if (op === "criar") {
+        const [id, nome, simbolo] = args2;
+        if (!id || !nome) {
+          return sendEmbed(message.channel, { title: "❌ Uso",
+            description: `\`${P}game admin moeda criar <id> <nome> [símbolo]\`\n\nEx.: \`${P}game admin moeda criar prata Prata 🥈\``,
+            colour: COR.erro });
+        }
+        const chave = id.toLowerCase().replace(/[^a-z0-9_]/g, "");
+        if (!chave) return sendEmbed(message.channel, { title: "❌ ID inválido",
+          description: "Use letras e números, sem espaço. Ex.: `prata`, `cristal_negro`.", colour: COR.erro });
+        if (db.getMoeda(serverId, chave)) {
+          return sendEmbed(message.channel, { title: "❌ Já existe",
+            description: `Já há uma moeda \`${chave}\`. Ajuste com \`${P}game admin moeda set\`.`, colour: COR.erro });
+        }
+        const primeira = db.listarMoedas(serverId).length === 0;
+        const m = db.upsertMoeda(serverId, { id: chave, nome, simbolo: simbolo ?? "🪙",
+          finita: true, suprimentoBase: 10000, dificuldade: 1, nivelMin: 1, padrao: primeira });
+        return sendEmbed(message.channel, { title: "🪙 Moeda criada",
+          description: [
+            `${m.simbolo} **${m.nome}** \`${m.id}\`${primeira ? " ⭐ _(virou a padrão)_" : ""}`,
+            `finita · suprimento ${fmt(m.mercado)} · dificuldade 1 · nível mínimo 1`,
+            "",
+            `_Ajuste com \`${P}game admin moeda set ${m.id} dificuldade 4\`._`,
+          ].join("\n"), colour: COR.sucesso });
+      }
+
+      if (op === "set" || op === "editar") {
+        const [idM, campo, ...valores] = args2;
+        const m = db.acharMoeda(serverId, idM);
+        if (!m) return sendEmbed(message.channel, { title: "❌ Moeda desconhecida",
+          description: `\`${P}game admin moeda\` lista as existentes.`, colour: COR.erro });
+        const valor = valores.join(" ");
+        const campos = { nome: "texto", simbolo: "texto", finita: "bool",
+          dificuldade: "num", nivelMin: "int", mercado: "num", suprimentoBase: "num" };
+        if (!campos[campo]) {
+          return sendEmbed(message.channel, { title: "❌ Campo desconhecido",
+            description: `Campos: ${Object.keys(campos).map((c) => `\`${c}\``).join(", ")}`, colour: COR.erro });
+        }
+        let v = valor;
+        if (campos[campo] === "num") v = Number(valor);
+        if (campos[campo] === "int") v = parseInt(valor, 10);
+        if (campos[campo] === "bool") v = ["sim", "true", "1", "finita"].includes(valor.toLowerCase()) ? 1 : 0;
+        if ((campos[campo] === "num" || campos[campo] === "int") && !Number.isFinite(v)) {
+          return sendEmbed(message.channel, { title: "❌ Valor inválido",
+            description: `**${campo}** precisa de um número.`, colour: COR.erro });
+        }
+        db.salvarMoeda(serverId, m.id, { [campo]: v });
+        const atual = db.getMoeda(serverId, m.id);
+        return sendEmbed(message.channel, { title: "🪙 Moeda ajustada",
+          description: `${atual.simbolo} **${atual.nome}**: \`${campo}\` → **${v}**`, colour: COR.mod });
+      }
+
+      if (op === "padrao" || op === "padrão") {
+        const m = db.acharMoeda(serverId, args2[0]);
+        if (!m) return sendEmbed(message.channel, { title: "❌ Moeda desconhecida", description: "-", colour: COR.erro });
+        for (const x of db.listarMoedas(serverId)) db.salvarMoeda(serverId, x.id, { padrao: x.id === m.id ? 1 : 0 });
+        return sendEmbed(message.channel, { title: "⭐ Moeda padrão",
+          description: `${m.simbolo} **${m.nome}** é a principal do servidor.`, colour: COR.mod });
+      }
+
+      if (op === "remover") {
+        const m = db.acharMoeda(serverId, args2[0]);
+        if (!m) return sendEmbed(message.channel, { title: "❌ Moeda desconhecida", description: "-", colour: COR.erro });
+        if (args2[1]?.toLowerCase() !== "confirmar") {
+          const total = db.totalNasCarteiras(serverId, m.id);
+          return sendEmbed(message.channel, { title: "⚠️ Apaga a moeda e os saldos",
+            description: [
+              `${m.simbolo} **${m.nome}** — há ${fmt(total)} nas carteiras dos jogadores.`,
+              "Tudo isso será **perdido**.",
+              "",
+              `\`${P}game admin moeda remover ${m.id} confirmar\``,
+            ].join("\n"), colour: COR.aviso });
+        }
+        if (m.padrao && db.listarMoedas(serverId).length > 1) {
+          return sendEmbed(message.channel, { title: "❌ É a moeda padrão",
+            description: `Defina outra como padrão antes: \`${P}game admin moeda padrao <id>\`.`, colour: COR.erro });
+        }
+        db.removerMoeda(serverId, m.id);
+        return sendEmbed(message.channel, { title: "🗑️ Moeda removida",
+          description: `${m.simbolo} **${m.nome}** e todos os saldos dela.`, colour: COR.mod });
+      }
+
+      return sendEmbed(message.channel, { title: "❓ Operação desconhecida",
+        description: `\`${P}game admin moeda\` lista o que dá para fazer.`, colour: COR.erro });
+    }
+
     if (acao === "eco") {
       const m = garantirMoeda(serverId);
       const { pAgora, pSuave, comPlayers } = pDaMoeda(serverId, m);
@@ -852,6 +971,276 @@ export async function cmdGame(message, args, ctx) {
     ].filter(Boolean);
     return sendEmbed(message.channel, { title: "💰 Sua carteira",
       description: linhas.join("\n"), colour: COR.info });
+  }
+
+  // ── mercado entre jogadores ──
+  //
+  // Três formas, todas com CUSTÓDIA: o que está em jogo sai da carteira de
+  // quem anuncia e fica com o bot até fechar ou cancelar. Sem isso, qualquer
+  // uma delas vira golpe na primeira semana.
+  if (["mercado", "bazar", "p2p"].includes(sub)) {
+    const p = db.getPersonagem(serverId, eu);
+    if (!p) return sendEmbed(message.channel, { title: "🎭 Sem personagem",
+      description: `Crie com \`${P}game criar\`.`, colour: COR.aviso });
+
+    const moeda = garantirMoeda(serverId);
+    const acao = args[1]?.toLowerCase();
+    const resto = args.slice(2);
+
+    // ── anunciar item por moeda ──
+    if (["vender", "anunciar"].includes(acao)) {
+      const preco = parseInt(resto[resto.length - 1], 10);
+      const nomeItem = resto.slice(0, -1).join(" ").trim();
+      if (!nomeItem || !Number.isFinite(preco) || preco < 1) {
+        return sendEmbed(message.channel, { title: "❌ Uso",
+          description: `\`${P}game mercado vender <item> <preço>\`\n\nEx.: \`${P}game mercado vender Espada de Ferro 250\``,
+          colour: COR.erro });
+      }
+      const item = db.acharItemPorNome(nomeItem);
+      if (!item || !db.temItem(serverId, eu, item.id)) {
+        return sendEmbed(message.channel, { title: "❌ Você não tem isso",
+          description: `**${nomeItem}** não está na sua mochila.`, colour: COR.erro });
+      }
+      // custódia: o item sai agora
+      const slot = db.slotDoItem(serverId, eu, item.id);
+      if (slot) db.desequipar(serverId, eu, slot);
+      db.tirarItem(serverId, eu, item.id, 1);
+      const of = db.criarOferta({ serverId, tipo: "venda", autorId: eu,
+        itemOferecido: item.id, moedaPedida: moeda.id, qtdPedida: preco });
+      return sendEmbed(message.channel, { title: "🏷️ Anunciado",
+        description: [
+          `**${item.nome}** por ${moeda.simbolo}${fmt(preco)}`,
+          `_O item ficou em custódia comigo até alguém comprar ou você cancelar._`,
+          "",
+          `Oferta **#${of.id}** · cancelar: \`${P}game mercado cancelar ${of.id}\``,
+        ].join("\n"), colour: COR.sucesso });
+    }
+
+    // ── comprar ──
+    if (["comprar", "aceitar"].includes(acao)) {
+      const id = parseInt(resto[0], 10);
+      const of = Number.isFinite(id) ? db.getOferta(id) : null;
+      if (!of || of.serverId !== serverId || of.estado !== "aberta") {
+        return sendEmbed(message.channel, { title: "❌ Oferta indisponível",
+          description: `Veja as abertas com \`${P}game mercado\`.`, colour: COR.erro });
+      }
+      if (of.autorId === eu) {
+        return sendEmbed(message.channel, { title: "🤔 É sua",
+          description: `Para tirar do ar: \`${P}game mercado cancelar ${of.id}\`.`, colour: COR.aviso });
+      }
+
+      const volume = db.volumeRecente(serverId);
+      const { pct, valor: taxa } = ECO.calcularTaxa(of.qtdPedida, volume);
+      const total = of.qtdPedida;
+      const saldo = db.getSaldo(serverId, eu, of.moedaPedida ?? moeda.id);
+      if (saldo < total) {
+        return sendEmbed(message.channel, { title: "💸 Saldo insuficiente",
+          description: `Precisa de ${moeda.simbolo}${fmt(total)} — você tem ${moeda.simbolo}${fmt(saldo)}.`,
+          colour: COR.erro });
+      }
+
+      // troca: comprador paga, vendedor recebe menos a taxa, taxa vai ao mercado
+      db.debitar(serverId, eu, of.moedaPedida, total);
+      db.creditar(serverId, of.autorId, of.moedaPedida, total - taxa);
+      const m = db.getMoeda(serverId, of.moedaPedida);
+      if (m) db.salvarMoeda(serverId, of.moedaPedida, { mercado: (m.mercado ?? 0) + taxa });
+
+      if (of.tipo === "cambio") {
+        db.creditar(serverId, eu, of.moedaOferecida, of.qtdOferecida);
+      } else {
+        db.darItem(serverId, eu, of.itemOferecido);
+      }
+      db.fecharOferta(of.id, "fechada", total);
+
+      const oQue = of.tipo === "cambio"
+        ? `${fmt(of.qtdOferecida)} ${db.getMoeda(serverId, of.moedaOferecida)?.simbolo ?? ""}`
+        : `**${db.getItem(of.itemOferecido)?.nome ?? "?"}**`;
+      return sendEmbed(message.channel, { title: "🤝 Negócio fechado",
+        description: [
+          `Você levou ${oQue} por ${moeda.simbolo}${fmt(total)}.`,
+          `_Taxa do mercado: ${moeda.simbolo}${fmt(taxa)} (${(pct * 100).toFixed(2)}%)_`,
+        ].join("\n"), colour: COR.sucesso });
+    }
+
+    // ── cancelar (devolve a custódia) ──
+    if (["cancelar", "retirar"].includes(acao)) {
+      const id = parseInt(resto[0], 10);
+      const of = Number.isFinite(id) ? db.getOferta(id) : null;
+      if (!of || of.autorId !== eu || of.estado !== "aberta") {
+        return sendEmbed(message.channel, { title: "❌ Não dá para cancelar",
+          description: "A oferta não existe, não é sua, ou já fechou.", colour: COR.erro });
+      }
+      if (of.itemOferecido) db.darItem(serverId, eu, of.itemOferecido);
+      if (of.moedaOferecida) db.creditar(serverId, eu, of.moedaOferecida, of.qtdOferecida);
+      db.fecharOferta(of.id, "cancelada");
+      return sendEmbed(message.channel, { title: "↩️ Cancelada",
+        description: "O que estava em custódia voltou para você.", colour: COR.mod });
+    }
+
+    // ── listar (padrão) ──
+    const ofertas = db.listarOfertas(serverId);
+    if (!ofertas.length) {
+      return sendEmbed(message.channel, { title: "🏪 Bazar vazio",
+        description: [
+          "Ninguém está vendendo nada agora.",
+          "",
+          `\`${P}game mercado vender <item> <preço>\` — anuncie o seu`,
+          `\`${P}game cambio <qtd> <moeda> por <qtd> <moeda>\` — troca de moedas`,
+          `\`${P}game trocar @pessoa <seu item> por <item dela>\` — escambo`,
+        ].join("\n"), colour: COR.info });
+    }
+    const volume = db.volumeRecente(serverId);
+    const linhas = ofertas.map((o) => {
+      const dono = o.autorId === eu ? " _(sua)_" : "";
+      if (o.tipo === "cambio") {
+        const de = db.getMoeda(serverId, o.moedaOferecida);
+        return `\`#${o.id}\` 💱 ${fmt(o.qtdOferecida)} ${de?.simbolo ?? ""} por ${moeda.simbolo}${fmt(o.qtdPedida)}${dono}`;
+      }
+      const it = db.getItem(o.itemOferecido);
+      const r = RARIDADE_INFO[it?.raridade] ?? {};
+      return `\`#${o.id}\` ${r.emoji ?? ""} **${it?.nome ?? "?"}** — ${moeda.simbolo}${fmt(o.qtdPedida)}${dono}`;
+    });
+    linhas.push("", `_\`${P}game mercado comprar <#>\` · taxa atual: **${(ECO.taxaMercado(volume) * 100).toFixed(2)}%**_`);
+    return enviarLista(sendEmbed, message.channel, { titulo: "🏪 Bazar dos jogadores", linhas, colour: COR.info });
+  }
+
+  // ── câmbio entre jogadores ──
+  if (["cambio", "câmbio"].includes(sub)) {
+    const p = db.getPersonagem(serverId, eu);
+    if (!p) return sendEmbed(message.channel, { title: "🎭 Sem personagem",
+      description: `Crie com \`${P}game criar\`.`, colour: COR.aviso });
+
+    const moedas = db.listarMoedas(serverId);
+    const texto = args.slice(1).join(" ");
+    const m = texto.match(/^(\d+)\s+(\S+)\s+por\s+(\d+)\s+(\S+)$/i);
+    if (!m) {
+      const padrao = garantirMoeda(serverId);
+      const { pSuave } = pDaMoeda(serverId, padrao);
+      const linhas = [
+        `\`${P}game cambio <qtd> <moeda> por <qtd> <moeda>\``,
+        `Ex.: \`${P}game cambio 100 ouro por 5 prata\``,
+        "",
+        "**Moedas do servidor:**",
+        ...moedas.map((x) => `${x.simbolo} **${x.nome}** — você tem ${fmt(db.getSaldo(serverId, eu, x.id))}`),
+        "",
+        `_Taxa de referência do sistema: spread de ${(ECO.CFG.spread * 100).toFixed(0)}%._`,
+        `_No balcão você define a taxa que quiser; quem aceitar, aceita._`,
+      ];
+      if (moedas.length < 2) linhas.push("", "_Só há uma moeda aqui — o câmbio precisa de pelo menos duas._");
+      return enviarLista(sendEmbed, message.channel, { titulo: "💱 Balcão de câmbio", linhas, colour: COR.info });
+    }
+
+    const [, qtdDe, nomeDe, qtdPara, nomePara] = m;
+    const de = db.acharMoeda(serverId, nomeDe);
+    const para = db.acharMoeda(serverId, nomePara);
+    if (!de || !para || de.id === para.id) {
+      return sendEmbed(message.channel, { title: "❌ Moedas inválidas",
+        description: "Precisam ser duas moedas diferentes deste servidor.", colour: COR.erro });
+    }
+    const saldo = db.getSaldo(serverId, eu, de.id);
+    if (saldo < Number(qtdDe)) {
+      return sendEmbed(message.channel, { title: "💸 Saldo insuficiente",
+        description: `Você tem ${de.simbolo}${fmt(saldo)}.`, colour: COR.erro });
+    }
+    // custódia
+    db.debitar(serverId, eu, de.id, Number(qtdDe));
+    const of = db.criarOferta({ serverId, tipo: "cambio", autorId: eu,
+      moedaOferecida: de.id, qtdOferecida: Number(qtdDe),
+      moedaPedida: para.id, qtdPedida: Number(qtdPara) });
+
+    // compara com a taxa do sistema, para quem aceitar saber se é bom negócio
+    const pDe = pDaMoeda(serverId, de).pSuave, pPara = pDaMoeda(serverId, para).pSuave;
+    const ref = ECO.converter(Number(qtdDe), pDe, pPara);
+    return sendEmbed(message.channel, { title: "💱 Oferta publicada",
+      description: [
+        `Oferece **${fmt(qtdDe)} ${de.nome}** ${de.simbolo} por **${fmt(qtdPara)} ${para.nome}** ${para.simbolo}`,
+        `_O sistema pagaria ~${fmt(ref.recebe)} — a sua taxa é ${Number(qtdPara) < ref.recebe ? "melhor para quem aceitar" : "pior para quem aceitar"}._`,
+        "",
+        `Oferta **#${of.id}** · o valor ficou em custódia comigo.`,
+      ].join("\n"), colour: COR.sucesso });
+  }
+
+  // ── escambo: item por item ──
+  if (["trocar", "escambo", "permuta"].includes(sub)) {
+    const p = db.getPersonagem(serverId, eu);
+    if (!p) return sendEmbed(message.channel, { title: "🎭 Sem personagem",
+      description: `Crie com \`${P}game criar\`.`, colour: COR.aviso });
+
+    const acao = args[1]?.toLowerCase();
+
+    // aceitar uma proposta
+    if (["aceitar", "aceito"].includes(acao)) {
+      const id = parseInt(args[2], 10);
+      const of = Number.isFinite(id) ? db.getOferta(id) : null;
+      if (!of || of.tipo !== "troca" || of.estado !== "aberta" || of.serverId !== serverId) {
+        return sendEmbed(message.channel, { title: "❌ Proposta indisponível",
+          description: `Veja as suas com \`${P}game trocar\`.`, colour: COR.erro });
+      }
+      if (of.alvoId && of.alvoId !== eu) {
+        return sendEmbed(message.channel, { title: "❌ Não é para você",
+          description: "Essa proposta foi feita a outra pessoa.", colour: COR.erro });
+      }
+      if (!db.temItem(serverId, eu, of.itemPedido)) {
+        const pedido = db.getItem(of.itemPedido);
+        return sendEmbed(message.channel, { title: "❌ Você não tem o que ele quer",
+          description: `A proposta pede **${pedido?.nome ?? "?"}**.`, colour: COR.erro });
+      }
+      // troca atômica: o item dele já está em custódia
+      const slot = db.slotDoItem(serverId, eu, of.itemPedido);
+      if (slot) db.desequipar(serverId, eu, slot);
+      db.tirarItem(serverId, eu, of.itemPedido, 1);
+      db.darItem(serverId, eu, of.itemOferecido);
+      db.darItem(serverId, of.autorId, of.itemPedido);
+      db.fecharOferta(of.id, "fechada", 0);
+      return sendEmbed(message.channel, { title: "🔄 Trocado",
+        description: [
+          `Você deu **${db.getItem(of.itemPedido)?.nome}** e levou **${db.getItem(of.itemOferecido)?.nome}**.`,
+          `_<@${of.autorId}> recebeu o seu._`,
+        ].join("\n"), colour: COR.sucesso });
+    }
+
+    // propor: &game trocar @pessoa <meu item> por <item dela>
+    const texto = args.slice(1).join(" ");
+    const mm = texto.match(/^(.*?)\s+por\s+(.*)$/i);
+    if (!mm) {
+      const minhas = db.listarOfertas(serverId, { tipo: "troca" })
+        .filter((o) => o.autorId === eu || !o.alvoId || o.alvoId === eu);
+      const linhas = minhas.length ? minhas.map((o) => {
+        const ofe = db.getItem(o.itemOferecido), ped = db.getItem(o.itemPedido);
+        const quem = o.autorId === eu ? "você oferece" : "oferecem a você";
+        return `\`#${o.id}\` ${quem}: **${ofe?.nome}** por **${ped?.nome}**`;
+      }) : ["_Nenhuma proposta aberta._"];
+      linhas.push("", `\`${P}game trocar [@pessoa] <seu item> por <item dela>\``,
+        `\`${P}game trocar aceitar <#>\` — fecha a troca`);
+      return enviarLista(sendEmbed, message.channel, { titulo: "🔄 Escambo", linhas, colour: COR.info });
+    }
+
+    const alvoId = message.mentionIds?.[0] ?? null;
+    const meuNome = mm[1].replace(/<[@%#][^>]*>/g, "").trim();
+    const item = db.acharItemPorNome(meuNome);
+    const quer = db.acharItemPorNome(mm[2].trim());
+    if (!item || !quer) {
+      return sendEmbed(message.channel, { title: "❌ Item desconhecido",
+        description: `Não achei ${!item ? `**${meuNome}**` : `**${mm[2].trim()}**`}.`, colour: COR.erro });
+    }
+    if (!db.temItem(serverId, eu, item.id)) {
+      return sendEmbed(message.channel, { title: "❌ Você não tem isso",
+        description: `**${item.nome}** não está na sua mochila.`, colour: COR.erro });
+    }
+    // custódia do lado de quem propõe
+    const slot = db.slotDoItem(serverId, eu, item.id);
+    if (slot) db.desequipar(serverId, eu, slot);
+    db.tirarItem(serverId, eu, item.id, 1);
+    const of = db.criarOferta({ serverId, tipo: "troca", autorId: eu, alvoId,
+      itemOferecido: item.id, itemPedido: quer.id });
+    return sendEmbed(message.channel, { title: "🔄 Proposta feita",
+      description: [
+        `Oferece **${item.nome}** por **${quer.nome}**${alvoId ? ` a <@${alvoId}>` : " (aberta a qualquer um)"}`,
+        `_Seu item ficou em custódia comigo._`,
+        "",
+        `Proposta **#${of.id}** · quem aceitar: \`${P}game trocar aceitar ${of.id}\``,
+        `Cancelar: \`${P}game mercado cancelar ${of.id}\``,
+      ].join("\n"), colour: COR.sucesso });
   }
 
   // ── loja: comprar e vender ──
@@ -1272,11 +1661,14 @@ export async function cmdGame(message, args, ctx) {
     const { pSuave } = pDaMoeda(serverId, moeda);
     let moedaGanha = 0, moedaPerdida = 0;
 
+    let moedaSorteada = moeda;
     if (r.exito && r.sobreviveu) {
-      const bruto = ECO.moedaDaMissao(missao, pSuave, attr.sorte);
-      // party divide: a parte deles vai para o mercado, não para o NPC
+      // Qual moeda cai depende da dificuldade configurada em cada uma
+      const sorteada = ECO.sortearMoeda(db.listarMoedas(serverId), missao);
+      if (sorteada) moedaSorteada = sorteada;
+      const bruto = ECO.moedaDaMissao(missao, pSuave, attr.sorte, moedaSorteada.dificuldade ?? 1);
       const meu = tamanhoParty ? Math.round(bruto / (1 + 0.30 * tamanhoParty)) : bruto;
-      moedaGanha = pagarAoJogador(serverId, eu, db.getMoeda(serverId, moeda.id), meu);
+      moedaGanha = pagarAoJogador(serverId, eu, db.getMoeda(serverId, moedaSorteada.id), meu);
     } else if (r.desfecho === "caiu") {
       // perde uma fração do que carrega — e vai para a DUNGEON
       const carrega = db.getSaldo(serverId, eu, moeda.id);
@@ -1348,7 +1740,7 @@ export async function cmdGame(message, args, ctx) {
     else linhas.push("Você não aguentou. Voltou de mãos vazias, mas **inteiro**: nada de nível ou equipamento se perde.");
 
     linhas.push("", `✨ **+${xpFinal} XP**`);
-    if (moedaGanha > 0) linhas.push(`${moeda.simbolo} **+${fmt(moedaGanha)} ${moeda.nome}**`);
+    if (moedaGanha > 0) linhas.push(`${moedaSorteada.simbolo} **+${fmt(moedaGanha)} ${moedaSorteada.nome}**`);
     if (moedaPerdida > 0) {
       linhas.push(`${moeda.simbolo} **−${fmt(moedaPerdida)}** _(${(ECO.perda(pSuave) * 100).toFixed(0)}% do que carregava, foi para a dungeon)_`);
     }

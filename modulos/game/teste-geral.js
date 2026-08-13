@@ -159,6 +159,28 @@ export async function rodarTesteGeral(ctx, serverId, donoId, deps) {
     registrar(premio >= 0 && premio <= pote, "Prêmio da dungeon é uma fração",
       `pote ${Math.round(pote)} → prêmio ${premio} (${(ECO.fracaoDungeon(pote) * 100).toFixed(0)}%)`);
 
+    // ── 15. Mercado entre jogadores (custódia) ──
+    const itemP2P = db.listarItens({ raridade: "incomum" })[0];
+    if (itemP2P) {
+      db.darItem(serverId, uid, itemP2P.id);
+      const oferta = db.criarOferta({ serverId, tipo: "venda", autorId: uid,
+        itemOferecido: itemP2P.id, moedaPedida: moeda.id, qtdPedida: 500 });
+      db.tirarItem(serverId, uid, itemP2P.id, 1);   // custódia
+      const saiu = !db.temItem(serverId, uid, itemP2P.id);
+      registrar(saiu && !!oferta, "Anunciar no bazar (custódia)",
+        `${itemP2P.nome} por 500 — item retido`);
+
+      // cancelar devolve
+      db.darItem(serverId, uid, itemP2P.id);
+      db.fecharOferta(oferta.id, "cancelada");
+      registrar(db.temItem(serverId, uid, itemP2P.id), "Cancelar devolve a custódia");
+
+      const vol = db.volumeRecente(serverId);
+      const { pct } = ECO.calcularTaxa(500, vol);
+      registrar(pct > 0 && pct < 0.15, "Taxa do mercado dentro da faixa",
+        `${(pct * 100).toFixed(2)}% (volume ${Math.round(vol)})`);
+    }
+
   } catch (e) {
     registrar(false, "Erro inesperado", e?.message ?? String(e));
     console.error("[RPG][teste]", e);

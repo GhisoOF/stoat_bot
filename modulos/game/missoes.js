@@ -92,12 +92,16 @@ const precisao = (destreza) => 0.70 + 0.30 * (destreza / (destreza + 10));
 const reducao  = (resistencia) => resistencia / (resistencia + 20);   // < 1 sempre
 const evasao   = (agilidade) => agilidade / (agilidade + 25);
 
-export function calcularPoder(attr) {
+export function calcularPoder(attr, magias = []) {
   const base = (attr.forca ?? 0) * 1.00 + (attr.inteligencia ?? 0) * 0.70;
-  return base * precisao(attr.destreza ?? 0) + (attr.carisma ?? 0) * 0.30;
+  const bruto = base * precisao(attr.destreza ?? 0) + (attr.carisma ?? 0) * 0.30;
+  // Magias de ATAQUE somam por cima, proporcionais ao que a party já tem
+  const bonus = magias.filter((m) => m.tipo === "ataque")
+    .reduce((acc, m) => acc + m.poder, 0);
+  return bruto * (1 + bonus);
 }
 
-export function calcularResiliencia(attr) {
+export function calcularResiliencia(attr, magias = []) {
   // As três defesas se MULTIPLICAM. Para que "espalhar renda mais que empilhar"
   // (§2.1 do design), nenhuma delas pode ser linear: se a Vida entrasse direto,
   // despejar tudo nela venceria sempre, e Resistência/Agilidade virariam
@@ -108,26 +112,43 @@ export function calcularResiliencia(attr) {
   const fVida  = 1 + (attr.vida ?? 0) / 12;
   const fResis = 1 + (attr.resistencia ?? 0) / 12;
   const fAgil  = 1 + (attr.agilidade ?? 0) / 12;
-  return 3 * fVida * fResis * fAgil + (attr.sorte ?? 0) * 0.60;
+  const bruto = 3 * fVida * fResis * fAgil + (attr.sorte ?? 0) * 0.60;
+  // Magias de SUPORTE aumentam a sobrevivência
+  const bonus = magias.filter((m) => m.tipo === "suporte")
+    .reduce((acc, m) => acc + m.poder, 0);
+  return bruto * (1 + bonus);
 }
 
 // Probabilidade no formato "poder próprio contra a exigência":
 // iguais = 50%. Nunca chega a 0% nem 100% — sempre há sorte envolvida.
 const chance = (meu, exigido) => (exigido <= 0 ? 1 : meu / (meu + exigido));
 
-export function previsao(attr, missao) {
-  const poder = calcularPoder(attr);
-  const resil = calcularResiliencia(attr);
+// Levar gente aumenta a exigência da missão: party maior enfrenta inimigo mais
+// forte. Assim followers dão VARIEDADE (classes e magias que você não tem), não
+// só força bruta — do contrário levar 2 sempre seria obviamente melhor.
+export function escalaPorParty(tamanho) {
+  // A exigência sobe menos do que a party acrescenta em atributos+magias.
+  // Levar gente PRECISA valer a pena (senão ninguém recruta), mas não pode
+  // trivializar a missão — daí a escala existir, e ser modesta.
+  return 1 + 0.18 * Math.max(0, tamanho);
+}
+
+export function previsao(attr, missao, magias = [], tamanhoParty = 0) {
+  const poder = calcularPoder(attr, magias);
+  const resil = calcularResiliencia(attr, magias);
+  const esc = escalaPorParty(tamanhoParty);
+  const poderExigido = (missao.poder ?? 0) * esc;
+  const riscoExigido = (missao.risco ?? 0) * esc;
   return {
-    poder, resil,
-    exito: chance(poder, missao.poder),
-    sobrevivencia: missao.risco > 0 ? chance(resil, missao.risco) : 1,
+    poder, resil, escala: esc,
+    exito: chance(poder, poderExigido),
+    sobrevivencia: riscoExigido > 0 ? chance(resil, riscoExigido) : 1,
   };
 }
 
 // ── Resolução ─────────────────────────────────────────────
-export function resolver(attr, missao, aleatorio = Math.random) {
-  const p = previsao(attr, missao);
+export function resolver(attr, missao, aleatorio = Math.random, magias = [], tamanhoParty = 0) {
+  const p = previsao(attr, missao, magias, tamanhoParty);
   const exito = aleatorio() < p.exito;
   const sobreviveu = missao.risco <= 0 ? true : aleatorio() < p.sobrevivencia;
 
@@ -146,11 +167,14 @@ export function resolver(attr, missao, aleatorio = Math.random) {
 }
 
 // Sorteia uma raridade de loot; devolve null quando não sai nada.
-export function sortearRaridade(missao, sorte = 0, aleatorio = Math.random) {
+export function sortearRaridade(missao, sorte = 0, aleatorio = Math.random, tamanhoParty = 0) {
   if (missao.tipo === "mercado") return null;   // mercado não dá item
   const tabela = LOOT[missao.dificuldade] ?? {};
   // Sorte melhora um pouco a chance de sair algo, com retorno decrescente
-  const bonus = 1 + 0.03 * Math.sqrt(Math.max(0, sorte));
+  // Levar followers REDUZ o loot do jogador: a parte deles vai para o mercado
+  // (§4 do design) — em vez de criar inventário de NPC.
+  const divisao = 1 / (1 + 0.30 * Math.max(0, tamanhoParty));
+  const bonus = (1 + 0.03 * Math.sqrt(Math.max(0, sorte))) * divisao;
   let r = aleatorio();
   for (const [raridade, chanceBase] of Object.entries(tabela)) {
     const c = chanceBase * bonus;

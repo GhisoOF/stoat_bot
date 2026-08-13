@@ -248,6 +248,38 @@ export function abrirBanco(caminho) {
     )
   `);
 
+  // ── RPG: followers ──
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS rpg_followers_catalogo (
+      id        TEXT PRIMARY KEY,
+      nome      TEXT NOT NULL,
+      classe    TEXT NOT NULL,
+      raridade  TEXT NOT NULL,
+      preco     INTEGER NOT NULL DEFAULT 0,     -- 0 = não vendido (só dungeon)
+      soDungeon INTEGER NOT NULL DEFAULT 0,
+      fotos     TEXT NOT NULL DEFAULT '[]',     -- JSON: [url, ...]
+      origem    TEXT NOT NULL DEFAULT 'generico',
+      ativo     INTEGER NOT NULL DEFAULT 1
+    )
+  `);
+  // Instâncias: cada follower recrutado é uma linha própria (tem nível e energia)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS rpg_followers (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      serverId    TEXT NOT NULL,
+      donoId      TEXT,                          -- null = está na dungeon, sem dono
+      catalogoId  TEXT NOT NULL,
+      nivel       INTEGER NOT NULL DEFAULT 1,
+      energia     REAL    NOT NULL DEFAULT 5,
+      energiaEm   INTEGER NOT NULL DEFAULT 0,    -- quando a energia foi atualizada
+      naParty     INTEGER NOT NULL DEFAULT 0,
+      capturado   INTEGER NOT NULL DEFAULT 0,    -- 1 = caiu e está na dungeon
+      donoOriginal TEXT,                         -- para a chance maior no resgate
+      capturadoEm INTEGER NOT NULL DEFAULT 0
+    )
+  `);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_folw_dono ON rpg_followers (serverId, donoId)`);
+
   // Colunas de missão no personagem (migração: adiciona se faltar)
   try {
     const cols = db.prepare("PRAGMA table_info(rpg_personagem)").all().map((c) => c.name);
@@ -859,6 +891,112 @@ export function getEquipado(serverId, userId) {
 export function slotDoItem(serverId, userId, itemId) {
   return db.prepare("SELECT slot FROM rpg_equipado WHERE serverId=? AND userId=? AND itemId=?")
     .get(serverId, userId, itemId)?.slot ?? null;
+}
+
+// ══════════════════════════════════════════════════════════
+//  RPG — followers
+// ══════════════════════════════════════════════════════════
+export function upsertFollowerCatalogo(f) {
+  db.prepare(`INSERT INTO rpg_followers_catalogo (id, nome, classe, raridade, preco, soDungeon, fotos, origem, ativo)
+    VALUES (?, ?, ?, ?, ?, ?, COALESCE((SELECT fotos FROM rpg_followers_catalogo WHERE id = ?), '[]'), ?, 1)
+    ON CONFLICT(id) DO UPDATE SET nome=excluded.nome, classe=excluded.classe,
+      raridade=excluded.raridade, preco=excluded.preco, soDungeon=excluded.soDungeon,
+      origem=excluded.origem`)
+    .run(f.id, f.nome, f.classe, f.raridade, f.preco ?? 0, f.soDungeon ? 1 : 0, f.id, f.origem ?? "generico");
+}
+
+function hidratarFollower(r) {
+  if (!r) return null;
+  let fotos = [];
+  try { fotos = JSON.parse(r.fotos ?? "[]"); } catch {}
+  return { ...r, fotos, soDungeon: !!r.soDungeon, ativo: !!r.ativo };
+}
+
+export function getFollowerCatalogo(id) {
+  return hidratarFollower(db.prepare("SELECT * FROM rpg_followers_catalogo WHERE id = ?").get(id));
+}
+
+export function acharFollowerCatalogo(txt) {
+  const alvo = String(txt ?? "").trim().toLowerCase();
+  if (!alvo) return null;
+  const todos = db.prepare("SELECT * FROM rpg_followers_catalogo WHERE ativo = 1").all().map(hidratarFollower);
+  return todos.find((f) => f.id === alvo)
+      ?? todos.find((f) => f.nome.toLowerCase() === alvo)
+      ?? todos.find((f) => f.nome.toLowerCase().includes(alvo))
+      ?? null;
+}
+
+export function listarFollowersCatalogo({ soVendidos = false } = {}) {
+  let sql = "SELECT * FROM rpg_followers_catalogo WHERE ativo = 1";
+  if (soVendidos) sql += " AND soDungeon = 0 AND preco > 0";
+  return db.prepare(sql + " ORDER BY raridade, nome").all().map(hidratarFollower);
+}
+
+// ── Fotos (álbum) ──
+export function setFotosFollower(catalogoId, fotos) {
+  return db.prepare("UPDATE rpg_followers_catalogo SET fotos = ? WHERE id = ?")
+    .run(JSON.stringify(fotos ?? []), catalogoId).changes ?? 0;
+}
+
+export function addFotoFollower(catalogoId, url) {
+  const f = getFollowerCatalogo(catalogoId);
+  if (!f) return 0;
+  const fotos = [...f.fotos, url];
+  return setFotosFollower(catalogoId, fotos);
+}
+
+// ── Instâncias ──
+export function recrutarFollower(serverId, donoId, catalogoId, nivel = 1) {
+  const r = db.prepare(`INSERT INTO rpg_followers (serverId, donoId, catalogoId, nivel, energia, energiaEm, donoOriginal)
+    VALUES (?, ?, ?, ?, 5, ?, ?)`).run(serverId, donoId, catalogoId, nivel, Date.now(), donoId);
+  return getFollower(r.lastInsertRowid);
+}
+
+export function getFollower(id) {
+  return db.prepare("SELECT * FROM rpg_followers WHERE id = ?").get(id) ?? null;
+}
+
+export function listarFollowersDe(serverId, donoId) {
+  return db.prepare("SELECT * FROM rpg_followers WHERE serverId=? AND donoId=? AND capturado=0 ORDER BY naParty DESC, nivel DESC")
+    .all(serverId, donoId);
+}
+
+export function getParty(serverId, donoId) {
+  return db.prepare("SELECT * FROM rpg_followers WHERE serverId=? AND donoId=? AND naParty=1 AND capturado=0")
+    .all(serverId, donoId);
+}
+
+const CAMPOS_FOLLOWER = new Set(["nivel", "energia", "energiaEm", "naParty", "capturado", "donoId", "capturadoEm"]);
+export function salvarFollower(id, campos = {}) {
+  const e = Object.entries(campos).filter(([k]) => CAMPOS_FOLLOWER.has(k));
+  if (!e.length) return getFollower(id);
+  db.prepare(`UPDATE rpg_followers SET ${e.map(([k]) => `${k} = ?`).join(", ")} WHERE id = ?`)
+    .run(...e.map(([, v]) => v), id);
+  return getFollower(id);
+}
+
+export function dispensarFollower(id) {
+  return db.prepare("DELETE FROM rpg_followers WHERE id = ?").run(id).changes ?? 0;
+}
+
+// ── Dungeon: followers capturados ──
+export function capturarFollower(id) {
+  const f = getFollower(id);
+  if (!f) return null;
+  db.prepare("UPDATE rpg_followers SET capturado=1, naParty=0, donoId=NULL, capturadoEm=? WHERE id=?")
+    .run(Date.now(), id);
+  return getFollower(id);
+}
+
+export function listarCapturados(serverId) {
+  return db.prepare("SELECT * FROM rpg_followers WHERE serverId=? AND capturado=1 ORDER BY capturadoEm")
+    .all(serverId);
+}
+
+export function resgatarFollower(id, novoDono) {
+  db.prepare("UPDATE rpg_followers SET capturado=0, donoId=?, capturadoEm=0, energia=1, energiaEm=? WHERE id=?")
+    .run(novoDono, Date.now(), id);
+  return getFollower(id);
 }
 
 // ── Acesso cru ─────────────────────────────────────────────

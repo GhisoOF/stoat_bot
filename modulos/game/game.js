@@ -15,6 +15,8 @@ import * as db from "../core/db.js";
 import { resolverUsuario } from "../core/ids.js";
 import { semear as semearItens } from "./itens-genericos.js";
 import * as MISS from "./missoes.js";
+import * as FOL from "./followers.js";
+import { semear as semearFollowers } from "./followers.js";
 
 const XP_BASE = 100;
 const CRESCIMENTO = 1.5;
@@ -103,8 +105,9 @@ export function iniciarCatalogo() {
   if (semeado) return;
   try {
     const n = semearItens(db);
+    const nf = semearFollowers(db);
     semeado = true;
-    console.log(`[RPG] catálogo genérico pronto (${n} item(ns))`);
+    console.log(`[RPG] catálogo genérico pronto (${n} item(ns), ${nf} follower(s))`);
   } catch (e) { console.error("[RPG] falha ao semear itens:", e?.message ?? e); }
 }
 
@@ -149,6 +152,39 @@ export function bonusEquipados(serverId, userId) {
   return total;
 }
 
+// ── Followers ─────────────────────────────────────────────
+const ENERGIA_MAX = 5;
+// Resgate na dungeon: o dono tem vantagem clara, mas não garantia.
+const CHANCE_RESGATE = 0.25;
+const BONUS_DONO = 3;        // dono ≈ 75%
+const JANELA_DONO_H = 6;     // horas em que só o dono pode tentar
+const ENERGIA_MS = 60 * 60_000;   // 1 ponto por hora
+
+// Energia regenera por TEMPO, calculada na hora da leitura (timestamp no
+// banco, nunca timer em memória — o bot reinicia).
+export function energiaAtual(f) {
+  const base = f.energia ?? 0;
+  const desde = f.energiaEm ?? 0;
+  if (!desde) return Math.min(ENERGIA_MAX, base);
+  const ganho = Math.floor((Date.now() - desde) / ENERGIA_MS);
+  return Math.min(ENERGIA_MAX, base + Math.max(0, ganho));
+}
+
+function gastarEnergia(f, quanto = 1) {
+  const atual = energiaAtual(f);
+  db.salvarFollower(f.id, { energia: Math.max(0, atual - quanto), energiaEm: Date.now() });
+}
+
+function descreverFollower(f, comEnergia = true) {
+  const cat = db.getFollowerCatalogo(f.catalogoId);
+  if (!cat) return `_(follower desconhecido)_`;
+  const cls = FOL.CLASSES[cat.classe] ?? {};
+  const rar = RARIDADE_INFO[cat.raridade] ?? {};
+  const e = comEnergia ? ` · ⚡${energiaAtual(f)}/${ENERGIA_MAX}` : "";
+  const naParty = f.naParty ? " 🎒" : "";
+  return `${rar.emoji ?? ""}${cls.emoji ?? ""} **${cat.nome}** _(${cls.rotulo ?? cat.classe}, nv ${f.nivel})_${e}${naParty}`;
+}
+
 // Atributos efetivos: os do personagem + o que o equipamento acrescenta.
 // É isto que vai para o cálculo da missão — equipar tem que importar.
 export function atributosComEquipamento(p, serverId, userId) {
@@ -156,6 +192,35 @@ export function atributosComEquipamento(p, serverId, userId) {
   const out = {};
   for (const a of db.ATRIBUTOS) out[a] = (p[a] ?? 0) + (extra[a] ?? 0);
   return out;
+}
+
+// Atributos da PARTY inteira: você + followers, com as magias deles.
+// Carisma buffa os companheiros (§2 do design), então entra como multiplicador
+// sobre a contribuição dos NPCs.
+export function atributosDaParty(p, serverId, userId) {
+  const meus = atributosComEquipamento(p, serverId, userId);
+  const party = db.getParty(serverId, userId);
+
+  const total = { ...meus };
+  const magias = [];
+  for (const f of party) {
+    const cat = db.getFollowerCatalogo(f.catalogoId);
+    if (!cat) continue;
+    const attr = FOL.atributosDoFollower(cat, f.nivel);
+    // Carisma do líder amplifica o que os followers trazem (retorno decrescente)
+    const buff = 1 + 0.05 * Math.sqrt(Math.max(0, meus.carisma ?? 0));
+    for (const a of db.ATRIBUTOS) total[a] = (total[a] ?? 0) + Math.round((attr[a] ?? 0) * buff);
+    const m = FOL.magiaDo(cat);
+    if (m) magias.push(m);
+  }
+
+  // Magias custam mana: só entram as que cabem no total de Mana da party.
+  let manaLivre = total.mana ?? 0;
+  const usadas = [];
+  for (const m of magias.sort((a, b) => b.poder - a.poder)) {
+    if (manaLivre >= m.custo) { manaLivre -= m.custo; usadas.push(m); }
+  }
+  return { attr: total, magias: usadas, tamanhoParty: party.length };
 }
 
 // Em qual slot este item cabe? Acessório tem 3 vagas — usa a primeira livre,
@@ -502,6 +567,149 @@ export async function cmdGame(message, args, ctx) {
     });
   }
 
+  // ── followers ──
+  if (["follower", "followers", "companheiro", "companheiros", "party", "equipe"].includes(sub)) {
+    const p = db.getPersonagem(serverId, eu);
+    if (!p) {
+      return sendEmbed(message.channel, { title: "🎭 Você não tem personagem",
+        description: `Crie com \`${P}game criar\`.`, colour: COR.aviso });
+    }
+    const acao = args[1]?.toLowerCase();
+    const resto = args.slice(2).join(" ").trim();
+
+    // ── levar / tirar da party ──
+    if (["levar", "adicionar", "party+"].includes(acao)) {
+      const meus = db.listarFollowersDe(serverId, eu);
+      const alvo = meus.find((f) => {
+        const c = db.getFollowerCatalogo(f.catalogoId);
+        return c && c.nome.toLowerCase().includes(resto.toLowerCase());
+      });
+      if (!resto || !alvo) {
+        return sendEmbed(message.channel, { title: "❌ Levar quem?",
+          description: `\`${P}game follower levar <nome>\`\n\nVeja os seus com \`${P}game followers\`.`, colour: COR.erro });
+      }
+      if (alvo.naParty) {
+        return sendEmbed(message.channel, { title: "🎒 Já está na party",
+          description: descreverFollower(alvo), colour: COR.aviso });
+      }
+      const naParty = db.getParty(serverId, eu);
+      if (naParty.length >= 2) {
+        return sendEmbed(message.channel, { title: "🎒 Party cheia",
+          description: `Você pode levar até **2** followers.\n\nTire alguém com \`${P}game follower tirar <nome>\`.`,
+          colour: COR.aviso });
+      }
+      if (energiaAtual(alvo) < 1) {
+        return sendEmbed(message.channel, { title: "😴 Sem energia",
+          description: `${descreverFollower(alvo)}\n\nPrecisa descansar — a energia volta com o tempo (1 por hora).`,
+          colour: COR.aviso });
+      }
+      db.salvarFollower(alvo.id, { naParty: 1 });
+      return sendEmbed(message.channel, { title: "🎒 Entrou na party",
+        description: `${descreverFollower(db.getFollower(alvo.id))}\n\n_Ele gasta 1 de energia por missão de dungeon._`,
+        colour: COR.sucesso });
+    }
+
+    if (["tirar", "remover", "party-"].includes(acao)) {
+      const naParty = db.getParty(serverId, eu);
+      const alvo = naParty.find((f) => {
+        const c = db.getFollowerCatalogo(f.catalogoId);
+        return c && c.nome.toLowerCase().includes((resto || "").toLowerCase());
+      }) ?? (naParty.length === 1 && !resto ? naParty[0] : null);
+      if (!alvo) {
+        return sendEmbed(message.channel, { title: "❌ Tirar quem?",
+          description: naParty.length ? `\`${P}game follower tirar <nome>\`` : "Sua party está vazia.",
+          colour: COR.erro });
+      }
+      db.salvarFollower(alvo.id, { naParty: 0 });
+      return sendEmbed(message.channel, { title: "👋 Saiu da party",
+        description: descreverFollower(db.getFollower(alvo.id)), colour: COR.mod });
+    }
+
+    // ── dispensar ──
+    if (["dispensar", "demitir"].includes(acao)) {
+      const meus = db.listarFollowersDe(serverId, eu);
+      const alvo = meus.find((f) => {
+        const c = db.getFollowerCatalogo(f.catalogoId);
+        return c && c.nome.toLowerCase().includes((resto || "").toLowerCase());
+      });
+      if (!resto || !alvo) {
+        return sendEmbed(message.channel, { title: "❌ Dispensar quem?",
+          description: `\`${P}game follower dispensar <nome>\``, colour: COR.erro });
+      }
+      const nome = db.getFollowerCatalogo(alvo.catalogoId)?.nome ?? "?";
+      db.dispensarFollower(alvo.id);
+      return sendEmbed(message.channel, { title: "👋 Dispensado",
+        description: `**${nome}** seguiu seu caminho.`, colour: COR.mod });
+    }
+
+    // ── fotos ──
+    if (["fotos", "foto", "album", "álbum"].includes(acao)) {
+      const cat = db.acharFollowerCatalogo(resto);
+      if (!cat) {
+        return sendEmbed(message.channel, { title: "❌ Quem?",
+          description: `\`${P}game follower fotos <nome>\``, colour: COR.erro });
+      }
+      if (!cat.fotos.length) {
+        return sendEmbed(message.channel, { title: `📷 ${cat.nome}`,
+          description: "_Ainda não tem fotos._", colour: COR.info });
+      }
+      return sendEmbed(message.channel, { title: `📷 ${cat.nome} (1/${cat.fotos.length})`,
+        description: cat.fotos.length > 1 ? `_${cat.fotos.length} fotos no álbum._` : "",
+        image: cat.fotos[0], colour: COR.info });
+    }
+
+    // ── lista (padrão) ──
+    const meus = db.listarFollowersDe(serverId, eu);
+    const naParty = meus.filter((f) => f.naParty);
+    if (!meus.length) {
+      return sendEmbed(message.channel, { title: "👥 Nenhum companheiro",
+        description: [
+          "Você ainda não tem followers.",
+          "",
+          "Eles aparecem como **loot de dungeon** — e, quando a economia chegar,",
+          "também poderão ser contratados como mercenários.",
+          "",
+          `_Veja quem existe com \`${P}game recrutas\`._`,
+        ].join("\n"), colour: COR.info });
+    }
+    const linhas = [];
+    if (naParty.length) {
+      linhas.push(`🎒 **Na party (${naParty.length}/2)**`);
+      for (const f of naParty) linhas.push(`   ${descreverFollower(f)}`);
+      linhas.push("");
+    }
+    const fora = meus.filter((f) => !f.naParty);
+    if (fora.length) {
+      linhas.push("**Disponíveis**");
+      for (const f of fora) linhas.push(`   ${descreverFollower(f)}`);
+    }
+    linhas.push("", `_\`${P}game follower levar <nome>\` para colocar na party · ⚡ = energia_`);
+    return enviarLista(sendEmbed, message.channel, {
+      titulo: "👥 Seus companheiros", linhas, colour: COR.info });
+  }
+
+  // ── recrutas (catálogo de followers) ──
+  if (["recrutas", "mercenarios", "mercenários"].includes(sub)) {
+    const lista = db.listarFollowersCatalogo();
+    const linhas = [];
+    const porClasse = {};
+    for (const f of lista) (porClasse[f.classe] ??= []).push(f);
+    for (const [chave, cls] of Object.entries(FOL.CLASSES)) {
+      const grupo = porClasse[chave] ?? [];
+      if (!grupo.length) continue;
+      linhas.push(`${cls.emoji} **${cls.rotulo}** — ${cls.desc} · magia: _${cls.magia.nome}_`);
+      for (const f of grupo) {
+        const r = RARIDADE_INFO[f.raridade] ?? {};
+        const onde = f.soDungeon ? "🗝️ só em dungeon" : `💰 ${f.preco}`;
+        linhas.push(`   ${r.emoji ?? ""} ${f.nome} — ${onde}`);
+      }
+      linhas.push("");
+    }
+    linhas.push("_🗝️ = aparece como loot · 💰 = contratável quando a economia chegar_");
+    return enviarLista(sendEmbed, message.channel, {
+      titulo: "📜 Companheiros que existem", linhas, colour: COR.info });
+  }
+
   // ── missões ──
   if (["missao", "missão", "missoes", "missões", "quest"].includes(sub)) {
     const p = db.getPersonagem(serverId, eu);
@@ -514,7 +722,7 @@ export async function cmdGame(message, args, ctx) {
 
     // sem argumento: lista as missões disponíveis com a chance de cada uma
     if (!acao) {
-      const attr = atributosComEquipamento(p, serverId, eu);
+      const { attr, magias, tamanhoParty } = atributosDaParty(p, serverId, eu);
       const agora = Date.now();
       const espera = Math.max(p.ultimaMissao + 0, 0);
       const linhas = [];
@@ -536,11 +744,13 @@ export async function cmdGame(message, args, ctx) {
         const info = MISS.DIFICULDADE_INFO[d];
         linhas.push("", `${info.emoji} **${info.rotulo}**`);
         for (const m of porTipo[d] ?? []) {
-          const v = MISS.previsao(attr, m);
+          const v = MISS.previsao(attr, m, magias, tamanhoParty);
           linhas.push(`   • **${m.nome}** — êxito ${(v.exito * 100).toFixed(0)}% · sobrevive ${(v.sobrevivencia * 100).toFixed(0)}%`);
         }
       }
-      linhas.push("", `_\`${P}game missao <nome>\` para partir · as chances já contam seu equipamento._`);
+      linhas.push("", tamanhoParty
+        ? `_Chances já contam equipamento e sua party de ${tamanhoParty}._`
+        : `_Chances contam seu equipamento. Levar companheiros muda tudo: \`${P}game followers\`._`);
       return enviarLista(sendEmbed, message.channel, {
         titulo: "🗺️ Missões disponíveis", linhas, colour: COR.info });
     }
@@ -566,8 +776,21 @@ export async function cmdGame(message, args, ctx) {
     }
 
     // ── resolve ──
-    const attr = atributosComEquipamento(p, serverId, eu);
-    const r = MISS.resolver(attr, missao);
+    const { attr, magias, tamanhoParty } = atributosDaParty(p, serverId, eu);
+    const party = db.getParty(serverId, eu);
+
+    // followers sem energia não vão (dungeon só)
+    if (missao.tipo !== "mercado") {
+      const cansados = party.filter((f) => energiaAtual(f) < 1);
+      if (cansados.length) {
+        return sendEmbed(message.channel, { title: "😴 Companheiro sem energia",
+          description: cansados.map((f) => descreverFollower(f)).join("\n")
+            + `\n\nTire da party ou espere a energia voltar (1 por hora).`,
+          colour: COR.aviso });
+      }
+    }
+
+    const r = MISS.resolver(attr, missao, Math.random, magias, tamanhoParty);
 
     // XP com o bônus de INT/Sorte
     const xpFinal = Math.round(r.xp * bonusXp(attr.inteligencia, attr.sorte));
@@ -581,15 +804,52 @@ export async function cmdGame(message, args, ctx) {
     if (r.desfecho === "caiu") campos.recuperandoAte = agora + 30 * 60_000;
     db.salvarPersonagem(serverId, eu, campos);
 
+    // followers gastam energia em dungeon
+    if (missao.tipo !== "mercado") for (const f of party) gastarEnergia(f, 1);
+
+    // ── se a party caiu, os followers são CAPTURADOS na dungeon ──
+    const capturados = [];
+    if (r.desfecho === "caiu") {
+      for (const f of party) {
+        // em fácil/médio eles só ficam feridos; em difícil, podem ser capturados
+        const chanceCaptura = missao.dificuldade === "dificil" ? 0.5
+          : missao.dificuldade === "medio" ? 0.2 : 0;
+        if (Math.random() < chanceCaptura) {
+          const cat = db.getFollowerCatalogo(f.catalogoId);
+          db.capturarFollower(f.id);
+          capturados.push(cat?.nome ?? "?");
+        } else {
+          db.salvarFollower(f.id, { naParty: 0, energia: 0, energiaEm: Date.now() });
+        }
+      }
+    }
+
     // ── loot ──
     let ganhou = null;
+    let ganhouFollower = null;
     if (r.exito && r.sobreviveu) {
-      const raridade = MISS.sortearRaridade(missao, attr.sorte);
+      const raridade = MISS.sortearRaridade(missao, attr.sorte, Math.random, tamanhoParty);
       if (raridade) {
         const candidatos = db.listarItens({ raridade });
         if (candidatos.length) {
           ganhou = candidatos[Math.floor(Math.random() * candidatos.length)];
           db.darItem(serverId, eu, ganhou.id);
+        }
+      }
+      // chance de um FOLLOWER aparecer como loot (só em dungeon)
+      if (missao.tipo !== "mercado") {
+        const chanceFol = { facil: 0.04, medio: 0.07, dificil: 0.12 }[missao.dificuldade] ?? 0;
+        if (Math.random() < chanceFol) {
+          const raridades = { facil: ["comum"], medio: ["comum", "incomum"],
+            dificil: ["incomum", "raro", "epico", "lendario"] }[missao.dificuldade] ?? ["comum"];
+          const pool = db.listarFollowersCatalogo()
+            .filter((f) => raridades.includes(f.raridade));
+          if (pool.length) {
+            const cat = pool[Math.floor(Math.random() * pool.length)];
+            const nv = Math.max(1, Math.round((missao.nivel ?? 1) * 0.6));
+            db.recrutarFollower(serverId, eu, cat.id, nv);
+            ganhouFollower = { cat, nivel: nv };
+          }
         }
       }
     }
@@ -613,9 +873,90 @@ export async function cmdGame(message, args, ctx) {
     } else if (r.desfecho === "sucesso" && missao.tipo !== "mercado") {
       linhas.push("", "_Nenhum item desta vez._");
     }
+    if (ganhouFollower) {
+      const cls = FOL.CLASSES[ganhouFollower.cat.classe] ?? {};
+      linhas.push(`👥 **${ganhouFollower.cat.nome}** (${cls.rotulo}, nv ${ganhouFollower.nivel}) se juntou a você!`);
+    }
+    if (tamanhoParty) {
+      linhas.push("", `_Party de ${tamanhoParty}: a missão foi mais difícil, e parte do loot ficou com eles._`);
+    }
+    if (capturados.length) {
+      linhas.push("", `⛓️ **Capturado(s) na dungeon:** ${capturados.join(", ")}`,
+        `_Resgate com \`${P}game dungeon\` — você tem prioridade nas primeiras horas._`);
+    }
     if (r.desfecho === "caiu") linhas.push("", "_Você precisa de ~30 min para se recuperar._");
 
     return sendEmbed(message.channel, { title: titulo, description: linhas.join("\n"), colour: cor });
+  }
+
+  // ── dungeon: resgatar followers capturados ──
+  if (["dungeon", "resgate", "resgatar"].includes(sub)) {
+    const p = db.getPersonagem(serverId, eu);
+    if (!p) {
+      return sendEmbed(message.channel, { title: "🎭 Você não tem personagem",
+        description: `Crie com \`${P}game criar\`.`, colour: COR.aviso });
+    }
+    const presos = db.listarCapturados(serverId);
+    const alvoNome = args.slice(1).join(" ").trim();
+
+    if (!alvoNome) {
+      if (!presos.length) {
+        return sendEmbed(message.channel, { title: "🕳️ A dungeon está quieta",
+          description: "Nenhum companheiro capturado por aqui.", colour: COR.info });
+      }
+      const linhas = presos.map((f) => {
+        const cat = db.getFollowerCatalogo(f.catalogoId);
+        const cls = FOL.CLASSES[cat?.classe] ?? {};
+        const r = RARIDADE_INFO[cat?.raridade] ?? {};
+        const meu = f.donoOriginal === eu;
+        const horas = (Date.now() - (f.capturadoEm ?? 0)) / 3600000;
+        const janela = horas < JANELA_DONO_H;
+        const marca = meu ? " 👤 _seu_" : janela ? " ⏳ _janela do dono_" : "";
+        return `${r.emoji ?? ""}${cls.emoji ?? ""} **${cat?.nome ?? "?"}** (nv ${f.nivel})${marca}`;
+      });
+      linhas.push("", `_\`${P}game dungeon <nome>\` para tentar o resgate._`,
+        `_O dono original tem chance maior, e prioridade nas primeiras ${JANELA_DONO_H}h._`);
+      return enviarLista(sendEmbed, message.channel, {
+        titulo: `⛓️ Capturados na dungeon (${presos.length})`, linhas, colour: COR.aviso });
+    }
+
+    const alvo = presos.find((f) => {
+      const c = db.getFollowerCatalogo(f.catalogoId);
+      return c && c.nome.toLowerCase().includes(alvoNome.toLowerCase());
+    });
+    if (!alvo) {
+      return sendEmbed(message.channel, { title: "❌ Não está lá",
+        description: `Não achei **${alvoNome}** entre os capturados.`, colour: COR.erro });
+    }
+    const cat = db.getFollowerCatalogo(alvo.catalogoId);
+    const ehDono = alvo.donoOriginal === eu;
+    const horas = (Date.now() - (alvo.capturadoEm ?? 0)) / 3600000;
+
+    // Janela exclusiva: nas primeiras horas só o dono tenta.
+    if (!ehDono && horas < JANELA_DONO_H) {
+      const faltam = Math.ceil(JANELA_DONO_H - horas);
+      return sendEmbed(message.channel, { title: "⏳ Ainda não",
+        description: `**${cat?.nome}** foi capturado há pouco. Só o dono original pode tentar nas primeiras **${JANELA_DONO_H}h** — faltam ~${faltam}h.`,
+        colour: COR.aviso });
+    }
+
+    // já tem 2 na party? o resgate ainda funciona, ele só não entra na party
+    const chance = CHANCE_RESGATE * (ehDono ? BONUS_DONO : 1);
+    if (Math.random() < chance) {
+      db.resgatarFollower(alvo.id, eu);
+      return sendEmbed(message.channel, { title: "🔓 Resgatado!",
+        description: [
+          `**${cat?.nome}** saiu da dungeon com você.`,
+          ehDono ? "_De volta para casa._" : "_Não era seu, mas agora é._",
+          "",
+          `_Ele volta com pouca energia — \`${P}game followers\`._`,
+        ].join("\n"), colour: COR.sucesso });
+    }
+    return sendEmbed(message.channel, { title: "🕳️ Não deu",
+      description: [
+        `Você não conseguiu tirar **${cat?.nome}** de lá desta vez.`,
+        `_Chance era de ${(chance * 100).toFixed(0)}%${ehDono ? " (você é o dono)" : ""}. Pode tentar de novo._`,
+      ].join("\n"), colour: COR.aviso });
   }
 
   // ── ranking ──

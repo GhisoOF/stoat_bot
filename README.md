@@ -452,6 +452,10 @@ distribui pontos em 9 atributos.
 &game                      # sua ficha (atributos + equipamento)
 &game ficha @pessoa        # a ficha de outra pessoa
 &game pontos int 3         # distribui pontos (aceita abreviação)
+&game followers            # seus companheiros
+&game follower levar Aprendiz de Magia
+&game recrutas             # companheiros que existem no jogo
+&game dungeon              # resgata quem foi capturado
 &game missao               # missões disponíveis e suas chances
 &game missao Caçar o Lobo Branco
 &game itens                # sua mochila
@@ -476,6 +480,30 @@ distribui pontos em 9 atributos.
 | 🧠 Inteligência | dano mágico · +XP · +pontos por nível |
 | 🍀 Sorte | dinheiro, drop, sobrevivência · +XP · +pontos por nível |
 | ✨ Carisma | buffa a party · melhora preços |
+
+### Companheiros (party)
+
+Até **2 followers** na party. Quatro classes, cada uma com uma magia própria:
+
+| Classe | Foco | Magia |
+|---|---|---|
+| ⚔️ Combatente | dano físico | Golpe Certeiro (ataque) |
+| 🛡️ Tank | resistência | Muralha (suporte) |
+| 🔮 Mago | dano mágico | Lança Arcana (ataque) |
+| ✨ Suporte | sorte e carisma | Bênção (suporte) |
+
+Os atributos deles sobem **sozinhos** conforme a classe e a raridade. Gastam
+⚡ **energia** por missão de dungeon, que regenera 1 por hora.
+
+Levar companheiros **aumenta a dificuldade da missão** e **divide o loot** (a
+parte deles vai para o mercado). Isso é proposital: eles valem pela **variedade**
+— classes e magias que você não tem — e não por força bruta. Seu ✨ Carisma
+amplifica o que eles trazem.
+
+**Se a party cair**, os followers podem ser **capturados na dungeon**. Ninguém
+morre de vez: `&game dungeon` lista os presos e tenta o resgate. O dono original
+tem chance maior (~75% contra 25%) e prioridade exclusiva nas primeiras 6h — mas
+depois disso, qualquer um pode tentar levar.
 
 ### Missões
 

@@ -74,3 +74,50 @@ curl http://localhost:8090/saude
 ```
 
 A saída de `/saude` diz na hora se o Ollama está acessível e quais modelos existem.
+
+
+---
+
+## Diagnóstico
+
+O serviço se autodiagnostica no boot e grita no log quando algo está errado:
+
+```
+[IA] ✓ DNS resolvendo
+[IA] ✓ GitHub alcançável (HTTP 200)
+[IA] ✓ GitHub autenticado (GhisoOF/stoat_bot)
+[IA] ✓ Ollama respondendo (5 modelo(s))
+[IA] ✓ diagnóstico de boot: tudo certo
+```
+
+Quando há problema, ele aparece em bloco destacado com a correção sugerida:
+
+```
+[IA] ═══════════════════════════════════════════
+[IA] ⚠️  PROBLEMAS DETECTADOS NO BOOT
+[IA] DNS NÃO resolve (EAI_AGAIN). O container não consegue traduzir nomes.
+[IA]    → confira /etc/resolv.conf DENTRO do container:
+[IA]      docker exec judy-ia cat /etc/resolv.conf
+[IA]    → se estiver sem 'nameserver', o bind-mount está preso num arquivo antigo.
+[IA]      Recrie: docker compose up -d --force-recreate
+[IA] ═══════════════════════════════════════════
+```
+
+Verifica quatro coisas: **DNS**, **acesso à internet**, **token do GitHub**
+(distinguindo ausente, expirado e sem permissão) e **Ollama**.
+
+Sem reiniciar, dá para consultar a qualquer momento:
+
+```bash
+curl localhost:8090/diagnostico
+docker logs judy-ia | grep "\[IA\]"
+```
+
+Nada disso derruba o serviço — são avisos. O bot funciona sem GitHub e sem
+busca web; só perde essas capacidades.
+
+### Por que existe
+
+O sintoma "a Judy não consegue ler o repositório" já teve três causas
+diferentes: DNS quebrado, token ausente e token expirado. Cada uma exigiu uma
+investigação do zero. O diagnóstico troca isso por uma linha no log.

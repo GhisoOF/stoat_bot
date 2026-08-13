@@ -135,6 +135,13 @@ const servidor = createServer(async (req, res) => {
       });
     }
 
+    // Diagnóstico sob demanda — sem precisar reiniciar para ver o estado.
+    // `curl localhost:8090/diagnostico` responde o mesmo que o boot.
+    if (req.method === "GET" && req.url === "/diagnostico") {
+      const problemas = await diagnosticoDeBoot();
+      return json(res, 200, { ok: problemas.length === 0, problemas });
+    }
+
     if (req.method === "GET" && req.url === "/ferramentas") {
       return json(res, 200, { ferramentas: ferramentas.definicoes() });
     }
@@ -161,8 +168,108 @@ const servidor = createServer(async (req, res) => {
   }
 });
 
+// ══════════════════════════════════════════════════════════
+//  Autodiagnóstico de boot
+//
+//  Já perdemos horas caçando "a Judy não lê o repositório" que eram, na
+//  verdade, DNS quebrado ou token ausente. Testar isso no boot e gritar no
+//  log troca uma investigação inteira por uma linha visível no `docker logs`.
+//
+//  Nada aqui derruba o serviço: são avisos. O bot funciona sem GitHub e sem
+//  busca web — só perde essas capacidades.
+// ══════════════════════════════════════════════════════════
+async function diagnosticoDeBoot() {
+  const problemas = [];
+
+  // 1. DNS — a falha mais comum, e a mais confusa quando acontece
+  try {
+    const { lookup } = await import("node:dns/promises");
+    await lookup("api.github.com");
+    log("✓ DNS resolvendo");
+  } catch (e) {
+    const codigo = e?.code ?? e?.message ?? "?";
+    problemas.push(
+      `DNS NÃO resolve (${codigo}). O container não consegue traduzir nomes.`,
+      "   → confira /etc/resolv.conf DENTRO do container:",
+      "     docker exec judy-ia cat /etc/resolv.conf",
+      "   → se estiver sem 'nameserver', o bind-mount está preso num arquivo antigo.",
+      "     Recrie: docker compose up -d --force-recreate",
+    );
+  }
+
+  // 2. Alcance real à internet (DNS pode resolver e a rota estar bloqueada)
+  try {
+    const r = await fetch("https://api.github.com", {
+      signal: AbortSignal.timeout(8000),
+      headers: { "User-Agent": "judy-ia" },
+    });
+    log(`✓ GitHub alcançável (HTTP ${r.status})`);
+  } catch (e) {
+    const causa = e?.cause?.code ?? e?.message ?? "?";
+    if (!problemas.length) {
+      problemas.push(
+        `Sem acesso à internet (${causa}), mesmo com DNS ok.`,
+        "   → firewall ou rota bloqueando saída?",
+      );
+    }
+  }
+
+  // 3. Token do GitHub — sem ele, repositório privado devolve 404
+  const token = process.env.GITHUB_TOKEN;
+  const repo = process.env.GITHUB_REPO;
+  if (!token) {
+    problemas.push(
+      "GITHUB_TOKEN ausente — a leitura de código vai falhar com 404 em repo privado.",
+      "   → defina no .env ao lado do docker-compose.yml",
+    );
+  } else if (!problemas.length && repo) {
+    // só testa o token se a rede estiver de pé, senão o erro seria enganoso
+    try {
+      const r = await fetch(`https://api.github.com/repos/${repo}`, {
+        headers: { Authorization: `Bearer ${token}`, "User-Agent": "judy-ia" },
+        signal: AbortSignal.timeout(8000),
+      });
+      if (r.ok) log(`✓ GitHub autenticado (${repo})`);
+      else if (r.status === 401) problemas.push(`GITHUB_TOKEN inválido ou expirado (HTTP 401).`);
+      else if (r.status === 404) problemas.push(
+        `Repositório ${repo} não encontrado (HTTP 404).`,
+        "   → o token existe mas não tem acesso a ele, ou expirou.",
+      );
+      else problemas.push(`GitHub respondeu HTTP ${r.status} para ${repo}.`);
+    } catch (e) {
+      problemas.push(`Falha ao validar o token: ${e?.message ?? e}`);
+    }
+  }
+
+  // 4. Ollama — sem ele o serviço não responde nada
+  try {
+    const r = await fetch(`${OLLAMA_URL}/api/tags`, { signal: AbortSignal.timeout(5000) });
+    const d = await r.json();
+    log(`✓ Ollama respondendo (${(d?.models ?? []).length} modelo(s))`);
+  } catch (e) {
+    problemas.push(
+      `Ollama inacessível em ${OLLAMA_URL} (${e?.cause?.code ?? e?.message}).`,
+      "   → o serviço de IA não vai conseguir responder nada.",
+    );
+  }
+
+  if (problemas.length) {
+    console.error("");
+    console.error("[IA] ═══════════════════════════════════════════");
+    console.error("[IA] ⚠️  PROBLEMAS DETECTADOS NO BOOT");
+    for (const p of problemas) console.error(`[IA] ${p}`);
+    console.error("[IA] ═══════════════════════════════════════════");
+    console.error("");
+  } else {
+    log("✓ diagnóstico de boot: tudo certo");
+  }
+  return problemas;
+}
+
 servidor.listen(PORTA, () => {
   log(`serviço de IA na porta ${PORTA}`);
   log(`Ollama: ${OLLAMA_URL} | modelo padrão: ${MODELO_PADRAO}`);
   log(`ferramentas: ${ferramentas.nomes().join(", ") || "(nenhuma)"}`);
+  // roda depois de subir: um problema de rede não deve impedir o serviço
+  diagnosticoDeBoot().catch((e) => console.error("[IA] diagnóstico falhou:", e?.message));
 });

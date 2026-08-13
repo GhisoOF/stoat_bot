@@ -251,6 +251,7 @@ export function construirDetalhes(P) {
 // remove essas linhas nos servidores sem IA, em vez de anunciar o que não roda.
 const IA_TAG = "\u200b[ia]";
 function filtrarIA(linhas, comIA) {
+  if (!Array.isArray(linhas)) return [];   // categoria inexistente/malformada
   return linhas
     .filter((l) => comIA || !String(l).includes(IA_TAG))
     .map((l) => String(l).replace(IA_TAG, ""));
@@ -425,19 +426,23 @@ export async function cmdHelp(message, args, ctx) {
         `\`${P}chat esquecer [tudo]\` — apaga sua memória (ou a do servidor)` + IA_TAG,
       ],
     },
-    game: {
-      uso: `${P}game [criar|ficha|pontos|top|apagar]`,
-      desc: "RPG do servidor: crie um personagem, suba de nível e distribua pontos em 9 atributos.\n\n`&game criar [nome]` — cria seu personagem\n`&game` — sua ficha\n`&game ficha @pessoa` — a ficha de outro\n`&game pontos <atributo> [quantos]` — distribui pontos (aceita abreviação: for, int, sor…)\n`&game top` — ranking do servidor\n`&game apagar confirmar` — recomeça do zero\n\n**Atributos:** Força, Destreza, Resistência, Agilidade, Vida, Mana, Inteligência, Sorte, Carisma.\n\n_Inteligência e Sorte aumentam o XP ganho e os pontos por nível, com retorno decrescente — nunca param de valer._\n\n⚠️ Não confundir com `&xp`, que é o sistema de níveis por mensagem.",
-      perm: null,
-      ex: `${P}game criar Kael`,
+    rpg: {
+      titulo: "RPG (personagem)",
+      linhas: [
+        `\`${P}game criar [nome]\` — cria seu personagem`,
+        `\`${P}game\` — sua ficha (nível, XP e os 9 atributos)`,
+        `\`${P}game ficha [@pessoa]\` — a ficha de outra pessoa`,
+        `\`${P}game pontos <atributo> [quantos]\` — distribui pontos`,
+        `\`${P}game top\` — ranking de aventureiros`,
+        `\`${P}game apagar confirmar\` — recomeça do zero`,
+        "",
+        "_Sistema separado do `&xp`: aqui você tem um personagem com atributos._",
+      ],
     },
     xp: {
-      titulo: "Sistema de níveis (XP)",
+      titulo: "Sistema de níveis (XP por mensagem)",
       linhas: [
-        `\`${P}game\` — 🎲 seu personagem de RPG (ficha, atributos)`,
-        `\`${P}game criar [nome]\` — cria o personagem`,
-        `\`${P}game pontos <atributo>\` — distribui pontos`,
-        `\`${P}xp\` — seu nível, XP e progresso (por mensagem)`,
+        `\`${P}xp\` — seu nível, XP e progresso`,
         `\`${P}xp rank [@usuário]\` — perfil de outra pessoa`,
         `\`${P}xp top\` — ranking do servidor`,
         `\`${P}xp setup\` — configurar *(ManagePermissions)*`,
@@ -453,7 +458,8 @@ export async function cmdHelp(message, args, ctx) {
   // aliases de categoria
   const ALIAS_CAT = { "moderação": "moderacao", mod: "moderacao", "configuração": "config",
     configuracao: "config", tools: "ferramentas", ferramenta: "ferramentas",
-    nivel: "xp", niveis: "xp", level: "xp", game: "xp" };
+    nivel: "xp", niveis: "xp", level: "xp",
+    game: "rpg", personagem: "rpg", jogo: "rpg" };
   const cat = CATEGORIAS[alvo] ? alvo : ALIAS_CAT[alvo];
 
   if (alvo && CATEGORIAS[cat]) {

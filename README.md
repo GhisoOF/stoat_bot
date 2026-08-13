@@ -482,6 +482,8 @@ os outros atributos irrelevantes. Não há teto — só curva.
 > ⚠️ `&game` (RPG) é diferente de `&xp` (nível por mensagens do servidor). São
 > sistemas separados, com progressões independentes.
 
+`&help rpg` lista os comandos e `&tutorial rpg` explica passo a passo.
+
 O design completo — missões, itens, economia, followers, mercado entre jogadores
 — está em [`DESIGN-rpg-economia.md`](DESIGN-rpg-economia.md). As próximas etapas
 são itens, missões e economia.

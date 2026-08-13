@@ -448,12 +448,16 @@ Sistema de RPG por servidor: cada pessoa cria um personagem, sobe de nível e
 distribui pontos em 9 atributos.
 
 ```
-&game criar Kael          # cria seu personagem
-&game                     # sua ficha
-&game ficha @pessoa       # a ficha de outra pessoa
-&game pontos int 3        # distribui pontos (aceita abreviação)
-&game top                 # ranking do servidor
-&game apagar confirmar    # recomeça do zero
+&game criar Kael           # cria seu personagem
+&game                      # sua ficha (atributos + equipamento)
+&game ficha @pessoa        # a ficha de outra pessoa
+&game pontos int 3         # distribui pontos (aceita abreviação)
+&game itens                # sua mochila
+&game equipar Espada de Ferro
+&game desequipar arma      # ou pelo nome do item
+&game catalogo raro        # itens do jogo (filtra por raridade)
+&game top                  # ranking do servidor
+&game apagar confirmar     # recomeça do zero
 ```
 
 ### Atributos
@@ -469,6 +473,24 @@ distribui pontos em 9 atributos.
 | 🧠 Inteligência | dano mágico · +XP · +pontos por nível |
 | 🍀 Sorte | dinheiro, drop, sobrevivência · +XP · +pontos por nível |
 | ✨ Carisma | buffa a party · melhora preços |
+
+### Itens e equipamento
+
+Seis slots: ⚔️ **Arma**, 🪖 **Capacete**, 🛡️ **Armadura** e 💍 **3 Acessórios**.
+Cada item dá bônus de atributo, que entram na ficha ao lado do valor base.
+
+| Raridade | |
+|---|---|
+| ⚪ Comum | ♾️ estoque infinito — ninguém fica sem equipamento |
+| 🟢 Incomum · 🔵 Raro · 🟣 Épico · 🟠 Lendário | finitos: a escassez move o preço |
+
+O jogo já nasce com um **catálogo genérico** de 26 itens cobrindo todas as
+raridades e slots, para rodar antes de a curadoria terminar. Itens curados entram
+depois sem parar o jogo.
+
+> Conteúdo nunca é apagado, só **descontinuado**: para de aparecer em drop e no
+> mercado, mas quem já tem continua tendo. Apagar removeria o item da mochila
+> das pessoas.
 
 ### Progressão
 

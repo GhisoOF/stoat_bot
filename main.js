@@ -370,6 +370,7 @@ client.on("ready", async () => {
   // lib não emite eventos de reação para elas e os cargos param de ser dados.
   reactionRoles.precarregarMensagens(client).catch((e) => console.error("[REACTIONROLE][boot]", e?.message));
 
+  rpg.iniciarCatalogo();   // semeia os itens genéricos (idempotente)
   srvStats.marcarInicio();
   chat.iniciarMemoria();          // liga o agente de memória (extração em background)
   chat.iniciarComentario(client); // liga o comentário espontâneo

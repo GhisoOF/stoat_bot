@@ -214,6 +214,40 @@ export function abrirBanco(caminho) {
     )
   `);
 
+  // ── RPG: catálogo de itens (global — a curadoria é do dono do bot) ──
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS rpg_itens (
+      id        TEXT PRIMARY KEY,
+      nome      TEXT NOT NULL,
+      slot      TEXT NOT NULL,        -- arma | capacete | armadura | acessorio
+      raridade  TEXT NOT NULL,        -- comum | incomum | raro | epico | lendario
+      bonus     TEXT NOT NULL,        -- JSON: { atributo: valor }
+      origem    TEXT NOT NULL DEFAULT 'generico',
+      infinito  INTEGER NOT NULL DEFAULT 0,
+      precoBase INTEGER NOT NULL DEFAULT 10,
+      ativo     INTEGER NOT NULL DEFAULT 1   -- 0 = descontinuado (some do drop, quem tem mantém)
+    )
+  `);
+  // ── RPG: inventário e equipamento (por servidor) ──
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS rpg_inventario (
+      serverId   TEXT NOT NULL,
+      userId     TEXT NOT NULL,
+      itemId     TEXT NOT NULL,
+      quantidade INTEGER NOT NULL DEFAULT 1,
+      PRIMARY KEY (serverId, userId, itemId)
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS rpg_equipado (
+      serverId TEXT NOT NULL,
+      userId   TEXT NOT NULL,
+      slot     TEXT NOT NULL,          -- arma, capacete, armadura, acessorio1..3
+      itemId   TEXT NOT NULL,
+      PRIMARY KEY (serverId, userId, slot)
+    )
+  `);
+
   migrarTabelasGame();   // XP: game_* → xp_* (preserva os dados)
 
   console.info("[DB] Banco aberto em", DB_PATH);
@@ -700,6 +734,122 @@ export function apagarPersonagem(serverId, userId) {
 export function listarPersonagens(serverId, limite = 10) {
   return db.prepare(`SELECT userId, nome, nivel, xp FROM rpg_personagem
     WHERE serverId = ? ORDER BY nivel DESC, xp DESC LIMIT ?`).all(serverId, limite);
+}
+
+// ══════════════════════════════════════════════════════════
+//  RPG — itens, inventário e equipamento
+// ══════════════════════════════════════════════════════════
+export const SLOTS = ["arma", "capacete", "armadura", "acessorio1", "acessorio2", "acessorio3"];
+export const RARIDADES = ["comum", "incomum", "raro", "epico", "lendario"];
+
+// ── Catálogo ──
+export function upsertItem(item) {
+  db.prepare(`INSERT INTO rpg_itens (id, nome, slot, raridade, bonus, origem, infinito, precoBase, ativo)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
+    ON CONFLICT(id) DO UPDATE SET
+      nome=excluded.nome, slot=excluded.slot, raridade=excluded.raridade,
+      bonus=excluded.bonus, origem=excluded.origem,
+      infinito=excluded.infinito, precoBase=excluded.precoBase`)
+    .run(item.id, item.nome, item.slot, item.raridade,
+         JSON.stringify(item.bonus ?? {}), item.origem ?? "generico",
+         item.infinito ? 1 : 0, item.precoBase ?? 10);
+}
+
+function hidratarItem(r) {
+  if (!r) return null;
+  let bonus = {};
+  try { bonus = JSON.parse(r.bonus ?? "{}"); } catch {}
+  return { ...r, bonus, infinito: !!r.infinito, ativo: !!r.ativo };
+}
+
+export function getItem(id) {
+  return hidratarItem(db.prepare("SELECT * FROM rpg_itens WHERE id = ?").get(id));
+}
+
+export function acharItemPorNome(txt) {
+  const alvo = String(txt ?? "").trim().toLowerCase();
+  if (!alvo) return null;
+  const todos = db.prepare("SELECT * FROM rpg_itens").all().map(hidratarItem);
+  return todos.find((i) => i.nome.toLowerCase() === alvo)
+      ?? todos.find((i) => i.nome.toLowerCase().includes(alvo))
+      ?? null;
+}
+
+export function listarItens({ slot = null, raridade = null, apenasAtivos = true } = {}) {
+  let sql = "SELECT * FROM rpg_itens WHERE 1=1";
+  const p = [];
+  if (apenasAtivos) sql += " AND ativo = 1";
+  if (slot) { sql += " AND slot = ?"; p.push(slot); }
+  if (raridade) { sql += " AND raridade = ?"; p.push(raridade); }
+  sql += " ORDER BY raridade, nome";
+  return db.prepare(sql).all(...p).map(hidratarItem);
+}
+
+// Descontinuar em vez de apagar: quem já tem, continua tendo.
+export function descontinuarItem(id) {
+  return db.prepare("UPDATE rpg_itens SET ativo = 0 WHERE id = ?").run(id).changes ?? 0;
+}
+
+// ── Inventário ──
+export function darItem(serverId, userId, itemId, qtd = 1) {
+  db.prepare(`INSERT INTO rpg_inventario (serverId, userId, itemId, quantidade)
+    VALUES (?, ?, ?, ?)
+    ON CONFLICT(serverId, userId, itemId) DO UPDATE SET quantidade = quantidade + excluded.quantidade`)
+    .run(serverId, userId, itemId, qtd);
+}
+
+export function tirarItem(serverId, userId, itemId, qtd = 1) {
+  const atual = db.prepare("SELECT quantidade FROM rpg_inventario WHERE serverId=? AND userId=? AND itemId=?")
+    .get(serverId, userId, itemId)?.quantidade ?? 0;
+  if (atual <= qtd) {
+    db.prepare("DELETE FROM rpg_inventario WHERE serverId=? AND userId=? AND itemId=?")
+      .run(serverId, userId, itemId);
+    return atual;
+  }
+  db.prepare("UPDATE rpg_inventario SET quantidade = quantidade - ? WHERE serverId=? AND userId=? AND itemId=?")
+    .run(qtd, serverId, userId, itemId);
+  return qtd;
+}
+
+export function getInventario(serverId, userId) {
+  const linhas = db.prepare("SELECT itemId, quantidade FROM rpg_inventario WHERE serverId=? AND userId=?")
+    .all(serverId, userId);
+  return linhas.map((l) => ({ ...getItem(l.itemId), quantidade: l.quantidade }))
+    .filter((x) => x.id);
+}
+
+export function temItem(serverId, userId, itemId) {
+  return (db.prepare("SELECT quantidade FROM rpg_inventario WHERE serverId=? AND userId=? AND itemId=?")
+    .get(serverId, userId, itemId)?.quantidade ?? 0) > 0;
+}
+
+// ── Equipamento ──
+export function equipar(serverId, userId, slot, itemId) {
+  db.prepare(`INSERT INTO rpg_equipado (serverId, userId, slot, itemId) VALUES (?, ?, ?, ?)
+    ON CONFLICT(serverId, userId, slot) DO UPDATE SET itemId = excluded.itemId`)
+    .run(serverId, userId, slot, itemId);
+}
+
+export function desequipar(serverId, userId, slot) {
+  return db.prepare("DELETE FROM rpg_equipado WHERE serverId=? AND userId=? AND slot=?")
+    .run(serverId, userId, slot).changes ?? 0;
+}
+
+export function getEquipado(serverId, userId) {
+  const linhas = db.prepare("SELECT slot, itemId FROM rpg_equipado WHERE serverId=? AND userId=?")
+    .all(serverId, userId);
+  const out = {};
+  for (const l of linhas) {
+    const item = getItem(l.itemId);
+    if (item) out[l.slot] = item;
+  }
+  return out;
+}
+
+// Onde este item está equipado (se estiver)
+export function slotDoItem(serverId, userId, itemId) {
+  return db.prepare("SELECT slot FROM rpg_equipado WHERE serverId=? AND userId=? AND itemId=?")
+    .get(serverId, userId, itemId)?.slot ?? null;
 }
 
 // ── Acesso cru ─────────────────────────────────────────────

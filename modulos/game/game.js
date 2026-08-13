@@ -86,6 +86,8 @@ const RARIDADE_INFO = {
   lendario: { emoji: "🟠", rotulo: "Lendário" },
 };
 const SLOT_INFO = {
+  // "acessorio" é o slot do CATÁLOGO; acessorio1..3 são as vagas equipáveis
+  acessorio:  { emoji: "💍", rotulo: "Acessório" },
   arma:       { emoji: "⚔️", rotulo: "Arma" },
   capacete:   { emoji: "🪖", rotulo: "Capacete" },
   armadura:   { emoji: "🛡️", rotulo: "Armadura" },
@@ -103,6 +105,28 @@ export function iniciarCatalogo() {
     semeado = true;
     console.log(`[RPG] catálogo genérico pronto (${n} item(ns))`);
   } catch (e) { console.error("[RPG] falha ao semear itens:", e?.message ?? e); }
+}
+
+// Envia uma lista longa em partes, em vez de cortar no limite do embed.
+// Cortar é pior que paginar: a pessoa não percebe que faltou conteúdo.
+async function enviarLista(sendEmbed, canal, { titulo, linhas, rodape = "", colour }) {
+  const blocos = [];
+  let atual = [], tam = 0;
+  for (const l of linhas) {
+    if (tam + l.length > 1700 && atual.length) { blocos.push(atual); atual = []; tam = 0; }
+    atual.push(l); tam += l.length + 1;
+  }
+  if (atual.length) blocos.push(atual);
+  if (!blocos.length) blocos.push([]);
+
+  for (let i = 0; i < blocos.length; i++) {
+    const ultimo = i === blocos.length - 1;
+    await sendEmbed(canal, {
+      title: blocos.length > 1 ? `${titulo} (${i + 1}/${blocos.length})` : titulo,
+      description: blocos[i].join("\n") + (ultimo && rodape ? `\n\n${rodape}` : ""),
+      colour,
+    });
+  }
 }
 
 function descreverBonus(bonus) {
@@ -321,9 +345,12 @@ export async function cmdGame(message, args, ctx) {
         linhas.push(`   ${SLOT_INFO[i.slot]?.emoji ?? "•"} **${i.nome}**${qtd}${marca} — ${descreverBonus(i.bonus)}`);
       }
     }
-    linhas.push("", `_✅ = equipado · \`${P}game equipar <item>\` para usar._`);
-    return sendEmbed(message.channel, { title: "🎒 Sua mochila",
-      description: linhas.join("\n").slice(0, 1950), colour: COR.info });
+    return enviarLista(sendEmbed, message.channel, {
+      titulo: "🎒 Sua mochila",
+      linhas,
+      rodape: `_✅ = equipado · \`${P}game equipar <item>\` para usar._`,
+      colour: COR.info,
+    });
   }
 
   // ── equipar ──
@@ -396,30 +423,73 @@ export async function cmdGame(message, args, ctx) {
   }
 
   // ── catálogo ──
+  //
+  // Um embed não cabe o catálogo inteiro. Sem filtro, mostramos um RESUMO por
+  // raridade; com filtro, a lista completa daquela raridade. Assim nada é
+  // cortado no meio — o que era pior que paginar, porque a pessoa nem via que
+  // faltava conteúdo.
   if (["catalogo", "catálogo", "itens-jogo", "loja"].includes(sub)) {
-    const filtroRaridade = db.RARIDADES.find((r) => r === args[1]?.toLowerCase());
-    const lista = db.listarItens({ raridade: filtroRaridade });
+    const filtro = args[1]?.toLowerCase();
+    const raridade = db.RARIDADES.find((r) => r === filtro
+      || r.startsWith(filtro ?? "\u0000")
+      || (filtro === "épico" && r === "epico")
+      || (filtro === "lendário" && r === "lendario"));
+    const slotFiltro = ["arma", "capacete", "armadura", "acessorio"].find((x) => x === filtro);
+
+    const lista = db.listarItens({ raridade, slot: slotFiltro });
     if (!lista.length) {
       return sendEmbed(message.channel, { title: "📖 Catálogo",
-        description: "Nenhum item cadastrado ainda.", colour: COR.aviso });
+        description: filtro
+          ? `Nada encontrado para **${filtro}**.\n\nRaridades: ${db.RARIDADES.join(", ")}\nSlots: arma, capacete, armadura, acessorio`
+          : "Nenhum item cadastrado ainda.",
+        colour: COR.aviso });
     }
-    const porRaridade = {};
-    for (const i of lista) (porRaridade[i.raridade] ??= []).push(i);
-    const linhas = [];
-    for (const r of db.RARIDADES) {
-      const itens = porRaridade[r];
-      if (!itens?.length) continue;
-      const info = RARIDADE_INFO[r] ?? {};
-      linhas.push(`${info.emoji} **${info.rotulo}** (${itens.length})`);
-      for (const i of itens.slice(0, 8)) {
-        linhas.push(`   ${SLOT_INFO[i.slot]?.emoji ?? "•"} ${i.nome}${i.infinito ? " ♾️" : ""} — ${descreverBonus(i.bonus)}`);
+
+    // Filtro que não bate em nada: avisa, em vez de cair no resumo como se
+    // a pessoa não tivesse pedido nada.
+    if (filtro && !raridade && !slotFiltro) {
+      return sendEmbed(message.channel, { title: "❌ Filtro desconhecido",
+        description: [
+          `Não conheço **${filtro}**.`,
+          "",
+          `**Raridades:** ${db.RARIDADES.join(" · ")}`,
+          "**Slots:** arma · capacete · armadura · acessorio",
+          "",
+          `Sem filtro, \`${P}game catalogo\` mostra o resumo.`,
+        ].join("\n"), colour: COR.erro });
+    }
+
+    // Sem filtro: resumo (cabe sempre)
+    if (!raridade && !slotFiltro) {
+      const porRaridade = {};
+      for (const i of lista) (porRaridade[i.raridade] ??= []).push(i);
+      const linhas = [`**${lista.length}** itens no jogo:`, ""];
+      for (const r of db.RARIDADES) {
+        const itens = porRaridade[r] ?? [];
+        if (!itens.length) continue;
+        const info = RARIDADE_INFO[r] ?? {};
+        const infinitos = itens.filter((i) => i.infinito).length;
+        linhas.push(`${info.emoji} **${info.rotulo}** — ${itens.length} item(ns)${infinitos ? ` · ${infinitos} ♾️` : ""}`);
+        linhas.push(`   _${itens.slice(0, 4).map((i) => i.nome).join(", ")}${itens.length > 4 ? "…" : ""}_`);
+        linhas.push(`   \`${P}game catalogo ${r}\``);
       }
-      if (itens.length > 8) linhas.push(`   _… e mais ${itens.length - 8}_`);
+      linhas.push("", "_♾️ = estoque infinito (sempre dá para comprar)_");
+      linhas.push(`_Também filtra por slot:_ \`${P}game catalogo arma\``);
+      return sendEmbed(message.channel, { title: "📖 Itens do jogo",
+        description: linhas.join("\n").slice(0, 1950), colour: COR.info });
     }
-    linhas.push("", "_♾️ = sempre disponível no mercado (estoque infinito)_");
-    if (!filtroRaridade) linhas.push(`_Filtre por raridade: \`${P}game catalogo raro\`_`);
-    return sendEmbed(message.channel, { title: "📖 Itens do jogo",
-      description: linhas.join("\n").slice(0, 1950), colour: COR.info });
+
+    // Com filtro: lista completa, quebrada em blocos se precisar
+    const info = raridade ? (RARIDADE_INFO[raridade] ?? {}) : (SLOT_INFO[slotFiltro] ?? {});
+    const titulo = `${info.emoji ?? "📖"} ${info.rotulo ?? filtro} — ${lista.length} item(ns)`;
+    const linhas = lista.map((i) =>
+      `${SLOT_INFO[i.slot]?.emoji ?? "•"} **${i.nome}**${i.infinito ? " ♾️" : ""}\n   ${descreverBonus(i.bonus)}`);
+
+    return enviarLista(sendEmbed, message.channel, {
+      titulo, linhas,
+      rodape: "_♾️ = estoque infinito_",
+      colour: COR.info,
+    });
   }
 
   // ── ranking ──

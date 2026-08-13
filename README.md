@@ -455,7 +455,8 @@ distribui pontos em 9 atributos.
 &game itens                # sua mochila
 &game equipar Espada de Ferro
 &game desequipar arma      # ou pelo nome do item
-&game catalogo raro        # itens do jogo (filtra por raridade)
+&game catalogo             # resumo dos itens do jogo
+&game catalogo lendario    # lista completa (filtra por raridade ou slot)
 &game top                  # ranking do servidor
 &game apagar confirmar     # recomeça do zero
 ```

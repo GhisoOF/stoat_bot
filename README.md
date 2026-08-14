@@ -454,6 +454,7 @@ distribui pontos em 9 atributos.
 &game pontos int 3         # distribui pontos (aceita abreviação)
 &game carteira             # saldo e estado da economia
 &game comprar Espada de Ferro
+&game comprar Espada de Ferro com prata   # paga com a moeda que você escolher
 &game vender Adaga Simples
 &game contratar Mercenário Novato
 &game mercado              # bazar entre jogadores
@@ -469,6 +470,9 @@ distribui pontos em 9 atributos.
 &game missao               # missões disponíveis e suas chances
 &game missao Caçar o Lobo Branco
 &game itens                # sua mochila
+&game item Espada de Ferro # preço, estoque e bônus de um item
+&game magias               # o grimório: o que existe e o que você sabe
+&game aprender Cura        # compra uma magia
 &game equipar Espada de Ferro
 &game desequipar arma      # ou pelo nome do item
 &game catalogo             # resumo dos itens do jogo
@@ -607,6 +611,44 @@ jogo sai da sua mochila e fica com o bot até fechar ou ser cancelado:
 Sem custódia, qualquer um poderia anunciar o que não tem e sumir. No câmbio, a
 taxa do sistema aparece ao lado da oferta como referência, para ninguém aceitar
 um negócio ruim sem perceber.
+
+### Itens: a ficha, os slots e o preço
+
+O catálogo lista dezenas de itens, mas ver o preço de um exigia abrir o mercado
+inteiro e procurar. `&game item <nome>` responde direto:
+
+```
+&game item Espada de Ferro
+```
+
+Vem o bônus, o slot, o estoque, quanto o mercado te paga de volta — e o preço
+**em cada moeda do servidor**, com ✅ nas que você consegue pagar. Para escolher
+com qual pagar: `&game comprar <item> com <moeda>`. Antes o bot decidia sozinho
+a primeira moeda que desse, o que é péssimo quando você está guardando uma rara.
+
+A ficha do personagem (`&game`) passou a listar os **seis slots, vazios
+inclusive**. Mostrar só o que está equipado escondia justamente a informação
+útil: onde ainda dá para melhorar.
+
+### Magia
+
+O atributo **Mana** existia sem ter no que gastar — magia só vinha da classe do
+companheiro. Agora dá para comprar as suas:
+
+```
+&game magias               # o catálogo e o que você já sabe
+&game magia Cura           # custo, poder, nível e preço em cada moeda
+&game aprender Cura        # compra (aceita `com <moeda>`)
+```
+
+São dez magias em duas escolas: 🔥 **ataque** sobe a chance de cumprir a missão,
+✨ **suporte** sobe a de voltar vivo.
+
+O limite é a **Mana da party**, não o tamanho do grimório. As magias entram da
+mais forte para a mais fraca enquanto a Mana durar; o resto fica dormente (💤)
+até você investir no atributo. As magias dos followers disputam a mesma Mana, de
+propósito — uma party de magos com Mana baixa desperdiça poder, e equilibrar
+vira uma decisão de verdade.
 
 ### Câmbio com o banco
 

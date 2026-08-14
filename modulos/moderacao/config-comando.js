@@ -13,6 +13,7 @@ import * as db from "../core/db.js";
 import { EVENTOS } from "../core/log.js";
 import { MODOS as MODOS_BG, MODOS_EN as MODOS_BG_EN } from "./ban-global.js";
 import { tr, lingua } from "../core/i18n.js";
+import * as MAG from "../game/magias.js";
 
 const on  = (v) => (v ? "🟢" : "🔴");
 const sim = (v) => (v ? "sim" : "não");
@@ -107,16 +108,19 @@ export async function cmdConfig(message, args, ctx) {
   const moedas = (() => { try { return db.listarMoedas(serverId) ?? []; } catch { return []; } })();
   const padraoMoeda = moedas.find((m) => m.padrao) ?? moedas[0] ?? null;
   const nJogadores = (() => { try { return db.listarPersonagens(serverId, 9999)?.length ?? null; } catch { return null; } })();
+  const nMagias = MAG.CATALOGO.length;
   const economia = moedas.length ? (en ? [
     `**Currencies:** ${moedas.length} — ${moedas.map((m) => `${m.simbolo}${m.id}`).join(" · ")}`,
     `**Main:** ${padraoMoeda ? `${padraoMoeda.simbolo} ${padraoMoeda.nome}` : "_(none)_"}  ·  prices are shown in it`,
     `**Exchange:** ${moedas.length > 1 ? `🟢 on — bank and player counter (\`${PREFIXO}game cambio\`)` : "🔴 needs at least 2 currencies"}`,
     nJogadores != null ? `**Characters:** ${nJogadores}` : null,
+    `**Magic:** ${nMagias} spell(s) in the catalog · learned with \`${PREFIXO}game aprender\``,
   ] : [
     `**Moedas:** ${moedas.length} — ${moedas.map((m) => `${m.simbolo}${m.id}`).join(" · ")}`,
     `**Principal:** ${padraoMoeda ? `${padraoMoeda.simbolo} ${padraoMoeda.nome}` : "_(nenhuma)_"}  ·  os preços aparecem nela`,
     `**Câmbio:** ${moedas.length > 1 ? `🟢 ativo — banco e balcão (\`${PREFIXO}game cambio\`)` : "🔴 precisa de ao menos 2 moedas"}`,
     nJogadores != null ? `**Personagens:** ${nJogadores}` : null,
+    `**Magia:** ${nMagias} magia(s) no catálogo · aprendidas com \`${PREFIXO}game aprender\``,
   ]).filter(Boolean) : [en
     ? "_No currency yet — one is born as soon as someone plays._"
     : "_Nenhuma moeda ainda — uma nasce assim que alguém jogar._"];

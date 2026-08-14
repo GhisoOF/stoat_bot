@@ -80,6 +80,8 @@ const SUB = {
     create: "criar", new: "novo", delete: "apagar", erase: "apagar",
     points: "pontos", spend: "pontos",
     items: "itens", inventory: "inventario", bag: "mochila",
+    item: "item", spell: "magia", spells: "magias", learn: "aprender",
+    grimoire: "grimorio", magic: "magia",
     equip: "equipar", unequip: "desequipar", wear: "vestir",
     catalog: "catalogo", shop: "loja",
     wallet: "carteira", balance: "saldo", economy: "economia",

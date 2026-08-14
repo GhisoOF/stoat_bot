@@ -17,6 +17,7 @@ import { tr, lingua } from "../core/i18n.js";
 import { semear as semearItens } from "./itens-genericos.js";
 import * as MISS from "./missoes.js";
 import * as FOL from "./followers.js";
+import * as MAG from "./magias.js";
 import { semear as semearFollowers } from "./followers.js";
 import * as ECO from "./economia.js";
 import { rodarTesteGeral } from "./teste-geral.js";
@@ -110,13 +111,13 @@ const RARIDADE_INFO = {
 };
 const SLOT_INFO = {
   // "acessorio" é o slot do CATÁLOGO; acessorio1..3 são as vagas equipáveis
-  acessorio:  { emoji: "💍", rotulo: "Acessório" },
-  arma:       { emoji: "⚔️", rotulo: "Arma" },
-  capacete:   { emoji: "🪖", rotulo: "Capacete" },
-  armadura:   { emoji: "🛡️", rotulo: "Armadura" },
-  acessorio1: { emoji: "💍", rotulo: "Acessório 1" },
-  acessorio2: { emoji: "💍", rotulo: "Acessório 2" },
-  acessorio3: { emoji: "💍", rotulo: "Acessório 3" },
+  acessorio:  { emoji: "💍", rotulo: "Acessório",   rotuloEN: "Accessory" },
+  arma:       { emoji: "⚔️", rotulo: "Arma",        rotuloEN: "Weapon" },
+  capacete:   { emoji: "🪖", rotulo: "Capacete",    rotuloEN: "Helmet" },
+  armadura:   { emoji: "🛡️", rotulo: "Armadura",    rotuloEN: "Armor" },
+  acessorio1: { emoji: "💍", rotulo: "Acessório 1", rotuloEN: "Accessory 1" },
+  acessorio2: { emoji: "💍", rotulo: "Acessório 2", rotuloEN: "Accessory 2" },
+  acessorio3: { emoji: "💍", rotulo: "Acessório 3", rotuloEN: "Accessory 3" },
 };
 
 // Semeia o catálogo genérico uma vez por boot.
@@ -294,13 +295,20 @@ export function atributosDaParty(p, serverId, userId) {
     if (m) magias.push(m);
   }
 
+  // As magias que o próprio jogador aprendeu entram na mesma disputa que as
+  // dos followers: quem paga o custo em Mana é a party, não o dono da magia.
+  const doGrimorio = db.listarMagias(serverId, userId)
+    .map((x) => MAG.getMagia(x.magiaId)).filter(Boolean);
+  const todas = [...magias, ...doGrimorio];
+
   // Magias custam mana: só entram as que cabem no total de Mana da party.
-  let manaLivre = total.mana ?? 0;
-  const usadas = [];
-  for (const m of magias.sort((a, b) => b.poder - a.poder)) {
-    if (manaLivre >= m.custo) { manaLivre -= m.custo; usadas.push(m); }
-  }
-  return { attr: total, magias: usadas, tamanhoParty: party.length };
+  const { usadas, manaLivre, manaGasta } = MAG.magiasAtivas(todas, total.mana ?? 0);
+  return {
+    attr: total, magias: usadas, tamanhoParty: party.length,
+    // O que a ficha precisa para mostrar quanto da Mana está em uso.
+    manaTotal: total.mana ?? 0, manaGasta, manaLivre,
+    magiasConhecidas: todas.length, magiasDoGrimorio: doGrimorio.length,
+  };
 }
 
 // Em qual slot este item cabe? Acessório tem 3 vagas — usa a primeira livre,
@@ -357,19 +365,57 @@ function montarFicha(p, nomeExibido, P, serverId, userId, lang = "pt") {
     : `_Ganho por nível: **${pontosPorNivel(p.inteligencia, p.sorte).toFixed(2)}** ponto(s) · XP +${((bonusXp(p.inteligencia, p.sorte) - 1) * 100).toFixed(0)}%_`);
 
   if (serverId && userId) {
+    // ── Slots ──
+    // Mostrar só o que está equipado esconde a informação que importa: os
+    // buracos. Listar os seis, vazios inclusive, transforma a ficha num
+    // checklist do que ainda dá para melhorar.
     const eq = db.getEquipado(serverId, userId);
-    const usados = Object.entries(eq);
+    const ocupados = db.SLOTS.filter((s) => eq[s]).length;
     linhas.push("");
-    if (usados.length) {
-      linhas.push(en ? "**Equipped:**" : "**Equipado:**");
-      for (const s of db.SLOTS) {
-        if (!eq[s]) continue;
-        const item = eq[s];
+    linhas.push(en
+      ? `**Slots — ${ocupados}/${db.SLOTS.length} filled**`
+      : `**Slots — ${ocupados}/${db.SLOTS.length} preenchidos**`);
+    for (const slot of db.SLOTS) {
+      const info = SLOT_INFO[slot] ?? {};
+      const rotulo = en ? (info.rotuloEN ?? info.rotulo ?? slot) : (info.rotulo ?? slot);
+      const item = eq[slot];
+      if (item) {
         const r = RARIDADE_INFO[item.raridade] ?? {};
-        linhas.push(`${SLOT_INFO[s]?.emoji ?? "•"} ${r.emoji ?? ""} **${item.nome}** — ${descreverBonus(item.bonus)}`);
+        linhas.push(`${info.emoji ?? "•"} **${rotulo}:** ${r.emoji ?? ""} ${item.nome} — ${descreverBonus(item.bonus)}`);
+      } else {
+        linhas.push(`${info.emoji ?? "•"} **${rotulo}:** ${en ? "_empty_" : "_vazio_"}`);
+      }
+    }
+    if (ocupados < db.SLOTS.length) {
+      linhas.push(en
+        ? `_${db.SLOTS.length - ocupados} free slot(s) — \`${P}game itens\` shows what you can equip._`
+        : `_${db.SLOTS.length - ocupados} slot(s) livre(s) — \`${P}game itens\` mostra o que dá para equipar._`);
+    }
+
+    // ── Magia ──
+    // Mana sem contexto é só um número. Aqui ela vira "quanto do meu poder
+    // está em uso", que é a pergunta de quem decide se investe mais nela.
+    const mag = atributosDaParty(p, serverId, userId);
+    linhas.push("");
+    linhas.push(en
+      ? `**Magic — ${mag.manaGasta}/${mag.manaTotal} mana in use**`
+      : `**Magia — ${mag.manaGasta}/${mag.manaTotal} de mana em uso**`);
+    if (mag.magias.length) {
+      for (const m of mag.magias) {
+        const esc = MAG.ESCOLAS[m.tipo] ?? {};
+        linhas.push(`${esc.emoji ?? "✦"} **${m.nome}** — ${en ? (esc.rotuloEN ?? m.tipo) : (esc.rotulo ?? m.tipo)} · ${m.custo} 🔷 · +${(m.poder * 100).toFixed(0)}%`);
       }
     } else {
-      linhas.push(en ? `_Nothing equipped._ See what you have with \`${P}game itens\`.` : `_Nada equipado._ Veja o que você tem com \`${P}game itens\`.`);
+      linhas.push(en
+        ? `_No active spell._ Learn one with \`${P}game magias\`.`
+        : `_Nenhuma magia ativa._ Aprenda uma com \`${P}game magias\`.`);
+    }
+    // Magia conhecida mas sem Mana para pagar é frustração silenciosa — melhor dizer.
+    const dormentes = mag.magiasConhecidas - mag.magias.length;
+    if (dormentes > 0) {
+      linhas.push(en
+        ? `_${dormentes} known spell(s) don't fit in your mana — raise Mana to use them._`
+        : `_${dormentes} magia(s) conhecida(s) não cabem na sua mana — suba Mana para usá-las._`);
     }
   }
   return linhas.join("\n");
@@ -452,6 +498,7 @@ export async function cmdGame(message, args, ctx) {
       }));
     }
     db.apagarPersonagem(serverId, eu);
+    db.limparMagias(serverId, eu);   // o grimório vai junto: recomeçar é recomeçar
     return sendEmbed(message.channel, tr(ctx,
       { title: "🗑️ Personagem apagado",
         description: `Crie outro quando quiser com \`${P}game criar\`.`, colour: COR.mod },
@@ -738,8 +785,8 @@ export async function cmdGame(message, args, ctx) {
         ? "_♾️ = infinite stock (always buyable)_"
         : "_♾️ = estoque infinito (sempre dá para comprar)_");
       linhas.push(en
-        ? `_You can also filter by slot:_ \`${P}game catalogo arma\``
-        : `_Também filtra por slot:_ \`${P}game catalogo arma\``);
+        ? `_Filter by slot:_ \`${P}game catalogo arma\` · _price and details:_ \`${P}game item <name>\``
+        : `_Filtra por slot:_ \`${P}game catalogo arma\` · _preço e detalhes:_ \`${P}game item <nome>\``);
       return sendEmbed(message.channel, { title: en ? "📖 Game items" : "📖 Itens do jogo",
         description: linhas.join("\n").slice(0, 1950), colour: COR.info });
     }
@@ -754,7 +801,9 @@ export async function cmdGame(message, args, ctx) {
 
     return enviarLista(sendEmbed, message.channel, {
       titulo, linhas,
-      rodape: en ? "_♾️ = infinite stock_" : "_♾️ = estoque infinito_",
+      rodape: en
+        ? `_♾️ = infinite stock · price and details:_ \`${P}game item <name>\``
+        : `_♾️ = estoque infinito · preço e detalhes:_ \`${P}game item <nome>\``,
       colour: COR.info,
     });
   }
@@ -1388,6 +1437,7 @@ export async function cmdGame(message, args, ctx) {
         rpg_followers: "companheiro(s)",
         rpg_itens: "item(ns) do catálogo",
         rpg_followers_catalogo: "companheiro(s) do catálogo",
+        rpg_magias: "magia(s) aprendida(s)",
       };
       const apagados = [];
       const apagar = (tabela, where, ...p) => {
@@ -1401,7 +1451,8 @@ export async function cmdGame(message, args, ctx) {
         // progresso do servidor — inclui as OFERTAS, que ficariam órfãs
         // segurando itens que já não existem
         for (const t of ["rpg_personagem", "rpg_inventario", "rpg_equipado",
-                         "rpg_carteira", "rpg_estoque", "rpg_moedas", "rpg_ofertas"]) {
+                         "rpg_carteira", "rpg_estoque", "rpg_moedas", "rpg_ofertas",
+                         "rpg_magias"]) {
           apagar(t, "serverId = ?", serverId);
         }
         apagar("rpg_followers", "serverId = ?", serverId);
@@ -1911,6 +1962,263 @@ export async function cmdGame(message, args, ctx) {
   }
 
   // ── loja: comprar e vender ──
+  // ── &game item <nome> — a ficha de UM item, com preço ──
+  // O catálogo lista dezenas de itens; ver o preço de cada um obrigava a
+  // abrir o mercado inteiro e procurar. Aqui é uma consulta direta.
+  if (["item", "ficha-item", "preco", "preço", "price"].includes(sub)) {
+    const busca = args.slice(1).join(" ").trim();
+    if (!busca) {
+      return sendEmbed(message.channel, tr(ctx, {
+        title: "❌ Qual item?",
+        description: `\`${P}game item <nome>\`\n\nEx.: \`${P}game item Espada de Ferro\`\nVeja a lista com \`${P}game catalogo\`.`,
+        colour: COR.erro,
+      }, {
+        title: "❌ Which item?",
+        description: `\`${P}game item <name>\`\n\nE.g.: \`${P}game item Espada de Ferro\`\nSee the list with \`${P}game catalogo\`.`,
+        colour: COR.erro,
+      }));
+    }
+    const item = db.acharItemPorNome(busca);
+    if (!item) {
+      return sendEmbed(message.channel, {
+        title: en ? "❌ Unknown item" : "❌ Item desconhecido",
+        description: en ? `I couldn't find any item called **${busca}**.` : `Não achei nenhum item chamado **${busca}**.`,
+        colour: COR.erro });
+    }
+
+    const moeda = garantirMoeda(serverId);
+    const { pSuave } = pDaMoeda(serverId, moeda);
+    const est = db.getEstoque(serverId, item.id);
+    const estoque = item.infinito ? null : (est?.quantidade ?? est?.base ?? 0);
+    const preco = ECO.precoDeVenda(item, est, pSuave);
+    const p = db.getPersonagem(serverId, eu);
+    const carisma = p ? atributosComEquipamento(p, serverId, eu).carisma : 0;
+    const recompra = ECO.precoDeRecompra(preco, carisma);
+    const r = RARIDADE_INFO[item.raridade] ?? {};
+    const si = SLOT_INFO[item.slot] ?? {};
+    const temNaMochila = p ? (db.getInventario(serverId, eu).find((x) => x.id === item.id)?.quantidade ?? 0) : 0;
+
+    // Quanto custa em CADA moeda: é a pergunta natural de quem tem carteira
+    // variada, e evita ter de fazer a conta do câmbio na mão.
+    const emCadaMoeda = db.listarMoedas(serverId).map((m) => {
+      const c = m.id === moeda.id ? preco : Math.ceil(preco / Math.max(0.000001, ECO.taxaCambio(m, moeda)));
+      const seu = db.getSaldo(serverId, eu, m.id);
+      return `${m.simbolo} ${fmt(c)} ${m.id}${seu >= c ? " ✅" : ""}`;
+    });
+
+    const linhas = en ? [
+      `${r.emoji ?? ""} **${item.nome}** — ${r.rotulo ?? item.raridade}`,
+      `${si.emoji ?? "•"} **Slot:** ${si.rotuloEN ?? si.rotulo ?? item.slot}`,
+      `**Bonus:** ${descreverBonus(item.bonus)}`,
+      "",
+      `**Price:** ${moeda.simbolo}${fmt(preco)}`,
+      `**The market pays you:** ${moeda.simbolo}${fmt(recompra)} _(your Charisma ${carisma})_`,
+      `**Stock:** ${item.infinito ? "♾️ infinite" : `${fmt(estoque)} left`}`,
+      temNaMochila ? `**In your bag:** ${temNaMochila}` : null,
+      "",
+      "**In each currency** _(✅ = you can afford it)_",
+      ...emCadaMoeda,
+      "",
+      `\`${P}game comprar ${item.nome}\` · \`${P}game comprar ${item.nome} com <currency>\``,
+    ] : [
+      `${r.emoji ?? ""} **${item.nome}** — ${r.rotulo ?? item.raridade}`,
+      `${si.emoji ?? "•"} **Slot:** ${si.rotulo ?? item.slot}`,
+      `**Bônus:** ${descreverBonus(item.bonus)}`,
+      "",
+      `**Preço:** ${moeda.simbolo}${fmt(preco)}`,
+      `**O mercado te paga:** ${moeda.simbolo}${fmt(recompra)} _(seu Carisma ${carisma})_`,
+      `**Estoque:** ${item.infinito ? "♾️ infinito" : `${fmt(estoque)} restante(s)`}`,
+      temNaMochila ? `**Na sua mochila:** ${temNaMochila}` : null,
+      "",
+      "**Em cada moeda** _(✅ = dá para pagar)_",
+      ...emCadaMoeda,
+      "",
+      `\`${P}game comprar ${item.nome}\` · \`${P}game comprar ${item.nome} com <moeda>\``,
+    ];
+    return enviarLista(sendEmbed, message.channel, {
+      titulo: en ? "📦 Item" : "📦 Item", linhas: linhas.filter(Boolean), colour: COR.info });
+  }
+
+  // ── &game magias / magia / aprender — o grimório ──
+  if (["magias", "magia", "grimorio", "grimório", "aprender", "spells", "spell", "learn"].includes(sub)) {
+    const p = db.getPersonagem(serverId, eu);
+    if (!p) return sendEmbed(message.channel, tr(ctx,
+      { title: "🎭 Sem personagem", description: `Crie o seu com \`${P}game criar\`.`, colour: COR.aviso },
+      { title: "🎭 No character", description: `Create yours with \`${P}game criar\`.`, colour: COR.aviso }));
+
+    const aprender = ["aprender", "learn"].includes(sub) || ["aprender", "learn", "comprar", "buy"].includes(String(args[1] ?? "").toLowerCase());
+    const restoBruto = ["aprender", "learn"].includes(sub)
+      ? args.slice(1).join(" ").trim()
+      : args.slice(["aprender", "learn", "comprar", "buy"].includes(String(args[1] ?? "").toLowerCase()) ? 2 : 1).join(" ").trim();
+
+    const moedaPadrao = garantirMoeda(serverId);
+    const attr = atributosComEquipamento(p, serverId, eu);
+    const conhecidas = new Set(db.listarMagias(serverId, eu).map((x) => x.magiaId));
+
+    // ── aprender uma magia ──
+    if (aprender && restoBruto) {
+      // aceita "... com <moeda>", igual à compra de item
+      let alvo = restoBruto, moedaEscolhida = null;
+      const mm = alvo.match(/^(.*?)\s+(?:com|with|em|in)\s+(\S+)$/i);
+      if (mm) {
+        const achada = db.acharMoeda(serverId, mm[2]);
+        if (achada) { alvo = mm[1].trim(); moedaEscolhida = achada; }
+      }
+      const magia = MAG.acharMagia(alvo);
+      if (!magia) {
+        return sendEmbed(message.channel, {
+          title: en ? "❌ Unknown spell" : "❌ Magia desconhecida",
+          description: en
+            ? `I couldn't find **${alvo}**. See the list with \`${P}game magias\`.`
+            : `Não achei **${alvo}**. Veja a lista com \`${P}game magias\`.`,
+          colour: COR.erro });
+      }
+      if (conhecidas.has(magia.id)) {
+        return sendEmbed(message.channel, {
+          title: en ? "📖 Already known" : "📖 Você já conhece",
+          description: en
+            ? `**${magia.nome}** is already in your grimoire.`
+            : `**${magia.nome}** já está no seu grimório.`,
+          colour: COR.aviso });
+      }
+      if (p.nivel < magia.nivelMin) {
+        return sendEmbed(message.channel, {
+          title: en ? "🔒 Level too low" : "🔒 Nível insuficiente",
+          description: en
+            ? `**${magia.nome}** requires level **${magia.nivelMin}** — you're level ${p.nivel}.`
+            : `**${magia.nome}** exige nível **${magia.nivelMin}** — você está no ${p.nivel}.`,
+          colour: COR.aviso });
+      }
+
+      const preco = MAG.precoComCarisma(magia.preco, attr.carisma);
+      const pag = moedaEscolhida
+        ? (() => {
+          const custo = moedaEscolhida.id === moedaPadrao.id
+            ? preco
+            : Math.ceil(preco / Math.max(0.000001, ECO.taxaCambio(moedaEscolhida, moedaPadrao)));
+          return { moeda: moedaEscolhida, custo, convertido: moedaEscolhida.id !== moedaPadrao.id,
+            semSaldo: db.getSaldo(serverId, eu, moedaEscolhida.id) < custo, escolhida: true };
+        })()
+        : moedaParaPagar(serverId, eu, preco);
+      if (pag.semSaldo) {
+        return sendEmbed(message.channel, {
+          title: en ? "💸 Not enough balance" : "💸 Saldo insuficiente",
+          description: en
+            ? `**${magia.nome}** costs ${pag.moeda.simbolo}${fmt(pag.custo)} — you have ${pag.moeda.simbolo}${fmt(db.getSaldo(serverId, eu, pag.moeda.id))}.`
+            : `**${magia.nome}** custa ${pag.moeda.simbolo}${fmt(pag.custo)} — você tem ${pag.moeda.simbolo}${fmt(db.getSaldo(serverId, eu, pag.moeda.id))}.`,
+          colour: COR.erro });
+      }
+
+      jogadorPaga(serverId, eu, pag.moeda, pag.custo);
+      db.aprenderMagia(serverId, eu, magia.id);
+
+      // Aprender sem Mana para lançar é o erro clássico — o aviso vem junto.
+      const depois = atributosDaParty(db.getPersonagem(serverId, eu), serverId, eu);
+      const ativa = depois.magias.some((x) => x.id === magia.id || x.nome === magia.nome);
+      const esc = MAG.ESCOLAS[magia.tipo] ?? {};
+      return sendEmbed(message.channel, {
+        title: en ? "📖 Spell learned" : "📖 Magia aprendida",
+        description: (en ? [
+          `${esc.emoji ?? "✦"} **${magia.nome}** — ${esc.rotuloEN ?? magia.tipo} · ${magia.custo} 🔷 · +${(magia.poder * 100).toFixed(0)}%`,
+          `Paid ${pag.moeda.simbolo}${fmt(pag.custo)}${pag.convertido ? ` _(price was ${moedaPadrao.simbolo}${fmt(preco)})_` : ""}`,
+          "",
+          ativa
+            ? `✅ Active now — mana in use: ${depois.manaGasta}/${depois.manaTotal}`
+            : `⚠️ It doesn't fit in your mana yet (${depois.manaGasta}/${depois.manaTotal} in use). Raise **Mana** with \`${P}game pontos mana\`.`,
+        ] : [
+          `${esc.emoji ?? "✦"} **${magia.nome}** — ${esc.rotulo ?? magia.tipo} · ${magia.custo} 🔷 · +${(magia.poder * 100).toFixed(0)}%`,
+          `Pagou ${pag.moeda.simbolo}${fmt(pag.custo)}${pag.convertido ? ` _(preço era ${moedaPadrao.simbolo}${fmt(preco)})_` : ""}`,
+          "",
+          ativa
+            ? `✅ Já está ativa — mana em uso: ${depois.manaGasta}/${depois.manaTotal}`
+            : `⚠️ Ainda não cabe na sua mana (${depois.manaGasta}/${depois.manaTotal} em uso). Suba **Mana** com \`${P}game pontos mana\`.`,
+        ]).join("\n"), colour: COR.sucesso });
+    }
+
+    // ── ficha de UMA magia ──
+    if (!aprender && restoBruto) {
+      const magia = MAG.acharMagia(restoBruto);
+      if (magia) {
+        const esc = MAG.ESCOLAS[magia.tipo] ?? {};
+        const preco = MAG.precoComCarisma(magia.preco, attr.carisma);
+        const emCada = db.listarMoedas(serverId).map((m) => {
+          const c = m.id === moedaPadrao.id ? preco : Math.ceil(preco / Math.max(0.000001, ECO.taxaCambio(m, moedaPadrao)));
+          return `${m.simbolo} ${fmt(c)} ${m.id}${db.getSaldo(serverId, eu, m.id) >= c ? " ✅" : ""}`;
+        });
+        const linhas = en ? [
+          `${esc.emoji ?? "✦"} **${magia.nome}** — ${esc.rotuloEN ?? magia.tipo}`,
+          `**Mana cost:** ${magia.custo} 🔷  ·  **Power:** +${(magia.poder * 100).toFixed(0)}%`,
+          `**Required level:** ${magia.nivelMin}  ·  **Rarity:** ${RARIDADE_INFO[magia.raridade]?.rotulo ?? magia.raridade}`,
+          `**Price:** ${moedaPadrao.simbolo}${fmt(preco)} _(your Charisma ${attr.carisma} is already applied)_`,
+          conhecidas.has(magia.id) ? "📖 **You already know this one.**" : null,
+          "",
+          "**In each currency** _(✅ = you can afford it)_",
+          ...emCada,
+          "",
+          `\`${P}game aprender ${magia.nome}\` · \`${P}game aprender ${magia.nome} com <currency>\``,
+        ] : [
+          `${esc.emoji ?? "✦"} **${magia.nome}** — ${esc.rotulo ?? magia.tipo}`,
+          `**Custo de mana:** ${magia.custo} 🔷  ·  **Poder:** +${(magia.poder * 100).toFixed(0)}%`,
+          `**Nível exigido:** ${magia.nivelMin}  ·  **Raridade:** ${RARIDADE_INFO[magia.raridade]?.rotulo ?? magia.raridade}`,
+          `**Preço:** ${moedaPadrao.simbolo}${fmt(preco)} _(já com o seu Carisma ${attr.carisma})_`,
+          conhecidas.has(magia.id) ? "📖 **Você já conhece esta.**" : null,
+          "",
+          "**Em cada moeda** _(✅ = dá para pagar)_",
+          ...emCada,
+          "",
+          `\`${P}game aprender ${magia.nome}\` · \`${P}game aprender ${magia.nome} com <moeda>\``,
+        ];
+        return enviarLista(sendEmbed, message.channel, {
+          titulo: en ? "✦ Spell" : "✦ Magia", linhas: linhas.filter(Boolean), colour: COR.info });
+      }
+      // Pediu uma magia que não existe. Cair na lista inteira sem dizer nada
+      // faria parecer que o comando ignorou o argumento.
+      return sendEmbed(message.channel, {
+        title: en ? "❌ Unknown spell" : "❌ Magia desconhecida",
+        description: en
+          ? `I couldn't find **${restoBruto}**. See the whole catalog with \`${P}game magias\`.`
+          : `Não achei **${restoBruto}**. Veja o catálogo inteiro com \`${P}game magias\`.`,
+        colour: COR.erro });
+    }
+
+    // ── a lista ──
+    const estado = atributosDaParty(p, serverId, eu);
+    const ativas = new Set(estado.magias.map((m) => m.nome));
+    const linhas = [];
+    linhas.push(en
+      ? `**Mana in use: ${estado.manaGasta}/${estado.manaTotal}** — spells enter from the strongest down, while the mana lasts.`
+      : `**Mana em uso: ${estado.manaGasta}/${estado.manaTotal}** — as magias entram da mais forte para a mais fraca, enquanto a mana durar.`);
+    linhas.push("");
+
+    for (const tipo of ["ataque", "suporte"]) {
+      const esc = MAG.ESCOLAS[tipo];
+      linhas.push(`${esc.emoji} **${en ? esc.rotuloEN : esc.rotulo}**`);
+      for (const m of MAG.CATALOGO.filter((x) => x.tipo === tipo)) {
+        const tem = conhecidas.has(m.id);
+        const marca = tem ? (ativas.has(m.nome) ? " ✅" : " 💤") : "";
+        const preco = MAG.precoComCarisma(m.preco, attr.carisma);
+        const trava = p.nivel < m.nivelMin ? ` 🔒${en ? "lv" : "nv"} ${m.nivelMin}` : "";
+        linhas.push(tem
+          ? `   **${m.nome}**${marca} — ${m.custo} 🔷 · +${(m.poder * 100).toFixed(0)}%`
+          : `   **${m.nome}**${trava} — ${m.custo} 🔷 · +${(m.poder * 100).toFixed(0)}% · ${moedaPadrao.simbolo}${fmt(preco)}`);
+      }
+      linhas.push("");
+    }
+    linhas.push(en
+      ? "_✅ active · 💤 known but doesn't fit in your mana · 🔒 level required_"
+      : "_✅ ativa · 💤 conhecida mas não cabe na mana · 🔒 nível exigido_");
+    linhas.push(en
+      ? `\`${P}game magia <name>\` — details · \`${P}game aprender <name> [com <currency>]\``
+      : `\`${P}game magia <nome>\` — detalhes · \`${P}game aprender <nome> [com <moeda>]\``);
+    if (estado.magiasDoGrimorio === 0) {
+      linhas.push(en
+        ? "_Followers also bring their own spells — they share the same mana pool._"
+        : "_Os followers também trazem magias — dividem a mesma mana._");
+    }
+    return enviarLista(sendEmbed, message.channel, {
+      titulo: en ? "✦ Grimoire" : "✦ Grimório", linhas, colour: COR.info });
+  }
+
   if (["comprar", "loja"].includes(sub)) {
     const p = db.getPersonagem(serverId, eu);
     if (!p) return sendEmbed(message.channel, { title: en ? "🎭 No character" : "🎭 Sem personagem",
@@ -1918,7 +2226,17 @@ export async function cmdGame(message, args, ctx) {
 
     const moeda = garantirMoeda(serverId);
     const { pSuave } = pDaMoeda(serverId, moeda);
-    const busca = args.slice(1).join(" ").trim();
+    let busca = args.slice(1).join(" ").trim();
+
+    // `... com <moeda>` / `... with <currency>`: escolher com que moeda pagar.
+    // Antes, o bot escolhia sozinho a primeira que desse — o que é péssimo
+    // quando você está guardando uma moeda rara e ele resolve gastá-la.
+    let moedaEscolhida = null;
+    const mComMoeda = busca.match(/^(.*?)\s+(?:com|with|em|in)\s+(\S+)$/i);
+    if (mComMoeda) {
+      const achada = db.acharMoeda(serverId, mComMoeda[2]);
+      if (achada) { busca = mComMoeda[1].trim(); moedaEscolhida = achada; }
+    }
 
     if (!busca) {
       const itens = db.listarItens().slice(0, 40);
@@ -1946,13 +2264,29 @@ export async function cmdGame(message, args, ctx) {
         description: en ? `**${item.nome}** ran out in the market. Finite items return when someone sells.` : `**${item.nome}** acabou no mercado. Itens finitos voltam quando alguém vende.`, colour: COR.aviso });
     }
     const preco = ECO.precoDeVenda(item, est, pSuave);
-    const pag = moedaParaPagar(serverId, eu, preco);
+    // Com moeda escolhida, o preço é convertido para ela pela taxa do balcão —
+    // a mesma do &game cambio, para não haver duas cotações na mesma economia.
+    const pag = moedaEscolhida
+      ? (() => {
+        const custo = moedaEscolhida.id === moeda.id
+          ? preco
+          : Math.ceil(preco / Math.max(0.000001, ECO.taxaCambio(moedaEscolhida, moeda)));
+        const temSaldo = db.getSaldo(serverId, eu, moedaEscolhida.id) >= custo;
+        return { moeda: moedaEscolhida, custo, convertido: moedaEscolhida.id !== moeda.id,
+          padrao: moeda, semSaldo: !temSaldo, escolhida: true };
+      })()
+      : moedaParaPagar(serverId, eu, preco);
     if (pag.semSaldo) {
       const carteira = db.carteiraDe(serverId, eu)
         .map((c) => { const m = db.getMoeda(serverId, c.moedaId); return `${m?.simbolo ?? ""}${fmt(c.quantidade)}`; })
         .join(" · ") || "nada";
+      const emMoeda = pag.escolhida
+        ? (en
+          ? `\nIn ${pag.moeda.nome} that's ${pag.moeda.simbolo}${fmt(pag.custo)} — you have ${pag.moeda.simbolo}${fmt(db.getSaldo(serverId, eu, pag.moeda.id))}.`
+          : `\nEm ${pag.moeda.nome} dá ${pag.moeda.simbolo}${fmt(pag.custo)} — você tem ${pag.moeda.simbolo}${fmt(db.getSaldo(serverId, eu, pag.moeda.id))}.`)
+        : "";
       return sendEmbed(message.channel, { title: en ? "💸 Not enough balance" : "💸 Saldo insuficiente",
-        description: en ? `**${item.nome}** costs ${moeda.simbolo}${fmt(preco)}.\nYou have: ${carteira}.` : `**${item.nome}** custa ${moeda.simbolo}${fmt(preco)}.\nVocê tem: ${carteira}.`,
+        description: (en ? `**${item.nome}** costs ${moeda.simbolo}${fmt(preco)}.${emMoeda}\nYou have: ${carteira}.` : `**${item.nome}** custa ${moeda.simbolo}${fmt(preco)}.${emMoeda}\nVocê tem: ${carteira}.`),
         colour: COR.erro });
     }
     jogadorPaga(serverId, eu, pag.moeda, pag.custo);
@@ -2651,6 +2985,8 @@ export async function cmdGame(message, args, ctx) {
         `\`${P}game itens\` — your bag`,
         `\`${P}game equipar <item>\` · \`${P}game desequipar <slot>\``,
         `\`${P}game catalogo [rarity]\` — every item in the game`,
+        `\`${P}game item <name>\` — one item's sheet, with price`,
+        `\`${P}game magias\` — the grimoire · \`${P}game aprender <name>\` — learn one`,
         `\`${P}game top\` — server ranking`,
         `\`${P}game apagar confirmar\` — starts over`,
         "",
@@ -2668,6 +3004,8 @@ export async function cmdGame(message, args, ctx) {
         `\`${P}game itens\` — sua mochila`,
         `\`${P}game equipar <item>\` · \`${P}game desequipar <slot>\``,
         `\`${P}game catalogo [raridade]\` — todos os itens do jogo`,
+        `\`${P}game item <nome>\` — a ficha de um item, com preço`,
+        `\`${P}game magias\` — o grimório · \`${P}game aprender <nome>\` — aprende uma`,
         `\`${P}game top\` — ranking do servidor`,
         `\`${P}game apagar confirmar\` — recomeça do zero`,
         "",

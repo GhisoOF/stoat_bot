@@ -248,6 +248,19 @@ export function abrirBanco(caminho) {
     )
   `);
 
+  // ── RPG: magias aprendidas pelo jogador ──
+  // O catálogo em si vive no código (magias.js): é conteúdo do jogo, não
+  // dado do servidor. Aqui fica só quem aprendeu o quê.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS rpg_magias (
+      serverId  TEXT NOT NULL,
+      userId    TEXT NOT NULL,
+      magiaId   TEXT NOT NULL,
+      criadoEm  INTEGER NOT NULL,
+      PRIMARY KEY (serverId, userId, magiaId)
+    )
+  `);
+
   // ── RPG: followers ──
   db.exec(`
     CREATE TABLE IF NOT EXISTS rpg_followers_catalogo (
@@ -851,6 +864,30 @@ export function listarPersonagens(serverId, limite = 10) {
 //  RPG — itens, inventário e equipamento
 // ══════════════════════════════════════════════════════════
 export const SLOTS = ["arma", "capacete", "armadura", "acessorio1", "acessorio2", "acessorio3"];
+
+// ── Magias do jogador ─────────────────────────────────────
+export function aprenderMagia(serverId, userId, magiaId) {
+  db.prepare(`INSERT OR IGNORE INTO rpg_magias (serverId, userId, magiaId, criadoEm)
+    VALUES (?, ?, ?, ?)`).run(serverId, userId, magiaId, Date.now());
+  return true;
+}
+export function listarMagias(serverId, userId) {
+  return db.prepare(`SELECT magiaId, criadoEm FROM rpg_magias
+    WHERE serverId = ? AND userId = ? ORDER BY criadoEm`).all(serverId, userId);
+}
+export function temMagia(serverId, userId, magiaId) {
+  return !!db.prepare(`SELECT 1 FROM rpg_magias WHERE serverId = ? AND userId = ? AND magiaId = ?`)
+    .get(serverId, userId, magiaId);
+}
+export function esquecerMagia(serverId, userId, magiaId) {
+  return db.prepare(`DELETE FROM rpg_magias WHERE serverId = ? AND userId = ? AND magiaId = ?`)
+    .run(serverId, userId, magiaId).changes;
+}
+export function limparMagias(serverId, userId = null) {
+  return userId
+    ? db.prepare(`DELETE FROM rpg_magias WHERE serverId = ? AND userId = ?`).run(serverId, userId).changes
+    : db.prepare(`DELETE FROM rpg_magias WHERE serverId = ?`).run(serverId).changes;
+}
 export const RARIDADES = ["comum", "incomum", "raro", "epico", "lendario"];
 
 // ── Catálogo ──

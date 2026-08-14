@@ -97,12 +97,17 @@ const SUB = {
     help: "ajuda", commands: "comandos",
     // dentro de `game admin` e `game follower`
     give: "dar", item: "item", level: "nivel", energy: "energia",
+    // Iguais nos dois idiomas, mas precisam constar: a tradução para no
+    // primeiro token desconhecido, e sem eles a cadeia quebraria no meio.
+    admin: "admin", eco: "eco", status: "status", top: "top",
     currency: "moeda", coin: "moeda", test: "teste", simulate: "simular",
     eco: "eco", reset: "reset", server: "servidor", all: "tudo",
     confirm: "confirmar", model: "modelo", view: "ver", info: "detalhe",
     remove: "remover", default: "padrao", main: "padrao",
     world: "mundo", fantasy: "fantasia", simple: "simples",
     take: "levar", add: "adicionar", drop: "tirar", dismiss: "dispensar",
+    sheet: "ficha", status: "status", give: "dar", retrieve: "pegar",
+    bag: "mochila", inventory: "inventario",
     photos: "fotos", album: "album",
     cancel: "cancelar", accept: "aceitar", announce: "anunciar",
   },
@@ -368,7 +373,30 @@ function traduzirTrecho(trecho, prefixo, CANONICO) {
   }
 
   const rev = SUB_REVERSO[canonico] ?? {};
-  const traduzidas = partes.map((tok, i) => (i === 0 ? prefixo + nomeEN : traduzirToken(tok, rev)));
+  // Traduz os subcomandos ENQUANTO eles forem subcomandos. No primeiro token
+  // que não está na tabela, começou o texto livre — nome de item, de
+  // companheiro, de missão — e dali para a frente nada é traduzido.
+  //
+  // Sem essa parada, `&game follower pegar Aprendiz de Magia <item>` virava
+  // `... Aprendiz de spell <item>`: "Magia" bate com um subcomando, mas ali é
+  // parte de um nome próprio.
+  //
+  // Exceção na posição 1: muitos comandos põem o ALVO antes da ação
+  // (`&cor VIP gradiente`, `&automod antilink punicao`). Um desconhecido ali
+  // é o alvo, não o começo do texto livre — se parássemos, `gradiente` e
+  // `punicao` ficariam em português.
+  let acabaramOsSubcomandos = false;
+  const traduzidas = partes.map((tok, i) => {
+    if (i === 0) return prefixo + nomeEN;
+    if (/^[<[(]/.test(tok)) return traduzirToken(tok, rev);   // placeholder: sempre
+    if (acabaramOsSubcomandos) return tok;
+    const t = rev[tok.toLowerCase()];
+    if (t === undefined) {
+      if (i > 1) acabaramOsSubcomandos = true;
+      return tok;
+    }
+    return t;
+  });
   return { texto: traduzidas.join(" "), comando: canonico };
 }
 

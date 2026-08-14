@@ -27,15 +27,15 @@ const CRESCIMENTO = 1.5;
 
 // Nomes bonitos e apelidos aceitos na hora de distribuir pontos.
 const ATRIB = {
-  forca:        { rotulo: "Força",        emoji: "💪", aliases: ["forca", "força", "for", "str"] },
-  destreza:     { rotulo: "Destreza",     emoji: "🎯", aliases: ["destreza", "des", "dex"] },
-  resistencia:  { rotulo: "Resistência",  emoji: "🛡️", aliases: ["resistencia", "resistência", "res", "def"] },
-  agilidade:    { rotulo: "Agilidade",    emoji: "💨", aliases: ["agilidade", "agi", "agl"] },
-  vida:         { rotulo: "Vida",         emoji: "❤️", aliases: ["vida", "hp", "vit"] },
-  mana:         { rotulo: "Mana",         emoji: "🔷", aliases: ["mana", "mp"] },
-  inteligencia: { rotulo: "Inteligência", emoji: "🧠", aliases: ["inteligencia", "inteligência", "int"] },
-  sorte:        { rotulo: "Sorte",        emoji: "🍀", aliases: ["sorte", "sor", "luk"] },
-  carisma:      { rotulo: "Carisma",      emoji: "✨", aliases: ["carisma", "car", "cha"] },
+  forca:        { rotulo: "Força", rotuloEN: "Strength",        emoji: "💪", aliases: ["forca", "força", "for", "str"] },
+  destreza:     { rotulo: "Destreza", rotuloEN: "Dexterity",     emoji: "🎯", aliases: ["destreza", "des", "dex"] },
+  resistencia:  { rotulo: "Resistência", rotuloEN: "Resistance",  emoji: "🛡️", aliases: ["resistencia", "resistência", "res", "def"] },
+  agilidade:    { rotulo: "Agilidade", rotuloEN: "Agility",    emoji: "💨", aliases: ["agilidade", "agi", "agl"] },
+  vida:         { rotulo: "Vida", rotuloEN: "Health",         emoji: "❤️", aliases: ["vida", "hp", "vit"] },
+  mana:         { rotulo: "Mana", rotuloEN: "Mana",         emoji: "🔷", aliases: ["mana", "mp"] },
+  inteligencia: { rotulo: "Inteligência", rotuloEN: "Intelligence", emoji: "🧠", aliases: ["inteligencia", "inteligência", "int"] },
+  sorte:        { rotulo: "Sorte", rotuloEN: "Luck",        emoji: "🍀", aliases: ["sorte", "sor", "luk"] },
+  carisma:      { rotulo: "Carisma", rotuloEN: "Charisma",      emoji: "✨", aliases: ["carisma", "car", "cha"] },
 };
 
 function acharAtributo(txt) {
@@ -256,6 +256,23 @@ function gastarEnergia(f, quanto = 1) {
   db.salvarFollower(f.id, { energia: Math.max(0, atual - quanto), energiaEm: Date.now() });
 }
 
+// Atributos do companheiro somados aos itens que ele carrega. Fica junto do
+// resto do cálculo para o que a ficha mostra ser exatamente o que a missão usa.
+export function atributosDoFollowerComItens(f) {
+  const cat = db.getFollowerCatalogo(f.catalogoId);
+  const base = FOL.atributosDoFollower(cat, f.nivel);
+  const itens = db.itensDoFollower(f.id);
+  const extra = {};
+  for (const it of itens) {
+    let b = it.bonus;
+    if (typeof b === "string") { try { b = JSON.parse(b); } catch { b = {}; } }
+    for (const [k, v] of Object.entries(b ?? {})) extra[k] = (extra[k] ?? 0) + v;
+  }
+  const total = { ...base };
+  for (const [k, v] of Object.entries(extra)) total[k] = (total[k] ?? 0) + v;
+  return { base, extra, total, itens };
+}
+
 function descreverFollower(f, comEnergia = true) {
   const cat = db.getFollowerCatalogo(f.catalogoId);
   if (!cat) return `_(follower desconhecido)_`;
@@ -287,7 +304,7 @@ export function atributosDaParty(p, serverId, userId) {
   for (const f of party) {
     const cat = db.getFollowerCatalogo(f.catalogoId);
     if (!cat) continue;
-    const attr = FOL.atributosDoFollower(cat, f.nivel);
+    const attr = atributosDoFollowerComItens(f).total;
     // Carisma do líder amplifica o que os followers trazem (retorno decrescente)
     const buff = 1 + 0.05 * Math.sqrt(Math.max(0, meus.carisma ?? 0));
     for (const a of db.ATRIBUTOS) total[a] = (total[a] ?? 0) + Math.round((attr[a] ?? 0) * buff);
@@ -2469,6 +2486,201 @@ export async function cmdGame(message, args, ctx) {
     const acao = args[1]?.toLowerCase();
     const resto = args.slice(2).join(" ").trim();
 
+    // Acha um companheiro SEU pelo nome. Usado por quase todos os subcomandos.
+    const acharMeu = (texto) => {
+      const alvoTxt = String(texto ?? "").trim().toLowerCase();
+      if (!alvoTxt) return null;
+      const meus = db.listarFollowersDe(serverId, eu);
+      return meus.find((f) => {
+        const c = db.getFollowerCatalogo(f.catalogoId);
+        return c && c.nome.toLowerCase().includes(alvoTxt);
+      }) ?? null;
+    };
+    const semEsse = (texto) => sendEmbed(message.channel, {
+      title: en ? "❌ Not among yours" : "❌ Não é um dos seus",
+      description: en
+        ? `I couldn't find **${texto}** among your companions. See them with \`${P}game followers\`.`
+        : `Não achei **${texto}** entre os seus companheiros. Veja com \`${P}game followers\`.`,
+      colour: COR.erro });
+
+    // ── ficha / status de UM companheiro ──
+    // A lista mostra nome, nível e energia; quem decide quem levar precisa dos
+    // atributos e da magia, que é o que de fato muda a chance da missão.
+    if (["ficha", "status", "ver", "sheet", "info"].includes(acao)) {
+      if (!resto) {
+        return sendEmbed(message.channel, tr(ctx,
+          { title: "❌ Qual companheiro?",
+            description: `\`${P}game follower ficha <nome>\`\n\nVeja os seus com \`${P}game followers\`.`, colour: COR.erro },
+          { title: "❌ Which companion?",
+            description: `\`${P}game follower ficha <name>\`\n\nSee yours with \`${P}game followers\`.`, colour: COR.erro }));
+      }
+      const f = acharMeu(resto);
+      if (!f) return semEsse(resto);
+
+      const cat = db.getFollowerCatalogo(f.catalogoId);
+      const cls = FOL.CLASSES[cat?.classe] ?? {};
+      const rar = RARIDADE_INFO[cat?.raridade] ?? {};
+      const { base, extra, total, itens } = atributosDoFollowerComItens(f);
+      const magia = FOL.magiaDo(cat);
+      const energia = energiaAtual(f);
+
+      // Só os atributos que ele realmente tem: listar nove zeros seria ruído.
+      const linhasAttr = db.ATRIBUTOS
+        .filter((a) => (total[a] ?? 0) > 0)
+        .map((a) => {
+          const info = ATRIB[a] ?? {};
+          const bonus = extra[a] ? ` (+${extra[a]})` : "";
+          return `${info.emoji ?? "•"} **${en ? (info.rotuloEN ?? info.rotulo) : info.rotulo}** ${base[a] ?? 0}${bonus}`;
+        });
+
+      const linhas = en ? [
+        `${rar.emoji ?? ""}${cls.emoji ?? ""} **${cat?.nome ?? "?"}** — ${cls.rotulo ?? cat?.classe} · level ${f.nivel}`,
+        `${rar.emoji ?? ""} ${rar.rotulo ?? cat?.raridade} · ${cls.desc ?? ""}`,
+        "",
+        `⚡ **Energy:** ${energia}/${ENERGIA_MAX}${energia < ENERGIA_MAX ? " _(+1 per hour)_" : ""}`,
+        `🎒 **In the party:** ${f.naParty ? "yes" : "no"}`,
+        magia ? `✦ **Spell:** ${magia.nome} — ${magia.custo} 🔷 · +${(magia.poder * 100).toFixed(0)}%` : null,
+        "",
+        "**Attributes** _(base and, in parentheses, what the bag adds)_",
+        ...linhasAttr,
+        "",
+        `🎒 **Bag — ${itens.length}/${db.FOLLOWER_MOCHILA}**`,
+        ...(itens.length
+          ? itens.map((i) => `${SLOT_INFO[i.slot]?.emoji ?? "•"} **${i.nome}** — ${descreverBonus(i.bonus)}`)
+          : ["_empty_"]),
+        "",
+        `\`${P}game follower dar ${cat?.nome} <item>\` · \`${P}game follower pegar ${cat?.nome} <item>\``,
+      ] : [
+        `${rar.emoji ?? ""}${cls.emoji ?? ""} **${cat?.nome ?? "?"}** — ${cls.rotulo ?? cat?.classe} · nível ${f.nivel}`,
+        `${rar.emoji ?? ""} ${rar.rotulo ?? cat?.raridade} · ${cls.desc ?? ""}`,
+        "",
+        `⚡ **Energia:** ${energia}/${ENERGIA_MAX}${energia < ENERGIA_MAX ? " _(+1 por hora)_" : ""}`,
+        `🎒 **Na party:** ${f.naParty ? "sim" : "não"}`,
+        magia ? `✦ **Magia:** ${magia.nome} — ${magia.custo} 🔷 · +${(magia.poder * 100).toFixed(0)}%` : null,
+        "",
+        "**Atributos** _(base e, entre parênteses, o que a mochila soma)_",
+        ...linhasAttr,
+        "",
+        `🎒 **Mochila — ${itens.length}/${db.FOLLOWER_MOCHILA}**`,
+        ...(itens.length
+          ? itens.map((i) => `${SLOT_INFO[i.slot]?.emoji ?? "•"} **${i.nome}** — ${descreverBonus(i.bonus)}`)
+          : ["_vazia_"]),
+        "",
+        `\`${P}game follower dar ${cat?.nome} <item>\` · \`${P}game follower pegar ${cat?.nome} <item>\``,
+      ];
+      return enviarLista(sendEmbed, message.channel, {
+        titulo: en ? "👤 Companion" : "👤 Companheiro", linhas: linhas.filter(Boolean), colour: COR.info });
+    }
+
+    // ── mochila: dar e pegar de volta ──
+    if (["dar", "equipar", "give", "equip", "mochila", "inventario", "inventário", "bag"].includes(acao)) {
+      // `mochila <nome>` sem item é só a consulta — atalho para a ficha.
+      const soConsulta = ["mochila", "inventario", "inventário", "bag"].includes(acao) && !/\s/.test(resto);
+      const m = resto.match(/^(.*?)\s+(.+)$/);
+      if (soConsulta || !m) {
+        const f = acharMeu(soConsulta ? resto : resto);
+        if (!f) {
+          return sendEmbed(message.channel, tr(ctx,
+            { title: "❌ Uso incorreto",
+              description: `\`${P}game follower dar <companheiro> <item>\`\n\nEx.: \`${P}game follower dar Aprendiz Espada de Ferro\``, colour: COR.erro },
+            { title: "❌ Wrong usage",
+              description: `\`${P}game follower dar <companion> <item>\`\n\nE.g.: \`${P}game follower dar Aprendiz Espada de Ferro\``, colour: COR.erro }));
+        }
+        const itens = db.itensDoFollower(f.id);
+        const cat = db.getFollowerCatalogo(f.catalogoId);
+        return sendEmbed(message.channel, {
+          title: en ? `🎒 ${cat?.nome}'s bag` : `🎒 Mochila de ${cat?.nome}`,
+          description: (itens.length
+            ? itens.map((i) => `${SLOT_INFO[i.slot]?.emoji ?? "•"} **${i.nome}** — ${descreverBonus(i.bonus)}`).join("\n")
+            : (en ? "_Empty._" : "_Vazia._"))
+            + `\n\n${itens.length}/${db.FOLLOWER_MOCHILA}`,
+          colour: COR.info });
+      }
+
+      const f = acharMeu(m[1]);
+      if (!f) return semEsse(m[1]);
+      const item = db.acharItemPorNome(m[2]);
+      if (!item) {
+        return sendEmbed(message.channel, {
+          title: en ? "❌ Unknown item" : "❌ Item desconhecido",
+          description: en ? `I couldn't find any item called **${m[2]}**.` : `Não achei nenhum item chamado **${m[2]}**.`,
+          colour: COR.erro });
+      }
+      const naMochila = db.getInventario(serverId, eu).find((x) => x.id === item.id);
+      if (!naMochila) {
+        return sendEmbed(message.channel, {
+          title: en ? "❌ You don't have that item" : "❌ Você não tem esse item",
+          description: en ? `**${item.nome}** isn't in your bag.` : `**${item.nome}** não está na sua mochila.`,
+          colour: COR.erro });
+      }
+      const atuais = db.itensDoFollower(f.id);
+      const cat = db.getFollowerCatalogo(f.catalogoId);
+      if (atuais.length >= db.FOLLOWER_MOCHILA) {
+        return sendEmbed(message.channel, {
+          title: en ? "🎒 Bag full" : "🎒 Mochila cheia",
+          description: en
+            ? `**${cat?.nome}** already carries ${db.FOLLOWER_MOCHILA} item(s). Take one back with \`${P}game follower pegar ${cat?.nome} <item>\`.`
+            : `**${cat?.nome}** já carrega ${db.FOLLOWER_MOCHILA} item(ns). Pegue um de volta com \`${P}game follower pegar ${cat?.nome} <item>\`.`,
+          colour: COR.aviso });
+      }
+      if (atuais.some((x) => x.id === item.id)) {
+        return sendEmbed(message.channel, {
+          title: en ? "🎒 Already carrying it" : "🎒 Ele já carrega esse",
+          description: en ? `**${cat?.nome}** already has **${item.nome}**.` : `**${cat?.nome}** já tem **${item.nome}**.`,
+          colour: COR.aviso });
+      }
+
+      // Sai da SUA mochila: o item está com ele, não em dois lugares ao mesmo tempo.
+      db.tirarItem(serverId, eu, item.id, 1);
+      db.darItemAoFollower(f.id, item.id);
+      const depois = atributosDoFollowerComItens(f);
+      return sendEmbed(message.channel, {
+        title: en ? "🎒 Handed over" : "🎒 Entregue",
+        description: (en ? [
+          `**${cat?.nome}** is now carrying ${SLOT_INFO[item.slot]?.emoji ?? ""} **${item.nome}** — ${descreverBonus(item.bonus)}`,
+          `_Bag: ${atuais.length + 1}/${db.FOLLOWER_MOCHILA} · it counts on missions right away._`,
+          "",
+          `\`${P}game follower ficha ${cat?.nome}\` shows the full sheet.`,
+        ] : [
+          `**${cat?.nome}** agora carrega ${SLOT_INFO[item.slot]?.emoji ?? ""} **${item.nome}** — ${descreverBonus(item.bonus)}`,
+          `_Mochila: ${atuais.length + 1}/${db.FOLLOWER_MOCHILA} · já conta nas missões._`,
+          "",
+          `\`${P}game follower ficha ${cat?.nome}\` mostra a ficha completa.`,
+        ]).join("\n"), colour: COR.sucesso });
+    }
+
+    if (["pegar", "retomar", "take", "desequipar"].includes(acao)) {
+      const m = resto.match(/^(.*?)\s+(.+)$/);
+      if (!m) {
+        return sendEmbed(message.channel, tr(ctx,
+          { title: "❌ Uso incorreto",
+            description: `\`${P}game follower pegar <companheiro> <item>\``, colour: COR.erro },
+          { title: "❌ Wrong usage",
+            description: `\`${P}game follower pegar <companion> <item>\``, colour: COR.erro }));
+      }
+      const f = acharMeu(m[1]);
+      if (!f) return semEsse(m[1]);
+      const cat = db.getFollowerCatalogo(f.catalogoId);
+      const item = db.itensDoFollower(f.id).find((x) =>
+        x.nome.toLowerCase().includes(m[2].trim().toLowerCase()));
+      if (!item) {
+        return sendEmbed(message.channel, {
+          title: en ? "❌ He isn't carrying that" : "❌ Ele não carrega isso",
+          description: en
+            ? `**${cat?.nome}** isn't carrying **${m[2]}**.`
+            : `**${cat?.nome}** não está com **${m[2]}**.`,
+          colour: COR.erro });
+      }
+      db.tirarItemDoFollower(f.id, item.id);
+      db.darItem(serverId, eu, item.id);
+      return sendEmbed(message.channel, {
+        title: en ? "🎒 Taken back" : "🎒 De volta com você",
+        description: en
+          ? `**${item.nome}** left ${cat?.nome}'s bag and returned to yours.`
+          : `**${item.nome}** saiu da mochila de ${cat?.nome} e voltou para a sua.`,
+        colour: COR.sucesso });
+    }
+
     // ── levar / tirar da party ──
     if (["levar", "adicionar", "party+"].includes(acao)) {
       const meus = db.listarFollowersDe(serverId, eu);
@@ -2590,8 +2802,11 @@ export async function cmdGame(message, args, ctx) {
       for (const f of fora) linhas.push(`   ${descreverFollower(f)}`);
     }
     linhas.push("", en
-      ? `_\`${P}game follower levar <name>\` to add to the party · ⚡ = energy_`
-      : `_\`${P}game follower levar <nome>\` para colocar na party · ⚡ = energia_`);
+      ? `_\`${P}game follower ficha <name>\` — attributes, spell and bag_`
+      : `_\`${P}game follower ficha <nome>\` — atributos, magia e mochila_`,
+      en
+        ? `_\`${P}game follower levar <name>\` to add to the party · ⚡ = energy_`
+        : `_\`${P}game follower levar <nome>\` para colocar na party · ⚡ = energia_`);
     return enviarLista(sendEmbed, message.channel, {
       titulo: en ? "👥 Your companions" : "👥 Seus companheiros", linhas, colour: COR.info });
   }
@@ -2782,6 +2997,33 @@ export async function cmdGame(message, args, ctx) {
       }
     }
 
+    // ── resgate automático ──
+    // Antes o resgate era um comando à parte, e ficava estranho: você "ia
+    // à dungeon" sem sair do lugar, num comando que só rolava um dado. Agora
+    // ele acontece onde faz sentido — indo à missão você passa por lá.
+    //
+    // Só uma tentativa por missão, e só se você voltou: quem caiu não estava
+    // em condição de tirar ninguém de lá.
+    const resgatados = [];
+    if (r.desfecho !== "caiu") {
+      const presos = db.listarCapturados(serverId);
+      const meus = presos.filter((f) => f.donoOriginal === eu);
+      // Fora da janela do dono, qualquer um pode trazer qualquer um de volta.
+      const livres = presos.filter((f) => f.donoOriginal !== eu
+        && (Date.now() - (f.capturadoEm ?? 0)) / 3600000 >= JANELA_DONO_H);
+      const candidato = meus[0] ?? livres[0] ?? null;
+      if (candidato) {
+        const ehDono = candidato.donoOriginal === eu;
+        // Missão cumprida dá a chance cheia; ter voltado sem cumprir dá metade.
+        const chance = CHANCE_RESGATE * (ehDono ? BONUS_DONO : 1) * (r.exito ? 1 : 0.5);
+        if (Math.random() < Math.min(0.95, chance)) {
+          db.resgatarFollower(candidato.id, eu);
+          const cat = db.getFollowerCatalogo(candidato.catalogoId);
+          resgatados.push({ nome: cat?.nome ?? "?", ehDono });
+        }
+      }
+    }
+
     // ── loot ──
     let ganhou = null;
     let ganhouFollower = null;
@@ -2855,13 +3097,23 @@ export async function cmdGame(message, args, ctx) {
         ? `_Party of ${tamanhoParty}: the mission was harder, and part of the loot stayed with them._`
         : `_Party de ${tamanhoParty}: a missão foi mais difícil, e parte do loot ficou com eles._`);
     }
+    if (resgatados.length) {
+      for (const rg of resgatados) {
+        linhas.push("", en
+          ? `🔓 **Rescued on the way:** ${rg.nome}${rg.ehDono ? " — back home." : " — they weren't yours, but they are now."}`
+          : `🔓 **Resgatado no caminho:** ${rg.nome}${rg.ehDono ? " — de volta para casa." : " — não era seu, mas agora é."}`);
+      }
+      linhas.push(en
+        ? `_They come back with little energy — \`${P}game followers\`._`
+        : `_Volta com pouca energia — \`${P}game followers\`._`);
+    }
     if (capturados.length) {
       linhas.push("", en
         ? `⛓️ **Captured in the dungeon:** ${capturados.join(", ")}`
         : `⛓️ **Capturado(s) na dungeon:** ${capturados.join(", ")}`,
         en
-          ? `_Rescue with \`${P}game dungeon\` — you have priority in the first hours._`
-          : `_Resgate com \`${P}game dungeon\` — você tem prioridade nas primeiras horas._`);
+          ? `_Every mission you come back from is a chance to pull them out — you have priority in the first ${JANELA_DONO_H}h._`
+          : `_Toda missão de que você volta é uma chance de tirá-los de lá — você tem prioridade nas primeiras ${JANELA_DONO_H}h._`);
     }
     if (r.desfecho === "caiu") linhas.push("", en ? "_You need ~30 min to recover._" : "_Você precisa de ~30 min para se recuperar._");
 
@@ -2879,79 +3131,48 @@ export async function cmdGame(message, args, ctx) {
           description: `Create one with \`${P}game criar\`.`, colour: COR.aviso }));
     }
     const presos = db.listarCapturados(serverId);
-    const alvoNome = args.slice(1).join(" ").trim();
 
-    if (!alvoNome) {
-      if (!presos.length) {
-        return sendEmbed(message.channel, { title: en ? "🕳️ The dungeon is quiet" : "🕳️ A dungeon está quieta",
-          description: en ? "No companions captured around here." : "Nenhum companheiro capturado por aqui.", colour: COR.info });
-      }
-      const linhas = presos.map((f) => {
-        const cat = db.getFollowerCatalogo(f.catalogoId);
-        const cls = FOL.CLASSES[cat?.classe] ?? {};
-        const r = RARIDADE_INFO[cat?.raridade] ?? {};
-        const meu = f.donoOriginal === eu;
-        const horas = (Date.now() - (f.capturadoEm ?? 0)) / 3600000;
-        const janela = horas < JANELA_DONO_H;
-        const marca = meu
-          ? (en ? " 👤 _yours_" : " 👤 _seu_")
-          : janela ? (en ? " ⏳ _owner's window_" : " ⏳ _janela do dono_") : "";
-        return `${r.emoji ?? ""}${cls.emoji ?? ""} **${cat?.nome ?? "?"}** (${en ? "lv" : "nv"} ${f.nivel})${marca}`;
-      });
-      linhas.push("", en ? `_\`${P}game dungeon <name>\` to attempt the rescue._` : `_\`${P}game dungeon <nome>\` para tentar o resgate._`,
-        en
-          ? `_The original owner has a better chance, and priority in the first ${JANELA_DONO_H}h._`
-          : `_O dono original tem chance maior, e prioridade nas primeiras ${JANELA_DONO_H}h._`);
-      return enviarLista(sendEmbed, message.channel, {
-        titulo: en ? `⛓️ Captured in the dungeon (${presos.length})` : `⛓️ Capturados na dungeon (${presos.length})`,
-        linhas, colour: COR.aviso });
+    if (!presos.length) {
+      return sendEmbed(message.channel, {
+        title: en ? "🕳️ The dungeon is quiet" : "🕳️ A dungeon está quieta",
+        description: en ? "No companions captured around here." : "Nenhum companheiro capturado por aqui.",
+        colour: COR.info });
     }
 
-    const alvo = presos.find((f) => {
-      const c = db.getFollowerCatalogo(f.catalogoId);
-      return c && c.nome.toLowerCase().includes(alvoNome.toLowerCase());
+    // Esta tela é só o painel de quem está lá dentro. O resgate em si acontece
+    // nas missões: rolar um dado num comando parado nunca foi uma decisão —
+    // era só repetir até dar certo. Agora ir à missão É a tentativa.
+    const linhas = presos.map((f) => {
+      const cat = db.getFollowerCatalogo(f.catalogoId);
+      const cls = FOL.CLASSES[cat?.classe] ?? {};
+      const r = RARIDADE_INFO[cat?.raridade] ?? {};
+      const meu = f.donoOriginal === eu;
+      const horas = (Date.now() - (f.capturadoEm ?? 0)) / 3600000;
+      const janela = horas < JANELA_DONO_H;
+      const marca = meu
+        ? (en ? " 👤 _yours_" : " 👤 _seu_")
+        : janela
+          ? (en ? ` ⏳ _owner's window (~${Math.ceil(JANELA_DONO_H - horas)}h)_` : ` ⏳ _janela do dono (~${Math.ceil(JANELA_DONO_H - horas)}h)_`)
+          : (en ? " 🔓 _anyone can bring them back_" : " 🔓 _qualquer um pode trazer_");
+      return `${r.emoji ?? ""}${cls.emoji ?? ""} **${cat?.nome ?? "?"}** (${en ? "lv" : "nv"} ${f.nivel})${marca}`;
     });
-    if (!alvo) {
-      return sendEmbed(message.channel, { title: en ? "❌ Not in there" : "❌ Não está lá",
-        description: en ? `I couldn't find **${alvoNome}** among the captured.` : `Não achei **${alvoNome}** entre os capturados.`, colour: COR.erro });
-    }
-    const cat = db.getFollowerCatalogo(alvo.catalogoId);
-    const ehDono = alvo.donoOriginal === eu;
-    const horas = (Date.now() - (alvo.capturadoEm ?? 0)) / 3600000;
 
-    // Janela exclusiva: nas primeiras horas só o dono tenta.
-    if (!ehDono && horas < JANELA_DONO_H) {
-      const faltam = Math.ceil(JANELA_DONO_H - horas);
-      return sendEmbed(message.channel, { title: en ? "⏳ Not yet" : "⏳ Ainda não",
-        description: en ? `**${cat?.nome}** was captured recently. Only the original owner can try in the first **${JANELA_DONO_H}h** — ~${faltam}h left.` : `**${cat?.nome}** foi capturado há pouco. Só o dono original pode tentar nas primeiras **${JANELA_DONO_H}h** — faltam ~${faltam}h.`,
-        colour: COR.aviso });
+    const meusPresos = presos.filter((f) => f.donoOriginal === eu).length;
+    linhas.push("", en
+      ? "**The rescue is automatic.** Every mission you come back from is one attempt — the mission being completed doubles the odds."
+      : "**O resgate é automático.** Toda missão de que você volta é uma tentativa — cumprir a missão dobra a chance.");
+    linhas.push(en
+      ? `_You have priority over yours in the first ${JANELA_DONO_H}h; after that, anyone's mission can free them._`
+      : `_Você tem prioridade sobre os seus nas primeiras ${JANELA_DONO_H}h; depois, a missão de qualquer um pode soltá-los._`);
+    if (meusPresos) {
+      linhas.push("", en
+        ? `➡️ **${meusPresos === 1 ? "One of them is yours" : `${meusPresos} of them are yours`}.** Go on a mission: \`${P}game missao\``
+        : `➡️ **${meusPresos === 1 ? "Um deles é seu" : `${meusPresos} deles são seus`}.** Parta para uma missão: \`${P}game missao\``);
     }
 
-    // já tem 2 na party? o resgate ainda funciona, ele só não entra na party
-    const chance = CHANCE_RESGATE * (ehDono ? BONUS_DONO : 1);
-    if (Math.random() < chance) {
-      db.resgatarFollower(alvo.id, eu);
-      return sendEmbed(message.channel, { title: en ? "🔓 Rescued!" : "🔓 Resgatado!",
-        description: (en ? [
-          `**${cat?.nome}** walked out of the dungeon with you.`,
-          ehDono ? "_Back home._" : "_They weren't yours, but they are now._",
-          "",
-          `_They come back with little energy — \`${P}game followers\`._`,
-        ] : [
-          `**${cat?.nome}** saiu da dungeon com você.`,
-          ehDono ? "_De volta para casa._" : "_Não era seu, mas agora é._",
-          "",
-          `_Ele volta com pouca energia — \`${P}game followers\`._`,
-        ]).join("\n"), colour: COR.sucesso });
-    }
-    return sendEmbed(message.channel, { title: en ? "🕳️ No luck" : "🕳️ Não deu",
-      description: (en ? [
-        `You couldn't get **${cat?.nome}** out of there this time.`,
-        `_The chance was ${(chance * 100).toFixed(0)}%${ehDono ? " (you're the owner)" : ""}. You can try again._`,
-      ] : [
-        `Você não conseguiu tirar **${cat?.nome}** de lá desta vez.`,
-        `_Chance era de ${(chance * 100).toFixed(0)}%${ehDono ? " (você é o dono)" : ""}. Pode tentar de novo._`,
-      ]).join("\n"), colour: COR.aviso });
+    return enviarLista(sendEmbed, message.channel, {
+      titulo: en ? `⛓️ Captured in the dungeon (${presos.length})` : `⛓️ Capturados na dungeon (${presos.length})`,
+      linhas, colour: COR.aviso });
   }
 
   // ── ranking ──
@@ -2982,11 +3203,10 @@ export async function cmdGame(message, args, ctx) {
         `\`${P}game\` — your sheet`,
         `\`${P}game ficha @person\` — someone else's sheet`,
         `\`${P}game pontos <attribute> [how many]\` — spends points`,
-        `\`${P}game itens\` — your bag`,
-        `\`${P}game equipar <item>\` · \`${P}game desequipar <slot>\``,
-        `\`${P}game catalogo [rarity]\` — every item in the game`,
-        `\`${P}game item <name>\` — one item's sheet, with price`,
-        `\`${P}game magias\` — the grimoire · \`${P}game aprender <name>\` — learn one`,
+        `\`${P}game itens\` · \`${P}game equipar <item>\` · \`${P}game desequipar <slot>\``,
+        `\`${P}game catalogo [rarity]\` · \`${P}game item <name>\` — price and details`,
+        `\`${P}game magias\` · \`${P}game aprender <name>\` — the grimoire`,
+        `\`${P}game followers\` · \`${P}game follower ficha <name>\` — sheet and bag`,
         `\`${P}game top\` — server ranking`,
         `\`${P}game apagar confirmar\` — starts over`,
         "",
@@ -3001,11 +3221,10 @@ export async function cmdGame(message, args, ctx) {
         `\`${P}game\` — sua ficha`,
         `\`${P}game ficha @pessoa\` — a ficha de outro`,
         `\`${P}game pontos <atributo> [quantos]\` — distribui pontos`,
-        `\`${P}game itens\` — sua mochila`,
-        `\`${P}game equipar <item>\` · \`${P}game desequipar <slot>\``,
-        `\`${P}game catalogo [raridade]\` — todos os itens do jogo`,
-        `\`${P}game item <nome>\` — a ficha de um item, com preço`,
-        `\`${P}game magias\` — o grimório · \`${P}game aprender <nome>\` — aprende uma`,
+        `\`${P}game itens\` · \`${P}game equipar <item>\` · \`${P}game desequipar <slot>\``,
+        `\`${P}game catalogo [raridade]\` · \`${P}game item <nome>\` — preço e detalhes`,
+        `\`${P}game magias\` · \`${P}game aprender <nome>\` — o grimório`,
+        `\`${P}game followers\` · \`${P}game follower ficha <nome>\` — ficha e mochila`,
         `\`${P}game top\` — ranking do servidor`,
         `\`${P}game apagar confirmar\` — recomeça do zero`,
         "",

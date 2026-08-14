@@ -464,9 +464,11 @@ distribui pontos em 9 atributos.
 &game cambio 100 ouro por 5 prata  # oferta a outro jogador
 &game trocar @amigo Elmo do Dragão por Manto Estelar
 &game followers            # seus companheiros
+&game follower ficha Aprendiz de Magia    # atributos, magia, energia e mochila
+&game follower dar Aprendiz Espada de Ferro  # ele carrega e o bônus soma nele
 &game follower levar Aprendiz de Magia
 &game recrutas             # companheiros que existem no jogo
-&game dungeon              # resgata quem foi capturado
+&game dungeon              # quem foi capturado (o resgate é automático)
 &game missao               # missões disponíveis e suas chances
 &game missao Caçar o Lobo Branco
 &game itens                # sua mochila
@@ -649,6 +651,47 @@ mais forte para a mais fraca enquanto a Mana durar; o resto fica dormente (💤)
 até você investir no atributo. As magias dos followers disputam a mesma Mana, de
 propósito — uma party de magos com Mana baixa desperdiça poder, e equilibrar
 vira uma decisão de verdade.
+
+### Companheiros: ficha e mochila
+
+A lista de followers mostrava nome, nível e energia — mas quem decide **quem
+levar** precisa dos atributos e da magia, que é o que muda a chance da missão:
+
+```
+&game follower ficha Aprendiz de Magia
+```
+
+Cada companheiro também carrega até **2 itens**, e o bônus deles soma nos
+atributos *dele*:
+
+```
+&game follower dar Aprendiz Espada de Ferro
+&game follower pegar Aprendiz Espada de Ferro
+```
+
+Isso dá destino ao equipamento que você já superou, em vez de tudo virar
+revenda. Na ficha, o valor base aparece com o acréscimo entre parênteses:
+`Força 0 (+2)`.
+
+### O resgate na dungeon é automático
+
+Existia um `&game dungeon <nome>` que rolava um dado. Era um comando parado:
+sem custo, sem espera e sem escolha, então a estratégia ótima era repetir até
+dar certo — o que não é decisão nenhuma.
+
+Agora o resgate acontece onde ele já fazia sentido: **na missão**. Toda missão
+de que você volta é uma tentativa.
+
+| Desfecho | Chance |
+|---|---|
+| Missão cumprida | cheia |
+| Voltou sem cumprir | metade |
+| Caiu | nenhuma — você não estava em condição de tirar ninguém de lá |
+
+O dono original tem chance bem maior e prioridade exclusiva nas primeiras 6h;
+depois disso, a missão de qualquer um pode soltá-lo. Uma tentativa por missão, e
+os seus vêm primeiro. `&game dungeon` continua existindo como **painel** de quem
+está lá dentro.
 
 ### Câmbio com o banco
 

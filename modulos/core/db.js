@@ -248,6 +248,19 @@ export function abrirBanco(caminho) {
     )
   `);
 
+  // ── RPG: mochila do companheiro ──
+  // O follower carrega os próprios itens, que somam nos atributos DELE. É o
+  // que faz um companheiro comum virar útil sem precisar de mais níveis, e dá
+  // destino para o equipamento que você já superou em vez de ir tudo revendido.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS rpg_follower_itens (
+      followerId INTEGER NOT NULL,
+      itemId     TEXT NOT NULL,
+      criadoEm   INTEGER NOT NULL,
+      PRIMARY KEY (followerId, itemId)
+    )
+  `);
+
   // ── RPG: magias aprendidas pelo jogador ──
   // O catálogo em si vive no código (magias.js): é conteúdo do jogo, não
   // dado do servidor. Aqui fica só quem aprendeu o quê.
@@ -864,6 +877,29 @@ export function listarPersonagens(serverId, limite = 10) {
 //  RPG — itens, inventário e equipamento
 // ══════════════════════════════════════════════════════════
 export const SLOTS = ["arma", "capacete", "armadura", "acessorio1", "acessorio2", "acessorio3"];
+
+// ── Mochila do companheiro ────────────────────────────────
+// Capacidade pequena de propósito: escolher o que dar é a decisão
+// interessante; carregar tudo não seria.
+export const FOLLOWER_MOCHILA = 2;
+
+export function itensDoFollower(followerId) {
+  const linhas = db.prepare(`SELECT itemId FROM rpg_follower_itens
+    WHERE followerId = ? ORDER BY criadoEm`).all(followerId);
+  return linhas.map((l) => getItem(l.itemId)).filter(Boolean);
+}
+export function darItemAoFollower(followerId, itemId) {
+  db.prepare(`INSERT OR IGNORE INTO rpg_follower_itens (followerId, itemId, criadoEm)
+    VALUES (?, ?, ?)`).run(followerId, itemId, Date.now());
+  return true;
+}
+export function tirarItemDoFollower(followerId, itemId) {
+  return db.prepare(`DELETE FROM rpg_follower_itens WHERE followerId = ? AND itemId = ?`)
+    .run(followerId, itemId).changes;
+}
+export function limparItensDoFollower(followerId) {
+  return db.prepare(`DELETE FROM rpg_follower_itens WHERE followerId = ?`).run(followerId).changes;
+}
 
 // ── Magias do jogador ─────────────────────────────────────
 export function aprenderMagia(serverId, userId, magiaId) {

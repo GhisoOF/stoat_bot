@@ -2496,6 +2496,84 @@ export async function cmdGame(message, args, ctx) {
         return c && c.nome.toLowerCase().includes(alvoTxt);
       }) ?? null;
     };
+    // "Curandeira Errante Espada Temperada" tem nome composto dos DOIS lados,
+    // e não existe separador. Quebrar no primeiro espaço (o que se fazia antes)
+    // dava "Curandeira" + "Errante Espada Temperada" e falhava.
+    //
+    // A saída é testar TODAS as quebras possíveis e ficar com a única em que os
+    // dois lados resolvem para algo real. Entre várias válidas, ganha a que
+    // acerta o nome inteiro em vez de um pedaço.
+    const separarNomes = (texto, acharDireita) => {
+      const bruto = String(texto ?? "").trim();
+      if (!bruto) return null;
+
+      // Separador explícito, para quando a ambiguidade for genuína.
+      if (bruto.includes("|")) {
+        const [e, d] = bruto.split("|");
+        const f = acharMeu((e ?? "").trim());
+        const it = acharDireita((d ?? "").trim());
+        return f && it ? { f, it } : null;
+      }
+
+      const limpo = (x) => String(x ?? "").trim().toLowerCase()
+        .normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      const partes = bruto.split(/\s+/);
+      const opcoes = [];
+      for (let i = 1; i < partes.length; i++) {
+        const esq = partes.slice(0, i).join(" ");
+        const dir = partes.slice(i).join(" ");
+        const f = acharMeu(esq);
+        if (!f) continue;
+        const it = acharDireita(dir);
+        if (!it) continue;
+        const cat = db.getFollowerCatalogo(f.catalogoId);
+        opcoes.push({
+          f, it, esq, dir,
+          // quem escreveu o nome inteiro (dos dois lados) tem prioridade
+          exatoF: limpo(cat?.nome) === limpo(esq) ? 1 : 0,
+          exatoI: limpo(it.nome) === limpo(dir) ? 1 : 0,
+        });
+      }
+      if (!opcoes.length) return null;
+      opcoes.sort((a, b) =>
+        (b.exatoF + b.exatoI) - (a.exatoF + a.exatoI)
+        || b.esq.length - a.esq.length);
+      return opcoes[0];
+    };
+
+    // Explica QUAL dos dois lados falhou, em vez de culpar sempre o item.
+    const naoSeparou = (texto, acao) => {
+      const partes = String(texto ?? "").trim().split(/\s+/);
+      const algumFollower = partes.some((_, i) => acharMeu(partes.slice(0, i + 1).join(" ")));
+      return sendEmbed(message.channel, en ? {
+        title: "❌ I couldn't tell the two names apart",
+        description: [
+          algumFollower
+            ? `I found the companion, but not the item in **${texto}**.`
+            : `I couldn't find a companion of yours in **${texto}**.`,
+          "",
+          `\`${P}game follower ${acao} <companion> <item>\``,
+          `Both names can have spaces — I try every split until both sides match.`,
+          "",
+          `If it stays ambiguous, separate them with \`|\`:`,
+          `\`${P}game follower ${acao} Curandeira Errante | Espada Temperada\``,
+        ].join("\n"), colour: COR.erro,
+      } : {
+        title: "❌ Não consegui separar os dois nomes",
+        description: [
+          algumFollower
+            ? `Achei o companheiro, mas não o item em **${texto}**.`
+            : `Não achei nenhum companheiro seu em **${texto}**.`,
+          "",
+          `\`${P}game follower ${acao} <companheiro> <item>\``,
+          `Os dois nomes podem ter espaço — eu testo todas as quebras até os dois baterem.`,
+          "",
+          `Se continuar ambíguo, separe com \`|\`:`,
+          `\`${P}game follower ${acao} Curandeira Errante | Espada Temperada\``,
+        ].join("\n"), colour: COR.erro,
+      });
+    };
+
     const semEsse = (texto) => sendEmbed(message.channel, {
       title: en ? "❌ Not among yours" : "❌ Não é um dos seus",
       description: en
@@ -2574,11 +2652,14 @@ export async function cmdGame(message, args, ctx) {
 
     // ── mochila: dar e pegar de volta ──
     if (["dar", "equipar", "give", "equip", "mochila", "inventario", "inventário", "bag"].includes(acao)) {
-      // `mochila <nome>` sem item é só a consulta — atalho para a ficha.
-      const soConsulta = ["mochila", "inventario", "inventário", "bag"].includes(acao) && !/\s/.test(resto);
-      const m = resto.match(/^(.*?)\s+(.+)$/);
-      if (soConsulta || !m) {
-        const f = acharMeu(soConsulta ? resto : resto);
+      // `mochila <nome>` é só a consulta — e "dar <nome>" sem item também,
+      // já que aí não há o que entregar.
+      const eConsulta = ["mochila", "inventario", "inventário", "bag"].includes(acao);
+      const par = separarNomes(resto, (t) => db.acharItemPorNome(t));
+      if (eConsulta || !par) {
+        const f = acharMeu(resto);
+        // Se o texto inteiro é um companheiro seu, a pessoa só quis ver a mochila.
+        if (!f && !eConsulta && /\s/.test(resto.trim())) return naoSeparou(resto, "dar");
         if (!f) {
           return sendEmbed(message.channel, tr(ctx,
             { title: "❌ Uso incorreto",
@@ -2597,15 +2678,7 @@ export async function cmdGame(message, args, ctx) {
           colour: COR.info });
       }
 
-      const f = acharMeu(m[1]);
-      if (!f) return semEsse(m[1]);
-      const item = db.acharItemPorNome(m[2]);
-      if (!item) {
-        return sendEmbed(message.channel, {
-          title: en ? "❌ Unknown item" : "❌ Item desconhecido",
-          description: en ? `I couldn't find any item called **${m[2]}**.` : `Não achei nenhum item chamado **${m[2]}**.`,
-          colour: COR.erro });
-      }
+      const { f, it: item } = par;
       const naMochila = db.getInventario(serverId, eu).find((x) => x.id === item.id);
       if (!naMochila) {
         return sendEmbed(message.channel, {
@@ -2650,25 +2723,38 @@ export async function cmdGame(message, args, ctx) {
     }
 
     if (["pegar", "retomar", "take", "desequipar"].includes(acao)) {
-      const m = resto.match(/^(.*?)\s+(.+)$/);
-      if (!m) {
+      if (!resto || !/\s/.test(resto.trim())) {
         return sendEmbed(message.channel, tr(ctx,
           { title: "❌ Uso incorreto",
             description: `\`${P}game follower pegar <companheiro> <item>\``, colour: COR.erro },
           { title: "❌ Wrong usage",
             description: `\`${P}game follower pegar <companion> <item>\``, colour: COR.erro }));
       }
-      const f = acharMeu(m[1]);
-      if (!f) return semEsse(m[1]);
+      // Aqui a busca da direita é entre os itens QUE ELE CARREGA, não o
+      // catálogo inteiro — senão daria para "pegar" algo que ele nunca teve.
+      const limparTxt = (x) => String(x ?? "").trim().toLowerCase()
+        .normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      const par = separarNomes(resto, (t) => {
+        const alvo = limparTxt(t);
+        if (!alvo) return null;
+        for (const cand of db.listarFollowersDe(serverId, eu)) {
+          const achado = db.itensDoFollower(cand.id)
+            .find((x) => limparTxt(x.nome).includes(alvo));
+          if (achado) return achado;
+        }
+        return null;
+      });
+      if (!par) return naoSeparou(resto, "pegar");
+      const { f } = par;
       const cat = db.getFollowerCatalogo(f.catalogoId);
-      const item = db.itensDoFollower(f.id).find((x) =>
-        x.nome.toLowerCase().includes(m[2].trim().toLowerCase()));
+      // Confere que é ESTE companheiro que carrega o item encontrado.
+      const item = db.itensDoFollower(f.id).find((x) => x.id === par.it.id);
       if (!item) {
         return sendEmbed(message.channel, {
-          title: en ? "❌ He isn't carrying that" : "❌ Ele não carrega isso",
+          title: en ? "❌ They aren't carrying that" : "❌ Ele não carrega isso",
           description: en
-            ? `**${cat?.nome}** isn't carrying **${m[2]}**.`
-            : `**${cat?.nome}** não está com **${m[2]}**.`,
+            ? `**${cat?.nome}** isn't carrying **${par.it.nome}**.`
+            : `**${cat?.nome}** não está com **${par.it.nome}**.`,
           colour: COR.erro });
       }
       db.tirarItemDoFollower(f.id, item.id);
@@ -2857,8 +2943,21 @@ export async function cmdGame(message, args, ctx) {
 
       if (p.recuperandoAte > agora) {
         const min = Math.ceil((p.recuperandoAte - agora) / 60000);
-        linhas.push(en ? `🩹 **You're recovering.** Back in ~${min} min.` : `🩹 **Você está se recuperando.** Volta em ~${min} min.`, "");
+        linhas.push(en
+          ? `🩹 **You're recovering.** Nothing is available for ~${min} min.`
+          : `🩹 **Você está se recuperando.** Nada fica disponível por ~${min} min.`, "");
       }
+
+      // Espera de cada missão, já somando recuperação e cooldown. Sem isso, a
+      // lista mostrava chances de missões que a pessoa nem podia começar.
+      const esperaDe = (m) => {
+        const liberaEm = Math.max(p.recuperandoAte ?? 0, (p.ultimaMissao ?? 0) + MISS.cooldownMs(m));
+        return liberaEm > agora ? Math.ceil((liberaEm - agora) / 60000) : 0;
+      };
+      const marcaEspera = (m) => {
+        const min = esperaDe(m);
+        return min ? (en ? ` ⏳ _${min} min_` : ` ⏳ _${min} min_`) : "";
+      };
 
       const porTipo = { mercado: [], facil: [], medio: [], dificil: [] };
       for (const m of MISS.MISSOES) {
@@ -2866,7 +2965,7 @@ export async function cmdGame(message, args, ctx) {
       }
 
       linhas.push(en ? "🏪 **Market** — no risk, pays little" : "🏪 **Mercado** — sem risco, paga pouco");
-      for (const m of porTipo.mercado.slice(0, 4)) linhas.push(`   • **${m.nome}**`);
+      for (const m of porTipo.mercado.slice(0, 4)) linhas.push(`   • **${m.nome}**${marcaEspera(m)}`);
 
       for (const d of ["facil", "medio", "dificil"]) {
         const info = MISS.DIFICULDADE_INFO[d];
@@ -2878,13 +2977,18 @@ export async function cmdGame(message, args, ctx) {
           // acha que vence 53% das vezes.
           const completa = v.exito * v.sobrevivencia;
           linhas.push(en
-            ? `   • **${m.nome}** — 🏆 **${(completa * 100).toFixed(0)}%** _(success ${(v.exito * 100).toFixed(0)}% × survival ${(v.sobrevivencia * 100).toFixed(0)}%)_`
-            : `   • **${m.nome}** — 🏆 **${(completa * 100).toFixed(0)}%** _(êxito ${(v.exito * 100).toFixed(0)}% × sobrevive ${(v.sobrevivencia * 100).toFixed(0)}%)_`);
+            ? `   • **${m.nome}** — 🏆 **${(completa * 100).toFixed(0)}%** _(success ${(v.exito * 100).toFixed(0)}% × survival ${(v.sobrevivencia * 100).toFixed(0)}%)_${marcaEspera(m)}`
+            : `   • **${m.nome}** — 🏆 **${(completa * 100).toFixed(0)}%** _(êxito ${(v.exito * 100).toFixed(0)}% × sobrevive ${(v.sobrevivencia * 100).toFixed(0)}%)_${marcaEspera(m)}`);
         }
       }
       linhas.push("", en
         ? "_🏆 = chance to complete AND come back alive. The two chances multiply._"
         : "_🏆 = chance de cumprir E voltar vivo. As duas chances se multiplicam._");
+      if (MISS.MISSOES.some((m) => esperaDe(m) > 0)) {
+        linhas.push(en
+          ? "_⏳ = still on cooldown. Lighter missions come back sooner._"
+          : "_⏳ = ainda em espera. As missões mais leves liberam antes._");
+      }
       linhas.push("", en
         ? (tamanhoParty
           ? `_Chances already account for gear and your party of ${tamanhoParty}._`
@@ -2904,18 +3008,51 @@ export async function cmdGame(message, args, ctx) {
           : `Não achei **${acao}**. Veja a lista com \`${P}game missao\`.`, colour: COR.erro });
     }
 
-    // cooldown e recuperação
+    // ── cooldown e recuperação ──
+    // As duas esperas correm em PARALELO, a partir da mesma missão. Checá-las
+    // em sequência mostrava a mais curta primeiro: você esperava a recuperação
+    // achando que ia partir, e só então descobria o cooldown. Agora a conta é
+    // uma só — o prazo que vale é o mais distante dos dois, e a mensagem diz
+    // o porquê de cada um.
     const agora = Date.now();
-    if (p.recuperandoAte > agora) {
-      const min = Math.ceil((p.recuperandoAte - agora) / 60000);
-      return sendEmbed(message.channel, { title: en ? "🩹 Still recovering" : "🩹 Ainda se recuperando",
-        description: en ? `You fell on your last mission. Come back in **~${min} min**.` : `Você caiu na última missão. Volte em **~${min} min**.`, colour: COR.aviso });
-    }
     const prontoEm = (p.ultimaMissao ?? 0) + MISS.cooldownMs(missao);
-    if (prontoEm > agora) {
-      const min = Math.ceil((prontoEm - agora) / 60000);
-      return sendEmbed(message.channel, { title: en ? "⏳ Resting" : "⏳ Descansando",
-        description: en ? `You just got back from a mission. You can set out again in **~${min} min**.` : `Você acabou de voltar de uma missão. Pode partir de novo em **~${min} min**.`, colour: COR.aviso });
+    const liberaEm = Math.max(p.recuperandoAte ?? 0, prontoEm);
+    if (liberaEm > agora) {
+      const min = Math.ceil((liberaEm - agora) / 60000);
+      const recuperando = (p.recuperandoAte ?? 0) > agora;
+      const emCooldown = prontoEm > agora;
+
+      // Missões mais leves têm cooldown menor: se alguma já estiver liberada,
+      // vale dizer — é a diferença entre esperar e jogar agora.
+      const jaLiberadas = MISS.MISSOES.filter((m) =>
+        (p.ultimaMissao ?? 0) + MISS.cooldownMs(m) <= agora
+        && (p.recuperandoAte ?? 0) <= agora);
+      const dica = jaLiberadas.length
+        ? (en
+          ? `\n\n_Already available:_ ${jaLiberadas.slice(0, 3).map((m) => `**${m.nome}**`).join(" · ")}`
+          : `\n\n_Já liberadas:_ ${jaLiberadas.slice(0, 3).map((m) => `**${m.nome}**`).join(" · ")}`)
+        : "";
+
+      const motivo = en
+        ? [
+          recuperando ? `🩹 You fell on your last mission and are still recovering.` : null,
+          emCooldown ? `⏳ **${missao.nome}** has a ${Math.round(MISS.cooldownMs(missao) / 60000)} min cooldown between attempts.` : null,
+        ].filter(Boolean).join("\n")
+        : [
+          recuperando ? `🩹 Você caiu na última missão e ainda está se recuperando.` : null,
+          emCooldown ? `⏳ **${missao.nome}** tem ${Math.round(MISS.cooldownMs(missao) / 60000)} min de espera entre tentativas.` : null,
+        ].filter(Boolean).join("\n");
+
+      return sendEmbed(message.channel, {
+        title: en ? `⏳ Available in ~${min} min` : `⏳ Liberada em ~${min} min`,
+        description: motivo
+          + (recuperando && emCooldown
+            ? (en
+              ? `\n\n_The two waits run together — what counts is the longer one._`
+              : `\n\n_As duas esperas correm juntas — vale a mais longa._`)
+            : "")
+          + dica,
+        colour: COR.aviso });
     }
 
     // ── resolve ──

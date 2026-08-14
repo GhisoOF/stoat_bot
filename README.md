@@ -669,9 +669,34 @@ atributos *dele*:
 &game follower pegar Aprendiz Espada de Ferro
 ```
 
+Os dois nomes podem ter espaço, e não há separador obrigatório: em
+`dar Curandeira Errante Espada Temperada` o bot testa todas as quebras
+possíveis e fica com a única em que os dois lados resolvem para algo real.
+Quando várias servem, ganha a que acerta o nome inteiro em vez de um pedaço.
+Se ainda assim ficar ambíguo, `|` separa na marra:
+`&game follower dar Curandeira Errante | Espada Temperada`.
+
 Isso dá destino ao equipamento que você já superou, em vez de tudo virar
 revenda. Na ficha, o valor base aparece com o acréscimo entre parênteses:
 `Força 0 (+2)`.
+
+### Duas esperas, uma conta
+
+Cada missão tem cooldown próprio (10 min no mercado, 90 na difícil) e cair
+adiciona ~30 min de recuperação. As duas correm **em paralelo**, a partir da
+mesma missão — mas eram checadas em sequência, então a mais curta escondia a
+mais longa:
+
+```
+&game missao ...    → 🩹 Ainda se recuperando. Volte em ~3 min.
+   (3 minutos depois)
+&game missao ...    → ⏳ Descansando. Pode partir em ~59 min.
+```
+
+Agora é uma mensagem só, com o prazo que de fato vale e o motivo de cada
+espera. E como o cooldown é por missão, ela também aponta o que já está
+liberado — depois de cair numa difícil, as de mercado voltam em 10 minutos.
+A lista de missões marca com ⏳ quanto falta em cada uma.
 
 ### O resgate na dungeon é automático
 

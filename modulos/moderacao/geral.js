@@ -1,8 +1,12 @@
 import { servidorPermitido as temIA } from "../ai/chat.js";
 import { arvoreSubtopicos, SUBTOPICOS_SO_IA } from "./help-arvore.js";
+import { nomeExibido, exibirTitulo } from "../core/aliases.js";
 
 // Comandos que só existem onde a IA roda (espelha a lista do main.js).
 const COMANDOS_SO_IA = new Set(["chat", "modia"]);
+
+// Só o suficiente para o cabeçalho do subtópico achar o canônico do comando.
+const CANONICO_LOCAL = { rpg: "game", nivel: "xp", level: "xp", logs: "log" };
 // ══════════════════════════════════════════════════════════
 //  modulos/geral.js — Comandos gerais e de moderação manual:
 //  help, ping, repete, userinfo, kick, ban.
@@ -904,7 +908,9 @@ export async function cmdHelp(message, args, ctx) {
   if (alvo && subtopico && SUBTOPICOS[alvo]?.[subtopico]) {
     const st = SUBTOPICOS[alvo][subtopico];
     return sendEmbed(message.channel, {
-      title: `📖 ${lang === "en" ? "Help" : "Ajuda"} — ${P}${st.titulo}`,
+      // O `titulo` do subtópico é "comando subcomando" — passa pela mesma
+      // tradução do corpo, para o cabeçalho nunca divergir dele.
+      title: `📖 ${lang === "en" ? "Help" : "Ajuda"} — ${P}${exibirTitulo(st.titulo, lang, P, ctx.estado?.CANONICO_COMPLETO ?? {})}`,
       description: filtrarIA(String(st.texto).split("\n"), comIA).join("\n"),
       colour: COR.info,
     });
@@ -979,7 +985,7 @@ export async function cmdHelp(message, args, ctx) {
         + Object.keys(SUBTOPICOS[alvo]).map((k) => `\`${P}help ${alvo} ${k}\``).join(" · ")
       : "";
     return sendEmbed(message.channel, {
-      title: `📖 ${lang === "en" ? "Help" : "Ajuda"} — ${P}${alvo}`,
+      title: `📖 ${lang === "en" ? "Help" : "Ajuda"} — ${P}${nomeExibido(alvo, lang)}`,
       colour: COR.info,
       description: [
         `**${lang === "en" ? "Usage" : "Uso"}:** \`${d.uso}\``,

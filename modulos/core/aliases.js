@@ -173,7 +173,9 @@ const SUB = {
   blocklist: {
     add: "add", remove: "remove", list: "list", clear: "clear",
     reload: "reload", adddomain: "adddomain", removedomain: "removedomain",
+    domains: "dominios",
   },
+  embed: { fields: "campos", colors: "cores" },
   whitelist: { add: "add", remove: "remove", list: "list" },
   scam: {
     sensitivity: "sensitivity", channel: "channel", test: "test",
@@ -181,7 +183,7 @@ const SUB = {
     config: "config", status: "status",
     low: "baixa", medium: "media", high: "alta",
   },
-  comando: { disable: "disable", enable: "enable", list: "list" },
+  comando: { disable: "disable", enable: "enable", list: "list", manage: "gerenciar" },
   autorole: { set: "set", off: "off", disable: "desativar", remove: "remover" },
   idioma: {
     portuguese: "portugues", english: "english", status: "status",
@@ -273,42 +275,124 @@ function canonicoDe(nome, CANONICO = {}) {
   return CANONICO[n] ?? COMANDO_EXTRA[n] ?? n;
 }
 
+// Palavras que aparecem dentro de placeholders (`<nome>`, `[quantos]`) em
+// qualquer comando. Não são subcomandos, são o rótulo do que se espera ali —
+// e ficariam em português mesmo num texto de ajuda inteiro em inglês.
+const PLACEHOLDER_EN = {
+  nome: "name", nomes: "names", "número": "number", numero: "number",
+  quantos: "amount", quantidade: "amount", qtd: "qty", valor: "value",
+  texto: "text", mensagem: "message", canal: "channel", canais: "channels",
+  cargo: "role", cargos: "roles", "usuário": "user", usuario: "user",
+  pessoa: "person", item: "item", itens: "items", "preço": "price",
+  preco: "price", segundos: "seconds", campo: "field", "parâmetro": "parameter",
+  parametro: "parameter", raridade: "rarity", slot: "slot", moeda: "currency",
+  "missão": "mission", missao: "mission", idmensagem: "messageId",
+  iddocanal: "channelId", idcargo: "roleId", link: "link", url: "url",
+  "símbolo": "symbol", simbolo: "symbol", "nível": "level", nivel: "level",
+  "opção": "option", opcao: "option", motivo: "reason", dias: "days",
+};
+
+// Traduz uma LISTA de opções, como as de `<off|avisar|banir>`. Cada item vai
+// para o mesmo mapa dos subcomandos — é a mesma coisa, só escrita junta.
+function traduzirLista(dentro, rev) {
+  return dentro.split("|").map((parte) => {
+    const t = parte.trim().toLowerCase();
+    return rev[t] ?? PLACEHOLDER_EN[t] ?? parte;
+  }).join("|");
+}
+
+// Um token isolado: pode ser um subcomando (`avisar`), um placeholder
+// (`<off|avisar>`) ou algo que não é nem um nem outro (aí volta intacto).
+function traduzirToken(tok, rev) {
+  // placeholder: preserva os delimitadores e traduz o miolo
+  const m = tok.match(/^([<[(])(.+)([>\])])$/);
+  if (m) return m[1] + traduzirLista(m[2], rev) + m[3];
+  if (tok.includes("|")) return traduzirLista(tok, rev);
+  return rev[tok.toLowerCase()] ?? tok;
+}
+
 // Traduz UM trecho de comando, já sem as crases. Ex.: "&game criar [nome]".
+// Devolve { texto, comando } — o comando volta para virar contexto das
+// menções soltas que vierem depois no mesmo texto de ajuda.
 function traduzirTrecho(trecho, prefixo, CANONICO) {
   const partes = trecho.trim().split(/\s+/);
-  if (!partes.length || !partes[0].startsWith(prefixo)) return trecho;
+  if (!partes.length || !partes[0].startsWith(prefixo)) return { texto: trecho, comando: null };
 
   const nomeBruto = partes[0].slice(prefixo.length).toLowerCase();
   const canonico = canonicoDe(nomeBruto, CANONICO);
   const nomeEN = COMANDO_EN[canonico] ?? canonico;
-  const rev = SUB_REVERSO[canonico] ?? {};
 
-  const traduzidas = partes.map((tok, i) => {
-    if (i === 0) return prefixo + nomeEN;
-    // Placeholders (<nome>, [quantos]) e valores literais ficam como estão.
-    if (/^[<[(]/.test(tok)) return tok;
-    const limpo = tok.toLowerCase();
-    return rev[limpo] ?? tok;
-  });
-  return traduzidas.join(" ");
+  // `help` e `tutorial` falam SOBRE outros comandos: o 2º token é um nome de
+  // comando e o 3º é um subcomando dele. Sem isso, `&help banglobal varrer`
+  // sairia com o nome e o subcomando ainda em português.
+  if ((canonico === "help" || canonico === "tutorial") && partes.length > 1) {
+    const alvoBruto = String(partes[1]).toLowerCase();
+    const revProprio = SUB_REVERSO[canonico] ?? {};
+    // Categoria/área do próprio help ou tutorial (`&tutorial cargos` → `roles`).
+    // Só se não for uma delas é que o token vira nome de outro comando.
+    if (revProprio[alvoBruto]) {
+      // A área tem nome em inglês; o resto do trecho ainda pertence ao COMANDO
+      // correspondente àquela área (`xp` → xp, `rpg` → game), então a cauda usa
+      // o mapa dele. Sem isso, `&help xp cargos` viraria `&help levels cargos`.
+      const canonAlvo = canonicoDe(alvoBruto, CANONICO);
+      const revAlvo = SUB_REVERSO[canonAlvo] ?? {};
+      const saida = [prefixo + nomeEN, revProprio[alvoBruto],
+        ...partes.slice(2).map((t) => traduzirToken(t, revAlvo))];
+      return { texto: saida.join(" "), comando: canonAlvo };
+    }
+    const alvoCanon = SUB[canonico]?.[alvoBruto] ?? canonicoDe(alvoBruto, CANONICO);
+    const revAlvo = SUB_REVERSO[alvoCanon] ?? {};
+    const saida = [prefixo + nomeEN, COMANDO_EN[alvoCanon] ?? alvoCanon];
+    for (let i = 2; i < partes.length; i++) saida.push(traduzirToken(partes[i], revAlvo));
+    return { texto: saida.join(" "), comando: alvoCanon };
+  }
+
+  const rev = SUB_REVERSO[canonico] ?? {};
+  const traduzidas = partes.map((tok, i) => (i === 0 ? prefixo + nomeEN : traduzirToken(tok, rev)));
+  return { texto: traduzidas.join(" "), comando: canonico };
 }
 
 // Passa um texto de ajuda inteiro pela tradução, mexendo só no que está
 // entre crases simples. Blocos ``` ficam intactos: ali costuma haver
 // exemplo com texto livre, que não deve ser mexido.
+//
+// Guarda o último comando citado como CONTEXTO: depois de `&globalban …`,
+// um `\`avisar\`` solto na mesma explicação é o modo daquele comando, e
+// vira `\`warn\``. É assim que as legendas de opção também saem em inglês.
 export function exibir(texto, lang, prefixo = "&", CANONICO = {}) {
   if (lang !== "en" || typeof texto !== "string") return texto;
 
   const linhas = texto.split("\n");
   let dentroDeBloco = false;
+  let contexto = null;
+
   return linhas.map((linha) => {
     if (linha.trim().startsWith("```")) { dentroDeBloco = !dentroDeBloco; return linha; }
     if (dentroDeBloco) return linha;
     return linha.replace(/`([^`\n]+)`/g, (todo, dentro) => {
-      if (!dentro.includes(prefixo)) return todo;
-      return "`" + traduzirTrecho(dentro, prefixo, CANONICO) + "`";
+      if (dentro.includes(prefixo)) {
+        const r = traduzirTrecho(dentro, prefixo, CANONICO);
+        if (r.comando) contexto = r.comando;
+        return "`" + r.texto + "`";
+      }
+      // Sem prefixo: só traduz se já sabemos de qual comando o texto fala.
+      // Pode ser um token só (`avisar`) ou uma dupla (`modo avisar`), que é
+      // como as legendas costumam citar "subcomando + valor".
+      if (!contexto) return todo;
+      const rev = SUB_REVERSO[contexto] ?? {};
+      const traduzido = dentro.trim().split(/\s+/).map((t) => traduzirToken(t, rev)).join(" ");
+      return "`" + traduzido + "`";
     });
   }).join("\n");
+}
+
+// Um "comando sub" solto (sem prefixo), como o `titulo` de um subtópico:
+// "banglobal varrer" → "globalban sweep". Reaproveita a mesma tradução dos
+// trechos, para o cabeçalho nunca divergir do corpo.
+export function exibirTitulo(titulo, lang, prefixo = "&", CANONICO = {}) {
+  if (lang !== "en" || typeof titulo !== "string") return titulo;
+  const r = traduzirTrecho(prefixo + titulo, prefixo, CANONICO);
+  return r.texto.startsWith(prefixo) ? r.texto.slice(prefixo.length) : r.texto;
 }
 
 // Nome de exibição de um comando isolado (sem prefixo, sem argumentos).

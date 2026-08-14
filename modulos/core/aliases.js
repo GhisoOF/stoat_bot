@@ -65,9 +65,16 @@ const SUB = {
     moderation: "moderacao", settings: "config", configuration: "config",
     tools: "ferramentas", general: "geral", levels: "xp", character: "game",
   },
+  // Áreas do tutorial. O módulo já entende os nomes em inglês sozinho
+  // (o mapa APELIDOS dele), então esta tabela é usada só para EXIBIR —
+  // normalizarArgs não mexe em `tutorial`, justamente para não atropelar
+  // as áreas dele com nomes de comando parecidos (`rpg` é área, não `game`).
   tutorial: {
-    moderation: "moderacao", punishment: "punicao", roles: "cargos",
-    access: "acesso", levels: "xp", start: "inicio", index: "indice",
+    moderation: "moderacao", roles: "cargos", levels: "xp",
+    character: "rpg", adventure: "aventura", economy: "economia",
+    setup: "game", permissions: "permissoes", logging: "logs",
+    news: "noticias", messages: "mensagens", settings: "ajustes",
+    ai: "ia",
   },
   game: {
     create: "criar", new: "novo", delete: "apagar", erase: "apagar",
@@ -231,7 +238,12 @@ export function normalizarArgs(canonico, args, CANONICO = {}) {
   // `help` e `tutorial` são meta-comandos: o primeiro argumento é o NOME de
   // outro comando, e o segundo é um subcomando DAQUELE comando. Sem tratar
   // isso, `&help game create` normalizaria só o "game" e erraria o resto.
-  if (canonico === "help" || canonico === "tutorial") {
+  // `tutorial` resolve as próprias áreas (inclusive em inglês) e algumas delas
+  // têm o mesmo nome de um comando — traduzir aqui mandaria `&tutorial rpg`
+  // para a página de `game`, que é outra coisa.
+  if (canonico === "tutorial") return args;
+
+  if (canonico === "help") {
     const saida = [...args];
     const bruto = String(saida[0] ?? "").toLowerCase();
     // categoria/área (moderation → moderacao) ou nome de comando (color → cor)
@@ -328,6 +340,12 @@ function traduzirTrecho(trecho, prefixo, CANONICO) {
   if ((canonico === "help" || canonico === "tutorial") && partes.length > 1) {
     const alvoBruto = String(partes[1]).toLowerCase();
     const revProprio = SUB_REVERSO[canonico] ?? {};
+    // No tutorial o argumento é sempre uma ÁREA. Se não conhecemos o nome
+    // inglês dela, deixamos como está — nunca tratamos como nome de comando.
+    if (canonico === "tutorial") {
+      return { texto: [prefixo + nomeEN, revProprio[alvoBruto] ?? partes[1], ...partes.slice(2)].join(" "),
+        comando: null };
+    }
     // Categoria/área do próprio help ou tutorial (`&tutorial cargos` → `roles`).
     // Só se não for uma delas é que o token vira nome de outro comando.
     if (revProprio[alvoBruto]) {

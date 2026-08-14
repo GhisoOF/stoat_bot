@@ -32,6 +32,7 @@ import * as chat      from "./modulos/ai/chat.js";
 import * as rss       from "./modulos/ferramentas/rss.js";
 import * as nivel     from "./modulos/ferramentas/nivel.js";
 import * as i18n      from "./modulos/core/i18n.js";
+import * as aliases   from "./modulos/core/aliases.js";
 import { tr }         from "./modulos/core/i18n.js";
 
 const PREFIXO     = "&";
@@ -252,9 +253,20 @@ const estado = {
 // `serverId` determina QUAL config por-servidor entra em ctx.config.
 function criarContexto(serverId = null) {
   const config = store.configDoServidor(serverId);
+
+  // Num servidor em inglês, todo comando citado num embed sai na forma inglesa
+  // (`&game create`, não `&game criar`). Fica aqui, no ponto por onde TODOS os
+  // módulos passam, em vez de espalhado em cada texto de ajuda — assim nada
+  // fica para trás e o que a pessoa lê é sempre o que funciona ao digitar.
+  const enviarTraduzido = (canal, embed = {}) => sendEmbed(canal, {
+    ...embed,
+    title: aliases.exibir(embed.title, config?.language, PREFIXO, CANONICO),
+    description: aliases.exibir(embed.description, config?.language, PREFIXO, CANONICO),
+  });
+
   return {
     client, config, cfgGlobal, COR, PERM, PREFIXO,
-    sendEmbed, getServer, membroTemPermissao, ehSuperAdmin,
+    sendEmbed: enviarTraduzido, getServer, membroTemPermissao, ehSuperAdmin,
     salvarConfig: () => store.salvarConfigServidor(serverId),
     salvarGlobal: store.salvarGlobal,
     getGlobal: store.getGlobal,
@@ -361,6 +373,10 @@ const CANONICO = {
   configuracoes: "config", configurações: "config",
   diagnostico: "debug", "diagnóstico": "debug",
   language: "idioma", lang: "idioma",
+  // Nomes em inglês dos comandos cujo nome PT não é óbvio para quem lê em
+  // inglês. Ficam aqui e não espalhados nas rotas para haver um lugar só onde
+  // conferir "isto existe nos dois idiomas?".
+  ...aliases.COMANDO_EXTRA,
 };
 
 // ══════════════════════════════════════════════════════════
@@ -388,7 +404,13 @@ estado.comandosGerenciaveisDe = (sid) => {
   const comIA = (() => { try { return chat.servidorPermitido(sid); } catch { return false; } })();
   return comIA ? COMANDOS_GERENCIAVEIS : COMANDOS_GERENCIAVEIS.filter((c) => !COMANDOS_SO_IA.has(c));
 };
+// Os aliases em inglês viram rotas de verdade: se o help mostra
+// `&game create`, digitar isso tem que funcionar.
+for (const [alias, canonico] of Object.entries(aliases.COMANDO_EXTRA)) {
+  if (!rotas[alias] && rotas[canonico]) rotas[alias] = rotas[canonico];
+}
 estado.rotas = rotas;
+estado.CANONICO_COMPLETO = CANONICO;
 
 // ══════════════════════════════════════════════════════════
 //  EVENTOS
@@ -612,8 +634,12 @@ client.on("messageCreate", async (message) => {
     ].join("\n"),
   });
 
+  // Subcomandos em inglês viram os canônicos em PT antes do dispatch: os
+  // módulos comparam com um token só, e quem digita escolhe o idioma.
+  const argsFinais = aliases.normalizarArgs(canonico, args, CANONICO);
+
   try {
-    await handler(message, args, ctx);
+    await handler(message, argsFinais, ctx);
     // Conversar com a IA via comando (&chat) também conta XP — é interação.
     if ((CANONICO[command] ?? command) === "chat") {
       try { await nivel.aoMensagem(message, { ...ctx, client }); }

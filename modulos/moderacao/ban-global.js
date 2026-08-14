@@ -18,11 +18,17 @@
 import * as db  from "../core/db.js";
 import * as log from "../core/log.js";
 import { resolverUsuario as resolverUser } from "../core/ids.js";
+import { tr, lingua } from "../core/i18n.js";
 
 export const MODOS = {
   off:    "ignora a lista global",
   avisar: "alerta os moderadores quando um banido entra",
   banir:  "bane automaticamente quem está na lista",
+};
+export const MODOS_EN = {
+  off:    "ignores the global list",
+  avisar: "alerts the moderators when a banned user joins",
+  banir:  "automatically bans anyone on the list",
 };
 
 // Formata uma data legível a partir de um timestamp
@@ -158,14 +164,20 @@ export async function varrer(ctx, message, { aplicar = true } = {}) {
 
 export async function cmdBanGlobal(message, args, ctx) {
   const { config, sendEmbed, COR, getServer, membroTemPermissao, salvarConfig, PREFIXO, serverId } = ctx;
+  const lang = lingua(ctx);
+  const L_MODOS = lang === "en" ? MODOS_EN : MODOS;
 
   const server = await getServer(message);
   if (!membroTemPermissao(message, server, "BanMembers")) {
-    return sendEmbed(message.channel, {
+    return sendEmbed(message.channel, tr(ctx, {
       title: "🚫 Permissão insuficiente",
       description: "Você precisa da permissão **BanMembers** para usar este comando.",
       colour: COR.erro,
-    });
+    }, {
+      title: "🚫 Missing permission",
+      description: "You need the **BanMembers** permission to use this command.",
+      colour: COR.erro,
+    }));
   }
 
   config.banGlobal ??= { modo: "off" };
@@ -174,13 +186,35 @@ export async function cmdBanGlobal(message, args, ctx) {
   // ── &banglobal → status ──
   if (!sub) {
     const modo = config.banGlobal.modo ?? "off";
+    if (lang === "en") return sendEmbed(message.channel, {
+      title: "🌐 Global ban list",
+      description: [
+        `**Current mode:** \`${modo}\` — ${L_MODOS[modo]}`,
+        "",
+        "**Available modes:**",
+        ...Object.entries(L_MODOS).map(([k, v]) => `\`${k}\` — ${v}`),
+        "",
+        `**Listed:** ${db.usuariosBanidosDistintos()} user(s), ${db.totalBansGlobais()} record(s).`,
+        "",
+        "**Commands:**",
+        `\`${PREFIXO}banglobal <off|avisar|banir>\` — sets the mode`,
+        `\`${PREFIXO}banglobal historico <@user|id>\` — a user's history`,
+        `\`${PREFIXO}banglobal varrer\` — **checks who is ALREADY in the server** and acts`,
+        `\`${PREFIXO}banglobal varrer ver\` — only shows, without banning anyone`,
+        `\`${PREFIXO}banglobal importar\` — imports this server's existing bans`,
+        `\`${PREFIXO}banglobal esquecer <@user|id>\` — removes a user from the list`,
+        "",
+        "⚠️ _The `banir` mode acts on its own based on bans from **other** servers. Use it only if you trust the sources._",
+      ].join("\n"),
+      colour: COR.mod,
+    });
     return sendEmbed(message.channel, {
       title: "🌐 Lista global de banimentos",
       description: [
-        `**Modo atual:** \`${modo}\` — ${MODOS[modo]}`,
+        `**Modo atual:** \`${modo}\` — ${L_MODOS[modo]}`,
         "",
         "**Modos disponíveis:**",
-        ...Object.entries(MODOS).map(([k, v]) => `\`${k}\` — ${v}`),
+        ...Object.entries(L_MODOS).map(([k, v]) => `\`${k}\` — ${v}`),
         "",
         `**Na lista:** ${db.usuariosBanidosDistintos()} usuário(s), ${db.totalBansGlobais()} registro(s).`,
         "",
@@ -203,15 +237,19 @@ export async function cmdBanGlobal(message, args, ctx) {
     config.banGlobal.modo = sub;
     salvarConfig();
     const extra = sub === "banir"
-      ? "\n\n⚠️ _A partir de agora, quem consta na lista será **banido automaticamente** ao entrar._"
+      ? (lang === "en"
+        ? "\n\n⚠️ _From now on, anyone on the list will be **automatically banned** on joining._"
+        : "\n\n⚠️ _A partir de agora, quem consta na lista será **banido automaticamente** ao entrar._")
       : "";
     await log.registrar(ctx, "punicoes", {
       titulo: "🌐 Ban global reconfigurado",
       descricao: `Modo alterado para **${sub}** por <@${message.authorId}>.`,
     });
     return sendEmbed(message.channel, {
-      title: "🌐 Ban global atualizado",
-      description: `**Modo:** \`${sub}\` — ${MODOS[sub]}.${extra}`,
+      title: lang === "en" ? "🌐 Global ban updated" : "🌐 Ban global atualizado",
+      description: lang === "en"
+        ? `**Mode:** \`${sub}\` — ${L_MODOS[sub]}.${extra}`
+        : `**Modo:** \`${sub}\` — ${L_MODOS[sub]}.${extra}`,
       colour: COR.mod,
     });
   }
@@ -220,20 +258,44 @@ export async function cmdBanGlobal(message, args, ctx) {
   if (sub === "historico" || sub === "histórico") {
     const server = await ctx.getServer?.(message);
     const uid = await resolverUser(args[1], { message, server });
-    if (!uid) return sendEmbed(message.channel, { title: "❌ Não achei esse usuário",
+    if (!uid) return sendEmbed(message.channel, tr(ctx, {
+      title: "❌ Não achei esse usuário",
       description: [
         `\`${PREFIXO}banglobal historico <@usuário|id|nome>\``,
         "",
         args[1] ? `Procurei por **${args[1]}** entre os membros e não encontrei.` : "",
         "Aceito uma **menção**, o **ID** ou o **nome** de alguém que esteja no servidor.",
         "_Se a pessoa já saiu, só o ID funciona._",
-      ].filter(Boolean).join("\n"), colour: COR.erro });
+      ].filter(Boolean).join("\n"), colour: COR.erro,
+    }, {
+      title: "❌ Couldn't find that user",
+      description: [
+        `\`${PREFIXO}banglobal historico <@user|id|name>\``,
+        "",
+        args[1] ? `I looked for **${args[1]}** among the members and found nobody.` : "",
+        "I accept a **mention**, the **ID** or the **name** of someone in the server.",
+        "_If the person already left, only the ID works._",
+      ].filter(Boolean).join("\n"), colour: COR.erro,
+    }));
 
     const hist = db.historicoBans(uid);
-    if (!hist.length) return sendEmbed(message.channel, { title: "🌐 Histórico global",
-      description: `<@${uid}> **não consta** na lista global de banimentos.`, colour: COR.sucesso });
+    if (!hist.length) return sendEmbed(message.channel, tr(ctx,
+      { title: "🌐 Histórico global",
+        description: `<@${uid}> **não consta** na lista global de banimentos.`, colour: COR.sucesso },
+      { title: "🌐 Global history",
+        description: `<@${uid}> is **not** on the global ban list.`, colour: COR.sucesso }));
 
-    return sendEmbed(message.channel, {
+    return sendEmbed(message.channel, lang === "en" ? {
+      title: "🌐 Global history",
+      description: [
+        `<@${uid}> — banned on **${hist.length}** server(s):`,
+        "",
+        ...hist.slice(0, 10).map((b) =>
+          `• \`${b.serverId}\` — ${b.motivo ?? "_no reason_"} _(${data(b.criadoEm)}, ${b.origem})_`),
+        hist.length > 10 ? `\n_… and ${hist.length - 10} more._` : "",
+      ].filter(Boolean).join("\n"),
+      colour: COR.aviso,
+    } : {
       title: "🌐 Histórico global",
       description: [
         `<@${uid}> — banido em **${hist.length}** servidor(es):`,
@@ -254,31 +316,56 @@ export async function cmdBanGlobal(message, args, ctx) {
     const modo = config?.banGlobal?.modo ?? "off";
 
     if (modo === "off" && !soVer) {
-      return sendEmbed(message.channel, { title: "🌐 Lista global desligada",
+      return sendEmbed(message.channel, tr(ctx, {
+        title: "🌐 Lista global desligada",
         description: `O modo está \`off\`. Ligue com \`${PREFIXO}banglobal avisar\` ou \`${PREFIXO}banglobal banir\` antes de varrer — ou use \`${PREFIXO}banglobal varrer ver\` só para conferir quem apareceria.`,
-        colour: COR.aviso });
+        colour: COR.aviso,
+      }, {
+        title: "🌐 Global list off",
+        description: `The mode is \`off\`. Enable it with \`${PREFIXO}banglobal avisar\` or \`${PREFIXO}banglobal banir\` before sweeping — or use \`${PREFIXO}banglobal varrer ver\` just to see who would show up.`,
+        colour: COR.aviso,
+      }));
     }
 
-    await sendEmbed(message.channel, { title: "🔎 Varrendo os membros…",
-      description: "Conferindo quem já está no servidor contra a lista global. Pode levar um instante.", colour: COR.info });
+    await sendEmbed(message.channel, tr(ctx,
+      { title: "🔎 Varrendo os membros…",
+        description: "Conferindo quem já está no servidor contra a lista global. Pode levar um instante.", colour: COR.info },
+      { title: "🔎 Sweeping the members…",
+        description: "Checking everyone already in the server against the global list. This may take a moment.", colour: COR.info }));
 
     const r = await varrer(ctx, message, { aplicar: !soVer });
     if (r.erro) {
-      return sendEmbed(message.channel, { title: "❌ Varredura falhou",
-        description: `${r.erro}\n\n_O bot precisa de permissão para ver os membros._`, colour: COR.erro });
+      return sendEmbed(message.channel, tr(ctx,
+        { title: "❌ Varredura falhou",
+          description: `${r.erro}\n\n_O bot precisa de permissão para ver os membros._`, colour: COR.erro },
+        { title: "❌ Sweep failed",
+          description: `${r.erro}\n\n_The bot needs permission to see the members._`, colour: COR.erro }));
     }
 
     if (!r.achados.length) {
-      return sendEmbed(message.channel, { title: "✅ Nenhum encontrado",
-        description: `Conferi **${r.total}** membro(s) e ninguém consta na lista global.`, colour: COR.sucesso });
+      return sendEmbed(message.channel, tr(ctx,
+        { title: "✅ Nenhum encontrado",
+          description: `Conferi **${r.total}** membro(s) e ninguém consta na lista global.`, colour: COR.sucesso },
+        { title: "✅ Nobody found",
+          description: `I checked **${r.total}** member(s) and nobody is on the global list.`, colour: COR.sucesso }));
     }
 
     const lista = r.achados.slice(0, 15)
-      .map((a) => `• <@${a.uid}> (**${a.nome}**) — banido em ${a.n} servidor(es)`).join("\n");
-    const extra = r.achados.length > 15 ? `\n_… e mais ${r.achados.length - 15}._` : "";
+      .map((a) => lang === "en"
+        ? `• <@${a.uid}> (**${a.nome}**) — banned on ${a.n} server(s)`
+        : `• <@${a.uid}> (**${a.nome}**) — banido em ${a.n} servidor(es)`).join("\n");
+    const extra = r.achados.length > 15
+      ? (lang === "en" ? `\n_… and ${r.achados.length - 15} more._` : `\n_… e mais ${r.achados.length - 15}._`) : "";
 
     if (soVer || modo !== "banir") {
-      return sendEmbed(message.channel, {
+      return sendEmbed(message.channel, lang === "en" ? {
+        title: `🔎 ${r.achados.length} on the global list`,
+        description: [
+          `Out of **${r.total}** server member(s):`, "", lista + extra, "",
+          soVer ? `_Simulation: nothing was done. Run \`${PREFIXO}banglobal varrer\` to act._`
+                : `_Mode **${modo}**: no automatic action. Use \`${PREFIXO}banglobal banir\` and sweep again to ban._`,
+        ].join("\n").slice(0, 1900), colour: COR.aviso,
+      } : {
         title: `🔎 ${r.achados.length} na lista global`,
         description: [
           `De **${r.total}** membro(s) do servidor:`, "", lista + extra, "",
@@ -289,7 +376,16 @@ export async function cmdBanGlobal(message, args, ctx) {
 
     const ok = r.aplicados.filter((a) => a.ok).length;
     const falhas = r.aplicados.filter((a) => !a.ok);
-    return sendEmbed(message.channel, {
+    return sendEmbed(message.channel, lang === "en" ? {
+      title: `🔨 Sweep finished — ${ok} banned`,
+      description: [
+        `I checked **${r.total}** member(s); **${r.achados.length}** were on the list.`, "",
+        lista + extra,
+        falhas.length ? `\n**Failures (${falhas.length}):**\n` + falhas.slice(0, 5).map((f) => `• ${f.nome}: ${f.erro}`).join("\n") : "",
+        falhas.length ? "_Common failure: the bot's role needs **BanMembers** and must sit above the person's role._" : "",
+      ].filter(Boolean).join("\n").slice(0, 1900),
+      colour: falhas.length ? COR.aviso : COR.sucesso,
+    } : {
       title: `🔨 Varredura concluída — ${ok} banido(s)`,
       description: [
         `Conferi **${r.total}** membro(s); **${r.achados.length}** constavam na lista.`, "",
@@ -313,7 +409,7 @@ export async function cmdBanGlobal(message, args, ctx) {
         titulo: "🌐 Bans importados",
         descricao: `<@${message.authorId}> importou **${novos}** ban(s) deste servidor para a lista global.`,
       });
-      return sendEmbed(message.channel, {
+      return sendEmbed(message.channel, tr(ctx, {
         title: "🌐 Importação concluída",
         description: [
           `Encontrados **${bans.length}** ban(s) neste servidor.`,
@@ -322,25 +418,46 @@ export async function cmdBanGlobal(message, args, ctx) {
           "_Os demais já constavam._",
         ].join("\n"),
         colour: COR.sucesso,
-      });
+      }, {
+        title: "🌐 Import finished",
+        description: [
+          `Found **${bans.length}** ban(s) on this server.`,
+          `**${novos}** new record(s) added to the global list.`,
+          "",
+          "_The rest were already listed._",
+        ].join("\n"),
+        colour: COR.sucesso,
+      }));
     } catch (err) {
-      return sendEmbed(message.channel, { title: "❌ Falha ao importar",
-        description: `Não consegui ler os bans do servidor: ${err?.message}`, colour: COR.erro });
+      return sendEmbed(message.channel, tr(ctx,
+        { title: "❌ Falha ao importar",
+          description: `Não consegui ler os bans do servidor: ${err?.message}`, colour: COR.erro },
+        { title: "❌ Failed to import",
+          description: `I couldn't read the server's bans: ${err?.message}`, colour: COR.erro }));
     }
   }
 
   // ── &banglobal esquecer <usuário> ──
   if (sub === "esquecer") {
     const uid = (args[1] ?? "").replace(/[<@>]/g, "") || message.mentionIds?.[0];
-    if (!uid) return sendEmbed(message.channel, { title: "❌ Uso incorreto",
-      description: `\`${PREFIXO}banglobal esquecer <@usuário|id>\``, colour: COR.erro });
+    if (!uid) return sendEmbed(message.channel, tr(ctx,
+      { title: "❌ Uso incorreto",
+        description: `\`${PREFIXO}banglobal esquecer <@usuário|id>\``, colour: COR.erro },
+      { title: "❌ Wrong usage",
+        description: `\`${PREFIXO}banglobal esquecer <@user|id>\``, colour: COR.erro }));
 
     const n = db.esquecerUsuario(uid);
     await log.registrar(ctx, "punicoes", {
       titulo: "🌐 Usuário removido da lista global",
       descricao: `<@${message.authorId}> removeu <@${uid}> da lista global (**${n}** registro(s)).`,
     });
-    return sendEmbed(message.channel, {
+    return sendEmbed(message.channel, lang === "en" ? {
+      title: "🌐 Removed from the global list",
+      description: n
+        ? `<@${uid}> was removed: **${n}** record(s) deleted.`
+        : `<@${uid}> wasn't on the list.`,
+      colour: COR.sucesso,
+    } : {
       title: "🌐 Removido da lista global",
       description: n
         ? `<@${uid}> foi removido: **${n}** registro(s) apagado(s).`
@@ -349,9 +466,13 @@ export async function cmdBanGlobal(message, args, ctx) {
     });
   }
 
-  return sendEmbed(message.channel, {
+  return sendEmbed(message.channel, tr(ctx, {
     title: "❌ Subcomando desconhecido",
     description: `Use \`${PREFIXO}banglobal\` para ver as opções.`,
     colour: COR.erro,
-  });
+  }, {
+    title: "❌ Unknown subcommand",
+    description: `Use \`${PREFIXO}banglobal\` to see the options.`,
+    colour: COR.erro,
+  }));
 }

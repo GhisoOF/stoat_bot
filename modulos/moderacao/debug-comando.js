@@ -1,4 +1,5 @@
 import * as perms from "./permissoes.js";
+import { tr, lingua } from "../core/i18n.js";
 // ══════════════════════════════════════════════════════════
 //  debug-comando.js — &debug
 //
@@ -51,11 +52,16 @@ function botTem(server, perm) {
 
 export async function cmdDebug(message, args, ctx) {
   const { estado, sendEmbed, COR, getServer, membroTemPermissao, PREFIXO, config } = ctx;
+  const lang = lingua(ctx);
+  const en = lang === "en";
 
   const server = await getServer(message);
   if (!membroTemPermissao(message, server, "ManagePermissions")) {
-    return sendEmbed(message.channel, { title: "🚫 Permissão insuficiente",
-      description: "Você precisa de **ManagePermissions** para ver o diagnóstico.", colour: COR.erro });
+    return sendEmbed(message.channel, tr(ctx,
+      { title: "🚫 Permissão insuficiente",
+        description: "Você precisa de **ManagePermissions** para ver o diagnóstico.", colour: COR.erro },
+      { title: "🚫 Missing permission",
+        description: "You need **ManagePermissions** to see the diagnostics.", colour: COR.erro }));
   }
 
   const sub = args[0]?.toLowerCase();
@@ -74,12 +80,17 @@ export async function cmdDebug(message, args, ctx) {
       const primeiro = (server?.channels ?? []).find(Boolean);
       const canal = typeof primeiro === "string" ? ctx.client?.channels?.get?.(primeiro) : primeiro;
       const insp = perms.inspecionarCanal(canal);
-      return sendEmbed(message.channel, { title: "🔬 Formato dos dados",
+      return sendEmbed(message.channel, {
+        title: en ? "🔬 Data format" : "🔬 Formato dos dados",
         description: [
-          `**Membro do bot:** ${botMember ? `ok (${(botMember.roles ?? []).length} cargo(s))` : "❌ não consegui buscar"}`,
-          `**Dono do servidor:** \`${server?.owner ?? server?.ownerId ?? "?"}\``,
+          en
+            ? `**Bot's member:** ${botMember ? `ok (${(botMember.roles ?? []).length} role(s))` : "❌ couldn't fetch"}`
+            : `**Membro do bot:** ${botMember ? `ok (${(botMember.roles ?? []).length} cargo(s))` : "❌ não consegui buscar"}`,
+          en
+            ? `**Server owner:** \`${server?.owner ?? server?.ownerId ?? "?"}\``
+            : `**Dono do servidor:** \`${server?.owner ?? server?.ownerId ?? "?"}\``,
           "",
-          "**Um canal, como a API me entrega:**",
+          en ? "**One channel, as the API delivers it:**" : "**Um canal, como a API me entrega:**",
           "```json",
           typeof insp === "string" ? insp : JSON.stringify(insp, null, 1).slice(0, 1200),
           "```",
@@ -88,14 +99,17 @@ export async function cmdDebug(message, args, ctx) {
 
     const r = perms.diagnosticarCanais(server, ctx.client, botMember);
     if (!r.total) {
-      return sendEmbed(message.channel, { title: "🔍 Canais",
-        description: "Não consegui listar os canais deste servidor.", colour: COR.aviso });
+      return sendEmbed(message.channel, tr(ctx,
+        { title: "🔍 Canais", description: "Não consegui listar os canais deste servidor.", colour: COR.aviso },
+        { title: "🔍 Channels", description: "I couldn't list this server's channels.", colour: COR.aviso }));
     }
     const corpo = perms.formatarRelatorio(r, PREFIXO);
     const aviso = !botMember
-      ? "\n\n⚠️ _Não consegui buscar meu próprio membro no servidor — sem isso não sei quais cargos eu tenho._"
+      ? (en
+        ? "\n\n⚠️ _I couldn't fetch my own member in the server — without it I don't know which roles I have._"
+        : "\n\n⚠️ _Não consegui buscar meu próprio membro no servidor — sem isso não sei quais cargos eu tenho._")
       : "";
-    return sendEmbed(message.channel, { title: "🔍 Permissões por canal",
+    return sendEmbed(message.channel, { title: en ? "🔍 Permissions per channel" : "🔍 Permissões por canal",
       description: (corpo + aviso).slice(0, 1950),
       colour: r.problemas.length || r.desconhecidos ? COR.aviso : COR.sucesso });
   }
@@ -104,11 +118,14 @@ export async function cmdDebug(message, args, ctx) {
   if (["silence", "silencio", "silêncio", "mudo"].includes(sub)) {
     const silenceRoleId = config?.automod?.punicao?.silenceRoleId;
     if (!silenceRoleId) {
-      return sendEmbed(message.channel, { title: "🔇 Sem cargo de silêncio",
-        description: `Nenhum cargo de silêncio configurado. Crie um com \`${PREFIXO}cargomudo\`.`, colour: COR.aviso });
+      return sendEmbed(message.channel, tr(ctx,
+        { title: "🔇 Sem cargo de silêncio",
+          description: `Nenhum cargo de silêncio configurado. Crie um com \`${PREFIXO}cargomudo\`.`, colour: COR.aviso },
+        { title: "🔇 No silence role",
+          description: `No silence role configured. Create one with \`${PREFIXO}cargomudo\`.`, colour: COR.aviso }));
     }
 
-    const linhas = [`**Cargo de silêncio:** <%${silenceRoleId}>`, ""];
+    const linhas = [en ? `**Silence role:** <%${silenceRoleId}>` : `**Cargo de silêncio:** <%${silenceRoleId}>`, ""];
 
     // (a) o cargo está negado em todos os canais?
     const canais = (server?.channels ?? []).filter(Boolean);
@@ -120,38 +137,50 @@ export async function cmdDebug(message, args, ctx) {
       if (ov) comOverride++;
       else semOverride.push(canal.name ?? canal.id);
     }
-    linhas.push(comOverride
-      ? `📋 Negado explicitamente em **${comOverride}** canal(is).`
-      : "⚠️ Não achei negação por canal — o silêncio pode vazar em canais com permissão própria.");
+    linhas.push(en
+      ? (comOverride
+        ? `📋 Explicitly denied in **${comOverride}** channel(s).`
+        : "⚠️ I found no per-channel denial — the silence may leak in channels with their own permissions.")
+      : (comOverride
+        ? `📋 Negado explicitamente em **${comOverride}** canal(is).`
+        : "⚠️ Não achei negação por canal — o silêncio pode vazar em canais com permissão própria."));
     if (semOverride.length) {
-      linhas.push(`⚠️ **Sem negação em:** ${semOverride.slice(0, 10).join(", ")}${semOverride.length > 10 ? "…" : ""}`);
-      linhas.push(`_Corrija com_ \`${PREFIXO}cargomudo canais\``);
+      linhas.push(en
+        ? `⚠️ **No denial in:** ${semOverride.slice(0, 10).join(", ")}${semOverride.length > 10 ? "…" : ""}`
+        : `⚠️ **Sem negação em:** ${semOverride.slice(0, 10).join(", ")}${semOverride.length > 10 ? "…" : ""}`);
+      linhas.push(en ? `_Fix it with_ \`${PREFIXO}cargomudo canais\`` : `_Corrija com_ \`${PREFIXO}cargomudo canais\``);
     }
 
     // (b) o alvo tem cargo acima que anula o silêncio?
     const alvoId = message.mentionIds?.[0] ?? (args[1] ? args[1].replace(/[<@%>]/g, "") : null);
     if (alvoId) {
       const member = await server?.fetchMember?.(alvoId).catch(() => null);
-      if (!member) linhas.push("", `❔ Não achei o membro \`${alvoId}\` para checar os cargos dele.`);
+      if (!member) linhas.push("", en
+        ? `❔ I couldn't find the member \`${alvoId}\` to check their roles.`
+        : `❔ Não achei o membro \`${alvoId}\` para checar os cargos dele.`);
       else {
         const c = perms.conflitosDeSilencio(server, member, silenceRoleId);
-        linhas.push("", `**Checando <@${alvoId}>:**`);
+        linhas.push("", en ? `**Checking <@${alvoId}>:**` : `**Checando <@${alvoId}>:**`);
         if (c.erro) linhas.push(`❔ ${c.erro}`);
         else if (c.dono) linhas.push(`👑 ${c.aviso}`);
         else if (c.conflitantes.length) {
-          linhas.push(`❌ **O silêncio NÃO vai calar essa pessoa.**`);
-          linhas.push(`Ela tem cargo(s) acima do silêncio que liberam falar:`);
+          linhas.push(en ? `❌ **The silence will NOT mute this person.**` : `❌ **O silêncio NÃO vai calar essa pessoa.**`);
+          linhas.push(en ? `They have role(s) above the silence one that allow speaking:` : `Ela tem cargo(s) acima do silêncio que liberam falar:`);
           for (const x of c.conflitantes) linhas.push(`• <%${x.id}> (${x.nome})`);
-          linhas.push("", "_Suba o cargo de silêncio acima desses na lista de cargos, ou tire a permissão de SendMessage deles._");
+          linhas.push("", en
+            ? "_Move the silence role above those in the role list, or remove their SendMessage permission._"
+            : "_Suba o cargo de silêncio acima desses na lista de cargos, ou tire a permissão de SendMessage deles._");
         } else {
-          linhas.push("✅ Nenhum cargo dela anula o silêncio.");
+          linhas.push(en ? "✅ None of their roles overrides the silence." : "✅ Nenhum cargo dela anula o silêncio.");
         }
       }
     } else {
-      linhas.push("", `_Para checar alguém:_ \`${PREFIXO}debug silence @pessoa\``);
+      linhas.push("", en
+        ? `_To check someone:_ \`${PREFIXO}debug silence @person\``
+        : `_Para checar alguém:_ \`${PREFIXO}debug silence @pessoa\``);
     }
 
-    return sendEmbed(message.channel, { title: "🔇 Diagnóstico do silêncio",
+    return sendEmbed(message.channel, { title: en ? "🔇 Silence diagnostics" : "🔇 Diagnóstico do silêncio",
       description: linhas.join("\n").slice(0, 1950),
       colour: semOverride.length ? COR.aviso : COR.info });
   }
@@ -175,7 +204,9 @@ export async function cmdDebug(message, args, ctx) {
 
     // 1) SAÚDE TÉCNICA
     if (typeof aliasHandler !== "function") {
-      erros.push(`🔴 \`${cmd}\` — **sem handler válido** (não é uma função)`);
+      erros.push(en
+        ? `🔴 \`${cmd}\` — **no valid handler** (not a function)`
+        : `🔴 \`${cmd}\` — **sem handler válido** (não é uma função)`);
       continue;
     }
 
@@ -186,17 +217,21 @@ export async function cmdDebug(message, args, ctx) {
     const temPerm = botTem(server, cat.bot);
     const permInfo = cat.bot
       ? (temPerm === true ? `bot: ✅ ${cat.bot}`
-        : temPerm === false ? `bot: ❌ **falta ${cat.bot}**`
-        : `bot: ⚠️ ${cat.bot} (não verificável)`)
+        : temPerm === false ? (en ? `bot: ❌ **missing ${cat.bot}**` : `bot: ❌ **falta ${cat.bot}**`)
+        : (en ? `bot: ⚠️ ${cat.bot} (unverifiable)` : `bot: ⚠️ ${cat.bot} (não verificável)`))
       : "bot: —";
-    const adminInfo = cat.admin ? `admin: ${cat.admin}` : "admin: livre";
+    const adminInfo = cat.admin ? `admin: ${cat.admin}` : (en ? "admin: open" : "admin: livre");
 
     const linha = `\`${cmd}\` · ${permInfo} · ${adminInfo}`;
 
     if (off) {
-      alertas.push(`🔴 ${linha} — **desativado** (\`${PREFIXO}comando enable ${cmd}\`)`);
+      alertas.push(en
+        ? `🔴 ${linha} — **disabled** (\`${PREFIXO}comando enable ${cmd}\`)`
+        : `🔴 ${linha} — **desativado** (\`${PREFIXO}comando enable ${cmd}\`)`);
     } else if (temPerm === false) {
-      alertas.push(`🟠 ${linha} — **o bot não tem a permissão necessária**`);
+      alertas.push(en
+        ? `🟠 ${linha} — **the bot lacks the required permission**`
+        : `🟠 ${linha} — **o bot não tem a permissão necessária**`);
     } else if (temPerm === null && cat.bot) {
       alertas.push(`🟡 ${linha}`);
     } else {
@@ -206,22 +241,26 @@ export async function cmdDebug(message, args, ctx) {
 
   // Monta o relatório (quebra em blocos para não estourar o limite do embed)
   const blocos = [];
-  blocos.push(`**Total:** ${canonicos.size} comando(s) · 🟢 ${ok.length} · ⚠️ ${alertas.length} · 🔴 ${erros.length}`);
-  if (erros.length)   blocos.push("\n**❌ Não funcionam**\n" + erros.join("\n"));
-  if (alertas.length) blocos.push("\n**⚠️ Atenção**\n" + alertas.join("\n"));
-  if (ok.length)      blocos.push("\n**✅ Funcionando**\n" + ok.join("\n"));
+  blocos.push(en
+    ? `**Total:** ${canonicos.size} command(s) · 🟢 ${ok.length} · ⚠️ ${alertas.length} · 🔴 ${erros.length}`
+    : `**Total:** ${canonicos.size} comando(s) · 🟢 ${ok.length} · ⚠️ ${alertas.length} · 🔴 ${erros.length}`);
+  if (erros.length)   blocos.push((en ? "\n**❌ Not working**\n" : "\n**❌ Não funcionam**\n") + erros.join("\n"));
+  if (alertas.length) blocos.push((en ? "\n**⚠️ Attention**\n" : "\n**⚠️ Atenção**\n") + alertas.join("\n"));
+  if (ok.length)      blocos.push((en ? "\n**✅ Working**\n" : "\n**✅ Funcionando**\n") + ok.join("\n"));
 
-  blocos.push("\n_Legenda:_ 🟢 ok · 🟠 falta permissão do bot · 🔴 desativado/sem handler · 🟡 permissão não verificável");
+  blocos.push(en
+    ? "\n_Legend:_ 🟢 ok · 🟠 bot missing permission · 🔴 disabled/no handler · 🟡 unverifiable permission"
+    : "\n_Legenda:_ 🟢 ok · 🟠 falta permissão do bot · 🔴 desativado/sem handler · 🟡 permissão não verificável");
 
   // Se o relatório for muito grande, envia em partes
   const texto = blocos.join("\n");
   if (texto.length <= 3500) {
-    return sendEmbed(message.channel, { title: "🔧 Diagnóstico de comandos", description: texto, colour: COR.info });
+    return sendEmbed(message.channel, { title: en ? "🔧 Command diagnostics" : "🔧 Diagnóstico de comandos", description: texto, colour: COR.info });
   }
   // fatiar
   for (let i = 0; i < blocos.length; i += 3) {
     await sendEmbed(message.channel, {
-      title: i === 0 ? "🔧 Diagnóstico de comandos" : "🔧 (continuação)",
+      title: i === 0 ? (en ? "🔧 Command diagnostics" : "🔧 Diagnóstico de comandos") : (en ? "🔧 (continued)" : "🔧 (continuação)"),
       description: blocos.slice(i, i + 3).join("\n"),
       colour: COR.info,
     });

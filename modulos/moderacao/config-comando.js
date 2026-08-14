@@ -11,7 +11,8 @@ import { servidorPermitido as temIA } from "../ai/chat.js";
 
 import * as db from "../core/db.js";
 import { EVENTOS } from "../core/log.js";
-import { MODOS as MODOS_BG } from "./ban-global.js";
+import { MODOS as MODOS_BG, MODOS_EN as MODOS_BG_EN } from "./ban-global.js";
+import { tr, lingua } from "../core/i18n.js";
 
 const on  = (v) => (v ? "🟢" : "🔴");
 const sim = (v) => (v ? "sim" : "não");
@@ -23,19 +24,36 @@ const MODOS = {
   acumular:  "soma avisos até banir",
   banir:     "ban imediato",
 };
+const MODOS_EN = {
+  avisar:    "warn only (doesn't remove or punish)",
+  confirmar: "removes, silences and waits for a moderator",
+  acumular:  "stacks warnings until a ban",
+  banir:     "instant ban",
+};
 
 const SENSIBILIDADE = { baixa: "baixa (limiar 8/10)", media: "média (limiar 6/10)", alta: "alta (limiar 4/10)" };
+const SENSIBILIDADE_EN = { baixa: "low (threshold 8/10)", media: "medium (threshold 6/10)", alta: "high (threshold 4/10)" };
 
 export async function cmdConfig(message, args, ctx) {
   const { config, cfgGlobal, estado, sendEmbed, COR, getServer, membroTemPermissao, PREFIXO, serverId } = ctx;
+  const lang = lingua(ctx);
+  const en = lang === "en";
+  const L_MODOS = en ? MODOS_EN : MODOS;
+  const L_SENS = en ? SENSIBILIDADE_EN : SENSIBILIDADE;
+  const L_BG = en ? MODOS_BG_EN : MODOS_BG;
+  const simL = (v) => en ? (v ? "yes" : "no") : (v ? "sim" : "não");
 
   const server = await getServer(message);
   if (!membroTemPermissao(message, server, "ManagePermissions")) {
-    return sendEmbed(message.channel, {
+    return sendEmbed(message.channel, tr(ctx, {
       title: "🚫 Permissão insuficiente",
       description: "Você precisa da permissão **ManagePermissions** para ver as configurações.",
       colour: COR.erro,
-    });
+    }, {
+      title: "🚫 Missing permission",
+      description: "You need the **ManagePermissions** permission to view the settings.",
+      colour: COR.erro,
+    }));
   }
 
   const am  = config.automod;
@@ -43,48 +61,106 @@ export async function cmdConfig(message, args, ctx) {
   const lg  = config.log ?? { canalId: null, eventos: {} };
 
   // ── Módulos do automod ──
-  const modulos = [
+  const modulos = en ? [
+    `${on(am.antiSpam.enabled)} **antispam** — ${am.antiSpam.maxMessages} msg / ${am.antiSpam.windowMs}ms`,
+    `${on(am.antiMassSpam.enabled)} **antimassspam** — ${am.antiMassSpam.maxMessages} msg / ${am.antiMassSpam.windowMs}ms`,
+    `${on(am.antiInvite.enabled)} **antiinvite** — blocks invites`,
+    `${on(am.antiMassMention.enabled)} **antimassmention** — max ${am.antiMassMention.maxMentions} mentions`,
+    `${on(am.antiCaps.enabled)} **anticaps** — ≥${am.antiCaps.minLength} chars and ${Math.round(am.antiCaps.threshold * 100)}% uppercase`,
+    `${on(am.antiLink.enabled)} **antilink** — ${estado.blockedDomains.size.toLocaleString("en-US")} domain(s) listed`,
+    `${on(am.antiScam.enabled)} **antiscam** — sensitivity ${L_SENS[am.antiScam.sensitivity] ?? am.antiScam.sensitivity}`,
+  ] : [
     `${on(am.antiSpam.enabled)} **antispam** — ${am.antiSpam.maxMessages} msg / ${am.antiSpam.windowMs}ms`,
     `${on(am.antiMassSpam.enabled)} **antimassspam** — ${am.antiMassSpam.maxMessages} msg / ${am.antiMassSpam.windowMs}ms`,
     `${on(am.antiInvite.enabled)} **antiinvite** — bloqueia convites`,
     `${on(am.antiMassMention.enabled)} **antimassmention** — máx. ${am.antiMassMention.maxMentions} menções`,
     `${on(am.antiCaps.enabled)} **anticaps** — ≥${am.antiCaps.minLength} chars e ${Math.round(am.antiCaps.threshold * 100)}% maiúsculas`,
     `${on(am.antiLink.enabled)} **antilink** — ${estado.blockedDomains.size.toLocaleString("pt-BR")} domínio(s) na lista`,
-    `${on(am.antiScam.enabled)} **antiscam** — sensibilidade ${SENSIBILIDADE[am.antiScam.sensitivity] ?? am.antiScam.sensitivity}`,
+    `${on(am.antiScam.enabled)} **antiscam** — sensibilidade ${L_SENS[am.antiScam.sensitivity] ?? am.antiScam.sensitivity}`,
   ];
 
   // ── Punição ──
-  const punicao = [
-    `**Modo:** \`${pol.modo}\` — ${MODOS[pol.modo] ?? "?"}`,
+  const punicao = (en ? [
+    `**Mode:** \`${pol.modo}\` — ${L_MODOS[pol.modo] ?? "?"}`,
+    pol.modo === "acumular" ? `**Warnings until ban:** ${pol.warnsParaBan}` : null,
+    `**Silence role:** ${pol.silenceRoleId ? `\`${pol.silenceRoleId}\`` : "_(not set)_"}`,
+    `**Alert channel:** ${am.antiScam.alertChannelId ? `<#${am.antiScam.alertChannelId}>` : "_(the message's own channel)_"}`,
+  ] : [
+    `**Modo:** \`${pol.modo}\` — ${L_MODOS[pol.modo] ?? "?"}`,
     pol.modo === "acumular" ? `**Avisos até o ban:** ${pol.warnsParaBan}` : null,
     `**Cargo de silêncio:** ${pol.silenceRoleId ? `\`${pol.silenceRoleId}\`` : "_(não definido)_"}`,
     `**Canal de avisos:** ${am.antiScam.alertChannelId ? `<#${am.antiScam.alertChannelId}>` : "_(canal da própria mensagem)_"}`,
-  ].filter(Boolean);
+  ]).filter(Boolean);
 
   // ── Chat de logs ──
   const logs = [
-    `**Canal:** ${lg.canalId ? `<#${lg.canalId}>` : "_(desativado)_"}`,
+    en
+      ? `**Channel:** ${lg.canalId ? `<#${lg.canalId}>` : "_(disabled)_"}`
+      : `**Canal:** ${lg.canalId ? `<#${lg.canalId}>` : "_(desativado)_"}`,
     ...Object.keys(EVENTOS).map((k) => `${on(lg.eventos?.[k] !== false)} ${k}`),
   ];
 
   // ── Punições ativas neste servidor (do banco) ──
-  let ativas = "_(nenhuma)_";
+  let ativas = en ? "_(none)_" : "_(nenhuma)_";
   try {
     const linhas = db.getDb()
       .prepare("SELECT userId, avisos, silenciado FROM punicoes WHERE serverId = ? ORDER BY avisos DESC LIMIT 5")
       .all(serverId);
     if (linhas.length) {
-      ativas = linhas.map((p) =>
-        `• <@${p.userId}> — ${p.avisos} aviso(s)${p.silenciado ? " · 🔇 silenciado" : ""}`).join("\n");
+      ativas = linhas.map((p) => en
+        ? `• <@${p.userId}> — ${p.avisos} warning(s)${p.silenciado ? " · 🔇 silenced" : ""}`
+        : `• <@${p.userId}> — ${p.avisos} aviso(s)${p.silenciado ? " · 🔇 silenciado" : ""}`).join("\n");
     }
   } catch { /* banco indisponível: segue sem essa seção */ }
 
   // ── Whitelist de convites ──
   const wl = config.inviteWhitelist?.length
     ? config.inviteWhitelist.map((c) => `\`${c}\``).join(", ")
-    : "_(vazia)_";
+    : (en ? "_(empty)_" : "_(vazia)_");
 
-  await sendEmbed(message.channel, {
+  await sendEmbed(message.channel, en ? {
+    title: "⚙️ This server's settings",
+    description: [
+      "**🛡 AutoMod modules**",
+      ...modulos,
+      "",
+      "**⚖️ Punishment** *(applies to every module)*",
+      ...punicao,
+      "",
+      "**📜 Log channel**",
+      ...logs,
+      "",
+      "**✅ Allowed invites**",
+      wl,
+      "",
+      "**🌐 Global ban list**",
+      `**Mode:** \`${config.banGlobal?.modo ?? "off"}\` — ${L_BG[config.banGlobal?.modo ?? "off"]}`,
+      `**Listed:** ${db.usuariosBanidosDistintos()} user(s) in ${db.totalBansGlobais()} record(s)`,
+      "",
+      "**🎛 Disabled commands**",
+      (config.comandosDesativados?.length ? config.comandosDesativados.map(c=>`\`${c}\``).join(", ") : "_(none)_"),
+      "",
+      "**🚨 Active punishments** *(top 5)*",
+      ativas,
+      "",
+      "**🔐 Command access**",
+      `Staff roles: ${config.acesso?.cargosStaff?.length ? config.acesso.cargosStaff.map((r)=>`<%${r}>`).join(" ") : "_(native permissions only)_"}`,
+      `Channels: ${(config.acesso?.canais?.modo ?? "todos") === "todos" ? "any" : `\`${config.acesso.canais.modo}\` ${config.acesso.canais.lista?.length ? config.acesso.canais.lista.map((c)=>`<#${c}>`).join(", ") : "_(empty list)_"}`}`,
+      "",
+      ...(temIA(serverId) ? [
+        "**🤖 AI (Judy)**",
+        `Free chat: ${config.chatLivre?.canais?.length ? config.chatLivre.canais.map((c)=>`<#${c}>`).join(", ") + ` (mode \`${config.chatLivre.modo ?? "relevante"}\`)` : "_(off)_"}`,
+        `Spontaneous comments: ${config.comentarioEspontaneo?.canalId ? `<#${config.comentarioEspontaneo.canalId}> (up to ${config.comentarioEspontaneo.porDia ?? 4}/day)` : "_(off)_"}`,
+        `AI moderation: ${config.moderacaoIA?.ativa ? "🟢 active" : "🔴 off"}${config.moderacaoIA?.criterios ? "" : " _(no criteria)_"}`,
+        "",
+      ] : []),
+      "**🌐 Global** *(shared across servers)*",
+      `Debug: ${simL(cfgGlobal.debug !== false)} · Anti-link lists: ${cfgGlobal.linkBlocklistSources.length} source(s), ${cfgGlobal.linkBlocklistManual.length} manual domain(s)`,
+      "",
+      `💡 Adjust with \`${PREFIXO}automod\`, \`${PREFIXO}punicao\`, \`${PREFIXO}log\`, \`${PREFIXO}scam\` — and \`${PREFIXO}tutorial\` shows the full path.`,
+    ].join("\n"),
+    colour: COR.info,
+  } : {
     title: "⚙️ Configurações deste servidor",
     description: [
       "**🛡 Módulos do AutoMod**",
@@ -100,7 +176,7 @@ export async function cmdConfig(message, args, ctx) {
       wl,
       "",
       "**🌐 Lista global de banimentos**",
-      `**Modo:** \`${config.banGlobal?.modo ?? "off"}\` — ${MODOS_BG[config.banGlobal?.modo ?? "off"]}`,
+      `**Modo:** \`${config.banGlobal?.modo ?? "off"}\` — ${L_BG[config.banGlobal?.modo ?? "off"]}`,
       `**Na lista:** ${db.usuariosBanidosDistintos()} usuário(s) em ${db.totalBansGlobais()} registro(s)`,
       "",
       "**🎛 Comandos desativados**",
@@ -121,7 +197,7 @@ export async function cmdConfig(message, args, ctx) {
         "",
       ] : []),
       "**🌐 Global** *(compartilhado entre servidores)*",
-      `Debug: ${sim(cfgGlobal.debug !== false)} · Listas anti-link: ${cfgGlobal.linkBlocklistSources.length} fonte(s), ${cfgGlobal.linkBlocklistManual.length} domínio(s) manual(is)`,
+      `Debug: ${simL(cfgGlobal.debug !== false)} · Listas anti-link: ${cfgGlobal.linkBlocklistSources.length} fonte(s), ${cfgGlobal.linkBlocklistManual.length} domínio(s) manual(is)`,
       "",
       `💡 Ajuste com \`${PREFIXO}automod\`, \`${PREFIXO}punicao\`, \`${PREFIXO}log\`, \`${PREFIXO}scam\` — e \`${PREFIXO}tutorial\` mostra o caminho completo.`,
     ].join("\n"),

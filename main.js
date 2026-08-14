@@ -31,6 +31,8 @@ import * as debugCmd  from "./modulos/moderacao/debug-comando.js";
 import * as chat      from "./modulos/ai/chat.js";
 import * as rss       from "./modulos/ferramentas/rss.js";
 import * as nivel     from "./modulos/ferramentas/nivel.js";
+import * as i18n      from "./modulos/core/i18n.js";
+import { tr }         from "./modulos/core/i18n.js";
 
 const PREFIXO     = "&";
 const CONFIG_PATH = process.env.CONFIG_PATH || "./automod-config.json";
@@ -155,6 +157,27 @@ async function sendEmbed(channel, { title, description, colour = COR.info }) {
       console.error("[EMBED] Fallback de texto também falhou:", erroStr(err2));
     }
   }
+}
+
+// ── Status da conta do bot (texto sob o nome na lista de membros) ──
+//  PATCH https://api.stoat.chat/users/@me  { status: { text, presence } }
+//  Header: X-Bot-Token (mesmo esquema REST do &cor).
+async function definirStatus() {
+  const API = (process.env.STOAT_API || "https://api.stoat.chat").replace(/\/$/, "");
+  const token = process.env.BOT_TOKEN;
+  if (!token) return;
+  const texto = process.env.STATUS_TEXT
+    || `${PREFIXO}help • ${PREFIXO}tutorial | prefixo/prefix: ${PREFIXO}`;
+  const r = await fetch(`${API}/users/@me`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", "X-Bot-Token": token },
+    body: JSON.stringify({ status: { text: texto.slice(0, 128), presence: "Online" } }),
+  });
+  if (!r.ok) {
+    const corpo = await r.text().catch(() => "");
+    throw new Error(`HTTP ${r.status} ${corpo.slice(0, 200)}`);
+  }
+  console.info(`[STATUS] Definido: "${texto}"`);
 }
 
 async function getServer(message) {
@@ -313,6 +336,10 @@ const rotas = {
   xp:            nivel.cmdXp,
   nivel:         nivel.cmdXp,
   level:         nivel.cmdXp,
+  // Idioma do servidor (pt | en)
+  idioma:        i18n.cmdIdioma,
+  language:      i18n.cmdIdioma,
+  lang:          i18n.cmdIdioma,
 };
 
 // Aliases → nome canônico (para desativar um comando desativa todos os apelidos).
@@ -333,6 +360,7 @@ const CANONICO = {
   globalban: "banglobal",
   configuracoes: "config", configurações: "config",
   diagnostico: "debug", "diagnóstico": "debug",
+  language: "idioma", lang: "idioma",
 };
 
 // Comandos que o admin pode ligar/desligar (nomes canônicos, sem os essenciais).
@@ -365,6 +393,11 @@ client.on("ready", async () => {
 
   store.inicializar(CONFIG_PATH); // abre o banco e migra o config antigo
   cfgGlobal = store.getGlobal();
+
+  // Status do bot (o texto que aparece embaixo do nome na lista de membros).
+  // A stoat.js não expõe isso, então é REST direto — mesmo padrão do &cor.
+  // Obs.: o status é GLOBAL da conta; servidores com prefixo padrão veem o certo.
+  definirStatus().catch((e) => console.error("[STATUS]", e?.message ?? e));
 
   // Recarrega as mensagens de reaction role: sem isso, depois de um restart a
   // lib não emite eventos de reação para elas e os cargos param de ser dados.
@@ -476,13 +509,22 @@ client.on("messageCreate", async (message) => {
   if (!command) return;            // mensagem normal, sem prefixo
 
   if (!handler) {                  // tinha prefixo, mas o comando não existe
-    await sendEmbed(message.channel, {
+    await sendEmbed(message.channel, tr(ctx, {
       title: "❓ Comando desconhecido",
       description: `Use \`${PREFIXO}help\` para ver os comandos disponíveis.`,
       colour: COR.aviso,
-    });
+    }, {
+      title: "❓ Unknown command",
+      description: `Use \`${PREFIXO}help\` to see the available commands.`,
+      colour: COR.aviso,
+    }));
     return;
   }
+
+  // Primeiro comando num servidor que nunca escolheu idioma → sugere UMA vez
+  // (bilíngue, não bloqueia o comando atual).
+  try { await i18n.talvezSugerirIdioma(message, ctx); }
+  catch (e) { console.error("[I18N]", e?.message); }
 
   if (cfgGlobal.debug !== false) console.log(`[CMD] Executando "${command}" (args: ${JSON.stringify(args)})`);
 
@@ -490,35 +532,43 @@ client.on("messageCreate", async (message) => {
   // O nome canônico agrupa aliases (clear/purge → limpar). Comandos essenciais
   // (help e o próprio gerenciador) NUNCA podem ser desativados, para o admin
   // não se trancar para fora.
-  const ESSENCIAIS = new Set(["help", "comando", "comandos", "command", "debug", "diagnostico", "diagnóstico"]);
+  const ESSENCIAIS = new Set(["help", "comando", "comandos", "command", "debug", "diagnostico", "diagnóstico", "idioma"]);
   const canonico = CANONICO[command] ?? command;
   if (!ESSENCIAIS.has(canonico) && (ctx.config.comandosDesativados ?? []).includes(canonico)) {
     await log.registrar(ctx, "comandos", {
       titulo: "🚫 Comando desativado",
       descricao: `<@${message.authorId}> tentou usar \`${PREFIXO}${command}\`, que está desativado neste servidor.`,
     });
-    return sendEmbed(message.channel, {
+    return sendEmbed(message.channel, tr(ctx, {
       title: "🚫 Comando desativado",
       description: `O comando \`${PREFIXO}${canonico}\` está desativado neste servidor.`,
       colour: COR.aviso,
-    });
+    }, {
+      title: "🚫 Command disabled",
+      description: `The \`${PREFIXO}${canonico}\` command is disabled on this server.`,
+      colour: COR.aviso,
+    }));
   }
 
   // ── Restrição por canal ──
   // Quem tem cargo de staff (ou permissão nativa) pode escapar disso, conforme
   // a config. `acesso` e `debug` sempre passam, senão dá para se trancar fora.
-  const SEMPRE_LIBERADOS = new Set(["acesso", "debug", "help", "tutorial"]);
+  const SEMPRE_LIBERADOS = new Set(["acesso", "debug", "help", "tutorial", "idioma"]);
   if (!SEMPRE_LIBERADOS.has(canonico)) {
     const ehStaff = acessoMod.temCargoStaff(message, ctx.config)
       || membroTemPermissao(message, await getServer(message).catch(() => null), "ManagePermissions");
     const permitido = acessoMod.canalPermitido(message, ctx.config, { ehStaff });
     if (!permitido.ok) {
       console.log(`[ACESSO] ${message.authorId} usou ${canonico} em canal restrito`);
-      return sendEmbed(message.channel, {
+      return sendEmbed(message.channel, tr(ctx, {
         title: "🔐 Aqui não",
         description: `${permitido.motivo.charAt(0).toUpperCase()}${permitido.motivo.slice(1)}.`,
         colour: COR.aviso,
-      });
+      }, {
+        title: "🔐 Not here",
+        description: "Commands are restricted in this channel by the server's access settings.",
+        colour: COR.aviso,
+      }));
     }
   }
 
@@ -541,11 +591,15 @@ client.on("messageCreate", async (message) => {
     }
   } catch (err) {
     console.error(`[CMD:${command}] Erro:`, err);
-    await sendEmbed(message.channel, {
+    await sendEmbed(message.channel, tr(ctx, {
       title: "❌ Erro inesperado",
       description: "Algo deu errado ao executar o comando.",
       colour: COR.erro,
-    });
+    }, {
+      title: "❌ Unexpected error",
+      description: "Something went wrong while running the command.",
+      colour: COR.erro,
+    }));
   }
 });
 

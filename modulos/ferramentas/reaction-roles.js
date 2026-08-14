@@ -15,6 +15,7 @@
 import * as db  from "../core/db.js";
 import * as log from "../core/log.js";
 import { idValido, descreverProblemaDeId, resolverMensagem, resolverCargo } from "../core/ids.js";
+import { tr, lingua } from "../core/i18n.js";
 
 const ULID = /^[0-9A-HJKMNP-TV-Z]{26}$/i;
 
@@ -211,11 +212,16 @@ export async function precarregarMensagens(client) {
 // ──────────────────────────────────────────────────────────
 export async function cmdReactionRole(message, args, ctx) {
   const { sendEmbed, COR, getServer, membroTemPermissao, PREFIXO, serverId, client } = ctx;
+  const lang = lingua(ctx);
+  const en = lang === "en";
 
   const server = await getServer(message);
   if (!membroTemPermissao(message, server, "ManageRole")) {
-    return sendEmbed(message.channel, { title: "🚫 Permissão insuficiente",
-      description: "Você precisa de **ManageRole** para configurar cargos por reação.", colour: COR.erro });
+    return sendEmbed(message.channel, tr(ctx,
+      { title: "🚫 Permissão insuficiente",
+        description: "Você precisa de **ManageRole** para configurar cargos por reação.", colour: COR.erro },
+      { title: "🚫 Missing permission",
+        description: "You need **ManageRole** to configure reaction roles.", colour: COR.erro }));
   }
 
   const sub = args[0]?.toLowerCase();
@@ -224,18 +230,22 @@ export async function cmdReactionRole(message, args, ctx) {
   if (sub === "list" || sub === "lista") {
     const linhas = db.listReactionRolesServidor(serverId);
     if (!linhas.length)
-      return sendEmbed(message.channel, { title: "🎭 Cargos por reação",
-        description: "_Nenhum configurado neste servidor._", colour: COR.mod });
+      return sendEmbed(message.channel, tr(ctx,
+        { title: "🎭 Cargos por reação", description: "_Nenhum configurado neste servidor._", colour: COR.mod },
+        { title: "🎭 Reaction roles", description: "_None configured on this server._", colour: COR.mod }));
     const porMsg = {};
     for (const l of linhas) (porMsg[l.messageId] ??= []).push(`${l.emoji} → \`${l.roleId}\``);
     return sendEmbed(message.channel, {
-      title: "🎭 Cargos por reação",
+      title: en ? "🎭 Reaction roles" : "🎭 Cargos por reação",
       description: Object.entries(porMsg)
         .map(([mid, arr]) => {
-          const modo = db.isReactionRoleExclusivo(mid) ? " — 🎯 _exclusivo (troca o cargo)_" : "";
-          return `**Mensagem \`${mid}\`**${modo}\n${arr.join("\n")}`;
+          const modo = db.isReactionRoleExclusivo(mid)
+            ? (en ? " — 🎯 _exclusive (swaps the role)_" : " — 🎯 _exclusivo (troca o cargo)_") : "";
+          return (en ? `**Message \`${mid}\`**` : `**Mensagem \`${mid}\`**`) + `${modo}\n${arr.join("\n")}`;
         }).join("\n\n")
-        + `\n\n_Use \`${PREFIXO}reactionrole exclusivo <mensagem> on\` para que a escolha troque o cargo anterior._`,
+        + (en
+          ? `\n\n_Use \`${PREFIXO}reactionrole exclusivo <message> on\` so that picking one swaps the previous role._`
+          : `\n\n_Use \`${PREFIXO}reactionrole exclusivo <mensagem> on\` para que a escolha troque o cargo anterior._`),
       colour: COR.mod,
     });
   }
@@ -244,7 +254,8 @@ export async function cmdReactionRole(message, args, ctx) {
   if (["exclusivo", "exclusive", "unico", "único"].includes(sub)) {
     const mid = resolverMensagem(args[1]).id;
     if (!mid) {
-      return sendEmbed(message.channel, { title: "❌ Uso incorreto",
+      return sendEmbed(message.channel, tr(ctx, {
+        title: "❌ Uso incorreto",
         description: [
           `\`${PREFIXO}reactionrole exclusivo <mensagem> on|off\``,
           "",
@@ -252,18 +263,41 @@ export async function cmdReactionRole(message, args, ctx) {
           "**off** — os cargos **acumulam** (ex.: escolha seus interesses)",
           "",
           "A mensagem pode ser o **ID** ou o **link**.",
-        ].join("\n"), colour: COR.erro });
+        ].join("\n"), colour: COR.erro,
+      }, {
+        title: "❌ Wrong usage",
+        description: [
+          `\`${PREFIXO}reactionrole exclusivo <message> on|off\``,
+          "",
+          "**on** — picking an emoji **swaps** the previous role (e.g. pick your color)",
+          "**off** — roles **stack** (e.g. pick your interests)",
+          "",
+          "The message can be its **ID** or its **link**.",
+        ].join("\n"), colour: COR.erro,
+      }));
     }
     const regras = db.listReactionRoles(mid);
     if (!regras.length) {
-      return sendEmbed(message.channel, { title: "❌ Sem regras nessa mensagem",
+      return sendEmbed(message.channel, tr(ctx, {
+        title: "❌ Sem regras nessa mensagem",
         description: `Não há cargos por reação registrados em \`${mid}\`. Adicione com \`${PREFIXO}reactionrole add\` primeiro.`,
-        colour: COR.erro });
+        colour: COR.erro,
+      }, {
+        title: "❌ No rules on that message",
+        description: `There are no reaction roles registered on \`${mid}\`. Add one with \`${PREFIXO}reactionrole add\` first.`,
+        colour: COR.erro,
+      }));
     }
     const estado = (args[2] ?? "on").toLowerCase();
     const ligar = !["off", "nao", "não", "0"].includes(estado);
     db.setReactionRoleExclusivo(mid, ligar);
-    return sendEmbed(message.channel, {
+    return sendEmbed(message.channel, en ? {
+      title: ligar ? "🎯 Exclusive mode on" : "➕ Stacking mode",
+      description: ligar
+        ? `On that message (**${regras.length}** options), picking an emoji **removes** the previously chosen role. Good for color, age, team — things where only one applies.`
+        : `On that message, a person can hold **several** roles at once.`,
+      colour: COR.sucesso,
+    } : {
       title: ligar ? "🎯 Modo exclusivo ligado" : "➕ Modo acumulativo",
       description: ligar
         ? `Nessa mensagem (**${regras.length}** opções), escolher um emoji **remove** o cargo escolhido antes. Bom para cor, idade, time — coisas em que só uma vale.`
@@ -273,10 +307,22 @@ export async function cmdReactionRole(message, args, ctx) {
 
   // ── recarregar: força a re-leitura das mensagens (diagnóstico) ──
   if (["recarregar", "reload", "reparar"].includes(sub)) {
-    await sendEmbed(message.channel, { title: "🔄 Recarregando…",
-      description: "Buscando as mensagens de cargos por reação para voltarem ao cache.", colour: COR.info });
+    await sendEmbed(message.channel, tr(ctx,
+      { title: "🔄 Recarregando…",
+        description: "Buscando as mensagens de cargos por reação para voltarem ao cache.", colour: COR.info },
+      { title: "🔄 Reloading…",
+        description: "Fetching the reaction-role messages so they return to the cache.", colour: COR.info }));
     const r = await precarregarMensagens(client);
-    return sendEmbed(message.channel, {
+    return sendEmbed(message.channel, en ? {
+      title: r.perdidas ? "⚠️ Reloaded with issues" : "✅ Reloaded",
+      description: [
+        `**${r.ok}** of **${r.total}** message(s) returned to the cache.`,
+        r.perdidas ? `**${r.perdidas}** weren't found — the channel may have been deleted, or the bot lacks \`ViewChannel\`/\`ReadMessageHistory\`.` : "",
+        "",
+        "_This runs automatically on every bot restart._",
+      ].filter(Boolean).join("\n"),
+      colour: r.perdidas ? COR.aviso : COR.sucesso,
+    } : {
       title: r.perdidas ? "⚠️ Recarregado com pendências" : "✅ Recarregado",
       description: [
         `**${r.ok}** de **${r.total}** mensagem(ns) voltaram ao cache.`,
@@ -290,10 +336,18 @@ export async function cmdReactionRole(message, args, ctx) {
   if (sub === "remove" || sub === "remover") {
     const mid = resolverMensagem(args[1]).id;
     if (!mid)
-      return sendEmbed(message.channel, { title: "❌ Uso incorreto",
-        description: `\`${PREFIXO}reactionrole remove <mensagem>\`\n\nAceito o **ID** ou o **link** da mensagem.`, colour: COR.erro });
+      return sendEmbed(message.channel, tr(ctx,
+        { title: "❌ Uso incorreto",
+          description: `\`${PREFIXO}reactionrole remove <mensagem>\`\n\nAceito o **ID** ou o **link** da mensagem.`, colour: COR.erro },
+        { title: "❌ Wrong usage",
+          description: `\`${PREFIXO}reactionrole remove <message>\`\n\nI accept the message's **ID** or **link**.`, colour: COR.erro }));
     const n = db.removeReactionRolesMensagem(mid);
-    return sendEmbed(message.channel, { title: "🎭 Removido",
+    return sendEmbed(message.channel, en ? {
+      title: "🎭 Removed",
+      description: n ? `Removed **${n}** link(s) from message \`${mid}\`.` : "Nothing found for that message.",
+      colour: COR.sucesso,
+    } : {
+      title: "🎭 Removido",
       description: n ? `Removidos **${n}** vínculo(s) da mensagem \`${mid}\`.` : "Nada encontrado para essa mensagem.",
       colour: COR.sucesso });
   }
@@ -309,14 +363,34 @@ export async function cmdReactionRole(message, args, ctx) {
       // aponta exatamente o que está errado, em vez de repetir a sintaxe seca
       const problemas = [];
       if (!mid) {
-        problemas.push(ref.canalId
-          ? "• o link aponta para o **canal**, não para uma mensagem — abra o menu `...` da mensagem e use *Copiar link*"
-          : "• não achei o **ID da mensagem** (aceito o ID puro ou o **link** da mensagem)");
+        problemas.push(en
+          ? (ref.canalId
+            ? "• the link points to the **channel**, not to a message — open the message's `...` menu and use *Copy link*"
+            : "• I couldn't find the **message ID** (I accept the raw ID or the message's **link**)")
+          : (ref.canalId
+            ? "• o link aponta para o **canal**, não para uma mensagem — abra o menu \`...\` da mensagem e use *Copiar link*"
+            : "• não achei o **ID da mensagem** (aceito o ID puro ou o **link** da mensagem)"));
       }
-      if (!emoji) problemas.push("• faltou o **emoji**");
-      if (!role) problemas.push(`• o **cargo**: ${descreverProblemaDeId(args[3], "cargo")} — mencione o cargo ou cole o ID (Configurações → Cargos → *Copy role ID*)`);
+      if (!emoji) problemas.push(en ? "• the **emoji** is missing" : "• faltou o **emoji**");
+      if (!role) problemas.push(en
+        ? `• the **role**: ${descreverProblemaDeId(args[3], "cargo")} — mention the role or paste its ID (Settings → Roles → *Copy role ID*)`
+        : `• o **cargo**: ${descreverProblemaDeId(args[3], "cargo")} — mencione o cargo ou cole o ID (Configurações → Cargos → *Copy role ID*)`);
 
-      return sendEmbed(message.channel, { title: "❌ Uso incorreto",
+      return sendEmbed(message.channel, en ? {
+        title: "❌ Wrong usage",
+        description: [
+          `\`${PREFIXO}reactionrole add <message> <emoji> <roleId>\``,
+          "",
+          problemas.join("\n"),
+          "",
+          "**The message** can be the ID **or the link** — both work:",
+          "```",
+          `${PREFIXO}reactionrole add https://stoat.chat/server/.../01ABC... 🎮 01XYZ...`,
+          `${PREFIXO}reactionrole add 01ABC... 🎮 01XYZ...`,
+          "```",
+        ].join("\n"), colour: COR.erro,
+      } : {
+        title: "❌ Uso incorreto",
         description: [
           `\`${PREFIXO}reactionrole add <mensagem> <emoji> <idCargo>\``,
           "",
@@ -343,9 +417,15 @@ export async function cmdReactionRole(message, args, ctx) {
       msg ??= await message.channel.fetchMessage(mid).catch(() => null)
         ?? await buscarEmCanais(server, client, mid);
       if (!msg) {
-        return sendEmbed(message.channel, { title: "❌ Mensagem não encontrada",
+        return sendEmbed(message.channel, tr(ctx, {
+          title: "❌ Mensagem não encontrada",
           description: `Não achei a mensagem \`${mid}\`. Ela precisa estar num canal onde o bot tem acesso (ViewChannel + ReadMessageHistory).`,
-          colour: COR.erro });
+          colour: COR.erro,
+        }, {
+          title: "❌ Message not found",
+          description: `I couldn't find the message \`${mid}\`. It must be in a channel the bot can access (ViewChannel + ReadMessageHistory).`,
+          colour: COR.erro,
+        }));
       }
 
       // grava o canal junto: é o que permite recarregar a mensagem no boot
@@ -358,7 +438,17 @@ export async function cmdReactionRole(message, args, ctx) {
       await log.registrar(ctx, "cargos", { titulo: "🎭 Cargo por reação configurado",
         descricao: `<@${message.authorId}> vinculou ${emoji} → \`${role}\` na mensagem \`${mid}\`.` });
 
-      return sendEmbed(message.channel, {
+      return sendEmbed(message.channel, en ? {
+        title: "🎭 Reaction role configured",
+        description: [
+          `**Message:** \`${mid}\``,
+          `**Emoji:** ${emoji}`,
+          `**Role:** \`${role}\``,
+          "",
+          "Anyone who clicks the emoji on that message gets the role. ✅",
+        ].join("\n"),
+        colour: COR.sucesso,
+      } : {
         title: "🎭 Cargo por reação configurado",
         description: [
           `**Mensagem:** \`${mid}\``,
@@ -371,13 +461,16 @@ export async function cmdReactionRole(message, args, ctx) {
       });
     } catch (err) {
       console.error("[REACTIONROLE][add]", descreverErro(err));
-      return sendEmbed(message.channel, { title: "❌ Falha",
-        description: `**Erro:** ${descreverErro(err)}\n\n_O bot precisa de **React**, **ManageRole** e **AssignRoles**._`, colour: COR.erro });
+      return sendEmbed(message.channel, tr(ctx,
+        { title: "❌ Falha",
+          description: `**Erro:** ${descreverErro(err)}\n\n_O bot precisa de **React**, **ManageRole** e **AssignRoles**._`, colour: COR.erro },
+        { title: "❌ Failure",
+          description: `**Error:** ${descreverErro(err)}\n\n_The bot needs **React**, **ManageRole** and **AssignRoles**._`, colour: COR.erro }));
     }
   }
 
   // ── ajuda ──
-  return sendEmbed(message.channel, {
+  return sendEmbed(message.channel, tr(ctx, {
     title: "🎭 Cargos por reação",
     description: [
       `\`${PREFIXO}reactionrole add <idMensagem> <emoji> <idCargo>\``,
@@ -387,7 +480,17 @@ export async function cmdReactionRole(message, args, ctx) {
       "💡 _Dica: crie a mensagem-painel com_ `&embed` _e depois vincule os emojis a ela._",
     ].join("\n"),
     colour: COR.info,
-  });
+  }, {
+    title: "🎭 Reaction roles",
+    description: [
+      `\`${PREFIXO}reactionrole add <messageId> <emoji> <roleId>\``,
+      `\`${PREFIXO}reactionrole remove <messageId>\``,
+      `\`${PREFIXO}reactionrole list\``,
+      "",
+      "💡 _Tip: create the panel message with_ `&embed` _and then link the emojis to it._",
+    ].join("\n"),
+    colour: COR.info,
+  }));
 }
 
 // Tenta achar a mensagem varrendo os canais de texto (fallback quando não está

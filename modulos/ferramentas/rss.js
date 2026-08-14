@@ -20,6 +20,7 @@
 import * as db from "../core/db.js";
 import { ULID } from "../core/ids.js";
 import * as log from "../core/log.js";
+import { tr, lingua } from "../core/i18n.js";
 
 // Resumo por IA (injetado pelo main, usando o pipeline do chat). Se não for
 // configurado, o RSS posta os itens sem resumo (comportamento antigo).
@@ -146,8 +147,9 @@ export async function rodarCiclo(serverId, ctx, { forcado = false } = {}) {
   let novos = await coletarNovos(serverId);
   if (!novos.length) {
     if (forcado) {
+      const rlang = config?.language === "en" ? "en" : "pt";
       await canal.sendMessage({ embeds: [{ title: "📰 RSS",
-        description: "Nenhuma notícia nova desde o último ciclo.", colour: "#5865F2" }] });
+        description: rlang === "en" ? "No new stories since the last cycle." : "Nenhuma notícia nova desde o último ciclo.", colour: "#5865F2" }] });
     }
     return { ok: true, quantidade: 0 };
   }
@@ -156,7 +158,8 @@ export async function rodarCiclo(serverId, ctx, { forcado = false } = {}) {
   let cortados = 0;
   if (novos.length > MAX_ITENS) { cortados = novos.length - MAX_ITENS; novos = novos.slice(0, MAX_ITENS); }
 
-  const agora = new Date().toLocaleString("pt-BR", { timeZone: process.env.TZ || "UTC" });
+  const cicloEn = config?.language === "en";
+  const agora = new Date().toLocaleString(cicloEn ? "en-US" : "pt-BR", { timeZone: process.env.TZ || "UTC" });
 
   // ── Resumo geral com IA (tom da Judy), se configurado ──
   if (resumirIA) {
@@ -167,7 +170,7 @@ export async function rodarCiclo(serverId, ctx, { forcado = false } = {}) {
       const resumo = await resumirIA(material, novos.length);
       if (resumo && resumo.trim()) {
         await canal.sendMessage({ embeds: [{
-          title: `📰 O resumo da Judy — ${agora}`,
+          title: cicloEn ? `📰 Judy's digest — ${agora}` : `📰 O resumo da Judy — ${agora}`,
           description: resumo.trim().slice(0, 1900),
           colour: "#a78bfa",
         }] });
@@ -180,7 +183,7 @@ export async function rodarCiclo(serverId, ctx, { forcado = false } = {}) {
   // Posta cada notícia como um item (título, feed, horário, link).
   // Agrupa em blocos para não exceder o limite do embed.
   const linhas = novos.map((it) => {
-    const quando = it.data ? new Date(it.data).toLocaleString("pt-BR", { timeZone: process.env.TZ || "UTC" }) : "—";
+    const quando = it.data ? new Date(it.data).toLocaleString(cicloEn ? "en-US" : "pt-BR", { timeZone: process.env.TZ || "UTC" }) : "—";
     return `**${it.titulo}**\n${it.feedTitulo} · ${quando}${it.link ? `\n${it.link}` : ""}`;
   });
 
@@ -194,8 +197,11 @@ export async function rodarCiclo(serverId, ctx, { forcado = false } = {}) {
   if (atual) blocos.push(atual);
 
   for (let i = 0; i < blocos.length; i++) {
-    const titulo = blocos.length > 1 ? `📰 Notícias (${i + 1}/${blocos.length}) — ${agora}` : `📰 Notícias — ${agora}`;
-    const rodape = (i === blocos.length - 1 && cortados) ? `\n\n_(+${cortados} além do limite deste ciclo)_` : "";
+    const titulo = cicloEn
+      ? (blocos.length > 1 ? `📰 News (${i + 1}/${blocos.length}) — ${agora}` : `📰 News — ${agora}`)
+      : (blocos.length > 1 ? `📰 Notícias (${i + 1}/${blocos.length}) — ${agora}` : `📰 Notícias — ${agora}`);
+    const rodape = (i === blocos.length - 1 && cortados)
+      ? (cicloEn ? `\n\n_(+${cortados} beyond this cycle's limit)_` : `\n\n_(+${cortados} além do limite deste ciclo)_`) : "";
     try {
       await canal.sendMessage({ embeds: [{ title: titulo, description: (blocos[i] + rodape).slice(0, 1990), colour: "#5865F2" }] });
     } catch (e) {
@@ -243,16 +249,22 @@ export function iniciarAgendador(ctx) {
 // ──────────────────────────────────────────────────────────
 export async function cmdRss(message, args, ctx) {
   const { sendEmbed, COR, getServer, membroTemPermissao, PREFIXO, serverId, config, salvarConfig } = ctx;
+  const lang = lingua(ctx);
+  const en = lang === "en";
 
   if (!servidorPermitido(serverId)) {
-    return sendEmbed(message.channel, { title: "🚫 Indisponível aqui",
-      description: "A curadoria RSS não está habilitada neste servidor.", colour: COR.aviso });
+    return sendEmbed(message.channel, tr(ctx,
+      { title: "🚫 Indisponível aqui", description: "A curadoria RSS não está habilitada neste servidor.", colour: COR.aviso },
+      { title: "🚫 Unavailable here", description: "RSS curation isn't enabled on this server.", colour: COR.aviso }));
   }
 
   const server = await getServer(message);
   if (!membroTemPermissao(message, server, "ManagePermissions")) {
-    return sendEmbed(message.channel, { title: "🚫 Permissão insuficiente",
-      description: "Você precisa de **ManagePermissions** para configurar a curadoria RSS.", colour: COR.erro });
+    return sendEmbed(message.channel, tr(ctx,
+      { title: "🚫 Permissão insuficiente",
+        description: "Você precisa de **ManagePermissions** para configurar a curadoria RSS.", colour: COR.erro },
+      { title: "🚫 Missing permission",
+        description: "You need **ManagePermissions** to configure RSS curation.", colour: COR.erro }));
   }
 
   const sub = args[0]?.toLowerCase();
@@ -261,14 +273,20 @@ export async function cmdRss(message, args, ctx) {
   if (sub === "add" || sub === "adicionar") {
     const url = args[1];
     if (!url || !/^https?:\/\//i.test(url))
-      return sendEmbed(message.channel, { title: "❌ URL inválida",
-        description: `\`${PREFIXO}rss add <url>\` — a URL precisa começar com http(s).`, colour: COR.erro });
+      return sendEmbed(message.channel, tr(ctx,
+        { title: "❌ URL inválida",
+          description: `\`${PREFIXO}rss add <url>\` — a URL precisa começar com http(s).`, colour: COR.erro },
+        { title: "❌ Invalid URL",
+          description: `\`${PREFIXO}rss add <url>\` — the URL must start with http(s).`, colour: COR.erro }));
     // valida buscando o feed uma vez
     let titulo = null;
     try { titulo = (await parseFeed(url)).titulo; }
     catch (err) {
-      return sendEmbed(message.channel, { title: "❌ Feed inacessível",
-        description: `Não consegui ler esse RSS.\n**Erro:** ${err.message}`, colour: COR.erro });
+      return sendEmbed(message.channel, tr(ctx,
+        { title: "❌ Feed inacessível",
+          description: `Não consegui ler esse RSS.\n**Erro:** ${err.message}`, colour: COR.erro },
+        { title: "❌ Unreachable feed",
+          description: `I couldn't read that RSS.\n**Error:** ${err.message}`, colour: COR.erro }));
     }
     const novo = db.addFeed(serverId, url, titulo);
     // já marca os itens atuais como vistos (só resume o que vier DEPOIS)
@@ -277,7 +295,13 @@ export async function cmdRss(message, args, ctx) {
       const f = feeds.find((x) => x.url === url);
       try { for (const it of (await parseFeed(url)).itens) if (it.guid) db.marcarVisto(f.id, it.guid); } catch {}
     }
-    return sendEmbed(message.channel, {
+    return sendEmbed(message.channel, en ? {
+      title: novo ? "✅ Feed added" : "ℹ️ Already registered",
+      description: novo
+        ? `**${titulo || url}**\nThe current content was marked as seen; you'll only get the **next** stories.`
+        : "That feed was already on the list.",
+      colour: novo ? COR.sucesso : COR.mod,
+    } : {
       title: novo ? "✅ Feed adicionado" : "ℹ️ Já cadastrado",
       description: novo
         ? `**${titulo || url}**\nO conteúdo atual foi marcado como visto; você receberá só as **próximas** notícias.`
@@ -289,10 +313,17 @@ export async function cmdRss(message, args, ctx) {
   if (sub === "remove" || sub === "remover" || sub === "rm") {
     const alvo = args[1];
     if (!alvo)
-      return sendEmbed(message.channel, { title: "❌ Uso incorreto",
-        description: `\`${PREFIXO}rss remove <id|url>\` (veja os IDs em \`${PREFIXO}rss list\`)`, colour: COR.erro });
+      return sendEmbed(message.channel, tr(ctx,
+        { title: "❌ Uso incorreto",
+          description: `\`${PREFIXO}rss remove <id|url>\` (veja os IDs em \`${PREFIXO}rss list\`)`, colour: COR.erro },
+        { title: "❌ Wrong usage",
+          description: `\`${PREFIXO}rss remove <id|url>\` (see the IDs with \`${PREFIXO}rss list\`)`, colour: COR.erro }));
     const n = db.removeFeed(serverId, alvo);
-    return sendEmbed(message.channel, { title: n ? "🗑 Feed removido" : "❓ Não encontrado",
+    return sendEmbed(message.channel, en ? {
+      title: n ? "🗑 Feed removed" : "❓ Not found",
+      description: n ? `Removed ${n} feed(s).` : "No feed with that id/url.", colour: n ? COR.sucesso : COR.aviso,
+    } : {
+      title: n ? "🗑 Feed removido" : "❓ Não encontrado",
       description: n ? `Removido(s) ${n} feed(s).` : "Nenhum feed com esse id/url.", colour: n ? COR.sucesso : COR.aviso });
   }
 
@@ -300,9 +331,10 @@ export async function cmdRss(message, args, ctx) {
   if (sub === "list" || sub === "lista") {
     const feeds = db.listarFeeds(serverId);
     if (!feeds.length)
-      return sendEmbed(message.channel, { title: "📰 Feeds RSS",
-        description: `Nenhum feed. Adicione com \`${PREFIXO}rss add <url>\`.`, colour: COR.mod });
-    return sendEmbed(message.channel, { title: "📰 Feeds RSS",
+      return sendEmbed(message.channel, tr(ctx,
+        { title: "📰 Feeds RSS", description: `Nenhum feed. Adicione com \`${PREFIXO}rss add <url>\`.`, colour: COR.mod },
+        { title: "📰 RSS feeds", description: `No feeds. Add one with \`${PREFIXO}rss add <url>\`.`, colour: COR.mod }));
+    return sendEmbed(message.channel, { title: en ? "📰 RSS feeds" : "📰 Feeds RSS",
       description: feeds.map((f) => `**${f.id}.** ${f.titulo || f.url}\n${f.url}`).join("\n\n"), colour: COR.mod });
   }
 
@@ -312,34 +344,50 @@ export async function cmdRss(message, args, ctx) {
     const arg = (args[1] || "").toLowerCase();
     if (arg === "off" || arg === "desativar") {
       config.rss.canalId = null; salvarConfig();
-      return sendEmbed(message.channel, { title: "📰 Canal desativado",
-        description: "A curadoria não será mais postada até você definir um canal.", colour: COR.mod });
+      return sendEmbed(message.channel, tr(ctx,
+        { title: "📰 Canal desativado",
+          description: "A curadoria não será mais postada até você definir um canal.", colour: COR.mod },
+        { title: "📰 Channel disabled",
+          description: "The curation won't be posted until you set a channel again.", colour: COR.mod }));
     }
     let canalId = null;
     if (!arg || arg === "aqui" || arg === "here") canalId = message.channelId;
     else if (ULID.test(args[1].replace(/[<#>]/g, ""))) canalId = args[1].replace(/[<#>]/g, "");
-    else return sendEmbed(message.channel, { title: "❌ Uso incorreto",
-      description: `\`${PREFIXO}rss canal aqui\` · \`${PREFIXO}rss canal <id>\` · \`${PREFIXO}rss canal off\``, colour: COR.erro });
+    else return sendEmbed(message.channel, tr(ctx,
+      { title: "❌ Uso incorreto",
+        description: `\`${PREFIXO}rss canal aqui\` · \`${PREFIXO}rss canal <id>\` · \`${PREFIXO}rss canal off\``, colour: COR.erro },
+      { title: "❌ Wrong usage",
+        description: `\`${PREFIXO}rss canal aqui\` · \`${PREFIXO}rss canal <id>\` · \`${PREFIXO}rss canal off\``, colour: COR.erro }));
     config.rss.canalId = canalId; salvarConfig();
-    return sendEmbed(message.channel, { title: "📰 Canal definido",
-      description: `Os resumos serão postados em <#${canalId}>.`, colour: COR.sucesso });
+    return sendEmbed(message.channel, tr(ctx,
+      { title: "📰 Canal definido", description: `Os resumos serão postados em <#${canalId}>.`, colour: COR.sucesso },
+      { title: "📰 Channel set", description: `The digests will be posted in <#${canalId}>.`, colour: COR.sucesso }));
   }
 
   // ── agora (forçar ciclo) ──
   if (sub === "agora" || sub === "now" || sub === "testar") {
     if (!getCanalId(config))
-      return sendEmbed(message.channel, { title: "❌ Sem canal",
-        description: `Defina primeiro com \`${PREFIXO}rss canal aqui\`.`, colour: COR.erro });
-    await sendEmbed(message.channel, { title: "⏳ Rodando curadoria…",
-      description: "Buscando e resumindo as novidades. Pode levar um tempo.", colour: COR.info });
+      return sendEmbed(message.channel, tr(ctx,
+        { title: "❌ Sem canal", description: `Defina primeiro com \`${PREFIXO}rss canal aqui\`.`, colour: COR.erro },
+        { title: "❌ No channel", description: `Set one first with \`${PREFIXO}rss canal aqui\`.`, colour: COR.erro }));
+    await sendEmbed(message.channel, tr(ctx,
+      { title: "⏳ Rodando curadoria…",
+        description: "Buscando e resumindo as novidades. Pode levar um tempo.", colour: COR.info },
+      { title: "⏳ Running the curation…",
+        description: "Fetching and summarizing the news. This may take a while.", colour: COR.info }));
     try {
       const r = await rodarCiclo(serverId, ctx, { forcado: true });
       if (!r.ok)
-        return sendEmbed(message.channel, { title: "❌ Falhou", description: r.motivo, colour: COR.erro });
+        return sendEmbed(message.channel, tr(ctx,
+          { title: "❌ Falhou", description: r.motivo, colour: COR.erro },
+          { title: "❌ Failed", description: r.motivo, colour: COR.erro }));
     } catch (err) {
       console.error("[RSS] erro no ciclo forçado:", err);
-      return sendEmbed(message.channel, { title: "❌ Erro na curadoria",
-        description: `O resumo pode ter sido postado, mas algo falhou depois.\n**Erro:** ${err.message}`, colour: COR.erro });
+      return sendEmbed(message.channel, tr(ctx,
+        { title: "❌ Erro na curadoria",
+          description: `O resumo pode ter sido postado, mas algo falhou depois.\n**Erro:** ${err.message}`, colour: COR.erro },
+        { title: "❌ Error in the curation",
+          description: `The digest may have been posted, but something failed afterwards.\n**Error:** ${err.message}`, colour: COR.erro }));
     }
     return; // o próprio ciclo já postou
   }
@@ -347,7 +395,19 @@ export async function cmdRss(message, args, ctx) {
   // ── status (padrão) ──
   const feeds = db.listarFeeds(serverId);
   const canalId = getCanalId(config);
-  return sendEmbed(message.channel, {
+  return sendEmbed(message.channel, en ? {
+    title: "📰 RSS curation",
+    description: [
+      `**Feeds:** ${feeds.length}`,
+      `**Channel:** ${canalId ? `<#${canalId}>` : "_(not set)_"}`,
+      `**Cycle:** every ${Math.round(INTERVALO_MS / 60000)} min · cap ${MAX_ITENS} items`,
+      "",
+      "**Commands**",
+      `\`${PREFIXO}rss add <url>\` · \`${PREFIXO}rss remove <id>\` · \`${PREFIXO}rss list\``,
+      `\`${PREFIXO}rss canal <aqui|id|off>\` · \`${PREFIXO}rss agora\``,
+    ].join("\n"),
+    colour: COR.mod,
+  } : {
     title: "📰 Curadoria RSS",
     description: [
       `**Feeds:** ${feeds.length}`,

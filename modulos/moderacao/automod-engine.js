@@ -11,6 +11,7 @@ import * as db  from "../core/db.js";
 import * as log from "../core/log.js";
 import * as banGlobal from "./ban-global.js";
 import { analisarCaracteres, analisarRepeticao } from "./caracteres.js";
+import { lingua } from "../core/i18n.js";
 
 const INVITE_REGEX = /https?:\/\/stt\.gg\/([A-Za-z0-9]+)/gi;
 
@@ -158,6 +159,7 @@ async function aplicarPunicao(ctx, opts) {
   const nota = opts.nota ?? null;
   const grave = opts.grave ?? false;
   const { config, estado, sendEmbed, COR, PREFIXO } = ctx;
+  const lang = lingua(ctx);   // idioma dos avisos vistos pelos membros
   // Política: a do MÓDULO (opts.pol) tem prioridade; senão, a global do servidor.
   const polGlobal = config.automod.punicao ?? { modo: "avisar", warnsParaBan: 3, silenceRoleId: null };
   const polModulo = opts.pol && opts.pol.modo ? opts.pol : null;
@@ -167,18 +169,26 @@ async function aplicarPunicao(ctx, opts) {
     silenceRoleId: polGlobal.silenceRoleId,   // o cargo de silêncio é sempre o do servidor
   };
 
-  const linhaNota = (nota != null) ? `\n**Nota:** ${nota.toFixed(1)}/10` : "";
+  const linhaNota = (nota != null)
+    ? `\n**${lang === "en" ? "Score" : "Nota"}:** ${nota.toFixed(1)}/10` : "";
   const blocoGrave = grave ? [
     "",
-    "🚨 **Conteúdo grave.** Preserve evidências (ID do usuário) e denuncie à plataforma/autoridades — no Brasil: SaferNet + Polícia Federal; abuso infantil: report.cybertip.org.",
+    lang === "en"
+      ? "🚨 **Serious content.** Preserve evidence (the user's ID) and report it to the platform/authorities — child abuse: report.cybertip.org."
+      : "🚨 **Conteúdo grave.** Preserve evidências (ID do usuário) e denuncie à plataforma/autoridades — no Brasil: SaferNet + Polícia Federal; abuso infantil: report.cybertip.org.",
   ] : [];
 
   // ── avisar: só notifica, não apaga, não pune ──
   if (pol.modo === "avisar") {
     await sendEmbed(channel, {
-      title: grave ? "🚨 Detecção (somente aviso)" : "👁 Aviso do AutoMod",
+      title: grave
+        ? (lang === "en" ? "🚨 Detection (warning only)" : "🚨 Detecção (somente aviso)")
+        : (lang === "en" ? "👁 AutoMod notice" : "👁 Aviso do AutoMod"),
       description: [`<@${userId}> — ${motivo}${linhaNota}`,
-        "_Modo apenas-aviso: nada foi removido ou punido automaticamente._", ...blocoGrave].join("\n"),
+        lang === "en"
+          ? "_Warn-only mode: nothing was removed or punished automatically._"
+          : "_Modo apenas-aviso: nada foi removido ou punido automaticamente._",
+        ...blocoGrave].join("\n"),
       colour: grave ? COR.erro : COR.aviso,
     });
     return;
@@ -190,9 +200,12 @@ async function aplicarPunicao(ctx, opts) {
   // ── apagar: só remove a mensagem, sem punir o usuário ──
   if (pol.modo === "apagar") {
     await sendEmbed(channel, {
-      title: "🧹 Mensagem removida",
+      title: lang === "en" ? "🧹 Message removed" : "🧹 Mensagem removida",
       description: [`<@${userId}> — ${motivo}${linhaNota}`,
-        "_A mensagem foi apagada. Nenhuma punição aplicada ao usuário._", ...blocoGrave].join("\n"),
+        lang === "en"
+          ? "_The message was deleted. No punishment applied to the user._"
+          : "_A mensagem foi apagada. Nenhuma punição aplicada ao usuário._",
+        ...blocoGrave].join("\n"),
       colour: COR.mod,
     });
     await log.registrar(ctx, "punicoes", { titulo: "🧹 Mensagem removida (automod)",
@@ -202,15 +215,17 @@ async function aplicarPunicao(ctx, opts) {
 
   // ── banir: ban imediato ──
   if (pol.modo === "banir") {
-    let acao = "mensagem removida";
+    let acao = lang === "en" ? "message removed" : "mensagem removida";
     try {
       await server.banUser(userId, { reason: `[AutoMod] ${motivo}` });
-      acao = "🔨 usuário BANIDO";
+      acao = lang === "en" ? "🔨 user BANNED" : "🔨 usuário BANIDO";
       banGlobal.registrar(ctx, userId, motivo, "automod");   // alimenta a lista global
     }
-    catch (e) { console.error("[PUNIÇÃO][BAN]", e.message); acao = `falha ao banir (${e.message})`; }
-    await sendEmbed(channel, { title: "🔨 Banimento imediato",
-      description: [`<@${userId}> — ${motivo}${linhaNota}`, `**Ação:** ${acao}`, ...blocoGrave].join("\n"),
+    catch (e) { console.error("[PUNIÇÃO][BAN]", e.message);
+      acao = lang === "en" ? `failed to ban (${e.message})` : `falha ao banir (${e.message})`; }
+    await sendEmbed(channel, { title: lang === "en" ? "🔨 Instant ban" : "🔨 Banimento imediato",
+      description: [`<@${userId}> — ${motivo}${linhaNota}`,
+        `**${lang === "en" ? "Action" : "Ação"}:** ${acao}`, ...blocoGrave].join("\n"),
       colour: COR.erro });
     await log.registrar(ctx, "punicoes", { titulo: "🔨 Banimento imediato",
       descricao: `<@${userId}> — ${acao}.\n**Motivo:** ${motivo}` });
@@ -219,11 +234,11 @@ async function aplicarPunicao(ctx, opts) {
 
   // ── confirmar: silencia (se houver cargo) e pede confirmação ──
   if (pol.modo === "confirmar") {
-    let acao = "mensagem removida";
+    let acao = lang === "en" ? "message removed" : "mensagem removida";
     if (pol.silenceRoleId) {
       try {
         await aplicarCargoSilence(server, userId, pol.silenceRoleId, ctx);
-        acao = "usuário silenciado";
+        acao = lang === "en" ? "user silenced" : "usuário silenciado";
         // A permissão do canal e o rank dos cargos vencem o cargo de silêncio.
         // Se a pessoa tem cargo acima que libera falar, avisamos AGORA — senão
         // você só descobre quando ela continuar conversando normalmente.
@@ -232,19 +247,25 @@ async function aplicarPunicao(ctx, opts) {
           const membro = await server.fetchMember(userId).catch(() => null);
           const c = membro ? perms.conflitosDeSilencio(server, membro, pol.silenceRoleId) : null;
           if (c?.conflitantes?.length) {
-            acao = `silenciado, mas **o silêncio não deve funcionar** (cargo(s) acima: ${c.conflitantes.map((x) => x.nome).join(", ")})`;
+            acao = lang === "en"
+              ? `silenced, but **the silence likely won't work** (role(s) above: ${c.conflitantes.map((x) => x.nome).join(", ")})`
+              : `silenciado, mas **o silêncio não deve funcionar** (cargo(s) acima: ${c.conflitantes.map((x) => x.nome).join(", ")})`;
             console.log(`[PUNIÇÃO][SILENCE] ⚠️ ${userId} tem cargo acima do silêncio: ${c.conflitantes.map((x) => x.nome).join(", ")}`);
           }
         } catch {}
         // Marca no banco: se ele sair e voltar, o cargo é REAPLICADO.
         db.definirSilenciado(ctx.serverId ?? server?.id, userId, true, motivo);
       }
-      catch (e) { console.error("[PUNIÇÃO][SILENCE]", e.message); acao = `falha ao silenciar (${e.message})`; }
+      catch (e) { console.error("[PUNIÇÃO][SILENCE]", e.message);
+        acao = lang === "en" ? `failed to silence (${e.message})` : `falha ao silenciar (${e.message})`; }
     }
     await sendEmbed(channel, {
-      title: "⚠️ Violação — confirmação necessária",
-      description: [`<@${userId}> — ${motivo}${linhaNota}`, `**Ação:** ${acao}`,
-        `Confirme o ban com \`${PREFIXO}scam ban ${userId}\` ou libere com \`${PREFIXO}scam dismiss ${userId}\`.`,
+      title: lang === "en" ? "⚠️ Violation — confirmation needed" : "⚠️ Violação — confirmação necessária",
+      description: [`<@${userId}> — ${motivo}${linhaNota}`,
+        `**${lang === "en" ? "Action" : "Ação"}:** ${acao}`,
+        lang === "en"
+          ? `Confirm the ban with \`${PREFIXO}scam ban ${userId}\` or release with \`${PREFIXO}scam dismiss ${userId}\`.`
+          : `Confirme o ban com \`${PREFIXO}scam ban ${userId}\` ou libere com \`${PREFIXO}scam dismiss ${userId}\`.`,
         ...blocoGrave].join("\n"),
       colour: COR.mod,
     });
@@ -261,21 +282,28 @@ async function aplicarPunicao(ctx, opts) {
   const count = db.somarAviso(sid, userId, motivo);
   console.log(`[AUTOMOD] ⚠️ Aviso #${count}/${limite} para ${userId} — ${motivo}`);
   if (count >= limite) {
-    let acao = "banido";
+    let acao = lang === "en" ? "banned" : "banido";
     try {
       await server.banUser(userId, { reason: `[AutoMod] ${motivo} (${count} avisos)` });
       banGlobal.registrar(ctx, userId, `${motivo} (${count} avisos)`, "automod");
     }
-    catch (e) { console.error("[PUNIÇÃO][BAN]", e.message); acao = `falha ao banir (${e.message})`; }
+    catch (e) { console.error("[PUNIÇÃO][BAN]", e.message);
+      acao = lang === "en" ? `failed to ban (${e.message})` : `falha ao banir (${e.message})`; }
     db.limparPunicao(sid, userId);
-    await sendEmbed(channel, { title: "🔨 Usuário banido",
-      description: [`<@${userId}> ${acao} após ${count} avisos.`, `**Motivo:** ${motivo}${linhaNota}`, ...blocoGrave].join("\n"),
+    await sendEmbed(channel, { title: lang === "en" ? "🔨 User banned" : "🔨 Usuário banido",
+      description: [
+        lang === "en" ? `<@${userId}> ${acao} after ${count} warnings.` : `<@${userId}> ${acao} após ${count} avisos.`,
+        `**${lang === "en" ? "Reason" : "Motivo"}:** ${motivo}${linhaNota}`, ...blocoGrave].join("\n"),
       colour: COR.erro });
     await log.registrar(ctx, "punicoes", { titulo: "🔨 Ban automático",
-      descricao: `<@${userId}> ${acao} após **${count}** avisos.\n**Motivo:** ${motivo}` });
+      descricao: `<@${userId}> banido após **${count}** avisos.\n**Motivo:** ${motivo}` });
   } else {
-    await sendEmbed(channel, { title: "⚠️ Aviso do AutoMod",
-      description: [`<@${userId}> — ${motivo} *(aviso ${count}/${limite})*${linhaNota}`, ...blocoGrave].join("\n"),
+    await sendEmbed(channel, { title: lang === "en" ? "⚠️ AutoMod warning" : "⚠️ Aviso do AutoMod",
+      description: [
+        lang === "en"
+          ? `<@${userId}> — ${motivo} *(warning ${count}/${limite})*${linhaNota}`
+          : `<@${userId}> — ${motivo} *(aviso ${count}/${limite})*${linhaNota}`,
+        ...blocoGrave].join("\n"),
       colour: COR.aviso });
     await log.registrar(ctx, "punicoes", { titulo: "⚠️ Aviso aplicado",
       descricao: `<@${userId}> recebeu o aviso **${count}/${limite}**.\n**Motivo:** ${motivo}` });

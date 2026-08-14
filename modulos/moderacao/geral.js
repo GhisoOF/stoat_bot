@@ -3,14 +3,17 @@ import { servidorPermitido as temIA } from "../ai/chat.js";
 //  modulos/geral.js — Comandos gerais e de moderação manual:
 //  help, ping, repete, userinfo, kick, ban.
 //
+//  BILÍNGUE: cada texto tem versão PT e EN, escolhida por
+//  ctx.config.language (helper tr() do core/i18n.js).
+//
 //  Todas as funções recebem (message, args, ctx). O `ctx` vem
 //  do main.js com: client, COR, PREFIXO, sendEmbed, getServer,
 //  membroTemPermissao, etc.
 // ══════════════════════════════════════════════════════════
 
-// %help — lista todos os comandos
 import * as log from "../core/log.js";
 import * as db  from "../core/db.js";
+import { tr, lingua } from "../core/i18n.js";
 import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
@@ -59,9 +62,17 @@ function extrairAlvo(message, args) {
   return { id, motivo: resto.join(" ").trim() };
 }
 
-// Referência dos comandos (usada pelo &help e também pela IA como base
-// de conhecimento para assistir na configuração).
-export function construirDetalhes(P) {
+// ══════════════════════════════════════════════════════════
+//  Referência dos comandos (usada pelo &help e também pela IA
+//  como base de conhecimento). `lang` escolhe o dicionário;
+//  omitido → pt (compatível com quem já chamava com 1 arg).
+// ══════════════════════════════════════════════════════════
+export function construirDetalhes(P, lang = "pt") {
+  if (lang === "en") return detalhesEN(P);
+  return detalhesPT(P);
+}
+
+function detalhesPT(P) {
   return {
     cor: {
       uso: `${P}cor <cargo> <cor|gradiente|preset>`,
@@ -147,7 +158,7 @@ export function construirDetalhes(P) {
     },
     scam: {
       uso: `${P}scam <config|sensitivity|channel|test|simulate|ban|dismiss>`,
-      desc: "Detecção de conteúdo proibido por PONTUAÇÃO (0–10): golpe, +18, gore, apologia a ilícito e abuso, tudo numa categoria só. A punição é definida no `${P}punicao`. `test <texto>` mostra a nota; `simulate <texto>` dispara o fluxo real no canal de avisos.",
+      desc: `Detecção de conteúdo proibido por PONTUAÇÃO (0–10): golpe, +18, gore, apologia a ilícito e abuso, tudo numa categoria só. A punição é definida no \`${P}punicao\`. \`test <texto>\` mostra a nota; \`simulate <texto>\` dispara o fluxo real no canal de avisos.`,
       perm: "ManagePermissions", ex: `${P}scam test ganhe dinheiro fácil chama no pv`,
     },
     banglobal: {
@@ -182,6 +193,11 @@ export function construirDetalhes(P) {
       desc: "Mostra informações resumidas do bot: recursos, número de comandos e há quanto tempo está no ar.",
       perm: null, ex: `${P}sobre`,
     },
+    idioma: {
+      uso: `${P}idioma [pt|en]`,
+      desc: "Define o idioma em que o bot responde **neste servidor**: Português ou Inglês. Sem argumento, mostra o idioma atual. Também responde por `&language` e `&lang`.",
+      perm: "ManagePermissions (para mudar)", ex: `${P}idioma en`,
+    },
     chat: {
       uso: `${P}chat <mensagem>`,
       desc: "Conversa com a IA local (a Judy). Ela busca na internet, faz contas exatas, lê o próprio código, monta um perfil de quem conversa com ela e adapta o tom a cada pessoa. O modelo é escolhido sozinho conforme o tipo (conversa leve, código, lógica).\n\n**Subcomandos:**\n`&chat status` — se o serviço de IA está no ar\n`&chat perfil [@user]` — o que a Judy sabe sobre alguém\n`&chat mapear [@user]` — captura bio/status do cartão\n`&chat cuidado [@user] on|off` — trata a pessoa com gentileza extra (opt-in)\n`&chat esquecer` — apaga tudo que a Judy sabe de você\n`&chat esquecer tudo` — zera a memória do servidor *(ManageServer)*\n`&chat livre on|off|modo` — a Judy participa sozinha do canal *(ManagePermissions)*\n`&chat comentar aqui|off|pordia <n>` — comentários por iniciativa *(ManagePermissions)*\n\nQuando responde alguém, mantém o papo fluido por um tempo.",
@@ -205,7 +221,7 @@ export function construirDetalhes(P) {
     },
     cargomudo: {
       uso: `${P}cargomudo [nome]`,
-      desc: "Cria um cargo com TODAS as permissões negadas (serve para silenciar) e já o define como cargo de silêncio do servidor. Nega no servidor E em cada canal. `${P}cargomudo canais` reaplica nos canais.",
+      desc: `Cria um cargo com TODAS as permissões negadas (serve para silenciar) e já o define como cargo de silêncio do servidor. Nega no servidor E em cada canal. \`${P}cargomudo canais\` reaplica nos canais.`,
       perm: "ManagePermissions", ex: `${P}cargomudo Silenciado`,
     },
     embed: {
@@ -247,6 +263,197 @@ export function construirDetalhes(P) {
   };
 }
 
+function detalhesEN(P) {
+  return {
+    cor: {
+      uso: `${P}cor <role> <color|gradient|preset>`,
+      desc: "Customizes role colors — including **gradients**, which the Stoat client doesn't offer in its UI.\n\n**Solid:** `&cor VIP #FF00AA` or `&cor VIP roxo`\n**Gradient:** `&cor VIP gradiente #FF0000 #0000FF` (2+ colors; a leading number sets the angle)\n**Preset:** `&cor VIP preset vaporwave` — see them all with `&cor presets`\n**Automatic:** `&cor painel aqui` — creates the roles, posts the picker message (mentioning the roles), adds the emoji reactions, wires up reaction roles and enables exclusive mode. All in one command.\n**Roles only:** `&cor criar` — creates/paints without posting anything\n**Raw CSS:** `&cor VIP linear-gradient(90deg, #f00 0%, #00f 100%)`\n**Clear:** `&cor VIP remover` · **View:** `&cor lista`\n\nThe role can be given by name (even partial) or by ID. The bot's role needs **ManageRole** and must sit **above** the edited role.",
+      perm: "ManageRole",
+      ex: `${P}cor VIP gradiente #FF71CE #01CDFE #05FFA1`,
+    },
+    tutorial: {
+      uso: `${P}tutorial [area]`,
+      desc: "First-steps guide: shows **where to start** and which command to use in each area — it never changes anything by itself.\n\n`&tutorial` — the recommended order\n`&tutorial <area>` — that area's page with the exact commands\n\n**Areas:** `permissoes` (what the bot needs), `moderacao`, `logs`, `cargos`, `xp`, `ia`, `noticias`, `mensagens`, `ajustes`.\n\nEach page ends by pointing at the next one. Also answers to `&guia` and `&comecar`.",
+      perm: null,
+      ex: `${P}tutorial moderacao`,
+    },
+    hello: {
+      uso: `${P}hello`,
+      desc: "Replies with a simple greeting. Handy to check whether the bot is online.",
+    },
+    ping: {
+      uso: `${P}ping`,
+      desc: "Shows the latency between the message being sent and the bot processing it.",
+    },
+    repete: {
+      uso: `${P}repete <text>`,
+      desc: "The bot repeats the given text verbatim. Useful for announcements.",
+      ex: `${P}repete Welcome to the server!`,
+    },
+    userinfo: {
+      uso: `${P}userinfo [@user]`,
+      desc: "Shows ID, account creation date, server join date and roles. Without a mention, shows you.",
+      ex: `${P}userinfo @someone`,
+    },
+    kick: {
+      uso: `${P}kick @user [reason]`,
+      desc: "Kicks the mentioned user. They can come back with a new invite.",
+      perm: "KickMembers", ex: `${P}kick @someone spam`,
+    },
+    ban: {
+      uso: `${P}ban @user [reason]`,
+      desc: "Permanently bans the mentioned user.",
+      perm: "BanMembers", ex: `${P}ban @someone advertising`,
+    },
+    warn: {
+      uso: `${P}warn <@user|id|name> [reason]`,
+      desc: "Gives someone a manual warning. It uses the **same counter** as the automod, so in `acumular` (accumulate) mode a manual warning counts towards the automatic ban — and the bot tells you how many are left.\n\nSee warnings: `&warnings @user` · Reset: `&clearwarnings @user`",
+      perm: "KickMembers",
+      ex: `${P}warn @Someone flooding the art channel`,
+    },
+    servidores: {
+      uso: `${P}servidores`,
+      desc: "Overview of everywhere the bot is: each server's name, member count and message rate per minute.\n\n`&servidores cru` shows the raw data as the API delivers it (diagnostics).\n\n_Restricted to the bot owner._",
+      perm: null,
+      ex: `${P}servidores`,
+    },
+    acesso: {
+      uso: `${P}acesso <cargo|canal|staffignora|status>`,
+      desc: "Defines **who** can use the commands and **where**.\n\n**Staff roles** — anyone holding one can use the moderation commands even without the native Stoat permission:\n`&acesso cargo add <@role>` · `&acesso cargo remove <@role>` · `&acesso cargo limpar`\n\n**Channels** — where commands work:\n`&acesso canal todos` — in any channel\n`&acesso canal somente` — only in the listed ones\n`&acesso canal exceto` — everywhere except the listed ones\n`&acesso canal add|remove [#channel]` — edits the list\n\n`&acesso staffignora on|off` — whether staff bypasses the channel restriction (default: yes)\n\n_`&acesso`, `&debug`, `&help` and `&tutorial` always work, so you can't lock yourself out._",
+      perm: "ManagePermissions",
+      ex: `${P}acesso canal somente`,
+    },
+    warnings: {
+      uso: `${P}warnings [@user]`,
+      desc: "Shows how many warnings (0 to 3) the user has accumulated in the AutoMod. 3 warnings = ban.",
+    },
+    clearwarnings: {
+      uso: `${P}clearwarnings @user`,
+      desc: "Resets a user's accumulated warnings.",
+      perm: "ManagePermissions",
+    },
+    automod: {
+      uso: `${P}automod status | ${P}automod <module> <on|off>`,
+      desc: "Turns each AutoMod module on/off and shows the overall state. Modules: antispam, antimassspam, antiinvite, antimassmention, anticaps, antilink, antiscam.",
+      perm: "ManagePermissions", ex: `${P}automod antilink on`,
+    },
+    whitelist: {
+      uso: `${P}whitelist <add|remove|list> [invite]`,
+      desc: "List of this server's invites exempt from the anti-invite. Accepts the full link or just the code.",
+      perm: "ManagePermissions", ex: `${P}whitelist add https://stt.gg/abc123`,
+    },
+    blocklist: {
+      uso: `${P}blocklist <add|adddomain|remove|removedomain|list|clear|reload> [url|domain]`,
+      desc: "Manages the anti-link. `add <url>` imports Pi-hole-style lists; `adddomain <domain>` blocks a single domain.",
+      perm: "ManagePermissions", ex: `${P}blocklist adddomain bad-site.com`,
+    },
+    scam: {
+      uso: `${P}scam <config|sensitivity|channel|test|simulate|ban|dismiss>`,
+      desc: `SCORE-based (0–10) detection of forbidden content: scams, NSFW, gore, glorifying crime and abuse, all in one category. The punishment is set with \`${P}punicao\`. \`test <text>\` shows the score; \`simulate <text>\` fires the real flow in the alerts channel.`,
+      perm: "ManagePermissions", ex: `${P}scam test easy money DM me now`,
+    },
+    banglobal: {
+      uso: `${P}banglobal <off|avisar|banir|varrer|historico|importar|esquecer>`,
+      desc: "Global ban list shared across every server the bot is in.\n\n`off` — ignore · `avisar` — alert the moderators · `banir` — ban automatically\n\n⚠️ **Important:** the modes above only act when someone **joins**. For people **already in** the server, use:\n`&banglobal varrer` — checks every current member and acts\n`&banglobal varrer ver` — only shows who would be flagged, without banning\n\n`&banglobal historico <@user|id|name>` — where the person was banned\n`&banglobal importar` — imports this server's existing bans\n`&banglobal esquecer <@user|id>` — removes someone from the list",
+      perm: "BanMembers",
+      ex: `${P}banglobal varrer ver`,
+    },
+    game: {
+      uso: `${P}game [criar|ficha|pontos|top|apagar]`,
+      desc: "Server RPG: create a character, level up and spend points across 9 attributes.\n\n`&game criar [name]` — creates your character\n`&game` — your sheet\n`&game ficha @user` — someone else's sheet\n`&game pontos <attribute> [amount]` — spends points (abbreviations work: for, int, sor…)\n\n_Every 2 levels all attributes rise by 1 on their own; the free points are what shape your build._\n`&game carteira` — balance and economy state\n`&game comprar [item]` · `&game vender <item>` — market\n`&game contratar [name]` — mercenaries\n`&game descansar` — restores energy for a fee\n`&game mercado` — player-to-player bazaar (sell, buy, cancel)\n`&game cambio <qty> <currency> por <qty> <currency>` — currency exchange\n`&game trocar @user <item> por <item>` — bartering\n\n_To **configure** the RPG on the server: `&tutorial game`._\n_Bot owner: `&game admin` has the testing tools._\n`&game followers` — your companions\n`&game follower levar <name>` — adds to the party (up to 2)\n`&game recrutas` — who exists in the game\n`&game dungeon` — rescues captured companions\n`&game missao` — available missions (with your odds in each)\n`&game missao <name>` — sets off on the mission\n`&game itens` — your backpack\n`&game equipar <item>` / `&game desequipar <slot|item>`\n`&game catalogo` — item summary · `&game catalogo <rarity|slot>` — the full list of that group\n`&game top` — server ranking\n`&game apagar confirmar` — starts over from scratch\n\n**Attributes:** Strength, Dexterity, Endurance, Agility, Health, Mana, Intelligence, Luck, Charisma.\n\n_Intelligence and Luck boost XP gains and points per level, with diminishing returns — they never stop mattering._\n\n⚠️ Not to be confused with `&xp`, the per-message leveling system.",
+      perm: null,
+      ex: `${P}game criar Kael`,
+    },
+    xp: {
+      uso: `${P}xp [rank|top|setup|cargos|criarcargos|on|off]`,
+      desc: "Message-XP leveling system. Each message grants XP (with a cooldown), and enough XP levels you up. Every N levels you can earn a role. `top` shows the ranking. `setup` configures difficulty, level cap and role interval. (Voice-call XP isn't supported by Stoat.)",
+      perm: "ManagePermissions (to configure)", ex: `${P}xp top`,
+    },
+    rss: {
+      uso: `${P}rss [add|remove|list|canal|agora]`,
+      desc: "RSS news curation with Judy's summaries. `add <url>` registers a feed, `canal aqui` sets the destination, `list` shows the feeds, `remove <url|n>` removes one, `agora` forces a cycle. Every hour Judy posts an overall summary in her own voice, followed by the new items (title, feed, time, link).",
+      perm: "ManagePermissions", ex: `${P}rss add https://example.com/feed.xml`,
+    },
+    autorole: {
+      uso: `${P}autorole [set <@role>|off]`,
+      desc: "Automatically gives a role to every new member who joins the server. `set` defines the role, `off` disables it. Useful for handing everyone a 'Member' role automatically.",
+      perm: "ManageRole", ex: `${P}autorole set <@Member>`,
+    },
+    sobre: {
+      uso: `${P}sobre`,
+      desc: "Shows a summary of the bot: features, number of commands and how long it has been up.",
+      perm: null, ex: `${P}sobre`,
+    },
+    idioma: {
+      uso: `${P}language [pt|en]`,
+      desc: "Sets the language the bot replies in **on this server**: Portuguese or English. Without an argument, shows the current language. Also answers to `&idioma` and `&lang`.",
+      perm: "ManagePermissions (to change)", ex: `${P}language en`,
+    },
+    chat: {
+      uso: `${P}chat <message>`,
+      desc: "Talk to the local AI (Judy). She searches the web, does exact math, reads her own code, builds a profile of whoever talks to her and adapts her tone to each person. The model is picked automatically by task type (casual chat, code, logic).\n\n**Subcommands:**\n`&chat status` — whether the AI service is up\n`&chat perfil [@user]` — what Judy knows about someone\n`&chat mapear [@user]` — captures the profile card bio/status\n`&chat cuidado [@user] on|off` — treats the person with extra kindness (opt-in)\n`&chat esquecer` — erases everything Judy knows about you\n`&chat esquecer tudo` — wipes the server's memory *(ManageServer)*\n`&chat livre on|off|modo` — Judy joins the channel on her own *(ManagePermissions)*\n`&chat comentar aqui|off|pordia <n>` — comments on her own initiative *(ManagePermissions)*\n\nWhen she replies to someone, she keeps the conversation flowing for a while.",
+      perm: null, ex: `${P}chat status`,
+    },
+    modia: {
+      uso: `${P}modia <on|off|criterios|canal|status|limpar>`,
+      desc: "AI moderation of the conversation. You write the CRITERIA in free text and Judy evaluates each message; if it violates them, she DELETES it and pings you in #log with the content and the options (warn/silence/ban) with the command ready to paste. She never bans on her own — the decision is yours. The bot owner is immune.\n\n`&modia criterios <text>` — defines what to moderate\n`&modia on|off` — toggles it\n`&modia canal add|remove` — limits it to channels (otherwise applies to all)\n`&modia limpar` — resets everything",
+      perm: "ManageServer", ex: `${P}modia criterios Delete ads for other servers and personal attacks`,
+    },
+    debug: {
+      uso: `${P}debug [canais|silence]`,
+      desc: "Bot diagnostics on this server.\n\n`&debug` — tests every command and points out what's disabled or missing permissions\n`&debug canais` — **what I can see and do in each channel**. On Stoat the channel permission beats the role permission, so I can have a server-wide permission yet be muted in one specific channel\n`&debug canais cru` — shows the raw data format (when the diagnosis can't evaluate)\n`&debug silence [@user]` — whether the silence role actually silences: shows which channels are missing the denial and, with someone mentioned, warns if they hold a role **above** the silence role that cancels it",
+      perm: "ManagePermissions",
+      ex: `${P}debug canais`,
+    },
+    comando: {
+      uso: `${P}comando [disable|enable <name>]`,
+      desc: "Enables or disables bot commands on this server. `&comando` alone lists each one's state. E.g.: `&comando disable ban`. The `help` and `comando` commands can't be disabled.",
+      perm: "ManagePermissions", ex: `${P}comando disable repete`,
+    },
+    cargomudo: {
+      uso: `${P}cargomudo [name]`,
+      desc: `Creates a role with ALL permissions denied (used to silence people) and sets it as the server's silence role. Denies at the server level AND in every channel. \`${P}cargomudo canais\` re-applies it to the channels.`,
+      perm: "ManagePermissions", ex: `${P}cargomudo Silenced`,
+    },
+    embed: {
+      uso: `${P}embed` + " → then `field: value`, one per line",
+      desc: "Posts a customizable embed message.\n\n**Write it like this** (no parentheses, no trailing comma):\n```\n&embed\ntitulo: Age\ndescricao: Are you over or under 18?\ncor: #FF00FF\n```\n**Fields:** `titulo:` `descricao:` `cor:` `rodape:` `imagem:` (URL) `canal:` (ID to post in another channel).\nColor by hex (`#5865F2`) or name (azul, verde, rosa…).\nAlso accepts everything on one line separated by `|`.",
+      perm: "ManageMessages", ex: `${P}embed titulo: Age | descricao: 18+ or under? | cor: rosa`,
+    },
+    reactionrole: {
+      uso: `${P}reactionrole <add|remove|list>`,
+      desc: "Reaction roles: whoever reacts with the emoji gets the role; removing the reaction removes the role.\n\n`&reactionrole add <message> <emoji> <roleId>`\n`&reactionrole remove <message>` — removes that message's rules\n`&reactionrole exclusivo <message> on|off` — **on**: picking one emoji swaps out the previous role (e.g. colors); **off**: they stack (e.g. interests)\n`&reactionrole recarregar` — if roles stop being handed out after a restart\n`&reactionrole list` — this server's rules\n\n**The message** can be its **ID** or its **link** (`...` menu → *Copy link*) — both work.\n**The role** can be **mentioned** (`<%Role>`) or given by ID (Settings → Roles → *Copy role ID*).\n\nThe bot needs `React`, `ViewChannel`, `ReadMessageHistory` and **AssignRoles**, and its role must be above the role being handed out.",
+      perm: "ManageRole",
+      ex: `${P}reactionrole add https://stoat.chat/server/.../01ABC... 🎮 01XYZ...`,
+    },
+    limpar: {
+      uso: `${P}limpar <amount> [@user]`,
+      desc: "Deletes the channel's latest messages (1–100). With a user, deletes only theirs. Also answers to `clear` and `purge`. The confirmation deletes itself after a few seconds.",
+      perm: "ManageMessages", ex: `${P}limpar 10`,
+    },
+    config: {
+      uso: `${P}config`,
+      desc: "Shows ALL of the server's current settings in one place: automod modules, punishment policy, log channel, allowed invites and active punishments.",
+      perm: "ManagePermissions", ex: `${P}config`,
+    },
+    log: {
+      uso: `${P}log [here | <channelId> | off | <event> <on|off>]`,
+      desc: "The server's log channel. `here` uses the current channel; `<channelId>` sets it by ID; `off` disables it. Events: `punicoes`, `membros`, `mensagens`, `cargos`, `comandos` — each can be toggled.",
+      perm: "ManagePermissions", ex: `${P}log here`,
+    },
+    punicao: {
+      uso: `${P}punicao <modo|warns|silencerole>`,
+      desc: "Punishment aggressiveness for ALL automods. `modo avisar` (warn only) | `confirmar` (remove+silence+wait for a mod) | `acumular` (warnings until ban) | `banir` (instant ban). `warns <n>` sets how many warnings until the ban; `silencerole <id>` sets the silence role.",
+      perm: "ManagePermissions", ex: `${P}punicao modo acumular`,
+    },
+    review: {
+      uso: `${P}scam ban <userId> | ${P}scam dismiss <userId>`,
+      desc: "In confirmation mode, confirms the ban or releases the flagged user.",
+      perm: "BanMembers",
+    },
+  };
+}
+
 // Marca invisível nas linhas que só valem onde a IA está ativa. O filtro
 // remove essas linhas nos servidores sem IA, em vez de anunciar o que não roda.
 const IA_TAG = "\u200b[ia]";
@@ -257,16 +464,96 @@ function filtrarIA(linhas, comIA) {
     .map((l) => String(l).replace(IA_TAG, ""));
 }
 
-export async function cmdHelp(message, args, ctx) {
-  const { sendEmbed, COR, PREFIXO } = ctx;
-  const P = PREFIXO;
-  const comIA = (() => { try { return temIA(ctx.serverId); } catch { return false; } })();
+// ══════════════════════════════════════════════════════════
+//  Subtópicos do help (&help <comando> <subtópico>)
+// ══════════════════════════════════════════════════════════
+function construirSubtopicos(P, lang) {
+  if (lang === "en") return {
+    scam: {
+      sensitivity: {
+        titulo: "scam sensitivity",
+        texto: [
+          `**Usage:** \`${P}scam sensitivity <baixa|media|alta>\``,
+          "",
+          "Sets from which **score (0–10)** the bot acts on suspicious content:",
+          "• 🟢 **baixa** (low, threshold 8) — only near-certain cases; fewer false positives.",
+          "• 🟡 **media** (medium, threshold 6) — recommended balance.",
+          "• 🔴 **alta** (high, threshold 4) — catches faint signs; protects more, errs more.",
+        ].join("\n"),
+      },
+      test: {
+        titulo: "scam test",
+        texto: [
+          `**Usage:** \`${P}scam test <text>\``,
+          "",
+          "Simulates analyzing a text and shows the score (0–10) and detected signals, without punishing anyone. Useful for calibrating the sensitivity.",
+        ].join("\n"),
+      },
+      channel: {
+        titulo: "scam channel",
+        texto: [
+          `**Usage:** \`${P}scam channel <aqui|id|off>\``,
+          "",
+          "Sets which channel receives the suspicious-content alerts. `off` goes back to alerting in the message's own channel.",
+        ].join("\n"),
+      },
+    },
+    automod: {
+      set: {
+        titulo: "automod set",
+        texto: [
+          `**Usage:** \`${P}automod <module> set <parameter> <value>\``,
+          "",
+          "Adjusts a module's parameter. Parameters per module:",
+          "• `antispam` / `antimassspam`: `mensagens`, `tempo` (ms)",
+          "• `antimassmention`: `mencoes`",
+          "• `anticaps`: `tamanho`, `limiar` (0–1 or %)",
+          "• `anticaracteres`: `zalgo`",
+          "• `antirepeticao`: `repeticao`, `ignorar` (laughter letters, e.g. `k`)",
+          "",
+          `E.g.: \`${P}automod antispam set mensagens 3\` · \`${P}automod antispam set tempo 10000\``,
+        ].join("\n"),
+      },
+      punicao: {
+        titulo: "automod punicao",
+        texto: [
+          `**Usage:** \`${P}automod <module> punicao <mode|herdar>\``,
+          "",
+          "Gives a module its **own** punishment, independent of the global one:",
+          "• `avisar` — warn only\n• `apagar` — remove the message only\n• `confirmar` — silence and wait for a mod\n• `acumular` — stack warnings until a ban\n• `banir` — instant ban\n• `herdar` — inherit the global punishment again",
+          "",
+          `E.g.: \`${P}automod antilink punicao apagar\``,
+        ].join("\n"),
+      },
+      antirepeticao: {
+        titulo: "automod antirepeticao",
+        texto: [
+          "**Anti-repetition** — blocks the same letter repeated many times in one message (e.g. `aaaaaaaaaa`).",
+          "",
+          "It ships **disabled** by default, because in Brazilian servers `kkkkk` (laughter) is legitimate — which is also why `k` is ignored by default.",
+          "",
+          `\`${P}automod antirepeticao on\` — enables it`,
+          `\`${P}automod antirepeticao set repeticao 15\` — repetition limit`,
+          `\`${P}automod antirepeticao set ignorar k\` — letters to ignore (laughter)`,
+          `\`${P}automod antirepeticao punicao apagar\` — its own punishment`,
+        ].join("\n"),
+      },
+    },
+    punicao: {
+      modo: {
+        titulo: "punicao modo",
+        texto: [
+          `**Usage:** \`${P}punicao modo <avisar|apagar|confirmar|acumular|banir>\``,
+          "",
+          "Sets the **global** punishment (applies to every module without its own):",
+          "• `avisar` — warn only, don't remove\n• `apagar` — remove the message only\n• `confirmar` — remove, silence (if a role is set) and wait for a mod's approval\n• `acumular` — stack warnings and ban at the limit\n• `banir` — instant ban",
+        ].join("\n"),
+      },
+    },
+  };
 
-  // Ajuda detalhada por comando: &help <comando>
-  const DETALHES = construirDetalhes(P);
-
-  // ── Subtópicos: &help <comando> <subtópico> ──
-  const SUBTOPICOS = {
+  // pt
+  return {
     scam: {
       sensitivity: {
         titulo: "scam sensitivity",
@@ -349,19 +636,127 @@ export async function cmdHelp(message, args, ctx) {
       },
     },
   };
+}
 
-  const alvo = args[0]?.toLowerCase();
-  const subtopico = args[1]?.toLowerCase();
+// ══════════════════════════════════════════════════════════
+//  Categorias do help (&help <categoria>)
+// ══════════════════════════════════════════════════════════
+function construirCategorias(P, lang) {
+  if (lang === "en") return {
+    geral: {
+      titulo: "General commands",
+      linhas: [
+        `\`${P}tutorial\` — ⭐ where to start (setup guide)`,
+        `\`${P}ping\` — bot latency`,
+        `\`${P}repete <text>\` — repeats the text`,
+        `\`${P}chat <message>\` — talk to the AI (or mention the bot)` + IA_TAG,
+        `\`${P}userinfo [@user]\` — user info`,
+        `\`${P}sobre\` — bot info`,
+        `\`${P}idioma pt|en\` — server language *(ManagePermissions)*`,
+      ],
+    },
+    moderacao: {
+      titulo: "Moderation",
+      linhas: [
+        `\`${P}kick @user [reason]\` — kicks *(KickMembers)*`,
+        `\`${P}ban @user [reason]\` — bans *(BanMembers)*`,
+        `\`${P}limpar <n> [@user]\` — deletes messages *(ManageMessages)*`,
+        `\`${P}warn <@user> [reason]\` — manual warning *(KickMembers)*`,
+        `\`${P}acesso <cargo|canal>\` — who can use commands and where *(ManagePermissions)*`,
+        `\`${P}warnings [@user]\` — see warnings`,
+        `\`${P}clearwarnings @user\` — clears warnings *(ManagePermissions)*`,
+        `\`${P}banglobal <off|avisar|banir|...>\` — global list *(BanMembers)*`,
+        `\`${P}modia <on|off|criterios|...>\` — AI moderation of the chat *(ManageServer)*` + IA_TAG,
+      ],
+    },
+    automod: {
+      titulo: "AutoMod *(ManagePermissions)*",
+      linhas: [
+        `\`${P}automod status\` — each module's state`,
+        `\`${P}automod <module> <on|off>\` — enables/disables`,
+        `\`${P}automod <module> set <param> <value>\` — adjusts parameters`,
+        `\`${P}automod <module> punicao <mode>\` — per-module punishment`,
+        `\`${P}punicao <modo|warns|silencerole>\` — global punishment`,
+        `\`${P}scam <config|sensitivity|test|...>\` — forbidden content (0–10)`,
+        `\`${P}whitelist <add|remove|list>\` — allowed invites`,
+        `\`${P}blocklist <add|remove|list|clear|reload>\` — anti-link lists`,
+      ],
+    },
+    config: {
+      titulo: "Configuration & administration *(ManagePermissions)*",
+      linhas: [
+        `\`${P}config\` — shows all the settings`,
+        `\`${P}log <here|id|off|<event> <on|off>>\` — log channel`,
+        `\`${P}comando <disable|enable> <name>\` — enables/disables commands`,
+        `\`${P}cargomudo [name]\` — creates a silence role`,
+        `\`${P}cor <role> <color|gradient>\` — role colors, with gradients *(ManageRole)*`,
+        `\`${P}idioma pt|en\` — the bot's language on this server`,
+        `\`${P}debug\` — diagnostics for every command`,
+      ],
+    },
+    ferramentas: {
+      titulo: "Tools",
+      linhas: [
+        `\`${P}embed\` — posts a customizable embed *(ManageMessages)*`,
+        `\`${P}reactionrole <add|remove|list>\` — reaction roles *(ManageRole)*`,
+        `\`${P}autorole <set|off>\` — automatic role on join *(ManageRole)*`,
+        `\`${P}rss <add|remove|list|canal|agora>\` — RSS news curation`,
+        `\`${P}chat <message>\` — talk to Judy (or mention the bot)` + IA_TAG,
+        `\`${P}chat livre on|off\` — Judy joins the channel on her own` + IA_TAG,
+        `\`${P}chat comentar aqui|off\` — Judy comments on her own initiative` + IA_TAG,
+        `\`${P}chat perfil [@user]\` — what Judy knows about someone` + IA_TAG,
+        `\`${P}chat cuidado [@user] on\` — extra-kind treatment (opt-in)` + IA_TAG,
+        `\`${P}chat esquecer [tudo]\` — erases your memory (or the server's)` + IA_TAG,
+      ],
+    },
+    rpg: {
+      titulo: "RPG (character)",
+      linhas: [
+        `\`${P}game criar [name]\` — creates your character`,
+        `\`${P}game\` — your sheet (level, XP and the 9 attributes)`,
+        `\`${P}game ficha [@user]\` — someone else's sheet`,
+        `\`${P}game pontos <attribute> [amount]\` — spends points`,
+        `\`${P}game carteira\` — balance and economy state`,
+        `\`${P}game comprar [item]\` · \`${P}game vender <item>\``,
+        `\`${P}game contratar [name]\` — mercenaries`,
+        `\`${P}game descansar\` — energy for coin`,
+        `\`${P}game mercado\` — player-to-player bazaar`,
+        `\`${P}game cambio\` — currency exchange`,
+        `\`${P}game trocar\` — item-for-item bartering`,
+        `\`${P}game followers\` — your companions`,
+        `\`${P}game follower levar|tirar <name>\` — builds the party (up to 2)`,
+        `\`${P}game recrutas\` — companions that exist`,
+        `\`${P}game dungeon\` — rescues the captured`,
+        `\`${P}game missao\` — missions and your odds`,
+        `\`${P}game missao <name>\` — sets off on the mission`,
+        `\`${P}game itens\` — your backpack`,
+        `\`${P}game equipar <item>\` — equips an item`,
+        `\`${P}game desequipar <slot|item>\` — takes it off`,
+        `\`${P}game catalogo [rarity]\` — items that exist in the game`,
+        `\`${P}game top\` — adventurer ranking`,
+        `\`${P}game apagar confirmar\` — starts over from scratch`,
+        "",
+        "_A separate system from `&xp`: here you have a character with attributes._",
+      ],
+    },
+    xp: {
+      titulo: "Leveling system (message XP)",
+      linhas: [
+        `\`${P}xp\` — your level, XP and progress`,
+        `\`${P}xp rank [@user]\` — someone else's profile`,
+        `\`${P}xp top\` — server ranking`,
+        `\`${P}xp setup\` — configure *(ManagePermissions)*`,
+        `\`${P}xp cargos\` — lists the level roles`,
+        `\`${P}xp criarcargos\` — creates the roles automatically`,
+        `\`${P}xp on | off\` — toggles the system`,
+        "",
+        "_XP is earned from messages (Stoat can't measure calls)._",
+      ],
+    },
+  };
 
-  // &help <comando> <subtópico>
-  if (alvo && subtopico && SUBTOPICOS[alvo]?.[subtopico]) {
-    const st = SUBTOPICOS[alvo][subtopico];
-    return sendEmbed(message.channel, { title: `📖 Ajuda — ${P}${st.titulo}`,
-      description: st.texto, colour: COR.info });
-  }
-
-  // ── Categorias: &help <categoria> ──
-  const CATEGORIAS = {
+  // pt
+  return {
     geral: {
       titulo: "Comandos gerais",
       linhas: [
@@ -371,6 +766,7 @@ export async function cmdHelp(message, args, ctx) {
         `\`${P}chat <mensagem>\` — conversa com a IA (ou mencione o bot)` + IA_TAG,
         `\`${P}userinfo [@usuário]\` — info de um usuário`,
         `\`${P}sobre\` — informações do bot`,
+        `\`${P}idioma pt|en\` — idioma do servidor *(ManagePermissions)*`,
       ],
     },
     moderacao: {
@@ -408,6 +804,7 @@ export async function cmdHelp(message, args, ctx) {
         `\`${P}comando <disable|enable> <nome>\` — ativa/desativa comandos`,
         `\`${P}cargomudo [nome]\` — cria cargo de silêncio`,
         `\`${P}cor <cargo> <cor|gradiente>\` — cor dos cargos, com gradiente *(ManageRole)*`,
+        `\`${P}idioma pt|en\` — idioma do bot neste servidor`,
         `\`${P}debug\` — diagnóstico de todos os comandos`,
       ],
     },
@@ -471,49 +868,86 @@ export async function cmdHelp(message, args, ctx) {
       ],
     },
   };
+}
 
-  // aliases de categoria
-  const ALIAS_CAT = { "moderação": "moderacao", mod: "moderacao", "configuração": "config",
-    configuracao: "config", tools: "ferramentas", ferramenta: "ferramentas",
-    nivel: "xp", niveis: "xp", level: "xp",
-    game: "rpg", personagem: "rpg", jogo: "rpg" };
+export async function cmdHelp(message, args, ctx) {
+  const { sendEmbed, COR, PREFIXO } = ctx;
+  const P = PREFIXO;
+  const lang = lingua(ctx);
+  const comIA = (() => { try { return temIA(ctx.serverId); } catch { return false; } })();
+
+  // Ajuda detalhada por comando: &help <comando>
+  const DETALHES  = construirDetalhes(P, lang);
+  const SUBTOPICOS = construirSubtopicos(P, lang);
+
+  const alvo = args[0]?.toLowerCase();
+  const subtopico = args[1]?.toLowerCase();
+
+  // &help <comando> <subtópico>
+  if (alvo && subtopico && SUBTOPICOS[alvo]?.[subtopico]) {
+    const st = SUBTOPICOS[alvo][subtopico];
+    return sendEmbed(message.channel, {
+      title: `📖 ${lang === "en" ? "Help" : "Ajuda"} — ${P}${st.titulo}`,
+      description: st.texto, colour: COR.info,
+    });
+  }
+
+  // ── Categorias: &help <categoria> ──
+  const CATEGORIAS = construirCategorias(P, lang);
+
+  // aliases de categoria (aceita PT e EN nos dois idiomas)
+  const ALIAS_CAT = { "moderação": "moderacao", mod: "moderacao", moderation: "moderacao",
+    "configuração": "config", configuracao: "config", configuration: "config", settings: "config",
+    tools: "ferramentas", ferramenta: "ferramentas", tool: "ferramentas",
+    nivel: "xp", niveis: "xp", level: "xp", levels: "xp",
+    game: "rpg", personagem: "rpg", jogo: "rpg", character: "rpg",
+    general: "geral" };
   const cat = CATEGORIAS[alvo] ? alvo : ALIAS_CAT[alvo];
 
   if (alvo && CATEGORIAS[cat]) {
     const c = CATEGORIAS[cat];
     return sendEmbed(message.channel, { title: `📋 ${c.titulo}`,
       colour: COR.info,
-      description: filtrarIA(c.linhas, comIA).join("\n") + `\n\n💡 \`${P}help <comando>\` para detalhes.`,
+      description: filtrarIA(c.linhas, comIA).join("\n")
+        + (lang === "en"
+          ? `\n\n💡 \`${P}help <command>\` for details.`
+          : `\n\n💡 \`${P}help <comando>\` para detalhes.`),
     });
   }
 
   // &help <comando> (detalhe individual)
   if (alvo && DETALHES[alvo]) {
     const d = DETALHES[alvo];
-    const temSub = SUBTOPICOS[alvo] ? `\n\n**Subtópicos:** ${Object.keys(SUBTOPICOS[alvo]).map((k) => `\`${P}help ${alvo} ${k}\``).join(" · ")}` : "";
+    const temSub = SUBTOPICOS[alvo]
+      ? `\n\n**${lang === "en" ? "Subtopics" : "Subtópicos"}:** ${Object.keys(SUBTOPICOS[alvo]).map((k) => `\`${P}help ${alvo} ${k}\``).join(" · ")}`
+      : "";
     return sendEmbed(message.channel, {
-      title: `📖 Ajuda — ${P}${alvo}`,
+      title: `📖 ${lang === "en" ? "Help" : "Ajuda"} — ${P}${alvo}`,
       colour: COR.info,
       description: [
-        `**Uso:** \`${d.uso}\``,
-        d.perm ? `**Permissão:** ${d.perm}` : null,
+        `**${lang === "en" ? "Usage" : "Uso"}:** \`${d.uso}\``,
+        d.perm ? `**${lang === "en" ? "Permission" : "Permissão"}:** ${d.perm}` : null,
         "",
         d.desc,
-        d.ex ? `\n**Exemplo:** \`${d.ex}\`` : null,
+        d.ex ? `\n**${lang === "en" ? "Example" : "Exemplo"}:** \`${d.ex}\`` : null,
         temSub,
       ].filter(Boolean).join("\n"),
     });
   }
   if (alvo) {
-    return sendEmbed(message.channel, {
+    return sendEmbed(message.channel, tr(ctx, {
       title: "❓ Não encontrado",
       description: `Não há ajuda para \`${alvo}\`. Use \`${P}help\` para o índice, ou \`${P}help <categoria>\` (geral, moderacao, automod, config, ferramentas).`,
       colour: COR.aviso,
-    });
+    }, {
+      title: "❓ Not found",
+      description: `There's no help for \`${alvo}\`. Use \`${P}help\` for the index, or \`${P}help <category>\` (geral, moderacao, automod, config, ferramentas).`,
+      colour: COR.aviso,
+    }));
   }
 
   // ── Índice principal (&help sem argumentos) ──
-  await sendEmbed(message.channel, {
+  await sendEmbed(message.channel, tr(ctx, {
     title: "📋 Central de Ajuda",
     colour: COR.info,
     description: [
@@ -528,8 +962,26 @@ export async function cmdHelp(message, args, ctx) {
       "",
       `💡 Detalhes de um comando: \`${P}help <comando>\` (ex.: \`${P}help scam\`)`,
       `💡 Alguns têm subtópicos: \`${P}help scam sensitivity\``,
+      `🌐 Idioma do servidor: \`${P}idioma pt|en\``,
     ].join("\n"),
-  });
+  }, {
+    title: "📋 Help Center",
+    colour: COR.info,
+    description: [
+      "Pick a category to see the commands:",
+      "",
+      `📌 \`${P}help geral\` — everyday commands`,
+      `🛡 \`${P}help moderacao\` — kick, ban, purge, warnings`,
+      `⚙️ \`${P}help automod\` — automatic protection and punishments`,
+      `🔧 \`${P}help config\` — configuration and administration`,
+      `🧰 \`${P}help ferramentas\` — embeds, reaction roles, RSS, AI`,
+      `🎮 \`${P}help xp\` — XP leveling system`,
+      "",
+      `💡 Details for one command: \`${P}help <command>\` (e.g. \`${P}help scam\`)`,
+      `💡 Some have subtopics: \`${P}help scam sensitivity\``,
+      `🌐 Server language: \`${P}language pt|en\``,
+    ].join("\n"),
+  }));
 }
 
 // %ping — mede a latência entre o envio da mensagem e o processamento
@@ -541,18 +993,25 @@ export async function cmdPing(message, args, ctx) {
     if (!Number.isNaN(enviado)) latencia = Date.now() - enviado;
   } catch {}
 
-  await sendEmbed(message.channel, {
+  await sendEmbed(message.channel, tr(ctx, {
     title: "🏓 Pong!",
     description: latencia != null
       ? `Latência da mensagem: **${latencia}ms**`
       : "Bot online e respondendo.",
     colour: COR.sucesso,
-  });
+  }, {
+    title: "🏓 Pong!",
+    description: latencia != null
+      ? `Message latency: **${latencia}ms**`
+      : "Bot online and responding.",
+    colour: COR.sucesso,
+  }));
 }
 
 // %sobre — informações resumidas do bot
 export async function cmdSobre(message, args, ctx) {
   const { sendEmbed, COR, PREFIXO, estado } = ctx;
+  const lang = lingua(ctx);
 
   // conta comandos, linhas e uptime de forma resiliente
   const nComandos = estado?.rotas ? new Set(Object.values(estado.rotas)).size : null;
@@ -563,7 +1022,25 @@ export async function cmdSobre(message, args, ctx) {
   const mins = Math.floor((up % 3600) / 60);
   const uptime = dias > 0 ? `${dias}d ${horas}h` : horas > 0 ? `${horas}h ${mins}min` : `${mins}min`;
 
-  await sendEmbed(message.channel, {
+  const creditos = "_Feito por <@01K9JKP85D5EP2ZTEHS8DT797A> (Ghiso#4419) com [stoat.js](https://github.com/stoatchat/javascript-client-sdk) — quer um bot assim no seu servidor? Chama! 🚀_";
+  const creditosEN = "_Made by <@01K9JKP85D5EP2ZTEHS8DT797A> (Ghiso#4419) with [stoat.js](https://github.com/stoatchat/javascript-client-sdk) — want a bot like this on your server? Reach out! 🚀_";
+
+  await sendEmbed(message.channel, lang === "en" ? {
+    title: "🤖 Cobaia",
+    description: [
+      "Moderation, automod, AI and leveling bot for Stoat.",
+      "",
+      `**Features:** moderation · automod · anti-scam · RSS curation · leveling system${temIA(ctx.serverId) ? " · AI chat" : ""}`,
+      nComandos ? `**Commands:** ${nComandos}` : null,
+      nLinhas ? `**Lines of code:** ${nLinhas.toLocaleString("en-US")}` : null,
+      `**Uptime:** ${uptime}`,
+      "",
+      `Use \`${PREFIXO}help\` to see everything.`,
+      "",
+      creditosEN,
+    ].filter((l) => l !== null).join("\n"),
+    colour: COR.info,
+  } : {
     title: "🤖 Cobaia",
     description: [
       "Bot de moderação, automod, IA e níveis para o Stoat.",
@@ -575,7 +1052,7 @@ export async function cmdSobre(message, args, ctx) {
       "",
       `Use \`${PREFIXO}help\` para ver tudo.`,
       "",
-      "_Feito por <@01K9JKP85D5EP2ZTEHS8DT797A> (Ghiso#4419) com [stoat.js](https://github.com/stoatchat/javascript-client-sdk) — quer um bot assim no seu servidor? Chama! 🚀_",
+      creditos,
     ].filter((l) => l !== null).join("\n"),
     colour: COR.info,
   });
@@ -592,7 +1069,10 @@ export async function cmdRepete(message, args, ctx) {
 // %userinfo [@usuário] — exibe informações de um usuário
 export async function cmdUserinfo(message, args, ctx) {
   const { sendEmbed, COR, getServer, serverId, PREFIXO } = ctx;
+  const lang = lingua(ctx);
   const targetId = message.mentionIds?.[0] ?? message.authorId;
+  const locale = lang === "en" ? "en-US" : "pt-BR";
+  const desconhecido = lang === "en" ? "Unknown" : "Desconhecido";
 
   try {
     const server = await getServer(message);
@@ -601,11 +1081,16 @@ export async function cmdUserinfo(message, args, ctx) {
       : await server.fetchMember(targetId);
     const user = member.user ?? member;
 
-    const createdAt = user.createdAt ? new Date(user.createdAt).toLocaleDateString("pt-BR") : "Desconhecido";
-    const joinedAt  = member.joinedAt ? new Date(member.joinedAt).toLocaleDateString("pt-BR") : "Desconhecido";
-    const roles     = member.roles?.map((r) => r.name ?? r).join(", ") || "Nenhum";
+    const createdAt = user.createdAt ? new Date(user.createdAt).toLocaleDateString(locale) : desconhecido;
+    const joinedAt  = member.joinedAt ? new Date(member.joinedAt).toLocaleDateString(locale) : desconhecido;
+    const roles     = member.roles?.map((r) => r.name ?? r).join(", ") || (lang === "en" ? "None" : "Nenhum");
 
-    const linhas = [
+    const linhas = lang === "en" ? [
+      `**ID:** ${user.id ?? targetId}`,
+      `**Account created:** ${createdAt}`,
+      `**Joined the server:** ${joinedAt}`,
+      `**Roles:** ${roles}`,
+    ] : [
       `**ID:** ${user.id ?? targetId}`,
       `**Conta criada em:** ${createdAt}`,
       `**Entrou no servidor:** ${joinedAt}`,
@@ -620,64 +1105,88 @@ export async function cmdUserinfo(message, args, ctx) {
       const hist       = db.historicoBans(targetId);
       const outros     = hist.filter((b) => b.serverId !== serverId);
 
-      linhas.push("", "**📋 Histórico de moderação**");
+      linhas.push("", lang === "en" ? "**📋 Moderation history**" : "**📋 Histórico de moderação**");
 
       if (avisos > 0 || silenciado) {
         const partes = [];
-        if (avisos > 0)  partes.push(`**${avisos}** aviso(s) neste servidor`);
-        if (silenciado)  partes.push("🔇 **silenciado**");
+        if (avisos > 0)  partes.push(lang === "en"
+          ? `**${avisos}** warning(s) on this server`
+          : `**${avisos}** aviso(s) neste servidor`);
+        if (silenciado)  partes.push(lang === "en" ? "🔇 **silenced**" : "🔇 **silenciado**");
         linhas.push(partes.join(" · "));
       } else {
-        linhas.push("Sem avisos neste servidor. ✅");
+        linhas.push(lang === "en" ? "No warnings on this server. ✅" : "Sem avisos neste servidor. ✅");
       }
 
       if (outros.length) {
         linhas.push(
           "",
-          `🌐 **Lista global:** banido em **${outros.length}** outro(s) servidor(es).`,
+          lang === "en"
+            ? `🌐 **Global list:** banned on **${outros.length}** other server(s).`
+            : `🌐 **Lista global:** banido em **${outros.length}** outro(s) servidor(es).`,
           ...outros.slice(0, 3).map((b) =>
-            `• \`${b.serverId}\` — ${b.motivo ?? "_sem motivo_"} _(${new Date(b.criadoEm).toLocaleDateString("pt-BR")})_`),
+            `• \`${b.serverId}\` — ${b.motivo ?? (lang === "en" ? "_no reason_" : "_sem motivo_")} _(${new Date(b.criadoEm).toLocaleDateString(locale)})_`),
         );
-        if (outros.length > 3) linhas.push(`_… e mais ${outros.length - 3}. Veja \`${PREFIXO}banglobal historico ${targetId}\`._`);
+        if (outros.length > 3) linhas.push(lang === "en"
+          ? `_… and ${outros.length - 3} more. See \`${PREFIXO}banglobal historico ${targetId}\`._`
+          : `_… e mais ${outros.length - 3}. Veja \`${PREFIXO}banglobal historico ${targetId}\`._`);
       } else {
-        linhas.push("", "🌐 **Lista global:** não consta. ✅");
+        linhas.push("", lang === "en" ? "🌐 **Global list:** not listed. ✅" : "🌐 **Lista global:** não consta. ✅");
       }
     } catch (e) {
       console.error("[USERINFO][HIST]", e?.message);
     }
 
     await sendEmbed(message.channel, {
-      title: `👤 ${user.username ?? user.name ?? "Usuário"}`,
+      title: `👤 ${user.username ?? user.name ?? (lang === "en" ? "User" : "Usuário")}`,
       colour: COR.info,
       description: linhas.join("\n"),
     });
   } catch (err) {
     console.error("[USERINFO]", err.message);
-    await sendEmbed(message.channel, { title: "❌ Erro",
-      description: "Não foi possível buscar as informações.", colour: COR.erro });
+    await sendEmbed(message.channel, tr(ctx,
+      { title: "❌ Erro", description: "Não foi possível buscar as informações.", colour: COR.erro },
+      { title: "❌ Error", description: "Couldn't fetch the information.", colour: COR.erro }));
   }
 }
 
 // %kick @usuário [motivo]   (KickMembers)
 export async function cmdKick(message, args, ctx) {
   const { client, sendEmbed, COR, getServer, membroTemPermissao, PREFIXO } = ctx;
+  const lang = lingua(ctx);
   const server = await getServer(message);
   if (!membroTemPermissao(message, server, "KickMembers"))
     return negarPermissao(ctx, message.channel, "KickMembers");
 
   const { id: targetId, motivo } = extrairAlvo(message, args);
-  const reason = motivo || "Sem motivo especificado";
+  const reason = motivo || (lang === "en" ? "No reason given" : "Sem motivo especificado");
   if (!targetId)
-    return sendEmbed(message.channel, { title: "❌ Uso incorreto",
-      description: `\`${PREFIXO}kick @usuário [motivo]\`\nVocê pode usar a menção ou o ID do usuário.`, colour: COR.erro });
+    return sendEmbed(message.channel, tr(ctx, {
+      title: "❌ Uso incorreto",
+      description: `\`${PREFIXO}kick @usuário [motivo]\`\nVocê pode usar a menção ou o ID do usuário.`, colour: COR.erro,
+    }, {
+      title: "❌ Wrong usage",
+      description: `\`${PREFIXO}kick @user [reason]\`\nYou can use the mention or the user's ID.`, colour: COR.erro,
+    }));
   if (targetId === client.user.id)
-    return sendEmbed(message.channel, { description: "❌ Não posso me expulsar!", colour: COR.erro });
+    return sendEmbed(message.channel, tr(ctx,
+      { description: "❌ Não posso me expulsar!", colour: COR.erro },
+      { description: "❌ I can't kick myself!", colour: COR.erro }));
 
   try {
     await server.kickUser(targetId);
     await log.registrar(ctx, "punicoes", { titulo: "👢 Usuário expulso (manual)",
       descricao: `<@${targetId}> foi expulso por <@${message.authorId}>.\n**Motivo:** ${reason}` });
-    await sendEmbed(message.channel, {
+    await sendEmbed(message.channel, lang === "en" ? {
+      title: "✅ Action executed: KICK",
+      description: [
+        `**User:** <@${targetId}> \`${targetId}\``,
+        `**Action:** kicked from the server (can come back with a new invite)`,
+        `**Reason:** ${motivo ? reason : "_(none given)_"}`,
+        `**By:** <@${message.authorId}>`,
+      ].join("\n"),
+      colour: COR.sucesso,
+    } : {
       title: "✅ Ação executada: EXPULSÃO",
       description: [
         `**Usuário:** <@${targetId}> \`${targetId}\``,
@@ -685,37 +1194,62 @@ export async function cmdKick(message, args, ctx) {
         `**Motivo:** ${motivo ? reason : "_(nenhum informado)_"}`,
         `**Por:** <@${message.authorId}>`,
       ].join("\n"),
-      colour: COR.sucesso });
+      colour: COR.sucesso,
+    });
     console.log(`[KICK] ${message.authorId} -> ${targetId} | ${reason}`);
   } catch (err) {
     console.error("[KICK]", err.message);
-    await sendEmbed(message.channel, { title: "❌ Não foi possível expulsar",
+    await sendEmbed(message.channel, tr(ctx, {
+      title: "❌ Não foi possível expulsar",
       description: `**Usuário:** \`${targetId}\`\n**Erro:** ${err.message}\n\n_Verifique se o bot tem a permissão **KickMembers** e se o cargo dele está acima do alvo._`,
-      colour: COR.erro });
+      colour: COR.erro,
+    }, {
+      title: "❌ Couldn't kick",
+      description: `**User:** \`${targetId}\`\n**Error:** ${err.message}\n\n_Check that the bot has **KickMembers** and that its role sits above the target's._`,
+      colour: COR.erro,
+    }));
   }
 }
 
 // %ban @usuário [motivo]   (BanMembers)
 export async function cmdBan(message, args, ctx) {
   const { client, sendEmbed, COR, getServer, membroTemPermissao, PREFIXO } = ctx;
+  const lang = lingua(ctx);
   const server = await getServer(message);
   if (!membroTemPermissao(message, server, "BanMembers"))
     return negarPermissao(ctx, message.channel, "BanMembers");
 
   const { id: targetId, motivo } = extrairAlvo(message, args);
-  const reason = motivo || "Sem motivo especificado";
+  const reason = motivo || (lang === "en" ? "No reason given" : "Sem motivo especificado");
   if (!targetId)
-    return sendEmbed(message.channel, { title: "❌ Uso incorreto",
-      description: `\`${PREFIXO}ban @usuário [motivo]\`\nVocê pode usar a menção ou o ID do usuário.`, colour: COR.erro });
+    return sendEmbed(message.channel, tr(ctx, {
+      title: "❌ Uso incorreto",
+      description: `\`${PREFIXO}ban @usuário [motivo]\`\nVocê pode usar a menção ou o ID do usuário.`, colour: COR.erro,
+    }, {
+      title: "❌ Wrong usage",
+      description: `\`${PREFIXO}ban @user [reason]\`\nYou can use the mention or the user's ID.`, colour: COR.erro,
+    }));
   if (targetId === client.user.id)
-    return sendEmbed(message.channel, { description: "❌ Não posso me banir!", colour: COR.erro });
+    return sendEmbed(message.channel, tr(ctx,
+      { description: "❌ Não posso me banir!", colour: COR.erro },
+      { description: "❌ I can't ban myself!", colour: COR.erro }));
 
   try {
     await server.banUser(targetId, { reason });
     banGlobal.registrar(ctx, targetId, reason, "manual");   // alimenta a lista global
     await log.registrar(ctx, "punicoes", { titulo: "🔨 Usuário banido (manual)",
       descricao: `<@${targetId}> foi banido por <@${message.authorId}>.\n**Motivo:** ${reason}` });
-    await sendEmbed(message.channel, {
+    await sendEmbed(message.channel, lang === "en" ? {
+      title: "🔨 Action executed: BAN",
+      description: [
+        `**User:** <@${targetId}> \`${targetId}\``,
+        `**Action:** permanently banned (can't come back)`,
+        `**Reason:** ${motivo ? reason : "_(none given)_"}`,
+        `**By:** <@${message.authorId}>`,
+        `**Global list:** recorded 🌐`,
+      ].join("\n"),
+      colour: COR.erro,
+    } : {
       title: "🔨 Ação executada: BANIMENTO",
       description: [
         `**Usuário:** <@${targetId}> \`${targetId}\``,
@@ -724,21 +1258,32 @@ export async function cmdBan(message, args, ctx) {
         `**Por:** <@${message.authorId}>`,
         `**Lista global:** registrado 🌐`,
       ].join("\n"),
-      colour: COR.erro });
+      colour: COR.erro,
+    });
     console.log(`[BAN] ${message.authorId} -> ${targetId} | ${reason}`);
   } catch (err) {
     console.error("[BAN]", err.message);
-    await sendEmbed(message.channel, { title: "❌ Não foi possível banir",
+    await sendEmbed(message.channel, tr(ctx, {
+      title: "❌ Não foi possível banir",
       description: `**Usuário:** \`${targetId}\`\n**Erro:** ${err.message}\n\n_Verifique se o bot tem a permissão **BanMembers** e se o cargo dele está acima do alvo._`,
-      colour: COR.erro });
+      colour: COR.erro,
+    }, {
+      title: "❌ Couldn't ban",
+      description: `**User:** \`${targetId}\`\n**Error:** ${err.message}\n\n_Check that the bot has **BanMembers** and that its role sits above the target's._`,
+      colour: COR.erro,
+    }));
   }
 }
 
 // ── Helper interno de negação de permissão ─────────────────
 function negarPermissao(ctx, channel, permName) {
-  return ctx.sendEmbed(channel, {
+  return ctx.sendEmbed(channel, tr(ctx, {
     title: "🚫 Permissão insuficiente",
     description: `Você precisa da permissão **${permName}** para usar este comando.`,
     colour: ctx.COR.erro,
-  });
+  }, {
+    title: "🚫 Missing permission",
+    description: `You need the **${permName}** permission to use this command.`,
+    colour: ctx.COR.erro,
+  }));
 }

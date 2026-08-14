@@ -1,4 +1,5 @@
 import { servidorPermitido as temIA } from "../ai/chat.js";
+import { lingua } from "../core/i18n.js";
 // ══════════════════════════════════════════════════════════
 //  tutorial.js — &tutorial
 //
@@ -10,10 +11,367 @@ import { servidorPermitido as temIA } from "../ai/chat.js";
 //  `&tutorial`          → o roteiro (visão geral, em ordem)
 //  `&tutorial <área>`   → detalhes daquela área
 //  `&tutorial permissoes` → o que o BOT precisa para funcionar
+//
+//  BILÍNGUE: AREAS(P, lang) devolve o dicionário no idioma do
+//  servidor. As CHAVES das áreas ficam em PT nos dois idiomas
+//  (são "nomes de comando", como &tutorial moderacao).
 // ══════════════════════════════════════════════════════════
 
 // Cada área: título, quando fazer, e os passos concretos.
-function AREAS(P) {
+function AREAS(P, lang = "pt") {
+  if (lang === "en") return {
+    permissoes: {
+      titulo: "🔑 Bot permissions",
+      ordem: 0,
+      resumo: "First of all: without these, nothing works.",
+      corpo: [
+        "In **Server settings → Roles**, give the bot's role:",
+        "",
+        "**Essentials**",
+        "• `ViewChannel`, `ReadMessageHistory` — see and read the channels",
+        "• `SendMessage`, `SendEmbeds` — reply",
+        "• `React` — reactions (reaction roles, Judy's 👀)",
+        "",
+        "**To moderate**",
+        "• `ManageMessages` — delete messages (automod, `&limpar`)",
+        "• `KickMembers`, `BanMembers` — `&kick`, `&ban`, global bans",
+        "• `TimeoutMembers` — timed silences",
+        "",
+        "**To manage roles and channels**",
+        "• `ManageRole` — **create** roles (silence role, level roles)",
+        "• `AssignRoles` — **give** roles to someone (autorole, levels, reactions)",
+        "• `ManageChannel` — create/edit channels",
+        "",
+        "⚠️ `ManageRole` and `AssignRoles` are **different** things: one creates the role, the other hands it to the person. Missing the second, the bot creates the roles and then fails to apply them.",
+        "",
+        "💡 The bot's role must sit **above** the roles it will manage in the role list.",
+      ],
+    },
+
+    moderacao: {
+      titulo: "🛡️ Automatic moderation",
+      ordem: 1,
+      resumo: "The filters that act on their own and what happens to offenders.",
+      corpo: [
+        `**1. See the current state:** \`${P}automod\``,
+        "Lists each filter (invites, spam, links, caps, mass mentions, weird characters) and whether it's on.",
+        "",
+        `**2. Toggle whatever you want:** \`${P}automod <filter> on|off\``,
+        `E.g.: \`${P}automod antilink on\``,
+        "",
+        `**3. Set the punishment:** \`${P}punicao modo <avisar|apagar|confirmar|acumular|banir>\``,
+        "• `avisar` — warn only (good for testing)",
+        "• `apagar` — removes the message, doesn't punish the person",
+        "• `confirmar` — deletes, silences and calls a moderator",
+        "• `acumular` — issues warnings and bans at the limit",
+        "• `banir` — bans on the spot",
+        "",
+        `**4. If you use \`acumular\`:** \`${P}punicao warns <number>\``,
+        `**5. If you use \`confirmar\`:** you need a silence role → \`${P}cargomudo\` creates one ready to go.`,
+        "",
+        `**Content detection** (scams, advertising): \`${P}scam on\` and \`${P}scam sensibilidade <baixa|media|alta>\`.`,
+        `**Allowed links:** \`${P}whitelist add <domain>\`.`,
+        "",
+        `**Manual warning:** \`${P}warn @user <reason>\` — counts alongside the automod warnings.`,
+        `**Who can moderate:** \`${P}acesso cargo add <@role>\` gives moderation power to a role without touching Stoat's permissions.`,
+        `**Where commands work:** \`${P}acesso canal somente\` + \`${P}acesso canal add\` limits commands to chosen channels.`,
+      ],
+    },
+
+    logs: {
+      titulo: "📋 Logging",
+      ordem: 2,
+      resumo: "Where the bot writes down what happened.",
+      corpo: [
+        "Create a channel (e.g. **#log**) visible only to the team. Then, **inside it**:",
+        "",
+        `\`${P}log canal aqui\` — sets this channel as the log channel`,
+        `\`${P}log\` — shows what's being logged`,
+        `\`${P}log evento <punicoes|membros|mensagens|cargos|comandos> on|off\``,
+        "",
+        "Logging punishments and joins/leaves is worth it; `comandos` is noisy and starts disabled.",
+        "",
+        "💡 The log channel is where Judy pings you when AI moderation deletes something.",
+      ],
+    },
+
+    cargos: {
+      titulo: "🎭 Roles",
+      ordem: 3,
+      resumo: "Role on join, reaction roles and the silence role.",
+      corpo: [
+        `**Automatic role on join:** \`${P}autorole <role-id>\``,
+        "Get the ID in Settings → Roles → *Copy role ID*.",
+        "",
+        `**Reaction roles** (react and get the role):`,
+        `1. Post the message: \`${P}embed titulo: Pick your roles | descricao: 🎮 Games · 📢 News\``,
+        `2. Wire emoji → role: \`${P}reactionrole add <message> 🎮 <role-id>\``,
+        "   The **message** can be the ID **or the link** (`...` menu → *Copy link*).",
+        `3. Check it with \`${P}reactionrole list\``,
+        `4. If only one option can apply (color, team, age): \`${P}reactionrole exclusivo <message> on\``,
+        "   Then picking one emoji **swaps** the previous role instead of stacking.",
+        "",
+        `**Silence role** (for \`${P}silence\`): \`${P}cargomudo\``,
+        "Creates a role with everything denied and blocks it across the channels.",
+        "",
+        `**Role colors:** \`${P}cor <role> <color>\``,
+        `Takes hex, names, and even **gradients** — which the Stoat client doesn't offer:`,
+        `\`${P}cor VIP gradiente #FF71CE #01CDFE #05FFA1\``,
+        `\`${P}cor VIP preset vaporwave\` · \`${P}cor presets\` lists the ready-made ones`,
+        `\`${P}cor painel aqui\` — **does everything**: creates the colored roles, posts the picker message, reacts and wires the reaction roles`,
+      ],
+    },
+
+    xp: {
+      titulo: "🎮 XP and levels",
+      ordem: 4,
+      resumo: "People earn XP by chatting and level up.",
+      corpo: [
+        `**Enable:** \`${P}xp on\``,
+        `**Create the level roles:** \`${P}xp criarcargos\` (one every 10 levels)`,
+        `**Adjust:** \`${P}xp setup\` shows everything you can change:`,
+        `• \`${P}xp setup intervalo <5|10>\` — how many levels between roles`,
+        `• \`${P}xp setup xp <min> <max>\` — how much a message earns`,
+        `• \`${P}xp setup cooldown <seconds>\` — prevents spam farming`,
+        `• \`${P}xp setup canal aqui|off\` — where to announce level ups`,
+        "",
+        `**See the ranking:** \`${P}xp top\` · **your profile:** \`${P}nivel\``,
+      ],
+    },
+
+    ia: {
+      titulo: "🤖 Judy (the AI)",
+      ordem: 5,
+      soComIA: true,
+      resumo: "Chat, memory, participation and AI moderation.",
+      corpo: [
+        `**Test it:** \`${P}chat status\` shows whether the AI service is up.`,
+        "Then just mention the bot or use `&chat <message>`.",
+        "",
+        `**Let her join on her own:** \`${P}chat livre on\` (in this channel)`,
+        `• \`${P}chat livre modo relevante\` — only when the topic is worth it`,
+        `• \`${P}chat livre modo todas\` — replies to everything`,
+        "",
+        `**Comments on her own initiative:** \`${P}chat comentar aqui\` · \`${P}chat comentar pordia <n>\``,
+        "",
+        `**Profile and memory:** \`${P}chat perfil\` shows what she knows about you.`,
+        `\`${P}chat cuidado @user on\` — treats someone with extra kindness.`,
+        `\`${P}chat esquecer\` erases yours; \`${P}chat esquecer tudo\` wipes the server's.`,
+        "",
+        `**AI moderation:** \`${P}modia criterios <what to moderate, in free text>\` then \`${P}modia on\`.`,
+        "She deletes whatever violates them and pings the owner in the log — she never bans on her own.",
+      ],
+    },
+
+    noticias: {
+      titulo: "📰 News (RSS)",
+      ordem: 6,
+      resumo: "The bot posts the feeds' updates every hour.",
+      corpo: [
+        "Create a channel (e.g. **#news**) and, **inside it**:",
+        "",
+        `\`${P}rss canal aqui\` — sets where to publish`,
+        `\`${P}rss add <feed-url>\` — e.g.: \`${P}rss add https://g1.globo.com/rss/g1/\``,
+        `\`${P}rss list\` — registered feeds`,
+        `\`${P}rss agora\` — forces a cycle to test`,
+        "",
+        "Every hour the bot posts the new items. Where the AI is available, Judy also writes an overall summary in her own voice.",
+      ],
+    },
+
+    mensagens: {
+      titulo: "✉️ Pretty messages",
+      ordem: 7,
+      resumo: "Publishing announcements and rules with embed styling.",
+      corpo: [
+        `\`${P}embed\` on its own shows the help. The format is \`field: value\`, one per line:`,
+        "```",
+        `${P}embed`,
+        "titulo: Rules",
+        "descricao: Be kind to everyone.",
+        "cor: #5865F2",
+        "```",
+        "",
+        `Or everything on one line: \`${P}embed titulo: Rules | descricao: Be kind | cor: azul\``,
+        "",
+        "**Fields:** `titulo` `descricao` `cor` `rodape` `imagem` `canal`.",
+      ],
+    },
+
+    game: {
+      titulo: "🎲 Setting up the RPG",
+      ordem: 8,
+      resumo: "Getting the game ready on the server — start here.",
+      corpo: [
+        "_This page is for the **admins**. To play, see_",
+        `\`${P}tutorial rpg\`, \`${P}tutorial aventura\` and \`${P}tutorial economia\`.`,
+        "",
+        "**1. Nothing to install**",
+        "The RPG already works: the item and companion catalog and the default",
+        `currency are created on their own. Someone can type \`${P}game criar\` right now.`,
+        "",
+        "**2. Choose where it's played**",
+        "The game's messages are long and frequent. Limiting it to one channel helps:",
+        `\`${P}acesso canal somente\` and then \`${P}acesso canal add\` in the game channel.`,
+        "_Moderation keeps working in the other channels normally._",
+        "",
+        "**3. Check everything is standing**",
+        `\`${P}game admin teste\` — runs the whole game on a throwaway character`,
+        "and returns ✅/❌ per stage. Use it after each bot update.",
+        "",
+        "**4. Program the currencies** _(optional)_",
+        `\`${P}game admin moeda modelo mundo\` — creates Real, Dollar, Euro, Silver,`,
+        "Gold and Bitcoin already balanced, in one go. There's also `fantasia` and `simples`.",
+        `\`${P}game admin moeda ajuda\` — explains each field if you want to do it by hand.`,
+        "",
+        "**5. Calibrate before opening**",
+        `\`${P}game admin simular <mission> 500\` shows the real success and death`,
+        "rates. If it's too hard or too easy, tell me and I'll adjust the numbers.",
+        "",
+        "**6. Clean up the tests**",
+        `\`${P}game admin reset servidor confirmar\` — erases the progress and starts over.`,
+        `\`${P}game admin reset tudo confirmar\` — also erases the curated catalog.`,
+        "",
+        `_Testing tools: \`${P}game admin\` lists them all._`,
+      ],
+    },
+
+    rpg: {
+      titulo: "🎲 RPG — how to play",
+      ordem: 9,
+      resumo: "_(for the players)_ creating a character, attributes and builds.",
+      corpo: [
+        `**Create:** \`${P}game criar <name>\` · **Sheet:** \`${P}game\``,
+        `Someone else's sheet: \`${P}game ficha @user\``,
+        "",
+        "**The 9 attributes:**",
+        "💪 Strength · 🎯 Dexterity · 🛡️ Endurance · 💨 Agility · ❤️ Health",
+        "🔷 Mana · 🧠 Intelligence · 🍀 Luck · ✨ Charisma",
+        "",
+        "**How your character grows**",
+        "Each level you get **free points** to spend as you like, and every",
+        "2 levels **all** attributes rise by 1 on their own. The base keeps",
+        "everyone viable; the free points are what shape your build.",
+        "",
+        `**Spending points:** \`${P}game pontos <attribute> [amount]\``,
+        `Abbreviations work: \`${P}game pontos int 3\``,
+        "",
+        "🧠 **Intelligence** and 🍀 **Luck** boost the XP you earn **and** how",
+        "many points you receive per level — with diminishing returns, so they",
+        "never stop mattering and never become the only viable choice.",
+        "",
+        "🛡️ Health, Endurance and Agility **multiply** on defense: spreading",
+        "across the three yields more than stacking a single one.",
+        "",
+        `**Ranking:** \`${P}game top\` · **Start over:** \`${P}game apagar confirmar\``,
+        "",
+        `⚠️ Don't confuse it with \`${P}xp\`: that's the server's message-based leveling.`,
+        "This is the RPG, with its own character.",
+        "",
+        `➡️ To actually play, see \`${P}tutorial aventura\`.`,
+      ],
+    },
+
+    aventura: {
+      titulo: "⚔️ RPG — missions and companions",
+      ordem: 10,
+      resumo: "_(for the players)_ missions, items, party and dungeon.",
+      corpo: [
+        "**Missions**",
+        `\`${P}game missao\` — list with your odds in each one`,
+        `\`${P}game missao <name>\` — sets off`,
+        "",
+        "🏪 **Market** — no risk, pays little and doesn't scale: the safety",
+        "net of the early game that stops carrying you as you climb.",
+        "🟢🟡🔴 **Dungeon** — three difficulties, real risk and real loot.",
+        "Falling does **not** cost levels or equipment: you come back",
+        "empty-handed and spend some time recovering.",
+        "",
+        "**Items**",
+        `\`${P}game itens\` · \`${P}game equipar <item>\` · \`${P}game catalogo\``,
+        "Slots: ⚔️ Weapon · 🪖 Helmet · 🛡️ Armor · 💍 3 Accessories.",
+        "The commons (♾️) are always available — nobody goes without equipment.",
+        "",
+        "**Companions**",
+        `\`${P}game followers\` · \`${P}game follower levar <name>\` (up to 2)`,
+        "⚔️ Fighter · 🛡️ Tank · 🔮 Mage · ✨ Support — each with one spell.",
+        "They spend ⚡energy per mission (1 comes back per hour).",
+        "",
+        "Bringing companions **raises the difficulty** and **splits the loot**:",
+        "their value is the variety of classes and spells, not brute force.",
+        "",
+        "**Dungeon**",
+        `If the party falls, they can be captured. \`${P}game dungeon\` rescues them.`,
+        "The owner has priority for the first 6h and a higher chance — after",
+        "that, anyone can try to take them.",
+      ],
+    },
+
+    economia: {
+      titulo: "💰 RPG — economy",
+      ordem: 11,
+      resumo: "_(for the players)_ currency, market and prices.",
+      corpo: [
+        `\`${P}game carteira\` — balance and the economy's state`,
+        `\`${P}game comprar [item]\` · \`${P}game vender <item>\``,
+        `\`${P}game contratar [name]\` — mercenaries`,
+        `\`${P}game descansar\` — companions' energy for coin`,
+        "",
+        "**How prices move**",
+        "Everything revolves around **P**: how much of the currency the players",
+        "hold, compared to what the market has.",
+        "",
+        "• **High P** (rich players) → cheap items, but falling costs a lot",
+        "• **Low P** (full market) → expensive items, but falling costs little",
+        "",
+        "That pushes the wealthy to spend and the broke to take risks,",
+        "without anyone having to adjust anything.",
+        "",
+        "**Selling to the market**",
+        "The NPC pays **below** the sale price — your ✨Charisma improves the",
+        "offer, and also discounts hiring mercenaries. Buying and reselling",
+        "always loses money, so there's no free lunch.",
+        "",
+        "_The bot owner can create several currencies with different rarities_",
+        `_(\`${P}game admin moeda\`)._`,
+        "",
+        "**Trading with other players**",
+        `\`${P}game mercado\` — bazaar: list items at whatever price you want`,
+        `\`${P}game cambio 100 ouro por 5 prata\` — currency counter`,
+        `\`${P}game trocar @user <your item> por <their item>\` — bartering`,
+        "",
+        "Everything goes through **escrow**: whatever you list leaves your",
+        "backpack and stays with me until someone closes the deal or you cancel.",
+        "Nobody lists what they don't have, and nobody gets stiffed.",
+        "",
+        "The fee is next to nothing day-to-day and rises with volume — never",
+        "to the point of making trading not worth it.",
+        "",
+        "**The dungeon keeps what is lost**",
+        "When you fall you lose part of what you carry, and it goes into the",
+        "dungeon's pot. The fuller the pot, the bigger the winner's share.",
+      ],
+    },
+
+    ajustes: {
+      titulo: "⚙️ General settings",
+      ordem: 12,
+      resumo: "Overview, disabled commands and the global list.",
+      corpo: [
+        `\`${P}config\` — overview of everything configured on this server`,
+        `\`${P}comando <name> on|off\` — toggles a command here`,
+        `\`${P}banglobal <off|avisar|banir>\` — what to do when someone banned elsewhere joins`,
+        `\`${P}idioma pt|en\` — the language I reply in on this server`,
+        `\`${P}debug\` — diagnostics when something doesn't work`,
+        `\`${P}debug canais\` — what the bot can see and do in EACH channel`,
+        `\`${P}debug silence @user\` — checks whether the silence will actually work`,
+        "",
+        `And \`${P}help\` lists everything, with \`${P}help <command>\` for details.`,
+      ],
+    },
+  };
+
+  // ── pt ──
   return {
     permissoes: {
       titulo: "🔑 Permissões do bot",
@@ -193,6 +551,44 @@ function AREAS(P) {
       ],
     },
 
+    game: {
+      titulo: "🎲 Configurar o RPG",
+      ordem: 8,
+      resumo: "Deixar o jogo pronto no servidor — comece por aqui.",
+      corpo: [
+        "_Esta página é para quem **administra**. Para jogar, veja_",
+        `\`${P}tutorial rpg\`, \`${P}tutorial aventura\` e \`${P}tutorial economia\`.`,
+        "",
+        "**1. Não precisa instalar nada**",
+        "O RPG já funciona: o catálogo de itens e companheiros e a moeda padrão",
+        `são criados sozinhos. Alguém pode digitar \`${P}game criar\` agora mesmo.`,
+        "",
+        "**2. Escolha onde se joga**",
+        "As mensagens do jogo são longas e frequentes. Vale limitar a um canal:",
+        `\`${P}acesso canal somente\` e depois \`${P}acesso canal add\` no canal do jogo.`,
+        "_A moderação continua funcionando nos outros canais normalmente._",
+        "",
+        "**3. Confira que está tudo de pé**",
+        `\`${P}game admin teste\` — roda o jogo inteiro num personagem descartável`,
+        "e devolve ✅/❌ por etapa. Use depois de cada atualização do bot.",
+        "",
+        "**4. Programe as moedas** _(opcional)_",
+        `\`${P}game admin moeda modelo mundo\` — cria Real, Dólar, Euro, Prata,`,
+        "Ouro e Bitcoin já balanceados, de uma vez. Há também `fantasia` e `simples`.",
+        `\`${P}game admin moeda ajuda\` — explica cada campo se quiser fazer à mão.`,
+        "",
+        "**5. Calibre antes de abrir**",
+        `\`${P}game admin simular <missão> 500\` mostra a taxa real de sucesso e`,
+        "morte. Se estiver duro ou fácil demais, me avise que ajusto os números.",
+        "",
+        "**6. Limpe os testes**",
+        `\`${P}game admin reset servidor confirmar\` — apaga o progresso e recomeça.`,
+        `\`${P}game admin reset tudo confirmar\` — apaga também o catálogo curado.`,
+        "",
+        `_Ferramentas de teste: \`${P}game admin\` lista todas._`,
+      ],
+    },
+
     rpg: {
       titulo: "🎲 RPG — como jogar",
       ordem: 9,
@@ -310,44 +706,6 @@ function AREAS(P) {
       ],
     },
 
-    game: {
-      titulo: "🎲 Configurar o RPG",
-      ordem: 8,
-      resumo: "Deixar o jogo pronto no servidor — comece por aqui.",
-      corpo: [
-        "_Esta página é para quem **administra**. Para jogar, veja_",
-        `\`${P}tutorial rpg\`, \`${P}tutorial aventura\` e \`${P}tutorial economia\`.`,
-        "",
-        "**1. Não precisa instalar nada**",
-        "O RPG já funciona: o catálogo de itens e companheiros e a moeda padrão",
-        `são criados sozinhos. Alguém pode digitar \`${P}game criar\` agora mesmo.`,
-        "",
-        "**2. Escolha onde se joga**",
-        "As mensagens do jogo são longas e frequentes. Vale limitar a um canal:",
-        `\`${P}acesso canal somente\` e depois \`${P}acesso canal add\` no canal do jogo.`,
-        "_A moderação continua funcionando nos outros canais normalmente._",
-        "",
-        "**3. Confira que está tudo de pé**",
-        `\`${P}game admin teste\` — roda o jogo inteiro num personagem descartável`,
-        "e devolve ✅/❌ por etapa. Use depois de cada atualização do bot.",
-        "",
-        "**4. Programe as moedas** _(opcional)_",
-        `\`${P}game admin moeda modelo mundo\` — cria Real, Dólar, Euro, Prata,`,
-        "Ouro e Bitcoin já balanceados, de uma vez. Há também `fantasia` e `simples`.",
-        `\`${P}game admin moeda ajuda\` — explica cada campo se quiser fazer à mão.`,
-        "",
-        "**5. Calibre antes de abrir**",
-        `\`${P}game admin simular <missão> 500\` mostra a taxa real de sucesso e`,
-        "morte. Se estiver duro ou fácil demais, me avise que ajusto os números.",
-        "",
-        "**6. Limpe os testes**",
-        `\`${P}game admin reset servidor confirmar\` — apaga o progresso e recomeça.`,
-        `\`${P}game admin reset tudo confirmar\` — apaga também o catálogo curado.`,
-        "",
-        `_Ferramentas de teste: \`${P}game admin\` lista todas._`,
-      ],
-    },
-
     ajustes: {
       titulo: "⚙️ Ajustes gerais",
       ordem: 12,
@@ -356,6 +714,7 @@ function AREAS(P) {
         `\`${P}config\` — panorama de tudo que está configurado neste servidor`,
         `\`${P}comando <nome> on|off\` — liga/desliga um comando aqui`,
         `\`${P}banglobal <off|avisar|banir>\` — o que fazer quando entra alguém banido em outro servidor`,
+        `\`${P}idioma pt|en\` — em que idioma eu respondo neste servidor`,
         `\`${P}debug\` — diagnóstico quando algo não funciona`,
         `\`${P}debug canais\` — o que o bot enxerga e pode fazer em CADA canal`,
         `\`${P}debug silence @pessoa\` — checa se o silêncio vai funcionar mesmo`,
@@ -368,29 +727,34 @@ function AREAS(P) {
 
 const APELIDOS = {
   permissao: "permissoes", permissões: "permissoes", perms: "permissoes", bot: "permissoes",
+  permissions: "permissoes",
   automod: "moderacao", moderação: "moderacao", punicao: "moderacao", punição: "moderacao", filtros: "moderacao",
-  log: "logs", registro: "logs",
+  moderation: "moderacao", filters: "moderacao",
+  log: "logs", registro: "logs", logging: "logs",
   cargo: "cargos", autorole: "cargos", reactionrole: "cargos", roles: "cargos",
-  nivel: "xp", niveis: "xp", "níveis": "xp", level: "xp",
-  personagem: "rpg", jogo: "rpg", ficha: "rpg",
+  nivel: "xp", niveis: "xp", "níveis": "xp", level: "xp", levels: "xp",
+  personagem: "rpg", jogo: "rpg", ficha: "rpg", character: "rpg",
   configurar: "game", "configuração": "game", admin: "game", setup: "game",
   missao: "aventura", missoes: "aventura", itens: "aventura",
+  missions: "aventura", adventure: "aventura", items: "aventura",
   moeda: "economia", mercado: "economia", loja: "economia", carteira: "economia",
+  economy: "economia", market: "economia", wallet: "economia",
   followers: "aventura", party: "aventura", dungeon: "aventura",
-  judy: "ia", chat: "ia", modia: "ia",
-  rss: "noticias", feed: "noticias", "notícias": "noticias",
-  embed: "mensagens", avisos: "mensagens",
-  config: "ajustes", geral: "ajustes",
+  judy: "ia", chat: "ia", modia: "ia", ai: "ia",
+  rss: "noticias", feed: "noticias", "notícias": "noticias", news: "noticias",
+  embed: "mensagens", avisos: "mensagens", messages: "mensagens", embeds: "mensagens",
+  config: "ajustes", geral: "ajustes", settings: "ajustes", general: "ajustes",
 };
 
 export async function cmdTutorial(message, args, ctx) {
   const { sendEmbed, COR, PREFIXO: P } = ctx;
+  const lang = lingua(ctx);
 
   // A IA só roda nos servidores da allowlist. Mostrar essa área onde ela não
   // funciona é pior que omitir: a pessoa tenta e nada acontece.
   const comIA = (() => { try { return temIA(ctx.serverId); } catch { return false; } })();
 
-  const todas = AREAS(P);
+  const todas = AREAS(P, lang);
   const areas = {};
   for (const [k, v] of Object.entries(todas)) {
     if (v.soComIA && !comIA) continue;
@@ -404,7 +768,11 @@ export async function cmdTutorial(message, args, ctx) {
     const area = chave ? areas[chave] : null;
     if (!area) {
       const nomes = Object.keys(areas).map((k) => `\`${k}\``).join(" · ");
-      return sendEmbed(message.channel, {
+      return sendEmbed(message.channel, lang === "en" ? {
+        title: "❓ Unknown area",
+        description: `I don't know that area. The existing ones:\n${nomes}\n\nOr use \`${P}tutorial\` to see the full walkthrough.`,
+        colour: COR.aviso,
+      } : {
         title: "❓ Área desconhecida",
         description: `Não conheço essa área. As que existem:\n${nomes}\n\nOu use \`${P}tutorial\` para ver o roteiro completo.`,
         colour: COR.aviso,
@@ -414,8 +782,12 @@ export async function cmdTutorial(message, args, ctx) {
     const i = ordem.indexOf(chave);
     const prox = ordem[i + 1];
     const rodape = prox
-      ? `\n\n➡️ Próxima área: \`${P}tutorial ${prox}\` (${areas[prox].titulo})`
-      : `\n\n✅ Essa é a última área. \`${P}config\` mostra como tudo ficou.`;
+      ? (lang === "en"
+        ? `\n\n➡️ Next area: \`${P}tutorial ${prox}\` (${areas[prox].titulo})`
+        : `\n\n➡️ Próxima área: \`${P}tutorial ${prox}\` (${areas[prox].titulo})`)
+      : (lang === "en"
+        ? `\n\n✅ That's the last area. \`${P}config\` shows how everything turned out.`
+        : `\n\n✅ Essa é a última área. \`${P}config\` mostra como tudo ficou.`);
     return sendEmbed(message.channel, {
       title: area.titulo,
       description: area.corpo.join("\n").slice(0, 1900) + rodape,
@@ -426,7 +798,9 @@ export async function cmdTutorial(message, args, ctx) {
   // ── Roteiro geral ──
   const ordenadas = Object.entries(areas).sort((a, b) => a[1].ordem - b[1].ordem);
   const linhas = [
-    "Um servidor novo costuma ficar pronto nesta ordem. **Nada é obrigatório** — pule o que não fizer sentido para você.",
+    lang === "en"
+      ? "A new server usually gets ready in this order. **Nothing is mandatory** — skip whatever doesn't make sense for you."
+      : "Um servidor novo costuma ficar pronto nesta ordem. **Nada é obrigatório** — pule o que não fizer sentido para você.",
     "",
   ];
   for (const [chave, a] of ordenadas) {
@@ -435,10 +809,12 @@ export async function cmdTutorial(message, args, ctx) {
     linhas.push(`\`${P}tutorial ${chave}\``);
     linhas.push("");
   }
-  linhas.push(`Cada página traz os comandos exatos. \`${P}help\` lista todos os comandos, \`${P}config\` mostra o estado atual do servidor.`);
+  linhas.push(lang === "en"
+    ? `Each page brings the exact commands. \`${P}help\` lists every command, \`${P}config\` shows the server's current state.`
+    : `Cada página traz os comandos exatos. \`${P}help\` lista todos os comandos, \`${P}config\` mostra o estado atual do servidor.`);
 
   return sendEmbed(message.channel, {
-    title: "📚 Por onde começar",
+    title: lang === "en" ? "📚 Where to start" : "📚 Por onde começar",
     description: linhas.join("\n").slice(0, 1950),
     colour: COR.info,
   });

@@ -11,7 +11,8 @@ import * as db from "./db.js";
 
 // ── Template de configuração POR SERVIDOR ──
 export const padraoServidor = {
-  language: "pt",                  // pt | es | en
+  language: "pt",                  // pt | en (definido pelo admin com &idioma)
+  idiomaPerguntado: false,         // já sugerimos a escolha de idioma uma vez?
   automod: {
     antiSpam:        { enabled: true,  maxMessages: 5,  windowMs: 4000, punicao: null },
     antiMassSpam:    { enabled: true,  maxMessages: 12, windowMs: 8000, punicao: null },

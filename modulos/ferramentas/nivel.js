@@ -29,6 +29,7 @@
 
 import * as db from "../core/db.js";
 import { limparId, ULID } from "../core/ids.js";
+import { tr, lingua } from "../core/i18n.js";
 
 
 // ── Fórmula de progressão ──────────────────────────────────
@@ -165,11 +166,15 @@ export async function aoMensagem(message, ctx) {
       const canal = g.canalAnuncio
         ? (ctx.client?.channels?.get?.(g.canalAnuncio) ?? message.channel)
         : message.channel;
-      const extra = ganhouCargo ? `\n🎖 Você ganhou um novo cargo!` : "";
+      const lvLang = lingua(ctx);
+      const extra = ganhouCargo
+        ? (lvLang === "en" ? `\n🎖 You earned a new role!` : `\n🎖 Você ganhou um novo cargo!`) : "";
       try {
         await canal.sendMessage({ embeds: [{
           title: "🎉 Level Up!",
-          description: `<@${userId}> subiu para o **nível ${novoNivel}**!${extra}`,
+          description: lvLang === "en"
+            ? `<@${userId}> reached **level ${novoNivel}**!${extra}`
+            : `<@${userId}> subiu para o **nível ${novoNivel}**!${extra}`,
           colour: "#FFD700",
         }] });
       } catch (e) { console.error("[GAME][anuncio]", e.message); }
@@ -183,31 +188,42 @@ export async function aoMensagem(message, ctx) {
 export async function cmdXp(message, args, ctx) {
   const { sendEmbed, COR, PREFIXO, config, serverId, getServer, membroTemPermissao } = ctx;
   const g = config.xp;
+  const lang = lingua(ctx);
   const sub = args[0]?.toLowerCase();
 
   // Aviso: se o sistema está desligado, quase nada faz sentido. Avisa (exceto
   // para 'on', 'setup' e 'criarcargos', que são justamente para configurá-lo).
   if (!g?.enabled && !["on", "setup", "config", "configurar", "criarcargos", "criar"].includes(sub)) {
-    return sendEmbed(message.channel, {
+    return sendEmbed(message.channel, tr(ctx, {
       title: "💤 Sistema de níveis desligado",
       description: `O sistema de XP está **desativado** neste servidor, por isso ninguém está ganhando XP.\n\nPara ativar: \`${PREFIXO}xp on\` *(precisa de ManagePermissions)*.\nDepois, configure com \`${PREFIXO}xp setup\` se quiser.`,
       colour: COR.aviso,
-    });
+    }, {
+      title: "💤 Leveling system off",
+      description: `The XP system is **disabled** on this server, so nobody is earning XP.\n\nTo enable it: \`${PREFIXO}xp on\` *(needs ManagePermissions)*.\nThen configure it with \`${PREFIXO}xp setup\` if you like.`,
+      colour: COR.aviso,
+    }));
   }
 
   // ── top / leaderboard ──
   if (sub === "top" || sub === "leaderboard" || sub === "ranking") {
     const top = db.topXp(serverId, 10);
     if (!top.length)
-      return sendEmbed(message.channel, { title: "🏆 Ranking", description: "Ainda não há ninguém com XP.", colour: COR.mod });
+      return sendEmbed(message.channel, tr(ctx,
+        { title: "🏆 Ranking", description: "Ainda não há ninguém com XP.", colour: COR.mod },
+        { title: "🏆 Ranking", description: "Nobody has XP yet.", colour: COR.mod }));
     const linhas = top.map((e, i) => {
       const medalha = ["🥇", "🥈", "🥉"][i] ?? `**${i + 1}.**`;
-      return `${medalha} <@${e.userId}> — nível **${e.nivel}** · ${e.xp} XP`;
+      return lang === "en"
+        ? `${medalha} <@${e.userId}> — level **${e.nivel}** · ${e.xp} XP`
+        : `${medalha} <@${e.userId}> — nível **${e.nivel}** · ${e.xp} XP`;
     });
     // nota: só XP de texto (call não é suportado pela plataforma)
     return sendEmbed(message.channel, {
-      title: "🏆 Ranking de níveis",
-      description: linhas.join("\n") + "\n\n_XP é ganho por mensagens (o Stoat não permite medir tempo em call)._",
+      title: lang === "en" ? "🏆 Level ranking" : "🏆 Ranking de níveis",
+      description: linhas.join("\n") + (lang === "en"
+        ? "\n\n_XP is earned from messages (Stoat can't measure call time)._"
+        : "\n\n_XP é ganho por mensagens (o Stoat não permite medir tempo em call)._"),
       colour: COR.info,
     });
   }
@@ -222,18 +238,25 @@ export async function cmdXp(message, args, ctx) {
     if (!(await podeConfigurar(message, ctx))) return;
     config.xp.enabled = (sub === "on");
     ctx.salvarConfig();
-    return sendEmbed(message.channel, { title: "🎮 Sistema de níveis",
-      description: `Sistema **${sub === "on" ? "ativado 🟢" : "desativado 🔴"}**.`, colour: COR.mod });
+    return sendEmbed(message.channel, tr(ctx,
+      { title: "🎮 Sistema de níveis",
+        description: `Sistema **${sub === "on" ? "ativado 🟢" : "desativado 🔴"}**.`, colour: COR.mod },
+      { title: "🎮 Leveling system",
+        description: `System **${sub === "on" ? "enabled 🟢" : "disabled 🔴"}**.`, colour: COR.mod }));
   }
 
   // ── cargos (lista) ──
   if (sub === "cargos") {
     const cargos = db.listarCargosNivel(serverId);
     if (!cargos.length)
-      return sendEmbed(message.channel, { title: "🎖 Cargos de nível",
-        description: `Nenhum cargo configurado. Use \`${PREFIXO}xp criarcargos\` para criar automaticamente.`, colour: COR.mod });
-    return sendEmbed(message.channel, { title: "🎖 Cargos de nível",
-      description: cargos.map((c) => `Nível **${c.nivel}** → <@&${c.roleId}>`).join("\n"), colour: COR.mod });
+      return sendEmbed(message.channel, tr(ctx,
+        { title: "🎖 Cargos de nível",
+          description: `Nenhum cargo configurado. Use \`${PREFIXO}xp criarcargos\` para criar automaticamente.`, colour: COR.mod },
+        { title: "🎖 Level roles",
+          description: `No roles configured. Use \`${PREFIXO}xp criarcargos\` to create them automatically.`, colour: COR.mod }));
+    return sendEmbed(message.channel, {
+      title: lang === "en" ? "🎖 Level roles" : "🎖 Cargos de nível",
+      description: cargos.map((c) => (lang === "en" ? `Level **${c.nivel}** → <@&${c.roleId}>` : `Nível **${c.nivel}** → <@&${c.roleId}>`)).join("\n"), colour: COR.mod });
   }
 
   // ── criarcargos ──
@@ -245,11 +268,15 @@ export async function cmdXp(message, args, ctx) {
   if (sub === "reset" || sub === "zerar") {
     if (!(await podeConfigurar(message, ctx))) return;
     if (args[1] !== "confirmar")
-      return sendEmbed(message.channel, { title: "⚠️ Confirmar reset",
-        description: `Isso apaga TODO o XP do servidor. Para confirmar: \`${PREFIXO}xp reset confirmar\``, colour: COR.aviso });
+      return sendEmbed(message.channel, tr(ctx,
+        { title: "⚠️ Confirmar reset",
+          description: `Isso apaga TODO o XP do servidor. Para confirmar: \`${PREFIXO}xp reset confirmar\``, colour: COR.aviso },
+        { title: "⚠️ Confirm reset",
+          description: `This erases ALL the server's XP. To confirm: \`${PREFIXO}xp reset confirmar\``, colour: COR.aviso }));
     const n = db.resetXp(serverId);
-    return sendEmbed(message.channel, { title: "🧹 XP zerado",
-      description: `Removido o XP de ${n} usuário(s).`, colour: COR.sucesso });
+    return sendEmbed(message.channel, tr(ctx,
+      { title: "🧹 XP zerado", description: `Removido o XP de ${n} usuário(s).`, colour: COR.sucesso },
+      { title: "🧹 XP reset", description: `Removed the XP of ${n} user(s).`, colour: COR.sucesso }));
   }
 
   // ── rank [@usuário] ou perfil próprio (padrão) ──
@@ -263,8 +290,16 @@ export async function cmdXp(message, args, ctx) {
   const pos = db.posicaoXp(serverId, alvoId);
   const p = progresso(dados.xp, dados.nivel, g.multiplicador);
   return sendEmbed(message.channel, {
-    title: "📊 Perfil de nível",
-    description: [
+    title: lang === "en" ? "📊 Level profile" : "📊 Perfil de nível",
+    description: (lang === "en" ? [
+      `<@${alvoId}>`,
+      `**Level:** ${dados.nivel}${dados.nivel >= g.nivelMaximo ? " (max!)" : ""}`,
+      `**XP:** ${dados.xp}`,
+      pos ? `**Ranking:** #${pos}` : "",
+      "",
+      `${barra(p.pct)} ${p.pct}%`,
+      `${p.atual} / ${p.necessario} XP to the next level`,
+    ] : [
       `<@${alvoId}>`,
       `**Nível:** ${dados.nivel}${dados.nivel >= g.nivelMaximo ? " (máximo!)" : ""}`,
       `**XP:** ${dados.xp}`,
@@ -272,7 +307,7 @@ export async function cmdXp(message, args, ctx) {
       "",
       `${barra(p.pct)} ${p.pct}%`,
       `${p.atual} / ${p.necessario} XP para o próximo nível`,
-    ].filter(Boolean).join("\n"),
+    ]).filter(Boolean).join("\n"),
     colour: COR.info,
   });
 }
@@ -282,8 +317,11 @@ async function podeConfigurar(message, ctx) {
   const { getServer, membroTemPermissao, sendEmbed, COR } = ctx;
   const server = await getServer(message);
   if (!membroTemPermissao(message, server, "ManagePermissions")) {
-    await sendEmbed(message.channel, { title: "🚫 Permissão insuficiente",
-      description: "Você precisa de **ManagePermissions** para isso.", colour: COR.erro });
+    await sendEmbed(message.channel, tr(ctx,
+      { title: "🚫 Permissão insuficiente",
+        description: "Você precisa de **ManagePermissions** para isso.", colour: COR.erro },
+      { title: "🚫 Missing permission",
+        description: "You need **ManagePermissions** for that.", colour: COR.erro }));
     return false;
   }
   return true;
@@ -301,7 +339,31 @@ async function setupGame(message, args, ctx) {
 
   if (!param) {
     const g = config.xp;
-    return sendEmbed(message.channel, {
+    const sl = lingua(ctx);
+    return sendEmbed(message.channel, sl === "en" ? {
+      title: "🎮 Leveling system configuration",
+      description: [
+        `**Enabled:** ${g.enabled ? "🟢 yes" : "🔴 no"}`,
+        `**XP per message:** ${g.xpMin}–${g.xpMax}`,
+        `**Cooldown:** ${Math.round(g.cooldownMs / 1000)}s`,
+        `**Multiplier (difficulty):** ${g.multiplicador}`,
+        `**Level cap:** ${g.nivelMaximo}`,
+        `**Roles every:** ${g.intervaloCargos} levels`,
+        `**Level-up announcement:** ${g.anunciarLevelUp ? "yes" : "no"}${g.canalAnuncio ? ` (channel set)` : ""}`,
+        "",
+        "**Adjust:**",
+        `\`${PREFIXO}xp setup multiplicador <number>\` (e.g. 1.5)`,
+        `\`${PREFIXO}xp setup nivelmaximo <number>\``,
+        `\`${PREFIXO}xp setup intervalo <5|10>\``,
+        `\`${PREFIXO}xp setup xp <min> <max>\``,
+        `\`${PREFIXO}xp setup cooldown <seconds>\``,
+        `\`${PREFIXO}xp setup canal <aqui|off>\``,
+        `\`${PREFIXO}xp setup anuncio <on|off>\``,
+        "",
+        `Then: \`${PREFIXO}xp criarcargos\` and \`${PREFIXO}xp on\`.`,
+      ].join("\n"),
+      colour: COR.mod,
+    } : {
       title: "🎮 Configuração do sistema de níveis",
       description: [
         `**Ativo:** ${g.enabled ? "🟢 sim" : "🔴 não"}`,
@@ -331,20 +393,20 @@ async function setupGame(message, args, ctx) {
   const num = Number(valor);
   switch (param) {
     case "multiplicador": case "mult":
-      if (!(num >= 1 && num <= 5)) return erro(ctx, message, "Multiplicador deve ser entre 1 e 5 (ex.: 1.5).");
+      if (!(num >= 1 && num <= 5)) return erro(ctx, message, tr(ctx, "Multiplicador deve ser entre 1 e 5 (ex.: 1.5).", "The multiplier must be between 1 and 5 (e.g. 1.5)."));
       g.multiplicador = num; break;
     case "nivelmaximo": case "nivelmax": case "max":
-      if (!(num >= 5 && num <= 1000)) return erro(ctx, message, "Nível máximo deve ser entre 5 e 1000.");
+      if (!(num >= 5 && num <= 1000)) return erro(ctx, message, tr(ctx, "Nível máximo deve ser entre 5 e 1000.", "The level cap must be between 5 and 1000."));
       g.nivelMaximo = Math.floor(num); break;
     case "intervalo":
-      if (num !== 5 && num !== 10) return erro(ctx, message, "Intervalo deve ser 5 ou 10.");
+      if (num !== 5 && num !== 10) return erro(ctx, message, tr(ctx, "Intervalo deve ser 5 ou 10.", "The interval must be 5 or 10."));
       g.intervaloCargos = num; break;
     case "xp":
       { const mn = Number(args[1]), mx = Number(args[2]);
-        if (!(mn > 0 && mx >= mn)) return erro(ctx, message, "Uso: `xp setup xp <min> <max>` (max ≥ min).");
+        if (!(mn > 0 && mx >= mn)) return erro(ctx, message, tr(ctx, "Uso: `xp setup xp <min> <max>` (max ≥ min).", "Usage: `xp setup xp <min> <max>` (max ≥ min)."));
         g.xpMin = Math.floor(mn); g.xpMax = Math.floor(mx); } break;
     case "cooldown":
-      if (!(num >= 0)) return erro(ctx, message, "Cooldown em segundos (número positivo).");
+      if (!(num >= 0)) return erro(ctx, message, tr(ctx, "Cooldown em segundos (número positivo).", "Cooldown in seconds (a positive number)."));
       g.cooldownMs = Math.floor(num * 1000); break;
     case "canal":
       if ((valor || "").toLowerCase() === "off") g.canalAnuncio = null;
@@ -353,15 +415,18 @@ async function setupGame(message, args, ctx) {
     case "anuncio": case "anúncio":
       g.anunciarLevelUp = (valor || "").toLowerCase() === "on"; break;
     default:
-      return erro(ctx, message, `Parâmetro desconhecido: \`${param}\`.`);
+      return erro(ctx, message, tr(ctx, `Parâmetro desconhecido: \`${param}\`.`, `Unknown parameter: \`${param}\`.`));
   }
   ctx.salvarConfig();
-  return sendEmbed(message.channel, { title: "✅ Configuração salva",
-    description: `\`${param}\` atualizado.`, colour: COR.sucesso });
+  return sendEmbed(message.channel, tr(ctx,
+    { title: "✅ Configuração salva", description: `\`${param}\` atualizado.`, colour: COR.sucesso },
+    { title: "✅ Configuration saved", description: `\`${param}\` updated.`, colour: COR.sucesso }));
 }
 
 function erro(ctx, message, texto) {
-  return ctx.sendEmbed(message.channel, { title: "❌ Valor inválido", description: texto, colour: ctx.COR.erro });
+  return ctx.sendEmbed(message.channel, {
+    title: lingua(ctx) === "en" ? "❌ Invalid value" : "❌ Valor inválido",
+    description: texto, colour: ctx.COR.erro });
 }
 
 // ──────────────────────────────────────────────────────────
@@ -378,18 +443,22 @@ export async function criarCargos(message, ctx) {
   for (let n = intervalo; n <= g.nivelMaximo; n += intervalo) niveis.push(n);
 
   if (!niveis.length)
-    return sendEmbed(message.channel, { title: "❌ Nada a criar",
-      description: "Verifique o nível máximo e o intervalo.", colour: COR.erro });
+    return sendEmbed(message.channel, tr(ctx,
+      { title: "❌ Nada a criar", description: "Verifique o nível máximo e o intervalo.", colour: COR.erro },
+      { title: "❌ Nothing to create", description: "Check the level cap and the interval.", colour: COR.erro }));
 
-  await sendEmbed(message.channel, { title: "⏳ Criando cargos…",
-    description: `Vou criar ${niveis.length} cargo(s), um a cada ${intervalo} níveis. Isso pode levar um instante.`, colour: COR.info });
+  await sendEmbed(message.channel, tr(ctx,
+    { title: "⏳ Criando cargos…",
+      description: `Vou criar ${niveis.length} cargo(s), um a cada ${intervalo} níveis. Isso pode levar um instante.`, colour: COR.info },
+    { title: "⏳ Creating roles…",
+      description: `I'll create ${niveis.length} role(s), one every ${intervalo} levels. This may take a moment.`, colour: COR.info }));
 
   const criados = [];
   for (const nivel of niveis) {
     // se já existe cargo para este nível, pula
     if (db.cargoDoNivel(serverId, nivel)) continue;
     try {
-      const { id } = await server.createRole(`Nível ${nivel}`);
+      const { id } = await server.createRole(lingua(ctx) === "en" ? `Level ${nivel}` : `Nível ${nivel}`);
       db.setCargoNivel(serverId, nivel, id);
       criados.push(id);
     } catch (e) { console.error("[GAME][criarCargo]", e.message); }
@@ -399,13 +468,24 @@ export async function criarCargos(message, ctx) {
   const todosIds = db.listarCargosNivel(serverId).map((c) => c.roleId);
   const ord = await ordenarAbaixoDoMute(server, config, todosIds);
 
-  const notaMute = ord.semMute
-    ? "\n\n⚠️ Nenhum cargo de mute detectado — quando você criar/definir um, rode `&xp criarcargos` de novo para reordenar."
-    : ord.ok
-      ? "\n\n🔒 Todos os cargos de nível foram posicionados **abaixo** do cargo de mute."
-      : `\n\n⚠️ Não consegui reordenar abaixo do mute (${ord.motivo}). Ajuste manualmente.`;
+  const ccLang = lingua(ctx);
+  const notaMute = ccLang === "en"
+    ? (ord.semMute
+      ? "\n\n⚠️ No mute role detected — once you create/set one, run `&xp criarcargos` again to reorder."
+      : ord.ok
+        ? "\n\n🔒 All the level roles were positioned **below** the mute role."
+        : `\n\n⚠️ I couldn't reorder below the mute role (${ord.motivo}). Adjust it manually.`)
+    : (ord.semMute
+      ? "\n\n⚠️ Nenhum cargo de mute detectado — quando você criar/definir um, rode `&xp criarcargos` de novo para reordenar."
+      : ord.ok
+        ? "\n\n🔒 Todos os cargos de nível foram posicionados **abaixo** do cargo de mute."
+        : `\n\n⚠️ Não consegui reordenar abaixo do mute (${ord.motivo}). Ajuste manualmente.`);
 
-  return sendEmbed(message.channel, {
+  return sendEmbed(message.channel, ccLang === "en" ? {
+    title: "🎖 Level roles created",
+    description: `${criados.length} new role(s) created, one every ${intervalo} levels (up to level ${g.nivelMaximo}).${notaMute}`,
+    colour: COR.sucesso,
+  } : {
     title: "🎖 Cargos de nível criados",
     description: `${criados.length} novo(s) cargo(s) criado(s), a cada ${intervalo} níveis (até o nível ${g.nivelMaximo}).${notaMute}`,
     colour: COR.sucesso,

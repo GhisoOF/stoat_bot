@@ -100,12 +100,16 @@ async function contarMembros(server) {
   return null;
 }
 
+import { tr, lingua } from "../core/i18n.js";
+
 export async function cmdServidores(message, args, ctx) {
   const { sendEmbed, COR, client, ehSuperAdmin } = ctx;
+  const lang = lingua(ctx);
 
   if (!ehSuperAdmin?.(message.authorId)) {
-    return sendEmbed(message.channel, { title: "🚫 Comando restrito",
-      description: "Só o dono do bot pode ver isso.", colour: COR.erro });
+    return sendEmbed(message.channel, tr(ctx,
+      { title: "🚫 Comando restrito", description: "Só o dono do bot pode ver isso.", colour: COR.erro },
+      { title: "🚫 Restricted command", description: "Only the bot's owner can see this.", colour: COR.erro }));
   }
 
   // Modo cru: mostra o que a API entrega, para descobrir onde está a contagem.
@@ -116,8 +120,9 @@ export async function cmdServidores(message, args, ctx) {
       um = s?.values ? [...s.values()][0] : (Array.isArray(s) ? s[0] : Object.values(s ?? {})[0]);
     } catch {}
     if (!um) {
-      return sendEmbed(message.channel, { title: "🔬 Diagnóstico",
-        description: "Não consegui pegar nenhum servidor do cliente.", colour: COR.erro });
+      return sendEmbed(message.channel, tr(ctx,
+        { title: "🔬 Diagnóstico", description: "Não consegui pegar nenhum servidor do cliente.", colour: COR.erro },
+        { title: "🔬 Diagnostics", description: "I couldn't get any server from the client.", colour: COR.erro }));
     }
     const chaves = Object.keys(um).filter((k) => typeof um[k] !== "function");
     const metodos = Object.getOwnPropertyNames(Object.getPrototypeOf(um) ?? {})
@@ -129,11 +134,12 @@ export async function cmdServidores(message, args, ctx) {
         amostra[k] = typeof v === "object" ? `${v?.constructor?.name ?? "obj"}(size=${v?.size ?? "?"})` : String(v);
       }
     }
-    return sendEmbed(message.channel, { title: "🔬 Como a API entrega o servidor",
+    return sendEmbed(message.channel, {
+      title: lang === "en" ? "🔬 How the API delivers the server" : "🔬 Como a API entrega o servidor",
       description: [
-        "**Campos:**", "```", chaves.join(", ").slice(0, 500), "```",
-        "**Métodos:**", "```", metodos.join(", ").slice(0, 400), "```",
-        "**Relevantes:**", "```json", JSON.stringify(amostra, null, 1).slice(0, 500), "```",
+        lang === "en" ? "**Fields:**" : "**Campos:**", "```", chaves.join(", ").slice(0, 500), "```",
+        lang === "en" ? "**Methods:**" : "**Métodos:**", "```", metodos.join(", ").slice(0, 400), "```",
+        lang === "en" ? "**Relevant:**" : "**Relevantes:**", "```json", JSON.stringify(amostra, null, 1).slice(0, 500), "```",
       ].join("\n").slice(0, 1950), colour: COR.info });
   }
 
@@ -145,13 +151,17 @@ export async function cmdServidores(message, args, ctx) {
     else if (Array.isArray(s)) lista = s;
     else if (s && typeof s === "object") lista = Object.values(s);
   } catch (e) {
-    return sendEmbed(message.channel, { title: "❌ Não consegui listar",
-      description: `Erro ao acessar os servidores: ${e?.message ?? e}`, colour: COR.erro });
+    return sendEmbed(message.channel, tr(ctx,
+      { title: "❌ Não consegui listar",
+        description: `Erro ao acessar os servidores: ${e?.message ?? e}`, colour: COR.erro },
+      { title: "❌ Couldn't list them",
+        description: `Error accessing the servers: ${e?.message ?? e}`, colour: COR.erro }));
   }
 
   if (!lista.length) {
-    return sendEmbed(message.channel, { title: "🌐 Servidores",
-      description: "Não consegui enxergar nenhum servidor pela API.", colour: COR.aviso });
+    return sendEmbed(message.channel, tr(ctx,
+      { title: "🌐 Servidores", description: "Não consegui enxergar nenhum servidor pela API.", colour: COR.aviso },
+      { title: "🌐 Servers", description: "I couldn't see any server through the API.", colour: COR.aviso }));
   }
 
   const linhas = [];
@@ -170,12 +180,25 @@ export async function cmdServidores(message, args, ctx) {
   for (const d of dados) {
     if (typeof d.membros === "number") totalMembros += d.membros; else semContagem++;
     totalMpm += d.mpm;
-    const membrosTxt = typeof d.membros === "number" ? `${d.membros} membro(s)` : "membros: ?";
-    const ritmo = d.mpm >= 0.1 ? `${d.mpm.toFixed(1)} msg/min` : d.mpm > 0 ? "<0,1 msg/min" : "parado";
+    const membrosTxt = typeof d.membros === "number"
+      ? (lang === "en" ? `${d.membros} member(s)` : `${d.membros} membro(s)`)
+      : (lang === "en" ? "members: ?" : "membros: ?");
+    const ritmo = lang === "en"
+      ? (d.mpm >= 0.1 ? `${d.mpm.toFixed(1)} msg/min` : d.mpm > 0 ? "<0.1 msg/min" : "idle")
+      : (d.mpm >= 0.1 ? `${d.mpm.toFixed(1)} msg/min` : d.mpm > 0 ? "<0,1 msg/min" : "parado");
     linhas.push(`**${d.nome}**\n   ${membrosTxt} · ${ritmo}`);
   }
 
-  const resumo = [
+  const resumo = (lang === "en" ? [
+    `**${dados.length}** server(s) · **${totalMembros}** member(s)`
+      + (semContagem ? ` _(+${semContagem} uncounted)_` : "")
+      + ` · **${totalMpm.toFixed(1)}** msg/min in total`,
+    "",
+    ...linhas.slice(0, 25),
+    dados.length > 25 ? `_… and ${dados.length - 25} more._` : "",
+    "",
+    `_Rate measured over the last ${JANELA_MIN} min · bot up for ${tempoDePe()}_`,
+  ] : [
     `**${dados.length}** servidor(es) · **${totalMembros}** membro(s)`
       + (semContagem ? ` _(+${semContagem} sem contagem)_` : "")
       + ` · **${totalMpm.toFixed(1)}** msg/min no total`,
@@ -184,10 +207,10 @@ export async function cmdServidores(message, args, ctx) {
     dados.length > 25 ? `_… e mais ${dados.length - 25}._` : "",
     "",
     `_Ritmo medido nos últimos ${JANELA_MIN} min · bot de pé há ${tempoDePe()}_`,
-  ].filter(Boolean).join("\n");
+  ]).filter(Boolean).join("\n");
 
   return sendEmbed(message.channel, {
-    title: "🌐 Onde o bot está",
+    title: lang === "en" ? "🌐 Where the bot lives" : "🌐 Onde o bot está",
     description: resumo.slice(0, 1950),
     colour: COR.info,
   });

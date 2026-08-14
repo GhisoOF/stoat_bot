@@ -12,39 +12,56 @@
 // ══════════════════════════════════════════════════════════
 
 import * as log from "../core/log.js";
+import { tr, lingua } from "../core/i18n.js";
 
 const MAX = 100;
 
 export async function cmdLimpar(message, args, ctx) {
   const { sendEmbed, COR, getServer, membroTemPermissao, PREFIXO, client } = ctx;
+  const lang = lingua(ctx);
 
   const server = await getServer(message);
   if (!membroTemPermissao(message, server, "ManageMessages")) {
-    return sendEmbed(message.channel, {
+    return sendEmbed(message.channel, tr(ctx, {
       title: "🚫 Permissão insuficiente",
       description: "Você precisa da permissão **ManageMessages** para limpar o chat.",
       colour: COR.erro,
-    });
+    }, {
+      title: "🚫 Missing permission",
+      description: "You need the **ManageMessages** permission to purge the chat.",
+      colour: COR.erro,
+    }));
   }
 
   // Quantidade
   const n = parseInt(args[0], 10);
   if (!Number.isInteger(n) || n < 1) {
-    return sendEmbed(message.channel, {
+    return sendEmbed(message.channel, tr(ctx, {
       title: "❌ Uso incorreto",
       description: [
         `\`${PREFIXO}limpar <quantidade>\` — apaga as últimas mensagens (1–${MAX})`,
         `\`${PREFIXO}limpar <quantidade> @usuário\` — apaga só as desse usuário`,
       ].join("\n"),
       colour: COR.erro,
-    });
+    }, {
+      title: "❌ Wrong usage",
+      description: [
+        `\`${PREFIXO}limpar <amount>\` — deletes the latest messages (1–${MAX})`,
+        `\`${PREFIXO}limpar <amount> @user\` — deletes only that user's`,
+      ].join("\n"),
+      colour: COR.erro,
+    }));
   }
   if (n > MAX) {
-    return sendEmbed(message.channel, {
+    return sendEmbed(message.channel, tr(ctx, {
       title: "❌ Limite excedido",
       description: `O máximo é **${MAX}** mensagens por vez (por segurança e limite da plataforma).`,
       colour: COR.erro,
-    });
+    }, {
+      title: "❌ Limit exceeded",
+      description: `The maximum is **${MAX}** messages at a time (for safety and platform limits).`,
+      colour: COR.erro,
+    }));
   }
 
   // Filtro opcional por usuário (menção ou ID)
@@ -63,18 +80,31 @@ export async function cmdLimpar(message, args, ctx) {
     const ids = candidatas.slice(0, n).map((m) => m.id ?? m._id).filter(Boolean);
 
     if (!ids.length) {
-      return sendEmbed(message.channel, {
+      return sendEmbed(message.channel, tr(ctx, {
         title: "🧹 Nada para apagar",
         description: alvo ? `Não encontrei mensagens recentes de <@${alvo}>.` : "Não encontrei mensagens para apagar.",
         colour: COR.mod,
-      });
+      }, {
+        title: "🧹 Nothing to delete",
+        description: alvo ? `I couldn't find recent messages from <@${alvo}>.` : "I couldn't find messages to delete.",
+        colour: COR.mod,
+      }));
     }
 
     // Apaga em massa (deleteMessages aceita vários IDs de uma vez)
     await message.channel.deleteMessages(ids);
 
     // Descrição EXATA da ação
-    const conf = await sendEmbedRetornando(ctx, message.channel, {
+    const conf = await sendEmbedRetornando(ctx, message.channel, lang === "en" ? {
+      title: "🧹 Action executed: PURGE",
+      description: [
+        `**Deleted:** ${ids.length} message(s)`,
+        alvo ? `**Filter:** only from <@${alvo}>` : `**Filter:** none (all recent)`,
+        `**Channel:** <#${message.channelId}>`,
+        `**By:** <@${message.authorId}>`,
+      ].join("\n"),
+      colour: COR.sucesso,
+    } : {
       title: "🧹 Ação executada: LIMPEZA",
       description: [
         `**Apagadas:** ${ids.length} mensagem(ns)`,
@@ -99,11 +129,15 @@ export async function cmdLimpar(message, args, ctx) {
     }
   } catch (err) {
     console.error("[LIMPAR]", err.message);
-    await sendEmbed(message.channel, {
+    await sendEmbed(message.channel, tr(ctx, {
       title: "❌ Não foi possível limpar",
       description: `**Erro:** ${err.message}\n\n_Verifique se o bot tem **ManageMessages** neste canal._`,
       colour: COR.erro,
-    });
+    }, {
+      title: "❌ Couldn't purge",
+      description: `**Error:** ${err.message}\n\n_Check that the bot has **ManageMessages** in this channel._`,
+      colour: COR.erro,
+    }));
   }
 }
 

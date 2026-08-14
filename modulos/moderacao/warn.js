@@ -11,39 +11,60 @@
 
 import * as db from "../core/db.js";
 import * as log from "../core/log.js";
+import { tr, lingua } from "../core/i18n.js";
 import { limparId, ULID, resolverUsuario } from "../core/ids.js";
 
 
 export async function cmdWarn(message, args, ctx) {
   const { sendEmbed, COR, PREFIXO: P, config, serverId, getServer } = ctx;
+  const lang = lingua(ctx);
 
   const server = await getServer(message);
   if (!server) {
-    return sendEmbed(message.channel, { title: "❌ Fora de um servidor",
-      description: "Este comando só funciona dentro de um servidor.", colour: COR.erro });
+    return sendEmbed(message.channel, tr(ctx,
+      { title: "❌ Fora de um servidor",
+        description: "Este comando só funciona dentro de um servidor.", colour: COR.erro },
+      { title: "❌ Outside a server",
+        description: "This command only works inside a server.", colour: COR.erro }));
   }
 
   const alvoId = await resolverUsuario(args[0], { message, server });
   if (!alvoId) {
-    return sendEmbed(message.channel, { title: "❌ Quem devo avisar?",
-      description: [
-        `\`${P}warn <@pessoa|id|nome> [motivo]\``,
-        "",
-        `Ex.: \`${P}warn @Fulano spam no chat de arte\``,
-        "",
-        `Para ver os avisos de alguém: \`${P}warnings @pessoa\``,
-        `Para zerar: \`${P}clearwarnings @pessoa\``,
-      ].join("\n"), colour: COR.erro });
+    return sendEmbed(message.channel, tr(ctx,
+      { title: "❌ Quem devo avisar?",
+        description: [
+          `\`${P}warn <@pessoa|id|nome> [motivo]\``,
+          "",
+          `Ex.: \`${P}warn @Fulano spam no chat de arte\``,
+          "",
+          `Para ver os avisos de alguém: \`${P}warnings @pessoa\``,
+          `Para zerar: \`${P}clearwarnings @pessoa\``,
+        ].join("\n"), colour: COR.erro },
+      { title: "❌ Who should I warn?",
+        description: [
+          `\`${P}warn <@user|id|name> [reason]\``,
+          "",
+          `E.g.: \`${P}warn @Someone spamming the art channel\``,
+          "",
+          `To see someone's warnings: \`${P}warnings @user\``,
+          `To reset them: \`${P}clearwarnings @user\``,
+        ].join("\n"), colour: COR.erro }));
     }
 
   // não avisa a si mesmo nem ao bot
   if (alvoId === message.authorId) {
-    return sendEmbed(message.channel, { title: "🤔 Sério?",
-      description: "Você não pode dar um aviso a si mesmo.", colour: COR.aviso });
+    return sendEmbed(message.channel, tr(ctx,
+      { title: "🤔 Sério?",
+        description: "Você não pode dar um aviso a si mesmo.", colour: COR.aviso },
+      { title: "🤔 Really?",
+        description: "You can't give yourself a warning.", colour: COR.aviso }));
   }
   if (alvoId === ctx.client?.user?.id) {
-    return sendEmbed(message.channel, { title: "🤖 Não",
-      description: "Não vou dar um aviso a mim mesmo.", colour: COR.aviso });
+    return sendEmbed(message.channel, tr(ctx,
+      { title: "🤖 Não",
+        description: "Não vou dar um aviso a mim mesmo.", colour: COR.aviso },
+      { title: "🤖 No",
+        description: "I'm not going to warn myself.", colour: COR.aviso }));
   }
 
   // O motivo é o resto da mensagem. O primeiro argumento é descartado quando
@@ -52,13 +73,18 @@ export async function cmdWarn(message, args, ctx) {
   const primeiroEhAlvo = limparId(primeiro) === alvoId
     || ULID.test(limparId(primeiro))
     || /^<[%@#]/.test(primeiro);
-  const motivo = args.slice(primeiroEhAlvo ? 1 : 0).join(" ").trim() || "sem motivo informado";
+  const motivo = args.slice(primeiroEhAlvo ? 1 : 0).join(" ").trim()
+    || (lang === "en" ? "no reason given" : "sem motivo informado");
 
   const total = db.somarAviso(serverId, alvoId, motivo);
   const pol = config?.automod?.punicao ?? { modo: "avisar", warnsParaBan: 3 };
   const limite = pol.warnsParaBan ?? 3;
 
-  const linhas = [
+  const linhas = lang === "en" ? [
+    `<@${alvoId}> received a warning.`,
+    `**Reason:** ${motivo}`,
+    `**Total warnings:** ${total}${pol.modo === "acumular" ? ` of ${limite}` : ""}`,
+  ] : [
     `<@${alvoId}> recebeu um aviso.`,
     `**Motivo:** ${motivo}`,
     `**Total de avisos:** ${total}${pol.modo === "acumular" ? ` de ${limite}` : ""}`,
@@ -68,16 +94,27 @@ export async function cmdWarn(message, args, ctx) {
   let banido = false;
   if (pol.modo === "acumular" && total >= limite) {
     try {
-      await server.banUser(alvoId, { reason: `Limite de ${limite} avisos atingido — último: ${motivo}` });
+      await server.banUser(alvoId, { reason: lang === "en"
+        ? `Reached the limit of ${limite} warnings — last one: ${motivo}`
+        : `Limite de ${limite} avisos atingido — último: ${motivo}` });
       banido = true;
       db.limparPunicao(serverId, alvoId);
-      linhas.push("", `🔨 **Limite atingido — usuário banido.**`);
+      linhas.push("", lang === "en"
+        ? `🔨 **Limit reached — user banned.**`
+        : `🔨 **Limite atingido — usuário banido.**`);
     } catch (e) {
-      linhas.push("", `⚠️ Limite atingido, mas **não consegui banir**: ${e?.message ?? e}`);
-      linhas.push("_O bot precisa de **BanMembers** e estar acima do cargo da pessoa._");
+      if (lang === "en") {
+        linhas.push("", `⚠️ Limit reached, but **I couldn't ban**: ${e?.message ?? e}`);
+        linhas.push("_The bot needs **BanMembers** and its role must sit above the person's._");
+      } else {
+        linhas.push("", `⚠️ Limite atingido, mas **não consegui banir**: ${e?.message ?? e}`);
+        linhas.push("_O bot precisa de **BanMembers** e estar acima do cargo da pessoa._");
+      }
     }
   } else if (pol.modo === "acumular") {
-    linhas.push(`_Faltam **${limite - total}** para o ban automático._`);
+    linhas.push(lang === "en"
+      ? `_**${limite - total}** more until the automatic ban._`
+      : `_Faltam **${limite - total}** para o ban automático._`);
   }
 
   await log.registrar(ctx, "punicoes", {
@@ -88,7 +125,9 @@ export async function cmdWarn(message, args, ctx) {
   console.log(`[WARN] ${message.authorId} avisou ${alvoId} (${total} aviso(s))${banido ? " → BANIDO" : ""}`);
 
   return sendEmbed(message.channel, {
-    title: banido ? "🔨 Aviso aplicado — e limite atingido" : "⚠️ Aviso aplicado",
+    title: banido
+      ? (lang === "en" ? "🔨 Warning applied — and limit reached" : "🔨 Aviso aplicado — e limite atingido")
+      : (lang === "en" ? "⚠️ Warning applied" : "⚠️ Aviso aplicado"),
     description: linhas.join("\n"),
     colour: banido ? COR.erro : COR.aviso,
   });

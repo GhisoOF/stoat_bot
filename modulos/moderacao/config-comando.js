@@ -101,6 +101,26 @@ export async function cmdConfig(message, args, ctx) {
   ];
 
   // ── Punições ativas neste servidor (do banco) ──
+  // ── RPG e economia ──
+  // Quem administra pergunta "quantas moedas tem, qual é a principal, e o
+  // câmbio está de pé?" — antes era preciso sair do &config para descobrir.
+  const moedas = (() => { try { return db.listarMoedas(serverId) ?? []; } catch { return []; } })();
+  const padraoMoeda = moedas.find((m) => m.padrao) ?? moedas[0] ?? null;
+  const nJogadores = (() => { try { return db.listarPersonagens(serverId, 9999)?.length ?? null; } catch { return null; } })();
+  const economia = moedas.length ? (en ? [
+    `**Currencies:** ${moedas.length} — ${moedas.map((m) => `${m.simbolo}${m.id}`).join(" · ")}`,
+    `**Main:** ${padraoMoeda ? `${padraoMoeda.simbolo} ${padraoMoeda.nome}` : "_(none)_"}  ·  prices are shown in it`,
+    `**Exchange:** ${moedas.length > 1 ? `🟢 on — bank and player counter (\`${PREFIXO}game cambio\`)` : "🔴 needs at least 2 currencies"}`,
+    nJogadores != null ? `**Characters:** ${nJogadores}` : null,
+  ] : [
+    `**Moedas:** ${moedas.length} — ${moedas.map((m) => `${m.simbolo}${m.id}`).join(" · ")}`,
+    `**Principal:** ${padraoMoeda ? `${padraoMoeda.simbolo} ${padraoMoeda.nome}` : "_(nenhuma)_"}  ·  os preços aparecem nela`,
+    `**Câmbio:** ${moedas.length > 1 ? `🟢 ativo — banco e balcão (\`${PREFIXO}game cambio\`)` : "🔴 precisa de ao menos 2 moedas"}`,
+    nJogadores != null ? `**Personagens:** ${nJogadores}` : null,
+  ]).filter(Boolean) : [en
+    ? "_No currency yet — one is born as soon as someone plays._"
+    : "_Nenhuma moeda ainda — uma nasce assim que alguém jogar._"];
+
   let ativas = en ? "_(none)_" : "_(nenhuma)_";
   try {
     const linhas = db.getDb()
@@ -143,6 +163,9 @@ export async function cmdConfig(message, args, ctx) {
       "**🚨 Active punishments** *(top 5)*",
       ativas,
       "",
+      "**🎲 RPG and economy**",
+      ...economia,
+      "",
       "**🔐 Command access**",
       `Staff roles: ${config.acesso?.cargosStaff?.length ? config.acesso.cargosStaff.map((r)=>`<%${r}>`).join(" ") : "_(native permissions only)_"}`,
       `Channels: ${(config.acesso?.canais?.modo ?? "todos") === "todos" ? "any" : `\`${config.acesso.canais.modo}\` ${config.acesso.canais.lista?.length ? config.acesso.canais.lista.map((c)=>`<#${c}>`).join(", ") : "_(empty list)_"}`}`,
@@ -184,6 +207,9 @@ export async function cmdConfig(message, args, ctx) {
       "",
       "**🚨 Punições ativas** *(top 5)*",
       ativas,
+      "",
+      "**🎲 RPG e economia**",
+      ...economia,
       "",
       "**🔐 Acesso aos comandos**",
       `Cargos de staff: ${config.acesso?.cargosStaff?.length ? config.acesso.cargosStaff.map((r)=>`<%${r}>`).join(" ") : "_(só permissões nativas)_"}`,

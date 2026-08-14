@@ -83,7 +83,7 @@ const SUB = {
     equip: "equipar", unequip: "desequipar", wear: "vestir",
     catalog: "catalogo", shop: "loja",
     wallet: "carteira", balance: "saldo", economy: "economia",
-    market: "mercado", exchange: "cambio", trade: "trocar", barter: "escambo",
+    market: "mercado", exchange: "cambio", trade: "trocar", barter: "escambo", rates: "taxas", bank: "banco",
     buy: "comprar", sell: "vender", hire: "contratar", recruit: "recrutar",
     rest: "descansar",
     companion: "follower", companions: "followers", party: "party",

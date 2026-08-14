@@ -115,17 +115,34 @@ export function premioDungeon(R) {
   return Math.floor((R ?? 0) * fracaoDungeon(R));
 }
 
-// ── Câmbio do sistema ─────────────────────────────────────
-// Taxa derivada do P das duas moedas. O spread vai para o mercado e é o
-// que impede o loop A→B→A lucrar com a oscilação.
-export function taxaCambio(pDe, pPara) {
-  const valorDe = 1 / Math.max(0.05, pDe ?? 0.5);
-  const valorPara = 1 / Math.max(0.05, pPara ?? 0.5);
-  return valorDe / valorPara;
+// ── Câmbio do sistema (o "banco") ─────────────────────────
+// O banco é um par de reservas, e o preço é a razão entre elas — o mesmo
+// princípio de uma casa de câmbio automática.
+//
+// A conta é `saida = Rout × q / (Rin + q)`: quanto maior a troca, pior a taxa
+// DENTRO da própria troca. Isso é o que fecha a arbitragem. A versão anterior
+// cobrava o preço de antes e só depois movia as reservas, então a volta do
+// A→B→A colhia o movimento que a ida tinha causado e sobrava dinheiro — dava
+// para imprimir moeda girando o câmbio.
+//
+// Quem torna uma moeda cara é a reserva pequena: Bitcoin nasce com 210 contra
+// 200.000 do Real, e é daí que sai o "1 BTC vale ~950 Reais". `dificuldade` e
+// `suprimentoBase` andam juntos (veja o GUIA-moedas), então configurar a
+// raridade continua sendo uma coisa só.
+export function reservaDe(moeda) {
+  return Math.max(1, moeda?.mercado ?? moeda?.suprimentoBase ?? 1);
 }
 
-export function converter(quantidade, pDe, pPara) {
-  const bruto = quantidade * taxaCambio(pDe, pPara);
+// Taxa marginal — quantas unidades de `para` vale 1 de `de` agora. É a que
+// aparece na tela; a troca real usa a fórmula acima e desliza um pouco.
+export function taxaCambio(de, para) {
+  return reservaDe(para) / reservaDe(de);
+}
+
+export function converter(quantidade, de, para) {
+  const Rin = reservaDe(de), Rout = reservaDe(para);
+  const q = Math.max(0, quantidade ?? 0);
+  const bruto = (Rout * q) / (Rin + q);
   const taxa = bruto * CFG.spread;
   return { recebe: Math.max(0, Math.floor(bruto - taxa)), taxa: Math.ceil(taxa) };
 }

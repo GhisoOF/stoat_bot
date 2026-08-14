@@ -220,12 +220,11 @@ export function moedaParaPagar(serverId, userId, custoNaPadrao) {
   if (db.getSaldo(serverId, userId, padrao.id) >= custoNaPadrao) {
     return { moeda: padrao, custo: custoNaPadrao, convertido: false };
   }
-  const pPadrao = pDaMoeda(serverId, padrao).pSuave;
   for (const m of db.listarMoedas(serverId)) {
     if (m.id === padrao.id) continue;
-    const pM = pDaMoeda(serverId, m).pSuave;
-    // quanto dessa moeda equivale ao custo cotado na padrão
-    const equivalente = Math.ceil(custoNaPadrao / Math.max(0.01, ECO.taxaCambio(pM, pPadrao)));
+    // Quanto dessa moeda equivale ao custo cotado na padrão. Usa a mesma taxa
+    // do balcão, para não haver duas cotações diferentes na mesma economia.
+    const equivalente = Math.ceil(custoNaPadrao / Math.max(0.01, ECO.taxaCambio(m, padrao)));
     if (db.getSaldo(serverId, userId, m.id) >= equivalente) {
       return { moeda: m, custo: equivalente, convertido: true, padrao };
     }
@@ -1507,8 +1506,8 @@ export async function cmdGame(message, args, ctx) {
         ? `_Each currency has its own P. See everything with \`${P}game admin moeda\`._`
         : `_Cada moeda tem seu próprio P. Veja tudo com \`${P}game admin moeda\`._`);
       linhas.push(en
-        ? `_Exchange between them: \`${P}game cambio <qty> <currency> por <qty> <currency>\`._`
-        : `_Trocar entre elas: \`${P}game cambio <qtd> <moeda> por <qtd> <moeda>\`._`);
+        ? `_Exchange with the bank: \`${P}game cambio <qty> <currency> para <currency>\` · rates: \`${P}game cambio taxas\`_`
+        : `_Trocar com o banco: \`${P}game cambio <qtd> <moeda> para <moeda>\` · taxas: \`${P}game cambio taxas\`_`);
     }
 
     return enviarLista(sendEmbed, message.channel, {
@@ -1625,13 +1624,15 @@ export async function cmdGame(message, args, ctx) {
           "Nobody is selling anything right now.",
           "",
           `\`${P}game mercado vender <item> <price>\` — list yours`,
-          `\`${P}game cambio <qty> <currency> por <qty> <currency>\` — currency exchange`,
+          `\`${P}game cambio <qty> <currency> para <currency>\` — exchange with the bank`,
+          `\`${P}game cambio <qty> <currency> por <qty> <currency>\` — offer to another player`,
           `\`${P}game trocar @person <your item> por <their item>\` — barter`,
         ] : [
           "Ninguém está vendendo nada agora.",
           "",
           `\`${P}game mercado vender <item> <preço>\` — anuncie o seu`,
-          `\`${P}game cambio <qtd> <moeda> por <qtd> <moeda>\` — troca de moedas`,
+          `\`${P}game cambio <qtd> <moeda> para <moeda>\` — troca com o banco`,
+          `\`${P}game cambio <qtd> <moeda> por <qtd> <moeda>\` — oferta a outro jogador`,
           `\`${P}game trocar @pessoa <seu item> por <item dela>\` — escambo`,
         ]).join("\n"), colour: COR.info });
     }
@@ -1658,25 +1659,133 @@ export async function cmdGame(message, args, ctx) {
 
     const moedas = db.listarMoedas(serverId);
     const texto = args.slice(1).join(" ");
+
+    // ── &game cambio taxas — quanto o banco paga hoje, de cada uma para cada ──
+    if (/^(taxas?|rates?|tabela|table)$/i.test(texto.trim())) {
+      if (moedas.length < 2) {
+        return sendEmbed(message.channel, tr(ctx,
+          { title: "💱 Taxas do banco",
+            description: "Só há uma moeda aqui — o câmbio precisa de pelo menos duas.", colour: COR.aviso },
+          { title: "💱 Bank rates",
+            description: "There's only one currency here — exchange needs at least two.", colour: COR.aviso }));
+      }
+      // O P de cada moeda é o que define o valor dela: quanto mais concentrada
+      // (P alto), menos vale — é a escassez que dá preço, não um número fixo.
+      const linhas = [];
+      for (const de of moedas) {
+        const partes = moedas.filter((x) => x.id !== de.id).map((para) => {
+          const r = ECO.converter(100, de, para);
+          return `${para.simbolo}${fmt(r.recebe)} ${para.id}`;
+        });
+        linhas.push(`${de.simbolo} **100 ${de.nome}** → ${partes.join(" · ")}`);
+      }
+      linhas.push("", en
+        ? `_Spread: ${(ECO.CFG.spread * 100).toFixed(0)}% — it's what keeps A→B→A from paying off._`
+        : `_Spread: ${(ECO.CFG.spread * 100).toFixed(0)}% — é o que impede o A→B→A dar lucro._`);
+      linhas.push(en
+        ? `_The rate is the ratio between the bank's stocks — big trades move it against you._`
+        : `_A taxa é a razão entre os estoques do banco — trocas grandes a movem contra você._`);
+      return enviarLista(sendEmbed, message.channel, {
+        titulo: en ? "💱 Bank rates" : "💱 Taxas do banco", linhas, colour: COR.info });
+    }
+
+    // ── &game cambio <qtd> <moeda> para <moeda> — troca com o BANCO ──
+    // Sem contraparte e sem espera: é o que faltava para quem só quer trocar.
+    const mb = texto.match(/^(\d+)\s+(\S+)\s+(?:para|to|por|→|->)\s+(\S+)$/i);
+    if (mb) {
+      const [, qtdTxt, nomeDe, nomePara] = mb;
+      const de = db.acharMoeda(serverId, nomeDe);
+      const para = db.acharMoeda(serverId, nomePara);
+      if (!de || !para || de.id === para.id) {
+        return sendEmbed(message.channel, tr(ctx,
+          { title: "❌ Moedas inválidas",
+            description: "Precisam ser duas moedas diferentes deste servidor.", colour: COR.erro },
+          { title: "❌ Invalid currencies",
+            description: "They must be two different currencies from this server.", colour: COR.erro }));
+      }
+      const qtd = Number(qtdTxt);
+      const saldo = db.getSaldo(serverId, eu, de.id);
+      if (qtd <= 0 || saldo < qtd) {
+        return sendEmbed(message.channel, {
+          title: en ? "💸 Not enough balance" : "💸 Saldo insuficiente",
+          description: en ? `You have ${de.simbolo}${fmt(saldo)}.` : `Você tem ${de.simbolo}${fmt(saldo)}.`,
+          colour: COR.erro });
+      }
+
+      const r = ECO.converter(qtd, de, para);
+      if (r.recebe <= 0) {
+        return sendEmbed(message.channel, tr(ctx,
+          { title: "💱 Valor pequeno demais",
+            description: `${fmt(qtd)} ${de.nome} não chega a 1 ${para.nome} pela taxa de hoje.`, colour: COR.aviso },
+          { title: "💱 Amount too small",
+            description: `${fmt(qtd)} ${de.nome} doesn't reach 1 ${para.nome} at today's rate.`, colour: COR.aviso }));
+      }
+
+      // Moeda finita tem estoque: o banco não pode pagar o que não tem.
+      const atualPara = db.getMoeda(serverId, para.id);
+      if (atualPara?.finita && (atualPara.mercado ?? 0) < r.recebe) {
+        return sendEmbed(message.channel, {
+          title: en ? "🏦 The bank is short" : "🏦 O banco não tem tanto",
+          description: en
+            ? `The bank only holds ${para.simbolo}${fmt(atualPara.mercado ?? 0)} of **${para.nome}** right now.\n\n_Finite currencies come back to the bank as people spend them. Try a smaller amount, or the counter: \`${P}game cambio ${qtd} ${de.id} por <qty> ${para.id}\`._`
+            : `O banco só tem ${para.simbolo}${fmt(atualPara.mercado ?? 0)} de **${para.nome}** agora.\n\n_Moedas finitas voltam ao banco conforme as pessoas gastam. Tente um valor menor, ou use o balcão: \`${P}game cambio ${qtd} ${de.id} por <qtd> ${para.id}\`._`,
+          colour: COR.aviso });
+      }
+
+      // A troca move as DUAS reservas, sempre: é o deslocamento delas que faz o
+      // preço reagir. `pagarAoJogador` só desconta o estoque de moeda finita —
+      // aqui o banco é o balcão do câmbio, então o débito vale para as duas.
+      db.debitar(serverId, eu, de.id, qtd);
+      db.salvarMoeda(serverId, de.id, { mercado: (db.getMoeda(serverId, de.id)?.mercado ?? 0) + qtd });
+      const recebido = r.recebe;
+      db.creditar(serverId, eu, para.id, recebido);
+      db.salvarMoeda(serverId, para.id, {
+        mercado: Math.max(1, (db.getMoeda(serverId, para.id)?.mercado ?? 0) - recebido) });
+
+      const carteira = db.listarMoedas(serverId)
+        .map((x) => `${x.simbolo}${fmt(db.getSaldo(serverId, eu, x.id))}`).join(" · ");
+      return sendEmbed(message.channel, {
+        title: en ? "💱 Exchanged" : "💱 Trocado",
+        description: (en ? [
+          `${de.simbolo}**${fmt(qtd)} ${de.nome}** → ${para.simbolo}**${fmt(recebido)} ${para.nome}**`,
+          `_Rate: 1 ${de.nome} = ${ECO.taxaCambio(de, para).toFixed(4)} ${para.nome} · spread ${para.simbolo}${fmt(r.taxa)}_`,
+          "",
+          `**Your wallet:** ${carteira}`,
+        ] : [
+          `${de.simbolo}**${fmt(qtd)} ${de.nome}** → ${para.simbolo}**${fmt(recebido)} ${para.nome}**`,
+          `_Taxa: 1 ${de.nome} = ${ECO.taxaCambio(de, para).toFixed(4)} ${para.nome} · spread ${para.simbolo}${fmt(r.taxa)}_`,
+          "",
+          `**Sua carteira:** ${carteira}`,
+        ]).join("\n"), colour: COR.sucesso });
+    }
+
     const m = texto.match(/^(\d+)\s+(\S+)\s+por\s+(\d+)\s+(\S+)$/i);
     if (!m) {
       const linhas = en ? [
-        `\`${P}game cambio <qty> <currency> por <qty> <currency>\``,
-        `E.g.: \`${P}game cambio 100 real por 5 dolar\``,
+        "**Two ways to exchange**",
+        `\`${P}game cambio <qty> <currency> para <currency>\` — **with the bank**, instantly`,
+        `   e.g. \`${P}game cambio 100 real para dolar\``,
+        `\`${P}game cambio <qty> <currency> por <qty> <currency>\` — offer to **another player**`,
+        `   e.g. \`${P}game cambio 100 real por 5 dolar\``,
         "",
         "**Server currencies:**",
         ...moedas.map((x) => `${x.simbolo} **${x.nome}** \`${x.id}\` — you have ${fmt(db.getSaldo(serverId, eu, x.id))}`),
         "",
-        `_System reference rate: ${(ECO.CFG.spread * 100).toFixed(0)}% spread._`,
+        `\`${P}game cambio taxas\` — the bank's current rates`,
+        `_The bank always trades, at the rate of the day and a ${(ECO.CFG.spread * 100).toFixed(0)}% spread._`,
         "_At the counter you set whatever rate you like; whoever accepts, accepts._",
       ] : [
-        `\`${P}game cambio <qtd> <moeda> por <qtd> <moeda>\``,
-        `Ex.: \`${P}game cambio 100 real por 5 dolar\``,
+        "**Duas formas de trocar**",
+        `\`${P}game cambio <qtd> <moeda> para <moeda>\` — **com o banco**, na hora`,
+        `   ex.: \`${P}game cambio 100 real para dolar\``,
+        `\`${P}game cambio <qtd> <moeda> por <qtd> <moeda>\` — oferta a **outro jogador**`,
+        `   ex.: \`${P}game cambio 100 real por 5 dolar\``,
         "",
         "**Moedas do servidor:**",
         ...moedas.map((x) => `${x.simbolo} **${x.nome}** \`${x.id}\` — você tem ${fmt(db.getSaldo(serverId, eu, x.id))}`),
         "",
-        `_Taxa de referência do sistema: spread de ${(ECO.CFG.spread * 100).toFixed(0)}%._`,
+        `\`${P}game cambio taxas\` — as taxas do banco agora`,
+        `_O banco sempre troca, pela taxa do dia e um spread de ${(ECO.CFG.spread * 100).toFixed(0)}%._`,
         "_No balcão você define a taxa que quiser; quem aceitar, aceita._",
       ];
       if (moedas.length < 2) linhas.push("", en
@@ -1703,8 +1812,7 @@ export async function cmdGame(message, args, ctx) {
       moedaOferecida: de.id, qtdOferecida: Number(qtdDe),
       moedaPedida: para.id, qtdPedida: Number(qtdPara) });
 
-    const pDe = pDaMoeda(serverId, de).pSuave, pPara = pDaMoeda(serverId, para).pSuave;
-    const ref = ECO.converter(Number(qtdDe), pDe, pPara);
+    const ref = ECO.converter(Number(qtdDe), de, para);
     return sendEmbed(message.channel, { title: en ? "💱 Offer published" : "💱 Oferta publicada",
       description: (en ? [
         `Offering **${fmt(qtdDe)} ${de.nome}** ${de.simbolo} for **${fmt(qtdPara)} ${para.nome}** ${para.simbolo}`,

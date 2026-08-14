@@ -1104,12 +1104,16 @@ export function moedaPadrao(serverId) {
 }
 
 export function acharMoeda(serverId, txt) {
-  const alvo = String(txt ?? "").trim().toLowerCase();
+  // Sem acento e em minúsculas dos dois lados: ninguém digita "Dólar" com
+  // acento no meio de um comando, e errar por isso seria só atrito.
+  const semAcento = (x) => String(x ?? "").trim().toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const alvo = semAcento(txt);
   if (!alvo) return moedaPadrao(serverId);
   const todas = listarMoedas(serverId);
-  return todas.find((m) => m.id === alvo)
-      ?? todas.find((m) => m.nome.toLowerCase() === alvo)
-      ?? todas.find((m) => m.nome.toLowerCase().includes(alvo))
+  return todas.find((m) => semAcento(m.id) === alvo)
+      ?? todas.find((m) => semAcento(m.nome) === alvo)
+      ?? todas.find((m) => semAcento(m.nome).includes(alvo))
       ?? null;
 }
 

@@ -458,7 +458,9 @@ distribui pontos em 9 atributos.
 &game contratar Mercenário Novato
 &game mercado              # bazar entre jogadores
 &game mercado vender Lâmina Aurora 5000
-&game cambio 100 ouro por 5 prata
+&game cambio 1000 ouro para prata   # troca com o banco, na hora
+&game cambio taxas                 # quanto o banco paga hoje
+&game cambio 100 ouro por 5 prata  # oferta a outro jogador
 &game trocar @amigo Elmo do Dragão por Manto Estelar
 &game followers            # seus companheiros
 &game follower levar Aprendiz de Magia
@@ -593,8 +595,8 @@ O catálogo genérico é recriado no reset de `catalogo` e `tudo`.
 
 ### Mercado entre jogadores
 
-Três formas de negociar, **todas com custódia** — o que está em jogo sai da sua
-mochila e fica com o bot até fechar ou ser cancelado:
+Três formas de negociar **entre jogadores**, todas com custódia — o que está em
+jogo sai da sua mochila e fica com o bot até fechar ou ser cancelado:
 
 | | Comando |
 |---|---|
@@ -605,6 +607,27 @@ mochila e fica com o bot até fechar ou ser cancelado:
 Sem custódia, qualquer um poderia anunciar o que não tem e sumir. No câmbio, a
 taxa do sistema aparece ao lado da oferta como referência, para ninguém aceitar
 um negócio ruim sem perceber.
+
+### Câmbio com o banco
+
+Depender de outro jogador para trocar moeda trava quem joga sozinho ou fora de
+horário. Por isso o banco também troca, na hora:
+
+```
+&game cambio 1000 real para dolar   # troca imediata, pela taxa do dia
+&game cambio taxas                  # a tabela completa, de cada moeda
+```
+
+A taxa do banco sai de duas coisas. A **dificuldade** da moeda é o lastro: um
+Bitcoin com `dificuldade 400` contra 1 do Real custa ~400× mais esforço para
+ganhar, então vale ~400×. O **P** é a inflação do momento: moeda parada nas
+carteiras desvaloriza, moeda escassa valoriza. Nenhuma tabela fixa — a taxa se
+move conforme o servidor joga.
+
+Cada troca cobra um **spread** de 3%, e é ele que impede o A→B→A de virar
+máquina de dinheiro: a ida e a volta sempre custam mais do que a oscilação
+devolve. Moeda finita tem estoque; se o banco não tiver o bastante, ele avisa e
+o balcão entre jogadores continua aberto.
 
 A **taxa** começa em 0,5% e sobe com o volume recente, como custo de
 congestionamento — saturando em 8%, para nunca inviabilizar negociar.

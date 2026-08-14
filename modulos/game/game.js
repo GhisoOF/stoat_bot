@@ -1931,9 +1931,14 @@ export async function cmdGame(message, args, ctx) {
         linhas.push("", `${info.emoji} **${info.rotulo}**`);
         for (const m of porTipo[d] ?? []) {
           const v = MISS.previsao(attr, m, magias, tamanhoParty);
-          linhas.push(`   • **${m.nome}** — êxito ${(v.exito * 100).toFixed(0)}% · sobrevive ${(v.sobrevivencia * 100).toFixed(0)}%`);
+          // As duas chances se MULTIPLICAM: 53% de êxito com 75% de sobrevivência
+          // dá só 40% de missão cumprida. Mostrar as duas soltas engana — quem lê
+          // acha que vence 53% das vezes.
+          const completa = v.exito * v.sobrevivencia;
+          linhas.push(`   • **${m.nome}** — 🏆 **${(completa * 100).toFixed(0)}%** _(êxito ${(v.exito * 100).toFixed(0)}% × sobrevive ${(v.sobrevivencia * 100).toFixed(0)}%)_`);
         }
       }
+      linhas.push("", "_🏆 = chance de cumprir E voltar vivo. As duas chances se multiplicam._");
       linhas.push("", tamanhoParty
         ? `_Chances já contam equipamento e sua party de ${tamanhoParty}._`
         : `_Chances contam seu equipamento. Levar companheiros muda tudo: \`${P}game followers\`._`);

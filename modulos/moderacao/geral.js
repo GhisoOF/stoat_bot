@@ -1,4 +1,8 @@
 import { servidorPermitido as temIA } from "../ai/chat.js";
+import { arvoreSubtopicos, SUBTOPICOS_SO_IA } from "./help-arvore.js";
+
+// Comandos que só existem onde a IA roda (espelha a lista do main.js).
+const COMANDOS_SO_IA = new Set(["chat", "modia"]);
 // ══════════════════════════════════════════════════════════
 //  modulos/geral.js — Comandos gerais e de moderação manual:
 //  help, ping, repete, userinfo, kick, ban.
@@ -878,7 +882,20 @@ export async function cmdHelp(message, args, ctx) {
 
   // Ajuda detalhada por comando: &help <comando>
   const DETALHES  = construirDetalhes(P, lang);
-  const SUBTOPICOS = construirSubtopicos(P, lang);
+  // Os subtópicos vêm de duas fontes: os antigos, embutidos aqui, e a árvore
+  // por subcomando do help-arvore.js. A árvore complementa; onde as duas têm a
+  // mesma chave, a antiga vence (é a mais específica, escrita à mão).
+  const SUBTOPICOS = (() => {
+    const base = construirSubtopicos(P, lang);
+    const extra = arvoreSubtopicos(P, lang);
+    const fundido = { ...extra };
+    for (const [cmd, subs] of Object.entries(base)) {
+      fundido[cmd] = { ...(extra[cmd] ?? {}), ...subs };
+    }
+    // Sem IA no servidor, os subtópicos de IA não existem — nem para listar.
+    if (!comIA) for (const cmd of SUBTOPICOS_SO_IA) delete fundido[cmd];
+    return fundido;
+  })();
 
   const alvo = args[0]?.toLowerCase();
   const subtopico = args[1]?.toLowerCase();
@@ -888,8 +905,24 @@ export async function cmdHelp(message, args, ctx) {
     const st = SUBTOPICOS[alvo][subtopico];
     return sendEmbed(message.channel, {
       title: `📖 ${lang === "en" ? "Help" : "Ajuda"} — ${P}${st.titulo}`,
-      description: st.texto, colour: COR.info,
+      description: filtrarIA(String(st.texto).split("\n"), comIA).join("\n"),
+      colour: COR.info,
     });
+  }
+
+  // Pediu um subtópico que não existe, mas o comando tem subtópicos?
+  // Melhor dizer quais existem do que devolver o detalhe genérico em silêncio.
+  if (alvo && subtopico && SUBTOPICOS[alvo] && !SUBTOPICOS[alvo][subtopico]) {
+    const disponiveis = Object.keys(SUBTOPICOS[alvo]).map((k) => `\`${P}help ${alvo} ${k}\``).join(" · ");
+    return sendEmbed(message.channel, tr(ctx, {
+      title: `❓ Subtópico desconhecido`,
+      description: `\`${subtopico}\` não é um subtópico de \`${P}${alvo}\`.\n\n**Existem:** ${disponiveis}`,
+      colour: COR.aviso,
+    }, {
+      title: `❓ Unknown subtopic`,
+      description: `\`${subtopico}\` isn't a subtopic of \`${P}${alvo}\`.\n\n**Available:** ${disponiveis}`,
+      colour: COR.aviso,
+    }));
   }
 
   // ── Categorias: &help <categoria> ──
@@ -906,20 +939,44 @@ export async function cmdHelp(message, args, ctx) {
 
   if (alvo && CATEGORIAS[cat]) {
     const c = CATEGORIAS[cat];
+    // Se existe um COMANDO com o mesmo nome que a categoria (ex.: `game`, que é
+    // a categoria "rpg" e também o comando), aponte os subtópicos dele aqui —
+    // senão `&help game` some com a segmentação que a pessoa está procurando.
+    const subsDoAlvo = SUBTOPICOS[alvo] ?? SUBTOPICOS[cat] ?? null;
+    const dicaSub = subsDoAlvo
+      ? (lang === "en"
+        ? `\n\n**Details on each part**\n` + Object.keys(subsDoAlvo).map((k) => `\`${P}help ${SUBTOPICOS[alvo] ? alvo : cat} ${k}\``).join(" · ")
+        : `\n\n**O detalhe de cada parte**\n` + Object.keys(subsDoAlvo).map((k) => `\`${P}help ${SUBTOPICOS[alvo] ? alvo : cat} ${k}\``).join(" · "))
+      : "";
     return sendEmbed(message.channel, { title: `📋 ${c.titulo}`,
       colour: COR.info,
       description: filtrarIA(c.linhas, comIA).join("\n")
         + (lang === "en"
           ? `\n\n💡 \`${P}help <command>\` for details.`
-          : `\n\n💡 \`${P}help <comando>\` para detalhes.`),
+          : `\n\n💡 \`${P}help <comando>\` para detalhes.`)
+        + dicaSub,
     });
+  }
+
+  // Comando de IA num servidor sem IA: ele não roda aqui, então não há ajuda.
+  if (alvo && !comIA && COMANDOS_SO_IA.has(alvo)) {
+    return sendEmbed(message.channel, tr(ctx, {
+      title: "🚫 Indisponível aqui",
+      description: `\`${P}${alvo}\` faz parte dos recursos de IA, que não estão habilitados neste servidor.\n\nUse \`${P}help\` para ver o que existe por aqui.`,
+      colour: COR.aviso,
+    }, {
+      title: "🚫 Unavailable here",
+      description: `\`${P}${alvo}\` is part of the AI features, which aren't enabled on this server.\n\nUse \`${P}help\` to see what's available here.`,
+      colour: COR.aviso,
+    }));
   }
 
   // &help <comando> (detalhe individual)
   if (alvo && DETALHES[alvo]) {
     const d = DETALHES[alvo];
     const temSub = SUBTOPICOS[alvo]
-      ? `\n\n**${lang === "en" ? "Subtopics" : "Subtópicos"}:** ${Object.keys(SUBTOPICOS[alvo]).map((k) => `\`${P}help ${alvo} ${k}\``).join(" · ")}`
+      ? `\n\n**${lang === "en" ? "Subtopics" : "Subtópicos"}** ${lang === "en" ? "_(details on each part)_" : "_(o detalhe de cada parte)_"}\n`
+        + Object.keys(SUBTOPICOS[alvo]).map((k) => `\`${P}help ${alvo} ${k}\``).join(" · ")
       : "";
     return sendEmbed(message.channel, {
       title: `📖 ${lang === "en" ? "Help" : "Ajuda"} — ${P}${alvo}`,
@@ -957,11 +1014,12 @@ export async function cmdHelp(message, args, ctx) {
       `🛡 \`${P}help moderacao\` — kick, ban, limpar, avisos`,
       `⚙️ \`${P}help automod\` — proteção automática e punições`,
       `🔧 \`${P}help config\` — configuração e administração`,
-      `🧰 \`${P}help ferramentas\` — embed, reaction roles, RSS, IA`,
+      `🧰 \`${P}help ferramentas\` — embed, reaction roles, RSS${comIA ? ", IA" : ""}`,
       `🎮 \`${P}help xp\` — sistema de níveis por XP`,
+      `🎲 \`${P}help rpg\` — o RPG completo`,
       "",
       `💡 Detalhes de um comando: \`${P}help <comando>\` (ex.: \`${P}help scam\`)`,
-      `💡 Alguns têm subtópicos: \`${P}help scam sensitivity\``,
+      `💡 E de cada parte dele: \`${P}help game admin\`, \`${P}help xp setup\`, \`${P}help cor painel\``,
       `🌐 Idioma do servidor: \`${P}idioma pt|en\``,
     ].join("\n"),
   }, {
@@ -974,11 +1032,12 @@ export async function cmdHelp(message, args, ctx) {
       `🛡 \`${P}help moderacao\` — kick, ban, purge, warnings`,
       `⚙️ \`${P}help automod\` — automatic protection and punishments`,
       `🔧 \`${P}help config\` — configuration and administration`,
-      `🧰 \`${P}help ferramentas\` — embeds, reaction roles, RSS, AI`,
+      `🧰 \`${P}help ferramentas\` — embeds, reaction roles, RSS${comIA ? ", AI" : ""}`,
       `🎮 \`${P}help xp\` — XP leveling system`,
+      `🎲 \`${P}help rpg\` — the full RPG`,
       "",
       `💡 Details for one command: \`${P}help <command>\` (e.g. \`${P}help scam\`)`,
-      `💡 Some have subtopics: \`${P}help scam sensitivity\``,
+      `💡 And for each part of it: \`${P}help game admin\`, \`${P}help xp setup\`, \`${P}help cor painel\``,
       `🌐 Server language: \`${P}language pt|en\``,
     ].join("\n"),
   }));
@@ -1010,11 +1069,18 @@ export async function cmdPing(message, args, ctx) {
 
 // %sobre — informações resumidas do bot
 export async function cmdSobre(message, args, ctx) {
-  const { sendEmbed, COR, PREFIXO, estado } = ctx;
+  const { sendEmbed, COR, PREFIXO, estado, config, serverId } = ctx;
   const lang = lingua(ctx);
+  const en = lang === "en";
+  const comIA = (() => { try { return temIA(serverId); } catch { return false; } })();
 
   // conta comandos, linhas e uptime de forma resiliente
-  const nComandos = estado?.rotas ? new Set(Object.values(estado.rotas)).size : null;
+  const todasRotas = estado?.rotas ? new Set(Object.values(estado.rotas)) : null;
+  // Comandos de IA não contam nos servidores onde a IA não roda: anunciar um
+  // número que inclui o que a pessoa não pode usar é só ruído.
+  const nComandos = todasRotas
+    ? (comIA ? todasRotas.size : todasRotas.size - (estado?.COMANDOS_SO_IA?.size ?? 0))
+    : null;
   const nLinhas = contarLinhas();
   const up = process.uptime();
   const dias = Math.floor(up / 86400);
@@ -1022,20 +1088,57 @@ export async function cmdSobre(message, args, ctx) {
   const mins = Math.floor((up % 3600) / 60);
   const uptime = dias > 0 ? `${dias}d ${horas}h` : horas > 0 ? `${horas}h ${mins}min` : `${mins}min`;
 
+  // ── O que está LIGADO neste servidor ──
+  // O &info antes listava os recursos do bot; agora diz o que vale aqui, que é
+  // a pergunta real de quem digita o comando.
+  const am = config?.automod ?? {};
+  const modulosOn = ["antiSpam", "antiMassSpam", "antiInvite", "antiMassMention",
+    "antiCaps", "antiLink", "antiScam", "antiCaracteres", "antiRepeticao"]
+    .filter((k) => am[k]?.enabled).length;
+  const xpOn = !!config?.xp?.enabled;
+  const logOn = !!config?.log?.canalId;
+  const rssN = (() => { try { return db.listarFeeds?.(serverId)?.length ?? 0; } catch { return 0; } })();
+  const banGlobalModo = config?.banGlobal?.modo ?? "off";
+  const idioma = en ? "English" : "Português";
+
+  const sim = (v) => v ? "🟢" : "🔴";
+  const estadoLinhas = en ? [
+    `${sim(modulosOn)} **AutoMod** — ${modulosOn}/9 modules on`,
+    `${sim(xpOn)} **Leveling (XP)** — ${xpOn ? "on" : "off"}`,
+    `${sim(logOn)} **Log channel** — ${logOn ? `<#${config.log.canalId}>` : "not set"}`,
+    `${sim(rssN)} **RSS** — ${rssN} feed(s)`,
+    `${sim(banGlobalModo !== "off")} **Global ban list** — mode \`${banGlobalModo}\``,
+    `🎲 **RPG** — always available (\`${PREFIXO}game\`)`,
+    comIA ? `🤖 **AI (Judy)** — enabled on this server` : null,
+  ] : [
+    `${sim(modulosOn)} **AutoMod** — ${modulosOn}/9 módulos ligados`,
+    `${sim(xpOn)} **Níveis (XP)** — ${xpOn ? "ligado" : "desligado"}`,
+    `${sim(logOn)} **Chat de logs** — ${logOn ? `<#${config.log.canalId}>` : "não definido"}`,
+    `${sim(rssN)} **RSS** — ${rssN} feed(s)`,
+    `${sim(banGlobalModo !== "off")} **Lista global de bans** — modo \`${banGlobalModo}\``,
+    `🎲 **RPG** — sempre disponível (\`${PREFIXO}game\`)`,
+    comIA ? `🤖 **IA (Judy)** — habilitada neste servidor` : null,
+  ];
+
   const creditos = "_Feito por <@01K9JKP85D5EP2ZTEHS8DT797A> (Ghiso#4419) com [stoat.js](https://github.com/stoatchat/javascript-client-sdk) — quer um bot assim no seu servidor? Chama! 🚀_";
   const creditosEN = "_Made by <@01K9JKP85D5EP2ZTEHS8DT797A> (Ghiso#4419) with [stoat.js](https://github.com/stoatchat/javascript-client-sdk) — want a bot like this on your server? Reach out! 🚀_";
 
-  await sendEmbed(message.channel, lang === "en" ? {
+  await sendEmbed(message.channel, en ? {
     title: "🤖 Cobaia",
     description: [
-      "Moderation, automod, AI and leveling bot for Stoat.",
+      "Moderation, automod and leveling bot for Stoat.",
       "",
-      `**Features:** moderation · automod · anti-scam · RSS curation · leveling system${temIA(ctx.serverId) ? " · AI chat" : ""}`,
-      nComandos ? `**Commands:** ${nComandos}` : null,
+      "**On this server**",
+      ...estadoLinhas.filter(Boolean),
+      "",
+      "**The bot**",
+      nComandos ? `**Commands available here:** ${nComandos}` : null,
       nLinhas ? `**Lines of code:** ${nLinhas.toLocaleString("en-US")}` : null,
-      `**Uptime:** ${uptime}`,
+      `**Uptime:** ${uptime}  ·  **Language:** ${idioma}`,
       "",
-      `Use \`${PREFIXO}help\` to see everything.`,
+      `\`${PREFIXO}help\` — everything, by category`,
+      `\`${PREFIXO}tutorial\` — the guided path, subject by subject`,
+      !comIA ? "_AI features (chat, AI moderation) run on a separate server._" : null,
       "",
       creditosEN,
     ].filter((l) => l !== null).join("\n"),
@@ -1043,14 +1146,19 @@ export async function cmdSobre(message, args, ctx) {
   } : {
     title: "🤖 Cobaia",
     description: [
-      "Bot de moderação, automod, IA e níveis para o Stoat.",
+      "Bot de moderação, automod e níveis para o Stoat.",
       "",
-      `**Recursos:** moderação · automod · anti-scam · curadoria RSS · sistema de níveis${temIA(ctx.serverId) ? " · chat com IA" : ""}`,
-      nComandos ? `**Comandos:** ${nComandos}` : null,
+      "**Neste servidor**",
+      ...estadoLinhas.filter(Boolean),
+      "",
+      "**O bot**",
+      nComandos ? `**Comandos disponíveis aqui:** ${nComandos}` : null,
       nLinhas ? `**Linhas de código:** ${nLinhas.toLocaleString("pt-BR")}` : null,
-      `**No ar há:** ${uptime}`,
+      `**No ar há:** ${uptime}  ·  **Idioma:** ${idioma}`,
       "",
-      `Use \`${PREFIXO}help\` para ver tudo.`,
+      `\`${PREFIXO}help\` — tudo, por categoria`,
+      `\`${PREFIXO}tutorial\` — o caminho guiado, assunto por assunto`,
+      !comIA ? "_Os recursos de IA (chat, moderação por IA) rodam num servidor à parte._" : null,
       "",
       creditos,
     ].filter((l) => l !== null).join("\n"),

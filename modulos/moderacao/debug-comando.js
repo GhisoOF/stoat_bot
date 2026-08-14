@@ -97,13 +97,13 @@ export async function cmdDebug(message, args, ctx) {
         ].join("\n").slice(0, 1950), colour: COR.info });
     }
 
-    const r = perms.diagnosticarCanais(server, ctx.client, botMember);
+    const r = perms.diagnosticarCanais(server, ctx.client, botMember, lang);
     if (!r.total) {
       return sendEmbed(message.channel, tr(ctx,
         { title: "🔍 Canais", description: "Não consegui listar os canais deste servidor.", colour: COR.aviso },
         { title: "🔍 Channels", description: "I couldn't list this server's channels.", colour: COR.aviso }));
     }
-    const corpo = perms.formatarRelatorio(r, PREFIXO);
+    const corpo = perms.formatarRelatorio(r, PREFIXO, lang);
     const aviso = !botMember
       ? (en
         ? "\n\n⚠️ _I couldn't fetch my own member in the server — without it I don't know which roles I have._"

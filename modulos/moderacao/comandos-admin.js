@@ -35,7 +35,7 @@ export async function cmdComando(message, args, ctx) {
         description: "You need **ManagePermissions** to manage commands.", colour: COR.erro }));
 
   config.comandosDesativados ??= [];
-  const geren = estado.COMANDOS_GERENCIAVEIS ?? [];
+  const geren = estado.comandosGerenciaveisDe?.(ctx.serverId) ?? estado.COMANDOS_GERENCIAVEIS ?? [];
   const canon = (nome) => (estado.CANONICO?.[nome] ?? nome);
 
   const sub = args[0]?.toLowerCase();

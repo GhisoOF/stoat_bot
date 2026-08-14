@@ -363,6 +363,17 @@ const CANONICO = {
   language: "idioma", lang: "idioma",
 };
 
+// ══════════════════════════════════════════════════════════
+//  Comandos exclusivos dos servidores com IA
+//
+//  A IA roda num servidor de cada vez (a allowlist CHAT_SERVIDORES). Nos demais,
+//  esses comandos não existem: não aparecem no help, não entram na lista do
+//  &comando, e a rota responde que não está habilitado — em vez de aceitar o
+//  comando e falhar lá dentro, que é pior de entender.
+// ══════════════════════════════════════════════════════════
+const COMANDOS_SO_IA = new Set(["chat", "modia"]);
+estado.COMANDOS_SO_IA = COMANDOS_SO_IA;
+
 // Comandos que o admin pode ligar/desligar (nomes canônicos, sem os essenciais).
 const COMANDOS_GERENCIAVEIS = [
   "ping", "repete", "userinfo", "kick", "ban", "limpar",
@@ -372,6 +383,11 @@ const COMANDOS_GERENCIAVEIS = [
 // exportado via ctx para o comando &comando consultar
 estado.CANONICO = CANONICO;
 estado.COMANDOS_GERENCIAVEIS = COMANDOS_GERENCIAVEIS;
+// Versão filtrada por servidor: esconde os comandos de IA onde ela não roda.
+estado.comandosGerenciaveisDe = (sid) => {
+  const comIA = (() => { try { return chat.servidorPermitido(sid); } catch { return false; } })();
+  return comIA ? COMANDOS_GERENCIAVEIS : COMANDOS_GERENCIAVEIS.filter((c) => !COMANDOS_SO_IA.has(c));
+};
 estado.rotas = rotas;
 
 // ══════════════════════════════════════════════════════════
@@ -534,6 +550,20 @@ client.on("messageCreate", async (message) => {
   // não se trancar para fora.
   const ESSENCIAIS = new Set(["help", "comando", "comandos", "command", "debug", "diagnostico", "diagnóstico", "idioma"]);
   const canonico = CANONICO[command] ?? command;
+
+  // ── Comandos de IA fora do servidor com IA ──
+  // Não é "desativado pelo admin": simplesmente não existe aqui.
+  if (COMANDOS_SO_IA.has(canonico) && !chat.servidorPermitido(serverId)) {
+    return sendEmbed(message.channel, tr(ctx, {
+      title: "🚫 Indisponível aqui",
+      description: `\`${PREFIXO}${canonico}\` faz parte dos recursos de IA, que não estão habilitados neste servidor.\n\nVeja o que existe por aqui com \`${PREFIXO}help\`.`,
+      colour: COR.aviso,
+    }, {
+      title: "🚫 Unavailable here",
+      description: `\`${PREFIXO}${canonico}\` is part of the AI features, which aren't enabled on this server.\n\nSee what's available here with \`${PREFIXO}help\`.`,
+      colour: COR.aviso,
+    }));
+  }
   if (!ESSENCIAIS.has(canonico) && (ctx.config.comandosDesativados ?? []).includes(canonico)) {
     await log.registrar(ctx, "comandos", {
       titulo: "🚫 Comando desativado",

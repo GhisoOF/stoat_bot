@@ -385,7 +385,7 @@ export async function cmdGame(message, args, ctx) {
   if (!serverId) {
     return sendEmbed(message.channel, tr(ctx,
       { title: "❌ Fora de um servidor",
-        description: "O RPG funciona dentro de um servidor — cada um tem o seu personagem.", colour: COR.erro },
+        description: en ? "The RPG works inside a server — each one has its own character." : "O RPG funciona dentro de um servidor — cada um tem o seu personagem.", colour: COR.erro },
       { title: "❌ Outside a server",
         description: "The RPG works inside a server — each one has its own character.", colour: COR.erro }));
   }
@@ -429,10 +429,11 @@ export async function cmdGame(message, args, ctx) {
   if (["apagar", "deletar", "resetar"].includes(sub)) {
     const p = db.getPersonagem(serverId, eu);
     if (!p) {
-      return sendEmbed(message.channel, tr(ctx, { title: "🎭 Você não tem personagem",
-        description: `Crie com \`${P}game criar\`.`, colour: COR.aviso },
-      { title: "🎭 You don't have a character",
-        description: `Create one with \`${P}game criar\`.`, colour: COR.aviso }));
+      return sendEmbed(message.channel, tr(ctx,
+        { title: "🎭 Você não tem personagem",
+          description: `Crie com \`${P}game criar\`.`, colour: COR.aviso },
+        { title: "🎭 You don't have a character",
+          description: `Create one with \`${P}game criar\`.`, colour: COR.aviso }));
     }
     if (args[1]?.toLowerCase() !== "confirmar") {
       return sendEmbed(message.channel, tr(ctx, {
@@ -463,10 +464,11 @@ export async function cmdGame(message, args, ctx) {
   if (["pontos", "ponto", "distribuir", "upar"].includes(sub)) {
     const p = db.getPersonagem(serverId, eu);
     if (!p) {
-      return sendEmbed(message.channel, tr(ctx, { title: "🎭 Você não tem personagem",
-        description: `Crie com \`${P}game criar\`.`, colour: COR.aviso },
-      { title: "🎭 You don't have a character",
-        description: `Create one with \`${P}game criar\`.`, colour: COR.aviso }));
+      return sendEmbed(message.channel, tr(ctx,
+        { title: "🎭 Você não tem personagem",
+          description: `Crie com \`${P}game criar\`.`, colour: COR.aviso },
+        { title: "🎭 You don't have a character",
+          description: `Create one with \`${P}game criar\`.`, colour: COR.aviso }));
     }
 
     const atributo = acharAtributo(args[1]);
@@ -539,16 +541,23 @@ export async function cmdGame(message, args, ctx) {
   if (["itens", "inventario", "inventário", "mochila", "bag"].includes(sub)) {
     const p = db.getPersonagem(serverId, eu);
     if (!p) {
-      return sendEmbed(message.channel, tr(ctx, { title: "🎭 Você não tem personagem",
-        description: `Crie com \`${P}game criar\`.`, colour: COR.aviso },
-      { title: "🎭 You don't have a character",
-        description: `Create one with \`${P}game criar\`.`, colour: COR.aviso }));
+      return sendEmbed(message.channel, tr(ctx,
+        { title: "🎭 Você não tem personagem",
+          description: `Crie com \`${P}game criar\`.`, colour: COR.aviso },
+        { title: "🎭 You don't have a character",
+          description: `Create one with \`${P}game criar\`.`, colour: COR.aviso }));
     }
     const inv = db.getInventario(serverId, eu);
     if (!inv.length) {
-      return sendEmbed(message.channel, { title: "🎒 Mochila vazia",
+      return sendEmbed(message.channel, tr(ctx, {
+        title: "🎒 Mochila vazia",
         description: `Você ainda não tem itens. Eles vêm de missões e do mercado.\n\n_Veja o que existe no jogo com \`${P}game catalogo\`._`,
-        colour: COR.info });
+        colour: COR.info,
+      }, {
+        title: "🎒 Empty bag",
+        description: `You don't have items yet. They come from missions and the market.\n\n_See what exists in the game with \`${P}game catalogo\`._`,
+        colour: COR.info,
+      }));
     }
     const porRaridade = {};
     for (const i of inv) (porRaridade[i.raridade] ??= []).push(i);
@@ -567,9 +576,11 @@ export async function cmdGame(message, args, ctx) {
       }
     }
     return enviarLista(sendEmbed, message.channel, {
-      titulo: "🎒 Sua mochila",
+      titulo: en ? "🎒 Your bag" : "🎒 Sua mochila",
       linhas,
-      rodape: `_✅ = equipado · \`${P}game equipar <item>\` para usar._`,
+      rodape: en
+        ? `_✅ = equipped · \`${P}game equipar <item>\` to use._`
+        : `_✅ = equipado · \`${P}game equipar <item>\` para usar._`,
       colour: COR.info,
     });
   }
@@ -578,31 +589,42 @@ export async function cmdGame(message, args, ctx) {
   if (["equipar", "usar", "vestir"].includes(sub)) {
     const p = db.getPersonagem(serverId, eu);
     if (!p) {
-      return sendEmbed(message.channel, tr(ctx, { title: "🎭 Você não tem personagem",
-        description: `Crie com \`${P}game criar\`.`, colour: COR.aviso },
-      { title: "🎭 You don't have a character",
-        description: `Create one with \`${P}game criar\`.`, colour: COR.aviso }));
+      return sendEmbed(message.channel, tr(ctx,
+        { title: "🎭 Você não tem personagem",
+          description: `Crie com \`${P}game criar\`.`, colour: COR.aviso },
+        { title: "🎭 You don't have a character",
+          description: `Create one with \`${P}game criar\`.`, colour: COR.aviso }));
     }
     const busca = args.slice(1).filter((a) => !/^acessorio[123]$/i.test(a)).join(" ").trim();
     const slotPedido = args.find((a) => /^acessorio[123]$/i.test(a))?.toLowerCase();
     if (!busca) {
-      return sendEmbed(message.channel, { title: "❌ Equipar o quê?",
+      return sendEmbed(message.channel, tr(ctx, {
+        title: "❌ Equipar o quê?",
         description: `\`${P}game equipar <nome do item>\`\n\nVeja o que você tem com \`${P}game itens\`.`,
-        colour: COR.erro });
+        colour: COR.erro,
+      }, {
+        title: "❌ Equip what?",
+        description: `\`${P}game equipar <item name>\`\n\nSee what you have with \`${P}game itens\`.`,
+        colour: COR.erro,
+      }));
     }
     const item = db.acharItemPorNome(busca);
     if (!item) {
-      return sendEmbed(message.channel, { title: "❌ Item desconhecido",
-        description: `Não achei nenhum item chamado **${busca}**.`, colour: COR.erro });
+      return sendEmbed(message.channel, tr(ctx, { title: en ? "❌ Unknown item" : "❌ Item desconhecido",
+        description: en ? `I couldn't find any item called **${busca}**.` : `Não achei nenhum item chamado **${busca}**.`, colour: COR.erro },
+      { title: "❌ Unknown item",
+        description: `I couldn't find any item called **${busca}**.`, colour: COR.erro }));
     }
     if (!db.temItem(serverId, eu, item.id)) {
-      return sendEmbed(message.channel, { title: "❌ Você não tem esse item",
-        description: `**${item.nome}** não está na sua mochila.`, colour: COR.erro });
+      return sendEmbed(message.channel, tr(ctx, { title: "❌ Você não tem esse item",
+        description: en ? `**${item.nome}** isn't in your bag.` : `**${item.nome}** não está na sua mochila.`, colour: COR.erro },
+      { title: "❌ You don't have that item",
+        description: `**${item.nome}** isn't in your bag.`, colour: COR.erro }));
     }
     const jaEm = db.slotDoItem(serverId, eu, item.id);
     if (jaEm) {
-      return sendEmbed(message.channel, { title: "✅ Já está equipado",
-        description: `**${item.nome}** já está em ${SLOT_INFO[jaEm]?.rotulo ?? jaEm}.`, colour: COR.aviso });
+      return sendEmbed(message.channel, { title: en ? "✅ Already equipped" : "✅ Já está equipado",
+        description: en ? `**${item.nome}** is already in ${SLOT_INFO[jaEm]?.rotulo ?? jaEm}.` : `**${item.nome}** já está em ${SLOT_INFO[jaEm]?.rotulo ?? jaEm}.`, colour: COR.aviso });
     }
 
     const slot = slotParaEquipar(serverId, eu, item, slotPedido);
@@ -614,7 +636,7 @@ export async function cmdGame(message, args, ctx) {
       descreverBonus(item.bonus),
     ];
     if (anterior) linhas.push("", `_${anterior.nome} voltou para a mochila._`);
-    return sendEmbed(message.channel, { title: "⚔️ Equipado",
+    return sendEmbed(message.channel, { title: en ? "⚔️ Equipped" : "⚔️ Equipado",
       description: linhas.join("\n"), colour: COR.sucesso });
   }
 
@@ -628,21 +650,25 @@ export async function cmdGame(message, args, ctx) {
       if (item) slot = db.slotDoItem(serverId, eu, item.id);
     }
     if (!slot) {
-      return sendEmbed(message.channel, { title: "❌ Tirar o quê?",
-        description: [
+      return sendEmbed(message.channel, { title: en ? "❌ Unequip what?" : "❌ Tirar o quê?",
+        description: (en ? [
+          `\`${P}game desequipar <slot or item>\``,
+          "",
+          `**Slots:** ${db.SLOTS.join(", ")}`,
+        ] : [
           `\`${P}game desequipar <slot ou item>\``,
           "",
           `**Slots:** ${db.SLOTS.join(", ")}`,
-        ].join("\n"), colour: COR.erro });
+        ]).join("\n"), colour: COR.erro });
     }
     if (!eq[slot]) {
-      return sendEmbed(message.channel, { title: "🔸 Nada nesse slot",
-        description: `Não há nada equipado em **${SLOT_INFO[slot]?.rotulo ?? slot}**.`, colour: COR.aviso });
+      return sendEmbed(message.channel, { title: en ? "🔸 Nothing in that slot" : "🔸 Nada nesse slot",
+        description: en ? `Nothing is equipped in **${SLOT_INFO[slot]?.rotulo ?? slot}**.` : `Não há nada equipado em **${SLOT_INFO[slot]?.rotulo ?? slot}**.`, colour: COR.aviso });
     }
     const nome = eq[slot].nome;
     db.desequipar(serverId, eu, slot);
-    return sendEmbed(message.channel, { title: "🎒 Desequipado",
-      description: `**${nome}** voltou para a mochila.`, colour: COR.mod });
+    return sendEmbed(message.channel, { title: en ? "🎒 Unequipped" : "🎒 Desequipado",
+      description: en ? `**${nome}** went back to the bag.` : `**${nome}** voltou para a mochila.`, colour: COR.mod });
   }
 
   // ── catálogo ──
@@ -661,56 +687,75 @@ export async function cmdGame(message, args, ctx) {
 
     const lista = db.listarItens({ raridade, slot: slotFiltro });
     if (!lista.length) {
-      return sendEmbed(message.channel, { title: "📖 Catálogo",
-        description: filtro
-          ? `Nada encontrado para **${filtro}**.\n\nRaridades: ${db.RARIDADES.join(", ")}\nSlots: arma, capacete, armadura, acessorio`
-          : "Nenhum item cadastrado ainda.",
+      return sendEmbed(message.channel, { title: en ? "📖 Catalog" : "📖 Catálogo",
+        description: en
+          ? (filtro
+            ? `Nothing found for **${filtro}**.\n\nRarities: ${db.RARIDADES.join(", ")}\nSlots: arma, capacete, armadura, acessorio`
+            : "No items registered yet.")
+          : (filtro
+            ? `Nada encontrado para **${filtro}**.\n\nRaridades: ${db.RARIDADES.join(", ")}\nSlots: arma, capacete, armadura, acessorio`
+            : "Nenhum item cadastrado ainda."),
         colour: COR.aviso });
     }
 
     // Filtro que não bate em nada: avisa, em vez de cair no resumo como se
     // a pessoa não tivesse pedido nada.
     if (filtro && !raridade && !slotFiltro) {
-      return sendEmbed(message.channel, { title: "❌ Filtro desconhecido",
-        description: [
+      return sendEmbed(message.channel, { title: en ? "❌ Unknown filter" : "❌ Filtro desconhecido",
+        description: (en ? [
+          `I don't know **${filtro}**.`,
+          "",
+          `**Rarities:** ${db.RARIDADES.join(" · ")}`,
+          "**Slots:** arma · capacete · armadura · acessorio",
+          "",
+          `With no filter, \`${P}game catalogo\` shows the summary.`,
+        ] : [
           `Não conheço **${filtro}**.`,
           "",
           `**Raridades:** ${db.RARIDADES.join(" · ")}`,
           "**Slots:** arma · capacete · armadura · acessorio",
           "",
           `Sem filtro, \`${P}game catalogo\` mostra o resumo.`,
-        ].join("\n"), colour: COR.erro });
+        ]).join("\n"), colour: COR.erro });
     }
 
     // Sem filtro: resumo (cabe sempre)
     if (!raridade && !slotFiltro) {
       const porRaridade = {};
       for (const i of lista) (porRaridade[i.raridade] ??= []).push(i);
-      const linhas = [`**${lista.length}** itens no jogo:`, ""];
+      const linhas = [en ? `**${lista.length}** items in the game:` : `**${lista.length}** itens no jogo:`, ""];
       for (const r of db.RARIDADES) {
         const itens = porRaridade[r] ?? [];
         if (!itens.length) continue;
         const info = RARIDADE_INFO[r] ?? {};
         const infinitos = itens.filter((i) => i.infinito).length;
-        linhas.push(`${info.emoji} **${info.rotulo}** — ${itens.length} item(ns)${infinitos ? ` · ${infinitos} ♾️` : ""}`);
+        linhas.push(en
+          ? `${info.emoji} **${info.rotulo}** — ${itens.length} item(s)${infinitos ? ` · ${infinitos} ♾️` : ""}`
+          : `${info.emoji} **${info.rotulo}** — ${itens.length} item(ns)${infinitos ? ` · ${infinitos} ♾️` : ""}`);
         linhas.push(`   _${itens.slice(0, 4).map((i) => i.nome).join(", ")}${itens.length > 4 ? "…" : ""}_`);
         linhas.push(`   \`${P}game catalogo ${r}\``);
       }
-      linhas.push("", "_♾️ = estoque infinito (sempre dá para comprar)_");
-      linhas.push(`_Também filtra por slot:_ \`${P}game catalogo arma\``);
-      return sendEmbed(message.channel, { title: "📖 Itens do jogo",
+      linhas.push("", en
+        ? "_♾️ = infinite stock (always buyable)_"
+        : "_♾️ = estoque infinito (sempre dá para comprar)_");
+      linhas.push(en
+        ? `_You can also filter by slot:_ \`${P}game catalogo arma\``
+        : `_Também filtra por slot:_ \`${P}game catalogo arma\``);
+      return sendEmbed(message.channel, { title: en ? "📖 Game items" : "📖 Itens do jogo",
         description: linhas.join("\n").slice(0, 1950), colour: COR.info });
     }
 
     // Com filtro: lista completa, quebrada em blocos se precisar
     const info = raridade ? (RARIDADE_INFO[raridade] ?? {}) : (SLOT_INFO[slotFiltro] ?? {});
-    const titulo = `${info.emoji ?? "📖"} ${info.rotulo ?? filtro} — ${lista.length} item(ns)`;
+    const titulo = en
+      ? `${info.emoji ?? "📖"} ${info.rotulo ?? filtro} — ${lista.length} item(s)`
+      : `${info.emoji ?? "📖"} ${info.rotulo ?? filtro} — ${lista.length} item(ns)`;
     const linhas = lista.map((i) =>
       `${SLOT_INFO[i.slot]?.emoji ?? "•"} **${i.nome}**${i.infinito ? " ♾️" : ""}\n   ${descreverBonus(i.bonus)}`);
 
     return enviarLista(sendEmbed, message.channel, {
       titulo, linhas,
-      rodape: "_♾️ = estoque infinito_",
+      rodape: en ? "_♾️ = infinite stock_" : "_♾️ = estoque infinito_",
       colour: COR.info,
     });
   }
@@ -721,8 +766,8 @@ export async function cmdGame(message, args, ctx) {
   // moeda, follower, forçar nível e inspecionar os números da economia.
   if (["admin", "debug"].includes(sub)) {
     if (!ctx.ehSuperAdmin?.(eu)) {
-      return sendEmbed(message.channel, { title: "🚫 Comando restrito",
-        description: "Só o dono do bot usa o modo admin.", colour: COR.erro });
+      return sendEmbed(message.channel, { title: en ? "🚫 Restricted command" : "🚫 Comando restrito",
+        description: en ? "Only the bot owner can use admin mode." : "Só o dono do bot usa o modo admin.", colour: COR.erro });
     }
     const acao = args[1]?.toLowerCase();
     const resto = args.slice(2);
@@ -732,8 +777,22 @@ export async function cmdGame(message, args, ctx) {
     const quem = alvoId === eu ? "você" : `<@${alvoId}>`;
 
     if (!acao || acao === "ajuda") {
-      return sendEmbed(message.channel, { title: "🔧 Admin do RPG",
-        description: [
+      return sendEmbed(message.channel, { title: en ? "🔧 RPG admin" : "🔧 Admin do RPG",
+        description: (en ? [
+          `\`${P}game admin dar <qty> [@person]\` — credits currency`,
+          `\`${P}game admin item <name> [@person]\` — grants an item`,
+          `\`${P}game admin follower <name> [level] [@person]\` — grants a companion`,
+          `\`${P}game admin nivel <n> [@person]\` — forces the level`,
+          `\`${P}game admin pontos <n> [@person]\` — grants free points`,
+          `\`${P}game admin energia [@person]\` — refills companions' energy`,
+          `\`${P}game admin cooldown [@person]\` — clears cooldown and recovery`,
+          `\`${P}game admin moeda\` — **creates and configures the server's currencies**`,
+          `\`${P}game admin teste\` — runs the whole game and reports what worked`,
+          `\`${P}game admin eco\` — economy numbers`,
+          `\`${P}game admin simular <mission> [n]\` — runs the mission n times with no effect`,
+          `\`${P}game admin dungeon <qty>\` — puts currency in the dungeon pot`,
+          `\`${P}game admin reset <servidor|catalogo|tudo>\` — starts over`,
+        ] : [
           `\`${P}game admin dar <qtd> [@pessoa]\` — credita moeda`,
           `\`${P}game admin item <nome> [@pessoa]\` — dá um item`,
           `\`${P}game admin follower <nome> [nível] [@pessoa]\` — dá um companheiro`,
@@ -747,30 +806,30 @@ export async function cmdGame(message, args, ctx) {
           `\`${P}game admin simular <missao> [n]\` — roda a missão n vezes sem efeito`,
           `\`${P}game admin dungeon <qtd>\` — põe moeda no pote da dungeon`,
           `\`${P}game admin reset <servidor|catalogo|tudo>\` — recomeça do zero`,
-        ].join("\n"), colour: COR.mod });
+        ]).join("\n"), colour: COR.mod });
     }
 
     // `admin dar <qtd>` credita moeda. Mantemos `admin moeda <número>` por
     // compatibilidade — mas `admin moeda` sem número abre a configuração.
     if (acao === "dar" || (acao === "moeda" && /^\d+$/.test(resto[0] ?? ""))) {
       const qtd = parseInt(resto[0], 10);
-      if (!Number.isFinite(qtd)) return sendEmbed(message.channel, { title: "❌ Quanto?",
+      if (!Number.isFinite(qtd)) return sendEmbed(message.channel, { title: en ? "❌ How much?" : "❌ Quanto?",
         description: `\`${P}game admin moeda 1000\``, colour: COR.erro });
       const m = garantirMoeda(serverId);
       db.creditar(serverId, alvoId, m.id, qtd);
-      return sendEmbed(message.channel, { title: "🔧 Moeda creditada",
-        description: `${m.simbolo} ${fmt(qtd)} para ${quem} · saldo: ${fmt(db.getSaldo(serverId, alvoId, m.id))}`,
+      return sendEmbed(message.channel, { title: en ? "🔧 Currency credited" : "🔧 Moeda creditada",
+        description: en ? `${m.simbolo} ${fmt(qtd)} to ${quem} · balance: ${fmt(db.getSaldo(serverId, alvoId, m.id))}` : `${m.simbolo} ${fmt(qtd)} para ${quem} · saldo: ${fmt(db.getSaldo(serverId, alvoId, m.id))}`,
         colour: COR.mod });
     }
 
     if (acao === "item") {
       const nome = resto.filter((x) => !/^<[@%#]/.test(x)).join(" ");
       const item = db.acharItemPorNome(nome);
-      if (!item) return sendEmbed(message.channel, { title: "❌ Item desconhecido",
-        description: `Não achei **${nome}**.`, colour: COR.erro });
+      if (!item) return sendEmbed(message.channel, { title: en ? "❌ Unknown item" : "❌ Item desconhecido",
+        description: en ? `I couldn't find **${nome}**.` : `Não achei **${nome}**.`, colour: COR.erro });
       db.darItem(serverId, alvoId, item.id);
-      return sendEmbed(message.channel, { title: "🔧 Item entregue",
-        description: `**${item.nome}** para ${quem}`, colour: COR.mod });
+      return sendEmbed(message.channel, { title: en ? "🔧 Item delivered" : "🔧 Item entregue",
+        description: en ? `**${item.nome}** to ${quem}` : `**${item.nome}** para ${quem}`, colour: COR.mod });
     }
 
     if (acao === "follower") {
@@ -778,30 +837,30 @@ export async function cmdGame(message, args, ctx) {
       const nivel = /^\d+$/.test(argsLimpos[argsLimpos.length - 1] ?? "")
         ? parseInt(argsLimpos.pop(), 10) : 1;
       const cat = db.acharFollowerCatalogo(argsLimpos.join(" "));
-      if (!cat) return sendEmbed(message.channel, { title: "❌ Follower desconhecido",
-        description: `Não achei **${argsLimpos.join(" ")}**.`, colour: COR.erro });
+      if (!cat) return sendEmbed(message.channel, { title: en ? "❌ Unknown follower" : "❌ Follower desconhecido",
+        description: en ? `I couldn't find **${argsLimpos.join(" ")}**.` : `Não achei **${argsLimpos.join(" ")}**.`, colour: COR.erro });
       db.recrutarFollower(serverId, alvoId, cat.id, nivel);
-      return sendEmbed(message.channel, { title: "🔧 Companheiro entregue",
-        description: `**${cat.nome}** (nv ${nivel}) para ${quem}`, colour: COR.mod });
+      return sendEmbed(message.channel, { title: en ? "🔧 Companion delivered" : "🔧 Companheiro entregue",
+        description: en ? `**${cat.nome}** (lv ${nivel}) to ${quem}` : `**${cat.nome}** (nv ${nivel}) para ${quem}`, colour: COR.mod });
     }
 
     if (acao === "nivel" || acao === "pontos") {
       const n = parseInt(resto[0], 10);
-      if (!Number.isFinite(n)) return sendEmbed(message.channel, { title: "❌ Quanto?",
+      if (!Number.isFinite(n)) return sendEmbed(message.channel, { title: en ? "❌ How much?" : "❌ Quanto?",
         description: `\`${P}game admin ${acao} 10\``, colour: COR.erro });
       const alvo = db.getPersonagem(serverId, alvoId);
-      if (!alvo) return sendEmbed(message.channel, { title: "❌ Sem personagem",
-        description: `${quem === "você" ? "Você" : quem} não tem personagem.`, colour: COR.erro });
+      if (!alvo) return sendEmbed(message.channel, { title: en ? "❌ No character" : "❌ Sem personagem",
+        description: en ? `${quem === "você" ? "You" : quem} ${quem === "você" ? "don't" : "doesn't"} have a character.` : `${quem === "você" ? "Você" : quem} não tem personagem.`, colour: COR.erro });
       db.salvarPersonagem(serverId, alvoId, acao === "nivel" ? { nivel: n, xp: 0 } : { pontos: (alvo.pontos ?? 0) + n });
-      return sendEmbed(message.channel, { title: "🔧 Ajustado",
-        description: `${quem === "você" ? "Você" : quem}: ${acao} → ${n}`, colour: COR.mod });
+      return sendEmbed(message.channel, { title: en ? "🔧 Adjusted" : "🔧 Ajustado",
+        description: en ? `${quem === "você" ? "You" : quem}: ${acao} → ${n}` : `${quem === "você" ? "Você" : quem}: ${acao} → ${n}`, colour: COR.mod });
     }
 
     if (acao === "energia") {
       const meus = db.listarFollowersDe(serverId, alvoId);
       for (const f of meus) db.salvarFollower(f.id, { energia: 5, energiaEm: Date.now() });
-      return sendEmbed(message.channel, { title: "🔧 Energia cheia",
-        description: `${meus.length} companheiro(s) de ${quem}`, colour: COR.mod });
+      return sendEmbed(message.channel, { title: en ? "🔧 Energy full" : "🔧 Energia cheia",
+        description: en ? `${meus.length} companion(s) of ${quem}` : `${meus.length} companheiro(s) de ${quem}`, colour: COR.mod });
     }
 
     // Rodar a missão de verdade ignorando cooldown — o que você tentou fazer
@@ -815,8 +874,8 @@ export async function cmdGame(message, args, ctx) {
 
     if (acao === "cooldown") {
       db.salvarPersonagem(serverId, alvoId, { ultimaMissao: 0, recuperandoAte: 0 });
-      return sendEmbed(message.channel, { title: "🔧 Cooldown zerado",
-        description: `${quem === "você" ? "Você pode" : quem + " pode"} partir agora.`, colour: COR.mod });
+      return sendEmbed(message.channel, { title: en ? "🔧 Cooldown cleared" : "🔧 Cooldown zerado",
+        description: en ? `${quem === "você" ? "You can" : quem + " can"} set out now.` : `${quem === "você" ? "Você pode" : quem + " pode"} partir agora.`, colour: COR.mod });
     }
 
     if (acao === "dungeon") {
@@ -824,15 +883,15 @@ export async function cmdGame(message, args, ctx) {
       const m = garantirMoeda(serverId);
       db.salvarMoeda(serverId, m.id, { dungeon: (m.dungeon ?? 0) + qtd });
       const atual = db.getMoeda(serverId, m.id);
-      return sendEmbed(message.channel, { title: "🔧 Pote da dungeon",
-        description: `Agora tem ${m.simbolo}${fmt(atual.dungeon)} · prêmio seria ${fmt(ECO.premioDungeon(atual.dungeon))}`,
+      return sendEmbed(message.channel, { title: en ? "🔧 Dungeon pot" : "🔧 Pote da dungeon",
+        description: en ? `Now holds ${m.simbolo}${fmt(atual.dungeon)} · the prize would be ${fmt(ECO.premioDungeon(atual.dungeon))}` : `Agora tem ${m.simbolo}${fmt(atual.dungeon)} · prêmio seria ${fmt(ECO.premioDungeon(atual.dungeon))}`,
         colour: COR.mod });
     }
 
     // ── teste geral: roda o jogo inteiro num personagem descartável ──
     if (["teste", "smoke", "testar"].includes(acao)) {
-      await sendEmbed(message.channel, { title: "🧪 Rodando o teste geral…",
-        description: "Criando um personagem de teste e passando por tudo. Alguns segundos.",
+      await sendEmbed(message.channel, { title: en ? "🧪 Running the full test…" : "🧪 Rodando o teste geral…",
+        description: en ? "Creating a test character and running through everything. A few seconds." : "Criando um personagem de teste e passando por tudo. Alguns segundos.",
         colour: COR.mod });
 
       const r = await rodarTesteGeral(ctx, serverId, eu, {
@@ -876,7 +935,7 @@ export async function cmdGame(message, args, ctx) {
         db.listarMoedas(serverId).length > 1
           ? `_${db.listarMoedas(serverId).length} moedas no servidor — \`${P}game admin moeda\` vê todas._` : "",
       ].filter(Boolean);
-      return sendEmbed(message.channel, { title: "🔧 Economia",
+      return sendEmbed(message.channel, { title: en ? "🔧 Economy" : "🔧 Economia",
         description: linhas.join("\n"), colour: COR.mod });
     }
 
@@ -884,11 +943,11 @@ export async function cmdGame(message, args, ctx) {
       const nomeM = resto.filter((x) => !/^\d+$/.test(x)).join(" ");
       const vezes = Math.min(1000, parseInt(resto.find((x) => /^\d+$/.test(x)) ?? "100", 10));
       const missao = MISS.acharMissao(nomeM);
-      if (!missao) return sendEmbed(message.channel, { title: "❌ Missão desconhecida",
+      if (!missao) return sendEmbed(message.channel, { title: en ? "❌ Unknown mission" : "❌ Missão desconhecida",
         description: `\`${P}game admin simular <missao> [vezes]\`\n\nVeja os nomes com \`${P}game missao\`.`, colour: COR.erro });
       const alvo = db.getPersonagem(serverId, alvoId);
-      if (!alvo) return sendEmbed(message.channel, { title: "❌ Sem personagem",
-        description: `${quem === "você" ? "Você" : quem} não tem personagem.`, colour: COR.erro });
+      if (!alvo) return sendEmbed(message.channel, { title: en ? "❌ No character" : "❌ Sem personagem",
+        description: en ? `${quem === "você" ? "You" : quem} ${quem === "você" ? "don't" : "doesn't"} have a character.` : `${quem === "você" ? "Você" : quem} não tem personagem.`, colour: COR.erro });
       const { attr, magias, tamanhoParty } = atributosDaParty(alvo, serverId, alvoId);
       let ok = 0, falha = 0, caiu = 0, xpTotal = 0, loot = 0;
       for (let i = 0; i < vezes; i++) {
@@ -1098,7 +1157,7 @@ export async function cmdGame(message, args, ctx) {
       // ── ficha de uma moeda ──
       if (["ver", "detalhe", "info"].includes(op)) {
         const m = db.acharMoeda(serverId, args2[0]);
-        if (!m) return sendEmbed(message.channel, { title: "❌ Moeda desconhecida",
+        if (!m) return sendEmbed(message.channel, { title: en ? "❌ Unknown currency" : "❌ Moeda desconhecida",
           description: `\`${P}game admin moeda\` lista as existentes.`, colour: COR.erro });
         const exemploNv = [3, 10, 20].map((nv) =>
           `   nível ${String(nv).padStart(2)}: ~${fmt(ECO.moedaDaMissao({ tipo: "dungeon", dificuldade: "medio", nivel: nv }, 0.5, 0, m.dificuldade))} por missão`);
@@ -1120,7 +1179,7 @@ export async function cmdGame(message, args, ctx) {
         const { pares, sobra } = extrairPares(args2);
         const [id, nome, simbolo] = sobra;
         if (!id || !nome) {
-          return sendEmbed(message.channel, { title: "❌ Faltou o básico",
+          return sendEmbed(message.channel, { title: en ? "❌ Missing the basics" : "❌ Faltou o básico",
             description: [
               `\`${P}game admin moeda criar <id> <nome> [símbolo] [campo=valor …]\``,
               "",
@@ -1133,11 +1192,13 @@ export async function cmdGame(message, args, ctx) {
             ].join("\n"), colour: COR.erro });
         }
         const chave = id.toLowerCase().replace(/[^a-z0-9_]/g, "");
-        if (!chave) return sendEmbed(message.channel, { title: "❌ ID inválido",
-          description: "O `id` é o nome curto usado nos comandos: letras e números, sem espaço.\nEx.: `prata`, `btc`, `cristal_negro`.", colour: COR.erro });
+        if (!chave) return sendEmbed(message.channel, { title: en ? "❌ Invalid ID" : "❌ ID inválido",
+          description: en ? "The `id` is the short name used in commands: letters and numbers, no spaces.\nE.g.: `prata`, `btc`, `cristal_negro`." : "O `id` é o nome curto usado nos comandos: letras e números, sem espaço.\nEx.: `prata`, `btc`, `cristal_negro`.", colour: COR.erro });
         if (db.getMoeda(serverId, chave)) {
-          return sendEmbed(message.channel, { title: "❌ Já existe",
-            description: `Já há uma moeda \`${chave}\`.\nAjuste com \`${P}game admin moeda set ${chave} <campo> <valor>\`.`, colour: COR.erro });
+          return sendEmbed(message.channel, { title: en ? "❌ Already exists" : "❌ Já existe",
+            description: en
+          ? `There's already a \`${chave}\` currency.\nAdjust it with \`${P}game admin moeda set ${chave} <field> <value>\`.`
+          : `Já há uma moeda \`${chave}\`.\nAjuste com \`${P}game admin moeda set ${chave} <campo> <valor>\`.`, colour: COR.erro });
         }
         const primeira = db.listarMoedas(serverId).length === 0;
         const base = { id: chave, nome, simbolo: simbolo ?? "🪙", finita: true,
@@ -1145,7 +1206,7 @@ export async function cmdGame(message, args, ctx) {
         base.mercado = pares.mercado ?? base.suprimentoBase;
         const m = db.upsertMoeda(serverId, base);
         const ajustados = Object.keys(pares);
-        return sendEmbed(message.channel, { title: "🪙 Moeda criada",
+        return sendEmbed(message.channel, { title: en ? "🪙 Currency created" : "🪙 Moeda criada",
           description: [
             fichaDaMoeda(m),
             primeira ? "\n_Virou a moeda padrão do servidor._" : "",
@@ -1156,7 +1217,7 @@ export async function cmdGame(message, args, ctx) {
       // ── set ──
       if (["set", "editar", "config"].includes(op)) {
         const m = db.acharMoeda(serverId, args2[0]);
-        if (!m) return sendEmbed(message.channel, { title: "❌ Qual moeda?",
+        if (!m) return sendEmbed(message.channel, { title: en ? "❌ Which currency?" : "❌ Qual moeda?",
           description: `\`${P}game admin moeda set <id> <campo> <valor>\`\n\n\`${P}game admin moeda\` lista as existentes.`, colour: COR.erro });
 
         const { pares, sobra } = extrairPares(args2.slice(1));
@@ -1164,14 +1225,14 @@ export async function cmdGame(message, args, ctx) {
         if (!Object.keys(pares).length && sobra.length >= 2) {
           const campo = normalizarCampo(sobra[0]);
           if (!campo) {
-            return sendEmbed(message.channel, { title: "❌ Campo desconhecido",
+            return sendEmbed(message.channel, { title: en ? "❌ Unknown field" : "❌ Campo desconhecido",
               description: ["**Campos:**", ...Object.entries(CAMPOS).map(([k, v]) => `\`${k}\` — ${v.desc}`)].join("\n"),
               colour: COR.erro });
           }
           pares[campo] = converter(campo, sobra.slice(1).join(" "));
         }
         if (!Object.keys(pares).length) {
-          return sendEmbed(message.channel, { title: "❌ Mudar o quê?",
+          return sendEmbed(message.channel, { title: en ? "❌ Change what?" : "❌ Mudar o quê?",
             description: [
               `\`${P}game admin moeda set ${m.id} dificuldade 20\``,
               `\`${P}game admin moeda set ${m.id} dificuldade=20 nivel=5\`  ← vários de uma vez`,
@@ -1182,8 +1243,8 @@ export async function cmdGame(message, args, ctx) {
         }
         const invalidos = Object.entries(pares).filter(([, v]) => typeof v === "number" && !Number.isFinite(v));
         if (invalidos.length) {
-          return sendEmbed(message.channel, { title: "❌ Valor inválido",
-            description: `**${invalidos.map(([k]) => k).join(", ")}** precisa(m) de número.`, colour: COR.erro });
+          return sendEmbed(message.channel, { title: en ? "❌ Invalid value" : "❌ Valor inválido",
+            description: en ? `**${invalidos.map(([k]) => k).join(", ")}** need(s) a number.` : `**${invalidos.map(([k]) => k).join(", ")}** precisa(m) de número.`, colour: COR.erro });
         }
         db.salvarMoeda(serverId, m.id, pares);
         const atual = db.getMoeda(serverId, m.id);
@@ -1193,7 +1254,7 @@ export async function cmdGame(message, args, ctx) {
         if (!atual.finita && atual.mercado < 100) {
           avisos.push(`⚠️ A referência (${fmt(atual.mercado)}) está muito baixa para uma moeda infinita — o P vai ficar perto de 100% e os preços travam no mínimo. Use algo próximo do total que os jogadores devem acumular.`);
         }
-        return sendEmbed(message.channel, { title: "🪙 Ajustado",
+        return sendEmbed(message.channel, { title: en ? "🪙 Adjusted" : "🪙 Ajustado",
           description: [
             Object.entries(pares).map(([k, v]) => `\`${k}\` → **${v}**`).join(" · "),
             "",
@@ -1204,19 +1265,19 @@ export async function cmdGame(message, args, ctx) {
 
       if (["padrao", "padrão", "principal"].includes(op)) {
         const m = db.acharMoeda(serverId, args2[0]);
-        if (!m) return sendEmbed(message.channel, { title: "❌ Moeda desconhecida",
+        if (!m) return sendEmbed(message.channel, { title: en ? "❌ Unknown currency" : "❌ Moeda desconhecida",
           description: `\`${P}game admin moeda\` lista as existentes.`, colour: COR.erro });
         for (const x of db.listarMoedas(serverId)) db.salvarMoeda(serverId, x.id, { padrao: x.id === m.id ? 1 : 0 });
-        return sendEmbed(message.channel, { title: "⭐ Moeda padrão",
-          description: `${m.simbolo} **${m.nome}** é a principal — é nela que os preços do mercado aparecem.`, colour: COR.mod });
+        return sendEmbed(message.channel, { title: en ? "⭐ Default currency" : "⭐ Moeda padrão",
+          description: en ? `${m.simbolo} **${m.nome}** is the main one — market prices are shown in it.` : `${m.simbolo} **${m.nome}** é a principal — é nela que os preços do mercado aparecem.`, colour: COR.mod });
       }
 
       if (["remover", "apagar", "deletar"].includes(op)) {
         const m = db.acharMoeda(serverId, args2[0]);
-        if (!m) return sendEmbed(message.channel, { title: "❌ Moeda desconhecida",
+        if (!m) return sendEmbed(message.channel, { title: en ? "❌ Unknown currency" : "❌ Moeda desconhecida",
           description: `\`${P}game admin moeda\` lista as existentes.`, colour: COR.erro });
         if (!args2.includes("confirmar")) {
-          return sendEmbed(message.channel, { title: "⚠️ Apaga a moeda e os saldos",
+          return sendEmbed(message.channel, { title: en ? "⚠️ This deletes the currency and its balances" : "⚠️ Apaga a moeda e os saldos",
             description: [
               `${m.simbolo} **${m.nome}** — ${fmt(db.totalNasCarteiras(serverId, m.id))} nas carteiras dos jogadores.`,
               "Tudo isso será **perdido**.",
@@ -1225,12 +1286,12 @@ export async function cmdGame(message, args, ctx) {
             ].join("\n"), colour: COR.aviso });
         }
         if (m.padrao && db.listarMoedas(serverId).length > 1) {
-          return sendEmbed(message.channel, { title: "❌ É a moeda padrão",
+          return sendEmbed(message.channel, { title: en ? "❌ That's the default currency" : "❌ É a moeda padrão",
             description: `Escolha outra antes: \`${P}game admin moeda padrao <id>\`.`, colour: COR.erro });
         }
         db.removerMoeda(serverId, m.id);
-        return sendEmbed(message.channel, { title: "🗑️ Removida",
-          description: `${m.simbolo} **${m.nome}** e todos os saldos dela.`, colour: COR.mod });
+        return sendEmbed(message.channel, { title: en ? "🗑️ Removed" : "🗑️ Removida",
+          description: en ? `${m.simbolo} **${m.nome}** and all its balances.` : `${m.simbolo} **${m.nome}** e todos os saldos dela.`, colour: COR.mod });
       }
 
       // ── painel (padrão) ──
@@ -1262,8 +1323,17 @@ export async function cmdGame(message, args, ctx) {
       const confirmou = resto.includes("confirmar");
       const escopos = { servidor: 1, catalogo: 1, "catálogo": 1, tudo: 1 };
       if (!escopos[escopo]) {
-        return sendEmbed(message.channel, { title: "❓ Resetar o quê?",
-          description: [
+        return sendEmbed(message.channel, { title: en ? "❓ Reset what?" : "❓ Resetar o quê?",
+          description: (en ? [
+            `\`${P}game admin reset servidor confirmar\``,
+            "   erases **progress**: characters, bags, followers, currencies and offers",
+            "",
+            `\`${P}game admin reset catalogo confirmar\``,
+            "   erases what you **curated**, back to the generic items/followers only",
+            "",
+            `\`${P}game admin reset tudo confirmar\``,
+            "   both — the game returns to a freshly installed state",
+          ] : [
             `\`${P}game admin reset servidor confirmar\``,
             "   apaga o **progresso**: personagens, mochilas, followers, moedas e ofertas",
             "",
@@ -1272,7 +1342,7 @@ export async function cmdGame(message, args, ctx) {
             "",
             `\`${P}game admin reset tudo confirmar\``,
             "   os dois — o jogo volta ao estado de recém-instalado",
-          ].join("\n"), colour: COR.info });
+          ]).join("\n"), colour: COR.info });
       }
 
       const d = db.getDb();
@@ -1355,8 +1425,22 @@ export async function cmdGame(message, args, ctx) {
       const mexeuNoCatalogo = ["catalogo", "catálogo", "tudo"].includes(escopo);
 
       return sendEmbed(message.channel, {
-        title: "🔄 Reset concluído",
-        description: [
+        title: en ? "🔄 Reset done" : "🔄 Reset concluído",
+        description: (en ? [
+          `**Scope:** ${escopo}`,
+          "",
+          apagados.length ? "**Erased:**\n" + apagados.map((x) => `• ${x}`).join("\n") : "_There was nothing to erase._",
+          mexeuNoCatalogo
+            ? `\n✅ Generic catalog recreated: ${db.listarItens().length} items, ${db.listarFollowersCatalogo().length} companions` : "",
+          "",
+          "**Next step — pick the currencies:**",
+          `\`${P}game admin moeda modelo mundo\` — Real, Dollar, Euro, Silver, Gold, Bitcoin`,
+          `\`${P}game admin moeda modelo fantasia\` — Copper, Silver, Gold, Crystal`,
+          `\`${P}game admin moeda modelo simples\` — a single currency`,
+          "",
+          `_If you don't pick, a default currency is born on its own when someone plays._`,
+          `_After that, just \`${P}game criar\`._`,
+        ] : [
           `**Escopo:** ${escopo}`,
           "",
           apagados.length ? "**Apagado:**\n" + apagados.map((x) => `• ${x}`).join("\n") : "_Nada havia para apagar._",
@@ -1370,12 +1454,12 @@ export async function cmdGame(message, args, ctx) {
           "",
           `_Se você não escolher, uma moeda padrão nasce sozinha quando alguém jogar._`,
           `_Depois é só \`${P}game criar\`._`,
-        ].filter(Boolean).join("\n"),
+        ]).filter(Boolean).join("\n"),
         colour: COR.sucesso });
     }
 
-    return sendEmbed(message.channel, { title: "❓ Ação desconhecida",
-      description: `\`${P}game admin\` lista o que dá para fazer.`, colour: COR.erro });
+    return sendEmbed(message.channel, { title: en ? "❓ Unknown action" : "❓ Ação desconhecida",
+      description: en ? `\`${P}game admin\` lists what you can do.` : `\`${P}game admin\` lista o que dá para fazer.`, colour: COR.erro });
   }
 
   // ── carteira / economia ──
@@ -1438,8 +1522,8 @@ export async function cmdGame(message, args, ctx) {
   // uma delas vira golpe na primeira semana.
   if (["mercado", "bazar", "p2p"].includes(sub)) {
     const p = db.getPersonagem(serverId, eu);
-    if (!p) return sendEmbed(message.channel, { title: "🎭 Sem personagem",
-      description: `Crie com \`${P}game criar\`.`, colour: COR.aviso });
+    if (!p) return sendEmbed(message.channel, { title: en ? "🎭 No character" : "🎭 Sem personagem",
+      description: en ? `Create one with \`${P}game criar\`.` : `Crie com \`${P}game criar\`.`, colour: COR.aviso });
 
     const moeda = garantirMoeda(serverId);
     const acao = args[1]?.toLowerCase();
@@ -1449,47 +1533,54 @@ export async function cmdGame(message, args, ctx) {
       const preco = parseInt(resto[resto.length - 1], 10);
       const nomeItem = resto.slice(0, -1).join(" ").trim();
       if (!nomeItem || !Number.isFinite(preco) || preco < 1) {
-        return sendEmbed(message.channel, { title: "❌ Uso",
-          description: `\`${P}game mercado vender <item> <preço>\`\n\nEx.: \`${P}game mercado vender Espada de Ferro 250\``,
+        return sendEmbed(message.channel, { title: en ? "❌ Usage" : "❌ Uso",
+          description: en
+            ? `\`${P}game mercado vender <item> <price>\`\n\nE.g.: \`${P}game mercado vender Espada de Ferro 250\``
+            : `\`${P}game mercado vender <item> <preço>\`\n\nEx.: \`${P}game mercado vender Espada de Ferro 250\``,
           colour: COR.erro });
       }
       const item = db.acharItemPorNome(nomeItem);
       if (!item || !db.temItem(serverId, eu, item.id)) {
-        return sendEmbed(message.channel, { title: "❌ Você não tem isso",
-          description: `**${nomeItem}** não está na sua mochila.`, colour: COR.erro });
+        return sendEmbed(message.channel, { title: en ? "❌ You don't have that" : "❌ Você não tem isso",
+          description: en ? `**${nomeItem}** isn't in your bag.` : `**${nomeItem}** não está na sua mochila.`, colour: COR.erro });
       }
       const slot = db.slotDoItem(serverId, eu, item.id);
       if (slot) db.desequipar(serverId, eu, slot);
       db.tirarItem(serverId, eu, item.id, 1);
       const of = db.criarOferta({ serverId, tipo: "venda", autorId: eu,
         itemOferecido: item.id, moedaPedida: moeda.id, qtdPedida: preco });
-      return sendEmbed(message.channel, { title: "🏷️ Anunciado",
-        description: [
+      return sendEmbed(message.channel, { title: en ? "🏷️ Listed" : "🏷️ Anunciado",
+        description: (en ? [
+          `**${item.nome}** for ${moeda.simbolo}${fmt(preco)}`,
+          "_The item is held in escrow with me until someone buys it or you cancel._",
+          "",
+          `Offer **#${of.id}** · cancel: \`${P}game mercado cancelar ${of.id}\``,
+        ] : [
           `**${item.nome}** por ${moeda.simbolo}${fmt(preco)}`,
           "_O item ficou em custódia comigo até alguém comprar ou você cancelar._",
           "",
           `Oferta **#${of.id}** · cancelar: \`${P}game mercado cancelar ${of.id}\``,
-        ].join("\n"), colour: COR.sucesso });
+        ]).join("\n"), colour: COR.sucesso });
     }
 
     if (["comprar", "aceitar"].includes(acao)) {
       const id = parseInt(resto[0], 10);
       const of = Number.isFinite(id) ? db.getOferta(id) : null;
       if (!of || of.serverId !== serverId || of.estado !== "aberta") {
-        return sendEmbed(message.channel, { title: "❌ Oferta indisponível",
-          description: `Veja as abertas com \`${P}game mercado\`.`, colour: COR.erro });
+        return sendEmbed(message.channel, { title: en ? "❌ Offer unavailable" : "❌ Oferta indisponível",
+          description: en ? `See the open ones with \`${P}game mercado\`.` : `Veja as abertas com \`${P}game mercado\`.`, colour: COR.erro });
       }
       if (of.autorId === eu) {
-        return sendEmbed(message.channel, { title: "🤔 É sua",
-          description: `Para tirar do ar: \`${P}game mercado cancelar ${of.id}\`.`, colour: COR.aviso });
+        return sendEmbed(message.channel, { title: en ? "🤔 It's yours" : "🤔 É sua",
+          description: en ? `To take it down: \`${P}game mercado cancelar ${of.id}\`.` : `Para tirar do ar: \`${P}game mercado cancelar ${of.id}\`.`, colour: COR.aviso });
       }
       const volume = db.volumeRecente(serverId);
       const { pct, valor: taxa } = ECO.calcularTaxa(of.qtdPedida, volume);
       const total = of.qtdPedida;
       const saldo = db.getSaldo(serverId, eu, of.moedaPedida ?? moeda.id);
       if (saldo < total) {
-        return sendEmbed(message.channel, { title: "💸 Saldo insuficiente",
-          description: `Precisa de ${moeda.simbolo}${fmt(total)} — você tem ${moeda.simbolo}${fmt(saldo)}.`,
+        return sendEmbed(message.channel, { title: en ? "💸 Not enough balance" : "💸 Saldo insuficiente",
+          description: en ? `You need ${moeda.simbolo}${fmt(total)} — you have ${moeda.simbolo}${fmt(saldo)}.` : `Precisa de ${moeda.simbolo}${fmt(total)} — você tem ${moeda.simbolo}${fmt(saldo)}.`,
           colour: COR.erro });
       }
       db.debitar(serverId, eu, of.moedaPedida, total);
@@ -1503,37 +1594,46 @@ export async function cmdGame(message, args, ctx) {
       const oQue = of.tipo === "cambio"
         ? `${fmt(of.qtdOferecida)} ${db.getMoeda(serverId, of.moedaOferecida)?.simbolo ?? ""}`
         : `**${db.getItem(of.itemOferecido)?.nome ?? "?"}**`;
-      return sendEmbed(message.channel, { title: "🤝 Negócio fechado",
-        description: [
+      return sendEmbed(message.channel, { title: en ? "🤝 Deal closed" : "🤝 Negócio fechado",
+        description: (en ? [
+          `You took ${oQue} for ${moeda.simbolo}${fmt(total)}.`,
+          `_Market fee: ${moeda.simbolo}${fmt(taxa)} (${(pct * 100).toFixed(2)}%)_`,
+        ] : [
           `Você levou ${oQue} por ${moeda.simbolo}${fmt(total)}.`,
           `_Taxa do mercado: ${moeda.simbolo}${fmt(taxa)} (${(pct * 100).toFixed(2)}%)_`,
-        ].join("\n"), colour: COR.sucesso });
+        ]).join("\n"), colour: COR.sucesso });
     }
 
     if (["cancelar", "retirar"].includes(acao)) {
       const id = parseInt(resto[0], 10);
       const of = Number.isFinite(id) ? db.getOferta(id) : null;
       if (!of || of.autorId !== eu || of.estado !== "aberta") {
-        return sendEmbed(message.channel, { title: "❌ Não dá para cancelar",
-          description: "A oferta não existe, não é sua, ou já fechou.", colour: COR.erro });
+        return sendEmbed(message.channel, { title: en ? "❌ Can't cancel" : "❌ Não dá para cancelar",
+          description: en ? "The offer doesn't exist, isn't yours, or already closed." : "A oferta não existe, não é sua, ou já fechou.", colour: COR.erro });
       }
       if (of.itemOferecido) db.darItem(serverId, eu, of.itemOferecido);
       if (of.moedaOferecida) db.creditar(serverId, eu, of.moedaOferecida, of.qtdOferecida);
       db.fecharOferta(of.id, "cancelada");
-      return sendEmbed(message.channel, { title: "↩️ Cancelada",
-        description: "O que estava em custódia voltou para você.", colour: COR.mod });
+      return sendEmbed(message.channel, { title: en ? "↩️ Cancelled" : "↩️ Cancelada",
+        description: en ? "What was held in escrow came back to you." : "O que estava em custódia voltou para você.", colour: COR.mod });
     }
 
     const ofertas = db.listarOfertas(serverId);
     if (!ofertas.length) {
-      return sendEmbed(message.channel, { title: "🏪 Bazar vazio",
-        description: [
+      return sendEmbed(message.channel, { title: en ? "🏪 Empty bazaar" : "🏪 Bazar vazio",
+        description: (en ? [
+          "Nobody is selling anything right now.",
+          "",
+          `\`${P}game mercado vender <item> <price>\` — list yours`,
+          `\`${P}game cambio <qty> <currency> por <qty> <currency>\` — currency exchange`,
+          `\`${P}game trocar @person <your item> por <their item>\` — barter`,
+        ] : [
           "Ninguém está vendendo nada agora.",
           "",
           `\`${P}game mercado vender <item> <preço>\` — anuncie o seu`,
           `\`${P}game cambio <qtd> <moeda> por <qtd> <moeda>\` — troca de moedas`,
           `\`${P}game trocar @pessoa <seu item> por <item dela>\` — escambo`,
-        ].join("\n"), colour: COR.info });
+        ]).join("\n"), colour: COR.info });
     }
     const volume = db.volumeRecente(serverId);
     const linhas = ofertas.map((o) => {
@@ -1553,14 +1653,23 @@ export async function cmdGame(message, args, ctx) {
   // ── câmbio entre jogadores ──
   if (["cambio", "câmbio"].includes(sub)) {
     const p = db.getPersonagem(serverId, eu);
-    if (!p) return sendEmbed(message.channel, { title: "🎭 Sem personagem",
-      description: `Crie com \`${P}game criar\`.`, colour: COR.aviso });
+    if (!p) return sendEmbed(message.channel, { title: en ? "🎭 No character" : "🎭 Sem personagem",
+      description: en ? `Create one with \`${P}game criar\`.` : `Crie com \`${P}game criar\`.`, colour: COR.aviso });
 
     const moedas = db.listarMoedas(serverId);
     const texto = args.slice(1).join(" ");
     const m = texto.match(/^(\d+)\s+(\S+)\s+por\s+(\d+)\s+(\S+)$/i);
     if (!m) {
-      const linhas = [
+      const linhas = en ? [
+        `\`${P}game cambio <qty> <currency> por <qty> <currency>\``,
+        `E.g.: \`${P}game cambio 100 real por 5 dolar\``,
+        "",
+        "**Server currencies:**",
+        ...moedas.map((x) => `${x.simbolo} **${x.nome}** \`${x.id}\` — you have ${fmt(db.getSaldo(serverId, eu, x.id))}`),
+        "",
+        `_System reference rate: ${(ECO.CFG.spread * 100).toFixed(0)}% spread._`,
+        "_At the counter you set whatever rate you like; whoever accepts, accepts._",
+      ] : [
         `\`${P}game cambio <qtd> <moeda> por <qtd> <moeda>\``,
         `Ex.: \`${P}game cambio 100 real por 5 dolar\``,
         "",
@@ -1570,21 +1679,24 @@ export async function cmdGame(message, args, ctx) {
         `_Taxa de referência do sistema: spread de ${(ECO.CFG.spread * 100).toFixed(0)}%._`,
         "_No balcão você define a taxa que quiser; quem aceitar, aceita._",
       ];
-      if (moedas.length < 2) linhas.push("", "_Só há uma moeda aqui — o câmbio precisa de pelo menos duas._");
-      return enviarLista(sendEmbed, message.channel, { titulo: "💱 Balcão de câmbio", linhas, colour: COR.info });
+      if (moedas.length < 2) linhas.push("", en
+        ? "_There's only one currency here — exchange needs at least two._"
+        : "_Só há uma moeda aqui — o câmbio precisa de pelo menos duas._");
+      return enviarLista(sendEmbed, message.channel, {
+        titulo: en ? "💱 Exchange counter" : "💱 Balcão de câmbio", linhas, colour: COR.info });
     }
 
     const [, qtdDe, nomeDe, qtdPara, nomePara] = m;
     const de = db.acharMoeda(serverId, nomeDe);
     const para = db.acharMoeda(serverId, nomePara);
     if (!de || !para || de.id === para.id) {
-      return sendEmbed(message.channel, { title: "❌ Moedas inválidas",
-        description: "Precisam ser duas moedas diferentes deste servidor.", colour: COR.erro });
+      return sendEmbed(message.channel, { title: en ? "❌ Invalid currencies" : "❌ Moedas inválidas",
+        description: en ? "They must be two different currencies from this server." : "Precisam ser duas moedas diferentes deste servidor.", colour: COR.erro });
     }
     const saldo = db.getSaldo(serverId, eu, de.id);
     if (saldo < Number(qtdDe)) {
-      return sendEmbed(message.channel, { title: "💸 Saldo insuficiente",
-        description: `Você tem ${de.simbolo}${fmt(saldo)}.`, colour: COR.erro });
+      return sendEmbed(message.channel, { title: en ? "💸 Not enough balance" : "💸 Saldo insuficiente",
+        description: en ? `You have ${de.simbolo}${fmt(saldo)}.` : `Você tem ${de.simbolo}${fmt(saldo)}.`, colour: COR.erro });
     }
     db.debitar(serverId, eu, de.id, Number(qtdDe));
     const of = db.criarOferta({ serverId, tipo: "cambio", autorId: eu,
@@ -1593,20 +1705,25 @@ export async function cmdGame(message, args, ctx) {
 
     const pDe = pDaMoeda(serverId, de).pSuave, pPara = pDaMoeda(serverId, para).pSuave;
     const ref = ECO.converter(Number(qtdDe), pDe, pPara);
-    return sendEmbed(message.channel, { title: "💱 Oferta publicada",
-      description: [
+    return sendEmbed(message.channel, { title: en ? "💱 Offer published" : "💱 Oferta publicada",
+      description: (en ? [
+        `Offering **${fmt(qtdDe)} ${de.nome}** ${de.simbolo} for **${fmt(qtdPara)} ${para.nome}** ${para.simbolo}`,
+        `_The system would pay ~${fmt(ref.recebe)} — your rate is ${Number(qtdPara) < ref.recebe ? "better" : "worse"} for whoever accepts._`,
+        "",
+        `Offer **#${of.id}** · the amount is held in escrow with me.`,
+      ] : [
         `Oferece **${fmt(qtdDe)} ${de.nome}** ${de.simbolo} por **${fmt(qtdPara)} ${para.nome}** ${para.simbolo}`,
         `_O sistema pagaria ~${fmt(ref.recebe)} — a sua taxa é ${Number(qtdPara) < ref.recebe ? "melhor" : "pior"} para quem aceitar._`,
         "",
         `Oferta **#${of.id}** · o valor ficou em custódia comigo.`,
-      ].join("\n"), colour: COR.sucesso });
+      ]).join("\n"), colour: COR.sucesso });
   }
 
   // ── escambo: item por item ──
   if (["trocar", "escambo", "permuta"].includes(sub)) {
     const p = db.getPersonagem(serverId, eu);
-    if (!p) return sendEmbed(message.channel, { title: "🎭 Sem personagem",
-      description: `Crie com \`${P}game criar\`.`, colour: COR.aviso });
+    if (!p) return sendEmbed(message.channel, { title: en ? "🎭 No character" : "🎭 Sem personagem",
+      description: en ? `Create one with \`${P}game criar\`.` : `Crie com \`${P}game criar\`.`, colour: COR.aviso });
 
     const acao = args[1]?.toLowerCase();
 
@@ -1614,17 +1731,17 @@ export async function cmdGame(message, args, ctx) {
       const id = parseInt(args[2], 10);
       const of = Number.isFinite(id) ? db.getOferta(id) : null;
       if (!of || of.tipo !== "troca" || of.estado !== "aberta" || of.serverId !== serverId) {
-        return sendEmbed(message.channel, { title: "❌ Proposta indisponível",
-          description: `Veja as suas com \`${P}game trocar\`.`, colour: COR.erro });
+        return sendEmbed(message.channel, { title: en ? "❌ Proposal unavailable" : "❌ Proposta indisponível",
+          description: en ? `See yours with \`${P}game trocar\`.` : `Veja as suas com \`${P}game trocar\`.`, colour: COR.erro });
       }
       if (of.alvoId && of.alvoId !== eu) {
-        return sendEmbed(message.channel, { title: "❌ Não é para você",
-          description: "Essa proposta foi feita a outra pessoa.", colour: COR.erro });
+        return sendEmbed(message.channel, { title: en ? "❌ Not for you" : "❌ Não é para você",
+          description: en ? "That proposal was made to someone else." : "Essa proposta foi feita a outra pessoa.", colour: COR.erro });
       }
       if (!db.temItem(serverId, eu, of.itemPedido)) {
         const pedido = db.getItem(of.itemPedido);
-        return sendEmbed(message.channel, { title: "❌ Você não tem o que ele quer",
-          description: `A proposta pede **${pedido?.nome ?? "?"}**.`, colour: COR.erro });
+        return sendEmbed(message.channel, { title: en ? "❌ You don't have what they want" : "❌ Você não tem o que ele quer",
+          description: en ? `The proposal asks for **${pedido?.nome ?? "?"}**.` : `A proposta pede **${pedido?.nome ?? "?"}**.`, colour: COR.erro });
       }
       const slot = db.slotDoItem(serverId, eu, of.itemPedido);
       if (slot) db.desequipar(serverId, eu, slot);
@@ -1632,8 +1749,8 @@ export async function cmdGame(message, args, ctx) {
       db.darItem(serverId, eu, of.itemOferecido);
       db.darItem(serverId, of.autorId, of.itemPedido);
       db.fecharOferta(of.id, "fechada", 0);
-      return sendEmbed(message.channel, { title: "🔄 Trocado",
-        description: `Você deu **${db.getItem(of.itemPedido)?.nome}** e levou **${db.getItem(of.itemOferecido)?.nome}**.`,
+      return sendEmbed(message.channel, { title: en ? "🔄 Traded" : "🔄 Trocado",
+        description: en ? `You gave **${db.getItem(of.itemPedido)?.nome}** and took **${db.getItem(of.itemOferecido)?.nome}**.` : `Você deu **${db.getItem(of.itemPedido)?.nome}** e levou **${db.getItem(of.itemOferecido)?.nome}**.`,
         colour: COR.sucesso });
     }
 
@@ -1644,12 +1761,17 @@ export async function cmdGame(message, args, ctx) {
         .filter((o) => o.autorId === eu || !o.alvoId || o.alvoId === eu);
       const linhas = minhas.length ? minhas.map((o) => {
         const ofe = db.getItem(o.itemOferecido), ped = db.getItem(o.itemPedido);
-        const quem = o.autorId === eu ? "você oferece" : "oferecem a você";
-        return `\`#${o.id}\` ${quem}: **${ofe?.nome}** por **${ped?.nome}**`;
-      }) : ["_Nenhuma proposta aberta._"];
-      linhas.push("", `\`${P}game trocar [@pessoa] <seu item> por <item dela>\``,
-        `\`${P}game trocar aceitar <#>\` — fecha a troca`);
-      return enviarLista(sendEmbed, message.channel, { titulo: "🔄 Escambo", linhas, colour: COR.info });
+        const quem = o.autorId === eu
+          ? (en ? "you offer" : "você oferece")
+          : (en ? "offered to you" : "oferecem a você");
+        return en
+          ? `\`#${o.id}\` ${quem}: **${ofe?.nome}** for **${ped?.nome}**`
+          : `\`#${o.id}\` ${quem}: **${ofe?.nome}** por **${ped?.nome}**`;
+      }) : [en ? "_No open proposals._" : "_Nenhuma proposta aberta._"];
+      linhas.push("", en ? `\`${P}game trocar [@person] <your item> por <their item>\`` : `\`${P}game trocar [@pessoa] <seu item> por <item dela>\``,
+        en ? `\`${P}game trocar aceitar <#>\` — closes the trade` : `\`${P}game trocar aceitar <#>\` — fecha a troca`);
+      return enviarLista(sendEmbed, message.channel, {
+        titulo: en ? "🔄 Barter" : "🔄 Escambo", linhas, colour: COR.info });
     }
 
     const alvoId = message.mentionIds?.[0] ?? null;
@@ -1657,19 +1779,21 @@ export async function cmdGame(message, args, ctx) {
     const item = db.acharItemPorNome(meuNome);
     const quer = db.acharItemPorNome(mm[2].trim());
     if (!item || !quer) {
-      return sendEmbed(message.channel, { title: "❌ Item desconhecido",
-        description: `Não achei ${!item ? `**${meuNome}**` : `**${mm[2].trim()}**`}.`, colour: COR.erro });
+      return sendEmbed(message.channel, { title: en ? "❌ Unknown item" : "❌ Item desconhecido",
+        description: en
+          ? `I couldn't find ${!item ? `**${meuNome}**` : `**${mm[2].trim()}**`}.`
+          : `Não achei ${!item ? `**${meuNome}**` : `**${mm[2].trim()}**`}.`, colour: COR.erro });
     }
     if (!db.temItem(serverId, eu, item.id)) {
-      return sendEmbed(message.channel, { title: "❌ Você não tem isso",
-        description: `**${item.nome}** não está na sua mochila.`, colour: COR.erro });
+      return sendEmbed(message.channel, { title: en ? "❌ You don't have that" : "❌ Você não tem isso",
+        description: en ? `**${item.nome}** isn't in your bag.` : `**${item.nome}** não está na sua mochila.`, colour: COR.erro });
     }
     const slot = db.slotDoItem(serverId, eu, item.id);
     if (slot) db.desequipar(serverId, eu, slot);
     db.tirarItem(serverId, eu, item.id, 1);
     const of = db.criarOferta({ serverId, tipo: "troca", autorId: eu, alvoId,
       itemOferecido: item.id, itemPedido: quer.id });
-    return sendEmbed(message.channel, { title: "🔄 Proposta feita",
+    return sendEmbed(message.channel, { title: en ? "🔄 Proposal sent" : "🔄 Proposta feita",
       description: [
         `Oferece **${item.nome}** por **${quer.nome}**${alvoId ? ` a <@${alvoId}>` : " (aberta a qualquer um)"}`,
         "_Seu item ficou em custódia comigo._",
@@ -1681,8 +1805,8 @@ export async function cmdGame(message, args, ctx) {
   // ── loja: comprar e vender ──
   if (["comprar", "loja"].includes(sub)) {
     const p = db.getPersonagem(serverId, eu);
-    if (!p) return sendEmbed(message.channel, { title: "🎭 Sem personagem",
-      description: `Crie com \`${P}game criar\`.`, colour: COR.aviso });
+    if (!p) return sendEmbed(message.channel, { title: en ? "🎭 No character" : "🎭 Sem personagem",
+      description: en ? `Create one with \`${P}game criar\`.` : `Crie com \`${P}game criar\`.`, colour: COR.aviso });
 
     const moeda = garantirMoeda(serverId);
     const { pSuave } = pDaMoeda(serverId, moeda);
@@ -1697,18 +1821,21 @@ export async function cmdGame(message, args, ctx) {
         const r = RARIDADE_INFO[i.raridade] ?? {};
         return `${r.emoji ?? ""} **${i.nome}** — ${moeda.simbolo}${fmt(preco)} _(${qtd})_`;
       });
-      linhas.push("", `_\`${P}game comprar <item>\` · seu saldo: ${moeda.simbolo}${fmt(db.getSaldo(serverId, eu, moeda.id))}_`);
-      return enviarLista(sendEmbed, message.channel, { titulo: "🏪 Mercado", linhas, colour: COR.info });
+      linhas.push("", en
+        ? `_\`${P}game comprar <item>\` · your balance: ${moeda.simbolo}${fmt(db.getSaldo(serverId, eu, moeda.id))}_`
+        : `_\`${P}game comprar <item>\` · seu saldo: ${moeda.simbolo}${fmt(db.getSaldo(serverId, eu, moeda.id))}_`);
+      return enviarLista(sendEmbed, message.channel, {
+        titulo: en ? "🏪 Market" : "🏪 Mercado", linhas, colour: COR.info });
     }
 
     const item = db.acharItemPorNome(busca);
-    if (!item) return sendEmbed(message.channel, { title: "❌ Item desconhecido",
-      description: `Não achei **${busca}** no mercado.`, colour: COR.erro });
+    if (!item) return sendEmbed(message.channel, { title: en ? "❌ Unknown item" : "❌ Item desconhecido",
+      description: en ? `I couldn't find **${busca}** in the market.` : `Não achei **${busca}** no mercado.`, colour: COR.erro });
 
     const est = db.getEstoque(serverId, item.id);
     if (!item.infinito && (est?.quantidade ?? est?.base ?? 10) <= 0) {
-      return sendEmbed(message.channel, { title: "📦 Esgotado",
-        description: `**${item.nome}** acabou no mercado. Itens finitos voltam quando alguém vende.`, colour: COR.aviso });
+      return sendEmbed(message.channel, { title: en ? "📦 Sold out" : "📦 Esgotado",
+        description: en ? `**${item.nome}** ran out in the market. Finite items return when someone sells.` : `**${item.nome}** acabou no mercado. Itens finitos voltam quando alguém vende.`, colour: COR.aviso });
     }
     const preco = ECO.precoDeVenda(item, est, pSuave);
     const pag = moedaParaPagar(serverId, eu, preco);
@@ -1716,36 +1843,44 @@ export async function cmdGame(message, args, ctx) {
       const carteira = db.carteiraDe(serverId, eu)
         .map((c) => { const m = db.getMoeda(serverId, c.moedaId); return `${m?.simbolo ?? ""}${fmt(c.quantidade)}`; })
         .join(" · ") || "nada";
-      return sendEmbed(message.channel, { title: "💸 Saldo insuficiente",
-        description: `**${item.nome}** custa ${moeda.simbolo}${fmt(preco)}.\nVocê tem: ${carteira}.`,
+      return sendEmbed(message.channel, { title: en ? "💸 Not enough balance" : "💸 Saldo insuficiente",
+        description: en ? `**${item.nome}** costs ${moeda.simbolo}${fmt(preco)}.\nYou have: ${carteira}.` : `**${item.nome}** custa ${moeda.simbolo}${fmt(preco)}.\nVocê tem: ${carteira}.`,
         colour: COR.erro });
     }
     jogadorPaga(serverId, eu, pag.moeda, pag.custo);
     db.darItem(serverId, eu, item.id);
     if (!item.infinito) db.ajustarEstoque(serverId, item.id, -1);
-    return sendEmbed(message.channel, { title: "🛒 Comprado",
-      description: [
+    return sendEmbed(message.channel, { title: en ? "🛒 Purchased" : "🛒 Comprado",
+      description: (en ? [
+        `${RARIDADE_INFO[item.raridade]?.emoji ?? ""} **${item.nome}** — ${descreverBonus(item.bonus)}`,
+        `Paid ${pag.moeda.simbolo}${fmt(pag.custo)} · ${pag.moeda.simbolo}${fmt(db.getSaldo(serverId, eu, pag.moeda.id))} left`,
+        pag.convertido ? `_(the price was ${moeda.simbolo}${fmt(preco)}; paid in ${pag.moeda.nome} at today's rate)_` : "",
+        "",
+        `_Equip it with \`${P}game equipar ${item.nome}\`._`,
+      ] : [
         `${RARIDADE_INFO[item.raridade]?.emoji ?? ""} **${item.nome}** — ${descreverBonus(item.bonus)}`,
         `Pagou ${pag.moeda.simbolo}${fmt(pag.custo)} · resta ${pag.moeda.simbolo}${fmt(db.getSaldo(serverId, eu, pag.moeda.id))}`,
         pag.convertido ? `_(preço era ${moeda.simbolo}${fmt(preco)}; pagou em ${pag.moeda.nome} pela taxa do dia)_` : "",
         "",
         `_Equipe com \`${P}game equipar ${item.nome}\`._`,
-      ].join("\n"), colour: COR.sucesso });
+      ]).join("\n"), colour: COR.sucesso });
   }
 
   if (["vender"].includes(sub)) {
     const p = db.getPersonagem(serverId, eu);
-    if (!p) return sendEmbed(message.channel, { title: "🎭 Sem personagem",
-      description: `Crie com \`${P}game criar\`.`, colour: COR.aviso });
+    if (!p) return sendEmbed(message.channel, { title: en ? "🎭 No character" : "🎭 Sem personagem",
+      description: en ? `Create one with \`${P}game criar\`.` : `Crie com \`${P}game criar\`.`, colour: COR.aviso });
     const busca = args.slice(1).join(" ").trim();
-    if (!busca) return sendEmbed(message.channel, { title: "❌ Vender o quê?",
-      description: `\`${P}game vender <item>\`\n\nO mercado paga **abaixo** do preço de venda — seu ✨Carisma melhora a oferta.`,
+    if (!busca) return sendEmbed(message.channel, { title: en ? "❌ Sell what?" : "❌ Vender o quê?",
+      description: en
+        ? `\`${P}game vender <item>\`\n\nThe market pays **below** the sale price — your ✨Charisma improves the offer.`
+        : `\`${P}game vender <item>\`\n\nO mercado paga **abaixo** do preço de venda — seu ✨Carisma melhora a oferta.`,
       colour: COR.erro });
 
     const item = db.acharItemPorNome(busca);
     if (!item || !db.temItem(serverId, eu, item.id)) {
-      return sendEmbed(message.channel, { title: "❌ Você não tem isso",
-        description: `**${busca}** não está na sua mochila.`, colour: COR.erro });
+      return sendEmbed(message.channel, { title: en ? "❌ You don't have that" : "❌ Você não tem isso",
+        description: en ? `**${busca}** isn't in your bag.` : `**${busca}** não está na sua mochila.`, colour: COR.erro });
     }
     const slot = db.slotDoItem(serverId, eu, item.id);
     if (slot) db.desequipar(serverId, eu, slot);
@@ -1760,19 +1895,23 @@ export async function cmdGame(message, args, ctx) {
     if (!item.infinito) db.ajustarEstoque(serverId, item.id, +1);
     const pago = pagarAoJogador(serverId, eu, db.getMoeda(serverId, moeda.id), recebe);
 
-    return sendEmbed(message.channel, { title: "💵 Vendido",
-      description: [
+    return sendEmbed(message.channel, { title: en ? "💵 Sold" : "💵 Vendido",
+      description: (en ? [
+        `**${item.nome}** → ${moeda.simbolo}${fmt(pago)}`,
+        `_The market sells for ${moeda.simbolo}${fmt(precoVenda)}; with your Charisma (${attr.carisma}) you got ${(ECO.fatorRecompra(attr.carisma) * 100).toFixed(0)}%._`,
+        slot ? "\n_It was equipped — I unequipped it._" : "",
+      ] : [
         `**${item.nome}** → ${moeda.simbolo}${fmt(pago)}`,
         `_O mercado vende por ${moeda.simbolo}${fmt(precoVenda)}; com seu Carisma (${attr.carisma}) você tirou ${(ECO.fatorRecompra(attr.carisma) * 100).toFixed(0)}%._`,
         slot ? "\n_Estava equipado — foi desequipado._" : "",
-      ].filter(Boolean).join("\n"), colour: COR.sucesso });
+      ]).filter(Boolean).join("\n"), colour: COR.sucesso });
   }
 
   // ── contratar mercenário ──
   if (["contratar", "recrutar"].includes(sub)) {
     const p = db.getPersonagem(serverId, eu);
-    if (!p) return sendEmbed(message.channel, { title: "🎭 Sem personagem",
-      description: `Crie com \`${P}game criar\`.`, colour: COR.aviso });
+    if (!p) return sendEmbed(message.channel, { title: en ? "🎭 No character" : "🎭 Sem personagem",
+      description: en ? `Create one with \`${P}game criar\`.` : `Crie com \`${P}game criar\`.`, colour: COR.aviso });
     const busca = args.slice(1).join(" ").trim();
     const moeda = garantirMoeda(serverId);
     const { pSuave } = pDaMoeda(serverId, moeda);
@@ -1788,17 +1927,22 @@ export async function cmdGame(message, args, ctx) {
         const preco = Math.round(f.preco * ECO.mult(pSuave) * desconto);
         return `${r.emoji ?? ""}${cls.emoji ?? ""} **${f.nome}** _(${cls.rotulo})_ — ${moeda.simbolo}${fmt(preco)}`;
       });
-      linhas.push("", `_Seu Carisma (${attr.carisma}) dá **${((1 - desconto) * 100).toFixed(0)}%** de desconto._`,
-        `_Saldo: ${moeda.simbolo}${fmt(db.getSaldo(serverId, eu, moeda.id))} · \`${P}game contratar <nome>\`_`);
-      return enviarLista(sendEmbed, message.channel, { titulo: "🤝 Mercenários disponíveis", linhas, colour: COR.info });
+      linhas.push("", en
+        ? `_Your Charisma (${attr.carisma}) gives a **${((1 - desconto) * 100).toFixed(0)}%** discount._`
+        : `_Seu Carisma (${attr.carisma}) dá **${((1 - desconto) * 100).toFixed(0)}%** de desconto._`,
+        en
+          ? `_Balance: ${moeda.simbolo}${fmt(db.getSaldo(serverId, eu, moeda.id))} · \`${P}game contratar <name>\`_`
+          : `_Saldo: ${moeda.simbolo}${fmt(db.getSaldo(serverId, eu, moeda.id))} · \`${P}game contratar <nome>\`_`);
+      return enviarLista(sendEmbed, message.channel, {
+        titulo: en ? "🤝 Mercenaries available" : "🤝 Mercenários disponíveis", linhas, colour: COR.info });
     }
 
     const cat = db.acharFollowerCatalogo(busca);
-    if (!cat) return sendEmbed(message.channel, { title: "❌ Não conheço",
-      description: `Não achei **${busca}**.`, colour: COR.erro });
+    if (!cat) return sendEmbed(message.channel, { title: en ? "❌ I don't know that" : "❌ Não conheço",
+      description: en ? `I couldn't find **${busca}**.` : `Não achei **${busca}**.`, colour: COR.erro });
     if (cat.soDungeon || !cat.preco) {
-      return sendEmbed(message.channel, { title: "🗝️ Não está à venda",
-        description: `**${cat.nome}** só aparece como loot de dungeon.`, colour: COR.aviso });
+      return sendEmbed(message.channel, { title: en ? "🗝️ Not for sale" : "🗝️ Não está à venda",
+        description: en ? `**${cat.nome}** only shows up as dungeon loot.` : `**${cat.nome}** só aparece como loot de dungeon.`, colour: COR.aviso });
     }
     const preco = Math.round(cat.preco * ECO.mult(pSuave) * desconto);
     const pag = moedaParaPagar(serverId, eu, preco);
@@ -1806,20 +1950,26 @@ export async function cmdGame(message, args, ctx) {
       const carteira = db.carteiraDe(serverId, eu)
         .map((c) => { const m = db.getMoeda(serverId, c.moedaId); return `${m?.simbolo ?? ""}${fmt(c.quantidade)}`; })
         .join(" · ") || "nada";
-      return sendEmbed(message.channel, { title: "💸 Saldo insuficiente",
-        description: `**${cat.nome}** custa ${moeda.simbolo}${fmt(preco)}.\nVocê tem: ${carteira}.`, colour: COR.erro });
+      return sendEmbed(message.channel, { title: en ? "💸 Not enough balance" : "💸 Saldo insuficiente",
+        description: en ? `**${cat.nome}** costs ${moeda.simbolo}${fmt(preco)}.\nYou have: ${carteira}.` : `**${cat.nome}** custa ${moeda.simbolo}${fmt(preco)}.\nVocê tem: ${carteira}.`, colour: COR.erro });
     }
     jogadorPaga(serverId, eu, pag.moeda, pag.custo);
     const novo = db.recrutarFollower(serverId, eu, cat.id, 1);
     const cls = FOL.CLASSES[cat.classe] ?? {};
-    return sendEmbed(message.channel, { title: "🤝 Contratado",
-      description: [
+    return sendEmbed(message.channel, { title: en ? "🤝 Hired" : "🤝 Contratado",
+      description: (en ? [
+        `${cls.emoji ?? ""} **${cat.nome}** _(${cls.rotulo}, lv 1)_ joined your group.`,
+        `Paid ${pag.moeda.simbolo}${fmt(pag.custo)} · ${pag.moeda.simbolo}${fmt(db.getSaldo(serverId, eu, pag.moeda.id))} left`,
+        pag.convertido ? `_(the price was ${moeda.simbolo}${fmt(preco)}; paid in ${pag.moeda.nome})_` : "",
+        "",
+        `_Take them along with \`${P}game follower levar ${cat.nome}\`._`,
+      ] : [
         `${cls.emoji ?? ""} **${cat.nome}** _(${cls.rotulo}, nv 1)_ entrou para o seu grupo.`,
         `Pagou ${pag.moeda.simbolo}${fmt(pag.custo)} · resta ${pag.moeda.simbolo}${fmt(db.getSaldo(serverId, eu, pag.moeda.id))}`,
         pag.convertido ? `_(preço era ${moeda.simbolo}${fmt(preco)}; pagou em ${pag.moeda.nome})_` : "",
         "",
         `_Leve com \`${P}game follower levar ${cat.nome}\`._`,
-      ].join("\n"), colour: COR.sucesso });
+      ]).join("\n"), colour: COR.sucesso });
   }
 
   // ── descanso pago ──
@@ -1827,8 +1977,8 @@ export async function cmdGame(message, args, ctx) {
     const meus = db.listarFollowersDe(serverId, eu);
     const cansados = meus.filter((f) => energiaAtual(f) < 5);
     if (!cansados.length) {
-      return sendEmbed(message.channel, { title: "😌 Todos descansados",
-        description: "Ninguém precisa de descanso agora.", colour: COR.info });
+      return sendEmbed(message.channel, { title: en ? "😌 Everyone rested" : "😌 Todos descansados",
+        description: en ? "Nobody needs rest right now." : "Ninguém precisa de descanso agora.", colour: COR.info });
     }
     const moeda = garantirMoeda(serverId);
     const { pSuave } = pDaMoeda(serverId, moeda);
@@ -1837,24 +1987,30 @@ export async function cmdGame(message, args, ctx) {
     const saldo = db.getSaldo(serverId, eu, moeda.id);
 
     if (args[1]?.toLowerCase() !== "confirmar") {
-      return sendEmbed(message.channel, { title: "🛏️ Descanso pago",
-        description: [
+      return sendEmbed(message.channel, { title: en ? "🛏️ Rest paid" : "🛏️ Descanso pago",
+        description: (en ? [
+          `Restore **${faltando}** energy point(s) for **${cansados.length}** companion(s).`,
+          `Cost: ${moeda.simbolo}${fmt(custo)} · your balance: ${moeda.simbolo}${fmt(saldo)}`,
+          "",
+          `Confirm with \`${P}game descansar confirmar\`.`,
+          "_Energy also comes back on its own: 1 per hour._",
+        ] : [
           `Restaurar **${faltando}** ponto(s) de energia de **${cansados.length}** companheiro(s).`,
           `Custo: ${moeda.simbolo}${fmt(custo)} · seu saldo: ${moeda.simbolo}${fmt(saldo)}`,
           "",
           `Confirme com \`${P}game descansar confirmar\`.`,
           "_A energia também volta sozinha: 1 por hora._",
-        ].join("\n"), colour: COR.aviso });
+        ]).join("\n"), colour: COR.aviso });
     }
     const pag = moedaParaPagar(serverId, eu, custo);
     if (pag.semSaldo) {
-      return sendEmbed(message.channel, { title: "💸 Saldo insuficiente",
-        description: `Precisa de ${moeda.simbolo}${fmt(custo)} (ou equivalente em outra moeda).`, colour: COR.erro });
+      return sendEmbed(message.channel, { title: en ? "💸 Not enough balance" : "💸 Saldo insuficiente",
+        description: en ? `You need ${moeda.simbolo}${fmt(custo)} (or the equivalent in another currency).` : `Precisa de ${moeda.simbolo}${fmt(custo)} (ou equivalente em outra moeda).`, colour: COR.erro });
     }
     jogadorPaga(serverId, eu, pag.moeda, pag.custo);
     for (const f of cansados) db.salvarFollower(f.id, { energia: 5, energiaEm: Date.now() });
-    return sendEmbed(message.channel, { title: "🛏️ Descansaram",
-      description: `**${cansados.length}** companheiro(s) com energia cheia. Pagou ${pag.moeda.simbolo}${fmt(pag.custo)}.`,
+    return sendEmbed(message.channel, { title: en ? "🛏️ They rested" : "🛏️ Descansaram",
+      description: en ? `**${cansados.length}** companion(s) at full energy. You paid ${pag.moeda.simbolo}${fmt(pag.custo)}.` : `**${cansados.length}** companheiro(s) com energia cheia. Pagou ${pag.moeda.simbolo}${fmt(pag.custo)}.`,
       colour: COR.sucesso });
   }
 
@@ -1862,10 +2018,11 @@ export async function cmdGame(message, args, ctx) {
   if (["follower", "followers", "companheiro", "companheiros", "party", "equipe"].includes(sub)) {
     const p = db.getPersonagem(serverId, eu);
     if (!p) {
-      return sendEmbed(message.channel, tr(ctx, { title: "🎭 Você não tem personagem",
-        description: `Crie com \`${P}game criar\`.`, colour: COR.aviso },
-      { title: "🎭 You don't have a character",
-        description: `Create one with \`${P}game criar\`.`, colour: COR.aviso }));
+      return sendEmbed(message.channel, tr(ctx,
+        { title: "🎭 Você não tem personagem",
+          description: `Crie com \`${P}game criar\`.`, colour: COR.aviso },
+        { title: "🎭 You don't have a character",
+          description: `Create one with \`${P}game criar\`.`, colour: COR.aviso }));
     }
     const acao = args[1]?.toLowerCase();
     const resto = args.slice(2).join(" ").trim();
@@ -1878,27 +2035,31 @@ export async function cmdGame(message, args, ctx) {
         return c && c.nome.toLowerCase().includes(resto.toLowerCase());
       });
       if (!resto || !alvo) {
-        return sendEmbed(message.channel, { title: "❌ Levar quem?",
-          description: `\`${P}game follower levar <nome>\`\n\nVeja os seus com \`${P}game followers\`.`, colour: COR.erro });
+        return sendEmbed(message.channel, { title: en ? "❌ Take who?" : "❌ Levar quem?",
+          description: en
+            ? `\`${P}game follower levar <name>\`\n\nSee yours with \`${P}game followers\`.`
+            : `\`${P}game follower levar <nome>\`\n\nVeja os seus com \`${P}game followers\`.`, colour: COR.erro });
       }
       if (alvo.naParty) {
-        return sendEmbed(message.channel, { title: "🎒 Já está na party",
+        return sendEmbed(message.channel, { title: en ? "🎒 Already in the party" : "🎒 Já está na party",
           description: descreverFollower(alvo), colour: COR.aviso });
       }
       const naParty = db.getParty(serverId, eu);
       if (naParty.length >= 2) {
-        return sendEmbed(message.channel, { title: "🎒 Party cheia",
-          description: `Você pode levar até **2** followers.\n\nTire alguém com \`${P}game follower tirar <nome>\`.`,
+        return sendEmbed(message.channel, { title: en ? "🎒 Party full" : "🎒 Party cheia",
+          description: en
+            ? `You can take up to **2** followers.\n\nRemove someone with \`${P}game follower tirar <name>\`.`
+            : `Você pode levar até **2** followers.\n\nTire alguém com \`${P}game follower tirar <nome>\`.`,
           colour: COR.aviso });
       }
       if (energiaAtual(alvo) < 1) {
-        return sendEmbed(message.channel, { title: "😴 Sem energia",
-          description: `${descreverFollower(alvo)}\n\nPrecisa descansar — a energia volta com o tempo (1 por hora).`,
+        return sendEmbed(message.channel, { title: en ? "😴 Out of energy" : "😴 Sem energia",
+          description: en ? `${descreverFollower(alvo)}\n\nThey need rest — energy returns over time (1 per hour).` : `${descreverFollower(alvo)}\n\nPrecisa descansar — a energia volta com o tempo (1 por hora).`,
           colour: COR.aviso });
       }
       db.salvarFollower(alvo.id, { naParty: 1 });
-      return sendEmbed(message.channel, { title: "🎒 Entrou na party",
-        description: `${descreverFollower(db.getFollower(alvo.id))}\n\n_Ele gasta 1 de energia por missão de dungeon._`,
+      return sendEmbed(message.channel, { title: en ? "🎒 Joined the party" : "🎒 Entrou na party",
+        description: en ? `${descreverFollower(db.getFollower(alvo.id))}\n\n_They spend 1 energy per dungeon mission._` : `${descreverFollower(db.getFollower(alvo.id))}\n\n_Ele gasta 1 de energia por missão de dungeon._`,
         colour: COR.sucesso });
     }
 
@@ -1909,12 +2070,14 @@ export async function cmdGame(message, args, ctx) {
         return c && c.nome.toLowerCase().includes((resto || "").toLowerCase());
       }) ?? (naParty.length === 1 && !resto ? naParty[0] : null);
       if (!alvo) {
-        return sendEmbed(message.channel, { title: "❌ Tirar quem?",
-          description: naParty.length ? `\`${P}game follower tirar <nome>\`` : "Sua party está vazia.",
+        return sendEmbed(message.channel, { title: en ? "❌ Remove who?" : "❌ Tirar quem?",
+          description: naParty.length
+            ? (en ? `\`${P}game follower tirar <name>\`` : `\`${P}game follower tirar <nome>\``)
+            : (en ? "Your party is empty." : "Sua party está vazia."),
           colour: COR.erro });
       }
       db.salvarFollower(alvo.id, { naParty: 0 });
-      return sendEmbed(message.channel, { title: "👋 Saiu da party",
+      return sendEmbed(message.channel, { title: en ? "👋 Left the party" : "👋 Saiu da party",
         description: descreverFollower(db.getFollower(alvo.id)), colour: COR.mod });
     }
 
@@ -1926,28 +2089,29 @@ export async function cmdGame(message, args, ctx) {
         return c && c.nome.toLowerCase().includes((resto || "").toLowerCase());
       });
       if (!resto || !alvo) {
-        return sendEmbed(message.channel, { title: "❌ Dispensar quem?",
-          description: `\`${P}game follower dispensar <nome>\``, colour: COR.erro });
+        return sendEmbed(message.channel, { title: en ? "❌ Dismiss who?" : "❌ Dispensar quem?",
+          description: en ? `\`${P}game follower dispensar <name>\`` : `\`${P}game follower dispensar <nome>\``, colour: COR.erro });
       }
       const nome = db.getFollowerCatalogo(alvo.catalogoId)?.nome ?? "?";
       db.dispensarFollower(alvo.id);
-      return sendEmbed(message.channel, { title: "👋 Dispensado",
-        description: `**${nome}** seguiu seu caminho.`, colour: COR.mod });
+      return sendEmbed(message.channel, { title: en ? "👋 Dismissed" : "👋 Dispensado",
+        description: en ? `**${nome}** went their own way.` : `**${nome}** seguiu seu caminho.`, colour: COR.mod });
     }
 
     // ── fotos ──
     if (["fotos", "foto", "album", "álbum"].includes(acao)) {
       const cat = db.acharFollowerCatalogo(resto);
       if (!cat) {
-        return sendEmbed(message.channel, { title: "❌ Quem?",
-          description: `\`${P}game follower fotos <nome>\``, colour: COR.erro });
+        return sendEmbed(message.channel, { title: en ? "❌ Who?" : "❌ Quem?",
+          description: en ? `\`${P}game follower fotos <name>\`` : `\`${P}game follower fotos <nome>\``, colour: COR.erro });
       }
       if (!cat.fotos.length) {
         return sendEmbed(message.channel, { title: `📷 ${cat.nome}`,
-          description: "_Ainda não tem fotos._", colour: COR.info });
+          description: en ? "_No photos yet._" : "_Ainda não tem fotos._", colour: COR.info });
       }
       return sendEmbed(message.channel, { title: `📷 ${cat.nome} (1/${cat.fotos.length})`,
-        description: cat.fotos.length > 1 ? `_${cat.fotos.length} fotos no álbum._` : "",
+        description: cat.fotos.length > 1
+          ? (en ? `_${cat.fotos.length} photos in the album._` : `_${cat.fotos.length} fotos no álbum._`) : "",
         image: cat.fotos[0], colour: COR.info });
     }
 
@@ -1955,30 +2119,39 @@ export async function cmdGame(message, args, ctx) {
     const meus = db.listarFollowersDe(serverId, eu);
     const naParty = meus.filter((f) => f.naParty);
     if (!meus.length) {
-      return sendEmbed(message.channel, { title: "👥 Nenhum companheiro",
-        description: [
+      return sendEmbed(message.channel, { title: en ? "👥 No companions" : "👥 Nenhum companheiro",
+        description: (en ? [
+          "You don't have followers yet.",
+          "",
+          "They show up as **dungeon loot** — and can also be hired",
+          "as mercenaries.",
+          "",
+          `_See who exists with \`${P}game recrutas\`._`,
+        ] : [
           "Você ainda não tem followers.",
           "",
           "Eles aparecem como **loot de dungeon** — e, quando a economia chegar,",
           "também poderão ser contratados como mercenários.",
           "",
           `_Veja quem existe com \`${P}game recrutas\`._`,
-        ].join("\n"), colour: COR.info });
+        ]).join("\n"), colour: COR.info });
     }
     const linhas = [];
     if (naParty.length) {
-      linhas.push(`🎒 **Na party (${naParty.length}/2)**`);
+      linhas.push(en ? `🎒 **In the party (${naParty.length}/2)**` : `🎒 **Na party (${naParty.length}/2)**`);
       for (const f of naParty) linhas.push(`   ${descreverFollower(f)}`);
       linhas.push("");
     }
     const fora = meus.filter((f) => !f.naParty);
     if (fora.length) {
-      linhas.push("**Disponíveis**");
+      linhas.push(en ? "**Available**" : "**Disponíveis**");
       for (const f of fora) linhas.push(`   ${descreverFollower(f)}`);
     }
-    linhas.push("", `_\`${P}game follower levar <nome>\` para colocar na party · ⚡ = energia_`);
+    linhas.push("", en
+      ? `_\`${P}game follower levar <name>\` to add to the party · ⚡ = energy_`
+      : `_\`${P}game follower levar <nome>\` para colocar na party · ⚡ = energia_`);
     return enviarLista(sendEmbed, message.channel, {
-      titulo: "👥 Seus companheiros", linhas, colour: COR.info });
+      titulo: en ? "👥 Your companions" : "👥 Seus companheiros", linhas, colour: COR.info });
   }
 
   // ── recrutas (catálogo de followers) ──
@@ -1993,24 +2166,27 @@ export async function cmdGame(message, args, ctx) {
       linhas.push(`${cls.emoji} **${cls.rotulo}** — ${cls.desc} · magia: _${cls.magia.nome}_`);
       for (const f of grupo) {
         const r = RARIDADE_INFO[f.raridade] ?? {};
-        const onde = f.soDungeon ? "🗝️ só em dungeon" : `💰 ${f.preco}`;
+        const onde = f.soDungeon ? (en ? "🗝️ dungeon only" : "🗝️ só em dungeon") : `💰 ${f.preco}`;
         linhas.push(`   ${r.emoji ?? ""} ${f.nome} — ${onde}`);
       }
       linhas.push("");
     }
-    linhas.push("_🗝️ = aparece como loot · 💰 = contratável quando a economia chegar_");
+    linhas.push(en
+      ? "_🗝️ = shows up as loot · 💰 = hireable_"
+      : "_🗝️ = aparece como loot · 💰 = contratável quando a economia chegar_");
     return enviarLista(sendEmbed, message.channel, {
-      titulo: "📜 Companheiros que existem", linhas, colour: COR.info });
+      titulo: en ? "📜 Companions that exist" : "📜 Companheiros que existem", linhas, colour: COR.info });
   }
 
   // ── missões ──
   if (["missao", "missão", "missoes", "missões", "quest"].includes(sub)) {
     const p = db.getPersonagem(serverId, eu);
     if (!p) {
-      return sendEmbed(message.channel, tr(ctx, { title: "🎭 Você não tem personagem",
-        description: `Crie com \`${P}game criar\`.`, colour: COR.aviso },
-      { title: "🎭 You don't have a character",
-        description: `Create one with \`${P}game criar\`.`, colour: COR.aviso }));
+      return sendEmbed(message.channel, tr(ctx,
+        { title: "🎭 Você não tem personagem",
+          description: `Crie com \`${P}game criar\`.`, colour: COR.aviso },
+        { title: "🎭 You don't have a character",
+          description: `Create one with \`${P}game criar\`.`, colour: COR.aviso }));
     }
 
     const acao = args.slice(1).join(" ").trim();
@@ -2024,7 +2200,7 @@ export async function cmdGame(message, args, ctx) {
 
       if (p.recuperandoAte > agora) {
         const min = Math.ceil((p.recuperandoAte - agora) / 60000);
-        linhas.push(`🩹 **Você está se recuperando.** Volta em ~${min} min.`, "");
+        linhas.push(en ? `🩹 **You're recovering.** Back in ~${min} min.` : `🩹 **Você está se recuperando.** Volta em ~${min} min.`, "");
       }
 
       const porTipo = { mercado: [], facil: [], medio: [], dificil: [] };
@@ -2032,7 +2208,7 @@ export async function cmdGame(message, args, ctx) {
         (porTipo[m.tipo === "mercado" ? "mercado" : m.dificuldade] ??= []).push(m);
       }
 
-      linhas.push("🏪 **Mercado** — sem risco, paga pouco");
+      linhas.push(en ? "🏪 **Market** — no risk, pays little" : "🏪 **Mercado** — sem risco, paga pouco");
       for (const m of porTipo.mercado.slice(0, 4)) linhas.push(`   • **${m.nome}**`);
 
       for (const d of ["facil", "medio", "dificil"]) {
@@ -2044,35 +2220,45 @@ export async function cmdGame(message, args, ctx) {
           // dá só 40% de missão cumprida. Mostrar as duas soltas engana — quem lê
           // acha que vence 53% das vezes.
           const completa = v.exito * v.sobrevivencia;
-          linhas.push(`   • **${m.nome}** — 🏆 **${(completa * 100).toFixed(0)}%** _(êxito ${(v.exito * 100).toFixed(0)}% × sobrevive ${(v.sobrevivencia * 100).toFixed(0)}%)_`);
+          linhas.push(en
+            ? `   • **${m.nome}** — 🏆 **${(completa * 100).toFixed(0)}%** _(success ${(v.exito * 100).toFixed(0)}% × survival ${(v.sobrevivencia * 100).toFixed(0)}%)_`
+            : `   • **${m.nome}** — 🏆 **${(completa * 100).toFixed(0)}%** _(êxito ${(v.exito * 100).toFixed(0)}% × sobrevive ${(v.sobrevivencia * 100).toFixed(0)}%)_`);
         }
       }
-      linhas.push("", "_🏆 = chance de cumprir E voltar vivo. As duas chances se multiplicam._");
-      linhas.push("", tamanhoParty
-        ? `_Chances já contam equipamento e sua party de ${tamanhoParty}._`
-        : `_Chances contam seu equipamento. Levar companheiros muda tudo: \`${P}game followers\`._`);
+      linhas.push("", en
+        ? "_🏆 = chance to complete AND come back alive. The two chances multiply._"
+        : "_🏆 = chance de cumprir E voltar vivo. As duas chances se multiplicam._");
+      linhas.push("", en
+        ? (tamanhoParty
+          ? `_Chances already account for gear and your party of ${tamanhoParty}._`
+          : `_Chances account for your gear. Bringing companions changes everything: \`${P}game followers\`._`)
+        : (tamanhoParty
+          ? `_Chances já contam equipamento e sua party de ${tamanhoParty}._`
+          : `_Chances contam seu equipamento. Levar companheiros muda tudo: \`${P}game followers\`._`));
       return enviarLista(sendEmbed, message.channel, {
-        titulo: "🗺️ Missões disponíveis", linhas, colour: COR.info });
+        titulo: en ? "🗺️ Available missions" : "🗺️ Missões disponíveis", linhas, colour: COR.info });
     }
 
     const missao = MISS.acharMissao(acao);
     if (!missao) {
-      return sendEmbed(message.channel, { title: "❌ Missão desconhecida",
-        description: `Não achei **${acao}**. Veja a lista com \`${P}game missao\`.`, colour: COR.erro });
+      return sendEmbed(message.channel, { title: en ? "❌ Unknown mission" : "❌ Missão desconhecida",
+        description: en
+          ? `I couldn't find **${acao}**. See the list with \`${P}game missao\`.`
+          : `Não achei **${acao}**. Veja a lista com \`${P}game missao\`.`, colour: COR.erro });
     }
 
     // cooldown e recuperação
     const agora = Date.now();
     if (p.recuperandoAte > agora) {
       const min = Math.ceil((p.recuperandoAte - agora) / 60000);
-      return sendEmbed(message.channel, { title: "🩹 Ainda se recuperando",
-        description: `Você caiu na última missão. Volte em **~${min} min**.`, colour: COR.aviso });
+      return sendEmbed(message.channel, { title: en ? "🩹 Still recovering" : "🩹 Ainda se recuperando",
+        description: en ? `You fell on your last mission. Come back in **~${min} min**.` : `Você caiu na última missão. Volte em **~${min} min**.`, colour: COR.aviso });
     }
     const prontoEm = (p.ultimaMissao ?? 0) + MISS.cooldownMs(missao);
     if (prontoEm > agora) {
       const min = Math.ceil((prontoEm - agora) / 60000);
-      return sendEmbed(message.channel, { title: "⏳ Descansando",
-        description: `Você acabou de voltar de uma missão. Pode partir de novo em **~${min} min**.`, colour: COR.aviso });
+      return sendEmbed(message.channel, { title: en ? "⏳ Resting" : "⏳ Descansando",
+        description: en ? `You just got back from a mission. You can set out again in **~${min} min**.` : `Você acabou de voltar de uma missão. Pode partir de novo em **~${min} min**.`, colour: COR.aviso });
     }
 
     // ── resolve ──
@@ -2083,9 +2269,11 @@ export async function cmdGame(message, args, ctx) {
     if (missao.tipo !== "mercado") {
       const cansados = party.filter((f) => energiaAtual(f) < 1);
       if (cansados.length) {
-        return sendEmbed(message.channel, { title: "😴 Companheiro sem energia",
+        return sendEmbed(message.channel, { title: en ? "😴 Companion out of energy" : "😴 Companheiro sem energia",
           description: cansados.map((f) => descreverFollower(f)).join("\n")
-            + `\n\nTire da party ou espere a energia voltar (1 por hora).`,
+            + (en
+              ? `\n\nRemove them from the party or wait for energy to return (1 per hour).`
+              : `\n\nTire da party ou espere a energia voltar (1 por hora).`),
           colour: COR.aviso });
       }
     }
@@ -2183,41 +2371,57 @@ export async function cmdGame(message, args, ctx) {
     }
 
     // ── relato ──
-    const titulo = { sucesso: "🏆 Missão cumprida", falha: "😐 Não deu certo", caiu: "💀 Você caiu" }[r.desfecho];
+    const titulo = (en
+      ? { sucesso: "🏆 Mission complete", falha: "😐 Didn't work out", caiu: "💀 You fell" }
+      : { sucesso: "🏆 Missão cumprida", falha: "😐 Não deu certo", caiu: "💀 Você caiu" })[r.desfecho];
     const cor = { sucesso: COR.sucesso, falha: COR.aviso, caiu: COR.erro }[r.desfecho];
     const linhas = [`**${missao.nome}**`, `_${missao.descricao}_`, ""];
 
-    if (r.desfecho === "sucesso") linhas.push("Você venceu e voltou inteiro.");
-    else if (r.desfecho === "falha") linhas.push("Não conseguiu completar, mas voltou vivo — e mais experiente.");
-    else linhas.push("Você não aguentou. Voltou de mãos vazias, mas **inteiro**: nada de nível ou equipamento se perde.");
+    if (r.desfecho === "sucesso") linhas.push(en ? "You won and came back in one piece." : "Você venceu e voltou inteiro.");
+    else if (r.desfecho === "falha") linhas.push(en ? "You couldn't finish it, but came back alive — and more experienced." : "Não conseguiu completar, mas voltou vivo — e mais experiente.");
+    else linhas.push(en ? "You didn't hold out. You came back empty-handed, but **whole**: no level or gear is lost." : "Você não aguentou. Voltou de mãos vazias, mas **inteiro**: nada de nível ou equipamento se perde.");
 
     linhas.push("", `✨ **+${xpFinal} XP**`);
     if (moedaGanha > 0) linhas.push(`${moedaSorteada.simbolo} **+${fmt(moedaGanha)} ${moedaSorteada.nome}**`);
     if (moedaPerdida > 0) {
-      linhas.push(`${moeda.simbolo} **−${fmt(moedaPerdida)}** _(${(ECO.perda(pSuave) * 100).toFixed(0)}% do que carregava, foi para a dungeon)_`);
+      linhas.push(en
+        ? `${moeda.simbolo} **−${fmt(moedaPerdida)}** _(${(ECO.perda(pSuave) * 100).toFixed(0)}% of what you carried, it went to the dungeon)_`
+        : `${moeda.simbolo} **−${fmt(moedaPerdida)}** _(${(ECO.perda(pSuave) * 100).toFixed(0)}% do que carregava, foi para a dungeon)_`);
     }
     if (depois.subiu) {
-      linhas.push(`🎉 **Subiu para o nível ${depois.nivel}!** (+${(depois.pontos - (p.pontos ?? 0)).toFixed(2)} ponto(s))`);
-      if (depois.ganhoBase > 0) linhas.push(`   _+${depois.ganhoBase} em **todos** os atributos (crescimento natural)_`);
+      linhas.push(en
+        ? `🎉 **Reached level ${depois.nivel}!** (+${(depois.pontos - (p.pontos ?? 0)).toFixed(2)} point(s))`
+        : `🎉 **Subiu para o nível ${depois.nivel}!** (+${(depois.pontos - (p.pontos ?? 0)).toFixed(2)} ponto(s))`);
+      if (depois.ganhoBase > 0) linhas.push(en
+        ? `   _+${depois.ganhoBase} to **all** attributes (natural growth)_`
+        : `   _+${depois.ganhoBase} em **todos** os atributos (crescimento natural)_`);
     }
     if (ganhou) {
       const ri = RARIDADE_INFO[ganhou.raridade] ?? {};
       linhas.push("", `🎁 **Loot:** ${ri.emoji ?? ""} **${ganhou.nome}** — ${descreverBonus(ganhou.bonus)}`);
     } else if (r.desfecho === "sucesso" && missao.tipo !== "mercado") {
-      linhas.push("", "_Nenhum item desta vez._");
+      linhas.push("", en ? "_No item this time._" : "_Nenhum item desta vez._");
     }
     if (ganhouFollower) {
       const cls = FOL.CLASSES[ganhouFollower.cat.classe] ?? {};
-      linhas.push(`👥 **${ganhouFollower.cat.nome}** (${cls.rotulo}, nv ${ganhouFollower.nivel}) se juntou a você!`);
+      linhas.push(en
+        ? `👥 **${ganhouFollower.cat.nome}** (${cls.rotulo}, lv ${ganhouFollower.nivel}) joined you!`
+        : `👥 **${ganhouFollower.cat.nome}** (${cls.rotulo}, nv ${ganhouFollower.nivel}) se juntou a você!`);
     }
     if (tamanhoParty) {
-      linhas.push("", `_Party de ${tamanhoParty}: a missão foi mais difícil, e parte do loot ficou com eles._`);
+      linhas.push("", en
+        ? `_Party of ${tamanhoParty}: the mission was harder, and part of the loot stayed with them._`
+        : `_Party de ${tamanhoParty}: a missão foi mais difícil, e parte do loot ficou com eles._`);
     }
     if (capturados.length) {
-      linhas.push("", `⛓️ **Capturado(s) na dungeon:** ${capturados.join(", ")}`,
-        `_Resgate com \`${P}game dungeon\` — você tem prioridade nas primeiras horas._`);
+      linhas.push("", en
+        ? `⛓️ **Captured in the dungeon:** ${capturados.join(", ")}`
+        : `⛓️ **Capturado(s) na dungeon:** ${capturados.join(", ")}`,
+        en
+          ? `_Rescue with \`${P}game dungeon\` — you have priority in the first hours._`
+          : `_Resgate com \`${P}game dungeon\` — você tem prioridade nas primeiras horas._`);
     }
-    if (r.desfecho === "caiu") linhas.push("", "_Você precisa de ~30 min para se recuperar._");
+    if (r.desfecho === "caiu") linhas.push("", en ? "_You need ~30 min to recover._" : "_Você precisa de ~30 min para se recuperar._");
 
     return sendEmbed(message.channel, { title: titulo, description: linhas.join("\n"), colour: cor });
   }
@@ -2226,18 +2430,19 @@ export async function cmdGame(message, args, ctx) {
   if (["dungeon", "resgate", "resgatar"].includes(sub)) {
     const p = db.getPersonagem(serverId, eu);
     if (!p) {
-      return sendEmbed(message.channel, tr(ctx, { title: "🎭 Você não tem personagem",
-        description: `Crie com \`${P}game criar\`.`, colour: COR.aviso },
-      { title: "🎭 You don't have a character",
-        description: `Create one with \`${P}game criar\`.`, colour: COR.aviso }));
+      return sendEmbed(message.channel, tr(ctx,
+        { title: "🎭 Você não tem personagem",
+          description: `Crie com \`${P}game criar\`.`, colour: COR.aviso },
+        { title: "🎭 You don't have a character",
+          description: `Create one with \`${P}game criar\`.`, colour: COR.aviso }));
     }
     const presos = db.listarCapturados(serverId);
     const alvoNome = args.slice(1).join(" ").trim();
 
     if (!alvoNome) {
       if (!presos.length) {
-        return sendEmbed(message.channel, { title: "🕳️ A dungeon está quieta",
-          description: "Nenhum companheiro capturado por aqui.", colour: COR.info });
+        return sendEmbed(message.channel, { title: en ? "🕳️ The dungeon is quiet" : "🕳️ A dungeon está quieta",
+          description: en ? "No companions captured around here." : "Nenhum companheiro capturado por aqui.", colour: COR.info });
       }
       const linhas = presos.map((f) => {
         const cat = db.getFollowerCatalogo(f.catalogoId);
@@ -2246,13 +2451,18 @@ export async function cmdGame(message, args, ctx) {
         const meu = f.donoOriginal === eu;
         const horas = (Date.now() - (f.capturadoEm ?? 0)) / 3600000;
         const janela = horas < JANELA_DONO_H;
-        const marca = meu ? " 👤 _seu_" : janela ? " ⏳ _janela do dono_" : "";
-        return `${r.emoji ?? ""}${cls.emoji ?? ""} **${cat?.nome ?? "?"}** (nv ${f.nivel})${marca}`;
+        const marca = meu
+          ? (en ? " 👤 _yours_" : " 👤 _seu_")
+          : janela ? (en ? " ⏳ _owner's window_" : " ⏳ _janela do dono_") : "";
+        return `${r.emoji ?? ""}${cls.emoji ?? ""} **${cat?.nome ?? "?"}** (${en ? "lv" : "nv"} ${f.nivel})${marca}`;
       });
-      linhas.push("", `_\`${P}game dungeon <nome>\` para tentar o resgate._`,
-        `_O dono original tem chance maior, e prioridade nas primeiras ${JANELA_DONO_H}h._`);
+      linhas.push("", en ? `_\`${P}game dungeon <name>\` to attempt the rescue._` : `_\`${P}game dungeon <nome>\` para tentar o resgate._`,
+        en
+          ? `_The original owner has a better chance, and priority in the first ${JANELA_DONO_H}h._`
+          : `_O dono original tem chance maior, e prioridade nas primeiras ${JANELA_DONO_H}h._`);
       return enviarLista(sendEmbed, message.channel, {
-        titulo: `⛓️ Capturados na dungeon (${presos.length})`, linhas, colour: COR.aviso });
+        titulo: en ? `⛓️ Captured in the dungeon (${presos.length})` : `⛓️ Capturados na dungeon (${presos.length})`,
+        linhas, colour: COR.aviso });
     }
 
     const alvo = presos.find((f) => {
@@ -2260,8 +2470,8 @@ export async function cmdGame(message, args, ctx) {
       return c && c.nome.toLowerCase().includes(alvoNome.toLowerCase());
     });
     if (!alvo) {
-      return sendEmbed(message.channel, { title: "❌ Não está lá",
-        description: `Não achei **${alvoNome}** entre os capturados.`, colour: COR.erro });
+      return sendEmbed(message.channel, { title: en ? "❌ Not in there" : "❌ Não está lá",
+        description: en ? `I couldn't find **${alvoNome}** among the captured.` : `Não achei **${alvoNome}** entre os capturados.`, colour: COR.erro });
     }
     const cat = db.getFollowerCatalogo(alvo.catalogoId);
     const ehDono = alvo.donoOriginal === eu;
@@ -2270,8 +2480,8 @@ export async function cmdGame(message, args, ctx) {
     // Janela exclusiva: nas primeiras horas só o dono tenta.
     if (!ehDono && horas < JANELA_DONO_H) {
       const faltam = Math.ceil(JANELA_DONO_H - horas);
-      return sendEmbed(message.channel, { title: "⏳ Ainda não",
-        description: `**${cat?.nome}** foi capturado há pouco. Só o dono original pode tentar nas primeiras **${JANELA_DONO_H}h** — faltam ~${faltam}h.`,
+      return sendEmbed(message.channel, { title: en ? "⏳ Not yet" : "⏳ Ainda não",
+        description: en ? `**${cat?.nome}** was captured recently. Only the original owner can try in the first **${JANELA_DONO_H}h** — ~${faltam}h left.` : `**${cat?.nome}** foi capturado há pouco. Só o dono original pode tentar nas primeiras **${JANELA_DONO_H}h** — faltam ~${faltam}h.`,
         colour: COR.aviso });
     }
 
@@ -2279,19 +2489,27 @@ export async function cmdGame(message, args, ctx) {
     const chance = CHANCE_RESGATE * (ehDono ? BONUS_DONO : 1);
     if (Math.random() < chance) {
       db.resgatarFollower(alvo.id, eu);
-      return sendEmbed(message.channel, { title: "🔓 Resgatado!",
-        description: [
+      return sendEmbed(message.channel, { title: en ? "🔓 Rescued!" : "🔓 Resgatado!",
+        description: (en ? [
+          `**${cat?.nome}** walked out of the dungeon with you.`,
+          ehDono ? "_Back home._" : "_They weren't yours, but they are now._",
+          "",
+          `_They come back with little energy — \`${P}game followers\`._`,
+        ] : [
           `**${cat?.nome}** saiu da dungeon com você.`,
           ehDono ? "_De volta para casa._" : "_Não era seu, mas agora é._",
           "",
           `_Ele volta com pouca energia — \`${P}game followers\`._`,
-        ].join("\n"), colour: COR.sucesso });
+        ]).join("\n"), colour: COR.sucesso });
     }
-    return sendEmbed(message.channel, { title: "🕳️ Não deu",
-      description: [
+    return sendEmbed(message.channel, { title: en ? "🕳️ No luck" : "🕳️ Não deu",
+      description: (en ? [
+        `You couldn't get **${cat?.nome}** out of there this time.`,
+        `_The chance was ${(chance * 100).toFixed(0)}%${ehDono ? " (you're the owner)" : ""}. You can try again._`,
+      ] : [
         `Você não conseguiu tirar **${cat?.nome}** de lá desta vez.`,
         `_Chance era de ${(chance * 100).toFixed(0)}%${ehDono ? " (você é o dono)" : ""}. Pode tentar de novo._`,
-      ].join("\n"), colour: COR.aviso });
+      ]).join("\n"), colour: COR.aviso });
   }
 
   // ── ranking ──

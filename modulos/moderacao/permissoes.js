@@ -48,6 +48,15 @@ const PARA_QUE = {
   ManageMessages: "apagar mensagens (automod, &limpar, &modia)",
   ManageChannel: "editar o canal",
 };
+const PARA_QUE_EN = {
+  ViewChannel: "see the channel",
+  ReadMessageHistory: "read the messages",
+  SendMessage: "reply",
+  SendEmbeds: "send the reply cards",
+  React: "react (reaction roles, 👀)",
+  ManageMessages: "delete messages (automod, &limpar, &modia)",
+  ManageChannel: "edit the channel",
+};
 
 // Permissões que o bot precisa em QUALQUER canal onde deva atuar.
 const ESSENCIAIS = ["ViewChannel", "ReadMessageHistory", "SendMessage", "SendEmbeds"];
@@ -157,7 +166,9 @@ const nomeCanal = (c) => c?.name ?? c?.id ?? "?";
 const ehTexto = (c) => (c?.type ?? "").includes("Text") || c?.type === "TextChannel";
 
 // ── 1 e 2: o que o bot enxerga e o que consegue fazer em cada canal ──
-export function diagnosticarCanais(server, client, botMember = null) {
+export function diagnosticarCanais(server, client, botMember = null, lang = "pt") {
+  const en = lang === "en";
+  const ROTULO = en ? PARA_QUE_EN : PARA_QUE;
   const canais = (server?.channels ?? []).filter(Boolean);
   const grupos = { ok: [], parcial: [], mudo: [], cego: [], desconhecido: [] };
   const problemas = [];
@@ -180,10 +191,10 @@ export function diagnosticarCanais(server, client, botMember = null) {
     const falta = ESSENCIAIS.filter((p) => !temBit(valor, BITS[p]));
     const faltaExtra = DESEJAVEIS.filter((p) => !temBit(valor, BITS[p]));
     if (falta.length) {
-      grupos.mudo.push(`${nomeCanal(canal)} _(sem ${falta.join(", ")})_`);
-      problemas.push(`**${nomeCanal(canal)}**: sem ${falta.map((f) => PARA_QUE[f] ?? f).join(", ")}`);
+      grupos.mudo.push(`${nomeCanal(canal)} _(${en ? "no" : "sem"} ${falta.join(", ")})_`);
+      problemas.push(`**${nomeCanal(canal)}**: ${en ? "can't" : "sem"} ${falta.map((f) => ROTULO[f] ?? f).join(", ")}`);
     } else if (faltaExtra.length) {
-      grupos.parcial.push(`${nomeCanal(canal)} _(sem ${faltaExtra.join(", ")})_`);
+      grupos.parcial.push(`${nomeCanal(canal)} _(${en ? "no" : "sem"} ${faltaExtra.join(", ")})_`);
     } else {
       grupos.ok.push(nomeCanal(canal));
     }
@@ -201,31 +212,41 @@ export function diagnosticarCanais(server, client, botMember = null) {
 
 // Monta o texto do relatório agrupado — canais OK viram uma linha só, e o
 // detalhe fica para o que tem problema. Assim cabe no embed mesmo com 30+ canais.
-export function formatarRelatorio(r, PREFIXO = "&") {
+export function formatarRelatorio(r, PREFIXO = "&", lang = "pt") {
+  const en = lang === "en";
   const linhas = [];
   const lista = (arr, max = 12) =>
     arr.slice(0, max).join(", ") + (arr.length > max ? ` _… +${arr.length - max}_` : "");
 
   linhas.push(
-    `**${r.vistos}** visível(is)`
-    + (r.cegos ? ` · **${r.cegos}** invisível(is)` : "")
-    + (r.mudos ? ` · **${r.mudos}** com falta` : "")
-    + (r.desconhecidos ? ` · **${r.desconhecidos}** não avaliado(s)` : ""),
+    en
+      ? `**${r.vistos}** visible`
+        + (r.cegos ? ` · **${r.cegos}** invisible` : "")
+        + (r.mudos ? ` · **${r.mudos}** missing something` : "")
+        + (r.desconhecidos ? ` · **${r.desconhecidos}** not evaluated` : "")
+      : `**${r.vistos}** visível(is)`
+        + (r.cegos ? ` · **${r.cegos}** invisível(is)` : "")
+        + (r.mudos ? ` · **${r.mudos}** com falta` : "")
+        + (r.desconhecidos ? ` · **${r.desconhecidos}** não avaliado(s)` : ""),
     "",
   );
-  if (r.grupos.mudo.length)   linhas.push(`⚠️ **Falta o essencial:**\n${r.grupos.mudo.join("\n")}`, "");
-  if (r.grupos.cego.length)   linhas.push(`🚫 **Não enxergo:** ${lista(r.grupos.cego)}`, "");
-  if (r.grupos.parcial.length) linhas.push(`🟡 **Ok, mas incompleto:** ${lista(r.grupos.parcial)}`, "");
-  if (r.grupos.ok.length)     linhas.push(`✅ **Tudo certo (${r.grupos.ok.length}):** ${lista(r.grupos.ok, 20)}`, "");
+  if (r.grupos.mudo.length)   linhas.push(`⚠️ **${en ? "Missing the essentials" : "Falta o essencial"}:**\n${r.grupos.mudo.join("\n")}`, "");
+  if (r.grupos.cego.length)   linhas.push(`🚫 **${en ? "I can't see" : "Não enxergo"}:** ${lista(r.grupos.cego)}`, "");
+  if (r.grupos.parcial.length) linhas.push(`🟡 **${en ? "Ok, but incomplete" : "Ok, mas incompleto"}:** ${lista(r.grupos.parcial)}`, "");
+  if (r.grupos.ok.length)     linhas.push(`✅ **${en ? "All good" : "Tudo certo"} (${r.grupos.ok.length}):** ${lista(r.grupos.ok, 20)}`, "");
   if (r.grupos.desconhecido.length) {
-    linhas.push(`❔ **Não consegui avaliar (${r.grupos.desconhecido.length}):** ${lista(r.grupos.desconhecido)}`);
-    linhas.push(`_Rode \`${PREFIXO}debug canais cru\` para eu mostrar o que a API me devolve._`, "");
+    linhas.push(`❔ **${en ? "Couldn't evaluate" : "Não consegui avaliar"} (${r.grupos.desconhecido.length}):** ${lista(r.grupos.desconhecido)}`);
+    linhas.push(en
+      ? `_Run \`${PREFIXO}debug canais cru\` and I'll show what the API returns._`
+      : `_Rode \`${PREFIXO}debug canais cru\` para eu mostrar o que a API me devolve._`, "");
   }
   if (r.problemas.length) {
-    linhas.push("**Onde eu vou falhar:**");
+    linhas.push(en ? "**Where I'll fail:**" : "**Onde eu vou falhar:**");
     for (const p of r.problemas.slice(0, 6)) linhas.push(`• ${p}`);
   } else if (r.vistos) {
-    linhas.push("✅ Tenho o necessário em todos os canais que enxergo.");
+    linhas.push(en
+      ? "✅ I have what I need in every channel I can see."
+      : "✅ Tenho o necessário em todos os canais que enxergo.");
   }
   return linhas.join("\n");
 }

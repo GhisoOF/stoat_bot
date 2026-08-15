@@ -17,6 +17,7 @@
 // ══════════════════════════════════════════════════════════
 
 import { createServer } from "node:http";
+import { garantirDNS, estaInstalado, servidoresUsados } from "./dns-fallback.js";
 import * as ferramentas from "./ferramentas/index.js";
 
 const PORTA        = Number(process.env.PORTA || 8090);
@@ -137,6 +138,16 @@ const servidor = createServer(async (req, res) => {
 
     // Diagnóstico sob demanda — sem precisar reiniciar para ver o estado.
     // `curl localhost:8090/diagnostico` responde o mesmo que o boot.
+    if (req.method === "GET" && req.url === "/dns") {
+      // Rota curta para conferir só o DNS, sem rodar o diagnóstico inteiro.
+      const info = await garantirDNS();
+      return json(res, 200, {
+        fallbackAtivo: estaInstalado(),
+        servidores: servidoresUsados(),
+        estado: info.motivo,
+      });
+    }
+
     if (req.method === "GET" && req.url === "/diagnostico") {
       const problemas = await diagnosticoDeBoot();
       return json(res, 200, { ok: problemas.length === 0, problemas });
@@ -201,19 +212,40 @@ const servidor = createServer(async (req, res) => {
 async function diagnosticoDeBoot() {
   const problemas = [];
 
-  // 1. DNS — a falha mais comum, e a mais confusa quando acontece
-  try {
-    const { lookup } = await import("node:dns/promises");
-    await lookup("api.github.com");
-    log("✓ DNS resolvendo");
-  } catch (e) {
-    const codigo = e?.code ?? e?.message ?? "?";
+  // 1. DNS — a falha mais comum, e a mais confusa quando acontece.
+  //
+  // Antes de acusar, tentamos consertar: se o resolvedor do sistema não
+  // responde (resolv.conf sem `nameserver`, o caso clássico), o serviço passa
+  // a resolver por conta própria com servidores públicos. Assim a Judy volta
+  // a funcionar imediatamente, e o aviso vira "está funcionando POR CIMA de um
+  // problema" em vez de "está tudo parado".
+  const dnsInfo = await garantirDNS();
+  if (!dnsInfo.trocou) {
+    if (dnsInfo.motivo.includes("resolvendo")) {
+      log("✓ DNS resolvendo");
+    } else {
+      problemas.push(
+        `DNS NÃO resolve e o fallback está indisponível (${dnsInfo.motivo}).`,
+        "   → confira /etc/resolv.conf DENTRO do container:",
+        "     docker exec judy-ia cat /etc/resolv.conf",
+        "   → precisa ter uma linha 'nameserver'. Se só tiver comentários,",
+        "     recrie o container: docker compose up -d --force-recreate judy-ia",
+      );
+    }
+  } else if (dnsInfo.funciona) {
+    log(`⚠ DNS do sistema quebrado — usando ${dnsInfo.servidores.join(", ")} por dentro`);
     problemas.push(
-      `DNS NÃO resolve (${codigo}). O container não consegue traduzir nomes.`,
-      "   → confira /etc/resolv.conf DENTRO do container:",
-      "     docker exec judy-ia cat /etc/resolv.conf",
-      "   → se estiver sem 'nameserver', o bind-mount está preso num arquivo antigo.",
-      "     Recrie: docker compose up -d --force-recreate",
+      "O /etc/resolv.conf do container não tem 'nameserver' — o DNS do sistema não funciona.",
+      `   → contornado: resolvendo por ${dnsInfo.servidores.join(", ")} dentro do processo.`,
+      "   → a Judy funciona assim, mas nomes locais/Tailscale não resolvem.",
+      "   → conserto de verdade: docker compose up -d --force-recreate judy-ia",
+      "     (e confira o /etc/resolv.conf do HOST, que é de onde o container copia)",
+    );
+  } else {
+    problemas.push(
+      "DNS NÃO resolve, nem pelo sistema nem pelos servidores de fallback.",
+      "   → o container parece estar sem saída para a internet (firewall/rota).",
+      "     Teste: docker exec judy-ia node -e \"fetch('https://1.1.1.1').then(r=>console.log(r.status))\"",
     );
   }
 

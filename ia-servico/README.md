@@ -188,6 +188,38 @@ sempre é o /etc/resolv.conf preso num arquivo antigo — recrie o container:
 `docker compose up -d --force-recreate judy-ia`.
 ```
 
+### A rede de segurança
+
+Consertar o `resolv.conf` depende de mexer no host e recriar o container — e
+até lá a Judy fica muda. Por isso o serviço agora **se vira sozinho**.
+
+No boot ele testa se o resolvedor do sistema responde. Se não responde, troca o
+`dns.lookup` do processo por um que usa **c-ares** com servidores públicos
+(`DNS_FALLBACK`, padrão `1.1.1.1,8.8.8.8`). O c-ares aceita servidores
+explícitos e **não lê o `/etc/resolv.conf`**, então funciona mesmo com o arquivo
+vazio. Como o `fetch` do Node passa pelo `dns.lookup`, tudo volta a funcionar
+sem que nenhuma outra parte do código precise saber.
+
+A troca só acontece quando o sistema está realmente quebrado. Com DNS
+funcionando nada muda — inclusive nomes locais e do Tailscale, que os
+servidores públicos não conheceriam. `localhost` e IPs literais nunca passam
+pela rede.
+
+O log deixa claro que está funcionando *apesar* de um problema:
+
+```
+[IA] ⚠ DNS do sistema quebrado — usando 1.1.1.1, 8.8.8.8 por dentro
+```
+
+E há uma rota curta para conferir só isso:
+
+```bash
+curl localhost:8090/dns
+```
+
+Isso é contorno, não conserto: nomes internos continuam sem resolver. O reparo
+de verdade é o `resolv.conf` do host.
+
 ### Se acontecer de novo
 
 ```bash

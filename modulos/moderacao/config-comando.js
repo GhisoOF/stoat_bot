@@ -14,6 +14,7 @@ import { EVENTOS } from "../core/log.js";
 import { MODOS as MODOS_BG, MODOS_EN as MODOS_BG_EN } from "./ban-global.js";
 import { tr, lingua } from "../core/i18n.js";
 import * as MAG from "../game/magias.js";
+import * as PERFIS_MOEDA from "../game/moedas-perfis.js";
 
 const on  = (v) => (v ? "🟢" : "🔴");
 const sim = (v) => (v ? "sim" : "não");
@@ -120,6 +121,7 @@ export async function cmdConfig(message, args, ctx) {
     `**Currencies:** ${moedas.length} — ${moedas.map((m) => `${m.simbolo}${m.id}`).join(" · ")}`,
     `**Main:** ${padraoMoeda ? `${padraoMoeda.simbolo} ${padraoMoeda.nome}` : "_(none)_"}  ·  prices are shown in it`,
     `**Exchange:** ${moedas.length > 1 ? `🟢 on — bank and player counter (\`${PREFIXO}game cambio\`)` : "🔴 needs at least 2 currencies"}`,
+    `**Catalog:** ${PERFIS_MOEDA.PERFIS.length} ready-made profiles — add with \`${PREFIXO}game admin moeda perfil\``,
     nJogadores != null ? `**Characters:** ${nJogadores}` : null,
     `**Magic:** ${nMagias} spell(s) in the catalog · learned with \`${PREFIXO}game aprender\``,
     `**Companions:** ${nFollowers} in play${nCapturados ? ` · ${nCapturados} captured (rescued on missions)` : ""}`,
@@ -127,6 +129,7 @@ export async function cmdConfig(message, args, ctx) {
     `**Moedas:** ${moedas.length} — ${moedas.map((m) => `${m.simbolo}${m.id}`).join(" · ")}`,
     `**Principal:** ${padraoMoeda ? `${padraoMoeda.simbolo} ${padraoMoeda.nome}` : "_(nenhuma)_"}  ·  os preços aparecem nela`,
     `**Câmbio:** ${moedas.length > 1 ? `🟢 ativo — banco e balcão (\`${PREFIXO}game cambio\`)` : "🔴 precisa de ao menos 2 moedas"}`,
+    `**Catálogo:** ${PERFIS_MOEDA.PERFIS.length} perfis prontos — some com \`${PREFIXO}game admin moeda perfil\``,
     nJogadores != null ? `**Personagens:** ${nJogadores}` : null,
     `**Magia:** ${nMagias} magia(s) no catálogo · aprendidas com \`${PREFIXO}game aprender\``,
     `**Companheiros:** ${nFollowers} em jogo${nCapturados ? ` · ${nCapturados} capturado(s) (resgate nas missões)` : ""}`,

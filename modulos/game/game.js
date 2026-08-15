@@ -18,6 +18,7 @@ import { semear as semearItens } from "./itens-genericos.js";
 import * as MISS from "./missoes.js";
 import * as FOL from "./followers.js";
 import * as MAG from "./magias.js";
+import * as PERFIS from "./moedas-perfis.js";
 import { semear as semearFollowers } from "./followers.js";
 import * as ECO from "./economia.js";
 import { rodarTesteGeral } from "./teste-geral.js";
@@ -1141,6 +1142,84 @@ export async function cmdGame(message, args, ctx) {
         });
       }
 
+      // ── perfis avulsos ──
+      // Diferente do `modelo`, que cria um conjunto fechado: aqui a pessoa
+      // escolhe moeda por moeda e monta a economia que quiser.
+      if (["perfil", "perfis", "profile", "profiles", "add", "adicionar"].includes(op)) {
+        const pedidos = args2.filter(Boolean);
+
+        if (!pedidos.length) {
+          const linhas = [en
+            ? "Add currencies **one by one**, in any combination — they all share the same value scale, so mixing them is safe."
+            : "Adicione moedas **uma a uma**, na combinação que quiser — todas usam a mesma escala de valor, então misturar é seguro.",
+            ""];
+          for (const [g, info] of Object.entries(PERFIS.GRUPOS)) {
+            const doGrupo = PERFIS.PERFIS.filter((x) => x.grupo === g);
+            if (!doGrupo.length) continue;
+            linhas.push(`${info.emoji} **${en ? info.rotuloEN : info.rotulo}**`);
+            for (const x of doGrupo) {
+              const jaTem = db.getMoeda(serverId, x.id) ? " ✅" : "";
+              linhas.push(`   ${x.simbolo} **${x.nome}** \`${x.id}\`${jaTem}`
+                + ` — ${en ? "worth" : "vale"} ~${fmt(x.valor)}× ${en ? "the base coin" : "a moeda base"}`
+                + `${x.finita ? (en ? " · finite" : " · finita") : ""} · ${en ? "level" : "nível"} ${x.nivelMin}+`);
+            }
+            linhas.push("");
+          }
+          linhas.push(en
+            ? `\`${P}game admin moeda perfil <id>\` — adds one · several at once: \`perfil brl xau btc\``
+            : `\`${P}game admin moeda perfil <id>\` — adiciona uma · várias de uma vez: \`perfil brl xau btc\``);
+          linhas.push(en
+            ? "_✅ = already on this server. A whole set at once: `moeda modelo`._"
+            : "_✅ = já existe neste servidor. Um conjunto inteiro de uma vez: `moeda modelo`._");
+          return enviarLista(sendEmbed, message.channel, {
+            titulo: en ? "🪙 Currency profiles" : "🪙 Perfis de moeda", linhas, colour: COR.mod });
+        }
+
+        const criadas = [], existentes = [], desconhecidas = [];
+        for (const pedido of pedidos) {
+          const perfil = PERFIS.acharPerfil(pedido);
+          if (!perfil) { desconhecidas.push(pedido); continue; }
+          if (db.getMoeda(serverId, perfil.id)) { existentes.push(perfil.nome); continue; }
+          // A primeira moeda do servidor vira a padrão sozinha: sem uma
+          // principal, os preços não teriam em que ser cotados.
+          const primeira = db.listarMoedas(serverId).length === 0;
+          db.upsertMoeda(serverId, PERFIS.paraBanco(perfil, { padrao: primeira }));
+          criadas.push(perfil);
+        }
+
+        if (!criadas.length && desconhecidas.length && !existentes.length) {
+          return sendEmbed(message.channel, {
+            title: en ? "❌ Unknown profile" : "❌ Perfil desconhecido",
+            description: (en
+              ? `I don't know: ${desconhecidas.map((x) => `\`${x}\``).join(", ")}.\n\nSee the list with \`${P}game admin moeda perfil\`.`
+              : `Não conheço: ${desconhecidas.map((x) => `\`${x}\``).join(", ")}.\n\nVeja a lista com \`${P}game admin moeda perfil\`.`),
+            colour: COR.erro });
+        }
+
+        return sendEmbed(message.channel, {
+          title: en ? "🪙 Profiles added" : "🪙 Perfis adicionados",
+          description: [
+            criadas.length
+              ? (en ? `**Created (${criadas.length}):**\n` : `**Criadas (${criadas.length}):**\n`)
+                + criadas.map((m) => `${m.simbolo} **${m.nome}** — ${en ? "worth" : "vale"} ~${fmt(m.valor)}×`
+                  + ` · ${en ? "supply" : "suprimento"} ${fmt(m.suprimentoBase)}`
+                  + `${m.finita ? (en ? " · finite" : " · finita") : ""}`).join("\n")
+              : null,
+            existentes.length
+              ? (en ? `\n_Already existed: ${existentes.join(", ")}_` : `\n_Já existiam: ${existentes.join(", ")}_`)
+              : null,
+            desconhecidas.length
+              ? (en ? `\n⚠️ _Unknown: ${desconhecidas.join(", ")}_` : `\n⚠️ _Desconhecidas: ${desconhecidas.join(", ")}_`)
+              : null,
+            criadas.length && db.listarMoedas(serverId).length > 1
+              ? (en
+                ? `\n_Exchange rates between them: \`${P}game cambio taxas\`_`
+                : `\n_As taxas entre elas: \`${P}game cambio taxas\`_`)
+              : null,
+          ].filter(Boolean).join("\n"),
+          colour: COR.sucesso });
+      }
+
       // ── modelos prontos ──
       if (["modelo", "modelos", "preset"].includes(op)) {
         const MODELOS = {
@@ -1757,6 +1836,46 @@ export async function cmdGame(message, args, ctx) {
         titulo: en ? "💱 Bank rates" : "💱 Taxas do banco", linhas, colour: COR.info });
     }
 
+    // ── &game cambio <qtd> <moeda> — quanto isso vale em TODAS as outras ──
+    // A tabela geral (`cambio taxas`) mostra 100 de cada, o que obriga a fazer
+    // a regra de três na mão quando você quer saber de outra quantia. Aqui a
+    // pergunta é direta: "1 Bitcoin dá quanto em cada moeda?"
+    const mQuanto = texto.match(/^([\d.,]+)\s+(\S+)$/);
+    if (mQuanto) {
+      const qtd = Number(String(mQuanto[1]).replace(/\./g, "").replace(",", "."));
+      const de = db.acharMoeda(serverId, mQuanto[2]);
+      if (de && Number.isFinite(qtd) && qtd > 0) {
+        const outras = moedas.filter((x) => x.id !== de.id);
+        if (!outras.length) {
+          return sendEmbed(message.channel, tr(ctx,
+            { title: "💱 Só há uma moeda",
+              description: `Este servidor só tem ${de.simbolo} **${de.nome}**. Adicione outras com \`${P}game admin moeda perfil\`.`,
+              colour: COR.aviso },
+            { title: "💱 Only one currency",
+              description: `This server only has ${de.simbolo} **${de.nome}**. Add more with \`${P}game admin moeda perfil\`.`,
+              colour: COR.aviso }));
+        }
+        const linhas = outras.map((para) => {
+          const r = ECO.converter(qtd, de, para);
+          const unit = ECO.taxaCambio(de, para);
+          return `${para.simbolo} **${fmt(r.recebe)}** ${para.nome}`
+            + `  _(1 = ${unit >= 0.01 ? unit.toFixed(2) : unit.toExponential(1)})_`;
+        });
+        const seu = db.getSaldo(serverId, eu, de.id);
+        linhas.push("", en
+          ? `_Already with the ${(ECO.CFG.spread * 100).toFixed(0)}% spread discounted — it's what you'd actually receive._`
+          : `_Já com o spread de ${(ECO.CFG.spread * 100).toFixed(0)}% descontado — é o que você receberia de fato._`);
+        linhas.push(en
+          ? `_You have ${de.simbolo}${fmt(seu)} · to trade: \`${P}game cambio ${qtd} ${de.id} para <currency>\`_`
+          : `_Você tem ${de.simbolo}${fmt(seu)} · para trocar: \`${P}game cambio ${qtd} ${de.id} para <moeda>\`_`);
+        return enviarLista(sendEmbed, message.channel, {
+          titulo: en
+            ? `💱 ${de.simbolo} ${fmt(qtd)} ${de.nome} is worth`
+            : `💱 ${de.simbolo} ${fmt(qtd)} ${de.nome} vale`,
+          linhas, colour: COR.info });
+      }
+    }
+
     // ── &game cambio <qtd> <moeda> para <moeda> — troca com o BANCO ──
     // Sem contraparte e sem espera: é o que faltava para quem só quer trocar.
     const mb = texto.match(/^(\d+)\s+(\S+)\s+(?:para|to|por|→|->)\s+(\S+)$/i);
@@ -1839,6 +1958,7 @@ export async function cmdGame(message, args, ctx) {
         "**Server currencies:**",
         ...moedas.map((x) => `${x.simbolo} **${x.nome}** \`${x.id}\` — you have ${fmt(db.getSaldo(serverId, eu, x.id))}`),
         "",
+        `\`${P}game cambio <qty> <currency>\` — what that amount is worth in EVERY currency`,
         `\`${P}game cambio taxas\` — the bank's current rates`,
         `_The bank always trades, at the rate of the day and a ${(ECO.CFG.spread * 100).toFixed(0)}% spread._`,
         "_At the counter you set whatever rate you like; whoever accepts, accepts._",
@@ -1852,6 +1972,7 @@ export async function cmdGame(message, args, ctx) {
         "**Moedas do servidor:**",
         ...moedas.map((x) => `${x.simbolo} **${x.nome}** \`${x.id}\` — você tem ${fmt(db.getSaldo(serverId, eu, x.id))}`),
         "",
+        `\`${P}game cambio <qtd> <moeda>\` — quanto isso vale em TODAS as moedas`,
         `\`${P}game cambio taxas\` — as taxas do banco agora`,
         `_O banco sempre troca, pela taxa do dia e um spread de ${(ECO.CFG.spread * 100).toFixed(0)}%._`,
         "_No balcão você define a taxa que quiser; quem aceitar, aceita._",

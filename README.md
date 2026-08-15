@@ -718,6 +718,58 @@ depois disso, a missão de qualquer um pode soltá-lo. Uma tentativa por missão
 os seus vêm primeiro. `&game dungeon` continua existindo como **painel** de quem
 está lá dentro.
 
+### As moedas: perfis prontos
+
+Os **modelos** (`moeda modelo mundo`) criam um conjunto fechado — bom para
+começar rápido, ruim para quem quer misturar Real com Esmeralda. Os **perfis**
+resolvem isso: doze moedas que se adicionam uma a uma, em qualquer combinação.
+
+```
+&game admin moeda perfil              # o catálogo, por grupo
+&game admin moeda perfil brl xau btc  # adiciona três de uma vez
+```
+
+| Grupo | Moedas |
+|---|---|
+| 💵 Fiduciárias | Real · Dólar · Euro · Libra Esterlina |
+| 🥇 Metais | Cobre · Prata · Ouro |
+| 💎 Gemas | Esmeralda · Diamante |
+| ₿ Criptos | Monero · Ethereum · Bitcoin |
+
+Misturar é seguro porque todas vivem na mesma escala. Como a taxa do banco é a
+razão entre os estoques, o suprimento de cada uma **nasce inversamente
+proporcional ao seu valor**:
+
+```
+suprimentoBase = 200.000 / valor
+```
+
+Assim 1 Ouro (valor 200) já vale ~200 Reais no instante em que as duas
+aparecem, sem tabela de conversão em lugar nenhum — e a taxa passa a flutuar
+com o que os jogadores fazem. Gemas e criptos são **finitas** (têm teto de
+emissão); fiduciárias e metais são infinitos, e o que os separa é a velocidade
+de geração.
+
+Os valores não são a cotação real: 1 BTC valendo 350 mil Reais deixaria a moeda
+inalcançável dentro do jogo. São valores de jogo, mantendo a ordem e a sensação
+de raridade de cada uma.
+
+### Quanto vale em cada moeda
+
+```
+&game cambio 1 bitcoin
+```
+
+```
+₿ 1 Bitcoin vale
+🇧🇷 387 Real   (1 = 400.00)
+🥇   1 Ouro    (1 = 2.00)
+```
+
+O spread já vem descontado — é o que você receberia de fato, não uma cotação
+teórica. `&game cambio taxas` continua mostrando a tabela completa de todas
+contra todas.
+
 ### Câmbio com o banco
 
 Depender de outro jogador para trocar moeda trava quem joga sozinho ou fora de

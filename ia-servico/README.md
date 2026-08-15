@@ -152,3 +152,53 @@ busca web; só perde essas capacidades.
 O sintoma "a Judy não consegue ler o repositório" já teve três causas
 diferentes: DNS quebrado, token ausente e token expirado. Cada uma exigiu uma
 investigação do zero. O diagnóstico troca isso por uma linha no log.
+
+## EAI_AGAIN: o DNS que para sozinho
+
+Sintoma característico: **funcionava, ninguém mexeu em nada, e parou**. Todo
+acesso à rede passa a falhar com `EAI_AGAIN`, enquanto o host resolve nomes
+normalmente.
+
+A causa é um detalhe de como o bind-mount funciona. Este compose já montou
+`/etc/resolv.conf` do host dentro do container, e isso parece razoável — mas
+esse arquivo costuma ser um symlink para algo que o **systemd-resolved** e o
+**Tailscale** reescrevem ao reconectar. E eles não editam o arquivo: criam um
+novo e renomeiam por cima. O bind-mount prende o **inode antigo**, que depois
+disso não existe mais. O container fica olhando para um arquivo órfão e para de
+resolver nomes — sem nenhum evento que explique.
+
+Por isso o mount foi removido. Com `network_mode: host` ele é dispensável: o
+Docker entrega o `resolv.conf` do host ao container **e o mantém atualizado**
+quando o arquivo do host muda. Deixar o Docker cuidar disso é o que faz o DNS
+sobreviver a reinícios do resolved e do Tailscale.
+
+Além disso, as chamadas de rede passaram a **repetir automaticamente** falhas
+transitórias (`ferramentas/rede.js`). `EAI_AGAIN` não significa "não existe":
+é o resolver dizendo *tente de novo*. Três tentativas com espera crescente
+(400ms, 800ms, 1600ms) absorvem a janela de alguns segundos em que o DNS está
+sendo reescrito, sem que ninguém perceba. `ENOTFOUND` fica de fora de
+propósito — nome que não existe não vai passar a existir na segunda tentativa.
+
+O que sobra chega com diagnóstico em vez de `fetch failed`:
+
+```
+Não consegui alcançar a API do GitHub: o DNS não respondeu (EAI_AGAIN) mesmo
+depois de algumas tentativas. Isso é rede do container, não credencial. Quase
+sempre é o /etc/resolv.conf preso num arquivo antigo — recrie o container:
+`docker compose up -d --force-recreate judy-ia`.
+```
+
+### Se acontecer de novo
+
+```bash
+docker exec judy-ia cat /etc/resolv.conf     # tem linha "nameserver"?
+docker exec judy-ia getent hosts api.github.com
+curl localhost:8090/diagnostico
+```
+
+**Recriar, não reiniciar** — `restart` mantém o namespace de rede e os mounts
+antigos:
+
+```bash
+docker compose up -d --force-recreate judy-ia
+```

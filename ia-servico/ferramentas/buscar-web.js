@@ -9,6 +9,8 @@
 //  precisa estar habilitado no settings.yml do SearXNG.
 // ══════════════════════════════════════════════════════════
 
+import { buscar, explicarErroDeRede } from "./rede.js";
+
 const SEARXNG_URL = (process.env.SEARXNG_URL || "http://localhost:8080").replace(/\/$/, "");
 const IDIOMA      = process.env.SEARXNG_IDIOMA || "pt-BR";
 const MAX_RESULT  = Number(process.env.SEARXNG_MAX || 5);
@@ -37,7 +39,7 @@ export async function executar({ consulta, maximo } = {}) {
   const url = `${SEARXNG_URL}/search?q=${encodeURIComponent(q)}&format=json&language=${encodeURIComponent(IDIOMA)}`;
 
   try {
-    const r = await fetch(url, { signal: AbortSignal.timeout(20000) });
+    const r = await buscar(url, { signal: AbortSignal.timeout(20000) });
     if (r.status === 403) return { erro: "SearXNG recusou (formato JSON pode estar desabilitado no settings.yml)." };
     if (!r.ok) return { erro: `SearXNG HTTP ${r.status}` };
     const data = await r.json();
@@ -49,6 +51,11 @@ export async function executar({ consulta, maximo } = {}) {
     if (!itens.length) return { consulta: q, total: 0, nota: "Nenhum resultado encontrado." };
     return { consulta: q, total: itens.length, resultados: itens };
   } catch (e) {
+    // Erro de rede tem explicação específica; o resto vai cru mesmo.
+    const codigo = e?.cause?.code ?? e?.code ?? "";
+    if (codigo || /fetch failed/i.test(e?.message ?? "")) {
+      return { erro: explicarErroDeRede(e, `o SearXNG (${SEARXNG_URL})`) };
+    }
     const msg = (e?.message ?? String(e)).slice(0, 200);
     return { erro: `Busca falhou: ${msg}. Confira se o SearXNG está no ar em ${SEARXNG_URL}.` };
   }

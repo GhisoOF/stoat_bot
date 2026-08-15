@@ -13,12 +13,26 @@ services:
     container_name: judy-ia
     restart: unless-stopped
     network_mode: host          # usa a rede do host (localhost = a própria máquina)
-    volumes:
-      # DNS: com network_mode host, o Docker COPIA o resolv.conf ao criar o
-      # container e às vezes descarta os nameservers (o do Tailscale, por
-      # exemplo). Montar o arquivo garante que o container sempre veja o DNS
-      # real da máquina. Sem isso: EAI_AGAIN em tudo que depende de rede.
-      - /etc/resolv.conf:/etc/resolv.conf:ro
+    # ── DNS ───────────────────────────────────────────────
+    # NÃO monte /etc/resolv.conf aqui. Já foi tentado, e é justamente o
+    # que causa o EAI_AGAIN depois de algumas horas rodando:
+    #
+    #   /etc/resolv.conf costuma ser um symlink para um arquivo que o
+    #   systemd-resolved (e o Tailscale, ao reconectar) REESCREVE criando
+    #   um arquivo novo e renomeando por cima. O bind-mount do Docker
+    #   prende o INODE antigo, que depois disso não existe mais — o
+    #   container fica olhando para um arquivo órfão e para de resolver
+    #   nomes, mesmo com o host resolvendo normalmente. O sintoma clássico
+    #   é "funcionava e parou sozinho", sem ninguém mexer em nada.
+    #
+    # Com network_mode: host o mount é dispensável: o Docker entrega o
+    # resolv.conf do host ao container E o mantém atualizado quando o
+    # arquivo do host muda. Deixar o Docker cuidar disso é o que faz o
+    # DNS sobreviver a reinícios do resolved e do Tailscale.
+    #
+    # Se o DNS falhar mesmo assim, recrie (não só reinicie) o container:
+    #   docker compose up -d --force-recreate judy-ia
+    # e confira: docker exec judy-ia cat /etc/resolv.conf
     environment:
       # ── LLM (Ollama nativo, mesma máquina) ──
       # Com network_mode host, localhost é o próprio host.

@@ -14,6 +14,8 @@
 //  eleva o limite de 60 para 5000 requisições/hora.
 // ══════════════════════════════════════════════════════════
 
+import { buscar, explicarErroDeRede, ehTransitorio } from "./rede.js";
+
 const REPO   = process.env.GITHUB_REPO || "";
 const BRANCH = process.env.GITHUB_BRANCH || "main";
 const TOKEN  = process.env.GITHUB_TOKEN || "";
@@ -32,7 +34,7 @@ function cabecalhos() {
 
 async function api(caminho) {
   const url = `https://api.github.com/repos/${REPO}/contents/${caminho}?ref=${BRANCH}`;
-  const r = await fetch(url, { headers: cabecalhos(), signal: AbortSignal.timeout(15000) });
+  const r = await buscar(url, { headers: cabecalhos(), signal: AbortSignal.timeout(15000) });
   if (r.status === 403) throw new Error("limite de requisições do GitHub atingido (adicione GITHUB_TOKEN).");
   if (r.status === 404) throw new Error("repositório ou caminho não encontrado — se o repo for privado, é preciso um GITHUB_TOKEN com acesso a ele.");
   if (!r.ok) throw new Error(`GitHub HTTP ${r.status}`);
@@ -42,7 +44,7 @@ async function api(caminho) {
 // Árvore recursiva (uma chamada) — boa para listar e estatísticas.
 async function arvore() {
   const url = `https://api.github.com/repos/${REPO}/git/trees/${BRANCH}?recursive=1`;
-  const r = await fetch(url, { headers: cabecalhos(), signal: AbortSignal.timeout(15000) });
+  const r = await buscar(url, { headers: cabecalhos(), signal: AbortSignal.timeout(15000) });
   if (!r.ok) throw new Error(`GitHub HTTP ${r.status}`);
   const data = await r.json();
   return (data.tree || []).filter((n) => n.type === "blob" && !proibido(n.path));
@@ -113,12 +115,10 @@ export async function executar({ acao, caminho }) {
     const msg = (e?.message ?? String(e));
     const causa = e?.cause?.code ?? "";
     // "fetch failed" é opaco: pode ser DNS, sem rota, firewall ou timeout.
-    // Distinguir isso do erro de token poupa muito tempo de diagnóstico.
-    if (/fetch failed/i.test(msg) || /ENOTFOUND|EAI_AGAIN|ECONNREFUSED|ETIMEDOUT|UND_ERR/i.test(causa)) {
-      return { erro: `Não consegui alcançar a API do GitHub (${causa || "rede"}). Isso é problema de REDE do serviço de IA, não do token: confira se o container tem internet e DNS (teste: docker exec judy-ia node -e "fetch('https://api.github.com').then(r=>console.log(r.status))").` };
-    }
-    if (/aborted|timeout/i.test(msg)) {
-      return { erro: "A API do GitHub demorou demais para responder (timeout de 15s). Tente de novo." };
+    // A retentativa já aconteceu lá dentro; se chegou aqui, o problema
+    // persiste — então vale devolver o passo a passo, não só o código.
+    if (/fetch failed/i.test(msg) || ehTransitorio(e) || /ENOTFOUND|UND_ERR/i.test(causa)) {
+      return { erro: explicarErroDeRede(e, "a API do GitHub") };
     }
     return { erro: msg.slice(0, 300) };
   }

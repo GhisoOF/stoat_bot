@@ -73,7 +73,14 @@ services:
       # Se o /etc/resolv.conf do container ficar sem `nameserver` (acontece),
       # o serviço passa a resolver nomes por dentro, com estes servidores, em
       # vez de ficar mudo. Só entra em ação quando o DNS do sistema falha.
-      # Use `off` para desligar a rede de segurança.
-      - DNS_FALLBACK=1.1.1.1,8.8.8.8
+      #
+      # A ORDEM importa. O 100.100.100.100 é o MagicDNS do Tailscale: como
+      # este container usa a rede do host, ele alcança esse endereço, e é o
+      # único que resolve os nomes internos `*.ts.net`. Os públicos vêm depois
+      # como rede de segurança, para o caso de o Tailscale estar fora do ar.
+      #
+      # Se esta máquina não usar Tailscale, pode deixar só os públicos.
+      # Use `off` para desligar a rede de segurança por completo.
+      - DNS_FALLBACK=100.100.100.100,1.1.1.1,8.8.8.8
 
       - TZ=Europe/Madrid

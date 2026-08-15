@@ -18,8 +18,12 @@
 //  e do Tailscale, que os servidores públicos não conheceriam.
 //
 //  Env:
-//    DNS_FALLBACK=1.1.1.1,8.8.8.8   servidores (padrão)
+//    DNS_FALLBACK=1.1.1.1,8.8.8.8   servidores, em ordem de preferência
 //    DNS_FALLBACK=off               desliga a rede de segurança
+//
+//  Numa máquina com Tailscale vale pôr o MagicDNS (100.100.100.100) na
+//  frente: com a rede do host ele é alcançável, e é o único que resolve
+//  os nomes internos *.ts.net. Os públicos ficam atrás, como reserva.
 // ══════════════════════════════════════════════════════════
 import dns from "node:dns";
 

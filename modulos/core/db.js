@@ -1192,6 +1192,88 @@ export function acharMoeda(serverId, txt) {
 
 const CAMPOS_MOEDA = new Set(["mercado", "dungeon", "pSuave", "pEm", "nome", "simbolo",
   "finita", "padrao", "dificuldade", "suprimentoBase", "nivelMin"]);
+// ── Moedas duplicadas ─────────────────────────────────────
+// Dois conjuntos prontos podem trazer a MESMA moeda com ids diferentes
+// (`mundo` traz Prata como `xag`, `fantasia` como `prata`). Sem colisão de
+// id, as duas eram criadas e a carteira mostrava "Prata" duas vezes.
+//
+// A fusão é a operação segura: em vez de apagar uma e sumir com o saldo de
+// quem já tinha, os saldos são somados na que fica e os estoques também.
+export function moedasDuplicadas(serverId) {
+  const semAcento = (x) => String(x ?? "").trim().toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const porNome = new Map();
+  for (const m of listarMoedas(serverId)) {
+    const chave = semAcento(m.nome);
+    if (!porNome.has(chave)) porNome.set(chave, []);
+    porNome.get(chave).push(m);
+  }
+  const grupos = [];
+  for (const [, lista] of porNome) {
+    if (lista.length < 2) continue;
+    // Quem fica: a padrão primeiro (é a que precifica tudo); depois a que as
+    // pessoas mais têm na carteira — manter a moeda em uso significa menos
+    // referências para reescrever e menos estranheza para quem joga. O
+    // suprimento só desempata quando ninguém tem nenhuma das duas.
+    const ordenada = [...lista].sort((a, b) =>
+      (b.padrao ? 1 : 0) - (a.padrao ? 1 : 0)
+      || totalNasCarteiras(serverId, b.id) - totalNasCarteiras(serverId, a.id)
+      || (b.suprimentoBase ?? 0) - (a.suprimentoBase ?? 0));
+    grupos.push({ fica: ordenada[0], some: ordenada.slice(1) });
+  }
+  return grupos;
+}
+
+// Executa a fusão. Devolve o relatório do que foi feito.
+export function fundirMoedasDuplicadas(serverId) {
+  const grupos = moedasDuplicadas(serverId);
+  const feitos = [];
+  for (const g of grupos) {
+    let saldosMovidos = 0, usuarios = 0;
+    for (const velha of g.some) {
+      const linhas = db.prepare(`SELECT userId, quantidade FROM rpg_carteira
+        WHERE serverId = ? AND moedaId = ? AND quantidade > 0`).all(serverId, velha.id);
+      for (const l of linhas) {
+        creditar(serverId, l.userId, g.fica.id, l.quantidade);
+        saldosMovidos += l.quantidade;
+        usuarios++;
+      }
+      // O estoque do banco e o pote da dungeon também se somam: são valor
+      // que existe no servidor e não pode evaporar.
+      salvarMoeda(serverId, g.fica.id, {
+        mercado: (getMoeda(serverId, g.fica.id)?.mercado ?? 0) + (velha.mercado ?? 0),
+        dungeon: (getMoeda(serverId, g.fica.id)?.dungeon ?? 0) + (velha.dungeon ?? 0),
+      });
+      // Ofertas abertas apontam para a moeda que fica, em vez de serem
+      // apagadas: elas guardam valor em CUSTÓDIA, e apagá-las sumiria com o
+      // que já saiu da carteira de quem anunciou.
+      db.prepare(`UPDATE rpg_ofertas SET moedaOferecida = ?
+        WHERE serverId = ? AND moedaOferecida = ?`).run(g.fica.id, serverId, velha.id);
+      db.prepare(`UPDATE rpg_ofertas SET moedaPedida = ?
+        WHERE serverId = ? AND moedaPedida = ?`).run(g.fica.id, serverId, velha.id);
+      removerMoeda(serverId, velha.id);
+    }
+    feitos.push({
+      nome: g.fica.nome, ficou: g.fica.id,
+      sumiram: g.some.map((x) => x.id), saldosMovidos, usuarios,
+    });
+  }
+  return feitos;
+}
+
+// Servidores que têm alguma moeda — o universo que a fusão precisa varrer.
+export function servidoresComMoeda() {
+  return db.prepare("SELECT DISTINCT serverId FROM rpg_moedas").all().map((r) => r.serverId);
+}
+
+// Já existe uma moeda com esse NOME? (a checagem que faltava)
+export function acharMoedaPorNome(serverId, nome) {
+  const semAcento = (x) => String(x ?? "").trim().toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const alvo = semAcento(nome);
+  return listarMoedas(serverId).find((m) => semAcento(m.nome) === alvo) ?? null;
+}
+
 export function salvarMoeda(serverId, id, campos = {}) {
   const e = Object.entries(campos).filter(([k]) => CAMPOS_MOEDA.has(k));
   if (!e.length) return getMoeda(serverId, id);

@@ -1130,7 +1130,9 @@ export async function cmdGame(message, args, ctx) {
             "~20× menos por vez — então cada unidade vale muito mais.",
             "",
             "**Conjuntos prontos**",
+            `\`${P}game admin moeda perfil\` — 12 moedas prontas, uma a uma`,
             `\`${P}game admin moeda modelo\` — cria um conjunto inteiro de uma vez`,
+            `\`${P}game admin moeda duplicadas\` — funde moedas repetidas`,
             "",
             "**Outros**",
             `\`${P}game admin moeda\` — lista o que existe`,
@@ -1140,6 +1142,60 @@ export async function cmdGame(message, args, ctx) {
           ],
           colour: COR.mod,
         });
+      }
+
+      // ── duplicadas ──
+      // Serve para bases que já ficaram com repetição antes da checagem por
+      // nome existir. Funde em vez de apagar: os saldos vão para a que fica.
+      if (["duplicadas", "duplicates", "limpar", "dedupe", "fundir", "merge"].includes(op)) {
+        const grupos = db.moedasDuplicadas(serverId);
+        if (!grupos.length) {
+          return sendEmbed(message.channel, tr(ctx,
+            { title: "✅ Nenhuma duplicada",
+              description: "Cada moeda deste servidor tem um nome só.", colour: COR.sucesso },
+            { title: "✅ No duplicates",
+              description: "Every currency on this server has a unique name.", colour: COR.sucesso }));
+        }
+
+        const confirmar = ["confirmar", "confirm", "sim", "yes"].includes(String(args2[0] ?? "").toLowerCase());
+        const detalhe = grupos.map((g) => {
+          const some = g.some.map((x) => `\`${x.id}\``).join(", ");
+          const saldos = g.some.reduce((t, x) => t + db.totalNasCarteiras(serverId, x.id), 0);
+          return en
+            ? `${g.fica.simbolo} **${g.fica.nome}** — keeps \`${g.fica.id}\`, absorbs ${some}`
+              + (saldos ? ` · ${fmt(saldos)} in players' wallets moves over` : "")
+            : `${g.fica.simbolo} **${g.fica.nome}** — fica \`${g.fica.id}\`, absorve ${some}`
+              + (saldos ? ` · ${fmt(saldos)} nas carteiras vai junto` : "");
+        });
+
+        if (!confirmar) {
+          return enviarLista(sendEmbed, message.channel, {
+            titulo: en ? `⚠️ ${grupos.length} duplicate(s) found` : `⚠️ ${grupos.length} duplicada(s) encontrada(s)`,
+            linhas: [
+              ...detalhe,
+              "",
+              en
+                ? "Nothing is lost: balances, bank stock and the dungeon pot are **summed** into the one that stays, and open offers are pointed at it."
+                : "Nada se perde: saldos, estoque do banco e pote da dungeon são **somados** na que fica, e as ofertas abertas passam a apontar para ela.",
+              "",
+              `\`${P}game admin moeda duplicadas confirmar\``,
+            ],
+            colour: COR.aviso });
+        }
+
+        const feitos = db.fundirMoedasDuplicadas(serverId);
+        return enviarLista(sendEmbed, message.channel, {
+          titulo: en ? "🪙 Duplicates merged" : "🪙 Duplicadas fundidas",
+          linhas: [
+            ...feitos.map((f) => en
+              ? `${f.nome} — kept \`${f.ficou}\`, removed ${f.sumiram.map((x) => `\`${x}\``).join(", ")}`
+                + (f.usuarios ? ` · ${fmt(f.saldosMovidos)} moved from ${f.usuarios} wallet(s)` : "")
+              : `${f.nome} — ficou \`${f.ficou}\`, removida(s) ${f.sumiram.map((x) => `\`${x}\``).join(", ")}`
+                + (f.usuarios ? ` · ${fmt(f.saldosMovidos)} movido(s) de ${f.usuarios} carteira(s)` : "")),
+            "",
+            en ? `_Check with \`${P}game carteira\`._` : `_Confira com \`${P}game carteira\`._`,
+          ],
+          colour: COR.sucesso });
       }
 
       // ── perfis avulsos ──
@@ -1179,11 +1235,14 @@ export async function cmdGame(message, args, ctx) {
         for (const pedido of pedidos) {
           const perfil = PERFIS.acharPerfil(pedido);
           if (!perfil) { desconhecidas.push(pedido); continue; }
-          if (db.getMoeda(serverId, perfil.id)) { existentes.push(perfil.nome); continue; }
+          // mesma checagem dupla dos modelos: id E nome
+          if (db.getMoeda(serverId, perfil.id) ?? db.acharMoedaPorNome(serverId, perfil.nome)) {
+            existentes.push(perfil.nome); continue;
+          }
           // A primeira moeda do servidor vira a padrão sozinha: sem uma
           // principal, os preços não teriam em que ser cotados.
-          const primeira = db.listarMoedas(serverId).length === 0;
-          db.upsertMoeda(serverId, PERFIS.paraBanco(perfil, { padrao: primeira }));
+          const semPadrao = !db.listarMoedas(serverId).some((x) => x.padrao);
+          db.upsertMoeda(serverId, PERFIS.paraBanco(perfil, { padrao: semPadrao }));
           criadas.push(perfil);
         }
 
@@ -1278,12 +1337,24 @@ export async function cmdGame(message, args, ctx) {
         }
 
         const criadas = [], existentes = [];
+        // Lido ANTES do laço: se o servidor já tem uma principal, nenhuma moeda
+        // nova pode nascer com a estrela — senão ficariam duas.
+        const jaTinhaPadrao = db.listarMoedas(serverId).some((x) => x.padrao);
         for (const m of mod.moedas) {
-          if (db.getMoeda(serverId, m.id)) { existentes.push(m.nome); continue; }
-          db.upsertMoeda(serverId, { ...m, finita: m.finita !== false, mercado: m.suprimentoBase });
+          // Pelo ID **e** pelo NOME: `mundo` traz Prata como `xag` e `fantasia`
+          // como `prata`. Só checar o id deixava as duas passarem, e a carteira
+          // ficava com "Prata" repetida.
+          const jaTem = db.getMoeda(serverId, m.id) ?? db.acharMoedaPorNome(serverId, m.nome);
+          if (jaTem) { existentes.push(m.nome); continue; }
+          db.upsertMoeda(serverId, {
+            ...m, finita: m.finita !== false, mercado: m.suprimentoBase,
+            padrao: !jaTinhaPadrao && !!m.padrao,
+          });
           criadas.push(m);
         }
-        if (criadas.some((m) => m.padrao)) {
+        // Trocar a principal sem avisar reprecificaria todos os itens do
+        // servidor, então ela só é definida quando ainda não existe nenhuma.
+        if (!jaTinhaPadrao && criadas.some((m) => m.padrao)) {
           const padraoId = criadas.find((m) => m.padrao).id;
           for (const x of db.listarMoedas(serverId)) db.salvarMoeda(serverId, x.id, { padrao: x.id === padraoId ? 1 : 0 });
         }
@@ -1331,7 +1402,8 @@ export async function cmdGame(message, args, ctx) {
               `\`${P}game admin moeda criar prata Prata 🥈\``,
               `\`${P}game admin moeda criar btc Bitcoin ₿ dificuldade=400 nivel=18 suprimento=210\``,
               "",
-              `_Não quer configurar à mão? \`${P}game admin moeda modelo\` tem conjuntos prontos._`,
+              `_Não quer configurar à mão? \`${P}game admin moeda perfil\` e \`modelo\` têm moedas prontas._`,
+              `_Duas com o mesmo nome? \`${P}game admin moeda duplicadas\` funde sem perder saldo._`,
               `_Explicação dos campos: \`${P}game admin moeda ajuda\`._`,
             ].join("\n"), colour: COR.erro });
         }
@@ -1441,13 +1513,27 @@ export async function cmdGame(message, args, ctx) {
       // ── painel (padrão) ──
       if (!db.listarMoedas(serverId).length) garantirMoeda(serverId);
       const lista = db.listarMoedas(serverId);
+      // Aviso de duplicadas ANTES da lista: o rodapé pode cair na segunda
+      // página quando há muitas moedas, e é justamente aqui que a pessoa
+      // percebe a repetição.
+      const dupes = db.moedasDuplicadas(serverId);
       return enviarLista(sendEmbed, message.channel, {
         titulo: `🪙 Moedas do servidor (${lista.length})`,
         linhas: [
+          ...(dupes.length ? [
+            en
+              ? `⚠️ **${dupes.length} name(s) appear twice:** ${dupes.map((g) => g.fica.nome).join(", ")}`
+              : `⚠️ **${dupes.length} nome(s) repetido(s):** ${dupes.map((g) => g.fica.nome).join(", ")}`,
+            en
+              ? `_Merge without losing balances:_ \`${P}game admin moeda duplicadas\``
+              : `_Funda sem perder saldo:_ \`${P}game admin moeda duplicadas\``,
+            "",
+          ] : []),
           ...lista.map(fichaDaMoeda),
           "",
           "**O que dá para fazer**",
           `\`${P}game admin moeda ajuda\` — 📖 o que cada campo significa`,
+          `\`${P}game admin moeda perfil\` — 🪙 12 moedas prontas, uma a uma`,
           `\`${P}game admin moeda modelo\` — ⚡ conjuntos prontos (mundo real, fantasia…)`,
           `\`${P}game admin moeda criar <id> <nome> [símbolo] [campo=valor]\``,
           `\`${P}game admin moeda set <id> <campo> <valor>\``,

@@ -1113,6 +1113,7 @@ export async function cmdSobre(message, args, ctx) {
   const rssN = (() => { try { return db.listarFeeds?.(serverId)?.length ?? 0; } catch { return 0; } })();
   const moedas = (() => { try { return db.listarMoedas?.(serverId) ?? []; } catch { return []; } })();
   const nPerfis = (() => { try { return PERFIS_MOEDA.PERFIS.length; } catch { return 0; } })();
+  const nDupes = (() => { try { return db.moedasDuplicadas?.(serverId)?.length ?? 0; } catch { return 0; } })();
   const nPersonagens = (() => { try { return db.listarPersonagens?.(serverId, 9999)?.length ?? 0; } catch { return 0; } })();
   // Magias aprendidas no servidor inteiro: mostra se a mecânica pegou ou não.
   const nCapturados = (() => { try { return db.listarCapturados?.(serverId)?.length ?? 0; } catch { return 0; } })();
@@ -1132,7 +1133,7 @@ export async function cmdSobre(message, args, ctx) {
     `${sim(logOn)} **Log channel** — ${logOn ? `<#${config.log.canalId}>` : "not set"}`,
     `${sim(rssN)} **RSS** — ${rssN} feed(s)`,
     `${sim(banGlobalModo !== "off")} **Global ban list** — mode \`${banGlobalModo}\``,
-    `🎲 **RPG** — ${nPersonagens} character(s) · ${moedas.length} currenc${moedas.length === 1 ? "y" : "ies"}${moedas.length > 1 ? " · exchange on" : ""}${nMagias ? ` · ${nMagias} spell(s) learned` : ""}${nCapturados ? ` · ${nCapturados} companion(s) in the dungeon` : ""}${moedas.length < nPerfis ? ` · ${nPerfis} currency profiles available` : ""}`,
+    `🎲 **RPG** — ${nPersonagens} character(s) · ${moedas.length} currenc${moedas.length === 1 ? "y" : "ies"}${moedas.length > 1 ? " · exchange on" : ""}${nMagias ? ` · ${nMagias} spell(s) learned` : ""}${nCapturados ? ` · ${nCapturados} companion(s) in the dungeon` : ""}${moedas.length < nPerfis ? ` · ${nPerfis} currency profiles available` : ""}${nDupes ? ` · ⚠️ ${nDupes} duplicate currenc${nDupes === 1 ? "y" : "ies"}` : ""}`,
     comIA ? `🤖 **AI (Judy)** — enabled on this server` : null,
   ] : [
     `${sim(modulosOn)} **AutoMod** — ${modulosOn}/9 módulos ligados`,
@@ -1140,7 +1141,7 @@ export async function cmdSobre(message, args, ctx) {
     `${sim(logOn)} **Chat de logs** — ${logOn ? `<#${config.log.canalId}>` : "não definido"}`,
     `${sim(rssN)} **RSS** — ${rssN} feed(s)`,
     `${sim(banGlobalModo !== "off")} **Lista global de bans** — modo \`${banGlobalModo}\``,
-    `🎲 **RPG** — ${nPersonagens} personagem(ns) · ${moedas.length} moeda(s)${moedas.length > 1 ? " · câmbio ativo" : ""}${nMagias ? ` · ${nMagias} magia(s) aprendida(s)` : ""}${nCapturados ? ` · ${nCapturados} companheiro(s) na dungeon` : ""}${moedas.length < nPerfis ? ` · ${nPerfis} perfis de moeda disponíveis` : ""}`,
+    `🎲 **RPG** — ${nPersonagens} personagem(ns) · ${moedas.length} moeda(s)${moedas.length > 1 ? " · câmbio ativo" : ""}${nMagias ? ` · ${nMagias} magia(s) aprendida(s)` : ""}${nCapturados ? ` · ${nCapturados} companheiro(s) na dungeon` : ""}${moedas.length < nPerfis ? ` · ${nPerfis} perfis de moeda disponíveis` : ""}${nDupes ? ` · ⚠️ ${nDupes} moeda(s) repetida(s)` : ""}`,
     comIA ? `🤖 **IA (Judy)** — habilitada neste servidor` : null,
   ];
 

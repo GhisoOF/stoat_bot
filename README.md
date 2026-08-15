@@ -754,6 +754,31 @@ Os valores não são a cotação real: 1 BTC valendo 350 mil Reais deixaria a mo
 inalcançável dentro do jogo. São valores de jogo, mantendo a ordem e a sensação
 de raridade de cada uma.
 
+### Moedas repetidas
+
+Aplicar `modelo mundo` e `modelo fantasia` no mesmo servidor criava **Prata e
+Ouro duplicados**: os dois conjuntos trazem as mesmas moedas com ids diferentes
+(`xag` contra `prata`, `xau` contra `ouro`), e a checagem só olhava o id.
+
+A criação agora confere **id e nome**, então juntar conjuntos apenas mantém o
+que já existe. E o `padrao` deixou de ser roubado pelo último conjunto aplicado
+— trocar a moeda principal reprecificaria todos os itens do servidor sem aviso.
+
+Para bases que já ficaram sujas, existe a fusão:
+
+```
+&game admin moeda duplicadas            # mostra o que seria feito
+&game admin moeda duplicadas confirmar  # executa
+```
+
+Ela **funde, não apaga**: saldos das carteiras, estoque do banco e pote da
+dungeon são somados na moeda que fica, e ofertas abertas passam a apontar para
+ela — o valor em custódia não evapora. Fica a moeda padrão; sem padrão no
+grupo, fica a que as pessoas mais têm na carteira.
+
+Isso também roda **sozinho no boot**, em silêncio: é conserto de dado, não
+novidade para anunciar. Quem já tem a base duplicada não precisa fazer nada.
+
 ### Quanto vale em cada moeda
 
 ```

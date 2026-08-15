@@ -442,6 +442,22 @@ client.on("ready", async () => {
   reactionRoles.precarregarMensagens(client).catch((e) => console.error("[REACTIONROLE][boot]", e?.message));
 
   rpg.iniciarCatalogo();   // semeia os itens genéricos (idempotente)
+
+  // Repara bases que já ficaram com moedas repetidas antes da checagem por
+  // nome existir (dois conjuntos prontos traziam "Prata" com ids diferentes).
+  // Roda em silêncio: é conserto de dado, não novidade para anunciar. Funde,
+  // não apaga — os saldos vão para a moeda que fica.
+  try {
+    for (const sid of db.servidoresComMoeda()) {
+      const feitos = db.fundirMoedasDuplicadas(sid);
+      if (feitos.length) {
+        console.info(`[RPG] ${sid}: ${feitos.length} moeda(s) duplicada(s) fundida(s) — `
+          + feitos.map((f) => `${f.nome} → ${f.ficou}`).join(", "));
+      }
+    }
+  } catch (e) {
+    console.error("[RPG] Falha ao conferir moedas duplicadas:", e.message);
+  }
   srvStats.marcarInicio();
   chat.iniciarMemoria();          // liga o agente de memória (extração em background)
   chat.iniciarComentario(client); // liga o comentário espontâneo

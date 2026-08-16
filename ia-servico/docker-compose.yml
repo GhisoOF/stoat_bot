@@ -44,11 +44,21 @@ services:
 
       # ── Leitura do código via GitHub ──
       #
-      # O token vem do arquivo .env AO LADO deste compose — nunca escrito aqui.
-      # Motivo: este arquivo é versionado e sobrescrito a cada atualização; o
-      # .env não é (está no .gitignore), então o token sobrevive aos deploys.
+      # O token vem do arquivo .env AO LADO deste compose — nunca escrito aqui,
+      # porque este arquivo é versionado.
       #
-      # Crie uma vez:  echo "GITHUB_TOKEN=github_pat_..." > .env
+      # ⚠️ ATENÇÃO no deploy: o procedimento usual apaga a pasta inteira antes
+      # de descompactar a nova versão (`rm -rf ia-servico`). Isso leva o .env
+      # junto, e o sintoma é silencioso — o container sobe normal e só a
+      # leitura do repositório passa a responder 404, que parece "não existe".
+      #
+      # Guarde uma cópia FORA da pasta e restaure depois de atualizar:
+      #
+      #   cp ia-servico/.env ~/judy-github.env          # uma vez, para guardar
+      #   ...deploy...
+      #   cp ~/judy-github.env ia-servico/.env          # depois de cada deploy
+      #
+      # Criar do zero:  echo "GITHUB_TOKEN=github_pat_..." > ia-servico/.env
       #
       # É OBRIGATÓRIO para repositório privado — sem ele a API responde 404
       # (não 401), o que engana: parece "não existe" e é "sem permissão".

@@ -109,6 +109,45 @@ docker exec judy-ia sh -c 'echo ${GITHUB_TOKEN:+ok}'
 docker logs judy-ia | grep "\[IA\]"
 ```
 
+## O token que some no deploy
+
+Sintoma: tudo funciona, a rede está boa, e a leitura do repositório responde
+**404**. Não é "o arquivo não existe" — em repositório **privado** o GitHub
+responde 404 em vez de 401/403 de propósito, para não revelar que o repo
+existe. Ou seja: 404 aqui quase sempre significa **sem credencial**.
+
+E a credencial some sozinha. O procedimento de deploy apaga a pasta antes de
+descompactar a versão nova:
+
+```bash
+rm -rf modulos scripts ia-servico ia-stack   # ← leva o ia-servico/.env junto
+unzip -o stoat_bot-*.zip
+```
+
+O `.env` está no `.gitignore` (então não vai para o repositório, o que é
+correto), mas justamente por isso ele também não volta no `unzip`. O container
+sobe normalmente, sem erro nenhum, e só o acesso ao código quebra.
+
+**Guarde uma cópia fora da pasta:**
+
+```bash
+cp ia-servico/.env ~/judy-github.env      # uma vez
+```
+
+E restaure ao fim de cada deploy:
+
+```bash
+cp ~/judy-github.env ia-servico/.env
+docker compose -f ia-servico/docker-compose.yml up -d --build --force-recreate judy-ia
+```
+
+Para conferir sem adivinhar:
+
+```bash
+docker exec judy-ia sh -c 'echo ${GITHUB_TOKEN:+definido}${GITHUB_TOKEN:-VAZIO}'
+curl -s localhost:8090/diagnostico
+```
+
 ## Diagnóstico
 
 O serviço se autodiagnostica no boot e grita no log quando algo está errado:

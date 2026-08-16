@@ -20,6 +20,34 @@ const REPO   = process.env.GITHUB_REPO || "";
 const BRANCH = process.env.GITHUB_BRANCH || "main";
 const TOKEN  = process.env.GITHUB_TOKEN || "";
 
+// O GitHub responde 404 (não 401/403) para repositório privado sem
+// credencial válida — de propósito, para não revelar que ele existe. Isso
+// engana: parece "o arquivo não existe" quando é "não tenho permissão".
+//
+// Os dois casos exigem ações diferentes, então a mensagem separa: sem token
+// é problema de configuração do container; com token é escopo, repo ou branch.
+function erro404(caminho = "") {
+  const onde = caminho ? ` em \`${caminho}\`` : "";
+  // `amigavel` diz ao catch que esta mensagem já foi escrita para ser lida
+  // por gente — e que portanto NÃO deve ser truncada nem reescrita.
+  const marcar = (texto) => Object.assign(new Error(texto), { amigavel: true });
+  if (!TOKEN) {
+    return marcar(`O GitHub respondeu 404${onde}. O repositório \`${REPO}\` é privado e`
+      + ` **não há GITHUB_TOKEN configurado** neste container — sem credencial, o`
+      + ` GitHub finge que o repo não existe.`
+      + `\n\nO token vem do arquivo \`.env\` ao lado do docker-compose.yml do judy-ia.`
+      + ` Ele costuma sumir quando o diretório \`ia-servico\` é apagado e recriado no deploy.`
+      + `\n\nRefazer:  \`echo "GITHUB_TOKEN=github_pat_..." > ia-servico/.env\``
+      + ` e subir de novo com \`docker compose up -d --force-recreate judy-ia\`.`);
+  }
+  return marcar(`O GitHub respondeu 404${onde}, mesmo com GITHUB_TOKEN presente.`
+    + ` Isso costuma ser uma destas três coisas:`
+    + `\n• o token não tem acesso a \`${REPO}\` (fine-grained precisa listar ESTE repositório e dar leitura em "Contents")`
+    + `\n• o token expirou — o GitHub volta a responder 404, não 401`
+    + `\n• o caminho ou a branch (\`${BRANCH}\`) não existem`
+    + `\n\nConfira com: \`curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $GITHUB_TOKEN" https://api.github.com/repos/${REPO}\``);
+}
+
 const EXT_OK = new Set([".js", ".json", ".md", ".yml", ".yaml", ".txt"]);
 const PROIBIDOS = [/\.env/i, /token/i, /secret/i, /senha/i, /password/i, /\.db$/i];
 const MAX_BYTES = 60_000;
@@ -36,7 +64,7 @@ async function api(caminho) {
   const url = `https://api.github.com/repos/${REPO}/contents/${caminho}?ref=${BRANCH}`;
   const r = await buscar(url, { headers: cabecalhos(), signal: AbortSignal.timeout(15000) });
   if (r.status === 403) throw new Error("limite de requisições do GitHub atingido (adicione GITHUB_TOKEN).");
-  if (r.status === 404) throw new Error("repositório ou caminho não encontrado — se o repo for privado, é preciso um GITHUB_TOKEN com acesso a ele.");
+  if (r.status === 404) throw erro404(caminho);
   if (!r.ok) throw new Error(`GitHub HTTP ${r.status}`);
   return r.json();
 }
@@ -45,6 +73,10 @@ async function api(caminho) {
 async function arvore() {
   const url = `https://api.github.com/repos/${REPO}/git/trees/${BRANCH}?recursive=1`;
   const r = await buscar(url, { headers: cabecalhos(), signal: AbortSignal.timeout(15000) });
+  // Mesma armadilha do 404 aqui: é por esta chamada que a Judy LISTA o
+  // repositório, então sem ela a resposta vira "não encontrei nada".
+  if (r.status === 404) throw erro404();
+  if (r.status === 403) throw new Error("limite de requisições do GitHub atingido (adicione GITHUB_TOKEN).");
   if (!r.ok) throw new Error(`GitHub HTTP ${r.status}`);
   const data = await r.json();
   return (data.tree || []).filter((n) => n.type === "blob" && !proibido(n.path));
@@ -120,6 +152,8 @@ export async function executar({ acao, caminho }) {
     if (/fetch failed/i.test(msg) || ehTransitorio(e) || /ENOTFOUND|UND_ERR/i.test(causa)) {
       return { erro: explicarErroDeRede(e, "a API do GitHub") };
     }
-    return { erro: msg.slice(0, 300) };
+    // Mensagem já escrita para ser lida: vai inteira. Cortar em 300 caracteres
+    // decapitava justamente a parte que diz o que fazer.
+    return { erro: e?.amigavel ? msg : msg.slice(0, 300) };
   }
 }

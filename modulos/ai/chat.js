@@ -303,7 +303,7 @@ export function caminhoCitado(texto) {
   return m[1].replace(/^\/+/, "");   // tira a barra inicial: /modulos/x → modulos/x
 }
 
-async function chamarServicoIA(messages, { modelo = null } = {}) {
+async function chamarServicoIA(messages, { modelo = null, idioma = "pt" } = {}) {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), TIMEOUT);
   try {
@@ -312,7 +312,10 @@ async function chamarServicoIA(messages, { modelo = null } = {}) {
     const r = await fetch(`${IA_SERVICO_URL}/chat`, {
       method: "POST",
       headers,
-      body: JSON.stringify({ messages, modelo: modelo || undefined }),
+      // O idioma vai explícito: depois de um resultado de ferramenta (JSON
+      // grande, quase sempre em inglês), o modelo tende a esquecer a instrução
+      // do system e responder em inglês. O serviço reforça a cada volta.
+      body: JSON.stringify({ messages, modelo: modelo || undefined, idioma }),
       signal: ctrl.signal,
     });
     if (!r.ok) throw new Error(`serviço IA HTTP ${r.status}`);
@@ -587,7 +590,7 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
   // pode ficar sem resposta só porque o serviço de ferramentas está fora.
   if (IA_SERVICO_URL) {
     try {
-      const r = await chamarServicoIA(messages, { modelo: modeloEscolhido });
+      const r = await chamarServicoIA(messages, { modelo: modeloEscolhido, idioma: lang });
       if (r) return r.trim();
       dlog("serviço IA devolveu vazio — caindo para Ollama direto");
     } catch (e) {
@@ -1012,20 +1015,28 @@ export async function conversar(message, pergunta, ctx) {
     // Fragmentamos em pedaços de 1900 (com folga), preservando blocos de código.
     const partes = fragmentar(textoFinal, 1500);
     dlog(`entregando resposta em ${partes.length} parte(s) | total ${textoFinal.length} chars | tempo total ${((Date.now() - tInicio) / 1000).toFixed(1)}s`);
-    await mostrarEmbed({
-      title: en
-        ? (partes.length > 1 ? "💬 Reply (1/" + partes.length + ")" : "💬 Reply")
-        : (partes.length > 1 ? "💬 Resposta (1/" + partes.length + ")" : "💬 Resposta"),
-      description: partes[0],
-      colour: COR.info,
-    });
+
+    // Todas as partes saem do MESMO jeito: texto corrido. Antes a primeira
+    // virava texto (via mostrarEmbed) e as seguintes iam como embed com
+    // título — a mesma resposta aparecia em dois formatos diferentes, o que
+    // fazia parecer que o bot tinha mudado de assunto no meio.
+    //
+    // O contador vai no fim: primeiro se lê a resposta, depois se percebe
+    // que há continuação.
+    const marcar = (texto, i) => partes.length > 1
+      ? `${texto}\n\n_(${i + 1}/${partes.length})_`
+      : texto;
+
+    await mostrarEmbed({ description: marcar(partes[0], 0), colour: COR.info });
     for (let i = 1; i < partes.length; i++) {
       try {
-        await sendEmbed(message.channel, {
-          title: en ? `💬 Reply (${i + 1}/${partes.length})` : `💬 Resposta (${i + 1}/${partes.length})`,
-          description: partes[i], colour: COR.info,
-        });
-      } catch (e) { console.error("[CHAT][parte]", e.message); }
+        await message.channel.sendMessage(marcar(partes[i], i));
+      } catch (e) {
+        console.error("[CHAT][parte]", e.message);
+        // Se o texto puro falhar, o embed ainda entrega o conteúdo.
+        try { await sendEmbed(message.channel, { description: partes[i], colour: COR.info }); }
+        catch (e2) { console.error("[CHAT][parte-embed]", e2.message); }
+      }
     }
     dlog(`══════ conversa concluída ══════`);
   } catch (err) {

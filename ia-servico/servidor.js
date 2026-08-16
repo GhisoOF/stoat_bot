@@ -59,9 +59,24 @@ async function ollama(messages, { modelo, comFerramentas = true } = {}) {
 // ── Laço de ferramentas ────────────────────────────────────
 // Enquanto o modelo pedir ferramentas, executamos e devolvemos
 // o resultado, até ele responder em texto (ou bater o limite).
-async function conversarComFerramentas(messages, { modelo, usarFerramentas = true } = {}) {
+// Lembrete de idioma, reinjetado depois das ferramentas.
+//
+// O resultado de uma ferramenta é um JSON grande — nomes de arquivo, código,
+// chaves em inglês. Isso empurra o modelo para o inglês, e a instrução do
+// system fica longe demais no histórico para competir. O sintoma é o usuário
+// perguntar em português e receber a resposta inteira em inglês.
+//
+// Repetir a instrução logo antes da resposta final resolve, e custa uma linha.
+function lembreteDeIdioma(idioma) {
+  return idioma === "en"
+    ? "Answer in English, regardless of the language of the tool results."
+    : "Responda em português do Brasil, independentemente do idioma dos resultados das ferramentas.";
+}
+
+async function conversarComFerramentas(messages, { modelo, usarFerramentas = true, idioma = "pt" } = {}) {
   const hist = [...messages];
   const usos = [];
+  let usouFerramenta = false;
 
   for (let volta = 0; volta < MAX_VOLTAS; volta++) {
     const data = await ollama(hist, { modelo, comFerramentas: usarFerramentas });
@@ -73,6 +88,7 @@ async function conversarComFerramentas(messages, { modelo, usarFerramentas = tru
     }
 
     hist.push(msg);   // registra o pedido de ferramenta do modelo
+    usouFerramenta = true;
 
     for (const c of chamadas) {
       const nome = c?.function?.name;
@@ -90,11 +106,19 @@ async function conversarComFerramentas(messages, { modelo, usarFerramentas = tru
         content: JSON.stringify(resultado).slice(0, 20000),
       });
     }
+
+    // Logo depois do JSON da ferramenta, enquanto ainda é a última coisa lida.
+    hist.push({ role: "system", content: lembreteDeIdioma(idioma) });
   }
 
   // Estourou o limite de voltas: pede uma resposta final sem ferramentas.
   const final = await ollama(
-    [...hist, { role: "user", content: "Responda agora com o que já tem, sem usar mais ferramentas." }],
+    [...hist, {
+      role: "user",
+      content: idioma === "en"
+        ? "Answer now with what you already have, without using more tools."
+        : "Responda agora com o que já tem, sem usar mais ferramentas.",
+    }],
     { modelo, comFerramentas: false },
   );
   return { resposta: (final?.message?.content || "").trim(), usos, limite: true };
@@ -187,6 +211,9 @@ const servidor = createServer(async (req, res) => {
       const r = await conversarComFerramentas(messages, {
         modelo: corpo.modelo,
         usarFerramentas: corpo.ferramentas !== false,
+        // Quem chama diz o idioma; sem isso, assumimos português (o padrão
+        // dos servidores onde a Judy roda).
+        idioma: corpo.idioma === "en" ? "en" : "pt",
       });
       log(`chat ok em ${Date.now() - t0}ms | ferramentas: ${r.usos.map((u) => u.ferramenta).join(",") || "nenhuma"}`);
       return json(res, 200, r);

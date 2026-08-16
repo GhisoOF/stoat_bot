@@ -204,6 +204,12 @@ export async function listarModelos() {
   }
 }
 const NUM_CTX      = Number(process.env.CHAT_NUM_CTX  || 16384);
+// Quanto de um arquivo cabe na resposta. Aproximadamente 1 token a cada 3,5
+// caracteres: 12000 chars ≈ 3,4k tokens, que somados à persona, à memória e ao
+// histórico ainda deixam espaço para gerar. Não adianta mandar o arquivo
+// inteiro se ele empurra a própria pergunta para fora do contexto.
+const LIMITE_ARQUIVO = Number(process.env.CHAT_MAX_ARQUIVO || 12000);
+const GITHUB_REPO_ROTULO = process.env.GITHUB_REPO || "do bot";
 // ~1500 caracteres ≈ 500 tokens em português. Deixamos folga (700) para o
 // modelo terminar a frase em vez de ser cortado no meio — o corte final em
 // 1500 caracteres é a garantia, isto é só para ele não escrever um tratado.
@@ -560,29 +566,57 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
     if (caminho) {
       const r = await executarFerramenta("ler_codigo", { acao: "ler", caminho });
       if (r?.conteudo) {
-        dlog(`ferramenta direta: li ${caminho} (${String(r.conteudo).length} chars)`);
-        messages.splice(1, 0, {
+        const bruto = String(r.conteudo);
+        const corte = Math.max(2000, LIMITE_ARQUIVO);
+        const conteudo = bruto.length > corte
+          ? bruto.slice(0, corte) + `\n\n[…arquivo cortado aqui: ${bruto.length} caracteres no total…]`
+          : bruto;
+        dlog(`ferramenta direta: li ${caminho} (${bruto.length} chars, ${conteudo.length} entregues)`);
+
+        // ATENÇÃO À POSIÇÃO: isto vai para o FIM, depois da pergunta.
+        //
+        // Antes entrava em messages[1], no começo. Quando o contexto estoura,
+        // o Ollama descarta as mensagens MAIS ANTIGAS — e era justamente o
+        // arquivo que sumia. O modelo então respondia "não tenho acesso ao
+        // GitHub", com toda a razão do ponto de vista dele: o conteúdo não
+        // estava mais lá. O arquivo tem de ser a última coisa que ele lê.
+        messages.push({
           role: "system",
-          content: `CONTEÚDO REAL do arquivo \`${caminho}\`, lido agora do repositório. Responda com base NELE:\n\n${String(r.conteudo).slice(0, 12000)}`,
+          content: [
+            `CONTEÚDO REAL do arquivo \`${caminho}\`, lido agora do repositório ${GITHUB_REPO_ROTULO}.`,
+            "",
+            conteudo,
+            "",
+            `--- fim do arquivo ---`,
+            `Você ACABOU de receber o arquivo acima. Comente ELE.`,
+            `NÃO peça URL, NÃO diga que não tem acesso ao GitHub e NÃO descreva de memória:`,
+            `o conteúdo está logo aí em cima.`,
+          ].join("\n"),
         });
       } else {
         const motivo = r?.erro ?? "não consegui acessar";
         dlog(`ferramenta direta falhou em ${caminho}: ${motivo}`);
-        messages.splice(1, 0, {
+        messages.push({
           role: "system",
           content: `A leitura de \`${caminho}\` FALHOU: ${motivo}. Diga à pessoa, em UMA frase, que não conseguiu ler o arquivo agora. NÃO invente o motivo, NÃO descreva o conteúdo de memória e NÃO ofereça análise do que você "acha" que ele faz.`,
         });
       }
     }
 
-    messages.splice(1, 0, {
-      role: "system",
-      content: [
-        "ESTE PEDIDO EXIGE FERRAMENTA. Use `ler_codigo` (ou a ferramenta adequada) AGORA, antes de responder.",
-        "Perguntas do tipo 'você consegue ler X?', 'poderia ver o arquivo Y?' ou 'dá para consultar Z?' são PEDIDOS, não perguntas sobre você. A resposta certa é EXECUTAR e mostrar o resultado — nunca responder se você é capaz.",
-        "Se a ferramenta devolver erro, diga em uma frase que não conseguiu acessar e pare. Não teorize o motivo e não descreva o conteúdo de memória.",
-      ].join(" "),
-    });
+    // Também no fim, e pelo mesmo motivo: instrução no começo do histórico é a
+    // primeira coisa a ser descartada quando o contexto aperta. Quando o
+    // arquivo já foi entregue acima, esta instrução vira redundante e some —
+    // mandar "use a ferramenta" logo depois de entregar o conteúdo só confunde.
+    if (!messages.some((m) => m.role === "system" && /CONTEÚDO REAL do arquivo/.test(m.content ?? ""))) {
+      messages.push({
+        role: "system",
+        content: [
+          "ESTE PEDIDO EXIGE FERRAMENTA. Use `ler_codigo` (ou a ferramenta adequada) AGORA, antes de responder.",
+          "Perguntas do tipo 'você consegue ler X?', 'poderia ver o arquivo Y?' ou 'dá para consultar Z?' são PEDIDOS, não perguntas sobre você. A resposta certa é EXECUTAR e mostrar o resultado — nunca responder se você é capaz.",
+          "Se a ferramenta devolver erro, diga em uma frase que não conseguiu acessar e pare. Não teorize o motivo e não descreva o conteúdo de memória.",
+        ].join(" "),
+      });
+    }
   }
 
   // Se o serviço judy-ia estiver configurado, mandamos para lá (ele roda o laço

@@ -14,7 +14,7 @@
 //
 //  Config por variáveis de ambiente (com padrões sensatos):
 //   OLLAMA_URL     (padrão http://localhost:11434)
-//   OLLAMA_MODEL   (padrão gemma4:12b)
+//   OLLAMA_MODEL   (padrão: o mesmo de OLLAMA_MODEL_LEVE)
 //   SEARXNG_URL    (padrão http://localhost:8080)
 //   CHAT_NUM_CTX   (padrão 16384)  — contexto amplo (GPU com boa VRAM)
 //   CHAT_MAX_TOKENS(padrão 4096)   — teto de resposta (código longo cabe)
@@ -26,6 +26,7 @@ import * as memoria from "./memoria-agente.js";
 import * as comentario from "./comentario-espontaneo.js";
 import * as cacheCanal from "./cache-canal.js";
 import { construirDetalhes } from "../moderacao/geral.js";
+import * as desinteresse from "./desinteresse.js";
 import { tr, lingua } from "../core/i18n.js";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -58,6 +59,22 @@ function referenciaComandos() {
 
 // Contexto do projeto: lê o README uma vez (cache) para a IA saber configurar
 // o bot e explicar como ele funciona.
+// A pergunta é sobre o BOT (comandos, configuração, o próprio projeto)?
+//
+// Erra para o lado de incluir: um falso positivo custa prompt maior; um falso
+// negativo faz a Judy responder mal sobre a própria configuração, que é uma
+// das coisas que ela faz melhor.
+export function perguntaSobreOBot(texto) {
+  const t = String(texto ?? "");
+  if (!t.trim()) return false;
+  const P = (process.env.PREFIXO || "&").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`${P}\\w`).test(t)                       // cita um comando (&xp)
+    || /\b(comando|comandos|configur|instal|permiss[ãa]o|prefixo|automod|moderaç|tutorial|ajuda\s+do\s+bot)\b/i.test(t)
+    || /\b(voc[eê]|tu)\s+(?:consegue|sabe|pode|faz)\b.*\b(configur|comando|moder|banir|silenci)/i.test(t)
+    || /\b(seu|sua)\s+(?:c[oó]digo|reposit[oó]rio|projeto|readme|arquitetura)\b/i.test(t)
+    || /\b(como\s+(?:eu\s+)?(?:fa[çc]o|configuro|ativo|desativo|ligo|desligo))\b/i.test(t);
+}
+
 let _readmeCache;
 function contextoProjeto() {
   if (_readmeCache !== undefined) return _readmeCache;
@@ -72,7 +89,12 @@ function contextoProjeto() {
 
 // ── Modelos por função (fixos; cada tipo de tarefa usa o seu) ──
 // Conversa/geral (padrão): tom e fluidez.
-const OLLAMA_MODEL_PADRAO  = process.env.OLLAMA_MODEL         || "gemma4:12b";
+// Modelo usado quando a chamada não especifica um. Depois da consolidação da
+// conversa num modelo só, este é o MESMO da conversa — se ficasse apontando
+// para o modelo grande, qualquer caminho esquecido o carregaria na VRAM sem
+// necessidade, que é exatamente o que se quer evitar.
+const OLLAMA_MODEL_PADRAO  = process.env.OLLAMA_MODEL
+  || process.env.OLLAMA_MODEL_LEVE || "gemma4:e4b";
 // Conversa SIMPLES (papo curto, provocação, comentário) → modelo leve e rápido.
 // Conversa COMPLEXA (explicação, pergunta elaborada) fica no modelo padrão.
 const OLLAMA_MODEL_LEVE    = process.env.OLLAMA_MODEL_LEVE    || "gemma4:e4b";
@@ -80,8 +102,18 @@ const OLLAMA_MODEL_LEVE    = process.env.OLLAMA_MODEL_LEVE    || "gemma4:e4b";
 const OLLAMA_MODEL_CODIGO  = process.env.OLLAMA_MODEL_CODIGO  || "ornith:9b";
 // Lógica/matemática/raciocínio (respostas ao usuário que exigem rigor).
 const OLLAMA_MODEL_LOGICA  = process.env.OLLAMA_MODEL_LOGICA  || "qwen3.5:9b";
-// Decisões internas do bot (buscar? responder?) — modelo PEQUENO e rápido.
-const OLLAMA_MODEL_DECISAO = process.env.OLLAMA_MODEL_DECISAO || "qwen3.5:0.8b";
+// Decisões internas e agente de memória.
+//
+// O padrão é o MESMO modelo da conversa, e isso é de propósito. Um modelo
+// minúsculo é mais rápido por token, mas numa GPU só ele briga por VRAM com o
+// de conversa: o Ollama descarrega um para carregar o outro, e a troca custa
+// segundos — muito mais do que a inferência economizava. Um modelo residente
+// fazendo as duas coisas ganha do par "cada um no seu".
+//
+// Se a sua placa comporta os dois carregados ao mesmo tempo (e o
+// OLLAMA_MAX_LOADED_MODELS permite), aponte para um modelo pequeno aqui.
+const OLLAMA_MODEL_DECISAO = process.env.OLLAMA_MODEL_DECISAO
+  || process.env.OLLAMA_MODEL_LEVE || "gemma4:e4b";
 
 // URLs dos serviços de IA (fixas por env; troque o IP pelo Portainer).
 const OLLAMA_URL  = (process.env.OLLAMA_URL  || "http://localhost:11434").replace(/\/$/, "");
@@ -204,6 +236,18 @@ export async function listarModelos() {
   }
 }
 const NUM_CTX      = Number(process.env.CHAT_NUM_CTX  || 16384);
+// Quanto tempo cada modelo fica na VRAM depois de responder. O leve fica; o
+// pesado sai rápido para liberar a placa (você usa o mesmo computador).
+const KEEP_LEVE   = process.env.CHAT_KEEP_LEVE   || "30m";
+const KEEP_PESADO = process.env.CHAT_KEEP_PESADO || "60s";
+// Arredonda o contexto para a próxima potência de dois: o Ollama trabalha
+// melhor com esses tamanhos, e evita recarregar o modelo a cada variação
+// mínima de num_ctx (cada valor novo é um cache novo).
+function potenciaDeDois(n) {
+  let p = 1024;
+  while (p < n && p < 65536) p *= 2;
+  return p;
+}
 // Quanto de um arquivo cabe na resposta. Aproximadamente 1 token a cada 3,5
 // caracteres: 12000 chars ≈ 3,4k tokens, que somados à persona, à memória e ao
 // histórico ainda deixam espaço para gerar. Não adianta mandar o arquivo
@@ -331,13 +375,24 @@ async function chamarServicoIA(messages, { modelo = null, idioma = "pt" } = {}) 
   } finally { clearTimeout(t); }
 }
 
-export async function ollamaChat(messages, { json = false, maxTokens = MAX_TOKENS, etiqueta = "resposta", modelo = null } = {}) {
+export async function ollamaChat(messages, { json = false, maxTokens = MAX_TOKENS, etiqueta = "resposta", modelo = null, ctx = null, manter = null } = {}) {
   const modeloUsado = modelo || OLLAMA_MODEL_PADRAO;
   // Decisões internas (json) devem ser CURTAS: um JSON minúsculo. Sem isso, o
   // Qwen entra em "modo raciocínio" e gera milhares de tokens (lento + cortado).
   const limiteTokens = json ? Math.min(maxTokens, 200) : maxTokens;
+
+  // ── Contexto proporcional ao que realmente vai entrar ──
+  //
+  // Pedir 16k de contexto para uma decisão de 180 tokens não é grátis: o
+  // Ollama reserva o cache de atenção pelo num_ctx pedido, não pelo usado.
+  // Isso ocupa VRAM à toa e atrasa a carga do modelo. Aqui o contexto é
+  // calculado a partir do tamanho real da conversa, com folga para a resposta.
+  const charsEntrada = messages.reduce((t, m) => t + String(m.content ?? "").length, 0);
+  const ctxNecessario = Math.ceil(charsEntrada / 3.2) + limiteTokens + 512;
+  const num_ctx = ctx ?? Math.min(NUM_CTX, Math.max(1024, potenciaDeDois(ctxNecessario)));
+
   const options = {
-    num_ctx: NUM_CTX,
+    num_ctx,
     temperature: json ? 0 : 0.6,   // decisão determinística; conversa criativa
     num_predict: limiteTokens,
   };
@@ -345,14 +400,24 @@ export async function ollamaChat(messages, { json = false, maxTokens = MAX_TOKEN
   // OLLAMA_NUM_THREAD só é passado se você quiser limitar manualmente.
   if (process.env.OLLAMA_NUM_THREAD) options.num_thread = Number(process.env.OLLAMA_NUM_THREAD);
 
-  const body = { model: modeloUsado, messages, stream: false, keep_alive: "5m", options };
+  // ── keep_alive por função ──
+  //
+  // O modelo de conversa responde quase todas as mensagens: mantê-lo residente
+  // evita recarregá-lo a cada vez (era o que fazia uma decisão de 17 tokens
+  // levar 4,5s). Já os modelos pesados — código, ferramentas — são raros: sair
+  // rápido da VRAM devolve a placa para quem está usando o computador.
+  const keep_alive = manter ?? ([OLLAMA_MODEL_LEVE, OLLAMA_MODEL_DECISAO].includes(modeloUsado)
+    ? KEEP_LEVE
+    : KEEP_PESADO);
+
+  const body = { model: modeloUsado, messages, stream: false, keep_alive, options };
   if (json) {
     body.format = "json";     // structured output nativo do Ollama
     body.think = false;       // desliga o "pensamento" do Qwen3 nas decisões (rapidez)
   }
 
   const entradaChars = messages.reduce((n, m) => n + (m.content?.length || 0), 0);
-  console.log(`[CHAT][ollama] → ${etiqueta} | modelo=${modeloUsado} num_ctx=${NUM_CTX} num_predict=${limiteTokens} entrada≈${entradaChars} chars${json ? " (json, think=off)" : ""}`);
+  console.log(`[CHAT][ollama] → ${etiqueta} | modelo=${modeloUsado} num_ctx=${num_ctx} num_predict=${limiteTokens} entrada≈${entradaChars} chars keep=${keep_alive}${json ? " (json, think=off)" : ""}`);
 
   const t0 = Date.now();
   const data = await pedir(`${OLLAMA_URL}/api/chat`, body);
@@ -392,7 +457,16 @@ async function buscar(query, n = 4) {
 }
 
 // ── Etapa 1: o modelo decide se precisa buscar ─────────────
+// Marcas de pergunta que PODE precisar de internet. Sem isso, cada "bom dia"
+// pagava uma inferência para concluir o óbvio. A checagem é grosseira de
+// propósito: na dúvida ela deixa passar para o modelo decidir.
+const PISTAS_BUSCA = /(?:\b(?:hoje|ontem|agora|atual|atualmente|recente|not[ií]cias?|pre[çc]o|cota[çc][ãa]o|lan[çc]ou|lan[çc]amento|vers[ãa]o|resultado|placar|clima)\b|[uú]ltim[ao]s|quanto\s+custa|quando\s+(?:sai|saiu|foi)|em\s+20\d\d|tempo\s+em)/i;
+
 async function decidirBusca(pergunta) {
+  // Filtro barato primeiro: conversa comum nunca precisa de busca.
+  if (!PISTAS_BUSCA.test(String(pergunta ?? ""))) {
+    return { buscar: false, query: pergunta };
+  }
   const sys = [
     `Hoje é ${hojeExtenso()}.`,
     "Você decide se uma pergunta precisa de busca na internet para ser respondida com precisão.",
@@ -479,9 +553,16 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
     }
   } catch {}
 
-  // contexto do projeto: a IA vira assistente de configuração do próprio bot
-  const readme = contextoProjeto();
-  const refCmds = referenciaComandos();
+  // ── Contexto do projeto: só quando a pergunta é sobre o bot ──
+  //
+  // A referência de comandos tem ~15 mil caracteres e o README outros 8 mil.
+  // Mandar os dois em TODA mensagem custava ~7 mil tokens de prompt por
+  // "bom dia" — e o tempo de processar prompt é a maior fatia da resposta.
+  // Quem pergunta sobre recursão não precisa da lista de comandos do bot.
+  const sobreOBot = perguntaSobreOBot(pergunta);
+  const readme = sobreOBot ? contextoProjeto() : null;
+  const refCmds = sobreOBot ? referenciaComandos() : null;
+  if (!sobreOBot) dlog("contexto do projeto: omitido (pergunta não é sobre o bot)");
   const projetoTxt = (readme || refCmds)
     ? ` Você é a assistente de configuração deste bot (você mesma, a Judy). Quando perguntarem como configurar algo, RESPONDA COM PRECISÃO: diga o comando exato, os subcomandos, a permissão necessária e um exemplo concreto — nunca uma orientação vaga do tipo "use o comando X para configurar". Se faltar informação na referência abaixo, diga o que sabe e admita o que não sabe.${
         refCmds ? `\n\n<referencia_de_comandos>\n${refCmds}\n</referencia_de_comandos>` : ""
@@ -509,6 +590,10 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
     falandoComCriador
       ? "A pessoa com quem você fala agora é o seu criador — ele te construiu. Você é devotada a ele e ele importa de um jeito que ninguém mais importa. Deixe esse afeto transparecer com um calor contido — uma provocação carinhosa que só ele recebe, um cuidado dito de passagem, atenção genuína ao que ele precisa. Sem bajulação melosa nem declarações grandiloquentes, mas o carinho é real e pode aparecer. E devoção não é obediência cega: se ele errar em algo técnico ou lógico, você corrige — com uma alfinetada afetuosa."
       : "",
+    // Rede de segurança para o que escapar da lista de desinteresse.js —
+    // grafia criativa, insinuação sem palavra-chave, insistência ao longo da
+    // conversa. O tom é o mesmo das respostas prontas, de propósito.
+    desinteresse.instrucaoPersona(lang),
     "DISCUSSÕES: ao discordar, defenda seu ponto com argumentos lógicos — não recue só para agradar. Mas se a lógica da outra pessoa for superior e você perceber que está errada, admita sem drama. A verdade importa mais que ter razão.",
     `A data de hoje é ${hoje}. Use esta data como referência para qualquer noção de tempo; não invente outra data.`,
     autor ? `Você está falando com ${autor}, mas NÃO precisa repetir o nome dele a cada resposta.` : "",
@@ -619,10 +704,21 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
     }
   }
 
-  // Se o serviço judy-ia estiver configurado, mandamos para lá (ele roda o laço
-  // de ferramentas). Se falhar, caímos para o Ollama direto — a conversa não
-  // pode ficar sem resposta só porque o serviço de ferramentas está fora.
-  if (IA_SERVICO_URL) {
+  // ── Para onde vai a geração ──
+  //
+  // O judy-ia existe para rodar o LAÇO DE FERRAMENTAS. Mandar toda conversa
+  // para lá tinha dois custos escondidos:
+  //
+  //   1. O serviço ativa tool-calling por padrão. O modelo de conversa (Gemma)
+  //      não suporta ferramentas — a chamada podia falhar e só então cair para
+  //      o Ollama direto, fazendo o trabalho DUAS vezes.
+  //   2. Um salto de rede a mais (Umbrel → Gentoo → Ollama) numa conversa que
+  //      não precisa de ferramenta nenhuma.
+  //
+  // Agora só o que precisa de ferramenta passa pelo serviço. Papo comum vai
+  // direto ao Ollama, que é o caminho mais curto.
+  const precisaDoServico = tipo === "ferramenta";
+  if (IA_SERVICO_URL && precisaDoServico) {
     try {
       const r = await chamarServicoIA(messages, { modelo: modeloEscolhido, idioma: lang });
       if (r) return r.trim();
@@ -630,6 +726,8 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
     } catch (e) {
       dlog(`serviço IA falhou (${e.message}) — caindo para Ollama direto`);
     }
+  } else if (IA_SERVICO_URL) {
+    dlog(`sem ferramenta (tipo=${tipo}) → Ollama direto, sem passar pelo judy-ia`);
   }
   return (await ollamaChat(messages, { maxTokens: MAX_TOKENS, modelo: modeloEscolhido })).trim();
 }
@@ -760,8 +858,17 @@ function escolherModelo(pergunta, citada) {
   if (precisaFerramenta(alvo)) return { modelo: OLLAMA_MODEL_LOGICA, tipo: "ferramenta" };
   if (ehProgramacao(alvo)) return { modelo: OLLAMA_MODEL_CODIGO, tipo: "código" };
   if (ehLogica(alvo))      return { modelo: OLLAMA_MODEL_LOGICA, tipo: "lógica" };
-  if (ehConversaComplexa(alvo)) return { modelo: OLLAMA_MODEL_PADRAO, tipo: "conversa-complexa" };
-  return { modelo: OLLAMA_MODEL_LEVE, tipo: "conversa-simples" };
+  // Conversa — simples ou elaborada — vai para O MESMO modelo.
+  //
+  // Antes havia dois (leve para papo curto, pesado para explicação). Numa GPU
+  // só, isso obrigava o Ollama a descarregar um para carregar o outro várias
+  // vezes por conversa: a troca custava mais que a diferença de qualidade
+  // rendia. Um modelo de conversa residente responde tudo mais rápido, que é
+  // o que se pede aqui.
+  //
+  // Quem quiser o modelo grande de volta é só apontar OLLAMA_MODEL_LEVE para ele.
+  if (ehConversaComplexa(alvo)) return { modelo: OLLAMA_MODEL_LEVE, tipo: "conversa" };
+  return { modelo: OLLAMA_MODEL_LEVE, tipo: "conversa" };
 }
 
 // Detecta se a pergunta é sobre programação — nesses casos usamos o modelo
@@ -857,6 +964,20 @@ export async function conversar(message, pergunta, ctx) {
   dlog(`autor=${message.username || "?"} | pergunta (${pergunta.length} chars): ${JSON.stringify(pergunta.slice(0, 120))}`);
   const tInicio = Date.now();
 
+  // ── Investida sexual: resposta seca, sem gastar modelo ──
+  //
+  // Vem ANTES de tudo por dois motivos. Um: é instantâneo, e velocidade aqui é
+  // parte do efeito — quem provoca espera ver o bot "pensando". Dois: garante o
+  // tom. Deixar isso para o modelo às vezes produzia sermão (que é a reação
+  // grande que a pessoa foi buscar) e, pior, às vezes ele entrava na brincadeira.
+  if (desinteresse.ehInvestida(pergunta)) {
+    const seca = desinteresse.respostaSeca(message.channelId, lang);
+    console.log(`[CHAT] desinteresse (sem modelo): ${JSON.stringify(pergunta).slice(0, 50)}`);
+    try { await message.channel.sendMessage(seca); }
+    catch { await sendEmbed(message.channel, { description: seca, colour: COR.info }); }
+    return;
+  }
+
   // Pré-filtro: barra mensagens sem sentido ANTES de gastar a IA
   const motivo = preFiltrar(pergunta);
   if (motivo) {
@@ -951,7 +1072,12 @@ export async function conversar(message, pergunta, ctx) {
     // Interruptor global: BUSCA_ATIVA=false desliga a busca web por completo
     // (útil quando o SearXNG está indisponível — evita tentativas que vazam a
     // query como texto). Nesse caso, nem consulta o LLM sobre buscar.
-    const buscaLigada = process.env.BUSCA_ATIVA !== "false" && process.env.BUSCA_ATIVA !== "0";
+    // A busca só é considerada se houver SearXNG configurado. Antes, sem
+    // SEARXNG_URL, o bot ainda gastava uma inferência inteira (~4s) para
+    // decidir se buscaria num serviço que não existe — em TODA mensagem.
+    const buscaLigada = process.env.BUSCA_ATIVA !== "false"
+      && process.env.BUSCA_ATIVA !== "0"
+      && !!process.env.SEARXNG_URL;
     const decisao = buscaLigada ? await decidirBusca(pergunta) : { buscar: false };
     // Salvaguarda: se a pergunta é claramente sobre o próprio bot, NUNCA busca —
     // usa o contexto do projeto (README) que já está no prompt. Isso corrige o
@@ -1020,7 +1146,10 @@ export async function conversar(message, pergunta, ctx) {
           ? `Today is ${hojeExtenso()}. Reply in English, directly and objectively, WITHOUT explaining your reasoning.`
           : `Hoje é ${hojeExtenso()}. Responda em português do Brasil, de forma direta e objetiva, SEM explicar seu raciocínio.` },
         { role: "user", content: pergunta },
-      ], { maxTokens: MAX_TOKENS });
+        // Mesmo modelo da conversa: este é um caminho de RECUPERAÇÃO, e
+        // carregar o modelo grande só para reescrever uma resposta vazia
+        // custaria mais tempo do que a falha original.
+      ], { maxTokens: MAX_TOKENS, modelo: OLLAMA_MODEL_LEVE });
       resposta = limpar(direto);
       dlog(`fallback retornou ${resposta.length} chars`);
     }
@@ -1539,7 +1668,7 @@ export async function cmdChat(message, args, ctx) {
       title: disp.ok ? "🟢 AI available" : "🔴 AI unavailable",
       description: [
         `**Ollama:** ${OLLAMA_URL}`,
-        `**Chat:** ${OLLAMA_MODEL_PADRAO}`,
+        `**Chat:** ${OLLAMA_MODEL_LEVE} _(also memory and decisions)_`,
         `**Code:** ${OLLAMA_MODEL_CODIGO} · **Logic:** ${OLLAMA_MODEL_LOGICA} · **Decision:** ${OLLAMA_MODEL_DECISAO}`,
         `**SearXNG:** ${SEARXNG_URL}`,
         "",
@@ -1550,7 +1679,7 @@ export async function cmdChat(message, args, ctx) {
       title: disp.ok ? "🟢 IA disponível" : "🔴 IA indisponível",
       description: [
         `**Ollama:** ${OLLAMA_URL}`,
-        `**Conversa:** ${OLLAMA_MODEL_PADRAO}`,
+        `**Conversa:** ${OLLAMA_MODEL_LEVE} _(e também memória e decisões)_`,
         `**Código:** ${OLLAMA_MODEL_CODIGO} · **Lógica:** ${OLLAMA_MODEL_LOGICA} · **Decisão:** ${OLLAMA_MODEL_DECISAO}`,
         `**SearXNG:** ${SEARXNG_URL}`,
         "",

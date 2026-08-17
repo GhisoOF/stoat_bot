@@ -11,6 +11,66 @@ embutido (nada de serviço externo), então as configurações e punições
 
 ---
 
+## Conversa: rápida por desenho
+
+A prioridade aqui é **tempo de resposta**, não profundidade. Quatro mudanças,
+em ordem de impacto medido:
+
+**Contexto sob demanda.** A referência de comandos (15 mil caracteres) e o
+README (8 mil) iam no prompt de *toda* mensagem. Um "bom dia" custava 9.300
+tokens de prompt — e processar prompt é a maior fatia do tempo. Agora só entram
+quando a pergunta é sobre o bot. Medido: **9.328 → 1.872 tokens** numa conversa
+comum, com o contexto completo preservado em "como configuro o automod?".
+
+**Um modelo para conversa.** Havia dois (leve para papo curto, pesado para
+explicação). Numa GPU só, isso obrigava o Ollama a descarregar um para carregar
+o outro várias vezes por conversa — a troca custava mais do que a diferença de
+qualidade rendia. O agente de memória, que usava um terceiro modelo, passou a
+usar o mesmo.
+
+**Menos uma inferência por mensagem.** A decisão "isto precisa de busca?" era um
+chamado ao LLM em toda mensagem — inclusive sem SearXNG configurado, decidindo
+sobre um serviço que não existe. Agora exige `SEARXNG_URL` e passa antes por
+uma heurística.
+
+**Contexto proporcional.** `num_ctx` era 16384 sempre; o Ollama reserva cache
+de atenção pelo valor pedido, não pelo usado. Agora é calculado pelo tamanho
+real da conversa (4096 no caso comum).
+
+### Como está a VRAM
+
+| Modelo | Papel | Fica na memória |
+|---|---|---|
+| `OLLAMA_MODEL_LEVE` | conversa, memória, decisões | 30 min |
+| `OLLAMA_MODEL_CODIGO` | programação | 60 s |
+| `OLLAMA_MODEL_LOGICA` | ferramentas, lógica | 60 s |
+
+O modelo de conversa fica residente porque responde quase tudo; os pesados saem
+rápido para devolver a placa a quem está usando o computador. Ajustável em
+`CHAT_KEEP_LEVE` e `CHAT_KEEP_PESADO`.
+
+## Quando alguém dá em cima do bot
+
+O pessoal brinca, e parte das brincadeiras tem teor sexual. Deixar isso para o
+modelo dava três problemas: ele às vezes entrava na brincadeira, às vezes fazia
+sermão, e sempre gastava uma inferência inteira para responder algo que não
+exige inteligência nenhuma.
+
+A resposta agora é **fixa, curta e entediada**, escolhida em `desinteresse.js`
+sem chamar modelo — sai instantânea:
+
+> — manda nude
+> — Não tenho corpo, nem interesse. Sobretudo interesse.
+
+O raciocínio por trás do tom: quem provoca busca reação, e sermão é uma reação
+enorme. Tédio encerra o assunto; indignação alimenta. Por isso nenhuma das
+respostas repreende.
+
+A lista de gatilhos é enxuta de propósito, com exceções explícitas para
+"comer alguma coisa", "peitoral" e "sexo do personagem" — falso positivo aqui
+custa uma resposta seca numa conversa normal. O que escapa cai na instrução de
+persona, que pede o mesmo tom em uma frase.
+
 ## Sumário
 
 - [Recursos](#recursos)

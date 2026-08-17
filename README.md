@@ -795,6 +795,31 @@ O spread já vem descontado — é o que você receberia de fato, não uma cota�
 teórica. `&game cambio taxas` continua mostrando a tabela completa de todas
 contra todas.
 
+### Fração é dinheiro
+
+O câmbio arredondava para baixo, e isso comia patrimônio a cada troca. Com
+Monero valendo ~90 Reais, trocar 112 Reais devolvia **1 Monero** — os 22 Reais
+restantes simplesmente sumiam. Pior: 68 Cobre "não chegavam a 1 Monero", então
+a troca era recusada e o jogador ficava preso na moeda barata.
+
+Os saldos agora têm **6 casas decimais**. A mesma troca devolve 1,24 Monero, e
+a única perda é o spread de 3% — que existe de propósito, para o A→B→A não
+virar máquina de dinheiro.
+
+```
+&game cambio 112 brl para xmr     # → 1,24 Monero
+&game cambio 0,5 xau para brl     # fração na entrada (ponto ou vírgula)
+```
+
+Isso vale também para as compras: um item de 20 Reais pago em Ouro custa
+0,107 Ouro, não 1 Ouro inteiro (que era o que o arredondamento para cima
+cobrava antes).
+
+A exibição mostra só as casas que existem — `150.475` de Cobre continua
+inteiro, `0,0001` de Bitcoin aparece inteiro em vez de virar `0`. Seis casas
+passam longe do erro de ponto flutuante do JavaScript e são finas o bastante
+para a moeda mais cara do catálogo.
+
 ### Câmbio com o banco
 
 Depender de outro jogador para trocar moeda trava quem joga sozinho ou fora de

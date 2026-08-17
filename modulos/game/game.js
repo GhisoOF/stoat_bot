@@ -210,7 +210,36 @@ function jogadorPaga(serverId, userId, moeda, qtd) {
   return pago;
 }
 
-function fmt(n) { return Math.round(n).toLocaleString("pt-BR"); }
+// Lê um número digitado por gente: aceita "0.5", "0,5" e "1.234,56".
+//
+// A ambiguidade do ponto é real — em "1.234" ele é separador de milhar, em
+// "0.5" é decimal. A regra que acerta os dois: se há vírgula, ela é a decimal
+// e os pontos são milhar; se só há ponto, ele é decimal (ninguém digita
+// "1.234" querendo mil e duzentos num comando de jogo).
+function numeroDigitado(txt) {
+  const t = String(txt ?? "").trim();
+  if (!t) return NaN;
+  const limpo = t.includes(",")
+    ? t.replace(/\./g, "").replace(",", ".")
+    : t;
+  return Number(limpo);
+}
+
+// Formata dinheiro mostrando SÓ as casas que existem.
+//
+// Arredondar tudo para inteiro escondia o saldo de moedas caras: quem tinha
+// 0,24 Ouro via "0" e concluía que havia perdido o dinheiro. Por outro lado,
+// escrever "150.475,000000" de Cobre é ruído. A regra: valores grandes saem
+// inteiros; abaixo de 100, mostra o quanto for preciso para não virar zero.
+function fmt(n) {
+  const v = Number(n) || 0;
+  const abs = Math.abs(v);
+  if (abs >= 100 || Number.isInteger(v)) return Math.round(v).toLocaleString("pt-BR");
+  // 2 casas resolvem a maioria; moedas muito caras precisam de mais para não
+  // exibirem zero (0,0001 Bitcoin ainda é dinheiro).
+  const casas = abs >= 1 ? 2 : abs >= 0.01 ? 4 : 6;
+  return v.toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: casas });
+}
 
 // Com qual moeda a pessoa vai pagar?
 //
@@ -219,15 +248,18 @@ function fmt(n) { return Math.round(n).toLocaleString("pt-BR"); }
 // procuramos outra que cubra — convertendo pela taxa das duas.
 export function moedaParaPagar(serverId, userId, custoNaPadrao) {
   const padrao = garantirMoeda(serverId);
-  if (db.getSaldo(serverId, userId, padrao.id) >= custoNaPadrao) {
+  if (db.getSaldo(serverId, userId, padrao.id) + 1e-7 >= custoNaPadrao) {
     return { moeda: padrao, custo: custoNaPadrao, convertido: false };
   }
   for (const m of db.listarMoedas(serverId)) {
     if (m.id === padrao.id) continue;
     // Quanto dessa moeda equivale ao custo cotado na padrão. Usa a mesma taxa
     // do balcão, para não haver duas cotações diferentes na mesma economia.
-    const equivalente = Math.ceil(custoNaPadrao / Math.max(0.01, ECO.taxaCambio(m, padrao)));
-    if (db.getSaldo(serverId, userId, m.id) >= equivalente) {
+    // Arredondar PARA CIMA aqui cobrava a mais de quem paga em moeda cara:
+    // um item de 1 Real virava 1 Ouro inteiro. Com casas decimais, o preço
+    // convertido é o preço convertido.
+    const equivalente = ECO.arredondar(custoNaPadrao / Math.max(1e-9, ECO.taxaCambio(m, padrao)));
+    if (db.getSaldo(serverId, userId, m.id) + 1e-7 >= equivalente) {
       return { moeda: m, custo: equivalente, convertido: true, padrao };
     }
   }
@@ -1928,7 +1960,7 @@ export async function cmdGame(message, args, ctx) {
     // pergunta é direta: "1 Bitcoin dá quanto em cada moeda?"
     const mQuanto = texto.match(/^([\d.,]+)\s+(\S+)$/);
     if (mQuanto) {
-      const qtd = Number(String(mQuanto[1]).replace(/\./g, "").replace(",", "."));
+      const qtd = numeroDigitado(mQuanto[1]);
       const de = db.acharMoeda(serverId, mQuanto[2]);
       if (de && Number.isFinite(qtd) && qtd > 0) {
         const outras = moedas.filter((x) => x.id !== de.id);
@@ -1964,7 +1996,8 @@ export async function cmdGame(message, args, ctx) {
 
     // ── &game cambio <qtd> <moeda> para <moeda> — troca com o BANCO ──
     // Sem contraparte e sem espera: é o que faltava para quem só quer trocar.
-    const mb = texto.match(/^(\d+)\s+(\S+)\s+(?:para|to|por|→|->)\s+(\S+)$/i);
+    // `[\d.,]+` e não `\d+`: moeda cara exige fração ("0,5 xau para brl").
+    const mb = texto.match(/^([\d.,]+)\s+(\S+)\s+(?:para|to|por|→|->)\s+(\S+)$/i);
     if (mb) {
       const [, qtdTxt, nomeDe, nomePara] = mb;
       const de = db.acharMoeda(serverId, nomeDe);
@@ -1976,9 +2009,12 @@ export async function cmdGame(message, args, ctx) {
           { title: "❌ Invalid currencies",
             description: "They must be two different currencies from this server.", colour: COR.erro }));
       }
-      const qtd = Number(qtdTxt);
+      const qtd = numeroDigitado(qtdTxt);
       const saldo = db.getSaldo(serverId, eu, de.id);
-      if (qtd <= 0 || saldo < qtd) {
+      // Tolerância de um centésimo da última casa: sem isso, "trocar tudo"
+      // com um saldo de 0,1+0,2 (que em float dá 0,30000000000000004) seria
+      // recusado por saldo insuficiente.
+      if (!(qtd > 0) || saldo + 1e-7 < qtd) {
         return sendEmbed(message.channel, {
           title: en ? "💸 Not enough balance" : "💸 Saldo insuficiente",
           description: en ? `You have ${de.simbolo}${fmt(saldo)}.` : `Você tem ${de.simbolo}${fmt(saldo)}.`,
@@ -2032,7 +2068,7 @@ export async function cmdGame(message, args, ctx) {
         ]).join("\n"), colour: COR.sucesso });
     }
 
-    const m = texto.match(/^(\d+)\s+(\S+)\s+por\s+(\d+)\s+(\S+)$/i);
+    const m = texto.match(/^([\d.,]+)\s+(\S+)\s+por\s+([\d.,]+)\s+(\S+)$/i);
     if (!m) {
       const linhas = en ? [
         "**Two ways to exchange**",
@@ -2078,25 +2114,25 @@ export async function cmdGame(message, args, ctx) {
         description: en ? "They must be two different currencies from this server." : "Precisam ser duas moedas diferentes deste servidor.", colour: COR.erro });
     }
     const saldo = db.getSaldo(serverId, eu, de.id);
-    if (saldo < Number(qtdDe)) {
+    if (saldo + 1e-7 < numeroDigitado(qtdDe)) {
       return sendEmbed(message.channel, { title: en ? "💸 Not enough balance" : "💸 Saldo insuficiente",
         description: en ? `You have ${de.simbolo}${fmt(saldo)}.` : `Você tem ${de.simbolo}${fmt(saldo)}.`, colour: COR.erro });
     }
-    db.debitar(serverId, eu, de.id, Number(qtdDe));
+    db.debitar(serverId, eu, de.id, numeroDigitado(qtdDe));
     const of = db.criarOferta({ serverId, tipo: "cambio", autorId: eu,
-      moedaOferecida: de.id, qtdOferecida: Number(qtdDe),
-      moedaPedida: para.id, qtdPedida: Number(qtdPara) });
+      moedaOferecida: de.id, qtdOferecida: numeroDigitado(qtdDe),
+      moedaPedida: para.id, qtdPedida: numeroDigitado(qtdPara) });
 
-    const ref = ECO.converter(Number(qtdDe), de, para);
+    const ref = ECO.converter(numeroDigitado(qtdDe), de, para);
     return sendEmbed(message.channel, { title: en ? "💱 Offer published" : "💱 Oferta publicada",
       description: (en ? [
         `Offering **${fmt(qtdDe)} ${de.nome}** ${de.simbolo} for **${fmt(qtdPara)} ${para.nome}** ${para.simbolo}`,
-        `_The system would pay ~${fmt(ref.recebe)} — your rate is ${Number(qtdPara) < ref.recebe ? "better" : "worse"} for whoever accepts._`,
+        `_The system would pay ~${fmt(ref.recebe)} — your rate is ${numeroDigitado(qtdPara) < ref.recebe ? "better" : "worse"} for whoever accepts._`,
         "",
         `Offer **#${of.id}** · the amount is held in escrow with me.`,
       ] : [
         `Oferece **${fmt(qtdDe)} ${de.nome}** ${de.simbolo} por **${fmt(qtdPara)} ${para.nome}** ${para.simbolo}`,
-        `_O sistema pagaria ~${fmt(ref.recebe)} — a sua taxa é ${Number(qtdPara) < ref.recebe ? "melhor" : "pior"} para quem aceitar._`,
+        `_O sistema pagaria ~${fmt(ref.recebe)} — a sua taxa é ${numeroDigitado(qtdPara) < ref.recebe ? "melhor" : "pior"} para quem aceitar._`,
         "",
         `Oferta **#${of.id}** · o valor ficou em custódia comigo.`,
       ]).join("\n"), colour: COR.sucesso });
@@ -2225,7 +2261,7 @@ export async function cmdGame(message, args, ctx) {
     // Quanto custa em CADA moeda: é a pergunta natural de quem tem carteira
     // variada, e evita ter de fazer a conta do câmbio na mão.
     const emCadaMoeda = db.listarMoedas(serverId).map((m) => {
-      const c = m.id === moeda.id ? preco : Math.ceil(preco / Math.max(0.000001, ECO.taxaCambio(m, moeda)));
+      const c = m.id === moeda.id ? preco : ECO.arredondar(preco / Math.max(1e-9, ECO.taxaCambio(m, moeda)));
       const seu = db.getSaldo(serverId, eu, m.id);
       return `${m.simbolo} ${fmt(c)} ${m.id}${seu >= c ? " ✅" : ""}`;
     });
@@ -2319,7 +2355,7 @@ export async function cmdGame(message, args, ctx) {
         ? (() => {
           const custo = moedaEscolhida.id === moedaPadrao.id
             ? preco
-            : Math.ceil(preco / Math.max(0.000001, ECO.taxaCambio(moedaEscolhida, moedaPadrao)));
+            : ECO.arredondar(preco / Math.max(1e-9, ECO.taxaCambio(moedaEscolhida, moedaPadrao)));
           return { moeda: moedaEscolhida, custo, convertido: moedaEscolhida.id !== moedaPadrao.id,
             semSaldo: db.getSaldo(serverId, eu, moedaEscolhida.id) < custo, escolhida: true };
         })()
@@ -2366,7 +2402,7 @@ export async function cmdGame(message, args, ctx) {
         const esc = MAG.ESCOLAS[magia.tipo] ?? {};
         const preco = MAG.precoComCarisma(magia.preco, attr.carisma);
         const emCada = db.listarMoedas(serverId).map((m) => {
-          const c = m.id === moedaPadrao.id ? preco : Math.ceil(preco / Math.max(0.000001, ECO.taxaCambio(m, moedaPadrao)));
+          const c = m.id === moedaPadrao.id ? preco : ECO.arredondar(preco / Math.max(1e-9, ECO.taxaCambio(m, moedaPadrao)));
           return `${m.simbolo} ${fmt(c)} ${m.id}${db.getSaldo(serverId, eu, m.id) >= c ? " ✅" : ""}`;
         });
         const linhas = en ? [
@@ -2494,7 +2530,7 @@ export async function cmdGame(message, args, ctx) {
       ? (() => {
         const custo = moedaEscolhida.id === moeda.id
           ? preco
-          : Math.ceil(preco / Math.max(0.000001, ECO.taxaCambio(moedaEscolhida, moeda)));
+          : ECO.arredondar(preco / Math.max(1e-9, ECO.taxaCambio(moedaEscolhida, moeda)));
         const temSaldo = db.getSaldo(serverId, eu, moedaEscolhida.id) >= custo;
         return { moeda: moedaEscolhida, custo, convertido: moedaEscolhida.id !== moeda.id,
           padrao: moeda, semSaldo: !temSaldo, escolhida: true };

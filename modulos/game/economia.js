@@ -99,7 +99,7 @@ export function fatorRecompra(carisma) {
 }
 
 export function precoDeRecompra(precoVenda, carisma) {
-  return Math.max(1, Math.floor(precoVenda * fatorRecompra(carisma)));
+  return Math.max(0.000001, arredondar(precoVenda * fatorRecompra(carisma)));
 }
 
 // ── Dungeon-reservatório ──────────────────────────────────
@@ -112,7 +112,23 @@ export function fracaoDungeon(R) {
 }
 
 export function premioDungeon(R) {
-  return Math.floor((R ?? 0) * fracaoDungeon(R));
+  return arredondar((R ?? 0) * fracaoDungeon(R));
+}
+
+// ── Precisão do dinheiro ──────────────────────────────────
+// Moedas caras exigem fração. Com Monero valendo ~90 Reais, arredondar para
+// baixo na troca fazia 112 Reais virarem 1 Monero (~90) e os outros 22 sumirem
+// — o jogador empobrecia a cada câmbio, sem nada indicar isso.
+//
+// Guardamos 6 casas: passa longe do erro de ponto flutuante do JS (que aparece
+// por volta da 15ª) e é fino o bastante para 1 unidade de uma moeda cara valer
+// muitas de uma barata. Arredondar aqui, num lugar só, evita que cada cálculo
+// invente a própria precisão.
+export const CASAS = 6;
+export function arredondar(n, casas = CASAS) {
+  if (!Number.isFinite(n)) return 0;
+  const f = Math.pow(10, casas);
+  return Math.round(n * f) / f;
 }
 
 // ── Câmbio do sistema (o "banco") ─────────────────────────
@@ -144,7 +160,11 @@ export function converter(quantidade, de, para) {
   const q = Math.max(0, quantidade ?? 0);
   const bruto = (Rout * q) / (Rin + q);
   const taxa = bruto * CFG.spread;
-  return { recebe: Math.max(0, Math.floor(bruto - taxa)), taxa: Math.ceil(taxa) };
+  // Sem piso: o que sobra em fração continua sendo dinheiro do jogador.
+  return {
+    recebe: Math.max(0, arredondar(bruto - taxa)),
+    taxa: arredondar(taxa),
+  };
 }
 
 // ── Taxa do mercado entre jogadores ───────────────────────
@@ -167,7 +187,7 @@ export function taxaMercado(volumeRecente = 0) {
 
 export function calcularTaxa(valor, volumeRecente = 0) {
   const pct = taxaMercado(volumeRecente);
-  return { pct, valor: Math.max(0, Math.floor(valor * pct)) };
+  return { pct, valor: Math.max(0, arredondar(valor * pct)) };
 }
 
 // ── Recompensa de missão ──────────────────────────────────

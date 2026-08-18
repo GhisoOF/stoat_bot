@@ -1,14 +1,16 @@
 // ══════════════════════════════════════════════════════════
-//  verificar-build.js — sanidade do build (roda no Docker build)
+//  verificar-build.js — sanidade do repositório (roda no CI e à mão)
 //
-//  Garante que a imagem só é construída se:
+//  Garante que o código está íntegro antes do deploy:
 //   1. Todos os imports locais do main.js existem no disco
 //   2. Todos os .js de modulos/ têm sintaxe válida e seus
 //      imports relativos também existem
 //
-//  Se o repositório estiver incompleto (ex.: pasta modulos/
-//  faltando após uma atualização malfeita), o build FALHA aqui,
-//  em vez de gerar um container que morre em crash-loop.
+//  Se o repositório estiver incompleto (ex.: pasta modulos/ faltando
+//  após uma atualização malfeita), a verificação FALHA aqui, em vez de
+//  o bot morrer no start — quando o conserto já custa um servidor fora.
+//
+//  Uso à mão, antes de reiniciar o serviço:  node scripts/verificar-build.js
 // ══════════════════════════════════════════════════════════
 
 import { readFileSync, readdirSync, existsSync, statSync } from "node:fs";

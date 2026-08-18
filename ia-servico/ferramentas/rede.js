@@ -65,9 +65,9 @@ export function explicarErroDeRede(e, alvo = "o serviço") {
   if (c === "EAI_AGAIN") {
     return `${base}: o DNS não respondeu (EAI_AGAIN) mesmo depois de algumas tentativas.`
       + ` Isso é rede do container, não credencial.`
-      + ` Quase sempre é o /etc/resolv.conf preso num arquivo antigo — recrie o container:`
-      + ` \`docker compose up -d --force-recreate judy-ia\`.`
-      + ` Para conferir: \`docker exec judy-ia cat /etc/resolv.conf\` (tem que ter uma linha \`nameserver\`).`;
+      + ` Confira o /etc/resolv.conf da máquina: precisa ter uma linha \`nameserver\`.`
+      + ` Se o serviço tem um DNS de emergência configurado (DNS_FALLBACK), ele entra sozinho no próximo boot:`
+      + ` \`rc-service judy-ia restart\`.`;
   }
   if (c === "ENOTFOUND") {
     return `${base}: o nome não existe no DNS (ENOTFOUND). Confira o endereço configurado.`;

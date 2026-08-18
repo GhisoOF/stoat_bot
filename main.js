@@ -43,13 +43,15 @@ const client      = new Client({ autoReconnect: true });
 //  OBSERVABILIDADE E AUTO-RECUPERAÇÃO
 //  Objetivo: nunca ficar "vivo mas surdo". Se a conexão morrer de um
 //  jeito que a reconexão automática não resolve, reiniciamos o processo
-//  (o Docker `restart: unless-stopped` sobe um novo, limpo).
+//  (o `restart: unless-stopped` do container sobe um novo, limpo).
 // ══════════════════════════════════════════════════════════
 
 let ultimoEvento = Date.now();       // quando recebemos o último evento do Stoat
 let jaReiniciando = false;
 
-// Reinício controlado: encerra o processo para o Docker subir de novo.
+// Reinício controlado: encerra o processo para o supervisor subir de novo.
+// Rodando à mão (sem container), o processo simplesmente termina — por isso o
+// motivo vai para o log ANTES de sair.
 function reiniciar(motivo) {
   if (jaReiniciando) return;
   jaReiniciando = true;
@@ -945,9 +947,9 @@ if (!TOKEN || TOKEN.trim() === "" || TOKEN === "cole_seu_token_aqui") {
   console.error("\n══════════════════════════════════════════════════════════");
   console.error("❌ BOT_TOKEN não definido.");
   console.error("   Defina a variável de ambiente BOT_TOKEN com o token do bot.");
-  console.error("   • Docker (compose): campo 'environment' → BOT_TOKEN=...");
-  console.error("   • Portainer/Dockge: adicione a variável BOT_TOKEN na stack.");
-  console.error("   • Local: crie um arquivo .env com  BOT_TOKEN=seu_token");
+  console.error("   • Portainer/Dockge: adicione BOT_TOKEN no bloco 'environment' da stack.");
+  console.error("     Depois RECRIE o container — 'restart' não aplica variável nova.");
+  console.error("   • Rodando local: crie um .env no diretório de onde você chama o node.");
   console.error("══════════════════════════════════════════════════════════\n");
   process.exit(1);
 }

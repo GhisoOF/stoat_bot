@@ -1,1001 +1,407 @@
-2026-08-18T00:13:57.472941287Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.473247835Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.473398041Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.473499799Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.473648273Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.473844209Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.473993247Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.474147748Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.474299614Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.474495529Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.474596569Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.474704670Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.474809713Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.474913849Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.475022869Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.475145474Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.475293444Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.475415940Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.475523303Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.475625637Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.475776100Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.475958392Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.476060600Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.476164394Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.476266674Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.476472081Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.476621609Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.476772715Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.476921134Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.477021774Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.477124052Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.477226742Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.477330939Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.477481154Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.477584010Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.477694443Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.477979339Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.478209998Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.478333650Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.478461054Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.478649026Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.478823078Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.479063211Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.479274666Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.479389525Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.479565285Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.479704428Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.479842865Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.479968794Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.480082739Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.480341484Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.480553481Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.480673574Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.480879437Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.481012264Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.481199495Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.481304520Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.481425257Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.481538983Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.481972106Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.482078404Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.482247282Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.482501629Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.482604830Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.482709653Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.482817029Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.483023046Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.483173688Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.483331466Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.483439499Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.483541877Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.483642186Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.483879776Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.484048546Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.484149366Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.484252103Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.484355103Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.484465779Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.484569980Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.484671733Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.484828995Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.485024935Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.485137271Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.485238509Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.485341148Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.485491475Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.485601297Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.485807798Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.485911264Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.486015229Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.486224258Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.486324581Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.486428391Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.486580209Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.486684979Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.486789004Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.486892483Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.487040805Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.487195168Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.487297421Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.487399986Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.487503763Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.487606366Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.487921249Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.488080751Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.488182252Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.488284245Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.488388288Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.488539015Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.488642212Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.488743904Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.488849354Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.488951234Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.489099897Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.489393424Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.489497582Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.489608897Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.489710954Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.489812792Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.489912669Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.490014118Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.490161141Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.490401210Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.490501435Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.490604265Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.490752734Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.490852452Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.491054134Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.491164672Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.491267317Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.491466512Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.491566100Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.491770335Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.491938332Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.492048590Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.492296690Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.492398793Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.492503177Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.492607374Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.492710871Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.492869573Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.493021038Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.493124097Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.493280173Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.493382641Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.493628058Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.493729882Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.493832380Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.493937134Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.494040202Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.494201021Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.494304923Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.494407292Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.494558915Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.494663422Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.494766466Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.494873148Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.494974479Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.495124371Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.495226024Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.495327645Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.495532332Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.495634156Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.495736816Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.495906061Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.496007082Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.496119094Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.496285199Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.496396494Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.496495669Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.497094407Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.497188563Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.497345239Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.497554603Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.497659495Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.497763598Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.497863129Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.497963941Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.498067210Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.498228907Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.498330707Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.498480770Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.498773839Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.498896103Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.499083118Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.499192166Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.499344233Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.499452688Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.499601876Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.499704734Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.499935902Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.500042159Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.500156390Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.500262709Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.500420572Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.500622426Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.500726385Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.500830168Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.500984172Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.501141740Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.501243558Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.501496154Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.501644941Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.501745871Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.501847958Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.501996678Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.502097135Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.502249655Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.502405474Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.502512941Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.502667543Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.502770679Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.502967619Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.503068948Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.503170308Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.503319584Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.503566289Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.503716943Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.503883179Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.504048025Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.504153367Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.504254110Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.504416280Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.504566526Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.504673862Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.504869142Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.505065165Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.505212149Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.505356681Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.505458353Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.505666859Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.505768460Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.505963814Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.506069020Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.506234015Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.506437553Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.506595408Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.506697145Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.506798299Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.506905070Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.507053280Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.507259977Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.507409810Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.507510844Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.507613883Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.507720689Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.507865724Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.508052044Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.508205705Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.508454178Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.508556289Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.508663589Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.508765562Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.508868608Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.508970738Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.509075337Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.509182369Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.509310109Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.509504770Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.509616308Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.509776595Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.510012772Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.510164371Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.510319685Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.510516181Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.510618492Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.510729184Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.510837113Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.510940554Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.511048939Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.511202060Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.511775096Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.511991981Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.512425941Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.512535355Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.512638181Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.512800610Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.512904052Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.513053302Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.513157028Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.513506693Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.513671945Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.513772310Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.513976423Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.514196987Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.514307294Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.514418456Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.514641615Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.514981881Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.515084808Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.515338951Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.515455798Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.515566942Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.515949599Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.516151896Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.516270952Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.516477369Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.516585046Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.516755478Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.516859116Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.517009835Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.517111224Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.517354570Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.517454821Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.517591014Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.517743913Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.517938274Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.518037739Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.518143455Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.518248734Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.518352640Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.518503366Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.518795946Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.519089242Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.519195978Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.519298878Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.519729079Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.519848452Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.520002766Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.520199833Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.520353122Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.520509078Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.520657642Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.520766010Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.520924773Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.521127138Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.521228204Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.521519440Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.521717292Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.521818030Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.521920444Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.522022578Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.522170131Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.522413092Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.522609134Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.522708647Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.522952739Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.523054350Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.523156852Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.523262852Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.523421837Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.523571145Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.523725879Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.523851690Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.524153598Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.524257358Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.524406371Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.524508924Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.524611925Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.524716744Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.524919993Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.525030566Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.525388121Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.525498926Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.525705901Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.525854195Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.525955812Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.526059846Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.526264711Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.526460823Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.526567929Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.526866543Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.526967622Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.527070015Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.527176155Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.527370340Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.527470715Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.527574185Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.527784454Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.527899985Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.528006102Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.528115258Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.528265258Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.528413575Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.528517248Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.528770390Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.528870950Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.528972463Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.529073814Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.529569700Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.529717611Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.529876332Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.530077479Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.530179077Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.530280687Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.530390653Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.530495996Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.530598343Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.530748508Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.530899484Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.531048940Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.531290090Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.531482144Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.531585192Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.532104822Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.532222578Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.532330193Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.532445915Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.532545877Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.532703939Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.532808759Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.532970038Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.533161332Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.533263659Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.533467416Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.533625266Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.533729159Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.533938001Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.534143891Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.534296658Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.534397744Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.534642301Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.534744108Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.534851121Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.534954565Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.535413458Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.535512613Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.535623389Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.536393675Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.536569069Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.536726874Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.536883558Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.537472741Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.537585084Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.537919392Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.538025194Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.538135042Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.538308052Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.538420383Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.538531711Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.538751926Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.538858215Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.538975809Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.539088099Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.539207822Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.539428415Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.539537367Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.539649109Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.539761428Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.539891237Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.540121002Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.540351721Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.540465333Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.540620950Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.540788303Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.540951290Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.541124917Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.541236795Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.541344252Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.541520900Z Skipping key pronouns during hydration!
-2026-08-18T00:13:57.541838505Z Skipping key pronouns during hydration!
-2026-08-18T00:14:07.971423245Z [MSG] 01M093AFESR110DF37WSZPD3GN no canal 01KQ566RHQC8V8YAFH79G67MSJ: "cai de paraquedas aq"
-2026-08-18T00:14:07.971485031Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-18T00:14:07.971503457Z [AUTOMOD] ▶ Analisando mensagem de 01M093AFESR110DF37WSZPD3GN
-2026-08-18T00:14:07.971520967Z [AUTOMOD]   conteúdo: "cai de paraquedas aq"
-2026-08-18T00:14:07.971913470Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-18T00:14:07.972302734Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
-2026-08-18T00:14:07.972342609Z [AUTOMOD]   [anti-link] ON → lista tem 3126348 domínio(s)
-2026-08-18T00:14:07.972384620Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-18T00:14:07.972400940Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-18T00:14:07.972498056Z [AUTOMOD]   [anti-caps] OFF
-2026-08-18T00:14:07.972577413Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-18T00:14:07.972659155Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-18T00:14:07.972741442Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
-2026-08-18T00:14:07.972798940Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-18T00:14:07.972819055Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-18T00:14:19.310128901Z [MSG] 01M092QZN105MXHHNWMCPQD3FX no canal 01KZKFDGS0CA6ZHNDHHW89Y2KY: ""
-2026-08-18T00:14:19.310202012Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-18T00:14:19.310227573Z [AUTOMOD] ▶ Analisando mensagem de 01M092QZN105MXHHNWMCPQD3FX
-2026-08-18T00:14:19.310243065Z [AUTOMOD]   conteúdo: ""
-2026-08-18T00:14:19.310513975Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-18T00:14:19.310774765Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 6) sinais: [nenhum]
-2026-08-18T00:14:19.310814765Z [AUTOMOD]   [anti-link] ON → lista tem 3126348 domínio(s)
-2026-08-18T00:14:19.312003906Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-18T00:14:19.312034791Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-18T00:14:19.312047323Z [AUTOMOD]   [anti-caps] OFF
-2026-08-18T00:14:19.312059589Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-18T00:14:19.312071347Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-18T00:14:19.312113770Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
-2026-08-18T00:14:19.312124546Z [AUTOMOD]   [anti-spam] ON → 1 msg em 4000ms (limite 5)
-2026-08-18T00:14:19.312133039Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-18T00:14:20.297674377Z [MSG] 01KZ16ENP4RFZ79HZ2H8JX5GCD no canal 01KQ566RHQC8V8YAFH79G67MSJ: "meh"
-2026-08-18T00:14:20.297728536Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-18T00:14:20.297764250Z [AUTOMOD] ▶ Analisando mensagem de 01KZ16ENP4RFZ79HZ2H8JX5GCD
-2026-08-18T00:14:20.297796315Z [AUTOMOD]   conteúdo: "meh"
-2026-08-18T00:14:20.298209754Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-18T00:14:20.298458971Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
-2026-08-18T00:14:20.298477397Z [AUTOMOD]   [anti-link] ON → lista tem 3126348 domínio(s)
-2026-08-18T00:14:20.298664410Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-18T00:14:20.298692612Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-18T00:14:20.298705451Z [AUTOMOD]   [anti-caps] OFF
-2026-08-18T00:14:20.298785192Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-18T00:14:20.298800662Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-18T00:14:20.298984287Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
-2026-08-18T00:14:20.299006225Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-18T00:14:20.299019706Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-18T00:14:21.704558214Z [MSG] 01M08EKK8H8CB4J75H12ZK5ED9 no canal 01KZKFDGS0CA6ZHNDHHW89Y2KY: "pss pss"
-2026-08-18T00:14:21.704733742Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-18T00:14:21.704767983Z [AUTOMOD] ▶ Analisando mensagem de 01M08EKK8H8CB4J75H12ZK5ED9
-2026-08-18T00:14:21.704782089Z [AUTOMOD]   conteúdo: "pss pss"
-2026-08-18T00:14:21.705255880Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-18T00:14:21.705541278Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 6) sinais: [nenhum]
-2026-08-18T00:14:21.705565129Z [AUTOMOD]   [anti-link] ON → lista tem 3126348 domínio(s)
-2026-08-18T00:14:21.705611744Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-18T00:14:21.707014942Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-18T00:14:21.707045425Z [AUTOMOD]   [anti-caps] OFF
-2026-08-18T00:14:21.707056335Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-18T00:14:21.707066499Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-18T00:14:21.707075424Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
-2026-08-18T00:14:21.707120359Z [AUTOMOD]   [anti-spam] ON → 1 msg em 4000ms (limite 5)
-2026-08-18T00:14:21.707131484Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-18T00:14:26.830199661Z [MSG] 01KZP617S168B0X951TVG9KS98 no canal 01KQ566RHQC8V8YAFH79G67MSJ: "inclusive, é o momento perfeito para criamos os primeiros servidores como honra deste app. Eu mesmo estou criando um servidor de rp pq eu sei que a galera vai ficar desesperada dps quando sairem do discord kk"
-2026-08-18T00:14:26.830266950Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-18T00:14:26.830284549Z [AUTOMOD] ▶ Analisando mensagem de 01KZP617S168B0X951TVG9KS98
-     
-18T00:14:26.830306309Z [AUTOMOD]   conteúdo: "inclusive, é o momento perfeito para criamos os primeiros servidores como honra deste app. Eu mesmo estou criando um servidor de rp pq eu sei que a galera vai ficar desesperada dps quando sairem do discord kk"
-2026-08-18T00:14:26.830675805Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-18T00:14:26.831077252Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
-2026-08-18T00:14:26.831295394Z [AUTOMOD]   [anti-link] ON → lista tem 3126348 domínio(s)
-2026-08-18T00:14:26.831322795Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-18T00:14:26.831357230Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-18T00:14:26.831447026Z [AUTOMOD]   [anti-caps] OFF
-2026-08-18T00:14:26.831581355Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-18T00:14:26.831616502Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-18T00:14:26.831735793Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
-2026-08-18T00:14:26.831757742Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-18T00:14:26.831867673Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-18T00:14:29.178788085Z [MSG] 00000000000000000000000000 no canal 01KZMZFG804Q5KY4G9MY071RWD: ""
-2026-08-18T00:14:29.178847331Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-18T00:14:29.178864613Z [AUTOMOD] ▶ Analisando mensagem de 00000000000000000000000000
-2026-08-18T00:14:29.179775104Z [AUTOMOD]   conteúdo: ""
-2026-08-18T00:14:29.179882494Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-18T00:14:29.179899716Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 6) sinais: [nenhum]
-2026-08-18T00:14:29.179914538Z [AUTOMOD]   [anti-link] ON → lista tem 3126348 domínio(s)
-2026-08-18T00:14:29.179928724Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-18T00:14:29.179951131Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-18T00:14:29.179966313Z [AUTOMOD]   [anti-caps] OFF
-2026-08-18T00:14:29.179979592Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-18T00:14:29.180029591Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-18T00:14:29.180146271Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
-2026-08-18T00:14:29.180163355Z [AUTOMOD]   [anti-spam] ON → 1 msg em 4000ms (limite 5)
-2026-08-18T00:14:29.180192346Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-18T00:14:30.276610224Z [MSG] 00000000000000000000000000 no canal 01KZMZFG804Q5KY4G9MY071RWD: ""
-2026-08-18T00:14:30.276667439Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-18T00:14:30.276683018Z [AUTOMOD] ▶ Analisando mensagem de 00000000000000000000000000
-2026-08-18T00:14:30.276767751Z [AUTOMOD]   conteúdo: ""
-2026-08-18T00:14:30.277127522Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-18T00:14:30.277409016Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 6) sinais: [nenhum]
-2026-08-18T00:14:30.277436950Z [AUTOMOD]   [anti-link] ON → lista tem 3126348 domínio(s)
-2026-08-18T00:14:30.277470871Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-18T00:14:30.277483029Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-18T00:14:30.277507681Z [AUTOMOD]   [anti-caps] OFF
-2026-08-18T00:14:30.277592992Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-18T00:14:30.277642522Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-18T00:14:30.277846114Z [AUTOMOD]   [anti-mass-spam] ON → 2 msg em 8000ms (limite 12)
-2026-08-18T00:14:30.277873131Z [AUTOMOD]   [anti-spam] ON → 2 msg em 4000ms (limite 5)
-2026-08-18T00:14:30.277884542Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-18T00:14:33.098002391Z [MSG] 01M08EKK8H8CB4J75H12ZK5ED9 no canal 01KZKFDGS0CA6ZHNDHHW89Y2KY: "eu depois de sair do discord"
-2026-08-18T00:14:33.098073235Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-18T00:14:33.098093053Z [AUTOMOD] ▶ Analisando mensagem de 01M08EKK8H8CB4J75H12ZK5ED9
-2026-08-18T00:14:33.098207948Z [AUTOMOD]   conteúdo: "eu depois de sair do discord"
-2026-08-18T00:14:33.098504844Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-18T00:14:33.098950816Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 6) sinais: [nenhum]
-2026-08-18T00:14:33.099220455Z [AUTOMOD]   [anti-link] ON → lista tem 3126348 domínio(s)
-2026-08-18T00:14:33.099283841Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-18T00:14:33.099302904Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-18T00:14:33.099318081Z [AUTOMOD]   [anti-caps] OFF
-2026-08-18T00:14:33.099965861Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-18T00:14:33.100009667Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-18T00:14:33.100066939Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
-2026-08-18T00:14:33.100080643Z [AUTOMOD]   [anti-spam] ON → 1 msg em 4000ms (limite 5)
-2026-08-18T00:14:33.100090138Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-18T00:14:33.753211446Z [MSG] 00000000000000000000000000 no canal 01KZMZFG804Q5KY4G9MY071RWD: ""
-2026-08-18T00:14:33.753265334Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-18T00:14:33.754945808Z [AUTOMOD] ▶ Analisando mensagem de 00000000000000000000000000
-2026-08-18T00:14:33.754980086Z [AUTOMOD]   conteúdo: ""
-2026-08-18T00:14:33.754993029Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-18T00:14:33.755003966Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 6) sinais: [nenhum]
-2026-08-18T00:14:33.755014374Z [AUTOMOD]   [anti-link] ON → lista tem 3126348 domínio(s)
-2026-08-18T00:14:33.755024009Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-18T00:14:33.755033286Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-18T00:14:33.755042693Z [AUTOMOD]   [anti-caps] OFF
-2026-08-18T00:14:33.755051229Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-18T00:14:33.755060124Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-18T00:14:33.755068836Z [AUTOMOD]   [anti-mass-spam] ON → 3 msg em 8000ms (limite 12)
-2026-08-18T00:14:33.755077910Z [AUTOMOD]   [anti-spam] ON → 2 msg em 4000ms (limite 5)
-2026-08-18T00:14:33.755087054Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-18T00:14:34.036741442Z [EVENTO] messageDelete: canal=01KZKFDGS0CA6ZHNDHHW89Y2KY autor=01M092QZN105MXHHNWMCPQD3FX
-2026-08-18T00:14:36.860392624Z [MSG] 01M090TD1ZAQ5RCK61GY6EZA3S no canal 01KZKFDGS0CA6ZHNDHHW89Y2KY: "Oi"
-2026-08-18T00:14:36.860455361Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-18T00:14:36.860473261Z [AUTOMOD] ▶ Analisando mensagem de 01M090TD1ZAQ5RCK61GY6EZA3S
-2026-08-18T00:14:36.860486011Z [AUTOMOD]   conteúdo: "Oi"
-2026-08-18T00:14:36.861290448Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-18T00:14:36.861325206Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 6) sinais: [nenhum]
-2026-08-18T00:14:36.861338698Z [AUTOMOD]   [anti-link] ON → lista tem 3126348 domínio(s)
-2026-08-18T00:14:36.861349269Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-18T00:14:36.861359325Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-18T00:14:36.861370129Z [AUTOMOD]   [anti-caps] OFF
-2026-08-18T00:14:36.861379520Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-18T00:14:36.861389346Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-18T00:14:36.861450087Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
-2026-08-18T00:14:36.861463288Z [AUTOMOD]   [anti-spam] ON → 1 msg em 4000ms (limite 5)
-2026-08-18T00:14:36.861510430Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-18T00:14:37.237710667Z [MSG] 01M06EDF4NZDAPWZHMS4PM9C21 no canal 01KQ566RHQC8V8YAFH79G67MSJ: "em 2027 ele vai ter q lidar com toda a merda dnv"
-2026-08-18T00:14:37.237767295Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-18T00:14:37.237841776Z [AUTOMOD] ▶ Analisando mensagem de 01M06EDF4NZDAPWZHMS4PM9C21
-2026-08-18T00:14:37.237869864Z [AUTOMOD]   conteúdo: "em 2027 ele vai ter q lidar com toda a merda dnv"
-2026-08-18T00:14:37.238223919Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-18T00:14:37.238543260Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
-2026-08-18T00:14:37.238647275Z [AUTOMOD]   [anti-link] ON → lista tem 3126348 domínio(s)
-2026-08-18T00:14:37.238664808Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-18T00:14:37.238694214Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-18T00:14:37.238724487Z [AUTOMOD]   [anti-caps] OFF
-2026-08-18T00:14:37.238912981Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-18T00:14:37.238939883Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-18T00:14:37.238982468Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
-2026-08-18T00:14:37.239035523Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-18T00:14:37.239050500Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-18T00:14:38.907443041Z [MSG] 01M092YDS7ME8WF80273DTKBE1 no canal 01KZKFDGS0CA6ZHNDHHW89Y2KY: "oi"
-2026-08-18T00:14:38.907505001Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-18T00:14:38.907548215Z [AUTOMOD] ▶ Analisando mensagem de 01M092YDS7ME8WF80273DTKBE1
-2026-08-18T00:14:38.907564778Z [AUTOMOD]   conteúdo: "oi"
-2026-08-18T00:14:38.908012266Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-18T00:14:38.908317521Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 6) sinais: [nenhum]
-2026-08-18T00:14:38.908355322Z [AUTOMOD]   [anti-link] ON → lista tem 3126348 domínio(s)
-2026-08-18T00:14:38.908395623Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-18T00:14:38.908411450Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-18T00:14:38.908425228Z [AUTOMOD]   [anti-caps] OFF
-2026-08-18T00:14:38.908547810Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-18T00:14:38.908567945Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-18T00:14:38.908716340Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
-2026-08-18T00:14:38.908785128Z [AUTOMOD]   [anti-spam] ON → 1 msg em 4000ms (limite 5)
-2026-08-18T00:14:38.908818619Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-18T00:14:39.471830445Z [MSG] 00000000000000000000000000 no canal 01KZMZFG804Q5KY4G9MY071RWD: ""
-2026-08-18T00:14:39.471888150Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-18T00:14:39.471997133Z [AUTOMOD] ▶ Analisando mensagem de 00000000000000000000000000
-2026-08-18T00:14:39.472029283Z [AUTOMOD]   conteúdo: ""
-2026-08-18T00:14:39.472387046Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-18T00:14:39.472714931Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 6) sinais: [nenhum]
-2026-08-18T00:14:39.472757770Z [AUTOMOD]   [anti-link] ON → lista tem 3126348 domínio(s)
-2026-08-18T00:14:39.472770808Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-18T00:14:39.472783744Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-18T00:14:39.472905451Z [AUTOMOD]   [anti-caps] OFF
-2026-08-18T00:14:39.472932021Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-18T00:14:39.473200634Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-18T00:14:39.473212987Z [AUTOMOD]   [anti-mass-spam] ON → 2 msg em 8000ms (limite 12)
-2026-08-18T00:14:39.473223332Z [AUTOMOD]   [anti-spam] ON → 1 msg em 4000ms (limite 5)
-2026-08-18T00:14:39.473232924Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-18T00:14:40.116548079Z Skipping key pronouns during hydration!
-2026-08-18T00:14:40.492523466Z [MSG] 01KZP617S168B0X951TVG9KS98 no canal 01KQ566RHQC8V8YAFH79G67MSJ: "eu ja criei uma house, vou fazer o dishboard dela daqui agora"
-2026-08-18T00:14:40.492578994Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-18T00:14:40.492594295Z [AUTOMOD] ▶ Analisando mensagem de 01KZP617S168B0X951TVG9KS98
-2026-08-18T00:14:40.492616982Z [AUTOMOD]   conteúdo: "eu ja criei uma house, vou fazer o dishboard dela daqui agora"
-2026-08-18T00:14:40.493056639Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-18T00:14:40.493384551Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
-2026-08-18T00:14:40.493451722Z [AUTOMOD]   [anti-link] ON → lista tem 3126348 domínio(s)
-2026-08-18T00:14:40.493479405Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-18T00:14:40.493619594Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-18T00:14:40.493637005Z [AUTOMOD]   [anti-caps] OFF
-2026-08-18T00:14:40.493776457Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-18T00:14:40.493804484Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-18T00:14:40.493851006Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
-2026-08-18T00:14:40.494018815Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-18T00:14:40.494045647Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-18T00:14:43.145044839Z [MSG] 01M06EDF4NZDAPWZHMS4PM9C21 no canal 01KQ566RHQC8V8YAFH79G67MSJ: "ainda por cima"
-2026-08-18T00:14:43.145105049Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-18T00:14:43.145120395Z [AUTOMOD] ▶ Analisando mensagem de 01M06EDF4NZDAPWZHMS4PM9C21
-2026-08-18T00:14:43.145135421Z [AUTOMOD]   conteúdo: "ainda por cima"
-2026-08-18T00:14:43.145538420Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-18T00:14:43.145859317Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
-2026-08-18T00:14:43.146036008Z [AUTOMOD]   [anti-link] ON → lista tem 3126348 domínio(s)
-2026-08-18T00:14:43.147496698Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-18T00:14:43.147527996Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-18T00:14:43.147539779Z [AUTOMOD]   [anti-caps] OFF
-2026-08-18T00:14:43.147549860Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-18T00:14:43.147560216Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-18T00:14:43.147569993Z [AUTOMOD]   [anti-mass-spam] ON → 2 msg em 8000ms (limite 12)
-2026-08-18T00:14:43.147579786Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-18T00:14:43.147589294Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-18T00:14:47.221385811Z [MSG] 01KKYE00PSP5NAA1C91XWD00QM no canal 01KQ566RHQC8V8YAFH79G67MSJ: "Querido Discord,\n\nJá vai tarde."
-2026-08-18T00:14:47.221450993Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-18T00:14:47.221467914Z [AUTOMOD] ▶ Analisando mensagem de 01KKYE00PSP5NAA1C91XWD00QM
-2026-08-18T00:14:47.221481322Z [AUTOMOD]   conteúdo: "Querido Discord,\n\nJá vai tarde."
-2026-08-18T00:14:47.221849687Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-18T00:14:47.222043700Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
-2026-08-18T00:14:47.222151625Z [AUTOMOD]   [anti-link] ON → lista tem 3126348 domínio(s)
-2026-08-18T00:14:47.222191046Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-18T00:14:47.222214604Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-18T00:14:47.222232074Z [AUTOMOD]   [anti-caps] OFF
-2026-08-18T00:14:47.222374750Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-18T00:14:47.222401315Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-18T00:14:47.222621736Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
-2026-08-18T00:14:47.222701255Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-18T00:14:47.222714785Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-18T00:14:48.143726992Z [MSG] 01M08G5NRG95EER24ERAGB5MRH no canal 01KQ566RHQC8V8YAFH79G67MSJ: "oi, gente, voltei :3"
-2026-08-18T00:14:48.143814343Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-18T00:14:48.143836543Z [AUTOMOD] ▶ Analisando mensagem de 01M08G5NRG95EER24ERAGB5MRH
-2026-08-18T00:14:48.143895189Z [AUTOMOD]   conteúdo: "oi, gente, voltei :3"
-2026-08-18T00:14:48.144213257Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-18T00:14:48.144463227Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
-2026-08-18T00:14:48.144511933Z [AUTOMOD]   [anti-link] ON → lista tem 3126348 domínio(s)
-2026-08-18T00:14:48.144526330Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-18T00:14:48.144613040Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-18T00:14:48.144628180Z [AUTOMOD]   [anti-caps] OFF
-2026-08-18T00:14:48.144843007Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-18T00:14:48.144869206Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-18T00:14:48.144881117Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
-2026-08-18T00:14:48.144891729Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-18T00:14:48.144901235Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-18T00:14:48.846088445Z [MSG] 01KZP617S168B0X951TVG9KS98 no canal 01KQ566RHQC8V8YAFH79G67MSJ: "e ja vou começar a criar o rp"
-2026-08-18T00:14:48.846150579Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-18T00:14:48.846165532Z [AUTOMOD] ▶ Analisando mensagem de 01KZP617S168B0X951TVG9KS98
-2026-08-18T00:14:48.846176500Z [AUTOMOD]   conteúdo: "e ja vou começar a criar o rp"
-2026-08-18T00:14:48.846438987Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-18T00:14:48.846901167Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
-2026-08-18T00:14:48.846957327Z [AUTOMOD]   [anti-link] ON → lista tem 3126348 domínio(s)
-2026-08-18T00:14:48.846971138Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-18T00:14:48.846981927Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-18T00:14:48.847178719Z [AUTOMOD]   [anti-caps] OFF
-2026-08-18T00:14:48.847200247Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-18T00:14:48.847210678Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-18T00:14:48.847346512Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
-2026-08-18T00:14:48.847420389Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-18T00:14:48.847490220Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-18T00:14:51.796242290Z [MSG] 01M092YDS7ME8WF80273DTKBE1 no canal 01KZKFDGS0CA6ZHNDHHW89Y2KY: "a gente akakka"
-2026-08-18T00:14:51.796297506Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-18T00:14:51.796312277Z [AUTOMOD] ▶ Analisando mensagem de 01M092YDS7ME8WF80273DTKBE1
-2026-08-18T00:14:51.796343226Z [AUTOMOD]   conteúdo: "a gente akakka"
-2026-08-18T00:14:51.796653361Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-18T00:14:51.796900233Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 6) sinais: [nenhum]
-2026-08-18T00:14:51.796927864Z [AUTOMOD]   [anti-link] ON → lista tem 3126348 domínio(s)
-2026-08-18T00:14:51.796958168Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-18T00:14:51.796972371Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-18T00:14:51.797059774Z [AUTOMOD]   [anti-caps] OFF
-2026-08-18T00:14:51.797164851Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-18T00:14:51.797216109Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-18T00:14:51.797264900Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
-2026-08-18T00:14:51.797290965Z [AUTOMOD]   [anti-spam] ON → 1 msg em 4000ms (limite 5)
-2026-08-18T00:14:51.797419748Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-18T00:14:52.187689688Z [MSG] 01M08EKK8H8CB4J75H12ZK5ED9 no canal 01KQ566RHQC8V8YAFH79G67MSJ: "os primeiros??!!?!!?!"
-2026-08-18T00:14:52.187746240Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-18T00:14:52.187761367Z [AUTOMOD] ▶ Analisando mensagem de 01M08EKK8H8CB4J75H12ZK5ED9
-2026-08-18T00:14:52.187772061Z [AUTOMOD]   conteúdo: "os primeiros??!!?!!?!"
-2026-08-18T00:14:52.188133184Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-18T00:14:52.188423506Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [pergunta]
-2026-08-18T00:14:52.188512942Z [AUTOMOD]   [anti-link] ON → lista tem 3126348 domínio(s)
-2026-08-18T00:14:52.188529095Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-18T00:14:52.188540644Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-18T00:14:52.188584028Z [AUTOMOD]   [anti-caps] OFF
-2026-08-18T00:14:52.188716453Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-18T00:14:52.188744178Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-18T00:14:52.188756618Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
-2026-08-18T00:14:52.188804716Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-18T00:14:52.188888975Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-18T00:14:55.269180056Z [MSG] 01M093AFESR110DF37WSZPD3GN no canal 01KQ566RHQC8V8YAFH79G67MSJ: "inclusive motivado pq minha cunhada me mandou um vídeo de um cara defendendo o banimento do discord 💀"
-2026-08-18T00:14:55.269246617Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-18T00:14:55.269287013Z [AUTOMOD] ▶ Analisando mensagem de 01M093AFESR110DF37WSZPD3GN
-2026-08-18T00:14:55.269295724Z [AUTOMOD]   conteúdo: "inclusive motivado pq minha cunhada me mandou um vídeo de um cara defendendo o banimento do discord 💀"
-2026-08-18T00:14:55.269430698Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-18T00:14:55.269577561Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
-2026-08-18T00:14:55.269586898Z [AUTOMOD]   [anti-link] ON → lista tem 3126348 domínio(s)
-2026-08-18T00:14:55.269649196Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-18T00:14:55.269737538Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-18T00:14:55.269746268Z [AUTOMOD]   [anti-caps] OFF
-2026-08-18T00:14:55.271535192Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-18T00:14:55.272232781Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-18T00:14:55.272246913Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
-2026-08-18T00:14:55.272251664Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-18T00:14:55.272255584Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-18T00:14:57.524828389Z [MSG] 01M08EKK8H8CB4J75H12ZK5ED9 no canal 01KQ566RHQC8V8YAFH79G67MSJ: "tá atrasado!!!"
-2026-08-18T00:14:57.524889433Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-18T00:14:57.524906384Z [AUTOMOD] ▶ Analisando mensagem de 01M08EKK8H8CB4J75H12ZK5ED9
-2026-08-18T00:14:57.524920829Z [AUTOMOD]   conteúdo: "tá atrasado!!!"
-2026-08-18T00:14:57.525185092Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-18T00:14:57.525225151Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
-2026-08-18T00:14:57.525349619Z [AUTOMOD]   [anti-link] ON → lista tem 3126348 domínio(s)
-2026-08-18T00:14:57.525386735Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-18T00:14:57.525402698Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-18T00:14:57.525506085Z [AUTOMOD]   [anti-caps] OFF
-2026-08-18T00:14:57.525530619Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-18T00:14:57.525544443Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-18T00:14:57.525577171Z [AUTOMOD]   [anti-mass-spam] ON → 2 msg em 8000ms (limite 12)
-2026-08-18T00:14:57.525593369Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-18T00:14:57.525694302Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-18T00:15:03.878926020Z [MSG] 01M08EKK8H8CB4J75H12ZK5ED9 no canal 01KQ566RHQC8V8YAFH79G67MSJ: "Oioi lamby"
-2026-08-18T00:15:03.878999226Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-18T00:15:03.879016987Z [AUTOMOD] ▶ Analisando mensagem de 01M08EKK8H8CB4J75H12ZK5ED9
-2026-08-18T00:15:03.879031402Z [AUTOMOD]   conteúdo: "Oioi lamby"
-2026-08-18T00:15:03.879332814Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-18T00:15:03.879489563Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
-2026-08-18T00:15:03.879631504Z [AUTOMOD]   [anti-link] ON → lista tem 3126348 domínio(s)
-2026-08-18T00:15:03.879654542Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-18T00:15:03.879677693Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-18T00:15:03.879719273Z [AUTOMOD]   [anti-caps] OFF
-2026-08-18T00:15:03.879865767Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-18T00:15:03.879900184Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-18T00:15:03.879935190Z [AUTOMOD]   [anti-mass-spam] ON → 2 msg em 8000ms (limite 12)
-2026-08-18T00:15:03.879967838Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-18T00:15:03.880058409Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-18T00:15:04.396099115Z [MSG] 01M08QTTK7VD42JSJAV472N7KP no canal 01KQ566RHQC8V8YAFH79G67MSJ: "O Stoat finalmente estabilizou um pouco"
-2026-08-18T00:15:04.396159003Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-18T00:15:04.396177892Z [AUTOMOD] ▶ Analisando mensagem de 01M08QTTK7VD42JSJAV472N7KP
-2026-08-18T00:15:04.396192170Z [AUTOMOD]   conteúdo: "O Stoat finalmente estabilizou um pouco"
-2026-08-18T00:15:04.396353230Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-18T00:15:04.396740516Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
-2026-08-18T00:15:04.396788101Z [AUTOMOD]   [anti-link] ON → lista tem 3126348 domínio(s)
-2026-08-18T00:15:04.396932199Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-18T00:15:04.396956709Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-18T00:15:04.396999862Z [AUTOMOD]   [anti-caps] OFF
-2026-08-18T00:15:04.397137339Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-18T00:15:04.397162194Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-18T00:15:04.397176534Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
-2026-08-18T00:15:04.397191519Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-18T00:15:04.397332470Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-18T00:15:06.476378299Z [MSG] 01KKYE00PSP5NAA1C91XWD00QM no canal 01KQ566RHQC8V8YAFH79G67MSJ: "Muitokkkkkk"
-2026-08-18T00:15:06.476435950Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-18T00:15:06.476451645Z [AUTOMOD] ▶ Analisando mensagem de 01KKYE00PSP5NAA1C91XWD00QM
-2026-08-18T00:15:06.476466201Z [AUTOMOD]   conteúdo: "Muitokkkkkk"
-2026-08-18T00:15:06.476826985Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-18T00:15:06.477086520Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
-2026-08-18T00:15:06.477114641Z [AUTOMOD]   [anti-link] ON → lista tem 3126348 domínio(s)
-2026-08-18T00:15:06.477126800Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-18T00:15:06.477237383Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-18T00:15:06.477387190Z [AUTOMOD]   [anti-caps] OFF
-2026-08-18T00:15:06.477404207Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-18T00:15:06.477432780Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-18T00:15:06.477593536Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
-2026-08-18T00:15:06.477610004Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-18T00:15:06.477620111Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-18T00:15:09.850605390Z [MSG] 01KZP617S168B0X951TVG9KS98 no canal 01KQ566RHQC8V8YAFH79G67MSJ: "os primeiros brs"
-2026-08-18T00:15:09.850743440Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-18T00:15:09.850764015Z [AUTOMOD] ▶ Analisando mensagem de 01KZP617S168B0X951TVG9KS98
-2026-08-18T00:15:09.850782212Z [AUTOMOD]   conteúdo: "os primeiros brs"
-2026-08-18T00:15:09.851126542Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-18T00:15:09.851278478Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
-2026-08-18T00:15:09.851362796Z [AUTOMOD]   [anti-link] ON → lista tem 3126348 domínio(s)
-2026-08-18T00:15:09.851401447Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-18T00:15:09.851488036Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-18T00:15:09.851506905Z [AUTOMOD]   [anti-caps] OFF
-2026-08-18T00:15:09.851858877Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-18T00:15:09.851893825Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-18T00:15:09.851907013Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
-2026-08-18T00:15:09.851919853Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-18T00:15:09.851932437Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-18T00:15:11.652707397Z Skipping key pronouns during hydration!
-2026-08-18T00:15:13.375404129Z [EVENTO] serverMemberLeave: server=01KZKFDGS0SANQEN4CJZ6MAN42 user=01M08GGRJV2892Z46SMW95ZD14
-2026-08-18T00:15:13.384799639Z [MSG] 00000000000000000000000000 no canal 01KZMT05MRC3PRBHZWHVB94M5V: ""
-2026-08-18T00:15:13.384854967Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-18T00:15:13.384869324Z [AUTOMOD] ▶ Analisando mensagem de 00000000000000000000000000
-2026-08-18T00:15:13.384918636Z [AUTOMOD]   conteúdo: ""
-2026-08-18T00:15:13.385241828Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-18T00:15:13.386354842Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 6) sinais: [nenhum]
-2026-08-18T00:15:13.386383848Z [AUTOMOD]   [anti-link] ON → lista tem 3126348 domínio(s)
-2026-08-18T00:15:13.386395432Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-18T00:15:13.386405032Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-18T00:15:13.386414877Z [AUTOMOD]   [anti-caps] OFF
-2026-08-18T00:15:13.386424284Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-18T00:15:13.386433565Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-18T00:15:13.386442299Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
-2026-08-18T00:15:13.386451453Z [AUTOMOD]   [anti-spam] ON → 1 msg em 4000ms (limite 5)
-2026-08-18T00:15:13.386460248Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-18T00:15:14.157774690Z [MSG] 01KZ16ENP4RFZ79HZ2H8JX5GCD no canal 01KQ566RHQC8V8YAFH79G67MSJ: "aiai"
-2026-08-18T00:15:14.157829905Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-18T00:15:14.157846004Z [AUTOMOD] ▶ Analisando mensagem de 01KZ16ENP4RFZ79HZ2H8JX5GCD
-2026-08-18T00:15:14.157856774Z [AUTOMOD]   conteúdo: "aiai"
-2026-08-18T00:15:14.158221709Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-18T00:15:14.159967373Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
-2026-08-18T00:15:14.160005307Z [AUTOMOD]   [anti-link] ON → lista tem 3126348 domínio(s)
-2026-08-18T00:15:14.160018537Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-18T00:15:14.160029245Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-18T00:15:14.160039311Z [AUTOMOD]   [anti-caps] OFF
-2026-08-18T00:15:14.160048433Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-18T00:15:14.160057657Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-18T00:15:14.160067365Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
-2026-08-18T00:15:14.160077018Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-18T00:15:14.160086195Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-18T00:15:16.089424180Z [VIVO] bot ativo | RAM 486MB | sem eventos há 0min
-2026-08-18T00:15:16.106899360Z [MSG] 01KZP617S168B0X951TVG9KS98 no canal 01KQ566RHQC8V8YAFH79G67MSJ: "unites n conta"
-2026-08-18T00:15:16.106957208Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-18T00:15:16.106975279Z [AUTOMOD] ▶ Analisando mensagem de 01KZP617S168B0X951TVG9KS98
-2026-08-18T00:15:16.106989061Z [AUTOMOD]   conteúdo: "unites n conta"
-2026-08-18T00:15:16.107259457Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-18T00:15:16.107461554Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
-2026-08-18T00:15:16.107543573Z [AUTOMOD]   [anti-link] ON → lista tem 3126348 domínio(s)
-2026-08-18T00:15:16.107582547Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-18T00:15:16.107614205Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-18T00:15:16.107718068Z [AUTOMOD]   [anti-caps] OFF
-2026-08-18T00:15:16.107763740Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-18T00:15:16.107806247Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-18T00:15:16.108004376Z [AUTOMOD]   [anti-mass-spam] ON → 2 msg em 8000ms (limite 12)
-2026-08-18T00:15:16.108035962Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-18T00:15:16.108051124Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-18T00:15:16.239610343Z [MSG] 01M08G5NRG95EER24ERAGB5MRH no canal 01KQ566RHQC8V8YAFH79G67MSJ: "oi, Yato"
-2026-08-18T00:15:16.239635742Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-18T00:15:16.239641537Z [AUTOMOD] ▶ Analisando mensagem de 01M08G5NRG95EER24ERAGB5MRH
-2026-08-18T00:15:16.239651106Z [AUTOMOD]   conteúdo: "oi, Yato"
-2026-08-18T00:15:16.239745914Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-18T00:15:16.239858642Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
-2026-08-18T00:15:16.239881691Z [AUTOMOD]   [anti-link] ON → lista tem 3126348 domínio(s)
-2026-08-18T00:15:16.239897328Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-18T00:15:16.239914897Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-18T00:15:16.239926434Z [AUTOMOD]   [anti-caps] OFF
-2026-08-18T00:15:16.239956226Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-18T00:15:16.239974982Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-18T00:15:16.239993704Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
-2026-08-18T00:15:16.240001070Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-18T00:15:16.240010806Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-18T00:15:16.437989401Z [MSG] 01M08EKK8H8CB4J75H12ZK5ED9 no canal 01KQ566RHQC8V8YAFH79G67MSJ: "É uma boa"
-2026-08-18T00:15:16.438037666Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-18T00:15:16.438042297Z [AUTOMOD] ▶ Analisando mensagem de 01M08EKK8H8CB4J75H12ZK5ED9
-2026-08-18T00:15:16.438048332Z [AUTOMOD]   conteúdo: "É uma boa"
-2026-08-18T00:15:16.438122268Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-18T00:15:16.438210654Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
-2026-08-18T00:15:16.438239781Z [AUTOMOD]   [anti-link] ON → lista tem 3126348 domínio(s)
-2026-08-18T00:15:16.438262542Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-18T00:15:16.438280050Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-18T00:15:16.438288107Z [AUTOMOD]   [anti-caps] OFF
-2026-08-18T00:15:16.438307225Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-18T00:15:16.438316636Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-18T00:15:16.438334683Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
-2026-08-18T00:15:16.438343947Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-18T00:15:16.438357205Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-18T00:15:17.610810118Z [MSG] 01M08ZQCR7569ZM7X7P8X66PEZ no canal 01KZKFDGS0CA6ZHNDHHW89Y2KY: ":01M02SB1D7HXTMW4VWBJ4281C8:"
-2026-08-18T00:15:17.610867031Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-18T00:15:17.610885860Z [AUTOMOD] ▶ Analisando mensagem de 01M08ZQCR7569ZM7X7P8X66PEZ
-2026-08-18T00:15:17.610898444Z [AUTOMOD]   conteúdo: ":01M02SB1D7HXTMW4VWBJ4281C8:"
-2026-08-18T00:15:17.611279996Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-18T00:15:17.611491109Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 6) sinais: [nenhum]
-2026-08-18T00:15:17.611602710Z [AUTOMOD]   [anti-link] ON → lista tem 3126348 domínio(s)
-2026-08-18T00:15:17.611637867Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-18T00:15:17.611915231Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-18T00:15:17.611938939Z [AUTOMOD]   [anti-caps] OFF
-2026-08-18T00:15:17.611949024Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-18T00:15:17.611958701Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-18T00:15:17.611967778Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
-2026-08-18T00:15:17.612023807Z [AUTOMOD]   [anti-spam] ON → 1 msg em 4000ms (limite 5)
-2026-08-18T00:15:17.612050540Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-18T00:15:22.714107098Z [MSG] 01KZP617S168B0X951TVG9KS98 no canal 01KQ566RHQC8V8YAFH79G67MSJ: ":01KQWZ67R86E7Y6VTNR2RY85BF:]"
-2026-08-18T00:15:22.714203839Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-18T00:15:22.714220324Z [AUTOMOD] ▶ Analisando mensagem de 01KZP617S168B0X951TVG9KS98
-2026-08-18T00:15:22.714232252Z [AUTOMOD]   conteúdo: ":01KQWZ67R86E7Y6VTNR2RY85BF:]"
-2026-08-18T00:15:22.714523725Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-18T00:15:22.714850898Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
-2026-08-18T00:15:22.714879931Z [AUTOMOD]   [anti-link] ON → lista tem 3126348 domínio(s)
-2026-08-18T00:15:22.714892467Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-18T00:15:22.714924750Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-18T00:15:22.714937809Z [AUTOMOD]   [anti-caps] OFF
-2026-08-18T00:15:22.716001575Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-18T00:15:22.716036788Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-18T00:15:22.716049056Z [AUTOMOD]   [anti-mass-spam] ON → 2 msg em 8000ms (limite 12)
-2026-08-18T00:15:22.716060434Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-18T00:15:22.716070711Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-18T00:15:25.699762885Z [MSG] 01M08EKK8H8CB4J75H12ZK5ED9 no canal 01KQ566RHQC8V8YAFH79G67MSJ: "Dois aninhos"
-2026-08-18T00:15:25.699862296Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-18T00:15:25.699878003Z [AUTOMOD] ▶ Analisando mensagem de 01M08EKK8H8CB4J75H12ZK5ED9
-2026-08-18T00:15:25.699959521Z [AUTOMOD]   conteúdo: "Dois aninhos"
-2026-08-18T00:15:25.700334294Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-18T00:15:25.700516122Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
-2026-08-18T00:15:25.700558941Z [AUTOMOD]   [anti-link] ON → lista tem 3126348 domínio(s)
-2026-08-18T00:15:25.700607880Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-18T00:15:25.700634554Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-18T00:15:25.700663471Z [AUTOMOD]   [anti-caps] OFF
-2026-08-18T00:15:25.700787225Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-18T00:15:25.700803351Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-18T00:15:25.700886014Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
-2026-08-18T00:15:25.700911274Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-18T00:15:25.700973333Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-18T00:15:28.873205008Z [MSG] 01K9JKP85D5EP2ZTEHS8DT797A no canal 01KKRZV7Y4GF7XA9P94AEKAPJK: "<@01KHBPN31QT1THM1A0CEM8JA91> como vai o seu dia?"
-2026-08-18T00:15:28.877357124Z [CHAT][debug] ══════ nova conversa ══════
-2026-08-18T00:15:28.877944476Z [CHAT][debug] autor=Ghiso | pergunta (19 chars): "como vai o seu dia?"
-2026-08-18T00:15:28.892966811Z [CHAT] Ollama indisponível — causa=recusou codigo=ECONNREFUSED url=http://localhost:11434
-2026-08-18T00:15:31.520344263Z [MSG] 01M08EKK8H8CB4J75H12ZK5ED9 no canal 01KQ566RHQC8V8YAFH79G67MSJ: "ou até mais "
-2026-08-18T00:15:31.520402023Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-18T00:15:31.520416025Z [AUTOMOD] ▶ Analisando mensagem de 01M08EKK8H8CB4J75H12ZK5ED9
-2026-08-18T00:15:31.520430217Z [AUTOMOD]   conteúdo: "ou até mais "
-2026-08-18T00:15:31.521194207Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-18T00:15:31.521233344Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
-2026-08-18T00:15:31.521247144Z [AUTOMOD]   [anti-link] ON → lista tem 3126348 domínio(s)
-2026-08-18T00:15:31.521532314Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-18T00:15:31.521556477Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-18T00:15:31.521576267Z [AUTOMOD]   [anti-caps] OFF
-2026-08-18T00:15:31.521586470Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-18T00:15:31.521596530Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-18T00:15:31.521605837Z [AUTOMOD]   [anti-mass-spam] ON → 2 msg em 8000ms (limite 12)
-2026-08-18T00:15:31.521616125Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-18T00:15:31.521626062Z [AUTOMOD]   ✓ Nenhuma violação detectada
-2026-08-18T00:15:34.093386220Z [MSG] 01M08QTTK7VD42JSJAV472N7KP no canal 01KQ566RHQC8V8YAFH79G67MSJ: "Antes se a pessoa saísse no mobile era 1 ano pra recarregar, e agr as calls pararam de cair mais"
-2026-08-18T00:15:34.093454129Z [AUTOMOD] ────────────────────────────────────────────
-2026-08-18T00:15:34.093494725Z [AUTOMOD] ▶ Analisando mensagem de 01M08QTTK7VD42JSJAV472N7KP
-2026-08-18T00:15:34.093510759Z [AUTOMOD]   conteúdo: "Antes se a pessoa saísse no mobile era 1 ano pra recarregar, e agr as calls pararam de cair mais"
-2026-08-18T00:15:34.093866943Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
-2026-08-18T00:15:34.094200981Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
-2026-08-18T00:15:34.094316220Z [AUTOMOD]   [anti-link] ON → lista tem 3126348 domínio(s)
-2026-08-18T00:15:34.094469442Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
-2026-08-18T00:15:34.094492390Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
-2026-08-18T00:15:34.094629029Z [AUTOMOD]   [anti-caps] OFF
-2026-08-18T00:15:34.094710637Z [AUTOMOD]   [anti-caracteres] ON → ok
-2026-08-18T00:15:34.094729548Z [AUTOMOD]   [anti-repeticao] OFF
-2026-08-18T00:15:34.094828297Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
-2026-08-18T00:15:34.094844267Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
-2026-08-18T00:15:34.094870077Z [AUTOMOD]   ✓ Nenhuma violação detectada
+2026-08-18T00:26:06.373765126Z [CONN] Conectando ao Stoat…
+2026-08-18T00:26:07.010168114Z Skipping key pronouns during hydration!
+2026-08-18T00:26:07.010815471Z Skipping key pronouns during hydration!
+2026-08-18T00:26:07.011102620Z Skipping key pronouns during hydration!
+2026-08-18T00:26:07.011233075Z Skipping key pronouns during hydration!
+2026-08-18T00:26:07.012670608Z Skipping key approximate_member_count during hydration!
+2026-08-18T00:26:07.013200790Z Skipping key approximate_member_count during hydration!
+2026-08-18T00:26:07.013408360Z Skipping key approximate_member_count during hydration!
+2026-08-18T00:26:07.013658597Z Skipping key approximate_member_count during hydration!
+2026-08-18T00:26:07.013919180Z Skipping key approximate_member_count during hydration!
+2026-08-18T00:26:07.017558071Z Skipping key slowmode during hydration!
+2026-08-18T00:26:07.019504080Z Skipping key slowmode during hydration!
+2026-08-18T00:26:07.039081507Z Logged in as Cobaia!
+2026-08-18T00:26:07.039104622Z Token loaded: true
+2026-08-18T00:26:07.042385908Z [DB] Banco aberto em /data/stoat.db
+2026-08-18T00:26:07.042771082Z [CONFIG] Configuração carregada do banco.
+2026-08-18T00:26:07.051638836Z [RPG] catálogo genérico pronto (26 item(ns), 20 follower(s))
+2026-08-18T00:26:07.052721157Z [IA] Ollama:  http://localhost:11434  ⚠️ (padrão — OLLAMA_URL não definida)
+2026-08-18T00:26:07.052734622Z [IA] Serviço: http://100.74.70.106:8090
+2026-08-18T00:26:07.052738130Z [IA] Modelos: conversa=gemma4:e4b · código=ornith:9b · ferramentas=qwen3.5:9b
+2026-08-18T00:26:07.052741194Z [IA] Busca:   desligada (sem SEARXNG_URL)
+2026-08-18T00:26:07.052744079Z [IA] ⚠️ ATENÇÃO: o serviço de IA é remoto, mas o Ollama está em localhost.
+2026-08-18T00:26:07.052746952Z [IA]    Isso quase sempre é OLLAMA_URL faltando no container.
+2026-08-18T00:26:07.052751861Z [IA]    Confira com: docker exec stoat-bot env | grep OLLAMA
+2026-08-18T00:26:07.053576555Z [AUTOMOD] [BLOCKLIST] 0 domínio(s) manual(is) carregado(s)
+2026-08-18T00:26:07.053586775Z [AUTOMOD] [BLOCKLIST] Baixando https://media.githubusercontent.com/media/zachlagden/Pi-hole-Optimized-Blocklists/main/lists/nsfw_abp.txt …
+2026-08-18T00:26:07.056263488Z [RSS] agendador ligado (a cada 60 min)
+2026-08-18T00:26:07.056535159Z [CONN] Conectado (WebSocket ativo).
+2026-08-18T00:26:07.315526727Z [STATUS] Definido: "&help • &tutorial | prefixo/prefix: &"
+2026-08-18T00:26:07.721103554Z Skipping key pronouns during hydration!
+2026-08-18T00:26:07.722771032Z [MSG] 01KYJWHP0MZ55CJZYGGX7TVWA0 no canal 01KZPWPJ9BK3YPS7EBEBDQFPP6: ""
+2026-08-18T00:26:07.724536121Z [AUTOMOD] ────────────────────────────────────────────
+2026-08-18T00:26:07.724553698Z [AUTOMOD] ▶ Analisando mensagem de 01KYJWHP0MZ55CJZYGGX7TVWA0
+2026-08-18T00:26:07.724578671Z [AUTOMOD]   conteúdo: ""
+2026-08-18T00:26:07.725493190Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+2026-08-18T00:26:07.732567833Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
+2026-08-18T00:26:07.732719124Z [AUTOMOD]   [anti-link] ON → lista tem 0 domínio(s)
+2026-08-18T00:26:07.732725790Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+2026-08-18T00:26:07.732797069Z [AUTOMOD]   [anti-link] ⚠️ lista VAZIA — adicione com %blocklist add <url> ou %blocklist adddomain <domínio>
+2026-08-18T00:26:07.732802637Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
+2026-08-18T00:26:07.732805832Z [AUTOMOD]   [anti-caps] OFF
+2026-08-18T00:26:07.733015961Z [AUTOMOD]   [anti-caracteres] ON → ok
+2026-08-18T00:26:07.733025118Z [AUTOMOD]   [anti-repeticao] OFF
+2026-08-18T00:26:07.733086968Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
+2026-08-18T00:26:07.733120333Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
+2026-08-18T00:26:07.733128311Z [AUTOMOD]   ✓ Nenhuma violação detectada
+2026-08-18T00:26:09.414928368Z [BLOCKLIST] 494069 domínios de https://media.githubusercontent.com/media/zachlagden/Pi-hole-Optimized-Blocklists/main/lists/nsfw_abp.txt
+2026-08-18T00:26:09.414951657Z [AUTOMOD] [BLOCKLIST] Baixando https://media.githubusercontent.com/media/zachlagden/Pi-hole-Optimized-Blocklists/main/lists/nsfw.txt …
+2026-08-18T00:26:11.387836753Z [BLOCKLIST] 494069 domínios de https://media.githubusercontent.com/media/zachlagden/Pi-hole-Optimized-Blocklists/main/lists/nsfw.txt
+2026-08-18T00:26:11.387866133Z [AUTOMOD] [BLOCKLIST] Baixando https://media.githubusercontent.com/media/zachlagden/Pi-hole-Optimized-Blocklists/main/lists/suspicious.txt …
+2026-08-18T00:26:11.432573521Z [REAÇÃO-] args: [ '01KZR9JW1QTE4FXMMAN08VNXKW', '01M06EDF4NZDAPWZHMS4PM9C21', '🚬' ]
+2026-08-18T00:26:11.743315093Z [BLOCKLIST] 73514 domínios de https://media.githubusercontent.com/media/zachlagden/Pi-hole-Optimized-Blocklists/main/lists/suspicious.txt
+2026-08-18T00:26:11.743350512Z [AUTOMOD] [BLOCKLIST] Baixando https://media.githubusercontent.com/media/zachlagden/Pi-hole-Optimized-Blocklists/main/lists/malicious.txt …
+2026-08-18T00:26:11.755514759Z [REACTIONROLE] -cargo 01KZR8FEJG3BY4KQHNA4GEAST5 de 01M06EDF4NZDAPWZHMS4PM9C21 (msg 01KZR9JW1QTE4FXMMAN08VNXKW)
+2026-08-18T00:26:12.691497539Z [REAÇÃO] args: [
+2026-08-18T00:26:12.691521735Z   '01KZR9JW1QTE4FXMMAN08VNXKW',
+2026-08-18T00:26:12.691525969Z   '01M06EDF4NZDAPWZHMS4PM9C21',
+2026-08-18T00:26:12.691529724Z   '🏳️‍⚧️'
+2026-08-18T00:26:12.691533247Z ]
+2026-08-18T00:26:12.783337472Z [REACTIONROLE][boot] não achei a mensagem 01KZWNKW4NZVHH3SE0XXD6EH35 (canal apagado ou sem acesso?)
+2026-08-18T00:26:12.783361279Z [REACTIONROLE] 2 mensagem(ns) recarregada(s), 1 não encontrada(s)
+2026-08-18T00:26:12.889814884Z [REACTIONROLE] +cargo 01KZR8FJ5MHXBSJR8TDXB2SHTT para 01M06EDF4NZDAPWZHMS4PM9C21 (msg 01KZR9JW1QTE4FXMMAN08VNXKW)
+2026-08-18T00:26:13.160630647Z Skipping key pronouns during hydration!
+2026-08-18T00:26:13.160831265Z [MSG] 01KZ16ENP4RFZ79HZ2H8JX5GCD no canal 01KZPWPJ9BK3YPS7EBEBDQFPP6: "ae "
+2026-08-18T00:26:13.160931023Z [AUTOMOD] ────────────────────────────────────────────
+2026-08-18T00:26:13.160994132Z [AUTOMOD] ▶ Analisando mensagem de 01KZ16ENP4RFZ79HZ2H8JX5GCD
+2026-08-18T00:26:13.161002497Z [AUTOMOD]   conteúdo: "ae "
+2026-08-18T00:26:13.161226938Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+2026-08-18T00:26:13.164765246Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
+2026-08-18T00:26:13.164980814Z [AUTOMOD]   [anti-link] ON → lista tem 0 domínio(s)
+2026-08-18T00:26:13.165026364Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+2026-08-18T00:26:13.165045090Z [AUTOMOD]   [anti-link] ⚠️ lista VAZIA — adicione com %blocklist add <url> ou %blocklist adddomain <domínio>
+2026-08-18T00:26:13.165057333Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
+2026-08-18T00:26:13.165061488Z [AUTOMOD]   [anti-caps] OFF
+2026-08-18T00:26:13.165720171Z [AUTOMOD]   [anti-caracteres] ON → ok
+2026-08-18T00:26:13.165727716Z [AUTOMOD]   [anti-repeticao] OFF
+2026-08-18T00:26:13.165730834Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
+2026-08-18T00:26:13.165786615Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
+2026-08-18T00:26:13.165795281Z [AUTOMOD]   ✓ Nenhuma violação detectada
+2026-08-18T00:26:13.892633271Z [REAÇÃO-] args: [
+2026-08-18T00:26:13.892657274Z   '01KZR9JW1QTE4FXMMAN08VNXKW',
+2026-08-18T00:26:13.892660751Z   '01M06EDF4NZDAPWZHMS4PM9C21',
+2026-08-18T00:26:13.892663656Z   '🏳️‍⚧️'
+2026-08-18T00:26:13.892666557Z ]
+2026-08-18T00:26:14.081455802Z [REACTIONROLE] -cargo 01KZR8FJ5MHXBSJR8TDXB2SHTT de 01M06EDF4NZDAPWZHMS4PM9C21 (msg 01KZR9JW1QTE4FXMMAN08VNXKW)
+2026-08-18T00:26:14.774699801Z [REAÇÃO] args: [ '01KZR9JW1QTE4FXMMAN08VNXKW', '01M06EDF4NZDAPWZHMS4PM9C21', '🧊' ]
+2026-08-18T00:26:14.929467276Z [REACTIONROLE] +cargo 01KZR8FHJEWZ19QZ3H6KKKF9CS para 01M06EDF4NZDAPWZHMS4PM9C21 (msg 01KZR9JW1QTE4FXMMAN08VNXKW)
+2026-08-18T00:26:20.227868792Z [BLOCKLIST] 2593038 domínios de https://media.githubusercontent.com/media/zachlagden/Pi-hole-Optimized-Blocklists/main/lists/malicious.txt
+2026-08-18T00:26:20.227895310Z [BLOCKLIST] Total de domínios bloqueados: 3126348
+2026-08-18T00:26:20.230497025Z [MSG] 01KZ16ENP4RFZ79HZ2H8JX5GCD no canal 01KZPWPJ9BK3YPS7EBEBDQFPP6: "Interessante "
+2026-08-18T00:26:20.230526059Z [AUTOMOD] ────────────────────────────────────────────
+2026-08-18T00:26:20.230550007Z [AUTOMOD] ▶ Analisando mensagem de 01KZ16ENP4RFZ79HZ2H8JX5GCD
+2026-08-18T00:26:20.230553869Z [AUTOMOD]   conteúdo: "Interessante "
+2026-08-18T00:26:20.230814005Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+2026-08-18T00:26:20.231079526Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
+2026-08-18T00:26:20.231259848Z [AUTOMOD]   [anti-link] ON → lista tem 3126348 domínio(s)
+2026-08-18T00:26:20.231266453Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+2026-08-18T00:26:20.231295276Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
+2026-08-18T00:26:20.231317824Z [AUTOMOD]   [anti-caps] OFF
+2026-08-18T00:26:20.231640354Z [AUTOMOD]   [anti-caracteres] ON → ok
+2026-08-18T00:26:20.231646751Z [AUTOMOD]   [anti-repeticao] OFF
+2026-08-18T00:26:20.231742595Z [AUTOMOD]   [anti-mass-spam] ON → 2 msg em 8000ms (limite 12)
+2026-08-18T00:26:20.231771653Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
+2026-08-18T00:26:20.231776090Z [AUTOMOD]   ✓ Nenhuma violação detectada
+2026-08-18T00:26:28.229203883Z Skipping key pronouns during hydration!
+2026-08-18T00:26:28.229772178Z [MSG] 01M06EDF4NZDAPWZHMS4PM9C21 no canal 01KQ566RHQC8V8YAFH79G67MSJ: "mudei tb inclusive"
+2026-08-18T00:26:28.230021971Z [AUTOMOD] ────────────────────────────────────────────
+2026-08-18T00:26:28.230060085Z [AUTOMOD] ▶ Analisando mensagem de 01M06EDF4NZDAPWZHMS4PM9C21
+2026-08-18T00:26:28.230158855Z [AUTOMOD]   conteúdo: "mudei tb inclusive"
+2026-08-18T00:26:28.230803809Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+2026-08-18T00:26:28.231392550Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
+2026-08-18T00:26:28.232432222Z [AUTOMOD]   [anti-link] ON → lista tem 3126348 domínio(s)
+2026-08-18T00:26:28.232466464Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+2026-08-18T00:26:28.232633013Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
+2026-08-18T00:26:28.232670144Z [AUTOMOD]   [anti-caps] OFF
+2026-08-18T00:26:28.232752592Z [AUTOMOD]   [anti-caracteres] ON → ok
+2026-08-18T00:26:28.232807474Z [AUTOMOD]   [anti-repeticao] OFF
+2026-08-18T00:26:28.233007236Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
+2026-08-18T00:26:28.233042999Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
+2026-08-18T00:26:28.233125897Z [AUTOMOD]   ✓ Nenhuma violação detectada
+2026-08-18T00:26:31.415863766Z Skipping key pronouns during hydration!
+2026-08-18T00:26:31.416602036Z [MSG] 01M08SD7X90MVKHTX3Z0T9RW3T no canal 01KZKFDGS0CA6ZHNDHHW89Y2KY: "pare com essa brincadeira gostosa"
+2026-08-18T00:26:31.417546359Z [AUTOMOD] ────────────────────────────────────────────
+2026-08-18T00:26:31.417632770Z [AUTOMOD] ▶ Analisando mensagem de 01M08SD7X90MVKHTX3Z0T9RW3T
+2026-08-18T00:26:31.417647953Z [AUTOMOD]   conteúdo: "pare com essa brincadeira gostosa"
+2026-08-18T00:26:31.418024840Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+2026-08-18T00:26:31.418376701Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 6) sinais: [nenhum]
+2026-08-18T00:26:31.418472681Z [AUTOMOD]   [anti-link] ON → lista tem 3126348 domínio(s)
+2026-08-18T00:26:31.418489178Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+2026-08-18T00:26:31.418640401Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
+2026-08-18T00:26:31.418771349Z [AUTOMOD]   [anti-caps] OFF
+2026-08-18T00:26:31.418797123Z [AUTOMOD]   [anti-caracteres] ON → ok
+2026-08-18T00:26:31.418857068Z [AUTOMOD]   [anti-repeticao] OFF
+2026-08-18T00:26:31.418942573Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
+2026-08-18T00:26:31.419027877Z [AUTOMOD]   [anti-spam] ON → 1 msg em 4000ms (limite 5)
+2026-08-18T00:26:31.419148119Z [AUTOMOD]   ✓ Nenhuma violação detectada
+2026-08-18T00:26:31.524557001Z Skipping key pronouns during hydration!
+2026-08-18T00:26:31.525113459Z [MSG] 01M08QTTK7VD42JSJAV472N7KP no canal 01KZPWPJ9BK3YPS7EBEBDQFPP6: "Como escreve na descrição?"
+2026-08-18T00:26:31.525311309Z [AUTOMOD] ────────────────────────────────────────────
+2026-08-18T00:26:31.525338634Z [AUTOMOD] ▶ Analisando mensagem de 01M08QTTK7VD42JSJAV472N7KP
+2026-08-18T00:26:31.525350664Z [AUTOMOD]   conteúdo: "Como escreve na descrição?"
+2026-08-18T00:26:31.525777275Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+2026-08-18T00:26:31.526421147Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [pergunta]
+2026-08-18T00:26:31.526461411Z [AUTOMOD]   [anti-link] ON → lista tem 3126348 domínio(s)
+2026-08-18T00:26:31.526474860Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+2026-08-18T00:26:31.526536716Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
+2026-08-18T00:26:31.526563969Z [AUTOMOD]   [anti-caps] OFF
+2026-08-18T00:26:31.526753737Z [AUTOMOD]   [anti-caracteres] ON → ok
+2026-08-18T00:26:31.526771444Z [AUTOMOD]   [anti-repeticao] OFF
+2026-08-18T00:26:31.526924541Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
+2026-08-18T00:26:31.526951913Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
+2026-08-18T00:26:31.526996037Z [AUTOMOD]   ✓ Nenhuma violação detectada
+2026-08-18T00:26:31.761795876Z [REAÇÃO] args: [ '01KZR9JW1QTE4FXMMAN08VNXKW', '01KKYE00PSP5NAA1C91XWD00QM', '🌆' ]
+2026-08-18T00:26:31.949284777Z [REACTIONROLE] +cargo 01KZR8FGYR1ES93SDGCNBQK932 para 01KKYE00PSP5NAA1C91XWD00QM (msg 01KZR9JW1QTE4FXMMAN08VNXKW)
+2026-08-18T00:26:34.948918401Z [MSG] 01M06EDF4NZDAPWZHMS4PM9C21 no canal 01KQ566RHQC8V8YAFH79G67MSJ: "combinar com a pfp"
+2026-08-18T00:26:34.949017179Z [AUTOMOD] ────────────────────────────────────────────
+2026-08-18T00:26:34.949036268Z [AUTOMOD] ▶ Analisando mensagem de 01M06EDF4NZDAPWZHMS4PM9C21
+2026-08-18T00:26:34.949057316Z [AUTOMOD]   conteúdo: "combinar com a pfp"
+2026-08-18T00:26:34.949425092Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+2026-08-18T00:26:34.949786092Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
+2026-08-18T00:26:34.949847649Z [AUTOMOD]   [anti-link] ON → lista tem 3126348 domínio(s)
+2026-08-18T00:26:34.949865711Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+2026-08-18T00:26:34.949902476Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
+2026-08-18T00:26:34.949995725Z [AUTOMOD]   [anti-caps] OFF
+2026-08-18T00:26:34.950147933Z [AUTOMOD]   [anti-caracteres] ON → ok
+2026-08-18T00:26:34.950185215Z [AUTOMOD]   [anti-repeticao] OFF
+2026-08-18T00:26:34.950277166Z [AUTOMOD]   [anti-mass-spam] ON → 2 msg em 8000ms (limite 12)
+2026-08-18T00:26:34.950361084Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
+2026-08-18T00:26:34.950381815Z [AUTOMOD]   ✓ Nenhuma violação detectada
+2026-08-18T00:26:41.091118974Z [MSG] 01M08QTTK7VD42JSJAV472N7KP no canal 01KZPWPJ9BK3YPS7EBEBDQFPP6: "Deixa eu testar algo"
+2026-08-18T00:26:41.091315551Z [AUTOMOD] ────────────────────────────────────────────
+2026-08-18T00:26:41.091344240Z [AUTOMOD] ▶ Analisando mensagem de 01M08QTTK7VD42JSJAV472N7KP
+2026-08-18T00:26:41.091359739Z [AUTOMOD]   conteúdo: "Deixa eu testar algo"
+2026-08-18T00:26:41.091740877Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+2026-08-18T00:26:41.092241410Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
+2026-08-18T00:26:41.092279606Z [AUTOMOD]   [anti-link] ON → lista tem 3126348 domínio(s)
+2026-08-18T00:26:41.092316649Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+2026-08-18T00:26:41.092350206Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
+2026-08-18T00:26:41.092440451Z [AUTOMOD]   [anti-caps] OFF
+2026-08-18T00:26:41.092630892Z [AUTOMOD]   [anti-caracteres] ON → ok
+2026-08-18T00:26:41.092665875Z [AUTOMOD]   [anti-repeticao] OFF
+2026-08-18T00:26:41.092701671Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
+2026-08-18T00:26:41.092814606Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
+2026-08-18T00:26:41.092860932Z [AUTOMOD]   ✓ Nenhuma violação detectada
+2026-08-18T00:26:42.625132991Z [MSG] 01M08QTTK7VD42JSJAV472N7KP no canal 01KZPWPJ9BK3YPS7EBEBDQFPP6: "Uhh"
+2026-08-18T00:26:42.625211416Z [AUTOMOD] ────────────────────────────────────────────
+2026-08-18T00:26:42.625242561Z [AUTOMOD] ▶ Analisando mensagem de 01M08QTTK7VD42JSJAV472N7KP
+2026-08-18T00:26:42.625336939Z [AUTOMOD]   conteúdo: "Uhh"
+2026-08-18T00:26:42.625765068Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+2026-08-18T00:26:42.626515987Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
+2026-08-18T00:26:42.626547174Z [AUTOMOD]   [anti-link] ON → lista tem 3126348 domínio(s)
+2026-08-18T00:26:42.626620397Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+2026-08-18T00:26:42.626772756Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
+2026-08-18T00:26:42.626790210Z [AUTOMOD]   [anti-caps] OFF
+2026-08-18T00:26:42.626894197Z [AUTOMOD]   [anti-caracteres] ON → ok
+2026-08-18T00:26:42.627129452Z [AUTOMOD]   [anti-repeticao] OFF
+2026-08-18T00:26:42.627155329Z [AUTOMOD]   [anti-mass-spam] ON → 2 msg em 8000ms (limite 12)
+2026-08-18T00:26:42.627223179Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
+2026-08-18T00:26:42.627287459Z [AUTOMOD]   ✓ Nenhuma violação detectada
+2026-08-18T00:26:44.239691131Z [REAÇÃO] args: [ '01KZR9JW1QTE4FXMMAN08VNXKW', '01M093ZTBJX0W0PXJF4FTZP1SF', '🩸' ]
+2026-08-18T00:26:44.355646813Z [REACTIONROLE] +cargo 01KZR9JTHEH363S27EPAS5SS36 para 01M093ZTBJX0W0PXJF4FTZP1SF (msg 01KZR9JW1QTE4FXMMAN08VNXKW)
+2026-08-18T00:26:46.171370436Z [MSG] 01KZ16ENP4RFZ79HZ2H8JX5GCD no canal 01KZPWPJ9BK3YPS7EBEBDQFPP6: "idk"
+2026-08-18T00:26:46.171865825Z [AUTOMOD] ────────────────────────────────────────────
+2026-08-18T00:26:46.172022500Z [AUTOMOD] ▶ Analisando mensagem de 01KZ16ENP4RFZ79HZ2H8JX5GCD
+2026-08-18T00:26:46.172049520Z [AUTOMOD]   conteúdo: "idk"
+2026-08-18T00:26:46.172072056Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+2026-08-18T00:26:46.172481219Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
+2026-08-18T00:26:46.173340591Z [AUTOMOD]   [anti-link] ON → lista tem 3126348 domínio(s)
+2026-08-18T00:26:46.173391524Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+2026-08-18T00:26:46.173407623Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
+2026-08-18T00:26:46.173422253Z [AUTOMOD]   [anti-caps] OFF
+2026-08-18T00:26:46.173435250Z [AUTOMOD]   [anti-caracteres] ON → ok
+2026-08-18T00:26:46.173447985Z [AUTOMOD]   [anti-repeticao] OFF
+2026-08-18T00:26:46.173460126Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
+2026-08-18T00:26:46.173472816Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
+2026-08-18T00:26:46.173527293Z [AUTOMOD]   ✓ Nenhuma violação detectada
+2026-08-18T00:26:46.597491119Z Skipping key pronouns during hydration!
+2026-08-18T00:26:46.598334620Z [MSG] 01KZEX0PEFRKD906BWQJK07FQD no canal 01KZPWPJ9BK3YPS7EBEBDQFPP6: "?sobremim"
+2026-08-18T00:26:46.598403402Z [AUTOMOD] ────────────────────────────────────────────
+2026-08-18T00:26:46.598532572Z [AUTOMOD] ▶ Analisando mensagem de 01KZEX0PEFRKD906BWQJK07FQD
+2026-08-18T00:26:46.598722778Z [AUTOMOD]   conteúdo: "?sobremim"
+2026-08-18T00:26:46.599014823Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+2026-08-18T00:26:46.599473992Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [pergunta]
+2026-08-18T00:26:46.599503444Z [AUTOMOD]   [anti-link] ON → lista tem 3126348 domínio(s)
+2026-08-18T00:26:46.599614703Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+2026-08-18T00:26:46.599642282Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
+2026-08-18T00:26:46.599665968Z [AUTOMOD]   [anti-caps] OFF
+2026-08-18T00:26:46.599849001Z [AUTOMOD]   [anti-caracteres] ON → ok
+2026-08-18T00:26:46.600036193Z [AUTOMOD]   [anti-repeticao] OFF
+2026-08-18T00:26:46.600058627Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
+2026-08-18T00:26:46.600101545Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
+2026-08-18T00:26:46.600129143Z [AUTOMOD]   ✓ Nenhuma violação detectada
+2026-08-18T00:26:47.649813284Z [MSG] 01KYJWHP0MZ55CJZYGGX7TVWA0 no canal 01KZPWPJ9BK3YPS7EBEBDQFPP6: ""
+2026-08-18T00:26:47.649908332Z [AUTOMOD] ────────────────────────────────────────────
+2026-08-18T00:26:47.649924737Z [AUTOMOD] ▶ Analisando mensagem de 01KYJWHP0MZ55CJZYGGX7TVWA0
+2026-08-18T00:26:47.649934685Z [AUTOMOD]   conteúdo: ""
+2026-08-18T00:26:47.650354125Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+2026-08-18T00:26:47.650591829Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
+2026-08-18T00:26:47.650618457Z [AUTOMOD]   [anti-link] ON → lista tem 3126348 domínio(s)
+2026-08-18T00:26:47.650671854Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+2026-08-18T00:26:47.650772310Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
+2026-08-18T00:26:47.650800551Z [AUTOMOD]   [anti-caps] OFF
+2026-08-18T00:26:47.650815431Z [AUTOMOD]   [anti-caracteres] ON → ok
+2026-08-18T00:26:47.650902971Z [AUTOMOD]   [anti-repeticao] OFF
+2026-08-18T00:26:47.651046683Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
+2026-08-18T00:26:47.651065952Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
+2026-08-18T00:26:47.651242229Z [AUTOMOD]   ✓ Nenhuma violação detectada
+2026-08-18T00:26:50.216353884Z Skipping key pronouns during hydration!
+2026-08-18T00:26:50.217003883Z [MSG] 01KZZBYRFDAED58V455JR0R631 no canal 01KQ56JPGP80Y7DA595AV3ZXSZ: "eu conheço o welcome to the game"
+2026-08-18T00:26:50.217277032Z [AUTOMOD] ────────────────────────────────────────────
+2026-08-18T00:26:50.217305929Z [AUTOMOD] ▶ Analisando mensagem de 01KZZBYRFDAED58V455JR0R631
+2026-08-18T00:26:50.217318126Z [AUTOMOD]   conteúdo: "eu conheço o welcome to the game"
+2026-08-18T00:26:50.217736771Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+2026-08-18T00:26:50.217877570Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
+2026-08-18T00:26:50.218128167Z [AUTOMOD]   [anti-link] ON → lista tem 3126348 domínio(s)
+2026-08-18T00:26:50.218155312Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+2026-08-18T00:26:50.218167831Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
+2026-08-18T00:26:50.218178359Z [AUTOMOD]   [anti-caps] OFF
+2026-08-18T00:26:50.218271671Z [AUTOMOD]   [anti-caracteres] ON → ok
+2026-08-18T00:26:50.218310507Z [AUTOMOD]   [anti-repeticao] OFF
+2026-08-18T00:26:50.218504196Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
+2026-08-18T00:26:50.218532544Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
+2026-08-18T00:26:50.218621460Z [AUTOMOD]   ✓ Nenhuma violação detectada
+2026-08-18T00:26:59.057308688Z [MSG] 01M08ZQCR7569ZM7X7P8X66PEZ no canal 01KZKFDGS0CA6ZHNDHHW89Y2KY: "que? 🤔 "
+2026-08-18T00:26:59.057370542Z [AUTOMOD] ────────────────────────────────────────────
+2026-08-18T00:26:59.057387768Z [AUTOMOD] ▶ Analisando mensagem de 01M08ZQCR7569ZM7X7P8X66PEZ
+2026-08-18T00:26:59.057492204Z [AUTOMOD]   conteúdo: "que? 🤔 "
+2026-08-18T00:26:59.058191397Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+2026-08-18T00:26:59.062628796Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 6) sinais: [pergunta]
+2026-08-18T00:26:59.062741336Z [AUTOMOD]   [anti-link] ON → lista tem 3126348 domínio(s)
+2026-08-18T00:26:59.062752786Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+2026-08-18T00:26:59.062757850Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
+2026-08-18T00:26:59.062767050Z [AUTOMOD]   [anti-caps] OFF
+2026-08-18T00:26:59.063247766Z [AUTOMOD]   [anti-caracteres] ON → ok
+2026-08-18T00:26:59.063259604Z [AUTOMOD]   [anti-repeticao] OFF
+2026-08-18T00:26:59.063264013Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
+2026-08-18T00:26:59.063270680Z [AUTOMOD]   [anti-spam] ON → 1 msg em 4000ms (limite 5)
+2026-08-18T00:26:59.063291762Z [AUTOMOD]   ✓ Nenhuma violação detectada
+2026-08-18T00:27:01.638665497Z [MSG] 01KKYE00PSP5NAA1C91XWD00QM no canal 01KQ566RHQC8V8YAFH79G67MSJ: "Perfeito."
+2026-08-18T00:27:01.638841542Z [AUTOMOD] ────────────────────────────────────────────
+2026-08-18T00:27:01.639007666Z [AUTOMOD] ▶ Analisando mensagem de 01KKYE00PSP5NAA1C91XWD00QM
+2026-08-18T00:27:01.639032231Z [AUTOMOD]   conteúdo: "Perfeito."
+2026-08-18T00:27:01.639287188Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+2026-08-18T00:27:01.639602920Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
+2026-08-18T00:27:01.639672929Z [AUTOMOD]   [anti-link] ON → lista tem 3126348 domínio(s)
+2026-08-18T00:27:01.639692361Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+2026-08-18T00:27:01.639812043Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
+2026-08-18T00:27:01.639937436Z [AUTOMOD]   [anti-caps] OFF
+2026-08-18T00:27:01.639958728Z [AUTOMOD]   [anti-caracteres] ON → ok
+2026-08-18T00:27:01.640052048Z [AUTOMOD]   [anti-repeticao] OFF
+2026-08-18T00:27:01.640158260Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
+2026-08-18T00:27:01.640310207Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
+2026-08-18T00:27:01.640337210Z [AUTOMOD]   ✓ Nenhuma violação detectada
+2026-08-18T00:27:07.176657685Z [MSG] 00000000000000000000000000 no canal 01KZMZFG804Q5KY4G9MY071RWD: ""
+2026-08-18T00:27:07.176921680Z [AUTOMOD] ────────────────────────────────────────────
+2026-08-18T00:27:07.176966309Z [AUTOMOD] ▶ Analisando mensagem de 00000000000000000000000000
+2026-08-18T00:27:07.176983447Z [AUTOMOD]   conteúdo: ""
+2026-08-18T00:27:07.179012169Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+2026-08-18T00:27:07.179115949Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 6) sinais: [nenhum]
+2026-08-18T00:27:07.179138603Z [AUTOMOD]   [anti-link] ON → lista tem 3126348 domínio(s)
+2026-08-18T00:27:07.179156474Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+2026-08-18T00:27:07.179197258Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
+2026-08-18T00:27:07.179214648Z [AUTOMOD]   [anti-caps] OFF
+2026-08-18T00:27:07.179229297Z [AUTOMOD]   [anti-caracteres] ON → ok
+2026-08-18T00:27:07.179241980Z [AUTOMOD]   [anti-repeticao] OFF
+2026-08-18T00:27:07.179271392Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
+2026-08-18T00:27:07.179287612Z [AUTOMOD]   [anti-spam] ON → 1 msg em 4000ms (limite 5)
+2026-08-18T00:27:07.179302228Z [AUTOMOD]   ✓ Nenhuma violação detectada
+2026-08-18T00:27:07.666145267Z [MSG] 01KZZBYRFDAED58V455JR0R631 no canal 01KQ56JPGP80Y7DA595AV3ZXSZ: "joguei o 1 e o 2, o terceiro vi um youtuber jogar o começo dele"
+2026-08-18T00:27:07.666235205Z [AUTOMOD] ────────────────────────────────────────────
+2026-08-18T00:27:07.666249896Z [AUTOMOD] ▶ Analisando mensagem de 01KZZBYRFDAED58V455JR0R631
+2026-08-18T00:27:07.666260354Z [AUTOMOD]   conteúdo: "joguei o 1 e o 2, o terceiro vi um youtuber jogar o começo dele"
+2026-08-18T00:27:07.667082307Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+2026-08-18T00:27:07.667426415Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
+2026-08-18T00:27:07.667479976Z [AUTOMOD]   [anti-link] ON → lista tem 3126348 domínio(s)
+2026-08-18T00:27:07.667553450Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+2026-08-18T00:27:07.667648580Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
+2026-08-18T00:27:07.667873565Z [AUTOMOD]   [anti-caps] OFF
+2026-08-18T00:27:07.667983407Z [AUTOMOD]   [anti-caracteres] ON → ok
+2026-08-18T00:27:07.668138048Z [AUTOMOD]   [anti-repeticao] OFF
+2026-08-18T00:27:07.668270579Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
+2026-08-18T00:27:07.668298064Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
+2026-08-18T00:27:07.668380171Z [AUTOMOD]   ✓ Nenhuma violação detectada
+2026-08-18T00:27:18.823673312Z [MSG] 01KKYE00PSP5NAA1C91XWD00QM no canal 01KQ566RHQC8V8YAFH79G67MSJ: "Vou mudar meu perfil em breve "
+2026-08-18T00:27:18.823901576Z [AUTOMOD] ────────────────────────────────────────────
+2026-08-18T00:27:18.823940382Z [AUTOMOD] ▶ Analisando mensagem de 01KKYE00PSP5NAA1C91XWD00QM
+2026-08-18T00:27:18.823956458Z [AUTOMOD]   conteúdo: "Vou mudar meu perfil em breve "
+2026-08-18T00:27:18.824357195Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+2026-08-18T00:27:18.824653860Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
+2026-08-18T00:27:18.824777181Z [AUTOMOD]   [anti-link] ON → lista tem 3126348 domínio(s)
+2026-08-18T00:27:18.824814806Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+2026-08-18T00:27:18.824866368Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
+2026-08-18T00:27:18.824991790Z [AUTOMOD]   [anti-caps] OFF
+2026-08-18T00:27:18.825086233Z [AUTOMOD]   [anti-caracteres] ON → ok
+2026-08-18T00:27:18.825123789Z [AUTOMOD]   [anti-repeticao] OFF
+2026-08-18T00:27:18.825217914Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
+2026-08-18T00:27:18.825367017Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
+2026-08-18T00:27:18.825393769Z [AUTOMOD]   ✓ Nenhuma violação detectada
+2026-08-18T00:27:25.308433747Z [MSG] 01KZ16ENP4RFZ79HZ2H8JX5GCD no canal 01KQ566RHQC8V8YAFH79G67MSJ: ":p"
+2026-08-18T00:27:25.308521443Z [AUTOMOD] ────────────────────────────────────────────
+2026-08-18T00:27:25.308542222Z [AUTOMOD] ▶ Analisando mensagem de 01KZ16ENP4RFZ79HZ2H8JX5GCD
+2026-08-18T00:27:25.308619986Z [AUTOMOD]   conteúdo: ":p"
+2026-08-18T00:27:25.309023078Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+2026-08-18T00:27:25.309303522Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
+2026-08-18T00:27:25.309340562Z [AUTOMOD]   [anti-link] ON → lista tem 3126348 domínio(s)
+2026-08-18T00:27:25.309381077Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+2026-08-18T00:27:25.309397620Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
+2026-08-18T00:27:25.309524323Z [AUTOMOD]   [anti-caps] OFF
+2026-08-18T00:27:25.309562584Z [AUTOMOD]   [anti-caracteres] ON → ok
+2026-08-18T00:27:25.309671763Z [AUTOMOD]   [anti-repeticao] OFF
+2026-08-18T00:27:25.309709785Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
+2026-08-18T00:27:25.309871546Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
+2026-08-18T00:27:25.309909887Z [AUTOMOD]   ✓ Nenhuma violação detectada
+2026-08-18T00:27:27.678380699Z [MSG] 01M093YVDYDGBD498QGMYSQWJ3 no canal 01KZKFDGS0CA6ZHNDHHW89Y2KY: "a resenha se encontra aq ?"
+2026-08-18T00:27:27.678481904Z [AUTOMOD] ────────────────────────────────────────────
+2026-08-18T00:27:27.678521442Z [AUTOMOD] ▶ Analisando mensagem de 01M093YVDYDGBD498QGMYSQWJ3
+2026-08-18T00:27:27.678543492Z [AUTOMOD]   conteúdo: "a resenha se encontra aq ?"
+2026-08-18T00:27:27.679068063Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+2026-08-18T00:27:27.679552178Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 6) sinais: [pergunta]
+2026-08-18T00:27:27.679592820Z [AUTOMOD]   [anti-link] ON → lista tem 3126348 domínio(s)
+2026-08-18T00:27:27.679609414Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+2026-08-18T00:27:27.679627709Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
+2026-08-18T00:27:27.679691479Z [AUTOMOD]   [anti-caps] OFF
+2026-08-18T00:27:27.679890139Z [AUTOMOD]   [anti-caracteres] ON → ok
+2026-08-18T00:27:27.679923257Z [AUTOMOD]   [anti-repeticao] OFF
+2026-08-18T00:27:27.680126439Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
+2026-08-18T00:27:27.680164280Z [AUTOMOD]   [anti-spam] ON → 1 msg em 4000ms (limite 5)
+2026-08-18T00:27:27.680180201Z [AUTOMOD]   ✓ Nenhuma violação detectada
+2026-08-18T00:27:40.854481424Z [MSG] 01K9JKP85D5EP2ZTEHS8DT797A no canal 01KKRZV7Y4GF7XA9P94AEKAPJK: "<@01KHBPN31QT1THM1A0CEM8JA91> como vai o seu dia?"
+2026-08-18T00:27:40.857841419Z [CHAT][debug] ══════ nova conversa ══════
+2026-08-18T00:27:40.858064334Z [CHAT][debug] autor=Ghiso | pergunta (19 chars): "como vai o seu dia?"
+2026-08-18T00:27:40.864878743Z [CHAT] Ollama indisponível — causa=recusou codigo=ECONNREFUSED url=http://localhost:11434
+2026-08-18T00:27:41.721525293Z [REAÇÃO] args: [ '01KZR9JW1QTE4FXMMAN08VNXKW', '01M093ZTBJX0W0PXJF4FTZP1SF', '🌆' ]
+2026-08-18T00:27:41.883194915Z [REACTIONROLE] +cargo 01KZR8FGYR1ES93SDGCNBQK932 para 01M093ZTBJX0W0PXJF4FTZP1SF (msg 01KZR9JW1QTE4FXMMAN08VNXKW) | trocou 1 cargo(s)
+2026-08-18T00:27:41.973736895Z [MSG] 01KKYE00PSP5NAA1C91XWD00QM no canal 01KQ566RHQC8V8YAFH79G67MSJ: "E me despedir do meu banner .-.)"
+2026-08-18T00:27:41.973959325Z [AUTOMOD] ────────────────────────────────────────────
+2026-08-18T00:27:41.973983065Z [AUTOMOD] ▶ Analisando mensagem de 01KKYE00PSP5NAA1C91XWD00QM
+2026-08-18T00:27:41.973995304Z [AUTOMOD]   conteúdo: "E me despedir do meu banner .-.)"
+2026-08-18T00:27:41.974444534Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+2026-08-18T00:27:41.974703530Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 7) sinais: [nenhum]
+2026-08-18T00:27:41.974919939Z [AUTOMOD]   [anti-link] ON → lista tem 3126348 domínio(s)
+2026-08-18T00:27:41.974938732Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+2026-08-18T00:27:41.974949699Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
+2026-08-18T00:27:41.975145517Z [AUTOMOD]   [anti-caps] OFF
+2026-08-18T00:27:41.975164956Z [AUTOMOD]   [anti-caracteres] ON → ok
+2026-08-18T00:27:41.975248903Z [AUTOMOD]   [anti-repeticao] OFF
+2026-08-18T00:27:41.975275861Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
+2026-08-18T00:27:41.975325699Z [AUTOMOD]   [anti-spam] ON → 1 msg em 1000ms (limite 6)
+2026-08-18T00:27:41.975546275Z [AUTOMOD]   ✓ Nenhuma violação detectada
+2026-08-18T00:27:43.155386507Z [REAÇÃO-] args: [ '01KZR9JW1QTE4FXMMAN08VNXKW', '01M093ZTBJX0W0PXJF4FTZP1SF', '🌆' ]
+2026-08-18T00:27:43.248623822Z [REACTIONROLE] -cargo 01KZR8FGYR1ES93SDGCNBQK932 de 01M093ZTBJX0W0PXJF4FTZP1SF (msg 01KZR9JW1QTE4FXMMAN08VNXKW)
+2026-08-18T00:27:49.913504066Z [MSG] 00000000000000000000000000 no canal 01KZMZFG804Q5KY4G9MY071RWD: ""
+2026-08-18T00:27:49.913661066Z [AUTOMOD] ────────────────────────────────────────────
+2026-08-18T00:27:49.913774939Z [AUTOMOD] ▶ Analisando mensagem de 00000000000000000000000000
+2026-08-18T00:27:49.913800459Z [AUTOMOD]   conteúdo: ""
+2026-08-18T00:27:49.914202610Z [AUTOMOD]   [anti-invite] ON → convites encontrados: [nenhum]
+2026-08-18T00:27:49.914481132Z [AUTOMOD]   [conteúdo] ON → nota 0.0/10 (limiar 6) sinais: [nenhum]
+2026-08-18T00:27:49.914566580Z [AUTOMOD]   [anti-link] ON → lista tem 3126348 domínio(s)
+2026-08-18T00:27:49.914580611Z [AUTOMOD]   [anti-link] domínios extraídos da mensagem: [nenhum]
+2026-08-18T00:27:49.914749459Z [AUTOMOD]   [anti-mass-mention] ON → 0 menção(ões) (limite 5)
+2026-08-18T00:27:49.914766039Z [AUTOMOD]   [anti-caps] OFF
+2026-08-18T00:27:49.914776002Z [AUTOMOD]   [anti-caracteres] ON → ok
+2026-08-18T00:27:49.914839583Z [AUTOMOD]   [anti-repeticao] OFF
+2026-08-18T00:27:49.914968710Z [AUTOMOD]   [anti-mass-spam] ON → 1 msg em 8000ms (limite 12)
+2026-08-18T00:27:49.914983859Z [AUTOMOD]   [anti-spam] ON → 1 msg em 4000ms (limite 5)
+2026-08-18T00:27:49.915011408Z [AUTOMOD]   ✓ Nenhuma violação detectada
+2026-08-18T00:27:49.999474267Z Skipping key pronouns during hydration!

@@ -1,7 +1,7 @@
 // ══════════════════════════════════════════════════════════
 //  db.js — Persistência com SQLite embutido (node:sqlite)
 //  Zero dependências nativas: o SQLite vem dentro do Node.
-//  Arquivo do banco em DB_PATH (padrão ./stoat.db; no Docker,
+//  Arquivo do banco em DB_PATH (padrão ./stoat.db; no container,
 //  /data/stoat.db, dentro do volume persistente).
 //
 //  Fase 1: tabela `config` (por servidor + linhas especiais

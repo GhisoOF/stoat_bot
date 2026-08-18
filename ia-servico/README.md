@@ -68,8 +68,9 @@ troque com `OLLAMA_MODEL`.
 ## Subir
 
 ```bash
-# ajuste o volume do código e a URL do Ollama no docker-compose.yml
-docker compose up -d
+cp .env.example .env
+nano .env                 # GITHUB_TOKEN e OLLAMA_URL
+node servidor.js          # teste em primeiro plano
 curl http://localhost:8090/saude
 ```
 
@@ -90,10 +91,10 @@ O token vive num arquivo `.env` **ao lado deste compose**, nunca dentro dele:
 cd ia-servico
 cp .env.example .env
 nano .env          # cole o token em GITHUB_TOKEN=
-docker compose up -d --force-recreate
+sudo rc-service judy-ia restart
 ```
 
-**Por que num arquivo separado:** o `docker-compose.yml` é versionado e
+**Por que num arquivo separado:** o serviço é versionado e
 sobrescrito a cada atualização do bot. O `.env` está no `.gitignore` e não vai
 no pacote — então ele é o único lugar onde uma configuração sua sobrevive aos
 deploys.
@@ -105,8 +106,8 @@ token expirado devolve o mesmo 404 enganoso.
 Confira que pegou:
 
 ```bash
-docker exec judy-ia sh -c 'echo ${GITHUB_TOKEN:+ok}'
-docker logs judy-ia | grep "\[IA\]"
+grep GITHUB_TOKEN .env
+grep "\[IA\]" /var/log/judy-ia.log
 ```
 
 ## Ollama só aceita conexão local (OpenRC)
@@ -149,6 +150,24 @@ Se preferir não expor na rede local, use o IP do Tailscale em vez de
 export OLLAMA_HOST="100.74.70.106:11434"
 ```
 
+## Busca web (SearXNG) — opcional
+
+Está **desligada** por padrão: sem `SEARXNG_URL` no `.env`, o bot nem gasta
+inferência decidindo se deveria buscar.
+
+Se quiser ligar, o SearXNG precisa rodar nativamente (a receita antiga era em
+container e foi removida junto com o resto do Docker). O detalhe que custa
+tempo redescobrir está no `searxng-settings.example.yml` desta pasta:
+
+```yaml
+search:
+  formats:
+    - html
+    - json      # ← sem isto, /search?format=json devolve 403 Forbidden
+```
+
+Depois é só apontar `SEARXNG_URL=http://localhost:8080` no `.env`.
+
 ## O token que some no deploy
 
 Sintoma: tudo funciona, a rede está boa, e a leitura do repositório responde
@@ -178,13 +197,13 @@ E restaure ao fim de cada deploy:
 
 ```bash
 cp ~/judy-github.env ia-servico/.env
-docker compose -f ia-servico/docker-compose.yml up -d --build --force-recreate judy-ia
+sudo rc-service judy-ia restart
 ```
 
 Para conferir sem adivinhar:
 
 ```bash
-docker exec judy-ia sh -c 'echo ${GITHUB_TOKEN:+definido}${GITHUB_TOKEN:-VAZIO}'
+grep -q GITHUB_TOKEN ia-servico/.env && echo definido || echo VAZIO
 curl -s localhost:8090/diagnostico
 ```
 
@@ -207,9 +226,9 @@ Quando há problema, ele aparece em bloco destacado com a correção sugerida:
 [IA] ⚠️  PROBLEMAS DETECTADOS NO BOOT
 [IA] DNS NÃO resolve (EAI_AGAIN). O container não consegue traduzir nomes.
 [IA]    → confira /etc/resolv.conf DENTRO do container:
-[IA]      docker exec judy-ia cat /etc/resolv.conf
+[IA]      cat /etc/resolv.conf
 [IA]    → se estiver sem 'nameserver', o bind-mount está preso num arquivo antigo.
-[IA]      Recrie: docker compose up -d --force-recreate
+[IA]      Recrie: sudo rc-service judy-ia restart
 [IA] ═══════════════════════════════════════════
 ```
 
@@ -220,7 +239,7 @@ Sem reiniciar, dá para consultar a qualquer momento:
 
 ```bash
 curl localhost:8090/diagnostico
-docker logs judy-ia | grep "\[IA\]"
+grep "\[IA\]" /var/log/judy-ia.log
 ```
 
 Nada disso derruba o serviço — são avisos. O bot funciona sem GitHub e sem
@@ -232,104 +251,129 @@ O sintoma "a Judy não consegue ler o repositório" já teve três causas
 diferentes: DNS quebrado, token ausente e token expirado. Cada uma exigiu uma
 investigação do zero. O diagnóstico troca isso por uma linha no log.
 
-## EAI_AGAIN: o DNS que para sozinho
+## EAI_AGAIN: quando o DNS para sozinho
 
 Sintoma característico: **funcionava, ninguém mexeu em nada, e parou**. Todo
-acesso à rede passa a falhar com `EAI_AGAIN`, enquanto o host resolve nomes
-normalmente.
+acesso à rede passa a falhar com `EAI_AGAIN`.
 
-A causa é um detalhe de como o bind-mount funciona. Este compose já montou
-`/etc/resolv.conf` do host dentro do container, e isso parece razoável — mas
-esse arquivo costuma ser um symlink para algo que o **systemd-resolved** e o
-**Tailscale** reescrevem ao reconectar. E eles não editam o arquivo: criam um
-novo e renomeiam por cima. O bind-mount prende o **inode antigo**, que depois
-disso não existe mais. O container fica olhando para um arquivo órfão e para de
-resolver nomes — sem nenhum evento que explique.
+`EAI_AGAIN` não significa "esse nome não existe" — é o resolver dizendo *tente
+de novo*. Costuma acontecer quando o `/etc/resolv.conf` é reescrito: o
+**Tailscale** e o **systemd-resolved** fazem isso ao reconectar, e há uma
+janela de segundos em que nada resolve.
 
-Por isso o mount foi removido. Com `network_mode: host` ele é dispensável: o
-Docker entrega o `resolv.conf` do host ao container **e o mantém atualizado**
-quando o arquivo do host muda. Deixar o Docker cuidar disso é o que faz o DNS
-sobreviver a reinícios do resolved e do Tailscale.
+Duas defesas, nesta ordem:
 
-Além disso, as chamadas de rede passaram a **repetir automaticamente** falhas
-transitórias (`ferramentas/rede.js`). `EAI_AGAIN` não significa "não existe":
-é o resolver dizendo *tente de novo*. Três tentativas com espera crescente
-(400ms, 800ms, 1600ms) absorvem a janela de alguns segundos em que o DNS está
-sendo reescrito, sem que ninguém perceba. `ENOTFOUND` fica de fora de
-propósito — nome que não existe não vai passar a existir na segunda tentativa.
+**Retentativa automática** (`ferramentas/rede.js`). Três tentativas com espera
+crescente (400ms, 800ms, 1600ms) absorvem a janela sem ninguém perceber.
+`ENOTFOUND` fica de fora de propósito — nome que não existe não vai passar a
+existir na segunda tentativa.
 
-O que sobra chega com diagnóstico em vez de `fetch failed`:
+**DNS de emergência** (`dns-fallback.js`). Se o `/etc/resolv.conf` ficar sem
+nenhuma linha `nameserver` — acontece, e aí `getaddrinfo` falha em tudo — o
+serviço passa a resolver por **c-ares** com servidores explícitos
+(`DNS_FALLBACK`), que não lê esse arquivo. Como o `fetch` do Node usa
+`dns.lookup`, tudo volta a funcionar sem nenhuma outra parte do código saber.
 
-```
-Não consegui alcançar a API do GitHub: o DNS não respondeu (EAI_AGAIN) mesmo
-depois de algumas tentativas. Isso é rede do container, não credencial. Quase
-sempre é o /etc/resolv.conf preso num arquivo antigo — recrie o container:
-`docker compose up -d --force-recreate judy-ia`.
-```
-
-### A rede de segurança
-
-Consertar o `resolv.conf` depende de mexer no host e recriar o container — e
-até lá a Judy fica muda. Por isso o serviço agora **se vira sozinho**.
-
-No boot ele testa se o resolvedor do sistema responde. Se não responde, troca o
-`dns.lookup` do processo por um que usa **c-ares** com servidores públicos
-(`DNS_FALLBACK`, padrão `1.1.1.1,8.8.8.8`). O c-ares aceita servidores
-explícitos e **não lê o `/etc/resolv.conf`**, então funciona mesmo com o arquivo
-vazio. Como o `fetch` do Node passa pelo `dns.lookup`, tudo volta a funcionar
-sem que nenhuma outra parte do código precise saber.
-
-A troca só acontece quando o sistema está realmente quebrado. Com DNS
-funcionando nada muda. `localhost` e IPs literais nunca passam pela rede.
-
-A **ordem** dos servidores importa. Nesta máquina o host usa o MagicDNS do
-Tailscale (`100.100.100.100`), então ele vem primeiro: como o container usa a
-rede do host, esse endereço é alcançável, e é o único que resolve os nomes
-internos `*.ts.net`. Os públicos ficam atrás, para o caso de o Tailscale estar
-fora do ar. Numa máquina sem Tailscale, deixe só os públicos.
-
-O log deixa claro que está funcionando *apesar* de um problema:
+A troca só acontece com o resolvedor do sistema realmente quebrado. A **ordem**
+importa: numa máquina com Tailscale, ponha o MagicDNS (`100.100.100.100`) na
+frente — é o único que resolve os nomes internos `*.ts.net`. Os públicos ficam
+atrás, como reserva.
 
 ```
-[IA] ⚠ DNS do sistema quebrado — usando 1.1.1.1, 8.8.8.8 por dentro
+[IA] ⚠ DNS do sistema quebrado — usando 100.100.100.100, 1.1.1.1 por dentro
 ```
 
-E há uma rota curta para conferir só isso:
+Isso é contorno, não conserto: o reparo de verdade é o `/etc/resolv.conf`.
+
+### Se acontecer
 
 ```bash
-curl localhost:8090/dns
-```
-
-Isso é contorno, não conserto. O reparo de verdade é o container voltar a ver o
-`resolv.conf` do host — mas com o MagicDNS na frente da lista, nem os nomes
-internos se perdem enquanto isso.
-
-### O caso real que originou isto
-
-O host estava com o arquivo do Tailscale:
-
-```
-# resolv.conf(5) file generated by tailscale
-# DO NOT EDIT THIS FILE BY HAND -- CHANGES WILL BE OVERWRITTEN
-nameserver 100.100.100.100
-```
-
-E o container, com um `dhcpcd` anterior à chegada do Tailscale — só cabeçalhos,
-sem `nameserver` nenhum. O próprio arquivo avisa que é sobrescrito; o
-bind-mount ficou preso na versão de antes. Meses depois, sem ninguém tocar em
-nada, o DNS do container simplesmente não existia mais.
-
-### Se acontecer de novo
-
-```bash
-docker exec judy-ia cat /etc/resolv.conf     # tem linha "nameserver"?
-docker exec judy-ia getent hosts api.github.com
+cat /etc/resolv.conf                  # tem linha "nameserver"?
+getent hosts api.github.com
+curl localhost:8090/dns               # qual caminho está em uso
 curl localhost:8090/diagnostico
 ```
 
-**Recriar, não reiniciar** — `restart` mantém o namespace de rede e os mounts
-antigos:
+## O token que some no deploy
+
+Sintoma: tudo funciona, a rede está boa, e a leitura do repositório responde
+**404**. Não é "o arquivo não existe" — em repositório **privado** o GitHub
+responde 404 em vez de 401/403 de propósito, para não revelar que o repo
+existe. Ou seja: 404 aqui quase sempre significa **sem credencial**.
+
+E a credencial some sozinha. O procedimento de deploy apaga a pasta antes de
+descompactar a versão nova:
 
 ```bash
-docker compose up -d --force-recreate judy-ia
+rm -rf modulos scripts ia-servico ia-stack   # ← leva o ia-servico/.env junto
+unzip -o stoat_bot-*.zip
 ```
+
+O `.env` está no `.gitignore` (então não vai para o repositório, o que é
+correto), mas justamente por isso ele também não volta no `unzip`. O container
+sobe normalmente, sem erro nenhum, e só o acesso ao código quebra.
+
+**Guarde uma cópia fora da pasta:**
+
+```bash
+cp ia-servico/.env ~/judy-github.env      # uma vez
+```
+
+E restaure ao fim de cada deploy:
+
+```bash
+cp ~/judy-github.env ia-servico/.env
+sudo rc-service judy-ia restart
+```
+
+Para conferir sem adivinhar:
+
+```bash
+grep -q GITHUB_TOKEN ia-servico/.env && echo definido || echo VAZIO
+curl -s localhost:8090/diagnostico
+```
+
+## Diagnóstico
+
+O serviço se autodiagnostica no boot e grita no log quando algo está errado:
+
+```
+[IA] ✓ DNS resolvendo
+[IA] ✓ GitHub alcançável (HTTP 200)
+[IA] ✓ GitHub autenticado (GhisoOF/stoat_bot)
+[IA] ✓ Ollama respondendo (5 modelo(s))
+[IA] ✓ diagnóstico de boot: tudo certo
+```
+
+Quando há problema, ele aparece em bloco destacado com a correção sugerida:
+
+```
+[IA] ═══════════════════════════════════════════
+[IA] ⚠️  PROBLEMAS DETECTADOS NO BOOT
+[IA] DNS NÃO resolve (EAI_AGAIN). O container não consegue traduzir nomes.
+[IA]    → confira /etc/resolv.conf DENTRO do container:
+[IA]      cat /etc/resolv.conf
+[IA]    → se estiver sem 'nameserver', o bind-mount está preso num arquivo antigo.
+[IA]      Recrie: sudo rc-service judy-ia restart
+[IA] ═══════════════════════════════════════════
+```
+
+Verifica quatro coisas: **DNS**, **acesso à internet**, **token do GitHub**
+(distinguindo ausente, expirado e sem permissão) e **Ollama**.
+
+Sem reiniciar, dá para consultar a qualquer momento:
+
+```bash
+curl localhost:8090/diagnostico
+grep "\[IA\]" /var/log/judy-ia.log
+```
+
+Nada disso derruba o serviço — são avisos. O bot funciona sem GitHub e sem
+busca web; só perde essas capacidades.
+
+### Por que existe
+
+O sintoma "a Judy não consegue ler o repositório" já teve três causas
+diferentes: DNS quebrado, token ausente e token expirado. Cada uma exigiu uma
+investigação do zero. O diagnóstico troca isso por uma linha no log.
+

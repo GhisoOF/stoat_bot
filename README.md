@@ -11,6 +11,61 @@ embutido (nada de serviço externo), então as configurações e punições
 
 ---
 
+## Onde cada peça roda
+
+O projeto tem **dois processos, em duas máquinas**, e confundir isso já custou
+horas de diagnóstico:
+
+| Peça | Onde | Como |
+|---|---|---|
+| **stoat-bot** | Umbrel | container, stack no **Portainer** |
+| **judy-ia** | Gentoo (a do GPU) | direto com Node, serviço **OpenRC** |
+| **Ollama** | Gentoo | nativo, serviço OpenRC |
+
+O bot fala com a máquina do GPU pelo **Tailscale** (`100.74.70.106`), nas
+portas `8090` (judy-ia) e `11434` (Ollama).
+
+### Configuração do bot (Portainer)
+
+As variáveis vêm do bloco `environment` da stack — **não** de um `.env`. Depois
+de mudar qualquer uma, é preciso **recriar** o container: um `restart` mantém
+as variáveis antigas, e o sintoma é silencioso (o bot sobe normal e só falha
+quando alguém usa a IA).
+
+O boot imprime o que efetivamente chegou:
+
+```
+[IA] Ollama:  http://100.74.70.106:11434
+[IA] Serviço: http://100.74.70.106:8090
+[IA] Modelos: conversa=gemma4:e4b · código=ornith:9b · ferramentas=qwen3.5:9b
+```
+
+Se aparecer `⚠️ (padrão — OLLAMA_URL não definida)`, a variável não chegou.
+
+O `.env.example` na raiz serve para rodar **local**, fora do container.
+
+### Configuração da IA (Gentoo)
+
+Essa metade roda nativa. O `judy-ia` lê um `.env` **do próprio diretório**, e
+o serviço OpenRC define `directory=` para lá:
+
+```bash
+sudo cp scripts/openrc/judy-ia /etc/init.d/judy-ia
+sudo chmod +x /etc/init.d/judy-ia
+sudo cp scripts/openrc/judy-ia.confd /etc/conf.d/judy-ia
+sudo nano /etc/conf.d/judy-ia          # usuário e diretório
+sudo rc-update add judy-ia default
+sudo rc-service judy-ia start
+```
+
+**Cuidado com o `OLLAMA_HOST`:** se o Ollama for configurado com um IP
+específico (o do Tailscale, por exemplo), ele deixa de escutar em `127.0.0.1`.
+A partir daí `localhost:11434` dá `ECONNREFUSED` até na própria máquina —
+enquanto `ollama list` continua funcionando, porque usa o endereço
+configurado. Use o mesmo endereço nas duas pontas.
+
+---
+
 ## Conversa: rápida por desenho
 
 A prioridade aqui é **tempo de resposta**, não profundidade. Quatro mudanças,
@@ -106,7 +161,7 @@ persona, que pede o mesmo tom em uma frase.
 - [Cor dos cargos (`&cor`)](#cor-dos-cargos-cor)
 - [Guia `&tutorial`](#guia-tutorial)
 - [Persistência (SQLite)](#persistência-sqlite)
-- [Deploy com Docker / umbrelOS](#deploy-com-docker--umbrelos)
+- [Instalação e serviço (OpenRC)](#instalação-e-serviço-openrc)
 - [Estrutura do projeto](#estrutura-do-projeto)
 
 ---
@@ -1255,36 +1310,80 @@ Todo o estado fica em um único arquivo de banco (`stoat.db`), usando o módulo
 - `punicoes` — avisos e silêncios por `(servidor, usuário)`
 - `bans_globais` — histórico da lista global
 
-No Docker, o banco fica em `/data/stoat.db`, dentro do volume persistente, então
-sobrevive a restart, update e redeploy. O caminho é configurável via `DB_PATH`.
+O caminho do banco vem de `DB_PATH`. **Aponte para um diretório fixo**: o padrão
+é relativo ao lugar de onde o `node` foi executado, então rodar de outra pasta
+criaria um banco novo e vazio — com o antigo intacto, mas invisível.
 
 ---
 
-## Deploy com Docker / umbrelOS
+## Instalação e serviço (OpenRC)
 
-O bot roda a partir de uma **imagem pré-construída** (recomendado no umbrelOS,
-onde o `npm install` no build costuma falhar). O fluxo:
+O bot roda direto com Node. Não há imagem nem container: o Gentoo já tem
+supervisão de serviço, e uma camada a mais só acrescentaria lugares onde a
+configuração pode se perder — foi exatamente o que aconteceu enquanto havia
+Docker no caminho.
 
-1. Faça push do código para o GitHub.
-2. O GitHub Actions (`.github/workflows/build.yml`) constrói a imagem
-   **multi-arquitetura** (amd64 + arm64) e publica no GitHub Container Registry.
-3. No Portainer/Dockge, use um compose com `image:` apontando para a imagem
-   (veja `docker-compose.image.yml`) e defina a variável **`BOT_TOKEN`**.
+### Primeira instalação
 
-Variáveis de ambiente:
+```bash
+cd ~/Downloads/github
+npm install --omit=dev
+cp .env.example .env
+nano .env                        # BOT_TOKEN, OLLAMA_URL, modelos
+mkdir -p dados                   # onde o banco vai morar
+node scripts/verificar-build.js  # confere que o repositório está íntegro
+node main.js                     # teste em primeiro plano
+```
+
+### Como serviço
+
+```bash
+sudo cp scripts/openrc/stoat-bot /etc/init.d/stoat-bot
+sudo chmod +x /etc/init.d/stoat-bot
+sudo cp scripts/openrc/stoat-bot.confd /etc/conf.d/stoat-bot
+sudo nano /etc/conf.d/stoat-bot          # usuário, diretório e caminho do node
+sudo rc-update add stoat-bot default
+sudo rc-service stoat-bot start
+tail -f /var/log/stoat-bot.log
+```
+
+O mesmo para o serviço de ferramentas, se estiver na mesma máquina:
+
+```bash
+sudo cp scripts/openrc/judy-ia /etc/init.d/judy-ia
+sudo chmod +x /etc/init.d/judy-ia
+sudo cp scripts/openrc/judy-ia.confd /etc/conf.d/judy-ia
+sudo rc-update add judy-ia default
+sudo rc-service judy-ia start
+```
+
+### Atualizar
+
+```bash
+cd ~/Downloads/github
+git pull
+npm install --omit=dev              # só se package.json mudou
+node scripts/verificar-build.js     # falha aqui é melhor que falha no start
+sudo rc-service stoat-bot restart
+```
+
+### Variáveis principais
 
 | Variável | Padrão | Descrição |
 |---|---|---|
 | `BOT_TOKEN` | — | **obrigatória** — token do bot |
-| `DB_PATH` | `/data/stoat.db` | caminho do banco SQLite |
-| `CONFIG_PATH` | `/data/automod-config.json` | (legado) migrado uma vez, se existir |
-| `TZ` | — | fuso para os horários nos logs (ex.: `Europe/Madrid`) |
+| `DB_PATH` | `./stoat.db` | banco SQLite — use caminho absoluto ou fixe o diretório |
+| `OLLAMA_URL` | `http://localhost:11434` | ⚠️ o padrão aponta para a própria máquina |
+| `IA_SERVICO_URL` | — | judy-ia; sem ele, a IA fica sem ferramentas |
+| `OLLAMA_MODEL_LEVE` | — | modelo de conversa (fica residente na VRAM) |
+| `TZ` | — | fuso dos horários no log |
 
-O `Dockerfile` já inclui a flag `--disable-warning=ExperimentalWarning` (silencia
-o aviso do `node:sqlite`) e define `DB_PATH`. O volume `/data` guarda o banco.
+A lista completa está no `.env.example`, comentada.
 
-> Após atualizar o código: push → aguarde o Actions ficar verde → no Portainer,
-> **Pull and redeploy** para puxar a imagem nova.
+> O `.env` é lido do **diretório de onde o node foi executado**. O serviço
+> OpenRC define `directory=` e resolve isso; rodando à mão, faça `cd` no
+> projeto antes. O boot imprime a configuração de IA em uso — se algo não
+> chegou, aparece ali.
 
 ---
 
@@ -1333,8 +1432,8 @@ O código é organizado em quatro áreas, sob `modulos/`:
 │   ├── servidor.js             # HTTP: /chat, /saude, /ferramentas
 │   └── ferramentas/            # calcular, ler_codigo, buscar_web, buscar_rss
 ├── ia-stack/                   # stack de IA legada (superada pelo ia-servico)
-├── Dockerfile
-├── docker-compose.image.yml    # imagem pré-construída (Portainer/umbrelOS)
+├── scripts/openrc/             # serviços do OpenRC (bot e judy-ia)
+├── .env.example                # modelo de configuração
 └── .github/workflows/build.yml # build multi-arch → GHCR
 ```
 

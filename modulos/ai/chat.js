@@ -4,7 +4,7 @@
 //  &chat <mensagem>     → conversa; se precisar, busca na internet
 //  @menção do bot       → mesmo comportamento (tratado no main.js)
 //
-//  100% local: fala com o Ollama e o SearXNG na própria rede Docker.
+//  100% local: fala com o Ollama (e, opcionalmente, o SearXNG) na rede local.
 //  Nenhuma chave/API externa.
 //
 //  Fluxo (padrão agente para modelos pequenos):
@@ -234,7 +234,7 @@ export function resumoConfigIA() {
   if (padraoLocal && IA_SERVICO_URL && !/localhost|127\.0\.0\.1/.test(IA_SERVICO_URL)) {
     linhas.push("[IA] ⚠️ ATENÇÃO: o serviço de IA é remoto, mas o Ollama está em localhost.");
     linhas.push("[IA]    Isso quase sempre é OLLAMA_URL faltando no container.");
-    linhas.push("[IA]    Confira com: docker exec stoat-bot env | grep OLLAMA");
+    linhas.push("[IA]    No Portainer: confira o bloco environment da stack e RECRIE o container.");
   }
   return linhas;
 }

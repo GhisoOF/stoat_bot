@@ -231,7 +231,7 @@ const servidor = createServer(async (req, res) => {
 //
 //  Já perdemos horas caçando "a Judy não lê o repositório" que eram, na
 //  verdade, DNS quebrado ou token ausente. Testar isso no boot e gritar no
-//  log troca uma investigação inteira por uma linha visível no `docker logs`.
+//  log troca uma investigação inteira por uma linha visível no log do serviço.
 //
 //  Nada aqui derruba o serviço: são avisos. O bot funciona sem GitHub e sem
 //  busca web — só perde essas capacidades.
@@ -254,9 +254,9 @@ async function diagnosticoDeBoot() {
       problemas.push(
         `DNS NÃO resolve e o fallback está indisponível (${dnsInfo.motivo}).`,
         "   → confira /etc/resolv.conf DENTRO do container:",
-        "     docker exec judy-ia cat /etc/resolv.conf",
+        "     cat /etc/resolv.conf",
         "   → precisa ter uma linha 'nameserver'. Se só tiver comentários,",
-        "     recrie o container: docker compose up -d --force-recreate judy-ia",
+        "     precisa ter uma linha 'nameserver'; se não tiver, o DNS do sistema está quebrado",
       );
     }
   } else if (dnsInfo.funciona) {
@@ -265,14 +265,14 @@ async function diagnosticoDeBoot() {
       "O /etc/resolv.conf do container não tem 'nameserver' — o DNS do sistema não funciona.",
       `   → contornado: resolvendo por ${dnsInfo.servidores.join(", ")} dentro do processo.`,
       "   → a Judy funciona assim, mas nomes locais/Tailscale não resolvem.",
-      "   → conserto de verdade: docker compose up -d --force-recreate judy-ia",
+      "   → conserto de verdade: arrume o /etc/resolv.conf da máquina",
       "     (e confira o /etc/resolv.conf do HOST, que é de onde o container copia)",
     );
   } else {
     problemas.push(
       "DNS NÃO resolve, nem pelo sistema nem pelos servidores de fallback.",
       "   → o container parece estar sem saída para a internet (firewall/rota).",
-      "     Teste: docker exec judy-ia node -e \"fetch('https://1.1.1.1').then(r=>console.log(r.status))\"",
+      "     Teste: curl -s -o /dev/null -w '%{http_code}' https://1.1.1.1",
     );
   }
 
@@ -299,7 +299,7 @@ async function diagnosticoDeBoot() {
   if (!token) {
     problemas.push(
       "GITHUB_TOKEN ausente — a leitura de código vai falhar com 404 em repo privado.",
-      "   → defina no .env ao lado do docker-compose.yml",
+      "   → defina no .env do diretório do judy-ia",
     );
   } else if (!problemas.length && repo) {
     // só testa o token se a rede estiver de pé, senão o erro seria enganoso

@@ -101,10 +101,10 @@ export function respostaSeca(canalId = "geral", lang = "pt") {
 // das frases para o tom ser o mesmo nos dois caminhos.
 export function instrucaoPersona(lang = "pt") {
   return lang === "en"
-    ? "If anyone flirts, makes sexual jokes or advances at you: refuse in ONE short, dry, bored line. "
+    ? "SEXUAL/ROMANTIC ADVANCES ONLY (this rule does not apply to anything else): If anyone flirts, makes sexual jokes or advances at you: refuse in ONE short, dry, bored line. "
       + "No lectures, no explaining why, no moralising — a sermon is a big reaction, and a big reaction is exactly the reward they came for. "
       + "Never play along, never describe anything sexual, never roleplay it. Boredom ends the subject; outrage feeds it."
-    : "Se alguém flertar, fizer piada sexual ou dar em cima de você: recuse em UMA frase curta, seca e entediada. "
+    : "SÓ PARA INVESTIDA SEXUAL/ROMÂNTICA (esta regra não vale para mais nada): Se alguém flertar, fizer piada sexual ou dar em cima de você: recuse em UMA frase curta, seca e entediada. "
       + "Sem sermão, sem explicar o porquê, sem moralizar — discurso é uma reação enorme, e reação enorme é exatamente o prêmio que a pessoa veio buscar. "
       + "Nunca entre na brincadeira, nunca descreva nada sexual, nunca interprete a cena. Tédio encerra o assunto; indignação alimenta.";
 }

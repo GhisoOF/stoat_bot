@@ -109,6 +109,46 @@ docker exec judy-ia sh -c 'echo ${GITHUB_TOKEN:+ok}'
 docker logs judy-ia | grep "\[IA\]"
 ```
 
+## Ollama só aceita conexão local (OpenRC)
+
+Sintoma: `ollama list` funciona na máquina do Ollama, mas o bot diz
+**"IA indisponível — o servidor está desligado ou inacessível"**.
+
+O `ollama list` fala com o servidor por `127.0.0.1`, então ele funcionar prova
+que o daemon está no ar — e que o problema é o **endereço em que ele escuta**.
+Por padrão o Ollama aceita só conexões locais; de outra máquina, nada entra.
+
+Confirme de onde vem a falha:
+
+```bash
+# na máquina do Ollama
+curl -s localhost:11434/api/tags | head -c 100      # responde?
+
+# no Umbrel (ou de onde o bot roda)
+curl -s --max-time 5 http://100.74.70.106:11434/api/tags | head -c 100
+```
+
+Responder no primeiro e não no segundo confirma o diagnóstico. Em **OpenRC**
+(Gentoo), o ajuste fica em `/etc/conf.d/ollama`:
+
+```sh
+export OLLAMA_HOST="0.0.0.0:11434"
+```
+
+E então:
+
+```bash
+sudo rc-service ollama restart
+sudo rc-update add ollama default     # se ainda não sobe no boot
+```
+
+Se preferir não expor na rede local, use o IP do Tailscale em vez de
+`0.0.0.0` — assim só quem está na sua tailnet alcança:
+
+```sh
+export OLLAMA_HOST="100.74.70.106:11434"
+```
+
 ## O token que some no deploy
 
 Sintoma: tudo funciona, a rede está boa, e a leitura do repositório responde

@@ -307,13 +307,32 @@ async function pedir(url, body) {
 // /api/chat devolve erro, que tratamos ao conversar.
 async function ollamaDisponivel() {
   const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), 4000);
+  // 4s era apertado: numa máquina carregando um modelo de 9 GB, até o
+  // /api/tags pode demorar. Um timeout curto transformava "ocupado" em
+  // "desligado" — dois problemas com conserto completamente diferente.
+  const limite = Number(process.env.OLLAMA_PING_MS || 8000);
+  const t = setTimeout(() => ctrl.abort(), limite);
+  const t0 = Date.now();
   try {
     const r = await fetch(`${OLLAMA_URL}/api/tags`, { signal: ctrl.signal });
-    if (!r.ok) return { ok: false, motivo: `respondeu HTTP ${r.status}` };
-    return { ok: true };
-  } catch {
-    return { ok: false, motivo: "offline" };   // host desligado / inalcançável
+    if (!r.ok) return { ok: false, causa: "http", motivo: `respondeu HTTP ${r.status}` };
+    return { ok: true, ms: Date.now() - t0 };
+  } catch (e) {
+    // O código do erro é a informação mais útil que existe aqui, e antes era
+    // jogada fora: recusa de conexão, timeout e rota inexistente viravam todos
+    // "offline", e cada um pede um conserto diferente.
+    const codigo = e?.cause?.code ?? e?.code ?? "";
+    const abortou = /abort/i.test(e?.name ?? "");
+    if (codigo === "ECONNREFUSED") {
+      return { ok: false, causa: "recusou", motivo: "conexão recusada", codigo };
+    }
+    if (codigo === "EHOSTUNREACH" || codigo === "ENETUNREACH") {
+      return { ok: false, causa: "sem-rota", motivo: "sem rota até o host", codigo };
+    }
+    if (abortou || codigo === "ETIMEDOUT" || codigo === "UND_ERR_CONNECT_TIMEOUT") {
+      return { ok: false, causa: "lento", motivo: `sem resposta em ${limite}ms`, codigo: codigo || "timeout" };
+    }
+    return { ok: false, causa: "offline", motivo: codigo || "inalcançável", codigo };
   } finally {
     clearTimeout(t);
   }
@@ -1009,13 +1028,25 @@ export async function conversar(message, pergunta, ctx) {
   const disp = await ollamaDisponivel();
   if (!disp.ok) {
     ocupado = false;   // libera: não vamos gerar nada
-    const msg = en
-      ? (disp.motivo === "offline"
-        ? "The AI server is **off or unreachable**. Turn on the machine running Ollama (and check that Tailscale is active on it), then try again."
-        : `The AI server responded, but ${disp.motivo}.`)
-      : (disp.motivo === "offline"
-        ? "O servidor de IA está **desligado ou inacessível**. Ligue a máquina que roda o Ollama (e confirme que o Tailscale está ativo nela) e tente de novo."
-        : `O servidor de IA respondeu, mas ${disp.motivo}.`);
+    // Cada causa tem um conserto próprio — dizer qual poupa a investigação.
+    const alvo = OLLAMA_URL;
+    const explica = {
+      recusou: en
+        ? `Something is answering at **${alvo}**, but refusing the connection. Ollama is probably listening only on localhost: set \`OLLAMA_HOST\` to the machine's IP and restart it.`
+        : `Tem algo respondendo em **${alvo}**, mas recusando a conexão. Provavelmente o Ollama está escutando só em localhost: defina \`OLLAMA_HOST\` com o IP da máquina e reinicie.`,
+      "sem-rota": en
+        ? `No route to **${alvo}**. The machine is off, asleep, or Tailscale is down on one of the two ends.`
+        : `Não há rota até **${alvo}**. A máquina está desligada, dormindo, ou o Tailscale caiu numa das duas pontas.`,
+      lento: en
+        ? `**${alvo}** didn't answer in time (${disp.motivo}). It's usually loading a model or the machine is under heavy load — this is different from being off.`
+        : `**${alvo}** não respondeu a tempo (${disp.motivo}). Costuma ser carga de modelo ou máquina sobrecarregada — o que é diferente de estar desligada.`,
+      http: en ? `The AI server responded, but ${disp.motivo}.` : `O servidor de IA respondeu, mas ${disp.motivo}.`,
+      offline: en
+        ? `**${alvo}** is unreachable (${disp.motivo}). Check that the machine is on and Tailscale is up.`
+        : `**${alvo}** está inalcançável (${disp.motivo}). Confira se a máquina está ligada e o Tailscale de pé.`,
+    };
+    const msg = explica[disp.causa] ?? explica.offline;
+    console.error(`[CHAT] Ollama indisponível — causa=${disp.causa} codigo=${disp.codigo ?? "-"} url=${alvo}`);
     return sendEmbed(message.channel, {
       title: en ? "💤 AI unavailable" : "💤 IA indisponível",
       description: msg, colour: COR.aviso });

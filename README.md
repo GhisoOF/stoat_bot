@@ -37,6 +37,26 @@ uma heurística.
 de atenção pelo valor pedido, não pelo usado. Agora é calculado pelo tamanho
 real da conversa (4096 no caso comum).
 
+### Escolher o modelo de conversa
+
+O nome não diz o custo. Num caso real, `gemma4:e4b` ocupava **9,6 GB** e
+`gemma4:12b`, **7,6 GB** — o modelo com cara de leve era o mais pesado dos
+dois. Arquitetura MoE, quantização e tamanho de contexto mexem nisso de formas
+que o nome não revela.
+
+Por isso existe `scripts/medir-modelos.sh`: rode na máquina do Ollama e ele
+mede o que importa — tempo com o modelo já carregado, tempo com carga fria, e
+quanto de VRAM sobra para você usar o computador.
+
+```bash
+./scripts/medir-modelos.sh
+```
+
+Aponte `OLLAMA_MODEL_LEVE` para o melhor tempo **quente** cuja VRAM ainda te
+deixe trabalhar. Um modelo que suporte tool calling (a família Qwen, por
+exemplo) permite ir além: ele serve conversa **e** ferramentas, e aí só resta
+um segundo modelo para código — dois no total, em vez de cinco.
+
 ### Como está a VRAM
 
 | Modelo | Papel | Fica na memória |

@@ -215,6 +215,30 @@ export async function gerarComentarioEspontaneo(contextoCanal) {
 }
 export function getModelo() { return OLLAMA_MODEL_PADRAO; }
 
+// Resumo da configuração de IA, impresso no boot.
+//
+// Um erro de env aqui é silencioso: o bot sobe normal e só falha quando alguém
+// conversa — e a mensagem de erro fala do Ollama, não da configuração. Já
+// perdemos uma investigação inteira por causa de um OLLAMA_URL que não chegou
+// no container e caiu no padrão `localhost`, apontando para o próprio bot.
+export function resumoConfigIA() {
+  const linhas = [];
+  const padraoLocal = !process.env.OLLAMA_URL;
+  linhas.push(`[IA] Ollama:  ${OLLAMA_URL}${padraoLocal ? "  ⚠️ (padrão — OLLAMA_URL não definida)" : ""}`);
+  linhas.push(`[IA] Serviço: ${IA_SERVICO_URL || "(não configurado — sem ferramentas)"}`);
+  linhas.push(`[IA] Modelos: conversa=${OLLAMA_MODEL_LEVE} · código=${OLLAMA_MODEL_CODIGO} · ferramentas=${OLLAMA_MODEL_LOGICA}`);
+  linhas.push(`[IA] Busca:   ${process.env.SEARXNG_URL ? process.env.SEARXNG_URL : "desligada (sem SEARXNG_URL)"}`);
+
+  // O sinal mais claro de env perdida: o serviço de IA está numa máquina
+  // remota, mas o Ollama ficou apontando para dentro do container.
+  if (padraoLocal && IA_SERVICO_URL && !/localhost|127\.0\.0\.1/.test(IA_SERVICO_URL)) {
+    linhas.push("[IA] ⚠️ ATENÇÃO: o serviço de IA é remoto, mas o Ollama está em localhost.");
+    linhas.push("[IA]    Isso quase sempre é OLLAMA_URL faltando no container.");
+    linhas.push("[IA]    Confira com: docker exec stoat-bot env | grep OLLAMA");
+  }
+  return linhas;
+}
+
 // Lista os modelos baixados no Ollama (via /api/tags).
 export async function listarModelos() {
   const ctrl = new AbortController();

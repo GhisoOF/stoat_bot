@@ -459,6 +459,10 @@ client.on("ready", async () => {
     console.error("[RPG] Falha ao conferir moedas duplicadas:", e.message);
   }
   srvStats.marcarInicio();
+  // Configuração de IA no log: um env perdido aqui só apareceria muito depois,
+  // como "Ollama indisponível" — erro que aponta para o lugar errado.
+  for (const l of chat.resumoConfigIA()) console.info(l);
+
   chat.iniciarMemoria();          // liga o agente de memória (extração em background)
   chat.iniciarComentario(client); // liga o comentário espontâneo
   modIA.configurar({ avaliar: chat.avaliarModeracao });   // moderação por IA usa o modelo pequeno

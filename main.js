@@ -19,6 +19,8 @@ import * as admin     from "./modulos/moderacao/comandos-admin.js";
 import * as embedCmd  from "./modulos/moderacao/embed.js";
 import * as reactionRoles from "./modulos/ferramentas/reaction-roles.js";
 import * as autorole  from "./modulos/ferramentas/autorole.js";
+import * as bemvindo  from "./modulos/ferramentas/boas-vindas.js";
+import * as staff     from "./modulos/moderacao/staff.js";
 import * as tutorial   from "./modulos/moderacao/tutorial.js";
 import * as corCargo   from "./modulos/moderacao/cor-cargo.js";
 import * as acessoMod  from "./modulos/moderacao/acesso.js";
@@ -271,6 +273,13 @@ function criarContexto(serverId = null) {
   return {
     client, config, cfgGlobal, COR, PERM, PREFIXO,
     sendEmbed: enviarTraduzido, getServer, membroTemPermissao, ehSuperAdmin,
+    // Busca o servidor pelo ID. Os handlers de evento (entrar/sair) não têm um
+    // objeto `message` para passar ao getServer, mas precisam do nome do
+    // servidor e da contagem de membros nas mensagens de boas-vindas/adeus.
+    getServerPorId: async (sid) => {
+      if (!sid) return null;
+      return client.servers.get?.(sid) ?? await client.servers.fetch(sid).catch(() => null);
+    },
     salvarConfig: () => store.salvarConfigServidor(serverId),
     salvarGlobal: store.salvarGlobal,
     getGlobal: store.getGlobal,
@@ -346,6 +355,16 @@ const rotas = {
   rss:           rss.cmdRss,
   feed:          rss.cmdRss,
   autorole:      autorole.cmdAutorole,
+  // Equipe do servidor (mesma lista de cargos do &acesso)
+  staff:         staff.cmdStaff,
+  equipe:        staff.cmdStaff,
+  // Mensagens de entrada e saída
+  boasvindas:    bemvindo.cmdBoasVindas,
+  "boas-vindas": bemvindo.cmdBoasVindas,
+  welcome:       bemvindo.cmdBoasVindas,
+  adeus:         bemvindo.cmdAdeus,
+  goodbye:       bemvindo.cmdAdeus,
+  despedida:     bemvindo.cmdAdeus,
   game:          rpg.cmdGame,
   rpg:           rpg.cmdGame,
   personagem:    rpg.cmdGame,
@@ -371,6 +390,9 @@ const CANONICO = {
   comecar: "tutorial",
   inicio: "tutorial",
   logs: "log",
+  equipe: "staff",
+  "boas-vindas": "boasvindas", welcome: "boasvindas", bemvindo: "boasvindas",
+  goodbye: "adeus", despedida: "adeus", farewell: "adeus",
   clear: "limpar", purge: "limpar", limpiar: "limpar",
   punição: "punicao",
   globalban: "banglobal",
@@ -403,6 +425,7 @@ const COMANDOS_GERENCIAVEIS = [
   "ping", "repete", "userinfo", "kick", "ban", "limpar",
   "warnings", "clearwarnings", "warn", "acesso", "automod", "whitelist", "blocklist",
   "sentinela", "punicao", "tutorial", "cor", "log", "banglobal", "embed", "reactionrole", "chat", "rss", "xp", "game", "autorole",
+  "staff", "boasvindas", "adeus",
 ];
 // exportado via ctx para o comando &comando consultar
 estado.CANONICO = CANONICO;
@@ -822,6 +845,7 @@ client.on("serverMemberJoin", async (member) => {
 
     await autorole.aoEntrar(member, ctx);          // ← cargo automático (se configurado)
     await engine.reaplicarPunicao(member, ctx);   // ← reaplica o silêncio, se houver
+    await bemvindo.aoEntrar(member, ctx);         // ← embed de boas-vindas (se configurado)
   } catch (err) { console.error("[EVENTO][JOIN]", err?.message); }
 });
 
@@ -850,6 +874,10 @@ client.on("serverMemberLeave", async (member, extra) => {
       titulo: "📤 Membro saiu",
       descricao: `<@${userId}> saiu do servidor (saída, expulsão ou ban).`,
     });
+    // Embed de despedida (se configurado). O nome vem do payload quando existe;
+    // quem saiu não é mais buscável, então não insistimos numa API que falharia.
+    const nome = member?.user?.username ?? member?.nickname ?? null;
+    await bemvindo.aoSair(userId, serverId, ctx, nome);
   } catch (err) { console.error("[EVENTO][LEAVE]", err?.message); }
 });
 

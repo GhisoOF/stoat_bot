@@ -37,6 +37,9 @@ export const COMANDO_EN = {
   warn: "warn",
   xp: "xp",
   game: "game",
+  staff: "staff",
+  boasvindas: "welcome",
+  adeus: "goodbye",
 };
 
 // ── Aliases de comando que precisam EXISTIR como rota ──
@@ -56,6 +59,11 @@ export const COMANDO_EXTRA = {
   character: "game",
   guide: "tutorial",
   start: "tutorial",
+  team: "staff",
+  welcome: "boasvindas",
+  greeting: "boasvindas",
+  goodbye: "adeus",
+  farewell: "adeus",
 };
 
 // ── Tokens de SUBCOMANDO, por comando canônico ──
@@ -164,6 +172,20 @@ const SUB = {
     add: "add", remove: "remove", list: "list",
     channel: "canal", now: "agora", test: "testar", off: "off",
   },
+  staff: {
+    add: "add", remove: "remove", list: "lista", clear: "limpar",
+    title: "titulo", label: "titulo",
+  },
+  boasvindas: {
+    channel: "canal", title: "titulo", text: "texto", message: "texto",
+    colour: "cor", color: "cor", image: "imagem", test: "testar",
+    default: "padrao", status: "status", clear: "limpar", here: "aqui",
+  },
+  adeus: {
+    channel: "canal", title: "titulo", text: "texto", message: "texto",
+    colour: "cor", color: "cor", image: "imagem", test: "testar",
+    default: "padrao", status: "status", clear: "limpar", here: "aqui",
+  },
   log: {
     here: "here", off: "off", channel: "canal",
     punishments: "punicoes", members: "membros", messages: "mensagens",
@@ -205,7 +227,11 @@ const SUB = {
     config: "config", status: "status",
     low: "baixa", medium: "media", high: "alta",
   },
-  comando: { disable: "disable", enable: "enable", list: "list", manage: "gerenciar" },
+  comando: {
+    disable: "desativar", off: "desativar",
+    enable: "ativar", on: "ativar",
+    list: "list", manage: "gerenciar",
+  },
   autorole: { set: "set", off: "off", disable: "desativar", remove: "remover" },
   idioma: {
     portuguese: "portugues", english: "english", status: "status",

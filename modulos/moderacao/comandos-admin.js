@@ -68,8 +68,8 @@ export async function cmdComando(message, args, ctx) {
         linhas.join("  "),
         "",
         "**Uso:**",
-        `\`${PREFIXO}comando disable <nome>\` — desativa`,
-        `\`${PREFIXO}comando enable <nome>\` — reativa`,
+        `\`${PREFIXO}comando desativar <nome>\` — desativa`,
+        `\`${PREFIXO}comando ativar <nome>\` — reativa`,
         "",
         "_`help` e `comando` não podem ser desativados (para você não se trancar para fora)._",
       ].join("\n"),
@@ -77,9 +77,13 @@ export async function cmdComando(message, args, ctx) {
     });
   }
 
-  if (sub !== "disable" && sub !== "enable" && sub !== "on" && sub !== "off") {
+  // Aceita as duas línguas: num servidor em PT ninguém deveria precisar
+  // digitar `disable` (o resto do bot traduz os subcomandos, este ficou para trás).
+  const DESLIGA = new Set(["disable", "off", "desativar", "desligar", "desabilitar"]);
+  const LIGA    = new Set(["enable", "on", "ativar", "ligar", "habilitar", "reativar"]);
+  if (!DESLIGA.has(sub) && !LIGA.has(sub)) {
     return sendEmbed(message.channel, tr(ctx,
-      { title: "❌ Uso incorreto", description: `\`${PREFIXO}comando <disable|enable> <nome>\``, colour: COR.erro },
+      { title: "❌ Uso incorreto", description: `\`${PREFIXO}comando <desativar|ativar> <nome>\``, colour: COR.erro },
       { title: "❌ Wrong usage", description: `\`${PREFIXO}comando <disable|enable> <name>\``, colour: COR.erro }));
   }
 
@@ -87,7 +91,7 @@ export async function cmdComando(message, args, ctx) {
   if (!alvo)
     return sendEmbed(message.channel, tr(ctx,
       { title: "❌ Falta o comando",
-        description: `Diga qual comando. Ex.: \`${PREFIXO}comando disable ban\``, colour: COR.erro },
+        description: `Diga qual comando. Ex.: \`${PREFIXO}comando desativar ban\``, colour: COR.erro },
       { title: "❌ Missing the command",
         description: `Tell me which command. E.g.: \`${PREFIXO}comando disable ban\``, colour: COR.erro }));
 
@@ -103,7 +107,7 @@ export async function cmdComando(message, args, ctx) {
     }));
   }
 
-  const desativar = (sub === "disable" || sub === "off");
+  const desativar = DESLIGA.has(sub);
   const jaDesativado = config.comandosDesativados.includes(alvo);
 
   if (desativar && !jaDesativado) config.comandosDesativados.push(alvo);

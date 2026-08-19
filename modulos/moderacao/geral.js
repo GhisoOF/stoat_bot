@@ -193,6 +193,21 @@ function detalhesPT(P) {
       desc: "Curadoria de notícias por RSS, com resumo da Judy. `add <url>` cadastra um feed, `canal aqui` define o destino, `list` mostra os feeds, `remove <url|n>` remove, `agora` força um ciclo. A cada hora a Judy posta um resumo geral no tom dela e depois os itens novos (título, feed, horário, link).",
       perm: "ManagePermissions", ex: `${P}rss add https://exemplo.com/feed.xml`,
     },
+    staff: {
+      uso: `${P}staff [add|remove|titulo|limpar]`,
+      desc: "Mostra a **equipe do servidor**, agrupada por cargo e com quem tem cada um.\n\nA lista não tem cadastro próprio: ela lê os mesmos cargos do `&acesso cargo`. Então adicionar aqui **também dá acesso aos comandos de moderação** — e remover tira os dois de uma vez, sem o quadro de avisos discordar da permissão real.\n\n`&staff add <@cargo>` · `&staff remove <@cargo>` · `&staff limpar`\n`&staff titulo <@cargo> <texto>` — rótulo exibido no lugar do nome do cargo\n\n_Consultar é público; mexer exige ManagePermissions._",
+      perm: "ManagePermissions", ex: `${P}staff add Moderador`,
+    },
+    boasvindas: {
+      uso: `${P}boasvindas [canal|titulo|texto|cor|imagem|testar|padrao|on|off]`,
+      desc: "Embed publicado quando alguém **entra** no servidor.\n\n`&boasvindas canal aqui` — define onde publicar (já liga)\n`&boasvindas titulo <texto>` · `&boasvindas texto <descrição>`\n`&boasvindas cor <cor>` · `&boasvindas imagem <url|limpar>`\n`&boasvindas testar` — publica usando você de exemplo\n`&boasvindas padrao` — volta ao texto de fábrica\n\n**Marcadores:** `{usuario}` `{nome}` `{servidor}` `{membros}`",
+      perm: "ManageMessages", ex: `${P}boasvindas canal aqui`,
+    },
+    adeus: {
+      uso: `${P}adeus [canal|titulo|texto|cor|imagem|testar|padrao|on|off]`,
+      desc: "Embed publicado quando alguém **sai** do servidor (saída, expulsão ou ban). Mesmas opções do `&boasvindas`.\n\n_Nas despedidas o `{usuario}` vira o **nome** em vez de menção: quem saiu não está mais no servidor, e a menção apareceria como um ID cru._",
+      perm: "ManageMessages", ex: `${P}adeus canal aqui`,
+    },
     autorole: {
       uso: `${P}autorole [set <@cargo>|off]`,
       desc: "Dá um cargo automaticamente a todo novo membro que entra no servidor. `set` define o cargo, `off` desativa. Útil para dar um cargo de 'Membro' a todos automaticamente.",
@@ -226,8 +241,8 @@ function detalhesPT(P) {
     },
     comando: {
       uso: `${P}comando [disable|enable <nome>]`,
-      desc: "Ativa ou desativa comandos do bot neste servidor. `&comando` sozinho lista o estado de cada um. Ex.: `&comando disable ban`. Os comandos `help` e `comando` não podem ser desativados.",
-      perm: "ManagePermissions", ex: `${P}comando disable repete`,
+      desc: "Ativa ou desativa comandos do bot neste servidor. `&comando` sozinho lista o estado de cada um. Ex.: `&comando desativar ban`. Os comandos `help` e `comando` não podem ser desativados.\n\n_Aceita as duas línguas: `desativar`/`disable`, `ativar`/`enable`._",
+      perm: "ManagePermissions", ex: `${P}comando desativar repete`,
     },
     cargomudo: {
       uso: `${P}cargomudo [nome]`,
@@ -383,6 +398,21 @@ function detalhesEN(P) {
       uso: `${P}rss [add|remove|list|canal|agora]`,
       desc: "RSS news curation with Judy's summaries. `add <url>` registers a feed, `canal aqui` sets the destination, `list` shows the feeds, `remove <url|n>` removes one, `agora` forces a cycle. Every hour Judy posts an overall summary in her own voice, followed by the new items (title, feed, time, link).",
       perm: "ManagePermissions", ex: `${P}rss add https://example.com/feed.xml`,
+    },
+    staff: {
+      uso: `${P}staff [add|remove|title|clear]`,
+      desc: "Shows the **server's staff**, grouped by role and listing who holds each one.\n\nThe list has no separate registry: it reads the very same roles as `&acesso cargo`. So adding here **also grants access to the moderation commands** — and removing drops both at once, so the notice board can never disagree with the actual permission.\n\n`&staff add <@role>` · `&staff remove <@role>` · `&staff clear`\n`&staff title <@role> <text>` — label shown instead of the role's name\n\n_Viewing is public; changing requires ManagePermissions._",
+      perm: "ManagePermissions", ex: `${P}staff add Moderator`,
+    },
+    boasvindas: {
+      uso: `${P}welcome [channel|title|text|colour|image|test|default|on|off]`,
+      desc: "Embed posted when someone **joins** the server.\n\n`&welcome channel here` — where to post (turns it on)\n`&welcome title <text>` · `&welcome text <description>`\n`&welcome colour <colour>` · `&welcome image <url|clear>`\n`&welcome test` — posts using you as the example\n`&welcome default` — back to the factory text\n\n**Markers:** `{usuario}` `{nome}` `{servidor}` `{membros}`",
+      perm: "ManageMessages", ex: `${P}welcome channel here`,
+    },
+    adeus: {
+      uso: `${P}goodbye [channel|title|text|colour|image|test|default|on|off]`,
+      desc: "Embed posted when someone **leaves** the server (leave, kick or ban). Same options as `&welcome`.\n\n_In farewells `{usuario}` becomes the **name** rather than a mention: whoever left isn't on the server anymore, and the mention would show up as a raw ID._",
+      perm: "ManageMessages", ex: `${P}goodbye channel here`,
     },
     autorole: {
       uso: `${P}autorole [set <@role>|off]`,
@@ -673,6 +703,7 @@ function construirCategorias(P, lang) {
         `\`${P}limpar <n> [@user]\` — deletes messages *(ManageMessages)*`,
         `\`${P}warn <@user> [reason]\` — manual warning *(KickMembers)*`,
         `\`${P}acesso <cargo|canal>\` — who can use commands and where *(ManagePermissions)*`,
+        `\`${P}staff\` — the server's staff, from those same roles`,
         `\`${P}warnings [@user]\` — see warnings`,
         `\`${P}clearwarnings @user\` — clears warnings *(ManagePermissions)*`,
         `\`${P}banglobal <off|avisar|banir|...>\` — global list *(BanMembers)*`,
@@ -710,6 +741,8 @@ function construirCategorias(P, lang) {
         `\`${P}embed\` — posts a customizable embed *(ManageMessages)*`,
         `\`${P}reactionrole <add|remove|list>\` — reaction roles *(ManageRole)*`,
         `\`${P}autorole <set|off>\` — automatic role on join *(ManageRole)*`,
+        `\`${P}welcome <channel|text|test>\` — join embed *(ManageMessages)*`,
+        `\`${P}goodbye <channel|text|test>\` — leave embed *(ManageMessages)*`,
         `\`${P}rss <add|remove|list|canal|agora>\` — RSS news curation`,
         `\`${P}chat <message>\` — talk to Judy (or mention the bot)` + IA_TAG,
         `\`${P}chat livre on|off\` — Judy joins the channel on her own` + IA_TAG,
@@ -790,6 +823,7 @@ function construirCategorias(P, lang) {
         `\`${P}limpar <n> [@usuário]\` — apaga mensagens *(ManageMessages)*`,
         `\`${P}warn <@pessoa> [motivo]\` — aviso manual *(KickMembers)*`,
         `\`${P}acesso <cargo|canal>\` — quem pode usar comandos e onde *(ManagePermissions)*`,
+        `\`${P}staff\` — a equipe do servidor, a partir desses mesmos cargos`,
         `\`${P}warnings [@usuário]\` — ver avisos`,
         `\`${P}clearwarnings @usuário\` — limpa avisos *(ManagePermissions)*`,
         `\`${P}banglobal <off|avisar|banir|...>\` — lista global *(BanMembers)*`,
@@ -814,7 +848,7 @@ function construirCategorias(P, lang) {
       linhas: [
         `\`${P}config\` — mostra todas as configurações`,
         `\`${P}log <here|id|off|<evento> <on|off>>\` — chat de logs`,
-        `\`${P}comando <disable|enable> <nome>\` — ativa/desativa comandos`,
+        `\`${P}comando <desativar|ativar> <nome>\` — ativa/desativa comandos`,
         `\`${P}cargomudo [nome]\` — cria cargo de silêncio`,
         `\`${P}cor <cargo> <cor|gradiente>\` — cor dos cargos, com gradiente *(ManageRole)*`,
         `\`${P}idioma pt|en\` — idioma do bot neste servidor`,
@@ -827,6 +861,8 @@ function construirCategorias(P, lang) {
         `\`${P}embed\` — publica um embed customizável *(ManageMessages)*`,
         `\`${P}reactionrole <add|remove|list>\` — cargos por reação *(ManageRole)*`,
         `\`${P}autorole <set|off>\` — cargo automático a quem entra *(ManageRole)*`,
+        `\`${P}boasvindas <canal|texto|testar>\` — embed de entrada *(ManageMessages)*`,
+        `\`${P}adeus <canal|texto|testar>\` — embed de saída *(ManageMessages)*`,
         `\`${P}rss <add|remove|list|canal|agora>\` — curadoria de notícias por RSS`,
         `\`${P}chat <mensagem>\` — conversa com a Judy (ou mencione o bot)` + IA_TAG,
         `\`${P}chat livre on|off\` — a Judy participa sozinha do canal` + IA_TAG,

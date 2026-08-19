@@ -197,6 +197,11 @@ export async function cmdConfig(message, args, ctx) {
       "**🔐 Command access**",
       `Staff roles: ${config.acesso?.cargosStaff?.length ? config.acesso.cargosStaff.map((r)=>`<%${r}>`).join(" ") : "_(native permissions only)_"}`,
       `Channels: ${(config.acesso?.canais?.modo ?? "todos") === "todos" ? "any" : `\`${config.acesso.canais.modo}\` ${config.acesso.canais.lista?.length ? config.acesso.canais.lista.map((c)=>`<#${c}>`).join(", ") : "_(empty list)_"}`}`,
+      `Staff list: ${config.acesso?.cargosStaff?.length ? `\`${PREFIXO}staff\` shows ${config.acesso.cargosStaff.length} role(s)` : "_(empty)_"}`,
+      "",
+      "**👋 Join and leave**",
+      `Welcome: ${config.boasVindas?.ativo && config.boasVindas?.canalId ? `🟢 <#${config.boasVindas.canalId}>` : "🔴 off"}`,
+      `Farewell: ${config.adeus?.ativo && config.adeus?.canalId ? `🟢 <#${config.adeus.canalId}>` : "🔴 off"}`,
       "",
       ...(temIA(serverId) ? [
         "**🤖 AI (Judy)**",
@@ -242,6 +247,11 @@ export async function cmdConfig(message, args, ctx) {
       "**🔐 Acesso aos comandos**",
       `Cargos de staff: ${config.acesso?.cargosStaff?.length ? config.acesso.cargosStaff.map((r)=>`<%${r}>`).join(" ") : "_(só permissões nativas)_"}`,
       `Canais: ${(config.acesso?.canais?.modo ?? "todos") === "todos" ? "qualquer um" : `\`${config.acesso.canais.modo}\` ${config.acesso.canais.lista?.length ? config.acesso.canais.lista.map((c)=>`<#${c}>`).join(", ") : "_(lista vazia)_"}`}`,
+      `Lista da equipe: ${config.acesso?.cargosStaff?.length ? `\`${PREFIXO}staff\` mostra ${config.acesso.cargosStaff.length} cargo(s)` : "_(vazia)_"}`,
+      "",
+      "**👋 Entrada e saída**",
+      `Boas-vindas: ${config.boasVindas?.ativo && config.boasVindas?.canalId ? `🟢 <#${config.boasVindas.canalId}>` : "🔴 desligadas"}`,
+      `Despedida: ${config.adeus?.ativo && config.adeus?.canalId ? `🟢 <#${config.adeus.canalId}>` : "🔴 desligada"}`,
       "",
       ...(temIA(serverId) ? [
         "**🤖 IA (Judy)**",

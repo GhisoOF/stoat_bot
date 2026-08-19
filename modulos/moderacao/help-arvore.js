@@ -785,6 +785,56 @@ function arvorePT(P) {
     },
 
     // ── &embed ───────────────────────────────────────────
+    // ── &staff / &boasvindas / &adeus ────────────────────
+    staff: {
+      equipe: {
+        titulo: "staff",
+        texto: [
+          "A **equipe do servidor**, agrupada por cargo, com quem tem cada um.",
+          "",
+          "**A lista não é um cadastro à parte.** Ela lê os mesmos cargos que o",
+          `\`${P}acesso cargo\` usa para decidir quem pode moderar. Promover no`,
+          `\`${P}staff add\` é promover de verdade; tirar daqui tira o acesso também.`,
+          "Assim o quadro de avisos nunca discorda da permissão real.",
+          "",
+          "**Comandos** _(mexer exige ManagePermissions; consultar é público)_",
+          `\`${P}staff\` — mostra a equipe`,
+          `\`${P}staff add <@cargo>\` — marca o cargo como staff`,
+          `\`${P}staff remove <@cargo>\` — desmarca`,
+          `\`${P}staff titulo <@cargo> <texto>\` — rótulo no lugar do nome do cargo`,
+          `\`${P}staff limpar\` — esvazia a lista`,
+          "",
+          "_A ordem é a de adição: o primeiro cargo adicionado aparece no topo._",
+        ].join("\n"),
+      },
+    },
+    boasvindas: {
+      mensagens: {
+        titulo: "boasvindas / adeus",
+        texto: [
+          `Embeds publicados quando alguém **entra** (\`${P}boasvindas\`) ou **sai**`,
+          `(\`${P}adeus\`) do servidor. Os dois têm exatamente as mesmas opções.`,
+          "",
+          "**Configurar**",
+          `\`${P}boasvindas canal aqui\` — onde publicar _(já liga)_`,
+          `\`${P}boasvindas titulo <texto>\` · \`${P}boasvindas texto <descrição>\``,
+          `\`${P}boasvindas cor <cor>\` · \`${P}boasvindas imagem <url|limpar>\``,
+          `\`${P}boasvindas testar\` — publica usando você de exemplo`,
+          `\`${P}boasvindas padrao\` — volta ao texto de fábrica`,
+          `\`${P}boasvindas on|off\` — liga/desliga sem perder o que você escreveu`,
+          "",
+          "**Marcadores**",
+          "`{usuario}` — menção clicável · `{nome}` — só o nome",
+          "`{servidor}` — nome do servidor · `{membros}` — total de membros",
+          "",
+          "_Na despedida o `{usuario}` vira o **nome**, não menção: quem saiu não está_",
+          "_mais no servidor e a menção apareceria como um ID cru na tela._",
+          "",
+          "_O texto aceita várias linhas; `\\n` também vira quebra de linha._",
+        ].join("\n"),
+      },
+    },
+
     embed: {
       campos: {
         titulo: "embed (campos)",
@@ -1642,6 +1692,56 @@ function arvoreEN(P) {
           "_The list is **global** to the bot, not per server: once downloaded, it applies to all._",
           "_The finished index is cached on disk: after a restart, the anti-link wakes up already armed._",
           "_If a source fails during `reload`, the current list is kept — it never shrinks because of a network hiccup._",
+        ].join("\n"),
+      },
+    },
+
+    // ── &staff / &welcome / &goodbye ─────────────────────
+    staff: {
+      equipe: {
+        titulo: "staff",
+        texto: [
+          "The **server's staff**, grouped by role, showing who holds each one.",
+          "",
+          "**The list isn't a separate registry.** It reads the very same roles that",
+          `\`${P}acesso cargo\` uses to decide who may moderate. Promoting with`,
+          `\`${P}staff add\` is a real promotion; removing here removes the access too.`,
+          "That way the notice board can never disagree with the actual permission.",
+          "",
+          "**Commands** _(changing requires ManagePermissions; viewing is public)_",
+          `\`${P}staff\` — show the team`,
+          `\`${P}staff add <@role>\` — mark the role as staff`,
+          `\`${P}staff remove <@role>\` — unmark it`,
+          `\`${P}staff title <@role> <text>\` — label instead of the role's name`,
+          `\`${P}staff clear\` — empty the list`,
+          "",
+          "_Order follows insertion: the first role added shows up on top._",
+        ].join("\n"),
+      },
+    },
+    boasvindas: {
+      mensagens: {
+        titulo: "welcome / goodbye",
+        texto: [
+          `Embeds posted when someone **joins** (\`${P}welcome\`) or **leaves**`,
+          `(\`${P}goodbye\`) the server. Both have exactly the same options.`,
+          "",
+          "**Configure**",
+          `\`${P}welcome channel here\` — where to post _(turns it on)_`,
+          `\`${P}welcome title <text>\` · \`${P}welcome text <description>\``,
+          `\`${P}welcome colour <colour>\` · \`${P}welcome image <url|clear>\``,
+          `\`${P}welcome test\` — posts using you as the example`,
+          `\`${P}welcome default\` — back to the factory text`,
+          `\`${P}welcome on|off\` — toggle without losing what you wrote`,
+          "",
+          "**Markers**",
+          "`{usuario}` — clickable mention · `{nome}` — just the name",
+          "`{servidor}` — server name · `{membros}` — member count",
+          "",
+          "_In farewells `{usuario}` becomes the **name**, not a mention: whoever left_",
+          "_isn't on the server anymore and the mention would show as a raw ID._",
+          "",
+          "_The text accepts multiple lines; `\\n` also becomes a line break._",
         ].join("\n"),
       },
     },

@@ -3,14 +3,26 @@ services:
     image: ghcr.io/ghisoof/stoat_bot:latest   # imagem construída pelo GitHub
     container_name: stoat-bot
     restart: unless-stopped
+    network_mode: host
+    # ── Rotação de logs ──
+    # O bot loga bastante (automod, chat, XP). Sem rotação, o json-file do
+    # Docker cresce sem limite no disco do Umbrel. Com isto: no máximo 3
+    # arquivos de 10 MB (30 MB de teto, sempre com o log recente disponível).
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     environment:
       - BOT_TOKEN=${BOT_TOKEN}                 # preencha no campo de variáveis do Portainer
       - CONFIG_PATH=/data/automod-config.json
       - TZ=America/Sao_Paulo
-      # ── Conexão com a stack de IA (máquina Void, via Tailscale) ──
-      # 100.106.52.86 = IP Tailscale da máquina que roda o Ollama + SearXNG.
+      # ── Serviço de IA (judy-ia) no computador Gentoo, via Tailscale ──
+      # 100.74.70.106 = IP Tailscale da máquina que roda o Ollama + judy-ia.
       # (Se o IP mudar, atualize aqui ou nas variáveis do Portainer.)
-      - OLLAMA_URL=http://100.106.52.86:11434
+      - IA_SERVICO_URL=http://100.74.70.106:8090
+      # ── Modelos por função (o judy-ia é quem fala com o Ollama) ──
+      - OLLAMA_URL=http://100.74.70.106:11434
       - OLLAMA_MODEL=gemma4:12b            # conversa complexa (explicações, debate)
       - OLLAMA_MODEL_LEVE=gemma4:e4b       # conversa simples (papo curto) — rápido
       - OLLAMA_MODEL_CODIGO=ornith:9b      # programação
@@ -25,24 +37,21 @@ services:
       # ── Comentário espontâneo (a Judy comenta por iniciativa; &chat comentar) ──
       - COMENTARIO_COOLDOWN_MS=2700000     # 45 min entre comentários
       - COMENTARIO_CHANCE=0.25             # 25% de chance quando elegível
-      # Serviço judy-ia (ferramentas). Se definido, a conversa passa por ele;
-      # se ele cair, o bot volta a falar direto com o Ollama.
-      # Aponta para o computador onde roda o judy-ia + Ollama.
-      - IA_SERVICO_URL=http://100.106.52.86:8090
-      # - IA_SERVICO_CHAVE=uma-chave-secreta   # se ativar IA_CHAVE no judy-ia
-      - SEARXNG_URL=http://100.106.52.86:8080
+      # - SEARXNG_URL=http://100.74.70.106:8080   # busca web (desligada por ora)
       # ── Ajuste fino da IA (opcional) ──
       - CHAT_NUM_CTX=16384                     # contexto (entrada+saída); RX9060XT aguenta
       - CHAT_MAX_TOKENS=4096                   # teto de resposta (aumente p/ código longo)
       - CHAT_TIMEOUT=300000                    # ms; geração longa demora
-      - CHAT_DEBUG=1
+      - CHAT_DEBUG=1                           # 1 = log detalhado no Portainer (diagnóstico)
       - XP_DEBUG=1
+      # - MSG_LOG=off                          # desliga SÓ o log [MSG] por mensagem
+      #                                        # (o resto do debug continua)
       # Conversa livre: intervalo mínimo entre avaliações por canal (ms)
       - CHAT_LIVRE_COOLDOWN=20000
-      - CHAT_ENGAJAMENTO_MS=90000
-      - CACHE_CANAL_MSGS=20                 # msgs recentes que a Judy vê do canal          # após responder alguém, trata as próximas msgs dele como continuação (90s)
+      - CHAT_ENGAJAMENTO_MS=90000              # após responder alguém, trata as próximas msgs dele como continuação (90s)
+      - CACHE_CANAL_MSGS=20                    # msgs recentes que a Judy vê do canal
       # ── Super-admin (dono do bot, controle total em qualquer servidor) ──
-      - SUPER_ADMINS=01K9JKP85D5EP2ZTEHS8DT797A                            # 1 = log detalhado no Portainer (diagnóstico)
+      - SUPER_ADMINS=01K9JKP85D5EP2ZTEHS8DT797A
       # ── Observabilidade / estabilidade da conexão ──
       - HEARTBEAT_MS=300000                    # intervalo do log "[VIVO]" (prova de vida)
       - INATIVIDADE_MS=600000                  # sem eventos > isso (10min) → reinicia sozinho

@@ -467,7 +467,13 @@ Cada módulo é ligado/desligado **por servidor** com `&automod <módulo> <on|of
 - **antiinvite** — convites `stt.gg` de outros servidores
 - **antimassmention** — menções em excesso numa mensagem
 - **anticaps** — CAIXA ALTA em excesso
-- **antilink** — domínios de listas estilo Pi-hole (baixadas ao iniciar)
+- **antilink** — domínios de listas estilo Pi-hole. As listas viram um **índice
+  compacto em RAM** (hash de 64 bits por domínio: ~20 MB para 2,5 milhões de
+  domínios, em vez de ~400 MB) e o índice pronto fica **cacheado em disco**
+  (`/data/blocklist-cache.bin`): no boot o anti-link arma na hora, mesmo sem
+  internet, enquanto o download real roda em segundo plano. Se alguma fonte
+  falhar no download, o índice anterior é mantido (nunca "encolhe" por queda
+  de rede).
 - **anticaracteres** — bloqueia zalgo (acentos empilhados) e caracteres invisíveis/de controle de direção (coisas que travam front-ends)
 - **antirepeticao** — bloqueia a mesma letra repetida muitas vezes (ex.: `aaaaaaaaaa`). **Desligado por padrão** e, quando ligado, ignora o `k` (a risada BR `kkkkk` não é punida). Configure com `&automod antirepeticao set ignorar <letras>`
 - **antiscam** — detecção de conteúdo proibido por pontuação (ver abaixo)

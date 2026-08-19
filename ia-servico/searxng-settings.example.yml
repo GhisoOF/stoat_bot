@@ -1,0 +1,46 @@
+# ══════════════════════════════════════════════════════════
+#  SearXNG — configuração mínima para uso como API pelo Cobaia
+#
+#  O essencial aqui é `search.formats` incluir `json` — sem isso,
+#  /search?format=json devolve 403 Forbidden.
+#
+#  ⚠️ TROQUE o `secret_key` abaixo por um valor aleatório antes de subir:
+#       openssl rand -hex 32
+# ══════════════════════════════════════════════════════════
+
+use_default_settings: true
+
+general:
+  instance_name: "Cobaia Search"
+  # não expõe estatísticas/infos públicas
+  enable_metrics: false
+
+server:
+  # TROQUE ISTO por um segredo aleatório (openssl rand -hex 32)
+  secret_key: "TROQUE_ESTE_SEGREDO_POR_UM_ALEATORIO"
+  # POST reduz a chance de ser bloqueado por alguns motores
+  method: "POST"
+  limiter: false            # sem rate-limit interno (uso privado)
+  image_proxy: false
+
+search:
+  # ⬇️ ISTO habilita a API JSON que o bot consome
+  formats:
+    - html
+    - json
+  # idioma padrão das buscas
+  default_lang: "pt-BR"
+  # busca segura moderada por padrão
+  safe_search: 1
+  autocomplete: ""
+
+# Cache no Redis (definido no compose como serviço 'redis')
+redis:
+  url: redis://redis:6379/0
+
+ui:
+  static_use_hash: true
+
+# Você pode desabilitar motores pesados/instáveis aqui se quiser.
+# Por padrão o SearXNG já vem com um conjunto amplo (Google, DuckDuckGo,
+# Bing, Wikipedia, etc.). Para uso leve no A7, o padrão funciona bem.

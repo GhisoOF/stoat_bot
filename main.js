@@ -247,7 +247,9 @@ function membroTemPermissao(message, server, permName) {
 const estado = {
   spamData:       new Map(),   // userId → number[]  (timestamps)
   // avisos/silêncios agora ficam no BANCO (tabela punicoes), por (servidor, usuário)
-  blockedDomains: new Set(),   // domínios bloqueados (anti-link)
+  // Domínios bloqueados (anti-link) — índice compacto (hash 64-bit ordenado),
+  // ~20 MB para 2,5M domínios em vez dos ~400 MB do antigo Set de strings.
+  blockedDomains: engine.criarIndiceVazio(),
 };
 
 // Objeto de contexto entregue a todas as funções dos módulos.
@@ -488,7 +490,8 @@ client.on("ready", async () => {
 
   const ctx = criarContexto();    // contexto sem servidor (tarefas globais)
   engine.agendarLimpezaSpam(ctx); // limpeza periódica do rastreio de spam
-  engine.rebuildBlocklist(ctx);   // baixa as listas anti-link (assíncrono)
+  engine.carregarBlocklistCache(ctx);   // anti-link armado na hora, do disco
+  engine.rebuildBlocklist(ctx);         // baixa as listas de verdade (assíncrono)
 
   // Curadoria RSS: agendador horário (só age nos servidores permitidos)
   const ctxRss = criarContexto();
@@ -501,8 +504,14 @@ client.on("messageCreate", async (message) => {
   ultimoEvento = Date.now();   // prova de vida: recebemos um evento
   if (message.authorId === client.user.id) return;
 
-  if (cfgGlobal.debug !== false) {
-    console.log(`[MSG] ${message.authorId} no canal ${message.channelId}: ${JSON.stringify(message.content)}`);
+  // Log por mensagem: útil para depurar, mas era o maior gerador de volume de
+  // log (JSON.stringify do conteúdo INTEIRO, a cada mensagem, para sempre).
+  // Agora trunca em 120 chars e pode ser desligado só ele com MSG_LOG=off,
+  // sem perder o resto do debug do automod.
+  if (cfgGlobal.debug !== false && process.env.MSG_LOG !== "off") {
+    const c = message.content ?? "";
+    const resumo = c.length > 120 ? c.slice(0, 120) + `… (+${c.length - 120})` : c;
+    console.log(`[MSG] ${message.authorId} no canal ${message.channelId}: ${JSON.stringify(resumo)}`);
   }
 
   // Cada servidor tem sua própria config

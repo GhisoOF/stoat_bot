@@ -185,11 +185,13 @@ const SUB = {
     channel: "canal", title: "titulo", text: "texto", message: "texto",
     colour: "cor", color: "cor", image: "imagem", test: "testar",
     default: "padrao", status: "status", clear: "limpar", here: "aqui",
+    hidden: "oculto", hide: "oculto", visible: "visivel", show: "visivel",
   },
   adeus: {
     channel: "canal", title: "titulo", text: "texto", message: "texto",
     colour: "cor", color: "cor", image: "imagem", test: "testar",
     default: "padrao", status: "status", clear: "limpar", here: "aqui",
+    hidden: "oculto", hide: "oculto", visible: "visivel", show: "visivel",
   },
   log: {
     here: "here", off: "off", channel: "canal",

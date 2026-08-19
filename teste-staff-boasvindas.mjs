@@ -197,8 +197,10 @@ console.log("\n── imagem ──");
   await say("&adeus testar");
   // Link externo: o campo `media` do Revolt/Stoat só aceita ID do Autumn, então
   // a URL vai no conteúdo e o Stoat gera a pré-visualização.
-  ok(enviadosPortaria[0]?.content === "https://exemplo.com/capa.png",
-    "★ link externo vai no conteúdo (Stoat pré-visualiza)");
+  ok(enviadosPortaria[0]?.content === "[\u2800](https://exemplo.com/capa.png)",
+    "★ link externo vai no conteúdo, MASCARADO (sem URL crua na tela)");
+  ok(enviadosPortaria[0]?.content.includes("https://exemplo.com/capa.png"),
+    "  → a URL segue lá, para o Stoat pré-visualizar");
   ok(!enviadosPortaria[0]?.embeds?.[0]?.media,
     "  → e NÃO no campo media, que ignoraria a URL em silêncio");
 
@@ -212,10 +214,20 @@ console.log("\n── imagem ──");
   // link de busca: aceita, mas avisa que costuma falhar
   await say("&adeus imagem https://imgs.search.brave.com/abc/def");
   ok(ult().includes("⚠️") && ult().includes("busca"), "★ link de resultado de busca → alerta");
+  // escape: se o Stoat parar de pré-visualizar link mascarado
+  await say("&adeus imagem https://exemplo.com/capa.png");
+  await say("&adeus imagem visivel");
+  enviadosPortaria.length = 0;
+  await say("&adeus testar");
+  ok(enviadosPortaria[0]?.content === "https://exemplo.com/capa.png",
+    "★ `imagem visivel` devolve a URL crua (escape sem deploy)");
+  await say("&adeus imagem oculto");
+
   await say("&adeus imagem limpar");
   enviadosPortaria.length = 0;
   await say("&adeus testar");
-  ok(!enviadosPortaria[0]?.embeds?.[0]?.media, "limpar remove a capa do envio");
+  ok(!enviadosPortaria[0]?.embeds?.[0]?.media && !enviadosPortaria[0]?.content,
+    "limpar remove a capa e o link do envio");
 }
 
 // ══ contagem de membros em servidor SEM memberCount ══

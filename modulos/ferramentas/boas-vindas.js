@@ -63,6 +63,7 @@ function garantirConfig(config, chave, lang) {
   c.texto   ??= base.texto;
   c.cor     ??= tipo.cor;
   c.imagem  ??= null;
+  c.imagemLinkOculto ??= true;   // link de fora entra mascarado (sem URL crua na tela)
   return c;
 }
 
@@ -113,6 +114,7 @@ async function disparar(ctx, chave, { userId, nome, server, mencionar }) {
       description: renderizar(c.texto, dados),
       colour: c.cor,
       imagem: c.imagem || null,   // capa configurada em `imagem`
+      ocultarLink: c.imagemLinkOculto !== false,
     });
   } catch (err) {
     console.error(`[${chave === "boasVindas" ? "BOASVINDAS" : "ADEUS"}]`, err?.message);
@@ -173,7 +175,7 @@ function criarComando(tipoId) {
         description: [
           `**${lang === "en" ? "Status" : "Estado"}:** ${estado}`,
           `**${lang === "en" ? "Channel" : "Canal"}:** ${canal}`,
-          `**${lang === "en" ? "Colour" : "Cor"}:** \`${c.cor}\`${c.imagem ? `\n**${lang === "en" ? "Image" : "Imagem"}:** ${c.imagem}` : ""}`,
+          `**${lang === "en" ? "Colour" : "Cor"}:** \`${c.cor}\`${c.imagem ? `\n**${lang === "en" ? "Image" : "Imagem"}:** ${c.imagem.length > 70 ? c.imagem.slice(0, 70) + "…" : c.imagem}${comoExibir(c.imagem)?.modo === "media" ? (lang === "en" ? " _(embed cover)_" : " _(capa do embed)_") : (c.imagemLinkOculto !== false ? (lang === "en" ? " _(preview, link hidden)_" : " _(pré-visualização, link oculto)_") : (lang === "en" ? " _(preview, link visible)_" : " _(pré-visualização, link visível)_"))}` : ""}`,
           "",
           lang === "en" ? "**Preview**" : "**Prévia**",
           `> **${renderizar(c.titulo, { userId: message.authorId, nome: message.author?.username, servidor: srvPrevia?.name ?? "?", membros: nPrevia, mencionar: tipoId === "boasvindas" })}**`,
@@ -328,6 +330,32 @@ function criarComando(tipoId) {
           { title: "✅ Imagem removida", description: "O embed volta a ser só texto.", colour: COR.sucesso },
           { title: "✅ Image removed",   description: "The embed goes back to text only.", colour: COR.sucesso }));
       }
+      // ── &... imagem oculto | visivel ──
+      // Para imagem de FORA, a URL precisa ir no conteúdo da mensagem (é assim
+      // que o Stoat gera a pré-visualização). Mascarada, ela some da tela; se
+      // alguma versão do Stoat deixar de pré-visualizar link mascarado, o
+      // `visivel` devolve a URL crua sem precisar de atualização do bot.
+      if (["oculto", "ocultar", "hidden", "hide", "mascarar"].includes(resto.toLowerCase())) {
+        c.imagemLinkOculto = true; salvarConfig?.();
+        return sendEmbed(message.channel, tr(ctx,
+          { title: "✅ Link oculto",
+            description: `A URL não aparece mais acima do embed.\n\nConfira: \`${PREFIXO}${CMD} testar\``,
+            colour: COR.sucesso },
+          { title: "✅ Link hidden",
+            description: `The URL no longer shows above the embed.\n\nCheck: \`${PREFIXO}${CMD} test\``,
+            colour: COR.sucesso }));
+      }
+      if (["visivel", "visível", "visible", "show", "mostrar"].includes(resto.toLowerCase())) {
+        c.imagemLinkOculto = false; salvarConfig?.();
+        return sendEmbed(message.channel, tr(ctx,
+          { title: "✅ Link visível",
+            description: `A URL volta a aparecer acima do embed.\n_Use isto só se a imagem parar de ser exibida com o link oculto._`,
+            colour: COR.sucesso },
+          { title: "✅ Link visible",
+            description: `The URL shows above the embed again.\n_Only use this if the image stops displaying with the link hidden._`,
+            colour: COR.sucesso }));
+      }
+
       const v = validarUrlImagem(resto);
       if (!v.ok) {
         return sendEmbed(message.channel, tr(ctx,
@@ -347,10 +375,10 @@ function criarComando(tipoId) {
       const ex = comoExibir(v.url);
       const comoPt = ex.modo === "media"
         ? "Como é um **anexo do Stoat**, ela vira a **capa do embed** — o melhor resultado."
-        : "Como é um link **de fora**, ela aparece como **pré-visualização logo abaixo** do embed, não dentro dele.\n_Para virar capa do embed: envie o arquivo aqui no Stoat, clique nele, copie o link do anexo e use esse._";
+        : `Como é um link **de fora**, ela aparece como **pré-visualização logo abaixo** do embed, não dentro dele. A URL fica **oculta** (sem aquele link enorme na tela).\n_Para virar capa do embed: envie o arquivo aqui no Stoat, clique nele, copie o link do anexo e use esse._\n_Se a imagem não aparecer: \`${PREFIXO}${CMD} imagem visivel\`._`;
       const comoEn = ex.modo === "media"
         ? "Since it's a **Stoat attachment**, it becomes the **embed's cover** — the best result."
-        : "Since it's an **external** link, it shows as a **preview right below** the embed, not inside it.\n_To make it the embed's cover: upload the file here on Stoat, click it, copy the attachment link and use that._";
+        : `Since it's an **external** link, it shows as a **preview right below** the embed, not inside it. The URL stays **hidden** (no giant link on screen).\n_To make it the embed's cover: upload the file here on Stoat, click it, copy the attachment link and use that._\n_If the image doesn't show up: \`${PREFIXO}${CMD} image visible\`._`;
 
       return sendEmbed(message.channel, tr(ctx, {
         title: "✅ Imagem definida",
@@ -424,6 +452,7 @@ function criarComando(tipoId) {
         description: renderizar(c.texto, dados),
         colour: c.cor,
         imagem: c.imagem || null,
+        ocultarLink: c.imagemLinkOculto !== false,
       });
       return sendEmbed(message.channel, tr(ctx,
         { title: "✅ Teste enviado",

@@ -278,7 +278,9 @@ persona, que pede o mesmo tom em uma frase.
 - **Equipe do servidor** (`&staff`): lista a staff agrupada por cargo, com quem tem cada um. Não é um cadastro à parte — lê os **mesmos cargos** do `&acesso cargo`, então promover pelo `&staff add` concede de verdade o acesso aos comandos de moderação, e remover tira os dois de uma vez. `&staff titulo <@cargo> <texto>` troca o nome exibido (ex.: cargo `Admin` aparecendo como `Fundadores`).
 - **Boas-vindas e despedida** (`&boasvindas`, `&adeus`): embeds configuráveis publicados quando alguém entra ou sai. Título, texto, cor e imagem próprios, com os marcadores `{usuario}` `{nome}` `{servidor}` `{membros}`. `&boasvindas testar` publica usando você de exemplo antes de valer para o servidor inteiro. A imagem tem **dois resultados** conforme a origem: **anexo do Stoat** vira a
   capa do embed (o campo de capa só aceita anexo do próprio Stoat); **link de
-  fora** aparece como pré-visualização logo abaixo do embed. Se não carregar, a
+  fora** aparece como pré-visualização logo abaixo do embed, com a URL
+  mascarada (sem link enorme na tela; `&boasvindas imagem visivel` devolve a URL
+  crua caso a pré-visualização pare de funcionar). Se não carregar, a
   mensagem vai sem capa em vez de não ir.
 
   > **Sobre a imagem e segurança.** O bot **nunca baixa** a imagem — só guarda o

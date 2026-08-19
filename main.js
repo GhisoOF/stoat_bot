@@ -149,7 +149,7 @@ let cfgGlobal = store.getGlobal();  // atualizado após inicializar()
 //    Autumn), então o link vai no CONTEÚDO da mensagem e o Stoat gera a
 //    pré-visualização sozinho. Aparece logo abaixo do embed, não dentro dele.
 // Essa distinção vive em core/midia.js (`comoExibir`).
-async function sendEmbed(channel, { title, description, colour = COR.info, imagem = null }) {
+async function sendEmbed(channel, { title, description, colour = COR.info, imagem = null, ocultarLink = true }) {
   if (!channel || typeof channel.sendMessage !== "function") {
     console.error("[EMBED] Canal indisponível — mensagem não enviada:", title ?? description);
     return;
@@ -163,7 +163,7 @@ async function sendEmbed(channel, { title, description, colour = COR.info, image
   const exibicao = imagem ? midia.comoExibir(imagem) : null;
   const payload = { embeds: [base] };
   if (exibicao?.modo === "media") payload.embeds = [{ ...base, media: exibicao.id }];
-  else if (exibicao?.modo === "link") payload.content = exibicao.url;
+  else if (exibicao?.modo === "link") payload.content = midia.formatarLinkConteudo(exibicao.url, ocultarLink);
 
   try {
     await channel.sendMessage(payload);

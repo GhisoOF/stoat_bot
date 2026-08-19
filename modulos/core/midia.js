@@ -128,8 +128,8 @@ export function validarUrlImagem(entrada) {
     avisosEn.push("⚠️ The link is `http` (not encrypted): many clients refuse to load it. Prefer `https`.");
   }
   if (PROXY_DE_BUSCA.test(bruto)) {
-    avisos.push("⚠️ Parece um link de **resultado de busca** (Brave/Google/Bing), que aponta para uma miniatura temporária em vez do arquivo. Costuma falhar.");
-    avisosEn.push("⚠️ This looks like a **search result** link (Brave/Google/Bing), pointing to a temporary thumbnail instead of the file. It usually fails.");
+    avisos.push("⚠️ É um link de **resultado de busca** (Brave/Google/Bing). Costuma exibir, mas é enorme e a miniatura pode expirar sem aviso — o link fica quebrado meses depois.");
+    avisosEn.push("⚠️ This is a **search result** link (Brave/Google/Bing). It usually displays, but it's huge and the thumbnail may expire silently — leaving a broken link months later.");
   } else if (!TEM_EXTENSAO.test(bruto)) {
     avisos.push("⚠️ O link não termina em `.png`/`.jpg`/`.gif`/`.webp`, então pode não ser a imagem em si.");
     avisosEn.push("⚠️ The link doesn't end in `.png`/`.jpg`/`.gif`/`.webp`, so it may not be the image itself.");
@@ -180,4 +180,25 @@ export function comoExibir(url) {
   const id = extrairAnexoStoat(url);
   if (id) return { modo: "media", id };
   return { modo: "link", url };
+}
+
+// ── Como escrever o link no conteúdo da mensagem ───────────
+//
+// Para imagem de fora, a URL precisa aparecer no CONTEÚDO da mensagem para o
+// Stoat gerar a pré-visualização. O problema é estético: a URL crua fica
+// visível acima do embed — e links de busca chegam a ocupar três linhas.
+//
+// Solução: link markdown com rótulo invisível (`[⠀](url)`). O Stoat continua
+// enxergando a URL e monta a pré-visualização, mas não há texto para ler.
+// U+2800 (Braille em branco) é usado como rótulo por ser um caractere gráfico
+// de verdade — alguns renderizadores descartam link de rótulo vazio.
+//
+// Se em alguma versão do Stoat o link mascarado deixar de gerar a
+// pré-visualização, `ocultar: false` devolve o comportamento antigo sem
+// precisar de deploy novo (é o que o `&boasvindas imagem visivel` faz).
+const ROTULO_INVISIVEL = "\u2800";
+
+export function formatarLinkConteudo(url, ocultar = true) {
+  if (!url) return null;
+  return ocultar ? `[${ROTULO_INVISIVEL}](${url})` : url;
 }

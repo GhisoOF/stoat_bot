@@ -1,6 +1,6 @@
 import { CORES as CORES_NOMEADAS, normalizarCor } from "../core/cores.js";
 import { ULID } from "../core/ids.js";
-import { validarUrlImagem, comoExibir } from "../core/midia.js";
+import { validarUrlImagem, comoExibir, formatarLinkConteudo } from "../core/midia.js";
 // ══════════════════════════════════════════════════════════
 //  embed.js — &embed (mensagem embed customizável)
 //
@@ -201,7 +201,7 @@ export async function cmdEmbed(message, args, ctx) {
   const exibicao = imagemValidada ? comoExibir(imagemValidada) : null;
   const payload = { embeds: [embed] };
   if (exibicao?.modo === "media") payload.embeds = [{ ...embed, media: exibicao.id }];
-  else if (exibicao?.modo === "link") payload.content = exibicao.url;
+  else if (exibicao?.modo === "link") payload.content = formatarLinkConteudo(exibicao.url, true);
 
   try {
     await canalDestino.sendMessage(payload);

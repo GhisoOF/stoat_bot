@@ -18,6 +18,7 @@ import * as limpar    from "./modulos/moderacao/limpar.js";
 import * as admin     from "./modulos/moderacao/comandos-admin.js";
 import * as embedCmd  from "./modulos/moderacao/embed.js";
 import * as reactionRoles from "./modulos/ferramentas/reaction-roles.js";
+import * as midia     from "./modulos/core/midia.js";
 import * as autorole  from "./modulos/ferramentas/autorole.js";
 import * as bemvindo  from "./modulos/ferramentas/boas-vindas.js";
 import * as staff     from "./modulos/moderacao/staff.js";
@@ -141,8 +142,14 @@ let cfgGlobal = store.getGlobal();  // atualizado após inicializar()
 // ══════════════════════════════════════════════════════════
 
 // Envia uma mensagem SEMPRE como embed (com fallback para texto puro).
-// `media` é a imagem de capa (mesmo campo que o &embed usa) — opcional.
-async function sendEmbed(channel, { title, description, colour = COR.info, media = null }) {
+//
+// `imagem` é a URL da capa (opcional). Como exibi-la depende da origem:
+//  • anexo do próprio Stoat → o ID vai no campo `media` do embed (vira capa);
+//  • URL de fora → o campo `media` NÃO aceita URL externa (espera um ID do
+//    Autumn), então o link vai no CONTEÚDO da mensagem e o Stoat gera a
+//    pré-visualização sozinho. Aparece logo abaixo do embed, não dentro dele.
+// Essa distinção vive em core/midia.js (`comoExibir`).
+async function sendEmbed(channel, { title, description, colour = COR.info, imagem = null }) {
   if (!channel || typeof channel.sendMessage !== "function") {
     console.error("[EMBED] Canal indisponível — mensagem não enviada:", title ?? description);
     return;
@@ -153,18 +160,22 @@ async function sendEmbed(channel, { title, description, colour = COR.info, media
   let desc = description ?? "";
   if (desc.length > 1500) desc = desc.slice(0, 1495) + "…";
   const base = { title, description: desc, colour };
+  const exibicao = imagem ? midia.comoExibir(imagem) : null;
+  const payload = { embeds: [base] };
+  if (exibicao?.modo === "media") payload.embeds = [{ ...base, media: exibicao.id }];
+  else if (exibicao?.modo === "link") payload.content = exibicao.url;
+
   try {
-    await channel.sendMessage({ embeds: [media ? { ...base, media } : base] });
+    await channel.sendMessage(payload);
   } catch (err) {
     console.error("[EMBED] Falha ao enviar embed:", erroStr(err));
-    // A imagem é a parte mais frágil do envio: URL que o servidor não consegue
-    // baixar, host que bloqueia, link que não é imagem de verdade. Antes de
-    // desistir do embed inteiro, tentamos de novo SEM ela — a mensagem da
-    // pessoa chega, só sem capa. Melhor perder a imagem que perder o aviso.
-    if (media) {
+    // A imagem é a parte mais frágil do envio. Antes de desistir do embed
+    // inteiro, tentamos de novo SEM ela — a mensagem da pessoa chega, só sem
+    // capa. Melhor perder a imagem que perder o aviso.
+    if (exibicao) {
       try {
         await channel.sendMessage({ embeds: [base] });
-        console.warn("[EMBED] Imagem recusada, enviei sem capa:", String(media).slice(0, 120));
+        console.warn("[EMBED] Imagem recusada, enviei sem capa:", String(imagem).slice(0, 120));
         return;
       } catch (err2) {
         console.error("[EMBED] Sem imagem também falhou:", erroStr(err2));

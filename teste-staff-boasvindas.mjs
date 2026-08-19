@@ -195,8 +195,19 @@ console.log("\n── imagem ──");
   ok(ult().includes("Imagem definida"), "&adeus imagem aceita URL direta");
   enviadosPortaria.length = 0;
   await say("&adeus testar");
-  ok(enviadosPortaria[0]?.embeds?.[0]?.media === "https://exemplo.com/capa.png",
-    "★ a imagem vai no embed (campo media)");
+  // Link externo: o campo `media` do Revolt/Stoat só aceita ID do Autumn, então
+  // a URL vai no conteúdo e o Stoat gera a pré-visualização.
+  ok(enviadosPortaria[0]?.content === "https://exemplo.com/capa.png",
+    "★ link externo vai no conteúdo (Stoat pré-visualiza)");
+  ok(!enviadosPortaria[0]?.embeds?.[0]?.media,
+    "  → e NÃO no campo media, que ignoraria a URL em silêncio");
+
+  // Anexo do próprio Stoat: aí sim vira capa do embed
+  await say("&adeus imagem https://autumn.stoat.chat/attachments/01JHKMNPQRSTVWXYZ012345678/capa.png");
+  enviadosPortaria.length = 0;
+  await say("&adeus testar");
+  ok(enviadosPortaria[0]?.embeds?.[0]?.media === "01JHKMNPQRSTVWXYZ012345678",
+    "★ anexo do Stoat → ID no campo media (capa de verdade)");
 
   // link de busca: aceita, mas avisa que costuma falhar
   await say("&adeus imagem https://imgs.search.brave.com/abc/def");

@@ -1,5 +1,6 @@
 import { CORES as CORES_NOMEADAS, normalizarCor } from "../core/cores.js";
 import { ULID } from "../core/ids.js";
+import { validarUrlImagem, comoExibir } from "../core/midia.js";
 // ══════════════════════════════════════════════════════════
 //  embed.js — &embed (mensagem embed customizável)
 //
@@ -178,11 +179,32 @@ export async function cmdEmbed(message, args, ctx) {
     ...(descricao ? { description: descricao } : {}),
     colour: cor,
   };
-  if (campos.imagem) embed.media = campos.imagem;   // capa/imagem do embed
+  // Imagem de capa: passa pelo mesmo validador das boas-vindas — recusa
+  // endereços de rede interna (o bot enxerga a rede de casa) e links que não
+  // são imagem, avisando em vez de deixar o embed sair quebrado.
+  let imagemValidada = null;
+  if (campos.imagem) {
+    const v = validarUrlImagem(campos.imagem);
+    if (v.ok) {
+      imagemValidada = v.url;
+      if (v.aviso) avisos.push(lang === "en" ? v.avisoEn : v.aviso);
+    } else {
+      avisos.push(lang === "en"
+        ? `image ignored — ${v.motivoEn}`
+        : `imagem ignorada — ${v.motivo}`);
+    }
+  }
   if (campos.rodape) embed.description = (embed.description ?? "") + `\n\n_${campos.rodape}_`;
 
+  // Anexo do Stoat vira capa do embed (campo `media`, que espera o ID do
+  // Autumn); link de fora vai no conteúdo, para o Stoat pré-visualizar.
+  const exibicao = imagemValidada ? comoExibir(imagemValidada) : null;
+  const payload = { embeds: [embed] };
+  if (exibicao?.modo === "media") payload.embeds = [{ ...embed, media: exibicao.id }];
+  else if (exibicao?.modo === "link") payload.content = exibicao.url;
+
   try {
-    await canalDestino.sendMessage({ embeds: [embed] });
+    await canalDestino.sendMessage(payload);
     await log.registrar(ctx, "comandos", { titulo: "📝 Embed enviado",
       descricao: `<@${message.authorId}> enviou um embed em <#${campos.canal ?? message.channelId}>.` });
     // confirma discretamente se foi para OUTRO canal

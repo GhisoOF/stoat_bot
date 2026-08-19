@@ -276,7 +276,20 @@ persona, que pede o mesmo tom em uma frase.
 - **Sistema de níveis** (`&xp`): XP por mensagem, cargos por nível (posicionados abaixo do mute), leaderboard e parâmetros configuráveis.
 - **Autorole** (`&autorole`): dá um cargo automaticamente a quem entra no servidor.
 - **Equipe do servidor** (`&staff`): lista a staff agrupada por cargo, com quem tem cada um. Não é um cadastro à parte — lê os **mesmos cargos** do `&acesso cargo`, então promover pelo `&staff add` concede de verdade o acesso aos comandos de moderação, e remover tira os dois de uma vez. `&staff titulo <@cargo> <texto>` troca o nome exibido (ex.: cargo `Admin` aparecendo como `Fundadores`).
-- **Boas-vindas e despedida** (`&boasvindas`, `&adeus`): embeds configuráveis publicados quando alguém entra ou sai. Título, texto, cor e imagem próprios, com os marcadores `{usuario}` `{nome}` `{servidor}` `{membros}`. `&boasvindas testar` publica usando você de exemplo antes de valer para o servidor inteiro. A imagem precisa ser o link do **arquivo** (`.png`, `.jpg`, `.gif`, `.webp`) — link de resultado de busca aponta para miniatura temporária e costuma falhar; se ela não carregar, a mensagem vai sem capa em vez de não ir.
+- **Boas-vindas e despedida** (`&boasvindas`, `&adeus`): embeds configuráveis publicados quando alguém entra ou sai. Título, texto, cor e imagem próprios, com os marcadores `{usuario}` `{nome}` `{servidor}` `{membros}`. `&boasvindas testar` publica usando você de exemplo antes de valer para o servidor inteiro. A imagem tem **dois resultados** conforme a origem: **anexo do Stoat** vira a
+  capa do embed (o campo de capa só aceita anexo do próprio Stoat); **link de
+  fora** aparece como pré-visualização logo abaixo do embed. Se não carregar, a
+  mensagem vai sem capa em vez de não ir.
+
+  > **Sobre a imagem e segurança.** O bot **nunca baixa** a imagem — só guarda o
+  > link e o repassa ao Stoat, então não há arquivo de terceiro entrando no
+  > processo do bot. Ainda assim, URLs são validadas: endereços de rede interna
+  > (`localhost`, `192.168.x`, `100.x` da Tailscale, portas fora de 80/443) e
+  > esquemas como `javascript:`/`data:` são **recusados**, porque guardá-los na
+  > configuração criaria um atalho para a rede da máquina do bot. O melhor
+  > caminho é **enviar o arquivo no próprio Stoat e usar o link do anexo**: além
+  > de não quebrar, evita que o dono de um site de terceiros veja o IP de cada
+  > pessoa que carrega a mensagem — numa boas-vindas, o de todos que entram.
 - **IA com perfil e memória de longo prazo**: um agente observa o chat e monta um **perfil** de cada pessoa — personalidade, gostos e informações, cada fato com a **data** em que foi aprendido. A Judy usa isso para **adaptar o tom** a cada um (mais leve com quem é sério, mais afiada com quem curte). `&chat perfil` mostra o que ela sabe; `&chat esquecer` apaga o seu, `&chat esquecer tudo` zera o servidor.
 - **Tom modular e acessibilidade**: o tom base é caloroso; a acidez fica para quem já é próximo. `&chat cuidado @user on` marca alguém (opt-in) para tratamento gentil e paciente — sem a Judy inferir nada sozinha.
 - **Cache de conversa do canal**: ela acompanha as últimas mensagens do canal (quem falou, a quem respondeu) e percebe quando o assunto mudou, evitando responder fora de contexto.
@@ -1508,6 +1521,7 @@ O código é organizado em quatro áreas, sob `modulos/`:
 │   │   ├── db.js               # SQLite (config, punições, bans, RSS, XP)
 │   │   ├── config-store.js     # configuração por servidor + global
 │   │   ├── membros.js          # contar/listar membros (cache compartilhado)
+│   │   ├── midia.js            # validação de URL de imagem (anti-SSRF, avisos)
 │   │   └── log.js              # chat de logs configurável (&log)
 │   ├── moderacao/              # moderação e automod
 │   │   ├── automod-engine.js   # motor: runAutomod, punição, blocklist, spam

@@ -28,6 +28,7 @@
 
 import { resolverCanal } from "../core/ids.js";
 import { contarMembros, invalidar as invalidarMembros } from "../core/membros.js";
+import { validarUrlImagem, comoExibir } from "../core/midia.js";
 import { normalizarCor, nomesDeCor } from "../core/cores.js";
 import { tr, lingua } from "../core/i18n.js";
 
@@ -111,7 +112,7 @@ async function disparar(ctx, chave, { userId, nome, server, mencionar }) {
       title: renderizar(c.titulo, dados),
       description: renderizar(c.texto, dados),
       colour: c.cor,
-      media: c.imagem || null,   // capa configurada em `imagem`
+      imagem: c.imagem || null,   // capa configurada em `imagem`
     });
   } catch (err) {
     console.error(`[${chave === "boasVindas" ? "BOASVINDAS" : "ADEUS"}]`, err?.message);
@@ -327,54 +328,52 @@ function criarComando(tipoId) {
           { title: "✅ Imagem removida", description: "O embed volta a ser só texto.", colour: COR.sucesso },
           { title: "✅ Image removed",   description: "The embed goes back to text only.", colour: COR.sucesso }));
       }
-      if (!/^https?:\/\/\S+$/i.test(resto)) {
+      const v = validarUrlImagem(resto);
+      if (!v.ok) {
         return sendEmbed(message.channel, tr(ctx,
-          { title: "❌ URL inválida",
-            description: `Envie um link começando com \`http\`, ou \`${PREFIXO}${CMD} imagem limpar\`.`, colour: COR.erro },
-          { title: "❌ Invalid URL",
-            description: `Send a link starting with \`http\`, or \`${PREFIXO}${CMD} image clear\`.`, colour: COR.erro }));
+          { title: "❌ Link recusado",
+            description: `${v.motivo}\n\nUse \`${PREFIXO}${CMD} imagem limpar\` para remover a atual.`,
+            colour: COR.erro },
+          { title: "❌ Link rejected",
+            description: `${v.motivoEn}\n\nUse \`${PREFIXO}${CMD} image clear\` to remove the current one.`,
+            colour: COR.erro }));
       }
-      c.imagem = resto;
+
+      c.imagem = v.url;
       salvarConfig?.();
 
-      // Links de BUSCA/proxy (Brave, Google, Bing…) costumam apontar para uma
-      // miniatura temporária, não para o arquivo em si: o Stoat tenta baixar,
-      // não consegue, e o embed sai sem capa. Vale avisar em vez de deixar a
-      // pessoa descobrir sozinha quando alguém entrar.
-      const suspeito = /(?:search\.brave\.com|encrypted-tbn|gstatic\.com|lookaside|bing\.net\/th|duckduckgo\.com\/i\/)/i.test(resto);
-      const semExtensao = !/\.(?:png|jpe?g|gif|webp|avif)(?:$|[?#])/i.test(resto);
-      const alerta = suspeito || semExtensao;
+      // Os dois caminhos possíveis rendem resultados visualmente diferentes,
+      // e a pessoa merece saber qual vai ver antes de testar.
+      const ex = comoExibir(v.url);
+      const comoPt = ex.modo === "media"
+        ? "Como é um **anexo do Stoat**, ela vira a **capa do embed** — o melhor resultado."
+        : "Como é um link **de fora**, ela aparece como **pré-visualização logo abaixo** do embed, não dentro dele.\n_Para virar capa do embed: envie o arquivo aqui no Stoat, clique nele, copie o link do anexo e use esse._";
+      const comoEn = ex.modo === "media"
+        ? "Since it's a **Stoat attachment**, it becomes the **embed's cover** — the best result."
+        : "Since it's an **external** link, it shows as a **preview right below** the embed, not inside it.\n_To make it the embed's cover: upload the file here on Stoat, click it, copy the attachment link and use that._";
 
       return sendEmbed(message.channel, tr(ctx, {
         title: "✅ Imagem definida",
         description: [
-          resto,
+          v.url,
+          "",
+          comoPt,
           "",
           `Confira como ficou: \`${PREFIXO}${CMD} testar\``,
-          ...(alerta ? [
-            "",
-            suspeito
-              ? "⚠️ Este parece um link de **resultado de busca** (Brave/Google/Bing), que aponta para uma miniatura temporária em vez do arquivo. Costuma falhar."
-              : "⚠️ O link não termina em `.png`/`.jpg`/`.gif`/`.webp`, então pode não ser a imagem em si.",
-            "Se o teste sair sem capa: abra a imagem, use **Copiar endereço da imagem** e cole esse link — ou envie o arquivo aqui no Stoat e copie o link do anexo.",
-          ] : []),
+          ...(v.aviso ? ["", v.aviso] : []),
         ].join("\n"),
-        colour: alerta ? COR.aviso : COR.sucesso,
+        colour: v.aviso ? COR.aviso : COR.sucesso,
       }, {
         title: "✅ Image set",
         description: [
-          resto,
+          v.url,
+          "",
+          comoEn,
           "",
           `Check how it looks: \`${PREFIXO}${CMD} test\``,
-          ...(alerta ? [
-            "",
-            suspeito
-              ? "⚠️ This looks like a **search result** link (Brave/Google/Bing), which points to a temporary thumbnail rather than the file itself. It usually fails."
-              : "⚠️ The link doesn't end in `.png`/`.jpg`/`.gif`/`.webp`, so it may not be the image itself.",
-            "If the test comes out with no cover: open the image, use **Copy image address** and paste that link — or upload the file here on Stoat and copy the attachment link.",
-          ] : []),
+          ...(v.avisoEn ? ["", v.avisoEn] : []),
         ].join("\n"),
-        colour: alerta ? COR.aviso : COR.sucesso,
+        colour: v.avisoEn ? COR.aviso : COR.sucesso,
       }));
     }
 
@@ -424,7 +423,7 @@ function criarComando(tipoId) {
         title: renderizar(c.titulo, dados),
         description: renderizar(c.texto, dados),
         colour: c.cor,
-        media: c.imagem || null,
+        imagem: c.imagem || null,
       });
       return sendEmbed(message.channel, tr(ctx,
         { title: "✅ Teste enviado",

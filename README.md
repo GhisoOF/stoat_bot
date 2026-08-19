@@ -1507,6 +1507,7 @@ O código é organizado em quatro áreas, sob `modulos/`:
 │   ├── core/                   # base compartilhada
 │   │   ├── db.js               # SQLite (config, punições, bans, RSS, XP)
 │   │   ├── config-store.js     # configuração por servidor + global
+│   │   ├── membros.js          # contar/listar membros (cache compartilhado)
 │   │   └── log.js              # chat de logs configurável (&log)
 │   ├── moderacao/              # moderação e automod
 │   │   ├── automod-engine.js   # motor: runAutomod, punição, blocklist, spam

@@ -53,52 +53,9 @@ function tempoDePe() {
   return d ? `${d}d ${h}h` : h ? `${h}h ${m}min` : `${m}min`;
 }
 
-// Contagem de membros.
-//
-// O objeto de servidor em cache normalmente NÃO traz esse número — é preciso
-// buscar a lista. Então tentamos primeiro os campos diretos (grátis) e, se não
-// houver, chamamos fetchMembers() de verdade.
-function contarDireto(server) {
-  const direto = server?.memberCount ?? server?.member_count
-    ?? server?.approximate_member_count ?? server?.approximateMemberCount;
-  if (typeof direto === "number") return direto;
-  try {
-    const m = server?.members;
-    if (typeof m?.size === "number" && m.size > 0) return m.size;
-    if (Array.isArray(m) && m.length) return m.length;
-  } catch {}
-  return null;
-}
-
-// Cache: buscar membros é caro, e o número não muda a cada segundo.
-const cacheMembros = new Map();   // serverId → { n, quando }
-const CACHE_MS = 10 * 60_000;
-
-async function contarMembros(server) {
-  const id = server?.id ?? server?._id;
-  const direto = contarDireto(server);
-  if (typeof direto === "number") return direto;
-
-  const cache = cacheMembros.get(id);
-  if (cache && agora() - cache.quando < CACHE_MS) return cache.n;
-
-  // Sem o método não há como contar — melhor dizer "?" do que mostrar 0,
-  // que pareceria um servidor vazio.
-  if (typeof server?.fetchMembers !== "function") return null;
-
-  try {
-    const r = await Promise.race([
-      server.fetchMembers(),
-      new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 8000)),
-    ]);
-    const lista = r?.members ?? r?.users ?? r ?? [];
-    const n = Array.isArray(lista) ? lista.length : (lista?.size ?? null);
-    if (typeof n === "number") { cacheMembros.set(id, { n, quando: agora() }); return n; }
-  } catch (e) {
-    console.log(`[SERVIDORES] não consegui contar membros de ${id}: ${e?.message ?? e}`);
-  }
-  return null;
-}
+// Contagem de membros: a lógica (campos diretos → fetchMembers → cache) vive
+// no core, compartilhada com o &staff e as boas-vindas.
+import { contarMembros } from "../core/membros.js";
 
 import { tr, lingua } from "../core/i18n.js";
 

@@ -27,6 +27,7 @@
 // ══════════════════════════════════════════════════════════
 
 import { resolverCanal } from "../core/ids.js";
+import { contarMembros, invalidar as invalidarMembros } from "../core/membros.js";
 import { normalizarCor, nomesDeCor } from "../core/cores.js";
 import { tr, lingua } from "../core/i18n.js";
 
@@ -95,7 +96,10 @@ async function disparar(ctx, chave, { userId, nome, server, mencionar }) {
               ?? await ctx.client?.channels?.fetch?.(c.canalId).catch(() => null);
     if (!canal) return;
 
-    const membros = server?.memberCount ?? server?.member_count ?? null;
+    // O objeto de servidor do Stoat quase nunca traz `memberCount`: é preciso
+    // buscar a lista. O módulo core cuida disso (com cache) — antes daqui saía
+    // sempre "?" no lugar de {membros}.
+    const membros = await contarMembros(server);
     const dados = {
       userId, nome,
       servidor: server?.name ?? "",
@@ -116,7 +120,9 @@ async function disparar(ctx, chave, { userId, nome, server, mencionar }) {
 export async function aoEntrar(member, ctx) {
   const userId = member?.id?.user ?? member?._id?.user;
   if (!userId) return;
-  const server = await ctx.getServerPorId?.(member?.id?.server).catch(() => null);
+  const serverId = member?.id?.server;
+  invalidarMembros(serverId);   // acabou de entrar alguém: recontar, não usar cache velho
+  const server = await ctx.getServerPorId?.(serverId).catch(() => null);
   await disparar(ctx, "boasVindas", {
     userId,
     nome: member?.user?.username ?? member?.nickname ?? null,
@@ -127,6 +133,7 @@ export async function aoEntrar(member, ctx) {
 
 export async function aoSair(userId, serverId, ctx, nome = null) {
   if (!userId) return;
+  invalidarMembros(serverId);   // acabou de sair alguém: recontar
   const server = await ctx.getServerPorId?.(serverId).catch(() => null);
   await disparar(ctx, "adeus", { userId, nome: nome ?? userId, server, mencionar: false });
 }
@@ -149,11 +156,13 @@ function criarComando(tipoId) {
       const estado = c.ativo && c.canalId
         ? (lang === "en" ? "🟢 on" : "🟢 ligado")
         : (lang === "en" ? "🔴 off" : "🔴 desligado");
+      const srvPrevia = await getServer(message).catch(() => null);
+      const nPrevia = (await contarMembros(srvPrevia).catch(() => null)) ?? "?";
       const previa = renderizar(c.texto, {
         userId: message.authorId,
         nome: message.author?.username ?? "?",
-        servidor: (await getServer(message).catch(() => null))?.name ?? "?",
-        membros: "123",
+        servidor: srvPrevia?.name ?? "?",
+        membros: nPrevia,
         mencionar: tipoId === "boasvindas",
       });
 
@@ -165,7 +174,7 @@ function criarComando(tipoId) {
           `**${lang === "en" ? "Colour" : "Cor"}:** \`${c.cor}\`${c.imagem ? `\n**${lang === "en" ? "Image" : "Imagem"}:** ${c.imagem}` : ""}`,
           "",
           lang === "en" ? "**Preview**" : "**Prévia**",
-          `> **${renderizar(c.titulo, { userId: message.authorId, nome: message.author?.username, servidor: "?", membros: "123", mencionar: tipoId === "boasvindas" })}**`,
+          `> **${renderizar(c.titulo, { userId: message.authorId, nome: message.author?.username, servidor: srvPrevia?.name ?? "?", membros: nPrevia, mencionar: tipoId === "boasvindas" })}**`,
           ...previa.split("\n").map((l) => `> ${l}`),
           "",
           lang === "en" ? "**Commands**" : "**Comandos**",
@@ -370,7 +379,7 @@ function criarComando(tipoId) {
         userId: message.authorId,
         nome: message.author?.username ?? "?",
         servidor: server?.name ?? "?",
-        membros: server?.memberCount ?? server?.member_count ?? "?",
+        membros: (await contarMembros(server).catch(() => null)) ?? "?",
         mencionar: tipoId === "boasvindas",
       };
       await ctx.sendEmbed(canal, {

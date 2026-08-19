@@ -47,41 +47,9 @@ function rotuloDoCargo(roleId, server, config) {
 }
 
 // ── Quem tem cada cargo ────────────────────────────────────
-// Buscar membros é caro e a equipe não muda a cada minuto: 10 min de cache,
-// a mesma janela usada no &servidores.
-const cacheMembros = new Map();   // serverId → { lista, quando }
-const CACHE_MS = 10 * 60_000;
-
-async function membrosDoServidor(server) {
-  const sid = server?.id ?? server?._id;
-  const cache = cacheMembros.get(sid);
-  if (cache && Date.now() - cache.quando < CACHE_MS) return cache.lista;
-
-  let lista = null;
-
-  // 1) cache local do cliente, quando existe
-  try {
-    const m = server?.members;
-    if (m && typeof m.values === "function") lista = [...m.values()];
-    else if (Array.isArray(m) && m.length) lista = m;
-  } catch { /* segue para o fetch */ }
-
-  // 2) busca na API
-  if (!lista?.length && typeof server?.fetchMembers === "function") {
-    try {
-      const r = await Promise.race([
-        server.fetchMembers(),
-        new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 8000)),
-      ]);
-      lista = r?.members ?? (Array.isArray(r) ? r : null);
-    } catch (e) {
-      console.log(`[STAFF] não consegui listar membros de ${sid}: ${e?.message ?? e}`);
-    }
-  }
-
-  if (lista) cacheMembros.set(sid, { lista, quando: Date.now() });
-  return lista;
-}
+// A busca de membros (com cache) vive no core, compartilhada com o
+// &servidores e as boas-vindas — uma fonte só, um cache só.
+import { listarMembros } from "../core/membros.js";
 
 // IDs dos membros que têm um cargo específico.
 function quemTem(membros, roleId) {
@@ -129,7 +97,7 @@ export async function cmdStaff(message, args, ctx) {
       }));
     }
 
-    const membros = await membrosDoServidor(server);
+    const membros = await listarMembros(server);
     const blocos = [];
     for (const roleId of cargos) {
       const nome = rotuloDoCargo(roleId, server, config);

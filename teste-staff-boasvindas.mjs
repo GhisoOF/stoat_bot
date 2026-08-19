@@ -186,5 +186,29 @@ ok(ult().includes("{usuario}") || ult().includes("Marcadores"), "PT: &help boasv
 await say("&config");
 ok(ult().includes("Boas-vindas") || ult().includes("Entrada e saída"), "&config PT mostra o novo estado");
 
+// ══ contagem de membros em servidor SEM memberCount ══
+// (o caso real: o Stoat quase nunca traz esse campo, e {membros} saía "?")
+console.log("\n── contagem de membros ──");
+{
+  const { invalidar } = await import("./modulos/core/membros.js");
+  let lista = Array.from({ length: 42 }, (_, i) => ({ id: { user: "01J" + String(i).padStart(23, "0") }, roles: [] }));
+  const semContagem = {
+    id: "S2", ownerId: "U1", name: "Sem memberCount", roles: new Map(), channels: [portaria],
+    fetchMember: async () => null,
+    fetchMembers: async () => ({ members: lista }),
+    fetchBans: async () => [],
+  };
+  // memberCount ausente de propósito
+  ok(semContagem.memberCount === undefined, "cenário: servidor sem memberCount (como o Stoat entrega)");
+  invalidar();
+  const { contarMembros } = await import("./modulos/core/membros.js");
+  ok(await contarMembros(semContagem) === 42, "★ contarMembros busca a lista quando o campo não existe");
+  invalidar("S2");
+  lista = lista.slice(0, 40);
+  ok(await contarMembros(semContagem) === 40, "★ invalidar() força recontagem (entrada/saída recente)");
+  ok(await contarMembros({ id: "S3", memberCount: 7 }) === 7, "campo direto é usado sem buscar nada");
+  ok(await contarMembros({ id: "S4" }) === null, "sem campo e sem fetchMembers → null (vira \"?\", nunca 0)");
+}
+
 console.log(`\nSTAFF + BOAS-VINDAS: ${pass} ok, ${fail} falha(s)`);
 process.exit(fail ? 1 : 0);

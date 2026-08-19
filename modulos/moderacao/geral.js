@@ -1,6 +1,7 @@
 import { servidorPermitido as temIA } from "../ai/chat.js";
 import { arvoreSubtopicos, SUBTOPICOS_SO_IA } from "./help-arvore.js";
 import { nomeExibido, exibirTitulo } from "../core/aliases.js";
+import { escadaDePunicao, rotuloDegrau } from "./automod-engine.js";
 import * as PERFIS_MOEDA from "../game/moedas-perfis.js";
 
 // Comandos que só existem onde a IA roda (espelha a lista do main.js).
@@ -165,10 +166,10 @@ function detalhesPT(P) {
       desc: "Gerencia o anti-link. `add <url>` importa listas estilo Pi-hole; `adddomain <domínio>` bloqueia um domínio único.",
       perm: "ManagePermissions", ex: `${P}blocklist adddomain site-ruim.com`,
     },
-    scam: {
-      uso: `${P}scam <config|sensitivity|channel|test|simulate|ban|dismiss>`,
-      desc: `Detecção de conteúdo proibido por PONTUAÇÃO (0–10): golpe, +18, gore, apologia a ilícito e abuso, tudo numa categoria só. A punição é definida no \`${P}punicao\`. \`test <texto>\` mostra a nota; \`simulate <texto>\` dispara o fluxo real no canal de avisos.`,
-      perm: "ManagePermissions", ex: `${P}scam test ganhe dinheiro fácil chama no pv`,
+    sentinela: {
+      uso: `${P}sentinela <config|sensitivity|antiguidade|alerta|channel|test|simulate|ban|dismiss>`,
+      desc: `O único módulo que **julga** em vez de medir: dá ao conteúdo uma nota de suspeita (0–10) cobrindo golpe, +18, gore, apologia a ilícito e abuso numa categoria só.\n\nComo julga, ele se adapta a quem escreve:\n**\`antiguidade on\`** — o limiar acompanha o nível de XP do membro. Conta recém-chegada é olhada de perto; quem conversa aqui há semanas ganha margem. Uma frase que soa a golpe vinda de alguém que acabou de entrar é bem mais provável de ser golpe.\n**\`alerta on\`** — marca a staff quando alguém levanta suspeita **repetidas vezes** em pouco tempo, mesmo sem chegar ao limiar de punição. Sinal isolado é ruído; padrão merece olho humano.\n\nA punição vem do \`${P}punicao\`. \`test <texto>\` mostra a nota; \`simulate <texto>\` dispara o fluxo real no canal de avisos.\n\n_Chamava-se \`${P}scam\`, e esse nome continua funcionando._`,
+      perm: "ManagePermissions", ex: `${P}sentinela test ganhe dinheiro fácil chama no pv`,
     },
     banglobal: {
       uso: `${P}banglobal <off|avisar|banir|varrer|historico|importar|esquecer>`,
@@ -356,10 +357,10 @@ function detalhesEN(P) {
       desc: "Manages the anti-link. `add <url>` imports Pi-hole-style lists; `adddomain <domain>` blocks a single domain.",
       perm: "ManagePermissions", ex: `${P}blocklist adddomain bad-site.com`,
     },
-    scam: {
-      uso: `${P}scam <config|sensitivity|channel|test|simulate|ban|dismiss>`,
-      desc: `SCORE-based (0–10) detection of forbidden content: scams, NSFW, gore, glorifying crime and abuse, all in one category. The punishment is set with \`${P}punicao\`. \`test <text>\` shows the score; \`simulate <text>\` fires the real flow in the alerts channel.`,
-      perm: "ManagePermissions", ex: `${P}scam test easy money DM me now`,
+    sentinela: {
+      uso: `${P}sentinela <config|sensitivity|antiguidade|alerta|channel|test|simulate|ban|dismiss>`,
+      desc: `The only module that **judges** instead of measuring: it scores content for suspicion (0–10), covering scams, NSFW, gore, glorifying crime and abuse in a single category.\n\nBecause it judges, it adapts to who is writing:\n**\`antiguidade on\`** — the threshold follows the member's XP level. A brand new account gets a closer look; someone who has been talking here for weeks gets slack. A scammy-sounding line from someone who just arrived is far more likely to actually be a scam.\n**\`alerta on\`** — pings the staff when someone raises suspicion **repeatedly** in a short window, even below the punishment threshold. One signal is noise; a pattern deserves human eyes.\n\nThe punishment comes from \`${P}punicao\`. \`test <text>\` shows the score; \`simulate <text>\` fires the real flow in the alerts channel.\n\n_It used to be \`${P}scam\`, and that name still works._`,
+      perm: "ManagePermissions", ex: `${P}sentinela test easy money DM me now`,
     },
     banglobal: {
       uso: `${P}banglobal <off|avisar|banir|varrer|historico|importar|esquecer>`,
@@ -1128,7 +1129,8 @@ export async function cmdSobre(message, args, ctx) {
 
   const sim = (v) => v ? "🟢" : "🔴";
   const estadoLinhas = en ? [
-    `${sim(modulosOn)} **AutoMod** — ${modulosOn}/9 modules on`,
+    `${sim(modulosOn)} **AutoMod** — ${modulosOn}/9 modules on${am.antiScam?.enabled ? ` · sentinel ${am.antiScam.porAntiguidade !== false ? "(stricter with newcomers)" : "on"}` : ""}`,
+    `⚖️ **Punishment** — \`${config?.automod?.punicao?.modo ?? "avisar"}\`${(config?.automod?.punicao?.modo === "acumular") ? ` · ${escadaDePunicao(config.automod.punicao).map((d) => rotuloDegrau(d, "en")).join(" → ")}` : ""}`,
     `${sim(xpOn)} **Leveling (XP)** — ${xpOn ? "on" : "off"}`,
     `${sim(logOn)} **Log channel** — ${logOn ? `<#${config.log.canalId}>` : "not set"}`,
     `${sim(rssN)} **RSS** — ${rssN} feed(s)`,
@@ -1136,7 +1138,8 @@ export async function cmdSobre(message, args, ctx) {
     `🎲 **RPG** — ${nPersonagens} character(s) · ${moedas.length} currenc${moedas.length === 1 ? "y" : "ies"}${moedas.length > 1 ? " · exchange on" : ""}${nMagias ? ` · ${nMagias} spell(s) learned` : ""}${nCapturados ? ` · ${nCapturados} companion(s) in the dungeon` : ""}${moedas.length < nPerfis ? ` · ${nPerfis} currency profiles available` : ""}${nDupes ? ` · ⚠️ ${nDupes} duplicate currenc${nDupes === 1 ? "y" : "ies"}` : ""}`,
     comIA ? `🤖 **AI (Judy)** — enabled on this server` : null,
   ] : [
-    `${sim(modulosOn)} **AutoMod** — ${modulosOn}/9 módulos ligados`,
+    `${sim(modulosOn)} **AutoMod** — ${modulosOn}/9 módulos ligados${am.antiScam?.enabled ? ` · sentinela ${am.antiScam.porAntiguidade !== false ? "(mais rígido com novatos)" : "ligado"}` : ""}`,
+    `⚖️ **Punição** — \`${config?.automod?.punicao?.modo ?? "avisar"}\`${(config?.automod?.punicao?.modo === "acumular") ? ` · ${escadaDePunicao(config.automod.punicao).map((d) => rotuloDegrau(d, "pt")).join(" → ")}` : ""}`,
     `${sim(xpOn)} **Níveis (XP)** — ${xpOn ? "ligado" : "desligado"}`,
     `${sim(logOn)} **Chat de logs** — ${logOn ? `<#${config.log.canalId}>` : "não definido"}`,
     `${sim(rssN)} **RSS** — ${rssN} feed(s)`,

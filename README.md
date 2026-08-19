@@ -66,6 +66,86 @@ configurado. Use o mesmo endereço nas duas pontas.
 
 ---
 
+## Moderação que se adapta
+
+Os módulos do AutoMod se dividem em dois tipos, e a diferença importa.
+
+**Os que medem** — spam, spam em massa, convites, menções, caixa alta, links,
+caracteres, repetição — trabalham com números objetivos: 5 mensagens em 4
+segundos, 70% de maiúsculas. O limite é o mesmo para todo mundo, e assim deve
+ser: 12 mensagens em 8 segundos é flood venha de quem vier.
+
+**O que julga** — o **sentinela** (antigo `scam`) — dá ao conteúdo uma nota de
+suspeita de 0 a 10. Julgamento não é medida, e por isso ele se adapta.
+
+### Mais rígido com quem chegou agora
+
+Uma conta criada minutos atrás que já chega mandando link e falando de venda é
+o padrão clássico de golpe. A mesma frase vinda de quem conversa no servidor há
+semanas quase sempre é brincadeira que o detector não entende.
+
+Como o Stoat não expõe a data de entrada de forma confiável, a medida de
+convívio é o **nível de XP** — ele só sobe conversando, ao longo do tempo, que é
+exatamente o que se quer medir.
+
+| Nível | Faixa | Limiar (base 6) |
+|---|---|---|
+| 0 | recém-chegado | 4,5 |
+| 1–2 | conhecido | 5,0 |
+| 3–5 | frequente | 5,5 |
+| 6–10 | estabelecido | 6,0 |
+| 11+ | veterano | 6,5 |
+
+Com piso e teto: nem o veterano fica imune, nem o novato é punido por qualquer
+bobagem. Sem XP ligado no servidor, todos contam como novatos — o lado seguro
+de errar. `&sentinela antiguidade on|off`.
+
+### Avisar antes de punir
+
+Quando alguém levanta suspeita **3 vezes em 10 minutos** — mesmo sem chegar ao
+limiar de punição — a staff é marcada com o perfil da pessoa, os sinais vistos e
+os comandos de ação.
+
+Nem todo padrão suspeito merece punir, mas todo padrão suspeito merece um par de
+olhos humanos **enquanto está acontecendo**. É justamente o caso duvidoso, de
+nota alta mas não alta o bastante, que a moderação precisa ver antes de o bot
+decidir sozinho.
+
+Um sinal isolado é ruído, por isso o mínimo de três. E depois de avisar, fica 30
+minutos em silêncio sobre aquela pessoa: alerta que se repete vira ruído e a
+staff para de ler. `&sentinela alerta on|off`.
+
+## A escada de punição
+
+O modo `acumular` era N avisos e, no limite, ban — sem nada no meio. Isso punia
+igual quem escorregou uma vez e quem estava atacando o servidor, e dava ao
+membro comum um susto desproporcional na única punição que ele via.
+
+Agora cada reincidência sobe um degrau:
+
+| Reincidência | Punição |
+|---|---|
+| 1ª | aviso |
+| 2ª | silêncio de 5 min |
+| 3ª | silêncio de 1 h |
+| 4ª | ban |
+
+Quem para no primeiro degrau nunca chega ao último; quem insiste sobe sozinho.
+
+```
+&punicao escada                      # mostra a escada atual
+&punicao escada aviso,10m,2h,ban     # mais tempo em cada degrau
+```
+
+Aceita `aviso`, `ban` e prazos como `30s`, `10m`, `2h`, `1d`. O ban é sempre o
+último degrau, mesmo que você não escreva — sem isso, alguém insistente ficaria
+em loop de mute para sempre.
+
+O prazo do silêncio fica no **banco**, não num timer em memória: um mute de 1
+hora sobrevive a reinício do bot. E há uma rotina conferindo os vencimentos —
+sem ela, reiniciar o processo no meio transformaria mute temporário em
+permanente.
+
 ## Conversa: rápida por desenho
 
 A prioridade aqui é **tempo de resposta**, não profundidade. Quatro mudanças,

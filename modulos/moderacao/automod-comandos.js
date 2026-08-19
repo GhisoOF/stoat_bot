@@ -5,6 +5,7 @@
 //  BILÍNGUE: textos escolhidos por ctx.config.language.
 // ══════════════════════════════════════════════════════════
 import { rebuildBlocklist, DOMINIO_VALIDO, simularDeteccao, removerCargoSilence } from "./automod-engine.js";
+import * as engine from "./automod-engine.js";
 import * as db  from "../core/db.js";
 import { limparId } from "../core/ids.js";
 import * as log from "../core/log.js";
@@ -479,36 +480,103 @@ export async function cmdScam(message, args, ctx) {
 
   if (!sub || sub === "config" || sub === "status") {
     return sendEmbed(message.channel, lang === "en" ? {
-      title: "🛡 Forbidden content (single scorecard)",
+      title: "🛡 Sentinel — judgement-based moderation",
       colour: COR.mod,
       description: [
+        "Weighs the *content* and gives it a suspicion score. Unlike the other",
+        "modules — which measure exact things like caps or message rate — this one",
+        "**judges**, so it adapts to who is writing.",
+        "",
         `**Enabled:** ${cfg.enabled ? "🟢 yes" : "🔴 no"}  (enable with \`${PREFIXO}automod antiscam on\`)`,
-        `**Sensitivity:** ${cfg.sensitivity}  (score threshold: ${limiarDe(cfg.sensitivity)}/10)`,
+        `**Sensitivity:** ${cfg.sensitivity}  (base threshold: ${limiarDe(cfg.sensitivity)}/10)`,
+        `**Stricter with newcomers:** ${cfg.porAntiguidade !== false ? "🟢 on" : "🔴 off"} — threshold moves with the member's level`,
+        `**Alert the staff:** ${cfg.alertarAdmin !== false ? "🟢 on" : "🔴 off"} — pings staff on a suspicious *pattern*, before punishing`,
         `**Alert channel:** ${cfg.alertChannelId ? `\`${cfg.alertChannelId}\`` : "_(uses the message's channel)_"}`,
         `**Punishment:** set with \`${PREFIXO}punicao\` (current mode: **${pol.modo}**) — applies to all automods`,
         "",
         "**Commands:**",
-        `\`${PREFIXO}scam sensitivity <baixa|media|alta>\``,
-        `\`${PREFIXO}scam channel <id|aqui>\``,
-        `\`${PREFIXO}scam test <text>\` · \`${PREFIXO}scam simulate <text>\``,
-        `\`${PREFIXO}scam ban <userId>\` · \`${PREFIXO}scam dismiss <userId>\``,
+        `\`${PREFIXO}sentinela sensitivity <baixa|media|alta>\``,
+        `\`${PREFIXO}sentinela antiguidade on|off\` · \`${PREFIXO}sentinela alerta on|off\``,
+        `\`${PREFIXO}sentinela channel <id|aqui>\``,
+        `\`${PREFIXO}sentinela test <text>\` · \`${PREFIXO}sentinela simulate <text>\``,
+        `\`${PREFIXO}sentinela ban <userId>\` · \`${PREFIXO}sentinela dismiss <userId>\``,
+        "",
+        `_\`${PREFIXO}scam\` still works — it's the old name._`,
       ].join("\n"),
     } : {
-      title: "🛡 Conteúdo proibido (scorecard único)",
+      title: "🛡 Sentinela — moderação por julgamento",
       colour: COR.mod,
       description: [
+        "Pesa o *conteúdo* e dá uma nota de suspeita. Diferente dos outros",
+        "módulos — que medem coisas exatas, como caixa alta ou ritmo de mensagem —",
+        "este **julga**, e por isso se adapta a quem está escrevendo.",
+        "",
         `**Ativado:** ${cfg.enabled ? "🟢 sim" : "🔴 não"}  (ligue com \`${PREFIXO}automod antiscam on\`)`,
-        `**Sensibilidade:** ${cfg.sensitivity}  (limiar da nota: ${limiarDe(cfg.sensitivity)}/10)`,
+        `**Sensibilidade:** ${cfg.sensitivity}  (limiar base: ${limiarDe(cfg.sensitivity)}/10)`,
+        `**Mais rígido com quem chegou agora:** ${cfg.porAntiguidade !== false ? "🟢 ligado" : "🔴 desligado"} — o limiar acompanha o nível do membro`,
+        `**Avisar a staff:** ${cfg.alertarAdmin !== false ? "🟢 ligado" : "🔴 desligado"} — marca a staff diante de um *padrão* suspeito, antes de punir`,
         `**Canal de aviso:** ${cfg.alertChannelId ? `\`${cfg.alertChannelId}\`` : "_(usa o canal da mensagem)_"}`,
         `**Punição:** definida em \`${PREFIXO}punicao\` (modo atual: **${pol.modo}**) — vale para todos os automods`,
         "",
         "**Comandos:**",
-        `\`${PREFIXO}scam sensitivity <baixa|media|alta>\``,
-        `\`${PREFIXO}scam channel <id|aqui>\``,
-        `\`${PREFIXO}scam test <texto>\` · \`${PREFIXO}scam simulate <texto>\``,
-        `\`${PREFIXO}scam ban <userId>\` · \`${PREFIXO}scam dismiss <userId>\``,
+        `\`${PREFIXO}sentinela sensitivity <baixa|media|alta>\``,
+        `\`${PREFIXO}sentinela antiguidade on|off\` · \`${PREFIXO}sentinela alerta on|off\``,
+        `\`${PREFIXO}sentinela channel <id|aqui>\``,
+        `\`${PREFIXO}sentinela test <texto>\` · \`${PREFIXO}sentinela simulate <texto>\``,
+        `\`${PREFIXO}sentinela ban <userId>\` · \`${PREFIXO}sentinela dismiss <userId>\``,
+        "",
+        `_\`${PREFIXO}scam\` continua funcionando — é o nome antigo._`,
       ].join("\n"),
     });
+  }
+
+  // Liga/desliga o rigor por antiguidade e o alerta à staff.
+  if (["antiguidade", "tenure", "novatos"].includes(sub)) {
+    const on = ["on", "sim", "yes", "true"].includes(String(val ?? "").toLowerCase());
+    const off = ["off", "nao", "não", "no", "false"].includes(String(val ?? "").toLowerCase());
+    if (!on && !off) {
+      return sendEmbed(message.channel, tr(ctx,
+        { title: "❌ Uso", description: `\`${PREFIXO}sentinela antiguidade on|off\``, colour: COR.erro },
+        { title: "❌ Usage", description: `\`${PREFIXO}sentinela antiguidade on|off\``, colour: COR.erro }));
+    }
+    cfg.porAntiguidade = on; salvarConfig();
+    return sendEmbed(message.channel, tr(ctx, {
+      title: on ? "🟢 Rigor por antiguidade ligado" : "🔴 Rigor por antiguidade desligado",
+      description: on
+        ? "Quem chegou agora é olhado de perto; quem já convive no servidor ganha margem.\nA medida de convívio é o **nível de XP** — ele só sobe conversando, ao longo do tempo."
+        : "O limiar volta a ser igual para todo mundo, independente de há quanto tempo a pessoa está aqui.",
+      colour: on ? COR.sucesso : COR.aviso,
+    }, {
+      title: on ? "🟢 Stricter with newcomers: on" : "🔴 Stricter with newcomers: off",
+      description: on
+        ? "Newcomers get a closer look; people who already belong here get slack.\nTenure is measured by **XP level** — it only grows by talking, over time."
+        : "The threshold is the same for everyone again, regardless of how long they've been here.",
+      colour: on ? COR.sucesso : COR.aviso,
+    }));
+  }
+
+  if (["alerta", "alertar", "alert", "staff"].includes(sub)) {
+    const on = ["on", "sim", "yes", "true"].includes(String(val ?? "").toLowerCase());
+    const off = ["off", "nao", "não", "no", "false"].includes(String(val ?? "").toLowerCase());
+    if (!on && !off) {
+      return sendEmbed(message.channel, tr(ctx,
+        { title: "❌ Uso", description: `\`${PREFIXO}sentinela alerta on|off\``, colour: COR.erro },
+        { title: "❌ Usage", description: `\`${PREFIXO}sentinela alert on|off\``, colour: COR.erro }));
+    }
+    cfg.alertarAdmin = on; salvarConfig();
+    return sendEmbed(message.channel, tr(ctx, {
+      title: on ? "🟢 Alerta à staff ligado" : "🔴 Alerta à staff desligado",
+      description: on
+        ? `A staff é marcada quando alguém levanta suspeita **repetidas vezes** em pouco tempo — mesmo sem chegar ao limiar de punição.\nUm sinal isolado é ruído; um padrão merece olho humano.\nCargos marcados: os de \`${PREFIXO}acesso cargo\`.`
+        : "Nada de marcações. As punições continuam normalmente; só o aviso preventivo sai de cena.",
+      colour: on ? COR.sucesso : COR.aviso,
+    }, {
+      title: on ? "🟢 Staff alerts on" : "🔴 Staff alerts off",
+      description: on
+        ? `Staff gets pinged when someone raises suspicion **repeatedly** in a short window — even below the punishment threshold.\nOne signal is noise; a pattern deserves human eyes.\nRoles pinged: the ones in \`${PREFIXO}acesso cargo\`.`
+        : "No pings. Punishments still work; only the preventive heads-up goes away.",
+      colour: on ? COR.sucesso : COR.aviso,
+    }));
   }
 
   if (sub === "sensitivity") {
@@ -721,6 +789,61 @@ export async function cmdPunicao(message, args, ctx) {
     return sendEmbed(message.channel, tr(ctx,
       { title: "✅ Modo de punição atualizado", description: `Agora: **${val}** — ${rotulo(val)}.`, colour: COR.sucesso },
       { title: "✅ Punishment mode updated", description: `Now: **${val}** — ${rotulo(val)}.`, colour: COR.sucesso }));
+  }
+
+  // ── Os degraus do modo acumular ──
+  if (["escada", "degraus", "ladder", "steps"].includes(sub)) {
+    const bruto = args.slice(1).join(" ").trim();
+    if (!bruto) {
+      const atual = engine.escadaDePunicao(pol);
+      return sendEmbed(message.channel, tr(ctx, {
+        title: "🪜 Escada de punição",
+        description: [
+          "No modo `acumular`, cada reincidência sobe um degrau:",
+          "",
+          ...atual.map((d, i) => `**${i + 1}.** ${engine.rotuloDegrau(d, "pt")}`),
+          "",
+          "Quem para no primeiro degrau nunca chega ao último.",
+          "",
+          `\`${PREFIXO}punicao escada aviso,5m,1h,ban\` — o padrão`,
+          `\`${PREFIXO}punicao escada aviso,10m,1h,12h,ban\` — mais degraus`,
+          "",
+          "_Aceita `aviso`, `ban` e prazos como `30s`, `10m`, `2h`, `1d`._",
+          "_O ban é sempre o último degrau, mesmo que você não escreva._",
+        ].join("\n"), colour: COR.mod,
+      }, {
+        title: "🪜 Punishment ladder",
+        description: [
+          "In `acumular` mode, each repeat offence climbs a step:",
+          "",
+          ...atual.map((d, i) => `**${i + 1}.** ${engine.rotuloDegrau(d, "en")}`),
+          "",
+          "Whoever stops at the first step never reaches the last.",
+          "",
+          `\`${PREFIXO}punicao escada aviso,5m,1h,ban\` — the default`,
+          `\`${PREFIXO}punicao escada aviso,10m,1h,12h,ban\` — more steps`,
+          "",
+          "_Accepts `aviso`, `ban` and durations like `30s`, `10m`, `2h`, `1d`._",
+          "_A ban is always the last step, even if you don't write it._",
+        ].join("\n"), colour: COR.mod,
+      }));
+    }
+    const teste = engine.escadaDePunicao({ escada: bruto }, { estrito: true });
+    if (teste.length < 2) {
+      return sendEmbed(message.channel, tr(ctx,
+        { title: "❌ Escada inválida", description: `Não entendi \`${bruto}\`.\n\nEx.: \`aviso,5m,1h,ban\``, colour: COR.erro },
+        { title: "❌ Invalid ladder", description: `I didn't understand \`${bruto}\`.\n\nE.g.: \`aviso,5m,1h,ban\``, colour: COR.erro }));
+    }
+    pol.escada = bruto; salvarConfig();
+    return sendEmbed(message.channel, tr(ctx, {
+      title: "🪜 Escada atualizada",
+      description: teste.map((d, i) => `**${i + 1}.** ${engine.rotuloDegrau(d, "pt")}`).join("\n"),
+      colour: COR.sucesso,
+    }, {
+      title: "🪜 Ladder updated",
+      description: teste.map((d, i) => `**${i + 1}.** ${engine.rotuloDegrau(d, "en")}`).join("\n"),
+      colour: COR.sucesso,
+    }));
   }
 
   if (sub === "warns" || sub === "warnsparaban") {

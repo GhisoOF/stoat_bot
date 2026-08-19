@@ -26,6 +26,7 @@ export const COMANDO_EN = {
   cargomudo: "muterole",
   comando: "command",
   cor: "color",
+  sentinela: "sentinel",
   idioma: "language",
   limpar: "purge",
   log: "log",
@@ -43,6 +44,7 @@ export const COMANDO_EN = {
 // são os que ainda não estavam no CANONICO do main.
 export const COMANDO_EXTRA = {
   access: "acesso",
+  sentinel: "sentinela", sentry: "sentinela",
   punishment: "punicao",
   color: "cor",
   colour: "cor",
@@ -191,6 +193,12 @@ const SUB = {
   },
   embed: { fields: "campos", colors: "cores" },
   whitelist: { add: "add", remove: "remove", list: "list" },
+  sentinela: {
+    sensitivity: "sensitivity", channel: "channel", test: "test",
+    simulate: "simulate", ban: "ban", dismiss: "dismiss",
+    config: "config", status: "status", tenure: "antiguidade",
+    low: "baixa", medium: "media", high: "alta",
+  },
   scam: {
     sensitivity: "sensitivity", channel: "channel", test: "test",
     simulate: "simulate", ban: "ban", dismiss: "dismiss",

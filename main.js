@@ -304,7 +304,7 @@ const rotas = {
   automod:       automodCmd.cmdAutomod,
   whitelist:     automodCmd.cmdWhitelist,
   blocklist:     automodCmd.cmdBlocklist,
-  scam:          automodCmd.cmdScam,
+  sentinela:     automodCmd.cmdScam,
   punicao:       automodCmd.cmdPunicao,
   punição:       automodCmd.cmdPunicao,
   tutorial:      tutorial.cmdTutorial,
@@ -375,6 +375,10 @@ const CANONICO = {
   configuracoes: "config", configurações: "config",
   diagnostico: "debug", "diagnóstico": "debug",
   language: "idioma", lang: "idioma",
+  // `scam` virou `sentinela`: o módulo deixou de ser só anti-golpe (hoje pesa
+  // conteúdo grave, venda, links, padrão de conta nova e rigor por antiguidade).
+  // O nome antigo continua valendo — ninguém precisa reaprender um comando.
+  scam: "sentinela", antiscam: "sentinela", sentry: "sentinela", guard: "sentinela",
   // Nomes em inglês dos comandos cujo nome PT não é óbvio para quem lê em
   // inglês. Ficam aqui e não espalhados nas rotas para haver um lugar só onde
   // conferir "isto existe nos dois idiomas?".
@@ -396,7 +400,7 @@ estado.COMANDOS_SO_IA = COMANDOS_SO_IA;
 const COMANDOS_GERENCIAVEIS = [
   "ping", "repete", "userinfo", "kick", "ban", "limpar",
   "warnings", "clearwarnings", "warn", "acesso", "automod", "whitelist", "blocklist",
-  "scam", "punicao", "tutorial", "cor", "log", "banglobal", "embed", "reactionrole", "chat", "rss", "xp", "game", "autorole",
+  "sentinela", "punicao", "tutorial", "cor", "log", "banglobal", "embed", "reactionrole", "chat", "rss", "xp", "game", "autorole",
 ];
 // exportado via ctx para o comando &comando consultar
 estado.CANONICO = CANONICO;
@@ -409,6 +413,13 @@ estado.comandosGerenciaveisDe = (sid) => {
 // Os aliases em inglês viram rotas de verdade: se o help mostra
 // `&game create`, digitar isso tem que funcionar.
 for (const [alias, canonico] of Object.entries(aliases.COMANDO_EXTRA)) {
+  if (!rotas[alias] && rotas[canonico]) rotas[alias] = rotas[canonico];
+}
+// Os apelidos do CANONICO também precisam existir como rota. Antes só o
+// COMANDO_EXTRA virava rota, então renomear `scam` para `sentinela` deixava
+// o nome antigo apontando para lugar nenhum — quebrando o comando de quem
+// já tinha o hábito.
+for (const [alias, canonico] of Object.entries(CANONICO)) {
   if (!rotas[alias] && rotas[canonico]) rotas[alias] = rotas[canonico];
 }
 estado.rotas = rotas;
@@ -464,6 +475,11 @@ client.on("ready", async () => {
   // Configuração de IA no log: um env perdido aqui só apareceria muito depois,
   // como "Ollama indisponível" — erro que aponta para o lugar errado.
   for (const l of chat.resumoConfigIA()) console.info(l);
+
+  // Devolve a voz a quem cumpriu mute temporário. Precisa rodar sempre: o
+  // prazo vive no banco, então sem esta rotina um mute de 1h viraria eterno
+  // caso o bot reiniciasse no meio.
+  engine.iniciarVigiaDeSilencios(criarContexto());
 
   chat.iniciarMemoria();          // liga o agente de memória (extração em background)
   chat.iniciarComentario(client); // liga o comentário espontâneo

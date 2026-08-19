@@ -10,6 +10,7 @@ import { analisarConteudo } from "./scorecard.js";
 import * as db  from "../core/db.js";
 import * as log from "../core/log.js";
 import * as banGlobal from "./ban-global.js";
+import * as confianca from "./confianca.js";
 import { analisarCaracteres, analisarRepeticao } from "./caracteres.js";
 import { lingua } from "../core/i18n.js";
 
@@ -274,41 +275,246 @@ async function aplicarPunicao(ctx, opts) {
     return;
   }
 
-  // ── acumular: avisos → ban no limite ──
-  // Avisos ficam no BANCO, por (servidor, usuário): sobrevivem a restart
-  // do bot e a sair/reentrar no servidor.
-  const limite = pol.warnsParaBan ?? 3;
+  // ── acumular: escada progressiva ──
+  //
+  // Antes eram N avisos e, no limite, ban — do nada. Isso pune igual quem
+  // errou uma vez e quem está claramente atacando o servidor, e dá ao membro
+  // comum um susto desproporcional na única punição que ele vê.
+  //
+  // A escada dá peso crescente e, principalmente, dá CHANCE: aviso → 5 min →
+  // 1 hora → ban. Quem parou no primeiro degrau nunca chega ao último; quem
+  // insiste sobe sozinho.
+  //
+  // Os avisos ficam no BANCO, por (servidor, usuário): sobrevivem a restart do
+  // bot e a sair/reentrar no servidor.
   const sid   = ctx.serverId ?? server?.id;
   const count = db.somarAviso(sid, userId, motivo);
-  console.log(`[AUTOMOD] ⚠️ Aviso #${count}/${limite} para ${userId} — ${motivo}`);
-  if (count >= limite) {
-    let acao = lang === "en" ? "banned" : "banido";
-    try {
-      await server.banUser(userId, { reason: `[AutoMod] ${motivo} (${count} avisos)` });
-      banGlobal.registrar(ctx, userId, `${motivo} (${count} avisos)`, "automod");
-    }
-    catch (e) { console.error("[PUNIÇÃO][BAN]", e.message);
-      acao = lang === "en" ? `failed to ban (${e.message})` : `falha ao banir (${e.message})`; }
-    db.limparPunicao(sid, userId);
-    await sendEmbed(channel, { title: lang === "en" ? "🔨 User banned" : "🔨 Usuário banido",
-      description: [
-        lang === "en" ? `<@${userId}> ${acao} after ${count} warnings.` : `<@${userId}> ${acao} após ${count} avisos.`,
-        `**${lang === "en" ? "Reason" : "Motivo"}:** ${motivo}${linhaNota}`, ...blocoGrave].join("\n"),
-      colour: COR.erro });
-    await log.registrar(ctx, "punicoes", { titulo: "🔨 Ban automático",
-      descricao: `<@${userId}> banido após **${count}** avisos.\n**Motivo:** ${motivo}` });
-  } else {
+  const degraus = escadaDePunicao(pol);
+  // Passou do último degrau definido? Fica no último (que é o ban).
+  const degrau = degraus[Math.min(count, degraus.length) - 1];
+  console.log(`[AUTOMOD] ⚠️ Aviso #${count} para ${userId} → ${degrau.tipo} — ${motivo}`);
+
+  if (degrau.tipo === "aviso") {
     await sendEmbed(channel, { title: lang === "en" ? "⚠️ AutoMod warning" : "⚠️ Aviso do AutoMod",
       description: [
         lang === "en"
-          ? `<@${userId}> — ${motivo} *(warning ${count}/${limite})*${linhaNota}`
-          : `<@${userId}> — ${motivo} *(aviso ${count}/${limite})*${linhaNota}`,
+          ? `<@${userId}> — ${motivo} *(warning ${count})*${linhaNota}`
+          : `<@${userId}> — ${motivo} *(aviso ${count})*${linhaNota}`,
+        lang === "en"
+          ? `_Next step: ${rotuloDegrau(degraus[count], "en")}._`
+          : `_Próximo passo: ${rotuloDegrau(degraus[count], "pt")}._`,
         ...blocoGrave].join("\n"),
       colour: COR.aviso });
     await log.registrar(ctx, "punicoes", { titulo: "⚠️ Aviso aplicado",
-      descricao: `<@${userId}> recebeu o aviso **${count}/${limite}**.\n**Motivo:** ${motivo}` });
+      descricao: `<@${userId}> recebeu o aviso **${count}**.\n**Motivo:** ${motivo}` });
+    return;
   }
+
+  if (degrau.tipo === "mute") {
+    const ate = Date.now() + degrau.ms;
+    let acao = lang === "en" ? `silenced for ${degrau.rotulo}` : `silenciado por ${degrau.rotulo}`;
+    if (pol.silenceRoleId) {
+      try {
+        await aplicarCargoSilence(server, userId, pol.silenceRoleId, ctx);
+        db.silenciarAte(sid, userId, ate, motivo);
+      } catch (e) {
+        console.error("[PUNIÇÃO][MUTE]", e.message);
+        acao = lang === "en" ? `failed to silence (${e.message})` : `falha ao silenciar (${e.message})`;
+      }
+    } else {
+      // Sem cargo configurado o degrau não tem como ser cumprido. Dizer isso é
+      // melhor do que fingir que puniu.
+      acao = lang === "en"
+        ? "would be silenced, but there is no silence role configured"
+        : "seria silenciado, mas não há cargo de silêncio configurado";
+    }
+    await sendEmbed(channel, { title: lang === "en" ? "🔇 Temporary silence" : "🔇 Silêncio temporário",
+      description: [
+        `<@${userId}> — ${acao}. *(${lang === "en" ? "warning" : "aviso"} ${count})*`,
+        `**${lang === "en" ? "Reason" : "Motivo"}:** ${motivo}${linhaNota}`,
+        degraus[count]
+          ? (lang === "en" ? `_Next step: ${rotuloDegrau(degraus[count], "en")}._`
+                           : `_Próximo passo: ${rotuloDegrau(degraus[count], "pt")}._`)
+          : null,
+        ...blocoGrave].filter(Boolean).join("\n"),
+      colour: COR.mod });
+    await log.registrar(ctx, "punicoes", { titulo: "🔇 Silêncio temporário",
+      descricao: `<@${userId}> silenciado por **${degrau.rotulo}** (aviso ${count}).\n**Motivo:** ${motivo}` });
+    return;
+  }
+
+  // ── último degrau: ban ──
+  let acao = lang === "en" ? "banned" : "banido";
+  try {
+    await server.banUser(userId, { reason: `[AutoMod] ${motivo} (${count} avisos)` });
+    banGlobal.registrar(ctx, userId, `${motivo} (${count} avisos)`, "automod");
+  } catch (e) {
+    console.error("[PUNIÇÃO][BAN]", e.message);
+    acao = lang === "en" ? `failed to ban (${e.message})` : `falha ao banir (${e.message})`;
+  }
+  db.limparPunicao(sid, userId);
+  await sendEmbed(channel, { title: lang === "en" ? "🔨 User banned" : "🔨 Usuário banido",
+    description: [
+      lang === "en" ? `<@${userId}> ${acao} after ${count} warnings.` : `<@${userId}> ${acao} após ${count} avisos.`,
+      `**${lang === "en" ? "Reason" : "Motivo"}:** ${motivo}${linhaNota}`, ...blocoGrave].join("\n"),
+    colour: COR.erro });
+  await log.registrar(ctx, "punicoes", { titulo: "🔨 Ban automático",
+    descricao: `<@${userId}> banido após **${count}** avisos.\n**Motivo:** ${motivo}` });
 }
+
+// ──────────────────────────────────────────────────────────
+//  Alerta à administração: "olhem isto, agora".
+//
+//  Separado da punição de propósito. Nem todo padrão suspeito merece punir —
+//  mas todo padrão suspeito merece um par de olhos humanos ENQUANTO está
+//  acontecendo. O alerta chega no canal de alerta do sentinela (ou no de logs),
+//  marcando quem pode agir.
+// ──────────────────────────────────────────────────────────
+async function alertarAdministracao(ctx, { server, canal, userId, sinal, faixa, nivel, nota }) {
+  const { config, sendEmbed, COR, PREFIXO } = ctx;
+  const lang = lingua(ctx);
+  const am = config.automod ?? {};
+
+  // Onde avisar: o canal do sentinela, senão o de logs, senão o próprio canal.
+  const destinoId = am.antiScam?.alertChannelId || config.log?.canalId || null;
+  let destino = canal;
+  if (destinoId) {
+    try { destino = await ctx.client.channels.fetch(destinoId); } catch { destino = canal; }
+  }
+
+  // Quem marcar: os cargos de staff configurados no &acesso. Sem eles, o
+  // alerta ainda sai — só não marca ninguém, o que é melhor que não alertar.
+  const cargos = config.acesso?.cargosStaff ?? [];
+  const mencao = cargos.length ? cargos.map((id) => `<%${id}>`).join(" ") : "";
+
+  const linhas = lang === "en" ? [
+    mencao,
+    `**Possible threat** — <@${userId}> tripped the sentinel **${sinal.vezes}×** in ${sinal.janelaMin} min.`,
+    `**Profile:** ${faixa ? faixa.rotuloEN : "unknown"}${nivel != null ? ` (level ${nivel})` : ""} · **highest score:** ${nota.toFixed(1)}/10`,
+    sinal.sinais.length ? `**Signals:** ${sinal.sinais.join(", ")}` : null,
+    "",
+    "Nothing was punished — the score stayed below the threshold. This is a **pattern**, and patterns are worth a human look.",
+    `\`${PREFIXO}scam ban ${userId}\` · \`${PREFIXO}scam dismiss ${userId}\` · \`${PREFIXO}warnings ${userId}\``,
+  ] : [
+    mencao,
+    `**Possível ameaça** — <@${userId}> acionou o sentinela **${sinal.vezes}×** em ${sinal.janelaMin} min.`,
+    `**Perfil:** ${faixa ? faixa.rotulo : "desconhecido"}${nivel != null ? ` (nível ${nivel})` : ""} · **maior nota:** ${nota.toFixed(1)}/10`,
+    sinal.sinais.length ? `**Sinais:** ${sinal.sinais.join(", ")}` : null,
+    "",
+    "Nada foi punido — a nota ficou abaixo do limiar. Isto é um **padrão**, e padrão merece olho humano.",
+    `\`${PREFIXO}scam ban ${userId}\` · \`${PREFIXO}scam dismiss ${userId}\` · \`${PREFIXO}warnings ${userId}\``,
+  ];
+
+  try {
+    await sendEmbed(destino, {
+      title: lang === "en" ? "🚨 Possible threat" : "🚨 Possível ameaça",
+      description: linhas.filter(Boolean).join("\n"),
+      colour: COR.erro,
+    });
+  } catch (e) { console.error("[SENTINELA][alerta]", e.message); }
+
+  await log.registrar(ctx, "punicoes", {
+    titulo: "🚨 Possível ameaça",
+    descricao: `<@${userId}> acionou o sentinela **${sinal.vezes}×** em ${sinal.janelaMin} min`
+      + ` (${faixa?.rotulo ?? "?"}, nível ${nivel ?? "?"}). Sinais: ${sinal.sinais.join(", ") || "—"}`,
+  });
+  console.log(`[SENTINELA] 🚨 Alerta: ${userId} — ${sinal.vezes}× em ${sinal.janelaMin}min`);
+}
+
+// ──────────────────────────────────────────────────────────
+//  A escada do modo `acumular`.
+//
+//  Configurável: `punicao escada aviso,5m,1h,ban`. O padrão é o que a maioria
+//  quer sem pensar — uma chance, dois mutes crescentes, e ban só no fim.
+// ──────────────────────────────────────────────────────────
+export const ESCADA_PADRAO = "aviso,5m,1h,ban";
+
+// ──────────────────────────────────────────────────────────
+//  Devolver a voz quando o prazo vence.
+//
+//  O vencimento vive no banco, então um mute de 1 hora sobrevive a restart do
+//  bot — e é justamente por isso que precisa de alguém conferindo: sem esta
+//  rotina, um mute temporário viraria permanente se o processo reiniciasse.
+// ──────────────────────────────────────────────────────────
+let timerSilencios = null;
+
+export function iniciarVigiaDeSilencios(ctx, intervaloMs = 60_000) {
+  if (timerSilencios) clearInterval(timerSilencios);
+  timerSilencios = setInterval(() => {
+    liberarSilenciosVencidos(ctx).catch((e) => console.error("[PUNIÇÃO][vigia]", e.message));
+  }, intervaloMs);
+  if (timerSilencios.unref) timerSilencios.unref();
+  // Uma passada imediata: se o bot ficou fora por mais tempo que o mute,
+  // a pessoa não deve esperar mais um ciclo para poder falar.
+  liberarSilenciosVencidos(ctx).catch(() => {});
+}
+
+export async function liberarSilenciosVencidos(ctx) {
+  const vencidos = db.silenciosVencidos();
+  if (!vencidos.length) return 0;
+  let soltos = 0;
+  for (const { serverId, userId, motivo } of vencidos) {
+    try {
+      const cfg = ctx.estado?.configDoServidor?.(serverId) ?? ctx.config;
+      const roleId = cfg?.automod?.punicao?.silenceRoleId;
+      const server = await ctx.client?.servers?.fetch?.(serverId);
+      if (server && roleId) await removerCargoSilence(server, userId, roleId, ctx);
+      db.definirSilenciado(serverId, userId, false, motivo);
+      db.silenciarAte(serverId, userId, 0, motivo);
+      db.gravarPunicao(serverId, userId, {
+        avisos: db.lerPunicao(serverId, userId)?.avisos ?? 0,
+        silenciado: 0, motivo, silencioAte: 0,
+      });
+      soltos++;
+      console.log(`[PUNIÇÃO] 🔊 Silêncio expirado — ${userId} liberado em ${serverId}`);
+      await log.registrar({ ...ctx, serverId }, "punicoes", {
+        titulo: "🔊 Silêncio expirado",
+        descricao: `<@${userId}> voltou a falar — o prazo da punição terminou.\n**Motivo original:** ${motivo ?? "—"}`,
+      });
+    } catch (e) {
+      console.error(`[PUNIÇÃO][vigia] ${userId}:`, e.message);
+    }
+  }
+  return soltos;
+}
+
+export function escadaDePunicao(pol = {}, { estrito = false } = {}) {
+  const bruto = String(pol.escada || ESCADA_PADRAO).split(",").map((x) => x.trim()).filter(Boolean);
+  const degraus = bruto.map(interpretarDegrau).filter(Boolean);
+  // No modo estrito (usado ao CONFIGURAR), texto que não vira degrau nenhum é
+  // erro do usuário e precisa ser recusado. Em uso normal, cai no padrão —
+  // uma config estranha não pode desligar a punição sem ninguém perceber.
+  if (estrito && degraus.length !== bruto.length) return [];
+  // Sem um ban no fim, um usuário insistente ficaria em loop de mute para
+  // sempre. O último degrau é sempre terminal.
+  if (!degraus.length) return [{ tipo: "aviso" }, { tipo: "ban" }];
+  if (degraus[degraus.length - 1].tipo !== "ban") degraus.push({ tipo: "ban" });
+  return degraus;
+}
+
+function interpretarDegrau(txt) {
+  const t = String(txt).toLowerCase();
+  if (/^(aviso|warn|warning)$/.test(t)) return { tipo: "aviso" };
+  if (/^(ban|banir)$/.test(t)) return { tipo: "ban" };
+  const m = t.match(/^(\d+)\s*(s|seg|m|min|h|hora|d|dia)/);
+  if (!m) return null;
+  const n = Number(m[1]);
+  const unidade = m[2][0];
+  const ms = unidade === "s" ? n * 1000
+    : unidade === "m" ? n * 60_000
+    : unidade === "h" ? n * 3_600_000
+    : n * 86_400_000;
+  const rotulo = unidade === "s" ? `${n}s` : unidade === "m" ? `${n} min` : unidade === "h" ? `${n}h` : `${n}d`;
+  return { tipo: "mute", ms, rotulo };
+}
+
+export function rotuloDegrau(degrau, lang = "pt") {
+  if (!degrau) return lang === "en" ? "nothing further" : "nada além disso";
+  if (degrau.tipo === "aviso") return lang === "en" ? "warning" : "aviso";
+  if (degrau.tipo === "ban") return lang === "en" ? "ban" : "ban";
+  return lang === "en" ? `${degrau.rotulo} of silence` : `silêncio de ${degrau.rotulo}`;
+}
+
 // ──────────────────────────────────────────────────────────
 //  Motor principal — executado em TODAS as mensagens.
 //  Retorna true se a mensagem foi bloqueada.
@@ -359,10 +565,36 @@ export async function runAutomod(message, ctx) {
   if (am.antiScam?.enabled) {
     const rate = taxaPorSegundo(estado, userId);
     const r = analisarConteudo(content, { rate });
-    const limiar = ({ baixa: 7, media: 6, alta: 5 })[am.antiScam.sensitivity] ?? 6;
-    dbg(ctx, `  [conteúdo] ON → nota ${r.nota.toFixed(1)}/10 (limiar ${limiar})${r.grave ? " GRAVE" : ""} sinais: [${r.sinais.join(", ") || "nenhum"}]`);
+    const base = ({ baixa: 7, media: 6, alta: 5 })[am.antiScam.sensitivity] ?? 6;
+
+    // ── Rigor por antiguidade ──
+    // Só o sentinela usa isto: ele julga, não mede. Conta nova mandando link
+    // de venda é o padrão do golpe; a mesma frase de quem está há semanas no
+    // servidor quase sempre é brincadeira que o detector não entende.
+    const { limiar, faixa, nivel } = confianca.limiarPara(
+      ctx.serverId ?? server?.id, userId, base,
+      { ativo: am.antiScam.porAntiguidade !== false },
+    );
+    dbg(ctx, `  [sentinela] ON → nota ${r.nota.toFixed(1)}/10 (limiar ${limiar}`
+      + `${faixa ? `, ${faixa.rotulo} nv${nivel}` : ""})${r.grave ? " GRAVE" : ""}`
+      + ` sinais: [${r.sinais.join(", ") || "nenhum"}]`);
+
+    // ── Alerta à administração ──
+    // Um sinal isolado não vira punição nem alarme; um PADRÃO vira. Isto roda
+    // mesmo quando a nota não chegou ao limiar: é justamente o caso em que a
+    // moderação humana precisa olhar antes de o bot decidir sozinho.
+    if (r.nota >= Math.max(3, limiar - 2) && am.antiScam.alertarAdmin !== false) {
+      const sinal = confianca.registrarSinal(ctx.serverId ?? server?.id, userId,
+        { nota: r.nota, sinais: r.sinais });
+      if (sinal.alertar) {
+        await alertarAdministracao(ctx, {
+          server, canal, userId, sinal, faixa, nivel, nota: r.nota,
+        });
+      }
+    }
+
     if (r.nota >= limiar) {
-      dbg(ctx, `  ✗ CONTEÚDO PROIBIDO (nota ${r.nota.toFixed(1)})`);
+      dbg(ctx, `  ✗ CONTEÚDO PROIBIDO (nota ${r.nota.toFixed(1)} ≥ ${limiar})`);
       await aplicarPunicao(ctx, { server, channel: canal, message, userId,
         pol: am.antiScam.punicao, motivo: "conteúdo proibido detectado", nota: r.nota, grave: r.grave });
       return true;

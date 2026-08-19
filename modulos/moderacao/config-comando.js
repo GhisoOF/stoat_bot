@@ -12,6 +12,7 @@ import { servidorPermitido as temIA } from "../ai/chat.js";
 import * as db from "../core/db.js";
 import { EVENTOS } from "../core/log.js";
 import { MODOS as MODOS_BG, MODOS_EN as MODOS_BG_EN } from "./ban-global.js";
+import { escadaDePunicao, rotuloDegrau } from "./automod-engine.js";
 import { tr, lingua } from "../core/i18n.js";
 import * as MAG from "../game/magias.js";
 import * as PERFIS_MOEDA from "../game/moedas-perfis.js";
@@ -84,13 +85,21 @@ export async function cmdConfig(message, args, ctx) {
   // ── Punição ──
   const punicao = (en ? [
     `**Mode:** \`${pol.modo}\` — ${L_MODOS[pol.modo] ?? "?"}`,
-    pol.modo === "acumular" ? `**Warnings until ban:** ${pol.warnsParaBan}` : null,
+    pol.modo === "acumular"
+      ? `**Ladder:** ${escadaDePunicao(pol).map((d) => rotuloDegrau(d, "en")).join(" → ")}`
+      : null,
     `**Silence role:** ${pol.silenceRoleId ? `\`${pol.silenceRoleId}\`` : "_(not set)_"}`,
+    `**Sentinel — stricter with newcomers:** ${am.antiScam.porAntiguidade !== false ? "🟢 on" : "🔴 off"}`,
+    `**Sentinel — staff alerts:** ${am.antiScam.alertarAdmin !== false ? "🟢 on" : "🔴 off"}`,
     `**Alert channel:** ${am.antiScam.alertChannelId ? `<#${am.antiScam.alertChannelId}>` : "_(the message's own channel)_"}`,
   ] : [
     `**Modo:** \`${pol.modo}\` — ${L_MODOS[pol.modo] ?? "?"}`,
-    pol.modo === "acumular" ? `**Avisos até o ban:** ${pol.warnsParaBan}` : null,
+    pol.modo === "acumular"
+      ? `**Escada:** ${escadaDePunicao(pol).map((d) => rotuloDegrau(d, "pt")).join(" → ")}`
+      : null,
     `**Cargo de silêncio:** ${pol.silenceRoleId ? `\`${pol.silenceRoleId}\`` : "_(não definido)_"}`,
+    `**Sentinela — mais rígido com novatos:** ${am.antiScam.porAntiguidade !== false ? "🟢 ligado" : "🔴 desligado"}`,
+    `**Sentinela — alerta à staff:** ${am.antiScam.alertarAdmin !== false ? "🟢 ligado" : "🔴 desligado"}`,
     `**Canal de avisos:** ${am.antiScam.alertChannelId ? `<#${am.antiScam.alertChannelId}>` : "_(canal da própria mensagem)_"}`,
   ]).filter(Boolean);
 

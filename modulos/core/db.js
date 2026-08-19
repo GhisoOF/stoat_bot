@@ -34,11 +34,22 @@ export function abrirBanco(caminho) {
       userId    TEXT NOT NULL,
       avisos    INTEGER NOT NULL DEFAULT 0,
       silenciado INTEGER NOT NULL DEFAULT 0,
+      silencioAte INTEGER NOT NULL DEFAULT 0,   -- 0 = sem prazo (permanente)
       motivo    TEXT,
       atualizadoEm INTEGER,
       PRIMARY KEY (serverId, userId)
     )
   `);
+
+  // Migração: `silencioAte` chegou depois da escada de punição progressiva.
+  // Bases criadas antes não têm a coluna, e sem ela todo mute vira permanente.
+  try {
+    const cols = db.prepare("PRAGMA table_info(punicoes)").all().map((c) => c.name);
+    if (!cols.includes("silencioAte")) {
+      db.exec("ALTER TABLE punicoes ADD COLUMN silencioAte INTEGER NOT NULL DEFAULT 0");
+      console.info("[DB] punicoes: coluna silencioAte adicionada");
+    }
+  } catch (e) { console.error("[DB] migração punicoes:", e.message); }
 
   // (Fase 3) Histórico global de banimentos
   db.exec(`
@@ -411,21 +422,28 @@ export function listarServidoresConfig() {
 
 export function lerPunicao(serverId, userId) {
   return db.prepare(
-    "SELECT avisos, silenciado, motivo FROM punicoes WHERE serverId = ? AND userId = ?"
+    "SELECT avisos, silenciado, silencioAte, motivo FROM punicoes WHERE serverId = ? AND userId = ?"
   ).get(serverId, userId) ?? null;
 }
 
 // Grava (cria ou atualiza) o estado de punição do usuário
-export function gravarPunicao(serverId, userId, { avisos = 0, silenciado = 0, motivo = null }) {
+export function gravarPunicao(serverId, userId, { avisos = 0, silenciado = 0, motivo = null, silencioAte = null }) {
+  // `silencioAte` null preserva o valor que já estava lá: quem chama para
+  // somar um aviso não deve, sem querer, apagar o prazo de um mute em curso.
+  const anterior = silencioAte === null
+    ? (db.prepare("SELECT silencioAte FROM punicoes WHERE serverId = ? AND userId = ?")
+        .get(serverId, userId)?.silencioAte ?? 0)
+    : silencioAte;
   db.prepare(`
-    INSERT INTO punicoes (serverId, userId, avisos, silenciado, motivo, atualizadoEm)
-    VALUES (?, ?, ?, ?, ?, ?)
+    INSERT INTO punicoes (serverId, userId, avisos, silenciado, silencioAte, motivo, atualizadoEm)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(serverId, userId) DO UPDATE SET
       avisos = excluded.avisos,
       silenciado = excluded.silenciado,
+      silencioAte = excluded.silencioAte,
       motivo = excluded.motivo,
       atualizadoEm = excluded.atualizadoEm
-  `).run(serverId, userId, avisos, silenciado ? 1 : 0, motivo, Date.now());
+  `).run(serverId, userId, avisos, silenciado ? 1 : 0, anterior, motivo, Date.now());
 }
 
 // Soma 1 aviso e devolve o total atualizado
@@ -456,6 +474,33 @@ export function definirSilenciado(serverId, userId, silenciado, motivo = null) {
 
 export function estaSilenciado(serverId, userId) {
   return (lerPunicao(serverId, userId)?.silenciado ?? 0) === 1;
+}
+
+// ── Silêncio com PRAZO ────────────────────────────────────
+// A escada de punição precisa de mute temporário (5 min, 1 h). Guardar o
+// vencimento no banco — e não num timer em memória — é o que faz o prazo
+// sobreviver a reinício do bot: um mute de 1 hora não pode virar permanente
+// só porque o processo caiu no meio.
+export function silenciarAte(serverId, userId, ate, motivo = null) {
+  const atual = lerPunicao(serverId, userId);
+  gravarPunicao(serverId, userId, {
+    avisos: atual?.avisos ?? 0,
+    // Prazo 0 significa "sem prazo": aí o silêncio é permanente e a linha
+    // não deve ficar marcada como silenciada por engano.
+    silenciado: ate > 0 ? 1 : (atual?.silenciado ?? 0),
+    motivo: motivo ?? atual?.motivo ?? null,
+    silencioAte: ate ?? 0,
+  });
+}
+
+export function silencioExpiraEm(serverId, userId) {
+  return lerPunicao(serverId, userId)?.silencioAte ?? 0;
+}
+
+// Quem já cumpriu a pena — chamado periodicamente para devolver a voz.
+export function silenciosVencidos(agora = Date.now()) {
+  return db.prepare(`SELECT serverId, userId, motivo FROM punicoes
+    WHERE silenciado = 1 AND silencioAte > 0 AND silencioAte <= ?`).all(agora);
 }
 
 // ── Lista GLOBAL de banimentos (Fase 3) ────────────────────

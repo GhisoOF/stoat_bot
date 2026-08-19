@@ -22,8 +22,18 @@ export const padraoServidor = {
     antiLink:        { enabled: false, punicao: null },
     antiCaracteres:  { enabled: true, limiteZalgo: 0.6, punicao: null },
     antiRepeticao:   { enabled: false, maxRepeticao: 15, ignorar: "k", punicao: null },
-    antiScam:        { enabled: false, sensitivity: "media", alertChannelId: null, punicao: null },
-    punicao:         { modo: "avisar", warnsParaBan: 3, silenceRoleId: null },
+    // O "sentinela" (nome antigo: antiScam) é o único módulo que JULGA em vez
+    // de medir — por isso é o único com rigor variável por antiguidade.
+    antiScam: {
+      enabled: false, sensitivity: "media", alertChannelId: null, punicao: null,
+      porAntiguidade: true,   // limiar acompanha o nível do membro
+      alertarAdmin: true,     // marca a staff diante de um padrão suspeito
+    },
+    // `escada`: os degraus do modo `acumular`, em ordem. Ver automod-engine.
+    punicao: {
+      modo: "avisar", warnsParaBan: 3, silenceRoleId: null,
+      escada: "aviso,5m,1h,ban",
+    },
   },
   // ── Moderação por IA na conversa (a Judy avalia por critérios) ──
   moderacaoIA: {

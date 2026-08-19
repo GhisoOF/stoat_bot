@@ -1,6 +1,0 @@
-# Config do serviço /etc/init.d/judy-ia
-# Vai em /etc/conf.d/judy-ia
-
-IA_USER="ghiso"
-IA_DIR="/home/ghiso/Downloads/github/ia-servico"
-IA_NODE="/usr/bin/node"

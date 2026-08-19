@@ -186,6 +186,27 @@ ok(ult().includes("{usuario}") || ult().includes("Marcadores"), "PT: &help boasv
 await say("&config");
 ok(ult().includes("Boas-vindas") || ult().includes("Entrada e saída"), "&config PT mostra o novo estado");
 
+// ══ imagem de capa ══
+console.log("\n── imagem ──");
+{
+  await say("&idioma pt");
+  await say(`&adeus canal <#${CANAL_PORTARIA}>`);
+  await say("&adeus imagem https://exemplo.com/capa.png");
+  ok(ult().includes("Imagem definida"), "&adeus imagem aceita URL direta");
+  enviadosPortaria.length = 0;
+  await say("&adeus testar");
+  ok(enviadosPortaria[0]?.embeds?.[0]?.media === "https://exemplo.com/capa.png",
+    "★ a imagem vai no embed (campo media)");
+
+  // link de busca: aceita, mas avisa que costuma falhar
+  await say("&adeus imagem https://imgs.search.brave.com/abc/def");
+  ok(ult().includes("⚠️") && ult().includes("busca"), "★ link de resultado de busca → alerta");
+  await say("&adeus imagem limpar");
+  enviadosPortaria.length = 0;
+  await say("&adeus testar");
+  ok(!enviadosPortaria[0]?.embeds?.[0]?.media, "limpar remove a capa do envio");
+}
+
 // ══ contagem de membros em servidor SEM memberCount ══
 // (o caso real: o Stoat quase nunca traz esse campo, e {membros} saía "?")
 console.log("\n── contagem de membros ──");

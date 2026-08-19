@@ -140,8 +140,9 @@ let cfgGlobal = store.getGlobal();  // atualizado após inicializar()
 //  HELPERS COMPARTILHADOS
 // ══════════════════════════════════════════════════════════
 
-// Envia uma mensagem SEMPRE como embed (com fallback para texto puro)
-async function sendEmbed(channel, { title, description, colour = COR.info }) {
+// Envia uma mensagem SEMPRE como embed (com fallback para texto puro).
+// `media` é a imagem de capa (mesmo campo que o &embed usa) — opcional.
+async function sendEmbed(channel, { title, description, colour = COR.info, media = null }) {
   if (!channel || typeof channel.sendMessage !== "function") {
     console.error("[EMBED] Canal indisponível — mensagem não enviada:", title ?? description);
     return;
@@ -151,15 +152,29 @@ async function sendEmbed(channel, { title, description, colour = COR.info }) {
   // limite conta o embed inteiro (título incluso), não só a descrição.
   let desc = description ?? "";
   if (desc.length > 1500) desc = desc.slice(0, 1495) + "…";
+  const base = { title, description: desc, colour };
   try {
-    await channel.sendMessage({ embeds: [{ title, description: desc, colour }] });
+    await channel.sendMessage({ embeds: [media ? { ...base, media } : base] });
   } catch (err) {
     console.error("[EMBED] Falha ao enviar embed:", erroStr(err));
+    // A imagem é a parte mais frágil do envio: URL que o servidor não consegue
+    // baixar, host que bloqueia, link que não é imagem de verdade. Antes de
+    // desistir do embed inteiro, tentamos de novo SEM ela — a mensagem da
+    // pessoa chega, só sem capa. Melhor perder a imagem que perder o aviso.
+    if (media) {
+      try {
+        await channel.sendMessage({ embeds: [base] });
+        console.warn("[EMBED] Imagem recusada, enviei sem capa:", String(media).slice(0, 120));
+        return;
+      } catch (err2) {
+        console.error("[EMBED] Sem imagem também falhou:", erroStr(err2));
+      }
+    }
     // fallback: texto puro, ainda mais curto
     try {
       await channel.sendMessage([title, desc].filter(Boolean).join("\n").slice(0, 1500));
-    } catch (err2) {
-      console.error("[EMBED] Fallback de texto também falhou:", erroStr(err2));
+    } catch (err3) {
+      console.error("[EMBED] Fallback de texto também falhou:", erroStr(err3));
     }
   }
 }

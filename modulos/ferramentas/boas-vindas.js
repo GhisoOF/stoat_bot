@@ -111,6 +111,7 @@ async function disparar(ctx, chave, { userId, nome, server, mencionar }) {
       title: renderizar(c.titulo, dados),
       description: renderizar(c.texto, dados),
       colour: c.cor,
+      media: c.imagem || null,   // capa configurada em `imagem`
     });
   } catch (err) {
     console.error(`[${chave === "boasVindas" ? "BOASVINDAS" : "ADEUS"}]`, err?.message);
@@ -335,9 +336,46 @@ function criarComando(tipoId) {
       }
       c.imagem = resto;
       salvarConfig?.();
-      return sendEmbed(message.channel, tr(ctx,
-        { title: "✅ Imagem definida", description: resto, colour: COR.sucesso },
-        { title: "✅ Image set",       description: resto, colour: COR.sucesso }));
+
+      // Links de BUSCA/proxy (Brave, Google, Bing…) costumam apontar para uma
+      // miniatura temporária, não para o arquivo em si: o Stoat tenta baixar,
+      // não consegue, e o embed sai sem capa. Vale avisar em vez de deixar a
+      // pessoa descobrir sozinha quando alguém entrar.
+      const suspeito = /(?:search\.brave\.com|encrypted-tbn|gstatic\.com|lookaside|bing\.net\/th|duckduckgo\.com\/i\/)/i.test(resto);
+      const semExtensao = !/\.(?:png|jpe?g|gif|webp|avif)(?:$|[?#])/i.test(resto);
+      const alerta = suspeito || semExtensao;
+
+      return sendEmbed(message.channel, tr(ctx, {
+        title: "✅ Imagem definida",
+        description: [
+          resto,
+          "",
+          `Confira como ficou: \`${PREFIXO}${CMD} testar\``,
+          ...(alerta ? [
+            "",
+            suspeito
+              ? "⚠️ Este parece um link de **resultado de busca** (Brave/Google/Bing), que aponta para uma miniatura temporária em vez do arquivo. Costuma falhar."
+              : "⚠️ O link não termina em `.png`/`.jpg`/`.gif`/`.webp`, então pode não ser a imagem em si.",
+            "Se o teste sair sem capa: abra a imagem, use **Copiar endereço da imagem** e cole esse link — ou envie o arquivo aqui no Stoat e copie o link do anexo.",
+          ] : []),
+        ].join("\n"),
+        colour: alerta ? COR.aviso : COR.sucesso,
+      }, {
+        title: "✅ Image set",
+        description: [
+          resto,
+          "",
+          `Check how it looks: \`${PREFIXO}${CMD} test\``,
+          ...(alerta ? [
+            "",
+            suspeito
+              ? "⚠️ This looks like a **search result** link (Brave/Google/Bing), which points to a temporary thumbnail rather than the file itself. It usually fails."
+              : "⚠️ The link doesn't end in `.png`/`.jpg`/`.gif`/`.webp`, so it may not be the image itself.",
+            "If the test comes out with no cover: open the image, use **Copy image address** and paste that link — or upload the file here on Stoat and copy the attachment link.",
+          ] : []),
+        ].join("\n"),
+        colour: alerta ? COR.aviso : COR.sucesso,
+      }));
     }
 
     // ── padrao ──
@@ -386,6 +424,7 @@ function criarComando(tipoId) {
         title: renderizar(c.titulo, dados),
         description: renderizar(c.texto, dados),
         colour: c.cor,
+        media: c.imagem || null,
       });
       return sendEmbed(message.channel, tr(ctx,
         { title: "✅ Teste enviado",

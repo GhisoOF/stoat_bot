@@ -37,24 +37,56 @@ import { dirname, join } from "node:path";
 // (uso exato, permissão necessária, subcomandos e exemplo) em vez de dar
 // respostas vagas baseadas só no README.
 let _refCache;
-function referenciaComandos() {
+// Verbete por comando, montado uma vez.
+function verbetes() {
   if (_refCache !== undefined) return _refCache;
   try {
     const P = process.env.PREFIXO || "&";
     const det = construirDetalhes(P);
-    const partes = [];
-    for (const [nome, d] of Object.entries(det)) {
-      partes.push([
+    _refCache = Object.entries(det).map(([nome, d]) => ({
+      nome,
+      curto: `${P}${nome} — ${(d.desc ?? "").replace(/\n+/g, " ").slice(0, 90)}`,
+      completo: [
         `### ${P}${nome}`,
         d.uso ? `uso: ${d.uso}` : null,
         d.perm ? `permissão: ${d.perm}` : null,
         d.desc ? d.desc.replace(/\n+/g, " ") : null,
         d.ex ? `exemplo: ${d.ex}` : null,
-      ].filter(Boolean).join("\n"));
-    }
-    _refCache = partes.join("\n\n");
+      ].filter(Boolean).join("\n"),
+    }));
   } catch { _refCache = null; }
   return _refCache;
+}
+
+// Referência SOB MEDIDA para a pergunta.
+//
+// Mandar os 36 verbetes completos custava ~15 mil caracteres — e a pessoa
+// perguntou de UM comando. O que vai é: os verbetes que a pergunta menciona,
+// mais um índice de uma linha com todos os outros, para a Judy saber que
+// existem e poder dizer "veja `&xp`" sem ter o texto inteiro na frente.
+function referenciaComandos(pergunta = "") {
+  const lista = verbetes();
+  if (!lista) return null;
+  const P = process.env.PREFIXO || "&";
+  const t = String(pergunta).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+  const citados = lista.filter((v) => {
+    const n = v.nome.toLowerCase();
+    return t.includes(P + n) || new RegExp(`\\b${n}\\b`).test(t);
+  });
+
+  // Nenhum comando citado por nome: a pergunta é genérica ("como configuro o
+  // bot?"). Aí o índice basta — e ele custa 10% do texto completo.
+  if (!citados.length) {
+    return "COMANDOS DISPONÍVEIS (peça o detalhe de um se precisar):\n"
+      + lista.map((v) => v.curto).join("\n");
+  }
+
+  const outros = lista.filter((v) => !citados.includes(v));
+  return citados.map((v) => v.completo).join("\n\n")
+    + (outros.length
+      ? "\n\nOUTROS COMANDOS (só os nomes):\n" + outros.map((v) => `${P}${v.nome}`).join(" · ")
+      : "");
 }
 
 // Contexto do projeto: lê o README uma vez (cache) para a IA saber configurar
@@ -602,11 +634,24 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
   } catch {}
 
   // CACHE DO CANAL: o fio recente da conversa (quem falou, a quem respondeu).
+  // Calculado aqui em cima porque duas coisas dependem dele: o tamanho do fio
+  // da conversa e a inclusão (ou não) da referência de comandos.
+  const sobreOBot = perguntaSobreOBot(pergunta);
+
   // Deixa a Judy perceber o contexto ao vivo e notar quando o assunto mudou —
   // ela pode estar respondendo algo, mas a conversa já seguiu para outro tópico.
   let canalTxt = "";
   try {
-    const fio = cacheCanal.contexto(canalId, { limite: 14, excluirUltima: false });
+    // 14 mensagens num canal movimentado viram milhares de caracteres, e todo
+    // caractere aqui é tempo de processamento antes do primeiro token sair.
+    // Num papo casual, meia dúzia de mensagens já dá o contexto; o limite
+    // maior fica para quando a pergunta é técnica e o histórico importa.
+    const limiteFio = Number(process.env.CHAT_FIO_MSGS || (sobreOBot ? 14 : 6));
+    let fio = cacheCanal.contexto(canalId, { limite: limiteFio, excluirUltima: false });
+    // Teto rígido em caracteres: uma única mensagem gigante colada no canal
+    // não pode sozinha dobrar o prompt.
+    const TETO_FIO = Number(process.env.CHAT_FIO_CHARS || 2500);
+    if (fio && fio.length > TETO_FIO) fio = "…\n" + fio.slice(-TETO_FIO);
     if (fio) canalTxt = `\n\n<conversa_recente_do_canal>\n${fio}\n</conversa_recente_do_canal>\nAtenção: se a mensagem que você vai responder já não é mais o foco da conversa (o assunto mudou), reconheça isso com naturalidade em vez de responder fora de contexto.`;
   } catch {}
 
@@ -650,9 +695,8 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
   // Mandar os dois em TODA mensagem custava ~7 mil tokens de prompt por
   // "bom dia" — e o tempo de processar prompt é a maior fatia da resposta.
   // Quem pergunta sobre recursão não precisa da lista de comandos do bot.
-  const sobreOBot = perguntaSobreOBot(pergunta);
   const readme = sobreOBot ? contextoProjeto() : null;
-  const refCmds = sobreOBot ? referenciaComandos() : null;
+  const refCmds = sobreOBot ? referenciaComandos(pergunta) : null;
   if (!sobreOBot) dlog("contexto do projeto: omitido (pergunta não é sobre o bot)");
   const projetoTxt = (readme || refCmds)
     ? ` Você é a assistente de configuração deste bot (você mesma, a Judy). Quando perguntarem como configurar algo, RESPONDA COM PRECISÃO: diga o comando exato, os subcomandos, a permissão necessária e um exemplo concreto — nunca uma orientação vaga do tipo "use o comando X para configurar". Se faltar informação na referência abaixo, diga o que sabe e admita o que não sabe.${
@@ -819,6 +863,16 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
   //
   // Agora só o que precisa de ferramenta passa pelo serviço. Papo comum vai
   // direto ao Ollama, que é o caminho mais curto.
+  // A partir daqui a GPU é da conversa. A extração de memória, que dispara
+  // sozinha a cada mensagem, cede a vez até isto terminar.
+  memoria.marcarRespondendo();
+  try {
+    return await gerar();
+  } finally {
+    memoria.marcarLivre();
+  }
+
+  async function gerar() {
   const precisaDoServico = tipo === "ferramenta";
   if (IA_SERVICO_URL && precisaDoServico) {
     try {
@@ -832,6 +886,7 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
     dlog(`sem ferramenta (tipo=${tipo}) → Ollama direto, sem passar pelo judy-ia`);
   }
   return (await ollamaChat(messages, { maxTokens: MAX_TOKENS, modelo: modeloEscolhido })).trim();
+  }
 }
 
 // Remove blocos de "pensamento" que alguns modelos (Qwen/Gemma) emitem.

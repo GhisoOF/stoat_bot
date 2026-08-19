@@ -31,6 +31,33 @@ const chave = (serverId, userId) => `${serverId}:${userId}`;
 let chamarLLM = null;
 export function configurar({ chamarModelo }) { chamarLLM = chamarModelo; }
 
+// ── Prioridade: a conversa vem primeiro ─────────────────────
+//
+// A GPU atende uma coisa de cada vez. Quando a extração de memória disparava
+// no meio de uma resposta, as duas competiam e a resposta — que tem alguém
+// esperando na tela — passava de 20s para minutos, até estourar o timeout.
+//
+// A memória não tem pressa: um fato extraído agora ou daqui a um minuto dá no
+// mesmo. Então ela cede a vez, sempre.
+let ocupadoRespondendo = 0;
+const adiados = new Set();
+
+export function marcarRespondendo() { ocupadoRespondendo++; }
+export function marcarLivre() {
+  ocupadoRespondendo = Math.max(0, ocupadoRespondendo - 1);
+  if (ocupadoRespondendo === 0 && adiados.size) {
+    // Volta ao trabalho pendente, mas com folga: emendar na resposta que
+    // acabou de sair pegaria a GPU ainda quente com a próxima mensagem.
+    const pendentes = [...adiados];
+    adiados.clear();
+    log(`retomando ${pendentes.length} extração(ões) adiada(s)`);
+    setTimeout(() => {
+      for (const k of pendentes) processar(k).catch((e) => log("erro:", e.message));
+    }, 3000);
+  }
+}
+export function estaOcupado() { return ocupadoRespondendo > 0; }
+
 // Chamado pelo bot a cada mensagem "normal" (não-comando) do chat.
 export function observar({ serverId, userId, nome, texto, ehBot }) {
   if (!LIGADO || ehBot || !chamarLLM) return;
@@ -47,7 +74,16 @@ export function observar({ serverId, userId, nome, texto, ehBot }) {
 
   // reinicia o debounce: só extrai quando a pessoa "parar" de escrever
   if (buf.timer) clearTimeout(buf.timer);
-  buf.timer = setTimeout(() => { processar(k).catch((e) => log("erro:", e.message)); }, DEBOUNCE_MS);
+  buf.timer = setTimeout(() => {
+    // Se há resposta sendo gerada, a extração espera a vez em vez de brigar
+    // pela GPU. Ela é retomada assim que a conversa termina.
+    if (ocupadoRespondendo > 0) {
+      adiados.add(k);
+      log(`extração adiada (conversa em andamento): ${k}`);
+      return;
+    }
+    processar(k).catch((e) => log("erro:", e.message));
+  }, DEBOUNCE_MS);
 }
 
 const PROMPT_EXTRACAO = `Você extrai fatos duráveis de mensagens de chat para a memória de um bot.

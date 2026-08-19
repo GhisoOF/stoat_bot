@@ -93,7 +93,7 @@ function AREAS(P, lang = "pt") {
       corpo: [
         "Create a channel (e.g. **#log**) visible only to the team. Then, **inside it**:",
         "",
-        `\`${P}log canal aqui\` — sets this channel as the log channel`,
+        `\`${P}log channel here\` — sets this channel as the log channel`,
         `\`${P}log\` — shows what's being logged`,
         `\`${P}log evento <punicoes|membros|mensagens|cargos|comandos> on|off\``,
         "",

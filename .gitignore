@@ -9,4 +9,3 @@ ia-servico/.env
 **/.env
 automod-config.json
 npm-debug.log*
-*.zip

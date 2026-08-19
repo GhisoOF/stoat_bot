@@ -16,6 +16,7 @@
 // ══════════════════════════════════════════════════════════
 
 import { tr, lingua } from "./i18n.js";
+import { resolverCanal } from "./ids.js";
 
 // Rótulos amigáveis de cada categoria
 export const EVENTOS = {
@@ -183,14 +184,19 @@ export async function cmdLog(message, args, ctx) {
     });
   }
 
-  // ── &log <canal> ── aceita menção, link, ID ou nome do canal
+  // ── &log <canal> ── aceita menção, link, ID ou nome do canal.
+  // Também aceita a forma explícita `&log canal <alvo>` / `&log channel <target>`
+  // (é a sintaxe que o &tutorial ensina); sem alvo, usa o canal atual.
+  let alvoBruto = args[0];
+  if (sub === "canal" || sub === "channel") alvoBruto = args[1] ?? "here";
+
   const srv = await ctx.getServer?.(message).catch(() => null);
-  const id = resolverCanal(args[0], { message, server: srv });
+  const id = resolverCanal(alvoBruto, { message, server: srv });
   if (!id) {
     return sendEmbed(message.channel, tr(ctx, {
       title: "❌ Canal inválido",
       description: [
-        `Não consegui identificar um canal em \`${args[0]}\`.`,
+        `Não consegui identificar um canal em \`${alvoBruto}\`.`,
         "",
         `Aceito: **menção** (\`#canal\`), **link** do canal, **ID** ou o **nome**.`,
         `Ou use \`${PREFIXO}log here\` para usar o canal atual.`,
@@ -200,7 +206,7 @@ export async function cmdLog(message, args, ctx) {
     }, {
       title: "❌ Invalid channel",
       description: [
-        `I couldn't identify a channel in \`${args[0]}\`.`,
+        `I couldn't identify a channel in \`${alvoBruto}\`.`,
         "",
         `I accept: a **mention** (\`#channel\`), the channel's **link**, its **ID** or its **name**.`,
         `Or use \`${PREFIXO}log here\` to use the current channel.`,

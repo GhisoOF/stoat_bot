@@ -165,7 +165,7 @@ const SUB = {
     channel: "canal", now: "agora", test: "testar", off: "off",
   },
   log: {
-    here: "here", off: "off",
+    here: "here", off: "off", channel: "canal",
     punishments: "punicoes", members: "membros", messages: "mensagens",
     roles: "cargos", commands: "comandos",
   },

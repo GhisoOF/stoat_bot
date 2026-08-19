@@ -618,8 +618,8 @@ liga/desliga separadamente.
 
 ```
 &log                     # status e canal atual
-&log here                # usa o canal atual
-&log <idDoCanal>         # define por ID (ULID de 26 caracteres)
+&log here                # usa o canal atual (aceita também: &log canal aqui)
+&log <canal>             # por menção, link, ID ou nome (&log canal <alvo> também vale)
 &log off                 # desativa
 &log <evento> <on|off>   # liga/desliga uma categoria
 ```

@@ -521,6 +521,11 @@ client.on("ready", async () => {
   ctxRss.client = client;
   ctxRss.configDoServidor = store.configDoServidor;
   rss.iniciarAgendador(ctxRss);
+
+  // Lista global: importa sozinha os bans já existentes em cada servidor
+  // (~1 min após o boot e a cada 6h). Servidores com `&banglobal auto off`
+  // ficam de fora — bans novos deles ainda entram, o histórico antigo não.
+  banGlobal.iniciarAutoImportacao(client, criarContexto);
 });
 
 client.on("messageCreate", async (message) => {
@@ -879,6 +884,17 @@ client.on("serverMemberLeave", async (member, extra) => {
     const nome = member?.user?.username ?? member?.nickname ?? null;
     await bemvindo.aoSair(userId, serverId, ctx, nome);
   } catch (err) { console.error("[EVENTO][LEAVE]", err?.message); }
+});
+
+// BOT ENTROU NUM SERVIDOR NOVO
+// A contribuição para a lista global é incondicional, então o histórico de
+// bans do servidor novo entra assim que o bot chega — sem esperar a rodada
+// de 6h. Se a SDK não emitir este evento, a rodada periódica cobre de todo
+// jeito; o listener só antecipa.
+client.on("serverCreate", async (server) => {
+  try {
+    await banGlobal.sincronizarServidor(server, criarContexto);
+  } catch (err) { console.error("[EVENTO][SERVER_CREATE]", err?.message); }
 });
 
 // CARGOS DADOS A UM USUÁRIO (compara a lista antes/depois)

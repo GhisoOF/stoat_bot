@@ -258,7 +258,9 @@ persona, que pede o mesmo tom em uma frase.
 - **Chat de logs configurável** (`&log`): punições, entradas/saídas, mensagens
   apagadas/editadas, cargos e uso de comandos — cada categoria liga/desliga.
 - **Lista global de banimentos** (`&banglobal`): compartilhada entre servidores,
-  com modos `off` / `avisar` / `banir`.
+  com modos `off` / `avisar` / `banir`. Contribuir é automático e permanente
+  (bans novos e antigos entram sozinhos); o modo decide só se o servidor **se
+  aproveita** da lista.
 - **Moderação manual**: `&kick`, `&ban` (por menção **ou** ID), `&limpar`.
 - **Panorama**: `&config` mostra todas as configurações de uma vez.
 - **Cor dos cargos com gradiente** (`&cor`): o cliente do Stoat só deixa escolher cor sólida; o bot fala direto com a API e aplica **gradientes** (montados por você ou de uma lista de prontos).
@@ -649,22 +651,38 @@ servidor decide o que fazer quando um usuário da lista entra:
 | `avisar` | alerta os mods (motivo + em quantos servidores) — não age |
 | `banir` | bane automaticamente |
 
-Todo ban (automod e `&ban` manual) alimenta a lista, guardando **servidor de
-origem** e **motivo**. Comandos:
+### Contribuir é automático e permanente
+
+Todo servidor onde o bot está **alimenta a lista, sempre** — não há comando
+para ligar, desligar ou importar à mão:
+
+- **Bans novos** (automod e `&ban` manual) entram no instante em que acontecem,
+  guardando **servidor de origem** e **motivo**.
+- **Bans antigos** do servidor são sincronizados sozinhos ~1 min após o bot
+  subir e a cada 6 h (`BANGLOBAL_IMPORT_MS`).
+- **Servidor novo**: o histórico entra assim que o bot é adicionado.
+
+A tabela de modos acima é a **única** escolha de cada servidor, e ela trata só
+do consumo: dá para **não usar** a lista (`off`), mas não dá para usá-la sem
+alimentá-la. Isso mantém a lista honesta — quem se protege com o trabalho dos
+outros contribui com o seu.
 
 ```
-&banglobal                      # status
-&banglobal <off|avisar|banir>
+&banglobal                      # status (inclui quantos registros vieram daqui)
+&banglobal <off|avisar|banir>   # define o modo
 &banglobal varrer          # confere quem JÁ está no servidor (os modos só agem em quem entra)
-&banglobal varrer ver     # simula, sem banir   # define o modo
+&banglobal varrer ver      # simula, sem banir
 &banglobal historico <@user|id> # em quais servidores foi banido e por quê
-&banglobal importar             # importa os bans JÁ EXISTENTES deste servidor
-&banglobal esquecer <@user|id>  # remove um usuário da lista
+&banglobal esquecer <@user|id>  # remove um registro que não se sustente
 ```
 
 > ⚠️ O modo `banir` age com base em bans de **outros** servidores. Comece com
-> `avisar`, popule a lista com `importar`, observe alguns dias e só então
-> mude para `banir` se confiar na origem.
+> `avisar`, observe alguns dias e só então mude para `banir` se confiar na origem.
+>
+> ⚠️ Como a contribuição não é desligável, **adicionar o bot a um servidor de
+> terceiros faz o critério de moderação de lá valer para os seus**. Pense nisso
+> antes de aceitar o convite; para um registro pontual que não se sustente,
+> use `&banglobal esquecer`.
 
 ---
 

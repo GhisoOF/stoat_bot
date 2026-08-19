@@ -8,11 +8,27 @@
 //    banir   — bane automaticamente
 //
 //  A lista é alimentada por TODOS os bans (automod + &ban
-//  manual), guardando servidor de origem e motivo. O histórico
-//  de bans já existente no servidor pode ser importado com
-//  `&banglobal importar` — deliberadamente MANUAL: importar o
-//  passado de um servidor afeta os demais, então é uma decisão
-//  consciente, nunca automática.
+//  manual), guardando servidor de origem e motivo.
+//
+//  ── Contribuição: sempre ligada, sem configuração ──
+//  Todo servidor onde o bot está CONTRIBUI para a lista, sempre:
+//  os bans que já existiam entram sozinhos (cerca de 1 min após o
+//  boot e depois a cada 6h, BANGLOBAL_IMPORT_MS) e os bans novos
+//  são registrados no momento em que acontecem. Não há comando
+//  para ligar, desligar nem forçar isso — é o alicerce da lista.
+//
+//  A ÚNICA escolha de cada servidor é o lado do consumo: se ele
+//  se aproveita da lista (`avisar`, `banir`) ou a ignora (`off`).
+//  Ou seja, dá para não usar a lista, mas não dá para usá-la sem
+//  alimentá-la — o que mantém a lista honesta: quem se protege
+//  com o trabalho dos outros também contribui com o seu.
+//
+//  Consequência a ter em mente: o histórico de bans de qualquer
+//  servidor onde o bot entrar passa a valer para os demais. Em
+//  servidores onde o bot é convidado, o critério de moderação de
+//  lá vira critério daqui — por isso o `&banglobal esquecer`
+//  existe, para tirar da lista um registro específico que não se
+//  sustente.
 // ══════════════════════════════════════════════════════════
 
 import * as db  from "../core/db.js";
@@ -33,6 +49,102 @@ export const MODOS_EN = {
 
 // Formata uma data legível a partir de um timestamp
 const data = (ms) => new Date(ms).toISOString().slice(0, 10);
+
+// ──────────────────────────────────────────────────────────
+//  Importação: lê os bans que já existem NO SERVIDOR e os
+//  registra na lista global. Usada tanto pelo `&banglobal
+//  importar` (manual) quanto pela sincronização automática.
+//
+//  Devolve { total, novos } ou lança — quem chama decide o que
+//  fazer com o erro (o comando avisa, o agendador só loga).
+// ──────────────────────────────────────────────────────────
+export async function importarBansDoServidor(server, serverId) {
+  const bans = await server.fetchBans();
+  let novos = 0;
+  for (const b of bans ?? []) {
+    const uid = b?.id?.user ?? b?.user?.id;
+    if (!uid) continue;
+    if (db.registrarBanGlobal(uid, serverId, b?.reason ?? "importado do servidor", "importado")) novos++;
+  }
+  return { total: bans?.length ?? 0, novos };
+}
+
+// ──────────────────────────────────────────────────────────
+//  Sincronização AUTOMÁTICA
+//
+//  Roda no boot e de tempos em tempos, em TODOS os servidores
+//  onde o bot está. Sem exceção e sem chave para desligar: a
+//  contribuição é a contrapartida de existir uma lista.
+// ──────────────────────────────────────────────────────────
+const INTERVALO_MS = Number(process.env.BANGLOBAL_IMPORT_MS || 6 * 60 * 60_000);   // 6h
+const ATRASO_BOOT_MS = Number(process.env.BANGLOBAL_IMPORT_BOOT_MS || 60_000);     // 1min após o boot
+const ESPACO_MS = Number(process.env.BANGLOBAL_ESPACO_MS || 3000);   // respiro entre servidores, para não estourar rate limit
+
+async function sincronizarTodos(client, criarContexto) {
+  const servidores = [...(client.servers?.values?.() ?? [])];
+  if (!servidores.length) return;
+
+  let somaNovos = 0, tocados = 0;
+  for (const server of servidores) {
+    const sid = server?.id ?? server?._id;
+    if (!sid) continue;
+    let ctx;
+    try { ctx = criarContexto(sid); } catch { continue; }
+    if (typeof server.fetchBans !== "function") continue;
+
+    try {
+      const { total, novos } = await importarBansDoServidor(server, sid);
+      tocados++;
+      if (novos > 0) {
+        somaNovos += novos;
+        console.info(`[BANGLOBAL] auto: ${novos} novo(s) de ${total} ban(s) em ${server.name ?? sid}`);
+        // Só registra no log do servidor quando há novidade — sincronização
+        // silenciosa a cada 6 horas viraria ruído no canal de logs.
+        await log.registrar(ctx, "punicoes", {
+          titulo: "🌐 Bans importados automaticamente",
+          descricao: `**${novos}** ban(s) deste servidor entraram na lista global.`,
+        });
+      }
+    } catch (err) {
+      console.error(`[BANGLOBAL] auto: falha em ${server?.name ?? sid}:`, err?.message);
+    }
+    await new Promise((r) => setTimeout(r, ESPACO_MS));
+  }
+  if (tocados) {
+    console.info(`[BANGLOBAL] auto: ${tocados} servidor(es) sincronizado(s), ${somaNovos} registro(s) novo(s).`);
+  }
+}
+
+// Sincroniza UM servidor. Usado quando o bot entra num servidor novo: sem
+// isto, o histórico de lá só entraria na lista na próxima rodada de 6h.
+export async function sincronizarServidor(server, criarContexto) {
+  const sid = server?.id ?? server?._id;
+  if (!sid || typeof server?.fetchBans !== "function") return;
+  try {
+    const ctx = criarContexto(sid);
+    const { total, novos } = await importarBansDoServidor(server, sid);
+    if (novos > 0) {
+      console.info(`[BANGLOBAL] servidor novo ${server.name ?? sid}: ${novos} de ${total} ban(s) importado(s).`);
+      await log.registrar(ctx, "punicoes", {
+        titulo: "🌐 Bans importados automaticamente",
+        descricao: `**${novos}** ban(s) deste servidor entraram na lista global.`,
+      });
+    }
+  } catch (err) {
+    console.error(`[BANGLOBAL] servidor novo ${sid}:`, err?.message);
+  }
+}
+
+export function iniciarAutoImportacao(client, criarContexto) {
+  const rodar = () => sincronizarTodos(client, criarContexto)
+    .catch((e) => console.error("[BANGLOBAL] auto:", e?.message));
+
+  // O boot já tem trabalho demais (blocklist, RSS, status): a primeira
+  // sincronização espera o bot assentar.
+  setTimeout(rodar, ATRASO_BOOT_MS).unref?.();
+  setInterval(rodar, INTERVALO_MS).unref?.();
+  console.info(`[BANGLOBAL] Contribuição automática ativa (sincroniza a cada ${Math.round(INTERVALO_MS / 3600000)}h; não é desligável).`);
+}
 
 // ──────────────────────────────────────────────────────────
 //  Registro: chamado sempre que um ban acontece
@@ -194,15 +306,18 @@ export async function cmdBanGlobal(message, args, ctx) {
         "**Available modes:**",
         ...Object.entries(L_MODOS).map(([k, v]) => `\`${k}\` — ${v}`),
         "",
-        `**Listed:** ${db.usuariosBanidosDistintos()} user(s), ${db.totalBansGlobais()} record(s).`,
+        `**Listed:** ${db.usuariosBanidosDistintos()} user(s), ${db.totalBansGlobais()} record(s) — ${db.bansGlobaisDoServidor(serverId)} from this server.`,
         "",
         "**Commands:**",
         `\`${PREFIXO}banglobal <off|avisar|banir>\` — sets the mode`,
         `\`${PREFIXO}banglobal historico <@user|id>\` — a user's history`,
         `\`${PREFIXO}banglobal varrer\` — **checks who is ALREADY in the server** and acts`,
         `\`${PREFIXO}banglobal varrer ver\` — only shows, without banning anyone`,
-        `\`${PREFIXO}banglobal importar\` — imports this server's existing bans`,
         `\`${PREFIXO}banglobal esquecer <@user|id>\` — removes a user from the list`,
+        "",
+        `**Contribution:** 🟢 always on — this server's bans (old and new) feed the list on their own. There's nothing to configure and no command to run.`,
+        "",
+        "_The mode above only decides whether this server **benefits** from the list. You can opt out of using it, but not out of feeding it._",
         "",
         "⚠️ _The `banir` mode acts on its own based on bans from **other** servers. Use it only if you trust the sources._",
       ].join("\n"),
@@ -216,15 +331,18 @@ export async function cmdBanGlobal(message, args, ctx) {
         "**Modos disponíveis:**",
         ...Object.entries(L_MODOS).map(([k, v]) => `\`${k}\` — ${v}`),
         "",
-        `**Na lista:** ${db.usuariosBanidosDistintos()} usuário(s), ${db.totalBansGlobais()} registro(s).`,
+        `**Na lista:** ${db.usuariosBanidosDistintos()} usuário(s), ${db.totalBansGlobais()} registro(s) — ${db.bansGlobaisDoServidor(serverId)} deste servidor.`,
         "",
         "**Comandos:**",
         `\`${PREFIXO}banglobal <off|avisar|banir>\` — define o modo`,
         `\`${PREFIXO}banglobal historico <@usuário|id>\` — histórico de um usuário`,
         `\`${PREFIXO}banglobal varrer\` — **confere quem JÁ está no servidor** e age`,
         `\`${PREFIXO}banglobal varrer ver\` — só mostra, sem banir ninguém`,
-        `\`${PREFIXO}banglobal importar\` — importa os bans já existentes deste servidor`,
         `\`${PREFIXO}banglobal esquecer <@usuário|id>\` — remove um usuário da lista`,
+        "",
+        `**Contribuição:** 🟢 sempre ligada — os bans deste servidor (antigos e novos) alimentam a lista sozinhos. Não há o que configurar nem comando a rodar.`,
+        "",
+        "_O modo acima decide só se este servidor **se aproveita** da lista. Dá para não usar a lista, mas não dá para usá-la sem alimentá-la._",
         "",
         "⚠️ _O modo `banir` age sozinho com base em bans de **outros** servidores. Use com confiança na origem._",
       ].join("\n"),
@@ -308,8 +426,6 @@ export async function cmdBanGlobal(message, args, ctx) {
     });
   }
 
-  // ── &banglobal importar ──
-  // Traz os bans JÁ EXISTENTES deste servidor para a lista global.
   // ── varrer: confere quem JÁ está no servidor ──
   if (["varrer", "varredura", "revisar", "scan"].includes(sub)) {
     const soVer = ["ver", "listar", "simular", "dry"].includes((args[1] ?? "").toLowerCase());
@@ -396,45 +512,52 @@ export async function cmdBanGlobal(message, args, ctx) {
       colour: falhas.length ? COR.aviso : COR.sucesso });
   }
 
-  if (sub === "importar") {
-    try {
-      const bans = await server.fetchBans();
-      let novos = 0;
-      for (const b of bans) {
-        const uid = b?.id?.user ?? b?.user?.id;
-        if (!uid) continue;
-        if (db.registrarBanGlobal(uid, serverId, b?.reason ?? "importado do servidor", "importado")) novos++;
-      }
-      await log.registrar(ctx, "punicoes", {
-        titulo: "🌐 Bans importados",
-        descricao: `<@${message.authorId}> importou **${novos}** ban(s) deste servidor para a lista global.`,
-      });
-      return sendEmbed(message.channel, tr(ctx, {
-        title: "🌐 Importação concluída",
-        description: [
-          `Encontrados **${bans.length}** ban(s) neste servidor.`,
-          `**${novos}** novo(s) registro(s) adicionado(s) à lista global.`,
-          "",
-          "_Os demais já constavam._",
-        ].join("\n"),
-        colour: COR.sucesso,
-      }, {
-        title: "🌐 Import finished",
-        description: [
-          `Found **${bans.length}** ban(s) on this server.`,
-          `**${novos}** new record(s) added to the global list.`,
-          "",
-          "_The rest were already listed._",
-        ].join("\n"),
-        colour: COR.sucesso,
-      }));
-    } catch (err) {
-      return sendEmbed(message.channel, tr(ctx,
-        { title: "❌ Falha ao importar",
-          description: `Não consegui ler os bans do servidor: ${err?.message}`, colour: COR.erro },
-        { title: "❌ Failed to import",
-          description: `I couldn't read the server's bans: ${err?.message}`, colour: COR.erro }));
-    }
+  // ── &banglobal auto / importar ──
+  //
+  // Os dois deixaram de ser configuração: a contribuição é incondicional e a
+  // importação roda sozinha. Em vez de responder "subcomando desconhecido" a
+  // quem tinha o hábito de rodá-los, explicamos o que mudou e mostramos o
+  // estado real da lista — o comando some, a informação não.
+  if (["auto", "automatico", "automático", "automatic", "autoimport",
+       "importar", "import", "sincronizar", "sync"].includes(sub)) {
+    const registros = db.bansGlobaisDoServidor?.(serverId) ?? null;
+    const linhaServidor = registros === null
+      ? null
+      : (lang === "en"
+        ? `**From this server:** ${registros} record(s) already in the list.`
+        : `**Deste servidor:** ${registros} registro(s) já na lista.`);
+
+    return sendEmbed(message.channel, tr(ctx, {
+      title: "🌐 Importação: agora é automática e permanente",
+      description: [
+        "Não existe mais o que ligar, desligar ou importar à mão.",
+        "",
+        "**Como funciona hoje**",
+        "• Os bans **novos** entram na lista no instante em que acontecem.",
+        "• Os bans **antigos** deste servidor são sincronizados sozinhos: logo após o bot subir e a cada 6 horas.",
+        ...(linhaServidor ? ["", linhaServidor] : []),
+        "",
+        `A única escolha deste servidor é se ele **se aproveita** da lista: \`${PREFIXO}banglobal <off|avisar|banir>\`.`,
+        "",
+        `_Um registro específico que não se sustente pode sair com \`${PREFIXO}banglobal esquecer <@usuário>\`._`,
+      ].join("\n"),
+      colour: COR.mod,
+    }, {
+      title: "🌐 Importing: now automatic and permanent",
+      description: [
+        "There's nothing left to enable, disable or import by hand.",
+        "",
+        "**How it works now**",
+        "• **New** bans join the list the moment they happen.",
+        "• This server's **old** bans sync on their own: shortly after the bot boots and every 6 hours.",
+        ...(linhaServidor ? ["", linhaServidor] : []),
+        "",
+        `This server's only choice is whether it **benefits** from the list: \`${PREFIXO}banglobal <off|avisar|banir>\`.`,
+        "",
+        `_A specific record that doesn't hold up can be dropped with \`${PREFIXO}banglobal esquecer <@user>\`._`,
+      ].join("\n"),
+      colour: COR.mod,
+    }));
   }
 
   // ── &banglobal esquecer <usuário> ──

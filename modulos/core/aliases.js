@@ -139,8 +139,13 @@ const SUB = {
   },
   banglobal: {
     sweep: "varrer", scan: "varrer", review: "revisar", view: "ver",
-    import: "importar", forget: "esquecer", history: "historico",
+    forget: "esquecer", history: "historico",
     warn: "avisar", ban: "banir", off: "off",
+    // `import`/`auto` deixaram de ser configuração (a contribuição é sempre
+    // ligada). Continuam mapeados para que quem os digite receba a explicação
+    // do que mudou, em vez de "subcomando desconhecido".
+    import: "importar", auto: "auto", automatic: "auto", autoimport: "auto",
+    contribution: "contribuicao",
   },
   punicao: {
     mode: "modo", warns: "warns", role: "cargo", silencerole: "silencerole",

@@ -576,6 +576,14 @@ export function usuariosBanidosDistintos() {
   return prep("SELECT COUNT(DISTINCT userId) AS n FROM bans_globais").get()?.n ?? 0;
 }
 
+// Quantos registros da lista global vieram DESTE servidor — usado pelo
+// `&banglobal` para mostrar a contribuição do servidor sem precisar de
+// nenhum comando de importação.
+export function bansGlobaisDoServidor(serverId) {
+  if (!serverId) return 0;
+  return prep("SELECT COUNT(*) AS n FROM bans_globais WHERE serverId = ?").get(serverId)?.n ?? 0;
+}
+
 // ── Reaction roles ─────────────────────────────────────────
 export function addReactionRole(serverId, messageId, emoji, roleId, channelId = null) {
   // herda o modo e o canal já definidos para esta mensagem

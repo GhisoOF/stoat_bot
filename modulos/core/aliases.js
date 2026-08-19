@@ -38,6 +38,7 @@ export const COMANDO_EN = {
   xp: "xp",
   game: "game",
   staff: "staff",
+  fuso: "timezone",
   boasvindas: "welcome",
   adeus: "goodbye",
 };
@@ -60,6 +61,10 @@ export const COMANDO_EXTRA = {
   guide: "tutorial",
   start: "tutorial",
   team: "staff",
+  timezone: "fuso",
+  timezones: "fuso",
+  tz: "fuso",
+  clock: "fuso",
   welcome: "boasvindas",
   greeting: "boasvindas",
   goodbye: "adeus",
@@ -192,6 +197,12 @@ const SUB = {
     colour: "cor", color: "cor", image: "imagem", test: "testar",
     default: "padrao", status: "status", clear: "limpar", here: "aqui",
     hidden: "oculto", hide: "oculto", visible: "visivel", show: "visivel",
+  },
+  fuso: {
+    add: "add", remove: "remove", list: "lista", clear: "limpar",
+    search: "buscar", find: "buscar", now: "ver", time: "ver", check: "ver",
+    label: "apelido", name: "apelido", alias: "apelido",
+    main: "principal", reference: "principal", format: "formato",
   },
   log: {
     here: "here", off: "off", channel: "canal",

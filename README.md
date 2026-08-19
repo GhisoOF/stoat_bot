@@ -275,6 +275,13 @@ persona, que pede o mesmo tom em uma frase.
 - **Notícias por RSS** (`&rss`): a cada hora o bot posta os itens novos dos feeds no canal configurado. Onde a IA está ativa, a Judy escreve também um **resumo geral no tom dela**.
 - **Sistema de níveis** (`&xp`): XP por mensagem, cargos por nível (posicionados abaixo do mute), leaderboard e parâmetros configuráveis.
 - **Autorole** (`&autorole`): dá um cargo automaticamente a quem entra no servidor.
+- **Fusos horários** (`&fuso`): relógio com várias cidades ao mesmo tempo, para
+  servidores com gente espalhada. A staff escolhe as cidades (`&fuso add São Paulo`,
+  `&fuso add Madrid/Europa`) e qualquer pessoa consulta com `&fuso`. A lista sai
+  ordenada do fuso mais atrasado ao mais adiantado, com a diferença em relação à
+  cidade de referência. Aceita acentos, o formato `Cidade/País` e apelidos
+  (`sp`, `nova york`, `toquio`). Também dá para consultar uma cidade avulsa sem
+  configurar nada: `&fuso ver Lisboa`.
 - **Equipe do servidor** (`&staff`): lista a staff agrupada por cargo, com quem tem cada um. Não é um cadastro à parte — lê os **mesmos cargos** do `&acesso cargo`, então promover pelo `&staff add` concede de verdade o acesso aos comandos de moderação, e remover tira os dois de uma vez. `&staff titulo <@cargo> <texto>` troca o nome exibido (ex.: cargo `Admin` aparecendo como `Fundadores`).
 - **Boas-vindas e despedida** (`&boasvindas`, `&adeus`): embeds configuráveis publicados quando alguém entra ou sai. Título, texto, cor e imagem próprios, com os marcadores `{usuario}` `{nome}` `{servidor}` `{membros}`. `&boasvindas testar` publica usando você de exemplo antes de valer para o servidor inteiro. A imagem tem **dois resultados** conforme a origem: **anexo do Stoat** vira a
   capa do embed (o campo de capa só aceita anexo do próprio Stoat); **link de
@@ -475,6 +482,7 @@ Prefixo: `&`. Aliases entre parênteses.
 | `&whitelist <add\|remove\|list> [convite]` | convites permitidos |
 | `&blocklist <add\|remove\|list\|clear\|reload> [url]` | listas anti-link |
 | `&staff [add\|remove\|titulo\|limpar]` | a equipe do servidor (mesmos cargos do `&acesso`) |
+| `&fuso [ver\|buscar\|add\|remove\|apelido\|principal\|formato]` | relógio com vários fusos |
 | `&boasvindas <canal\|titulo\|texto\|cor\|imagem\|testar\|padrao\|on\|off>` | embed de entrada |
 | `&adeus <canal\|titulo\|texto\|cor\|imagem\|testar\|padrao\|on\|off>` | embed de saída |
 
@@ -488,7 +496,11 @@ Cada módulo é ligado/desligado **por servidor** com `&automod <módulo> <on|of
 - **antimassspam** — flood (limite maior, janela maior)
 - **antiinvite** — convites `stt.gg` de outros servidores
 - **antimassmention** — menções em excesso numa mensagem
-- **anticaps** — CAIXA ALTA em excesso
+- **anticaps** — CAIXA ALTA em excesso. A conta é feita **só sobre o que a
+  pessoa digitou**: menções (`<@ULID>`, 26 caracteres maiúsculos), links,
+  emojis nomeados e blocos de código são removidos antes de medir, e mensagens
+  com pouco texto são ignoradas — sem isso, marcar duas pessoas ou citar uma
+  sigla já era punido como grito.
 - **antilink** — domínios de listas estilo Pi-hole. As listas viram um **índice
   compacto em RAM** (hash de 64 bits por domínio: ~20 MB para 2,5 milhões de
   domínios, em vez de ~400 MB) e o índice pronto fica **cacheado em disco**
@@ -1524,6 +1536,7 @@ O código é organizado em quatro áreas, sob `modulos/`:
 │   │   ├── config-store.js     # configuração por servidor + global
 │   │   ├── membros.js          # contar/listar membros (cache compartilhado)
 │   │   ├── midia.js            # validação de URL de imagem (anti-SSRF, avisos)
+│   │   ├── fusos.js            # busca de fuso por cidade (base ICU do Node)
 │   │   └── log.js              # chat de logs configurável (&log)
 │   ├── moderacao/              # moderação e automod
 │   │   ├── automod-engine.js   # motor: runAutomod, punição, blocklist, spam

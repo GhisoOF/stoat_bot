@@ -98,3 +98,55 @@ export function analisarRepeticao(texto, opcoes = {}) {
   }
   return null;
 }
+
+// ══════════════════════════════════════════════════════════
+//  Texto "humano" — o que a pessoa realmente ESCREVEU
+//
+//  Menções no Stoat são `<@01ARZ3NDEKTSV4RRFFQ69G5FAV>`: um ULID de 26
+//  caracteres SEMPRE em maiúsculas. Analisar o conteúdo cru fazia o
+//  anti-caps punir quem só marcou duas pessoas — duas menções e três
+//  palavras dão 80% de maiúsculas sem ninguém ter gritado. O mesmo valia,
+//  em menor grau, para links, emojis nomeados e blocos de código.
+//
+//  Esta função devolve o texto sem essas partes, para que as análises de
+//  ESTILO (caixa alta, repetição) julguem apenas o que foi digitado.
+//  Atenção: NÃO usar isto em análises de CONTEÚDO (anti-link, scam), que
+//  precisam justamente ver as URLs.
+// ══════════════════════════════════════════════════════════
+export function textoHumano(conteudo) {
+  return String(conteudo ?? "")
+    .replace(/```[\s\S]*?```/g, " ")          // blocos de código
+    .replace(/`[^`]*`/g, " ")                  // código em linha
+    .replace(/<[@#%&!][^>]{0,64}>/g, " ")      // menções de usuário, cargo e canal
+    .replace(/:[a-z0-9_+-]{2,64}:/gi, " ")     // emojis nomeados (:PogChamp:)
+    .replace(/https?:\/\/\S+/gi, " ")          // links
+    .replace(/\b[0-9A-HJKMNP-TV-Z]{26}\b/g, " ") // ULIDs soltos (IDs colados)
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+// ══════════════════════════════════════════════════════════
+//  Proporção de CAIXA ALTA de um texto já sanitizado
+//
+//  A conta é direta — maiúsculas sobre o total de letras — mas só vale a
+//  partir de um mínimo de texto. Esse mínimo é o que protege a escrita
+//  normal: "PDF ou RPG?" tem 8 letras e 75% de maiúsculas por causa das
+//  siglas, e puni-lo seria absurdo.
+//
+//  Tentei antes ignorar "siglas" (palavras curtas todas em maiúsculas), e
+//  foi pior: em português, OLHA, ISSO, AQUI e SEU têm 3–4 letras, então um
+//  grito legítimo virava invisível. Exigir volume de texto separa os dois
+//  casos sem precisar adivinhar o que é sigla.
+//
+//  Devolve `null` quando não há texto suficiente para uma conclusão honesta.
+// ══════════════════════════════════════════════════════════
+const MAIUSCULAS = /[A-ZÀÁÂÃÄÉÊÍÓÔÕÚÜÇ]/g;
+const SO_LETRAS  = /[^a-zA-ZÀ-ÿ]/g;
+const MIN_LETRAS = 12;   // abaixo disso a conta é ruído (siglas, "OK OK OK")
+
+export function razaoDeCaixaAlta(texto) {
+  const letras = String(texto ?? "").replace(SO_LETRAS, "");
+  if (letras.length < MIN_LETRAS) return null;
+  const maius = (letras.match(MAIUSCULAS) ?? []).length;
+  return maius / letras.length;
+}

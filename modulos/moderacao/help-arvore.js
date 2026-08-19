@@ -792,6 +792,36 @@ function arvorePT(P) {
 
     // ── &embed ───────────────────────────────────────────
     // ── &staff / &boasvindas / &adeus ────────────────────
+    fuso: {
+      cidades: {
+        titulo: "fuso",
+        texto: [
+          "Relógio do servidor mostrando **várias cidades ao mesmo tempo** — para",
+          "quando a galera está espalhada e todo combinado vira conta de cabeça.",
+          "",
+          "**Consultar** _(qualquer pessoa)_",
+          `\`${P}fuso\` — a hora agora em cada cidade da lista`,
+          `\`${P}fuso ver <cidade>\` — hora de qualquer cidade, sem configurar`,
+          `\`${P}fuso buscar <termo>\` — procura cidades disponíveis`,
+          `\`${P}fuso <cidade>\` — atalho para \`ver\``,
+          "",
+          "**Configurar** _(ManageMessages)_",
+          `\`${P}fuso add <cidade>\` · \`${P}fuso remove <cidade>\``,
+          `\`${P}fuso apelido <cidade> <texto>\` — ex.: Madrid aparecendo como \"Europa\"`,
+          `\`${P}fuso principal <cidade>\` — de quem as diferenças são contadas`,
+          `\`${P}fuso formato <12|24>\` · \`${P}fuso limpar\``,
+          "",
+          "**Como escrever a cidade**",
+          "Acentos funcionam (`São Paulo`), o formato `Cidade/País` também",
+          "(`Madrid/Europa`), e há apelidos prontos: `sp`, `nova york`, `toquio`,",
+          "`londres`, `lisboa`, `utc`. Se houver empate, o bot mostra as opções.",
+          "",
+          "_A lista sai ordenada do fuso mais atrasado ao mais adiantado — é como o_",
+          "_olho espera ler um relógio mundial. O limite é de 12 cidades._",
+        ].join("\n"),
+      },
+    },
+
     staff: {
       equipe: {
         titulo: "staff",
@@ -1731,6 +1761,36 @@ function arvoreEN(P) {
     },
 
     // ── &staff / &welcome / &goodbye ─────────────────────
+    fuso: {
+      cidades: {
+        titulo: "fuso (timezones)",
+        texto: [
+          "A server clock showing **several cities at once** — for when people are",
+          "spread out and every plan turns into mental arithmetic.",
+          "",
+          "**Viewing** _(anyone)_",
+          `\`${P}fuso\` — the current time in each city on the list`,
+          `\`${P}fuso ver <city>\` — any city's time, no setup needed`,
+          `\`${P}fuso buscar <term>\` — search available cities`,
+          `\`${P}fuso <city>\` — shortcut for \`ver\``,
+          "",
+          "**Configuring** _(ManageMessages)_",
+          `\`${P}fuso add <city>\` · \`${P}fuso remove <city>\``,
+          `\`${P}fuso apelido <city> <text>\` — e.g. Madrid showing as \"Europe\"`,
+          `\`${P}fuso principal <city>\` — which city the differences count from`,
+          `\`${P}fuso formato <12|24>\` · \`${P}fuso limpar\``,
+          "",
+          "**How to write the city**",
+          "Accents work (`São Paulo`), so does the `City/Country` format",
+          "(`Madrid/Europa`), and there are built-in nicknames: `sp`, `nova york`,",
+          "`toquio`, `londres`, `utc`. On a tie, the bot shows you the options.",
+          "",
+          "_The list is sorted from the earliest offset to the latest — the way the eye_",
+          "_expects to read a world clock. The limit is 12 cities._",
+        ].join("\n"),
+      },
+    },
+
     staff: {
       equipe: {
         titulo: "staff",

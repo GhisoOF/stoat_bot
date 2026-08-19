@@ -11,7 +11,7 @@ import * as db  from "../core/db.js";
 import * as log from "../core/log.js";
 import * as banGlobal from "./ban-global.js";
 import * as confianca from "./confianca.js";
-import { analisarCaracteres, analisarRepeticao } from "./caracteres.js";
+import { analisarCaracteres, analisarRepeticao, textoHumano, razaoDeCaixaAlta } from "./caracteres.js";
 import { lingua } from "../core/i18n.js";
 import {
   ConstrutorIndice, criarIndiceVazio, carregarCache, salvarCache,
@@ -327,8 +327,11 @@ async function aplicarPunicao(ctx, opts) {
         // Marca no banco: se ele sair e voltar, o cargo é REAPLICADO.
         db.definirSilenciado(ctx.serverId ?? server?.id, userId, true, motivo);
       }
-      catch (e) { console.error("[PUNIÇÃO][SILENCE]", e.message);
-        acao = lang === "en" ? `failed to silence (${e.message})` : `falha ao silenciar (${e.message})`; }
+      catch (e) {
+        const detalhe = descreverErro(e, lang);
+        console.error("[PUNIÇÃO][SILENCE]", detalhe, e);
+        acao = lang === "en" ? `failed to silence — ${detalhe}` : `falha ao silenciar — ${detalhe}`;
+      }
     }
     await sendEmbed(channel, {
       title: lang === "en" ? "⚠️ Violation — confirmation needed" : "⚠️ Violação — confirmação necessária",
@@ -388,8 +391,9 @@ async function aplicarPunicao(ctx, opts) {
         await aplicarCargoSilence(server, userId, pol.silenceRoleId, ctx);
         db.silenciarAte(sid, userId, ate, motivo);
       } catch (e) {
-        console.error("[PUNIÇÃO][MUTE]", e.message);
-        acao = lang === "en" ? `failed to silence (${e.message})` : `falha ao silenciar (${e.message})`;
+        const detalhe = descreverErro(e, lang);
+        console.error("[PUNIÇÃO][MUTE]", detalhe, e);
+        acao = lang === "en" ? `failed to silence — ${detalhe}` : `falha ao silenciar — ${detalhe}`;
       }
     } else {
       // Sem cargo configurado o degrau não tem como ser cumprido. Dizer isso é
@@ -713,12 +717,15 @@ export async function runAutomod(message, ctx) {
   }
 
   // ── Anti-caps ──
-  if (am.antiCaps.enabled && content.length >= am.antiCaps.minLength) {
-    const letras = content.replace(/[^a-zA-ZÀ-ÿ]/g, "");
-    if (letras.length > 0) {
-      const maius = letras.replace(/[^A-ZÀÁÂÃÄÉÊÍÓÔÕÚÜÇ]/g, "").length;
-      const ratio = maius / letras.length;
-      dbg(ctx, `  [anti-caps] ON → ${(ratio * 100).toFixed(0)}% maiúsculas (limite ${(am.antiCaps.threshold * 100).toFixed(0)}%)`);
+  // Analisa só o que a pessoa DIGITOU: menções (`<@ULID>`, 26 caracteres
+  // maiúsculos), links, emojis nomeados e código ficam de fora. Antes disso,
+  // marcar duas pessoas já bastava para ser punido por "CAIXA ALTA".
+  const textoEstilo = textoHumano(content);
+  if (am.antiCaps.enabled && textoEstilo.length >= am.antiCaps.minLength) {
+    // Siglas curtas ficam fora da conta; `null` = texto insuficiente.
+    const ratio = razaoDeCaixaAlta(textoEstilo);
+    if (ratio !== null) {
+      dbg(ctx, `  [anti-caps] ON → ${(ratio * 100).toFixed(0)}% maiúsculas em "${textoEstilo.slice(0, 60)}" (limite ${(am.antiCaps.threshold * 100).toFixed(0)}%)`);
       if (ratio >= am.antiCaps.threshold) {
         dbg(ctx, "  ✗ BLOQUEADA por anti-caps");
         try { await message.delete(); } catch {}
@@ -728,7 +735,7 @@ export async function runAutomod(message, ctx) {
       }
     }
   } else if (am.antiCaps.enabled) {
-    dbg(ctx, `  [anti-caps] ON → mensagem curta (<${am.antiCaps.minLength}), ignorada`);
+    dbg(ctx, `  [anti-caps] ON → pouco texto digitado (<${am.antiCaps.minLength} após remover menções/links), ignorada`);
   } else {
     dbg(ctx, "  [anti-caps] OFF");
   }
@@ -753,7 +760,9 @@ export async function runAutomod(message, ctx) {
   // Desligado por padrão: em servidores BR o "kkkkk" é risada. Quando ligado,
   // ignora por padrão o "k" (configurável em antiRepeticao.ignorar).
   if (am.antiRepeticao?.enabled) {
-    const r = analisarRepeticao(content, {
+    // Também sobre o texto digitado: um link com muitos caracteres iguais
+    // (ou um bloco de código) não é flood visual da pessoa.
+    const r = analisarRepeticao(textoEstilo, {
       maxRepeticao: am.antiRepeticao.maxRepeticao ?? 15,
       ignorar:      am.antiRepeticao.ignorar ?? "k",
     });
@@ -809,8 +818,43 @@ export async function runAutomod(message, ctx) {
 }
 
 // Aplica o cargo de silêncio a um usuário (mantém os cargos atuais)
+// Erros da API do Stoat raramente são `Error`: costumam vir como objetos
+// `{ type: "MissingPermission" }`. Ler `.message` dava `undefined` — foi o que
+// apareceu para o moderador como "falha ao silenciar (undefined)", uma
+// mensagem que não ajuda ninguém a consertar nada.
+export function descreverErro(e, lang = "pt") {
+  const tipo = e?.type ?? e?.error ?? e?.code;
+  const TRADUCAO = {
+    MissingPermission: lang === "en"
+      ? "the bot lacks the **AssignRoles** permission (or the silence role is above the bot's)"
+      : "o bot não tem a permissão **AssignRoles** (ou o cargo de silêncio está acima do cargo dele)",
+    NotElevated: lang === "en"
+      ? "the bot's role is below the target's — move the bot's role up"
+      : "o cargo do bot está abaixo do cargo da pessoa — suba o cargo do bot",
+    NotFound: lang === "en" ? "member or role not found" : "membro ou cargo não encontrado",
+    InvalidRole: lang === "en" ? "invalid silence role" : "cargo de silêncio inválido",
+  };
+  if (tipo && TRADUCAO[tipo]) return TRADUCAO[tipo];
+  if (typeof e?.message === "string" && e.message) return e.message;
+  if (tipo) return String(tipo);
+  try { const j = JSON.stringify(e); if (j && j !== "{}") return j.slice(0, 120); } catch {}
+  return lang === "en" ? "unknown error" : "erro desconhecido";
+}
+
 async function aplicarCargoSilence(server, userId, roleId, ctx) {
+  // Sem cargo configurado não há o que aplicar. Antes, `undefined` ia parar
+  // dentro da lista de cargos e a API recusava com um erro sem mensagem.
+  if (!roleId) {
+    const lang = lingua(ctx);
+    throw new Error(lang === "en"
+      ? `no silence role configured — set one with \`${ctx?.PREFIXO ?? "&"}cargomudo\``
+      : `nenhum cargo de silêncio configurado — defina com \`${ctx?.PREFIXO ?? "&"}cargomudo\``);
+  }
   const member = await server.fetchMember(userId);
+  if (!member) {
+    const lang = lingua(ctx);
+    throw new Error(lang === "en" ? "member not found on the server" : "membro não encontrado no servidor");
+  }
   const atuais = (member.roles ?? []).map((r) => r?.id ?? r).filter(Boolean);
   if (!atuais.includes(roleId)) atuais.push(roleId);
   await member.edit({ roles: atuais });

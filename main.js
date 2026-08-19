@@ -21,6 +21,7 @@ import * as reactionRoles from "./modulos/ferramentas/reaction-roles.js";
 import * as midia     from "./modulos/core/midia.js";
 import * as autorole  from "./modulos/ferramentas/autorole.js";
 import * as bemvindo  from "./modulos/ferramentas/boas-vindas.js";
+import * as fuso      from "./modulos/ferramentas/fuso.js";
 import * as staff     from "./modulos/moderacao/staff.js";
 import * as tutorial   from "./modulos/moderacao/tutorial.js";
 import * as corCargo   from "./modulos/moderacao/cor-cargo.js";
@@ -384,6 +385,11 @@ const rotas = {
   // Equipe do servidor (mesma lista de cargos do &acesso)
   staff:         staff.cmdStaff,
   equipe:        staff.cmdStaff,
+  // Relógio com vários fusos
+  fuso:          fuso.cmdFuso,
+  fusos:         fuso.cmdFuso,
+  hora:          fuso.cmdFuso,
+  timezone:      fuso.cmdFuso,
   // Mensagens de entrada e saída
   boasvindas:    bemvindo.cmdBoasVindas,
   "boas-vindas": bemvindo.cmdBoasVindas,
@@ -417,6 +423,7 @@ const CANONICO = {
   inicio: "tutorial",
   logs: "log",
   equipe: "staff",
+  fusos: "fuso", hora: "fuso", timezone: "fuso", timezones: "fuso", tz: "fuso",
   "boas-vindas": "boasvindas", welcome: "boasvindas", bemvindo: "boasvindas",
   goodbye: "adeus", despedida: "adeus", farewell: "adeus",
   clear: "limpar", purge: "limpar", limpiar: "limpar",
@@ -451,7 +458,7 @@ const COMANDOS_GERENCIAVEIS = [
   "ping", "repete", "userinfo", "kick", "ban", "limpar",
   "warnings", "clearwarnings", "warn", "acesso", "automod", "whitelist", "blocklist",
   "sentinela", "punicao", "tutorial", "cor", "log", "banglobal", "embed", "reactionrole", "chat", "rss", "xp", "game", "autorole",
-  "staff", "boasvindas", "adeus",
+  "staff", "boasvindas", "adeus", "fuso",
 ];
 // exportado via ctx para o comando &comando consultar
 estado.CANONICO = CANONICO;

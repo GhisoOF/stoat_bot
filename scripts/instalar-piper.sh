@@ -18,6 +18,31 @@ okay() { printf '\033[32m✓ %s\033[0m\n' "$1"; }
 erro() { printf '\033[31m✗ %s\033[0m\n' "$1" >&2; exit 1; }
 
 mkdir -p "$VOZES"
+
+# ── Modo busca: procurar vozes no HuggingFace ─────────────
+# `bash scripts/instalar-piper.sh buscar pt` lista modelos Piper de português.
+# Existe porque a oferta muda: vozes novas aparecem, links de tutorial
+# apodrecem. Melhor perguntar ao HuggingFace na hora do que confiar numa
+# lista escrita meses atrás.
+if [ "${1:-}" = "buscar" ] || [ "${1:-}" = "search" ]; then
+  TERMO="${2:-pt}"
+  printf '\033[36m→ procurando vozes Piper para "%s"…\033[0m\n\n' "$TERMO"
+  curl -fsL "https://huggingface.co/api/models?search=piper%20${TERMO}&limit=60" \
+    | tr '}' '\n' | grep -o '"modelId":"[^"]*"' | cut -d'"' -f4 | sort -u \
+    | while read -r repo; do printf '  %s\n' "$repo"; done
+  echo
+  printf '\033[36m→ também vale olhar estas coleções:\033[0m\n'
+  echo "  OpenVoiceOS/pipertts-voices    (vozes 'dii' femininas em várias línguas)"
+  echo "  rhasspy/piper-voices           (oficiais — pt_BR só tem masculinas)"
+  echo "  BornSaint/piper-TTS            (comunidade, pt-BR)"
+  echo
+  printf '\033[36m→ para instalar qualquer uma:\033[0m\n'
+  echo "  bash scripts/instalar-piper.sh Autor/nome-do-repo"
+  echo
+  printf '\033[33m! Confira a LICENÇA antes de usar: algumas proíbem uso comercial.\033[0m\n'
+  exit 0
+fi
+
 cd "$DESTINO"
 
 # ── Binário ──
@@ -47,6 +72,7 @@ fi
 #   bash scripts/instalar-piper.sh dii          → instala dii (FEMININA)
 #   bash scripts/instalar-piper.sh todas        → instala as duas
 #   bash scripts/instalar-piper.sh Autor/repo   → qualquer voz do HuggingFace
+#   bash scripts/instalar-piper.sh buscar pt    → procura vozes disponíveis
 #
 # Para vozes da comunidade os nomes de arquivo NÃO seguem a convenção do
 # Piper (o OpenVoiceOS publica `dii_pt-BR.onnx`, e às vezes a config vem como

@@ -58,7 +58,7 @@ const servidor = createServer(async (req, res) => {
 
   // A chave protege tudo menos o /saude, que precisa ser alcançável
   // por um curl simples quando algo dá errado.
-  if (CHAVE && rota !== "/saude" && req.headers["x-chave"] !== CHAVE) {
+  if (CHAVE && rota !== "/saude" && rota !== "/efeitos" && req.headers["x-chave"] !== CHAVE) {
     dbg(`recusado ${rota}: chave inválida`);
     return responder(res, 401, { erro: "chave inválida" });
   }
@@ -76,6 +76,13 @@ const servidor = createServer(async (req, res) => {
         chaveExigida: !!CHAVE,
         debug: DEBUG,
       });
+    }
+
+    // Expõe as cadeias de filtro para o script de diagnóstico poder aplicar
+    // EXATAMENTE o mesmo efeito ao testar uma voz. Duplicar as cadeias no
+    // script criaria duas versões para desincronizar na primeira mudança.
+    if (rota === "/efeitos") {
+      return responder(res, 200, tts.EFEITOS);
     }
 
     if (rota === "/estado") {

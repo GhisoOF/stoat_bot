@@ -182,6 +182,8 @@ reiniciar() {
 
 falar() {
   local texto="${1:-Teste da voz da Judy.}"
+  local voz_pedida="${2:-}"
+  local efeito="${3:-}"
   local env_file="$VOZ_DIR/.env"
   local bin vozes voz
   bin=$(grep -s '^PIPER_BIN=' "$env_file" | cut -d= -f2-)
@@ -189,22 +191,97 @@ falar() {
   voz=$(grep -s '^PIPER_VOZ=' "$env_file" | cut -d= -f2-)
   bin="${bin:-$HOME/.local/share/piper/piper}"
   vozes="${vozes:-$HOME/.local/share/piper/vozes}"
-  voz="${voz:-pt_BR-faber-medium}"
+  voz="${voz_pedida:-${voz:-pt_BR-faber-medium}}"
 
   [ -x "$bin" ] || { falha "Piper não encontrado em $bin"; exit 1; }
-  printf '%s→ sintetizando: "%s"%s\n' "$C_INFO" "$texto" "$C_OFF"
+  [ -f "$vozes/$voz.onnx" ] || {
+    falha "voz '$voz' não encontrada em $vozes"
+    aviso "instaladas: $(ls "$vozes"/*.onnx 2>/dev/null | xargs -n1 basename 2>/dev/null | sed 's/\.onnx$//' | tr '\n' ' ')"
+    exit 1; }
+
+  printf '%s→ voz: %s%s%s\n' "$C_INFO" "$voz" "${efeito:+  |  efeito: $efeito}" "$C_OFF"
   echo "$texto" | "$bin" --model "$vozes/$voz.onnx" --output_file /tmp/judy-diag.wav || {
     falha "a síntese falhou"; exit 1; }
+
+  # Aplica o mesmo efeito que o bot aplicaria — a cadeia vive no tts.js, e
+  # duplicá-la aqui só criaria duas versões para desincronizar. Lemos de lá.
+  if [ -n "$efeito" ] && [ "$efeito" != "nenhum" ]; then
+    # A cadeia de filtros vive no serviço, que a expõe em /efeitos. Buscar
+    # de lá garante que o teste soe igual ao que a call vai ouvir — copiar a
+    # cadeia para cá criaria duas versões para desincronizar.
+    # Ler com o Node, não com grep: as cadeias de filtro CONTÊM vírgulas
+    # (`highpass=f=200,lowpass=f=6500,...`), então qualquer recorte por
+    # vírgula parte a cadeia no meio e devolve lixo.
+    local cadeia node_bin
+    node_bin=$(command -v node || echo /usr/bin/node)
+    cadeia=$(curl -fsL "http://localhost:$VOZ_PORTA/efeitos" 2>/dev/null \
+      | "$node_bin" -e "
+        let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{
+          try{ const e=JSON.parse(d)['$efeito']; if(e) process.stdout.write(e); }catch{}
+        });" 2>/dev/null)
+
+    if [ -n "$cadeia" ]; then
+      local ff node_bin
+      node_bin=$(command -v node || echo /usr/bin/node)
+      ff=$("$node_bin" -e "try{process.stdout.write(require('$VOZ_DIR/node_modules/ffmpeg-static'))}catch{process.stdout.write('ffmpeg')}" 2>/dev/null || echo ffmpeg)
+      "$ff" -hide_banner -loglevel error -i /tmp/judy-diag.wav -af "$cadeia" \
+        -ar 48000 -ac 1 -y /tmp/judy-diag-fx.wav 2>/dev/null \
+        && mv /tmp/judy-diag-fx.wav /tmp/judy-diag.wav \
+        && ok "efeito aplicado" \
+        || aviso "o efeito falhou — ouvindo sem ele"
+    else
+      aviso "não consegui obter o efeito '$efeito' (o judy-voz está rodando?) — ouvindo sem ele"
+    fi
+  fi
+
   ok "gerado /tmp/judy-diag.wav"
   command -v aplay >/dev/null && aplay -q /tmp/judy-diag.wav && ok "reproduzido" \
     || aviso "ouça com:  aplay /tmp/judy-diag.wav"
+}
+
+# Compara TODAS as vozes instaladas com o mesmo texto — a forma mais rápida
+# de escolher, porque o que importa é como soa, não o nome do arquivo.
+comparar() {
+  local texto="${1:-Olá! Esta é a minha voz.}"
+  local efeito="${2:-}"
+  local vozes
+  vozes=$(grep -s '^PIPER_VOZES=' "$VOZ_DIR/.env" | cut -d= -f2-)
+  vozes="${vozes:-$HOME/.local/share/piper/vozes}"
+
+  local lista
+  lista=$(ls "$vozes"/*.onnx 2>/dev/null | xargs -n1 basename 2>/dev/null | sed 's/\.onnx$//')
+  [ -n "$lista" ] || { falha "nenhuma voz instalada em $vozes"; exit 1; }
+
+  titulo "Comparando as vozes instaladas"
+  for v in $lista; do
+    echo
+    falar "$texto" "$v" "$efeito"
+    sleep 1
+  done
+  echo
+  info "para usar a escolhida:  &tts voz <nome>   (no chat, sem reiniciar nada)"
 }
 
 case "${1:-diag}" in
   logs)      logs "${2:-ambos}" ;;
   erros)     erros ;;
   reiniciar|restart) reiniciar ;;
-  falar)     falar "${2:-}" ;;
+  falar)     falar "${2:-}" "${3:-}" "${4:-}" ;;
+  comparar|compare) comparar "${2:-}" "${3:-}" ;;
+  vozes)     ls "$(grep -s '^PIPER_VOZES=' "$VOZ_DIR/.env" | cut -d= -f2- || echo "$HOME/.local/share/piper/vozes")"/*.onnx 2>/dev/null | xargs -n1 basename | sed 's/\.onnx$//' ;;
   diag|"")   diagnostico ;;
-  *) echo "uso: $0 [diag|logs [voz|ia]|erros|reiniciar|falar \"texto\"]" ;;
+  *) cat <<AJUDA
+uso: $0 <comando>
+
+  diag                          diagnóstico completo (padrão)
+  logs [voz|ia]                 acompanha os logs ao vivo
+  erros                         só as linhas de erro recentes
+  reiniciar                     reinicia os serviços
+  vozes                         lista as vozes instaladas
+  falar "texto" [voz] [efeito]  testa uma voz  (ex.: falar "oi" pt_BR-dii-medium glados)
+  comparar "texto" [efeito]     toca o mesmo texto em TODAS as vozes instaladas
+
+Efeitos: nenhum, glados, robo, radio, grave, agudo, sussurro
+AJUDA
+     ;;
 esac

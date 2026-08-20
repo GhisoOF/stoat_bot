@@ -134,8 +134,21 @@ export async function entrar(canalVoz) {
       connection.once("error", (e) => { clearTimeout(t); rej(e); });
     });
 
-    conexoes.set(canalVoz, { connection, entrouEm: Date.now(), falas: 0, fila: [], ocupado: false });
-    log(`entrou na call ${canalVoz}`);
+    // ── UM player por conexão, publicado UMA vez ──
+    // Antes eu criava um MediaPlayer novo a cada fala e chamava play() de
+    // novo — ou seja, publicava uma FAIXA nova na sala a cada frase. O
+    // LiveKit roteia a primeira e as seguintes viram faixas órfãs: o
+    // microfone aparece aberto, o áudio é gerado, e ninguém ouve nada.
+    // É assim que os bots de música fazem: um player por conexão, e cada
+    // faixa nova só troca o arquivo tocado.
+    const media = new MediaPlayer();
+    await connection.play(media);
+    await esperarPublicacao(connection, media);
+
+    conexoes.set(canalVoz, {
+      connection, media, entrouEm: Date.now(), falas: 0, fila: [], ocupado: false,
+    });
+    log(`entrou na call ${canalVoz} (faixa de áudio publicada)`);
     return { ok: true, canalVoz };
   } catch (e) {
     const erro = explicar(e);
@@ -155,6 +168,7 @@ export async function sair(canalVoz = null) {
   for (const id of alvos) {
     const c = conexoes.get(id);
     if (!c) continue;
+    try { c.media?.destroy?.(); } catch {}
     try { c.connection.leave?.(); } catch {}
     conexoes.delete(id);
     saiu.push(id);
@@ -227,22 +241,23 @@ async function processarFila(canalVoz) {
       conexoes.delete(canalVoz);
       const r = await entrar(canalVoz);
       if (!r.ok) throw new Error(`reconexão falhou: ${r.erro}`);
-      const novo = conexoes.get(canalVoz);
+      const novo = conexoes.get(canalVoz);   // já vem com player publicado
       novo.fila = c.fila; novo.falas = c.falas;
       c = novo;
     }
 
-    const media = new MediaPlayer();
+    // Reusa o player já publicado no join: só troca o arquivo tocado.
+    const media = c.media;
+    if (!media) throw new Error("conexão sem player publicado — reentre na call");
 
-    // ── A CORRIDA QUE DEIXAVA A JUDY MUDA ──
-    // `connection.play()` é async e chama `publishToRoom()` SEM esperar. Se o
-    // playFile começa antes de a faixa estar publicada no LiveKit, os quadros
-    // de áudio caem no vazio: o bot aparece na call com o microfone riscado e
-    // ninguém ouve nada — sem erro em lugar nenhum.
-    // Então: aguardamos o play E confirmamos que a faixa aparece nas
-    // publicações do participante local antes de tocar.
-    await c.connection.play(media);
-    await esperarPublicacao(c.connection, media);
+    // Instrumentação: sem isto, "não ouvi nada" é indistinguível de
+    // "o áudio nem foi gerado". Estes eventos dizem exatamente até onde a
+    // fala chegou — e o quanto de áudio de fato saiu.
+    const t0 = Date.now();
+    let comecou = false, quadros = 0;
+    media.on?.("startplay", () => { comecou = true; dbg(`  ▶ começou a tocar em ${Date.now() - t0}ms`); });
+    media.on?.("buffer", () => dbg("  ⏳ bufferizando"));
+    media.on?.("error", (e) => log(`  ✗ erro no player: ${e?.message ?? e}`));
 
     media.playFile(arquivo);
 
@@ -257,7 +272,21 @@ async function processarFila(canalVoz) {
       setTimeout(fim, Number(process.env.VOZ_FALA_MAX_MS || 45_000));
     });
 
-    try { media.destroy?.(); } catch {}
+    quadros = media.playedOutSamples ?? 0;
+    const dur = Date.now() - t0;
+    if (!comecou) {
+      // Sinal claro: o player nunca emitiu "startplay". O áudio existe no
+      // disco mas não chegou a ser tocado — problema no ffmpeg ou no
+      // formato, não na geração nem na publicação.
+      log(`  ⚠ a fala terminou sem nunca começar a tocar (${dur}ms) — áudio gerado mas não reproduzido`);
+    } else {
+      dbg(`  ✓ fala concluída em ${dur}ms (${quadros} amostras)`);
+    }
+
+    // NÃO destruir o media aqui: ele pertence à conexão e será reusado na
+    // próxima fala. Destruí-lo despublicaria a faixa e a fala seguinte
+    // sairia muda de novo.
+    try { media.stop?.(); } catch {}
     try { fs.unlinkSync(arquivo); } catch {}
     c.falas++;
   } catch (e) {

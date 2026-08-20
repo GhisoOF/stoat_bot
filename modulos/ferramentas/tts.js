@@ -400,13 +400,20 @@ export async function cmdTts(message, args, ctx) {
           description: [
             ...disp.map((e) => `• \`${e}\`${e === (c.efeito ?? "nenhum") ? " ←" : ""}`),
             "",
+            "",
+            lang === "en"
+              ? "_Fine-tune the pitch with `tom:<n>` — e.g. `tom:1.18`. 1.0 is the original; above that gets more feminine (formants shift too, so it doesn't sound like a sped-up man)._"
+              : "_Ajuste fino do tom com `tom:<n>` — ex.: `tom:1.18`. 1.0 é o original; acima disso fica mais feminino (os formantes sobem junto, então não vira homem acelerado)._",
+            "",
             lang === "en"
               ? "_There's no GLaDOS voice trained in Portuguese — the ready-made ones are English models from Portal. `glados` here is the **processing** (narrow band, metallic ring, chamber, slight pitch), applied over the voice you already use._"
               : "_Não existe voz GLaDOS treinada em português — as prontas são modelos ingleses do Portal. O `glados` aqui é o **processamento** (banda estreita, ressonância metálica, câmara e leve mudança de tom), aplicado sobre a voz que você já usa._",
           ].join("\n"),
           colour: COR.info });
       }
-      if (!disp.includes(alvo)) {
+      // `tom:1.18` é sob medida — não está na lista fixa, mas é válido.
+      const ehTom = /^tom:[0-9]*\.?[0-9]+$/.test(alvo);
+      if (!disp.includes(alvo) && !ehTom) {
         return sendEmbed(message.channel, {
           title: lang === "en" ? "❌ Unknown effect" : "❌ Efeito desconhecido",
           description: `\`${alvo}\`\n\n${disp.map((e) => `\`${e}\``).join(", ")}`, colour: COR.erro });

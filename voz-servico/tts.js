@@ -227,29 +227,74 @@ setInterval(() => limparAntigos(), 5 * 60_000).unref?.();
 // depender da voz (o Piper sai em 22.05k; o dii pode ser outro).
 const tom = (k) => `aresample=48000,asetrate=${Math.round(48000 * k)},aresample=48000,atempo=${(1 / k).toFixed(4)}`;
 
+// ── Feminizar uma voz masculina ───────────────────────────
+//
+// Deslocar o tom com `asetrate` sobe TAMBÉM os formantes de forma
+// desproporcional, e o resultado é o efeito "esquilo": agudo, mas
+// evidentemente uma voz masculina acelerada.
+//
+// O `rubberband` (embutido no ffmpeg-static, não precisa instalar nada)
+// separa as duas coisas. `formant=shifted` sobe os formantes JUNTO com o
+// tom — que é justamente o que distingue um trato vocal feminino de um
+// masculino. É a diferença entre "homem falando fino" e "voz de mulher".
+//
+// Depois do tom, a EQ faz o resto do trabalho:
+//   • corte em ~250 Hz  → tira a ressonância de peito, que lê como masculina
+//   • realce em ~3.2 kHz → presença e clareza, típicas de voz feminina
+//   • aexciter          → brilho nos agudos, sensação de "ar"
+const fem = (tom = 1.20) => `rubberband=pitch=${tom}:formant=shifted`;
+
 export const EFEITOS = {
   nenhum: null,
 
-  // GLaDOS: banda de alto-falante + metálico + câmara + tom levemente acima.
-  // O aphaser é o que dá o "cantado" robótico característico.
-  glados: `${tom(1.06)},highpass=f=200,lowpass=f=6500,` +
+  // ── Feminização ──
+  // `feminina`: neutra e clara. Ponto de partida para afinar.
+  feminina: `${fem(1.20)},equalizer=f=250:t=q:w=1.2:g=-4,` +
+            `equalizer=f=3200:t=q:w=1.5:g=3,aexciter=amount=1.5,` +
+            `acompressor=threshold=0.15:ratio=3:attack=15:release=180,volume=1.2`,
+
+  // `sedutora`: mais grave que a `feminina` (voz sussurrada é MENOS aguda,
+  // não mais), fala um pouco mais devagar, com brilho suave e uma câmara
+  // curta que dá sensação de proximidade — o efeito de microfone perto.
+  sedutora: `${fem(1.13)},atempo=0.93,` +
+            `equalizer=f=200:t=q:w=1.0:g=-3,` +   // menos peito
+            `equalizer=f=900:t=q:w=1.2:g=2,` +    // corpo aveludado
+            `equalizer=f=5000:t=q:w=2.0:g=2.5,` + // "ar" e sopro
+            `aexciter=amount=2,` +
+            `acompressor=threshold=0.10:ratio=5:attack=25:release=250,` +
+            `aecho=0.9:0.35:18:0.12,volume=1.15`,
+
+  // `suave`: feminina discreta, sem exagero. Para uso contínuo.
+  suave: `${fem(1.15)},equalizer=f=260:t=q:w=1.2:g=-3,` +
+         `equalizer=f=4000:t=q:w=2:g=2,volume=1.1`,
+
+  // ── Robóticos ──
+  glados: `${fem(1.16)},highpass=f=200,lowpass=f=6500,` +
           `aphaser=type=t:speed=1.3:decay=0.55:delay=2.5,` +
           `aecho=0.85:0.7:32:0.28,` +
           `acompressor=threshold=0.12:ratio=4:attack=8:release=120,volume=1.35`,
 
-  // Robô genérico: modulação mais dura, sem a câmara.
-  robo: `${tom(0.96)},highpass=f=180,lowpass=f=5200,` +
+  robo: `rubberband=pitch=0.96:formant=preserved,highpass=f=180,lowpass=f=5200,` +
         `flanger=delay=4:depth=3:speed=1.2,volume=1.25`,
 
-  // Rádio/intercom: só banda estreita e compressão.
   radio: `highpass=f=400,lowpass=f=3400,acompressor=threshold=0.1:ratio=6,volume=1.4`,
 
-  grave: `${tom(0.85)},volume=1.1`,
-  agudo: `${tom(1.18)},volume=1.05`,
-
-  // Sussurro: agudo suave, sem graves, bem comprimido.
-  sussurro: `${tom(1.04)},highpass=f=600,lowpass=f=7000,volume=0.85`,
+  // ── Ajustes simples de tom ──
+  grave: `rubberband=pitch=0.85:formant=preserved,volume=1.1`,
+  agudo: `rubberband=pitch=1.18:formant=preserved,volume=1.05`,
+  sussurro: `${fem(1.10)},highpass=f=500,lowpass=f=7500,` +
+            `acompressor=threshold=0.08:ratio=8,volume=0.9`,
 };
+
+// Efeito sob medida: `tom:<n>` desloca o tom em <n> (1.0 = original) com
+// formantes deslocados junto. Existe para você achar o número certo de
+// ouvido — o valor ideal muda conforme a voz base.
+export function cadeiaPersonalizada(nome) {
+  const m = String(nome ?? "").match(/^tom:([0-9]*\.?[0-9]+)$/);
+  if (!m) return null;
+  const t = Math.min(2, Math.max(0.5, Number(m[1])));
+  return `${fem(t)},equalizer=f=250:t=q:w=1.2:g=-3,volume=1.1`;
+}
 
 function ffmpegBin() {
   try { return require_("ffmpeg-static"); } catch { return "ffmpeg"; }
@@ -261,10 +306,10 @@ function ffmpegBin() {
  * efeito é irritante, perder a fala é pior.
  */
 export async function aplicarEfeito(arquivo, nome) {
-  const cadeia = EFEITOS[nome];
+  const cadeia = EFEITOS[nome] ?? cadeiaPersonalizada(nome);
   if (!cadeia) return arquivo;
 
-  const saida = arquivo.replace(/\.wav$/, "") + `-${nome}.wav`;
+  const saida = arquivo.replace(/\.wav$/, "") + `-${String(nome).replace(/[^a-z0-9]/gi, "")}.wav`;
   try {
     await new Promise((res, rej) => {
       const p = spawn(ffmpegBin(), [

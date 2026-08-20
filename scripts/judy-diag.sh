@@ -239,6 +239,49 @@ falar() {
     || aviso "ouça com:  aplay /tmp/judy-diag.wav"
 }
 
+# Varre valores de TOM com a mesma voz e o mesmo texto.
+#
+# Existe porque o número certo não se descobre no papel: depende da voz base,
+# e a diferença entre "homem falando fino" e "voz feminina" mora em poucos
+# centésimos. Ouvir a escada inteira resolve em dois minutos o que ficaria
+# em tentativa e erro por uma tarde.
+tons() {
+  local texto="${1:-Olá, tudo bem com você?}"
+  local voz="${2:-}"
+  titulo "Escada de tom — ouça e escolha o número"
+  for t in 1.00 1.08 1.12 1.16 1.20 1.25 1.30; do
+    echo
+    printf '%s tom %s %s\n' "$C_INFO" "$t" "$C_OFF"
+    falar "$texto" "$voz" "tom:$t"
+    sleep 0.6
+  done
+  echo
+  info "quando achar o seu:  &tts efeito tom:1.16   (no chat)"
+}
+
+# Toca o mesmo texto em todos os efeitos, para comparar o caráter de cada um.
+efeitos() {
+  local texto="${1:-Olá, eu sou a Judy.}"
+  local voz="${2:-}"
+  local lista
+  lista=$(curl -fsL "http://localhost:$VOZ_PORTA/efeitos" 2>/dev/null \
+    | "$(command -v node || echo /usr/bin/node)" -e "
+      let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{
+        try{ process.stdout.write(Object.keys(JSON.parse(d)).join(' ')); }catch{}
+      });" 2>/dev/null)
+  [ -n "$lista" ] || { falha "não consegui listar os efeitos (o judy-voz está rodando?)"; exit 1; }
+
+  titulo "Comparando os efeitos"
+  for e in $lista; do
+    [ "$e" = "nenhum" ] && continue
+    echo
+    falar "$texto" "$voz" "$e"
+    sleep 0.6
+  done
+  echo
+  info "quando escolher:  &tts efeito <nome>   (no chat)"
+}
+
 # Compara TODAS as vozes instaladas com o mesmo texto — a forma mais rápida
 # de escolher, porque o que importa é como soa, não o nome do arquivo.
 comparar() {
@@ -268,6 +311,8 @@ case "${1:-diag}" in
   reiniciar|restart) reiniciar ;;
   falar)     falar "${2:-}" "${3:-}" "${4:-}" ;;
   comparar|compare) comparar "${2:-}" "${3:-}" ;;
+  tons|tom)  tons "${2:-}" "${3:-}" ;;
+  efeitos)   efeitos "${2:-}" "${3:-}" ;;
   vozes)     ls "$(grep -s '^PIPER_VOZES=' "$VOZ_DIR/.env" | cut -d= -f2- || echo "$HOME/.local/share/piper/vozes")"/*.onnx 2>/dev/null | xargs -n1 basename | sed 's/\.onnx$//' ;;
   diag|"")   diagnostico ;;
   *) cat <<AJUDA
@@ -280,8 +325,11 @@ uso: $0 <comando>
   vozes                         lista as vozes instaladas
   falar "texto" [voz] [efeito]  testa uma voz  (ex.: falar "oi" pt_BR-dii-medium glados)
   comparar "texto" [efeito]     toca o mesmo texto em TODAS as vozes instaladas
+  efeitos "texto" [voz]         toca o mesmo texto em TODOS os efeitos
+  tons "texto" [voz]            escada de tom (1.00 a 1.30) para achar o seu
 
-Efeitos: nenhum, glados, robo, radio, grave, agudo, sussurro
+Efeitos: nenhum, feminina, sedutora, suave, glados, robo, radio,
+         grave, agudo, sussurro, tom:<n> (ex.: tom:1.16)
 AJUDA
      ;;
 esac

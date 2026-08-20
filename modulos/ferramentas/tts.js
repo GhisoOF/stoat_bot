@@ -24,6 +24,7 @@
 
 import { resolverCanal } from "../core/ids.js";
 import { tr, lingua } from "../core/i18n.js";
+import * as abrev from "../core/abreviacoes.js";
 
 const VOZ_URL   = (process.env.VOZ_SERVICO_URL || "").replace(/\/$/, "");
 const VOZ_CHAVE = process.env.VOZ_CHAVE || "";
@@ -50,6 +51,8 @@ function garantirConfig(config) {
   config.tts.voz ??= null;
   config.tts.cooldown ??= null;    // ms; null = usa o padrão do ambiente
   config.tts.anunciarNome ??= true;
+  config.tts.dicionario ??= {};      // abreviações extras deste servidor
+  config.tts.expandir ??= true;      // usar o dicionário embutido
   return config.tts;
 }
 
@@ -100,7 +103,11 @@ export async function aoMensagem(message, ctx) {
     // cansa rápido. Configurável, e o padrão continua anunciando porque numa
     // call com várias pessoas escrevendo é o que faz sentido.
     const nome = message.author?.username ?? "alguém";
-    const corpo = texto.slice(0, MAX_CHARS);
+    // Expande antes de cortar: "vc" ocupa 2 chars, "você" ocupa 4 — cortar
+    // primeiro deixaria uma abreviação pela metade no fim da frase.
+    const corpo = (c.expandir === false
+      ? texto
+      : abrev.expandir(texto, c.dicionario ?? {})).slice(0, MAX_CHARS);
     await chamar("/falar", {
       canalVoz: c.canalVoz,
       texto: c.anunciarNome === false ? corpo : `${nome} disse: ${corpo}`,
@@ -161,6 +168,118 @@ export async function cmdTts(message, args, ctx) {
   const ehStaff = membroTemPermissao(message, server, "ManageMessages");
 
   // ── configuração (staff) ──
+  // ── &tts dicionario ── (consulta é pública, edição é staff)
+  if (["dicionario", "dicionário", "dictionary", "dic", "abreviacoes", "abreviações"].includes(sub)) {
+    const acao = (args[1] ?? "").toLowerCase();
+    const arg = args.slice(2).join(" ").trim();
+
+    if (!acao || ["lista", "list", "ver"].includes(acao)) {
+      const meus = Object.entries(c.dicionario ?? {});
+      return sendEmbed(message.channel, tr(ctx, {
+        title: "📖 Dicionário da voz",
+        description: [
+          `**Embutido:** ${c.expandir === false ? "🔴 desligado" : `🟢 ${Object.keys(abrev.PADRAO).length} abreviações comuns`}`,
+          `_(vc → você, n → não, pq → porque, kkkk → risada…)_`,
+          "",
+          `**Deste servidor:** ${meus.length ? meus.length : "_nenhuma_"}`,
+          ...(meus.length ? [meus.map(([k, v]) => `\`${k}\` → ${v}`).join("\n")] : []),
+          "",
+          `\`${PREFIXO}tts dicionario add <abrev> <texto>\``,
+          `\`${PREFIXO}tts dicionario remove <abrev>\` · \`${PREFIXO}tts dicionario padrao on|off\``,
+        ].join("\n"),
+        colour: COR.info,
+      }, {
+        title: "📖 Voice dictionary",
+        description: [
+          `**Built-in:** ${c.expandir === false ? "🔴 off" : `🟢 ${Object.keys(abrev.PADRAO).length} common abbreviations`}`,
+          `_(vc → você, n → não, pq → porque, kkkk → laughter…)_`,
+          "",
+          `**This server's:** ${meus.length ? meus.length : "_none_"}`,
+          ...(meus.length ? [meus.map(([k, v]) => `\`${k}\` → ${v}`).join("\n")] : []),
+          "",
+          `\`${PREFIXO}tts dicionario add <abbrev> <text>\``,
+          `\`${PREFIXO}tts dicionario remove <abbrev>\` · \`${PREFIXO}tts dicionario padrao on|off\``,
+        ].join("\n"),
+        colour: COR.info,
+      }));
+    }
+
+    const server0 = await getServer(message).catch(() => null);
+    if (!membroTemPermissao(message, server0, "ManageMessages")) {
+      return sendEmbed(message.channel, tr(ctx,
+        { title: "🚫 Permissão insuficiente",
+          description: "Você precisa de **ManageMessages** para mexer no dicionário.", colour: COR.erro },
+        { title: "🚫 Missing permission",
+          description: "You need **ManageMessages** to change the dictionary.", colour: COR.erro }));
+    }
+
+    if (["add", "adicionar", "set"].includes(acao)) {
+      const partes = arg.split(/\s+/);
+      const chave = (partes.shift() ?? "").toLowerCase();
+      const valor = partes.join(" ").trim();
+      if (!chave || !valor) {
+        return sendEmbed(message.channel, tr(ctx,
+          { title: "❌ Faltou algo",
+            description: `Uso: \`${PREFIXO}tts dicionario add <abrev> <texto>\`\nEx.: \`${PREFIXO}tts dicionario add rt retuíte\``, colour: COR.erro },
+          { title: "❌ Missing something",
+            description: `Usage: \`${PREFIXO}tts dicionario add <abbrev> <text>\``, colour: COR.erro }));
+      }
+      if (chave.length > 20 || valor.length > 80) {
+        return sendEmbed(message.channel, tr(ctx,
+          { title: "❌ Longo demais", description: "Abreviação até 20 e expansão até 80 caracteres.", colour: COR.erro },
+          { title: "❌ Too long", description: "Abbreviation up to 20 and expansion up to 80 characters.", colour: COR.erro }));
+      }
+      if (Object.keys(c.dicionario).length >= 200) {
+        return sendEmbed(message.channel, tr(ctx,
+          { title: "❌ Dicionário cheio", description: "O limite é de 200 entradas por servidor.", colour: COR.erro },
+          { title: "❌ Dictionary full", description: "The limit is 200 entries per server.", colour: COR.erro }));
+      }
+      c.dicionario[chave] = valor; salvarConfig?.();
+      return sendEmbed(message.channel, tr(ctx,
+        { title: "📖 Adicionado",
+          description: `\`${chave}\` → **${valor}**\n\n_Exemplo:_ "${abrev.expandir(`teste ${chave} aqui`, c.dicionario)}"`,
+          colour: COR.sucesso },
+        { title: "📖 Added",
+          description: `\`${chave}\` → **${valor}**`, colour: COR.sucesso }));
+    }
+
+    if (["remove", "remover", "rem", "del"].includes(acao)) {
+      const chave = arg.toLowerCase();
+      const tinha = chave in (c.dicionario ?? {});
+      delete c.dicionario[chave]; salvarConfig?.();
+      return sendEmbed(message.channel, tr(ctx,
+        { title: tinha ? "📖 Removido" : "📖 Não estava no dicionário",
+          description: tinha
+            ? `\`${chave}\` não é mais expandido.`
+            : `\`${chave}\` não constava. _(As abreviações embutidas não se removem uma a uma — use \`padrao off\`.)_`,
+          colour: tinha ? COR.sucesso : COR.aviso },
+        { title: tinha ? "📖 Removed" : "📖 Not in the dictionary",
+          description: tinha ? `\`${chave}\` is no longer expanded.` : `\`${chave}\` wasn't there.`,
+          colour: tinha ? COR.sucesso : COR.aviso }));
+    }
+
+    if (["padrao", "padrão", "default", "embutido"].includes(acao)) {
+      c.expandir = !["off", "nao", "não", "no"].includes(arg.toLowerCase());
+      salvarConfig?.();
+      return sendEmbed(message.channel, tr(ctx,
+        { title: c.expandir ? "📖 Dicionário embutido ligado" : "📖 Dicionário embutido desligado",
+          description: c.expandir
+            ? "As abreviações comuns voltam a ser expandidas."
+            : "Só o dicionário deste servidor vale agora — a escrita de chat será lida como está.",
+          colour: COR.sucesso },
+        { title: c.expandir ? "📖 Built-in dictionary on" : "📖 Built-in dictionary off",
+          description: c.expandir ? "Common abbreviations are expanded again." : "Only this server's dictionary applies now.",
+          colour: COR.sucesso }));
+    }
+
+    if (["limpar", "clear"].includes(acao)) {
+      c.dicionario = {}; salvarConfig?.();
+      return sendEmbed(message.channel, tr(ctx,
+        { title: "📖 Dicionário do servidor esvaziado", description: "As abreviações embutidas continuam valendo.", colour: COR.sucesso },
+        { title: "📖 Server dictionary cleared", description: "The built-in abbreviations still apply.", colour: COR.sucesso }));
+    }
+  }
+
   if (["canal", "channel", "transmitir", "broadcast", "entrar", "join", "sair", "leave",
        "on", "off", "voz", "voice", "cooldown", "espera", "nomes", "names"].includes(sub)) {
     if (!ehStaff) {
@@ -374,11 +493,12 @@ export async function cmdTts(message, args, ctx) {
   }
   ultimaFala.set(chave, Date.now());
 
+  const falado = c.expandir === false ? texto : abrev.expandir(texto, c.dicionario ?? {});
   try {
-    const r = await chamar("/falar", { canalVoz: c.canalVoz, texto, voz: c.voz });
+    const r = await chamar("/falar", { canalVoz: c.canalVoz, texto: falado, voz: c.voz });
     return sendEmbed(message.channel, {
       title: lang === "en" ? "🔊 Speaking" : "🔊 Falando",
-      description: `${texto.length > 120 ? texto.slice(0, 120) + "…" : texto}${
+      description: `${falado.length > 120 ? falado.slice(0, 120) + "…" : falado}${
         r.naFila > 1 ? `\n\n_${lang === "en" ? "in queue" : "na fila"}: ${r.naFila}_` : ""}`,
       colour: COR.sucesso });
   } catch (e) {

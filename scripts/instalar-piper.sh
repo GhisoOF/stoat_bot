@@ -35,21 +35,50 @@ else
   okay "Piper instalado"
 fi
 
-# ── Voz pt-BR ──
-# faber-medium: boa relação qualidade/velocidade para conversa.
-VOZ="${PIPER_VOZ:-pt_BR-faber-medium}"
-BASE="https://huggingface.co/rhasspy/piper-voices/resolve/main/pt/pt_BR/faber/medium"
+# ── Vozes pt-BR ──
+#
+# ATENÇÃO: o repositório OFICIAL do Piper (rhasspy/piper-voices) não tem
+# nenhuma voz feminina em português — faber, edresson, cadu e jeff são todas
+# masculinas, e há uma issue aberta pedindo uma feminina há mais de um ano.
+# A opção feminina vem da comunidade (OpenVoiceOS), por isso mora noutro
+# endereço e é tratada como um caso à parte aqui.
+#
+#   bash scripts/instalar-piper.sh              → instala faber (masculina)
+#   bash scripts/instalar-piper.sh dii          → instala dii (FEMININA)
+#   bash scripts/instalar-piper.sh todas        → instala as duas
+#
+ESCOLHA="${1:-${PIPER_VOZ_ESCOLHA:-faber}}"
 
-if [ -f "$VOZES/$VOZ.onnx" ]; then
-  okay "voz $VOZ já presente"
-else
-  info "baixando a voz $VOZ…"
-  curl -fL "$BASE/pt_BR-faber-medium.onnx"      -o "$VOZES/$VOZ.onnx" \
-    || erro "falha ao baixar o modelo da voz"
-  curl -fL "$BASE/pt_BR-faber-medium.onnx.json" -o "$VOZES/$VOZ.onnx.json" \
-    || erro "falha ao baixar a config da voz"
-  okay "voz instalada"
-fi
+baixar_voz() {
+  local nome="$1" url_onnx="$2" url_json="$3"
+  if [ -f "$VOZES/$nome.onnx" ] && [ -f "$VOZES/$nome.onnx.json" ]; then
+    okay "voz $nome já presente"
+    return 0
+  fi
+  info "baixando a voz $nome…"
+  curl -fL "$url_onnx" -o "$VOZES/$nome.onnx" || {
+    rm -f "$VOZES/$nome.onnx"; erro "falha ao baixar o modelo de $nome"; }
+  curl -fL "$url_json" -o "$VOZES/$nome.onnx.json" || {
+    rm -f "$VOZES/$nome.onnx" "$VOZES/$nome.onnx.json"
+    erro "falha ao baixar a config de $nome (sem o .onnx.json o Piper não roda)"; }
+  okay "voz $nome instalada"
+}
+
+RH="https://huggingface.co/rhasspy/piper-voices/resolve/main/pt/pt_BR"
+OVOS="https://huggingface.co/OpenVoiceOS/pipertts_pt-BR_dii/resolve/main"
+
+case "$ESCOLHA" in
+  dii|feminina|female)
+    baixar_voz "pt_BR-dii-medium" "$OVOS/pt-BR-dii-medium.onnx" "$OVOS/pt-BR-dii-medium.onnx.json"
+    VOZ="pt_BR-dii-medium" ;;
+  todas|all|ambas)
+    baixar_voz "pt_BR-faber-medium" "$RH/faber/medium/pt_BR-faber-medium.onnx" "$RH/faber/medium/pt_BR-faber-medium.onnx.json"
+    baixar_voz "pt_BR-dii-medium" "$OVOS/pt-BR-dii-medium.onnx" "$OVOS/pt-BR-dii-medium.onnx.json"
+    VOZ="pt_BR-dii-medium" ;;
+  *)
+    baixar_voz "pt_BR-faber-medium" "$RH/faber/medium/pt_BR-faber-medium.onnx" "$RH/faber/medium/pt_BR-faber-medium.onnx.json"
+    VOZ="pt_BR-faber-medium" ;;
+esac
 
 # ── Dependência do sistema ──
 # O Piper converte texto em FONEMAS usando o espeak-ng. Sem ele o binário
@@ -86,4 +115,10 @@ echo "  PIPER_BIN=$DESTINO/piper"
 echo "  PIPER_VOZES=$VOZES"
 echo "  PIPER_VOZ=$VOZ"
 echo
-info "outras vozes pt-BR: https://huggingface.co/rhasspy/piper-voices/tree/main/pt/pt_BR"
+info "trocar a voz sem reiniciar nada:  &tts voz <nome>  no chat"
+echo
+echo "Vozes pt-BR conhecidas:"
+echo "  masculinas (oficiais): faber, edresson, cadu, jeff"
+echo "    https://huggingface.co/rhasspy/piper-voices/tree/main/pt/pt_BR"
+echo "  feminina (comunidade): dii"
+echo "    https://huggingface.co/OpenVoiceOS/pipertts_pt-BR_dii"

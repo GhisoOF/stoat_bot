@@ -276,7 +276,8 @@ persona, que pede o mesmo tom em uma frase.
 - **Sistema de níveis** (`&xp`): XP por mensagem, cargos por nível (posicionados abaixo do mute), leaderboard e parâmetros configuráveis.
 - **Autorole** (`&autorole`): dá um cargo automaticamente a quem entra no servidor.
 - **Voz nas calls** (`&tts`): a Judy entra num canal de voz e **fala** o que
-  for escrito. A síntese é **offline**, no computador do dono (Piper, pt-BR),
+  for escrito. A síntese é **offline**, no computador do dono (Piper, pt-BR — `faber` masculina
+  ou `dii` feminina),
   e o serviço de voz (`judy-voz`) roda nativo no Gentoo — fora do Docker, para
   que uma falha de WebRTC não derrube a moderação. `&tts transmitir aqui`
   faz tudo que for escrito no canal virar fala na call — sem precisar de comando. Recurso isolado:
@@ -1545,6 +1546,7 @@ O código é organizado em quatro áreas, sob `modulos/`:
 │   │   ├── membros.js          # contar/listar membros (cache compartilhado)
 │   │   ├── midia.js            # validação de URL de imagem (anti-SSRF, avisos)
 │   │   ├── fusos.js            # busca de fuso por cidade (base ICU do Node)
+│   │   ├── abreviacoes.js      # expande escrita de chat antes do TTS
 │   │   └── log.js              # chat de logs configurável (&log)
 │   ├── moderacao/              # moderação e automod
 │   │   ├── automod-engine.js   # motor: runAutomod, punição, blocklist, spam

@@ -30,6 +30,19 @@
 
 process.env.LIVEKIT_LOG_LEVEL = process.env.LIVEKIT_LOG_LEVEL || "warn";
 
+// O revoice imprime o comando inteiro do ffmpeg a CADA fala, com um
+// console.log fixo que não dá para desligar por configuração. Numa call
+// movimentada isso soterra o log justamente quando ele importa. Filtramos
+// só essas duas linhas; qualquer outra coisa passa normalmente.
+{
+  const original = console.log;
+  const RUIDO = /^(Ffmpeg process started:|ffmpeg finished)/;
+  console.log = (...a) => {
+    if (process.env.VOZ_DEBUG !== "1" && typeof a[0] === "string" && RUIDO.test(a[0])) return;
+    original(...a);
+  };
+}
+
 import { createRequire } from "node:module";
 import fs from "node:fs";
 import * as tts from "./tts.js";
@@ -164,6 +177,36 @@ export async function estado() {
   };
 }
 
+// Espera a faixa de áudio ficar realmente publicada na sala.
+// Sem isto o áudio sai antes da publicação e se perde. O limite existe
+// porque a API do LiveKit muda de forma entre versões: se não conseguirmos
+// confirmar, seguimos assim mesmo depois de um instante — melhor arriscar
+// tocar do que travar a fila para sempre.
+async function esperarPublicacao(connection, media, limiteMs = 4000) {
+  const inicio = Date.now();
+  const trackId = media?.track?.sid ?? media?.track?.name ?? null;
+
+  while (Date.now() - inicio < limiteMs) {
+    try {
+      const pubs = connection?.room?.localParticipant?.trackPublications;
+      if (pubs) {
+        const lista = typeof pubs.values === "function" ? [...pubs.values()] : Object.values(pubs);
+        if (lista.length > 0) {
+          // achou alguma publicação: se soubermos o id, conferimos; se não,
+          // a simples existência já indica que a faixa subiu
+          if (!trackId || lista.some((p) => p?.sid === trackId || p?.name === trackId || p?.track === media.track)) {
+            dbg(`faixa publicada em ${Date.now() - inicio}ms`);
+            return true;
+          }
+        }
+      }
+    } catch { /* forma da API mudou — cai no tempo mínimo abaixo */ }
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  dbg("não confirmei a publicação da faixa; tocando mesmo assim");
+  return false;
+}
+
 // ── Fila: uma fala por vez, por canal ─────────────────────
 async function processarFila(canalVoz) {
   let c = conexoes.get(canalVoz);
@@ -190,8 +233,17 @@ async function processarFila(canalVoz) {
     }
 
     const media = new MediaPlayer();
-    // ORDEM CRÍTICA — ver o cabeçalho deste arquivo.
-    c.connection.play(media);
+
+    // ── A CORRIDA QUE DEIXAVA A JUDY MUDA ──
+    // `connection.play()` é async e chama `publishToRoom()` SEM esperar. Se o
+    // playFile começa antes de a faixa estar publicada no LiveKit, os quadros
+    // de áudio caem no vazio: o bot aparece na call com o microfone riscado e
+    // ninguém ouve nada — sem erro em lugar nenhum.
+    // Então: aguardamos o play E confirmamos que a faixa aparece nas
+    // publicações do participante local antes de tocar.
+    await c.connection.play(media);
+    await esperarPublicacao(c.connection, media);
+
     media.playFile(arquivo);
 
     // Espera o fim para não sobrepor a próxima fala. `finish` é o

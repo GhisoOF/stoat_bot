@@ -134,7 +134,13 @@ diagnostico() {
   # resolvidos ficavam assombrando o diagnóstico como se fossem atuais.
   # Agora olhamos só o fim do arquivo, que é o que de fato é recente.
   local recentes
-  recentes=$(tail -200 "$VOZ_LOG" 2>/dev/null | grep -iE "erro|error" | tail -5)
+  # Erros do axios vêm como um objeto gigante despejado em dezenas de linhas
+  # (onerror, Symbol(errored), isAxiosError...). Mostrar isso cru não ajuda
+  # ninguém: filtramos as linhas de ruído e ficamos com a mensagem.
+  recentes=$(tail -200 "$VOZ_LOG" 2>/dev/null \
+    | grep -iE "erro|error" \
+    | grep -vE "^\s*(onerror|Symbol\(|isAxiosError|at |\.\.\.|\}|\{|[a-zA-Z_]+: \[Function)" \
+    | tail -5)
   if [ -n "$recentes" ]; then
     echo "$recentes" | sed 's/^/   /'
   else

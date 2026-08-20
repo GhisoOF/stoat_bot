@@ -16,6 +16,8 @@ VERSAO="${PIPER_VERSAO:-2023.11.14-2}"
 info() { printf '\033[36m→ %s\033[0m\n' "$1"; }
 okay() { printf '\033[32m✓ %s\033[0m\n' "$1"; }
 erro() { printf '\033[31m✗ %s\033[0m\n' "$1" >&2; exit 1; }
+pular() { printf '\033[33m! pulando: %s\033[0m\n' "$1" >&2; PULADAS=$((PULADAS+1)); }
+PULADAS=0
 
 mkdir -p "$VOZES"
 
@@ -73,6 +75,7 @@ fi
 #   bash scripts/instalar-piper.sh todas        → instala as duas
 #   bash scripts/instalar-piper.sh Autor/repo   → qualquer voz do HuggingFace
 #   bash scripts/instalar-piper.sh buscar pt    → procura vozes disponíveis
+#   bash scripts/instalar-piper.sh portugues    → TODAS as vozes pt compatíveis (~1 GB)
 #
 # Para vozes da comunidade os nomes de arquivo NÃO seguem a convenção do
 # Piper (o OpenVoiceOS publica `dii_pt-BR.onnx`, e às vezes a config vem como
@@ -81,6 +84,11 @@ fi
 # tentativa.
 #
 ESCOLHA="${1:-${PIPER_VOZ_ESCOLHA:-faber}}"
+
+# ── Modo "portugues": todas as vozes pt compatíveis com o Piper ──
+# A lista é curada: só repositórios NATIVOS do Piper. Ficam de fora os
+# espelhos `csukuangfj/vits-piper-*` (são conversões para sherpa-onnx) e as
+# duplicatas do mesmo modelo, que só ocupariam disco sem trazer voz nova.
 
 baixar_voz() {
   local nome="$1" url_onnx="$2" url_json="$3"
@@ -104,8 +112,12 @@ baixar_voz() {
 # `.onnx.json`. Adivinhar o nome deu 404 e uma mensagem inútil. Aqui
 # perguntamos à API do HuggingFace quais arquivos existem de verdade e
 # pegamos o .onnx e o .json que estiverem lá, qualquer que seja o nome.
+# LOTE=1 faz as falhas serem puladas em vez de abortarem o script — numa
+# instalação de várias vozes, uma incompatível não pode derrubar as outras.
 baixar_do_hf() {
   local repo="$1" nome_local="$2"
+  local falhar="erro"
+  [ "${LOTE:-0}" = "1" ] && falhar="pular"
   if [ -f "$VOZES/$nome_local.onnx" ] && [ -f "$VOZES/$nome_local.onnx.json" ]; then
     okay "voz $nome_local já presente"
     return 0
@@ -113,9 +125,9 @@ baixar_do_hf() {
 
   info "consultando os arquivos de $repo…"
   local lista
-  lista=$(curl -fsL "https://huggingface.co/api/models/$repo" 2>/dev/null) \
-    || erro "não consegui consultar o repositório $repo
-   Confira se ele existe: https://huggingface.co/$repo"
+  lista=$(curl -fsL "https://huggingface.co/api/models/$repo" 2>/dev/null) || {
+    $falhar "não consegui consultar $repo (existe? https://huggingface.co/$repo)"
+    return 1; }
 
   # extrai os rfilename do JSON sem depender de jq
   local arq_onnx arq_json
@@ -124,23 +136,68 @@ baixar_do_hf() {
   arq_json=$(printf '%s' "$lista" | tr ',' '\n' | grep -oE '"rfilename":"[^"]*\.(onnx\.json|piper\.json|json)"' \
              | grep -v 'config.json' | head -1 | cut -d'"' -f4)
 
-  [ -n "$arq_onnx" ] || erro "não achei nenhum arquivo .onnx em $repo"
-  [ -n "$arq_json" ] || erro "achei o modelo ($arq_onnx) mas nenhum .json de configuração em $repo"
+  [ -n "$arq_onnx" ] || { $falhar "sem arquivo .onnx em $repo"; return 1; }
+  # Repositórios convertidos para sherpa-onnx (csukuangfj/vits-piper-*) trazem
+  # `tokens.txt` e `espeak-ng-data/` no lugar do `.onnx.json` — são para outro
+  # runtime e não servem ao Piper. Vale detectar e dizer isso, em vez de
+  # baixar 60 MB para descobrir depois que não funciona.
+  if [ -z "$arq_json" ]; then
+    if printf '%s' "$lista" | grep -q 'tokens.txt'; then
+      $falhar "$repo é uma conversão para sherpa-onnx (tem tokens.txt, não .onnx.json) — não serve para o Piper"
+    else
+      $falhar "achei o modelo ($arq_onnx) mas nenhum .json de configuração em $repo"
+    fi
+    return 1
+  fi
 
   info "  modelo: $arq_onnx"
   info "  config: $arq_json"
 
   local base="https://huggingface.co/$repo/resolve/main"
   curl -fL "$base/$arq_onnx" -o "$VOZES/$nome_local.onnx" || {
-    rm -f "$VOZES/$nome_local.onnx"; erro "falha ao baixar $arq_onnx"; }
+    rm -f "$VOZES/$nome_local.onnx"; $falhar "falha ao baixar $arq_onnx"; return 1; }
   curl -fL "$base/$arq_json" -o "$VOZES/$nome_local.onnx.json" || {
     rm -f "$VOZES/$nome_local.onnx" "$VOZES/$nome_local.onnx.json"
-    erro "falha ao baixar $arq_json"; }
-  okay "voz $nome_local instalada"
+    $falhar "falha ao baixar $arq_json"; return 1; }
+  okay "voz $nome_local instalada ($(du -h "$VOZES/$nome_local.onnx" | cut -f1))"
 }
 
 RH="https://huggingface.co/rhasspy/piper-voices/resolve/main/pt/pt_BR"
 
+if [ "$ESCOLHA" = "portugues" ] || [ "$ESCOLHA" = "pt" ] || [ "$ESCOLHA" = "tudo" ]; then
+  LOTE=1
+  # `set -e` derruba o script quando uma função retorna 1 — e no lote uma voz
+  # indisponível NÃO pode interromper as outras. Daí o `|| true` em cada
+  # chamada: a falha vira um aviso e a lista continua.
+  printf '\033[36m→ instalando as vozes pt compatíveis (~1 GB no total)\033[0m\n\n'
+
+  #        repositório                              nome local          (sexo)
+  baixar_do_hf "OpenVoiceOS/pipertts_pt-BR_dii"      "pt_BR-dii" || true          # F
+  baixar_do_hf "OpenVoiceOS/pipertts_pt-BR_miro"     "pt_BR-miro" || true         # M
+  baixar_do_hf "OpenVoiceOS/pipertts_pt-PT_dii"      "pt_PT-dii" || true          # F
+  baixar_do_hf "OpenVoiceOS/pipertts_pt-PT_miro"     "pt_PT-miro" || true         # M
+  baixar_do_hf "OpenVoiceOS/pipertts_pt-PT_voice3"   "pt_PT-voice3" || true       # ?
+  baixar_do_hf "OpenVoiceOS/pipertts_pt-PT_voice4"   "pt_PT-voice4" || true       # ?
+  baixar_do_hf "TarcisoAmorim/piper-pt_BR-miro-high" "pt_BR-miro-high" || true    # M
+  baixar_do_hf "cristianoaredes/piper-pt-br"         "pt_BR-aredes" || true       # ?
+  baixar_do_hf "freds0/piper-ptbr-brspeech-medium"   "pt_BR-brspeech" || true     # ?
+  baixar_do_hf "tigopt/piper-pt_PT-dii-medium"       "pt_PT-dii-medium" || true   # F
+  baixar_do_hf "Lucasllfs/Razo-piper-voice"          "pt_BR-razo" || true         # M
+
+  # As oficiais do rhasspy (todas masculinas em pt_BR)
+  RH="https://huggingface.co/rhasspy/piper-voices/resolve/main/pt/pt_BR"
+  baixar_voz "pt_BR-faber-medium"    "$RH/faber/medium/pt_BR-faber-medium.onnx"       "$RH/faber/medium/pt_BR-faber-medium.onnx.json" || true
+  baixar_voz "pt_BR-edresson-low"    "$RH/edresson/low/pt_BR-edresson-low.onnx"       "$RH/edresson/low/pt_BR-edresson-low.onnx.json" || true
+
+  echo
+  okay "instaladas: $(ls "$VOZES"/*.onnx 2>/dev/null | wc -l) voz(es)"
+  [ "$PULADAS" -gt 0 ] && printf '\033[33m! %s repositório(s) pulado(s) — veja os avisos acima\033[0m\n' "$PULADAS"
+  printf '   ocupando %s em %s\n' "$(du -sh "$VOZES" 2>/dev/null | cut -f1)" "$VOZES"
+  echo
+  info "compare todas de ouvido:"
+  echo "   bash scripts/judy-diag.sh comparar \"Olá, eu sou a Judy\" glados"
+  exit 0
+fi
 case "$ESCOLHA" in
   dii|feminina|female)
     baixar_do_hf "OpenVoiceOS/pipertts_pt-BR_dii" "pt_BR-dii-medium"
@@ -150,10 +207,11 @@ case "$ESCOLHA" in
     baixar_do_hf "OpenVoiceOS/pipertts_pt-BR_dii" "pt_BR-dii-medium"
     VOZ="pt_BR-dii-medium" ;;
   */*)
-    # qualquer repositório do HuggingFace:
-    #   bash scripts/instalar-piper.sh OpenVoiceOS/pipertts_pt-PT_dii
-    baixar_do_hf "$ESCOLHA" "$(echo "$ESCOLHA" | tr '/' '-')"
-    VOZ="$(echo "$ESCOLHA" | tr '/' '-')" ;;
+    # qualquer repositório do HuggingFace, com nome local opcional:
+    #   bash scripts/instalar-piper.sh OpenVoiceOS/pipertts_pt-PT_dii pt_PT-dii
+    NOME_LOCAL="${2:-$(echo "$ESCOLHA" | tr '/' '-')}"
+    baixar_do_hf "$ESCOLHA" "$NOME_LOCAL"
+    VOZ="$NOME_LOCAL" ;;
   *)
     baixar_voz "pt_BR-faber-medium" "$RH/faber/medium/pt_BR-faber-medium.onnx" "$RH/faber/medium/pt_BR-faber-medium.onnx.json"
     VOZ="pt_BR-faber-medium" ;;

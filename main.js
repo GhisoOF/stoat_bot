@@ -725,7 +725,18 @@ client.on("messageCreate", async (message) => {
   // Quem tem cargo de staff (ou permissão nativa) pode escapar disso, conforme
   // a config. `acesso` e `debug` sempre passam, senão dá para se trancar fora.
   const SEMPRE_LIBERADOS = new Set(["acesso", "debug", "help", "tutorial", "idioma"]);
-  if (!SEMPRE_LIBERADOS.has(canonico)) {
+
+  // O `&tts` é liberado NOS CANAIS DA PRÓPRIA VOZ, mesmo com restrição de
+  // canal ligada. O motivo é prático: o comando serve para falar na call, e
+  // quem está na call escreve no chat DELA — exigir que fosse até o canal de
+  // comandos para mandar a Judy falar tornava o recurso inútil para todo
+  // mundo que não é staff. A liberação é estreita: vale só nos canais que a
+  // própria configuração de voz aponta, não em qualquer lugar.
+  const cfgTts = ctx.config?.tts;
+  const naVoz = canonico === "tts" && cfgTts?.ativo
+    && (message.channelId === cfgTts.canalVoz || message.channelId === cfgTts.canalTexto);
+
+  if (!SEMPRE_LIBERADOS.has(canonico) && !naVoz) {
     const ehStaff = acessoMod.temCargoStaff(message, ctx.config)
       || membroTemPermissao(message, await getServer(message).catch(() => null), "ManagePermissions");
     const permitido = acessoMod.canalPermitido(message, ctx.config, { ehStaff });

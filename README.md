@@ -278,8 +278,8 @@ persona, que pede o mesmo tom em uma frase.
 - **Voz nas calls** (`&tts`): a Judy entra num canal de voz e **fala** o que
   for escrito. A síntese é **offline**, no computador do dono (Piper, pt-BR),
   e o serviço de voz (`judy-voz`) roda nativo no Gentoo — fora do Docker, para
-  que uma falha de WebRTC não derrube a moderação. `&tts transmitir <#canal>`
-  faz tudo que for escrito naquele canal virar fala na call. Recurso isolado:
+  que uma falha de WebRTC não derrube a moderação. `&tts transmitir aqui`
+  faz tudo que for escrito no canal virar fala na call — sem precisar de comando. Recurso isolado:
   só funciona nos servidores listados em `TTS_SERVIDORES`.
   Diagnóstico da cadeia inteira: `&tts estado` ou `&debug voz`.
 - **Fusos horários** (`&fuso`): relógio com várias cidades ao mesmo tempo, para

@@ -48,6 +48,8 @@ function garantirConfig(config) {
   config.tts.canalVoz ??= null;
   config.tts.canalTexto ??= null;   // transmissão automática
   config.tts.voz ??= null;
+  config.tts.cooldown ??= null;    // ms; null = usa o padrão do ambiente
+  config.tts.anunciarNome ??= true;
   return config.tts;
 }
 
@@ -90,13 +92,18 @@ export async function aoMensagem(message, ctx) {
 
     const chave = `${serverId}:${message.authorId}`;
     const agora = Date.now();
-    if (agora - (ultimaFala.get(chave) ?? 0) < COOLDOWN_MS) return false;
+    const espera = c.cooldown ?? COOLDOWN_MS;
+    if (agora - (ultimaFala.get(chave) ?? 0) < espera) return false;
     ultimaFala.set(chave, agora);
 
+    // Numa conversa de verdade, ouvir "Fulano disse:" antes de cada frase
+    // cansa rápido. Configurável, e o padrão continua anunciando porque numa
+    // call com várias pessoas escrevendo é o que faz sentido.
     const nome = message.author?.username ?? "alguém";
+    const corpo = texto.slice(0, MAX_CHARS);
     await chamar("/falar", {
       canalVoz: c.canalVoz,
-      texto: `${nome} disse: ${texto.slice(0, MAX_CHARS)}`,
+      texto: c.anunciarNome === false ? corpo : `${nome} disse: ${corpo}`,
       voz: c.voz,
     });
     return true;
@@ -155,7 +162,7 @@ export async function cmdTts(message, args, ctx) {
 
   // ── configuração (staff) ──
   if (["canal", "channel", "transmitir", "broadcast", "entrar", "join", "sair", "leave",
-       "on", "off", "voz", "voice"].includes(sub)) {
+       "on", "off", "voz", "voice", "cooldown", "espera", "nomes", "names"].includes(sub)) {
     if (!ehStaff) {
       return sendEmbed(message.channel, tr(ctx,
         { title: "🚫 Permissão insuficiente",
@@ -260,6 +267,41 @@ export async function cmdTts(message, args, ctx) {
           description: c.ativo ? "Judy speaks again." : "Nothing will be spoken until re-enabled.", colour: COR.mod }));
     }
 
+    if (["cooldown", "espera"].includes(sub)) {
+      const seg = Number(resto.replace(",", "."));
+      if (!Number.isFinite(seg) || seg < 0 || seg > 300) {
+        return sendEmbed(message.channel, tr(ctx,
+          { title: "❌ Valor inválido",
+            description: `Uso: \`${PREFIXO}tts cooldown <segundos>\` (0 a 300)\n_0 desliga o freio — cuidado em canal movimentado._`, colour: COR.erro },
+          { title: "❌ Invalid value",
+            description: `Usage: \`${PREFIXO}tts cooldown <seconds>\` (0 to 300)\n_0 removes the brake — careful on a busy channel._`, colour: COR.erro }));
+      }
+      c.cooldown = Math.round(seg * 1000); salvarConfig?.();
+      return sendEmbed(message.channel, tr(ctx,
+        { title: "✅ Freio ajustado",
+          description: seg === 0
+            ? "Sem espera entre falas da mesma pessoa.\n\n⚠️ Num canal movimentado isso vira uma fila enorme de fala."
+            : `Cada pessoa espera **${seg}s** entre uma fala e outra.`,
+          colour: seg === 0 ? COR.aviso : COR.sucesso },
+        { title: "✅ Brake adjusted",
+          description: seg === 0
+            ? "No wait between the same person's utterances.\n\n⚠️ On a busy channel this builds a huge speech queue."
+            : `Each person waits **${seg}s** between utterances.`,
+          colour: seg === 0 ? COR.aviso : COR.sucesso }));
+    }
+
+    if (["nomes", "names"].includes(sub)) {
+      const ligar = !["off", "nao", "não", "no"].includes(resto.toLowerCase());
+      c.anunciarNome = ligar; salvarConfig?.();
+      return sendEmbed(message.channel, tr(ctx,
+        { title: ligar ? "✅ Anunciando quem falou" : "✅ Só o texto",
+          description: ligar ? '_"Fulano disse: bom dia"_' : '_"bom dia"_',
+          colour: COR.sucesso },
+        { title: ligar ? "✅ Announcing who spoke" : "✅ Text only",
+          description: ligar ? '_"Someone said: good morning"_' : '_"good morning"_',
+          colour: COR.sucesso }));
+    }
+
     if (["voz", "voice"].includes(sub)) {
       let saude = null;
       try { saude = await chamar("/saude", null, "GET"); } catch {}
@@ -295,7 +337,8 @@ export async function cmdTts(message, args, ctx) {
         "",
         `**Configuração** _(ManageMessages)_`,
         `\`${PREFIXO}tts canal aqui\` — define a call em que você está`
-        + `\n\`${PREFIXO}tts canal <#voz>\` · \`${PREFIXO}tts transmitir <#texto>\``,
+        + `\n\`${PREFIXO}tts transmitir aqui\` — **tudo** que for escrito aqui vira fala`
+        + `\n\`${PREFIXO}tts canal <#voz>\` · \`${PREFIXO}tts cooldown <s>\` · \`${PREFIXO}tts nomes on|off\``,
         `\`${PREFIXO}tts entrar\` · \`${PREFIXO}tts sair\` · \`${PREFIXO}tts on|off\``,
         `\`${PREFIXO}tts voz [nome]\` — escolhe a voz`,
       ].join("\n"), colour: COR.info,
@@ -307,7 +350,8 @@ export async function cmdTts(message, args, ctx) {
         "",
         `**Configuration** _(ManageMessages)_`,
         `\`${PREFIXO}tts canal here\` — sets the call you are in`
-        + `\n\`${PREFIXO}tts canal <#voice>\` · \`${PREFIXO}tts transmitir <#text>\``,
+        + `\n\`${PREFIXO}tts transmitir here\` — **everything** written here becomes speech`
+        + `\n\`${PREFIXO}tts canal <#voice>\` · \`${PREFIXO}tts cooldown <s>\` · \`${PREFIXO}tts nomes on|off\``,
         `\`${PREFIXO}tts entrar\` · \`${PREFIXO}tts sair\` · \`${PREFIXO}tts on|off\``,
         `\`${PREFIXO}tts voz [name]\` — pick the voice`,
       ].join("\n"), colour: COR.info,
@@ -322,7 +366,7 @@ export async function cmdTts(message, args, ctx) {
 
   // Cooldown: o megafone precisa de freio, mesmo para quem é da casa.
   const chave = `${serverId}:${message.authorId}`;
-  const espera = COOLDOWN_MS - (Date.now() - (ultimaFala.get(chave) ?? 0));
+  const espera = (c.cooldown ?? COOLDOWN_MS) - (Date.now() - (ultimaFala.get(chave) ?? 0));
   if (espera > 0 && !ehStaff) {
     return sendEmbed(message.channel, tr(ctx,
       { title: "⏳ Calma lá", description: `Espere ${Math.ceil(espera / 1000)}s para falar de novo.`, colour: COR.aviso },

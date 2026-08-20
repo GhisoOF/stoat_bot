@@ -201,6 +201,7 @@ const SUB = {
   tts: {
     channel: "canal", here: "aqui", broadcast: "transmitir",
     join: "entrar", leave: "sair", voice: "voz", status: "estado",
+    names: "nomes", cooldown: "cooldown",
   },
   fuso: {
     add: "add", remove: "remove", list: "lista", clear: "limpar",

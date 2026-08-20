@@ -200,7 +200,7 @@ function detalhesPT(P) {
     },
     tts: {
       uso: `${P}tts <texto> | [canal|transmitir|entrar|sair|voz|estado|on|off]`,
-      desc: "A Judy **fala nas calls**. Alguém escreve, ela lê em voz alta no canal de voz.\n\n`&tts <texto>` — fala agora\n`&tts estado` — diagnóstico da cadeia inteira\n\n**Configuração** _(ManageMessages)_\n`&tts canal <#voz>` — onde falar\n`&tts transmitir <#texto>` — tudo escrito lá vira fala na call\n`&tts entrar` · `&tts sair` · `&tts on|off`\n`&tts voz [nome]` — escolhe a voz\n\n_A síntese é **offline**, no computador do dono (Piper). Só funciona nos servidores habilitados._",
+      desc: "A Judy **fala nas calls**. Alguém escreve, ela lê em voz alta no canal de voz.\n\n`&tts <texto>` — fala agora\n`&tts estado` — diagnóstico da cadeia inteira\n\n**Modo transmissão** — sem precisar de comando\n`&tts transmitir aqui` faz **tudo** que for escrito no canal virar fala. Ideal no chat da própria call.\n`&tts nomes off` — para de anunciar \"Fulano disse:\"\n`&tts cooldown <s>` — freio entre falas da mesma pessoa (0 desliga)\n\n**Configuração** _(ManageMessages)_\n`&tts canal aqui` — define a call (digite dentro dela)\n`&tts entrar` · `&tts sair` · `&tts on|off` · `&tts voz [nome]`\n\n_Dentro dos canais de voz configurados, o `&tts` funciona para **todos**, mesmo com restrição de canal ligada._\n_A síntese é **offline**, no computador do dono (Piper)._",
       perm: "ManageMessages (só para configurar)", ex: `${P}tts canal <#voz>`,
     },
     fuso: {
@@ -416,7 +416,7 @@ function detalhesEN(P) {
     },
     tts: {
       uso: `${P}tts <text> | [canal|transmitir|entrar|sair|voz|estado|on|off]`,
-      desc: "Judy **speaks in calls**. Someone writes, she reads it aloud in the voice channel.\n\n`&tts <text>` — speak now\n`&tts estado` — diagnostics for the whole chain\n\n**Configuration** _(ManageMessages)_\n`&tts canal <#voice>` — where to speak\n`&tts transmitir <#text>` — everything written there becomes speech\n`&tts entrar` · `&tts sair` · `&tts on|off`\n`&tts voz [name]` — pick the voice\n\n_Synthesis runs **offline** on the owner's machine (Piper). Only works on enabled servers._",
+      desc: "Judy **speaks in calls**. Someone writes, she reads it aloud in the voice channel.\n\n`&tts <text>` — speak now\n`&tts estado` — diagnostics for the whole chain\n\n**Broadcast mode** — no command needed\n`&tts transmitir here` makes **everything** written in the channel become speech. Ideal in the call's own chat.\n`&tts nomes off` — stops announcing \"Someone said:\"\n`&tts cooldown <s>` — brake between one person's utterances (0 disables)\n\n**Configuration** _(ManageMessages)_\n`&tts canal here` — sets the call (type inside it)\n`&tts entrar` · `&tts sair` · `&tts on|off` · `&tts voz [name]`\n\n_Inside the configured voice channels, `&tts` works for **everyone**, even with channel restriction on._\n_Synthesis runs **offline** on the owner's machine (Piper)._",
       perm: "ManageMessages (configuration only)", ex: `${P}tts canal <#voice>`,
     },
     fuso: {

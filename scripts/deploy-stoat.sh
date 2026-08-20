@@ -46,6 +46,11 @@ okay() { printf '\033[32m✓ %s\033[0m\n' "$1"; }
 [ -f "$TOKEN_BACKUP" ] || erro "backup do token não encontrado: $TOKEN_BACKUP
    (era ele que devolvia o GITHUB_TOKEN ao ia-servico depois do deploy)"
 
+# O voz-servico guarda BOT_TOKEN e VOZ_CHAVE. Ele não é apagado pelo passo 3,
+# mas se um dia for, o backup evita ter de gerar a chave de novo (e
+# reconfigurar o Portainer junto).
+VOZ_ENV_BACKUP="${VOZ_ENV_BACKUP:-$HOME/judy-voz.env}"
+
 ZIP="$(cd "$(dirname "$ZIP")" && pwd)/$(basename "$ZIP")"   # caminho absoluto
 
 # O zip não pode estar DENTRO do repositório: é assim que ele acaba commitado.
@@ -79,6 +84,39 @@ rm -f "$REPO/.token-guardado"
 mkdir -p ia-servico
 cp "$TOKEN_BACKUP" ia-servico/.env
 okay "GITHUB_TOKEN devolvido a ia-servico/.env"
+
+# ── 4b. Reinstalar as dependências dos serviços nativos ──
+# O passo 3 apaga `ia-servico/` inteira, e com ela some o node_modules.
+# O serviço só quebra no PRÓXIMO restart — então o sintoma aparece dias
+# depois, desconectado da causa. Foi assim que o judy-ia caiu com
+# "Cannot find package 'rss-parser'" muito tempo após o deploy que o
+# esvaziou. Reinstalar aqui fecha o buraco.
+if [ -f "$VOZ_ENV_BACKUP" ] && [ -d voz-servico ] && [ ! -f voz-servico/.env ]; then
+  cp "$VOZ_ENV_BACKUP" voz-servico/.env
+  okay "BOT_TOKEN/VOZ_CHAVE devolvidos a voz-servico/.env"
+fi
+
+for servico in ia-servico voz-servico; do
+  if [ -f "$servico/package.json" ] && [ ! -d "$servico/node_modules" ]; then
+    info "instalando dependências de $servico (foram apagadas no passo 3)"
+    (cd "$servico" && npm install --silent) \
+      && okay "$servico pronto" \
+      || printf '\033[33m! npm install falhou em %s — rode à mão antes de reiniciar o serviço\033[0m\n' "$servico"
+  fi
+done
+
+# Aviso sobre reinício: código novo no disco não vira código novo em
+# execução. Sem isto, você fica achando que o deploy não pegou.
+if command -v rc-service >/dev/null 2>&1; then
+  for servico in judy-ia judy-voz; do
+    if rc-service "$servico" status >/dev/null 2>&1; then
+      info "reiniciando $servico para carregar o código novo"
+      sudo rc-service "$servico" restart >/dev/null 2>&1 \
+        && okay "$servico reiniciado" \
+        || printf '\033[33m! reinicie à mão:  sudo rc-service %s restart\033[0m\n' "$servico"
+    fi
+  done
+fi
 
 # ── 5. Rede de segurança: nada de segredo ou lixo no commit ──
 info "conferindo o que vai subir"

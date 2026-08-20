@@ -127,6 +127,20 @@ servidor.listen(PORTA, () => {
   voz.iniciar().then((r) => log(`revoice: ${r.ok ? "pronto" : `INDISPONÍVEL — ${r.erro}`}`));
 });
 
+// ── Blindagem contra erros do LiveKit ─────────────────────
+// Um erro assíncrono vindo de dentro do revoice/LiveKit derrubava o
+// processo inteiro: a primeira falha matava o serviço e a chamada seguinte
+// respondia "fetch failed" — sintoma que não diz nada sobre a causa.
+// Um serviço de voz não pode morrer porque uma sala deu problema.
+process.on("uncaughtException", (e) => {
+  erro("exceção não tratada (o serviço CONTINUA de pé):", e?.message ?? e);
+  if (DEBUG) console.error(e);
+});
+process.on("unhandledRejection", (e) => {
+  erro("promessa rejeitada sem tratamento (o serviço CONTINUA de pé):", e?.message ?? e);
+  if (DEBUG) console.error(e);
+});
+
 // Sair limpo: deixar o bot pendurado numa call depois do serviço morrer
 // é o tipo de coisa que só se descobre quando alguém reclama.
 for (const sinal of ["SIGINT", "SIGTERM"]) {

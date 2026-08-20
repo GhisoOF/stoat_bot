@@ -165,13 +165,31 @@ export async function cmdTts(message, args, ctx) {
     }
 
     if (["canal", "channel"].includes(sub)) {
-      const id = resolverCanal(resto, { message, server });
+      // Canais de voz do Stoat têm chat próprio, então `aqui` é o atalho
+      // natural: você digita dentro da call que quer configurar. Sem alvo
+      // nenhum, assume `aqui` — é o que a pessoa quis dizer.
+      const alvo = resto || "aqui";
+      const id = resolverCanal(alvo, { message, server });
       if (!id) {
         return sendEmbed(message.channel, tr(ctx,
           { title: "❌ Canal inválido",
-            description: `Uso: \`${PREFIXO}tts canal <#canal-de-voz>\`\n_Precisa ser um canal de **voz**._`, colour: COR.erro },
+            description: [
+              `Não identifiquei um canal em \`${alvo}\`.`,
+              "",
+              `\`${PREFIXO}tts canal aqui\` — usa **este** canal (digite dentro da call)`,
+              `\`${PREFIXO}tts canal <#canal>\` — por menção, link, ID ou nome`,
+              "",
+              "_Precisa ser um canal de **voz**._",
+            ].join("\n"), colour: COR.erro },
           { title: "❌ Invalid channel",
-            description: `Usage: \`${PREFIXO}tts canal <#voice-channel>\`\n_It must be a **voice** channel._`, colour: COR.erro }));
+            description: [
+              `I couldn't identify a channel in \`${alvo}\`.`,
+              "",
+              `\`${PREFIXO}tts canal here\` — uses **this** channel (type it inside the call)`,
+              `\`${PREFIXO}tts canal <#channel>\` — by mention, link, ID or name`,
+              "",
+              "_It must be a **voice** channel._",
+            ].join("\n"), colour: COR.erro }));
       }
       c.canalVoz = id; c.ativo = true; salvarConfig?.();
       return sendEmbed(message.channel, tr(ctx,
@@ -276,7 +294,8 @@ export async function cmdTts(message, args, ctx) {
         `\`${PREFIXO}tts estado\` — diagnóstico`,
         "",
         `**Configuração** _(ManageMessages)_`,
-        `\`${PREFIXO}tts canal <#voz>\` · \`${PREFIXO}tts transmitir <#texto>\``,
+        `\`${PREFIXO}tts canal aqui\` — define a call em que você está`
+        + `\n\`${PREFIXO}tts canal <#voz>\` · \`${PREFIXO}tts transmitir <#texto>\``,
         `\`${PREFIXO}tts entrar\` · \`${PREFIXO}tts sair\` · \`${PREFIXO}tts on|off\``,
         `\`${PREFIXO}tts voz [nome]\` — escolhe a voz`,
       ].join("\n"), colour: COR.info,
@@ -287,7 +306,8 @@ export async function cmdTts(message, args, ctx) {
         `\`${PREFIXO}tts estado\` — diagnostics`,
         "",
         `**Configuration** _(ManageMessages)_`,
-        `\`${PREFIXO}tts canal <#voice>\` · \`${PREFIXO}tts transmitir <#text>\``,
+        `\`${PREFIXO}tts canal here\` — sets the call you are in`
+        + `\n\`${PREFIXO}tts canal <#voice>\` · \`${PREFIXO}tts transmitir <#text>\``,
         `\`${PREFIXO}tts entrar\` · \`${PREFIXO}tts sair\` · \`${PREFIXO}tts on|off\``,
         `\`${PREFIXO}tts voz [name]\` — pick the voice`,
       ].join("\n"), colour: COR.info,

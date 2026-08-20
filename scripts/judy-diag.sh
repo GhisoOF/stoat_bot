@@ -37,14 +37,34 @@ diagnostico() {
   local problemas=0
 
   titulo "Serviços"
-  for s in judy-voz judy-ia; do
-    if rc-service "$s" status >/dev/null 2>&1; then
-      ok "$s está rodando"
-    else
-      falha "$s NÃO está rodando  →  sudo rc-service $s start"
-      problemas=$((problemas+1))
-    fi
-  done
+  # A arquitetura deste Gentoo é MISTA e isso já custou uma hora de
+  # investigação: o Ollama roda nativo, o judy-ia roda em CONTAINER Docker
+  # e o judy-voz roda nativo (precisa dos binários do LiveKit e do Piper).
+  # Checar tudo com `rc-service` fazia o judy-ia aparecer como morto enquanto
+  # respondia normalmente — e sugeria "instale o OpenRC", que era o conselho
+  # errado. Aqui cada serviço é checado do jeito que ele realmente roda.
+
+  # judy-voz: nativo, via OpenRC
+  if rc-service judy-voz status >/dev/null 2>&1; then
+    ok "judy-voz rodando como serviço (sobrevive a reboot)"
+  elif curl -sf --max-time 3 "http://localhost:$VOZ_PORTA/saude" >/dev/null 2>&1; then
+    aviso "judy-voz VIVO mas fora do OpenRC — some no próximo reboot"
+    aviso "   registre:  sudo cp scripts/openrc/judy-voz /etc/init.d/ && sudo rc-update add judy-voz default"
+  else
+    falha "judy-voz NÃO está rodando  →  sudo rc-service judy-voz start"
+    problemas=$((problemas+1))
+  fi
+
+  # judy-ia: container Docker
+  if command -v docker >/dev/null 2>&1 && docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "judy-ia"; then
+    local st; st=$(docker ps --format '{{.Names}}\t{{.Status}}' | grep -P '^judy-ia\t' | cut -f2)
+    ok "judy-ia em container — $st"
+  elif curl -sf --max-time 3 "http://localhost:$IA_PORTA/saude" >/dev/null 2>&1; then
+    ok "judy-ia respondendo (fora do Docker)"
+  else
+    falha "judy-ia parado  →  cd ia-servico && docker compose up -d"
+    problemas=$((problemas+1))
+  fi
 
   titulo "Ollama (a IA)"
   if curl -sf --max-time 3 "$OLLAMA/api/tags" >/dev/null 2>&1; then
@@ -60,6 +80,7 @@ diagnostico() {
     ok "respondendo na porta $IA_PORTA"
   else
     falha "não responde na porta $IA_PORTA"
+    aviso "   é um container: cd ia-servico && docker compose up -d --build"
     problemas=$((problemas+1))
   fi
 
@@ -108,9 +129,12 @@ diagnostico() {
   [ -d "$VOZ_DIR/node_modules" ] && ok "dependências instaladas" || {
     falha "faltam dependências  →  cd $VOZ_DIR && npm install"; problemas=$((problemas+1)); }
 
-  titulo "Erros recentes (últimas 2h)"
+  titulo "Erros recentes"
+  # O título dizia "últimas 2h" mas mostrava o log inteiro — erros já
+  # resolvidos ficavam assombrando o diagnóstico como se fossem atuais.
+  # Agora olhamos só o fim do arquivo, que é o que de fato é recente.
   local recentes
-  recentes=$(grep -hiE "erro|error|ERRO" "$VOZ_LOG" "$IA_LOG" 2>/dev/null | tail -5)
+  recentes=$(tail -200 "$VOZ_LOG" 2>/dev/null | grep -iE "erro|error" | tail -5)
   if [ -n "$recentes" ]; then
     echo "$recentes" | sed 's/^/   /'
   else

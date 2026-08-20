@@ -198,6 +198,10 @@ const SUB = {
     default: "padrao", status: "status", clear: "limpar", here: "aqui",
     hidden: "oculto", hide: "oculto", visible: "visivel", show: "visivel",
   },
+  tts: {
+    channel: "canal", here: "aqui", broadcast: "transmitir",
+    join: "entrar", leave: "sair", voice: "voz", status: "estado",
+  },
   fuso: {
     add: "add", remove: "remove", list: "lista", clear: "limpar",
     search: "buscar", find: "buscar", now: "ver", time: "ver", check: "ver",

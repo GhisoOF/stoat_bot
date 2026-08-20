@@ -69,6 +69,18 @@ export async function iniciar() {
   }
 }
 
+// `isConnected` mudou de função para propriedade entre versões do
+// @livekit/rtc-node. Esta função aceita as duas formas e nunca lança —
+// um detalhe de biblioteca não pode derrubar a chamada inteira.
+function jaConectado(connection) {
+  try {
+    const room = connection?.room;
+    if (!room) return false;
+    const v = room.isConnected;
+    return typeof v === "function" ? !!v.call(room) : !!v;
+  } catch { return false; }
+}
+
 // Traduz o erro da API do Stoat em algo que aponta a solução.
 function explicar(e) {
   const st = e?.response?.status;
@@ -97,7 +109,14 @@ export async function entrar(canalVoz) {
         () => rej(new Error(`${ESPERA_JOIN_MS / 1000}s sem conectar à sala (firewall UDP? permissão?)`)),
         ESPERA_JOIN_MS
       );
-      if (connection.isConnected?.()) { clearTimeout(t); return res(); }
+      // NÃO chamar connection.isConnected() aqui: no @livekit/rtc-node atual
+      // `room.isConnected` é uma PROPRIEDADE, mas o revoice a invoca como
+      // função — daí o "this.room.isConnected is not a function". Esperamos
+      // só pelo evento, que é confiável. O try/catch protege caso a lib mude
+      // de novo.
+      try {
+        if (jaConectado(connection)) { clearTimeout(t); return res(); }
+      } catch { /* segue esperando o evento */ }
       connection.once("join", () => { clearTimeout(t); res(); });
       connection.once("error", (e) => { clearTimeout(t); rej(e); });
     });
@@ -108,6 +127,11 @@ export async function entrar(canalVoz) {
   } catch (e) {
     const erro = explicar(e);
     log(`falha ao entrar em ${canalVoz}: ${erro}`);
+    // Limpeza: uma conexão que falhou no meio não pode ficar registrada,
+    // senão a tentativa seguinte reusa um objeto quebrado e falha de um
+    // jeito diferente — mascarando a causa original.
+    try { conexoes.get(canalVoz)?.connection?.leave?.(); } catch {}
+    conexoes.delete(canalVoz);
     return { ok: false, erro };
   }
 }
@@ -142,7 +166,7 @@ export async function estado() {
 
 // ── Fila: uma fala por vez, por canal ─────────────────────
 async function processarFila(canalVoz) {
-  const c = conexoes.get(canalVoz);
+  let c = conexoes.get(canalVoz);
   if (!c || c.ocupado) return;
   const item = c.fila.shift();
   if (!item) return;
@@ -151,6 +175,19 @@ async function processarFila(canalVoz) {
   try {
     const { arquivo, voz } = await tts.sintetizar(item.texto, item.voz);
     dbg(`falando em ${canalVoz} (voz ${voz}): "${item.texto.slice(0, 60)}"`);
+
+    // Se a sala caiu entre uma fala e outra (rede, timeout do LiveKit), a
+    // publicação vai para o vazio: o bot aparece na call mas sai mudo.
+    // Reconectar aqui é mais barato que deixar a pessoa achando que falou.
+    if (!jaConectado(c.connection)) {
+      log(`sala de ${canalVoz} caiu — reconectando antes de falar`);
+      conexoes.delete(canalVoz);
+      const r = await entrar(canalVoz);
+      if (!r.ok) throw new Error(`reconexão falhou: ${r.erro}`);
+      const novo = conexoes.get(canalVoz);
+      novo.fila = c.fila; novo.falas = c.falas;
+      c = novo;
+    }
 
     const media = new MediaPlayer();
     // ORDEM CRÍTICA — ver o cabeçalho deste arquivo.

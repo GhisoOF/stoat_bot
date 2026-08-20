@@ -143,7 +143,11 @@ export async function cmdServidores(message, args, ctx) {
     const ritmo = lang === "en"
       ? (d.mpm >= 0.1 ? `${d.mpm.toFixed(1)} msg/min` : d.mpm > 0 ? "<0.1 msg/min" : "idle")
       : (d.mpm >= 0.1 ? `${d.mpm.toFixed(1)} msg/min` : d.mpm > 0 ? "<0,1 msg/min" : "parado");
-    linhas.push(`**${d.nome}**\n   ${membrosTxt} · ${ritmo}`);
+    // O ID em `código` vai junto: este comando é do dono, e o ID é
+    // justamente o que ele precisa para configurar qualquer coisa por
+    // servidor (TTS_SERVIDORES, chat de IA, etc.). Sem isso, era preciso
+    // caçá-lo no cliente — e o Stoat nem sempre oferece "Copiar ID".
+    linhas.push(`**${d.nome}**\n   ${membrosTxt} · ${ritmo}\n   \`${d.id}\``);
   }
 
   const resumo = (lang === "en" ? [

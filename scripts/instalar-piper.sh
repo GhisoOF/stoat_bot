@@ -51,11 +51,28 @@ else
   okay "voz instalada"
 fi
 
+# ── Dependência do sistema ──
+# O Piper converte texto em FONEMAS usando o espeak-ng. Sem ele o binário
+# instala normalmente, aparece na lista, e falha em toda síntese com um
+# "Command failed" que não diz nada. É a causa nº 1 de "instalei mas não fala".
+if ! ldconfig -p 2>/dev/null | grep -q espeak-ng && [ ! -d "$DESTINO/espeak-ng-data" ]; then
+  aviso_espeak=1
+  printf '\033[33m! espeak-ng não encontrado — o Piper precisa dele para gerar fala\033[0m\n'
+  printf '\033[33m  No Gentoo:  sudo emerge app-accessibility/espeak-ng\033[0m\n'
+fi
+
 # ── Teste ──
+# SEM engolir o stderr: se falhar, a mensagem do Piper é justamente o que
+# se precisa ler. A versão anterior mandava tudo para /dev/null e deixava
+# você sem pista nenhuma.
 info "testando a síntese…"
-echo "Olá! Aqui é a Judy falando pela primeira vez." \
-  | "$DESTINO/piper" --model "$VOZES/$VOZ.onnx" --output_file /tmp/judy-teste.wav 2>/dev/null \
-  || erro "o Piper não conseguiu sintetizar — rode sem 2>/dev/null para ver o erro"
+if ! echo "Olá! Aqui é a Judy falando pela primeira vez." \
+     | "$DESTINO/piper" --model "$VOZES/$VOZ.onnx" --output_file /tmp/judy-teste.wav; then
+  echo
+  erro "o Piper não conseguiu sintetizar — a mensagem dele está logo acima.
+   Se fala em espeak/phonemize:  sudo emerge app-accessibility/espeak-ng
+   Se fala em onnx/model:        apague $VOZES e rode este script de novo"
+fi
 
 TAM=$(stat -c%s /tmp/judy-teste.wav 2>/dev/null || echo 0)
 [ "$TAM" -gt 1000 ] || erro "o WAV saiu vazio ($TAM bytes)"

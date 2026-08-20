@@ -22,6 +22,9 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import crypto from "node:crypto";
+import { createRequire } from "node:module";
+
+const require_ = createRequire(import.meta.url);
 
 // ── Executar o Piper passando texto pelo stdin ────────────
 //
@@ -202,3 +205,87 @@ export function limparAntigos(idadeMs = 5 * 60_000) {
 }
 
 setInterval(() => limparAntigos(), 5 * 60_000).unref?.();
+
+// ══════════════════════════════════════════════════════════
+//  Efeitos de voz — o timbre "GLaDOS" sem um modelo GLaDOS
+//
+//  Não existe voz GLaDOS treinada em português: os modelos prontos vêm das
+//  falas do Portal, em inglês, e usar um deles com texto em português daria
+//  pronúncia inglesa ("não" viraria "nay-oh").
+//
+//  Mas o que define aquele timbre não é a voz da atriz — é o PROCESSAMENTO:
+//  banda estreita de alto-falante, ressonância metálica, leve câmara e um
+//  deslocamento de tom. Tudo isso é filtro de áudio, e se aplica a qualquer
+//  voz — inclusive a feminina em português.
+//
+//  O ffmpeg vem embutido no revoice (ffmpeg-static), então não depende do
+//  sistema. Cada efeito custa poucos milissegundos sobre uma fala curta.
+// ══════════════════════════════════════════════════════════
+
+// Deslocar o tom mantendo a velocidade: acelera a taxa de amostragem,
+// reamostra de volta e compensa o tempo. Fixamos 48k antes para a conta não
+// depender da voz (o Piper sai em 22.05k; o dii pode ser outro).
+const tom = (k) => `aresample=48000,asetrate=${Math.round(48000 * k)},aresample=48000,atempo=${(1 / k).toFixed(4)}`;
+
+export const EFEITOS = {
+  nenhum: null,
+
+  // GLaDOS: banda de alto-falante + metálico + câmara + tom levemente acima.
+  // O aphaser é o que dá o "cantado" robótico característico.
+  glados: `${tom(1.06)},highpass=f=200,lowpass=f=6500,` +
+          `aphaser=type=t:speed=1.3:decay=0.55:delay=2.5,` +
+          `aecho=0.85:0.7:32:0.28,` +
+          `acompressor=threshold=0.12:ratio=4:attack=8:release=120,volume=1.35`,
+
+  // Robô genérico: modulação mais dura, sem a câmara.
+  robo: `${tom(0.96)},highpass=f=180,lowpass=f=5200,` +
+        `flanger=delay=4:depth=3:speed=1.2,volume=1.25`,
+
+  // Rádio/intercom: só banda estreita e compressão.
+  radio: `highpass=f=400,lowpass=f=3400,acompressor=threshold=0.1:ratio=6,volume=1.4`,
+
+  grave: `${tom(0.85)},volume=1.1`,
+  agudo: `${tom(1.18)},volume=1.05`,
+
+  // Sussurro: agudo suave, sem graves, bem comprimido.
+  sussurro: `${tom(1.04)},highpass=f=600,lowpass=f=7000,volume=0.85`,
+};
+
+function ffmpegBin() {
+  try { return require_("ffmpeg-static"); } catch { return "ffmpeg"; }
+}
+
+/**
+ * Aplica um efeito a um WAV. Devolve o caminho do novo arquivo.
+ * Se o efeito falhar por qualquer motivo, devolve o ORIGINAL — perder o
+ * efeito é irritante, perder a fala é pior.
+ */
+export async function aplicarEfeito(arquivo, nome) {
+  const cadeia = EFEITOS[nome];
+  if (!cadeia) return arquivo;
+
+  const saida = arquivo.replace(/\.wav$/, "") + `-${nome}.wav`;
+  try {
+    await new Promise((res, rej) => {
+      const p = spawn(ffmpegBin(), [
+        "-hide_banner", "-loglevel", "error",
+        "-i", arquivo, "-af", cadeia,
+        "-ar", "48000", "-ac", "1", "-y", saida,
+      ]);
+      let err = "";
+      p.stderr.on("data", (d) => { err += d; });
+      p.on("error", rej);
+      p.on("close", (c) => (c === 0 ? res() : rej(new Error(err.trim().slice(0, 200) || `ffmpeg saiu com ${c}`))));
+      setTimeout(() => { try { p.kill("SIGKILL"); } catch {} rej(new Error("efeito demorou demais")); }, 20_000);
+    });
+    if (fs.existsSync(saida) && fs.statSync(saida).size > 100) {
+      try { fs.unlinkSync(arquivo); } catch {}
+      return saida;
+    }
+    return arquivo;
+  } catch (e) {
+    console.error(`[VOZ] efeito "${nome}" falhou (falando sem ele): ${e.message}`);
+    try { fs.unlinkSync(saida); } catch {}
+    return arquivo;
+  }
+}

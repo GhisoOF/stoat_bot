@@ -53,6 +53,7 @@ function garantirConfig(config) {
   config.tts.anunciarNome ??= true;
   config.tts.dicionario ??= {};      // abreviações extras deste servidor
   config.tts.expandir ??= true;      // usar o dicionário embutido
+  config.tts.efeito ??= null;        // timbre: glados, robo, radio…
   return config.tts;
 }
 
@@ -111,7 +112,7 @@ export async function aoMensagem(message, ctx) {
     await chamar("/falar", {
       canalVoz: c.canalVoz,
       texto: c.anunciarNome === false ? corpo : `${nome} disse: ${corpo}`,
-      voz: c.voz,
+      voz: c.voz, efeito: c.efeito,
     });
     return true;
   } catch (e) {
@@ -281,7 +282,8 @@ export async function cmdTts(message, args, ctx) {
   }
 
   if (["canal", "channel", "transmitir", "broadcast", "entrar", "join", "sair", "leave",
-       "on", "off", "voz", "voice", "cooldown", "espera", "nomes", "names"].includes(sub)) {
+       "on", "off", "voz", "voice", "cooldown", "espera", "nomes", "names",
+       "efeito", "effect", "timbre"].includes(sub)) {
     if (!ehStaff) {
       return sendEmbed(message.channel, tr(ctx,
         { title: "🚫 Permissão insuficiente",
@@ -386,6 +388,37 @@ export async function cmdTts(message, args, ctx) {
           description: c.ativo ? "Judy speaks again." : "Nothing will be spoken until re-enabled.", colour: COR.mod }));
     }
 
+    if (["efeito", "effect", "timbre"].includes(sub)) {
+      let saude = null;
+      try { saude = await chamar("/saude", null, "GET"); } catch {}
+      const disp = saude?.efeitos ?? ["nenhum", "glados", "robo", "radio", "grave", "agudo", "sussurro"];
+      const alvo = resto.toLowerCase();
+
+      if (!alvo) {
+        return sendEmbed(message.channel, {
+          title: lang === "en" ? "🎛️ Voice effects" : "🎛️ Efeitos de voz",
+          description: [
+            ...disp.map((e) => `• \`${e}\`${e === (c.efeito ?? "nenhum") ? " ←" : ""}`),
+            "",
+            lang === "en"
+              ? "_There's no GLaDOS voice trained in Portuguese — the ready-made ones are English models from Portal. `glados` here is the **processing** (narrow band, metallic ring, chamber, slight pitch), applied over the voice you already use._"
+              : "_Não existe voz GLaDOS treinada em português — as prontas são modelos ingleses do Portal. O `glados` aqui é o **processamento** (banda estreita, ressonância metálica, câmara e leve mudança de tom), aplicado sobre a voz que você já usa._",
+          ].join("\n"),
+          colour: COR.info });
+      }
+      if (!disp.includes(alvo)) {
+        return sendEmbed(message.channel, {
+          title: lang === "en" ? "❌ Unknown effect" : "❌ Efeito desconhecido",
+          description: `\`${alvo}\`\n\n${disp.map((e) => `\`${e}\``).join(", ")}`, colour: COR.erro });
+      }
+      c.efeito = alvo === "nenhum" ? null : alvo; salvarConfig?.();
+      return sendEmbed(message.channel, tr(ctx,
+        { title: "🎛️ Efeito aplicado",
+          description: `Agora falo com \`${alvo}\`.\n\nOuça: \`${PREFIXO}tts teste de voz\``, colour: COR.sucesso },
+        { title: "🎛️ Effect applied",
+          description: `Now speaking with \`${alvo}\`.\n\nHear it: \`${PREFIXO}tts voice test\``, colour: COR.sucesso }));
+    }
+
     if (["cooldown", "espera"].includes(sub)) {
       const seg = Number(resto.replace(",", "."));
       if (!Number.isFinite(seg) || seg < 0 || seg > 300) {
@@ -457,7 +490,8 @@ export async function cmdTts(message, args, ctx) {
         `**Configuração** _(ManageMessages)_`,
         `\`${PREFIXO}tts canal aqui\` — define a call em que você está`
         + `\n\`${PREFIXO}tts transmitir aqui\` — **tudo** que for escrito aqui vira fala`
-        + `\n\`${PREFIXO}tts canal <#voz>\` · \`${PREFIXO}tts cooldown <s>\` · \`${PREFIXO}tts nomes on|off\``,
+        + `\n\`${PREFIXO}tts canal <#voz>\` · \`${PREFIXO}tts voz\` · \`${PREFIXO}tts efeito\``
+        + `\n\`${PREFIXO}tts cooldown <s>\` · \`${PREFIXO}tts nomes on|off\` · \`${PREFIXO}tts dicionario\``,
         `\`${PREFIXO}tts entrar\` · \`${PREFIXO}tts sair\` · \`${PREFIXO}tts on|off\``,
         `\`${PREFIXO}tts voz [nome]\` — escolhe a voz`,
       ].join("\n"), colour: COR.info,
@@ -495,7 +529,7 @@ export async function cmdTts(message, args, ctx) {
 
   const falado = c.expandir === false ? texto : abrev.expandir(texto, c.dicionario ?? {});
   try {
-    const r = await chamar("/falar", { canalVoz: c.canalVoz, texto: falado, voz: c.voz });
+    const r = await chamar("/falar", { canalVoz: c.canalVoz, texto: falado, voz: c.voz, efeito: c.efeito });
     return sendEmbed(message.channel, {
       title: lang === "en" ? "🔊 Speaking" : "🔊 Falando",
       description: `${falado.length > 120 ? falado.slice(0, 120) + "…" : falado}${

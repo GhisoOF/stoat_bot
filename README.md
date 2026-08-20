@@ -277,7 +277,9 @@ persona, que pede o mesmo tom em uma frase.
 - **Autorole** (`&autorole`): dá um cargo automaticamente a quem entra no servidor.
 - **Voz nas calls** (`&tts`): a Judy entra num canal de voz e **fala** o que
   for escrito. A síntese é **offline**, no computador do dono (Piper, pt-BR — `faber` masculina
-  ou `dii` feminina),
+  ou `dii` feminina), com efeitos de timbre aplicados por ffmpeg (`&tts efeito
+  glados` recria o processamento metálico da GLaDOS — não existe voz GLaDOS
+  treinada em português, as prontas são modelos ingleses do Portal),
   e o serviço de voz (`judy-voz`) roda nativo no Gentoo — fora do Docker, para
   que uma falha de WebRTC não derrube a moderação. `&tts transmitir aqui`
   faz tudo que for escrito no canal virar fala na call — sem precisar de comando. Recurso isolado:

@@ -71,6 +71,7 @@ const servidor = createServer(async (req, res) => {
         ok,
         versao: "1.0",
         piper,
+        efeitos: Object.keys(tts.EFEITOS),
         voz: conexoes,
         chaveExigida: !!CHAVE,
         debug: DEBUG,
@@ -97,12 +98,12 @@ const servidor = createServer(async (req, res) => {
     }
 
     if (rota === "/falar") {
-      const { canalVoz, texto, voz: vozNome } = corpo;
+      const { canalVoz, texto, voz: vozNome, efeito } = corpo;
       if (!canalVoz) return responder(res, 400, { erro: "falta canalVoz" });
       if (!texto || !String(texto).trim()) return responder(res, 400, { erro: "falta texto" });
 
       const t0 = Date.now();
-      const r = await voz.falar(canalVoz, String(texto), vozNome);
+      const r = await voz.falar(canalVoz, String(texto), vozNome, efeito);
       dbg(`falar em ${canalVoz}: ${Date.now() - t0}ms — ${r.ok ? "ok" : r.erro}`);
       return responder(res, r.ok ? 200 : 502, { ...r, ms: Date.now() - t0 });
     }

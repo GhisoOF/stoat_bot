@@ -230,7 +230,10 @@ async function processarFila(canalVoz) {
 
   c.ocupado = true;
   try {
-    const { arquivo, voz } = await tts.sintetizar(item.texto, item.voz);
+    let { arquivo, voz } = await tts.sintetizar(item.texto, item.voz);
+    if (item.efeito && item.efeito !== "nenhum") {
+      arquivo = await tts.aplicarEfeito(arquivo, item.efeito);
+    }
     dbg(`falando em ${canalVoz} (voz ${voz}): "${item.texto.slice(0, 60)}"`);
 
     // Se a sala caiu entre uma fala e outra (rede, timeout do LiveKit), a
@@ -308,7 +311,7 @@ async function processarFila(canalVoz) {
   }
 }
 
-export async function falar(canalVoz, texto, vozNome = null) {
+export async function falar(canalVoz, texto, vozNome = null, efeito = null) {
   if (erroCarga) return { ok: false, erro: erroCarga };
 
   // Entra sozinho se ainda não estiver na call — é o que a pessoa espera
@@ -324,7 +327,7 @@ export async function falar(canalVoz, texto, vozNome = null) {
     return { ok: false, erro: `fila cheia (${MAX_FILA}) — espere as falas anteriores terminarem` };
   }
 
-  c.fila.push({ texto, voz: vozNome });
+  c.fila.push({ texto, voz: vozNome, efeito });
   processarFila(canalVoz);
   return { ok: true, naFila: c.fila.length, falando: c.ocupado };
 }

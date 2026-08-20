@@ -46,6 +46,13 @@ fi
 #   bash scripts/instalar-piper.sh              → instala faber (masculina)
 #   bash scripts/instalar-piper.sh dii          → instala dii (FEMININA)
 #   bash scripts/instalar-piper.sh todas        → instala as duas
+#   bash scripts/instalar-piper.sh Autor/repo   → qualquer voz do HuggingFace
+#
+# Para vozes da comunidade os nomes de arquivo NÃO seguem a convenção do
+# Piper (o OpenVoiceOS publica `dii_pt-BR.onnx`, e às vezes a config vem como
+# `.piper.json`). Por isso perguntamos à API do HuggingFace quais arquivos
+# existem em vez de montar a URL no chute — foi o que deu 404 na primeira
+# tentativa.
 #
 ESCOLHA="${1:-${PIPER_VOZ_ESCOLHA:-faber}}"
 
@@ -64,17 +71,63 @@ baixar_voz() {
   okay "voz $nome instalada"
 }
 
+# ── Descobrir os arquivos de um repositório do HuggingFace ──
+#
+# Vozes da comunidade não seguem a convenção de nomes do Piper: o OpenVoiceOS
+# publica como `dii_pt-BR.onnx` e às vezes `.piper.json` em vez de
+# `.onnx.json`. Adivinhar o nome deu 404 e uma mensagem inútil. Aqui
+# perguntamos à API do HuggingFace quais arquivos existem de verdade e
+# pegamos o .onnx e o .json que estiverem lá, qualquer que seja o nome.
+baixar_do_hf() {
+  local repo="$1" nome_local="$2"
+  if [ -f "$VOZES/$nome_local.onnx" ] && [ -f "$VOZES/$nome_local.onnx.json" ]; then
+    okay "voz $nome_local já presente"
+    return 0
+  fi
+
+  info "consultando os arquivos de $repo…"
+  local lista
+  lista=$(curl -fsL "https://huggingface.co/api/models/$repo" 2>/dev/null) \
+    || erro "não consegui consultar o repositório $repo
+   Confira se ele existe: https://huggingface.co/$repo"
+
+  # extrai os rfilename do JSON sem depender de jq
+  local arq_onnx arq_json
+  arq_onnx=$(printf '%s' "$lista" | tr ',' '\n' | grep -o '"rfilename":"[^"]*\.onnx"' \
+             | head -1 | cut -d'"' -f4)
+  arq_json=$(printf '%s' "$lista" | tr ',' '\n' | grep -oE '"rfilename":"[^"]*\.(onnx\.json|piper\.json|json)"' \
+             | grep -v 'config.json' | head -1 | cut -d'"' -f4)
+
+  [ -n "$arq_onnx" ] || erro "não achei nenhum arquivo .onnx em $repo"
+  [ -n "$arq_json" ] || erro "achei o modelo ($arq_onnx) mas nenhum .json de configuração em $repo"
+
+  info "  modelo: $arq_onnx"
+  info "  config: $arq_json"
+
+  local base="https://huggingface.co/$repo/resolve/main"
+  curl -fL "$base/$arq_onnx" -o "$VOZES/$nome_local.onnx" || {
+    rm -f "$VOZES/$nome_local.onnx"; erro "falha ao baixar $arq_onnx"; }
+  curl -fL "$base/$arq_json" -o "$VOZES/$nome_local.onnx.json" || {
+    rm -f "$VOZES/$nome_local.onnx" "$VOZES/$nome_local.onnx.json"
+    erro "falha ao baixar $arq_json"; }
+  okay "voz $nome_local instalada"
+}
+
 RH="https://huggingface.co/rhasspy/piper-voices/resolve/main/pt/pt_BR"
-OVOS="https://huggingface.co/OpenVoiceOS/pipertts_pt-BR_dii/resolve/main"
 
 case "$ESCOLHA" in
   dii|feminina|female)
-    baixar_voz "pt_BR-dii-medium" "$OVOS/pt-BR-dii-medium.onnx" "$OVOS/pt-BR-dii-medium.onnx.json"
+    baixar_do_hf "OpenVoiceOS/pipertts_pt-BR_dii" "pt_BR-dii-medium"
     VOZ="pt_BR-dii-medium" ;;
   todas|all|ambas)
     baixar_voz "pt_BR-faber-medium" "$RH/faber/medium/pt_BR-faber-medium.onnx" "$RH/faber/medium/pt_BR-faber-medium.onnx.json"
-    baixar_voz "pt_BR-dii-medium" "$OVOS/pt-BR-dii-medium.onnx" "$OVOS/pt-BR-dii-medium.onnx.json"
+    baixar_do_hf "OpenVoiceOS/pipertts_pt-BR_dii" "pt_BR-dii-medium"
     VOZ="pt_BR-dii-medium" ;;
+  */*)
+    # qualquer repositório do HuggingFace:
+    #   bash scripts/instalar-piper.sh OpenVoiceOS/pipertts_pt-PT_dii
+    baixar_do_hf "$ESCOLHA" "$(echo "$ESCOLHA" | tr '/' '-')"
+    VOZ="$(echo "$ESCOLHA" | tr '/' '-')" ;;
   *)
     baixar_voz "pt_BR-faber-medium" "$RH/faber/medium/pt_BR-faber-medium.onnx" "$RH/faber/medium/pt_BR-faber-medium.onnx.json"
     VOZ="pt_BR-faber-medium" ;;

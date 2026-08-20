@@ -111,9 +111,20 @@ if command -v rc-service >/dev/null 2>&1; then
   for servico in judy-ia judy-voz; do
     if rc-service "$servico" status >/dev/null 2>&1; then
       info "reiniciando $servico para carregar o código novo"
-      sudo rc-service "$servico" restart >/dev/null 2>&1 \
-        && okay "$servico reiniciado" \
-        || printf '\033[33m! reinicie à mão:  sudo rc-service %s restart\033[0m\n' "$servico"
+      # `sudo` sem terminal falha em silêncio, e o serviço fica rodando código
+      # velho enquanto o bot já roda o novo — o pior estado possível, porque
+      # tudo "parece" atualizado. Se não der para reiniciar, o aviso tem de
+      # ser impossível de ignorar.
+      if sudo -n true 2>/dev/null; then
+        sudo rc-service "$servico" restart >/dev/null 2>&1 \
+          && okay "$servico reiniciado" \
+          || printf '\033[31m✗ %s NÃO reiniciou — rode: sudo rc-service %s restart\033[0m\n' "$servico" "$servico"
+      else
+        printf '\033[31m\n╔════════════════════════════════════════════════════════╗\033[0m\n'
+        printf '\033[31m║  ATENÇÃO: %s ainda roda o código ANTIGO          ║\033[0m\n' "$servico"
+        printf '\033[31m╚════════════════════════════════════════════════════════╝\033[0m\n'
+        printf '   Rode agora:  \033[36msudo rc-service %s restart\033[0m\n\n' "$servico"
+      fi
     fi
   done
 fi

@@ -231,8 +231,12 @@ async function processarFila(canalVoz) {
   c.ocupado = true;
   try {
     let { arquivo, voz } = await tts.sintetizar(item.texto, item.voz);
-    if (item.efeito && item.efeito !== "nenhum") {
-      arquivo = await tts.aplicarEfeito(arquivo, item.efeito);
+    // Tom e efeito são independentes — aplicar juntos numa passada só de
+    // ffmpeg, em vez de duas (que dobraria a perda de qualidade).
+    const temEfeito = item.efeito && item.efeito !== "nenhum";
+    const temTom = Number.isFinite(Number(item.tom)) && Math.abs(Number(item.tom) - 1) > 0.001;
+    if (temEfeito || temTom) {
+      arquivo = await tts.aplicarEfeito(arquivo, temEfeito ? item.efeito : null, item.tom);
     }
     dbg(`falando em ${canalVoz} (voz ${voz}): "${item.texto.slice(0, 60)}"`);
 
@@ -311,7 +315,7 @@ async function processarFila(canalVoz) {
   }
 }
 
-export async function falar(canalVoz, texto, vozNome = null, efeito = null) {
+export async function falar(canalVoz, texto, vozNome = null, efeito = null, tom = null) {
   if (erroCarga) return { ok: false, erro: erroCarga };
 
   // Entra sozinho se ainda não estiver na call — é o que a pessoa espera
@@ -327,7 +331,7 @@ export async function falar(canalVoz, texto, vozNome = null, efeito = null) {
     return { ok: false, erro: `fila cheia (${MAX_FILA}) — espere as falas anteriores terminarem` };
   }
 
-  c.fila.push({ texto, voz: vozNome, efeito });
+  c.fila.push({ texto, voz: vozNome, efeito, tom });
   processarFila(canalVoz);
   return { ok: true, naFila: c.fila.length, falando: c.ocupado };
 }

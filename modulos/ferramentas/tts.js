@@ -53,7 +53,8 @@ function garantirConfig(config) {
   config.tts.anunciarNome ??= true;
   config.tts.dicionario ??= {};      // abreviações extras deste servidor
   config.tts.expandir ??= true;      // usar o dicionário embutido
-  config.tts.efeito ??= null;        // timbre: glados, robo, radio…
+  config.tts.efeito ??= null;        // caráter: glados, robo, radio…
+  config.tts.tom ??= null;           // altura da voz (1.0 = original)
   return config.tts;
 }
 
@@ -112,7 +113,7 @@ export async function aoMensagem(message, ctx) {
     await chamar("/falar", {
       canalVoz: c.canalVoz,
       texto: c.anunciarNome === false ? corpo : `${nome} disse: ${corpo}`,
-      voz: c.voz, efeito: c.efeito,
+      voz: c.voz, efeito: c.efeito, tom: c.tom,
     });
     return true;
   } catch (e) {
@@ -283,7 +284,7 @@ export async function cmdTts(message, args, ctx) {
 
   if (["canal", "channel", "transmitir", "broadcast", "entrar", "join", "sair", "leave",
        "on", "off", "voz", "voice", "cooldown", "espera", "nomes", "names",
-       "efeito", "effect", "timbre"].includes(sub)) {
+       "efeito", "effect", "timbre", "tom", "pitch", "altura"].includes(sub)) {
     if (!ehStaff) {
       return sendEmbed(message.channel, tr(ctx,
         { title: "🚫 Permissão insuficiente",
@@ -388,6 +389,50 @@ export async function cmdTts(message, args, ctx) {
           description: c.ativo ? "Judy speaks again." : "Nothing will be spoken until re-enabled.", colour: COR.mod }));
     }
 
+    if (["tom", "pitch", "altura"].includes(sub)) {
+      if (!resto) {
+        return sendEmbed(message.channel, tr(ctx, {
+          title: "🎚️ Tom da voz",
+          description: [
+            `**Agora:** ${c.tom ?? 1}${c.tom && c.tom !== 1 ? "" : " _(original)_"}`,
+            "",
+            `\`${PREFIXO}tts tom 1.10\` — mais agudo · \`${PREFIXO}tts tom 0.92\` — mais grave`,
+            `\`${PREFIXO}tts tom 1\` — volta ao original`,
+            "",
+            "_Sobe **tom e formantes juntos**: uma voz masculina vira feminina de verdade, não 'homem falando fino'._",
+            "_Se a voz base já é feminina (como a `dii`), mexa pouco — acima de 1.05 começa a soar infantil._",
+          ].join("\n"),
+          colour: COR.info,
+        }, {
+          title: "🎚️ Voice pitch",
+          description: [
+            `**Now:** ${c.tom ?? 1}${c.tom && c.tom !== 1 ? "" : " _(original)_"}`,
+            "",
+            `\`${PREFIXO}tts tom 1.10\` — higher · \`${PREFIXO}tts tom 0.92\` — lower`,
+            `\`${PREFIXO}tts tom 1\` — back to original`,
+            "",
+            "_Shifts **pitch and formants together**: a male voice becomes properly feminine, not a sped-up man._",
+            "_If the base voice is already female (like `dii`), go easy — above 1.05 starts sounding childlike._",
+          ].join("\n"),
+          colour: COR.info,
+        }));
+      }
+      const n = Number(resto.replace(",", "."));
+      if (!Number.isFinite(n) || n < 0.5 || n > 2) {
+        return sendEmbed(message.channel, tr(ctx,
+          { title: "❌ Valor inválido", description: `Entre 0.5 e 2.0. Ex.: \`${PREFIXO}tts tom 1.08\``, colour: COR.erro },
+          { title: "❌ Invalid value", description: `Between 0.5 and 2.0. E.g.: \`${PREFIXO}tts tom 1.08\``, colour: COR.erro }));
+      }
+      c.tom = n === 1 ? null : n; salvarConfig?.();
+      return sendEmbed(message.channel, tr(ctx,
+        { title: "🎚️ Tom ajustado",
+          description: `${n === 1 ? "Voltou ao tom original." : `Tom em **${n}**.`}\n\nOuça: \`${PREFIXO}tts teste de voz\``,
+          colour: COR.sucesso },
+        { title: "🎚️ Pitch adjusted",
+          description: `${n === 1 ? "Back to the original pitch." : `Pitch at **${n}**.`}`,
+          colour: COR.sucesso }));
+    }
+
     if (["efeito", "effect", "timbre"].includes(sub)) {
       let saude = null;
       try { saude = await chamar("/saude", null, "GET"); } catch {}
@@ -402,8 +447,8 @@ export async function cmdTts(message, args, ctx) {
             "",
             "",
             lang === "en"
-              ? "_Fine-tune the pitch with `tom:<n>` — e.g. `tom:1.18`. 1.0 is the original; above that gets more feminine (formants shift too, so it doesn't sound like a sped-up man)._"
-              : "_Ajuste fino do tom com `tom:<n>` — ex.: `tom:1.18`. 1.0 é o original; acima disso fica mais feminino (os formantes sobem junto, então não vira homem acelerado)._",
+              ? `_These change the **character** only — pitch is a separate knob: \`${PREFIXO}tts tom <n>\`. That way an effect sounds the same over any base voice._`
+              : `_Estes mudam só o **caráter** — a altura é um controle à parte: \`${PREFIXO}tts tom <n>\`. Assim um efeito soa igual sobre qualquer voz base._`,
             "",
             lang === "en"
               ? "_There's no GLaDOS voice trained in Portuguese — the ready-made ones are English models from Portal. `glados` here is the **processing** (narrow band, metallic ring, chamber, slight pitch), applied over the voice you already use._"
@@ -411,9 +456,31 @@ export async function cmdTts(message, args, ctx) {
           ].join("\n"),
           colour: COR.info });
       }
-      // `tom:1.18` é sob medida — não está na lista fixa, mas é válido.
-      const ehTom = /^tom:[0-9]*\.?[0-9]+$/.test(alvo);
-      if (!disp.includes(alvo) && !ehTom) {
+
+      // O serviço de voz é atualizado à parte (roda no Gentoo, fora do
+      // Docker). Se ele não conhece efeitos que este código já conhece, está
+      // com versão antiga — e aceitar o pedido faria a fala sair SEM efeito,
+      // silenciosamente. Melhor dizer o que houve e como resolver.
+      if (saude && !disp.includes("feminina")) {
+        return sendEmbed(message.channel, tr(ctx,
+          { title: "⚠️ Serviço de voz desatualizado",
+            description: [
+              "O bot já tem os efeitos novos, mas o `judy-voz` ainda roda a versão anterior — por isso a fala sairia sem efeito.",
+              "",
+              "No Gentoo:",
+              "```sudo rc-service judy-voz restart```",
+              `Depois: \`${PREFIXO}tts efeito\` para ver a lista completa.`,
+            ].join("\n"), colour: COR.aviso },
+          { title: "⚠️ Voice service is outdated",
+            description: [
+              "The bot already has the new effects, but `judy-voz` is still running the previous version — speech would come out with no effect.",
+              "",
+              "On the Gentoo box:",
+              "```sudo rc-service judy-voz restart```",
+            ].join("\n"), colour: COR.aviso }));
+      }
+
+      if (!disp.includes(alvo)) {
         return sendEmbed(message.channel, {
           title: lang === "en" ? "❌ Unknown effect" : "❌ Efeito desconhecido",
           description: `\`${alvo}\`\n\n${disp.map((e) => `\`${e}\``).join(", ")}`, colour: COR.erro });
@@ -498,7 +565,7 @@ export async function cmdTts(message, args, ctx) {
         `\`${PREFIXO}tts canal aqui\` — define a call em que você está`
         + `\n\`${PREFIXO}tts transmitir aqui\` — **tudo** que for escrito aqui vira fala`
         + `\n\`${PREFIXO}tts canal <#voz>\` · \`${PREFIXO}tts voz\` · \`${PREFIXO}tts efeito\``
-        + `\n\`${PREFIXO}tts cooldown <s>\` · \`${PREFIXO}tts nomes on|off\` · \`${PREFIXO}tts dicionario\``,
+        + `\n\`${PREFIXO}tts tom <n>\` · \`${PREFIXO}tts cooldown <s>\` · \`${PREFIXO}tts nomes on|off\` · \`${PREFIXO}tts dicionario\``,
         `\`${PREFIXO}tts entrar\` · \`${PREFIXO}tts sair\` · \`${PREFIXO}tts on|off\``,
         `\`${PREFIXO}tts voz [nome]\` — escolhe a voz`,
       ].join("\n"), colour: COR.info,
@@ -536,7 +603,7 @@ export async function cmdTts(message, args, ctx) {
 
   const falado = c.expandir === false ? texto : abrev.expandir(texto, c.dicionario ?? {});
   try {
-    const r = await chamar("/falar", { canalVoz: c.canalVoz, texto: falado, voz: c.voz, efeito: c.efeito });
+    const r = await chamar("/falar", { canalVoz: c.canalVoz, texto: falado, voz: c.voz, efeito: c.efeito, tom: c.tom });
     return sendEmbed(message.channel, {
       title: lang === "en" ? "🔊 Speaking" : "🔊 Falando",
       description: `${falado.length > 120 ? falado.slice(0, 120) + "…" : falado}${

@@ -105,12 +105,12 @@ const servidor = createServer(async (req, res) => {
     }
 
     if (rota === "/falar") {
-      const { canalVoz, texto, voz: vozNome, efeito } = corpo;
+      const { canalVoz, texto, voz: vozNome, efeito, tom } = corpo;
       if (!canalVoz) return responder(res, 400, { erro: "falta canalVoz" });
       if (!texto || !String(texto).trim()) return responder(res, 400, { erro: "falta texto" });
 
       const t0 = Date.now();
-      const r = await voz.falar(canalVoz, String(texto), vozNome, efeito);
+      const r = await voz.falar(canalVoz, String(texto), vozNome, efeito, tom);
       dbg(`falar em ${canalVoz}: ${Date.now() - t0}ms — ${r.ok ? "ok" : r.erro}`);
       return responder(res, r.ok ? 200 : 502, { ...r, ms: Date.now() - t0 });
     }

@@ -239,6 +239,30 @@ falar() {
     || aviso "ouça com:  aplay /tmp/judy-diag.wav"
 }
 
+# Toca com um deslocamento de tom, sem efeito de caráter.
+falar_tom() {
+  local texto="$1" voz="$2" t="$3"
+  local vozes bin
+  vozes=$(grep -s '^PIPER_VOZES=' "$VOZ_DIR/.env" | cut -d= -f2-)
+  bin=$(grep -s '^PIPER_BIN=' "$VOZ_DIR/.env" | cut -d= -f2-)
+  vozes="${vozes:-$HOME/.local/share/piper/vozes}"
+  bin="${bin:-$HOME/.local/share/piper/piper}"
+  [ -n "$voz" ] || voz=$(grep -s '^PIPER_VOZ=' "$VOZ_DIR/.env" | cut -d= -f2-)
+
+  echo "$texto" | "$bin" --model "$vozes/$voz.onnx" --output_file /tmp/judy-diag.wav 2>/dev/null || {
+    falha "síntese falhou"; return 1; }
+
+  if [ "$t" != "1.00" ] && [ "$t" != "1" ]; then
+    local ff node_bin
+    node_bin=$(command -v node || echo /usr/bin/node)
+    ff=$("$node_bin" -e "try{process.stdout.write(require('$VOZ_DIR/node_modules/ffmpeg-static'))}catch{process.stdout.write('ffmpeg')}" 2>/dev/null || echo ffmpeg)
+    "$ff" -hide_banner -loglevel error -i /tmp/judy-diag.wav \
+      -af "rubberband=pitch=$t:formant=shifted" -ar 48000 -y /tmp/judy-tom.wav 2>/dev/null \
+      && mv /tmp/judy-tom.wav /tmp/judy-diag.wav
+  fi
+  command -v aplay >/dev/null && aplay -q /tmp/judy-diag.wav || aviso "ouça: aplay /tmp/judy-diag.wav"
+}
+
 # Varre valores de TOM com a mesma voz e o mesmo texto.
 #
 # Existe porque o número certo não se descobre no papel: depende da voz base,
@@ -249,14 +273,16 @@ tons() {
   local texto="${1:-Olá, tudo bem com você?}"
   local voz="${2:-}"
   titulo "Escada de tom — ouça e escolha o número"
-  for t in 1.00 1.08 1.12 1.16 1.20 1.25 1.30; do
+  # Faixa útil para voz JÁ feminina fica perto de 1.0 — passar de 1.05
+  # começa a soar infantil. Para voz masculina, o interessante é 1.12–1.22.
+  for t in 0.92 0.96 1.00 1.04 1.08 1.14 1.20; do
     echo
     printf '%s tom %s %s\n' "$C_INFO" "$t" "$C_OFF"
-    falar "$texto" "$voz" "tom:$t"
+    falar_tom "$texto" "$voz" "$t"
     sleep 0.6
   done
   echo
-  info "quando achar o seu:  &tts efeito tom:1.16   (no chat)"
+  info "quando achar o seu:  &tts tom 1.04   (no chat)"
 }
 
 # Toca o mesmo texto em todos os efeitos, para comparar o caráter de cada um.

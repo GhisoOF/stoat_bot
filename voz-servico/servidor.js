@@ -26,6 +26,13 @@ import { createServer } from "node:http";
 import * as tts from "./tts.js";
 import * as voz from "./voz.js";
 
+// Versão da INTERFACE entre bot e serviço. Sobe sempre que o serviço ganha
+// algo que o bot precisa saber que existe (um efeito novo, um parâmetro novo).
+// O bot compara com o número que ele espera e avisa se estiver defasado —
+// antes eu detectava isso procurando um efeito específico na lista, e quando
+// esse efeito foi renomeado o alarme passou a tocar para sempre.
+export const API_VERSAO = 3;
+
 const PORTA   = Number(process.env.VOZ_PORTA || 8091);
 const CHAVE   = process.env.VOZ_CHAVE || "";
 const DEBUG   = process.env.VOZ_DEBUG === "1";
@@ -69,7 +76,7 @@ const servidor = createServer(async (req, res) => {
       const ok = piper.ok;
       return responder(res, ok ? 200 : 503, {
         ok,
-        versao: "1.0",
+        versao: API_VERSAO,
         piper,
         efeitos: Object.keys(tts.EFEITOS),
         voz: conexoes,

@@ -349,13 +349,13 @@ uso: $0 <comando>
   erros                         só as linhas de erro recentes
   reiniciar                     reinicia os serviços
   vozes                         lista as vozes instaladas
-  falar "texto" [voz] [efeito]  testa uma voz  (ex.: falar "oi" pt_BR-dii-medium glados)
+  falar "texto" [voz] [efeito]  testa uma voz  (ex.: falar "oi" pt_BR-dii glados)
   comparar "texto" [efeito]     toca o mesmo texto em TODAS as vozes instaladas
   efeitos "texto" [voz]         toca o mesmo texto em TODOS os efeitos
-  tons "texto" [voz]            escada de tom (1.00 a 1.30) para achar o seu
+  tons "texto" [voz]            escada de tom (0.92 a 1.20) para achar o seu
 
-Efeitos: nenhum, feminina, sedutora, suave, glados, robo, radio,
-         grave, agudo, sussurro, tom:<n> (ex.: tom:1.16)
+Efeitos (caráter): nenhum, glados, robo, radio, sedutora, suave, sussurro
+Tom é separado:    tons "texto" [voz]   →  depois  &tts tom <n>  no chat
 AJUDA
      ;;
 esac

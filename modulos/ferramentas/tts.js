@@ -30,6 +30,12 @@ const VOZ_URL   = (process.env.VOZ_SERVICO_URL || "").replace(/\/$/, "");
 const VOZ_CHAVE = process.env.VOZ_CHAVE || "";
 const SERVIDORES = (process.env.TTS_SERVIDORES || "")
   .split(",").map((s) => s.trim()).filter(Boolean);
+// Versão da interface que ESTE código espera do judy-voz. O serviço roda no
+// Gentoo, fora do Docker, então os dois são atualizados por caminhos
+// diferentes e podem ficar defasados — o pior estado possível, porque tudo
+// "parece" atualizado e a fala sai sem efeito, em silêncio.
+const VOZ_API_ESPERADA = 3;
+
 const COOLDOWN_MS = Number(process.env.TTS_COOLDOWN_MS || 8000);
 const MAX_CHARS   = Number(process.env.TTS_MAX_CHARS || 400);
 
@@ -461,11 +467,11 @@ export async function cmdTts(message, args, ctx) {
       // Docker). Se ele não conhece efeitos que este código já conhece, está
       // com versão antiga — e aceitar o pedido faria a fala sair SEM efeito,
       // silenciosamente. Melhor dizer o que houve e como resolver.
-      if (saude && !disp.includes("feminina")) {
+      if (saude && Number(saude.versao ?? 0) < VOZ_API_ESPERADA) {
         return sendEmbed(message.channel, tr(ctx,
           { title: "⚠️ Serviço de voz desatualizado",
             description: [
-              "O bot já tem os efeitos novos, mas o `judy-voz` ainda roda a versão anterior — por isso a fala sairia sem efeito.",
+              `O bot espera a versão **${VOZ_API_ESPERADA}** do serviço de voz, mas o \`judy-voz\` responde **${saude.versao ?? "1"}** — a fala sairia sem efeito.`,
               "",
               "No Gentoo:",
               "```sudo rc-service judy-voz restart```",
@@ -473,7 +479,7 @@ export async function cmdTts(message, args, ctx) {
             ].join("\n"), colour: COR.aviso },
           { title: "⚠️ Voice service is outdated",
             description: [
-              "The bot already has the new effects, but `judy-voz` is still running the previous version — speech would come out with no effect.",
+              `The bot expects voice service version **${VOZ_API_ESPERADA}**, but \`judy-voz\` reports **${saude.versao ?? "1"}** — speech would come out with no effect.`,
               "",
               "On the Gentoo box:",
               "```sudo rc-service judy-voz restart```",

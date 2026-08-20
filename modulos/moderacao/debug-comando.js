@@ -89,6 +89,7 @@ export async function cmdDebug(message, args, ctx) {
         const d = await r.json();
         const ms = Date.now() - t0;
         linhas.push("", marca(r.ok, `judy-voz respondeu em ${ms}ms`));
+        linhas.push(`**Versão do serviço:** ${d.versao ?? "1 (antiga)"}`);
         linhas.push(marca(d.piper?.ok, `Piper: ${d.piper?.ok ? d.piper.vozAtual : d.piper?.erro}`));
         if (d.piper?.vozes?.length) linhas.push(`   _vozes: ${d.piper.vozes.join(", ")}_`);
         linhas.push(marca(d.voz?.pronto, `LiveKit: ${d.voz?.pronto ? "pronto" : d.voz?.erro}`));

@@ -529,10 +529,33 @@ export async function liberarSilenciosVencidos(ctx) {
   let soltos = 0;
   for (const { serverId, userId, motivo } of vencidos) {
     try {
-      const cfg = ctx.estado?.configDoServidor?.(serverId) ?? ctx.config;
+      // BUG QUE DEIXAVA GENTE MUDA PARA SEMPRE:
+      // `configDoServidor` vive no ctx, não em `ctx.estado`. A busca antiga
+      // (`ctx.estado?.configDoServidor`) falhava SEMPRE e caía no `ctx.config`
+      // — que aqui é a config GLOBAL, porque o vigia roda com
+      // `criarContexto()` sem servidor. Sem `silenceRoleId`, o cargo nunca era
+      // removido. E o pior: o banco era limpo e o log dizia "Silêncio
+      // expirado", então tudo parecia certo enquanto a pessoa seguia sem voz.
+      const cfg = ctx.configDoServidor?.(serverId)
+        ?? ctx.estado?.configDoServidor?.(serverId)
+        ?? ctx.config;
       const roleId = cfg?.automod?.punicao?.silenceRoleId;
       const server = await ctx.client?.servers?.fetch?.(serverId);
-      if (server && roleId) await removerCargoSilence(server, userId, roleId, ctx);
+
+      if (!roleId) {
+        // Sem cargo configurado não há o que remover — mas o registro precisa
+        // ser limpo mesmo assim, senão o vigia tenta de novo a cada minuto.
+        console.warn(`[PUNIÇÃO][vigia] ${serverId}: sem silenceRoleId na config — nada a remover`);
+      } else if (!server) {
+        // Não conseguir buscar o servidor é diferente de não ter cargo: aqui
+        // a remoção AINDA é necessária. Deixamos o registro no banco para a
+        // próxima passada tentar de novo, em vez de marcar como resolvido.
+        console.error(`[PUNIÇÃO][vigia] ${serverId}: servidor inacessível — tentarei de novo no próximo ciclo`);
+        continue;
+      } else {
+        await removerCargoSilence(server, userId, roleId, ctx);
+      }
+
       db.definirSilenciado(serverId, userId, false, motivo);
       db.silenciarAte(serverId, userId, 0, motivo);
       db.gravarPunicao(serverId, userId, {
@@ -912,8 +935,24 @@ export async function reaplicarPunicao(member, ctx) {
 // Remove o cargo de silêncio de um usuário
 export async function removerCargoSilence(server, userId, roleId, ctx) {
   const member = await server.fetchMember(userId);
-  const atuais = (member.roles ?? []).map((r) => r?.id ?? r).filter((id) => id && id !== roleId);
-  await member.edit({ roles: atuais });
+  if (!member) throw new Error("membro não encontrado no servidor (saiu?)");
+
+  const atuais = (member.roles ?? []).map((r) => r?.id ?? r).filter(Boolean);
+  if (!atuais.includes(roleId)) return { jaEstavaSemCargo: true };
+
+  await member.edit({ roles: atuais.filter((id) => id !== roleId) });
+
+  // Conferir em vez de confiar: a API pode aceitar o edit e não aplicar
+  // (hierarquia de cargos, permissão faltando). Silêncio que não sai é
+  // exatamente o tipo de falha que ninguém percebe até alguém reclamar.
+  try {
+    const depois = await server.fetchMember(userId);
+    const aindaTem = (depois?.roles ?? []).map((r) => r?.id ?? r).includes(roleId);
+    if (aindaTem) throw new Error("a API aceitou mas o cargo continua — confira se o cargo do bot está ACIMA do cargo de silêncio e se ele tem AssignRoles");
+  } catch (e) {
+    if (/continua/.test(e.message)) throw e;   // erro real; o resto é falha ao reconferir
+  }
+  return { removido: true };
 }
 
 // Resolve o canal de aviso configurado (ou usa o canal atual como fallback)

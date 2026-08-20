@@ -175,6 +175,63 @@ export async function cmdTts(message, args, ctx) {
   const server = await getServer(message).catch(() => null);
   const ehStaff = membroTemPermissao(message, server, "ManageMessages");
 
+  // ── entrar / sair: LIBERADOS a todos ──
+  //
+  // O canal já foi escolhido pela staff; entrar nele é reversível e é
+  // justamente o que quem está na call precisa fazer. Exigir ManageMessages
+  // aqui significava que só o dono conseguia chamar a Judy — o recurso
+  // existia para todos no papel e para uma pessoa na prática.
+  //
+  // O freio contra vai-e-vem é o mesmo cooldown das falas: quem não é staff
+  // espera entre uma ação e outra.
+  if (["entrar", "join", "sair", "leave"].includes(sub)) {
+    const entrando = ["entrar", "join"].includes(sub);
+    const chaveAcao = `${serverId}:${message.authorId}`;
+    const faltam = (c.cooldown ?? COOLDOWN_MS) - (Date.now() - (ultimaFala.get(chaveAcao) ?? 0));
+    if (faltam > 0 && !ehStaff) {
+      return sendEmbed(message.channel, tr(ctx,
+        { title: "⏳ Calma lá", description: `Espere ${Math.ceil(faltam / 1000)}s.`, colour: COR.aviso },
+        { title: "⏳ Slow down", description: `Wait ${Math.ceil(faltam / 1000)}s.`, colour: COR.aviso }));
+    }
+    ultimaFala.set(chaveAcao, Date.now());
+
+    if (entrando) {
+      if (!c.canalVoz) {
+        return sendEmbed(message.channel, tr(ctx,
+          { title: "❌ Falta configurar o canal",
+            description: `Ninguém definiu em qual call a Judy fala.\n\nQuem tem **ManageMessages** resolve com \`${PREFIXO}tts canal aqui\` dentro da call.`,
+            colour: COR.erro },
+          { title: "❌ No channel configured",
+            description: `Nobody set which call Judy speaks in.\n\nAnyone with **ManageMessages** can fix it with \`${PREFIXO}tts canal here\` inside the call.`,
+            colour: COR.erro }));
+      }
+      if (!c.ativo) {
+        return sendEmbed(message.channel, tr(ctx,
+          { title: "🔴 A voz está desligada",
+            description: `Peça a alguém da equipe para religar com \`${PREFIXO}tts on\`.`, colour: COR.aviso },
+          { title: "🔴 Voice is off",
+            description: `Ask a staff member to turn it back on with \`${PREFIXO}tts on\`.`, colour: COR.aviso }));
+      }
+      try {
+        await chamar("/entrar", { canalVoz: c.canalVoz });
+        return sendEmbed(message.channel, tr(ctx,
+          { title: "✅ Entrei na call", description: `Estou em <#${c.canalVoz}>.\n\nManda o que eu falo: \`${PREFIXO}tts oi pessoal\``, colour: COR.sucesso },
+          { title: "✅ Joined the call", description: `I'm in <#${c.canalVoz}>.\n\nTell me what to say: \`${PREFIXO}tts hello\``, colour: COR.sucesso }));
+      } catch (e) {
+        return sendEmbed(message.channel, {
+          title: lang === "en" ? "❌ Couldn't join" : "❌ Não consegui entrar",
+          description: `\`${e.message}\`\n\n${lang === "en" ? "See" : "Veja"} \`${PREFIXO}tts estado\``,
+          colour: COR.erro });
+      }
+    }
+
+    try { await chamar("/sair", { canalVoz: c.canalVoz }); } catch {}
+    return sendEmbed(message.channel, tr(ctx,
+      { title: "✅ Saí da call", description: "Até a próxima.", colour: COR.sucesso },
+      { title: "✅ Left the call", description: "See you.", colour: COR.sucesso }));
+  }
+
+
   // ── configuração (staff) ──
   // ── &tts dicionario ── (consulta é pública, edição é staff)
   if (["dicionario", "dicionário", "dictionary", "dic", "abreviacoes", "abreviações"].includes(sub)) {
@@ -288,7 +345,7 @@ export async function cmdTts(message, args, ctx) {
     }
   }
 
-  if (["canal", "channel", "transmitir", "broadcast", "entrar", "join", "sair", "leave",
+  if (["canal", "channel", "transmitir", "broadcast",
        "on", "off", "voz", "voice", "cooldown", "espera", "nomes", "names",
        "efeito", "effect", "timbre", "tom", "pitch", "altura"].includes(sub)) {
     if (!ehStaff) {
@@ -357,32 +414,6 @@ export async function cmdTts(message, args, ctx) {
         { title: "✅ Broadcast on",
           description: `Everything written in <#${id}> will be **spoken in the call**.\n\n⚠️ That applies to everyone writing there — turn it off with \`${PREFIXO}tts transmitir off\`.`,
           colour: COR.aviso }));
-    }
-
-    if (["entrar", "join"].includes(sub)) {
-      if (!c.canalVoz) {
-        return sendEmbed(message.channel, tr(ctx,
-          { title: "❌ Falta o canal", description: `Defina antes: \`${PREFIXO}tts canal <#voz>\``, colour: COR.erro },
-          { title: "❌ No channel yet", description: `Set it first: \`${PREFIXO}tts canal <#voice>\``, colour: COR.erro }));
-      }
-      try {
-        await chamar("/entrar", { canalVoz: c.canalVoz });
-        return sendEmbed(message.channel, tr(ctx,
-          { title: "✅ Entrei na call", description: `Estou em <#${c.canalVoz}>.`, colour: COR.sucesso },
-          { title: "✅ Joined the call", description: `I'm in <#${c.canalVoz}>.`, colour: COR.sucesso }));
-      } catch (e) {
-        return sendEmbed(message.channel, {
-          title: lang === "en" ? "❌ Couldn't join" : "❌ Não consegui entrar",
-          description: `\`${e.message}\`\n\n${lang === "en" ? "See" : "Veja"} \`${PREFIXO}tts estado\``,
-          colour: COR.erro });
-      }
-    }
-
-    if (["sair", "leave"].includes(sub)) {
-      try { await chamar("/sair", { canalVoz: c.canalVoz }); } catch {}
-      return sendEmbed(message.channel, tr(ctx,
-        { title: "✅ Saí da call", description: "Até a próxima.", colour: COR.sucesso },
-        { title: "✅ Left the call", description: "See you.", colour: COR.sucesso }));
     }
 
     if (sub === "on" || sub === "off") {
@@ -565,7 +596,9 @@ export async function cmdTts(message, args, ctx) {
       title: "🔊 Voz da Judy",
       description: [
         `\`${PREFIXO}tts <texto>\` — fala na call`,
+        `\`${PREFIXO}tts entrar\` · \`${PREFIXO}tts sair\` — chama ou dispensa a Judy`,
         `\`${PREFIXO}tts estado\` — diagnóstico`,
+        "_Estes valem para **todo mundo**._",
         "",
         `**Configuração** _(ManageMessages)_`,
         `\`${PREFIXO}tts canal aqui\` — define a call em que você está`
@@ -579,7 +612,9 @@ export async function cmdTts(message, args, ctx) {
       title: "🔊 Judy's voice",
       description: [
         `\`${PREFIXO}tts <text>\` — speaks in the call`,
+        `\`${PREFIXO}tts entrar\` · \`${PREFIXO}tts sair\` — call or dismiss Judy`,
         `\`${PREFIXO}tts estado\` — diagnostics`,
+        "_These are open to **everyone**._",
         "",
         `**Configuration** _(ManageMessages)_`,
         `\`${PREFIXO}tts canal here\` — sets the call you are in`

@@ -213,9 +213,9 @@ export function agendarLimpezaSpam(ctx) {
 // ──────────────────────────────────────────────────────────
 //  Taxa de mensagens por segundo de um autor (feature do scorecard)
 // ──────────────────────────────────────────────────────────
-function taxaPorSegundo(estado, userId) {
+function taxaPorSegundo(estado, userId, serverId = null) {
   const now = Date.now();
-  const ts = estado.spamData.get(userId) ?? [];
+  const ts = estado.spamData.get(`${serverId ?? "?"}:${userId}`) ?? estado.spamData.get(userId) ?? [];
   return ts.filter((t) => now - t < 1000).length + 1; // +1 conta a atual
 }
 
@@ -596,7 +596,13 @@ export function rotuloDegrau(degrau, lang = "pt") {
 export async function runAutomod(message, ctx) {
   const { config, estado, getServer } = ctx;
   const userId  = message.authorId;
-  const content = message.content ?? "";
+  // Normaliza para NFC antes de qualquer análise. Clientes Apple enviam texto
+  // em NFD ("ação" = a+c+cedilha combinante+a+til+o): sem isto, uma mensagem
+  // curta cheia de acentos podia estourar o detector de zalgo, que conta
+  // exatamente marcas combinantes. NFC recompõe o português em caracteres
+  // prontos; zalgo DE VERDADE (marcas empilhadas sem forma pré-composta)
+  // continua decomposto e continua detectável.
+  const content = String(message.content ?? "").normalize("NFC");
   const am = config.automod;
 
   dbg(ctx, "────────────────────────────────────────────");
@@ -637,7 +643,7 @@ export async function runAutomod(message, ctx) {
 
   // ── Conteúdo proibido (scorecard único: golpe/+18/gore/ilícito/CSAM) ──
   if (am.antiScam?.enabled) {
-    const rate = taxaPorSegundo(estado, userId);
+    const rate = taxaPorSegundo(estado, userId, ctx.serverId ?? server?.id);
     const r = analisarConteudo(content, { rate });
     const base = ({ baixa: 7, media: 6, alta: 5 })[am.antiScam.sensitivity] ?? 6;
 
@@ -703,13 +709,16 @@ export async function runAutomod(message, ctx) {
 
   // ── Anti-mass-mention ──
   if (am.antiMassMention.enabled) {
-    const n = message.mentionIds?.length ?? 0;
+    // Menções DISTINTAS: marcar a mesma pessoa seis vezes numa brincadeira é
+    // UMA pessoa incomodada, não seis — e mencionar a si próprio não conta.
+    const unicas = new Set((message.mentionIds ?? []).filter((id) => id && id !== userId));
+    const n = unicas.size;
     dbg(ctx, `  [anti-mass-mention] ON → ${n} menção(ões) (limite ${am.antiMassMention.maxMentions})`);
     if (n > am.antiMassMention.maxMentions) {
       dbg(ctx, "  ✗ BLOQUEADA por anti-mass-mention");
       try { await message.delete(); } catch {}
       await aplicarPunicao(ctx, { server, channel: canal, message, userId,
-        pol: am.antiMassMention.punicao, motivo: `você mencionou ${n} usuários de uma só vez` });
+        pol: am.antiMassMention.punicao, motivo: `você mencionou ${n} usuários diferentes de uma só vez` });
       return true;
     }
   } else {
@@ -781,16 +790,20 @@ export async function runAutomod(message, ctx) {
   if (am.antiSpam.enabled || am.antiMassSpam.enabled) {
     const now = Date.now();
     const maxWindow = Math.max(am.antiSpam.windowMs, am.antiMassSpam.windowMs);
-    const prev = (estado.spamData.get(userId) ?? []).filter((t) => now - t < maxWindow);
+    // Chave por servidor+usuário: o bot está em vários servidores, e sem o
+    // serverId a contagem VAZAVA entre eles — 4 msgs aqui + 4 acolá na mesma
+    // janela puniam por "flood" alguém com ritmo normal em cada um.
+    const chaveSpam = `${ctx.serverId ?? server?.id ?? "?"}:${userId}`;
+    const prev = (estado.spamData.get(chaveSpam) ?? []).filter((t) => now - t < maxWindow);
     prev.push(now);
-    estado.spamData.set(userId, prev);
+    estado.spamData.set(chaveSpam, prev);
 
     if (am.antiMassSpam.enabled) {
       const c = prev.filter((t) => now - t < am.antiMassSpam.windowMs).length;
       dbg(ctx, `  [anti-mass-spam] ON → ${c} msg em ${am.antiMassSpam.windowMs}ms (limite ${am.antiMassSpam.maxMessages})`);
       if (c >= am.antiMassSpam.maxMessages) {
         dbg(ctx, "  ✗ BLOQUEADA por anti-mass-spam");
-        estado.spamData.delete(userId);
+        estado.spamData.delete(chaveSpam);
         await aplicarPunicao(ctx, { server, channel: canal, message, userId,
           pol: am.antiMassSpam.punicao, motivo: "flood de mensagens (mass spam)" });
         return true;
@@ -802,7 +815,7 @@ export async function runAutomod(message, ctx) {
       dbg(ctx, `  [anti-spam] ON → ${c} msg em ${am.antiSpam.windowMs}ms (limite ${am.antiSpam.maxMessages})`);
       if (c >= am.antiSpam.maxMessages) {
         dbg(ctx, "  ✗ BLOQUEADA por anti-spam");
-        estado.spamData.set(userId, []);
+        estado.spamData.set(chaveSpam, []);
         try { await message.delete(); } catch {}
         await aplicarPunicao(ctx, { server, channel: canal, message, userId,
           pol: am.antiSpam.punicao, motivo: "você está enviando mensagens muito rapidamente" });

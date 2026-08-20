@@ -62,5 +62,20 @@ ok(razaoDeCaixaAlta("PDF ou RPG?") === null, "  → \"PDF ou RPG?\" fica abaixo 
 ok(razaoDeCaixaAlta("GRITARIA TOTAL AQUI") === 1, "grito puro → 100%");
 ok(seriaPunido("meu PDF do RPG não abre, alguém me ajuda?") === false, "siglas no meio de frase normal não punem");
 
+// ── NFD (clientes Apple) ──
+console.log("\n── unicode NFD ──");
+{
+  const { analisarCaracteres } = await import("./modulos/moderacao/caracteres.js");
+  // Simula o que o engine faz agora: normaliza para NFC antes de analisar.
+  const nfc = (t) => t.normalize("NFC");
+  const acentosNfd = "áéíóú àèìòù âêîôû ãõ ç".normalize("NFD");
+  ok(analisarCaracteres(nfc(acentosNfd)) === null,
+    "★ mensagem só de acentos vinda de um iPhone (NFD) não é zalgo após NFC");
+  // zalgo real: base + marcas empilhadas — NFC não recompõe, continua pego
+  const zalgo = "z" + "\u0300\u0301\u0302\u0303\u0304\u0305\u0306\u0307\u0308".repeat(2);
+  ok(analisarCaracteres(nfc(zalgo))?.tipo === "zalgo",
+    "★ zalgo de verdade continua detectado mesmo após NFC");
+}
+
 console.log(`\nANTI-CAPS: ${pass} ok, ${fail} falha(s)`);
 process.exit(fail ? 1 : 0);

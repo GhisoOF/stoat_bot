@@ -549,7 +549,10 @@ export async function ollamaChat(messages, { json = false, maxTokens = MAX_TOKEN
 async function buscar(query, n = 4) {
   const url = `${SEARXNG_URL}/search?q=${encodeURIComponent(query)}&format=json&language=pt-BR`;
   const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), 30000);
+  // 30s era generoso demais: uma busca lenta consumia o orçamento inteiro da
+  // resposta e a Judy estourava o tempo sem falar nada. Melhor desistir da
+  // busca em 8s e responder com o que se sabe.
+  const t = setTimeout(() => ctrl.abort(), Number(process.env.BUSCA_TIMEOUT_MS || 8000));
   try {
     const r = await fetch(url, { signal: ctrl.signal });
     if (!r.ok) throw new Error(`SearXNG HTTP ${r.status}`);
@@ -568,9 +571,30 @@ async function buscar(query, n = 4) {
 // propósito: na dúvida ela deixa passar para o modelo decidir.
 const PISTAS_BUSCA = /(?:\b(?:hoje|ontem|agora|atual|atualmente|recente|not[ií]cias?|pre[çc]o|cota[çc][ãa]o|lan[çc]ou|lan[çc]amento|vers[ãa]o|resultado|placar|clima)\b|[uú]ltim[ao]s|quanto\s+custa|quando\s+(?:sai|saiu|foi)|em\s+20\d\d|tempo\s+em)/i;
 
+// Pedido EXPLÍCITO de busca. "pesquisa isso para mim" é uma ordem, não uma
+// dúvida a ser julgada — mandar para o modelo decidir era um convite ao erro,
+// e errou: numa pergunta que começava com "pode pesquisar para mim", o juiz
+// respondeu `buscar=false` porque a pergunta mencionava o Stoat e ele achou
+// que era "sobre si mesmo". Ordem explícita agora pula o juiz e vai direto —
+// de quebra, economiza uma ida ao Ollama.
+export const PEDIDO_EXPLICITO = /\b(pesquis(a|ar|e|ue)|busca(r|e)?|procur(a|ar|e)|d[aá] uma olhada na (web|internet)|consult(a|ar|e) a (web|internet)|olha na (web|internet)|search)\b/i;
+
 async function decidirBusca(pergunta) {
+  const texto = String(pergunta ?? "");
+
+  if (PEDIDO_EXPLICITO.test(texto)) {
+    // A query é a própria pergunta, limpa dos verbos de comando — eles não
+    // ajudam o buscador e só diluem os termos que importam.
+    const query = texto
+      .replace(PEDIDO_EXPLICITO, " ")
+      .replace(/\b(para mim|pra mim|por favor|pfv|você|voce|vc|judy)\b/gi, " ")
+      .replace(/<@[^>]+>/g, " ")
+      .replace(/\s+/g, " ").trim();
+    return { buscar: true, query: (query || texto).slice(0, 200), explicito: true };
+  }
+
   // Filtro barato primeiro: conversa comum nunca precisa de busca.
-  if (!PISTAS_BUSCA.test(String(pergunta ?? ""))) {
+  if (!PISTAS_BUSCA.test(texto)) {
     return { buscar: false, query: pergunta };
   }
   const sys = [
@@ -578,7 +602,10 @@ async function decidirBusca(pergunta) {
     "Você decide se uma pergunta precisa de busca na internet para ser respondida com precisão.",
     "Precisa buscar se envolve fatos atuais, notícias, preços, datas recentes, ou algo que muda com o tempo.",
     "NÃO precisa buscar se é conversa, opinião, criatividade ou conhecimento geral estável.",
-    "NUNCA busque se a pergunta é sobre você mesmo (a bot Judy), sobre como configurá-lo, ou sobre seus comandos e recursos — você já tem essa informação e NÃO está na internet.",
+    // Esta regra existia para evitar buscar "quais são seus comandos". Mas
+    // estava larga demais: qualquer menção ao Stoat fazia o modelo achar que
+    // a pergunta era "sobre si mesmo" e recusar a busca.
+    "NÃO busque se a pergunta for sobre os SEUS comandos, SUA configuração ou COMO VOCÊ funciona — isso você já sabe. Perguntas sobre a plataforma Stoat, sites, serviços ou qualquer assunto externo PODEM e DEVEM ser buscadas.",
     'Responda APENAS um JSON: {"buscar": true|false, "query": "termos de busca"}.',
   ].join(" ");
   try {
@@ -780,7 +807,7 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
   }
   // Programação → modelo especializado (ornith). Considera a pergunta e a
   // mensagem citada (ex.: respondeu a um trecho de código e chamou a Judy).
-  const { modelo: modeloEscolhido, tipo } = escolherModelo(pergunta, citada);
+  let { modelo: modeloEscolhido, tipo } = escolherModelo(pergunta, citada);
   dlog(`roteamento: tipo=${tipo} → modelo=${modeloEscolhido}`);
 
   // Quando o pedido depende de ferramenta, MANDAMOS usá-la.
@@ -1251,10 +1278,20 @@ export async function conversar(message, pergunta, ctx) {
     // Salvaguarda: se a pergunta é claramente sobre o próprio bot, NUNCA busca —
     // usa o contexto do projeto (README) que já está no prompt. Isso corrige o
     // caso "fale sobre o bot Cobaia" que ia parar na internet.
-    if (/\b(judy|cobaia)\b/i.test(pergunta) || /\b(voc[êe]|tu)\b.*\b(bot|comando|configura|funciona|feito|criou)/i.test(pergunta)
-        || /\b(seu|sua|seus|suas)\b.*\b(comando|recurso|fun[çc]|configura)/i.test(pergunta)) {
+    //
+    // MAS um pedido explícito de busca vence a salvaguarda. Ela estava
+    // barrando qualquer pergunta que mencionasse "judy" — e como se fala com
+    // a Judy MENCIONANDO ela, na prática toda busca pedida no chat era
+    // silenciosamente cancelada. Quem escreve "pesquisa isso para mim" quer
+    // busca, mesmo que a frase cite o nome dela.
+    const sobreOBot = /\b(judy|cobaia)\b/i.test(pergunta)
+      || /\b(voc[êe]|tu)\b.*\b(bot|comando|configura|funciona|feito|criou)/i.test(pergunta)
+      || /\b(seu|sua|seus|suas)\b.*\b(comando|recurso|fun[çc]|configura)/i.test(pergunta);
+    if (sobreOBot && !decisao.explicito) {
       decisao.buscar = false;
       dlog("pergunta sobre o próprio bot → busca desativada (usa README)");
+    } else if (sobreOBot && decisao.explicito) {
+      dlog("menciona o bot, mas a busca foi PEDIDA explicitamente → busca mantida");
     }
     dlog(`decisão de busca: buscar=${decisao.buscar}${decisao.buscar ? ` query="${decisao.query}"` : ""}`);
     let resultados = null;
@@ -1264,7 +1301,15 @@ export async function conversar(message, pergunta, ctx) {
         resultados = await buscar(decisao.query);
         dlog(`busca retornou ${resultados?.length ?? 0} resultado(s)`);
       }
-      catch (e) { console.error("[CHAT][busca]", e.message); dlog(`busca FALHOU: ${e.message}`); }
+      catch (e) {
+        // Diferenciar "não achei nada" de "não alcancei o SearXNG" importa:
+        // o segundo é problema de rede (o bot roda no Umbrel, o SearXNG no
+        // Gentoo pela Tailscale) e some do log como um erro genérico.
+        const msg = e?.message ?? String(e);
+        const rede = /ENOTFOUND|ECONNREFUSED|EAI_AGAIN|abort|timeout|fetch failed/i.test(msg);
+        console.error("[CHAT][busca]", rede ? `SearXNG inalcançável em ${SEARXNG_URL}: ${msg}` : msg);
+        dlog(`busca FALHOU: ${msg}${rede ? " (rede — confira SEARXNG_URL no stack do bot)" : ""}`);
+      }
     }
 
     await editarStatus(en ? (resultados?.length ? "✍️ Writing the reply with the sources…" : "✍️ Writing the reply…") : (resultados?.length ? "✍️ Gerando resposta com as fontes…" : "✍️ Gerando resposta…"));

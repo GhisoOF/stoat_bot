@@ -10,3 +10,11 @@ Dockerfile
 docker-compose.yml
 *.md
 !README.md
+
+# Nunca entram na imagem: artefatos de deploy, backups, logs, cache.
+*.zip
+ia-servico/.env
+**/.env
+_stoat-bot*_logs.txt
+*.log
+blocklist-cache.bin

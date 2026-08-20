@@ -1,0 +1,124 @@
+#!/usr/bin/env bash
+# ══════════════════════════════════════════════════════════
+#  deploy-stoat.sh — sobe uma nova versão do bot para o GitHub
+#
+#  ESTE ARQUIVO MORA FORA DO REPOSITÓRIO (em ~/), de propósito:
+#  o deploy apaga e recria diretórios do repo, e um script que
+#  apaga a si mesmo enquanto roda é uma péssima ideia (o bash lê
+#  o arquivo em pedaços conforme executa).
+#
+#  Instalar uma vez:
+#     cp scripts/deploy-stoat.sh ~/deploy-stoat.sh
+#     chmod +x ~/deploy-stoat.sh
+#
+#  Usar:
+#     ~/deploy-stoat.sh ~/Downloads/stoat_bot-atualizado.zip "mensagem do commit"
+#
+#  O que ele garante, e que a sequência manual não garantia:
+#   • o zip é aberto FORA do repositório (foi o zip solto dentro
+#     de ~/Downloads/github que acabou commitado por acidente)
+#   • `set -e` de verdade: qualquer passo que falhe interrompe tudo
+#     ANTES do commit — nada de commitar um repo pela metade
+#   • o GITHUB_TOKEN é salvo antes e devolvido depois
+#   • mostra o que vai subir e pede confirmação
+#   • só apaga o zip depois do push dar certo
+# ══════════════════════════════════════════════════════════
+
+set -euo pipefail
+
+REPO="${REPO:-$HOME/Downloads/github}"
+TOKEN_BACKUP="${TOKEN_BACKUP:-$HOME/judy-github.env}"
+ZIP="${1:-}"
+MSG="${2:-}"
+TMP="$(mktemp -d)"
+
+# Limpeza do temporário aconteça o que acontecer (sucesso, erro ou Ctrl-C).
+trap 'rm -rf "$TMP"' EXIT
+
+erro() { printf '\n\033[31m✗ %s\033[0m\n' "$1" >&2; exit 1; }
+info() { printf '\033[36m→ %s\033[0m\n' "$1"; }
+okay() { printf '\033[32m✓ %s\033[0m\n' "$1"; }
+
+# ── Conferências antes de tocar em qualquer coisa ──
+[ -n "$ZIP" ] || erro "uso: $0 <caminho-do-zip> [mensagem do commit]"
+[ -f "$ZIP" ] || erro "zip não encontrado: $ZIP"
+[ -d "$REPO/.git" ] || erro "não é um repositório git: $REPO"
+[ -f "$TOKEN_BACKUP" ] || erro "backup do token não encontrado: $TOKEN_BACKUP
+   (era ele que devolvia o GITHUB_TOKEN ao ia-servico depois do deploy)"
+
+ZIP="$(cd "$(dirname "$ZIP")" && pwd)/$(basename "$ZIP")"   # caminho absoluto
+
+# O zip não pode estar DENTRO do repositório: é assim que ele acaba commitado.
+case "$ZIP" in
+  "$REPO"/*) info "o zip está dentro do repositório; movendo para fora primeiro"
+             mv "$ZIP" "$HOME/$(basename "$ZIP")"
+             ZIP="$HOME/$(basename "$ZIP")" ;;
+esac
+
+# ── 1. Abrir o pacote fora do repositório ──
+info "abrindo o pacote em $TMP"
+unzip -q "$ZIP" -d "$TMP"
+[ -f "$TMP/main.js" ] || erro "o zip não parece ser o projeto (não achei main.js na raiz)"
+okay "pacote válido: $(find "$TMP" -type f | wc -l) arquivo(s)"
+
+# ── 2. Guardar o token ──
+cp "$TOKEN_BACKUP" "$TMP/.token-guardado"
+okay "GITHUB_TOKEN guardado"
+
+# ── 3. Substituir os diretórios versionados ──
+cd "$REPO"
+info "removendo as versões antigas dos módulos"
+git rm -rq --ignore-unmatch modulos scripts ia-servico 2>/dev/null || true
+rm -rf modulos scripts ia-servico
+
+info "copiando os arquivos novos"
+cp -a "$TMP"/. "$REPO"/
+rm -f "$REPO/.token-guardado"
+
+# ── 4. Devolver o token (o ia-servico/ foi recriado do zero) ──
+mkdir -p ia-servico
+cp "$TOKEN_BACKUP" ia-servico/.env
+okay "GITHUB_TOKEN devolvido a ia-servico/.env"
+
+# ── 5. Rede de segurança: nada de segredo ou lixo no commit ──
+info "conferindo o que vai subir"
+git add -A
+
+SUSPEITO="$(git diff --cached --name-only | grep -iE '(^|/)\.env$|\.env\.|\.zip$|\.log$|\.db$|_logs\.txt$|blocklist-cache\.bin$|node_modules/' | grep -v '\.env\.example$' || true)"
+if [ -n "$SUSPEITO" ]; then
+  printf '\n\033[31m✗ arquivos que NÃO deveriam ser versionados entraram no commit:\033[0m\n'
+  printf '%s\n' "$SUSPEITO"
+  printf '\nDesfazendo o stage. Verifique o .gitignore e rode de novo.\n'
+  git reset -q
+  exit 1
+fi
+okay "nenhum segredo ou artefato no commit"
+
+echo
+git status --short
+echo
+
+TOTAL="$(git diff --cached --name-only | wc -l)"
+[ "$TOTAL" -gt 0 ] || { info "nada mudou — encerrando sem commit"; exit 0; }
+
+# ── 6. Confirmar ──
+printf '\033[33m%s arquivo(s) serão enviados. Continuar? [s/N] \033[0m' "$TOTAL"
+read -r RESP
+case "$RESP" in
+  s|S|y|Y) ;;
+  *) git reset -q; info "cancelado — nada foi enviado"; exit 0 ;;
+esac
+
+# ── 7. Commit e push ──
+[ -n "$MSG" ] || MSG="deploy: $(date '+%Y-%m-%d %H:%M')"
+git commit -qm "$MSG"
+git push
+okay "enviado: $MSG"
+
+# ── 8. Só agora o zip pode sumir ──
+rm -f "$ZIP"
+okay "zip removido: $(basename "$ZIP")"
+
+echo
+info "Actions: https://github.com/GhisoOF/stoat_bot/actions"
+info "quando ficar verde → Portainer → Pull and redeploy (recriar)"

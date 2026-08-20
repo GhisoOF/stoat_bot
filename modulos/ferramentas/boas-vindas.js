@@ -67,19 +67,38 @@ function garantirConfig(config, chave, lang) {
   return c;
 }
 
+// Neutraliza markdown e menções embutidas num texto controlado pelo USUÁRIO
+// (nome/apelido). Sem isto, alguém com o nome `[x](https://phishing)` ou
+// `<@algum-admin>` faria o embed de boas-vindas gerar um link falso ou uma
+// menção clicável a terceiros — o bot assinaria um phishing com a própria voz.
+// A menção real da pessoa que entrou continua vindo do {usuario}, que usa o
+// userId verificado, não o texto do nome.
+function limparValor(txt) {
+  return String(txt ?? "")
+    .replace(/[<>[\]`*_~|]/g, "")   // tira o que forma menção/link/markdown
+    .replace(/@(everyone|here|online)/gi, "@\u200b$1")  // quebra pings em massa
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 80);                  // nome não vira parágrafo
+}
+
 // ── Renderização dos marcadores ────────────────────────────
 // `mencionar: false` (saídas) troca {usuario} pelo nome, porque uma menção
 // a quem já saiu aparece como um ID cru na tela.
 export function renderizar(texto, { userId, nome, servidor, membros, mencionar = true }) {
-  const quem = mencionar && userId ? `<@${userId}>` : `**${nome || userId || "?"}**`;
+  // {usuario} mencionando: usa o userId VERIFICADO (não o texto do nome).
+  // Sem menção, ou como {nome}: o nome é sanitizado antes de entrar.
+  const nomeLimpo = limparValor(nome);
+  const quem = mencionar && userId ? `<@${userId}>` : `**${nomeLimpo || userId || "?"}**`;
+  const servidorLimpo = limparValor(servidor);
   return String(texto ?? "")
     .replaceAll("{usuario}",  quem)
     .replaceAll("{usuário}",  quem)
     .replaceAll("{user}",     quem)
-    .replaceAll("{nome}",     nome || userId || "?")
-    .replaceAll("{name}",     nome || userId || "?")
-    .replaceAll("{servidor}", servidor || "?")
-    .replaceAll("{server}",   servidor || "?")
+    .replaceAll("{nome}",     nomeLimpo || userId || "?")
+    .replaceAll("{name}",     nomeLimpo || userId || "?")
+    .replaceAll("{servidor}", servidorLimpo || "?")
+    .replaceAll("{server}",   servidorLimpo || "?")
     .replaceAll("{membros}",  membros ?? "?")
     .replaceAll("{members}",  membros ?? "?")
     .replaceAll("{contagem}", membros ?? "?")

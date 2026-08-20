@@ -9,3 +9,11 @@ ia-servico/.env
 **/.env
 automod-config.json
 npm-debug.log*
+
+# Zips de deploy e logs de depuração — nunca versionados.
+# (Esta linha vive AQUI porque o deploy sobrescreve o .gitignore local:
+#  qualquer adição feita só na máquina se perde no próximo unzip.)
+*.zip
+_stoat-bot*_logs.txt
+*.log
+blocklist-cache.bin

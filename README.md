@@ -1572,7 +1572,8 @@ O código é organizado em quatro áreas, sob `modulos/`:
 │   ├── servidor.js             # HTTP: /chat, /saude, /ferramentas
 │   └── ferramentas/            # calcular, ler_codigo, buscar_web, buscar_rss
 ├── ia-stack/                   # stack de IA legada (superada pelo ia-servico)
-├── scripts/openrc/             # serviços do OpenRC (bot e judy-ia)
+├── scripts/
+│   ├── deploy-stoat.sh         # deploy seguro (copie para ~/ e rode de lá)openrc/             # serviços do OpenRC (bot e judy-ia)
 ├── .env.example                # modelo de configuração
 └── .github/workflows/build.yml # build multi-arch → GHCR
 ```

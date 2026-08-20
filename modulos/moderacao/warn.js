@@ -16,7 +16,7 @@ import { limparId, ULID, resolverUsuario } from "../core/ids.js";
 
 
 export async function cmdWarn(message, args, ctx) {
-  const { sendEmbed, COR, PREFIXO: P, config, serverId, getServer } = ctx;
+  const { sendEmbed, COR, PREFIXO: P, config, serverId, getServer, membroTemPermissao } = ctx;
   const lang = lingua(ctx);
 
   const server = await getServer(message);
@@ -26,6 +26,19 @@ export async function cmdWarn(message, args, ctx) {
         description: "Este comando só funciona dentro de um servidor.", colour: COR.erro },
       { title: "❌ Outside a server",
         description: "This command only works inside a server.", colour: COR.erro }));
+  }
+
+  // GATE DE PERMISSÃO — estava FALTANDO. O &warn escreve na mesma tabela de
+  // punições do automod, então um aviso manual conta para o modo "acumular":
+  // sem esta checagem, qualquer membro podia advertir qualquer outro e, no
+  // limite, forçar o ban automático de terceiros. Exige ManageMessages, o
+  // mesmo nível dos outros comandos de moderação leve.
+  if (!membroTemPermissao(message, server, "ManageMessages")) {
+    return sendEmbed(message.channel, tr(ctx,
+      { title: "🚫 Permissão insuficiente",
+        description: "Você precisa de **ManageMessages** (ou um cargo de staff) para advertir alguém.", colour: COR.erro },
+      { title: "🚫 Missing permission",
+        description: "You need **ManageMessages** (or a staff role) to warn someone.", colour: COR.erro }));
   }
 
   const alvoId = await resolverUsuario(args[0], { message, server });

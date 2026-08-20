@@ -259,7 +259,17 @@ async function processarFila(canalVoz) {
     media.on?.("buffer", () => dbg("  ⏳ bufferizando"));
     media.on?.("error", (e) => log(`  ✗ erro no player: ${e?.message ?? e}`));
 
-    media.playFile(arquivo);
+    // ── BUG DA BIBLIOTECA: playFile() está quebrado em ESM ──
+    // O Media.js do revoice usa `fs.createReadStream(path)` mas NUNCA importa
+    // o `fs`. Ele só funciona por acidente quando alguma dependência vaza um
+    // `fs` global — o que ocorre em CommonJS e NÃO ocorre em ESM. Como este
+    // serviço é ESM, playFile() lançava "fs is not defined" em toda fala.
+    // (Verificado: em CJS `globalThis.fs` existe; em ESM é undefined.)
+    // Ninguém tinha notado porque o uso comum — bots de música — manda
+    // streams de rede, não arquivos locais.
+    // Abrimos o arquivo aqui e usamos playStream(), que é implementado
+    // corretamente e é exatamente para onde o playFile apontaria.
+    media.playStream(fs.createReadStream(arquivo));
 
     // Espera o fim para não sobrepor a próxima fala. `finish` é o
     // caminho normal; o timeout é a rede de segurança para o caso de o

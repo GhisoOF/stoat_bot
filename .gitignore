@@ -6,6 +6,7 @@ node_modules/
 .env.*
 !.env.example
 ia-servico/.env
+voz-servico/.env
 **/.env
 automod-config.json
 npm-debug.log*

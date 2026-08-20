@@ -198,6 +198,11 @@ function detalhesPT(P) {
       desc: "Mostra a **equipe do servidor**, agrupada por cargo e com quem tem cada um.\n\nA lista não tem cadastro próprio: ela lê os mesmos cargos do `&acesso cargo`. Então adicionar aqui **também dá acesso aos comandos de moderação** — e remover tira os dois de uma vez, sem o quadro de avisos discordar da permissão real.\n\n`&staff add <@cargo>` · `&staff remove <@cargo>` · `&staff limpar`\n`&staff titulo <@cargo> <texto>` — rótulo exibido no lugar do nome do cargo\n\n_Consultar é público; mexer exige ManagePermissions._",
       perm: "ManagePermissions", ex: `${P}staff add Moderador`,
     },
+    tts: {
+      uso: `${P}tts <texto> | [canal|transmitir|entrar|sair|voz|estado|on|off]`,
+      desc: "A Judy **fala nas calls**. Alguém escreve, ela lê em voz alta no canal de voz.\n\n`&tts <texto>` — fala agora\n`&tts estado` — diagnóstico da cadeia inteira\n\n**Configuração** _(ManageMessages)_\n`&tts canal <#voz>` — onde falar\n`&tts transmitir <#texto>` — tudo escrito lá vira fala na call\n`&tts entrar` · `&tts sair` · `&tts on|off`\n`&tts voz [nome]` — escolhe a voz\n\n_A síntese é **offline**, no computador do dono (Piper). Só funciona nos servidores habilitados._",
+      perm: "ManageMessages (só para configurar)", ex: `${P}tts canal <#voz>`,
+    },
     fuso: {
       uso: `${P}fuso [ver|buscar|add|remove|apelido|principal|formato|limpar]`,
       desc: "Relógio do servidor com **várias cidades ao mesmo tempo** — útil quando a galera está espalhada (São Paulo, Madrid, Tóquio…).\n\n`&fuso` mostra a hora agora em cada cidade configurada, ordenada do fuso mais atrasado ao mais adiantado, com a diferença em relação à cidade de referência.\n\n`&fuso ver <cidade>` — hora de qualquer cidade, sem configurar\n`&fuso buscar <termo>` — procura cidades disponíveis\n`&fuso add/remove <cidade>` — monta a lista _(ManageMessages)_\n`&fuso apelido <cidade> <texto>` — ex.: Madrid aparecendo como \"Europa\"\n`&fuso principal <cidade>` — de quem as diferenças são contadas\n`&fuso formato <12|24>`\n\n_Aceita acentos e o formato Cidade/País: `São Paulo`, `Madrid/Europa`, `Tokyo`._",
@@ -408,6 +413,11 @@ function detalhesEN(P) {
       uso: `${P}staff [add|remove|title|clear]`,
       desc: "Shows the **server's staff**, grouped by role and listing who holds each one.\n\nThe list has no separate registry: it reads the very same roles as `&acesso cargo`. So adding here **also grants access to the moderation commands** — and removing drops both at once, so the notice board can never disagree with the actual permission.\n\n`&staff add <@role>` · `&staff remove <@role>` · `&staff clear`\n`&staff title <@role> <text>` — label shown instead of the role's name\n\n_Viewing is public; changing requires ManagePermissions._",
       perm: "ManagePermissions", ex: `${P}staff add Moderator`,
+    },
+    tts: {
+      uso: `${P}tts <text> | [canal|transmitir|entrar|sair|voz|estado|on|off]`,
+      desc: "Judy **speaks in calls**. Someone writes, she reads it aloud in the voice channel.\n\n`&tts <text>` — speak now\n`&tts estado` — diagnostics for the whole chain\n\n**Configuration** _(ManageMessages)_\n`&tts canal <#voice>` — where to speak\n`&tts transmitir <#text>` — everything written there becomes speech\n`&tts entrar` · `&tts sair` · `&tts on|off`\n`&tts voz [name]` — pick the voice\n\n_Synthesis runs **offline** on the owner's machine (Piper). Only works on enabled servers._",
+      perm: "ManageMessages (configuration only)", ex: `${P}tts canal <#voice>`,
     },
     fuso: {
       uso: `${P}fuso [ver|buscar|add|remove|apelido|principal|formato|limpar]`,
@@ -754,6 +764,7 @@ function construirCategorias(P, lang) {
         `\`${P}reactionrole <add|remove|list>\` — reaction roles *(ManageRole)*`,
         `\`${P}autorole <set|off>\` — automatic role on join *(ManageRole)*`,
         `\`${P}fuso\` — clock with several cities at once`,
+        `\`${P}tts <text>\` — Judy speaks it in the call`,
         `\`${P}welcome <channel|text|test>\` — join embed *(ManageMessages)*`,
         `\`${P}goodbye <channel|text|test>\` — leave embed *(ManageMessages)*`,
         `\`${P}rss <add|remove|list|canal|agora>\` — RSS news curation`,
@@ -875,6 +886,7 @@ function construirCategorias(P, lang) {
         `\`${P}reactionrole <add|remove|list>\` — cargos por reação *(ManageRole)*`,
         `\`${P}autorole <set|off>\` — cargo automático a quem entra *(ManageRole)*`,
         `\`${P}fuso\` — relógio com várias cidades ao mesmo tempo`,
+        `\`${P}tts <texto>\` — a Judy fala isso na call`,
         `\`${P}boasvindas <canal|texto|testar>\` — embed de entrada *(ManageMessages)*`,
         `\`${P}adeus <canal|texto|testar>\` — embed de saída *(ManageMessages)*`,
         `\`${P}rss <add|remove|list|canal|agora>\` — curadoria de notícias por RSS`,

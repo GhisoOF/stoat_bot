@@ -1,0 +1,15 @@
+{
+  "name": "judy-voz",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Serviço de voz da Judy: entra em calls do Stoat e fala (TTS offline com Piper)",
+  "main": "servidor.js",
+  "scripts": {
+    "start": "node --no-experimental-global-navigator servidor.js",
+    "saude": "curl -s localhost:8091/saude | head -40"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "revoice.js": "^0.2.1696"
+  }
+}

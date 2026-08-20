@@ -28,6 +28,16 @@ services:
       - OLLAMA_MODEL_CODIGO=ornith:9b      # programação
       - OLLAMA_MODEL_LOGICA=qwen3.5:9b     # lógica/matemática
       - OLLAMA_MODEL_DECISAO=qwen3.5:0.8b  # decisões internas (rápido)
+      # ── Voz nas calls (judy-voz, nativo no Gentoo) ──
+      # O serviço de voz NÃO roda em Docker: ele precisa de binários nativos
+      # do LiveKit e do Piper, e é melhor que caia sozinho sem levar a
+      # moderação junto. Aqui ficam só o endereço e a chave.
+      - VOZ_SERVICO_URL=http://100.74.70.106:8091
+      - VOZ_CHAVE=                          # MESMA chave do voz-servico/.env
+      - TTS_SERVIDORES=                     # IDs dos servidores com voz (vazio = desligado em todos)
+      - TTS_COOLDOWN_MS=8000                # freio por pessoa entre falas
+      - TTS_MAX_CHARS=400
+      - TTS_TIMEOUT_MS=40000
       # ── Agente de memória (aprende fatos observando o chat) ──
       - MEMORIA_AGENTE=on                  # 'off' desliga o agente
       - MEMORIA_DEBOUNCE_MS=8000           # agrupa rajadas de msgs numa extração
@@ -42,8 +52,12 @@ services:
       - CHAT_NUM_CTX=16384                     # contexto (entrada+saída); RX9060XT aguenta
       - CHAT_MAX_TOKENS=4096                   # teto de resposta (aumente p/ código longo)
       - CHAT_TIMEOUT=300000                    # ms; geração longa demora
-      - CHAT_DEBUG=1                           # 1 = log detalhado no Portainer (diagnóstico)
-      - XP_DEBUG=1
+      # ── Debug: ligue só o que estiver investigando ──
+      # Cada um vale por si; ligar tudo de uma vez deixa o log do Portainer
+      # ilegível justamente quando você mais precisa dele.
+      - CHAT_DEBUG=1                           # conversa da IA
+      - XP_DEBUG=1                             # ganho de XP por mensagem
+      - VOZ_DEBUG=0                            # chamadas ao judy-voz (TTS)
       # - MSG_LOG=off                          # desliga SÓ o log [MSG] por mensagem
       #                                        # (o resto do debug continua)
       # Conversa livre: intervalo mínimo entre avaliações por canal (ms)

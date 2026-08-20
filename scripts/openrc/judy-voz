@@ -1,0 +1,55 @@
+#!/sbin/openrc-run
+# ══════════════════════════════════════════════════════════
+#  Serviço OpenRC para o judy-voz (voz nas calls do Stoat).
+#
+#  Instalar:
+#    sudo cp scripts/openrc/judy-voz /etc/init.d/judy-voz
+#    sudo chmod +x /etc/init.d/judy-voz
+#    sudo cp scripts/openrc/judy-voz.confd /etc/conf.d/judy-voz
+#    sudo nano /etc/conf.d/judy-voz
+#    sudo rc-update add judy-voz default
+#    sudo rc-service judy-voz start
+#
+#  Log:    tail -f /var/log/judy-voz.log
+#  Saúde:  curl localhost:8091/saude
+# ══════════════════════════════════════════════════════════
+
+: ${VOZ_USER:=ghiso}
+: ${VOZ_DIR:=/home/ghiso/Downloads/github/voz-servico}
+: ${VOZ_NODE:=/usr/bin/node}
+
+name="judy-voz"
+description="Voz da Judy nas calls do Stoat (LiveKit + Piper)"
+
+command="${VOZ_NODE}"
+# A FLAG NÃO É OPCIONAL: sem --no-experimental-global-navigator o Node 21.1+
+# expõe a API navigator e o revoice.js falha ao entrar na call com
+# "device not supported" — erro que não sugere a causa.
+command_args="--no-experimental-global-navigator servidor.js"
+command_user="${VOZ_USER}"
+command_background="yes"
+directory="${VOZ_DIR}"
+pidfile="/run/judy-voz.pid"
+output_log="/var/log/judy-voz.log"
+error_log="/var/log/judy-voz.log"
+
+depend() {
+    need net
+}
+
+start_pre() {
+    if [ ! -f "${VOZ_DIR}/servidor.js" ]; then
+        eerror "Não achei ${VOZ_DIR}/servidor.js — ajuste VOZ_DIR em /etc/conf.d/judy-voz"
+        return 1
+    fi
+    if [ ! -f "${VOZ_DIR}/.env" ]; then
+        eerror "Sem ${VOZ_DIR}/.env — o serviço precisa do BOT_TOKEN e da VOZ_CHAVE."
+        eerror "Restaure com:  cp ~/judy-voz.env ${VOZ_DIR}/.env"
+        return 1
+    fi
+    if [ ! -d "${VOZ_DIR}/node_modules" ]; then
+        eerror "Faltam as dependências. Rode:  cd ${VOZ_DIR} && npm install"
+        return 1
+    fi
+    checkpath --file --owner "${VOZ_USER}" --mode 0644 /var/log/judy-voz.log
+}

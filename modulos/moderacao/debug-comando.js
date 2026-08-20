@@ -69,6 +69,51 @@ export async function cmdDebug(message, args, ctx) {
   // ── &debug canais → o que o bot enxerga e pode fazer em cada canal ──
   // No Stoat a permissão do canal vence a do cargo: dá para ter SendMessage
   // no servidor e estar mudo num canal. É isso que este relatório expõe.
+  // ── &debug voz ── diagnóstico da cadeia inteira do TTS ──
+  // Seis elos (Ollama → judy-ia → Piper → judy-voz → LiveKit → Stoat) e um
+  // sintoma único ("o bot não falou"). Isto diz QUAL elo quebrou, direto do
+  // chat, sem precisar de acesso ao Gentoo.
+  if (["voz", "tts", "voice"].includes(sub)) {
+    const VOZ_URL = (process.env.VOZ_SERVICO_URL || "").replace(/\/$/, "");
+    const linhas = [];
+    const marca = (ok, txt) => `${ok ? "🟢" : "🔴"} ${txt}`;
+
+    linhas.push(`**Servidores com voz:** \`${process.env.TTS_SERVIDORES || "(nenhum)"}\``);
+    linhas.push(marca(!!VOZ_URL, `VOZ_SERVICO_URL: \`${VOZ_URL || "não definida"}\``));
+    linhas.push(marca(!!process.env.VOZ_CHAVE, `VOZ_CHAVE: ${process.env.VOZ_CHAVE ? "definida" : "AUSENTE"}`));
+
+    if (VOZ_URL) {
+      const t0 = Date.now();
+      try {
+        const r = await fetch(`${VOZ_URL}/saude`, { signal: AbortSignal.timeout(6000) });
+        const d = await r.json();
+        const ms = Date.now() - t0;
+        linhas.push("", marca(r.ok, `judy-voz respondeu em ${ms}ms`));
+        linhas.push(marca(d.piper?.ok, `Piper: ${d.piper?.ok ? d.piper.vozAtual : d.piper?.erro}`));
+        if (d.piper?.vozes?.length) linhas.push(`   _vozes: ${d.piper.vozes.join(", ")}_`);
+        linhas.push(marca(d.voz?.pronto, `LiveKit: ${d.voz?.pronto ? "pronto" : d.voz?.erro}`));
+        const con = d.voz?.conexoes ?? [];
+        linhas.push(`**Em calls:** ${con.length
+          ? con.map((x) => `<#${x.canalVoz}> — ${x.falas} fala(s), ${x.naFila} na fila`).join("\n")
+          : "_nenhuma_"}`);
+      } catch (e) {
+        linhas.push("", `🔴 judy-voz inalcançável: \`${e?.message ?? e}\``);
+        linhas.push("_No Gentoo:_ `bash scripts/judy-diag.sh`");
+      }
+    }
+
+    const c = ctx.config?.tts;
+    linhas.push("", `**Neste servidor:** ${c?.ativo ? "🟢 ligado" : "🔴 desligado"}`);
+    if (c?.canalVoz) linhas.push(`Canal de voz: <#${c.canalVoz}>`);
+    if (c?.canalTexto) linhas.push(`Transmite de: <#${c.canalTexto}>`);
+
+    return sendEmbed(message.channel, {
+      title: "🔊 Debug — voz",
+      description: linhas.join("\n"),
+      colour: COR.info,
+    });
+  }
+
   if (["canais", "canal", "permissoes", "permissões", "perms"].includes(sub)) {
     // O cálculo precisa do MEMBRO do bot (os cargos dele). Sem isso não há
     // como saber o que ele pode em cada canal.

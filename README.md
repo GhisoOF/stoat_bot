@@ -275,6 +275,13 @@ persona, que pede o mesmo tom em uma frase.
 - **Notícias por RSS** (`&rss`): a cada hora o bot posta os itens novos dos feeds no canal configurado. Onde a IA está ativa, a Judy escreve também um **resumo geral no tom dela**.
 - **Sistema de níveis** (`&xp`): XP por mensagem, cargos por nível (posicionados abaixo do mute), leaderboard e parâmetros configuráveis.
 - **Autorole** (`&autorole`): dá um cargo automaticamente a quem entra no servidor.
+- **Voz nas calls** (`&tts`): a Judy entra num canal de voz e **fala** o que
+  for escrito. A síntese é **offline**, no computador do dono (Piper, pt-BR),
+  e o serviço de voz (`judy-voz`) roda nativo no Gentoo — fora do Docker, para
+  que uma falha de WebRTC não derrube a moderação. `&tts transmitir <#canal>`
+  faz tudo que for escrito naquele canal virar fala na call. Recurso isolado:
+  só funciona nos servidores listados em `TTS_SERVIDORES`.
+  Diagnóstico da cadeia inteira: `&tts estado` ou `&debug voz`.
 - **Fusos horários** (`&fuso`): relógio com várias cidades ao mesmo tempo, para
   servidores com gente espalhada. A staff escolhe as cidades (`&fuso add São Paulo`,
   `&fuso add Madrid/Europa`) e qualquer pessoa consulta com `&fuso`. A lista sai
@@ -483,6 +490,7 @@ Prefixo: `&`. Aliases entre parênteses.
 | `&blocklist <add\|remove\|list\|clear\|reload> [url]` | listas anti-link |
 | `&staff [add\|remove\|titulo\|limpar]` | a equipe do servidor (mesmos cargos do `&acesso`) |
 | `&fuso [ver\|buscar\|add\|remove\|apelido\|principal\|formato]` | relógio com vários fusos |
+| `&tts <texto>` / `&tts [canal\|transmitir\|entrar\|sair\|voz\|estado]` | a Judy fala na call |
 | `&boasvindas <canal\|titulo\|texto\|cor\|imagem\|testar\|padrao\|on\|off>` | embed de entrada |
 | `&adeus <canal\|titulo\|texto\|cor\|imagem\|testar\|padrao\|on\|off>` | embed de saída |
 

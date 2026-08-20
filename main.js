@@ -22,6 +22,7 @@ import * as midia     from "./modulos/core/midia.js";
 import * as autorole  from "./modulos/ferramentas/autorole.js";
 import * as bemvindo  from "./modulos/ferramentas/boas-vindas.js";
 import * as fuso      from "./modulos/ferramentas/fuso.js";
+import * as ttsVoz    from "./modulos/ferramentas/tts.js";
 import * as staff     from "./modulos/moderacao/staff.js";
 import * as tutorial   from "./modulos/moderacao/tutorial.js";
 import * as corCargo   from "./modulos/moderacao/cor-cargo.js";
@@ -385,6 +386,10 @@ const rotas = {
   // Equipe do servidor (mesma lista de cargos do &acesso)
   staff:         staff.cmdStaff,
   equipe:        staff.cmdStaff,
+  // Voz nas calls (TTS)
+  tts:           ttsVoz.cmdTts,
+  voz:           ttsVoz.cmdTts,
+  falar:         ttsVoz.cmdTts,
   // Relógio com vários fusos
   fuso:          fuso.cmdFuso,
   fusos:         fuso.cmdFuso,
@@ -424,6 +429,7 @@ const CANONICO = {
   logs: "log",
   equipe: "staff",
   fusos: "fuso", hora: "fuso", timezone: "fuso", timezones: "fuso", tz: "fuso",
+  voz: "tts", falar: "tts", speak: "tts",
   "boas-vindas": "boasvindas", welcome: "boasvindas", bemvindo: "boasvindas",
   goodbye: "adeus", despedida: "adeus", farewell: "adeus",
   clear: "limpar", purge: "limpar", limpiar: "limpar",
@@ -458,7 +464,7 @@ const COMANDOS_GERENCIAVEIS = [
   "ping", "repete", "userinfo", "kick", "ban", "limpar",
   "warnings", "clearwarnings", "warn", "acesso", "automod", "whitelist", "blocklist",
   "sentinela", "punicao", "tutorial", "cor", "log", "banglobal", "embed", "reactionrole", "chat", "rss", "xp", "game", "autorole",
-  "staff", "boasvindas", "adeus", "fuso",
+  "staff", "boasvindas", "adeus", "fuso", "tts",
 ];
 // exportado via ctx para o comando &comando consultar
 estado.CANONICO = CANONICO;
@@ -623,6 +629,11 @@ client.on("messageCreate", async (message) => {
   if (!command) {
     try { await nivel.aoMensagem(message, { ...ctx, client }); }
     catch (e) { console.error("[NIVEL]", e.message); }
+
+    // Transmissão por voz: se este canal estiver configurado, a mensagem
+    // vira fala na call. Sai barato quando não é o caso.
+    try { await ttsVoz.aoMensagem(message, ctx); }
+    catch (e) { console.error("[TTS]", e.message); }
 
     // Agente de memória: observa a mensagem (extração roda em background,
     // com debounce; não trava nada aqui). Só onde o chat é permitido.

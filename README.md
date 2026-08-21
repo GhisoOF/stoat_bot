@@ -453,6 +453,7 @@ Prefixo: `&`. Aliases entre parênteses.
 |---|---|---|
 | `&kick @usuário [motivo]` | KickMembers | expulsa (aceita menção **ou** ID) |
 | `&ban @usuário [motivo]` | BanMembers | bane e registra na lista global |
+| `&limpar tudo` | esvazia o canal inteiro — **só o dono**, com código de confirmação |
 | `&limpar <n> [@usuário]` | ManageMessages | apaga as últimas `n` mensagens (1–100) |
 | `&clearwarnings @usuário` | ManagePermissions | zera os avisos do usuário |
 

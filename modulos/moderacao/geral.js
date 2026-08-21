@@ -271,8 +271,8 @@ function detalhesPT(P) {
       ex: `${P}reactionrole add https://stoat.chat/server/.../01ABC... 🎮 01XYZ...`,
     },
     limpar: {
-      uso: `${P}limpar <quantidade> [@usuário]`,
-      desc: "Apaga as últimas mensagens do canal (1–100). Com um usuário, apaga só as mensagens dele. Também responde a `clear` e `purge`. A confirmação some sozinha após alguns segundos.",
+      uso: `${P}limpar <quantidade> [@usuário] | tudo`,
+      desc: "Apaga as últimas mensagens do canal (1–100). Com um usuário, apaga só as mensagens dele. Também responde a `clear` e `purge`. A confirmação some sozinha após alguns segundos.\n\n`&limpar tudo` — esvazia o canal INTEIRO. Só o **dono do servidor**, e com confirmação por código de 4 caracteres que expira em 60s. Não há como desfazer.",
       perm: "ManageMessages", ex: `${P}limpar 10`,
     },
     config: {
@@ -487,8 +487,8 @@ function detalhesEN(P) {
       ex: `${P}reactionrole add https://stoat.chat/server/.../01ABC... 🎮 01XYZ...`,
     },
     limpar: {
-      uso: `${P}limpar <amount> [@user]`,
-      desc: "Deletes the channel's latest messages (1–100). With a user, deletes only theirs. Also answers to `clear` and `purge`. The confirmation deletes itself after a few seconds.",
+      uso: `${P}limpar <amount> [@user] | tudo`,
+      desc: "Deletes the channel's latest messages (1–100). With a user, deletes only theirs. Also answers to `clear` and `purge`. The confirmation deletes itself after a few seconds.\n\n`&limpar tudo` — empties the WHOLE channel. **Server owner only**, with a 4-character confirmation code that expires in 60s. There is no undo.",
       perm: "ManageMessages", ex: `${P}limpar 10`,
     },
     config: {

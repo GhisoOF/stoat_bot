@@ -67,6 +67,8 @@ services:
       # ── Super-admin (dono do bot, controle total em qualquer servidor) ──
       - SUPER_ADMINS=01K9JKP85D5EP2ZTEHS8DT797A
       # ── Observabilidade / estabilidade da conexão ──
+      - LOGIN_MAX_TENTATIVAS=10                 # tentativas de login antes de encerrar
+                                               # (3s, 6s, 12s… até 60s entre elas)
       - HEARTBEAT_MS=300000                    # intervalo do log "[VIVO]" (prova de vida)
       - INATIVIDADE_MS=600000                  # sem eventos > isso (10min) → reinicia sozinho
     volumes:

@@ -52,6 +52,7 @@ const client      = new Client({ autoReconnect: true });
 // ══════════════════════════════════════════════════════════
 
 let ultimoEvento = Date.now();       // quando recebemos o último evento do Stoat
+let jaConectou = false;              // o login chegou a dar certo alguma vez?
 let jaReiniciando = false;
 
 // Reinício controlado: encerra o processo para o supervisor subir de novo.
@@ -68,7 +69,12 @@ function reiniciar(motivo) {
 // 1) Erros globais. Erros de SOCKET/CONEXÃO são fatais para o funcionamento —
 //    não adianta seguir "vivo": reiniciamos. Outros erros são só logados.
 function ehErroDeConexao(txt) {
-  return /socket closed|ECONNRESET|EPIPE|ETIMEDOUT|ECONNREFUSED|write after end|not opened|WebSocket/i.test(txt || "");
+  // `fetch failed` faltava aqui e custou uma intervenção manual: quando o
+  // Stoat caiu, o login falhou com essa mensagem, ela não casou com nenhum
+  // padrão, o processo NÃO reiniciou e ficou vivo sem nunca conectar — o
+  // Docker não recria um container que não morreu.
+  return /socket closed|ECONNRESET|EPIPE|ETIMEDOUT|ECONNREFUSED|ENOTFOUND|EAI_AGAIN|EHOSTUNREACH|ENETUNREACH|fetch failed|write after end|not opened|WebSocket|getaddrinfo/i
+    .test(txt || "");
 }
 process.on("uncaughtException", (err) => {
   const txt = err?.stack || String(err);
@@ -88,7 +94,10 @@ client.on("error", (e) => {
   if (ehErroDeConexao(txt)) reiniciar("erro de conexão do cliente");
 });
 client.on("connecting", () => console.info("[CONN] Conectando ao Stoat…"));
-client.on("connected", () => { ultimoEvento = Date.now(); console.info("[CONN] Conectado (WebSocket ativo)."); });
+client.on("connected", () => {
+  ultimoEvento = Date.now(); jaConectou = true;
+  console.info("[CONN] Conectado (WebSocket ativo).");
+});
 client.on("disconnected", () => console.warn("[CONN] ⚠️ DESCONECTADO do Stoat — aguardando reconexão…"));
 
 // 3) Watchdog por INATIVIDADE (não depende do evento 'disconnected', que pode
@@ -99,6 +108,15 @@ client.on("disconnected", () => console.warn("[CONN] ⚠️ DESCONECTADO do Stoa
 const INATIVIDADE_MS = Number(process.env.INATIVIDADE_MS || 600000); // 10 min sem eventos → reinicia
 setInterval(() => {
   const ocioso = Date.now() - ultimoEvento;
+
+  // Caso distinto e mais urgente: o processo está de pé mas NUNCA conectou.
+  // Não é socket zumbi, é login que não completou — e esperar 10 minutos por
+  // isso é tempo demais, porque nesse estado o bot não faz absolutamente nada.
+  if (!jaConectou && ocioso > 120_000) {
+    reiniciar("2min de pé sem nunca ter conectado ao Stoat (login não completou)");
+    return;
+  }
+
   if (ocioso > INATIVIDADE_MS) {
     reiniciar(`sem eventos do Stoat há ${Math.round(ocioso / 60000)}min (socket provavelmente zumbi)`);
   }
@@ -110,7 +128,7 @@ const HEARTBEAT_MS = Number(process.env.HEARTBEAT_MS || 300000); // 5 min
 setInterval(() => {
   const ociosoMin = Math.round((Date.now() - ultimoEvento) / 60000);
   const mem = Math.round(process.memoryUsage().rss / 1048576);
-  console.info(`[VIVO] bot ativo | RAM ${mem}MB | sem eventos há ${ociosoMin}min`);
+  console.info(`[VIVO] bot ${jaConectou ? "ativo" : "AINDA SEM CONECTAR"} | RAM ${mem}MB | sem eventos há ${ociosoMin}min`);
 }, HEARTBEAT_MS);
 
 
@@ -1077,4 +1095,32 @@ if (!TOKEN || TOKEN.trim() === "" || TOKEN === "cole_seu_token_aqui") {
   console.error("══════════════════════════════════════════════════════════\n");
   process.exit(1);
 }
-client.loginBot(TOKEN);
+// ── Login com nova tentativa ──────────────────────────────
+//
+// Antes isto era `client.loginBot(TOKEN)` solto: sem await e sem catch. Se o
+// Stoat estivesse fora do ar, a rejeição virava um `unhandledRejection`, o
+// processo continuava VIVO sem nunca ter conectado, e o container ficava de
+// pé sem fazer nada — exigindo intervenção manual.
+//
+// Agora tentamos de novo com espera crescente. Um Stoat fora do ar por
+// alguns minutos deixa de ser um problema que precisa de gente.
+async function conectar(tentativa = 1) {
+  const MAX = Number(process.env.LOGIN_MAX_TENTATIVAS || 10);
+  try {
+    await client.loginBot(TOKEN);
+    console.info("[CONN] Login aceito pelo Stoat.");
+  } catch (err) {
+    const txt = err?.message ?? String(err);
+    const espera = Math.min(60_000, 3000 * 2 ** (tentativa - 1));   // 3s, 6s, 12s… até 60s
+
+    if (tentativa >= MAX) {
+      console.error(`[CONN] Login falhou ${MAX} vezes (${txt}). Encerrando para o supervisor recriar o container.`);
+      process.exit(1);   // sair é melhor que ficar de pé sem conectar
+    }
+
+    console.error(`[CONN] Login falhou (${txt}) — tentativa ${tentativa}/${MAX}, nova em ${espera / 1000}s`);
+    setTimeout(() => conectar(tentativa + 1), espera);
+  }
+}
+
+conectar();

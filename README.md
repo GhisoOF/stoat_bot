@@ -274,6 +274,11 @@ persona, que pede o mesmo tom em uma frase.
 - **Chat com IA local** (`&chat` ou menção): conversa com a **Judy**, um LLM rodando na sua máquina, sem chaves externas. Ela escolhe o modelo conforme o tipo de mensagem (conversa, código, lógica), faz **contas exatas** e **lê o próprio código** através de um serviço de ferramentas (`ia-servico/`). Busca na internet via SearXNG quando precisa.
 - **Notícias por RSS** (`&rss`): a cada hora o bot posta os itens novos dos feeds no canal configurado. Onde a IA está ativa, a Judy escreve também um **resumo geral no tom dela**.
 - **Sistema de níveis** (`&xp`): XP por mensagem, cargos por nível (posicionados abaixo do mute), leaderboard e parâmetros configuráveis.
+- **Auto-recuperação**: erros de conexão (socket morto, `fetch failed`, DNS)
+  encerram o processo para o supervisor recriá-lo. O login tem nova tentativa
+  com espera crescente, e um watchdog encerra o bot se ele ficar 2 minutos de
+  pé **sem nunca ter conectado** — estado em que o container fica vivo sem
+  fazer nada e o Docker não o recria sozinho.
 - **Autorole** (`&autorole`): dá um cargo automaticamente a quem entra no servidor.
 - **Voz nas calls** (`&tts`): a Judy entra num canal de voz e **fala** o que
   for escrito. A síntese é **offline**, no computador do dono (Piper, pt-BR — `faber` masculina

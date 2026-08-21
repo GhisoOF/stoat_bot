@@ -34,6 +34,7 @@ export const COMANDO_EN = {
   servidores: "servers",
   sobre: "about",
   tutorial: "tutorial",
+  assistente: "wizard",
   warn: "warn",
   xp: "xp",
   game: "game",
@@ -60,6 +61,9 @@ export const COMANDO_EXTRA = {
   character: "game",
   guide: "tutorial",
   start: "tutorial",
+  wizard: "assistente",
+  setup: "assistente",
+  configure: "assistente",
   team: "staff",
   timezone: "fuso",
   timezones: "fuso",
@@ -79,6 +83,15 @@ const SUB = {
   help: {
     moderation: "moderacao", settings: "config", configuration: "config",
     tools: "ferramentas", general: "geral", levels: "xp", character: "game",
+    // grupos novos
+    start: "comecar", protect: "proteger", protection: "proteger",
+    customize: "personalizar", customise: "personalizar", fun: "diversao",
+    diagnostics: "diagnostico", troubleshooting: "diagnostico", owner: "dono",
+  },
+  assistente: {
+    quick: "rapido", fast: "rapido", full: "completo", complete: "completo",
+    channels: "canais", protection: "protecao", protect: "protecao",
+    cancel: "cancelar", stop: "cancelar",
   },
   // Áreas do tutorial. O módulo já entende os nomes em inglês sozinho
   // (o mapa APELIDOS dele), então esta tabela é usada só para EXIBIR —
@@ -89,7 +102,7 @@ const SUB = {
     character: "rpg", adventure: "aventura", economy: "economia",
     setup: "game", permissions: "permissoes", logging: "logs",
     news: "noticias", messages: "mensagens", settings: "ajustes",
-    ai: "ia",
+    ai: "ia", channels: "canais",
   },
   game: {
     create: "criar", new: "novo", delete: "apagar", erase: "apagar",
@@ -271,7 +284,7 @@ const ANINHADOS = {
   acesso: new Set(["cargo", "cargos", "staff", "canal", "canais"]),
   xp: new Set(["setup", "config", "configurar"]),
   automod: new Set([...Object.keys(SUB.automod), "antispam", "antimassspam",
-    "antiinvite", "antimassmention", "anticaps", "antilink", "antiscam",
+    "antiinvite", "antimassmention", "anticaps", "antilink", "antiscam", "sentinela",
     "anticaracteres", "antirepeticao"]),
   banglobal: new Set(["varrer", "revisar", "scan"]),
   cor: new Set(["painel", "criar", "gerar"]),

@@ -11,6 +11,38 @@ embutido (nada de serviço externo), então as configurações e punições
 
 ---
 
+## Primeiros passos (5 minutos)
+
+Acabou de adicionar o bot? Três comandos resolvem quase tudo:
+
+| Comando | O que faz |
+|---|---|
+| `&assistente rapido` | ⭐ **configuração guiada**: o bot pergunta (idioma, staff, log, nível de proteção, boas-vindas), você responde em texto normal, ele mostra o resumo e aplica — usando os mesmos comandos que você usaria na mão, e mostrando quais foram |
+| `&tutorial` | guia **em páginas** (reaja ◀ ▶): permissões → canais → proteção → boas-vindas e cargos → XP e RPG → checklist |
+| `&help` | índice **por intenção** (começar · proteger · personalizar · diversão · rpg · diagnóstico); `&help <comando>` explica **cada parâmetro** |
+
+### A regra de ouro dos canais
+
+> **A permissão definida no canal vence a definida no cargo.** Se o canal nega,
+> nenhum cargo salva — nem o do bot. Deixe as permissões dos cargos no mínimo e
+> abra exceções canal por canal.
+
+Separe **todo** canal em um de três tipos:
+
+| Tipo | Exemplos | No canal → *Permissões* |
+|---|---|---|
+| 🔒 **Só staff vê** | #log, #alertas, #staff | **Padrão**: negue *Ver canal* → em cada cargo de staff: permita *Ver canal* |
+| 📢 **Só staff escreve** | #regras, #avisos, painéis de reaction role | **Padrão**: negue *Enviar mensagens* → em cada cargo de staff: permita *Enviar mensagens* |
+| 💬 **Geral** | #chat, #off-topic | não mexa |
+
+O cargo do **bot** precisa de *Ver canal* + *Enviar mensagens* nos dois primeiros
+tipos também, senão ele não registra log, não alerta e não publica painel.
+`&debug canais` confere isso canal a canal; `&assistente canais` pergunta quais
+canais são de cada tipo e lista exatamente o que clicar; `&tutorial canais` é a
+versão em prosa.
+
+---
+
 ## Onde cada peça roda
 
 O projeto tem **dois processos, em duas máquinas**, e confundir isso já custou
@@ -228,6 +260,7 @@ persona, que pede o mesmo tom em uma frase.
 
 ## Sumário
 
+- [Primeiros passos (5 minutos)](#primeiros-passos-5-minutos) ⭐
 - [Recursos](#recursos)
 - [Requisitos](#requisitos)
 - [Permissões necessárias](#permissões-necessárias) ⭐
@@ -239,7 +272,8 @@ persona, que pede o mesmo tom em uma frase.
 - [Lista global de banimentos (`&banglobal`)](#lista-global-de-banimentos-banglobal)
 - [RPG (`&game`)](#rpg-game)
 - [Cor dos cargos (`&cor`)](#cor-dos-cargos-cor)
-- [Guia `&tutorial`](#guia-tutorial)
+- [Guia `&tutorial` e assistente `&assistente`](#guia-tutorial-e-assistente-assistente)
+- [Instância do autor vs. o bot genérico](#instância-do-autor-vs-o-bot-genérico)
 - [Persistência (SQLite)](#persistência-sqlite)
 - [Instalação e serviço (OpenRC)](#instalação-e-serviço-openrc)
 - [Estrutura do projeto](#estrutura-do-projeto)
@@ -439,7 +473,9 @@ Prefixo: `&`. Aliases entre parênteses.
 
 | Comando | Descrição |
 |---|---|
-| `&help [comando]` | lista os comandos, ou detalha um específico |
+| `&help [grupo\|comando]` | índice por intenção (em páginas, reaja ◀ ▶); `&help <comando>` detalha **cada parâmetro**; os nomes antigos (`moderacao`, `config`…) continuam valendo |
+| `&tutorial [n\|área]` | guia de primeiros passos em 6 páginas; `&tutorial canais` explica os 3 tipos de canal |
+| `&assistente [rapido\|completo\|canais\|protecao]` | configuração guiada (exige ManagePermissions ou cargo de staff) |
 | `&ping` | latência do bot |
 | `&userinfo [@usuário]` | informações + **histórico de moderação** (avisos e lista global) |
 | `&warnings [@usuário]` | avisos acumulados neste servidor |
@@ -527,7 +563,7 @@ Cada módulo é ligado/desligado **por servidor** com `&automod <módulo> <on|of
   de rede).
 - **anticaracteres** — bloqueia zalgo (acentos empilhados) e caracteres invisíveis/de controle de direção (coisas que travam front-ends)
 - **antirepeticao** — bloqueia a mesma letra repetida muitas vezes (ex.: `aaaaaaaaaa`). **Desligado por padrão** e, quando ligado, ignora o `k` (a risada BR `kkkkk` não é punida). Configure com `&automod antirepeticao set ignorar <letras>`
-- **antiscam** — detecção de conteúdo proibido por pontuação (ver abaixo)
+- **sentinela** (antigo `antiscam`, nome que ainda é aceito) — o único filtro que **julga** em vez de medir: nota de suspeita 0–10 para golpe, +18, gore e apologia; `&sentinela on` liga (ver abaixo)
 
 A detecção de conteúdo dá uma **nota de 0 a 10** (golpe, +18, gore, apologia a
 ilícito e abuso, tudo numa categoria) e age conforme a sensibilidade
@@ -553,7 +589,7 @@ E cada módulo pode ter uma **punição própria**, independente da global:
 
 ```
 &automod antilink punicao apagar       # anti-link só apaga a mensagem
-&automod antiscam punicao banir        # scam bane direto
+&automod sentinela punicao banir      # o Sentinela bane direto
 &automod antispam punicao herdar       # volta a usar a punição global
 ```
 
@@ -1310,38 +1346,97 @@ O cargo pode ser informado pelo **nome** (mesmo parcial), **mencionando** (`<%Ca
 
 ---
 
-## Guia `&tutorial`
+## Guia `&tutorial` e assistente `&assistente`
 
-O bot não tem assistente que configura sozinho: cada área tem seu próprio comando
-e o `&tutorial` é o **mapa** que diz por onde passar e o que rodar em cada etapa.
-Ele nunca altera nada — só explica.
+São dois caminhos para o mesmo lugar:
+
+- **`&tutorial`** ensina. Seis páginas curtas, navegadas por reação (◀ ▶) ou por
+  número (`&tutorial 3`): *antes de tudo* (permissões do bot) → *canais* (a regra
+  de ouro e os 3 tipos) → *proteção* → *boas-vindas e cargos* → *XP e RPG* →
+  *checklist*. Cada página termina apontando o comando que aprofunda.
+- **`&assistente`** faz junto. Pergunta uma coisa de cada vez, você responde em
+  texto normal (sem prefixo), e no fim mostra o **resumo com os comandos
+  equivalentes** antes de aplicar qualquer coisa. Quem usou o assistente sai
+  sabendo fazer na mão.
 
 ```
-&tutorial              # o roteiro, na ordem recomendada
-&tutorial moderacao    # a página daquela área, com os comandos exatos
+&tutorial              # o guia em páginas
+&tutorial 2            # abre direto a página 2 (celular, ou sem poder reagir)
+&tutorial canais       # aprofundamento: os 3 tipos de canal, clique a clique
+
+&assistente            # menu
+&assistente rapido     # idioma, staff, log, nível de proteção, boas-vindas (~2 min)
+&assistente completo   # o rápido + escada de punição, lista global, autorole, XP
+&assistente canais     # classifica seus canais nos 3 tipos e diz o que clicar
+&assistente protecao   # só automod, Sentinela e punição
 ```
 
-Também responde por `&guia` e `&comecar`.
+Durante o assistente: `pular` pula a pergunta, `voltar` volta uma, `cancelar`
+desiste. A sessão é por (canal, pessoa) e expira em 10 min sem resposta. Um
+comando com prefixo continua sendo comando — só o texto puro vai para o
+assistente.
 
-### As áreas, na ordem sugerida
+Como o assistente aplica chamando os **mesmos handlers** dos comandos normais
+(com as respostas capturadas em vez de publicadas), não existe lógica de
+configuração duplicada: se `&punicao` muda, o assistente muda junto, e as
+checagens de permissão continuam valendo. O relatório final marca ✅/❌ por
+comando; para os que falharam, rodar o comando na mão mostra a explicação
+completa.
+
+> O assistente **não altera permissões de canal** — o Stoat pede que isso seja
+> feito na interface. O roteiro `canais` gera as instruções e confere, canal a
+> canal, se o bot já consegue ver/escrever ali.
+
+### Os níveis de proteção do assistente
+
+| Nível | Liga | Punição |
+|---|---|---|
+| 1 Leve | antispam, antiinvite | `avisar` |
+| 2 Médio | + antilink, antimassmention, **Sentinela** (com `antiguidade` e `alerta`) | `acumular` (aviso → mute 5 min → mute 1 h → ban); cria o cargo de silêncio se faltar |
+| 3 Rígido | + anticaps, anticaracteres, antirepeticao; Sentinela em `alta` | `acumular` + `banglobal banir` |
+
+### As áreas de aprofundamento (`&tutorial <área>`)
 
 | # | Área | O que cobre |
 |---|---|---|
-| ⚠️ | `permissoes` | o que o **bot** precisa para funcionar — comece por aqui |
-| 1 | `moderacao` | filtros do automod, política de punição, detecção de conteúdo |
+| ⚠️ | `permissoes` | o que o **bot** precisa para funcionar |
+| 0.5 | `canais` | a regra canal > cargo e os 3 tipos, clique a clique |
+| 1 | `moderacao` | filtros do automod, política de punição, Sentinela |
 | 2 | `logs` | canal de registro e quais eventos anotar |
 | 3 | `cargos` | autorole, cargos por reação, cargo de silêncio |
 | 4 | `xp` | níveis, cargos por nível, dificuldade |
-| 5 | `ia` | conversa da Judy, memória, perfil, moderação por IA |
+| 5 | `ia` | conversa da Judy, memória, perfil, moderação por IA *(só onde a IA roda)* |
 | 6 | `noticias` | feeds RSS e o resumo automático |
 | 7 | `mensagens` | `&embed` para avisos e regras |
-| 8 | `ajustes` | panorama, comandos desativados, ban global |
+| 8–11 | `game`, `rpg`, `aventura`, `economia` | montar e jogar o RPG |
+| 12 | `ajustes` | panorama, comandos desativados, ban global |
 
-Cada página termina apontando a próxima, então dá para seguir em sequência. Nada
-é obrigatório: pule o que não fizer sentido para o seu servidor.
+Áreas longas viram duas páginas em vez de serem cortadas no limite do embed.
+Também responde por `&guia` e `&comecar`; em inglês, `&guide`/`&start` e
+`&wizard`/`&setup`.
 
-> 💡 `&config` mostra o **estado atual** de tudo que está configurado, e
-> `&help <comando>` detalha qualquer comando citado no guia.
+> 💡 `&config` mostra o **estado atual** de tudo, e `&help <comando>` detalha
+> qualquer comando citado — com a seção **Parâmetros** explicando cada opção
+> (`&help boasvindas` diz o que é `{membros}`, o que `imagem oculto` faz, etc.).
+
+---
+
+## Instância do autor vs. o bot genérico
+
+O código é genérico: qualquer servidor que adicione o bot recebe moderação,
+níveis, RPG, boas-vindas, cores, reaction roles, RSS, relógio e o assistente.
+Algumas coisas, porém, só existem na **instância do autor** (o servidor Vapor
+Nexus) e não aparecem nos outros:
+
+| Recurso | Por que é específico | Como é isolado |
+|---|---|---|
+| A **Judy** (`&chat`, `&modia`, comentário espontâneo, memória) | depende do `judy-ia` + Ollama na máquina com GPU do autor | allowlist `CHAT_SERVIDORES`; fora dela os comandos não existem (não aparecem no `&help`, e a rota responde "não habilitado") |
+| **Voz** (`&tts`) | depende do `voz-servico` | só funciona onde há um canal de voz configurado |
+| `&servidores`, `&game admin`, `&automod debug`, `&banglobal revisar` | ferramentas do dono do bot | exigem super-admin; o `&help` mostra a página 👑 **dono** só para ele |
+| Infra (Portainer, Tailscale, `resolv.conf`, `GITHUB_TOKEN`) | homelab do autor | documentada em *Onde cada peça roda*; nada disso é exigido para rodar o bot em outro lugar |
+
+O que **não** é específico: o `&help`, o `&tutorial` e o `&assistente` se
+adaptam sozinhos — onde a IA não roda, as linhas e páginas de IA somem.
 
 ---
 
@@ -1555,11 +1650,14 @@ O código é organizado em quatro áreas, sob `modulos/`:
 │   │   ├── midia.js            # validação de URL de imagem (anti-SSRF, avisos)
 │   │   ├── fusos.js            # busca de fuso por cidade (base ICU do Node)
 │   │   ├── abreviacoes.js      # expande escrita de chat antes do TTS
+│   │   ├── paginas.js          # embeds em páginas navegadas por reação ◀ ▶ (&help, &tutorial)
+│   │   ├── aliases.js          # comandos e subcomandos nos dois idiomas (entrada e exibição)
+│   │   ├── ids.js              # resolve menção/link/ID/nome de canal, cargo e usuário
 │   │   └── log.js              # chat de logs configurável (&log)
 │   ├── moderacao/              # moderação e automod
 │   │   ├── automod-engine.js   # motor: runAutomod, punição, blocklist, spam
 │   │   ├── automod-comandos.js # configuração do automod
-│   │   ├── scorecard.js        # pontuação 0–10 (anti-scam)
+│   │   ├── scorecard.js        # pontuação 0–10 (Sentinela)
 │   │   ├── caracteres.js       # anti-zalgo/invisíveis e anti-repetição
 │   │   ├── ban-global.js       # lista global de banimentos
 │   │   ├── comandos-admin.js   # &comando, &cargomudo
@@ -1567,7 +1665,10 @@ O código é organizado em quatro áreas, sob `modulos/`:
 │   │   ├── limpar.js           # &limpar
 │   │   ├── embed.js            # &embed
 │   │   ├── debug-comando.js    # &debug (diagnóstico)
-│   │   ├── tutorial.js         # &tutorial — guia de primeiros passos
+│   │   ├── tutorial.js         # &tutorial — guia de primeiros passos em páginas
+│   │   ├── assistente.js       # &assistente — configuração guiada (pergunta → resumo → aplica)
+│   │   ├── help-grupos.js      # a árvore do &help por intenção (começar, proteger…)
+│   │   ├── help-parametros.js  # o que cada parâmetro de cada comando significa
 │   │   ├── cor-cargo.js        # &cor — cores de cargo, com gradiente (via API)
 │   │   ├── moderacao-ia.js     # moderação por IA (apaga + marca o dono)
 │   │   ├── modia-comando.js    # &modia (configura a moderação por IA)

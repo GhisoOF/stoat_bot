@@ -1,6 +1,9 @@
 import { servidorPermitido as temIA } from "../ai/chat.js";
 import { arvoreSubtopicos, SUBTOPICOS_SO_IA } from "./help-arvore.js";
 import { nomeExibido, exibirTitulo } from "../core/aliases.js";
+import { grupos as gruposHelp, ALIAS_GRUPO, ORDEM as ORDEM_GRUPOS } from "./help-grupos.js";
+import { secaoParametros } from "./help-parametros.js";
+import { enviarPaginado, paginarLinhas } from "../core/paginas.js";
 import { escadaDePunicao, rotuloDegrau } from "./automod-engine.js";
 import * as PERFIS_MOEDA from "../game/moedas-perfis.js";
 
@@ -91,10 +94,16 @@ function detalhesPT(P) {
       ex: `${P}cor VIP gradiente #FF71CE #01CDFE #05FFA1`,
     },
     tutorial: {
-      uso: `${P}tutorial [área]`,
-      desc: "Guia de primeiros passos: mostra **por onde começar** e qual comando usar em cada área — não altera nada sozinho.\n\n`&tutorial` — o roteiro na ordem recomendada\n`&tutorial <área>` — a página daquela área com os comandos exatos\n\n**Áreas:** `permissoes` (o que o bot precisa), `moderacao`, `logs`, `cargos`, `xp`, `ia`, `noticias`, `mensagens`, `ajustes`.\n\nCada página termina indicando a próxima. Também responde por `&guia` e `&comecar`.",
+      uso: `${P}tutorial [página|área]`,
+      desc: "Guia de primeiros passos **em páginas** — reaja ◀ ▶ para virar. Não altera nada sozinho: mostra o caminho e o comando exato de cada passo.\n\n`&tutorial` — o guia (6 páginas): permissões → canais → proteção → boas-vindas e cargos → XP e RPG → checklist\n`&tutorial 2` — abre direto a página 2\n`&tutorial <área>` — aprofunda um assunto (ex.: `&tutorial canais`, `&tutorial game`)\n\nPrefere que o bot pergunte e configure por você? `&assistente`.\n\nTambém responde por `&guia` e `&comecar`.",
       perm: null,
-      ex: `${P}tutorial moderacao`,
+      ex: `${P}tutorial canais`,
+    },
+    assistente: {
+      uso: `${P}assistente [rapido|completo|canais|protecao|cancelar]`,
+      desc: "Configuração **guiada**: o bot faz uma pergunta de cada vez, você responde em texto normal, e no fim ele mostra o resumo e aplica tudo — usando os mesmos comandos que você usaria na mão (e mostra quais foram, para você aprender).\n\n`&assistente` — menu\n`&assistente rapido` — idioma, staff, log, proteção, boas-vindas (~2 min)\n`&assistente completo` — o rápido + escada de punição, lista global, XP, cargo automático\n`&assistente canais` — classifica seus canais nos 3 tipos e diz o que clicar no Stoat\n`&assistente protecao` — só automod, sentinela e punição\n\nDurante as perguntas: `pular` pula, `voltar` volta, `cancelar` desiste. Cada pessoa tem o seu; ele expira em 10 min sem resposta.",
+      perm: "ManagePermissions",
+      ex: `${P}assistente rapido`,
     },
     hello: {
       uso: `${P}hello`,
@@ -153,7 +162,7 @@ function detalhesPT(P) {
     },
     automod: {
       uso: `${P}automod status | ${P}automod <módulo> <on|off>`,
-      desc: "Liga/desliga cada módulo do AutoMod e mostra o estado geral. Módulos: antispam, antimassspam, antiinvite, antimassmention, anticaps, antilink, antiscam.",
+      desc: "Liga/desliga cada módulo do AutoMod e mostra o estado geral. Filtros: antispam, antimassspam, antiinvite, antimassmention, anticaps, antilink, anticaracteres, antirepeticao e o `sentinela` (o antigo antiscam, que agora julga conteúdo em geral).",
       perm: "ManagePermissions", ex: `${P}automod antilink on`,
     },
     whitelist: {
@@ -291,7 +300,7 @@ function detalhesPT(P) {
       perm: "ManagePermissions", ex: `${P}punicao modo acumular`,
     },
     review: {
-      uso: `${P}scam ban <userId> | ${P}scam dismiss <userId>`,
+      uso: `${P}sentinela ban <userId> | ${P}sentinela dismiss <userId>`,
       desc: "No modo confirmação, confirma o banimento ou libera o usuário sinalizado.",
       perm: "BanMembers",
     },
@@ -307,10 +316,16 @@ function detalhesEN(P) {
       ex: `${P}cor VIP gradiente #FF71CE #01CDFE #05FFA1`,
     },
     tutorial: {
-      uso: `${P}tutorial [area]`,
-      desc: "First-steps guide: shows **where to start** and which command to use in each area — it never changes anything by itself.\n\n`&tutorial` — the recommended order\n`&tutorial <area>` — that area's page with the exact commands\n\n**Areas:** `permissoes` (what the bot needs), `moderacao`, `logs`, `cargos`, `xp`, `ia`, `noticias`, `mensagens`, `ajustes`.\n\nEach page ends by pointing at the next one. Also answers to `&guia` and `&comecar`.",
+      uso: `${P}tutorial [page|area]`,
+      desc: "First-steps guide **in pages** — react ◀ ▶ to turn. It changes nothing by itself: it shows the path and the exact command for each step.\n\n`&tutorial` — the guide (6 pages): permissions → channels → protection → welcome and roles → XP and RPG → checklist\n`&tutorial 2` — opens page 2 directly\n`&tutorial <area>` — goes deeper on one subject (e.g. `&tutorial canais`, `&tutorial game`)\n\nWould you rather have the bot ask and configure for you? `&assistente`.\n\nAlso answers to `&guide` and `&start`.",
       perm: null,
-      ex: `${P}tutorial moderacao`,
+      ex: `${P}tutorial canais`,
+    },
+    assistente: {
+      uso: `${P}assistente [rapido|completo|canais|protecao|cancelar]`,
+      desc: "**Guided** setup: the bot asks one question at a time, you answer in plain text, and at the end it shows a summary and applies everything — using the same commands you would type by hand (and shows which ones, so you learn them).\n\n`&assistente` — menu\n`&assistente rapido` — language, staff, log, protection, welcome (~2 min)\n`&assistente completo` — quick + punishment ladder, global list, XP, autorole\n`&assistente canais` — sorts your channels into the 3 types and tells you what to click in Stoat\n`&assistente protecao` — only automod, sentinel and punishment\n\nDuring the questions: `pular` skips, `voltar` goes back, `cancelar` quits. Each person has their own; it expires after 10 min without an answer.",
+      perm: "ManagePermissions",
+      ex: `${P}assistente rapido`,
     },
     hello: {
       uso: `${P}hello`,
@@ -369,7 +384,7 @@ function detalhesEN(P) {
     },
     automod: {
       uso: `${P}automod status | ${P}automod <module> <on|off>`,
-      desc: "Turns each AutoMod module on/off and shows the overall state. Modules: antispam, antimassspam, antiinvite, antimassmention, anticaps, antilink, antiscam.",
+      desc: "Turns each AutoMod module on/off and shows the overall state. Filters: antispam, antimassspam, antiinvite, antimassmention, anticaps, antilink, anticaracteres, antirepeticao and `sentinela` (the former antiscam, which now judges content in general).",
       perm: "ManagePermissions", ex: `${P}automod antilink on`,
     },
     whitelist: {
@@ -507,7 +522,7 @@ function detalhesEN(P) {
       perm: "ManagePermissions", ex: `${P}punicao modo acumular`,
     },
     review: {
-      uso: `${P}scam ban <userId> | ${P}scam dismiss <userId>`,
+      uso: `${P}sentinela ban <userId> | ${P}sentinela dismiss <userId>`,
       desc: "In confirmation mode, confirms the ban or releases the flagged user.",
       perm: "BanMembers",
     },
@@ -529,11 +544,11 @@ function filtrarIA(linhas, comIA) {
 // ══════════════════════════════════════════════════════════
 function construirSubtopicos(P, lang) {
   if (lang === "en") return {
-    scam: {
+    sentinela: {
       sensitivity: {
-        titulo: "scam sensitivity",
+        titulo: "sentinela sensitivity",
         texto: [
-          `**Usage:** \`${P}scam sensitivity <baixa|media|alta>\``,
+          `**Usage:** \`${P}sentinela sensitivity <baixa|media|alta>\``,
           "",
           "Sets from which **score (0–10)** the bot acts on suspicious content:",
           "• 🟢 **baixa** (low, threshold 8) — only near-certain cases; fewer false positives.",
@@ -542,17 +557,17 @@ function construirSubtopicos(P, lang) {
         ].join("\n"),
       },
       test: {
-        titulo: "scam test",
+        titulo: "sentinela test",
         texto: [
-          `**Usage:** \`${P}scam test <text>\``,
+          `**Usage:** \`${P}sentinela test <text>\``,
           "",
           "Simulates analyzing a text and shows the score (0–10) and detected signals, without punishing anyone. Useful for calibrating the sensitivity.",
         ].join("\n"),
       },
       channel: {
-        titulo: "scam channel",
+        titulo: "sentinela channel",
         texto: [
-          `**Usage:** \`${P}scam channel <aqui|id|off>\``,
+          `**Usage:** \`${P}sentinela channel <aqui|id|off>\``,
           "",
           "Sets which channel receives the suspicious-content alerts. `off` goes back to alerting in the message's own channel.",
         ].join("\n"),
@@ -615,11 +630,11 @@ function construirSubtopicos(P, lang) {
 
   // pt
   return {
-    scam: {
+    sentinela: {
       sensitivity: {
-        titulo: "scam sensitivity",
+        titulo: "sentinela sensitivity",
         texto: [
-          `**Uso:** \`${P}scam sensitivity <baixa|media|alta>\``,
+          `**Uso:** \`${P}sentinela sensitivity <baixa|media|alta>\``,
           "",
           "Define a partir de qual **nota (0–10)** o bot age sobre conteúdo suspeito:",
           "• 🟢 **baixa** (limiar 8) — só o que é quase certo; menos falsos positivos.",
@@ -628,17 +643,17 @@ function construirSubtopicos(P, lang) {
         ].join("\n"),
       },
       test: {
-        titulo: "scam test",
+        titulo: "sentinela test",
         texto: [
-          `**Uso:** \`${P}scam test <texto>\``,
+          `**Uso:** \`${P}sentinela test <texto>\``,
           "",
           "Simula a análise de um texto e mostra a nota (0–10) e os sinais detectados, sem punir ninguém. Útil para calibrar a sensibilidade.",
         ].join("\n"),
       },
       channel: {
-        titulo: "scam channel",
+        titulo: "sentinela channel",
         texto: [
-          `**Uso:** \`${P}scam channel <aqui|id|off>\``,
+          `**Uso:** \`${P}sentinela channel <aqui|id|off>\``,
           "",
           "Define para qual canal vão os alertas de conteúdo suspeito. `off` volta a alertar no próprio canal da mensagem.",
         ].join("\n"),
@@ -700,254 +715,6 @@ function construirSubtopicos(P, lang) {
   };
 }
 
-// ══════════════════════════════════════════════════════════
-//  Categorias do help (&help <categoria>)
-// ══════════════════════════════════════════════════════════
-function construirCategorias(P, lang) {
-  if (lang === "en") return {
-    geral: {
-      titulo: "General commands",
-      linhas: [
-        `\`${P}tutorial\` — ⭐ where to start (setup guide)`,
-        `\`${P}ping\` — bot latency`,
-        `\`${P}repete <text>\` — repeats the text`,
-        `\`${P}chat <message>\` — talk to the AI (or mention the bot)` + IA_TAG,
-        `\`${P}userinfo [@user]\` — user info`,
-        `\`${P}sobre\` — bot info`,
-        `\`${P}idioma pt|en\` — server language *(ManagePermissions)*`,
-      ],
-    },
-    moderacao: {
-      titulo: "Moderation",
-      linhas: [
-        `\`${P}kick @user [reason]\` — kicks *(KickMembers)*`,
-        `\`${P}ban @user [reason]\` — bans *(BanMembers)*`,
-        `\`${P}limpar <n> [@user]\` — deletes messages *(ManageMessages)*`,
-        `\`${P}warn <@user> [reason]\` — manual warning *(KickMembers)*`,
-        `\`${P}acesso <cargo|canal>\` — who can use commands and where *(ManagePermissions)*`,
-        `\`${P}staff\` — the server's staff, from those same roles`,
-        `\`${P}warnings [@user]\` — see warnings`,
-        `\`${P}clearwarnings @user\` — clears warnings *(ManagePermissions)*`,
-        `\`${P}banglobal <off|avisar|banir|...>\` — global list *(BanMembers)*`,
-        `\`${P}modia <on|off|criterios|...>\` — AI moderation of the chat *(ManageServer)*` + IA_TAG,
-      ],
-    },
-    automod: {
-      titulo: "AutoMod *(ManagePermissions)*",
-      linhas: [
-        `\`${P}automod status\` — each module's state`,
-        `\`${P}automod <module> <on|off>\` — enables/disables`,
-        `\`${P}automod <module> set <param> <value>\` — adjusts parameters`,
-        `\`${P}automod <module> punicao <mode>\` — per-module punishment`,
-        `\`${P}punicao <modo|warns|silencerole>\` — global punishment`,
-        `\`${P}scam <config|sensitivity|test|...>\` — forbidden content (0–10)`,
-        `\`${P}whitelist <add|remove|list>\` — allowed invites`,
-        `\`${P}blocklist <add|remove|list|clear|reload>\` — anti-link lists`,
-      ],
-    },
-    config: {
-      titulo: "Configuration & administration *(ManagePermissions)*",
-      linhas: [
-        `\`${P}config\` — shows all the settings`,
-        `\`${P}log <here|id|off|<event> <on|off>>\` — log channel`,
-        `\`${P}comando <disable|enable> <name>\` — enables/disables commands`,
-        `\`${P}cargomudo [name]\` — creates a silence role`,
-        `\`${P}cor <role> <color|gradient>\` — role colors, with gradients *(ManageRole)*`,
-        `\`${P}idioma pt|en\` — the bot's language on this server`,
-        `\`${P}debug\` — diagnostics for every command`,
-      ],
-    },
-    ferramentas: {
-      titulo: "Tools",
-      linhas: [
-        `\`${P}embed\` — posts a customizable embed *(ManageMessages)*`,
-        `\`${P}reactionrole <add|remove|list>\` — reaction roles *(ManageRole)*`,
-        `\`${P}autorole <set|off>\` — automatic role on join *(ManageRole)*`,
-        `\`${P}fuso\` — clock with several cities at once`,
-        `\`${P}tts <text>\` — Judy speaks it in the call`,
-        `\`${P}welcome <channel|text|test>\` — join embed *(ManageMessages)*`,
-        `\`${P}goodbye <channel|text|test>\` — leave embed *(ManageMessages)*`,
-        `\`${P}rss <add|remove|list|canal|agora>\` — RSS news curation`,
-        `\`${P}chat <message>\` — talk to Judy (or mention the bot)` + IA_TAG,
-        `\`${P}chat livre on|off\` — Judy joins the channel on her own` + IA_TAG,
-        `\`${P}chat comentar aqui|off\` — Judy comments on her own initiative` + IA_TAG,
-        `\`${P}chat perfil [@user]\` — what Judy knows about someone` + IA_TAG,
-        `\`${P}chat cuidado [@user] on\` — extra-kind treatment (opt-in)` + IA_TAG,
-        `\`${P}chat esquecer [tudo]\` — erases your memory (or the server's)` + IA_TAG,
-      ],
-    },
-    rpg: {
-      titulo: "RPG (character)",
-      linhas: [
-        `\`${P}game criar [name]\` — creates your character`,
-        `\`${P}game\` — your sheet (level, XP and the 9 attributes)`,
-        `\`${P}game ficha [@user]\` — someone else's sheet`,
-        `\`${P}game pontos <attribute> [amount]\` — spends points`,
-        `\`${P}game carteira\` — balance and economy state`,
-        `\`${P}game comprar [item]\` · \`${P}game vender <item>\``,
-        `\`${P}game contratar [name]\` — mercenaries`,
-        `\`${P}game descansar\` — energy for coin`,
-        `\`${P}game mercado\` — player-to-player bazaar`,
-        `\`${P}game cambio\` — exchange: with the bank or between players`,
-        `\`${P}game trocar\` — item-for-item bartering`,
-        `\`${P}game followers\` — your companions`,
-        `\`${P}game follower ficha <name>\` — sheet, spell and bag`,
-        `\`${P}game follower levar|tirar <name>\` — builds the party (up to 2)`,
-        `\`${P}game recrutas\` — companions that exist`,
-        `\`${P}game dungeon\` — rescues the captured`,
-        `\`${P}game missao\` — missions and your odds`,
-        `\`${P}game missao <name>\` — sets off on the mission`,
-        `\`${P}game itens\` — your backpack`,
-        `\`${P}game item <name>\` — one item's sheet, with price`,
-        `\`${P}game magias\` — grimoire: learn and cast spells`,
-        `\`${P}game equipar <item>\` — equips an item`,
-        `\`${P}game desequipar <slot|item>\` — takes it off`,
-        `\`${P}game catalogo [rarity]\` — items that exist in the game`,
-        `\`${P}game top\` — adventurer ranking`,
-        `\`${P}game apagar confirmar\` — starts over from scratch`,
-        "",
-        "_A separate system from `&xp`: here you have a character with attributes._",
-      ],
-    },
-    xp: {
-      titulo: "Leveling system (message XP)",
-      linhas: [
-        `\`${P}xp\` — your level, XP and progress`,
-        `\`${P}xp rank [@user]\` — someone else's profile`,
-        `\`${P}xp top\` — server ranking`,
-        `\`${P}xp setup\` — configure *(ManagePermissions)*`,
-        `\`${P}xp cargos\` — lists the level roles`,
-        `\`${P}xp criarcargos\` — creates the roles automatically`,
-        `\`${P}xp on | off\` — toggles the system`,
-        "",
-        "_XP is earned from messages (Stoat can't measure calls)._",
-      ],
-    },
-  };
-
-  // pt
-  return {
-    geral: {
-      titulo: "Comandos gerais",
-      linhas: [
-        `\`${P}tutorial\` — ⭐ por onde começar (guia de configuração)`,
-        `\`${P}ping\` — latência do bot`,
-        `\`${P}repete <texto>\` — repete o texto`,
-        `\`${P}chat <mensagem>\` — conversa com a IA (ou mencione o bot)` + IA_TAG,
-        `\`${P}userinfo [@usuário]\` — info de um usuário`,
-        `\`${P}sobre\` — informações do bot`,
-        `\`${P}idioma pt|en\` — idioma do servidor *(ManagePermissions)*`,
-      ],
-    },
-    moderacao: {
-      titulo: "Moderação",
-      linhas: [
-        `\`${P}kick @usuário [motivo]\` — expulsa *(KickMembers)*`,
-        `\`${P}ban @usuário [motivo]\` — bane *(BanMembers)*`,
-        `\`${P}limpar <n> [@usuário]\` — apaga mensagens *(ManageMessages)*`,
-        `\`${P}warn <@pessoa> [motivo]\` — aviso manual *(KickMembers)*`,
-        `\`${P}acesso <cargo|canal>\` — quem pode usar comandos e onde *(ManagePermissions)*`,
-        `\`${P}staff\` — a equipe do servidor, a partir desses mesmos cargos`,
-        `\`${P}warnings [@usuário]\` — ver avisos`,
-        `\`${P}clearwarnings @usuário\` — limpa avisos *(ManagePermissions)*`,
-        `\`${P}banglobal <off|avisar|banir|...>\` — lista global *(BanMembers)*`,
-        `\`${P}modia <on|off|criterios|...>\` — moderação por IA na conversa *(ManageServer)*` + IA_TAG,
-      ],
-    },
-    automod: {
-      titulo: "AutoMod *(ManagePermissions)*",
-      linhas: [
-        `\`${P}automod status\` — estado de cada módulo`,
-        `\`${P}automod <módulo> <on|off>\` — ativa/desativa`,
-        `\`${P}automod <módulo> set <param> <valor>\` — ajusta parâmetros`,
-        `\`${P}automod <módulo> punicao <modo>\` — punição por módulo`,
-        `\`${P}punicao <modo|warns|silencerole>\` — punição global`,
-        `\`${P}scam <config|sensitivity|test|...>\` — conteúdo proibido (0–10)`,
-        `\`${P}whitelist <add|remove|list>\` — convites permitidos`,
-        `\`${P}blocklist <add|remove|list|clear|reload>\` — listas anti-link`,
-      ],
-    },
-    config: {
-      titulo: "Configuração e administração *(ManagePermissions)*",
-      linhas: [
-        `\`${P}config\` — mostra todas as configurações`,
-        `\`${P}log <here|id|off|<evento> <on|off>>\` — chat de logs`,
-        `\`${P}comando <desativar|ativar> <nome>\` — ativa/desativa comandos`,
-        `\`${P}cargomudo [nome]\` — cria cargo de silêncio`,
-        `\`${P}cor <cargo> <cor|gradiente>\` — cor dos cargos, com gradiente *(ManageRole)*`,
-        `\`${P}idioma pt|en\` — idioma do bot neste servidor`,
-        `\`${P}debug\` — diagnóstico de todos os comandos`,
-      ],
-    },
-    ferramentas: {
-      titulo: "Ferramentas",
-      linhas: [
-        `\`${P}embed\` — publica um embed customizável *(ManageMessages)*`,
-        `\`${P}reactionrole <add|remove|list>\` — cargos por reação *(ManageRole)*`,
-        `\`${P}autorole <set|off>\` — cargo automático a quem entra *(ManageRole)*`,
-        `\`${P}fuso\` — relógio com várias cidades ao mesmo tempo`,
-        `\`${P}tts <texto>\` — a Judy fala isso na call`,
-        `\`${P}boasvindas <canal|texto|testar>\` — embed de entrada *(ManageMessages)*`,
-        `\`${P}adeus <canal|texto|testar>\` — embed de saída *(ManageMessages)*`,
-        `\`${P}rss <add|remove|list|canal|agora>\` — curadoria de notícias por RSS`,
-        `\`${P}chat <mensagem>\` — conversa com a Judy (ou mencione o bot)` + IA_TAG,
-        `\`${P}chat livre on|off\` — a Judy participa sozinha do canal` + IA_TAG,
-        `\`${P}chat comentar aqui|off\` — a Judy comenta por iniciativa` + IA_TAG,
-        `\`${P}chat perfil [@user]\` — o que a Judy sabe de alguém` + IA_TAG,
-        `\`${P}chat cuidado [@user] on\` — tratamento gentil (opt-in)` + IA_TAG,
-        `\`${P}chat esquecer [tudo]\` — apaga sua memória (ou a do servidor)` + IA_TAG,
-      ],
-    },
-    rpg: {
-      titulo: "RPG (personagem)",
-      linhas: [
-        `\`${P}game criar [nome]\` — cria seu personagem`,
-        `\`${P}game\` — sua ficha (nível, XP e os 9 atributos)`,
-        `\`${P}game ficha [@pessoa]\` — a ficha de outra pessoa`,
-        `\`${P}game pontos <atributo> [quantos]\` — distribui pontos`,
-        `\`${P}game carteira\` — saldo e estado da economia`,
-        `\`${P}game comprar [item]\` · \`${P}game vender <item>\``,
-        `\`${P}game contratar [nome]\` — mercenários`,
-        `\`${P}game descansar\` — energia por moeda`,
-        `\`${P}game mercado\` — bazar entre jogadores`,
-        `\`${P}game cambio\` — câmbio: com o banco ou entre jogadores`,
-        `\`${P}game trocar\` — escambo item por item`,
-        `\`${P}game followers\` — seus companheiros`,
-        `\`${P}game follower ficha <nome>\` — ficha, magia e mochila`,
-        `\`${P}game follower levar|tirar <nome>\` — monta a party (até 2)`,
-        `\`${P}game recrutas\` — companheiros que existem`,
-        `\`${P}game dungeon\` — resgata quem foi capturado`,
-        `\`${P}game missao\` — missões e suas chances`,
-        `\`${P}game missao <nome>\` — parte para a missão`,
-        `\`${P}game itens\` — sua mochila`,
-        `\`${P}game item <nome>\` — a ficha de um item, com preço`,
-        `\`${P}game magias\` — grimório: aprender e lançar magias`,
-        `\`${P}game equipar <item>\` — equipa um item`,
-        `\`${P}game desequipar <slot|item>\` — tira do lugar`,
-        `\`${P}game catalogo [raridade]\` — itens que existem no jogo`,
-        `\`${P}game top\` — ranking de aventureiros`,
-        `\`${P}game apagar confirmar\` — recomeça do zero`,
-        "",
-        "_Sistema separado do `&xp`: aqui você tem um personagem com atributos._",
-      ],
-    },
-    xp: {
-      titulo: "Sistema de níveis (XP por mensagem)",
-      linhas: [
-        `\`${P}xp\` — seu nível, XP e progresso`,
-        `\`${P}xp rank [@usuário]\` — perfil de outra pessoa`,
-        `\`${P}xp top\` — ranking do servidor`,
-        `\`${P}xp setup\` — configurar *(ManagePermissions)*`,
-        `\`${P}xp cargos\` — lista os cargos de nível`,
-        `\`${P}xp criarcargos\` — cria os cargos automaticamente`,
-        `\`${P}xp on | off\` — liga/desliga o sistema`,
-        "",
-        "_XP é ganho por mensagens (o Stoat não permite medir call)._",
-      ],
-    },
-  };
-}
-
 export async function cmdHelp(message, args, ctx) {
   const { sendEmbed, COR, PREFIXO } = ctx;
   const P = PREFIXO;
@@ -1001,36 +768,64 @@ export async function cmdHelp(message, args, ctx) {
     }));
   }
 
-  // ── Categorias: &help <categoria> ──
-  const CATEGORIAS = construirCategorias(P, lang);
+  // ── Grupos: &help <grupo> (aceita os nomes antigos também) ──
+  const GRUPOS = gruposHelp(P, lang);
+  const ehDono = (() => { try { return ctx.ehSuperAdmin?.(message.authorId); } catch { return false; } })();
+  const chavesGrupos = ehDono ? [...ORDEM_GRUPOS, "dono"] : [...ORDEM_GRUPOS];
 
-  // aliases de categoria (aceita PT e EN nos dois idiomas)
-  const ALIAS_CAT = { "moderação": "moderacao", mod: "moderacao", moderation: "moderacao",
-    "configuração": "config", configuracao: "config", configuration: "config", settings: "config",
-    tools: "ferramentas", ferramenta: "ferramentas", tool: "ferramentas",
-    nivel: "xp", niveis: "xp", level: "xp", levels: "xp",
-    game: "rpg", personagem: "rpg", jogo: "rpg", character: "rpg",
-    general: "geral" };
-  const cat = CATEGORIAS[alvo] ? alvo : ALIAS_CAT[alvo];
+  // Página de um grupo: cabeçalho + linhas (quebra em 2 páginas se não couber).
+  const paginasDoGrupo = (chave) => {
+    const g = GRUPOS[chave];
+    const linhas = filtrarIA(g.linhas, comIA);
+    const rodape = [
+      "",
+      lang === "en"
+        ? `💡 \`${P}help <command>\` explains every parameter · \`${P}help\` for the index`
+        : `💡 \`${P}help <comando>\` explica cada parâmetro · \`${P}help\` para o índice`,
+    ];
+    return paginarLinhas([...linhas, ...rodape], { titulo: `${g.emoji} ${g.titulo}`, limite: 1300 });
+  };
 
-  if (alvo && CATEGORIAS[cat]) {
-    const c = CATEGORIAS[cat];
-    // Se existe um COMANDO com o mesmo nome que a categoria (ex.: `game`, que é
-    // a categoria "rpg" e também o comando), aponte os subtópicos dele aqui —
-    // senão `&help game` some com a segmentação que a pessoa está procurando.
-    const subsDoAlvo = SUBTOPICOS[alvo] ?? SUBTOPICOS[cat] ?? null;
-    const dicaSub = subsDoAlvo
-      ? (lang === "en"
-        ? `\n\n**Details on each part**\n` + Object.keys(subsDoAlvo).map((k) => `\`${P}help ${SUBTOPICOS[alvo] ? alvo : cat} ${k}\``).join(" · ")
-        : `\n\n**O detalhe de cada parte**\n` + Object.keys(subsDoAlvo).map((k) => `\`${P}help ${SUBTOPICOS[alvo] ? alvo : cat} ${k}\``).join(" · "))
-      : "";
-    return sendEmbed(message.channel, { title: `📋 ${c.titulo}`,
-      colour: COR.info,
-      description: filtrarIA(c.linhas, comIA).join("\n")
-        + (lang === "en"
-          ? `\n\n💡 \`${P}help <command>\` for details.`
-          : `\n\n💡 \`${P}help <comando>\` para detalhes.`)
-        + dicaSub,
+  const indice = () => ({
+    title: lang === "en" ? "📋 Help Center" : "📋 Central de Ajuda",
+    description: [
+      lang === "en"
+        ? "What do you want to do? Pick a group — react ◀ ▶ to browse them all, or type the command."
+        : "O que você quer fazer? Escolha um grupo — reaja ◀ ▶ para folhear todos, ou digite o comando.",
+      "",
+      ...chavesGrupos.map((k) => `${GRUPOS[k].emoji} \`${P}help ${k}\` — ${GRUPOS[k].resumo}`),
+      "",
+      lang === "en"
+        ? `🆕 New server? \`${P}assistente\` configures it with you, step by step.`
+        : `🆕 Servidor novo? \`${P}assistente\` configura com você, passo a passo.`,
+      lang === "en"
+        ? `📖 \`${P}help <command>\` — usage, **each parameter explained**, example (e.g. \`${P}help boasvindas\`)`
+        : `📖 \`${P}help <comando>\` — uso, **cada parâmetro explicado**, exemplo (ex.: \`${P}help boasvindas\`)`,
+      lang === "en"
+        ? `🔍 \`${P}help <command> <part>\` — one part of it (\`${P}help game admin\`, \`${P}help xp setup\`)`
+        : `🔍 \`${P}help <comando> <parte>\` — uma parte dele (\`${P}help game admin\`, \`${P}help xp setup\`)`,
+      lang === "en" ? `🌐 \`${P}idioma pt|en\` — server language` : `🌐 \`${P}idioma pt|en\` — idioma do servidor`,
+    ].join("\n"),
+    colour: COR.info,
+  });
+
+  // &help <número> → página N do índice paginado
+  const numero = /^\d+$/.test(alvo ?? "") ? parseInt(alvo, 10) : null;
+  const chaveGrupo = ALIAS_GRUPO[alvo];
+
+  if (!alvo || numero !== null || (chaveGrupo && GRUPOS[chaveGrupo] && (chaveGrupo !== "dono" || ehDono))) {
+    // Um livrinho: índice + uma página (ou duas) por grupo.
+    const paginas = [indice()];
+    const inicioDe = {};
+    for (const k of chavesGrupos) {
+      inicioDe[k] = paginas.length;
+      paginas.push(...paginasDoGrupo(k));
+    }
+    let inicial = 0;
+    if (numero !== null) inicial = Math.min(Math.max(numero - 1, 0), paginas.length - 1);
+    else if (chaveGrupo) inicial = inicioDe[chaveGrupo] ?? 0;
+    return enviarPaginado(ctx, message.channel, {
+      paginas, autorId: message.authorId, paginaInicial: inicial, comandoPagina: `${P}help`,
     });
   }
 
@@ -1047,76 +842,47 @@ export async function cmdHelp(message, args, ctx) {
     }));
   }
 
-  // &help <comando> (detalhe individual)
+  // &help <comando> (detalhe individual) — agora com a seção de parâmetros
   if (alvo && DETALHES[alvo]) {
     const d = DETALHES[alvo];
     const temSub = SUBTOPICOS[alvo]
       ? `\n\n**${lang === "en" ? "Subtopics" : "Subtópicos"}** ${lang === "en" ? "_(details on each part)_" : "_(o detalhe de cada parte)_"}\n`
         + Object.keys(SUBTOPICOS[alvo]).map((k) => `\`${P}help ${alvo} ${k}\``).join(" · ")
       : "";
-    return sendEmbed(message.channel, {
-      title: `📖 ${lang === "en" ? "Help" : "Ajuda"} — ${P}${nomeExibido(alvo, lang)}`,
-      colour: COR.info,
-      description: [
-        `**${lang === "en" ? "Usage" : "Uso"}:** \`${d.uso}\``,
-        d.perm ? `**${lang === "en" ? "Permission" : "Permissão"}:** ${d.perm}` : null,
-        "",
-        d.desc,
-        d.ex ? `\n**${lang === "en" ? "Example" : "Exemplo"}:** \`${d.ex}\`` : null,
-        temSub,
-      ].filter(Boolean).join("\n"),
+    const params = secaoParametros(P, lang, alvo);
+    const cabecalho = [
+      `**${lang === "en" ? "Usage" : "Uso"}:** \`${d.uso}\``,
+      d.perm ? `**${lang === "en" ? "Permission" : "Permissão"}:** ${d.perm}` : null,
+      "",
+      d.desc,
+      d.ex ? `\n**${lang === "en" ? "Example" : "Exemplo"}:** \`${d.ex}\`` : null,
+    ].filter(Boolean).join("\n");
+    const titulo = `📖 ${lang === "en" ? "Help" : "Ajuda"} — ${P}${nomeExibido(alvo, lang)}`;
+    // Descrição + parâmetros quase sempre estouram o embed: viram páginas
+    // (1: o que é e como usar · 2: cada parâmetro · 3: subtópicos).
+    const paginas = [{ title: titulo, description: cabecalho }];
+    if (params) paginas.push({ title: titulo, description: params.trim() });
+    if (temSub) paginas.push({ title: titulo, description: temSub.trim() });
+    if (paginas.length === 1 || (cabecalho.length + params.length + temSub.length) < 1350) {
+      return sendEmbed(message.channel, { title: titulo, colour: COR.info,
+        description: cabecalho + params + temSub });
+    }
+    return enviarPaginado(ctx, message.channel, {
+      paginas, autorId: message.authorId, comandoPagina: null,
     });
   }
   if (alvo) {
+    const lista = chavesGrupos.filter((k) => k !== "dono").join(", ");
     return sendEmbed(message.channel, tr(ctx, {
       title: "❓ Não encontrado",
-      description: `Não há ajuda para \`${alvo}\`. Use \`${P}help\` para o índice, ou \`${P}help <categoria>\` (geral, moderacao, automod, config, ferramentas).`,
+      description: `Não há ajuda para \`${alvo}\`. Use \`${P}help\` para o índice, ou \`${P}help <grupo>\` (${lista}).`,
       colour: COR.aviso,
     }, {
       title: "❓ Not found",
-      description: `There's no help for \`${alvo}\`. Use \`${P}help\` for the index, or \`${P}help <category>\` (geral, moderacao, automod, config, ferramentas).`,
+      description: `There's no help for \`${alvo}\`. Use \`${P}help\` for the index, or \`${P}help <group>\` (${lista}).`,
       colour: COR.aviso,
     }));
   }
-
-  // ── Índice principal (&help sem argumentos) ──
-  await sendEmbed(message.channel, tr(ctx, {
-    title: "📋 Central de Ajuda",
-    colour: COR.info,
-    description: [
-      "Escolha uma categoria para ver os comandos:",
-      "",
-      `📌 \`${P}help geral\` — comandos do dia a dia`,
-      `🛡 \`${P}help moderacao\` — kick, ban, limpar, avisos`,
-      `⚙️ \`${P}help automod\` — proteção automática e punições`,
-      `🔧 \`${P}help config\` — configuração e administração`,
-      `🧰 \`${P}help ferramentas\` — embed, reaction roles, RSS${comIA ? ", IA" : ""}`,
-      `🎮 \`${P}help xp\` — sistema de níveis por XP`,
-      `🎲 \`${P}help rpg\` — o RPG completo`,
-      "",
-      `💡 Detalhes de um comando: \`${P}help <comando>\` (ex.: \`${P}help scam\`)`,
-      `💡 E de cada parte dele: \`${P}help game admin\`, \`${P}help xp setup\`, \`${P}help cor painel\``,
-      `🌐 Idioma do servidor: \`${P}idioma pt|en\``,
-    ].join("\n"),
-  }, {
-    title: "📋 Help Center",
-    colour: COR.info,
-    description: [
-      "Pick a category to see the commands:",
-      "",
-      `📌 \`${P}help geral\` — everyday commands`,
-      `🛡 \`${P}help moderacao\` — kick, ban, purge, warnings`,
-      `⚙️ \`${P}help automod\` — automatic protection and punishments`,
-      `🔧 \`${P}help config\` — configuration and administration`,
-      `🧰 \`${P}help ferramentas\` — embeds, reaction roles, RSS${comIA ? ", AI" : ""}`,
-      `🎮 \`${P}help xp\` — XP leveling system`,
-      `🎲 \`${P}help rpg\` — the full RPG`,
-      "",
-      `💡 Details for one command: \`${P}help <command>\` (e.g. \`${P}help scam\`)`,
-      `💡 And for each part of it: \`${P}help game admin\`, \`${P}help xp setup\`, \`${P}help cor painel\``,
-      `🌐 Server language: \`${P}language pt|en\``,
-    ].join("\n"),
-  }));
 }
 
 // %ping — mede a latência entre o envio da mensagem e o processamento
@@ -1226,8 +992,9 @@ export async function cmdSobre(message, args, ctx) {
       nLinhas ? `**Lines of code:** ${nLinhas.toLocaleString("en-US")}` : null,
       `**Uptime:** ${uptime}  ·  **Language:** ${idioma}`,
       "",
-      `\`${PREFIXO}help\` — everything, by category`,
-      `\`${PREFIXO}tutorial\` — the guided path, subject by subject`,
+      `\`${PREFIXO}help\` — everything, grouped by what you want to do`,
+      `\`${PREFIXO}tutorial\` — the paged first-steps guide`,
+      `\`${PREFIXO}assistente\` — guided setup: I ask, you answer`,
       !comIA ? "_AI features (chat, AI moderation) run on a separate server._" : null,
       "",
       creditosEN,
@@ -1246,8 +1013,9 @@ export async function cmdSobre(message, args, ctx) {
       nLinhas ? `**Linhas de código:** ${nLinhas.toLocaleString("pt-BR")}` : null,
       `**No ar há:** ${uptime}  ·  **Idioma:** ${idioma}`,
       "",
-      `\`${PREFIXO}help\` — tudo, por categoria`,
-      `\`${PREFIXO}tutorial\` — o caminho guiado, assunto por assunto`,
+      `\`${PREFIXO}help\` — tudo, agrupado pelo que você quer fazer`,
+      `\`${PREFIXO}tutorial\` — o guia de primeiros passos, em páginas`,
+      `\`${PREFIXO}assistente\` — configuração guiada: eu pergunto, você responde`,
       !comIA ? "_Os recursos de IA (chat, moderação por IA) rodam num servidor à parte._" : null,
       "",
       creditos,

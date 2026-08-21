@@ -66,7 +66,7 @@ export async function cmdAutomod(message, args, ctx) {
   if (!membroTemPermissao(message, server, "ManagePermissions"))
     return negarPermissao(ctx, message.channel, "ManagePermissions");
 
-  const sub = args[0]?.toLowerCase();
+  let sub = args[0]?.toLowerCase();
 
   // %automod debug <on|off> — liga/desliga os logs (GLOBAL, todos os servidores)
   if (sub === "debug") {
@@ -91,10 +91,15 @@ export async function cmdAutomod(message, args, ctx) {
     antimassmention: "antiMassMention",
     anticaps:        "antiCaps",
     antilink:        "antiLink",
-    antiscam:        "antiScam",
+    // O filtro que julga conteúdo chama-se `sentinela` (antes `antiscam`,
+    // nome que ainda é aceito ao digitar, mas não aparece mais nas listas).
+    sentinela:       "antiScam",
     anticaracteres:  "antiCaracteres",
     antirepeticao:   "antiRepeticao",
   };
+
+  // `antiscam` → `sentinela`: mesmo filtro, nome novo.
+  if (sub === "antiscam") sub = "sentinela";
 
   if (!sub || sub === "status") {
     const linhas = Object.entries(modulos).map(([nome, chave]) => {
@@ -487,7 +492,7 @@ export async function cmdScam(message, args, ctx) {
         "modules — which measure exact things like caps or message rate — this one",
         "**judges**, so it adapts to who is writing.",
         "",
-        `**Enabled:** ${cfg.enabled ? "🟢 yes" : "🔴 no"}  (enable with \`${PREFIXO}automod antiscam on\`)`,
+        `**Enabled:** ${cfg.enabled ? "🟢 yes" : "🔴 no"}  (enable with \`${PREFIXO}sentinela on\`)`,
         `**Sensitivity:** ${cfg.sensitivity}  (base threshold: ${limiarDe(cfg.sensitivity)}/10)`,
         `**Stricter with newcomers:** ${cfg.porAntiguidade !== false ? "🟢 on" : "🔴 off"} — threshold moves with the member's level`,
         `**Alert the staff:** ${cfg.alertarAdmin !== false ? "🟢 on" : "🔴 off"} — pings staff on a suspicious *pattern*, before punishing`,
@@ -511,7 +516,7 @@ export async function cmdScam(message, args, ctx) {
         "módulos — que medem coisas exatas, como caixa alta ou ritmo de mensagem —",
         "este **julga**, e por isso se adapta a quem está escrevendo.",
         "",
-        `**Ativado:** ${cfg.enabled ? "🟢 sim" : "🔴 não"}  (ligue com \`${PREFIXO}automod antiscam on\`)`,
+        `**Ativado:** ${cfg.enabled ? "🟢 sim" : "🔴 não"}  (ligue com \`${PREFIXO}sentinela on\`)`,
         `**Sensibilidade:** ${cfg.sensitivity}  (limiar base: ${limiarDe(cfg.sensitivity)}/10)`,
         `**Mais rígido com quem chegou agora:** ${cfg.porAntiguidade !== false ? "🟢 ligado" : "🔴 desligado"} — o limiar acompanha o nível do membro`,
         `**Avisar a staff:** ${cfg.alertarAdmin !== false ? "🟢 ligado" : "🔴 desligado"} — marca a staff diante de um *padrão* suspeito, antes de punir`,
@@ -531,6 +536,17 @@ export async function cmdScam(message, args, ctx) {
   }
 
   // Liga/desliga o rigor por antiguidade e o alerta à staff.
+  // `&sentinela on|off` — o mesmo que `&automod sentinela on|off`. O tutorial
+  // sempre ensinou assim; faltava o comando aceitar.
+  if (["on", "off", "ligar", "desligar", "enable", "disable"].includes(sub)) {
+    const ligar = ["on", "ligar", "enable"].includes(sub);
+    cfg.enabled = ligar;
+    salvarConfig?.();
+    return sendEmbed(message.channel, tr(ctx,
+      { title: "🛡 Sentinela", description: `O Sentinela foi **${ligar ? "ativado 🟢" : "desativado 🔴"}**.${ligar ? `\n\nSensibilidade: \`${cfg.sensitivity ?? "media"}\` · punição: a do \`${PREFIXO}punicao\`.` : ""}`, colour: COR.mod },
+      { title: "🛡 Sentinel", description: `The Sentinel was **${ligar ? "enabled 🟢" : "disabled 🔴"}**.${ligar ? `\n\nSensitivity: \`${cfg.sensitivity ?? "media"}\` · punishment: the one from \`${PREFIXO}punicao\`.` : ""}`, colour: COR.mod }));
+  }
+
   if (["antiguidade", "tenure", "novatos"].includes(sub)) {
     const on = ["on", "sim", "yes", "true"].includes(String(val ?? "").toLowerCase());
     const off = ["off", "nao", "não", "no", "false"].includes(String(val ?? "").toLowerCase());
@@ -583,8 +599,8 @@ export async function cmdScam(message, args, ctx) {
     const opc = ["baixa", "media", "alta"];
     if (!opc.includes(val))
       return sendEmbed(message.channel, tr(ctx,
-        { title: "❌ Uso", description: `\`${PREFIXO}scam sensitivity <${opc.join("|")}>\``, colour: COR.erro },
-        { title: "❌ Usage", description: `\`${PREFIXO}scam sensitivity <${opc.join("|")}>\``, colour: COR.erro }));
+        { title: "❌ Uso", description: `\`${PREFIXO}sentinela sensitivity <${opc.join("|")}>\``, colour: COR.erro },
+        { title: "❌ Usage", description: `\`${PREFIXO}sentinela sensitivity <${opc.join("|")}>\``, colour: COR.erro }));
     cfg.sensitivity = val; salvarConfig();
     return sendEmbed(message.channel, tr(ctx,
       { title: "✅ Sensibilidade", description: `Sensibilidade: **${val}** (limiar ${limiarDe(val)}/10).`, colour: COR.sucesso },
@@ -653,7 +669,7 @@ export async function cmdScam(message, args, ctx) {
 
     const acaoTxt = lang === "en"
       ? (!cfg.enabled
-        ? `module **DISABLED** (enable with \`${PREFIXO}automod antiscam on\`)`
+        ? `module **DISABLED** (enable with \`${PREFIXO}sentinela on\`)`
         : `it would apply the global policy **${pol.modo}** (see \`${PREFIXO}punicao\`)`)
       : (!cfg.enabled
         ? `módulo **DESATIVADO** (ative com \`${PREFIXO}automod antiscam on\`)`

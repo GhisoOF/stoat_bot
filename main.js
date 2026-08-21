@@ -38,6 +38,8 @@ import * as rss       from "./modulos/ferramentas/rss.js";
 import * as nivel     from "./modulos/ferramentas/nivel.js";
 import * as i18n      from "./modulos/core/i18n.js";
 import * as aliases   from "./modulos/core/aliases.js";
+import * as paginas   from "./modulos/core/paginas.js";
+import * as assistente from "./modulos/moderacao/assistente.js";
 import { tr }         from "./modulos/core/i18n.js";
 
 const PREFIXO     = "&";
@@ -186,7 +188,9 @@ async function sendEmbed(channel, { title, description, colour = COR.info, image
   else if (exibicao?.modo === "link") payload.content = midia.formatarLinkConteudo(exibicao.url, ocultarLink);
 
   try {
-    await channel.sendMessage(payload);
+    // Devolve a mensagem enviada: quem pagina (&help, &tutorial) precisa
+    // dela para reagir e editar depois.
+    return await channel.sendMessage(payload);
   } catch (err) {
     console.error("[EMBED] Falha ao enviar embed:", erroStr(err));
     // A imagem é a parte mais frágil do envio. Antes de desistir do embed
@@ -194,16 +198,16 @@ async function sendEmbed(channel, { title, description, colour = COR.info, image
     // capa. Melhor perder a imagem que perder o aviso.
     if (exibicao) {
       try {
-        await channel.sendMessage({ embeds: [base] });
+        const m = await channel.sendMessage({ embeds: [base] });
         console.warn("[EMBED] Imagem recusada, enviei sem capa:", String(imagem).slice(0, 120));
-        return;
+        return m;
       } catch (err2) {
         console.error("[EMBED] Sem imagem também falhou:", erroStr(err2));
       }
     }
     // fallback: texto puro, ainda mais curto
     try {
-      await channel.sendMessage([title, desc].filter(Boolean).join("\n").slice(0, 1500));
+      return await channel.sendMessage([title, desc].filter(Boolean).join("\n").slice(0, 1500));
     } catch (err3) {
       console.error("[EMBED] Fallback de texto também falhou:", erroStr(err3));
     }
@@ -319,6 +323,8 @@ function criarContexto(serverId = null) {
   return {
     client, config, cfgGlobal, COR, PERM, PREFIXO,
     sendEmbed: enviarTraduzido, getServer, membroTemPermissao, ehSuperAdmin,
+    // A mesma tradução, para quem EDITA um embed já enviado (páginas).
+    exibir: (texto) => aliases.exibir(texto, config?.language, PREFIXO, CANONICO),
     // Busca o servidor pelo ID. Os handlers de evento (entrar/sair) não têm um
     // objeto `message` para passar ao getServer, mas precisam do nome do
     // servidor e da contagem de membros nas mensagens de boas-vindas/adeus.
@@ -365,6 +371,8 @@ const rotas = {
   punicao:       automodCmd.cmdPunicao,
   punição:       automodCmd.cmdPunicao,
   tutorial:      tutorial.cmdTutorial,
+  assistente:    assistente.cmdAssistente,
+  wizard:        assistente.cmdAssistente,
   guia:          tutorial.cmdTutorial,
   comecar:       tutorial.cmdTutorial,
   inicio:        tutorial.cmdTutorial,
@@ -442,6 +450,7 @@ const CANONICO = {
   cores: "cor",
   cargocor: "cor",
   guia: "tutorial",
+  wizard: "assistente", setup: "assistente", configurar: "assistente",
   comecar: "tutorial",
   inicio: "tutorial",
   logs: "log",
@@ -481,7 +490,7 @@ estado.COMANDOS_SO_IA = COMANDOS_SO_IA;
 const COMANDOS_GERENCIAVEIS = [
   "ping", "repete", "userinfo", "kick", "ban", "limpar",
   "warnings", "clearwarnings", "warn", "acesso", "automod", "whitelist", "blocklist",
-  "sentinela", "punicao", "tutorial", "cor", "log", "banglobal", "embed", "reactionrole", "chat", "rss", "xp", "game", "autorole",
+  "sentinela", "punicao", "tutorial", "assistente", "cor", "log", "banglobal", "embed", "reactionrole", "chat", "rss", "xp", "game", "autorole",
   "staff", "boasvindas", "adeus", "fuso", "tts",
 ];
 // exportado via ctx para o comando &comando consultar
@@ -613,6 +622,15 @@ client.on("messageCreate", async (message) => {
   }
   const handler = command ? rotas[command] : null;
 
+  // ── Assistente em andamento? ──
+  // Quem está no meio de um `&assistente` responde às perguntas em texto
+  // puro (sem prefixo). Essas respostas vão para o assistente, não para o
+  // automod nem para a IA. Um comando com prefixo continua sendo comando.
+  if (!command && assistente.temSessao(message)) {
+    try { if (await assistente.aoResponder(message, ctx)) return; }
+    catch (e) { console.error("[ASSISTENTE]", e.message); }
+  }
+
   // ── Menção ao bot → conversa com a IA (se o chat estiver ligado) ──
   // Dispara quando não é um comando e o bot foi mencionado.
   if (!command) {
@@ -742,7 +760,7 @@ client.on("messageCreate", async (message) => {
   // ── Restrição por canal ──
   // Quem tem cargo de staff (ou permissão nativa) pode escapar disso, conforme
   // a config. `acesso` e `debug` sempre passam, senão dá para se trancar fora.
-  const SEMPRE_LIBERADOS = new Set(["acesso", "debug", "help", "tutorial", "idioma"]);
+  const SEMPRE_LIBERADOS = new Set(["acesso", "debug", "help", "tutorial", "assistente", "idioma"]);
 
   // O `&tts` é liberado NOS CANAIS DA PRÓPRIA VOZ, mesmo com restrição de
   // canal ligada. O motivo é prático: o comando serve para falar na call, e
@@ -833,6 +851,9 @@ client.on("messageReactionAdd", async (...a) => {
 
     if (userId && client.user && userId === client.user.id) return; // ignora o próprio bot
 
+    // Páginas (&help, &tutorial): ◀ ▶ numa mensagem paginada vira a página.
+    if (await paginas.aoReagir(msgId, userId, emoji)) return;
+
     // Reaction roles — dá o cargo se a (mensagem, emoji) estiver registrada.
     //    O objeto da mensagem (a0) traz o id; passamos ctx com acesso à config.
     const msgObj = (a0 && typeof a0 === "object") ? a0 : { id: msgId };
@@ -867,6 +888,9 @@ client.on("messageReactionRemove", async (...a) => {
                         ?? ((typeof a1 === "string") ? a2 : undefined);
 
     if (userId && client.user && userId === client.user.id) return; // ignora o próprio bot
+
+    // Tirar a reação ◀ ▶ também vira a página (assim dá para clicar de novo).
+    if (await paginas.aoReagir(msgId, userId, emoji)) return;
 
     // Reaction roles — dá o cargo se a (mensagem, emoji) estiver registrada.
     //    O objeto da mensagem (a0) traz o id; passamos ctx com acesso à config.

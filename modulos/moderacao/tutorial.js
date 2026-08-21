@@ -1,5 +1,6 @@
 import { servidorPermitido as temIA } from "../ai/chat.js";
 import { lingua } from "../core/i18n.js";
+import { enviarPaginado, paginarLinhas } from "../core/paginas.js";
 // ══════════════════════════════════════════════════════════
 //  tutorial.js — &tutorial
 //
@@ -45,6 +46,33 @@ function AREAS(P, lang = "pt") {
         "⚠️ `ManageRole` and `AssignRoles` are **different** things: one creates the role, the other hands it to the person. Missing the second, the bot creates the roles and then fails to apply them.",
         "",
         "💡 The bot's role must sit **above** the roles it will manage in the role list.",
+      ],
+    },
+
+    canais: {
+      titulo: "🔀 Channels: the 3 types",
+      ordem: 0.5,
+      resumo: "Channel permission beats role permission. Sort every channel into one of 3 types.",
+      corpo: [
+        "**The rule that explains almost every \"why doesn't it work\":**",
+        "a permission set **on the channel** overrides the one **on the role**. If a role can *Send messages* server-wide but the channel denies it, the role doesn't send. So: keep role permissions as the *minimum* and open exceptions per channel.",
+        "",
+        "Put every channel in one of **three types**:",
+        "",
+        "**🔒 Staff-only to see** — logs, Sentinel alerts, backstage",
+        "• Channel → *Permissions* → **Default**: deny *View channel*",
+        "• then, for each **staff role**: allow *View channel*",
+        "",
+        "**📢 Staff-only to write** — rules, announcements, reaction-role panels",
+        "• **Default**: deny *Send messages* (keep *View channel* allowed)",
+        "• for each **staff role**: allow *Send messages*",
+        "",
+        "**💬 General** — chat, off-topic, media",
+        "• touch nothing; it inherits the server defaults",
+        "",
+        "**And the bot?** Give its role *View channel* + *Send messages* in the first two types too, or it can't log, alert, or post panels. " + "`&debug canais` checks that for you, channel by channel.",
+        "",
+        `💡 \`${P}assistente canais\` asks which channels are which type and lists exactly what to click.`,
       ],
     },
 
@@ -437,6 +465,33 @@ function AREAS(P, lang = "pt") {
       ],
     },
 
+    canais: {
+      titulo: "🔀 Canais: os 3 tipos",
+      ordem: 0.5,
+      resumo: "Permissão de canal vence permissão de cargo. Separe todo canal em um de 3 tipos.",
+      corpo: [
+        "**A regra que explica quase todo \"por que não funciona\":**",
+        "uma permissão definida **no canal** passa por cima da **do cargo**. Se um cargo pode *Enviar mensagens* no servidor mas o canal nega, o cargo não envia. Então: deixe as permissões dos cargos no *mínimo* e abra exceções canal por canal.",
+        "",
+        "Coloque todo canal em um de **três tipos**:",
+        "",
+        "**🔒 Só staff vê** — logs, alertas do Sentinela, bastidores",
+        "• Canal → *Permissões* → **Padrão**: negue *Ver canal*",
+        "• depois, em cada **cargo de staff**: permita *Ver canal*",
+        "",
+        "**📢 Só staff escreve** — regras, avisos, painéis de reaction role",
+        "• **Padrão**: negue *Enviar mensagens* (mantenha *Ver canal* permitido)",
+        "• em cada **cargo de staff**: permita *Enviar mensagens*",
+        "",
+        "**💬 Geral** — conversa, off-topic, mídia",
+        "• não mexa em nada; herda o padrão do servidor",
+        "",
+        "**E o bot?** Dê ao cargo dele *Ver canal* + *Enviar mensagens* também nos dois primeiros tipos, senão ele não consegue registrar log, alertar nem publicar painel. " + "`&debug canais` confere isso por você, canal a canal.",
+        "",
+        `💡 \`${P}assistente canais\` pergunta quais canais são de cada tipo e lista exatamente o que clicar.`,
+      ],
+    },
+
     moderacao: {
       titulo: "🛡️ Moderação automática",
       ordem: 1,
@@ -797,6 +852,7 @@ function AREAS(P, lang = "pt") {
 }
 
 const APELIDOS = {
+  canal: "canais", channels: "canais", channel: "canais", tipos: "canais", types: "canais",
   permissao: "permissoes", permissões: "permissoes", perms: "permissoes", bot: "permissoes",
   permissions: "permissoes",
   automod: "moderacao", moderação: "moderacao", punicao: "moderacao", punição: "moderacao", filtros: "moderacao",
@@ -817,6 +873,221 @@ const APELIDOS = {
   config: "ajustes", geral: "ajustes", settings: "ajustes", general: "ajustes",
 };
 
+// ══════════════════════════════════════════════════════════
+//  O GUIA: 6 páginas na ordem em que um servidor novo fica pronto.
+//  Cada página é curta, termina apontando o comando que aprofunda,
+//  e o &assistente faz a parte "responda e eu configuro".
+// ══════════════════════════════════════════════════════════
+function GUIA(P, lang = "pt", comIA = false) {
+  if (lang === "en") return [
+    { title: "📚 Getting started — Before anything",
+      description: [
+        "This guide has **6 pages**: react ◀ ▶ to turn, or type `&tutorial <number>`.",
+        `In a hurry? \`${P}assistente rapido\` asks 5 questions and configures it for you.`,
+        "",
+        "**First: the bot's permissions** (Server settings → Roles → the bot's role)",
+        "• `ViewChannel`, `ReadMessageHistory`, `SendMessage`, `SendEmbeds`, `React` — the basics",
+        "• `ManageMessages`, `KickMembers`, `BanMembers`, `TimeoutMembers` — to moderate",
+        "• `ManageRole` **and** `AssignRoles` — one creates roles, the other hands them out. The bot needs **both**",
+        "• `ManageChannel` — only if you'll use `&cargomudo`",
+        "",
+        "⚠️ The bot's role must sit **above** every role it will manage in the role list.",
+        "",
+        `Check it: \`${P}debug\` says what's missing · Deep dive: \`${P}tutorial permissoes\``,
+      ].join("\n") },
+
+    { title: "🔀 Getting started — Channels (the golden rule)",
+      description: [
+        "**A channel's permissions beat a role's.** If the channel denies it, no role can save it. Keep role permissions minimal and open exceptions per channel.",
+        "",
+        "Sort **every** channel into one of 3 types:",
+        "",
+        "**🔒 Staff-only to see** (logs, alerts) — *Default*: deny **View channel** → each staff role: allow **View channel**",
+        "**📢 Staff-only to write** (rules, announcements, panels) — *Default*: deny **Send messages** → each staff role: allow **Send messages**",
+        "**💬 General** — change nothing",
+        "",
+        "The bot's role needs *View* + *Send* in the first two types as well.",
+        "",
+        `Who's staff for the bot: \`${P}acesso cargo add @Role\` (or \`${P}staff add\`).`,
+        "",
+        `Check it: \`${P}debug canais\` · Guided: \`${P}assistente canais\` · Deep dive: \`${P}tutorial canais\``,
+      ].join("\n") },
+
+    { title: "🛡️ Getting started — Protection",
+      description: [
+        `**See the filters:** \`${P}automod\` — spam, invites, links, caps, mass mentions, odd characters.`,
+        `**Toggle:** \`${P}automod antilink on\` (and so on for each filter)`,
+        "",
+        `**Sentinel** \`${P}sentinela on\` — the filter that *judges* content (scams, NSFW, gore). It was called \`antiscam\`; the old name still works.`,
+        `• \`${P}sentinela antiguidade on\` — stricter with newcomers`,
+        `• \`${P}sentinela alerta on\` — pings the staff on a suspicious *pattern*`,
+        "",
+        `**Punishment:** \`${P}punicao modo acumular\` — warning → 5 min mute → 1 h mute → ban (change it with \`${P}punicao escada\`). Mutes need a silence role: \`${P}cargomudo\`.`,
+        "",
+        `**Logging:** create a 🔒 staff-only channel and, inside it, \`${P}log canal aqui\`.`,
+        `**Global list:** \`${P}banglobal avisar\` warns when someone banned elsewhere joins.`,
+        "",
+        `Guided: \`${P}assistente protecao\` · Deep dive: \`${P}tutorial moderacao\``,
+      ].join("\n") },
+
+    { title: "🎨 Getting started — Welcome and roles",
+      description: [
+        `**Welcome embed:** go to the channel and \`${P}boasvindas canal aqui\`. Then:`,
+        `• \`${P}boasvindas texto Welcome, {usuario}! You're member #{membros}.\``,
+        `• \`${P}boasvindas testar\` — see it now`,
+        "Markers: `{usuario}` mention · `{nome}` name · `{servidor}` · `{membros}`. `&help boasvindas` explains every parameter.",
+        `**Goodbye:** same thing with \`${P}adeus\`.`,
+        "",
+        `**Role on join:** \`${P}autorole Member\``,
+        "",
+        "**Reaction roles:**",
+        `1. \`${P}embed titulo: Pick your roles | descricao: 🎮 Games · 📢 News\``,
+        `2. \`${P}reactionrole add <message link> 🎮 Games\``,
+        `3. \`${P}reactionrole exclusivo <message link> on\` — if only one may apply`,
+        `**Colors in one go:** \`${P}cor painel aqui\` builds a "pick your color" panel.`,
+        "",
+        `Deep dive: \`${P}tutorial cargos\` · \`${P}tutorial mensagens\``,
+      ].join("\n") },
+
+    { title: "🎮 Getting started — XP and RPG",
+      description: [
+        `**Levels by message:** \`${P}xp on\`, then \`${P}xp setup\` to choose roles per level, multiplier and the announcement channel. \`${P}xp criarcargos\` creates the roles.`,
+        "",
+        `**RPG (character, missions, economy):** a separate system. \`${P}tutorial game\` walks through setting up the currency and economy; players then use \`${P}game criar\`.`,
+        "",
+        ...(comIA ? [
+          `**Judy (AI):** mention the bot or \`${P}chat <message>\`. \`${P}chat livre on\` lets her join a channel's conversation; \`${P}modia\` moderates with free-text criteria.`,
+          "",
+        ] : []),
+        `**Clock:** \`${P}fuso add London\` · **News:** \`${P}rss add <url>\` · **Voice:** \`${P}tts <text>\``,
+        "",
+        `Deep dive: \`${P}tutorial xp\` · \`${P}tutorial game\` · \`${P}tutorial rpg\``,
+      ].join("\n") },
+
+    { title: "✅ Getting started — Checklist",
+      description: [
+        "Before opening the doors, run through this:",
+        "",
+        `☐ \`${P}debug\` shows no missing permission`,
+        `☐ \`${P}debug canais\` — the bot sees and writes where it should`,
+        `☐ \`${P}staff\` lists the right roles`,
+        `☐ \`${P}log\` points at a 🔒 staff-only channel`,
+        `☐ \`${P}automod status\` and \`${P}sentinela\` are the way you want`,
+        `☐ \`${P}punicao\` — the mode makes sense and the silence role exists`,
+        `☐ \`${P}boasvindas testar\` looks right`,
+        `☐ \`${P}config\` — the overview matches what you expected`,
+        "",
+        `Anything off? \`${P}help <command>\` explains every parameter; \`${P}help diagnostico\` lists the usual suspects.`,
+        "",
+        `🎉 That's it. To redo any part with guidance: \`${P}assistente\`.`,
+      ].join("\n") },
+  ];
+
+  return [
+    { title: "📚 Por onde começar — Antes de tudo",
+      description: [
+        "Este guia tem **6 páginas**: reaja ◀ ▶ para virar, ou digite `&tutorial <número>`.",
+        `Com pressa? \`${P}assistente rapido\` faz 5 perguntas e configura por você.`,
+        "",
+        "**Primeiro: as permissões do bot** (Configurações do servidor → Cargos → cargo do bot)",
+        "• `ViewChannel`, `ReadMessageHistory`, `SendMessage`, `SendEmbeds`, `React` — o básico",
+        "• `ManageMessages`, `KickMembers`, `BanMembers`, `TimeoutMembers` — para moderar",
+        "• `ManageRole` **e** `AssignRoles` — um cria cargos, o outro entrega. O bot precisa dos **dois**",
+        "• `ManageChannel` — só se for usar `&cargomudo`",
+        "",
+        "⚠️ O cargo do bot precisa estar **acima** de todo cargo que ele vai mexer, na lista de cargos.",
+        "",
+        `Conferir: \`${P}debug\` diz o que falta · Aprofundar: \`${P}tutorial permissoes\``,
+      ].join("\n") },
+
+    { title: "🔀 Por onde começar — Canais (a regra de ouro)",
+      description: [
+        "**A permissão do canal vence a do cargo.** Se o canal nega, nenhum cargo salva. Deixe os cargos no mínimo e abra exceções canal por canal.",
+        "",
+        "Separe **todo** canal em um de 3 tipos:",
+        "",
+        "**🔒 Só staff vê** (logs, alertas) — *Padrão*: negue **Ver canal** → em cada cargo de staff: permita **Ver canal**",
+        "**📢 Só staff escreve** (regras, avisos, painéis) — *Padrão*: negue **Enviar mensagens** → em cada cargo de staff: permita **Enviar mensagens**",
+        "**💬 Geral** — não mexa em nada",
+        "",
+        "O cargo do bot precisa de *Ver* + *Enviar* também nos dois primeiros tipos.",
+        "",
+        `Quem é staff para o bot: \`${P}acesso cargo add @Cargo\` (ou \`${P}staff add\`).`,
+        "",
+        `Conferir: \`${P}debug canais\` · Guiado: \`${P}assistente canais\` · Aprofundar: \`${P}tutorial canais\``,
+      ].join("\n") },
+
+    { title: "🛡️ Por onde começar — Proteção",
+      description: [
+        `**Veja os filtros:** \`${P}automod\` — spam, convites, links, caps, menções em massa, caracteres estranhos.`,
+        `**Ligue:** \`${P}automod antilink on\` (e assim por diante para cada filtro)`,
+        "",
+        `**Sentinela** \`${P}sentinela on\` — o filtro que *julga* conteúdo (golpe, +18, gore). Chamava-se \`antiscam\`; o nome antigo ainda funciona.`,
+        `• \`${P}sentinela antiguidade on\` — mais rígido com quem acabou de chegar`,
+        `• \`${P}sentinela alerta on\` — avisa a staff num *padrão* suspeito`,
+        "",
+        `**Punição:** \`${P}punicao modo acumular\` — aviso → mute 5 min → mute 1 h → ban (mude com \`${P}punicao escada\`). Mute precisa de cargo de silêncio: \`${P}cargomudo\`.`,
+        "",
+        `**Registro:** crie um canal 🔒 só-staff-vê e, dentro dele, \`${P}log canal aqui\`.`,
+        `**Lista global:** \`${P}banglobal avisar\` avisa quando entra alguém banido em outro servidor.`,
+        "",
+        `Guiado: \`${P}assistente protecao\` · Aprofundar: \`${P}tutorial moderacao\``,
+      ].join("\n") },
+
+    { title: "🎨 Por onde começar — Boas-vindas e cargos",
+      description: [
+        `**Embed de boas-vindas:** vá ao canal e \`${P}boasvindas canal aqui\`. Depois:`,
+        `• \`${P}boasvindas texto Bem-vindo, {usuario}! Você é o membro nº {membros}.\``,
+        `• \`${P}boasvindas testar\` — veja agora`,
+        "Marcadores: `{usuario}` menção · `{nome}` nome · `{servidor}` · `{membros}`. `&help boasvindas` explica cada parâmetro.",
+        `**Despedida:** a mesma coisa com \`${P}adeus\`.`,
+        "",
+        `**Cargo a quem entra:** \`${P}autorole Membro\``,
+        "",
+        "**Cargos por reação:**",
+        `1. \`${P}embed titulo: Escolha seus cargos | descricao: 🎮 Jogos · 📢 Avisos\``,
+        `2. \`${P}reactionrole add <link da mensagem> 🎮 Jogos\``,
+        `3. \`${P}reactionrole exclusivo <link da mensagem> on\` — se só pode valer um`,
+        `**Cores de uma vez:** \`${P}cor painel aqui\` monta o painel "escolha sua cor".`,
+        "",
+        `Aprofundar: \`${P}tutorial cargos\` · \`${P}tutorial mensagens\``,
+      ].join("\n") },
+
+    { title: "🎮 Por onde começar — XP e RPG",
+      description: [
+        `**Níveis por mensagem:** \`${P}xp on\`, depois \`${P}xp setup\` para escolher cargos por nível, multiplicador e canal de anúncio. \`${P}xp criarcargos\` cria os cargos.`,
+        "",
+        `**RPG (personagem, missões, economia):** um sistema à parte. \`${P}tutorial game\` mostra como montar a moeda e a economia; os jogadores então usam \`${P}game criar\`.`,
+        "",
+        ...(comIA ? [
+          `**Judy (IA):** mencione o bot ou \`${P}chat <mensagem>\`. \`${P}chat livre on\` deixa ela entrar na conversa de um canal; \`${P}modia\` modera com critérios em texto livre.`,
+          "",
+        ] : []),
+        `**Relógio:** \`${P}fuso add Lisboa\` · **Notícias:** \`${P}rss add <url>\` · **Voz:** \`${P}tts <texto>\``,
+        "",
+        `Aprofundar: \`${P}tutorial xp\` · \`${P}tutorial game\` · \`${P}tutorial rpg\``,
+      ].join("\n") },
+
+    { title: "✅ Por onde começar — Checklist",
+      description: [
+        "Antes de abrir as portas, passe por isto:",
+        "",
+        `☐ \`${P}debug\` não acusa permissão faltando`,
+        `☐ \`${P}debug canais\` — o bot vê e escreve onde deve`,
+        `☐ \`${P}staff\` lista os cargos certos`,
+        `☐ \`${P}log\` aponta para um canal 🔒 só-staff-vê`,
+        `☐ \`${P}automod status\` e \`${P}sentinela\` estão do jeito que você quer`,
+        `☐ \`${P}punicao\` — o modo faz sentido e o cargo de silêncio existe`,
+        `☐ \`${P}boasvindas testar\` ficou bonito`,
+        `☐ \`${P}config\` — o panorama bate com o que você esperava`,
+        "",
+        `Algo estranho? \`${P}help <comando>\` explica cada parâmetro; \`${P}help diagnostico\` lista os culpados de sempre.`,
+        "",
+        `🎉 É isso. Para refazer qualquer parte com ajuda: \`${P}assistente\`.`,
+      ].join("\n") },
+  ];
+}
+
 export async function cmdTutorial(message, args, ctx) {
   const { sendEmbed, COR, PREFIXO: P } = ctx;
   const lang = lingua(ctx);
@@ -833,19 +1104,19 @@ export async function cmdTutorial(message, args, ctx) {
   }
   const pedido = args[0]?.toLowerCase();
 
-  // ── Página de uma área ──
-  if (pedido) {
+  // ── Página de uma área (aprofundamento) ──
+  if (pedido && !/^\d+$/.test(pedido)) {
     const chave = areas[pedido] ? pedido : APELIDOS[pedido];
     const area = chave ? areas[chave] : null;
     if (!area) {
       const nomes = Object.keys(areas).map((k) => `\`${k}\``).join(" · ");
       return sendEmbed(message.channel, lang === "en" ? {
         title: "❓ Unknown area",
-        description: `I don't know that area. The existing ones:\n${nomes}\n\nOr use \`${P}tutorial\` to see the full walkthrough.`,
+        description: `I don't know that area. The existing ones:\n${nomes}\n\nOr use \`${P}tutorial\` for the paged guide.`,
         colour: COR.aviso,
       } : {
         title: "❓ Área desconhecida",
-        description: `Não conheço essa área. As que existem:\n${nomes}\n\nOu use \`${P}tutorial\` para ver o roteiro completo.`,
+        description: `Não conheço essa área. As que existem:\n${nomes}\n\nOu use \`${P}tutorial\` para o guia em páginas.`,
         colour: COR.aviso,
       });
     }
@@ -854,39 +1125,24 @@ export async function cmdTutorial(message, args, ctx) {
     const prox = ordem[i + 1];
     const rodape = prox
       ? (lang === "en"
-        ? `\n\n➡️ Next area: \`${P}tutorial ${prox}\` (${areas[prox].titulo})`
-        : `\n\n➡️ Próxima área: \`${P}tutorial ${prox}\` (${areas[prox].titulo})`)
+        ? `➡️ Next area: \`${P}tutorial ${prox}\` (${areas[prox].titulo})`
+        : `➡️ Próxima área: \`${P}tutorial ${prox}\` (${areas[prox].titulo})`)
       : (lang === "en"
-        ? `\n\n✅ That's the last area. \`${P}config\` shows how everything turned out.`
-        : `\n\n✅ Essa é a última área. \`${P}config\` mostra como tudo ficou.`);
-    return sendEmbed(message.channel, {
-      title: area.titulo,
-      description: area.corpo.join("\n").slice(0, 1900) + rodape,
-      colour: COR.info,
+        ? `✅ That's the last area. \`${P}config\` shows how everything turned out.`
+        : `✅ Essa é a última área. \`${P}config\` mostra como tudo ficou.`);
+    // Uma área longa vira duas páginas, em vez de ser cortada no meio.
+    const paginas = paginarLinhas([...area.corpo, "", rodape], { titulo: area.titulo, limite: 1300 });
+    return enviarPaginado(ctx, message.channel, {
+      paginas, autorId: message.authorId, comandoPagina: null,
     });
   }
 
-  // ── Roteiro geral ──
-  const ordenadas = Object.entries(areas).sort((a, b) => a[1].ordem - b[1].ordem);
-  const linhas = [
-    lang === "en"
-      ? "A new server usually gets ready in this order. **Nothing is mandatory** — skip whatever doesn't make sense for you."
-      : "Um servidor novo costuma ficar pronto nesta ordem. **Nada é obrigatório** — pule o que não fizer sentido para você.",
-    "",
-  ];
-  for (const [chave, a] of ordenadas) {
-    linhas.push(`**${a.ordem === 0 ? "⚠️" : a.ordem + "."} ${a.titulo}**`);
-    linhas.push(`${a.resumo}`);
-    linhas.push(`\`${P}tutorial ${chave}\``);
-    linhas.push("");
-  }
-  linhas.push(lang === "en"
-    ? `Each page brings the exact commands. \`${P}help\` lists every command, \`${P}config\` shows the server's current state.`
-    : `Cada página traz os comandos exatos. \`${P}help\` lista todos os comandos, \`${P}config\` mostra o estado atual do servidor.`);
-
-  return sendEmbed(message.channel, {
-    title: lang === "en" ? "📚 Where to start" : "📚 Por onde começar",
-    description: linhas.join("\n").slice(0, 1950),
-    colour: COR.info,
+  // ── O guia em páginas (&tutorial, &tutorial <n>) ──
+  const paginas = GUIA(P, lang, comIA).map((pg) => ({ ...pg, colour: COR.info }));
+  const n = pedido ? parseInt(pedido, 10) : 0;
+  return enviarPaginado(ctx, message.channel, {
+    paginas, autorId: message.authorId,
+    paginaInicial: Math.min(Math.max(n - 1, 0), paginas.length - 1),
+    comandoPagina: `${P}tutorial`,
   });
 }

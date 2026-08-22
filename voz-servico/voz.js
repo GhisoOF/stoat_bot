@@ -161,7 +161,8 @@ function explicar(e) {
   return msg;
 }
 
-export async function entrar(canalVoz) {
+export async function entrar(canalVoz, serverId = null) {
+  ultimoServidor = serverId ?? ultimoServidor;
   if (erroCarga) return { ok: false, erro: erroCarga };
   if (conexoes.has(canalVoz)) return { ok: true, jaEstava: true, canalVoz };
 
@@ -250,7 +251,7 @@ async function entrarDeFato(canalVoz) {
     if (/AlreadyConnected/i.test(String(e?.message ?? e)) && !jaTentouDestravar.has(canalVoz)) {
       jaTentouDestravar.add(canalVoz);
       log(`AlreadyConnected em ${canalVoz} — forçando saída e tentando de novo`);
-      const f = await forcarSaida(canalVoz);
+      const f = await forcarSaida(canalVoz, ultimoServidor);
       marcos.push({ nome: f.ok ? "destravado" : "destravar-falhou", ms: Date.now() - t0 });
       if (f.ok) {
         const r2 = await entrarDeFato(canalVoz);
@@ -304,30 +305,59 @@ export async function sair(canalVoz = null) {
 //  Como a rota de saída não é a mesma em toda versão do Stoat, tentamos as
 //  candidatas em ordem e relatamos o que cada uma respondeu. A que existir
 //  resolve; o relatório serve para descobrir qual é, sem chutar de novo.
-export async function forcarSaida(canalVoz) {
+export async function forcarSaida(canalVoz, serverId = null) {
   const API = (process.env.STOAT_API || "https://api.stoat.chat").replace(/\/$/, "");
-  const tentativas = [
-    { metodo: "POST",   rota: `/channels/${canalVoz}/leave_call` },
-    { metodo: "DELETE", rota: `/channels/${canalVoz}/join_call` },
-    { metodo: "DELETE", rota: `/channels/${canalVoz}/call` },
-  ];
-  const resultados = [];
-  for (const t of tentativas) {
+  const passos = [];
+  const bater = async (metodo, rota, corpo = null) => {
+    const t = Date.now();
     try {
-      const r = await comLimite(fetch(`${API}${t.rota}`, {
-        method: t.metodo,
-        headers: { "X-Bot-Token": TOKEN, ...(t.metodo === "POST" ? { "Content-Type": "application/json" } : {}) },
-        ...(t.metodo === "POST" ? { body: "{}" } : {}),
-      }), 8000, `8s sem resposta de ${t.rota}`);
-      const corpo = await r.text().catch(() => "");
-      resultados.push({ ...t, status: r.status, ok: r.ok, corpo: corpo.slice(0, 120) });
-      // 2xx: deu certo, não precisa tentar as outras.
-      if (r.ok) { log(`saída forçada via ${t.metodo} ${t.rota}`); return { ok: true, via: t, resultados }; }
+      const r = await comLimite(fetch(`${API}${rota}`, {
+        method: metodo,
+        headers: { "X-Bot-Token": TOKEN, ...(corpo ? { "Content-Type": "application/json" } : {}) },
+        ...(corpo ? { body: JSON.stringify(corpo) } : {}),
+      }), 8000, `8s sem resposta de ${rota}`);
+      const txt = await r.text().catch(() => "");
+      return { metodo, rota, ok: r.ok, status: r.status, ms: Date.now() - t, corpo: txt.slice(0, 160) };
     } catch (e) {
-      resultados.push({ ...t, erro: e?.message ?? String(e) });
+      return { metodo, rota, ok: false, ms: Date.now() - t, erro: e?.message ?? String(e) };
     }
+  };
+
+  // ── O jeito certo, achado no código do Stoat ──
+  //
+  // Não existe rota de "sair da call": as únicas rotas de voz são
+  // `join_call` e `stop_ring` (crates/delta/src/routes/channels/mod.rs). A
+  // saída normal acontece quando o LiveKit avisa que o participante caiu — e
+  // é justamente esse aviso que nunca chega quando a entrada trava no meio,
+  // deixando o registro presoem `vc:{userId}` no Redis deles.
+  //
+  // O `join_call` aceita `force_disconnect`, que limparia tudo… mas:
+  //     if user.bot.is_some() && force_disconnect == Some(true) { IsBot }
+  // bots são explicitamente proibidos de usar.
+  //
+  // Sobra um caminho: `PATCH /servers/{s}/members/{u}` com
+  // `remove: ["VoiceChannel"]`, que chama `voice_client.remove_user(...)`. Ele
+  // exige a permissão MoveMembers — EXCETO quando o alvo é quem pede:
+  //     if member.id.user != user.id { throw_if_lacking(MoveMembers) }
+  // Ou seja: o bot pode desconectar a si mesmo, sem permissão nenhuma.
+  let meuId = null;
+  const me = await bater("GET", "/users/@me");
+  passos.push({ ...me, rota: "/users/@me" });
+  try { meuId = JSON.parse(me.corpo ?? "{}")?._id ?? JSON.parse(me.corpo ?? "{}")?.id ?? null; } catch {}
+
+  if (meuId && serverId) {
+    const r = await bater("PATCH", `/servers/${serverId}/members/${meuId}`, { remove: ["VoiceChannel"] });
+    passos.push(r);
+    if (r.ok) {
+      log(`saída forçada: removido do canal de voz de ${serverId}`);
+      return { ok: true, via: "PATCH members remove VoiceChannel", passos };
+    }
+  } else {
+    passos.push({ rota: "(auto-desconexão)", ok: false,
+      erro: !serverId ? "o serviço não recebeu o serverId" : "não descobri meu próprio id" });
   }
-  return { ok: false, resultados };
+
+  return { ok: false, passos };
 }
 
 // ── Reinício a quente ─────────────────────────────────────
@@ -359,6 +389,9 @@ let ultimaFalha = null;
 // preta de 20s; sem cronometrar o que acontece em volta dele, "travou no
 // join" é tudo que dá para dizer — e não é suficiente para consertar nada.
 let ultimosMarcos = null;
+// Último servidor informado pelo bot — o destrave precisa dele, e a chamada
+// que falha nem sempre o traz.
+let ultimoServidor = null;
 
 // ── Diagnóstico em ETAPAS ─────────────────────────────────
 //

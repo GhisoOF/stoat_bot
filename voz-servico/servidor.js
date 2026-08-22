@@ -34,7 +34,7 @@ import * as voz from "./voz.js";
 // O bot compara com o número que ele espera e avisa se estiver defasado —
 // antes eu detectava isso procurando um efeito específico na lista, e quando
 // esse efeito foi renomeado o alarme passou a tocar para sempre.
-export const API_VERSAO = 5;   // 5: /destravar (AlreadyConnected)
+export const API_VERSAO = 6;   // 6: destrave por auto-desconexão (PATCH members)
 
 const PORTA   = Number(process.env.VOZ_PORTA || 8091);
 const CHAVE   = process.env.VOZ_CHAVE || "";
@@ -103,9 +103,9 @@ const servidor = createServer(async (req, res) => {
     const corpo = await lerCorpo(req);
 
     if (rota === "/entrar") {
-      const { canalVoz } = corpo;
+      const { canalVoz, serverId } = corpo;
       if (!canalVoz) return responder(res, 400, { erro: "falta canalVoz" });
-      const r = await voz.entrar(canalVoz);
+      const r = await voz.entrar(canalVoz, serverId ?? null);
       return responder(res, r.ok ? 200 : 502, r);
     }
 
@@ -116,9 +116,9 @@ const servidor = createServer(async (req, res) => {
     }
 
     if (rota === "/destravar") {
-      const { canalVoz } = corpo;
+      const { canalVoz, serverId } = corpo;
       if (!canalVoz) return responder(res, 400, { erro: "falta canalVoz" });
-      const r = await voz.forcarSaida(canalVoz);
+      const r = await voz.forcarSaida(canalVoz, serverId ?? null);
       return responder(res, 200, r);
     }
 

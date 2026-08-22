@@ -35,7 +35,7 @@ const SERVIDORES = (process.env.TTS_SERVIDORES || "")
 // Gentoo, fora do Docker, então os dois são atualizados por caminhos
 // diferentes e podem ficar defasados — o pior estado possível, porque tudo
 // "parece" atualizado e a fala sai sem efeito, em silêncio.
-const VOZ_API_ESPERADA = 5;
+const VOZ_API_ESPERADA = 6;
 
 const COOLDOWN_MS = Number(process.env.TTS_COOLDOWN_MS || 8000);
 const MAX_CHARS   = Number(process.env.TTS_MAX_CHARS || 400);
@@ -456,8 +456,8 @@ export async function cmdTts(message, args, ctx) {
         `🔎 **I can't even read that channel.** It may have been deleted, or the bot can't see it. Join the call and send \`${PREFIXO}tts entrar\` there — I'll switch to that channel.`);
     } else if (/AlreadyConnected/i.test(String(jc?.detalhe ?? ""))) {
       veredito = tr(ctx,
-        `🔎 **\`AlreadyConnected\`: o Stoat acha que eu já estou numa call.** Não é permissão nem rede — é um registro preso no lado dele, que recusa toda entrada nova enquanto existir. Costuma sobrar de uma entrada que travou no meio.\n\nTente \`${PREFIXO}tts destravar\` _(ManageMessages)_. Se não resolver, o registro expira sozinho depois de alguns minutos.`,
-        `🔎 **\`AlreadyConnected\`: Stoat thinks I'm already in a call.** Not permission, not network — a stuck record on their side that refuses every new join while it exists. It's usually left over from a join that jammed halfway.\n\nTry \`${PREFIXO}tts destravar\` _(ManageMessages)_. If that doesn't do it, the record expires on its own after a few minutes.`);
+        `🔎 **\`AlreadyConnected\`: o Stoat me registra como já estando nesta call.** Não é permissão nem rede: é um registro preso no lado dele, sobra de uma entrada que travou no meio.\n\n\`${PREFIXO}tts destravar\` tenta me desconectar _(ManageMessages)_. Não dando certo, **alguém com MoveMembers me remove da call pelo cliente** — o Stoat não tem rota de "sair da call", então essa é a única forma de derrubar um participante preso.`,
+        `🔎 **\`AlreadyConnected\`: Stoat records me as already in this call.** Not permission, not network: a stuck record on their side, left over from a join that jammed halfway.\n\n\`${PREFIXO}tts destravar\` tries to disconnect me _(ManageMessages)_. If that fails, **someone with MoveMembers removes me from the call in the client** — Stoat has no "leave call" route, so that's the only way to drop a stuck participant.`);
     } else if (jc?.ok === false) {
       const html = /HTML/i.test(String(jc.detalhe ?? ""));
       veredito = html
@@ -508,29 +508,29 @@ export async function cmdTts(message, args, ctx) {
     }
     const alvo = c.canalVoz ?? message.channelId;
     let r;
-    try { r = await chamar("/destravar", { canalVoz: alvo }); }
+    try { r = await chamar("/destravar", { canalVoz: alvo, serverId }); }
     catch (e) {
       return sendEmbed(message.channel, {
         title: lang === "en" ? "❌ The service didn't answer" : "❌ O serviço não respondeu",
         description: `\`${String(e.message ?? e).replace(/`/g, "")}\``, colour: COR.erro });
     }
-    const linhas = (r?.resultados ?? []).map((t) =>
-      `${t.ok ? "✅" : "❌"} \`${t.metodo} ${t.rota.replace(alvo, "…")}\` — ${t.erro ?? `HTTP ${t.status}`}`);
+    const linhas = (r?.passos ?? r?.resultados ?? []).map((t) =>
+      `${t.ok ? "✅" : "❌"} \`${t.metodo ?? ""} ${String(t.rota ?? "").replace(alvo, "…")}\` — ${t.erro ?? `HTTP ${t.status}`}`);
     return sendEmbed(message.channel, tr(ctx, {
       title: r?.ok ? "🔓 Destravado" : "⚠️ Não consegui destravar",
       description: [
         ...linhas, "",
         r?.ok
-          ? `O registro de call foi removido. Agora: \`${PREFIXO}tts entrar\` dentro da call.`
-          : "Nenhuma rota de saída funcionou nesta instância do Stoat. O registro costuma expirar sozinho — tente de novo daqui a alguns minutos.",
+          ? `Me desconectei da call pelo lado do Stoat. Agora: \`${PREFIXO}tts entrar\` dentro da call.`
+          : "Não consegui me desconectar. Alguém com **MoveMembers** pode me remover da call pelo cliente — no Stoat, é a única forma de derrubar um participante preso.",
       ].join("\n"), colour: r?.ok ? COR.sucesso : COR.aviso,
     }, {
       title: r?.ok ? "🔓 Unstuck" : "⚠️ Couldn't clear it",
       description: [
         ...linhas, "",
         r?.ok
-          ? `The call record was removed. Now: \`${PREFIXO}tts entrar\` inside the call.`
-          : "No leave route worked on this Stoat instance. The record usually expires on its own — try again in a few minutes.",
+          ? `I disconnected myself on Stoat's side. Now: \`${PREFIXO}tts entrar\` inside the call.`
+          : "I couldn't disconnect myself. Someone with **MoveMembers** can remove me from the call in the client — on Stoat that's the only way to drop a stuck participant.",
       ].join("\n"), colour: r?.ok ? COR.sucesso : COR.aviso,
     }));
   }
@@ -719,27 +719,27 @@ export async function cmdTts(message, args, ctx) {
 
       filtro.limpar(c.canalTexto ?? null);
       try {
-        await chamar("/entrar", { canalVoz: c.canalVoz });
+        await chamar("/entrar", { canalVoz: c.canalVoz, serverId });
       } catch (e) {
         const motivo = String(e.message ?? e).replace(/`/g, "");
         if (/AlreadyConnected/i.test(motivo)) {
           return sendEmbed(message.channel, tr(ctx, {
-            title: "🔒 O Stoat acha que eu já estou numa call",
+            title: "🔒 O Stoat me registra como já estando nesta call",
             description: [
-              "Ele guarda que estou conectada e recusa qualquer entrada nova enquanto esse registro existir — mesmo eu não estando em call nenhuma.",
+              "Ele guarda isso num registro próprio e recusa toda entrada nova enquanto ele existir — mesmo eu não estando em call nenhuma. Sobra de uma entrada que travou no meio.",
               "",
-              `Já tentei destravar sozinha e não consegui. \`${PREFIXO}tts destravar\` tenta de novo _(ManageMessages)_.`,
+              `Já tentei me desconectar sozinha e não deu. \`${PREFIXO}tts destravar\` tenta de novo _(ManageMessages)_.`,
               "",
-              "Se insistir: alguém entra na call pelo cliente e confere se eu apareço na lista. Aparecendo, é registro preso do lado do servidor e passa sozinho quando a sala expira.",
+              "Se insistir: **alguém com MoveMembers me remove da call pelo cliente**. No Stoat não existe rota de \"sair da call\" — essa é a única forma de derrubar um participante preso.",
             ].join("\n"), colour: COR.aviso,
           }, {
-            title: "🔒 Stoat thinks I'm already in a call",
+            title: "🔒 Stoat records me as already in this call",
             description: [
-              "It records me as connected and refuses any new join while that record exists — even though I'm in no call at all.",
+              "It keeps its own record and refuses every new join while that record exists — even though I'm in no call at all. Left over from a join that jammed halfway.",
               "",
-              `I already tried to clear it myself and failed. \`${PREFIXO}tts destravar\` tries again _(ManageMessages)_.`,
+              `I already tried to disconnect myself and it didn't work. \`${PREFIXO}tts destravar\` tries again _(ManageMessages)_.`,
               "",
-              "If it persists: have someone open the call in the client and check whether I show up in the list. If I do, it's a stuck server-side record and it clears when the room expires.",
+              "If it persists: **someone with MoveMembers removes me from the call in the client**. Stoat has no \"leave call\" route — that's the only way to drop a stuck participant.",
             ].join("\n"), colour: COR.aviso,
           }));
         }

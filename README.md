@@ -334,9 +334,8 @@ persona, que pede o mesmo tom em uma frase.
   filtrado: pedido explícito é sempre falado. Se a entrada na call travar,
   `&tts diagnostico` diz **em qual etapa** — a API do Stoat (token, permissão,
   registro preso) ou a rede até o LiveKit (UDP, MTU, firewall). Para o caso
-  mais comum, `AlreadyConnected` (o Stoat guardar que o bot já está numa call e
-  recusar toda entrada nova), o `entrar` tenta destravar sozinho e
-  `&tts destravar` força de novo; `&tts reiniciar` recria a conexão local.
+  mais comum, `AlreadyConnected`, veja abaixo. `&tts reiniciar` recria a
+  conexão local.
   **Detalhe do Stoat:** não existe um "canal de voz" separado — a call vive
   dentro de um canal de texto com voz habilitada, então `&tts entrar` usa
   sempre a call do canal onde foi digitado.
@@ -1636,6 +1635,38 @@ nível; a cada N níveis, pode ganhar um cargo.
 &xp sincronizar @pessoa   # só uma pessoa
 &xp on | off         # liga/desliga
 ```
+
+### `AlreadyConnected`: o participante preso
+
+O Stoat **não tem rota de "sair da call"** — as únicas rotas de voz são
+`join_call` e `stop_ring`. A saída acontece quando o LiveKit avisa que o
+participante caiu, e é justamente esse aviso que não chega quando a entrada
+trava no meio: o registro fica preso e toda entrada nova é recusada com
+`AlreadyConnected`.
+
+O `join_call` aceita `force_disconnect`, que limparia tudo — mas bots são
+explicitamente proibidos de usá-lo:
+
+```rust
+if user.bot.is_some() && force_disconnect == Some(true) {
+    return Err(create_error!(IsBot));
+}
+```
+
+Sobra um caminho: `PATCH /servers/{s}/members/{u}` com
+`remove: ["VoiceChannel"]`, que chama `voice_client.remove_user(...)`. Ele
+exige **MoveMembers**, exceto quando o alvo é quem pede:
+
+```rust
+if member.id.user != user.id {
+    permissions.throw_if_lacking_channel_permission(ChannelPermission::MoveMembers)?;
+}
+```
+
+Ou seja: **o bot pode desconectar a si mesmo, sem permissão nenhuma**. É o que
+`&tts destravar` faz, e o que o `&tts entrar` tenta sozinho antes de desistir.
+Se nem isso resolver, alguém com **MoveMembers** remove o bot da call pelo
+cliente — é a única outra forma de derrubar um participante preso.
 
 ### Sair custa os cargos, não o XP
 

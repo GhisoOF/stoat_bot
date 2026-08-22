@@ -397,5 +397,34 @@ await tts.cmdTts(msgNaCallReal, ["destravar"], ctxA);
 ok(urlsDestravar.some((u) => u.includes("/destravar")), "`&tts destravar` chama o serviço");
 ok(String(respA.at(-1)?.title).includes("Destravado"), "  → e relata o resultado de cada rota tentada");
 
+// ══ 9. O destrave: auto-desconexão ══
+//
+//  O Stoat não tem rota de "sair da call" — só `join_call` e `stop_ring`. O
+//  único caminho que desconecta alguém é
+//    PATCH /servers/{s}/members/{u}  com  remove: ["VoiceChannel"]
+//  que exige MoveMembers, EXCETO quando o alvo é quem pede. Então o bot
+//  consegue se desconectar sozinho, e só a si mesmo.
+console.log("\n── destrave por auto-desconexão ──");
+const pedidos = [];
+globalThis.fetch = async (url, op) => {
+  const u = String(url);
+  pedidos.push({ url: u, metodo: op?.method, corpo: op?.body ? JSON.parse(op.body) : null });
+  if (u.endsWith("/users/@me")) return { ok: true, status: 200, text: async () => '{"_id":"01JBOTAA00000000000000AAAA","username":"Judy"}' };
+  return { ok: true, status: 200, text: async () => "{}" };
+};
+const rDestrave = await voz.forcarSaida("01JCALLR000000000000000AA", "01JSERVER00000000000000AA");
+ok(rDestrave.ok === true, "★ o destrave funciona: o bot se remove do canal de voz");
+const patch = pedidos.find((p) => p.metodo === "PATCH");
+ok(patch && patch.url.includes("/servers/01JSERVER00000000000000AA/members/01JBOTAA00000000000000AAAA"),
+  "  → via PATCH no PRÓPRIO membro (é o que dispensa MoveMembers)");
+ok(patch?.corpo?.remove?.includes("VoiceChannel"), "  → com remove: [\"VoiceChannel\"]");
+ok(pedidos.some((p) => p.url.endsWith("/users/@me")), "  → descobrindo o próprio id antes");
+
+// sem o serverId não dá para tentar — e isso precisa aparecer no relatório
+pedidos.length = 0;
+const semServidor = await voz.forcarSaida("01JCALLR000000000000000AA", null);
+ok(semServidor.ok === false, "sem serverId, não tenta às cegas");
+ok(semServidor.passos.some((p) => String(p.erro ?? "").includes("serverId")), "  → e o relatório diz o que faltou");
+
 console.log(`\nTTS: ${pass} ok, ${fail} falha(s)`);
 process.exit(fail ? 1 : 0);

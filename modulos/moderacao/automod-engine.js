@@ -290,7 +290,10 @@ async function aplicarPunicao(ctx, opts) {
     try {
       await server.banUser(userId, { reason: `[AutoMod] ${motivo}` });
       acao = lang === "en" ? "🔨 user BANNED" : "🔨 usuário BANIDO";
-      banGlobal.registrar(ctx, userId, motivo, "automod");   // alimenta a lista global
+      // O nome vai junto: sem ele a lista vira uma parede de "Unknown User"
+      // justamente para quem já foi banido e saiu.
+      banGlobal.registrar(ctx, userId, motivo, "automod",
+        { nome: message?.author?.username ?? null, membro: message?.member ?? message?.author ?? null });
     }
     catch (e) { console.error("[PUNIÇÃO][BAN]", e.message);
       acao = lang === "en" ? `failed to ban (${e.message})` : `falha ao banir (${e.message})`; }
@@ -421,7 +424,8 @@ async function aplicarPunicao(ctx, opts) {
   let acao = lang === "en" ? "banned" : "banido";
   try {
     await server.banUser(userId, { reason: `[AutoMod] ${motivo} (${count} avisos)` });
-    banGlobal.registrar(ctx, userId, `${motivo} (${count} avisos)`, "automod");
+    banGlobal.registrar(ctx, userId, `${motivo} (${count} avisos)`, "automod",
+      { nome: message?.author?.username ?? null, membro: message?.member ?? message?.author ?? null });
   } catch (e) {
     console.error("[PUNIÇÃO][BAN]", e.message);
     acao = lang === "en" ? `failed to ban (${e.message})` : `falha ao banir (${e.message})`;

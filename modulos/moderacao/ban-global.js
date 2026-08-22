@@ -33,7 +33,7 @@
 
 import * as db  from "../core/db.js";
 import * as log from "../core/log.js";
-import { resolverUsuario as resolverUser } from "../core/ids.js";
+import { resolverUsuario as resolverUser, resolverUsuarioDetalhado, ehBot } from "../core/ids.js";
 import { tr, lingua } from "../core/i18n.js";
 import { enviarPaginado, paginarLinhas } from "../core/paginas.js";
 
@@ -63,6 +63,90 @@ const data = (ms) => new Date(ms).toISOString().slice(0, 10);
 //  MUNDO, impondo a decisão deste servidor aos demais. A isenção resolve
 //  no lugar certo: vale só aqui, e não mexe na lista dos outros.
 // ──────────────────────────────────────────────────────────
+// ──────────────────────────────────────────────────────────
+//  Bots não entram na lista
+//
+//  Um bot não escolhe entrar em lugar nenhum: alguém o adiciona. Se ele foi
+//  banido num servidor, isso diz respeito a quem o adicionou lá — não é
+//  histórico de comportamento que faça sentido carregar para os outros. Pior:
+//  bots populares são banidos em algum servidor mais cedo ou mais tarde, então
+//  a lista se encheria justamente dos mais usados, e o modo `banir` passaria a
+//  derrubar integrações que o dono do servidor acabou de adicionar de propósito.
+// ──────────────────────────────────────────────────────────
+export function ehBotConhecido(userId, { client, membro = null } = {}) {
+  if (membro && ehBot(membro)) return true;
+  try {
+    const u = client?.users?.get?.(userId);
+    if (u && ehBot(u)) return true;
+  } catch {}
+  return false;
+}
+
+// Resolve o alvo de um subcomando e devolve um embed pronto quando falha.
+// Todos os subcomandos usavam caminhos diferentes para isso — e o `esquecer`
+// não usava nenhum: pegava o texto cru, então `esquecer AutoMod` virava
+// literalmente o "id" `AutoMod` e respondia que não constava na lista.
+async function alvoDoComando(entrada, { message, server, ctx }) {
+  const extras = (() => {
+    try { return db.buscarBanidosPorNome(entrada ?? "").map((b) => ({ id: b.userId, username: b.nome })); }
+    catch { return []; }
+  })();
+  const r = await resolverUsuarioDetalhado(entrada, { message, server, client: ctx.client, extras });
+  if (r?.id) return { id: r.id, nome: r.nome ?? db.nomeDeBanido(r.id) };
+  return { erro: r };
+}
+
+function embedAlvoNaoResolvido(ctx, r, entrada, uso) {
+  const { COR, PREFIXO } = ctx;
+  if (r?.ambiguo) {
+    const lista = r.candidatos.map((c) => `• **${c.nome}** — \`${c.id}\``).join("\n");
+    return tr(ctx, {
+      title: "🤔 Mais de uma pessoa com esse nome",
+      description: `Encontrei ${r.candidatos.length} para \`${entrada}\`:\n\n${lista}\n\nRepita usando o **ID** de quem você quer — assim não corro o risco de agir sobre a pessoa errada.`,
+      colour: COR.aviso,
+    }, {
+      title: "🤔 More than one person with that name",
+      description: `I found ${r.candidatos.length} for \`${entrada}\`:\n\n${lista}\n\nRun it again with the **ID** of the one you mean — that way I can't act on the wrong person.`,
+      colour: COR.aviso,
+    });
+  }
+  return tr(ctx, {
+    title: "❌ Não achei essa pessoa",
+    description: [
+      `\`${uso}\``,
+      "",
+      entrada ? `Procurei por **${entrada}** entre os membros, os banidos e a própria lista global.` : "",
+      "Aceito **menção**, **ID**, **link do perfil**, o **nome** ou `Nome#0000`.",
+      "",
+      `_Se a pessoa não está em nenhum servidor em comum, só o **ID** funciona — ele aparece em \`${PREFIXO}banglobal lista\`._`,
+    ].filter(Boolean).join("\n"), colour: COR.erro,
+  }, {
+    title: "❌ Couldn't find that person",
+    description: [
+      `\`${uso}\``,
+      "",
+      entrada ? `I looked for **${entrada}** among the members, the banned users and the global list itself.` : "",
+      "I accept a **mention**, an **ID**, a **profile link**, the **name** or `Name#0000`.",
+      "",
+      `_If they're not in any shared server, only the **ID** works — it shows in \`${PREFIXO}banglobal lista\`._`,
+    ].filter(Boolean).join("\n"), colour: COR.erro,
+  });
+}
+
+// Como mostrar alguém numa listagem.
+//
+// `<@ID>` parece a escolha óbvia, mas o cliente só resolve a menção se tiver
+// o usuário em cache — e numa lista de BANIDOS quase ninguém está. O
+// resultado era uma parede de "Unknown User", que não identifica nem ajuda a
+// agir. Nome guardado no banco vem primeiro; depois o cache; e o ID sempre
+// aparece, porque é ele que os outros comandos aceitam.
+export function rotularUsuario(userId, { nome = null, client = null } = {}) {
+  const conhecido = nome
+    ?? (() => { try { return db.nomeDeBanido(userId); } catch { return null; } })()
+    ?? (() => { try { return client?.users?.get?.(userId)?.username ?? null; } catch { return null; } })();
+  return conhecido ? `**${conhecido}** \`${userId}\`` : `\`${userId}\` _(nome desconhecido)_`;
+}
+
 export function estaIsento(config, userId) {
   return (config?.banGlobal?.isentos ?? []).includes(userId);
 }
@@ -100,13 +184,22 @@ async function desbanir(server, serverId, userId) {
 // ──────────────────────────────────────────────────────────
 export async function importarBansDoServidor(server, serverId) {
   const bans = await server.fetchBans();
-  let novos = 0;
-  for (const b of bans ?? []) {
-    const uid = b?.id?.user ?? b?.user?.id;
+  const lista = bans?.bans ?? bans ?? [];
+  // O fetchBans devolve os usuários num campo separado em algumas versões da
+  // API; juntamos os dois para ter nome e flag de bot sempre que possível.
+  const porId = new Map();
+  for (const u of bans?.users ?? []) porId.set(u?.id ?? u?._id, u);
+
+  let novos = 0, bots = 0;
+  for (const b of lista) {
+    const uid = b?.id?.user ?? b?.user?.id ?? b?.id;
     if (!uid) continue;
-    if (db.registrarBanGlobal(uid, serverId, b?.reason ?? "importado do servidor", "importado")) novos++;
+    const u = b?.user ?? porId.get(uid) ?? null;
+    if (ehBot(b) || ehBot(u)) { bots++; continue; }   // bot não entra na lista
+    const nome = u?.username ?? b?.username ?? null;
+    if (db.registrarBanGlobal(uid, serverId, b?.reason ?? "importado do servidor", "importado", { nome })) novos++;
   }
-  return { total: bans?.length ?? 0, novos };
+  return { total: lista.length, novos, bots };
 }
 
 // ──────────────────────────────────────────────────────────
@@ -189,11 +282,18 @@ export function iniciarAutoImportacao(client, criarContexto) {
 // ──────────────────────────────────────────────────────────
 //  Registro: chamado sempre que um ban acontece
 // ──────────────────────────────────────────────────────────
-export function registrar(ctx, userId, motivo, origem = "manual") {
+export function registrar(ctx, userId, motivo, origem = "manual", { nome = null, membro = null } = {}) {
   const serverId = ctx?.serverId;
   if (!serverId || !userId) return;
+  if (ehBotConhecido(userId, { client: ctx?.client, membro })) {
+    console.log(`[BANGLOBAL] ${userId} é bot — não entra na lista global`);
+    return;
+  }
   try {
-    db.registrarBanGlobal(userId, serverId, motivo, origem);
+    const nomeFinal = nome
+      ?? ctx?.client?.users?.get?.(userId)?.username
+      ?? null;
+    db.registrarBanGlobal(userId, serverId, motivo, origem, { nome: nomeFinal });
   } catch (err) {
     console.error("[BANGLOBAL] Falha ao registrar:", err?.message);
   }
@@ -211,6 +311,11 @@ export async function verificarEntrada(member, ctx) {
   const modo = ctx.config?.banGlobal?.modo ?? "off";
   if (modo === "off") return false;
 
+  // Bot: não escolheu entrar, alguém o adicionou. A lista não vale para ele.
+  if (ehBot(member) || ehBot(member?.user) || ehBotConhecido(userId, { client: ctx.client })) {
+    return false;
+  }
+
   // Isento: este servidor já decidiu que aceita esta pessoa.
   if (estaIsento(ctx.config, userId)) {
     console.log(`[BANGLOBAL] ${userId} entrou em ${serverId} e está ISENTO — nada a fazer`);
@@ -225,7 +330,8 @@ export async function verificarEntrada(member, ctx) {
   const motivos = historico.slice(0, 3)
     .map((b) => `• \`${b.serverId}\` — ${b.motivo ?? "_sem motivo_"} _(${data(b.criadoEm)})_`)
     .join("\n");
-  const resumo = `<@${userId}> consta na lista global: banido em **${n}** servidor(es).\n${motivos}`
+  const quemEntrou = member?.user?.username ?? member?.nickname ?? null;
+  const resumo = `${rotularUsuario(userId, { nome: quemEntrou, client: ctx.client })} consta na lista global: banido em **${n}** servidor(es).\n${motivos}`
     + (n > 3 ? `\n_… e mais ${n - 3}._` : "");
 
   // ── modo avisar: só alerta, não age ──
@@ -243,7 +349,8 @@ export async function verificarEntrada(member, ctx) {
     try {
       const server = member.server ?? await ctx.client.servers.fetch(serverId);
       await server.banUser(userId, { reason: `[Ban global] banido em ${n} outro(s) servidor(es)` });
-      db.registrarBanGlobal(userId, serverId, `ban global (${n} servidores)`, "banglobal");
+      db.registrarBanGlobal(userId, serverId, `ban global (${n} servidores)`, "banglobal",
+        { nome: member?.user?.username ?? member?.nickname ?? null });
       await log.registrar(ctx, "punicoes", {
         titulo: "🔨 Ban automático (lista global)",
         descricao: `${resumo}\n\n_Modo **banir**: usuário banido automaticamente._`,
@@ -292,9 +399,10 @@ export async function varrer(ctx, message, { aplicar = true } = {}) {
   for (const m of membros) {
     const uid = m?.id?.user ?? m?.user?.id ?? m?.id;
     if (!uid) continue;
+    if (ehBot(m) || ehBot(m?.user)) continue;   // bots não são varridos
     const hist = db.historicoBans(uid).filter((b) => b.serverId !== serverId);
     if (!hist.length) continue;
-    const nome = m?.user?.username ?? m?.nickname ?? uid;
+    const nome = m?.user?.username ?? m?.nickname ?? db.nomeDeBanido(uid) ?? uid;
     if (estaIsento(ctx.config, uid)) { isentos.push({ uid, nome, n: hist.length }); continue; }
     achados.push({ uid, nome, n: hist.length, membro: m });
   }
@@ -305,7 +413,7 @@ export async function varrer(ctx, message, { aplicar = true } = {}) {
   for (const a of achados) {
     try {
       await server.banUser(a.uid, { reason: `[Ban global] banido em ${a.n} outro(s) servidor(es)` });
-      db.registrarBanGlobal(a.uid, serverId, `ban global (${a.n} servidores, varredura)`, "banglobal");
+      db.registrarBanGlobal(a.uid, serverId, `ban global (${a.n} servidores, varredura)`, "banglobal", { nome: a.nome });
       aplicados.push({ ...a, ok: true });
       console.log(`[BANGLOBAL] 🔨 ${a.uid} banido na varredura de ${serverId}`);
     } catch (e) {
@@ -316,7 +424,7 @@ export async function varrer(ctx, message, { aplicar = true } = {}) {
   if (aplicados.length) {
     await log.registrar(ctx, "punicoes", {
       titulo: "🔨 Varredura da lista global",
-      descricao: aplicados.map((a) => `${a.ok ? "🔨" : "❌"} <@${a.uid}> (${a.nome}) — ${a.n} servidor(es)${a.ok ? "" : ` — erro: ${a.erro}`}`).join("\n").slice(0, 1800),
+      descricao: aplicados.map((a) => `${a.ok ? "🔨" : "❌"} ${a.nome} \`${a.uid}\` — ${a.n} servidor(es)${a.ok ? "" : ` — erro: ${a.erro}`}`).join("\n").slice(0, 1800),
     });
   }
   return { total: membros.length, achados, isentos, aplicados, modo };
@@ -435,57 +543,45 @@ export async function cmdBanGlobal(message, args, ctx) {
   }
 
   // ── &banglobal historico <usuário> ──
-  if (sub === "historico" || sub === "histórico") {
-    const server = await ctx.getServer?.(message);
-    const uid = await resolverUser(args[1], { message, server });
-    if (!uid) return sendEmbed(message.channel, tr(ctx, {
-      title: "❌ Não achei esse usuário",
-      description: [
-        `\`${PREFIXO}banglobal historico <@usuário|id|nome>\``,
-        "",
-        args[1] ? `Procurei por **${args[1]}** entre os membros e não encontrei.` : "",
-        "Aceito uma **menção**, o **ID** ou o **nome** de alguém que esteja no servidor.",
-        "_Se a pessoa já saiu, só o ID funciona._",
-      ].filter(Boolean).join("\n"), colour: COR.erro,
-    }, {
-      title: "❌ Couldn't find that user",
-      description: [
-        `\`${PREFIXO}banglobal historico <@user|id|name>\``,
-        "",
-        args[1] ? `I looked for **${args[1]}** among the members and found nobody.` : "",
-        "I accept a **mention**, the **ID** or the **name** of someone in the server.",
-        "_If the person already left, only the ID works._",
-      ].filter(Boolean).join("\n"), colour: COR.erro,
-    }));
+  if (["historico", "histórico", "history", "ver", "porque"].includes(sub)) {
+    const alvo = await alvoDoComando(args.slice(1).join(" "), { message, server, ctx });
+    if (alvo.erro) return sendEmbed(message.channel,
+      embedAlvoNaoResolvido(ctx, alvo.erro, args.slice(1).join(" "), `${PREFIXO}banglobal historico <@pessoa|id|nome>`));
+    const uid = alvo.id;
+    const nome = rotularUsuario(uid, { nome: alvo.nome, client: ctx.client });
 
     const hist = db.historicoBans(uid);
     if (!hist.length) return sendEmbed(message.channel, tr(ctx,
       { title: "🌐 Histórico global",
-        description: `<@${uid}> **não consta** na lista global de banimentos.`, colour: COR.sucesso },
+        description: `${nome} **não consta** na lista global de banimentos.`, colour: COR.sucesso },
       { title: "🌐 Global history",
-        description: `<@${uid}> is **not** on the global ban list.`, colour: COR.sucesso }));
+        description: `${nome} is **not** on the global ban list.`, colour: COR.sucesso }));
 
-    return sendEmbed(message.channel, lang === "en" ? {
-      title: "🌐 Global history",
-      description: [
-        `<@${uid}> — banned on **${hist.length}** server(s):`,
-        "",
-        ...hist.slice(0, 10).map((b) =>
-          `• \`${b.serverId}\` — ${b.motivo ?? "_no reason_"} _(${data(b.criadoEm)}, ${b.origem})_`),
-        hist.length > 10 ? `\n_… and ${hist.length - 10} more._` : "",
-      ].filter(Boolean).join("\n"),
-      colour: COR.aviso,
-    } : {
+    return sendEmbed(message.channel, tr(ctx, {
       title: "🌐 Histórico global",
       description: [
-        `<@${uid}> — banido em **${hist.length}** servidor(es):`,
+        `${nome} — banido em **${hist.length}** servidor(es):`,
         "",
         ...hist.slice(0, 10).map((b) =>
           `• \`${b.serverId}\` — ${b.motivo ?? "_sem motivo_"} _(${data(b.criadoEm)}, ${b.origem})_`),
         hist.length > 10 ? `\n_… e mais ${hist.length - 10}._` : "",
+        "",
+        `_Aceita aqui mesmo assim: \`${PREFIXO}banglobal isentar ${uid}\`_`,
       ].filter(Boolean).join("\n"),
       colour: COR.aviso,
-    });
+    }, {
+      title: "🌐 Global history",
+      description: [
+        `${nome} — banned on **${hist.length}** server(s):`,
+        "",
+        ...hist.slice(0, 10).map((b) =>
+          `• \`${b.serverId}\` — ${b.motivo ?? "_no reason_"} _(${data(b.criadoEm)}, ${b.origem})_`),
+        hist.length > 10 ? `\n_… and ${hist.length - 10} more._` : "",
+        "",
+        `_Accept them here anyway: \`${PREFIXO}banglobal isentar ${uid}\`_`,
+      ].filter(Boolean).join("\n"),
+      colour: COR.aviso,
+    }));
   }
 
   // ── revisar: SÓ OLHA. Nunca age. ──
@@ -515,12 +611,12 @@ export async function cmdBanGlobal(message, args, ctx) {
     const linhas = [
       tr(ctx, `De **${r.total}** membro(s) do servidor:`, `Out of **${r.total}** server member(s):`), "",
       ...r.achados.map((a) => tr(ctx,
-        `• <@${a.uid}> (**${a.nome}**) — banido em ${a.n} servidor(es)`,
-        `• <@${a.uid}> (**${a.nome}**) — banned on ${a.n} server(s)`)),
+        `• **${a.nome}** \`${a.uid}\` — banido em ${a.n} servidor(es)`,
+        `• **${a.nome}** \`${a.uid}\` — banned on ${a.n} server(s)`)),
     ];
     if (r.isentos.length) {
       linhas.push("", tr(ctx, `**Isentos** _(este servidor já decidiu aceitar)_`, `**Exempt** _(this server already chose to accept them)_`),
-        ...r.isentos.map((a) => `• <@${a.uid}> (**${a.nome}**) — ${a.n}`));
+        ...r.isentos.map((a) => `• **${a.nome}** \`${a.uid}\` — ${a.n}`));
     }
     linhas.push("", tr(ctx,
       `_Revisão: **nada foi feito**._\n\`${PREFIXO}banglobal isentar <@pessoa>\` — aceitar alguém apesar da lista\n\`${PREFIXO}banglobal historico <@pessoa>\` — ver por que ela está lá\n\`${PREFIXO}banglobal varrer\` — se você realmente quiser **banir** os de cima`,
@@ -579,7 +675,7 @@ export async function cmdBanGlobal(message, args, ctx) {
     }
 
     const lista = previa.achados.slice(0, 15)
-      .map((a) => tr(ctx, `• <@${a.uid}> (**${a.nome}**) — ${a.n} servidor(es)`, `• <@${a.uid}> (**${a.nome}**) — ${a.n} server(s)`)).join("\n");
+      .map((a) => tr(ctx, `• **${a.nome}** \`${a.uid}\` — ${a.n} servidor(es)`, `• **${a.nome}** \`${a.uid}\` — ${a.n} server(s)`)).join("\n");
     const extra = previa.achados.length > 15
       ? tr(ctx, `\n_… e mais ${previa.achados.length - 15}._`, `\n_… and ${previa.achados.length - 15} more._`) : "";
 
@@ -651,7 +747,8 @@ export async function cmdBanGlobal(message, args, ctx) {
         { title: "✅ Nothing to undo", description: "There's no ban applied by the global list on this server.", colour: COR.sucesso }));
     }
 
-    const lista = aplicados.slice(0, 20).map((b) => `• <@${b.userId}> _(${data(b.criadoEm)})_`).join("\n");
+    const lista = aplicados.slice(0, 20)
+      .map((b) => `• ${rotularUsuario(b.userId, { nome: b.userNome, client: ctx.client })} _(${data(b.criadoEm)})_`).join("\n");
     if (!confirmou) {
       return sendEmbed(message.channel, tr(ctx, {
         title: `↩️ Desfazer ${aplicados.length} ban(s) da lista global?`,
@@ -698,8 +795,8 @@ export async function cmdBanGlobal(message, args, ctx) {
     return sendEmbed(message.channel, tr(ctx, {
       title: `↩️ ${feitos.length} ban(s) desfeito(s)`,
       description: [
-        feitos.length ? feitos.map((u) => `✅ <@${u}> — desbanido e isento aqui`).join("\n") : "",
-        falhou.length ? `\n**Não consegui (${falhou.length}):**\n` + falhou.slice(0, 5).map((f) => `❌ <@${f.uid}> — ${f.erro}`).join("\n") : "",
+        feitos.length ? feitos.map((u) => `✅ ${rotularUsuario(u, { client: ctx.client })} — desbanido e isento aqui`).join("\n") : "",
+        falhou.length ? `\n**Não consegui (${falhou.length}):**\n` + falhou.slice(0, 5).map((f) => `❌ ${rotularUsuario(f.uid, { client: ctx.client })} — ${f.erro}`).join("\n") : "",
         "",
         "As pessoas precisam de um **convite novo** para voltar: o desban só remove o impedimento.",
         `_Ver quem está isento: \`${PREFIXO}banglobal isentos\`._`,
@@ -708,8 +805,8 @@ export async function cmdBanGlobal(message, args, ctx) {
     }, {
       title: `↩️ ${feitos.length} ban(s) undone`,
       description: [
-        feitos.length ? feitos.map((u) => `✅ <@${u}> — unbanned and exempt here`).join("\n") : "",
-        falhou.length ? `\n**Couldn't do (${falhou.length}):**\n` + falhou.slice(0, 5).map((f) => `❌ <@${f.uid}> — ${f.erro}`).join("\n") : "",
+        feitos.length ? feitos.map((u) => `✅ ${rotularUsuario(u, { client: ctx.client })} — unbanned and exempt here`).join("\n") : "",
+        falhou.length ? `\n**Couldn't do (${falhou.length}):**\n` + falhou.slice(0, 5).map((f) => `❌ ${rotularUsuario(f.uid, { client: ctx.client })} — ${f.erro}`).join("\n") : "",
         "",
         "They need a **fresh invite** to come back: unbanning only removes the block.",
         `_See who's exempt: \`${PREFIXO}banglobal isentos\`._`,
@@ -730,7 +827,7 @@ export async function cmdBanGlobal(message, args, ctx) {
         title: `🛡️ Isentos da lista global — ${ids.length}`,
         description: [
           ids.length
-            ? ids.map((u) => `• <@${u}> _(${db.contarBansGlobais(u)} servidor(es) na lista)_`).join("\n")
+            ? ids.map((u) => `• ${rotularUsuario(u, { client: ctx.client })} _(${db.contarBansGlobais(u)} servidor(es) na lista)_`).join("\n")
             : "_Ninguém._",
           "",
           "Quem está aqui **entra e fica**, mesmo constando na lista global. A lista dos outros servidores não é apagada — só deixa de valer aqui.",
@@ -742,7 +839,7 @@ export async function cmdBanGlobal(message, args, ctx) {
         title: `🛡️ Exempt from the global list — ${ids.length}`,
         description: [
           ids.length
-            ? ids.map((u) => `• <@${u}> _(${db.contarBansGlobais(u)} server(s) on the list)_`).join("\n")
+            ? ids.map((u) => `• ${rotularUsuario(u, { client: ctx.client })} _(${db.contarBansGlobais(u)} server(s) on the list)_`).join("\n")
             : "_Nobody._",
           "",
           "People here **join and stay**, even if they're on the global list. Other servers' records aren't deleted — they just stop applying here.",
@@ -754,23 +851,22 @@ export async function cmdBanGlobal(message, args, ctx) {
     }
 
     const removendo = ["remover", "remove", "tirar", "off"].includes(acao);
-    const alvo = removendo ? args[2] : args[1];
-    const uid = await resolverUser(alvo, { message, server }) ?? (alvo ?? "").replace(/[<@>]/g, "");
-    if (!uid) return sendEmbed(message.channel, tr(ctx,
-      { title: "❌ Não achei essa pessoa",
-        description: `\`${PREFIXO}banglobal isentar <@pessoa|id>\`\n\n_Se ela já foi banida e não está no servidor, use o **ID**._`, colour: COR.erro },
-      { title: "❌ Couldn't find that person",
-        description: `\`${PREFIXO}banglobal isentar <@user|id>\`\n\n_If they're already banned and not in the server, use the **ID**._`, colour: COR.erro }));
+    const entrada = removendo ? args.slice(2).join(" ") : args.slice(1).join(" ");
+    const alvo = await alvoDoComando(entrada, { message, server, ctx });
+    if (alvo.erro) return sendEmbed(message.channel,
+      embedAlvoNaoResolvido(ctx, alvo.erro, entrada, `${PREFIXO}banglobal isentar <@pessoa|id|nome>`));
+    const uid = alvo.id;
 
     if (removendo) {
       const antes = config.banGlobal.isentos.length;
       config.banGlobal.isentos = config.banGlobal.isentos.filter((u) => u !== uid);
       salvarConfig();
+      const rot = rotularUsuario(uid, { nome: alvo.nome, client: ctx.client });
       return sendEmbed(message.channel, tr(ctx,
         { title: antes === config.banGlobal.isentos.length ? "🤷 Não estava isento" : "🛡️ Isenção removida",
-          description: `<@${uid}> volta a ser tratado pela lista global neste servidor.`, colour: COR.mod },
+          description: `${rot} volta a ser tratado pela lista global neste servidor.`, colour: COR.mod },
         { title: antes === config.banGlobal.isentos.length ? "🤷 Wasn't exempt" : "🛡️ Exemption removed",
-          description: `<@${uid}> is subject to the global list again on this server.`, colour: COR.mod }));
+          description: `${rot} is subject to the global list again on this server.`, colour: COR.mod }));
     }
 
     if (!config.banGlobal.isentos.includes(uid)) config.banGlobal.isentos.push(uid);
@@ -792,7 +888,7 @@ export async function cmdBanGlobal(message, args, ctx) {
     return sendEmbed(message.channel, tr(ctx, {
       title: "🛡️ Isento aqui",
       description: [
-        `<@${uid}> é aceito neste servidor, mesmo constando na lista global${n ? ` (**${n}** servidor(es))` : ""}.`,
+        `${rotularUsuario(uid, { nome: alvo.nome, client: ctx.client })} é aceito neste servidor, mesmo constando na lista global${n ? ` (**${n}** servidor(es))` : ""}.`,
         desbanida ? "\n✅ O ban que a lista tinha aplicado aqui foi **desfeito** — mande um convite novo para a pessoa voltar." : "",
         erroDesban ? `\n⚠️ Não consegui desfazer o ban: \`${erroDesban}\`` : "",
         "",
@@ -801,7 +897,7 @@ export async function cmdBanGlobal(message, args, ctx) {
     }, {
       title: "🛡️ Exempt here",
       description: [
-        `<@${uid}> is accepted on this server, even though they're on the global list${n ? ` (**${n}** server(s))` : ""}.`,
+        `${rotularUsuario(uid, { nome: alvo.nome, client: ctx.client })} is accepted on this server, even though they're on the global list${n ? ` (**${n}** server(s))` : ""}.`,
         desbanida ? "\n✅ The ban the list had applied here was **undone** — send them a fresh invite to come back." : "",
         erroDesban ? `\n⚠️ Couldn't undo the ban: \`${erroDesban}\`` : "",
         "",
@@ -827,10 +923,11 @@ export async function cmdBanGlobal(message, args, ctx) {
       "",
       ...linhas0.map((b) => {
         const marca = isentos.includes(b.userId) ? "🛡️ " : "";
+        const quem = rotularUsuario(b.userId, { nome: b.nome, client: ctx.client });
         const motivo = (b.motivo ?? "").slice(0, 60);
         return soDaqui
-          ? `${marca}<@${b.userId}> — ${motivo || tr(ctx, "_sem motivo_", "_no reason_")} _(${data(b.ultimo)}, ${b.origem})_`
-          : `${marca}<@${b.userId}> — ${b.servidores} ${tr(ctx, "servidor(es)", "server(s)")} _(${data(b.ultimo)})_`;
+          ? `${marca}${quem} — ${motivo || tr(ctx, "_sem motivo_", "_no reason_")} _(${data(b.ultimo)})_`
+          : `${marca}${quem} — ${b.servidores} ${tr(ctx, "servidor(es)", "server(s)")} _(${data(b.ultimo)})_`;
       }),
       "",
       tr(ctx,
@@ -897,32 +994,85 @@ export async function cmdBanGlobal(message, args, ctx) {
   }
 
   // ── &banglobal esquecer <usuário> ──
-  if (sub === "esquecer") {
-    const uid = (args[1] ?? "").replace(/[<@>]/g, "") || message.mentionIds?.[0];
-    if (!uid) return sendEmbed(message.channel, tr(ctx,
-      { title: "❌ Uso incorreto",
-        description: `\`${PREFIXO}banglobal esquecer <@usuário|id>\``, colour: COR.erro },
-      { title: "❌ Wrong usage",
-        description: `\`${PREFIXO}banglobal esquecer <@user|id>\``, colour: COR.erro }));
+  if (["esquecer", "forget", "remover", "apagar"].includes(sub)) {
+    // Antes esta linha era `(args[1] ?? "").replace(/[<@>]/g, "")`: o texto
+    // cru virava "id". Digitar `esquecer AutoMod` respondia "AutoMod não
+    // constava na lista" — verdade literal e inútil, porque a pessoa
+    // existia, só não tinha sido procurada.
+    const entrada = args.slice(1).join(" ");
+    const alvo = await alvoDoComando(entrada, { message, server, ctx });
+    if (alvo.erro) return sendEmbed(message.channel,
+      embedAlvoNaoResolvido(ctx, alvo.erro, entrada, `${PREFIXO}banglobal esquecer <@pessoa|id|nome>`));
+    const uid = alvo.id;
+    const nome = rotularUsuario(uid, { nome: alvo.nome, client: ctx.client });
 
     const n = db.esquecerUsuario(uid);
+    if (n) {
+      await log.registrar(ctx, "punicoes", {
+        titulo: "🌐 Usuário removido da lista global",
+        descricao: `<@${message.authorId}> removeu ${alvo.nome ?? uid} da lista global (**${n}** registro(s)).`,
+      });
+    }
+    return sendEmbed(message.channel, tr(ctx, {
+      title: n ? "🌐 Removido da lista global" : "🤷 Não constava na lista",
+      description: n
+        ? `${nome} saiu da lista: **${n}** registro(s) apagado(s) — em **todos** os servidores.`
+        : `${nome} não estava na lista global. Nada a fazer.`,
+      colour: n ? COR.sucesso : COR.info,
+    }, {
+      title: n ? "🌐 Removed from the global list" : "🤷 Wasn't on the list",
+      description: n
+        ? `${nome} was removed: **${n}** record(s) deleted — across **every** server.`
+        : `${nome} wasn't on the global list. Nothing to do.`,
+      colour: n ? COR.sucesso : COR.info,
+    }));
+  }
+
+  // ── &banglobal bots: tira da lista quem é bot ──
+  //
+  // A regra de não registrar bots vale daqui para a frente; o que já entrou
+  // antes continua lá, e é justamente o que enche a lista de nomes conhecidos.
+  // Este comando faz a limpeza retroativa.
+  if (["bots", "limparbots", "podar"].includes(sub)) {
+    const ids = db.idsBanidosGlobais();
+    const achados = [];
+    for (const uid of ids) {
+      let u = null;
+      try { u = ctx.client?.users?.get?.(uid) ?? await ctx.client?.users?.fetch?.(uid).catch(() => null); } catch {}
+      if (u && ehBot(u)) achados.push({ id: uid, nome: u.username ?? uid });
+    }
+    if (!achados.length) {
+      return sendEmbed(message.channel, tr(ctx,
+        { title: "✅ Nenhum bot na lista", description: `Conferi **${ids.length}** registro(s) e não achei bots.`, colour: COR.sucesso },
+        { title: "✅ No bots on the list", description: `I checked **${ids.length}** record(s) and found no bots.`, colour: COR.sucesso }));
+    }
+    const confirmou = ["confirmar", "confirm", "sim", "yes"].includes((args[1] ?? "").toLowerCase());
+    const lista = achados.slice(0, 20).map((a) => `• **${a.nome}** — \`${a.id}\``).join("\n");
+    if (!confirmou) {
+      return sendEmbed(message.channel, tr(ctx, {
+        title: `🤖 ${achados.length} bot(s) na lista global`,
+        description: [lista, achados.length > 20 ? `\n_… e mais ${achados.length - 20}._` : "", "",
+          "Bots não escolhem entrar em servidor nenhum — alguém os adiciona. Manter isso na lista faria o modo `banir` derrubar integrações que o dono acabou de instalar.",
+          "", `Remover todos: \`${PREFIXO}banglobal bots confirmar\``].filter(Boolean).join("\n").slice(0, 1900),
+        colour: COR.aviso,
+      }, {
+        title: `🤖 ${achados.length} bot(s) on the global list`,
+        description: [lista, achados.length > 20 ? `\n_… and ${achados.length - 20} more._` : "", "",
+          "Bots don't choose to join anywhere — someone adds them. Keeping them listed would make `banir` mode knock out integrations the owner just installed.",
+          "", `Remove them all: \`${PREFIXO}banglobal bots confirmar\``].filter(Boolean).join("\n").slice(0, 1900),
+        colour: COR.aviso,
+      }));
+    }
+    const n = db.removerBotsDaLista(achados.map((a) => a.id));
     await log.registrar(ctx, "punicoes", {
-      titulo: "🌐 Usuário removido da lista global",
-      descricao: `<@${message.authorId}> removeu <@${uid}> da lista global (**${n}** registro(s)).`,
+      titulo: "🤖 Bots removidos da lista global",
+      descricao: `<@${message.authorId}> removeu **${achados.length}** bot(s) (**${n}** registro(s)).`,
     });
-    return sendEmbed(message.channel, lang === "en" ? {
-      title: "🌐 Removed from the global list",
-      description: n
-        ? `<@${uid}> was removed: **${n}** record(s) deleted.`
-        : `<@${uid}> wasn't on the list.`,
-      colour: COR.sucesso,
-    } : {
-      title: "🌐 Removido da lista global",
-      description: n
-        ? `<@${uid}> foi removido: **${n}** registro(s) apagado(s).`
-        : `<@${uid}> não constava na lista.`,
-      colour: COR.sucesso,
-    });
+    return sendEmbed(message.channel, tr(ctx,
+      { title: `🤖 ${achados.length} bot(s) removido(s)`,
+        description: `**${n}** registro(s) apagado(s). Bots novos não entram mais na lista.`, colour: COR.sucesso },
+      { title: `🤖 ${achados.length} bot(s) removed`,
+        description: `**${n}** record(s) deleted. New bots no longer enter the list.`, colour: COR.sucesso }));
   }
 
   return sendEmbed(message.channel, tr(ctx, {

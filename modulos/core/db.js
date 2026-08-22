@@ -85,6 +85,25 @@ export function abrirBanco(caminho) {
   `);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_bans_user ON bans_globais (userId)`);
 
+  // O nome de quem foi banido, guardado NO MOMENTO do ban.
+  //
+  // Antes a lista só tinha o ID, e a exibição virava `<@ID>` — que o cliente
+  // renderiza como "Unknown User" quando a pessoa não está mais em nenhum
+  // servidor em comum. Ou seja: exatamente nos casos que mais importam (gente
+  // banida, que saiu), a lista ficava ilegível. Quem registra o ban sabe o
+  // nome; guardá-lo ali é a única hora em que ele está garantidamente à mão.
+  try {
+    const cols = prep("PRAGMA table_info(bans_globais)").all().map((c) => c.name);
+    if (!cols.includes("userNome")) {
+      db.exec("ALTER TABLE bans_globais ADD COLUMN userNome TEXT");
+      console.info("[DB] bans_globais: coluna userNome adicionada");
+    }
+    if (!cols.includes("ehBot")) {
+      db.exec("ALTER TABLE bans_globais ADD COLUMN ehBot INTEGER NOT NULL DEFAULT 0");
+      console.info("[DB] bans_globais: coluna ehBot adicionada");
+    }
+  } catch (e) { console.error("[DB] migração bans_globais:", e.message); }
+
   // (Reaction roles) emoji numa mensagem → cargo
   db.exec(`
     CREATE TABLE IF NOT EXISTS reaction_roles (
@@ -529,26 +548,68 @@ export function silenciosVencidos(agora = Date.now()) {
 // aparecer várias vezes (banido em vários servidores).
 // `origem`: "automod" | "manual" | "importado"
 
-export function registrarBanGlobal(userId, serverId, motivo, origem = "manual") {
+export function registrarBanGlobal(userId, serverId, motivo, origem = "manual", { nome = null, ehBot = false } = {}) {
   // evita duplicar o mesmo (usuário, servidor)
   const existe = prep(
-    "SELECT id FROM bans_globais WHERE userId = ? AND serverId = ?"
+    "SELECT id, userNome FROM bans_globais WHERE userId = ? AND serverId = ?"
   ).get(userId, serverId);
   if (existe) {
-    prep("UPDATE bans_globais SET motivo = ?, origem = ?, criadoEm = ? WHERE id = ?")
-      .run(motivo ?? null, origem, Date.now(), existe.id);
+    // Não apaga um nome que já temos por causa de uma sincronização que veio
+    // sem ele: a lista fica legível para sempre depois da primeira vez.
+    prep("UPDATE bans_globais SET motivo = ?, origem = ?, criadoEm = ?, userNome = ?, ehBot = ? WHERE id = ?")
+      .run(motivo ?? null, origem, Date.now(), nome ?? existe.userNome ?? null, ehBot ? 1 : 0, existe.id);
     return false;  // já constava
   }
   prep(
-    "INSERT INTO bans_globais (userId, serverId, motivo, origem, criadoEm) VALUES (?, ?, ?, ?, ?)"
-  ).run(userId, serverId, motivo ?? null, origem, Date.now());
+    "INSERT INTO bans_globais (userId, serverId, motivo, origem, criadoEm, userNome, ehBot) VALUES (?, ?, ?, ?, ?, ?, ?)"
+  ).run(userId, serverId, motivo ?? null, origem, Date.now(), nome ?? null, ehBot ? 1 : 0);
   return true;     // novo registro
+}
+
+// O nome conhecido de alguém na lista (o mais recente que registramos).
+export function nomeDeBanido(userId) {
+  return prep(
+    "SELECT userNome FROM bans_globais WHERE userId = ? AND userNome IS NOT NULL ORDER BY criadoEm DESC LIMIT 1"
+  ).get(userId)?.userNome ?? null;
+}
+
+// Preenche o nome de um registro que entrou sem ele (descoberto depois).
+export function anotarNomeBanido(userId, nome, ehBot = null) {
+  if (!userId || !nome) return 0;
+  const r = ehBot === null
+    ? prep("UPDATE bans_globais SET userNome = ? WHERE userId = ? AND (userNome IS NULL OR userNome = '')").run(nome, userId)
+    : prep("UPDATE bans_globais SET userNome = ?, ehBot = ? WHERE userId = ?").run(nome, ehBot ? 1 : 0, userId);
+  return r.changes ?? 0;
+}
+
+// Todos os IDs da lista, para varreduras de manutenção.
+export function idsBanidosGlobais() {
+  return prep("SELECT DISTINCT userId FROM bans_globais").all().map((r) => r.userId);
+}
+
+// Marca alguém como bot e devolve quantos registros saíram.
+export function removerBotsDaLista(ids = []) {
+  if (!ids.length) return 0;
+  const marcas = ids.map(() => "?").join(",");
+  const r = prep(`DELETE FROM bans_globais WHERE userId IN (${marcas})`).run(...ids);
+  return r.changes ?? 0;
+}
+
+// Candidatos para busca por NOME: a lista lembra quem ela conhece, então dá
+// para achar pelo nome mesmo quem não está em nenhum servidor em comum.
+export function buscarBanidosPorNome(termo) {
+  const t = `%${String(termo ?? "").toLowerCase()}%`;
+  return prep(
+    `SELECT userId, MAX(userNome) AS nome FROM bans_globais
+     WHERE userNome IS NOT NULL AND LOWER(userNome) LIKE ?
+     GROUP BY userId LIMIT 25`
+  ).all(t);
 }
 
 // Histórico completo de um usuário (em quais servidores foi banido e por quê)
 export function historicoBans(userId) {
   return prep(
-    "SELECT serverId, motivo, origem, criadoEm FROM bans_globais WHERE userId = ? ORDER BY criadoEm DESC"
+    "SELECT serverId, motivo, origem, criadoEm, userNome FROM bans_globais WHERE userId = ? ORDER BY criadoEm DESC"
   ).all(userId);
 }
 
@@ -585,7 +646,7 @@ export function bansGlobaisPorOrigem(serverId, origens = ["banglobal"]) {
   if (!serverId) return [];
   const marcas = origens.map(() => "?").join(",");
   return prep(
-    `SELECT userId, motivo, origem, criadoEm FROM bans_globais
+    `SELECT userId, motivo, origem, criadoEm, userNome FROM bans_globais
      WHERE serverId = ? AND origem IN (${marcas}) ORDER BY criadoEm DESC`
   ).all(serverId, ...origens);
 }
@@ -597,14 +658,14 @@ export function listarBanidosGlobais({ limite = 500, serverId = null } = {}) {
   if (serverId) {
     return prep(
       `SELECT userId, COUNT(*) AS servidores, MAX(criadoEm) AS ultimo,
-              MAX(motivo) AS motivo, MAX(origem) AS origem
+              MAX(motivo) AS motivo, MAX(origem) AS origem, MAX(userNome) AS nome
        FROM bans_globais WHERE serverId = ?
        GROUP BY userId ORDER BY ultimo DESC LIMIT ?`
     ).all(serverId, limite);
   }
   return prep(
     `SELECT userId, COUNT(*) AS servidores, MAX(criadoEm) AS ultimo,
-            MAX(motivo) AS motivo, MAX(origem) AS origem
+            MAX(motivo) AS motivo, MAX(origem) AS origem, MAX(userNome) AS nome
      FROM bans_globais GROUP BY userId ORDER BY servidores DESC, ultimo DESC LIMIT ?`
   ).all(limite);
 }

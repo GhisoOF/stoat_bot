@@ -782,7 +782,39 @@ outros contribui com o seu.
 &banglobal isentos                # quem está isento neste servidor
 &banglobal desfazer               # ↩️ reverte os bans que a LISTA aplicou aqui
 &banglobal esquecer <@pessoa>     # apaga o registro PARA TODOS os servidores
+&banglobal bots                   # bots que entraram na lista antes da regra nova
 ```
+
+### Como indicar uma pessoa
+
+Todo comando aceita **menção**, **ID**, **link do perfil**, **nome**,
+`Nome#0000` ou o **apelido no servidor**. A busca passa pelos membros, pelos
+banidos do servidor e pela própria lista global — por isso funciona para quem
+já saiu, que é justamente quem esses comandos costumam tratar.
+
+Se o nome bater em mais de uma pessoa, o bot **mostra os candidatos com os IDs
+e não faz nada**: banir a pessoa errada por um apelido parecido não se desfaz
+com um pedido de desculpas.
+
+### Bots não entram na lista
+
+Um bot não escolhe entrar em lugar nenhum — alguém o adiciona. Se ele foi
+banido num servidor, isso é assunto de quem o adicionou lá. Bots populares
+acabam banidos em algum lugar mais cedo ou mais tarde, e sem essa regra a lista
+se encheria justamente dos mais usados, fazendo o modo `banir` derrubar
+integrações que o dono do servidor acabou de instalar.
+
+A regra vale para a importação, o ban manual, o automod e a entrada de membros.
+Para os que entraram antes dela: `&banglobal bots` mostra, `&banglobal bots
+confirmar` remove.
+
+### Nomes em vez de "Unknown User"
+
+A lista guarda o **nome** de quem foi banido, no momento do ban. Antes só o ID
+era gravado e a exibição virava `<@ID>`, que o cliente renderiza como *Unknown
+User* quando não há servidor em comum — ou seja, ilegível exatamente nos casos
+que mais importam. Agora cada linha traz nome e ID: o nome para você reconhecer,
+o ID porque é ele que os comandos aceitam.
 
 ### Revisar ≠ varrer (e por que agora são dois comandos)
 

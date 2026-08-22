@@ -242,5 +242,89 @@ env.length = 0; await dizD("&globalban exempted");
 ok(ult().includes("Exempt") || ult().includes("exempt"), "EN: `&globalban exempted`");
 await dizD("&idioma pt");
 
+// ══════════════════════════════════════════════════════════
+//  13. Achar a pessoa de todo jeito que ela apareça na tela
+//
+//  `&banglobal esquecer AutoMod#0800` respondia "não constava na lista":
+//  o comando pegava o texto CRU como se fosse um ID. O nome existia, só
+//  nunca tinha sido procurado.
+// ══════════════════════════════════════════════════════════
+console.log("\n── formas de indicar uma pessoa ──");
+
+const BOT_ID = "01JBTA0000000000000000000B";
+const HUM_ID = "01JHRN0000000000000000000H";
+const HUM2_ID = "01JHRN2000000000000000000H";
+const servE = mkServer("SE", "Servidor E", []);
+servE.fetchMembers = async () => ({ members: [
+  { id: { user: HUM_ID }, user: { username: "Renan", discriminator: "0042" }, nickname: "Rê" },
+  { id: { user: HUM2_ID }, user: { username: "Renata", discriminator: "0777" } },
+]});
+servE.fetchBans = async () => [
+  { id: { user: BOT_ID }, user: { username: "AutoMod", discriminator: "0800", bot: { owner: "z" } }, reason: "teste" },
+];
+c.servers.set("SE", servE);
+c.users.set(HUM_ID, { id: HUM_ID, username: "Renan" });
+c.users.set(BOT_ID, { id: BOT_ID, username: "AutoMod", bot: { owner: "z" } });
+const dizE = async (t) => { await say(t, servE); };
+
+// planta um registro para ter o que esquecer
+db.registrarBanGlobal(HUM_ID, "SZ", "confusão", "manual", { nome: "Renan" });
+
+for (const forma of ["Renan", "renan", "Renan#0042", "Rê", `<@${HUM_ID}>`, HUM_ID, `https://stoat.chat/@${HUM_ID}`]) {
+  env.length = 0;
+  await dizE(`&banglobal historico ${forma}`);
+  ok(ult().includes("banido em") || ult().includes("SZ"), `acha a pessoa por: ${forma}`);
+}
+
+env.length = 0;
+await dizE("&banglobal historico Ren");
+ok(ult().includes("mais de uma") || ult().includes("Mais de uma"), "★ nome ambíguo (`Ren`) NÃO chuta — lista os candidatos");
+ok(ult().includes("Renan") && ult().includes("Renata"), "  → e mostra quem são, com os IDs");
+
+env.length = 0;
+await dizE("&banglobal esquecer Renan");
+ok(ult().includes("Removido") || ult().includes("registro"), "★ `&banglobal esquecer <nome>` funciona (era o bug)");
+ok(!ult().includes("<@Renan"), "  → e não trata o nome como se fosse um ID");
+
+env.length = 0;
+await dizE("&banglobal esquecer NinguemComEsseNome");
+ok(ult().includes("Não achei") || ult().includes("achei"), "nome inexistente → erro claro, não um 'não constava' enganoso");
+
+// ══ 14. Bots ficam fora da lista ══
+console.log("\n── bots não entram na lista ──");
+const antesBot = db.contarBansGlobais(BOT_ID);
+await bg.sincronizarServidor(servE, (sid) => ({ serverId: sid, config: {}, client: c, sendEmbed: async () => {} }));
+ok(db.contarBansGlobais(BOT_ID) === antesBot, "★ importação PULA bots (ninguém adiciona um bot sem querer)");
+
+bg.registrar({ serverId: "SE", client: c }, BOT_ID, "teste", "manual");
+ok(db.contarBansGlobais(BOT_ID) === 0, "★ registrar() recusa bot");
+
+const cfgE = (await import("./modulos/core/config-store.js")).configDoServidor("SE");
+cfgE.banGlobal = { modo: "banir", isentos: [] };
+db.registrarBanGlobal(BOT_ID, "SZ", "banido noutro lugar", "manual", { nome: "AutoMod" });
+const banidosE = [];
+servE.banUser = async (uid) => { banidosE.push(uid); };
+await bg.verificarEntrada({ id: { server: "SE", user: BOT_ID }, server: servE, user: { bot: { owner: "z" } } },
+  { serverId: "SE", client: c, config: cfgE, sendEmbed: async () => {}, configDoServidor: () => cfgE });
+ok(banidosE.length === 0, "★ bot que entra NÃO é banido pela lista, mesmo constando nela");
+
+env.length = 0;
+await dizE("&banglobal bots");
+ok(ult().includes("AutoMod"), "&banglobal bots encontra os bots que já estavam na lista");
+env.length = 0;
+await dizE("&banglobal bots confirmar");
+ok(db.contarBansGlobais(BOT_ID) === 0, "★ `&banglobal bots confirmar` limpa os bots antigos da lista");
+
+// ══ 15. "Unknown User" some: a lista guarda o nome ══
+console.log("\n── nomes na listagem ──");
+db.registrarBanGlobal("01JSMDA00000000000000000S", "SZ", "spam", "automod", { nome: "Fulano" });
+ok(db.nomeDeBanido("01JSMDA00000000000000000S") === "Fulano", "o nome é guardado junto do ban");
+env.length = 0;
+await dizE("&banglobal lista");
+const txtLista = ult();
+ok(txtLista.includes("Fulano"), "★ a listagem mostra o NOME de quem já saiu (em vez de `<@id>` → 'Unknown User')");
+ok(txtLista.includes("01JSMDA00000000000000000S"), "  → e o ID junto, que é o que os comandos aceitam");
+ok(!txtLista.includes("<@01JSUMIU"), "  → sem menção crua, que o cliente não resolveria");
+
 console.log(`\nBANGLOBAL: ${pass} ok, ${fail} falha(s)`);
 process.exit(fail ? 1 : 0);

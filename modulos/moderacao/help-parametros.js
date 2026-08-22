@@ -99,6 +99,8 @@ function parametrosPT(P) {
       { nome: "isentos", desc: "quem está isento aqui" },
       { nome: "desfazer", desc: "↩️ reverte os bans que **a lista** aplicou aqui e isenta as pessoas (não toca em ban manual nem do automod)" },
       { nome: "esquecer", valor: "<@pessoa|id>", desc: "apaga os registros dessa pessoa **para todos os servidores** — bem mais forte que `isentar`" },
+      { nome: "bots", desc: "acha bots que já estavam na lista e os remove (bots novos não entram mais: ninguém adiciona um bot sem querer)" },
+      { nome: "Como indicar alguém", desc: "menção · **ID** · link do perfil · **nome** · `Nome#0000` · apelido no servidor. Se o nome bater em mais de uma pessoa, eu mostro os candidatos em vez de escolher" },
     ],
 
     reactionrole: [
@@ -310,6 +312,8 @@ function parametrosEN(P) {
       { nome: "isentos", desc: "who is exempt here" },
       { nome: "desfazer", desc: "↩️ reverts the bans **the list** applied here and exempts those people (leaves manual and automod bans alone)" },
       { nome: "esquecer", valor: "<@user|id>", desc: "deletes that person's records **for every server** — much stronger than `isentar`" },
+      { nome: "bots", desc: "finds bots already on the list and removes them (new bots no longer enter: nobody adds a bot by accident)" },
+      { nome: "How to point at someone", desc: "mention · **ID** · profile link · **name** · `Name#0000` · server nickname. If the name matches more than one person, I show the candidates instead of picking" },
     ],
 
     reactionrole: [

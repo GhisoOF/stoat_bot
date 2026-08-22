@@ -151,23 +151,64 @@ console.log("\n── diagnóstico do serviço de voz ──");
 process.env.STOAT_API = "https://api.stoat.invalido";
 const voz = await import("./voz-servico/voz.js");
 
-// join_call recusado pelo Stoat → o veredito tem de apontar a etapa 1
-globalThis.fetch = async () => ({ ok: false, status: 403, text: async () => '{"type":"MissingPermission"}' });
-let d = await voz.diagnosticar("01JVOZ00000000000000000000");
-let e1 = d.etapas.find((e) => e.etapa === "join_call");
-ok(e1 && e1.ok === false && e1.status === 403, "join_call recusado aparece como etapa 1 com o HTTP");
-ok(d.etapas.find((e) => e.etapa === "livekit-tcp")?.ok === null, "  → sem endereço, a etapa 2 fica indeterminada (não inventa culpado)");
-ok(d.ok === false, "  → diagnóstico geral: não ok");
+// Respostas por rota, para montar cada cenário.
+const responder = (mapa) => async (url) => {
+  const u = String(url);
+  const chave = u.includes("join_call") ? "join_call" : u.includes("/users/@me") ? "me" : "canal";
+  const r = mapa[chave] ?? { ok: true, status: 200, corpo: "{}" };
+  return { ok: r.ok !== false, status: r.status ?? 200, text: async () => r.corpo };
+};
 
-// join_call ok → a etapa 2 é tentada e o token NUNCA aparece no resultado
-globalThis.fetch = async () => ({ ok: true, status: 200,
-  text: async () => JSON.stringify({ token: "SEGREDO-QUE-NAO-PODE-VAZAR", url: "wss://livekit.invalido:7880" }) });
+// Cenário do servidor: um 400 em HTML no join_call. Um proxy respondeu,
+// não a API — e o veredito NÃO pode acusar permissão de canal por isso.
+globalThis.fetch = responder({
+  me: { ok: true, status: 200, corpo: '{"username":"Judy"}' },
+  canal: { ok: true, status: 200, corpo: '{"channel_type":"VoiceChannel","name":"Call"}' },
+  join_call: { ok: false, status: 400, corpo: '<!DOCTYPE html><html lang="en"><head><title>400 Bad Request</title></head><body>' },
+});
+let d = await voz.diagnosticar("01JVOZ00000000000000000000");
+const et = (n) => d.etapas.find((e) => e.etapa === n);
+ok(et("api+token")?.ok === true, "token válido aparece como etapa própria (some a ambiguidade)");
+ok(et("api+token")?.detalhe.includes("Judy"), "  → e diz como quem autenticou");
+ok(et("canal")?.ok === true, "confere que o ID é mesmo de um canal de VOZ");
+ok(et("join_call")?.ok === false && et("join_call")?.detalhe.includes("proxy"),
+  "400 em HTML é identificado como proxy/CDN, NÃO como recusa da API");
+
+// Recusa de verdade: JSON com o tipo do erro.
+globalThis.fetch = responder({
+  me: { ok: true, status: 200, corpo: '{"username":"Judy"}' },
+  canal: { ok: true, status: 200, corpo: '{"channel_type":"VoiceChannel","name":"Call"}' },
+  join_call: { ok: false, status: 403, corpo: '{"type":"MissingPermission","permission":"Speak"}' },
+});
 d = await voz.diagnosticar("01JVOZ00000000000000000000");
-e1 = d.etapas.find((e) => e.etapa === "join_call");
-ok(e1.ok === true, "join_call ok é reportado como etapa 1 bem-sucedida");
+ok(et("join_call")?.detalhe.includes("MissingPermission"), "recusa real (JSON) mostra o tipo do erro do Stoat");
+ok(!et("join_call")?.detalhe.includes("proxy"), "  → e NÃO é confundida com proxy");
+
+// Token inválido: a falha aparece na primeira etapa, não no join.
+globalThis.fetch = responder({ me: { ok: false, status: 401, corpo: '{"type":"InvalidSession"}' } });
+d = await voz.diagnosticar("01JVOZ00000000000000000000");
+ok(et("api+token")?.ok === false, "token inválido falha logo na etapa 1");
+
+// Canal de TEXTO no lugar do de voz — some sozinho se ninguém conferir.
+globalThis.fetch = responder({
+  me: { ok: true, status: 200, corpo: '{"username":"Judy"}' },
+  canal: { ok: true, status: 200, corpo: '{"channel_type":"TextChannel","name":"geral"}' },
+  join_call: { ok: false, status: 400, corpo: '{"type":"NotAVoiceChannel"}' },
+});
+d = await voz.diagnosticar("01JVOZ00000000000000000000");
+ok(et("canal")?.ok === false, "canal de TEXTO configurado por engano é apontado");
+
+// Caminho feliz: o token do LiveKit nunca sai no resultado.
+globalThis.fetch = responder({
+  me: { ok: true, status: 200, corpo: '{"username":"Judy"}' },
+  canal: { ok: true, status: 200, corpo: '{"channel_type":"VoiceChannel","name":"Call"}' },
+  join_call: { ok: true, status: 200, corpo: JSON.stringify({ token: "SEGREDO-QUE-NAO-PODE-VAZAR", url: "wss://livekit.invalido:7880" }) },
+});
+d = await voz.diagnosticar("01JVOZ00000000000000000000");
+ok(et("join_call")?.ok === true, "join_call autorizado é reportado como sucesso");
 ok(!JSON.stringify(d).includes("SEGREDO-QUE-NAO-PODE-VAZAR"), "  → o token do LiveKit NUNCA vai para o resultado (isto vai parar num chat)");
-ok(e1.detalhe.includes("token") && e1.detalhe.includes("url"), "  → mas os CAMPOS recebidos são mostrados");
-ok(d.etapas.find((e) => e.etapa === "livekit-tcp")?.ok === false, "  → e o alcance do LiveKit é testado de verdade");
+ok(et("join_call")?.detalhe.includes("token") && et("join_call")?.detalhe.includes("url"), "  → mas os CAMPOS recebidos são mostrados");
+ok(et("livekit-tcp")?.ok === false, "  → e o alcance do LiveKit é testado de verdade");
 // Este teste roda SEM a flag (é o Node padrão), então o diagnóstico deve
 // acusar a falta — que é justamente o comportamento útil no serviço real.
 ok(d.flagNode === (typeof globalThis.navigator === "undefined" ? "ok" : "FALTA --no-experimental-global-navigator"),

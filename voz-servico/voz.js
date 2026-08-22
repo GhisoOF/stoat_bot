@@ -28,7 +28,11 @@
 //  simultâneas viram duas vozes sobrepostas e ninguém entende nada.
 // ══════════════════════════════════════════════════════════
 
-process.env.LIVEKIT_LOG_LEVEL = process.env.LIVEKIT_LOG_LEVEL || "warn";
+// Em operação normal o LiveKit é silenciado (ele fala DEMAIS e esconde o
+// resto). Mas com VOZ_DEBUG=1 queremos exatamente o contrário: quando a
+// entrada trava, o log dele é a única janela para o que acontece nos 20s.
+process.env.LIVEKIT_LOG_LEVEL = process.env.LIVEKIT_LOG_LEVEL
+  || (process.env.VOZ_DEBUG === "1" ? "debug" : "warn");
 
 // O revoice imprime o comando inteiro do ffmpeg a CADA fala, com um
 // console.log fixo que não dá para desligar por configuração. Numa call
@@ -169,20 +173,29 @@ export async function entrar(canalVoz) {
 }
 
 async function entrarDeFato(canalVoz) {
+  const t0 = Date.now();
+  const marcos = [];
+  const marco = (nome) => { marcos.push({ nome, ms: Date.now() - t0 }); dbg(`  ⏱ ${nome} em ${Date.now() - t0}ms`); };
+  ultimosMarcos = marcos;
   try {
     dbg(`entrando em ${canalVoz}…`);
+    marco("inicio");
     // O join() é a parte que pendura. Com limite, um Stoat que não responde
     // vira um erro claro em 20s em vez de uma requisição pendurada.
+    marco("chamando-revoice.join");
     const connection = await comLimite(
       revoice.join(canalVoz),
       ENTRAR_MAX_MS,
       `${ENTRAR_MAX_MS / 1000}s sem resposta ao pedido de entrar na call (etapa: join)`,
       (tardia) => {
+        marco("join-chegou-tarde");
         // Chegou depois de eu desistir: fecha, senão vira sala fantasma.
         log(`entrada em ${canalVoz} chegou TARDE — derrubando a conexão órfã`);
         derrubar(tardia);
       },
     );
+
+    marco("join-retornou");
 
     // O join resolve antes de a sala estar de fato conectada; o evento
     // "join" é que marca o ponto em que dá para publicar áudio.
@@ -203,6 +216,8 @@ async function entrarDeFato(canalVoz) {
       connection.once("error", (e) => { clearTimeout(t); rej(e); });
     });
 
+    marco("sala-confirmada");
+
     // ── UM player por conexão, publicado UMA vez ──
     // Antes eu criava um MediaPlayer novo a cada fala e chamava play() de
     // novo — ou seja, publicava uma FAIXA nova na sala a cada frase. O
@@ -214,6 +229,7 @@ async function entrarDeFato(canalVoz) {
     await connection.play(media);
     await esperarPublicacao(connection, media);
 
+    marco("faixa-publicada");
     conexoes.set(canalVoz, {
       connection, media, entrouEm: Date.now(), falas: 0, fila: [], ocupado: false,
     });
@@ -222,7 +238,8 @@ async function entrarDeFato(canalVoz) {
   } catch (e) {
     const erro = explicar(e);
     log(`falha ao entrar em ${canalVoz}: ${erro}`);
-    ultimaFalha = { canalVoz, erro, quando: Date.now() };
+    marcos.push({ nome: "falhou", ms: Date.now() - t0 });
+    ultimaFalha = { canalVoz, erro, quando: Date.now(), marcos: [...marcos] };
     // Limpeza: uma conexão que falhou no meio não pode ficar registrada,
     // senão a tentativa seguinte reusa um objeto quebrado e falha de um
     // jeito diferente — mascarando a causa original.
@@ -280,6 +297,10 @@ export async function reiniciar() {
 // A última falha de entrada, para o diagnóstico não depender de reproduzir
 // o problema na hora de investigar.
 let ultimaFalha = null;
+// Marcos da última tentativa de entrada. O `revoice.join()` é uma caixa
+// preta de 20s; sem cronometrar o que acontece em volta dele, "travou no
+// join" é tudo que dá para dizer — e não é suficiente para consertar nada.
+let ultimosMarcos = null;
 
 // ── Diagnóstico em ETAPAS ─────────────────────────────────
 //
@@ -301,38 +322,71 @@ export async function diagnosticar(canalVoz) {
   const API = (process.env.STOAT_API || "https://api.stoat.chat").replace(/\/$/, "");
   const etapas = [];
 
-  // ── 1. join_call ──
-  const t0 = Date.now();
-  let dados = null;
-  try {
-    const r = await comLimite(
-      fetch(`${API}/channels/${canalVoz}/join_call`, {
-        method: "POST",
-        headers: { "content-type": "application/json", "x-bot-token": TOKEN },
-      }),
-      10_000,
-      "10s sem resposta da API do Stoat",
-    );
-    const corpo = await r.text().catch(() => "");
-    try { dados = JSON.parse(corpo); } catch {}
-    etapas.push({
-      etapa: "join_call",
-      ok: r.ok,
-      ms: Date.now() - t0,
-      status: r.status,
-      // NUNCA devolver o token: isto vai parar num chat.
-      detalhe: r.ok ? `campos: ${Object.keys(dados ?? {}).join(", ") || "(vazio)"}`
-                    : corpo.slice(0, 200),
-    });
-  } catch (e) {
-    etapas.push({ etapa: "join_call", ok: false, ms: Date.now() - t0, detalhe: e?.message ?? String(e) });
-  }
+  // Toda chamada usa o MESMO formato: `X-Bot-Token` e, nos POST, um corpo
+  // JSON de verdade. A primeira versão disto mandava POST com
+  // `content-type: application/json` e SEM corpo — e levou um 400 em HTML,
+  // de um proxy, antes de chegar à API. Eu li aquele 400 como "o Stoat
+  // recusou o join" e mandei investigar permissão de canal: culpado errado,
+  // com uma confiança que o dado não sustentava. Um 400 sem JSON não é a
+  // API falando; é sinal de que a requisição nem chegou lá.
+  const bater = async (rota, metodo = "GET") => {
+    const t = Date.now();
+    try {
+      const r = await comLimite(fetch(`${API}${rota}`, {
+        method: metodo,
+        headers: {
+          "X-Bot-Token": TOKEN,
+          ...(metodo === "POST" ? { "Content-Type": "application/json" } : {}),
+        },
+        ...(metodo === "POST" ? { body: "{}" } : {}),
+      }), 10_000, `10s sem resposta de ${rota}`);
+      const corpo = await r.text().catch(() => "");
+      let json = null;
+      try { json = JSON.parse(corpo); } catch {}
+      const ehHtml = /^\s*<(!doctype|html)/i.test(corpo);
+      return { ok: r.ok, ms: Date.now() - t, status: r.status, json, corpo, ehHtml };
+    } catch (e) {
+      return { ok: false, ms: Date.now() - t, erro: e?.message ?? String(e) };
+    }
+  };
 
-  // ── 2. alcance do LiveKit ──
-  // O endereço vem no corpo do join_call. Testamos só o TCP: se nem ele
-  // passa, o UDP também não passa e não há o que discutir. Se o TCP passa e
-  // a entrada continua travando, o suspeito é justamente o UDP.
-  const urlLk = dados?.url ?? dados?.livekit?.url ?? dados?.node ?? null;
+  const descrever = (r) => {
+    if (r.erro) return r.erro;
+    if (r.ehHtml) return "resposta em HTML, não JSON — quem respondeu foi um proxy/CDN, não a API";
+    if (r.json && !r.ok) return `${r.json.type ?? ""} ${JSON.stringify(r.json).slice(0, 120)}`.trim();
+    return r.corpo ? r.corpo.slice(0, 150) : "(vazio)";
+  };
+
+  // ── 1. O token vale e a API responde? ──
+  // Sem isto, qualquer falha adiante fica ambígua. `/users/@me` é a chamada
+  // mais barata que exige autenticação.
+  const me = await bater("/users/@me");
+  etapas.push({
+    etapa: "api+token", ok: me.ok, ms: me.ms, status: me.status,
+    detalhe: me.ok ? `autenticado como ${me.json?.username ?? "?"}` : descrever(me),
+  });
+
+  // ── 2. O ID é mesmo de um canal de VOZ? ──
+  // Um ID de canal de texto no lugar do de voz dá exatamente o mesmo
+  // sintoma e não aparece em lugar nenhum até alguém conferir.
+  const ch = await bater(`/channels/${canalVoz}`);
+  const tipo = ch.json?.channel_type ?? ch.json?.type ?? null;
+  etapas.push({
+    etapa: "canal", ok: ch.ok ? (tipo ? /voice/i.test(String(tipo)) : null) : false,
+    ms: ch.ms, status: ch.status,
+    detalhe: ch.ok ? `tipo: ${tipo ?? "(não informado)"} · nome: ${ch.json?.name ?? "?"}` : descrever(ch),
+  });
+
+  // ── 3. O join_call ──
+  const jc = await bater(`/channels/${canalVoz}/join_call`, "POST");
+  etapas.push({
+    etapa: "join_call", ok: jc.ok, ms: jc.ms, status: jc.status,
+    // NUNCA devolver o token de voz: isto vai parar num chat.
+    detalhe: jc.ok ? `campos: ${Object.keys(jc.json ?? {}).join(", ") || "(vazio)"}` : descrever(jc),
+  });
+
+  // ── 4. Alcance do LiveKit ──
+  const urlLk = jc.json?.url ?? jc.json?.livekit?.url ?? jc.json?.node ?? null;
   if (urlLk) {
     const t1 = Date.now();
     try {
@@ -360,7 +414,9 @@ export async function diagnosticar(canalVoz) {
     naCall: conexoes.has(canalVoz),
     entrandoAgora: entrando.has(canalVoz),
     ultimaFalha,
+    marcos: ultimosMarcos,
     flagNode: typeof globalThis.navigator === "undefined" ? "ok" : "FALTA --no-experimental-global-navigator",
+    debug: process.env.VOZ_DEBUG === "1",
   };
 }
 

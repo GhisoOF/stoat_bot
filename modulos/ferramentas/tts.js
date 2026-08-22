@@ -377,40 +377,71 @@ export async function cmdTts(message, args, ctx) {
     }
 
     const marca = (v) => v === true ? "✅" : v === false ? "❌" : "❔";
-    const linhas = (d.etapas ?? []).map((e) => `${marca(e.ok)} **${e.etapa}** — ${e.ms}ms${e.status ? ` · HTTP ${e.status}` : ""}\n   \`${String(e.detalhe ?? "").slice(0, 180)}\``);
+    const linhas = (d.etapas ?? []).map((e) =>
+      `${marca(e.ok)} **${e.etapa}** — ${e.ms}ms${e.status ? ` · HTTP ${e.status}` : ""}\n   ${String(e.detalhe ?? "").slice(0, 160).replace(/`/g, "")}`);
 
-    // O veredito é o que importa: cada combinação tem um culpado diferente.
-    const httpOk = d.etapas?.find((e) => e.etapa === "join_call")?.ok;
-    const tcpOk = d.etapas?.find((e) => e.etapa === "livekit-tcp")?.ok;
+    // Onde os 20s foram gastos na última tentativa. É o dado que falta
+    // quando o join é uma caixa preta: sem ele, "travou no join" é tudo
+    // que dá para dizer, e não é suficiente para consertar nada.
+    const marcos = d.marcos ?? d.ultimaFalha?.marcos ?? [];
+    const linhaMarcos = marcos.length
+      ? `\n**${lang === "en" ? "Last attempt, step by step" : "Última tentativa, passo a passo"}**\n`
+        + marcos.map((m) => `\`${String(m.ms).padStart(6)}ms\` ${m.nome}`).join("\n")
+      : "";
+
+    const passo = (nome) => d.etapas?.find((e) => e.etapa === nome);
+    const api = passo("api+token"), canal = passo("canal"), jc = passo("join_call"), tcp = passo("livekit-tcp");
     let veredito;
     if (d.flagNode !== "ok") {
       veredito = tr(ctx,
         "⚠️ **O serviço está sem a flag do Node.** Suba o `judy-voz` com `--no-experimental-global-navigator` — sem ela a entrada falha sempre.",
         "⚠️ **The service is missing the Node flag.** Start `judy-voz` with `--no-experimental-global-navigator` — without it joining always fails.");
-    } else if (httpOk === false) {
+    } else if (api?.ok === false) {
       veredito = tr(ctx,
-        "🔎 **Trava na API do Stoat**, antes de qualquer coisa de rede. Olhe o HTTP acima: `401` é token do bot, `403` é falta de **Connect**/**Speak** no canal de voz, `404` é ID errado, `400`/`409` costuma ser o Stoat achando que ainda estou na call — nesse caso, saia da call pelo cliente (ou reinicie o servidor de voz do Stoat) e tente de novo.",
-        "🔎 **It jams at Stoat's API**, before anything network-related. Look at the HTTP above: `401` is the bot token, `403` is missing **Connect**/**Speak** on the voice channel, `404` is a wrong ID, `400`/`409` usually means Stoat still thinks I'm in the call — in that case, leave the call from the client (or restart Stoat's voice server) and try again.");
-    } else if (tcpOk === false) {
+        "🔎 **Nem a autenticação passa.** Não é a call: é o token ou o alcance da API. Confira se o `BOT_TOKEN` no `.env` do `judy-voz` é o **mesmo** do bot, e se a máquina alcança a API do Stoat.",
+        "🔎 **Authentication itself fails.** It's not the call: it's the token or reaching the API. Check that `BOT_TOKEN` in `judy-voz`'s `.env` is the **same** as the bot's, and that the machine can reach Stoat's API.");
+    } else if (canal?.ok === false) {
       veredito = tr(ctx,
-        "🔎 **A API responde, mas não alcanço o LiveKit.** É rede da máquina do serviço: firewall, DNS ou rota. Se o TCP nem abre, o UDP também não vai — confira a saída da máquina do `judy-voz`.",
-        "🔎 **The API answers, but I can't reach LiveKit.** It's the service machine's network: firewall, DNS or routing. If TCP won't even open, UDP won't either — check outbound access from the `judy-voz` machine.");
-    } else if (httpOk && tcpOk !== false) {
+        `🔎 **Não consigo nem ler esse canal.** O ID configurado em \`${PREFIXO}tts canal\` pode estar errado, ou o bot não enxerga o canal. Entre na call e rode \`${PREFIXO}tts canal aqui\`.`,
+        `🔎 **I can't even read that channel.** The ID set in \`${PREFIXO}tts canal\` may be wrong, or the bot can't see the channel. Join the call and run \`${PREFIXO}tts canal aqui\`.`);
+    } else if (canal?.ok === false || (canal && canal.ok === null)) {
       veredito = tr(ctx,
-        "🔎 **As duas etapas passam aqui.** Então a trava é no meio: a mídia do LiveKit anda por **UDP**, que este teste não cobre. Libere UDP de saída na máquina do `judy-voz` (e verifique a MTU da Tailscale). Se acabou de acontecer, `&tts reiniciar` e tente entrar de novo.",
-        "🔎 **Both steps pass here.** So the jam is in between: LiveKit media rides on **UDP**, which this test doesn't cover. Allow outbound UDP on the `judy-voz` machine (and check the Tailscale MTU). If it just happened, `&tts reiniciar` and try joining again.");
+        `🔎 **Leio o canal, mas não confirmei que ele é de voz.** Veja o tipo acima: se não for um canal de voz, \`${PREFIXO}tts canal aqui\` dentro da call resolve.`,
+        `🔎 **I can read the channel, but couldn't confirm it's a voice one.** Check the type above: if it isn't a voice channel, \`${PREFIXO}tts canal aqui\` inside the call fixes it.`);
+    } else if (jc?.ok === false) {
+      const html = /HTML/i.test(String(jc.detalhe ?? ""));
+      veredito = html
+        ? tr(ctx,
+          "🔎 **A resposta do `join_call` veio em HTML, não JSON** — quem respondeu foi um proxy/CDN no caminho, não a API. Isso NÃO quer dizer que o Stoat recusou a entrada: quer dizer que a requisição não chegou até ele. Suspeite do endereço da API (`STOAT_API`) ou de algo interceptando a saída da máquina.",
+          "🔎 **`join_call` answered with HTML, not JSON** — a proxy/CDN on the way replied, not the API. This does NOT mean Stoat refused the join: it means the request never reached it. Suspect the API address (`STOAT_API`) or something intercepting the machine's outbound traffic.")
+        : tr(ctx,
+          "🔎 **O Stoat recusou o `join_call`.** Veja o HTTP e o tipo acima: `403` é falta de **Connect**/**Speak** para o cargo do bot no canal de voz, `404` é canal inexistente, `409`/`400` com JSON costuma ser o servidor achando que ainda estou na call.",
+          "🔎 **Stoat refused `join_call`.** Check the HTTP and type above: `403` is missing **Connect**/**Speak** for the bot's role on the voice channel, `404` is a non-existent channel, `409`/`400` with JSON usually means the server still thinks I'm in the call.");
+    } else if (tcp?.ok === false) {
+      veredito = tr(ctx,
+        "🔎 **A API autoriza, mas não alcanço o LiveKit.** É rede da máquina do serviço: firewall, DNS ou rota de saída. Se nem o TCP abre, o UDP também não vai.",
+        "🔎 **The API authorises, but I can't reach LiveKit.** It's the service machine's network: firewall, DNS or outbound routing. If TCP won't even open, UDP won't either.");
+    } else if (jc?.ok && tcp?.ok) {
+      veredito = tr(ctx,
+        `🔎 **Todas as etapas passam neste teste, mas entrar trava mesmo assim.** Então a trava está no que este teste não cobre: a mídia do LiveKit, que anda por **UDP**. Libere UDP de saída na máquina do \`judy-voz\` e confira a MTU da Tailscale.\n\nPara ver por dentro: suba o serviço com \`VOZ_DEBUG=1\`, tente \`${PREFIXO}tts entrar\` e olhe o log — com o debug ligado o LiveKit passa a contar o que faz durante os 20s.`,
+        `🔎 **Every step passes in this test, yet joining still jams.** So the jam is in what this test doesn't cover: LiveKit media, which rides on **UDP**. Allow outbound UDP on the \`judy-voz\` machine and check the Tailscale MTU.\n\nTo see inside: start the service with \`VOZ_DEBUG=1\`, try \`${PREFIXO}tts entrar\` and read the log — with debug on, LiveKit narrates what it does during those 20s.`);
     } else {
       veredito = tr(ctx, "🔎 Resultado inconclusivo — veja as etapas acima.", "🔎 Inconclusive — see the steps above.");
+    }
+    if (!d.debug) {
+      veredito += tr(ctx,
+        "\n\n_Para o log contar mais: suba o `judy-voz` com `VOZ_DEBUG=1`._",
+        "\n\n_For a more talkative log: start `judy-voz` with `VOZ_DEBUG=1`._");
     }
 
     return sendEmbed(message.channel, {
       title: lang === "en" ? "🩺 Voice diagnostics" : "🩺 Diagnóstico da voz",
       description: [
         ...linhas,
+        linhaMarcos,
         "",
         `${lang === "en" ? "**In the call now**" : "**Na call agora**"}: ${d.naCall ? "🟢" : "🔴"}`
           + (d.entrandoAgora ? (lang === "en" ? " · entering right now" : " · entrando neste momento") : ""),
-        d.ultimaFalha ? `${lang === "en" ? "**Last failure**" : "**Última falha**"}: \`${String(d.ultimaFalha.erro).slice(0, 140)}\`` : null,
         "",
         veredito,
       ].filter(Boolean).join("\n"),

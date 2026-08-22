@@ -156,7 +156,8 @@ const responder = (mapa) => async (url) => {
   const u = String(url);
   const chave = u.includes("join_call") ? "join_call" : u.includes("/users/@me") ? "me" : "canal";
   const r = mapa[chave] ?? { ok: true, status: 200, corpo: "{}" };
-  return { ok: r.ok !== false, status: r.status ?? 200, text: async () => r.corpo };
+  return { ok: r.ok !== false, status: r.status ?? 200, text: async () => r.corpo,
+    json: async () => JSON.parse(r.corpo) };
 };
 
 // Cenário do servidor: um 400 em HTML no join_call. Um proxy respondeu,
@@ -510,6 +511,39 @@ await voz.forcarSaida("01JCALLR000000000000000AA", "01JSRVA00000000000000000AA",
   ["01JSRVA00000000000000000AA", "01JSRVB00000000000000000AA", "01JSRVC00000000000000000AA"]);
 const patches = chamadasD.filter((c) => c.metodo === "PATCH");
 ok(patches.length === 1, `★ para no primeiro servidor que aceita (foram ${patches.length} PATCH, não 3)`);
+
+// ══ 12. UnknownNode: a call que ainda não existe ══
+//
+//  `let node = existing_node.or(node).ok_or(UnknownNode)?;`
+//  O Stoat só sabe em qual servidor de voz a call está depois que alguém a
+//  inicia. Antes disso, quem entra precisa DIZER qual usar — e o revoice não
+//  diz. Era por isso que chamar o bot para uma call vazia travava.
+console.log("\n── UnknownNode (call vazia) ──");
+const vistas = [];
+globalThis.fetch = async (url, op) => {
+  const u = String(url);
+  vistas.push({ url: u, metodo: op?.method, corpo: op?.body ? JSON.parse(op.body) : null });
+  if (u.match(/\/$/) || u.endsWith("api.stoat.invalido")) {
+    return { ok: true, status: 200, text: async () => "{}",
+      json: async () => ({ features: { livekit: { enabled: true, nodes: [
+        { name: "eu-west", lat: 50, lon: 3, public_url: "wss://lk1" },
+        { name: "us-east", lat: 40, lon: -74, public_url: "wss://lk2" }] } } }) };
+  }
+  if (u.endsWith("/users/@me")) return { ok: true, status: 200, text: async () => perfil };
+  if (u.includes("/join_call")) return { ok: true, status: 200,
+    text: async () => '{"token":"t","url":"wss://lk1"}', json: async () => ({ token: "t", url: "wss://lk1" }) };
+  return { ok: true, status: 200, text: async () => "{}", json: async () => ({}) };
+};
+const nodeEscolhido = await voz.nodePreferido();
+ok(nodeEscolhido === "eu-west", `★ descobre os nodes de voz pelo GET / da API (${nodeEscolhido})`);
+
+vistas.length = 0;
+const d2 = await voz.diagnosticar("01JCALLR000000000000000AA");
+const etapaNode = d2.etapas.find((e) => e.etapa === "node");
+ok(etapaNode?.ok === true, "o diagnóstico mostra qual node vai usar");
+const jcTeste = vistas.find((v) => v.url.includes("/join_call"));
+ok(jcTeste?.corpo?.node === "eu-west",
+  "★ e manda o node no join_call — sem isso, uma call que não começou acusa UnknownNode à toa");
 
 console.log(`\nTTS: ${pass} ok, ${fail} falha(s)`);
 process.exit(fail ? 1 : 0);

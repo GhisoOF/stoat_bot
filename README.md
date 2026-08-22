@@ -1699,8 +1699,26 @@ Sobrando o problema: **use outra call** (o bloqueio é por canal, e bots podem
 estar em várias) ou, em último caso, **kick no bot e adicioná-lo de volta** —
 `member_remove` é a única rota acessível que chama `delete_voice_state`.
 
-💡 **Entre na call antes de chamar o bot.** Chamá-lo para uma call vazia é
-onde a entrada costuma travar.
+### `UnknownNode`: a call que ainda não existe
+
+```rust
+let existing_node = get_channel_node(channel.id()).await?;
+let node = existing_node.or(node).ok_or_else(|| create_error!(UnknownNode))?;
+```
+
+O Stoat só sabe em qual servidor de voz (*node*) uma call está **depois** que
+alguém a inicia. Antes disso, quem entra precisa informar o node no corpo do
+`join_call` — e o `revoice.join()` não informa. Pior: ao receber o erro, ele
+não rejeita a promessa, apenas nunca resolve, o que virava 20 s de silêncio
+seguidos de timeout, sem pista alguma no meio.
+
+O serviço agora descobre os nodes disponíveis em `GET /`
+(`features.livekit.nodes`) e **abre a sala informando o node** antes de
+delegar ao revoice. A partir daí o Stoat lembra dele e o join funciona.
+`VOZ_NODE_LIVEKIT` no `.env` fixa uma região, se quiser.
+
+💡 Mesmo assim, **entrar na call antes de chamar o bot** continua sendo o
+caminho mais tranquilo.
 A mesma rota, com `voice_channel: <novo canal>` em vez de `remove`, **move** o
 bot entre calls — daí `&tts entrar` numa call diferente funcionar como "vem
 para cá" em vez de dar `AlreadyConnected`. O move só enxerga a call de origem

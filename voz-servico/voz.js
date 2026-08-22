@@ -210,6 +210,16 @@ async function entrarDeFato(canalVoz, serverId = null) {
     }
     // O join() é a parte que pendura. Com limite, um Stoat que não responde
     // vira um erro claro em 20s em vez de uma requisição pendurada.
+    // ── A call ainda não existe? Então eu preciso inaugurá-la ──
+    //
+    // O `revoice.join()` não informa node nenhum, então numa call vazia ele
+    // leva `UnknownNode` — e, em vez de propagar o erro, simplesmente não
+    // resolve a promessa. Daí os 20s de silêncio seguidos de timeout, sem
+    // pista nenhuma no meio. Abrimos a sala antes, dizendo o node; a partir
+    // daí o Stoat lembra dele e o join do revoice funciona.
+    const abriu = await abrirSalaSePreciso(canalVoz);
+    if (abriu) marco(`sala-aberta(${abriu})`);
+
     marco("chamando-revoice.join");
     const connection = await comLimite(
       revoice.join(canalVoz),
@@ -339,6 +349,48 @@ export async function sair(canalVoz = null) {
     log(`saiu da call ${id}`);
   }
   return { ok: true, saiu };
+}
+
+// ── Qual node LiveKit usar ────────────────────────────────
+//
+//  Entrar numa call que JÁ existe é fácil: o Stoat lembra em qual node ela
+//  está (`node:{canal}` no Redis) e usa esse.
+//
+//      let node = existing_node.or(node).ok_or(UnknownNode)?;
+//
+//  Mas quem INICIA a call precisa dizer o node — e é aí que estava o
+//  problema. Chamado para uma call vazia, o bot não informava nada, o Stoat
+//  não tinha o que usar e devolvia `UnknownNode`. Batia com o que se via na
+//  prática: funcionava quando alguém já estava na call, travava quando não.
+//
+//  A lista de nodes vem do `GET /` da API (`features.livekit.nodes`).
+let nodesCache = null;
+async function nodesDisponiveis() {
+  // Só guardamos a lista quando ela veio com algo. Guardar um resultado vazio
+  // deixaria o serviço sem nodes até o próximo reinício se a API estivesse
+  // fora do ar justo na primeira consulta.
+  if (nodesCache?.length) return nodesCache;
+  const API = (process.env.STOAT_API || "https://api.stoat.chat").replace(/\/$/, "");
+  try {
+    const r = await comLimite(fetch(`${API}/`), 8000, "8s sem resposta da raiz da API");
+    const j = await r.json().catch(() => null);
+    const lista = j?.features?.livekit?.nodes ?? [];
+    const nomes = lista.map((n) => n?.name).filter(Boolean);
+    if (nomes.length) nodesCache = nomes;
+    log(`nodes de voz disponíveis: ${nomes.join(", ") || "(nenhum)"}`);
+    return nomes;
+  } catch (e) {
+    console.warn("[VOZ] não consegui listar os nodes:", e?.message ?? e);
+    return [];
+  }
+  return nodesCache ?? [];
+}
+
+// O node preferido: o que o .env mandar, senão o primeiro anunciado pela API.
+export async function nodePreferido() {
+  if (process.env.VOZ_NODE_LIVEKIT) return process.env.VOZ_NODE_LIVEKIT;
+  const lista = await nodesDisponiveis();
+  return lista[0] ?? null;
 }
 
 // ── Sair pela API, sem depender do estado local ───────────
@@ -475,6 +527,30 @@ export async function moverPara(canalVoz, serverId) {
   return { ok: r.ok, passos };
 }
 
+// Garante que o canal tenha uma sala e um node registrados. Devolve o nome do
+// node quando foi preciso abrir, ou null quando a call já existia.
+async function abrirSalaSePreciso(canalVoz) {
+  const API = (process.env.STOAT_API || "https://api.stoat.chat").replace(/\/$/, "");
+  const node = await nodePreferido();
+  if (!node) return null;
+  try {
+    const r = await comLimite(fetch(`${API}/channels/${canalVoz}/join_call`, {
+      method: "POST",
+      headers: { "X-Bot-Token": TOKEN, "Content-Type": "application/json" },
+      body: JSON.stringify({ node }),
+    }), 10_000, "10s sem resposta ao abrir a sala");
+    if (r.ok) { dbg(`sala aberta no node ${node}`); return node; }
+    const txt = await r.text().catch(() => "");
+    // `AlreadyConnected` aqui é bom sinal: a sala existe e eu constava nela.
+    // O erro sai adiante, no join de verdade, com o tratamento certo.
+    dbg(`abrir sala: HTTP ${r.status} ${txt.slice(0, 120)}`);
+    return null;
+  } catch (e) {
+    console.warn("[VOZ] falha ao abrir a sala:", e?.message ?? e);
+    return null;
+  }
+}
+
 // ── Reinício a quente ─────────────────────────────────────
 // Quando o estado do lado do Stoat/LiveKit fica inconsistente ("entrei mas
 // ninguém ouve", "não consigo mais entrar"), a saída era reiniciar o
@@ -539,7 +615,7 @@ export async function diagnosticar(canalVoz) {
   // recusou o join" e mandei investigar permissão de canal: culpado errado,
   // com uma confiança que o dado não sustentava. Um 400 sem JSON não é a
   // API falando; é sinal de que a requisição nem chegou lá.
-  const bater = async (rota, metodo = "GET") => {
+  const bater = async (rota, metodo = "GET", payload = null) => {
     const t = Date.now();
     try {
       const r = await comLimite(fetch(`${API}${rota}`, {
@@ -548,7 +624,7 @@ export async function diagnosticar(canalVoz) {
           "X-Bot-Token": TOKEN,
           ...(metodo === "POST" ? { "Content-Type": "application/json" } : {}),
         },
-        ...(metodo === "POST" ? { body: "{}" } : {}),
+        ...(metodo === "POST" ? { body: JSON.stringify(payload ?? {}) } : {}),
       }), 10_000, `10s sem resposta de ${rota}`);
       const corpo = await r.text().catch(() => "");
       let json = null;
@@ -591,7 +667,13 @@ export async function diagnosticar(canalVoz) {
   });
 
   // ── 3. O join_call ──
-  const jc = await bater(`/channels/${canalVoz}/join_call`, "POST");
+  // Com o node explícito: sem ele, uma call que ainda não começou responde
+  // `UnknownNode` e o diagnóstico acusaria um problema que é só a call não
+  // existir ainda.
+  const node = await nodePreferido();
+  etapas.push({ etapa: "node", ok: !!node, ms: 0,
+    detalhe: node ? `usando \`${node}\`` : "a API não anunciou nenhum node de voz" });
+  const jc = await bater(`/channels/${canalVoz}/join_call`, "POST", node ? { node } : null);
   etapas.push({
     etapa: "join_call", ok: jc.ok, ms: jc.ms, status: jc.status,
     // NUNCA devolver o token de voz: isto vai parar num chat.

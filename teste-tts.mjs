@@ -398,6 +398,62 @@ await tts.cmdTts(msgNaCallReal, ["destravar"], ctxA);
 ok(urlsDestravar.some((u) => u.includes("/destravar")), "`&tts destravar` chama o serviço");
 ok(String(respA.at(-1)?.description).includes("PATCH"), "  → e mostra o pedido que saiu");
 
+// ══ 8b. &tts resgatar — a porta dos fundos do AlreadyConnected ══
+//
+//  destravar/kick/cliente leem a chave `{bot}:{servidor}` e não apagam o
+//  conjunto `vc:{bot}`. O mover (PATCH voice_channel) emite token sem conferir
+//  esse conjunto; o token vem pelo evento UserMoveVoiceChannel. O comando tem
+//  de: entrar na auxiliar → PATCH mover → capturar o token → /entrar-com-token.
+console.log("\n── &tts resgatar ──");
+{
+  const aux = { id: "01JAUXIL000000000000000AA", name: "Lounge", type: "TextChannel", voice: {}, isVoice: true,
+    voiceParticipants: new Map([["01JBOTAA00000000000000AAAA", {}]]) };
+  const listeners = [];
+  const clientR = {
+    user: { id: "01JBOTAA00000000000000AAAA" },
+    channels: new Map([[callReal.id, callReal], [aux.id, aux]]),
+    servers: new Map([["S1", {}]]),
+    events: { on: (_e, f) => listeners.push(f), off: (_e, f) => { const i = listeners.indexOf(f); if (i >= 0) listeners.splice(i, 1); } },
+  };
+  const respR = [];
+  const cfgR = { language: "pt", tts: { ativo: false, canalVoz: null, canalTexto: null, filtro: true, cooldown: 0 } };
+  const ctxR = { ...ctxA, config: cfgR, client: clientR,
+    sendEmbed: async (_c, e) => { respR.push(e); return { id: "M" }; },
+    getServer: async () => ({ id: "S1", channels: [callReal, aux] }) };
+  process.env.BOT_TOKEN = process.env.BOT_TOKEN || "tok";
+  const chamadas = [];
+  globalThis.fetch = async (url, op) => {
+    const u = String(url); const corpo = op?.body ? JSON.parse(op.body) : null;
+    chamadas.push({ u, metodo: op?.method, corpo });
+    if (u.includes("/members/") && op?.method === "PATCH") {
+      // o Stoat manda o token pelo WebSocket, não na resposta do PATCH
+      setTimeout(() => listeners.forEach((f) => f({ type: "UserMoveVoiceChannel", node: "eu-west", from: aux.id, to: callReal.id, token: "TOKEN-DO-MOVER" })), 5);
+      return { ok: true, status: 200, text: async () => "{}" };
+    }
+    return { ok: true, status: 200, json: async () => ({ ok: true }), text: async () => "{}" };
+  };
+  await tts.cmdTts(msgNaCallReal, ["resgatar"], ctxR);
+  const entrouAux = chamadas.find((c) => c.u.endsWith("/entrar"));
+  ok(entrouAux?.corpo?.canalVoz === aux.id, "★ resgatar entra primeiro numa call AUXILIAR (outra do servidor)");
+  const patch = chamadas.find((c) => c.metodo === "PATCH");
+  ok(patch?.corpo?.voice_channel === callReal.id && patch.u.includes("/members/01JBOTAA00000000000000AAAA"),
+    "  → depois se MOVE para a call presa pelo PATCH do próprio membro");
+  const comToken = chamadas.find((c) => c.u.endsWith("/entrar-com-token"));
+  ok(comToken?.corpo?.token === "TOKEN-DO-MOVER" && comToken.corpo.canalVoz === callReal.id && comToken.corpo.node === "eu-west",
+    "  → e entrega o token do evento UserMoveVoiceChannel ao serviço");
+  ok(listeners.length === 0, "  → e tira o ouvinte do WebSocket ao terminar");
+  ok(cfgR.tts.ativo && cfgR.tts.canalVoz === callReal.id, "  → já deixa a leitura ligada na call resgatada");
+  ok(/Resgatada/.test(String(respR.at(-1)?.title)), `  → e diz que deu certo (${respR.at(-1)?.title})`);
+  const textoR = respR.map((e) => e.description).join(" ");
+  ok(!/kick/i.test(textoR), "  → sem mandar dar kick (não resolve: lê a mesma chave)");
+
+  // Sem auxiliar disponível: pede uma em vez de tentar a própria call presa.
+  respR.length = 0;
+  const ctxS = { ...ctxR, getServer: async () => ({ id: "S1", channels: [callReal] }), client: { ...clientR, channels: new Map([[callReal.id, callReal]]) } };
+  await tts.cmdTts(msgNaCallReal, ["resgatar"], ctxS);
+  ok(/auxiliar/.test(String(respR.at(-1)?.title)), "sem outra call no servidor, pede a auxiliar");
+}
+
 // ══ 9. O destrave: auto-desconexão ══
 //
 //  O Stoat não tem rota de "sair da call" — só `join_call` e `stop_ring`. O
@@ -505,12 +561,16 @@ ok(rv.ok === true, "o destrave pede a desconexão e relata");
 ok(!chamadasD.some((c) => c.url.includes("/join_call")),
   "★ o destrave NUNCA chama join_call (isso criaria a sala e o registro de novo)");
 
-// Vários servidores: para no primeiro que aceita, em vez de repetir em todos.
+// Vários servidores: bate em TODOS. O HTTP 200 dessa rota não prova nada
+// (member_edit.rs só age se a chave `{bot}:{servidor}` apontar para uma call,
+// e devolve 200 igual quando não aponta), então parar no primeiro 200 deixava
+// o registro preso num segundo servidor sem nem tentar.
 chamadasD.length = 0;
 await voz.forcarSaida("01JCALLR000000000000000AA", "01JSRVA00000000000000000AA",
   ["01JSRVA00000000000000000AA", "01JSRVB00000000000000000AA", "01JSRVC00000000000000000AA"]);
 const patches = chamadasD.filter((c) => c.metodo === "PATCH");
-ok(patches.length === 1, `★ para no primeiro servidor que aceita (foram ${patches.length} PATCH, não 3)`);
+ok(patches.length === 3, `★ tenta em todos os servidores — 200 não é prova (foram ${patches.length} PATCH, não 1)`);
+ok(new Set(patches.map((c) => c.url)).size === 3, "  → um PATCH por servidor, sem repetir");
 
 // ══ 12. UnknownNode: a call que ainda não existe ══
 //

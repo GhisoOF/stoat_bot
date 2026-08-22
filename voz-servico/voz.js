@@ -161,7 +161,7 @@ function explicar(e) {
   return msg;
 }
 
-export async function entrar(canalVoz, serverId = null, servidores = null) {
+export async function entrar(canalVoz, serverId = null, servidores = null, credenciais = null) {
   ultimoServidor = serverId ?? ultimoServidor;
   if (Array.isArray(servidores) && servidores.length) servidoresConhecidos = servidores;
   if (erroCarga) return { ok: false, erro: erroCarga };
@@ -172,12 +172,39 @@ export async function entrar(canalVoz, serverId = null, servidores = null) {
   const emVoo = entrando.get(canalVoz);
   if (emVoo) { dbg(`entrada em ${canalVoz} já em andamento — aguardando a mesma`); return emVoo; }
 
-  const tarefa = entrarDeFato(canalVoz, serverId).finally(() => entrando.delete(canalVoz));
+  const tarefa = entrarDeFato(canalVoz, serverId, credenciais).finally(() => entrando.delete(canalVoz));
   entrando.set(canalVoz, tarefa);
   return tarefa;
 }
 
-async function entrarDeFato(canalVoz, serverId = null) {
+// ── Entrar com um token que NÃO veio do join_call ─────────
+//
+//  O `join_call` é a única rota que o revoice conhece, e ela recusa com
+//  `AlreadyConnected` enquanto o Stoat me tiver no conjunto `vc:{bot}` do
+//  Redis dele. Esse conjunto só é limpo pelo aviso `participant_left` do
+//  LiveKit — que só existe se eu estiver DE FATO numa sala do LiveKit para
+//  sair dela. Ciclo fechado: não entro porque constou que estou, e não saio
+//  porque não estou.
+//
+//  A brecha é o MOVER: `PATCH /servers/{s}/members/{eu}` com `voice_channel`
+//  gera um token para o canal novo SEM passar pelo `raise_if_in_voice`
+//  (member_edit.rs: `create_token` direto). O token chega ao bot pelo
+//  WebSocket, no evento `UserMoveVoiceChannel { node, from, to, token }` —
+//  e o bot o repassa para cá. Conectando com ele, viro participante real da
+//  sala; daí em diante o estado do Stoat volta a bater com o meu, e sair
+//  (quando for a hora) dispara o `participant_left` que limpa tudo.
+//
+//  Pré-requisito do mover: estar numa call do MESMO servidor (a chave
+//  `{eu}:{servidor}` precisa existir). Quem orquestra isso é o bot, em
+//  `&tts resgatar`: entra numa call auxiliar, move-se, e chama esta rota.
+export async function entrarComToken(canalVoz, { token, node = null, url = null, serverId = null } = {}) {
+  if (!token) return { ok: false, erro: "falta o token" };
+  const destino = url || await urlDoNode(node);
+  if (!destino) return { ok: false, erro: `não sei a URL do node ${node ?? "(nenhum)"} — a API não o anunciou em features.livekit.nodes` };
+  return entrar(canalVoz, serverId, null, { token, url: destino, node });
+}
+
+async function entrarDeFato(canalVoz, serverId = null, credenciais = null) {
   const t0 = Date.now();
   const marcos = [];
   const marco = (nome) => { marcos.push({ nome, ms: Date.now() - t0 }); dbg(`  ⏱ ${nome} em ${Date.now() - t0}ms`); };
@@ -192,7 +219,7 @@ async function entrarDeFato(canalVoz, serverId = null) {
     // Stoat é resíduo de uma tentativa anterior. Limpar antes custa uma
     // requisição e evita o `AlreadyConnected` inteiro — que, sem isto, só
     // sairia esperando a conexão fantasma morrer sozinha.
-    if (!conexoes.size && (serverId ?? ultimoServidor)) {
+    if (!credenciais && !conexoes.size && (serverId ?? ultimoServidor)) {
       const previa = await forcarSaida(canalVoz, serverId ?? ultimoServidor, servidoresConhecidos).catch(() => null);
       marco(previa?.ok ? "residuo-limpo" : "sem-residuo");
     }
@@ -217,12 +244,12 @@ async function entrarDeFato(canalVoz, serverId = null) {
     // resolve a promessa. Daí os 20s de silêncio seguidos de timeout, sem
     // pista nenhuma no meio. Abrimos a sala antes, dizendo o node; a partir
     // daí o Stoat lembra dele e o join do revoice funciona.
-    const abriu = await abrirSalaSePreciso(canalVoz);
+    const abriu = credenciais ? null : await abrirSalaSePreciso(canalVoz);
     if (abriu) marco(`sala-aberta(${abriu})`);
 
-    marco("chamando-revoice.join");
+    marco(credenciais ? `chamando-revoice.join(token-do-mover:${credenciais.node ?? "?"})` : "chamando-revoice.join");
     const connection = await comLimite(
-      revoice.join(canalVoz),
+      credenciais ? joinComCredenciais(canalVoz, credenciais) : revoice.join(canalVoz),
       ENTRAR_MAX_MS,
       `${ENTRAR_MAX_MS / 1000}s sem resposta ao pedido de entrar na call (etapa: join)`,
       (tardia) => {
@@ -351,6 +378,30 @@ export async function sair(canalVoz = null) {
   return { ok: true, saiu };
 }
 
+// O `revoice.join()` é: POST join_call → `new VoiceConnection(canal, {token,
+// url})`. A classe VoiceConnection não é exportada, então o jeito de entrar
+// com um token NOSSO é interceptar esse POST — só o deste canal, só desta
+// vez — e devolver as credenciais que já temos. Qualquer outro POST segue
+// normal, inclusive de um join concorrente em outro canal.
+function joinComCredenciais(canalVoz, { token, url }) {
+  const api = revoice.api;
+  const original = api.post;
+  const alvo = `/channels/${canalVoz}/join_call`;
+  api.post = async function (rota, ...resto) {
+    if (rota === alvo) { api.post = original; return { token, url }; }
+    return original.call(this, rota, ...resto);
+  };
+  return revoice.join(canalVoz).finally(() => { if (api.post !== original) api.post = original; });
+}
+
+// URL pública de um node, pelo nome (`features.livekit.nodes[].public_url`).
+async function urlDoNode(node) {
+  if (!node) return process.env.VOZ_LIVEKIT_URL || null;
+  const lista = await nodesDisponiveis(true);
+  return lista.find((n) => n.name === node)?.public_url
+    ?? process.env.VOZ_LIVEKIT_URL ?? null;
+}
+
 // ── Qual node LiveKit usar ────────────────────────────────
 //
 //  Entrar numa call que JÁ existe é fácil: o Stoat lembra em qual node ela
@@ -364,26 +415,27 @@ export async function sair(canalVoz = null) {
 //  prática: funcionava quando alguém já estava na call, travava quando não.
 //
 //  A lista de nodes vem do `GET /` da API (`features.livekit.nodes`).
-let nodesCache = null;
-async function nodesDisponiveis() {
+let nodesCache = null;   // [{ name, public_url }]
+async function nodesDisponiveis(completo = false) {
   // Só guardamos a lista quando ela veio com algo. Guardar um resultado vazio
   // deixaria o serviço sem nodes até o próximo reinício se a API estivesse
   // fora do ar justo na primeira consulta.
-  if (nodesCache?.length) return nodesCache;
+  const entregar = (l) => completo ? l : l.map((n) => n.name);
+  if (nodesCache?.length) return entregar(nodesCache);
   const API = (process.env.STOAT_API || "https://api.stoat.chat").replace(/\/$/, "");
   try {
     const r = await comLimite(fetch(`${API}/`), 8000, "8s sem resposta da raiz da API");
     const j = await r.json().catch(() => null);
-    const lista = j?.features?.livekit?.nodes ?? [];
-    const nomes = lista.map((n) => n?.name).filter(Boolean);
-    if (nomes.length) nodesCache = nomes;
-    log(`nodes de voz disponíveis: ${nomes.join(", ") || "(nenhum)"}`);
-    return nomes;
+    const lista = (j?.features?.livekit?.nodes ?? [])
+      .filter((n) => n?.name)
+      .map((n) => ({ name: n.name, public_url: n.public_url ?? n.url ?? null }));
+    if (lista.length) nodesCache = lista;
+    log(`nodes de voz disponíveis: ${lista.map((n) => n.name).join(", ") || "(nenhum)"}`);
+    return entregar(lista);
   } catch (e) {
     console.warn("[VOZ] não consegui listar os nodes:", e?.message ?? e);
     return [];
   }
-  return nodesCache ?? [];
 }
 
 // O node preferido: o que o .env mandar, senão o primeiro anunciado pela API.
@@ -461,12 +513,20 @@ export async function forcarSaida(canalVoz, serverId = null, servidores = []) {
     return { ok: false, passos };
   }
 
+  // HTTP 200 aqui NÃO prova que algo foi removido: o Stoat só age se a chave
+  // `{eu}:{servidor}` do Redis dele apontar para uma call — e devolve 200
+  // igualmente quando ela não existe (member_edit.rs: `if let Some(channel)`).
+  // Por isso não paramos no primeiro 200: batemos em todos os servidores que
+  // conhecemos, já que o registro preso pode estar em qualquer um deles. Só
+  // chegamos aqui sem conexão local nenhuma, então não há call legítima para
+  // derrubar por engano.
+  let aceitos = 0;
   for (const sid of alvos) {
     const r = await bater("PATCH", `/servers/${sid}/members/${meuId}`, { remove: ["VoiceChannel"] });
     passos.push(r);
     if (!r.ok) continue;
+    aceitos++;
     log(`pedido de desconexão aceito em ${sid}`);
-    return { ok: true, via: "PATCH members remove VoiceChannel", passos };
 
     // NÃO verificamos com um `join_call` de teste.
     //
@@ -478,6 +538,7 @@ export async function forcarSaida(canalVoz, serverId = null, servidores = []) {
     // A única prova honesta é a entrada real que a pessoa vai fazer em
     // seguida, e ela já diz se funcionou.
   }
+  if (aceitos) return { ok: true, via: "PATCH members remove VoiceChannel", passos, aceitos };
   return { ok: false, passos, aindaPreso: true };
 }
 

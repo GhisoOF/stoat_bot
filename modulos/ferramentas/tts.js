@@ -35,7 +35,7 @@ const SERVIDORES = (process.env.TTS_SERVIDORES || "")
 // Gentoo, fora do Docker, então os dois são atualizados por caminhos
 // diferentes e podem ficar defasados — o pior estado possível, porque tudo
 // "parece" atualizado e a fala sai sem efeito, em silêncio.
-const VOZ_API_ESPERADA = 10;
+const VOZ_API_ESPERADA = 11;
 
 const COOLDOWN_MS = Number(process.env.TTS_COOLDOWN_MS || 8000);
 const MAX_CHARS   = Number(process.env.TTS_MAX_CHARS || 400);
@@ -53,7 +53,7 @@ setInterval(() => {
 // para a Judy dizer a palavra "diagnosticar" em voz alta — mas era isso que
 // acontecia, e ainda gastava 20s tentando entrar na call para fazê-lo.
 const SUBCOMANDOS = [
-  "estado", "status", "saude", "diagnostico", "reiniciar", "filtro",
+  "estado", "status", "saude", "diagnostico", "reiniciar", "resgatar", "filtro",
   "entrar", "sair", "canal", "transmitir", "on", "off", "voz", "efeito",
   "tom", "cooldown", "nomes", "dicionario", "ajuda",
 ];
@@ -468,8 +468,8 @@ export async function cmdTts(message, args, ctx) {
         "🔎 **`UnknownNode`: the call doesn't exist yet.** Stoat only knows which voice server a call lives on after someone starts it; before that, whoever joins has to **say** which one to use. I now provide that myself when opening the room — if you're seeing this, the API announced no voice node at all (see the `node` step above).\n\nImmediate workaround: **join the call first**, then call me.");
     } else if (/AlreadyConnected/i.test(String(jc?.detalhe ?? ""))) {
       veredito = tr(ctx,
-        `🔎 **\`AlreadyConnected\`: o Stoat me registra como já estando nesta call.** Não é permissão nem rede: é um registro preso no lado dele, sobra de uma entrada que travou no meio.\n\n\`${PREFIXO}tts destravar\` tenta me desconectar _(ManageMessages)_. Não dando certo, **alguém com MoveMembers me remove da call pelo cliente** — o Stoat não tem rota de "sair da call", então essa é a única forma de derrubar um participante preso.`,
-        `🔎 **\`AlreadyConnected\`: Stoat records me as already in this call.** Not permission, not network: a stuck record on their side, left over from a join that jammed halfway.\n\n\`${PREFIXO}tts destravar\` tries to disconnect me _(ManageMessages)_. If that fails, **someone with MoveMembers removes me from the call in the client** — Stoat has no "leave call" route, so that's the only way to drop a stuck participant.`);
+        `🔎 **\`AlreadyConnected\`: o Stoat me registra como já estando nesta call.** Não é permissão nem rede: é um registro preso no lado dele, sobra de uma entrada que travou no meio.\n\n\`${PREFIXO}tts destravar\` tenta me desconectar _(ManageMessages)_. Não dando certo, \`${PREFIXO}tts resgatar\`: entro por outra call e me movo para esta — o mover emite um token sem conferir o registro preso. _(Remover pelo cliente ou kick passam pela mesma chave que o destravar, então não adiantam quando ele não adianta.)_`,
+        `🔎 **\`AlreadyConnected\`: Stoat records me as already in this call.** Not permission, not network: a stuck record on their side, left over from a join that jammed halfway.\n\n\`${PREFIXO}tts destravar\` tries to disconnect me _(ManageMessages)_. If that fails, \`${PREFIXO}tts resgatar\`: I come in through another call and move myself here — the move issues a token without checking the stuck record. _(Removing me in the client or kicking go through the same key as destravar, so they won't help when it doesn't.)_`);
     } else if (jc?.ok === false) {
       const html = /HTML/i.test(String(jc.detalhe ?? ""));
       veredito = html
@@ -542,7 +542,7 @@ export async function cmdTts(message, args, ctx) {
             "**As saídas, da menos à mais drástica:**",
             `1. Use **outra call** — o Stoat só me bloqueia neste canal; em outro eu entro normalmente. \`${PREFIXO}tts entrar\` lá.`,
             "2. Espere: a sala pode expirar sozinha e liberar.",
-            "3. **Me dê kick do servidor e me adicione de volta.** É a única rota do Stoat que apaga o registro de voz de verdade (`member_remove` chama `delete_voice_state`; a que eu uso, não).",
+            `3. **\`${PREFIXO}tts resgatar\`** — entro numa call auxiliar, me movo para esta pelo PATCH do Stoat (que emite token sem conferir o registro preso) e conecto de verdade. _(Kick não resolve: \`member_remove\` lê a mesma chave que esta rota.)_`,
           ].join("\n"),
       ].join("\n"), colour: r?.ok ? COR.sucesso : COR.aviso,
     }, {
@@ -559,10 +559,165 @@ export async function cmdTts(message, args, ctx) {
             "**Ways out, least to most drastic:**",
             `1. Use **another call** — Stoat only blocks me on this channel; elsewhere I join fine. \`${PREFIXO}tts entrar\` there.`,
             "2. Wait: the room may expire on its own and free it.",
-            "3. **Kick me from the server and add me back.** It's the only Stoat route that truly deletes the voice record (`member_remove` calls `delete_voice_state`; the one I use doesn't).",
+            `3. **\`${PREFIXO}tts resgatar\`** — I join a helper call, move myself here through Stoat's PATCH (which issues a token without checking the stuck record) and connect for real. _(Kicking doesn't help: \`member_remove\` reads the same key this route does.)_`,
           ].join("\n"),
       ].join("\n"), colour: r?.ok ? COR.sucesso : COR.aviso,
     }));
+  }
+
+  // ── resgatar (staff): sai do AlreadyConnected pela porta dos fundos ──
+  //
+  //  O que está preso é um conjunto no Redis do Stoat (`vc:{bot}`), que só o
+  //  aviso `participant_left` do LiveKit limpa. `destravar` não o alcança: a
+  //  rota que ele usa só age se a chave `{bot}:{servidor}` apontar para uma
+  //  call — e devolve 200 mesmo quando não aponta para nada. Nem kick ajuda:
+  //  `member_remove` lê a MESMA chave. Sobra o MOVER (`voice_channel` no PATCH
+  //  do próprio membro), que emite um token para o canal destino sem passar
+  //  pelo `raise_if_in_voice`. O token vem pelo WebSocket, no evento
+  //  `UserMoveVoiceChannel`; aqui a gente o captura e entrega ao serviço.
+  //
+  //  Roteiro: entrar numa call AUXILIAR do mesmo servidor (para a chave
+  //  existir) → PATCH voice_channel → pegar o token do evento → o serviço
+  //  conecta com ele na call presa. Pronto: de participante real, o estado
+  //  do Stoat volta a bater com o meu, e a leitura já começa ali.
+  if (["resgatar", "resgate", "rescue"].includes(sub)) {
+    if (!ehStaff) {
+      return sendEmbed(message.channel, tr(ctx,
+        { title: "🚫 Permissão insuficiente", description: "Você precisa de **ManageMessages**.", colour: COR.erro },
+        { title: "🚫 Missing permission", description: "You need **ManageMessages**.", colour: COR.erro }));
+    }
+    const client = ctx.client;
+    const meuId = client?.user?.id;
+    const token = process.env.BOT_TOKEN;
+    const API = (process.env.STOAT_API || "https://api.stoat.chat").replace(/\/$/, "");
+    const presa = c.canalVoz && c.canalVoz !== message.channelId && !pareceCanalDeVoz(message.channel)
+      ? c.canalVoz : message.channelId;
+    const passos = [];
+    const ok = (t) => passos.push(`✅ ${t}`);
+    const falha = (t) => passos.push(`❌ ${t}`);
+    const relatar = (titulo, cor, rodape) => sendEmbed(message.channel, {
+      title: titulo, description: [...passos, "", rodape].filter((x) => x != null).join("\n"), colour: cor,
+    });
+
+    // Call auxiliar: a indicada, ou a primeira outra call do servidor.
+    const auxArg = resto ? resolverCanal(resto, { message, server }) : null;
+    const candidatas = canaisDeVozDo(server, client)
+      .filter((v) => (v.id ?? v._id) !== presa)
+      .sort((a, b) => (b.isVoice === true) - (a.isVoice === true));
+    const aux = auxArg ?? (candidatas[0]?.id ?? candidatas[0]?._id ?? null);
+    if (!aux || aux === presa) {
+      return sendEmbed(message.channel, tr(ctx, {
+        title: "❓ Preciso de uma call auxiliar",
+        description: `O resgate passa por **outra call do mesmo servidor** (entro nela e me movo para <#${presa}>). Não achei nenhuma sozinha — diga qual: \`${PREFIXO}tts resgatar #call-auxiliar\`.`,
+        colour: COR.aviso,
+      }, {
+        title: "❓ I need a helper call",
+        description: `The rescue goes through **another call in this server** (I join it and move myself to <#${presa}>). I couldn't find one on my own — tell me which: \`${PREFIXO}tts resgatar #helper-call\`.`,
+        colour: COR.aviso,
+      }));
+    }
+    if (!meuId || !token) {
+      return sendEmbed(message.channel, { title: "❌", description: "sem `BOT_TOKEN`/id próprio no ambiente do bot", colour: COR.erro });
+    }
+
+    await sendEmbed(message.channel, tr(ctx, {
+      title: "🛟 Resgate em andamento",
+      description: `Entrando em <#${aux}> para depois me mover para <#${presa}>. Leva uns 10–30s.`,
+      colour: COR.info,
+    }, {
+      title: "🛟 Rescue in progress",
+      description: `Joining <#${aux}> so I can move myself to <#${presa}>. Takes about 10–30s.`,
+      colour: COR.info,
+    }));
+
+    // 1. entrar na auxiliar
+    try {
+      const r = await chamar("/entrar", { canalVoz: aux, serverId, servidores: servidoresConhecidos(ctx) });
+      ok(`${lang === "en" ? "joined helper call" : "entrei na call auxiliar"} <#${aux}>${r?.jaEstava ? (lang === "en" ? " (was already there)" : " (já estava)") : ""}`);
+    } catch (e) {
+      falha(`${lang === "en" ? "helper call" : "call auxiliar"} <#${aux}>: \`${String(e.message ?? e).replace(/`/g, "")}\``);
+      return relatar(lang === "en" ? "⚠️ Rescue stopped at the helper call" : "⚠️ Resgate parou na call auxiliar", COR.aviso,
+        lang === "en"
+          ? "If this one is also stuck, pick another: `" + PREFIXO + "tts resgatar #other-call`."
+          : "Se essa também está presa, escolha outra: `" + PREFIXO + "tts resgatar #outra-call`.");
+    }
+
+    // 2. esperar o Stoat me registrar lá (é a chave que o mover vai ler)
+    const canalAux = client?.channels?.get?.(aux);
+    let registrada = false;
+    for (let i = 0; i < 40 && !registrada; i++) {
+      registrada = !!canalAux?.voiceParticipants?.has?.(meuId);
+      if (!registrada) await new Promise((r) => setTimeout(r, 250));
+    }
+    passos.push(registrada
+      ? `✅ ${lang === "en" ? "Stoat registered me in the helper call" : "o Stoat me registrou na call auxiliar"}`
+      : `⚠️ ${lang === "en" ? "didn't see myself listed in the helper call after 10s — trying anyway" : "não me vi listada na call auxiliar em 10s — tentando assim mesmo"}`);
+
+    // 3. ouvir o evento que traz o token, e pedir o mover
+    const tokenDoMover = new Promise((resolve, reject) => {
+      const t = setTimeout(() => { client?.events?.off?.("event", ouvir); reject(new Error("15s sem o evento UserMoveVoiceChannel")); }, 15_000);
+      const ouvir = (ev) => {
+        if (ev?.type !== "UserMoveVoiceChannel" || ev?.to !== presa) return;
+        clearTimeout(t); client?.events?.off?.("event", ouvir); resolve(ev);
+      };
+      client?.events?.on?.("event", ouvir);
+    });
+    let patch;
+    try {
+      const r = await fetch(`${API}/servers/${serverId}/members/${meuId}`, {
+        method: "PATCH",
+        headers: { "X-Bot-Token": token, "Content-Type": "application/json" },
+        body: JSON.stringify({ voice_channel: presa }),
+        signal: AbortSignal.timeout(10_000),
+      });
+      const txt = await r.text().catch(() => "");
+      patch = { ok: r.ok, status: r.status, corpo: txt.slice(0, 140) };
+    } catch (e) { patch = { ok: false, erro: e?.message ?? String(e) }; }
+    if (!patch.ok) {
+      tokenDoMover.catch(() => {});
+      falha(`PATCH voice_channel → ${patch.erro ?? `HTTP ${patch.status} ${patch.corpo.replace(/`/g, "")}`}`);
+      const dica = /NotConnected/i.test(patch.corpo ?? "")
+        ? (lang === "en"
+            ? "`NotConnected`: Stoat never recorded my join in the helper call. That's the `participant_joined` webhook not being processed on their side — nothing I can fix from here; try again in a minute."
+            : "`NotConnected`: o Stoat não registrou minha entrada na call auxiliar. É o webhook `participant_joined` não sendo processado do lado deles — não tenho como consertar daqui; tente de novo em um minuto.")
+        : (lang === "en" ? "I'll stay in the helper call; `" + PREFIXO + "tts sair` drops me." : "Fico na call auxiliar; `" + PREFIXO + "tts sair` me tira.");
+      return relatar(lang === "en" ? "⚠️ Rescue failed at the move" : "⚠️ Resgate falhou no mover", COR.aviso, dica);
+    }
+    ok(`PATCH voice_channel → HTTP ${patch.status}`);
+
+    let ev;
+    try { ev = await tokenDoMover; }
+    catch (e) {
+      falha(`${lang === "en" ? "token" : "token"}: \`${e.message}\``);
+      return relatar(lang === "en" ? "⚠️ Rescue failed waiting for the token" : "⚠️ Resgate falhou esperando o token", COR.aviso,
+        lang === "en"
+          ? "Stoat accepted the move but never sent the `UserMoveVoiceChannel` event with the token. `" + PREFIXO + "tts sair` and try again."
+          : "O Stoat aceitou o mover mas não mandou o evento `UserMoveVoiceChannel` com o token. `" + PREFIXO + "tts sair` e tente de novo.");
+    }
+    ok(`${lang === "en" ? "got the token for" : "recebi o token para"} <#${presa}> (node \`${ev.node ?? "?"}\`)`);
+
+    // 4. o serviço entra com o token (sai da auxiliar no caminho)
+    try {
+      await chamar("/entrar-com-token", { canalVoz: presa, token: ev.token, node: ev.node ?? null, serverId });
+      ok(`${lang === "en" ? "connected for real in" : "conectei de verdade em"} <#${presa}>`);
+    } catch (e) {
+      falha(`${lang === "en" ? "join with token" : "entrada com token"}: \`${String(e.message ?? e).replace(/`/g, "")}\``);
+      return relatar(lang === "en" ? "⚠️ Rescue failed at the final join" : "⚠️ Resgate falhou na entrada final", COR.aviso,
+        lang === "en"
+          ? "If the service answered \"rota desconhecida\", update `voz-servico/` on the machine (this needs API version " + VOZ_API_ESPERADA + ")."
+          : "Se o serviço respondeu \"rota desconhecida\", atualize o `voz-servico/` na máquina (isto precisa da versão " + VOZ_API_ESPERADA + " da API).");
+    }
+
+    // Já que estou lá, a leitura começa ali — é o que a pessoa queria.
+    if (!c.ativo) c.ativo = true;
+    c.canalVoz = presa;
+    if (!c.canalTexto) c.canalTexto = message.channelId;
+    salvarConfig?.();
+    filtro.limpar(c.canalTexto ?? null);
+    return relatar(lang === "en" ? "🛟 Rescued — I'm in the call" : "🛟 Resgatada — estou na call", COR.sucesso,
+      lang === "en"
+        ? `Reading <#${c.canalTexto}> into <#${presa}>. From now on Stoat's record and mine match again, so \`${PREFIXO}tts sair\` / \`${PREFIXO}tts entrar\` work normally.`
+        : `Lendo <#${c.canalTexto}> em <#${presa}>. Daqui em diante o registro do Stoat e o meu batem de novo, então \`${PREFIXO}tts sair\` / \`${PREFIXO}tts entrar\` voltam ao normal.`);
   }
 
   // ── reiniciar (staff): destrava o serviço sem ir ao terminal ──
@@ -764,7 +919,7 @@ export async function cmdTts(message, args, ctx) {
               "",
               `**Enquanto isso, use outra call:** o bloqueio é só neste canal — em qualquer outro eu entro normalmente. Basta \`${PREFIXO}tts entrar\` lá.`,
               "",
-              "Para liberar este canal de vez: **kick no bot e adicionar de volta**. É a única rota do Stoat que apaga o registro de voz.",
+              `Para liberar este canal de vez: \`${PREFIXO}tts resgatar\` _(ManageMessages)_ — entro por outra call e me movo para cá.`,
             ].join("\n"), colour: COR.aviso,
           }, {
             title: "🔒 Stoat records me as already in this call",
@@ -775,7 +930,7 @@ export async function cmdTts(message, args, ctx) {
               "",
               `**Meanwhile, use another call:** the block is on this channel only — anywhere else I join fine. Just \`${PREFIXO}tts entrar\` there.`,
               "",
-              "To free this channel for good: **kick the bot and add it back**. It's the only Stoat route that deletes the voice record.",
+              `To free this channel for good: \`${PREFIXO}tts resgatar\` _(ManageMessages)_ — I come in through another call and move myself here.`,
             ].join("\n"), colour: COR.aviso,
           }));
         }

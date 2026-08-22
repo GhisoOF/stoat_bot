@@ -564,6 +564,7 @@ Prefixo: `&`. Aliases entre parênteses.
 | `&tts filtro [status\|on\|off\|porminuto <n>\|teste <texto>]` | a peneira anti-barulho da transmissão |
 | `&tts diagnostico` | em qual etapa a entrada na call trava *(ManageMessages)* |
 | `&tts destravar` | limpa o `AlreadyConnected` do lado do Stoat *(ManageMessages)* |
+| `&tts resgatar [#call-auxiliar]` | quando `destravar` não resolve: entra por outra call e se move para a presa, conectando com o token do evento `UserMoveVoiceChannel` *(ManageMessages)* |
 | `&tts reiniciar` | destrava o serviço de voz sem terminal *(ManageMessages)* |
 | `&boasvindas <canal\|titulo\|texto\|cor\|imagem\|testar\|padrao\|on\|off>` | embed de entrada |
 | `&adeus <canal\|titulo\|texto\|cor\|imagem\|testar\|padrao\|on\|off>` | embed de saída |
@@ -1696,8 +1697,77 @@ Três medidas quebram o ciclo:
    encerrar. Não cobre queda de energia, mas cobre reinício e deploy.
 
 Sobrando o problema: **use outra call** (o bloqueio é por canal, e bots podem
-estar em várias) ou, em último caso, **kick no bot e adicioná-lo de volta** —
-`member_remove` é a única rota acessível que chama `delete_voice_state`.
+estar em várias) ou `&tts resgatar`, abaixo.
+
+### `&tts resgatar`: a porta dos fundos
+
+Quando nem a limpeza resolve, o registro preso é o conjunto `vc:{bot}` do
+Redis do Stoat — e **nenhuma rota que o bot alcança o apaga**:
+
+| Caminho | Lê | Apaga `vc:{bot}`? |
+|---|---|---|
+| `PATCH members remove VoiceChannel` (`destravar`) | chave `{bot}:{servidor}` | só via webhook `participant_left` |
+| remover pelo cliente (MoveMembers) | a mesma rota acima | idem |
+| kick + readicionar (`member_remove`) | a mesma chave | idem |
+| `join_call` com `force_disconnect` | `vc:{bot}` direto | **proibido para bots** (`IsBot`) |
+
+Só o webhook `participant_left` do LiveKit limpa — e ele exige que o bot
+esteja **de fato** na sala para sair dela. Ciclo fechado.
+
+A brecha é o **mover**: `PATCH /servers/{s}/members/{eu}` com
+`voice_channel: <call>` chama `create_token` direto, **sem**
+`raise_if_in_voice` (`member_edit.rs`). O token vem pelo WebSocket no evento
+`UserMoveVoiceChannel { node, from, to, token }`. Pré-requisito: estar numa
+call do **mesmo** servidor (a chave `{bot}:{servidor}` precisa existir).
+
+`&tts resgatar [#call-auxiliar]` faz o roteiro inteiro:
+
+1. entra numa call auxiliar do servidor (a indicada, ou a primeira outra);
+2. espera o Stoat listar o bot nela (`voiceParticipants`);
+3. faz o PATCH de mover para a call presa e captura o token do evento;
+4. chama `POST /entrar-com-token` do `voz-servico`, que intercepta o
+   `join_call` interno do revoice só para aquele canal e conecta com o token.
+
+De participante real, o registro do Stoat e o do serviço voltam a bater; a
+leitura já começa na call resgatada. Precisa da **versão 11** do `voz-servico`.
+
+### `&tts resgatar`: quando o registro preso não aponta para nada
+
+O `AlreadyConnected` de bot é um `SISMEMBER vc:{bot} "{canal}-{servidor}"`
+(`voice/mod.rs`, `raise_if_in_voice`). Já o `destravar` lê **outra chave**:
+
+```rust
+if let Some(channel) = get_user_voice_channel_in_server(&target_user.id, &server.id).await? {
+    // chave `{bot}:{servidor}` — uma só por servidor, sobrescrita a cada entrada
+    voice_client.remove_user(&node, &user.id, &channel).await?;
+};
+Ok(Json(member.into()))   // 200 com ou sem efeito
+```
+
+Quando `{bot}:{servidor}` já não existe (bots podem estar em várias calls, e a
+chave é uma só: entrar noutra call do mesmo servidor e sair dela a apaga), o
+`destravar` devolve 200 sem tocar em nada. **Kick não ajuda**: `member_remove`
+lê a mesma chave. `force_disconnect` limparia tudo, mas é proibido para bots.
+O conjunto `vc:{bot}` só é limpo pelo webhook `participant_left` — que exige
+estar de fato numa sala do LiveKit.
+
+A brecha é o **mover**: `PATCH /servers/{s}/members/{eu}` com
+`voice_channel: <call>` chama `create_token` direto, sem `raise_if_in_voice`, e
+entrega o token pelo WebSocket no evento `UserMoveVoiceChannel { node, from,
+to, token }`. Pré-requisito: estar numa call do mesmo servidor (a chave precisa
+existir). Daí o roteiro do `&tts resgatar [#call-auxiliar]`:
+
+1. entra numa call auxiliar do servidor (`POST /entrar` normal);
+2. espera o Stoat listar o bot nela (`voiceParticipants`);
+3. faz o PATCH de mover para a call presa e captura o token em
+   `client.events.on("event")`;
+4. `POST /entrar-com-token` no serviço, que intercepta o `join_call` interno do
+   `revoice.join()` só para esse canal e conecta com o token recebido.
+
+De participante real, o estado do Stoat volta a bater com o do bot; a leitura
+já começa na call resgatada. Se o PATCH responder `NotConnected`, o webhook
+`participant_joined` não foi processado do lado deles — não há o que fazer
+daqui além de esperar.
 
 ### `UnknownNode`: a call que ainda não existe
 
@@ -1900,7 +1970,7 @@ O código é organizado em quatro áreas, sob `modulos/`:
 │   │   └── game.js             # &game — personagem, 9 atributos, progressão
 │   └── economia/               # reservado para o futuro
 ├── voz-servico/                # judy-voz: LiveKit + Piper (nativo no Gentoo)
-│   ├── servidor.js             # HTTP: /saude, /entrar, /sair, /falar, /reiniciar, /diagnostico, /destravar
+│   ├── servidor.js             # HTTP: /saude, /entrar, /entrar-com-token, /sair, /falar, /reiniciar, /diagnostico, /destravar
 │   ├── voz.js                  # entra na call e publica áudio (revoice.js)
 │   └── tts.js                  # síntese (Piper) e efeitos (ffmpeg)
 ├── ia-servico/                 # serviço de IA (ferramentas + tool-calling)

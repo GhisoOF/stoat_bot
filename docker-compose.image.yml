@@ -34,7 +34,7 @@ services:
       # moderação junto. Aqui ficam só o endereço e a chave.
       - VOZ_SERVICO_URL=http://100.74.70.106:8091
       - VOZ_CHAVE=                          # MESMA chave do voz-servico/.env
-      - TTS_SERVIDORES=                     # IDs dos servidores com voz (vazio = desligado em todos)
+      - TTS_SERVIDORES=01KH9SJYWVD7XAHJ28TP0YP4Q0   # só Vapor Nexus tem voz; vazio = desligado em todos
       - TTS_COOLDOWN_MS=8000                # freio por pessoa entre falas
       - TTS_MAX_CHARS=400
       - TTS_TIMEOUT_MS=40000

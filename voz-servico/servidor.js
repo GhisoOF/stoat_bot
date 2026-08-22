@@ -12,6 +12,9 @@
 //  Rotas:
 //    GET  /saude       → diagnóstico completo da cadeia
 //    POST /entrar      → { canalVoz } entra numa call
+//    POST /entrar-com-token → { canalVoz, token, node } entra com um token que
+//                        veio do evento UserMoveVoiceChannel (resgate de
+//                        AlreadyConnected; ver voz.entrarComToken)
 //    POST /sair        → { canalVoz? } sai (sem canal = sai de todas)
 //    POST /reiniciar   → recria o cliente de voz sem derrubar o processo
 //    POST /diagnostico → { canalVoz } testa join_call e alcance do LiveKit,
@@ -34,7 +37,7 @@ import * as voz from "./voz.js";
 // O bot compara com o número que ele espera e avisa se estiver defasado —
 // antes eu detectava isso procurando um efeito específico na lista, e quando
 // esse efeito foi renomeado o alarme passou a tocar para sempre.
-export const API_VERSAO = 10;  // 10: abre a sala informando o node (UnknownNode)
+export const API_VERSAO = 11;  // 11: /entrar-com-token (resgate do AlreadyConnected via mover)
 
 const PORTA   = Number(process.env.VOZ_PORTA || 8091);
 const CHAVE   = process.env.VOZ_CHAVE || "";
@@ -106,6 +109,14 @@ const servidor = createServer(async (req, res) => {
       const { canalVoz, serverId, servidores } = corpo;
       if (!canalVoz) return responder(res, 400, { erro: "falta canalVoz" });
       const r = await voz.entrar(canalVoz, serverId ?? null, servidores ?? null);
+      return responder(res, r.ok ? 200 : 502, r);
+    }
+
+    if (rota === "/entrar-com-token") {
+      const { canalVoz, token, node, url, serverId } = corpo;
+      if (!canalVoz) return responder(res, 400, { erro: "falta canalVoz" });
+      if (!token) return responder(res, 400, { erro: "falta token" });
+      const r = await voz.entrarComToken(canalVoz, { token, node: node ?? null, url: url ?? null, serverId: serverId ?? null });
       return responder(res, r.ok ? 200 : 502, r);
     }
 

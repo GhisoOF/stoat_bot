@@ -224,6 +224,7 @@ const SUB = {
     diagnose: "diagnostico", diagnostics: "diagnostico", health: "estado",
     join: "entrar", read: "ler", start: "entrar", stop: "sair",
     unstick: "destravar", unlock: "destravar",
+    rescue: "resgatar", resgate: "resgatar",
     perminute: "porminuto", cap: "porminuto",
     join: "entrar", leave: "sair", voice: "voz", status: "estado",
     names: "nomes", cooldown: "cooldown",

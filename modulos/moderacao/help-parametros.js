@@ -190,6 +190,7 @@ function parametrosPT(P) {
 
     tts: [
       { nome: "<texto>", desc: "a Judy fala isso na call agora (não passa pela peneira — é pedido explícito)" },
+      { nome: "falar", valor: "<texto>", desc: "força a fala mesmo que o texto pareça um subcomando (`&tts falar sair`)" },
       { nome: "canal", valor: "<#voz|aqui>", desc: "em qual call ela fala. Digite dentro da call e use `aqui`" },
       { nome: "transmitir", valor: "<#texto|off>", desc: "tudo escrito nesse canal vira fala na call. Vale para **todo mundo** que escrever lá" },
       { nome: "entrar | sair", desc: "conecta/desconecta da call. Depois de `sair`, a transmissão **não** traz o bot de volta sozinha" },
@@ -393,6 +394,7 @@ function parametrosEN(P) {
 
     tts: [
       { nome: "<text>", desc: "Judy says it in the call right now (skips the sieve — it's an explicit request)" },
+      { nome: "falar", valor: "<text>", desc: "forces speech even when the text looks like a subcommand (`&tts falar sair`)" },
       { nome: "canal", valor: "<#voice|aqui>", desc: "which call she speaks in. Type inside the call and use `aqui`" },
       { nome: "transmitir", valor: "<#text|off>", desc: "everything written in that channel becomes speech in the call. Applies to **everyone** writing there" },
       { nome: "entrar | sair", desc: "connects/disconnects from the call. After `sair`, the broadcast will **not** drag the bot back" },

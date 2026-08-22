@@ -35,7 +35,7 @@ const SERVIDORES = (process.env.TTS_SERVIDORES || "")
 // Gentoo, fora do Docker, então os dois são atualizados por caminhos
 // diferentes e podem ficar defasados — o pior estado possível, porque tudo
 // "parece" atualizado e a fala sai sem efeito, em silêncio.
-const VOZ_API_ESPERADA = 3;
+const VOZ_API_ESPERADA = 4;
 
 const COOLDOWN_MS = Number(process.env.TTS_COOLDOWN_MS || 8000);
 const MAX_CHARS   = Number(process.env.TTS_MAX_CHARS || 400);
@@ -47,6 +47,47 @@ setInterval(() => {
   const corte = Date.now() - COOLDOWN_MS * 10;
   for (const [k, t] of ultimaFala) if (t < corte) ultimaFala.delete(k);
 }, 10 * 60_000).unref?.();
+
+// Todo subcomando que o `&tts` entende. Serve para pegar o erro de digitação
+// antes de ele virar fala: `&tts diagnosticar` (com o "r") não é um pedido
+// para a Judy dizer a palavra "diagnosticar" em voz alta — mas era isso que
+// acontecia, e ainda gastava 20s tentando entrar na call para fazê-lo.
+const SUBCOMANDOS = [
+  "estado", "status", "saude", "diagnostico", "reiniciar", "filtro",
+  "entrar", "sair", "canal", "transmitir", "on", "off", "voz", "efeito",
+  "tom", "cooldown", "nomes", "dicionario", "ajuda",
+];
+
+function semAcento(t) {
+  return String(t ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+}
+
+// Distância de edição, com corte: acima de `max` não interessa o valor exato.
+function perto(a, b, max = 2) {
+  if (Math.abs(a.length - b.length) > max) return false;
+  const d = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    let ant = d[0]; d[0] = i;
+    for (let j = 1; j <= b.length; j++) {
+      const tmp = d[j];
+      d[j] = Math.min(d[j] + 1, d[j - 1] + 1, ant + (a[i - 1] === b[j - 1] ? 0 : 1));
+      ant = tmp;
+    }
+  }
+  return d[b.length] <= max;
+}
+
+// Só dispara com UMA palavra: `&tts entrar agora na call` é fala de verdade.
+function quaseSubcomando(args) {
+  if (args.length !== 1) return null;
+  const p = semAcento(args[0]);
+  if (p.length < 4) return null;
+  for (const sc of SUBCOMANDOS) {
+    if (p === sc) return null;                    // exato já foi tratado acima
+    if (sc.startsWith(p) || p.startsWith(sc) || perto(p, sc)) return sc;
+  }
+  return null;
+}
 
 export function servidorPermitido(serverId) {
   return !!serverId && SERVIDORES.includes(serverId);
@@ -219,6 +260,12 @@ export async function cmdTts(message, args, ctx) {
       `**${lang === "en" ? "Voice service" : "Serviço de voz"}:** ${saude ? "🟢 ok" : `🔴 ${erroSaude}`}`,
     ];
     if (saude) {
+      const v = Number(saude.versao ?? 1);
+      linhas.push(v < VOZ_API_ESPERADA
+        ? `**${lang === "en" ? "Service version" : "Versão do serviço"}:** ⚠️ **${v}** ${lang === "en"
+            ? `— this bot expects **${VOZ_API_ESPERADA}**. Update \`voz-servico/\` on the machine and restart \`judy-voz\`; until then, commands the old version doesn't know will answer "rota desconhecida".`
+            : `— este bot espera a **${VOZ_API_ESPERADA}**. Atualize o \`voz-servico/\` na máquina e reinicie o \`judy-voz\`; até lá, comandos que a versão antiga não conhece respondem "rota desconhecida".`}`
+        : `**${lang === "en" ? "Service version" : "Versão do serviço"}:** 🟢 ${v}`);
       linhas.push(`**Piper:** ${saude.piper?.ok ? `🟢 ${saude.piper.vozAtual}` : `🔴 ${saude.piper?.erro}`}`);
       // "pronto" aqui é só "a biblioteca carregou" — NÃO diz nada sobre
       // conseguir entrar numa call. Confundir os dois foi o que fez este
@@ -259,7 +306,8 @@ export async function cmdTts(message, args, ctx) {
   // bot já está na call) ou a rede não alcançando o LiveKit (UDP, MTU,
   // firewall). O remédio de uma não serve para a outra. Isto separa as
   // duas antes de qualquer chute.
-  if (["diagnostico", "diagnóstico", "diagnose", "porque", "porquê"].includes(sub)) {
+  if (["diagnostico", "diagnóstico", "diagnosticar", "diagnose", "diagnostics",
+       "checar", "check", "porque", "porquê"].includes(sub)) {
     if (!ehStaff) {
       return sendEmbed(message.channel, tr(ctx,
         { title: "🚫 Permissão insuficiente",
@@ -277,9 +325,52 @@ export async function cmdTts(message, args, ctx) {
     let d;
     try { d = await chamar("/diagnostico", { canalVoz: c.canalVoz }); }
     catch (e) {
-      return sendEmbed(message.channel, {
+      const motivo = String(e.message ?? e).replace(/`/g, "");
+      // O serviço RESPONDEU, só não conhece a rota: está numa versão anterior.
+      // É um diagnóstico completamente diferente de "está fora do ar", e
+      // mandava investigar rede quando o que falta é copiar uma pasta.
+      const velho = /rota desconhecida|HTTP 404/i.test(motivo);
+      return sendEmbed(message.channel, velho ? tr(ctx, {
+        title: "⚠️ O serviço de voz está desatualizado",
+        description: [
+          `O \`judy-voz\` respondeu, mas não conhece o \`/diagnostico\` — ele ainda roda uma versão anterior à ${VOZ_API_ESPERADA}.`,
+          "",
+          "O bot é atualizado pelo deploy do container; o serviço de voz **não** — ele roda nativo na máquina, e precisa ser copiado e reiniciado à mão:",
+          "",
+          "```",
+          "# na máquina do judy-voz",
+          "cd ~/Downloads/github/voz-servico   # onde ele vive",
+          "# substitua os arquivos pelo voz-servico/ do pacote novo",
+          "# e reinicie o serviço",
+          "```",
+          "",
+          `Depois, \`${PREFIXO}tts estado\` deve mostrar **versão ${VOZ_API_ESPERADA}**.`,
+          "",
+          "_Enquanto isso: as correções de entrar/sair também estão nessa pasta, então o timeout que você está vendo continua acontecendo até ela subir._",
+        ].join("\n"),
+        colour: COR.aviso,
+      }, {
+        title: "⚠️ The voice service is out of date",
+        description: [
+          `\`judy-voz\` answered, but doesn't know \`/diagnostico\` — it's still running a version older than ${VOZ_API_ESPERADA}.`,
+          "",
+          "The bot updates through the container deploy; the voice service does **not** — it runs natively on the machine and has to be copied and restarted by hand:",
+          "",
+          "```",
+          "# on the judy-voz machine",
+          "cd ~/Downloads/github/voz-servico   # wherever it lives",
+          "# replace the files with voz-servico/ from the new package",
+          "# then restart the service",
+          "```",
+          "",
+          `After that, \`${PREFIXO}tts estado\` should show **version ${VOZ_API_ESPERADA}**.`,
+          "",
+          "_Meanwhile: the join/leave fixes live in that same folder, so the timeout you're seeing keeps happening until it goes up._",
+        ].join("\n"),
+        colour: COR.aviso,
+      }) : {
         title: lang === "en" ? "❌ The voice service didn't answer" : "❌ O serviço de voz não respondeu",
-        description: `\`${e.message}\`\n\n${lang === "en"
+        description: `\`${motivo}\`\n\n${lang === "en"
           ? "The problem is before the call: `judy-voz` is down or unreachable. It needs a hand on the machine."
           : "O problema é antes da call: o `judy-voz` está fora do ar ou inalcançável. Precisa de mão na máquina."}`,
         colour: COR.erro });
@@ -876,6 +967,26 @@ export async function cmdTts(message, args, ctx) {
   }
 
   // ── &tts <texto> → falar ──
+  // Antes: uma palavra digitada errado virava fala. `&tts diagnosticar`
+  // mandava a Judy dizer "diagnosticar" — e, como fala explícita entra na
+  // call sozinha, gastava os 20s do timeout de entrada para fazer isso.
+  const talvez = quaseSubcomando(args);
+  if (talvez) {
+    return sendEmbed(message.channel, tr(ctx, {
+      title: "🤔 Você quis dizer um comando?",
+      description: `\`${PREFIXO}tts ${args[0]}\` não é um subcomando — o mais parecido é \`${PREFIXO}tts ${talvez}\`.\n\nSe era mesmo para eu **falar** essa palavra, mande \`${PREFIXO}tts falar ${args[0]}\`.`,
+      colour: COR.aviso,
+    }, {
+      title: "🤔 Did you mean a command?",
+      description: `\`${PREFIXO}tts ${args[0]}\` isn't a subcommand — the closest one is \`${PREFIXO}tts ${talvez}\`.\n\nIf you really wanted me to **say** that word, send \`${PREFIXO}tts falar ${args[0]}\`.`,
+      colour: COR.aviso,
+    }));
+  }
+  // `falar` é a saída explícita: força a fala do que vier depois, mesmo que
+  // pareça um comando.
+  if (["falar", "fala", "say", "speak"].includes((args[0] ?? "").toLowerCase()) && args.length > 1) {
+    args = args.slice(1);
+  }
   const texto = args.join(" ").trim();
   if (!texto) {
     return sendEmbed(message.channel, tr(ctx, {

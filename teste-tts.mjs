@@ -173,5 +173,54 @@ ok(d.etapas.find((e) => e.etapa === "livekit-tcp")?.ok === false, "  → e o alc
 ok(d.flagNode === (typeof globalThis.navigator === "undefined" ? "ok" : "FALTA --no-experimental-global-navigator"),
   `confere a flag do Node e reporta o que encontrou (${d.flagNode})`);
 
+// ══ 6. Erro de digitação não vira fala ══
+console.log("\n── &tts <palavra errada> ──");
+const CANAL_VOZ2 = "01JVOZ00000000000000000000";
+const respostas = [];
+const ctxCmd = {
+  serverId: "S1", PREFIXO: "&", COR: { info: "#1", aviso: "#2", erro: "#3", sucesso: "#4", mod: "#5" },
+  cfgGlobal: { debug: false },
+  config: { language: "pt", tts: { ativo: true, canalVoz: CANAL_VOZ2, canalTexto: null, filtro: true, cooldown: 0 } },
+  sendEmbed: async (_c, e) => { respostas.push(e); return { id: "M9" }; },
+  getServer: async () => ({ id: "S1", channels: [] }),
+  membroTemPermissao: () => true,
+  salvarConfig: () => {},
+};
+const msgCmd = { channelId: "C9", authorId: "U1", channel: { id: "C9" }, author: { username: "Ghieh" } };
+let chamou = 0;
+globalThis.fetch = async () => { chamou++; return { ok: true, status: 200, json: async () => ({ ok: true }) }; };
+
+// `diagnosticar` agora É um subcomando (foi o que ele digitou de verdade):
+// tem de RODAR o diagnóstico, não virar fala nem sugestão.
+respostas.length = 0; chamou = 0;
+await tts.cmdTts(msgCmd, ["diagnosticar"], ctxCmd);
+ok(chamou === 1, "`&tts diagnosticar` roda o diagnóstico (não fala a palavra)");
+ok(!String(respostas.at(-1)?.title).includes("Não consegui falar"), "  → e não tenta entrar na call para isso");
+
+// Um typo de verdade cai na sugestão, com o subcomando certo apontado.
+respostas.length = 0; chamou = 0;
+await tts.cmdTts(msgCmd, ["transmitr"], ctxCmd);
+ok(String(respostas.at(-1)?.title).includes("quis dizer"), "typo (`transmitr`) sugere o subcomando em vez de falar a palavra");
+ok(chamou === 0, "  → e não gasta uma tentativa de entrar na call para isso");
+ok(String(respostas.at(-1)?.description).includes("transmitir"), "  → aponta o subcomando certo");
+
+respostas.length = 0; chamou = 0;
+await tts.cmdTts(msgCmd, ["reinicar"], ctxCmd);
+ok(String(respostas.at(-1)?.title).includes("quis dizer"), "pega erro de digitação com letra faltando (`reinicar`)");
+
+respostas.length = 0; chamou = 0;
+await tts.cmdTts(msgCmd, ["falar", "diagnosticar"], ctxCmd);
+ok(chamou === 1, "`&tts falar <palavra>` força a fala mesmo parecendo comando");
+
+respostas.length = 0; chamou = 0;
+await tts.cmdTts(msgCmd, ["entrar", "na", "call", "agora"], ctxCmd);
+ok(chamou === 1, "frase que começa com um subcomando continua sendo fala (`&tts entrar na call agora`)");
+
+for (const frase of [["oi"], ["teste"], ["bom", "dia"], ["paralelepípedo"]]) {
+  respostas.length = 0; chamou = 0;
+  await tts.cmdTts(msgCmd, frase, ctxCmd);
+  ok(chamou === 1, `fala legítima não é confundida: ${JSON.stringify(frase.join(" "))}`);
+}
+
 console.log(`\nTTS: ${pass} ok, ${fail} falha(s)`);
 process.exit(fail ? 1 : 0);

@@ -34,7 +34,7 @@ import * as voz from "./voz.js";
 // O bot compara com o número que ele espera e avisa se estiver defasado —
 // antes eu detectava isso procurando um efeito específico na lista, e quando
 // esse efeito foi renomeado o alarme passou a tocar para sempre.
-export const API_VERSAO = 3;
+export const API_VERSAO = 4;   // 4: /diagnostico, /reiniciar, autoEntrar
 
 const PORTA   = Number(process.env.VOZ_PORTA || 8091);
 const CHAVE   = process.env.VOZ_CHAVE || "";

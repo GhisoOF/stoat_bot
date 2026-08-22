@@ -332,6 +332,10 @@ persona, que pede o mesmo tom em uma frase.
   `&tts diagnostico` diz **em qual etapa** — a API do Stoat (token, permissão,
   sala fantasma) ou a rede até o LiveKit (UDP, MTU, firewall) — e
   `&tts reiniciar` recria a conexão sem ir ao terminal.
+  ⚠️ **O `voz-servico/` não sobe pelo deploy do container** — ele roda nativo na
+  máquina e precisa ser copiado e reiniciado à mão. O bot compara a versão da
+  interface: se estiverem defasados, `&tts estado` mostra o aviso e as rotas
+  novas respondem `rota desconhecida`.
 - **Fusos horários** (`&fuso`): relógio com várias cidades ao mesmo tempo, para
   servidores com gente espalhada. A staff escolhe as cidades (`&fuso add São Paulo`,
   `&fuso add Madrid/Europa`) e qualquer pessoa consulta com `&fuso`. A lista sai

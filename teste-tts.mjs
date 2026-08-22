@@ -382,9 +382,10 @@ globalThis.fetch = async () => ({ ok: false, status: 502,
   text: async () => '{"erro":"AlreadyConnected"}' });
 await tts.cmdTts(msgNaCallReal, ["entrar"], ctxA);
 const t = String(respA.at(-1)?.title ?? "") + String(respA.at(-1)?.description ?? "");
-ok(t.includes("já estou numa call") || t.includes("destravar"),
-  "★ AlreadyConnected vira explicação própria, não um timeout genérico");
+ok(/Não consegui entrar na call|Entrei/.test(String(respA.at(-1)?.title)) && !/20s/.test(t),
+  "★ AlreadyConnected dispara o resgate em vez de um timeout genérico");
 ok(!t.includes("tts canal aqui"), "  → e NÃO manda usar o comando de configuração antigo");
+ok(!/kick/i.test(t), "  → nem manda dar kick");
 
 // &tts destravar
 respA.length = 0;
@@ -443,7 +444,8 @@ console.log("\n── &tts resgatar ──");
     "  → e entrega o token do evento UserMoveVoiceChannel ao serviço");
   ok(listeners.length === 0, "  → e tira o ouvinte do WebSocket ao terminar");
   ok(cfgR.tts.ativo && cfgR.tts.canalVoz === callReal.id, "  → já deixa a leitura ligada na call resgatada");
-  ok(/Resgatada/.test(String(respR.at(-1)?.title)), `  → e diz que deu certo (${respR.at(-1)?.title})`);
+  ok(/Entrei/.test(String(respR.at(-1)?.title)), `  → e diz que deu certo (${respR.at(-1)?.title})`);
+  ok(cfgR.tts.canalTexto === callReal.id, "  → e a leitura passa a ser do canal onde a pessoa digitou");
   const textoR = respR.map((e) => e.description).join(" ");
   ok(!/kick/i.test(textoR), "  → sem mandar dar kick (não resolve: lê a mesma chave)");
 
@@ -451,7 +453,69 @@ console.log("\n── &tts resgatar ──");
   respR.length = 0;
   const ctxS = { ...ctxR, getServer: async () => ({ id: "S1", channels: [callReal] }), client: { ...clientR, channels: new Map([[callReal.id, callReal]]) } };
   await tts.cmdTts(msgNaCallReal, ["resgatar"], ctxS);
-  ok(/auxiliar/.test(String(respR.at(-1)?.title)), "sem outra call no servidor, pede a auxiliar");
+  ok(/auxiliar/.test(String(respR.at(-1)?.description)), "sem outra call no servidor, pede a auxiliar");
+}
+
+// ══ 8c. &tts entrar resgata SOZINHO, pulando auxiliar presa ══
+//
+//  No servidor: "Call" e "call staff" presas ao mesmo tempo. O resgate
+//  escolheu "Call" como auxiliar, pendurou 20s e parou. Agora: o serviço
+//  devolve AlreadyConnected na hora, o bot pula para a próxima candidata, e
+//  tudo isso acontece dentro do `entrar`, sem a pessoa saber de resgate.
+console.log("\n── entrar → resgate automático ──");
+{
+  const presaB = { id: "01JPRESAB00000000000000AA", name: "Call", type: "TextChannel", voice: {}, isVoice: true, voiceParticipants: new Map() };
+  const presaC = { id: "01JPRESAC00000000000000AA", name: "call staff", type: "TextChannel", voice: {}, isVoice: true,
+    voiceParticipants: new Map([["U7", {}]]) };   // tem gente → candidata preferida
+  const livre = { id: "01JLIVRE000000000000000AA", name: "Call Resenha", type: "TextChannel", voice: {}, isVoice: true,
+    voiceParticipants: new Map([["01JBOTAA00000000000000AAAA", {}]]) };
+  const listeners = [];
+  const clientE = {
+    user: { id: "01JBOTAA00000000000000AAAA" },
+    channels: new Map([[presaB.id, presaB], [presaC.id, presaC], [livre.id, livre]]),
+    servers: new Map([["S1", {}]]),
+    events: { on: (_e, f) => listeners.push(f), off: (_e, f) => { const i = listeners.indexOf(f); if (i >= 0) listeners.splice(i, 1); } },
+  };
+  const respE = [];
+  const cfgE2 = { language: "pt", tts: { ativo: false, canalVoz: null, canalTexto: "01JVELHO000000000000000AA", filtro: true, cooldown: 0 } };
+  const ctxE2 = { ...ctxA, config: cfgE2, client: clientE, membroTemPermissao: () => false,   // pessoa comum, sem staff
+    sendEmbed: async (_c, e) => { respE.push(e); return { id: "M" }; },
+    getServer: async () => ({ id: "S1", channels: [presaB, presaC, livre] }) };
+  const chamadasE = [];
+  const presas = new Set([presaB.id, presaC.id]);
+  globalThis.fetch = async (url, op) => {
+    const u = String(url); const corpo = op?.body ? JSON.parse(op.body) : null;
+    chamadasE.push({ u, metodo: op?.method, corpo });
+    if (u.endsWith("/entrar") && presas.has(corpo?.canalVoz)) {
+      return { ok: false, status: 502, json: async () => ({ ok: false, erro: "AlreadyConnected: o Stoat me registra como já estando nesta call" }), text: async () => "" };
+    }
+    if (u.includes("/members/") && op?.method === "PATCH") {
+      setTimeout(() => listeners.forEach((f) => f({ type: "UserMoveVoiceChannel", node: "hel1", from: livre.id, to: presaB.id, token: "TOK" })), 5);
+      return { ok: true, status: 200, text: async () => "{}" };
+    }
+    return { ok: true, status: 200, json: async () => ({ ok: true }), text: async () => "{}" };
+  };
+  const msgB = { channelId: presaB.id, authorId: "U9", channel: presaB, author: { username: "Alguém" } };
+  await tts.cmdTts(msgB, ["entrar"], ctxE2);
+  const entradas = chamadasE.filter((c) => c.u.endsWith("/entrar")).map((c) => c.corpo.canalVoz);
+  ok(entradas[0] === presaB.id, "★ entrar tenta a call da pessoa primeiro");
+  ok(entradas.includes(presaC.id) && entradas.indexOf(livre.id) > entradas.indexOf(presaC.id),
+    "  → presa → tenta a próxima auxiliar; presa também → a seguinte");
+  ok(chamadasE.some((c) => c.u.endsWith("/entrar-com-token") && c.corpo.canalVoz === presaB.id && c.corpo.token === "TOK"),
+    "  → e entra na call da pessoa com o token do mover");
+  ok(/Entrei/.test(String(respE.at(-1)?.title)), `  → sem pedir nada a ninguém (${respE.at(-1)?.title})`);
+  ok(String(respE.at(-1)?.description).includes("presa também"), "  → contando que a auxiliar presa foi pulada");
+  ok(cfgE2.tts.canalVoz === presaB.id && cfgE2.tts.canalTexto === presaB.id && cfgE2.tts.ativo, "  → e a leitura fica na call da pessoa");
+  ok(listeners.length === 0, "  → sem ouvinte sobrando no WebSocket");
+
+  // Erro de digitação COM argumento não vira fala (foi "resgater #Call Resenha")
+  respE.length = 0; chamadasE.length = 0;
+  await tts.cmdTts(msgB, ["resgater", "<#" + livre.id + ">"], ctxE2);
+  ok(/quis dizer/i.test(String(respE.at(-1)?.title)) && !chamadasE.some((c) => c.u.endsWith("/falar")),
+    "★ `resgater #call` vira \"você quis dizer resgatar?\", não fala de 20s");
+  respE.length = 0; chamadasE.length = 0;
+  await tts.cmdTts(msgB, ["entrarr", "agora", "na", "call"], ctxE2);
+  ok(chamadasE.some((c) => c.u.endsWith("/falar")), "  → mas uma frase longa com uma palavra parecida continua sendo fala");
 }
 
 // ══ 9. O destrave: auto-desconexão ══
@@ -604,6 +668,33 @@ ok(etapaNode?.ok === true, "o diagnóstico mostra qual node vai usar");
 const jcTeste = vistas.find((v) => v.url.includes("/join_call"));
 ok(jcTeste?.corpo?.node === "eu-west",
   "★ e manda o node no join_call — sem isso, uma call que não começou acusa UnknownNode à toa");
+
+// ══ 11. O serviço curto-circuita o AlreadyConnected ══
+//
+//  O join_call de abrir a sala já diz `AlreadyConnected`; o revoice faria o
+//  mesmo pedido, engoliria o mesmo 400 e penduraria 20s. Agora a entrada
+//  falha na hora, com o nome certo — é o que deixa o bot pular para a próxima
+//  auxiliar em ~1s em vez de 20s.
+// (por último: deixa cache de nodes e id do bot, que os cenários anteriores não esperam)
+console.log("\n── serviço: AlreadyConnected na hora ──");
+{
+  const pedidos = [];
+  globalThis.fetch = async (url, op) => {
+    const u = String(url); pedidos.push({ u, metodo: op?.method });
+    if (u.endsWith("/")) return { ok: true, status: 200, text: async () => "{}", json: async () => ({ features: { livekit: { nodes: [{ name: "hel1", public_url: "wss://hel1" }] } } }) };
+    if (u.includes("join_call")) return { ok: false, status: 400, text: async () => '{"type":"AlreadyConnected"}', json: async () => ({ type: "AlreadyConnected" }) };
+    if (u.includes("/users/@me")) return { ok: true, status: 200, text: async () => '{"_id":"01JBOTAA00000000000000AAAA"}', json: async () => ({ _id: "01JBOTAA00000000000000AAAA" }) };
+    return { ok: true, status: 200, text: async () => "{}", json: async () => ({}) };
+  };
+  const t0 = Date.now();
+  const r = await voz.entrar("01JPRESAB00000000000000AA", "01JSERVER00000000000000AA", ["01JSERVER00000000000000AA"]);
+  const dt = Date.now() - t0;
+  ok(r.ok === false && /AlreadyConnected/.test(String(r.erro)), `★ a entrada devolve AlreadyConnected pelo nome (${r.erro})`);
+  ok(dt < 5000, `  → e na hora, sem os 20s do revoice (${dt}ms)`);
+  const d = voz.diagnosticar ? await voz.diagnosticar("01JPRESAB00000000000000AA") : null;
+  ok(!d || d.marcos?.some?.((m) => /sala-recusou\(AlreadyConnected\)/.test(m.nome)) || JSON.stringify(d).includes("sala-recusou"),
+    "  → o marco diz que foi a abertura da sala que recusou");
+}
 
 console.log(`\nTTS: ${pass} ok, ${fail} falha(s)`);
 process.exit(fail ? 1 : 0);

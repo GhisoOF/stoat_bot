@@ -245,7 +245,15 @@ async function entrarDeFato(canalVoz, serverId = null, credenciais = null) {
     // pista nenhuma no meio. Abrimos a sala antes, dizendo o node; a partir
     // daí o Stoat lembra dele e o join do revoice funciona.
     const abriu = credenciais ? null : await abrirSalaSePreciso(canalVoz);
-    if (abriu) marco(`sala-aberta(${abriu})`);
+    if (abriu?.node) marco(`sala-aberta(${abriu.node})`);
+    // O join_call de abrir a sala já disse `AlreadyConnected`. O `revoice.join()`
+    // faria o MESMO pedido, receberia o MESMO 400 — e, como engole o erro,
+    // ficaria 20s pendurado para dizer menos do que já sabemos. Falha agora,
+    // com o nome certo, para quem chama decidir o resgate sem esperar.
+    if (abriu?.recusa === "AlreadyConnected") {
+      marco("sala-recusou(AlreadyConnected)");
+      throw new Error("AlreadyConnected: o Stoat me registra como já estando nesta call");
+    }
 
     marco(credenciais ? `chamando-revoice.join(token-do-mover:${credenciais.node ?? "?"})` : "chamando-revoice.join");
     const connection = await comLimite(
@@ -588,8 +596,9 @@ export async function moverPara(canalVoz, serverId) {
   return { ok: r.ok, passos };
 }
 
-// Garante que o canal tenha uma sala e um node registrados. Devolve o nome do
-// node quando foi preciso abrir, ou null quando a call já existia.
+// Garante que o canal tenha uma sala e um node registrados. Devolve
+// `{ node }` quando abriu, `{ recusa }` quando o Stoat recusou (com o tipo do
+// erro), ou null quando nem tentou.
 async function abrirSalaSePreciso(canalVoz) {
   const API = (process.env.STOAT_API || "https://api.stoat.chat").replace(/\/$/, "");
   const node = await nodePreferido();
@@ -600,12 +609,13 @@ async function abrirSalaSePreciso(canalVoz) {
       headers: { "X-Bot-Token": TOKEN, "Content-Type": "application/json" },
       body: JSON.stringify({ node }),
     }), 10_000, "10s sem resposta ao abrir a sala");
-    if (r.ok) { dbg(`sala aberta no node ${node}`); return node; }
+    if (r.ok) { dbg(`sala aberta no node ${node}`); return { node }; }
     const txt = await r.text().catch(() => "");
-    // `AlreadyConnected` aqui é bom sinal: a sala existe e eu constava nela.
-    // O erro sai adiante, no join de verdade, com o tratamento certo.
     dbg(`abrir sala: HTTP ${r.status} ${txt.slice(0, 120)}`);
-    return null;
+    // Devolve o tipo de recusa: `AlreadyConnected` tem de curto-circuitar a
+    // entrada (ver entrarDeFato); as outras seguem para o join de verdade,
+    // que dá o erro com o tratamento certo.
+    return { recusa: /AlreadyConnected/.test(txt) ? "AlreadyConnected" : (txt.match(/"type"\s*:\s*"(\w+)"/)?.[1] ?? `HTTP ${r.status}`) };
   } catch (e) {
     console.warn("[VOZ] falha ao abrir a sala:", e?.message ?? e);
     return null;

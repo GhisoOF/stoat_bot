@@ -564,7 +564,7 @@ Prefixo: `&`. Aliases entre parênteses.
 | `&tts filtro [status\|on\|off\|porminuto <n>\|teste <texto>]` | a peneira anti-barulho da transmissão |
 | `&tts diagnostico` | em qual etapa a entrada na call trava *(ManageMessages)* |
 | `&tts destravar` | limpa o `AlreadyConnected` do lado do Stoat *(ManageMessages)* |
-| `&tts resgatar [#call-auxiliar]` | quando `destravar` não resolve: entra por outra call e se move para a presa, conectando com o token do evento `UserMoveVoiceChannel` *(ManageMessages)* |
+| `&tts resgatar [#call-auxiliar]` | o que `entrar` já faz sozinho no `AlreadyConnected`, escolhendo a call auxiliar à mão |
 | `&tts reiniciar` | destrava o serviço de voz sem terminal *(ManageMessages)* |
 | `&boasvindas <canal\|titulo\|texto\|cor\|imagem\|testar\|padrao\|on\|off>` | embed de entrada |
 | `&adeus <canal\|titulo\|texto\|cor\|imagem\|testar\|padrao\|on\|off>` | embed de saída |
@@ -1720,9 +1720,14 @@ A brecha é o **mover**: `PATCH /servers/{s}/members/{eu}` com
 `UserMoveVoiceChannel { node, from, to, token }`. Pré-requisito: estar numa
 call do **mesmo** servidor (a chave `{bot}:{servidor}` precisa existir).
 
-`&tts resgatar [#call-auxiliar]` faz o roteiro inteiro:
+**`&tts entrar` faz o roteiro inteiro sozinho** quando o serviço devolve
+`AlreadyConnected` (que agora é imediato: o `join_call` de abrir a sala já
+recusa, e o serviço não espera os 20s do revoice para dizer o mesmo).
+`&tts resgatar [#call-auxiliar]` é a versão manual, para escolher a auxiliar:
 
-1. entra numa call auxiliar do servidor (a indicada, ou a primeira outra);
+1. entra numa call auxiliar do servidor — a indicada, ou as outras em ordem
+   (com gente dentro primeiro), **pulando as que também estiverem presas**;
+   cada presa custa ~1s graças ao curto-circuito acima;
 2. espera o Stoat listar o bot nela (`voiceParticipants`);
 3. faz o PATCH de mover para a call presa e captura o token do evento;
 4. chama `POST /entrar-com-token` do `voz-servico`, que intercepta o

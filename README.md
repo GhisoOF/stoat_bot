@@ -1622,8 +1622,32 @@ nível; a cada N níveis, pode ganhar um cargo.
 &xp top              # ranking (XP + nível)
 &xp setup             # configurar
 &xp criarcargos      # cria os cargos de nível automaticamente
+&xp sincronizar      # devolve os cargos que o nível já garante (servidor inteiro)
+&xp sincronizar @pessoa   # só uma pessoa
 &xp on | off         # liga/desliga
 ```
+
+### Sair custa os cargos, não o XP
+
+Cargo pertence ao **membro**: quem sai — por vontade própria, kick ou ban —
+deixa de ser membro, e o Stoat retira os cargos. O **XP fica guardado** no
+banco, com o nível.
+
+O problema é que o cargo só era concedido no instante do *level up*. Alguém que
+voltasse no nível 14 continuaria sem cargo nenhum até chegar ao 15 — semanas
+depois, com toda a aparência de ter perdido o progresso.
+
+Agora:
+
+- **quem entra** recebe de volta, sozinho, todos os cargos que o nível atual já
+  garante (inclusive marcos antigos, não só o mais recente);
+- **`&xp sincronizar`** conserta quem já tinha voltado antes disso, e também
+  serve quando você cria os cargos depois de o pessoal já ter subido de nível;
+- **subir vários níveis de uma vez** (multiplicador alto, XP dado pelo admin)
+  concede todos os marcos alcançados, não apenas o último.
+
+Cargos apagados à mão no servidor são ignorados na sincronização — um ID morto
+faria a atualização inteira do membro falhar.
 
 Configurável via `&xp setup`: **multiplicador de dificuldade**, **nível
 máximo**, **intervalo de cargos** (5 ou 10 níveis), XP por mensagem, cooldown e

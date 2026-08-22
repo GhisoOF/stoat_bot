@@ -946,6 +946,10 @@ client.on("serverMemberJoin", async (member) => {
     if (banido) return;   // já foi banido: não faz sentido dar cargo/reaplicar silêncio
 
     await autorole.aoEntrar(member, ctx);          // ← cargo automático (se configurado)
+    // Devolve os cargos de nível que a pessoa já tinha. Sem isto, quem sai
+    // (ou é banido e volta) reaparece sem nada, e só recupera o cargo ao
+    // atingir o PRÓXIMO nível — semanas depois, no caso de quem já subiu bastante.
+    await nivel.aoEntrar(member, ctx);
     await engine.reaplicarPunicao(member, ctx);   // ← reaplica o silêncio, se houver
     await bemvindo.aoEntrar(member, ctx);         // ← embed de boas-vindas (se configurado)
   } catch (err) { console.error("[EVENTO][JOIN]", err?.message); }

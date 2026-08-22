@@ -142,6 +142,7 @@ function parametrosPT(P) {
       { nome: "setup anuncio", valor: "<#canal|aqui|off>", desc: "onde anunciar quem subiu de nível" },
       { nome: "cargos", desc: "lista os cargos por nível" },
       { nome: "criarcargos", desc: "cria os cargos de nível sozinho" },
+      { nome: "sincronizar", valor: "[@pessoa|todos]", desc: "devolve os cargos que o nível já garante — para quem saiu e voltou, ou quando os cargos foram criados depois *(ManagePermissions)*" },
       { nome: "reset", valor: "[@pessoa] confirmar", desc: "zera o XP de alguém (ou de todos)" },
     ],
 
@@ -355,6 +356,7 @@ function parametrosEN(P) {
       { nome: "setup anuncio", valor: "<#channel|aqui|off>", desc: "where to announce level-ups" },
       { nome: "cargos", desc: "lists the level roles" },
       { nome: "criarcargos", desc: "creates the level roles by itself" },
+      { nome: "sincronizar", valor: "[@user|todos]", desc: "hands back the roles the current level already grants — for people who left and came back, or when the roles were created later *(ManagePermissions)*" },
       { nome: "reset", valor: "[@user] confirmar", desc: "wipes someone's XP (or everyone's)" },
     ],
 

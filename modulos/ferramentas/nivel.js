@@ -28,8 +28,9 @@
 // ══════════════════════════════════════════════════════════
 
 import * as db from "../core/db.js";
-import { limparId, ULID } from "../core/ids.js";
+import { limparId, ULID, resolverUsuario } from "../core/ids.js";
 import { tr, lingua } from "../core/i18n.js";
+import * as log from "../core/log.js";
 
 
 // ── Fórmula de progressão ──────────────────────────────────
@@ -141,6 +142,76 @@ async function aplicarCargoNivel(server, member, serverId, nivel, config) {
 }
 
 // ──────────────────────────────────────────────────────────
+//  Sincronizar TODOS os cargos que o nível atual já mereceu
+//
+//  O cargo era concedido só no instante do level up. Quem sai do servidor
+//  — por vontade própria, kick ou ban — perde os cargos, e o XP fica no
+//  banco. Ao voltar, a pessoa reaparece sem nada: o XP diz nível 14, mas os
+//  cargos só voltariam quando ela chegasse ao 15, o que pode levar semanas.
+//  Do ponto de vista dela, o progresso simplesmente sumiu.
+//
+//  Esta função reconcilia: dá tudo que o nível atual já garante. Também
+//  cobre o caso de quem pula vários marcos de uma vez (multiplicador alto,
+//  ou XP dado pelo admin) e o de cargos criados DEPOIS de a pessoa já ter
+//  passado do nível.
+//
+//  Devolve { concedidos: [roleId], nivel } — ou null se não havia o que fazer.
+// ──────────────────────────────────────────────────────────
+export async function sincronizarCargos(server, member, serverId, { nivel = null } = {}) {
+  if (!server || !member || !serverId) return null;
+  const userId = member?.id?.user ?? member?.user?.id ?? member?.id;
+  if (!userId) return null;
+
+  const nivelAtual = nivel ?? db.getXp(serverId, userId)?.nivel ?? 0;
+  if (nivelAtual < 1) return null;
+
+  const marcos = db.listarCargosNivel(serverId).filter((c) => c.nivel <= nivelAtual);
+  if (!marcos.length) return null;
+
+  const atuais = new Set((member.roles ?? []).map((r) => r?.id ?? r).filter(Boolean));
+  // Só cargos que ainda EXISTEM no servidor: um cargo apagado à mão continua
+  // no banco, e mandar um id morto no edit() faz a chamada inteira falhar.
+  const existe = (id) => {
+    try { return !!(server.roles?.get?.(id) ?? server.roles?.[id]); } catch { return true; }
+  };
+  const faltando = marcos.map((c) => c.roleId).filter((id) => id && !atuais.has(id) && existe(id));
+  if (!faltando.length) return { concedidos: [], nivel: nivelAtual };
+
+  try {
+    await member.edit({ roles: [...atuais, ...faltando] });
+    console.log(`[XP] cargos sincronizados para ${userId} em ${serverId}: +${faltando.length} (nível ${nivelAtual})`);
+    return { concedidos: faltando, nivel: nivelAtual };
+  } catch (e) {
+    console.error("[XP][sincronizar]", e?.message ?? e);
+    return { concedidos: [], nivel: nivelAtual, erro: e?.message ?? String(e) };
+  }
+}
+
+// Chamado quando alguém ENTRA no servidor: devolve os cargos de nível que a
+// pessoa já tinha conquistado. É o conserto do "voltei e perdi tudo".
+export async function aoEntrar(member, ctx) {
+  try {
+    const serverId = member?.id?.server ?? ctx?.serverId;
+    if (!serverId || !ctx?.config?.xp?.enabled) return null;
+    const server = member.server
+      ?? ctx.client?.servers?.get?.(serverId)
+      ?? await ctx.client?.servers?.fetch?.(serverId).catch(() => null);
+    if (!server) return null;
+    const r = await sincronizarCargos(server, member, serverId);
+    if (r?.concedidos?.length) {
+      await log.registrar(ctx, "cargos", {
+        titulo: "🎖 Cargos de nível devolvidos",
+        descricao: `<@${member?.id?.user}> voltou e recuperou **${r.concedidos.length}** cargo(s) de nível (nível ${r.nivel}).`,
+      });
+    }
+    return r;
+  } catch (e) {
+    console.error("[XP][aoEntrar]", e?.message ?? e);
+    return null;
+  }
+}
+
+// ──────────────────────────────────────────────────────────
 //  Handler de mensagem — concede XP
 // ──────────────────────────────────────────────────────────
 export async function aoMensagem(message, ctx) {
@@ -176,8 +247,12 @@ export async function aoMensagem(message, ctx) {
       const server = await ctx.getServer(message);
       const member = await server.fetchMember(userId).catch(() => null);
       if (member) {
-        // concede o cargo do nível novo (ou do maior múltiplo alcançado)
-        ganhouCargo = await aplicarCargoNivel(server, member, serverId, novoNivel, config);
+        // Concede o cargo do nível novo E qualquer marco anterior que esteja
+        // faltando — quem pula dois níveis de uma vez não deixa um cargo para trás.
+        const r = await sincronizarCargos(server, member, serverId, { nivel: novoNivel });
+        ganhouCargo = r?.concedidos?.length
+          ? r.concedidos[r.concedidos.length - 1]
+          : await aplicarCargoNivel(server, member, serverId, novoNivel, config);
       }
     } catch (e) { console.error("[GAME][levelup]", e.message); }
 
@@ -248,6 +323,104 @@ export async function cmdXp(message, args, ctx) {
   }
 
   // ── setup ──
+  // ── sincronizar: devolve os cargos que o nível já garante ──
+  //
+  // Conserta de uma vez quem perdeu os cargos ao sair/ser banido antes de o
+  // bot passar a devolvê-los na entrada. Sem argumento, varre o servidor.
+  if (["sincronizar", "sync", "recargos", "resync", "reaplicar"].includes(sub)) {
+    if (!(await podeConfigurar(message, ctx))) return;
+    const server = await getServer(message);
+    const alvoTexto = args.slice(1).join(" ").trim();
+
+    // Uma pessoa só
+    if (alvoTexto && !["todos", "all", "servidor", "server"].includes(alvoTexto.toLowerCase())) {
+      const alvoId = await resolverUsuario(alvoTexto, { message, server, client: ctx.client });
+      if (!alvoId) return sendEmbed(message.channel, tr(ctx,
+        { title: "❌ Não achei essa pessoa",
+          description: `\`${PREFIXO}xp sincronizar [@pessoa|todos]\`\n\nAceito menção, ID ou nome.`, colour: COR.erro },
+        { title: "❌ Couldn't find that person",
+          description: `\`${PREFIXO}xp sincronizar [@user|todos]\`\n\nI accept a mention, ID or name.`, colour: COR.erro }));
+
+      const membro = await server.fetchMember(alvoId).catch(() => null);
+      if (!membro) return sendEmbed(message.channel, tr(ctx,
+        { title: "❌ Não está no servidor",
+          description: `<@${alvoId}> precisa estar aqui para receber os cargos. O XP dela continua guardado — assim que voltar, eu devolvo sozinho.`, colour: COR.aviso },
+        { title: "❌ Not in the server",
+          description: `<@${alvoId}> has to be here to receive the roles. Their XP is still stored — as soon as they return, I hand the roles back on my own.`, colour: COR.aviso }));
+
+      const r = await sincronizarCargos(server, membro, serverId);
+      if (!r) return sendEmbed(message.channel, tr(ctx,
+        { title: "🤷 Nada a fazer", description: `<@${alvoId}> ainda não alcançou nenhum cargo de nível.`, colour: COR.info },
+        { title: "🤷 Nothing to do", description: `<@${alvoId}> hasn't reached any level role yet.`, colour: COR.info }));
+
+      return sendEmbed(message.channel, tr(ctx, {
+        title: r.concedidos.length ? "🎖 Cargos devolvidos" : "✅ Já estava em dia",
+        description: r.concedidos.length
+          ? `<@${alvoId}> (nível **${r.nivel}**) recebeu **${r.concedidos.length}** cargo(s):\n${r.concedidos.map((id) => `<@&${id}>`).join(" ")}`
+          : `<@${alvoId}> (nível **${r.nivel}**) já tinha todos os cargos do nível dela.`,
+        colour: r.concedidos.length ? COR.sucesso : COR.info,
+      }, {
+        title: r.concedidos.length ? "🎖 Roles restored" : "✅ Already up to date",
+        description: r.concedidos.length
+          ? `<@${alvoId}> (level **${r.nivel}**) received **${r.concedidos.length}** role(s):\n${r.concedidos.map((id) => `<@&${id}>`).join(" ")}`
+          : `<@${alvoId}> (level **${r.nivel}**) already had every role for their level.`,
+        colour: r.concedidos.length ? COR.sucesso : COR.info,
+      }));
+    }
+
+    // O servidor inteiro
+    if (!db.listarCargosNivel(serverId).length) {
+      return sendEmbed(message.channel, tr(ctx,
+        { title: "❌ Não há cargos de nível", description: `Crie-os primeiro com \`${PREFIXO}xp criarcargos\`.`, colour: COR.erro },
+        { title: "❌ No level roles", description: `Create them first with \`${PREFIXO}xp criarcargos\`.`, colour: COR.erro }));
+    }
+    await sendEmbed(message.channel, tr(ctx,
+      { title: "⏳ Conferindo todo mundo…", description: "Vou devolver os cargos que cada pessoa já conquistou. Pode levar um instante.", colour: COR.info },
+      { title: "⏳ Checking everyone…", description: "I'll hand back the roles each person already earned. This may take a moment.", colour: COR.info }));
+
+    let membros = [];
+    try {
+      const r = await server.fetchMembers();
+      membros = r?.members ?? r ?? [];
+    } catch (e) {
+      return sendEmbed(message.channel, tr(ctx,
+        { title: "❌ Não consegui listar os membros", description: `${e?.message ?? e}`, colour: COR.erro },
+        { title: "❌ Couldn't list the members", description: `${e?.message ?? e}`, colour: COR.erro }));
+    }
+
+    const arrumados = [];
+    let falhas = 0;
+    for (const m of membros) {
+      const uid = m?.id?.user ?? m?.user?.id;
+      if (!uid) continue;
+      const r = await sincronizarCargos(server, m, serverId);
+      if (r?.erro) { falhas++; continue; }
+      if (r?.concedidos?.length) arrumados.push({ uid, n: r.concedidos.length, nivel: r.nivel });
+    }
+
+    const lista = arrumados.slice(0, 20)
+      .map((a) => `• <@${a.uid}> — nível ${a.nivel}, +${a.n} cargo(s)`).join("\n");
+    return sendEmbed(message.channel, tr(ctx, {
+      title: `🎖 ${arrumados.length} pessoa(s) atualizada(s)`,
+      description: [
+        `Conferi **${membros.length}** membro(s).`,
+        arrumados.length ? "\n" + lista : "\n_Todo mundo já estava com os cargos certos._",
+        arrumados.length > 20 ? `\n_… e mais ${arrumados.length - 20}._` : "",
+        falhas ? `\n⚠️ **${falhas}** falha(s) — o cargo do bot precisa de **AssignRoles** e estar **acima** dos cargos de nível.` : "",
+      ].filter(Boolean).join("\n").slice(0, 1900),
+      colour: falhas ? COR.aviso : COR.sucesso,
+    }, {
+      title: `🎖 ${arrumados.length} person(s) updated`,
+      description: [
+        `I checked **${membros.length}** member(s).`,
+        arrumados.length ? "\n" + lista : "\n_Everyone already had the right roles._",
+        arrumados.length > 20 ? `\n_… and ${arrumados.length - 20} more._` : "",
+        falhas ? `\n⚠️ **${falhas}** failure(s) — the bot's role needs **AssignRoles** and must sit **above** the level roles.` : "",
+      ].filter(Boolean).join("\n").slice(0, 1900),
+      colour: falhas ? COR.aviso : COR.sucesso,
+    }));
+  }
+
   if (sub === "setup" || sub === "config" || sub === "configurar") {
     return setupGame(message, args.slice(1), ctx);
   }

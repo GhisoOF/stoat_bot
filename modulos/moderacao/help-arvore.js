@@ -331,6 +331,32 @@ function arvorePT(P) {
 
     // ── &xp ──────────────────────────────────────────────
     xp: {
+      sincronizar: {
+        titulo: "xp sincronizar",
+        texto: [
+          "**Como os cargos de nível funcionam**",
+          `\`${P}xp criarcargos\` cria um cargo a cada N níveis (o N vem do \`${P}xp setup\`).`,
+          "Quem atinge o nível ganha o cargo — e os anteriores **continuam**: eles se acumulam.",
+          "",
+          "**Quem sai perde os cargos**",
+          "É o Stoat que os retira: cargo é do MEMBRO, e quem sai deixa de ser membro.",
+          "O **XP não se perde** — fica guardado no banco, com o nível.",
+          "",
+          `Por isso existe o \`${P}xp sincronizar\`: ele devolve tudo que o nível atual`,
+          "já garante. Sem ele, quem voltava no nível 14 só recuperaria o cargo ao",
+          "chegar no 15 — semanas depois, com a sensação de ter perdido o progresso.",
+          "",
+          `\`${P}xp sincronizar\` — confere o servidor inteiro`,
+          `\`${P}xp sincronizar @pessoa\` — só uma`,
+          "",
+          "_Desde já, quem **entra** recebe os cargos de volta sozinho; o comando é para_",
+          "_quem já tinha voltado antes, e para quando você cria os cargos depois de o_",
+          "_pessoal já ter subido de nível._",
+          "",
+          "**Se falhar:** o cargo do bot precisa de **AssignRoles** e estar **acima**",
+          "dos cargos de nível na lista.",
+        ].join("\n"),
+      },
       setup: {
         titulo: "xp setup",
         texto: [
@@ -358,6 +384,7 @@ function arvorePT(P) {
         titulo: "xp cargos",
         texto: [
           `\`${P}xp cargos\` — lista os cargos de nível já configurados`,
+          `\`${P}xp sincronizar\` — devolve os cargos a quem saiu e voltou _(\`${P}help xp sincronizar\`)_`,
           `\`${P}xp criarcargos\` — cria automaticamente, um a cada N níveis`,
           "",
           "**Segurança de hierarquia**",
@@ -1458,6 +1485,32 @@ function arvoreEN(P) {
     },
 
     xp: {
+      sincronizar: {
+        titulo: "xp sincronizar",
+        texto: [
+          "**How level roles work**",
+          `\`${P}xp criarcargos\` creates one role every N levels (N comes from \`${P}xp setup\`).`,
+          "Reaching the level grants the role — and the earlier ones **stay**: they stack.",
+          "",
+          "**Leaving costs the roles**",
+          "It's Stoat that removes them: a role belongs to the MEMBER, and someone who",
+          "leaves stops being one. The **XP is not lost** — it stays in the database.",
+          "",
+          `That's why \`${P}xp sincronizar\` exists: it hands back everything the current`,
+          "level already grants. Without it, someone returning at level 14 would only get",
+          "their role back on reaching 15 — weeks later, feeling like the progress vanished.",
+          "",
+          `\`${P}xp sincronizar\` — checks the whole server`,
+          `\`${P}xp sincronizar @user\` — just one person`,
+          "",
+          "_From now on, whoever **joins** gets the roles back automatically; the command_",
+          "_is for those who already returned, and for when you create the roles after_",
+          "_people have levelled up._",
+          "",
+          "**If it fails:** the bot's role needs **AssignRoles** and must sit **above**",
+          "the level roles in the list.",
+        ].join("\n"),
+      },
       setup: {
         titulo: "xp setup",
         texto: [
@@ -1485,6 +1538,7 @@ function arvoreEN(P) {
         titulo: "xp cargos",
         texto: [
           `\`${P}xp cargos\` — lists the level roles already configured`,
+          `\`${P}xp sincronizar\` — hands roles back to people who left and returned _(\`${P}help xp sincronizar\`)_`,
           `\`${P}xp criarcargos\` — creates them automatically, one every N levels`,
           "",
           "**Hierarchy safety**",

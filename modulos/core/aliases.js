@@ -146,6 +146,7 @@ const SUB = {
     rank: "rank", leaderboard: "leaderboard",
     multiplier: "multiplicador", maxlevel: "nivelmaximo", interval: "intervalo",
     channel: "canal", announce: "anuncio", announcement: "anuncio",
+    sync: "sincronizar", resync: "sincronizar", restore: "sincronizar", all: "todos",
   },
   acesso: {
     role: "cargo", roles: "cargos", staff: "staff",
@@ -291,7 +292,7 @@ const ANINHADOS = {
   game: new Set(["admin", "moeda", "mercado", "follower", "followers",
     "trocar", "escambo", "party", "equipe", "reset"]),
   acesso: new Set(["cargo", "cargos", "staff", "canal", "canais"]),
-  xp: new Set(["setup", "config", "configurar"]),
+  xp: new Set(["setup", "config", "configurar", "sincronizar"]),
   automod: new Set([...Object.keys(SUB.automod), "antispam", "antimassspam",
     "antiinvite", "antimassmention", "anticaps", "antilink", "antiscam", "sentinela",
     "anticaracteres", "antirepeticao"]),

@@ -193,8 +193,8 @@ function detalhesPT(P) {
       ex: `${P}game criar Kael`,
     },
     xp: {
-      uso: `${P}xp [rank|top|setup|cargos|criarcargos|on|off]`,
-      desc: "Sistema de níveis por XP de mensagens. Cada mensagem dá XP (com cooldown), e ao juntar XP você sobe de nível. A cada N níveis pode ganhar um cargo. `top` mostra o ranking. `setup` configura dificuldade, nível máximo e intervalo de cargos. (XP por call não é suportado pelo Stoat.)",
+      uso: `${P}xp [rank|top|setup|cargos|criarcargos|sincronizar|on|off]`,
+      desc: "Sistema de níveis por XP de mensagens. Cada mensagem dá XP (com cooldown), e ao juntar XP você sobe de nível. A cada N níveis pode ganhar um cargo, e os anteriores continuam — eles se acumulam.\n\n`top` mostra o ranking · `setup` configura dificuldade, nível máximo e intervalo de cargos.\n\n**Quem sai perde os cargos, não o XP.** Cargo é do membro: quem sai deixa de ser membro e o Stoat os retira. O XP fica guardado. Quem **entra** recebe os cargos de volta sozinho; para quem já tinha voltado antes disso, `&xp sincronizar [@pessoa]` devolve tudo que o nível atual garante _(veja `&help xp sincronizar`)_.\n\n(XP por call não é suportado pelo Stoat.)",
       perm: "ManagePermissions (para configurar)", ex: `${P}xp top`,
     },
     rss: {
@@ -415,8 +415,8 @@ function detalhesEN(P) {
       ex: `${P}game criar Kael`,
     },
     xp: {
-      uso: `${P}xp [rank|top|setup|cargos|criarcargos|on|off]`,
-      desc: "Message-XP leveling system. Each message grants XP (with a cooldown), and enough XP levels you up. Every N levels you can earn a role. `top` shows the ranking. `setup` configures difficulty, level cap and role interval. (Voice-call XP isn't supported by Stoat.)",
+      uso: `${P}xp [rank|top|setup|cargos|criarcargos|sincronizar|on|off]`,
+      desc: "Message-XP leveling system. Each message grants XP (with a cooldown), and enough XP levels you up. Every N levels you can earn a role, and the earlier ones stay — they stack.\n\n`top` shows the ranking · `setup` configures difficulty, level cap and role interval.\n\n**Leaving costs the roles, not the XP.** A role belongs to the member: leaving means no longer being one, so Stoat removes them. The XP stays. Whoever **joins** gets the roles back automatically; for those who returned before that, `&xp sincronizar [@user]` hands back everything the current level grants _(see `&help xp sincronizar`)_.\n\n(Voice-call XP isn't supported by Stoat.)",
       perm: "ManagePermissions (to configure)", ex: `${P}xp top`,
     },
     rss: {

@@ -390,12 +390,12 @@ respA.length = 0;
 const urlsDestravar = [];
 globalThis.fetch = async (url, op) => {
   urlsDestravar.push(String(url));
-  return { ok: true, status: 200, json: async () => ({ ok: true, via: { metodo: "POST", rota: "/leave_call" },
-    resultados: [{ metodo: "POST", rota: `/channels/${callReal.id}/leave_call`, ok: true, status: 200 }] }) };
+  return { ok: true, status: 200, json: async () => ({ ok: true, via: "PATCH members remove VoiceChannel",
+    passos: [{ metodo: "PATCH", rota: `/servers/S1/members/01JBOTAA00000000000000AAAA`, ok: true, status: 200 }] }) };
 };
 await tts.cmdTts(msgNaCallReal, ["destravar"], ctxA);
 ok(urlsDestravar.some((u) => u.includes("/destravar")), "`&tts destravar` chama o serviço");
-ok(String(respA.at(-1)?.title).includes("Destravado"), "  → e relata o resultado de cada rota tentada");
+ok(String(respA.at(-1)?.description).includes("PATCH"), "  → e mostra o pedido que saiu");
 
 // ══ 9. O destrave: auto-desconexão ══
 //
@@ -482,48 +482,34 @@ ok(pm?.corpo?.voice_channel === "01JCALLNOVA00000000000AAA",
   "  → via voice_channel no PRÓPRIO membro (dispensa MoveMembers, como o remove)");
 ok(!pm?.corpo?.remove, "  → e sem remover nada: é uma mudança, não uma saída");
 
-// ══ 11. HTTP 200 não é prova de destrave ══
+// ══ 11. A "verificação" era ela mesma uma entrada ══
 //
-//  Aconteceu de verdade: o PATCH devolveu 200, eu anunciei "🔓 Destravado", e
-//  o AlreadyConnected continuou. A rota só manda o LiveKit remover o
-//  participante; quem apaga o registro é o webhook que o LiveKit dispara
-//  depois — e ele não vem se o participante já não existir lá.
-console.log("\n── destrave verificado ──");
+//  Eu conferia o destrave com um POST /join_call. Só que join_call não é um
+//  teste: ele cria a sala no LiveKit e devolve um token de entrada de
+//  verdade. Conferir assim plantava justamente o estado que eu queria
+//  remover — uma vez por servidor. O relatório do servidor mostrou nove
+//  desses seguidos, todos 400.
+console.log("\n── o destrave não pode plantar o problema ──");
 const perfil = JSON.stringify({ _id: "01JBOTAA00000000000000AAAA", username: "Judy",
   avatar: { _id: "y".repeat(90), filename: "a.png" }, bot: { owner: "01JDONO0000000000000000AA" } });
-
-// Cenário do servidor: PATCH ok, mas o registro continua.
-globalThis.fetch = async (url) => {
+const chamadasD = [];
+globalThis.fetch = async (url, op) => {
   const u = String(url);
+  chamadasD.push({ url: u, metodo: op?.method });
   if (u.endsWith("/users/@me")) return { ok: true, status: 200, text: async () => perfil };
-  if (u.includes("/join_call")) return { ok: false, status: 400,
-    text: async () => '{"type":"AlreadyConnected","location":"crates/core/database/src/voice/mod.rs:40:24"}' };
   return { ok: true, status: 200, text: async () => "{}" };
 };
-let rv = await voz.forcarSaida("01JCALLR000000000000000AA", "01JSERVER00000000000000AA");
-ok(rv.ok === false, "★ PATCH 200 + AlreadyConnected persistente → relata FALHA, não sucesso");
-ok(rv.aindaPreso === true, "  → e diz que continua preso");
-ok(rv.passos.some((p) => String(p.rota).includes("verificação")), "  → a verificação aparece no relatório");
+const rv = await voz.forcarSaida("01JCALLR000000000000000AA", "01JSERVER00000000000000AA");
+ok(rv.ok === true, "o destrave pede a desconexão e relata");
+ok(!chamadasD.some((c) => c.url.includes("/join_call")),
+  "★ o destrave NUNCA chama join_call (isso criaria a sala e o registro de novo)");
 
-// Destrave que funcionou de verdade: o join de teste passa.
-globalThis.fetch = async (url) => {
-  const u = String(url);
-  if (u.endsWith("/users/@me")) return { ok: true, status: 200, text: async () => perfil };
-  return { ok: true, status: 200, text: async () => '{"token":"x","url":"wss://lk:7880"}' };
-};
-rv = await voz.forcarSaida("01JCALLR000000000000000AA", "01JSERVER00000000000000AA");
-ok(rv.ok === true && rv.verificado === true, "★ só reporta sucesso depois de CONFIRMAR entrando");
-
-// Um erro diferente também conta como destravado: o registro saiu, o
-// problema virou outro (permissão, rede…).
-globalThis.fetch = async (url) => {
-  const u = String(url);
-  if (u.endsWith("/users/@me")) return { ok: true, status: 200, text: async () => perfil };
-  if (u.includes("/join_call")) return { ok: false, status: 403, text: async () => '{"type":"MissingPermission"}' };
-  return { ok: true, status: 200, text: async () => "{}" };
-};
-rv = await voz.forcarSaida("01JCALLR000000000000000AA", "01JSERVER00000000000000AA");
-ok(rv.ok === true, "outro erro no teste = o registro saiu (o problema agora é outro)");
+// Vários servidores: para no primeiro que aceita, em vez de repetir em todos.
+chamadasD.length = 0;
+await voz.forcarSaida("01JCALLR000000000000000AA", "01JSRVA00000000000000000AA",
+  ["01JSRVA00000000000000000AA", "01JSRVB00000000000000000AA", "01JSRVC00000000000000000AA"]);
+const patches = chamadasD.filter((c) => c.metodo === "PATCH");
+ok(patches.length === 1, `★ para no primeiro servidor que aceita (foram ${patches.length} PATCH, não 3)`);
 
 console.log(`\nTTS: ${pass} ok, ${fail} falha(s)`);
 process.exit(fail ? 1 : 0);

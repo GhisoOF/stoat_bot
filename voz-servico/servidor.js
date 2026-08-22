@@ -34,7 +34,7 @@ import * as voz from "./voz.js";
 // O bot compara com o número que ele espera e avisa se estiver defasado —
 // antes eu detectava isso procurando um efeito específico na lista, e quando
 // esse efeito foi renomeado o alarme passou a tocar para sempre.
-export const API_VERSAO = 8;   // 8: destrave VERIFICADO (200 não é prova)
+export const API_VERSAO = 9;   // 9: limpeza preventiva e pós-falha; sem join_call de teste
 
 const PORTA   = Number(process.env.VOZ_PORTA || 8091);
 const CHAVE   = process.env.VOZ_CHAVE || "";

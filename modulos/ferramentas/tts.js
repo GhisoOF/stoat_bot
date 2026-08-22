@@ -35,7 +35,7 @@ const SERVIDORES = (process.env.TTS_SERVIDORES || "")
 // Gentoo, fora do Docker, então os dois são atualizados por caminhos
 // diferentes e podem ficar defasados — o pior estado possível, porque tudo
 // "parece" atualizado e a fala sai sem efeito, em silêncio.
-const VOZ_API_ESPERADA = 8;
+const VOZ_API_ESPERADA = 9;
 
 const COOLDOWN_MS = Number(process.env.TTS_COOLDOWN_MS || 8000);
 const MAX_CHARS   = Number(process.env.TTS_MAX_CHARS || 400);
@@ -525,11 +525,11 @@ export async function cmdTts(message, args, ctx) {
     const linhas = (r?.passos ?? r?.resultados ?? []).map((t) =>
       `${t.ok ? "✅" : "❌"} \`${t.metodo ?? ""} ${String(t.rota ?? "").replace(alvo, "…")}\` — ${t.erro ?? `HTTP ${t.status}`}`);
     return sendEmbed(message.channel, tr(ctx, {
-      title: r?.ok ? "🔓 Destravado (confirmado)" : "⚠️ Continua preso",
+      title: r?.ok ? "🔓 Desconexão pedida" : "⚠️ Continua preso",
       description: [
         ...linhas, "",
         r?.ok
-          ? `Confirmei entrando: o registro saiu. Agora \`${PREFIXO}tts entrar\` dentro da call.`
+          ? `Pedi a desconexão e o Stoat aceitou. Agora \`${PREFIXO}tts entrar\` **de dentro da call** — a entrada é que diz se funcionou.`
           : [
             "O Stoat aceitou o pedido (HTTP 200) mas o registro **continua lá** — eu conferi tentando entrar de novo.",
             "",
@@ -542,11 +542,11 @@ export async function cmdTts(message, args, ctx) {
           ].join("\n"),
       ].join("\n"), colour: r?.ok ? COR.sucesso : COR.aviso,
     }, {
-      title: r?.ok ? "🔓 Unstuck (confirmed)" : "⚠️ Still stuck",
+      title: r?.ok ? "🔓 Disconnect requested" : "⚠️ Still stuck",
       description: [
         ...linhas, "",
         r?.ok
-          ? `I confirmed by joining: the record is gone. Now \`${PREFIXO}tts entrar\` inside the call.`
+          ? `I asked to be disconnected and Stoat accepted. Now \`${PREFIXO}tts entrar\` **from inside the call** — the join itself will tell.`
           : [
             "Stoat accepted the request (HTTP 200) but the record **is still there** — I checked by trying to join again.",
             "",
@@ -778,8 +778,8 @@ export async function cmdTts(message, args, ctx) {
         return sendEmbed(message.channel, {
           title: lang === "en" ? "❌ Couldn't join" : "❌ Não consegui entrar",
           description: `\`${motivo}\`\n\n${lang === "en"
-            ? `Find out where it jams: \`${PREFIXO}tts diagnostico\``
-            : `Descubra onde trava: \`${PREFIXO}tts diagnostico\``}`,
+            ? `**Make sure you're already in the call** before calling me — joining an empty call is where it usually jams.\n\nFind out where: \`${PREFIXO}tts diagnostico\``
+            : `**Entre na call antes de me chamar** — entrar numa call vazia é onde costuma travar.\n\nDescubra onde: \`${PREFIXO}tts diagnostico\``}`,
           colour: COR.erro });
       }
 

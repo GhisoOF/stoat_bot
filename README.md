@@ -1669,20 +1669,38 @@ Ou seja: **o bot pode desconectar a si mesmo, sem permissão nenhuma**. É o que
 
 ⚠️ **HTTP 200 não é prova.** Essa rota só manda o LiveKit remover o
 participante; quem apaga o registro (`delete_voice_state`) é o webhook que o
-LiveKit dispara depois. Se o participante já não existe lá — queda de energia,
-processo morto —, o LiveKit responde "ok" sem fazer nada e o registro
-permanece. Por isso o `destravar` **confirma tentando entrar** antes de
-anunciar sucesso.
+LiveKit dispara depois. Se o participante já não existe lá, o LiveKit responde
+"ok" sem fazer nada e o registro permanece.
 
-Quando nem isso resolve, em ordem de gravidade:
+**E o `join_call` não serve de verificação:** ele não é um teste, é uma entrada
+de verdade — cria a sala e devolve token. Usá-lo para "conferir" plantava
+exatamente o estado que se queria remover, uma vez por servidor.
 
-1. **Use outra call.** O bloqueio é por canal (`sismember(vc:{user}, channel)`),
-   e bots podem estar em várias calls — em qualquer outro canal o bot entra.
-2. **Espere.** A sala do LiveKit pode expirar e liberar.
-3. **Kick no bot e adicioná-lo de volta.** `member_remove` chama
-   `remove_user_from_voice_channel`, que faz `delete_voice_state` — é a única
-   rota acessível que apaga o registro de verdade. A que o bot usa
-   (`member_edit`) não apaga.
+### O ciclo vicioso
+
+`join_call` **não** cria o registro de voz: quem cria é o LiveKit, quando o
+participante conecta de fato. Então, quando o `revoice.join()` pendura, ele
+**já conectou** — a conexão fica viva do lado do LiveKit, o Stoat passa a
+registrar o bot na call, e a nossa camada desiste no timeout. A tentativa
+seguinte bate em `AlreadyConnected` causado pela anterior, e cada tentativa
+planta o obstáculo da próxima. Era por isso que "deixar quieto" resolvia: a
+conexão morria de inatividade.
+
+Três medidas quebram o ciclo:
+
+1. **Limpeza preventiva** — sem conexão local, o bot pede a desconexão antes de
+   tentar entrar. Custa uma requisição e evita o `AlreadyConnected` inteiro.
+2. **Limpeza pós-falha** — toda entrada que estoura o timeout limpa o registro
+   que ela mesma deixou.
+3. **Desligar limpo** — `SIGTERM`/`SIGINT` saem de todas as calls antes de
+   encerrar. Não cobre queda de energia, mas cobre reinício e deploy.
+
+Sobrando o problema: **use outra call** (o bloqueio é por canal, e bots podem
+estar em várias) ou, em último caso, **kick no bot e adicioná-lo de volta** —
+`member_remove` é a única rota acessível que chama `delete_voice_state`.
+
+💡 **Entre na call antes de chamar o bot.** Chamá-lo para uma call vazia é
+onde a entrada costuma travar.
 A mesma rota, com `voice_channel: <novo canal>` em vez de `remove`, **move** o
 bot entre calls — daí `&tts entrar` numa call diferente funcionar como "vem
 para cá" em vez de dar `AlreadyConnected`. O move só enxerga a call de origem

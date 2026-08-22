@@ -186,6 +186,17 @@ async function entrarDeFato(canalVoz, serverId = null) {
     dbg(`entrando em ${canalVoz}…`);
     marco("inicio");
 
+    // ── Limpeza preventiva ──
+    //
+    // Se não tenho conexão local nenhuma, qualquer registro meu do lado do
+    // Stoat é resíduo de uma tentativa anterior. Limpar antes custa uma
+    // requisição e evita o `AlreadyConnected` inteiro — que, sem isto, só
+    // sairia esperando a conexão fantasma morrer sozinha.
+    if (!conexoes.size && (serverId ?? ultimoServidor)) {
+      const previa = await forcarSaida(canalVoz, serverId ?? ultimoServidor, servidoresConhecidos).catch(() => null);
+      marco(previa?.ok ? "residuo-limpo" : "sem-residuo");
+    }
+
     // ── Já estou em outra call? Então "entrar" quer dizer MOVER ──
     //
     // Chamar alguém para a sua call enquanto ele está em outra é o pedido
@@ -261,6 +272,22 @@ async function entrarDeFato(canalVoz, serverId = null) {
     // AlreadyConnected: o Stoat acha que já estamos na call. Destrava e
     // tenta UMA vez — quem pediu para entrar não deve precisar aprender a
     // existência de um estado preso do outro lado para conseguir entrar.
+    // ── O ciclo vicioso ──
+    //
+    // O `join_call` não cria o registro de voz: quem cria é o LiveKit, quando
+    // o participante conecta de fato. Ou seja, quando o `revoice.join()`
+    // pendura, ele JÁ conectou lá — a conexão fica viva do lado do LiveKit, o
+    // Stoat passa a me registrar na call, e a minha camada desiste em 20s.
+    // A tentativa seguinte então bate em `AlreadyConnected`, causado pela
+    // anterior. Sem limpar aqui, cada tentativa planta o obstáculo da próxima
+    // e a única saída é esperar a conexão morrer de inatividade.
+    if (/sem resposta ao pedido de entrar/i.test(String(e?.message ?? e))) {
+      log(`entrada travou em ${canalVoz} — limpando o registro que ela deixou`);
+      const limpeza = await forcarSaida(canalVoz, serverId ?? ultimoServidor, servidoresConhecidos);
+      marcos.push({ nome: limpeza.ok ? "registro-limpo" : "limpeza-falhou", ms: Date.now() - t0 });
+      ultimaFalha.marcos = [...marcos];
+    }
+
     if (/AlreadyConnected/i.test(String(e?.message ?? e)) && !jaTentouDestravar.has(canalVoz)) {
       jaTentouDestravar.add(canalVoz);
       const sid = serverId ?? ultimoServidor;
@@ -386,26 +413,18 @@ export async function forcarSaida(canalVoz, serverId = null, servidores = []) {
     const r = await bater("PATCH", `/servers/${sid}/members/${meuId}`, { remove: ["VoiceChannel"] });
     passos.push(r);
     if (!r.ok) continue;
+    log(`pedido de desconexão aceito em ${sid}`);
+    return { ok: true, via: "PATCH members remove VoiceChannel", passos };
 
-    // ── HTTP 200 NÃO significa destravado ──
+    // NÃO verificamos com um `join_call` de teste.
     //
-    // Essa rota só manda o LiveKit remover o participante; quem apaga o
-    // registro do Stoat (`delete_voice_state`) é o webhook que o LiveKit
-    // dispara depois. Quando o participante já não existe lá — queda de
-    // energia, processo morto — o LiveKit responde "ok" sem fazer nada,
-    // webhook nenhum é disparado, e o registro continua exatamente onde
-    // estava. Foi assim que reportei "destravado" para um estado que não
-    // tinha mudado. A única prova é tentar entrar.
-    const teste = await bater("POST", `/channels/${canalVoz}/join_call`, {});
-    passos.push({ ...teste, rota: "(verificação: join_call)" });
-    if (teste.ok) {
-      log(`destravado de verdade em ${sid}`);
-      return { ok: true, via: "PATCH members remove VoiceChannel", passos, verificado: true };
-    }
-    if (!/AlreadyConnected/i.test(teste.corpo ?? "")) {
-      // Outro erro qualquer: o registro saiu, o problema agora é outro.
-      return { ok: true, via: "PATCH members remove VoiceChannel", passos, verificado: true };
-    }
+    // Eu tinha feito isso — e `join_call` não é um teste: ele cria a sala no
+    // LiveKit e devolve um token de entrada de verdade. Usá-lo para "conferir"
+    // era plantar exatamente o estado que eu queria remover, uma vez por
+    // servidor. O relatório do servidor mostrou nove desses seguidos.
+    //
+    // A única prova honesta é a entrada real que a pessoa vai fazer em
+    // seguida, e ela já diz se funcionou.
   }
   return { ok: false, passos, aindaPreso: true };
 }
@@ -778,4 +797,26 @@ export async function falar(canalVoz, texto, vozNome = null, efeito = null, tom 
   c.fila.push({ texto, voz: vozNome, efeito, tom });
   processarFila(canalVoz);
   return { ok: true, naFila: c.fila.length, falando: c.ocupado };
+}
+
+
+// ══════════════════════════════════════════════════════════
+//  Desligar limpo
+//
+//  Um processo que morre sem desconectar deixa a conexão viva do lado do
+//  LiveKit, e o Stoat continua registrando o bot na call — é a origem do
+//  `AlreadyConnected`. Queda de energia não dá tempo de nada, mas reinício,
+//  deploy e `rc-service restart` dão: são a maioria dos casos.
+// ══════════════════════════════════════════════════════════
+let saindo = false;
+async function desligarLimpo(sinal) {
+  if (saindo) return;
+  saindo = true;
+  log(`${sinal}: saindo das calls antes de encerrar…`);
+  try { await Promise.race([sair(null), new Promise((r) => setTimeout(r, 4000))]); } catch {}
+  log("encerrado");
+  process.exit(0);
+}
+for (const sinal of ["SIGTERM", "SIGINT"]) {
+  process.on(sinal, () => { desligarLimpo(sinal); });
 }

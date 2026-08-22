@@ -189,14 +189,33 @@ globalThis.fetch = responder({ me: { ok: false, status: 401, corpo: '{"type":"In
 d = await voz.diagnosticar("01JVOZ00000000000000000000");
 ok(et("api+token")?.ok === false, "token inválido falha logo na etapa 1");
 
-// Canal de TEXTO no lugar do de voz — some sozinho se ninguém conferir.
+// Um canal de call no Stoat É um TextChannel: a etapa "canal" só verifica se
+// dá para LER o canal. Julgar o tipo aqui apontava um culpado inexistente e
+// mandava reconfigurar um canal que estava certo.
 globalThis.fetch = responder({
   me: { ok: true, status: 200, corpo: '{"username":"Judy"}' },
-  canal: { ok: true, status: 200, corpo: '{"channel_type":"TextChannel","name":"geral"}' },
-  join_call: { ok: false, status: 400, corpo: '{"type":"NotAVoiceChannel"}' },
+  canal: { ok: true, status: 200, corpo: '{"channel_type":"TextChannel","name":"Call"}' },
+  join_call: { ok: true, status: 200, corpo: '{"token":"x","url":"wss://lk.invalido:7880"}' },
 });
 d = await voz.diagnosticar("01JVOZ00000000000000000000");
-ok(et("canal")?.ok === false, "canal de TEXTO configurado por engano é apontado");
+ok(et("canal")?.ok === true, "★ TextChannel com call NÃO é marcado como erro (é o normal no Stoat)");
+
+// Canal que o bot não consegue ler: aí sim é problema.
+globalThis.fetch = responder({
+  me: { ok: true, status: 200, corpo: '{"username":"Judy"}' },
+  canal: { ok: false, status: 404, corpo: '{"type":"NotFound"}' },
+});
+d = await voz.diagnosticar("01JVOZ00000000000000000000");
+ok(et("canal")?.ok === false, "canal ilegível/inexistente é apontado");
+
+// AlreadyConnected reconhecido no diagnóstico
+globalThis.fetch = responder({
+  me: { ok: true, status: 200, corpo: '{"username":"Judy"}' },
+  canal: { ok: true, status: 200, corpo: '{"channel_type":"TextChannel","name":"Call"}' },
+  join_call: { ok: false, status: 400, corpo: '{"type":"AlreadyConnected","location":"crates/core/database/src/voice/mod.rs:40:24"}' },
+});
+d = await voz.diagnosticar("01JVOZ00000000000000000000");
+ok(String(et("join_call")?.detalhe).includes("AlreadyConnected"), "★ o diagnóstico mostra o AlreadyConnected literal");
 
 // Caminho feliz: o token do LiveKit nunca sai no resultado.
 globalThis.fetch = responder({
@@ -306,27 +325,77 @@ rotas.length = 0;
 await tts.aoMensagem({ channelId: CALL, authorId: "U2", content: "ainda tem alguem?", author: { username: "Alguem" } }, ctxE);
 ok(rotas.length === 0, "  → e nada mais é enviado ao serviço");
 
-// Fora de uma call, mas o servidor só tem uma: entra nela sem perguntar.
+// A call é a do canal onde a pessoa digitou — inclusive em canal de texto,
+// porque no Stoat qualquer canal pode ter uma call. Se não houver call ali,
+// o join_call falha com uma mensagem clara; melhor do que adivinhar em
+// silêncio e entrar na call errada, que foi o que aconteceu no servidor.
 respE.length = 0; rotas.length = 0;
 const canalTexto = { id: "01JTXT0000000000000000AAAA", name: "geral", type: "TextChannel", sendMessage: async () => ({ id: "m" }) };
 const msgNoTexto = { channelId: canalTexto.id, authorId: "U1", channel: canalTexto, author: { username: "G" } };
 const ctxT = { ...ctxE, config: { language: "pt", tts: { ativo: false, canalVoz: null, canalTexto: null, filtro: true, cooldown: 0 } },
   getServer: async () => ({ id: "S1", channels: [canalCall, canalTexto] }) };
 await tts.cmdTts(msgNoTexto, ["entrar"], ctxT);
-ok(rotas.some((r) => r.url.endsWith("/entrar")), "com uma call só no servidor, entra nela mesmo o comando vindo de outro canal");
-ok(ctxT.config.tts.canalVoz === CALL, "  → escolheu a única call que existe");
-ok(ctxT.config.tts.canalTexto === canalTexto.id, "  → e lê o canal onde o comando foi dado");
+ok(ctxT.config.tts.canalVoz === canalTexto.id, "★ entra na call DO CANAL onde o comando foi dado");
+ok(rotas.some((r) => r.corpo.canalVoz === canalTexto.id), "  → e é esse canal que vai para o serviço");
 
-// Com mais de uma call, pergunta em vez de chutar.
+// Sem canal utilizável (DM, categoria), aí sim pergunta.
 respE.length = 0; rotas.length = 0;
-const call2 = { id: "01JCALL2000000000000000AA", name: "Call 2", type: "VoiceChannel", sendMessage: async () => ({ id: "m" }) };
-const ctxD = { ...ctxE, config: { language: "pt", tts: { ativo: false, canalVoz: null, canalTexto: null, filtro: true, cooldown: 0 } },
-  getServer: async () => ({ id: "S1", channels: [canalCall, call2, canalTexto] }) };
-await tts.cmdTts(msgNoTexto, ["entrar"], ctxD);
-ok(String(respE.at(-1)?.title).includes("Em qual call"), "★ com duas calls, pergunta qual — em vez de chutar uma");
-ok(rotas.length === 0, "  → e não entra em nenhuma enquanto não souber");
-ok(String(respE.at(-1)?.description).includes(CALL) && String(respE.at(-1)?.description).includes(call2.id),
-  "  → listando as duas opções");
+const categoria = { id: "01JCAT0000000000000000AAAA", name: "categoria", type: "Category", sendMessage: async () => ({ id: "m" }) };
+const ctxC = { ...ctxE, config: { language: "pt", tts: { ativo: false, canalVoz: null, canalTexto: null, filtro: true, cooldown: 0 } },
+  getServer: async () => ({ id: "S1", channels: [canalCall, categoria] }) };
+await tts.cmdTts({ channelId: categoria.id, authorId: "U1", channel: categoria, author: { username: "G" } }, ["entrar"], ctxC);
+ok(ctxC.config.tts.canalVoz === canalCall.id, "de um canal que não comporta call, cai para a única que existe");
+
+// ══ 8. AlreadyConnected — a causa real do servidor ══
+//
+//  O diagnóstico no servidor devolveu:
+//    join_call → HTTP 400 · AlreadyConnected (crates/core/database/src/voice)
+//  O Stoat guarda que o bot está numa call e recusa toda entrada nova. Não é
+//  permissão nem rede: é registro preso do lado dele.
+console.log("\n── AlreadyConnected ──");
+
+// O canal de call do Stoat é um TextChannel com voz — não um "VoiceChannel".
+// Supor o contrário fazia `entrar` recusar justamente o canal certo.
+const callReal = { id: "01JCALLR000000000000000AA", name: "Call", type: "TextChannel", sendMessage: async () => ({ id: "m" }) };
+const respA = [];
+const cfgA = { language: "pt", tts: { ativo: false, canalVoz: "01JVELHO000000000000000AA", canalTexto: null, filtro: true, cooldown: 0 } };
+const ctxA = {
+  serverId: "S1", PREFIXO: "&", COR: { info: "#1", aviso: "#2", erro: "#3", sucesso: "#4", mod: "#5" },
+  cfgGlobal: { debug: false }, config: cfgA,
+  sendEmbed: async (_c, e) => { respA.push(e); return { id: "M" }; },
+  getServer: async () => ({ id: "S1", channels: [callReal] }),
+  membroTemPermissao: () => true, salvarConfig: () => {}, client: { channels: new Map([[callReal.id, callReal]]) },
+};
+const msgNaCallReal = { channelId: callReal.id, authorId: "U1", channel: callReal, author: { username: "Ghieh" } };
+
+globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => ({ ok: true }) });
+await tts.cmdTts(msgNaCallReal, ["entrar"], ctxA);
+ok(cfgA.tts.canalVoz === callReal.id,
+  "★ um canal `TextChannel` com call É aceito (no Stoat não existe VoiceChannel separado)");
+ok(cfgA.tts.canalVoz !== "01JVELHO000000000000000AA", "  → e a configuração antiga não sequestra o comando");
+
+// entrar quando o Stoat recusa com AlreadyConnected
+respA.length = 0;
+globalThis.fetch = async () => ({ ok: false, status: 502,
+  json: async () => ({ erro: 'AlreadyConnected {"type":"AlreadyConnected"}' }),
+  text: async () => '{"erro":"AlreadyConnected"}' });
+await tts.cmdTts(msgNaCallReal, ["entrar"], ctxA);
+const t = String(respA.at(-1)?.title ?? "") + String(respA.at(-1)?.description ?? "");
+ok(t.includes("já estou numa call") || t.includes("destravar"),
+  "★ AlreadyConnected vira explicação própria, não um timeout genérico");
+ok(!t.includes("tts canal aqui"), "  → e NÃO manda usar o comando de configuração antigo");
+
+// &tts destravar
+respA.length = 0;
+const urlsDestravar = [];
+globalThis.fetch = async (url, op) => {
+  urlsDestravar.push(String(url));
+  return { ok: true, status: 200, json: async () => ({ ok: true, via: { metodo: "POST", rota: "/leave_call" },
+    resultados: [{ metodo: "POST", rota: `/channels/${callReal.id}/leave_call`, ok: true, status: 200 }] }) };
+};
+await tts.cmdTts(msgNaCallReal, ["destravar"], ctxA);
+ok(urlsDestravar.some((u) => u.includes("/destravar")), "`&tts destravar` chama o serviço");
+ok(String(respA.at(-1)?.title).includes("Destravado"), "  → e relata o resultado de cada rota tentada");
 
 console.log(`\nTTS: ${pass} ok, ${fail} falha(s)`);
 process.exit(fail ? 1 : 0);

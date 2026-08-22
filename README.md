@@ -333,8 +333,13 @@ persona, que pede o mesmo tom em uma frase.
   pessoa. Risada (`kkkk`, `rsrs`) passa de propósito, e `&tts <texto>` nunca é
   filtrado: pedido explícito é sempre falado. Se a entrada na call travar,
   `&tts diagnostico` diz **em qual etapa** — a API do Stoat (token, permissão,
-  sala fantasma) ou a rede até o LiveKit (UDP, MTU, firewall) — e
-  `&tts reiniciar` recria a conexão sem ir ao terminal.
+  registro preso) ou a rede até o LiveKit (UDP, MTU, firewall). Para o caso
+  mais comum, `AlreadyConnected` (o Stoat guardar que o bot já está numa call e
+  recusar toda entrada nova), o `entrar` tenta destravar sozinho e
+  `&tts destravar` força de novo; `&tts reiniciar` recria a conexão local.
+  **Detalhe do Stoat:** não existe um "canal de voz" separado — a call vive
+  dentro de um canal de texto com voz habilitada, então `&tts entrar` usa
+  sempre a call do canal onde foi digitado.
   ⚠️ **O `voz-servico/` não sobe pelo deploy do container** — ele roda nativo na
   máquina e precisa ser copiado e reiniciado à mão. O bot compara a versão da
   interface: se estiverem defasados, `&tts estado` mostra o aviso e as rotas
@@ -558,6 +563,7 @@ Prefixo: `&`. Aliases entre parênteses.
 | `&tts <texto>` / `&tts [canal\|transmitir\|voz\|estado]` | uma frase específica, e os ajustes |
 | `&tts filtro [status\|on\|off\|porminuto <n>\|teste <texto>]` | a peneira anti-barulho da transmissão |
 | `&tts diagnostico` | em qual etapa a entrada na call trava *(ManageMessages)* |
+| `&tts destravar` | limpa o `AlreadyConnected` do lado do Stoat *(ManageMessages)* |
 | `&tts reiniciar` | destrava o serviço de voz sem terminal *(ManageMessages)* |
 | `&boasvindas <canal\|titulo\|texto\|cor\|imagem\|testar\|padrao\|on\|off>` | embed de entrada |
 | `&adeus <canal\|titulo\|texto\|cor\|imagem\|testar\|padrao\|on\|off>` | embed de saída |
@@ -1805,7 +1811,7 @@ O código é organizado em quatro áreas, sob `modulos/`:
 │   │   └── game.js             # &game — personagem, 9 atributos, progressão
 │   └── economia/               # reservado para o futuro
 ├── voz-servico/                # judy-voz: LiveKit + Piper (nativo no Gentoo)
-│   ├── servidor.js             # HTTP: /saude, /entrar, /sair, /falar, /reiniciar, /diagnostico
+│   ├── servidor.js             # HTTP: /saude, /entrar, /sair, /falar, /reiniciar, /diagnostico, /destravar
 │   ├── voz.js                  # entra na call e publica áudio (revoice.js)
 │   └── tts.js                  # síntese (Piper) e efeitos (ffmpeg)
 ├── ia-servico/                 # serviço de IA (ferramentas + tool-calling)

@@ -35,7 +35,7 @@ const SERVIDORES = (process.env.TTS_SERVIDORES || "")
 // Gentoo, fora do Docker, então os dois são atualizados por caminhos
 // diferentes e podem ficar defasados — o pior estado possível, porque tudo
 // "parece" atualizado e a fala sai sem efeito, em silêncio.
-const VOZ_API_ESPERADA = 4;
+const VOZ_API_ESPERADA = 5;
 
 const COOLDOWN_MS = Number(process.env.TTS_COOLDOWN_MS || 8000);
 const MAX_CHARS   = Number(process.env.TTS_MAX_CHARS || 400);
@@ -101,13 +101,21 @@ function quaseSubcomando(args) {
 //  o único canal de voz do servidor, se houver só um. Nada disso valendo,
 //  quem chama mostra as opções em vez de adivinhar.
 // ──────────────────────────────────────────────────────────
+// ATENÇÃO: no Stoat NÃO existe um "VoiceChannel" separado — uma call vive
+// dentro de um `TextChannel` com voz habilitada. Eu tinha suposto o contrário,
+// e o resultado foi `&tts entrar` recusar exatamente o canal certo (o
+// diagnóstico do servidor mostrou "tipo: TextChannel · nome: Call") e cair
+// para uma configuração antiga, entrando na call errada.
+//
+// Como qualquer canal pode ter call, a pergunta "isto é um canal de voz?" não
+// tem resposta confiável no cliente. A resposta útil é outra: **a call é a do
+// canal onde a pessoa digitou**. Se não houver call ali, o join_call falha com
+// uma mensagem clara — melhor do que adivinhar em silêncio.
 function pareceCanalDeVoz(canal) {
   if (!canal) return false;
   const t = String(canal.type ?? canal.channel_type ?? "");
-  if (/voice/i.test(t)) return true;
-  // Algumas versões da lib não expõem o tipo, mas expõem o estado da call.
-  if (canal.voice || canal.activeCall || typeof canal.joinCall === "function") return true;
-  return false;
+  // Canal de servidor (texto ou voz) serve; DM e categoria, não.
+  return /text|voice/i.test(t) || !!canal.voice || !!canal.activeCall;
 }
 
 function canaisDeVozDo(server, client) {
@@ -119,15 +127,15 @@ function canaisDeVozDo(server, client) {
 }
 
 function descobrirCanalDeVoz(message, server, ctx, config) {
+  // O canal onde a pessoa digitou vem primeiro, sempre. É o que ela quer
+  // dizer com "entra aqui", e no Stoat é onde a call de fato está.
   const atual = message.channel ?? ctx.client?.channels?.get?.(message.channelId);
-  if (pareceCanalDeVoz(atual)) {
+  if (message.channelId && pareceCanalDeVoz(atual)) {
     return { id: message.channelId, fonte: "aqui" };
   }
   if (config?.canalVoz) return { id: config.canalVoz, fonte: "configurado" };
   const vozes = canaisDeVozDo(server, ctx.client);
-  if (vozes.length === 1) {
-    return { id: vozes[0].id ?? vozes[0]._id, fonte: "unico" };
-  }
+  if (vozes.length === 1) return { id: vozes[0].id ?? vozes[0]._id, fonte: "unico" };
   return { id: null, opcoes: vozes.slice(0, 10) };
 }
 
@@ -444,12 +452,12 @@ export async function cmdTts(message, args, ctx) {
         "🔎 **Authentication itself fails.** It's not the call: it's the token or reaching the API. Check that `BOT_TOKEN` in `judy-voz`'s `.env` is the **same** as the bot's, and that the machine can reach Stoat's API.");
     } else if (canal?.ok === false) {
       veredito = tr(ctx,
-        `🔎 **Não consigo nem ler esse canal.** O ID configurado em \`${PREFIXO}tts canal\` pode estar errado, ou o bot não enxerga o canal. Entre na call e rode \`${PREFIXO}tts canal aqui\`.`,
-        `🔎 **I can't even read that channel.** The ID set in \`${PREFIXO}tts canal\` may be wrong, or the bot can't see the channel. Join the call and run \`${PREFIXO}tts canal aqui\`.`);
-    } else if (canal?.ok === false || (canal && canal.ok === null)) {
+        `🔎 **Não consigo nem ler esse canal.** Ele pode ter sido apagado, ou o bot não o enxerga. Entre na call e mande \`${PREFIXO}tts entrar\` por lá — eu passo a usar esse canal.`,
+        `🔎 **I can't even read that channel.** It may have been deleted, or the bot can't see it. Join the call and send \`${PREFIXO}tts entrar\` there — I'll switch to that channel.`);
+    } else if (/AlreadyConnected/i.test(String(jc?.detalhe ?? ""))) {
       veredito = tr(ctx,
-        `🔎 **Leio o canal, mas não confirmei que ele é de voz.** Veja o tipo acima: se não for um canal de voz, \`${PREFIXO}tts canal aqui\` dentro da call resolve.`,
-        `🔎 **I can read the channel, but couldn't confirm it's a voice one.** Check the type above: if it isn't a voice channel, \`${PREFIXO}tts canal aqui\` inside the call fixes it.`);
+        `🔎 **\`AlreadyConnected\`: o Stoat acha que eu já estou numa call.** Não é permissão nem rede — é um registro preso no lado dele, que recusa toda entrada nova enquanto existir. Costuma sobrar de uma entrada que travou no meio.\n\nTente \`${PREFIXO}tts destravar\` _(ManageMessages)_. Se não resolver, o registro expira sozinho depois de alguns minutos.`,
+        `🔎 **\`AlreadyConnected\`: Stoat thinks I'm already in a call.** Not permission, not network — a stuck record on their side that refuses every new join while it exists. It's usually left over from a join that jammed halfway.\n\nTry \`${PREFIXO}tts destravar\` _(ManageMessages)_. If that doesn't do it, the record expires on its own after a few minutes.`);
     } else if (jc?.ok === false) {
       const html = /HTML/i.test(String(jc.detalhe ?? ""));
       veredito = html
@@ -489,6 +497,42 @@ export async function cmdTts(message, args, ctx) {
       ].filter(Boolean).join("\n"),
       colour: d.ok ? COR.info : COR.aviso,
     });
+  }
+
+  // ── destravar: limpa o "AlreadyConnected" do lado do Stoat ──
+  if (["destravar", "unstick", "forcarsaida", "leave"].includes(sub)) {
+    if (!ehStaff) {
+      return sendEmbed(message.channel, tr(ctx,
+        { title: "🚫 Permissão insuficiente", description: "Você precisa de **ManageMessages**.", colour: COR.erro },
+        { title: "🚫 Missing permission", description: "You need **ManageMessages**.", colour: COR.erro }));
+    }
+    const alvo = c.canalVoz ?? message.channelId;
+    let r;
+    try { r = await chamar("/destravar", { canalVoz: alvo }); }
+    catch (e) {
+      return sendEmbed(message.channel, {
+        title: lang === "en" ? "❌ The service didn't answer" : "❌ O serviço não respondeu",
+        description: `\`${String(e.message ?? e).replace(/`/g, "")}\``, colour: COR.erro });
+    }
+    const linhas = (r?.resultados ?? []).map((t) =>
+      `${t.ok ? "✅" : "❌"} \`${t.metodo} ${t.rota.replace(alvo, "…")}\` — ${t.erro ?? `HTTP ${t.status}`}`);
+    return sendEmbed(message.channel, tr(ctx, {
+      title: r?.ok ? "🔓 Destravado" : "⚠️ Não consegui destravar",
+      description: [
+        ...linhas, "",
+        r?.ok
+          ? `O registro de call foi removido. Agora: \`${PREFIXO}tts entrar\` dentro da call.`
+          : "Nenhuma rota de saída funcionou nesta instância do Stoat. O registro costuma expirar sozinho — tente de novo daqui a alguns minutos.",
+      ].join("\n"), colour: r?.ok ? COR.sucesso : COR.aviso,
+    }, {
+      title: r?.ok ? "🔓 Unstuck" : "⚠️ Couldn't clear it",
+      description: [
+        ...linhas, "",
+        r?.ok
+          ? `The call record was removed. Now: \`${PREFIXO}tts entrar\` inside the call.`
+          : "No leave route worked on this Stoat instance. The record usually expires on its own — try again in a few minutes.",
+      ].join("\n"), colour: r?.ok ? COR.sucesso : COR.aviso,
+    }));
   }
 
   // ── reiniciar (staff): destrava o serviço sem ir ao terminal ──
@@ -678,6 +722,27 @@ export async function cmdTts(message, args, ctx) {
         await chamar("/entrar", { canalVoz: c.canalVoz });
       } catch (e) {
         const motivo = String(e.message ?? e).replace(/`/g, "");
+        if (/AlreadyConnected/i.test(motivo)) {
+          return sendEmbed(message.channel, tr(ctx, {
+            title: "🔒 O Stoat acha que eu já estou numa call",
+            description: [
+              "Ele guarda que estou conectada e recusa qualquer entrada nova enquanto esse registro existir — mesmo eu não estando em call nenhuma.",
+              "",
+              `Já tentei destravar sozinha e não consegui. \`${PREFIXO}tts destravar\` tenta de novo _(ManageMessages)_.`,
+              "",
+              "Se insistir: alguém entra na call pelo cliente e confere se eu apareço na lista. Aparecendo, é registro preso do lado do servidor e passa sozinho quando a sala expira.",
+            ].join("\n"), colour: COR.aviso,
+          }, {
+            title: "🔒 Stoat thinks I'm already in a call",
+            description: [
+              "It records me as connected and refuses any new join while that record exists — even though I'm in no call at all.",
+              "",
+              `I already tried to clear it myself and failed. \`${PREFIXO}tts destravar\` tries again _(ManageMessages)_.`,
+              "",
+              "If it persists: have someone open the call in the client and check whether I show up in the list. If I do, it's a stuck server-side record and it clears when the room expires.",
+            ].join("\n"), colour: COR.aviso,
+          }));
+        }
         return sendEmbed(message.channel, {
           title: lang === "en" ? "❌ Couldn't join" : "❌ Não consegui entrar",
           description: `\`${motivo}\`\n\n${lang === "en"

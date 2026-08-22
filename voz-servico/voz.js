@@ -78,6 +78,9 @@ const conexoes = new Map();   // canalVoz → { connection, entrouEm, falas, fil
 // disparou sete joins ao mesmo tempo e travou a entrada de vez — cada um
 // abrindo uma sala que o seguinte não sabia que existia.
 const entrando = new Map();   // canalVoz → Promise<{ ok, … }>
+// Canais em que já tentamos o destrave automático nesta rodada — sem isto,
+// um AlreadyConnected persistente viraria recursão infinita.
+const jaTentouDestravar = new Set();
 
 // Corrida entre uma promessa e um timeout, com mensagem que diz ONDE parou.
 //
@@ -240,6 +243,22 @@ async function entrarDeFato(canalVoz) {
     log(`falha ao entrar em ${canalVoz}: ${erro}`);
     marcos.push({ nome: "falhou", ms: Date.now() - t0 });
     ultimaFalha = { canalVoz, erro, quando: Date.now(), marcos: [...marcos] };
+
+    // AlreadyConnected: o Stoat acha que já estamos na call. Destrava e
+    // tenta UMA vez — quem pediu para entrar não deve precisar aprender a
+    // existência de um estado preso do outro lado para conseguir entrar.
+    if (/AlreadyConnected/i.test(String(e?.message ?? e)) && !jaTentouDestravar.has(canalVoz)) {
+      jaTentouDestravar.add(canalVoz);
+      log(`AlreadyConnected em ${canalVoz} — forçando saída e tentando de novo`);
+      const f = await forcarSaida(canalVoz);
+      marcos.push({ nome: f.ok ? "destravado" : "destravar-falhou", ms: Date.now() - t0 });
+      if (f.ok) {
+        const r2 = await entrarDeFato(canalVoz);
+        jaTentouDestravar.delete(canalVoz);
+        return r2;
+      }
+    }
+    jaTentouDestravar.delete(canalVoz);
     // Limpeza: uma conexão que falhou no meio não pode ficar registrada,
     // senão a tentativa seguinte reusa um objeto quebrado e falha de um
     // jeito diferente — mascarando a causa original.
@@ -270,6 +289,45 @@ export async function sair(canalVoz = null) {
     log(`saiu da call ${id}`);
   }
   return { ok: true, saiu };
+}
+
+// ── Sair pela API, sem depender do estado local ───────────
+//
+//  O `AlreadyConnected` do Stoat vem do banco DELE: o servidor guarda que
+//  este bot está numa call, e recusa qualquer entrada nova enquanto esse
+//  registro existir. Normalmente ele some quando a sala do LiveKit
+//  desconecta — mas se a nossa entrada travou no meio, ou o processo morreu
+//  com a sala meio aberta, o registro fica preso e NADA que a gente faça
+//  localmente o remove: reiniciar o serviço não adianta, porque o estado
+//  não é nosso.
+//
+//  Como a rota de saída não é a mesma em toda versão do Stoat, tentamos as
+//  candidatas em ordem e relatamos o que cada uma respondeu. A que existir
+//  resolve; o relatório serve para descobrir qual é, sem chutar de novo.
+export async function forcarSaida(canalVoz) {
+  const API = (process.env.STOAT_API || "https://api.stoat.chat").replace(/\/$/, "");
+  const tentativas = [
+    { metodo: "POST",   rota: `/channels/${canalVoz}/leave_call` },
+    { metodo: "DELETE", rota: `/channels/${canalVoz}/join_call` },
+    { metodo: "DELETE", rota: `/channels/${canalVoz}/call` },
+  ];
+  const resultados = [];
+  for (const t of tentativas) {
+    try {
+      const r = await comLimite(fetch(`${API}${t.rota}`, {
+        method: t.metodo,
+        headers: { "X-Bot-Token": TOKEN, ...(t.metodo === "POST" ? { "Content-Type": "application/json" } : {}) },
+        ...(t.metodo === "POST" ? { body: "{}" } : {}),
+      }), 8000, `8s sem resposta de ${t.rota}`);
+      const corpo = await r.text().catch(() => "");
+      resultados.push({ ...t, status: r.status, ok: r.ok, corpo: corpo.slice(0, 120) });
+      // 2xx: deu certo, não precisa tentar as outras.
+      if (r.ok) { log(`saída forçada via ${t.metodo} ${t.rota}`); return { ok: true, via: t, resultados }; }
+    } catch (e) {
+      resultados.push({ ...t, erro: e?.message ?? String(e) });
+    }
+  }
+  return { ok: false, resultados };
 }
 
 // ── Reinício a quente ─────────────────────────────────────
@@ -371,10 +429,13 @@ export async function diagnosticar(canalVoz) {
   // sintoma e não aparece em lugar nenhum até alguém conferir.
   const ch = await bater(`/channels/${canalVoz}`);
   const tipo = ch.json?.channel_type ?? ch.json?.type ?? null;
+  // ATENÇÃO: no Stoat um canal de call é um `TextChannel` com voz habilitada —
+  // não existe "VoiceChannel" separado como eu supus. Marcar ❌ por causa do
+  // tipo apontava um culpado inexistente e mandava a pessoa reconfigurar um
+  // canal que estava certo. Aqui só interessa se o canal é LEGÍVEL.
   etapas.push({
-    etapa: "canal", ok: ch.ok ? (tipo ? /voice/i.test(String(tipo)) : null) : false,
-    ms: ch.ms, status: ch.status,
-    detalhe: ch.ok ? `tipo: ${tipo ?? "(não informado)"} · nome: ${ch.json?.name ?? "?"}` : descrever(ch),
+    etapa: "canal", ok: ch.ok, ms: ch.ms, status: ch.status,
+    detalhe: ch.ok ? `${ch.json?.name ?? "?"} · tipo ${tipo ?? "(não informado)"}` : descrever(ch),
   });
 
   // ── 3. O join_call ──

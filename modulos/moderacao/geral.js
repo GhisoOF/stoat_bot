@@ -181,10 +181,10 @@ function detalhesPT(P) {
       perm: "ManagePermissions", ex: `${P}sentinela test ganhe dinheiro fácil chama no pv`,
     },
     banglobal: {
-      uso: `${P}banglobal <off|avisar|banir|varrer|historico|importar|auto|esquecer>`,
-      desc: "Lista global de banimentos compartilhada entre os servidores onde o bot está.\n\n`off` — ignora · `avisar` — alerta os moderadores · `banir` — bane automaticamente\n\n⚠️ **Importante:** os modos acima só agem quando a pessoa **entra**. Para quem **já está** no servidor, use:\n`&banglobal varrer` — confere todos os membros atuais e age\n`&banglobal varrer ver` — só mostra quem apareceria, sem banir\n\n`&banglobal historico <@usuário|id|nome>` — onde a pessoa foi banida\n`&banglobal esquecer <@usuário|id>` — tira alguém da lista\n\n**A contribuição é automática e permanente.** Os bans deste servidor — os antigos e os novos — alimentam a lista sozinhos, sem comando e sem chave para desligar. O modo acima decide só se este servidor **se aproveita** da lista: dá para não usar, não dá para usar sem alimentar.",
+      uso: `${P}banglobal <off|avisar|banir|lista|revisar|varrer|isentar|desfazer|historico|esquecer>`,
+      desc: "Lista global de banimentos compartilhada entre os servidores onde o bot está.\n\n`off` — ignora · `avisar` — alerta os moderadores · `banir` — bane automaticamente **ao entrar**\n\n**Ver quem está na lista**\n`&banglobal lista` — todo mundo, em páginas · `&banglobal lista servidor` — só os deste servidor\n`&banglobal historico <@pessoa>` — onde e por que aquela pessoa foi banida\n\n**Quem já está no servidor**\n`&banglobal revisar` — confere e **só mostra**. Nunca bane.\n`&banglobal varrer` — mostra e **espera confirmação** · `&banglobal varrer confirmar` — ⚠️ bane\n\n**Quando a lista erra**\n`&banglobal isentar <@pessoa>` — aceita a pessoa **aqui** apesar da lista (e desfaz o ban dela, se foi o bot que aplicou)\n`&banglobal isentos` — quem está isento · `&banglobal desfazer` — ↩️ reverte os bans que a lista aplicou aqui\n`&banglobal esquecer <@pessoa>` — apaga o registro **para todos os servidores**\n\n**A contribuição é automática e permanente.** Os bans deste servidor — os antigos e os novos — alimentam a lista sozinhos, sem comando e sem chave para desligar. O modo acima decide só se este servidor **se aproveita** da lista: dá para não usar, não dá para usar sem alimentar.",
       perm: "BanMembers",
-      ex: `${P}banglobal varrer ver`,
+      ex: `${P}banglobal revisar`,
     },
     game: {
       uso: `${P}game [criar|ficha|pontos|top|apagar]`,
@@ -403,10 +403,10 @@ function detalhesEN(P) {
       perm: "ManagePermissions", ex: `${P}sentinela test easy money DM me now`,
     },
     banglobal: {
-      uso: `${P}banglobal <off|avisar|banir|varrer|historico|importar|auto|esquecer>`,
-      desc: "Global ban list shared across every server the bot is in.\n\n`off` — ignore · `avisar` — alert the moderators · `banir` — ban automatically\n\n⚠️ **Important:** the modes above only act when someone **joins**. For people **already in** the server, use:\n`&banglobal varrer` — checks every current member and acts\n`&banglobal varrer ver` — only shows who would be flagged, without banning\n\n`&banglobal historico <@user|id|name>` — where the person was banned\n`&banglobal esquecer <@user|id>` — removes someone from the list\n\n**Contributing is automatic and permanent.** This server's bans — old and new — feed the list on their own, with no command and no switch to turn it off. The mode above only decides whether this server **benefits** from the list: you can opt out of using it, not out of feeding it.",
+      uso: `${P}banglobal <off|avisar|banir|lista|revisar|varrer|isentar|desfazer|historico|esquecer>`,
+      desc: "Global ban list shared across every server the bot is in.\n\n`off` — ignore · `avisar` — alert the moderators · `banir` — ban automatically **on join**\n\n**Seeing who's listed**\n`&banglobal lista` — everyone, in pages · `&banglobal lista servidor` — only this server's\n`&banglobal historico <@user>` — where and why that person was banned\n\n**People already in the server**\n`&banglobal revisar` — checks and **shows only**. Never bans.\n`&banglobal varrer` — shows and **waits for confirmation** · `&banglobal varrer confirmar` — ⚠️ bans\n\n**When the list gets it wrong**\n`&banglobal isentar <@user>` — accepts that person **here** despite the list (and undoes their ban, if the bot applied it)\n`&banglobal isentos` — who's exempt · `&banglobal desfazer` — ↩️ reverts the bans the list applied here\n`&banglobal esquecer <@user>` — deletes the record **for every server**\n\n**Contributing is automatic and permanent.** This server's bans — old and new — feed the list on their own, with no command and no switch to turn it off. The mode above only decides whether this server **benefits** from the list: you can opt out of using it, not out of feeding it.",
       perm: "BanMembers",
-      ex: `${P}banglobal varrer ver`,
+      ex: `${P}banglobal revisar`,
     },
     game: {
       uso: `${P}game [criar|ficha|pontos|top|apagar]`,

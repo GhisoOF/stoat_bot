@@ -157,6 +157,11 @@ const SUB = {
   },
   banglobal: {
     sweep: "varrer", scan: "varrer", review: "revisar", view: "ver",
+    list: "lista", banned: "lista", all: "lista",
+    exempt: "isentar", allow: "isentar", accept: "isentar", bypass: "isentar",
+    exempted: "isentos",
+    undo: "desfazer", revert: "desfazer", confirm: "confirmar",
+    server: "servidor", remove: "remover",
     forget: "esquecer", history: "historico",
     warn: "avisar", ban: "banir", off: "off",
     // `import`/`auto` deixaram de ser configuração (a contribuição é sempre
@@ -289,7 +294,7 @@ const ANINHADOS = {
   automod: new Set([...Object.keys(SUB.automod), "antispam", "antimassspam",
     "antiinvite", "antimassmention", "anticaps", "antilink", "antiscam", "sentinela",
     "anticaracteres", "antirepeticao"]),
-  banglobal: new Set(["varrer", "revisar", "scan"]),
+  banglobal: new Set(["varrer", "revisar", "scan", "isentar", "lista", "desfazer"]),
   cor: new Set(["painel", "criar", "gerar"]),
   reactionrole: new Set(["exclusivo", "unico"]),
   chat: new Set(["livre", "comentar", "esquecer", "cuidado", "gentil"]),

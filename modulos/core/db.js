@@ -576,6 +576,39 @@ export function usuariosBanidosDistintos() {
   return prep("SELECT COUNT(DISTINCT userId) AS n FROM bans_globais").get()?.n ?? 0;
 }
 
+// Bans que ESTE servidor aplicou por uma certa origem. Serve para desfazer
+// uma varredura: os bans automáticos da lista global ficam com origem
+// "banglobal", separados dos manuais e dos importados — sem essa distinção
+// não haveria como distinguir "banido porque a lista mandou" de "banido
+// porque a moderação daqui decidiu", e desfazer viraria um chute.
+export function bansGlobaisPorOrigem(serverId, origens = ["banglobal"]) {
+  if (!serverId) return [];
+  const marcas = origens.map(() => "?").join(",");
+  return prep(
+    `SELECT userId, motivo, origem, criadoEm FROM bans_globais
+     WHERE serverId = ? AND origem IN (${marcas}) ORDER BY criadoEm DESC`
+  ).all(serverId, ...origens);
+}
+
+// Todo mundo que consta na lista, com em quantos servidores e quando foi a
+// vez mais recente. Agrupado por usuário: a lista tem uma linha por (pessoa,
+// servidor), e listar isso cru repetiria a mesma pessoa várias vezes.
+export function listarBanidosGlobais({ limite = 500, serverId = null } = {}) {
+  if (serverId) {
+    return prep(
+      `SELECT userId, COUNT(*) AS servidores, MAX(criadoEm) AS ultimo,
+              MAX(motivo) AS motivo, MAX(origem) AS origem
+       FROM bans_globais WHERE serverId = ?
+       GROUP BY userId ORDER BY ultimo DESC LIMIT ?`
+    ).all(serverId, limite);
+  }
+  return prep(
+    `SELECT userId, COUNT(*) AS servidores, MAX(criadoEm) AS ultimo,
+            MAX(motivo) AS motivo, MAX(origem) AS origem
+     FROM bans_globais GROUP BY userId ORDER BY servidores DESC, ultimo DESC LIMIT ?`
+  ).all(limite);
+}
+
 // Quantos registros da lista global vieram DESTE servidor — usado pelo
 // `&banglobal` para mostrar a contribuição do servidor sem precisar de
 // nenhum comando de importação.

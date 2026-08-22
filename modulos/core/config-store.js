@@ -69,6 +69,10 @@ export const padraoServidor = {
   // ── Lista global de banimentos (&banglobal) ──
   banGlobal: {
     modo: "off",              // off | avisar | banir  (padrão: nada automático)
+    // Pessoas que este servidor ACEITA apesar da lista global. A lista é
+    // feita do critério de moderação de OUTROS servidores; às vezes ele não
+    // é o seu. Quem está aqui não é banido nem aparece na varredura.
+    isentos: [],
   },
   // ── Comandos desativados neste servidor (nomes canônicos) ──
   comandosDesativados: [],
@@ -119,7 +123,10 @@ function mesclarServidor(salvo, tpl) {
       ...tpl.log, ...lg,
       eventos: { ...tpl.log.eventos, ...(lg.eventos ?? {}) },
     },
-    banGlobal: { ...tpl.banGlobal, ...(salvo.banGlobal ?? {}) },
+    banGlobal: {
+      ...tpl.banGlobal, ...(salvo.banGlobal ?? {}),
+      isentos: [...(salvo.banGlobal?.isentos ?? [])],
+    },
     comandosDesativados: [...(salvo.comandosDesativados ?? tpl.comandosDesativados)],
     rss: { ...tpl.rss, ...(salvo.rss ?? {}) },
     autorole: { ...tpl.autorole, ...(salvo.autorole ?? {}) },

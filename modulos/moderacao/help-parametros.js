@@ -88,10 +88,17 @@ function parametrosPT(P) {
     banglobal: [
       { nome: "off", desc: "ignora a lista global" },
       { nome: "avisar", desc: "quando entra alguém banido em outro servidor, avisa no log e não faz nada" },
-      { nome: "banir", desc: "bane automaticamente quem está na lista" },
-      { nome: "varrer", desc: "confere quem JÁ está no servidor contra a lista" },
-      { nome: "ver", valor: "<@pessoa|id>", desc: "por que essa pessoa está na lista" },
-      { nome: "esquecer", valor: "<id>", desc: "tira uma pessoa da lista (só quem baniu)" },
+      { nome: "banir", desc: "bane automaticamente quem está na lista **ao entrar**" },
+      { nome: "lista", valor: "[servidor]", desc: "todas as pessoas da lista global; com `servidor`, só as banidas por este servidor" },
+      { nome: "historico", valor: "<@pessoa|id>", desc: "em quais servidores essa pessoa foi banida e por quê" },
+      { nome: "revisar", desc: "confere quem já está aqui contra a lista — **só mostra, nunca bane**" },
+      { nome: "varrer", desc: "mostra quem seria banido e **espera confirmação**; só age no modo `banir`" },
+      { nome: "varrer confirmar", desc: "⚠️ bane de verdade quem a varredura encontrou" },
+      { nome: "isentar", valor: "<@pessoa|id>", desc: "aceita a pessoa **neste servidor** apesar da lista; se o bot a tinha banido, desfaz o ban" },
+      { nome: "isentar remover", valor: "<@pessoa|id>", desc: "volta a tratá-la pela lista" },
+      { nome: "isentos", desc: "quem está isento aqui" },
+      { nome: "desfazer", desc: "↩️ reverte os bans que **a lista** aplicou aqui e isenta as pessoas (não toca em ban manual nem do automod)" },
+      { nome: "esquecer", valor: "<@pessoa|id>", desc: "apaga os registros dessa pessoa **para todos os servidores** — bem mais forte que `isentar`" },
     ],
 
     reactionrole: [
@@ -292,10 +299,17 @@ function parametrosEN(P) {
     banglobal: [
       { nome: "off", desc: "ignores the global list" },
       { nome: "avisar", desc: "when someone banned elsewhere joins, logs a warning and does nothing" },
-      { nome: "banir", desc: "auto-bans anyone on the list" },
-      { nome: "varrer", desc: "checks the people ALREADY in the server against the list" },
-      { nome: "ver", valor: "<@user|id>", desc: "why that person is on the list" },
-      { nome: "esquecer", valor: "<id>", desc: "removes someone from the list (only whoever banned)" },
+      { nome: "banir", desc: "auto-bans anyone on the list **on join**" },
+      { nome: "lista", valor: "[servidor]", desc: "everyone on the global list; with `servidor`, only those banned by this server" },
+      { nome: "historico", valor: "<@user|id>", desc: "which servers banned that person, and why" },
+      { nome: "revisar", desc: "checks who's already here against the list — **shows only, never bans**" },
+      { nome: "varrer", desc: "shows who would be banned and **waits for confirmation**; only acts in `banir` mode" },
+      { nome: "varrer confirmar", desc: "⚠️ actually bans whoever the sweep found" },
+      { nome: "isentar", valor: "<@user|id>", desc: "accepts that person **on this server** despite the list; if the bot had banned them, undoes it" },
+      { nome: "isentar remover", valor: "<@user|id>", desc: "makes the list apply to them again" },
+      { nome: "isentos", desc: "who is exempt here" },
+      { nome: "desfazer", desc: "↩️ reverts the bans **the list** applied here and exempts those people (leaves manual and automod bans alone)" },
+      { nome: "esquecer", valor: "<@user|id>", desc: "deletes that person's records **for every server** — much stronger than `isentar`" },
     ],
 
     reactionrole: [

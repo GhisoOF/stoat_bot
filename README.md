@@ -535,6 +535,10 @@ Prefixo: `&`. Aliases entre parênteses.
 | `&warn <@pessoa> [motivo]` | aviso manual (conta para o ban no modo acumular) |
 | `&acesso <cargo\|canal>` | quem pode usar comandos e em quais canais |
 | `&banglobal <off\|avisar\|banir\|...>` | lista global (exige **BanMembers**) |
+| `&banglobal lista` | todas as pessoas na lista global, em páginas |
+| `&banglobal revisar` | confere quem já está no servidor — **só mostra** |
+| `&banglobal isentar <@pessoa>` | aceita alguém neste servidor apesar da lista |
+| `&banglobal desfazer` | reverte os bans que a lista aplicou aqui |
 | `&modia <on\|off\|criterios\|canal\|limpar>` | moderação por IA na conversa (exige **ManageServer**) |
 | `&chat perfil [@user]` | o que a Judy sabe sobre alguém |
 | `&chat mapear [@user]` | captura bio/status do cartão do Stoat |
@@ -763,13 +767,49 @@ alimentá-la. Isso mantém a lista honesta — quem se protege com o trabalho do
 outros contribui com o seu.
 
 ```
-&banglobal                      # status (inclui quantos registros vieram daqui)
-&banglobal <off|avisar|banir>   # define o modo
-&banglobal varrer          # confere quem JÁ está no servidor (os modos só agem em quem entra)
-&banglobal varrer ver      # simula, sem banir
-&banglobal historico <@user|id> # em quais servidores foi banido e por quê
-&banglobal esquecer <@user|id>  # remove um registro que não se sustente
+&banglobal                        # status (inclui quantos registros vieram daqui)
+&banglobal <off|avisar|banir>     # define o modo
+
+&banglobal lista                  # TODO MUNDO na lista global, em páginas (◀ ▶)
+&banglobal lista servidor         # só quem ESTE servidor baniu
+&banglobal historico <@pessoa>    # em quais servidores foi banido e por quê
+
+&banglobal revisar                # confere quem JÁ está aqui — SÓ MOSTRA, nunca bane
+&banglobal varrer                 # mostra a lista e espera confirmação
+&banglobal varrer confirmar       # ⚠️ bane de verdade quem foi encontrado
+
+&banglobal isentar <@pessoa>      # aceita a pessoa AQUI apesar da lista (e desbane, se o bot baniu)
+&banglobal isentos                # quem está isento neste servidor
+&banglobal desfazer               # ↩️ reverte os bans que a LISTA aplicou aqui
+&banglobal esquecer <@pessoa>     # apaga o registro PARA TODOS os servidores
 ```
+
+### Revisar ≠ varrer (e por que agora são dois comandos)
+
+`revisar` era apelido de `varrer`, e `varrer` banir direto: uma palavra que
+significa "conferir" executava a ação irreversível. Num servidor real isso
+custou **quatro bans por engano**. Hoje:
+
+- **`revisar`** lista quem consta e não faz absolutamente nada;
+- **`varrer`** lista e **espera** `varrer confirmar` — mesmo com o modo `banir` ligado;
+- **`desfazer`** reverte os bans que a lista aplicou (só os de origem `banglobal`;
+  bans manuais e do automod ficam intactos) e **isenta** as pessoas, senão a
+  varredura seguinte as banaria de novo.
+
+### Isentar: quando o critério de fora não é o seu
+
+A lista é feita da moderação de **outros** servidores. Às vezes ela não
+corresponde ao que você quer aqui — a pessoa levou ban num servidor de jogo por
+bater boca e, no seu, é bem-vinda.
+
+| Comando | Alcance | Quando usar |
+|---|---|---|
+| `&banglobal isentar <@pessoa>` | **só este servidor** | você discorda do critério de fora, mas o ban de lá é assunto deles |
+| `&banglobal esquecer <@pessoa>` | **todos os servidores** | o registro em si não se sustenta (engano, ban revertido na origem) |
+
+Quem está isento entra e fica, a varredura passa por ela, e se o bot já a tinha
+banido por causa da lista o ban é desfeito na hora. Desbanir remove o
+impedimento, não traz ninguém de volta: mande um convite novo.
 
 > ⚠️ O modo `banir` age com base em bans de **outros** servidores. Comece com
 > `avisar`, observe alguns dias e só então mude para `banir` se confiar na origem.

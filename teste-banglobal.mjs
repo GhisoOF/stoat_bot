@@ -128,5 +128,119 @@ await say("&idioma pt");
 env.length = 0; await say("&help banglobal contribuicao");
 ok(ult().includes("Sempre") || ult().includes("sempre"), "PT: &help banglobal contribuicao responde");
 
+// ══════════════════════════════════════════════════════════
+//  8. O acidente: `revisar` NÃO pode banir ninguém
+//
+//  Foi exatamente isto que aconteceu num servidor real: `revisar` era
+//  apelido de `varrer`, `varrer` bania direto, e quatro pessoas foram
+//  banidas por quem só queria conferir. Estes testes existem para que
+//  nenhuma refatoração futura volte a juntar as duas ideias.
+// ══════════════════════════════════════════════════════════
+console.log("\n── revisar não bane (o acidente) ──");
+
+const banidosNoStoat = [];
+const desbanidosNoStoat = [];
+const MEMBROS = [
+  { id: { user: "01JBANA000000000000000000A" }, user: { username: "Ana" } },    // na lista (SA)
+  { id: { user: "01JBANC000000000000000000C" }, user: { username: "Caio" } },   // na lista (SB)
+  { id: { user: "01JLIMP000000000000000000L" }, user: { username: "Lia" } },    // limpa
+];
+const servD = mkServer("SD", "Servidor D", []);
+servD.fetchMembers = async () => ({ members: MEMBROS });
+servD.banUser = async (uid) => { banidosNoStoat.push(uid); };
+servD.unbanUser = async (uid) => { desbanidosNoStoat.push(uid); };
+c.servers.set("SD", servD);
+
+const dizD = async (t) => { await say(t, servD); };
+await dizD("&banglobal banir");        // o modo mais perigoso, de propósito
+
+env.length = 0; banidosNoStoat.length = 0;
+await dizD("&banglobal revisar");
+ok(banidosNoStoat.length === 0, "★ `&banglobal revisar` NÃO baniu ninguém");
+ok(ult().includes("Ana") || ult().includes("01JBANA"), "  → mas mostra quem consta na lista");
+ok(ult().includes("nada foi feito") || ult().includes("Revisão"), "  → e diz claramente que nada foi feito");
+
+env.length = 0; banidosNoStoat.length = 0;
+await dizD("&banglobal varrer");
+ok(banidosNoStoat.length === 0, "★ `&banglobal varrer` sozinho também NÃO bane — pede confirmação");
+ok(ult().includes("Confirmar") || ult().includes("confirmar"), "  → mostra a lista e pede `varrer confirmar`");
+
+env.length = 0; banidosNoStoat.length = 0;
+await dizD("&banglobal varrer confirmar");
+ok(banidosNoStoat.length === 2, `★ só \`varrer confirmar\` bane de verdade (${banidosNoStoat.length})`);
+ok(!banidosNoStoat.includes("01JLIMP000000000000000000L"), "  → e não toca em quem não está na lista");
+
+// ── 9. Desfazer: o conserto do acidente ──
+console.log("\n── desfazer ──");
+env.length = 0; desbanidosNoStoat.length = 0;
+await dizD("&banglobal desfazer");
+ok(desbanidosNoStoat.length === 0, "`&banglobal desfazer` sozinho não age — mostra o que reverteria");
+ok(ult().includes("Desfazer") || ult().includes("desfazer"), "  → e pede confirmação");
+
+env.length = 0; desbanidosNoStoat.length = 0;
+await dizD("&banglobal desfazer confirmar");
+ok(desbanidosNoStoat.length === 2, `★ desfaz os bans que a LISTA aplicou (${desbanidosNoStoat.length})`);
+const cfgD = (await import("./modulos/core/config-store.js")).configDoServidor("SD");
+ok((cfgD.banGlobal.isentos ?? []).length === 2, "  → e isenta as pessoas, senão a próxima varredura banaria de novo");
+
+// desfazer não mexe em ban manual/automod
+db.registrarBanGlobal("01JMANUAL0000000000000000M", "SD", "briga", "manual");
+env.length = 0; desbanidosNoStoat.length = 0;
+await dizD("&banglobal desfazer");
+ok(!ult().includes("01JMANUAL"), "★ desfazer NÃO oferece reverter ban manual (não é papel dele)");
+
+// ── 10. Isenção: aceitar alguém apesar da lista ──
+console.log("\n── isentar (o bypass) ──");
+env.length = 0;
+await dizD("&banglobal isentar remover 01JBANA000000000000000000A");
+await dizD("&banglobal isentar remover 01JBANC000000000000000000C");
+env.length = 0; banidosNoStoat.length = 0;
+await dizD("&banglobal isentar 01JBANA000000000000000000A");
+ok(ult().includes("Isento") || ult().includes("isento"), "&banglobal isentar → confirma a isenção");
+env.length = 0;
+await dizD("&banglobal revisar");
+ok(ult().includes("Isentos") || ult().includes("isento"), "  → a revisão passa a marcar quem está isento");
+
+env.length = 0; banidosNoStoat.length = 0;
+await dizD("&banglobal varrer confirmar");
+ok(!banidosNoStoat.includes("01JBANA000000000000000000A"), "★ a varredura NÃO bane quem está isento");
+ok(banidosNoStoat.includes("01JBANC000000000000000000C"), "  → mas continua agindo sobre os demais");
+
+// entrada de membro isento
+const bgMod = await import("./modulos/moderacao/ban-global.js");
+const ctxD = { serverId: "SD", client: c, config: cfgD, sendEmbed: async () => {}, configDoServidor: () => cfgD };
+banidosNoStoat.length = 0;
+await bgMod.verificarEntrada({ id: { server: "SD", user: "01JBANA000000000000000000A" }, server: servD }, ctxD);
+ok(banidosNoStoat.length === 0, "★ quem está isento ENTRA no servidor sem ser banido");
+await bgMod.verificarEntrada({ id: { server: "SD", user: "01JBANB000000000000000000B" }, server: servD }, ctxD);
+ok(banidosNoStoat.includes("01JBANB000000000000000000B"), "  → e quem não está isento continua sendo barrado");
+
+env.length = 0;
+await dizD("&banglobal isentos");
+ok(ult().includes("01JBANA"), "&banglobal isentos lista quem está isento");
+
+// ── 11. Listar todos os banidos ──
+console.log("\n── lista ──");
+env.length = 0;
+await dizD("&banglobal lista");
+const listaTxt = ult();
+ok(listaTxt.includes("01JBANA") && listaTxt.includes("01JBANC"), "★ `&banglobal lista` mostra todo mundo da lista global");
+ok(listaTxt.includes("🛡"), "  → marca quem está isento aqui");
+env.length = 0;
+await dizD("&banglobal lista servidor");
+ok(ult().includes("01JMANUAL") || ult().includes("este servidor") || ult().includes("Banidos por este servidor"),
+  "`&banglobal lista servidor` mostra só os banidos por este servidor");
+
+// ── 12. Paridade EN dos comandos novos ──
+console.log("\n── EN ──");
+await dizD("&idioma en");
+env.length = 0; await dizD("&globalban review");
+ok(ult().includes("Review") || ult().includes("review"), "EN: `&globalban review` só revisa");
+env.length = 0; await dizD("&globalban list");
+ok(ult().includes("global list") || ult().includes("Everyone"), "EN: `&globalban list`");
+env.length = 0; await dizD("&globalban exempted");
+ok(ult().includes("Exempt") || ult().includes("exempt"), "EN: `&globalban exempted`");
+await dizD("&idioma pt");
+
 console.log(`\nBANGLOBAL: ${pass} ok, ${fail} falha(s)`);
 process.exit(fail ? 1 : 0);

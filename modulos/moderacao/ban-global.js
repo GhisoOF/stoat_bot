@@ -35,6 +35,9 @@ import * as db  from "../core/db.js";
 import * as log from "../core/log.js";
 import { resolverUsuario as resolverUser } from "../core/ids.js";
 import { tr, lingua } from "../core/i18n.js";
+import { enviarPaginado, paginarLinhas } from "../core/paginas.js";
+
+const API = (process.env.STOAT_API || "https://api.stoat.chat").replace(/\/$/, "");
 
 export const MODOS = {
   off:    "ignora a lista global",
@@ -49,6 +52,43 @@ export const MODOS_EN = {
 
 // Formata uma data legível a partir de um timestamp
 const data = (ms) => new Date(ms).toISOString().slice(0, 10);
+
+// ──────────────────────────────────────────────────────────
+//  Isenção por servidor
+//
+//  A lista global é feita do critério de moderação de OUTROS servidores.
+//  Às vezes ele simplesmente não é o seu: a pessoa levou ban num servidor
+//  de jogo por bater boca, e aqui ela é bem-vinda. Sem uma forma de dizer
+//  isso, a única saída era `esquecer` — que apaga o registro para TODO
+//  MUNDO, impondo a decisão deste servidor aos demais. A isenção resolve
+//  no lugar certo: vale só aqui, e não mexe na lista dos outros.
+// ──────────────────────────────────────────────────────────
+export function estaIsento(config, userId) {
+  return (config?.banGlobal?.isentos ?? []).includes(userId);
+}
+
+// Desbana de verdade, pela API. A stoat.js não expõe isso de forma estável
+// entre versões, então tentamos o método da lib e caímos no REST — o mesmo
+// caminho que o `&cor` já usa.
+async function desbanir(server, serverId, userId) {
+  try {
+    if (typeof server?.unbanUser === "function") { await server.unbanUser(userId); return { ok: true }; }
+  } catch (e) { /* cai no REST */ }
+  const token = process.env.BOT_TOKEN;
+  if (!token) return { ok: false, erro: "sem BOT_TOKEN para falar com a API" };
+  try {
+    const r = await fetch(`${API}/servers/${serverId}/bans/${userId}`, {
+      method: "DELETE", headers: { "X-Bot-Token": token },
+    });
+    if (!r.ok && r.status !== 404) {
+      const corpo = await r.text().catch(() => "");
+      return { ok: false, erro: `HTTP ${r.status} ${corpo.slice(0, 120)}` };
+    }
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, erro: e?.message ?? String(e) };
+  }
+}
 
 // ──────────────────────────────────────────────────────────
 //  Importação: lê os bans que já existem NO SERVIDOR e os
@@ -171,6 +211,12 @@ export async function verificarEntrada(member, ctx) {
   const modo = ctx.config?.banGlobal?.modo ?? "off";
   if (modo === "off") return false;
 
+  // Isento: este servidor já decidiu que aceita esta pessoa.
+  if (estaIsento(ctx.config, userId)) {
+    console.log(`[BANGLOBAL] ${userId} entrou em ${serverId} e está ISENTO — nada a fazer`);
+    return false;
+  }
+
   const historico = db.historicoBans(userId)
     .filter((b) => b.serverId !== serverId);   // bans deste próprio servidor não contam
   if (!historico.length) return false;
@@ -242,16 +288,18 @@ export async function varrer(ctx, message, { aplicar = true } = {}) {
   }
 
   const achados = [];
+  const isentos = [];
   for (const m of membros) {
     const uid = m?.id?.user ?? m?.user?.id ?? m?.id;
     if (!uid) continue;
     const hist = db.historicoBans(uid).filter((b) => b.serverId !== serverId);
     if (!hist.length) continue;
     const nome = m?.user?.username ?? m?.nickname ?? uid;
+    if (estaIsento(ctx.config, uid)) { isentos.push({ uid, nome, n: hist.length }); continue; }
     achados.push({ uid, nome, n: hist.length, membro: m });
   }
 
-  if (!aplicar || modo !== "banir") return { total: membros.length, achados, aplicados: [], modo };
+  if (!aplicar || modo !== "banir") return { total: membros.length, achados, isentos, aplicados: [], modo };
 
   const aplicados = [];
   for (const a of achados) {
@@ -271,7 +319,7 @@ export async function varrer(ctx, message, { aplicar = true } = {}) {
       descricao: aplicados.map((a) => `${a.ok ? "🔨" : "❌"} <@${a.uid}> (${a.nome}) — ${a.n} servidor(es)${a.ok ? "" : ` — erro: ${a.erro}`}`).join("\n").slice(0, 1800),
     });
   }
-  return { total: membros.length, achados, aplicados, modo };
+  return { total: membros.length, achados, isentos, aplicados, modo };
 }
 
 export async function cmdBanGlobal(message, args, ctx) {
@@ -307,19 +355,26 @@ export async function cmdBanGlobal(message, args, ctx) {
         ...Object.entries(L_MODOS).map(([k, v]) => `\`${k}\` — ${v}`),
         "",
         `**Listed:** ${db.usuariosBanidosDistintos()} user(s), ${db.totalBansGlobais()} record(s) — ${db.bansGlobaisDoServidor(serverId)} from this server.`,
+        `**Exempt here:** ${(config.banGlobal.isentos ?? []).length} person(s) this server accepts despite the list.`,
         "",
         "**Commands:**",
         `\`${PREFIXO}banglobal <off|avisar|banir>\` — sets the mode`,
-        `\`${PREFIXO}banglobal historico <@user|id>\` — a user's history`,
-        `\`${PREFIXO}banglobal varrer\` — **checks who is ALREADY in the server** and acts`,
-        `\`${PREFIXO}banglobal varrer ver\` — only shows, without banning anyone`,
-        `\`${PREFIXO}banglobal esquecer <@user|id>\` — removes a user from the list`,
+        `\`${PREFIXO}banglobal lista\` — **everyone on the list** · \`lista servidor\` for this server's only`,
+        `\`${PREFIXO}banglobal historico <@user|id>\` — one user's history`,
+        `\`${PREFIXO}banglobal revisar\` — checks who's already here. **Shows only, never acts**`,
+        `\`${PREFIXO}banglobal varrer confirmar\` — ⚠️ actually **bans** the ones found`,
+        `\`${PREFIXO}banglobal isentar <@user>\` — accept someone despite the list _(and unban them here)_`,
+        `\`${PREFIXO}banglobal isentos\` — who is exempt here`,
+        `\`${PREFIXO}banglobal desfazer\` — ↩️ reverts the bans the list applied here`,
+        `\`${PREFIXO}banglobal esquecer <@user|id>\` — removes a user from the list **for everyone**`,
         "",
         `**Contribution:** 🟢 always on — this server's bans (old and new) feed the list on their own. There's nothing to configure and no command to run.`,
         "",
         "_The mode above only decides whether this server **benefits** from the list. You can opt out of using it, but not out of feeding it._",
         "",
         "⚠️ _The `banir` mode acts on its own based on bans from **other** servers. Use it only if you trust the sources._",
+        "",
+        "_`revisar` **looks**; `varrer confirmar` **bans**. They used to be the same thing and that already caused accidental bans — now they're separate commands, and the sweep always shows the list first._",
       ].join("\n"),
       colour: COR.mod,
     });
@@ -332,19 +387,26 @@ export async function cmdBanGlobal(message, args, ctx) {
         ...Object.entries(L_MODOS).map(([k, v]) => `\`${k}\` — ${v}`),
         "",
         `**Na lista:** ${db.usuariosBanidosDistintos()} usuário(s), ${db.totalBansGlobais()} registro(s) — ${db.bansGlobaisDoServidor(serverId)} deste servidor.`,
+        `**Isentos aqui:** ${(config.banGlobal.isentos ?? []).length} pessoa(s) que este servidor aceita apesar da lista.`,
         "",
         "**Comandos:**",
         `\`${PREFIXO}banglobal <off|avisar|banir>\` — define o modo`,
-        `\`${PREFIXO}banglobal historico <@usuário|id>\` — histórico de um usuário`,
-        `\`${PREFIXO}banglobal varrer\` — **confere quem JÁ está no servidor** e age`,
-        `\`${PREFIXO}banglobal varrer ver\` — só mostra, sem banir ninguém`,
-        `\`${PREFIXO}banglobal esquecer <@usuário|id>\` — remove um usuário da lista`,
+        `\`${PREFIXO}banglobal lista\` — **todos os banidos** · \`lista servidor\` só os deste servidor`,
+        `\`${PREFIXO}banglobal historico <@usuário|id>\` — histórico de uma pessoa`,
+        `\`${PREFIXO}banglobal revisar\` — confere quem já está aqui. **Só mostra, nunca age**`,
+        `\`${PREFIXO}banglobal varrer confirmar\` — ⚠️ **bane** de verdade quem for encontrado`,
+        `\`${PREFIXO}banglobal isentar <@pessoa>\` — aceitar alguém apesar da lista _(e desbanir aqui)_`,
+        `\`${PREFIXO}banglobal isentos\` — quem está isento neste servidor`,
+        `\`${PREFIXO}banglobal desfazer\` — ↩️ reverte os bans que a lista aplicou aqui`,
+        `\`${PREFIXO}banglobal esquecer <@usuário|id>\` — tira alguém da lista **para todos os servidores**`,
         "",
         `**Contribuição:** 🟢 sempre ligada — os bans deste servidor (antigos e novos) alimentam a lista sozinhos. Não há o que configurar nem comando a rodar.`,
         "",
         "_O modo acima decide só se este servidor **se aproveita** da lista. Dá para não usar a lista, mas não dá para usá-la sem alimentá-la._",
         "",
         "⚠️ _O modo `banir` age sozinho com base em bans de **outros** servidores. Use com confiança na origem._",
+        "",
+        "_`revisar` **olha**; `varrer confirmar` **bane**. Os dois eram a mesma coisa e isso já custou bans por engano — agora são comandos separados, e a varredura sempre mostra a lista antes._",
       ].join("\n"),
       colour: COR.mod,
     });
@@ -426,90 +488,364 @@ export async function cmdBanGlobal(message, args, ctx) {
     });
   }
 
-  // ── varrer: confere quem JÁ está no servidor ──
-  if (["varrer", "varredura", "revisar", "scan"].includes(sub)) {
-    const soVer = ["ver", "listar", "simular", "dry"].includes((args[1] ?? "").toLowerCase());
+  // ── revisar: SÓ OLHA. Nunca age. ──
+  //
+  // `revisar` era apelido de `varrer`, e `varrer` banir. Uma palavra que
+  // significa "conferir" executava a ação irreversível — e foi assim que
+  // quatro pessoas foram banidas por engano num servidor. Agora as duas
+  // ideias têm nomes distintos e comportamentos distintos: `revisar` mostra,
+  // `varrer` age (e ainda pede confirmação).
+  if (["revisar", "review", "conferir", "checar", "ver"].includes(sub)) {
+    await sendEmbed(message.channel, tr(ctx,
+      { title: "🔎 Revisando…", description: "Conferindo os membros contra a lista global. Nada será feito.", colour: COR.info },
+      { title: "🔎 Reviewing…", description: "Checking members against the global list. Nothing will be done.", colour: COR.info }));
+
+    const r = await varrer(ctx, message, { aplicar: false });
+    if (r.erro) {
+      return sendEmbed(message.channel, tr(ctx,
+        { title: "❌ Revisão falhou", description: `${r.erro}\n\n_O bot precisa de permissão para ver os membros._`, colour: COR.erro },
+        { title: "❌ Review failed", description: `${r.erro}\n\n_The bot needs permission to see the members._`, colour: COR.erro }));
+    }
+    if (!r.achados.length && !r.isentos.length) {
+      return sendEmbed(message.channel, tr(ctx,
+        { title: "✅ Nenhum encontrado", description: `Conferi **${r.total}** membro(s) e ninguém consta na lista global.`, colour: COR.sucesso },
+        { title: "✅ Nobody found", description: `I checked **${r.total}** member(s) and nobody is on the global list.`, colour: COR.sucesso }));
+    }
+
+    const linhas = [
+      tr(ctx, `De **${r.total}** membro(s) do servidor:`, `Out of **${r.total}** server member(s):`), "",
+      ...r.achados.map((a) => tr(ctx,
+        `• <@${a.uid}> (**${a.nome}**) — banido em ${a.n} servidor(es)`,
+        `• <@${a.uid}> (**${a.nome}**) — banned on ${a.n} server(s)`)),
+    ];
+    if (r.isentos.length) {
+      linhas.push("", tr(ctx, `**Isentos** _(este servidor já decidiu aceitar)_`, `**Exempt** _(this server already chose to accept them)_`),
+        ...r.isentos.map((a) => `• <@${a.uid}> (**${a.nome}**) — ${a.n}`));
+    }
+    linhas.push("", tr(ctx,
+      `_Revisão: **nada foi feito**._\n\`${PREFIXO}banglobal isentar <@pessoa>\` — aceitar alguém apesar da lista\n\`${PREFIXO}banglobal historico <@pessoa>\` — ver por que ela está lá\n\`${PREFIXO}banglobal varrer\` — se você realmente quiser **banir** os de cima`,
+      `_Review: **nothing was done**._\n\`${PREFIXO}banglobal isentar <@user>\` — accept someone despite the list\n\`${PREFIXO}banglobal historico <@user>\` — see why they're on it\n\`${PREFIXO}banglobal varrer\` — if you really want to **ban** the ones above`));
+
+    const paginas = paginarLinhas(linhas, {
+      titulo: tr(ctx, `🔎 Revisão — ${r.achados.length} na lista global`, `🔎 Review — ${r.achados.length} on the global list`),
+      limite: 1300,
+    });
+    return enviarPaginado(ctx, message.channel, { paginas, autorId: message.authorId, colour: COR.aviso });
+  }
+
+  // ── varrer: age, mas só depois de você ver a lista e confirmar ──
+  if (["varrer", "varredura", "scan", "sweep"].includes(sub)) {
+    const arg1 = (args[1] ?? "").toLowerCase();
+    const confirmou = ["confirmar", "confirm", "sim", "yes"].includes(arg1);
     const modo = config?.banGlobal?.modo ?? "off";
 
-    if (modo === "off" && !soVer) {
+    if (modo !== "banir") {
       return sendEmbed(message.channel, tr(ctx, {
-        title: "🌐 Lista global desligada",
-        description: `O modo está \`off\`. Ligue com \`${PREFIXO}banglobal avisar\` ou \`${PREFIXO}banglobal banir\` antes de varrer — ou use \`${PREFIXO}banglobal varrer ver\` só para conferir quem apareceria.`,
-        colour: COR.aviso,
+        title: "🌐 A varredura só bane no modo `banir`",
+        description: [
+          `O modo atual é \`${modo}\`.`,
+          "",
+          `Para **só conferir**, use \`${PREFIXO}banglobal revisar\` — ele mostra quem consta na lista e não faz nada.`,
+          `Para banir, mude o modo com \`${PREFIXO}banglobal banir\` e varra de novo.`,
+        ].join("\n"), colour: COR.aviso,
       }, {
-        title: "🌐 Global list off",
-        description: `The mode is \`off\`. Enable it with \`${PREFIXO}banglobal avisar\` or \`${PREFIXO}banglobal banir\` before sweeping — or use \`${PREFIXO}banglobal varrer ver\` just to see who would show up.`,
-        colour: COR.aviso,
+        title: "🌐 The sweep only bans in `banir` mode",
+        description: [
+          `The current mode is \`${modo}\`.`,
+          "",
+          `To **just check**, use \`${PREFIXO}banglobal revisar\` — it shows who's on the list and does nothing.`,
+          `To ban, switch with \`${PREFIXO}banglobal banir\` and sweep again.`,
+        ].join("\n"), colour: COR.aviso,
       }));
     }
 
     await sendEmbed(message.channel, tr(ctx,
-      { title: "🔎 Varrendo os membros…",
-        description: "Conferindo quem já está no servidor contra a lista global. Pode levar um instante.", colour: COR.info },
-      { title: "🔎 Sweeping the members…",
-        description: "Checking everyone already in the server against the global list. This may take a moment.", colour: COR.info }));
+      { title: "🔎 Varrendo os membros…", description: "Conferindo quem já está no servidor contra a lista global.", colour: COR.info },
+      { title: "🔎 Sweeping the members…", description: "Checking everyone already in the server against the global list.", colour: COR.info }));
 
-    const r = await varrer(ctx, message, { aplicar: !soVer });
-    if (r.erro) {
+    // Sempre lista ANTES de agir. Mesmo com o modo `banir` ligado, banir
+    // gente sem mostrar quem é primeiro foi exatamente o erro que custou
+    // quatro pessoas.
+    const previa = await varrer(ctx, message, { aplicar: false });
+    if (previa.erro) {
       return sendEmbed(message.channel, tr(ctx,
-        { title: "❌ Varredura falhou",
-          description: `${r.erro}\n\n_O bot precisa de permissão para ver os membros._`, colour: COR.erro },
-        { title: "❌ Sweep failed",
-          description: `${r.erro}\n\n_The bot needs permission to see the members._`, colour: COR.erro }));
+        { title: "❌ Varredura falhou", description: `${previa.erro}\n\n_O bot precisa de permissão para ver os membros._`, colour: COR.erro },
+        { title: "❌ Sweep failed", description: `${previa.erro}\n\n_The bot needs permission to see the members._`, colour: COR.erro }));
+    }
+    if (!previa.achados.length) {
+      return sendEmbed(message.channel, tr(ctx,
+        { title: "✅ Nenhum encontrado", description: `Conferi **${previa.total}** membro(s) e ninguém a banir.`, colour: COR.sucesso },
+        { title: "✅ Nobody found", description: `I checked **${previa.total}** member(s) and there's nobody to ban.`, colour: COR.sucesso }));
     }
 
-    if (!r.achados.length) {
-      return sendEmbed(message.channel, tr(ctx,
-        { title: "✅ Nenhum encontrado",
-          description: `Conferi **${r.total}** membro(s) e ninguém consta na lista global.`, colour: COR.sucesso },
-        { title: "✅ Nobody found",
-          description: `I checked **${r.total}** member(s) and nobody is on the global list.`, colour: COR.sucesso }));
-    }
+    const lista = previa.achados.slice(0, 15)
+      .map((a) => tr(ctx, `• <@${a.uid}> (**${a.nome}**) — ${a.n} servidor(es)`, `• <@${a.uid}> (**${a.nome}**) — ${a.n} server(s)`)).join("\n");
+    const extra = previa.achados.length > 15
+      ? tr(ctx, `\n_… e mais ${previa.achados.length - 15}._`, `\n_… and ${previa.achados.length - 15} more._`) : "";
 
-    const lista = r.achados.slice(0, 15)
-      .map((a) => lang === "en"
-        ? `• <@${a.uid}> (**${a.nome}**) — banned on ${a.n} server(s)`
-        : `• <@${a.uid}> (**${a.nome}**) — banido em ${a.n} servidor(es)`).join("\n");
-    const extra = r.achados.length > 15
-      ? (lang === "en" ? `\n_… and ${r.achados.length - 15} more._` : `\n_… e mais ${r.achados.length - 15}._`) : "";
-
-    if (soVer || modo !== "banir") {
-      return sendEmbed(message.channel, lang === "en" ? {
-        title: `🔎 ${r.achados.length} on the global list`,
+    if (!confirmou) {
+      return sendEmbed(message.channel, tr(ctx, {
+        title: `⚠️ Confirmar: banir ${previa.achados.length} pessoa(s)?`,
         description: [
-          `Out of **${r.total}** server member(s):`, "", lista + extra, "",
-          soVer ? `_Simulation: nothing was done. Run \`${PREFIXO}banglobal varrer\` to act._`
-                : `_Mode **${modo}**: no automatic action. Use \`${PREFIXO}banglobal banir\` and sweep again to ban._`,
+          `De **${previa.total}** membro(s), estas constam na lista global:`, "", lista + extra, "",
+          "**Nada foi feito ainda.**",
+          "",
+          `Para banir todas: \`${PREFIXO}banglobal varrer confirmar\``,
+          `Para poupar alguém antes: \`${PREFIXO}banglobal isentar <@pessoa>\``,
+          `Para entender um caso: \`${PREFIXO}banglobal historico <@pessoa>\``,
+          "",
+          "_Banir é irreversível pelo lado de quem levou o ban: ela precisa de convite novo para voltar._",
         ].join("\n").slice(0, 1900), colour: COR.aviso,
-      } : {
-        title: `🔎 ${r.achados.length} na lista global`,
+      }, {
+        title: `⚠️ Confirm: ban ${previa.achados.length} people?`,
         description: [
-          `De **${r.total}** membro(s) do servidor:`, "", lista + extra, "",
-          soVer ? `_Simulação: nada foi feito. Rode \`${PREFIXO}banglobal varrer\` para agir._`
-                : `_Modo **${modo}**: nenhuma ação automática. Use \`${PREFIXO}banglobal banir\` e varra de novo para banir._`,
-        ].join("\n").slice(0, 1900), colour: COR.aviso });
+          `Out of **${previa.total}** member(s), these are on the global list:`, "", lista + extra, "",
+          "**Nothing has been done yet.**",
+          "",
+          `To ban them all: \`${PREFIXO}banglobal varrer confirmar\``,
+          `To spare someone first: \`${PREFIXO}banglobal isentar <@user>\``,
+          `To understand a case: \`${PREFIXO}banglobal historico <@user>\``,
+          "",
+          "_A ban is irreversible from the other side: they need a fresh invite to come back._",
+        ].join("\n").slice(0, 1900), colour: COR.aviso,
+      }));
     }
 
+    const r = await varrer(ctx, message, { aplicar: true });
     const ok = r.aplicados.filter((a) => a.ok).length;
     const falhas = r.aplicados.filter((a) => !a.ok);
-    return sendEmbed(message.channel, lang === "en" ? {
-      title: `🔨 Sweep finished — ${ok} banned`,
-      description: [
-        `I checked **${r.total}** member(s); **${r.achados.length}** were on the list.`, "",
-        lista + extra,
-        falhas.length ? `\n**Failures (${falhas.length}):**\n` + falhas.slice(0, 5).map((f) => `• ${f.nome}: ${f.erro}`).join("\n") : "",
-        falhas.length ? "_Common failure: the bot's role needs **BanMembers** and must sit above the person's role._" : "",
-      ].filter(Boolean).join("\n").slice(0, 1900),
-      colour: falhas.length ? COR.aviso : COR.sucesso,
-    } : {
+    return sendEmbed(message.channel, tr(ctx, {
       title: `🔨 Varredura concluída — ${ok} banido(s)`,
       description: [
-        `Conferi **${r.total}** membro(s); **${r.achados.length}** constavam na lista.`, "",
-        lista + extra,
+        `Conferi **${r.total}** membro(s); **${r.achados.length}** constavam na lista.`, "", lista + extra,
         falhas.length ? `\n**Falhas (${falhas.length}):**\n` + falhas.slice(0, 5).map((f) => `• ${f.nome}: ${f.erro}`).join("\n") : "",
         falhas.length ? "_Falha comum: o cargo do bot precisa de **BanMembers** e estar acima do cargo da pessoa._" : "",
+        "",
+        `_Errou? \`${PREFIXO}banglobal desfazer\` reverte os bans que EU apliquei aqui._`,
       ].filter(Boolean).join("\n").slice(0, 1900),
-      colour: falhas.length ? COR.aviso : COR.sucesso });
+      colour: falhas.length ? COR.aviso : COR.sucesso,
+    }, {
+      title: `🔨 Sweep finished — ${ok} banned`,
+      description: [
+        `I checked **${r.total}** member(s); **${r.achados.length}** were on the list.`, "", lista + extra,
+        falhas.length ? `\n**Failures (${falhas.length}):**\n` + falhas.slice(0, 5).map((f) => `• ${f.nome}: ${f.erro}`).join("\n") : "",
+        falhas.length ? "_Common failure: the bot's role needs **BanMembers** and must sit above the person's role._" : "",
+        "",
+        `_Wrong call? \`${PREFIXO}banglobal desfazer\` reverts the bans I applied here._`,
+      ].filter(Boolean).join("\n").slice(0, 1900),
+      colour: falhas.length ? COR.aviso : COR.sucesso,
+    }));
+  }
+
+  // ── desfazer: reverte os bans que a LISTA aplicou neste servidor ──
+  //
+  // Só os que o bot aplicou por causa da lista global (origem `banglobal`).
+  // Bans manuais e do automod ficam de fora: desfazer o trabalho da
+  // moderação daqui não é papel deste comando.
+  if (["desfazer", "undo", "reverter", "revert"].includes(sub)) {
+    const confirmou = ["confirmar", "confirm", "sim", "yes"].includes((args[1] ?? "").toLowerCase());
+    const aplicados = db.bansGlobaisPorOrigem(serverId, ["banglobal"]);
+    if (!aplicados.length) {
+      return sendEmbed(message.channel, tr(ctx,
+        { title: "✅ Nada a desfazer", description: "Não há ban aplicado pela lista global neste servidor.", colour: COR.sucesso },
+        { title: "✅ Nothing to undo", description: "There's no ban applied by the global list on this server.", colour: COR.sucesso }));
+    }
+
+    const lista = aplicados.slice(0, 20).map((b) => `• <@${b.userId}> _(${data(b.criadoEm)})_`).join("\n");
+    if (!confirmou) {
+      return sendEmbed(message.channel, tr(ctx, {
+        title: `↩️ Desfazer ${aplicados.length} ban(s) da lista global?`,
+        description: [
+          "Estes bans foram aplicados **pelo bot**, por causa da lista global:", "", lista,
+          aplicados.length > 20 ? `\n_… e mais ${aplicados.length - 20}._` : "", "",
+          "Ao desfazer, cada pessoa é **desbanida** e passa a ficar **isenta** aqui — senão a próxima varredura banaria de novo.",
+          "",
+          `Confirme com \`${PREFIXO}banglobal desfazer confirmar\`.`,
+          "",
+          "_Bans manuais e do automod não são tocados._",
+        ].filter(Boolean).join("\n").slice(0, 1900), colour: COR.aviso,
+      }, {
+        title: `↩️ Undo ${aplicados.length} global-list ban(s)?`,
+        description: [
+          "These bans were applied **by the bot**, because of the global list:", "", lista,
+          aplicados.length > 20 ? `\n_… and ${aplicados.length - 20} more._` : "", "",
+          "Undoing unbans each person and marks them **exempt** here — otherwise the next sweep would ban them again.",
+          "",
+          `Confirm with \`${PREFIXO}banglobal desfazer confirmar\`.`,
+          "",
+          "_Manual and automod bans are left alone._",
+        ].filter(Boolean).join("\n").slice(0, 1900), colour: COR.aviso,
+      }));
+    }
+
+    config.banGlobal.isentos ??= [];
+    const feitos = [], falhou = [];
+    for (const b of aplicados) {
+      const r = await desbanir(server, serverId, b.userId);
+      if (r.ok) {
+        db.removerBanGlobal(b.userId, serverId);
+        if (!config.banGlobal.isentos.includes(b.userId)) config.banGlobal.isentos.push(b.userId);
+        feitos.push(b.userId);
+      } else {
+        falhou.push({ uid: b.userId, erro: r.erro });
+      }
+    }
+    salvarConfig();
+    await log.registrar(ctx, "punicoes", {
+      titulo: "↩️ Bans da lista global desfeitos",
+      descricao: `<@${message.authorId}> reverteu **${feitos.length}** ban(s) aplicado(s) pela lista global.`,
+    });
+    return sendEmbed(message.channel, tr(ctx, {
+      title: `↩️ ${feitos.length} ban(s) desfeito(s)`,
+      description: [
+        feitos.length ? feitos.map((u) => `✅ <@${u}> — desbanido e isento aqui`).join("\n") : "",
+        falhou.length ? `\n**Não consegui (${falhou.length}):**\n` + falhou.slice(0, 5).map((f) => `❌ <@${f.uid}> — ${f.erro}`).join("\n") : "",
+        "",
+        "As pessoas precisam de um **convite novo** para voltar: o desban só remove o impedimento.",
+        `_Ver quem está isento: \`${PREFIXO}banglobal isentos\`._`,
+      ].filter(Boolean).join("\n").slice(0, 1900),
+      colour: falhou.length ? COR.aviso : COR.sucesso,
+    }, {
+      title: `↩️ ${feitos.length} ban(s) undone`,
+      description: [
+        feitos.length ? feitos.map((u) => `✅ <@${u}> — unbanned and exempt here`).join("\n") : "",
+        falhou.length ? `\n**Couldn't do (${falhou.length}):**\n` + falhou.slice(0, 5).map((f) => `❌ <@${f.uid}> — ${f.erro}`).join("\n") : "",
+        "",
+        "They need a **fresh invite** to come back: unbanning only removes the block.",
+        `_See who's exempt: \`${PREFIXO}banglobal isentos\`._`,
+      ].filter(Boolean).join("\n").slice(0, 1900),
+      colour: falhou.length ? COR.aviso : COR.sucesso,
+    }));
+  }
+
+  // ── isentar / isentos: o bypass deste servidor ──
+  if (["isentar", "isento", "isentos", "exempt", "permitir", "aceitar", "allow", "bypass"].includes(sub)) {
+    const acao = (args[1] ?? "").toLowerCase();
+    const listar = ["isentos", "exempt"].includes(sub) || ["lista", "list", "ver"].includes(acao) || !args[1];
+    config.banGlobal.isentos ??= [];
+
+    if (listar) {
+      const ids = config.banGlobal.isentos;
+      return sendEmbed(message.channel, tr(ctx, {
+        title: `🛡️ Isentos da lista global — ${ids.length}`,
+        description: [
+          ids.length
+            ? ids.map((u) => `• <@${u}> _(${db.contarBansGlobais(u)} servidor(es) na lista)_`).join("\n")
+            : "_Ninguém._",
+          "",
+          "Quem está aqui **entra e fica**, mesmo constando na lista global. A lista dos outros servidores não é apagada — só deixa de valer aqui.",
+          "",
+          `\`${PREFIXO}banglobal isentar <@pessoa|id>\` — aceitar alguém`,
+          `\`${PREFIXO}banglobal isentar remover <@pessoa|id>\` — voltar atrás`,
+        ].join("\n").slice(0, 1900), colour: COR.info,
+      }, {
+        title: `🛡️ Exempt from the global list — ${ids.length}`,
+        description: [
+          ids.length
+            ? ids.map((u) => `• <@${u}> _(${db.contarBansGlobais(u)} server(s) on the list)_`).join("\n")
+            : "_Nobody._",
+          "",
+          "People here **join and stay**, even if they're on the global list. Other servers' records aren't deleted — they just stop applying here.",
+          "",
+          `\`${PREFIXO}banglobal isentar <@user|id>\` — accept someone`,
+          `\`${PREFIXO}banglobal isentar remover <@user|id>\` — take it back`,
+        ].join("\n").slice(0, 1900), colour: COR.info,
+      }));
+    }
+
+    const removendo = ["remover", "remove", "tirar", "off"].includes(acao);
+    const alvo = removendo ? args[2] : args[1];
+    const uid = await resolverUser(alvo, { message, server }) ?? (alvo ?? "").replace(/[<@>]/g, "");
+    if (!uid) return sendEmbed(message.channel, tr(ctx,
+      { title: "❌ Não achei essa pessoa",
+        description: `\`${PREFIXO}banglobal isentar <@pessoa|id>\`\n\n_Se ela já foi banida e não está no servidor, use o **ID**._`, colour: COR.erro },
+      { title: "❌ Couldn't find that person",
+        description: `\`${PREFIXO}banglobal isentar <@user|id>\`\n\n_If they're already banned and not in the server, use the **ID**._`, colour: COR.erro }));
+
+    if (removendo) {
+      const antes = config.banGlobal.isentos.length;
+      config.banGlobal.isentos = config.banGlobal.isentos.filter((u) => u !== uid);
+      salvarConfig();
+      return sendEmbed(message.channel, tr(ctx,
+        { title: antes === config.banGlobal.isentos.length ? "🤷 Não estava isento" : "🛡️ Isenção removida",
+          description: `<@${uid}> volta a ser tratado pela lista global neste servidor.`, colour: COR.mod },
+        { title: antes === config.banGlobal.isentos.length ? "🤷 Wasn't exempt" : "🛡️ Exemption removed",
+          description: `<@${uid}> is subject to the global list again on this server.`, colour: COR.mod }));
+    }
+
+    if (!config.banGlobal.isentos.includes(uid)) config.banGlobal.isentos.push(uid);
+    salvarConfig();
+
+    // Se a pessoa já está banida AQUI, isentar sem desbanir seria meia
+    // ajuda: ela continuaria de fora. Desfazemos o ban se ele foi nosso.
+    const nossoBan = db.bansGlobaisPorOrigem(serverId, ["banglobal"]).some((b) => b.userId === uid);
+    let desbanida = false, erroDesban = null;
+    if (nossoBan) {
+      const r = await desbanir(server, serverId, uid);
+      if (r.ok) { db.removerBanGlobal(uid, serverId); desbanida = true; } else erroDesban = r.erro;
+    }
+    await log.registrar(ctx, "punicoes", {
+      titulo: "🛡️ Isenção da lista global",
+      descricao: `<@${message.authorId}> isentou <@${uid}>${desbanida ? " (e desfez o ban aplicado pela lista)" : ""}.`,
+    });
+    const n = db.contarBansGlobais(uid);
+    return sendEmbed(message.channel, tr(ctx, {
+      title: "🛡️ Isento aqui",
+      description: [
+        `<@${uid}> é aceito neste servidor, mesmo constando na lista global${n ? ` (**${n}** servidor(es))` : ""}.`,
+        desbanida ? "\n✅ O ban que a lista tinha aplicado aqui foi **desfeito** — mande um convite novo para a pessoa voltar." : "",
+        erroDesban ? `\n⚠️ Não consegui desfazer o ban: \`${erroDesban}\`` : "",
+        "",
+        "_A lista dos outros servidores continua intacta: a isenção vale só aqui._",
+      ].filter(Boolean).join("\n"), colour: COR.sucesso,
+    }, {
+      title: "🛡️ Exempt here",
+      description: [
+        `<@${uid}> is accepted on this server, even though they're on the global list${n ? ` (**${n}** server(s))` : ""}.`,
+        desbanida ? "\n✅ The ban the list had applied here was **undone** — send them a fresh invite to come back." : "",
+        erroDesban ? `\n⚠️ Couldn't undo the ban: \`${erroDesban}\`` : "",
+        "",
+        "_Other servers' records stay intact: the exemption applies here only._",
+      ].filter(Boolean).join("\n"), colour: COR.sucesso,
+    }));
+  }
+
+  // ── lista: TODO MUNDO que consta na lista global ──
+  if (["lista", "list", "banidos", "banned", "todos", "all"].includes(sub)) {
+    const soDaqui = ["servidor", "server", "aqui", "here", "daqui"].includes((args[1] ?? "").toLowerCase());
+    const linhas0 = db.listarBanidosGlobais({ limite: 500, serverId: soDaqui ? serverId : null });
+    if (!linhas0.length) {
+      return sendEmbed(message.channel, tr(ctx,
+        { title: "🌐 Lista vazia", description: "Ninguém na lista global ainda.", colour: COR.info },
+        { title: "🌐 Empty list", description: "Nobody on the global list yet.", colour: COR.info }));
+    }
+    const isentos = config.banGlobal?.isentos ?? [];
+    const linhas = [
+      soDaqui
+        ? tr(ctx, `**${linhas0.length}** pessoa(s) banida(s) **por este servidor**:`, `**${linhas0.length}** person(s) banned **by this server**:`)
+        : tr(ctx, `**${linhas0.length}** pessoa(s) na lista global (todos os servidores):`, `**${linhas0.length}** person(s) on the global list (all servers):`),
+      "",
+      ...linhas0.map((b) => {
+        const marca = isentos.includes(b.userId) ? "🛡️ " : "";
+        const motivo = (b.motivo ?? "").slice(0, 60);
+        return soDaqui
+          ? `${marca}<@${b.userId}> — ${motivo || tr(ctx, "_sem motivo_", "_no reason_")} _(${data(b.ultimo)}, ${b.origem})_`
+          : `${marca}<@${b.userId}> — ${b.servidores} ${tr(ctx, "servidor(es)", "server(s)")} _(${data(b.ultimo)})_`;
+      }),
+      "",
+      tr(ctx,
+        `🛡️ = isento aqui · \`${PREFIXO}banglobal historico <@pessoa>\` mostra o porquê de cada caso\n\`${PREFIXO}banglobal lista servidor\` — só os banidos por este servidor`,
+        `🛡️ = exempt here · \`${PREFIXO}banglobal historico <@user>\` shows the reason for each case\n\`${PREFIXO}banglobal lista servidor\` — only those banned by this server`),
+    ];
+    const paginas = paginarLinhas(linhas, {
+      titulo: soDaqui
+        ? tr(ctx, "🌐 Banidos por este servidor", "🌐 Banned by this server")
+        : tr(ctx, "🌐 Todos na lista global", "🌐 Everyone on the global list"),
+      limite: 1300,
+    });
+    return enviarPaginado(ctx, message.channel, {
+      paginas, autorId: message.authorId, comandoPagina: `${PREFIXO}banglobal lista`, colour: COR.mod,
+    });
   }
 
   // ── &banglobal auto / importar ──

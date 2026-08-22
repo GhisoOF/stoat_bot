@@ -1666,6 +1666,23 @@ if member.id.user != user.id {
 
 Ou seja: **o bot pode desconectar a si mesmo, sem permissão nenhuma**. É o que
 `&tts destravar` faz, e o que o `&tts entrar` tenta sozinho antes de desistir.
+
+⚠️ **HTTP 200 não é prova.** Essa rota só manda o LiveKit remover o
+participante; quem apaga o registro (`delete_voice_state`) é o webhook que o
+LiveKit dispara depois. Se o participante já não existe lá — queda de energia,
+processo morto —, o LiveKit responde "ok" sem fazer nada e o registro
+permanece. Por isso o `destravar` **confirma tentando entrar** antes de
+anunciar sucesso.
+
+Quando nem isso resolve, em ordem de gravidade:
+
+1. **Use outra call.** O bloqueio é por canal (`sismember(vc:{user}, channel)`),
+   e bots podem estar em várias calls — em qualquer outro canal o bot entra.
+2. **Espere.** A sala do LiveKit pode expirar e liberar.
+3. **Kick no bot e adicioná-lo de volta.** `member_remove` chama
+   `remove_user_from_voice_channel`, que faz `delete_voice_state` — é a única
+   rota acessível que apaga o registro de verdade. A que o bot usa
+   (`member_edit`) não apaga.
 A mesma rota, com `voice_channel: <novo canal>` em vez de `remove`, **move** o
 bot entre calls — daí `&tts entrar` numa call diferente funcionar como "vem
 para cá" em vez de dar `AlreadyConnected`. O move só enxerga a call de origem

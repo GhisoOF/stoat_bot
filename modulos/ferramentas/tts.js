@@ -35,7 +35,7 @@ const SERVIDORES = (process.env.TTS_SERVIDORES || "")
 // Gentoo, fora do Docker, então os dois são atualizados por caminhos
 // diferentes e podem ficar defasados — o pior estado possível, porque tudo
 // "parece" atualizado e a fala sai sem efeito, em silêncio.
-const VOZ_API_ESPERADA = 7;
+const VOZ_API_ESPERADA = 8;
 
 const COOLDOWN_MS = Number(process.env.TTS_COOLDOWN_MS || 8000);
 const MAX_CHARS   = Number(process.env.TTS_MAX_CHARS || 400);
@@ -525,20 +525,38 @@ export async function cmdTts(message, args, ctx) {
     const linhas = (r?.passos ?? r?.resultados ?? []).map((t) =>
       `${t.ok ? "✅" : "❌"} \`${t.metodo ?? ""} ${String(t.rota ?? "").replace(alvo, "…")}\` — ${t.erro ?? `HTTP ${t.status}`}`);
     return sendEmbed(message.channel, tr(ctx, {
-      title: r?.ok ? "🔓 Destravado" : "⚠️ Não consegui destravar",
+      title: r?.ok ? "🔓 Destravado (confirmado)" : "⚠️ Continua preso",
       description: [
         ...linhas, "",
         r?.ok
-          ? `Me desconectei da call pelo lado do Stoat. Agora: \`${PREFIXO}tts entrar\` dentro da call.`
-          : "Não consegui me desconectar. Alguém com **MoveMembers** pode me remover da call pelo cliente — no Stoat, é a única forma de derrubar um participante preso.",
+          ? `Confirmei entrando: o registro saiu. Agora \`${PREFIXO}tts entrar\` dentro da call.`
+          : [
+            "O Stoat aceitou o pedido (HTTP 200) mas o registro **continua lá** — eu conferi tentando entrar de novo.",
+            "",
+            "Por quê: essa rota só manda o LiveKit me remover, e quem apaga o registro é o aviso que o LiveKit dispara depois. Se eu já não estava lá (queda de energia, processo morto), não há o que remover e aviso nenhum é disparado.",
+            "",
+            "**As saídas, da menos à mais drástica:**",
+            `1. Use **outra call** — o Stoat só me bloqueia neste canal; em outro eu entro normalmente. \`${PREFIXO}tts entrar\` lá.`,
+            "2. Espere: a sala pode expirar sozinha e liberar.",
+            "3. **Me dê kick do servidor e me adicione de volta.** É a única rota do Stoat que apaga o registro de voz de verdade (`member_remove` chama `delete_voice_state`; a que eu uso, não).",
+          ].join("\n"),
       ].join("\n"), colour: r?.ok ? COR.sucesso : COR.aviso,
     }, {
-      title: r?.ok ? "🔓 Unstuck" : "⚠️ Couldn't clear it",
+      title: r?.ok ? "🔓 Unstuck (confirmed)" : "⚠️ Still stuck",
       description: [
         ...linhas, "",
         r?.ok
-          ? `I disconnected myself on Stoat's side. Now: \`${PREFIXO}tts entrar\` inside the call.`
-          : "I couldn't disconnect myself. Someone with **MoveMembers** can remove me from the call in the client — on Stoat that's the only way to drop a stuck participant.",
+          ? `I confirmed by joining: the record is gone. Now \`${PREFIXO}tts entrar\` inside the call.`
+          : [
+            "Stoat accepted the request (HTTP 200) but the record **is still there** — I checked by trying to join again.",
+            "",
+            "Why: that route only tells LiveKit to remove me, and what deletes the record is the notice LiveKit fires afterwards. If I wasn't there anymore (power cut, dead process), there's nothing to remove and no notice is fired.",
+            "",
+            "**Ways out, least to most drastic:**",
+            `1. Use **another call** — Stoat only blocks me on this channel; elsewhere I join fine. \`${PREFIXO}tts entrar\` there.`,
+            "2. Wait: the room may expire on its own and free it.",
+            "3. **Kick me from the server and add me back.** It's the only Stoat route that truly deletes the voice record (`member_remove` calls `delete_voice_state`; the one I use doesn't).",
+          ].join("\n"),
       ].join("\n"), colour: r?.ok ? COR.sucesso : COR.aviso,
     }));
   }
@@ -738,18 +756,22 @@ export async function cmdTts(message, args, ctx) {
             description: [
               "Ele guarda isso num registro próprio e recusa toda entrada nova enquanto ele existir — mesmo eu não estando em call nenhuma. Sobra de uma entrada que travou no meio.",
               "",
-              `Já tentei me desconectar sozinha e não deu. \`${PREFIXO}tts destravar\` tenta de novo _(ManageMessages)_.`,
+              `Já tentei me desconectar sozinha e não deu. \`${PREFIXO}tts destravar\` tenta de novo e **confere** se funcionou _(ManageMessages)_.`,
               "",
-              "Se insistir: **alguém com MoveMembers me remove da call pelo cliente**. No Stoat não existe rota de \"sair da call\" — essa é a única forma de derrubar um participante preso.",
+              `**Enquanto isso, use outra call:** o bloqueio é só neste canal — em qualquer outro eu entro normalmente. Basta \`${PREFIXO}tts entrar\` lá.`,
+              "",
+              "Para liberar este canal de vez: **kick no bot e adicionar de volta**. É a única rota do Stoat que apaga o registro de voz.",
             ].join("\n"), colour: COR.aviso,
           }, {
             title: "🔒 Stoat records me as already in this call",
             description: [
               "It keeps its own record and refuses every new join while that record exists — even though I'm in no call at all. Left over from a join that jammed halfway.",
               "",
-              `I already tried to disconnect myself and it didn't work. \`${PREFIXO}tts destravar\` tries again _(ManageMessages)_.`,
+              `I already tried to disconnect myself and it didn't work. \`${PREFIXO}tts destravar\` tries again and **verifies** whether it worked _(ManageMessages)_.`,
               "",
-              "If it persists: **someone with MoveMembers removes me from the call in the client**. Stoat has no \"leave call\" route — that's the only way to drop a stuck participant.",
+              `**Meanwhile, use another call:** the block is on this channel only — anywhere else I join fine. Just \`${PREFIXO}tts entrar\` there.`,
+              "",
+              "To free this channel for good: **kick the bot and add it back**. It's the only Stoat route that deletes the voice record.",
             ].join("\n"), colour: COR.aviso,
           }));
         }

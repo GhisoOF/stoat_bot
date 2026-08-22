@@ -385,12 +385,29 @@ export async function forcarSaida(canalVoz, serverId = null, servidores = []) {
   for (const sid of alvos) {
     const r = await bater("PATCH", `/servers/${sid}/members/${meuId}`, { remove: ["VoiceChannel"] });
     passos.push(r);
-    if (r.ok) {
-      log(`saída forçada: removido do canal de voz de ${sid}`);
-      return { ok: true, via: "PATCH members remove VoiceChannel", passos };
+    if (!r.ok) continue;
+
+    // ── HTTP 200 NÃO significa destravado ──
+    //
+    // Essa rota só manda o LiveKit remover o participante; quem apaga o
+    // registro do Stoat (`delete_voice_state`) é o webhook que o LiveKit
+    // dispara depois. Quando o participante já não existe lá — queda de
+    // energia, processo morto — o LiveKit responde "ok" sem fazer nada,
+    // webhook nenhum é disparado, e o registro continua exatamente onde
+    // estava. Foi assim que reportei "destravado" para um estado que não
+    // tinha mudado. A única prova é tentar entrar.
+    const teste = await bater("POST", `/channels/${canalVoz}/join_call`, {});
+    passos.push({ ...teste, rota: "(verificação: join_call)" });
+    if (teste.ok) {
+      log(`destravado de verdade em ${sid}`);
+      return { ok: true, via: "PATCH members remove VoiceChannel", passos, verificado: true };
+    }
+    if (!/AlreadyConnected/i.test(teste.corpo ?? "")) {
+      // Outro erro qualquer: o registro saiu, o problema agora é outro.
+      return { ok: true, via: "PATCH members remove VoiceChannel", passos, verificado: true };
     }
   }
-  return { ok: false, passos };
+  return { ok: false, passos, aindaPreso: true };
 }
 
 // O próprio id do bot, descoberto uma vez e lembrado.

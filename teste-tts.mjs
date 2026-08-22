@@ -482,5 +482,48 @@ ok(pm?.corpo?.voice_channel === "01JCALLNOVA00000000000AAA",
   "  → via voice_channel no PRÓPRIO membro (dispensa MoveMembers, como o remove)");
 ok(!pm?.corpo?.remove, "  → e sem remover nada: é uma mudança, não uma saída");
 
+// ══ 11. HTTP 200 não é prova de destrave ══
+//
+//  Aconteceu de verdade: o PATCH devolveu 200, eu anunciei "🔓 Destravado", e
+//  o AlreadyConnected continuou. A rota só manda o LiveKit remover o
+//  participante; quem apaga o registro é o webhook que o LiveKit dispara
+//  depois — e ele não vem se o participante já não existir lá.
+console.log("\n── destrave verificado ──");
+const perfil = JSON.stringify({ _id: "01JBOTAA00000000000000AAAA", username: "Judy",
+  avatar: { _id: "y".repeat(90), filename: "a.png" }, bot: { owner: "01JDONO0000000000000000AA" } });
+
+// Cenário do servidor: PATCH ok, mas o registro continua.
+globalThis.fetch = async (url) => {
+  const u = String(url);
+  if (u.endsWith("/users/@me")) return { ok: true, status: 200, text: async () => perfil };
+  if (u.includes("/join_call")) return { ok: false, status: 400,
+    text: async () => '{"type":"AlreadyConnected","location":"crates/core/database/src/voice/mod.rs:40:24"}' };
+  return { ok: true, status: 200, text: async () => "{}" };
+};
+let rv = await voz.forcarSaida("01JCALLR000000000000000AA", "01JSERVER00000000000000AA");
+ok(rv.ok === false, "★ PATCH 200 + AlreadyConnected persistente → relata FALHA, não sucesso");
+ok(rv.aindaPreso === true, "  → e diz que continua preso");
+ok(rv.passos.some((p) => String(p.rota).includes("verificação")), "  → a verificação aparece no relatório");
+
+// Destrave que funcionou de verdade: o join de teste passa.
+globalThis.fetch = async (url) => {
+  const u = String(url);
+  if (u.endsWith("/users/@me")) return { ok: true, status: 200, text: async () => perfil };
+  return { ok: true, status: 200, text: async () => '{"token":"x","url":"wss://lk:7880"}' };
+};
+rv = await voz.forcarSaida("01JCALLR000000000000000AA", "01JSERVER00000000000000AA");
+ok(rv.ok === true && rv.verificado === true, "★ só reporta sucesso depois de CONFIRMAR entrando");
+
+// Um erro diferente também conta como destravado: o registro saiu, o
+// problema virou outro (permissão, rede…).
+globalThis.fetch = async (url) => {
+  const u = String(url);
+  if (u.endsWith("/users/@me")) return { ok: true, status: 200, text: async () => perfil };
+  if (u.includes("/join_call")) return { ok: false, status: 403, text: async () => '{"type":"MissingPermission"}' };
+  return { ok: true, status: 200, text: async () => "{}" };
+};
+rv = await voz.forcarSaida("01JCALLR000000000000000AA", "01JSERVER00000000000000AA");
+ok(rv.ok === true, "outro erro no teste = o registro saiu (o problema agora é outro)");
+
 console.log(`\nTTS: ${pass} ok, ${fail} falha(s)`);
 process.exit(fail ? 1 : 0);

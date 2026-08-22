@@ -324,6 +324,12 @@ persona, que pede o mesmo tom em uma frase.
   faz tudo que for escrito no canal virar fala na call — sem precisar de comando. Recurso isolado:
   só funciona nos servidores listados em `TTS_SERVIDORES`.
   Diagnóstico da cadeia inteira: `&tts estado` ou `&debug voz`.
+  A transmissão passa por uma **peneira** (`&tts filtro`) que ignora barulho
+  pela FORMA — letra repetida, bloco repetido, pouca variedade de caracteres,
+  parede de texto — e limita as falas por minuto **no canal**, não só por
+  pessoa. Risada (`kkkk`, `rsrs`) passa de propósito, e `&tts <texto>` nunca é
+  filtrado: pedido explícito é sempre falado. Se a entrada na call travar,
+  `&tts reiniciar` recria a conexão sem ir ao terminal.
 - **Fusos horários** (`&fuso`): relógio com várias cidades ao mesmo tempo, para
   servidores com gente espalhada. A staff escolhe as cidades (`&fuso add São Paulo`,
   `&fuso add Madrid/Europa`) e qualquer pessoa consulta com `&fuso`. A lista sai
@@ -536,6 +542,8 @@ Prefixo: `&`. Aliases entre parênteses.
 | `&staff [add\|remove\|titulo\|limpar]` | a equipe do servidor (mesmos cargos do `&acesso`) |
 | `&fuso [ver\|buscar\|add\|remove\|apelido\|principal\|formato]` | relógio com vários fusos |
 | `&tts <texto>` / `&tts [canal\|transmitir\|entrar\|sair\|voz\|estado]` | a Judy fala na call |
+| `&tts filtro [status\|on\|off\|porminuto <n>\|teste <texto>]` | a peneira anti-barulho da transmissão |
+| `&tts reiniciar` | destrava o serviço de voz sem terminal *(ManageMessages)* |
 | `&boasvindas <canal\|titulo\|texto\|cor\|imagem\|testar\|padrao\|on\|off>` | embed de entrada |
 | `&adeus <canal\|titulo\|texto\|cor\|imagem\|testar\|padrao\|on\|off>` | embed de saída |
 
@@ -1683,10 +1691,16 @@ O código é organizado em quatro áreas, sob `modulos/`:
 │   │   ├── reaction-roles.js   # cargos por reação (&reactionrole)
 │   │   ├── autorole.js         # cargo automático a quem entra (&autorole)
 │   │   ├── boas-vindas.js      # embeds de entrada e saída (&boasvindas, &adeus)
+│   │   ├── tts.js              # &tts — a Judy fala nas calls
+│   │   ├── tts-filtro.js       # peneira: o que NÃO vale a pena falar na call
 │   │   └── rss.js              # notícias com resumo da Judy (&rss)
 │   ├── game/                   # RPG
 │   │   └── game.js             # &game — personagem, 9 atributos, progressão
 │   └── economia/               # reservado para o futuro
+├── voz-servico/                # judy-voz: LiveKit + Piper (nativo no Gentoo)
+│   ├── servidor.js             # HTTP: /saude, /entrar, /sair, /falar, /reiniciar
+│   ├── voz.js                  # entra na call e publica áudio (revoice.js)
+│   └── tts.js                  # síntese (Piper) e efeitos (ffmpeg)
 ├── ia-servico/                 # serviço de IA (ferramentas + tool-calling)
 │   ├── servidor.js             # HTTP: /chat, /saude, /ferramentas
 │   └── ferramentas/            # calcular, ler_codigo, buscar_web, buscar_rss

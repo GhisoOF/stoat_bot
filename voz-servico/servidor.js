@@ -13,6 +13,7 @@
 //    GET  /saude       → diagnóstico completo da cadeia
 //    POST /entrar      → { canalVoz } entra numa call
 //    POST /sair        → { canalVoz? } sai (sem canal = sai de todas)
+//    POST /reiniciar   → recria o cliente de voz sem derrubar o processo
 //    POST /falar       → { canalVoz, texto, voz? } fala na call
 //    GET  /estado      → onde está conectado e o que há na fila
 //
@@ -106,18 +107,23 @@ const servidor = createServer(async (req, res) => {
       return responder(res, r.ok ? 200 : 502, r);
     }
 
+    if (rota === "/reiniciar") {
+      const r = await voz.reiniciar();
+      return responder(res, r.ok ? 200 : 502, r);
+    }
+
     if (rota === "/sair") {
       const r = await voz.sair(corpo.canalVoz ?? null);
       return responder(res, 200, r);
     }
 
     if (rota === "/falar") {
-      const { canalVoz, texto, voz: vozNome, efeito, tom } = corpo;
+      const { canalVoz, texto, voz: vozNome, efeito, tom, autoEntrar } = corpo;
       if (!canalVoz) return responder(res, 400, { erro: "falta canalVoz" });
       if (!texto || !String(texto).trim()) return responder(res, 400, { erro: "falta texto" });
 
       const t0 = Date.now();
-      const r = await voz.falar(canalVoz, String(texto), vozNome, efeito, tom);
+      const r = await voz.falar(canalVoz, String(texto), vozNome, efeito, tom, autoEntrar !== false);
       dbg(`falar em ${canalVoz}: ${Date.now() - t0}ms — ${r.ok ? "ok" : r.erro}`);
       return responder(res, r.ok ? 200 : 502, { ...r, ms: Date.now() - t0 });
     }

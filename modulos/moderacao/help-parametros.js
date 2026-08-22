@@ -188,6 +188,21 @@ function parametrosPT(P) {
       { nome: "off", desc: "desliga" },
     ],
 
+    tts: [
+      { nome: "<texto>", desc: "a Judy fala isso na call agora (não passa pela peneira — é pedido explícito)" },
+      { nome: "canal", valor: "<#voz|aqui>", desc: "em qual call ela fala. Digite dentro da call e use `aqui`" },
+      { nome: "transmitir", valor: "<#texto|off>", desc: "tudo escrito nesse canal vira fala na call. Vale para **todo mundo** que escrever lá" },
+      { nome: "entrar | sair", desc: "conecta/desconecta da call. Depois de `sair`, a transmissão **não** traz o bot de volta sozinha" },
+      { nome: "reiniciar", desc: "destrava o serviço de voz sem ir ao terminal — use quando `entrar` dá timeout *(ManageMessages)*" },
+      { nome: "filtro", valor: "[status|on|off|porminuto <n>|teste <texto>]", desc: "a peneira anti-barulho da transmissão; `teste` mostra se uma frase seria falada e por quê" },
+      { nome: "cooldown", valor: "<segundos>", desc: "espera mínima entre duas falas **da mesma pessoa** (0 desliga)" },
+      { nome: "nomes", valor: "on | off", desc: "anunciar \"Fulano disse:\" antes de cada frase" },
+      { nome: "voz", valor: "[nome]", desc: "qual voz do Piper usar" },
+      { nome: "tom", valor: "<n>", desc: "altura da voz (1 = original)" },
+      { nome: "efeito", valor: "<nome>", desc: "caráter da voz: robo, radio, glados…" },
+      { nome: "dicionario", valor: "[add|remove|lista|padrao on|off]", desc: "como abreviações são lidas em voz alta (`vc` → `você`)" },
+      { nome: "estado", desc: "diagnóstico da cadeia inteira: serviço, Piper, LiveKit, peneira e em quais calls está" },
+    ],
     cargomudo: [
       { nome: "[nome]", desc: "cria o cargo de silêncio (padrão \"Silenciado\") e nega \"Enviar mensagens\" nele em todos os canais" },
       { nome: "canais", desc: "reaplica a negação em todos os canais (depois de criar canais novos)" },
@@ -375,6 +390,21 @@ function parametrosEN(P) {
       { nome: "off", desc: "turns it off" },
     ],
 
+    tts: [
+      { nome: "<text>", desc: "Judy says it in the call right now (skips the sieve — it's an explicit request)" },
+      { nome: "canal", valor: "<#voice|aqui>", desc: "which call she speaks in. Type inside the call and use `aqui`" },
+      { nome: "transmitir", valor: "<#text|off>", desc: "everything written in that channel becomes speech in the call. Applies to **everyone** writing there" },
+      { nome: "entrar | sair", desc: "connects/disconnects from the call. After `sair`, the broadcast will **not** drag the bot back" },
+      { nome: "reiniciar", desc: "unsticks the voice service without a terminal — use it when `entrar` times out *(ManageMessages)*" },
+      { nome: "filtro", valor: "[status|on|off|porminuto <n>|teste <text>]", desc: "the broadcast's noise sieve; `teste` shows whether a sentence would be spoken and why" },
+      { nome: "cooldown", valor: "<seconds>", desc: "minimum wait between two utterances **from the same person** (0 disables)" },
+      { nome: "nomes", valor: "on | off", desc: "announce \"So-and-so said:\" before each sentence" },
+      { nome: "voz", valor: "[name]", desc: "which Piper voice to use" },
+      { nome: "tom", valor: "<n>", desc: "voice pitch (1 = original)" },
+      { nome: "efeito", valor: "<name>", desc: "voice character: robo, radio, glados…" },
+      { nome: "dicionario", valor: "[add|remove|lista|padrao on|off]", desc: "how abbreviations are read aloud (`vc` → `você`)" },
+      { nome: "estado", desc: "diagnostics for the whole chain: service, Piper, LiveKit, sieve and which calls it's in" },
+    ],
     cargomudo: [
       { nome: "[name]", desc: "creates the silence role (default \"Silenciado\") and denies \"Send messages\" for it in every channel" },
       { nome: "canais", desc: "re-applies the denial in every channel (after creating new channels)" },

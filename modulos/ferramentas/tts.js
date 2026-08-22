@@ -25,6 +25,7 @@
 import { resolverCanal } from "../core/ids.js";
 import { tr, lingua } from "../core/i18n.js";
 import * as abrev from "../core/abreviacoes.js";
+import * as filtro from "./tts-filtro.js";
 
 const VOZ_URL   = (process.env.VOZ_SERVICO_URL || "").replace(/\/$/, "");
 const VOZ_CHAVE = process.env.VOZ_CHAVE || "";
@@ -40,6 +41,8 @@ const COOLDOWN_MS = Number(process.env.TTS_COOLDOWN_MS || 8000);
 const MAX_CHARS   = Number(process.env.TTS_MAX_CHARS || 400);
 
 const ultimaFala = new Map();   // `${serverId}:${userId}` → timestamp
+// erro → quando foi logado pela última vez (anti-enxurrada no log)
+const ultimoErro = new Map();
 setInterval(() => {
   const corte = Date.now() - COOLDOWN_MS * 10;
   for (const [k, t] of ultimaFala) if (t < corte) ultimaFala.delete(k);
@@ -61,6 +64,8 @@ function garantirConfig(config) {
   config.tts.expandir ??= true;      // usar o dicionário embutido
   config.tts.efeito ??= null;        // caráter: glados, robo, radio…
   config.tts.tom ??= null;           // altura da voz (1.0 = original)
+  config.tts.filtro ??= true;        // peneira anti-barulho na transmissão
+  config.tts.porMinuto ??= null;     // teto de falas por minuto no canal
   return config.tts;
 }
 
@@ -101,10 +106,48 @@ export async function aoMensagem(message, ctx) {
     const texto = (message.content ?? "").trim();
     if (!texto || texto.startsWith(ctx.PREFIXO)) return false;
 
+    // ── Peneira: isto é fala ou é barulho? ──
+    // Só forma (repetição, variedade, tamanho), nunca conteúdo. Sai antes
+    // do cooldown de propósito: barulho não deve consumir a vez de ninguém.
+    if (c.filtro !== false) {
+      const v = filtro.avaliar(texto);
+      if (!v.falar) {
+        if (ctx.cfgGlobal?.debug !== false) console.log(`[TTS] ignorei (${v.motivo}): ${JSON.stringify(texto.slice(0, 60))}`);
+        return false;
+      }
+    }
+
     const chave = `${serverId}:${message.authorId}`;
     const agora = Date.now();
     const espera = c.cooldown ?? COOLDOWN_MS;
     if (agora - (ultimaFala.get(chave) ?? 0) < espera) return false;
+
+    // ── Teto POR CANAL ──
+    // O cooldown acima é por pessoa: cinco pessoas escrevendo juntas passam
+    // por ele sem esforço, e a call vira um megafone. Aqui é o freio
+    // coletivo. Quem realmente precisa falar continua tendo o `&tts <texto>`,
+    // que não passa por esta função.
+    const jaSilenciado = filtro.emEnxurrada(message.channelId, agora);
+    if (jaSilenciado.silenciado) return false;
+    const cota = filtro.registrarFala(message.channelId, agora,
+      c.porMinuto ? { porMinuto: c.porMinuto } : {});
+    if (!cota.permitido) {
+      // Avisa UMA vez, quando o silêncio começa. Repetir a cada mensagem
+      // seria trocar o barulho na call por barulho no chat.
+      if (cota.estreando) {
+        const seg = Math.ceil((cota.ate - agora) / 1000);
+        await ctx.sendEmbed(message.channel, tr(ctx, {
+          title: "🤫 Muita coisa de uma vez",
+          description: `Vou parar de falar por ${seg}s para a call respirar.\n\nO \`${ctx.PREFIXO}tts <texto>\` continua funcionando normalmente.`,
+          colour: ctx.COR.aviso,
+        }, {
+          title: "🤫 Too much at once",
+          description: `I'll stop speaking for ${seg}s so the call can breathe.\n\n\`${ctx.PREFIXO}tts <text>\` still works normally.`,
+          colour: ctx.COR.aviso,
+        })).catch(() => {});
+      }
+      return false;
+    }
     ultimaFala.set(chave, agora);
 
     // Numa conversa de verdade, ouvir "Fulano disse:" antes de cada frase
@@ -116,17 +159,30 @@ export async function aoMensagem(message, ctx) {
     const corpo = (c.expandir === false
       ? texto
       : abrev.expandir(texto, c.dicionario ?? {})).slice(0, MAX_CHARS);
-    await chamar("/falar", {
+    // `autoEntrar: false` — se o bot não está na call, a transmissão NÃO o
+    // traz de volta. Quem mandou `&tts sair` mandou de verdade; antes, a
+    // mensagem seguinte de qualquer pessoa desfazia o pedido.
+    const r = await chamar("/falar", {
       canalVoz: c.canalVoz,
       texto: c.anunciarNome === false ? corpo : `${nome} disse: ${corpo}`,
       voz: c.voz, efeito: c.efeito, tom: c.tom,
+      autoEntrar: false,
     });
-    return true;
+    return r?.ok !== false;
   } catch (e) {
-    console.error("[TTS] transmissão:", e?.message ?? e);
+    const msg = e?.message ?? String(e);
+    // Um serviço fora do ar gera um erro POR MENSAGEM do canal. Isso encheu
+    // o log de linhas idênticas justamente na hora em que ele precisava
+    // estar legível. Uma linha por minuto por tipo de erro basta.
+    const agora = Date.now();
+    if (agora - (ultimoErro.get(msg) ?? 0) > 60_000) {
+      ultimoErro.set(msg, agora);
+      console.error("[TTS] transmissão:", msg);
+    }
     return false;
   }
 }
+
 
 // ── Comando ───────────────────────────────────────────────
 export async function cmdTts(message, args, ctx) {
@@ -154,6 +210,11 @@ export async function cmdTts(message, args, ctx) {
       `**${lang === "en" ? "Enabled" : "Ligado"}:** ${c.ativo ? "🟢" : "🔴"}`,
       `**${lang === "en" ? "Voice channel" : "Canal de voz"}:** ${c.canalVoz ? `<#${c.canalVoz}>` : "_—_"}`,
       `**${lang === "en" ? "Broadcast from" : "Transmite de"}:** ${c.canalTexto ? `<#${c.canalTexto}>` : "_—_"}`,
+      `**${lang === "en" ? "Sieve" : "Peneira"}:** ${c.filtro === false ? "🔴" : "🟢"} ${lang === "en"
+        ? `up to ${c.porMinuto ?? filtro.PADROES.porMinuto}/min` : `até ${c.porMinuto ?? filtro.PADROES.porMinuto}/min`}${(() => {
+          const e = c.canalTexto ? filtro.estadoDoCanal(c.canalTexto) : null;
+          return e?.silenciado ? ` · 🤫 ${Math.ceil(e.faltamMs / 1000)}s` : "";
+        })()} _(\`${PREFIXO}tts filtro\`)_`,
       "",
       `**${lang === "en" ? "Voice service" : "Serviço de voz"}:** ${saude ? "🟢 ok" : `🔴 ${erroSaude}`}`,
     ];
@@ -184,6 +245,136 @@ export async function cmdTts(message, args, ctx) {
   //
   // O freio contra vai-e-vem é o mesmo cooldown das falas: quem não é staff
   // espera entre uma ação e outra.
+  // ── reiniciar (staff): destrava o serviço sem ir ao terminal ──
+  // Quando o estado do lado do Stoat/LiveKit fica inconsistente, a entrada
+  // pendura e nenhum comando resolve. Antes só reiniciando o judy-voz à mão
+  // no Gentoo — impossível para quem está no celular, às duas da manhã.
+  if (["reiniciar", "restart", "destravar", "reset"].includes(sub)) {
+    if (!membroTemPermissao(message, await getServer(message).catch(() => null), "ManageMessages")) {
+      return sendEmbed(message.channel, tr(ctx,
+        { title: "🚫 Permissão insuficiente",
+          description: "Você precisa de **ManageMessages** para reiniciar a voz.", colour: COR.erro },
+        { title: "🚫 Missing permission",
+          description: "You need **ManageMessages** to restart the voice service.", colour: COR.erro }));
+    }
+    filtro.limpar(c.canalTexto ?? null);
+    try {
+      const r = await chamar("/reiniciar", {});
+      return sendEmbed(message.channel, tr(ctx,
+        { title: r?.ok ? "✅ Voz reiniciada" : "⚠️ Reiniciei, mas com problema",
+          description: r?.ok
+            ? `Saí de todas as calls e recriei a conexão.\n\nAgora: \`${PREFIXO}tts entrar\``
+            : `\`${r?.erro}\`\n\nVeja \`${PREFIXO}tts estado\`.`,
+          colour: r?.ok ? COR.sucesso : COR.aviso },
+        { title: r?.ok ? "✅ Voice restarted" : "⚠️ Restarted, but with a problem",
+          description: r?.ok
+            ? `I left every call and rebuilt the connection.\n\nNow: \`${PREFIXO}tts entrar\``
+            : `\`${r?.erro}\`\n\nSee \`${PREFIXO}tts estado\`.`,
+          colour: r?.ok ? COR.sucesso : COR.aviso }));
+    } catch (e) {
+      return sendEmbed(message.channel, {
+        title: lang === "en" ? "❌ Couldn't restart" : "❌ Não consegui reiniciar",
+        description: `\`${e.message}\`\n\n${lang === "en"
+          ? "The voice service itself may be down — it needs a hand on the machine."
+          : "O serviço de voz pode estar fora do ar — aí precisa de mão na máquina."}`,
+        colour: COR.erro });
+    }
+  }
+
+  // ── filtro (consulta pública, mudança é staff) ──
+  if (["filtro", "filter", "peneira"].includes(sub)) {
+    const acao = (args[1] ?? "").toLowerCase();
+    if (["teste", "test"].includes(acao)) {
+      const alvo = args.slice(2).join(" ");
+      if (!alvo) {
+        return sendEmbed(message.channel, tr(ctx,
+          { title: "❌ Falta o texto", description: `Uso: \`${PREFIXO}tts filtro teste <texto>\``, colour: COR.erro },
+          { title: "❌ Missing text", description: `Usage: \`${PREFIXO}tts filtro teste <text>\``, colour: COR.erro }));
+      }
+      const v = filtro.avaliar(alvo);
+      return sendEmbed(message.channel, {
+        title: v.falar ? (lang === "en" ? "🔊 Would be spoken" : "🔊 Seria falado") : (lang === "en" ? "🔇 Would be ignored" : "🔇 Seria ignorado"),
+        description: `\`${alvo.slice(0, 200)}\`\n\n**${lang === "en" ? "Reason" : "Motivo"}:** \`${v.motivo}\``,
+        colour: v.falar ? COR.sucesso : COR.aviso,
+      });
+    }
+    if (!acao || acao === "status") {
+      const est = c.canalTexto ? filtro.estadoDoCanal(c.canalTexto) : null;
+      return sendEmbed(message.channel, tr(ctx, {
+        title: "🧹 Peneira da transmissão",
+        description: [
+          `**Estado:** ${c.filtro === false ? "🔴 desligada" : "🟢 ligada"}`,
+          `**Teto por minuto no canal:** ${c.porMinuto ?? filtro.PADROES.porMinuto}`,
+          est ? `**Agora:** ${est.noMinuto} fala(s) no último minuto${est.silenciado ? ` · 🤫 em silêncio por mais ${Math.ceil(est.faltamMs / 1000)}s` : ""}` : null,
+          "",
+          "Ignoro mensagens que são **forma de barulho**, não conteúdo:",
+          "• letra repetida (`renaaaaaa…`) · bloco repetido (`lalalala`)",
+          "• pouca variedade de caracteres (`9?99?999?`) · só pontuação ou emoji",
+          "• 1 caractere sozinho · parede de texto (acima de 600 caracteres)",
+          "",
+          "_Risada (`kkkk`, `rsrs`, `hahaha`) passa de propósito._",
+          "",
+          `\`${PREFIXO}tts filtro teste <texto>\` — ver o que aconteceria com uma frase`,
+          `\`${PREFIXO}tts filtro on|off\` · \`${PREFIXO}tts filtro porminuto <n>\` *(ManageMessages)*`,
+        ].filter(Boolean).join("\n"),
+        colour: COR.info,
+      }, {
+        title: "🧹 Broadcast sieve",
+        description: [
+          `**State:** ${c.filtro === false ? "🔴 off" : "🟢 on"}`,
+          `**Per-minute cap on the channel:** ${c.porMinuto ?? filtro.PADROES.porMinuto}`,
+          est ? `**Right now:** ${est.noMinuto} utterance(s) in the last minute${est.silenciado ? ` · 🤫 quiet for ${Math.ceil(est.faltamMs / 1000)}s more` : ""}` : null,
+          "",
+          "I skip messages that are **noise by shape**, not by content:",
+          "• repeated letter (`renaaaaaa…`) · repeated block (`lalalala`)",
+          "• few distinct characters (`9?99?999?`) · punctuation or emoji only",
+          "• a single character · wall of text (over 600 characters)",
+          "",
+          "_Laughter (`kkkk`, `rsrs`, `hahaha`) passes on purpose._",
+          "",
+          `\`${PREFIXO}tts filtro teste <text>\` — see what would happen to a sentence`,
+          `\`${PREFIXO}tts filtro on|off\` · \`${PREFIXO}tts filtro porminuto <n>\` *(ManageMessages)*`,
+        ].filter(Boolean).join("\n"),
+        colour: COR.info,
+      }));
+    }
+    if (!membroTemPermissao(message, await getServer(message).catch(() => null), "ManageMessages")) {
+      return sendEmbed(message.channel, tr(ctx,
+        { title: "🚫 Permissão insuficiente",
+          description: "Você precisa de **ManageMessages** para mexer na peneira.", colour: COR.erro },
+        { title: "🚫 Missing permission",
+          description: "You need **ManageMessages** to change the sieve.", colour: COR.erro }));
+    }
+    if (acao === "on" || acao === "off") {
+      c.filtro = acao === "on"; salvarConfig?.();
+      return sendEmbed(message.channel, tr(ctx,
+        { title: c.filtro ? "✅ Peneira ligada" : "🔴 Peneira desligada",
+          description: c.filtro ? "Volto a ignorar barulho na transmissão."
+            : "⚠️ Vou falar **tudo** que for escrito no canal de transmissão, inclusive paredes de texto repetido.",
+          colour: c.filtro ? COR.sucesso : COR.aviso },
+        { title: c.filtro ? "✅ Sieve on" : "🔴 Sieve off",
+          description: c.filtro ? "I'll skip noise on the broadcast again."
+            : "⚠️ I'll speak **everything** written in the broadcast channel, walls of repeated text included.",
+          colour: c.filtro ? COR.sucesso : COR.aviso }));
+    }
+    if (["porminuto", "perminute", "teto", "cap"].includes(acao)) {
+      const n = Number(args[2]);
+      if (!Number.isFinite(n) || n < 1 || n > 60) {
+        return sendEmbed(message.channel, tr(ctx,
+          { title: "❌ Valor inválido", description: `Uso: \`${PREFIXO}tts filtro porminuto <1 a 60>\``, colour: COR.erro },
+          { title: "❌ Invalid value", description: `Usage: \`${PREFIXO}tts filtro porminuto <1 to 60>\``, colour: COR.erro }));
+      }
+      c.porMinuto = Math.round(n); salvarConfig?.();
+      filtro.limpar(c.canalTexto ?? null);
+      return sendEmbed(message.channel, tr(ctx,
+        { title: "✅ Teto ajustado", description: `Até **${c.porMinuto}** fala(s) por minuto vindas da transmissão.`, colour: COR.sucesso },
+        { title: "✅ Cap adjusted", description: `Up to **${c.porMinuto}** utterance(s) per minute from the broadcast.`, colour: COR.sucesso }));
+    }
+    return sendEmbed(message.channel, tr(ctx,
+      { title: "❌ Não conheço essa opção", description: `\`${PREFIXO}tts filtro [status|on|off|porminuto <n>|teste <texto>]\``, colour: COR.erro },
+      { title: "❌ Unknown option", description: `\`${PREFIXO}tts filtro [status|on|off|porminuto <n>|teste <text>]\``, colour: COR.erro }));
+  }
+
   if (["entrar", "join", "sair", "leave"].includes(sub)) {
     const entrando = ["entrar", "join"].includes(sub);
     const chaveAcao = `${serverId}:${message.authorId}`;
@@ -212,6 +403,8 @@ export async function cmdTts(message, args, ctx) {
           { title: "🔴 Voice is off",
             description: `Ask a staff member to turn it back on with \`${PREFIXO}tts on\`.`, colour: COR.aviso }));
       }
+      // Quem chamou o bot de volta não herda o silêncio da bagunça anterior.
+      filtro.limpar(c.canalTexto ?? null);
       try {
         await chamar("/entrar", { canalVoz: c.canalVoz });
         return sendEmbed(message.channel, tr(ctx,
@@ -226,9 +419,14 @@ export async function cmdTts(message, args, ctx) {
     }
 
     try { await chamar("/sair", { canalVoz: c.canalVoz }); } catch {}
+    filtro.limpar(c.canalTexto ?? null);
     return sendEmbed(message.channel, tr(ctx,
-      { title: "✅ Saí da call", description: "Até a próxima.", colour: COR.sucesso },
-      { title: "✅ Left the call", description: "See you.", colour: COR.sucesso }));
+      { title: "✅ Saí da call",
+        description: `Até a próxima.\n\n_A transmissão não me traz de volta sozinha — chame com \`${PREFIXO}tts entrar\`._`,
+        colour: COR.sucesso },
+      { title: "✅ Left the call",
+        description: `See you.\n\n_The broadcast won't drag me back on its own — call me with \`${PREFIXO}tts entrar\`._`,
+        colour: COR.sucesso }));
   }
 
 

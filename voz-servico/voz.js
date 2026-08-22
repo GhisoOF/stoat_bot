@@ -54,9 +54,35 @@ const log = (...a) => console.log(new Date().toISOString(), "[VOZ]", ...a);
 
 const TOKEN = process.env.BOT_TOKEN || "";
 const ESPERA_JOIN_MS = Number(process.env.VOZ_JOIN_TIMEOUT_MS || 25_000);
+// Teto DURO para a entrada inteira, incluindo o `revoice.join()`.
+// O ESPERA_JOIN_MS acima só cobre a espera pelo evento "join" — ou seja,
+// o que acontece DEPOIS de o join() resolver. Quando o próprio join()
+// pendura (o POST /channels/{id}/join_call do Stoat sem resposta, típico
+// quando o servidor ainda acha que o bot está na call), não havia limite
+// nenhum: a requisição do bot ficava presa até o timeout dele, 40s, e o
+// erro que chegava ao chat era "aborted due to timeout" — que não diz
+// nada sobre onde travou.
+const ENTRAR_MAX_MS = Number(process.env.VOZ_ENTRAR_TIMEOUT_MS || 20_000);
 
 let Revoice = null, MediaPlayer = null, revoice = null, erroCarga = null;
 const conexoes = new Map();   // canalVoz → { connection, entrouEm, falas, fila:[], ocupado }
+
+// Entradas EM ANDAMENTO, por canal. Sem isto, N pedidos simultâneos para o
+// mesmo canal viravam N `revoice.join()` paralelos: `conexoes.set()` só
+// acontece no FIM de uma entrada bem-sucedida, então nenhum dos pedidos via
+// os outros. Foi assim que uma rajada de mensagens no canal de transmissão
+// disparou sete joins ao mesmo tempo e travou a entrada de vez — cada um
+// abrindo uma sala que o seguinte não sabia que existia.
+const entrando = new Map();   // canalVoz → Promise<{ ok, … }>
+
+// Corrida entre uma promessa e um timeout, com mensagem que diz ONDE parou.
+function comLimite(promessa, ms, ondeParou) {
+  let t;
+  return Promise.race([
+    promessa.finally(() => clearTimeout(t)),
+    new Promise((_, rej) => { t = setTimeout(() => rej(new Error(ondeParou)), ms); }),
+  ]);
+}
 
 export async function iniciar() {
   // A flag do Node é pré-requisito duro: sem ela o join falha com uma
@@ -111,9 +137,26 @@ export async function entrar(canalVoz) {
   if (erroCarga) return { ok: false, erro: erroCarga };
   if (conexoes.has(canalVoz)) return { ok: true, jaEstava: true, canalVoz };
 
+  // Já há uma entrada em voo para este canal: espera a MESMA, em vez de
+  // abrir outra. Todos os pedidos recebem o mesmo resultado.
+  const emVoo = entrando.get(canalVoz);
+  if (emVoo) { dbg(`entrada em ${canalVoz} já em andamento — aguardando a mesma`); return emVoo; }
+
+  const tarefa = entrarDeFato(canalVoz).finally(() => entrando.delete(canalVoz));
+  entrando.set(canalVoz, tarefa);
+  return tarefa;
+}
+
+async function entrarDeFato(canalVoz) {
   try {
     dbg(`entrando em ${canalVoz}…`);
-    const connection = await revoice.join(canalVoz);
+    // O join() é a parte que pendura. Com limite, um Stoat que não responde
+    // vira um erro claro em 20s em vez de uma requisição pendurada.
+    const connection = await comLimite(
+      Promise.resolve(revoice.join(canalVoz)),
+      ENTRAR_MAX_MS,
+      `${ENTRAR_MAX_MS / 1000}s sem resposta ao pedido de entrar na call — o Stoat pode ainda achar que estou nela; tente \`&tts reiniciar\``,
+    );
 
     // O join resolve antes de a sala estar de fato conectada; o evento
     // "join" é que marca o ponto em que dá para publicar áudio.
@@ -168,13 +211,39 @@ export async function sair(canalVoz = null) {
   for (const id of alvos) {
     const c = conexoes.get(id);
     if (!c) continue;
+    // Descarta a fila ANTES de derrubar a conexão: o que estava esperando
+    // para ser falado não deve ressuscitar a sala pelo caminho da
+    // reconexão automática do processarFila.
+    c.fila.length = 0;
     try { c.media?.destroy?.(); } catch {}
     try { c.connection.leave?.(); } catch {}
+    // O `leave()` do revoice nem sempre desconecta a sala do LiveKit —
+    // e uma sala meio-viva é exatamente o que faz a entrada seguinte
+    // pendurar. Fechamos por baixo também, se a API deixar.
+    try { await c.connection?.room?.disconnect?.(); } catch {}
     conexoes.delete(id);
     saiu.push(id);
     log(`saiu da call ${id}`);
   }
   return { ok: true, saiu };
+}
+
+// ── Reinício a quente ─────────────────────────────────────
+// Quando o estado do lado do Stoat/LiveKit fica inconsistente ("entrei mas
+// ninguém ouve", "não consigo mais entrar"), a saída era reiniciar o
+// serviço à mão no Gentoo — o que só o dono consegue fazer, e só quando
+// está perto de um terminal. Isto recria o cliente do zero sem derrubar o
+// processo: mesmo efeito, alcançável de dentro do chat.
+export async function reiniciar() {
+  log("reinício a quente pedido");
+  try { await sair(null); } catch {}
+  entrando.clear();
+  conexoes.clear();
+  revoice = null;
+  erroCarga = null;
+  const r = await iniciar();
+  log(`reinício: ${r.ok ? "ok" : `falhou — ${r.erro}`}`);
+  return r;
 }
 
 export async function estado() {
@@ -315,12 +384,19 @@ async function processarFila(canalVoz) {
   }
 }
 
-export async function falar(canalVoz, texto, vozNome = null, efeito = null, tom = null) {
+export async function falar(canalVoz, texto, vozNome = null, efeito = null, tom = null, autoEntrar = true) {
   if (erroCarga) return { ok: false, erro: erroCarga };
 
-  // Entra sozinho se ainda não estiver na call — é o que a pessoa espera
-  // ao mandar o bot falar.
+  // Entra sozinho se ainda não estiver na call — é o que a pessoa espera ao
+  // mandar o bot falar com `&tts <texto>`.
+  //
+  // Mas NÃO quando a fala veio da transmissão automática (autoEntrar=false).
+  // Antes, quem mandasse `&tts sair` via o bot voltar na mensagem seguinte
+  // de qualquer pessoa: o pedido explícito de sair era desfeito por quem nem
+  // sabia que ele tinha sido feito. Pior, com o join pendurado cada mensagem
+  // acumulava uma tentativa nova.
   if (!conexoes.has(canalVoz)) {
+    if (!autoEntrar) return { ok: false, erro: "fora da call", foraDaCall: true };
     const r = await entrar(canalVoz);
     if (!r.ok) return r;
   }

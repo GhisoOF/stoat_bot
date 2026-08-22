@@ -329,6 +329,8 @@ persona, que pede o mesmo tom em uma frase.
   parede de texto — e limita as falas por minuto **no canal**, não só por
   pessoa. Risada (`kkkk`, `rsrs`) passa de propósito, e `&tts <texto>` nunca é
   filtrado: pedido explícito é sempre falado. Se a entrada na call travar,
+  `&tts diagnostico` diz **em qual etapa** — a API do Stoat (token, permissão,
+  sala fantasma) ou a rede até o LiveKit (UDP, MTU, firewall) — e
   `&tts reiniciar` recria a conexão sem ir ao terminal.
 - **Fusos horários** (`&fuso`): relógio com várias cidades ao mesmo tempo, para
   servidores com gente espalhada. A staff escolhe as cidades (`&fuso add São Paulo`,
@@ -543,6 +545,7 @@ Prefixo: `&`. Aliases entre parênteses.
 | `&fuso [ver\|buscar\|add\|remove\|apelido\|principal\|formato]` | relógio com vários fusos |
 | `&tts <texto>` / `&tts [canal\|transmitir\|entrar\|sair\|voz\|estado]` | a Judy fala na call |
 | `&tts filtro [status\|on\|off\|porminuto <n>\|teste <texto>]` | a peneira anti-barulho da transmissão |
+| `&tts diagnostico` | em qual etapa a entrada na call trava *(ManageMessages)* |
 | `&tts reiniciar` | destrava o serviço de voz sem terminal *(ManageMessages)* |
 | `&boasvindas <canal\|titulo\|texto\|cor\|imagem\|testar\|padrao\|on\|off>` | embed de entrada |
 | `&adeus <canal\|titulo\|texto\|cor\|imagem\|testar\|padrao\|on\|off>` | embed de saída |
@@ -1698,7 +1701,7 @@ O código é organizado em quatro áreas, sob `modulos/`:
 │   │   └── game.js             # &game — personagem, 9 atributos, progressão
 │   └── economia/               # reservado para o futuro
 ├── voz-servico/                # judy-voz: LiveKit + Piper (nativo no Gentoo)
-│   ├── servidor.js             # HTTP: /saude, /entrar, /sair, /falar, /reiniciar
+│   ├── servidor.js             # HTTP: /saude, /entrar, /sair, /falar, /reiniciar, /diagnostico
 │   ├── voz.js                  # entra na call e publica áudio (revoice.js)
 │   └── tts.js                  # síntese (Piper) e efeitos (ffmpeg)
 ├── ia-servico/                 # serviço de IA (ferramentas + tool-calling)

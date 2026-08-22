@@ -14,6 +14,8 @@
 //    POST /entrar      → { canalVoz } entra numa call
 //    POST /sair        → { canalVoz? } sai (sem canal = sai de todas)
 //    POST /reiniciar   → recria o cliente de voz sem derrubar o processo
+//    POST /diagnostico → { canalVoz } testa join_call e alcance do LiveKit,
+//                        etapa por etapa, sem entrar na call
 //    POST /falar       → { canalVoz, texto, voz? } fala na call
 //    GET  /estado      → onde está conectado e o que há na fila
 //
@@ -105,6 +107,12 @@ const servidor = createServer(async (req, res) => {
       if (!canalVoz) return responder(res, 400, { erro: "falta canalVoz" });
       const r = await voz.entrar(canalVoz);
       return responder(res, r.ok ? 200 : 502, r);
+    }
+
+    if (rota === "/diagnostico") {
+      const { canalVoz } = corpo;
+      if (!canalVoz) return responder(res, 400, { erro: "falta canalVoz" });
+      return responder(res, 200, await voz.diagnosticar(canalVoz));
     }
 
     if (rota === "/reiniciar") {

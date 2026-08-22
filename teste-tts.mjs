@@ -146,5 +146,32 @@ ok(chamadas.length === filtro.PADROES.porMinuto, `teto por canal corta em ${filt
 const avisou = enviados.filter((e) => String(e.title ?? "").includes("Muita coisa"));
 ok(avisou.length === 1, "avisa uma única vez no chat que vai ficar quieta");
 
+// ══ 5. Diagnóstico em etapas (voz-servico) ══
+console.log("\n── diagnóstico do serviço de voz ──");
+process.env.STOAT_API = "https://api.stoat.invalido";
+const voz = await import("./voz-servico/voz.js");
+
+// join_call recusado pelo Stoat → o veredito tem de apontar a etapa 1
+globalThis.fetch = async () => ({ ok: false, status: 403, text: async () => '{"type":"MissingPermission"}' });
+let d = await voz.diagnosticar("01JVOZ00000000000000000000");
+let e1 = d.etapas.find((e) => e.etapa === "join_call");
+ok(e1 && e1.ok === false && e1.status === 403, "join_call recusado aparece como etapa 1 com o HTTP");
+ok(d.etapas.find((e) => e.etapa === "livekit-tcp")?.ok === null, "  → sem endereço, a etapa 2 fica indeterminada (não inventa culpado)");
+ok(d.ok === false, "  → diagnóstico geral: não ok");
+
+// join_call ok → a etapa 2 é tentada e o token NUNCA aparece no resultado
+globalThis.fetch = async () => ({ ok: true, status: 200,
+  text: async () => JSON.stringify({ token: "SEGREDO-QUE-NAO-PODE-VAZAR", url: "wss://livekit.invalido:7880" }) });
+d = await voz.diagnosticar("01JVOZ00000000000000000000");
+e1 = d.etapas.find((e) => e.etapa === "join_call");
+ok(e1.ok === true, "join_call ok é reportado como etapa 1 bem-sucedida");
+ok(!JSON.stringify(d).includes("SEGREDO-QUE-NAO-PODE-VAZAR"), "  → o token do LiveKit NUNCA vai para o resultado (isto vai parar num chat)");
+ok(e1.detalhe.includes("token") && e1.detalhe.includes("url"), "  → mas os CAMPOS recebidos são mostrados");
+ok(d.etapas.find((e) => e.etapa === "livekit-tcp")?.ok === false, "  → e o alcance do LiveKit é testado de verdade");
+// Este teste roda SEM a flag (é o Node padrão), então o diagnóstico deve
+// acusar a falta — que é justamente o comportamento útil no serviço real.
+ok(d.flagNode === (typeof globalThis.navigator === "undefined" ? "ok" : "FALTA --no-experimental-global-navigator"),
+  `confere a flag do Node e reporta o que encontrou (${d.flagNode})`);
+
 console.log(`\nTTS: ${pass} ok, ${fail} falha(s)`);
 process.exit(fail ? 1 : 0);

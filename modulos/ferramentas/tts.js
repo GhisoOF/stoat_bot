@@ -201,7 +201,7 @@ export async function cmdTts(message, args, ctx) {
   }
 
   // ── estado (público) ──
-  if (sub === "estado" || sub === "status" || sub === "diagnostico") {
+  if (sub === "estado" || sub === "status" || sub === "saude" || sub === "health") {
     let saude = null, erroSaude = null;
     try { saude = await chamar("/saude", null, "GET"); }
     catch (e) { erroSaude = e?.message ?? String(e); }
@@ -220,12 +220,19 @@ export async function cmdTts(message, args, ctx) {
     ];
     if (saude) {
       linhas.push(`**Piper:** ${saude.piper?.ok ? `🟢 ${saude.piper.vozAtual}` : `🔴 ${saude.piper?.erro}`}`);
-      linhas.push(`**LiveKit:** ${saude.voz?.pronto ? "🟢 pronto" : `🔴 ${saude.voz?.erro}`}`);
+      // "pronto" aqui é só "a biblioteca carregou" — NÃO diz nada sobre
+      // conseguir entrar numa call. Confundir os dois foi o que fez este
+      // painel parecer saudável enquanto toda entrada dava timeout.
+      linhas.push(`**${lang === "en" ? "revoice (library)" : "revoice (biblioteca)"}:** ${saude.voz?.pronto
+        ? (lang === "en" ? "🟢 loaded" : "🟢 carregada") : `🔴 ${saude.voz?.erro}`}`);
       const con = saude.voz?.conexoes ?? [];
       linhas.push(`**${lang === "en" ? "In calls" : "Em calls"}:** ${con.length
         ? con.map((x) => `<#${x.canalVoz}> (${x.falas} ${lang === "en" ? "utterances" : "falas"})`).join(", ")
         : "_—_"}`);
     }
+    linhas.push("", lang === "en"
+      ? `_Can't join? \`${PREFIXO}tts diagnostico\` says at which step it jams._`
+      : `_Não consegue entrar? \`${PREFIXO}tts diagnostico\` diz em qual etapa trava._`);
     return sendEmbed(message.channel, {
       title: lang === "en" ? "🔊 Voice status" : "🔊 Estado da voz",
       description: linhas.join("\n"),
@@ -245,6 +252,81 @@ export async function cmdTts(message, args, ctx) {
   //
   // O freio contra vai-e-vem é o mesmo cooldown das falas: quem não é staff
   // espera entre uma ação e outra.
+  // ── diagnostico (staff): ONDE, exatamente, a entrada trava ──
+  //
+  // "Não consigo entrar" tem duas causas com o mesmo sintoma: a API do
+  // Stoat recusando/pendurando (token, permissão, o servidor achar que o
+  // bot já está na call) ou a rede não alcançando o LiveKit (UDP, MTU,
+  // firewall). O remédio de uma não serve para a outra. Isto separa as
+  // duas antes de qualquer chute.
+  if (["diagnostico", "diagnóstico", "diagnose", "porque", "porquê"].includes(sub)) {
+    if (!ehStaff) {
+      return sendEmbed(message.channel, tr(ctx,
+        { title: "🚫 Permissão insuficiente",
+          description: "Você precisa de **ManageMessages** para rodar o diagnóstico.", colour: COR.erro },
+        { title: "🚫 Missing permission",
+          description: "You need **ManageMessages** to run the diagnostics.", colour: COR.erro }));
+    }
+    if (!c.canalVoz) {
+      return sendEmbed(message.channel, tr(ctx,
+        { title: "❌ Falta o canal de voz",
+          description: `Defina primeiro com \`${PREFIXO}tts canal aqui\` (dentro da call).`, colour: COR.erro },
+        { title: "❌ No voice channel",
+          description: `Set it first with \`${PREFIXO}tts canal aqui\` (inside the call).`, colour: COR.erro }));
+    }
+    let d;
+    try { d = await chamar("/diagnostico", { canalVoz: c.canalVoz }); }
+    catch (e) {
+      return sendEmbed(message.channel, {
+        title: lang === "en" ? "❌ The voice service didn't answer" : "❌ O serviço de voz não respondeu",
+        description: `\`${e.message}\`\n\n${lang === "en"
+          ? "The problem is before the call: `judy-voz` is down or unreachable. It needs a hand on the machine."
+          : "O problema é antes da call: o `judy-voz` está fora do ar ou inalcançável. Precisa de mão na máquina."}`,
+        colour: COR.erro });
+    }
+
+    const marca = (v) => v === true ? "✅" : v === false ? "❌" : "❔";
+    const linhas = (d.etapas ?? []).map((e) => `${marca(e.ok)} **${e.etapa}** — ${e.ms}ms${e.status ? ` · HTTP ${e.status}` : ""}\n   \`${String(e.detalhe ?? "").slice(0, 180)}\``);
+
+    // O veredito é o que importa: cada combinação tem um culpado diferente.
+    const httpOk = d.etapas?.find((e) => e.etapa === "join_call")?.ok;
+    const tcpOk = d.etapas?.find((e) => e.etapa === "livekit-tcp")?.ok;
+    let veredito;
+    if (d.flagNode !== "ok") {
+      veredito = tr(ctx,
+        "⚠️ **O serviço está sem a flag do Node.** Suba o `judy-voz` com `--no-experimental-global-navigator` — sem ela a entrada falha sempre.",
+        "⚠️ **The service is missing the Node flag.** Start `judy-voz` with `--no-experimental-global-navigator` — without it joining always fails.");
+    } else if (httpOk === false) {
+      veredito = tr(ctx,
+        "🔎 **Trava na API do Stoat**, antes de qualquer coisa de rede. Olhe o HTTP acima: `401` é token do bot, `403` é falta de **Connect**/**Speak** no canal de voz, `404` é ID errado, `400`/`409` costuma ser o Stoat achando que ainda estou na call — nesse caso, saia da call pelo cliente (ou reinicie o servidor de voz do Stoat) e tente de novo.",
+        "🔎 **It jams at Stoat's API**, before anything network-related. Look at the HTTP above: `401` is the bot token, `403` is missing **Connect**/**Speak** on the voice channel, `404` is a wrong ID, `400`/`409` usually means Stoat still thinks I'm in the call — in that case, leave the call from the client (or restart Stoat's voice server) and try again.");
+    } else if (tcpOk === false) {
+      veredito = tr(ctx,
+        "🔎 **A API responde, mas não alcanço o LiveKit.** É rede da máquina do serviço: firewall, DNS ou rota. Se o TCP nem abre, o UDP também não vai — confira a saída da máquina do `judy-voz`.",
+        "🔎 **The API answers, but I can't reach LiveKit.** It's the service machine's network: firewall, DNS or routing. If TCP won't even open, UDP won't either — check outbound access from the `judy-voz` machine.");
+    } else if (httpOk && tcpOk !== false) {
+      veredito = tr(ctx,
+        "🔎 **As duas etapas passam aqui.** Então a trava é no meio: a mídia do LiveKit anda por **UDP**, que este teste não cobre. Libere UDP de saída na máquina do `judy-voz` (e verifique a MTU da Tailscale). Se acabou de acontecer, `&tts reiniciar` e tente entrar de novo.",
+        "🔎 **Both steps pass here.** So the jam is in between: LiveKit media rides on **UDP**, which this test doesn't cover. Allow outbound UDP on the `judy-voz` machine (and check the Tailscale MTU). If it just happened, `&tts reiniciar` and try joining again.");
+    } else {
+      veredito = tr(ctx, "🔎 Resultado inconclusivo — veja as etapas acima.", "🔎 Inconclusive — see the steps above.");
+    }
+
+    return sendEmbed(message.channel, {
+      title: lang === "en" ? "🩺 Voice diagnostics" : "🩺 Diagnóstico da voz",
+      description: [
+        ...linhas,
+        "",
+        `${lang === "en" ? "**In the call now**" : "**Na call agora**"}: ${d.naCall ? "🟢" : "🔴"}`
+          + (d.entrandoAgora ? (lang === "en" ? " · entering right now" : " · entrando neste momento") : ""),
+        d.ultimaFalha ? `${lang === "en" ? "**Last failure**" : "**Última falha**"}: \`${String(d.ultimaFalha.erro).slice(0, 140)}\`` : null,
+        "",
+        veredito,
+      ].filter(Boolean).join("\n"),
+      colour: d.ok ? COR.info : COR.aviso,
+    });
+  }
+
   // ── reiniciar (staff): destrava o serviço sem ir ao terminal ──
   // Quando o estado do lado do Stoat/LiveKit fica inconsistente, a entrada
   // pendura e nenhum comando resolve. Antes só reiniciando o judy-voz à mão
@@ -411,9 +493,15 @@ export async function cmdTts(message, args, ctx) {
           { title: "✅ Entrei na call", description: `Estou em <#${c.canalVoz}>.\n\nManda o que eu falo: \`${PREFIXO}tts oi pessoal\``, colour: COR.sucesso },
           { title: "✅ Joined the call", description: `I'm in <#${c.canalVoz}>.\n\nTell me what to say: \`${PREFIXO}tts hello\``, colour: COR.sucesso }));
       } catch (e) {
+        // Tira crases da mensagem do serviço: ela entra DENTRO de um trecho
+        // em crase, e uma crase no meio fecha o trecho cedo — foi assim que
+        // o erro apareceu no chat com uma crase solta no fim.
+        const motivo = String(e.message ?? e).replace(/`/g, "");
         return sendEmbed(message.channel, {
           title: lang === "en" ? "❌ Couldn't join" : "❌ Não consegui entrar",
-          description: `\`${e.message}\`\n\n${lang === "en" ? "See" : "Veja"} \`${PREFIXO}tts estado\``,
+          description: `\`${motivo}\`\n\n${lang === "en"
+            ? `Find out where it jams: \`${PREFIXO}tts diagnostico\``
+            : `Descubra onde trava: \`${PREFIXO}tts diagnostico\``}`,
           colour: COR.erro });
       }
     }
@@ -849,9 +937,10 @@ export async function cmdTts(message, args, ctx) {
         r.naFila > 1 ? `\n\n_${lang === "en" ? "in queue" : "na fila"}: ${r.naFila}_` : ""}`,
       colour: COR.sucesso });
   } catch (e) {
+    const motivo = String(e.message ?? e).replace(/`/g, "");
     return sendEmbed(message.channel, {
       title: lang === "en" ? "❌ Couldn't speak" : "❌ Não consegui falar",
-      description: `\`${e.message}\`\n\n${lang === "en" ? "Diagnose with" : "Diagnostique com"} \`${PREFIXO}tts estado\``,
+      description: `\`${motivo}\`\n\n${lang === "en" ? "Diagnose with" : "Diagnostique com"} \`${PREFIXO}tts diagnostico\``,
       colour: COR.erro });
   }
 }

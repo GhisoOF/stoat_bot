@@ -76,12 +76,33 @@ const conexoes = new Map();   // canalVoz → { connection, entrouEm, falas, fil
 const entrando = new Map();   // canalVoz → Promise<{ ok, … }>
 
 // Corrida entre uma promessa e um timeout, com mensagem que diz ONDE parou.
-function comLimite(promessa, ms, ondeParou) {
-  let t;
+//
+// ATENÇÃO: desistir de ESPERAR não CANCELA o que está rodando. O
+// `revoice.join()` continua seu caminho depois do timeout e pode completar
+// meio minuto mais tarde — deixando uma sala aberta que ninguém registrou.
+// Do lado do Stoat o bot passa a estar na call; do nosso, não. A tentativa
+// seguinte então falha porque "já está na call", e cada nova tentativa
+// piora: era isso que fazia o problema não passar sozinho, nem depois do
+// reinício. Quem chama precisa varrer a órfã — daí o `aoChegarTarde`.
+function comLimite(promessa, ms, ondeParou, aoChegarTarde = null) {
+  let t, estourou = false;
+  const p = Promise.resolve(promessa);
+  if (aoChegarTarde) {
+    p.then((v) => { if (estourou) aoChegarTarde(v); },
+           () => { /* falhou tarde: nada a limpar */ });
+  }
   return Promise.race([
-    promessa.finally(() => clearTimeout(t)),
-    new Promise((_, rej) => { t = setTimeout(() => rej(new Error(ondeParou)), ms); }),
+    p.finally(() => clearTimeout(t)),
+    new Promise((_, rej) => {
+      t = setTimeout(() => { estourou = true; rej(new Error(ondeParou)); }, ms);
+    }),
   ]);
+}
+
+// Derruba uma conexão de qualquer jeito que a lib permitir.
+async function derrubar(connection) {
+  try { connection?.leave?.(); } catch {}
+  try { await connection?.room?.disconnect?.(); } catch {}
 }
 
 export async function iniciar() {
@@ -153,16 +174,21 @@ async function entrarDeFato(canalVoz) {
     // O join() é a parte que pendura. Com limite, um Stoat que não responde
     // vira um erro claro em 20s em vez de uma requisição pendurada.
     const connection = await comLimite(
-      Promise.resolve(revoice.join(canalVoz)),
+      revoice.join(canalVoz),
       ENTRAR_MAX_MS,
-      `${ENTRAR_MAX_MS / 1000}s sem resposta ao pedido de entrar na call — o Stoat pode ainda achar que estou nela; tente \`&tts reiniciar\``,
+      `${ENTRAR_MAX_MS / 1000}s sem resposta ao pedido de entrar na call (etapa: join)`,
+      (tardia) => {
+        // Chegou depois de eu desistir: fecha, senão vira sala fantasma.
+        log(`entrada em ${canalVoz} chegou TARDE — derrubando a conexão órfã`);
+        derrubar(tardia);
+      },
     );
 
     // O join resolve antes de a sala estar de fato conectada; o evento
     // "join" é que marca o ponto em que dá para publicar áudio.
     await new Promise((res, rej) => {
       const t = setTimeout(
-        () => rej(new Error(`${ESPERA_JOIN_MS / 1000}s sem conectar à sala (firewall UDP? permissão?)`)),
+        () => rej(new Error(`${ESPERA_JOIN_MS / 1000}s sem a sala confirmar a entrada (etapa: sala)`)),
         ESPERA_JOIN_MS
       );
       // NÃO chamar connection.isConnected() aqui: no @livekit/rtc-node atual
@@ -196,6 +222,7 @@ async function entrarDeFato(canalVoz) {
   } catch (e) {
     const erro = explicar(e);
     log(`falha ao entrar em ${canalVoz}: ${erro}`);
+    ultimaFalha = { canalVoz, erro, quando: Date.now() };
     // Limpeza: uma conexão que falhou no meio não pode ficar registrada,
     // senão a tentativa seguinte reusa um objeto quebrado e falha de um
     // jeito diferente — mascarando a causa original.
@@ -238,12 +265,103 @@ export async function reiniciar() {
   log("reinício a quente pedido");
   try { await sair(null); } catch {}
   entrando.clear();
+  // Derruba o que ainda estiver de pé ANTES de esquecer as referências —
+  // senão as conexões viram exatamente as órfãs que queremos evitar.
+  for (const c of conexoes.values()) await derrubar(c.connection);
   conexoes.clear();
+  ultimaFalha = null;
   revoice = null;
   erroCarga = null;
   const r = await iniciar();
   log(`reinício: ${r.ok ? "ok" : `falhou — ${r.erro}`}`);
   return r;
+}
+
+// A última falha de entrada, para o diagnóstico não depender de reproduzir
+// o problema na hora de investigar.
+let ultimaFalha = null;
+
+// ── Diagnóstico em ETAPAS ─────────────────────────────────
+//
+// "Não consigo entrar" tem duas causas completamente diferentes e o mesmo
+// sintoma. Entrar numa call é:
+//
+//   1. HTTP  — POST /channels/{id}/join_call na API do Stoat, que devolve
+//              o token e o endereço do LiveKit;
+//   2. WebRTC — conectar ao LiveKit com esse token e publicar áudio.
+//
+// A etapa 1 falha por token, permissão ou estado (o Stoat achar que o bot
+// já está na call). A etapa 2 falha por rede: UDP bloqueado, MTU da
+// Tailscale, firewall. O remédio de uma não serve para a outra, e sem
+// separá-las a investigação vira tentativa e erro.
+//
+// Esta função faz a etapa 1 CRUA, sem o revoice, e testa o alcance da
+// etapa 2 — sem entrar na call de verdade.
+export async function diagnosticar(canalVoz) {
+  const API = (process.env.STOAT_API || "https://api.stoat.chat").replace(/\/$/, "");
+  const etapas = [];
+
+  // ── 1. join_call ──
+  const t0 = Date.now();
+  let dados = null;
+  try {
+    const r = await comLimite(
+      fetch(`${API}/channels/${canalVoz}/join_call`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-bot-token": TOKEN },
+      }),
+      10_000,
+      "10s sem resposta da API do Stoat",
+    );
+    const corpo = await r.text().catch(() => "");
+    try { dados = JSON.parse(corpo); } catch {}
+    etapas.push({
+      etapa: "join_call",
+      ok: r.ok,
+      ms: Date.now() - t0,
+      status: r.status,
+      // NUNCA devolver o token: isto vai parar num chat.
+      detalhe: r.ok ? `campos: ${Object.keys(dados ?? {}).join(", ") || "(vazio)"}`
+                    : corpo.slice(0, 200),
+    });
+  } catch (e) {
+    etapas.push({ etapa: "join_call", ok: false, ms: Date.now() - t0, detalhe: e?.message ?? String(e) });
+  }
+
+  // ── 2. alcance do LiveKit ──
+  // O endereço vem no corpo do join_call. Testamos só o TCP: se nem ele
+  // passa, o UDP também não passa e não há o que discutir. Se o TCP passa e
+  // a entrada continua travando, o suspeito é justamente o UDP.
+  const urlLk = dados?.url ?? dados?.livekit?.url ?? dados?.node ?? null;
+  if (urlLk) {
+    const t1 = Date.now();
+    try {
+      const u = new URL(String(urlLk).replace(/^ws/, "http"));
+      const porta = Number(u.port) || (u.protocol === "https:" ? 443 : 80);
+      const net = await import("node:net");
+      await new Promise((res, rej) => {
+        const sock = net.connect({ host: u.hostname, port: porta });
+        const t = setTimeout(() => { sock.destroy(); rej(new Error("8s sem abrir o TCP")); }, 8000);
+        sock.once("connect", () => { clearTimeout(t); sock.end(); res(); });
+        sock.once("error", (err) => { clearTimeout(t); rej(err); });
+      });
+      etapas.push({ etapa: "livekit-tcp", ok: true, ms: Date.now() - t1, detalhe: `${u.hostname}:${porta} alcançável` });
+    } catch (e) {
+      etapas.push({ etapa: "livekit-tcp", ok: false, ms: Date.now() - t1, detalhe: e?.message ?? String(e) });
+    }
+  } else {
+    etapas.push({ etapa: "livekit-tcp", ok: null, ms: 0, detalhe: "o join_call não devolveu endereço do LiveKit" });
+  }
+
+  return {
+    ok: etapas.every((e) => e.ok !== false),
+    canalVoz,
+    etapas,
+    naCall: conexoes.has(canalVoz),
+    entrandoAgora: entrando.has(canalVoz),
+    ultimaFalha,
+    flagNode: typeof globalThis.navigator === "undefined" ? "ok" : "FALTA --no-experimental-global-navigator",
+  };
 }
 
 export async function estado() {

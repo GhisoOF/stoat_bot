@@ -214,6 +214,7 @@ const SUB = {
   tts: {
     channel: "canal", here: "aqui", broadcast: "transmitir",
     filter: "filtro", sieve: "filtro", restart: "reiniciar", test: "teste",
+    diagnose: "diagnostico", diagnostics: "diagnostico", health: "estado",
     perminute: "porminuto", cap: "porminuto",
     join: "entrar", leave: "sair", voice: "voz", status: "estado",
     names: "nomes", cooldown: "cooldown",

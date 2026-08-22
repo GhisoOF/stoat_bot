@@ -161,8 +161,9 @@ function explicar(e) {
   return msg;
 }
 
-export async function entrar(canalVoz, serverId = null) {
+export async function entrar(canalVoz, serverId = null, servidores = null) {
   ultimoServidor = serverId ?? ultimoServidor;
+  if (Array.isArray(servidores) && servidores.length) servidoresConhecidos = servidores;
   if (erroCarga) return { ok: false, erro: erroCarga };
   if (conexoes.has(canalVoz)) return { ok: true, jaEstava: true, canalVoz };
 
@@ -171,12 +172,12 @@ export async function entrar(canalVoz, serverId = null) {
   const emVoo = entrando.get(canalVoz);
   if (emVoo) { dbg(`entrada em ${canalVoz} já em andamento — aguardando a mesma`); return emVoo; }
 
-  const tarefa = entrarDeFato(canalVoz).finally(() => entrando.delete(canalVoz));
+  const tarefa = entrarDeFato(canalVoz, serverId).finally(() => entrando.delete(canalVoz));
   entrando.set(canalVoz, tarefa);
   return tarefa;
 }
 
-async function entrarDeFato(canalVoz) {
+async function entrarDeFato(canalVoz, serverId = null) {
   const t0 = Date.now();
   const marcos = [];
   const marco = (nome) => { marcos.push({ nome, ms: Date.now() - t0 }); dbg(`  ⏱ ${nome} em ${Date.now() - t0}ms`); };
@@ -184,6 +185,18 @@ async function entrarDeFato(canalVoz) {
   try {
     dbg(`entrando em ${canalVoz}…`);
     marco("inicio");
+
+    // ── Já estou em outra call? Então "entrar" quer dizer MOVER ──
+    //
+    // Chamar alguém para a sua call enquanto ele está em outra é o pedido
+    // mais natural do mundo, e antes dava `AlreadyConnected` — um erro
+    // técnico sobre um estado interno, para quem só queria a Judy ali.
+    const outras = [...conexoes.keys()].filter((id) => id !== canalVoz);
+    if (outras.length) {
+      log(`já estou em ${outras.join(", ")} — saindo antes de entrar em ${canalVoz}`);
+      await sair(null);
+      marco("saiu-da-call-anterior");
+    }
     // O join() é a parte que pendura. Com limite, um Stoat que não responde
     // vira um erro claro em 20s em vez de uma requisição pendurada.
     marco("chamando-revoice.join");
@@ -250,11 +263,20 @@ async function entrarDeFato(canalVoz) {
     // existência de um estado preso do outro lado para conseguir entrar.
     if (/AlreadyConnected/i.test(String(e?.message ?? e)) && !jaTentouDestravar.has(canalVoz)) {
       jaTentouDestravar.add(canalVoz);
-      log(`AlreadyConnected em ${canalVoz} — forçando saída e tentando de novo`);
-      const f = await forcarSaida(canalVoz, ultimoServidor);
-      marcos.push({ nome: f.ok ? "destravado" : "destravar-falhou", ms: Date.now() - t0 });
+      const sid = serverId ?? ultimoServidor;
+
+      // 1ª tentativa: MOVER. Se o Stoat me registra em alguma call deste
+      // servidor, mover é mais barato e mais direto que sair e voltar.
+      log(`AlreadyConnected em ${canalVoz} — tentando me mover para lá`);
+      const m = await moverPara(canalVoz, sid);
+      marcos.push({ nome: m.ok ? "movida" : "mover-falhou", ms: Date.now() - t0 });
+
+      // 2ª: desconectar de vez e entrar do zero (funciona entre servidores).
+      const f = m.ok ? { ok: true } : await forcarSaida(canalVoz, sid, servidoresConhecidos);
+      if (!m.ok) marcos.push({ nome: f.ok ? "destravado" : "destravar-falhou", ms: Date.now() - t0 });
+
       if (f.ok) {
-        const r2 = await entrarDeFato(canalVoz);
+        const r2 = await entrarDeFato(canalVoz, sid);
         jaTentouDestravar.delete(canalVoz);
         return r2;
       }
@@ -305,7 +327,7 @@ export async function sair(canalVoz = null) {
 //  Como a rota de saída não é a mesma em toda versão do Stoat, tentamos as
 //  candidatas em ordem e relatamos o que cada uma respondeu. A que existir
 //  resolve; o relatório serve para descobrir qual é, sem chutar de novo.
-export async function forcarSaida(canalVoz, serverId = null) {
+export async function forcarSaida(canalVoz, serverId = null, servidores = []) {
   const API = (process.env.STOAT_API || "https://api.stoat.chat").replace(/\/$/, "");
   const passos = [];
   const bater = async (metodo, rota, corpo = null) => {
@@ -317,7 +339,12 @@ export async function forcarSaida(canalVoz, serverId = null) {
         ...(corpo ? { body: JSON.stringify(corpo) } : {}),
       }), 8000, `8s sem resposta de ${rota}`);
       const txt = await r.text().catch(() => "");
-      return { metodo, rota, ok: r.ok, status: r.status, ms: Date.now() - t, corpo: txt.slice(0, 160) };
+      let json = null;
+      try { json = JSON.parse(txt); } catch {}
+      // `corpo` é cortado porque vai para um embed; `json` é o texto INTEIRO
+      // já convertido. Fazer o parse do texto cortado era garantia de falhar
+      // em qualquer resposta com mais de 160 caracteres — e o /users/@me tem.
+      return { metodo, rota, ok: r.ok, status: r.status, ms: Date.now() - t, corpo: txt.slice(0, 160), json };
     } catch (e) {
       return { metodo, rota, ok: false, ms: Date.now() - t, erro: e?.message ?? String(e) };
     }
@@ -340,24 +367,76 @@ export async function forcarSaida(canalVoz, serverId = null) {
   // exige a permissão MoveMembers — EXCETO quando o alvo é quem pede:
   //     if member.id.user != user.id { throw_if_lacking(MoveMembers) }
   // Ou seja: o bot pode desconectar a si mesmo, sem permissão nenhuma.
-  let meuId = null;
-  const me = await bater("GET", "/users/@me");
-  passos.push({ ...me, rota: "/users/@me" });
-  try { meuId = JSON.parse(me.corpo ?? "{}")?._id ?? JSON.parse(me.corpo ?? "{}")?.id ?? null; } catch {}
+  const meuId = await meuIdDeBot(bater, passos);
 
-  if (meuId && serverId) {
-    const r = await bater("PATCH", `/servers/${serverId}/members/${meuId}`, { remove: ["VoiceChannel"] });
-    passos.push(r);
-    if (r.ok) {
-      log(`saída forçada: removido do canal de voz de ${serverId}`);
-      return { ok: true, via: "PATCH members remove VoiceChannel", passos };
-    }
-  } else {
-    passos.push({ rota: "(auto-desconexão)", ok: false,
-      erro: !serverId ? "o serviço não recebeu o serverId" : "não descobri meu próprio id" });
+  // O registro preso pode estar num canal de OUTRO servidor: o `remove` só
+  // acha a call se ela estiver no servidor da requisição. Por isso tentamos
+  // em todos os servidores que o bot conhece, começando pelo mais provável.
+  const alvos = [serverId, ...servidores].filter((x, i, a) => x && a.indexOf(x) === i);
+  if (!meuId) {
+    passos.push({ rota: "(auto-desconexão)", ok: false, erro: "não descobri meu próprio id" });
+    return { ok: false, passos };
+  }
+  if (!alvos.length) {
+    passos.push({ rota: "(auto-desconexão)", ok: false, erro: "o serviço não recebeu nenhum serverId" });
+    return { ok: false, passos };
   }
 
+  for (const sid of alvos) {
+    const r = await bater("PATCH", `/servers/${sid}/members/${meuId}`, { remove: ["VoiceChannel"] });
+    passos.push(r);
+    if (r.ok) {
+      log(`saída forçada: removido do canal de voz de ${sid}`);
+      return { ok: true, via: "PATCH members remove VoiceChannel", passos };
+    }
+  }
   return { ok: false, passos };
+}
+
+// O próprio id do bot, descoberto uma vez e lembrado.
+let meuIdCache = null;
+async function meuIdDeBot(bater, passos) {
+  if (meuIdCache) return meuIdCache;
+  const me = await bater("GET", "/users/@me");
+  passos.push({ ...me, json: undefined });
+  meuIdCache = me.json?._id ?? me.json?.id ?? null;
+  return meuIdCache;
+}
+
+// ── Mover-se para outra call ──
+//
+//  A mesma rota que desconecta também MOVE: `voice_channel: <novo>` em vez de
+//  `remove: ["VoiceChannel"]`. E vale a mesma dispensa de permissão — mover a
+//  si mesmo não exige MoveMembers. É o que faz `&tts entrar` numa call
+//  diferente funcionar como "vem para cá" em vez de dar AlreadyConnected.
+//
+//  Limite do Stoat: `get_user_voice_channel_in_server` só encontra a call de
+//  origem se ela estiver NO MESMO servidor. Entre servidores, o caminho é
+//  desconectar e entrar de novo — que é o fallback de quem chama.
+export async function moverPara(canalVoz, serverId) {
+  const API = (process.env.STOAT_API || "https://api.stoat.chat").replace(/\/$/, "");
+  const passos = [];
+  const bater = async (metodo, rota, corpo = null) => {
+    const t = Date.now();
+    try {
+      const r = await comLimite(fetch(`${API}${rota}`, {
+        method: metodo,
+        headers: { "X-Bot-Token": TOKEN, ...(corpo ? { "Content-Type": "application/json" } : {}) },
+        ...(corpo ? { body: JSON.stringify(corpo) } : {}),
+      }), 8000, `8s sem resposta de ${rota}`);
+      const txt = await r.text().catch(() => "");
+      let json = null; try { json = JSON.parse(txt); } catch {}
+      return { metodo, rota, ok: r.ok, status: r.status, ms: Date.now() - t, corpo: txt.slice(0, 160), json };
+    } catch (e) {
+      return { metodo, rota, ok: false, ms: Date.now() - t, erro: e?.message ?? String(e) };
+    }
+  };
+  const meuId = await meuIdDeBot(bater, passos);
+  if (!meuId || !serverId) return { ok: false, passos };
+  const r = await bater("PATCH", `/servers/${serverId}/members/${meuId}`, { voice_channel: canalVoz });
+  passos.push(r);
+  if (r.ok) log(`movida para a call ${canalVoz}`);
+  return { ok: r.ok, passos };
 }
 
 // ── Reinício a quente ─────────────────────────────────────
@@ -392,6 +471,10 @@ let ultimosMarcos = null;
 // Último servidor informado pelo bot — o destrave precisa dele, e a chamada
 // que falha nem sempre o traz.
 let ultimoServidor = null;
+// Servidores que o bot conhece, informados por ele. O registro preso pode
+// estar num canal de OUTRO servidor, e o `remove` só encontra a call se
+// procurar no servidor certo.
+let servidoresConhecidos = [];
 
 // ── Diagnóstico em ETAPAS ─────────────────────────────────
 //

@@ -426,5 +426,61 @@ const semServidor = await voz.forcarSaida("01JCALLR000000000000000AA", null);
 ok(semServidor.ok === false, "sem serverId, não tenta às cegas");
 ok(semServidor.passos.some((p) => String(p.erro ?? "").includes("serverId")), "  → e o relatório diz o que faltou");
 
+// ══ 10. O corpo do /users/@me não cabia em 160 caracteres ══
+//
+//  O relatório corta o corpo em 160 chars para caber no embed — e eu fazia o
+//  JSON.parse NESSE texto cortado. Resultado: "não descobri meu próprio id"
+//  com HTTP 200 ao lado, em toda resposta maior que isso. E a do /users/@me é.
+console.log("\n── id do bot em resposta longa ──");
+const perfilLongo = JSON.stringify({
+  _id: "01JBOTAA00000000000000AAAA", username: "Judy", discriminator: "0800",
+  display_name: "Judy", avatar: { _id: "x".repeat(80), tag: "avatars", size: 12345,
+    filename: "avatar-com-nome-bem-comprido.png", content_type: "image/png" },
+  badges: 0, status: { text: "cuidando do servidor", presence: "Online" },
+  relationship: "None", online: true, bot: { owner: "01JDONO0000000000000000AA" },
+});
+ok(perfilLongo.length > 160, `o perfil de um bot real passa de 160 caracteres (${perfilLongo.length})`);
+const pedidos2 = [];
+globalThis.fetch = async (url, op) => {
+  const u = String(url);
+  pedidos2.push({ url: u, metodo: op?.method, corpo: op?.body ? JSON.parse(op.body) : null });
+  if (u.endsWith("/users/@me")) return { ok: true, status: 200, text: async () => perfilLongo };
+  return { ok: true, status: 200, text: async () => "{}" };
+};
+const rLongo = await voz.forcarSaida("01JCALLR000000000000000AA", "01JSERVER00000000000000AA");
+ok(rLongo.ok === true, "★ com um perfil longo, o id ainda é descoberto (era o bug do print)");
+ok(pedidos2.some((p) => p.metodo === "PATCH" && p.url.includes("01JBOTAA00000000000000AAAA")),
+  "  → e o PATCH sai com o id certo");
+
+// procura em vários servidores: a call presa pode ser de outro servidor
+pedidos2.length = 0;
+globalThis.fetch = async (url, op) => {
+  const u = String(url);
+  pedidos2.push({ url: u, metodo: op?.method });
+  if (u.endsWith("/users/@me")) return { ok: true, status: 200, text: async () => perfilLongo };
+  // só o segundo servidor tem a call
+  const certo = u.includes("01JSRVB00000000000000000AA");
+  return { ok: certo, status: certo ? 200 : 404, text: async () => "{}" };
+};
+const rVarios = await voz.forcarSaida("01JCALLR000000000000000AA", "01JSRVA00000000000000000AA",
+  ["01JSRVA00000000000000000AA", "01JSRVB00000000000000000AA"]);
+ok(rVarios.ok === true, "★ procura a call presa em TODOS os servidores conhecidos");
+
+// ── Mover-se de uma call para outra ──
+console.log("\n── mover para a call de quem chamou ──");
+pedidos2.length = 0;
+globalThis.fetch = async (url, op) => {
+  const u = String(url);
+  pedidos2.push({ url: u, metodo: op?.method, corpo: op?.body ? JSON.parse(op.body) : null });
+  if (u.endsWith("/users/@me")) return { ok: true, status: 200, text: async () => perfilLongo };
+  return { ok: true, status: 200, text: async () => "{}" };
+};
+const rMover = await voz.moverPara("01JCALLNOVA00000000000AAA", "01JSERVER00000000000000AA");
+ok(rMover.ok === true, "★ mover-se para outra call funciona");
+const pm = pedidos2.find((p) => p.metodo === "PATCH");
+ok(pm?.corpo?.voice_channel === "01JCALLNOVA00000000000AAA",
+  "  → via voice_channel no PRÓPRIO membro (dispensa MoveMembers, como o remove)");
+ok(!pm?.corpo?.remove, "  → e sem remover nada: é uma mudança, não uma saída");
+
 console.log(`\nTTS: ${pass} ok, ${fail} falha(s)`);
 process.exit(fail ? 1 : 0);

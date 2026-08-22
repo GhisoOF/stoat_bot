@@ -35,7 +35,7 @@ const SERVIDORES = (process.env.TTS_SERVIDORES || "")
 // Gentoo, fora do Docker, então os dois são atualizados por caminhos
 // diferentes e podem ficar defasados — o pior estado possível, porque tudo
 // "parece" atualizado e a fala sai sem efeito, em silêncio.
-const VOZ_API_ESPERADA = 6;
+const VOZ_API_ESPERADA = 7;
 
 const COOLDOWN_MS = Number(process.env.TTS_COOLDOWN_MS || 8000);
 const MAX_CHARS   = Number(process.env.TTS_MAX_CHARS || 400);
@@ -111,6 +111,14 @@ function quaseSubcomando(args) {
 // tem resposta confiável no cliente. A resposta útil é outra: **a call é a do
 // canal onde a pessoa digitou**. Se não houver call ali, o join_call falha com
 // uma mensagem clara — melhor do que adivinhar em silêncio.
+// A call presa pode estar num canal de OUTRO servidor, e a rota que
+// desconecta só a encontra se procurar no servidor certo. O serviço de voz
+// não tem a lista; o bot tem.
+function servidoresConhecidos(ctx) {
+  try { return [...(ctx.client?.servers?.keys?.() ?? [])].slice(0, 25); }
+  catch { return []; }
+}
+
 function pareceCanalDeVoz(canal) {
   if (!canal) return false;
   const t = String(canal.type ?? canal.channel_type ?? "");
@@ -508,7 +516,7 @@ export async function cmdTts(message, args, ctx) {
     }
     const alvo = c.canalVoz ?? message.channelId;
     let r;
-    try { r = await chamar("/destravar", { canalVoz: alvo, serverId }); }
+    try { r = await chamar("/destravar", { canalVoz: alvo, serverId, servidores: servidoresConhecidos(ctx) }); }
     catch (e) {
       return sendEmbed(message.channel, {
         title: lang === "en" ? "❌ The service didn't answer" : "❌ O serviço não respondeu",
@@ -706,6 +714,8 @@ export async function cmdTts(message, args, ctx) {
 
       // Configura sozinho o que estiver faltando, e lembra o que mudou para
       // contar no fim — quem quiser aprender os comandos vê quais foram.
+      // Estava noutra call? Então este `entrar` é um "vem para cá".
+      const vinhaDeOutra = !!c.canalVoz && c.canalVoz !== achado.id;
       const mudou = [];
       if (!c.ativo) { c.ativo = true; mudou.push(`${PREFIXO}tts on`); }
       if (c.canalVoz !== achado.id) { c.canalVoz = achado.id; mudou.push(`${PREFIXO}tts canal aqui`); }
@@ -719,7 +729,7 @@ export async function cmdTts(message, args, ctx) {
 
       filtro.limpar(c.canalTexto ?? null);
       try {
-        await chamar("/entrar", { canalVoz: c.canalVoz, serverId });
+        await chamar("/entrar", { canalVoz: c.canalVoz, serverId, servidores: servidoresConhecidos(ctx) });
       } catch (e) {
         const motivo = String(e.message ?? e).replace(/`/g, "");
         if (/AlreadyConnected/i.test(motivo)) {
@@ -752,8 +762,9 @@ export async function cmdTts(message, args, ctx) {
       }
 
       return sendEmbed(message.channel, tr(ctx, {
-        title: "🔊 Entrei e já estou lendo",
+        title: vinhaDeOutra ? "🔊 Vim para cá e já estou lendo" : "🔊 Entrei e já estou lendo",
         description: [
+          vinhaDeOutra ? `Saí da call anterior e vim para <#${c.canalVoz}>.` : null,
           `Estou em <#${c.canalVoz}> e **falo tudo que for escrito** em <#${c.canalTexto}>.`,
           "",
           "⚠️ Vale para **todo mundo** que escrever aqui.",
@@ -766,8 +777,9 @@ export async function cmdTts(message, args, ctx) {
         ].filter(Boolean).join("\n"),
         colour: COR.sucesso,
       }, {
-        title: "🔊 Joined and already reading",
+        title: vinhaDeOutra ? "🔊 Moved over and already reading" : "🔊 Joined and already reading",
         description: [
+          vinhaDeOutra ? `I left the previous call and came to <#${c.canalVoz}>.` : null,
           `I'm in <#${c.canalVoz}> and I **speak everything written** in <#${c.canalTexto}>.`,
           "",
           "⚠️ That applies to **everyone** writing here.",

@@ -322,7 +322,8 @@ persona, que pede o mesmo tom em uma frase.
   e o serviço de voz (`judy-voz`) roda nativo no Gentoo — fora do Docker, para
   que uma falha de WebRTC não derrube a moderação.
   **Na prática são dois comandos:** `&tts entrar` dentro da call (ela entra e
-  passa a falar tudo que for escrito ali) e `&tts sair` (sai e para de ler).
+  passa a falar tudo que for escrito ali; se estiver em outra call, vem para a
+  sua) e `&tts sair` (sai e para de ler).
   O `entrar` liga o sistema, descobre a call e liga a leitura sozinho — isso
   eram quatro comandos na ordem certa. Recurso isolado:
   só funciona nos servidores listados em `TTS_SERVIDORES`.
@@ -1665,6 +1666,10 @@ if member.id.user != user.id {
 
 Ou seja: **o bot pode desconectar a si mesmo, sem permissão nenhuma**. É o que
 `&tts destravar` faz, e o que o `&tts entrar` tenta sozinho antes de desistir.
+A mesma rota, com `voice_channel: <novo canal>` em vez de `remove`, **move** o
+bot entre calls — daí `&tts entrar` numa call diferente funcionar como "vem
+para cá" em vez de dar `AlreadyConnected`. O move só enxerga a call de origem
+dentro do mesmo servidor; entre servidores, o caminho é desconectar e entrar.
 Se nem isso resolver, alguém com **MoveMembers** remove o bot da call pelo
 cliente — é a única outra forma de derrubar um participante preso.
 

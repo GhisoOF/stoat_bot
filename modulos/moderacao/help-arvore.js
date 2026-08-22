@@ -1107,6 +1107,7 @@ function arvorePT(P) {
         texto: [
           "**O caminho curto**",
           `\`${P}tts entrar\` — dentro da call. Eu entro e passo a falar **tudo que for escrito ali**.`,
+          "Já estando em outra call, eu **saio dela e venho para a sua** — chamar alguém que está em outro lugar é o pedido mais natural do mundo.",
           `\`${P}tts sair\` — saio e paro de ler.`,
           "",
           "Só isso. O `entrar` liga o sistema, escolhe a call e liga a leitura —",
@@ -2273,6 +2274,7 @@ function arvoreEN(P) {
         texto: [
           "**The short path**",
           `\`${P}tts entrar\` — inside the call. I join and start speaking **everything written there**.`,
+          "If I'm already in another call, I **leave it and come to yours** — calling someone who's elsewhere is the most natural request there is.",
           `\`${P}tts sair\` — I leave and stop reading.`,
           "",
           "That's all. `entrar` turns the system on, picks the call and starts the",

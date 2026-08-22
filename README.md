@@ -320,8 +320,11 @@ persona, que pede o mesmo tom em uma frase.
   glados` recria o processamento metálico da GLaDOS — não existe voz GLaDOS
   treinada em português, as prontas são modelos ingleses do Portal),
   e o serviço de voz (`judy-voz`) roda nativo no Gentoo — fora do Docker, para
-  que uma falha de WebRTC não derrube a moderação. `&tts transmitir aqui`
-  faz tudo que for escrito no canal virar fala na call — sem precisar de comando. Recurso isolado:
+  que uma falha de WebRTC não derrube a moderação.
+  **Na prática são dois comandos:** `&tts entrar` dentro da call (ela entra e
+  passa a falar tudo que for escrito ali) e `&tts sair` (sai e para de ler).
+  O `entrar` liga o sistema, descobre a call e liga a leitura sozinho — isso
+  eram quatro comandos na ordem certa. Recurso isolado:
   só funciona nos servidores listados em `TTS_SERVIDORES`.
   Diagnóstico da cadeia inteira: `&tts estado` ou `&debug voz`.
   A transmissão passa por uma **peneira** (`&tts filtro`) que ignora barulho
@@ -551,7 +554,8 @@ Prefixo: `&`. Aliases entre parênteses.
 | `&blocklist <add\|remove\|list\|clear\|reload> [url]` | listas anti-link |
 | `&staff [add\|remove\|titulo\|limpar]` | a equipe do servidor (mesmos cargos do `&acesso`) |
 | `&fuso [ver\|buscar\|add\|remove\|apelido\|principal\|formato]` | relógio com vários fusos |
-| `&tts <texto>` / `&tts [canal\|transmitir\|entrar\|sair\|voz\|estado]` | a Judy fala na call |
+| `&tts entrar` / `&tts sair` | ⭐ dentro da call: entra e lê tudo que for escrito ali / sai e para |
+| `&tts <texto>` / `&tts [canal\|transmitir\|voz\|estado]` | uma frase específica, e os ajustes |
 | `&tts filtro [status\|on\|off\|porminuto <n>\|teste <texto>]` | a peneira anti-barulho da transmissão |
 | `&tts diagnostico` | em qual etapa a entrada na call trava *(ManageMessages)* |
 | `&tts reiniciar` | destrava o serviço de voz sem terminal *(ManageMessages)* |

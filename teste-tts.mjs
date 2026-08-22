@@ -263,5 +263,70 @@ for (const frase of [["oi"], ["teste"], ["bom", "dia"], ["paralelepípedo"]]) {
   ok(chamou === 1, `fala legítima não é confundida: ${JSON.stringify(frase.join(" "))}`);
 }
 
+// ══ 7. Um comando só: entrar já lê a call ══
+//
+//  Antes eram quatro, na ordem certa: `tts on`, `tts canal aqui`,
+//  `tts transmitir aqui`, `tts entrar`. Errar a ordem dava um erro que
+//  falava de outro comando.
+console.log("\n── &tts entrar faz tudo ──");
+const CALL = "01JCALL0000000000000000AA";
+const rotas = [];
+globalThis.fetch = async (url, op) => { rotas.push({ url: String(url), corpo: JSON.parse(op?.body ?? "{}") }); return { ok: true, status: 200, json: async () => ({ ok: true }) }; };
+
+const respE = [];
+const canalCall = { id: CALL, name: "Call", type: "VoiceChannel", sendMessage: async () => ({ id: "m" }) };
+const cfgZero = { language: "pt", tts: { ativo: false, canalVoz: null, canalTexto: null, filtro: true, cooldown: 0 } };
+const ctxE = {
+  serverId: "S1", PREFIXO: "&", COR: { info: "#1", aviso: "#2", erro: "#3", sucesso: "#4", mod: "#5" },
+  cfgGlobal: { debug: false }, config: cfgZero,
+  sendEmbed: async (_c, e) => { respE.push(e); return { id: "M" }; },
+  getServer: async () => ({ id: "S1", channels: [canalCall] }),
+  membroTemPermissao: () => true, salvarConfig: () => {}, client: { channels: new Map([[CALL, canalCall]]) },
+};
+const msgNaCall = { channelId: CALL, authorId: "U1", channel: canalCall, author: { username: "Ghieh" } };
+
+await tts.cmdTts(msgNaCall, ["entrar"], ctxE);
+ok(rotas.some((r) => r.url.endsWith("/entrar")), "★ `&tts entrar` sozinho já entra na call — sem configurar nada antes");
+ok(cfgZero.tts.canalVoz === CALL, "  → descobriu a call pelo canal onde o comando foi dado");
+ok(cfgZero.tts.canalTexto === CALL, "  → e ligou a leitura desse canal");
+ok(cfgZero.tts.ativo === true, "  → e ligou o sistema (que estava desligado)");
+ok(String(respE.at(-1)?.description).includes("falo tudo que for escrito"), "  → a resposta diz que ela já está lendo");
+ok(String(respE.at(-1)?.description).includes("tts on"), "  → e mostra os comandos equivalentes, para quem quiser aprender");
+
+// a leitura funciona logo em seguida
+rotas.length = 0; filtro.limpar();
+await tts.aoMensagem({ channelId: CALL, authorId: "U2", content: "oi pessoal", author: { username: "Alguem" } }, ctxE);
+ok(rotas.some((r) => r.url.endsWith("/falar")), "★ logo depois do entrar, o que é escrito na call já vira fala");
+
+// sair para de ler também
+rotas.length = 0;
+await tts.cmdTts(msgNaCall, ["sair"], ctxE);
+ok(cfgZero.tts.canalTexto === null, "★ `&tts sair` também PARA de ler (ninguém quer ler para uma call vazia)");
+rotas.length = 0;
+await tts.aoMensagem({ channelId: CALL, authorId: "U2", content: "ainda tem alguem?", author: { username: "Alguem" } }, ctxE);
+ok(rotas.length === 0, "  → e nada mais é enviado ao serviço");
+
+// Fora de uma call, mas o servidor só tem uma: entra nela sem perguntar.
+respE.length = 0; rotas.length = 0;
+const canalTexto = { id: "01JTXT0000000000000000AAAA", name: "geral", type: "TextChannel", sendMessage: async () => ({ id: "m" }) };
+const msgNoTexto = { channelId: canalTexto.id, authorId: "U1", channel: canalTexto, author: { username: "G" } };
+const ctxT = { ...ctxE, config: { language: "pt", tts: { ativo: false, canalVoz: null, canalTexto: null, filtro: true, cooldown: 0 } },
+  getServer: async () => ({ id: "S1", channels: [canalCall, canalTexto] }) };
+await tts.cmdTts(msgNoTexto, ["entrar"], ctxT);
+ok(rotas.some((r) => r.url.endsWith("/entrar")), "com uma call só no servidor, entra nela mesmo o comando vindo de outro canal");
+ok(ctxT.config.tts.canalVoz === CALL, "  → escolheu a única call que existe");
+ok(ctxT.config.tts.canalTexto === canalTexto.id, "  → e lê o canal onde o comando foi dado");
+
+// Com mais de uma call, pergunta em vez de chutar.
+respE.length = 0; rotas.length = 0;
+const call2 = { id: "01JCALL2000000000000000AA", name: "Call 2", type: "VoiceChannel", sendMessage: async () => ({ id: "m" }) };
+const ctxD = { ...ctxE, config: { language: "pt", tts: { ativo: false, canalVoz: null, canalTexto: null, filtro: true, cooldown: 0 } },
+  getServer: async () => ({ id: "S1", channels: [canalCall, call2, canalTexto] }) };
+await tts.cmdTts(msgNoTexto, ["entrar"], ctxD);
+ok(String(respE.at(-1)?.title).includes("Em qual call"), "★ com duas calls, pergunta qual — em vez de chutar uma");
+ok(rotas.length === 0, "  → e não entra em nenhuma enquanto não souber");
+ok(String(respE.at(-1)?.description).includes(CALL) && String(respE.at(-1)?.description).includes(call2.id),
+  "  → listando as duas opções");
+
 console.log(`\nTTS: ${pass} ok, ${fail} falha(s)`);
 process.exit(fail ? 1 : 0);

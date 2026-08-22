@@ -89,6 +89,48 @@ function quaseSubcomando(args) {
   return null;
 }
 
+// ──────────────────────────────────────────────────────────
+//  Em qual call eu entro?
+//
+//  No Stoat um canal de "Call" tem voz E chat no mesmo canal — então, na
+//  esmagadora maioria das vezes, a resposta é "a call onde a pessoa acabou
+//  de digitar o comando". Exigir que alguém configurasse isso antes era
+//  pedir para declarar o óbvio.
+//
+//  Ordem: o canal atual, se for de voz → o que já estiver configurado →
+//  o único canal de voz do servidor, se houver só um. Nada disso valendo,
+//  quem chama mostra as opções em vez de adivinhar.
+// ──────────────────────────────────────────────────────────
+function pareceCanalDeVoz(canal) {
+  if (!canal) return false;
+  const t = String(canal.type ?? canal.channel_type ?? "");
+  if (/voice/i.test(t)) return true;
+  // Algumas versões da lib não expõem o tipo, mas expõem o estado da call.
+  if (canal.voice || canal.activeCall || typeof canal.joinCall === "function") return true;
+  return false;
+}
+
+function canaisDeVozDo(server, client) {
+  const lista = Array.isArray(server?.channels) ? server.channels
+    : (server?.channels && typeof server.channels.values === "function") ? [...server.channels.values()]
+    : [];
+  const resolvidos = lista.map((c) => (typeof c === "string" ? client?.channels?.get?.(c) : c)).filter(Boolean);
+  return resolvidos.filter(pareceCanalDeVoz);
+}
+
+function descobrirCanalDeVoz(message, server, ctx, config) {
+  const atual = message.channel ?? ctx.client?.channels?.get?.(message.channelId);
+  if (pareceCanalDeVoz(atual)) {
+    return { id: message.channelId, fonte: "aqui" };
+  }
+  if (config?.canalVoz) return { id: config.canalVoz, fonte: "configurado" };
+  const vozes = canaisDeVozDo(server, ctx.client);
+  if (vozes.length === 1) {
+    return { id: vozes[0].id ?? vozes[0]._id, fonte: "unico" };
+  }
+  return { id: null, opcoes: vozes.slice(0, 10) };
+}
+
 export function servidorPermitido(serverId) {
   return !!serverId && SERVIDORES.includes(serverId);
 }
@@ -579,8 +621,8 @@ export async function cmdTts(message, args, ctx) {
       { title: "❌ Unknown option", description: `\`${PREFIXO}tts filtro [status|on|off|porminuto <n>|teste <text>]\``, colour: COR.erro }));
   }
 
-  if (["entrar", "join", "sair", "leave"].includes(sub)) {
-    const entrando = ["entrar", "join"].includes(sub);
+  if (["entrar", "join", "sair", "leave", "ler", "comecar", "começar", "start", "stop"].includes(sub)) {
+    const entrando = ["entrar", "join", "ler", "comecar", "começar", "start"].includes(sub);
     const chaveAcao = `${serverId}:${message.authorId}`;
     const faltam = (c.cooldown ?? COOLDOWN_MS) - (Date.now() - (ultimaFala.get(chaveAcao) ?? 0));
     if (faltam > 0 && !ehStaff) {
@@ -591,33 +633,50 @@ export async function cmdTts(message, args, ctx) {
     ultimaFala.set(chaveAcao, Date.now());
 
     if (entrando) {
-      if (!c.canalVoz) {
-        return sendEmbed(message.channel, tr(ctx,
-          { title: "❌ Falta configurar o canal",
-            description: `Ninguém definiu em qual call a Judy fala.\n\nQuem tem **ManageMessages** resolve com \`${PREFIXO}tts canal aqui\` dentro da call.`,
-            colour: COR.erro },
-          { title: "❌ No channel configured",
-            description: `Nobody set which call Judy speaks in.\n\nAnyone with **ManageMessages** can fix it with \`${PREFIXO}tts canal here\` inside the call.`,
-            colour: COR.erro }));
+      // ── Um comando faz tudo ──
+      //
+      // Antes eram quatro, na ordem certa: `tts on`, `tts canal aqui`,
+      // `tts transmitir aqui`, `tts entrar`. Errar a ordem dava mensagens de
+      // erro que falavam de OUTRO comando, e ninguém que só queria a Judy
+      // lendo a call tinha por que aprender essa sequência. Agora `entrar`
+      // descobre a call, liga o sistema, liga a leitura e entra.
+      const server = await getServer(message).catch(() => null);
+      const achado = descobrirCanalDeVoz(message, server, ctx, c);
+
+      if (!achado.id) {
+        const opcoes = achado.opcoes?.length
+          ? "\n\n" + achado.opcoes.map((v) => `• <#${v.id ?? v._id}>`).join("\n")
+          : "";
+        return sendEmbed(message.channel, tr(ctx, {
+          title: "❓ Em qual call?",
+          description: `Digite \`${PREFIXO}tts entrar\` **dentro da call** e eu entro nela.${
+            opcoes ? `\n\nAs calls que encontrei:${opcoes}` : ""}`,
+          colour: COR.aviso,
+        }, {
+          title: "❓ Which call?",
+          description: `Type \`${PREFIXO}tts entrar\` **inside the call** and I'll join it.${
+            opcoes ? `\n\nThe calls I found:${opcoes}` : ""}`,
+          colour: COR.aviso,
+        }));
       }
-      if (!c.ativo) {
-        return sendEmbed(message.channel, tr(ctx,
-          { title: "🔴 A voz está desligada",
-            description: `Peça a alguém da equipe para religar com \`${PREFIXO}tts on\`.`, colour: COR.aviso },
-          { title: "🔴 Voice is off",
-            description: `Ask a staff member to turn it back on with \`${PREFIXO}tts on\`.`, colour: COR.aviso }));
+
+      // Configura sozinho o que estiver faltando, e lembra o que mudou para
+      // contar no fim — quem quiser aprender os comandos vê quais foram.
+      const mudou = [];
+      if (!c.ativo) { c.ativo = true; mudou.push(`${PREFIXO}tts on`); }
+      if (c.canalVoz !== achado.id) { c.canalVoz = achado.id; mudou.push(`${PREFIXO}tts canal aqui`); }
+      // A leitura fica no canal onde o comando foi dado. Num canal de call do
+      // Stoat esse é o próprio chat da call, que é exatamente o que se espera.
+      if (c.canalTexto !== message.channelId) {
+        c.canalTexto = message.channelId;
+        mudou.push(`${PREFIXO}tts transmitir aqui`);
       }
-      // Quem chamou o bot de volta não herda o silêncio da bagunça anterior.
+      if (mudou.length) salvarConfig?.();
+
       filtro.limpar(c.canalTexto ?? null);
       try {
         await chamar("/entrar", { canalVoz: c.canalVoz });
-        return sendEmbed(message.channel, tr(ctx,
-          { title: "✅ Entrei na call", description: `Estou em <#${c.canalVoz}>.\n\nManda o que eu falo: \`${PREFIXO}tts oi pessoal\``, colour: COR.sucesso },
-          { title: "✅ Joined the call", description: `I'm in <#${c.canalVoz}>.\n\nTell me what to say: \`${PREFIXO}tts hello\``, colour: COR.sucesso }));
       } catch (e) {
-        // Tira crases da mensagem do serviço: ela entra DENTRO de um trecho
-        // em crase, e uma crase no meio fecha o trecho cedo — foi assim que
-        // o erro apareceu no chat com uma crase solta no fim.
         const motivo = String(e.message ?? e).replace(/`/g, "");
         return sendEmbed(message.channel, {
           title: lang === "en" ? "❌ Couldn't join" : "❌ Não consegui entrar",
@@ -626,375 +685,63 @@ export async function cmdTts(message, args, ctx) {
             : `Descubra onde trava: \`${PREFIXO}tts diagnostico\``}`,
           colour: COR.erro });
       }
-    }
 
-    try { await chamar("/sair", { canalVoz: c.canalVoz }); } catch {}
-    filtro.limpar(c.canalTexto ?? null);
-    return sendEmbed(message.channel, tr(ctx,
-      { title: "✅ Saí da call",
-        description: `Até a próxima.\n\n_A transmissão não me traz de volta sozinha — chame com \`${PREFIXO}tts entrar\`._`,
-        colour: COR.sucesso },
-      { title: "✅ Left the call",
-        description: `See you.\n\n_The broadcast won't drag me back on its own — call me with \`${PREFIXO}tts entrar\`._`,
-        colour: COR.sucesso }));
-  }
-
-
-  // ── configuração (staff) ──
-  // ── &tts dicionario ── (consulta é pública, edição é staff)
-  if (["dicionario", "dicionário", "dictionary", "dic", "abreviacoes", "abreviações"].includes(sub)) {
-    const acao = (args[1] ?? "").toLowerCase();
-    const arg = args.slice(2).join(" ").trim();
-
-    if (!acao || ["lista", "list", "ver"].includes(acao)) {
-      const meus = Object.entries(c.dicionario ?? {});
       return sendEmbed(message.channel, tr(ctx, {
-        title: "📖 Dicionário da voz",
+        title: "🔊 Entrei e já estou lendo",
         description: [
-          `**Embutido:** ${c.expandir === false ? "🔴 desligado" : `🟢 ${Object.keys(abrev.PADRAO).length} abreviações comuns`}`,
-          `_(vc → você, n → não, pq → porque, kkkk → risada…)_`,
+          `Estou em <#${c.canalVoz}> e **falo tudo que for escrito** em <#${c.canalTexto}>.`,
           "",
-          `**Deste servidor:** ${meus.length ? meus.length : "_nenhuma_"}`,
-          ...(meus.length ? [meus.map(([k, v]) => `\`${k}\` → ${v}`).join("\n")] : []),
+          "⚠️ Vale para **todo mundo** que escrever aqui.",
           "",
-          `\`${PREFIXO}tts dicionario add <abrev> <texto>\``,
-          `\`${PREFIXO}tts dicionario remove <abrev>\` · \`${PREFIXO}tts dicionario padrao on|off\``,
-        ].join("\n"),
-        colour: COR.info,
+          `\`${PREFIXO}tts sair\` — saio e paro de ler`,
+          `\`${PREFIXO}tts filtro\` — o que eu ignoro (repetição, parede de texto…)`,
+          mudou.length
+            ? `\n_Configurei sozinha o equivalente a: ${mudou.map((m) => `\`${m}\``).join(" · ")}_`
+            : "",
+        ].filter(Boolean).join("\n"),
+        colour: COR.sucesso,
       }, {
-        title: "📖 Voice dictionary",
+        title: "🔊 Joined and already reading",
         description: [
-          `**Built-in:** ${c.expandir === false ? "🔴 off" : `🟢 ${Object.keys(abrev.PADRAO).length} common abbreviations`}`,
-          `_(vc → você, n → não, pq → porque, kkkk → laughter…)_`,
+          `I'm in <#${c.canalVoz}> and I **speak everything written** in <#${c.canalTexto}>.`,
           "",
-          `**This server's:** ${meus.length ? meus.length : "_none_"}`,
-          ...(meus.length ? [meus.map(([k, v]) => `\`${k}\` → ${v}`).join("\n")] : []),
+          "⚠️ That applies to **everyone** writing here.",
           "",
-          `\`${PREFIXO}tts dicionario add <abbrev> <text>\``,
-          `\`${PREFIXO}tts dicionario remove <abbrev>\` · \`${PREFIXO}tts dicionario padrao on|off\``,
-        ].join("\n"),
-        colour: COR.info,
+          `\`${PREFIXO}tts sair\` — I leave and stop reading`,
+          `\`${PREFIXO}tts filtro\` — what I skip (repetition, walls of text…)`,
+          mudou.length
+            ? `\n_I set up the equivalent of: ${mudou.map((m) => `\`${m}\``).join(" · ")}_`
+            : "",
+        ].filter(Boolean).join("\n"),
+        colour: COR.sucesso,
       }));
     }
 
-    const server0 = await getServer(message).catch(() => null);
-    if (!membroTemPermissao(message, server0, "ManageMessages")) {
-      return sendEmbed(message.channel, tr(ctx,
-        { title: "🚫 Permissão insuficiente",
-          description: "Você precisa de **ManageMessages** para mexer no dicionário.", colour: COR.erro },
-        { title: "🚫 Missing permission",
-          description: "You need **ManageMessages** to change the dictionary.", colour: COR.erro }));
-    }
-
-    if (["add", "adicionar", "set"].includes(acao)) {
-      const partes = arg.split(/\s+/);
-      const chave = (partes.shift() ?? "").toLowerCase();
-      const valor = partes.join(" ").trim();
-      if (!chave || !valor) {
-        return sendEmbed(message.channel, tr(ctx,
-          { title: "❌ Faltou algo",
-            description: `Uso: \`${PREFIXO}tts dicionario add <abrev> <texto>\`\nEx.: \`${PREFIXO}tts dicionario add rt retuíte\``, colour: COR.erro },
-          { title: "❌ Missing something",
-            description: `Usage: \`${PREFIXO}tts dicionario add <abbrev> <text>\``, colour: COR.erro }));
-      }
-      if (chave.length > 20 || valor.length > 80) {
-        return sendEmbed(message.channel, tr(ctx,
-          { title: "❌ Longo demais", description: "Abreviação até 20 e expansão até 80 caracteres.", colour: COR.erro },
-          { title: "❌ Too long", description: "Abbreviation up to 20 and expansion up to 80 characters.", colour: COR.erro }));
-      }
-      if (Object.keys(c.dicionario).length >= 200) {
-        return sendEmbed(message.channel, tr(ctx,
-          { title: "❌ Dicionário cheio", description: "O limite é de 200 entradas por servidor.", colour: COR.erro },
-          { title: "❌ Dictionary full", description: "The limit is 200 entries per server.", colour: COR.erro }));
-      }
-      c.dicionario[chave] = valor; salvarConfig?.();
-      return sendEmbed(message.channel, tr(ctx,
-        { title: "📖 Adicionado",
-          description: `\`${chave}\` → **${valor}**\n\n_Exemplo:_ "${abrev.expandir(`teste ${chave} aqui`, c.dicionario)}"`,
-          colour: COR.sucesso },
-        { title: "📖 Added",
-          description: `\`${chave}\` → **${valor}**`, colour: COR.sucesso }));
-    }
-
-    if (["remove", "remover", "rem", "del"].includes(acao)) {
-      const chave = arg.toLowerCase();
-      const tinha = chave in (c.dicionario ?? {});
-      delete c.dicionario[chave]; salvarConfig?.();
-      return sendEmbed(message.channel, tr(ctx,
-        { title: tinha ? "📖 Removido" : "📖 Não estava no dicionário",
-          description: tinha
-            ? `\`${chave}\` não é mais expandido.`
-            : `\`${chave}\` não constava. _(As abreviações embutidas não se removem uma a uma — use \`padrao off\`.)_`,
-          colour: tinha ? COR.sucesso : COR.aviso },
-        { title: tinha ? "📖 Removed" : "📖 Not in the dictionary",
-          description: tinha ? `\`${chave}\` is no longer expanded.` : `\`${chave}\` wasn't there.`,
-          colour: tinha ? COR.sucesso : COR.aviso }));
-    }
-
-    if (["padrao", "padrão", "default", "embutido"].includes(acao)) {
-      c.expandir = !["off", "nao", "não", "no"].includes(arg.toLowerCase());
-      salvarConfig?.();
-      return sendEmbed(message.channel, tr(ctx,
-        { title: c.expandir ? "📖 Dicionário embutido ligado" : "📖 Dicionário embutido desligado",
-          description: c.expandir
-            ? "As abreviações comuns voltam a ser expandidas."
-            : "Só o dicionário deste servidor vale agora — a escrita de chat será lida como está.",
-          colour: COR.sucesso },
-        { title: c.expandir ? "📖 Built-in dictionary on" : "📖 Built-in dictionary off",
-          description: c.expandir ? "Common abbreviations are expanded again." : "Only this server's dictionary applies now.",
-          colour: COR.sucesso }));
-    }
-
-    if (["limpar", "clear"].includes(acao)) {
-      c.dicionario = {}; salvarConfig?.();
-      return sendEmbed(message.channel, tr(ctx,
-        { title: "📖 Dicionário do servidor esvaziado", description: "As abreviações embutidas continuam valendo.", colour: COR.sucesso },
-        { title: "📖 Server dictionary cleared", description: "The built-in abbreviations still apply.", colour: COR.sucesso }));
-    }
-  }
-
-  if (["canal", "channel", "transmitir", "broadcast",
-       "on", "off", "voz", "voice", "cooldown", "espera", "nomes", "names",
-       "efeito", "effect", "timbre", "tom", "pitch", "altura"].includes(sub)) {
-    if (!ehStaff) {
-      return sendEmbed(message.channel, tr(ctx,
-        { title: "🚫 Permissão insuficiente",
-          description: "Você precisa de **ManageMessages** para configurar a voz.", colour: COR.erro },
-        { title: "🚫 Missing permission",
-          description: "You need **ManageMessages** to configure the voice.", colour: COR.erro }));
-    }
-
-    if (["canal", "channel"].includes(sub)) {
-      // Canais de voz do Stoat têm chat próprio, então `aqui` é o atalho
-      // natural: você digita dentro da call que quer configurar. Sem alvo
-      // nenhum, assume `aqui` — é o que a pessoa quis dizer.
-      const alvo = resto || "aqui";
-      const id = resolverCanal(alvo, { message, server });
-      if (!id) {
-        return sendEmbed(message.channel, tr(ctx,
-          { title: "❌ Canal inválido",
-            description: [
-              `Não identifiquei um canal em \`${alvo}\`.`,
-              "",
-              `\`${PREFIXO}tts canal aqui\` — usa **este** canal (digite dentro da call)`,
-              `\`${PREFIXO}tts canal <#canal>\` — por menção, link, ID ou nome`,
-              "",
-              "_Precisa ser um canal de **voz**._",
-            ].join("\n"), colour: COR.erro },
-          { title: "❌ Invalid channel",
-            description: [
-              `I couldn't identify a channel in \`${alvo}\`.`,
-              "",
-              `\`${PREFIXO}tts canal here\` — uses **this** channel (type it inside the call)`,
-              `\`${PREFIXO}tts canal <#channel>\` — by mention, link, ID or name`,
-              "",
-              "_It must be a **voice** channel._",
-            ].join("\n"), colour: COR.erro }));
-      }
-      c.canalVoz = id; c.ativo = true; salvarConfig?.();
-      return sendEmbed(message.channel, tr(ctx,
-        { title: "✅ Canal de voz definido",
-          description: `A Judy vai falar em <#${id}>.\n\nTeste: \`${PREFIXO}tts olá pessoal\``, colour: COR.sucesso },
-        { title: "✅ Voice channel set",
-          description: `Judy will speak in <#${id}>.\n\nTest: \`${PREFIXO}tts hello everyone\``, colour: COR.sucesso }));
-    }
-
-    if (["transmitir", "broadcast"].includes(sub)) {
-      if (["off", "limpar", "clear", "nao", "não"].includes(resto.toLowerCase())) {
-        c.canalTexto = null; salvarConfig?.();
-        return sendEmbed(message.channel, tr(ctx,
-          { title: "✅ Transmissão desligada",
-            description: `Só o \`${PREFIXO}tts <texto>\` fala agora.`, colour: COR.sucesso },
-          { title: "✅ Broadcast off",
-            description: `Only \`${PREFIXO}tts <text>\` speaks now.`, colour: COR.sucesso }));
-      }
-      const id = resolverCanal(resto || "aqui", { message, server });
-      if (!id) {
-        return sendEmbed(message.channel, tr(ctx,
-          { title: "❌ Canal inválido", description: `Uso: \`${PREFIXO}tts transmitir <#canal-de-texto>\``, colour: COR.erro },
-          { title: "❌ Invalid channel", description: `Usage: \`${PREFIXO}tts transmitir <#text-channel>\``, colour: COR.erro }));
-      }
-      c.canalTexto = id; salvarConfig?.();
-      return sendEmbed(message.channel, tr(ctx,
-        { title: "✅ Transmissão ligada",
-          description: `Tudo escrito em <#${id}> será **falado na call**.\n\n⚠️ Vale para todo mundo que escrever lá — desligue com \`${PREFIXO}tts transmitir off\`.`,
-          colour: COR.aviso },
-        { title: "✅ Broadcast on",
-          description: `Everything written in <#${id}> will be **spoken in the call**.\n\n⚠️ That applies to everyone writing there — turn it off with \`${PREFIXO}tts transmitir off\`.`,
-          colour: COR.aviso }));
-    }
-
-    if (sub === "on" || sub === "off") {
-      c.ativo = sub === "on"; salvarConfig?.();
-      if (!c.ativo) { try { await chamar("/sair", { canalVoz: c.canalVoz }); } catch {} }
-      return sendEmbed(message.channel, tr(ctx,
-        { title: c.ativo ? "✅ Voz ligada" : "🔴 Voz desligada",
-          description: c.ativo ? "A Judy volta a falar." : "Nada será falado até religar.", colour: COR.mod },
-        { title: c.ativo ? "✅ Voice on" : "🔴 Voice off",
-          description: c.ativo ? "Judy speaks again." : "Nothing will be spoken until re-enabled.", colour: COR.mod }));
-    }
-
-    if (["tom", "pitch", "altura"].includes(sub)) {
-      if (!resto) {
-        return sendEmbed(message.channel, tr(ctx, {
-          title: "🎚️ Tom da voz",
-          description: [
-            `**Agora:** ${c.tom ?? 1}${c.tom && c.tom !== 1 ? "" : " _(original)_"}`,
-            "",
-            `\`${PREFIXO}tts tom 1.10\` — mais agudo · \`${PREFIXO}tts tom 0.92\` — mais grave`,
-            `\`${PREFIXO}tts tom 1\` — volta ao original`,
-            "",
-            "_Sobe **tom e formantes juntos**: uma voz masculina vira feminina de verdade, não 'homem falando fino'._",
-            "_Se a voz base já é feminina (como a `dii`), mexa pouco — acima de 1.05 começa a soar infantil._",
-          ].join("\n"),
-          colour: COR.info,
-        }, {
-          title: "🎚️ Voice pitch",
-          description: [
-            `**Now:** ${c.tom ?? 1}${c.tom && c.tom !== 1 ? "" : " _(original)_"}`,
-            "",
-            `\`${PREFIXO}tts tom 1.10\` — higher · \`${PREFIXO}tts tom 0.92\` — lower`,
-            `\`${PREFIXO}tts tom 1\` — back to original`,
-            "",
-            "_Shifts **pitch and formants together**: a male voice becomes properly feminine, not a sped-up man._",
-            "_If the base voice is already female (like `dii`), go easy — above 1.05 starts sounding childlike._",
-          ].join("\n"),
-          colour: COR.info,
-        }));
-      }
-      const n = Number(resto.replace(",", "."));
-      if (!Number.isFinite(n) || n < 0.5 || n > 2) {
-        return sendEmbed(message.channel, tr(ctx,
-          { title: "❌ Valor inválido", description: `Entre 0.5 e 2.0. Ex.: \`${PREFIXO}tts tom 1.08\``, colour: COR.erro },
-          { title: "❌ Invalid value", description: `Between 0.5 and 2.0. E.g.: \`${PREFIXO}tts tom 1.08\``, colour: COR.erro }));
-      }
-      c.tom = n === 1 ? null : n; salvarConfig?.();
-      return sendEmbed(message.channel, tr(ctx,
-        { title: "🎚️ Tom ajustado",
-          description: `${n === 1 ? "Voltou ao tom original." : `Tom em **${n}**.`}\n\nOuça: \`${PREFIXO}tts teste de voz\``,
-          colour: COR.sucesso },
-        { title: "🎚️ Pitch adjusted",
-          description: `${n === 1 ? "Back to the original pitch." : `Pitch at **${n}**.`}`,
-          colour: COR.sucesso }));
-    }
-
-    if (["efeito", "effect", "timbre"].includes(sub)) {
-      let saude = null;
-      try { saude = await chamar("/saude", null, "GET"); } catch {}
-      const disp = saude?.efeitos ?? ["nenhum", "glados", "robo", "radio", "grave", "agudo", "sussurro"];
-      const alvo = resto.toLowerCase();
-
-      if (!alvo) {
-        return sendEmbed(message.channel, {
-          title: lang === "en" ? "🎛️ Voice effects" : "🎛️ Efeitos de voz",
-          description: [
-            ...disp.map((e) => `• \`${e}\`${e === (c.efeito ?? "nenhum") ? " ←" : ""}`),
-            "",
-            "",
-            lang === "en"
-              ? `_These change the **character** only — pitch is a separate knob: \`${PREFIXO}tts tom <n>\`. That way an effect sounds the same over any base voice._`
-              : `_Estes mudam só o **caráter** — a altura é um controle à parte: \`${PREFIXO}tts tom <n>\`. Assim um efeito soa igual sobre qualquer voz base._`,
-            "",
-            lang === "en"
-              ? "_There's no GLaDOS voice trained in Portuguese — the ready-made ones are English models from Portal. `glados` here is the **processing** (narrow band, metallic ring, chamber, slight pitch), applied over the voice you already use._"
-              : "_Não existe voz GLaDOS treinada em português — as prontas são modelos ingleses do Portal. O `glados` aqui é o **processamento** (banda estreita, ressonância metálica, câmara e leve mudança de tom), aplicado sobre a voz que você já usa._",
-          ].join("\n"),
-          colour: COR.info });
-      }
-
-      // O serviço de voz é atualizado à parte (roda no Gentoo, fora do
-      // Docker). Se ele não conhece efeitos que este código já conhece, está
-      // com versão antiga — e aceitar o pedido faria a fala sair SEM efeito,
-      // silenciosamente. Melhor dizer o que houve e como resolver.
-      if (saude && Number(saude.versao ?? 0) < VOZ_API_ESPERADA) {
-        return sendEmbed(message.channel, tr(ctx,
-          { title: "⚠️ Serviço de voz desatualizado",
-            description: [
-              `O bot espera a versão **${VOZ_API_ESPERADA}** do serviço de voz, mas o \`judy-voz\` responde **${saude.versao ?? "1"}** — a fala sairia sem efeito.`,
-              "",
-              "No Gentoo:",
-              "```sudo rc-service judy-voz restart```",
-              `Depois: \`${PREFIXO}tts efeito\` para ver a lista completa.`,
-            ].join("\n"), colour: COR.aviso },
-          { title: "⚠️ Voice service is outdated",
-            description: [
-              `The bot expects voice service version **${VOZ_API_ESPERADA}**, but \`judy-voz\` reports **${saude.versao ?? "1"}** — speech would come out with no effect.`,
-              "",
-              "On the Gentoo box:",
-              "```sudo rc-service judy-voz restart```",
-            ].join("\n"), colour: COR.aviso }));
-      }
-
-      if (!disp.includes(alvo)) {
-        return sendEmbed(message.channel, {
-          title: lang === "en" ? "❌ Unknown effect" : "❌ Efeito desconhecido",
-          description: `\`${alvo}\`\n\n${disp.map((e) => `\`${e}\``).join(", ")}`, colour: COR.erro });
-      }
-      c.efeito = alvo === "nenhum" ? null : alvo; salvarConfig?.();
-      return sendEmbed(message.channel, tr(ctx,
-        { title: "🎛️ Efeito aplicado",
-          description: `Agora falo com \`${alvo}\`.\n\nOuça: \`${PREFIXO}tts teste de voz\``, colour: COR.sucesso },
-        { title: "🎛️ Effect applied",
-          description: `Now speaking with \`${alvo}\`.\n\nHear it: \`${PREFIXO}tts voice test\``, colour: COR.sucesso }));
-    }
-
-    if (["cooldown", "espera"].includes(sub)) {
-      const seg = Number(resto.replace(",", "."));
-      if (!Number.isFinite(seg) || seg < 0 || seg > 300) {
-        return sendEmbed(message.channel, tr(ctx,
-          { title: "❌ Valor inválido",
-            description: `Uso: \`${PREFIXO}tts cooldown <segundos>\` (0 a 300)\n_0 desliga o freio — cuidado em canal movimentado._`, colour: COR.erro },
-          { title: "❌ Invalid value",
-            description: `Usage: \`${PREFIXO}tts cooldown <seconds>\` (0 to 300)\n_0 removes the brake — careful on a busy channel._`, colour: COR.erro }));
-      }
-      c.cooldown = Math.round(seg * 1000); salvarConfig?.();
-      return sendEmbed(message.channel, tr(ctx,
-        { title: "✅ Freio ajustado",
-          description: seg === 0
-            ? "Sem espera entre falas da mesma pessoa.\n\n⚠️ Num canal movimentado isso vira uma fila enorme de fala."
-            : `Cada pessoa espera **${seg}s** entre uma fala e outra.`,
-          colour: seg === 0 ? COR.aviso : COR.sucesso },
-        { title: "✅ Brake adjusted",
-          description: seg === 0
-            ? "No wait between the same person's utterances.\n\n⚠️ On a busy channel this builds a huge speech queue."
-            : `Each person waits **${seg}s** between utterances.`,
-          colour: seg === 0 ? COR.aviso : COR.sucesso }));
-    }
-
-    if (["nomes", "names"].includes(sub)) {
-      const ligar = !["off", "nao", "não", "no"].includes(resto.toLowerCase());
-      c.anunciarNome = ligar; salvarConfig?.();
-      return sendEmbed(message.channel, tr(ctx,
-        { title: ligar ? "✅ Anunciando quem falou" : "✅ Só o texto",
-          description: ligar ? '_"Fulano disse: bom dia"_' : '_"bom dia"_',
-          colour: COR.sucesso },
-        { title: ligar ? "✅ Announcing who spoke" : "✅ Text only",
-          description: ligar ? '_"Someone said: good morning"_' : '_"good morning"_',
-          colour: COR.sucesso }));
-    }
-
-    if (["voz", "voice"].includes(sub)) {
-      let saude = null;
-      try { saude = await chamar("/saude", null, "GET"); } catch {}
-      const vozes = saude?.piper?.vozes ?? [];
-      if (!resto) {
-        return sendEmbed(message.channel, {
-          title: lang === "en" ? "🔊 Available voices" : "🔊 Vozes disponíveis",
-          description: vozes.length
-            ? vozes.map((v) => `• \`${v}\`${v === (c.voz ?? saude?.piper?.vozAtual) ? " ←" : ""}`).join("\n")
-            : (lang === "en" ? "_none installed_" : "_nenhuma instalada_"),
-          colour: COR.info });
-      }
-      if (vozes.length && !vozes.includes(resto)) {
-        return sendEmbed(message.channel, {
-          title: lang === "en" ? "❌ Unknown voice" : "❌ Voz desconhecida",
-          description: `\`${resto}\`\n\n${vozes.map((v) => `\`${v}\``).join(", ")}`, colour: COR.erro });
-      }
-      c.voz = resto; salvarConfig?.();
-      return sendEmbed(message.channel, tr(ctx,
-        { title: "✅ Voz alterada", description: `Agora falo com \`${resto}\`.`, colour: COR.sucesso },
-        { title: "✅ Voice changed", description: `Now speaking with \`${resto}\`.`, colour: COR.sucesso }));
-    }
+    // ── Sair: para de ler também ──
+    // Sair da call e continuar "lendo" para ninguém não é um estado que alguém
+    // queira. Quem sai, sai inteiro.
+    try { await chamar("/sair", { canalVoz: c.canalVoz }); } catch {}
+    filtro.limpar(c.canalTexto ?? null);
+    const lia = !!c.canalTexto;
+    c.canalTexto = null;
+    salvarConfig?.();
+    return sendEmbed(message.channel, tr(ctx, {
+      title: "👋 Saí da call",
+      description: [
+        lia ? "Parei de ler as mensagens também." : "Até a próxima.",
+        "",
+        `Para voltar: \`${PREFIXO}tts entrar\` dentro da call.`,
+      ].join("\n"),
+      colour: COR.sucesso,
+    }, {
+      title: "👋 Left the call",
+      description: [
+        lia ? "I stopped reading the messages as well." : "See you.",
+        "",
+        `To come back: \`${PREFIXO}tts entrar\` inside the call.`,
+      ].join("\n"),
+      colour: COR.sucesso,
+    }));
   }
 
   // ── &tts <texto> → falar ──
@@ -1023,41 +770,52 @@ export async function cmdTts(message, args, ctx) {
     return sendEmbed(message.channel, tr(ctx, {
       title: "🔊 Voz da Judy",
       description: [
-        `\`${PREFIXO}tts <texto>\` — fala na call`,
-        `\`${PREFIXO}tts entrar\` · \`${PREFIXO}tts sair\` — chama ou dispensa a Judy`,
-        `\`${PREFIXO}tts estado\` — diagnóstico`,
-        "_Estes valem para **todo mundo**._",
+        `**\`${PREFIXO}tts entrar\`** — dentro da call. Eu entro e passo a **falar tudo que for escrito ali**.`,
+        `**\`${PREFIXO}tts sair\`** — saio e paro de ler.`,
         "",
-        `**Configuração** _(ManageMessages)_`,
-        `\`${PREFIXO}tts canal aqui\` — define a call em que você está`
-        + `\n\`${PREFIXO}tts transmitir aqui\` — **tudo** que for escrito aqui vira fala`
-        + `\n\`${PREFIXO}tts canal <#voz>\` · \`${PREFIXO}tts voz\` · \`${PREFIXO}tts efeito\``
-        + `\n\`${PREFIXO}tts tom <n>\` · \`${PREFIXO}tts cooldown <s>\` · \`${PREFIXO}tts nomes on|off\` · \`${PREFIXO}tts dicionario\``,
-        `\`${PREFIXO}tts entrar\` · \`${PREFIXO}tts sair\` · \`${PREFIXO}tts on|off\``,
-        `\`${PREFIXO}tts voz [nome]\` — escolhe a voz`,
+        "É só isso para o uso normal. O resto é ajuste fino:",
+        "",
+        `\`${PREFIXO}tts <texto>\` — falo uma frase específica, mesmo fora da leitura`,
+        `\`${PREFIXO}tts voz [nome]\` — troca a voz · \`${PREFIXO}tts efeito <nome>\` · \`${PREFIXO}tts tom <n>\``,
+        `\`${PREFIXO}tts filtro\` — o que eu ignoro (repetição, parede de texto…)`,
+        `\`${PREFIXO}tts estado\` — está tudo de pé? · \`${PREFIXO}tts diagnostico\` — onde travou`,
+        "",
+        `**Ajustes** _(ManageMessages)_`,
+        `\`${PREFIXO}tts transmitir <#canal|off>\` — ler outro canal, ou parar de ler sem sair`,
+        `\`${PREFIXO}tts canal <#voz>\` — fixar a call · \`${PREFIXO}tts nomes on|off\` — anunciar quem falou`,
+        `\`${PREFIXO}tts cooldown <s>\` · \`${PREFIXO}tts dicionario\` · \`${PREFIXO}tts on|off\` · \`${PREFIXO}tts reiniciar\``,
       ].join("\n"), colour: COR.info,
     }, {
       title: "🔊 Judy's voice",
       description: [
-        `\`${PREFIXO}tts <text>\` — speaks in the call`,
-        `\`${PREFIXO}tts entrar\` · \`${PREFIXO}tts sair\` — call or dismiss Judy`,
-        `\`${PREFIXO}tts estado\` — diagnostics`,
-        "_These are open to **everyone**._",
+        `**\`${PREFIXO}tts entrar\`** — inside the call. I join and start **speaking everything written there**.`,
+        `**\`${PREFIXO}tts sair\`** — I leave and stop reading.`,
         "",
-        `**Configuration** _(ManageMessages)_`,
-        `\`${PREFIXO}tts canal here\` — sets the call you are in`
-        + `\n\`${PREFIXO}tts transmitir here\` — **everything** written here becomes speech`
-        + `\n\`${PREFIXO}tts canal <#voice>\` · \`${PREFIXO}tts cooldown <s>\` · \`${PREFIXO}tts nomes on|off\``,
-        `\`${PREFIXO}tts entrar\` · \`${PREFIXO}tts sair\` · \`${PREFIXO}tts on|off\``,
-        `\`${PREFIXO}tts voz [name]\` — pick the voice`,
+        "That's it for normal use. The rest is fine-tuning:",
+        "",
+        `\`${PREFIXO}tts <text>\` — I say one specific line, even outside the reading`,
+        `\`${PREFIXO}tts voz [name]\` — change the voice · \`${PREFIXO}tts efeito <name>\` · \`${PREFIXO}tts tom <n>\``,
+        `\`${PREFIXO}tts filtro\` — what I skip (repetition, walls of text…)`,
+        `\`${PREFIXO}tts estado\` — is everything up? · \`${PREFIXO}tts diagnostico\` — where it jammed`,
+        "",
+        `**Settings** _(ManageMessages)_`,
+        `\`${PREFIXO}tts transmitir <#channel|off>\` — read another channel, or stop reading without leaving`,
+        `\`${PREFIXO}tts canal <#voice>\` — pin the call · \`${PREFIXO}tts nomes on|off\` — announce who spoke`,
+        `\`${PREFIXO}tts cooldown <s>\` · \`${PREFIXO}tts dicionario\` · \`${PREFIXO}tts on|off\` · \`${PREFIXO}tts reiniciar\``,
       ].join("\n"), colour: COR.info,
     }));
   }
 
+  // Falar sem estar em call: em vez de listar comandos de configuração,
+  // aponta o único que a pessoa precisa saber.
   if (!c.ativo || !c.canalVoz) {
     return sendEmbed(message.channel, tr(ctx,
-      { title: "❌ Voz não configurada", description: `Defina o canal: \`${PREFIXO}tts canal <#voz>\``, colour: COR.erro },
-      { title: "❌ Voice not set up", description: `Set the channel: \`${PREFIXO}tts canal <#voice>\``, colour: COR.erro }));
+      { title: "🔇 Não estou em nenhuma call",
+        description: `Entre numa call e mande \`${PREFIXO}tts entrar\` por lá — eu configuro o resto sozinha.`,
+        colour: COR.aviso },
+      { title: "🔇 I'm not in any call",
+        description: `Join a call and send \`${PREFIXO}tts entrar\` there — I'll set up the rest myself.`,
+        colour: COR.aviso }));
   }
 
   // Cooldown: o megafone precisa de freio, mesmo para quem é da casa.

@@ -1102,6 +1102,34 @@ function arvorePT(P) {
 
     // ── &tutorial ────────────────────────────────────────
     tts: {
+      entrar: {
+        titulo: "tts entrar",
+        texto: [
+          "**O caminho curto**",
+          `\`${P}tts entrar\` — dentro da call. Eu entro e passo a falar **tudo que for escrito ali**.`,
+          `\`${P}tts sair\` — saio e paro de ler.`,
+          "",
+          "Só isso. O `entrar` liga o sistema, escolhe a call e liga a leitura —",
+          "antes eram quatro comandos, e na ordem certa: `tts on`, `tts canal aqui`,",
+          "`tts transmitir aqui`, `tts entrar`. Errar a ordem dava um erro que falava",
+          "de outro comando, e ninguém que só queria a Judy lendo a call tinha por que",
+          "aprender essa sequência.",
+          "",
+          "**Como eu descubro a call**",
+          "1. o canal onde você digitou, se for uma call _(o caso normal)_",
+          "2. a que já estiver configurada",
+          "3. a única call do servidor, se houver só uma",
+          "",
+          "Havendo mais de uma e nenhuma pista, eu **pergunto** em vez de chutar.",
+          "",
+          "**Ajustes que continuam existindo**",
+          `\`${P}tts transmitir <#canal>\` — ler OUTRO canal (não o da call)`,
+          `\`${P}tts transmitir off\` — parar de ler sem sair da call`,
+          `\`${P}tts canal <#voz>\` — fixar a call, se você não quiser depender de onde digitou`,
+          "",
+          `_\`${P}tts <texto>\` continua falando uma frase avulsa, mesmo sem leitura ligada._`,
+        ].join("\n"),
+      },
       filtro: {
         titulo: "tts filtro",
         texto: [
@@ -2239,6 +2267,34 @@ function arvoreEN(P) {
     },
 
     tts: {
+      entrar: {
+        titulo: "tts entrar",
+        texto: [
+          "**The short path**",
+          `\`${P}tts entrar\` — inside the call. I join and start speaking **everything written there**.`,
+          `\`${P}tts sair\` — I leave and stop reading.`,
+          "",
+          "That's all. `entrar` turns the system on, picks the call and starts the",
+          "reading — this used to be four commands, in the right order: `tts on`,",
+          "`tts canal aqui`, `tts transmitir aqui`, `tts entrar`. Getting the order",
+          "wrong produced an error about a different command, and nobody who just",
+          "wanted Judy reading the call had any reason to learn that sequence.",
+          "",
+          "**How I find the call**",
+          "1. the channel you typed in, if it's a call _(the normal case)_",
+          "2. whichever one is already configured",
+          "3. the server's only call, if there's just one",
+          "",
+          "With more than one and no clue, I **ask** instead of guessing.",
+          "",
+          "**Settings that still exist**",
+          `\`${P}tts transmitir <#channel>\` — read ANOTHER channel (not the call's)`,
+          `\`${P}tts transmitir off\` — stop reading without leaving the call`,
+          `\`${P}tts canal <#voice>\` — pin the call, if you'd rather not depend on where you typed`,
+          "",
+          `_\`${P}tts <text>\` still speaks a one-off line, even with reading turned off._`,
+        ].join("\n"),
+      },
       filtro: {
         titulo: "tts filtro",
         texto: [

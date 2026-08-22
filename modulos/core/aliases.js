@@ -222,6 +222,7 @@ const SUB = {
     channel: "canal", here: "aqui", broadcast: "transmitir",
     filter: "filtro", sieve: "filtro", restart: "reiniciar", test: "teste",
     diagnose: "diagnostico", diagnostics: "diagnostico", health: "estado",
+    join: "entrar", leave: "sair", read: "ler", start: "entrar", stop: "sair",
     perminute: "porminuto", cap: "porminuto",
     join: "entrar", leave: "sair", voice: "voz", status: "estado",
     names: "nomes", cooldown: "cooldown",

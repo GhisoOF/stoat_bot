@@ -83,6 +83,89 @@ const LEX_GRAVE = [
   /\bfamily\s+(fun|content|vids?|videos?|collection)\b/i,
 ];
 
+// ══════════════════════════════════════════════════════════
+//  Golpe do "trabalho": use a SUA conta, dividimos o lucro
+//
+//  Uma mensagem real que passou batido (nota 3,0): oferta de "colaboração"
+//  em que a vítima entrega a conta do LinkedIn, o golpista usa a identidade
+//  dela para conseguir contratos, e o dinheiro "cai direto na sua conta".
+//  Nenhum léxico antigo pegava: não há link, não há brinde grátis, não há
+//  "ganhe dinheiro fácil" — o texto é comedido, empresarial e comprido.
+//
+//  O que o denuncia não é uma palavra, e sim a ESTRUTURA da proposta. Quatro
+//  peças que, juntas, nenhuma oferta honesta tem:
+//
+//    1. recrutamento  — "procuro colaborador", "sem experiência necessária"
+//    2. conta_alheia  — a conta/identidade tem de ser a SUA (o núcleo)
+//    3. divisao_lucro — "dividimos 50%"
+//    4. mula          — o dinheiro passa por você ("cai na sua conta")
+//    5. pretexto_conta— a explicação de por que não pode ser a conta dele
+//
+//  Nenhuma delas basta sozinha, e é de propósito: "procuro parceiro, a gente
+//  divide 50/50" é uma proposta legítima comum. O que quase nunca aparece
+//  fora de golpe é a exigência da conta DA VÍTIMA — por isso as conjunções
+//  lá embaixo só disparam quando `conta_alheia` está presente.
+// ══════════════════════════════════════════════════════════
+
+// A conta/identidade tem de ser a da vítima
+const LEX_CONTA_ALHEIA = [
+  /\b(usar|utilizar|usando|use|using|through|via)\s+(a\s+|o\s+|sua\s+|seu\s+|your\s+|the\s+)*\b(conta|account|perfil|profile|cadastro|identidade|identity)\b/i,
+  /\b(sua|seu|your)\s+(conta|account|perfil|profile)\s+(do|de|no|na|of|on)?\s*(linkedin|upwork|fiverr|freelancer|paypal|wise|payoneer|binance|revolut|banc\w+|bank)/i,
+  /\b(linkedin|upwork|fiverr|freelancer|payoneer|binance)\s+(account|conta|profile|perfil)\b/i,
+  /\b(empresta\w*|alug\w+|ced[ae]r?|ceder)\s+(a\s+|o\s+|sua\s+|seu\s+)?(conta|perfil|cart[ãa]o|documento|cpf)/i,
+  /\b(em|no)\s+(seu|teu)\s+nome\b/i, /\bin\s+your\s+name\b/i,
+  /\byour\s+(identity|documents?|id|credentials?)\b/i,
+  /\b(seus?|suas?)\s+(documentos?|dados\s+banc\w+)\b/i,
+];
+
+// Divisão de lucro/receita
+const LEX_DIVISAO_LUCRO = [
+  /\b(divid\w+|split|share|sharing|reparti\w+|rachar)\s+(os\s+|o\s+|a\s+|the\s+|resulting\s+)*\b(lucro|ganho|receita|revenue|profit|earnings|income|comiss[ãa]o)/i,
+  /\b(lucro|ganho|receita|revenue|profit|earnings|income)s?\b[^.\n]{0,40}\b(divid|split|shar|50\s*%|meio\s+a\s+meio)/i,
+  /\b(50\/50|60\/40|70\/30|80\/20|40\/60|30\/70)\b/,
+  /\b\d{1,3}\s*%\s*(do|dos|da|de|of|the)?\s*(lucro|ganho|receita|revenue|profit|earnings)/i,
+  /\b(lucro|receita|revenue|profit|earnings)[^.\n]{0,30}\b\d{1,3}\s*%/i,
+  // A parte em que o valor é oferecido sem a palavra "lucro": "te dou 30%",
+  // "you get 40%", "30% pra você" — é como a proposta costuma ser escrita.
+  /\b(te\s+dou|te\s+passo|fic\w+\s+com|voc[êe]\s+ganha|you\s+(get|keep|receive))\s*\d{1,3}\s*%/i,
+  // Sem `\b` no fim: em "você" o último caractere é acentuado, e `\b` exige
+  // um caractere de PALAVRA ao lado — `ê` não é um deles, então a âncora
+  // nunca casaria. Um detalhe assim some no meio de uma lista de regex e
+  // deixa a regra ligada e inútil ao mesmo tempo.
+  /\b\d{1,3}\s*%\s*(pra|para|for)\s+(voc[êe]|you|ti|si)(?![a-z])/i,
+];
+
+// Mula: o dinheiro passa pela conta da vítima
+const LEX_MULA = [
+  /\b(depositad\w+|deposited|transferid\w+|transferred|enviad\w+|sent|pago|paid|cai|cair[áa]?|entra|vai)\b[^.\n]{0,30}\b(na|no|para|pra|em|into|to)\s+(a\s+|sua|seu|your)\s*(conta|account)/i,
+  /\b(recebe?r?|receive)\b[^.\n]{0,30}\b(pagamentos?|payments?|transfer\w+|dep[óo]sitos?)\b[^.\n]{0,25}\b(na\s+sua|em\s+sua|your)\s*(conta|account)/i,
+  /\b(voc[êe]|you)\s+(vai|ir[áa]|will)?\s*(handle|gerenc\w+|administr\w+|cuidar?\w*|receb\w+|manage)\b[^.\n]{0,25}\b(o\s+)?(dinheiro|money|pagamento|payment|funds?)/i,
+  /\b(money|dinheiro)\s*(management|handling|gest[ãa]o)\b/i,
+  /\b(receb\w+\s+e\s+(repass|transfer|envi)\w+|receive\s+and\s+(forward|send|transfer|wire))/i,
+  /\b(retir\w+|saque|withdraw)\b[^.\n]{0,25}\b(e\s+)?(envi|repass|transfer|send)/i,
+  /\b(conta|account)\b[^.\n]{0,20}\b(pra|para|to)\s+(receber|recebimento|receive|collect)\b/i,
+];
+
+// Recrutamento sem barreira de entrada
+const LEX_RECRUTAMENTO = [
+  /\b(no|sem|nenhum\w*)\s+(technical\s+|prior\s+|pr[ée]via\s+)*(skills?|experience|experi[êe]ncia|conhecimento)\b[^.\n]{0,25}\b(required|needed|necess[áa]ri\w+|exigid\w+)?/i,
+  /\b(looking\s+for|procur\w+|busc\w+|preciso\s+de|need)\b[^.\n]{0,25}\b(collaborator|partner|parceir\w+|colaborador\w*|s[óo]ci\w+|representante|agent|freelancer)/i,
+  /\b(vaga|oportunidade|opportunity)\s+(de\s+)?(emprego|trabalho|home\s*office|remote|remoto)/i,
+  /\b(trabalh\w+|work|renda)\s+(de\s+|em\s+|from\s+)?(casa|home|remoto|remote|meio\s+per[íi]odo|part[\s-]?time)\b/i,
+  /\b(collaboration|colabora[çc][ãa]o)\s+(method|m[ée]todo|proposta)\b/i,
+];
+
+// A explicação de por que a conta não pode ser a dele — quase diagnóstica:
+// negócio honesto não precisa justificar por que usa a identidade do outro.
+const LEX_PRETEXTO_CONTA = [
+  /\b(the\s+)?reason\s+for\s+using\s+your\b/i,
+  /\b(motivo|raz[ãa]o)\s+(de|para|por)\s+(usar|utilizar)\s+(a\s+)?sua\b/i,
+  /\b(minha|my)\s+(conta|account|card|cart[ãa]o)\b[^.\n]{0,30}\b(bloquead|restrit|banid|suspens|limited|restricted|blocked|suspended|banned)/i,
+  /\b(n[ãa]o\s+posso\s+usar\s+(a\s+)?minha|can'?t\s+use\s+my\s+own)\b/i,
+  /\b(sal[áa]ri\w+|salaries|salary|pagamentos?|rates?)\b[^.\n]{0,40}\b(sua\s+regi[ãa]o|seu\s+pa[íi]s|your\s+region|your\s+country|higher\s+than)/i,
+  /\b(in|na|no|em)\s+(your|sua|seu)\s+(region|regi[ãa]o|country|pa[íi]s)\b/i,
+];
+
 // Oferta de material (vende/troca/arquivos/provas)
 const LEX_OFERTA = [
   /\b(selling|for\s+sale|buy|trade|trading|vendo|à?\s*venda)\b/i,
@@ -125,6 +208,23 @@ export const PESOS = {
   conj_grave_oferta:   6,  // grave + oferta = anúncio de material → topo
   conj_grave_contexto: 5,  // grave + link/cta/venda = contexto suspeito → alerta
   conj_topico_cta:     2,  // tópico proibido + contato = divulgação
+
+  // Golpe do "trabalho". Os pesos isolados são de propósito baixos: cada peça,
+  // sozinha, aparece em conversa honesta ("procuro parceiro", "dividimos
+  // 50/50", "sua conta do LinkedIn"). É a combinação que não aparece.
+  recrutamento:    1,
+  conta_alheia:    1.5,
+  divisao_lucro:   1.5,
+  mula:            1.5,
+  pretexto_conta:  1.5,
+  conj_emprego_conta: 3,  // recrutamento/lucro + a conta tem de ser a SUA
+  conj_mula_conta:    3,  // a conta é sua E o dinheiro passa por ela
+  // Nem toda redação diz "sua conta" com todas as letras: "usamos a sua e
+  // dividimos", "you receive the payments and keep 20%". Estas duas cobrem o
+  // caso sem depender daquela palavra — pedindo, em troca, uma peça que
+  // conversa honesta raramente tem (a justificativa, ou o dinheiro passando).
+  conj_pretexto_ganho: 3,  // "não posso usar a minha" + divisão/dinheiro
+  conj_mula_ganho:     3,  // o dinheiro passa por você E é dividido
 };
 
 const contar = (txt, lista, cap = 99) => {
@@ -146,6 +246,11 @@ function extrairFeatures(texto, opts = {}) {
   f.oferta  = contar(t, LEX_OFERTA, 3);
   f.cta     = contar(t, LEX_CTA, 3);
   f.urgencia = contar(t, LEX_URGENCIA, 2);
+  f.recrutamento   = contar(t, LEX_RECRUTAMENTO, 2);
+  f.conta_alheia   = contar(t, LEX_CONTA_ALHEIA, 2);
+  f.divisao_lucro  = contar(t, LEX_DIVISAO_LUCRO, 2);
+  f.mula           = contar(t, LEX_MULA, 2);
+  f.pretexto_conta = contar(t, LEX_PRETEXTO_CONTA, 2);
 
   // Tipo de link (apenas o de maior prioridade conta)
   if (LINK_FILEHOST.test(t))        f.link_filehost = 1;
@@ -170,6 +275,14 @@ function extrairFeatures(texto, opts = {}) {
   if (f.grave > 0 && f.oferta > 0) f.conj_grave_oferta = 1;
   else if (f.grave > 0 && temContexto) f.conj_grave_contexto = 1;
   if ((f.adulto > 0 || f.gore > 0 || f.scam > 0) && (f.cta > 0 || f.oferta > 0)) f.conj_topico_cta = 1;
+
+  // As duas conjunções do golpe do trabalho. Ambas exigem `conta_alheia`:
+  // é a peça que uma proposta honesta não tem. Sem ela, "procuro parceiro,
+  // dividimos 50/50" continua somando pouco e passando.
+  if (f.conta_alheia > 0 && (f.recrutamento > 0 || f.divisao_lucro > 0)) f.conj_emprego_conta = 1;
+  if (f.conta_alheia > 0 && (f.mula > 0 || f.pretexto_conta > 0)) f.conj_mula_conta = 1;
+  if (f.pretexto_conta > 0 && (f.divisao_lucro > 0 || f.mula > 0)) f.conj_pretexto_ganho = 1;
+  if (f.mula > 0 && f.divisao_lucro > 0) f.conj_mula_ganho = 1;
 
   return f;
 }

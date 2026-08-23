@@ -605,7 +605,46 @@ Cada módulo é ligado/desligado **por servidor** com `&automod <módulo> <on|of
 
 A detecção de conteúdo dá uma **nota de 0 a 10** (golpe, +18, gore, apologia a
 ilícito e abuso, tudo numa categoria) e age conforme a sensibilidade
-(`baixa`/`media`/`alta`). Configure com `&scam`.
+(`baixa` = 8, `media` = 6, `alta` = 4). Configure com `&sentinela`.
+
+### O golpe do "trabalho" e por que ele exige conjunções
+
+Uma mensagem real passou com nota 3,0: oferta de "colaboração" em que a vítima
+entrega a conta do LinkedIn, o golpista usa a identidade dela para fechar
+contratos e o dinheiro "cai direto na sua conta". Nenhum léxico antigo pegava —
+não há link, não há brinde grátis, não há "ganhe dinheiro fácil". O texto é
+comedido e empresarial.
+
+O que o denuncia é a **estrutura da proposta**, não uma palavra. Cinco peças:
+
+| Sinal | O que é | Peso |
+|---|---|---|
+| `recrutamento` | "procuro colaborador", "sem experiência necessária" | 1 |
+| `conta_alheia` | a conta/identidade tem de ser a **sua** — o núcleo | 1,5 |
+| `divisao_lucro` | "dividimos 50%", "te dou 30%" | 1,5 |
+| `mula` | o dinheiro passa por você ("cai direto na sua conta") | 1,5 |
+| `pretexto_conta` | a justificativa de por que não pode ser a conta dele | 1,5 |
+
+Os pesos isolados são baixos **de propósito**: cada peça, sozinha, aparece em
+conversa honesta — "procuro parceiro", "dividimos 50/50", "minha conta tá
+bloqueada". O que não aparece fora de golpe é a **combinação**, e é ela que
+pontua:
+
+```
+conta_alheia + (recrutamento | divisao_lucro)   → +3
+conta_alheia + (mula | pretexto_conta)          → +3
+pretexto_conta + (divisao_lucro | mula)         → +3
+mula + divisao_lucro                            → +3
+```
+
+A mensagem original passou de 3,0 para 10. `to procurando um parceiro pro
+projeto, a gente divide 50/50` continua em 2,5, e quem **alerta** sobre o golpe
+fica abaixo do limiar por causa do peso negativo de `negacao`.
+
+Tudo isso vale em **português e inglês**, e está coberto por `teste-scorecard.mjs`
+— que testa as duas metades: o golpe sendo pego e a conversa honesta passando.
+A segunda metade importa mais, porque sem ela a tentação é subir pesos até tudo
+virar suspeito.
 
 ---
 

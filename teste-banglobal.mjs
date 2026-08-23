@@ -363,27 +363,78 @@ console.log("\n── esquecer resiste aos bans seguintes ──");
   ok(db.contarBansGlobais(ALVO) === 1, "  → sem ressuscitar os registros antigos, só o novo");
 }
 
-// ══ 16. Bot confirmado pela API, não só pelo cache ══
+// ══ 16. Bot detectado sem servidor em comum ══
 //
-//  `ehBotConhecido` só enxerga o cache do cliente. Um moderador banindo um bot
-//  que não está em nenhum servidor em comum passava direto — e foi assim que o
-//  AutoMod entrou na lista.
-console.log("\n── bot descoberto pela API ──");
-{
-  const BOT2 = "01JBOTDESCNHCD000000000AAA";
-  const clienteVazio = { users: { get: () => null, fetch: async () => null }, servers: new Map() };
-  process.env.BOT_TOKEN = process.env.BOT_TOKEN || "tok";
+//  `GET /users/{id}` só responde para quem tem CONEXÃO MÚTUA com o alvo
+//  (`have_mutual_connection` em calculate_user_permissions). Um bot banido em
+//  OUTRO servidor não divide servidor nenhum com a Judy — ou seja, o caso que
+//  motiva a checagem era justamente o único que ela não cobria. Foi por isso
+//  que o AutoMod continuou passando. A saída é `GET /bots/{id}/invite`, que
+//  responde sobre qualquer bot público sem exigir nada, e o discover.
+console.log("\n── bot detectado sem servidor em comum ──");
+const clienteVazio = { users: { get: () => null, fetch: async () => null }, servers: new Map() };
+process.env.BOT_TOKEN = process.env.BOT_TOKEN || "tok";
+const fetchOriginal = globalThis.fetch;
+// A API se comporta como a de verdade: /users/{id} nega (403) para quem não
+// divide servidor, e a vitrine responde só sobre os bots públicos.
+const simularApi = ({ publicos = [], discover = [], erroDiscover = false }) => {
   const pedidos = [];
-  const fetchAntes = globalThis.fetch;
   globalThis.fetch = async (url) => {
-    pedidos.push(String(url));
-    return { ok: true, status: 200, json: async () => ({ _id: BOT2, username: "OutroBot", bot: { owner: "x" } }) };
+    const u = String(url); pedidos.push(u);
+    if (u.includes("/discover")) {
+      if (erroDiscover) throw new Error("página fora do ar");
+      return { ok: true, status: 200, text: async () => discover.map((i) => `<a href="/bot/${i}">`).join("\n") };
+    }
+    const alvo = u.split("/").filter(Boolean).pop().replace("invite", "").replace(/\/$/, "");
+    if (u.includes("/bots/")) {
+      const id = u.match(/\/bots\/([^/]+)\/invite/)?.[1];
+      return publicos.includes(id)
+        ? { ok: true, status: 200, json: async () => ({ _id: id, username: "PublicBot" }) }
+        : { ok: false, status: 404, json: async () => ({ type: "NotFound" }) };
+    }
+    if (u.includes("/users/")) return { ok: false, status: 403, json: async () => ({ type: "NotFound" }) };
+    return { ok: true, status: 200, json: async () => ({}), text: async () => "" };
   };
+  return pedidos;
+};
+{
+  const BOT2 = "01JB9TDESCNHCD000000000AAA";
+  const pedidos = simularApi({ publicos: [BOT2] });
   await bg.registrar({ serverId: "SE", client: clienteVazio }, BOT2, "banido", "manual");
-  globalThis.fetch = fetchAntes;
-  ok(pedidos.some((u) => u.includes(`/users/${BOT2}`)), "★ pergunta à API quando o cache não sabe");
-  ok(db.contarBansGlobais(BOT2) === 0, "  → e o bot não entra na lista");
-  ok(db.estaIgnoradoGlobal(BOT2), "  → ficando marcado, para o próximo ban não perguntar de novo");
+  globalThis.fetch = fetchOriginal;
+  ok(pedidos.some((u) => u.includes(`/bots/${BOT2}/invite`)), "★ pergunta à vitrine pública de bots, que não exige servidor em comum");
+  ok(db.contarBansGlobais(BOT2) === 0, "  → o bot não entra na lista");
+  ok(db.estaIgnoradoGlobal(BOT2), "  → e fica marcado, para o próximo ban não perguntar de novo");
+}
+{
+  // Bot PRIVADO: a vitrine responde 404, e o `/users/{id}` é negado. Sobra o
+  // discover — que é o caminho que o Ghieh sugeriu.
+  const BOT3 = "01JB9TPRVAD0000000000000AA";
+  const pedidos = simularApi({ publicos: [], discover: [BOT3] });
+  await bg.idsDoDiscover({ forcar: true });   // a vitrine é lida uma vez a cada 6h
+  await bg.registrar({ serverId: "SE", client: clienteVazio }, BOT3, "banido", "manual");
+  globalThis.fetch = fetchOriginal;
+  ok(pedidos.some((u) => u.includes("/discover")), "★ e recorre ao discover quando a vitrine não responde");
+  ok(db.estaIgnoradoGlobal(BOT3), "  → achando lá o bot que as outras rotas não alcançam");
+}
+{
+  // Gente de verdade não pode ser confundida com bot por causa disso.
+  const HUMANO = "01JH9MAN0DEVERDADE00000AAA";
+  simularApi({ publicos: [], discover: ["01J99TR9B9T0000000000000AA"] });
+  await bg.idsDoDiscover({ forcar: true });
+  await bg.registrar({ serverId: "SE", client: clienteVazio }, HUMANO, "briga", "manual");
+  globalThis.fetch = fetchOriginal;
+  ok(!db.estaIgnoradoGlobal(HUMANO), "★ quem não aparece em nenhum sinal NÃO é tratado como bot");
+  ok(db.contarBansGlobais(HUMANO) === 1, "  → e entra na lista normalmente");
+}
+{
+  // Discover fora do ar não pode virar "é bot" nem travar o registro.
+  const HUMANO2 = "01JH9MAN0D99SDEVERDADE0AAA";
+  simularApi({ publicos: [], erroDiscover: true });
+  await bg.idsDoDiscover({ forcar: true });
+  await bg.registrar({ serverId: "SE", client: clienteVazio }, HUMANO2, "briga", "manual");
+  globalThis.fetch = fetchOriginal;
+  ok(db.contarBansGlobais(HUMANO2) === 1, "discover fora do ar não impede o registro de gente de verdade");
 }
 
 console.log(`\nBANGLOBAL: ${pass} ok, ${fail} falha(s)`);

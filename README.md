@@ -804,6 +804,7 @@ outros contribui com o seu.
 &banglobal ignorados              # quem está marcado para ficar fora da lista
 &banglobal lembrar <@pessoa>      # desfaz o esquecer (reabre a porta; não ressuscita registros)
 &banglobal bots                   # bots que entraram na lista antes da regra nova
+&banglobal bots <@ele>            # por que ESTE não foi detectado (mostra cada sinal)
 ```
 
 ### Como indicar uma pessoa
@@ -888,10 +889,50 @@ marca; `&banglobal ignorados` mostra quem está fora e por quê.
 banido em algum servidor mais cedo ou mais tarde, então sem a marca a limpeza
 precisaria ser refeita toda semana.
 
-**Detecção de bot:** a flag `bot` vem do cache do cliente quando ela está lá, e
-de `GET /users/{id}` quando não está — que é o caso normal de um bot banido em
-outro servidor. Antes só se olhava o cache, e era essa a fresta por onde bots
-entravam na lista.
+### Como se descobre que um id é de um bot
+
+`GET /users/{id}` **não serve sozinho**. O Stoat só responde sobre quem tem
+conexão mútua com quem pergunta:
+
+```rust
+if query.have_mutual_connection().await {
+    permissions = UserPermission::Access as u64 + UserPermission::ViewProfile as u64;
+```
+
+Um bot banido em **outro** servidor não divide servidor nenhum com a Judy — ou
+seja, o caso que motiva a checagem era exatamente o único que ela não cobria.
+
+A rota que não exige nada disso é `GET /bots/{id}/invite`, que nem pede
+autenticação:
+
+```rust
+let bot = db.fetch_bot(target.id).await?;          // 404 se o id não for de bot
+if !bot.public && user.is_none_or(|x| x.id != bot.owner) { NotFound }
+```
+
+Um 200 é **prova** de que o id é de um bot. Um 404 não prova nada (pode ser um
+bot privado). Daí a cadeia, da mais barata à mais cara — cada resposta positiva
+encerra a busca, e o motivo fica registrado:
+
+| # | Sinal | Alcança | Custo |
+|---|---|---|---|
+| 1 | cache do cliente / o próprio membro | quem já foi carregado | zero |
+| 2 | `GET /bots/{id}/invite` | qualquer bot **público** | 1 requisição |
+| 3 | `users.fetch` e `GET /users/{id}` | quem divide servidor | 1–2 requisições |
+| 4 | **discover** (`stt.gg/discover/bots`) | bots listados na vitrine | 1 requisição a cada 6h, para a lista toda |
+
+O discover é lido uma vez e guardado: os ids são extraídos por **formato**
+(ULID) em vez de por uma estrutura específica, porque a página pode mudar de
+HTML para JSON sem aviso e o que importa é se o id aparece nela. `BANGLOBAL_DISCOVER_URL`
+troca o endereço; `BANGLOBAL_DISCOVER_MS`, a validade.
+
+Só respostas **positivas** ficam guardadas para sempre. Um "não" pode ser
+apenas a API tendo recusado a pergunta naquele momento, e eternizá-lo
+transformaria uma falha de rede em fato.
+
+`&banglobal bots <@alguém>` mostra o resultado de cada sinal para um id — é o
+que responder quando a lista mostra um bot e o comando diz que não achou
+nenhum.
 
 ---
 

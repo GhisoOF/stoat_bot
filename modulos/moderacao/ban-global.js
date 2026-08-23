@@ -82,44 +82,121 @@ export function ehBotConhecido(userId, { client, membro = null } = {}) {
   return false;
 }
 
-// ── A pergunta cara, mas confiável ──
+// ══════════════════════════════════════════════════════════
+//  "Isto é um bot?" — quatro perguntas, da mais barata à mais cara
 //
-//  A versão acima só enxerga o que já está no cache do cliente. Quando um
-//  moderador bane um bot que não é membro de nenhum servidor em comum (ou
-//  simplesmente ainda não foi carregado), ela responde "não é bot" e o bot
-//  entra na lista — foi assim que o AutoMod voltou para lá depois de ter
-//  sido esquecido. A API sabe a resposta: `GET /users/{id}` traz o campo
-//  `bot`. Guardamos o resultado porque a pergunta se repete a cada ban.
-const cacheBot = new Map();   // userId → boolean
-export async function confirmarSeEhBot(userId, { client, membro = null } = {}) {
-  if (!userId) return false;
-  if (ehBotConhecido(userId, { client, membro })) return true;
-  if (cacheBot.has(userId)) return cacheBot.get(userId);
+//  A versão de cache só enxerga quem o cliente já carregou. A pergunta
+//  seguinte, `GET /users/{id}`, PARECIA resolver — mas o Stoat só a responde
+//  para quem tem conexão mútua com o alvo:
+//
+//      if query.have_mutual_connection() { Access + ViewProfile } else { 0 }
+//
+//  Um bot banido em OUTRO servidor não divide servidor nenhum com a Judy.
+//  Ou seja: exatamente o caso que motiva a checagem é o único em que ela não
+//  pode ser feita por esse caminho. Era por isso que o AutoMod continuava
+//  passando mesmo depois da correção anterior.
+//
+//  A rota que não exige nada disso é `GET /bots/{id}/invite`:
+//
+//      let bot = db.fetch_bot(target.id).await?;          // 404 se não for bot
+//      if !bot.public && user != bot.owner { NotFound }   // 404 se for privado
+//
+//  Ela nem pede autenticação. Um 200 é prova de que o id é de um bot; um 404
+//  não prova nada (pode ser bot privado, pode ser gente). Daí a ordem abaixo,
+//  e daí a última tentativa ser o **discover** — a vitrine pública de bots,
+//  onde qualquer bot que alguém adiciona por lá aparece.
+//
+//  Cada resposta diz também DE ONDE veio, porque "não achei bots" sem dizer
+//  o que foi tentado é o tipo de resposta que não dá para depurar.
+// ══════════════════════════════════════════════════════════
+const cacheBot = new Map();   // userId → { ehBot, via }
 
-  let resposta = false;
+// Só respostas POSITIVAS são guardadas para sempre. Um "não" pode ser apenas
+// a API tendo recusado a pergunta naquele momento — guardá-lo eternizaria uma
+// falha de rede como se fosse um fato.
+const NEGATIVO_MS = Number(process.env.BANGLOBAL_BOT_CACHE_MS || 30 * 60_000);
+
+export async function confirmarSeEhBot(userId, { client, membro = null, comDiscover = true } = {}) {
+  if (!userId) return { ehBot: false, via: null };
+  if (ehBotConhecido(userId, { client, membro })) return { ehBot: true, via: "cache do cliente" };
+
+  const lembrado = cacheBot.get(userId);
+  if (lembrado?.ehBot) return lembrado;
+  if (lembrado && Date.now() - lembrado.quando < NEGATIVO_MS) return lembrado;
+
+  const guardar = (ehBot, via) => {
+    const r = { ehBot, via, quando: Date.now() };
+    cacheBot.set(userId, r);
+    return r;
+  };
+
+  // 1. A vitrine de bots: pública, sem token, sem conexão mútua.
   try {
-    const u = await client?.users?.fetch?.(userId).catch(() => null);
-    if (u) resposta = ehBot(u);
-    else {
-      const token = process.env.BOT_TOKEN;
-      if (token) {
-        const r = await fetch(`${API}/users/${userId}`, {
-          headers: { "X-Bot-Token": token },
-          signal: AbortSignal.timeout(8000),
-        });
-        if (r.ok) resposta = ehBot(await r.json().catch(() => null));
-      }
+    const r = await fetch(`${API}/bots/${userId}/invite`, { signal: AbortSignal.timeout(8000) });
+    if (r.ok) return guardar(true, "/bots/{id}/invite");
+  } catch { /* rede: segue para as outras */ }
+
+  // 2. O cliente, que sabe quando há servidor em comum.
+  try {
+    const u = await client?.users?.fetch?.(userId)?.catch?.(() => null);
+    if (u && ehBot(u)) return guardar(true, "users.fetch");
+  } catch {}
+
+  // 3. A API direta — mesma limitação do item 2, mas funciona com o cache frio.
+  try {
+    const token = process.env.BOT_TOKEN;
+    if (token) {
+      const r = await fetch(`${API}/users/${userId}`, {
+        headers: { "X-Bot-Token": token },
+        signal: AbortSignal.timeout(8000),
+      });
+      if (r.ok && ehBot(await r.json().catch(() => null))) return guardar(true, "/users/{id}");
     }
-  } catch (e) {
-    // Sem resposta não dá para afirmar nada: devolvemos `false` (não é bot)
-    // porque o custo de errar aqui é um registro a mais na lista, que o
-    // `&banglobal bots` limpa — enquanto travar o registro por causa de uma
-    // falha de rede deixaria bans de gente de verdade fora da lista.
-    console.error("[BANGLOBAL] não consegui conferir se", userId, "é bot:", e?.message ?? e);
-    return false;
+  } catch {}
+
+  // 4. O discover: bot privado, sem servidor em comum, ainda pode estar lá.
+  if (comDiscover && await estaNoDiscover(userId)) return guardar(true, "discover");
+
+  return guardar(false, null);
+}
+
+// ── O discover ────────────────────────────────────────────
+//
+//  A página de bots do Stoat. Baixamos UMA vez e guardamos os ids que ela
+//  contiver: perguntar por usuário seria uma requisição por registro, e a
+//  resposta é a mesma lista para todos. Extraímos por formato de id em vez de
+//  ler uma estrutura específica, porque a página pode ser HTML ou JSON e nós
+//  não controlamos nenhum dos dois — o que importa é se o id aparece nela.
+const DISCOVER_URL = process.env.BANGLOBAL_DISCOVER_URL || "https://stt.gg/discover/bots";
+const DISCOVER_VALIDADE_MS = Number(process.env.BANGLOBAL_DISCOVER_MS || 6 * 60 * 60_000);
+let discoverCache = null;   // { ids:Set, quando:number, erro:string|null }
+
+export async function idsDoDiscover({ forcar = false } = {}) {
+  if (!forcar && discoverCache && Date.now() - discoverCache.quando < DISCOVER_VALIDADE_MS) {
+    return discoverCache;
   }
-  cacheBot.set(userId, resposta);
-  return resposta;
+  try {
+    const r = await fetch(DISCOVER_URL, {
+      headers: { accept: "application/json, text/html" },
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const txt = await r.text();
+    const ids = new Set((txt.match(/\b[0-9A-HJKMNP-TV-Z]{26}\b/g) ?? []));
+    discoverCache = { ids, quando: Date.now(), erro: ids.size ? null : "a página não trouxe nenhum id" };
+    console.info(`[BANGLOBAL] discover: ${ids.size} id(s) em ${DISCOVER_URL}`);
+  } catch (e) {
+    // Guardamos o erro com hora: sem isso, uma página fora do ar viraria uma
+    // requisição por usuário, a cada verificação, para sempre.
+    discoverCache = { ids: new Set(), quando: Date.now(), erro: e?.message ?? String(e) };
+    console.error("[BANGLOBAL] discover:", discoverCache.erro);
+  }
+  return discoverCache;
+}
+
+async function estaNoDiscover(userId) {
+  const d = await idsDoDiscover();
+  return d.ids.has(userId);
 }
 
 // Resolve o alvo de um subcomando e devolve um embed pronto quando falha.
@@ -222,7 +299,7 @@ async function desbanir(server, serverId, userId) {
 //  Devolve { total, novos } ou lança — quem chama decide o que
 //  fazer com o erro (o comando avisa, o agendador só loga).
 // ──────────────────────────────────────────────────────────
-export async function importarBansDoServidor(server, serverId) {
+export async function importarBansDoServidor(server, serverId, client = null) {
   const bans = await server.fetchBans();
   const lista = bans?.bans ?? bans ?? [];
   // O fetchBans devolve os usuários num campo separado em algumas versões da
@@ -246,6 +323,15 @@ export async function importarBansDoServidor(server, serverId) {
       continue;
     }
     const nome = u?.username ?? b?.username ?? null;
+    // O `fetchBans` costuma vir SEM a flag de bot — foi por aí que os bots
+    // entraram na lista em primeiro lugar. A confirmação usa o cache e a
+    // vitrine pública; nada de rede por usuário quando a resposta já é sabida.
+    const v = await confirmarSeEhBot(uid, { client });
+    if (v.ehBot) {
+      bots++;
+      db.ignorarNaListaGlobal(uid, { nome, motivo: `é um bot (${v.via})` });
+      continue;
+    }
     if (db.registrarBanGlobal(uid, serverId, b?.reason ?? "importado do servidor", "importado", { nome })) novos++;
   }
   return { total: lista.length, novos, bots, ignorados };
@@ -275,7 +361,7 @@ async function sincronizarTodos(client, criarContexto) {
     if (typeof server.fetchBans !== "function") continue;
 
     try {
-      const { total, novos } = await importarBansDoServidor(server, sid);
+      const { total, novos } = await importarBansDoServidor(server, sid, client);
       tocados++;
       if (novos > 0) {
         somaNovos += novos;
@@ -304,7 +390,7 @@ export async function sincronizarServidor(server, criarContexto) {
   if (!sid || typeof server?.fetchBans !== "function") return;
   try {
     const ctx = criarContexto(sid);
-    const { total, novos } = await importarBansDoServidor(server, sid);
+    const { total, novos } = await importarBansDoServidor(server, sid, ctx?.client ?? null);
     if (novos > 0) {
       console.info(`[BANGLOBAL] servidor novo ${server.name ?? sid}: ${novos} de ${total} ban(s) importado(s).`);
       await log.registrar(ctx, "punicoes", {
@@ -340,13 +426,14 @@ export async function registrar(ctx, userId, motivo, origem = "manual", { nome =
     console.log(`[BANGLOBAL] ${userId} está na lista de ignorados — não volta para a lista global`);
     return;
   }
-  if (await confirmarSeEhBot(userId, { client: ctx?.client, membro })) {
-    console.log(`[BANGLOBAL] ${userId} é bot — não entra na lista global`);
+  const veredito = await confirmarSeEhBot(userId, { client: ctx?.client, membro });
+  if (veredito.ehBot) {
+    console.log(`[BANGLOBAL] ${userId} é bot (${veredito.via}) — não entra na lista global`);
     // Uma vez confirmado, fica confirmado: o próximo ban não precisa
     // perguntar de novo, nem depender de o cache estar quente naquela hora.
     db.ignorarNaListaGlobal(userId, {
       nome: nome ?? ctx?.client?.users?.get?.(userId)?.username ?? null,
-      motivo: "é um bot",
+      motivo: `é um bot (${veredito.via})`,
     });
     return;
   }
@@ -1168,35 +1255,86 @@ export async function cmdBanGlobal(message, args, ctx) {
   // antes continua lá, e é justamente o que enche a lista de nomes conhecidos.
   // Este comando faz a limpeza retroativa.
   if (["bots", "limparbots", "podar"].includes(sub)) {
+    const arg1 = (args[1] ?? "").toLowerCase();
+    const confirmou = ["confirmar", "confirm", "sim", "yes"].includes(arg1);
+
+    // ── `bots <@alguém>`: por que ESTE não foi detectado? ──
+    // "Não achei bots" numa lista onde você está vendo um não dá para depurar.
+    // Aqui cada sinal responde por si.
+    if (args[1] && !confirmou) {
+      const entrada = args.slice(1).join(" ");
+      const alvo = await alvoDoComando(entrada, { message, server, ctx });
+      if (alvo.erro) return sendEmbed(message.channel,
+        embedAlvoNaoResolvido(ctx, alvo.erro, entrada, `${PREFIXO}banglobal bots <@pessoa|id>`));
+      const v = await confirmarSeEhBot(alvo.id, { client: ctx.client });
+      const disc = await idsDoDiscover();
+      return sendEmbed(message.channel, {
+        title: v.ehBot ? (lang === "en" ? "🤖 It's a bot" : "🤖 É um bot") : (lang === "en" ? "🙋 I couldn't prove it's a bot" : "🙋 Não consegui provar que é bot"),
+        description: [
+          `${rotularUsuario(alvo.id, { nome: alvo.nome, client: ctx.client })} — \`${alvo.id}\``,
+          "",
+          v.ehBot
+            ? tr(ctx, `Descoberto por: **${v.via}**`, `Found via: **${v.via}**`)
+            : tr(ctx,
+                "Nenhum dos sinais respondeu sim: a vitrine `/bots/{id}/invite` (só responde por bots **públicos**), o cliente e a API (`/users/{id}` só responde sobre quem divide servidor comigo) e o discover.",
+                "None of the signals said yes: the `/bots/{id}/invite` showcase (only answers for **public** bots), the client and the API (`/users/{id}` only answers about users I share a server with), and discover."),
+          "",
+          `**Discover:** ${disc.erro ? `🔴 ${disc.erro}` : `🟢 ${disc.ids.size} ${tr(ctx, "id(s) lidos", "id(s) read")}`} _(${DISCOVER_URL})_`,
+          "",
+          v.ehBot
+            ? `\`${PREFIXO}banglobal bots confirmar\` ${tr(ctx, "tira todos os bots da lista", "removes every bot from the list")}`
+            : `${tr(ctx, "Sabendo que é bot, tire-o à mão:", "If you know it's a bot, remove it by hand:")} \`${PREFIXO}banglobal esquecer ${alvo.id} é um bot\``,
+        ].join("\n"), colour: v.ehBot ? COR.info : COR.aviso });
+    }
+
     const ids = db.idsBanidosGlobais();
     const achados = [];
+    const porVia = new Map();
+    // Uma consulta só para a vitrine inteira, antes do laço: sem isso, cada
+    // registro dispararia o download do discover na primeira falha de cache.
+    await idsDoDiscover();
     for (const uid of ids) {
-      // `confirmarSeEhBot` pergunta à API quando o cache não sabe — que é o
-      // caso normal aqui: um bot banido em OUTRO servidor não está no cache
-      // deste. Com a checagem antiga, a limpeza não achava justamente os
-      // registros que a motivaram.
-      if (await confirmarSeEhBot(uid, { client: ctx.client })) {
-        achados.push({ id: uid, nome: db.nomeDeBanido(uid) ?? ctx.client?.users?.get?.(uid)?.username ?? uid });
-      }
+      const v = await confirmarSeEhBot(uid, { client: ctx.client });
+      if (!v.ehBot) continue;
+      porVia.set(v.via, (porVia.get(v.via) ?? 0) + 1);
+      achados.push({ id: uid, nome: db.nomeDeBanido(uid) ?? ctx.client?.users?.get?.(uid)?.username ?? uid });
     }
     if (!achados.length) {
-      return sendEmbed(message.channel, tr(ctx,
-        { title: "✅ Nenhum bot na lista", description: `Conferi **${ids.length}** registro(s) e não achei bots.`, colour: COR.sucesso },
-        { title: "✅ No bots on the list", description: `I checked **${ids.length}** record(s) and found no bots.`, colour: COR.sucesso }));
+      const disc = await idsDoDiscover();
+      return sendEmbed(message.channel, tr(ctx, {
+        title: "✅ Nenhum bot na lista",
+        description: [
+          `Conferi **${ids.length}** registro(s) por quatro caminhos e nenhum acusou bot.`,
+          "",
+          `**Discover:** ${disc.erro ? `🔴 ${disc.erro}` : `🟢 ${disc.ids.size} id(s) lidos`} _(${DISCOVER_URL})_`,
+          "",
+          `Se você está **vendo** um bot na lista, \`${PREFIXO}banglobal bots <@ele>\` diz qual sinal falhou.`,
+        ].join("\n"), colour: COR.sucesso,
+      }, {
+        title: "✅ No bots on the list",
+        description: [
+          `I checked **${ids.length}** record(s) through four routes and none flagged a bot.`,
+          "",
+          `**Discover:** ${disc.erro ? `🔴 ${disc.erro}` : `🟢 ${disc.ids.size} id(s) read`} _(${DISCOVER_URL})_`,
+          "",
+          `If you can **see** a bot on the list, \`${PREFIXO}banglobal bots <@it>\` says which signal failed.`,
+        ].join("\n"), colour: COR.sucesso,
+      }));
     }
-    const confirmou = ["confirmar", "confirm", "sim", "yes"].includes((args[1] ?? "").toLowerCase());
     const lista = achados.slice(0, 20).map((a) => `• **${a.nome}** — \`${a.id}\``).join("\n");
     if (!confirmou) {
       return sendEmbed(message.channel, tr(ctx, {
         title: `🤖 ${achados.length} bot(s) na lista global`,
         description: [lista, achados.length > 20 ? `\n_… e mais ${achados.length - 20}._` : "", "",
           "Bots não escolhem entrar em servidor nenhum — alguém os adiciona. Manter isso na lista faria o modo `banir` derrubar integrações que o dono acabou de instalar.",
+          "", `_Descobertos por: ${[...porVia].map(([v, n]) => `${v} (${n})`).join(" · ")}_`,
           "", `Remover todos: \`${PREFIXO}banglobal bots confirmar\``].filter(Boolean).join("\n").slice(0, 1900),
         colour: COR.aviso,
       }, {
         title: `🤖 ${achados.length} bot(s) on the global list`,
         description: [lista, achados.length > 20 ? `\n_… and ${achados.length - 20} more._` : "", "",
           "Bots don't choose to join anywhere — someone adds them. Keeping them listed would make `banir` mode knock out integrations the owner just installed.",
+          "", `_Found via: ${[...porVia].map(([v, n]) => `${v} (${n})`).join(" · ")}_`,
           "", `Remove them all: \`${PREFIXO}banglobal bots confirmar\``].filter(Boolean).join("\n").slice(0, 1900),
         colour: COR.aviso,
       }));

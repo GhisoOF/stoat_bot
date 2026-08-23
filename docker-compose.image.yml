@@ -35,6 +35,9 @@ services:
       - VOZ_SERVICO_URL=http://100.74.70.106:8091
       - VOZ_CHAVE=                          # MESMA chave do voz-servico/.env
       - TTS_SERVIDORES=01KH9SJYWVD7XAHJ28TP0YP4Q0   # só Vapor Nexus tem voz; vazio = desligado em todos
+      # Vitrine pública de bots, usada como último sinal para não deixar bot
+      # entrar na lista global. Vazio/ausente = usa o padrão.
+      - BANGLOBAL_DISCOVER_URL=https://stt.gg/discover/bots
       - TTS_COOLDOWN_MS=8000                # freio por pessoa entre falas
       - TTS_MAX_CHARS=400
       - TTS_TIMEOUT_MS=40000

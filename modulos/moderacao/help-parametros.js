@@ -101,7 +101,7 @@ function parametrosPT(P) {
       { nome: "esquecer", valor: "<@pessoa|id> [nota]", desc: "apaga os registros dessa pessoa **para todos os servidores** e a mantém fora: bans futuros e a importação de 6h passam a ignorá-la — bem mais forte que `isentar`" },
       { nome: "ignorados", desc: "quem está marcado para ficar fora da lista, e por quê" },
       { nome: "lembrar", valor: "<@pessoa|id>", desc: "desfaz o `esquecer`: a pessoa volta a entrar na lista no próximo ban (os registros antigos continuam apagados)" },
-      { nome: "bots", desc: "acha bots que já estavam na lista e os remove **de vez** (bots novos não entram: ninguém adiciona um bot sem querer)" },
+      { nome: "bots", valor: "[confirmar|<@pessoa>]", desc: "acha bots que já estavam na lista e os remove **de vez**. Com uma pessoa, diz **qual sinal** a identificou (ou por que nenhum identificou)" },
       { nome: "Como indicar alguém", desc: "menção · **ID** · link do perfil · **nome** · `Nome#0000` · apelido no servidor. Se o nome bater em mais de uma pessoa, eu mostro os candidatos em vez de escolher" },
     ],
 
@@ -318,7 +318,7 @@ function parametrosEN(P) {
       { nome: "esquecer", valor: "<@user|id> [note]", desc: "deletes that person's records **for every server** and keeps them out: future bans and the 6-hourly import skip them — much stronger than `isentar`" },
       { nome: "ignorados", desc: "who is marked to stay off the list, and why" },
       { nome: "lembrar", valor: "<@user|id>", desc: "undoes `esquecer`: they can enter the list again on their next ban (old records stay deleted)" },
-      { nome: "bots", desc: "finds bots already on the list and removes them **for good** (new bots don't enter: nobody adds a bot by accident)" },
+      { nome: "bots", valor: "[confirmar|<@user>]", desc: "finds bots already on the list and removes them **for good**. With a user, says **which signal** identified them (or why none did)" },
       { nome: "How to point at someone", desc: "mention · **ID** · profile link · **name** · `Name#0000` · server nickname. If the name matches more than one person, I show the candidates instead of picking" },
     ],
 

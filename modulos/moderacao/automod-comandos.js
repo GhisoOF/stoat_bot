@@ -768,8 +768,11 @@ export async function cmdPunicao(message, args, ctx) {
         "",
         "**Commands:**",
         `\`${PREFIXO}punicao modo <avisar|apagar|confirmar|acumular|banir>\``,
+        `\`${PREFIXO}punicao escada [aviso,5m,1h,ban]\` — the steps of \`acumular\` mode`,
         `\`${PREFIXO}punicao warns <number>\``,
         `\`${PREFIXO}punicao silencerole <id>\``,
+        "",
+        `_To try a text out, that's the filter's job: \`${PREFIXO}sentinela test <text>\`. This command only decides what **happens** afterwards._`,
       ].join("\n"),
     } : {
       title: "⚖️ Política de punição — vale para TODOS os automods",
@@ -790,8 +793,11 @@ export async function cmdPunicao(message, args, ctx) {
         "",
         "**Comandos:**",
         `\`${PREFIXO}punicao modo <avisar|apagar|confirmar|acumular|banir>\``,
+        `\`${PREFIXO}punicao escada [aviso,5m,1h,ban]\` — os degraus do modo \`acumular\``,
         `\`${PREFIXO}punicao warns <número>\``,
         `\`${PREFIXO}punicao silencerole <id>\``,
+        "",
+        `_Para experimentar um texto, quem faz isso é o filtro: \`${PREFIXO}sentinela test <texto>\`. Este comando só decide o que **acontece** depois._`,
       ].join("\n"),
     });
   }
@@ -886,9 +892,63 @@ export async function cmdPunicao(message, args, ctx) {
         description: `Role used to silence: \`${pol.silenceRoleId}\` (used in \`confirmar\` mode).`, colour: COR.sucesso }));
   }
 
-  return sendEmbed(message.channel, tr(ctx,
-    { title: "❌ Subcomando desconhecido", description: `Use \`${PREFIXO}punicao status\` para ver as opções.`, colour: COR.erro },
-    { title: "❌ Unknown subcommand", description: `Use \`${PREFIXO}punicao status\` to see the options.`, colour: COR.erro }));
+  // ── Subcomando que não existe AQUI, mas existe ali ──
+  //
+  //  `&punicao test <texto>` foi digitado de verdade, porque a ajuda do
+  //  sentinela dizia "a punição vem do &punicao. `test <texto>` mostra a
+  //  nota" — duas frases coladas que se leem como uma. Mandar a pessoa
+  //  reler o `status` não resolve: o que ela quer existe, só mora em
+  //  outro comando. Então a resposta diz onde, já com o texto que ela
+  //  digitou, em vez de fazê-la procurar.
+  const NOUTRO_COMANDO = {
+    test: "sentinela", testar: "sentinela", simulate: "sentinela", simular: "sentinela",
+    sensitivity: "sentinela", sensibilidade: "sentinela", limiar: "sentinela",
+    channel: "sentinela", canal: "sentinela", alerta: "sentinela", antiguidade: "sentinela",
+    warn: "warn", avisar: "warn", warnings: "warnings", avisos: "warnings",
+    clearwarnings: "clearwarnings", cargomudo: "cargomudo",
+  };
+  const destino = NOUTRO_COMANDO[sub];
+  if (destino) {
+    const restante = args.slice(1).join(" ");
+    const cmd = `${PREFIXO}${destino} ${sub === destino ? "" : `${sub} `}${restante}`.replace(/\s+/g, " ").trim();
+    return sendEmbed(message.channel, tr(ctx, {
+      title: `↪️ Isso é do \`${PREFIXO}${destino}\``,
+      description: [
+        `\`${PREFIXO}punicao\` decide **o que acontece** com quem infringe — ele não analisa textos nem pune ninguém sozinho.`,
+        "",
+        `Você quis dizer:`,
+        `\`${cmd}\``,
+      ].join("\n"), colour: COR.aviso,
+    }, {
+      title: `↪️ That belongs to \`${PREFIXO}${destino}\``,
+      description: [
+        `\`${PREFIXO}punicao\` decides **what happens** to whoever breaks a rule — it doesn't analyse text or punish anyone on its own.`,
+        "",
+        `You probably meant:`,
+        `\`${cmd}\``,
+      ].join("\n"), colour: COR.aviso,
+    }));
+  }
+
+  return sendEmbed(message.channel, tr(ctx, {
+    title: "❌ Subcomando desconhecido",
+    description: [
+      `\`${sub}\` não é um subcomando do \`${PREFIXO}punicao\`.`,
+      "",
+      `\`modo\` · \`escada\` · \`warns\` · \`silencerole\` · \`status\``,
+      "",
+      `_\`${PREFIXO}punicao status\` mostra o que cada um faz._`,
+    ].join("\n"), colour: COR.erro,
+  }, {
+    title: "❌ Unknown subcommand",
+    description: [
+      `\`${sub}\` isn't a \`${PREFIXO}punicao\` subcommand.`,
+      "",
+      `\`modo\` · \`escada\` · \`warns\` · \`silencerole\` · \`status\``,
+      "",
+      `_\`${PREFIXO}punicao status\` shows what each one does._`,
+    ].join("\n"), colour: COR.erro,
+  }));
 }
 
 // ── Helper interno de negação de permissão ─────────────────

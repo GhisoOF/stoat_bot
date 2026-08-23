@@ -57,6 +57,7 @@ function parametrosPT(P) {
       { nome: "warns", valor: "<n>", desc: "quantos avisos até o ban (modo `acumular` antigo)" },
       { nome: "silencerole", valor: "<cargo>", desc: "qual cargo é o de silêncio (ou crie um com `&cargomudo`)" },
       { nome: "status", desc: "a configuração atual" },
+      { nome: "Não existe aqui", desc: "`test`/`simulate` são do `&sentinela` (é ele que lê o texto); `warn`, `warnings` e `clearwarnings` são comandos próprios. O `&punicao` só decide **o que acontece** depois" },
     ],
 
     sentinela: [
@@ -274,6 +275,7 @@ function parametrosEN(P) {
       { nome: "warns", valor: "<n>", desc: "how many warnings until a ban (legacy `acumular`)" },
       { nome: "silencerole", valor: "<role>", desc: "which role is the silence role (or create one with `&cargomudo`)" },
       { nome: "status", desc: "the current setup" },
+      { nome: "Not here", desc: "`test`/`simulate` belong to `&sentinela` (it's the one that reads the text); `warn`, `warnings` and `clearwarnings` are their own commands. `&punicao` only decides **what happens** afterwards" },
     ],
 
     sentinela: [

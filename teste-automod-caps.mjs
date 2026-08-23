@@ -77,5 +77,52 @@ console.log("\n── unicode NFD ──");
     "★ zalgo de verdade continua detectado mesmo após NFC");
 }
 
+
+// ══ &punicao: subcomando que mora em outro comando ══
+//
+//  `&punicao test testando` foi digitado de verdade. A ajuda do sentinela
+//  dizia "a punição vem do &punicao. `test <texto>` mostra a nota" — duas
+//  frases coladas que se leem como uma. A resposta era "use &punicao status",
+//  que manda a pessoa procurar o que existe, só que em outro lugar.
+console.log("\n── &punicao aponta o comando certo ──");
+{
+  const { cmdPunicao } = await import("./modulos/moderacao/automod-comandos.js");
+  const respostas = [];
+  const ctx = {
+    config: { automod: { punicao: { modo: "acumular", warnsParaBan: 6, silenceRoleId: null } } },
+    sendEmbed: async (_c, e) => { respostas.push(e); return { id: "M" }; },
+    COR: { mod: 1, erro: 2, aviso: 3, sucesso: 4 },
+    getServer: async () => ({ id: "S1" }),
+    membroTemPermissao: () => true,
+    salvarConfig: () => {},
+    PREFIXO: "&",
+  };
+  const msg = { channelId: "C1", authorId: "U1", channel: { id: "C1" } };
+  const ult = () => `${respostas.at(-1)?.title ?? ""} ${respostas.at(-1)?.description ?? ""}`;
+
+  await cmdPunicao(msg, ["test", "testando"], ctx);
+  ok(ult().includes("&sentinela test testando"),
+    "★ `&punicao test testando` devolve o comando certo, já com o texto digitado");
+  ok(!ult().includes("punicao status para ver"), "  → em vez de mandar reler o status");
+
+  respostas.length = 0;
+  await cmdPunicao(msg, ["simulate", "ganhe dinheiro"], ctx);
+  ok(ult().includes("&sentinela simulate ganhe dinheiro"), "o mesmo vale para `simulate`");
+
+  respostas.length = 0;
+  await cmdPunicao(msg, ["warn", "@alguem", "spam"], ctx);
+  ok(ult().includes("&warn @alguem spam"), "e para os comandos próprios, como `warn`");
+
+  respostas.length = 0;
+  await cmdPunicao(msg, ["xisbolinha"], ctx);
+  ok(ult().includes("escada") && ult().includes("silencerole"),
+    "subcomando de verdade inexistente lista os que existem");
+
+  respostas.length = 0;
+  await cmdPunicao(msg, ["status"], ctx);
+  ok(ult().includes("escada"), "★ o status lista a `escada` — ela existe e estava fora da lista");
+  ok(ult().includes("sentinela test"), "  → e diz quem analisa texto, já que não é ele");
+}
+
 console.log(`\nANTI-CAPS: ${pass} ok, ${fail} falha(s)`);
 process.exit(fail ? 1 : 0);

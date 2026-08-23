@@ -645,9 +645,16 @@ Definida por servidor com `&punicao`. Vale para **todos** os módulos do automod
 | `acumular` | soma avisos; ao atingir o limite, bane |
 | `banir` | ban imediato |
 
-- `&punicao modo <avisar\|confirmar\|acumular\|banir>`
-- `&punicao warns <n>` — quantos avisos até o ban (modo `acumular`)
+- `&punicao modo <avisar\|apagar\|confirmar\|acumular\|banir>`
+- `&punicao escada [aviso,5m,1h,ban]` — os degraus do modo `acumular`
+- `&punicao warns <n>` — quantos avisos até o ban (modo `acumular` antigo)
 - `&punicao silencerole <idDoCargo>` — cargo usado para silenciar
+
+> `&punicao` **não analisa texto**: ele decide o que acontece *depois* que um
+> filtro acusa. Quem lê um texto e dá nota é o `&sentinela test <texto>`. Um
+> subcomando que pertence a outro comando (`test`, `simulate`, `warn`…) recebe
+> de volta o comando certo já montado com o que foi digitado, em vez de um
+> "subcomando desconhecido" que manda procurar.
 
 **Avisos e silêncios são persistentes** (banco, por `(servidor, usuário)`).
 Se o usuário sai e volta, o silêncio é reaplicado no evento de entrada.

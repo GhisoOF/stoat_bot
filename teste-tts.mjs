@@ -17,6 +17,7 @@ for (const f of ["/tmp/tts-teste.db", "/tmp/tts-teste.db-wal", "/tmp/tts-teste.d
                  "/tmp/tts-teste-cfg.json", "/tmp/blocklist-cache.bin"]) fs.rmSync(f, { force: true });
 
 import * as filtro from "./modulos/ferramentas/tts-filtro.js";
+import * as abrevMod from "./modulos/core/abreviacoes.js";
 
 let pass = 0, fail = 0;
 const ok = (cond, msg) => { cond ? pass++ : fail++; console.log(`${cond ? "✅" : "❌"} ${msg}`); };
@@ -260,10 +261,10 @@ ok(!String(respostas.at(-1)?.title).includes("Não consegui falar"), "  → e n�
 
 // Um typo de verdade cai na sugestão, com o subcomando certo apontado.
 respostas.length = 0; chamou = 0;
-await tts.cmdTts(msgCmd, ["transmitr"], ctxCmd);
-ok(String(respostas.at(-1)?.title).includes("quis dizer"), "typo (`transmitr`) sugere o subcomando em vez de falar a palavra");
+await tts.cmdTts(msgCmd, ["dicionari"], ctxCmd);
+ok(String(respostas.at(-1)?.title).includes("quis dizer"), "typo (`dicionari`) sugere o subcomando em vez de falar a palavra");
 ok(chamou === 0, "  → e não gasta uma tentativa de entrar na call para isso");
-ok(String(respostas.at(-1)?.description).includes("transmitir"), "  → aponta o subcomando certo");
+ok(String(respostas.at(-1)?.description).includes("dicionario"), "  → aponta o subcomando certo");
 
 respostas.length = 0; chamou = 0;
 await tts.cmdTts(msgCmd, ["reinicar"], ctxCmd);
@@ -311,7 +312,9 @@ ok(cfgZero.tts.canalVoz === CALL, "  → descobriu a call pelo canal onde o coma
 ok(cfgZero.tts.canalTexto === CALL, "  → e ligou a leitura desse canal");
 ok(cfgZero.tts.ativo === true, "  → e ligou o sistema (que estava desligado)");
 ok(String(respE.at(-1)?.description).includes("falo tudo que for escrito"), "  → a resposta diz que ela já está lendo");
-ok(String(respE.at(-1)?.description).includes("tts on"), "  → e mostra os comandos equivalentes, para quem quiser aprender");
+ok(/Escolhi sozinha/.test(String(respE.at(-1)?.description)), "  → e conta o que escolheu sozinha (sem citar comando que não existe)");
+ok(!/tts on|tts canal|tts transmitir/.test(String(respE.at(-1)?.description)),
+  "  → sem mandar usar `tts on`/`canal`/`transmitir`: não existem, o entrar faz os três");
 
 // a leitura funciona logo em seguida
 rotas.length = 0; filtro.limpar();
@@ -516,6 +519,84 @@ console.log("\n── entrar → resgate automático ──");
   respE.length = 0; chamadasE.length = 0;
   await tts.cmdTts(msgB, ["entrarr", "agora", "na", "call"], ctxE2);
   ok(chamadasE.some((c) => c.u.endsWith("/falar")), "  → mas uma frase longa com uma palavra parecida continua sendo fala");
+}
+
+// ══ 8e. Os ajustes da fala existem de verdade ══
+//
+//  `&tts dicionario add vish vixi` FALAVA "dicionario adicionar vish vixi":
+//  o subcomando nunca tinha sido implementado, só documentado no &help. E o
+//  próprio dicionário expandia o "add" no caminho.
+console.log("\n── ajustes da fala ──");
+{
+  const respD = [];
+  const cfgD = { language: "pt", tts: { ativo: true, canalVoz: "01JCALLR000000000000000AA", canalTexto: "01JCALLR000000000000000AA", filtro: true, cooldown: 0 } };
+  const faladas = [];
+  globalThis.fetch = async (url, op) => {
+    const u = String(url);
+    if (u.endsWith("/falar")) faladas.push(JSON.parse(op.body).texto);
+    if (u.endsWith("/saude")) return { ok: true, status: 200, json: async () => ({ ok: true, versao: 11, efeitos: ["glados", "radio"], piper: { ok: true, vozAtual: "pt_BR-faber-medium", vozes: ["pt_BR-faber-medium", "pt_BR-dii-medium"] } }) };
+    return { ok: true, status: 200, json: async () => ({ ok: true }), text: async () => "{}" };
+  };
+  const ctxD = { ...ctxA, config: cfgD, sendEmbed: async (_c, e) => { respD.push(e); return { id: "M" }; } };
+  const msgD = { channelId: callReal.id, authorId: "U1", channel: callReal, author: { username: "Ghieh" } };
+
+  await tts.cmdTts(msgD, ["dicionario", "add", "vish", "vixi"], ctxD);
+  ok(cfgD.tts.dicionario?.vish === "vixi", "★ `dicionario add vish vixi` guarda a entrada");
+  ok(!faladas.length, "  → e NÃO fala \"dicionario adicionar vish vixi\"");
+  ok(abrevMod.expandir("vish que susto", cfgD.tts.dicionario) === "vixi que susto", "  → e a entrada passa a valer na fala");
+
+  respD.length = 0;
+  await tts.cmdTts(msgD, ["dicionario"], ctxD);
+  ok(String(respD.at(-1)?.description).includes("vish"), "`dicionario` lista o que o servidor tem");
+
+  respD.length = 0;
+  await tts.cmdTts(msgD, ["dicionario", "teste", "vish vc n vem hj"], ctxD);
+  ok(/vixi você não vem hoje/.test(String(respD.at(-1)?.description)), "`dicionario teste` mostra como sairia falado");
+
+  respD.length = 0;
+  await tts.cmdTts(msgD, ["dicionario", "remove", "vish"], ctxD);
+  ok(!("vish" in cfgD.tts.dicionario), "`dicionario remove` tira a entrada");
+
+  // Abreviação com espaço nunca casaria (a troca é palavra a palavra).
+  respD.length = 0;
+  await tts.cmdTts(msgD, ["dicionario", "add", "de", "boa", "tranquilo"], ctxD);
+  ok(cfgD.tts.dicionario.de === "boa tranquilo", "a abreviação é a 1ª palavra; o resto é o texto falado");
+
+  // Ver é público; mudar é da equipe.
+  const ctxSemStaff = { ...ctxD, membroTemPermissao: () => false };
+  respD.length = 0;
+  await tts.cmdTts(msgD, ["dicionario"], ctxSemStaff);
+  ok(!/Permissão/.test(String(respD.at(-1)?.title)), "ver o dicionário é livre");
+  respD.length = 0;
+  await tts.cmdTts(msgD, ["dicionario", "add", "x", "y"], ctxSemStaff);
+  ok(/Permissão/.test(String(respD.at(-1)?.title)) && !("x" in cfgD.tts.dicionario), "  → mas mudar exige ManageMessages");
+
+  // voz/efeito: as listas vêm do serviço
+  respD.length = 0;
+  await tts.cmdTts(msgD, ["voz"], ctxD);
+  ok(String(respD.at(-1)?.description).includes("pt_BR-dii-medium"), "`voz` lista o que o serviço tem, não uma lista fixa aqui");
+  await tts.cmdTts(msgD, ["voz", "pt_BR-dii-medium"], ctxD);
+  ok(cfgD.tts.voz === "pt_BR-dii-medium", "  → e trocar a voz funciona");
+  respD.length = 0;
+  await tts.cmdTts(msgD, ["voz", "inexistente"], ctxD);
+  ok(/não tenho essa voz/i.test(String(respD.at(-1)?.title)), "  → voz que não existe é recusada com a lista");
+  await tts.cmdTts(msgD, ["efeito", "glados"], ctxD);
+  ok(cfgD.tts.efeito === "glados", "`efeito glados` aplica");
+  await tts.cmdTts(msgD, ["efeito", "nenhum"], ctxD);
+  ok(cfgD.tts.efeito === null, "  → e `efeito nenhum` tira");
+
+  await tts.cmdTts(msgD, ["tom", "1.05"], ctxD);
+  ok(cfgD.tts.tom === 1.05, "`tom 1.05` guarda o valor");
+  respD.length = 0;
+  await tts.cmdTts(msgD, ["tom", "9"], ctxD);
+  ok(cfgD.tts.tom === 1.05, "  → e um valor fora da faixa é recusado");
+
+  await tts.cmdTts(msgD, ["cooldown", "5"], ctxD);
+  ok(cfgD.tts.cooldown === 5000, "`cooldown 5` vira 5000ms");
+  await tts.cmdTts(msgD, ["nomes", "off"], ctxD);
+  ok(cfgD.tts.anunciarNome === false, "`nomes off` para de anunciar quem falou");
+  await tts.cmdTts(msgD, ["dicionario", "padrao", "off"], ctxD);
+  ok(cfgD.tts.expandir === false, "`dicionario padrao off` desliga as embutidas");
 }
 
 // ══ 9. O destrave: auto-desconexão ══

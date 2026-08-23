@@ -327,6 +327,11 @@ persona, que pede o mesmo tom em uma frase.
   O `entrar` liga o sistema, descobre a call e liga a leitura sozinho — isso
   eram quatro comandos na ordem certa. Recurso isolado:
   só funciona nos servidores listados em `TTS_SERVIDORES`.
+  Não existem `canal`, `transmitir`, `on` nem `off`: o `entrar` faz os quatro
+  de uma vez (liga o sistema, escolhe a call, define o canal lido e entra) e o
+  `sair` desfaz. Um comando que só repete o que outro já faz é mais uma coisa
+  para aprender e mais um jeito de deixar a configuração pela metade.
+
   Diagnóstico da cadeia inteira: `&tts estado` ou `&debug voz`.
   A transmissão passa por uma **peneira** (`&tts filtro`) que ignora barulho
   pela FORMA — letra repetida, bloco repetido, pouca variedade de caracteres,
@@ -560,7 +565,10 @@ Prefixo: `&`. Aliases entre parênteses.
 | `&staff [add\|remove\|titulo\|limpar]` | a equipe do servidor (mesmos cargos do `&acesso`) |
 | `&fuso [ver\|buscar\|add\|remove\|apelido\|principal\|formato]` | relógio com vários fusos |
 | `&tts entrar` / `&tts sair` | ⭐ dentro da call: entra e lê tudo que for escrito ali / sai e para |
-| `&tts <texto>` / `&tts [canal\|transmitir\|voz\|estado]` | uma frase específica, e os ajustes |
+| `&tts <texto>` / `&tts estado` | uma frase específica, e o painel da cadeia inteira |
+| `&tts dicionario [lista\|teste\|add\|remove\|padrao on\|off]` | como a escrita de chat vira fala (`vc` → `você`); ver e testar é livre |
+| `&tts voz [nome]` / `&tts efeito <nome>` / `&tts tom <n>` | timbre — as listas vêm do serviço, não do bot *(ManageMessages)* |
+| `&tts nomes on\|off` / `&tts cooldown <s>` | anunciar quem falou / freio entre falas da mesma pessoa *(ManageMessages)* |
 | `&tts filtro [status\|on\|off\|porminuto <n>\|teste <texto>]` | a peneira anti-barulho da transmissão |
 | `&tts diagnostico` | em qual etapa a entrada na call trava *(ManageMessages)* |
 | `&tts destravar` | limpa o `AlreadyConnected` do lado do Stoat *(ManageMessages)* |

@@ -201,8 +201,6 @@ function parametrosPT(P) {
     tts: [
       { nome: "<texto>", desc: "a Judy fala isso na call agora (não passa pela peneira — é pedido explícito)" },
       { nome: "falar", valor: "<texto>", desc: "força a fala mesmo que o texto pareça um subcomando (`&tts falar sair`)" },
-      { nome: "canal", valor: "<#voz|aqui>", desc: "em qual call ela fala. Digite dentro da call e use `aqui`" },
-      { nome: "transmitir", valor: "<#texto|off>", desc: "ler OUTRO canal, ou parar de ler sem sair da call. O `entrar` já liga a leitura do canal onde foi digitado" },
       { nome: "entrar", desc: "⭐ **o único comando que importa**: dentro da call, ela entra e passa a falar tudo que for escrito ali. Se já estiver em outra call, **vem para a sua**. Liga o sistema, escolhe a call e a leitura sozinha" },
       { nome: "sair", desc: "sai da call **e** para de ler. Depois disso, só `entrar` traz o bot de volta" },
       { nome: "diagnostico", desc: "**onde** a entrada trava: na API do Stoat ou na rede até o LiveKit — com o veredito de cada caso *(ManageMessages)*" },
@@ -215,7 +213,7 @@ function parametrosPT(P) {
       { nome: "voz", valor: "[nome]", desc: "qual voz do Piper usar" },
       { nome: "tom", valor: "<n>", desc: "altura da voz (1 = original)" },
       { nome: "efeito", valor: "<nome>", desc: "caráter da voz: robo, radio, glados…" },
-      { nome: "dicionario", valor: "[add|remove|lista|padrao on|off]", desc: "como abreviações são lidas em voz alta (`vc` → `você`)" },
+      { nome: "dicionario", valor: "[lista|teste <frase>|add <abrev> <texto>|remove <abrev>|padrao on|off]", desc: "como abreviações são lidas em voz alta (`vc` → `você`). Ver e testar é livre; mudar é *(ManageMessages)*" },
       { nome: "estado", desc: "diagnóstico da cadeia inteira: serviço, Piper, LiveKit, peneira e em quais calls está" },
     ],
     cargomudo: [
@@ -418,8 +416,6 @@ function parametrosEN(P) {
     tts: [
       { nome: "<text>", desc: "Judy says it in the call right now (skips the sieve — it's an explicit request)" },
       { nome: "falar", valor: "<text>", desc: "forces speech even when the text looks like a subcommand (`&tts falar sair`)" },
-      { nome: "canal", valor: "<#voice|aqui>", desc: "which call she speaks in. Type inside the call and use `aqui`" },
-      { nome: "transmitir", valor: "<#text|off>", desc: "read ANOTHER channel, or stop reading without leaving the call. `entrar` already turns on reading for the channel it was typed in" },
       { nome: "entrar", desc: "⭐ **the only command that matters**: inside the call, she joins and starts speaking everything written there. If she's in another call, she **moves to yours**. Turns the system on, picks the call and the reading by herself" },
       { nome: "sair", desc: "leaves the call **and** stops reading. After that, only `entrar` brings the bot back" },
       { nome: "diagnostico", desc: "**where** joining jams: at Stoat's API or on the network to LiveKit — with a verdict for each case *(ManageMessages)*" },
@@ -432,7 +428,7 @@ function parametrosEN(P) {
       { nome: "voz", valor: "[name]", desc: "which Piper voice to use" },
       { nome: "tom", valor: "<n>", desc: "voice pitch (1 = original)" },
       { nome: "efeito", valor: "<name>", desc: "voice character: robo, radio, glados…" },
-      { nome: "dicionario", valor: "[add|remove|lista|padrao on|off]", desc: "how abbreviations are read aloud (`vc` → `você`)" },
+      { nome: "dicionario", valor: "[lista|teste <phrase>|add <abbrev> <text>|remove <abbrev>|padrao on|off]", desc: "how abbreviations are read aloud (`vc` → `você`). Viewing and testing is open; changing needs *(ManageMessages)*" },
       { nome: "estado", desc: "diagnostics for the whole chain: service, Piper, LiveKit, sieve and which calls it's in" },
     ],
     cargomudo: [

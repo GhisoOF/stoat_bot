@@ -800,7 +800,9 @@ outros contribui com o seu.
 &banglobal isentar <@pessoa>      # aceita a pessoa AQUI apesar da lista (e desbane, se o bot baniu)
 &banglobal isentos                # quem está isento neste servidor
 &banglobal desfazer               # ↩️ reverte os bans que a LISTA aplicou aqui
-&banglobal esquecer <@pessoa>     # apaga o registro PARA TODOS os servidores
+&banglobal esquecer <@pessoa>     # apaga o registro PARA TODOS os servidores — e o mantém fora
+&banglobal ignorados              # quem está marcado para ficar fora da lista
+&banglobal lembrar <@pessoa>      # desfaz o esquecer (reabre a porta; não ressuscita registros)
 &banglobal bots                   # bots que entraram na lista antes da regra nova
 ```
 
@@ -856,7 +858,7 @@ bater boca e, no seu, é bem-vinda.
 | Comando | Alcance | Quando usar |
 |---|---|---|
 | `&banglobal isentar <@pessoa>` | **só este servidor** | você discorda do critério de fora, mas o ban de lá é assunto deles |
-| `&banglobal esquecer <@pessoa>` | **todos os servidores** | o registro em si não se sustenta (engano, ban revertido na origem) |
+| `&banglobal esquecer <@pessoa>` | **todos os servidores, para sempre** | o registro em si não se sustenta (engano, ban revertido na origem), ou a pessoa/bot não pertence à lista |
 
 Quem está isento entra e fica, a varredura passa por ela, e se o bot já a tinha
 banido por causa da lista o ban é desfeito na hora. Desbanir remove o
@@ -869,6 +871,27 @@ impedimento, não traz ninguém de volta: mande um convite novo.
 > terceiros faz o critério de moderação de lá valer para os seus**. Pense nisso
 > antes de aceitar o convite; para um registro pontual que não se sustente,
 > use `&banglobal esquecer`.
+
+### `esquecer` é uma decisão, não uma limpeza
+
+Apagar as linhas não bastava. A lista é **realimentada o tempo todo**: qualquer
+ban novo em qualquer servidor, e a importação automática a cada 6h, trazem a
+pessoa de volta. Foi o que aconteceu com o bot AutoMod aqui — esquecido num dia,
+reposto no outro pelo ban de outra pessoa, sem ninguém ficar sabendo.
+
+Por isso `esquecer` grava uma marca (`banglobal_ignorados`) que **veta a entrada
+na origem**, dentro do `registrarBanGlobal` — a porta única da lista, por onde
+passam o ban manual, o do automod e a importação. `&banglobal lembrar` tira a
+marca; `&banglobal ignorados` mostra quem está fora e por quê.
+
+`&banglobal bots` faz o mesmo para todos os bots que encontrar: um bot popular é
+banido em algum servidor mais cedo ou mais tarde, então sem a marca a limpeza
+precisaria ser refeita toda semana.
+
+**Detecção de bot:** a flag `bot` vem do cache do cliente quando ela está lá, e
+de `GET /users/{id}` quando não está — que é o caso normal de um bot banido em
+outro servidor. Antes só se olhava o cache, e era essa a fresta por onde bots
+entravam na lista.
 
 ---
 

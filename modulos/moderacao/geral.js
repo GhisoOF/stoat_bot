@@ -1208,7 +1208,7 @@ export async function cmdBan(message, args, ctx) {
   try {
     await server.banUser(targetId, { reason });
     // alimenta a lista global — com o nome, para a listagem ser legível depois
-    banGlobal.registrar(ctx, targetId, reason, "manual", {
+    await banGlobal.registrar(ctx, targetId, reason, "manual", {
       nome: ctx.client?.users?.get?.(targetId)?.username ?? null,
     });
     await log.registrar(ctx, "punicoes", { titulo: "🔨 Usuário banido (manual)",

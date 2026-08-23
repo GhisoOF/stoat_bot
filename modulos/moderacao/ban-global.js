@@ -82,6 +82,46 @@ export function ehBotConhecido(userId, { client, membro = null } = {}) {
   return false;
 }
 
+// ── A pergunta cara, mas confiável ──
+//
+//  A versão acima só enxerga o que já está no cache do cliente. Quando um
+//  moderador bane um bot que não é membro de nenhum servidor em comum (ou
+//  simplesmente ainda não foi carregado), ela responde "não é bot" e o bot
+//  entra na lista — foi assim que o AutoMod voltou para lá depois de ter
+//  sido esquecido. A API sabe a resposta: `GET /users/{id}` traz o campo
+//  `bot`. Guardamos o resultado porque a pergunta se repete a cada ban.
+const cacheBot = new Map();   // userId → boolean
+export async function confirmarSeEhBot(userId, { client, membro = null } = {}) {
+  if (!userId) return false;
+  if (ehBotConhecido(userId, { client, membro })) return true;
+  if (cacheBot.has(userId)) return cacheBot.get(userId);
+
+  let resposta = false;
+  try {
+    const u = await client?.users?.fetch?.(userId).catch(() => null);
+    if (u) resposta = ehBot(u);
+    else {
+      const token = process.env.BOT_TOKEN;
+      if (token) {
+        const r = await fetch(`${API}/users/${userId}`, {
+          headers: { "X-Bot-Token": token },
+          signal: AbortSignal.timeout(8000),
+        });
+        if (r.ok) resposta = ehBot(await r.json().catch(() => null));
+      }
+    }
+  } catch (e) {
+    // Sem resposta não dá para afirmar nada: devolvemos `false` (não é bot)
+    // porque o custo de errar aqui é um registro a mais na lista, que o
+    // `&banglobal bots` limpa — enquanto travar o registro por causa de uma
+    // falha de rede deixaria bans de gente de verdade fora da lista.
+    console.error("[BANGLOBAL] não consegui conferir se", userId, "é bot:", e?.message ?? e);
+    return false;
+  }
+  cacheBot.set(userId, resposta);
+  return resposta;
+}
+
 // Resolve o alvo de um subcomando e devolve um embed pronto quando falha.
 // Todos os subcomandos usavam caminhos diferentes para isso — e o `esquecer`
 // não usava nenhum: pegava o texto cru, então `esquecer AutoMod` virava
@@ -190,16 +230,25 @@ export async function importarBansDoServidor(server, serverId) {
   const porId = new Map();
   for (const u of bans?.users ?? []) porId.set(u?.id ?? u?._id, u);
 
-  let novos = 0, bots = 0;
+  let novos = 0, bots = 0, ignorados = 0;
   for (const b of lista) {
     const uid = b?.id?.user ?? b?.user?.id ?? b?.id;
     if (!uid) continue;
+    // Decisão já tomada por alguém: nem consulta a API, nem conta como bot.
+    if (db.estaIgnoradoGlobal(uid)) { ignorados++; continue; }
     const u = b?.user ?? porId.get(uid) ?? null;
-    if (ehBot(b) || ehBot(u)) { bots++; continue; }   // bot não entra na lista
+    if (ehBot(b) || ehBot(u)) {
+      bots++;
+      // O `fetchBans` traz a flag; aproveitamos para nunca mais precisar
+      // perguntar. Sem isto, um bot banido em vários servidores era conferido
+      // de novo a cada rodada de sincronização, em todos eles.
+      db.ignorarNaListaGlobal(uid, { nome: u?.username ?? b?.username ?? null, motivo: "é um bot" });
+      continue;
+    }
     const nome = u?.username ?? b?.username ?? null;
     if (db.registrarBanGlobal(uid, serverId, b?.reason ?? "importado do servidor", "importado", { nome })) novos++;
   }
-  return { total: lista.length, novos, bots };
+  return { total: lista.length, novos, bots, ignorados };
 }
 
 // ──────────────────────────────────────────────────────────
@@ -282,11 +331,23 @@ export function iniciarAutoImportacao(client, criarContexto) {
 // ──────────────────────────────────────────────────────────
 //  Registro: chamado sempre que um ban acontece
 // ──────────────────────────────────────────────────────────
-export function registrar(ctx, userId, motivo, origem = "manual", { nome = null, membro = null } = {}) {
+export async function registrar(ctx, userId, motivo, origem = "manual", { nome = null, membro = null } = {}) {
   const serverId = ctx?.serverId;
   if (!serverId || !userId) return;
-  if (ehBotConhecido(userId, { client: ctx?.client, membro })) {
+  // Decisão anterior de que esta pessoa não pertence à lista. Vem antes de
+  // tudo: é o `esquecer` que precisa sobreviver aos bans seguintes.
+  if (db.estaIgnoradoGlobal(userId)) {
+    console.log(`[BANGLOBAL] ${userId} está na lista de ignorados — não volta para a lista global`);
+    return;
+  }
+  if (await confirmarSeEhBot(userId, { client: ctx?.client, membro })) {
     console.log(`[BANGLOBAL] ${userId} é bot — não entra na lista global`);
+    // Uma vez confirmado, fica confirmado: o próximo ban não precisa
+    // perguntar de novo, nem depender de o cache estar quente naquela hora.
+    db.ignorarNaListaGlobal(userId, {
+      nome: nome ?? ctx?.client?.users?.get?.(userId)?.username ?? null,
+      motivo: "é um bot",
+    });
     return;
   }
   try {
@@ -474,7 +535,9 @@ export async function cmdBanGlobal(message, args, ctx) {
         `\`${PREFIXO}banglobal isentar <@user>\` — accept someone despite the list _(and unban them here)_`,
         `\`${PREFIXO}banglobal isentos\` — who is exempt here`,
         `\`${PREFIXO}banglobal desfazer\` — ↩️ reverts the bans the list applied here`,
-        `\`${PREFIXO}banglobal esquecer <@user|id>\` — removes a user from the list **for everyone**`,
+        `\`${PREFIXO}banglobal esquecer <@user|id> [nota]\` — removes a user from the list **for everyone**, and keeps them out for good`,
+        `\`${PREFIXO}banglobal ignorados\` — who is kept out · \`lembrar <@user>\` undoes it`,
+        `\`${PREFIXO}banglobal bots\` — finds bots on the list and drops them`,
         "",
         `**Contribution:** 🟢 always on — this server's bans (old and new) feed the list on their own. There's nothing to configure and no command to run.`,
         "",
@@ -506,7 +569,9 @@ export async function cmdBanGlobal(message, args, ctx) {
         `\`${PREFIXO}banglobal isentar <@pessoa>\` — aceitar alguém apesar da lista _(e desbanir aqui)_`,
         `\`${PREFIXO}banglobal isentos\` — quem está isento neste servidor`,
         `\`${PREFIXO}banglobal desfazer\` — ↩️ reverte os bans que a lista aplicou aqui`,
-        `\`${PREFIXO}banglobal esquecer <@usuário|id>\` — tira alguém da lista **para todos os servidores**`,
+        `\`${PREFIXO}banglobal esquecer <@usuário|id> [nota]\` — tira alguém da lista **para todos os servidores**, e o mantém fora`,
+        `\`${PREFIXO}banglobal ignorados\` — quem está fora · \`lembrar <@pessoa>\` desfaz`,
+        `\`${PREFIXO}banglobal bots\` — acha bots na lista e os tira`,
         "",
         `**Contribuição:** 🟢 sempre ligada — os bans deste servidor (antigos e novos) alimentam a lista sozinhos. Não há o que configurar nem comando a rodar.`,
         "",
@@ -1006,24 +1071,93 @@ export async function cmdBanGlobal(message, args, ctx) {
     const uid = alvo.id;
     const nome = rotularUsuario(uid, { nome: alvo.nome, client: ctx.client });
 
-    const n = db.esquecerUsuario(uid);
+    // O `esquecer` é permanente por padrão. Apagar as linhas e nada mais era
+    // enxugar gelo: o próximo ban em qualquer servidor — ou a sincronização
+    // de 6h — traz a pessoa de volta, e quem esqueceu não fica sabendo.
+    const motivoNota = args.slice(2).join(" ").trim() || null;
+    const n = db.esquecerUsuario(uid, {
+      nome: alvo.nome ?? null,
+      motivo: motivoNota,
+      porQuem: message.authorId,
+    });
+    await log.registrar(ctx, "punicoes", {
+      titulo: "🌐 Usuário removido da lista global",
+      descricao: `<@${message.authorId}> removeu ${alvo.nome ?? uid} da lista global (**${n}** registro(s)) — e ela não voltará com bans futuros.`,
+    });
+    return sendEmbed(message.channel, tr(ctx, {
+      title: n ? "🌐 Removido da lista global" : "🌐 Marcado para ficar de fora",
+      description: [
+        n
+          ? `${nome} saiu da lista: **${n}** registro(s) apagado(s) — em **todos** os servidores.`
+          : `${nome} não constava na lista, mas agora está marcado para **não entrar**.`,
+        "",
+        "**E não volta:** bans futuros em qualquer servidor, e a importação automática a cada 6h, passam a ignorá-lo.",
+        `_Desfazer: \`${PREFIXO}banglobal lembrar ${uid}\` · ver todos: \`${PREFIXO}banglobal ignorados\`_`,
+      ].join("\n"),
+      colour: COR.sucesso,
+    }, {
+      title: n ? "🌐 Removed from the global list" : "🌐 Marked to stay out",
+      description: [
+        n
+          ? `${nome} was removed: **${n}** record(s) deleted — across **every** server.`
+          : `${nome} wasn't on the list, but is now marked **not to enter** it.`,
+        "",
+        "**And it won't come back:** future bans in any server, and the 6-hourly import, will skip them from now on.",
+        `_Undo: \`${PREFIXO}banglobal lembrar ${uid}\` · see them all: \`${PREFIXO}banglobal ignorados\`_`,
+      ].join("\n"),
+      colour: COR.sucesso,
+    }));
+  }
+
+  // ── &banglobal ignorados — quem está marcado para ficar fora ──
+  if (["ignorados", "ignored", "excecoes", "exceções", "foradalista"].includes(sub)) {
+    const linhas = db.listarIgnoradosGlobais().map((i) =>
+      `• ${rotularUsuario(i.userId, { nome: i.nome, client: ctx.client })} — ${i.motivo ?? (lang === "en" ? "_no note_" : "_sem nota_")}`
+      + (i.porQuem ? ` _(<@${i.porQuem}>)_` : ""));
+    if (!linhas.length) {
+      return sendEmbed(message.channel, tr(ctx,
+        { title: "📋 Ninguém marcado", description: `Ninguém está marcado para ficar fora da lista global.\n\n\`${PREFIXO}banglobal esquecer <@pessoa>\` tira alguém e o mantém fora.`, colour: COR.info },
+        { title: "📋 Nobody marked", description: `Nobody is marked to stay off the global list.\n\n\`${PREFIXO}banglobal esquecer <@user>\` removes someone and keeps them out.`, colour: COR.info }));
+    }
+    const paginas = paginarLinhas([
+      ...linhas,
+      "",
+      tr(ctx,
+        `Bans nestes **nunca** entram na lista. Desfazer: \`${PREFIXO}banglobal lembrar <@pessoa>\``,
+        `Bans on these **never** enter the list. Undo: \`${PREFIXO}banglobal lembrar <@user>\``),
+    ], {
+      titulo: tr(ctx, `📋 Fora da lista global — ${linhas.length}`, `📋 Kept off the global list — ${linhas.length}`),
+    });
+    return enviarPaginado(ctx, message.channel, {
+      paginas, autorId: message.authorId, comandoPagina: `${PREFIXO}banglobal ignorados`, colour: COR.info,
+    });
+  }
+
+  // ── &banglobal lembrar — desfaz o esquecer ──
+  if (["lembrar", "remember", "desesquecer", "unforget", "reincluir"].includes(sub)) {
+    const entrada = args.slice(1).join(" ");
+    const alvo = await alvoDoComando(entrada, { message, server, ctx });
+    if (alvo.erro) return sendEmbed(message.channel,
+      embedAlvoNaoResolvido(ctx, alvo.erro, entrada, `${PREFIXO}banglobal lembrar <@pessoa|id|nome>`));
+    const n = db.deixarDeIgnorarGlobal(alvo.id);
+    const nome = rotularUsuario(alvo.id, { nome: alvo.nome, client: ctx.client });
     if (n) {
       await log.registrar(ctx, "punicoes", {
-        titulo: "🌐 Usuário removido da lista global",
-        descricao: `<@${message.authorId}> removeu ${alvo.nome ?? uid} da lista global (**${n}** registro(s)).`,
+        titulo: "🌐 Marca de exceção removida",
+        descricao: `<@${message.authorId}> permitiu que ${alvo.nome ?? alvo.id} volte a entrar na lista global.`,
       });
     }
     return sendEmbed(message.channel, tr(ctx, {
-      title: n ? "🌐 Removido da lista global" : "🤷 Não constava na lista",
+      title: n ? "🌐 Pode voltar para a lista" : "🤷 Não estava marcado",
       description: n
-        ? `${nome} saiu da lista: **${n}** registro(s) apagado(s) — em **todos** os servidores.`
-        : `${nome} não estava na lista global. Nada a fazer.`,
+        ? `${nome} volta a entrar na lista global quando for banido de novo.\n\n_Os registros antigos continuam apagados — isto só reabre a porta._`
+        : `${nome} não estava marcado para ficar fora. \`${PREFIXO}banglobal ignorados\` lista quem está.`,
       colour: n ? COR.sucesso : COR.info,
     }, {
-      title: n ? "🌐 Removed from the global list" : "🤷 Wasn't on the list",
+      title: n ? "🌐 Can rejoin the list" : "🤷 Wasn't marked",
       description: n
-        ? `${nome} was removed: **${n}** record(s) deleted — across **every** server.`
-        : `${nome} wasn't on the global list. Nothing to do.`,
+        ? `${nome} will enter the global list again on their next ban.\n\n_The old records stay deleted — this only reopens the door._`
+        : `${nome} wasn't marked to stay out. \`${PREFIXO}banglobal ignorados\` shows who is.`,
       colour: n ? COR.sucesso : COR.info,
     }));
   }
@@ -1037,9 +1171,13 @@ export async function cmdBanGlobal(message, args, ctx) {
     const ids = db.idsBanidosGlobais();
     const achados = [];
     for (const uid of ids) {
-      let u = null;
-      try { u = ctx.client?.users?.get?.(uid) ?? await ctx.client?.users?.fetch?.(uid).catch(() => null); } catch {}
-      if (u && ehBot(u)) achados.push({ id: uid, nome: u.username ?? uid });
+      // `confirmarSeEhBot` pergunta à API quando o cache não sabe — que é o
+      // caso normal aqui: um bot banido em OUTRO servidor não está no cache
+      // deste. Com a checagem antiga, a limpeza não achava justamente os
+      // registros que a motivaram.
+      if (await confirmarSeEhBot(uid, { client: ctx.client })) {
+        achados.push({ id: uid, nome: db.nomeDeBanido(uid) ?? ctx.client?.users?.get?.(uid)?.username ?? uid });
+      }
     }
     if (!achados.length) {
       return sendEmbed(message.channel, tr(ctx,
@@ -1063,16 +1201,16 @@ export async function cmdBanGlobal(message, args, ctx) {
         colour: COR.aviso,
       }));
     }
-    const n = db.removerBotsDaLista(achados.map((a) => a.id));
+    const n = db.removerBotsDaLista(achados);
     await log.registrar(ctx, "punicoes", {
       titulo: "🤖 Bots removidos da lista global",
       descricao: `<@${message.authorId}> removeu **${achados.length}** bot(s) (**${n}** registro(s)).`,
     });
     return sendEmbed(message.channel, tr(ctx,
       { title: `🤖 ${achados.length} bot(s) removido(s)`,
-        description: `**${n}** registro(s) apagado(s). Bots novos não entram mais na lista.`, colour: COR.sucesso },
+        description: `**${n}** registro(s) apagado(s), e estes ficam **marcados**: um ban futuro num deles não os traz de volta.\n\n_\`${PREFIXO}banglobal ignorados\` mostra a lista._`, colour: COR.sucesso },
       { title: `🤖 ${achados.length} bot(s) removed`,
-        description: `**${n}** record(s) deleted. New bots no longer enter the list.`, colour: COR.sucesso }));
+        description: `**${n}** record(s) deleted, and these are now **marked**: a future ban on one of them won't bring it back.\n\n_\`${PREFIXO}banglobal ignorados\` shows the list._`, colour: COR.sucesso }));
   }
 
   return sendEmbed(message.channel, tr(ctx, {

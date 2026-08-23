@@ -296,11 +296,14 @@ const antesBot = db.contarBansGlobais(BOT_ID);
 await bg.sincronizarServidor(servE, (sid) => ({ serverId: sid, config: {}, client: c, sendEmbed: async () => {} }));
 ok(db.contarBansGlobais(BOT_ID) === antesBot, "★ importação PULA bots (ninguém adiciona um bot sem querer)");
 
-bg.registrar({ serverId: "SE", client: c }, BOT_ID, "teste", "manual");
+await bg.registrar({ serverId: "SE", client: c }, BOT_ID, "teste", "manual");
 ok(db.contarBansGlobais(BOT_ID) === 0, "★ registrar() recusa bot");
+ok(db.estaIgnoradoGlobal(BOT_ID), "  → e o marca, para não precisar redescobrir a cada ban");
 
 const cfgE = (await import("./modulos/core/config-store.js")).configDoServidor("SE");
 cfgE.banGlobal = { modo: "banir", isentos: [] };
+// Registro ANTIGO, de antes da regra: por isso a marca é levantada aqui.
+db.deixarDeIgnorarGlobal(BOT_ID);
 db.registrarBanGlobal(BOT_ID, "SZ", "banido noutro lugar", "manual", { nome: "AutoMod" });
 const banidosE = [];
 servE.banUser = async (uid) => { banidosE.push(uid); };
@@ -325,6 +328,63 @@ const txtLista = ult();
 ok(txtLista.includes("Fulano"), "★ a listagem mostra o NOME de quem já saiu (em vez de `<@id>` → 'Unknown User')");
 ok(txtLista.includes("01JSMDA00000000000000000S"), "  → e o ID junto, que é o que os comandos aceitam");
 ok(!txtLista.includes("<@01JSUMIU"), "  → sem menção crua, que o cliente não resolveria");
+
+// ══ 15. Esquecer é para sempre ══
+//
+//  No servidor: o AutoMod foi esquecido, funcionou — e voltou para a lista
+//  quando OUTRA pessoa o baniu. Apagar linhas não decide nada enquanto a
+//  lista é realimentada a cada ban e a cada 6h de sincronização.
+console.log("\n── esquecer resiste aos bans seguintes ──");
+{
+  const ALVO = "01JESQ2CD90000000000000AAA";
+  db.deixarDeIgnorarGlobal(ALVO);
+  db.registrarBanGlobal(ALVO, "SZ", "briga", "manual", { nome: "Fulano" });
+  ok(db.contarBansGlobais(ALVO) === 1, "o usuário está na lista");
+
+  env.length = 0;
+  await dizE(`&banglobal esquecer ${ALVO}`);
+  ok(db.contarBansGlobais(ALVO) === 0, "`esquecer` tira da lista");
+  ok(db.estaIgnoradoGlobal(ALVO), "  → e o marca para não voltar");
+
+  // O ban de outra pessoa, em outro servidor: era isto que o trazia de volta.
+  await bg.registrar({ serverId: "SOUTRO", client: c }, ALVO, "banido por outra pessoa", "manual");
+  ok(db.contarBansGlobais(ALVO) === 0, "★ um ban NOVO não o traz de volta");
+  ok(db.registrarBanGlobal(ALVO, "SX", "importado", "importado") === false
+     && db.contarBansGlobais(ALVO) === 0, "★ nem a importação automática de outro servidor");
+
+  env.length = 0;
+  await dizE("&banglobal ignorados");
+  ok(ult().includes(ALVO) || ult().includes("Fulano"), "`ignorados` lista quem está fora");
+
+  env.length = 0;
+  await dizE(`&banglobal lembrar ${ALVO}`);
+  ok(!db.estaIgnoradoGlobal(ALVO), "`lembrar` desfaz a marca");
+  ok(db.registrarBanGlobal(ALVO, "SX", "de novo", "manual") === true, "  → e a porta reabre para bans futuros");
+  ok(db.contarBansGlobais(ALVO) === 1, "  → sem ressuscitar os registros antigos, só o novo");
+}
+
+// ══ 16. Bot confirmado pela API, não só pelo cache ══
+//
+//  `ehBotConhecido` só enxerga o cache do cliente. Um moderador banindo um bot
+//  que não está em nenhum servidor em comum passava direto — e foi assim que o
+//  AutoMod entrou na lista.
+console.log("\n── bot descoberto pela API ──");
+{
+  const BOT2 = "01JBOTDESCNHCD000000000AAA";
+  const clienteVazio = { users: { get: () => null, fetch: async () => null }, servers: new Map() };
+  process.env.BOT_TOKEN = process.env.BOT_TOKEN || "tok";
+  const pedidos = [];
+  const fetchAntes = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    pedidos.push(String(url));
+    return { ok: true, status: 200, json: async () => ({ _id: BOT2, username: "OutroBot", bot: { owner: "x" } }) };
+  };
+  await bg.registrar({ serverId: "SE", client: clienteVazio }, BOT2, "banido", "manual");
+  globalThis.fetch = fetchAntes;
+  ok(pedidos.some((u) => u.includes(`/users/${BOT2}`)), "★ pergunta à API quando o cache não sabe");
+  ok(db.contarBansGlobais(BOT2) === 0, "  → e o bot não entra na lista");
+  ok(db.estaIgnoradoGlobal(BOT2), "  → ficando marcado, para o próximo ban não perguntar de novo");
+}
 
 console.log(`\nBANGLOBAL: ${pass} ok, ${fail} falha(s)`);
 process.exit(fail ? 1 : 0);

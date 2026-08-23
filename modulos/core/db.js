@@ -104,6 +104,25 @@ export function abrirBanco(caminho) {
     }
   } catch (e) { console.error("[DB] migração bans_globais:", e.message); }
 
+  // ── Quem NUNCA deve entrar na lista global ──
+  //
+  //  `esquecer` só apagava as linhas. Mas a lista é realimentada o tempo
+  //  todo: qualquer ban novo em qualquer servidor, e a importação a cada 6h,
+  //  trazem a pessoa de volta — e foi exatamente isso que aconteceu com o
+  //  AutoMod, esquecido num dia e reposto no outro por um ban de outra
+  //  pessoa. Uma decisão de "este não pertence à lista" precisa sobreviver
+  //  aos bans seguintes, senão não é decisão nenhuma: é uma limpeza que a
+  //  próxima sincronização desfaz.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS banglobal_ignorados (
+      userId    TEXT PRIMARY KEY,
+      nome      TEXT,
+      motivo    TEXT,
+      porQuem   TEXT,
+      criadoEm  INTEGER NOT NULL
+    )
+  `);
+
   // (Reaction roles) emoji numa mensagem → cargo
   db.exec(`
     CREATE TABLE IF NOT EXISTS reaction_roles (
@@ -549,6 +568,9 @@ export function silenciosVencidos(agora = Date.now()) {
 // `origem`: "automod" | "manual" | "importado"
 
 export function registrarBanGlobal(userId, serverId, motivo, origem = "manual", { nome = null, ehBot = false } = {}) {
+  // A porta de entrada ÚNICA da lista — por isso o veto mora aqui, e não em
+  // cada um dos caminhos que registram bans (manual, automod, importação).
+  if (estaIgnoradoGlobal(userId)) return false;
   // evita duplicar o mesmo (usuário, servidor)
   const existe = prep(
     "SELECT id, userNome FROM bans_globais WHERE userId = ? AND serverId = ?"
@@ -588,10 +610,14 @@ export function idsBanidosGlobais() {
 }
 
 // Marca alguém como bot e devolve quantos registros saíram.
-export function removerBotsDaLista(ids = []) {
-  if (!ids.length) return 0;
-  const marcas = ids.map(() => "?").join(",");
-  const r = prep(`DELETE FROM bans_globais WHERE userId IN (${marcas})`).run(...ids);
+export function removerBotsDaLista(bots = []) {
+  const lista = bots.map((b) => (typeof b === "string" ? { id: b, nome: null } : b)).filter((b) => b?.id);
+  if (!lista.length) return 0;
+  const marcas = lista.map(() => "?").join(",");
+  const r = prep(`DELETE FROM bans_globais WHERE userId IN (${marcas})`).run(...lista.map((b) => b.id));
+  // Marcados para sempre: um bot popular é banido em algum servidor mais cedo
+  // ou mais tarde, então sem isto a limpeza precisaria ser refeita toda semana.
+  for (const b of lista) ignorarNaListaGlobal(b.id, { nome: b.nome ?? null, motivo: "é um bot" });
   return r.changes ?? 0;
 }
 
@@ -624,9 +650,37 @@ export function removerBanGlobal(userId, serverId) {
 }
 
 // Apaga TODO o histórico de um usuário na lista global
-export function esquecerUsuario(userId) {
+export function esquecerUsuario(userId, { nome = null, motivo = null, porQuem = null, permanente = true } = {}) {
   const r = prep("DELETE FROM bans_globais WHERE userId = ?").run(userId);
+  if (permanente) ignorarNaListaGlobal(userId, { nome, motivo, porQuem });
   return r.changes ?? 0;
+}
+
+// ── A lista de "nunca liste esta pessoa" ──
+export function ignorarNaListaGlobal(userId, { nome = null, motivo = null, porQuem = null } = {}) {
+  if (!userId) return false;
+  const antes = prep("SELECT userId, nome FROM banglobal_ignorados WHERE userId = ?").get(userId);
+  prep(`INSERT INTO banglobal_ignorados (userId, nome, motivo, porQuem, criadoEm)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(userId) DO UPDATE SET
+          nome = COALESCE(excluded.nome, nome),
+          motivo = COALESCE(excluded.motivo, motivo),
+          porQuem = COALESCE(excluded.porQuem, porQuem)`)
+    .run(userId, nome ?? null, motivo ?? null, porQuem ?? null, Date.now());
+  return !antes;   // true = entrou agora
+}
+
+export function estaIgnoradoGlobal(userId) {
+  if (!userId) return false;
+  return !!prep("SELECT 1 FROM banglobal_ignorados WHERE userId = ?").get(userId);
+}
+
+export function deixarDeIgnorarGlobal(userId) {
+  return prep("DELETE FROM banglobal_ignorados WHERE userId = ?").run(userId).changes ?? 0;
+}
+
+export function listarIgnoradosGlobais() {
+  return prep("SELECT userId, nome, motivo, porQuem, criadoEm FROM banglobal_ignorados ORDER BY criadoEm DESC").all();
 }
 
 export function totalBansGlobais() {

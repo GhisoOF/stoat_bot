@@ -783,6 +783,35 @@ Duas defesas somadas à correção:
   `rowid`: o `INSERT OR REPLACE` do `addReactionRole` apaga e reinsere a linha,
   jogando para o fim uma regra apenas reeditada.
 
+### O painel grande e o limite de requisições
+
+Reação cai no bucket do **canal**, que o Stoat limita a 15 requisições por
+janela:
+
+```rust
+("channels", Some(id)) => ("channels", Some(id)),
+"channels" => 15,
+```
+
+Um painel de 17 cores recomposto de uma vez estoura no 15º, e os últimos
+voltam com `{"retry_after": 8270}`. Aconteceu aqui: 13 emojis entraram, 4
+ficaram de fora — e em silêncio, porque o erro só ia para o log.
+
+As reações agora saem espaçadas (~750ms, configurável em `RR_PAUSA_MS`), e um
+429 é obedecido: espera o `retry_after` e tenta de novo, até três vezes. Painel
+com mais de 8 emojis avisa quanto tempo vai levar antes de começar.
+
+Falha que não é limite — `InvalidOperation` — **não** é retentada e aparece no
+resultado com o motivo. Ela significa uma de duas coisas, e o erro cru não
+distingue: ou a mensagem chegou ao teto de reações do servidor, ou é um emoji
+personalizado que o bot não pode usar (de um servidor onde ele não está, ou
+apagado).
+
+O teto vem da própria API (`features.limits.global.message_reactions`, 20 por
+padrão). Se a mensagem tiver mais regras que isso, o comando diz explicitamente
+que as excedentes nunca vão caber e que o painel precisa ser dividido em duas
+mensagens — em vez de falhar sempre nos mesmos últimos emojis.
+
 Um emoji reposto entra no **fim** da fila — repor sem apagar nada não permite
 escolher a posição. `&reactionrole ordem <mensagem> confirmar` devolve a ordem
 original, ao custo de limpar as marcações de todos (os cargos permanecem). Por

@@ -163,5 +163,69 @@ console.log("\n── repor o que sumiu ──");
   ok(msg.reactions.get("💙").has(PESSOA), "  → sem mexer em quem já estava marcado");
 }
 
+// ══ 5. Limite de requisições: 17 emojis não cabem numa janela ══
+//
+//  Aconteceu no servidor: um painel de 17 cores foi recomposto e só 13
+//  entraram. O Stoat limita o bucket do canal a 15 requisições por janela e
+//  devolve `{"retry_after": 8270}` nas seguintes. O erro ia só para o log,
+//  então o painel ficava incompleto em silêncio.
+console.log("\n── quando o Stoat diz 'devagar' ──");
+{
+  process.env.RR_PAUSA_MS = "1";                    // sem esperar de verdade no teste
+  const rr2 = await import("./modulos/ferramentas/reaction-roles.js?paciencia");
+  const MSG2 = "01MSGDEZESSETE00000000AAAA";
+  const emojis = Array.from({ length: 17 }, (_, i) => String.fromCodePoint(0x1F330 + i));
+  emojis.forEach((e, i) => db.addReactionRole(SERVER, MSG2, e, `01ROLE${String(i).padStart(20, "0")}`, CANAL));
+
+  // O dublê do backend: 15 passam por janela; as demais levam 429 até a
+  // janela virar.
+  let naJanela = 0;
+  let janelaAberta = true;
+  const msg = criarMensagem();
+  msg.id = MSG2;
+  msg.react = async function (emojiCodificado) {
+    const e = decodeURIComponent(emojiCodificado);
+    if (janelaAberta && naJanela >= 15) { const err = { retry_after: 8270 }; throw err; }
+    naJanela++;
+    this.reagidos.push(e);
+    this.reactions.set(e, new Set([BOT]));
+  };
+  const client = criarClient(msg);
+  // A janela vira enquanto esperamos, como na vida real.
+  const dormirDeVerdade = setTimeout;
+  globalThis.setTimeout = (fn, ms) => dormirDeVerdade(() => { if (ms > 100) { naJanela = 0; } fn(); }, 1);
+
+  const r = await rr2.reporReacoesQueFaltam(msg, client);
+  globalThis.setTimeout = dormirDeVerdade;
+  ok(r.repostos.length === 17, `★ os 17 emojis entram, não 13 (entraram ${r.repostos.length})`);
+  ok(!r.falhas.length, "  → e nenhum fica pelo caminho em silêncio");
+  ok(JSON.stringify(msg.reagidos) === JSON.stringify(emojis), "  → na ordem configurada");
+}
+
+// ══ 6. Falha de verdade não pode passar em silêncio ══
+//
+//  Um emoji personalizado de um servidor onde o bot não está devolve
+//  `InvalidOperation`. Isso não se resolve tentando de novo — tem de chegar
+//  a quem configurou.
+console.log("\n── quando o emoji não pode ser usado ──");
+{
+  process.env.RR_PAUSA_MS = "1";
+  const rr3 = await import("./modulos/ferramentas/reaction-roles.js?invalido");
+  const MSG3 = "01MSGEMOJIRUIM00000000AAAA";
+  db.addReactionRole(SERVER, MSG3, "🧊", "01ROLEOK0000000000000000AA", CANAL);
+  db.addReactionRole(SERVER, MSG3, ":01KZ14HB7AVX1N6WJ1CM2NP0HP:", "01ROLERUIM00000000000000AA", CANAL);
+  const msg = criarMensagem();
+  msg.id = MSG3;
+  const original = msg.react.bind(msg);
+  msg.react = async function (e) {
+    if (decodeURIComponent(e).startsWith(":")) throw { type: "InvalidOperation" };
+    return original(e);
+  };
+  const r = await rr3.reporReacoesQueFaltam(msg, criarClient(msg));
+  ok(r.repostos.includes("🧊"), "o emoji válido entra");
+  ok(r.falhas.length === 1 && /teto|personalizado/.test(r.falhas[0].motivo),
+    `★ e o inválido é RELATADO com o motivo ("${r.falhas[0]?.motivo?.slice(0, 60)}…")`);
+}
+
 console.log(`\nREACTION ROLES: ${pass} ok, ${fail} falha(s)`);
 process.exit(fail ? 1 : 0);

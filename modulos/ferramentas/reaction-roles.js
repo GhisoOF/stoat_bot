@@ -92,6 +92,67 @@ async function tirarReacaoDe(message, emoji, userId, client) {
   }
 }
 
+// ══════════════════════════════════════════════════════════
+//  Reagir sem levar 429 na cara
+//
+//  O Stoat limita requisições por bucket, e reação cai no bucket do CANAL:
+//
+//      ("channels", Some(id)) => ...   "channels" => 15
+//
+//  São 15 por janela. Um painel de 17 cores, disparado de uma vez, passa
+//  do teto no 15º e os últimos voltam com `{"retry_after": 8270}` — foi
+//  exatamente o que aconteceu: 13 emojis entraram e 4 ficaram de fora, em
+//  silêncio, porque o erro só ia para o log.
+//
+//  Duas medidas: espaçar as reações para caber na janela, e obedecer ao
+//  `retry_after` quando mesmo assim estourar (outra coisa pode estar usando
+//  o mesmo bucket). O tempo total de um painel grande passa a ser previsível
+//  — ~1s por emoji — e é isso que a mensagem de progresso promete.
+// ══════════════════════════════════════════════════════════
+const PAUSA_MS = Number(process.env.RR_PAUSA_MS || 750);   // 15 por 10s = 1 a cada 667ms
+const dormir = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// Devolve `true`, ou o motivo da falha em texto.
+async function reagirComPaciencia(message, emoji, { tentativas = 3 } = {}) {
+  for (let i = 0; i < tentativas; i++) {
+    try {
+      await message.react(encodeURIComponent(emoji));
+      return true;
+    } catch (e) {
+      const espera = Number(e?.retry_after ?? e?.data?.retry_after ?? e?.response?.data?.retry_after ?? 0);
+      if (espera > 0 && i < tentativas - 1) {
+        await dormir(espera + 250);       // margem: o relógio deles não é o nosso
+        continue;
+      }
+      if (espera > 0) return `limite de requisições (retry_after ${espera}ms)`;
+      // `InvalidOperation` aqui é quase sempre uma destas duas: a mensagem
+      // bateu no teto de reações do servidor, ou é um emoji personalizado
+      // que o bot não pode usar (de um servidor onde ele não está, ou
+      // apagado). O erro cru não diz qual, então dizemos as duas.
+      if (/InvalidOperation/.test(descreverErro(e))) {
+        return "o Stoat recusou: ou a mensagem chegou ao teto de reações, ou é um emoji personalizado que eu não posso usar";
+      }
+      return descreverErro(e);
+    }
+  }
+  return "não consegui depois de várias tentativas";
+}
+
+// Teto de reações por mensagem, anunciado pela própria API. Sem ele, um
+// painel grande demais falharia sempre nos últimos emojis sem explicação.
+let tetoCache = null;
+async function tetoDeReacoes() {
+  if (tetoCache) return tetoCache;
+  try {
+    const API = (process.env.STOAT_API || "https://api.stoat.chat").replace(/\/$/, "");
+    const r = await fetch(`${API}/`, { signal: AbortSignal.timeout(8000) });
+    const j = await r.json().catch(() => null);
+    const n = j?.features?.limits?.global?.message_reactions;
+    if (Number.isFinite(n)) tetoCache = n;
+  } catch { /* sem resposta: seguimos sem o aviso */ }
+  return tetoCache;
+}
+
 // Quem reagiu com este emoji, segundo o cache da mensagem.
 function quemReagiu(message, emoji) {
   const mapa = message?.reactions;
@@ -116,25 +177,27 @@ function quemReagiu(message, emoji) {
 // ══════════════════════════════════════════════════════════
 export async function reporReacoesQueFaltam(message, client, { forcar = false } = {}) {
   const messageId = message?.id ?? message?._id;
-  if (!messageId) return { repostos: [], conferidos: 0 };
+  if (!messageId) return { repostos: [], falhas: [], conferidos: 0 };
   const meuId = client?.user?.id;
   const regras = db.listReactionRoles(messageId);
   const repostos = [];
+  const falhas = [];
   for (const r of regras) {
     const reagiram = quemReagiu(message, r.emoji);
     // `null` = a mensagem não trouxe as reações; nesse caso só agimos se
     // pedirem explicitamente, para não martelar a API a cada boot.
     const falta = reagiram === null ? forcar : (reagiram.size === 0 || (forcar && !reagiram.has(meuId)));
     if (!falta) continue;
-    try {
-      await message.react(encodeURIComponent(r.emoji));
-      repostos.push(r.emoji);
-    } catch (e) {
-      console.error(`[REACTIONROLE] não consegui repor ${r.emoji} em ${messageId}: ${descreverErro(e)}`);
+    if (repostos.length) await dormir(PAUSA_MS);
+    const r2 = await reagirComPaciencia(message, r.emoji);
+    if (r2 === true) repostos.push(r.emoji);
+    else {
+      falhas.push({ emoji: r.emoji, motivo: r2 });
+      console.error(`[REACTIONROLE] não consegui repor ${r.emoji} em ${messageId}: ${r2}`);
     }
   }
   if (repostos.length) console.log(`[REACTIONROLE] repus ${repostos.length} reação(ões) em ${messageId}: ${repostos.join(" ")}`);
-  return { repostos, conferidos: regras.length };
+  return { repostos, falhas, conferidos: regras.length };
 }
 
 export async function aoReagir(message, userId, emoji, ctx) {
@@ -262,8 +325,9 @@ export async function aoDesreagir(message, userId, emoji, ctx) {
 // ──────────────────────────────────────────────────────────
 export async function precarregarMensagens(client) {
   let ok = 0, perdidas = 0, repostos = 0;
+  const falhas = [];
   const registros = db.mensagensComReactionRole();
-  if (!registros.length) return { ok, perdidas, repostos, total: 0 };
+  if (!registros.length) return { ok, perdidas, repostos, falhas, total: 0 };
 
   for (const reg of registros) {
     let msg = null;
@@ -292,12 +356,13 @@ export async function precarregarMensagens(client) {
       ok++;
       // Aproveita que a mensagem está em mãos para devolver os emojis que
       // sumiram. Só o que falta, na ordem configurada — nada é apagado aqui.
-      const r = await reporReacoesQueFaltam(msg, client).catch(() => ({ repostos: [] }));
+      const r = await reporReacoesQueFaltam(msg, client).catch(() => ({ repostos: [], falhas: [] }));
       repostos += r.repostos.length;
+      falhas.push(...(r.falhas ?? []));
     } else { perdidas++; console.log(`[REACTIONROLE][boot] não achei a mensagem ${reg.messageId} (canal apagado ou sem acesso?)`); }
   }
   console.log(`[REACTIONROLE] ${ok} mensagem(ns) recarregada(s)${perdidas ? `, ${perdidas} não encontrada(s)` : ""}${repostos ? `, ${repostos} reação(ões) reposta(s)` : ""}`);
-  return { ok, perdidas, repostos, total: registros.length };
+  return { ok, perdidas, repostos, falhas, total: registros.length };
 }
 
 // ──────────────────────────────────────────────────────────
@@ -468,24 +533,45 @@ export async function cmdReactionRole(message, args, ctx) {
         { title: "❌ Couldn't clear the reactions",
           description: `\`${descreverErro(e)}\`\n\nClearing other people's reactions needs **ManageMessages** in the channel.`, colour: COR.erro }));
     }
-    const falhas = [];
-    for (const emoji of ordem) {
-      try { await msg.react(encodeURIComponent(emoji)); }
-      catch (e) { falhas.push(emoji); console.error(`[REACTIONROLE][ordem] ${emoji}: ${descreverErro(e)}`); }
+    // Um painel grande leva tempo: são 15 requisições por janela no bucket do
+    // canal, e é melhor dizer isso antes do que deixar a pessoa achando que
+    // travou. (Foi o que aconteceu: 17 cores, 13 entraram, silêncio.)
+    const segundos = Math.ceil((ordem.length * PAUSA_MS) / 1000);
+    if (ordem.length > 8) {
+      await sendEmbed(message.channel, tr(ctx,
+        { title: "⏳ Recompondo o painel", description: `São **${ordem.length}** emojis, um a cada ~${(PAUSA_MS / 1000).toFixed(1)}s para não estourar o limite do Stoat. Leva uns **${segundos}s**.`, colour: COR.info },
+        { title: "⏳ Rebuilding the panel", description: `**${ordem.length}** emojis, one every ~${(PAUSA_MS / 1000).toFixed(1)}s to stay under Stoat's limit. About **${segundos}s**.`, colour: COR.info })).catch(() => {});
     }
+    const falhas = [];
+    for (const [i, emoji] of ordem.entries()) {
+      if (i) await dormir(PAUSA_MS);
+      const r = await reagirComPaciencia(msg, emoji);
+      if (r !== true) {
+        falhas.push({ emoji, motivo: r });
+        console.error(`[REACTIONROLE][ordem] ${emoji}: ${r}`);
+      }
+    }
+    const teto = await tetoDeReacoes();
+    const estourouTeto = teto && ordem.length > teto;
     return sendEmbed(message.channel, tr(ctx, {
       title: falhas.length ? "⚠️ Painel refeito, com falhas" : "✅ Painel na ordem original",
       description: [
-        `${ordem.length - falhas.length} de ${ordem.length} emojis, na ordem configurada.`,
-        falhas.length ? `Não consegui repor: ${falhas.join(" ")}` : "",
+        `**${ordem.length - falhas.length}** de **${ordem.length}** emojis, na ordem configurada.`,
+        falhas.length ? "\n**Não entraram:**\n" + falhas.map((f) => `${f.emoji} — ${f.motivo}`).join("\n") : "",
+        estourouTeto
+          ? `\n⚠️ Esta mensagem tem **${ordem.length}** regras, mas o Stoat aceita no máximo **${teto}** reações por mensagem. As que sobram nunca vão caber — divida o painel em duas mensagens.`
+          : "",
         "",
         "_Quem já tinha cargo continua com ele._",
       ].filter(Boolean).join("\n"), colour: falhas.length ? COR.aviso : COR.sucesso,
     }, {
       title: falhas.length ? "⚠️ Panel rebuilt, with failures" : "✅ Panel back in its original order",
       description: [
-        `${ordem.length - falhas.length} of ${ordem.length} emojis, in the configured order.`,
-        falhas.length ? `Couldn't restore: ${falhas.join(" ")}` : "",
+        `**${ordem.length - falhas.length}** of **${ordem.length}** emojis, in the configured order.`,
+        falhas.length ? "\n**Didn't make it:**\n" + falhas.map((f) => `${f.emoji} — ${f.motivo}`).join("\n") : "",
+        estourouTeto
+          ? `\n⚠️ This message has **${ordem.length}** rules, but Stoat allows at most **${teto}** reactions per message. The extras will never fit — split the panel into two messages.`
+          : "",
         "",
         "_Anyone who already had a role keeps it._",
       ].filter(Boolean).join("\n"), colour: falhas.length ? COR.aviso : COR.sucesso,
@@ -500,11 +586,13 @@ export async function cmdReactionRole(message, args, ctx) {
       { title: "🔄 Reloading…",
         description: "Fetching the reaction-role messages so they return to the cache.", colour: COR.info }));
     const r = await precarregarMensagens(client);
+    const motivos = [...new Set((r.falhas ?? []).map((f) => `${f.emoji} — ${f.motivo}`))].slice(0, 6);
     return sendEmbed(message.channel, en ? {
       title: r.perdidas ? "⚠️ Reloaded with issues" : "✅ Reloaded",
       description: [
         `**${r.ok}** of **${r.total}** message(s) returned to the cache.`,
         r.repostos ? `**${r.repostos}** missing reaction(s) put back (they go to the end of the row — \`${PREFIXO}reactionrole ordem <message>\` restores the original order).` : "",
+        motivos.length ? `\n**Couldn't put back:**\n${motivos.join("\n")}` : "",
         r.perdidas ? `**${r.perdidas}** weren't found — the channel may have been deleted, or the bot lacks \`ViewChannel\`/\`ReadMessageHistory\`.` : "",
         "",
         "_This runs automatically on every bot restart._",
@@ -515,6 +603,7 @@ export async function cmdReactionRole(message, args, ctx) {
       description: [
         `**${r.ok}** de **${r.total}** mensagem(ns) voltaram ao cache.`,
         r.repostos ? `**${r.repostos}** reação(ões) que tinham sumido foram repostas (entram no fim da fila — \`${PREFIXO}reactionrole ordem <mensagem>\` devolve a ordem original).` : "",
+        motivos.length ? `\n**Não consegui repor:**\n${motivos.join("\n")}` : "",
         r.perdidas ? `**${r.perdidas}** não foram encontradas — o canal pode ter sido apagado, ou falta \`ViewChannel\`/\`ReadMessageHistory\` para o bot.` : "",
         "",
         "_Isso é feito sozinho a cada reinício do bot._",

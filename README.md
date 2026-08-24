@@ -743,8 +743,50 @@ Reagir num emoji de uma mensagem concede um cargo. Alias: `&rr`. Exige **ManageR
 ```
 &reactionrole add <mensagem> <emoji> <idCargo>   # o bot reage; quem clicar ganha o cargo
 &reactionrole remove <mensagem>                  # remove os vínculos da mensagem
-&reactionrole list        # a <mensagem> pode ser o ID OU o link dela                                 # lista os vínculos do servidor
+&reactionrole list                               # lista os vínculos do servidor
+&reactionrole exclusivo <mensagem> on            # só um cargo por vez (cor, time)
+&reactionrole recarregar                         # repõe emojis que sumiram do painel
+&reactionrole ordem <mensagem> confirmar         # recompõe o painel na ordem configurada
 ```
+
+A `<mensagem>` pode ser o **ID** ou o **link** dela.
+
+### A reação do bot é o que segura o painel de pé
+
+Quando uma regra é criada, o bot reage na mensagem. Essa reação não é
+decoração: é ela que mantém a contagem em 1 quando ninguém está marcado. Sem
+ela, a última pessoa que desmarca leva o emoji junto — e a opção deixa de
+existir para todo mundo, porque não há mais onde clicar.
+
+Foi o que aconteceu no modo exclusivo, por causa de uma assinatura enganosa da
+lib:
+
+```js
+async unreact(emoji, deleteAll = false) {
+  return api.delete(`.../reactions/${emoji}`, { remove_all: deleteAll });
+}
+```
+
+O segundo parâmetro é um **booleano**, não um usuário. Passando um `userId` ali
+— que é o que qualquer um escreveria — a string vira `remove_all: true` e o
+backend executa `clear_reaction`, apagando a reação de **todos**. O código
+pedia "tire a reação desta pessoa" e o servidor ouvia "apague este emoji da
+mensagem". A rota certa aceita `user_id` (`OptionsUnreact`, no delta), só não
+está exposta na lib; agora é chamada direto pela API.
+
+Duas defesas somadas à correção:
+
+- **`aoDesreagir` repõe a semente** se o emoji ficou sem ninguém, e o boot faz
+  o mesmo em todas as mensagens configuradas. Painéis já danificados voltam
+  sozinhos no próximo restart.
+- **A ordem é persistida** (coluna `ordem`), porque não dá para confiar no
+  `rowid`: o `INSERT OR REPLACE` do `addReactionRole` apaga e reinsere a linha,
+  jogando para o fim uma regra apenas reeditada.
+
+Um emoji reposto entra no **fim** da fila — repor sem apagar nada não permite
+escolher a posição. `&reactionrole ordem <mensagem> confirmar` devolve a ordem
+original, ao custo de limpar as marcações de todos (os cargos permanecem). Por
+isso ele pede confirmação e nunca roda sozinho.
 
 > 💡 Crie a mensagem-painel com `&embed` e depois vincule os emojis a ela com o ID da mensagem.
 > Para pegar o ID: `...` na mensagem → *Copiar ID*. O bot precisa de **React** e **ManageRole**.

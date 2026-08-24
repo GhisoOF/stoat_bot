@@ -111,7 +111,8 @@ function parametrosPT(P) {
       { nome: "remove", valor: "<mensagem> <emoji>", desc: "desfaz uma ligação" },
       { nome: "list", desc: "tudo que está ligado neste servidor" },
       { nome: "exclusivo", valor: "<mensagem> on|off", desc: "nessa mensagem só vale um cargo por vez (cor, time): escolher um troca o anterior" },
-      { nome: "recarregar", desc: "se os cargos pararam de ser dados depois de um reinício" },
+      { nome: "recarregar", desc: "se os cargos pararam de ser dados depois de um reinício. Também **repõe** emojis que sumiram do painel (entram no fim da fila)" },
+      { nome: "ordem", valor: "<mensagem> confirmar", desc: "recompõe o painel na ordem configurada. Limpa as reações de todos e reage de novo, uma a uma — os cargos ficam, só o ✓ some" },
     ],
 
     cor: [
@@ -329,7 +330,8 @@ function parametrosEN(P) {
       { nome: "remove", valor: "<message> <emoji>", desc: "undoes a wiring" },
       { nome: "list", desc: "everything wired on this server" },
       { nome: "exclusivo", valor: "<message> on|off", desc: "only one role at a time on that message (color, team): picking one swaps the previous" },
-      { nome: "recarregar", desc: "if roles stopped being handed out after a restart" },
+      { nome: "recarregar", desc: "if roles stopped being handed out after a restart. It also **puts back** emojis that vanished from the panel (they go to the end of the row)" },
+      { nome: "ordem", valor: "<message> confirmar", desc: "rebuilds the panel in the configured order. Clears everyone's reactions and reacts again one by one — roles stay, only the ✓ goes" },
     ],
 
     cor: [

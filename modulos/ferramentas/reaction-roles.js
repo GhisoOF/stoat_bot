@@ -53,6 +53,90 @@ function descreverErro(e) {
   return partes.join(" | ");
 }
 
+// ══════════════════════════════════════════════════════════
+//  Tirar a reação de UMA pessoa
+//
+//  `message.unreact(emoji, X)` da lib NÃO recebe um usuário: o segundo
+//  parâmetro é `deleteAll`, um booleano.
+//
+//      async unreact(emoji, deleteAll = false) {
+//        return api.delete(`.../reactions/${emoji}`, { remove_all: deleteAll });
+//      }
+//
+//  Passando um userId ali, a string cai como `remove_all: true` (toda string
+//  não vazia é verdadeira) e o backend executa `clear_reaction`, que apaga a
+//  reação de TODO MUNDO — inclusive a do próprio bot, que é a que mantém o
+//  emoji visível com contagem 1. Resultado: no modo exclusivo, trocar de cor
+//  fazia o emoji sumir da mensagem, e ninguém mais conseguia escolher aquela
+//  opção. Era o bug relatado.
+//
+//  A rota certa existe e aceita `user_id` (delta: `OptionsUnreact`), só não
+//  está exposta na lib. Então chamamos a API direto.
+// ══════════════════════════════════════════════════════════
+async function tirarReacaoDe(message, emoji, userId, client) {
+  const canalId = message?.channelId ?? message?.channel?.id ?? message?.channel?._id;
+  const msgId = message?.id ?? message?._id;
+  if (!canalId || !msgId) return false;
+  try {
+    await client.api.delete(
+      `/channels/${canalId}/messages/${msgId}/reactions/${encodeURIComponent(emoji)}`,
+      { user_id: userId },
+    );
+    return true;
+  } catch (e) {
+    // Remover a reação de outra pessoa exige ManageMessages (o backend
+    // escala a permissão quando vem `user_id`). Sem ela, o cargo já foi
+    // trocado de qualquer forma — o painel é que fica desatualizado.
+    console.error(`[REACTIONROLE] não consegui tirar a reação ${emoji} de ${userId}: ${descreverErro(e)}`);
+    return false;
+  }
+}
+
+// Quem reagiu com este emoji, segundo o cache da mensagem.
+function quemReagiu(message, emoji) {
+  const mapa = message?.reactions;
+  if (!mapa) return null;                       // sem informação
+  const chave = [...(mapa.keys?.() ?? [])].find((k) => normalizarEmoji(k) === normalizarEmoji(emoji));
+  if (chave === undefined) return new Set();    // ninguém
+  const v = mapa.get?.(chave);
+  return new Set(v ? [...v] : []);
+}
+
+// ══════════════════════════════════════════════════════════
+//  Garantir que o painel continue clicável
+//
+//  A reação do bot é o que segura o emoji na mensagem: sem ela, quando a
+//  última pessoa desmarca, a contagem chega a zero e o emoji desaparece —
+//  aí não há mais onde clicar para pegar aquele cargo.
+//
+//  Repomos SEMPRE na ordem configurada, e só o que falta. Reagir de novo num
+//  emoji que já está lá não muda a posição dele; um que sumiu volta para o
+//  fim da fila, que é o melhor que dá para fazer sem apagar as escolhas de
+//  todo mundo (o `reparar ordem` faz isso, mas só quando alguém pede).
+// ══════════════════════════════════════════════════════════
+export async function reporReacoesQueFaltam(message, client, { forcar = false } = {}) {
+  const messageId = message?.id ?? message?._id;
+  if (!messageId) return { repostos: [], conferidos: 0 };
+  const meuId = client?.user?.id;
+  const regras = db.listReactionRoles(messageId);
+  const repostos = [];
+  for (const r of regras) {
+    const reagiram = quemReagiu(message, r.emoji);
+    // `null` = a mensagem não trouxe as reações; nesse caso só agimos se
+    // pedirem explicitamente, para não martelar a API a cada boot.
+    const falta = reagiram === null ? forcar : (reagiram.size === 0 || (forcar && !reagiram.has(meuId)));
+    if (!falta) continue;
+    try {
+      await message.react(encodeURIComponent(r.emoji));
+      repostos.push(r.emoji);
+    } catch (e) {
+      console.error(`[REACTIONROLE] não consegui repor ${r.emoji} em ${messageId}: ${descreverErro(e)}`);
+    }
+  }
+  if (repostos.length) console.log(`[REACTIONROLE] repus ${repostos.length} reação(ões) em ${messageId}: ${repostos.join(" ")}`);
+  return { repostos, conferidos: regras.length };
+}
+
 export async function aoReagir(message, userId, emoji, ctx) {
   try {
     const messageId = message?.id ?? message?._id;
@@ -103,7 +187,7 @@ export async function aoReagir(message, userId, emoji, ctx) {
           .filter((r) => removidos.includes(r.roleId))
           .map((r) => r.emoji);
         for (const e of paraTirar) {
-          await message.unreact?.(encodeURIComponent(e), userId).catch(() => {});
+          await tirarReacaoDe(message, e, userId, ctx.client);
         }
       } catch (e) { console.log("[REACTIONROLE] não consegui limpar as reações antigas:", e?.message); }
     }
@@ -147,6 +231,9 @@ export async function aoDesreagir(message, userId, emoji, ctx) {
       return false;
     }
     console.log(`[REACTIONROLE] -cargo ${alvo.roleId} de ${userId} (msg ${messageId})`);
+    // Se essa era a última reação daquele emoji, ele some da mensagem e o
+    // painel perde uma opção. Repor a do bot devolve o botão para o próximo.
+    await reporReacoesQueFaltam(message, ctx.client).catch(() => {});
     const rctx = { ...ctx, serverId: alvo.serverId, config: ctx.configDoServidor?.(alvo.serverId) ?? ctx.config };
     await log.registrar(rctx, "cargos", {
       titulo: "🎭 Cargo por reação",
@@ -174,9 +261,9 @@ export async function aoDesreagir(message, userId, emoji, ctx) {
 //  próxima vez.
 // ──────────────────────────────────────────────────────────
 export async function precarregarMensagens(client) {
-  let ok = 0, perdidas = 0;
+  let ok = 0, perdidas = 0, repostos = 0;
   const registros = db.mensagensComReactionRole();
-  if (!registros.length) return { ok, perdidas, total: 0 };
+  if (!registros.length) return { ok, perdidas, repostos, total: 0 };
 
   for (const reg of registros) {
     let msg = null;
@@ -201,10 +288,16 @@ export async function precarregarMensagens(client) {
     } catch (e) {
       console.error(`[REACTIONROLE][boot] ${reg.messageId}:`, e?.message);
     }
-    if (msg) ok++; else { perdidas++; console.log(`[REACTIONROLE][boot] não achei a mensagem ${reg.messageId} (canal apagado ou sem acesso?)`); }
+    if (msg) {
+      ok++;
+      // Aproveita que a mensagem está em mãos para devolver os emojis que
+      // sumiram. Só o que falta, na ordem configurada — nada é apagado aqui.
+      const r = await reporReacoesQueFaltam(msg, client).catch(() => ({ repostos: [] }));
+      repostos += r.repostos.length;
+    } else { perdidas++; console.log(`[REACTIONROLE][boot] não achei a mensagem ${reg.messageId} (canal apagado ou sem acesso?)`); }
   }
-  console.log(`[REACTIONROLE] ${ok} mensagem(ns) recarregada(s)${perdidas ? `, ${perdidas} não encontrada(s)` : ""}`);
-  return { ok, perdidas, total: registros.length };
+  console.log(`[REACTIONROLE] ${ok} mensagem(ns) recarregada(s)${perdidas ? `, ${perdidas} não encontrada(s)` : ""}${repostos ? `, ${repostos} reação(ões) reposta(s)` : ""}`);
+  return { ok, perdidas, repostos, total: registros.length };
 }
 
 // ──────────────────────────────────────────────────────────
@@ -305,6 +398,100 @@ export async function cmdReactionRole(message, args, ctx) {
       colour: COR.sucesso });
   }
 
+  // ── ordem: recompõe o painel exatamente como foi configurado ──
+  //
+  //  Repor só o que falta devolve o emoji perdido no FIM da fila. Para
+  //  voltar à ordem original não há meio-termo: é preciso limpar tudo e
+  //  reagir de novo, um a um. Isso apaga as marcações das pessoas — os
+  //  cargos ficam, mas o "check" visual some. Por isso não acontece
+  //  sozinho, e por isso pede confirmação.
+  if (["ordem", "order", "reordenar"].includes(sub)) {
+    const mid = resolverMensagem(args[1]).id;
+    const regras = mid ? db.listReactionRoles(mid) : [];
+    if (!mid || !regras.length) {
+      return sendEmbed(message.channel, tr(ctx,
+        { title: "❌ Mensagem sem cargos por reação",
+          description: `\`${PREFIXO}reactionrole ordem <mensagem> confirmar\`\n\nAceito o **ID** ou o **link**. \`${PREFIXO}reactionrole list\` mostra as configuradas.`, colour: COR.erro },
+        { title: "❌ No reaction roles on that message",
+          description: `\`${PREFIXO}reactionrole ordem <message> confirmar\`\n\nI accept the **ID** or the **link**. \`${PREFIXO}reactionrole list\` shows the configured ones.`, colour: COR.erro }));
+    }
+    const ordem = regras.map((r) => r.emoji);
+    if (!["confirmar", "confirm", "sim", "yes"].includes((args[2] ?? "").toLowerCase())) {
+      return sendEmbed(message.channel, tr(ctx, {
+        title: "⚠️ Isto apaga as marcações de todo mundo",
+        description: [
+          `Vou limpar **todas** as reações de \`${mid}\` e reagir de novo nesta ordem:`,
+          "",
+          ordem.map((e, i) => `${i + 1}. ${e}`).join("  "),
+          "",
+          "**Os cargos que as pessoas já têm continuam** — só o ✓ na mensagem some, e cada uma reage de novo quando quiser.",
+          "",
+          `Se você só quer de volta um emoji que sumiu, \`${PREFIXO}reactionrole recarregar\` faz isso sem apagar nada (ele entra no fim da fila).`,
+          "",
+          `Confirma? \`${PREFIXO}reactionrole ordem ${mid} confirmar\``,
+        ].join("\n"), colour: COR.aviso,
+      }, {
+        title: "⚠️ This wipes everyone's ticks",
+        description: [
+          `I'll clear **every** reaction on \`${mid}\` and react again in this order:`,
+          "",
+          ordem.map((e, i) => `${i + 1}. ${e}`).join("  "),
+          "",
+          "**People keep the roles they already have** — only the ✓ on the message goes away, and each person can react again whenever they like.",
+          "",
+          `If you just want a vanished emoji back, \`${PREFIXO}reactionrole recarregar\` does that without wiping anything (it goes to the end of the row).`,
+          "",
+          `Confirm? \`${PREFIXO}reactionrole ordem ${mid} confirmar\``,
+        ].join("\n"), colour: COR.aviso,
+      }));
+    }
+
+    const reg = db.mensagensComReactionRole().find((r) => r.messageId === mid);
+    let msg = null;
+    if (reg?.channelId) {
+      const canal = client.channels.get(reg.channelId) ?? await client.channels.fetch(reg.channelId).catch(() => null);
+      if (canal) msg = await canal.fetchMessage(mid).catch(() => null);
+    }
+    msg ??= await message.channel.fetchMessage(mid).catch(() => null) ?? await buscarEmCanais(server, client, mid);
+    if (!msg) {
+      return sendEmbed(message.channel, tr(ctx,
+        { title: "❌ Mensagem não encontrada", description: `Não achei \`${mid}\` num canal que eu enxergue.`, colour: COR.erro },
+        { title: "❌ Message not found", description: `I couldn't find \`${mid}\` in a channel I can see.`, colour: COR.erro }));
+    }
+
+    try {
+      await msg.clearReactions();
+    } catch (e) {
+      return sendEmbed(message.channel, tr(ctx,
+        { title: "❌ Não consegui limpar as reações",
+          description: `\`${descreverErro(e)}\`\n\nLimpar reações dos outros exige **ManageMessages** no canal.`, colour: COR.erro },
+        { title: "❌ Couldn't clear the reactions",
+          description: `\`${descreverErro(e)}\`\n\nClearing other people's reactions needs **ManageMessages** in the channel.`, colour: COR.erro }));
+    }
+    const falhas = [];
+    for (const emoji of ordem) {
+      try { await msg.react(encodeURIComponent(emoji)); }
+      catch (e) { falhas.push(emoji); console.error(`[REACTIONROLE][ordem] ${emoji}: ${descreverErro(e)}`); }
+    }
+    return sendEmbed(message.channel, tr(ctx, {
+      title: falhas.length ? "⚠️ Painel refeito, com falhas" : "✅ Painel na ordem original",
+      description: [
+        `${ordem.length - falhas.length} de ${ordem.length} emojis, na ordem configurada.`,
+        falhas.length ? `Não consegui repor: ${falhas.join(" ")}` : "",
+        "",
+        "_Quem já tinha cargo continua com ele._",
+      ].filter(Boolean).join("\n"), colour: falhas.length ? COR.aviso : COR.sucesso,
+    }, {
+      title: falhas.length ? "⚠️ Panel rebuilt, with failures" : "✅ Panel back in its original order",
+      description: [
+        `${ordem.length - falhas.length} of ${ordem.length} emojis, in the configured order.`,
+        falhas.length ? `Couldn't restore: ${falhas.join(" ")}` : "",
+        "",
+        "_Anyone who already had a role keeps it._",
+      ].filter(Boolean).join("\n"), colour: falhas.length ? COR.aviso : COR.sucesso,
+    }));
+  }
+
   // ── recarregar: força a re-leitura das mensagens (diagnóstico) ──
   if (["recarregar", "reload", "reparar"].includes(sub)) {
     await sendEmbed(message.channel, tr(ctx,
@@ -317,6 +504,7 @@ export async function cmdReactionRole(message, args, ctx) {
       title: r.perdidas ? "⚠️ Reloaded with issues" : "✅ Reloaded",
       description: [
         `**${r.ok}** of **${r.total}** message(s) returned to the cache.`,
+        r.repostos ? `**${r.repostos}** missing reaction(s) put back (they go to the end of the row — \`${PREFIXO}reactionrole ordem <message>\` restores the original order).` : "",
         r.perdidas ? `**${r.perdidas}** weren't found — the channel may have been deleted, or the bot lacks \`ViewChannel\`/\`ReadMessageHistory\`.` : "",
         "",
         "_This runs automatically on every bot restart._",
@@ -326,6 +514,7 @@ export async function cmdReactionRole(message, args, ctx) {
       title: r.perdidas ? "⚠️ Recarregado com pendências" : "✅ Recarregado",
       description: [
         `**${r.ok}** de **${r.total}** mensagem(ns) voltaram ao cache.`,
+        r.repostos ? `**${r.repostos}** reação(ões) que tinham sumido foram repostas (entram no fim da fila — \`${PREFIXO}reactionrole ordem <mensagem>\` devolve a ordem original).` : "",
         r.perdidas ? `**${r.perdidas}** não foram encontradas — o canal pode ter sido apagado, ou falta \`ViewChannel\`/\`ReadMessageHistory\` para o bot.` : "",
         "",
         "_Isso é feito sozinho a cada reinício do bot._",

@@ -146,6 +146,17 @@ export function abrirBanco(caminho) {
     if (!cols.includes("channelId")) {
       db.exec("ALTER TABLE reaction_roles ADD COLUMN channelId TEXT");
     }
+    // A ORDEM em que os emojis foram configurados. É a ordem em que eles
+    // aparecem na mensagem, e a única forma de recolocá-los como estavam
+    // quando um some. Não dá para confiar no `rowid`: o `INSERT OR REPLACE`
+    // do `addReactionRole` apaga e reinsere a linha, jogando a regra
+    // reeditada para o fim.
+    if (!cols.includes("ordem")) {
+      db.exec("ALTER TABLE reaction_roles ADD COLUMN ordem INTEGER");
+      // Regras que já existiam: o rowid atual é a melhor aproximação que
+      // temos da ordem original, e é melhor que nada.
+      db.exec("UPDATE reaction_roles SET ordem = rowid WHERE ordem IS NULL");
+    }
   } catch (e) { console.error("[DB] migração reaction_roles:", e.message); }
 
   // (Curadoria RSS) feeds cadastrados por servidor
@@ -738,8 +749,12 @@ export function addReactionRole(serverId, messageId, emoji, roleId, channelId = 
   const atual = prep("SELECT exclusivo, channelId FROM reaction_roles WHERE messageId = ? LIMIT 1").get(messageId);
   const exclusivo = atual?.exclusivo ?? 0;
   const canal = channelId ?? atual?.channelId ?? null;
-  prep(`INSERT OR REPLACE INTO reaction_roles (serverId, messageId, emoji, roleId, exclusivo, channelId)
-              VALUES (?, ?, ?, ?, ?, ?)`).run(serverId, messageId, emoji, roleId, exclusivo, canal);
+  // Reeditar uma regra existente NÃO a manda para o fim da fila: quem já
+  // tinha posição, mantém. Só quem é novo entra no fim.
+  const posicao = prep("SELECT ordem FROM reaction_roles WHERE messageId = ? AND emoji = ?").get(messageId, emoji)?.ordem
+    ?? ((prep("SELECT MAX(ordem) AS m FROM reaction_roles WHERE messageId = ?").get(messageId)?.m ?? 0) + 1);
+  prep(`INSERT OR REPLACE INTO reaction_roles (serverId, messageId, emoji, roleId, exclusivo, channelId, ordem)
+              VALUES (?, ?, ?, ?, ?, ?, ?)`).run(serverId, messageId, emoji, roleId, exclusivo, canal, posicao);
 }
 
 // Grava/atualiza o canal de uma mensagem já registrada.
@@ -771,11 +786,13 @@ export function getReactionRole(messageId, emoji) {
 }
 
 export function listReactionRoles(messageId) {
-  return prep("SELECT emoji, roleId, exclusivo FROM reaction_roles WHERE messageId = ?").all(messageId);
+  // Sempre na ordem de configuração: é ela que a mensagem mostra, e é o que
+  // permite recompor o painel do jeito que estava.
+  return prep("SELECT emoji, roleId, exclusivo FROM reaction_roles WHERE messageId = ? ORDER BY ordem, rowid").all(messageId);
 }
 
 export function listReactionRolesServidor(serverId) {
-  return prep("SELECT messageId, emoji, roleId FROM reaction_roles WHERE serverId = ? ORDER BY messageId")
+  return prep("SELECT messageId, emoji, roleId FROM reaction_roles WHERE serverId = ? ORDER BY messageId, ordem, rowid")
     .all(serverId);
 }
 

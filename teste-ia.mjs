@@ -291,5 +291,43 @@ console.log("\n── imagem: o que não passa ──");
   ok(/SD_URL/.test(semSd.erro ?? ""), "  → sem SD_URL, a ferramenta explica o que falta em vez de fingir");
 }
 
+// ══ 6. A memória não pode inventar ══
+//
+//  No servidor, o `&chat perfil` de alguém mostrava "mora em Y" e "trabalha
+//  com X" — os PLACEHOLDERS do meu próprio prompt, copiados literalmente
+//  por um modelo pequeno e gravados como fato. Daí a Judy afirmou que a
+//  pessoa morava em São Paulo e inventou uma piada interna do servidor
+//  para justificar. Memória errada não fica quieta: vira alucinação
+//  confiante, porque os fatos são injetados no prompt da conversa.
+console.log("\n── a memória só aceita o que tem evidência ──");
+{
+  const { filtrarFato } = await import("./modulos/ai/memoria-agente.js?ev");
+  const msgs = ["kkkk claro que sim, muito útil", "vou dormir depois dessa"];
+  const f = (item) => filtrarFato(item, { msgs, nome: "Ghiso" });
+
+  ok(f({ fato: "mora em Y", evidencia: "mora em Y" }) === null,
+    "★ placeholder do prompt ('mora em Y') não vira fato — foi exatamente o que apareceu no perfil");
+  ok(f({ fato: "trabalha com X", evidencia: "trabalha com X" }) === null, "  → nem 'trabalha com X'");
+  ok(f({ fato: "bot", evidencia: "bot aqui" }) === null, "  → termo genérico de uma palavra é descartado");
+  ok(f({ fato: "mora em São Paulo", evidencia: "eu moro em são paulo" }) === null,
+    "★ evidência INVENTADA é descartada — ninguém disse isso, e virou 'então você também é de SP!'");
+  ok(f({ fato: "é sarcástica", evidencia: "kkkk claro que sim, muito útil" }) === "é sarcástica",
+    "  → e o fato com evidência REAL passa");
+  ok(f({ fato: "gosta de Souls games" }) === null, "sem campo de evidência, não entra");
+  ok(f({ fato: "Ghiso", evidencia: "vou dormir depois dessa" }) === null, "o nome da pessoa não é fato sobre ela");
+  ok(f("é sarcástica") === null, "formato antigo (string solta) também exige evidência");
+}
+
+// ══ 7. Os fatos são apresentados como impressão, não como verdade ══
+console.log("\n── enquadramento do que a Judy 'sabe' ──");
+{
+  const fonte = fs.readFileSync("./modulos/ai/memoria-agente.js", "utf8");
+  const bloco = fonte.slice(fonte.indexOf("export function contextoMemoria"));
+  ok(/IMPRESSÕES/.test(bloco), "★ o bloco injetado diz que são impressões, não verdades");
+  ok(/acredite nela, n[ãa]o na sua mem[óo]ria/i.test(bloco),
+    "  → e manda acreditar na pessoa quando ela contradisser a memória");
+  ok(/Nunca afirme como certo/i.test(bloco), "  → proibindo afirmar como certo o que só está ali");
+}
+
 console.log(`\nIA: ${pass} ok, ${fail} falha(s)`);
 process.exit(fail ? 1 : 0);

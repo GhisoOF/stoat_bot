@@ -86,20 +86,70 @@ export function observar({ serverId, userId, nome, texto, ehBot }) {
   }, DEBOUNCE_MS);
 }
 
+// ══════════════════════════════════════════════════════════
+//  O extrator — e a lição dos placeholders
+//
+//  A versão anterior dava exemplos assim: "trabalha com X", "mora em Y",
+//  "estuda Z". Um modelo pequeno não os leu como PLACEHOLDERS: copiou-os
+//  literalmente para a saída. O resultado apareceu no `&chat perfil` de
+//  alguém como "mora em Y" e "trabalha com X" — o meu prompt vazando para
+//  o banco, apresentado à pessoa como fato sobre ela.
+//
+//  Pior: fatos falsos são INJETADOS no prompt da conversa. A Judy passou a
+//  afirmar com confiança que a pessoa morava em São Paulo, e a inventar uma
+//  piada interna do servidor para justificar. Uma memória errada não fica
+//  quieta: ela vira alucinação confiante.
+//
+//  Por isso agora cada fato precisa de EVIDÊNCIA — a citação da mensagem
+//  que o sustenta. Se o modelo não consegue apontar onde leu aquilo, o fato
+//  não entra. É o mesmo princípio de "não invente" aplicado à memória.
+// ══════════════════════════════════════════════════════════
 const PROMPT_EXTRACAO = `Você extrai fatos duráveis de mensagens de chat para a memória de um bot.
 Leia as mensagens de UM usuário e devolva SÓ um JSON:
-{"personalidade": ["..."], "gosto": ["..."], "info": ["..."], "servidor": ["..."]}
+{"personalidade": [{"fato":"...","evidencia":"..."}], "gosto": [...], "info": [...], "servidor": [...]}
+
+Cada item tem DOIS campos:
+- "fato": frase curta em 3ª pessoa, em português.
+- "evidencia": um TRECHO LITERAL de uma das mensagens acima que prova o fato.
 
 CATEGORIAS (sobre quem escreveu):
-- "personalidade": traços de como a pessoa é ou se comunica ("é sarcástica", "é paciente", "gosta de debater", "é tímida").
-- "gosto": preferências e interesses ("gosta de Souls games", "curte cyberpunk", "prefere café").
-- "info": fatos concretos ("trabalha com X", "mora em Y", "estuda Z", "tem um gato").
-- "servidor": fatos gerais da comunidade (piadas internas, eventos, apelidos). NÃO sobre a pessoa.
+- "personalidade": como a pessoa é ou se comunica.
+- "gosto": preferências e interesses concretos.
+- "info": fatos concretos e verificáveis da vida dela (onde mora, o que faz, o que tem).
+- "servidor": fatos da comunidade (piadas internas, eventos, apelidos). NÃO sobre a pessoa.
 
-REGRAS:
-- Frases curtas em 3ª pessoa. Só fatos DURÁVEIS — ignore saudações, reações e o clima do momento.
-- Se não houver nada que valha lembrar numa categoria, deixe a lista vazia.
-- Máximo 2 fatos por categoria. Em português. Nada além do JSON.`;
+REGRAS ABSOLUTAS:
+- NUNCA invente. Se a mensagem não disser, não existe. Preferir lista vazia a preencher.
+- A "evidencia" tem de ser texto que aparece LITERALMENTE nas mensagens. Sem evidência, não inclua o item.
+- Nada de placeholders, letras soltas ou termos genéricos ("X", "Y", "profissional", "bot", "ativo").
+- Não registre o nome da pessoa nem o que ELA perguntou — só o que ela afirmou sobre si.
+- Ignore saudações, reações, piadas do momento e o humor do dia.
+- Máximo 2 itens por categoria. Nada além do JSON.`;
+
+// Exportada para ser testável de verdade: é uma função pura, e o teste
+// anterior que a exercitava "pelo caminho público" passava vazio sem
+// executar nada — falso verde é pior que teste nenhum.
+const LIXO_MEMORIA = /^(x|y|z|profissional|bot|ativo|ativa|curto|curta|geral|pessoa|usuário|usuario|nada|humano)$/i;
+export function filtrarFato(item, { msgs = [], nome = "", aoDescartar = () => {} } = {}) {
+  const fato = (typeof item === "string" ? item : item?.fato ?? "").trim();
+  if (!fato || fato.length < 6) return null;                        // "bot", "ativo"
+  if (LIXO_MEMORIA.test(fato.replace(/^(é|e|tem|gosta de)\s+/i, "").trim())) return null;
+  // Placeholder do próprio prompt, copiado literalmente pelo modelo.
+  if (/\b(com|em|de)\s+[xyz]\b/i.test(fato)) return null;
+  // O nome da pessoa não é um fato sobre ela.
+  if (nome && fato.toLowerCase().trim() === String(nome).toLowerCase().trim()) return null;
+
+  const evid = String(item?.evidencia ?? "").trim().toLowerCase();
+  if (evid.length < 4) return null;                                  // sem evidência, não entra
+  // Pedir evidência não basta: o modelo inventa a evidência junto. Então
+  // conferimos que o trecho citado aparece MESMO nas mensagens lidas.
+  const texto = msgs.join("\n").toLowerCase();
+  if (!texto.includes(evid.slice(0, 40))) {
+    aoDescartar(`descartado (evidência inventada): "${fato}" ← "${evid.slice(0, 50)}"`);
+    return null;
+  }
+  return fato;
+}
 
 async function processar(k) {
   const buf = buffers.get(k);
@@ -123,18 +173,26 @@ async function processar(k) {
     obj = JSON.parse(limpo);
   } catch { log("JSON inválido do extrator; ignorando"); return; }
 
+  // ── A peneira ──
+  //
+  //  O prompt pede evidência, mas pedir não basta: um modelo pequeno
+  //  inventa a evidência junto. Então CONFERIMOS que o trecho citado
+  //  realmente aparece nas mensagens. É a diferença entre confiar e
+  //  verificar, e é barata: uma busca em texto.
+  const aceitar = (item) => filtrarFato(item, { msgs, nome, aoDescartar: (m) => log(m) });
+
   const cats = { personalidade: "personalidade", gosto: "gosto", info: "info" };
   let total = 0;
   for (const [chave, categoria] of Object.entries(cats)) {
     const lista = Array.isArray(obj?.[chave]) ? obj[chave] : [];
-    for (const f of lista.slice(0, 2)) {
-      if (typeof f === "string" && f.trim()) { db.addFatoPessoa(serverId, userId, f.trim(), 0.5, categoria); total++; }
+    for (const item of lista.slice(0, 2)) {
+      const fato = aceitar(item);
+      if (fato) { db.addFatoPessoa(serverId, userId, fato, 0.5, categoria); total++; }
     }
   }
-  const servidor = Array.isArray(obj?.servidor) ? obj.servidor : [];
-  for (const f of servidor.slice(0, 2)) {
-    if (typeof f === "string" && f.trim()) db.addFatoServidor(serverId, f.trim());
-  }
+  const servidor = (Array.isArray(obj?.servidor) ? obj.servidor : []).slice(0, 2)
+    .map(aceitar).filter(Boolean);
+  for (const f of servidor) db.addFatoServidor(serverId, f);
   if (total || servidor.length) {
     log(`extraiu p/ ${nome}: ${total} pessoais, ${servidor.length} de servidor`);
   }
@@ -184,7 +242,15 @@ export function contextoMemoria(serverId, userId) {
     linhas.push("IMPORTANTE: trate esta pessoa com gentileza e paciência extra, de forma clara e acolhedora. Sem ironia ácida com ela.");
   }
 
-  linhas.push("(Use com naturalidade; não recite. Pode estar desatualizado.)");
+  // O enquadramento importa tanto quanto o conteúdo. Apresentado como
+  // verdade, um fato errado vira afirmação confiante ("então você também é
+  // de São Paulo!"). Apresentado como impressão, vira pergunta.
+  linhas.push(
+    "(Isto são IMPRESSÕES suas de conversas passadas, não verdades verificadas.",
+    "Use com naturalidade e NUNCA recite. Se for usar um fato destes, trate-o como algo",
+    "que você acha que sabe — e se a pessoa contradisser, acredite nela, não na sua memória.",
+    "Nunca afirme como certo algo que só está aqui.)",
+  );
   return linhas.join("\n");
 }
 

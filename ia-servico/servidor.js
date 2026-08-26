@@ -110,6 +110,7 @@ async function conversarComFerramentas(messages, { modelo, usarFerramentas = tru
   const usos = [];
   const anexos = [];
   let usouFerramenta = false;
+  let usouLeitura = false;   // leu código? então a resposta é explicação, não cópia
 
   for (let volta = 0; volta < MAX_VOLTAS; volta++) {
     const data = await ollama(hist, { modelo, comFerramentas: usarFerramentas });
@@ -145,6 +146,7 @@ async function conversarComFerramentas(messages, { modelo, usarFerramentas = tru
 
     for (const c of chamadas) {
       const nome = c?.function?.name;
+      if (nome === "ler_codigo") usouLeitura = true;
       let args = c?.function?.arguments ?? {};
       if (typeof args === "string") { try { args = JSON.parse(args); } catch { args = {}; } }
 
@@ -172,6 +174,19 @@ async function conversarComFerramentas(messages, { modelo, usarFerramentas = tru
 
     // Logo depois do JSON da ferramenta, enquanto ainda é a última coisa lida.
     hist.push({ role: "system", content: lembreteDeIdioma(idioma) });
+
+    // ── Explicar, não despejar ──
+    //
+    //  Perguntada "como funciona o seu TTS a nível de código?", ela colou o
+    //  arquivo inteiro. O conteúdo estava certo; o formato, não — ninguém
+    //  pede uma explicação para receber 1400 linhas de volta. O modelo faz
+    //  isso porque o resultado da ferramenta é a última coisa que ele leu,
+    //  e copiar é mais fácil que sintetizar. Então dizemos explicitamente.
+    if (usouLeitura) {
+      hist.push({ role: "system", content: idioma === "en"
+        ? "The tool result is REFERENCE MATERIAL, not the answer. Explain in your own words what the code does; never paste the file. Quote at most 3-5 short lines, and only when a specific line is the point. Cite the path you read."
+        : "O resultado da ferramenta é MATERIAL DE REFERÊNCIA, não a resposta. Explique com as SUAS palavras o que o código faz; nunca cole o arquivo. Cite no máximo 3-5 linhas curtas, e só quando uma linha específica for o ponto. Diga o caminho do arquivo que você leu." });
+    }
   }
 
   // Estourou o limite de voltas: pede uma resposta final sem ferramentas.

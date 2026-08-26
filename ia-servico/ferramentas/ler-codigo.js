@@ -135,19 +135,51 @@ export const definicao = {
   type: "function",
   function: {
     name: "ler_codigo",
-    description: "Lê o código-fonte do próprio bot direto do repositório no GitHub (somente leitura). Use para responder como o bot funciona, contar curiosidades sobre a própria implementação ou conferir detalhes técnicos. Ações: 'estatisticas' (totais de linhas/arquivos), 'listar' (árvore de arquivos), 'ler' (conteúdo de um arquivo).",
+    // A descrição diz ao modelo POR ONDE COMEÇAR. Sem isso ele adivinhava
+    // nomes de arquivo ("scripts/judy-ia.js", que nunca existiu) e gastava
+    // três chamadas para descobrir que estava errado.
+    description: "Lê o código-fonte do próprio bot (somente leitura). Use para responder como o bot funciona, comentar a própria implementação ou conferir detalhes técnicos. SEMPRE comece por 'estatisticas' (visão geral: quantos arquivos, quais pastas) ou 'listar' sem caminho (árvore completa) — só depois use 'ler' com um caminho que você VIU na listagem. Nunca adivinhe nomes de arquivo.",
     parameters: {
       type: "object",
       required: ["acao"],
       properties: {
         acao: { type: "string", enum: ["estatisticas", "listar", "ler"], description: "O que fazer" },
-        caminho: { type: "string", description: "Caminho do arquivo, ex.: 'modulos/ai/chat.js'. Obrigatório na ação 'ler'." },
+        caminho: { type: "string", description: "Caminho relativo à raiz do repositório, ex.: 'modulos/ai/chat.js' ou 'modulos/ai'. Deixe VAZIO para a raiz — não use '.' nem '/'. Obrigatório na ação 'ler'." },
       },
     },
   },
 };
 
+// ── Normalizar o caminho que o modelo mandou ──────────────
+//
+//  O modelo escreve a raiz como ".", "./" ou "/" — as três formas naturais.
+//  O filtro era `path.startsWith(caminho)`, e nenhum arquivo começa com "."
+//  (eles são `main.js`, `modulos/x.js`…), então listar a raiz devolvia lista
+//  VAZIA. A Judy olhou para o próprio repositório, viu o nada, e concluiu que
+//  não tinha acesso ao código. Um bug de uma linha que parecia falta de
+//  permissão — foi por isso que fomos conferir token e volume primeiro.
+function normalizarCaminho(caminho) {
+  const c = String(caminho ?? "").trim().replace(/\\\\/g, "/");
+  if (!c || c === "." || c === "./" || c === "/" || c === "raiz" || c === "root") return "";
+  return c.replace(/^\.\//, "").replace(/^\/+/, "").replace(/\/+$/, "");
+}
+
+// Quando o caminho não existe, dizer O QUE existe vale mais que dizer "não
+// achei": o modelo tentou `scripts/judy-ia.js`, que nunca existiu, e ficou
+// chutando. Com as opções na mão, ele acerta na segunda.
+function sugerir(arqs, pedido) {
+  const alvo = pedido.toLowerCase();
+  const base = alvo.split("/").pop();
+  const perto = arqs
+    .map((n) => n.path)
+    .filter((p) => p.toLowerCase().includes(base) || base.includes(p.split("/").pop().toLowerCase()))
+    .slice(0, 8);
+  const pastas = [...new Set(arqs.map((n) => n.path.includes("/") ? n.path.split("/")[0] : "(raiz)"))].slice(0, 12);
+  return { parecidos: perto, pastas_no_repositorio: pastas };
+}
+
 export async function executar({ acao, caminho }) {
+  caminho = normalizarCaminho(caminho);
   // ── Plano A: o disco ──
   const raiz = raizLocal();
   if (raiz) {
@@ -155,7 +187,10 @@ export async function executar({ acao, caminho }) {
       if (acao === "estatisticas" || acao === "listar") {
         const arqs = arvoreLocal(raiz);
         if (acao === "listar") {
-          const filtro = caminho ? arqs.filter((n) => n.path.startsWith(caminho)) : arqs;
+          const filtro = caminho ? arqs.filter((n) => n.path === caminho || n.path.startsWith(`${caminho}/`)) : arqs;
+          if (!filtro.length) {
+            return { fonte: "disco local", erro: `nada em \`${caminho}\``, ...sugerir(arqs, caminho) };
+          }
           return { fonte: "disco local", total: filtro.length, arquivos: filtro.map((n) => `${n.path} (${n.size} bytes)`).slice(0, 300) };
         }
         const js = arqs.filter((n) => extDe(n.path) === ".js");
@@ -171,13 +206,24 @@ export async function executar({ acao, caminho }) {
           tamanho_js_bytes: bytes, linhas_estimadas: Math.round(bytes / 40), por_pasta: ranking };
       }
       if (acao === "ler") {
-        if (!caminho) return { erro: "Informe o caminho do arquivo." };
+        if (!caminho) {
+          return { erro: "Para ler é preciso um arquivo; a raiz é uma pasta.", ...sugerir(arvoreLocal(raiz), "") };
+        }
         if (proibido(caminho)) return { erro: "Arquivo protegido — não posso ler." };
-        if (!EXT_OK.has(extDe(caminho))) return { erro: "Tipo de arquivo não legível." };
         const alvo = caminhoSeguro(raiz, caminho);
         if (!alvo) return { erro: "Caminho fora do repositório — não posso ler." };
-        if (!fs.existsSync(alvo)) return { erro: `\`${caminho}\` não existe no repositório local.` };
-        if (fs.statSync(alvo).isDirectory()) return { erro: "Isso é uma pasta — use a ação 'listar'." };
+        // A checagem de PASTA vem antes da de extensão: `modulos` não tem
+        // extensão nenhuma, e responder "tipo de arquivo não legível" para
+        // uma pasta manda o modelo para o lado errado — ele precisa ouvir
+        // "isso é uma pasta, eis o que tem dentro".
+        if (fs.existsSync(alvo) && fs.statSync(alvo).isDirectory()) {
+          const dentro = arvoreLocal(raiz).filter((n) => n.path.startsWith(`${caminho}/`)).map((n) => n.path).slice(0, 50);
+          return { erro: "Isso é uma pasta, não um arquivo.", arquivos_dentro: dentro };
+        }
+        if (!EXT_OK.has(extDe(caminho))) return { erro: "Tipo de arquivo não legível." };
+        if (!fs.existsSync(alvo)) {
+          return { erro: `\`${caminho}\` não existe no repositório.`, ...sugerir(arvoreLocal(raiz), caminho) };
+        }
         let txt = fs.readFileSync(alvo, "utf8");
         let cortado = false;
         if (txt.length > MAX_BYTES) { txt = txt.slice(0, MAX_BYTES); cortado = true; }

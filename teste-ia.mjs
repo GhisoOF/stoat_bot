@@ -241,6 +241,28 @@ console.log("\n── ler-codigo: o disco vem primeiro ──");
   // Um .js FORA da raiz: passa no filtro de extensão, tem de morrer na trava
   // de caminho. (/etc/passwd já morre antes, na extensão.)
   fs.writeFileSync("/tmp/fora-do-repo.js", "// segredo\n");
+  // ── A raiz escrita como o modelo escreve ──
+  //
+  //  No servidor: `listar` com caminho "." devolveu lista VAZIA, porque o
+  //  filtro era `path.startsWith(".")` e nenhum arquivo começa com ponto.
+  //  A Judy olhou o próprio repositório, viu o nada, e disse que não
+  //  conseguia localizar o código. Parecia falta de permissão; era isto.
+  for (const raizEscrita of [".", "./", "/", "", undefined]) {
+    const r = await lc.executar({ acao: "listar", caminho: raizEscrita });
+    ok(r.arquivos?.some((a) => a.startsWith("main.js")),
+      `★ listar com caminho ${JSON.stringify(raizEscrita)} enxerga a raiz`);
+  }
+  const sub = await lc.executar({ acao: "listar", caminho: "./modulos" });
+  ok(sub.arquivos?.length === 1 && sub.arquivos[0].startsWith("modulos/x.js"), "  → e './modulos' lista só o que está dentro");
+
+  // Caminho inexistente devolve PISTAS, não só "não achei": o modelo chutou
+  // "scripts/judy-ia.js" três vezes por falta delas.
+  const chute = await lc.executar({ acao: "ler", caminho: "scripts/judy-ia.js" });
+  ok(chute.erro && Array.isArray(chute.pastas_no_repositorio) && chute.pastas_no_repositorio.length,
+    "★ arquivo inexistente devolve as pastas que EXISTEM, para o modelo acertar na segunda");
+  const pasta = await lc.executar({ acao: "ler", caminho: "modulos" });
+  ok(/pasta/i.test(pasta.erro ?? "") && pasta.arquivos_dentro?.length, "  → e ler uma pasta devolve o que há dentro dela");
+
   const fuga = await lc.executar({ acao: "ler", caminho: "../fora-do-repo.js" });
   ok(/fora do reposit/i.test(fuga.erro ?? "") && !fuga.conteudo, "★ `../` não sai do repositório — o container não vira leitor da máquina");
   const segredo = await lc.executar({ acao: "ler", caminho: ".env" });

@@ -110,6 +110,23 @@ console.log("\n── saúde pelo /v1/models ──");
   ok(r2.ok && r2.modelos.includes("qwen3:8b"), "  → e o formato antigo do Ollama também, se a URL voltar para ele");
 }
 
+// ══ 2a-bis. O painel mostra o modelo PRINCIPAL ══
+//
+//  No servidor: `&chat status` dizia "Conversa: lfm2.5-2.6b" com o
+//  OLLAMA_MODEL corretamente definido como lfm2.5-8b-a1b. O painel imprimia
+//  o LEVE sob o rótulo "Conversa" e nunca mostrava o principal — quem lia
+//  concluía que a configuração não tinha pegado. Configuração certa,
+//  diagnóstico errado, meia hora caçando um problema inexistente.
+console.log("\n── o painel de status não pode mentir ──");
+{
+  const fonte = fs.readFileSync("./modulos/ai/chat.js", "utf8");
+  const painel = fonte.slice(fonte.indexOf("🟢 IA disponível"), fonte.indexOf("SearXNG:** ${SEARXNG_URL}", fonte.indexOf("🟢 IA disponível")));
+  ok(painel.includes("OLLAMA_MODEL_PADRAO"), "★ o modelo principal aparece no painel");
+  ok(painel.includes("OLLAMA_MODEL_LEVE"), "  → e o leve continua, com rótulo próprio");
+  ok(!/\*\*Conversa:\*\* \$\{OLLAMA_MODEL_LEVE\}/.test(painel), "  → o leve não usurpa mais o rótulo 'Conversa'");
+  ok(painel.includes("faltando"), "  → e o painel avisa quando um modelo configurado não existe no servidor");
+}
+
 // ══ 2b. O raciocínio nunca vai para o chat ══
 //
 //  Com `--reasoning-budget 0` o llama.cpp ainda emite o par vazio:

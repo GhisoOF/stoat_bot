@@ -2021,27 +2021,49 @@ export async function cmdChat(message, args, ctx) {
         { title: "🚫 Unavailable here",
           description: "The AI chat isn't enabled on this server.", colour: COR.aviso }));
     const disp = await ollamaDisponivel();
+    // A lista real do servidor: é o que transforma "não funciona" em "o nome
+    // que você configurou não existe lá". Falha em silêncio se o servidor
+    // estiver fora — o `disp` acima já cobre esse caso.
+    const { modelos: modelosDoServidor = [] } = await listarModelos().catch(() => ({ modelos: [] }));
+    const configurados = [...new Set([OLLAMA_MODEL_PADRAO, OLLAMA_MODEL_LEVE, OLLAMA_MODEL_CODIGO, OLLAMA_MODEL_LOGICA, OLLAMA_MODEL_DECISAO])].filter(Boolean);
+    const faltando = modelosDoServidor.length ? configurados.filter((m) => !modelosDoServidor.includes(m)) : [];
     return sendEmbed(message.channel, cen ? {
       title: disp.ok ? "🟢 AI available" : "🔴 AI unavailable",
       description: [
         `**Ollama:** ${OLLAMA_URL}`,
         `**Chat:** ${OLLAMA_MODEL_LEVE} _(also memory and decisions)_`,
         `**Code:** ${OLLAMA_MODEL_CODIGO} · **Logic:** ${OLLAMA_MODEL_LOGICA} · **Decision:** ${OLLAMA_MODEL_DECISAO}`,
+        `**Server:** ${OLLAMA_URL}`,
+        `**Conversation:** ${OLLAMA_MODEL_PADRAO}`,
+        `**Small talk, memory and decisions:** ${OLLAMA_MODEL_LEVE}`,
+        `**Code:** ${OLLAMA_MODEL_CODIGO} · **Logic:** ${OLLAMA_MODEL_LOGICA} · **Decision:** ${OLLAMA_MODEL_DECISAO}`,
+        modelosDoServidor.length ? `**On the server:** ${modelosDoServidor.map((m) => `\`${m}\``).join(" · ")}` : "",
+        faltando.length ? `⚠️ **Configured but missing on the server:** ${faltando.join(", ")}` : "",
         `**SearXNG:** ${SEARXNG_URL}`,
         "",
         disp.ok ? "All set — you can chat." : `Status: ${disp.motivo === "offline" ? "**offline** (machine off?)" : disp.motivo}`,
-      ].join("\n"),
+      ].filter(Boolean).join("\n"),
       colour: disp.ok ? COR.sucesso : COR.aviso,
     } : {
       title: disp.ok ? "🟢 IA disponível" : "🔴 IA indisponível",
       description: [
-        `**Ollama:** ${OLLAMA_URL}`,
-        `**Conversa:** ${OLLAMA_MODEL_LEVE} _(e também memória e decisões)_`,
+        `**Servidor:** ${OLLAMA_URL}`,
+        // O principal FALTAVA nesta lista: o painel mostrava o leve sob o
+        // rótulo "Conversa", e quem lia concluía que o OLLAMA_MODEL não
+        // tinha sido aplicado. Configuração certa, diagnóstico errado.
+        `**Conversa:** ${OLLAMA_MODEL_PADRAO}`,
+        `**Papo curto, memória e decisões:** ${OLLAMA_MODEL_LEVE}`,
         `**Código:** ${OLLAMA_MODEL_CODIGO} · **Lógica:** ${OLLAMA_MODEL_LOGICA} · **Decisão:** ${OLLAMA_MODEL_DECISAO}`,
+        modelosDoServidor.length
+          ? `**No servidor:** ${modelosDoServidor.map((m) => faltando.includes(m) ? m : `\`${m}\``).join(" · ")}`
+          : "",
+        faltando.length
+          ? `⚠️ **Configurado mas ausente no servidor:** ${faltando.join(", ")} — confira os nomes no \`llama-swap.yaml\`.`
+          : "",
         `**SearXNG:** ${SEARXNG_URL}`,
         "",
         disp.ok ? "Tudo pronto — pode conversar." : `Status: ${disp.motivo === "offline" ? "**offline** (máquina desligada?)" : disp.motivo}`,
-      ].join("\n"),
+      ].filter(Boolean).join("\n"),
       colour: disp.ok ? COR.sucesso : COR.aviso,
     });
   }

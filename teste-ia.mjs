@@ -81,6 +81,35 @@ console.log("\n── continuação automática ──");
   ok(pedidos.length === 1, "decisão json cortada não entra no laço de emendas");
 }
 
+// ══ 2a. A verificação de saúde não pode usar rota só do Ollama ══
+//
+//  No servidor: `&chat status` dizia "🔴 IA indisponível — respondeu HTTP
+//  404" com tudo funcionando. O teste batia em `/api/tags`, que só o Ollama
+//  serve. O llama-swap responde `/v1/models`, do padrão OpenAI — que o
+//  Ollama TAMBÉM serve, então a rota nova funciona nos dois.
+console.log("\n── saúde pelo /v1/models ──");
+{
+  const chat = await import("./modulos/ai/chat.js?saude");
+  const rotas = [];
+  globalThis.fetch = async (url) => {
+    const u = String(url); rotas.push(u);
+    if (u.endsWith("/api/tags")) return { ok: false, status: 404, json: async () => ({}) };
+    return { ok: true, status: 200, json: async () => ({
+      object: "list",
+      data: [{ id: "lfm2.5-8b-a1b" }, { id: "lfm2.5-2.6b" }, { id: "lfm2.5-vl-3b" }],
+    }) };
+  };
+  const r = await chat.listarModelos();
+  ok(rotas.every((u) => !u.includes("/api/tags")), "★ nada mais bate em /api/tags (rota exclusiva do Ollama)");
+  ok(rotas.some((u) => u.endsWith("/v1/models")), "  → a consulta vai para /v1/models");
+  ok(r.ok && r.modelos.includes("lfm2.5-8b-a1b"), `  → e lê os nomes de data[].id (${r.modelos.join(", ")})`);
+
+  // Formato do Ollama continua sendo entendido, para quem voltar atrás.
+  globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => ({ models: [{ name: "qwen3:8b" }] }) });
+  const r2 = await chat.listarModelos();
+  ok(r2.ok && r2.modelos.includes("qwen3:8b"), "  → e o formato antigo do Ollama também, se a URL voltar para ele");
+}
+
 // ══ 2b. O raciocínio nunca vai para o chat ══
 //
 //  Com `--reasoning-budget 0` o llama.cpp ainda emite o par vazio:

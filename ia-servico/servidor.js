@@ -214,8 +214,14 @@ const servidor = createServer(async (req, res) => {
     if (req.method === "GET" && req.url === "/saude") {
       let ollamaOk = false, modelos = [];
       try {
-        const r = await fetch(`${OLLAMA_URL}/api/tags`, { signal: AbortSignal.timeout(5000) });
-        if (r.ok) { ollamaOk = true; modelos = (await r.json()).models?.map((m) => m.model) ?? []; }
+        // `/v1/models` (padrão OpenAI): llama-swap, llama-server e Ollama
+        // respondem. O `/api/tags` de antes era só do Ollama e virava 404.
+        const r = await fetch(`${LLM_URL}/v1/models`, { signal: AbortSignal.timeout(5000) });
+        if (r.ok) {
+          const d = await r.json().catch(() => ({}));
+          ollamaOk = true;
+          modelos = (d.data ?? d.models ?? []).map((m) => m.id || m.model || m.name).filter(Boolean);
+        }
       } catch {}
       return json(res, 200, {
         ok: true, ollama: { url: OLLAMA_URL, alcancavel: ollamaOk, modelos },
@@ -383,14 +389,22 @@ async function diagnosticoDeBoot() {
     }
   }
 
-  // 4. Ollama — sem ele o serviço não responde nada
+  // 4. O servidor de LLM — sem ele o serviço não responde nada
   try {
-    const r = await fetch(`${OLLAMA_URL}/api/tags`, { signal: AbortSignal.timeout(5000) });
-    const d = await r.json();
-    log(`✓ Ollama respondendo (${(d?.models ?? []).length} modelo(s))`);
+    const r = await fetch(`${LLM_URL}/v1/models`, { signal: AbortSignal.timeout(5000) });
+    if (!r.ok) throw new Error(`HTTP ${r.status}${r.status === 404 ? " (a URL não serve /v1/models — llama-swap na porta certa?)" : ""}`);
+    const d = await r.json().catch(() => ({}));
+    const nomes = (d.data ?? d.models ?? []).map((m) => m.id || m.model || m.name).filter(Boolean);
+    log(`✓ LLM respondendo em ${LLM_URL} (${nomes.length} modelo(s): ${nomes.join(", ") || "—"})`);
+    if (nomes.length && !nomes.includes(MODELO_PADRAO)) {
+      problemas.push(
+        `O modelo padrão "${MODELO_PADRAO}" não está na lista do servidor.`,
+        `   → disponíveis: ${nomes.join(", ")}. Confira LLM_MODEL.`,
+      );
+    }
   } catch (e) {
     problemas.push(
-      `Ollama inacessível em ${OLLAMA_URL} (${e?.cause?.code ?? e?.message}).`,
+      `Servidor de LLM inacessível em ${LLM_URL} (${e?.cause?.code ?? e?.message}).`,
       "   → o serviço de IA não vai conseguir responder nada.",
     );
   }

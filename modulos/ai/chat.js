@@ -316,17 +316,21 @@ export function resumoConfigIA() {
   return linhas;
 }
 
-// Lista os modelos baixados no Ollama (via /api/tags).
+// ── Listar os modelos disponíveis ─────────────────────────
+//
+//  Via `/v1/models`, do padrão OpenAI — servido pelo llama-swap, pelo
+//  llama-server e também pelo Ollama. O antigo `/api/tags` era exclusivo do
+//  Ollama, e virou 404 assim que migramos: o serviço estava perfeito e o
+//  bot anunciava "IA indisponível", que é o pior tipo de falso negativo.
 export async function listarModelos() {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), 6000);
   try {
-    const r = await fetch(`${OLLAMA_URL}/api/tags`, { signal: ctrl.signal });
+    const r = await fetch(`${OLLAMA_URL}/v1/models`, { signal: ctrl.signal });
     if (!r.ok) return { ok: false, motivo: `HTTP ${r.status}`, modelos: [] };
     const data = await r.json().catch(() => ({}));
-    // o campo varia entre versões do Ollama: name ou model
-    const modelos = (data.models ?? [])
-      .map((m) => m.name || m.model)
+    const modelos = (data.data ?? data.models ?? [])
+      .map((m) => m.id || m.name || m.model)
       .filter(Boolean)
       .sort();
     return { ok: true, modelos };
@@ -418,22 +422,26 @@ async function pedir(url, body) {
   }
 }
 
-// Verifica rapidamente se o Ollama está no ar (a máquina pode estar desligada).
-// Timeout curto: não faz sentido esperar 2 min se o host nem responde.
-// NÃO valida o modelo aqui — o campo do /api/tags varia entre versões do Ollama
-// (name vs model) e causava falso negativo. Se o modelo não existir, o próprio
-// /api/chat devolve erro, que tratamos ao conversar.
+// Verifica rapidamente se o servidor de LLM está no ar (a máquina pode estar
+// desligada). Timeout curto: não faz sentido esperar 2 min se o host nem
+// responde. NÃO valida o modelo aqui — se ele não existir, o próprio
+// /v1/chat/completions devolve erro, que tratamos ao conversar.
 async function ollamaDisponivel() {
   const ctrl = new AbortController();
-  // 4s era apertado: numa máquina carregando um modelo de 9 GB, até o
-  // /api/tags pode demorar. Um timeout curto transformava "ocupado" em
+  // 4s era apertado: numa máquina carregando um modelo de 13 GB, até o
+  // /v1/models pode demorar. Um timeout curto transformava "ocupado" em
   // "desligado" — dois problemas com conserto completamente diferente.
   const limite = Number(process.env.OLLAMA_PING_MS || 8000);
   const t = setTimeout(() => ctrl.abort(), limite);
   const t0 = Date.now();
   try {
-    const r = await fetch(`${OLLAMA_URL}/api/tags`, { signal: ctrl.signal });
-    if (!r.ok) return { ok: false, causa: "http", motivo: `respondeu HTTP ${r.status}` };
+    const r = await fetch(`${OLLAMA_URL}/v1/models`, { signal: ctrl.signal });
+    if (!r.ok) {
+      return { ok: false, causa: "http",
+        motivo: r.status === 404
+          ? `respondeu HTTP 404 — a URL aponta para algo que não serve /v1/models (llama-swap? porta certa?)`
+          : `respondeu HTTP ${r.status}` };
+    }
     return { ok: true, ms: Date.now() - t0 };
   } catch (e) {
     // O código do erro é a informação mais útil que existe aqui, e antes era

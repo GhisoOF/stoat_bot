@@ -28,6 +28,11 @@ set -euo pipefail
 
 REPO="${REPO:-$HOME/Downloads/github}"
 TOKEN_BACKUP="${TOKEN_BACKUP:-$HOME/judy-github.env}"
+# Backup do `.env` INTEIRO do ia-servico. O TOKEN_BACKUP guardava só o
+# GITHUB_TOKEN, e a restauração o copiava por cima do arquivo — apagando
+# LLM_URL, LLM_MODEL, CODIGO_DIR e tudo o mais que fosse acrescentado
+# depois. Um backup que destrói o que não conhece é pior que nenhum.
+IA_ENV_BACKUP="${IA_ENV_BACKUP:-$HOME/judy-ia.env}"
 ZIP="${1:-}"
 MSG="${2:-}"
 TMP="$(mktemp -d)"
@@ -72,6 +77,13 @@ okay "GITHUB_TOKEN guardado"
 
 # ── 3. Substituir os diretórios versionados ──
 cd "$REPO"
+# Guarda o `.env` completo ANTES do rm -rf. Roda toda vez: assim o backup
+# acompanha as variáveis que forem sendo acrescentadas ao longo do tempo.
+if [ -f ia-servico/.env ]; then
+  cp ia-servico/.env "$IA_ENV_BACKUP"
+  okay "ia-servico/.env guardado em $IA_ENV_BACKUP"
+fi
+
 info "removendo as versões antigas dos módulos"
 git rm -rq --ignore-unmatch modulos scripts ia-servico 2>/dev/null || true
 rm -rf modulos scripts ia-servico
@@ -80,10 +92,21 @@ info "copiando os arquivos novos"
 cp -a "$TMP"/. "$REPO"/
 rm -f "$REPO/.token-guardado"
 
-# ── 4. Devolver o token (o ia-servico/ foi recriado do zero) ──
+# ── 4. Devolver o .env (o ia-servico/ foi recriado do zero) ──
+#
+#  Ordem importa: o backup completo vem primeiro; o TOKEN_BACKUP só entra
+#  se não houver backup completo nenhum (primeira execução depois desta
+#  mudança). E nunca sobrescrevemos um .env existente.
 mkdir -p ia-servico
-cp "$TOKEN_BACKUP" ia-servico/.env
-okay "GITHUB_TOKEN devolvido a ia-servico/.env"
+if [ -f ia-servico/.env ]; then
+  okay "ia-servico/.env já existe — não mexo"
+elif [ -f "$IA_ENV_BACKUP" ]; then
+  cp "$IA_ENV_BACKUP" ia-servico/.env
+  okay "ia-servico/.env devolvido de $IA_ENV_BACKUP ($(wc -l < ia-servico/.env) linhas)"
+elif [ -f "$TOKEN_BACKUP" ]; then
+  cp "$TOKEN_BACKUP" ia-servico/.env
+  printf '\033[33m! %s\033[0m\n' "só havia o backup do token — confira LLM_URL/LLM_MODEL/CODIGO_DIR em ia-servico/.env"
+fi
 
 # ── 4b. Reinstalar as dependências dos serviços nativos ──
 # O passo 3 apaga `ia-servico/` inteira, e com ela some o node_modules.

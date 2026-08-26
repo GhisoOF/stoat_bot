@@ -23,7 +23,7 @@ models:
     cmd: >
       /usr/local/bin/llama-server --port ${PORT}
       -m /models/LFM2.5-8B-A1B-Q4_K_M.gguf
-      -c 8192 -ngl 99 --jinja --flash-attn on
+      -c 32768 -ngl 99 --jinja --flash-attn on
     ttl: 600
 
   "lfm2.5-vl-3b":

@@ -1,46 +1,72 @@
 # ══════════════════════════════════════════════════════════
-#  llama-swap.yaml — os modelos da Judy no llama.cpp
+#  llama-swap.example.yaml — os modelos da Judy (llama.cpp / Vulkan)
 #
-#  Cada entrada vira um llama-server que o llama-swap sobe quando um pedido
-#  chega com aquele `model`, e derruba depois do `ttl` sem uso. É o
-#  substituto do keep_alive do Ollama — só que por modelo, no config, em
-#  vez de por pedido no código.
+#  Cópia versionada do que roda em ~/judy-llm/config.yaml na Gentoo.
 #
-#  Os `-c` (contexto) são fixos por modelo, alocados no boot do servidor:
-#  é o que torna o consumo PREVISÍVEL — a maior queixa com o Ollama era o
-#  cache de atenção crescendo conforme o num_ctx de cada pedido.
+#  O MESMO GGUF aparece duas vezes, sob nomes diferentes: é assim que o
+#  "thinking dinâmico" funciona. `--reasoning-budget 0` é uma flag de
+#  SERVIDOR (não dá para ligar/desligar por requisição), então servimos o
+#  modelo pensando e não-pensando em paralelo — e a classificação que o bot
+#  já faz para escolher entre MODEL/LEVE/CODIGO/LOGICA passa a escolher
+#  também o modo de raciocínio. Nenhum código novo para isso.
 #
-#  Modelos: baixe os GGUF (quantização Q4_K_M é o equilíbrio) para
-#  ~/modelos-gguf. Nomes de arquivo são exemplos — ajuste para os seus.
+#  Medições reais na RX 9060 XT 16GB (Vulkan/RADV, gfx1200):
+#    LFM2.5-8B-A1B  →  153 tok/s TG · 317 tok/s PP   ← 1,5B ativos (MoE)
+#    Qwen3.8-27B    →   10 tok/s TG ·  39 tok/s PP   ← ver nota abaixo
 # ══════════════════════════════════════════════════════════
 healthCheckTimeout: 300
 
 models:
-  # Conversa e decisões — o cavalo de batalha. ttl longo: responde quase tudo.
-  "qwen3-8b":
+  # Principal: conversa, ferramentas, papo. Sem raciocínio = resposta na hora.
+  "lfm2.5-8b-a1b":
     cmd: >
-      /app/llama-server --port ${PORT}
-      -m /models/Qwen3-8B-Q4_K_M.gguf
-      -c 16384 -ngl 99 --jinja
-    ttl: 1800
+      /usr/local/bin/llama-server --port ${PORT}
+      -m /models/LFM2.5-8B-A1B-Q4_K_M.gguf
+      -c 16384 -ngl 99 --jinja --flash-attn on --reasoning-budget 0
+    ttl: 3600
 
-  # Leve, para decisões rápidas e resumos (RSS). Sobe em segundos.
-  "qwen3-4b":
+  # O mesmo modelo, pensando. Para código e lógica (OLLAMA_MODEL_CODIGO/_LOGICA).
+  "lfm2.5-8b-think":
     cmd: >
-      /app/llama-server --port ${PORT}
-      -m /models/Qwen3-4B-Q4_K_M.gguf
-      -c 8192 -ngl 99 --jinja
-    ttl: 900
+      /usr/local/bin/llama-server --port ${PORT}
+      -m /models/LFM2.5-8B-A1B-Q4_K_M.gguf
+      -c 16384 -ngl 99 --jinja --flash-attn on
+    ttl: 600
 
-  # Visão: multimodal via --mmproj. Só carrega quando alguém manda imagem.
-  "qwen2.5-vl":
+  # Leve: decisões JSON e resumo de RSS. `-ngl 0` = CPU, não disputa VRAM.
+  "lfm2.5-2.6b":
     cmd: >
-      /app/llama-server --port ${PORT}
-      -m /models/Qwen2.5-VL-7B-Instruct-Q4_K_M.gguf
-      --mmproj /models/Qwen2.5-VL-7B-Instruct-mmproj-f16.gguf
-      -c 8192 -ngl 99 --jinja
+      /usr/local/bin/llama-server --port ${PORT}
+      -m /models/LFM2.5-2.6B-QAD-Q4_0.gguf
+      -md /models/LFM2.5-2.6B-DSpark-F16.gguf
+      --spec-type draft-dspark --spec-draft-n-max 10 --spec-draft-n-min 0
+      -c 8192 -ngl 0 --jinja --flash-attn on
+    ttl: 3600
+
+  # Visão. Também na CPU: o projetor do modelo grande não caberia junto.
+  "lfm2.5-vl-3b":
+    cmd: >
+      /usr/local/bin/llama-server --port ${PORT}
+      -m /models/LFM2.5-VL-3B-Q4_K_M.gguf
+      --mmproj /models/mmproj-LFM2.5-VL-3B-F16.gguf
+      -c 8192 -ngl 0 --jinja --flash-attn on
+    ttl: 600
+
+  # ── Reserva: rápido no papel, lento nesta placa ──
+  #
+  #  As 48 camadas Gated DeltaNet (contra 16 de atenção) ainda não têm kernel
+  #  Vulkan no llama.cpp, então caem para a CPU: 10 tok/s contra os 153 do
+  #  LFM2.5. Os pesos ESTÃO na GPU (14 GB ocupados) — o que falta é a
+  #  operação. Quando o kernel chegar, `docker compose pull && up -d` e
+  #  refaça a medição; se passar de 40 tok/s, ele volta à disputa.
+  #  O MTP funciona: draft aceito 135/249 na medição.
+  "qwen3.8-27b":
+    cmd: >
+      /usr/local/bin/llama-server --port ${PORT}
+      -m /models/Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-Q3_K_P.gguf
+      --spec-type draft-mtp --spec-draft-n-max 3 --spec-draft-p-min 0
+      -c 8192 -ngl 99 --flash-attn on --no-mmap
+      --jinja --chat-template-kwargs '{"enable_thinking":false}'
+      --temp 0.7 --top-p 0.80 --top-k 20 --min-p 0
+      --presence-penalty 1.5 --repeat-penalty 1.0
     ttl: 300
-
-# `--jinja` é obrigatório para tool calling no llama.cpp: sem ele o modelo
-# recebe as ferramentas mas o template não as formata, e nada é chamado.
-# `-ngl 99` = todas as camadas na GPU (Vulkan decide o que cabe).

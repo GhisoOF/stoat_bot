@@ -379,6 +379,23 @@ let ocupado = false;
 export function estaOcupado() { return ocupado; }
 
 // ── HTTP helper com timeout ────────────────────────────────
+// ── Tirar o raciocínio do que vai para o chat ─────────────
+//
+//  Com `--reasoning-budget 0` o llama.cpp ainda emite o par vazio no início
+//  da resposta: "\n<think></think>\nO número é 4." Sem esta limpeza, isso
+//  apareceria literalmente nas mensagens do servidor. E quando o raciocínio
+//  vem de verdade (modelo …-think), ele chega em `reasoning_content` — mas
+//  alguns templates o deixam vazar para dentro do `content`, então cortamos
+//  o bloco inteiro por segurança.
+export function limparRaciocinio(texto, { aparar = true } = {}) {
+  const limpo = String(texto ?? "")
+    .replace(/<think>[\s\S]*?<\/think>/gi, "")   // bloco completo, com ou sem conteúdo
+    .replace(/^[\s\S]*?<\/think>/i, "");         // abertura perdida no começo
+  // `aparar: false` nas continuações: aparar cada pedaço comeria o espaço
+  // entre eles e emendaria "Era uma vez" com "um homelab" sem separação.
+  return aparar ? limpo.trim() : limpo;
+}
+
 async function pedir(url, body) {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), TIMEOUT);
@@ -536,7 +553,10 @@ export async function ollamaChat(messages, { json = false, maxTokens = MAX_TOKEN
   //      reservando cache de atenção a cada carga.
   //    • keep_alive — quem descarrega modelo agora é o llama-swap (`ttl` no
   //      config.yaml dele), por modelo, no lugar certo.
-  //    • format:"json"/think — viram response_format + /no_think no system.
+  //    • format:"json" → response_format. O raciocínio NÃO se desliga por
+  //      prompt: quem manda é o `--reasoning-budget 0` do llama-server, e
+  //      por isso o mesmo GGUF é servido sob dois nomes (…-a1b sem pensar,
+  //      …-think pensando). A escolha do modelo já é a escolha do modo.
   const body = {
     model: modeloUsado,
     messages,
@@ -544,15 +564,10 @@ export async function ollamaChat(messages, { json = false, maxTokens = MAX_TOKEN
     max_tokens: limiteTokens,
     temperature: json ? 0 : 0.6,   // decisão determinística; conversa criativa
   };
-  if (json) {
-    body.response_format = { type: "json_object" };
-    // O "/no_think" no system desliga o raciocínio do Qwen3 em qualquer
-    // backend; modelos que não o conhecem o ignoram como texto.
-    messages = body.messages = [
-      { role: "system", content: "/no_think" },
-      ...messages,
-    ];
-  }
+  // Nada de injetar "/no_think": era a convenção do Qwen3 e virou texto morto
+  // no prompt destes modelos — o LFM2.5 não o interpreta, só o lê como
+  // conteúdo. Desligar raciocínio é decisão do servidor (ver acima).
+  if (json) body.response_format = { type: "json_object" };
 
   const entradaChars = messages.reduce((n, m) => n + (m.content?.length || 0), 0);
   console.log(`[CHAT][llm] → ${etiqueta} | modelo=${modeloUsado} max_tokens=${limiteTokens} entrada≈${entradaChars} chars${json ? " (json)" : ""}`);
@@ -560,8 +575,25 @@ export async function ollamaChat(messages, { json = false, maxTokens = MAX_TOKEN
   const t0 = Date.now();
   let data = await pedir(`${OLLAMA_URL}/v1/chat/completions`, body);
   let escolha = data?.choices?.[0] ?? {};
-  let conteudo = escolha?.message?.content ?? "";
+  let conteudo = limparRaciocinio(escolha?.message?.content ?? "", { aparar: false });
   let motivo = escolha?.finish_reason ?? "?";
+  if (escolha?.message?.reasoning_content) {
+    dlog(`raciocínio (${escolha.message.reasoning_content.length} chars, não vai para o chat): ${escolha.message.reasoning_content.slice(0, 300)}`);
+  }
+
+  // ── Rede de segurança: pensou tanto que não sobrou resposta ──
+  //
+  //  Um modelo de raciocínio pode gastar TODO o orçamento no <think> e
+  //  devolver `content` vazio com finish_reason "length". No chat isso
+  //  aparece como a Judy simplesmente muda — sem erro, sem log, sem pista.
+  //  Refazer com mais espaço é mais honesto que devolver silêncio.
+  if (!conteudo.trim() && motivo === "length") {
+    console.warn(`[CHAT][llm] ⚠️ ${etiqueta}: o modelo consumiu ${limiteTokens} tokens raciocinando e não respondeu — refazendo com o dobro`);
+    data = await pedir(`${OLLAMA_URL}/v1/chat/completions`, { ...body, max_tokens: limiteTokens * 2 });
+    escolha = data?.choices?.[0] ?? {};
+    conteudo = limparRaciocinio(escolha?.message?.content ?? "", { aparar: false });
+    motivo = escolha?.finish_reason ?? "?";
+  }
 
   // ── Continuação automática ──
   //
@@ -583,7 +615,7 @@ export async function ollamaChat(messages, { json = false, maxTokens = MAX_TOKEN
       ],
     });
     escolha = data?.choices?.[0] ?? {};
-    conteudo += escolha?.message?.content ?? "";
+    conteudo += limparRaciocinio(escolha?.message?.content ?? "", { aparar: false });
     motivo = escolha?.finish_reason ?? "?";
   }
 
@@ -595,7 +627,7 @@ export async function ollamaChat(messages, { json = false, maxTokens = MAX_TOKEN
   if (ollamaChat._cortou)
     console.warn(`[CHAT][llm] ⚠️ ainda cortada após ${emendas} emenda(s) — aumente CHAT_MAX_TOKENS ou CONTINUAR_MAX.`);
 
-  return conteudo;
+  return conteudo.trim();
 }
 
 // ── Busca no SearXNG (JSON) ────────────────────────────────

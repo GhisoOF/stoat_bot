@@ -40,7 +40,7 @@ console.log("── formato OpenAI (llama.cpp / llama-swap / ollama) ──");
   ok(pedidos[0].corpo.max_tokens > 0 && !("options" in pedidos[0].corpo) && !("keep_alive" in pedidos[0].corpo),
     "  → max_tokens no lugar de options/num_predict; sem keep_alive (isso agora é do llama-swap)");
   ok(pedidos[0].corpo.response_format?.type === "json_object", "  → json usa response_format, não format:'json'");
-  ok(pedidos[0].corpo.messages[0]?.content === "/no_think", "  → /no_think desliga o raciocínio do Qwen3 em qualquer backend");
+  ok(!JSON.stringify(pedidos[0].corpo.messages).includes("/no_think"), "  → sem `/no_think` no prompt (era convenção do Qwen3, morta aqui)");
   ok(r === '{"ok":true}', "  → e o conteúdo volta de choices[0].message");
 }
 
@@ -79,6 +79,47 @@ console.log("\n── continuação automática ──");
   };
   await chat.ollamaChat([{ role: "user", content: "x" }], { json: true, etiqueta: "t" });
   ok(pedidos.length === 1, "decisão json cortada não entra no laço de emendas");
+}
+
+// ══ 2b. O raciocínio nunca vai para o chat ══
+//
+//  Com `--reasoning-budget 0` o llama.cpp ainda emite o par vazio:
+//  "\n<think></think>\nO número é 4." Sem limpeza isso apareceria literal
+//  nas mensagens do servidor. E o modelo …-think devolve o raciocínio em
+//  `reasoning_content` — que é para depurar, não para publicar.
+console.log("\n── <think> não vaza para o chat ──");
+{
+  const chat = await import("./modulos/ai/chat.js?think");
+  ok(chat.limparRaciocinio("\n<think></think>\nO número é 4.") === "O número é 4.",
+    "★ o par vazio some (foi o que o llama.cpp devolveu de verdade)");
+  ok(chat.limparRaciocinio("<think>hmm, deixa eu ver</think>\nResposta final") === "Resposta final",
+    "  → e um bloco com conteúdo também");
+  ok(chat.limparRaciocinio("raciocínio solto</think> a resposta") === "a resposta",
+    "  → inclusive quando a abertura se perde e sobra só o fechamento");
+  ok(chat.limparRaciocinio("texto normal com <b>tags</b>") === "texto normal com <b>tags</b>",
+    "  → sem estragar texto que não tem raciocínio nenhum");
+
+  // Pensou tanto que não sobrou resposta: refazer, em vez de a Judy ficar muda.
+  let vez = 0; const pedidos = [];
+  globalThis.fetch = async (url, op) => {
+    pedidos.push(JSON.parse(op.body)); vez++;
+    return { ok: true, status: 200, json: async () => ({ choices: [ vez === 1
+      ? { message: { content: "", reasoning_content: "pensando..." }, finish_reason: "length" }
+      : { message: { content: "4" }, finish_reason: "stop" } ] }) };
+  };
+  const r = await chat.ollamaChat([{ role: "user", content: "2+2?" }], { etiqueta: "t", maxTokens: 200 });
+  ok(r === "4", "★ resposta vazia por excesso de raciocínio é refeita, não devolvida como silêncio");
+  ok(pedidos[1]?.max_tokens === 400, "  → com o dobro do orçamento");
+
+  // E o /no_think não é mais injetado: nestes modelos era texto morto.
+  pedidos.length = 0; vez = 1;
+  globalThis.fetch = async (url, op) => {
+    pedidos.push(JSON.parse(op.body));
+    return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: "{}" }, finish_reason: "stop" }] }) };
+  };
+  await chat.ollamaChat([{ role: "user", content: "x" }], { json: true, etiqueta: "t" });
+  ok(!JSON.stringify(pedidos[0].messages).includes("/no_think"),
+    "★ nada de `/no_think` no prompt — desligar raciocínio é do servidor, não do texto");
 }
 
 // ══ 3. RSS: um resumo por categoria ══

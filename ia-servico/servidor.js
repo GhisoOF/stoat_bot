@@ -46,6 +46,13 @@ const CHAVE        = process.env.IA_CHAVE || "";   // opcional: exige header x-c
 
 const log = (...a) => console.log("[IA]", ...a);
 
+function limparRaciocinio(texto) {
+  return String(texto ?? "")
+    .replace(/<think>[\s\S]*?<\/think>/gi, "")
+    .replace(/^[\s\S]*?<\/think>/i, "")
+    .trim();
+}
+
 // ── Chamada ao LLM (formato OpenAI) ────────────────────────
 async function llm(messages, { modelo, comFerramentas = true, maxTokens = MAX_TOKENS } = {}) {
   const corpo = {
@@ -69,8 +76,14 @@ async function llm(messages, { modelo, comFerramentas = true, maxTokens = MAX_TO
     if (!r.ok) throw new Error(`LLM HTTP ${r.status} — ${(await r.text()).slice(0, 200)}`);
     const j = await r.json();
     const escolha = j?.choices?.[0] ?? {};
+    const msg = { ...(escolha.message ?? {}) };
+    // O raciocínio nunca vai para o chat: com --reasoning-budget 0 sobra o
+    // par vazio "<think></think>" no content, e nos modelos que pensam o
+    // bloco às vezes vaza para dentro dele. Some ao registro em debug.
+    if (msg.reasoning_content) log(`raciocínio (${msg.reasoning_content.length} chars, descartado): ${msg.reasoning_content.slice(0, 200)}`);
+    if (typeof msg.content === "string") msg.content = limparRaciocinio(msg.content);
     // Mesmo formato interno de antes, para o resto do arquivo não mudar.
-    return { message: escolha.message ?? {}, done_reason: escolha.finish_reason ?? "?" };
+    return { message: msg, done_reason: escolha.finish_reason ?? "?" };
   } finally { clearTimeout(t); }
 }
 const ollama = llm;   // nome antigo, mesmos chamadores

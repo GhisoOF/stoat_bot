@@ -24,14 +24,14 @@ services:
     environment:
       - PORTA=8090
       # O serviço fala OpenAI; o llama-swap responde por todos os modelos.
-      - LLM_URL=http://llama:8080
-      - LLM_MODEL=qwen3-8b            # nome definido no llama-swap/config.yaml
+      - LLM_URL=http://100.74.70.106:8081   # llama-swap (8080 é do SearXNG)
+      - LLM_MODEL=lfm2.5-8b-a1b       # nome definido no llama-swap/config.yaml
       # ── Código local: adeus GITHUB_TOKEN ──
       # O repositório já está nesta máquina (o deploy descompacta em
       # ~/Downloads/github). Montado abaixo como volume, a Judy lê do disco.
       - CODIGO_DIR=/repo
       # ── Visão e geração de imagem (opcionais; sem env = ferramenta some) ──
-      - LLM_MODEL_VISAO=qwen2.5-vl    # modelo multimodal no llama-swap
+      - LLM_MODEL_VISAO=lfm2.5-vl-3b  # multimodal, na CPU
       #- SD_URL=http://100.74.70.106:7860   # Forge/A1111/SD.Next na mesma GPU
     volumes:
       - ~/Downloads/github:/repo:ro   # :ro — a Judy LÊ o código, nunca escreve

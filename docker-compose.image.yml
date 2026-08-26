@@ -22,9 +22,12 @@ services:
       # (Se o IP mudar, atualize aqui ou nas variáveis do Portainer.)
       - IA_SERVICO_URL=http://100.74.70.106:8090
       # ── Modelos por função (o judy-ia é quem fala com o Ollama) ──
-      - OLLAMA_URL=http://100.74.70.106:11434
-      - OLLAMA_MODEL=gemma4:12b            # conversa complexa (explicações, debate)
-      - OLLAMA_MODEL_LEVE=gemma4:e4b       # conversa simples (papo curto) — rápido
+      # A URL agora aponta para o llama-swap (llama.cpp) na Gentoo. O código
+      # fala o formato OpenAI, então voltar ao Ollama = voltar esta URL
+      # para :11434 — nada mais muda.
+      - OLLAMA_URL=http://100.74.70.106:8080
+      - OLLAMA_MODEL=qwen3-8b              # nomes do llama-swap.yaml (não mais tags do Ollama)
+      - OLLAMA_MODEL_LEVE=qwen3-4b         # decisões e resumos — sobe em segundos
       - OLLAMA_MODEL_CODIGO=ornith:9b      # programação
       - OLLAMA_MODEL_LOGICA=qwen3.5:9b     # lógica/matemática
       - OLLAMA_MODEL_DECISAO=qwen3.5:0.8b  # decisões internas (rápido)

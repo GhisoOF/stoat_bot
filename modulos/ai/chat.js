@@ -181,6 +181,7 @@ const SEARXNG_URL = (process.env.SEARXNG_URL || "http://localhost:8080").replace
 // mensagens para lá (que roda o laço de tool-calling) em vez de falar direto
 // com o Ollama. Vazio = comportamento antigo (Ollama direto, sem ferramentas).
 const IA_SERVICO_URL = (process.env.IA_SERVICO_URL || "").replace(/\/$/, "");
+const CONTINUAR_MAX = Number(process.env.CONTINUAR_MAX || 2);
 const IA_SERVICO_CHAVE = process.env.IA_SERVICO_CHAVE || "";
 
 // Inicia pelo env; se houver um salvo na config global, o main aplica no boot.
@@ -229,17 +230,30 @@ export function avaliarModeracao(messages) {
 
 // Resumo de RSS com o tom da Judy. Recebe o material (lista de notícias) e
 // devolve um resumo geral curto, na voz dela. Usa o modelo leve (rápido).
-export async function resumirRSS(material, quantidade) {
+export async function resumirRSS(material, quantidade, { categoria = null, lang = "pt" } = {}) {
+  const en = lang === "en";
   const sys = [
-    "Você é a Judy: afiada, irônica e com humor seco, mas calorosa por baixo (mistura de GLaDOS e Tae Takemi).",
-    "Escreva um RESUMO GERAL curto das notícias abaixo — 2 a 4 frases — no SEU tom: espirituoso, direto, com um toque de deboche elegante. Nada de tom jornalístico neutro nem lista; é um comentário seu sobre o apanhado das notícias.",
-    "Destaque o que for mais relevante ou curioso. Não invente nada além do que está nas notícias. Não repita os títulos um a um — sintetize o panorama.",
-    `São ${quantidade} notícia(s) novas.`,
-  ].join(" ");
+    en ? "You are Judy: sharp, ironic, dry humour, but warm underneath (a mix of GLaDOS and Tae Takemi)."
+       : "Você é a Judy: afiada, irônica e com humor seco, mas calorosa por baixo (mistura de GLaDOS e Tae Takemi).",
+    categoria
+      ? (en ? `These stories are all about **${categoria}** — the digest is about that topic specifically; don't drift.`
+            : `Estas notícias são todas de **${categoria}** — o resumo é sobre esse assunto especificamente; não desvie.`)
+      : "",
+    // "2 a 4 frases" era o que fazia o resumo não dizer nada: com uma dúzia
+    // de notícias, quatro frases só dão para constatar que houve notícias.
+    // Agora o tamanho acompanha o material, e o conteúdo é O QUE aconteceu.
+    en ? "Write Judy's digest of the stories below: one short paragraph per real subject (group related stories), saying WHAT happened in each — names, numbers, decisions — in your voice: witty, direct, a touch of elegant snark. No neutral newsroom tone, no bullet lists, no repeating titles verbatim."
+       : "Escreva o resumo da Judy das notícias abaixo: um parágrafo curto por assunto real (agrupe notícias relacionadas), dizendo O QUE aconteceu em cada um — nomes, números, decisões — no SEU tom: espirituoso, direto, com deboche elegante. Nada de tom jornalístico neutro, nada de lista, nada de repetir títulos ao pé da letra.",
+    en ? "Never invent anything beyond what the stories say. End with a closing sentence, not mid-thought."
+       : "Não invente nada além do que está nas notícias. Termine com uma frase de fechamento, não no meio de um pensamento.",
+    `${en ? "There are" : "São"} ${quantidade} ${en ? "new stories" : "notícia(s) novas"}.`,
+  ].filter(Boolean).join(" ");
   try {
+    // maxTokens folgado: quem fecha o resumo é o modelo, não o corte — e a
+    // continuação automática do ollamaChat emenda se ainda assim faltar.
     return await ollamaChat(
       [{ role: "system", content: sys }, { role: "user", content: material.slice(0, 6000) }],
-      { modelo: OLLAMA_MODEL_LEVE, maxTokens: 800, etiqueta: "resumo-rss" },
+      { modelo: OLLAMA_MODEL_LEVE, maxTokens: 1400, etiqueta: categoria ? `resumo-rss:${categoria}` : "resumo-rss" },
     );
   } catch (e) {
     dlog(`resumo RSS falhou: ${e.message}`);
@@ -477,8 +491,32 @@ async function chamarServicoIA(messages, { modelo = null, idioma = "pt" } = {}) 
     if (!r.ok) throw new Error(`serviço IA HTTP ${r.status}`);
     const data = await r.json();
     if (data?.usos?.length) dlog(`judy-ia usou: ${data.usos.map((u) => u.ferramenta).join(", ")}`);
+    // Ferramentas de imagem devolvem o arquivo aqui, fora do texto; quem
+    // chama decide anexar (chamarServicoIA._anexos, consumido logo após).
+    chamarServicoIA._anexos = Array.isArray(data?.anexos) ? data.anexos : [];
     return (data?.resposta || "").trim();
   } finally { clearTimeout(t); }
+}
+
+// ── Subir um anexo para o Autumn (o CDN do Stoat) ─────────
+//
+//  O serviço de IA devolve a imagem em base64; para ela aparecer na
+//  mensagem, precisa virar um attachment do Stoat. O Autumn é a única
+//  ponta que aceita upload, e devolve o id que o sendMessage usa.
+export async function subirAnexo({ base64, mime = "image/jpeg", nome = "imagem.jpg" }) {
+  const AUTUMN = (process.env.AUTUMN_URL || "https://autumn.stoat.chat").replace(/\/$/, "");
+  const form = new FormData();
+  form.append("file", new Blob([Buffer.from(base64, "base64")], { type: mime }), nome);
+  const r = await fetch(`${AUTUMN}/attachments`, {
+    method: "POST",
+    headers: { "X-Bot-Token": process.env.BOT_TOKEN ?? "" },
+    body: form,
+    signal: AbortSignal.timeout(30_000),
+  });
+  if (!r.ok) throw new Error(`Autumn HTTP ${r.status} — ${(await r.text().catch(() => "")).slice(0, 120)}`);
+  const j = await r.json().catch(() => null);
+  if (!j?.id) throw new Error("Autumn não devolveu o id do anexo");
+  return j.id;
 }
 
 export async function ollamaChat(messages, { json = false, maxTokens = MAX_TOKENS, etiqueta = "resposta", modelo = null, ctx = null, manter = null } = {}) {
@@ -487,60 +525,75 @@ export async function ollamaChat(messages, { json = false, maxTokens = MAX_TOKEN
   // Qwen entra em "modo raciocínio" e gera milhares de tokens (lento + cortado).
   const limiteTokens = json ? Math.min(maxTokens, 200) : maxTokens;
 
-  // ── Contexto proporcional ao que realmente vai entrar ──
+  // ── Formato OpenAI, backend qualquer ──
   //
-  // Pedir 16k de contexto para uma decisão de 180 tokens não é grátis: o
-  // Ollama reserva o cache de atenção pelo num_ctx pedido, não pelo usado.
-  // Isso ocupa VRAM à toa e atrasa a carga do modelo. Aqui o contexto é
-  // calculado a partir do tamanho real da conversa, com folga para a resposta.
-  const charsEntrada = messages.reduce((t, m) => t + String(m.content ?? "").length, 0);
-  const ctxNecessario = Math.ceil(charsEntrada / 3.2) + limiteTokens + 512;
-  const num_ctx = ctx ?? Math.min(NUM_CTX, Math.max(1024, potenciaDeDois(ctxNecessario)));
-
-  const options = {
-    num_ctx,
+  //  `/v1/chat/completions` é servido pelo llama.cpp (`llama-server`), pelo
+  //  llama-swap E pelo Ollama — então a migração para o llama.cpp é trocar a
+  //  URL, e voltar atrás também. O que o dialeto antigo tinha e este não:
+  //
+  //    • num_ctx por pedido — no llama.cpp o contexto é do servidor (`-c` no
+  //      boot), alocado UMA vez: mais previsível e mais barato que o Ollama
+  //      reservando cache de atenção a cada carga.
+  //    • keep_alive — quem descarrega modelo agora é o llama-swap (`ttl` no
+  //      config.yaml dele), por modelo, no lugar certo.
+  //    • format:"json"/think — viram response_format + /no_think no system.
+  const body = {
+    model: modeloUsado,
+    messages,
+    stream: false,
+    max_tokens: limiteTokens,
     temperature: json ? 0 : 0.6,   // decisão determinística; conversa criativa
-    num_predict: limiteTokens,
   };
-  // Por padrão o Ollama usa a GPU e todos os recursos disponíveis.
-  // OLLAMA_NUM_THREAD só é passado se você quiser limitar manualmente.
-  if (process.env.OLLAMA_NUM_THREAD) options.num_thread = Number(process.env.OLLAMA_NUM_THREAD);
-
-  // ── keep_alive por função ──
-  //
-  // O modelo de conversa responde quase todas as mensagens: mantê-lo residente
-  // evita recarregá-lo a cada vez (era o que fazia uma decisão de 17 tokens
-  // levar 4,5s). Já os modelos pesados — código, ferramentas — são raros: sair
-  // rápido da VRAM devolve a placa para quem está usando o computador.
-  const keep_alive = manter ?? ([OLLAMA_MODEL_LEVE, OLLAMA_MODEL_DECISAO].includes(modeloUsado)
-    ? KEEP_LEVE
-    : KEEP_PESADO);
-
-  const body = { model: modeloUsado, messages, stream: false, keep_alive, options };
   if (json) {
-    body.format = "json";     // structured output nativo do Ollama
-    body.think = false;       // desliga o "pensamento" do Qwen3 nas decisões (rapidez)
+    body.response_format = { type: "json_object" };
+    // O "/no_think" no system desliga o raciocínio do Qwen3 em qualquer
+    // backend; modelos que não o conhecem o ignoram como texto.
+    messages = body.messages = [
+      { role: "system", content: "/no_think" },
+      ...messages,
+    ];
   }
 
   const entradaChars = messages.reduce((n, m) => n + (m.content?.length || 0), 0);
-  console.log(`[CHAT][ollama] → ${etiqueta} | modelo=${modeloUsado} num_ctx=${num_ctx} num_predict=${limiteTokens} entrada≈${entradaChars} chars keep=${keep_alive}${json ? " (json, think=off)" : ""}`);
+  console.log(`[CHAT][llm] → ${etiqueta} | modelo=${modeloUsado} max_tokens=${limiteTokens} entrada≈${entradaChars} chars${json ? " (json)" : ""}`);
 
   const t0 = Date.now();
-  const data = await pedir(`${OLLAMA_URL}/api/chat`, body);
+  let data = await pedir(`${OLLAMA_URL}/v1/chat/completions`, body);
+  let escolha = data?.choices?.[0] ?? {};
+  let conteudo = escolha?.message?.content ?? "";
+  let motivo = escolha?.finish_reason ?? "?";
+
+  // ── Continuação automática ──
+  //
+  //  Antes, bater no limite virava um aviso "peça 'continue' para o resto" —
+  //  empurrando para o usuário um trabalho que é nosso. Agora a emenda é
+  //  feita aqui: o trecho gerado volta como assistant e o modelo segue de
+  //  onde parou, até CONTINUAR_MAX vezes. Só para conversa (json cortado é
+  //  bug de limite, não de continuação).
+  let emendas = 0;
+  while (!json && motivo === "length" && emendas < CONTINUAR_MAX) {
+    emendas++;
+    console.log(`[CHAT][llm] ✂️ cortada no limite — continuando sozinha (${emendas}/${CONTINUAR_MAX})`);
+    data = await pedir(`${OLLAMA_URL}/v1/chat/completions`, {
+      ...body,
+      messages: [
+        ...messages,
+        { role: "assistant", content: conteudo },
+        { role: "user", content: "Continue EXATAMENTE de onde parou, sem repetir nada, sem resumir, sem cumprimentar. / Continue EXACTLY from where you stopped; no repetition, no summary, no greeting." },
+      ],
+    });
+    escolha = data?.choices?.[0] ?? {};
+    conteudo += escolha?.message?.content ?? "";
+    motivo = escolha?.finish_reason ?? "?";
+  }
+
   const dur = ((Date.now() - t0) / 1000).toFixed(1);
+  ollamaChat._cortou = motivo === "length";   // ainda cortada DEPOIS das emendas
 
-  const conteudo = data?.message?.content ?? "";
-  const doneReason = data?.done_reason ?? "?";
-  ollamaChat._cortou = doneReason === "length";
-
-  // Métricas que o Ollama devolve (contagem de tokens e tempos internos)
-  const pt = data?.prompt_eval_count ?? "?";       // tokens do prompt
-  const gt = data?.eval_count ?? "?";              // tokens gerados
-  const tps = (data?.eval_count && data?.eval_duration)
-    ? (data.eval_count / (data.eval_duration / 1e9)).toFixed(1) : "?";
-  console.log(`[CHAT][ollama] ← ${etiqueta} | done=${doneReason} tokens_prompt=${pt} tokens_gerados=${gt} veloc=${tps} tok/s saída=${conteudo.length} chars tempo=${dur}s`);
-  if (doneReason === "length")
-    console.warn(`[CHAT][ollama] ⚠️ CORTADO por limite de tokens (num_predict=${maxTokens}). Aumente CHAT_MAX_TOKENS para respostas mais longas.`);
+  const uso = data?.usage ?? {};
+  console.log(`[CHAT][llm] ← ${etiqueta} | fim=${motivo}${emendas ? ` (+${emendas} emenda(s))` : ""} tokens_prompt=${uso.prompt_tokens ?? "?"} tokens_gerados=${uso.completion_tokens ?? "?"} saída=${conteudo.length} chars tempo=${dur}s`);
+  if (ollamaChat._cortou)
+    console.warn(`[CHAT][llm] ⚠️ ainda cortada após ${emendas} emenda(s) — aumente CHAT_MAX_TOKENS ou CONTINUAR_MAX.`);
 
   return conteudo;
 }
@@ -1104,9 +1157,11 @@ async function lerMensagemCitada(message) {
     const autor = citada.username || citada.author?.username || "alguém";
     if (!conteudo) {
       const temAnexo = (citada.attachments?.length ?? 0) > 0;
-      return temAnexo ? { autor, conteudo: "(mensagem sem texto, apenas anexo)" } : null;
+      // `mensagem` vai junto: é dela que saem os anexos de imagem que o
+      // conversar() oferece à ferramenta ver_imagem.
+      return temAnexo ? { autor, conteudo: "(mensagem sem texto, apenas anexo)", mensagem: citada } : null;
     }
-    return { autor, conteudo: conteudo.slice(0, 1500) };
+    return { autor, conteudo: conteudo.slice(0, 1500), mensagem: citada };
   } catch { return null; }
 }
 
@@ -1143,6 +1198,31 @@ export async function conversar(message, pergunta, ctx) {
   }
   // Só citou e mencionou, sem texto: comenta a mensagem citada.
   if (!pergunta && citada) pergunta = en ? "Comment on the quoted message above." : "Comente a mensagem citada acima.";
+
+  // ── Anexos de imagem: entram no prompt como URLs para a ferramenta ──
+  //
+  //  O modelo não recebe bytes: recebe o ENDEREÇO do anexo, e decide se
+  //  chama `ver_imagem` — que baixa (só do CDN do Stoat), reescreve os
+  //  pixels e joga fora o original. Assim uma imagem maliciosa nunca chega
+  //  a decodificador nenhum fora do container da IA, e mensagens com
+  //  anexo que ninguém perguntou nada sobre não custam uma análise à toa.
+  const urlsDeImagem = [message, citada?.mensagem]
+    .flatMap((m) => m?.attachments ?? [])
+    .map((a) => {
+      const id = a?.id ?? a?._id;
+      const tipo = a?.metadata?.type ?? a?.content_type ?? "";
+      if (!id || !/image/i.test(String(tipo))) return null;
+      const AUTUMN = (process.env.AUTUMN_URL || "https://autumn.stoat.chat").replace(/\/$/, "");
+      return `${AUTUMN}/attachments/${id}/${encodeURIComponent(a?.filename ?? "imagem")}`;
+    })
+    .filter(Boolean)
+    .slice(0, 3);
+  if (urlsDeImagem.length) {
+    pergunta += (en
+      ? `\n\n[attached image(s), viewable with the ver_imagem tool: ${urlsDeImagem.join(" ")}]`
+      : `\n\n[imagem(ns) anexada(s), visíveis com a ferramenta ver_imagem: ${urlsDeImagem.join(" ")}]`);
+    dlog(`anexos de imagem no prompt: ${urlsDeImagem.length}`);
+  }
 
   dlog(`══════ nova conversa ══════`);
   dlog(`autor=${message.username || "?"} | pergunta (${pergunta.length} chars): ${JSON.stringify(pergunta.slice(0, 120))}`);
@@ -1371,10 +1451,13 @@ export async function conversar(message, pergunta, ctx) {
     const rodape = resultados?.length
       ? (en ? `\n\n_🔎 I searched: "${decisao.query}"_` : `\n\n_🔎 busquei: "${decisao.query}"_`)
       : "";
+    // A continuação automática já emendou os cortes comuns; este aviso só
+    // sobra quando a resposta estourou até o teto de emendas — aí avisar é
+    // honesto, porque falta texto de verdade.
     const avisoCorte = ollamaChat._cortou
       ? (en
-        ? "\n\n_✂️ long reply — I cut it at the limit. Ask 'continue' for the rest._"
-        : "\n\n_✂️ resposta longa — cortei no limite. Peça 'continue' para o resto._")
+        ? "\n\n_✂️ this one hit the length ceiling even after auto-continuing — ask 'continue' for the rest._"
+        : "\n\n_✂️ essa estourou o teto mesmo com a continuação automática — peça 'continue' para o resto._")
       : "";
     const textoFinal = (resposta
       || (en ? "_I couldn't put a reply together. Try rephrasing the question._" : "_Não consegui formular uma resposta. Tente reformular a pergunta._"))
@@ -1404,6 +1487,16 @@ export async function conversar(message, pergunta, ctx) {
       ? `${texto}\n\n_(${i + 1}/${partes.length})_`
       : texto;
 
+    // Imagens geradas pelas ferramentas: sobem para o CDN e saem anexadas
+    // numa mensagem própria (embed não carrega attachment no Stoat).
+    const anexosIA = chamarServicoIA._anexos ?? [];
+    chamarServicoIA._anexos = [];
+    for (const a of anexosIA.slice(0, 3)) {
+      try {
+        const id = await subirAnexo(a);
+        await message.channel.sendMessage({ content: "", attachments: [id] });
+      } catch (e) { console.error("[CHAT][anexo]", e?.message ?? e); }
+    }
     await mostrarEmbed({ description: marcar(partes[0], 0), colour: COR.info });
     for (let i = 1; i < partes.length; i++) {
       try {

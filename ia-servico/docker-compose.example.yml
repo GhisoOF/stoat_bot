@@ -1,0 +1,49 @@
+# ══════════════════════════════════════════════════════════
+#  docker-compose.example.yml — judy-ia com llama.cpp (via llama-swap)
+#
+#  Copie para o diretório do judy-ia na máquina Gentoo como
+#  `docker-compose.yml` e ajuste os caminhos. Este arquivo é VERSIONADO:
+#  segredos NUNCA aqui — ficam no `.env` ao lado (o deploy preserva ele).
+#
+#  Por que llama-swap e não o llama-server puro: o llama-server serve UM
+#  modelo. O llama-swap fica na frente, fala a mesma API OpenAI, e sobe/
+#  derruba um llama-server por modelo conforme o campo `model` do pedido —
+#  o "vários modelos por nome" que o Ollama dava, com o custo do llama.cpp:
+#  GGUF direto do disco, contexto alocado uma vez, sem daemon Go no meio.
+#
+#  GPU: RX 9060 XT (RDNA4) → imagem VULKAN. ROCm em RDNA4 ainda é loteria;
+#  Vulkan funciona em qualquer driver Mesa recente e rende bem no llama.cpp.
+# ══════════════════════════════════════════════════════════
+services:
+  judy-ia:
+    build: .
+    container_name: judy-ia
+    restart: unless-stopped
+    ports: ["8090:8090"]
+    env_file: .env            # IA_CHAVE, e GITHUB_TOKEN só se ainda quiser o plano B
+    environment:
+      - PORTA=8090
+      # O serviço fala OpenAI; o llama-swap responde por todos os modelos.
+      - LLM_URL=http://llama:8080
+      - LLM_MODEL=qwen3-8b            # nome definido no llama-swap/config.yaml
+      # ── Código local: adeus GITHUB_TOKEN ──
+      # O repositório já está nesta máquina (o deploy descompacta em
+      # ~/Downloads/github). Montado abaixo como volume, a Judy lê do disco.
+      - CODIGO_DIR=/repo
+      # ── Visão e geração de imagem (opcionais; sem env = ferramenta some) ──
+      - LLM_MODEL_VISAO=qwen2.5-vl    # modelo multimodal no llama-swap
+      #- SD_URL=http://100.74.70.106:7860   # Forge/A1111/SD.Next na mesma GPU
+    volumes:
+      - ~/Downloads/github:/repo:ro   # :ro — a Judy LÊ o código, nunca escreve
+    depends_on: [llama]
+
+  llama:
+    image: ghcr.io/mostlygeek/llama-swap:vulkan
+    container_name: judy-llama
+    restart: unless-stopped
+    ports: ["8080:8080"]     # exposto para o bot no homelab também usar (Tailscale)
+    devices:
+      - /dev/dri:/dev/dri    # a GPU via Vulkan — sem ROCm, sem HSA_OVERRIDE
+    volumes:
+      - ./llama-swap.yaml:/app/config.yaml:ro
+      - ~/modelos-gguf:/models:ro     # os .gguf baixados (HuggingFace)

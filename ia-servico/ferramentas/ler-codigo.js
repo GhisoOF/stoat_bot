@@ -15,6 +15,55 @@
 // ══════════════════════════════════════════════════════════
 
 import { buscar, explicarErroDeRede, ehTransitorio } from "./rede.js";
+import fs from "node:fs";
+import path from "node:path";
+
+// ── O repositório LOCAL vem primeiro ──────────────────────
+//
+//  O GitHub aqui era uma fonte de dor recorrente: o deploy apaga e recria
+//  `ia-servico/`, o `.env` com o GITHUB_TOKEN some junto, e a Judy passa a
+//  responder "o repositório não existe" até alguém refazer o token à mão.
+//  Tudo isso para ler um código que JÁ ESTÁ na mesma máquina — o deploy
+//  acabou de descompactá-lo em `~/Downloads/github`.
+//
+//  Então: com `CODIGO_DIR` apontando para a cópia local (montada como
+//  volume somente-leitura no compose), a leitura é do disco — sem token,
+//  sem limite de requisições, sem rede. O GitHub vira o que sempre deveria
+//  ter sido: um plano B para quando o volume não estiver montado.
+const CODIGO_DIR = process.env.CODIGO_DIR || "";
+
+function raizLocal() {
+  if (!CODIGO_DIR) return null;
+  try { return fs.statSync(CODIGO_DIR).isDirectory() ? path.resolve(CODIGO_DIR) : null; }
+  catch { return null; }
+}
+
+// Trava de fuga: o caminho pedido, resolvido, tem de continuar DENTRO da
+// raiz. Sem isso, `../..` sairia do repositório e este container viraria um
+// leitor de arquivos da máquina.
+function caminhoSeguro(raiz, pedido) {
+  const alvo = path.resolve(raiz, pedido ?? "");
+  return alvo === raiz || alvo.startsWith(raiz + path.sep) ? alvo : null;
+}
+
+const IGNORAR_DIRS = new Set(["node_modules", ".git", ".github"]);
+
+function arvoreLocal(raiz) {
+  const saida = [];
+  const andar = (dir, rel) => {
+    for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (ent.name.startsWith(".") && ent.name !== ".env.example") continue;
+      const relCaminho = rel ? `${rel}/${ent.name}` : ent.name;
+      if (ent.isDirectory()) {
+        if (!IGNORAR_DIRS.has(ent.name)) andar(path.join(dir, ent.name), relCaminho);
+      } else if (!proibido(relCaminho)) {
+        saida.push({ path: relCaminho, size: fs.statSync(path.join(dir, ent.name)).size });
+      }
+    }
+  };
+  andar(raiz, "");
+  return saida;
+}
 
 const REPO   = process.env.GITHUB_REPO || "";
 const BRANCH = process.env.GITHUB_BRANCH || "main";
@@ -99,7 +148,54 @@ export const definicao = {
 };
 
 export async function executar({ acao, caminho }) {
-  if (!REPO) return { erro: "GITHUB_REPO não configurado no serviço." };
+  // ── Plano A: o disco ──
+  const raiz = raizLocal();
+  if (raiz) {
+    try {
+      if (acao === "estatisticas" || acao === "listar") {
+        const arqs = arvoreLocal(raiz);
+        if (acao === "listar") {
+          const filtro = caminho ? arqs.filter((n) => n.path.startsWith(caminho)) : arqs;
+          return { fonte: "disco local", total: filtro.length, arquivos: filtro.map((n) => `${n.path} (${n.size} bytes)`).slice(0, 300) };
+        }
+        const js = arqs.filter((n) => extDe(n.path) === ".js");
+        let bytes = 0; const porPasta = {};
+        for (const n of js) {
+          bytes += n.size || 0;
+          const pasta = n.path.includes("/") ? n.path.split("/").slice(0, -1).join("/") : "(raiz)";
+          porPasta[pasta] = (porPasta[pasta] || 0) + (n.size || 0);
+        }
+        const ranking = Object.entries(porPasta).sort((a, b) => b[1] - a[1]).slice(0, 8)
+          .map(([pp, b]) => `${pp}: ~${Math.round(b / 40)} linhas`).join(", ");
+        return { fonte: "disco local", arquivos_js: js.length, arquivos_totais: arqs.length,
+          tamanho_js_bytes: bytes, linhas_estimadas: Math.round(bytes / 40), por_pasta: ranking };
+      }
+      if (acao === "ler") {
+        if (!caminho) return { erro: "Informe o caminho do arquivo." };
+        if (proibido(caminho)) return { erro: "Arquivo protegido — não posso ler." };
+        if (!EXT_OK.has(extDe(caminho))) return { erro: "Tipo de arquivo não legível." };
+        const alvo = caminhoSeguro(raiz, caminho);
+        if (!alvo) return { erro: "Caminho fora do repositório — não posso ler." };
+        if (!fs.existsSync(alvo)) return { erro: `\`${caminho}\` não existe no repositório local.` };
+        if (fs.statSync(alvo).isDirectory()) return { erro: "Isso é uma pasta — use a ação 'listar'." };
+        let txt = fs.readFileSync(alvo, "utf8");
+        let cortado = false;
+        if (txt.length > MAX_BYTES) { txt = txt.slice(0, MAX_BYTES); cortado = true; }
+        return { fonte: "disco local", caminho, linhas: txt.split("\n").length, cortado, conteudo: txt };
+      }
+      return { erro: "Ação desconhecida." };
+    } catch (e) {
+      // Disco falhou de forma inesperada: cai para o GitHub em vez de morrer.
+      console.error("[IA][ler-codigo] leitura local falhou:", e?.message ?? e);
+    }
+  }
+
+  // ── Plano B: o GitHub (o caminho antigo, com o token e as dores dele) ──
+  if (!REPO) {
+    return { erro: CODIGO_DIR
+      ? `CODIGO_DIR aponta para \`${CODIGO_DIR}\`, mas o volume não está montado (nem GITHUB_REPO configurado como reserva). Confira o \`volumes:\` do docker-compose do judy-ia.`
+      : "nem CODIGO_DIR (repositório local) nem GITHUB_REPO estão configurados no serviço." };
+  }
 
   try {
     if (acao === "estatisticas") {

@@ -1,7 +1,48 @@
 # Serviço de IA da Judy
 
 Container **separado** do bot. O bot (`stoat_bot`) continua exatamente como está —
-ele só passa a mandar as mensagens para cá em vez de falar direto com o Ollama.
+ele só manda as mensagens para cá.
+
+## llama.cpp no lugar do Ollama
+
+O serviço fala o formato **OpenAI** (`/v1/chat/completions`) — servido
+igualmente pelo `llama-server` do llama.cpp, pelo **llama-swap** e pelo
+próprio Ollama. Trocar de backend é trocar a `LLM_URL`; nenhum código muda.
+
+A configuração recomendada está em `docker-compose.example.yml` +
+`llama-swap.example.yaml`: o llama-swap fica na frente e sobe um
+`llama-server` por modelo conforme o campo `model` do pedido, com `ttl` para
+descarregar — o "vários modelos por nome" do Ollama, com o custo do
+llama.cpp (GGUF direto do disco, contexto alocado uma vez no boot, imagem
+**Vulkan** — na RX 9060 XT/RDNA4, Vulkan funciona onde o ROCm ainda é
+loteria). `--jinja` no llama-server é obrigatório para as ferramentas.
+
+Variáveis: `LLM_URL` (ex.: `http://llama:8080`), `LLM_MODEL`,
+`LLM_MODEL_VISAO` (multimodal; sem ela a ferramenta de visão nem aparece),
+`SD_URL` (geração de imagem, API do A1111/Forge; idem), `CONTINUAR_MAX`
+(emendas automáticas de resposta cortada, padrão 2).
+
+## Código local no lugar do GITHUB_TOKEN
+
+`CODIGO_DIR=/repo` + o volume `~/Downloads/github:/repo:ro` no compose fazem
+a ferramenta `ler_codigo` ler o repositório do **disco** — o mesmo que o
+deploy acabou de descompactar. Sem token para sumir no deploy, sem limite de
+requisições, sem rede. O GitHub continua como plano B quando o volume não
+está montado (aí valem `GITHUB_REPO`/`GITHUB_TOKEN` como antes).
+
+## Imagens: ver e gerar, sem engolir bytes de ninguém
+
+Toda imagem — recebida (`ver_imagem`) ou produzida (`gerar_imagem`) — é
+**reescrita** pelo `sharp` dentro deste container: os pixels são
+decodificados e um JPEG novo é emitido. Metadados, payloads em chunks e
+arquivos-poliglota morrem na reescrita; o que não decodifica não era imagem
+honesta e para aqui, não no cliente de quem vê a mensagem. Downloads: só
+`https`, só hosts do CDN do Stoat (`IMAGEM_HOSTS_PERMITIDOS`), teto de bytes
+durante o streaming e teto de pixels no decodificador (`limitInputPixels`,
+contra bomba de descompressão). Geração: filtro de prompt por combinação
+(menores+sexual, pessoa real+nudez, gore, símbolos de ódio) recusa ANTES de
+chamar o gerador, e o negative prompt fixo reforça do outro lado; dimensões
+e passos têm teto para a GPU não virar refém de um comando.
 
 ```
 ┌──────────────┐      HTTP       ┌──────────────┐      HTTP      ┌──────────┐

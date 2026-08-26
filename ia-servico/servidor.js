@@ -21,40 +21,59 @@ import { garantirDNS, estaInstalado, servidoresUsados } from "./dns-fallback.js"
 import * as ferramentas from "./ferramentas/index.js";
 
 const PORTA        = Number(process.env.PORTA || 8090);
-const OLLAMA_URL   = (process.env.OLLAMA_URL || "http://localhost:11434").replace(/\/$/, "");
-const MODELO_PADRAO= process.env.OLLAMA_MODEL || "qwen3.5:9b";
+// ── Backend de LLM ────────────────────────────────────────
+//
+//  Falamos o formato OpenAI (`/v1/chat/completions`) em vez do formato
+//  próprio do Ollama. Motivo: é o formato que o llama.cpp (`llama-server`),
+//  o llama-swap E o próprio Ollama servem — então trocar de backend vira
+//  trocar uma URL, não reescrever este arquivo. O llama.cpp gasta menos
+//  (uma engine, contexto alocado uma vez no boot, GGUF direto do disco), e
+//  o llama-swap devolve o "vários modelos por nome" que o Ollama dava:
+//  o campo `model` do pedido escolhe qual sobe, com TTL para descarregar.
+//
+//  O que muda de dialeto:
+//    num_predict → max_tokens · format:"json" → response_format
+//    done_reason → choices[0].finish_reason · num_ctx/keep_alive → do servidor
+const LLM_URL      = (process.env.LLM_URL || process.env.OLLAMA_URL || "http://localhost:11434").replace(/\/$/, "");
+const OLLAMA_URL   = LLM_URL;   // rotas antigas de diagnóstico ainda usam o nome
+const MODELO_PADRAO= process.env.LLM_MODEL || process.env.OLLAMA_MODEL || "qwen3.5:9b";
 const NUM_CTX      = Number(process.env.NUM_CTX || 16384);
 const MAX_TOKENS   = Number(process.env.MAX_TOKENS || 4096);
 const MAX_VOLTAS   = Number(process.env.MAX_VOLTAS_FERRAMENTA || 5);
-const TIMEOUT_MS   = Number(process.env.OLLAMA_TIMEOUT_MS || 300000);
+const TIMEOUT_MS   = Number(process.env.LLM_TIMEOUT_MS || process.env.OLLAMA_TIMEOUT_MS || 300000);
+const CONTINUAR_MAX= Number(process.env.CONTINUAR_MAX || 2);   // emendas automáticas em resposta cortada
 const CHAVE        = process.env.IA_CHAVE || "";   // opcional: exige header x-chave
 
 const log = (...a) => console.log("[IA]", ...a);
 
-// ── Chamada ao Ollama ──────────────────────────────────────
-async function ollama(messages, { modelo, comFerramentas = true } = {}) {
+// ── Chamada ao LLM (formato OpenAI) ────────────────────────
+async function llm(messages, { modelo, comFerramentas = true, maxTokens = MAX_TOKENS } = {}) {
   const corpo = {
     model: modelo || MODELO_PADRAO,
     messages,
     stream: false,
-    keep_alive: "5m",
-    options: { num_ctx: NUM_CTX, num_predict: MAX_TOKENS, temperature: 0.6 },
+    max_tokens: maxTokens,
+    temperature: 0.6,
   };
   if (comFerramentas) corpo.tools = ferramentas.definicoes();
 
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
   try {
-    const r = await fetch(`${OLLAMA_URL}/api/chat`, {
+    const r = await fetch(`${LLM_URL}/v1/chat/completions`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(corpo),
       signal: ctrl.signal,
     });
-    if (!r.ok) throw new Error(`Ollama HTTP ${r.status} — ${(await r.text()).slice(0, 200)}`);
-    return await r.json();
+    if (!r.ok) throw new Error(`LLM HTTP ${r.status} — ${(await r.text()).slice(0, 200)}`);
+    const j = await r.json();
+    const escolha = j?.choices?.[0] ?? {};
+    // Mesmo formato interno de antes, para o resto do arquivo não mudar.
+    return { message: escolha.message ?? {}, done_reason: escolha.finish_reason ?? "?" };
   } finally { clearTimeout(t); }
 }
+const ollama = llm;   // nome antigo, mesmos chamadores
 
 // ── Laço de ferramentas ────────────────────────────────────
 // Enquanto o modelo pedir ferramentas, executamos e devolvemos
@@ -76,6 +95,7 @@ function lembreteDeIdioma(idioma) {
 async function conversarComFerramentas(messages, { modelo, usarFerramentas = true, idioma = "pt" } = {}) {
   const hist = [...messages];
   const usos = [];
+  const anexos = [];
   let usouFerramenta = false;
 
   for (let volta = 0; volta < MAX_VOLTAS; volta++) {
@@ -84,7 +104,27 @@ async function conversarComFerramentas(messages, { modelo, usarFerramentas = tru
     const chamadas = msg.tool_calls || [];
 
     if (!chamadas.length) {
-      return { resposta: (msg.content || "").trim(), usos };
+      // ── Resposta cortada no limite? Continua sozinha. ──
+      // "…e aí, quer que eu continue?" era o modelo batendo em max_tokens.
+      // Quem pergunta é porque parou; quem parou não precisa perguntar —
+      // pedimos a continuação aqui mesmo, e o usuário recebe o texto inteiro.
+      let texto = (msg.content || "").trim();
+      let cortes = 0;
+      let motivo = data?.done_reason;
+      while (motivo === "length" && cortes < CONTINUAR_MAX) {
+        cortes++;
+        log(`resposta cortada (length) — continuando (${cortes}/${CONTINUAR_MAX})`);
+        const mais = await ollama([
+          ...hist,
+          { role: "assistant", content: texto },
+          { role: "user", content: idioma === "en"
+              ? "Continue EXACTLY from where you stopped. Do not repeat anything, do not summarise, do not greet."
+              : "Continue EXATAMENTE de onde parou. Não repita nada, não resuma, não cumprimente." },
+        ], { modelo, comFerramentas: false });
+        texto += (mais?.message?.content || "");
+        motivo = mais?.done_reason;
+      }
+      return { resposta: texto.trim(), usos, anexos };
     }
 
     hist.push(msg);   // registra o pedido de ferramenta do modelo
@@ -100,8 +140,18 @@ async function conversarComFerramentas(messages, { modelo, usarFerramentas = tru
       const resultado = await ferramentas.executar(nome, args);
       usos.push({ ferramenta: nome, ms: Date.now() - inicio, erro: !!resultado?.erro });
 
+      // Ferramenta que produz IMAGEM: o binário não vai para o modelo (base64
+      // no contexto é caro e inútil) — fica de lado e sai na resposta HTTP,
+      // para o bot anexar na mensagem. O modelo recebe só a confirmação.
+      if (resultado?.anexo_base64) {
+        anexos.push({ base64: resultado.anexo_base64, mime: resultado.anexo_mime || "image/jpeg", nome: resultado.anexo_nome || "imagem.jpg" });
+        delete resultado.anexo_base64;
+        resultado.anexo = "gerado e pronto para envio junto da resposta";
+      }
       hist.push({
         role: "tool",
+        // OpenAI amarra o resultado à chamada pelo id; Ollama aceita e ignora.
+        tool_call_id: c?.id ?? undefined,
         tool_name: nome,
         content: JSON.stringify(resultado).slice(0, 20000),
       });
@@ -121,7 +171,7 @@ async function conversarComFerramentas(messages, { modelo, usarFerramentas = tru
     }],
     { modelo, comFerramentas: false },
   );
-  return { resposta: (final?.message?.content || "").trim(), usos, limite: true };
+  return { resposta: (final?.message?.content || "").trim(), usos, anexos, limite: true };
 }
 
 // ── HTTP ───────────────────────────────────────────────────

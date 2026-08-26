@@ -194,7 +194,8 @@ function parametrosPT(P) {
     ],
 
     rss: [
-      { nome: "add", valor: "<url>", desc: "acompanha um feed" },
+      { nome: "add", valor: "<url> [categoria]", desc: "acompanha um feed. A categoria agrupa os resumos: cada assunto sai num bloco próprio, em vez de tudo espremido num apanhado só" },
+      { nome: "categoria", valor: "<id|url> <nome|off>", desc: "define ou tira a categoria de um feed já cadastrado (`&rss list` mostra os ids). Sem categoria, o feed resume no bloco **Geral**" },
       { nome: "remove", valor: "<url|número>", desc: "para de acompanhar" },
       { nome: "list", desc: "feeds acompanhados" },
       { nome: "canal", valor: "<#canal|aqui>", desc: "onde publicar" },
@@ -413,7 +414,8 @@ function parametrosEN(P) {
     ],
 
     rss: [
-      { nome: "add", valor: "<url>", desc: "follows a feed" },
+      { nome: "add", valor: "<url> [category]", desc: "follows a feed. The category groups the digests: each topic gets its own block instead of everything squeezed into one" },
+      { nome: "categoria", valor: "<id|url> <name|off>", desc: "sets or clears the category of an existing feed (`&rss list` shows the ids). Without one, the feed digests under **Geral**" },
       { nome: "remove", valor: "<url|number>", desc: "stops following" },
       { nome: "list", desc: "followed feeds" },
       { nome: "canal", valor: "<#channel|aqui>", desc: "where to post" },

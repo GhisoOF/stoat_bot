@@ -117,7 +117,7 @@ async function coletarNovos(serverId) {
         if (!item.guid) continue;
         // marcarVisto devolve true se era novo
         if (db.marcarVisto(f.id, item.guid)) {
-          novos.push({ feedTitulo: tituloFeed, ...item });
+          novos.push({ feedTitulo: tituloFeed, categoria: f.categoria || null, ...item });
         }
       }
       // se o feed não tinha título salvo, guarda agora
@@ -161,22 +161,40 @@ export async function rodarCiclo(serverId, ctx, { forcado = false } = {}) {
   const cicloEn = config?.language === "en";
   const agora = new Date().toLocaleString(cicloEn ? "en-US" : "pt-BR", { timeZone: process.env.TZ || "UTC" });
 
-  // ── Resumo geral com IA (tom da Judy), se configurado ──
+  // ── Resumo com IA, um bloco POR CATEGORIA ──
+  //
+  //  Antes tudo virava um apanhado único: "kernel novo" e "novela nova"
+  //  disputavam as mesmas 3 frases, e o resultado não especificava nada.
+  //  Agrupando pela categoria do feed (sem categoria = "Geral"), cada bloco
+  //  fala só do próprio assunto — e como o material de cada um é menor, o
+  //  resumo tem espaço para dizer O QUE aconteceu, não só que aconteceu.
   if (resumirIA) {
-    try {
-      const material = novos.map((it, i) =>
-        `${i + 1}. [${it.feedTitulo}] ${it.titulo}${it.resumo ? ` — ${it.resumo.slice(0, 200)}` : ""}`
-      ).join("\n");
-      const resumo = await resumirIA(material, novos.length);
-      if (resumo && resumo.trim()) {
-        await canal.sendMessage({ embeds: [{
-          title: cicloEn ? `📰 Judy's digest — ${agora}` : `📰 O resumo da Judy — ${agora}`,
-          description: resumo.trim().slice(0, 1900),
-          colour: "#a78bfa",
-        }] });
+    const grupos = new Map();
+    for (const it of novos) {
+      const cat = it.categoria || "Geral";
+      if (!grupos.has(cat)) grupos.set(cat, []);
+      grupos.get(cat).push(it);
+    }
+    // "Geral" por último: os assuntos nomeados vêm primeiro.
+    const ordenados = [...grupos.entries()].sort(([a], [b]) =>
+      (a === "Geral") - (b === "Geral") || a.localeCompare(b));
+    for (const [cat, itens] of ordenados) {
+      try {
+        const material = itens.map((it, i) =>
+          `${i + 1}. [${it.feedTitulo}] ${it.titulo}${it.resumo ? ` — ${it.resumo.slice(0, 250)}` : ""}`
+        ).join("\n");
+        const resumo = await resumirIA(material, itens.length, { categoria: cat === "Geral" ? null : cat, lang: cicloEn ? "en" : "pt" });
+        if (resumo && resumo.trim()) {
+          const rotulo = cat === "Geral" ? "" : ` · ${cat}`;
+          await canal.sendMessage({ embeds: [{
+            title: cicloEn ? `📰 Judy's digest${rotulo} — ${agora}` : `📰 O resumo da Judy${rotulo} — ${agora}`,
+            description: resumo.trim().slice(0, 1900),
+            colour: "#a78bfa",
+          }] });
+        }
+      } catch (e) {
+        console.error(`[RSS] resumo IA (${cat}) falhou:`, e.message);   // segue para os outros blocos
       }
-    } catch (e) {
-      console.error("[RSS] resumo IA falhou:", e.message);   // segue postando os itens
     }
   }
 
@@ -272,12 +290,13 @@ export async function cmdRss(message, args, ctx) {
   // ── add ──
   if (sub === "add" || sub === "adicionar") {
     const url = args[1];
+    const categoria = args.slice(2).join(" ").trim() || null;
     if (!url || !/^https?:\/\//i.test(url))
       return sendEmbed(message.channel, tr(ctx,
         { title: "❌ URL inválida",
-          description: `\`${PREFIXO}rss add <url>\` — a URL precisa começar com http(s).`, colour: COR.erro },
+          description: `\`${PREFIXO}rss add <url> [categoria]\` — a URL precisa começar com http(s). A categoria agrupa os resumos: \`${PREFIXO}rss add https://... tecnologia\`.`, colour: COR.erro },
         { title: "❌ Invalid URL",
-          description: `\`${PREFIXO}rss add <url>\` — the URL must start with http(s).`, colour: COR.erro }));
+          description: `\`${PREFIXO}rss add <url> [category]\` — the URL must start with http(s). The category groups the digests: \`${PREFIXO}rss add https://... tech\`.`, colour: COR.erro }));
     // valida buscando o feed uma vez
     let titulo = null;
     try { titulo = (await parseFeed(url)).titulo; }
@@ -288,7 +307,7 @@ export async function cmdRss(message, args, ctx) {
         { title: "❌ Unreachable feed",
           description: `I couldn't read that RSS.\n**Error:** ${err.message}`, colour: COR.erro }));
     }
-    const novo = db.addFeed(serverId, url, titulo);
+    const novo = db.addFeed(serverId, url, titulo, categoria);
     // já marca os itens atuais como vistos (só resume o que vier DEPOIS)
     if (novo) {
       const feeds = db.listarFeeds(serverId);
@@ -335,10 +354,37 @@ export async function cmdRss(message, args, ctx) {
         { title: "📰 Feeds RSS", description: `Nenhum feed. Adicione com \`${PREFIXO}rss add <url>\`.`, colour: COR.mod },
         { title: "📰 RSS feeds", description: `No feeds. Add one with \`${PREFIXO}rss add <url>\`.`, colour: COR.mod }));
     return sendEmbed(message.channel, { title: en ? "📰 RSS feeds" : "📰 Feeds RSS",
-      description: feeds.map((f) => `**${f.id}.** ${f.titulo || f.url}\n${f.url}`).join("\n\n"), colour: COR.mod });
+      description: feeds.map((f) => `**${f.id}.** ${f.titulo || f.url}${f.categoria ? ` · 🏷️ ${f.categoria}` : ""}\n${f.url}`).join("\n\n"), colour: COR.mod });
   }
 
   // ── canal ──
+  if (sub === "categoria" || sub === "category") {
+    const alvo = args[1];
+    const nome = args.slice(2).join(" ").trim();
+    if (!alvo) {
+      return sendEmbed(message.channel, tr(ctx,
+        { title: "🏷️ Categoria de feed",
+          description: `\`${PREFIXO}rss categoria <id|url> <nome>\` — os resumos saem agrupados por categoria, um bloco por assunto.\n\`${PREFIXO}rss categoria <id|url> off\` tira a categoria (o feed volta para "Geral").\n\n\`${PREFIXO}rss list\` mostra os ids.`, colour: COR.info },
+        { title: "🏷️ Feed category",
+          description: `\`${PREFIXO}rss categoria <id|url> <name>\` — digests come out grouped by category, one block per topic.\n\`${PREFIXO}rss categoria <id|url> off\` clears it (the feed goes back to "Geral").\n\n\`${PREFIXO}rss list\` shows the ids.`, colour: COR.info }));
+    }
+    const valor = /^(off|nenhuma|none)$/i.test(nome) ? null : (nome || null);
+    const n = db.setCategoriaFeed(serverId, alvo, valor);
+    return sendEmbed(message.channel, tr(ctx, {
+      title: n ? "🏷️ Categoria atualizada" : "❌ Feed não encontrado",
+      description: n
+        ? (valor ? `O feed agora resume no bloco **${valor}**.` : `O feed voltou para o bloco **Geral**.`)
+        : `Não achei o feed \`${alvo}\` — \`${PREFIXO}rss list\` mostra os ids.`,
+      colour: n ? COR.sucesso : COR.erro,
+    }, {
+      title: n ? "🏷️ Category updated" : "❌ Feed not found",
+      description: n
+        ? (valor ? `The feed now digests under **${valor}**.` : `The feed is back under **Geral**.`)
+        : `I couldn't find feed \`${alvo}\` — \`${PREFIXO}rss list\` shows the ids.`,
+      colour: n ? COR.sucesso : COR.erro,
+    }));
+  }
+
   if (sub === "canal" || sub === "channel") {
     config.rss ??= {};
     const arg = (args[1] || "").toLowerCase();

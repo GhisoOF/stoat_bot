@@ -170,6 +170,16 @@ export function abrirBanco(caminho) {
       UNIQUE (serverId, url)
     )
   `);
+  // (RSS) categoria por feed: os resumos saem agrupados por ela, em vez de
+  // um apanhado único em que "kernel novo" e "novela nova" disputam a mesma
+  // frase. Feed sem categoria cai no grupo "Geral".
+  try {
+    const colsRss = prep("PRAGMA table_info(rss_feeds)").all().map((c) => c.name);
+    if (!colsRss.includes("categoria")) {
+      db.exec("ALTER TABLE rss_feeds ADD COLUMN categoria TEXT");
+    }
+  } catch (e) { console.error("[DB] migração rss categoria:", e.message); }
+
   // itens já processados (para não repetir notícia)
   db.exec(`
     CREATE TABLE IF NOT EXISTS rss_vistos (
@@ -802,10 +812,23 @@ export function removeReactionRolesMensagem(messageId) {
 }
 
 // ── Curadoria RSS ──────────────────────────────────────────
-export function addFeed(serverId, url, titulo) {
-  const r = prep(`INSERT OR IGNORE INTO rss_feeds (serverId, url, titulo, criadoEm)
-                        VALUES (?, ?, ?, ?)`).run(serverId, url, titulo ?? null, new Date().toISOString());
+export function addFeed(serverId, url, titulo, categoria = null) {
+  const r = prep(`INSERT OR IGNORE INTO rss_feeds (serverId, url, titulo, criadoEm, categoria)
+                        VALUES (?, ?, ?, ?, ?)`).run(serverId, url, titulo ?? null, new Date().toISOString(), categoria ?? null);
+  if (r.changes === 0) {
+    // Já existia: atualiza o que veio preenchido, sem apagar o que não veio.
+    if (titulo) prep("UPDATE rss_feeds SET titulo = ? WHERE serverId = ? AND url = ?").run(titulo, serverId, url);
+    if (categoria) prep("UPDATE rss_feeds SET categoria = ? WHERE serverId = ? AND url = ?").run(categoria, serverId, url);
+  }
   return r.changes > 0;   // false se já existia
+}
+
+export function setCategoriaFeed(serverId, idOuUrl, categoria) {
+  const porId = /^\d+$/.test(String(idOuUrl));
+  const r = porId
+    ? prep("UPDATE rss_feeds SET categoria = ? WHERE serverId = ? AND id = ?").run(categoria ?? null, serverId, Number(idOuUrl))
+    : prep("UPDATE rss_feeds SET categoria = ? WHERE serverId = ? AND url = ?").run(categoria ?? null, serverId, String(idOuUrl));
+  return r.changes ?? 0;
 }
 
 export function removeFeed(serverId, idOuUrl) {
@@ -818,7 +841,7 @@ export function removeFeed(serverId, idOuUrl) {
 }
 
 export function listarFeeds(serverId) {
-  return prep("SELECT id, url, titulo FROM rss_feeds WHERE serverId = ? ORDER BY id").all(serverId);
+  return prep("SELECT id, url, titulo, categoria FROM rss_feeds WHERE serverId = ? ORDER BY id").all(serverId);
 }
 
 export function todosOsFeeds() {

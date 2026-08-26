@@ -1,0 +1,46 @@
+# ══════════════════════════════════════════════════════════
+#  llama-swap.yaml — os modelos da Judy no llama.cpp
+#
+#  Cada entrada vira um llama-server que o llama-swap sobe quando um pedido
+#  chega com aquele `model`, e derruba depois do `ttl` sem uso. É o
+#  substituto do keep_alive do Ollama — só que por modelo, no config, em
+#  vez de por pedido no código.
+#
+#  Os `-c` (contexto) são fixos por modelo, alocados no boot do servidor:
+#  é o que torna o consumo PREVISÍVEL — a maior queixa com o Ollama era o
+#  cache de atenção crescendo conforme o num_ctx de cada pedido.
+#
+#  Modelos: baixe os GGUF (quantização Q4_K_M é o equilíbrio) para
+#  ~/modelos-gguf. Nomes de arquivo são exemplos — ajuste para os seus.
+# ══════════════════════════════════════════════════════════
+healthCheckTimeout: 300
+
+models:
+  # Conversa e decisões — o cavalo de batalha. ttl longo: responde quase tudo.
+  "qwen3-8b":
+    cmd: >
+      /app/llama-server --port ${PORT}
+      -m /models/Qwen3-8B-Q4_K_M.gguf
+      -c 16384 -ngl 99 --jinja
+    ttl: 1800
+
+  # Leve, para decisões rápidas e resumos (RSS). Sobe em segundos.
+  "qwen3-4b":
+    cmd: >
+      /app/llama-server --port ${PORT}
+      -m /models/Qwen3-4B-Q4_K_M.gguf
+      -c 8192 -ngl 99 --jinja
+    ttl: 900
+
+  # Visão: multimodal via --mmproj. Só carrega quando alguém manda imagem.
+  "qwen2.5-vl":
+    cmd: >
+      /app/llama-server --port ${PORT}
+      -m /models/Qwen2.5-VL-7B-Instruct-Q4_K_M.gguf
+      --mmproj /models/Qwen2.5-VL-7B-Instruct-mmproj-f16.gguf
+      -c 8192 -ngl 99 --jinja
+    ttl: 300
+
+# `--jinja` é obrigatório para tool calling no llama.cpp: sem ele o modelo
+# recebe as ferramentas mas o template não as formata, e nada é chamado.
+# `-ngl 99` = todas as camadas na GPU (Vulkan decide o que cabe).

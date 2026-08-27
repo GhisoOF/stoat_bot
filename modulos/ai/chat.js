@@ -1021,8 +1021,8 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
             r.simbolos
               ? `Descreva a ARQUITETURA a partir deste mapa: o que o arquivo faz, como se divide, o que expõe. NÃO afirme o que uma função faz POR DENTRO — isso não está aqui. Se precisar desse detalhe, chame ler_codigo com acao='ler' e linha_inicial na linha indicada.`
               : `Você ACABOU de receber o trecho acima. Comente ELE.`,
-            r.porcentagem_lida && r.ATENCAO
-              ? `ATENÇÃO: isto é ${r.porcentagem_lida} do arquivo (linhas ${r.intervalo} de ${r.linhas_totais}). NÃO descreva nada fora deste intervalo — o que não aparece acima você NÃO leu. Para falar do arquivo inteiro, peça acao='estrutura'.`
+            r.leitura_parcial
+              ? `Isto é ${r.porcentagem_lida} do arquivo (linhas ${r.intervalo} de ${r.linhas_totais}) e é código real — descreva à vontade. Só não apresente como visto o que está fora deste intervalo; para o arquivo inteiro, peça acao='estrutura'.`
               : "",
             `NÃO peça URL, NÃO diga que não tem acesso ao GitHub e NÃO descreva de memória:`,
             `o conteúdo está logo aí em cima.`,

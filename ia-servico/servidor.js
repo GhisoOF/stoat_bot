@@ -118,6 +118,7 @@ async function conversarComFerramentas(messages, { modelo, usarFerramentas = tru
   let usouBusca = false;     // chamou 'buscar'…
   let leuConteudo = false;   // …e chegou a abrir algum arquivo depois?
   let cobrouLeitura = false; // já cobramos uma vez; não insistimos para sempre
+  let buscaTrouxeMapa = false; // a busca já veio com o mapa do melhor candidato?
 
   for (let volta = 0; volta < MAX_VOLTAS; volta++) {
     const data = await ollama(hist, { modelo, comFerramentas: usarFerramentas });
@@ -135,7 +136,7 @@ async function conversarComFerramentas(messages, { modelo, usarFerramentas = tru
       //  TTS faz isso. Aqui a volta não é desperdiçada — devolvemos ao laço
       //  com a ordem explícita de abrir o arquivo. Uma vez só; se insistir em
       //  responder, respondemos com o que há.
-      if (usouBusca && !leuConteudo && !cobrouLeitura && volta < MAX_VOLTAS - 1) {
+      if (usouBusca && !leuConteudo && !buscaTrouxeMapa && !cobrouLeitura && volta < MAX_VOLTAS - 1) {
         cobrouLeitura = true;
         log("buscou mas não leu — exigindo estrutura/ler antes da resposta");
         hist.push({ role: "system", content: idioma === "en"
@@ -192,6 +193,10 @@ async function conversarComFerramentas(messages, { modelo, usarFerramentas = tru
       // Ferramenta que produz IMAGEM: o binário não vai para o modelo (base64
       // no contexto é caro e inútil) — fica de lado e sai na resposta HTTP,
       // para o bot anexar na mensagem. O modelo recebe só a confirmação.
+      // A busca que já veio com o mapa do melhor candidato entrega conteúdo
+      // de verdade: exigir uma segunda chamada seria burocracia.
+      if (nome === "ler_codigo" && resultado?.estrutura_do_melhor) { buscaTrouxeMapa = true; usouEstrutura = true; }
+
       if (resultado?.anexo_base64) {
         anexos.push({ base64: resultado.anexo_base64, mime: resultado.anexo_mime || "image/jpeg", nome: resultado.anexo_nome || "imagem.jpg" });
         delete resultado.anexo_base64;
@@ -211,33 +216,41 @@ async function conversarComFerramentas(messages, { modelo, usarFerramentas = tru
 
     // ── Explicar, não despejar — e não inventar ──
     //
-    //  Perguntada "como funciona o seu TTS a nível de código?", ela colou o
-    //  arquivo inteiro. O conteúdo estava certo; o formato, não — ninguém
-    //  pede uma explicação para receber 1400 linhas de volta. O modelo faz
-    //  isso porque o resultado da ferramenta é a última coisa que ele leu,
-    //  e copiar é mais fácil que sintetizar. Então dizemos explicitamente.
+    //  Três falhas em sequência moldaram esta instrução, e a terceira foi
+    //  causada pelas correções das duas primeiras:
     //
-    //  A instrução "explique, não cole" trocou um problema por outro: sem o
-    //  texto na frente, ela preencheu de memória — leu `modulos/ai/chat.js`
-    //  para uma pergunta sobre TTS e descreveu funções que não existem
-    //  (`lerFileSync`, um `gerarComentarioEspontaneo` exportado do chat).
-    //  A regra agora tem três partes: só o que está no arquivo; se o arquivo
-    //  não responde, diga e busque outro; nome que não apareceu não existe.
-    if (usouEstrutura) {
-      hist.push({ role: "system", content: idioma === "en"
-        ? "You received a MAP of the file (sections, functions, exports with line numbers), not its code. Describe the architecture from it: what the file does, how it is divided, what it exposes. Do NOT state what any function does INSIDE — you have not seen those lines. If a specific detail matters, call ler_codigo with acao='ler' and linha_inicial at the line shown in the map."
-        : "Você recebeu um MAPA do arquivo (seções, funções e exports com o número da linha), não o código dele. Descreva a arquitetura a partir disso: o que o arquivo faz, como se divide, o que expõe. NÃO afirme o que uma função faz POR DENTRO — você não viu essas linhas. Se um detalhe específico importa, chame ler_codigo com acao='ler' e linha_inicial na linha indicada no mapa." });
-    }
+    //   1. Ela COLOU o arquivo inteiro (1400 linhas para "como funciona?").
+    //      → "explique com as suas palavras, não cole".
+    //   2. Sem o texto na frente, PREENCHEU DE MEMÓRIA: descreveu funções que
+    //      não existem, e um "graceful shutdown" que estava nas linhas que ela
+    //      nunca leu.  → "só o que está no conteúdo; o que não apareceu não
+    //      existe".
+    //   3. Com os dois avisos empilhados mais o "isto é um índice" da busca,
+    //      ela RECUSOU RESPONDER — disse que o arquivo era "um índice de
+    //      metadados", com 600 linhas de código real na frente.
+    //
+    //  A lição da terceira: instrução que só proíbe produz recusa. Uma pilha
+    //  de "não faça" não desenha o que fazer, e o caminho mais seguro para um
+    //  modelo acuado é não responder. Então esta versão é mais curta que a
+    //  anterior, diz primeiro o que ELA PODE afirmar, e deixa a proibição
+    //  como uma linha no fim em vez de cinco regras numeradas.
     if (usouLeitura) {
-      hist.push({ role: "system", content: idioma === "en"
+      const regras = idioma === "en"
         ? [
-          "The tool result is REFERENCE MATERIAL, not the answer. Explain in your own words what the code does; never paste the file. Quote at most 3-5 short lines, and only when a specific line is the point. Cite the path you read.",
-          "STRICT RULES: (0) If the result has an ATENCAO field saying you saw only PART of the file, that part is all you read: describing the whole file from it is inventing. For the whole, call again with acao='estrutura' (the map: sections, functions and exports of the entire file); for a detail, acao='ler' with linha_inicial. (1) Describe ONLY what appears in the content you just read. (2) A function, export, variable or file that does NOT appear in the content DOES NOT EXIST — do not name it, do not guess it, do not fill in from memory. (3) If the file you read does not answer the question (wrong subject, wrong module), SAY SO and use ler_codigo 'buscar' with the question's keyword to find the right file, then read it. (4) If the page you got is only part of the file ('proxima_linha' present) and the answer isn't in it, read the next page or pass 'termo' to jump to the relevant part. Never answer from a truncated page as if it were the whole file.",
-        ].join(" ")
+          "You now have real material from the repository. Answer the question with it, in your own words — explain, don't paste the file (quote 3-5 short lines only when a specific line IS the point), and name the path you read.",
+          usouEstrutura
+            ? "What you received is the file's MAP (sections, functions and exports with line numbers). It covers the whole file, so describe the architecture confidently: what it does, how it's divided, what it exposes. For what happens INSIDE a function, call ler_codigo acao='ler' with linha_inicial at the line the map shows."
+            : "If you got part of a file, that part is real code — describe it freely. Just don't present what you haven't seen as if you had: for the whole file use acao='estrutura', for another part use linha_inicial.",
+          "One boundary: a function or file that never appeared in what you read does not exist — don't name it. And if what you read is about the wrong subject, say so and search again instead of guessing.",
+        ]
         : [
-          "O resultado da ferramenta é MATERIAL DE REFERÊNCIA, não a resposta. Explique com as SUAS palavras o que o código faz; nunca cole o arquivo. Cite no máximo 3-5 linhas curtas, e só quando uma linha específica for o ponto. Diga o caminho do arquivo que você leu.",
-          "REGRAS ESTRITAS: (0) Se o resultado trouxer um campo ATENCAO dizendo que você viu só uma PARTE do arquivo, essa parte é tudo que você leu: descrever o arquivo inteiro a partir dela é inventar. Para o todo, chame de novo com acao='estrutura' (o mapa: seções, funções e exports do arquivo inteiro); para um detalhe, com acao='ler' e linha_inicial. (1) Descreva SOMENTE o que aparece no conteúdo que você acabou de ler. (2) Função, exportação, variável ou arquivo que NÃO apareceu no conteúdo NÃO EXISTE — não cite, não chute, não complete de memória. (3) Se o arquivo lido não responde à pergunta (assunto errado, módulo errado), DIGA ISSO e use ler_codigo 'buscar' com a palavra-chave da pergunta para achar o arquivo certo; depois leia. (4) Se a página recebida é só parte do arquivo (veio 'proxima_linha') e a resposta não está nela, leia a página seguinte ou passe 'termo' para pular ao trecho relevante. Nunca responda a partir de uma página truncada como se fosse o arquivo inteiro.",
-        ].join(" ") });
+          "Você agora tem material real do repositório. Responda a pergunta com ele, com as SUAS palavras — explique, não cole o arquivo (cite 3-5 linhas curtas só quando uma linha específica FOR o ponto) e diga o caminho que leu.",
+          usouEstrutura
+            ? "O que você recebeu é o MAPA do arquivo (seções, funções e exports com o número da linha). Ele cobre o arquivo inteiro, então descreva a arquitetura com segurança: o que ele faz, como se divide, o que expõe. Para o que acontece DENTRO de uma função, chame ler_codigo acao='ler' com linha_inicial na linha que o mapa indica."
+            : "Se você recebeu parte de um arquivo, essa parte é código real — descreva à vontade. Só não apresente como visto o que você não viu: para o arquivo inteiro use acao='estrutura', para outro trecho use linha_inicial.",
+          "Um limite só: função ou arquivo que não apareceu no que você leu não existe — não cite. E se o que você leu é sobre outro assunto, diga isso e busque de novo em vez de chutar.",
+        ];
+      hist.push({ role: "system", content: regras.join(" ") });
     }
   }
 

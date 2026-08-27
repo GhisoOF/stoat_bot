@@ -1787,8 +1787,9 @@ vinha cortado e a chamada era refeita — duas inferências para uma resposta de
   proíbe descrever o resto), `listar` e `estatisticas`. Depois de ler, a
   instrução é explícita: descrever **só o que está no arquivo**; se o arquivo
   não responde, dizer e buscar outro; nome que não apareceu não existe. E
-  `buscar` sozinho não fecha resposta: é um índice de caminhos, e o serviço
-  exige abrir o arquivo antes de explicar como ele funciona. Um **seguimento**
+  `buscar` já devolve o mapa completo do arquivo mais provável, para que uma
+  chamada baste — e o serviço só exige uma leitura extra quando esse mapa não
+  pôde ser montado. Um **seguimento**
   ("e a lógica?", "explica melhor") herda o caminho com ferramentas do turno
   anterior no mesmo canal, em vez de cair no modelo sem acesso e responder
   "não tenho o arquivo". E quando a pessoa muda o escopo ("sai do

@@ -195,12 +195,15 @@ function paginar(txt, { linha_inicial, quantidade, termo } = {}) {
 
   const pct = Math.round(((fim - inicio + 1) / total) * 100);
   const saida = { linhas_totais: total, intervalo: `${inicio}-${fim}`, porcentagem_lida: `${pct}%` };
-  // O aviso vem ANTES do conteúdo, de propósito: depois de 300 linhas de
-  // código o modelo já esqueceu qualquer ressalva colocada no fim. E é
-  // taxativo porque o `cortado: true` educado foi ignorado — ela leu 21% de
-  // um arquivo e descreveu os outros 79% de memória.
+  // O aviso vem ANTES do conteúdo (depois de 300 linhas de código, ressalva
+  // no rodapé já saiu do foco) e diz primeiro o que PODE ser afirmado.
+  //
+  //  A versão anterior só proibia — "NÃO descreva o que está fora deste
+  //  intervalo" — e o efeito foi o oposto do pretendido: em vez de limitar o
+  //  escopo da resposta, o modelo concluiu que não podia responder e disse
+  //  que "não conseguia descrever o arquivo". Aviso que só nega vira recusa.
   if (fim - inicio + 1 < total) {
-    saida.ATENCAO = `VOCÊ ESTÁ VENDO APENAS ${pct}% DESTE ARQUIVO (linhas ${inicio}-${fim} de ${total}). NÃO descreva o que está fora deste intervalo — o que não aparece abaixo você NÃO leu. Para falar do arquivo como um todo, use acao='estrutura'; para ver outro trecho, use linha_inicial ou termo.`;
+    saida.leitura_parcial = `Estas ${fim - inicio + 1} linhas (${inicio}-${fim} de ${total}, ${pct}% do arquivo) são CÓDIGO REAL e você pode descrevê-las à vontade. O que está fora deste intervalo você ainda não viu — para falar do arquivo inteiro, chame acao='estrutura'; para outro trecho, use linha_inicial ou termo.`;
   }
   saida.conteudo = trecho;
   if (ancora) saida.termo_encontrado_na_linha = ancora;
@@ -309,15 +312,33 @@ function buscarLocal(raiz, termo) {
       dica: "nada casa com esse termo. Tente uma palavra mais curta ou um sinônimo; 'listar' mostra a árvore inteira." };
   }
   const melhor = por_nome[0] ?? por_conteudo[0]?.caminho;
+
+  // ── A busca já entrega o mapa do melhor candidato ─────────
+  //
+  //  Devolver só a lista criou dois problemas opostos. Primeiro o modelo
+  //  respondeu A PARTIR DELA, descrevendo um arquivo que nunca abriu. Aí eu
+  //  pus um aviso dizendo "isto é um índice, não o código" — e ele passou a
+  //  achar que o ARQUIVO era um índice de metadados e se recusou a responder,
+  //  com 600 linhas de código na frente.
+  //
+  //  A saída não era um aviso melhor: era não devolver um resultado que
+  //  precisa de aviso. Agora a busca já vem com o mapa do arquivo mais
+  //  provável — conteúdo de verdade, cobrindo o arquivo inteiro. Uma chamada,
+  //  nada a proibir, e o passo seguinte é opcional em vez de obrigatório.
+  let mapa = null;
+  if (melhor) {
+    try { mapa = { caminho: melhor, ...estruturaDe(fs.readFileSync(path.join(raiz, melhor), "utf8")) }; }
+    catch { mapa = null; }
+  }
+
   return {
     fonte: "disco local", termo,
-    // O aviso vem PRIMEIRO porque este resultado engana: uma lista de
-    // caminhos com contagem de ocorrências parece conhecimento sobre o
-    // código, e o modelo respondeu a partir dela sem abrir arquivo nenhum.
-    ATENCAO: "Isto é um ÍNDICE de arquivos, NÃO o código. Você ainda não leu nada. Não descreva funcionamento a partir desta lista — escolha um caminho e chame 'estrutura' (o arquivo como um todo) ou 'ler' (um trecho).",
     pelo_nome: por_nome.slice(0, 10),
     pelo_conteudo: por_conteudo.slice(0, 10),
-    proximo_passo: `leia \`${melhor}\` com a ação 'ler' (passe termo="${termo}" para abrir no trecho certo). Se não responder à pergunta, leia o seguinte da lista — não complete de memória.`,
+    estrutura_do_melhor: mapa,
+    proximo_passo: mapa
+      ? `\`${melhor}\` é o arquivo mais provável, e o MAPA COMPLETO dele está em 'estrutura_do_melhor' acima — dá para descrever a arquitetura já com isso. Para citar um ponto específico, chame 'ler' com o caminho e a linha que o mapa indica. Se este não for o arquivo certo, escolha outro da lista.`
+      : `leia \`${melhor}\` com a ação 'ler' (passe termo="${termo}" para abrir no trecho certo). Se não responder à pergunta, leia o seguinte da lista — não complete de memória.`,
   };
 }
 

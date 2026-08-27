@@ -89,11 +89,14 @@ Ações:
   com o termo **pelo nome** (`tts` → `tts.js`, `tts-filtro.js`, nome curto
   primeiro) e **pelo conteúdo** (quantas linhas citam o termo, e a primeira
   delas). Sem acento, sem maiúscula. Pelo GitHub (plano B) só o nome é varrido.
-  O resultado abre com um `ATENCAO` dizendo o que ele é: um **índice**, não
-  código. Sem isso o modelo respondeu descrevendo o `tts.js` inteiro a partir
-  da lista de caminhos, sem nunca ter aberto o arquivo — e o serviço agora
-  devolve a volta ao laço (uma vez) exigindo `estrutura` ou `ler` antes da
-  resposta final.
+  O resultado já traz `estrutura_do_melhor`: o **mapa completo** do arquivo
+  mais provável. Isso nasceu de duas falhas opostas. Primeiro o modelo
+  respondeu a partir da lista, descrevendo um arquivo que nunca abriu. O
+  conserto foi um aviso — "isto é um índice, não o código" — e ele passou a
+  achar que o *arquivo* era um índice de metadados e se recusou a responder,
+  com 600 linhas de código na frente. A saída não era um aviso melhor: era
+  não devolver um resultado que precisa de aviso. Quando o mapa não pode ser
+  montado, o serviço ainda exige `estrutura` ou `ler` antes da resposta final.
 - **`estrutura`** `{ caminho }` — o **mapa** do arquivo: cabeçalhos de seção,
   funções, classes e exports, cada um com o número da linha. É o que responde
   "como funciona X" — cobre 100% do arquivo em ~2 KB, onde `ler` entregaria

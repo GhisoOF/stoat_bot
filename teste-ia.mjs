@@ -390,7 +390,8 @@ console.log("\n── ler_codigo: buscar + paginação ──");
   ok(b.pelo_conteudo?.[0]?.caminho === "modulos/ferramentas/tts.js" && b.pelo_conteudo[0].ocorrencias > 600,
     "  → e pelo conteúdo, contando as linhas que citam o termo");
   ok(!b.pelo_conteudo.some((x) => x.caminho === "modulos/ai/chat.js"), "  → chat.js não aparece: não fala de TTS");
-  ok(/não complete de memória/.test(b.proximo_passo), "  → o próximo passo já diz: se não responder, leia o seguinte");
+  ok(/Se este não for o arquivo certo, escolha outro da lista/.test(b.proximo_passo),
+    "  → e o próximo passo já diz o que fazer se o palpite estiver errado");
   const p1 = await lc.executar({ acao: "ler", caminho: "modulos/ferramentas/tts.js" });
   ok(p1.linhas_totais === 700 && p1.intervalo === "1-300" && p1.proxima_linha === 301 && !p1.fim_do_arquivo,
     "★ arquivo grande vem em página: 1-300 de 700, próxima em 301");
@@ -402,9 +403,9 @@ console.log("\n── ler_codigo: buscar + paginação ──");
   const p4 = await lc.executar({ acao: "ler", caminho: "modulos/ai/chat.js", termo: "AlreadyConnected" });
   ok(/não aparece neste arquivo/.test(p4.aviso), "  → e avisa quando o termo não está no arquivo (sinal de arquivo errado)");
   const srv = fs.readFileSync("./ia-servico/servidor.js", "utf8");
-  ok(/NÃO apareceu no conteúdo NÃO EXISTE/.test(srv) && /DOES NOT EXIST/.test(srv),
+  ok(/não apareceu no que você leu não existe/.test(srv) && /never appeared in what you read does not exist/.test(srv),
     "★ depois de ler, a instrução diz: nome que não apareceu não existe (PT e EN)");
-  ok(/use ler_codigo 'buscar'/.test(srv), "  → e se o arquivo não responde, busca outro em vez de completar de memória");
+  ok(/busque de novo em vez de chutar/.test(srv), "  → e se o arquivo é de outro assunto, busca de novo em vez de completar de memória");
   ok(/MAX_VOLTAS_FERRAMENTA \|\| 6/.test(srv), "  → com 6 voltas, buscar → ler → página seguinte cabe");
 }
 
@@ -459,17 +460,21 @@ console.log("\n── estrutura: o mapa, não os primeiros 21% ──");
   ok(/NUNCA descreva o que uma função faz por dentro/.test(e.como_usar), "  → dizendo que o mapa não autoriza descrever o interior");
 
   const p1 = await lc.executar({ acao: "ler", caminho: "modulos/ferramentas/tts.js" });
-  ok(p1.porcentagem_lida === "33%" && /VOCÊ ESTÁ VENDO APENAS 33%/.test(p1.ATENCAO),
-    "★ página parcial grita a porcentagem — o `cortado: true` educado foi ignorado");
-  ok(Object.keys(p1).indexOf("ATENCAO") < Object.keys(p1).indexOf("conteudo"),
-    "  → e o aviso vem ANTES do código: depois de 300 linhas ele já foi esquecido");
+  ok(p1.porcentagem_lida === "33%" && /33% do arquivo/.test(p1.leitura_parcial),
+    "★ página parcial diz a porcentagem — o `cortado: true` educado foi ignorado");
+  ok(/são CÓDIGO REAL e você pode descrevê-las à vontade/.test(p1.leitura_parcial),
+    "  → mas diz primeiro o que ELA PODE afirmar: aviso que só proíbe virou recusa");
+  ok(Object.keys(p1).indexOf("leitura_parcial") < Object.keys(p1).indexOf("conteudo"),
+    "  → e vem ANTES do código: depois de 300 linhas ele já foi esquecido");
   const inteiro = await lc.executar({ acao: "ler", caminho: "modulos/ai/chat.js" });
-  ok(!inteiro.ATENCAO && inteiro.fim_do_arquivo, "  → arquivo que coube inteiro não leva aviso nenhum");
+  ok(!inteiro.leitura_parcial && inteiro.fim_do_arquivo, "  → arquivo que coube inteiro não leva aviso nenhum");
 
   const srv = fs.readFileSync("./ia-servico/servidor.js", "utf8");
-  ok(/campo ATENCAO dizendo que você viu só uma PARTE/.test(srv), "  → e o serviço reforça isso depois de cada leitura");
-  ok(/usouEstrutura/.test(srv) && /não viu essas linhas/.test(srv),
-    "  → com regra própria para o mapa: arquitetura sim, interior de função não");
+  ok(/essa parte é código real — descreva à vontade/.test(srv), "  → e o serviço repete o enquadramento positivo depois de cada leitura");
+  ok(/usouEstrutura/.test(srv) && /Ele cobre o arquivo inteiro, então descreva a arquitetura com segurança/.test(srv),
+    "  → o mapa autoriza falar da arquitetura, e só o interior das funções fica de fora");
+  ok((srv.match(/Um limite só/g) ?? []).length === 1 && !/REGRAS ESTRITAS/.test(srv),
+    "★ uma proibição, não cinco regras numeradas — a pilha de 'não faça' foi o que produziu a recusa");
 }
 
 // ══ 14. Mudou de assunto? o arquivo anterior não é a resposta ══
@@ -505,11 +510,13 @@ console.log("\n── buscar sozinho não fecha a resposta ──");
 {
   const lc = await import("./ia-servico/ferramentas/ler-codigo.js");
   const b = await lc.executar({ acao: "buscar", termo: "tts" });
-  ok(/ÍNDICE de arquivos, NÃO o código/.test(b.ATENCAO), "★ o resultado da busca avisa que é índice, não conteúdo");
-  ok(Object.keys(b).indexOf("ATENCAO") < Object.keys(b).indexOf("pelo_conteudo"), "  → e o aviso vem antes da lista que engana");
+  ok(b.estrutura_do_melhor?.caminho === "modulos/ferramentas/tts.js" && b.estrutura_do_melhor.simbolos?.length,
+    "★ a busca já vem com o MAPA do melhor candidato — conteúdo real, não só uma lista");
+  ok(!b.ATENCAO, "  → e por isso não precisa mais de aviso: o aviso 'isto é um índice' virou recusa de responder");
+  ok(/MAPA COMPLETO dele está em 'estrutura_do_melhor'/.test(b.proximo_passo), "  → o próximo passo aponta para o mapa que já está ali");
   const srv = fs.readFileSync("./ia-servico/servidor.js", "utf8");
-  ok(/usouBusca && !leuConteudo && !cobrouLeitura/.test(srv),
-    "★ o serviço devolve ao laço quando o modelo tenta responder só com a busca");
+  ok(/usouBusca && !leuConteudo && !buscaTrouxeMapa && !cobrouLeitura/.test(srv),
+    "★ o serviço só cobra leitura quando a busca NÃO trouxe o mapa");
   ok(/cobrouLeitura = true/.test(srv) && /volta < MAX_VOLTAS - 1/.test(srv),
     "  → uma vez só, e nunca na última volta: cobrar em laço deixaria a pessoa sem resposta");
   ok(/você ainda NÃO leu código nenhum/.test(srv) && /you have NOT read any code yet/.test(srv), "  → em PT e EN");

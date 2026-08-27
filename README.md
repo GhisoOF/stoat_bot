@@ -1779,11 +1779,19 @@ vinha cortado e a chamada era refeita — duas inferências para uma resposta de
   modelo de conversa julgar se "é conta" — foi assim que nasceu o `2+2=2`.
 - **ler_codigo** — lê o próprio código do repositório (do disco, via
   `CODIGO_DIR`; GitHub como reserva). Ações: `buscar <termo>` (acha os arquivos
-  pelo nome e pelo conteúdo — é por aqui que ela começa), `ler` com paginação
-  por linhas (`linha_inicial`, `quantidade`, ou `termo` para abrir direto no
-  trecho), `listar` e `estatisticas`. Depois de ler, a instrução é explícita:
-  descrever **só o que está no arquivo**; se o arquivo não responde, dizer e
-  buscar outro; nome que não apareceu não existe.
+  pelo nome e pelo conteúdo — é por aqui que ela começa),
+  `estrutura <arquivo>` (o **mapa**: seções, funções e exports com a linha de
+  cada um — é o que responde "como funciona X" sem ler 1400 linhas),
+  `ler` com paginação por linhas (`linha_inicial`, `quantidade`, ou `termo`
+  para abrir direto no trecho; a página parcial avisa a porcentagem lida e
+  proíbe descrever o resto), `listar` e `estatisticas`. Depois de ler, a
+  instrução é explícita: descrever **só o que está no arquivo**; se o arquivo
+  não responde, dizer e buscar outro; nome que não apareceu não existe. E
+  quando a pessoa muda o escopo ("sai do `modulos/ferramentas` e vai para a
+  raiz", "em âmbito geral"), o arquivo do turno anterior é descartado e a
+  busca recomeça — inclusive o caminho que a própria Judy citou na resposta
+  anterior, que antes era relido a cada mensagem e prendia a conversa no
+  mesmo arquivo.
 - **buscar_web** — busca na internet via SearXNG.
 - **buscar_rss** — resumo de feeds sob demanda.
 

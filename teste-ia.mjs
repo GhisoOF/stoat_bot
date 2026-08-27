@@ -422,5 +422,78 @@ console.log("\n── [PUNIÇÃO][vigia]: nunca mais 'undefined' ──");
   ok(/try \{ server = await ctx\.client\?\.servers\?\.fetch/.test(fonte), "  → servers.fetch que rejeita vira 'servidor inacessível', não exceção muda");
 }
 
+// ══ 13. O mapa do arquivo — e nunca descrever o que não se leu ══
+//
+//  Perguntada "como funciona seu TTS a nível de código?", ela leu 300 das
+//  1436 linhas e descreveu o arquivo inteiro: tudo que acertou estava nas
+//  linhas 1-300, tudo que inventou ("graceful shutdown no &tts reiniciar")
+//  estava depois da linha 780. A pergunta era sobre o TODO; a ferramenta só
+//  sabia entregar PEDAÇOS.
+console.log("\n── estrutura: o mapa, não os primeiros 21% ──");
+{
+  const raiz = process.env.CODIGO_DIR;
+  const grande = [
+    "// ══ Cabeçalho ══",
+    "// ── Anti-abuso ──",
+    "const COOLDOWN_MS = 8000;",
+    "function semAcento(t) { return t; }",
+    "export function servidorPermitido(id) { return true; }",
+    "export const cmdTts = async (m) => m;",
+    ...Array.from({ length: 900 }, (_, i) => `// enchimento ${i}`),
+    "// ── reiniciar (staff) ──",
+    "function reiniciarVoz() { return chamar('/reiniciar'); }",
+    "export { falarNaCall };",
+  ].join("\n");
+  fs.writeFileSync(`${raiz}/modulos/ferramentas/tts.js`, grande);
+  const lc = await import("./ia-servico/ferramentas/ler-codigo.js");
+
+  const e = await lc.executar({ acao: "estrutura", caminho: "modulos/ferramentas/tts.js" });
+  ok(e.linhas_totais === 909 && !e.conteudo, "★ `estrutura` devolve o MAPA, não o conteúdo");
+  ok(e.secoes.some((x) => /Anti-abuso/.test(x)) && e.secoes.some((x) => /reiniciar \(staff\)/.test(x)),
+    "  → pega seções do começo E do fim: cobre 100% do arquivo, não 21%");
+  ok(e.simbolos.some((x) => /export função servidorPermitido/.test(x)) && e.simbolos.some((x) => /função reiniciarVoz/.test(x)),
+    "  → funções declaradas e arrow, com a linha de cada uma");
+  ok(e.exporta.includes("servidorPermitido") && e.exporta.includes("cmdTts") && e.exporta.includes("falarNaCall"),
+    "  → e o que o arquivo exporta, inclusive no `export { }`");
+  ok(JSON.stringify(e).length < 3000, `  → cabe em ${JSON.stringify(e).length} chars (o arquivo tem ${grande.length})`);
+  ok(/NUNCA descreva o que uma função faz por dentro/.test(e.como_usar), "  → dizendo que o mapa não autoriza descrever o interior");
+
+  const p1 = await lc.executar({ acao: "ler", caminho: "modulos/ferramentas/tts.js" });
+  ok(p1.porcentagem_lida === "33%" && /VOCÊ ESTÁ VENDO APENAS 33%/.test(p1.ATENCAO),
+    "★ página parcial grita a porcentagem — o `cortado: true` educado foi ignorado");
+  ok(Object.keys(p1).indexOf("ATENCAO") < Object.keys(p1).indexOf("conteudo"),
+    "  → e o aviso vem ANTES do código: depois de 300 linhas ele já foi esquecido");
+  const inteiro = await lc.executar({ acao: "ler", caminho: "modulos/ai/chat.js" });
+  ok(!inteiro.ATENCAO && inteiro.fim_do_arquivo, "  → arquivo que coube inteiro não leva aviso nenhum");
+
+  const srv = fs.readFileSync("./ia-servico/servidor.js", "utf8");
+  ok(/campo ATENCAO dizendo que você viu só uma PARTE/.test(srv), "  → e o serviço reforça isso depois de cada leitura");
+  ok(/usouEstrutura/.test(srv) && /não viu essas linhas/.test(srv),
+    "  → com regra própria para o mapa: arquitetura sim, interior de função não");
+}
+
+// ══ 14. Mudou de assunto? o arquivo anterior não é a resposta ══
+//
+//  "saia do modulos/ferramentas e vá para a pasta raiz" recebeu, pela
+//  terceira vez seguida, uma resposta sobre tts.js. O caminho vinha sendo
+//  relido da mensagem citada — que era a resposta ANTERIOR DA PRÓPRIA JUDY.
+console.log("\n── mudança de escopo quebra a inércia do assunto ──");
+{
+  const chat = await import("./modulos/ai/chat.js");
+  ok(chat.mudouEscopo("eu quero que agora saia do modulos/ferramentas e vá para a pasta raiz"), "★ 'saia de X e vá para a raiz' é virada de página");
+  ok(chat.mudouEscopo("indo em um ambito geral: como funciona o tratamento de erros?"), "  → 'em âmbito geral' também");
+  ok(chat.mudouEscopo("trocando de assunto, quanto é 2+2?"), "  → e 'trocando de assunto'");
+  ok(!chat.mudouEscopo("como funciona seu TTS a nível de código?"), "  → pergunta normal NÃO é virada (senão toda pergunta reinicia a busca)");
+  ok(!chat.mudouEscopo("me explica melhor essa parte do cooldown"), "  → nem um pedido de aprofundar o mesmo assunto");
+
+  const fonte = fs.readFileSync("./modulos/ai/chat.js", "utf8");
+  ok(/citada\?\.doBot \? null : caminhoCitado\(citada\?\.conteudo\)/.test(fonte),
+    "★ o caminho citado pela PRÓPRIA Judy não é relido — era o laço que prendia a conversa no mesmo arquivo");
+  ok(/const doBot = !!\(citada\.authorId && message\.client\?\.user\?\.id/.test(fonte), "  → e a citada sabe dizer se veio dela mesma");
+  ok(/O ESCOPO MUDOU/.test(fonte) && /SCOPE CHANGED/.test(fonte), "  → virou a página: instrução manda buscar do zero (PT e EN)");
+  ok(/querOTodo \? \{ acao: "estrutura", caminho \}/.test(fonte),
+    "★ pergunta sobre o TODO ('como funciona', 'lógica', 'arquitetura') pede o mapa, não as primeiras 300 linhas");
+}
+
 console.log(`\nIA: ${pass} ok, ${fail} falha(s)`);
 process.exit(fail ? 1 : 0);

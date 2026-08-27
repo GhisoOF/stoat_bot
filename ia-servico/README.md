@@ -89,13 +89,23 @@ Ações:
   com o termo **pelo nome** (`tts` → `tts.js`, `tts-filtro.js`, nome curto
   primeiro) e **pelo conteúdo** (quantas linhas citam o termo, e a primeira
   delas). Sem acento, sem maiúscula. Pelo GitHub (plano B) só o nome é varrido.
+- **`estrutura`** `{ caminho }` — o **mapa** do arquivo: cabeçalhos de seção,
+  funções, classes e exports, cada um com o número da linha. É o que responde
+  "como funciona X" — cobre 100% do arquivo em ~2 KB, onde `ler` entregaria
+  21% dele em 15 KB. Depois do mapa, `ler` com `linha_inicial` busca o detalhe.
+  Nasceu de um caso real: perguntada sobre o TTS, ela leu 300 das 1436 linhas
+  de `tts.js` e descreveu o arquivo inteiro — o que acertou estava nas linhas
+  1-300, o que inventou estava depois da 780.
 - **`ler`** `{ caminho, linha_inicial?, quantidade?, termo? }` — devolve uma
   **página** de linhas numeradas (padrão 300, máximo 600), com `linhas_totais`,
   `intervalo` e, se houver mais, `proxima_linha` para continuar. Com `termo`, a
   página abre 15 linhas antes da primeira ocorrência — e avisa se o termo não
   aparece no arquivo (sinal de arquivo errado). O corte antigo era por bytes,
   sempre do começo: um arquivo de 1400 linhas virava as 300 primeiras e um
-  `cortado: true` que o modelo ignorava.
+  `cortado: true` que o modelo ignorava. Hoje a página parcial vem com
+  `porcentagem_lida` e um campo `ATENCAO` **antes** do código (depois de 300
+  linhas, qualquer ressalva no fim já foi esquecida) dizendo, sem meias
+  palavras, para não descrever o que está fora do intervalo.
 - **`listar`** `{ caminho? }` e **`estatisticas`** — visão geral da árvore.
 
 Depois de qualquer leitura, o serviço injeta uma instrução de três partes:

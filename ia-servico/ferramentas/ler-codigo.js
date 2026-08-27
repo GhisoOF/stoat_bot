@@ -142,12 +142,12 @@ export const definicao = {
     // `modulos/ai/chat.js` (o primeiro nome que lhe ocorreu) e descreveu
     // funções que não existem. A ação `buscar` tira o palpite do caminho:
     // "tts" devolve os arquivos que falam de TTS, e só então ela lê.
-    description: "Lê o código-fonte do próprio bot (somente leitura). Use para responder como o bot funciona, comentar a própria implementação ou conferir detalhes técnicos. FLUXO OBRIGATÓRIO: (1) 'buscar' com o termo da pergunta (ex.: 'tts', 'xp', 'banglobal') — devolve os arquivos cujo nome ou conteúdo casam; (2) 'ler' o arquivo mais relevante que apareceu na busca. Arquivos grandes vêm em páginas de linhas: o resultado diz 'proxima_linha' quando há mais — chame 'ler' de novo com 'linha_inicial' para continuar, ou passe 'termo' para abrir direto no trecho que fala do assunto. 'listar' e 'estatisticas' são para visão geral. NUNCA adivinhe nomes de arquivo; NUNCA descreva funções que não apareceram no conteúdo lido.",
+    description: "Lê o código-fonte do próprio bot (somente leitura). Use para responder como o bot funciona, comentar a própria implementação ou conferir detalhes técnicos. FLUXO OBRIGATÓRIO: (1) 'buscar' com o termo da pergunta (ex.: 'tts', 'xp', 'banglobal') — devolve os arquivos cujo nome ou conteúdo casam; (2) 'estrutura' do arquivo escolhido — o MAPA dele (seções, funções, exports, com a linha de cada um), que é o que responde perguntas do tipo como-funciona-X; (3) 'ler' as linhas específicas que você precisa citar. Um arquivo de 1400 linhas NÃO cabe numa leitura: descrever o todo a partir da primeira página é como resumir um livro pela primeira folha — use 'estrutura' para o todo e 'ler' para o detalhe. Arquivos grandes vêm em páginas de linhas: o resultado diz 'proxima_linha' quando há mais — chame 'ler' de novo com 'linha_inicial' para continuar, ou passe 'termo' para abrir direto no trecho que fala do assunto. 'listar' e 'estatisticas' são para visão geral. NUNCA adivinhe nomes de arquivo; NUNCA descreva funções que não apareceram no conteúdo lido.",
     parameters: {
       type: "object",
       required: ["acao"],
       properties: {
-        acao: { type: "string", enum: ["buscar", "estatisticas", "listar", "ler"], description: "O que fazer" },
+        acao: { type: "string", enum: ["buscar", "estrutura", "estatisticas", "listar", "ler"], description: "O que fazer" },
         termo: { type: "string", description: "Em 'buscar': o assunto procurado (uma palavra ou duas, ex.: 'tts', 'reaction role', 'silence'). Em 'ler': opcional — abre o arquivo no primeiro trecho que contém o termo, em vez do começo." },
         caminho: { type: "string", description: "Caminho relativo à raiz do repositório, ex.: 'modulos/ai/chat.js' ou 'modulos/ai'. Deixe VAZIO para a raiz — não use '.' nem '/'. Obrigatório na ação 'ler'." },
         linha_inicial: { type: "integer", description: "Em 'ler': a linha (a partir de 1) por onde começar. Use o 'proxima_linha' do resultado anterior para continuar um arquivo grande. Padrão: 1." },
@@ -193,7 +193,16 @@ function paginar(txt, { linha_inicial, quantidade, termo } = {}) {
     .map((l, i) => `${String(inicio + i).padStart(largura)}| ${l}`)
     .join("\n");
 
-  const saida = { linhas_totais: total, intervalo: `${inicio}-${fim}`, conteudo: trecho };
+  const pct = Math.round(((fim - inicio + 1) / total) * 100);
+  const saida = { linhas_totais: total, intervalo: `${inicio}-${fim}`, porcentagem_lida: `${pct}%` };
+  // O aviso vem ANTES do conteúdo, de propósito: depois de 300 linhas de
+  // código o modelo já esqueceu qualquer ressalva colocada no fim. E é
+  // taxativo porque o `cortado: true` educado foi ignorado — ela leu 21% de
+  // um arquivo e descreveu os outros 79% de memória.
+  if (fim - inicio + 1 < total) {
+    saida.ATENCAO = `VOCÊ ESTÁ VENDO APENAS ${pct}% DESTE ARQUIVO (linhas ${inicio}-${fim} de ${total}). NÃO descreva o que está fora deste intervalo — o que não aparece abaixo você NÃO leu. Para falar do arquivo como um todo, use acao='estrutura'; para ver outro trecho, use linha_inicial ou termo.`;
+  }
+  saida.conteudo = trecho;
   if (ancora) saida.termo_encontrado_na_linha = ancora;
   else if (t) saida.aviso = `o termo "${t}" não aparece neste arquivo — talvez o arquivo errado; use 'buscar'`;
   if (fim < total) {
@@ -203,6 +212,60 @@ function paginar(txt, { linha_inicial, quantidade, termo } = {}) {
     saida.fim_do_arquivo = true;
   }
   return saida;
+}
+
+
+// ── O mapa do arquivo, em vez do começo dele ──────────────
+//
+//  Perguntada "como funciona o TTS no seu código?", ela leu a primeira página
+//  de um arquivo de 1436 linhas e descreveu o arquivo inteiro. Tudo que ela
+//  acertou estava nas linhas 1-300; tudo que inventou ("graceful shutdown no
+//  &tts reiniciar") estava depois da linha 780, que ela nunca viu.
+//
+//  A causa não é o modelo mentir: é a pergunta ser sobre o TODO e a ferramenta
+//  só saber entregar PEDAÇOS. `estrutura` responde no formato da pergunta —
+//  os cabeçalhos de seção, as funções e o que o arquivo exporta, com a linha
+//  de cada um. Cabe em 60 linhas, cobre 100% do arquivo, e o que ela não
+//  souber explicar ela agora sabe ONDE ler.
+function estruturaDe(txt) {
+  const linhas = txt.split("\n");
+  const secoes = [];      // cabeçalhos de comentário (// ── Título ──)
+  const simbolos = [];
+
+  for (let i = 0; i < linhas.length; i++) {
+    const l = linhas[i];
+    const n = i + 1;
+
+    // Cabeçalho de seção: `// ── Entrar na call ──` ou `//  Título` em bloco ═
+    const sec = l.match(/^\s*(?:\/\/|\*)\s*[─═=-]{2,}\s*(.+?)\s*[─═=-]{2,}\s*$/);
+    if (sec && sec[1].length > 2) { secoes.push({ linha: n, titulo: sec[1] }); continue; }
+
+    // Declarações: função, classe, const de arrow/objeto, export
+    let m;
+    if ((m = l.match(/^\s*(export\s+)?(default\s+)?(async\s+)?function\s*\*?\s*([\w$]+)\s*\(([^)]*)/))) {
+      simbolos.push({ linha: n, tipo: "função", nome: m[4], exportado: !!m[1], args: m[5].slice(0, 60) });
+    } else if ((m = l.match(/^\s*(export\s+)?class\s+([\w$]+)/))) {
+      simbolos.push({ linha: n, tipo: "classe", nome: m[2], exportado: !!m[1] });
+    } else if ((m = l.match(/^\s*(export\s+)?(?:const|let|var)\s+([\w$]+)\s*=\s*(async\s*)?(?:\(([^)]*)\)|[\w$]+)\s*=>/))) {
+      simbolos.push({ linha: n, tipo: "função", nome: m[2], exportado: !!m[1], args: (m[4] ?? "").slice(0, 60) });
+    } else if ((m = l.match(/^\s*export\s+(?:const|let|var)\s+([\w$]+)/))) {
+      simbolos.push({ linha: n, tipo: "valor", nome: m[1], exportado: true });
+    } else if ((m = l.match(/^\s*export\s*\{([^}]*)\}/))) {
+      for (const nome of m[1].split(",").map((x) => x.trim().split(/\s+as\s+/)[0]).filter(Boolean)) {
+        simbolos.push({ linha: n, tipo: "reexport", nome, exportado: true });
+      }
+    }
+  }
+
+  const exportados = simbolos.filter((x) => x.exportado).map((x) => x.nome);
+  return {
+    linhas_totais: linhas.length,
+    secoes: secoes.slice(0, 60).map((x) => `${x.linha}: ${x.titulo}`),
+    simbolos: simbolos.slice(0, 120).map((x) =>
+      `${x.linha}: ${x.exportado ? "export " : ""}${x.tipo} ${x.nome}${x.args !== undefined ? `(${x.args})` : ""}`),
+    exporta: exportados,
+    como_usar: "Este é o MAPA do arquivo, não o conteúdo. Descreva a arquitetura a partir dele e, para explicar um ponto específico, use 'ler' com linha_inicial na linha indicada acima. NUNCA descreva o que uma função faz por dentro sem ter lido as linhas dela.",
+  };
 }
 
 // ── Buscar arquivo por assunto ───────────────────────────
@@ -290,6 +353,18 @@ export async function executar({ acao, caminho, termo, linha_inicial, quantidade
   if (raiz) {
     try {
       if (acao === "buscar") return buscarLocal(raiz, termo);
+      if (acao === "estrutura") {
+        if (!caminho) return { erro: "Informe o caminho do arquivo.", ...sugerir(arvoreLocal(raiz), "") };
+        if (proibido(caminho)) return { erro: "Arquivo protegido — não posso ler." };
+        const alvo = caminhoSeguro(raiz, caminho);
+        if (!alvo) return { erro: "Caminho fora do repositório — não posso ler." };
+        if (!fs.existsSync(alvo)) return { erro: `\`${caminho}\` não existe.`, ...sugerir(arvoreLocal(raiz), caminho) };
+        if (fs.statSync(alvo).isDirectory()) {
+          const dentro = arvoreLocal(raiz).filter((n) => n.path.startsWith(`${caminho}/`)).map((n) => n.path).slice(0, 50);
+          return { erro: "Isso é uma pasta, não um arquivo.", arquivos_dentro: dentro };
+        }
+        return { fonte: "disco local", caminho, ...estruturaDe(fs.readFileSync(alvo, "utf8")) };
+      }
       if (acao === "estatisticas" || acao === "listar") {
         const arqs = arvoreLocal(raiz);
         if (acao === "listar") {
@@ -357,6 +432,14 @@ export async function executar({ acao, caminho, termo, linha_inicial, quantidade
       return { fonte: "github", termo, pelo_nome: por_nome.slice(0, 10),
         nota: "pelo GitHub a busca é só pelo NOME do arquivo (o conteúdo não é varrido). Sem resultado? 'listar' e escolha pela pasta.",
         proximo_passo: por_nome[0] ? `leia \`${por_nome[0]}\` com a ação 'ler'.` : undefined };
+    }
+
+    if (acao === "estrutura") {
+      if (!caminho) return { erro: "Informe o caminho do arquivo." };
+      if (proibido(caminho)) return { erro: "Arquivo protegido — não posso ler." };
+      const data = await api(caminho);
+      if (Array.isArray(data)) return { erro: "Isso é uma pasta — use a ação 'listar'." };
+      return { fonte: "github", caminho, ...estruturaDe(Buffer.from(data.content || "", "base64").toString("utf8")) };
     }
 
     if (acao === "estatisticas") {

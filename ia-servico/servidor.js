@@ -114,6 +114,7 @@ async function conversarComFerramentas(messages, { modelo, usarFerramentas = tru
   const anexos = [];
   let usouFerramenta = false;
   let usouLeitura = false;   // leu código? então a resposta é explicação, não cópia
+  let usouEstrutura = false; // pediu o MAPA? então não sabe o interior das funções
 
   for (let volta = 0; volta < MAX_VOLTAS; volta++) {
     const data = await ollama(hist, { modelo, comFerramentas: usarFerramentas });
@@ -149,7 +150,13 @@ async function conversarComFerramentas(messages, { modelo, usarFerramentas = tru
 
     for (const c of chamadas) {
       const nome = c?.function?.name;
-      if (nome === "ler_codigo") usouLeitura = true;
+      if (nome === "ler_codigo") {
+        usouLeitura = true;
+        const acao = (typeof c?.function?.arguments === "string"
+          ? (() => { try { return JSON.parse(c.function.arguments); } catch { return {}; } })()
+          : c?.function?.arguments ?? {})?.acao;
+        usouEstrutura = acao === "estrutura";
+      }
       let args = c?.function?.arguments ?? {};
       if (typeof args === "string") { try { args = JSON.parse(args); } catch { args = {}; } }
 
@@ -192,15 +199,20 @@ async function conversarComFerramentas(messages, { modelo, usarFerramentas = tru
     //  (`lerFileSync`, um `gerarComentarioEspontaneo` exportado do chat).
     //  A regra agora tem três partes: só o que está no arquivo; se o arquivo
     //  não responde, diga e busque outro; nome que não apareceu não existe.
+    if (usouEstrutura) {
+      hist.push({ role: "system", content: idioma === "en"
+        ? "You received a MAP of the file (sections, functions, exports with line numbers), not its code. Describe the architecture from it: what the file does, how it is divided, what it exposes. Do NOT state what any function does INSIDE — you have not seen those lines. If a specific detail matters, call ler_codigo with acao='ler' and linha_inicial at the line shown in the map."
+        : "Você recebeu um MAPA do arquivo (seções, funções e exports com o número da linha), não o código dele. Descreva a arquitetura a partir disso: o que o arquivo faz, como se divide, o que expõe. NÃO afirme o que uma função faz POR DENTRO — você não viu essas linhas. Se um detalhe específico importa, chame ler_codigo com acao='ler' e linha_inicial na linha indicada no mapa." });
+    }
     if (usouLeitura) {
       hist.push({ role: "system", content: idioma === "en"
         ? [
           "The tool result is REFERENCE MATERIAL, not the answer. Explain in your own words what the code does; never paste the file. Quote at most 3-5 short lines, and only when a specific line is the point. Cite the path you read.",
-          "STRICT RULES: (1) Describe ONLY what appears in the content you just read. (2) A function, export, variable or file that does NOT appear in the content DOES NOT EXIST — do not name it, do not guess it, do not fill in from memory. (3) If the file you read does not answer the question (wrong subject, wrong module), SAY SO and use ler_codigo 'buscar' with the question's keyword to find the right file, then read it. (4) If the page you got is only part of the file ('proxima_linha' present) and the answer isn't in it, read the next page or pass 'termo' to jump to the relevant part. Never answer from a truncated page as if it were the whole file.",
+          "STRICT RULES: (0) If the result has an ATENCAO field saying you saw only PART of the file, that part is all you read: describing the whole file from it is inventing. For the whole, call again with acao='estrutura' (the map: sections, functions and exports of the entire file); for a detail, acao='ler' with linha_inicial. (1) Describe ONLY what appears in the content you just read. (2) A function, export, variable or file that does NOT appear in the content DOES NOT EXIST — do not name it, do not guess it, do not fill in from memory. (3) If the file you read does not answer the question (wrong subject, wrong module), SAY SO and use ler_codigo 'buscar' with the question's keyword to find the right file, then read it. (4) If the page you got is only part of the file ('proxima_linha' present) and the answer isn't in it, read the next page or pass 'termo' to jump to the relevant part. Never answer from a truncated page as if it were the whole file.",
         ].join(" ")
         : [
           "O resultado da ferramenta é MATERIAL DE REFERÊNCIA, não a resposta. Explique com as SUAS palavras o que o código faz; nunca cole o arquivo. Cite no máximo 3-5 linhas curtas, e só quando uma linha específica for o ponto. Diga o caminho do arquivo que você leu.",
-          "REGRAS ESTRITAS: (1) Descreva SOMENTE o que aparece no conteúdo que você acabou de ler. (2) Função, exportação, variável ou arquivo que NÃO apareceu no conteúdo NÃO EXISTE — não cite, não chute, não complete de memória. (3) Se o arquivo lido não responde à pergunta (assunto errado, módulo errado), DIGA ISSO e use ler_codigo 'buscar' com a palavra-chave da pergunta para achar o arquivo certo; depois leia. (4) Se a página recebida é só parte do arquivo (veio 'proxima_linha') e a resposta não está nela, leia a página seguinte ou passe 'termo' para pular ao trecho relevante. Nunca responda a partir de uma página truncada como se fosse o arquivo inteiro.",
+          "REGRAS ESTRITAS: (0) Se o resultado trouxer um campo ATENCAO dizendo que você viu só uma PARTE do arquivo, essa parte é tudo que você leu: descrever o arquivo inteiro a partir dela é inventar. Para o todo, chame de novo com acao='estrutura' (o mapa: seções, funções e exports do arquivo inteiro); para um detalhe, com acao='ler' e linha_inicial. (1) Descreva SOMENTE o que aparece no conteúdo que você acabou de ler. (2) Função, exportação, variável ou arquivo que NÃO apareceu no conteúdo NÃO EXISTE — não cite, não chute, não complete de memória. (3) Se o arquivo lido não responde à pergunta (assunto errado, módulo errado), DIGA ISSO e use ler_codigo 'buscar' com a palavra-chave da pergunta para achar o arquivo certo; depois leia. (4) Se a página recebida é só parte do arquivo (veio 'proxima_linha') e a resposta não está nela, leia a página seguinte ou passe 'termo' para pular ao trecho relevante. Nunca responda a partir de uma página truncada como se fosse o arquivo inteiro.",
         ].join(" ") });
     }
   }

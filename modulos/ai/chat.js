@@ -944,11 +944,43 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
     // Se um arquivo foi citado, buscamos o conteúdo NÓS MESMOS e entregamos
     // pronto. Assim o modelo não precisa decidir nada — ele só lê o que já
     // está na frente dele. Foi o que resolveu o "não consigo ler o main.js".
-    const caminho = caminhoCitado(pergunta) ?? caminhoCitado(citada?.conteudo);
+    // O caminho vem da pergunta da PESSOA. Da mensagem citada, só se ela não
+    // for da própria Judy: senão, o arquivo que ela citou numa resposta volta
+    // a ser lido na pergunta seguinte, e a conversa fica presa no mesmo
+    // arquivo por quantas mensagens durar o assunto — foi o que prendeu três
+    // respostas seguidas em `modulos/ferramentas/tts.js`.
+    const virou = mudouEscopo(pergunta);
+    const caminhoDaPessoa = caminhoCitado(pergunta);
+    const caminho = virou
+      ? caminhoDaPessoa            // virou a página: só vale o que ELA escreveu agora
+      : (caminhoDaPessoa ?? (citada?.doBot ? null : caminhoCitado(citada?.conteudo)));
+    if (virou) {
+      dlog(`escopo mudou na pergunta — ignorando o arquivo do turno anterior${caminho ? ` (mantido: ${caminho})` : ""}`);
+      messages.push({
+        role: "system",
+        content: lang === "en"
+          ? "SCOPE CHANGED: the person is explicitly moving away from the file/folder discussed in the previous messages. The earlier file is NOT the answer — do not read it again and do not reuse what you learned from it. Start over with ler_codigo acao='buscar' using the NEW subject of the question. If the new question is about the repository as a whole, use 'estatisticas' or 'listar' first to see which modules exist, then read more than one file before generalising."
+          : "O ESCOPO MUDOU: a pessoa está saindo explicitamente do arquivo/pasta que vocês discutiam nas mensagens anteriores. O arquivo de antes NÃO é a resposta — não o leia de novo e não reaproveite o que aprendeu nele. Comece do zero com ler_codigo acao='buscar' usando o NOVO assunto da pergunta. Se a pergunta nova é sobre o repositório inteiro, use 'estatisticas' ou 'listar' antes para ver quais módulos existem, e leia mais de um arquivo antes de generalizar.",
+      });
+    }
     if (caminho) {
-      const r = await executarFerramenta("ler_codigo", { acao: "ler", caminho });
-      if (r?.conteudo) {
-        const bruto = String(r.conteudo);
+      // Pergunta sobre o TODO ("como funciona X?") pede o MAPA do arquivo;
+      // pergunta sobre um ponto específico pede as linhas. Entregar 300 de
+      // 1436 linhas para uma pergunta do primeiro tipo foi o que produziu um
+      // "graceful shutdown" que não existe: ela descreveu os 79% que não viu.
+      const querOTodo = /\b(como funciona|como (é|e) feito|l[óo]gica|arquitetura|estrutura|vis[ãa]o geral|explica|explique|resumo|overview|how (does|it) work)\b/i.test(pergunta);
+      const r = await executarFerramenta("ler_codigo", querOTodo ? { acao: "estrutura", caminho } : { acao: "ler", caminho });
+      if (r?.conteudo || r?.simbolos) {
+        // O mapa (`estrutura`) não tem campo `conteudo`: ele É a lista. Nesse
+        // caso montamos o texto aqui — curto por natureza, cobre o arquivo
+        // inteiro, e não passa nem perto do teto de corte.
+        const bruto = r.simbolos
+          ? [
+            r.secoes?.length ? `SEÇÕES (linha: título)\n${r.secoes.join("\n")}` : "",
+            r.simbolos?.length ? `\nFUNÇÕES E VALORES (linha: declaração)\n${r.simbolos.join("\n")}` : "",
+            r.exporta?.length ? `\nO ARQUIVO EXPORTA: ${r.exporta.join(", ")}` : "",
+          ].filter(Boolean).join("\n")
+          : String(r.conteudo);
         const corte = Math.max(2000, LIMITE_ARQUIVO);
         let conteudo = bruto.length > corte
           ? bruto.slice(0, corte) + `\n\n[…arquivo cortado aqui: ${bruto.length} caracteres no total…]`
@@ -969,15 +1001,22 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
         messages.push({
           role: "system",
           content: [
-            `CONTEÚDO REAL do arquivo \`${caminho}\`, lido agora do repositório ${GITHUB_REPO_ROTULO}.`,
+            r.simbolos
+              ? `MAPA REAL do arquivo \`${caminho}\` (${r.linhas_totais} linhas), lido agora do repositório ${GITHUB_REPO_ROTULO}. São os cabeçalhos de seção, as funções e os exports, com a linha de cada um — NÃO é o código.`
+              : `CONTEÚDO REAL do arquivo \`${caminho}\`, lido agora do repositório ${GITHUB_REPO_ROTULO}.`,
             "",
             conteudo,
             "",
-            `--- fim do arquivo ---`,
-            `Você ACABOU de receber o arquivo acima. Comente ELE.`,
+            r.simbolos ? `--- fim do mapa ---` : `--- fim do trecho ---`,
+            r.simbolos
+              ? `Descreva a ARQUITETURA a partir deste mapa: o que o arquivo faz, como se divide, o que expõe. NÃO afirme o que uma função faz POR DENTRO — isso não está aqui. Se precisar desse detalhe, chame ler_codigo com acao='ler' e linha_inicial na linha indicada.`
+              : `Você ACABOU de receber o trecho acima. Comente ELE.`,
+            r.porcentagem_lida && r.ATENCAO
+              ? `ATENÇÃO: isto é ${r.porcentagem_lida} do arquivo (linhas ${r.intervalo} de ${r.linhas_totais}). NÃO descreva nada fora deste intervalo — o que não aparece acima você NÃO leu. Para falar do arquivo inteiro, peça acao='estrutura'.`
+              : "",
             `NÃO peça URL, NÃO diga que não tem acesso ao GitHub e NÃO descreva de memória:`,
             `o conteúdo está logo aí em cima.`,
-          ].join("\n"),
+          ].filter(Boolean).join("\n"),
         });
       } else {
         const motivo = r?.erro ?? "não consegui acessar";
@@ -1223,6 +1262,25 @@ export function ehAritmetica(texto) {
   return false;
 }
 
+// ── A pessoa MUDOU o escopo? ─────────────────────────────
+//
+//  "eu quero que agora saia do modulos/ferramentas e vá para a pasta raiz."
+//  Ela respondeu sobre o TTS de novo — o mesmo arquivo, pela terceira vez.
+//  Duas coisas a empurraram para lá: o caminho citado na resposta ANTERIOR
+//  (dela mesma) era relido automaticamente, e o histórico do canal inteiro
+//  falava de TTS. Uma frase de redirecionamento tem de valer mais que a
+//  inércia do assunto anterior — é a única pista de que o usuário virou a
+//  página.
+export function mudouEscopo(texto) {
+  if (!texto) return false;
+  const t = String(texto).toLowerCase();
+  if (/\b(sa(i|ia|indo)|sair|fora|longe|al[ée]m)\b[^.?!]{0,40}\b(de|do|da|dos|das)\b/.test(t)) return true;
+  if (/\b(pasta )?raiz\b|\bra[íi]z do (projeto|reposit[óo]rio)\b|\bem geral\b|\bde forma geral\b|\b[âa]mbito geral\b|\bno geral\b|\bgeralmente\b/.test(t)) return true;
+  if (/\b(outro|outra|demais|resto d[oa]|restante)\b[^.?!]{0,25}\b(arquivo|m[óo]dulo|pasta|parte|lugar)\b/.test(t)) return true;
+  if (/\b(trocando de assunto|mudando de assunto|agora sobre|deixa o .{0,20} de lado|esquece o)\b/.test(t)) return true;
+  return false;
+}
+
 // Detecta se a pergunta é sobre programação — nesses casos usamos o modelo
 // especializado em código. Heurística por palavras-chave e sinais de código.
 // O judy-ia só consegue chamar ferramentas com um modelo que suporte tool
@@ -1274,9 +1332,14 @@ async function lerMensagemCitada(message) {
       const temAnexo = (citada.attachments?.length ?? 0) > 0;
       // `mensagem` vai junto: é dela que saem os anexos de imagem que o
       // conversar() oferece à ferramenta ver_imagem.
-      return temAnexo ? { autor, conteudo: "(mensagem sem texto, apenas anexo)", mensagem: citada } : null;
+      const doBotSemTexto = !!(citada.authorId && message.client?.user?.id && citada.authorId === message.client.user.id);
+      return temAnexo ? { autor, conteudo: "(mensagem sem texto, apenas anexo)", mensagem: citada, doBot: doBotSemTexto } : null;
     }
-    return { autor, conteudo: conteudo.slice(0, 1500), mensagem: citada };
+    // De quem é a mensagem citada importa para uma coisa em particular: se
+    // for da PRÓPRIA Judy, o caminho de arquivo que houver nela é eco dela
+    // mesma, não pedido de ninguém (ver `caminhoCitado` em responder()).
+    const doBot = !!(citada.authorId && message.client?.user?.id && citada.authorId === message.client.user.id);
+    return { autor, conteudo: conteudo.slice(0, 1500), mensagem: citada, doBot };
   } catch { return null; }
 }
 

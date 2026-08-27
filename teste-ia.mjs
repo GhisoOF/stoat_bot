@@ -706,6 +706,15 @@ console.log("\n── identidade: conferida antes de sair ──");
     "  → e 'sou um modelo de linguagem', que o prompt proíbe desde sempre e o filtro não pegava");
   ok(!vaza("Um LLM é um modelo de linguagem grande, treinado em muito texto."),
     "  → mas EXPLICAR o que é um LLM continua passando: o teste é sobre se apresentar");
+  // A lista de nomes envelhece a cada modelo novo: "Sou o Qwythos, um modelo
+  // criado pela Empero AI" passou batido numa versão que só conhecia os nomes
+  // da época. A regra genérica não depende de conhecer a empresa.
+  ok(vaza("Sou o Qwythos, um modelo criado pela Empero AI."),
+    "★ modelo NOVO na lista de nomes (Qwythos/Empero/Ornith)");
+  ok(vaza("Eu sou um modelo treinado por uma empresa qualquer."),
+    "★ e a regra GENÉRICA pega qualquer 'sou um modelo criado por X' — sem precisar conhecer o X");
+  ok(!vaza("Sou a Judy, uma assistente digital (bot) criada pelo Ghiso."),
+    "  → sem pegar a apresentação certa, que também diz 'criada por'");
   ok(!vaza("O Qwen é um modelo da Alibaba, bem bom para código."),
     "★ mas falar SOBRE um modelo não é se apresentar como ele — o teste é de primeira pessoa");
   ok(!vaza("Sou a Judy, feita pelo Ghiso. Rodo num modelo local que ele escolhe."), "  → e a apresentação certa passa");

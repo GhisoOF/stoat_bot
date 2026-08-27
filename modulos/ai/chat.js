@@ -1288,7 +1288,7 @@ export function pareceChamadaDeFerramenta(texto) {
 //
 //  O teste é de PRIMEIRA PESSOA de propósito: "o que é o Qwen?" respondida
 //  com "o Qwen é um modelo da Alibaba" é conversa legítima e passa.
-const NOMES_DE_MOTOR = "(LFM\\d*|Liquid ?(AI|Foundation)|Qwen|Llama|Mistral|Gemma|Phi-?\\d|GPT|ChatGPT|Claude|Anthropic|OpenAI|Google DeepMind|Meta AI|Alibaba|DeepSeek)";
+const NOMES_DE_MOTOR = "(LFM\\d*|Liquid ?(AI|Foundation)|Qwen\\S*|Qwythos|Empero|Ornith|Llama|Mistral|Gemma|Phi-?\\d|GPT|ChatGPT|Claude|Anthropic|OpenAI|Google DeepMind|Meta AI|Alibaba|DeepSeek|Hauhau\\S*)";
 // O artigo é OPCIONAL. O furo que deixou passar "Sou LFM, o Liquid Foundation
 // Model, criado pela Liquid AI" foi exigir "sou A LFM" — sem artigo, escapava.
 const FALA_DE_SI = "(eu sou|sou|fui (treinad|construíd|criad|desenvolvid)|me chamo|minha arquitetura|meu modelo|minha (rede|base)|rodo (em|sobre)|baseada? (em|no|na)|minha identidade (é|não muda)|I am|I'm|my name is|I was (trained|built|created|developed)|my architecture)\\s+(a |o |um |uma |the |an? )?";
@@ -1300,7 +1300,17 @@ const VAZA_IDENTIDADE = new RegExp(
 // código ("minha arquitetura de módulos") é conversa legítima e passa.
 const FALA_DE_ARQUITETURA = /(minha|a minha|my)\s+(arquitetura|architecture)[^.!?\n]{0,80}\b(transformer|convolu|mixture of experts|atenção|attention|camadas|layers|parâmetros|parameters|neural)/i;
 // "sou um modelo de linguagem" já era proibido no prompt e escapava do filtro.
-const DIZ_QUE_E_MODELO = /\b(eu sou|sou|I am|I'?m)\s+(um |uma |a |an? )?(modelo de linguagem|modelo de ia|large language model|language model|llm\b|intelig[êe]ncia artificial (da|de)\s)/i;
+//
+// A última linha cobre o caso genérico: "sou um modelo criado pela empresa X".
+// Não precisa conhecer o nome da empresa — nenhuma resposta em que a Judy se
+// apresenta como "um modelo criado/treinado/desenvolvido por alguém" está
+// certa, seja qual for o `alguém`. Foi assim que "Sou o Qwythos, um modelo
+// criado pela Empero AI" passou batido numa lista que só tinha os nomes
+// conhecidos na época em que ela foi escrita.
+const DIZ_QUE_E_MODELO = new RegExp(
+  "\\b(eu sou|sou|I am|I'?m)\\s+(um |uma |a |an? )?(modelo de linguagem|modelo de ia|large language model|language model|llm\\b|intelig[êe]ncia artificial (da|de)\\s)"
+  + "|\\b(eu sou|sou|I am|I'?m)\\s+(um |uma |a |an? )?(modelo|model|assistente de ia|ai assistant)\\b[^.!?\\n]{0,40}\\b(criad|treinad|desenvolvid|constru|feit|built|trained|created|developed|made)\\S*\\s+(por|pela|pelo|by|from)\\b",
+  "i");
 
 export function vazaIdentidade(texto) {
   const t = String(texto ?? "");

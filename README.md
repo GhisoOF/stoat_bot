@@ -1784,6 +1784,21 @@ Alibaba") é conversa normal e passa. E o criador anunciar que trocou o modelo
 nunca é tratado como "tentativa de quebrar" a personagem: é informação, não
 teste.
 
+### Escolher modelo: dois scripts, duas perguntas
+
+`scripts/medir-modelos.sh` responde **quão rápido** (frio, quente, tok/s, custo
+da troca de modelo no llama-swap). `scripts/avaliar-modelos.mjs` responde **se
+serve**: emite `tool_calls` de verdade ou escreve a chamada como texto no chat,
+devolve JSON parseável nas decisões internas, responde no idioma pedido, aceita
+o nome que você deu, e quanto raciocínio descartado gasta por resposta. Cada
+prova saiu de um bug real desta base. As duas primeiras são eliminatórias:
+velocidade só importa entre modelos que fazem o serviço.
+
+```bash
+OLLAMA_URL=http://100.74.70.106:8081 node scripts/avaliar-modelos.mjs modelo-a modelo-b
+OLLAMA_URL=http://100.74.70.106:8081 ./scripts/medir-modelos.sh modelo-a modelo-b
+```
+
 ### `&chat especial` — o modelo grande sob demanda
 
 Medido nesta instalação: o modelo de conversa responde em ~1 s a 150 tok/s; o

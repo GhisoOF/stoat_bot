@@ -546,8 +546,8 @@ console.log("\n── seguimento herda o caminho com ferramentas ──");
   ok(!chat.seguimentoDeFerramenta(canal, "e a lógica?"), "  → e só se o turno anterior tiver usado ferramenta");
 
   const fonte = fs.readFileSync("./modulos/ai/chat.js", "utf8");
-  ok(/!mudouEscopo\(pergunta\) && seguimentoDeFerramenta/.test(fonte),
-    "★ mas quem MUDA de escopo não herda nada — as duas regras não brigam");
+  ok(/const caminho = virou\n\s*\? caminhoDaPessoa/.test(fonte),
+    "★ mudar de escopo descarta o ARQUIVO do turno anterior — mas não a ferramenta (ver bloco 19)");
   ok(/motivo === "seguimento"/.test(fonte) && /nunca diga que não tem acesso ao arquivo/.test(fonte),
     "  → com instrução própria: releia, não responda de memória");
 }
@@ -571,6 +571,62 @@ console.log("\n── o 'undefined' que sobrou: erro em string JSON ──");
   ok(r?.saiu === true, "★ agora o vigia RECONHECE que a pessoa saiu e encerra o registro em vez de tentar de novo");
   ok(/descreverErro\(err\)/.test(fs.readFileSync("./modulos/moderacao/ban-global.js", "utf8")),
     "  → e o `[BANGLOBAL] auto: falha em X: undefined` foi pela mesma causa");
+}
+
+// ══ 18. A chamada de ferramenta escrita como TEXTO ══
+//
+//  Perguntada sobre o RPG, ela respondeu literalmente isto no chat:
+//    {"name": "ler_codigo", "arguments": {"acao":"buscar","termo":"tts"}}
+//  Decisão certa, lugar errado — falha de template do modelo local.
+console.log("\n── chamada de ferramenta vinda como texto ──");
+{
+  const src = fs.readFileSync("./ia-servico/servidor.js", "utf8");
+  const corpo = src.match(/function chamadasEmTexto[\s\S]*?\n}\n/)[0];
+  const ferramentas = { nomes: () => ["ler_codigo", "calcular", "buscar_web"] };
+  const achar = new Function("ferramentas", corpo + "; return chamadasEmTexto;")(ferramentas);
+
+  const doLog = `{"name": "ler_codigo", "arguments": {"acao":"buscar","termo":"tts"}}`;
+  ok(achar(doLog)[0]?.function?.name === "ler_codigo", "★ o JSON exato que foi parar no chat é reconhecido e vira chamada");
+  ok(achar("```json\n{\"name\":\"calcular\",\"arguments\":{\"codigo\":\"return 2+2\"}}\n```")[0]?.function?.arguments?.codigo === "return 2+2",
+    "  → dentro de bloco ```json também");
+  ok(achar(`{"function":{"name":"ler_codigo","arguments":"{\\"acao\\":\\"estrutura\\"}"}}`)[0]?.function?.arguments?.acao === "estrutura",
+    "  → e no formato {function:{…}}, com arguments em string");
+  ok(achar(`{"name":"ler_codigo","arguments":{"acao":"ler","extra":{"x":{"y":1}}}}`).length === 1,
+    "  → objeto aninhado não confunde o fechamento de chaves");
+  ok(achar(`{"name":"ler_codigo","arguments":{"termo":"a}b"}}`).length === 1, "  → nem uma chave DENTRO de uma string");
+  ok(achar("O TTS lê o arquivo e manda para o judy-voz.").length === 0, "  → texto normal não vira chamada");
+  ok(achar(`{"resultado": 42, "name": "ferramenta_que_nao_existe"}`).length === 0,
+    "★ e nome fora do registro é ignorado — isto executa, então não pode adivinhar");
+  ok(/msg\.content = "";/.test(src), "  → o texto da chamada não vai para o histórico como se fosse resposta");
+
+  const chat = await import("./modulos/ai/chat.js");
+  ok(chat.pareceChamadaDeFerramenta(doLog) === true, "★ e o bot tem a última barreira: JSON cru nunca chega em quem perguntou");
+  ok(chat.pareceChamadaDeFerramenta("Aqui o exemplo: {\"name\":\"ler_codigo\"} — é assim que se chama.") === false,
+    "  → mas uma resposta que só MENCIONA o formato passa normalmente");
+}
+
+// ══ 19. Mudar de escopo não é dispensar a ferramenta ══
+//
+//  "agora indo para a pasta raiz, como está estruturado todo o código?"
+//  caiu no Ollama puro: era mudança de escopo E pedido de leitura, e o meu
+//  guard tratou as duas como a mesma coisa. Ela quer OUTRO arquivo, não
+//  NENHUM arquivo.
+console.log("\n── mudar de escopo mantém a ferramenta ──");
+{
+  const chat = await import("./modulos/ai/chat.js");
+  const q = "agora indo para a pasta raiz, como está estruturado todo o código?";
+  ok(chat.mudouEscopo(q) && chat.precisaFerramenta(q),
+    "★ a mesma frase é virada de página E pedido de leitura — as duas coisas juntas");
+  ok(chat.precisaFerramenta("como está organizado o projeto?"), "  → 'organizado' e 'estruturado' contam: o regex agora usa radical, não palavra inteira");
+  ok(chat.precisaFerramenta("e como funciona o jogo de RPG, que está no seu código, a nível de código?"), "  → e a pergunta do RPG também");
+  ok(!chat.precisaFerramenta("qual a lógica de um quicksort?") && !chat.precisaFerramenta("bom dia, tudo bem?"),
+    "  → sem pegar pergunta de fora do repositório nem conversa comum");
+
+  const fonte = fs.readFileSync("./modulos/ai/chat.js", "utf8");
+  ok(/if \(tipo !== "ferramenta" && seguimentoDeFerramenta\(canalId, pergunta\)\) \{/.test(fonte),
+    "★ o guard `!mudouEscopo` saiu do roteamento — quem decide o que não reler é o bloco do caminho");
+  ok(/o termo DESTA pergunta — o assunto de agora, não o da mensagem anterior/.test(fonte),
+    "  → e a instrução manda buscar pelo assunto ATUAL (ela buscou 'tts' para uma pergunta de RPG)");
 }
 
 console.log(`\nIA: ${pass} ok, ${fail} falha(s)`);

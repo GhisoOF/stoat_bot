@@ -933,9 +933,18 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
   // mensagem citada (ex.: respondeu a um trecho de código e chamou a Judy).
   let { modelo: modeloEscolhido, tipo, motivo } = escolherModelo(pergunta, citada);
   // Seguimento de uma conversa que JÁ estava lendo código herda o caminho com
-  // ferramentas — a menos que a pessoa tenha mudado de escopo de propósito,
-  // caso em que ela quer outra coisa e a herança atrapalharia.
-  if (tipo !== "ferramenta" && !mudouEscopo(pergunta) && seguimentoDeFerramenta(canalId, pergunta)) {
+  // ferramentas.
+  //
+  //  A versão anterior cancelava a herança quando a pessoa mudava de escopo —
+  //  e isso estava errado por confundir duas coisas. "Agora indo para a pasta
+  //  raiz, como está estruturado todo o código?" É mudança de escopo E é um
+  //  pedido de leitura: ela quer OUTRO arquivo, não NENHUM arquivo. O guard
+  //  derrubou a ferramenta, a pergunta foi para o Ollama puro, e a resposta
+  //  saiu do histórico do canal em vez do repositório.
+  //
+  //  Quem decide o que NÃO reler é o bloco do `caminho` mais abaixo; aqui só
+  //  se decide se há ferramenta, e a resposta é sim nos dois casos.
+  if (tipo !== "ferramenta" && seguimentoDeFerramenta(canalId, pergunta)) {
     dlog(`seguimento da conversa anterior (que usou ferramenta) → mantendo o caminho com ferramentas`);
     tipo = "ferramenta";
     motivo = "seguimento";
@@ -1063,7 +1072,7 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
         role: "system",
         content: [
           "ESTE PEDIDO EXIGE FERRAMENTA. Use `ler_codigo` (ou a ferramenta adequada) AGORA, antes de responder.",
-          "Comece por `ler_codigo` com acao='buscar' e o termo da pergunta (ex.: 'tts'); só depois leia o arquivo que a busca apontou. Nunca adivinhe o caminho.",
+          "Comece por `ler_codigo` com acao='buscar' e o termo DESTA pergunta — o assunto de agora, não o da mensagem anterior (se perguntam de RPG, o termo é 'rpg'; se perguntam de TTS, é 'tts'). A busca já devolve o mapa do arquivo mais provável, o que costuma bastar. Nunca adivinhe o caminho.",
           "Perguntas do tipo 'você consegue ler X?', 'poderia ver o arquivo Y?' ou 'dá para consultar Z?' são PEDIDOS, não perguntas sobre você. A resposta certa é EXECUTAR e mostrar o resultado — nunca responder se você é capaz.",
           "Se a ferramenta devolver erro, diga em uma frase que não conseguiu acessar e pare. Não teorize o motivo e não descreva o conteúdo de memória.",
         ].join(" "),
@@ -1113,6 +1122,22 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
 // Remove blocos de "pensamento" que alguns modelos (Qwen/Gemma) emitem.
 // Trata também o caso do <think> que ficou SEM fechar (resposta cortada dentro
 // do raciocínio) — nesse caso, remove do <think> até o fim.
+// Última barreira: JSON de chamada de ferramenta que chegou até aqui.
+//
+//  O judy-ia já reconhece e executa a chamada escrita como texto, mas ele é
+//  só um dos caminhos — a conversa comum vai direto ao Ollama, e de lá o
+//  mesmo acidente de template pode sair. JSON cru na cara de quem perguntou é
+//  a pior falha possível: parece o bot quebrado. Preferimos uma frase honesta.
+const SO_CHAMADA = /^[\s`]*(?:json)?\s*\{\s*"(?:name|function)"\s*:[\s\S]*\}\s*`*$/;
+export function pareceChamadaDeFerramenta(texto) {
+  const t = String(texto ?? "").trim();
+  if (!SO_CHAMADA.test(t)) return false;
+  try {
+    const o = JSON.parse(t.replace(/^[`\s]*(?:json)?\s*/, "").replace(/[`\s]*$/, ""));
+    return !!(o?.name ?? o?.function?.name);
+  } catch { return false; }
+}
+
 export function limpar(texto) {
   if (!texto) return "";
   let t = texto.replace(/<think>[\s\S]*?<\/think>/gi, "");   // blocos completos
@@ -1322,8 +1347,14 @@ export function precisaFerramenta(texto) {
   // parar no Ollama sem ferramenta — ela respondeu, corretamente, que não
   // tinha acesso ao arquivo. O pedido era o mesmo da mensagem anterior, só
   // que dito de outro jeito.
-  if (/\b(l[óo]gica|arquitetura|estrutura|funcionamento|implementa[çc][ãa]o|como (funciona|[ée] feito|foi feito|voc[êe] faz))\b[^.?!]{0,60}\b(c[óo]digo|arquivo|m[óo]dulo|fun[çc][ãa]o|sistema|reposit[óo]rio)\b/.test(t)) return true;
-  if (/\b(c[óo]digo|arquivo|m[óo]dulo|reposit[óo]rio)\b[^.?!]{0,60}\b(l[óo]gica|arquitetura|estrutura|funcionamento|implementa[çc][ãa]o)\b/.test(t)) return true;
+  // Radicais, não palavras inteiras: `\bestrutura\b` não casa com
+  // "estruturado", e foi exatamente assim que "como está estruturado todo o
+  // código?" escapou e foi parar no modelo sem ferramenta.
+  const PEDE_EXPLICACAO = "(l[óo]gic|arquitetur|estrutur|funcionament|implementa|organiza|divid|compos)";
+  const COISA_DO_REPO = "(c[óo]digo|arquivos?|m[óo]dulos?|fun[çc][õo]?[ãa]?[eo]?s?|sistema|reposit[óo]rio|projeto|pastas?)";
+  if (new RegExp(`\\b${PEDE_EXPLICACAO}[\\wçãõéíóêô]*\\b[^.?!]{0,60}\\b${COISA_DO_REPO}\\b`).test(t)) return true;
+  if (new RegExp(`\\b${COISA_DO_REPO}\\b[^.?!]{0,60}\\b${PEDE_EXPLICACAO}[\\wçãõéíóêô]*\\b`).test(t)) return true;
+  if (/\bcomo (funciona|[ée] feito|foi feito|voc[êe] faz|est[áa])\b[^.?!]{0,60}\b(c[óo]digo|arquivo|m[óo]dulo|sistema|reposit[óo]rio|projeto)\b/.test(t)) return true;
   // "seu código" / "teu código" é sempre sobre ELA — e ela pode ler o próprio.
   if (/\b(seu|sua|teu|tua)\s+(c[óo]digo|arquivo|m[óo]dulo|implementa[çc][ãa]o)\b/.test(t)) return true;
   // cálculo explícito
@@ -1682,6 +1713,13 @@ export async function conversar(message, pergunta, ctx) {
         fatos.push(`perguntou sobre: ${tema}`);
         db.setMemoria(userId, { nome: autor || mem.nome, fatos });
       } catch (e) { dlog(`memória não atualizada: ${e.message}`); }
+    }
+
+    // O modelo escreveu a chamada de ferramenta em vez de executá-la, e ela
+    // escapou do judy-ia. Não dá para entregar isso a ninguém.
+    if (pareceChamadaDeFerramenta(resposta)) {
+      console.warn(`[CHAT] ⚠️ o modelo devolveu uma chamada de ferramenta como TEXTO — descartando: ${resposta.slice(0, 160)}`);
+      resposta = "";
     }
 
     // Se a limpeza esvaziou tudo (modelo gastou os tokens no raciocínio),

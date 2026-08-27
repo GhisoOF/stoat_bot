@@ -138,6 +138,18 @@ o formato JSON habilitado no SearXNG.
 **`buscar_rss`** — busca os itens dos feeds e devolve crus; quem escreve o resumo
 é a própria Judy, na voz dela. Com `RSS_FEEDS` configurado, funciona sem passar URL.
 
+## Chamada de ferramenta que vem como texto
+
+Modelos locais às vezes decidem certo e escrevem no lugar errado: em vez de
+emitir `tool_calls`, colocam `{"name":"ler_codigo","arguments":{…}}` no **texto
+da resposta**. É falha de template Jinja, e sem tratamento o usuário recebe
+JSON cru na cara. O serviço reconhece essa forma (inclusive dentro de
+```` ```json ````, no formato `{function:{…}}` e com objetos aninhados),
+executa a ferramenta e segue o laço. Só passa o que tem exatamente a forma de
+uma chamada **e** cujo nome está no registro — isto executa código, então não
+pode adivinhar. O bot tem ainda uma última barreira: se um JSON de chamada
+escapar até a resposta final, ele é descartado em vez de entregue.
+
 Para adicionar uma ferramenta: crie o arquivo em `ferramentas/` exportando
 `definicao` e `executar(args)`, e registre em `ferramentas/index.js`.
 

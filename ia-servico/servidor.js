@@ -108,6 +108,62 @@ function lembreteDeIdioma(idioma) {
     : "Responda em português do Brasil, independentemente do idioma dos resultados das ferramentas.";
 }
 
+
+// ── Chamada de ferramenta escrita como TEXTO ──────────────
+//
+//  Perguntada sobre o RPG, ela respondeu literalmente isto no chat:
+//
+//    {"name": "ler_codigo", "arguments": {"acao":"buscar","termo":"tts"}}
+//
+//  O modelo tomou a decisão certa e a escreveu no lugar errado: o texto da
+//  resposta em vez do campo `tool_calls`. É uma falha conhecida de template
+//  em modelos locais — o Jinja do llama.cpp nem sempre emite o formato, e
+//  quando não emite, quem paga é o usuário, que recebe JSON na cara.
+//
+//  Em vez de tratar como resposta, reconhecemos a intenção e executamos.
+//  Isso NÃO é adivinhar: só entra aqui o que tem exatamente a forma de uma
+//  chamada e cujo nome está no registro de ferramentas.
+function chamadasEmTexto(texto) {
+  const t = String(texto ?? "").trim();
+  if (!t.includes("\"name\"") && !t.includes("\"function\"")) return [];
+  const achadas = [];
+  const nomesValidos = new Set(ferramentas.nomes());
+
+  // Candidatos: blocos ```json, e objetos de primeiro nível no texto.
+  const candidatos = [];
+  for (const m of t.matchAll(/```(?:json)?\s*([\s\S]*?)```/g)) candidatos.push(m[1].trim());
+  // Varredura por chaves balanceadas — regex não fecha objeto aninhado.
+  for (let i = 0; i < t.length; i++) {
+    if (t[i] !== "{") continue;
+    let nivel = 0, dentroTexto = false, escapa = false;
+    for (let j = i; j < t.length; j++) {
+      const ch = t[j];
+      if (escapa) { escapa = false; continue; }
+      if (ch === "\\") { escapa = true; continue; }
+      if (ch === "\"") { dentroTexto = !dentroTexto; continue; }
+      if (dentroTexto) continue;
+      if (ch === "{") nivel++;
+      else if (ch === "}") {
+        nivel--;
+        if (nivel === 0) { candidatos.push(t.slice(i, j + 1)); i = j; break; }
+      }
+    }
+  }
+
+  for (const bruto of candidatos) {
+    let o;
+    try { o = JSON.parse(bruto); } catch { continue; }
+    // Dois formatos vistos: {name, arguments} e {function:{name, arguments}}
+    const nome = o?.name ?? o?.function?.name;
+    let args = o?.arguments ?? o?.parameters ?? o?.function?.arguments ?? {};
+    if (typeof args === "string") { try { args = JSON.parse(args); } catch { args = {}; } }
+    if (!nome || !nomesValidos.has(nome)) continue;
+    if (achadas.some((c) => c.function.name === nome && JSON.stringify(c.function.arguments) === JSON.stringify(args))) continue;
+    achadas.push({ id: undefined, function: { name: nome, arguments: args } });
+  }
+  return achadas;
+}
+
 async function conversarComFerramentas(messages, { modelo, usarFerramentas = true, idioma = "pt" } = {}) {
   const hist = [...messages];
   const usos = [];
@@ -123,7 +179,19 @@ async function conversarComFerramentas(messages, { modelo, usarFerramentas = tru
   for (let volta = 0; volta < MAX_VOLTAS; volta++) {
     const data = await ollama(hist, { modelo, comFerramentas: usarFerramentas });
     const msg = data?.message ?? {};
-    const chamadas = msg.tool_calls || [];
+    let chamadas = msg.tool_calls || [];
+
+    // O modelo pode ter escrito a chamada no texto em vez de emiti-la no
+    // campo próprio. Se escreveu, a intenção era usar a ferramenta — usamos.
+    if (!chamadas.length && usarFerramentas) {
+      const noTexto = chamadasEmTexto(msg.content);
+      if (noTexto.length) {
+        log(`chamada de ferramenta veio como TEXTO (template do modelo) — executando: ${noTexto.map((c) => c.function.name).join(", ")}`);
+        chamadas = noTexto;
+        // O texto não vai para o histórico: era a chamada, não uma resposta.
+        msg.content = "";
+      }
+    }
 
     if (!chamadas.length) {
       // ── Buscou, não leu, e já ia responder ──

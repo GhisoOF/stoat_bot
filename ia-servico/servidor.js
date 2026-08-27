@@ -56,11 +56,36 @@ function limparRaciocinio(texto) {
     .trim();
 }
 
+// ── Um `system` só, e na frente ────────────────────────────
+//
+//  O template Jinja do Qwen (e do Qwythos, que herda dele) recusa a conversa
+//  INTEIRA com HTTP 500 se houver `system` fora do começo:
+//
+//    raise_exception('System message must be at the beginning...')
+//
+//  E este arquivo empilha vários: o lembrete de idioma, as regras depois de
+//  ler código, a cobrança quando só houve busca. Os modelos LFM aceitavam;
+//  o Qwen derruba a requisição, e o bot mostrava "o serviço de IA não
+//  respondeu" — apontando para o lado errado do problema.
+//
+//  Normalizamos na saída, e não em cada `push`: assim quem escrever a
+//  próxima instrução amanhã não precisa lembrar da regra.
+function umSystemNaFrente(messages) {
+  const lista = Array.isArray(messages) ? messages : [];
+  const sistemas = [], resto = [];
+  for (const m of lista) {
+    if (m?.role === "system") sistemas.push(String(m.content ?? "").trim());
+    else resto.push(m);
+  }
+  const juntos = sistemas.filter(Boolean).join("\n\n");
+  return juntos ? [{ role: "system", content: juntos }, ...resto] : resto;
+}
+
 // ── Chamada ao LLM (formato OpenAI) ────────────────────────
 async function llm(messages, { modelo, comFerramentas = true, maxTokens = MAX_TOKENS } = {}) {
   const corpo = {
     model: modelo || MODELO_PADRAO,
-    messages,
+    messages: umSystemNaFrente(messages),
     stream: false,
     max_tokens: maxTokens,
     temperature: 0.6,

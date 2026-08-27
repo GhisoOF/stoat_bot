@@ -645,7 +645,35 @@ export function costurar(texto, pedaco) {
   return base + (precisaQuebra ? "\n\n" : precisaEspaco ? " " : "") + b;
 }
 
+// ── Um `system` só, e na frente ──────────────────────────
+//
+//  O template Jinja do Qwen (e do Qwythos, que herda dele) recusa a conversa
+//  inteira com HTTP 500 se houver mensagem `system` depois do começo:
+//
+//    raise_exception('System message must be at the beginning...')
+//
+//  E o caminho de ferramentas empilha várias: a instrução de idioma, a de
+//  "isto exige ferramenta", a de escopo mudado, a de anti-invenção. Os LFM
+//  aceitavam tudo isso no meio; o Qwen derruba a requisição — e o usuário via
+//  "o serviço de IA não respondeu", mensagem que aponta para o lado errado.
+//
+//  Consertar cada `push` no lugar de origem seria frágil: quem escrever a
+//  próxima instrução amanhã não vai lembrar da regra. Normalizamos aqui, na
+//  saída, onde é impossível esquecer: todos os `system` viram um só, no
+//  índice 0, na ordem em que foram adicionados.
+export function normalizarMensagens(messages) {
+  const lista = Array.isArray(messages) ? messages : [];
+  const sistemas = [], resto = [];
+  for (const m of lista) {
+    if (m?.role === "system") sistemas.push(String(m.content ?? "").trim());
+    else resto.push(m);
+  }
+  const juntos = sistemas.filter(Boolean).join("\n\n");
+  return juntos ? [{ role: "system", content: juntos }, ...resto] : resto;
+}
+
 export async function ollamaChat(messages, { json = false, maxTokens = MAX_TOKENS, etiqueta = "resposta", modelo = null, ctx = null, manter = null } = {}) {
+  messages = normalizarMensagens(messages);
   const modeloUsado = modelo || OLLAMA_MODEL_PADRAO;
   // Decisões internas (json) devem ser CURTAS: um JSON minúsculo. Mas o teto
   // de 200 partia de um modelo que não pensava. O de decisão gasta ~185

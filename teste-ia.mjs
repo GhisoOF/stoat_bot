@@ -945,5 +945,46 @@ console.log("\n── fumaça: os caminhos rodam de ponta a ponta ──");
   srv.close();
 }
 
+// ══ 29. Um `system` só, e na frente ══
+//
+//  O template Jinja do Qwen/Qwythos recusa a conversa INTEIRA com HTTP 500 se
+//  houver `system` fora do começo:
+//    raise_exception('System message must be at the beginning...')
+//  Os LFM aceitavam no meio, então o problema só apareceu ao trocar o modelo:
+//  "se apresentar" (caminho sem ferramenta, 1 system) funcionou, e conta,
+//  leitura de código e `&chat especial` — que empilham instruções — morreram
+//  todos com "o serviço de IA não respondeu", apontando para o lado errado.
+console.log("\n── mensagens: um system só, e na frente ──");
+{
+  const chat = await import("./modulos/ai/chat.js");
+  const bagunçado = [
+    { role: "system", content: "Você é a Judy." },
+    { role: "user", content: "oi" },
+    { role: "assistant", content: "olá" },
+    { role: "system", content: "ESTE PEDIDO EXIGE FERRAMENTA." },
+    { role: "user", content: "quanto é 2+2?" },
+    { role: "system", content: "Responda em português." },
+  ];
+  const d = chat.normalizarMensagens(bagunçado);
+  ok(d[0].role === "system" && d.slice(1).every((m) => m.role !== "system"),
+    "★ todos os `system` viram UM, no índice 0 — é o que o template do Qwen exige");
+  ok(/Você é a Judy[\s\S]*EXIGE FERRAMENTA[\s\S]*português/.test(d[0].content),
+    "  → na ordem em que foram adicionados, sem perder nenhum");
+  ok(d.filter((m) => m.role !== "system").length === 3
+    && d[1].content === "oi" && d[3].content === "quanto é 2+2?",
+    "  → e user/assistant ficam intactos, na ordem original");
+  ok(JSON.stringify(chat.normalizarMensagens([{ role: "user", content: "x" }])) === '[{"role":"user","content":"x"}]',
+    "  → conversa sem system nenhum passa inalterada");
+  ok(chat.normalizarMensagens([]).length === 0 && chat.normalizarMensagens(null).length === 0,
+    "  → e lista vazia ou nula não quebra");
+
+  const fonte = fs.readFileSync("./modulos/ai/chat.js", "utf8");
+  ok(/messages = normalizarMensagens\(messages\);/.test(fonte),
+    "★ aplicado dentro do ollamaChat — na SAÍDA, não em cada push");
+  const srv = fs.readFileSync("./ia-servico/servidor.js", "utf8");
+  ok(/messages: umSystemNaFrente\(messages\)/.test(srv),
+    "  → e o judy-ia faz o mesmo: foi ELE que devolveu o HTTP 500");
+}
+
 console.log(`\nIA: ${pass} ok, ${fail} falha(s)`);
 process.exit(fail ? 1 : 0);

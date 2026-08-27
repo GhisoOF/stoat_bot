@@ -1802,13 +1802,20 @@ OLLAMA_URL=http://100.74.70.106:8081 ./scripts/medir-modelos.sh modelo-a modelo-
 ### `&chat especial` — o modelo grande sob demanda
 
 Medido nesta instalação: o modelo de conversa responde em ~1 s a 150 tok/s; o
-grande (`qwen3.8-27b`), em ~13,6 s a 11 tok/s, mais ~19,6 s para carregar.
-Trinta segundos é inaceitável como padrão e perfeitamente aceitável quando a
-pessoa pediu por eles — então ele fica atrás de `&chat especial <pergunta>`,
-com aviso de espera e cooldown de 5 min por pessoa (`CHAT_ESPECIAL_COOLDOWN_MS`;
-super admin não espera). O modelo muda; o resto não: detecção de conta, de
-leitura de código e de escopo continua valendo. Configurável em
-`OLLAMA_MODEL_ESPECIAL`.
+grande (`qwen3.8-27b`), em ~13,6 s a 11 tok/s, mais ~19,6 s para carregar —
+e ele **derruba o modelo residente**, então a mensagem seguinte de qualquer
+pessoa paga a recarga. Por isso `&chat especial <pergunta>` é **restrito**:
+super admins sempre, mais os cargos liberados em
+`&chat especial cargos add <cargo>` *(ManageServer)*. Sem cargo configurado,
+só super admins.
+
+Como quem chega já foi autorizado, os limites do caminho público saem: teto
+de **4000 tokens** e **6 emendas** (`CHAT_ESPECIAL_TOKENS`,
+`CHAT_ESPECIAL_CONTINUAR`) contra 700 e 2, porque a primeira resposta veio
+truncada no meio de um bloco de código; e cooldown desligado
+(`CHAT_ESPECIAL_COOLDOWN_MS=0`, ligável se um dia liberar um cargo grande).
+O modelo muda; o resto não: detecção de conta, de leitura de código e de
+escopo continua valendo. Configurável em `OLLAMA_MODEL_ESPECIAL`.
 
 ### Uma conversa por vez, as outras na fila
 

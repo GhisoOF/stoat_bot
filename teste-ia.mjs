@@ -986,5 +986,62 @@ console.log("\n── mensagens: um system só, e na frente ──");
     "  → e o judy-ia faz o mesmo: foi ELE que devolveu o HTTP 500");
 }
 
+// ══ 30. `&chat especial`: restrito e sem tetos ══
+//
+//  Ele ocupa a placa por minutos e derruba o modelo residente — depois dele,
+//  a próxima mensagem de QUALQUER pessoa paga a recarga. Por isso o acesso é
+//  por cargo. E como quem chega já foi autorizado, os limites que existiam
+//  para conter abuso público (cooldown, teto de 700 tokens) saem: a primeira
+//  resposta veio truncada no meio de uma lista de botões em Lua.
+console.log("\n── especial: acesso por cargo, sem tetos ──");
+{
+  const fonte = fs.readFileSync("./modulos/ai/chat.js", "utf8");
+  ok(/CHAT_ESPECIAL_TOKENS \|\| 4000/.test(fonte) && /CHAT_ESPECIAL_CONTINUAR \|\| 6/.test(fonte),
+    "★ teto de 4000 tokens e 6 emendas — contra 700 e 2 do caminho comum");
+  ok(/maxTokens: ehEspecial \? ESPECIAL_TOKENS : MAX_TOKENS/.test(fonte),
+    "  → aplicados só quando é o especial; a conversa normal segue enxuta");
+  ok(/CHAT_ESPECIAL_COOLDOWN_MS \|\| 0/.test(fonte) && /ESPECIAL_COOLDOWN_MS > 0 && espera > 0/.test(fonte),
+    "  → cooldown desligado por padrão, e ligável se um dia liberar um cargo grande");
+
+  const chat = await import("./modulos/ai/chat.js");
+  const saidas = [];
+  const base = {
+    sendEmbed: async (_c, e) => saidas.push(`${e.title}|${e.description}`),
+    COR: { info: 1, erro: 2, aviso: 3, sucesso: 4 }, serverId: "01KH9SJYWVD7XAHJ28TP0YP4Q0",
+    PREFIXO: "&", salvarConfig: () => {}, membroTemPermissao: () => true,
+  };
+  const msg = (autor) => ({ content: "&chat especial oi", authorId: autor, channelId: "c1",
+    channel: { sendMessage: async () => ({ edit: async () => {} }) },
+    client: { user: { id: "bot" } }, reply_ids: [] });
+
+  // Sem cargo liberado: só super admin entra.
+  const cfg = { config: {}, ehSuperAdmin: (id) => id === "dono",
+    getServer: async () => ({ roles: { "r-vip": { name: "VIP" } }, fetchMember: async () => ({ roles: ["r-outro"] }) }) };
+  saidas.length = 0;
+  await chat.cmdChat(msg("estranho"), ["especial", "quanto é 2+2"], { ...base, ...cfg });
+  ok(saidas.some((x) => /Acesso restrito/.test(x)), "★ quem não é admin nem tem cargo é barrado");
+
+  // O dono libera um cargo.
+  saidas.length = 0;
+  await chat.cmdChat(msg("dono"), ["especial", "cargos", "add", "VIP"], { ...base, ...cfg });
+  ok(saidas.some((x) => /Cargo liberado/.test(x)) && cfg.config.chatEspecial.cargos.includes("r-vip"),
+    "★ `cargos add VIP` resolve o cargo pelo NOME e guarda o id");
+
+  // Agora quem tem o cargo passa.
+  const comCargo = { ...cfg, getServer: async () => ({ roles: { "r-vip": { name: "VIP" } }, fetchMember: async () => ({ roles: ["r-vip"] }) }) };
+  saidas.length = 0;
+  await chat.cmdChat(msg("membro-vip"), ["especial", "oi"], { ...base, ...comCargo });
+  ok(!saidas.some((x) => /Acesso restrito/.test(x)), "  → e membro COM o cargo não é mais barrado");
+
+  // Listar e remover.
+  saidas.length = 0;
+  await chat.cmdChat(msg("dono"), ["especial", "cargos"], { ...base, ...cfg });
+  ok(saidas.some((x) => /VIP/.test(x)), "  → `cargos` lista quem tem acesso pelo nome");
+  saidas.length = 0;
+  await chat.cmdChat(msg("dono"), ["especial", "cargos", "remover", "VIP"], { ...base, ...cfg });
+  ok(saidas.some((x) => /Acesso removido/.test(x)) && !cfg.config.chatEspecial.cargos.includes("r-vip"),
+    "  → e `cargos remover` tira");
+}
+
 console.log(`\nIA: ${pass} ok, ${fail} falha(s)`);
 process.exit(fail ? 1 : 0);

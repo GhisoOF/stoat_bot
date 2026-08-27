@@ -25,6 +25,7 @@ import * as db from "../core/db.js";
 import * as memoria from "./memoria-agente.js";
 import * as comentario from "./comentario-espontaneo.js";
 import * as cacheCanal from "./cache-canal.js";
+import { resolverCargo } from "../core/ids.js";
 import { construirDetalhes } from "../moderacao/geral.js";
 import * as desinteresse from "./desinteresse.js";
 import { tr, lingua } from "../core/i18n.js";
@@ -167,7 +168,13 @@ const OLLAMA_MODEL_LOGICA  = process.env.OLLAMA_MODEL_LOGICA  || "qwen3.5:9b";
 //  existir — então fica atrás de um comando explícito, onde a pessoa aceita
 //  a espera porque foi ela quem pediu.
 const OLLAMA_MODEL_ESPECIAL = process.env.OLLAMA_MODEL_ESPECIAL || "qwen3.8-27b";
-const ESPECIAL_COOLDOWN_MS  = Number(process.env.CHAT_ESPECIAL_COOLDOWN_MS || 5 * 60_000);
+const ESPECIAL_COOLDOWN_MS  = Number(process.env.CHAT_ESPECIAL_COOLDOWN_MS || 0);
+// O especial é de acesso restrito, então os limites que existem para conter
+// abuso público não fazem sentido aqui — quem chega já foi autorizado.
+// O teto de tokens sobe muito: a primeira resposta veio truncada no meio de
+// uma lista de botões, e código longo é justamente o caso de uso dele.
+const ESPECIAL_TOKENS = Number(process.env.CHAT_ESPECIAL_TOKENS || 4000);
+const ESPECIAL_CONTINUAR = Number(process.env.CHAT_ESPECIAL_CONTINUAR || 6);
 // Decisões internas e agente de memória.
 //
 // O padrão é o MESMO modelo da conversa, e isso é de propósito. Um modelo
@@ -672,7 +679,7 @@ export function normalizarMensagens(messages) {
   return juntos ? [{ role: "system", content: juntos }, ...resto] : resto;
 }
 
-export async function ollamaChat(messages, { json = false, maxTokens = MAX_TOKENS, etiqueta = "resposta", modelo = null, ctx = null, manter = null } = {}) {
+export async function ollamaChat(messages, { json = false, maxTokens = MAX_TOKENS, etiqueta = "resposta", modelo = null, ctx = null, manter = null, continuarMax = null } = {}) {
   messages = normalizarMensagens(messages);
   const modeloUsado = modelo || OLLAMA_MODEL_PADRAO;
   // Decisões internas (json) devem ser CURTAS: um JSON minúsculo. Mas o teto
@@ -744,7 +751,8 @@ export async function ollamaChat(messages, { json = false, maxTokens = MAX_TOKEN
   //  onde parou, até CONTINUAR_MAX vezes. Só para conversa (json cortado é
   //  bug de limite, não de continuação).
   let emendas = 0;
-  while (!json && motivo === "length" && emendas < CONTINUAR_MAX) {
+  const tetoEmendas = continuarMax ?? CONTINUAR_MAX;
+  while (!json && motivo === "length" && emendas < tetoEmendas) {
     emendas++;
     console.log(`[CHAT][llm] ✂️ cortada no limite — continuando sozinha (${emendas}/${CONTINUAR_MAX})`);
     data = await pedir(`${OLLAMA_URL}/v1/chat/completions`, {
@@ -1278,7 +1286,14 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
   } else if (IA_SERVICO_URL) {
     dlog(`sem ferramenta (tipo=${tipo}) → Ollama direto, sem passar pelo judy-ia`);
   }
-  const texto = await ollamaChat(messages, { maxTokens: MAX_TOKENS, modelo: modeloEscolhido });
+  // No especial, teto alto e mais emendas: a resposta veio truncada no meio
+  // de um bloco de código com os limites do caminho comum.
+  const ehEspecial = modeloForcado && modeloForcado === OLLAMA_MODEL_ESPECIAL;
+  const texto = await ollamaChat(messages, {
+    maxTokens: ehEspecial ? ESPECIAL_TOKENS : MAX_TOKENS,
+    continuarMax: ehEspecial ? ESPECIAL_CONTINUAR : null,
+    modelo: modeloEscolhido,
+  });
   // Lido AGORA, antes de qualquer outra chamada ao ollamaChat poder mudá-lo.
   responder._cortou = !!ollamaChat._cortou;
   return texto.trim();
@@ -2734,6 +2749,112 @@ export async function cmdChat(message, args, ctx) {
   //  mensagem comum ainda paga a recarga do modelo pequeno — é o preço, e
   //  está dito no aviso.
   if (["especial", "special", "grande", "pro"].includes(args[0]?.toLowerCase())) {
+    // ── Quem pode usar ────────────────────────────────────
+    //
+    //  O especial ocupa a placa inteira por minutos e derruba o modelo
+    //  residente — depois dele, a próxima mensagem de qualquer pessoa paga a
+    //  recarga. Por isso é restrito: super admins sempre, mais os cargos que
+    //  o dono escolher. Sem cargo configurado, é só super admin.
+    ctx.config.chatEspecial ??= { cargos: [] };
+    const cargosOk = ctx.config.chatEspecial.cargos ?? [];
+    const sub = args[1]?.toLowerCase();
+
+    // `&chat especial cargos …` — gerir quem tem acesso (ManageServer)
+    if (["cargos", "cargo", "roles"].includes(sub)) {
+      const server = await ctx.getServer?.(message);
+      if (ctx.membroTemPermissao && !ctx.membroTemPermissao(message, server, "ManageServer")) {
+        return sendEmbed(message.channel, tr(ctx,
+          { title: "🚫 Permissão insuficiente",
+            description: "Gerir quem usa o modelo especial exige **ManageServer**.", colour: COR.erro },
+          { title: "🚫 Missing permission",
+            description: "Managing special-model access requires **ManageServer**.", colour: COR.erro }));
+      }
+      const acao = args[2]?.toLowerCase();
+      const alvo = args.slice(3).join(" ").trim();
+
+      if (["add", "adicionar", "+"].includes(acao)) {
+        const cargo = resolverCargo(alvo, server);
+        if (!cargo) {
+          return sendEmbed(message.channel, tr(ctx,
+            { title: "❌ Cargo não encontrado", description: `Não achei \`${alvo || "(vazio)"}\`. Use o nome exato ou o ID.`, colour: COR.erro },
+            { title: "❌ Role not found", description: `Couldn't find \`${alvo || "(empty)"}\`. Use the exact name or the ID.`, colour: COR.erro }));
+        }
+        if (!cargosOk.includes(cargo.id)) cargosOk.push(cargo.id);
+        ctx.config.chatEspecial.cargos = cargosOk;
+        ctx.salvarConfig?.();
+        return sendEmbed(message.channel, tr(ctx,
+          { title: "✅ Cargo liberado", description: `**${cargo.nome}** agora pode usar \`${PREFIXO}chat especial\`.`, colour: COR.sucesso },
+          { title: "✅ Role allowed", description: `**${cargo.nome}** can now use \`${PREFIXO}chat especial\`.`, colour: COR.sucesso }));
+      }
+
+      if (["remover", "remove", "rm", "-"].includes(acao)) {
+        const cargo = resolverCargo(alvo, server);
+        const id = cargo?.id ?? alvo;
+        const i = cargosOk.indexOf(id);
+        if (i < 0) {
+          return sendEmbed(message.channel, tr(ctx,
+            { title: "❌ Não estava na lista", description: `\`${cargo?.nome ?? alvo}\` não tinha acesso.`, colour: COR.erro },
+            { title: "❌ Not on the list", description: `\`${cargo?.nome ?? alvo}\` didn't have access.`, colour: COR.erro }));
+        }
+        cargosOk.splice(i, 1);
+        ctx.config.chatEspecial.cargos = cargosOk;
+        ctx.salvarConfig?.();
+        return sendEmbed(message.channel, tr(ctx,
+          { title: "✅ Acesso removido", description: `**${cargo?.nome ?? id}** não usa mais o modelo especial.`, colour: COR.sucesso },
+          { title: "✅ Access removed", description: `**${cargo?.nome ?? id}** can no longer use the special model.`, colour: COR.sucesso }));
+      }
+
+      // listar
+      const server2 = server ?? await ctx.getServer?.(message);
+      // Busca o nome direto na lista de cargos do servidor: `resolverCargo`
+      // devolve null para id que não existe mais, e mostrar o ULID cru sem
+      // explicação faria parecer bug. Cargo apagado aparece marcado.
+      const nomeDe = (id) => {
+        try {
+          const r = typeof server2?.roles?.get === "function" ? server2.roles.get(id) : server2?.roles?.[id];
+          if (r?.name) return r.name;
+        } catch {}
+        return resolverCargo(id, server2)?.nome ?? `${id} _(cargo apagado?)_`;
+      };
+      const nomes = cargosOk.map(nomeDe);
+      return sendEmbed(message.channel, tr(ctx,
+        { title: "🧠 Quem usa o modelo especial",
+          description: [
+            "Super admins sempre podem.",
+            nomes.length ? `Cargos liberados: ${nomes.map((n) => `**${n}**`).join(", ")}` : "_Nenhum cargo liberado — só super admins._",
+            "",
+            `\`${PREFIXO}chat especial cargos add <cargo>\``,
+            `\`${PREFIXO}chat especial cargos remover <cargo>\``,
+          ].join("\n"), colour: COR.info },
+        { title: "🧠 Who can use the special model",
+          description: [
+            "Super admins always can.",
+            nomes.length ? `Allowed roles: ${nomes.map((n) => `**${n}**`).join(", ")}` : "_No roles allowed — super admins only._",
+            "",
+            `\`${PREFIXO}chat especial cargos add <role>\``,
+            `\`${PREFIXO}chat especial cargos remover <role>\``,
+          ].join("\n"), colour: COR.info }));
+    }
+
+    // Acesso: super admin, ou membro com um dos cargos liberados.
+    const ehAdmin = !!ctx.ehSuperAdmin?.(message.authorId);
+    let temCargo = false;
+    if (!ehAdmin && cargosOk.length) {
+      try {
+        const server = await ctx.getServer?.(message);
+        const membro = await server?.fetchMember?.(message.authorId);
+        const meus = (membro?.roles ?? []).map((r) => r?.id ?? r).filter(Boolean);
+        temCargo = meus.some((r) => cargosOk.includes(r));
+      } catch (e) { console.error("[CHAT][especial] cargos:", e?.message ?? e); }
+    }
+    if (!ehAdmin && !temCargo) {
+      return sendEmbed(message.channel, tr(ctx,
+        { title: "🔒 Acesso restrito",
+          description: `O modelo especial é limitado. Use \`${PREFIXO}chat\` normal — ele responde na hora.`, colour: COR.aviso },
+        { title: "🔒 Restricted",
+          description: `The special model is limited. Use plain \`${PREFIXO}chat\` — it answers right away.`, colour: COR.aviso }));
+    }
+
     const texto = args.slice(1).join(" ").trim();
     if (!texto) {
       return sendEmbed(message.channel, tr(ctx,
@@ -2749,8 +2870,10 @@ export async function cmdChat(message, args, ctx) {
     const agora = Date.now();
     const ultima = cmdChat._especial?.get(uid) ?? 0;
     const espera = ESPECIAL_COOLDOWN_MS - (agora - ultima);
-    // Super admin não espera: é quem testa o modelo.
-    if (espera > 0 && !ctx.ehSuperAdmin?.(uid)) {
+    // Cooldown desligado por padrão (CHAT_ESPECIAL_COOLDOWN_MS=0): o acesso
+    // já é restrito por cargo, então não há abuso público a conter. Ligue-o
+    // se um dia liberar para um cargo grande. Super admin nunca espera.
+    if (ESPECIAL_COOLDOWN_MS > 0 && espera > 0 && !ehAdmin) {
       const min = Math.ceil(espera / 60_000);
       return sendEmbed(message.channel, tr(ctx,
         { title: "⏳ Ainda não",

@@ -80,8 +80,33 @@ memória e histórico). Este serviço acrescenta as ferramentas e o laço de exe
 `GITHUB_REPO` (ex.: `GhisoOF/stoat_bot`) e opcionalmente `GITHUB_BRANCH` e
 `GITHUB_TOKEN`. **Repositório privado exige token** (fine-grained, com permissão
 Contents: Read-only no repo). Repositório público funciona sem token — nesse caso
-o token só eleva o limite de 60 para 5000 requisições/hora. Ações: `estatisticas`, `listar`, `ler`.
-Bloqueia `.env`, tokens e arquivos binários.
+o token só eleva o limite de 60 para 5000 requisições/hora. Bloqueia `.env`,
+tokens e arquivos binários.
+
+Ações:
+
+- **`buscar`** `{ termo }` — o ponto de partida. Devolve os arquivos que casam
+  com o termo **pelo nome** (`tts` → `tts.js`, `tts-filtro.js`, nome curto
+  primeiro) e **pelo conteúdo** (quantas linhas citam o termo, e a primeira
+  delas). Sem acento, sem maiúscula. Pelo GitHub (plano B) só o nome é varrido.
+- **`ler`** `{ caminho, linha_inicial?, quantidade?, termo? }` — devolve uma
+  **página** de linhas numeradas (padrão 300, máximo 600), com `linhas_totais`,
+  `intervalo` e, se houver mais, `proxima_linha` para continuar. Com `termo`, a
+  página abre 15 linhas antes da primeira ocorrência — e avisa se o termo não
+  aparece no arquivo (sinal de arquivo errado). O corte antigo era por bytes,
+  sempre do começo: um arquivo de 1400 linhas virava as 300 primeiras e um
+  `cortado: true` que o modelo ignorava.
+- **`listar`** `{ caminho? }` e **`estatisticas`** — visão geral da árvore.
+
+Depois de qualquer leitura, o serviço injeta uma instrução de três partes:
+descrever **só o que está no conteúdo lido**; se o arquivo não responde à
+pergunta, **dizer** e buscar outro; função ou arquivo que não apareceu **não
+existe**. Foi a resposta a um caso real — perguntada sobre TTS, leu
+`modulos/ai/chat.js` e descreveu funções inventadas.
+
+`MAX_VOLTAS_FERRAMENTA` (padrão 6) é o teto de idas e vindas com ferramentas
+numa resposta; o fluxo buscar → ler → página seguinte cabe com folga.
+`CODIGO_PAGINA_LINHAS` muda o tamanho padrão da página.
 
 **`calcular`** — executa JavaScript para fazer contas de verdade. Roda em processo
 separado com o **modelo de permissões do Node** (`--permission`), que bloqueia

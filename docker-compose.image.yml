@@ -58,6 +58,8 @@ services:
       - CHAT_NUM_CTX=16384                     # contexto (entrada+saída); RX9060XT aguenta
       - CHAT_MAX_TOKENS=4096                   # teto de resposta (aumente p/ código longo)
       - CHAT_TIMEOUT=300000                    # ms; geração longa demora
+      - CHAT_FILA_MAX=3                        # conversas esperando a vez (além disso: "tente mais tarde")
+      - CHAT_DECISAO_TOKENS=600                # piso das decisões internas (o raciocínio come ~185)
       # ── Debug: ligue só o que estiver investigando ──
       # Cada um vale por si; ligar tudo de uma vez deixa o log do Portainer
       # ilegível justamente quando você mais precisa dele.

@@ -519,7 +519,7 @@ let timerSilencios = null;
 export function iniciarVigiaDeSilencios(ctx, intervaloMs = 60_000) {
   if (timerSilencios) clearInterval(timerSilencios);
   timerSilencios = setInterval(() => {
-    liberarSilenciosVencidos(ctx).catch((e) => console.error("[PUNIÇÃO][vigia]", e.message));
+    liberarSilenciosVencidos(ctx).catch((e) => console.error("[PUNIÇÃO][vigia]", descreverErro(e)));
   }, intervaloMs);
   if (timerSilencios.unref) timerSilencios.unref();
   // Uma passada imediata: se o bot ficou fora por mais tempo que o mute,
@@ -544,7 +544,13 @@ export async function liberarSilenciosVencidos(ctx) {
         ?? ctx.estado?.configDoServidor?.(serverId)
         ?? ctx.config;
       const roleId = cfg?.automod?.punicao?.silenceRoleId;
-      const server = await ctx.client?.servers?.fetch?.(serverId);
+      // `servers.fetch` rejeita com um OBJETO da API (`{ type: "NotFound" }`)
+      // quando o bot foi expulso do servidor — e isso subia como exceção sem
+      // `.message`, virando o `[PUNIÇÃO][vigia] <id>: undefined` do log. Aqui
+      // vira "servidor inacessível", que é o que de fato aconteceu.
+      let server = null;
+      try { server = await ctx.client?.servers?.fetch?.(serverId); }
+      catch (e) { console.error(`[PUNIÇÃO][vigia] ${serverId}: não consegui buscar o servidor (${descreverErro(e)})`); }
 
       if (!roleId) {
         // Sem cargo configurado não há o que remover — mas o registro precisa
@@ -557,7 +563,11 @@ export async function liberarSilenciosVencidos(ctx) {
         console.error(`[PUNIÇÃO][vigia] ${serverId}: servidor inacessível — tentarei de novo no próximo ciclo`);
         continue;
       } else {
-        await removerCargoSilence(server, userId, roleId, ctx);
+        const r = await removerCargoSilence(server, userId, roleId, ctx);
+        // A pessoa saiu do servidor: não há cargo a tirar (o Stoat descarta os
+        // cargos na saída). O registro fecha como resolvido — antes ficava
+        // preso, e o vigia tentava e falhava de novo a cada minuto, para sempre.
+        if (r?.saiu) console.log(`[PUNIÇÃO][vigia] ${userId} já saiu de ${serverId} — silêncio encerrado sem cargo a remover`);
       }
 
       db.definirSilenciado(serverId, userId, false, motivo);
@@ -573,7 +583,9 @@ export async function liberarSilenciosVencidos(ctx) {
         descricao: `<@${userId}> voltou a falar — o prazo da punição terminou.\n**Motivo original:** ${motivo ?? "—"}`,
       });
     } catch (e) {
-      console.error(`[PUNIÇÃO][vigia] ${userId}:`, e.message);
+      // `e.message` só existe em `Error`; a lib do Stoat lança objetos e o log
+      // ficava "…: undefined" — sem dizer NEM o que falhou NEM por quê.
+      console.error(`[PUNIÇÃO][vigia] ${userId} em ${serverId}: ${descreverErro(e)}`);
     }
   }
   return soltos;
@@ -938,8 +950,17 @@ export async function reaplicarPunicao(member, ctx) {
 
 // Remove o cargo de silêncio de um usuário
 export async function removerCargoSilence(server, userId, roleId, ctx) {
-  const member = await server.fetchMember(userId);
-  if (!member) throw new Error("membro não encontrado no servidor (saiu?)");
+  // `fetchMember` de quem saiu não devolve null: REJEITA com `{ type: "NotFound" }`.
+  // Era a origem mais provável do "undefined" no vigia — e um caso que não é
+  // falha nenhuma: sem membro, não há cargo. Quem chama decide o que fazer
+  // com `saiu`; o que era "erro sem mensagem" vira um resultado com nome.
+  let member;
+  try { member = await server.fetchMember(userId); }
+  catch (e) {
+    if ((e?.type ?? e?.error) === "NotFound") return { saiu: true };
+    throw e;
+  }
+  if (!member) return { saiu: true };
 
   const atuais = (member.roles ?? []).map((r) => r?.id ?? r).filter(Boolean);
   if (!atuais.includes(roleId)) return { jaEstavaSemCargo: true };
@@ -954,7 +975,7 @@ export async function removerCargoSilence(server, userId, roleId, ctx) {
     const aindaTem = (depois?.roles ?? []).map((r) => r?.id ?? r).includes(roleId);
     if (aindaTem) throw new Error("a API aceitou mas o cargo continua — confira se o cargo do bot está ACIMA do cargo de silêncio e se ele tem AssignRoles");
   } catch (e) {
-    if (/continua/.test(e.message)) throw e;   // erro real; o resto é falha ao reconferir
+    if (/continua/.test(e?.message ?? "")) throw e;   // erro real; o resto é falha ao reconferir
   }
   return { removido: true };
 }

@@ -39,7 +39,10 @@ const OLLAMA_URL   = LLM_URL;   // rotas antigas de diagnóstico ainda usam o no
 const MODELO_PADRAO= process.env.LLM_MODEL || process.env.OLLAMA_MODEL || "qwen3.5:9b";
 const NUM_CTX      = Number(process.env.NUM_CTX || 16384);
 const MAX_TOKENS   = Number(process.env.MAX_TOKENS || 4096);
-const MAX_VOLTAS   = Number(process.env.MAX_VOLTAS_FERRAMENTA || 5);
+// 6 voltas: o fluxo certo de leitura de código agora é buscar → ler → (página
+// seguinte) → responder, e com 5 uma pergunta que exigisse dois arquivos batia
+// no teto e recebia "responda com o que tem" no meio do caminho.
+const MAX_VOLTAS   = Number(process.env.MAX_VOLTAS_FERRAMENTA || 6);
 const TIMEOUT_MS   = Number(process.env.LLM_TIMEOUT_MS || process.env.OLLAMA_TIMEOUT_MS || 300000);
 const CONTINUAR_MAX= Number(process.env.CONTINUAR_MAX || 2);   // emendas automáticas em resposta cortada
 const CHAVE        = process.env.IA_CHAVE || "";   // opcional: exige header x-chave
@@ -175,17 +178,30 @@ async function conversarComFerramentas(messages, { modelo, usarFerramentas = tru
     // Logo depois do JSON da ferramenta, enquanto ainda é a última coisa lida.
     hist.push({ role: "system", content: lembreteDeIdioma(idioma) });
 
-    // ── Explicar, não despejar ──
+    // ── Explicar, não despejar — e não inventar ──
     //
     //  Perguntada "como funciona o seu TTS a nível de código?", ela colou o
     //  arquivo inteiro. O conteúdo estava certo; o formato, não — ninguém
     //  pede uma explicação para receber 1400 linhas de volta. O modelo faz
     //  isso porque o resultado da ferramenta é a última coisa que ele leu,
     //  e copiar é mais fácil que sintetizar. Então dizemos explicitamente.
+    //
+    //  A instrução "explique, não cole" trocou um problema por outro: sem o
+    //  texto na frente, ela preencheu de memória — leu `modulos/ai/chat.js`
+    //  para uma pergunta sobre TTS e descreveu funções que não existem
+    //  (`lerFileSync`, um `gerarComentarioEspontaneo` exportado do chat).
+    //  A regra agora tem três partes: só o que está no arquivo; se o arquivo
+    //  não responde, diga e busque outro; nome que não apareceu não existe.
     if (usouLeitura) {
       hist.push({ role: "system", content: idioma === "en"
-        ? "The tool result is REFERENCE MATERIAL, not the answer. Explain in your own words what the code does; never paste the file. Quote at most 3-5 short lines, and only when a specific line is the point. Cite the path you read."
-        : "O resultado da ferramenta é MATERIAL DE REFERÊNCIA, não a resposta. Explique com as SUAS palavras o que o código faz; nunca cole o arquivo. Cite no máximo 3-5 linhas curtas, e só quando uma linha específica for o ponto. Diga o caminho do arquivo que você leu." });
+        ? [
+          "The tool result is REFERENCE MATERIAL, not the answer. Explain in your own words what the code does; never paste the file. Quote at most 3-5 short lines, and only when a specific line is the point. Cite the path you read.",
+          "STRICT RULES: (1) Describe ONLY what appears in the content you just read. (2) A function, export, variable or file that does NOT appear in the content DOES NOT EXIST — do not name it, do not guess it, do not fill in from memory. (3) If the file you read does not answer the question (wrong subject, wrong module), SAY SO and use ler_codigo 'buscar' with the question's keyword to find the right file, then read it. (4) If the page you got is only part of the file ('proxima_linha' present) and the answer isn't in it, read the next page or pass 'termo' to jump to the relevant part. Never answer from a truncated page as if it were the whole file.",
+        ].join(" ")
+        : [
+          "O resultado da ferramenta é MATERIAL DE REFERÊNCIA, não a resposta. Explique com as SUAS palavras o que o código faz; nunca cole o arquivo. Cite no máximo 3-5 linhas curtas, e só quando uma linha específica for o ponto. Diga o caminho do arquivo que você leu.",
+          "REGRAS ESTRITAS: (1) Descreva SOMENTE o que aparece no conteúdo que você acabou de ler. (2) Função, exportação, variável ou arquivo que NÃO apareceu no conteúdo NÃO EXISTE — não cite, não chute, não complete de memória. (3) Se o arquivo lido não responde à pergunta (assunto errado, módulo errado), DIGA ISSO e use ler_codigo 'buscar' com a palavra-chave da pergunta para achar o arquivo certo; depois leia. (4) Se a página recebida é só parte do arquivo (veio 'proxima_linha') e a resposta não está nela, leia a página seguinte ou passe 'termo' para pular ao trecho relevante. Nunca responda a partir de uma página truncada como se fosse o arquivo inteiro.",
+        ].join(" ") });
     }
   }
 

@@ -97,9 +97,8 @@ function erro404(caminho = "") {
     + `\n\nConfira com: \`curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $GITHUB_TOKEN" https://api.github.com/repos/${REPO}\``);
 }
 
-const EXT_OK = new Set([".js", ".json", ".md", ".yml", ".yaml", ".txt"]);
+const EXT_OK = new Set([".js", ".mjs", ".cjs", ".json", ".md", ".yml", ".yaml", ".txt", ".sh"]);
 const PROIBIDOS = [/\.env/i, /token/i, /secret/i, /senha/i, /password/i, /\.db$/i];
-const MAX_BYTES = 60_000;
 const extDe = (p) => { const i = p.lastIndexOf("."); return i < 0 ? "" : p.slice(i).toLowerCase(); };
 const proibido = (p) => PROIBIDOS.some((re) => re.test(p));
 
@@ -138,17 +137,122 @@ export const definicao = {
     // A descrição diz ao modelo POR ONDE COMEÇAR. Sem isso ele adivinhava
     // nomes de arquivo ("scripts/judy-ia.js", que nunca existiu) e gastava
     // três chamadas para descobrir que estava errado.
-    description: "Lê o código-fonte do próprio bot (somente leitura). Use para responder como o bot funciona, comentar a própria implementação ou conferir detalhes técnicos. SEMPRE comece por 'estatisticas' (visão geral: quantos arquivos, quais pastas) ou 'listar' sem caminho (árvore completa) — só depois use 'ler' com um caminho que você VIU na listagem. Nunca adivinhe nomes de arquivo.",
+    //
+    // E agora diz também POR ONDE NÃO COMEÇAR: perguntada sobre TTS, ela leu
+    // `modulos/ai/chat.js` (o primeiro nome que lhe ocorreu) e descreveu
+    // funções que não existem. A ação `buscar` tira o palpite do caminho:
+    // "tts" devolve os arquivos que falam de TTS, e só então ela lê.
+    description: "Lê o código-fonte do próprio bot (somente leitura). Use para responder como o bot funciona, comentar a própria implementação ou conferir detalhes técnicos. FLUXO OBRIGATÓRIO: (1) 'buscar' com o termo da pergunta (ex.: 'tts', 'xp', 'banglobal') — devolve os arquivos cujo nome ou conteúdo casam; (2) 'ler' o arquivo mais relevante que apareceu na busca. Arquivos grandes vêm em páginas de linhas: o resultado diz 'proxima_linha' quando há mais — chame 'ler' de novo com 'linha_inicial' para continuar, ou passe 'termo' para abrir direto no trecho que fala do assunto. 'listar' e 'estatisticas' são para visão geral. NUNCA adivinhe nomes de arquivo; NUNCA descreva funções que não apareceram no conteúdo lido.",
     parameters: {
       type: "object",
       required: ["acao"],
       properties: {
-        acao: { type: "string", enum: ["estatisticas", "listar", "ler"], description: "O que fazer" },
+        acao: { type: "string", enum: ["buscar", "estatisticas", "listar", "ler"], description: "O que fazer" },
+        termo: { type: "string", description: "Em 'buscar': o assunto procurado (uma palavra ou duas, ex.: 'tts', 'reaction role', 'silence'). Em 'ler': opcional — abre o arquivo no primeiro trecho que contém o termo, em vez do começo." },
         caminho: { type: "string", description: "Caminho relativo à raiz do repositório, ex.: 'modulos/ai/chat.js' ou 'modulos/ai'. Deixe VAZIO para a raiz — não use '.' nem '/'. Obrigatório na ação 'ler'." },
+        linha_inicial: { type: "integer", description: "Em 'ler': a linha (a partir de 1) por onde começar. Use o 'proxima_linha' do resultado anterior para continuar um arquivo grande. Padrão: 1." },
+        quantidade: { type: "integer", description: "Em 'ler': quantas linhas devolver por página (padrão 300, máximo 600)." },
       },
     },
   },
 };
+
+// ── Paginação: um arquivo grande vem em pedaços ──────────
+//
+//  O corte antigo era por bytes, sempre do começo: um arquivo de 1400 linhas
+//  virava as 300 primeiras e um `cortado: true` que o modelo ignorava — e o
+//  resto do arquivo simplesmente não existia para ele. Agora a leitura tem
+//  janela (`linha_inicial` + `quantidade`), diz quantas linhas há no total e
+//  onde a próxima página começa. E com `termo`, a janela abre em cima do
+//  trecho que interessa, em vez de no cabeçalho de licença.
+const PAGINA_PADRAO = Number(process.env.CODIGO_PAGINA_LINHAS || 300);
+const PAGINA_MAX    = 600;
+
+function paginar(txt, { linha_inicial, quantidade, termo } = {}) {
+  const linhas = txt.split("\n");
+  const total = linhas.length;
+  let qtd = Number(quantidade) || PAGINA_PADRAO;
+  qtd = Math.max(20, Math.min(PAGINA_MAX, qtd));
+
+  let inicio = Number(linha_inicial) || 1;
+  let ancora = null;
+  const t = String(termo ?? "").trim();
+  if (t && !linha_inicial) {
+    // Busca sem distinguir maiúsculas; a janela começa um pouco antes do
+    // achado, para o contexto (a função que contém a linha) vir junto.
+    const re = new RegExp(t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+    const i = linhas.findIndex((l) => re.test(l));
+    if (i >= 0) { ancora = i + 1; inicio = Math.max(1, i + 1 - 15); }
+  }
+  inicio = Math.max(1, Math.min(inicio, total));
+  const fim = Math.min(total, inicio + qtd - 1);
+
+  // Numerar as linhas: o modelo cita "na linha 412" e o humano acha.
+  const largura = String(fim).length;
+  const trecho = linhas.slice(inicio - 1, fim)
+    .map((l, i) => `${String(inicio + i).padStart(largura)}| ${l}`)
+    .join("\n");
+
+  const saida = { linhas_totais: total, intervalo: `${inicio}-${fim}`, conteudo: trecho };
+  if (ancora) saida.termo_encontrado_na_linha = ancora;
+  else if (t) saida.aviso = `o termo "${t}" não aparece neste arquivo — talvez o arquivo errado; use 'buscar'`;
+  if (fim < total) {
+    saida.proxima_linha = fim + 1;
+    saida.continuar = `há mais ${total - fim} linha(s): chame 'ler' com linha_inicial=${fim + 1}`;
+  } else {
+    saida.fim_do_arquivo = true;
+  }
+  return saida;
+}
+
+// ── Buscar arquivo por assunto ───────────────────────────
+//
+//  Dois critérios, nesta ordem: o termo no NOME do arquivo (tts.js, tts-filtro.js)
+//  e o termo no CONTEÚDO (quantas linhas o citam). O nome pesa mais porque quem
+//  chama o arquivo de "tts" quase sempre é o dono do assunto; o conteúdo pega
+//  o resto ("silence" aparece em automod-engine.js, que não tem isso no nome).
+const sem_acento = (s) => String(s).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+
+function buscarLocal(raiz, termo) {
+  const t = sem_acento(termo).trim();
+  if (!t) return { erro: "informe o 'termo' a buscar (ex.: 'tts')." };
+  const palavras = t.split(/\s+/).filter(Boolean);
+  const arqs = arvoreLocal(raiz);
+
+  // Nome curto primeiro: entre `tts.js` e `tts-filtro.js`, o dono do assunto
+  // é o de nome mais enxuto — a ordem alfabética punha o filtro na frente.
+  const por_nome = arqs
+    .filter((n) => palavras.every((w) => sem_acento(n.path).includes(w)))
+    .map((n) => n.path)
+    .sort((a, b) => a.split("/").pop().length - b.split("/").pop().length || a.localeCompare(b));
+
+  const por_conteudo = [];
+  for (const n of arqs) {
+    if (!EXT_OK.has(extDe(n.path)) || n.size > 400_000) continue;
+    let txt;
+    try { txt = fs.readFileSync(path.join(raiz, n.path), "utf8"); } catch { continue; }
+    const linhas = txt.split("\n");
+    let ocorrencias = 0, primeira = 0;
+    for (let i = 0; i < linhas.length; i++) {
+      const l = sem_acento(linhas[i]);
+      if (palavras.every((w) => l.includes(w))) { ocorrencias++; if (!primeira) primeira = i + 1; }
+    }
+    if (ocorrencias) por_conteudo.push({ caminho: n.path, ocorrencias, primeira_linha: primeira, linhas: linhas.length });
+  }
+  por_conteudo.sort((a, b) => b.ocorrencias - a.ocorrencias);
+
+  if (!por_nome.length && !por_conteudo.length) {
+    return { fonte: "disco local", termo, encontrados: 0,
+      dica: "nada casa com esse termo. Tente uma palavra mais curta ou um sinônimo; 'listar' mostra a árvore inteira." };
+  }
+  const melhor = por_nome[0] ?? por_conteudo[0]?.caminho;
+  return {
+    fonte: "disco local", termo,
+    pelo_nome: por_nome.slice(0, 10),
+    pelo_conteudo: por_conteudo.slice(0, 10),
+    proximo_passo: `leia \`${melhor}\` com a ação 'ler' (passe termo="${termo}" para abrir no trecho certo). Se não responder à pergunta, leia o seguinte da lista — não complete de memória.`,
+  };
+}
 
 // ── Normalizar o caminho que o modelo mandou ──────────────
 //
@@ -178,12 +282,14 @@ function sugerir(arqs, pedido) {
   return { parecidos: perto, pastas_no_repositorio: pastas };
 }
 
-export async function executar({ acao, caminho }) {
+export async function executar({ acao, caminho, termo, linha_inicial, quantidade }) {
   caminho = normalizarCaminho(caminho);
+  const pagina = { linha_inicial, quantidade, termo };
   // ── Plano A: o disco ──
   const raiz = raizLocal();
   if (raiz) {
     try {
+      if (acao === "buscar") return buscarLocal(raiz, termo);
       if (acao === "estatisticas" || acao === "listar") {
         const arqs = arvoreLocal(raiz);
         if (acao === "listar") {
@@ -224,10 +330,8 @@ export async function executar({ acao, caminho }) {
         if (!fs.existsSync(alvo)) {
           return { erro: `\`${caminho}\` não existe no repositório.`, ...sugerir(arvoreLocal(raiz), caminho) };
         }
-        let txt = fs.readFileSync(alvo, "utf8");
-        let cortado = false;
-        if (txt.length > MAX_BYTES) { txt = txt.slice(0, MAX_BYTES); cortado = true; }
-        return { fonte: "disco local", caminho, linhas: txt.split("\n").length, cortado, conteudo: txt };
+        const txt = fs.readFileSync(alvo, "utf8");
+        return { fonte: "disco local", caminho, ...paginar(txt, pagina) };
       }
       return { erro: "Ação desconhecida." };
     } catch (e) {
@@ -244,6 +348,17 @@ export async function executar({ acao, caminho }) {
   }
 
   try {
+    if (acao === "buscar") {
+      const t = sem_acento(termo ?? "").trim();
+      if (!t) return { erro: "informe o 'termo' a buscar (ex.: 'tts')." };
+      const palavras = t.split(/\s+/).filter(Boolean);
+      const arqs = await arvore();
+      const por_nome = arqs.filter((n) => palavras.every((w) => sem_acento(n.path).includes(w))).map((n) => n.path);
+      return { fonte: "github", termo, pelo_nome: por_nome.slice(0, 10),
+        nota: "pelo GitHub a busca é só pelo NOME do arquivo (o conteúdo não é varrido). Sem resultado? 'listar' e escolha pela pasta.",
+        proximo_passo: por_nome[0] ? `leia \`${por_nome[0]}\` com a ação 'ler'.` : undefined };
+    }
+
     if (acao === "estatisticas") {
       const arqs = await arvore();
       const js = arqs.filter((n) => extDe(n.path) === ".js");
@@ -278,10 +393,8 @@ export async function executar({ acao, caminho }) {
       if (!EXT_OK.has(extDe(caminho))) return { erro: "Tipo de arquivo não legível." };
       const data = await api(caminho);
       if (Array.isArray(data)) return { erro: "Isso é uma pasta — use a ação 'listar'." };
-      let txt = Buffer.from(data.content || "", "base64").toString("utf8");
-      let cortado = false;
-      if (txt.length > MAX_BYTES) { txt = txt.slice(0, MAX_BYTES); cortado = true; }
-      return { caminho, linhas: txt.split("\n").length, cortado, conteudo: txt };
+      const txt = Buffer.from(data.content || "", "base64").toString("utf8");
+      return { fonte: "github", caminho, ...paginar(txt, pagina) };
     }
 
     return { erro: "Ação desconhecida." };

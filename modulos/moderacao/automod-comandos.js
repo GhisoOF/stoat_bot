@@ -650,9 +650,10 @@ export async function cmdScam(message, args, ctx) {
         { title: "✅ Liberado", description: `Punição de <@${uid}> removida.`, colour: COR.sucesso },
         { title: "✅ Released", description: `<@${uid}>'s punishment was removed.`, colour: COR.sucesso }));
     } catch (err) {
+      // A API do Stoat lança objetos, não Error: `err.message` virava "undefined".
       return sendEmbed(message.channel, tr(ctx,
-        { title: "❌ Erro", description: `Não foi possível liberar: ${err.message}`, colour: COR.erro },
-        { title: "❌ Error", description: `Couldn't release: ${err.message}`, colour: COR.erro }));
+        { title: "❌ Erro", description: `Não foi possível liberar: ${engine.descreverErro(err, "pt")}`, colour: COR.erro },
+        { title: "❌ Error", description: `Couldn't release: ${engine.descreverErro(err, "en")}`, colour: COR.erro }));
     }
   }
 

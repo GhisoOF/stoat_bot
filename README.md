@@ -1744,6 +1744,15 @@ externa**. A arquitetura tem duas partes:
 @Judy qual a capital da Austrália?
 ```
 
+### Uma conversa por vez, as outras na fila
+
+A GPU gera uma resposta de cada vez. Quem chama a Judy enquanto ela responde a
+outra pessoa **entra na fila** — vê `⏳ Na fila — posição N` e é atendido na
+ordem, assim que a resposta em andamento sai. A fila tem teto
+(`CHAT_FILA_MAX`, padrão 3): além dele, a resposta é "tente de novo daqui a
+pouco". A conversa livre (`&chat livre`) não entra na fila — quem chamou pelo
+comando pediu; quem só falou no canal não fica esperando.
+
 ### Modelos por função (escolha automática)
 
 O tipo de mensagem define o modelo — sem troca manual:
@@ -1756,11 +1765,25 @@ O tipo de mensagem define o modelo — sem troca manual:
 | Lógica/matemática | `OLLAMA_MODEL_LOGICA` | contas, raciocínio |
 | Decisões internas | `OLLAMA_MODEL_DECISAO` | buscar? responder? (modelo pequeno, rápido) |
 
+As decisões internas (JSON minúsculo) têm um **piso** de tokens
+(`CHAT_DECISAO_TOKENS`, padrão 600): um modelo que raciocina gasta ~185 tokens
+pensando antes de escrever o primeiro `{`, e com o teto antigo de 200 o JSON
+vinha cortado e a chamada era refeita — duas inferências para uma resposta de
+30 tokens.
+
 ### Ferramentas (via `ia-servico`)
 
-- **calcular** — executa JS num sandbox isolado para contas exatas.
-- **ler_codigo** — lê o próprio código do repositório no GitHub (requer
-  `GITHUB_TOKEN` se o repo for privado).
+- **calcular** — executa JS num sandbox isolado para contas exatas. Uma conta
+  escrita na mensagem (`263857 * 3`, `12 vezes 7`, `15% de 200`) **força** este
+  caminho: o bot detecta por regex e manda usar a ferramenta, sem depender do
+  modelo de conversa julgar se "é conta" — foi assim que nasceu o `2+2=2`.
+- **ler_codigo** — lê o próprio código do repositório (do disco, via
+  `CODIGO_DIR`; GitHub como reserva). Ações: `buscar <termo>` (acha os arquivos
+  pelo nome e pelo conteúdo — é por aqui que ela começa), `ler` com paginação
+  por linhas (`linha_inicial`, `quantidade`, ou `termo` para abrir direto no
+  trecho), `listar` e `estatisticas`. Depois de ler, a instrução é explícita:
+  descrever **só o que está no arquivo**; se o arquivo não responde, dizer e
+  buscar outro; nome que não apareceu não existe.
 - **buscar_web** — busca na internet via SearXNG.
 - **buscar_rss** — resumo de feeds sob demanda.
 

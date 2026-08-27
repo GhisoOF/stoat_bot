@@ -329,5 +329,98 @@ console.log("\n── enquadramento do que a Judy 'sabe' ──");
   ok(/Nunca afirme como certo/i.test(bloco), "  → proibindo afirmar como certo o que só está ali");
 }
 
+// ══ 8. A conta vai para a calculadora, não para a cabeça do modelo ══
+//
+//  "quanto é 263857 × 3 rapidão?" foi classificado como conversa por causa do
+//  "rapidão" e a conta foi feita de cabeça — acertou por sorte, pelo mesmo
+//  caminho que produziu "2+2=2". Um regex de números e operadores não erra.
+console.log("\n── aritmética força o caminho com ferramentas ──");
+{
+  const chat = await import("./modulos/ai/chat.js");
+  const sim = ["quanto é 263857 * 3 rapidão?", "2+2", "10 - 4 = ?", "12 vezes 7", "raiz de 144", "15% de 200", "2^10", "100 dividido por 3"];
+  const nao = ["hoje é 27/08/2026", "às 10:30", "2-3 pessoas", "1920x1080", "node v22.1.0", "me liga +55 11 99999-9999", "bom dia", "tenho 3 gatos e 2 cachorros", "<@01KHBPN31QT1THM1A0CEM8JA91> oi"];
+  ok(sim.every((t) => chat.ehAritmetica(t)), "★ conta explícita é reconhecida (operador, extenso, raiz, porcentagem)");
+  ok(nao.every((t) => !chat.ehAritmetica(t)), "  → data, horário, versão, resolução, telefone e intervalo NÃO viram conta");
+  const fonte = fs.readFileSync("./modulos/ai/chat.js", "utf8");
+  ok(/ehAritmetica\(pergunta\)\) return \{ modelo: OLLAMA_MODEL_LOGICA, tipo: "ferramenta", motivo: "calculo" \}/.test(fonte),
+    "  → e no roteamento ela vem ANTES de tudo, com tipo=ferramenta");
+  ok(/motivo === "calculo"/.test(fonte) && /Use a ferramenta `calcular`/.test(fonte),
+    "  → com instrução própria: use `calcular` antes de responder, nunca de cabeça");
+}
+
+// ══ 9. Decisões internas têm piso de tokens ══
+console.log("\n── piso de tokens nas decisões ──");
+{
+  const chat = await import("./modulos/ai/chat.js");
+  const pedidos = [];
+  globalThis.fetch = async (url, op) => {
+    pedidos.push(JSON.parse(op.body));
+    return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: "{}" }, finish_reason: "stop" }], usage: {} }) };
+  };
+  await chat.ollamaChat([{ role: "user", content: "x" }], { json: true, etiqueta: "t" });
+  ok(pedidos[0].max_tokens >= 600, `★ decisão json pede ≥600 tokens (pediu ${pedidos[0].max_tokens}); o raciocínio come ~185 e com 200 o JSON vinha cortado`);
+}
+
+// ══ 10. Fila de conversas ══
+console.log("\n── fila de conversas paralelas ──");
+{
+  const chat = await import("./modulos/ai/chat.js");
+  const fonte = fs.readFileSync("./modulos/ai/chat.js", "utf8");
+  ok(typeof chat.tamanhoFila === "function" && chat.tamanhoFila() === 0, "★ a fila existe e começa vazia");
+  ok(!/Estou processando outra conversa agora\. Tente de novo/.test(fonte), "  → o 'tente de novo em alguns segundos' morreu");
+  ok(/Na fila — posição \$\{posicao\}/.test(fonte) && /In line — position/.test(fonte), "  → quem espera vê a posição (PT e EN)");
+  ok(/Fila cheia/.test(fonte) && /CHAT_FILA_MAX/.test(fonte), "  → com teto configurável (CHAT_FILA_MAX)");
+  ok(/finally \{\n\s*liberarVez\(\);/.test(fonte), "  → e a vez passa ao próximo no finally — erro no meio não trava a GPU");
+  ok(!/^\s*ocupado = false;\s*\/\/ libera/m.test(fonte), "  → nenhum caminho zera a flag por fora da fila");
+}
+
+// ══ 11. ler_codigo: buscar por assunto, ler por página, nunca inventar ══
+console.log("\n── ler_codigo: buscar + paginação ──");
+{
+  const raiz = process.env.CODIGO_DIR;
+  fs.mkdirSync(`${raiz}/modulos/ferramentas`, { recursive: true });
+  fs.mkdirSync(`${raiz}/modulos/ai`, { recursive: true });
+  fs.writeFileSync(`${raiz}/modulos/ferramentas/tts.js`, Array.from({ length: 700 }, (_, i) => i === 450 ? "const AlreadyConnected = 'preso';" : `// linha ${i + 1} sobre TTS`).join("\n"));
+  fs.writeFileSync(`${raiz}/modulos/ferramentas/tts-filtro.js`, "// filtro do tts\n");
+  fs.writeFileSync(`${raiz}/modulos/ai/chat.js`, "// chat sem nada de voz\n");
+  const lc = await import("./ia-servico/ferramentas/ler-codigo.js");
+  const b = await lc.executar({ acao: "buscar", termo: "TTS" });
+  ok(b.pelo_nome?.[0] === "modulos/ferramentas/tts.js" && b.pelo_nome.includes("modulos/ferramentas/tts-filtro.js"),
+    "★ `buscar tts` acha pelo nome — o dono do assunto primeiro, o filtro depois");
+  ok(b.pelo_conteudo?.[0]?.caminho === "modulos/ferramentas/tts.js" && b.pelo_conteudo[0].ocorrencias > 600,
+    "  → e pelo conteúdo, contando as linhas que citam o termo");
+  ok(!b.pelo_conteudo.some((x) => x.caminho === "modulos/ai/chat.js"), "  → chat.js não aparece: não fala de TTS");
+  ok(/não complete de memória/.test(b.proximo_passo), "  → o próximo passo já diz: se não responder, leia o seguinte");
+  const p1 = await lc.executar({ acao: "ler", caminho: "modulos/ferramentas/tts.js" });
+  ok(p1.linhas_totais === 700 && p1.intervalo === "1-300" && p1.proxima_linha === 301 && !p1.fim_do_arquivo,
+    "★ arquivo grande vem em página: 1-300 de 700, próxima em 301");
+  ok(/^\s*1\| /.test(p1.conteudo) && /\n300\| /.test(p1.conteudo), "  → linhas numeradas (o modelo cita 'na linha 412' e o humano acha)");
+  const p2 = await lc.executar({ acao: "ler", caminho: "modulos/ferramentas/tts.js", linha_inicial: 301, quantidade: 400 });
+  ok(p2.intervalo === "301-700" && p2.fim_do_arquivo === true, "  → a página seguinte fecha o arquivo");
+  const p3 = await lc.executar({ acao: "ler", caminho: "modulos/ferramentas/tts.js", termo: "AlreadyConnected" });
+  ok(p3.termo_encontrado_na_linha === 451 && p3.intervalo.startsWith("436-"), "  → com `termo`, a página abre 15 linhas antes do achado");
+  const p4 = await lc.executar({ acao: "ler", caminho: "modulos/ai/chat.js", termo: "AlreadyConnected" });
+  ok(/não aparece neste arquivo/.test(p4.aviso), "  → e avisa quando o termo não está no arquivo (sinal de arquivo errado)");
+  const srv = fs.readFileSync("./ia-servico/servidor.js", "utf8");
+  ok(/NÃO apareceu no conteúdo NÃO EXISTE/.test(srv) && /DOES NOT EXIST/.test(srv),
+    "★ depois de ler, a instrução diz: nome que não apareceu não existe (PT e EN)");
+  ok(/use ler_codigo 'buscar'/.test(srv), "  → e se o arquivo não responde, busca outro em vez de completar de memória");
+  ok(/MAX_VOLTAS_FERRAMENTA \|\| 6/.test(srv), "  → com 6 voltas, buscar → ler → página seguinte cabe");
+}
+
+// ══ 12. O vigia de silêncios diz o que falhou ══
+console.log("\n── [PUNIÇÃO][vigia]: nunca mais 'undefined' ──");
+{
+  const eng = await import("./modulos/moderacao/automod-engine.js");
+  const fonte = fs.readFileSync("./modulos/moderacao/automod-engine.js", "utf8");
+  ok(!/\[vigia\] \$\{userId\}:`, e\.message\)/.test(fonte) && /descreverErro\(e\)\}`\)/.test(fonte),
+    "★ o catch do vigia usa descreverErro — objeto da API vira texto, não 'undefined'");
+  ok(eng.descreverErro({ type: "NotFound" }) === "membro ou cargo não encontrado", "  → { type: 'NotFound' } vira frase legível");
+  const server = { fetchMember: async () => { throw { type: "NotFound" }; } };
+  const r = await eng.removerCargoSilence(server, "u1", "r1", {});
+  ok(r?.saiu === true, "  → membro que saiu não é erro: `saiu: true`, e o registro fecha em vez de tentar a cada minuto");
+  ok(/try \{ server = await ctx\.client\?\.servers\?\.fetch/.test(fonte), "  → servers.fetch que rejeita vira 'servidor inacessível', não exceção muda");
+}
+
 console.log(`\nIA: ${pass} ok, ${fail} falha(s)`);
 process.exit(fail ? 1 : 0);

@@ -363,6 +363,7 @@ const GITHUB_REPO_ROTULO = process.env.GITHUB_REPO || "do bot";
 // modelo terminar a frase em vez de ser cortado no meio — o corte final em
 // 1500 caracteres é a garantia, isto é só para ele não escrever um tratado.
 const MAX_TOKENS   = Number(process.env.CHAT_MAX_TOKENS || 700);
+const DECISAO_TOKENS = Number(process.env.CHAT_DECISAO_TOKENS || 600);   // piso das decisões json (ver ollamaChat)
 const TIMEOUT      = Number(process.env.CHAT_TIMEOUT  || 300000);
 
 // Servidor(es) onde o &chat pode funcionar. Por padrão, só o servidor abaixo.
@@ -376,11 +377,37 @@ export function servidorPermitido(serverId) {
   return !!serverId && SERVIDORES_PERMITIDOS.includes(serverId);
 }
 
-// Fila simples: 1 conversa por vez. Não é sobre hardware fraco — a GPU
-// processa uma inferência por vez, e servir duas ao mesmo tempo brigaria
-// pela VRAM. Mantém as respostas rápidas e previsíveis.
+// ── Fila: 1 conversa por vez, as outras esperam a vez ──────
+//
+//  A GPU processa uma inferência por vez; servir duas ao mesmo tempo brigaria
+//  pela VRAM. Antes, a segunda pessoa recebia "tente de novo em alguns
+//  segundos" — e tentava, e recebia de novo, porque a primeira resposta ainda
+//  não tinha saído. Agora ela entra na fila: vê a posição, e é atendida assim
+//  que a conversa em andamento termina, na ordem de chegada. A fila é curta
+//  de propósito (CHAT_FILA_MAX): mais que isso e o tempo de espera já não
+//  vale — aí sim é "tente mais tarde".
+//
+//  `ocupado` continua sendo a verdade única para quem só quer saber se a GPU
+//  está tomada (conversa livre, memória, RSS). A fila é o que espera atrás.
 let ocupado = false;
+const fila = [];   // resolvers das conversas esperando a vez, em ordem
+const FILA_MAX = Number(process.env.CHAT_FILA_MAX || 3);
 export function estaOcupado() { return ocupado; }
+export function tamanhoFila() { return fila.length; }
+
+// Pega a vez. Se está livre, é imediato (e marca ocupado ANTES de qualquer
+// await — duas mensagens quase simultâneas não passam mais as duas). Se não,
+// devolve uma promessa que resolve quando `liberarVez` chamar este pedido.
+function pegarVez() {
+  if (!ocupado) { ocupado = true; return Promise.resolve(); }
+  return new Promise((resolve) => fila.push(resolve));
+}
+// Passa a vez ao próximo da fila; sem ninguém, libera de fato.
+function liberarVez() {
+  const proximo = fila.shift();
+  if (proximo) proximo();   // `ocupado` segue true: a GPU passa de mão em mão
+  else ocupado = false;
+}
 
 // ── HTTP helper com timeout ────────────────────────────────
 // ── Tirar o raciocínio do que vai para o chat ─────────────
@@ -546,9 +573,13 @@ export async function subirAnexo({ base64, mime = "image/jpeg", nome = "imagem.j
 
 export async function ollamaChat(messages, { json = false, maxTokens = MAX_TOKENS, etiqueta = "resposta", modelo = null, ctx = null, manter = null } = {}) {
   const modeloUsado = modelo || OLLAMA_MODEL_PADRAO;
-  // Decisões internas (json) devem ser CURTAS: um JSON minúsculo. Sem isso, o
-  // Qwen entra em "modo raciocínio" e gera milhares de tokens (lento + cortado).
-  const limiteTokens = json ? Math.min(maxTokens, 200) : maxTokens;
+  // Decisões internas (json) devem ser CURTAS: um JSON minúsculo. Mas o teto
+  // de 200 partia de um modelo que não pensava. O de decisão gasta ~185
+  // tokens de `reasoning_content` antes de escrever o primeiro `{` — sobravam
+  // 15 para o JSON, que vinha cortado, e a "rede de segurança" abaixo refazia
+  // a chamada com o dobro em TODA decisão: duas inferências para uma resposta
+  // de 30 tokens. O piso de 600 cabe o raciocínio e o JSON numa chamada só.
+  const limiteTokens = json ? DECISAO_TOKENS : maxTokens;
 
   // ── Formato OpenAI, backend qualquer ──
   //
@@ -900,8 +931,8 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
   }
   // Programação → modelo especializado (ornith). Considera a pergunta e a
   // mensagem citada (ex.: respondeu a um trecho de código e chamou a Judy).
-  let { modelo: modeloEscolhido, tipo } = escolherModelo(pergunta, citada);
-  dlog(`roteamento: tipo=${tipo} → modelo=${modeloEscolhido}`);
+  let { modelo: modeloEscolhido, tipo, motivo } = escolherModelo(pergunta, citada);
+  dlog(`roteamento: tipo=${tipo}${motivo ? `/${motivo}` : ""} → modelo=${modeloEscolhido}`);
 
   // Quando o pedido depende de ferramenta, MANDAMOS usá-la.
   //
@@ -919,9 +950,13 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
       if (r?.conteudo) {
         const bruto = String(r.conteudo);
         const corte = Math.max(2000, LIMITE_ARQUIVO);
-        const conteudo = bruto.length > corte
+        let conteudo = bruto.length > corte
           ? bruto.slice(0, corte) + `\n\n[…arquivo cortado aqui: ${bruto.length} caracteres no total…]`
           : bruto;
+        // A ferramenta agora pagina por linhas: se veio só a primeira página,
+        // o modelo precisa saber que o arquivo continua (e onde), senão trata
+        // 300 linhas como o todo e "conclui" coisas sobre o que não viu.
+        if (r.proxima_linha) conteudo += `\n\n[…esta é a página ${r.intervalo} de ${r.linhas_totais} linhas; o resto pode ser lido com ler_codigo (acao='ler', linha_inicial=${r.proxima_linha})…]`;
         dlog(`ferramenta direta: li ${caminho} (${bruto.length} chars, ${conteudo.length} entregues)`);
 
         // ATENÇÃO À POSIÇÃO: isto vai para o FIM, depois da pergunta.
@@ -958,11 +993,21 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
     // primeira coisa a ser descartada quando o contexto aperta. Quando o
     // arquivo já foi entregue acima, esta instrução vira redundante e some —
     // mandar "use a ferramenta" logo depois de entregar o conteúdo só confunde.
-    if (!messages.some((m) => m.role === "system" && /CONTEÚDO REAL do arquivo/.test(m.content ?? ""))) {
+    if (motivo === "calculo") {
+      // A conta vai para o `calcular`, não para a cabeça do modelo. E a
+      // resposta é o número, curta — quem pergunta "quanto é" não quer aula.
+      messages.push({
+        role: "system",
+        content: lang === "en"
+          ? "This message contains an ARITHMETIC expression. Use the `calcular` tool to get the exact number BEFORE answering — never compute it in your head, even if it looks easy. Then answer briefly with the result (and the expression, if useful). Do not use ler_codigo for this."
+          : "Esta mensagem contém uma CONTA. Use a ferramenta `calcular` para obter o número exato ANTES de responder — nunca faça de cabeça, mesmo que pareça fácil. Depois responda curto, com o resultado (e a expressão, se ajudar). Não use ler_codigo para isso.",
+      });
+    } else if (!messages.some((m) => m.role === "system" && /CONTEÚDO REAL do arquivo/.test(m.content ?? ""))) {
       messages.push({
         role: "system",
         content: [
           "ESTE PEDIDO EXIGE FERRAMENTA. Use `ler_codigo` (ou a ferramenta adequada) AGORA, antes de responder.",
+          "Comece por `ler_codigo` com acao='buscar' e o termo da pergunta (ex.: 'tts'); só depois leia o arquivo que a busca apontou. Nunca adivinhe o caminho.",
           "Perguntas do tipo 'você consegue ler X?', 'poderia ver o arquivo Y?' ou 'dá para consultar Z?' são PEDIDOS, não perguntas sobre você. A resposta certa é EXECUTAR e mostrar o resultado — nunca responder se você é capaz.",
           "Se a ferramenta devolver erro, diga em uma frase que não conseguiu acessar e pare. Não teorize o motivo e não descreva o conteúdo de memória.",
         ].join(" "),
@@ -1128,11 +1173,18 @@ function ehConversaComplexa(texto) {
 // Programação > Lógica > Conversa (complexa vs. simples).
 function escolherModelo(pergunta, citada) {
   const alvo = `${pergunta || ""} ${citada?.conteudo || ""}`;
+  // Conta explícita na mensagem → caminho com ferramentas, sempre.
+  //
+  // "quanto é 263857 × 3 rapidão?" foi classificado como conversa por causa
+  // do "rapidão", e a conta foi feita de cabeça pelo modelo de 2,6B. Acertou
+  // por sorte — é o mesmo caminho que produziu "2+2=2". Um regex de números
+  // e operadores é barato e não erra; o julgamento do modelo, sim.
+  if (ehAritmetica(pergunta)) return { modelo: OLLAMA_MODEL_LOGICA, tipo: "ferramenta", motivo: "calculo" };
   // Pedidos que EXIGEM ferramenta (ler o próprio código, buscar na web, contar)
   // precisam de um modelo com tool calling. O Gemma não tem — se a pergunta cair
   // nele, a Judy não consegue nem tentar, e acaba inventando um motivo para a
   // falha. Por isso este teste vem antes de tudo.
-  if (precisaFerramenta(alvo)) return { modelo: OLLAMA_MODEL_LOGICA, tipo: "ferramenta" };
+  if (precisaFerramenta(alvo)) return { modelo: OLLAMA_MODEL_LOGICA, tipo: "ferramenta", motivo: "codigo" };
   if (ehProgramacao(alvo)) return { modelo: OLLAMA_MODEL_CODIGO, tipo: "código" };
   if (ehLogica(alvo))      return { modelo: OLLAMA_MODEL_LOGICA, tipo: "lógica" };
   // Conversa — simples ou elaborada — vai para O MESMO modelo.
@@ -1146,6 +1198,29 @@ function escolherModelo(pergunta, citada) {
   // Quem quiser o modelo grande de volta é só apontar OLLAMA_MODEL_LEVE para ele.
   if (ehConversaComplexa(alvo)) return { modelo: OLLAMA_MODEL_LEVE, tipo: "conversa" };
   return { modelo: OLLAMA_MODEL_LEVE, tipo: "conversa" };
+}
+
+// ── Há uma conta na mensagem? ─────────────────────────────
+//
+//  Só o que é inequivocamente aritmética: dois números com operador entre
+//  eles, ou operação por extenso com números ("12 vezes 7", "raiz de 144").
+//  Datas (27/08/2026), horários (10:30) e versões (v1.2.3) são tirados antes,
+//  senão toda data viraria "divisão". O hífen é ambíguo ("2-3 pessoas"), então
+//  a subtração só conta acompanhada de um sinal de pergunta de conta.
+export function ehAritmetica(texto) {
+  if (!texto) return false;
+  const t = String(texto)
+    .replace(/\b\d{1,2}\/\d{1,2}(\/\d{2,4})?\b/g, " ")   // datas
+    .replace(/\b\d{1,2}:\d{2}(:\d{2})?\b/g, " ")          // horários
+    .replace(/\bv?\d+(\.\d+){2,}\b/gi, " ")              // versões
+    .replace(/<@[^>]+>/g, " ");                            // menções (ids longos)
+  const num = "\\d[\\d.,]*";
+  if (new RegExp(`${num}\\s*[+*/×÷^]\\s*${num}`).test(t)) return true;                       // 2+2, 15 * 3, 2^10
+  if (new RegExp(`${num}\\s*[-−]\\s*${num}`).test(t)
+      && /[=?]|\b(quanto|resultado|conta|calcul|menos|subtra)/i.test(t)) return true;         // 10 - 4 = ?
+  if (new RegExp(`${num}\\s+(vezes|x|dividido por|mais|menos|elevado a|por cento de|% de)\\s+${num}`, "i").test(t)) return true;
+  if (/\b(raiz( quadrada| c[úu]bica)? de|fatorial de|log(aritmo)? de|\d+\s*%\s*de)\s*\d/i.test(t)) return true;
+  return false;
 }
 
 // Detecta se a pergunta é sobre programação — nesses casos usamos o modelo
@@ -1297,22 +1372,46 @@ export async function conversar(message, pergunta, ctx) {
     }));
   }
 
+  // Mensagem de status única, que vamos EDITANDO conforme o progresso.
+  // Assim o usuário vê o andamento e nunca fica sem retorno. Nasce aqui, e
+  // não mais adiante, porque a primeira coisa que ela pode dizer é "na fila".
+  let statusMsg = null;
+  let statusQuebrado = false;   // se uma edição falhar (ex.: rate limit), paramos de insistir
+  const editarStatus = async (texto) => {
+    if (statusQuebrado) return;
+    try {
+      if (statusMsg) await statusMsg.edit({ content: texto, embeds: [] });
+      else statusMsg = await message.channel.sendMessage(texto);
+    } catch (e) {
+      console.error("[CHAT][status]", e?.message ?? e);
+      statusQuebrado = true;   // não tenta mais editar o status (evita spam de erros)
+    }
+  };
+
   if (ocupado) {
-    return sendEmbed(message.channel, tr(ctx,
-      { title: "⏳ Um momento",
-        description: "Estou processando outra conversa agora. Tente de novo em alguns segundos.", colour: COR.aviso },
-      { title: "⏳ One moment",
-        description: "I'm handling another conversation right now. Try again in a few seconds.", colour: COR.aviso }));
+    if (fila.length >= FILA_MAX) {
+      return sendEmbed(message.channel, tr(ctx,
+        { title: "⏳ Fila cheia",
+          description: `Já tem ${fila.length} conversa(s) esperando a vez. Tente de novo daqui a pouco.`, colour: COR.aviso },
+        { title: "⏳ Queue is full",
+          description: `There are already ${fila.length} conversation(s) waiting. Try again in a bit.`, colour: COR.aviso }));
+    }
+    const posicao = fila.length + 1;
+    console.log(`[CHAT] fila: ${message.authorId ?? "?"} entrou na posição ${posicao}`);
+    await editarStatus(en
+      ? `⏳ In line — position ${posicao}. I'll answer as soon as the current conversation is done.`
+      : `⏳ Na fila — posição ${posicao}. Respondo assim que terminar a conversa em andamento.`);
+    await pegarVez();
+    console.log(`[CHAT] fila: ${message.authorId ?? "?"} chegou a vez (${fila.length} atrás)`);
+  } else {
+    await pegarVez();   // livre: marca ocupado agora, antes de qualquer await
   }
-  // Marca ocupado JÁ AQUI, antes de qualquer await, para fechar a janela de
-  // corrida: duas mensagens quase simultâneas não passam mais as duas.
-  ocupado = true;
 
   // Servidor de IA sob demanda: se estiver desligado, avisa na hora
   // (em vez de esperar o timeout longo).
   const disp = await ollamaDisponivel();
   if (!disp.ok) {
-    ocupado = false;   // libera: não vamos gerar nada
+    liberarVez();   // libera (ou passa ao próximo): não vamos gerar nada
     // Cada causa tem um conserto próprio — dizer qual poupa a investigação.
     const alvo = OLLAMA_URL;
     const explica = {
@@ -1337,20 +1436,6 @@ export async function conversar(message, pergunta, ctx) {
       description: msg, colour: COR.aviso });
   }
 
-  // Mensagem de status única, que vamos EDITANDO conforme o progresso.
-  // Assim o usuário vê o andamento e nunca fica sem retorno.
-  let statusMsg = null;
-  let statusQuebrado = false;   // se uma edição falhar (ex.: rate limit), paramos de insistir
-  const editarStatus = async (texto) => {
-    if (statusQuebrado) return;
-    try {
-      if (statusMsg) await statusMsg.edit({ content: texto, embeds: [] });
-      else statusMsg = await message.channel.sendMessage(texto);
-    } catch (e) {
-      console.error("[CHAT][status]", e.message);
-      statusQuebrado = true;   // não tenta mais editar o status (evita spam de erros)
-    }
-  };
   // A Judy responde como PESSOA: mensagem de texto normal, sem embed.
   //
   // Embed é caixa de sistema — certo para relatório, log e RSS, errado para
@@ -1571,7 +1656,7 @@ export async function conversar(message, pergunta, ctx) {
     // SEMPRE mostra algo — nunca deixa o usuário sem retorno.
     await mostrarEmbed({ title: en ? "❌ Chat failure" : "❌ Falha no chat", description: dica, colour: COR.erro });
   } finally {
-    ocupado = false;
+    liberarVez();   // a GPU passa ao próximo da fila, ou fica livre
   }
 }
 
@@ -1647,7 +1732,8 @@ export async function talvezResponderLivre(message, ctx) {
 
     // "Parar de ler enquanto responde": se já estou gerando algo, ignoro a
     // mensagem por completo. Assim foco só na resposta em andamento e não
-    // acumulo trabalho nem compito na GPU.
+    // acumulo trabalho nem compito na GPU. A conversa livre não entra na fila:
+    // quem chamou pelo comando pediu; quem só falou no canal não fica esperando.
     if (ocupado) return false;
 
     const texto = (message.content || "").trim();

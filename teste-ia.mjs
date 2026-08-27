@@ -785,5 +785,64 @@ console.log("\n── emendas costuradas, ✂️ honesto ──");
   ok(/NÃO mude de idioma/.test(fonte), "  → a instrução da emenda proíbe trocar de idioma ('Got it. Let me know…')");
 }
 
+// ══ 26. O histórico tem escopo e prazo ══
+//
+//  Perguntada "poderia apresentar-se, por favor", ela devolveu uma
+//  calculadora em Lua de uma hora antes. O histórico curto era global por
+//  usuário — sem servidor, sem canal, sem prazo — e as 12 últimas mensagens
+//  (incluindo uma resposta `assistant` cortada no meio de um bloco de código)
+//  entravam no prompt como se fossem a conversa em curso. O modelo completou
+//  o código em vez de responder à pergunta.
+console.log("\n── histórico: por canal, com prazo, e apagável ──");
+{
+  const db = await import("./modulos/core/db.js");
+  const U = "u-hist", S1 = "srv-1", S2 = "srv-2", C1 = "canal-1", C2 = "canal-2";
+  db.limparHistorico(U);
+  db.addHistorico(U, "user", "faça uma calculadora em Lua", { serverId: S1, canalId: C1 });
+  db.addHistorico(U, "assistant", "local function add(a,b) return a+b end", { serverId: S1, canalId: C1 });
+
+  ok(db.getHistorico(U, 6, { canalId: C1 }).length === 2, "★ o histórico volta no canal onde a conversa aconteceu");
+  ok(db.getHistorico(U, 6, { canalId: C2 }).length === 0, "  → e NÃO vaza para outro canal");
+  ok(db.getHistorico(U, 6, { canalId: C1, minutos: 0 }).length === 0,
+    "★ nem sobrevive ao prazo — conversa de uma hora atrás não é continuidade");
+
+  db.addHistorico(U, "user", "outra coisa", { serverId: S2, canalId: C2 });
+  ok(db.limparHistorico(U, { serverId: S1 }) === 2 && db.getHistorico(U, 6, { canalId: C2 }).length === 1,
+    "  → e dá para apagar só o de um servidor");
+
+  db.limparHistorico(U);
+  db.addHistorico(U, "user", "oi", { serverId: S1, canalId: C1 });
+  ok(db.limparHistoricoServidor(S1) >= 1 && db.getHistorico(U, 6, { canalId: C1 }).length === 0,
+    "★ `esquecer tudo` apaga o histórico — ele existia e nenhum dos dois comandos o limpava");
+
+  const fonte = fs.readFileSync("./modulos/ai/chat.js", "utf8");
+  ok(/db\.getHistorico\(userId, 6, \{ canalId, minutos:/.test(fonte), "  → e o chat lê com escopo de canal e prazo");
+  ok(/resposta interrompida no limite de tamanho/.test(fonte),
+    "★ resposta cortada é guardada MARCADA: um turno assistant terminando em código pela metade convida o modelo a completá-lo");
+  const dbFonte = fs.readFileSync("./modulos/core/db.js", "utf8");
+  ok(/DELETE FROM ia_historico WHERE serverId IS NULL/.test(dbFonte),
+    "  → e as linhas antigas, sem servidor, são descartadas na migração (são as contaminadas)");
+}
+
+// ══ 27. LaTeX vira texto legível ══
+//
+//  O prompt proíbe LaTeX desde sempre, e mesmo assim a explicação de
+//  logaritmo saiu com \log_{b}(a)=c, (b\neq 1) e \frac{}{} na tela.
+console.log("\n── LaTeX convertido, não proibido ──");
+{
+  const chat = await import("./modulos/ai/chat.js");
+  const real = "Formalmente, se (b>0), (b\\neq 1) e (a>0), então\n\n[\n\\log_{b}(a)=c \\quad\\Longleftrightarrow\\quad b^{c}=a\n]";
+  const saida = chat.semLatex(real);
+  ok(!/\\/.test(saida) && /logb\(a\)=c/.test(saida) && /⇔/.test(saida),
+    "★ a fórmula exata do chat vira texto legível, sem uma barra invertida sobrando");
+  ok(/≠/.test(saida) && /b\^c/.test(saida), "  → símbolos e expoentes incluídos");
+  ok(chat.semLatex("base $\\log_{c}a=\\frac{\\log_{b}a}{\\log_{b}c}$") === "base logca=(logba)/(logbc)",
+    "  → fração vira divisão explícita, e os cifrões somem");
+  ok(chat.semLatex("A raiz \\sqrt{16} e \\pi \\approx 3,14") === "A raiz √(16) e π ≈ 3,14", "  → raiz e letras gregas");
+  ok(chat.semLatex("Texto normal sem nada disso.") === "Texto normal sem nada disso.", "  → texto sem LaTeX passa intocado");
+  ok(/```lua\nprint\("\\\\frac"\)\n```/.test(chat.semLatex('Veja: ```lua\nprint("\\\\frac")\n```')),
+    "★ e BLOCO DE CÓDIGO fica intacto: lá a barra é literal de propósito");
+}
+
 console.log(`\nIA: ${pass} ok, ${fail} falha(s)`);
 process.exit(fail ? 1 : 0);

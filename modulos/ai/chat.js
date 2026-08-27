@@ -981,10 +981,15 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
   // histórico curto da conversa (dá continuidade — evita recomeçar/saudar toda vez)
   if (userId) {
     try {
-      const hist = db.getHistorico(userId, 6);
+      // Escopo: esta pessoa, NESTE canal, nos últimos 30 minutos. Sem isso
+      // uma conversa de uma hora antes (em qualquer canal) entrava como se
+      // fosse a atual — e a pergunta "poderia apresentar-se?" recebeu de
+      // volta a calculadora em Lua que ela vinha escrevendo.
+      const hist = db.getHistorico(userId, 6, { canalId, minutos: Number(process.env.CHAT_HISTORICO_MIN || 30) });
       for (const h of hist) {
         messages.push({ role: h.papel === "assistant" ? "assistant" : "user", content: h.conteudo });
       }
+      if (hist.length) dlog(`histórico: ${hist.length} mensagem(ns) deste canal nos últimos ${process.env.CHAT_HISTORICO_MIN || 30} min`);
     } catch {}
   }
 
@@ -1285,6 +1290,50 @@ export function podarIdentidade(texto) {
     .join(" ")
     .replace(/\s{2,}/g, " ")
     .trim();
+}
+
+// ── LaTeX que o chat não renderiza ───────────────────────
+//
+//  O prompt já proíbe LaTeX, e mesmo assim a explicação de logaritmo saiu com
+//  `\log_{b}(a)=c`, `(b\neq 1)` e `\frac{...}{...}` — texto quebrado na tela
+//  de quem lê. Instrução não segura o hábito de um modelo treinado em
+//  matemática escrita assim; converter na saída, sim.
+const LATEX = [
+  [/\\left|\\right|\\,|\\;|\\!|\\quad|\\qquad/g, " "],
+  [/\\log_\{?(\w+)\}?/g, "log$1"],
+  [/\\(ln|log|sin|cos|tan|exp|min|max|lim)\b/g, "$1"],
+  [/\\frac\{([^{}]+)\}\{([^{}]+)\}/g, "($1)/($2)"],
+  [/\\sqrt\{([^{}]+)\}/g, "√($1)"],
+  [/\\sqrt\b/g, "√"],
+  [/\\times/g, "×"], [/\\cdot/g, "·"], [/\\div/g, "÷"],
+  [/\\neq/g, "≠"], [/\\leq/g, "≤"], [/\\geq/g, "≥"],
+  [/\\approx/g, "≈"], [/\\infty/g, "∞"], [/\\pm/g, "±"],
+  [/\\Longleftrightarrow|\\iff|\\Leftrightarrow/g, "⇔"],
+  [/\\Rightarrow|\\implies|\\to\b/g, "→"],
+  [/\\int/g, "∫"], [/\\sum/g, "Σ"], [/\\prod/g, "Π"],
+  [/\\(alpha|beta|gamma|delta|theta|lambda|mu|pi|sigma|phi|omega)\b/gi,
+    (_, g) => ({ alpha: "α", beta: "β", gamma: "γ", delta: "δ", theta: "θ", lambda: "λ", mu: "μ", pi: "π", sigma: "σ", phi: "φ", omega: "ω" })[g.toLowerCase()] ?? g],
+  [/\^\{([^{}]+)\}/g, "^$1"],
+  [/_\{([^{}]+)\}/g, "_$1"],
+  // O que sobrar de comando LaTeX desconhecido perde a barra, não o nome.
+  [/\\([a-zA-Z]+)/g, "$1"],
+];
+
+export function semLatex(texto) {
+  let t = String(texto ?? "");
+  if (!/\\[a-zA-Z]|\$\$?[^$\n]*\$|\\\[|\\\(/.test(t)) return t;
+  // Blocos de código ficam intactos: lá o texto é literal de propósito.
+  const blocos = [];
+  t = t.replace(/```[\s\S]*?```|`[^`\n]+`/g, (m) => { blocos.push(m); return `\u0000${blocos.length - 1}\u0000`; });
+
+  // Delimitadores de fórmula: \[ … \], \( … \), $$ … $$, $ … $
+  t = t.replace(/\\\[([\s\S]*?)\\\]/g, "\n$1\n").replace(/\\\(([\s\S]*?)\\\)/g, "$1");
+  t = t.replace(/\$\$([\s\S]*?)\$\$/g, "\n$1\n").replace(/\$([^$\n]+)\$/g, "$1");
+  for (const [re, sub] of LATEX) t = t.replace(re, sub);
+  // Chaves de agrupamento que sobraram, já sem sentido.
+  t = t.replace(/\{([^{}]{1,40})\}/g, "$1");
+
+  return t.replace(/[ \t]{2,}/g, " ").replace(/\u0000(\d+)\u0000/g, (_, i) => blocos[Number(i)]);
 }
 
 export function limpar(texto) {
@@ -1944,6 +1993,12 @@ export async function conversar(message, pergunta, ctx) {
       } catch (e) { dlog(`memória não atualizada: ${e.message}`); }
     }
 
+    // LaTeX não renderiza no Stoat: convertemos para símbolos legíveis.
+    if (resposta) {
+      const convertido = semLatex(resposta);
+      if (convertido !== resposta) { dlog("LaTeX convertido para texto legível"); resposta = convertido; }
+    }
+
     // Identidade: se ela se apresentou como um modelo, refaz uma vez com a
     // regra explícita na última posição do prompt (onde pesa mais); se ainda
     // vazar, poda as frases. Nunca sai como está.
@@ -2018,8 +2073,14 @@ export async function conversar(message, pergunta, ctx) {
     // Salva a troca no histórico (para continuidade nas próximas mensagens).
     if (userId && resposta) {
       try {
-        db.addHistorico(userId, "user", pergunta);
-        db.addHistorico(userId, "assistant", resposta);
+        db.addHistorico(userId, "user", pergunta, { serverId, canalId });
+        // Uma resposta CORTADA não entra como se estivesse inteira: o modelo
+        // vê um turno `assistant` terminando no meio de um bloco de código e
+        // tende a completá-lo na próxima mensagem, seja qual for a pergunta.
+        // Ela entra marcada, e a retomada de verdade é o `continue`.
+        db.addHistorico(userId, "assistant",
+          responder._cortou ? `${resposta}\n[resposta interrompida no limite de tamanho]` : resposta,
+          { serverId, canalId });
       } catch (e) { dlog(`histórico não salvo: ${e.message}`); }
     }
 
@@ -2375,10 +2436,10 @@ export async function cmdChat(message, args, ctx) {
         const r = db.apagarMemoriaServidor(ctx.serverId);
         return sendEmbed(message.channel, tr(ctx, {
           title: "🧹 Memória geral apagada",
-          description: `Esqueci tudo neste servidor: ${r.fatosPessoa} fato(s) de pessoas, ${r.fatosServidor} do servidor e ${r.perfis} perfil(is). Recomeço do zero.`, colour: COR.sucesso,
+          description: `Esqueci tudo neste servidor: ${r.fatosPessoa} fato(s) de pessoas, ${r.fatosServidor} do servidor, ${r.perfis} perfil(is) e ${r.historico} mensagem(ns) de conversa recente. Recomeço do zero.`, colour: COR.sucesso,
         }, {
           title: "🧹 General memory erased",
-          description: `I forgot everything on this server: ${r.fatosPessoa} fact(s) about people, ${r.fatosServidor} about the server and ${r.perfis} profile(s). Starting from scratch.`, colour: COR.sucesso,
+          description: `I forgot everything on this server: ${r.fatosPessoa} fact(s) about people, ${r.fatosServidor} about the server, ${r.perfis} profile(s) and ${r.historico} recent conversation message(s). Starting from scratch.`, colour: COR.sucesso,
         }));
       } catch {
         return sendEmbed(message.channel, tr(ctx,
@@ -2392,6 +2453,9 @@ export async function cmdChat(message, args, ctx) {
     try {
       const r = db.apagarTudoDaPessoa(ctx.serverId, userId);
       db.limparMemoria(userId);
+      // O histórico curto também — ele existia e nunca era limpo por nenhum
+      // dos dois comandos de esquecer.
+      db.limparHistorico(userId, { serverId: ctx.serverId });
       return sendEmbed(message.channel, tr(ctx, {
         title: "🧹 Memória apagada",
         description: `Esqueci o que sabia sobre você (${r.fatos} fato(s) e seu perfil). Nossas próximas conversas começam do zero.`, colour: COR.sucesso,

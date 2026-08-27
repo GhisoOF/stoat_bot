@@ -222,6 +222,22 @@ export function abrirBanco(caminho) {
     )
   `);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_iahist_user ON ia_historico (userId, momento)`);
+  // Migração: o histórico nasceu global por usuário — sem servidor, sem canal
+  // e sem prazo de validade. Isso produziu uma falha visível: perguntada
+  // "poderia apresentar-se?", a Judy devolveu uma calculadora em Lua de uma
+  // hora antes. As 12 últimas mensagens (incluindo uma resposta `assistant`
+  // cortada no meio de um bloco de código) entravam no prompt como se fossem
+  // a conversa em curso, e o modelo completou o código em vez de responder.
+  //
+  // Também era vazamento entre servidores: a mesma pessoa em dois servidores
+  // compartilhava um único histórico.
+  for (const [col, tipo] of [["serverId", "TEXT"], ["canalId", "TEXT"]]) {
+    try { db.exec(`ALTER TABLE ia_historico ADD COLUMN ${col} ${tipo}`); } catch { /* já existe */ }
+  }
+  // As linhas antigas não têm como ser atribuídas a um servidor ou canal —
+  // e são justamente as contaminadas. Saem.
+  try { db.exec(`DELETE FROM ia_historico WHERE serverId IS NULL`); } catch {}
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_iahist_escopo ON ia_historico (userId, serverId, canalId, momento)`);
   // (IA) memória de LONGO PRAZO — fatos aprendidos observando o chat.
   // Fatos sobre PESSOAS (por usuário) e sobre o SERVIDOR (piadas internas, eventos).
   db.exec(`
@@ -936,24 +952,38 @@ export function limparMemoria(userId) {
 }
 
 // ── IA: histórico curto de conversa (continuidade) ─────────
-export function addHistorico(userId, papel, conteudo) {
-  prep("INSERT INTO ia_historico (userId, papel, conteudo, momento) VALUES (?, ?, ?, ?)")
-    .run(userId, papel, conteudo.slice(0, 2000), new Date().toISOString());
-  // mantém só as últimas 12 entradas (6 trocas) por usuário
-  prep(`DELETE FROM ia_historico WHERE userId = ? AND rowid NOT IN (
-    SELECT rowid FROM ia_historico WHERE userId = ? ORDER BY momento DESC LIMIT 12
-  )`).run(userId, userId);
+export function addHistorico(userId, papel, conteudo, { serverId = null, canalId = null } = {}) {
+  prep("INSERT INTO ia_historico (userId, serverId, canalId, papel, conteudo, momento) VALUES (?, ?, ?, ?, ?, ?)")
+    .run(userId, serverId, canalId, papel, conteudo.slice(0, 2000), new Date().toISOString());
+  // mantém só as últimas 12 entradas (6 trocas) por usuário EM CADA CANAL
+  prep(`DELETE FROM ia_historico WHERE userId = ? AND canalId IS ? AND rowid NOT IN (
+    SELECT rowid FROM ia_historico WHERE userId = ? AND canalId IS ? ORDER BY momento DESC LIMIT 12
+  )`).run(userId, canalId, userId, canalId);
 }
 
-export function getHistorico(userId, limite = 6) {
+// O histórico é do par (pessoa, canal) e tem PRAZO. Continuidade é lembrar do
+// que se falou há pouco; retomar uma conversa de uma hora atrás como se ela
+// não tivesse acabado não é continuidade, é confusão — foi o que fez uma
+// pergunta de apresentação receber uma calculadora em Lua de volta.
+export function getHistorico(userId, limite = 6, { canalId = null, minutos = 30 } = {}) {
+  const desde = new Date(Date.now() - minutos * 60_000).toISOString();
   const linhas = prep(
-    "SELECT papel, conteudo FROM ia_historico WHERE userId = ? ORDER BY momento DESC LIMIT ?"
-  ).all(userId, limite * 2);
+    `SELECT papel, conteudo FROM ia_historico
+      WHERE userId = ? AND canalId IS ? AND momento >= ?
+      ORDER BY momento DESC LIMIT ?`
+  ).all(userId, canalId, desde, limite * 2);
   return linhas.reverse();   // cronológico (mais antigo primeiro)
 }
 
-export function limparHistorico(userId) {
-  return prep("DELETE FROM ia_historico WHERE userId = ?").run(userId).changes ?? 0;
+export function limparHistorico(userId, { serverId = null } = {}) {
+  return serverId
+    ? prep("DELETE FROM ia_historico WHERE userId = ? AND serverId = ?").run(userId, serverId).changes ?? 0
+    : prep("DELETE FROM ia_historico WHERE userId = ?").run(userId).changes ?? 0;
+}
+
+// Usado pelo `&chat esquecer tudo`: o histórico do servidor inteiro.
+export function limparHistoricoServidor(serverId) {
+  return prep("DELETE FROM ia_historico WHERE serverId = ?").run(serverId).changes ?? 0;
 }
 
 // ── Memória de longo prazo: FATOS sobre pessoas ────────────
@@ -1041,7 +1071,10 @@ export function apagarMemoriaServidor(serverId) {
   const fp = prep("DELETE FROM ia_fatos_pessoa WHERE serverId = ?").run(serverId).changes ?? 0;
   const fs = prep("DELETE FROM ia_fatos_servidor WHERE serverId = ?").run(serverId).changes ?? 0;
   const pf = prep("DELETE FROM ia_perfil WHERE serverId = ?").run(serverId).changes ?? 0;
-  return { fatosPessoa: fp, fatosServidor: fs, perfis: pf };
+  // O histórico curto também: sem isto, "esquecei tudo" dizia ter esquecido
+  // e a conversa anterior continuava chegando ao prompt na mensagem seguinte.
+  const hi = prep("DELETE FROM ia_historico WHERE serverId = ?").run(serverId).changes ?? 0;
+  return { fatosPessoa: fp, fatosServidor: fs, perfis: pf, historico: hi };
 }
 
 // ── Memória de longo prazo: FATOS sobre o servidor ─────────

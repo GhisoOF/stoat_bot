@@ -1744,6 +1744,19 @@ externa**. A arquitetura tem duas partes:
 @Judy qual a capital da Austrália?
 ```
 
+### O histórico curto tem escopo e prazo
+
+A continuidade entre mensagens vem de um histórico de até 6 trocas — agora
+por **(pessoa, canal)** e com validade de 30 minutos (`CHAT_HISTORICO_MIN`).
+Antes era global por usuário, sem servidor, sem canal e sem prazo: uma
+conversa de uma hora antes entrava no prompt como se fosse a atual, e a
+pergunta "poderia apresentar-se?" recebeu de volta uma calculadora em Lua que
+ela vinha escrevendo. Uma resposta interrompida pelo teto é guardada
+**marcada** como tal, porque um turno terminando no meio de um bloco de código
+convida o modelo a completá-lo em vez de responder ao que foi perguntado. E
+os dois comandos de esquecer (`&chat esquecer` e `&chat esquecer tudo`) agora
+limpam esse histórico — antes ele sobrevivia aos dois.
+
 ### Ela sabe o que disse — e sabe quem é
 
 O fio recente do canal que entra no prompt inclui as **respostas da própria
@@ -1755,6 +1768,11 @@ guardada por 15 minutos: **`continue`** retoma exatamente dela, com o texto
 anterior de volta no contexto. Emendas automáticas são costuradas (sem
 "vocêMeu", sem parágrafo repetido, sem trocar de idioma), e o aviso ✂️ só
 aparece quando a resposta ficou cortada de verdade.
+
+Fórmulas em **LaTeX** são convertidas na saída (`\log_{b}`, `\frac{}{}`, `$…$`
+viram `logb`, `(a)/(b)` e texto limpo), porque o Stoat não renderiza LaTeX e a
+proibição no prompt não segurava o hábito do modelo. Blocos de código ficam
+intactos.
 
 A **identidade** é conferida antes de a resposta sair. A Judy é a Judy; o
 modelo por baixo é um motor que o dono troca quando quiser. Se ela se

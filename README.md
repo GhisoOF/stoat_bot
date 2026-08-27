@@ -1744,6 +1744,28 @@ externa**. A arquitetura tem duas partes:
 @Judy qual a capital da Austrália?
 ```
 
+### Ela sabe o que disse — e sabe quem é
+
+O fio recente do canal que entra no prompt inclui as **respostas da própria
+Judy**, rotuladas como dela. Sem isso o modelo via só as falas das pessoas,
+uma atrás da outra, e atribuía ao próprio nome a mensagem de quem falou por
+último, tratava uma citação da mensagem dela como texto que a pessoa "copiou"
+e não sabia o que "continue" continuava. Uma resposta cortada pelo teto fica
+guardada por 15 minutos: **`continue`** retoma exatamente dela, com o texto
+anterior de volta no contexto. Emendas automáticas são costuradas (sem
+"vocêMeu", sem parágrafo repetido, sem trocar de idioma), e o aviso ✂️ só
+aparece quando a resposta ficou cortada de verdade.
+
+A **identidade** é conferida antes de a resposta sair. A Judy é a Judy; o
+modelo por baixo é um motor que o dono troca quando quiser. Se ela se
+apresentar com nome de modelo ou empresa ("sou a LFM, da Liquid AI") ou
+descrever "sua arquitetura" em termos de rede neural, a resposta é refeita
+uma vez com a regra na última posição do prompt e, se ainda vazar, as frases
+são podadas — nunca chega ao canal. Falar *sobre* um modelo ("o Qwen é da
+Alibaba") é conversa normal e passa. E o criador anunciar que trocou o modelo
+nunca é tratado como "tentativa de quebrar" a personagem: é informação, não
+teste.
+
 ### Uma conversa por vez, as outras na fila
 
 A GPU gera uma resposta de cada vez. Quem chama a Judy enquanto ela responde a

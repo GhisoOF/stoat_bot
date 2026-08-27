@@ -14,12 +14,13 @@ const MAX_MSGS = Number(process.env.CACHE_CANAL_MSGS || 20);
 const cache = new Map();   // canalId → [{ nome, userId, texto, respondeuA, momento }]
 
 // Registra uma mensagem no cache do canal.
-export function registrar(canalId, { nome, userId, texto, respondeuA = null }) {
+export function registrar(canalId, { nome, userId, texto, respondeuA = null, ehJudy = false }) {
   if (!canalId || !texto) return;
   let arr = cache.get(canalId);
   if (!arr) { arr = []; cache.set(canalId, arr); }
   arr.push({
     nome: nome || "alguém",
+    ehJudy: !!ehJudy,
     userId: userId || null,
     texto: String(texto).slice(0, 500),
     respondeuA: respondeuA || null,
@@ -41,8 +42,24 @@ export function contexto(canalId, { limite = 12, excluirUltima = false } = {}) {
   let arr = recentes(canalId, limite);
   if (excluirUltima && arr.length) arr = arr.slice(0, -1);
   if (!arr.length) return "";
+  // As falas da PRÓPRIA Judy vêm rotuladas como dela, sem ambiguidade.
+  //
+  //  Até aqui o fio só tinha as mensagens das pessoas — as respostas da Judy
+  //  nunca eram registradas. O modelo via "Ghiso: … / Ghiso: Continue /
+  //  Ghiso: …" sem nenhuma linha sua no meio, e fazia o que dava: atribuiu
+  //  a fala do usuário a si mesma ("minha resposta anterior foi: 'LLM é
+  //  Large Language Model'"), não sabia o que "Continue" continuava, e
+  //  tratou a própria mensagem citada como algo que o usuário "copiou".
+  //
+  //  As dela entram truncadas: uma resposta de 4 partes no fio inteira
+  //  engoliria o teto de caracteres sozinha.
   const linhas = arr.map((m) => {
     const resp = m.respondeuA ? ` (respondendo a ${m.respondeuA})` : "";
+    if (m.ehJudy) {
+      const t = String(m.texto ?? "");
+      const curto = t.length > 400 ? `${t.slice(0, 400)}… [resposta continua]` : t;
+      return `Judy (VOCÊ MESMA, sua resposta anterior): ${curto}`;
+    }
     return `${m.nome}${resp}: ${m.texto}`;
   });
   return linhas.join("\n");

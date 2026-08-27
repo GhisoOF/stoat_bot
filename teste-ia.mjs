@@ -684,5 +684,106 @@ console.log("\n── perguntas sobre o repositório vão direto ao mapa ──"
     "  → citar o main.js como referência não cancela o mapa do projeto: vêm os dois");
 }
 
+// ══ 22. A Judy NÃO é o modelo que roda por baixo ══
+//
+//  Em público, respondendo ao criador que anunciou "atualizei o bot para ter
+//  uma LLM nova", ela escreveu: "você está tentando me enganar. Eu sou a LFM
+//  (Liquid Foundation Model), construída pela Liquid AI." A regra de
+//  IDENTIDADE já existia; a identidade de treino do modelo passou por cima.
+//  Prompt sozinho não segura isto — a resposta é conferida antes de sair.
+console.log("\n── identidade: conferida antes de sair ──");
+{
+  const chat = await import("./modulos/ai/chat.js");
+  const vaza = chat.vazaIdentidade;
+  ok(vaza("Ah, você está tentando me enganar. Eu sou a LFM (Liquid Foundation Model), construída pela Liquid AI."),
+    "★ a frase exata do chat é pega");
+  ok(vaza("Minha arquitetura é baseada em convoluções curtas e atenção por garganta (mixture of experts)."),
+    "  → e a 'arquitetura' em termos de rede neural também");
+  ok(vaza("I am Qwen, a large language model created by Alibaba."), "  → em inglês");
+  ok(!vaza("O Qwen é um modelo da Alibaba, bem bom para código."),
+    "★ mas falar SOBRE um modelo não é se apresentar como ele — o teste é de primeira pessoa");
+  ok(!vaza("Sou a Judy, feita pelo Ghiso. Rodo num modelo local que ele escolhe."), "  → e a apresentação certa passa");
+  ok(!vaza("Minha arquitetura de módulos: main.js roteia, modulos/moderacao cuida do automod."),
+    "  → 'minha arquitetura' sobre o próprio CÓDIGO passa (não é rede neural)");
+  ok(chat.podarIdentidade("Obrigada. Eu sou a LFM, construída pela Liquid AI. O que mais quer saber?") === "Obrigada. O que mais quer saber?",
+    "  → a poda tira só a frase que vaza");
+
+  const fonte = fs.readFileSync("./modulos/ai/chat.js", "utf8");
+  ok(/if \(resposta && vazaIdentidade\(resposta\)\) \{/.test(fonte) && /refazendo com a regra reforçada/.test(fonte),
+    "★ resposta que vaza é REFEITA uma vez com a regra na última posição do prompt");
+  ok(/if \(vazaIdentidade\(resposta\)\) resposta = podarIdentidade\(resposta\);/.test(fonte),
+    "  → e se ainda vazar, é podada: o canal nunca recebe isso");
+  ok(/isto NUNCA se aplica ao seu criador/.test(fonte),
+    "★ 'tentativa de te quebrar' nunca se aplica ao criador — foi essa regra que a fez chamar o aviso dele de tentativa de engano");
+  ok(/Se o Ghiso disser que trocou ou atualizou o modelo\/LLM, isso é VERDADE/.test(fonte),
+    "  → e o prompt diz que uma troca de modelo anunciada por ele é verdade, não contestação");
+  ok(/if \(vazaIdentidade\(texto\)\) texto = podarIdentidade\(texto\);/.test(fonte),
+    "  → o comentário espontâneo passa pelo mesmo filtro");
+}
+
+// ══ 23. O fio do canal sabe o que a Judy disse ══
+//
+//  As respostas dela nunca entravam no fio. O modelo via "Ghiso: … / Ghiso:
+//  Continue / Ghiso: …" sem uma linha sua no meio, e atribuiu a fala do
+//  usuário a si mesma ("minha resposta anterior foi: 'LLM é Large Language
+//  Model'"), tratou a própria mensagem citada como algo que ele "copiou", e
+//  não sabia o que "Continue" continuava.
+console.log("\n── o fio inclui as falas da Judy ──");
+{
+  const cache = await import("./modulos/ai/cache-canal.js");
+  const canal = "fio-teste";
+  cache.registrar(canal, { nome: "Ghiso", userId: "g", texto: "Eu atualizei o bot para ter uma LLM nova" });
+  cache.registrar(canal, { nome: "Judy", userId: "bot", texto: "Que bom, obrigada pela atualização.", ehJudy: true });
+  cache.registrar(canal, { nome: "Ghiso", userId: "g", texto: "LLM é Large Language Model." });
+  const fio = cache.contexto(canal, { limite: 10 });
+  ok(/Judy \(VOCÊ MESMA, sua resposta anterior\): Que bom/.test(fio), "★ a fala dela entra rotulada como DELA, sem ambiguidade");
+  ok(/^Ghiso: Eu atualizei/m.test(fio) && /^Ghiso: LLM é/m.test(fio), "  → as das pessoas continuam como estavam");
+  cache.registrar(canal, { nome: "Judy", userId: "bot", texto: "x".repeat(2000), ehJudy: true });
+  ok(/\[resposta continua\]/.test(cache.contexto(canal, { limite: 10 })), "  → e uma resposta longa entra truncada: não pode engolir o fio sozinha");
+
+  const fonte = fs.readFileSync("./modulos/ai/chat.js", "utf8");
+  ok(/registrarNoCanal\(canalId, \{ nome: "Judy", userId: message\.client\?\.user\?\.id, texto: resposta, ehJudy: true \}\)/.test(fonte),
+    "★ conversar() registra a própria resposta depois de entregar");
+  ok(/este texto abaixo foi VOCÊ \(Judy\) quem escreveu/.test(fonte),
+    "★ citada da própria Judy é apresentada como DELA — antes chegava como autor=\"Woman\", que ela não reconhece");
+}
+
+// ══ 24. "Continue" continua a resposta cortada, não inventa uma nova ══
+console.log("\n── continue de verdade ──");
+{
+  const chat = await import("./modulos/ai/chat.js");
+  ok(["Continue", "continua", "e o resto?", "prossiga", "manda o resto"].every((t) => chat.pedeContinuacao(t)),
+    "★ as formas comuns de pedir o resto são reconhecidas");
+  ok(!chat.pedeContinuacao("continue me explicando o automod") && !chat.pedeContinuacao("bom dia"),
+    "  → mas uma frase com assunto próprio não é");
+  ok(chat.continuacaoPendente("canal-x") === null, "sem resposta cortada guardada, não há o que continuar");
+  chat.lembrarUltimaResposta("canal-x", { pergunta: "p", texto: "resposta inteira", cortada: false });
+  ok(chat.continuacaoPendente("canal-x") === null, "  → resposta INTEIRA não gera continuação (segue o caminho normal)");
+  chat.lembrarUltimaResposta("canal-x", { pergunta: "p", texto: "resposta cor", cortada: true });
+  ok(chat.continuacaoPendente("canal-x")?.texto === "resposta cor", "★ resposta CORTADA fica pendente, e 'continue' retoma ela");
+  const fonte = fs.readFileSync("./modulos/ai/chat.js", "utf8");
+  ok(/\{ role: "assistant", content: pendente\.texto \}/.test(fonte), "  → o texto anterior volta como assistant e o modelo segue da última palavra");
+}
+
+// ══ 25. A costura das emendas e o flag de corte honesto ══
+console.log("\n── emendas costuradas, ✂️ honesto ──");
+{
+  const chat = await import("./modulos/ai/chat.js");
+  ok(chat.costurar("Se algo estiver errado, eu corrijo. Se você", "precisar de mim, eu entro.") === "Se algo estiver errado, eu corrijo. Se você precisar de mim, eu entro.",
+    "★ emenda no meio da frase ganha o espaço — era 'vocêMeu funcionamento'");
+  ok(/eu corrijo\.\n\nMeu funcionamento/.test(chat.costurar("Se algo estiver errado no meu código, eu corrijo. Se você", "Meu funcionamento é uma dança.")),
+    "  → e quando a continuação RECOMEÇA com frase nova, o fragmento pendurado é cortado no último ponto");
+  const par = "Uma curiosidade: eu tenho memória de conversas passadas, mas não guardo nada para você. Cada sessão começa limpa.";
+  ok(chat.costurar(par, par) === null, "★ continuação que só repete o já dito é descartada — o parágrafo saiu duas vezes no chat");
+  ok(/E outra: eu nunca desisto\.$/.test(chat.costurar("Tenho memória, mas não guardo nada para você.", "mas não guardo nada para você. E outra: eu nunca desisto.")),
+    "  → sobreposição parcial: fica só o que é novo");
+
+  const fonte = fs.readFileSync("./modulos/ai/chat.js", "utf8");
+  ok(/const avisoCorte = responder\._cortou/.test(fonte) && /responder\._cortou = !!ollamaChat\._cortou;/.test(fonte),
+    "★ o ✂️ lê um flag POR CAMINHO, lido na hora — o global aparecia em respostas inteiras de três linhas");
+  ok(/if \(r\) \{ responder\._cortou = false; return r\.trim\(\); \}/.test(fonte), "  → e resposta do judy-ia nunca leva ✂️: o serviço faz a própria continuação");
+  ok(/NÃO mude de idioma/.test(fonte), "  → a instrução da emenda proíbe trocar de idioma ('Got it. Let me know…')");
+}
+
 console.log(`\nIA: ${pass} ok, ${fail} falha(s)`);
 process.exit(fail ? 1 : 0);

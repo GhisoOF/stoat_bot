@@ -1780,8 +1780,10 @@ vinha cortado e a chamada era refeita — duas inferências para uma resposta de
 - **ler_codigo** — lê o próprio código do repositório (do disco, via
   `CODIGO_DIR`; GitHub como reserva). Ações: `buscar <termo>` (acha os arquivos
   pelo nome e pelo conteúdo — é por aqui que ela começa),
-  `estrutura <arquivo>` (o **mapa**: seções, funções e exports com a linha de
-  cada um — é o que responde "como funciona X" sem ler 1400 linhas),
+  `estrutura` (o **mapa**: sem caminho, as pastas do repositório com o que
+  cada arquivo expõe — é o que responde "como o código está organizado?"; com
+  um arquivo, as seções, funções e exports dele, com a linha de cada um — é o
+  que responde "como funciona X" sem ler 1400 linhas),
   `ler` com paginação por linhas (`linha_inicial`, `quantidade`, ou `termo`
   para abrir direto no trecho; a página parcial avisa a porcentagem lida e
   proíbe descrever o resto), `listar` e `estatisticas`. Depois de ler, a

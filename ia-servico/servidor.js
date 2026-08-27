@@ -307,14 +307,14 @@ async function conversarComFerramentas(messages, { modelo, usarFerramentas = tru
         ? [
           "You now have real material from the repository. Answer the question with it, in your own words — explain, don't paste the file (quote 3-5 short lines only when a specific line IS the point), and name the path you read.",
           usouEstrutura
-            ? "What you received is the file's MAP (sections, functions and exports with line numbers). It covers the whole file, so describe the architecture confidently: what it does, how it's divided, what it exposes. For what happens INSIDE a function, call ler_codigo acao='ler' with linha_inicial at the line the map shows."
+            ? "What you received is a MAP: either of one file (sections, functions and exports with line numbers) or of the repository (folders, files and what each one exposes). It covers the whole scope asked for, so describe the architecture confidently — do not say information is missing or that you need to read more. For what happens INSIDE a function, then call ler_codigo acao='ler' at the line the map shows."
             : "If you got part of a file, that part is real code — describe it freely. Just don't present what you haven't seen as if you had: for the whole file use acao='estrutura', for another part use linha_inicial.",
           "One boundary: a function or file that never appeared in what you read does not exist — don't name it. And if what you read is about the wrong subject, say so and search again instead of guessing.",
         ]
         : [
           "Você agora tem material real do repositório. Responda a pergunta com ele, com as SUAS palavras — explique, não cole o arquivo (cite 3-5 linhas curtas só quando uma linha específica FOR o ponto) e diga o caminho que leu.",
           usouEstrutura
-            ? "O que você recebeu é o MAPA do arquivo (seções, funções e exports com o número da linha). Ele cobre o arquivo inteiro, então descreva a arquitetura com segurança: o que ele faz, como se divide, o que expõe. Para o que acontece DENTRO de uma função, chame ler_codigo acao='ler' com linha_inicial na linha que o mapa indica."
+            ? "O que você recebeu é um MAPA: de um arquivo (seções, funções e exports com a linha de cada um) ou do repositório (pastas, arquivos e o que cada um expõe). Ele cobre TODO o escopo pedido, então descreva a arquitetura com segurança — não diga que falta informação nem que precisa ler mais para responder. Para o que acontece DENTRO de uma função, aí sim chame ler_codigo acao='ler' com a linha que o mapa indica."
             : "Se você recebeu parte de um arquivo, essa parte é código real — descreva à vontade. Só não apresente como visto o que você não viu: para o arquivo inteiro use acao='estrutura', para outro trecho use linha_inicial.",
           "Um limite só: função ou arquivo que não apareceu no que você leu não existe — não cite. E se o que você leu é sobre outro assunto, diga isso e busque de novo em vez de chutar.",
         ];

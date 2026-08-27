@@ -970,6 +970,32 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
     // respostas seguidas em `modulos/ferramentas/tts.js`.
     const virou = mudouEscopo(pergunta);
     const caminhoDaPessoa = caminhoCitado(pergunta);
+
+    // Pergunta sobre o projeto inteiro: buscamos o mapa do repositório aqui,
+    // sem depender de ela escolher a ação certa.
+    //
+    //  Um arquivo citado NÃO cancela isto. "Quero a pasta raiz, onde está o
+    //  main.js, me descreve toda a estrutura?" cita um arquivo, mas como
+    //  ponto de referência — o pedido é o repositório. Quando os dois
+    //  aparecem, mandamos os dois mapas: o do projeto e o do arquivo citado.
+    if (perguntaSobreORepo(pergunta)) {
+      const mapa = await executarFerramenta("ler_codigo", { acao: "estrutura" });
+      if (mapa?.pastas?.length) {
+        dlog(`pergunta sobre o repositório → mapa de ${mapa.arquivos_js} arquivo(s) em ${mapa.pastas.length} pasta(s)`);
+        messages.push({
+          role: "system",
+          content: [
+            `MAPA REAL do repositório ${GITHUB_REPO_ROTULO}, lido agora: ${mapa.arquivos_js} arquivos JavaScript, ${mapa.linhas_js} linhas, por pasta e com o que cada arquivo expõe.`,
+            "",
+            mapa.pastas.map((p) => `${p.pasta} — ${p.linhas} linhas\n  ${p.arquivos.join("\n  ")}`).join("\n\n"),
+            mapa.outros_arquivos?.length ? `\nOutros arquivos: ${mapa.outros_arquivos.join(", ")}` : "",
+            "",
+            "--- fim do mapa ---",
+            "Descreva a ARQUITETURA a partir disto: o que cada pasta faz, como o projeto se divide, onde fica o quê. Isto cobre o repositório inteiro, então responda com segurança — não diga que falta informação nem que precisa ler mais. NÃO afirme o que uma função faz por dentro: para isso, chame ler_codigo com acao='ler'.",
+          ].filter(Boolean).join("\n"),
+        });
+      }
+    }
     const caminho = virou
       ? caminhoDaPessoa            // virou a página: só vale o que ELA escreveu agora
       : (caminhoDaPessoa ?? (citada?.doBot ? null : caminhoCitado(citada?.conteudo)));
@@ -1360,6 +1386,25 @@ export function precisaFerramenta(texto) {
   // cálculo explícito
   if (/\b(calcul[ae]|quanto [eé]|resultado de)\b.*\d/.test(t)) return true;
   return false;
+}
+
+// ── A pergunta é sobre o PROJETO INTEIRO? ────────────────
+//
+//  "agora indo para a pasta raiz, como está estruturado todo o código?" não
+//  tem termo de busca — e `buscar` exige um. Ela inventou "package.json",
+//  achou três arquivos com esse nome e descreveu isso como se fosse a
+//  arquitetura do projeto. Não foi erro de julgamento: era a única porta que
+//  ela conhecia. Quando a pergunta é sobre o todo, pedimos o mapa do
+//  repositório nós mesmos, e ela recebe a resposta pronta.
+export function perguntaSobreORepo(texto) {
+  const t = String(texto ?? "").toLowerCase();
+  if (!t) return false;
+  // Pergunta que já é sobre o inventário do projeto, sozinha: "quais módulos
+  // existem?" não precisa de segunda pista.
+  if (/\b(quais|quantos|quantas|que)\s+(m[óo]dulos|pastas|arquivos|partes|componentes)\b/.test(t)) return true;
+  const ESCOPO_TODO = /(pasta )?raiz|reposit[óo]rio|projeto( inteiro| todo)?|todo o c[óo]digo|c[óo]digo (inteiro|todo)|geral|estrutura de (arquivos|pastas)/;
+  const PEDE_MAPA = /(estrutur|organiz|arquitetur|divid|compos|como (est[áa]|[ée] feito|funciona)|vis[ãa]o geral|overview|o que (tem|existe|h[áa]))/;
+  return ESCOPO_TODO.test(t) && PEDE_MAPA.test(t);
 }
 
 // ── O assunto continua? então a ferramenta continua ───────

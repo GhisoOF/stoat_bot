@@ -471,7 +471,7 @@ console.log("\n── estrutura: o mapa, não os primeiros 21% ──");
 
   const srv = fs.readFileSync("./ia-servico/servidor.js", "utf8");
   ok(/essa parte é código real — descreva à vontade/.test(srv), "  → e o serviço repete o enquadramento positivo depois de cada leitura");
-  ok(/usouEstrutura/.test(srv) && /Ele cobre o arquivo inteiro, então descreva a arquitetura com segurança/.test(srv),
+  ok(/usouEstrutura/.test(srv) && /Ele cobre TODO o escopo pedido, então descreva a arquitetura com segurança/.test(srv),
     "  → o mapa autoriza falar da arquitetura, e só o interior das funções fica de fora");
   ok((srv.match(/Um limite só/g) ?? []).length === 1 && !/REGRAS ESTRITAS/.test(srv),
     "★ uma proibição, não cinco regras numeradas — a pilha de 'não faça' foi o que produziu a recusa");
@@ -627,6 +627,61 @@ console.log("\n── mudar de escopo mantém a ferramenta ──");
     "★ o guard `!mudouEscopo` saiu do roteamento — quem decide o que não reler é o bloco do caminho");
   ok(/o termo DESTA pergunta — o assunto de agora, não o da mensagem anterior/.test(fonte),
     "  → e a instrução manda buscar pelo assunto ATUAL (ela buscou 'tts' para uma pergunta de RPG)");
+}
+
+// ══ 20. "Como o código está organizado?" — o degrau que faltava ══
+//
+//  `estrutura` de um arquivo respondia "como funciona o TTS?". Sobre a raiz
+//  do projeto, ela chamou `buscar` com o termo "package.json" — a única porta
+//  que conhecia exigia um termo, e não existe termo para "o projeto todo".
+//  Descreveu os três package.json que achou como se fossem a arquitetura.
+console.log("\n── o mapa do repositório inteiro ──");
+{
+  const raiz = process.env.CODIGO_DIR;
+  fs.mkdirSync(`${raiz}/modulos/core`, { recursive: true });
+  fs.writeFileSync(`${raiz}/modulos/core/db.js`, "export function abrirBanco(){}\nexport const X = 1;\n");
+  fs.writeFileSync(`${raiz}/package.json`, "{}");
+  const lc = await import("./ia-servico/ferramentas/ler-codigo.js");
+
+  const r = await lc.executar({ acao: "estrutura" });
+  ok(r.escopo === "(repositório inteiro)" && r.pastas?.length > 1,
+    "★ `estrutura` SEM caminho devolve o mapa do repositório — antes isso era erro");
+  ok(r.pastas.some((p) => p.pasta === "modulos/core" && p.arquivos.some((a) => /db\.js.*expõe: abrirBanco/.test(a))),
+    "  → com os arquivos de cada pasta e o que cada um EXPÕE (é daí que sai a arquitetura)");
+  ok(r.pastas[0].linhas >= r.pastas[r.pastas.length - 1].linhas, "  → pasta maior primeiro: é onde costuma estar o miolo");
+  ok(r.outros_arquivos.includes("package.json"), "  → e os arquivos notáveis fora do .js (README, compose, package.json)");
+  ok(/NÃO afirme o que uma função faz por dentro/.test(r.como_usar), "  → dizendo o que o mapa NÃO autoriza");
+
+  const pasta = await lc.executar({ acao: "estrutura", caminho: "modulos/core" });
+  ok(pasta.escopo === "modulos/core" && pasta.arquivos_js === 1,
+    "★ e uma PASTA também tem mapa — 'a estrutura de modulos/game' é pergunta sensata, era erro antes");
+
+  const arquivo = await lc.executar({ acao: "estrutura", caminho: "modulos/core/db.js" });
+  ok(arquivo.simbolos && !arquivo.pastas, "  → com um arquivo, continua sendo o mapa do arquivo");
+  ok(/estrutura' SEM caminho/.test(lc.definicao.function.description),
+    "  → e a descrição da ferramenta diz para não usar 'buscar' quando a pergunta é o projeto todo");
+}
+
+// ══ 21. A pergunta sobre o projeto não depende de ela escolher certo ══
+console.log("\n── perguntas sobre o repositório vão direto ao mapa ──");
+{
+  const chat = await import("./modulos/ai/chat.js");
+  const sim = ["agora indo para a pasta raiz, como está estruturado todo o código?",
+               "quero a pasta raiz do código, onde está o main.js, poderia me descrever toda a estrutura de arquivo?",
+               "como o projeto está organizado?", "quais módulos existem no seu código?", "quantas pastas tem o projeto?"];
+  const nao = ["como funciona seu TTS a nível de código?", "me explica a lógica do game.js",
+               "quais são seus comandos?", "quantos itens tem no RPG?", "bom dia"];
+  ok(sim.every((q) => chat.perguntaSobreORepo(q)), "★ pedido de estrutura do projeto é reconhecido");
+  ok(nao.every((q) => !chat.perguntaSobreORepo(q)),
+    "  → e pergunta sobre UM arquivo, sobre comandos ou papo comum não é (senão todo mundo receberia o mapa)");
+
+  const fonte = fs.readFileSync("./modulos/ai/chat.js", "utf8");
+  ok(/if \(perguntaSobreORepo\(pergunta\)\) \{/.test(fonte) && /acao: "estrutura" \}\)/.test(fonte),
+    "  → o bot busca o mapa ELE MESMO, sem depender de ela escolher a ação certa");
+  ok(/MAPA REAL do repositório/.test(fonte) && /não diga que falta informação/.test(fonte),
+    "★ e a instrução manda responder com segurança — o mapa cobre tudo que foi pedido");
+  ok(!/!caminhoDaPessoa && perguntaSobreORepo/.test(fonte),
+    "  → citar o main.js como referência não cancela o mapa do projeto: vêm os dois");
 }
 
 console.log(`\nIA: ${pass} ok, ${fail} falha(s)`);

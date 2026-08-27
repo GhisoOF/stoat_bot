@@ -97,6 +97,14 @@ Ações:
   com 600 linhas de código na frente. A saída não era um aviso melhor: era
   não devolver um resultado que precisa de aviso. Quando o mapa não pode ser
   montado, o serviço ainda exige `estrutura` ou `ler` antes da resposta final.
+- **`estrutura`** `{ }` **sem caminho** — o mapa do **repositório**: as pastas,
+  os arquivos de cada uma, o tamanho e o que cada um **expõe**. É o que
+  responde "como o código está organizado?". Com o caminho de uma **pasta**,
+  o mesmo mapa limitado a ela. Isto faltava, e a falta tinha um sintoma
+  específico: perguntada sobre a raiz do projeto, ela chamava `buscar` com o
+  termo "package.json" — a única porta que conhecia exigia um termo, e não
+  existe termo para "o projeto todo". `listar` (118 caminhos sem significado)
+  e `estatisticas` (bytes por pasta) não substituem isto.
 - **`estrutura`** `{ caminho }` — o **mapa** do arquivo: cabeçalhos de seção,
   funções, classes e exports, cada um com o número da linha. É o que responde
   "como funciona X" — cobre 100% do arquivo em ~2 KB, onde `ler` entregaria

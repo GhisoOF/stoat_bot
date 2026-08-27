@@ -142,14 +142,14 @@ export const definicao = {
     // `modulos/ai/chat.js` (o primeiro nome que lhe ocorreu) e descreveu
     // funções que não existem. A ação `buscar` tira o palpite do caminho:
     // "tts" devolve os arquivos que falam de TTS, e só então ela lê.
-    description: "Lê o código-fonte do próprio bot (somente leitura). Use para responder como o bot funciona, comentar a própria implementação ou conferir detalhes técnicos. FLUXO OBRIGATÓRIO: (1) 'buscar' com o termo da pergunta (ex.: 'tts', 'xp', 'banglobal') — devolve os arquivos cujo nome ou conteúdo casam; (2) 'estrutura' do arquivo escolhido — o MAPA dele (seções, funções, exports, com a linha de cada um), que é o que responde perguntas do tipo como-funciona-X; (3) 'ler' as linhas específicas que você precisa citar. Um arquivo de 1400 linhas NÃO cabe numa leitura: descrever o todo a partir da primeira página é como resumir um livro pela primeira folha — use 'estrutura' para o todo e 'ler' para o detalhe. Arquivos grandes vêm em páginas de linhas: o resultado diz 'proxima_linha' quando há mais — chame 'ler' de novo com 'linha_inicial' para continuar, ou passe 'termo' para abrir direto no trecho que fala do assunto. 'listar' e 'estatisticas' são para visão geral. NUNCA adivinhe nomes de arquivo; NUNCA descreva funções que não apareceram no conteúdo lido.",
+    description: "Lê o código-fonte do próprio bot (somente leitura). PERGUNTA SOBRE O PROJETO INTEIRO ('como o código está organizado?', 'a estrutura da raiz', 'quais módulos existem') → chame 'estrutura' SEM caminho: devolve as pastas, os arquivos de cada uma e o que cada um expõe. Nunca use 'buscar' para isso — buscar precisa de um termo, e não existe termo para 'o projeto todo'. Use para responder como o bot funciona, comentar a própria implementação ou conferir detalhes técnicos. FLUXO OBRIGATÓRIO: (1) 'buscar' com o termo da pergunta (ex.: 'tts', 'xp', 'banglobal') — devolve os arquivos cujo nome ou conteúdo casam; (2) 'estrutura' do arquivo escolhido — o MAPA dele (seções, funções, exports, com a linha de cada um), que é o que responde perguntas do tipo como-funciona-X; (3) 'ler' as linhas específicas que você precisa citar. Um arquivo de 1400 linhas NÃO cabe numa leitura: descrever o todo a partir da primeira página é como resumir um livro pela primeira folha — use 'estrutura' para o todo e 'ler' para o detalhe. Arquivos grandes vêm em páginas de linhas: o resultado diz 'proxima_linha' quando há mais — chame 'ler' de novo com 'linha_inicial' para continuar, ou passe 'termo' para abrir direto no trecho que fala do assunto. 'listar' e 'estatisticas' são para visão geral. NUNCA adivinhe nomes de arquivo; NUNCA descreva funções que não apareceram no conteúdo lido.",
     parameters: {
       type: "object",
       required: ["acao"],
       properties: {
         acao: { type: "string", enum: ["buscar", "estrutura", "estatisticas", "listar", "ler"], description: "O que fazer" },
         termo: { type: "string", description: "Em 'buscar': o assunto procurado (uma palavra ou duas, ex.: 'tts', 'reaction role', 'silence'). Em 'ler': opcional — abre o arquivo no primeiro trecho que contém o termo, em vez do começo." },
-        caminho: { type: "string", description: "Caminho relativo à raiz do repositório, ex.: 'modulos/ai/chat.js' ou 'modulos/ai'. Deixe VAZIO para a raiz — não use '.' nem '/'. Obrigatório na ação 'ler'." },
+        caminho: { type: "string", description: "Caminho relativo à raiz do repositório, ex.: 'modulos/ai/chat.js' ou 'modulos/ai'. Deixe VAZIO para a raiz — não use '.' nem '/'. Obrigatório na ação 'ler'. Em 'estrutura': vazio = mapa do REPOSITÓRIO INTEIRO, pasta = mapa daquela pasta, arquivo = mapa daquele arquivo." },
         linha_inicial: { type: "integer", description: "Em 'ler': a linha (a partir de 1) por onde começar. Use o 'proxima_linha' do resultado anterior para continuar um arquivo grande. Padrão: 1." },
         quantidade: { type: "integer", description: "Em 'ler': quantas linhas devolver por página (padrão 300, máximo 600)." },
       },
@@ -271,6 +271,65 @@ function estruturaDe(txt) {
   };
 }
 
+
+// ── O mapa do REPOSITÓRIO (ou de uma pasta) ──────────────
+//
+//  `estrutura` de um arquivo responde "como funciona o TTS?". Faltava o
+//  degrau de cima: "como o código está organizado?". Sem ele, perguntada
+//  sobre a raiz do projeto, ela chamou `buscar` com o termo "package.json" —
+//  não por burrice, mas porque `buscar` era a única porta de entrada e ela
+//  precisava de um termo. Descreveu os package.json que achou.
+//
+//  `listar` não servia (118 caminhos sem significado nenhum) e
+//  `estatisticas` menos ainda (bytes por pasta). O que responde a pergunta é
+//  isto: as pastas, os arquivos de cada uma, o tamanho e — o que importa — o
+//  que cada arquivo EXPÕE. Daí sai a arquitetura de verdade.
+function estruturaDoRepo(raiz, subpasta = "") {
+  const arqs = arvoreLocal(raiz).filter((n) => !subpasta || n.path === subpasta || n.path.startsWith(`${subpasta}/`));
+  if (!arqs.length) return null;
+
+  const porPasta = new Map();
+  const avulsos = [];   // notáveis fora do .js (README, compose, Dockerfile)
+
+  for (const n of arqs) {
+    const ext = extDe(n.path);
+    const pasta = n.path.includes("/") ? n.path.split("/").slice(0, -1).join("/") : "(raiz)";
+    if (ext !== ".js" && ext !== ".mjs") {
+      if (/README|package\.json|Dockerfile|docker-compose|\.ya?ml$/i.test(n.path)) avulsos.push(n.path);
+      continue;
+    }
+    let exporta = [], linhas = 0;
+    try {
+      const txt = fs.readFileSync(path.join(raiz, n.path), "utf8");
+      linhas = txt.split("\n").length;
+      exporta = estruturaDe(txt).exporta.slice(0, 6);
+    } catch { /* ilegível: entra sem detalhe */ }
+    if (!porPasta.has(pasta)) porPasta.set(pasta, []);
+    porPasta.get(pasta).push({ arquivo: n.path.split("/").pop(), linhas, exporta });
+  }
+
+  // Pasta maior primeiro: é quase sempre onde está o miolo do projeto.
+  const pastas = [...porPasta.entries()]
+    .map(([pasta, arquivos]) => ({
+      pasta,
+      linhas: arquivos.reduce((t, a) => t + a.linhas, 0),
+      arquivos: arquivos
+        .sort((a, b) => b.linhas - a.linhas)
+        .slice(0, 40)
+        .map((a) => `${a.arquivo} (${a.linhas} linhas)${a.exporta.length ? ` — expõe: ${a.exporta.join(", ")}` : ""}`),
+    }))
+    .sort((a, b) => b.linhas - a.linhas);
+
+  return {
+    escopo: subpasta || "(repositório inteiro)",
+    arquivos_js: pastas.reduce((t, p) => t + p.arquivos.length, 0),
+    linhas_js: pastas.reduce((t, p) => t + p.linhas, 0),
+    pastas: pastas.map((p) => ({ pasta: p.pasta, linhas: p.linhas, arquivos: p.arquivos })),
+    outros_arquivos: avulsos.slice(0, 25),
+    como_usar: "Este é o mapa da ORGANIZAÇÃO: pastas, arquivos e o que cada um expõe. Descreva a arquitetura a partir daqui — o que cada pasta faz, como o projeto se divide. Para o mapa de UM arquivo, chame 'estrutura' com o caminho dele; para o código, 'ler'. NÃO afirme o que uma função faz por dentro: isso não está aqui.",
+  };
+}
+
 // ── Buscar arquivo por assunto ───────────────────────────
 //
 //  Dois critérios, nesta ordem: o termo no NOME do arquivo (tts.js, tts-filtro.js)
@@ -379,14 +438,19 @@ export async function executar({ acao, caminho, termo, linha_inicial, quantidade
     try {
       if (acao === "buscar") return buscarLocal(raiz, termo);
       if (acao === "estrutura") {
-        if (!caminho) return { erro: "Informe o caminho do arquivo.", ...sugerir(arvoreLocal(raiz), "") };
+        // SEM caminho = o repositório inteiro. Antes isto era um erro
+        // ("informe o caminho"), e era justamente a pergunta que faltava
+        // responder: "como o código está organizado?".
+        if (!caminho) return { fonte: "disco local", ...estruturaDoRepo(raiz) };
         if (proibido(caminho)) return { erro: "Arquivo protegido — não posso ler." };
         const alvo = caminhoSeguro(raiz, caminho);
         if (!alvo) return { erro: "Caminho fora do repositório — não posso ler." };
         if (!fs.existsSync(alvo)) return { erro: `\`${caminho}\` não existe.`, ...sugerir(arvoreLocal(raiz), caminho) };
+        // Pasta: o mesmo mapa, limitado a ela. Também deixou de ser erro —
+        // "a estrutura de modulos/game" é uma pergunta perfeitamente sensata.
         if (fs.statSync(alvo).isDirectory()) {
-          const dentro = arvoreLocal(raiz).filter((n) => n.path.startsWith(`${caminho}/`)).map((n) => n.path).slice(0, 50);
-          return { erro: "Isso é uma pasta, não um arquivo.", arquivos_dentro: dentro };
+          const mapa = estruturaDoRepo(raiz, caminho);
+          return mapa ? { fonte: "disco local", ...mapa } : { erro: `nada em \`${caminho}\`` };
         }
         return { fonte: "disco local", caminho, ...estruturaDe(fs.readFileSync(alvo, "utf8")) };
       }

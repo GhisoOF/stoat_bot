@@ -32,6 +32,7 @@
 // ══════════════════════════════════════════════════════════
 
 import * as db  from "../core/db.js";
+import { descreverErro } from "../core/erros.js";
 import * as log from "../core/log.js";
 import { resolverUsuario as resolverUser, resolverUsuarioDetalhado, ehBot } from "../core/ids.js";
 import { tr, lingua } from "../core/i18n.js";
@@ -374,7 +375,8 @@ async function sincronizarTodos(client, criarContexto) {
         });
       }
     } catch (err) {
-      console.error(`[BANGLOBAL] auto: falha em ${server?.name ?? sid}:`, err?.message);
+      // `err?.message` era undefined: a API do Stoat rejeita com string JSON.
+      console.error(`[BANGLOBAL] auto: falha em ${server?.name ?? sid}: ${descreverErro(err)}`);
     }
     await new Promise((r) => setTimeout(r, ESPACO_MS));
   }

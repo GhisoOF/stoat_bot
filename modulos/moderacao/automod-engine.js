@@ -8,6 +8,7 @@
 
 import { analisarConteudo } from "./scorecard.js";
 import * as db  from "../core/db.js";
+import { descreverErro, tipoDoErro } from "../core/erros.js";
 import * as log from "../core/log.js";
 import * as banGlobal from "./ban-global.js";
 import * as confianca from "./confianca.js";
@@ -874,24 +875,10 @@ export async function runAutomod(message, ctx) {
 // `{ type: "MissingPermission" }`. Ler `.message` dava `undefined` — foi o que
 // apareceu para o moderador como "falha ao silenciar (undefined)", uma
 // mensagem que não ajuda ninguém a consertar nada.
-export function descreverErro(e, lang = "pt") {
-  const tipo = e?.type ?? e?.error ?? e?.code;
-  const TRADUCAO = {
-    MissingPermission: lang === "en"
-      ? "the bot lacks the **AssignRoles** permission (or the silence role is above the bot's)"
-      : "o bot não tem a permissão **AssignRoles** (ou o cargo de silêncio está acima do cargo dele)",
-    NotElevated: lang === "en"
-      ? "the bot's role is below the target's — move the bot's role up"
-      : "o cargo do bot está abaixo do cargo da pessoa — suba o cargo do bot",
-    NotFound: lang === "en" ? "member or role not found" : "membro ou cargo não encontrado",
-    InvalidRole: lang === "en" ? "invalid silence role" : "cargo de silêncio inválido",
-  };
-  if (tipo && TRADUCAO[tipo]) return TRADUCAO[tipo];
-  if (typeof e?.message === "string" && e.message) return e.message;
-  if (tipo) return String(tipo);
-  try { const j = JSON.stringify(e); if (j && j !== "{}") return j.slice(0, 120); } catch {}
-  return lang === "en" ? "unknown error" : "erro desconhecido";
-}
+// O desembrulho vive em `core/erros.js` (usado também pelo ban-global e por
+// quem mais precisar). Reexportado aqui porque meia dúzia de arquivos já
+// importavam `descreverErro` deste módulo.
+export { descreverErro, tipoDoErro, normalizarErro } from "../core/erros.js";
 
 async function aplicarCargoSilence(server, userId, roleId, ctx) {
   // Sem cargo configurado não há o que aplicar. Antes, `undefined` ia parar
@@ -957,7 +944,7 @@ export async function removerCargoSilence(server, userId, roleId, ctx) {
   let member;
   try { member = await server.fetchMember(userId); }
   catch (e) {
-    if ((e?.type ?? e?.error) === "NotFound") return { saiu: true };
+    if (tipoDoErro(e) === "NotFound") return { saiu: true };
     throw e;
   }
   if (!member) return { saiu: true };

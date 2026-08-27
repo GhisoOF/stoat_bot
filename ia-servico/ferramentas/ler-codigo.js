@@ -311,6 +311,10 @@ function buscarLocal(raiz, termo) {
   const melhor = por_nome[0] ?? por_conteudo[0]?.caminho;
   return {
     fonte: "disco local", termo,
+    // O aviso vem PRIMEIRO porque este resultado engana: uma lista de
+    // caminhos com contagem de ocorrências parece conhecimento sobre o
+    // código, e o modelo respondeu a partir dela sem abrir arquivo nenhum.
+    ATENCAO: "Isto é um ÍNDICE de arquivos, NÃO o código. Você ainda não leu nada. Não descreva funcionamento a partir desta lista — escolha um caminho e chame 'estrutura' (o arquivo como um todo) ou 'ler' (um trecho).",
     pelo_nome: por_nome.slice(0, 10),
     pelo_conteudo: por_conteudo.slice(0, 10),
     proximo_passo: `leia \`${melhor}\` com a ação 'ler' (passe termo="${termo}" para abrir no trecho certo). Se não responder à pergunta, leia o seguinte da lista — não complete de memória.`,

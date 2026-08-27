@@ -89,6 +89,11 @@ Ações:
   com o termo **pelo nome** (`tts` → `tts.js`, `tts-filtro.js`, nome curto
   primeiro) e **pelo conteúdo** (quantas linhas citam o termo, e a primeira
   delas). Sem acento, sem maiúscula. Pelo GitHub (plano B) só o nome é varrido.
+  O resultado abre com um `ATENCAO` dizendo o que ele é: um **índice**, não
+  código. Sem isso o modelo respondeu descrevendo o `tts.js` inteiro a partir
+  da lista de caminhos, sem nunca ter aberto o arquivo — e o serviço agora
+  devolve a volta ao laço (uma vez) exigindo `estrutura` ou `ler` antes da
+  resposta final.
 - **`estrutura`** `{ caminho }` — o **mapa** do arquivo: cabeçalhos de seção,
   funções, classes e exports, cada um com o número da linha. É o que responde
   "como funciona X" — cobre 100% do arquivo em ~2 KB, onde `ler` entregaria

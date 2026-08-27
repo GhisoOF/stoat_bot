@@ -115,6 +115,9 @@ async function conversarComFerramentas(messages, { modelo, usarFerramentas = tru
   let usouFerramenta = false;
   let usouLeitura = false;   // leu código? então a resposta é explicação, não cópia
   let usouEstrutura = false; // pediu o MAPA? então não sabe o interior das funções
+  let usouBusca = false;     // chamou 'buscar'…
+  let leuConteudo = false;   // …e chegou a abrir algum arquivo depois?
+  let cobrouLeitura = false; // já cobramos uma vez; não insistimos para sempre
 
   for (let volta = 0; volta < MAX_VOLTAS; volta++) {
     const data = await ollama(hist, { modelo, comFerramentas: usarFerramentas });
@@ -122,6 +125,25 @@ async function conversarComFerramentas(messages, { modelo, usarFerramentas = tru
     const chamadas = msg.tool_calls || [];
 
     if (!chamadas.length) {
+      // ── Buscou, não leu, e já ia responder ──
+      //
+      //  `buscar` devolve uma LISTA de caminhos com quantas linhas citam o
+      //  termo. É um índice, não conteúdo — mas parece informação suficiente,
+      //  e o modelo descreveu o `tts.js` inteiro sem nunca ter aberto o
+      //  arquivo ("gerencia chamadas ao serviço de voz, validação de
+      //  permissões, cooldown…"). Estava certo por sorte: qualquer módulo de
+      //  TTS faz isso. Aqui a volta não é desperdiçada — devolvemos ao laço
+      //  com a ordem explícita de abrir o arquivo. Uma vez só; se insistir em
+      //  responder, respondemos com o que há.
+      if (usouBusca && !leuConteudo && !cobrouLeitura && volta < MAX_VOLTAS - 1) {
+        cobrouLeitura = true;
+        log("buscou mas não leu — exigindo estrutura/ler antes da resposta");
+        hist.push({ role: "system", content: idioma === "en"
+          ? "STOP. You called ler_codigo 'buscar', which returns only a LIST OF FILE PATHS — you have NOT read any code yet. Everything you are about to say about how it works would be a guess. Call ler_codigo again NOW: acao='estrutura' with the path you picked (for how the file works as a whole), or acao='ler' (for a specific part). Only then answer."
+          : "PARE. Você chamou ler_codigo 'buscar', que devolve apenas uma LISTA DE CAMINHOS — você ainda NÃO leu código nenhum. Tudo que você fosse dizer agora sobre o funcionamento seria chute. Chame ler_codigo de novo AGORA: acao='estrutura' com o caminho que você escolheu (para o funcionamento do arquivo como um todo), ou acao='ler' (para um ponto específico). Só depois responda." });
+        continue;
+      }
+
       // ── Resposta cortada no limite? Continua sozinha. ──
       // "…e aí, quer que eu continue?" era o modelo batendo em max_tokens.
       // Quem pergunta é porque parou; quem parou não precisa perguntar —
@@ -156,6 +178,8 @@ async function conversarComFerramentas(messages, { modelo, usarFerramentas = tru
           ? (() => { try { return JSON.parse(c.function.arguments); } catch { return {}; } })()
           : c?.function?.arguments ?? {})?.acao;
         usouEstrutura = acao === "estrutura";
+        if (acao === "buscar") usouBusca = true;
+        if (acao === "ler" || acao === "estrutura") leuConteudo = true;
       }
       let args = c?.function?.arguments ?? {};
       if (typeof args === "string") { try { args = JSON.parse(args); } catch { args = {}; } }

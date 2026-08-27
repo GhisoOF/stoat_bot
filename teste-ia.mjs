@@ -495,5 +495,76 @@ console.log("\n── mudança de escopo quebra a inércia do assunto ──");
     "★ pergunta sobre o TODO ('como funciona', 'lógica', 'arquitetura') pede o mapa, não as primeiras 300 linhas");
 }
 
+// ══ 15. Buscar é um índice, não uma resposta ══
+//
+//  Ela chamou 'buscar', recebeu a lista de caminhos e respondeu descrevendo o
+//  tts.js sem NUNCA ter aberto o arquivo — "gerencia chamadas ao serviço de
+//  voz, validação de permissões, cooldown". Estava certo por sorte: qualquer
+//  módulo de TTS faz isso.
+console.log("\n── buscar sozinho não fecha a resposta ──");
+{
+  const lc = await import("./ia-servico/ferramentas/ler-codigo.js");
+  const b = await lc.executar({ acao: "buscar", termo: "tts" });
+  ok(/ÍNDICE de arquivos, NÃO o código/.test(b.ATENCAO), "★ o resultado da busca avisa que é índice, não conteúdo");
+  ok(Object.keys(b).indexOf("ATENCAO") < Object.keys(b).indexOf("pelo_conteudo"), "  → e o aviso vem antes da lista que engana");
+  const srv = fs.readFileSync("./ia-servico/servidor.js", "utf8");
+  ok(/usouBusca && !leuConteudo && !cobrouLeitura/.test(srv),
+    "★ o serviço devolve ao laço quando o modelo tenta responder só com a busca");
+  ok(/cobrouLeitura = true/.test(srv) && /volta < MAX_VOLTAS - 1/.test(srv),
+    "  → uma vez só, e nunca na última volta: cobrar em laço deixaria a pessoa sem resposta");
+  ok(/você ainda NÃO leu código nenhum/.test(srv) && /you have NOT read any code yet/.test(srv), "  → em PT e EN");
+}
+
+// ══ 16. O assunto continua, a ferramenta continua ══
+//
+//  "como funciona seu TTS a nível de código?" leu o arquivo. A seguinte,
+//  "quero que me diga a lógica de programação por detrás do código", foi
+//  para o Ollama puro — e ela respondeu, com razão, que não tinha acesso.
+console.log("\n── seguimento herda o caminho com ferramentas ──");
+{
+  const chat = await import("./modulos/ai/chat.js");
+  ok(chat.precisaFerramenta("quero que me diga a lógica de programação por de trás do código"),
+    "★ pedir a LÓGICA do código é pedir para ler, mesmo sem verbo de leitura");
+  ok(chat.precisaFerramenta("qual a arquitetura desse módulo?") && chat.precisaFerramenta("me explica o funcionamento do seu código"),
+    "  → arquitetura, funcionamento e 'seu código' também");
+  ok(!chat.precisaFerramenta("qual a lógica de um quicksort?"), "  → mas 'a lógica de um quicksort' não é sobre o repositório dela");
+
+  const canal = "canal-teste";
+  ok(!chat.seguimentoDeFerramenta(canal, "e a lógica?"), "sem turno anterior, não há seguimento");
+  chat.lembrarRoteamento(canal, "ferramenta");
+  ok(chat.seguimentoDeFerramenta(canal, "e a lógica?"), "★ depois de um turno com ferramenta, o seguimento curto herda o caminho");
+  ok(chat.seguimentoDeFerramenta(canal, "me explica melhor essa parte"), "  → e um 'explica melhor' também");
+  ok(!chat.seguimentoDeFerramenta("outro-canal", "e a lógica?"), "  → mas só no MESMO canal");
+  chat.lembrarRoteamento(canal, "conversa");
+  ok(!chat.seguimentoDeFerramenta(canal, "e a lógica?"), "  → e só se o turno anterior tiver usado ferramenta");
+
+  const fonte = fs.readFileSync("./modulos/ai/chat.js", "utf8");
+  ok(/!mudouEscopo\(pergunta\) && seguimentoDeFerramenta/.test(fonte),
+    "★ mas quem MUDA de escopo não herda nada — as duas regras não brigam");
+  ok(/motivo === "seguimento"/.test(fonte) && /nunca diga que não tem acesso ao arquivo/.test(fonte),
+    "  → com instrução própria: releia, não responda de memória");
+}
+
+// ══ 17. O erro da API vem como string, não como objeto ══
+console.log("\n── o 'undefined' que sobrou: erro em string JSON ──");
+{
+  const { descreverErro, tipoDoErro, normalizarErro } = await import("./modulos/core/erros.js");
+  const comoAPILanca = JSON.stringify({ type: "NotFound", location: "crates/core/database/src/models/server_members/ops/mongodb.rs:66:24" });
+  ok(descreverErro(comoAPILanca) === "membro ou cargo não encontrado",
+    "★ string JSON vira frase legível — era o que o vigia repetia a cada minuto");
+  ok(tipoDoErro(comoAPILanca) === "NotFound",
+    "  → e o tipo é encontrado: quem testava `e.type` nunca via, o type estava DENTRO do texto");
+  ok(descreverErro({ type: "MissingPermission" }).includes("AssignRoles"), "  → objeto continua funcionando");
+  ok(descreverErro(new Error("deu ruim")) === "deu ruim", "  → Error comum continua funcionando");
+  ok(descreverErro(undefined) === "erro desconhecido" && normalizarErro(null) && descreverErro("timeout") === "timeout",
+    "  → e nada disso quebra com nulo ou texto solto");
+
+  const eng = await import("./modulos/moderacao/automod-engine.js");
+  const r = await eng.removerCargoSilence({ fetchMember: async () => { throw comoAPILanca; } }, "u1", "r1", {});
+  ok(r?.saiu === true, "★ agora o vigia RECONHECE que a pessoa saiu e encerra o registro em vez de tentar de novo");
+  ok(/descreverErro\(err\)/.test(fs.readFileSync("./modulos/moderacao/ban-global.js", "utf8")),
+    "  → e o `[BANGLOBAL] auto: falha em X: undefined` foi pela mesma causa");
+}
+
 console.log(`\nIA: ${pass} ok, ${fail} falha(s)`);
 process.exit(fail ? 1 : 0);

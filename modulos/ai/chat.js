@@ -932,6 +932,16 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
   // Programação → modelo especializado (ornith). Considera a pergunta e a
   // mensagem citada (ex.: respondeu a um trecho de código e chamou a Judy).
   let { modelo: modeloEscolhido, tipo, motivo } = escolherModelo(pergunta, citada);
+  // Seguimento de uma conversa que JÁ estava lendo código herda o caminho com
+  // ferramentas — a menos que a pessoa tenha mudado de escopo de propósito,
+  // caso em que ela quer outra coisa e a herança atrapalharia.
+  if (tipo !== "ferramenta" && !mudouEscopo(pergunta) && seguimentoDeFerramenta(canalId, pergunta)) {
+    dlog(`seguimento da conversa anterior (que usou ferramenta) → mantendo o caminho com ferramentas`);
+    tipo = "ferramenta";
+    motivo = "seguimento";
+    modeloEscolhido = OLLAMA_MODEL_LOGICA;
+  }
+  lembrarRoteamento(canalId, tipo);
   dlog(`roteamento: tipo=${tipo}${motivo ? `/${motivo}` : ""} → modelo=${modeloEscolhido}`);
 
   // Quando o pedido depende de ferramenta, MANDAMOS usá-la.
@@ -1032,7 +1042,14 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
     // primeira coisa a ser descartada quando o contexto aperta. Quando o
     // arquivo já foi entregue acima, esta instrução vira redundante e some —
     // mandar "use a ferramenta" logo depois de entregar o conteúdo só confunde.
-    if (motivo === "calculo") {
+    if (motivo === "seguimento") {
+      messages.push({
+        role: "system",
+        content: lang === "en"
+          ? "This is a FOLLOW-UP to the previous question, which was about code you read. The person is not repeating the subject because it is implied. Read again with ler_codigo (acao='estrutura' for the file as a whole, acao='ler' for a specific part) before answering — do not answer from what you remember of the previous turn, and never say you have no access to the file."
+          : "Esta pergunta é SEGUIMENTO da anterior, que era sobre um código que você leu. A pessoa não repetiu o assunto porque ele está subentendido. Leia de novo com ler_codigo (acao='estrutura' para o arquivo inteiro, acao='ler' para um ponto específico) antes de responder — não responda pelo que lembra do turno anterior, e nunca diga que não tem acesso ao arquivo.",
+      });
+    } else if (motivo === "calculo") {
       // A conta vai para o `calcular`, não para a cabeça do modelo. E a
       // resposta é o número, curta — quem pergunta "quanto é" não quer aula.
       messages.push({
@@ -1299,9 +1316,59 @@ export function precisaFerramenta(texto) {
   // própria capacidade em vez de agir.
   if (/\b(consegue|consegues|poderia|pode|d[aá] para|dá pra|tem como)\b[^?]{0,60}\b(l[eê]r?|ver|abrir|acessar|consultar|mostrar|checar|verificar)\b/.test(t)
       && /\b(main\.js|package\.json|arquivo|reposit[oó]rio|repo|c[oó]digo|m[oó]dulo|\.js\b|\.json\b|\.md\b)/.test(t)) return true;
+  // Pedir a LÓGICA/ARQUITETURA do código é pedir para ler, mesmo sem nenhum
+  // verbo de leitura na frase. "quero que me diga a lógica de programação por
+  // detrás do código" foi classificado como conversa sobre programação e foi
+  // parar no Ollama sem ferramenta — ela respondeu, corretamente, que não
+  // tinha acesso ao arquivo. O pedido era o mesmo da mensagem anterior, só
+  // que dito de outro jeito.
+  if (/\b(l[óo]gica|arquitetura|estrutura|funcionamento|implementa[çc][ãa]o|como (funciona|[ée] feito|foi feito|voc[êe] faz))\b[^.?!]{0,60}\b(c[óo]digo|arquivo|m[óo]dulo|fun[çc][ãa]o|sistema|reposit[óo]rio)\b/.test(t)) return true;
+  if (/\b(c[óo]digo|arquivo|m[óo]dulo|reposit[óo]rio)\b[^.?!]{0,60}\b(l[óo]gica|arquitetura|estrutura|funcionamento|implementa[çc][ãa]o)\b/.test(t)) return true;
+  // "seu código" / "teu código" é sempre sobre ELA — e ela pode ler o próprio.
+  if (/\b(seu|sua|teu|tua)\s+(c[óo]digo|arquivo|m[óo]dulo|implementa[çc][ãa]o)\b/.test(t)) return true;
   // cálculo explícito
   if (/\b(calcul[ae]|quanto [eé]|resultado de)\b.*\d/.test(t)) return true;
   return false;
+}
+
+// ── O assunto continua? então a ferramenta continua ───────
+//
+//  "como funciona seu TTS a nível de código?" foi para o caminho com
+//  ferramentas e leu o arquivo. A pergunta seguinte — "me diga a lógica por
+//  detrás do código" — não casou com nenhum padrão e foi para o Ollama puro,
+//  onde ela não tem como ler nada. Do ponto de vista de quem pergunta é a
+//  MESMA conversa; a segunda mensagem só não repete o assunto porque ele
+//  está subentendido. Guardamos o último roteamento por canal para que um
+//  seguimento curto herde o caminho, em vez de recomeçar sem ferramenta.
+const ultimoRoteamento = new Map();   // canalId → { tipo, quando }
+const JANELA_SEGUIMENTO_MS = Number(process.env.CHAT_SEGUIMENTO_MS || 10 * 60_000);
+
+// Marcas de que a mensagem se apoia no que já foi dito, em vez de trazer
+// assunto novo: pronome sem antecedente, pedido de aprofundar, frase curta.
+function pareceSeguimento(texto) {
+  const t = String(texto ?? "").toLowerCase().trim();
+  if (!t) return false;
+  const palavras = t.split(/\s+/).length;
+  if (/\b(isso|isto|disso|nisso|dele|dela|desse|dessa|esse|essa|a[ií]|ent[ãa]o|e o que|e como|e a|e os)\b/.test(t)) return true;
+  if (/\b(mais (sobre|detalhe|a fundo)|detalha|aprofunda|explica melhor|continua|e (depois|al[ée]m disso))\b/.test(t)) return true;
+  // Frase curta sem sujeito novo: "e a lógica?", "por quê?", "como assim?"
+  if (palavras <= 12 && /^(e |mas |por que|porque|por qu[êe]|como|qual|quais|quando|onde)/.test(t)) return true;
+  return false;
+}
+
+export function lembrarRoteamento(canalId, tipo) {
+  if (canalId && tipo) ultimoRoteamento.set(canalId, { tipo, quando: Date.now() });
+}
+
+export function seguimentoDeFerramenta(canalId, pergunta) {
+  if (!canalId) return false;
+  const ultimo = ultimoRoteamento.get(canalId);
+  if (!ultimo || ultimo.tipo !== "ferramenta") return false;
+  if (Date.now() - ultimo.quando > JANELA_SEGUIMENTO_MS) return false;
+  // Duas portas: ou a mensagem se apoia no que veio antes, ou ela fala de
+  // código sem pedir leitura explícita ("a lógica", "essa função").
+  return pareceSeguimento(pergunta)
+    || /\b(c[óo]digo|arquivo|m[óo]dulo|fun[çc][ãa]o|l[óo]gica|implementa[çc][ãa]o|linha)\b/i.test(String(pergunta ?? ""));
 }
 
 function ehProgramacao(texto) {

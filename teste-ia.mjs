@@ -14,6 +14,20 @@
 process.env.DB_PATH = "/tmp/ia-teste.db";
 process.env.CONFIG_PATH = "/tmp/ia-teste-cfg.json";
 process.env.CODIGO_DIR = "/tmp/ia-teste-repo";
+// Vários blocos abaixo trocam `globalThis.fetch` por stubs (é o jeito de
+// testar chamadas ao LLM sem LLM). O teste de fumaça, no fim, precisa do
+// fetch DE VERDADE para falar com o servidor falso que ele mesmo sobe —
+// senão vê "Ollama indisponível" por causa de um stub de outro bloco, e
+// reporta um erro que não existe no código.
+const FETCH_NATIVO = globalThis.fetch;
+// O Ollama falso do teste de fumaça (bloco 28) vive aqui. Tem de ser definido
+// ANTES do primeiro import de chat.js: a URL é lida uma vez, no topo do
+// módulo — se ficar para depois, o teste fala com a porta padrão e falha
+// sem que haja nada errado no código.
+process.env.OLLAMA_URL = "http://localhost:8097";
+process.env.CHAT_SERVIDORES = "*";
+process.env.BUSCA_ATIVA = "false";
+delete process.env.IA_SERVICO_URL;
 import fs from "node:fs";
 for (const f of [process.env.DB_PATH, process.env.CONFIG_PATH]) { try { fs.unlinkSync(f); } catch {} }
 
@@ -353,11 +367,18 @@ console.log("\n── piso de tokens nas decisões ──");
 {
   const chat = await import("./modulos/ai/chat.js");
   const pedidos = [];
+  // Guarda o `fetch` de verdade: sem restaurar no fim, o stub vaza para os
+  // blocos seguintes. Ele quebra em GET (não há `op.body` para parsear), e o
+  // teste de fumaça lá embaixo passou a ver "Ollama indisponível" — um erro
+  // que não estava no código, e sim neste stub esquecido.
+  const fetchReal = globalThis.fetch;
   globalThis.fetch = async (url, op) => {
     pedidos.push(JSON.parse(op.body));
     return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: "{}" }, finish_reason: "stop" }], usage: {} }) };
   };
-  await chat.ollamaChat([{ role: "user", content: "x" }], { json: true, etiqueta: "t" });
+  try {
+    await chat.ollamaChat([{ role: "user", content: "x" }], { json: true, etiqueta: "t" });
+  } finally { globalThis.fetch = fetchReal; }
   ok(pedidos[0].max_tokens >= 600, `★ decisão json pede ≥600 tokens (pediu ${pedidos[0].max_tokens}); o raciocínio come ~185 e com 200 o JSON vinha cortado`);
 }
 
@@ -861,6 +882,67 @@ console.log("\n── LaTeX convertido, não proibido ──");
   ok(chat.semLatex("Texto normal sem nada disso.") === "Texto normal sem nada disso.", "  → texto sem LaTeX passa intocado");
   ok(/```lua\nprint\("\\\\frac"\)\n```/.test(chat.semLatex('Veja: ```lua\nprint("\\\\frac")\n```')),
     "★ e BLOCO DE CÓDIGO fica intacto: lá a barra é literal de propósito");
+}
+
+// ══ 28. Os caminhos EXECUTAM (não só compilam) ══
+//
+//  `modeloForcado` foi declarado em `conversar()` e usado em `responder()` —
+//  funções irmãs, não aninhadas. `node --check` passou (a sintaxe é válida),
+//  os 217 testes passaram (nenhum executava o caminho), e no chat toda
+//  mensagem virou "Falha no chat: modeloForcado is not defined".
+//
+//  A lição: teste que só lê o texto do arquivo não pega erro de escopo.
+//  Este sobe um Ollama falso e chama `conversar` e `cmdChat especial` de
+//  verdade — é o mínimo para afirmar que os caminhos funcionam.
+console.log("\n── fumaça: os caminhos rodam de ponta a ponta ──");
+{
+  const http = await import("node:http");
+  const enviadas = [];
+  const srv = http.createServer((req, res) => {
+    res.setHeader("content-type", "application/json");
+    // GET /v1/models é o ping de disponibilidade que o bot faz ANTES de gerar.
+    // Responde de imediato: num GET sem corpo o evento `end` do request pode
+    // nem disparar, e o bot desistiria com "Ollama indisponível" antes de
+    // executar o caminho que queremos testar.
+    if (req.method === "GET") {
+      return res.end(JSON.stringify({ data: [{ id: "fake" }, { id: "qwen3.8-27b" }] }));
+    }
+    let b = ""; req.on("data", (d) => b += d); req.on("end", () => {
+      const p = JSON.parse(b || "{}");
+      enviadas.push(p.model);
+      const ehJson = /SOMENTE|JSON/.test(p.messages?.[0]?.content ?? "");
+      res.end(JSON.stringify({
+        choices: [{ message: { content: ehJson ? '{"buscar":false}' : "Oi! Sou a Judy." }, finish_reason: "stop" }],
+        usage: { completion_tokens: 8 },
+      }));
+    });
+  });
+  await new Promise((r) => srv.listen(8097, r));   // porta fixada no topo do arquivo
+  const fetchDoBloco = globalThis.fetch;
+  globalThis.fetch = FETCH_NATIVO;   // ver a nota no topo do arquivo
+
+  const saidas = [];
+  const canal = { sendMessage: async (t) => { saidas.push(typeof t === "string" ? t : t.content); return { edit: async () => {} }; } };
+  const msg = { content: "oi", authorId: "u1", channelId: "c-fumaca", channel: canal,
+    client: { user: { id: "bot" } }, reply_ids: [] };
+  const ctx = { sendEmbed: async (_c, e) => saidas.push(e.description ?? e.title),
+    COR: { info: 1, erro: 2, aviso: 3, sucesso: 4 }, serverId: "01KH9SJYWVD7XAHJ28TP0YP4Q0",
+    PREFIXO: "&", config: {}, ehSuperAdmin: () => true, getServer: async () => ({}) };
+
+  const chat = await import("./modulos/ai/chat.js");
+  await chat.conversar(msg, "poderia se apresentar?", ctx);
+  ok(!saidas.some((x) => /not defined|Falha no chat/.test(String(x))),
+    "★ conversa normal roda sem ReferenceError — foi assim que o `modeloForcado` quebrou TUDO");
+
+  enviadas.length = 0; saidas.length = 0;
+  await chat.cmdChat({ ...msg, content: "&chat especial oi" }, ["especial", "quanto é a vida"], ctx);
+  ok(!saidas.some((x) => /not defined|Falha no chat/.test(String(x))), "  → e `&chat especial` também");
+  ok(enviadas.includes("qwen3.8-27b"),
+    `★ e o especial REALMENTE troca o modelo (pediu: ${enviadas.join(", ") || "nenhum"})`);
+  ok(saidas.some((x) => /Pensando com/.test(String(x))), "  → avisando a espera antes de começar");
+
+  globalThis.fetch = fetchDoBloco;
+  srv.close();
 }
 
 console.log(`\nIA: ${pass} ok, ${fail} falha(s)`);

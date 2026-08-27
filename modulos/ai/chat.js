@@ -840,7 +840,11 @@ function hojeExtenso() {
 }
 
 // ── Resposta final ─────────────────────────────────────────
-async function responder(pergunta, resultados, autor, userId, citada, serverId, canalId, lang = "pt") {
+// `modeloForcado` chega por parâmetro, e não por closure: `responder` é uma
+// função de topo, irmã de `conversar`, não aninhada nela. Ler a variável de
+// lá dava `modeloForcado is not defined` — e derrubava TODA conversa, não só
+// o `&chat especial`, porque a linha executa em qualquer caminho.
+async function responder(pergunta, resultados, autor, userId, citada, serverId, canalId, lang = "pt", modeloForcado = null) {
   const hoje = hojeExtenso();
 
   // memória do usuário (global): o que a IA já sabe sobre ele
@@ -2012,7 +2016,7 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
     const canalId = message.channelId || message.channel?.id || null;
     let resposta;
     try {
-      resposta = limpar(await responder(pergunta, resultados, autor, userId, citada, serverId, canalId, lang));
+      resposta = limpar(await responder(pergunta, resultados, autor, userId, citada, serverId, canalId, lang, modeloForcado));
     } finally {
       clearInterval(animacao);   // para a animação aconteça o que acontecer
     }

@@ -1,0 +1,111 @@
+healthCheckTimeout: 300
+
+# ══════════════════════════════════════════════════════════
+#  Configuração final, depois da avaliação de 8 candidatos.
+#
+#  A escolha foi por UM modelo residente para tudo — conversa, código,
+#  ferramentas e decisões internas. O motivo é a medição: trocar de modelo
+#  custa de 3,5 a 12 segundos nesta placa, mais que a própria inferência.
+#  Dois modelos "especializados" perdem no total para um só que fica de pé.
+#
+#  O que ficou de fora e por quê:
+#    lfm2.5-2.6b            3/5 na bateria — não chamou ferramenta nem
+#                           devolveu JSON. Era ele servindo a conversa.
+#    lfm2.5-8b-think        apontava para o MESMO arquivo do 8b-a1b: nome
+#                           diferente, bytes iguais, uma troca de modelo paga
+#                           à toa a cada pergunta de código.
+#    lfm2.5-8b-a1b          138 tok/s (4,5× mais rápido), mas 4/5 e errava
+#                           mais. Velocidade não compensa resposta errada.
+#    gemma-4-12b-qat        5/5 a 24 tok/s. É o plano B se o Qwythos
+#    gemma-4-12b-agentic    5/5 a 33 tok/s   incomodar na identidade.
+#    qwen3.8-9b-distill     4/5
+#    qwen3.8-2b-distill     3/5 — falhou as duas provas eliminatórias
+#    gemma-4-e4b-uncensored 4/5
+#    ornith-1.5-9b          5/5, mas a 5,3s/chamada
+#
+#  Os .gguf continuam em /models: voltar atrás é editar este arquivo.
+# ══════════════════════════════════════════════════════════
+
+models:
+  # ── O modelo de tudo ──────────────────────────────────
+  #
+  #  Qwythos 9B v2: Qwen3.5 uncensored pós-treinado em traces de raciocínio,
+  #  com function calling nativo — que é o que o judy-ia exige e onde os
+  #  outros falhavam (um chegou a escrever a chamada como texto no chat).
+  #
+  #  `enable_thinking: false` não é detalhe: COM raciocínio ele levou 4,2s e
+  #  falhou a prova de JSON (gastou o orçamento inteiro pensando e devolveu
+  #  vazio); SEM, 1,5s e passou em tudo. Mesmo arquivo, mesma placa.
+  #
+  #  `--model-draft` + `--spec-type draft-mtp`: decodificação especulativa.
+  #  O drafter propõe tokens e o modelo grande verifica — a resposta é
+  #  idêntica à que ele daria sozinho, só que mais rápida. Se o seu
+  #  llama.cpp não reconhecer o formato, ele avisa no log: remova as duas
+  #  linhas e nada mais muda.
+  "qwythos-9b-v2-rapido":
+    cmd: >
+      /usr/local/bin/llama-server --port ${PORT}
+      -m /models/Qwythos-9B-v2-Q4_K_M.gguf
+      --model-draft /models/Qwythos-9B-v2-MTP-Q4_K_M.gguf
+      --spec-type draft-mtp --spec-draft-n-max 4
+      -c 16384 -ngl 99 --jinja --flash-attn on --parallel 2
+      --chat-template-kwargs '{"enable_thinking":false}'
+      --temp 0.6 --top-p 0.95 --top-k 20 --repeat-penalty 1.05
+    ttl: 3600
+
+  # ── Visão: `ver_imagem` ───────────────────────────────
+  "lfm2.5-vl-3b":
+    cmd: >
+      /usr/local/bin/llama-server --port ${PORT}
+      -m /models/LFM2.5-VL-3B-Q4_K_M.gguf
+      --mmproj /models/mmproj-LFM2.5-VL-3B-F16.gguf
+      -c 8192 -ngl 99 --jinja --flash-attn on
+    ttl: 600
+
+  # ── `&chat especial`: o grande, sob demanda ───────────
+  #  ~10s de geração mais ~20s de carga. Inaceitável como padrão, aceitável
+  #  quando a pessoa pediu por ele. O bot tem cooldown de 5 min por pessoa.
+  "qwen3.8-27b":
+    cmd: >
+      /usr/local/bin/llama-server --port ${PORT}
+      -m /models/Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-Q3_K_P.gguf
+      --spec-type draft-mtp --spec-draft-n-max 3 --spec-draft-p-min 0
+      -c 8192 -ngl 99 --flash-attn on --no-mmap
+      --jinja --chat-template-kwargs '{"enable_thinking":false}'
+      --temp 0.7 --top-p 0.80 --top-k 20 --min-p 0
+      --presence-penalty 1.5 --repeat-penalty 1.0
+    ttl: 300
+
+  # ── O mesmo Qwythos, PENSANDO ─────────────────────────
+  #  Alternativa ao 27B no `&chat especial`: 4,2s contra 10,1s, e sem
+  #  carregar 13 GB. Para trocar, basta apontar OLLAMA_MODEL_ESPECIAL aqui.
+  "qwythos-9b-v2":
+    cmd: >
+      /usr/local/bin/llama-server --port ${PORT}
+      -m /models/Qwythos-9B-v2-Q4_K_M.gguf
+      --mmproj /models/mmproj-Qwythos-9B-v2-BF16.gguf
+      -c 16384 -ngl 99 --jinja --flash-attn on
+      --temp 0.6 --top-p 0.95 --top-k 20 --repeat-penalty 1.05
+    ttl: 300
+
+# ── Orçamento de VRAM (16 GB, ~2,5 GB do desktop = ~13,5 GB úteis) ──
+#   qwythos-9b-v2-rapido  ~5,7 GB + KV de 16k  → residente, sempre de pé
+#   sobram                ~7 GB                → vl-3b (~2,4 GB) quando
+#                                                pedirem imagem
+#   qwen3.8-27b           ~13 GB               → derruba tudo, e é o combinado
+groups:
+  "residentes":
+    swap: false
+    exclusive: false
+    members: ["qwythos-9b-v2-rapido"]
+
+  # Entram e saem sem derrubar o residente.
+  "sob-demanda":
+    swap: true
+    exclusive: false
+    members: ["lfm2.5-vl-3b", "qwythos-9b-v2"]
+
+  "pesados":
+    swap: true
+    exclusive: true     # 13 GB não convivem com nada
+    members: ["qwen3.8-27b"]

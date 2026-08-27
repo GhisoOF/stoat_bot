@@ -31,6 +31,8 @@ services:
       - OLLAMA_MODEL_CODIGO=ornith:9b      # programação
       - OLLAMA_MODEL_LOGICA=qwen3.5:9b     # lógica/matemática
       - OLLAMA_MODEL_DECISAO=qwen3.5:0.8b  # decisões internas (rápido)
+      - OLLAMA_MODEL_ESPECIAL=qwen3.8-27b  # só no `&chat especial` — grande e lento de propósito
+      - CHAT_ESPECIAL_COOLDOWN_MS=300000   # 5 min por pessoa (super admin não espera)
       # ── Voz nas calls (judy-voz, nativo no Gentoo) ──
       # O serviço de voz NÃO roda em Docker: ele precisa de binários nativos
       # do LiveKit e do Piper, e é melhor que caia sozinho sem levar a

@@ -1784,6 +1784,17 @@ Alibaba") é conversa normal e passa. E o criador anunciar que trocou o modelo
 nunca é tratado como "tentativa de quebrar" a personagem: é informação, não
 teste.
 
+### `&chat especial` — o modelo grande sob demanda
+
+Medido nesta instalação: o modelo de conversa responde em ~1 s a 150 tok/s; o
+grande (`qwen3.8-27b`), em ~13,6 s a 11 tok/s, mais ~19,6 s para carregar.
+Trinta segundos é inaceitável como padrão e perfeitamente aceitável quando a
+pessoa pediu por eles — então ele fica atrás de `&chat especial <pergunta>`,
+com aviso de espera e cooldown de 5 min por pessoa (`CHAT_ESPECIAL_COOLDOWN_MS`;
+super admin não espera). O modelo muda; o resto não: detecção de conta, de
+leitura de código e de escopo continua valendo. Configurável em
+`OLLAMA_MODEL_ESPECIAL`.
+
 ### Uma conversa por vez, as outras na fila
 
 A GPU gera uma resposta de cada vez. Quem chama a Judy enquanto ela responde a

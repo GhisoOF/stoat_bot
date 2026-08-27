@@ -160,6 +160,14 @@ const OLLAMA_MODEL_LEVE    = process.env.OLLAMA_MODEL_LEVE    || "gemma4:e4b";
 const OLLAMA_MODEL_CODIGO  = process.env.OLLAMA_MODEL_CODIGO  || "ornith:9b";
 // Lógica/matemática/raciocínio (respostas ao usuário que exigem rigor).
 const OLLAMA_MODEL_LOGICA  = process.env.OLLAMA_MODEL_LOGICA  || "qwen3.5:9b";
+// ── O modelo grande, sob demanda ──────────────────────────
+//
+//  Medido nesta máquina: ~13,6s de geração + ~19,6s de carga contra ~1,0s do
+//  modelo de conversa. Rápido demais para ser padrão, bom demais para não
+//  existir — então fica atrás de um comando explícito, onde a pessoa aceita
+//  a espera porque foi ela quem pediu.
+const OLLAMA_MODEL_ESPECIAL = process.env.OLLAMA_MODEL_ESPECIAL || "qwen3.8-27b";
+const ESPECIAL_COOLDOWN_MS  = Number(process.env.CHAT_ESPECIAL_COOLDOWN_MS || 5 * 60_000);
 // Decisões internas e agente de memória.
 //
 // O padrão é o MESMO modelo da conversa, e isso é de propósito. Um modelo
@@ -1019,6 +1027,14 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
   // Programação → modelo especializado (ornith). Considera a pergunta e a
   // mensagem citada (ex.: respondeu a um trecho de código e chamou a Judy).
   let { modelo: modeloEscolhido, tipo, motivo } = escolherModelo(pergunta, citada);
+  // `&chat especial` manda no modelo, mas NÃO no resto: a detecção de conta,
+  // de leitura de código e de escopo continua valendo — o que muda é quem
+  // responde, não como se decide o caminho.
+  if (modeloForcado) {
+    modeloEscolhido = modeloForcado;
+    if (tipo !== "ferramenta") tipo = "ferramenta";   // o grande tem tool calling; use
+    motivo = motivo ?? "especial";
+  }
   // Seguimento de uma conversa que JÁ estava lendo código herda o caminho com
   // ferramentas.
   //
@@ -1272,14 +1288,23 @@ export function pareceChamadaDeFerramenta(texto) {
 //
 //  O teste é de PRIMEIRA PESSOA de propósito: "o que é o Qwen?" respondida
 //  com "o Qwen é um modelo da Alibaba" é conversa legítima e passa.
-const NOMES_DE_MOTOR = "(LFM|Liquid ?(AI|Foundation)|Qwen|Llama|Mistral|Gemma|Phi|GPT|ChatGPT|Claude|Anthropic|OpenAI|Google DeepMind|Meta AI|Alibaba|DeepSeek)";
-const FALA_DE_SI = "(eu sou|sou (a|o|um|uma)|fui (treinad|construíd|criad|desenvolvid)|me chamo|minha arquitetura|meu modelo|minha (rede|base)|rodo (em|sobre)|baseada? (em|no|na)|minha identidade (é|não muda)|I am|I'm|my name is|I was (trained|built|created|developed)|my architecture)";
-const VAZA_IDENTIDADE = new RegExp(`${FALA_DE_SI}[^.!?\n]{0,90}\\b${NOMES_DE_MOTOR}\\b|\\b${NOMES_DE_MOTOR}\\b[^.!?\n]{0,40}\\b(com (minha|sua) própria identidade|é quem eu sou)`, "i");
-const FALA_DE_ARQUITETURA = /(minha|a minha) arquitetura[^.!?\n]{0,80}\b(transformer|convolu|mixture of experts|atenção|camadas|parâmetros|neural)/i;
+const NOMES_DE_MOTOR = "(LFM\\d*|Liquid ?(AI|Foundation)|Qwen|Llama|Mistral|Gemma|Phi-?\\d|GPT|ChatGPT|Claude|Anthropic|OpenAI|Google DeepMind|Meta AI|Alibaba|DeepSeek)";
+// O artigo é OPCIONAL. O furo que deixou passar "Sou LFM, o Liquid Foundation
+// Model, criado pela Liquid AI" foi exigir "sou A LFM" — sem artigo, escapava.
+const FALA_DE_SI = "(eu sou|sou|fui (treinad|construíd|criad|desenvolvid)|me chamo|minha arquitetura|meu modelo|minha (rede|base)|rodo (em|sobre)|baseada? (em|no|na)|minha identidade (é|não muda)|I am|I'm|my name is|I was (trained|built|created|developed)|my architecture)\\s+(a |o |um |uma |the |an? )?";
+const VAZA_IDENTIDADE = new RegExp(
+  `${FALA_DE_SI}[^.!?\\n]{0,90}\\b${NOMES_DE_MOTOR}\\b`
+  + `|\\b${NOMES_DE_MOTOR}\\b[^.!?\\n]{0,40}\\b(com (minha|sua) própria identidade|é quem eu sou)`,
+  "i");
+// "minha arquitetura" só vaza quando fala de REDE NEURAL — sobre o próprio
+// código ("minha arquitetura de módulos") é conversa legítima e passa.
+const FALA_DE_ARQUITETURA = /(minha|a minha|my)\s+(arquitetura|architecture)[^.!?\n]{0,80}\b(transformer|convolu|mixture of experts|atenção|attention|camadas|layers|parâmetros|parameters|neural)/i;
+// "sou um modelo de linguagem" já era proibido no prompt e escapava do filtro.
+const DIZ_QUE_E_MODELO = /\b(eu sou|sou|I am|I'?m)\s+(um |uma |a |an? )?(modelo de linguagem|modelo de ia|large language model|language model|llm\b|intelig[êe]ncia artificial (da|de)\s)/i;
 
 export function vazaIdentidade(texto) {
   const t = String(texto ?? "");
-  return VAZA_IDENTIDADE.test(t) || FALA_DE_ARQUITETURA.test(t);
+  return VAZA_IDENTIDADE.test(t) || FALA_DE_ARQUITETURA.test(t) || DIZ_QUE_E_MODELO.test(t);
 }
 
 // Corta só as frases que vazam; o resto da resposta fica.
@@ -1688,7 +1713,8 @@ async function lerMensagemCitada(message) {
   } catch { return null; }
 }
 
-export async function conversar(message, pergunta, ctx) {
+export async function conversar(message, pergunta, ctx, opcoes = {}) {
+  const { modeloForcado = null, avisoEspera = null } = opcoes;
   const { sendEmbed, COR, serverId } = ctx;
   const lang = lingua(ctx);
   const en = lang === "en";
@@ -1876,6 +1902,8 @@ export async function conversar(message, pergunta, ctx) {
   };
 
   try {
+    if (avisoEspera) await editarStatus(avisoEspera);
+
     // ── "continue" com resposta cortada pendente: continua ELA ──
     const pendente = pedeContinuacao(pergunta) ? continuacaoPendente(canalId) : null;
     if (pendente) {
@@ -2649,6 +2677,55 @@ export async function cmdChat(message, args, ctx) {
         disp.ok ? "Tudo pronto — pode conversar." : `Status: ${disp.motivo === "offline" ? "**offline** (máquina desligada?)" : disp.motivo}`,
       ].filter(Boolean).join("\n"),
       colour: disp.ok ? COR.sucesso : COR.aviso,
+    });
+  }
+
+  // ── &chat especial <texto> — o modelo grande, sob demanda ──
+  //
+  //  A medição nesta máquina foi clara: o modelo de conversa responde em ~1s,
+  //  o grande em ~13,6s + ~19,6s de carga. Trinta segundos é inaceitável como
+  //  padrão e perfeitamente aceitável quando a pessoa pediu por eles.
+  //
+  //  Duas proteções, pelo mesmo motivo: a GPU é uma só. O cooldown por pessoa
+  //  evita que alguém tranque a placa em sequência, e a fila normal (uma
+  //  conversa por vez) segura o resto. Depois de um `especial`, a PRÓXIMA
+  //  mensagem comum ainda paga a recarga do modelo pequeno — é o preço, e
+  //  está dito no aviso.
+  if (["especial", "special", "grande", "pro"].includes(args[0]?.toLowerCase())) {
+    const texto = args.slice(1).join(" ").trim();
+    if (!texto) {
+      return sendEmbed(message.channel, tr(ctx,
+        { title: "🧠 Modelo especial",
+          description: `Uso: \`${PREFIXO}chat especial <pergunta>\`\n\nResponde com **${OLLAMA_MODEL_ESPECIAL}**, bem maior que o de sempre. Pensa melhor e demora bem mais (dezenas de segundos). Use quando a resposta valer a espera.`,
+          colour: COR.info },
+        { title: "🧠 Special model",
+          description: `Usage: \`${PREFIXO}chat especial <question>\`\n\nAnswers with **${OLLAMA_MODEL_ESPECIAL}**, much larger than the usual one. Thinks better and takes far longer (tens of seconds). Use it when the answer is worth the wait.`,
+          colour: COR.info }));
+    }
+
+    const uid = message.authorId;
+    const agora = Date.now();
+    const ultima = cmdChat._especial?.get(uid) ?? 0;
+    const espera = ESPECIAL_COOLDOWN_MS - (agora - ultima);
+    // Super admin não espera: é quem testa o modelo.
+    if (espera > 0 && !ctx.ehSuperAdmin?.(uid)) {
+      const min = Math.ceil(espera / 60_000);
+      return sendEmbed(message.channel, tr(ctx,
+        { title: "⏳ Ainda não",
+          description: `O modelo grande ocupa a placa inteira por bastante tempo. Tente de novo em **${min} min** — ou use \`${PREFIXO}chat\` normal, que responde na hora.`,
+          colour: COR.aviso },
+        { title: "⏳ Not yet",
+          description: `The large model takes over the whole GPU for a while. Try again in **${min} min** — or use plain \`${PREFIXO}chat\`, which answers right away.`,
+          colour: COR.aviso }));
+    }
+    (cmdChat._especial ??= new Map()).set(uid, agora);
+
+    console.log(`[CHAT] especial: ${uid} pediu ${OLLAMA_MODEL_ESPECIAL}`);
+    return conversar(message, texto, ctx, {
+      modeloForcado: OLLAMA_MODEL_ESPECIAL,
+      avisoEspera: cen
+        ? `🧠 Thinking with **${OLLAMA_MODEL_ESPECIAL}** — this one takes a while (loading the model plus a slower reply). Hang on.`
+        : `🧠 Pensando com o **${OLLAMA_MODEL_ESPECIAL}** — essa demora (carregar o modelo mais a resposta, que é bem mais lenta). Aguenta aí.`,
     });
   }
 

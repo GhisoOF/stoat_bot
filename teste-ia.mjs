@@ -700,6 +700,12 @@ console.log("\n── identidade: conferida antes de sair ──");
   ok(vaza("Minha arquitetura é baseada em convoluções curtas e atenção por garganta (mixture of experts)."),
     "  → e a 'arquitetura' em termos de rede neural também");
   ok(vaza("I am Qwen, a large language model created by Alibaba."), "  → em inglês");
+  ok(vaza("Sou LFM, o Liquid Foundation Model, criado pela Liquid AI."),
+    "★ SEM artigo também — exigir 'sou A LFM' foi o furo que deixou essa frase passar depois do primeiro conserto");
+  ok(vaza("sou um modelo de linguagem de verdade, construído para conversar"),
+    "  → e 'sou um modelo de linguagem', que o prompt proíbe desde sempre e o filtro não pegava");
+  ok(!vaza("Um LLM é um modelo de linguagem grande, treinado em muito texto."),
+    "  → mas EXPLICAR o que é um LLM continua passando: o teste é sobre se apresentar");
   ok(!vaza("O Qwen é um modelo da Alibaba, bem bom para código."),
     "★ mas falar SOBRE um modelo não é se apresentar como ele — o teste é de primeira pessoa");
   ok(!vaza("Sou a Judy, feita pelo Ghiso. Rodo num modelo local que ele escolhe."), "  → e a apresentação certa passa");
@@ -803,6 +809,10 @@ console.log("\n── histórico: por canal, com prazo, e apagável ──");
 
   ok(db.getHistorico(U, 6, { canalId: C1 }).length === 2, "★ o histórico volta no canal onde a conversa aconteceu");
   ok(db.getHistorico(U, 6, { canalId: C2 }).length === 0, "  → e NÃO vaza para outro canal");
+  // `momento` tem resolução de milissegundo: inserir e consultar com prazo 0
+  // no mesmo ms fazia a linha passar, e o teste piscava. A espera tira a
+  // corrida sem enfraquecer o que está sendo verificado.
+  await new Promise((r) => setTimeout(r, 5));
   ok(db.getHistorico(U, 6, { canalId: C1, minutos: 0 }).length === 0,
     "★ nem sobrevive ao prazo — conversa de uma hora atrás não é continuidade");
 

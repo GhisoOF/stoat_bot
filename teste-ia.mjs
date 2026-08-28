@@ -1180,5 +1180,87 @@ console.log("\n── esquecer de verdade, e blocos separados ──");
     "  → e o bloco dela diz o que ela NÃO tem: foi bio e link de terceiro que ela adotou como seus");
 }
 
+// ══ 34. A segunda memória, que ninguém apagava ══
+//
+//  Depois de um `esquecer tudo` que reportou "0 fato(s) de pessoas, 0 do
+//  servidor", a Judy ainda sabia que "o Arch é o favorito". Não vinha do
+//  agente de fatos nem do fio: existe uma tabela `ia_memoria`, anterior ao
+//  agente, que continuou sendo LIDA no prompt ("Você já conversou com esta
+//  pessoa antes. Memória…") e que o comando não tocava.
+console.log("\n── a segunda memória (ia_memoria) ──");
+{
+  const db = await import("./modulos/core/db.js");
+  const S = "srv-esq", U = "u-esq", OUTRO = "u-de-outro-servidor";
+
+  db.setMemoria(U, { nome: "Ghiso", fatos: ["gosta de Linux", "Arch é o favorito"] });
+  db.setMemoria(OUTRO, { nome: "Alguém", fatos: ["nada a ver"] });
+  db.addHistorico(U, "user", "oi", { serverId: S, canalId: "c" });
+  ok(db.getMemoria(U).fatos.length === 2, "a memória global existe antes de esquecer");
+
+  const r = db.apagarMemoriaServidor(S);
+  ok(db.getMemoria(U).fatos.length === 0,
+    "★ `esquecer tudo` agora apaga a ia_memoria — era daí que vinha o 'Arch' depois de zerar tudo");
+  ok(r.memoriaAntiga >= 1, `  → e reporta quantas apagou (${r.memoriaAntiga})`);
+  ok(db.getMemoria(OUTRO).fatos.length === 1,
+    "★ sem tocar em quem não tem registro AQUI — a tabela não tem serverId, então o alvo são os ids deste servidor");
+
+  const fonte = fs.readFileSync("./modulos/core/db.js", "utf8");
+  ok(/coletado ANTES dos DELETEs/.test(fonte),
+    "  → e os ids são coletados ANTES dos deletes: depois, as tabelas de referência já estariam vazias");
+  const chat = fs.readFileSync("./modulos/ai/chat.js", "utf8");
+  ok(/memória\(s\) global\(is\)/.test(chat), "  → o comando diz quantas apagou, para o próximo caso ser visível");
+  ok(/db\.limparMemoria\(userId\);/.test(chat), "  → e o `esquecer` individual já limpava a dele");
+}
+
+// ══ 35. A ficha técnica: ela sabe de si ══
+//
+//  "Você está em mais algum servidor?" → "Só neste aqui." O `&servidores`
+//  listava DEZ, com 4.575 membros. Ela não mentiu: ninguém tinha contado a
+//  ela. Todo o prompt falava de tom, de regras e da pessoa do outro lado;
+//  nada falava do estado do próprio processo.
+console.log("\n── ficha técnica: o que ela sabe de si ──");
+{
+  const f = await import("./modulos/ai/ficha.js");
+  const db = await import("./modulos/core/db.js");
+
+  const client = { servers: new Map([
+    ["a", { _id: "a", name: "Vapor Nexus", member_count: 216 }],
+    ["b", { _id: "b", name: "Queremos acordar tarde!", member_count: 2805 }],
+    ["c", { _id: "c", name: "teste", member_count: 2 }],
+  ]) };
+  process.env.OLLAMA_MODEL_LEVE = "qwythos-9b-v2-rapido";
+  process.env.OLLAMA_MODEL_ESPECIAL = "qwen3.8-27b";
+  const txt = await f.fichaTecnica({ client }, { serverIdAtual: "a" });
+
+  ok(/Servidores em que você está: 3 \(3023 membros/.test(txt),
+    "★ a ficha conta os servidores e os membros — o dado que faltava para 'só neste aqui'");
+  ok(/Vapor Nexus — 216 membro\(s\)\s+← VOCÊ ESTÁ AQUI AGORA/.test(txt),
+    "  → marcando em qual deles ela está agora");
+  ok(txt.indexOf("Queremos acordar tarde") < txt.indexOf("teste"),
+    "  → maiores primeiro: num bot com 50 servidores, são eles que contam a história");
+  ok(/qwythos-9b-v2-rapido/.test(txt) && /qwen3\.8-27b/.test(txt),
+    "★ e os modelos por papel — dizer QUAL modelo a executa é config do dono, não identidade");
+  ok(/De pé há:/.test(txt) && /Memória neste servidor:/.test(txt),
+    "  → mais uptime e a contagem de memória, para ela poder dizer 'nada' com convicção");
+  ok(/<sua_ficha_tecnica>/.test(txt) && /não os confunda com informação sobre a pessoa/.test(txt),
+    "  → num bloco próprio, separado do que é da pessoa");
+
+  const sim = ["você está em mais algum servidor?", "em quantos servidores você está?",
+    "há quanto tempo você está no ar?", "qual modelo você usa?", "qual é o seu modelo?",
+    "o que você tem mapeado de mim?", "você dorme?", "onde você está rodando?", "me dá seu status"];
+  const nao = ["bom dia", "quanto é 2+2?", "que servidor é este?", "quais são seus comandos?",
+    "o que é um modelo de linguagem?", "me explica o que é um servidor DNS", "esse modelo de negócio é ruim"];
+  ok(sim.every((q) => f.perguntaSobreOEstado(q)), "★ as perguntas sobre o estado dela são reconhecidas");
+  ok(nao.every((q) => !f.perguntaSobreOEstado(q)),
+    "  → e a ficha NÃO entra num 'bom dia': são ~600 tokens e contar membros custa tempo");
+
+  const fonte = fs.readFileSync("./modulos/ai/chat.js", "utf8");
+  ok(/ficha\.perguntaSobreOEstado\(pergunta\)/.test(fonte) && /fichaTxt,/.test(fonte),
+    "  → montada sob demanda em conversar() e injetada como bloco próprio");
+  const srv = fs.readFileSync("./modulos/moderacao/servidores.js", "utf8");
+  ok(/export function listarServidores/.test(srv),
+    "  → reusando a mesma coleta do `&servidores`: uma fonte, não duas que divergem");
+}
+
 console.log(`\nIA: ${pass} ok, ${fail} falha(s)`);
 process.exit(fail ? 1 : 0);

@@ -1068,13 +1068,38 @@ export function apagarTudoDaPessoa(serverId, userId) {
 
 // Apaga TODA a memória da IA no servidor (fatos de pessoas, de servidor, perfis).
 export function apagarMemoriaServidor(serverId) {
+  // Quem tem registro NESTE servidor — coletado ANTES dos DELETEs, senão as
+  // tabelas de referência já estariam vazias quando fôssemos consultá-las.
+  let idsDaqui = [];
+  try {
+    idsDaqui = prep(`SELECT userId FROM ia_perfil WHERE serverId = ?
+      UNION SELECT userId FROM ia_fatos_pessoa WHERE serverId = ?
+      UNION SELECT userId FROM ia_historico WHERE serverId = ?`)
+      .all(serverId, serverId, serverId).map((r) => r.userId).filter(Boolean);
+  } catch {}
+
   const fp = prep("DELETE FROM ia_fatos_pessoa WHERE serverId = ?").run(serverId).changes ?? 0;
   const fs = prep("DELETE FROM ia_fatos_servidor WHERE serverId = ?").run(serverId).changes ?? 0;
   const pf = prep("DELETE FROM ia_perfil WHERE serverId = ?").run(serverId).changes ?? 0;
   // O histórico curto também: sem isto, "esquecei tudo" dizia ter esquecido
   // e a conversa anterior continuava chegando ao prompt na mensagem seguinte.
   const hi = prep("DELETE FROM ia_historico WHERE serverId = ?").run(serverId).changes ?? 0;
-  return { fatosPessoa: fp, fatosServidor: fs, perfis: pf, historico: hi };
+  // ── A segunda memória, que ninguém apagava ────────────
+  //
+  //  `ia_memoria` é anterior ao agente de fatos e continuou sendo LIDA no
+  //  prompt (chat.js: "Você já conversou com esta pessoa antes. Memória…").
+  //  O `esquecer tudo` apagava quatro tabelas e não esta — então, depois de
+  //  uma limpeza que reportava "0 fato(s)", a Judy ainda sabia que o Arch era
+  //  o favorito de alguém.
+  //
+  //  Ela é chaveada só por `userId`, sem servidor: não há como limpar "só
+  //  deste servidor". Apagamos as linhas de quem tem registro AQUI, que é o
+  //  mais próximo do que o comando promete.
+  let me = 0;
+  try {
+    for (const id of idsDaqui) me += prep("DELETE FROM ia_memoria WHERE userId = ?").run(id).changes ?? 0;
+  } catch {}
+  return { fatosPessoa: fp, fatosServidor: fs, perfis: pf, historico: hi, memoriaAntiga: me };
 }
 
 // ── Memória de longo prazo: FATOS sobre o servidor ─────────

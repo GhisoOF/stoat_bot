@@ -25,6 +25,7 @@ import * as db from "../core/db.js";
 import * as memoria from "./memoria-agente.js";
 import * as comentario from "./comentario-espontaneo.js";
 import * as cacheCanal from "./cache-canal.js";
+import * as ficha from "./ficha.js";
 import { resolverCargo } from "../core/ids.js";
 import { construirDetalhes } from "../moderacao/geral.js";
 import * as desinteresse from "./desinteresse.js";
@@ -944,7 +945,7 @@ function hojeExtenso() {
 // função de topo, irmã de `conversar`, não aninhada nela. Ler a variável de
 // lá dava `modeloForcado is not defined` — e derrubava TODA conversa, não só
 // o `&chat especial`, porque a linha executa em qualquer caminho.
-async function responder(pergunta, resultados, autor, userId, citada, serverId, canalId, lang = "pt", modeloForcado = null, local = null) {
+async function responder(pergunta, resultados, autor, userId, citada, serverId, canalId, lang = "pt", modeloForcado = null, local = null, fichaTxt = "") {
   const hoje = hojeExtenso();
 
   // memória do usuário (global): o que a IA já sabe sobre ele
@@ -1134,6 +1135,7 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
     memoriaTxt,
     souTxt,
     ondeTxt,
+    fichaTxt,
     fatosTxt,
     tomTxt,
     canalTxt,
@@ -2057,6 +2059,19 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
     if (local.servidor) dlog(`local: "${local.servidor}"${local.canal ? ` #${local.canal}` : ""}`);
   } catch (e) { dlog(`não consegui o nome do servidor (${e?.message ?? e})`); }
 
+  // Ficha técnica: só quando a pergunta é sobre o estado dela. Contar
+  // membros de dez servidores custa tempo e ~600 tokens — não é coisa para
+  // um "bom dia". Mas quando perguntam, a resposta certa está aqui.
+  let fichaTxt = "";
+  try {
+    if (ficha.perguntaSobreOEstado(pergunta)) {
+      fichaTxt = await ficha.fichaTecnica(
+        { ...ctx, client: message.client ?? ctx.client, userIdAtual: message.authorId },
+        { serverIdAtual: serverId });
+      if (fichaTxt) dlog(`ficha técnica injetada (${fichaTxt.length} chars)`);
+    }
+  } catch (e) { dlog(`ficha falhou (${e?.message ?? e})`); }
+
   const disp = await ollamaDisponivel();
   if (!disp.ok) {
     liberarVez();   // libera (ou passa ao próximo): não vamos gerar nada
@@ -2216,7 +2231,7 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
     const canalId = message.channelId || message.channel?.id || null;
     let resposta;
     try {
-      resposta = limpar(await responder(pergunta, resultados, autor, userId, citada, serverId, canalId, lang, modeloForcado, local));
+      resposta = limpar(await responder(pergunta, resultados, autor, userId, citada, serverId, canalId, lang, modeloForcado, local, fichaTxt));
     } finally {
       clearInterval(animacao);   // para a animação aconteça o que acontecer
     }
@@ -2729,10 +2744,10 @@ export async function cmdChat(message, args, ctx) {
         console.log(`[CHAT] esquecer tudo: banco (${r.fatosPessoa}+${r.fatosServidor}+${r.perfis}+${r.historico}) e memória (fio, ${mem.respostas} resposta(s), ${mem.pendentes} pendente(s))`);
         return sendEmbed(message.channel, tr(ctx, {
           title: "🧹 Memória geral apagada",
-          description: `Esqueci tudo neste servidor: ${r.fatosPessoa} fato(s) de pessoas, ${r.fatosServidor} do servidor, ${r.perfis} perfil(is) e ${r.historico} mensagem(ns) de conversa recente — além do fio de todos os canais e do que o agente ainda ia gravar. Recomeço do zero.`, colour: COR.sucesso,
+          description: `Esqueci tudo neste servidor: ${r.fatosPessoa} fato(s) de pessoas, ${r.fatosServidor} do servidor, ${r.perfis} perfil(is), ${r.historico} mensagem(ns) de conversa recente e ${r.memoriaAntiga ?? 0} memória(s) global(is) — além do fio de todos os canais e do que o agente ainda ia gravar. Recomeço do zero.`, colour: COR.sucesso,
         }, {
           title: "🧹 General memory erased",
-          description: `I forgot everything on this server: ${r.fatosPessoa} fact(s) about people, ${r.fatosServidor} about the server, ${r.perfis} profile(s) and ${r.historico} recent conversation message(s) — plus every channel's live thread and anything the agent was about to record. Starting from scratch.`, colour: COR.sucesso,
+          description: `I forgot everything on this server: ${r.fatosPessoa} fact(s) about people, ${r.fatosServidor} about the server, ${r.perfis} profile(s), ${r.historico} recent conversation message(s) and ${r.memoriaAntiga ?? 0} global memory record(s) — plus every channel's live thread and anything the agent was about to record. Starting from scratch.`, colour: COR.sucesso,
         }));
       } catch {
         return sendEmbed(message.channel, tr(ctx,

@@ -1757,6 +1757,26 @@ convida o modelo a completá-lo em vez de responder ao que foi perguntado. E
 os dois comandos de esquecer (`&chat esquecer` e `&chat esquecer tudo`) agora
 limpam esse histórico — antes ele sobrevivia aos dois.
 
+### Ficha técnica: ela sabe de si, com número
+
+Perguntada "você está em mais algum servidor?", a Judy respondia "só neste
+aqui" — enquanto o `&servidores` listava dez, com 4.575 membros. Ela não
+mentia: nada no prompt falava do estado do próprio processo.
+
+`modulos/ai/ficha.js` monta um bloco `<sua_ficha_tecnica>` com os servidores
+(marcando em qual ela está agora), membros, uptime, os modelos por papel, os
+serviços ligados e a contagem de memória — tudo lido do cliente, do banco e do
+ambiente, na hora. Serve para perguntar a ela em vez de ir ao terminal:
+*"em quantos servidores você está?"*, *"qual modelo você usa?"*,
+*"o que você tem mapeado de mim?"*.
+
+É montada **sob demanda** (`perguntaSobreOEstado`), porque são ~600 tokens e
+contar membros de dez servidores custa tempo — não é coisa para um "bom dia".
+E vive no processo do bot, não como ferramenta do `judy-ia`: aquele serviço
+roda em outra máquina e não tem o cliente Stoat nem o banco, então não
+conseguiria listar servidor nenhum. Reusa a coleta do `&servidores`, para não
+haver duas fontes que divergem.
+
 ### Quatro blocos com fronteira: ela, o lugar, a pessoa, o fio
 
 O prompt separa em blocos rotulados o que é **dela** (`<quem_voce_e>` — e o
@@ -1769,6 +1789,14 @@ Sem essa separação tudo chegava como texto solto e ela misturava: leu
 `Server: https://stt.gg/…` e `Meu Bot: Cobaia#7705` na bio do dono, passou a
 afirmar que aquele era o **seu** endereço e a chamar o dono de **Cobaia** —
 o nome do próprio bot.
+
+### `esquecer` esquece tudo mesmo — as duas memórias e o processo
+
+Existem **duas** memórias no banco: a do agente de fatos (`ia_fatos_pessoa`,
+por servidor) e uma anterior a ela, `ia_memoria`, global por usuário e ainda
+lida no prompt. O `esquecer tudo` apagava só a primeira — então, depois de
+uma limpeza que reportava "0 fato(s) de pessoas", a Judy ainda sabia coisas.
+Agora apaga as duas, e reporta quantas linhas de cada.
 
 ### `esquecer` esquece o processo, não só o banco
 

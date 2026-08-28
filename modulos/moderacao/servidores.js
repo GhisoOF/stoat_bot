@@ -47,7 +47,7 @@ export function porMinuto(serverId) {
 // Quanto tempo o bot está de pé (usado no rodapé).
 let inicio = agora();
 export function marcarInicio() { inicio = agora(); }
-function tempoDePe() {
+export function tempoDePe() {
   const s = Math.floor((agora() - inicio) / 1000);
   const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60);
   return d ? `${d}d ${h}h` : h ? `${h}h ${m}min` : `${m}min`;
@@ -58,6 +58,18 @@ function tempoDePe() {
 import { contarMembros } from "../core/membros.js";
 
 import { tr, lingua } from "../core/i18n.js";
+
+// A lista de servidores do cliente, nos três formatos que a lib pode entregar.
+// Exportada porque a Judy também precisa dela: perguntada "você está em mais
+// algum servidor?", ela respondeu "só neste aqui" enquanto o `&servidores`
+// listava dez. Ela não mentiu — ninguém tinha contado a ela.
+export function listarServidores(client) {
+  const s = client?.servers;
+  if (s?.values) return [...s.values()];
+  if (Array.isArray(s)) return s;
+  if (s && typeof s === "object") return Object.values(s);
+  return [];
+}
 
 export async function cmdServidores(message, args, ctx) {
   const { sendEmbed, COR, client, ehSuperAdmin } = ctx;
@@ -103,10 +115,7 @@ export async function cmdServidores(message, args, ctx) {
   // Coleta os servidores conhecidos pelo cliente.
   let lista = [];
   try {
-    const s = client?.servers;
-    if (s?.values) lista = [...s.values()];
-    else if (Array.isArray(s)) lista = s;
-    else if (s && typeof s === "object") lista = Object.values(s);
+    lista = listarServidores(client);
   } catch (e) {
     return sendEmbed(message.channel, tr(ctx,
       { title: "❌ Não consegui listar",

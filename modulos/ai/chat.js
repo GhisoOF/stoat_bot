@@ -999,7 +999,22 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
       // O nome da etiqueta importa: `<memoria_longo_prazo>` sugeria "coisas
       // que eu sei", e lá dentro estava a bio de outra pessoa. Agora a
       // etiqueta diz de quem é o conteúdo.
-      fatosTxt = `\n\n<sobre_a_pessoa_com_quem_voce_fala>\n${bloco}\n</sobre_a_pessoa_com_quem_voce_fala>\nTudo acima é sobre ${autor || "essa pessoa"}, NÃO sobre você. Não trate links, bots ou servidores citados aí como sendo seus.`;
+      // ── O nome do próprio bot dentro da bio de outra pessoa ──
+      //
+      //  Rotular o bloco não bastou: a bio do dono diz "Meu Bot: Cobaia#7705",
+      //  e pela terceira vez a Judy passou a chamá-lo de "Cobaia". O modelo vê
+      //  um nome perto de uma pessoa e o adota como o nome dela.
+      //
+      //  Aqui o nome sai do texto e vira uma anotação. Não é censura: é tirar
+      //  a ambiguidade de um dado que, cru, é indistinguível de um apelido.
+      const meuNome = message?.client?.user?.username ?? null;
+      let blocoLimpo = bloco;
+      for (const alvo of [meuNome, "Judy", "Cobaia"].filter(Boolean)) {
+        const re = new RegExp(`\\b${alvo.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(#\\d+)?\\b`, "gi");
+        blocoLimpo = blocoLimpo.replace(re, `(uma referência A VOCÊ, a bot — não é o nome desta pessoa)`);
+      }
+      if (blocoLimpo !== bloco) dlog("bio citava o nome da própria bot — neutralizado");
+      fatosTxt = `\n\n<sobre_a_pessoa_com_quem_voce_fala>\n${blocoLimpo}\n</sobre_a_pessoa_com_quem_voce_fala>\nTudo acima é sobre ${autor || "essa pessoa"}, NÃO sobre você. O nome dela é ${autor || "o que o Stoat mostra"} e nada mais: qualquer outro nome que apareça aí dentro é de bot, servidor ou projeto citado por ela. Não trate links, bots ou servidores citados aí como sendo seus.`;
       dlog(`memória: ${bloco.split("\n").filter(l => l.startsWith("- ")).length} fato(s) injetado(s)`);
     }
   } catch {}
@@ -1569,6 +1584,28 @@ export function suavizarAcusacao(texto) {
   return mudou ? t : null;   // null = nada a mudar
 }
 
+// ── Respondeu em espanhol ────────────────────────────────
+//
+//  "Soy Judy, una bot creada por Ghiso para la plataforma Stoat." O prompt
+//  manda responder em português do Brasil, e é a terceira regra de idioma
+//  que um modelo ignora aqui. Pior: ao ser corrigida, ela culpou "a Cobaia"
+//  por ter escrito em espanhol — a pergunta era português puro.
+//
+//  Espanhol e português compartilham quase tudo, então o teste procura o que
+//  NÃO existe em português: `ñ`, `¿`, `¡`, e palavras funcionais que só
+//  existem em castelhano. Duas ocorrências bastam; uma pode ser citação.
+const SO_ESPANHOL = /\b(soy|eres|estoy|estás|somos|tú|usted|ustedes|nosotros|pero|porque sí|también|entonces|ahora|aquí|allí|muy|siempre|nunca más|puedo|quieres|tienes|hacer|hola|gracias|por favor te|sí|una bot|un bot|creada por|creado por|entiendo|lo siento|dime|dígame)\b/gi;
+
+export function pareceEspanhol(texto) {
+  const t = String(texto ?? "");
+  if (!t.trim()) return false;
+  if (/[ñ¿¡]/.test(t)) return true;
+  const achados = new Set((t.match(SO_ESPANHOL) ?? []).map((x) => x.toLowerCase()));
+  // "sí" com acento e "tú" são inequívocos; o resto precisa de companhia.
+  if (/\b(sí|tú|usted|soy|eres|estoy)\b/i.test(t) && achados.size >= 2) return true;
+  return achados.size >= 3;
+}
+
 export function limpar(texto) {
   if (!texto) return "";
   let t = texto.replace(/<think>[\s\S]*?<\/think>/gi, "");   // blocos completos
@@ -1852,11 +1889,12 @@ export function perguntaSobreORepo(texto) {
 //  está subentendido. Guardamos o último roteamento por canal para que um
 //  seguimento curto herde o caminho, em vez de recomeçar sem ferramenta.
 const ultimoRoteamento = new Map();   // canalId → { tipo, quando }
+const ultimaFichaCanal = new Map();   // canalId → quando a ficha foi injetada
 const JANELA_SEGUIMENTO_MS = Number(process.env.CHAT_SEGUIMENTO_MS || 10 * 60_000);
 
 // Marcas de que a mensagem se apoia no que já foi dito, em vez de trazer
 // assunto novo: pronome sem antecedente, pedido de aprofundar, frase curta.
-function pareceSeguimento(texto) {
+export function pareceSeguimento(texto) {
   const t = String(texto ?? "").toLowerCase().trim();
   if (!t) return false;
   const palavras = t.split(/\s+/).length;
@@ -1864,6 +1902,10 @@ function pareceSeguimento(texto) {
   if (/\b(mais (sobre|detalhe|a fundo)|detalha|aprofunda|explica melhor|continua|e (depois|al[ée]m disso))\b/.test(t)) return true;
   // Frase curta sem sujeito novo: "e a lógica?", "por quê?", "como assim?"
   if (palavras <= 12 && /^(e |mas |por que|porque|por qu[êe]|como|qual|quais|quando|onde)/.test(t)) return true;
+  // Pedido imperativo curto, que só faz sentido com o turno anterior:
+  // "liste todos, por favor" — foi este que perdeu a ficha e virou uma lista
+  // inventada com Discord, Matrix e Telegram.
+  if (palavras <= 8 && /^(liste|lista|mostra|mostre|manda|mande|diga|fala|me d[êe]|me mostra|continua|continue|todos|todas)\b/.test(t)) return true;
   return false;
 }
 
@@ -2062,13 +2104,24 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
   // Ficha técnica: só quando a pergunta é sobre o estado dela. Contar
   // membros de dez servidores custa tempo e ~600 tokens — não é coisa para
   // um "bom dia". Mas quando perguntam, a resposta certa está aqui.
+  //  E o seguimento conta: "em quais servidores você está?" trouxe a ficha,
+  //  mas o "liste todos, por favor" seguinte não tem palavra-chave nenhuma —
+  //  a ficha saiu do prompt e ela inventou uma lista com Discord, Matrix e
+  //  Telegram, que nem servidores são. Se a última pergunta foi sobre o
+  //  estado dela, a seguinte que se apoia nela também recebe.
   let fichaTxt = "";
   try {
-    if (ficha.perguntaSobreOEstado(pergunta)) {
+    const seguimentoDaFicha = ultimaFichaCanal.get(canalId)
+      && (Date.now() - ultimaFichaCanal.get(canalId) < 10 * 60_000)
+      && pareceSeguimento(pergunta);
+    if (ficha.perguntaSobreOEstado(pergunta) || seguimentoDaFicha) {
       fichaTxt = await ficha.fichaTecnica(
         { ...ctx, client: message.client ?? ctx.client, userIdAtual: message.authorId },
         { serverIdAtual: serverId });
-      if (fichaTxt) dlog(`ficha técnica injetada (${fichaTxt.length} chars)`);
+      if (fichaTxt) {
+        ultimaFichaCanal.set(canalId, Date.now());
+        dlog(`ficha técnica injetada (${fichaTxt.length} chars)${seguimentoDaFicha ? " [seguimento]" : ""}`);
+      }
     }
   } catch (e) { dlog(`ficha falhou (${e?.message ?? e})`); }
 
@@ -2254,6 +2307,22 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
     if (resposta) {
       const convertido = semLatex(resposta);
       if (convertido !== resposta) { dlog("LaTeX convertido para texto legível"); resposta = convertido; }
+    }
+
+    // Idioma: o prompt manda responder em português e ela respondeu em
+    // espanhol. Refaz uma vez com a ordem na última posição — que é onde ela
+    // pesa mais — antes de entregar.
+    if (resposta && lang !== "es" && !en && pareceEspanhol(resposta)) {
+      console.warn(`[CHAT] ⚠️ resposta veio em espanhol — refazendo: "${resposta.slice(0, 80)}…"`);
+      dlog("idioma errado (espanhol) → refazendo");
+      try {
+        const refeita = await ollamaChat([
+          ...messages,
+          { role: "system", content: "OBRIGATÓRIO: responda em PORTUGUÊS DO BRASIL. Não use espanhol em hipótese alguma. A pergunta foi feita em português. Reescreva sua resposta inteira em português do Brasil." },
+        ], { maxTokens: MAX_TOKENS, modelo: responder._modelo ?? OLLAMA_MODEL_LEVE });
+        const limpa = limpar(refeita);
+        if (limpa && !pareceEspanhol(limpa)) resposta = limpa;
+      } catch (e) { dlog(`refazer idioma falhou (${e?.message ?? e})`); }
     }
 
     // Acusar quem a corrige de estar delirando é sempre errado — e ela não
@@ -2484,11 +2553,13 @@ export function limparEstadoEmMemoria({ canalId = null } = {}) {
   try { cacheCanal.limpar(canalId); } catch {}
   if (canalId) {
     ultimaResposta.delete(canalId);
+    ultimaFichaCanal.delete(canalId);
     ultimoRoteamento.delete(canalId);
     _ultimaAvaliacaoLivre.delete(canalId);
     for (const k of [..._engajamento.keys()]) if (String(k).startsWith(`${canalId}:`)) _engajamento.delete(k);
   } else {
     ultimaResposta.clear();
+    ultimaFichaCanal.clear();
     ultimoRoteamento.clear();
     _ultimaAvaliacaoLivre.clear();
     _engajamento.clear();

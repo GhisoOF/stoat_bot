@@ -1104,7 +1104,7 @@ console.log("\n── de quem é a bio, e cabe no contexto ──");
   // O `\`` na busca evita casar com o comentário que explica a mudança.
   ok(/<sobre_a_pessoa_com_quem_voce_fala>/.test(fonte) && !/\$\{bloco\}\\n<\/memoria_longo_prazo>/.test(fonte),
     "★ o bloco de memória diz de QUEM é o conteúdo — 'memoria_longo_prazo' soava como 'coisas que eu sei'");
-  ok(/NÃO sobre você. Não trate links, bots ou servidores citados aí como sendo seus/.test(fonte),
+  ok(/NÃO sobre você\./.test(fonte) && /Não trate links, bots ou servidores citados aí como sendo seus/.test(fonte),
     "  → e diz explicitamente que links e bots de lá não são dela");
   ok(/texto que ELA escreveu sobre si mesma/.test(mem) && /nunca seus/.test(mem),
     "  → o cartão de perfil também, na própria borda do bloco");
@@ -1260,6 +1260,49 @@ console.log("\n── ficha técnica: o que ela sabe de si ──");
   const srv = fs.readFileSync("./modulos/moderacao/servidores.js", "utf8");
   ok(/export function listarServidores/.test(srv),
     "  → reusando a mesma coleta do `&servidores`: uma fonte, não duas que divergem");
+}
+
+// ══ 36. A ficha some no seguimento; a bio ainda dá o nome; e o espanhol ══
+//
+//  Três falhas da mesma sessão. "Em quais servidores você está?" trouxe a
+//  ficha — mas o "liste todos, por favor" seguinte não tem palavra-chave
+//  nenhuma, a ficha saiu do prompt e ela listou Discord, Matrix, Telegram e
+//  WhatsApp como se fossem servidores dela. A bio voltou a fazê-la chamar o
+//  dono de "Cobaia", pela terceira vez. E ela respondeu em espanhol, culpando
+//  "a Cobaia" por isso quando corrigida.
+console.log("\n── ficha no seguimento, nome na bio, espanhol ──");
+{
+  const chat = await import("./modulos/ai/chat.js");
+  const f = await import("./modulos/ai/ficha.js");
+
+  ok(!f.perguntaSobreOEstado("liste todos, por favor"),
+    "'liste todos' sozinho não tem palavra-chave — e não deveria mesmo ter");
+  ok(chat.pareceSeguimento("liste todos, por favor") && chat.pareceSeguimento("me mostra a lista"),
+    "★ mas é SEGUIMENTO: o pedido imperativo curto se apoia no turno anterior");
+  ok(!chat.pareceSeguimento("crie uma calculadora em Lua com interface gráfica"),
+    "  → sem pegar pedido novo e completo");
+  const fonte = fs.readFileSync("./modulos/ai/chat.js", "utf8");
+  ok(/seguimentoDaFicha/.test(fonte) && /ultimaFichaCanal/.test(fonte),
+    "  → e a ficha é reinjetada por 10 min quando a conversa continua nela");
+  ok(/ultimaFichaCanal\.clear\(\)/.test(fonte), "  → limpa junto com o resto no `esquecer`");
+
+  ok(/uma referência A VOCÊ, a bot/.test(fonte),
+    "★ o nome da própria bot é retirado da bio de terceiro e vira anotação");
+  ok(/const meuNome = message\?\.client\?\.user\?\.username/.test(fonte),
+    "  → usando o nome real do cliente, não só a lista fixa");
+
+  const casos = [
+    [true, "Soy Judy, una bot creada por Ghiso para la plataforma Stoat."],
+    [true, "Hola, ¿cómo estás? Puedo ayudarte."],
+    [true, "Sí, entiendo. Estoy aquí para ayudar, dime lo que necesitas."],
+    [false, "Sou a Judy, uma bot feita pelo Ghiso para a plataforma Stoat."],
+    [false, "O comando é `sí` em espanhol, mas aqui usamos sim."],
+    [false, "A função `hacer()` do PHP não existe; você quis dizer outra coisa?"],
+  ];
+  ok(casos.every(([esp, t]) => chat.pareceEspanhol(t) === esp),
+    "★ espanhol é detectado — e uma frase em português que MENCIONA espanhol passa");
+  ok(/refazendo: "\$\{resposta\.slice\(0, 80\)\}/.test(fonte) || /veio em espanhol/.test(fonte),
+    "  → e a resposta é refeita antes de sair: é a terceira regra de idioma que um modelo ignora");
 }
 
 console.log(`\nIA: ${pass} ok, ${fail} falha(s)`);

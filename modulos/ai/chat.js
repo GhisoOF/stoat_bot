@@ -198,6 +198,9 @@ const SEARXNG_URL = (process.env.SEARXNG_URL || "http://localhost:8080").replace
 // com o Ollama. Vazio = comportamento antigo (Ollama direto, sem ferramentas).
 const IA_SERVICO_URL = (process.env.IA_SERVICO_URL || "").replace(/\/$/, "");
 const CONTINUAR_MAX = Number(process.env.CONTINUAR_MAX || 2);
+// Quantas fontes listar no rodapé: mais que isso e o rodapé compete com a
+// resposta. São as que o modelo de fato recebeu, na ordem em que as recebeu.
+const FONTES_MAX = Number(process.env.CHAT_FONTES_MAX || 5);
 const IA_SERVICO_CHAVE = process.env.IA_SERVICO_CHAVE || "";
 
 // Inicia pelo env; se houver um salvo na config global, o main aplica no boot.
@@ -2109,17 +2112,22 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
   //  a ficha saiu do prompt e ela inventou uma lista com Discord, Matrix e
   //  Telegram, que nem servidores são. Se a última pergunta foi sobre o
   //  estado dela, a seguinte que se apoia nela também recebe.
+  // `canalId` só é declarado mais abaixo, em outro bloco — usá-lo aqui dava
+  // `canalId is not defined`, e o try/catch engolia: a ficha simplesmente não
+  // existia, e a Judy voltou a dizer "só no Vapor Nexus". Mesmo erro do
+  // `modeloForcado`, e de novo invisível porque o catch era largo demais.
+  const canalDaMensagem = message.channelId || message.channel?.id || null;
   let fichaTxt = "";
   try {
-    const seguimentoDaFicha = ultimaFichaCanal.get(canalId)
-      && (Date.now() - ultimaFichaCanal.get(canalId) < 10 * 60_000)
+    const seguimentoDaFicha = ultimaFichaCanal.get(canalDaMensagem)
+      && (Date.now() - ultimaFichaCanal.get(canalDaMensagem) < 10 * 60_000)
       && pareceSeguimento(pergunta);
     if (ficha.perguntaSobreOEstado(pergunta) || seguimentoDaFicha) {
       fichaTxt = await ficha.fichaTecnica(
         { ...ctx, client: message.client ?? ctx.client, userIdAtual: message.authorId },
         { serverIdAtual: serverId });
       if (fichaTxt) {
-        ultimaFichaCanal.set(canalId, Date.now());
+        ultimaFichaCanal.set(canalDaMensagem, Date.now());
         dlog(`ficha técnica injetada (${fichaTxt.length} chars)${seguimentoDaFicha ? " [seguimento]" : ""}`);
       }
     }
@@ -2385,8 +2393,33 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
       dlog(`fallback retornou ${resposta.length} chars`);
     }
 
+    // ── As fontes, para quem quiser conferir ──────────────
+    //
+    //  O rodapé dizia só o termo buscado. Quem lê um resumo de pesquisa quer
+    //  poder verificar — e é o mínimo quando a resposta será repassada a
+    //  outras pessoas no servidor. Os links já vinham do SearXNG; faltava
+    //  entregá-los.
+    //
+    //  Domínio + link: o domínio diz de relance se a fonte é séria, e o
+    //  título completo faria o rodapé competir com a resposta.
     const rodape = resultados?.length
-      ? (en ? `\n\n_🔎 I searched: "${decisao.query}"_` : `\n\n_🔎 busquei: "${decisao.query}"_`)
+      ? (() => {
+        const vistos = new Set();
+        const fontes = [];
+        for (const r of resultados) {
+          if (!r?.url) continue;
+          let dominio;
+          try { dominio = new URL(r.url).hostname.replace(/^www\./, ""); } catch { continue; }
+          if (vistos.has(r.url)) continue;
+          vistos.add(r.url);
+          fontes.push(`[${fontes.length + 1}] [${dominio}](${r.url})`);
+          if (fontes.length >= FONTES_MAX) break;
+        }
+        const cabec = en ? `_🔎 I searched: "${decisao.query}"_` : `_🔎 busquei: "${decisao.query}"_`;
+        return fontes.length
+          ? `\n\n${cabec}\n${en ? "**Sources:**" : "**Fontes:**"} ${fontes.join(" · ")}`
+          : `\n\n${cabec}`;
+      })()
       : "";
     // A continuação automática já emendou os cortes comuns; este aviso só
     // sobra quando a resposta estourou até o teto de emendas — aí avisar é

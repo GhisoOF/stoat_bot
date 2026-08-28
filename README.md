@@ -1757,6 +1757,15 @@ convida o modelo a completá-lo em vez de responder ao que foi perguntado. E
 os dois comandos de esquecer (`&chat esquecer` e `&chat esquecer tudo`) agora
 limpam esse histórico — antes ele sobrevivia aos dois.
 
+### Pesquisa com fontes
+
+Quando a resposta vem de busca na web, o rodapé traz os links: `🔎 busquei:
+"…"` seguido de **Fontes** com domínio e URL de cada resultado, numeradas na
+mesma ordem dos `[1]`, `[2]` que o modelo cita no texto. Sem repetir link e
+com teto (`CHAT_FONTES_MAX`, padrão 5), para o rodapé não competir com a
+resposta. Serve para quem lê poder conferir — e é o mínimo quando o resumo
+vai ser repassado a outras pessoas.
+
 ### Ficha técnica: ela sabe de si, com número
 
 Perguntada "você está em mais algum servidor?", a Judy respondia "só neste

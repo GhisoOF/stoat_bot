@@ -25,6 +25,11 @@ const FETCH_NATIVO = globalThis.fetch;
 // módulo — se ficar para depois, o teste fala com a porta padrão e falha
 // sem que haja nada errado no código.
 process.env.OLLAMA_URL = "http://localhost:8097";
+// O `dlog` só escreve com CHAT_DEBUG ligado — e é por ele que passam os
+// erros engolidos por try/catch, como o "ficha falhou (canalId is not
+// defined)" que ficou dias invisível. Sem esta linha, o teste de fumaça
+// não teria como vê-los.
+process.env.CHAT_DEBUG = "1";
 process.env.CHAT_SERVIDORES = "*";
 process.env.BUSCA_ATIVA = "false";
 delete process.env.IA_SERVICO_URL;
@@ -934,6 +939,32 @@ console.log("\n── fumaça: os caminhos rodam de ponta a ponta ──");
   ok(!saidas.some((x) => /not defined|Falha no chat/.test(String(x))),
     "★ conversa normal roda sem ReferenceError — foi assim que o `modeloForcado` quebrou TUDO");
 
+  // Perguntas que ATIVAM caminhos opcionais: cada bloco condicional é um
+  // lugar onde uma variável fora de escopo passa despercebida. O `canalId is
+  // not defined` da ficha viveu num `try/catch` largo — o log dizia "ficha
+  // falhou", ninguém leu, e ela voltou a responder "só no Vapor Nexus".
+  for (const [rotulo, texto] of [
+    ["ficha técnica", "em quais servidores você está atualmente?"],
+    ["mapa do repo", "como o projeto está organizado?"],
+    ["conta", "quanto é 263857 * 3?"],
+    ["seguimento", "liste todos, por favor"],
+  ]) {
+    saidas.length = 0;
+    // Vigiamos console.log TAMBÉM: o erro da ficha morria num `try/catch`
+    // que só fazia `dlog("ficha falhou (canalId is not defined)")`. Olhando
+    // apenas o que chega ao usuário, o teste passava com o bug de pé — e
+    // passou mesmo, quando reintroduzi o erro para conferir.
+    const erros = [];
+    const logOriginal = console.log, errOriginal = console.error;
+    console.log = (...a) => { erros.push(a.join(" ")); logOriginal(...a); };
+    console.error = (...a) => { erros.push(a.join(" ")); errOriginal(...a); };
+    try {
+      await chat.conversar({ ...msg, content: texto }, texto, ctx);
+    } finally { console.log = logOriginal; console.error = errOriginal; }
+    const quebrou = [...saidas, ...erros].some((x) => /is not defined|is not a function|Cannot read propert/.test(String(x)));
+    ok(!quebrou, `★ "${rotulo}" roda sem erro de escopo — inclusive os engolidos por try/catch`);
+  }
+
   enviadas.length = 0; saidas.length = 0;
   await chat.cmdChat({ ...msg, content: "&chat especial oi" }, ["especial", "quanto é a vida"], ctx);
   ok(!saidas.some((x) => /not defined|Falha no chat/.test(String(x))), "  → e `&chat especial` também");
@@ -1303,6 +1334,24 @@ console.log("\n── ficha no seguimento, nome na bio, espanhol ──");
     "★ espanhol é detectado — e uma frase em português que MENCIONA espanhol passa");
   ok(/refazendo: "\$\{resposta\.slice\(0, 80\)\}/.test(fonte) || /veio em espanhol/.test(fonte),
     "  → e a resposta é refeita antes de sair: é a terceira regra de idioma que um modelo ignora");
+}
+
+// ══ 37. As fontes da pesquisa, e o erro que o catch engolia ══
+console.log("\n── fontes no rodapé, e o catch largo ──");
+{
+  const fonte = fs.readFileSync("./modulos/ai/chat.js", "utf8");
+
+  ok(/const canalDaMensagem = message\.channelId/.test(fonte),
+    "★ o `canalId is not defined` da ficha — canalId só existia em outro bloco");
+  ok(/const seguimentoDaFicha = ultimaFichaCanal\.get\(canalDaMensagem\)/.test(fonte),
+    "  → e o try/catch fazia só um dlog: o log dizia 'ficha falhou' e ninguém lia");
+
+  ok(/\*\*Fontes:\*\*|Sources:/.test(fonte) && /new URL\(r\.url\)\.hostname/.test(fonte),
+    "★ o rodapé agora lista as fontes com domínio e link, para quem quiser conferir");
+  ok(/vistos\.has\(r\.url\)/.test(fonte), "  → sem repetir o mesmo link");
+  ok(/CHAT_FONTES_MAX \|\| 5/.test(fonte), "  → com teto, para o rodapé não competir com a resposta");
+  ok(/\[\$\{fontes\.length \+ 1\}\]/.test(fonte),
+    "  → numeradas na ordem em que o modelo as recebeu, casando com os [1], [2] que ele cita no texto");
 }
 
 console.log(`\nIA: ${pass} ok, ${fail} falha(s)`);

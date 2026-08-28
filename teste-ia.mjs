@@ -1131,5 +1131,54 @@ console.log("\n── de quem é a bio, e cabe no contexto ──");
     "  → em vez de mostrar o JSON do llama.cpp para quem perguntou");
 }
 
+// ══ 33. Esquecer de verdade, e os quatro blocos ══
+//
+//  Depois de `&chat esquecer tudo` — que reportou 36 fatos, 1 perfil e 32
+//  mensagens apagados — a Judy respondeu que "seu servidor é o Stoat Brasil
+//  2.0". Não veio do banco: veio do FIO do canal, que vive na memória do
+//  processo e sobrevivia à limpeza. Ela não estava lembrando, estava lendo.
+console.log("\n── esquecer de verdade, e blocos separados ──");
+{
+  const chat = await import("./modulos/ai/chat.js");
+  const cache = await import("./modulos/ai/cache-canal.js");
+
+  cache.registrar("c-esq", { nome: "Ghiso", userId: "u", texto: "o servidor é Stoat Brasil 2.0" });
+  chat.lembrarUltimaResposta("c-esq", { pergunta: "p", texto: "t", cortada: true });
+  chat.lembrarRoteamento("c-esq", "ferramenta");
+  ok(cache.recentes("c-esq").length === 1 && !!chat.continuacaoPendente("c-esq"),
+    "o estado em memória existe antes de esquecer");
+
+  chat.limparEstadoEmMemoria();
+  ok(cache.recentes("c-esq").length === 0,
+    "★ o FIO do canal é apagado — era daí que 'Stoat Brasil 2.0' voltava depois da limpeza");
+  ok(chat.continuacaoPendente("c-esq") === null && !chat.seguimentoDeFerramenta("c-esq", "e a lógica?"),
+    "  → e também a resposta pendente do `continue` e o roteamento anterior");
+
+  // Por canal, sem derrubar os outros.
+  cache.registrar("c-a", { nome: "X", userId: "1", texto: "a" });
+  cache.registrar("c-b", { nome: "Y", userId: "2", texto: "b" });
+  chat.limparEstadoEmMemoria({ canalId: "c-a" });
+  ok(cache.recentes("c-a").length === 0 && cache.recentes("c-b").length === 1,
+    "  → `&chat esquecer` individual limpa só o canal onde foi pedido");
+
+  const mem = await import("./modulos/ai/memoria-agente.js");
+  ok(typeof mem.descartarPendentes === "function",
+    "★ e os buffers do agente são descartados: eles virariam fato DEPOIS da limpeza");
+
+  const fonte = fs.readFileSync("./modulos/ai/chat.js", "utf8");
+  ok(/const mem = limparEstadoEmMemoria\(\);/.test(fonte), "  → chamado pelo `esquecer tudo`");
+  ok(/limparEstadoEmMemoria\(\{ canalId: message\.channelId \}\)/.test(fonte), "  → e pelo `esquecer` individual");
+
+  // Os quatro blocos com fronteira explícita.
+  for (const [bloco, oque] of [
+    ["<quem_voce_e>", "o que ela é"],
+    ["<onde_voce_esta>", "onde ela está"],
+    ["<sobre_a_pessoa_com_quem_voce_fala>", "quem é o interlocutor"],
+    ["<conversa_recente_do_canal>", "o fio do canal"],
+  ]) ok(fonte.includes(bloco), `★ bloco separado para ${oque}: ${bloco}`);
+  ok(/não tem cartão de perfil, não tem bio, não tem link de convite e não tem servidor próprio/.test(fonte),
+    "  → e o bloco dela diz o que ela NÃO tem: foi bio e link de terceiro que ela adotou como seus");
+}
+
 console.log(`\nIA: ${pass} ok, ${fail} falha(s)`);
 process.exit(fail ? 1 : 0);

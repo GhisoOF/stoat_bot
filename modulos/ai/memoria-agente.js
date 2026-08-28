@@ -268,6 +268,24 @@ export function contextoMemoria(serverId, userId) {
 }
 
 // Para o &chat esquecer: apaga os fatos daquela pessoa.
+// ── Descartar o que ainda NÃO virou banco ────────────────
+//
+//  `&chat esquecer tudo` apagava o banco e nada mais. Os buffers de
+//  observação — mensagens já lidas, esperando o debounce para virar fato —
+//  continuavam de pé e viravam fato DEPOIS da limpeza. Quem mandou esquecer
+//  via a memória repovoar sozinha com o que acabara de apagar.
+export function descartarPendentes(serverId = null) {
+  let n = 0;
+  for (const [chave, buf] of [...buffers.entries()]) {
+    if (serverId && !String(chave).startsWith(`${serverId}:`)) continue;
+    try { clearTimeout(buf.timer); } catch {}
+    buffers.delete(chave);
+    n++;
+  }
+  adiados.clear();
+  return n;
+}
+
 export function esquecerPessoa(serverId, userId) {
   return db.limparFatosPessoa(serverId, userId);
 }

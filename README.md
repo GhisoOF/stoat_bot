@@ -1757,6 +1757,30 @@ convida o modelo a completá-lo em vez de responder ao que foi perguntado. E
 os dois comandos de esquecer (`&chat esquecer` e `&chat esquecer tudo`) agora
 limpam esse histórico — antes ele sobrevivia aos dois.
 
+### Quatro blocos com fronteira: ela, o lugar, a pessoa, o fio
+
+O prompt separa em blocos rotulados o que é **dela** (`<quem_voce_e>` — e o
+que ela *não* tem: perfil, bio, link de convite, servidor próprio), **onde
+está** (`<onde_voce_esta>`, vindo da plataforma, nunca deduzido), **sobre quem
+fala com ela** (`<sobre_a_pessoa_com_quem_voce_fala>`, com o aviso de que
+links e bots citados ali são da pessoa) e **o fio do canal**.
+
+Sem essa separação tudo chegava como texto solto e ela misturava: leu
+`Server: https://stt.gg/…` e `Meu Bot: Cobaia#7705` na bio do dono, passou a
+afirmar que aquele era o **seu** endereço e a chamar o dono de **Cobaia** —
+o nome do próprio bot.
+
+### `esquecer` esquece o processo, não só o banco
+
+`&chat esquecer tudo` limpava o banco e dizia "recomeço do zero", mas meia
+dúzia de estruturas vivem na memória do processo e sobreviviam: o fio recente
+de cada canal, a resposta guardada para o `continue`, o roteamento anterior,
+o engajamento e os buffers do agente de memória (que virariam fato *depois*
+da limpeza). O sintoma era desconcertante — logo após apagar 36 fatos e 32
+mensagens, ela repetia a informação errada. Não estava lembrando: estava
+lendo o fio. Agora os dois lados são limpos, e o `&chat esquecer` individual
+limpa o canal onde foi pedido.
+
 ### Ela sabe o que disse — e sabe quem é
 
 O fio recente do canal que entra no prompt inclui as **respostas da própria

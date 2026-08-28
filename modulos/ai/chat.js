@@ -971,6 +971,19 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
   //
   //  Ela deduzia porque não recebia o dado. Agora recebe, e a linha diz
   //  explicitamente que bio e perfil são das PESSOAS, não dela.
+  // ── O que a Judy sabe DE SI, por construção ───────────
+  //
+  //  Pedido do dono, e a peça que faltava: separar em blocos com fronteira
+  //  explícita o que é dela, o que é da pessoa e o que é do ambiente. Sem
+  //  isso, tudo chegava como texto solto e ela misturava — daí "meu endereço
+  //  é o link da bio dele" e "você é Cobaia".
+  //
+  //  Este bloco é o único que fala DELA, e é curto de propósito: quanto menos
+  //  houver aqui, menos há para confundir com o resto.
+  const souTxt = lang === "en"
+    ? `\n\n<quem_voce_e>\nName: Judy. A bot built by Ghiso for the Stoat platform.\nYou are software: you have no profile card, no bio, no invite link and no server of your own. You live wherever you were added.\n</quem_voce_e>`
+    : `\n\n<quem_voce_e>\nNome: Judy. Uma bot feita pelo Ghiso para a plataforma Stoat.\nVocê é software: não tem cartão de perfil, não tem bio, não tem link de convite e não tem servidor próprio. Você está onde te adicionaram.\n</quem_voce_e>`;
+
   const ondeTxt = local?.servidor || local?.canal
     ? (lang === "en"
       ? `\n\n<onde_voce_esta>\nServer: ${local.servidor ?? "(name unavailable)"}${serverId ? ` — id ${serverId}` : ""}\nChannel: ${local.canal ? `#${local.canal}` : canalId}\n</onde_voce_esta>\nThis is certain and comes from the platform. NEVER deduce where you are from links, bios or profiles — those belong to the PEOPLE, not to you. If someone claims you are elsewhere, ask what they mean instead of arguing.`
@@ -1119,6 +1132,7 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
     // O nome de quem fala vem do Stoat, e é o único que vale.
     autor ? `O nome de quem fala com você é **${autor}** — é o ÚNICO nome pelo qual você pode chamá-lo. Não use nomes vindos da bio, do perfil ou da memória dele como se fossem o nome dele: bio é o que a PESSOA escreveu, e costuma citar bots, servidores e projetos. "Judy" e "Cobaia" são VOCÊ, nunca o interlocutor. E não precisa repetir o nome a cada resposta.` : "",
     memoriaTxt,
+    souTxt,
     ondeTxt,
     fatosTxt,
     tomTxt,
@@ -2433,6 +2447,41 @@ const LIVRE_COOLDOWN_MS = Number(process.env.CHAT_LIVRE_COOLDOWN || 20000);
 // respondendo direto, sem o julgamento severo nem cooldown. É o que deixa a
 // conversa fluida em vez de robótica.
 const _engajamento = new Map();   // `${canalId}:${userId}` → expira em (timestamp)
+
+// ── Esquecer de verdade ──────────────────────────────────
+//
+//  `&chat esquecer tudo` limpava o BANCO e dizia "recomeço do zero". Mas
+//  meia dúzia de estruturas vivem na memória do processo e sobreviviam:
+//  o fio recente do canal, a última resposta guardada para o `continue`, o
+//  roteamento anterior, o engajamento, e os buffers do agente de memória.
+//
+//  O efeito era exatamente o que parecia impossível: logo depois de apagar
+//  tudo, a Judy repetia que o servidor era o "Stoat Brasil 2.0" — não do
+//  banco, do FIO do canal, onde a discussão inteira continuava. Ela não
+//  estava lembrando; estava lendo.
+export function limparEstadoEmMemoria({ canalId = null } = {}) {
+  const antes = {
+    fio: canalId ? (cacheCanal.recentes(canalId)?.length ?? 0) : null,
+    respostas: ultimaResposta.size,
+    roteamentos: ultimoRoteamento.size,
+    engajamento: _engajamento.size,
+  };
+  try { cacheCanal.limpar(canalId); } catch {}
+  if (canalId) {
+    ultimaResposta.delete(canalId);
+    ultimoRoteamento.delete(canalId);
+    _ultimaAvaliacaoLivre.delete(canalId);
+    for (const k of [..._engajamento.keys()]) if (String(k).startsWith(`${canalId}:`)) _engajamento.delete(k);
+  } else {
+    ultimaResposta.clear();
+    ultimoRoteamento.clear();
+    _ultimaAvaliacaoLivre.clear();
+    _engajamento.clear();
+  }
+  let pendentes = 0;
+  try { pendentes = memoria.descartarPendentes?.() ?? 0; } catch {}
+  return { ...antes, pendentes };
+}
 const ENGAJAMENTO_MS = Number(process.env.CHAT_ENGAJAMENTO_MS || 90000);   // 90s
 
 // Poda periódica: engajamentos vencidos só eram removidos quando a MESMA
@@ -2673,12 +2722,17 @@ export async function cmdChat(message, args, ctx) {
       }
       try {
         const r = db.apagarMemoriaServidor(ctx.serverId);
+        // O banco é só metade: o fio do canal e os buffers do agente vivem
+        // na memória do processo, e era de lá que a informação apagada
+        // voltava a aparecer na resposta seguinte.
+        const mem = limparEstadoEmMemoria();
+        console.log(`[CHAT] esquecer tudo: banco (${r.fatosPessoa}+${r.fatosServidor}+${r.perfis}+${r.historico}) e memória (fio, ${mem.respostas} resposta(s), ${mem.pendentes} pendente(s))`);
         return sendEmbed(message.channel, tr(ctx, {
           title: "🧹 Memória geral apagada",
-          description: `Esqueci tudo neste servidor: ${r.fatosPessoa} fato(s) de pessoas, ${r.fatosServidor} do servidor, ${r.perfis} perfil(is) e ${r.historico} mensagem(ns) de conversa recente. Recomeço do zero.`, colour: COR.sucesso,
+          description: `Esqueci tudo neste servidor: ${r.fatosPessoa} fato(s) de pessoas, ${r.fatosServidor} do servidor, ${r.perfis} perfil(is) e ${r.historico} mensagem(ns) de conversa recente — além do fio de todos os canais e do que o agente ainda ia gravar. Recomeço do zero.`, colour: COR.sucesso,
         }, {
           title: "🧹 General memory erased",
-          description: `I forgot everything on this server: ${r.fatosPessoa} fact(s) about people, ${r.fatosServidor} about the server, ${r.perfis} profile(s) and ${r.historico} recent conversation message(s). Starting from scratch.`, colour: COR.sucesso,
+          description: `I forgot everything on this server: ${r.fatosPessoa} fact(s) about people, ${r.fatosServidor} about the server, ${r.perfis} profile(s) and ${r.historico} recent conversation message(s) — plus every channel's live thread and anything the agent was about to record. Starting from scratch.`, colour: COR.sucesso,
         }));
       } catch {
         return sendEmbed(message.channel, tr(ctx,
@@ -2695,6 +2749,8 @@ export async function cmdChat(message, args, ctx) {
       // O histórico curto também — ele existia e nunca era limpo por nenhum
       // dos dois comandos de esquecer.
       db.limparHistorico(userId, { serverId: ctx.serverId });
+      // E o estado vivo deste canal, pelo mesmo motivo do `esquecer tudo`.
+      limparEstadoEmMemoria({ canalId: message.channelId });
       return sendEmbed(message.channel, tr(ctx, {
         title: "🧹 Memória apagada",
         description: `Esqueci o que sabia sobre você (${r.fatos} fato(s) e seu perfil). Nossas próximas conversas começam do zero.`, colour: COR.sucesso,

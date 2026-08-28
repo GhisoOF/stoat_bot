@@ -1043,5 +1043,93 @@ console.log("\n── especial: acesso por cargo, sem tetos ──");
     "  → e `cargos remover` tira");
 }
 
+// ══ 31. Ela sabe onde está, quem é quem, e não acusa ══
+//
+//  Numa conversa de dez minutos a Judy: (a) afirmou estar no "Stoat Brasil
+//  2.0" porque leu um link na BIO do dono — estava no Vapor Nexus; (b)
+//  chamou o dono de "Cobaia", que é o nome do PRÓPRIO BOT, lido na mesma
+//  bio ("Meu Bot: Cobaia#7705"); (c) escreveu "você é um delírio" cinco
+//  vezes e declarou "essa conversa já encerrou". Ela estava errada nos
+//  fatos o tempo todo.
+console.log("\n── onde está, quem é quem, e sem acusar ──");
+{
+  const fonte = fs.readFileSync("./modulos/ai/chat.js", "utf8");
+
+  ok(/<onde_voce_esta>/.test(fonte) && /local\?\.servidor/.test(fonte),
+    "★ o nome do servidor vem da PLATAFORMA e entra no prompt — ela deduzia porque não recebia o dado");
+  ok(/NUNCA deduza onde você está a partir de links, bios ou perfis/.test(fonte),
+    "  → dizendo explicitamente que bio e perfil são das PESSOAS, não dela");
+  ok(/const srv = await ctx\.getServer\?\.\(message\)/.test(fonte), "  → buscado em conversar() e passado adiante");
+
+  ok(/ÚNICO nome pelo qual você pode chamá-lo/.test(fonte) && /"Judy" e "Cobaia" são VOCÊ/.test(fonte),
+    "★ o nome de quem fala vem do Stoat — e o nome do próprio bot nunca serve para chamar o interlocutor");
+
+  ok(/NUNCA chame a pessoa de delirante, alucinada, mentirosa/.test(fonte)
+    && /NUNCA declare a conversa encerrada/.test(fonte),
+    "★ e a regra de discordância: quem não tem como verificar é ELA");
+
+  const chat = await import("./modulos/ai/chat.js");
+  const casos = [
+    "Cobaia, você é um delírio. Eu não sou ninguém do Vapor Nexus.",
+    "pare de inventar servidores onde eu não existo.",
+    "caso contrário, essa conversa já encerrou.",
+    "esse lugar parece existir apenas na sua imaginação.",
+  ];
+  ok(casos.every((t) => chat.suavizarAcusacao(t) !== null),
+    "★ as quatro frases REAIS do chat são interceptadas antes de sair");
+  ok(!/del[íi]rio|imaginação/i.test(chat.suavizarAcusacao(casos[0])),
+    "  → e o que sai no lugar não acusa ninguém");
+  ok(chat.suavizarAcusacao("Você está certo, me confundi. Qual é o nome do servidor?") === null,
+    "  → resposta que já admite o erro passa intacta");
+  ok(chat.suavizarAcusacao("O filme era um delírio visual, muito bonito.") === null,
+    "  → e 'delírio' fora da acusação direta também passa");
+  ok(/suavizarAcusacao\(resposta\)/.test(fonte),
+    "  → aplicado na saída: prompt não segurou identidade nem LaTeX, não vai segurar isto");
+}
+
+// ══ 32. De quem é essa bio, e cabe no contexto? ══
+//
+//  Dois problemas do mesmo print. A bio do dono entrava num bloco chamado
+//  `<memoria_longo_prazo>` rotulado "Perfil desta pessoa" — e ela contém
+//  `Server: https://stt.gg/…` e `Meu Bot: Cobaia#7705`. A Judy leu aquilo
+//  como fatos sobre SI, passou a afirmar que era o seu endereço e a chamar o
+//  dono de "Cobaia". E o prompt cresceu tanto (só as regras fixas somam ~2700
+//  tokens) que estourou: "request (8836 tokens) exceeds the available context
+//  size (8192)" foi entregue como JSON cru no chat.
+console.log("\n── de quem é a bio, e cabe no contexto ──");
+{
+  const fonte = fs.readFileSync("./modulos/ai/chat.js", "utf8");
+  const mem = fs.readFileSync("./modulos/ai/memoria-agente.js", "utf8");
+
+  // O `\`` na busca evita casar com o comentário que explica a mudança.
+  ok(/<sobre_a_pessoa_com_quem_voce_fala>/.test(fonte) && !/\$\{bloco\}\\n<\/memoria_longo_prazo>/.test(fonte),
+    "★ o bloco de memória diz de QUEM é o conteúdo — 'memoria_longo_prazo' soava como 'coisas que eu sei'");
+  ok(/NÃO sobre você. Não trate links, bots ou servidores citados aí como sendo seus/.test(fonte),
+    "  → e diz explicitamente que links e bots de lá não são dela");
+  ok(/texto que ELA escreveu sobre si mesma/.test(mem) && /nunca seus/.test(mem),
+    "  → o cartão de perfil também, na própria borda do bloco");
+
+  const chat = await import("./modulos/ai/chat.js");
+  const grande = [
+    { role: "system", content: "R".repeat(9000) },
+    { role: "user", content: "antiga 1" },
+    { role: "assistant", content: "A".repeat(6000) },
+    { role: "user", content: "a pergunta de agora" },
+  ];
+  const d = chat.caberNoContexto(grande, { ctxTokens: 2000, reservarSaida: 700 });
+  ok(d.reduce((t, m) => t + m.content.length, 0) < 2000 * 3.5,
+    "★ prompt grande demais é cortado ANTES de sair — o 400 chegou como JSON no chat");
+  ok(d[d.length - 1].content === "a pergunta de agora", "  → a pergunta atual nunca é descartada");
+  ok(d[0].role === "system" && d[0].content.includes("[…]"),
+    "  → e o system, se precisar, é cortado no MEIO: começo e fim é onde estão as regras que pesam");
+  ok(chat.caberNoContexto([{ role: "system", content: "curto" }, { role: "user", content: "oi" }]).length === 2,
+    "  → conversa pequena passa intacta");
+
+  ok(/e\.contextoEstourado = true/.test(fonte) && /"n_ctx"/.test(fonte),
+    "★ e se o teto REAL do servidor for menor, o erro 400 vira retentativa enxuta");
+  ok(/reenviando cortado/.test(fonte) && !/exceed_context_size_error.*sendEmbed/.test(fonte),
+    "  → em vez de mostrar o JSON do llama.cpp para quem perguntou");
+}
+
 console.log(`\nIA: ${pass} ok, ${fail} falha(s)`);
 process.exit(fail ? 1 : 0);

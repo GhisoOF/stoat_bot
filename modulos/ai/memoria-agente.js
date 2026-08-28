@@ -209,13 +209,26 @@ export function contextoMemoria(serverId, userId) {
   const dataCurta = (iso) => { try { return new Date(iso).toLocaleDateString("pt-BR"); } catch { return ""; } };
   const linhas = [];
 
-  // Perfil (cartão) primeiro, se houver
+  // ── O cartão de perfil é da PESSOA, não da Judy ───────
+  //
+  //  A bio entrava aqui rotulada só como "Perfil desta pessoa", e o modelo
+  //  a lia como fatos soltos. A bio do dono contém `Server: https://stt.gg/…`
+  //  e `Meu Bot: Cobaia#7705` — e a Judy passou a afirmar que aquele era o
+  //  SEU endereço e a chamar o dono de "Cobaia". Ela não confundiu por
+  //  burrice: ninguém tinha dito de quem era aquilo.
+  //
+  //  Agora o bloco diz, na própria borda, que é texto escrito PELA pessoa
+  //  sobre ela mesma — e que links e nomes ali dentro não são da Judy.
   if (perfil) {
     const p = [];
     if (perfil.bio) p.push(`bio: ${perfil.bio}`);
     if (perfil.grupos) p.push(`grupos: ${perfil.grupos}`);
     if (perfil.jogos) p.push(`jogos: ${perfil.jogos}`);
-    if (p.length) { linhas.push("Perfil desta pessoa:"); for (const x of p) linhas.push(`- ${x}`); }
+    if (p.length) {
+      linhas.push("Cartão de perfil DESTA PESSOA (texto que ELA escreveu sobre si mesma —");
+      linhas.push("links, servidores e bots citados aqui são DELA, nunca seus):");
+      for (const x of p) linhas.push(`- ${x}`);
+    }
   }
 
   // Fatos agrupados por categoria, com a data em que você percebeu

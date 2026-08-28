@@ -1773,8 +1773,12 @@ aqui" — enquanto o `&servidores` listava dez, com 4.575 membros. Ela não
 mentia: nada no prompt falava do estado do próprio processo.
 
 `modulos/ai/ficha.js` monta um bloco `<sua_ficha_tecnica>` com os servidores
-(marcando em qual ela está agora), membros, uptime, os modelos por papel, os
-serviços ligados e a contagem de memória — tudo lido do cliente, do banco e do
+(marcando em qual ela está agora), membros, **ritmo de mensagens** e id de
+cada um, uptime, os modelos por papel, os serviços ligados, a contagem de
+memória e a distinção entre **o que ela observa** (toda mensagem, edições,
+exclusões — é assim que o automod age) e **o que não tem** (o arquivo de log
+do container). Essa última linha nasceu de uma resposta imprecisa: "o Stoat
+não me passa esses dados", quando na verdade passa quase tudo — tudo lido do cliente, do banco e do
 ambiente, na hora. Serve para perguntar a ela em vez de ir ao terminal:
 *"em quantos servidores você está?"*, *"qual modelo você usa?"*,
 *"o que você tem mapeado de mim?"*.

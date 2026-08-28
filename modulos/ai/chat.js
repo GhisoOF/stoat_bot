@@ -990,8 +990,8 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
 
   const ondeTxt = local?.servidor || local?.canal
     ? (lang === "en"
-      ? `\n\n<onde_voce_esta>\nServer: ${local.servidor ?? "(name unavailable)"}${serverId ? ` — id ${serverId}` : ""}\nChannel: ${local.canal ? `#${local.canal}` : canalId}\n</onde_voce_esta>\nThis is certain and comes from the platform. NEVER deduce where you are from links, bios or profiles — those belong to the PEOPLE, not to you. If someone claims you are elsewhere, ask what they mean instead of arguing.`
-      : `\n\n<onde_voce_esta>\nServidor: ${local.servidor ?? "(nome indisponível)"}${serverId ? ` — id ${serverId}` : ""}\nCanal: ${local.canal ? `#${local.canal}` : canalId}\n</onde_voce_esta>\nIsto é certo e vem da plataforma. NUNCA deduza onde você está a partir de links, bios ou perfis — eles são das PESSOAS, não seus. Se alguém disser que você está em outro lugar, pergunte o que ele quer dizer em vez de discutir.`)
+      ? `\n\n<onde_voce_esta>\nServer: ${local.servidor ?? "(name unavailable)"}${serverId ? ` — id ${serverId}` : ""}\nChannel: ${local.canal ? `#${local.canal}` : "(unnamed)"}${canalId ? ` — id ${canalId}` : ""}\n</onde_voce_esta>\nThis is certain and comes from the platform. NEVER deduce where you are from links, bios or profiles — those belong to the PEOPLE, not to you. If someone claims you are elsewhere, ask what they mean instead of arguing.`
+      : `\n\n<onde_voce_esta>\nServidor: ${local.servidor ?? "(nome indisponível)"}${serverId ? ` — id ${serverId}` : ""}\nCanal: ${local.canal ? `#${local.canal}` : "(sem nome)"}${canalId ? ` — id ${canalId}` : ""}\n</onde_voce_esta>\nIsto é certo e vem da plataforma. NUNCA deduza onde você está a partir de links, bios ou perfis — eles são das PESSOAS, não seus. Se alguém disser que você está em outro lugar, pergunte o que ele quer dizer em vez de discutir.`)
     : "";
 
   // memória de LONGO PRAZO: fatos que o agente acumulou observando o chat

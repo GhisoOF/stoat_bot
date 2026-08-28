@@ -1265,7 +1265,7 @@ console.log("\n── ficha técnica: o que ela sabe de si ──");
 
   ok(/Servidores em que você está: 3 \(3023 membros/.test(txt),
     "★ a ficha conta os servidores e os membros — o dado que faltava para 'só neste aqui'");
-  ok(/Vapor Nexus — 216 membro\(s\)\s+← VOCÊ ESTÁ AQUI AGORA/.test(txt),
+  ok(/Vapor Nexus — 216 membro\(s\), [^\n]*← VOCÊ ESTÁ AQUI AGORA/.test(txt),
     "  → marcando em qual deles ela está agora");
   ok(txt.indexOf("Queremos acordar tarde") < txt.indexOf("teste"),
     "  → maiores primeiro: num bot com 50 servidores, são eles que contam a história");
@@ -1352,6 +1352,49 @@ console.log("\n── fontes no rodapé, e o catch largo ──");
   ok(/CHAT_FONTES_MAX \|\| 5/.test(fonte), "  → com teto, para o rodapé não competir com a resposta");
   ok(/\[\$\{fontes\.length \+ 1\}\]/.test(fonte),
     "  → numeradas na ordem em que o modelo as recebeu, casando com os [1], [2] que ele cita no texto");
+}
+
+// ══ 38. Ritmo, IDs e o que ela observa ══
+//
+//  A ficha passou a listar os dez servidores certos, mas faltavam três dados
+//  que o `&servidores` já tinha: "quantas mensagens por minuto tem aqui?" →
+//  "não tenho acesso aos logs e contagens internas" (tinha: é o mesmo
+//  contador); "qual o ID do canal?" → "não tenho acesso ao ID do canal" (o
+//  bloco só mostrava o id quando o canal NÃO tinha nome); e "você tem acesso
+//  aos logs?" → "o Stoat não me passa esses dados", impreciso — ela recebe
+//  cada mensagem, é assim que o automod funciona.
+console.log("\n── ritmo, ids e o que ela observa ──");
+{
+  const srv = await import("./modulos/moderacao/servidores.js");
+  const f = await import("./modulos/ai/ficha.js");
+  for (let i = 0; i < 25; i++) srv.registrar("s-ativo");
+  const client = { servers: new Map([
+    ["s-ativo", { _id: "s-ativo", name: "Vapor Nexus", member_count: 217 }],
+    ["s-parado", { _id: "s-parado", name: "teste", member_count: 2 }],
+  ]) };
+  const txt = await f.fichaTecnica({ client }, { serverIdAtual: "s-ativo" });
+
+  ok(/Vapor Nexus — 217 membro\(s\), 1\.7 msg\/min/.test(txt),
+    "★ o ritmo por servidor entra na ficha — vem do MESMO contador do `&servidores`");
+  ok(/teste — 2 membro\(s\), parado/.test(txt), "  → e 'parado' quando não há movimento");
+  ok(/Ritmo somado:/.test(txt) && /\[id s-ativo\]/.test(txt),
+    "  → com o total e o id de cada servidor");
+  ok(/O que você observa ao vivo:[\s\S]*edições e exclusões/.test(txt)
+    && /O que você NÃO tem: o arquivo de log do container/.test(txt),
+    "★ e a distinção entre o que ela vê (toda mensagem) e o que não vê (o arquivo de log)");
+
+  const chat = fs.readFileSync("./modulos/ai/chat.js", "utf8");
+  ok(/\$\{canalId \? ` — id \$\{canalId\}` : ""\}/.test(chat),
+    "★ o id do canal aparece SEMPRE, não só quando o canal é anônimo");
+
+  const sim = ["e como está a atividade dos outros servidores?", "quantas mensagens por minuto tem aqui?",
+    "pode me dizer o ID do canal que estamos agora?", "você tem acesso aos logs?",
+    "o que você vê no servidor?", "esse canal está movimentado?"];
+  const nao = ["quantas mensagens eu mandei ontem para o João?", "qual é a atividade física ideal?",
+    "o log do nginx está grande", "você viu o jogo ontem?", "bom dia"];
+  ok(sim.every((q) => f.perguntaSobreOEstado(q)), "  → e as perguntas sobre ritmo, id e observação disparam a ficha");
+  ok(nao.every((q) => !f.perguntaSobreOEstado(q)),
+    "  → sem pegar 'atividade física' nem 'quantas mensagens EU mandei': tem de ser sobre o servidor");
 }
 
 console.log(`\nIA: ${pass} ok, ${fail} falha(s)`);

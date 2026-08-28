@@ -43,19 +43,29 @@ export async function fichaTecnica(ctx, { serverIdAtual = null } = {}) {
       for (const s of lista) {
         let membros = null;
         try { membros = await contarMembros(s, client); } catch {}
+        const id = s?._id ?? s?.id ?? "?";
+        let mpm = 0;
+        try { mpm = srv.porMinuto(id) ?? 0; } catch {}
         dados.push({
           nome: s?.name ?? "(sem nome)",
-          id: s?._id ?? s?.id ?? "?",
+          id,
           membros: Number(membros) || 0,
-          atual: (s?._id ?? s?.id) === serverIdAtual,
+          mpm,
+          atual: id === serverIdAtual,
         });
       }
       dados.sort((a, b) => b.membros - a.membros);
       const total = dados.reduce((t, d) => t + d.membros, 0);
       linhas.push(`Servidores em que você está: ${dados.length} (${total} membros no total).`);
+      // O ritmo vem do mesmo contador do `&servidores` (janela de 15 min).
+      // Perguntada "quantas mensagens por minuto tem aqui?", ela respondeu que
+      // não tinha acesso a contagens — e tinha, só não estava no prompt.
+      const ritmo = (m) => (m >= 0.1 ? `${m.toFixed(1)} msg/min` : m > 0 ? "<0,1 msg/min" : "parado");
       for (const d of dados.slice(0, MAX_SERVIDORES)) {
-        linhas.push(`- ${d.nome} — ${d.membros} membro(s)${d.atual ? "  ← VOCÊ ESTÁ AQUI AGORA" : ""}`);
+        linhas.push(`- ${d.nome} — ${d.membros} membro(s), ${ritmo(d.mpm)}${d.atual ? "  ← VOCÊ ESTÁ AQUI AGORA" : ""} [id ${d.id}]`);
       }
+      const totalMpm = dados.reduce((t, d) => t + d.mpm, 0);
+      linhas.push(`Ritmo somado: ${ritmo(totalMpm)} (medido nos últimos 15 minutos).`);
       if (dados.length > MAX_SERVIDORES) linhas.push(`- (e mais ${dados.length - MAX_SERVIDORES})`);
     }
   } catch (e) { linhas.push(`Servidores: não consegui listar (${e?.message ?? e}).`); }
@@ -106,6 +116,21 @@ export async function fichaTecnica(ctx, { serverIdAtual = null } = {}) {
     }
   } catch {}
 
+  // ── O que ela observa (e o que não observa) ────────────
+  //
+  //  Perguntada sobre logs, respondeu "o Stoat não me passa esses dados" — e
+  //  passa: ela recebe cada mensagem, cada edição e cada exclusão, é assim que
+  //  o automod funciona. O que ela NÃO tem é o arquivo de log do container.
+  //  A diferença importa: "não tenho" vira desculpa quando é impreciso.
+  linhas.push(
+    "O que você observa ao vivo: toda mensagem dos canais que enxerga, "
+    + "edições e exclusões (é assim que o automod age), entradas e saídas de membros, "
+    + "e o fio recente de cada canal. O que você NÃO tem: o arquivo de log do "
+    + "container (aquele com linhas [EVENTO], [CHAT][debug]) — esse só o Ghiso lê "
+    + "no terminal. Se te colarem uma linha de log, você pode interpretá-la; "
+    + "o que você não pode é buscá-la sozinha.",
+  );
+
   if (!linhas.length) return "";
   return `\n\n<sua_ficha_tecnica>\n${linhas.join("\n")}\n</sua_ficha_tecnica>\nEstes números vêm do seu próprio processo, agora. São a resposta certa para perguntas sobre você — quantos servidores, há quanto tempo no ar, qual modelo, o que você lembra. Não chute nenhum deles, e não os confunda com informação sobre a pessoa com quem você fala.`;
 }
@@ -120,6 +145,15 @@ export function perguntaSobreOEstado(texto) {
   if (/\bonde\b[^.?!]{0,25}voc[êe][^.?!]{0,20}\b(roda|rodando|est[áa]|mora|vive|hospedad)/.test(t)) return true;
   if (/\b(mais algum|outro|outros|algum outro)\b[^.?!]{0,20}\b(servidor|server|lugar|canal)\b/.test(t)) return true;
   if (/\b(quanto tempo|desde quando|h[áa] quanto)\b[^.?!]{0,30}\b(no ar|de p[ée]|ligad|rodando|ativ)/.test(t)) return true;
+  // Atividade e ritmo: o dado existe (mesmo contador do `&servidores`), e ela
+  // respondia "não tenho acesso a contagens internas".
+  // A atividade tem de ser DO SERVIDOR/CANAL: "atividade física" e "quantas
+  // mensagens eu mandei para o João" não são sobre o estado dela.
+  if (/\b(msg\/min|mensagens por minuto)\b/.test(t)) return true;
+  if (/\b(atividade|movimento|movimentad|ritmo|movimentaç)\w*\b[^.?!]{0,40}\b(servidor|servidores|server|canal|canais|chat|aqui|bot)\b/.test(t)
+    || /\b(servidor|servidores|server|canal|canais|chat)\b[^.?!]{0,30}\b(atividade|movimento|movimentad|ritmo)\w*/.test(t)) return true;
+  if (/\b(id|identificador)\b[^.?!]{0,25}\b(canal|servidor|server)\b/.test(t)
+    || /\b(canal|servidor|server)\b[^.?!]{0,20}\b(id|identificador)\b/.test(t)) return true;
   // Sem `\b` DEPOIS de `voc[êe]`: `ê` não é caractere de palavra em JS, então
   // não existe fronteira entre ele e o espaço — e o padrão nunca casaria.
   if (/\b(modelo|llm|motor)\b[^.?!]{0,30}(voc[êe]|\b(seu|sua)\b)/.test(t)
@@ -127,5 +161,10 @@ export function perguntaSobreOEstado(texto) {
   if (/\b(seu|sua)\b[^.?!]{0,15}\b(estado|status|uptime|ficha|diagn[óo]stico|situa[çc][ãa]o)\b/.test(t)) return true;
   if (/\b(sabe|lembra|tem|guardou|guarda|mapeou|mapeado|armazen)\w*\b[^.?!]{0,30}\b(de mim|sobre mim|a meu respeito|da minha pessoa|de minha pessoa)\b/.test(t)) return true;
   if (/\b(voc[êe]|tu)\s+(dorme|desliga|reinicia|cai|trava)\b/.test(t)) return true;
+  // O que ela observa: dizia "não tenho acesso a logs", impreciso — ela vê
+  // toda mensagem, só não lê o arquivo de log do container.
+  if (/\b(log|logs)\b[^.?!]{0,30}(voc[êe]|\b(seu|sua)\b)/.test(t)
+    || /(voc[êe]|\b(seu|sua)\b)[^.?!]{0,25}\b(log|logs)\b/.test(t)) return true;
+  if (/voc[êe]\s+(v[êe]|enxerga|observa|monitora|l[êe]|acompanha|tem acesso)/.test(t)) return true;
   return false;
 }

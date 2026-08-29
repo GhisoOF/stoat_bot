@@ -822,7 +822,10 @@ console.log("\n── emendas costuradas, ✂️ honesto ──");
   const fonte = fs.readFileSync("./modulos/ai/chat.js", "utf8");
   ok(/const avisoCorte = responder\._cortou/.test(fonte) && /responder\._cortou = !!ollamaChat\._cortou;/.test(fonte),
     "★ o ✂️ lê um flag POR CAMINHO, lido na hora — o global aparecia em respostas inteiras de três linhas");
-  ok(/if \(r\) \{ responder\._cortou = false; return r\.trim\(\); \}/.test(fonte), "  → e resposta do judy-ia nunca leva ✂️: o serviço faz a própria continuação");
+  // O bloco virou multilinhas quando o verificador entrou (o caminho do
+  // serviço também guarda a evidência) — o que importa conferir é a GARANTIA:
+  // _cortou vira false antes do return do judy-ia, não o formato da linha.
+  ok(/if \(r\) \{\s*responder\._cortou = false;[\s\S]{0,300}?return r\.trim\(\);/.test(fonte), "  → e resposta do judy-ia nunca leva ✂️: o serviço faz a própria continuação");
   ok(/NÃO mude de idioma/.test(fonte), "  → a instrução da emenda proíbe trocar de idioma ('Got it. Let me know…')");
 }
 

@@ -193,6 +193,12 @@ async function conversarComFerramentas(messages, { modelo, usarFerramentas = tru
   const hist = [...messages];
   const usos = [];
   const anexos = [];
+  // Evidência para o verificador do bot: o texto cru que as ferramentas
+  // devolveram nesta conversa. O bot compara a resposta final contra isto
+  // (camada determinística + revisão ancorada). Cortado por item e no total
+  // para não inchar a resposta HTTP.
+  const evidencias = [];
+  const EVID_ITEM_MAX = 4000, EVID_TOTAL_MAX = 12000;
   let usouFerramenta = false;
   let usouLeitura = false;   // leu código? então a resposta é explicação, não cópia
   let usouEstrutura = false; // pediu o MAPA? então não sabe o interior das funções
@@ -258,7 +264,7 @@ async function conversarComFerramentas(messages, { modelo, usarFerramentas = tru
         texto += (mais?.message?.content || "");
         motivo = mais?.done_reason;
       }
-      return { resposta: texto.trim(), usos, anexos };
+      return { resposta: texto.trim(), usos, anexos, evidencia: evidencias.join("\n").slice(0, EVID_TOTAL_MAX) };
     }
 
     hist.push(msg);   // registra o pedido de ferramenta do modelo
@@ -295,6 +301,12 @@ async function conversarComFerramentas(messages, { modelo, usarFerramentas = tru
         delete resultado.anexo_base64;
         resultado.anexo = "gerado e pronto para envio junto da resposta";
       }
+      // Guarda o resultado como evidência — AQUI, depois do anexo_base64 já
+      // ter sido removido, para binário não entrar na comparação.
+      try {
+        const txt = typeof resultado === "string" ? resultado : JSON.stringify(resultado);
+        evidencias.push(`[${nome}]\n${txt.slice(0, EVID_ITEM_MAX)}`);
+      } catch { /* evidência é melhor-esforço; nunca derruba o laço */ }
       hist.push({
         role: "tool",
         // OpenAI amarra o resultado à chamada pelo id; Ollama aceita e ignora.
@@ -357,7 +369,7 @@ async function conversarComFerramentas(messages, { modelo, usarFerramentas = tru
     }],
     { modelo, comFerramentas: false },
   );
-  return { resposta: (final?.message?.content || "").trim(), usos, anexos, limite: true };
+  return { resposta: (final?.message?.content || "").trim(), usos, anexos, limite: true, evidencia: evidencias.join("\n").slice(0, EVID_TOTAL_MAX) };
 }
 
 // ── HTTP ───────────────────────────────────────────────────

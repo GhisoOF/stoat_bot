@@ -28,6 +28,7 @@ import * as cacheCanal from "./cache-canal.js";
 import * as ficha from "./ficha.js";
 import { resolverCargo } from "../core/ids.js";
 import { construirDetalhes } from "../moderacao/geral.js";
+import { verificar } from "./verificar.js";
 import * as desinteresse from "./desinteresse.js";
 import { tr, lingua } from "../core/i18n.js";
 import { readFileSync } from "node:fs";
@@ -583,6 +584,9 @@ async function chamarServicoIA(messages, { modelo = null, idioma = "pt" } = {}) 
     // Ferramentas de imagem devolvem o arquivo aqui, fora do texto; quem
     // chama decide anexar (chamarServicoIA._anexos, consumido logo após).
     chamarServicoIA._anexos = Array.isArray(data?.anexos) ? data.anexos : [];
+    // Evidência das ferramentas (para o verificador). Serviço antigo, sem o
+    // campo, degrada limpo: string vazia e o verificador simplesmente não roda.
+    chamarServicoIA._evidencia = typeof data?.evidencia === "string" ? data.evidencia : "";
     return (data?.resposta || "").trim();
   } finally { clearTimeout(t); }
 }
@@ -1283,6 +1287,11 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
   // agir: "poderia ler o main.js?" vira "não consigo" — uma resposta literal e
   // inútil, já que a ferramenta estava disponível o tempo todo. Perguntas assim
   // são pedidos disfarçados de pergunta, e é preciso dizer isso ao modelo.
+  // Evidência para o verificador: o que as ferramentas REALMENTE devolveram
+  // nesta resposta. A leitura direta alimenta aqui; o laço do judy-ia chega
+  // via chamarServicoIA._evidencia dentro de gerar().
+  let evidenciaColetada = "";
+
   if (tipo === "ferramenta") {
     // Se um arquivo foi citado, buscamos o conteúdo NÓS MESMOS e entregamos
     // pronto. Assim o modelo não precisa decidir nada — ele só lê o que já
@@ -1359,6 +1368,7 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
         // 300 linhas como o todo e "conclui" coisas sobre o que não viu.
         if (r.proxima_linha) conteudo += `\n\n[…esta é a página ${r.intervalo} de ${r.linhas_totais} linhas; o resto pode ser lido com ler_codigo (acao='ler', linha_inicial=${r.proxima_linha})…]`;
         dlog(`ferramenta direta: li ${caminho} (${bruto.length} chars, ${conteudo.length} entregues)`);
+        evidenciaColetada += `\n[ler_codigo ${caminho}]\n${conteudo}\n`;
 
         // ATENÇÃO À POSIÇÃO: isto vai para o FIM, depois da pergunta.
         //
@@ -1454,12 +1464,20 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
 
   async function gerar() {
   responder._modelo = modeloEscolhido;
+  // Zerado a CADA geração — pelo mesmo motivo do _cortou: campo pendurado na
+  // função é global entre chamadas, e evidência da resposta anterior faria o
+  // verificador reprovar uma resposta correta desta.
+  responder._evidencia = "";
   const precisaDoServico = tipo === "ferramenta";
   if (IA_SERVICO_URL && precisaDoServico) {
     try {
       const r = await chamarServicoIA(messages, { modelo: modeloEscolhido, idioma: lang });
       // O serviço faz a própria continuação; o que volta é inteiro.
-      if (r) { responder._cortou = false; return r.trim(); }
+      if (r) {
+        responder._cortou = false;
+        responder._evidencia = (evidenciaColetada + "\n" + (chamarServicoIA._evidencia || "")).trim();
+        return r.trim();
+      }
       dlog("serviço IA devolveu vazio — caindo para Ollama direto");
     } catch (e) {
       dlog(`serviço IA falhou (${e.message}) — caindo para Ollama direto`);
@@ -1477,6 +1495,7 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
   });
   // Lido AGORA, antes de qualquer outra chamada ao ollamaChat poder mudá-lo.
   responder._cortou = !!ollamaChat._cortou;
+  responder._evidencia = evidenciaColetada.trim();
   return texto.trim();
   }
 }
@@ -2299,10 +2318,10 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
     // Tenta reaproveitar a mensagem de status (vira a própria resposta);
     // se não der, manda uma nova. O resultado é SEMPRE entregue.
     if (statusMsg && !statusQuebrado) {
-      try { await statusMsg.edit({ content: texto, embeds: [] }); return; }
+      try { await statusMsg.edit({ content: texto, embeds: [] }); mostrarEmbed._msg = statusMsg; return; }
       catch (e) { console.error("[CHAT][edit-final]", e?.message ?? JSON.stringify(e) ?? "erro"); }
     }
-    try { await message.channel.sendMessage(texto); }
+    try { mostrarEmbed._msg = await message.channel.sendMessage(texto); }
     catch (e) {
       console.error("[CHAT][envio]", e?.message ?? e);
       await sendEmbed(message.channel, embed);   // último recurso
@@ -2411,6 +2430,9 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
     let resposta;
     try {
       resposta = limpar(await responder(pergunta, resultados, autor, userId, citada, serverId, canalId, lang, modeloForcado, local, fichaTxt));
+      // Lido AGORA, pelo mesmo motivo do _cortou: o extrator de memória e o
+      // comentário espontâneo também geram, e sobrescreveriam o campo.
+      var evidenciaVerif = String(responder._evidencia || "");
     } finally {
       clearInterval(animacao);   // para a animação aconteça o que acontecer
     }
@@ -2635,6 +2657,47 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
       registrarNoCanal(canalId, { nome: "Judy", userId: message.client?.user?.id, texto: resposta, ehJudy: true });
       lembrarUltimaResposta(canalId, { pergunta, texto: resposta, cortada: !!responder._cortou, modelo: responder._modelo });
     } catch {}
+
+    // ── Verificador em camadas (depois da entrega, sem travar nada) ──
+    //
+    //  Só roda quando o caminho de ferramentas produziu evidência — em papo
+    //  comum não há âncora e o modelo revisando a si mesmo aprova o próprio
+    //  erro. A camada determinística refaz contas e confere nomes citados
+    //  contra o que foi lido; a revisão de IA (mesmo modelo, stateless, sem
+    //  persona) julga o que string não pega. Fail-open em tudo.
+    //
+    //  VERIF_EDITAR=1 liga a edição da mensagem com a nota de correção.
+    //  Sem ela: MODO OBSERVAÇÃO — só loga no CHAT_DEBUG, nada muda no canal.
+    //  A ideia é rodar uns dias olhando a taxa de falso positivo antes de
+    //  deixar o bot se corrigir em público.
+    const msgVerif = mostrarEmbed._msg;
+    if (evidenciaVerif && evidenciaVerif.length >= 50) {
+      const textoEntregue = marcar(partes[0], 0);
+      verificar({
+        pergunta,
+        resposta,
+        evidencia: evidenciaVerif,
+        chamarModelo: (msgs, o) => ollamaChat(msgs, { json: true, maxTokens: o?.maxTokens, modelo: OLLAMA_MODEL_LOGICA, etiqueta: "verificador" }),
+        dlog,
+      }).then(async (v) => {
+        dlog(`verificador: ok=${v.ok} camadas=${JSON.stringify(v.camadas)}${v.ok ? "" : " | " + v.problemas.join(" · ")}`);
+        if (v.ok) return;
+        const editar = process.env.VERIF_EDITAR === "1" || process.env.VERIF_EDITAR === "true";
+        if (!editar || !msgVerif?.edit) return;   // modo observação
+        const nota = (en ? "\n\n⚠️ _Auto-review found issues:_" : "\n\n⚠️ _Revisão automática encontrou problemas:_")
+          + v.problemas.map((p) => `\n• ${p}`).join("");
+        // A nota entra na PRIMEIRA parte da resposta (a mensagem que temos na
+        // mão). Se estourar o teto do Stoat, corta a nota, nunca a resposta.
+        const teto = 1900;
+        const conteudo = (textoEntregue + nota).length > teto
+          ? textoEntregue + nota.slice(0, Math.max(0, teto - textoEntregue.length - 1)) + "…"
+          : textoEntregue + nota;
+        try { await msgVerif.edit({ content: conteudo, embeds: [] }); }
+        catch (e) { dlog(`verificador: edição falhou (${e?.message ?? e})`); }
+      }).catch((e) => dlog(`verificador: erro externo (${e?.message ?? e})`));
+    } else if (evidenciaVerif) {
+      dlog(`verificador: evidência curta demais (${evidenciaVerif.length} chars) — pulei`);
+    }
     dlog(`══════ conversa concluída ══════`);
   } catch (err) {
     console.error("[CHAT]", err.message);

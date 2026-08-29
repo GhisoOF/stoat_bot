@@ -22,9 +22,14 @@ export { criarIndiceVazio };   // usado pelo main (estado inicial) e pelo &block
 
 const INVITE_REGEX = /https?:\/\/stt\.gg\/([A-Za-z0-9]+)/gi;
 
-// Logger de depuração — só imprime se config.debug !== false
+// Logger de depuração — a análise linha a linha de CADA mensagem virou
+// OPT-IN (era o segundo maior ruído do log: ~14 linhas por mensagem para
+// dizer "nenhuma violação"). Liga com AUTOMOD_DEBUG=1 no ambiente ou
+// debug=true na config. Violações, avisos e punições NÃO passam por aqui —
+// usam console.log direto e continuam sempre visíveis.
 function dbg(ctx, ...args) {
-  if (ctx?.cfgGlobal?.debug !== false) console.log("[AUTOMOD]", ...args);
+  const ligado = process.env.AUTOMOD_DEBUG === "1" || ctx?.cfgGlobal?.debug === true;
+  if (ligado) console.log("[AUTOMOD]", ...args);
 }
 
 // Validação simples de domínio (ex.: 02giga.link, sub.exemplo.com.br)

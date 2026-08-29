@@ -79,7 +79,11 @@ export const COMANDO_EXTRA = {
 // Formato: { inglês: português }. O que já é aceito em inglês pelo
 // próprio módulo (list, mode, channel, on, off…) não precisa estar aqui,
 // mas repetir não faz mal — a normalização é idempotente.
-const SUB = {
+// Exportado: o verificador de respostas da IA usa este mapa como fonte dos
+// SUBCOMANDOS válidos (as chaves em inglês são apelidos; os VALORES são os
+// canônicos). Foi o `&assistente automod` — recomendado pela Judy e
+// inexistente — que criou essa necessidade.
+export const SUB = {
   help: {
     moderation: "moderacao", settings: "config", configuration: "config",
     tools: "ferramentas", general: "geral", levels: "xp", character: "game",

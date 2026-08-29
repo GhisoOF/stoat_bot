@@ -3,6 +3,21 @@
 //  stoat.js (compatível com a API do Revolt)
 // ══════════════════════════════════════════════════════════
 import 'dotenv/config';
+
+// ── Filtro de ruído da biblioteca ──────────────────────────
+//
+//  O stoat.js imprime "Skipping key pronouns during hydration!" a CADA membro
+//  hidratado — 1644 linhas num log de 2278 (72% de ruído puro). Não há opção
+//  na lib para calar; filtramos aqui, ANTES do Client existir. Só essa linha
+//  exata é descartada; qualquer outro aviso da lib continua passando.
+{
+  const original = console.log.bind(console);
+  console.log = (...args) => {
+    if (typeof args[0] === "string" && /^Skipping key \S+ during hydration!$/.test(args[0])) return;
+    original(...args);
+  };
+}
+
 import { Client } from "stoat.js";
 import { readFileSync, writeFileSync } from "node:fs";
 
@@ -183,6 +198,10 @@ async function sendEmbed(channel, { title, description, colour = COR.info, image
   let desc = description ?? "";
   if (desc.length > 1500) desc = desc.slice(0, 1495) + "…";
   const base = { title, description: desc, colour };
+  // O que os COMANDOS respondem entra no log: é o gabarito para conferir se
+  // o que a IA afirma sobre o bot bate com o que o bot realmente diz.
+  // (Pedido do Ghiso: menos análise de mensagem, mais rastro do que importa.)
+  console.log(`[CMD] ${title ?? "(sem título)"} | ${desc.replace(/\n/g, " ⏎ ").slice(0, 400)}`);
   const exibicao = imagem ? midia.comoExibir(imagem) : null;
   const payload = { embeds: [base] };
   if (exibicao?.modo === "media") payload.embeds = [{ ...base, media: exibicao.id }];

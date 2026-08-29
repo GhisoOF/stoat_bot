@@ -119,11 +119,42 @@ export function conferirNomes(resposta, evidencia, pergunta = "") {
   return [...new Set(problemas)];
 }
 
+// ── Camada 2c: comandos citados existem de verdade? ──────────────────────────
+// A Judy recomendou `&assistente automod` — subcomando que não existe (os
+// reais são rapido/completo/canais/protecao). Quem digitou caiu no menu
+// genérico e a recomendação virou beco. A checagem compara `&comando sub`
+// citados na resposta contra o registro REAL (passado por quem chama):
+//   • base desconhecida → problema ("&assistencia");
+//   • subcomando inválido → problema, mas SÓ para comandos cujo conjunto de
+//     subcomandos é fechado e conhecido (senão "&mute João" viraria falso
+//     positivo — João não é subcomando, é argumento).
+export function conferirComandos(resposta, comandos) {
+  const problemas = [];
+  if (!resposta || !comandos?.bases?.size) return problemas;
+  const { bases, subs = {}, prefixo = "&" } = comandos;
+  const p = prefixo.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const re = new RegExp(`${p}([a-zá-úç]{2,})(?:[ \\t]+([a-zá-úç]{2,}))?`, "gi");
+  for (const m of resposta.matchAll(re)) {
+    const base = m[1].toLowerCase();
+    const sub  = (m[2] || "").toLowerCase();
+    if (!bases.has(base)) {
+      problemas.push(`o comando \`${prefixo}${base}\` não existe`);
+      continue;
+    }
+    const validos = subs[base];
+    if (sub && validos instanceof Set && validos.size && !validos.has(sub)) {
+      const lista = [...validos].slice(0, 6).join(", ");
+      problemas.push(`\`${prefixo}${base} ${sub}\` não existe — os subcomandos reais são: ${lista}`);
+    }
+  }
+  return [...new Set(problemas)];
+}
 // ── Camada 2 completa ────────────────────────────────────────────────────────
-export function verificarDeterministico({ resposta, evidencia = "", pergunta = "" } = {}) {
+export function verificarDeterministico({ resposta, evidencia = "", pergunta = "", comandos = null } = {}) {
   const problemas = [
     ...conferirContas(resposta),
     ...conferirNomes(resposta, evidencia, pergunta),
+    ...conferirComandos(resposta, comandos),
   ];
   return { ok: problemas.length === 0, problemas };
 }
@@ -195,8 +226,8 @@ export async function verificarComIA({ pergunta, resposta, evidencia, chamarMode
 // Camada 2 sempre; camada 3 só com evidência e wrapper injetado. Junta e
 // deduplica, teto de 5 problemas. `camadas` diz de onde veio cada achado —
 // útil no CHAT_DEBUG para saber o que a IA pegou que o código não pegou.
-export async function verificar({ pergunta = "", resposta = "", evidencia = "", chamarModelo = null, dlog = () => {} } = {}) {
-  const det = verificarDeterministico({ resposta, evidencia, pergunta });
+export async function verificar({ pergunta = "", resposta = "", evidencia = "", comandos = null, chamarModelo = null, dlog = () => {} } = {}) {
+  const det = verificarDeterministico({ resposta, evidencia, pergunta, comandos });
 
   let ia = null;
   if (evidencia && String(evidencia).length >= VERIF_EVID_MIN) {

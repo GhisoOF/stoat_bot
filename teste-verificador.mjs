@@ -17,7 +17,7 @@
 
 import http from "node:http";
 import {
-  parseNumero, conferirContas, conferirNomes,
+  parseNumero, conferirContas, conferirNomes, conferirComandos,
   verificarDeterministico, verificarComIA, verificar,
 } from "./modulos/ai/verificar.js";
 
@@ -68,14 +68,36 @@ caso("não roda com evidência trivial",
 caso("case-insensitive como fallback",
   conferirNomes("Use `SINTETIZAR` ali.", EVID_TTS).length === 0);
 
+console.log("── camada 2c: comandos citados ──");
+// registro de mentira, no formato que o chat.js monta do help + aliases
+const CMDS = {
+  prefixo: "&",
+  bases: new Set(["assistente", "automod", "help", "chat", "mute"]),
+  subs: { assistente: new Set(["rapido", "completo", "canais", "protecao", "cancelar", "quick", "full"]) },
+};
+// o caso real: subcomando inventado pela Judy
+caso("pega `&assistente automod` (subcomando inventado)",
+  conferirComandos("Recomendo usar &assistente automod para configurar.", CMDS).length === 1);
+caso("aprova `&assistente protecao` (o certo)",
+  conferirComandos("Use &assistente protecao.", CMDS).length === 0);
+caso("pega `&assistencia` (base inventada)",
+  conferirComandos("O comando &assistencia resolve.", CMDS).length === 1);
+caso("aprova `&mute João` (argumento não é subcomando: mute não tem lista fechada)",
+  conferirComandos("É só usar &mute João por 10 minutos.", CMDS).length === 0);
+caso("aprova apelido EN de subcomando (&assistente quick)",
+  conferirComandos("Try &assistente quick.", CMDS).length === 0);
+caso("sem registro, não roda (fail-open)",
+  conferirComandos("Use &qualquercoisa aí.", null).length === 0);
+
 console.log("── camada 2 integrada ──");
 {
   const r = verificarDeterministico({
-    resposta: "O `lerFileSync` calcula 2+2=2.",
+    resposta: "O `lerFileSync` calcula 2+2=2. Depois rode &assistencia.",
     evidencia: EVID_TTS,
     pergunta: "como funciona o tts?",
+    comandos: CMDS,
   });
-  caso("junta conta + nome (2 problemas)", !r.ok && r.problemas.length === 2,
+  caso("junta conta + nome + comando (3 problemas)", !r.ok && r.problemas.length === 3,
     JSON.stringify(r.problemas));
 }
 

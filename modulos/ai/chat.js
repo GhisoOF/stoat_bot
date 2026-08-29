@@ -29,6 +29,7 @@ import * as ficha from "./ficha.js";
 import { resolverCargo } from "../core/ids.js";
 import { construirDetalhes } from "../moderacao/geral.js";
 import { verificar } from "./verificar.js";
+import { SUB as SUBCOMANDOS_REAIS } from "../core/aliases.js";
 import * as desinteresse from "./desinteresse.js";
 import { tr, lingua } from "../core/i18n.js";
 import { readFileSync } from "node:fs";
@@ -578,7 +579,12 @@ async function chamarServicoIA(messages, { modelo = null, idioma = "pt" } = {}) 
       body: JSON.stringify({ messages, modelo: modelo || undefined, idioma }),
       signal: ctrl.signal,
     });
-    if (!r.ok) throw new Error(`serviço IA HTTP ${r.status}`);
+    if (!r.ok) {
+      // O corpo carrega o motivo real ({erro: "..."} do servidor). Jogá-lo
+      // fora custou um diagnóstico: dois 500 em produção sem uma pista no log.
+      const corpo = await r.text().catch(() => "");
+      throw new Error(`serviço IA HTTP ${r.status} — ${corpo.slice(0, 200)}`);
+    }
     const data = await r.json();
     if (data?.usos?.length) dlog(`judy-ia usou: ${data.usos.map((u) => u.ferramenta).join(", ")}`);
     // Ferramentas de imagem devolvem o arquivo aqui, fora do texto; quem
@@ -898,6 +904,11 @@ export const PEDIDO_DE_BUSCA = new RegExp([
   "\\b(voc[êe]|quero que|queria que|poderia|pode|consegue|d[áa] para|preciso que|manda|vai)\\b[^.?!]{0,30}\\b(pesquis|busqu|procur|googl|verific)\\w*",
 ].join("|"), "i");
 
+// Pergunta de identidade + nome próprio no meio da frase (fora da 1ª palavra,
+// para não contar o começo de frase capitalizado). Judy/Ghiso/Stoat ficam de
+// fora: perguntas sobre eles se respondem com o contexto que já está no prompt.
+const PERGUNTA_DE_IDENTIDADE = /\b(quem|o que|que)\s+(é|e|foi|seria|são|sao)\b|\bpersonagem\b|\bconhece\b/i;
+const NOME_PROPRIO_NO_MEIO = /(?<!^)(?<=[\s(])(?!Judy\b|Ghiso\b|Stoat\b|Eu\b|Você\b|Voce\b)[A-ZÀ-Þ][a-zà-þ]+/;
 const PISTAS_BUSCA = /(?:\b(?:hoje|ontem|agora|atual|atualmente|recente|not[ií]cias?|pre[çc]o|cota[çc][ãa]o|lan[çc]ou|lan[çc]amento|vers[ãa]o|resultado|placar|clima)\b|[uú]ltim[ao]s|quanto\s+custa|quando\s+(?:sai|saiu|foi)|em\s+20\d\d|tempo\s+em)/i;
 
 // Pedido EXPLÍCITO de busca. "pesquisa isso para mim" é uma ordem, não uma
@@ -907,6 +918,36 @@ const PISTAS_BUSCA = /(?:\b(?:hoje|ontem|agora|atual|atualmente|recente|not[ií]
 // que era "sobre si mesmo". Ordem explícita agora pula o juiz e vai direto —
 // de quebra, economiza uma ida ao Ollama.
 export const PEDIDO_EXPLICITO = /\b(pesquis(a|ar|e|ue)|busca(r|e)?|procur(a|ar|e)|d[aá] uma olhada na (web|internet)|consult(a|ar|e) a (web|internet)|olha na (web|internet)|search)\b/i;
+
+// ── Registro real de comandos, para o verificador ─────────
+//
+//  A fonte é a MESMA do &help: as chaves de construirDetalhes são os comandos
+//  que existem; os submapas do aliases dizem quais subcomandos são fechados
+//  (assistente, tutorial, game…) e quais os nomes canônicos. Montado uma vez.
+let _comandosVerif = null;
+function comandosParaVerificar() {
+  if (_comandosVerif) return _comandosVerif;
+  const prefixo = process.env.PREFIXO || "&";
+  const bases = new Set();
+  try {
+    for (const k of Object.keys(construirDetalhes(prefixo, "pt") ?? {})) bases.add(k.toLowerCase());
+  } catch (e) { dlog(`comandosParaVerificar: help indisponível (${e?.message})`); }
+  const subs = {};
+  try {
+    for (const [cmd, mapa] of Object.entries(SUBCOMANDOS_REAIS ?? {})) {
+      if (!mapa || typeof mapa !== "object") continue;
+      bases.add(cmd.toLowerCase());
+      // chaves = apelidos EN, valores = canônicos PT; os dois são digitáveis.
+      subs[cmd.toLowerCase()] = new Set(
+        [...Object.keys(mapa), ...Object.values(mapa)].map((x) => String(x).toLowerCase()),
+      );
+    }
+  } catch (e) { dlog(`comandosParaVerificar: aliases indisponível (${e?.message})`); }
+  // Sem base nenhuma (algo falhou), a checagem se desliga sozinha — o
+  // conferirComandos exige bases.size para rodar. Fail-open, como o resto.
+  _comandosVerif = bases.size ? { bases, subs, prefixo } : null;
+  return _comandosVerif;
+}
 
 async function decidirBusca(pergunta) {
   const texto = String(pergunta ?? "");
@@ -935,14 +976,23 @@ async function decidirBusca(pergunta) {
     return { buscar: true, query: String(texto).replace(PEDIDO_DE_BUSCA, " ").replace(/\s+/g, " ").trim().slice(0, 120) };
   }
 
-  if (!PISTAS_BUSCA.test(texto)) {
+  // "quem é o personagem Malum Caedo?" morria aqui: nenhuma pista temporal
+  // (hoje, preço, lançou…) e a pergunta ia para o modelo SEM busca — que
+  // "respondeu" tratando um personagem de jogo como um desconhecido do
+  // servidor. Pergunta de identidade sobre NOME PRÓPRIO passa para o juiz:
+  // um nome capitalizado no meio da frase, que não é a Judy nem o criador,
+  // é exatamente o que o modelo local tem menos chance de conhecer.
+  const identidade = PERGUNTA_DE_IDENTIDADE.test(texto) && NOME_PROPRIO_NO_MEIO.test(texto);
+  if (!PISTAS_BUSCA.test(texto) && !identidade) {
     return { buscar: false, query: pergunta };
   }
+  if (identidade) dlog("pergunta de identidade sobre nome próprio → consultando o juiz de busca");
   const sys = [
     `Hoje é ${hojeExtenso()}.`,
     "Você decide se uma pergunta precisa de busca na internet para ser respondida com precisão.",
     "Precisa buscar se envolve fatos atuais, notícias, preços, datas recentes, ou algo que muda com o tempo.",
     "NÃO precisa buscar se é conversa, opinião, criatividade ou conhecimento geral estável.",
+    "BUSQUE quando perguntam 'quem é' ou 'o que é' sobre um nome próprio que você não conhece com CERTEZA (personagens de jogos/séries, produtos, pessoas de nicho) — chutar ou negar é pior que buscar.",
     // Esta regra existia para evitar buscar "quais são seus comandos". Mas
     // estava larga demais: qualquer menção ao Stoat fazia o modelo achar que
     // a pergunta era "sobre si mesmo" e recusar a busca.
@@ -2671,12 +2721,13 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
     //  A ideia é rodar uns dias olhando a taxa de falso positivo antes de
     //  deixar o bot se corrigir em público.
     const msgVerif = mostrarEmbed._msg;
-    if (evidenciaVerif && evidenciaVerif.length >= 50) {
+    {
       const textoEntregue = marcar(partes[0], 0);
       verificar({
         pergunta,
         resposta,
         evidencia: evidenciaVerif,
+        comandos: comandosParaVerificar(),
         chamarModelo: (msgs, o) => ollamaChat(msgs, { json: true, maxTokens: o?.maxTokens, modelo: OLLAMA_MODEL_LOGICA, etiqueta: "verificador" }),
         dlog,
       }).then(async (v) => {
@@ -2695,8 +2746,6 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
         try { await msgVerif.edit({ content: conteudo, embeds: [] }); }
         catch (e) { dlog(`verificador: edição falhou (${e?.message ?? e})`); }
       }).catch((e) => dlog(`verificador: erro externo (${e?.message ?? e})`));
-    } else if (evidenciaVerif) {
-      dlog(`verificador: evidência curta demais (${evidenciaVerif.length} chars) — pulei`);
     }
     dlog(`══════ conversa concluída ══════`);
   } catch (err) {

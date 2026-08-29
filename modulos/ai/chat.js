@@ -880,6 +880,10 @@ async function buscar(query, n = 4) {
 // Marcas de pergunta que PODE precisar de internet. Sem isso, cada "bom dia"
 // pagava uma inferência para concluir o óbvio. A checagem é grosseira de
 // propósito: na dúvida ela deixa passar para o modelo decidir.
+// Alguém pedindo pesquisa com todas as letras. Vale mais que qualquer
+// heurística: quem escreveu "pesquise na internet" sabe o que quer.
+const PEDIDO_DE_BUSCA = /(pesquis\w*|busqu\w*|busca\w*|procur\w*|d[áa] uma olhada|d[êe] uma olhada|olha\w*|veja|consult\w*)[^.?!]{0,20}\b(na internet|na web|no google|online|no searx|na rede)\b|\b(na internet|na web|no google)\b[^.?!]{0,20}(pesquis|busc|procur)\w*/i;
+
 const PISTAS_BUSCA = /(?:\b(?:hoje|ontem|agora|atual|atualmente|recente|not[ií]cias?|pre[çc]o|cota[çc][ãa]o|lan[çc]ou|lan[çc]amento|vers[ãa]o|resultado|placar|clima)\b|[uú]ltim[ao]s|quanto\s+custa|quando\s+(?:sai|saiu|foi)|em\s+20\d\d|tempo\s+em)/i;
 
 // Pedido EXPLÍCITO de busca. "pesquisa isso para mim" é uma ordem, não uma
@@ -905,6 +909,18 @@ async function decidirBusca(pergunta) {
   }
 
   // Filtro barato primeiro: conversa comum nunca precisa de busca.
+  // Pedido EXPLÍCITO de pesquisa passa por cima do filtro barato.
+  //
+  //  "pesquisa na internet quem é Malum Caedo" foi rejeitado aqui — nenhuma
+  //  das pistas (hoje, notícias, preço…) aparecia — e a Judy concluiu que
+  //  "não tenho essa funcionalidade ativa no momento". Tinha: o SearXNG está
+  //  configurado e o `&chat status` o lista. Negar uma capacidade que existe
+  //  é pior que não usá-la.
+  if (PEDIDO_DE_BUSCA.test(texto)) {
+    dlog("pedido explícito de pesquisa → buscando sem consultar o modelo de decisão");
+    return { buscar: true, query: String(texto).replace(PEDIDO_DE_BUSCA, " ").replace(/\s+/g, " ").trim().slice(0, 120) };
+  }
+
   if (!PISTAS_BUSCA.test(texto)) {
     return { buscar: false, query: pergunta };
   }
@@ -1026,7 +1042,7 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
         blocoLimpo = blocoLimpo.replace(re, `(uma referência A VOCÊ, a bot — não é o nome desta pessoa)`);
       }
       if (blocoLimpo !== bloco) dlog("bio citava o nome da própria bot — neutralizado");
-      fatosTxt = `\n\n<sobre_a_pessoa_com_quem_voce_fala>\n${blocoLimpo}\n</sobre_a_pessoa_com_quem_voce_fala>\nTudo acima é sobre ${autor || "essa pessoa"}, NÃO sobre você. O nome dela é ${autor || "o que o Stoat mostra"} e nada mais: qualquer outro nome que apareça aí dentro é de bot, servidor ou projeto citado por ela. Não trate links, bots ou servidores citados aí como sendo seus.`;
+      fatosTxt = `\n\n<sobre_a_pessoa_com_quem_voce_fala>\n${blocoLimpo}\n</sobre_a_pessoa_com_quem_voce_fala>\nTudo acima é sobre ${autor || "essa pessoa"} — QUEM ESTÁ ESCREVENDO AGORA — e NÃO sobre você nem sobre mais ninguém. Se a pergunta for sobre OUTRA pessoa (alguém mencionado, citado ou apontado), você NÃO tem nada sobre ela: diga isso e não use estes dados como se fossem dela. Foi assim que um perfil de cypherpunk/bodybuilding virou o palpite de idade e aparência de um terceiro. O nome dela é ${autor || "o que o Stoat mostra"} e nada mais: qualquer outro nome que apareça aí dentro é de bot, servidor ou projeto citado por ela. Não trate links, bots ou servidores citados aí como sendo seus.`;
       dlog(`memória: ${bloco.split("\n").filter(l => l.startsWith("- ")).length} fato(s) injetado(s)`);
     }
   } catch {}
@@ -1896,8 +1912,33 @@ export function precisaFerramenta(texto) {
 const ultimaResposta = new Map();   // canalId → { pergunta, texto, cortada, modelo, quando }
 const JANELA_CONTINUE_MS = 15 * 60_000;
 
+// Guardamos as últimas N respostas do canal, não só a anterior.
+//
+//  A Judy repetiu para a Ladainha, palavra por palavra, um texto que tinha
+//  dado ao Ghiso 27 MINUTOS e várias mensagens antes — e o texto falava de um
+//  terceiro. Comparar só com a resposta imediatamente anterior não pegava:
+//  entre as duas houve outras conversas.
+const RESPOSTAS_LEMBRADAS = Number(process.env.CHAT_ANTI_REPETICAO || 6);
+const respostasRecentes = new Map();   // canalId → [{ texto, quando }]
+
 export function lembrarUltimaResposta(canalId, dados) {
-  if (canalId && dados?.texto) ultimaResposta.set(canalId, { ...dados, quando: Date.now() });
+  if (!canalId || !dados?.texto) return;
+  ultimaResposta.set(canalId, { ...dados, quando: Date.now() });
+  const arr = respostasRecentes.get(canalId) ?? [];
+  arr.push({ texto: dados.texto, quando: Date.now() });
+  if (arr.length > RESPOSTAS_LEMBRADAS) arr.splice(0, arr.length - RESPOSTAS_LEMBRADAS);
+  respostasRecentes.set(canalId, arr);
+}
+
+// A resposta repete alguma das últimas? Devolve a repetida, ou null.
+export function repetiuAlguma(canalId, nova, { minutos = 60 } = {}) {
+  const arr = respostasRecentes.get(canalId) ?? [];
+  const desde = Date.now() - minutos * 60_000;
+  for (let i = arr.length - 1; i >= 0; i--) {
+    if (arr[i].quando < desde) break;
+    if (ehRepeticao(nova, arr[i].texto)) return arr[i].texto;
+  }
+  return null;
 }
 export function pedeContinuacao(texto) {
   const t = String(texto ?? "").trim().toLowerCase().replace(/[.!?…]+$/, "");
@@ -2368,9 +2409,9 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
       if (convertido !== resposta) { dlog("LaTeX convertido para texto legível"); resposta = convertido; }
     }
 
-    // Repetiu a resposta anterior palavra por palavra? Refaz uma vez.
-    const anterior = ultimaResposta.get(canalId)?.texto;
-    if (resposta && anterior && ehRepeticao(resposta, anterior)) {
+    // Repetiu ALGUMA das últimas respostas deste canal? Refaz uma vez.
+    const anterior = resposta ? repetiuAlguma(canalId, resposta) : null;
+    if (resposta && anterior) {
       console.warn(`[CHAT] ⚠️ resposta idêntica à anterior — refazendo`);
       dlog("resposta repetida → refazendo");
       try {
@@ -2656,12 +2697,14 @@ export function limparEstadoEmMemoria({ canalId = null } = {}) {
   try { cacheCanal.limpar(canalId); } catch {}
   if (canalId) {
     ultimaResposta.delete(canalId);
+    respostasRecentes.delete(canalId);
     ultimaFichaCanal.delete(canalId);
     ultimoRoteamento.delete(canalId);
     _ultimaAvaliacaoLivre.delete(canalId);
     for (const k of [..._engajamento.keys()]) if (String(k).startsWith(`${canalId}:`)) _engajamento.delete(k);
   } else {
     ultimaResposta.clear();
+    respostasRecentes.clear();
     ultimaFichaCanal.clear();
     ultimoRoteamento.clear();
     _ultimaAvaliacaoLivre.clear();

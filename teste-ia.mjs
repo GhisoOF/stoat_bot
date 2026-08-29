@@ -1135,7 +1135,7 @@ console.log("\n── de quem é a bio, e cabe no contexto ──");
   // O `\`` na busca evita casar com o comentário que explica a mudança.
   ok(/<sobre_a_pessoa_com_quem_voce_fala>/.test(fonte) && !/\$\{bloco\}\\n<\/memoria_longo_prazo>/.test(fonte),
     "★ o bloco de memória diz de QUEM é o conteúdo — 'memoria_longo_prazo' soava como 'coisas que eu sei'");
-  ok(/NÃO sobre você\./.test(fonte) && /Não trate links, bots ou servidores citados aí como sendo seus/.test(fonte),
+  ok(/NÃO sobre você nem sobre mais ninguém/.test(fonte) && /Não trate links, bots ou servidores citados aí como sendo seus/.test(fonte),
     "  → e diz explicitamente que links e bots de lá não são dela");
   ok(/texto que ELA escreveu sobre si mesma/.test(mem) && /nunca seus/.test(mem),
     "  → o cartão de perfil também, na própria borda do bloco");
@@ -1433,6 +1433,62 @@ console.log("\n── repetição, username da conta, tarefa vs regra ──");
 
   ok(/TAREFA ≠ REGRA SUA/.test(fonte) && /não é regra sua, não é instrução do Ghiso/.test(fonte),
     "★ pedido com restrição é para UMA resposta — não vira identidade nem 'minha moderação'");
+}
+
+// ══ 40. Busca negada, repetição a 27 min, e perfil de terceiro ══
+//
+//  Três falhas de uma sessão com várias pessoas testando:
+//   • "pesquisa na internet quem é Malum Caedo" → "não tenho essa
+//     funcionalidade ativa no momento". Tinha: o SearXNG está configurado e o
+//     `&chat status` o lista. O filtro barato de pistas rejeitou o pedido
+//     antes de a decisão rodar, e ela concluiu que era incapaz.
+//   • Ela respondeu à Ladainha com um texto IDÊNTICO ao que dera ao Ghiso 27
+//     minutos e várias mensagens antes — e o texto falava de um terceiro.
+//   • Perguntada sobre OUTRA pessoa, usou o perfil de quem estava escrevendo
+//     (cypherpunk, bodybuilding) para chutar idade e aparência do terceiro.
+console.log("\n── busca explícita, repetição distante, perfil de terceiro ──");
+{
+  const chat = await import("./modulos/ai/chat.js");
+  const fonte = fs.readFileSync("./modulos/ai/chat.js", "utf8");
+  const rePedido = new RegExp(fonte.match(/const PEDIDO_DE_BUSCA = \/(.+)\/i;/)[1], "i");
+
+  ok(rePedido.test("pesquisa na internet quem é Malum Caedo e me fale quem ele é"),
+    "★ pedido explícito de pesquisa é reconhecido — foi o que ela negou ter");
+  ok(rePedido.test("dá uma olhada no google sobre isso") && rePedido.test("procura online quem é X"),
+    "  → nas várias formas de pedir");
+  ok(!rePedido.test("pesquisa de mercado é cara") && !rePedido.test("me explica o que é a internet"),
+    "  → sem pegar 'pesquisa de mercado' nem quem só FALA de internet");
+  ok(/pedido explícito de pesquisa → buscando sem consultar o modelo de decisão/.test(fonte),
+    "  → e ele passa por cima do filtro de pistas: quem pediu sabe o que quer");
+
+  const A = "Kkkk, você está me cobrando para alucinar de propósito? É claro que não vou inventar dados que não tenho — seria um erro grave, então minha aposta é um adulto jovem.";
+  chat.lembrarUltimaResposta("c-rep", { texto: A });
+  for (let i = 0; i < 4; i++) {
+    chat.lembrarUltimaResposta("c-rep", { texto: `resposta intermediária ${i}, com texto longo o bastante para não ser considerada curta demais pelo detector.` });
+  }
+  ok(!!chat.repetiuAlguma("c-rep", A),
+    "★ repetição é procurada nas ÚLTIMAS respostas do canal, não só na anterior — a dela veio 27 min e várias mensagens depois");
+  ok(chat.repetiuAlguma("c-rep", "Estou no Vapor Nexus com 217 membros, ritmo tranquilo agora, nada demais por aqui.") === null,
+    "  → e texto novo passa");
+  ok(/CHAT_ANTI_REPETICAO \|\| 6/.test(fonte), "  → com janela configurável");
+
+  ok(/QUEM ESTÁ ESCREVENDO AGORA/.test(fonte) && /Se a pergunta for sobre OUTRA pessoa/.test(fonte),
+    "★ o perfil é de quem ESCREVE: perguntada sobre um terceiro, ela não tem nada e deve dizer isso");
+
+  // ── Ordem dada ao bot virando "fato" sobre a pessoa ──
+  //
+  //  "responde no máximo em 8s" era uma instrução PARA a Judy. Virou o fato
+  //  "MiguelRobes responde no máximo em 8 segundos", que apareceu no
+  //  `&chat perfil` dele.
+  const mem = await import("./modulos/ai/memoria-agente.js");
+  const msgs = ["responde no máximo em 8s", "toca violão", "gosta de bodybuilding", "quer que você seja mais breve"];
+  const testar = (fato, evidencia) => !!mem.filtrarFato({ fato, evidencia }, { msgs, nome: "MiguelRobes" });
+  ok(!testar("responde no máximo em 8 segundos", "responde no máximo em 8s"),
+    "★ ordem dada à Judy não vira fato sobre quem a deu — foi parar no `&chat perfil`");
+  ok(!testar("quer que você seja mais breve", "quer que você seja mais breve"),
+    "  → nem 'quer que VOCÊ faça X': o alvo é a bot, não um traço da pessoa");
+  ok(testar("toca violão e compõe músicas próprias", "toca violão") && testar("gosta de bodybuilding", "gosta de bodybuilding"),
+    "  → e fatos de verdade continuam entrando");
 }
 
 console.log(`\nIA: ${pass} ok, ${fail} falha(s)`);

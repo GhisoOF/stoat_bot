@@ -139,6 +139,25 @@ export function filtrarFato(item, { msgs = [], nome = "", aoDescartar = () => {}
   // O nome da pessoa não é um fato sobre ela.
   if (nome && fato.toLowerCase().trim() === String(nome).toLowerCase().trim()) return null;
 
+  // ── Ordem dada AO BOT não é fato sobre a pessoa ───────
+  //
+  //  Alguém escreveu "responde no máximo em 8s" — uma instrução para a Judy.
+  //  Virou o fato "MiguelRobes responde no máximo em 8 segundos", que apareceu
+  //  no `&chat perfil` dele. O agente confundiu o alvo: quem responderia em 8s
+  //  era a bot.
+  //
+  //  A marca é o imperativo na segunda pessoa ("responde", "fala", "seja",
+  //  "não use") — pedido, não descrição de alguém.
+  if (/^(responde|responda|fala|fale|diga|escreva|escreve|faça|faz|use|usa|seja|sê|para de|pare de|não\s+\w+|me\s+\w+|traduz|traduza|resume|resuma|explique|explica|liste|lista|mostre|mostra|calcule|calcula|pesquise|pesquisa|ignore|ignora|esqueça|esquece)\b/i.test(fato)) {
+    aoDescartar(`"${fato}" parece uma ordem dada à Judy, não um fato sobre ${nome || "a pessoa"}`);
+    return null;
+  }
+  // "O usuário quer que você…" — o alvo também é a bot.
+  if (/\b(quer|queria|pediu|mandou|pede|prefere)\s+que\s+(voc[êe]|a\s+judy|o\s+bot)/i.test(fato)) {
+    aoDescartar(`"${fato}" descreve um pedido à Judy, não um traço da pessoa`);
+    return null;
+  }
+
   const evid = String(item?.evidencia ?? "").trim().toLowerCase();
   if (evid.length < 4) return null;                                  // sem evidência, não entra
   // Pedir evidência não basta: o modelo inventa a evidência junto. Então

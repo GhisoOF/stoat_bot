@@ -1757,13 +1757,24 @@ convida o modelo a completá-lo em vez de responder ao que foi perguntado. E
 os dois comandos de esquecer (`&chat esquecer` e `&chat esquecer tudo`) agora
 limpam esse histórico — antes ele sobrevivia aos dois.
 
+### Pesquisa pedida com todas as letras
+
+Um pedido explícito ("pesquisa na internet quem é X", "dá uma olhada no
+google") passa por cima do filtro barato de pistas e vai direto para a busca.
+Sem isso, "pesquisa na internet quem é Malum Caedo" era rejeitado pelo filtro
+— nenhuma das pistas (hoje, notícias, preço…) aparecia — e a Judy respondia
+"não tenho essa funcionalidade ativa no momento", com o SearXNG configurado e
+listado no `&chat status`. Negar uma capacidade que existe é pior que não usá-la.
+
 ### Ela não se repete, e sabe que "Cobaia" é ela
 
 Duas falhas de uma sessão longa com várias pessoas testando. A Judy devolveu
 **palavra por palavra** uma resposta já dada, para uma pergunta diferente —
 modo de falha conhecido quando o assunto é circular e o histórico é longo: o
 caminho mais provável vira o texto que já está no contexto. Agora a resposta é
-comparada com a anterior daquele canal (ignorando pontuação e caixa) e refeita
+comparada com as **últimas 6** daquele canal (`CHAT_ANTI_REPETICAO`, ignorando
+pontuação e caixa) — comparar só com a imediatamente anterior não bastava: ela
+repetiu para outra pessoa um texto dado 27 minutos e várias mensagens antes e refeita
 com o texto antigo no contexto; respostas curtas repetidas passam, porque
 "bom dia" duas vezes é normal.
 

@@ -1450,7 +1450,9 @@ console.log("\n── busca explícita, repetição distante, perfil de terceiro
 {
   const chat = await import("./modulos/ai/chat.js");
   const fonte = fs.readFileSync("./modulos/ai/chat.js", "utf8");
-  const rePedido = new RegExp(fonte.match(/const PEDIDO_DE_BUSCA = \/(.+)\/i;/)[1], "i");
+  // Usa a EXPORTAÇÃO, não o texto do arquivo: extrair regex por regex quebra
+  // toda vez que o padrão muda de forma (foi o que aconteceu).
+  const rePedido = chat.PEDIDO_DE_BUSCA;
 
   ok(rePedido.test("pesquisa na internet quem é Malum Caedo e me fale quem ele é"),
     "★ pedido explícito de pesquisa é reconhecido — foi o que ela negou ter");
@@ -1489,6 +1491,40 @@ console.log("\n── busca explícita, repetição distante, perfil de terceiro
     "  → nem 'quer que VOCÊ faça X': o alvo é a bot, não um traço da pessoa");
   ok(testar("toca violão e compõe músicas próprias", "toca violão") && testar("gosta de bodybuilding", "gosta de bodybuilding"),
     "  → e fatos de verdade continuam entrando");
+}
+
+// ══ 41. "Pesquise X" sem dizer onde, e falar SOBRE modelos ══
+//
+//  Depois do deploy anterior: "eu quero que você pesquise e fale o que é o
+//  modelo de LLM Qwythos-9B" → "não tenho como pesquisar fora do contexto
+//  desta conversa". O meu regex exigia "na internet"/"na web"/"no google" —
+//  um "pesquise sobre X" sozinho não casava.
+//
+//  E antes disso: "o que é o Qwythos-9B?" → "O Qwythos-9B não é nada; eu sou
+//  a Judy". A regra de identidade virou negação de um fato do mundo. Ela
+//  proíbe SE APRESENTAR como um modelo, não proíbe falar de modelos.
+console.log("\n── pesquisar sem dizer onde, e falar sobre modelos ──");
+{
+  const chat = await import("./modulos/ai/chat.js");
+  const re = chat.PEDIDO_DE_BUSCA;
+
+  const sim = ["eu quero que você pesquise e fale o que é o modelo de LLM Qwythos-9B",
+    "pesquise sobre o Qwythos", "pesquisa quem é Malum Caedo", "poderia procurar sobre isso?",
+    "você consegue pesquisar o que é IRC?", "dá uma olhada no google", "busca o preço do dólar"];
+  const nao = ["pesquisa de mercado é cara", "busca de emprego está difícil", "a busca pela verdade",
+    "eu procurei o controle e não achei", "a pesquisa científica avança", "me explica o que é a internet"];
+  ok(sim.every((q) => re.test(q)),
+    "★ pedido de pesquisa SEM dizer onde ('pesquise sobre X') agora conta");
+  ok(nao.every((q) => !re.test(q)),
+    "  → e 'pesquisa DE mercado', 'busca DE emprego' continuam de fora: o substantivo pede complemento com 'de'");
+
+  ok(!chat.vazaIdentidade("O Qwythos-9B é um modelo de 9 bilhões de parâmetros derivado do Qwen."),
+    "★ falar SOBRE um modelo nunca foi vazamento — a barreira já permitia");
+  ok(chat.vazaIdentidade("Sou o Qwythos, um modelo criado pela Empero AI."),
+    "  → só se APRESENTAR como um continua barrado");
+  const fonte = fs.readFileSync("./modulos/ai/chat.js", "utf8");
+  ok(/é conversa técnica NORMAL/.test(fonte) && /nega um fato do mundo/.test(fonte),
+    "  → e o PROMPT agora diz isso: era ele que a fazia responder 'o Qwythos não é nada, eu sou a Judy'");
 }
 
 console.log(`\nIA: ${pass} ok, ${fail} falha(s)`);

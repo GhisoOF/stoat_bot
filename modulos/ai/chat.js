@@ -1578,13 +1578,29 @@ const LATEX = [
     (_, g) => ({ alpha: "α", beta: "β", gamma: "γ", delta: "δ", theta: "θ", lambda: "λ", mu: "μ", pi: "π", sigma: "σ", phi: "φ", omega: "ω" })[g.toLowerCase()] ?? g],
   [/\^\{([^{}]+)\}/g, "^$1"],
   [/_\{([^{}]+)\}/g, "_$1"],
-  // O que sobrar de comando LaTeX desconhecido perde a barra, não o nome.
-  [/\\([a-zA-Z]+)/g, "$1"],
+  // NÃO existe mais a regra "comando desconhecido perde a barra": ela comia
+  // `\n`, `\t` e `\s` de código Python e regex, e o chat recebeu
+  // `print('n'.join(...))` e `re.split(r"s+", s)`. Se um comando LaTeX não
+  // está na lista acima, ele fica como está — visível e estranho, mas honesto
+  // — em vez de corromper silenciosamente o código de outra pessoa.
 ];
+
+// Sequências de escape que NUNCA são LaTeX. Sozinhas, não devem sequer
+// acionar a conversão: quase todo código as contém.
+// A letra do escape não pode ser seguida de outra letra: `\n"` é escape,
+// `\neq` é LaTeX; `\f` é escape, `\frac` é LaTeX. Sem essa distinção,
+// `\frac` perdia o `\f` aqui e deixava de ser reconhecido como fórmula.
+const ESCAPES_COMUNS = /\\[ntrsdwbufxvae0'"\\\/](?![a-zA-Z])|\\\d/g;
 
 export function semLatex(texto) {
   let t = String(texto ?? "");
-  if (!/\\[a-zA-Z]|\$\$?[^$\n]*\$|\\\[|\\\(/.test(t)) return t;
+  // O gatilho antigo era `\\[a-zA-Z]` — qualquer barra seguida de letra. Um
+  // `\n` dentro de código Python bastava para acionar a conversão inteira e
+  // corromper o arquivo. Agora exigimos um comando LaTeX de verdade, ou um
+  // delimitador de fórmula.
+  const semEscapes = t.replace(ESCAPES_COMUNS, " ");
+  const TEM_LATEX = /\\(frac|sqrt|log|ln|sin|cos|tan|exp|times|cdot|div|neq|leq|geq|approx|infty|pm|int|sum|prod|alpha|beta|gamma|delta|theta|lambda|mu|pi|sigma|phi|omega|left|right|quad|qquad|Longleftrightarrow|Leftrightarrow|Rightarrow|implies|iff|to)\b|\\\[|\\\]|\\\(|\\\)|\$\$[\s\S]*?\$\$|\$[^$\n]{2,}\$/;
+  if (!TEM_LATEX.test(semEscapes)) return t;
   // Blocos de código ficam intactos: lá o texto é literal de propósito.
   const blocos = [];
   t = t.replace(/```[\s\S]*?```|`[^`\n]+`/g, (m) => { blocos.push(m); return `\u0000${blocos.length - 1}\u0000`; });

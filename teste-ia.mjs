@@ -1527,5 +1527,39 @@ console.log("\n── pesquisar sem dizer onde, e falar sobre modelos ──");
     "  → e o PROMPT agora diz isso: era ele que a fazia responder 'o Qwythos não é nada, eu sou a Judy'");
 }
 
+// ══ 42. A conversão de LaTeX estava comendo código ══
+//
+//  A Judy entregou `print('n'.join(grid))` e `re.split(r"s+", s)` — sem as
+//  barras. Não foi o modelo: fui eu. O `semLatex` disparava com QUALQUER
+//  `\letra` (e todo código Python tem `\n`), e tinha uma regra "comando LaTeX
+//  desconhecido perde a barra" que transformava `\n` em `n`, `\t` em `t` e
+//  `\s` em `s`. Só o código entre crases estava protegido, e o modelo manda
+//  código solto.
+console.log("\n── LaTeX não come mais barra de código ──");
+{
+  const chat = await import("./modulos/ai/chat.js");
+
+  const py = 'def f():\n    print("\\n".join(linhas))\n    x = re.split(r"\\s+", s)\n    return "a\\tb"';
+  ok(chat.semLatex(py) === py, "★ código Python com \\n, \\s e \\t passa INTACTO");
+  const js = 'const s = texto.replace(/\\s+/g, " ").split("\\n");';
+  ok(chat.semLatex(js) === js, "  → e regex JavaScript também");
+  const c99 = 'fprintf(stderr, "SDL init failed: %s\\n", SDL_GetError());';
+  ok(chat.semLatex(c99) === c99, "  → e o `%s\\n` do C, que já tinha aparecido quebrado antes");
+
+  const tex = 'se (b\\neq 1), então [ \\log_{b}(a)=c \\quad\\Longleftrightarrow\\quad b^{c}=a ]';
+  const convertido = chat.semLatex(tex);
+  ok(/≠/.test(convertido) && /logb\(a\)=c/.test(convertido) && /⇔/.test(convertido),
+    "★ e o LaTeX de verdade continua sendo convertido");
+  ok(/\(1\)\/\(2\)/.test(chat.semLatex('Use \\frac{1}{2} e no código print("\\n")'))
+    && /print\("\\n"\)/.test(chat.semLatex('Use \\frac{1}{2} e no código print("\\n")')),
+    "★ no MESMO texto: a fórmula vira símbolo e o \\n do código fica de pé");
+
+  const fonte = fs.readFileSync("./modulos/ai/chat.js", "utf8");
+  ok(!/\[\/\\\\\\\\\(\[a-zA-Z\]\+\)\/g, "\$1"\]/.test(fonte),
+    "  → a regra que tirava a barra de comando desconhecido foi removida");
+  ok(/ESCAPES_COMUNS/.test(fonte) && /\(\?!\[a-zA-Z\]\)/.test(fonte),
+    "  → e o escape só conta quando NÃO vem letra depois: `\\n\"` é escape, `\\neq` é LaTeX");
+}
+
 console.log(`\nIA: ${pass} ok, ${fail} falha(s)`);
 process.exit(fail ? 1 : 0);

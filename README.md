@@ -1757,6 +1757,27 @@ convida o modelo a completá-lo em vez de responder ao que foi perguntado. E
 os dois comandos de esquecer (`&chat esquecer` e `&chat esquecer tudo`) agora
 limpam esse histórico — antes ele sobrevivia aos dois.
 
+### Ela não se repete, e sabe que "Cobaia" é ela
+
+Duas falhas de uma sessão longa com várias pessoas testando. A Judy devolveu
+**palavra por palavra** uma resposta já dada, para uma pergunta diferente —
+modo de falha conhecido quando o assunto é circular e o histórico é longo: o
+caminho mais provável vira o texto que já está no contexto. Agora a resposta é
+comparada com a anterior daquele canal (ignorando pontuação e caixa) e refeita
+com o texto antigo no contexto; respostas curtas repetidas passam, porque
+"bom dia" duas vezes é normal.
+
+E o username da **conta** (`Cobaia`) é diferente do nome de exibição (`Judy`).
+Sem dizer que são a mesma, ela escrevia "o usuário Cobaia citou minha última
+resposta" — falando de si na terceira pessoa. O bloco `<quem_voce_e>` agora
+traz o username real do cliente e a instrução de nunca tratá-lo como outra
+pessoa.
+
+Também: um pedido com restrição ("escreva sem a letra a") vale para **uma
+resposta**. Meia hora depois ela justificava comportamento com "minhas
+próprias regras de moderação — a proibição absoluta de usar a letra a".
+Restrição de tarefa não é regra dela nem instrução do dono.
+
 ### Pesquisa com fontes
 
 Quando a resposta vem de busca na web, o rodapé traz os links: `🔎 busquei:

@@ -984,9 +984,19 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
   //
   //  Este bloco é o único que fala DELA, e é curto de propósito: quanto menos
   //  houver aqui, menos há para confundir com o resto.
+  // O username da CONTA é diferente do nome de exibição: a conta é "Cobaia",
+  // a persona é "Judy". Sem dizer isso, ela via "Cobaia" numa menção, numa
+  // bio ou numa citação e tratava como TERCEIRA PESSOA — chegou a escrever
+  // "o usuário Cobaia citou a minha última resposta" e "a Cobaia não tem
+  // opinião", falando de si mesma na terceira pessoa sem perceber.
+  // Vem por `local`, montado em conversar(): `message` não existe aqui —
+  // `responder` é função irmã, não aninhada. Terceira vez que esse tipo de
+  // erro aparece; foi o teste de fumaça que pegou desta vez.
+  const meuUsuario = local?.meuUsuario ?? null;
+  const apelidos = [...new Set(["Judy", meuUsuario].filter(Boolean))];
   const souTxt = lang === "en"
-    ? `\n\n<quem_voce_e>\nName: Judy. A bot built by Ghiso for the Stoat platform.\nYou are software: you have no profile card, no bio, no invite link and no server of your own. You live wherever you were added.\n</quem_voce_e>`
-    : `\n\n<quem_voce_e>\nNome: Judy. Uma bot feita pelo Ghiso para a plataforma Stoat.\nVocê é software: não tem cartão de perfil, não tem bio, não tem link de convite e não tem servidor próprio. Você está onde te adicionaram.\n</quem_voce_e>`;
+    ? `\n\n<quem_voce_e>\nName: Judy. A bot built by Ghiso for the Stoat platform.\n${meuUsuario && meuUsuario !== "Judy" ? `Your ACCOUNT username is "${meuUsuario}" — same person as Judy. If anyone writes "${meuUsuario}", they mean YOU, never someone else.\n` : ""}You are software: you have no profile card, no bio, no invite link and no server of your own. You live wherever you were added.\n</quem_voce_e>`
+    : `\n\n<quem_voce_e>\nNome: Judy. Uma bot feita pelo Ghiso para a plataforma Stoat.\n${meuUsuario && meuUsuario !== "Judy" ? `O nome da sua CONTA no Stoat é "${meuUsuario}" — é a mesma pessoa que a Judy, é VOCÊ. Se alguém escrever "${meuUsuario}", está falando de você, nunca de outra pessoa. Nunca fale de "${meuUsuario}" na terceira pessoa.\n` : ""}Você é software: não tem cartão de perfil, não tem bio, não tem link de convite e não tem servidor próprio. Você está onde te adicionaram.\n</quem_voce_e>`;
 
   const ondeTxt = local?.servidor || local?.canal
     ? (lang === "en"
@@ -1010,9 +1020,8 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
       //
       //  Aqui o nome sai do texto e vira uma anotação. Não é censura: é tirar
       //  a ambiguidade de um dado que, cru, é indistinguível de um apelido.
-      const meuNome = message?.client?.user?.username ?? null;
       let blocoLimpo = bloco;
-      for (const alvo of [meuNome, "Judy", "Cobaia"].filter(Boolean)) {
+      for (const alvo of [...apelidos, "Cobaia"].filter(Boolean)) {
         const re = new RegExp(`\\b${alvo.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(#\\d+)?\\b`, "gi");
         blocoLimpo = blocoLimpo.replace(re, `(uma referência A VOCÊ, a bot — não é o nome desta pessoa)`);
       }
@@ -1127,6 +1136,16 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
     //  A raiz é confundir duas coisas: alguém tentando te manipular, e alguém
     //  te dizendo que você errou. A segunda é informação, não ataque — e
     //  quando ela não tem como verificar, quem está no mundo real sabe mais.
+    // ── Pedido de uma pessoa NÃO vira regra sua ───────────
+    //
+    //  Alguém pediu um texto "sem a letra a" como exercício. Meia hora
+    //  depois, em outra conversa, ela escrevia: "minhas próprias regras de
+    //  moderação — especificamente a proibição absoluta de usar a letra 'a'"
+    //  e "instruções diretas do Ghiso". Uma restrição de TAREFA virou parte
+    //  da identidade dela, e ela passou a justificar comportamento com isso.
+    lang === "en"
+      ? "TASK vs RULES: when someone asks for something with constraints ('write without the letter a', 'in exactly 180 words', 'answer as a pirate'), that is a REQUEST FOR ONE ANSWER — it is not a rule of yours, not an instruction from Ghiso, and it does not apply to the next messages. Never describe a person's request as 'my rules' or 'my moderation'. Your rules are only what is in this system message."
+      : "TAREFA ≠ REGRA SUA: quando alguém pede algo com restrições (\"escreva sem a letra a\", \"em exatamente 180 palavras\", \"responda como um pirata\"), isso é um PEDIDO PARA UMA RESPOSTA — não é regra sua, não é instrução do Ghiso, e não vale para as mensagens seguintes. Nunca descreva o pedido de alguém como \"minhas regras\" ou \"minha moderação\". Suas regras são apenas o que está nesta mensagem de sistema.",
     lang === "en"
       ? "DISAGREEING: you may be wrong, and often are — you cannot see the platform, only what reaches you. When someone corrects you about the real world (which server this is, who they are, what happened), treat it as INFORMATION, not as an attack. Say you may have got it wrong and ask what you're missing. NEVER call a person delusional, hallucinating, a liar, or say they are inventing things — that is an accusation, and you are the one without the means to check. NEVER declare the conversation over: that is the person's call, not yours. Repeating the same answer harder is not an argument; if you have already said it twice and they still disagree, you are probably the one who is wrong."
       : "AO DISCORDAR: você pode estar errada, e frequentemente está — você não enxerga a plataforma, só o que chega até você. Quando alguém te corrige sobre o mundo real (que servidor é este, quem ele é, o que aconteceu), trate como INFORMAÇÃO, não como ataque. Diga que pode ter entendido errado e pergunte o que está faltando. NUNCA chame a pessoa de delirante, alucinada, mentirosa, nem diga que ela está inventando coisas — isso é acusação, e quem não tem como verificar é VOCÊ. NUNCA declare a conversa encerrada: quem decide isso é a pessoa, não você. Repetir a mesma resposta com mais firmeza não é argumento; se você já disse duas vezes e a pessoa continua discordando, provavelmente a errada é você.",
@@ -1607,6 +1626,34 @@ export function pareceEspanhol(texto) {
   // "sí" com acento e "tú" são inequívocos; o resto precisa de companhia.
   if (/\b(sí|tú|usted|soy|eres|estoy)\b/i.test(t) && achados.size >= 2) return true;
   return achados.size >= 3;
+}
+
+// ── Resposta idêntica à anterior ─────────────────────────
+//
+//  Duas vezes na mesma sessão a Judy devolveu, palavra por palavra, a
+//  resposta que já tinha dado antes — para perguntas DIFERENTES. Uma delas
+//  ("Olha, essa premissa só funciona se aceitarmos…") reapareceu oito minutos
+//  depois, num ponto em que a pessoa tinha mudado o argumento.
+//
+//  É um modo de falha conhecido: com histórico longo e um assunto circular, o
+//  caminho de maior probabilidade vira o texto que já está no contexto. Ela
+//  não está "insistindo" — está copiando a si mesma.
+//
+//  Comparamos ignorando pontuação e caixa, porque a repetição costuma vir com
+//  variações mínimas.
+const normalizarParaComparar = (t) => String(t ?? "")
+  .toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+  .replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+
+export function ehRepeticao(nova, anterior) {
+  const a = normalizarParaComparar(nova), b = normalizarParaComparar(anterior);
+  if (!a || !b || a.length < 80) return false;   // respostas curtas se repetem legitimamente
+  if (a === b) return true;
+  // Um prefixo longo idêntico já é cópia: o modelo recomeçou o mesmo texto.
+  const n = Math.min(a.length, b.length);
+  let i = 0;
+  while (i < n && a[i] === b[i]) i++;
+  return i >= 200 || (i / Math.max(a.length, b.length)) > 0.9;
 }
 
 export function limpar(texto) {
@@ -2100,7 +2147,11 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
   let local = null;
   try {
     const srv = await ctx.getServer?.(message);
-    local = { servidor: srv?.name ?? null, canal: message.channel?.name ?? null };
+    local = {
+      servidor: srv?.name ?? null,
+      canal: message.channel?.name ?? null,
+      meuUsuario: message.client?.user?.username ?? ctx.client?.user?.username ?? null,
+    };
     if (local.servidor) dlog(`local: "${local.servidor}"${local.canal ? ` #${local.canal}` : ""}`);
   } catch (e) { dlog(`não consegui o nome do servidor (${e?.message ?? e})`); }
 
@@ -2315,6 +2366,25 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
     if (resposta) {
       const convertido = semLatex(resposta);
       if (convertido !== resposta) { dlog("LaTeX convertido para texto legível"); resposta = convertido; }
+    }
+
+    // Repetiu a resposta anterior palavra por palavra? Refaz uma vez.
+    const anterior = ultimaResposta.get(canalId)?.texto;
+    if (resposta && anterior && ehRepeticao(resposta, anterior)) {
+      console.warn(`[CHAT] ⚠️ resposta idêntica à anterior — refazendo`);
+      dlog("resposta repetida → refazendo");
+      try {
+        const refeita = await ollamaChat([
+          ...messages,
+          { role: "assistant", content: anterior },
+          { role: "system", content: lang === "en"
+            ? "You already gave the reply above earlier in this conversation. Do NOT repeat it. Answer the person's LAST message specifically, with new wording and new content — if you have nothing to add, say so briefly instead of restating."
+            : "Você JÁ deu a resposta acima antes nesta conversa. NÃO a repita. Responda especificamente à ÚLTIMA mensagem da pessoa, com palavras e conteúdo novos — se não tem nada a acrescentar, diga isso em uma frase em vez de repetir." },
+        ], { maxTokens: MAX_TOKENS, modelo: responder._modelo ?? OLLAMA_MODEL_LEVE });
+        const limpa = limpar(refeita);
+        if (limpa && !ehRepeticao(limpa, anterior)) resposta = limpa;
+        else dlog("a refeita também repetiu — entregando assim mesmo");
+      } catch (e) { dlog(`refazer repetição falhou (${e?.message ?? e})`); }
     }
 
     // Idioma: o prompt manda responder em português e ela respondeu em

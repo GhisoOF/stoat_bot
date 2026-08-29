@@ -1319,7 +1319,7 @@ console.log("\n── ficha no seguimento, nome na bio, espanhol ──");
 
   ok(/uma referência A VOCÊ, a bot/.test(fonte),
     "★ o nome da própria bot é retirado da bio de terceiro e vira anotação");
-  ok(/const meuNome = message\?\.client\?\.user\?\.username/.test(fonte),
+  ok(/meuUsuario: message\.client\?\.user\?\.username/.test(fonte),
     "  → usando o nome real do cliente, não só a lista fixa");
 
   const casos = [
@@ -1395,6 +1395,44 @@ console.log("\n── ritmo, ids e o que ela observa ──");
   ok(sim.every((q) => f.perguntaSobreOEstado(q)), "  → e as perguntas sobre ritmo, id e observação disparam a ficha");
   ok(nao.every((q) => !f.perguntaSobreOEstado(q)),
     "  → sem pegar 'atividade física' nem 'quantas mensagens EU mandei': tem de ser sobre o servidor");
+}
+
+// ══ 39. Repetição literal, e "Cobaia" na terceira pessoa ══
+//
+//  Numa sessão de duas horas com várias pessoas testando: (a) ela devolveu
+//  DUAS vezes, palavra por palavra, uma resposta já dada — para perguntas
+//  diferentes, com oito minutos de intervalo; (b) escreveu "o usuário Cobaia
+//  citou a minha última resposta" e "a Cobaia não tem opinião" — falando de
+//  si mesma na terceira pessoa, porque "Cobaia" é o username da CONTA e
+//  "Judy" é o nome de exibição, e nada dizia que são a mesma; (c) passou a
+//  chamar de "minhas próprias regras de moderação" uma restrição que alguém
+//  tinha pedido numa tarefa ("escreva sem a letra a").
+console.log("\n── repetição, username da conta, tarefa vs regra ──");
+{
+  const chat = await import("./modulos/ai/chat.js");
+  const real = "Olha, essa premissa só funciona se aceitarmos que eu sou apenas um conjunto de instruções estáticas. Mas um script não tem a capacidade de avaliar o próprio script. Se eu digo que tenho opinião, não estou repetindo uma frase pré-gravada.";
+
+  ok(chat.ehRepeticao(real, real), "★ resposta idêntica à anterior é detectada");
+  ok(chat.ehRepeticao(real.replace(/,/g, ""), real), "  → mesmo com pontuação diferente");
+  ok(chat.ehRepeticao(`${real} E mais uma frase nova no fim.`, real),
+    "  → e quando ela recomeça o mesmo texto e só acrescenta no fim");
+  ok(!chat.ehRepeticao("Estou no Vapor Nexus com 217 membros e ritmo de 3 msg/min agora, tudo tranquilo por aqui hoje.", real),
+    "  → resposta diferente passa");
+  ok(!chat.ehRepeticao("Bom dia!", "Bom dia!"),
+    "★ mas respostas CURTAS iguais passam: 'bom dia' repetido é normal, não é o bug");
+
+  const fonte = fs.readFileSync("./modulos/ai/chat.js", "utf8");
+  ok(/resposta idêntica à anterior — refazendo/.test(fonte), "  → e a repetição é refeita antes de sair");
+  ok(/Você JÁ deu a resposta acima antes nesta conversa/.test(fonte),
+    "  → com o texto anterior no contexto, para o modelo saber o que não repetir");
+
+  ok(/O nome da sua CONTA no Stoat é/.test(fonte) && /Nunca fale de "\$\{meuUsuario\}" na terceira pessoa/.test(fonte),
+    "★ o prompt diz que o username da conta e a Judy são a MESMA pessoa");
+  ok(/const meuUsuario = local\?\.meuUsuario/.test(fonte),
+    "  → e vem por `local`: `message` não existe em responder() — terceiro erro desse tipo, pego pela fumaça");
+
+  ok(/TAREFA ≠ REGRA SUA/.test(fonte) && /não é regra sua, não é instrução do Ghiso/.test(fonte),
+    "★ pedido com restrição é para UMA resposta — não vira identidade nem 'minha moderação'");
 }
 
 console.log(`\nIA: ${pass} ok, ${fail} falha(s)`);

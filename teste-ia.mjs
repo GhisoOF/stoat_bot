@@ -968,12 +968,17 @@ console.log("\n── fumaça: os caminhos rodam de ponta a ponta ──");
     ok(!quebrou, `★ "${rotulo}" roda sem erro de escopo — inclusive os engolidos por try/catch`);
   }
 
+  // O especial foi aposentado, mas o caminho continua EXECUTANDO: quem digitar
+  // recebe o aviso. Foi aqui que o `embedIdioma is not defined` apareceu — um
+  // helper que não existe neste arquivo, invisível para o `node --check`.
   enviadas.length = 0; saidas.length = 0;
   await chat.cmdChat({ ...msg, content: "&chat especial oi" }, ["especial", "quanto é a vida"], ctx);
-  ok(!saidas.some((x) => /not defined|Falha no chat/.test(String(x))), "  → e `&chat especial` também");
-  ok(enviadas.includes("qwen3.8-27b"),
-    `★ e o especial REALMENTE troca o modelo (pediu: ${enviadas.join(", ") || "nenhum"})`);
-  ok(saidas.some((x) => /Pensando com/.test(String(x))), "  → avisando a espera antes de começar");
+  ok(!saidas.some((x) => /not defined|Falha no chat/.test(String(x))),
+    "  → e `&chat especial` (aviso de aposentadoria) roda sem erro de escopo");
+  ok(saidas.some((x) => /modelo grande saiu|large model is gone/i.test(String(x))),
+    "★ e explica que o modelo grande saiu, em vez de virar pergunta comum");
+  ok(!enviadas.includes("qwen3.8-27b"),
+    `  → e NÃO chama mais o modelo grande (pediu: ${enviadas.join(", ") || "nenhum"})`);
 
   globalThis.fetch = fetchDoBloco;
   srv.close();
@@ -1020,61 +1025,63 @@ console.log("\n── mensagens: um system só, e na frente ──");
     "  → e o judy-ia faz o mesmo: foi ELE que devolveu o HTTP 500");
 }
 
-// ══ 30. `&chat especial`: restrito e sem tetos ══
+// ══ 30. `&chat especial`: aposentado ══
 //
-//  Ele ocupa a placa por minutos e derruba o modelo residente — depois dele,
-//  a próxima mensagem de QUALQUER pessoa paga a recarga. Por isso o acesso é
-//  por cargo. E como quem chega já foi autorizado, os limites que existiam
-//  para conter abuso público (cooldown, teto de 700 tokens) saem: a primeira
-//  resposta veio truncada no meio de uma lista de botões em Lua.
-console.log("\n── especial: acesso por cargo, sem tetos ──");
+//  Ele servia o qwen3.8-27b: ~13 GB, ocupava a placa inteira, derrubava o
+//  residente e levava ~30s por resposta. Saiu quando a premissa acabou — a
+//  troca do backend Vulkan → ROCm levou o residente de 8 para 36,7 tok/s, e
+//  o 27B em Q3_K_P não justificava mais a espera. O config.yaml do
+//  llama-swap tem um modelo só agora.
+//
+//  O que estes testes garantem: o comando não ressuscita por acidente (nada
+//  de constante, teto ou cargo sobrando) e quem digitar recebe um aviso, nos
+//  dois idiomas, em vez de ver a palavra "especial" virar o começo de uma
+//  pergunta comum.
+console.log("\n── especial: aposentado, sem sobras ──");
 {
   const fonte = fs.readFileSync("./modulos/ai/chat.js", "utf8");
-  ok(/CHAT_ESPECIAL_TOKENS \|\| 4000/.test(fonte) && /CHAT_ESPECIAL_CONTINUAR \|\| 6/.test(fonte),
-    "★ teto de 4000 tokens e 6 emendas — contra 700 e 2 do caminho comum");
-  ok(/maxTokens: ehEspecial \? ESPECIAL_TOKENS : MAX_TOKENS/.test(fonte),
-    "  → aplicados só quando é o especial; a conversa normal segue enxuta");
-  ok(/CHAT_ESPECIAL_COOLDOWN_MS \|\| 0/.test(fonte) && /ESPECIAL_COOLDOWN_MS > 0 && espera > 0/.test(fonte),
-    "  → cooldown desligado por padrão, e ligável se um dia liberar um cargo grande");
+  ok(!/CHAT_ESPECIAL_TOKENS|CHAT_ESPECIAL_CONTINUAR|CHAT_ESPECIAL_COOLDOWN_MS/.test(fonte),
+    "★ nenhuma constante do especial sobrou no chat.js");
+  ok(!/OLLAMA_MODEL_ESPECIAL\s*=/.test(fonte),
+    "  → nem o OLLAMA_MODEL_ESPECIAL");
+  ok(!/ehEspecial/.test(fonte),
+    "  → nem o teto de tokens condicional: a conversa tem um teto só");
+  ok(!/chatEspecial/.test(fonte),
+    "  → nem a config de cargos: não há mais acesso a gerenciar");
 
+  const ficha = fs.readFileSync("./modulos/ai/ficha.js", "utf8");
+  ok(!/ESPECIAL/.test(ficha), "  → e a ficha não anuncia mais um modelo que não existe");
+
+  const help = fs.readFileSync("./modulos/moderacao/geral.js", "utf8");
+  ok(!/chat especial/.test(help), "★ o &help (PT e EN) não lista mais o subcomando");
+
+  // O aviso responde nos dois idiomas.
   const chat = await import("./modulos/ai/chat.js");
   const saidas = [];
   const base = {
     sendEmbed: async (_c, e) => saidas.push(`${e.title}|${e.description}`),
     COR: { info: 1, erro: 2, aviso: 3, sucesso: 4 }, serverId: "01KH9SJYWVD7XAHJ28TP0YP4Q0",
     PREFIXO: "&", salvarConfig: () => {}, membroTemPermissao: () => true,
+    ehSuperAdmin: () => true, config: {},
   };
-  const msg = (autor) => ({ content: "&chat especial oi", authorId: autor, channelId: "c1",
+  const msg = () => ({ content: "&chat especial oi", authorId: "quem-seja", channelId: "c1",
     channel: { sendMessage: async () => ({ edit: async () => {} }) },
     client: { user: { id: "bot" } }, reply_ids: [] });
 
-  // Sem cargo liberado: só super admin entra.
-  const cfg = { config: {}, ehSuperAdmin: (id) => id === "dono",
-    getServer: async () => ({ roles: { "r-vip": { name: "VIP" } }, fetchMember: async () => ({ roles: ["r-outro"] }) }) };
   saidas.length = 0;
-  await chat.cmdChat(msg("estranho"), ["especial", "quanto é 2+2"], { ...base, ...cfg });
-  ok(saidas.some((x) => /Acesso restrito/.test(x)), "★ quem não é admin nem tem cargo é barrado");
+  await chat.cmdChat(msg(), ["especial", "quanto é 2+2"], base);
+  ok(saidas.some((x) => /aposentado/i.test(x)), "★ avisa em PT que o modelo grande saiu");
 
-  // O dono libera um cargo.
   saidas.length = 0;
-  await chat.cmdChat(msg("dono"), ["especial", "cargos", "add", "VIP"], { ...base, ...cfg });
-  ok(saidas.some((x) => /Cargo liberado/.test(x)) && cfg.config.chatEspecial.cargos.includes("r-vip"),
-    "★ `cargos add VIP` resolve o cargo pelo NOME e guarda o id");
+  await chat.cmdChat(msg(), ["special", "what is 2+2"], { ...base, lang: "en" });
+  ok(saidas.some((x) => /retired|aposentado/i.test(x)), "  → e o apelido em inglês (`special`) cai no mesmo aviso");
 
-  // Agora quem tem o cargo passa.
-  const comCargo = { ...cfg, getServer: async () => ({ roles: { "r-vip": { name: "VIP" } }, fetchMember: async () => ({ roles: ["r-vip"] }) }) };
-  saidas.length = 0;
-  await chat.cmdChat(msg("membro-vip"), ["especial", "oi"], { ...base, ...comCargo });
-  ok(!saidas.some((x) => /Acesso restrito/.test(x)), "  → e membro COM o cargo não é mais barrado");
-
-  // Listar e remover.
-  saidas.length = 0;
-  await chat.cmdChat(msg("dono"), ["especial", "cargos"], { ...base, ...cfg });
-  ok(saidas.some((x) => /VIP/.test(x)), "  → `cargos` lista quem tem acesso pelo nome");
-  saidas.length = 0;
-  await chat.cmdChat(msg("dono"), ["especial", "cargos", "remover", "VIP"], { ...base, ...cfg });
-  ok(saidas.some((x) => /Acesso removido/.test(x)) && !cfg.config.chatEspecial.cargos.includes("r-vip"),
-    "  → e `cargos remover` tira");
+  // Apelidos que a memória muscular pode tentar.
+  for (const alias of ["grande", "pro"]) {
+    saidas.length = 0;
+    await chat.cmdChat(msg(), [alias, "oi"], base);
+    ok(saidas.some((x) => /aposentado|retired/i.test(x)), `  → \`&chat ${alias}\` também`);
+  }
 }
 
 // ══ 31. Ela sabe onde está, quem é quem, e não acusa ══
@@ -1263,7 +1270,6 @@ console.log("\n── ficha técnica: o que ela sabe de si ──");
     ["c", { _id: "c", name: "teste", member_count: 2 }],
   ]) };
   process.env.OLLAMA_MODEL_LEVE = "qwythos-9b-v2-rapido";
-  process.env.OLLAMA_MODEL_ESPECIAL = "qwen3.8-27b";
   const txt = await f.fichaTecnica({ client }, { serverIdAtual: "a" });
 
   ok(/Servidores em que você está: 3 \(3023 membros/.test(txt),
@@ -1272,8 +1278,10 @@ console.log("\n── ficha técnica: o que ela sabe de si ──");
     "  → marcando em qual deles ela está agora");
   ok(txt.indexOf("Queremos acordar tarde") < txt.indexOf("teste"),
     "  → maiores primeiro: num bot com 50 servidores, são eles que contam a história");
-  ok(/qwythos-9b-v2-rapido/.test(txt) && /qwen3\.8-27b/.test(txt),
-    "★ e os modelos por papel — dizer QUAL modelo a executa é config do dono, não identidade");
+  // Com um modelo só para todos os papéis, a ficha diz isso em uma linha —
+  // e o qwen3.8-27b saiu junto com o `&chat especial`.
+  ok(/qwythos-9b-v2-rapido/.test(txt) && !/qwen3\.8-27b/.test(txt),
+    "★ e o modelo que a executa — config do dono, não identidade — sem o especial aposentado");
   ok(/De pé há:/.test(txt) && /Memória neste servidor:/.test(txt),
     "  → mais uptime e a contagem de memória, para ela poder dizer 'nada' com convicção");
   ok(/<sua_ficha_tecnica>/.test(txt) && /não os confunda com informação sobre a pessoa/.test(txt),

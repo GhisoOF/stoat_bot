@@ -170,14 +170,8 @@ const OLLAMA_MODEL_LOGICA  = process.env.OLLAMA_MODEL_LOGICA  || "qwen3.5:9b";
 //  modelo de conversa. Rápido demais para ser padrão, bom demais para não
 //  existir — então fica atrás de um comando explícito, onde a pessoa aceita
 //  a espera porque foi ela quem pediu.
-const OLLAMA_MODEL_ESPECIAL = process.env.OLLAMA_MODEL_ESPECIAL || "qwen3.8-27b";
-const ESPECIAL_COOLDOWN_MS  = Number(process.env.CHAT_ESPECIAL_COOLDOWN_MS || 0);
-// O especial é de acesso restrito, então os limites que existem para conter
-// abuso público não fazem sentido aqui — quem chega já foi autorizado.
-// O teto de tokens sobe muito: a primeira resposta veio truncada no meio de
-// uma lista de botões, e código longo é justamente o caso de uso dele.
-const ESPECIAL_TOKENS = Number(process.env.CHAT_ESPECIAL_TOKENS || 4000);
-const ESPECIAL_CONTINUAR = Number(process.env.CHAT_ESPECIAL_CONTINUAR || 6);
+// (as constantes do especial saíram com ele: OLLAMA_MODEL_ESPECIAL,
+//  ESPECIAL_COOLDOWN_MS, ESPECIAL_TOKENS e ESPECIAL_CONTINUAR)
 // Decisões internas e agente de memória.
 //
 // O padrão é o MESMO modelo da conversa, e isso é de propósito. Um modelo
@@ -1026,8 +1020,9 @@ function hojeExtenso() {
 // ── Resposta final ─────────────────────────────────────────
 // `modeloForcado` chega por parâmetro, e não por closure: `responder` é uma
 // função de topo, irmã de `conversar`, não aninhada nela. Ler a variável de
-// lá dava `modeloForcado is not defined` — e derrubava TODA conversa, não só
-// o `&chat especial`, porque a linha executa em qualquer caminho.
+// lá dava `modeloForcado is not defined` — e derrubava TODA conversa, porque
+// a linha executa em qualquer caminho. (Era o `&chat especial`, hoje
+// aposentado, que passava esse parâmetro em produção.)
 async function responder(pergunta, resultados, autor, userId, citada, serverId, canalId, lang = "pt", modeloForcado = null, local = null, fichaTxt = "") {
   const hoje = hojeExtenso();
 
@@ -1302,13 +1297,15 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
   // Programação → modelo especializado (ornith). Considera a pergunta e a
   // mensagem citada (ex.: respondeu a um trecho de código e chamou a Judy).
   let { modelo: modeloEscolhido, tipo, motivo } = escolherModelo(pergunta, citada);
-  // `&chat especial` manda no modelo, mas NÃO no resto: a detecção de conta,
-  // de leitura de código e de escopo continua valendo — o que muda é quem
-  // responde, não como se decide o caminho.
+  // `modeloForcado` sobreviveu ao fim do `&chat especial`: continua sendo o
+  // gancho para forçar um modelo específico numa chamada (testes, e um
+  // eventual comando futuro). Quando vem preenchido, manda no modelo mas NÃO
+  // no resto — a detecção de conta, de leitura de código e de escopo continua
+  // valendo.
   if (modeloForcado) {
     modeloEscolhido = modeloForcado;
-    if (tipo !== "ferramenta") tipo = "ferramenta";   // o grande tem tool calling; use
-    motivo = motivo ?? "especial";
+    if (tipo !== "ferramenta") tipo = "ferramenta";
+    motivo = motivo ?? "forcado";
   }
   // Imagem anexada → SEMPRE caminho com ferramentas.
   //
@@ -1550,12 +1547,9 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
   } else if (IA_SERVICO_URL) {
     dlog(`sem ferramenta (tipo=${tipo}) → Ollama direto, sem passar pelo judy-ia`);
   }
-  // No especial, teto alto e mais emendas: a resposta veio truncada no meio
-  // de um bloco de código com os limites do caminho comum.
-  const ehEspecial = modeloForcado && modeloForcado === OLLAMA_MODEL_ESPECIAL;
+  // Teto único: o especial era o que pedia um teto maior, e ele saiu.
   const texto = await ollamaChat(messages, {
-    maxTokens: ehEspecial ? ESPECIAL_TOKENS : MAX_TOKENS,
-    continuarMax: ehEspecial ? ESPECIAL_CONTINUAR : null,
+    maxTokens: MAX_TOKENS,
     modelo: modeloEscolhido,
   });
   // Lido AGORA, antes de qualquer outra chamada ao ollamaChat poder mudá-lo.
@@ -3332,161 +3326,29 @@ export async function cmdChat(message, args, ctx) {
     });
   }
 
-  // ── &chat especial <texto> — o modelo grande, sob demanda ──
+  // ── &chat especial — APOSENTADO (2026-08-30) ──
   //
-  //  A medição nesta máquina foi clara: o modelo de conversa responde em ~1s,
-  //  o grande em ~13,6s + ~19,6s de carga. Trinta segundos é inaceitável como
-  //  padrão e perfeitamente aceitável quando a pessoa pediu por eles.
+  //  O comando servia o qwen3.8-27b, um modelo separado que ocupava a placa
+  //  inteira (~13 GB), derrubava o residente e levava ~30s por resposta.
   //
-  //  Duas proteções, pelo mesmo motivo: a GPU é uma só. O cooldown por pessoa
-  //  evita que alguém tranque a placa em sequência, e a fila normal (uma
-  //  conversa por vez) segura o resto. Depois de um `especial`, a PRÓXIMA
-  //  mensagem comum ainda paga a recarga do modelo pequeno — é o preço, e
-  //  está dito no aviso.
+  //  Saiu porque a premissa acabou: depois da troca do backend Vulkan → ROCm
+  //  o residente passou de 8 para 36,7 tok/s, e o 27B em Q3_K_P (quantização
+  //  agressiva, para caber em 16 GB) não entregava qualidade que justificasse
+  //  30s de espera derrubando o modelo de todo mundo. O config.yaml do
+  //  llama-swap tem UM modelo só agora.
+  //
+  //  O aviso é para quem tinha o comando na memória muscular: sem ele,
+  //  `&chat especial <pergunta>` viraria pergunta comum começando com
+  //  "especial". Vale também para `&chat especial cargos`, que gerenciava o
+  //  acesso — não há mais acesso a gerenciar.
   if (["especial", "special", "grande", "pro"].includes(args[0]?.toLowerCase())) {
-    // ── Quem pode usar ────────────────────────────────────
-    //
-    //  O especial ocupa a placa inteira por minutos e derruba o modelo
-    //  residente — depois dele, a próxima mensagem de qualquer pessoa paga a
-    //  recarga. Por isso é restrito: super admins sempre, mais os cargos que
-    //  o dono escolher. Sem cargo configurado, é só super admin.
-    ctx.config.chatEspecial ??= { cargos: [] };
-    const cargosOk = ctx.config.chatEspecial.cargos ?? [];
-    const sub = args[1]?.toLowerCase();
-
-    // `&chat especial cargos …` — gerir quem tem acesso (ManageServer)
-    if (["cargos", "cargo", "roles"].includes(sub)) {
-      const server = await ctx.getServer?.(message);
-      if (ctx.membroTemPermissao && !ctx.membroTemPermissao(message, server, "ManageServer")) {
-        return sendEmbed(message.channel, tr(ctx,
-          { title: "🚫 Permissão insuficiente",
-            description: "Gerir quem usa o modelo especial exige **ManageServer**.", colour: COR.erro },
-          { title: "🚫 Missing permission",
-            description: "Managing special-model access requires **ManageServer**.", colour: COR.erro }));
-      }
-      const acao = args[2]?.toLowerCase();
-      const alvo = args.slice(3).join(" ").trim();
-
-      if (["add", "adicionar", "+"].includes(acao)) {
-        const cargo = resolverCargo(alvo, server);
-        if (!cargo) {
-          return sendEmbed(message.channel, tr(ctx,
-            { title: "❌ Cargo não encontrado", description: `Não achei \`${alvo || "(vazio)"}\`. Use o nome exato ou o ID.`, colour: COR.erro },
-            { title: "❌ Role not found", description: `Couldn't find \`${alvo || "(empty)"}\`. Use the exact name or the ID.`, colour: COR.erro }));
-        }
-        if (!cargosOk.includes(cargo.id)) cargosOk.push(cargo.id);
-        ctx.config.chatEspecial.cargos = cargosOk;
-        ctx.salvarConfig?.();
-        return sendEmbed(message.channel, tr(ctx,
-          { title: "✅ Cargo liberado", description: `**${cargo.nome}** agora pode usar \`${PREFIXO}chat especial\`.`, colour: COR.sucesso },
-          { title: "✅ Role allowed", description: `**${cargo.nome}** can now use \`${PREFIXO}chat especial\`.`, colour: COR.sucesso }));
-      }
-
-      if (["remover", "remove", "rm", "-"].includes(acao)) {
-        const cargo = resolverCargo(alvo, server);
-        const id = cargo?.id ?? alvo;
-        const i = cargosOk.indexOf(id);
-        if (i < 0) {
-          return sendEmbed(message.channel, tr(ctx,
-            { title: "❌ Não estava na lista", description: `\`${cargo?.nome ?? alvo}\` não tinha acesso.`, colour: COR.erro },
-            { title: "❌ Not on the list", description: `\`${cargo?.nome ?? alvo}\` didn't have access.`, colour: COR.erro }));
-        }
-        cargosOk.splice(i, 1);
-        ctx.config.chatEspecial.cargos = cargosOk;
-        ctx.salvarConfig?.();
-        return sendEmbed(message.channel, tr(ctx,
-          { title: "✅ Acesso removido", description: `**${cargo?.nome ?? id}** não usa mais o modelo especial.`, colour: COR.sucesso },
-          { title: "✅ Access removed", description: `**${cargo?.nome ?? id}** can no longer use the special model.`, colour: COR.sucesso }));
-      }
-
-      // listar
-      const server2 = server ?? await ctx.getServer?.(message);
-      // Busca o nome direto na lista de cargos do servidor: `resolverCargo`
-      // devolve null para id que não existe mais, e mostrar o ULID cru sem
-      // explicação faria parecer bug. Cargo apagado aparece marcado.
-      const nomeDe = (id) => {
-        try {
-          const r = typeof server2?.roles?.get === "function" ? server2.roles.get(id) : server2?.roles?.[id];
-          if (r?.name) return r.name;
-        } catch {}
-        return resolverCargo(id, server2)?.nome ?? `${id} _(cargo apagado?)_`;
-      };
-      const nomes = cargosOk.map(nomeDe);
-      return sendEmbed(message.channel, tr(ctx,
-        { title: "🧠 Quem usa o modelo especial",
-          description: [
-            "Super admins sempre podem.",
-            nomes.length ? `Cargos liberados: ${nomes.map((n) => `**${n}**`).join(", ")}` : "_Nenhum cargo liberado — só super admins._",
-            "",
-            `\`${PREFIXO}chat especial cargos add <cargo>\``,
-            `\`${PREFIXO}chat especial cargos remover <cargo>\``,
-          ].join("\n"), colour: COR.info },
-        { title: "🧠 Who can use the special model",
-          description: [
-            "Super admins always can.",
-            nomes.length ? `Allowed roles: ${nomes.map((n) => `**${n}**`).join(", ")}` : "_No roles allowed — super admins only._",
-            "",
-            `\`${PREFIXO}chat especial cargos add <role>\``,
-            `\`${PREFIXO}chat especial cargos remover <role>\``,
-          ].join("\n"), colour: COR.info }));
-    }
-
-    // Acesso: super admin, ou membro com um dos cargos liberados.
-    const ehAdmin = !!ctx.ehSuperAdmin?.(message.authorId);
-    let temCargo = false;
-    if (!ehAdmin && cargosOk.length) {
-      try {
-        const server = await ctx.getServer?.(message);
-        const membro = await server?.fetchMember?.(message.authorId);
-        const meus = (membro?.roles ?? []).map((r) => r?.id ?? r).filter(Boolean);
-        temCargo = meus.some((r) => cargosOk.includes(r));
-      } catch (e) { console.error("[CHAT][especial] cargos:", e?.message ?? e); }
-    }
-    if (!ehAdmin && !temCargo) {
-      return sendEmbed(message.channel, tr(ctx,
-        { title: "🔒 Acesso restrito",
-          description: `O modelo especial é limitado. Use \`${PREFIXO}chat\` normal — ele responde na hora.`, colour: COR.aviso },
-        { title: "🔒 Restricted",
-          description: `The special model is limited. Use plain \`${PREFIXO}chat\` — it answers right away.`, colour: COR.aviso }));
-    }
-
-    const texto = args.slice(1).join(" ").trim();
-    if (!texto) {
-      return sendEmbed(message.channel, tr(ctx,
-        { title: "🧠 Modelo especial",
-          description: `Uso: \`${PREFIXO}chat especial <pergunta>\`\n\nResponde com **${OLLAMA_MODEL_ESPECIAL}**, bem maior que o de sempre. Pensa melhor e demora bem mais (dezenas de segundos). Use quando a resposta valer a espera.`,
-          colour: COR.info },
-        { title: "🧠 Special model",
-          description: `Usage: \`${PREFIXO}chat especial <question>\`\n\nAnswers with **${OLLAMA_MODEL_ESPECIAL}**, much larger than the usual one. Thinks better and takes far longer (tens of seconds). Use it when the answer is worth the wait.`,
-          colour: COR.info }));
-    }
-
-    const uid = message.authorId;
-    const agora = Date.now();
-    const ultima = cmdChat._especial?.get(uid) ?? 0;
-    const espera = ESPECIAL_COOLDOWN_MS - (agora - ultima);
-    // Cooldown desligado por padrão (CHAT_ESPECIAL_COOLDOWN_MS=0): o acesso
-    // já é restrito por cargo, então não há abuso público a conter. Ligue-o
-    // se um dia liberar para um cargo grande. Super admin nunca espera.
-    if (ESPECIAL_COOLDOWN_MS > 0 && espera > 0 && !ehAdmin) {
-      const min = Math.ceil(espera / 60_000);
-      return sendEmbed(message.channel, tr(ctx,
-        { title: "⏳ Ainda não",
-          description: `O modelo grande ocupa a placa inteira por bastante tempo. Tente de novo em **${min} min** — ou use \`${PREFIXO}chat\` normal, que responde na hora.`,
-          colour: COR.aviso },
-        { title: "⏳ Not yet",
-          description: `The large model takes over the whole GPU for a while. Try again in **${min} min** — or use plain \`${PREFIXO}chat\`, which answers right away.`,
-          colour: COR.aviso }));
-    }
-    (cmdChat._especial ??= new Map()).set(uid, agora);
-
-    console.log(`[CHAT] especial: ${uid} pediu ${OLLAMA_MODEL_ESPECIAL}`);
-    return conversar(message, texto, ctx, {
-      modeloForcado: OLLAMA_MODEL_ESPECIAL,
-      avisoEspera: cen
-        ? `🧠 Thinking with **${OLLAMA_MODEL_ESPECIAL}** — this one takes a while (loading the model plus a slower reply). Hang on.`
-        : `🧠 Pensando com o **${OLLAMA_MODEL_ESPECIAL}** — essa demora (carregar o modelo mais a resposta, que é bem mais lenta). Aguenta aí.`,
-    });
+    return sendEmbed(message.channel, tr(ctx,
+      { title: "🧠 Modelo especial aposentado",
+        description: `O modelo grande saiu de operação. O de sempre ficou **4,5× mais rápido** e responde melhor do que ele — use \`${PREFIXO}chat\` normalmente.`,
+        colour: COR.aviso },
+      { title: "🧠 Special model retired",
+        description: `The large model is gone. The regular one is now **4.5× faster** and answers better than it did — just use \`${PREFIXO}chat\`.`,
+        colour: COR.aviso }));
   }
 
   return conversar(message, args.join(" "), ctx);

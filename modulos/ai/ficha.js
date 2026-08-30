@@ -82,7 +82,6 @@ export async function fichaTecnica(ctx, { serverIdAtual = null } = {}) {
     código: process.env.OLLAMA_MODEL_CODIGO,
     ferramentas: process.env.OLLAMA_MODEL_LOGICA,
     decisões: process.env.OLLAMA_MODEL_DECISAO,
-    "&chat especial": process.env.OLLAMA_MODEL_ESPECIAL,
   };
   const usados = Object.entries(modelos).filter(([, v]) => v);
   if (usados.length) {

@@ -149,12 +149,54 @@ export function conferirComandos(resposta, comandos) {
   }
   return [...new Set(problemas)];
 }
+// ── Camada 2d: respondeu à pessoa certa? ─────────────────────────────────────
+// A Judy passou uma conversa inteira chamando a Mangetsuki de "Ghiso" — os
+// turnos eram anônimos e o único nome à vista era o do dono. O turno agora
+// leva rótulo, mas rótulo é prompt, e prompt não segura comportamento: isto
+// aqui segura. Vocativo (nome no começo, ou depois de vírgula/travessão,
+// seguido de pontuação) dirigido a alguém que NÃO é quem falou → problema.
+// Nome citado na própria pergunta é pulado: falar SOBRE alguém é normal.
+export function conferirDestinatario(resposta, autor, pergunta = "") {
+  const problemas = [];
+  if (!resposta || !autor) return problemas;
+  // Só vocativo DEPOIS de vírgula/travessão: no meio da frase, maiúscula é
+  // quase sempre nome próprio. Início de frase fica de fora de propósito —
+  // "Entendi, ..." é indistinguível de "Mangetsuki, ..." por posição, e falso
+  // positivo aqui custa mais que o caso perdido.
+  const reVocativo = /[,—–-]\s+([A-ZÀ-Þ][a-zà-þ]{2,20})\s*[,.!?—–:]/g;
+  const pergLower = (pergunta || "").toLowerCase();
+  const autorLower = String(autor).toLowerCase();
+  for (const m of resposta.matchAll(reVocativo)) {
+    const nome = m[1];
+    const nomeLower = nome.toLowerCase();
+    if (autorLower.includes(nomeLower) || nomeLower.includes(autorLower)) continue;
+    if (pergLower.includes(nomeLower)) continue;             // falou SOBRE a pessoa
+    problemas.push(`dirige-se a "${nome}", mas quem falou foi ${autor}`);
+  }
+  return [...new Set(problemas)].slice(0, 2);
+}
+
+// ── Camada 2e: negou capacidade que existe? ──────────────────────────────────
+// "N\u00e3o tenho acesso \u00e0 internet" \u00e9 mentira operacional em dois cen\u00e1rios: quando
+// a pessoa PEDIU busca (a ferramenta existe e o caminho devia t\u00ea-la usado) e
+// quando a evid\u00eancia mostra que a busca RODOU. Nos dois, \u00e9 problema.
+export function conferirNegacaoDeCapacidade(resposta, { pediuBusca = false, evidencia = "" } = {}) {
+  if (!resposta) return [];
+  const negou = /(n[\u00e3a]o|sem)\s+(tenho|tem|possuo)\s+(como\s+)?acess(o|ar)\s+([\u00e0a]\s+)?(internet|web)|n[\u00e3a]o\s+(consigo|posso)\s+(buscar|pesquisar|acessar\s+a\s+internet)|tempo\s+real/i.test(resposta);
+  if (!negou) return [];
+  if (String(evidencia).includes("[buscar")) return ["nega acesso \u00e0 internet, mas a busca RODOU e trouxe resultados (est\u00e3o na evid\u00eancia)"];
+  if (pediuBusca) return ["nega acesso \u00e0 internet num pedido expl\u00edcito de busca — a ferramenta existe e n\u00e3o foi usada"];
+  return [];
+}
+
 // ── Camada 2 completa ────────────────────────────────────────────────────────
-export function verificarDeterministico({ resposta, evidencia = "", pergunta = "", comandos = null } = {}) {
+export function verificarDeterministico({ resposta, evidencia = "", pergunta = "", comandos = null, autor = "", pediuBusca = false } = {}) {
   const problemas = [
     ...conferirContas(resposta),
     ...conferirNomes(resposta, evidencia, pergunta),
     ...conferirComandos(resposta, comandos),
+    ...conferirDestinatario(resposta, autor, pergunta),
+    ...conferirNegacaoDeCapacidade(resposta, { pediuBusca, evidencia }),
   ];
   return { ok: problemas.length === 0, problemas };
 }
@@ -226,8 +268,8 @@ export async function verificarComIA({ pergunta, resposta, evidencia, chamarMode
 // Camada 2 sempre; camada 3 só com evidência e wrapper injetado. Junta e
 // deduplica, teto de 5 problemas. `camadas` diz de onde veio cada achado —
 // útil no CHAT_DEBUG para saber o que a IA pegou que o código não pegou.
-export async function verificar({ pergunta = "", resposta = "", evidencia = "", comandos = null, chamarModelo = null, dlog = () => {} } = {}) {
-  const det = verificarDeterministico({ resposta, evidencia, pergunta, comandos });
+export async function verificar({ pergunta = "", resposta = "", evidencia = "", comandos = null, autor = "", pediuBusca = false, chamarModelo = null, dlog = () => {} } = {}) {
+  const det = verificarDeterministico({ resposta, evidencia, pergunta, comandos, autor, pediuBusca });
 
   let ia = null;
   if (evidencia && String(evidencia).length >= VERIF_EVID_MIN) {

@@ -908,7 +908,10 @@ const PISTAS_BUSCA = /(?:\b(?:hoje|ontem|agora|atual|atualmente|recente|not[ií]
 // respondeu `buscar=false` porque a pergunta mencionava o Stoat e ele achou
 // que era "sobre si mesmo". Ordem explícita agora pula o juiz e vai direto —
 // de quebra, economiza uma ida ao Ollama.
-export const PEDIDO_EXPLICITO = /\b(pesquis(a|ar|e|ue)|busca(r|e)?|procur(a|ar|e)|d[aá] uma olhada na (web|internet)|consult(a|ar|e) a (web|internet)|olha na (web|internet)|search)\b/i;
+// "utilize o tool searXNG" não tinha verbo de busca nenhum — e a Judy,
+// sem ferramenta, INVENTOU um top 10 de perks com cara de resultado real.
+// Citar a ferramenta pelo nome É pedir busca; googlar também.
+export const PEDIDO_EXPLICITO = /\b(pesquis(a|ar|e|ue)|busca(r|e)?|procur(a|ar|e)|d[aá] uma olhada na (web|internet)|consult(a|ar|e) a (web|internet)|olha na (web|internet)|search|searx(ng)?|googl(a|e|ar)|(usa|use|utiliza|utilize|roda|rode)r?\s+(a\s+|o\s+)?(tool|ferramenta)(\s+de\s+busca)?)\b/i;
 
 // ── Registro real de comandos, para o verificador ─────────
 //
@@ -1286,10 +1289,12 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
       .join("\n\n");
     messages.push({
       role: "user",
-      content: `${blocoCitado}Com base nestes resultados de busca (obtidos hoje, ${hoje}), responda à pergunta e cite as fontes pelo número. Se os resultados trouxerem datas, confie nelas em vez do seu conhecimento prévio.\n\nRESULTADOS:\n${contexto}\n\nPERGUNTA: ${pergunta}`,
+      content: `${blocoCitado}Com base nestes resultados de busca (obtidos hoje, ${hoje}), responda à pergunta e cite as fontes pelo número. Se os resultados trouxerem datas, confie nelas em vez do seu conhecimento prévio.\n\nRESULTADOS:\n${contexto}\n\nPERGUNTA (de ${autor}): ${pergunta}`,
     });
   } else {
-    messages.push({ role: "user", content: blocoCitado + pergunta });
+    // Quem fala vai no turno: sem isso, todo "user" parece a mesma pessoa e
+    // ela chama a Mangetsuki de Ghiso a conversa inteira.
+    messages.push({ role: "user", content: `${blocoCitado}[${autor}]: ${pergunta}` });
   }
   // Programação → modelo especializado (ornith). Considera a pergunta e a
   // mensagem citada (ex.: respondeu a um trecho de código e chamou a Judy).
@@ -1628,6 +1633,24 @@ export function podarIdentidade(texto) {
     .join(" ")
     .replace(/\s{2,}/g, " ")
     .trim();
+}
+
+// ── Deliberação vazada ───────────────────────────────────
+//
+//  Mesmo com enable_thinking desligado, saiu no chat: "Bom, se o Ghiso já
+//  deu o bom dia..., minha resposta tem de ser leve e direta. Vou manter o
+//  tom caloroso" — o PLANO da resposta, antes da resposta. Instrução não
+//  segura isso; corte na saída, sim (mesma lição do LaTeX, logo abaixo).
+//  Só corta quando o parágrafo-plano é o PRIMEIRO e há resposta depois dele.
+const DELIBERACAO = /\b(minha resposta (tem|deve|precisa)|vou manter o tom|devo (responder|manter|ser)|a resposta (deve|tem de) ser|ele (n[ãa]o )?est[áa] (pedindo|perguntando)|o usu[áa]rio (quer|pediu|est[áa])|n[ãa]o est[áa] pedindo ajuda)\b/i;
+export function cortarDeliberacao(texto) {
+  const t = String(texto ?? "");
+  const partes = t.split(/\n\s*\n/);
+  if (partes.length < 2) return t;                    // sem "resposta depois", não corta
+  if (DELIBERACAO.test(partes[0]) && partes[0].length < 600) {
+    return partes.slice(1).join("\n\n").trim();
+  }
+  return t;
 }
 
 // ── LaTeX que o chat não renderiza ───────────────────────
@@ -2507,6 +2530,12 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
       } catch (e) { dlog(`memória não atualizada: ${e.message}`); }
     }
 
+    // Deliberação vazada ("minha resposta tem de ser...") sai antes de tudo.
+    if (resposta) {
+      const semPlano = cortarDeliberacao(resposta);
+      if (semPlano !== resposta) { dlog("deliberação vazada cortada do início"); resposta = semPlano; }
+    }
+
     // LaTeX não renderiza no Stoat: convertemos para símbolos legíveis.
     if (resposta) {
       const convertido = semLatex(resposta);
@@ -2733,6 +2762,8 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
         pergunta,
         resposta,
         evidencia: evidenciaVerif,
+        autor,
+        pediuBusca: PEDIDO_EXPLICITO.test(pergunta),
         comandos: comandosParaVerificar(),
         chamarModelo: (msgs, o) => ollamaChat(msgs, { json: true, maxTokens: o?.maxTokens, modelo: OLLAMA_MODEL_LOGICA, etiqueta: "verificador" }),
         dlog,

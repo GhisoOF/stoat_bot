@@ -18,6 +18,7 @@
 import http from "node:http";
 import {
   parseNumero, conferirContas, conferirNomes, conferirComandos,
+  conferirDestinatario, conferirNegacaoDeCapacidade,
   verificarDeterministico, verificarComIA, verificar,
 } from "./modulos/ai/verificar.js";
 
@@ -88,6 +89,29 @@ caso("aprova apelido EN de subcomando (&assistente quick)",
   conferirComandos("Try &assistente quick.", CMDS).length === 0);
 caso("sem registro, não roda (fail-open)",
   conferirComandos("Use &qualquercoisa aí.", null).length === 0);
+
+console.log("── camada 2d: destinatário ──");
+// o caso real: a Judy chamou a Mangetsuki de Ghiso a conversa inteira
+caso("pega vocativo para a pessoa errada",
+  conferirDestinatario("Com certeza, Ghiso. Se você está aprendendo...", "Mangetsuki").length === 1);
+caso("aprova vocativo para quem falou",
+  conferirDestinatario("Entendi, Mangetsuki. Vamos lá.", "Mangetsuki").length === 0);
+caso("aprova falar SOBRE alguém citado na pergunta",
+  conferirDestinatario("O Akita, sim — vale assistir.", "Balatro", "gostei do Akita, ele é direto").length === 0);
+caso("aprova texto sem vocativo nenhum",
+  conferirDestinatario("Boa. Segue o plano que combinamos.", "Ghiso").length === 0);
+caso("palavras capitalizadas comuns não disparam",
+  conferirDestinatario("Certo, então. Boa, vamos.", "Ghiso").length === 0);
+
+console.log("── camada 2e: negação de capacidade ──");
+caso("pega 'não tenho acesso à internet' com pedido explícito",
+  conferirNegacaoDeCapacidade("Não tenho acesso à internet para buscar isso.", { pediuBusca: true }).length === 1);
+caso("pega negação com busca JÁ na evidência",
+  conferirNegacaoDeCapacidade("Não consigo pesquisar em tempo real.", { evidencia: "[buscar_web]\n1. resultado..." }).length === 1);
+caso("aprova negação em papo comum sem pedido nem evidência",
+  conferirNegacaoDeCapacidade("Não tenho acesso à internet.", {}).length === 0);
+caso("aprova resposta normal com a palavra internet",
+  conferirNegacaoDeCapacidade("A internet de vocês está lenta hoje?", { pediuBusca: true }).length === 0);
 
 console.log("── camada 2 integrada ──");
 {

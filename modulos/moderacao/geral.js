@@ -793,7 +793,7 @@ export async function cmdHelp(message, args, ctx) {
         ? "What do you want to do? Pick a group — react ◀ ▶ to browse them all, or type the command."
         : "O que você quer fazer? Escolha um grupo — reaja ◀ ▶ para folhear todos, ou digite o comando.",
       "",
-      ...chavesGrupos.map((k) => `${GRUPOS[k].emoji} \`${P}help ${k}\` — ${GRUPOS[k].resumo}`),
+      ...chavesGrupos.map((k) => `${GRUPOS[k].emoji} \`${P}help ${k}\` — ${(!comIA && GRUPOS[k].resumoSemIA) || GRUPOS[k].resumo}`),
       "",
       lang === "en"
         ? `🆕 New server? \`${P}assistente\` configures it with you, step by step.`
@@ -831,13 +831,15 @@ export async function cmdHelp(message, args, ctx) {
 
   // Comando de IA num servidor sem IA: ele não roda aqui, então não há ajuda.
   if (alvo && !comIA && COMANDOS_SO_IA.has(alvo)) {
+    // Sem citar IA: fora do servidor dela, o comando simplesmente não existe —
+    // anunciar "recursos de IA em outro lugar" é convite a perguntar onde.
     return sendEmbed(message.channel, tr(ctx, {
-      title: "🚫 Indisponível aqui",
-      description: `\`${P}${alvo}\` faz parte dos recursos de IA, que não estão habilitados neste servidor.\n\nUse \`${P}help\` para ver o que existe por aqui.`,
+      title: "🚫 Não existe aqui",
+      description: `\`${P}${alvo}\` não existe neste servidor.\n\nUse \`${P}help\` para ver o que existe por aqui.`,
       colour: COR.aviso,
     }, {
-      title: "🚫 Unavailable here",
-      description: `\`${P}${alvo}\` is part of the AI features, which aren't enabled on this server.\n\nUse \`${P}help\` to see what's available here.`,
+      title: "🚫 Not a command here",
+      description: `\`${P}${alvo}\` doesn't exist on this server.\n\nUse \`${P}help\` to see what's available here.`,
       colour: COR.aviso,
     }));
   }
@@ -964,7 +966,7 @@ export async function cmdSobre(message, args, ctx) {
     `${sim(rssN)} **RSS** — ${rssN} feed(s)`,
     `${sim(banGlobalModo !== "off")} **Global ban list** — mode \`${banGlobalModo}\``,
     `🎲 **RPG** — ${nPersonagens} character(s) · ${moedas.length} currenc${moedas.length === 1 ? "y" : "ies"}${moedas.length > 1 ? " · exchange on" : ""}${nMagias ? ` · ${nMagias} spell(s) learned` : ""}${nCapturados ? ` · ${nCapturados} companion(s) in the dungeon` : ""}${moedas.length < nPerfis ? ` · ${nPerfis} currency profiles available` : ""}${nDupes ? ` · ⚠️ ${nDupes} duplicate currenc${nDupes === 1 ? "y" : "ies"}` : ""}`,
-    comIA ? `🤖 **AI (Judy)** — enabled on this server` : null,
+    comIA ? `🤖 **AI (Judy)** — enabled here: chat, code, web search, exact math and **image reading** (attach one and ask)` : null,
   ] : [
     `${sim(modulosOn)} **AutoMod** — ${modulosOn}/9 módulos ligados${am.antiScam?.enabled ? ` · sentinela ${am.antiScam.porAntiguidade !== false ? "(mais rígido com novatos)" : "ligado"}` : ""}`,
     `⚖️ **Punição** — \`${config?.automod?.punicao?.modo ?? "avisar"}\`${(config?.automod?.punicao?.modo === "acumular") ? ` · ${escadaDePunicao(config.automod.punicao).map((d) => rotuloDegrau(d, "pt")).join(" → ")}` : ""}`,
@@ -973,7 +975,7 @@ export async function cmdSobre(message, args, ctx) {
     `${sim(rssN)} **RSS** — ${rssN} feed(s)`,
     `${sim(banGlobalModo !== "off")} **Lista global de bans** — modo \`${banGlobalModo}\``,
     `🎲 **RPG** — ${nPersonagens} personagem(ns) · ${moedas.length} moeda(s)${moedas.length > 1 ? " · câmbio ativo" : ""}${nMagias ? ` · ${nMagias} magia(s) aprendida(s)` : ""}${nCapturados ? ` · ${nCapturados} companheiro(s) na dungeon` : ""}${moedas.length < nPerfis ? ` · ${nPerfis} perfis de moeda disponíveis` : ""}${nDupes ? ` · ⚠️ ${nDupes} moeda(s) repetida(s)` : ""}`,
-    comIA ? `🤖 **IA (Judy)** — habilitada neste servidor` : null,
+    comIA ? `🤖 **IA (Judy)** — habilitada aqui: conversa, código, busca na web, contas exatas e **leitura de imagens** (anexa uma e pergunta)` : null,
   ];
 
   const creditos = "_Feito por <@01K9JKP85D5EP2ZTEHS8DT797A> (Ghiso#4419) com [stoat.js](https://github.com/stoatchat/javascript-client-sdk) — quer um bot assim no seu servidor? Chama! 🚀_";
@@ -995,7 +997,6 @@ export async function cmdSobre(message, args, ctx) {
       `\`${PREFIXO}help\` — everything, grouped by what you want to do`,
       `\`${PREFIXO}tutorial\` — the paged first-steps guide`,
       `\`${PREFIXO}assistente\` — guided setup: I ask, you answer`,
-      !comIA ? "_AI features (chat, AI moderation) run on a separate server._" : null,
       "",
       creditosEN,
     ].filter((l) => l !== null).join("\n"),
@@ -1016,7 +1017,6 @@ export async function cmdSobre(message, args, ctx) {
       `\`${PREFIXO}help\` — tudo, agrupado pelo que você quer fazer`,
       `\`${PREFIXO}tutorial\` — o guia de primeiros passos, em páginas`,
       `\`${PREFIXO}assistente\` — configuração guiada: eu pergunto, você responde`,
-      !comIA ? "_Os recursos de IA (chat, moderação por IA) rodam num servidor à parte._" : null,
       "",
       creditos,
     ].filter((l) => l !== null).join("\n"),

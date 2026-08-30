@@ -51,11 +51,11 @@ horas de diagnóstico:
 | Peça | Onde | Como |
 |---|---|---|
 | **stoat-bot** | Umbrel | container, stack no **Portainer** |
-| **judy-ia** | Gentoo (a do GPU) | direto com Node, serviço **OpenRC** |
-| **Ollama** | Gentoo | nativo, serviço OpenRC |
+| **judy-ia** | Gentoo (a do GPU) | Docker Compose, do checkout do repo |
+| **llama-swap** | Gentoo | Docker Compose (`~/judy-llm`, imagem `:rocm`) |
 
 O bot fala com a máquina do GPU pelo **Tailscale** (`100.74.70.106`), nas
-portas `8090` (judy-ia) e `11434` (Ollama).
+portas `8090` (judy-ia) e `8081` (llama-swap, API OpenAI-compatível).
 
 ### Configuração do bot (Portainer)
 
@@ -67,9 +67,9 @@ quando alguém usa a IA).
 O boot imprime o que efetivamente chegou:
 
 ```
-[IA] Ollama:  http://100.74.70.106:11434
+[IA] Ollama:  http://100.74.70.106:8081   ← o llama-swap (o rótulo é histórico)
 [IA] Serviço: http://100.74.70.106:8090
-[IA] Modelos: conversa=gemma4:e4b · código=ornith:9b · ferramentas=qwen3.5:9b
+[IA] Modelos: conversa=qwythos-9b-v2-rapido · código=qwythos-9b-v2-rapido · ferramentas=qwythos-9b-v2-rapido
 ```
 
 Se aparecer `⚠️ (padrão — OLLAMA_URL não definida)`, a variável não chegou.
@@ -78,23 +78,48 @@ O `.env.example` na raiz serve para rodar **local**, fora do container.
 
 ### Configuração da IA (Gentoo)
 
-Essa metade roda nativa. O `judy-ia` lê um `.env` **do próprio diretório**, e
-o serviço OpenRC define `directory=` para lá:
+Duas peças, ambas em Docker Compose:
 
-```bash
-sudo cp scripts/openrc/judy-ia /etc/init.d/judy-ia
-sudo chmod +x /etc/init.d/judy-ia
-sudo cp scripts/openrc/judy-ia.confd /etc/conf.d/judy-ia
-sudo nano /etc/conf.d/judy-ia          # usuário e diretório
-sudo rc-update add judy-ia default
-sudo rc-service judy-ia start
+**`judy-ia`** (o serviço de ferramentas) roda do próprio checkout do repo,
+lendo o `.env` do diretório `ia-servico/`. Atualizar é trocar o
+`servidor.js` e `docker compose up -d --build`.
+
+**`llama-swap`** (a inferência) roda em `~/judy-llm`, com a imagem **ROCm**:
+
+```yaml
+services:
+  llama:
+    image: ghcr.io/mostlygeek/llama-swap:rocm
+    ports: ["8081:8080"]
+    devices: ["/dev/dri:/dev/dri", "/dev/kfd:/dev/kfd"]
+    group_add: ["video", "render"]
+    security_opt: ["seccomp:unconfined"]
+    volumes:
+      - ./models:/models
+      - ./config.yaml:/app/config.yaml:ro
 ```
 
-**Cuidado com o `OLLAMA_HOST`:** se o Ollama for configurado com um IP
-específico (o do Tailscale, por exemplo), ele deixa de escutar em `127.0.0.1`.
-A partir daí `localhost:11434` dá `ECONNREFUSED` até na própria máquina —
-enquanto `ollama list` continua funcionando, porque usa o endereço
-configurado. Use o mesmo endereço nas duas pontas.
+Três lições pagas caro nessa migração (30/08/2026):
+
+- **A imagem `unified-vulkan` era o gargalo.** GPU saturada a 98% entregando
+  8 tok/s; com a `:rocm`, na mesma RX 9060 XT (gfx1200, sem override),
+  **36,7 tok/s** — e a RAM do sistema caiu de 13 GB para 5,4 GB.
+- **Os caminhos mudam entre as imagens.** Na `:rocm` o binário é
+  `/app/llama-server` (não `/usr/local/bin`) e o config é lido de
+  `/app/config.yaml`. Com o mount errado ela cai num config de exemplo
+  embutido e o erro cita um modelo `z-image` que não existe no seu arquivo.
+- **`/dev/kfd` + grupos `video`/`render`** são obrigatórios para ROCm; o
+  Vulkan se contentava com `/dev/dri`.
+
+A placa é a mesma usada para jogar, então o residente tem `ttl: 600` (libera
+sozinho em 10 min de ociosidade) e há descarga imediata sob demanda:
+
+```bash
+curl -sX POST http://127.0.0.1:8081/api/models/unload   # alias `jogar`
+```
+
+(Os scripts OpenRC antigos seguem em `scripts/openrc/` como alternativa
+nativa, mas a instalação atual é a de cima.)
 
 ---
 
@@ -221,20 +246,24 @@ quanto de VRAM sobra para você usar o computador.
 
 Aponte `OLLAMA_MODEL_LEVE` para o melhor tempo **quente** cuja VRAM ainda te
 deixe trabalhar. Um modelo que suporte tool calling (a família Qwen, por
-exemplo) permite ir além: ele serve conversa **e** ferramentas, e aí só resta
-um segundo modelo para código — dois no total, em vez de cinco.
+exemplo) permite ir além: ele serve conversa **e** ferramentas.
+
+Essa lógica foi levada até o fim em 30/08/2026: a instalação atual usa **um
+modelo para tudo** — `qwythos-9b-v2-rapido` serve conversa, código,
+ferramentas, decisões internas e, com o `mmproj` do próprio repositório do
+modelo, **visão**. A troca de modelo custava mais que a inferência, e o
+Qwythos passou em todas as provas eliminatórias.
 
 ### Como está a VRAM
 
-| Modelo | Papel | Fica na memória |
+| O que fica na placa | Quanto | Por quanto tempo |
 |---|---|---|
-| `OLLAMA_MODEL_LEVE` | conversa, memória, decisões | 30 min |
-| `OLLAMA_MODEL_CODIGO` | programação | 60 s |
-| `OLLAMA_MODEL_LOGICA` | ferramentas, lógica | 60 s |
+| `qwythos-9b-v2-rapido` + `mmproj` + KV | ~7,1 GB | `ttl: 600` (10 min de ociosidade) |
 
-O modelo de conversa fica residente porque responde quase tudo; os pesados saem
-rápido para devolver a placa a quem está usando o computador. Ajustável em
-`CHAT_KEEP_LEVE` e `CHAT_KEEP_PESADO`.
+Um residente só, para todos os papéis. A placa é a mesma usada para jogar,
+então o `ttl` é curto e existe descarga imediata:
+`curl -sX POST http://127.0.0.1:8081/api/models/unload` (alias `jogar` no
+`.bashrc`). A recarga na mensagem seguinte custa ~11 s.
 
 ## Quando alguém dá em cima do bot
 
@@ -1734,14 +1763,16 @@ externa**. A arquitetura tem duas partes:
 
 - **O bot** (este repositório) monta a personalidade, a memória e o contexto, e
   decide qual modelo usar.
-- **O serviço `ia-servico/`** (rodando na máquina com GPU, ao lado do Ollama)
-  executa as **ferramentas** e o laço de tool-calling. O bot fala com ele por HTTP
-  (`IA_SERVICO_URL`). Se o serviço cair, o bot fala direto com o Ollama.
+- **O serviço `ia-servico/`** (rodando na máquina com GPU, ao lado do
+  llama-swap) executa as **ferramentas** e o laço de tool-calling. O bot fala
+  com ele por HTTP (`IA_SERVICO_URL`). Se o serviço cair, o bot fala direto
+  com o llama-swap — sem ferramentas, mas sem ficar mudo.
 
 ```
 &chat me explique o que é RAID 5
 &chat quanto é 4783 × 921?          (faz a conta exata via ferramenta)
 @Judy qual a capital da Austrália?
+@Judy o que aparece nessa imagem?   (com uma imagem anexada — ela vê)
 ```
 
 ### O histórico curto tem escopo e prazo
@@ -1924,7 +1955,10 @@ comando pediu; quem só falou no canal não fica esperando.
 
 ### Modelos por função (escolha automática)
 
-O tipo de mensagem define o modelo — sem troca manual:
+O roteamento por tipo continua existindo no código, mas a instalação atual
+aponta **todas** as variáveis para o mesmo `qwythos-9b-v2-rapido` — um modelo
+residente ganha do revezamento porque a troca custa mais que a inferência.
+As variáveis ficam como estão para o dia em que valer separar de novo:
 
 | Tipo | Variável | Uso |
 |---|---|---|
@@ -1970,6 +2004,15 @@ vinha cortado e a chamada era refeita — duas inferências para uma resposta de
   mesmo arquivo.
 - **buscar_web** — busca na internet via SearXNG.
 - **buscar_rss** — resumo de feeds sob demanda.
+- **ver_imagem** — vê imagens anexadas na conversa. Anexo de imagem **força**
+  o caminho com ferramentas no roteamento (mesma lição do regex de conta:
+  "o que você vê nessa imagem?" era classificado como papo comum, a ferramenta
+  nunca ficava disponível e ela respondia que não tinha acesso — com toda a
+  honestidade e nenhuma utilidade). A ferramenta só baixa dos CDNs do Stoat
+  (allowlist em `IMAGEM_HOSTS_PERMITIDOS`), reescreve os pixels com o `sharp`
+  antes de qualquer decodificação (defesa contra imagem maliciosa) e manda ao
+  modelo de visão — o próprio residente, via `mmproj`, então não há troca de
+  modelo nem espera. `IMAGEM_LADO_VISAO` controla o tamanho enviado.
 
 ### Memória, perfil e participação
 
@@ -2302,9 +2345,9 @@ sudo rc-service stoat-bot restart
 |---|---|---|
 | `BOT_TOKEN` | — | **obrigatória** — token do bot |
 | `DB_PATH` | `./stoat.db` | banco SQLite — use caminho absoluto ou fixe o diretório |
-| `OLLAMA_URL` | `http://localhost:11434` | ⚠️ o padrão aponta para a própria máquina |
+| `OLLAMA_URL` | `http://localhost:11434` | URL do llama-swap (`:8081`); ⚠️ o padrão aponta para a própria máquina |
 | `IA_SERVICO_URL` | — | judy-ia; sem ele, a IA fica sem ferramentas |
-| `OLLAMA_MODEL_LEVE` | — | modelo de conversa (fica residente na VRAM) |
+| `OLLAMA_MODEL_LEVE` | — | o modelo residente; a instalação atual usa o mesmo em todas as `OLLAMA_MODEL_*` |
 | `TZ` | — | fuso dos horários no log |
 
 A lista completa está no `.env.example`, comentada.

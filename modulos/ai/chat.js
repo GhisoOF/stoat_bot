@@ -164,14 +164,11 @@ const OLLAMA_MODEL_LEVE    = process.env.OLLAMA_MODEL_LEVE    || "gemma4:e4b";
 const OLLAMA_MODEL_CODIGO  = process.env.OLLAMA_MODEL_CODIGO  || "ornith:9b";
 // Lógica/matemática/raciocínio (respostas ao usuário que exigem rigor).
 const OLLAMA_MODEL_LOGICA  = process.env.OLLAMA_MODEL_LOGICA  || "qwen3.5:9b";
-// ── O modelo grande, sob demanda ──────────────────────────
-//
-//  Medido nesta máquina: ~13,6s de geração + ~19,6s de carga contra ~1,0s do
-//  modelo de conversa. Rápido demais para ser padrão, bom demais para não
-//  existir — então fica atrás de um comando explícito, onde a pessoa aceita
-//  a espera porque foi ela quem pediu.
-// (as constantes do especial saíram com ele: OLLAMA_MODEL_ESPECIAL,
-//  ESPECIAL_COOLDOWN_MS, ESPECIAL_TOKENS e ESPECIAL_CONTINUAR)
+// ── O modelo grande, aposentado (30/08/2026) ──────────────
+//  O `&chat especial` servia um 27B sob demanda. Saiu quando a troca do
+//  backend Vulkan → ROCm deixou o residente 4,5× mais rápido e a espera do
+//  grande perdeu o sentido. As constantes saíram com ele: OLLAMA_MODEL_ESPECIAL,
+//  ESPECIAL_COOLDOWN_MS, ESPECIAL_TOKENS e ESPECIAL_CONTINUAR.
 // Decisões internas e agente de memória.
 //
 // O padrão é o MESMO modelo da conversa, e isso é de propósito. Um modelo

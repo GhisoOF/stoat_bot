@@ -128,6 +128,7 @@ function gruposPT(P) {
     diversao: {
       emoji: "🎮", titulo: "Diversão",
       resumo: "níveis por XP, conversa com a Judy, voz",
+      resumoSemIA: "níveis por XP e voz",
       linhas: [
         "**Níveis (XP por mensagem)**",
         `\`${P}xp\` — seu nível e progresso · \`${P}xp rank [@pessoa]\``,
@@ -206,7 +207,7 @@ function gruposPT(P) {
         `\`${P}automod debug on|off\` — log detalhado do automod (global)`,
         `\`${P}banglobal revisar\` — revisa a lista global`,
         "",
-        "_A IA (\`chat\`, \`modia\`, comentário espontâneo) roda só nos servidores de `CHAT_SERVIDORES`._",
+        "_A IA (\`chat\`, \`modia\`, comentário espontâneo) roda só nos servidores de `CHAT_SERVIDORES`._" + IA_TAG,
       ],
     },
   };
@@ -292,6 +293,7 @@ function gruposEN(P) {
     diversao: {
       emoji: "🎮", titulo: "Fun",
       resumo: "XP levels, chatting with Judy, voice",
+      resumoSemIA: "XP levels and voice",
       linhas: [
         "**Levels (message XP)**",
         `\`${P}xp\` — your level and progress · \`${P}xp rank [@user]\``,
@@ -370,7 +372,7 @@ function gruposEN(P) {
         `\`${P}automod debug on|off\` — verbose automod log (global)`,
         `\`${P}banglobal revisar\` — reviews the global list`,
         "",
-        "_The AI (\`chat\`, \`modia\`, spontaneous comments) only runs on the servers in `CHAT_SERVIDORES`._",
+        "_The AI (\`chat\`, \`modia\`, spontaneous comments) only runs on the servers in `CHAT_SERVIDORES`._" + IA_TAG,
       ],
     },
   };

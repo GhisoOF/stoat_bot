@@ -767,12 +767,12 @@ client.on("messageCreate", async (message) => {
   // Não é "desativado pelo admin": simplesmente não existe aqui.
   if (COMANDOS_SO_IA.has(canonico) && !chat.servidorPermitido(serverId)) {
     return sendEmbed(message.channel, tr(ctx, {
-      title: "🚫 Indisponível aqui",
-      description: `\`${PREFIXO}${canonico}\` faz parte dos recursos de IA, que não estão habilitados neste servidor.\n\nVeja o que existe por aqui com \`${PREFIXO}help\`.`,
+      title: "🚫 Não existe aqui",
+      description: `\`${PREFIXO}${canonico}\` não existe neste servidor.\n\nVeja o que existe por aqui com \`${PREFIXO}help\`.`,
       colour: COR.aviso,
     }, {
-      title: "🚫 Unavailable here",
-      description: `\`${PREFIXO}${canonico}\` is part of the AI features, which aren't enabled on this server.\n\nSee what's available here with \`${PREFIXO}help\`.`,
+      title: "🚫 Not a command here",
+      description: `\`${PREFIXO}${canonico}\` doesn't exist on this server.\n\nSee what's available here with \`${PREFIXO}help\`.`,
       colour: COR.aviso,
     }));
   }

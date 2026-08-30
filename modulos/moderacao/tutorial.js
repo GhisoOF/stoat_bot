@@ -19,7 +19,9 @@ import { enviarPaginado, paginarLinhas } from "../core/paginas.js";
 // ══════════════════════════════════════════════════════════
 
 // Cada área: título, quando fazer, e os passos concretos.
-function AREAS(P, lang = "pt") {
+// `comIA`: fora do servidor com IA, a Judy simplesmente não existe — nem de
+// passagem. Linha que a menciona só entra quando comIA=true.
+function AREAS(P, lang = "pt", comIA = false) {
   if (lang === "en") return {
     permissoes: {
       titulo: "🔑 Bot permissions",
@@ -31,7 +33,7 @@ function AREAS(P, lang = "pt") {
         "**Essentials**",
         "• `ViewChannel`, `ReadMessageHistory` — see and read the channels",
         "• `SendMessage`, `SendEmbeds` — reply",
-        "• `React` — reactions (reaction roles, Judy's 👀)",
+        `• \`React\` — reactions (reaction roles${comIA ? ", Judy's 👀" : ""})`,
         "",
         "**To moderate**",
         "• `ManageMessages` — delete messages (automod, `&limpar`)",
@@ -127,7 +129,7 @@ function AREAS(P, lang = "pt") {
         "",
         "Logging punishments and joins/leaves is worth it; `comandos` is noisy and starts disabled.",
         "",
-        "💡 The log channel is where Judy pings you when AI moderation deletes something.",
+        ...(comIA ? ["💡 The log channel is where Judy pings you when AI moderation deletes something."] : []),
       ],
     },
 
@@ -193,6 +195,7 @@ function AREAS(P, lang = "pt") {
       corpo: [
         `**Test it:** \`${P}chat status\` shows whether the AI service is up.`,
         "Then just mention the bot or use `&chat <message>`.",
+        "She can also **see images**: attach one and ask (\"what's in this?\").",
         "",
         `**Let her join on her own:** \`${P}chat livre on\` (in this channel)`,
         `• \`${P}chat livre modo relevante\` — only when the topic is worth it`,
@@ -221,7 +224,7 @@ function AREAS(P, lang = "pt") {
         `\`${P}rss list\` — registered feeds`,
         `\`${P}rss agora\` — forces a cycle to test`,
         "",
-        "Every hour the bot posts the new items. Where the AI is available, Judy also writes an overall summary in her own voice.",
+        "Every hour the bot posts the new items." + (comIA ? " Judy also writes an overall summary in her own voice." : ""),
       ],
     },
 
@@ -447,7 +450,7 @@ function AREAS(P, lang = "pt") {
         "**Essenciais**",
         "• `ViewChannel`, `ReadMessageHistory` — ver e ler os canais",
         "• `SendMessage`, `SendEmbeds` — responder",
-        "• `React` — reações (cargos por reação, 👀 da Judy)",
+        `• \`React\` — reações (cargos por reação${comIA ? ", 👀 da Judy" : ""})`,
         "",
         "**Para moderar**",
         "• `ManageMessages` — apagar mensagens (automod, `&limpar`)",
@@ -543,7 +546,7 @@ function AREAS(P, lang = "pt") {
         "",
         "Vale registrar punições e entradas/saídas; `comandos` é ruidoso e começa desligado.",
         "",
-        "💡 É no canal de log que a Judy te marca quando a moderação por IA apaga algo.",
+        ...(comIA ? ["💡 É no canal de log que a Judy te marca quando a moderação por IA apaga algo."] : []),
       ],
     },
 
@@ -609,6 +612,7 @@ function AREAS(P, lang = "pt") {
       corpo: [
         `**Testar:** \`${P}chat status\` mostra se o serviço de IA está no ar.`,
         "Depois é só mencionar o bot ou usar `&chat <mensagem>`.",
+        "Ela também **vê imagens**: anexa uma e pergunta (\"o que aparece aqui?\").",
         "",
         `**Deixar ela participar sozinha:** \`${P}chat livre on\` (neste canal)`,
         `• \`${P}chat livre modo relevante\` — só quando o assunto vale`,
@@ -637,7 +641,7 @@ function AREAS(P, lang = "pt") {
         `\`${P}rss list\` — feeds cadastrados`,
         `\`${P}rss agora\` — força um ciclo para testar`,
         "",
-        "A cada hora o bot posta os itens novos. Onde a IA está disponível, a Judy escreve também um resumo geral no tom dela.",
+        "A cada hora o bot posta os itens novos." + (comIA ? " A Judy escreve também um resumo geral no tom dela." : ""),
       ],
     },
 
@@ -1096,7 +1100,7 @@ export async function cmdTutorial(message, args, ctx) {
   // funciona é pior que omitir: a pessoa tenta e nada acontece.
   const comIA = (() => { try { return temIA(ctx.serverId); } catch { return false; } })();
 
-  const todas = AREAS(P, lang);
+  const todas = AREAS(P, lang, comIA);
   const areas = {};
   for (const [k, v] of Object.entries(todas)) {
     if (v.soComIA && !comIA) continue;

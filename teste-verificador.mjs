@@ -215,5 +215,31 @@ console.log("── orquestrador ──");
 }
 
 fake.close();
+
+// ── guard de imagem anexada → caminho com ferramentas ──────────────────────
+// Regressão do log de 2026-08-30: "o que você vê nessa imagem?" roteou como
+// `conversa`, o ver_imagem nunca ficou disponível e ela disse que não tinha
+// acesso à imagem. O guard é textual porque é assim que o chat.js anuncia os
+// anexos na própria pergunta.
+console.log("── guard: imagem anexada força ferramenta ──");
+{
+  const fonte = await import("node:fs").then(m => m.readFileSync("./modulos/ai/chat.js", "utf8"));
+  const re = /if \(tipo !== "ferramenta" && \/\\\[\(imagem[\s\S]{0,200}?tipo = "ferramenta";/;
+  caso("o guard existe no chat.js", re.test(fonte));
+
+  // o marcador que o guard procura tem que ser o MESMO que o chat.js escreve
+  const guard = /\[\(imagem\\\(ns\\\) anexada\|attached image\)/.test(fonte);
+  caso("marcador do guard bate com o texto injetado (PT e EN)", guard);
+
+  // e o regex do guard, aplicado ao texto real, casa
+  const rx = /\[(imagem\(ns\) anexada|attached image)/;
+  caso("casa com o texto PT real",
+    rx.test("o que você vê nessa imagem?\n\n[imagem(ns) anexada(s), visíveis com a ferramenta ver_imagem: https://x]"));
+  caso("casa com o texto EN real",
+    rx.test("what do you see?\n\n[attached image(s), viewable with the ver_imagem tool: https://x]"));
+  caso("não casa com pergunta comum sobre imagem",
+    !rx.test("você consegue gerar uma imagem pra mim?"));
+}
+
 console.log(`\n${passou} passou, ${falhou} falhou`);
 process.exit(falhou ? 1 : 0);

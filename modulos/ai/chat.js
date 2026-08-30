@@ -1310,6 +1310,21 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
     if (tipo !== "ferramenta") tipo = "ferramenta";   // o grande tem tool calling; use
     motivo = motivo ?? "especial";
   }
+  // Imagem anexada → SEMPRE caminho com ferramentas.
+  //
+  //  "o que você vê nessa imagem?" era classificado como `conversa`, e
+  //  conversa não habilita ferramenta nenhuma — então o `ver_imagem` nunca
+  //  ficava disponível e ela respondia, com toda honestidade, que não tinha
+  //  acesso à imagem. O prompt até anunciava a ferramenta logo acima; não
+  //  adiantou, porque quem decide o caminho é este código, não o texto.
+  //  Mesma lição do regex de aritmética: se dá para decidir por código,
+  //  decida por código.
+  if (tipo !== "ferramenta" && /\[(imagem\(ns\) anexada|attached image)/.test(pergunta)) {
+    dlog(`imagem anexada → forçando caminho com ferramentas (ver_imagem)`);
+    tipo = "ferramenta";
+    motivo = "imagem";
+    modeloEscolhido = OLLAMA_MODEL_LOGICA;
+  }
   // Seguimento de uma conversa que JÁ estava lendo código herda o caminho com
   // ferramentas.
   //

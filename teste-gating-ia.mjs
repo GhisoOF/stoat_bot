@@ -1,6 +1,7 @@
 // teste-gating-ia.mjs — a IA não existe fora do Vapor Nexus
 //
-// A regra: fora do servidor com IA, NENHUMA superfície menciona Judy ou IA —
+// A regra: fora do servidor com IA, a única menção é UMA linha informativa no
+// &info (onde a IA funciona e o que faz, sem tom de convite). Fora isso —
 // nem tutorial, nem &info, nem &help, nem a recusa de comando (que dizia
 // "faz parte dos recursos de IA" e virava convite a perguntar onde). Dentro,
 // tudo continua lá, com a visão anunciada. Executa os comandos DE VERDADE nos
@@ -47,8 +48,13 @@ for (const lang of ["pt", "en"]) {
   caso(`tutorial ia ${lang} dentro: Judy presente com visão`, /Judy/.test(r.txt) && /imagens|images/i.test(r.txt));
 
   // &info: fora, zero menção; dentro, a linha da IA com leitura de imagens
+  // O &info é a ÚNICA superfície que menciona a IA fora do servidor dela:
+  // uma linha informativa (onde funciona + o que faz), sem tom de convite.
   r = await coletar(geral.cmdSobre, FORA, lang);
-  caso(`info ${lang} fora: sem Judy nem IA`, !/Judy|IA \(|AI \(|recursos de IA|AI features/i.test(r.txt));
+  caso(`info ${lang} fora: informa o servidor oficial e as funções`,
+    /Vapor Nexus/.test(r.txt) && /leitura de imagens|image reading/.test(r.txt));
+  caso(`info ${lang} fora: sem tom de propaganda`,
+    !/venha|junte-se|join us|entre no|convite|invite/i.test(r.txt));
   r = await coletar(geral.cmdSobre, DENTRO, lang);
   caso(`info ${lang} dentro: anuncia leitura de imagens`, /leitura de imagens|image reading/.test(r.txt));
 

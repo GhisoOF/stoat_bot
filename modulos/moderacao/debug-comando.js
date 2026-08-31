@@ -121,6 +121,30 @@ export async function cmdDebug(message, args, ctx) {
     const botId = ctx.client?.user?.id;
     const botMember = botId ? await server?.fetchMember?.(botId).catch(() => null) : null;
 
+    // rastreio de UM canal: `&debug canais <nome-ou-id>` mostra a conta de
+    // permissão passo a passo — cada cargo, cada sobrescrita, e o que a lib
+    // acha. Nasceu do canal Logs marcado como invisível enquanto os logs
+    // chegavam nele: o rastro no servidor real aponta qual entrada mente.
+    if (args[1] && !["cru", "raw", "bruto"].includes(args[1].toLowerCase())) {
+      const alvo = args.slice(1).join(" ").toLowerCase();
+      const canais = (server?.channels ?? [])
+        .map((c) => (typeof c === "string" ? ctx.client?.channels?.get?.(c) : c))
+        .filter(Boolean);
+      const canal = canais.find((c) => c?.id === args[1]) ??
+        canais.find((c) => String(c?.name ?? "").toLowerCase().includes(alvo));
+      if (!canal) {
+        return sendEmbed(message.channel, tr(ctx,
+          { title: "🔍 Canal não encontrado", description: `Nenhum canal com "${args.slice(1).join(" ")}" no nome. Uso: \`${PREFIXO}debug canais <nome-ou-id>\``, colour: COR.aviso },
+          { title: "🔍 Channel not found", description: `No channel matching "${args.slice(1).join(" ")}". Usage: \`${PREFIXO}debug canais <name-or-id>\``, colour: COR.aviso }));
+      }
+      const rastro = perms.rastrearPermissoes(server, canal, botMember, ctx.client);
+      return sendEmbed(message.channel, {
+        title: (en ? "🔬 Permission math for " : "🔬 A conta de permissão de ") + (canal.name ?? canal.id),
+        description: ("```\n" + rastro.join("\n") + "\n```").slice(0, 1950),
+        colour: COR.info,
+      });
+    }
+
     // modo cru: mostra o que a API devolve, para descobrir o formato
     if (["cru", "raw", "bruto"].includes(args[1]?.toLowerCase())) {
       const primeiro = (server?.channels ?? []).find(Boolean);

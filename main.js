@@ -301,7 +301,10 @@ function membroTemPermissao(message, server, permName) {
     }
 
     let perms;
-    if (typeof member.getPermissions === "function") perms = member.getPermissions();
+    // getPermissions() da lib estoura em objeto não hidratado ("reading
+    // 'type'") — visto em produção no &xp. Falha dela não pode virar falha
+    // nossa: engole e cai para os outros caminhos.
+    if (typeof member.getPermissions === "function") { try { perms = member.getPermissions(); } catch {} }
     else if (typeof member.permissions === "number")  perms = member.permissions;
     else if (typeof member.permission === "number")   perms = member.permission;
 

@@ -165,6 +165,68 @@ export function podeNoCanal(canal, client, nome, server, botMember) {
 const nomeCanal = (c) => c?.name ?? c?.id ?? "?";
 const ehTexto = (c) => (c?.type ?? "").includes("Text") || c?.type === "TextChannel";
 
+// ── Rastreador: a conta de UM canal, passo a passo ────────
+//
+//  Nasceu de um falso negativo real: o relatório marcou o canal Logs de um
+//  servidor como "não enxergo" enquanto o bot postava logs nele normalmente.
+//  A conta está certa no papel; o suspeito são os DADOS (cargos do membro
+//  não hidratados pela lib, ou o helper dela devolvendo número parcial).
+//  Este rastro mostra cada entrada da conta para o servidor real decidir.
+export function rastrearPermissoes(server, canal, member, client = null) {
+  const L = [];
+  const bits = (v) => (typeof v === "number"
+    ? ESSENCIAIS.map((n) => `${temBit(v, BITS[n]) ? "✅" : "❌"}${n}`).join(" ") + ` (raw=${v})`
+    : String(v));
+
+  // o que a LIB acha (é o que a fachada usa primeiro, quando > 0)
+  let libPerm = null; try { libPerm = canal?.permission; } catch (e) { libPerm = `erro: ${e?.message}`; }
+  L.push(`lib.permission: ${typeof libPerm === "number" ? bits(libPerm) : (libPerm ?? "ausente")}`);
+
+  if (!server) { L.push("server: AUSENTE"); return L; }
+  if (!member) { L.push("membro do bot: AUSENTE — sem cargos, sem conta"); return L; }
+
+  const idsBrutos = member?.roles ?? [];
+  const cargos = cargosOrdenados(server, member);
+  L.push(`cargos do bot: ${idsBrutos.length} no membro, ${cargos.length} resolvidos no servidor` +
+         (idsBrutos.length !== cargos.length ? " ⚠️ (diferença = cargo não hidratado)" : ""));
+
+  const padraoSrv = server.default_permissions ?? server.defaultPermissions;
+  let perm = paraAD(padraoSrv).a || num(padraoSrv);
+  L.push(`servidor padrão: ${bits(perm)}`);
+
+  for (const { id, role } of cargos) {
+    const ad = paraAD(role.permissions);
+    perm = aplicar(perm, ad);
+    L.push(`cargo "${role.name ?? id}" (rank ${role.rank ?? "?"}) a=${ad.a} d=${ad.d} → ${bits(perm)}`);
+  }
+
+  if (canal) {
+    const padraoCanal = canal.default_permissions ?? canal.defaultPermissions;
+    if (padraoCanal != null) {
+      const ad = paraAD(padraoCanal);
+      perm = aplicar(perm, ad);
+      L.push(`canal padrão: a=${ad.a} d=${ad.d} → ${bits(perm)}`);
+    } else L.push("canal padrão: (sem sobrescrita)");
+
+    const sobre = canal.role_permissions ?? canal.rolePermissions;
+    const chaves = sobre ? Object.keys(sobre) : [];
+    L.push(`sobrescritas de cargo no canal: ${chaves.length}` +
+           (chaves.length ? ` (cargos: ${chaves.map((k) => server?.roles?.get?.(k)?.name ?? (server?.roles?.[k]?.name) ?? k).join(", ")})` : ""));
+    if (sobre) for (const { id, role } of cargos) {
+      const ov = sobre[id];
+      if (ov != null) {
+        const ad = paraAD(ov);
+        perm = aplicar(perm, ad);
+        L.push(`  ↳ aplica a do bot "${role.name ?? id}": a=${ad.a} d=${ad.d} → ${bits(perm)}`);
+      }
+    }
+  }
+  L.push(`FINAL (cálculo próprio): ${bits(perm)}`);
+  const fachada = permissoesDoBotNoCanal(canal, client, server, member);
+  L.push(`o relatório usa: via=${fachada.via ?? fachada.motivo} → ${bits(fachada.valor)}`);
+  return L;
+}
+
 // ── 1 e 2: o que o bot enxerga e o que consegue fazer em cada canal ──
 export function diagnosticarCanais(server, client, botMember = null, lang = "pt") {
   const en = lang === "en";

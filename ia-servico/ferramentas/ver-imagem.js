@@ -69,7 +69,22 @@ async function baixarLimitado(url) {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), 30_000);
   try {
-    const r = await fetch(url, { signal: ctrl.signal, redirect: "error" });
+    // Redirect é seguido NO MÁXIMO 2 vezes, e só se o destino passar na
+    // MESMA allowlist da entrada. O `redirect: "error"` cego quebrou a visão
+    // inteira quando o Stoat migrou o CDN: o autumn virou um 308 para o
+    // cdn.stoatusercontent.com, e a ferramenta recusava o próprio CDN oficial.
+    // Validar o destino mantém a defesa anti-SSRF; recusar tudo era só rigidez.
+    let alvo = url;
+    let r;
+    for (let salto = 0; ; salto++) {
+      r = await fetch(alvo, { signal: ctrl.signal, redirect: "manual" });
+      if (![301, 302, 307, 308].includes(r.status)) break;
+      if (salto >= 2) throw new Error("redirects demais no CDN (parei em 2)");
+      const destino = new URL(r.headers.get("location") ?? "", alvo).href;
+      const v = hostPermitido(destino);
+      if (!v.ok) throw new Error(`o CDN redirecionou para fora da allowlist (${new URL(destino).hostname})`);
+      alvo = destino;
+    }
     if (!r.ok) throw new Error(`HTTP ${r.status} ao baixar a imagem`);
     const declarado = Number(r.headers.get("content-length") || 0);
     if (declarado > MAX_BYTES) throw new Error(`imagem grande demais (${Math.round(declarado / 1024 / 1024)}MB; teto ${Math.round(MAX_BYTES / 1024 / 1024)}MB)`);

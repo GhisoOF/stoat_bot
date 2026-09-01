@@ -2226,8 +2226,12 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
       const id = a?.id ?? a?._id;
       const tipo = a?.metadata?.type ?? a?.content_type ?? "";
       if (!id || !/image/i.test(String(tipo))) return null;
-      const AUTUMN = (process.env.AUTUMN_URL || "https://autumn.stoat.chat").replace(/\/$/, "");
-      return `${AUTUMN}/attachments/${id}/${encodeURIComponent(a?.filename ?? "imagem")}`;
+      // Link de LEITURA vai direto no CDN atual, no formato que o próprio
+      // cliente gera (sem filename). O autumn ainda serve, mas como 308 —
+      // e cada salto de redirect é risco e latência à toa. O upload
+      // (subirAnexo) continua no AUTUMN_URL, que é a ponta que aceita POST.
+      const CDN = (process.env.CDN_URL || "https://cdn.stoatusercontent.com").replace(/\/$/, "");
+      return `${CDN}/attachments/${id}`;
     })
     .filter(Boolean)
     .slice(0, 3);

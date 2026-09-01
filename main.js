@@ -187,7 +187,7 @@ let cfgGlobal = store.getGlobal();  // atualizado após inicializar()
 //    Autumn), então o link vai no CONTEÚDO da mensagem e o Stoat gera a
 //    pré-visualização sozinho. Aparece logo abaixo do embed, não dentro dele.
 // Essa distinção vive em core/midia.js (`comoExibir`).
-async function sendEmbed(channel, { title, description, colour = COR.info, imagem = null, ocultarLink = true }) {
+async function sendEmbed(channel, { title, description, colour = COR.info, imagem = null, anexos = null, ocultarLink = true }) {
   if (!channel || typeof channel.sendMessage !== "function") {
     console.error("[EMBED] Canal indisponível — mensagem não enviada:", title ?? description);
     return;
@@ -206,6 +206,9 @@ async function sendEmbed(channel, { title, description, colour = COR.info, image
   const payload = { embeds: [base] };
   if (exibicao?.modo === "media") payload.embeds = [{ ...base, media: exibicao.id }];
   else if (exibicao?.modo === "link") payload.content = midia.formatarLinkConteudo(exibicao.url, ocultarLink);
+  // Anexos avulsos (ids já subidos no Autumn) — usado pelo log de mensagem
+  // apagada para reanexar a mídia resgatada.
+  if (Array.isArray(anexos) && anexos.length) payload.attachments = anexos.slice(0, 4);
 
   try {
     // Devolve a mensagem enviada: quem pagina (&help, &tutorial) precisa
@@ -1078,9 +1081,19 @@ client.on("messageDelete", async (message) => {
     const ctx = criarContexto(serverId);
     const texto = (message?.content ?? "").slice(0, 500) || "_(sem texto)_";
     const autor = message?.authorId ? `<@${message.authorId}>` : "_desconhecido_";
+
+    // Mídia apagada volta no log: resgatada do CDN e re-subida.
+    const { ids: midias, perdidas } = await log.resgatarMidias(message?.attachments, { subir: chat.subirAnexo });
+    const notaMidia =
+      (midias.length ? `\n**Mídia:** ${midias.length} anexo(s) resgatado(s) abaixo` : "") +
+      (perdidas.length ? `\n**Mídia não recuperável:** ${perdidas.join(", ")}` : "");
+
     await log.registrar(ctx, "mensagens", {
       titulo: "🗑 Mensagem apagada",
-      descricao: `**Autor:** ${autor}\n**Canal:** <#${message.channelId}>\n**Conteúdo:** ${texto}`,
+      descricao: `**Autor:** ${autor}\n**Canal:** <#${message.channelId}>\n**Conteúdo:** ${texto}${notaMidia}`,
+      // tudo como anexo da mensagem (uso garantido do bucket); o embed
+      // media do comoExibir espera URL, não id cru — não misturar.
+      anexos: midias.length ? midias : null,
     });
   } catch (err) { console.error("[EVENTO][MSG_DELETE]", err?.message); }
 });

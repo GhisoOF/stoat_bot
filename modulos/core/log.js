@@ -45,7 +45,43 @@ const CORES = {
 
 // Registra um evento no chat de log, se estiver ativo para o servidor.
 // Nunca lança: uma falha de log jamais deve derrubar a moderação.
-export async function registrar(ctx, categoria, { titulo, descricao }) {
+// ── Resgate de mídia de mensagem apagada ───────────────────
+//
+//  Id de anexo no Stoat é de uso único: não dá para reaproveitar o da
+//  mensagem morta. O caminho é resgatar os BYTES do CDN (que costuma servir
+//  o arquivo por um instante depois da deleção — e no automod o evento chega
+//  logo após o próprio bot apagar) e re-subir via Autumn. Melhor esforço
+//  declarado: se o CDN já purgou, o log diz isso em vez de fingir que não
+//  havia mídia. `baixar` e `subir` são injetáveis para o teste executar o
+//  caminho de verdade sem rede (lição do embedIdioma/modeloForcado).
+const RESGATE_MAX_BYTES = Number(process.env.LOG_MIDIA_MAX_BYTES || 10 * 1024 * 1024);
+export async function resgatarMidias(atts, { baixar = fetch, subir } = {}) {
+  const CDN = (process.env.CDN_URL || "https://cdn.stoatusercontent.com").replace(/\/$/, "");
+  const ids = [];
+  const perdidas = [];
+  if (typeof subir !== "function") return { ids, perdidas };
+  for (const a of (atts ?? []).slice(0, 3)) {
+    const id = a?.id ?? a?._id;
+    const tipo = String(a?.metadata?.type ?? a?.content_type ?? "");
+    const nome = a?.filename ?? "midia";
+    if (!id || !/image|video/i.test(tipo)) continue;
+    if ((a?.size ?? 0) > RESGATE_MAX_BYTES) { perdidas.push(`${nome} (grande demais para reanexar)`); continue; }
+    try {
+      const r = await baixar(`${CDN}/attachments/${id}`, { signal: AbortSignal.timeout(15_000) });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const bytes = Buffer.from(await r.arrayBuffer());
+      if (bytes.length > RESGATE_MAX_BYTES) { perdidas.push(`${nome} (grande demais)`); continue; }
+      const mime = r.headers.get("content-type") || (/video/i.test(tipo) ? "video/mp4" : "image/png");
+      const novoId = await subir({ base64: bytes.toString("base64"), mime, nome });
+      if (novoId) ids.push(novoId); else perdidas.push(nome);
+    } catch (e) {
+      perdidas.push(`${nome} (${e?.message ?? "irrecuperável"})`);
+    }
+  }
+  return { ids, perdidas };
+}
+
+export async function registrar(ctx, categoria, { titulo, descricao, imagem = null, anexos = null }) {
   try {
     const cfg = ctx?.config?.log;
     if (!cfg?.canalId) return;                 // sem canal configurado
@@ -60,6 +96,10 @@ export async function registrar(ctx, categoria, { titulo, descricao }) {
       title: titulo,
       description: `${descricao}\n\n_${agora} UTC_`,
       colour: CORES[categoria] ?? "#95a5a6",
+      // Mídia resgatada de mensagem apagada: a primeira imagem entra no
+      // corpo do embed; o resto (e vídeos) vai como anexo da mensagem.
+      imagem,
+      anexos,
     });
   } catch (err) {
     console.error("[LOG] Falha ao registrar:", err?.message);

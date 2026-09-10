@@ -77,7 +77,7 @@ export async function cmdDebug(message, args, ctx) {
           : "_nenhuma_"}`);
       } catch (e) {
         linhas.push("", `🔴 judy-voz inalcançável: \`${e?.message ?? e}\``);
-        linhas.push("_No Gentoo:_ `bash scripts/judy-diag.sh`");
+        linhas.push("_Na máquina do bot:_ `bash scripts/judy-diag.sh`");
       }
     }
 

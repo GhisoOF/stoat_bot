@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # ══════════════════════════════════════════════════════════
-#  instalar-piper.sh — TTS offline em português, no Gentoo
+#  instalar-piper.sh — TTS offline em português (feito para Gentoo/OpenRC;
+#  em Debian/Ubuntu: sudo apt install piper-tts espeak-ng e pule este script)
 #
 #  Instala o binário do Piper e uma voz pt-BR em ~/.local/share/piper.
 #  Não precisa de root e não mexe em nada do sistema.

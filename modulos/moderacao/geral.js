@@ -927,7 +927,7 @@ export async function cmdSobre(message, args, ctx) {
     `${sim(banGlobalModo !== "off")} **Global ban list** — mode \`${banGlobalModo}\``,
     `🎲 **RPG** — ${nPersonagens} character(s) · ${moedas.length} currenc${moedas.length === 1 ? "y" : "ies"}${moedas.length > 1 ? " · exchange on" : ""}${nMagias ? ` · ${nMagias} spell(s) learned` : ""}${nCapturados ? ` · ${nCapturados} companion(s) in the dungeon` : ""}${moedas.length < nPerfis ? ` · ${nPerfis} currency profiles available` : ""}${nDupes ? ` · ⚠️ ${nDupes} duplicate currenc${nDupes === 1 ? "y" : "ies"}` : ""}`,
     comIA ? `🤖 **AI (Judy)** — enabled here: chat, code, web search, exact math and **image reading** (attach one and ask)`
-          : `🤖 **AI (Judy)** — runs only on the official server (Vapor Nexus): chat, code, web search, exact math and image reading`,
+          : `🤖 **AI (Judy)** — runs only on the servers enabled by the bot owner: chat, code, web search, exact math and image reading`,
   ] : [
     `${sim(modulosOn)} **AutoMod** — ${modulosOn}/9 módulos ligados${am.antiScam?.enabled ? ` · sentinela ${am.antiScam.porAntiguidade !== false ? "(mais rígido com novatos)" : "ligado"}` : ""}`,
     `⚖️ **Punição** — \`${config?.automod?.punicao?.modo ?? "avisar"}\`${(config?.automod?.punicao?.modo === "acumular") ? ` · ${escadaDePunicao(config.automod.punicao).map((d) => rotuloDegrau(d, "pt")).join(" → ")}` : ""}`,
@@ -937,11 +937,11 @@ export async function cmdSobre(message, args, ctx) {
     `${sim(banGlobalModo !== "off")} **Lista global de bans** — modo \`${banGlobalModo}\``,
     `🎲 **RPG** — ${nPersonagens} personagem(ns) · ${moedas.length} moeda(s)${moedas.length > 1 ? " · câmbio ativo" : ""}${nMagias ? ` · ${nMagias} magia(s) aprendida(s)` : ""}${nCapturados ? ` · ${nCapturados} companheiro(s) na dungeon` : ""}${moedas.length < nPerfis ? ` · ${nPerfis} perfis de moeda disponíveis` : ""}${nDupes ? ` · ⚠️ ${nDupes} moeda(s) repetida(s)` : ""}`,
     comIA ? `🤖 **IA (Judy)** — habilitada aqui: conversa, código, busca na web, contas exatas e **leitura de imagens** (anexa uma e pergunta)`
-          : `🤖 **IA (Judy)** — funciona apenas no servidor oficial (Vapor Nexus): conversa, código, busca na web, contas exatas e leitura de imagens`,
+          : `🤖 **IA (Judy)** — funciona apenas nos servidores habilitados pelo dono do bot: conversa, código, busca na web, contas exatas e leitura de imagens`,
   ];
 
-  const creditos = "_Feito por <@01K9JKP85D5EP2ZTEHS8DT797A> (Ghiso#4419) com [stoat.js](https://github.com/stoatchat/javascript-client-sdk) — quer um bot assim no seu servidor? Chama! 🚀_";
-  const creditosEN = "_Made by <@01K9JKP85D5EP2ZTEHS8DT797A> (Ghiso#4419) with [stoat.js](https://github.com/stoatchat/javascript-client-sdk) — want a bot like this on your server? Reach out! 🚀_";
+  const creditos = "_Software livre ([código](https://github.com/GhisoOF/stoat_bot)), feito com [stoat.js](https://github.com/stoatchat/javascript-client-sdk) — rode o seu! 🚀_";
+  const creditosEN = "_Free software ([source](https://github.com/GhisoOF/stoat_bot)), built with [stoat.js](https://github.com/stoatchat/javascript-client-sdk) — run your own! 🚀_";
 
   await sendEmbed(message.channel, en ? {
     title: "🤖 Cobaia",

@@ -36,8 +36,8 @@ for (const lang of ["pt", "en"]) {
   caso(`tutorial ia ${lang} dentro: Judy presente com visão`, /Judy/.test(r.txt) && /imagens|images/i.test(r.txt));
 
   r = await coletar(geral.cmdSobre, FORA, lang);
-  caso(`info ${lang} fora: informa o servidor oficial e as funções`,
-    /Vapor Nexus/.test(r.txt) && /leitura de imagens|image reading/.test(r.txt));
+  caso(`info ${lang} fora: informa onde a IA roda e as funções`,
+    /habilitados pelo dono|enabled by the bot owner/.test(r.txt) && /leitura de imagens|image reading/.test(r.txt));
   caso(`info ${lang} fora: sem tom de propaganda`,
     !/venha|junte-se|join us|entre no|convite|invite/i.test(r.txt));
   r = await coletar(geral.cmdSobre, DENTRO, lang);

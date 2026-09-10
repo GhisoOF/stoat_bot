@@ -133,7 +133,7 @@ export async function sintetizar(texto, vozNome = null) {
       || e?.message || String(e);
     let dica = "";
     if (/espeak|phonem/i.test(detalhe)) {
-      dica = " → falta o espeak-ng (o Piper usa ele para converter texto em fonemas). No Gentoo: sudo emerge app-accessibility/espeak-ng";
+      dica = " → falta o espeak-ng (o Piper usa ele para converter texto em fonemas). Debian/Ubuntu: sudo apt install espeak-ng · Gentoo: sudo emerge app-accessibility/espeak-ng";
     } else if (/onnx|model|load/i.test(detalhe)) {
       dica = " → o modelo da voz pode estar corrompido ou faltando o .onnx.json ao lado. Rode: bash scripts/instalar-piper.sh";
     } else if (/permission|denied/i.test(detalhe)) {

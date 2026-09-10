@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ══════════════════════════════════════════════════════════
-#  judy-diag.sh — diagnóstico e logs dos serviços no Gentoo
+#  judy-diag.sh — diagnóstico e logs dos serviços na máquina do bot
 #
 #  A cadeia da voz tem seis elos (Ollama → judy-ia → Piper → judy-voz →
 #  LiveKit → Stoat) e, quando algo não funciona, o sintoma é sempre o

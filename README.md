@@ -1,5 +1,9 @@
 # Stoat Bot — moderação e IA para Stoat/Revolt
 
+![Licença](https://img.shields.io/badge/licen%C3%A7a-MIT-green) ![Node](https://img.shields.io/badge/node-%E2%89%A522-brightgreen) ![Docker](https://img.shields.io/badge/docker-multi--arch-blue) ![Idiomas](https://img.shields.io/badge/bot-pt--BR%20%C2%B7%20en-orange)
+
+> 🇬🇧 *The bot itself is fully bilingual (pt-BR/English — `&idioma en`); this documentation is in Portuguese.*
+
 Bot de moderação para a plataforma **Stoat** (fork/rebrand do Revolt), escrito em
 Node.js (ESM) com a biblioteca [`stoat.js`](https://www.npmjs.com/package/stoat.js).
 Prefixo padrão: **`&`**.

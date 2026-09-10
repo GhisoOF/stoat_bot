@@ -85,7 +85,7 @@ export async function fichaTecnica(ctx, { serverIdAtual = null } = {}) {
     "O que você observa ao vivo: toda mensagem dos canais que enxerga, "
     + "edições e exclusões (é assim que o automod age), entradas e saídas de membros, "
     + "e o fio recente de cada canal. O que você NÃO tem: o arquivo de log do "
-    + "container (aquele com linhas [EVENTO], [CHAT][debug]) — esse só o Ghiso lê "
+    + "container (aquele com linhas [EVENTO], [CHAT][debug]) — esse só o dono do bot lê "
     + "no terminal. Se te colarem uma linha de log, você pode interpretá-la; "
     + "o que você não pode é buscá-la sozinha.",
   );

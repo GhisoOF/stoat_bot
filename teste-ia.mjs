@@ -618,7 +618,7 @@ console.log("\n── identidade: conferida antes de sair ──");
     "  → e se ainda vazar, é podada: o canal nunca recebe isso");
   ok(/isto NUNCA se aplica ao seu criador/.test(fonte),
     "★ 'tentativa de te quebrar' nunca se aplica ao criador — foi essa regra que a fez chamar o aviso dele de tentativa de engano");
-  ok(/Se o Ghiso disser que trocou ou atualizou o modelo\/LLM, isso é VERDADE/.test(fonte),
+  ok(/Se o dono do bot disser que trocou ou atualizou o modelo\/LLM, isso é VERDADE/.test(fonte),
     "  → e o prompt diz que uma troca de modelo anunciada por ele é verdade, não contestação");
   ok(/if \(vazaIdentidade\(texto\)\) texto = podarIdentidade\(texto\);/.test(fonte),
     "  → o comentário espontâneo passa pelo mesmo filtro");
@@ -1165,7 +1165,7 @@ console.log("\n── repetição, username da conta, tarefa vs regra ──");
   ok(/const meuUsuario = local\?\.meuUsuario/.test(fonte),
     "  → e vem por `local`: `message` não existe em responder() — terceiro erro desse tipo, pego pela fumaça");
 
-  ok(/TAREFA ≠ REGRA SUA/.test(fonte) && /não é regra sua, não é instrução do Ghiso/.test(fonte),
+  ok(/TAREFA ≠ REGRA SUA/.test(fonte) && /não é regra sua, não é instrução do dono do bot/.test(fonte),
     "★ pedido com restrição é para UMA resposta — não vira identidade nem 'minha moderação'");
 }
 

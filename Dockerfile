@@ -17,20 +17,31 @@ WORKDIR /app
 #    arranque (flag -hf) e guarda no volume (/data/modelos), então o download
 #    de gigabytes acontece uma vez e sobrevive a rebuilds.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      curl ca-certificates unzip libgomp1 libcurl4 ffmpeg \
+      curl ca-certificates unzip libgomp1 libcurl4 ffmpeg libvulkan1 mesa-vulkan-drivers \
     && rm -rf /var/lib/apt/lists/*
-RUN set -x; ARQ="ubuntu-x64"; [ "$TARGETARCH" = "arm64" ] && ARQ="ubuntu-arm64"; \
-    URL="$(curl -fsSL https://api.github.com/repos/ggml-org/llama.cpp/releases/latest \
-          | grep -oE '"browser_download_url": "[^"]*bin-'"$ARQ"'\.zip"' | head -1 | cut -d'"' -f4)"; \
-    if [ -n "$URL" ] && curl -fsSL "$URL" -o /tmp/llama.zip; then \
-      mkdir -p /opt/llama && unzip -q /tmp/llama.zip -d /opt/llama && rm /tmp/llama.zip; \
-      BIN="$(find /opt/llama -name llama-server -type f | head -1)"; \
-      if [ -n "$BIN" ]; then \
-        chmod +x "$BIN" && LIBDIR="$(dirname "$BIN")" && \
-        printf '#!/bin/sh\nexport LD_LIBRARY_PATH="%s:${LD_LIBRARY_PATH:-}"\nexec "%s" "$@"\n' "$LIBDIR" "$BIN" \
-          > /usr/local/bin/llama-server && chmod +x /usr/local/bin/llama-server; \
+# Preferimos o build VULKAN: usa a GPU/iGPU quando existe (muito mais rápido) e
+# cai para CPU sozinho quando não há driver. Se o release não tiver o asset
+# Vulkan, o build de CPU entra no lugar. Os assets Vulkan são .tar.gz e nem
+# sempre estão no /latest — por isso a busca nos últimos releases.
+RUN set -x; SUF="x64"; [ "$TARGETARCH" = "arm64" ] && SUF="arm64"; \
+    URL="$(curl -fsSL 'https://api.github.com/repos/ggml-org/llama.cpp/releases?per_page=20' \
+          | grep -oE '"browser_download_url": "[^"]*bin-ubuntu-vulkan-'"$SUF"'\.tar\.gz"' | head -1 | cut -d'"' -f4)"; \
+    if [ -n "$URL" ] && curl -fsSL "$URL" -o /tmp/llama.tgz; then \
+      mkdir -p /opt/llama && tar -xzf /tmp/llama.tgz -C /opt/llama && rm /tmp/llama.tgz; \
+    else \
+      echo "sem build Vulkan — tentando o de CPU"; \
+      URL="$(curl -fsSL https://api.github.com/repos/ggml-org/llama.cpp/releases/latest \
+            | grep -oE '"browser_download_url": "[^"]*bin-ubuntu-'"$SUF"'\.zip"' | head -1 | cut -d'"' -f4)"; \
+      if [ -n "$URL" ] && curl -fsSL "$URL" -o /tmp/llama.zip; then \
+        mkdir -p /opt/llama && unzip -q /tmp/llama.zip -d /opt/llama && rm /tmp/llama.zip; \
       fi; \
-    else echo "AVISO: llama.cpp indisponível para $ARQ — IA_MODO=local não funcionará nesta imagem"; fi
+    fi; \
+    BIN="$(find /opt/llama -name llama-server -type f 2>/dev/null | head -1)"; \
+    if [ -n "$BIN" ]; then \
+      chmod +x "$BIN" && LIBDIR="$(dirname "$BIN")" && \
+      printf '#!/bin/sh\nexport LD_LIBRARY_PATH="%s:${LD_LIBRARY_PATH:-}"\nexec "%s" "$@"\n' "$LIBDIR" "$BIN" \
+        > /usr/local/bin/llama-server && chmod +x /usr/local/bin/llama-server; \
+    else echo "AVISO: llama.cpp indisponível — IA_MODO=local não funcionará nesta imagem"; fi
 
 # 0a-bis) stable-diffusion.cpp para gerar imagens (gerar_imagem): binário na
 #     imagem; o MODELO (SD-Turbo, ~2,3 GB) é baixado no PRIMEIRO USO da

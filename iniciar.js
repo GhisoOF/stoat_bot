@@ -14,14 +14,14 @@ if (VOZ_ATIVA && !process.env.VOZ_SERVICO_URL) process.env.VOZ_SERVICO_URL = "ht
 const filhos = new Set();
 let encerrando = false;
 
-function subir(nome, cwd, arquivo, { reiniciar = true, env = {} } = {}) {
+function subir(nome, cwd, arquivo, { reiniciar = true, env = {}, flags = [] } = {}) {
   if (!existsSync(`${cwd}/${arquivo}`)) {
     console.warn(`[INICIAR] ${nome}: ${cwd}/${arquivo} não existe — pulando.`);
     return;
   }
   let tentativas = 0;
   const lancar = () => {
-    const p = spawn(process.execPath, [arquivo], {
+    const p = spawn(process.execPath, [...flags, arquivo], {
       cwd, stdio: "inherit",
       env: { ...process.env, ...env },
     });
@@ -114,11 +114,15 @@ if (VOZ_ATIVA) {
       if (r.status !== 0) console.error(`[INICIAR] voz: download de ${nome}${suf} falhou — confira o nome no catálogo rhasspy/piper-voices.`);
     }
   }
-  subir("voz-servico", "./voz-servico", "servidor.js", { env: {
-    VOZ_PORTA: process.env.VOZ_PORTA || "8091",
-    // A primeira voz da lista vira a padrão, salvo PIPER_VOZ explícito.
-    PIPER_VOZ: process.env.PIPER_VOZ || pedidos[0] || "pt_BR-faber-medium",
-  } });
+  subir("voz-servico", "./voz-servico", "servidor.js", {
+    // O revoice/werift quebra com o navigator global do Node 22+.
+    flags: ["--no-experimental-global-navigator"],
+    env: {
+      VOZ_PORTA: process.env.VOZ_PORTA || "8091",
+      // A primeira voz da lista vira a padrão, salvo PIPER_VOZ explícito.
+      PIPER_VOZ: process.env.PIPER_VOZ || pedidos[0] || "pt_BR-faber-medium",
+    },
+  });
 }
 
 // O bot é o processo principal: se ele sair, tudo sai.

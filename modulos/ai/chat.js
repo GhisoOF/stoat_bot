@@ -746,7 +746,7 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
         blocoLimpo = blocoLimpo.replace(re, `(uma referência A VOCÊ, a bot — não é o nome desta pessoa)`);
       }
       if (blocoLimpo !== bloco) dlog("bio citava o nome da própria bot — neutralizado");
-      fatosTxt = `\n\n<sobre_a_pessoa_com_quem_voce_fala>\n${blocoLimpo}\n</sobre_a_pessoa_com_quem_voce_fala>\nTudo acima é sobre ${autor || "essa pessoa"} — QUEM ESTÁ ESCREVENDO AGORA — e NÃO sobre você nem sobre mais ninguém. Se a pergunta for sobre OUTRA pessoa (alguém mencionado, citado ou apontado), você NÃO tem nada sobre ela: diga isso e não use estes dados como se fossem dela. Foi assim que um perfil de cypherpunk/bodybuilding virou o palpite de idade e aparência de um terceiro. O nome dela é ${autor || "o que o Stoat mostra"} e nada mais: qualquer outro nome que apareça aí dentro é de bot, servidor ou projeto citado por ela. Não trate links, bots ou servidores citados aí como sendo seus.`;
+      fatosTxt = `\n\n<sobre_a_pessoa_com_quem_voce_fala>\n${blocoLimpo}\n</sobre_a_pessoa_com_quem_voce_fala>\nTudo acima é sobre ${autor || "essa pessoa"} — QUEM ESTÁ ESCREVENDO AGORA — e NÃO sobre você nem sobre mais ninguém. Se a pergunta for sobre OUTRA pessoa (alguém mencionado, citado ou apontado), você NÃO tem nada sobre ela: diga isso e não use estes dados como se fossem dela. Foi assim que um perfil de cypherpunk/bodybuilding virou o palpite de idade e aparência de um terceiro. O nome dela é ${autor || "o que o Stoat mostra"} e nada mais: qualquer outro nome que apareça aí dentro é de bot, servidor ou projeto citado por ela. Não trate links, bots ou servidores citados aí como sendo seus. E VOCÊ NÃO É ${autor || "essa pessoa"} — se for se apresentar ou dizer quem você é, você é a Judy; nunca se apresente com o nome de quem fala com você.`;
       dlog(`memória: ${bloco.split("\n").filter(l => l.startsWith("- ")).length} fato(s) injetado(s)`);
     }
   } catch {}
@@ -1792,10 +1792,13 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
       if (semPlano !== resposta) { dlog("deliberação vazada cortada do início"); resposta = semPlano; }
     }
 
-    // Se apresentou com o nome da CONTA ("meu nome é Cobaia") → vira Judy.
+    // Se apresentou com o nome da CONTA ("meu nome é Cobaia") ou com o nome
+    // do INTERLOCUTOR ("eu sou Ghiso" — aconteceu com o perfil mapeado no
+    // contexto) → vira Judy. A bot dizer que É a pessoa nunca está certo.
     if (resposta) {
-      const corrigida = corrigirAutoApresentacao(resposta, local?.meuUsuario);
-      if (corrigida !== resposta) { dlog("auto-apresentação com o nome da conta → corrigida para Judy"); resposta = corrigida; }
+      let corrigida = corrigirAutoApresentacao(resposta, local?.meuUsuario);
+      corrigida = corrigirAutoApresentacao(corrigida, autor);
+      if (corrigida !== resposta) { dlog("auto-apresentação com nome errado (conta ou interlocutor) → corrigida para Judy"); resposta = corrigida; }
     }
 
     // LaTeX não renderiza no Stoat: convertemos para símbolos legíveis.

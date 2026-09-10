@@ -1290,6 +1290,10 @@ console.log("\n── auto-apresentação com o nome da conta ──");
     "  → citar o nome fora de apresentação fica intocado");
   ok(chat.corrigirAutoApresentacao("Meu nome é Judy.", "Judy") === "Meu nome é Judy.",
     "  → conta já chamada Judy: nada muda");
+  ok(chat.corrigirAutoApresentacao("Olá, eu sou Ghiso. Sou o bot de código aberto.", "Ghiso") === "Olá, eu sou Judy. Sou o bot de código aberto.",
+    "★ 'eu sou <interlocutor>' também vira Judy (o bug do perfil mapeado)");
+  ok(chat.corrigirAutoApresentacao("O Ghiso perguntou sobre o main.js.", "Ghiso") === "O Ghiso perguntou sobre o main.js.",
+    "  → falar SOBRE o interlocutor fica intocado");
 }
 
 console.log("\n── extração das URLs de imagem do marcador ──");

@@ -95,7 +95,7 @@ if (!iaLigada()) {
     process.env.LLM_MODEL = process.env.LLM_MODEL || "conversa";
     process.env.LLM_MODEL_VISAO = "visao";
     const cfg = `/data/llama-swap.yaml`;
-    const comando = (m) => `${LLAMA_BIN} -hf ${m} --host 127.0.0.1 --port \${PORT} -c ${ctx} -ngl ${ngl} --jinja`;
+    const comando = (m) => `${LLAMA_BIN} -hf ${m} --host 127.0.0.1 --port \${PORT} -c ${ctx} -ngl ${ngl} --jinja --temp 0.2 --top-k 80 --repeat-penalty 1.05`;
     writeFileSync(cfg, [
       "models:",
       "  conversa:",

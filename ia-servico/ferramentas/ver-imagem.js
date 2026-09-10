@@ -8,9 +8,19 @@ const LADO_VISAO   = Number(process.env.IMAGEM_LADO_VISAO || 1280);
 const LADO_GERACAO = Number(process.env.IMAGEM_LADO_GERACAO || 768);
 const TIMEOUT_MS   = Number(process.env.IMAGEM_TIMEOUT_MS || 120_000);
 
-const HOSTS_PERMITIDOS = (process.env.IMAGEM_HOSTS_PERMITIDOS
-  || "autumn.stoat.chat,autumn.stt.gg,cdn.stoat.chat,autumn.revolt.chat")
-  .split(",").map((h) => h.trim().toLowerCase()).filter(Boolean);
+// O host do CDN_URL configurado no bot entra SEMPRE na allowlist: foi a
+// dessincronia entre os dois (chat.js montando URLs em cdn.stoatusercontent.com
+// e esta lista só com os hosts antigos) que fazia a ferramenta recusar o
+// próprio CDN do Stoat.
+function hostDe(url) {
+  try { return new URL(url).hostname.toLowerCase(); } catch { return ""; }
+}
+const HOSTS_PERMITIDOS = [...new Set([
+  ...(process.env.IMAGEM_HOSTS_PERMITIDOS
+    || "autumn.stoat.chat,autumn.stt.gg,cdn.stoat.chat,cdn.stoatusercontent.com,autumn.revolt.chat")
+    .split(",").map((h) => h.trim().toLowerCase()).filter(Boolean),
+  hostDe(process.env.CDN_URL || "https://cdn.stoatusercontent.com"),
+].filter(Boolean))];
 
 let sharpMod = null;
 async function sharp() {

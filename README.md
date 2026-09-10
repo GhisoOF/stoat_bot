@@ -330,4 +330,4 @@ repositório incompleto derruba o build, não o bot em produção.
 
 ## Licença
 
-MIT (veja `LICENSE`). Feito com [`stoat.js`](https://github.com/stoatchat/javascript-client-sdk).
+WTFPL (veja `LICENSE`). Feito com [`stoat.js`](https://github.com/stoatchat/javascript-client-sdk).

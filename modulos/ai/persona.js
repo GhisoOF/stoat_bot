@@ -32,9 +32,13 @@ export function personaConfigurada(serverId) {
 }
 
 // Linhas de persona para o prompt de sistema principal.
+// Personalidade padrão global via .env (PROMPT). O &personalidade por servidor vence.
+const PROMPT_ENV = (process.env.PROMPT || "").trim();
+
 export function linhasPersona(serverId, lang = "pt") {
   const custom = personaConfigurada(serverId);
   if (custom) return [custom];
+  if (PROMPT_ENV) return [PROMPT_ENV];
   return PADRAO[lang === "en" ? "en" : "pt"];
 }
 
@@ -42,6 +46,7 @@ export function linhasPersona(serverId, lang = "pt") {
 export function resumoPersona(serverId, lang = "pt") {
   const custom = personaConfigurada(serverId);
   if (custom) return custom.slice(0, 400);
+  if (PROMPT_ENV) return PROMPT_ENV.slice(0, 400);
   return RESUMO_PADRAO[lang === "en" ? "en" : "pt"];
 }
 

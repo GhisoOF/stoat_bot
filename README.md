@@ -11,6 +11,32 @@ embutido (nada de serviço externo), então as configurações e punições
 
 ---
 
+## Subir o seu (um container, um `.env`)
+
+```bash
+git clone https://github.com/GhisoOF/stoat_bot && cd stoat_bot
+cp .env.example .env    # edite: BOT_TOKEN, DONO, SERVIDOR — o resto é opcional
+docker compose up -d --build
+```
+
+Tudo roda num container só. As variáveis que importam:
+
+| Variável | O que é |
+|---|---|
+| `BOT_TOKEN` | token do bot na plataforma |
+| `DONO` | ID do **seu perfil** — ganha os comandos administrativos do bot |
+| `SERVIDOR` | ID do servidor onde a **IA** funciona (`*` = em todos; vazio = IA em lugar nenhum) |
+| `IA` | `0` desliga todos os módulos de IA — o bot de moderação segue completo |
+| `IA_MODO` | `local` roda um modelo na sua máquina (o **MODELO** é baixado do Hugging Face no primeiro arranque e guardado no volume); `online` usa uma plataforma via `TOKEN_IA` (padrão: OpenRouter) |
+| `MODELO` | local: `repo:quantização` GGUF do HF · online: nome do modelo na plataforma |
+| `TOKEN_IA` | token da plataforma, só no modo `online` |
+| `PROMPT` | personalidade padrão da IA no seu texto — e `&personalidade` troca por servidor, sem redeploy |
+
+Os nomes internos (`SUPER_ADMINS`, `CHAT_SERVIDORES`, `LLM_URL`, `LLM_MODEL`)
+continuam valendo e têm prioridade — instalações antigas não mudam nada.
+
+---
+
 ## Primeiros passos (5 minutos)
 
 Acabou de adicionar o bot? Três comandos resolvem quase tudo:

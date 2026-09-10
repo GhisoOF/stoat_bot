@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import './modulos/core/env.js';
 
 {
   const original = console.log.bind(console);

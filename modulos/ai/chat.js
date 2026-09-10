@@ -10,6 +10,7 @@ import { verificar } from "./verificar.js";
 import { SUB as SUBCOMANDOS_REAIS } from "../core/aliases.js";
 import * as desinteresse from "./desinteresse.js";
 import * as persona from "./persona.js";
+import { iaLigada } from "../core/env.js";
 import { tr, lingua } from "../core/i18n.js";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -269,10 +270,11 @@ const MAX_TOKENS   = Number(process.env.CHAT_MAX_TOKENS || 700);
 const DECISAO_TOKENS = Number(process.env.CHAT_DECISAO_TOKENS || 600);   // piso das decisões json (ver ollamaChat)
 const TIMEOUT      = Number(process.env.CHAT_TIMEOUT  || 300000);
 
-const SERVIDORES_PERMITIDOS = (process.env.CHAT_SERVIDORES || "01KH9SJYWVD7XAHJ28TP0YP4Q0")
+const SERVIDORES_PERMITIDOS = (process.env.CHAT_SERVIDORES || "")
   .split(",").map((s) => s.trim()).filter(Boolean);
 
 export function servidorPermitido(serverId) {
+  if (!iaLigada()) return false;
   if (SERVIDORES_PERMITIDOS.includes("*")) return true;
   return !!serverId && SERVIDORES_PERMITIDOS.includes(serverId);
 }

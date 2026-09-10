@@ -6,6 +6,10 @@ import * as ferramentas from "./ferramentas/index.js";
 const PORTA        = Number(process.env.PORTA || 8090);
 const LLM_URL      = (process.env.LLM_URL || process.env.OLLAMA_URL || "http://localhost:11434").replace(/\/$/, "");
 const OLLAMA_URL   = LLM_URL;   // rotas antigas de diagnóstico ainda usam o nome
+const TOKEN_LLM = process.env.TOKEN_IA || process.env.LLM_TOKEN || "";
+const cabecalhosLLM = () => TOKEN_LLM
+  ? { "Content-Type": "application/json", Authorization: `Bearer ${TOKEN_LLM}` }
+  : { "Content-Type": "application/json" };
 const MODELO_PADRAO= process.env.LLM_MODEL || process.env.OLLAMA_MODEL || "qwen3.5:9b";
 const NUM_CTX      = Number(process.env.NUM_CTX || 16384);
 const MAX_TOKENS   = Number(process.env.MAX_TOKENS || 4096);
@@ -49,7 +53,7 @@ async function llm(messages, { modelo, comFerramentas = true, maxTokens = MAX_TO
   try {
     const r = await fetch(`${LLM_URL}/v1/chat/completions`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: cabecalhosLLM(),
       body: JSON.stringify(corpo),
       signal: ctrl.signal,
     });
@@ -274,7 +278,7 @@ const servidor = createServer(async (req, res) => {
     if (req.method === "GET" && req.url === "/saude") {
       let ollamaOk = false, modelos = [];
       try {
-        const r = await fetch(`${LLM_URL}/v1/models`, { signal: AbortSignal.timeout(5000) });
+        const r = await fetch(`${LLM_URL}/v1/models`, { headers: cabecalhosLLM(), signal: AbortSignal.timeout(5000) });
         if (r.ok) {
           const d = await r.json().catch(() => ({}));
           ollamaOk = true;
@@ -423,7 +427,7 @@ async function diagnosticoDeBoot() {
 
   // 4. O servidor de LLM — sem ele o serviço não responde nada
   try {
-    const r = await fetch(`${LLM_URL}/v1/models`, { signal: AbortSignal.timeout(5000) });
+    const r = await fetch(`${LLM_URL}/v1/models`, { headers: cabecalhosLLM(), signal: AbortSignal.timeout(5000) });
     if (!r.ok) throw new Error(`HTTP ${r.status}${r.status === 404 ? " (a URL não serve /v1/models — llama-swap na porta certa?)" : ""}`);
     const d = await r.json().catch(() => ({}));
     const nomes = (d.data ?? d.models ?? []).map((m) => m.id || m.model || m.name).filter(Boolean);

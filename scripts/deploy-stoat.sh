@@ -103,9 +103,12 @@ fi
 
 # ── 4b. O .env da raiz agora é o coração — conferir o mínimo vital ──
 FALTA=""
-for VAR in BOT_TOKEN LLM_URL SUPER_ADMINS; do
-  grep -q "^${VAR}=" .env 2>/dev/null || FALTA="$FALTA $VAR"
-done
+grep -qE "^BOT_TOKEN=." .env 2>/dev/null || FALTA="$FALTA BOT_TOKEN"
+grep -qE "^(DONO|SUPER_ADMINS)=." .env 2>/dev/null || FALTA="$FALTA DONO"
+if ! grep -qE "^IA=(0|false|nao|não|off|no)\b" .env 2>/dev/null; then
+  grep -qE "^(SERVIDOR|CHAT_SERVIDORES)=." .env 2>/dev/null || FALTA="$FALTA SERVIDOR"
+  grep -qE "^(IA_MODO|LLM_URL)=." .env 2>/dev/null || FALTA="$FALTA IA_MODO-ou-LLM_URL"
+fi
 if [ -n "$FALTA" ]; then
   avis "faltam no .env da raiz:$FALTA — o container único precisa deles"
   avis "acrescente antes de subir o container (o push pode seguir normalmente)"

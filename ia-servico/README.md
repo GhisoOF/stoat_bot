@@ -229,12 +229,13 @@ Confirme de onde vem a falha:
 # na máquina do Ollama
 curl -s localhost:11434/api/tags | head -c 100      # responde?
 
-# no Umbrel (ou de onde o bot roda)
-curl -s --max-time 5 http://100.74.70.106:11434/api/tags | head -c 100
+# da máquina onde o bot roda (troque pelo IP da máquina do LLM)
+curl -s --max-time 5 http://IP_DA_MAQUINA_DO_LLM:11434/api/tags | head -c 100
 ```
 
-Responder no primeiro e não no segundo confirma o diagnóstico. Em **OpenRC**
-(Gentoo), o ajuste fica em `/etc/conf.d/ollama`:
+Responder no primeiro e não no segundo confirma o diagnóstico. Em **systemd**,
+o ajuste é um override (`systemctl edit ollama` → `Environment=OLLAMA_HOST=0.0.0.0:11434`);
+em **OpenRC**, fica em `/etc/conf.d/ollama`:
 
 ```sh
 export OLLAMA_HOST="0.0.0.0:11434"
@@ -247,12 +248,9 @@ sudo rc-service ollama restart
 sudo rc-update add ollama default     # se ainda não sobe no boot
 ```
 
-Se preferir não expor na rede local, use o IP do Tailscale em vez de
-`0.0.0.0` — assim só quem está na sua tailnet alcança:
-
-```sh
-export OLLAMA_HOST="100.74.70.106:11434"
-```
+Se preferir não expor na rede local toda, use um IP de uma rede privada
+(uma VPN como Tailscale/WireGuard, por exemplo) em vez de `0.0.0.0` — assim
+só quem está nessa rede alcança o serviço.
 
 ## Busca web (SearXNG) — opcional
 

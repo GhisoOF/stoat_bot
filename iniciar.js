@@ -1,6 +1,6 @@
 
-import { spawn } from "node:child_process";
-import { existsSync, mkdirSync } from "node:fs";
+import { spawn, spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, readdirSync } from "node:fs";
 import { iaLigada, modoIA, MODELO_LOCAL_PADRAO } from "./modulos/core/env.js";
 
 const IA_EMBUTIDA = iaLigada() && process.env.IA_EMBUTIDA !== "0";
@@ -88,7 +88,25 @@ if (!iaLigada()) {
 }
 
 if (IA_EMBUTIDA) subir("ia-servico", "./ia-servico", "servidor.js", { env: { PORTA: process.env.IA_PORTA || "8090" } });
-if (VOZ_ATIVA) subir("voz-servico", "./voz-servico", "servidor.js", { env: { VOZ_PORTA: process.env.VOZ_PORTA || "8091" } });
+if (VOZ_ATIVA) {
+  const vozesDir = process.env.PIPER_VOZES || "/data/vozes";
+  try { mkdirSync(vozesDir, { recursive: true }); } catch {}
+  const temVoz = existsSync(vozesDir) && readdirSync(vozesDir).some((f) => f.endsWith(".onnx"));
+  if (!temVoz) {
+    // Vozes pt-BR do catálogo oficial do Piper — uma vez, para o volume.
+    const BASE = "https://huggingface.co/rhasspy/piper-voices/resolve/main/pt/pt_BR";
+    const VOZES = [
+      ["faber/medium/pt_BR-faber-medium.onnx", "pt_BR-faber-medium.onnx"],
+      ["faber/medium/pt_BR-faber-medium.onnx.json", "pt_BR-faber-medium.onnx.json"],
+    ];
+    console.info("[INICIAR] voz: baixando as vozes pt-BR (primeiro arranque)…");
+    for (const [rel, nome] of VOZES) {
+      const r = spawnSync("curl", ["-fsSL", `${BASE}/${rel}`, "-o", `${vozesDir}/${nome}`], { stdio: "inherit" });
+      if (r.status !== 0) console.error(`[INICIAR] voz: falhou o download de ${nome} — &tts voz vai listar vazio até resolver a rede.`);
+    }
+  }
+  subir("voz-servico", "./voz-servico", "servidor.js", { env: { VOZ_PORTA: process.env.VOZ_PORTA || "8091" } });
+}
 
 // O bot é o processo principal: se ele sair, tudo sai.
 subir("bot", ".", "main.js", { reiniciar: false });

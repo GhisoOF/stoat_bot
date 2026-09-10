@@ -24,6 +24,22 @@ cp .env.example .env    # edite: BOT_TOKEN, DONO, SERVIDOR — o resto é opcion
 docker compose up -d --build
 ```
 
+**Baterias incluídas** — o `up` acima traz tudo, sem instalar mais nada:
+
+| Peça | Como vem |
+|---|---|
+| Bot + serviço de ferramentas da IA | dentro da imagem |
+| Motor de IA (llama.cpp) | dentro da imagem; com `IA_MODO=local`, o **modelo** é baixado do Hugging Face no primeiro arranque e guardado no volume |
+| Busca na web (SearXNG) | sobe junto no compose, já configurado — a IA pesquisa de fábrica |
+| Leitura de código (GitHub) | dentro; repositórios públicos funcionam sem token |
+| Voz nas calls (Piper + ffmpeg) | dentro da imagem; `VOZ_ATIVA=1` e as vozes pt-BR baixam sozinhas no primeiro arranque |
+| Geração de imagem (stable-diffusion.cpp + SD-Turbo) | dentro da imagem; o modelo (~2,3 GB) baixa no **primeiro pedido de desenho** e fica no volume — `IMAGEM=0` desliga, `SD_URL` troca por um A1111/Forge externo |
+
+Visão (a IA **ler** imagens) depende só de o modelo escolhido enxergar —
+funciona de fábrica no modo `online` com um modelo multimodal, e no modo
+`local` conforme o GGUF escolhido. Para rodar **só o bot**, sem a busca:
+`docker compose up -d stoat-bot`.
+
 As variáveis que importam:
 
 | Variável | O que é |
@@ -36,6 +52,7 @@ As variáveis que importam:
 | `MODELO` | local: `repo:quantização` GGUF do HF · online: nome do modelo na plataforma |
 | `TOKEN_IA` | token da plataforma, só no modo `online` |
 | `PROMPT` | personalidade padrão da IA no seu texto — e `&personalidade` troca por servidor, sem redeploy |
+| `IMAGEM` | `0` desliga a geração de imagem embutida (`SD_URL` aponta para um gerador externo) |
 
 Nomes internos (`SUPER_ADMINS`, `CHAT_SERVIDORES`, `LLM_URL`, `LLM_MODEL`)
 continuam valendo e têm prioridade — útil para apontar a IA a um servidor de
@@ -120,9 +137,10 @@ diz exatamente o que clicar.
   e uma **peneira anti-barulho** que filtra spam pela forma e limita falas por
   minuto no canal — risada passa de propósito, e `&tts <texto>` nunca é filtrado.
 - Diagnóstico da cadeia inteira com `&tts estado` e `&tts diagnostico` (diz
-  **em qual etapa** a entrada travou). Ligue com `VOZ_ATIVA=1` (sobe dentro do
-  container) ou aponte `VOZ_SERVICO_URL` para um serviço de voz externo;
-  restrinja com `TTS_SERVIDORES`.
+  **em qual etapa** a entrada travou). Ligue com `VOZ_ATIVA=1` — o Piper e o
+  ffmpeg vêm na imagem, e as vozes baixam sozinhas no primeiro arranque.
+  Restrinja com `TTS_SERVIDORES`; `VOZ_SERVICO_URL` aponta para um serviço
+  externo, se preferir rodá-lo fora.
 
 **Engajamento**
 
@@ -255,10 +273,10 @@ qualquer servidor) exigem estar em `DONO`/`SUPER_ADMINS`.
   `&help` — o bot se apresenta como um bot de moderação comum. `IA=0` desliga
   tudo globalmente.
 - **Arquitetura:** o bot conversa com um serviço de ferramentas embutido
-  (`ia-servico/`, tool-calling: calcular, ler código, buscar na web, RSS), que
-  fala com **qualquer LLM de API OpenAI** — o llama.cpp embutido do modo
-  `local`, uma plataforma no modo `online`, ou o seu próprio servidor via
-  `LLM_URL`.
+  (`ia-servico/`, tool-calling: calcular, ler código do GitHub, buscar na web
+  pelo SearXNG que sobe junto, RSS), e esse serviço fala com **qualquer LLM de
+  API OpenAI** — o llama.cpp embutido do modo `local`, uma plataforma no modo
+  `online`, ou o seu próprio servidor via `LLM_URL`.
 - **Memória com fronteiras:** memória curta por canal (~20 mensagens),
   perfis de longo prazo por pessoa com data em cada fato, e `&chat esquecer`
   que apaga **tudo** — o banco e o que está carregado no processo.
@@ -295,7 +313,7 @@ versões antigas continuam funcionando.
 ├── scripts/verificar-build.js  # sanidade do repositório (roda no CI e no build da imagem)
 ├── teste-*.mjs                 # suítes de teste por área
 ├── .env.example                # modelo de configuração comentado
-├── Dockerfile · docker-compose.yml
+├── Dockerfile · docker-compose.yml   # bot (tudo dentro) + SearXNG para a busca
 └── .github/workflows/build.yml # build multi-arch (x86-64 e ARM64)
 ```
 

@@ -1,5 +1,16 @@
 
 const SD_URL       = (process.env.SD_URL || "").replace(/\/$/, "");
+// Gerador embutido (stable-diffusion.cpp): usado quando não há SD_URL.
+const SD_BIN       = process.env.SD_BIN || "/usr/local/bin/sd-cpp";
+const SD_DIR       = process.env.SD_MODELOS_DIR || "/data/modelos-sd";
+const SD_MODELO_URL = process.env.SD_MODELO_URL
+  || "https://huggingface.co/stabilityai/sd-turbo/resolve/main/sd_turbo.safetensors";
+const IMAGEM_LIGADA = (process.env.IMAGEM ?? "1").trim() !== "0";
+
+import { existsSync, mkdirSync, readFileSync, unlinkSync, renameSync } from "node:fs";
+import { spawn as spawnProc, spawnSync } from "node:child_process";
+import { basename, join } from "node:path";
+import { tmpdir } from "node:os";
 const LADO_MAX     = Number(process.env.IMAGEM_LADO_GERACAO || 768);
 const PASSOS_MAX   = Number(process.env.IMAGEM_PASSOS_MAX || 30);
 const TIMEOUT_MS   = Number(process.env.IMAGEM_GERACAO_TIMEOUT_MS || 180_000);
@@ -55,9 +66,49 @@ export const definicao = {
   },
 };
 
+// ── Backend embutido (sd.cpp + SD-Turbo) ──
+function baixarModeloSD() {
+  const nome = basename(new URL(SD_MODELO_URL).pathname);
+  const destino = join(SD_DIR, nome);
+  if (existsSync(destino)) return destino;
+  try { mkdirSync(SD_DIR, { recursive: true }); } catch {}
+  console.info(`[IA][gerar_imagem] primeiro uso: baixando ${nome} (uma vez, fica no volume)…`);
+  const tmp = `${destino}.baixando`;
+  const r = spawnSync("curl", ["-fL", "--retry", "2", SD_MODELO_URL, "-o", tmp], { stdio: "inherit" });
+  if (r.status !== 0) { try { unlinkSync(tmp); } catch {} throw new Error("download do modelo de imagem falhou (rede? URL em SD_MODELO_URL?)"); }
+  renameSync(tmp, destino);
+  return destino;
+}
+
+function gerarEmbutido({ texto, width, height }) {
+  return new Promise((res, rej) => {
+    let modelo;
+    try { modelo = baixarModeloSD(); } catch (e) { return rej(e); }
+    const saida = join(tmpdir(), `sd-${Date.now()}.png`);
+    // SD-Turbo: pouquíssimos passos e cfg 1.0 — é o que o torna leve em CPU.
+    const passos = String(Math.min(PASSOS_MAX, Number(process.env.IMAGEM_PASSOS || 4)));
+    const finalArgs = ["-M", "txt2img", "-m", modelo, "-p", texto, "-n", NEGATIVO_FIXO,
+      "-W", String(width), "-H", String(height), "--steps", passos,
+      "--cfg-scale", process.env.IMAGEM_CFG || "1.0", "--type", "q8_0", "-o", saida];
+    const p = spawnProc(SD_BIN, finalArgs, { stdio: ["ignore", "ignore", "pipe"] });
+    let err = "";
+    p.stderr.on("data", (d) => { err += d; });
+    const t = setTimeout(() => { try { p.kill("SIGKILL"); } catch {} }, TIMEOUT_MS);
+    p.on("error", (e) => { clearTimeout(t); rej(new Error(`sd.cpp: ${e.message}`)); });
+    p.on("close", (c) => {
+      clearTimeout(t);
+      if (c !== 0 || !existsSync(saida)) return rej(new Error(`sd.cpp saiu com ${c}: ${err.trim().slice(-200)}`));
+      const png = readFileSync(saida);
+      try { unlinkSync(saida); } catch {}
+      res(png);
+    });
+  });
+}
+
 export async function executar({ prompt, largura, altura }) {
-  if (!SD_URL) {
-    return { erro: "geração de imagem desligada: defina SD_URL no judy-ia apontando para um servidor compatível com a API do A1111 (Forge/SD.Next) — ver ia-servico/README." };
+  const embutidoDisponivel = IMAGEM_LIGADA && existsSync(SD_BIN);
+  if (!SD_URL && !embutidoDisponivel) {
+    return { erro: "geração de imagem indisponível: o binário embutido (sd.cpp) não está nesta imagem e não há SD_URL apontando para um servidor A1111 (Forge/SD.Next) — ver ia-servico/README." };
   }
   const texto = String(prompt ?? "").trim();
   if (!texto) return { erro: "descreva o que desenhar." };
@@ -76,6 +127,25 @@ export async function executar({ prompt, largura, altura }) {
     cfg_scale: 6.5,
     sampler_name: process.env.IMAGEM_SAMPLER || "Euler a",
   };
+
+  if (!SD_URL) {
+    try {
+      const png = await gerarEmbutido({ texto, width: corpo.width, height: corpo.height });
+      const s2 = await sharp();
+      const limpa = await s2(png, { limitInputPixels: MAX_PIXELS })
+        .jpeg({ quality: 90, mozjpeg: true })
+        .toBuffer();
+      return {
+        ok: true,
+        dimensoes: `${corpo.width}x${corpo.height}`,
+        anexo_base64: limpa.toString("base64"),
+        anexo_mime: "image/jpeg",
+        anexo_nome: "judy-arte.jpg",
+      };
+    } catch (e) {
+      return { erro: `gerador embutido: ${e?.message ?? e}` };
+    }
+  }
 
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), TIMEOUT_MS);

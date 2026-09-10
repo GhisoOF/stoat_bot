@@ -76,9 +76,13 @@ if (!iaLigada()) {
     const cache = process.env.LLAMA_CACHE || "/data/modelos";
     try { mkdirSync(cache, { recursive: true }); } catch {}
     console.info(`[INICIAR] IA local: ${modelo} (primeiro arranque baixa o modelo — pode demorar)`);
+    // -ngl: camadas na GPU. O build é Vulkan, mas sem esta flag o llama.cpp
+    // carrega tudo na CPU mesmo com adaptador disponível. 999 = "tudo o que
+    // couber"; sem GPU exposta ao container, ele cai para CPU sozinho.
+    const ngl = process.env.LLAMA_NGL || "999";
     subirBin("llama", LLAMA_BIN,
       ["-hf", modelo, "--host", "127.0.0.1", "--port", process.env.LLAMA_PORTA || "8082",
-       "-c", process.env.LLAMA_CTX || "8192", "--jinja"],
+       "-c", process.env.LLAMA_CTX || "8192", "-ngl", ngl, "--jinja"],
       { LLAMA_CACHE: cache });
   } else {
     console.error(`[INICIAR] IA_MODO=local mas ${LLAMA_BIN} não existe nesta imagem — a IA vai falhar. Use IA_MODO=online ou aponte LLM_URL para um servidor externo.`);

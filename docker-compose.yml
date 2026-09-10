@@ -32,8 +32,16 @@ services:
       - SD_URL=${SD_URL:-}            # A1111/Forge externo no lugar do embutido
       - SD_MODELO_URL=${SD_MODELO_URL:-}
       - GITHUB_TOKEN=${GITHUB_TOKEN:-}  # só para ler repositório privado
+      - LLAMA_NGL=${LLAMA_NGL:-999}     # camadas do modelo na GPU (IA_MODO=local)
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    # GPU para o modo local: descomente se a máquina tem GPU/iGPU com driver
+    # Vulkan (Intel, AMD e a maioria das integradas). Sem isto, roda em CPU.
+    #devices:
+    #  - /dev/dri:/dev/dri
+    #group_add:
+    #  - video
+    #  - render
     volumes:
       - stoat_data:/data
 

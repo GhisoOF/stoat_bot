@@ -1,7 +1,8 @@
 # Serviço de IA da Judy
 
-Container **separado** do bot. O bot (`stoat_bot`) continua exatamente como está —
-ele só manda as mensagens para cá.
+Roda **embutido no container do bot**: o `iniciar.js` o sobe em
+`localhost:8090` automaticamente (desligável com `IA_EMBUTIDA=0`, se quiser
+rodá-lo em outro lugar e apontar `IA_SERVICO_URL`).
 
 ## llama.cpp no lugar do Ollama
 
@@ -9,8 +10,7 @@ O serviço fala o formato **OpenAI** (`/v1/chat/completions`) — servido
 igualmente pelo `llama-server` do llama.cpp, pelo **llama-swap** e pelo
 próprio Ollama. Trocar de backend é trocar a `LLM_URL`; nenhum código muda.
 
-A configuração recomendada está em `docker-compose.example.yml` +
-`llama-swap.example.yaml`: o llama-swap fica na frente e sobe um
+A configuração recomendada da inferência está em `llama-swap.example.yaml`: o llama-swap fica na frente e sobe um
 `llama-server` por modelo conforme o campo `model` do pedido, com `ttl` para
 descarregar — o "vários modelos por nome" do Ollama, com o custo do
 llama.cpp (GGUF direto do disco, contexto alocado uma vez no boot, imagem

@@ -1,27 +1,9 @@
-// ══════════════════════════════════════════════════════════
-//  comandos-admin.js — &comando e &cargomudo
-//
-//  &comando                       → lista comandos e seu estado
-//  &comando disable <nome>        → desativa um comando neste servidor
-//  &comando enable  <nome>        → reativa um comando
-//
-//  &cargomudo [nome]              → cria um cargo com TODAS as permissões
-//                                   negadas (serve para silenciar) e já o
-//                                   define como cargo de silêncio do servidor
-//
-//  Ambos exigem ManagePermissions.
-// ══════════════════════════════════════════════════════════
 
 import * as log from "../core/log.js";
 import { tr, lingua } from "../core/i18n.js";
 
-// Máscara "todas as permissões (segura)" do Stoat — confirmada na SDK:
-// Permission.GrantAllSafe = 0x000fffffffffffff
 const GRANT_ALL_SAFE = 0x000fffffffffffffn;
 
-// ──────────────────────────────────────────────────────────
-//  &comando — ativar/desativar comandos
-// ──────────────────────────────────────────────────────────
 export async function cmdComando(message, args, ctx) {
   const { config, estado, sendEmbed, COR, getServer, membroTemPermissao, salvarConfig, PREFIXO } = ctx;
   const lang = lingua(ctx);
@@ -77,8 +59,6 @@ export async function cmdComando(message, args, ctx) {
     });
   }
 
-  // Aceita as duas línguas: num servidor em PT ninguém deveria precisar
-  // digitar `disable` (o resto do bot traduz os subcomandos, este ficou para trás).
   const DESLIGA = new Set(["disable", "off", "desativar", "desligar", "desabilitar"]);
   const LIGA    = new Set(["enable", "on", "ativar", "ligar", "habilitar", "reativar"]);
   if (!DESLIGA.has(sub) && !LIGA.has(sub)) {
@@ -131,8 +111,6 @@ export async function cmdComando(message, args, ctx) {
   });
 }
 
-// Nega o cargo em cada canal de texto/voz do servidor.
-// Devolve { ok, falhas, total } — nunca lança (canais podem ter restrições).
 export async function negarEmTodosOsCanais(server, roleId) {
   const deny = Number(GRANT_ALL_SAFE);
   let ok = 0, falhas = 0;
@@ -150,11 +128,6 @@ export async function negarEmTodosOsCanais(server, roleId) {
   return { ok, falhas, total: alvo.length };
 }
 
-// ──────────────────────────────────────────────────────────
-//  Cria um cargo de silêncio (todas as permissões negadas).
-//  Reutilizável pelo &setup. Devolve { id, nome } ou lança.
-//  Se `porCanal` for true, também nega em cada canal.
-// ──────────────────────────────────────────────────────────
 export async function criarCargoMudo(server, nome = "Silenciado", porCanal = false) {
   // 1) cria o cargo
   const criado = await server.createRole(nome);
@@ -171,9 +144,6 @@ export async function criarCargoMudo(server, nome = "Silenciado", porCanal = fal
   return { id: roleId, nome, canais };
 }
 
-// ──────────────────────────────────────────────────────────
-//  &cargomudo [nome]
-// ──────────────────────────────────────────────────────────
 export async function cmdCargoMudo(message, args, ctx) {
   const { config, sendEmbed, COR, getServer, membroTemPermissao, salvarConfig, PREFIXO } = ctx;
   const lang = lingua(ctx);

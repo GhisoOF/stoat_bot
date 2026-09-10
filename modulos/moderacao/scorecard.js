@@ -1,18 +1,4 @@
-// ══════════════════════════════════════════════════════════
-//  scorecard.js — Pontuação aditiva única (0–10)
-//
-//  Modelo: scanners de feature → soma ponderada → nota 0–10.
-//  UMA categoria só ("conteúdo proibido"): +18, gore, golpe,
-//  apologia a ilícito e CSAM convivem aqui, distinguidos apenas
-//  por PESO (os indicadores graves pesam o suficiente para,
-//  sozinhos, chegarem perto do topo). Sem treino: os pesos são
-//  definidos à mão e ficam todos em PESOS, fáceis de calibrar.
-//
-//  A nota é a soma das features × pesos, limitada a [0, 10].
-// ══════════════════════════════════════════════════════════
 
-// ── Léxicos (dados) ───────────────────────────────────────
-// Iscas de golpe — promessa de ganho fácil / brinde premium
 const LEX_SCAM = [
   /\bfree\s*(nitro|robux|vbucks|gift|steam|skins?)\b/i,
   /\b(nitro|robux|vbucks|skins?)\s*(gr[áa]tis|free)\b/i,
@@ -68,8 +54,6 @@ const LEX_GORE = [
   /\bv[íi]deo\s+de\s+morte\b/i,
 ];
 
-// Indicadores GRAVES (abuso infantil / categorias ilícitas).
-// Folded into "adulto": pesam alto o bastante para destacar sozinhos.
 const LEX_GRAVE = [
   /\ball\s+ages\b/i,
   /\b(little|young|under-?age|pre-?teens?)\s+(girls?|boys?|kids?|ones?|teens?)\b/i,
@@ -82,30 +66,6 @@ const LEX_GRAVE = [
   /\b(rape|estupro|abuso\s+(infantil|de\s+menor)|pedofil|pedô|pedo)\b/i,
   /\bfamily\s+(fun|content|vids?|videos?|collection)\b/i,
 ];
-
-// ══════════════════════════════════════════════════════════
-//  Golpe do "trabalho": use a SUA conta, dividimos o lucro
-//
-//  Uma mensagem real que passou batido (nota 3,0): oferta de "colaboração"
-//  em que a vítima entrega a conta do LinkedIn, o golpista usa a identidade
-//  dela para conseguir contratos, e o dinheiro "cai direto na sua conta".
-//  Nenhum léxico antigo pegava: não há link, não há brinde grátis, não há
-//  "ganhe dinheiro fácil" — o texto é comedido, empresarial e comprido.
-//
-//  O que o denuncia não é uma palavra, e sim a ESTRUTURA da proposta. Quatro
-//  peças que, juntas, nenhuma oferta honesta tem:
-//
-//    1. recrutamento  — "procuro colaborador", "sem experiência necessária"
-//    2. conta_alheia  — a conta/identidade tem de ser a SUA (o núcleo)
-//    3. divisao_lucro — "dividimos 50%"
-//    4. mula          — o dinheiro passa por você ("cai na sua conta")
-//    5. pretexto_conta— a explicação de por que não pode ser a conta dele
-//
-//  Nenhuma delas basta sozinha, e é de propósito: "procuro parceiro, a gente
-//  divide 50/50" é uma proposta legítima comum. O que quase nunca aparece
-//  fora de golpe é a exigência da conta DA VÍTIMA — por isso as conjunções
-//  lá embaixo só disparam quando `conta_alheia` está presente.
-// ══════════════════════════════════════════════════════════
 
 // A conta/identidade tem de ser a da vítima
 const LEX_CONTA_ALHEIA = [
@@ -125,13 +85,7 @@ const LEX_DIVISAO_LUCRO = [
   /\b(50\/50|60\/40|70\/30|80\/20|40\/60|30\/70)\b/,
   /\b\d{1,3}\s*%\s*(do|dos|da|de|of|the)?\s*(lucro|ganho|receita|revenue|profit|earnings)/i,
   /\b(lucro|receita|revenue|profit|earnings)[^.\n]{0,30}\b\d{1,3}\s*%/i,
-  // A parte em que o valor é oferecido sem a palavra "lucro": "te dou 30%",
-  // "you get 40%", "30% pra você" — é como a proposta costuma ser escrita.
   /\b(te\s+dou|te\s+passo|fic\w+\s+com|voc[êe]\s+ganha|you\s+(get|keep|receive))\s*\d{1,3}\s*%/i,
-  // Sem `\b` no fim: em "você" o último caractere é acentuado, e `\b` exige
-  // um caractere de PALAVRA ao lado — `ê` não é um deles, então a âncora
-  // nunca casaria. Um detalhe assim some no meio de uma lista de regex e
-  // deixa a regra ligada e inútil ao mesmo tempo.
   /\b\d{1,3}\s*%\s*(pra|para|for)\s+(voc[êe]|you|ti|si)(?![a-z])/i,
 ];
 
@@ -155,8 +109,6 @@ const LEX_RECRUTAMENTO = [
   /\b(collaboration|colabora[çc][ãa]o)\s+(method|m[ée]todo|proposta)\b/i,
 ];
 
-// A explicação de por que a conta não pode ser a dele — quase diagnóstica:
-// negócio honesto não precisa justificar por que usa a identidade do outro.
 const LEX_PRETEXTO_CONTA = [
   /\b(the\s+)?reason\s+for\s+using\s+your\b/i,
   /\b(motivo|raz[ãa]o)\s+(de|para|por)\s+(usar|utilizar)\s+(a\s+)?sua\b/i,
@@ -183,12 +135,8 @@ const LINK_SIMPLES    = /\bhttps?:\/\/|\bwww\./i;
 const AFIRMACAO = /\b(vendo|selling|sell|compre|buy|acesse|access|baixe|download|assine|subscribe|clique|click|entre|join)\b/i;
 const PERGUNTA  = /\?/;
 
-// ── Pesos (à mão; calibráveis) ────────────────────────────
 export const PESOS = {
   vies:            0,
-  // Palavra sensível SOZINHA pesa pouco (evita punir "loli"/"cunny" numa
-  // conversa casual). Ela só vira grave de verdade quando acompanhada de
-  // contexto de oferta/link/venda — ver conj_grave_* abaixo.
   grave:           1.5,
   adulto:          1.5,
   gore:            2.5,
@@ -209,9 +157,6 @@ export const PESOS = {
   conj_grave_contexto: 5,  // grave + link/cta/venda = contexto suspeito → alerta
   conj_topico_cta:     2,  // tópico proibido + contato = divulgação
 
-  // Golpe do "trabalho". Os pesos isolados são de propósito baixos: cada peça,
-  // sozinha, aparece em conversa honesta ("procuro parceiro", "dividimos
-  // 50/50", "sua conta do LinkedIn"). É a combinação que não aparece.
   recrutamento:    1,
   conta_alheia:    1.5,
   divisao_lucro:   1.5,
@@ -219,10 +164,6 @@ export const PESOS = {
   pretexto_conta:  1.5,
   conj_emprego_conta: 3,  // recrutamento/lucro + a conta tem de ser a SUA
   conj_mula_conta:    3,  // a conta é sua E o dinheiro passa por ela
-  // Nem toda redação diz "sua conta" com todas as letras: "usamos a sua e
-  // dividimos", "you receive the payments and keep 20%". Estas duas cobrem o
-  // caso sem depender daquela palavra — pedindo, em troca, uma peça que
-  // conversa honesta raramente tem (a justificativa, ou o dinheiro passando).
   conj_pretexto_ganho: 3,  // "não posso usar a minha" + divisão/dinheiro
   conj_mula_ganho:     3,  // o dinheiro passa por você E é dividido
 };
@@ -234,7 +175,6 @@ const contar = (txt, lista, cap = 99) => {
 };
 const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
 
-// ── Scanners → features ───────────────────────────────────
 function extrairFeatures(texto, opts = {}) {
   const t = texto ?? "";
   const f = {};
@@ -276,9 +216,6 @@ function extrairFeatures(texto, opts = {}) {
   else if (f.grave > 0 && temContexto) f.conj_grave_contexto = 1;
   if ((f.adulto > 0 || f.gore > 0 || f.scam > 0) && (f.cta > 0 || f.oferta > 0)) f.conj_topico_cta = 1;
 
-  // As duas conjunções do golpe do trabalho. Ambas exigem `conta_alheia`:
-  // é a peça que uma proposta honesta não tem. Sem ela, "procuro parceiro,
-  // dividimos 50/50" continua somando pouco e passando.
   if (f.conta_alheia > 0 && (f.recrutamento > 0 || f.divisao_lucro > 0)) f.conj_emprego_conta = 1;
   if (f.conta_alheia > 0 && (f.mula > 0 || f.pretexto_conta > 0)) f.conj_mula_conta = 1;
   if (f.pretexto_conta > 0 && (f.divisao_lucro > 0 || f.mula > 0)) f.conj_pretexto_ganho = 1;
@@ -287,20 +224,15 @@ function extrairFeatures(texto, opts = {}) {
   return f;
 }
 
-// ── Função de pontuação ÚNICA ─────────────────────────────
 export function pontuar(features, pesos = PESOS) {
   let s = pesos.vies ?? 0;
   for (const [k, v] of Object.entries(features)) s += (pesos[k] ?? 0) * v;
   return clamp(s, 0, 10);
 }
 
-// Analisa um conteúdo e devolve a nota 0–10 + os sinais que somaram.
-//  opts.rate = mensagens por segundo daquele autor (opcional)
 export function analisarConteudo(texto, opts = {}) {
   const f = extrairFeatures(texto, opts);
   const nota = pontuar(f);
-  // "grave" (que aciona ação forte) agora exige CONTEXTO: palavra sensível
-  // sozinha não é mais tratada como grave — só quando vem com oferta/link/cta.
   const grave = (f.conj_grave_oferta > 0) || (f.conj_grave_contexto > 0);
   const sinais = Object.entries(f)
     .filter(([, v]) => v)

@@ -1,35 +1,3 @@
-// ══════════════════════════════════════════════════════════
-//  ban-global.js — Lista compartilhada de banimentos
-//
-//  Cada servidor escolhe o que fazer quando um usuário que
-//  consta na lista ENTRA no servidor:
-//    off     — ignora a lista (PADRÃO: nada automático)
-//    avisar  — alerta os moderadores com motivo e contagem
-//    banir   — bane automaticamente
-//
-//  A lista é alimentada por TODOS os bans (automod + &ban
-//  manual), guardando servidor de origem e motivo.
-//
-//  ── Contribuição: sempre ligada, sem configuração ──
-//  Todo servidor onde o bot está CONTRIBUI para a lista, sempre:
-//  os bans que já existiam entram sozinhos (cerca de 1 min após o
-//  boot e depois a cada 6h, BANGLOBAL_IMPORT_MS) e os bans novos
-//  são registrados no momento em que acontecem. Não há comando
-//  para ligar, desligar nem forçar isso — é o alicerce da lista.
-//
-//  A ÚNICA escolha de cada servidor é o lado do consumo: se ele
-//  se aproveita da lista (`avisar`, `banir`) ou a ignora (`off`).
-//  Ou seja, dá para não usar a lista, mas não dá para usá-la sem
-//  alimentá-la — o que mantém a lista honesta: quem se protege
-//  com o trabalho dos outros também contribui com o seu.
-//
-//  Consequência a ter em mente: o histórico de bans de qualquer
-//  servidor onde o bot entrar passa a valer para os demais. Em
-//  servidores onde o bot é convidado, o critério de moderação de
-//  lá vira critério daqui — por isso o `&banglobal esquecer`
-//  existe, para tirar da lista um registro específico que não se
-//  sustente.
-// ══════════════════════════════════════════════════════════
 
 import * as db  from "../core/db.js";
 import { descreverErro } from "../core/erros.js";
@@ -54,26 +22,6 @@ export const MODOS_EN = {
 // Formata uma data legível a partir de um timestamp
 const data = (ms) => new Date(ms).toISOString().slice(0, 10);
 
-// ──────────────────────────────────────────────────────────
-//  Isenção por servidor
-//
-//  A lista global é feita do critério de moderação de OUTROS servidores.
-//  Às vezes ele simplesmente não é o seu: a pessoa levou ban num servidor
-//  de jogo por bater boca, e aqui ela é bem-vinda. Sem uma forma de dizer
-//  isso, a única saída era `esquecer` — que apaga o registro para TODO
-//  MUNDO, impondo a decisão deste servidor aos demais. A isenção resolve
-//  no lugar certo: vale só aqui, e não mexe na lista dos outros.
-// ──────────────────────────────────────────────────────────
-// ──────────────────────────────────────────────────────────
-//  Bots não entram na lista
-//
-//  Um bot não escolhe entrar em lugar nenhum: alguém o adiciona. Se ele foi
-//  banido num servidor, isso diz respeito a quem o adicionou lá — não é
-//  histórico de comportamento que faça sentido carregar para os outros. Pior:
-//  bots populares são banidos em algum servidor mais cedo ou mais tarde, então
-//  a lista se encheria justamente dos mais usados, e o modo `banir` passaria a
-//  derrubar integrações que o dono do servidor acabou de adicionar de propósito.
-// ──────────────────────────────────────────────────────────
 export function ehBotConhecido(userId, { client, membro = null } = {}) {
   if (membro && ehBot(membro)) return true;
   try {
@@ -83,38 +31,8 @@ export function ehBotConhecido(userId, { client, membro = null } = {}) {
   return false;
 }
 
-// ══════════════════════════════════════════════════════════
-//  "Isto é um bot?" — quatro perguntas, da mais barata à mais cara
-//
-//  A versão de cache só enxerga quem o cliente já carregou. A pergunta
-//  seguinte, `GET /users/{id}`, PARECIA resolver — mas o Stoat só a responde
-//  para quem tem conexão mútua com o alvo:
-//
-//      if query.have_mutual_connection() { Access + ViewProfile } else { 0 }
-//
-//  Um bot banido em OUTRO servidor não divide servidor nenhum com a Judy.
-//  Ou seja: exatamente o caso que motiva a checagem é o único em que ela não
-//  pode ser feita por esse caminho. Era por isso que o AutoMod continuava
-//  passando mesmo depois da correção anterior.
-//
-//  A rota que não exige nada disso é `GET /bots/{id}/invite`:
-//
-//      let bot = db.fetch_bot(target.id).await?;          // 404 se não for bot
-//      if !bot.public && user != bot.owner { NotFound }   // 404 se for privado
-//
-//  Ela nem pede autenticação. Um 200 é prova de que o id é de um bot; um 404
-//  não prova nada (pode ser bot privado, pode ser gente). Daí a ordem abaixo,
-//  e daí a última tentativa ser o **discover** — a vitrine pública de bots,
-//  onde qualquer bot que alguém adiciona por lá aparece.
-//
-//  Cada resposta diz também DE ONDE veio, porque "não achei bots" sem dizer
-//  o que foi tentado é o tipo de resposta que não dá para depurar.
-// ══════════════════════════════════════════════════════════
 const cacheBot = new Map();   // userId → { ehBot, via }
 
-// Só respostas POSITIVAS são guardadas para sempre. Um "não" pode ser apenas
-// a API tendo recusado a pergunta naquele momento — guardá-lo eternizaria uma
-// falha de rede como se fosse um fato.
 const NEGATIVO_MS = Number(process.env.BANGLOBAL_BOT_CACHE_MS || 30 * 60_000);
 
 export async function confirmarSeEhBot(userId, { client, membro = null, comDiscover = true } = {}) {
@@ -161,13 +79,6 @@ export async function confirmarSeEhBot(userId, { client, membro = null, comDisco
   return guardar(false, null);
 }
 
-// ── O discover ────────────────────────────────────────────
-//
-//  A página de bots do Stoat. Baixamos UMA vez e guardamos os ids que ela
-//  contiver: perguntar por usuário seria uma requisição por registro, e a
-//  resposta é a mesma lista para todos. Extraímos por formato de id em vez de
-//  ler uma estrutura específica, porque a página pode ser HTML ou JSON e nós
-//  não controlamos nenhum dos dois — o que importa é se o id aparece nela.
 const DISCOVER_URL = process.env.BANGLOBAL_DISCOVER_URL || "https://stt.gg/discover/bots";
 const DISCOVER_VALIDADE_MS = Number(process.env.BANGLOBAL_DISCOVER_MS || 6 * 60 * 60_000);
 let discoverCache = null;   // { ids:Set, quando:number, erro:string|null }
@@ -187,8 +98,6 @@ export async function idsDoDiscover({ forcar = false } = {}) {
     discoverCache = { ids, quando: Date.now(), erro: ids.size ? null : "a página não trouxe nenhum id" };
     console.info(`[BANGLOBAL] discover: ${ids.size} id(s) em ${DISCOVER_URL}`);
   } catch (e) {
-    // Guardamos o erro com hora: sem isso, uma página fora do ar viraria uma
-    // requisição por usuário, a cada verificação, para sempre.
     discoverCache = { ids: new Set(), quando: Date.now(), erro: e?.message ?? String(e) };
     console.error("[BANGLOBAL] discover:", discoverCache.erro);
   }
@@ -200,10 +109,6 @@ async function estaNoDiscover(userId) {
   return d.ids.has(userId);
 }
 
-// Resolve o alvo de um subcomando e devolve um embed pronto quando falha.
-// Todos os subcomandos usavam caminhos diferentes para isso — e o `esquecer`
-// não usava nenhum: pegava o texto cru, então `esquecer AutoMod` virava
-// literalmente o "id" `AutoMod` e respondia que não constava na lista.
 async function alvoDoComando(entrada, { message, server, ctx }) {
   const extras = (() => {
     try { return db.buscarBanidosPorNome(entrada ?? "").map((b) => ({ id: b.userId, username: b.nome })); }
@@ -251,13 +156,6 @@ function embedAlvoNaoResolvido(ctx, r, entrada, uso) {
   });
 }
 
-// Como mostrar alguém numa listagem.
-//
-// `<@ID>` parece a escolha óbvia, mas o cliente só resolve a menção se tiver
-// o usuário em cache — e numa lista de BANIDOS quase ninguém está. O
-// resultado era uma parede de "Unknown User", que não identifica nem ajuda a
-// agir. Nome guardado no banco vem primeiro; depois o cache; e o ID sempre
-// aparece, porque é ele que os outros comandos aceitam.
 export function rotularUsuario(userId, { nome = null, client = null } = {}) {
   const conhecido = nome
     ?? (() => { try { return db.nomeDeBanido(userId); } catch { return null; } })()
@@ -269,9 +167,6 @@ export function estaIsento(config, userId) {
   return (config?.banGlobal?.isentos ?? []).includes(userId);
 }
 
-// Desbana de verdade, pela API. A stoat.js não expõe isso de forma estável
-// entre versões, então tentamos o método da lib e caímos no REST — o mesmo
-// caminho que o `&cor` já usa.
 async function desbanir(server, serverId, userId) {
   try {
     if (typeof server?.unbanUser === "function") { await server.unbanUser(userId); return { ok: true }; }
@@ -292,19 +187,9 @@ async function desbanir(server, serverId, userId) {
   }
 }
 
-// ──────────────────────────────────────────────────────────
-//  Importação: lê os bans que já existem NO SERVIDOR e os
-//  registra na lista global. Usada tanto pelo `&banglobal
-//  importar` (manual) quanto pela sincronização automática.
-//
-//  Devolve { total, novos } ou lança — quem chama decide o que
-//  fazer com o erro (o comando avisa, o agendador só loga).
-// ──────────────────────────────────────────────────────────
 export async function importarBansDoServidor(server, serverId, client = null) {
   const bans = await server.fetchBans();
   const lista = bans?.bans ?? bans ?? [];
-  // O fetchBans devolve os usuários num campo separado em algumas versões da
-  // API; juntamos os dois para ter nome e flag de bot sempre que possível.
   const porId = new Map();
   for (const u of bans?.users ?? []) porId.set(u?.id ?? u?._id, u);
 
@@ -317,16 +202,10 @@ export async function importarBansDoServidor(server, serverId, client = null) {
     const u = b?.user ?? porId.get(uid) ?? null;
     if (ehBot(b) || ehBot(u)) {
       bots++;
-      // O `fetchBans` traz a flag; aproveitamos para nunca mais precisar
-      // perguntar. Sem isto, um bot banido em vários servidores era conferido
-      // de novo a cada rodada de sincronização, em todos eles.
       db.ignorarNaListaGlobal(uid, { nome: u?.username ?? b?.username ?? null, motivo: "é um bot" });
       continue;
     }
     const nome = u?.username ?? b?.username ?? null;
-    // O `fetchBans` costuma vir SEM a flag de bot — foi por aí que os bots
-    // entraram na lista em primeiro lugar. A confirmação usa o cache e a
-    // vitrine pública; nada de rede por usuário quando a resposta já é sabida.
     const v = await confirmarSeEhBot(uid, { client });
     if (v.ehBot) {
       bots++;
@@ -338,13 +217,6 @@ export async function importarBansDoServidor(server, serverId, client = null) {
   return { total: lista.length, novos, bots, ignorados };
 }
 
-// ──────────────────────────────────────────────────────────
-//  Sincronização AUTOMÁTICA
-//
-//  Roda no boot e de tempos em tempos, em TODOS os servidores
-//  onde o bot está. Sem exceção e sem chave para desligar: a
-//  contribuição é a contrapartida de existir uma lista.
-// ──────────────────────────────────────────────────────────
 const INTERVALO_MS = Number(process.env.BANGLOBAL_IMPORT_MS || 6 * 60 * 60_000);   // 6h
 const ATRASO_BOOT_MS = Number(process.env.BANGLOBAL_IMPORT_BOOT_MS || 60_000);     // 1min após o boot
 const ESPACO_MS = Number(process.env.BANGLOBAL_ESPACO_MS || 3000);   // respiro entre servidores, para não estourar rate limit
@@ -367,8 +239,6 @@ async function sincronizarTodos(client, criarContexto) {
       if (novos > 0) {
         somaNovos += novos;
         console.info(`[BANGLOBAL] auto: ${novos} novo(s) de ${total} ban(s) em ${server.name ?? sid}`);
-        // Só registra no log do servidor quando há novidade — sincronização
-        // silenciosa a cada 6 horas viraria ruído no canal de logs.
         await log.registrar(ctx, "punicoes", {
           titulo: "🌐 Bans importados automaticamente",
           descricao: `**${novos}** ban(s) deste servidor entraram na lista global.`,
@@ -385,8 +255,6 @@ async function sincronizarTodos(client, criarContexto) {
   }
 }
 
-// Sincroniza UM servidor. Usado quando o bot entra num servidor novo: sem
-// isto, o histórico de lá só entraria na lista na próxima rodada de 6h.
 export async function sincronizarServidor(server, criarContexto) {
   const sid = server?.id ?? server?._id;
   if (!sid || typeof server?.fetchBans !== "function") return;
@@ -409,21 +277,14 @@ export function iniciarAutoImportacao(client, criarContexto) {
   const rodar = () => sincronizarTodos(client, criarContexto)
     .catch((e) => console.error("[BANGLOBAL] auto:", e?.message));
 
-  // O boot já tem trabalho demais (blocklist, RSS, status): a primeira
-  // sincronização espera o bot assentar.
   setTimeout(rodar, ATRASO_BOOT_MS).unref?.();
   setInterval(rodar, INTERVALO_MS).unref?.();
   console.info(`[BANGLOBAL] Contribuição automática ativa (sincroniza a cada ${Math.round(INTERVALO_MS / 3600000)}h; não é desligável).`);
 }
 
-// ──────────────────────────────────────────────────────────
-//  Registro: chamado sempre que um ban acontece
-// ──────────────────────────────────────────────────────────
 export async function registrar(ctx, userId, motivo, origem = "manual", { nome = null, membro = null } = {}) {
   const serverId = ctx?.serverId;
   if (!serverId || !userId) return;
-  // Decisão anterior de que esta pessoa não pertence à lista. Vem antes de
-  // tudo: é o `esquecer` que precisa sobreviver aos bans seguintes.
   if (db.estaIgnoradoGlobal(userId)) {
     console.log(`[BANGLOBAL] ${userId} está na lista de ignorados — não volta para a lista global`);
     return;
@@ -431,8 +292,6 @@ export async function registrar(ctx, userId, motivo, origem = "manual", { nome =
   const veredito = await confirmarSeEhBot(userId, { client: ctx?.client, membro });
   if (veredito.ehBot) {
     console.log(`[BANGLOBAL] ${userId} é bot (${veredito.via}) — não entra na lista global`);
-    // Uma vez confirmado, fica confirmado: o próximo ban não precisa
-    // perguntar de novo, nem depender de o cache estar quente naquela hora.
     db.ignorarNaListaGlobal(userId, {
       nome: nome ?? ctx?.client?.users?.get?.(userId)?.username ?? null,
       motivo: `é um bot (${veredito.via})`,
@@ -449,10 +308,6 @@ export async function registrar(ctx, userId, motivo, origem = "manual", { nome =
   }
 }
 
-// ──────────────────────────────────────────────────────────
-//  Verificação na ENTRADA de um membro
-//  Retorna true se o usuário foi banido automaticamente.
-// ──────────────────────────────────────────────────────────
 export async function verificarEntrada(member, ctx) {
   const serverId = member?.id?.server;
   const userId   = member?.id?.user;
@@ -519,17 +374,6 @@ export async function verificarEntrada(member, ctx) {
   return false;
 }
 
-// ──────────────────────────────────────────────────────────
-//  Comando &banglobal
-// ──────────────────────────────────────────────────────────
-
-// ──────────────────────────────────────────────────────────
-//  Varredura: confere os membros que JÁ ESTÃO no servidor.
-//
-//  O verificarEntrada() só age quando alguém entra. Quem já estava aqui
-//  quando foi banido em outro servidor passava despercebido — este é o
-//  ponto cego que a varredura fecha.
-// ──────────────────────────────────────────────────────────
 export async function varrer(ctx, message, { aplicar = true } = {}) {
   const serverId = ctx.serverId;
   const modo = ctx.config?.banGlobal?.modo ?? "off";
@@ -738,13 +582,6 @@ export async function cmdBanGlobal(message, args, ctx) {
     }));
   }
 
-  // ── revisar: SÓ OLHA. Nunca age. ──
-  //
-  // `revisar` era apelido de `varrer`, e `varrer` banir. Uma palavra que
-  // significa "conferir" executava a ação irreversível — e foi assim que
-  // quatro pessoas foram banidas por engano num servidor. Agora as duas
-  // ideias têm nomes distintos e comportamentos distintos: `revisar` mostra,
-  // `varrer` age (e ainda pede confirmação).
   if (["revisar", "review", "conferir", "checar", "ver"].includes(sub)) {
     await sendEmbed(message.channel, tr(ctx,
       { title: "🔎 Revisando…", description: "Conferindo os membros contra a lista global. Nada será feito.", colour: COR.info },
@@ -813,9 +650,6 @@ export async function cmdBanGlobal(message, args, ctx) {
       { title: "🔎 Varrendo os membros…", description: "Conferindo quem já está no servidor contra a lista global.", colour: COR.info },
       { title: "🔎 Sweeping the members…", description: "Checking everyone already in the server against the global list.", colour: COR.info }));
 
-    // Sempre lista ANTES de agir. Mesmo com o modo `banir` ligado, banir
-    // gente sem mostrar quem é primeiro foi exatamente o erro que custou
-    // quatro pessoas.
     const previa = await varrer(ctx, message, { aplicar: false });
     if (previa.erro) {
       return sendEmbed(message.channel, tr(ctx,
@@ -887,11 +721,6 @@ export async function cmdBanGlobal(message, args, ctx) {
     }));
   }
 
-  // ── desfazer: reverte os bans que a LISTA aplicou neste servidor ──
-  //
-  // Só os que o bot aplicou por causa da lista global (origem `banglobal`).
-  // Bans manuais e do automod ficam de fora: desfazer o trabalho da
-  // moderação daqui não é papel deste comando.
   if (["desfazer", "undo", "reverter", "revert"].includes(sub)) {
     const confirmou = ["confirmar", "confirm", "sim", "yes"].includes((args[1] ?? "").toLowerCase());
     const aplicados = db.bansGlobaisPorOrigem(serverId, ["banglobal"]);
@@ -1026,8 +855,6 @@ export async function cmdBanGlobal(message, args, ctx) {
     if (!config.banGlobal.isentos.includes(uid)) config.banGlobal.isentos.push(uid);
     salvarConfig();
 
-    // Se a pessoa já está banida AQUI, isentar sem desbanir seria meia
-    // ajuda: ela continuaria de fora. Desfazemos o ban se ele foi nosso.
     const nossoBan = db.bansGlobaisPorOrigem(serverId, ["banglobal"]).some((b) => b.userId === uid);
     let desbanida = false, erroDesban = null;
     if (nossoBan) {
@@ -1099,12 +926,6 @@ export async function cmdBanGlobal(message, args, ctx) {
     });
   }
 
-  // ── &banglobal auto / importar ──
-  //
-  // Os dois deixaram de ser configuração: a contribuição é incondicional e a
-  // importação roda sozinha. Em vez de responder "subcomando desconhecido" a
-  // quem tinha o hábito de rodá-los, explicamos o que mudou e mostramos o
-  // estado real da lista — o comando some, a informação não.
   if (["auto", "automatico", "automático", "automatic", "autoimport",
        "importar", "import", "sincronizar", "sync"].includes(sub)) {
     const registros = db.bansGlobaisDoServidor?.(serverId) ?? null;
@@ -1149,10 +970,6 @@ export async function cmdBanGlobal(message, args, ctx) {
 
   // ── &banglobal esquecer <usuário> ──
   if (["esquecer", "forget", "remover", "apagar"].includes(sub)) {
-    // Antes esta linha era `(args[1] ?? "").replace(/[<@>]/g, "")`: o texto
-    // cru virava "id". Digitar `esquecer AutoMod` respondia "AutoMod não
-    // constava na lista" — verdade literal e inútil, porque a pessoa
-    // existia, só não tinha sido procurada.
     const entrada = args.slice(1).join(" ");
     const alvo = await alvoDoComando(entrada, { message, server, ctx });
     if (alvo.erro) return sendEmbed(message.channel,
@@ -1160,9 +977,6 @@ export async function cmdBanGlobal(message, args, ctx) {
     const uid = alvo.id;
     const nome = rotularUsuario(uid, { nome: alvo.nome, client: ctx.client });
 
-    // O `esquecer` é permanente por padrão. Apagar as linhas e nada mais era
-    // enxugar gelo: o próximo ban em qualquer servidor — ou a sincronização
-    // de 6h — traz a pessoa de volta, e quem esqueceu não fica sabendo.
     const motivoNota = args.slice(2).join(" ").trim() || null;
     const n = db.esquecerUsuario(uid, {
       nome: alvo.nome ?? null,
@@ -1251,18 +1065,10 @@ export async function cmdBanGlobal(message, args, ctx) {
     }));
   }
 
-  // ── &banglobal bots: tira da lista quem é bot ──
-  //
-  // A regra de não registrar bots vale daqui para a frente; o que já entrou
-  // antes continua lá, e é justamente o que enche a lista de nomes conhecidos.
-  // Este comando faz a limpeza retroativa.
   if (["bots", "limparbots", "podar"].includes(sub)) {
     const arg1 = (args[1] ?? "").toLowerCase();
     const confirmou = ["confirmar", "confirm", "sim", "yes"].includes(arg1);
 
-    // ── `bots <@alguém>`: por que ESTE não foi detectado? ──
-    // "Não achei bots" numa lista onde você está vendo um não dá para depurar.
-    // Aqui cada sinal responde por si.
     if (args[1] && !confirmou) {
       const entrada = args.slice(1).join(" ");
       const alvo = await alvoDoComando(entrada, { message, server, ctx });
@@ -1292,8 +1098,6 @@ export async function cmdBanGlobal(message, args, ctx) {
     const ids = db.idsBanidosGlobais();
     const achados = [];
     const porVia = new Map();
-    // Uma consulta só para a vitrine inteira, antes do laço: sem isso, cada
-    // registro dispararia o download do discover na primeira falha de cache.
     await idsDoDiscover();
     for (const uid of ids) {
       const v = await confirmarSeEhBot(uid, { client: ctx.client });

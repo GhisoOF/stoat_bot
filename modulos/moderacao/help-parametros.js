@@ -1,21 +1,3 @@
-// ══════════════════════════════════════════════════════════
-//  help-parametros.js — o que CADA parâmetro de um comando significa
-//
-//  O `&help boasvindas` mostrava `[canal|titulo|texto|cor|imagem|…]`
-//  e parava aí — quem nunca viu o comando não sabe o que "cor" aceita
-//  nem o que "{membros}" faz. Esta tabela alimenta a seção
-//  **Parâmetros** do `&help <comando>`: uma linha por opção, com o
-//  valor que ela espera e o que acontece.
-//
-//  Formato: { comando: [ { nome, valor?, desc } ] }
-//   nome  — o token que a pessoa digita (em PT; o aliases.js traduz)
-//   valor — o que vem depois (opcional)
-//   desc  — o que faz, em uma linha
-//
-//  O teste exige que todo comando listado em PT exista em EN com o
-//  mesmo número de parâmetros — ninguém fica sem explicação num
-//  idioma só.
-// ══════════════════════════════════════════════════════════
 
 export function parametros(P, lang = "pt") {
   return lang === "en" ? parametrosEN(P) : parametrosPT(P);
@@ -468,9 +450,6 @@ function parametrosEN(P) {
 export function secaoParametros(P, lang, comando) {
   const lista = parametros(P, lang)[comando];
   if (!lista?.length) return "";
-  // O nome do comando entra no cabeçalho de propósito: é ele que dá CONTEXTO
-  // ao tradutor de exibição (aliases.exibir) para, num servidor em inglês,
-  // mostrar `channel` em vez de `canal` nas linhas abaixo.
   const titulo = lang === "en" ? `Parameters of \`${P}${comando}\`` : `Parâmetros de \`${P}${comando}\``;
   const linhas = lista.map((p) => {
     const cab = p.valor ? `\`${p.nome}\` ${p.valor}` : `\`${p.nome}\``;

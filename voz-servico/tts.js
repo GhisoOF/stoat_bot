@@ -1,21 +1,3 @@
-// ══════════════════════════════════════════════════════════
-//  tts.js — texto → áudio, offline, com Piper
-//
-//  Por que Piper e não um modelo maior (XTTS, Kokoro):
-//   • roda em CPU, então evita toda a dor de ROCm com a RX 9060 XT
-//   • gera bem mais rápido que tempo real — aqui LATÊNCIA é o que
-//     importa: alguém digita e espera a fala sair. Um modelo que
-//     produz áudio lindo em 8s é pior, neste uso, que um decente
-//     em 0,3s
-//   • vozes pt-BR prontas, sem treino
-//
-//  Se um dia quiser voz clonada com a personalidade da Judy, só este
-//  arquivo muda — o resto do sistema fala com `sintetizar()` e não
-//  sabe o que tem por baixo.
-//
-//  Saída: WAV 22.05kHz mono (o que o Piper produz). O revoice/ffmpeg
-//  reamostra para 48k estéreo na hora de publicar.
-// ══════════════════════════════════════════════════════════
 
 import { spawn } from "node:child_process";
 import fs from "node:fs";
@@ -26,16 +8,6 @@ import { createRequire } from "node:module";
 
 const require_ = createRequire(import.meta.url);
 
-// ── Executar o Piper passando texto pelo stdin ────────────
-//
-// ARMADILHA QUE CUSTOU UMA TARDE: a opção `input` do `execFile` só existe na
-// versão SÍNCRONA (`execFileSync`). Na assíncrona ela é ignorada sem aviso —
-// o Piper ficava esperando um texto que nunca chegava e morria no timeout,
-// exatamente 30s depois. O sintoma ("Command failed") apontava para o Piper,
-// que estava perfeito: rodando à mão ele sintetizava em 0,03s.
-//
-// Aqui o stdin é escrito e FECHADO de verdade. O fechamento é o que sinaliza
-// ao Piper que o texto acabou; sem ele, o processo espera para sempre.
 function rodarPiper(bin, args, texto, timeoutMs) {
   return new Promise((res, rej) => {
     const p = spawn(bin, args, { stdio: ["pipe", "pipe", "pipe"] });
@@ -102,9 +74,6 @@ export async function diagnostico() {
   }
   const vozAtual = vozes.includes(VOZ_PADRAO) ? VOZ_PADRAO : vozes[0];
 
-  // Existir não é funcionar. O diagnóstico dizia "Piper pronto" enquanto ele
-  // falhava em toda síntese — porque só conferia se o arquivo estava no
-  // lugar. Agora sintetizamos uma palavra de verdade.
   if (!fs.existsSync(`${caminhoVoz(vozAtual)}.json`)) {
     return { ok: false, erro: `falta ${vozAtual}.onnx.json ao lado do .onnx (o Piper precisa dos dois)`, vozes };
   }
@@ -124,9 +93,6 @@ export async function diagnostico() {
   return { ok: true, binario: PIPER, vozesDir: VOZES_DIR, vozAtual, vozes, maxChars: MAX_CHARS };
 }
 
-// Limpa o texto ANTES de virar áudio. Não é só estética: um link colado
-// numa call vira trinta segundos de "agá tê tê pê dois pontos barra barra"
-// e ninguém merece isso.
 export function prepararTexto(bruto) {
   let t = String(bruto ?? "")
     .replace(/```[\s\S]*?```/g, " bloco de código ")
@@ -160,12 +126,6 @@ export async function sintetizar(texto, vozNome = null) {
   const modelo = caminhoVoz(voz);
   const saida = path.join(TMP, `${crypto.randomUUID()}.wav`);
 
-  // O Piper lê o texto pelo stdin e escreve o WAV no caminho dado.
-  //
-  // O stderr é ESSENCIAL aqui: quando o Piper falha, o `execFile` só diz
-  // "Command failed" e a mensagem de verdade (modelo corrompido, espeak-ng
-  // ausente, voz incompatível) fica no stderr. Sem repassá-la, o diagnóstico
-  // vira adivinhação — foi exatamente o que aconteceu na primeira vez.
   try {
     await rodarPiper(PIPER, ["--model", modelo, "--output_file", saida], limpo, TIMEOUT_MS);
   } catch (e) {
@@ -190,8 +150,6 @@ export async function sintetizar(texto, vozNome = null) {
   return { arquivo: saida, voz, texto: limpo, bytes: fs.statSync(saida).size };
 }
 
-// Higiene do /tmp: sem isto, cada fala deixa um WAV para trás e o disco
-// enche devagar até alguém perceber meses depois.
 export function limparAntigos(idadeMs = 5 * 60_000) {
   try {
     const agora = Date.now();
@@ -206,41 +164,7 @@ export function limparAntigos(idadeMs = 5 * 60_000) {
 
 setInterval(() => limparAntigos(), 5 * 60_000).unref?.();
 
-// ══════════════════════════════════════════════════════════
-//  Efeitos de voz — o timbre "GLaDOS" sem um modelo GLaDOS
-//
-//  Não existe voz GLaDOS treinada em português: os modelos prontos vêm das
-//  falas do Portal, em inglês, e usar um deles com texto em português daria
-//  pronúncia inglesa ("não" viraria "nay-oh").
-//
-//  Mas o que define aquele timbre não é a voz da atriz — é o PROCESSAMENTO:
-//  banda estreita de alto-falante, ressonância metálica, leve câmara e um
-//  deslocamento de tom. Tudo isso é filtro de áudio, e se aplica a qualquer
-//  voz — inclusive a feminina em português.
-//
-//  O ffmpeg vem embutido no revoice (ffmpeg-static), então não depende do
-//  sistema. Cada efeito custa poucos milissegundos sobre uma fala curta.
-// ══════════════════════════════════════════════════════════
-
-// Deslocar o tom mantendo a velocidade: acelera a taxa de amostragem,
-// reamostra de volta e compensa o tempo. Fixamos 48k antes para a conta não
-// depender da voz (o Piper sai em 22.05k; o dii pode ser outro).
 const tom = (k) => `aresample=48000,asetrate=${Math.round(48000 * k)},aresample=48000,atempo=${(1 / k).toFixed(4)}`;
-
-// ── Dois eixos independentes: TOM e CARÁTER ───────────────
-//
-// A primeira versão misturava os dois e o resultado foi ruim: o `glados`
-// subia o tom porque eu assumi voz masculina de base. Aplicado à `dii`, que
-// já é feminina, virou criança robotizada.
-//
-// Agora são separados:
-//   TOM     — quanto subir/descer a voz (`&tts tom 1.10`). Sobe formantes
-//             junto, então uma voz masculina vira feminina de verdade em vez
-//             de "homem falando fino". Numa voz já feminina, deixe em 1.0.
-//   CARÁTER — a textura (`&tts efeito glados`). Não mexe no tom, então
-//             funciona igual sobre qualquer voz base.
-//
-// O `rubberband` vem embutido no ffmpeg-static: nada a instalar.
 
 // Desloca o tom levando os formantes junto — o que separa "voz de mulher"
 // de "homem acelerado".
@@ -250,12 +174,6 @@ export const cadeiaTom = (t) =>
 export const EFEITOS = {
   nenhum: null,
 
-  // ── CARÁTER (não mexem no tom) ──
-  //
-  // GLaDOS não é uma voz aguda: é grave, plana e fria. O que a define é o
-  // processamento — banda de alto-falante, ressonância metálica e câmara.
-  // Por isso aqui não há deslocamento de tom nenhum; se quiser mais grave,
-  // use `&tts tom 0.95` por cima.
   glados: `highpass=f=220,lowpass=f=6200,` +
           `aphaser=type=t:speed=1.1:decay=0.5:delay=2.0,` +
           `aecho=0.85:0.75:38:0.30,` +
@@ -268,8 +186,6 @@ export const EFEITOS = {
 
   radio: `highpass=f=400,lowpass=f=3400,acompressor=threshold=0.1:ratio=6,volume=1.4`,
 
-  // Íntima/aveludada: sem mexer no tom. Corta o peito, dá corpo nos médios,
-  // acrescenta "ar" nos agudos e uma câmara curta de microfone perto.
   sedutora: `atempo=0.94,` +
             `equalizer=f=200:t=q:w=1.0:g=-3,` +
             `equalizer=f=900:t=q:w=1.2:g=2,` +
@@ -294,9 +210,6 @@ function ffmpegBin() {
  * efeito é irritante, perder a fala é pior.
  */
 export async function aplicarEfeito(arquivo, nome, tom = null) {
-  // Tom e caráter são independentes: qualquer combinação é válida, inclusive
-  // só um dos dois. O tom vem primeiro para o resto da cadeia trabalhar já
-  // sobre a voz na altura final.
   const partes = [];
   const t = Number(tom);
   if (Number.isFinite(t) && t > 0 && Math.abs(t - 1) > 0.001) {

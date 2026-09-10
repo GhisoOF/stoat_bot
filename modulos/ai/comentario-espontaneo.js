@@ -1,19 +1,3 @@
-// ══════════════════════════════════════════════════════════
-//  comentario-espontaneo.js — a Judy comenta por iniciativa
-//
-//  Diferente da conversa livre (que RESPONDE quando alguém fala), aqui a
-//  Judy solta um comentário sobre a conversa em andamento SEM ser chamada
-//  — como alguém no canal que de vez em quando dá um pitaco.
-//
-//  Só comenta sobre o que JÁ está sendo dito (não puxa assunto do nada),
-//  num CANAL ESCOLHIDO, com FREIOS fortes contra virar spam:
-//   • teto por dia (config.porDia)
-//   • cooldown mínimo entre comentários (COOLDOWN_MS)
-//   • precisa de conversa acontecendo (várias msgs recentes de pessoas)
-//   • chance baixa mesmo quando poderia (não comenta toda janela)
-//   • não comenta duas vezes seguidas sem gente falar no meio
-//   • silêncio: se ninguém responde ao comentário dela, recua
-// ══════════════════════════════════════════════════════════
 
 const COOLDOWN_MS = Number(process.env.COMENTARIO_COOLDOWN_MS || 45 * 60 * 1000); // 45 min
 const CHANCE      = Number(process.env.COMENTARIO_CHANCE || 0.25);   // 25% quando elegível
@@ -21,7 +5,7 @@ const JANELA_MSGS = 12;    // quantas mensagens recentes considerar como context
 const log = (...a) => { if (process.env.CHAT_DEBUG) console.log("[COMENTARIO]", ...a); };
 
 // Estado por canal: buffer de mensagens recentes + contadores dos freios.
-const estado = new Map();   // canalId → { msgs, ultimoComentario, hojeData, hojeContagem, msgsDesdeComentario }
+const estado = new Map();
 
 function estadoDe(canalId) {
   let e = estado.get(canalId);
@@ -36,8 +20,6 @@ let gerarComentario = null;   // (contexto:string) => Promise<string>
 let enviarNoCanal = null;     // (canalId, texto) => Promise<void>
 export function configurar({ gerar, enviar }) { gerarComentario = gerar; enviarNoCanal = enviar; }
 
-// Chamado a cada mensagem do canal-alvo. Acumula contexto e, com os freios,
-// ocasionalmente dispara um comentário. Nunca lança.
 export async function observar(message, ctx) {
   try {
     const cfg = ctx?.config?.comentarioEspontaneo;
@@ -70,7 +52,8 @@ export async function observar(message, ctx) {
     // ── Elegível: gera o comentário sobre a conversa recente ──
     const contexto = e.msgs.map((m) => `${m.nome}: ${m.texto}`).join("\n");
     let comentario;
-    try { comentario = await gerarComentario(contexto); }
+    const sid = message.serverId ?? message.server?.id ?? null;
+    try { comentario = await gerarComentario(contexto, sid); }
     catch (err) { log("geração falhou:", err.message); return; }
 
     if (!comentario || !comentario.trim()) return;

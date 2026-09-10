@@ -1,14 +1,3 @@
-// ══════════════════════════════════════════════════════════
-//  permissoes.js — diagnóstico de permissões por CANAL
-//
-//  No Stoat, a permissão do CANAL tem prioridade sobre a do cargo:
-//  o bot pode ter SendMessage no servidor inteiro e ainda assim estar
-//  mudo num canal específico. Sem enxergar isso canal a canal, o
-//  sintoma vira "o bot ignorou meu comando ali" sem explicação.
-//
-//  Aqui a gente lê as permissões efetivas de cada canal e mostra o
-//  que o bot realmente consegue fazer em cada um.
-// ══════════════════════════════════════════════════════════
 
 // Bits de permissão do Stoat/Revolt (os que importam para o bot).
 export const BITS = {
@@ -65,21 +54,6 @@ const DESEJAVEIS = ["React", "ManageMessages"];
 
 const temBit = (valor, bit) => typeof valor === "number" && (valor & bit) === bit;
 
-// ── Cálculo de permissões ─────────────────────────────────
-//
-//  Não dá para depender de um helper da lib (os nomes variam entre versões
-//  e podem simplesmente não existir). Então calculamos como o próprio
-//  Revolt/Stoat define, a partir dos dados brutos:
-//
-//    1. permissões padrão do SERVIDOR
-//    2. cargos do membro, aplicados do rank mais baixo para o mais alto
-//       (rank menor = mais importante, aplicado por último e vence)
-//    3. permissões padrão do CANAL
-//    4. sobrescritas de cargo NO CANAL, na mesma ordem de rank
-//
-//  Cada etapa aplica "allow" (a) e "deny" (d) sobre o acumulado.
-//  Se o servidor der Administrator, tudo é liberado.
-
 const num = (v) => (typeof v === "number" ? v : Number(v) || 0);
 
 // Extrai {a, d} de formatos possíveis (objeto {a,d}, {allow,deny} ou número puro)
@@ -91,8 +65,6 @@ function paraAD(p) {
 
 const aplicar = (base, { a, d }) => (base & ~d) | a;
 
-// Cargos do membro ordenados: rank MAIOR primeiro (menos importante),
-// para que o rank menor (mais importante) seja aplicado por último.
 function cargosOrdenados(server, member) {
   const roles = server?.roles;
   const pegar = (id) => (typeof roles?.get === "function" ? roles.get(id) : roles?.[id]);
@@ -103,12 +75,8 @@ function cargosOrdenados(server, member) {
     .sort((x, y) => (y.role.rank ?? 0) - (x.role.rank ?? 0));
 }
 
-// Permissões efetivas do membro NO CANAL. Devolve { valor, via } ou
-// { valor: null, motivo } quando faltam dados para calcular.
 export function calcularPermissoes(server, canal, member) {
   if (!server) return { valor: null, motivo: "servidor indisponível" };
-  // Sem o membro não dá para saber os cargos — melhor admitir do que calcular
-  // zero e reportar "não enxergo nada", que seria um alarme falso.
   if (!member) return { valor: null, motivo: "membro do bot indisponível" };
   if (server.owner && member && (server.owner === (member.id?.user ?? member.user?.id ?? member.id))) {
     return { valor: 0x7FFFFFFF, via: "dono do servidor" };
@@ -165,13 +133,6 @@ export function podeNoCanal(canal, client, nome, server, botMember) {
 const nomeCanal = (c) => c?.name ?? c?.id ?? "?";
 const ehTexto = (c) => (c?.type ?? "").includes("Text") || c?.type === "TextChannel";
 
-// ── Rastreador: a conta de UM canal, passo a passo ────────
-//
-//  Nasceu de um falso negativo real: o relatório marcou o canal Logs de um
-//  servidor como "não enxergo" enquanto o bot postava logs nele normalmente.
-//  A conta está certa no papel; o suspeito são os DADOS (cargos do membro
-//  não hidratados pela lib, ou o helper dela devolvendo número parcial).
-//  Este rastro mostra cada entrada da conta para o servidor real decidir.
 export function rastrearPermissoes(server, canal, member, client = null) {
   const L = [];
   const bits = (v) => (typeof v === "number"
@@ -272,8 +233,6 @@ export function diagnosticarCanais(server, client, botMember = null, lang = "pt"
   };
 }
 
-// Monta o texto do relatório agrupado — canais OK viram uma linha só, e o
-// detalhe fica para o que tem problema. Assim cabe no embed mesmo com 30+ canais.
 export function formatarRelatorio(r, PREFIXO = "&", lang = "pt") {
   const en = lang === "en";
   const linhas = [];
@@ -313,8 +272,6 @@ export function formatarRelatorio(r, PREFIXO = "&", lang = "pt") {
   return linhas.join("\n");
 }
 
-// Diagnóstico do formato: mostra o que a API realmente devolve num canal.
-// É o que permite descobrir onde estão as permissões quando o cálculo falha.
 export function inspecionarCanal(canal) {
   if (!canal) return "canal indisponível";
   const chaves = Object.keys(canal).filter((k) => typeof canal[k] !== "function");
@@ -329,12 +286,6 @@ export function inspecionarCanal(canal) {
   return { chaves: chaves.slice(0, 25), relevantes: alvo };
 }
 
-// ── 4: um cargo acima do silêncio pode anular o silenciamento? ──
-//
-//  No Stoat as permissões dos cargos são combinadas por RANK. Se a pessoa
-//  tem um cargo melhor colocado que o "Silenciado" e esse cargo LIBERA
-//  SendMessage explicitamente, o silêncio não faz efeito — ela continua
-//  falando. Este teste avisa antes de você descobrir na prática.
 export function conflitosDeSilencio(server, member, silenceRoleId) {
   if (!silenceRoleId) return { erro: "não há cargo de silêncio configurado" };
   // O DONO do servidor ignora qualquer permissão — silenciá-lo nunca funciona.

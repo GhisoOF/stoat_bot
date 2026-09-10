@@ -1,19 +1,8 @@
-// ══════════════════════════════════════════════════════════
-//  warn.js — &warn: aviso manual dado pelo staff
-//
-//  Usa o MESMO contador do automod (tabela punicoes), então um aviso
-//  dado à mão conta para o modo "acumular" — se a política é banir com
-//  3 avisos, o terceiro aviso manual bane igual.
-//
-//  O bot nunca bane sozinho por aviso manual sem avisar: quando o
-//  limite é atingido, ele executa a política configurada e diz o que fez.
-// ══════════════════════════════════════════════════════════
 
 import * as db from "../core/db.js";
 import * as log from "../core/log.js";
 import { tr, lingua } from "../core/i18n.js";
 import { limparId, ULID, resolverUsuario } from "../core/ids.js";
-
 
 export async function cmdWarn(message, args, ctx) {
   const { sendEmbed, COR, PREFIXO: P, config, serverId, getServer, membroTemPermissao } = ctx;
@@ -28,11 +17,6 @@ export async function cmdWarn(message, args, ctx) {
         description: "This command only works inside a server.", colour: COR.erro }));
   }
 
-  // GATE DE PERMISSÃO — estava FALTANDO. O &warn escreve na mesma tabela de
-  // punições do automod, então um aviso manual conta para o modo "acumular":
-  // sem esta checagem, qualquer membro podia advertir qualquer outro e, no
-  // limite, forçar o ban automático de terceiros. Exige ManageMessages, o
-  // mesmo nível dos outros comandos de moderação leve.
   if (!membroTemPermissao(message, server, "ManageMessages")) {
     return sendEmbed(message.channel, tr(ctx,
       { title: "🚫 Permissão insuficiente",
@@ -80,8 +64,6 @@ export async function cmdWarn(message, args, ctx) {
         description: "I'm not going to warn myself.", colour: COR.aviso }));
   }
 
-  // O motivo é o resto da mensagem. O primeiro argumento é descartado quando
-  // ele é o próprio alvo (menção, ID ou nome) — e não quando já é o motivo.
   const primeiro = args[0] ?? "";
   const primeiroEhAlvo = limparId(primeiro) === alvoId
     || ULID.test(limparId(primeiro))

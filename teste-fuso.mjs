@@ -1,6 +1,3 @@
-// ══════════════════════════════════════════════════════════
-//  teste-fuso.mjs — &fuso e o resolvedor de cidades
-// ══════════════════════════════════════════════════════════
 
 process.env.BOT_TOKEN = "tok";
 process.env.DB_PATH = "/tmp/fuso-teste.db";

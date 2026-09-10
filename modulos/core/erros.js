@@ -1,24 +1,3 @@
-// ══════════════════════════════════════════════════════════
-//  erros.js — ler o que a API do Stoat realmente disse
-//
-//  A lib nem sempre rejeita com um `Error`. Ela rejeita, dependendo do
-//  caminho, com:
-//
-//    • um objeto:  { type: "MissingPermission" }
-//    • uma STRING contendo JSON:  '{"type":"NotFound","location":"crates/…"}'
-//    • um Error cujo `message` é esse JSON
-//
-//  Ler `.message` direto dá `undefined` nos dois primeiros casos — foi assim
-//  que nasceram o `[PUNIÇÃO][vigia] …: undefined` e o `[BANGLOBAL] auto:
-//  falha em X: undefined`. E o caso da string é mais traiçoeiro que parece:
-//  quem testava `e.type === "NotFound"` também não via nada, porque o `type`
-//  estava dentro do texto, não no objeto. O vigia repetiu o mesmo erro a cada
-//  minuto por isso — a condição que o encerraria estava a um JSON.parse de
-//  distância.
-//
-//  Este módulo vive em `core/` de propósito: `automod-engine`, `ban-global` e
-//  quem mais precisar importam daqui, sem um depender do outro.
-// ══════════════════════════════════════════════════════════
 
 // Devolve SEMPRE um objeto, venha o erro em que formato vier.
 export function normalizarErro(e) {
@@ -42,10 +21,6 @@ export function tipoDoErro(e) {
   return o?.type ?? o?.error ?? o?.code ?? null;
 }
 
-// Erros da API do Stoat raramente são `Error`: costumam vir como objetos
-// `{ type: "MissingPermission" }` ou como a string JSON acima. Ler `.message`
-// dava `undefined` — foi o que apareceu para o moderador como "falha ao
-// silenciar (undefined)", uma mensagem que não ajuda ninguém a consertar nada.
 export function descreverErro(e, lang = "pt") {
   e = normalizarErro(e);
   const tipo = e?.type ?? e?.error ?? e?.code;

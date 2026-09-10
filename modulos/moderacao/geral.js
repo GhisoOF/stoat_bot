@@ -12,17 +12,6 @@ const COMANDOS_SO_IA = new Set(["chat", "modia"]);
 
 // Só o suficiente para o cabeçalho do subtópico achar o canônico do comando.
 const CANONICO_LOCAL = { rpg: "game", nivel: "xp", level: "xp", logs: "log" };
-// ══════════════════════════════════════════════════════════
-//  modulos/geral.js — Comandos gerais e de moderação manual:
-//  help, ping, repete, userinfo, kick, ban.
-//
-//  BILÍNGUE: cada texto tem versão PT e EN, escolhida por
-//  ctx.config.language (helper tr() do core/i18n.js).
-//
-//  Todas as funções recebem (message, args, ctx). O `ctx` vem
-//  do main.js com: client, COR, PREFIXO, sendEmbed, getServer,
-//  membroTemPermissao, etc.
-// ══════════════════════════════════════════════════════════
 
 import * as log from "../core/log.js";
 import * as db  from "../core/db.js";
@@ -57,9 +46,6 @@ function contarLinhas() {
 
 import * as banGlobal from "./ban-global.js";
 
-// Extrai o usuário-alvo de um comando de moderação.
-// Aceita menção (<@ID>) OU o ID cru colado no texto.
-// Devolve { id, resto } — `resto` são os args após o alvo (o motivo).
 function extrairAlvo(message, args) {
   // 1) menção resolvida pela plataforma
   let id = message.mentionIds?.[0] ?? null;
@@ -75,11 +61,6 @@ function extrairAlvo(message, args) {
   return { id, motivo: resto.join(" ").trim() };
 }
 
-// ══════════════════════════════════════════════════════════
-//  Referência dos comandos (usada pelo &help e também pela IA
-//  como base de conhecimento). `lang` escolhe o dicionário;
-//  omitido → pt (compatível com quem já chamava com 1 arg).
-// ══════════════════════════════════════════════════════════
 export function construirDetalhes(P, lang = "pt") {
   if (lang === "en") return detalhesEN(P);
   return detalhesPT(P);
@@ -529,8 +510,6 @@ function detalhesEN(P) {
   };
 }
 
-// Marca invisível nas linhas que só valem onde a IA está ativa. O filtro
-// remove essas linhas nos servidores sem IA, em vez de anunciar o que não roda.
 const IA_TAG = "\u200b[ia]";
 function filtrarIA(linhas, comIA) {
   if (!Array.isArray(linhas)) return [];   // categoria inexistente/malformada
@@ -539,9 +518,6 @@ function filtrarIA(linhas, comIA) {
     .map((l) => String(l).replace(IA_TAG, ""));
 }
 
-// ══════════════════════════════════════════════════════════
-//  Subtópicos do help (&help <comando> <subtópico>)
-// ══════════════════════════════════════════════════════════
 function construirSubtopicos(P, lang) {
   if (lang === "en") return {
     sentinela: {
@@ -723,9 +699,6 @@ export async function cmdHelp(message, args, ctx) {
 
   // Ajuda detalhada por comando: &help <comando>
   const DETALHES  = construirDetalhes(P, lang);
-  // Os subtópicos vêm de duas fontes: os antigos, embutidos aqui, e a árvore
-  // por subcomando do help-arvore.js. A árvore complementa; onde as duas têm a
-  // mesma chave, a antiga vence (é a mais específica, escrita à mão).
   const SUBTOPICOS = (() => {
     const base = construirSubtopicos(P, lang);
     const extra = arvoreSubtopicos(P, lang);
@@ -745,16 +718,12 @@ export async function cmdHelp(message, args, ctx) {
   if (alvo && subtopico && SUBTOPICOS[alvo]?.[subtopico]) {
     const st = SUBTOPICOS[alvo][subtopico];
     return sendEmbed(message.channel, {
-      // O `titulo` do subtópico é "comando subcomando" — passa pela mesma
-      // tradução do corpo, para o cabeçalho nunca divergir dele.
       title: `📖 ${lang === "en" ? "Help" : "Ajuda"} — ${P}${exibirTitulo(st.titulo, lang, P, ctx.estado?.CANONICO_COMPLETO ?? {})}`,
       description: filtrarIA(String(st.texto).split("\n"), comIA).join("\n"),
       colour: COR.info,
     });
   }
 
-  // Pediu um subtópico que não existe, mas o comando tem subtópicos?
-  // Melhor dizer quais existem do que devolver o detalhe genérico em silêncio.
   if (alvo && subtopico && SUBTOPICOS[alvo] && !SUBTOPICOS[alvo][subtopico]) {
     const disponiveis = Object.keys(SUBTOPICOS[alvo]).map((k) => `\`${P}help ${alvo} ${k}\``).join(" · ");
     return sendEmbed(message.channel, tr(ctx, {
@@ -831,8 +800,6 @@ export async function cmdHelp(message, args, ctx) {
 
   // Comando de IA num servidor sem IA: ele não roda aqui, então não há ajuda.
   if (alvo && !comIA && COMANDOS_SO_IA.has(alvo)) {
-    // Sem citar IA: fora do servidor dela, o comando simplesmente não existe —
-    // anunciar "recursos de IA em outro lugar" é convite a perguntar onde.
     return sendEmbed(message.channel, tr(ctx, {
       title: "🚫 Não existe aqui",
       description: `\`${P}${alvo}\` não existe neste servidor.\n\nUse \`${P}help\` para ver o que existe por aqui.`,
@@ -860,8 +827,6 @@ export async function cmdHelp(message, args, ctx) {
       d.ex ? `\n**${lang === "en" ? "Example" : "Exemplo"}:** \`${d.ex}\`` : null,
     ].filter(Boolean).join("\n");
     const titulo = `📖 ${lang === "en" ? "Help" : "Ajuda"} — ${P}${nomeExibido(alvo, lang)}`;
-    // Descrição + parâmetros quase sempre estouram o embed: viram páginas
-    // (1: o que é e como usar · 2: cada parâmetro · 3: subtópicos).
     const paginas = [{ title: titulo, description: cabecalho }];
     if (params) paginas.push({ title: titulo, description: params.trim() });
     if (temSub) paginas.push({ title: titulo, description: temSub.trim() });
@@ -920,8 +885,6 @@ export async function cmdSobre(message, args, ctx) {
 
   // conta comandos, linhas e uptime de forma resiliente
   const todasRotas = estado?.rotas ? new Set(Object.values(estado.rotas)) : null;
-  // Comandos de IA não contam nos servidores onde a IA não roda: anunciar um
-  // número que inclui o que a pessoa não pode usar é só ruído.
   const nComandos = todasRotas
     ? (comIA ? todasRotas.size : todasRotas.size - (estado?.COMANDOS_SO_IA?.size ?? 0))
     : null;
@@ -932,9 +895,6 @@ export async function cmdSobre(message, args, ctx) {
   const mins = Math.floor((up % 3600) / 60);
   const uptime = dias > 0 ? `${dias}d ${horas}h` : horas > 0 ? `${horas}h ${mins}min` : `${mins}min`;
 
-  // ── O que está LIGADO neste servidor ──
-  // O &info antes listava os recursos do bot; agora diz o que vale aqui, que é
-  // a pergunta real de quem digita o comando.
   const am = config?.automod ?? {};
   const modulosOn = ["antiSpam", "antiMassSpam", "antiInvite", "antiMassMention",
     "antiCaps", "antiLink", "antiScam", "antiCaracteres", "antiRepeticao"]
@@ -966,8 +926,6 @@ export async function cmdSobre(message, args, ctx) {
     `${sim(rssN)} **RSS** — ${rssN} feed(s)`,
     `${sim(banGlobalModo !== "off")} **Global ban list** — mode \`${banGlobalModo}\``,
     `🎲 **RPG** — ${nPersonagens} character(s) · ${moedas.length} currenc${moedas.length === 1 ? "y" : "ies"}${moedas.length > 1 ? " · exchange on" : ""}${nMagias ? ` · ${nMagias} spell(s) learned` : ""}${nCapturados ? ` · ${nCapturados} companion(s) in the dungeon` : ""}${moedas.length < nPerfis ? ` · ${nPerfis} currency profiles available` : ""}${nDupes ? ` · ⚠️ ${nDupes} duplicate currenc${nDupes === 1 ? "y" : "ies"}` : ""}`,
-    // Fora do servidor com IA: uma linha INFORMATIVA, não convite — diz que
-    // existe, onde, e o que faz. Sem link, sem "venha conhecer".
     comIA ? `🤖 **AI (Judy)** — enabled here: chat, code, web search, exact math and **image reading** (attach one and ask)`
           : `🤖 **AI (Judy)** — runs only on the official server (Vapor Nexus): chat, code, web search, exact math and image reading`,
   ] : [
@@ -1049,9 +1007,6 @@ export async function cmdUserinfo(message, args, ctx) {
     const member = (targetId === message.authorId && message.member)
       ? message.member
       : await server.fetchMember(targetId).catch(() => null);
-    // Membro nulo = a pessoa SAIU do servidor (ou o ID não resolve como membro).
-    // É exatamente quando um moderador mais precisa do histórico — então em vez
-    // de cair no erro genérico, seguimos com o que dá: ID + histórico global.
     const user = member?.user ?? member ?? { id: targetId };
 
     const createdAt = user.createdAt ? new Date(user.createdAt).toLocaleDateString(locale) : desconhecido;
@@ -1072,8 +1027,6 @@ export async function cmdUserinfo(message, args, ctx) {
       `**Cargos:** ${roles}`,
     ];
 
-    // ── Histórico de moderação ──────────────────────────────
-    // Avisos e silêncio NESTE servidor + presença na lista global.
     try {
       const avisos     = db.contarAvisos(serverId, targetId);
       const silenciado = db.estaSilenciado(serverId, targetId);
@@ -1253,7 +1206,6 @@ export async function cmdBan(message, args, ctx) {
   }
 }
 
-// ── Helper interno de negação de permissão ─────────────────
 function negarPermissao(ctx, channel, permName) {
   return ctx.sendEmbed(channel, tr(ctx, {
     title: "🚫 Permissão insuficiente",

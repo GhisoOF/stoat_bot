@@ -1,9 +1,3 @@
-// teste-log-midia.mjs — resgate de mídia de mensagem apagada, EXECUTADO
-//
-// Servidor local faz o papel do CDN (serve, some, mente no tamanho) e o
-// `subir` falso faz o papel do Autumn. O que se garante: imagem resgatada e
-// re-subida; CDN purgado vira "não recuperável" declarado; arquivo grande é
-// recusado pelos metadados E pelo streaming; não-mídia é ignorada.
 import http from "node:http";
 import { resgatarMidias } from "./modulos/core/log.js";
 

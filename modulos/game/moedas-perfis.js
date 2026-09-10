@@ -1,32 +1,6 @@
-// ══════════════════════════════════════════════════════════
-//  moedas-perfis.js — moedas prontas para adicionar UMA A UMA
-//
-//  Os "modelos" (`moeda modelo mundo`) criam um conjunto fechado. Isso
-//  resolve quem quer começar rápido, mas não quem quer montar a própria
-//  economia — misturar Real com Esmeralda, ou ter só Ouro e Bitcoin.
-//
-//  Aqui cada moeda é um perfil independente, e todas vivem na MESMA
-//  escala de valor. É o que permite adicioná-las em qualquer combinação
-//  sem quebrar o câmbio: como a taxa do banco é a razão entre os
-//  estoques, o suprimento de cada uma já nasce inversamente proporcional
-//  ao seu valor.
-//
-//      suprimentoBase = 200.000 / valor
-//
-//  Assim 1 Ouro (valor 200) vale ~200 Reais assim que as duas nascem,
-//  sem precisar de tabela de conversão em lugar nenhum. Depois disso a
-//  taxa flutua com o que os jogadores fazem, como deve ser.
-//
-//  Os valores NÃO são a cotação do mundo real: 1 BTC valendo 350 mil
-//  Reais deixaria a moeda inalcançável dentro do jogo. São valores de
-//  jogo, mantendo a ORDEM e a sensação de raridade de cada uma.
-// ══════════════════════════════════════════════════════════
 
 const ESCALA = 200000;   // suprimento da moeda de valor 1
 
-// `valor` é o quanto uma unidade vale em relação à moeda base.
-// `finita` marca as que têm teto real de emissão — as outras são
-// infinitas: o que as separa é a VELOCIDADE de geração (dificuldade).
 const CRU = [
   // ── Fiduciárias ──
   { id: "brl", nome: "Real",            simbolo: "🇧🇷", valor: 1,   nivelMin: 1,  finita: false, grupo: "fiat",
@@ -68,8 +42,6 @@ export const GRUPOS = {
   cripto: { rotulo: "Criptos",     rotuloEN: "Cryptocurrency", emoji: "₿" },
 };
 
-// A dificuldade acompanha o valor: uma moeda que vale 200× precisa
-// aparecer 200× menos nas missões, senão ela mesma se desvaloriza.
 export const PERFIS = CRU.map((m) => ({
   ...m,
   dificuldade: m.valor,

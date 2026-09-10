@@ -1,13 +1,4 @@
 import { servidorPermitido as temIA } from "../ai/chat.js";
-// ══════════════════════════════════════════════════════════
-//  config-comando.js — &config
-//  Mostra, num só lugar, TODAS as configurações atuais:
-//  automod (módulo a módulo), política de punição, chat de
-//  logs, whitelist de convites e os ajustes globais.
-//
-//  Cuidado deliberado: a blocklist tem milhões de domínios,
-//  então mostramos apenas a CONTAGEM, nunca a lista inteira.
-// ══════════════════════════════════════════════════════════
 
 import * as db from "../core/db.js";
 import { EVENTOS } from "../core/log.js";
@@ -111,10 +102,6 @@ export async function cmdConfig(message, args, ctx) {
     ...Object.keys(EVENTOS).map((k) => `${on(lg.eventos?.[k] !== false)} ${k}`),
   ];
 
-  // ── Punições ativas neste servidor (do banco) ──
-  // ── RPG e economia ──
-  // Quem administra pergunta "quantas moedas tem, qual é a principal, e o
-  // câmbio está de pé?" — antes era preciso sair do &config para descobrir.
   const moedas = (() => { try { return db.listarMoedas(serverId) ?? []; } catch { return []; } })();
   const padraoMoeda = moedas.find((m) => m.padrao) ?? moedas[0] ?? null;
   const nJogadores = (() => { try { return db.listarPersonagens(serverId, 9999)?.length ?? null; } catch { return null; } })();

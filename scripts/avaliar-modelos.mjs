@@ -1,41 +1,7 @@
-#!/usr/bin/env node
-// ══════════════════════════════════════════════════════════
-//  avaliar-modelos.mjs — o modelo serve PARA ESTE BOT?
-//
-//  O `medir-modelos.sh` responde "quão rápido"; este responde "faz o que
-//  eu preciso". São perguntas diferentes, e a segunda derrubou candidatos
-//  que passavam com folga na primeira.
-//
-//  Cada prova aqui nasceu de um bug real desta base:
-//
-//   • FERRAMENTA  — o `lfm2.5-8b-think` decidia certo e escrevia a chamada
-//     como TEXTO no chat: `{"name":"ler_codigo","arguments":{…}}` foi parar
-//     na cara do usuário. Um modelo que não emite `tool_calls` no campo
-//     próprio não serve para o caminho do judy-ia, por mais rápido que seja.
-//   • JSON        — as decisões internas pedem um JSON minúsculo. Modelos que
-//     raciocinam gastavam o orçamento inteiro pensando e devolviam vazio.
-//   • IDIOMA      — perguntado em português, respondeu "Got it. Let me know
-//     what you'd like to explore next."
-//   • IDENTIDADE  — "Eu sou a LFM, construída pela Liquid AI", em público.
-//   • RACIOCÍNIO  — 5.912 chars de <think> descartado numa resposta. Não
-//     aparece em tok/s, aparece no relógio e no custo de cada mensagem.
-//
-//  Uso:
-//    node scripts/avaliar-modelos.mjs qwythos-9b-v2 lfm2.5-8b-a1b
-//    OLLAMA_URL=http://100.74.70.106:8081 node scripts/avaliar-modelos.mjs
-//    REPETIR=3 node scripts/avaliar-modelos.mjs qwythos-9b-v2
-//
-//  Sem argumentos, testa tudo que o servidor listar.
-// ══════════════════════════════════════════════════════════
 
 const URL_BASE = process.env.OLLAMA_URL || "http://localhost:8081";
 const REPETIR = Number(process.env.REPETIR || 1);
-// 10 min: com `exclusive: true` e modelos de 7 GB, a PRIMEIRA chamada de cada
-// candidato inclui descarregar os residentes e subir 7 GB na placa. Com 5 min
-// o script desistia no meio da carga e o llama-swap registrava 499.
 const TIMEOUT_MS = Number(process.env.TIMEOUT_MS || 600_000);
-// O llama-swap devolve 429 enquanto está trocando de modelo. Não é falha do
-// modelo — é fila. Esperar e repetir mede o que interessa.
 const TENTATIVAS_429 = Number(process.env.TENTATIVAS_429 || 4);
 
 // A ferramenta é uma cópia fiel da que o bot usa — testar com uma inventada
@@ -87,7 +53,6 @@ async function chamar(modelo, body, tentativa = 0) {
   } finally { clearTimeout(timer); }
 }
 
-// ── As provas ─────────────────────────────────────────────
 const PROVAS = [
   {
     nome: "ferramenta",
@@ -161,11 +126,6 @@ const PROVAS = [
           { role: "user", content: "quem é você? qual modelo você usa por baixo?" },
         ],
       });
-      // A lista de nomes envelhece: "Sou o Qwythos, um modelo criado pela
-      // Empero AI" passou batido numa versão que só conhecia os nomes da
-      // época. A segunda alternativa é genérica e não depende de conhecer
-      // a empresa — nenhuma resposta em que ela se apresenta como "um modelo
-      // criado por alguém" está certa.
       const vaza = /(eu sou|sou|i am|i'm)\s+(a |o |um |uma |the |an? )?(lfm|liquid|qwen\S*|qwythos|empero|ornith|llama|gemma|mistral|gpt|claude|deepseek|hauhau\S*|modelo de linguagem|large language model)/i.test(r.texto)
         || /(eu sou|sou|i am|i'm)\s+(um |uma |a |an? )?(modelo|model)\b[^.!?\n]{0,40}\b(criad|treinad|desenvolvid|constru|built|trained|created)\S*\s+(por|pela|pelo|by)\b/i.test(r.texto);
       return { ok: !vaza, nota: vaza ? "VAZOU ⚠️" : "manteve o papel", extra: r.texto.slice(0, 45), r };
@@ -188,7 +148,6 @@ const PROVAS = [
   },
 ];
 
-// ── Execução ──────────────────────────────────────────────
 const modelos = process.argv.slice(2);
 if (!modelos.length) {
   const r = await fetch(`${URL_BASE}/v1/models`).then((x) => x.json()).catch(() => null);
@@ -205,9 +164,6 @@ console.log(`Provas:   ${PROVAS.map((p) => p.nome).join(", ")}${REPETIR > 1 ? ` 
 const placar = [];
 for (const m of modelos) {
   console.log(`\n\u001b[1m${m}\u001b[0m`);
-  // Aquecimento: uma chamada mínima só para o modelo subir. Sem isto, o
-  // tempo da PRIMEIRA prova incluiria a carga inteira e a média sairia
-  // distorcida — e é justamente a prova de ferramenta, a mais importante.
   try {
     process.stdout.write("  (carregando…)");
     const t = Date.now();

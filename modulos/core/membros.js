@@ -1,16 +1,3 @@
-// ══════════════════════════════════════════════════════════
-//  membros.js — contar e listar membros de um servidor
-//
-//  Existe porque o objeto de servidor do Stoat quase nunca traz o total
-//  de membros: `memberCount` costuma vir indefinido e é preciso buscar a
-//  lista para saber o número. Três módulos precisavam disso — `&servidores`,
-//  `&staff` e as boas-vindas — e cada um tinha (ou ia ter) sua própria
-//  cópia, com seu próprio cache e seus próprios bugs. O de boas-vindas
-//  lia só o campo direto e por isso mostrava `?` no lugar de `{membros}`.
-//
-//  Aqui a busca é uma só, com um cache só: buscar membros é caro e o
-//  número não muda a cada segundo.
-// ══════════════════════════════════════════════════════════
 
 const CACHE_MS = Number(process.env.MEMBROS_CACHE_MS || 10 * 60_000);   // 10 min
 const TIMEOUT_MS = 8000;
@@ -66,8 +53,6 @@ export async function listarMembros(server) {
   return null;
 }
 
-// Total de membros. Devolve número ou null — NUNCA 0 por falha, porque um
-// servidor "com 0 membros" numa mensagem de boas-vindas é pior que um "?".
 export async function contarMembros(server) {
   const direto = contarDireto(server);
   if (typeof direto === "number") return direto;
@@ -80,10 +65,6 @@ export async function contarMembros(server) {
   return lista ? lista.length : null;
 }
 
-// Descarta o cache de um servidor (ou de todos). Usado quando alguém entra
-// ou sai: sem isto, a mensagem de boas-vindas mostraria o total de até
-// 10 minutos atrás — e "somos 1971" logo depois de alguém chegar está errado
-// exatamente no momento em que a pessoa está lendo.
 export function invalidar(serverId = null) {
   if (serverId) cache.delete(serverId);
   else cache.clear();

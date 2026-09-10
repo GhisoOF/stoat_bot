@@ -1,15 +1,5 @@
-// ══════════════════════════════════════════════════════════
-//  autorole.js — cargo automático para quem entra no servidor
-//
-//  Define UM cargo que é dado a todo novo membro assim que entra.
-//  Comandos:
-//   &autorole              → mostra o cargo configurado
-//   &autorole set <@cargo|id>  → define o cargo
-//   &autorole off          → desativa
-// ══════════════════════════════════════════════════════════
 import { ULID } from "../core/ids.js";
 import { tr, lingua } from "../core/i18n.js";
-
 
 // Extrai um ID de cargo de "<@&ID>", "<%ID>" ou ID cru.
 function extrairRoleId(txt) {
@@ -18,7 +8,6 @@ function extrairRoleId(txt) {
   return ULID.test(limpo) ? limpo : null;
 }
 
-// ── Comando &autorole ──────────────────────────────────────
 export async function cmdAutorole(message, args, ctx) {
   const { sendEmbed, COR, PREFIXO, config, getServer, membroTemPermissao, salvarConfig } = ctx;
   const sub = args[0]?.toLowerCase();
@@ -95,8 +84,6 @@ export async function cmdAutorole(message, args, ctx) {
       description: `Usage: \`${PREFIXO}autorole set <@role>\` · \`${PREFIXO}autorole off\``, colour: COR.info }));
 }
 
-// ── Aplicação no join ──────────────────────────────────────
-// Chamado pelo handler serverMemberJoin do main.
 export async function aoEntrar(member, ctx) {
   const roleId = ctx.config?.autorole?.roleId;
   if (!roleId) return;

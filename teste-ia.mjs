@@ -1,34 +1,8 @@
-// ══════════════════════════════════════════════════════════
-//  teste-ia.mjs — a migração para llama.cpp e o que veio junto
-//
-//  O serviço agora fala o formato OpenAI (`/v1/chat/completions`) — o que o
-//  llama.cpp, o llama-swap e o Ollama servem igualmente. Estes testes
-//  verificam o CONTRATO: o corpo que sai, a resposta que volta, e os três
-//  comportamentos novos que o usuário pediu com nome e sobrenome:
-//    • resposta cortada continua sozinha (nada de "peça 'continue'")
-//    • RSS resumido por categoria, sem se perder no apanhado único
-//    • código lido do disco, sem GITHUB_TOKEN para sumir no deploy
-//    • imagem: nada de fora entra sem ser reescrito, e prompt proibido
-//      é recusado antes de tocar o gerador
-// ══════════════════════════════════════════════════════════
 process.env.DB_PATH = "/tmp/ia-teste.db";
 process.env.CONFIG_PATH = "/tmp/ia-teste-cfg.json";
 process.env.CODIGO_DIR = "/tmp/ia-teste-repo";
-// Vários blocos abaixo trocam `globalThis.fetch` por stubs (é o jeito de
-// testar chamadas ao LLM sem LLM). O teste de fumaça, no fim, precisa do
-// fetch DE VERDADE para falar com o servidor falso que ele mesmo sobe —
-// senão vê "Ollama indisponível" por causa de um stub de outro bloco, e
-// reporta um erro que não existe no código.
 const FETCH_NATIVO = globalThis.fetch;
-// O Ollama falso do teste de fumaça (bloco 28) vive aqui. Tem de ser definido
-// ANTES do primeiro import de chat.js: a URL é lida uma vez, no topo do
-// módulo — se ficar para depois, o teste fala com a porta padrão e falha
-// sem que haja nada errado no código.
 process.env.OLLAMA_URL = "http://localhost:8097";
-// O `dlog` só escreve com CHAT_DEBUG ligado — e é por ele que passam os
-// erros engolidos por try/catch, como o "ficha falhou (canalId is not
-// defined)" que ficou dias invisível. Sem esta linha, o teste de fumaça
-// não teria como vê-los.
 process.env.CHAT_DEBUG = "1";
 process.env.CHAT_SERVIDORES = "*";
 process.env.BUSCA_ATIVA = "false";
@@ -39,7 +13,6 @@ for (const f of [process.env.DB_PATH, process.env.CONFIG_PATH]) { try { fs.unlin
 let pass = 0, fail = 0;
 const ok = (cond, msg) => { cond ? pass++ : fail++; console.log(`${cond ? "✅" : "❌"} ${msg}`); };
 
-// ══ 1. O dialeto: o que sai e o que volta ══
 console.log("── formato OpenAI (llama.cpp / llama-swap / ollama) ──");
 {
   const db = await import("./modulos/core/db.js");
@@ -63,11 +36,6 @@ console.log("── formato OpenAI (llama.cpp / llama-swap / ollama) ──");
   ok(r === '{"ok":true}', "  → e o conteúdo volta de choices[0].message");
 }
 
-// ══ 2. Resposta cortada continua SOZINHA ══
-//
-//  "As respostas pedem para continuar, assim não ficando prático." O corte
-//  em finish_reason=length agora vira uma emenda automática: o trecho volta
-//  como assistant e o modelo segue de onde parou.
 console.log("\n── continuação automática ──");
 {
   const chat = await import("./modulos/ai/chat.js?cont");
@@ -100,12 +68,6 @@ console.log("\n── continuação automática ──");
   ok(pedidos.length === 1, "decisão json cortada não entra no laço de emendas");
 }
 
-// ══ 2a. A verificação de saúde não pode usar rota só do Ollama ══
-//
-//  No servidor: `&chat status` dizia "🔴 IA indisponível — respondeu HTTP
-//  404" com tudo funcionando. O teste batia em `/api/tags`, que só o Ollama
-//  serve. O llama-swap responde `/v1/models`, do padrão OpenAI — que o
-//  Ollama TAMBÉM serve, então a rota nova funciona nos dois.
 console.log("\n── saúde pelo /v1/models ──");
 {
   const chat = await import("./modulos/ai/chat.js?saude");
@@ -129,13 +91,6 @@ console.log("\n── saúde pelo /v1/models ──");
   ok(r2.ok && r2.modelos.includes("qwen3:8b"), "  → e o formato antigo do Ollama também, se a URL voltar para ele");
 }
 
-// ══ 2a-bis. O painel mostra o modelo PRINCIPAL ══
-//
-//  No servidor: `&chat status` dizia "Conversa: lfm2.5-2.6b" com o
-//  OLLAMA_MODEL corretamente definido como lfm2.5-8b-a1b. O painel imprimia
-//  o LEVE sob o rótulo "Conversa" e nunca mostrava o principal — quem lia
-//  concluía que a configuração não tinha pegado. Configuração certa,
-//  diagnóstico errado, meia hora caçando um problema inexistente.
 console.log("\n── o painel de status não pode mentir ──");
 {
   const fonte = fs.readFileSync("./modulos/ai/chat.js", "utf8");
@@ -146,12 +101,6 @@ console.log("\n── o painel de status não pode mentir ──");
   ok(painel.includes("faltando"), "  → e o painel avisa quando um modelo configurado não existe no servidor");
 }
 
-// ══ 2b. O raciocínio nunca vai para o chat ══
-//
-//  Com `--reasoning-budget 0` o llama.cpp ainda emite o par vazio:
-//  "\n<think></think>\nO número é 4." Sem limpeza isso apareceria literal
-//  nas mensagens do servidor. E o modelo …-think devolve o raciocínio em
-//  `reasoning_content` — que é para depurar, não para publicar.
 console.log("\n── <think> não vaza para o chat ──");
 {
   const chat = await import("./modulos/ai/chat.js?think");
@@ -187,7 +136,6 @@ console.log("\n── <think> não vaza para o chat ──");
     "★ nada de `/no_think` no prompt — desligar raciocínio é do servidor, não do texto");
 }
 
-// ══ 3. RSS: um resumo por categoria ══
 console.log("\n── RSS por categoria ──");
 {
   const db = await import("./modulos/core/db.js");
@@ -235,7 +183,6 @@ console.log("\n── RSS por categoria ──");
   ok(resumos.every((x) => x.n <= 2), "  → cada resumo recebe só os itens da própria categoria");
 }
 
-// ══ 4. Código lido do disco, sem token ══
 console.log("\n── ler-codigo: o disco vem primeiro ──");
 {
   fs.rmSync(process.env.CODIGO_DIR, { recursive: true, force: true });
@@ -257,15 +204,7 @@ console.log("\n── ler-codigo: o disco vem primeiro ──");
   ok(lista.arquivos.some((a) => a.startsWith("modulos/x.js")), "  → listar percorre a árvore local");
   ok(!lista.arquivos.some((a) => a.includes(".env")), "  → e o .env não aparece nem na listagem");
 
-  // Um .js FORA da raiz: passa no filtro de extensão, tem de morrer na trava
-  // de caminho. (/etc/passwd já morre antes, na extensão.)
   fs.writeFileSync("/tmp/fora-do-repo.js", "// segredo\n");
-  // ── A raiz escrita como o modelo escreve ──
-  //
-  //  No servidor: `listar` com caminho "." devolveu lista VAZIA, porque o
-  //  filtro era `path.startsWith(".")` e nenhum arquivo começa com ponto.
-  //  A Judy olhou o próprio repositório, viu o nada, e disse que não
-  //  conseguia localizar o código. Parecia falta de permissão; era isto.
   for (const raizEscrita of [".", "./", "/", "", undefined]) {
     const r = await lc.executar({ acao: "listar", caminho: raizEscrita });
     ok(r.arquivos?.some((a) => a.startsWith("main.js")),
@@ -274,8 +213,6 @@ console.log("\n── ler-codigo: o disco vem primeiro ──");
   const sub = await lc.executar({ acao: "listar", caminho: "./modulos" });
   ok(sub.arquivos?.length === 1 && sub.arquivos[0].startsWith("modulos/x.js"), "  → e './modulos' lista só o que está dentro");
 
-  // Caminho inexistente devolve PISTAS, não só "não achei": o modelo chutou
-  // "scripts/judy-ia.js" três vezes por falta delas.
   const chute = await lc.executar({ acao: "ler", caminho: "scripts/judy-ia.js" });
   ok(chute.erro && Array.isArray(chute.pastas_no_repositorio) && chute.pastas_no_repositorio.length,
     "★ arquivo inexistente devolve as pastas que EXISTEM, para o modelo acertar na segunda");
@@ -288,7 +225,6 @@ console.log("\n── ler-codigo: o disco vem primeiro ──");
   ok(/protegido/i.test(segredo.erro ?? ""), "  → e .env é recusado pelo nome, como sempre foi");
 }
 
-// ══ 5. Imagem: as defesas ══
 console.log("\n── imagem: o que não passa ──");
 {
   process.env.LLM_MODEL_VISAO = "qwen2.5-vl";
@@ -310,14 +246,6 @@ console.log("\n── imagem: o que não passa ──");
   ok(/SD_URL/.test(semSd.erro ?? ""), "  → sem SD_URL, a ferramenta explica o que falta em vez de fingir");
 }
 
-// ══ 6. A memória não pode inventar ══
-//
-//  No servidor, o `&chat perfil` de alguém mostrava "mora em Y" e "trabalha
-//  com X" — os PLACEHOLDERS do meu próprio prompt, copiados literalmente
-//  por um modelo pequeno e gravados como fato. Daí a Judy afirmou que a
-//  pessoa morava em São Paulo e inventou uma piada interna do servidor
-//  para justificar. Memória errada não fica quieta: vira alucinação
-//  confiante, porque os fatos são injetados no prompt da conversa.
 console.log("\n── a memória só aceita o que tem evidência ──");
 {
   const { filtrarFato } = await import("./modulos/ai/memoria-agente.js?ev");
@@ -337,7 +265,6 @@ console.log("\n── a memória só aceita o que tem evidência ──");
   ok(f("é sarcástica") === null, "formato antigo (string solta) também exige evidência");
 }
 
-// ══ 7. Os fatos são apresentados como impressão, não como verdade ══
 console.log("\n── enquadramento do que a Judy 'sabe' ──");
 {
   const fonte = fs.readFileSync("./modulos/ai/memoria-agente.js", "utf8");
@@ -348,11 +275,6 @@ console.log("\n── enquadramento do que a Judy 'sabe' ──");
   ok(/Nunca afirme como certo/i.test(bloco), "  → proibindo afirmar como certo o que só está ali");
 }
 
-// ══ 8. A conta vai para a calculadora, não para a cabeça do modelo ══
-//
-//  "quanto é 263857 × 3 rapidão?" foi classificado como conversa por causa do
-//  "rapidão" e a conta foi feita de cabeça — acertou por sorte, pelo mesmo
-//  caminho que produziu "2+2=2". Um regex de números e operadores não erra.
 console.log("\n── aritmética força o caminho com ferramentas ──");
 {
   const chat = await import("./modulos/ai/chat.js");
@@ -367,15 +289,10 @@ console.log("\n── aritmética força o caminho com ferramentas ──");
     "  → com instrução própria: use `calcular` antes de responder, nunca de cabeça");
 }
 
-// ══ 9. Decisões internas têm piso de tokens ══
 console.log("\n── piso de tokens nas decisões ──");
 {
   const chat = await import("./modulos/ai/chat.js");
   const pedidos = [];
-  // Guarda o `fetch` de verdade: sem restaurar no fim, o stub vaza para os
-  // blocos seguintes. Ele quebra em GET (não há `op.body` para parsear), e o
-  // teste de fumaça lá embaixo passou a ver "Ollama indisponível" — um erro
-  // que não estava no código, e sim neste stub esquecido.
   const fetchReal = globalThis.fetch;
   globalThis.fetch = async (url, op) => {
     pedidos.push(JSON.parse(op.body));
@@ -387,7 +304,6 @@ console.log("\n── piso de tokens nas decisões ──");
   ok(pedidos[0].max_tokens >= 600, `★ decisão json pede ≥600 tokens (pediu ${pedidos[0].max_tokens}); o raciocínio come ~185 e com 200 o JSON vinha cortado`);
 }
 
-// ══ 10. Fila de conversas ══
 console.log("\n── fila de conversas paralelas ──");
 {
   const chat = await import("./modulos/ai/chat.js");
@@ -400,7 +316,6 @@ console.log("\n── fila de conversas paralelas ──");
   ok(!/^\s*ocupado = false;\s*\/\/ libera/m.test(fonte), "  → nenhum caminho zera a flag por fora da fila");
 }
 
-// ══ 11. ler_codigo: buscar por assunto, ler por página, nunca inventar ══
 console.log("\n── ler_codigo: buscar + paginação ──");
 {
   const raiz = process.env.CODIGO_DIR;
@@ -435,7 +350,6 @@ console.log("\n── ler_codigo: buscar + paginação ──");
   ok(/MAX_VOLTAS_FERRAMENTA \|\| 6/.test(srv), "  → com 6 voltas, buscar → ler → página seguinte cabe");
 }
 
-// ══ 12. O vigia de silêncios diz o que falhou ══
 console.log("\n── [PUNIÇÃO][vigia]: nunca mais 'undefined' ──");
 {
   const eng = await import("./modulos/moderacao/automod-engine.js");
@@ -449,13 +363,6 @@ console.log("\n── [PUNIÇÃO][vigia]: nunca mais 'undefined' ──");
   ok(/try \{ server = await ctx\.client\?\.servers\?\.fetch/.test(fonte), "  → servers.fetch que rejeita vira 'servidor inacessível', não exceção muda");
 }
 
-// ══ 13. O mapa do arquivo — e nunca descrever o que não se leu ══
-//
-//  Perguntada "como funciona seu TTS a nível de código?", ela leu 300 das
-//  1436 linhas e descreveu o arquivo inteiro: tudo que acertou estava nas
-//  linhas 1-300, tudo que inventou ("graceful shutdown no &tts reiniciar")
-//  estava depois da linha 780. A pergunta era sobre o TODO; a ferramenta só
-//  sabia entregar PEDAÇOS.
 console.log("\n── estrutura: o mapa, não os primeiros 21% ──");
 {
   const raiz = process.env.CODIGO_DIR;
@@ -503,11 +410,6 @@ console.log("\n── estrutura: o mapa, não os primeiros 21% ──");
     "★ uma proibição, não cinco regras numeradas — a pilha de 'não faça' foi o que produziu a recusa");
 }
 
-// ══ 14. Mudou de assunto? o arquivo anterior não é a resposta ══
-//
-//  "saia do modulos/ferramentas e vá para a pasta raiz" recebeu, pela
-//  terceira vez seguida, uma resposta sobre tts.js. O caminho vinha sendo
-//  relido da mensagem citada — que era a resposta ANTERIOR DA PRÓPRIA JUDY.
 console.log("\n── mudança de escopo quebra a inércia do assunto ──");
 {
   const chat = await import("./modulos/ai/chat.js");
@@ -526,12 +428,6 @@ console.log("\n── mudança de escopo quebra a inércia do assunto ──");
     "★ pergunta sobre o TODO ('como funciona', 'lógica', 'arquitetura') pede o mapa, não as primeiras 300 linhas");
 }
 
-// ══ 15. Buscar é um índice, não uma resposta ══
-//
-//  Ela chamou 'buscar', recebeu a lista de caminhos e respondeu descrevendo o
-//  tts.js sem NUNCA ter aberto o arquivo — "gerencia chamadas ao serviço de
-//  voz, validação de permissões, cooldown". Estava certo por sorte: qualquer
-//  módulo de TTS faz isso.
 console.log("\n── buscar sozinho não fecha a resposta ──");
 {
   const lc = await import("./ia-servico/ferramentas/ler-codigo.js");
@@ -548,11 +444,6 @@ console.log("\n── buscar sozinho não fecha a resposta ──");
   ok(/você ainda NÃO leu código nenhum/.test(srv) && /you have NOT read any code yet/.test(srv), "  → em PT e EN");
 }
 
-// ══ 16. O assunto continua, a ferramenta continua ══
-//
-//  "como funciona seu TTS a nível de código?" leu o arquivo. A seguinte,
-//  "quero que me diga a lógica de programação por detrás do código", foi
-//  para o Ollama puro — e ela respondeu, com razão, que não tinha acesso.
 console.log("\n── seguimento herda o caminho com ferramentas ──");
 {
   const chat = await import("./modulos/ai/chat.js");
@@ -578,7 +469,6 @@ console.log("\n── seguimento herda o caminho com ferramentas ──");
     "  → com instrução própria: releia, não responda de memória");
 }
 
-// ══ 17. O erro da API vem como string, não como objeto ══
 console.log("\n── o 'undefined' que sobrou: erro em string JSON ──");
 {
   const { descreverErro, tipoDoErro, normalizarErro } = await import("./modulos/core/erros.js");
@@ -599,11 +489,6 @@ console.log("\n── o 'undefined' que sobrou: erro em string JSON ──");
     "  → e o `[BANGLOBAL] auto: falha em X: undefined` foi pela mesma causa");
 }
 
-// ══ 18. A chamada de ferramenta escrita como TEXTO ══
-//
-//  Perguntada sobre o RPG, ela respondeu literalmente isto no chat:
-//    {"name": "ler_codigo", "arguments": {"acao":"buscar","termo":"tts"}}
-//  Decisão certa, lugar errado — falha de template do modelo local.
 console.log("\n── chamada de ferramenta vinda como texto ──");
 {
   const src = fs.readFileSync("./ia-servico/servidor.js", "utf8");
@@ -631,12 +516,6 @@ console.log("\n── chamada de ferramenta vinda como texto ──");
     "  → mas uma resposta que só MENCIONA o formato passa normalmente");
 }
 
-// ══ 19. Mudar de escopo não é dispensar a ferramenta ══
-//
-//  "agora indo para a pasta raiz, como está estruturado todo o código?"
-//  caiu no Ollama puro: era mudança de escopo E pedido de leitura, e o meu
-//  guard tratou as duas como a mesma coisa. Ela quer OUTRO arquivo, não
-//  NENHUM arquivo.
 console.log("\n── mudar de escopo mantém a ferramenta ──");
 {
   const chat = await import("./modulos/ai/chat.js");
@@ -655,12 +534,6 @@ console.log("\n── mudar de escopo mantém a ferramenta ──");
     "  → e a instrução manda buscar pelo assunto ATUAL (ela buscou 'tts' para uma pergunta de RPG)");
 }
 
-// ══ 20. "Como o código está organizado?" — o degrau que faltava ══
-//
-//  `estrutura` de um arquivo respondia "como funciona o TTS?". Sobre a raiz
-//  do projeto, ela chamou `buscar` com o termo "package.json" — a única porta
-//  que conhecia exigia um termo, e não existe termo para "o projeto todo".
-//  Descreveu os três package.json que achou como se fossem a arquitetura.
 console.log("\n── o mapa do repositório inteiro ──");
 {
   const raiz = process.env.CODIGO_DIR;
@@ -688,7 +561,6 @@ console.log("\n── o mapa do repositório inteiro ──");
     "  → e a descrição da ferramenta diz para não usar 'buscar' quando a pergunta é o projeto todo");
 }
 
-// ══ 21. A pergunta sobre o projeto não depende de ela escolher certo ══
 console.log("\n── perguntas sobre o repositório vão direto ao mapa ──");
 {
   const chat = await import("./modulos/ai/chat.js");
@@ -710,13 +582,6 @@ console.log("\n── perguntas sobre o repositório vão direto ao mapa ──"
     "  → citar o main.js como referência não cancela o mapa do projeto: vêm os dois");
 }
 
-// ══ 22. A Judy NÃO é o modelo que roda por baixo ══
-//
-//  Em público, respondendo ao criador que anunciou "atualizei o bot para ter
-//  uma LLM nova", ela escreveu: "você está tentando me enganar. Eu sou a LFM
-//  (Liquid Foundation Model), construída pela Liquid AI." A regra de
-//  IDENTIDADE já existia; a identidade de treino do modelo passou por cima.
-//  Prompt sozinho não segura isto — a resposta é conferida antes de sair.
 console.log("\n── identidade: conferida antes de sair ──");
 {
   const chat = await import("./modulos/ai/chat.js");
@@ -732,9 +597,6 @@ console.log("\n── identidade: conferida antes de sair ──");
     "  → e 'sou um modelo de linguagem', que o prompt proíbe desde sempre e o filtro não pegava");
   ok(!vaza("Um LLM é um modelo de linguagem grande, treinado em muito texto."),
     "  → mas EXPLICAR o que é um LLM continua passando: o teste é sobre se apresentar");
-  // A lista de nomes envelhece a cada modelo novo: "Sou o Qwythos, um modelo
-  // criado pela Empero AI" passou batido numa versão que só conhecia os nomes
-  // da época. A regra genérica não depende de conhecer a empresa.
   ok(vaza("Sou o Qwythos, um modelo criado pela Empero AI."),
     "★ modelo NOVO na lista de nomes (Qwythos/Empero/Ornith)");
   ok(vaza("Eu sou um modelo treinado por uma empresa qualquer."),
@@ -762,13 +624,6 @@ console.log("\n── identidade: conferida antes de sair ──");
     "  → o comentário espontâneo passa pelo mesmo filtro");
 }
 
-// ══ 23. O fio do canal sabe o que a Judy disse ══
-//
-//  As respostas dela nunca entravam no fio. O modelo via "Ghiso: … / Ghiso:
-//  Continue / Ghiso: …" sem uma linha sua no meio, e atribuiu a fala do
-//  usuário a si mesma ("minha resposta anterior foi: 'LLM é Large Language
-//  Model'"), tratou a própria mensagem citada como algo que ele "copiou", e
-//  não sabia o que "Continue" continuava.
 console.log("\n── o fio inclui as falas da Judy ──");
 {
   const cache = await import("./modulos/ai/cache-canal.js");
@@ -789,7 +644,6 @@ console.log("\n── o fio inclui as falas da Judy ──");
     "★ citada da própria Judy é apresentada como DELA — antes chegava como autor=\"Woman\", que ela não reconhece");
 }
 
-// ══ 24. "Continue" continua a resposta cortada, não inventa uma nova ══
 console.log("\n── continue de verdade ──");
 {
   const chat = await import("./modulos/ai/chat.js");
@@ -806,7 +660,6 @@ console.log("\n── continue de verdade ──");
   ok(/\{ role: "assistant", content: pendente\.texto \}/.test(fonte), "  → o texto anterior volta como assistant e o modelo segue da última palavra");
 }
 
-// ══ 25. A costura das emendas e o flag de corte honesto ══
 console.log("\n── emendas costuradas, ✂️ honesto ──");
 {
   const chat = await import("./modulos/ai/chat.js");
@@ -822,21 +675,10 @@ console.log("\n── emendas costuradas, ✂️ honesto ──");
   const fonte = fs.readFileSync("./modulos/ai/chat.js", "utf8");
   ok(/const avisoCorte = responder\._cortou/.test(fonte) && /responder\._cortou = !!ollamaChat\._cortou;/.test(fonte),
     "★ o ✂️ lê um flag POR CAMINHO, lido na hora — o global aparecia em respostas inteiras de três linhas");
-  // O bloco virou multilinhas quando o verificador entrou (o caminho do
-  // serviço também guarda a evidência) — o que importa conferir é a GARANTIA:
-  // _cortou vira false antes do return do judy-ia, não o formato da linha.
   ok(/if \(r\) \{\s*responder\._cortou = false;[\s\S]{0,300}?return r\.trim\(\);/.test(fonte), "  → e resposta do judy-ia nunca leva ✂️: o serviço faz a própria continuação");
   ok(/NÃO mude de idioma/.test(fonte), "  → a instrução da emenda proíbe trocar de idioma ('Got it. Let me know…')");
 }
 
-// ══ 26. O histórico tem escopo e prazo ══
-//
-//  Perguntada "poderia apresentar-se, por favor", ela devolveu uma
-//  calculadora em Lua de uma hora antes. O histórico curto era global por
-//  usuário — sem servidor, sem canal, sem prazo — e as 12 últimas mensagens
-//  (incluindo uma resposta `assistant` cortada no meio de um bloco de código)
-//  entravam no prompt como se fossem a conversa em curso. O modelo completou
-//  o código em vez de responder à pergunta.
 console.log("\n── histórico: por canal, com prazo, e apagável ──");
 {
   const db = await import("./modulos/core/db.js");
@@ -847,9 +689,6 @@ console.log("\n── histórico: por canal, com prazo, e apagável ──");
 
   ok(db.getHistorico(U, 6, { canalId: C1 }).length === 2, "★ o histórico volta no canal onde a conversa aconteceu");
   ok(db.getHistorico(U, 6, { canalId: C2 }).length === 0, "  → e NÃO vaza para outro canal");
-  // `momento` tem resolução de milissegundo: inserir e consultar com prazo 0
-  // no mesmo ms fazia a linha passar, e o teste piscava. A espera tira a
-  // corrida sem enfraquecer o que está sendo verificado.
   await new Promise((r) => setTimeout(r, 5));
   ok(db.getHistorico(U, 6, { canalId: C1, minutos: 0 }).length === 0,
     "★ nem sobrevive ao prazo — conversa de uma hora atrás não é continuidade");
@@ -872,10 +711,6 @@ console.log("\n── histórico: por canal, com prazo, e apagável ──");
     "  → e as linhas antigas, sem servidor, são descartadas na migração (são as contaminadas)");
 }
 
-// ══ 27. LaTeX vira texto legível ══
-//
-//  O prompt proíbe LaTeX desde sempre, e mesmo assim a explicação de
-//  logaritmo saiu com \log_{b}(a)=c, (b\neq 1) e \frac{}{} na tela.
 console.log("\n── LaTeX convertido, não proibido ──");
 {
   const chat = await import("./modulos/ai/chat.js");
@@ -892,26 +727,12 @@ console.log("\n── LaTeX convertido, não proibido ──");
     "★ e BLOCO DE CÓDIGO fica intacto: lá a barra é literal de propósito");
 }
 
-// ══ 28. Os caminhos EXECUTAM (não só compilam) ══
-//
-//  `modeloForcado` foi declarado em `conversar()` e usado em `responder()` —
-//  funções irmãs, não aninhadas. `node --check` passou (a sintaxe é válida),
-//  os 217 testes passaram (nenhum executava o caminho), e no chat toda
-//  mensagem virou "Falha no chat: modeloForcado is not defined".
-//
-//  A lição: teste que só lê o texto do arquivo não pega erro de escopo.
-//  Este sobe um Ollama falso e chama `conversar` e `cmdChat especial` de
-//  verdade — é o mínimo para afirmar que os caminhos funcionam.
 console.log("\n── fumaça: os caminhos rodam de ponta a ponta ──");
 {
   const http = await import("node:http");
   const enviadas = [];
   const srv = http.createServer((req, res) => {
     res.setHeader("content-type", "application/json");
-    // GET /v1/models é o ping de disponibilidade que o bot faz ANTES de gerar.
-    // Responde de imediato: num GET sem corpo o evento `end` do request pode
-    // nem disparar, e o bot desistiria com "Ollama indisponível" antes de
-    // executar o caminho que queremos testar.
     if (req.method === "GET") {
       return res.end(JSON.stringify({ data: [{ id: "fake" }, { id: "qwen3.8-27b" }] }));
     }
@@ -942,10 +763,6 @@ console.log("\n── fumaça: os caminhos rodam de ponta a ponta ──");
   ok(!saidas.some((x) => /not defined|Falha no chat/.test(String(x))),
     "★ conversa normal roda sem ReferenceError — foi assim que o `modeloForcado` quebrou TUDO");
 
-  // Perguntas que ATIVAM caminhos opcionais: cada bloco condicional é um
-  // lugar onde uma variável fora de escopo passa despercebida. O `canalId is
-  // not defined` da ficha viveu num `try/catch` largo — o log dizia "ficha
-  // falhou", ninguém leu, e ela voltou a responder "só no Vapor Nexus".
   for (const [rotulo, texto] of [
     ["ficha técnica", "em quais servidores você está atualmente?"],
     ["mapa do repo", "como o projeto está organizado?"],
@@ -953,10 +770,6 @@ console.log("\n── fumaça: os caminhos rodam de ponta a ponta ──");
     ["seguimento", "liste todos, por favor"],
   ]) {
     saidas.length = 0;
-    // Vigiamos console.log TAMBÉM: o erro da ficha morria num `try/catch`
-    // que só fazia `dlog("ficha falhou (canalId is not defined)")`. Olhando
-    // apenas o que chega ao usuário, o teste passava com o bug de pé — e
-    // passou mesmo, quando reintroduzi o erro para conferir.
     const erros = [];
     const logOriginal = console.log, errOriginal = console.error;
     console.log = (...a) => { erros.push(a.join(" ")); logOriginal(...a); };
@@ -968,9 +781,6 @@ console.log("\n── fumaça: os caminhos rodam de ponta a ponta ──");
     ok(!quebrou, `★ "${rotulo}" roda sem erro de escopo — inclusive os engolidos por try/catch`);
   }
 
-  // O especial foi aposentado, mas o caminho continua EXECUTANDO: quem digitar
-  // recebe o aviso. Foi aqui que o `embedIdioma is not defined` apareceu — um
-  // helper que não existe neste arquivo, invisível para o `node --check`.
   enviadas.length = 0; saidas.length = 0;
   await chat.cmdChat({ ...msg, content: "&chat especial oi" }, ["especial", "quanto é a vida"], ctx);
   ok(!saidas.some((x) => /not defined|Falha no chat/.test(String(x))),
@@ -984,15 +794,6 @@ console.log("\n── fumaça: os caminhos rodam de ponta a ponta ──");
   srv.close();
 }
 
-// ══ 29. Um `system` só, e na frente ══
-//
-//  O template Jinja do Qwen/Qwythos recusa a conversa INTEIRA com HTTP 500 se
-//  houver `system` fora do começo:
-//    raise_exception('System message must be at the beginning...')
-//  Os LFM aceitavam no meio, então o problema só apareceu ao trocar o modelo:
-//  "se apresentar" (caminho sem ferramenta, 1 system) funcionou, e conta,
-//  leitura de código e `&chat especial` — que empilham instruções — morreram
-//  todos com "o serviço de IA não respondeu", apontando para o lado errado.
 console.log("\n── mensagens: um system só, e na frente ──");
 {
   const chat = await import("./modulos/ai/chat.js");
@@ -1025,18 +826,6 @@ console.log("\n── mensagens: um system só, e na frente ──");
     "  → e o judy-ia faz o mesmo: foi ELE que devolveu o HTTP 500");
 }
 
-// ══ 30. `&chat especial`: aposentado ══
-//
-//  Ele servia o qwen3.8-27b: ~13 GB, ocupava a placa inteira, derrubava o
-//  residente e levava ~30s por resposta. Saiu quando a premissa acabou — a
-//  troca do backend Vulkan → ROCm levou o residente de 8 para 36,7 tok/s, e
-//  o 27B em Q3_K_P não justificava mais a espera. O config.yaml do
-//  llama-swap tem um modelo só agora.
-//
-//  O que estes testes garantem: o comando não ressuscita por acidente (nada
-//  de constante, teto ou cargo sobrando) e quem digitar recebe um aviso, nos
-//  dois idiomas, em vez de ver a palavra "especial" virar o começo de uma
-//  pergunta comum.
 console.log("\n── especial: aposentado, sem sobras ──");
 {
   const fonte = fs.readFileSync("./modulos/ai/chat.js", "utf8");
@@ -1084,14 +873,6 @@ console.log("\n── especial: aposentado, sem sobras ──");
   }
 }
 
-// ══ 31. Ela sabe onde está, quem é quem, e não acusa ══
-//
-//  Numa conversa de dez minutos a Judy: (a) afirmou estar no "Stoat Brasil
-//  2.0" porque leu um link na BIO do dono — estava no Vapor Nexus; (b)
-//  chamou o dono de "Cobaia", que é o nome do PRÓPRIO BOT, lido na mesma
-//  bio ("Meu Bot: Cobaia#7705"); (c) escreveu "você é um delírio" cinco
-//  vezes e declarou "essa conversa já encerrou". Ela estava errada nos
-//  fatos o tempo todo.
 console.log("\n── onde está, quem é quem, e sem acusar ──");
 {
   const fonte = fs.readFileSync("./modulos/ai/chat.js", "utf8");
@@ -1128,15 +909,6 @@ console.log("\n── onde está, quem é quem, e sem acusar ──");
     "  → aplicado na saída: prompt não segurou identidade nem LaTeX, não vai segurar isto");
 }
 
-// ══ 32. De quem é essa bio, e cabe no contexto? ══
-//
-//  Dois problemas do mesmo print. A bio do dono entrava num bloco chamado
-//  `<memoria_longo_prazo>` rotulado "Perfil desta pessoa" — e ela contém
-//  `Server: https://stt.gg/…` e `Meu Bot: Cobaia#7705`. A Judy leu aquilo
-//  como fatos sobre SI, passou a afirmar que era o seu endereço e a chamar o
-//  dono de "Cobaia". E o prompt cresceu tanto (só as regras fixas somam ~2700
-//  tokens) que estourou: "request (8836 tokens) exceeds the available context
-//  size (8192)" foi entregue como JSON cru no chat.
 console.log("\n── de quem é a bio, e cabe no contexto ──");
 {
   const fonte = fs.readFileSync("./modulos/ai/chat.js", "utf8");
@@ -1172,12 +944,6 @@ console.log("\n── de quem é a bio, e cabe no contexto ──");
     "  → em vez de mostrar o JSON do llama.cpp para quem perguntou");
 }
 
-// ══ 33. Esquecer de verdade, e os quatro blocos ══
-//
-//  Depois de `&chat esquecer tudo` — que reportou 36 fatos, 1 perfil e 32
-//  mensagens apagados — a Judy respondeu que "seu servidor é o Stoat Brasil
-//  2.0". Não veio do banco: veio do FIO do canal, que vive na memória do
-//  processo e sobrevivia à limpeza. Ela não estava lembrando, estava lendo.
 console.log("\n── esquecer de verdade, e blocos separados ──");
 {
   const chat = await import("./modulos/ai/chat.js");
@@ -1221,13 +987,6 @@ console.log("\n── esquecer de verdade, e blocos separados ──");
     "  → e o bloco dela diz o que ela NÃO tem: foi bio e link de terceiro que ela adotou como seus");
 }
 
-// ══ 34. A segunda memória, que ninguém apagava ══
-//
-//  Depois de um `esquecer tudo` que reportou "0 fato(s) de pessoas, 0 do
-//  servidor", a Judy ainda sabia que "o Arch é o favorito". Não vinha do
-//  agente de fatos nem do fio: existe uma tabela `ia_memoria`, anterior ao
-//  agente, que continuou sendo LIDA no prompt ("Você já conversou com esta
-//  pessoa antes. Memória…") e que o comando não tocava.
 console.log("\n── a segunda memória (ia_memoria) ──");
 {
   const db = await import("./modulos/core/db.js");
@@ -1253,12 +1012,6 @@ console.log("\n── a segunda memória (ia_memoria) ──");
   ok(/db\.limparMemoria\(userId\);/.test(chat), "  → e o `esquecer` individual já limpava a dele");
 }
 
-// ══ 35. A ficha técnica: ela sabe de si ══
-//
-//  "Você está em mais algum servidor?" → "Só neste aqui." O `&servidores`
-//  listava DEZ, com 4.575 membros. Ela não mentiu: ninguém tinha contado a
-//  ela. Todo o prompt falava de tom, de regras e da pessoa do outro lado;
-//  nada falava do estado do próprio processo.
 console.log("\n── ficha técnica: o que ela sabe de si ──");
 {
   const f = await import("./modulos/ai/ficha.js");
@@ -1278,8 +1031,6 @@ console.log("\n── ficha técnica: o que ela sabe de si ──");
     "  → marcando em qual deles ela está agora");
   ok(txt.indexOf("Queremos acordar tarde") < txt.indexOf("teste"),
     "  → maiores primeiro: num bot com 50 servidores, são eles que contam a história");
-  // Com um modelo só para todos os papéis, a ficha diz isso em uma linha —
-  // e o qwen3.8-27b saiu junto com o `&chat especial`.
   ok(/qwythos-9b-v2-rapido/.test(txt) && !/qwen3\.8-27b/.test(txt),
     "★ e o modelo que a executa — config do dono, não identidade — sem o especial aposentado");
   ok(/De pé há:/.test(txt) && /Memória neste servidor:/.test(txt),
@@ -1299,19 +1050,11 @@ console.log("\n── ficha técnica: o que ela sabe de si ──");
   const fonte = fs.readFileSync("./modulos/ai/chat.js", "utf8");
   ok(/ficha\.perguntaSobreOEstado\(pergunta\)/.test(fonte) && /fichaTxt,/.test(fonte),
     "  → montada sob demanda em conversar() e injetada como bloco próprio");
-  const srv = fs.readFileSync("./modulos/moderacao/servidores.js", "utf8");
+  const srv = fs.readFileSync("./modulos/core/metricas.js", "utf8");
   ok(/export function listarServidores/.test(srv),
-    "  → reusando a mesma coleta do `&servidores`: uma fonte, não duas que divergem");
+    "  → reusando a coleta de metricas.js: uma fonte, não duas que divergem");
 }
 
-// ══ 36. A ficha some no seguimento; a bio ainda dá o nome; e o espanhol ══
-//
-//  Três falhas da mesma sessão. "Em quais servidores você está?" trouxe a
-//  ficha — mas o "liste todos, por favor" seguinte não tem palavra-chave
-//  nenhuma, a ficha saiu do prompt e ela listou Discord, Matrix, Telegram e
-//  WhatsApp como se fossem servidores dela. A bio voltou a fazê-la chamar o
-//  dono de "Cobaia", pela terceira vez. E ela respondeu em espanhol, culpando
-//  "a Cobaia" por isso quando corrigida.
 console.log("\n── ficha no seguimento, nome na bio, espanhol ──");
 {
   const chat = await import("./modulos/ai/chat.js");
@@ -1347,7 +1090,6 @@ console.log("\n── ficha no seguimento, nome na bio, espanhol ──");
     "  → e a resposta é refeita antes de sair: é a terceira regra de idioma que um modelo ignora");
 }
 
-// ══ 37. As fontes da pesquisa, e o erro que o catch engolia ══
 console.log("\n── fontes no rodapé, e o catch largo ──");
 {
   const fonte = fs.readFileSync("./modulos/ai/chat.js", "utf8");
@@ -1365,18 +1107,9 @@ console.log("\n── fontes no rodapé, e o catch largo ──");
     "  → numeradas na ordem em que o modelo as recebeu, casando com os [1], [2] que ele cita no texto");
 }
 
-// ══ 38. Ritmo, IDs e o que ela observa ══
-//
-//  A ficha passou a listar os dez servidores certos, mas faltavam três dados
-//  que o `&servidores` já tinha: "quantas mensagens por minuto tem aqui?" →
-//  "não tenho acesso aos logs e contagens internas" (tinha: é o mesmo
-//  contador); "qual o ID do canal?" → "não tenho acesso ao ID do canal" (o
-//  bloco só mostrava o id quando o canal NÃO tinha nome); e "você tem acesso
-//  aos logs?" → "o Stoat não me passa esses dados", impreciso — ela recebe
-//  cada mensagem, é assim que o automod funciona.
 console.log("\n── ritmo, ids e o que ela observa ──");
 {
-  const srv = await import("./modulos/moderacao/servidores.js");
+  const srv = await import("./modulos/core/metricas.js");
   const f = await import("./modulos/ai/ficha.js");
   for (let i = 0; i < 25; i++) srv.registrar("s-ativo");
   const client = { servers: new Map([
@@ -1386,7 +1119,7 @@ console.log("\n── ritmo, ids e o que ela observa ──");
   const txt = await f.fichaTecnica({ client }, { serverIdAtual: "s-ativo" });
 
   ok(/Vapor Nexus — 217 membro\(s\), 1\.7 msg\/min/.test(txt),
-    "★ o ritmo por servidor entra na ficha — vem do MESMO contador do `&servidores`");
+    "★ o ritmo por servidor entra na ficha — vem do contador de metricas.js");
   ok(/teste — 2 membro\(s\), parado/.test(txt), "  → e 'parado' quando não há movimento");
   ok(/Ritmo somado:/.test(txt) && /\[id s-ativo\]/.test(txt),
     "  → com o total e o id de cada servidor");
@@ -1408,16 +1141,6 @@ console.log("\n── ritmo, ids e o que ela observa ──");
     "  → sem pegar 'atividade física' nem 'quantas mensagens EU mandei': tem de ser sobre o servidor");
 }
 
-// ══ 39. Repetição literal, e "Cobaia" na terceira pessoa ══
-//
-//  Numa sessão de duas horas com várias pessoas testando: (a) ela devolveu
-//  DUAS vezes, palavra por palavra, uma resposta já dada — para perguntas
-//  diferentes, com oito minutos de intervalo; (b) escreveu "o usuário Cobaia
-//  citou a minha última resposta" e "a Cobaia não tem opinião" — falando de
-//  si mesma na terceira pessoa, porque "Cobaia" é o username da CONTA e
-//  "Judy" é o nome de exibição, e nada dizia que são a mesma; (c) passou a
-//  chamar de "minhas próprias regras de moderação" uma restrição que alguém
-//  tinha pedido numa tarefa ("escreva sem a letra a").
 console.log("\n── repetição, username da conta, tarefa vs regra ──");
 {
   const chat = await import("./modulos/ai/chat.js");
@@ -1446,23 +1169,10 @@ console.log("\n── repetição, username da conta, tarefa vs regra ──");
     "★ pedido com restrição é para UMA resposta — não vira identidade nem 'minha moderação'");
 }
 
-// ══ 40. Busca negada, repetição a 27 min, e perfil de terceiro ══
-//
-//  Três falhas de uma sessão com várias pessoas testando:
-//   • "pesquisa na internet quem é Malum Caedo" → "não tenho essa
-//     funcionalidade ativa no momento". Tinha: o SearXNG está configurado e o
-//     `&chat status` o lista. O filtro barato de pistas rejeitou o pedido
-//     antes de a decisão rodar, e ela concluiu que era incapaz.
-//   • Ela respondeu à Ladainha com um texto IDÊNTICO ao que dera ao Ghiso 27
-//     minutos e várias mensagens antes — e o texto falava de um terceiro.
-//   • Perguntada sobre OUTRA pessoa, usou o perfil de quem estava escrevendo
-//     (cypherpunk, bodybuilding) para chutar idade e aparência do terceiro.
 console.log("\n── busca explícita, repetição distante, perfil de terceiro ──");
 {
   const chat = await import("./modulos/ai/chat.js");
   const fonte = fs.readFileSync("./modulos/ai/chat.js", "utf8");
-  // Usa a EXPORTAÇÃO, não o texto do arquivo: extrair regex por regex quebra
-  // toda vez que o padrão muda de forma (foi o que aconteceu).
   const rePedido = chat.PEDIDO_DE_BUSCA;
 
   ok(rePedido.test("pesquisa na internet quem é Malum Caedo e me fale quem ele é"),
@@ -1488,11 +1198,6 @@ console.log("\n── busca explícita, repetição distante, perfil de terceiro
   ok(/QUEM ESTÁ ESCREVENDO AGORA/.test(fonte) && /Se a pergunta for sobre OUTRA pessoa/.test(fonte),
     "★ o perfil é de quem ESCREVE: perguntada sobre um terceiro, ela não tem nada e deve dizer isso");
 
-  // ── Ordem dada ao bot virando "fato" sobre a pessoa ──
-  //
-  //  "responde no máximo em 8s" era uma instrução PARA a Judy. Virou o fato
-  //  "MiguelRobes responde no máximo em 8 segundos", que apareceu no
-  //  `&chat perfil` dele.
   const mem = await import("./modulos/ai/memoria-agente.js");
   const msgs = ["responde no máximo em 8s", "toca violão", "gosta de bodybuilding", "quer que você seja mais breve"];
   const testar = (fato, evidencia) => !!mem.filtrarFato({ fato, evidencia }, { msgs, nome: "MiguelRobes" });
@@ -1504,16 +1209,6 @@ console.log("\n── busca explícita, repetição distante, perfil de terceiro
     "  → e fatos de verdade continuam entrando");
 }
 
-// ══ 41. "Pesquise X" sem dizer onde, e falar SOBRE modelos ══
-//
-//  Depois do deploy anterior: "eu quero que você pesquise e fale o que é o
-//  modelo de LLM Qwythos-9B" → "não tenho como pesquisar fora do contexto
-//  desta conversa". O meu regex exigia "na internet"/"na web"/"no google" —
-//  um "pesquise sobre X" sozinho não casava.
-//
-//  E antes disso: "o que é o Qwythos-9B?" → "O Qwythos-9B não é nada; eu sou
-//  a Judy". A regra de identidade virou negação de um fato do mundo. Ela
-//  proíbe SE APRESENTAR como um modelo, não proíbe falar de modelos.
 console.log("\n── pesquisar sem dizer onde, e falar sobre modelos ──");
 {
   const chat = await import("./modulos/ai/chat.js");
@@ -1538,14 +1233,6 @@ console.log("\n── pesquisar sem dizer onde, e falar sobre modelos ──");
     "  → e o PROMPT agora diz isso: era ele que a fazia responder 'o Qwythos não é nada, eu sou a Judy'");
 }
 
-// ══ 42. A conversão de LaTeX estava comendo código ══
-//
-//  A Judy entregou `print('n'.join(grid))` e `re.split(r"s+", s)` — sem as
-//  barras. Não foi o modelo: fui eu. O `semLatex` disparava com QUALQUER
-//  `\letra` (e todo código Python tem `\n`), e tinha uma regra "comando LaTeX
-//  desconhecido perde a barra" que transformava `\n` em `n`, `\t` em `t` e
-//  `\s` em `s`. Só o código entre crases estava protegido, e o modelo manda
-//  código solto.
 console.log("\n── LaTeX não come mais barra de código ──");
 {
   const chat = await import("./modulos/ai/chat.js");

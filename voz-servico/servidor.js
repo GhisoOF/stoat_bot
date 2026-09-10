@@ -1,42 +1,9 @@
-// ══════════════════════════════════════════════════════════
-//  servidor.js — judy-voz: o bot fala nas calls do Stoat
-//
-//  Roda NATIVO no Gentoo, ao lado do judy-ia — não em Docker.
-//  Dois motivos:
-//   1. O revoice.js depende de @livekit/rtc-node, que traz binários
-//      nativos. Colocar isso na imagem do bot significaria arriscar o
-//      build inteiro da moderação por causa de um recurso opcional.
-//   2. Se a voz travar ou vazar memória, ela cai sozinha. A moderação
-//      de 3200 membros continua de pé.
-//
-//  Rotas:
-//    GET  /saude       → diagnóstico completo da cadeia
-//    POST /entrar      → { canalVoz } entra numa call
-//    POST /entrar-com-token → { canalVoz, token, node } entra com um token que
-//                        veio do evento UserMoveVoiceChannel (resgate de
-//                        AlreadyConnected; ver voz.entrarComToken)
-//    POST /sair        → { canalVoz? } sai (sem canal = sai de todas)
-//    POST /reiniciar   → recria o cliente de voz sem derrubar o processo
-//    POST /diagnostico → { canalVoz } testa join_call e alcance do LiveKit,
-//                        etapa por etapa, sem entrar na call
-//    POST /falar       → { canalVoz, texto, voz? } fala na call
-//    GET  /estado      → onde está conectado e o que há na fila
-//
-//  Segurança: só responde a quem apresenta o header `x-chave` igual a
-//  VOZ_CHAVE. O serviço fica exposto na Tailscale, e sem isso qualquer
-//  coisa na rede poderia fazer o bot falar.
-// ══════════════════════════════════════════════════════════
 
 import "dotenv/config";
 import { createServer } from "node:http";
 import * as tts from "./tts.js";
 import * as voz from "./voz.js";
 
-// Versão da INTERFACE entre bot e serviço. Sobe sempre que o serviço ganha
-// algo que o bot precisa saber que existe (um efeito novo, um parâmetro novo).
-// O bot compara com o número que ele espera e avisa se estiver defasado —
-// antes eu detectava isso procurando um efeito específico na lista, e quando
-// esse efeito foi renomeado o alarme passou a tocar para sempre.
 export const API_VERSAO = 11;  // 11: /entrar-com-token (resgate do AlreadyConnected via mover)
 
 const PORTA   = Number(process.env.VOZ_PORTA || 8091);
@@ -69,8 +36,6 @@ const servidor = createServer(async (req, res) => {
   const url = new URL(req.url, "http://x");
   const rota = url.pathname;
 
-  // A chave protege tudo menos o /saude, que precisa ser alcançável
-  // por um curl simples quando algo dá errado.
   if (CHAVE && rota !== "/saude" && rota !== "/efeitos" && req.headers["x-chave"] !== CHAVE) {
     dbg(`recusado ${rota}: chave inválida`);
     return responder(res, 401, { erro: "chave inválida" });
@@ -91,9 +56,6 @@ const servidor = createServer(async (req, res) => {
       });
     }
 
-    // Expõe as cadeias de filtro para o script de diagnóstico poder aplicar
-    // EXATAMENTE o mesmo efeito ao testar uma voz. Duplicar as cadeias no
-    // script criaria duas versões para desincronizar na primeira mudança.
     if (rota === "/efeitos") {
       return responder(res, 200, tts.EFEITOS);
     }
@@ -174,11 +136,6 @@ servidor.listen(PORTA, () => {
   voz.iniciar().then((r) => log(`revoice: ${r.ok ? "pronto" : `INDISPONÍVEL — ${r.erro}`}`));
 });
 
-// ── Blindagem contra erros do LiveKit ─────────────────────
-// Um erro assíncrono vindo de dentro do revoice/LiveKit derrubava o
-// processo inteiro: a primeira falha matava o serviço e a chamada seguinte
-// respondia "fetch failed" — sintoma que não diz nada sobre a causa.
-// Um serviço de voz não pode morrer porque uma sala deu problema.
 process.on("uncaughtException", (e) => {
   erro("exceção não tratada (o serviço CONTINUA de pé):", e?.message ?? e);
   if (DEBUG) console.error(e);
@@ -188,8 +145,6 @@ process.on("unhandledRejection", (e) => {
   if (DEBUG) console.error(e);
 });
 
-// Sair limpo: deixar o bot pendurado numa call depois do serviço morrer
-// é o tipo de coisa que só se descobre quando alguém reclama.
 for (const sinal of ["SIGINT", "SIGTERM"]) {
   process.on(sinal, async () => {
     log(`recebido ${sinal} — saindo das calls`);

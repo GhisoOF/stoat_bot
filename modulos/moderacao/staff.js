@@ -1,24 +1,3 @@
-// ══════════════════════════════════════════════════════════
-//  staff.js — &staff (quem é a equipe do servidor)
-//
-//  A lista NÃO tem cadastro próprio: ela lê os mesmos cargos que o
-//  `&acesso cargo` já usa para decidir quem pode moderar
-//  (config.acesso.cargosStaff). Assim não existe a situação clássica de
-//  "o quadro de avisos diz uma coisa e a permissão diz outra": promover
-//  alguém no `&staff add` é promover de verdade, e tirar é tirar.
-//
-//  Comandos:
-//   &staff                        → a equipe, agrupada por cargo (público)
-//   &staff add <@cargo>           → marca o cargo como staff  (ManagePermissions)
-//   &staff remove <@cargo>        → desmarca
-//   &staff limpar                 → esvazia a lista
-//   &staff titulo <@cargo> <texto>→ rótulo exibido no lugar do nome do cargo
-//   &staff titulo <@cargo> limpar → volta ao nome do cargo
-//
-//  A ORDEM da lista é a ordem em que os cargos foram adicionados — o
-//  primeiro adicionado aparece no topo. Para reordenar, remova e
-//  adicione de novo na ordem desejada.
-// ══════════════════════════════════════════════════════════
 
 import { resolverCargo } from "../core/ids.js";
 import { tr, lingua } from "../core/i18n.js";
@@ -32,8 +11,6 @@ function garantirConfig(config) {
   return config;
 }
 
-// Nome de exibição de um cargo: o título personalizado, senão o nome real,
-// senão o ID (para o admin ao menos conseguir removê-lo).
 function rotuloDoCargo(roleId, server, config) {
   const custom = config?.staff?.titulos?.[roleId];
   if (custom) return custom;
@@ -46,9 +23,6 @@ function rotuloDoCargo(roleId, server, config) {
   return roleId;
 }
 
-// ── Quem tem cada cargo ────────────────────────────────────
-// A busca de membros (com cache) vive no core, compartilhada com o
-// &servidores e as boas-vindas — uma fonte só, um cache só.
 import { listarMembros } from "../core/membros.js";
 
 // IDs dos membros que têm um cargo específico.
@@ -63,7 +37,6 @@ function quemTem(membros, roleId) {
   return out;
 }
 
-// ── Comando ────────────────────────────────────────────────
 export async function cmdStaff(message, args, ctx) {
   const { config, sendEmbed, COR, PREFIXO, getServer, membroTemPermissao, salvarConfig } = ctx;
   const lang = lingua(ctx);

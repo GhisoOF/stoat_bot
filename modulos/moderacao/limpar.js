@@ -1,37 +1,9 @@
-// ══════════════════════════════════════════════════════════
-//  limpar.js — &limpar (também &clear / &purge)
-//
-//  &limpar <n>            → apaga as últimas <n> mensagens (1–100)
-//  &limpar <n> @usuário   → apaga as <n> últimas DAQUELE usuário
-//  &limpar tudo           → esvazia o canal INTEIRO (só o dono, com confirmação)
-//
-//  Salvaguardas:
-//   • exige ManageMessages
-//   • limite de 100 por vez (evita acidentes e limites da API)
-//   • confirma exatamente quantas apagou (e quantas falharam)
-//   • a própria mensagem de confirmação some sozinha após alguns segundos
-// ══════════════════════════════════════════════════════════
 
 import * as log from "../core/log.js";
 import { tr, lingua } from "../core/i18n.js";
 
 const MAX = 100;
 
-// ── &limpar tudo ──────────────────────────────────────────
-//
-// Apagar um canal inteiro é irreversível e não tem "desfazer". Por isso três
-// travas, e não uma:
-//
-//  1. SÓ O DONO do servidor. Nem ManageMessages basta: um moderador com raiva
-//     ou uma conta de staff comprometida apagaria o histórico inteiro.
-//  2. CÓDIGO DIGITADO, não "sim". Um "sim" é fácil de mandar por reflexo ou
-//     por engano num canal errado; copiar um código de 4 caracteres exige
-//     ler a mensagem antes.
-//  3. VALIDADE CURTA. A confirmação expira em 60s, então um pedido esquecido
-//     não fica armado esperando alguém confirmar por acidente depois.
-//
-// A confirmação é guardada por canal — pedir em dois canais não confunde os
-// pedidos, e confirmar num canal nunca apaga outro.
 const pendentes = new Map();   // canalId → { codigo, autorId, expira, servidor }
 const VALIDADE_MS = 60_000;
 
@@ -41,14 +13,10 @@ setInterval(() => {
 }, 30_000).unref?.();
 
 function novoCodigo() {
-  // Sem letras ambíguas (0/O, 1/I): o código é para ser DIGITADO, e errar
-  // por causa da fonte seria frustrante num comando que já assusta.
   const alfabeto = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   return Array.from({ length: 4 }, () => alfabeto[Math.floor(Math.random() * alfabeto.length)]).join("");
 }
 
-// Esvazia o canal em lotes, porque a API aceita no máximo 100 por chamada.
-// Devolve quantas apagou; para quando não houver mais nada ou ao bater o teto.
 async function apagarTudo(canal, idComando, aoProgredir) {
   let total = 0;
   const TETO = Number(process.env.LIMPAR_TUDO_MAX || 5000);
@@ -150,9 +118,6 @@ export async function cmdLimpar(message, args, ctx) {
   }
 
   if (["tudo", "all", "everything"].includes(sub)) {
-    // SÓ O DONO. ManageMessages não basta: apagar o histórico inteiro é
-    // destrutivo e irreversível, e não é o tipo de poder que se delega junto
-    // com "apagar spam".
     const ehDono = (server?.ownerId ?? server?.owner) === message.authorId
       || ctx.ehSuperAdmin?.(message.authorId);
     if (!ehDono) {

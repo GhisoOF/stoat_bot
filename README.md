@@ -78,11 +78,9 @@ O `.env.example` na raiz serve para rodar **local**, fora do container.
 
 ### Configuração da IA (Gentoo)
 
-Duas peças, ambas em Docker Compose:
-
-**`judy-ia`** (o serviço de ferramentas) roda do próprio checkout do repo,
-lendo o `.env` do diretório `ia-servico/`. Atualizar é trocar o
-`servidor.js` e `docker compose up -d --build`.
+O serviço de ferramentas (`ia-servico/`) roda **embutido no container do
+bot** — o `iniciar.js` o sobe em `localhost:8090` automaticamente. A única
+peça externa é a inferência:
 
 **`llama-swap`** (a inferência) roda em `~/judy-llm`, com a imagem **ROCm**:
 
@@ -1748,7 +1746,7 @@ Nexus) e não aparecem nos outros:
 |---|---|---|
 | A **Judy** (`&chat`, `&modia`, comentário espontâneo, memória) | depende do `judy-ia` + Ollama na máquina com GPU do autor | allowlist `CHAT_SERVIDORES`; fora dela os comandos não existem (não aparecem no `&help`, e a rota responde "não habilitado") |
 | **Voz** (`&tts`) | depende do `voz-servico` | só funciona onde há um canal de voz configurado |
-| `&servidores`, `&game admin`, `&automod debug`, `&banglobal revisar` | ferramentas do dono do bot | exigem super-admin; o `&help` mostra a página 👑 **dono** só para ele |
+| `&game admin`, `&automod debug`, `&banglobal revisar` | ferramentas do dono do bot | exigem super-admin (`SUPER_ADMINS`, vazio por padrão); o `&help` mostra a página 👑 **dono** só para ele |
 | Infra (Portainer, Tailscale, `resolv.conf`, `GITHUB_TOKEN`) | homelab do autor | documentada em *Onde cada peça roda*; nada disso é exigido para rodar o bot em outro lugar |
 
 O que **não** é específico: o `&help`, o `&tutorial` e o `&assistente` se
@@ -1832,7 +1830,7 @@ vai ser repassado a outras pessoas.
 ### Ficha técnica: ela sabe de si, com número
 
 Perguntada "você está em mais algum servidor?", a Judy respondia "só neste
-aqui" — enquanto o `&servidores` listava dez, com 4.575 membros. Ela não
+aqui" — enquanto o cliente enxergava dez, com milhares de membros. Ela não
 mentia: nada no prompt falava do estado do próprio processo.
 
 `modulos/ai/ficha.js` monta um bloco `<sua_ficha_tecnica>` com os servidores
@@ -1848,10 +1846,32 @@ ambiente, na hora. Serve para perguntar a ela em vez de ir ao terminal:
 
 É montada **sob demanda** (`perguntaSobreOEstado`), porque são ~600 tokens e
 contar membros de dez servidores custa tempo — não é coisa para um "bom dia".
-E vive no processo do bot, não como ferramenta do `judy-ia`: aquele serviço
-roda em outra máquina e não tem o cliente Stoat nem o banco, então não
-conseguiria listar servidor nenhum. Reusa a coleta do `&servidores`, para não
-haver duas fontes que divergem.
+E vive no processo do bot, não como ferramenta do serviço de IA: ele não tem
+o cliente Stoat nem o banco, então não conseguiria listar servidor nenhum.
+A coleta (uptime, ritmo, lista de servidores) vem de `modulos/core/metricas.js`
+— uma fonte só, sem duas que divergem.
+
+### Personalidade por comando (`&personalidade`)
+
+O prompt de personalidade não é mais fixo no código: cada servidor define o
+seu, sem redeploy.
+
+```
+&personalidade                    # mostra a atual (personalizada ou padrão)
+&personalidade definir <texto>    # define o prompt deste servidor (ManageServer)
+&personalidade resetar            # volta ao padrão embutido
+```
+
+O texto vai na config do servidor (chave `persona`, no mesmo JSON do banco —
+nada de schema novo, bancos antigos seguem compatíveis) e substitui **só** o
+bloco de PERSONALIDADE e TOM do prompt. As regras de segurança, formato,
+idioma e identidade continuam fixas — a persona muda o *jeito*, não os
+limites. Sem nada definido, vale o padrão embutido (a Judy clássica), então
+instalações antigas não mudam em nada. Máximo de 2000 caracteres
+(`PERSONA_MAX_CHARS` ajusta).
+
+A mesma persona alimenta o resumo de RSS e o comentário espontâneo, na versão
+curta — uma fonte só (`modulos/ai/persona.js`), sem três textos que divergem.
 
 ### Quatro blocos com fronteira: ela, o lugar, a pessoa, o fio
 
@@ -2055,9 +2075,10 @@ A cada hora, a Judy posta um **resumo geral no tom dela** e depois os itens novo
 &rss agora            # testa um ciclo na hora
 ```
 
-**Como ativar a IA:** suba o Ollama na máquina com GPU, suba o `ia-servico/`
-(veja [`ia-servico/README.md`](ia-servico/README.md)), e aponte o bot para ele
-com `IA_SERVICO_URL` + as variáveis `OLLAMA_MODEL_*`.
+**Como ativar a IA:** suba um servidor de LLM na máquina com GPU (llama.cpp,
+llama-swap ou Ollama — qualquer um com API OpenAI) e aponte o container com
+`LLM_URL` + `LLM_MODEL`. O serviço de ferramentas já sobe embutido; detalhes
+em [`ia-servico/README.md`](ia-servico/README.md).
 
 ---
 
@@ -2413,14 +2434,14 @@ O código é organizado em quatro áreas, sob `modulos/`:
 │   ├── game/                   # RPG
 │   │   └── game.js             # &game — personagem, 9 atributos, progressão
 │   └── economia/               # reservado para o futuro
-├── voz-servico/                # judy-voz: LiveKit + Piper (nativo no Gentoo)
+├── iniciar.js                  # sobe tudo num container: bot + IA (+ voz opcional)
+├── voz-servico/                # voz nas calls: LiveKit + Piper (opcional, VOZ_ATIVA=1)
 │   ├── servidor.js             # HTTP: /saude, /entrar, /entrar-com-token, /sair, /falar, /reiniciar, /diagnostico, /destravar
 │   ├── voz.js                  # entra na call e publica áudio (revoice.js)
 │   └── tts.js                  # síntese (Piper) e efeitos (ffmpeg)
 ├── ia-servico/                 # serviço de IA (ferramentas + tool-calling)
 │   ├── servidor.js             # HTTP: /chat, /saude, /ferramentas
 │   └── ferramentas/            # calcular, ler_codigo, buscar_web, buscar_rss
-├── ia-stack/                   # stack de IA legada (superada pelo ia-servico)
 ├── scripts/
 │   ├── deploy-stoat.sh         # deploy seguro (copie para ~/ e rode de lá)openrc/             # serviços do OpenRC (bot e judy-ia)
 ├── .env.example                # modelo de configuração

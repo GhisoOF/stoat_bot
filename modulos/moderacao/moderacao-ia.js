@@ -1,23 +1,8 @@
-// ══════════════════════════════════════════════════════════
-//  moderacao-ia.js — a Judy modera a conversa por CRITÉRIOS
-//
-//  Você escreve os critérios em texto livre (&modia criterios ...).
-//  A cada mensagem, a Judy avalia se ela viola. Se sim:
-//    1) APAGA a mensagem
-//    2) te marca no #log com o texto removido e as OPÇÕES
-//       (ignorar / avisar / silenciar / banir) já com comando pronto
-//
-//  A IA NUNCA vai além de apagar. Banir/silenciar é decisão SUA — isso
-//  elimina o risco de alguém convencê-la a punir por prompt injection.
-//
-//  Só o CRIADOR é imune. A avaliação usa o modelo pequeno (rápido) e
-//  roda de forma protegida: qualquer erro = não faz nada (fail-safe).
-// ══════════════════════════════════════════════════════════
 
 import * as db from "../core/db.js";
 import * as log from "../core/log.js";
 
-const CRIADOR_ID = process.env.SUPER_ADMINS?.split(",")[0]?.trim() || "01K9JKP85D5EP2ZTEHS8DT797A";
+const CRIADOR_ID = process.env.SUPER_ADMINS?.split(",")[0]?.trim() || "";
 const MIN_CHARS  = Number(process.env.MODIA_MIN_CHARS || 3);
 const dlog = (...a) => { if (process.env.CHAT_DEBUG) console.log("[MOD-IA]", ...a); };
 
@@ -60,8 +45,6 @@ async function avaliar(cfg, texto) {
   }
 }
 
-// Chamado pelo bot a cada mensagem normal. Retorna true se APAGOU (para o
-// bot saber que a mensagem não deve seguir para XP/memória/etc).
 export async function moderar(message, ctx) {
   const cfg = ctx?.config;
   const canalId = message.channelId;

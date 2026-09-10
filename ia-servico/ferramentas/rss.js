@@ -1,14 +1,3 @@
-// ══════════════════════════════════════════════════════════
-//  rss.js — busca os itens de um ou mais feeds RSS
-//
-//  A ferramenta NÃO resume: ela devolve os itens crus e a própria
-//  LLM escreve o resumo. Assim evitamos uma chamada aninhada ao
-//  modelo (mais lenta) e o resumo sai na voz da Judy.
-//
-//  Os feeds podem vir do pedido ou da variável RSS_FEEDS
-//  (lista separada por vírgula) — é isso que permite agendar
-//  "resuma as notícias" sem passar as URLs toda vez.
-// ══════════════════════════════════════════════════════════
 
 import Parser from "rss-parser";
 

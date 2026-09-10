@@ -1,10 +1,3 @@
-// ══════════════════════════════════════════════════════════
-//  index.js — registro central das ferramentas
-//
-//  Para adicionar uma ferramenta nova: crie o arquivo exportando
-//  `definicao` (schema no formato do Ollama) e `executar(args)`,
-//  e registre aqui. Mais nada muda.
-// ══════════════════════════════════════════════════════════
 
 import * as lerCodigo from "./ler-codigo.js";
 import * as calcular  from "./calcular.js";
@@ -15,9 +8,6 @@ import * as gerarImagem from "./gerar-imagem.js";
 
 const MODULOS = [lerCodigo, calcular, rss, buscarWeb, verImagem, gerarImagem];
 
-// Imagem só entra no cardápio quando o backend correspondente existe: um
-// modelo sem a ferramenta não tenta usá-la; um modelo COM a ferramenta e sem
-// backend fica chamando algo que sempre falha.
 if (!process.env.LLM_MODEL_VISAO) MODULOS.splice(MODULOS.indexOf(verImagem), 1);
 if (!process.env.SD_URL) MODULOS.splice(MODULOS.indexOf(gerarImagem), 1);
 

@@ -1,35 +1,8 @@
-// ══════════════════════════════════════════════════════════
-//  ler-codigo.js — a Judy lê o próprio código direto do GitHub
-//
-//  Em vez de montar o repositório como volume (o código vive no
-//  homelab, não aqui), buscamos direto da API do GitHub. Assim a
-//  Judy sempre lê a versão publicada — a mesma que virou imagem.
-//
-//  Repositório e ramo por env:
-//    GITHUB_REPO   (ex.: GhisoOF/stoat_bot)  — obrigatório
-//    GITHUB_BRANCH (padrão: main)
-//    GITHUB_TOKEN  (opcional; só aumenta o limite de requisições)
-//
-//  Repositório público não precisa de token. O token, se houver,
-//  eleva o limite de 60 para 5000 requisições/hora.
-// ══════════════════════════════════════════════════════════
 
 import { buscar, explicarErroDeRede, ehTransitorio } from "./rede.js";
 import fs from "node:fs";
 import path from "node:path";
 
-// ── O repositório LOCAL vem primeiro ──────────────────────
-//
-//  O GitHub aqui era uma fonte de dor recorrente: o deploy apaga e recria
-//  `ia-servico/`, o `.env` com o GITHUB_TOKEN some junto, e a Judy passa a
-//  responder "o repositório não existe" até alguém refazer o token à mão.
-//  Tudo isso para ler um código que JÁ ESTÁ na mesma máquina — o deploy
-//  acabou de descompactá-lo em `~/Downloads/github`.
-//
-//  Então: com `CODIGO_DIR` apontando para a cópia local (montada como
-//  volume somente-leitura no compose), a leitura é do disco — sem token,
-//  sem limite de requisições, sem rede. O GitHub vira o que sempre deveria
-//  ter sido: um plano B para quando o volume não estiver montado.
 const CODIGO_DIR = process.env.CODIGO_DIR || "";
 
 function raizLocal() {
@@ -38,9 +11,6 @@ function raizLocal() {
   catch { return null; }
 }
 
-// Trava de fuga: o caminho pedido, resolvido, tem de continuar DENTRO da
-// raiz. Sem isso, `../..` sairia do repositório e este container viraria um
-// leitor de arquivos da máquina.
 function caminhoSeguro(raiz, pedido) {
   const alvo = path.resolve(raiz, pedido ?? "");
   return alvo === raiz || alvo.startsWith(raiz + path.sep) ? alvo : null;
@@ -69,16 +39,8 @@ const REPO   = process.env.GITHUB_REPO || "";
 const BRANCH = process.env.GITHUB_BRANCH || "main";
 const TOKEN  = process.env.GITHUB_TOKEN || "";
 
-// O GitHub responde 404 (não 401/403) para repositório privado sem
-// credencial válida — de propósito, para não revelar que ele existe. Isso
-// engana: parece "o arquivo não existe" quando é "não tenho permissão".
-//
-// Os dois casos exigem ações diferentes, então a mensagem separa: sem token
-// é problema de configuração do container; com token é escopo, repo ou branch.
 function erro404(caminho = "") {
   const onde = caminho ? ` em \`${caminho}\`` : "";
-  // `amigavel` diz ao catch que esta mensagem já foi escrita para ser lida
-  // por gente — e que portanto NÃO deve ser truncada nem reescrita.
   const marcar = (texto) => Object.assign(new Error(texto), { amigavel: true });
   if (!TOKEN) {
     return marcar(`O GitHub respondeu 404${onde}. O repositório \`${REPO}\` é privado e`
@@ -121,8 +83,6 @@ async function api(caminho) {
 async function arvore() {
   const url = `https://api.github.com/repos/${REPO}/git/trees/${BRANCH}?recursive=1`;
   const r = await buscar(url, { headers: cabecalhos(), signal: AbortSignal.timeout(15000) });
-  // Mesma armadilha do 404 aqui: é por esta chamada que a Judy LISTA o
-  // repositório, então sem ela a resposta vira "não encontrei nada".
   if (r.status === 404) throw erro404();
   if (r.status === 403) throw new Error("limite de requisições do GitHub atingido (adicione GITHUB_TOKEN).");
   if (!r.ok) throw new Error(`GitHub HTTP ${r.status}`);
@@ -134,14 +94,6 @@ export const definicao = {
   type: "function",
   function: {
     name: "ler_codigo",
-    // A descrição diz ao modelo POR ONDE COMEÇAR. Sem isso ele adivinhava
-    // nomes de arquivo ("scripts/judy-ia.js", que nunca existiu) e gastava
-    // três chamadas para descobrir que estava errado.
-    //
-    // E agora diz também POR ONDE NÃO COMEÇAR: perguntada sobre TTS, ela leu
-    // `modulos/ai/chat.js` (o primeiro nome que lhe ocorreu) e descreveu
-    // funções que não existem. A ação `buscar` tira o palpite do caminho:
-    // "tts" devolve os arquivos que falam de TTS, e só então ela lê.
     description: "Lê o código-fonte do próprio bot (somente leitura). PERGUNTA SOBRE O PROJETO INTEIRO ('como o código está organizado?', 'a estrutura da raiz', 'quais módulos existem') → chame 'estrutura' SEM caminho: devolve as pastas, os arquivos de cada uma e o que cada um expõe. Nunca use 'buscar' para isso — buscar precisa de um termo, e não existe termo para 'o projeto todo'. Use para responder como o bot funciona, comentar a própria implementação ou conferir detalhes técnicos. FLUXO OBRIGATÓRIO: (1) 'buscar' com o termo da pergunta (ex.: 'tts', 'xp', 'banglobal') — devolve os arquivos cujo nome ou conteúdo casam; (2) 'estrutura' do arquivo escolhido — o MAPA dele (seções, funções, exports, com a linha de cada um), que é o que responde perguntas do tipo como-funciona-X; (3) 'ler' as linhas específicas que você precisa citar. Um arquivo de 1400 linhas NÃO cabe numa leitura: descrever o todo a partir da primeira página é como resumir um livro pela primeira folha — use 'estrutura' para o todo e 'ler' para o detalhe. Arquivos grandes vêm em páginas de linhas: o resultado diz 'proxima_linha' quando há mais — chame 'ler' de novo com 'linha_inicial' para continuar, ou passe 'termo' para abrir direto no trecho que fala do assunto. 'listar' e 'estatisticas' são para visão geral. NUNCA adivinhe nomes de arquivo; NUNCA descreva funções que não apareceram no conteúdo lido.",
     parameters: {
       type: "object",
@@ -157,14 +109,6 @@ export const definicao = {
   },
 };
 
-// ── Paginação: um arquivo grande vem em pedaços ──────────
-//
-//  O corte antigo era por bytes, sempre do começo: um arquivo de 1400 linhas
-//  virava as 300 primeiras e um `cortado: true` que o modelo ignorava — e o
-//  resto do arquivo simplesmente não existia para ele. Agora a leitura tem
-//  janela (`linha_inicial` + `quantidade`), diz quantas linhas há no total e
-//  onde a próxima página começa. E com `termo`, a janela abre em cima do
-//  trecho que interessa, em vez de no cabeçalho de licença.
 const PAGINA_PADRAO = Number(process.env.CODIGO_PAGINA_LINHAS || 300);
 const PAGINA_MAX    = 600;
 
@@ -178,8 +122,6 @@ function paginar(txt, { linha_inicial, quantidade, termo } = {}) {
   let ancora = null;
   const t = String(termo ?? "").trim();
   if (t && !linha_inicial) {
-    // Busca sem distinguir maiúsculas; a janela começa um pouco antes do
-    // achado, para o contexto (a função que contém a linha) vir junto.
     const re = new RegExp(t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
     const i = linhas.findIndex((l) => re.test(l));
     if (i >= 0) { ancora = i + 1; inicio = Math.max(1, i + 1 - 15); }
@@ -195,13 +137,6 @@ function paginar(txt, { linha_inicial, quantidade, termo } = {}) {
 
   const pct = Math.round(((fim - inicio + 1) / total) * 100);
   const saida = { linhas_totais: total, intervalo: `${inicio}-${fim}`, porcentagem_lida: `${pct}%` };
-  // O aviso vem ANTES do conteúdo (depois de 300 linhas de código, ressalva
-  // no rodapé já saiu do foco) e diz primeiro o que PODE ser afirmado.
-  //
-  //  A versão anterior só proibia — "NÃO descreva o que está fora deste
-  //  intervalo" — e o efeito foi o oposto do pretendido: em vez de limitar o
-  //  escopo da resposta, o modelo concluiu que não podia responder e disse
-  //  que "não conseguia descrever o arquivo". Aviso que só nega vira recusa.
   if (fim - inicio + 1 < total) {
     saida.leitura_parcial = `Estas ${fim - inicio + 1} linhas (${inicio}-${fim} de ${total}, ${pct}% do arquivo) são CÓDIGO REAL e você pode descrevê-las à vontade. O que está fora deste intervalo você ainda não viu — para falar do arquivo inteiro, chame acao='estrutura'; para outro trecho, use linha_inicial ou termo.`;
   }
@@ -217,19 +152,6 @@ function paginar(txt, { linha_inicial, quantidade, termo } = {}) {
   return saida;
 }
 
-
-// ── O mapa do arquivo, em vez do começo dele ──────────────
-//
-//  Perguntada "como funciona o TTS no seu código?", ela leu a primeira página
-//  de um arquivo de 1436 linhas e descreveu o arquivo inteiro. Tudo que ela
-//  acertou estava nas linhas 1-300; tudo que inventou ("graceful shutdown no
-//  &tts reiniciar") estava depois da linha 780, que ela nunca viu.
-//
-//  A causa não é o modelo mentir: é a pergunta ser sobre o TODO e a ferramenta
-//  só saber entregar PEDAÇOS. `estrutura` responde no formato da pergunta —
-//  os cabeçalhos de seção, as funções e o que o arquivo exporta, com a linha
-//  de cada um. Cabe em 60 linhas, cobre 100% do arquivo, e o que ela não
-//  souber explicar ela agora sabe ONDE ler.
 function estruturaDe(txt) {
   const linhas = txt.split("\n");
   const secoes = [];      // cabeçalhos de comentário (// ── Título ──)
@@ -271,19 +193,6 @@ function estruturaDe(txt) {
   };
 }
 
-
-// ── O mapa do REPOSITÓRIO (ou de uma pasta) ──────────────
-//
-//  `estrutura` de um arquivo responde "como funciona o TTS?". Faltava o
-//  degrau de cima: "como o código está organizado?". Sem ele, perguntada
-//  sobre a raiz do projeto, ela chamou `buscar` com o termo "package.json" —
-//  não por burrice, mas porque `buscar` era a única porta de entrada e ela
-//  precisava de um termo. Descreveu os package.json que achou.
-//
-//  `listar` não servia (118 caminhos sem significado nenhum) e
-//  `estatisticas` menos ainda (bytes por pasta). O que responde a pergunta é
-//  isto: as pastas, os arquivos de cada uma, o tamanho e — o que importa — o
-//  que cada arquivo EXPÕE. Daí sai a arquitetura de verdade.
 function estruturaDoRepo(raiz, subpasta = "") {
   const arqs = arvoreLocal(raiz).filter((n) => !subpasta || n.path === subpasta || n.path.startsWith(`${subpasta}/`));
   if (!arqs.length) return null;
@@ -330,12 +239,6 @@ function estruturaDoRepo(raiz, subpasta = "") {
   };
 }
 
-// ── Buscar arquivo por assunto ───────────────────────────
-//
-//  Dois critérios, nesta ordem: o termo no NOME do arquivo (tts.js, tts-filtro.js)
-//  e o termo no CONTEÚDO (quantas linhas o citam). O nome pesa mais porque quem
-//  chama o arquivo de "tts" quase sempre é o dono do assunto; o conteúdo pega
-//  o resto ("silence" aparece em automod-engine.js, que não tem isso no nome).
 const sem_acento = (s) => String(s).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 
 function buscarLocal(raiz, termo) {
@@ -344,8 +247,6 @@ function buscarLocal(raiz, termo) {
   const palavras = t.split(/\s+/).filter(Boolean);
   const arqs = arvoreLocal(raiz);
 
-  // Nome curto primeiro: entre `tts.js` e `tts-filtro.js`, o dono do assunto
-  // é o de nome mais enxuto — a ordem alfabética punha o filtro na frente.
   const por_nome = arqs
     .filter((n) => palavras.every((w) => sem_acento(n.path).includes(w)))
     .map((n) => n.path)
@@ -372,18 +273,6 @@ function buscarLocal(raiz, termo) {
   }
   const melhor = por_nome[0] ?? por_conteudo[0]?.caminho;
 
-  // ── A busca já entrega o mapa do melhor candidato ─────────
-  //
-  //  Devolver só a lista criou dois problemas opostos. Primeiro o modelo
-  //  respondeu A PARTIR DELA, descrevendo um arquivo que nunca abriu. Aí eu
-  //  pus um aviso dizendo "isto é um índice, não o código" — e ele passou a
-  //  achar que o ARQUIVO era um índice de metadados e se recusou a responder,
-  //  com 600 linhas de código na frente.
-  //
-  //  A saída não era um aviso melhor: era não devolver um resultado que
-  //  precisa de aviso. Agora a busca já vem com o mapa do arquivo mais
-  //  provável — conteúdo de verdade, cobrindo o arquivo inteiro. Uma chamada,
-  //  nada a proibir, e o passo seguinte é opcional em vez de obrigatório.
   let mapa = null;
   if (melhor) {
     try { mapa = { caminho: melhor, ...estruturaDe(fs.readFileSync(path.join(raiz, melhor), "utf8")) }; }
@@ -401,23 +290,12 @@ function buscarLocal(raiz, termo) {
   };
 }
 
-// ── Normalizar o caminho que o modelo mandou ──────────────
-//
-//  O modelo escreve a raiz como ".", "./" ou "/" — as três formas naturais.
-//  O filtro era `path.startsWith(caminho)`, e nenhum arquivo começa com "."
-//  (eles são `main.js`, `modulos/x.js`…), então listar a raiz devolvia lista
-//  VAZIA. A Judy olhou para o próprio repositório, viu o nada, e concluiu que
-//  não tinha acesso ao código. Um bug de uma linha que parecia falta de
-//  permissão — foi por isso que fomos conferir token e volume primeiro.
 function normalizarCaminho(caminho) {
   const c = String(caminho ?? "").trim().replace(/\\\\/g, "/");
   if (!c || c === "." || c === "./" || c === "/" || c === "raiz" || c === "root") return "";
   return c.replace(/^\.\//, "").replace(/^\/+/, "").replace(/\/+$/, "");
 }
 
-// Quando o caminho não existe, dizer O QUE existe vale mais que dizer "não
-// achei": o modelo tentou `scripts/judy-ia.js`, que nunca existiu, e ficou
-// chutando. Com as opções na mão, ele acerta na segunda.
 function sugerir(arqs, pedido) {
   const alvo = pedido.toLowerCase();
   const base = alvo.split("/").pop();
@@ -438,16 +316,11 @@ export async function executar({ acao, caminho, termo, linha_inicial, quantidade
     try {
       if (acao === "buscar") return buscarLocal(raiz, termo);
       if (acao === "estrutura") {
-        // SEM caminho = o repositório inteiro. Antes isto era um erro
-        // ("informe o caminho"), e era justamente a pergunta que faltava
-        // responder: "como o código está organizado?".
         if (!caminho) return { fonte: "disco local", ...estruturaDoRepo(raiz) };
         if (proibido(caminho)) return { erro: "Arquivo protegido — não posso ler." };
         const alvo = caminhoSeguro(raiz, caminho);
         if (!alvo) return { erro: "Caminho fora do repositório — não posso ler." };
         if (!fs.existsSync(alvo)) return { erro: `\`${caminho}\` não existe.`, ...sugerir(arvoreLocal(raiz), caminho) };
-        // Pasta: o mesmo mapa, limitado a ela. Também deixou de ser erro —
-        // "a estrutura de modulos/game" é uma pergunta perfeitamente sensata.
         if (fs.statSync(alvo).isDirectory()) {
           const mapa = estruturaDoRepo(raiz, caminho);
           return mapa ? { fonte: "disco local", ...mapa } : { erro: `nada em \`${caminho}\`` };
@@ -482,10 +355,6 @@ export async function executar({ acao, caminho, termo, linha_inicial, quantidade
         if (proibido(caminho)) return { erro: "Arquivo protegido — não posso ler." };
         const alvo = caminhoSeguro(raiz, caminho);
         if (!alvo) return { erro: "Caminho fora do repositório — não posso ler." };
-        // A checagem de PASTA vem antes da de extensão: `modulos` não tem
-        // extensão nenhuma, e responder "tipo de arquivo não legível" para
-        // uma pasta manda o modelo para o lado errado — ele precisa ouvir
-        // "isso é uma pasta, eis o que tem dentro".
         if (fs.existsSync(alvo) && fs.statSync(alvo).isDirectory()) {
           const dentro = arvoreLocal(raiz).filter((n) => n.path.startsWith(`${caminho}/`)).map((n) => n.path).slice(0, 50);
           return { erro: "Isso é uma pasta, não um arquivo.", arquivos_dentro: dentro };
@@ -573,14 +442,9 @@ export async function executar({ acao, caminho, termo, linha_inicial, quantidade
   } catch (e) {
     const msg = (e?.message ?? String(e));
     const causa = e?.cause?.code ?? "";
-    // "fetch failed" é opaco: pode ser DNS, sem rota, firewall ou timeout.
-    // A retentativa já aconteceu lá dentro; se chegou aqui, o problema
-    // persiste — então vale devolver o passo a passo, não só o código.
     if (/fetch failed/i.test(msg) || ehTransitorio(e) || /ENOTFOUND|UND_ERR/i.test(causa)) {
       return { erro: explicarErroDeRede(e, "a API do GitHub") };
     }
-    // Mensagem já escrita para ser lida: vai inteira. Cortar em 300 caracteres
-    // decapitava justamente a parte que diz o que fazer.
     return { erro: e?.amigavel ? msg : msg.slice(0, 300) };
   }
 }

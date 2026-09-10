@@ -1,20 +1,3 @@
-// ══════════════════════════════════════════════════════════
-//  i18n.js — idioma por servidor (pt | en)
-//
-//  A escolha é POR SERVIDOR e fica em config.language (o campo já
-//  existia no template). O admin escolhe com &idioma / &language.
-//
-//  Como usar nos módulos:
-//    import { tr, lingua } from "../core/i18n.js";
-//    sendEmbed(ch, tr(ctx,
-//      { title: "❌ Erro", description: "…", colour: COR.erro },   // pt
-//      { title: "❌ Error", description: "…", colour: COR.erro },  // en
-//    ));
-//
-//  Regra de ouro: o PT é a fonte da verdade; módulos ainda não
-//  traduzidos continuam respondendo em PT mesmo em servidor EN
-//  (degradação suave, nunca quebra).
-// ══════════════════════════════════════════════════════════
 
 export const IDIOMAS = ["pt", "en"];
 
@@ -55,8 +38,6 @@ export async function cmdIdioma(message, args, ctx) {
     });
   }
 
-  // Mudar exige ManagePermissions (ou cargo de staff, que o main já respeita
-  // para canais; aqui checamos a permissão nativa por segurança).
   const server = await getServer(message).catch(() => null);
   const podeMudar = membroTemPermissao(message, server, "ManagePermissions");
   if (!podeMudar) {
@@ -96,10 +77,6 @@ export async function cmdIdioma(message, args, ctx) {
   });
 }
 
-// ── Sugestão de idioma no primeiro uso ─────────────────────
-//  Chamada pelo main.js quando chega o PRIMEIRO comando num servidor que
-//  nunca escolheu idioma. Pergunta UMA vez, em bilíngue, e marca a flag —
-//  não bloqueia o comando nem repete a pergunta.
 export async function talvezSugerirIdioma(message, ctx) {
   const { sendEmbed, COR, PREFIXO: P, config, salvarConfig, serverId } = ctx;
   if (!serverId) return;                    // fora de servidor não faz sentido

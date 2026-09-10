@@ -1,21 +1,3 @@
-// ══════════════════════════════════════════════════════════
-//  fusos.js — encontrar fusos horários por nome de cidade
-//
-//  A base é o próprio ICU do Node (`Intl.supportedValuesOf("timeZone")`,
-//  418 zonas), então não há lista para manter à mão nem dependência
-//  externa: quando o Node atualiza a base do IANA, o bot acompanha.
-//
-//  O problema a resolver é que ninguém digita `America/Sao_Paulo`.
-//  As pessoas digitam "são paulo", "sao paulo", "SP", "madrid",
-//  "nova york". Este módulo faz essa ponte:
-//
-//   • normaliza acentos e separadores ("são paulo" = "Sao_Paulo")
-//   • busca pelo trecho da CIDADE, não pelo continente
-//   • aceita apelidos comuns em PT e EN ("nova york" → New_York)
-//   • quando há empate, devolve os candidatos em vez de escolher por
-//     conta própria — "Córdoba" existe na Argentina e na Espanha, e
-//     chutar seria pior que perguntar
-// ══════════════════════════════════════════════════════════
 
 // Tira acentos, baixa a caixa e unifica separadores.
 function normalizar(txt) {
@@ -33,8 +15,6 @@ export function cidadeDoFuso(zona) {
   return parte.replace(/_/g, " ");
 }
 
-// Apelidos que o ICU não resolve sozinho. Mapeiam para o ID IANA.
-// Só o que é ambíguo ou muito usado por aqui — a busca genérica cobre o resto.
 const APELIDOS = {
   "sp": "America/Sao_Paulo",
   "sampa": "America/Sao_Paulo",
@@ -88,12 +68,6 @@ function zonas() {
   return _zonas;
 }
 
-/**
- * Procura fusos que combinem com o termo.
- * @returns {{exato: string|null, candidatos: string[]}}
- *   `exato` quando há uma resposta clara; `candidatos` quando há empate
- *   (ou quando não há exato, para sugerir).
- */
 export function buscarFuso(termo) {
   const alvo = normalizar(termo);
   if (!alvo) return { exato: null, candidatos: [] };
@@ -103,9 +77,6 @@ export function buscarFuso(termo) {
 
   const lista = zonas();
 
-  // 1b) "Cidade/País" ou "Cidade, País" — é como as pessoas escrevem
-  // ("São Paulo/Brasil", "Madrid/Europa"). Não é ID IANA (que vem
-  // ao contrário), então tentamos cada pedaço isoladamente.
   if (/[\/,]/.test(alvo) && !lista.some((z) => normalizar(z) === alvo)) {
     for (const pedaco of alvo.split(/[\/,]/).map((p) => p.trim()).filter(Boolean)) {
       const r = buscarFuso(pedaco);
@@ -122,8 +93,6 @@ export function buscarFuso(termo) {
   if (porCidade.length === 1) return { exato: porCidade[0], candidatos: [] };
   if (porCidade.length > 1) return { exato: null, candidatos: porCidade };
 
-  // 4) cidade que começa com o termo — desempata a favor do mais curto,
-  //    que costuma ser a cidade principal
   const começa = lista.filter((z) => normalizar(cidadeDoFuso(z)).startsWith(alvo));
   if (começa.length === 1) return { exato: começa[0], candidatos: [] };
   if (começa.length > 1) return { exato: null, candidatos: começa.slice(0, 10) };

@@ -1,13 +1,3 @@
-// ══════════════════════════════════════════════════════════
-//  acesso.js — quem pode usar os comandos, e onde
-//
-//  Duas perguntas independentes:
-//   1. A pessoa é staff? (permissão nativa do Stoat OU um cargo que
-//      você marcou como staff — útil quando você não quer dar
-//      permissões reais a um moderador)
-//   2. O comando vale NESTE canal? (para não poluir os canais de
-//      conversa com gente testando comando)
-// ══════════════════════════════════════════════════════════
 
 import { limparId, ULID } from "../core/ids.js";
 import { tr, lingua } from "../core/i18n.js";
@@ -26,8 +16,6 @@ export function temCargoStaff(message, config) {
   return meus.some((id) => marcados.includes(id));
 }
 
-// O comando pode rodar neste canal?
-// Devolve { ok } ou { ok:false, motivo } para a mensagem de recusa.
 export function canalPermitido(message, config, { ehStaff = false } = {}) {
   const a = config?.acesso?.canais ?? { modo: "todos", lista: [] };
   const modo = a.modo ?? "todos";
@@ -56,9 +44,6 @@ export function canalPermitido(message, config, { ehStaff = false } = {}) {
   return { ok: true };
 }
 
-// ══════════════════════════════════════════════════════════
-//  &acesso — configuração
-// ══════════════════════════════════════════════════════════
 export async function cmdAcesso(message, args, ctx) {
   const { sendEmbed, COR, PREFIXO: P, config, salvarConfig, getServer, membroTemPermissao } = ctx;
   const lang = lingua(ctx);

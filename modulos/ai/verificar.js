@@ -1,27 +1,3 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// verificar.js — verificação em camadas da resposta da IA
-//                layered verification of the AI response
-//
-// Camada 2 (determinística): refaz contas escritas na resposta e confere se
-//   nomes citados (funções, arquivos) existem na evidência lida pelas
-//   ferramentas. Código puro, custo zero de GPU, zero latência de modelo.
-// Layer 2 (deterministic): recomputes any "a op b = c" found in the reply and
-//   checks that cited identifiers exist in the tool evidence. Pure JS.
-//
-// Camada 3 (IA ancorada): segundo passe do MESMO modelo residente, stateless,
-//   sem persona, recebendo (pergunta, resposta, evidência). Só julga o que a
-//   camada 2 não alcança: paráfrase errada, conclusão que não decorre da
-//   evidência. NUNCA roda sem evidência — sem âncora, o modelo aprova o
-//   próprio erro.
-// Layer 3 (grounded AI): stateless second pass of the SAME resident model,
-//   no persona, (question, answer, evidence). Never runs without evidence.
-//
-// Regras herdadas do projeto / project-settled constraints honored here:
-//   • uma ÚNICA mensagem system, no índice 0 (template Qwen/Qwythos);
-//   • piso de tokens de decisão (o raciocínio come ~185 antes do JSON);
-//   • fail-open: se o verificador falhar, a resposta original fica como está;
-//   • a saída do verificador nunca é verificada de novo (sem loop).
-// ─────────────────────────────────────────────────────────────────────────────
 
 const DECISAO_TOKENS   = Number(process.env.CHAT_DECISAO_TOKENS   || 600);
 const VERIF_EVID_MIN   = Number(process.env.VERIF_EVID_MIN        || 50);    // evidência menor que isso não ancora nada
@@ -30,8 +6,6 @@ const VERIF_RESP_MAX   = Number(process.env.VERIF_RESP_MAX        || 3000);
 const VERIF_PERG_MAX   = Number(process.env.VERIF_PERG_MAX        || 1000);
 const VERIF_TIMEOUT_MS = Number(process.env.VERIF_TIMEOUT_MS      || 25000);
 
-// ── util: número em formato BR ou US → Number ────────────────────────────────
-// "263.857" → 263857 · "1.234,56" → 1234.56 · "3,5" → 3.5 · "791571" → 791571
 export function parseNumero(txt) {
   if (txt == null) return NaN;
   let s = String(txt).trim();
@@ -48,10 +22,6 @@ export function parseNumero(txt) {
   return Number.isFinite(n) ? n : NaN;
 }
 
-// ── Camada 2a: refazer contas escritas na resposta ───────────────────────────
-// Procura padrões "número operador número = número" e recalcula em JS.
-// A mesma classe de erro do "2+2=2": o modelo escreve a conta e erra o
-// resultado. Comparação com tolerância para decimais arredondados.
 export function conferirContas(resposta) {
   const problemas = [];
   if (!resposta) return problemas;
@@ -81,17 +51,6 @@ export function conferirContas(resposta) {
   return problemas;
 }
 
-// ── Camada 2b: nomes citados existem na evidência? ───────────────────────────
-// Pega identificadores citados na resposta (entre crases, ou "nome()") e
-// confere se aparecem no que o ler_codigo/busca realmente retornou. É o que
-// pegaria o `lerFileSync` inventado: a resposta afirma um símbolo que não
-// está em lugar nenhum do material lido.
-//
-// Cuidados contra falso positivo:
-//   • só roda com evidência não-trivial (>= VERIF_EVID_MIN chars);
-//   • token que aparece na PERGUNTA é pulado (a pessoa pode perguntar por
-//     algo que não existe, e a resposta "X não existe" citaria X);
-//   • comparação também sem "()" e case-insensitive como fallback.
 export function conferirNomes(resposta, evidencia, pergunta = "") {
   const problemas = [];
   if (!resposta || !evidencia || evidencia.length < VERIF_EVID_MIN) return problemas;
@@ -119,15 +78,6 @@ export function conferirNomes(resposta, evidencia, pergunta = "") {
   return [...new Set(problemas)];
 }
 
-// ── Camada 2c: comandos citados existem de verdade? ──────────────────────────
-// A Judy recomendou `&assistente automod` — subcomando que não existe (os
-// reais são rapido/completo/canais/protecao). Quem digitou caiu no menu
-// genérico e a recomendação virou beco. A checagem compara `&comando sub`
-// citados na resposta contra o registro REAL (passado por quem chama):
-//   • base desconhecida → problema ("&assistencia");
-//   • subcomando inválido → problema, mas SÓ para comandos cujo conjunto de
-//     subcomandos é fechado e conhecido (senão "&mute João" viraria falso
-//     positivo — João não é subcomando, é argumento).
 export function conferirComandos(resposta, comandos) {
   const problemas = [];
   if (!resposta || !comandos?.bases?.size) return problemas;
@@ -149,20 +99,9 @@ export function conferirComandos(resposta, comandos) {
   }
   return [...new Set(problemas)];
 }
-// ── Camada 2d: respondeu à pessoa certa? ─────────────────────────────────────
-// A Judy passou uma conversa inteira chamando a Mangetsuki de "Ghiso" — os
-// turnos eram anônimos e o único nome à vista era o do dono. O turno agora
-// leva rótulo, mas rótulo é prompt, e prompt não segura comportamento: isto
-// aqui segura. Vocativo (nome no começo, ou depois de vírgula/travessão,
-// seguido de pontuação) dirigido a alguém que NÃO é quem falou → problema.
-// Nome citado na própria pergunta é pulado: falar SOBRE alguém é normal.
 export function conferirDestinatario(resposta, autor, pergunta = "") {
   const problemas = [];
   if (!resposta || !autor) return problemas;
-  // Só vocativo DEPOIS de vírgula/travessão: no meio da frase, maiúscula é
-  // quase sempre nome próprio. Início de frase fica de fora de propósito —
-  // "Entendi, ..." é indistinguível de "Mangetsuki, ..." por posição, e falso
-  // positivo aqui custa mais que o caso perdido.
   const reVocativo = /[,—–-]\s+([A-ZÀ-Þ][a-zà-þ]{2,20})\s*[,.!?—–:]/g;
   const pergLower = (pergunta || "").toLowerCase();
   const autorLower = String(autor).toLowerCase();
@@ -176,10 +115,6 @@ export function conferirDestinatario(resposta, autor, pergunta = "") {
   return [...new Set(problemas)].slice(0, 2);
 }
 
-// ── Camada 2e: negou capacidade que existe? ──────────────────────────────────
-// "N\u00e3o tenho acesso \u00e0 internet" \u00e9 mentira operacional em dois cen\u00e1rios: quando
-// a pessoa PEDIU busca (a ferramenta existe e o caminho devia t\u00ea-la usado) e
-// quando a evid\u00eancia mostra que a busca RODOU. Nos dois, \u00e9 problema.
 export function conferirNegacaoDeCapacidade(resposta, { pediuBusca = false, evidencia = "" } = {}) {
   if (!resposta) return [];
   const negou = /(n[\u00e3a]o|sem)\s+(tenho|tem|possuo)\s+(como\s+)?acess(o|ar)\s+([\u00e0a]\s+)?(internet|web)|n[\u00e3a]o\s+(consigo|posso)\s+(buscar|pesquisar|acessar\s+a\s+internet)|tempo\s+real/i.test(resposta);
@@ -189,7 +124,6 @@ export function conferirNegacaoDeCapacidade(resposta, { pediuBusca = false, evid
   return [];
 }
 
-// ── Camada 2 completa ────────────────────────────────────────────────────────
 export function verificarDeterministico({ resposta, evidencia = "", pergunta = "", comandos = null, autor = "", pediuBusca = false } = {}) {
   const problemas = [
     ...conferirContas(resposta),
@@ -200,12 +134,6 @@ export function verificarDeterministico({ resposta, evidencia = "", pergunta = "
   ];
   return { ok: problemas.length === 0, problemas };
 }
-
-// ── Camada 3: verificador de IA ancorado na evidência ────────────────────────
-// `chamarModelo(mensagens, { json, maxTokens })` é injetado pelo chat.js e
-// deve devolver a string da resposta do modelo (o wrapper que já existe).
-// Mantém o contrato do template: UMA system, índice 0. Fail-open: qualquer
-// erro (timeout, JSON quebrado, formato inesperado) devolve null e nada muda.
 
 const PROMPT_VERIFICADOR =
   "Você é um verificador interno. Você não conversa com pessoas e não tem nome. " +
@@ -264,10 +192,6 @@ export async function verificarComIA({ pergunta, resposta, evidencia, chamarMode
   }
 }
 
-// ── Orquestrador ─────────────────────────────────────────────────────────────
-// Camada 2 sempre; camada 3 só com evidência e wrapper injetado. Junta e
-// deduplica, teto de 5 problemas. `camadas` diz de onde veio cada achado —
-// útil no CHAT_DEBUG para saber o que a IA pegou que o código não pegou.
 export async function verificar({ pergunta = "", resposta = "", evidencia = "", comandos = null, autor = "", pediuBusca = false, chamarModelo = null, dlog = () => {} } = {}) {
   const det = verificarDeterministico({ resposta, evidencia, pergunta, comandos, autor, pediuBusca });
 

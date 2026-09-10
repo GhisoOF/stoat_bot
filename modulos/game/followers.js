@@ -1,14 +1,3 @@
-// ══════════════════════════════════════════════════════════
-//  followers.js — catálogo, classes e progressão dos NPCs
-//
-//  Quatro classes, cada uma com uma magia própria. Os atributos
-//  sobem automaticamente por nível conforme a classe — o jogador
-//  não distribui pontos de follower.
-//
-//  Como nos itens, o jogo nasce com um conjunto GENÉRICO para
-//  rodar antes da curadoria. Os curados entram depois sem parar
-//  nada, e conteúdo sai de circulação sendo descontinuado.
-// ══════════════════════════════════════════════════════════
 
 export const CLASSES = {
   combatente: {

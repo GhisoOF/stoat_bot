@@ -1,11 +1,3 @@
-// ══════════════════════════════════════════════════════════
-//  teste-tts.mjs — a peneira da transmissão e o entra/sai
-//
-//  Os casos "barulho" abaixo são mensagens REAIS do servidor, na noite
-//  em que a call travou. Se algum dia uma mudança na heurística voltar
-//  a deixá-las passar, este teste avisa antes do próximo &tts sair que
-//  não funciona.
-// ══════════════════════════════════════════════════════════
 
 process.env.BOT_TOKEN = "tok";
 process.env.DB_PATH = "/tmp/tts-teste.db";
@@ -22,7 +14,6 @@ import * as abrevMod from "./modulos/core/abreviacoes.js";
 let pass = 0, fail = 0;
 const ok = (cond, msg) => { cond ? pass++ : fail++; console.log(`${cond ? "✅" : "❌"} ${msg}`); };
 
-// ══ 1. A peneira: barulho ══
 console.log("\n── mensagens reais que travaram a call ──");
 const BARULHO = [
   ["9?99?999?9999?99999?9999999?999999999?", "pouca-variedade"],
@@ -51,7 +42,6 @@ for (const [txt, motivo] of BARULHO) {
 // parede de texto: a de 2000 chars do servidor
 ok(filtro.avaliar("Lalala ".repeat(300)).motivo === "parede", "🔇 parede de 2000+ caracteres");
 
-// ══ 2. A peneira: fala legítima (o mais importante) ══
 console.log("\n── nada disso pode ser calado ──");
 const FALA = [
   "ola", "teste", "prato", "paralelepípedo", "ok", "aa", "hm",
@@ -69,7 +59,6 @@ for (const txt of FALA) {
   ok(r.falar, `🔊 ${JSON.stringify(txt.slice(0, 40))}${r.falar ? "" : ` → CALADO por ${r.motivo}`}`);
 }
 
-// ══ 3. Teto por canal ══
 console.log("\n── teto por canal (o freio coletivo) ──");
 filtro.limpar();
 const t0 = 1_000_000;
@@ -92,7 +81,6 @@ let p2 = 0;
 for (let i = 0; i < 10; i++) if (filtro.registrarFala("C3", t0 + i * 1000, { porMinuto: 2 }).permitido) p2++;
 ok(p2 === 2, "teto por minuto é configurável (&tts filtro porminuto)");
 
-// ══ 4. Integração: aoMensagem não chama o serviço quando é barulho ══
 console.log("\n── integração com a transmissão ──");
 await import("./main.js");
 const c = globalThis.__client;
@@ -147,7 +135,6 @@ ok(chamadas.length === filtro.PADROES.porMinuto, `teto por canal corta em ${filt
 const avisou = enviados.filter((e) => String(e.title ?? "").includes("Muita coisa"));
 ok(avisou.length === 1, "avisa uma única vez no chat que vai ficar quieta");
 
-// ══ 5. Diagnóstico em etapas (voz-servico) ══
 console.log("\n── diagnóstico do serviço de voz ──");
 process.env.STOAT_API = "https://api.stoat.invalido";
 const voz = await import("./voz-servico/voz.js");
@@ -161,8 +148,6 @@ const responder = (mapa) => async (url) => {
     json: async () => JSON.parse(r.corpo) };
 };
 
-// Cenário do servidor: um 400 em HTML no join_call. Um proxy respondeu,
-// não a API — e o veredito NÃO pode acusar permissão de canal por isso.
 globalThis.fetch = responder({
   me: { ok: true, status: 200, corpo: '{"username":"Judy"}' },
   canal: { ok: true, status: 200, corpo: '{"channel_type":"VoiceChannel","name":"Call"}' },
@@ -191,9 +176,6 @@ globalThis.fetch = responder({ me: { ok: false, status: 401, corpo: '{"type":"In
 d = await voz.diagnosticar("01JVOZ00000000000000000000");
 ok(et("api+token")?.ok === false, "token inválido falha logo na etapa 1");
 
-// Um canal de call no Stoat É um TextChannel: a etapa "canal" só verifica se
-// dá para LER o canal. Julgar o tipo aqui apontava um culpado inexistente e
-// mandava reconfigurar um canal que estava certo.
 globalThis.fetch = responder({
   me: { ok: true, status: 200, corpo: '{"username":"Judy"}' },
   canal: { ok: true, status: 200, corpo: '{"channel_type":"TextChannel","name":"Call"}' },
@@ -230,12 +212,9 @@ ok(et("join_call")?.ok === true, "join_call autorizado é reportado como sucesso
 ok(!JSON.stringify(d).includes("SEGREDO-QUE-NAO-PODE-VAZAR"), "  → o token do LiveKit NUNCA vai para o resultado (isto vai parar num chat)");
 ok(et("join_call")?.detalhe.includes("token") && et("join_call")?.detalhe.includes("url"), "  → mas os CAMPOS recebidos são mostrados");
 ok(et("livekit-tcp")?.ok === false, "  → e o alcance do LiveKit é testado de verdade");
-// Este teste roda SEM a flag (é o Node padrão), então o diagnóstico deve
-// acusar a falta — que é justamente o comportamento útil no serviço real.
 ok(d.flagNode === (typeof globalThis.navigator === "undefined" ? "ok" : "FALTA --no-experimental-global-navigator"),
   `confere a flag do Node e reporta o que encontrou (${d.flagNode})`);
 
-// ══ 6. Erro de digitação não vira fala ══
 console.log("\n── &tts <palavra errada> ──");
 const CANAL_VOZ2 = "01JVOZ00000000000000000000";
 const respostas = [];
@@ -252,8 +231,6 @@ const msgCmd = { channelId: "C9", authorId: "U1", channel: { id: "C9" }, author:
 let chamou = 0;
 globalThis.fetch = async () => { chamou++; return { ok: true, status: 200, json: async () => ({ ok: true }) }; };
 
-// `diagnosticar` agora É um subcomando (foi o que ele digitou de verdade):
-// tem de RODAR o diagnóstico, não virar fala nem sugestão.
 respostas.length = 0; chamou = 0;
 await tts.cmdTts(msgCmd, ["diagnosticar"], ctxCmd);
 ok(chamou === 1, "`&tts diagnosticar` roda o diagnóstico (não fala a palavra)");
@@ -284,11 +261,6 @@ for (const frase of [["oi"], ["teste"], ["bom", "dia"], ["paralelepípedo"]]) {
   ok(chamou === 1, `fala legítima não é confundida: ${JSON.stringify(frase.join(" "))}`);
 }
 
-// ══ 7. Um comando só: entrar já lê a call ══
-//
-//  Antes eram quatro, na ordem certa: `tts on`, `tts canal aqui`,
-//  `tts transmitir aqui`, `tts entrar`. Errar a ordem dava um erro que
-//  falava de outro comando.
 console.log("\n── &tts entrar faz tudo ──");
 const CALL = "01JCALL0000000000000000AA";
 const rotas = [];
@@ -329,10 +301,6 @@ rotas.length = 0;
 await tts.aoMensagem({ channelId: CALL, authorId: "U2", content: "ainda tem alguem?", author: { username: "Alguem" } }, ctxE);
 ok(rotas.length === 0, "  → e nada mais é enviado ao serviço");
 
-// A call é a do canal onde a pessoa digitou — inclusive em canal de texto,
-// porque no Stoat qualquer canal pode ter uma call. Se não houver call ali,
-// o join_call falha com uma mensagem clara; melhor do que adivinhar em
-// silêncio e entrar na call errada, que foi o que aconteceu no servidor.
 respE.length = 0; rotas.length = 0;
 const canalTexto = { id: "01JTXT0000000000000000AAAA", name: "geral", type: "TextChannel", sendMessage: async () => ({ id: "m" }) };
 const msgNoTexto = { channelId: canalTexto.id, authorId: "U1", channel: canalTexto, author: { username: "G" } };
@@ -350,16 +318,8 @@ const ctxC = { ...ctxE, config: { language: "pt", tts: { ativo: false, canalVoz:
 await tts.cmdTts({ channelId: categoria.id, authorId: "U1", channel: categoria, author: { username: "G" } }, ["entrar"], ctxC);
 ok(ctxC.config.tts.canalVoz === canalCall.id, "de um canal que não comporta call, cai para a única que existe");
 
-// ══ 8. AlreadyConnected — a causa real do servidor ══
-//
-//  O diagnóstico no servidor devolveu:
-//    join_call → HTTP 400 · AlreadyConnected (crates/core/database/src/voice)
-//  O Stoat guarda que o bot está numa call e recusa toda entrada nova. Não é
-//  permissão nem rede: é registro preso do lado dele.
 console.log("\n── AlreadyConnected ──");
 
-// O canal de call do Stoat é um TextChannel com voz — não um "VoiceChannel".
-// Supor o contrário fazia `entrar` recusar justamente o canal certo.
 const callReal = { id: "01JCALLR000000000000000AA", name: "Call", type: "TextChannel", sendMessage: async () => ({ id: "m" }) };
 const respA = [];
 const cfgA = { language: "pt", tts: { ativo: false, canalVoz: "01JVELHO000000000000000AA", canalTexto: null, filtro: true, cooldown: 0 } };
@@ -402,12 +362,6 @@ await tts.cmdTts(msgNaCallReal, ["destravar"], ctxA);
 ok(urlsDestravar.some((u) => u.includes("/destravar")), "`&tts destravar` chama o serviço");
 ok(String(respA.at(-1)?.description).includes("PATCH"), "  → e mostra o pedido que saiu");
 
-// ══ 8b. &tts resgatar — a porta dos fundos do AlreadyConnected ══
-//
-//  destravar/kick/cliente leem a chave `{bot}:{servidor}` e não apagam o
-//  conjunto `vc:{bot}`. O mover (PATCH voice_channel) emite token sem conferir
-//  esse conjunto; o token vem pelo evento UserMoveVoiceChannel. O comando tem
-//  de: entrar na auxiliar → PATCH mover → capturar o token → /entrar-com-token.
 console.log("\n── &tts resgatar ──");
 {
   const aux = { id: "01JAUXIL000000000000000AA", name: "Lounge", type: "TextChannel", voice: {}, isVoice: true,
@@ -459,12 +413,6 @@ console.log("\n── &tts resgatar ──");
   ok(/auxiliar/.test(String(respR.at(-1)?.description)), "sem outra call no servidor, pede a auxiliar");
 }
 
-// ══ 8c. &tts entrar resgata SOZINHO, pulando auxiliar presa ══
-//
-//  No servidor: "Call" e "call staff" presas ao mesmo tempo. O resgate
-//  escolheu "Call" como auxiliar, pendurou 20s e parou. Agora: o serviço
-//  devolve AlreadyConnected na hora, o bot pula para a próxima candidata, e
-//  tudo isso acontece dentro do `entrar`, sem a pessoa saber de resgate.
 console.log("\n── entrar → resgate automático ──");
 {
   const presaB = { id: "01JPRESAB00000000000000AA", name: "Call", type: "TextChannel", voice: {}, isVoice: true, voiceParticipants: new Map() };
@@ -521,11 +469,6 @@ console.log("\n── entrar → resgate automático ──");
   ok(chamadasE.some((c) => c.u.endsWith("/falar")), "  → mas uma frase longa com uma palavra parecida continua sendo fala");
 }
 
-// ══ 8e. Os ajustes da fala existem de verdade ══
-//
-//  `&tts dicionario add vish vixi` FALAVA "dicionario adicionar vish vixi":
-//  o subcomando nunca tinha sido implementado, só documentado no &help. E o
-//  próprio dicionário expandia o "add" no caminho.
 console.log("\n── ajustes da fala ──");
 {
   const respD = [];
@@ -599,13 +542,6 @@ console.log("\n── ajustes da fala ──");
   ok(cfgD.tts.expandir === false, "`dicionario padrao off` desliga as embutidas");
 }
 
-// ══ 9. O destrave: auto-desconexão ══
-//
-//  O Stoat não tem rota de "sair da call" — só `join_call` e `stop_ring`. O
-//  único caminho que desconecta alguém é
-//    PATCH /servers/{s}/members/{u}  com  remove: ["VoiceChannel"]
-//  que exige MoveMembers, EXCETO quando o alvo é quem pede. Então o bot
-//  consegue se desconectar sozinho, e só a si mesmo.
 console.log("\n── destrave por auto-desconexão ──");
 const pedidos = [];
 globalThis.fetch = async (url, op) => {
@@ -628,11 +564,6 @@ const semServidor = await voz.forcarSaida("01JCALLR000000000000000AA", null);
 ok(semServidor.ok === false, "sem serverId, não tenta às cegas");
 ok(semServidor.passos.some((p) => String(p.erro ?? "").includes("serverId")), "  → e o relatório diz o que faltou");
 
-// ══ 10. O corpo do /users/@me não cabia em 160 caracteres ══
-//
-//  O relatório corta o corpo em 160 chars para caber no embed — e eu fazia o
-//  JSON.parse NESSE texto cortado. Resultado: "não descobri meu próprio id"
-//  com HTTP 200 ao lado, em toda resposta maior que isso. E a do /users/@me é.
 console.log("\n── id do bot em resposta longa ──");
 const perfilLongo = JSON.stringify({
   _id: "01JBOTAA00000000000000AAAA", username: "Judy", discriminator: "0800",
@@ -684,13 +615,6 @@ ok(pm?.corpo?.voice_channel === "01JCALLNOVA00000000000AAA",
   "  → via voice_channel no PRÓPRIO membro (dispensa MoveMembers, como o remove)");
 ok(!pm?.corpo?.remove, "  → e sem remover nada: é uma mudança, não uma saída");
 
-// ══ 11. A "verificação" era ela mesma uma entrada ══
-//
-//  Eu conferia o destrave com um POST /join_call. Só que join_call não é um
-//  teste: ele cria a sala no LiveKit e devolve um token de entrada de
-//  verdade. Conferir assim plantava justamente o estado que eu queria
-//  remover — uma vez por servidor. O relatório do servidor mostrou nove
-//  desses seguidos, todos 400.
 console.log("\n── o destrave não pode plantar o problema ──");
 const perfil = JSON.stringify({ _id: "01JBOTAA00000000000000AAAA", username: "Judy",
   avatar: { _id: "y".repeat(90), filename: "a.png" }, bot: { owner: "01JDONO0000000000000000AA" } });
@@ -706,10 +630,6 @@ ok(rv.ok === true, "o destrave pede a desconexão e relata");
 ok(!chamadasD.some((c) => c.url.includes("/join_call")),
   "★ o destrave NUNCA chama join_call (isso criaria a sala e o registro de novo)");
 
-// Vários servidores: bate em TODOS. O HTTP 200 dessa rota não prova nada
-// (member_edit.rs só age se a chave `{bot}:{servidor}` apontar para uma call,
-// e devolve 200 igual quando não aponta), então parar no primeiro 200 deixava
-// o registro preso num segundo servidor sem nem tentar.
 chamadasD.length = 0;
 await voz.forcarSaida("01JCALLR000000000000000AA", "01JSRVA00000000000000000AA",
   ["01JSRVA00000000000000000AA", "01JSRVB00000000000000000AA", "01JSRVC00000000000000000AA"]);
@@ -717,12 +637,6 @@ const patches = chamadasD.filter((c) => c.metodo === "PATCH");
 ok(patches.length === 3, `★ tenta em todos os servidores — 200 não é prova (foram ${patches.length} PATCH, não 1)`);
 ok(new Set(patches.map((c) => c.url)).size === 3, "  → um PATCH por servidor, sem repetir");
 
-// ══ 12. UnknownNode: a call que ainda não existe ══
-//
-//  `let node = existing_node.or(node).ok_or(UnknownNode)?;`
-//  O Stoat só sabe em qual servidor de voz a call está depois que alguém a
-//  inicia. Antes disso, quem entra precisa DIZER qual usar — e o revoice não
-//  diz. Era por isso que chamar o bot para uma call vazia travava.
 console.log("\n── UnknownNode (call vazia) ──");
 const vistas = [];
 globalThis.fetch = async (url, op) => {
@@ -750,13 +664,6 @@ const jcTeste = vistas.find((v) => v.url.includes("/join_call"));
 ok(jcTeste?.corpo?.node === "eu-west",
   "★ e manda o node no join_call — sem isso, uma call que não começou acusa UnknownNode à toa");
 
-// ══ 11. O serviço curto-circuita o AlreadyConnected ══
-//
-//  O join_call de abrir a sala já diz `AlreadyConnected`; o revoice faria o
-//  mesmo pedido, engoliria o mesmo 400 e penduraria 20s. Agora a entrada
-//  falha na hora, com o nome certo — é o que deixa o bot pular para a próxima
-//  auxiliar em ~1s em vez de 20s.
-// (por último: deixa cache de nodes e id do bot, que os cenários anteriores não esperam)
 console.log("\n── serviço: AlreadyConnected na hora ──");
 {
   const pedidos = [];

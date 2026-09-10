@@ -1,15 +1,3 @@
-// ══════════════════════════════════════════════════════════
-//  teste-scorecard.mjs — a nota de suspeita do &sentinela
-//
-//  O scorecard decide quem é punido, e não tinha teste nenhum. O que ele
-//  precisa acertar são DUAS coisas em tensão: pegar o golpe e não pegar a
-//  conversa normal. Um teste que só verificasse a primeira levaria a subir
-//  pesos até tudo virar suspeito.
-//
-//  Por isso cada regra nova aqui vem com os casos honestos que se parecem
-//  com ela. Se um deles começar a ser sinalizado, o teste quebra — que é
-//  exatamente o aviso que se quer receber antes de o servidor receber.
-// ══════════════════════════════════════════════════════════
 import { analisarConteudo, PESOS } from "./modulos/moderacao/scorecard.js";
 
 let pass = 0, fail = 0;
@@ -22,11 +10,6 @@ const nota = (t) => analisarConteudo(t).nota;
 const sinaliza = (t, limiar = LIMIAR.media) => nota(t) >= limiar;
 const sinais = (t) => analisarConteudo(t).sinais.join(",");
 
-// ══ 1. O golpe que passou batido ══
-//
-//  Mensagem real, recebida no servidor: nota 3,0 e nenhum sinal útil. Não
-//  tem link, não tem "ganhe dinheiro fácil", não tem urgência — é comedida e
-//  empresarial. O que a denuncia é a estrutura da proposta.
 console.log("── o golpe do 'trabalho' (mensagem real) ──");
 const GOLPE_REAL = `I am looking for real collaborator. [No technical skills or prior experience required]
 Collaboration Method:
@@ -42,7 +25,6 @@ const s = analisarConteudo(GOLPE_REAL).sinais;
 ok(s.some((x) => x.startsWith("conta_alheia")), "  → o sinal do núcleo aparece: a conta tem de ser a da vítima");
 ok(s.some((x) => x.startsWith("conj_")), "  → e a conjunção, que é o que separa golpe de proposta comum");
 
-// ══ 2. As mesmas peças, em português ══
 console.log("\n── o mesmo golpe em português ──");
 for (const [nome, texto] of [
   ["proposta completa", "Procuro colaborador, sem experiência necessária. Vou usar sua conta do Mercado Pago e dividimos 50% do lucro. O dinheiro cai direto na sua conta."],
@@ -62,11 +44,6 @@ for (const [nome, texto] of [
   ok(sinaliza(texto), `${nome} → ${nota(texto)}/10 [${sinais(texto)}]`);
 }
 
-// ══ 3. O que NÃO pode ser sinalizado ══
-//
-//  Esta é a metade que impede a regra de virar um problema maior que o que
-//  ela resolve. Cada caso aqui contém UMA das peças do golpe, do jeito que
-//  ela aparece em conversa honesta.
 console.log("\n── conversa honesta continua passando ──");
 for (const [nome, texto] of [
   ["parceria de verdade", "to procurando um parceiro pro projeto, a gente divide 50/50 o que sair"],
@@ -83,8 +60,6 @@ for (const [nome, texto] of [
   ok(!sinaliza(texto), `${nome} → ${nota(texto)}/10 (não sinaliza)`);
 }
 
-// Nem na sensibilidade mais agressiva a conversa honesta deve virar punição
-// em massa: aqui o limiar é 4, então basta uma peça a mais para estourar.
 console.log("\n── e na sensibilidade alta (limiar 4) ──");
 for (const [nome, texto] of [
   ["parceria de verdade", "to procurando um parceiro pro projeto, a gente divide 50/50 o que sair"],
@@ -94,10 +69,6 @@ for (const [nome, texto] of [
   ok(!sinaliza(texto, LIMIAR.alta), `${nome} → ${nota(texto)}/10`);
 }
 
-// ══ 4. Quem AVISA sobre o golpe não pode ser punido por isso ══
-//
-//  O caso mais fácil de errar: a descrição de um golpe contém as mesmas
-//  palavras que o golpe. É para isso que existe o peso negativo de `negacao`.
 console.log("\n── quem alerta sobre o golpe ──");
 for (const [nome, texto] of [
   ["alerta simples", "cuidado, tem gente pedindo pra usar sua conta do linkedin e dividir lucro, é golpe"],
@@ -107,10 +78,6 @@ for (const [nome, texto] of [
   ok(!sinaliza(texto), `${nome} → ${nota(texto)}/10 [${sinais(texto)}]`);
 }
 
-// ══ 5. As regras antigas continuam de pé ══
-//
-//  Mexer em pesos é o tipo de mudança que estraga o que já funcionava sem
-//  ninguém perceber, porque a nota é uma soma só.
 console.log("\n── o que já era detectado continua sendo ──");
 for (const [nome, texto] of [
   ["nitro grátis", "free nitro clique aqui bit.ly/xxx"],
@@ -128,7 +95,6 @@ for (const [nome, texto] of [
   ok(!sinaliza(texto), `${nome} → ${nota(texto)}/10`);
 }
 
-// ══ 6. Limites da nota ══
 console.log("\n── a nota fica sempre entre 0 e 10 ──");
 ok(nota("") === 0, "texto vazio é 0");
 ok(nota(GOLPE_REAL + GOLPE_REAL + GOLPE_REAL) === 10, "★ acumular sinais nunca passa de 10");

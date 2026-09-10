@@ -1,15 +1,3 @@
-// teste-gating-ia.mjs — a IA não existe fora do Vapor Nexus
-//
-// A regra: fora do servidor com IA, a única menção é UMA linha informativa no
-// &info (onde a IA funciona e o que faz, sem tom de convite). Fora isso —
-// nem tutorial, nem &info, nem &help, nem a recusa de comando (que dizia
-// "faz parte dos recursos de IA" e virava convite a perguntar onde). Dentro,
-// tudo continua lá, com a visão anunciada. Executa os comandos DE VERDADE nos
-// dois idiomas — a lição do embedIdioma: só node --check não pega helper
-// inexistente.
-//
-// Smoke do gating: fora do servidor com IA, NENHUMA menção a Judy/IA pode
-// escapar em &tutorial e &info — e dentro dele, a Judy tem que aparecer.
 process.env.CHAT_SERVIDORES = "01KH9SJYWVD7XAHJ28TP0YP4Q0";   // só o Vapor Nexus
 const geral = await import("./modulos/moderacao/geral.js");
 const tutorial = await import("./modulos/moderacao/tutorial.js");
@@ -47,9 +35,6 @@ for (const lang of ["pt", "en"]) {
   r = await coletar(tutorial.cmdTutorial, DENTRO, lang, ["ia"]);
   caso(`tutorial ia ${lang} dentro: Judy presente com visão`, /Judy/.test(r.txt) && /imagens|images/i.test(r.txt));
 
-  // &info: fora, zero menção; dentro, a linha da IA com leitura de imagens
-  // O &info é a ÚNICA superfície que menciona a IA fora do servidor dela:
-  // uma linha informativa (onde funciona + o que faz), sem tom de convite.
   r = await coletar(geral.cmdSobre, FORA, lang);
   caso(`info ${lang} fora: informa o servidor oficial e as funções`,
     /Vapor Nexus/.test(r.txt) && /leitura de imagens|image reading/.test(r.txt));

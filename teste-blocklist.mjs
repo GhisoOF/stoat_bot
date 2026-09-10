@@ -1,8 +1,3 @@
-// ══════════════════════════════════════════════════════════
-//  teste-blocklist.mjs — índice compacto de domínios (anti-link)
-//  Cobre: hash/busca, dedupe, compatibilidade com o parse antigo,
-//  download em streaming, proteção contra downgrade e cache em disco.
-// ══════════════════════════════════════════════════════════
 import http from "node:http";
 import fs from "node:fs";
 import os from "node:os";

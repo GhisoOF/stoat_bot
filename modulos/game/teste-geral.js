@@ -1,16 +1,3 @@
-// ══════════════════════════════════════════════════════════
-//  teste-geral.js — &game admin teste
-//
-//  Roda o jogo inteiro de ponta a ponta e diz o que funcionou.
-//
-//  Usa um personagem SANDBOX (id próprio, apagado no fim), para
-//  não mexer no seu progresso nem sujar o ranking. A economia do
-//  servidor é tocada de leve — o que o sandbox ganha e gasta é
-//  devolvido ao mercado ao limpar.
-//
-//  Serve para: depois de um deploy, confirmar em 10 segundos que
-//  nada quebrou; e para ver os números de balanceamento reais.
-// ══════════════════════════════════════════════════════════
 
 export const SANDBOX_PREFIXO = "sandbox:";
 
@@ -192,8 +179,6 @@ export async function rodarTesteGeral(ctx, serverId, donoId, deps) {
   return { linhas, ok, falhas, devolvido };
 }
 
-// Apaga tudo do sandbox e devolve a moeda dele ao mercado, para o teste não
-// inflar a economia do servidor.
 function limpar(db, serverId, uid) {
   let devolvido = 0;
   try {

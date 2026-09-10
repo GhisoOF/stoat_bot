@@ -1,19 +1,3 @@
-// ══════════════════════════════════════════════════════════
-//  itens-genericos.js — o catálogo inicial
-//
-//  Existe para o jogo rodar ANTES de a curadoria terminar. Cobre
-//  todas as raridades e slots, para o balanceamento poder ser
-//  testado de verdade.
-//
-//  Os COMUNS têm estoque infinito: a ideia é que ninguém fique sem
-//  equipamento básico. Isso também os torna um piso de preço — como
-//  sempre dá para comprar uma Espada de Ferro, ninguém consegue
-//  cobrar um absurdo por equivalente no mercado dos players.
-//
-//  Os itens curados entram depois, sem parar o jogo. Nada aqui é
-//  apagado quando isso acontecer: itens saem de circulação sendo
-//  DESCONTINUADOS, para não sumir da mochila de quem já tem.
-// ══════════════════════════════════════════════════════════
 
 export const GENERICOS = [
   // ── COMUM (estoque infinito) ──
@@ -53,8 +37,6 @@ export const GENERICOS = [
   { id: "g_anel_infinito",  nome: "Anel do Infinito", slot: "acessorio", raridade: "lendario", precoBase: 2800, bonus: { sorte: 8, carisma: 6 } },
 ];
 
-// Semeia o catálogo. Roda no boot; é idempotente (upsert por id), então
-// não duplica nada nem sobrescreve o que você curou depois.
 export function semear(db) {
   let n = 0;
   for (const item of GENERICOS) {

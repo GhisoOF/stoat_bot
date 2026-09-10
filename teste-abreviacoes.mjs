@@ -1,10 +1,3 @@
-// ══════════════════════════════════════════════════════════
-//  teste-abreviacoes.mjs — expansão de escrita de chat para fala
-//
-//  O risco aqui não é falhar em expandir: é expandir DEMAIS. Trocar um "n"
-//  dentro de "banana" destrói a palavra e ninguém entende a fala. Estes
-//  testes travam a fronteira de palavra, que é o que protege isso.
-// ══════════════════════════════════════════════════════════
 
 import { expandir, PADRAO, total } from "./modulos/core/abreviacoes.js";
 

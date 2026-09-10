@@ -1,37 +1,12 @@
-// ══════════════════════════════════════════════════════════
-//  rss.js — curadoria de notícias por RSS + resumo com LLM local
-//
-//  &rss                       → status (feeds, canal, próximo ciclo)
-//  &rss add <url>             → adiciona um feed RSS
-//  &rss remove <id|url>       → remove um feed
-//  &rss list                  → lista os feeds cadastrados
-//  &rss canal [aqui|<id>|off] → define o canal onde os resumos são postados
-//  &rss agora                 → força um ciclo imediato (teste)
-//
-//  A cada hora, o bot busca os itens NOVOS de cada feed. Se a IA estiver
-//  ligada, a Judy escreve um resumo geral (no tom dela) e depois lista os itens.
-//
-//  Restrições:
-//   • só funciona no servidor permitido (mesma allowlist do &chat)
-//   • teto de itens por ciclo: RSS_MAX_ITENS (padrão 50)
-//   • exige ManagePermissions para configurar
-// ══════════════════════════════════════════════════════════
 
 import * as db from "../core/db.js";
 import { ULID } from "../core/ids.js";
 import * as log from "../core/log.js";
 import { tr, lingua } from "../core/i18n.js";
 
-// Resumo por IA (injetado pelo main, usando o pipeline do chat). Se não for
-// configurado, o RSS posta os itens sem resumo (comportamento antigo).
 let resumirIA = null;
 export function configurarResumo(fn) { resumirIA = fn; }
 
-// Allowlist do RSS. Só limita se você definir RSS_SERVIDORES explicitamente.
-//
-// Antes isto herdava CHAT_SERVIDORES, o que prendia o RSS aos servidores com IA
-// sem motivo: o resumo da Judy é opcional — sem IA, o bot posta os itens do
-// mesmo jeito. Quem quiser limitar o RSS define RSS_SERVIDORES.
 const RSS_SERVIDORES = (process.env.RSS_SERVIDORES || "")
   .split(",").map((x) => x.trim()).filter(Boolean);
 function servidorPermitido(serverId) {
@@ -45,9 +20,6 @@ const INTERVALO_MS = Number(process.env.RSS_INTERVALO_MS || 3600_000);  // 1 hor
 // O canal de destino por servidor fica na config (rss.canalId).
 function getCanalId(config) { return config?.rss?.canalId ?? null; }
 
-// ── Parser de RSS ──────────────────────────────────────────
-// Usa rss-parser se estiver instalado; senão, cai num parser mínimo de regex.
-// Exportado para permitir testes injetarem um parser controlado.
 let ParserRSS = null;
 export const _interno = { parseFeed: null };   // gancho de teste (opcional)
 
@@ -131,8 +103,6 @@ async function coletarNovos(serverId) {
   return novos;
 }
 
-// ── Executa um ciclo de curadoria para um servidor ─────────
-// (Sem IA: apenas posta os itens novos no canal configurado.)
 export async function rodarCiclo(serverId, ctx, { forcado = false } = {}) {
   if (!servidorPermitido(serverId)) return { ok: false, motivo: "servidor não permitido" };
 
@@ -161,13 +131,6 @@ export async function rodarCiclo(serverId, ctx, { forcado = false } = {}) {
   const cicloEn = config?.language === "en";
   const agora = new Date().toLocaleString(cicloEn ? "en-US" : "pt-BR", { timeZone: process.env.TZ || "UTC" });
 
-  // ── Resumo com IA, um bloco POR CATEGORIA ──
-  //
-  //  Antes tudo virava um apanhado único: "kernel novo" e "novela nova"
-  //  disputavam as mesmas 3 frases, e o resultado não especificava nada.
-  //  Agrupando pela categoria do feed (sem categoria = "Geral"), cada bloco
-  //  fala só do próprio assunto — e como o material de cada um é menor, o
-  //  resumo tem espaço para dizer O QUE aconteceu, não só que aconteceu.
   if (resumirIA) {
     const grupos = new Map();
     for (const it of novos) {
@@ -183,7 +146,7 @@ export async function rodarCiclo(serverId, ctx, { forcado = false } = {}) {
         const material = itens.map((it, i) =>
           `${i + 1}. [${it.feedTitulo}] ${it.titulo}${it.resumo ? ` — ${it.resumo.slice(0, 250)}` : ""}`
         ).join("\n");
-        const resumo = await resumirIA(material, itens.length, { categoria: cat === "Geral" ? null : cat, lang: cicloEn ? "en" : "pt" });
+        const resumo = await resumirIA(material, itens.length, { categoria: cat === "Geral" ? null : cat, lang: cicloEn ? "en" : "pt", serverId: serverId ?? null });
         if (resumo && resumo.trim()) {
           const rotulo = cat === "Geral" ? "" : ` · ${cat}`;
           await canal.sendMessage({ embeds: [{
@@ -198,8 +161,6 @@ export async function rodarCiclo(serverId, ctx, { forcado = false } = {}) {
     }
   }
 
-  // Posta cada notícia como um item (título, feed, horário, link).
-  // Agrupa em blocos para não exceder o limite do embed.
   const linhas = novos.map((it) => {
     const quando = it.data ? new Date(it.data).toLocaleString(cicloEn ? "en-US" : "pt-BR", { timeZone: process.env.TZ || "UTC" }) : "—";
     return `**${it.titulo}**\n${it.feedTitulo} · ${quando}${it.link ? `\n${it.link}` : ""}`;
@@ -237,7 +198,6 @@ export async function rodarCiclo(serverId, ctx, { forcado = false } = {}) {
   return { ok: true, quantidade: novos.length };
 }
 
-// ── Agendador: dispara o ciclo a cada hora ─────────────────
 let timer = null;
 export function iniciarAgendador(ctx) {
   if (timer) return;
@@ -262,9 +222,6 @@ export function iniciarAgendador(ctx) {
   console.log(`[RSS] agendador ligado (a cada ${Math.round(INTERVALO_MS / 60000)} min)`);
 }
 
-// ──────────────────────────────────────────────────────────
-//  Comando &rss
-// ──────────────────────────────────────────────────────────
 export async function cmdRss(message, args, ctx) {
   const { sendEmbed, COR, getServer, membroTemPermissao, PREFIXO, serverId, config, salvarConfig } = ctx;
   const lang = lingua(ctx);

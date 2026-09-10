@@ -1,24 +1,3 @@
-// ══════════════════════════════════════════════════════════
-//  fuso.js — &fuso (relógio do servidor, com vários fusos)
-//
-//  Nasceu de uma necessidade concreta: servidor com gente no Brasil e na
-//  Europa, e todo combinado de horário virando conta de cabeça. A staff
-//  escolhe as cidades uma vez; qualquer pessoa consulta quando quiser.
-//
-//   &fuso                      → as cidades e a hora AGORA em cada uma
-//   &fuso ver <cidade>         → hora de uma cidade qualquer, sem configurar
-//   &fuso add <cidade>         → inclui na lista       (ManageMessages)
-//   &fuso remove <cidade>      → tira da lista
-//   &fuso apelido <cidade> <texto> → rótulo exibido no lugar do nome
-//   &fuso principal <cidade>   → referência das diferenças ("3h à frente")
-//   &fuso formato <12|24>
-//   &fuso limpar
-//   &fuso buscar <termo>       → procura cidades sem alterar nada
-//
-//  A lista é ordenada por fuso (do mais atrasado ao mais adiantado), e
-//  não pela ordem de adição: ler um relógio mundial fora de ordem é
-//  desconfortável, e a ordem geográfica é a que o olho espera.
-// ══════════════════════════════════════════════════════════
 
 import { buscarFuso, fusoValido, agoraEm, diferenca, cidadeDoFuso } from "../core/fusos.js";
 import { tr, lingua } from "../core/i18n.js";
@@ -251,8 +230,6 @@ export async function cmdFuso(message, args, ctx) {
   // ── &fuso apelido <cidade> <texto> ──
   if (["apelido", "nome", "rotulo", "rótulo", "alias", "label", "name"].includes(sub)) {
     const partes = resto.split(/\s+/);
-    // O nome da cidade pode ter espaços ("São Paulo"), então testamos todos
-    // os pontos de corte possíveis — o mesmo cuidado dos nomes de companheiro.
     let alvo = null, texto = "";
     for (let corte = partes.length; corte >= 1; corte--) {
       const tentativa = partes.slice(0, corte).join(" ");
@@ -337,8 +314,6 @@ export async function cmdFuso(message, args, ctx) {
       { title: "🕐 List cleared",    description: "No city configured.", colour: COR.sucesso }));
   }
 
-  // ── atalho: `&fuso <cidade>` funciona como `&fuso ver <cidade>` ──
-  // Se a pessoa digitou algo que é uma cidade, ela quis a hora de lá.
   const talvezCidade = buscarFuso(args.join(" "));
   if (talvezCidade.exato) {
     const t = agoraEm(talvezCidade.exato, { lang, formato24: cfg.formato24 });

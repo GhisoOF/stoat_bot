@@ -1,30 +1,11 @@
 import { CORES as CORES_NOMEADAS, normalizarCor } from "../core/cores.js";
 import { ULID } from "../core/ids.js";
 import { validarUrlImagem, comoExibir, formatarLinkConteudo } from "../core/midia.js";
-// ══════════════════════════════════════════════════════════
-//  embed.js — &embed (mensagem embed customizável)
-//
-//  Sintaxe por campos "chave: valor", um por linha:
-//
-//    &embed
-//    titulo: Regras do servidor
-//    descricao: Seja legal com todos.
-//    Use várias linhas à vontade.
-//    cor: #5865F2
-//    canal: 01ABC...            (opcional; padrão = canal atual)
-//    rodape: Equipe de moderação (opcional)
-//    imagem: https://...        (opcional)
-//
-//  Também aceita `\n` no meio de um valor para quebra de linha.
-//  Exige ManageMessages.
-// ══════════════════════════════════════════════════════════
 
 import * as log from "../core/log.js";
 import { tr, lingua } from "../core/i18n.js";
 
 // Converte "#RRGGBB" ou nome comum em cor aceita pelo embed
-
-
 
 export async function cmdEmbed(message, args, ctx) {
   const { sendEmbed, COR, getServer, membroTemPermissao, PREFIXO, client } = ctx;
@@ -90,10 +71,6 @@ export async function cmdEmbed(message, args, ctx) {
     });
   }
 
-  // ── Normalização tolerante ────────────────────────────────
-  // As pessoas escrevem de tudo: com parênteses/chaves em volta, vírgula no
-  // fim de cada campo, tudo numa linha só, chaves em inglês. Em vez de falhar
-  // silenciosamente, a gente aceita e limpa.
   let corpoLimpo = corpo;
   // 1) tira um par de ( ), { } ou [ ] envolvendo o bloco inteiro
   const env = corpoLimpo.match(/^\s*[([{]\s*([\s\S]*?)\s*[)\]}]\s*$/);
@@ -131,8 +108,6 @@ export async function cmdEmbed(message, args, ctx) {
       else if (chave === "canal") { campos.canal = valor.replace(/[<#>]/g, "").trim(); emDescricao = false; }
       else if (chave === "imagem") { campos.imagem = valor.trim(); emDescricao = false; }
     } else if (m && chaveBruta && !chave) {
-      // Dentro da descrição, "Palavra: algo" é texto normal (ex.: "Exemplo: X").
-      // Só avisa quando a linha parece um campo mal escrito fora da descrição.
       if (emDescricao) campos.descricao.push(linha);
       else avisos.push(lang === "en" ? `\`${chaveBruta}\` is not a valid field` : `\`${chaveBruta}\` não é um campo válido`);
     } else if (emDescricao) {
@@ -179,9 +154,6 @@ export async function cmdEmbed(message, args, ctx) {
     ...(descricao ? { description: descricao } : {}),
     colour: cor,
   };
-  // Imagem de capa: passa pelo mesmo validador das boas-vindas — recusa
-  // endereços de rede interna (o bot enxerga a rede de casa) e links que não
-  // são imagem, avisando em vez de deixar o embed sair quebrado.
   let imagemValidada = null;
   if (campos.imagem) {
     const v = validarUrlImagem(campos.imagem);
@@ -196,8 +168,6 @@ export async function cmdEmbed(message, args, ctx) {
   }
   if (campos.rodape) embed.description = (embed.description ?? "") + `\n\n_${campos.rodape}_`;
 
-  // Anexo do Stoat vira capa do embed (campo `media`, que espera o ID do
-  // Autumn); link de fora vai no conteúdo, para o Stoat pré-visualizar.
   const exibicao = imagemValidada ? comoExibir(imagemValidada) : null;
   const payload = { embeds: [embed] };
   if (exibicao?.modo === "media") payload.embeds = [{ ...embed, media: exibicao.id }];

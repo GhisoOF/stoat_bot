@@ -1,10 +1,3 @@
-// ══════════════════════════════════════════════════════════
-//  config-store.js — Gestão da configuração
-//  • Config POR SERVIDOR (automod, punição, whitelist, idioma)
-//  • Config GLOBAL compartilhada (debug, blocklist)
-//  Persistência via db.js (SQLite). Migra o automod-config.json
-//  antigo na primeira execução.
-// ══════════════════════════════════════════════════════════
 
 import { readFileSync } from "node:fs";
 import * as db from "./db.js";
@@ -22,8 +15,6 @@ export const padraoServidor = {
     antiLink:        { enabled: false, punicao: null },
     antiCaracteres:  { enabled: true, limiteZalgo: 0.6, punicao: null },
     antiRepeticao:   { enabled: false, maxRepeticao: 15, ignorar: "k", punicao: null },
-    // O "sentinela" (nome antigo: antiScam) é o único módulo que JULGA em vez
-    // de medir — por isso é o único com rigor variável por antiguidade.
     antiScam: {
       enabled: false, sensitivity: "media", alertChannelId: null, punicao: null,
       porAntiguidade: true,   // limiar acompanha o nível do membro
@@ -53,15 +44,8 @@ export const padraoServidor = {
       comandos:  false,       // ruidoso: começa desligado
     },
   },
-  // ── Acesso aos comandos ────────────────────────────────
   acesso: {
-    // Cargos que valem como "staff": quem tiver um deles usa os comandos de
-    // moderação mesmo sem a permissão nativa do Stoat. Vazio = só as permissões.
     cargosStaff: [],
-    // Onde os comandos funcionam:
-    //   "todos"   → em qualquer canal (padrão)
-    //   "somente" → só nos canais da lista
-    //   "exceto"  → em todos, menos os da lista
     canais: { modo: "todos", lista: [] },
     // Staff escapa da restrição de canal (para moderar de qualquer lugar).
     staffIgnoraCanais: true,
@@ -69,9 +53,6 @@ export const padraoServidor = {
   // ── Lista global de banimentos (&banglobal) ──
   banGlobal: {
     modo: "off",              // off | avisar | banir  (padrão: nada automático)
-    // Pessoas que este servidor ACEITA apesar da lista global. A lista é
-    // feita do critério de moderação de OUTROS servidores; às vezes ele não
-    // é o seu. Quem está aqui não é banido nem aparece na varredura.
     isentos: [],
   },
   // ── Comandos desativados neste servidor (nomes canônicos) ──
@@ -80,8 +61,6 @@ export const padraoServidor = {
   rss: { canalId: null },
   autorole: { roleId: null },   // cargo dado automaticamente a quem entra
   chatLivre: { canais: [], modo: "relevante" },    // "relevante" = só o que julgar importante; "todas" = toda mensagem
-  // Comentário espontâneo: a Judy solta um comentário sobre a conversa em
-  // andamento, por iniciativa, num canal escolhido. Com freios de frequência.
   comentarioEspontaneo: {
     canalId:    null,     // canal único onde ela comenta (null = desligado)
     porDia:     4,        // teto de comentários espontâneos por dia
@@ -136,8 +115,6 @@ function mesclarServidor(salvo, tpl) {
       ...(salvo.acesso ?? {}),
       canais: { ...tpl.acesso.canais, ...(salvo.acesso?.canais ?? {}) },
     },
-    // A chave era "game"; virou "xp". Aceitamos a antiga para não perder a
-    // configuração de quem já usava (migração silenciosa, sem quebrar nada).
     xp: { ...tpl.xp, ...(salvo.xp ?? salvo.game ?? {}) },
     automod: {
       ...am, ...s,

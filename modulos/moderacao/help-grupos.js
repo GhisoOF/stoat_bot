@@ -1,24 +1,3 @@
-// ══════════════════════════════════════════════════════════
-//  help-grupos.js — a árvore do &help, organizada por INTENÇÃO
-//
-//  Antes o índice listava categorias por módulo interno ("geral",
-//  "config", "ferramentas") — faz sentido para quem escreveu o bot,
-//  não para quem acabou de criar um servidor. Agora os grupos são
-//  as perguntas que a pessoa traz:
-//
-//   🚀 começar       — "acabei de adicionar o bot, e agora?"
-//   🛡️ proteger      — "como evito spam, golpe, invasão?"
-//   🎨 personalizar  — "boas-vindas, cargos, cor, embed, relógio"
-//   🎮 diversão      — "XP, conversa com a Judy, voz"
-//   🎲 rpg           — o jogo completo
-//   🔧 diagnóstico   — "algo não funciona"
-//   👑 dono          — só para o dono do bot (não aparece aos demais)
-//
-//  Os nomes antigos (`&help moderacao`, `&help config`…) continuam
-//  funcionando via ALIAS_GRUPO, para não quebrar o hábito de ninguém.
-//
-//  Marque com IA_TAG a linha que só faz sentido onde a IA roda.
-// ══════════════════════════════════════════════════════════
 
 import { IA_TAG } from "./help-arvore.js";
 
@@ -141,6 +120,7 @@ function gruposPT(P) {
         `\`${P}chat livre on|off\` — ela entra sozinha na conversa deste canal` + IA_TAG,
         `\`${P}chat comentar aqui|off\` — comenta por iniciativa própria` + IA_TAG,
         `\`${P}chat perfil [@pessoa]\` · \`${P}chat esquecer [tudo]\` — o que ela lembra` + IA_TAG,
+        `\`${P}personalidade\` — vê/define o prompt de personalidade da IA *(ManageServer)*` + IA_TAG,
         "",
         "**Voz**",
         `\`${P}tts entrar\` — dentro da call: ela entra e lê tudo que for escrito ali`,
@@ -305,6 +285,7 @@ function gruposEN(P) {
         `\`${P}chat <message>\` — talk (or just mention the bot)` + IA_TAG,
         `\`${P}chat livre on|off\` — she joins this channel's conversation on her own` + IA_TAG,
         `\`${P}chat comentar aqui|off\` — comments on her own initiative` + IA_TAG,
+        `\`${P}personality\` — view/set the AI personality prompt *(ManageServer)*` + IA_TAG,
         `\`${P}chat perfil [@user]\` · \`${P}chat esquecer [tudo]\` — what she remembers` + IA_TAG,
         "",
         "**Voice**",

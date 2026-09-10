@@ -1,11 +1,3 @@
-// ══════════════════════════════════════════════════════════
-//  teste-xp-cargos.mjs — cargos de nível de quem sai e volta
-//
-//  O caso real: alguém banido no nível 14 voltou sem nenhum cargo. O XP
-//  estava intacto, mas os cargos só seriam devolvidos ao chegar no 15 —
-//  semanas depois. Estes testes travam a devolução automática na entrada
-//  e o conserto em massa.
-// ══════════════════════════════════════════════════════════
 
 process.env.BOT_TOKEN = "tok";
 process.env.DB_PATH = "/tmp/xpc-teste.db";

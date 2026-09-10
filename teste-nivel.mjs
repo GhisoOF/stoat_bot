@@ -1,8 +1,3 @@
-// ══════════════════════════════════════════════════════════
-//  teste-nivel.mjs — a memoização da curva de XP NÃO pode mudar
-//  nenhum número: mesmo XP → mesmo nível, para qualquer config.
-//  Compara a implementação nova com a fórmula original, força bruta.
-// ══════════════════════════════════════════════════════════
 
 // fórmula ORIGINAL (copiada tal como era, para servir de gabarito)
 function xpParaNivelOriginal(nivel, base = 100, mult = 1.5) {
@@ -17,8 +12,6 @@ function nivelPorXpOriginal(xp, mult = 1.5, nivelMax = 100, base = 100) {
   return nivel;
 }
 
-// implementação NOVA (mesma lógica interna do nivel.js — reimplementada aqui
-// porque as funções são privadas do módulo; o teste de boot cobre a integração)
 const _tab = new Map();
 function tabelaXp(base, mult, ateNivel) {
   const k = `${base}|${mult}`;

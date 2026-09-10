@@ -1,9 +1,3 @@
-// ══════════════════════════════════════════════════════════
-//  automod-comandos.js — LÓGICA LEVE do AutoMod
-//  Apenas os comandos de configuração (respostas em embed e
-//  ajustes na config). A análise pesada fica no automod-engine.js.
-//  BILÍNGUE: textos escolhidos por ctx.config.language.
-// ══════════════════════════════════════════════════════════
 import { rebuildBlocklist, DOMINIO_VALIDO, simularDeteccao, removerCargoSilence } from "./automod-engine.js";
 import * as engine from "./automod-engine.js";
 import * as db  from "../core/db.js";
@@ -11,10 +5,6 @@ import { limparId } from "../core/ids.js";
 import * as log from "../core/log.js";
 import { analisarConteudo } from "./scorecard.js";
 import { tr, lingua } from "../core/i18n.js";
-
-// ══════════════════════════════════════════════════════════
-//  COMANDOS
-// ══════════════════════════════════════════════════════════
 
 // %warnings [@usuário]
 export async function cmdWarnings(message, args, ctx) {
@@ -91,8 +81,6 @@ export async function cmdAutomod(message, args, ctx) {
     antimassmention: "antiMassMention",
     anticaps:        "antiCaps",
     antilink:        "antiLink",
-    // O filtro que julga conteúdo chama-se `sentinela` (antes `antiscam`,
-    // nome que ainda é aceito ao digitar, mas não aparece mais nas listas).
     sentinela:       "antiScam",
     anticaracteres:  "antiCaracteres",
     antirepeticao:   "antiRepeticao",
@@ -468,8 +456,6 @@ export async function cmdBlocklist(message, args, ctx) {
   }));
 }
 
-// %scam <config|mode|punishment|sensitivity|channel|silencerole|ban|dismiss|test>
-// (ManagePermissions)
 export async function cmdScam(message, args, ctx) {
   const { config, sendEmbed, COR, getServer, membroTemPermissao, salvarConfig, PREFIXO } = ctx;
   const lang = lingua(ctx);
@@ -535,9 +521,6 @@ export async function cmdScam(message, args, ctx) {
     });
   }
 
-  // Liga/desliga o rigor por antiguidade e o alerta à staff.
-  // `&sentinela on|off` — o mesmo que `&automod sentinela on|off`. O tutorial
-  // sempre ensinou assim; faltava o comando aceitar.
   if (["on", "off", "ligar", "desligar", "enable", "disable"].includes(sub)) {
     const ligar = ["on", "ligar", "enable"].includes(sub);
     cfg.enabled = ligar;
@@ -725,9 +708,6 @@ export async function cmdScam(message, args, ctx) {
     { title: "❌ Unknown subcommand", description: `Use \`${PREFIXO}scam config\` to see the options.`, colour: COR.erro }));
 }
 
-// ══════════════════════════════════════════════════════════
-//  &punicao — política de punição GLOBAL (todos os automods)
-// ══════════════════════════════════════════════════════════
 export async function cmdPunicao(message, args, ctx) {
   const { config, sendEmbed, COR, getServer, membroTemPermissao, salvarConfig, PREFIXO } = ctx;
   const lang = lingua(ctx);
@@ -893,14 +873,6 @@ export async function cmdPunicao(message, args, ctx) {
         description: `Role used to silence: \`${pol.silenceRoleId}\` (used in \`confirmar\` mode).`, colour: COR.sucesso }));
   }
 
-  // ── Subcomando que não existe AQUI, mas existe ali ──
-  //
-  //  `&punicao test <texto>` foi digitado de verdade, porque a ajuda do
-  //  sentinela dizia "a punição vem do &punicao. `test <texto>` mostra a
-  //  nota" — duas frases coladas que se leem como uma. Mandar a pessoa
-  //  reler o `status` não resolve: o que ela quer existe, só mora em
-  //  outro comando. Então a resposta diz onde, já com o texto que ela
-  //  digitou, em vez de fazê-la procurar.
   const NOUTRO_COMANDO = {
     test: "sentinela", testar: "sentinela", simulate: "sentinela", simular: "sentinela",
     sensitivity: "sentinela", sensibilidade: "sentinela", limiar: "sentinela",
@@ -952,7 +924,6 @@ export async function cmdPunicao(message, args, ctx) {
   }));
 }
 
-// ── Helper interno de negação de permissão ─────────────────
 function negarPermissao(ctx, channel, permName) {
   return ctx.sendEmbed(channel, tr(ctx, {
     title: "🚫 Permissão insuficiente",

@@ -2,26 +2,8 @@ import { limparId, ULID } from "../core/ids.js";
 import * as db from "../core/db.js";
 import { CORES as NOMES, normalizarCor as corSolida, nomesDeCor } from "../core/cores.js";
 import { tr, lingua } from "../core/i18n.js";
-// ══════════════════════════════════════════════════════════
-//  cor-cargo.js — &cor
-//
-//  Customiza a cor dos cargos, inclusive com GRADIENTE.
-//
-//  Por que via REST e não pelo SDK: o campo `colour` do cargo no
-//  Stoat aceita qualquer valor CSS válido — e é isso que permite
-//  `linear-gradient(...)`. O SDK trata cor como hex simples, então
-//  falamos direto com a API:
-//
-//    PATCH https://api.stoat.chat/servers/{serverId}/roles/{roleId}
-//    Header: X-Bot-Token
-//    Body:   { "colour": "<qualquer cor CSS>" }
-//
-//  Armadilha conhecida: escrever `gradient(...)` em vez de
-//  `linear-gradient(...)` devolve 400. A validação avisa antes.
-// ══════════════════════════════════════════════════════════
 
 const API = (process.env.STOAT_API || "https://api.stoat.chat").replace(/\/$/, "");
-
 
 // Gradientes prontos — o atalho para o efeito bonito sem montar nada.
 const PRESETS = {
@@ -39,16 +21,12 @@ const PRESETS = {
   trans:        "linear-gradient(90deg, #5BCEFA 0%, #F5A9B8 33%, #FFFFFF 50%, #F5A9B8 67%, #5BCEFA 100%)",
 };
 
-// Emoji sugerido para cada preset — usado ao montar o painel de cargos por
-// reação, para você não precisar escolher um a um.
 const EMOJI_PRESET = {
   "arco-iris": "🏳️‍🌈", fogo: "🔥", oceano: "🌊", neon: "🚨", vaporwave: "🚬",
   poente: "🌅", floresta: "🌳", ouro: "🥇", cyberpunk: "🌆", sangue: "🩸",
   gelo: "🧊", trans: "🏳️‍⚧️",
 };
 
-
-// ── Monta um linear-gradient a partir de 2+ cores ─────────
 function montarGradiente(cores, angulo = 90) {
   const paradas = cores.map((c, i) => {
     const pct = cores.length === 1 ? 0 : Math.round((i / (cores.length - 1)) * 100);
@@ -57,7 +35,6 @@ function montarGradiente(cores, angulo = 90) {
   return `linear-gradient(${angulo}deg, ${paradas.join(", ")})`;
 }
 
-// ── Valida um CSS colado pelo usuário ─────────────────────
 function validarCss(txt) {
   const t = txt.trim();
   // erro clássico: `gradient(...)` sem o `linear-`
@@ -73,7 +50,6 @@ function validarCss(txt) {
   return null;   // não reconhecido: quem chamou decide o que fazer
 }
 
-// ── Acha o cargo por ID ou por nome ───────────────────────
 function acharCargo(server, alvo) {
   const limpo = limparId(alvo);
   if (ULID.test(limpo)) {
@@ -91,7 +67,6 @@ function acharCargo(server, alvo) {
   return exato ?? parcial ?? null;
 }
 
-// ── Chamada à API ─────────────────────────────────────────
 async function aplicarCor(serverId, roleId, colour) {
   const token = process.env.BOT_TOKEN;
   if (!token) return { ok: false, erro: "BOT_TOKEN não está definido no ambiente do bot." };
@@ -116,7 +91,6 @@ async function aplicarCor(serverId, roleId, colour) {
   }
 }
 
-// ══════════════════════════════════════════════════════════
 export async function cmdCor(message, args, ctx) {
   const { sendEmbed, COR, PREFIXO: P, getServer, membroTemPermissao, serverId } = ctx;
   const lang = lingua(ctx);

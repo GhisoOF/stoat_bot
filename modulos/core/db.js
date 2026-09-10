@@ -1,29 +1,10 @@
-// ══════════════════════════════════════════════════════════
-//  db.js — Persistência com SQLite embutido (node:sqlite)
-//  Zero dependências nativas: o SQLite vem dentro do Node.
-//  Arquivo do banco em DB_PATH (padrão ./stoat.db; no container,
-//  /data/stoat.db, dentro do volume persistente).
-//
-//  Fase 1: tabela `config` (por servidor + linhas especiais
-//  __global__ e __default__). Fases 2/3 acrescentam `punicoes`
-//  e `bans_globais` — já deixo as tabelas criadas.
-// ══════════════════════════════════════════════════════════
 
 import { DatabaseSync } from "node:sqlite";
 
 let db = null;
 
-// ── Cache de prepared statements ──
-// prep() COMPILA o SQL toda vez que é chamado. Este arquivo tem ~140
-// consultas, várias no caminho quente (getXp roda em TODA mensagem) — antes,
-// cada mensagem recompilava as mesmas consultas de novo e de novo. Aqui cada
-// SQL é compilado UMA vez e o statement é reutilizado dali em diante: menos
-// CPU, menos lixo para o GC, mesma semântica (.get/.all/.run materializam o
-// resultado, nada fica com cursor aberto entre chamadas).
 const _stmts = new Map();
 const _STMTS_MAX = 512;   // teto de segurança: os SQLs "dinâmicos" (SET de
-                          // colunas variáveis do RPG) vêm de conjuntos finitos,
-                          // mas com o teto o cache é limitado POR CONSTRUÇÃO.
 function prep(sql) {
   let s = _stmts.get(sql);
   if (!s) {
@@ -62,8 +43,6 @@ export function abrirBanco(caminho) {
     )
   `);
 
-  // Migração: `silencioAte` chegou depois da escada de punição progressiva.
-  // Bases criadas antes não têm a coluna, e sem ela todo mute vira permanente.
   try {
     const cols = prep("PRAGMA table_info(punicoes)").all().map((c) => c.name);
     if (!cols.includes("silencioAte")) {
@@ -85,13 +64,6 @@ export function abrirBanco(caminho) {
   `);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_bans_user ON bans_globais (userId)`);
 
-  // O nome de quem foi banido, guardado NO MOMENTO do ban.
-  //
-  // Antes a lista só tinha o ID, e a exibição virava `<@ID>` — que o cliente
-  // renderiza como "Unknown User" quando a pessoa não está mais em nenhum
-  // servidor em comum. Ou seja: exatamente nos casos que mais importam (gente
-  // banida, que saiu), a lista ficava ilegível. Quem registra o ban sabe o
-  // nome; guardá-lo ali é a única hora em que ele está garantidamente à mão.
   try {
     const cols = prep("PRAGMA table_info(bans_globais)").all().map((c) => c.name);
     if (!cols.includes("userNome")) {
@@ -104,15 +76,6 @@ export function abrirBanco(caminho) {
     }
   } catch (e) { console.error("[DB] migração bans_globais:", e.message); }
 
-  // ── Quem NUNCA deve entrar na lista global ──
-  //
-  //  `esquecer` só apagava as linhas. Mas a lista é realimentada o tempo
-  //  todo: qualquer ban novo em qualquer servidor, e a importação a cada 6h,
-  //  trazem a pessoa de volta — e foi exatamente isso que aconteceu com o
-  //  AutoMod, esquecido num dia e reposto no outro por um ban de outra
-  //  pessoa. Uma decisão de "este não pertence à lista" precisa sobreviver
-  //  aos bans seguintes, senão não é decisão nenhuma: é uma limpeza que a
-  //  próxima sincronização desfaz.
   db.exec(`
     CREATE TABLE IF NOT EXISTS banglobal_ignorados (
       userId    TEXT PRIMARY KEY,
@@ -134,27 +97,16 @@ export function abrirBanco(caminho) {
     )
   `);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_rr_msg ON reaction_roles (messageId)`);
-  // Modo EXCLUSIVO por mensagem: 1 = escolher um emoji troca o cargo anterior
-  // (útil para "escolha sua cor"); 0 = acumula (útil para "seus interesses").
   try {
     const cols = prep("PRAGMA table_info(reaction_roles)").all().map((c) => c.name);
     if (!cols.includes("exclusivo")) {
       db.exec("ALTER TABLE reaction_roles ADD COLUMN exclusivo INTEGER NOT NULL DEFAULT 0");
     }
-    // Guardar o canal permite recarregar a mensagem no boot: sem ela em cache,
-    // a lib não emite o evento de reação e os cargos param de ser entregues.
     if (!cols.includes("channelId")) {
       db.exec("ALTER TABLE reaction_roles ADD COLUMN channelId TEXT");
     }
-    // A ORDEM em que os emojis foram configurados. É a ordem em que eles
-    // aparecem na mensagem, e a única forma de recolocá-los como estavam
-    // quando um some. Não dá para confiar no `rowid`: o `INSERT OR REPLACE`
-    // do `addReactionRole` apaga e reinsere a linha, jogando a regra
-    // reeditada para o fim.
     if (!cols.includes("ordem")) {
       db.exec("ALTER TABLE reaction_roles ADD COLUMN ordem INTEGER");
-      // Regras que já existiam: o rowid atual é a melhor aproximação que
-      // temos da ordem original, e é melhor que nada.
       db.exec("UPDATE reaction_roles SET ordem = rowid WHERE ordem IS NULL");
     }
   } catch (e) { console.error("[DB] migração reaction_roles:", e.message); }
@@ -170,9 +122,6 @@ export function abrirBanco(caminho) {
       UNIQUE (serverId, url)
     )
   `);
-  // (RSS) categoria por feed: os resumos saem agrupados por ela, em vez de
-  // um apanhado único em que "kernel novo" e "novela nova" disputam a mesma
-  // frase. Feed sem categoria cai no grupo "Geral".
   try {
     const colsRss = prep("PRAGMA table_info(rss_feeds)").all().map((c) => c.name);
     if (!colsRss.includes("categoria")) {
@@ -222,24 +171,11 @@ export function abrirBanco(caminho) {
     )
   `);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_iahist_user ON ia_historico (userId, momento)`);
-  // Migração: o histórico nasceu global por usuário — sem servidor, sem canal
-  // e sem prazo de validade. Isso produziu uma falha visível: perguntada
-  // "poderia apresentar-se?", a Judy devolveu uma calculadora em Lua de uma
-  // hora antes. As 12 últimas mensagens (incluindo uma resposta `assistant`
-  // cortada no meio de um bloco de código) entravam no prompt como se fossem
-  // a conversa em curso, e o modelo completou o código em vez de responder.
-  //
-  // Também era vazamento entre servidores: a mesma pessoa em dois servidores
-  // compartilhava um único histórico.
   for (const [col, tipo] of [["serverId", "TEXT"], ["canalId", "TEXT"]]) {
     try { db.exec(`ALTER TABLE ia_historico ADD COLUMN ${col} ${tipo}`); } catch { /* já existe */ }
   }
-  // As linhas antigas não têm como ser atribuídas a um servidor ou canal —
-  // e são justamente as contaminadas. Saem.
   try { db.exec(`DELETE FROM ia_historico WHERE serverId IS NULL`); } catch {}
   db.exec(`CREATE INDEX IF NOT EXISTS idx_iahist_escopo ON ia_historico (userId, serverId, canalId, momento)`);
-  // (IA) memória de LONGO PRAZO — fatos aprendidos observando o chat.
-  // Fatos sobre PESSOAS (por usuário) e sobre o SERVIDOR (piadas internas, eventos).
   db.exec(`
     CREATE TABLE IF NOT EXISTS ia_fatos_pessoa (
       id        INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -263,16 +199,12 @@ export function abrirBanco(caminho) {
     )
   `);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_fatosservidor ON ia_fatos_servidor (serverId)`);
-  // (IA) categoria nos fatos de pessoa: 'personalidade' | 'gosto' | 'info' | 'geral'.
-  // Migração segura: adiciona a coluna se ainda não existir.
   try {
     const cols = prep("PRAGMA table_info(ia_fatos_pessoa)").all().map((c) => c.name);
     if (!cols.includes("categoria")) {
       db.exec("ALTER TABLE ia_fatos_pessoa ADD COLUMN categoria TEXT DEFAULT 'geral'");
     }
   } catch (e) { console.error("[DB] migração categoria:", e.message); }
-  // (IA) perfil do usuário: dados do cartão (bio, grupos, jogos, status) + flag
-  // opt-in de "tratar com extra cuidado". Um registro por (servidor, usuário).
   db.exec(`
     CREATE TABLE IF NOT EXISTS ia_perfil (
       serverId    TEXT NOT NULL,
@@ -355,10 +287,6 @@ export function abrirBanco(caminho) {
     )
   `);
 
-  // ── RPG: mochila do companheiro ──
-  // O follower carrega os próprios itens, que somam nos atributos DELE. É o
-  // que faz um companheiro comum virar útil sem precisar de mais níveis, e dá
-  // destino para o equipamento que você já superou em vez de ir tudo revendido.
   db.exec(`
     CREATE TABLE IF NOT EXISTS rpg_follower_itens (
       followerId INTEGER NOT NULL,
@@ -368,9 +296,6 @@ export function abrirBanco(caminho) {
     )
   `);
 
-  // ── RPG: magias aprendidas pelo jogador ──
-  // O catálogo em si vive no código (magias.js): é conteúdo do jogo, não
-  // dado do servidor. Aqui fica só quem aprendeu o quê.
   db.exec(`
     CREATE TABLE IF NOT EXISTS rpg_magias (
       serverId  TEXT NOT NULL,
@@ -449,11 +374,6 @@ export function abrirBanco(caminho) {
     )
   `);
 
-  // ── RPG: mercado entre jogadores ──
-  //
-  // Toda oferta guarda o que está em jogo em CUSTÓDIA: o item/moeda sai da
-  // carteira de quem anuncia e só volta se cancelar. Sem isso, dá para
-  // anunciar o que não se tem e dar calote.
   db.exec(`
     CREATE TABLE IF NOT EXISTS rpg_ofertas (
       id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -497,7 +417,6 @@ export function abrirBanco(caminho) {
   return db;
 }
 
-// ── Config (JSON por chave) ────────────────────────────────
 export function lerConfig(serverId) {
   const row = prep("SELECT json FROM config WHERE serverId = ?").get(serverId);
   if (!row) return null;
@@ -513,9 +432,6 @@ export function listarServidoresConfig() {
   return prep("SELECT serverId FROM config").all().map((r) => r.serverId);
 }
 
-// ── Punições persistentes por (servidor, usuário) ──────────
-// Sobrevivem a restart do bot E a sair/reentrar no servidor.
-
 export function lerPunicao(serverId, userId) {
   return prep(
     "SELECT avisos, silenciado, silencioAte, motivo FROM punicoes WHERE serverId = ? AND userId = ?"
@@ -524,8 +440,6 @@ export function lerPunicao(serverId, userId) {
 
 // Grava (cria ou atualiza) o estado de punição do usuário
 export function gravarPunicao(serverId, userId, { avisos = 0, silenciado = 0, motivo = null, silencioAte = null }) {
-  // `silencioAte` null preserva o valor que já estava lá: quem chama para
-  // somar um aviso não deve, sem querer, apagar o prazo de um mute em curso.
   const anterior = silencioAte === null
     ? (prep("SELECT silencioAte FROM punicoes WHERE serverId = ? AND userId = ?")
         .get(serverId, userId)?.silencioAte ?? 0)
@@ -572,17 +486,10 @@ export function estaSilenciado(serverId, userId) {
   return (lerPunicao(serverId, userId)?.silenciado ?? 0) === 1;
 }
 
-// ── Silêncio com PRAZO ────────────────────────────────────
-// A escada de punição precisa de mute temporário (5 min, 1 h). Guardar o
-// vencimento no banco — e não num timer em memória — é o que faz o prazo
-// sobreviver a reinício do bot: um mute de 1 hora não pode virar permanente
-// só porque o processo caiu no meio.
 export function silenciarAte(serverId, userId, ate, motivo = null) {
   const atual = lerPunicao(serverId, userId);
   gravarPunicao(serverId, userId, {
     avisos: atual?.avisos ?? 0,
-    // Prazo 0 significa "sem prazo": aí o silêncio é permanente e a linha
-    // não deve ficar marcada como silenciada por engano.
     silenciado: ate > 0 ? 1 : (atual?.silenciado ?? 0),
     motivo: motivo ?? atual?.motivo ?? null,
     silencioAte: ate ?? 0,
@@ -599,22 +506,13 @@ export function silenciosVencidos(agora = Date.now()) {
     WHERE silenciado = 1 AND silencioAte > 0 AND silencioAte <= ?`).all(agora);
 }
 
-// ── Lista GLOBAL de banimentos (Fase 3) ────────────────────
-// Cada linha é um ban num servidor. O mesmo usuário pode
-// aparecer várias vezes (banido em vários servidores).
-// `origem`: "automod" | "manual" | "importado"
-
 export function registrarBanGlobal(userId, serverId, motivo, origem = "manual", { nome = null, ehBot = false } = {}) {
-  // A porta de entrada ÚNICA da lista — por isso o veto mora aqui, e não em
-  // cada um dos caminhos que registram bans (manual, automod, importação).
   if (estaIgnoradoGlobal(userId)) return false;
   // evita duplicar o mesmo (usuário, servidor)
   const existe = prep(
     "SELECT id, userNome FROM bans_globais WHERE userId = ? AND serverId = ?"
   ).get(userId, serverId);
   if (existe) {
-    // Não apaga um nome que já temos por causa de uma sincronização que veio
-    // sem ele: a lista fica legível para sempre depois da primeira vez.
     prep("UPDATE bans_globais SET motivo = ?, origem = ?, criadoEm = ?, userNome = ?, ehBot = ? WHERE id = ?")
       .run(motivo ?? null, origem, Date.now(), nome ?? existe.userNome ?? null, ehBot ? 1 : 0, existe.id);
     return false;  // já constava
@@ -652,14 +550,10 @@ export function removerBotsDaLista(bots = []) {
   if (!lista.length) return 0;
   const marcas = lista.map(() => "?").join(",");
   const r = prep(`DELETE FROM bans_globais WHERE userId IN (${marcas})`).run(...lista.map((b) => b.id));
-  // Marcados para sempre: um bot popular é banido em algum servidor mais cedo
-  // ou mais tarde, então sem isto a limpeza precisaria ser refeita toda semana.
   for (const b of lista) ignorarNaListaGlobal(b.id, { nome: b.nome ?? null, motivo: "é um bot" });
   return r.changes ?? 0;
 }
 
-// Candidatos para busca por NOME: a lista lembra quem ela conhece, então dá
-// para achar pelo nome mesmo quem não está em nenhum servidor em comum.
 export function buscarBanidosPorNome(termo) {
   const t = `%${String(termo ?? "").toLowerCase()}%`;
   return prep(
@@ -728,11 +622,6 @@ export function usuariosBanidosDistintos() {
   return prep("SELECT COUNT(DISTINCT userId) AS n FROM bans_globais").get()?.n ?? 0;
 }
 
-// Bans que ESTE servidor aplicou por uma certa origem. Serve para desfazer
-// uma varredura: os bans automáticos da lista global ficam com origem
-// "banglobal", separados dos manuais e dos importados — sem essa distinção
-// não haveria como distinguir "banido porque a lista mandou" de "banido
-// porque a moderação daqui decidiu", e desfazer viraria um chute.
 export function bansGlobaisPorOrigem(serverId, origens = ["banglobal"]) {
   if (!serverId) return [];
   const marcas = origens.map(() => "?").join(",");
@@ -742,9 +631,6 @@ export function bansGlobaisPorOrigem(serverId, origens = ["banglobal"]) {
   ).all(serverId, ...origens);
 }
 
-// Todo mundo que consta na lista, com em quantos servidores e quando foi a
-// vez mais recente. Agrupado por usuário: a lista tem uma linha por (pessoa,
-// servidor), e listar isso cru repetiria a mesma pessoa várias vezes.
 export function listarBanidosGlobais({ limite = 500, serverId = null } = {}) {
   if (serverId) {
     return prep(
@@ -761,22 +647,16 @@ export function listarBanidosGlobais({ limite = 500, serverId = null } = {}) {
   ).all(limite);
 }
 
-// Quantos registros da lista global vieram DESTE servidor — usado pelo
-// `&banglobal` para mostrar a contribuição do servidor sem precisar de
-// nenhum comando de importação.
 export function bansGlobaisDoServidor(serverId) {
   if (!serverId) return 0;
   return prep("SELECT COUNT(*) AS n FROM bans_globais WHERE serverId = ?").get(serverId)?.n ?? 0;
 }
 
-// ── Reaction roles ─────────────────────────────────────────
 export function addReactionRole(serverId, messageId, emoji, roleId, channelId = null) {
   // herda o modo e o canal já definidos para esta mensagem
   const atual = prep("SELECT exclusivo, channelId FROM reaction_roles WHERE messageId = ? LIMIT 1").get(messageId);
   const exclusivo = atual?.exclusivo ?? 0;
   const canal = channelId ?? atual?.channelId ?? null;
-  // Reeditar uma regra existente NÃO a manda para o fim da fila: quem já
-  // tinha posição, mantém. Só quem é novo entra no fim.
   const posicao = prep("SELECT ordem FROM reaction_roles WHERE messageId = ? AND emoji = ?").get(messageId, emoji)?.ordem
     ?? ((prep("SELECT MAX(ordem) AS m FROM reaction_roles WHERE messageId = ?").get(messageId)?.m ?? 0) + 1);
   prep(`INSERT OR REPLACE INTO reaction_roles (serverId, messageId, emoji, roleId, exclusivo, channelId, ordem)
@@ -812,8 +692,6 @@ export function getReactionRole(messageId, emoji) {
 }
 
 export function listReactionRoles(messageId) {
-  // Sempre na ordem de configuração: é ela que a mensagem mostra, e é o que
-  // permite recompor o painel do jeito que estava.
   return prep("SELECT emoji, roleId, exclusivo FROM reaction_roles WHERE messageId = ? ORDER BY ordem, rowid").all(messageId);
 }
 
@@ -827,7 +705,6 @@ export function removeReactionRolesMensagem(messageId) {
   return r.changes ?? 0;
 }
 
-// ── Curadoria RSS ──────────────────────────────────────────
 export function addFeed(serverId, url, titulo, categoria = null) {
   const r = prep(`INSERT OR IGNORE INTO rss_feeds (serverId, url, titulo, criadoEm, categoria)
                         VALUES (?, ?, ?, ?, ?)`).run(serverId, url, titulo ?? null, new Date().toISOString(), categoria ?? null);
@@ -882,7 +759,6 @@ export function limparVistosAntigos(dias = 30) {
   return r.changes ?? 0;
 }
 
-// ── Game (XP / níveis) ─────────────────────────────────────
 export function getXp(serverId, userId) {
   return prep("SELECT xp, nivel, ultimaMsg FROM xp_usuarios WHERE serverId = ? AND userId = ?")
            .get(serverId, userId) ?? { xp: 0, nivel: 0, ultimaMsg: null };
@@ -930,7 +806,6 @@ export function limparCargosNivel(serverId) {
   return prep("DELETE FROM xp_cargos WHERE serverId = ?").run(serverId).changes ?? 0;
 }
 
-// ── IA: memória por usuário (global) ───────────────────────
 export function getMemoria(userId) {
   const r = prep("SELECT nome, fatos, atualizado FROM ia_memoria WHERE userId = ?").get(userId);
   if (!r) return { nome: null, fatos: [], atualizado: null };
@@ -951,7 +826,6 @@ export function limparMemoria(userId) {
   return prep("DELETE FROM ia_memoria WHERE userId = ?").run(userId).changes ?? 0;
 }
 
-// ── IA: histórico curto de conversa (continuidade) ─────────
 export function addHistorico(userId, papel, conteudo, { serverId = null, canalId = null } = {}) {
   prep("INSERT INTO ia_historico (userId, serverId, canalId, papel, conteudo, momento) VALUES (?, ?, ?, ?, ?, ?)")
     .run(userId, serverId, canalId, papel, conteudo.slice(0, 2000), new Date().toISOString());
@@ -961,10 +835,6 @@ export function addHistorico(userId, papel, conteudo, { serverId = null, canalId
   )`).run(userId, canalId, userId, canalId);
 }
 
-// O histórico é do par (pessoa, canal) e tem PRAZO. Continuidade é lembrar do
-// que se falou há pouco; retomar uma conversa de uma hora atrás como se ela
-// não tivesse acabado não é continuidade, é confusão — foi o que fez uma
-// pergunta de apresentação receber uma calculadora em Lua de volta.
 export function getHistorico(userId, limite = 6, { canalId = null, minutos = 30 } = {}) {
   const desde = new Date(Date.now() - minutos * 60_000).toISOString();
   const linhas = prep(
@@ -986,9 +856,6 @@ export function limparHistoricoServidor(serverId) {
   return prep("DELETE FROM ia_historico WHERE serverId = ?").run(serverId).changes ?? 0;
 }
 
-// ── Memória de longo prazo: FATOS sobre pessoas ────────────
-// Registra um fato observado. Se um fato muito parecido já existe (mesmo
-// começo), reforça (sobe confiança, incrementa vezes) em vez de duplicar.
 export function addFatoPessoa(serverId, userId, fato, confianca = 0.5, categoria = "geral") {
   const f = String(fato || "").trim();
   if (!f) return;
@@ -1068,8 +935,7 @@ export function apagarTudoDaPessoa(serverId, userId) {
 
 // Apaga TODA a memória da IA no servidor (fatos de pessoas, de servidor, perfis).
 export function apagarMemoriaServidor(serverId) {
-  // Quem tem registro NESTE servidor — coletado ANTES dos DELETEs, senão as
-  // tabelas de referência já estariam vazias quando fôssemos consultá-las.
+  // ids: coletado ANTES dos DELETEs — depois, as tabelas de referência já estariam vazias
   let idsDaqui = [];
   try {
     idsDaqui = prep(`SELECT userId FROM ia_perfil WHERE serverId = ?
@@ -1081,20 +947,7 @@ export function apagarMemoriaServidor(serverId) {
   const fp = prep("DELETE FROM ia_fatos_pessoa WHERE serverId = ?").run(serverId).changes ?? 0;
   const fs = prep("DELETE FROM ia_fatos_servidor WHERE serverId = ?").run(serverId).changes ?? 0;
   const pf = prep("DELETE FROM ia_perfil WHERE serverId = ?").run(serverId).changes ?? 0;
-  // O histórico curto também: sem isto, "esquecei tudo" dizia ter esquecido
-  // e a conversa anterior continuava chegando ao prompt na mensagem seguinte.
   const hi = prep("DELETE FROM ia_historico WHERE serverId = ?").run(serverId).changes ?? 0;
-  // ── A segunda memória, que ninguém apagava ────────────
-  //
-  //  `ia_memoria` é anterior ao agente de fatos e continuou sendo LIDA no
-  //  prompt (chat.js: "Você já conversou com esta pessoa antes. Memória…").
-  //  O `esquecer tudo` apagava quatro tabelas e não esta — então, depois de
-  //  uma limpeza que reportava "0 fato(s)", a Judy ainda sabia que o Arch era
-  //  o favorito de alguém.
-  //
-  //  Ela é chaveada só por `userId`, sem servidor: não há como limpar "só
-  //  deste servidor". Apagamos as linhas de quem tem registro AQUI, que é o
-  //  mais próximo do que o comando promete.
   let me = 0;
   try {
     for (const id of idsDaqui) me += prep("DELETE FROM ia_memoria WHERE userId = ?").run(id).changes ?? 0;
@@ -1102,7 +955,6 @@ export function apagarMemoriaServidor(serverId) {
   return { fatosPessoa: fp, fatosServidor: fs, perfis: pf, historico: hi, memoriaAntiga: me };
 }
 
-// ── Memória de longo prazo: FATOS sobre o servidor ─────────
 export function addFatoServidor(serverId, fato, confianca = 0.5) {
   const f = String(fato || "").trim();
   if (!f) return;
@@ -1133,9 +985,6 @@ export function getFatosServidor(serverId, { limite = 15, minConf = 0.4 } = {}) 
   ).all(serverId, minConf, limite);
 }
 
-
-// Migração: as tabelas de XP se chamavam game_* (o nome "game" passou a ser do
-// RPG). Renomeamos preservando os dados — ninguém perde o XP acumulado.
 function migrarTabelasGame() {
   for (const [antiga, nova] of [["game_xp", "xp_usuarios"], ["game_cargos", "xp_cargos"]]) {
     try {
@@ -1153,9 +1002,6 @@ function migrarTabelasGame() {
   }
 }
 
-// ══════════════════════════════════════════════════════════
-//  RPG — personagem
-// ══════════════════════════════════════════════════════════
 export const ATRIBUTOS = ["forca", "destreza", "resistencia", "agilidade",
   "vida", "mana", "inteligencia", "sorte", "carisma"];
 
@@ -1170,8 +1016,6 @@ export function criarPersonagem(serverId, userId, nome) {
   return getPersonagem(serverId, userId);
 }
 
-// Grava campos avulsos. Só aceita colunas conhecidas — nada de SQL montado
-// com nome vindo do usuário.
 const COLUNAS_OK = new Set([...ATRIBUTOS, "nome", "nivel", "xp", "pontos",
   "ultimaMissao", "recuperandoAte", "missoesFeitas"]);
 export function salvarPersonagem(serverId, userId, campos = {}) {
@@ -1193,14 +1037,8 @@ export function listarPersonagens(serverId, limite = 10) {
     WHERE serverId = ? ORDER BY nivel DESC, xp DESC LIMIT ?`).all(serverId, limite);
 }
 
-// ══════════════════════════════════════════════════════════
-//  RPG — itens, inventário e equipamento
-// ══════════════════════════════════════════════════════════
 export const SLOTS = ["arma", "capacete", "armadura", "acessorio1", "acessorio2", "acessorio3"];
 
-// ── Mochila do companheiro ────────────────────────────────
-// Capacidade pequena de propósito: escolher o que dar é a decisão
-// interessante; carregar tudo não seria.
 export const FOLLOWER_MOCHILA = 2;
 
 export function itensDoFollower(followerId) {
@@ -1221,7 +1059,6 @@ export function limparItensDoFollower(followerId) {
   return prep(`DELETE FROM rpg_follower_itens WHERE followerId = ?`).run(followerId).changes;
 }
 
-// ── Magias do jogador ─────────────────────────────────────
 export function aprenderMagia(serverId, userId, magiaId) {
   prep(`INSERT OR IGNORE INTO rpg_magias (serverId, userId, magiaId, criadoEm)
     VALUES (?, ?, ?, ?)`).run(serverId, userId, magiaId, Date.now());
@@ -1356,9 +1193,6 @@ export function slotDoItem(serverId, userId, itemId) {
     .get(serverId, userId, itemId)?.slot ?? null;
 }
 
-// ══════════════════════════════════════════════════════════
-//  RPG — followers
-// ══════════════════════════════════════════════════════════
 export function upsertFollowerCatalogo(f) {
   prep(`INSERT INTO rpg_followers_catalogo (id, nome, classe, raridade, preco, soDungeon, fotos, origem, ativo)
     VALUES (?, ?, ?, ?, ?, ?, COALESCE((SELECT fotos FROM rpg_followers_catalogo WHERE id = ?), '[]'), ?, 1)
@@ -1462,9 +1296,6 @@ export function resgatarFollower(id, novoDono) {
   return getFollower(id);
 }
 
-// ══════════════════════════════════════════════════════════
-//  RPG — economia
-// ══════════════════════════════════════════════════════════
 export function upsertMoeda(serverId, m) {
   prep(`INSERT INTO rpg_moedas
     (serverId, id, nome, simbolo, finita, mercado, dungeon, pSuave, pEm, padrao,
@@ -1497,8 +1328,6 @@ export function moedaPadrao(serverId) {
 }
 
 export function acharMoeda(serverId, txt) {
-  // Sem acento e em minúsculas dos dois lados: ninguém digita "Dólar" com
-  // acento no meio de um comando, e errar por isso seria só atrito.
   const semAcento = (x) => String(x ?? "").trim().toLowerCase()
     .normalize("NFD").replace(/[\u0300-\u036f]/g, "");
   const alvo = semAcento(txt);
@@ -1512,13 +1341,6 @@ export function acharMoeda(serverId, txt) {
 
 const CAMPOS_MOEDA = new Set(["mercado", "dungeon", "pSuave", "pEm", "nome", "simbolo",
   "finita", "padrao", "dificuldade", "suprimentoBase", "nivelMin"]);
-// ── Moedas duplicadas ─────────────────────────────────────
-// Dois conjuntos prontos podem trazer a MESMA moeda com ids diferentes
-// (`mundo` traz Prata como `xag`, `fantasia` como `prata`). Sem colisão de
-// id, as duas eram criadas e a carteira mostrava "Prata" duas vezes.
-//
-// A fusão é a operação segura: em vez de apagar uma e sumir com o saldo de
-// quem já tinha, os saldos são somados na que fica e os estoques também.
 export function moedasDuplicadas(serverId) {
   const semAcento = (x) => String(x ?? "").trim().toLowerCase()
     .normalize("NFD").replace(/[\u0300-\u036f]/g, "");
@@ -1531,10 +1353,6 @@ export function moedasDuplicadas(serverId) {
   const grupos = [];
   for (const [, lista] of porNome) {
     if (lista.length < 2) continue;
-    // Quem fica: a padrão primeiro (é a que precifica tudo); depois a que as
-    // pessoas mais têm na carteira — manter a moeda em uso significa menos
-    // referências para reescrever e menos estranheza para quem joga. O
-    // suprimento só desempata quando ninguém tem nenhuma das duas.
     const ordenada = [...lista].sort((a, b) =>
       (b.padrao ? 1 : 0) - (a.padrao ? 1 : 0)
       || totalNasCarteiras(serverId, b.id) - totalNasCarteiras(serverId, a.id)
@@ -1558,15 +1376,10 @@ export function fundirMoedasDuplicadas(serverId) {
         saldosMovidos += l.quantidade;
         usuarios++;
       }
-      // O estoque do banco e o pote da dungeon também se somam: são valor
-      // que existe no servidor e não pode evaporar.
       salvarMoeda(serverId, g.fica.id, {
         mercado: (getMoeda(serverId, g.fica.id)?.mercado ?? 0) + (velha.mercado ?? 0),
         dungeon: (getMoeda(serverId, g.fica.id)?.dungeon ?? 0) + (velha.dungeon ?? 0),
       });
-      // Ofertas abertas apontam para a moeda que fica, em vez de serem
-      // apagadas: elas guardam valor em CUSTÓDIA, e apagá-las sumiria com o
-      // que já saiu da carteira de quem anunciou.
       prep(`UPDATE rpg_ofertas SET moedaOferecida = ?
         WHERE serverId = ? AND moedaOferecida = ?`).run(g.fica.id, serverId, velha.id);
       prep(`UPDATE rpg_ofertas SET moedaPedida = ?
@@ -1654,9 +1467,6 @@ export function ajustarEstoque(serverId, itemId, delta) {
   return setEstoque(serverId, itemId, Math.max(0, (e?.quantidade ?? base) + delta), base);
 }
 
-// ══════════════════════════════════════════════════════════
-//  RPG — ofertas do mercado entre jogadores
-// ══════════════════════════════════════════════════════════
 export function criarOferta(o) {
   const r = prep(`INSERT INTO rpg_ofertas
     (serverId, tipo, autorId, alvoId, itemOferecido, moedaOferecida, qtdOferecida,
@@ -1694,7 +1504,6 @@ export function volumeRecente(serverId, janelaMs = 3600_000) {
     .get(serverId, Date.now() - janelaMs)?.v ?? 0;
 }
 
-// ── Acesso cru ─────────────────────────────────────────────
 export function getDb() {
   return db;
 }

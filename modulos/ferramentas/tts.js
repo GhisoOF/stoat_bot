@@ -1,25 +1,3 @@
-// ══════════════════════════════════════════════════════════
-//  tts.js — &tts: a Judy fala nas calls
-//
-//  O trabalho pesado (LiveKit + Piper) vive no `judy-voz`, nativo no
-//  Gentoo. Aqui ficam só o comando, as permissões e os limites.
-//
-//   &tts <texto>             → fala agora na call configurada
-//   &tts entrar              → entra na call onde foi digitado, liga o sistema
-//                              e passa a falar tudo que for escrito ali
-//   &tts entrar | sair       → conecta/desconecta da call
-//   &tts voz [nome]          → escolhe a voz do Piper
-//   &tts estado              → diagnóstico da cadeia inteira
-//
-//  ── Isolamento ──
-//  Recurso caro e barulhento: só funciona nos servidores listados em
-//  TTS_SERVIDORES. Mesmo padrão do chat de IA. Sem a variável, fica
-//  desligado em todo lugar — nunca "ligado por engano".
-//
-//  ── Anti-abuso ──
-//  TTS numa call é um megafone. Cooldown por pessoa, teto de tamanho e
-//  um `&tts sair` que qualquer pessoa alcança rápido.
-// ══════════════════════════════════════════════════════════
 
 import { resolverCanal } from "../core/ids.js";
 import { tr, lingua } from "../core/i18n.js";
@@ -30,10 +8,6 @@ const VOZ_URL   = (process.env.VOZ_SERVICO_URL || "").replace(/\/$/, "");
 const VOZ_CHAVE = process.env.VOZ_CHAVE || "";
 const SERVIDORES = (process.env.TTS_SERVIDORES || "")
   .split(",").map((s) => s.trim()).filter(Boolean);
-// Versão da interface que ESTE código espera do judy-voz. O serviço roda no
-// Gentoo, fora do Docker, então os dois são atualizados por caminhos
-// diferentes e podem ficar defasados — o pior estado possível, porque tudo
-// "parece" atualizado e a fala sai sem efeito, em silêncio.
 const VOZ_API_ESPERADA = 11;
 
 const COOLDOWN_MS = Number(process.env.TTS_COOLDOWN_MS || 8000);
@@ -47,14 +21,6 @@ setInterval(() => {
   for (const [k, t] of ultimaFala) if (t < corte) ultimaFala.delete(k);
 }, 10 * 60_000).unref?.();
 
-// Todo subcomando que o `&tts` entende. Serve para pegar o erro de digitação
-// antes de ele virar fala: `&tts diagnosticar` (com o "r") não é um pedido
-// para a Judy dizer a palavra "diagnosticar" em voz alta — mas era isso que
-// acontecia, e ainda gastava 20s tentando entrar na call para fazê-lo.
-// Só o que o comando REALMENTE trata. `canal`, `transmitir`, `on` e `off`
-// saíram: o `entrar` faz os quatro de uma vez e o `sair` desfaz. Listar aqui
-// um subcomando inexistente era pior que não listar — a sugestão do "você quis
-// dizer?" mandava a pessoa para um comando que ia virar fala.
 const SUBCOMANDOS = [
   "estado", "status", "saude", "diagnostico", "reiniciar", "resgatar", "destravar",
   "filtro", "entrar", "sair", "voz", "efeito", "tom", "cooldown", "nomes",
@@ -84,9 +50,6 @@ function perto(a, b, max = 2) {
 function quaseSubcomando(args) {
   const p = semAcento(args[0] ?? "");
   if (p.length < 4) return null;
-  // Com mais palavras, só um erro de UMA letra num subcomando que aceita
-  // argumento: `&tts resgater #call` virou fala (e 20s de timeout) por cair
-  // aqui como texto. `&tts entrar agora na call` continua sendo fala.
   if (args.length !== 1) {
     if (p.length < 6) return null;
     for (const sc of COM_ARGUMENTO) if (p !== sc && perto(p, sc, 1)) return sc;
@@ -100,31 +63,6 @@ function quaseSubcomando(args) {
 }
 const COM_ARGUMENTO = ["resgatar", "filtro", "cooldown", "dicionario", "efeito", "voz", "nomes", "tom"];
 
-// ──────────────────────────────────────────────────────────
-//  Em qual call eu entro?
-//
-//  No Stoat um canal de "Call" tem voz E chat no mesmo canal — então, na
-//  esmagadora maioria das vezes, a resposta é "a call onde a pessoa acabou
-//  de digitar o comando". Exigir que alguém configurasse isso antes era
-//  pedir para declarar o óbvio.
-//
-//  Ordem: o canal atual, se for de voz → o que já estiver configurado →
-//  o único canal de voz do servidor, se houver só um. Nada disso valendo,
-//  quem chama mostra as opções em vez de adivinhar.
-// ──────────────────────────────────────────────────────────
-// ATENÇÃO: no Stoat NÃO existe um "VoiceChannel" separado — uma call vive
-// dentro de um `TextChannel` com voz habilitada. Eu tinha suposto o contrário,
-// e o resultado foi `&tts entrar` recusar exatamente o canal certo (o
-// diagnóstico do servidor mostrou "tipo: TextChannel · nome: Call") e cair
-// para uma configuração antiga, entrando na call errada.
-//
-// Como qualquer canal pode ter call, a pergunta "isto é um canal de voz?" não
-// tem resposta confiável no cliente. A resposta útil é outra: **a call é a do
-// canal onde a pessoa digitou**. Se não houver call ali, o join_call falha com
-// uma mensagem clara — melhor do que adivinhar em silêncio.
-// A call presa pode estar num canal de OUTRO servidor, e a rota que
-// desconecta só a encontra se procurar no servidor certo. O serviço de voz
-// não tem a lista; o bot tem.
 function servidoresConhecidos(ctx) {
   try { return [...(ctx.client?.servers?.keys?.() ?? [])].slice(0, 25); }
   catch { return []; }
@@ -146,8 +84,6 @@ function canaisDeVozDo(server, client) {
 }
 
 function descobrirCanalDeVoz(message, server, ctx, config) {
-  // O canal onde a pessoa digitou vem primeiro, sempre. É o que ela quer
-  // dizer com "entra aqui", e no Stoat é onde a call de fato está.
   const atual = message.channel ?? ctx.client?.channels?.get?.(message.channelId);
   if (message.channelId && pareceCanalDeVoz(atual)) {
     return { id: message.channelId, fonte: "aqui" };
@@ -179,7 +115,6 @@ function garantirConfig(config) {
   return config.tts;
 }
 
-// ── Conversa com o judy-voz ───────────────────────────────
 async function chamar(rota, corpo = null, metodo = "POST") {
   if (!VOZ_URL) throw new Error("VOZ_SERVICO_URL não configurada no ambiente do bot");
   const res = await fetch(`${VOZ_URL}${rota}`, {
@@ -193,17 +128,12 @@ async function chamar(rota, corpo = null, metodo = "POST") {
   return dados;
 }
 
-// Fala um texto na call configurada. Usado pelo comando E pela
-// transmissão automática — por isso vive separado.
 export async function falarNaCall(config, texto, ctx) {
   const c = garantirConfig(config);
   if (!c.ativo || !c.canalVoz) return { ok: false, erro: "desligado" };
   return chamar("/falar", { canalVoz: c.canalVoz, texto, voz: c.voz });
 }
 
-// ── Transmissão automática ────────────────────────────────
-// Chamado pelo main a cada mensagem. Sai cedo e barato quando não é o
-// caso — isto roda no caminho quente.
 export async function aoMensagem(message, ctx) {
   try {
     const serverId = ctx.serverId;
@@ -216,9 +146,6 @@ export async function aoMensagem(message, ctx) {
     const texto = (message.content ?? "").trim();
     if (!texto || texto.startsWith(ctx.PREFIXO)) return false;
 
-    // ── Peneira: isto é fala ou é barulho? ──
-    // Só forma (repetição, variedade, tamanho), nunca conteúdo. Sai antes
-    // do cooldown de propósito: barulho não deve consumir a vez de ninguém.
     if (c.filtro !== false) {
       const v = filtro.avaliar(texto);
       if (!v.falar) {
@@ -232,18 +159,11 @@ export async function aoMensagem(message, ctx) {
     const espera = c.cooldown ?? COOLDOWN_MS;
     if (agora - (ultimaFala.get(chave) ?? 0) < espera) return false;
 
-    // ── Teto POR CANAL ──
-    // O cooldown acima é por pessoa: cinco pessoas escrevendo juntas passam
-    // por ele sem esforço, e a call vira um megafone. Aqui é o freio
-    // coletivo. Quem realmente precisa falar continua tendo o `&tts <texto>`,
-    // que não passa por esta função.
     const jaSilenciado = filtro.emEnxurrada(message.channelId, agora);
     if (jaSilenciado.silenciado) return false;
     const cota = filtro.registrarFala(message.channelId, agora,
       c.porMinuto ? { porMinuto: c.porMinuto } : {});
     if (!cota.permitido) {
-      // Avisa UMA vez, quando o silêncio começa. Repetir a cada mensagem
-      // seria trocar o barulho na call por barulho no chat.
       if (cota.estreando) {
         const seg = Math.ceil((cota.ate - agora) / 1000);
         await ctx.sendEmbed(message.channel, tr(ctx, {
@@ -260,18 +180,10 @@ export async function aoMensagem(message, ctx) {
     }
     ultimaFala.set(chave, agora);
 
-    // Numa conversa de verdade, ouvir "Fulano disse:" antes de cada frase
-    // cansa rápido. Configurável, e o padrão continua anunciando porque numa
-    // call com várias pessoas escrevendo é o que faz sentido.
     const nome = message.author?.username ?? "alguém";
-    // Expande antes de cortar: "vc" ocupa 2 chars, "você" ocupa 4 — cortar
-    // primeiro deixaria uma abreviação pela metade no fim da frase.
     const corpo = (c.expandir === false
       ? texto
       : abrev.expandir(texto, c.dicionario ?? {})).slice(0, MAX_CHARS);
-    // `autoEntrar: false` — se o bot não está na call, a transmissão NÃO o
-    // traz de volta. Quem mandou `&tts sair` mandou de verdade; antes, a
-    // mensagem seguinte de qualquer pessoa desfazia o pedido.
     const r = await chamar("/falar", {
       canalVoz: c.canalVoz,
       texto: c.anunciarNome === false ? corpo : `${nome} disse: ${corpo}`,
@@ -281,9 +193,6 @@ export async function aoMensagem(message, ctx) {
     return r?.ok !== false;
   } catch (e) {
     const msg = e?.message ?? String(e);
-    // Um serviço fora do ar gera um erro POR MENSAGEM do canal. Isso encheu
-    // o log de linhas idênticas justamente na hora em que ele precisava
-    // estar legível. Uma linha por minuto por tipo de erro basta.
     const agora = Date.now();
     if (agora - (ultimoErro.get(msg) ?? 0) > 60_000) {
       ultimoErro.set(msg, agora);
@@ -293,39 +202,10 @@ export async function aoMensagem(message, ctx) {
   }
 }
 
-
-// ══════════════════════════════════════════════════════════
-//  Resgate do AlreadyConnected — a porta dos fundos
-//
-//  O que está preso é um conjunto no Redis do Stoat (`vc:{bot}`), que só o
-//  aviso `participant_left` do LiveKit limpa. `destravar` não o alcança: a
-//  rota que ele usa só age se a chave `{bot}:{servidor}` apontar para uma
-//  call — e devolve 200 mesmo quando não aponta para nada. Nem kick ajuda:
-//  `member_remove` lê a MESMA chave. Sobra o MOVER (`voice_channel` no PATCH
-//  do próprio membro), que emite um token para o canal destino sem passar
-//  pelo `raise_if_in_voice`. O token vem pelo WebSocket, no evento
-//  `UserMoveVoiceChannel`; aqui a gente o captura e entrega ao serviço.
-//
-//  Roteiro: entrar numa call AUXILIAR do mesmo servidor (para a chave
-//  existir) → PATCH voice_channel → pegar o token do evento → o serviço
-//  conecta com ele na call presa. De participante real, o estado do Stoat
-//  volta a bater com o meu, e a leitura já começa ali.
-//
-//  A auxiliar pode estar presa TAMBÉM (aconteceu: "Call" e "call staff"
-//  presas ao mesmo tempo). Por isso testamos as candidatas em sequência —
-//  cada uma presa custa ~1s, porque o serviço curto-circuita o
-//  AlreadyConnected em vez de esperar os 20s do revoice.
-//
-//  Isto roda dentro de `&tts entrar`, sem ninguém pedir: quem está na call
-//  não tem por que aprender que existe um registro preso do outro lado.
-// ══════════════════════════════════════════════════════════
 function candidatasAuxiliares(server, client, presa, preferida = null) {
   const lista = canaisDeVozDo(server, client)
     .map((v) => v.id ?? v._id)
     .filter((id) => id && id !== presa);
-  // Quem tem gente dentro vem primeiro: a sala já existe no LiveKit, então a
-  // entrada é mais rápida e mais confiável. Canais declarados como voz,
-  // depois. O resto fecha a fila.
   const meuId = client?.user?.id;
   const peso = (id) => {
     const ch = client?.channels?.get?.(id);
@@ -436,17 +316,12 @@ async function executarResgate({ presa, auxPreferida = null, message, ctx, c, se
   return resultado(true, null, { aux });
 }
 
-// O embed final do resgate — usado pelo `resgatar` à mão e pelo `entrar`
-// automático, para a pessoa ver o mesmo relato nos dois caminhos.
 function relatarResgate(r, { presa, message, ctx, c, lang }) {
   const { sendEmbed, COR, PREFIXO, salvarConfig } = ctx;
   const P = PREFIXO;
   if (r.ok) {
     if (!c.ativo) c.ativo = true;
     c.canalVoz = presa;
-    // A leitura segue o canal onde a pessoa digitou — igual ao `entrar`.
-    // Antes ficava o canal de texto antigo, e o resgate terminava "lendo
-    // Call em call staff".
     c.canalTexto = message.channelId;
     salvarConfig?.();
     filtro.limpar(c.canalTexto ?? null);
@@ -486,7 +361,6 @@ function relatarResgate(r, { presa, message, ctx, c, lang }) {
   });
 }
 
-// ── Comando ───────────────────────────────────────────────
 export async function cmdTts(message, args, ctx) {
   const { config, sendEmbed, COR, PREFIXO, getServer, membroTemPermissao, salvarConfig, serverId } = ctx;
   const lang = lingua(ctx);
@@ -528,9 +402,6 @@ export async function cmdTts(message, args, ctx) {
             : `— este bot espera a **${VOZ_API_ESPERADA}**. Atualize o \`voz-servico/\` na máquina e reinicie o \`judy-voz\`; até lá, comandos que a versão antiga não conhece respondem "rota desconhecida".`}`
         : `**${lang === "en" ? "Service version" : "Versão do serviço"}:** 🟢 ${v}`);
       linhas.push(`**Piper:** ${saude.piper?.ok ? `🟢 ${saude.piper.vozAtual}` : `🔴 ${saude.piper?.erro}`}`);
-      // "pronto" aqui é só "a biblioteca carregou" — NÃO diz nada sobre
-      // conseguir entrar numa call. Confundir os dois foi o que fez este
-      // painel parecer saudável enquanto toda entrada dava timeout.
       linhas.push(`**${lang === "en" ? "revoice (library)" : "revoice (biblioteca)"}:** ${saude.voz?.pronto
         ? (lang === "en" ? "🟢 loaded" : "🟢 carregada") : `🔴 ${saude.voz?.erro}`}`);
       const con = saude.voz?.conexoes ?? [];
@@ -551,22 +422,6 @@ export async function cmdTts(message, args, ctx) {
   const server = await getServer(message).catch(() => null);
   const ehStaff = membroTemPermissao(message, server, "ManageMessages");
 
-  // ── entrar / sair: LIBERADOS a todos ──
-  //
-  // O canal já foi escolhido pela staff; entrar nele é reversível e é
-  // justamente o que quem está na call precisa fazer. Exigir ManageMessages
-  // aqui significava que só o dono conseguia chamar a Judy — o recurso
-  // existia para todos no papel e para uma pessoa na prática.
-  //
-  // O freio contra vai-e-vem é o mesmo cooldown das falas: quem não é staff
-  // espera entre uma ação e outra.
-  // ── diagnostico (staff): ONDE, exatamente, a entrada trava ──
-  //
-  // "Não consigo entrar" tem duas causas com o mesmo sintoma: a API do
-  // Stoat recusando/pendurando (token, permissão, o servidor achar que o
-  // bot já está na call) ou a rede não alcançando o LiveKit (UDP, MTU,
-  // firewall). O remédio de uma não serve para a outra. Isto separa as
-  // duas antes de qualquer chute.
   if (["diagnostico", "diagnóstico", "diagnosticar", "diagnose", "diagnostics",
        "checar", "check", "porque", "porquê"].includes(sub)) {
     if (!ehStaff) {
@@ -587,9 +442,6 @@ export async function cmdTts(message, args, ctx) {
     try { d = await chamar("/diagnostico", { canalVoz: c.canalVoz }); }
     catch (e) {
       const motivo = String(e.message ?? e).replace(/`/g, "");
-      // O serviço RESPONDEU, só não conhece a rota: está numa versão anterior.
-      // É um diagnóstico completamente diferente de "está fora do ar", e
-      // mandava investigar rede quando o que falta é copiar uma pasta.
       const velho = /rota desconhecida|HTTP 404/i.test(motivo);
       return sendEmbed(message.channel, velho ? tr(ctx, {
         title: "⚠️ O serviço de voz está desatualizado",
@@ -641,9 +493,6 @@ export async function cmdTts(message, args, ctx) {
     const linhas = (d.etapas ?? []).map((e) =>
       `${marca(e.ok)} **${e.etapa}** — ${e.ms}ms${e.status ? ` · HTTP ${e.status}` : ""}\n   ${String(e.detalhe ?? "").slice(0, 160).replace(/`/g, "")}`);
 
-    // Onde os 20s foram gastos na última tentativa. É o dado que falta
-    // quando o join é uma caixa preta: sem ele, "travou no join" é tudo
-    // que dá para dizer, e não é suficiente para consertar nada.
     const marcos = d.marcos ?? d.ultimaFalha?.marcos ?? [];
     const linhaMarcos = marcos.length
       ? `\n**${lang === "en" ? "Last attempt, step by step" : "Última tentativa, passo a passo"}**\n`
@@ -768,8 +617,6 @@ export async function cmdTts(message, args, ctx) {
     }));
   }
 
-  // ── resgatar: o mesmo resgate que `entrar` faz sozinho, só que à mão ──
-  // Útil para escolher a call auxiliar quando a automática não serve.
   if (["resgatar", "resgate", "rescue"].includes(sub)) {
     const server = await getServer(message).catch(() => null);
     const presa = c.canalVoz && c.canalVoz !== message.channelId && !pareceCanalDeVoz(message.channel)
@@ -784,10 +631,6 @@ export async function cmdTts(message, args, ctx) {
     return relatarResgate(r, { presa, message, ctx, c, lang });
   }
 
-  // ── reiniciar (staff): destrava o serviço sem ir ao terminal ──
-  // Quando o estado do lado do Stoat/LiveKit fica inconsistente, a entrada
-  // pendura e nenhum comando resolve. Antes só reiniciando o judy-voz à mão
-  // no Gentoo — impossível para quem está no celular, às duas da manhã.
   if (["reiniciar", "restart", "destravar", "reset"].includes(sub)) {
     if (!membroTemPermissao(message, await getServer(message).catch(() => null), "ManageMessages")) {
       return sendEmbed(message.channel, tr(ctx,
@@ -926,13 +769,6 @@ export async function cmdTts(message, args, ctx) {
     ultimaFala.set(chaveAcao, Date.now());
 
     if (entrando) {
-      // ── Um comando faz tudo ──
-      //
-      // Antes eram quatro, na ordem certa: ligar, escolher a call, ligar a
-      // leitura, entrar. Errar a ordem dava mensagens de
-      // erro que falavam de OUTRO comando, e ninguém que só queria a Judy
-      // lendo a call tinha por que aprender essa sequência. Agora `entrar`
-      // descobre a call, liga o sistema, liga a leitura e entra.
       const server = await getServer(message).catch(() => null);
       const achado = descobrirCanalDeVoz(message, server, ctx, c);
 
@@ -953,22 +789,14 @@ export async function cmdTts(message, args, ctx) {
         }));
       }
 
-      // Configura sozinho o que estiver faltando, e lembra o que mudou para
-      // contar no fim — quem quiser aprender os comandos vê quais foram.
-      // Estava noutra call? Então este `entrar` é um "vem para cá".
       const vinhaDeOutra = !!c.canalVoz && c.canalVoz !== achado.id;
       const mudou = [];
       if (!c.ativo) c.ativo = true;
       if (c.canalVoz !== achado.id) { c.canalVoz = achado.id; mudou.push(lang === "en" ? "the call" : "a call"); }
-      // A leitura fica no canal onde o comando foi dado. Num canal de call do
-      // Stoat esse é o próprio chat da call, que é exatamente o que se espera.
       if (c.canalTexto !== message.channelId) {
         c.canalTexto = message.channelId;
         mudou.push(lang === "en" ? "the channel I read" : "o canal que eu leio");
       }
-      // Sempre salva: o `ativo` pode ter mudado sem entrar na lista acima,
-      // e uma configuração ligada que não sobrevive ao reinício é pior que
-      // uma desligada, porque ninguém desconfia dela.
       salvarConfig?.();
 
       filtro.limpar(c.canalTexto ?? null);
@@ -977,8 +805,6 @@ export async function cmdTts(message, args, ctx) {
       } catch (e) {
         const motivo = String(e.message ?? e).replace(/`/g, "");
         if (/AlreadyConnected/i.test(motivo)) {
-          // Registro preso do lado do Stoat. Não é problema da pessoa: resgata
-          // aqui mesmo, e só explica se o resgate também falhar.
           const r = await executarResgate({ presa: c.canalVoz, message, ctx, c, server, lang, anunciar: true });
           return relatarResgate(r, { presa: c.canalVoz, message, ctx, c, lang });
         }
@@ -1023,9 +849,6 @@ export async function cmdTts(message, args, ctx) {
       }));
     }
 
-    // ── Sair: para de ler também ──
-    // Sair da call e continuar "lendo" para ninguém não é um estado que alguém
-    // queira. Quem sai, sai inteiro.
     try { await chamar("/sair", { canalVoz: c.canalVoz }); } catch {}
     filtro.limpar(c.canalTexto ?? null);
     const lia = !!c.canalTexto;
@@ -1049,20 +872,6 @@ export async function cmdTts(message, args, ctx) {
       colour: COR.sucesso,
     }));
   }
-
-  // ══════════════════════════════════════════════════════════
-  //  Ajustes da fala: dicionário, voz, efeito, tom, cooldown, nomes
-  //
-  //  Estes existiam só no `&help`. Sem o `if` aqui, `&tts dicionario add
-  //  vish vixi` caía no `&tts <texto>` e a Judy FALAVA "dicionario
-  //  adicionar vish vixi" — com o próprio dicionário expandindo o "add"
-  //  no caminho, o que dava à falha uma cara de sarcasmo.
-  //
-  //  NÃO existem `canal`, `transmitir`, `on` e `off`: o `entrar` escolhe a
-  //  call, liga o sistema e define o canal lido; o `sair` desfaz os três.
-  //  Um comando que só repete o que outro já faz é mais uma coisa para
-  //  aprender e mais um jeito de deixar a configuração pela metade.
-  // ══════════════════════════════════════════════════════════
 
   // ── dicionário: como a escrita de chat vira fala ──
   if (["dicionario", "dicionário", "dictionary", "abreviacoes", "abreviações", "abbrev"].includes(sub)) {
@@ -1096,8 +905,6 @@ export async function cmdTts(message, args, ctx) {
     };
     if (!acao || ["lista", "list", "ver", "show"].includes(acao)) return listar();
 
-    // Ver o resultado é o que responde "vale a pena adicionar isso?" — e não
-    // muda nada, então é público como a listagem.
     if (["teste", "test", "testar"].includes(acao)) {
       const frase = args.slice(2).join(" ").trim();
       if (!frase) {
@@ -1146,8 +953,6 @@ export async function cmdTts(message, args, ctx) {
           { title: "❓ Faltou o quê e por quê", description: `\`${PREFIXO}tts dicionario add vish vixi\` — a abreviação primeiro, o texto falado depois.`, colour: COR.aviso },
           { title: "❓ Missing what and with what", description: `\`${PREFIXO}tts dicionario add vish vixi\` — abbreviation first, spoken text after.`, colour: COR.aviso }));
       }
-      // Uma "abreviação" com espaço nunca casaria: a expansão troca palavras
-      // inteiras, uma de cada vez. Melhor recusar do que gravar algo morto.
       if (/\s/.test(chave)) {
         return sendEmbed(message.channel, tr(ctx,
           { title: "❌ A abreviação é uma palavra só", description: "Ela é trocada palavra por palavra, então `de boa` nunca casaria. Use uma palavra só do lado esquerdo — o direito pode ter quantas quiser.", colour: COR.erro },
@@ -1248,9 +1053,6 @@ export async function cmdTts(message, args, ctx) {
       colour: COR.sucesso });
   }
 
-  // ── voz e efeito: as duas listas vêm do serviço, nunca daqui ──
-  // Fixar a lista no bot foi o que fez um efeito renomeado sumir da ajuda
-  // e continuar sendo aceito pelo comando.
   if (["voz", "voice", "efeito", "effect", "efeitos", "tom", "pitch"].includes(sub)) {
     const ehVoz = ["voz", "voice"].includes(sub);
     const ehTom = ["tom", "pitch"].includes(sub);
@@ -1332,10 +1134,6 @@ export async function cmdTts(message, args, ctx) {
       colour: COR.sucesso });
   }
 
-  // ── &tts <texto> → falar ──
-  // Antes: uma palavra digitada errado virava fala. `&tts diagnosticar`
-  // mandava a Judy dizer "diagnosticar" — e, como fala explícita entra na
-  // call sozinha, gastava os 20s do timeout de entrada para fazer isso.
   const talvez = quaseSubcomando(args);
   if (talvez) {
     return sendEmbed(message.channel, tr(ctx, {
@@ -1396,8 +1194,6 @@ export async function cmdTts(message, args, ctx) {
     }));
   }
 
-  // Falar sem estar em call: em vez de listar comandos de configuração,
-  // aponta o único que a pessoa precisa saber.
   if (!c.ativo || !c.canalVoz) {
     return sendEmbed(message.channel, tr(ctx,
       { title: "🔇 Não estou em nenhuma call",

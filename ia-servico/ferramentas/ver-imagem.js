@@ -1,29 +1,3 @@
-// ══════════════════════════════════════════════════════════
-//  imagem.js — a Judy vê imagens e cria imagens
-//
-//  As duas ferramentas lidam com o tipo de dado mais perigoso que chega
-//  num chat: arquivos que outra pessoa controla. A regra de segurança é
-//  uma só, aplicada duas vezes:
-//
-//      NENHUM byte vindo de fora segue adiante como chegou.
-//
-//  Toda imagem — recebida para ver, ou devolvida pelo gerador — passa pelo
-//  sharp, que DECODIFICA os pixels e reescreve um arquivo novo. O que
-//  sobrevive é a fotografia; o que morre é todo o resto: metadados EXIF,
-//  payloads escondidos em chunks, arquivos-poliglota (imagem válida que
-//  também é zip/script), e qualquer exploit que dependa dos bytes originais
-//  chegarem a outro decodificador. Se o sharp não consegue decodificar, o
-//  arquivo não era uma imagem honesta e morre aqui — dentro DESTE container,
-//  que é descartável, e não no cliente de quem vai olhar a mensagem.
-//
-//  Além da reescrita:
-//    • só https, só hosts da lista (o CDN do Stoat por padrão) — nada de
-//      buscar URL arbitrária: isso seria um proxy de SSRF com a minha cara
-//    • teto de bytes ANTES de decodificar, e teto de pixels NO decodificador
-//      (`limitInputPixels` corta bombas de descompressão: 300×300 que viram
-//      30.000×30.000 na memória)
-//    • nada encosta no disco: tudo em memória, tudo morre com a requisição
-// ══════════════════════════════════════════════════════════
 
 const LLM_URL      = (process.env.LLM_URL || process.env.OLLAMA_URL || "http://localhost:11434").replace(/\/$/, "");
 const MODELO_VISAO = process.env.LLM_MODEL_VISAO || "";        // vazio = visão desligada
@@ -34,14 +8,10 @@ const LADO_VISAO   = Number(process.env.IMAGEM_LADO_VISAO || 1280);
 const LADO_GERACAO = Number(process.env.IMAGEM_LADO_GERACAO || 768);
 const TIMEOUT_MS   = Number(process.env.IMAGEM_TIMEOUT_MS || 120_000);
 
-// Hosts de onde aceito BAIXAR imagem. Por padrão, só o CDN do próprio Stoat:
-// é de lá que vêm os anexos das mensagens. Mais hosts via env, um por vírgula.
 const HOSTS_PERMITIDOS = (process.env.IMAGEM_HOSTS_PERMITIDOS
   || "autumn.stoat.chat,autumn.stt.gg,cdn.stoat.chat,autumn.revolt.chat")
   .split(",").map((h) => h.trim().toLowerCase()).filter(Boolean);
 
-// sharp é opcional na instalação, obrigatório no uso: sem ele, as ferramentas
-// se recusam a funcionar em vez de deixarem passar bytes crus.
 let sharpMod = null;
 async function sharp() {
   if (sharpMod) return sharpMod;
@@ -63,17 +33,10 @@ function hostPermitido(url) {
   return { ok: true };
 }
 
-// Baixa com teto de bytes DURANTE o download — `content-length` é declaração
-// do servidor, não promessa; quem mente nela recebe o corte no streaming.
 async function baixarLimitado(url) {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), 30_000);
   try {
-    // Redirect é seguido NO MÁXIMO 2 vezes, e só se o destino passar na
-    // MESMA allowlist da entrada. O `redirect: "error"` cego quebrou a visão
-    // inteira quando o Stoat migrou o CDN: o autumn virou um 308 para o
-    // cdn.stoatusercontent.com, e a ferramenta recusava o próprio CDN oficial.
-    // Validar o destino mantém a defesa anti-SSRF; recusar tudo era só rigidez.
     let alvo = url;
     let r;
     for (let salto = 0; ; salto++) {
@@ -99,8 +62,6 @@ async function baixarLimitado(url) {
   } finally { clearTimeout(t); }
 }
 
-// A reescrita: decodifica os pixels e emite um JPEG novo, limitado em
-// dimensão. É por aqui que TODA imagem passa, na entrada e na saída.
 async function reescrever(buffer, ladoMax) {
   const s = await sharp();
   return s(buffer, { limitInputPixels: MAX_PIXELS, animated: false })
@@ -111,7 +72,6 @@ async function reescrever(buffer, ladoMax) {
     .toBuffer();
 }
 
-// ── ver_imagem ────────────────────────────────────────────
 export const definicao = {
   type: "function",
   function: {

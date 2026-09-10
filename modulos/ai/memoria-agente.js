@@ -1,18 +1,3 @@
-// ══════════════════════════════════════════════════════════
-//  memoria-agente.js — agente de memória de longo prazo
-//
-//  Observa o chat e extrai FATOS para a Judy lembrar depois:
-//   • sobre PESSOAS (gostos, quem é, contexto)
-//   • sobre o SERVIDOR (piadas internas, eventos, combinados)
-//
-//  Roda em BACKGROUND (não trava a mensagem) e usa o modelo
-//  PEQUENO (decisão) — barato e rápido. Um DEBOUNCE por usuário
-//  agrupa rajadas de mensagens numa extração só, para não fritar
-//  a GPU quando alguém manda várias linhas seguidas.
-//
-//  Os fatos vão para ia_fatos_pessoa / ia_fatos_servidor, com
-//  nível de confiança: fato repetido sobe, fato isolado fica baixo.
-// ══════════════════════════════════════════════════════════
 
 import * as db from "../core/db.js";
 
@@ -31,14 +16,6 @@ const chave = (serverId, userId) => `${serverId}:${userId}`;
 let chamarLLM = null;
 export function configurar({ chamarModelo }) { chamarLLM = chamarModelo; }
 
-// ── Prioridade: a conversa vem primeiro ─────────────────────
-//
-// A GPU atende uma coisa de cada vez. Quando a extração de memória disparava
-// no meio de uma resposta, as duas competiam e a resposta — que tem alguém
-// esperando na tela — passava de 20s para minutos, até estourar o timeout.
-//
-// A memória não tem pressa: um fato extraído agora ou daqui a um minuto dá no
-// mesmo. Então ela cede a vez, sempre.
 let ocupadoRespondendo = 0;
 const adiados = new Set();
 
@@ -46,8 +23,6 @@ export function marcarRespondendo() { ocupadoRespondendo++; }
 export function marcarLivre() {
   ocupadoRespondendo = Math.max(0, ocupadoRespondendo - 1);
   if (ocupadoRespondendo === 0 && adiados.size) {
-    // Volta ao trabalho pendente, mas com folga: emendar na resposta que
-    // acabou de sair pegaria a GPU ainda quente com a próxima mensagem.
     const pendentes = [...adiados];
     adiados.clear();
     log(`retomando ${pendentes.length} extração(ões) adiada(s)`);
@@ -75,8 +50,6 @@ export function observar({ serverId, userId, nome, texto, ehBot }) {
   // reinicia o debounce: só extrai quando a pessoa "parar" de escrever
   if (buf.timer) clearTimeout(buf.timer);
   buf.timer = setTimeout(() => {
-    // Se há resposta sendo gerada, a extração espera a vez em vez de brigar
-    // pela GPU. Ela é retomada assim que a conversa termina.
     if (ocupadoRespondendo > 0) {
       adiados.add(k);
       log(`extração adiada (conversa em andamento): ${k}`);
@@ -86,24 +59,6 @@ export function observar({ serverId, userId, nome, texto, ehBot }) {
   }, DEBOUNCE_MS);
 }
 
-// ══════════════════════════════════════════════════════════
-//  O extrator — e a lição dos placeholders
-//
-//  A versão anterior dava exemplos assim: "trabalha com X", "mora em Y",
-//  "estuda Z". Um modelo pequeno não os leu como PLACEHOLDERS: copiou-os
-//  literalmente para a saída. O resultado apareceu no `&chat perfil` de
-//  alguém como "mora em Y" e "trabalha com X" — o meu prompt vazando para
-//  o banco, apresentado à pessoa como fato sobre ela.
-//
-//  Pior: fatos falsos são INJETADOS no prompt da conversa. A Judy passou a
-//  afirmar com confiança que a pessoa morava em São Paulo, e a inventar uma
-//  piada interna do servidor para justificar. Uma memória errada não fica
-//  quieta: ela vira alucinação confiante.
-//
-//  Por isso agora cada fato precisa de EVIDÊNCIA — a citação da mensagem
-//  que o sustenta. Se o modelo não consegue apontar onde leu aquilo, o fato
-//  não entra. É o mesmo princípio de "não invente" aplicado à memória.
-// ══════════════════════════════════════════════════════════
 const PROMPT_EXTRACAO = `Você extrai fatos duráveis de mensagens de chat para a memória de um bot.
 Leia as mensagens de UM usuário e devolva SÓ um JSON:
 {"personalidade": [{"fato":"...","evidencia":"..."}], "gosto": [...], "info": [...], "servidor": [...]}
@@ -126,9 +81,6 @@ REGRAS ABSOLUTAS:
 - Ignore saudações, reações, piadas do momento e o humor do dia.
 - Máximo 2 itens por categoria. Nada além do JSON.`;
 
-// Exportada para ser testável de verdade: é uma função pura, e o teste
-// anterior que a exercitava "pelo caminho público" passava vazio sem
-// executar nada — falso verde é pior que teste nenhum.
 const LIXO_MEMORIA = /^(x|y|z|profissional|bot|ativo|ativa|curto|curta|geral|pessoa|usuário|usuario|nada|humano)$/i;
 export function filtrarFato(item, { msgs = [], nome = "", aoDescartar = () => {} } = {}) {
   const fato = (typeof item === "string" ? item : item?.fato ?? "").trim();
@@ -139,15 +91,6 @@ export function filtrarFato(item, { msgs = [], nome = "", aoDescartar = () => {}
   // O nome da pessoa não é um fato sobre ela.
   if (nome && fato.toLowerCase().trim() === String(nome).toLowerCase().trim()) return null;
 
-  // ── Ordem dada AO BOT não é fato sobre a pessoa ───────
-  //
-  //  Alguém escreveu "responde no máximo em 8s" — uma instrução para a Judy.
-  //  Virou o fato "MiguelRobes responde no máximo em 8 segundos", que apareceu
-  //  no `&chat perfil` dele. O agente confundiu o alvo: quem responderia em 8s
-  //  era a bot.
-  //
-  //  A marca é o imperativo na segunda pessoa ("responde", "fala", "seja",
-  //  "não use") — pedido, não descrição de alguém.
   if (/^(responde|responda|fala|fale|diga|escreva|escreve|faça|faz|use|usa|seja|sê|para de|pare de|não\s+\w+|me\s+\w+|traduz|traduza|resume|resuma|explique|explica|liste|lista|mostre|mostra|calcule|calcula|pesquise|pesquisa|ignore|ignora|esqueça|esquece)\b/i.test(fato)) {
     aoDescartar(`"${fato}" parece uma ordem dada à Judy, não um fato sobre ${nome || "a pessoa"}`);
     return null;
@@ -160,8 +103,6 @@ export function filtrarFato(item, { msgs = [], nome = "", aoDescartar = () => {}
 
   const evid = String(item?.evidencia ?? "").trim().toLowerCase();
   if (evid.length < 4) return null;                                  // sem evidência, não entra
-  // Pedir evidência não basta: o modelo inventa a evidência junto. Então
-  // conferimos que o trecho citado aparece MESMO nas mensagens lidas.
   const texto = msgs.join("\n").toLowerCase();
   if (!texto.includes(evid.slice(0, 40))) {
     aoDescartar(`descartado (evidência inventada): "${fato}" ← "${evid.slice(0, 50)}"`);
@@ -192,12 +133,6 @@ async function processar(k) {
     obj = JSON.parse(limpo);
   } catch { log("JSON inválido do extrator; ignorando"); return; }
 
-  // ── A peneira ──
-  //
-  //  O prompt pede evidência, mas pedir não basta: um modelo pequeno
-  //  inventa a evidência junto. Então CONFERIMOS que o trecho citado
-  //  realmente aparece nas mensagens. É a diferença entre confiar e
-  //  verificar, e é barata: uma busca em texto.
   const aceitar = (item) => filtrarFato(item, { msgs, nome, aoDescartar: (m) => log(m) });
 
   const cats = { personalidade: "personalidade", gosto: "gosto", info: "info" };
@@ -228,16 +163,6 @@ export function contextoMemoria(serverId, userId) {
   const dataCurta = (iso) => { try { return new Date(iso).toLocaleDateString("pt-BR"); } catch { return ""; } };
   const linhas = [];
 
-  // ── O cartão de perfil é da PESSOA, não da Judy ───────
-  //
-  //  A bio entrava aqui rotulada só como "Perfil desta pessoa", e o modelo
-  //  a lia como fatos soltos. A bio do dono contém `Server: https://stt.gg/…`
-  //  e `Meu Bot: Cobaia#7705` — e a Judy passou a afirmar que aquele era o
-  //  SEU endereço e a chamar o dono de "Cobaia". Ela não confundiu por
-  //  burrice: ninguém tinha dito de quem era aquilo.
-  //
-  //  Agora o bloco diz, na própria borda, que é texto escrito PELA pessoa
-  //  sobre ela mesma — e que links e nomes ali dentro não são da Judy.
   if (perfil) {
     const p = [];
     if (perfil.bio) p.push(`bio: ${perfil.bio}`);
@@ -274,9 +199,6 @@ export function contextoMemoria(serverId, userId) {
     linhas.push("IMPORTANTE: trate esta pessoa com gentileza e paciência extra, de forma clara e acolhedora. Sem ironia ácida com ela.");
   }
 
-  // O enquadramento importa tanto quanto o conteúdo. Apresentado como
-  // verdade, um fato errado vira afirmação confiante ("então você também é
-  // de São Paulo!"). Apresentado como impressão, vira pergunta.
   linhas.push(
     "(Isto são IMPRESSÕES suas de conversas passadas, não verdades verificadas.",
     "Use com naturalidade e NUNCA recite. Se for usar um fato destes, trate-o como algo",
@@ -286,13 +208,6 @@ export function contextoMemoria(serverId, userId) {
   return linhas.join("\n");
 }
 
-// Para o &chat esquecer: apaga os fatos daquela pessoa.
-// ── Descartar o que ainda NÃO virou banco ────────────────
-//
-//  `&chat esquecer tudo` apagava o banco e nada mais. Os buffers de
-//  observação — mensagens já lidas, esperando o debounce para virar fato —
-//  continuavam de pé e viravam fato DEPOIS da limpeza. Quem mandou esquecer
-//  via a memória repovoar sozinha com o que acabara de apagar.
 export function descartarPendentes(serverId = null) {
   let n = 0;
   for (const [chave, buf] of [...buffers.entries()]) {

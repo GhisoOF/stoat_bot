@@ -1,31 +1,9 @@
-// ══════════════════════════════════════════════════════════
-//  magias.js — magias que o JOGADOR aprende
-//
-//  Antes, magia só existia via follower: a classe do companheiro trazia
-//  uma, e pronto. Quem jogava sozinho, ou preferia party pequena, não
-//  tinha como investir em Mana — o atributo existia sem ter no que gastar.
-//
-//  Aqui a magia vira algo que se compra e se carrega. As regras são as
-//  mesmas das magias de follower (custo em Mana, poder, ataque/suporte),
-//  de propósito: o motor de missão já sabe lidar com elas, e duas
-//  mecânicas paralelas para a mesma coisa só confundiriam.
-//
-//  O limite continua sendo a **Mana total da party**. Aprender dez magias
-//  não ajuda se você só tem Mana para duas — as mais fortes entram, o
-//  resto fica no grimório. É o que faz Mana valer a pena como atributo.
-// ══════════════════════════════════════════════════════════
 
-// ── Escolas ───────────────────────────────────────────────
-// Só um agrupamento para a lista ficar legível e o preço fazer sentido.
 export const ESCOLAS = {
   ataque:  { rotulo: "Ataque",  rotuloEN: "Attack",  emoji: "🔥" },
   suporte: { rotulo: "Suporte", rotuloEN: "Support", emoji: "✨" },
 };
 
-// ── Catálogo ──────────────────────────────────────────────
-// `custo` é em Mana, `poder` é a fração que a magia soma no cálculo da
-// missão, e `preco` é em moeda padrão. A escada é intencional: dobrar o
-// poder custa bem mais que o dobro, para não existir "a magia certa".
 export const CATALOGO = [
   // Ataque — sobem o êxito da missão
   { id: "m_faisca",        nome: "Faísca",            tipo: "ataque",  custo: 1, poder: 0.15, preco: 150,   nivelMin: 1,  raridade: "comum" },
@@ -45,8 +23,6 @@ export function getMagia(id) {
   return CATALOGO.find((m) => m.id === id) ?? null;
 }
 
-// Busca tolerante: id, nome exato, ou pedaço do nome. Sem acento dos dois
-// lados — ninguém digita "Regeneração" com acento no meio de um comando.
 export function acharMagia(texto) {
   const limpo = (x) => String(x ?? "").trim().toLowerCase()
     .normalize("NFD").replace(/[\u0300-\u036f]/g, "");
@@ -59,11 +35,6 @@ export function acharMagia(texto) {
       ?? null;
 }
 
-// ── Quais magias cabem na Mana disponível ─────────────────
-// Recebe as magias do jogador MAIS as dos followers e devolve as que
-// entram, da mais forte para a mais fraca. O jogador não escolhe: a
-// party usa o que tem de melhor e cabe — decidir isso a cada missão
-// seria um clique a mais sem escolha real por trás.
 export function magiasAtivas(todas, manaTotal) {
   let livre = Math.max(0, manaTotal ?? 0);
   const usadas = [];
@@ -73,8 +44,6 @@ export function magiasAtivas(todas, manaTotal) {
   return { usadas, manaLivre: livre, manaGasta: Math.max(0, (manaTotal ?? 0) - livre) };
 }
 
-// Preço com o desconto de Carisma, igual ao dos mercenários: quem negocia
-// bem paga menos, e o atributo vale nos dois lugares.
 export function precoComCarisma(preco, carisma = 0) {
   const desconto = Math.max(0.6, 1 - 0.02 * Math.sqrt(Math.max(0, carisma)));
   return Math.max(1, Math.ceil(preco * desconto));

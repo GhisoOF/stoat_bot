@@ -1,21 +1,6 @@
-// ══════════════════════════════════════════════════════════
-//  ids.js — normaliza IDs colados/mencionados pelo usuário
-//
-//  No Stoat as menções têm formatos próprios, e nem sempre iguais
-//  aos do Discord:
-//    <%01ABC…>  → CARGO      (é `%`, não `&` como no Discord)
-//    <@01ABC…>  → usuário
-//    <#01ABC…>  → canal
-//
-//  Ninguém deveria precisar saber disso: se a pessoa menciona o
-//  cargo, o comando tem que entender. Estas funções aceitam menção
-//  (em qualquer um dos formatos), ID puro, ou o ID com lixo em volta.
-// ══════════════════════════════════════════════════════════
 
 export const ULID = /^[0-9A-HJKMNP-TV-Z]{26}$/i;
 
-// Remove a "casca" de qualquer menção e devolve só o ID.
-// Aceita <%id>, <@id>, <@&id>, <#id>, "id" e id.
 export function limparId(entrada) {
   let t = String(entrada ?? "").trim();
   if (!t) return "";
@@ -41,16 +26,6 @@ export function descreverProblemaDeId(entrada, tipo = "cargo") {
   return `\`${limpo}\` não parece um ID válido`;
 }
 
-// ══════════════════════════════════════════════════════════
-//  Links do Stoat
-//
-//  Formato: https://stoat.chat/server/<sid>/channel/<cid>/<mid>
-//  (o trecho da mensagem é opcional)
-//
-//  Copiar o ID nem sempre é possível pelo cliente, mas copiar o
-//  link é. Por isso todo comando que pede ID aceita link também.
-// ══════════════════════════════════════════════════════════
-
 // Extrai as partes de um link do Stoat. Devolve {} se não for link.
 export function partesDoLink(txt) {
   const t = String(txt ?? "").trim().replace(/[<>]/g, "");
@@ -67,8 +42,6 @@ export function partesDoLink(txt) {
   const mensagemId = ultimo && ultimo !== canalId && ultimo !== serverId ? ultimo : null;
   return { serverId, canalId, mensagemId };
 }
-
-// ── Resolvedores: aceitam menção, link, ID ou nome ─────────
 
 // Canal: <#id>, link, ID, "aqui" ou #nome
 export function resolverCanal(entrada, { message, server } = {}) {
@@ -117,35 +90,6 @@ function nomeDoCargo(server, id) {
   } catch { return null; }
 }
 
-// ══════════════════════════════════════════════════════════
-//  Usuário — o resolvedor mais exigido do bot
-//
-//  Quem digita um comando de moderação tem na mão o que o cliente deixa
-//  copiar, e isso varia: às vezes é a menção, às vezes só o nome que está
-//  na tela, às vezes o `Nome#0800` do perfil, às vezes o link. Aceitar só
-//  menção e ID transfere para a pessoa o trabalho de descobrir o ID — e em
-//  moderação isso costuma acontecer justo quando ela está com pressa.
-//
-//  Pior: os comandos que mais precisam disso (`esquecer`, `isentar`,
-//  `historico`) tratam de gente que **já não está no servidor**. Procurar
-//  só entre os membros falha exatamente nesses casos. Por isso a busca
-//  passa por várias fontes, da mais confiável para a mais frouxa:
-//
-//    1. menção real da mensagem      (a pessoa clicou: não há dúvida)
-//    2. ID cru ou dentro de <@…>
-//    3. link de perfil (/user/ID, @ID)
-//    4. membros do servidor          — nome, apelido, display name, Nome#0000
-//    5. banidos do servidor          — quem já foi expulso não é mais membro
-//    6. cache de usuários do client
-//    7. candidatos extras            — quem chama passa (ex.: a lista global,
-//                                      que guarda o nome de quem registrou)
-//
-//  Devolve `{ id, nome, fonte }`. Quando o nome bate em mais de uma pessoa,
-//  devolve `{ ambiguo, candidatos }` em vez de escolher no chute — banir a
-//  pessoa errada por causa de um apelido parecido é o tipo de erro que não
-//  se desfaz com um pedido de desculpas.
-// ══════════════════════════════════════════════════════════
-
 // Bot ou gente? No Revolt/Stoat o campo `bot` existe (e é um objeto com o
 // dono) só para bots.
 export function ehBot(u) {
@@ -179,9 +123,6 @@ export async function resolverUsuarioDetalhado(entrada, { message, server, clien
   const bruto = String(entrada ?? "").trim();
   const pareceMencao = /^<[@%]?[^>]+>$/.test(bruto);
 
-  // 1. A menção real da mensagem. Só vale quando a entrada está vazia ou É a
-  //    própria menção — senão `&comando @alguem OutroNome` resolveria para a
-  //    menção e ignoraria o que a pessoa escreveu.
   if ((!bruto || pareceMencao) && (message?.mentionIds?.[0] || message?.mentions?.[0]?.id)) {
     const id = message.mentionIds?.[0] ?? message.mentions[0].id;
     return { id, nome: null, fonte: "menção" };

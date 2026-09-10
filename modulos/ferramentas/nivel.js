@@ -1,47 +1,9 @@
-// ══════════════════════════════════════════════════════════
-//  nivel.js — sistema de XP e níveis (&xp)
-//
-//  Cada mensagem dá XP (com cooldown p/ não farmar por spam). Ao juntar XP
-//  suficiente, o usuário sobe de nível. A cada N níveis, pode ganhar um cargo.
-//
-//  ⚠️ XP por tempo em call NÃO é suportado: a SDK do Stoat não emite eventos
-//     de voz (join/leave), então não há como cronometrar call de forma
-//     confiável. Todo o XP vem de mensagens.
-//
-//  Comandos:
-//   &xp                    → seu nível, XP e progresso
-//   &xp rank [@usuário]     → idem, de outra pessoa
-//   &xp top                 → leaderboard (ranking + XP + nível)
-//   &xp setup               → assistente de configuração
-//   &xp cargos              → lista os cargos de nível
-//   &xp criarcargos         → cria os cargos automaticamente
-//   &xp reset               → zera o XP do servidor (cuidado!)
-//   &xp on | off            → liga/desliga o sistema
-//
-//  Config (via &xp setup): multiplicador de dificuldade, nível máximo,
-//  intervalo de cargos (5 ou 10), canal de anúncio.
-//
-//  ── Segurança de hierarquia ──
-//  Todos os cargos criados aqui são ordenados ABAIXO do cargo de silêncio
-//  (mute), se existir, para que ninguém possa usar um cargo de nível para
-//  escapar do mute.
-// ══════════════════════════════════════════════════════════
 
 import * as db from "../core/db.js";
 import { limparId, ULID, resolverUsuario } from "../core/ids.js";
 import { tr, lingua } from "../core/i18n.js";
 import * as log from "../core/log.js";
 
-
-// ── Fórmula de progressão ──────────────────────────────────
-// XP total necessário para ATINGIR um nível N.
-// Cresce de forma polinomial pelo multiplicador (dificuldade).
-// nível 1 = base; cada nível seguinte exige mais, escalado por `mult`.
-//
-// MEMOIZAÇÃO: xpParaNivel somava de 1..N a cada chamada, e nivelPorXp a
-// chamava em série — O(n²) com Math.pow, EM TODA MENSAGEM (via aoMensagem).
-// A curva só depende de (base, mult), que são config e quase nunca mudam:
-// a tabela acumulada é calculada uma vez por combinação e reutilizada.
 const _tabelasXp = new Map();   // `${base}|${mult}` → number[] (acumulado por nível)
 function tabelaXp(base, mult, ateNivel) {
   const k = `${base}|${mult}`;
@@ -59,8 +21,6 @@ function xpParaNivel(nivel, base = 100, mult = 1.5) {
   return tabelaXp(base, mult, nivel)[nivel];
 }
 
-// Dado um XP total, calcula o nível atingido (respeitando o teto).
-// Busca binária na tabela acumulada: O(log n) em vez do O(n²) antigo.
 function nivelPorXp(xp, mult = 1.5, nivelMax = 100, base = 100) {
   const tab = tabelaXp(base, mult, nivelMax);
   let lo = 0, hi = nivelMax;
@@ -85,8 +45,6 @@ function barra(pct, tam = 12) {
   return "▰".repeat(cheio) + "▱".repeat(tam - cheio);
 }
 
-// ── Descobre o cargo de mute (silêncio) do servidor ────────
-// Aceita o cargo salvo na config (cargoMudo) e/ou detecta por nome.
 function acharCargoMute(server, config) {
   const salvo = config?.cargoMudoId ?? config?.automod?.punicao?.silenceRoleId ?? null;
   if (salvo && server.roles?.get?.(salvo)) return server.roles.get(salvo);
@@ -97,8 +55,6 @@ function acharCargoMute(server, config) {
   return null;
 }
 
-// ── Reordena os cargos para ficarem ABAIXO do mute ─────────
-// No Stoat, rank menor = mais alto. "Abaixo do mute" = rank MAIOR que o do mute.
 async function ordenarAbaixoDoMute(server, config, idsCargosNivel) {
   const mute = acharCargoMute(server, config);
   if (!mute) return { ok: true, semMute: true };
@@ -141,22 +97,6 @@ async function aplicarCargoNivel(server, member, serverId, nivel, config) {
   }
 }
 
-// ──────────────────────────────────────────────────────────
-//  Sincronizar TODOS os cargos que o nível atual já mereceu
-//
-//  O cargo era concedido só no instante do level up. Quem sai do servidor
-//  — por vontade própria, kick ou ban — perde os cargos, e o XP fica no
-//  banco. Ao voltar, a pessoa reaparece sem nada: o XP diz nível 14, mas os
-//  cargos só voltariam quando ela chegasse ao 15, o que pode levar semanas.
-//  Do ponto de vista dela, o progresso simplesmente sumiu.
-//
-//  Esta função reconcilia: dá tudo que o nível atual já garante. Também
-//  cobre o caso de quem pula vários marcos de uma vez (multiplicador alto,
-//  ou XP dado pelo admin) e o de cargos criados DEPOIS de a pessoa já ter
-//  passado do nível.
-//
-//  Devolve { concedidos: [roleId], nivel } — ou null se não havia o que fazer.
-// ──────────────────────────────────────────────────────────
 export async function sincronizarCargos(server, member, serverId, { nivel = null } = {}) {
   if (!server || !member || !serverId) return null;
   const userId = member?.id?.user ?? member?.user?.id ?? member?.id;
@@ -169,8 +109,6 @@ export async function sincronizarCargos(server, member, serverId, { nivel = null
   if (!marcos.length) return null;
 
   const atuais = new Set((member.roles ?? []).map((r) => r?.id ?? r).filter(Boolean));
-  // Só cargos que ainda EXISTEM no servidor: um cargo apagado à mão continua
-  // no banco, e mandar um id morto no edit() faz a chamada inteira falhar.
   const existe = (id) => {
     try { return !!(server.roles?.get?.(id) ?? server.roles?.[id]); } catch { return true; }
   };
@@ -187,8 +125,6 @@ export async function sincronizarCargos(server, member, serverId, { nivel = null
   }
 }
 
-// Chamado quando alguém ENTRA no servidor: devolve os cargos de nível que a
-// pessoa já tinha conquistado. É o conserto do "voltei e perdi tudo".
 export async function aoEntrar(member, ctx) {
   try {
     const serverId = member?.id?.server ?? ctx?.serverId;
@@ -211,9 +147,6 @@ export async function aoEntrar(member, ctx) {
   }
 }
 
-// ──────────────────────────────────────────────────────────
-//  Handler de mensagem — concede XP
-// ──────────────────────────────────────────────────────────
 export async function aoMensagem(message, ctx) {
   const { config, serverId } = ctx;
   const g = config.xp;
@@ -247,8 +180,6 @@ export async function aoMensagem(message, ctx) {
       const server = await ctx.getServer(message);
       const member = await server.fetchMember(userId).catch(() => null);
       if (member) {
-        // Concede o cargo do nível novo E qualquer marco anterior que esteja
-        // faltando — quem pula dois níveis de uma vez não deixa um cargo para trás.
         const r = await sincronizarCargos(server, member, serverId, { nivel: novoNivel });
         ganhouCargo = r?.concedidos?.length
           ? r.concedidos[r.concedidos.length - 1]
@@ -276,17 +207,12 @@ export async function aoMensagem(message, ctx) {
   }
 }
 
-// ──────────────────────────────────────────────────────────
-//  Comando &xp
-// ──────────────────────────────────────────────────────────
 export async function cmdXp(message, args, ctx) {
   const { sendEmbed, COR, PREFIXO, config, serverId, getServer, membroTemPermissao } = ctx;
   const g = config.xp;
   const lang = lingua(ctx);
   const sub = args[0]?.toLowerCase();
 
-  // Aviso: se o sistema está desligado, quase nada faz sentido. Avisa (exceto
-  // para 'on', 'setup' e 'criarcargos', que são justamente para configurá-lo).
   if (!g?.enabled && !["on", "setup", "config", "configurar", "criarcargos", "criar"].includes(sub)) {
     return sendEmbed(message.channel, tr(ctx, {
       title: "💤 Sistema de níveis desligado",
@@ -322,11 +248,6 @@ export async function cmdXp(message, args, ctx) {
     });
   }
 
-  // ── setup ──
-  // ── sincronizar: devolve os cargos que o nível já garante ──
-  //
-  // Conserta de uma vez quem perdeu os cargos ao sair/ser banido antes de o
-  // bot passar a devolvê-los na entrada. Sem argumento, varre o servidor.
   if (["sincronizar", "sync", "recargos", "resync", "reaplicar"].includes(sub)) {
     if (!(await podeConfigurar(message, ctx))) return;
     const server = await getServer(message);
@@ -504,7 +425,6 @@ export async function cmdXp(message, args, ctx) {
   });
 }
 
-// ── Verificação de permissão para configurar ───────────────
 async function podeConfigurar(message, ctx) {
   const { getServer, membroTemPermissao, sendEmbed, COR } = ctx;
   const server = await getServer(message);
@@ -519,9 +439,6 @@ async function podeConfigurar(message, ctx) {
   return true;
 }
 
-// ──────────────────────────────────────────────────────────
-//  Setup do XP
-// ──────────────────────────────────────────────────────────
 async function setupGame(message, args, ctx) {
   const { sendEmbed, COR, PREFIXO, config } = ctx;
   if (!(await podeConfigurar(message, ctx))) return;
@@ -621,9 +538,6 @@ function erro(ctx, message, texto) {
     description: texto, colour: ctx.COR.erro });
 }
 
-// ──────────────────────────────────────────────────────────
-//  Criar cargos automaticamente (a cada N níveis)
-// ──────────────────────────────────────────────────────────
 export async function criarCargos(message, ctx) {
   const { sendEmbed, COR, config, serverId } = ctx;
   if (!(await podeConfigurar(message, ctx))) return;

@@ -1,30 +1,3 @@
-// ══════════════════════════════════════════════════════════
-//  boas-vindas.js — &boasvindas e &adeus (embeds de entrada e saída)
-//
-//  Dois comandos com a MESMA mecânica, então um módulo só: mudam o
-//  gatilho (entrou / saiu), o ramo da config e os textos padrão.
-//
-//   &boasvindas                    → status e prévia
-//   &boasvindas canal <alvo|aqui>  → onde publicar (liga se estava desligado)
-//   &boasvindas titulo <texto>
-//   &boasvindas texto <descrição>  → aceita várias linhas e \n
-//   &boasvindas cor <cor|#hex>
-//   &boasvindas imagem <url|limpar>
-//   &boasvindas testar             → dispara como se você tivesse entrado
-//   &boasvindas padrao             → volta ao texto de fábrica
-//   &boasvindas on | off
-//
-//  `&adeus` idem, para quem sai. Em inglês: `&welcome` e `&goodbye`.
-//
-//  ── Marcadores ──
-//   {usuario}  menção clicável       {nome}     nome de quem entrou/saiu
-//   {servidor} nome do servidor      {membros}  total de membros
-//   {contagem} idem {membros}
-//
-//  Nota de projeto: a saída NÃO menciona a pessoa com <@id>. Quem saiu não
-//  está mais no servidor, e a menção viraria um ID cru na tela — em vez
-//  disso {usuario} vira o nome em negrito nas despedidas.
-// ══════════════════════════════════════════════════════════
 
 import { resolverCanal } from "../core/ids.js";
 import { contarMembros, invalidar as invalidarMembros } from "../core/membros.js";
@@ -32,7 +5,6 @@ import { validarUrlImagem, comoExibir } from "../core/midia.js";
 import { normalizarCor, nomesDeCor } from "../core/cores.js";
 import { tr, lingua } from "../core/i18n.js";
 
-// ── Padrões de fábrica ─────────────────────────────────────
 const PADRAO = {
   boasVindas: {
     pt: { titulo: "👋 Bem-vindo(a)!", texto: "{usuario} acabou de chegar em **{servidor}**!\n\nAgora somos **{membros}** por aqui." },
@@ -67,12 +39,6 @@ function garantirConfig(config, chave, lang) {
   return c;
 }
 
-// Neutraliza markdown e menções embutidas num texto controlado pelo USUÁRIO
-// (nome/apelido). Sem isto, alguém com o nome `[x](https://phishing)` ou
-// `<@algum-admin>` faria o embed de boas-vindas gerar um link falso ou uma
-// menção clicável a terceiros — o bot assinaria um phishing com a própria voz.
-// A menção real da pessoa que entrou continua vindo do {usuario}, que usa o
-// userId verificado, não o texto do nome.
 function limparValor(txt) {
   return String(txt ?? "")
     .replace(/[<>[\]`*_~|]/g, "")   // tira o que forma menção/link/markdown
@@ -82,12 +48,7 @@ function limparValor(txt) {
     .slice(0, 80);                  // nome não vira parágrafo
 }
 
-// ── Renderização dos marcadores ────────────────────────────
-// `mencionar: false` (saídas) troca {usuario} pelo nome, porque uma menção
-// a quem já saiu aparece como um ID cru na tela.
 export function renderizar(texto, { userId, nome, servidor, membros, mencionar = true }) {
-  // {usuario} mencionando: usa o userId VERIFICADO (não o texto do nome).
-  // Sem menção, ou como {nome}: o nome é sanitizado antes de entrar.
   const nomeLimpo = limparValor(nome);
   const quem = mencionar && userId ? `<@${userId}>` : `**${nomeLimpo || userId || "?"}**`;
   const servidorLimpo = limparValor(servidor);
@@ -105,9 +66,6 @@ export function renderizar(texto, { userId, nome, servidor, membros, mencionar =
     .replaceAll("{count}",    membros ?? "?");
 }
 
-// ── Disparo pelos eventos do main ──────────────────────────
-// Nunca lança: uma falha aqui não pode derrubar o autorole nem a
-// reaplicação de punição que rodam no mesmo handler.
 async function disparar(ctx, chave, { userId, nome, server, mencionar }) {
   try {
     const c = ctx?.config?.[chave];
@@ -117,9 +75,6 @@ async function disparar(ctx, chave, { userId, nome, server, mencionar }) {
               ?? await ctx.client?.channels?.fetch?.(c.canalId).catch(() => null);
     if (!canal) return;
 
-    // O objeto de servidor do Stoat quase nunca traz `memberCount`: é preciso
-    // buscar a lista. O módulo core cuida disso (com cache) — antes daqui saía
-    // sempre "?" no lugar de {membros}.
     const membros = await contarMembros(server);
     const dados = {
       userId, nome,
@@ -161,7 +116,6 @@ export async function aoSair(userId, serverId, ctx, nome = null) {
   await disparar(ctx, "adeus", { userId, nome: nome ?? userId, server, mencionar: false });
 }
 
-// ── Comando ────────────────────────────────────────────────
 function criarComando(tipoId) {
   const T = TIPOS[tipoId];
 
@@ -349,11 +303,6 @@ function criarComando(tipoId) {
           { title: "✅ Imagem removida", description: "O embed volta a ser só texto.", colour: COR.sucesso },
           { title: "✅ Image removed",   description: "The embed goes back to text only.", colour: COR.sucesso }));
       }
-      // ── &... imagem oculto | visivel ──
-      // Para imagem de FORA, a URL precisa ir no conteúdo da mensagem (é assim
-      // que o Stoat gera a pré-visualização). Mascarada, ela some da tela; se
-      // alguma versão do Stoat deixar de pré-visualizar link mascarado, o
-      // `visivel` devolve a URL crua sem precisar de atualização do bot.
       if (["oculto", "ocultar", "hidden", "hide", "mascarar"].includes(resto.toLowerCase())) {
         c.imagemLinkOculto = true; salvarConfig?.();
         return sendEmbed(message.channel, tr(ctx,
@@ -389,8 +338,6 @@ function criarComando(tipoId) {
       c.imagem = v.url;
       salvarConfig?.();
 
-      // Os dois caminhos possíveis rendem resultados visualmente diferentes,
-      // e a pessoa merece saber qual vai ver antes de testar.
       const ex = comoExibir(v.url);
       const comoPt = ex.modo === "media"
         ? "Como é um **anexo do Stoat**, ela vira a **capa do embed** — o melhor resultado."

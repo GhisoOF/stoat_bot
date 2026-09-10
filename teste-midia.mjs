@@ -1,12 +1,3 @@
-// ══════════════════════════════════════════════════════════
-//  teste-midia.mjs — segurança das URLs de imagem em embeds
-//
-//  O que estes testes travam:
-//   • o bot nunca aceita URL apontando para a rede interna (SSRF)
-//   • só http(s) — nada de javascript:, data:, file:
-//   • limite de tamanho (a config não vira depósito de dados)
-//   • os avisos úteis (privacidade, link de busca, http) continuam saindo
-// ══════════════════════════════════════════════════════════
 
 import { validarUrlImagem, URL_MAX } from "./modulos/core/midia.js";
 

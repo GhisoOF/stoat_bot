@@ -1,20 +1,27 @@
+# Um serviço só: bot + IA (+ voz opcional) no mesmo container.
 services:
   stoat-bot:
-    # Opção A: construir a imagem a partir deste diretório
     build: .
-    # Opção B: usar uma imagem publicada (comente o "build: ." acima)
+    # Ou use uma imagem publicada no lugar do build:
     # image: SEU_USUARIO/stoat-bot:latest
     container_name: stoat-bot
-    restart: unless-stopped        # volta sozinho após reiniciar o host
+    restart: unless-stopped
     environment:
-      # ⬇️ O TOKEN VAI AQUI. Em Portainer/Dockge, você pode preencher isto
-      #    pelo campo de variáveis de ambiente da stack (recomendado).
       - BOT_TOKEN=${BOT_TOKEN}
-      - CONFIG_PATH=/data/automod-config.json
       - TZ=America/Sao_Paulo
+      # LLM externo (llama.cpp / llama-swap / Ollama, formato OpenAI):
+      - LLM_URL=${LLM_URL:-http://host.docker.internal:8081}
+      - LLM_MODEL=${LLM_MODEL:-}
+      # Busca (SearXNG), se tiver:
+      - SEARXNG_URL=${SEARXNG_URL:-}
+      # Voz (opcional): VOZ_ATIVA=1 liga o serviço de voz dentro do container
+      - VOZ_ATIVA=${VOZ_ATIVA:-0}
+      # Super-admins (IDs separados por vírgula). Vazio = ninguém.
+      - SUPER_ADMINS=${SUPER_ADMINS:-}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
-      - stoat_data:/data           # VOLUME NOMEADO (não use bind mount no Umbrel)
-    # Sem "ports": o bot só faz conexões de saída ao gateway.
+      - stoat_data:/data
 
 volumes:
   stoat_data:

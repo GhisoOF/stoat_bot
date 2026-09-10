@@ -1,13 +1,3 @@
-// ══════════════════════════════════════════════════════════
-//  buscar-web.js — busca na internet via SearXNG
-//
-//  A Judy usa quando precisa de informação atual (notícias, dados
-//  recentes, fatos que ela não teria de cabeça). Devolve os
-//  resultados crus (título, url, trecho) e ela escreve a resposta.
-//
-//  SEARXNG_URL aponta para a instância de busca. O formato JSON
-//  precisa estar habilitado no settings.yml do SearXNG.
-// ══════════════════════════════════════════════════════════
 
 import { buscar, explicarErroDeRede } from "./rede.js";
 

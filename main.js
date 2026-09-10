@@ -1,15 +1,5 @@
-// ══════════════════════════════════════════════════════════
-//  main.js — Inicialização do bot e roteamento de comandos
-//  stoat.js (compatível com a API do Revolt)
-// ══════════════════════════════════════════════════════════
 import 'dotenv/config';
 
-// ── Filtro de ruído da biblioteca ──────────────────────────
-//
-//  O stoat.js imprime "Skipping key pronouns during hydration!" a CADA membro
-//  hidratado — 1644 linhas num log de 2278 (72% de ruído puro). Não há opção
-//  na lib para calar; filtramos aqui, ANTES do Client existir. Só essa linha
-//  exata é descartada; qualquer outro aviso da lib continua passando.
 {
   const original = console.log.bind(console);
   console.log = (...args) => {
@@ -38,16 +28,16 @@ import * as autorole  from "./modulos/ferramentas/autorole.js";
 import * as bemvindo  from "./modulos/ferramentas/boas-vindas.js";
 import * as fuso      from "./modulos/ferramentas/fuso.js";
 import * as ttsVoz    from "./modulos/ferramentas/tts.js";
-import * as radar     from "./modulos/ferramentas/radar.js";   // vigia privado (fora de rotas: não aparece em help/config/debug)
 import * as staff     from "./modulos/moderacao/staff.js";
 import * as tutorial   from "./modulos/moderacao/tutorial.js";
 import * as corCargo   from "./modulos/moderacao/cor-cargo.js";
 import * as acessoMod  from "./modulos/moderacao/acesso.js";
 import * as warnMod    from "./modulos/moderacao/warn.js";
-import * as srvStats   from "./modulos/moderacao/servidores.js";
+import * as srvStats   from "./modulos/core/metricas.js";
 import * as rpg        from "./modulos/game/game.js";
 import * as modIA      from "./modulos/moderacao/moderacao-ia.js";
 import * as modiaCmd   from "./modulos/moderacao/modia-comando.js";
+import * as persona    from "./modulos/ai/persona.js";
 import * as debugCmd  from "./modulos/moderacao/debug-comando.js";
 import * as chat      from "./modulos/ai/chat.js";
 import * as rss       from "./modulos/ferramentas/rss.js";
@@ -62,20 +52,10 @@ const PREFIXO     = "&";
 const CONFIG_PATH = process.env.CONFIG_PATH || "./automod-config.json";
 const client      = new Client({ autoReconnect: true });
 
-// ══════════════════════════════════════════════════════════
-//  OBSERVABILIDADE E AUTO-RECUPERAÇÃO
-//  Objetivo: nunca ficar "vivo mas surdo". Se a conexão morrer de um
-//  jeito que a reconexão automática não resolve, reiniciamos o processo
-//  (o `restart: unless-stopped` do container sobe um novo, limpo).
-// ══════════════════════════════════════════════════════════
-
 let ultimoEvento = Date.now();       // quando recebemos o último evento do Stoat
 let jaConectou = false;              // o login chegou a dar certo alguma vez?
 let jaReiniciando = false;
 
-// Reinício controlado: encerra o processo para o supervisor subir de novo.
-// Rodando à mão (sem container), o processo simplesmente termina — por isso o
-// motivo vai para o log ANTES de sair.
 function reiniciar(motivo) {
   if (jaReiniciando) return;
   jaReiniciando = true;
@@ -84,13 +64,7 @@ function reiniciar(motivo) {
   setTimeout(() => process.exit(1), 500);
 }
 
-// 1) Erros globais. Erros de SOCKET/CONEXÃO são fatais para o funcionamento —
-//    não adianta seguir "vivo": reiniciamos. Outros erros são só logados.
 function ehErroDeConexao(txt) {
-  // `fetch failed` faltava aqui e custou uma intervenção manual: quando o
-  // Stoat caiu, o login falhou com essa mensagem, ela não casou com nenhum
-  // padrão, o processo NÃO reiniciou e ficou vivo sem nunca conectar — o
-  // Docker não recria um container que não morreu.
   return /socket closed|ECONNRESET|EPIPE|ETIMEDOUT|ECONNREFUSED|ENOTFOUND|EAI_AGAIN|EHOSTUNREACH|ENETUNREACH|fetch failed|write after end|not opened|WebSocket|getaddrinfo/i
     .test(txt || "");
 }
@@ -118,18 +92,10 @@ client.on("connected", () => {
 });
 client.on("disconnected", () => console.warn("[CONN] ⚠️ DESCONECTADO do Stoat — aguardando reconexão…"));
 
-// 3) Watchdog por INATIVIDADE (não depende do evento 'disconnected', que pode
-//    não disparar quando o socket morre "por baixo"). Se não recebemos NENHUM
-//    evento do Stoat por muito tempo, o socket provavelmente está zumbi.
-//    Um servidor com atividade normal recebe eventos com frequência; mesmo um
-//    servidor calado recebe pings/presença. Silêncio longo = problema.
 const INATIVIDADE_MS = Number(process.env.INATIVIDADE_MS || 600000); // 10 min sem eventos → reinicia
 setInterval(() => {
   const ocioso = Date.now() - ultimoEvento;
 
-  // Caso distinto e mais urgente: o processo está de pé mas NUNCA conectou.
-  // Não é socket zumbi, é login que não completou — e esperar 10 minutos por
-  // isso é tempo demais, porque nesse estado o bot não faz absolutamente nada.
   if (!jaConectou && ocioso > 120_000) {
     reiniciar("2min de pé sem nunca ter conectado ao Stoat (login não completou)");
     return;
@@ -140,8 +106,6 @@ setInterval(() => {
   }
 }, 60000);
 
-// 4) Heartbeat: prova de vida. Mostra há quanto tempo sem eventos — se esse
-//    número só cresce, o socket está morto mesmo que "conectado" diga true.
 const HEARTBEAT_MS = Number(process.env.HEARTBEAT_MS || 300000); // 5 min
 setInterval(() => {
   const ociosoMin = Math.round((Date.now() - ultimoEvento) / 60000);
@@ -149,8 +113,6 @@ setInterval(() => {
   console.info(`[VIVO] bot ${jaConectou ? "ativo" : "AINDA SEM CONECTAR"} | RAM ${mem}MB | sem eventos há ${ociosoMin}min`);
 }, HEARTBEAT_MS);
 
-
-// ── Cores semânticas dos embeds ────────────────────────────
 const COR = {
   sucesso: "#3BA55D",
   erro:    "#ED4245",
@@ -159,66 +121,34 @@ const COR = {
   mod:     "#9B59B6",
 };
 
-// ── Bits de permissão do Revolt/Stoat ──────────────────────
 const PERM = {
   ManagePermissions: 1 << 2,
   KickMembers:       1 << 6,
   BanMembers:        1 << 7,
 };
 
-// ══════════════════════════════════════════════════════════
-//  CONFIGURAÇÃO — delegada ao config-store (SQLite por servidor)
-// ══════════════════════════════════════════════════════════
-// Config POR SERVIDOR: store.configDoServidor(serverId)
-// Config GLOBAL (debug, blocklist): store.getGlobal()
-// A migração do automod-config.json antigo acontece em store.inicializar().
-
 let cfgGlobal = store.getGlobal();  // atualizado após inicializar()
 
-// ══════════════════════════════════════════════════════════
-//  HELPERS COMPARTILHADOS
-// ══════════════════════════════════════════════════════════
-
-// Envia uma mensagem SEMPRE como embed (com fallback para texto puro).
-//
-// `imagem` é a URL da capa (opcional). Como exibi-la depende da origem:
-//  • anexo do próprio Stoat → o ID vai no campo `media` do embed (vira capa);
-//  • URL de fora → o campo `media` NÃO aceita URL externa (espera um ID do
-//    Autumn), então o link vai no CONTEÚDO da mensagem e o Stoat gera a
-//    pré-visualização sozinho. Aparece logo abaixo do embed, não dentro dele.
-// Essa distinção vive em core/midia.js (`comoExibir`).
 async function sendEmbed(channel, { title, description, colour = COR.info, imagem = null, anexos = null, ocultarLink = true }) {
   if (!channel || typeof channel.sendMessage !== "function") {
     console.error("[EMBED] Canal indisponível — mensagem não enviada:", title ?? description);
     return;
   }
   const erroStr = (e) => e?.message ?? e?.type ?? (typeof e === "object" ? JSON.stringify(e) : String(e));
-  // Stoat/Revolt limita a descrição do embed. Mantemos folga (1500) porque o
-  // limite conta o embed inteiro (título incluso), não só a descrição.
   let desc = description ?? "";
   if (desc.length > 1500) desc = desc.slice(0, 1495) + "…";
   const base = { title, description: desc, colour };
-  // O que os COMANDOS respondem entra no log: é o gabarito para conferir se
-  // o que a IA afirma sobre o bot bate com o que o bot realmente diz.
-  // (Pedido do Ghiso: menos análise de mensagem, mais rastro do que importa.)
   console.log(`[CMD] ${title ?? "(sem título)"} | ${desc.replace(/\n/g, " ⏎ ").slice(0, 400)}`);
   const exibicao = imagem ? midia.comoExibir(imagem) : null;
   const payload = { embeds: [base] };
   if (exibicao?.modo === "media") payload.embeds = [{ ...base, media: exibicao.id }];
   else if (exibicao?.modo === "link") payload.content = midia.formatarLinkConteudo(exibicao.url, ocultarLink);
-  // Anexos avulsos (ids já subidos no Autumn) — usado pelo log de mensagem
-  // apagada para reanexar a mídia resgatada.
   if (Array.isArray(anexos) && anexos.length) payload.attachments = anexos.slice(0, 4);
 
   try {
-    // Devolve a mensagem enviada: quem pagina (&help, &tutorial) precisa
-    // dela para reagir e editar depois.
     return await channel.sendMessage(payload);
   } catch (err) {
     console.error("[EMBED] Falha ao enviar embed:", erroStr(err));
-    // A imagem é a parte mais frágil do envio. Antes de desistir do embed
-    // inteiro, tentamos de novo SEM ela — a mensagem da pessoa chega, só sem
-    // capa. Melhor perder a imagem que perder o aviso.
     if (exibicao) {
       try {
         const m = await channel.sendMessage({ embeds: [base] });
@@ -237,9 +167,6 @@ async function sendEmbed(channel, { title, description, colour = COR.info, image
   }
 }
 
-// ── Status da conta do bot (texto sob o nome na lista de membros) ──
-//  PATCH https://api.stoat.chat/users/@me  { status: { text, presence } }
-//  Header: X-Bot-Token (mesmo esquema REST do &cor).
 async function definirStatus() {
   const API = (process.env.STOAT_API || "https://api.stoat.chat").replace(/\/$/, "");
   const token = process.env.BOT_TOKEN;
@@ -264,30 +191,20 @@ async function getServer(message) {
   throw new Error("Servidor não encontrado.");
 }
 
-// ── Super-admin (o dono do bot) ────────────────────────────
-// IDs com controle TOTAL em qualquer servidor, ignorando permissões.
-// Validado pelo authorId real da mensagem (garantido pelo Stoat, não forjável).
-// Configurável por env SUPER_ADMINS (IDs separados por vírgula); o padrão é você.
 const SUPER_ADMINS = new Set(
-  (process.env.SUPER_ADMINS || "01K9JKP85D5EP2ZTEHS8DT797A")
+  (process.env.SUPER_ADMINS || "")
     .split(",").map((s) => s.trim()).filter(Boolean)
 );
 function ehSuperAdmin(userId) {
   return !!userId && SUPER_ADMINS.has(userId);
 }
 
-// Verifica se o AUTOR da mensagem tem determinada permissão.
-// Estratégia defensiva: super-admin sempre passa; dono do servidor sempre passa;
-// senão tenta hasPermission() e, por fim, o bitfield de permissões.
 function membroTemPermissao(message, server, permName) {
   try {
     const userId = message.authorId;
     if (ehSuperAdmin(userId)) return true;              // dono do bot: controle total
     if (server?.ownerId && server.ownerId === userId) return true;
 
-    // Cargos marcados como STAFF (&acesso cargo add) valem como permissão de
-    // moderação. Serve para dar poder de moderar sem entregar permissões reais
-    // do Stoat. Não cobre ManageServer, que é administração de verdade.
     if (permName !== "ManageServer") {
       try {
         const serverId = message.serverId ?? message.server?.id ?? null;
@@ -304,9 +221,6 @@ function membroTemPermissao(message, server, permName) {
     }
 
     let perms;
-    // getPermissions() da lib estoura em objeto não hidratado ("reading
-    // 'type'") — visto em produção no &xp. Falha dela não pode virar falha
-    // nossa: engole e cai para os outros caminhos.
     if (typeof member.getPermissions === "function") { try { perms = member.getPermissions(); } catch {} }
     else if (typeof member.permissions === "number")  perms = member.permissions;
     else if (typeof member.permission === "number")   perms = member.permission;
@@ -321,25 +235,14 @@ function membroTemPermissao(message, server, permName) {
   }
 }
 
-// ── Estado compartilhado entre os módulos ──────────────────
 const estado = {
   spamData:       new Map(),   // userId → number[]  (timestamps)
-  // avisos/silêncios agora ficam no BANCO (tabela punicoes), por (servidor, usuário)
-  // Domínios bloqueados (anti-link) — índice compacto (hash 64-bit ordenado),
-  // ~20 MB para 2,5M domínios em vez dos ~400 MB do antigo Set de strings.
   blockedDomains: engine.criarIndiceVazio(),
 };
 
-// Objeto de contexto entregue a todas as funções dos módulos.
-// Evita imports circulares: os módulos nunca importam o main.js.
-// `serverId` determina QUAL config por-servidor entra em ctx.config.
 function criarContexto(serverId = null) {
   const config = store.configDoServidor(serverId);
 
-  // Num servidor em inglês, todo comando citado num embed sai na forma inglesa
-  // (`&game create`, não `&game criar`). Fica aqui, no ponto por onde TODOS os
-  // módulos passam, em vez de espalhado em cada texto de ajuda — assim nada
-  // fica para trás e o que a pessoa lê é sempre o que funciona ao digitar.
   const enviarTraduzido = (canal, embed = {}) => sendEmbed(canal, {
     ...embed,
     title: aliases.exibir(embed.title, config?.language, PREFIXO, CANONICO),
@@ -351,9 +254,6 @@ function criarContexto(serverId = null) {
     sendEmbed: enviarTraduzido, getServer, membroTemPermissao, ehSuperAdmin,
     // A mesma tradução, para quem EDITA um embed já enviado (páginas).
     exibir: (texto) => aliases.exibir(texto, config?.language, PREFIXO, CANONICO),
-    // Busca o servidor pelo ID. Os handlers de evento (entrar/sair) não têm um
-    // objeto `message` para passar ao getServer, mas precisam do nome do
-    // servidor e da contagem de membros nas mensagens de boas-vindas/adeus.
     getServerPorId: async (sid) => {
       if (!sid) return null;
       return client.servers.get?.(sid) ?? await client.servers.fetch(sid).catch(() => null);
@@ -366,7 +266,6 @@ function criarContexto(serverId = null) {
   };
 }
 
-// ── Tabela de roteamento: comando → handler do módulo ──────
 const rotas = {
   // Gerais
   help:          geral.cmdHelp,
@@ -386,8 +285,8 @@ const rotas = {
   warn:          warnMod.cmdWarn,
   avisar:        warnMod.cmdWarn,
   acesso:        acessoMod.cmdAcesso,
-  servidores:    srvStats.cmdServidores,
-  servers:       srvStats.cmdServidores,
+  personalidade: persona.cmdPersonalidade,
+  personality:   persona.cmdPersonalidade,
   warnings:      automodCmd.cmdWarnings,
   clearwarnings: automodCmd.cmdClearwarnings,
   automod:       automodCmd.cmdAutomod,
@@ -491,24 +390,10 @@ const CANONICO = {
   configuracoes: "config", configurações: "config",
   diagnostico: "debug", "diagnóstico": "debug",
   language: "idioma", lang: "idioma",
-  // `scam` virou `sentinela`: o módulo deixou de ser só anti-golpe (hoje pesa
-  // conteúdo grave, venda, links, padrão de conta nova e rigor por antiguidade).
-  // O nome antigo continua valendo — ninguém precisa reaprender um comando.
   scam: "sentinela", antiscam: "sentinela", sentry: "sentinela", guard: "sentinela",
-  // Nomes em inglês dos comandos cujo nome PT não é óbvio para quem lê em
-  // inglês. Ficam aqui e não espalhados nas rotas para haver um lugar só onde
-  // conferir "isto existe nos dois idiomas?".
   ...aliases.COMANDO_EXTRA,
 };
 
-// ══════════════════════════════════════════════════════════
-//  Comandos exclusivos dos servidores com IA
-//
-//  A IA roda num servidor de cada vez (a allowlist CHAT_SERVIDORES). Nos demais,
-//  esses comandos não existem: não aparecem no help, não entram na lista do
-//  &comando, e a rota responde que não está habilitado — em vez de aceitar o
-//  comando e falhar lá dentro, que é pior de entender.
-// ══════════════════════════════════════════════════════════
 const COMANDOS_SO_IA = new Set(["chat", "modia"]);
 estado.COMANDOS_SO_IA = COMANDOS_SO_IA;
 
@@ -527,32 +412,21 @@ estado.comandosGerenciaveisDe = (sid) => {
   const comIA = (() => { try { return chat.servidorPermitido(sid); } catch { return false; } })();
   return comIA ? COMANDOS_GERENCIAVEIS : COMANDOS_GERENCIAVEIS.filter((c) => !COMANDOS_SO_IA.has(c));
 };
-// Os aliases em inglês viram rotas de verdade: se o help mostra
-// `&game create`, digitar isso tem que funcionar.
 for (const [alias, canonico] of Object.entries(aliases.COMANDO_EXTRA)) {
   if (!rotas[alias] && rotas[canonico]) rotas[alias] = rotas[canonico];
 }
-// Os apelidos do CANONICO também precisam existir como rota. Antes só o
-// COMANDO_EXTRA virava rota, então renomear `scam` para `sentinela` deixava
-// o nome antigo apontando para lugar nenhum — quebrando o comando de quem
-// já tinha o hábito.
 for (const [alias, canonico] of Object.entries(CANONICO)) {
   if (!rotas[alias] && rotas[canonico]) rotas[alias] = rotas[canonico];
 }
 estado.rotas = rotas;
 estado.CANONICO_COMPLETO = CANONICO;
 
-// ══════════════════════════════════════════════════════════
-//  EVENTOS
-// ══════════════════════════════════════════════════════════
 let jaInicializou = false;
 client.on("ready", async () => {
   console.info(`Logged in as ${client.user?.username}!`);
   console.info(`Token loaded: ${!!process.env.BOT_TOKEN}`);
   ultimoEvento = Date.now();
 
-  // O evento 'ready' dispara em TODA reconexão. As tarefas pesadas abaixo
-  // (baixar 3M+ domínios da blocklist, agendadores) só devem rodar uma vez.
   if (jaInicializou) {
     console.info("[BOOT] Reconexão — inicialização pesada já feita, pulando.");
     return;
@@ -562,21 +436,12 @@ client.on("ready", async () => {
   store.inicializar(CONFIG_PATH); // abre o banco e migra o config antigo
   cfgGlobal = store.getGlobal();
 
-  // Status do bot (o texto que aparece embaixo do nome na lista de membros).
-  // A stoat.js não expõe isso, então é REST direto — mesmo padrão do &cor.
-  // Obs.: o status é GLOBAL da conta; servidores com prefixo padrão veem o certo.
   definirStatus().catch((e) => console.error("[STATUS]", e?.message ?? e));
 
-  // Recarrega as mensagens de reaction role: sem isso, depois de um restart a
-  // lib não emite eventos de reação para elas e os cargos param de ser dados.
   reactionRoles.precarregarMensagens(client).catch((e) => console.error("[REACTIONROLE][boot]", e?.message));
 
   rpg.iniciarCatalogo();   // semeia os itens genéricos (idempotente)
 
-  // Repara bases que já ficaram com moedas repetidas antes da checagem por
-  // nome existir (dois conjuntos prontos traziam "Prata" com ids diferentes).
-  // Roda em silêncio: é conserto de dado, não novidade para anunciar. Funde,
-  // não apaga — os saldos vão para a moeda que fica.
   try {
     for (const sid of db.servidoresComMoeda()) {
       const feitos = db.fundirMoedasDuplicadas(sid);
@@ -589,13 +454,8 @@ client.on("ready", async () => {
     console.error("[RPG] Falha ao conferir moedas duplicadas:", e.message);
   }
   srvStats.marcarInicio();
-  // Configuração de IA no log: um env perdido aqui só apareceria muito depois,
-  // como "Ollama indisponível" — erro que aponta para o lugar errado.
   for (const l of chat.resumoConfigIA()) console.info(l);
 
-  // Devolve a voz a quem cumpriu mute temporário. Precisa rodar sempre: o
-  // prazo vive no banco, então sem esta rotina um mute de 1h viraria eterno
-  // caso o bot reiniciasse no meio.
   engine.iniciarVigiaDeSilencios(criarContexto());
 
   chat.iniciarMemoria();          // liga o agente de memória (extração em background)
@@ -614,9 +474,6 @@ client.on("ready", async () => {
   ctxRss.configDoServidor = store.configDoServidor;
   rss.iniciarAgendador(ctxRss);
 
-  // Lista global: importa sozinha os bans já existentes em cada servidor
-  // (~1 min após o boot e a cada 6h). Servidores com `&banglobal auto off`
-  // ficam de fora — bans novos deles ainda entram, o histórico antigo não.
   banGlobal.iniciarAutoImportacao(client, criarContexto);
 });
 
@@ -624,10 +481,6 @@ client.on("messageCreate", async (message) => {
   ultimoEvento = Date.now();   // prova de vida: recebemos um evento
   if (message.authorId === client.user.id) return;
 
-  // Log por mensagem: útil para depurar, mas era o maior gerador de volume de
-  // log (JSON.stringify do conteúdo INTEIRO, a cada mensagem, para sempre).
-  // Agora trunca em 120 chars e pode ser desligado só ele com MSG_LOG=off,
-  // sem perder o resto do debug do automod.
   if (cfgGlobal.debug !== false && process.env.MSG_LOG !== "off") {
     const c = message.content ?? "";
     const resumo = c.length > 120 ? c.slice(0, 120) + `… (+${c.length - 120})` : c;
@@ -639,21 +492,6 @@ client.on("messageCreate", async (message) => {
   srvStats.registrar(serverId);   // métrica de ritmo (memória, janela deslizante)
   const ctx = criarContexto(serverId);
 
-  // ── Radar privado ──
-  //
-  //  Fica FORA de `rotas` de propósito: `&debug` enumera `Object.keys(rotas)`
-  //  e o `&help` lê a mesma lista, então registrar o comando ali o tornaria
-  //  visível. Despachado aqui, ele só existe para quem é super admin; para
-  //  qualquer outra pessoa `&radar` cai no "comando desconhecido" de sempre.
-  try { if (await radar.talvezComando(message, { ...ctx, client })) return; }
-  catch (e) { console.error("[RADAR]", e?.message ?? e); }
-
-  // O encaminhamento fica AQUI EM CIMA, antes do automod e do roteador, para
-  // ver mesmo a mensagem que vai ser apagada em seguida — um golpe que se
-  // passa pelo Vapor Nexus é justamente o que interessa ver. Não bloqueia
-  // nada: roda em background e nunca lança.
-  radar.aoMensagem(message, { ...ctx, client }).catch(() => {});
-
   // Identifica se a mensagem é um COMANDO reconhecido
   let command = null, args = [];
   if (message.content.startsWith(PREFIXO)) {
@@ -663,17 +501,11 @@ client.on("messageCreate", async (message) => {
   }
   const handler = command ? rotas[command] : null;
 
-  // ── Assistente em andamento? ──
-  // Quem está no meio de um `&assistente` responde às perguntas em texto
-  // puro (sem prefixo). Essas respostas vão para o assistente, não para o
-  // automod nem para a IA. Um comando com prefixo continua sendo comando.
   if (!command && assistente.temSessao(message)) {
     try { if (await assistente.aoResponder(message, ctx)) return; }
     catch (e) { console.error("[ASSISTENTE]", e.message); }
   }
 
-  // ── Menção ao bot → conversa com a IA (se o chat estiver ligado) ──
-  // Dispara quando não é um comando e o bot foi mencionado.
   if (!command) {
     const meuId = client.user?.id;
     const mencionado =
@@ -689,10 +521,6 @@ client.on("messageCreate", async (message) => {
     }
   }
 
-  // AutoMod roda em mensagens normais e em "comandos" desconhecidos —
-  // mas NÃO em comandos válidos do bot. Assim, por exemplo, o convite
-  // que você está adicionando com `&whitelist add <link>` não é apagado
-  // pelo anti-invite antes de o comando rodar.
   if (!handler) {
     if (await engine.runAutomod(message, ctx)) return;
     // Moderação por IA (critérios em texto livre). Se apagou, para aqui.
@@ -701,19 +529,13 @@ client.on("messageCreate", async (message) => {
     } catch (e) { console.error("[MOD-IA]", e.message); }
   }
 
-  // Game: concede XP por mensagem (só em mensagens normais que sobreviveram
-  // ao automod; não conta comandos do bot).
   if (!command) {
     try { await nivel.aoMensagem(message, { ...ctx, client }); }
     catch (e) { console.error("[NIVEL]", e.message); }
 
-    // Transmissão por voz: se este canal estiver configurado, a mensagem
-    // vira fala na call. Sai barato quando não é o caso.
     try { await ttsVoz.aoMensagem(message, ctx); }
     catch (e) { console.error("[TTS]", e.message); }
 
-    // Agente de memória: observa a mensagem (extração roda em background,
-    // com debounce; não trava nada aqui). Só onde o chat é permitido.
     if (chat.servidorPermitido(serverId)) {
       const nome = message.author?.username ?? message.member?.nickname ?? message.authorId;
       chat.observarMensagem({
@@ -725,17 +547,12 @@ client.on("messageCreate", async (message) => {
       chat.registrarNoCanal(message.channelId, {
         nome, userId: message.authorId, texto: message.content, respondeuA: respNome,
       });
-      // Comentário espontâneo: talvez a Judy dê um pitaco (só no canal escolhido,
-      // com freios). Não bloqueia; roda em background.
       if (!message.author?.bot) {
         chat.observarParaComentario(message, { ...ctx, client });
       }
     }
   }
 
-  // Conversa livre: a Judy pode entrar em canais configurados quando o assunto
-  // vale (decisão dela). Se chegou aqui, a mensagem não é comando nem menção
-  // (menção já teria retornado acima).
   if (!command) {
     chat.talvezResponderLivre(message, { ...ctx, client }).catch(() => {});
   }
@@ -755,22 +572,14 @@ client.on("messageCreate", async (message) => {
     return;
   }
 
-  // Primeiro comando num servidor que nunca escolheu idioma → sugere UMA vez
-  // (bilíngue, não bloqueia o comando atual).
   try { await i18n.talvezSugerirIdioma(message, ctx); }
   catch (e) { console.error("[I18N]", e?.message); }
 
   if (cfgGlobal.debug !== false) console.log(`[CMD] Executando "${command}" (args: ${JSON.stringify(args)})`);
 
-  // ── Comandos desativados neste servidor ──
-  // O nome canônico agrupa aliases (clear/purge → limpar). Comandos essenciais
-  // (help e o próprio gerenciador) NUNCA podem ser desativados, para o admin
-  // não se trancar para fora.
   const ESSENCIAIS = new Set(["help", "comando", "comandos", "command", "debug", "diagnostico", "diagnóstico", "idioma"]);
   const canonico = CANONICO[command] ?? command;
 
-  // ── Comandos de IA fora do servidor com IA ──
-  // Não é "desativado pelo admin": simplesmente não existe aqui.
   if (COMANDOS_SO_IA.has(canonico) && !chat.servidorPermitido(serverId)) {
     return sendEmbed(message.channel, tr(ctx, {
       title: "🚫 Não existe aqui",
@@ -798,17 +607,8 @@ client.on("messageCreate", async (message) => {
     }));
   }
 
-  // ── Restrição por canal ──
-  // Quem tem cargo de staff (ou permissão nativa) pode escapar disso, conforme
-  // a config. `acesso` e `debug` sempre passam, senão dá para se trancar fora.
   const SEMPRE_LIBERADOS = new Set(["acesso", "debug", "help", "tutorial", "assistente", "idioma"]);
 
-  // O `&tts` é liberado NOS CANAIS DA PRÓPRIA VOZ, mesmo com restrição de
-  // canal ligada. O motivo é prático: o comando serve para falar na call, e
-  // quem está na call escreve no chat DELA — exigir que fosse até o canal de
-  // comandos para mandar a Judy falar tornava o recurso inútil para todo
-  // mundo que não é staff. A liberação é estreita: vale só nos canais que a
-  // própria configuração de voz aponta, não em qualquer lugar.
   const cfgTts = ctx.config?.tts;
   const naVoz = canonico === "tts" && cfgTts?.ativo
     && (message.channelId === cfgTts.canalVoz || message.channelId === cfgTts.canalTexto);
@@ -841,8 +641,6 @@ client.on("messageCreate", async (message) => {
     ].join("\n"),
   });
 
-  // Subcomandos em inglês viram os canônicos em PT antes do dispatch: os
-  // módulos comparam com um token só, e quem digita escolhe o idioma.
   const argsFinais = aliases.normalizarArgs(canonico, args, CANONICO);
 
   try {
@@ -866,9 +664,6 @@ client.on("messageCreate", async (message) => {
   }
 });
 
-// ── Reações (cargos por reação) ────────────────────────────
-// A assinatura exata do evento na stoat.js pode variar; extraímos
-// de forma defensiva e logamos os argumentos crus para diagnóstico.
 client.on("messageReactionAdd", async (...a) => {
   ultimoEvento = Date.now();
   try {
@@ -895,8 +690,6 @@ client.on("messageReactionAdd", async (...a) => {
     // Páginas (&help, &tutorial): ◀ ▶ numa mensagem paginada vira a página.
     if (await paginas.aoReagir(msgId, userId, emoji)) return;
 
-    // Reaction roles — dá o cargo se a (mensagem, emoji) estiver registrada.
-    //    O objeto da mensagem (a0) traz o id; passamos ctx com acesso à config.
     const msgObj = (a0 && typeof a0 === "object") ? a0 : { id: msgId };
     const ctxRR = criarContexto(null);
     ctxRR.configDoServidor = store.configDoServidor;   // p/ o log usar a config certa
@@ -933,8 +726,6 @@ client.on("messageReactionRemove", async (...a) => {
     // Tirar a reação ◀ ▶ também vira a página (assim dá para clicar de novo).
     if (await paginas.aoReagir(msgId, userId, emoji)) return;
 
-    // Reaction roles — dá o cargo se a (mensagem, emoji) estiver registrada.
-    //    O objeto da mensagem (a0) traz o id; passamos ctx com acesso à config.
     const msgObj = (a0 && typeof a0 === "object") ? a0 : { id: msgId };
     const ctxRR = criarContexto(null);
     ctxRR.configDoServidor = store.configDoServidor;   // p/ o log usar a config certa
@@ -944,20 +735,6 @@ client.on("messageReactionRemove", async (...a) => {
   }
 });
 
-// ══════════════════════════════════════════════════════════
-//  EVENTOS DE SERVIDOR (punição persistente + chat de logs)
-//  Assinaturas conferidas na stoat.js 7.3.6:
-//    serverMemberJoin:   [member]          member.id = { server, user }
-//    serverMemberLeave:  [member]
-//    serverMemberUpdate: [member, anterior]
-//    messageDelete:      [message]         ← objeto CRU: só tem channelId!
-//    messageUpdate:      [message, anterior]
-//    serverRoleUpdate:   [server, roleId, anterior]
-//    serverRoleDelete:   [server, roleId, role]
-// ══════════════════════════════════════════════════════════
-
-// O payload de messageDelete/messageUpdate é o objeto "hydrated" cru:
-// tem channelId, mas NÃO tem serverId. Descobrimos o servidor pelo canal.
 async function servidorDoCanal(canalId) {
   if (!canalId) return null;
   try {
@@ -987,9 +764,6 @@ client.on("serverMemberJoin", async (member) => {
     if (banido) return;   // já foi banido: não faz sentido dar cargo/reaplicar silêncio
 
     await autorole.aoEntrar(member, ctx);          // ← cargo automático (se configurado)
-    // Devolve os cargos de nível que a pessoa já tinha. Sem isto, quem sai
-    // (ou é banido e volta) reaparece sem nada, e só recupera o cargo ao
-    // atingir o PRÓXIMO nível — semanas depois, no caso de quem já subiu bastante.
     await nivel.aoEntrar(member, ctx);
     await engine.reaplicarPunicao(member, ctx);   // ← reaplica o silêncio, se houver
     await bemvindo.aoEntrar(member, ctx);         // ← embed de boas-vindas (se configurado)
@@ -999,8 +773,6 @@ client.on("serverMemberJoin", async (member) => {
 // SAÍDA
 client.on("serverMemberLeave", async (member, extra) => {
   try {
-    // O payload é cru (HydratedServerMember). O id normalmente é {server, user},
-    // mas dependendo do evento pode vir de outras formas — tentamos várias.
     const serverId = member?.id?.server ?? member?._id?.server ?? member?.serverId ?? member?.server?.id
                   ?? (typeof member === "string" ? member : null);
     const userId   = member?.id?.user ?? member?._id?.user ?? member?.userId ?? member?.user?.id
@@ -1021,18 +793,11 @@ client.on("serverMemberLeave", async (member, extra) => {
       titulo: "📤 Membro saiu",
       descricao: `<@${userId}> saiu do servidor (saída, expulsão ou ban).`,
     });
-    // Embed de despedida (se configurado). O nome vem do payload quando existe;
-    // quem saiu não é mais buscável, então não insistimos numa API que falharia.
     const nome = member?.user?.username ?? member?.nickname ?? null;
     await bemvindo.aoSair(userId, serverId, ctx, nome);
   } catch (err) { console.error("[EVENTO][LEAVE]", err?.message); }
 });
 
-// BOT ENTROU NUM SERVIDOR NOVO
-// A contribuição para a lista global é incondicional, então o histórico de
-// bans do servidor novo entra assim que o bot chega — sem esperar a rodada
-// de 6h. Se a SDK não emitir este evento, a rodada periódica cobre de todo
-// jeito; o listener só antecipa.
 client.on("serverCreate", async (server) => {
   try {
     await banGlobal.sincronizarServidor(server, criarContexto);
@@ -1091,8 +856,6 @@ client.on("messageDelete", async (message) => {
     await log.registrar(ctx, "mensagens", {
       titulo: "🗑 Mensagem apagada",
       descricao: `**Autor:** ${autor}\n**Canal:** <#${message.channelId}>\n**Conteúdo:** ${texto}${notaMidia}`,
-      // tudo como anexo da mensagem (uso garantido do bucket); o embed
-      // media do comoExibir espera URL, não id cru — não misturar.
       anexos: midias.length ? midias : null,
     });
   } catch (err) { console.error("[EVENTO][MSG_DELETE]", err?.message); }
@@ -1162,7 +925,6 @@ client.on("serverRoleDelete", async (server, roleId) => {
   } catch (err) { console.error("[EVENTO][ROLE_DELETE]", err?.message); }
 });
 
-// ── Login ──────────────────────────────────────────────────
 const TOKEN = process.env.BOT_TOKEN;
 if (!TOKEN || TOKEN.trim() === "" || TOKEN === "cole_seu_token_aqui") {
   console.error("\n══════════════════════════════════════════════════════════");
@@ -1174,15 +936,6 @@ if (!TOKEN || TOKEN.trim() === "" || TOKEN === "cole_seu_token_aqui") {
   console.error("══════════════════════════════════════════════════════════\n");
   process.exit(1);
 }
-// ── Login com nova tentativa ──────────────────────────────
-//
-// Antes isto era `client.loginBot(TOKEN)` solto: sem await e sem catch. Se o
-// Stoat estivesse fora do ar, a rejeição virava um `unhandledRejection`, o
-// processo continuava VIVO sem nunca ter conectado, e o container ficava de
-// pé sem fazer nada — exigindo intervenção manual.
-//
-// Agora tentamos de novo com espera crescente. Um Stoat fora do ar por
-// alguns minutos deixa de ser um problema que precisa de gente.
 async function conectar(tentativa = 1) {
   const MAX = Number(process.env.LOGIN_MAX_TENTATIVAS || 10);
   try {

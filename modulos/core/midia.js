@@ -1,47 +1,6 @@
-// ══════════════════════════════════════════════════════════
-//  midia.js — validação de URLs de imagem usadas em embeds
-//
-//  ── Modelo de ameaça (por que este arquivo existe) ──
-//
-//  INVARIANTE: **o bot nunca baixa a imagem.** Ele só guarda a URL e a
-//  repassa ao Stoat no campo `media` do embed. Quem busca o arquivo é a
-//  infraestrutura do Stoat e/ou o cliente de cada pessoa que vê a
-//  mensagem. Nenhum byte de terceiro entra no processo do bot, então
-//  não há aqui superfície de "arquivo malicioso executado no servidor".
-//  Se algum dia alguém for acrescentar um `fetch()` nessa URL, é
-//  preciso reavaliar tudo abaixo — em especial o item SSRF.
-//
-//  O que sobra de risco, e o que fazemos:
-//
-//  1. SSRF (o mais sério). Quem quer que busque a URL pode ser induzido
-//     a bater em endereços que só a rede interna alcança. Este bot roda
-//     em `network_mode: host` no Umbrel e enxerga o Ollama e o judy-ia
-//     pela Tailscale — uma URL como `http://100.74.70.106:11434/...`
-//     salva na config é uma rota pronta para a rede de casa. Bloqueamos
-//     loopback, redes privadas, link-local, `.local`, a faixa da
-//     Tailscale/CGNAT e portas fora de 80/443.
-//
-//  2. Privacidade dos membros. Uma URL em host de terceiro é buscada
-//     quando a mensagem é exibida: o dono daquele host vê o IP e o
-//     User-Agent de quem carregou. Numa mensagem de boas-vindas, isso é
-//     o IP de **todo mundo que entra no servidor**. Não dá para impedir
-//     tecnicamente, mas dá para avisar e recomendar hospedar no Stoat.
-//
-//  3. Exploits de decodificador de imagem (ex.: libwebp CVE-2023-4863)
-//     atingem os CLIENTES, não o bot. Fora do nosso alcance; entra no
-//     mesmo aviso do item 2 — preferir arquivo hospedado no Stoat.
-//
-//  4. Conteúdo impróprio. Quem configura precisa de ManageMessages, ou
-//     seja, já é da moderação. É risco social, não técnico.
-//
-//  5. Poluição da config. Impomos limite de tamanho para a URL não virar
-//     um despejo de dados dentro do JSON de configuração do servidor.
-// ══════════════════════════════════════════════════════════
 
 export const URL_MAX = 512;
 
-// Faixas que NUNCA devem ser alvo: se a URL aponta para cá, ou é engano
-// ou é tentativa de usar o bot como ponte para a rede interna.
 const IPV4_INTERNO = [
   /^127\./,                        // loopback
   /^10\./,                         // privada
@@ -54,8 +13,6 @@ const IPV4_INTERNO = [
 
 const HOST_INTERNO = /^(localhost|.*\.local|.*\.internal|.*\.lan|.*\.home|umbrel.*)$/i;
 
-// Proxies de resultado de busca: apontam para miniatura temporária, não
-// para o arquivo. Não é risco de segurança, é link que quebra.
 const PROXY_DE_BUSCA = /(?:search\.brave\.com|encrypted-tbn|gstatic\.com|lookaside|bing\.net\/th|duckduckgo\.com\/i\/)/i;
 
 const TEM_EXTENSAO = /\.(?:png|jpe?g|gif|webp|avif)(?:$|[?#])/i;
@@ -150,15 +107,6 @@ export function validarUrlImagem(entrada) {
   };
 }
 
-// ── Anexo hospedado no Stoat ───────────────────────────────
-//
-// O campo `media` do embed no Revolt/Stoat NÃO aceita URL externa: ele espera
-// o **ID do arquivo no Autumn** (o serviço de anexos). Passar uma URL de outro
-// site faz o embed sair sem capa, em silêncio — foi exatamente o que aconteceu.
-//
-// Quando a pessoa usa o link de um anexo do próprio Stoat, dá para extrair o ID
-// e usar `media` do jeito certo: a imagem vira capa do embed de verdade.
-// Para links de fora, o caminho é outro (ver `comoExibir` abaixo).
 const ANEXO_STOAT = /^https?:\/\/[^/]*(?:autumn|cdn|media)[^/]*\.(?:stoat\.(?:chat|gg)|revolt\.chat)\/[^/]+\/([0-9A-HJKMNP-TV-Z]{26})(?:\/|$|\?)/i;
 
 export function extrairAnexoStoat(url) {
@@ -166,15 +114,6 @@ export function extrairAnexoStoat(url) {
   return m ? m[1] : null;
 }
 
-/**
- * Decide COMO exibir a imagem, já que os dois caminhos são diferentes:
- *
- *  • { modo: "media", id }  → anexo do Stoat: vira capa do embed (o ideal).
- *  • { modo: "link", url }  → site de fora: a URL vai no CONTEÚDO da mensagem,
- *    e o Stoat gera a pré-visualização da imagem sozinho. Não fica dentro do
- *    embed, aparece logo abaixo dele — mas aparece, que é o que importa.
- *  • null → sem imagem.
- */
 export function comoExibir(url) {
   if (!url) return null;
   const id = extrairAnexoStoat(url);
@@ -182,20 +121,6 @@ export function comoExibir(url) {
   return { modo: "link", url };
 }
 
-// ── Como escrever o link no conteúdo da mensagem ───────────
-//
-// Para imagem de fora, a URL precisa aparecer no CONTEÚDO da mensagem para o
-// Stoat gerar a pré-visualização. O problema é estético: a URL crua fica
-// visível acima do embed — e links de busca chegam a ocupar três linhas.
-//
-// Solução: link markdown com rótulo invisível (`[⠀](url)`). O Stoat continua
-// enxergando a URL e monta a pré-visualização, mas não há texto para ler.
-// U+2800 (Braille em branco) é usado como rótulo por ser um caractere gráfico
-// de verdade — alguns renderizadores descartam link de rótulo vazio.
-//
-// Se em alguma versão do Stoat o link mascarado deixar de gerar a
-// pré-visualização, `ocultar: false` devolve o comportamento antigo sem
-// precisar de deploy novo (é o que o `&boasvindas imagem visivel` faz).
 const ROTULO_INVISIVEL = "\u2800";
 
 export function formatarLinkConteudo(url, ocultar = true) {

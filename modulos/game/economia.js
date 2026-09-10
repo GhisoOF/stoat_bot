@@ -1,23 +1,4 @@
-// ══════════════════════════════════════════════════════════
-//  economia.js — o mecanismo acoplado
-//
-//  Tudo gira em torno do P: a concentração da moeda nas mãos dos
-//  jogadores.
-//
-//      P = moeda com os players ÷ (players + mercado)
-//
-//  A dungeon NÃO entra no cálculo — o que está preso lá saiu de
-//  circulação de verdade.
-//
-//  Duas consequências opostas se equilibram sozinhas:
-//   • P alto  (players ricos)  → itens baratos, morrer custa caro
-//   • P baixo (mercado cheio)  → itens caros, morrer custa pouco
-//
-//  Isso empurra gente rica a gastar e gente pobre a arriscar, sem
-//  ninguém precisar ajustar nada à mão.
-// ══════════════════════════════════════════════════════════
 
-// ── Parâmetros (calibráveis) ──────────────────────────────
 export const CFG = {
   // perda ao cair, em fração do que carrega
   perdaPiso: 0.05, perdaA: 0.10, perdaB: 3, perdaC: 0.015, perdaD: 3.2,
@@ -33,40 +14,29 @@ export const CFG = {
   alfaP: 0.15,
 };
 
-// ── P ─────────────────────────────────────────────────────
 export function calcularP(comPlayers, noMercado) {
-  // Em moeda INFINITA o "mercado" é volume de referência, não estoque. Se
-  // alguém o zerar, o P travaria em 100% para sempre (denominador = só os
-  // jogadores) e os preços/perda ficariam presos no extremo. O piso evita isso.
   const referencia = Math.max(1, noMercado ?? 0);
   const total = (comPlayers ?? 0) + referencia;
   if (total <= 0) return 0.5;
   return Math.max(0, Math.min(1, (comPlayers ?? 0) / total));
 }
 
-// P suavizado: média móvel, para uma compra grande não sacudir o
-// mercado inteiro de uma vez (§10.4 do design).
 export function suavizar(pAntigo, pNovo, alfa = CFG.alfaP) {
   if (pAntigo == null || !Number.isFinite(pAntigo)) return pNovo;
   return pAntigo * (1 - alfa) + pNovo * alfa;
 }
 
-// ── Perda ao cair ─────────────────────────────────────────
-// Cresce devagar no começo e dispara quando os players estão ricos.
 export function perda(P) {
   const { perdaPiso: piso, perdaA: a, perdaB: b, perdaC: c, perdaD: d } = CFG;
   const v = piso + a * Math.log(1 + b * P) + c * (Math.exp(d * P) - 1);
   return Math.max(0, Math.min(0.95, v));
 }
 
-// ── Preços ────────────────────────────────────────────────
 export function mult(P) {
   const { multMin: MIN, multMax: MAX } = CFG;
   return MIN + (MAX - MIN) * (1 - perda(P));
 }
 
-// Item de estoque infinito: sem termo de escassez (o denominador iria a zero).
-// Eles funcionam como piso de preço do jogo.
 export function precoInfinito(precoBase, P) {
   return Math.max(1, Math.round(precoBase * mult(P)));
 }
@@ -84,14 +54,6 @@ export function precoDeVenda(item, estoque, P) {
   return precoFinito(item.precoBase, base, qtd, P);
 }
 
-// ── Recompra do NPC ───────────────────────────────────────
-//
-// ⚠️ rMax PRECISA ser estritamente menor que 1.
-//
-// Com item de estoque infinito, recomprar por ≥ o preço de venda vira
-// máquina de dinheiro infinito: compra por X, vende por X, repete para
-// sempre. Com 0,70, cada ciclo perde 30% e o loop nunca lucra. Este teto
-// não é balanceamento — é o que impede a economia de colapsar.
 export function fatorRecompra(carisma) {
   const rMax = Math.min(0.95, CFG.rMax);   // trava dura, mesmo se mal configurado
   const norm = Math.sqrt(Math.max(0, carisma)) / (Math.sqrt(Math.max(0, carisma)) + 6);
@@ -102,9 +64,6 @@ export function precoDeRecompra(precoVenda, carisma) {
   return Math.max(0.000001, arredondar(precoVenda * fatorRecompra(carisma)));
 }
 
-// ── Dungeon-reservatório ──────────────────────────────────
-// Fração pequena e progressiva: pote cheio devolve mais, pote vazio
-// devolve quase nada. A raiz faz crescer rápido no começo e desacelerar.
 export function fracaoDungeon(R) {
   const { fMin, fMax, rRef } = CFG;
   const razao = Math.min(1, Math.max(0, (R ?? 0) / rRef));
@@ -115,15 +74,6 @@ export function premioDungeon(R) {
   return arredondar((R ?? 0) * fracaoDungeon(R));
 }
 
-// ── Precisão do dinheiro ──────────────────────────────────
-// Moedas caras exigem fração. Com Monero valendo ~90 Reais, arredondar para
-// baixo na troca fazia 112 Reais virarem 1 Monero (~90) e os outros 22 sumirem
-// — o jogador empobrecia a cada câmbio, sem nada indicar isso.
-//
-// Guardamos 6 casas: passa longe do erro de ponto flutuante do JS (que aparece
-// por volta da 15ª) e é fino o bastante para 1 unidade de uma moeda cara valer
-// muitas de uma barata. Arredondar aqui, num lugar só, evita que cada cálculo
-// invente a própria precisão.
 export const CASAS = 6;
 export function arredondar(n, casas = CASAS) {
   if (!Number.isFinite(n)) return 0;
@@ -131,26 +81,10 @@ export function arredondar(n, casas = CASAS) {
   return Math.round(n * f) / f;
 }
 
-// ── Câmbio do sistema (o "banco") ─────────────────────────
-// O banco é um par de reservas, e o preço é a razão entre elas — o mesmo
-// princípio de uma casa de câmbio automática.
-//
-// A conta é `saida = Rout × q / (Rin + q)`: quanto maior a troca, pior a taxa
-// DENTRO da própria troca. Isso é o que fecha a arbitragem. A versão anterior
-// cobrava o preço de antes e só depois movia as reservas, então a volta do
-// A→B→A colhia o movimento que a ida tinha causado e sobrava dinheiro — dava
-// para imprimir moeda girando o câmbio.
-//
-// Quem torna uma moeda cara é a reserva pequena: Bitcoin nasce com 210 contra
-// 200.000 do Real, e é daí que sai o "1 BTC vale ~950 Reais". `dificuldade` e
-// `suprimentoBase` andam juntos (veja o GUIA-moedas), então configurar a
-// raridade continua sendo uma coisa só.
 export function reservaDe(moeda) {
   return Math.max(1, moeda?.mercado ?? moeda?.suprimentoBase ?? 1);
 }
 
-// Taxa marginal — quantas unidades de `para` vale 1 de `de` agora. É a que
-// aparece na tela; a troca real usa a fórmula acima e desliza um pouco.
 export function taxaCambio(de, para) {
   return reservaDe(para) / reservaDe(de);
 }
@@ -167,16 +101,10 @@ export function converter(quantidade, de, para) {
   };
 }
 
-// ── Taxa do mercado entre jogadores ───────────────────────
-// Quase nada em movimento normal; sobe com o volume recente, como custo de
-// congestionamento. A raiz faz subir sem nunca inviabilizar negociar.
 export const TAXA_BASE = 0.005;   // 0,5%
 export const VOLUME_REF = 20000;
 export const TAXA_K = 1.5;
 
-// Satura numa fração razoável: mesmo com volume absurdo a taxa se aproxima do
-// TAXA_TETO sem passar dele. Sem isso, volume alto o bastante levaria a taxa
-// acima de 100% — o vendedor pagaria para vender, o que é sem sentido.
 export const TAXA_TETO = 0.08;   // 8%
 
 export function taxaMercado(volumeRecente = 0) {
@@ -190,14 +118,6 @@ export function calcularTaxa(valor, volumeRecente = 0) {
   return { pct, valor: Math.max(0, arredondar(valor * pct)) };
 }
 
-// ── Recompensa de missão ──────────────────────────────────
-// Escala com a dificuldade e com o valor da moeda (P baixo = moeda cara,
-// então paga menos unidades).
-// Qual moeda sai desta missão.
-//
-// A `dificuldade` da moeda é o que a torna rara: quanto maior, menor a chance
-// de aparecer, e só em missões de nível alto o bastante. A moeda padrão
-// (dificuldade 1) é o piso — sempre pode cair, para ninguém ficar sem nada.
 export function sortearMoeda(moedas, missao, aleatorio = Math.random) {
   const nivel = missao.nivel ?? 1;
   const elegiveis = (moedas ?? []).filter((m) => (m.nivelMin ?? 1) <= nivel);

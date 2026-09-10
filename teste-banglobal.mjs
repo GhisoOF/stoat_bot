@@ -1,11 +1,3 @@
-// ══════════════════════════════════════════════════════════
-//  teste-banglobal.mjs — contribuição sempre ligada
-//
-//  A regra nova: TODO servidor alimenta a lista, sem configuração.
-//  A única escolha é o modo (off/avisar/banir), que trata só do
-//  consumo. Estes testes travam essa regra para que ela não seja
-//  desfeita sem querer numa refatoração futura.
-// ══════════════════════════════════════════════════════════
 
 process.env.BOT_TOKEN = "tok";
 process.env.DB_PATH = "/tmp/bg-teste.db";
@@ -128,14 +120,6 @@ await say("&idioma pt");
 env.length = 0; await say("&help banglobal contribuicao");
 ok(ult().includes("Sempre") || ult().includes("sempre"), "PT: &help banglobal contribuicao responde");
 
-// ══════════════════════════════════════════════════════════
-//  8. O acidente: `revisar` NÃO pode banir ninguém
-//
-//  Foi exatamente isto que aconteceu num servidor real: `revisar` era
-//  apelido de `varrer`, `varrer` bania direto, e quatro pessoas foram
-//  banidas por quem só queria conferir. Estes testes existem para que
-//  nenhuma refatoração futura volte a juntar as duas ideias.
-// ══════════════════════════════════════════════════════════
 console.log("\n── revisar não bane (o acidente) ──");
 
 const banidosNoStoat = [];
@@ -242,13 +226,6 @@ env.length = 0; await dizD("&globalban exempted");
 ok(ult().includes("Exempt") || ult().includes("exempt"), "EN: `&globalban exempted`");
 await dizD("&idioma pt");
 
-// ══════════════════════════════════════════════════════════
-//  13. Achar a pessoa de todo jeito que ela apareça na tela
-//
-//  `&banglobal esquecer AutoMod#0800` respondia "não constava na lista":
-//  o comando pegava o texto CRU como se fosse um ID. O nome existia, só
-//  nunca tinha sido procurado.
-// ══════════════════════════════════════════════════════════
 console.log("\n── formas de indicar uma pessoa ──");
 
 const BOT_ID = "01JBTA0000000000000000000B";
@@ -290,7 +267,6 @@ env.length = 0;
 await dizE("&banglobal esquecer NinguemComEsseNome");
 ok(ult().includes("Não achei") || ult().includes("achei"), "nome inexistente → erro claro, não um 'não constava' enganoso");
 
-// ══ 14. Bots ficam fora da lista ══
 console.log("\n── bots não entram na lista ──");
 const antesBot = db.contarBansGlobais(BOT_ID);
 await bg.sincronizarServidor(servE, (sid) => ({ serverId: sid, config: {}, client: c, sendEmbed: async () => {} }));
@@ -318,7 +294,6 @@ env.length = 0;
 await dizE("&banglobal bots confirmar");
 ok(db.contarBansGlobais(BOT_ID) === 0, "★ `&banglobal bots confirmar` limpa os bots antigos da lista");
 
-// ══ 15. "Unknown User" some: a lista guarda o nome ══
 console.log("\n── nomes na listagem ──");
 db.registrarBanGlobal("01JSMDA00000000000000000S", "SZ", "spam", "automod", { nome: "Fulano" });
 ok(db.nomeDeBanido("01JSMDA00000000000000000S") === "Fulano", "o nome é guardado junto do ban");
@@ -329,11 +304,6 @@ ok(txtLista.includes("Fulano"), "★ a listagem mostra o NOME de quem já saiu (
 ok(txtLista.includes("01JSMDA00000000000000000S"), "  → e o ID junto, que é o que os comandos aceitam");
 ok(!txtLista.includes("<@01JSUMIU"), "  → sem menção crua, que o cliente não resolveria");
 
-// ══ 15. Esquecer é para sempre ══
-//
-//  No servidor: o AutoMod foi esquecido, funcionou — e voltou para a lista
-//  quando OUTRA pessoa o baniu. Apagar linhas não decide nada enquanto a
-//  lista é realimentada a cada ban e a cada 6h de sincronização.
 console.log("\n── esquecer resiste aos bans seguintes ──");
 {
   const ALVO = "01JESQ2CD90000000000000AAA";
@@ -363,20 +333,10 @@ console.log("\n── esquecer resiste aos bans seguintes ──");
   ok(db.contarBansGlobais(ALVO) === 1, "  → sem ressuscitar os registros antigos, só o novo");
 }
 
-// ══ 16. Bot detectado sem servidor em comum ══
-//
-//  `GET /users/{id}` só responde para quem tem CONEXÃO MÚTUA com o alvo
-//  (`have_mutual_connection` em calculate_user_permissions). Um bot banido em
-//  OUTRO servidor não divide servidor nenhum com a Judy — ou seja, o caso que
-//  motiva a checagem era justamente o único que ela não cobria. Foi por isso
-//  que o AutoMod continuou passando. A saída é `GET /bots/{id}/invite`, que
-//  responde sobre qualquer bot público sem exigir nada, e o discover.
 console.log("\n── bot detectado sem servidor em comum ──");
 const clienteVazio = { users: { get: () => null, fetch: async () => null }, servers: new Map() };
 process.env.BOT_TOKEN = process.env.BOT_TOKEN || "tok";
 const fetchOriginal = globalThis.fetch;
-// A API se comporta como a de verdade: /users/{id} nega (403) para quem não
-// divide servidor, e a vitrine responde só sobre os bots públicos.
 const simularApi = ({ publicos = [], discover = [], erroDiscover = false }) => {
   const pedidos = [];
   globalThis.fetch = async (url) => {
@@ -407,8 +367,6 @@ const simularApi = ({ publicos = [], discover = [], erroDiscover = false }) => {
   ok(db.estaIgnoradoGlobal(BOT2), "  → e fica marcado, para o próximo ban não perguntar de novo");
 }
 {
-  // Bot PRIVADO: a vitrine responde 404, e o `/users/{id}` é negado. Sobra o
-  // discover — que é o caminho que o Ghieh sugeriu.
   const BOT3 = "01JB9TPRVAD0000000000000AA";
   const pedidos = simularApi({ publicos: [], discover: [BOT3] });
   await bg.idsDoDiscover({ forcar: true });   // a vitrine é lida uma vez a cada 6h

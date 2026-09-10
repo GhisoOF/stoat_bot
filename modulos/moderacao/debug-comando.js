@@ -1,21 +1,6 @@
 import * as perms from "./permissoes.js";
 import { tr, lingua } from "../core/i18n.js";
-// ══════════════════════════════════════════════════════════
-//  debug-comando.js — &debug
-//
-//  Relatório completo do estado de cada comando:
-//   1) Saúde técnica  — o handler existe e é uma função válida
-//   2) Estado         — ativo ou desativado por config neste servidor
-//   3) Permissões     — a que o BOT precisa ter (e se tem) + a que o
-//                       admin precisa ter para usar
-//
-//  Quando algo está "não ok", o motivo é mostrado.
-//  Exige ManagePermissions.
-// ══════════════════════════════════════════════════════════
 
-// Catálogo dos comandos canônicos: qual permissão o ADMIN precisa para usar,
-// e qual permissão o BOT precisa ter no servidor para a ação funcionar.
-// bot: null  → não requer permissão especial do bot (só responder)
 export const CATALOGO = {
   help:          { admin: null,               bot: null },
   ping:          { admin: null,               bot: null },
@@ -66,13 +51,6 @@ export async function cmdDebug(message, args, ctx) {
 
   const sub = args[0]?.toLowerCase();
 
-  // ── &debug canais → o que o bot enxerga e pode fazer em cada canal ──
-  // No Stoat a permissão do canal vence a do cargo: dá para ter SendMessage
-  // no servidor e estar mudo num canal. É isso que este relatório expõe.
-  // ── &debug voz ── diagnóstico da cadeia inteira do TTS ──
-  // Seis elos (Ollama → judy-ia → Piper → judy-voz → LiveKit → Stoat) e um
-  // sintoma único ("o bot não falou"). Isto diz QUAL elo quebrou, direto do
-  // chat, sem precisar de acesso ao Gentoo.
   if (["voz", "tts", "voice"].includes(sub)) {
     const VOZ_URL = (process.env.VOZ_SERVICO_URL || "").replace(/\/$/, "");
     const linhas = [];
@@ -116,15 +94,9 @@ export async function cmdDebug(message, args, ctx) {
   }
 
   if (["canais", "canal", "permissoes", "permissões", "perms"].includes(sub)) {
-    // O cálculo precisa do MEMBRO do bot (os cargos dele). Sem isso não há
-    // como saber o que ele pode em cada canal.
     const botId = ctx.client?.user?.id;
     const botMember = botId ? await server?.fetchMember?.(botId).catch(() => null) : null;
 
-    // rastreio de UM canal: `&debug canais <nome-ou-id>` mostra a conta de
-    // permissão passo a passo — cada cargo, cada sobrescrita, e o que a lib
-    // acha. Nasceu do canal Logs marcado como invisível enquanto os logs
-    // chegavam nele: o rastro no servidor real aponta qual entrada mente.
     if (args[1] && !["cru", "raw", "bruto"].includes(args[1].toLowerCase())) {
       const alvo = args.slice(1).join(" ").toLowerCase();
       const canais = (server?.channels ?? [])

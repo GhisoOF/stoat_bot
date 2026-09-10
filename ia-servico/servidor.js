@@ -1,47 +1,14 @@
-// ══════════════════════════════════════════════════════════
-//  servidor.js — Serviço de IA da Judy (container separado)
-//
-//  O bot (stoat.js) continua igual: ele só passa a mandar as
-//  mensagens para cá em vez de falar direto com o Ollama.
-//  Aqui é onde vivem as FERRAMENTAS e o laço de tool-calling.
-//
-//  Rotas:
-//    GET  /saude        → diagnóstico (Ollama alcançável? ferramentas ativas?)
-//    GET  /ferramentas  → lista das ferramentas disponíveis
-//    POST /chat         → { messages, modelo?, ferramentas? } → { resposta, usos }
-//
-//  Formato do Ollama verificado na documentação oficial:
-//   pedido : tools:[{type:"function",function:{name,description,parameters}}]
-//   volta  : message.tool_calls:[{function:{name,arguments}}]
-//   retorno: {role:"tool", tool_name:"...", content:"..."}
-// ══════════════════════════════════════════════════════════
 
 import { createServer } from "node:http";
 import { garantirDNS, estaInstalado, servidoresUsados } from "./dns-fallback.js";
 import * as ferramentas from "./ferramentas/index.js";
 
 const PORTA        = Number(process.env.PORTA || 8090);
-// ── Backend de LLM ────────────────────────────────────────
-//
-//  Falamos o formato OpenAI (`/v1/chat/completions`) em vez do formato
-//  próprio do Ollama. Motivo: é o formato que o llama.cpp (`llama-server`),
-//  o llama-swap E o próprio Ollama servem — então trocar de backend vira
-//  trocar uma URL, não reescrever este arquivo. O llama.cpp gasta menos
-//  (uma engine, contexto alocado uma vez no boot, GGUF direto do disco), e
-//  o llama-swap devolve o "vários modelos por nome" que o Ollama dava:
-//  o campo `model` do pedido escolhe qual sobe, com TTL para descarregar.
-//
-//  O que muda de dialeto:
-//    num_predict → max_tokens · format:"json" → response_format
-//    done_reason → choices[0].finish_reason · num_ctx/keep_alive → do servidor
 const LLM_URL      = (process.env.LLM_URL || process.env.OLLAMA_URL || "http://localhost:11434").replace(/\/$/, "");
 const OLLAMA_URL   = LLM_URL;   // rotas antigas de diagnóstico ainda usam o nome
 const MODELO_PADRAO= process.env.LLM_MODEL || process.env.OLLAMA_MODEL || "qwen3.5:9b";
 const NUM_CTX      = Number(process.env.NUM_CTX || 16384);
 const MAX_TOKENS   = Number(process.env.MAX_TOKENS || 4096);
-// 6 voltas: o fluxo certo de leitura de código agora é buscar → ler → (página
-// seguinte) → responder, e com 5 uma pergunta que exigisse dois arquivos batia
-// no teto e recebia "responda com o que tem" no meio do caminho.
 const MAX_VOLTAS   = Number(process.env.MAX_VOLTAS_FERRAMENTA || 6);
 const TIMEOUT_MS   = Number(process.env.LLM_TIMEOUT_MS || process.env.OLLAMA_TIMEOUT_MS || 300000);
 const CONTINUAR_MAX= Number(process.env.CONTINUAR_MAX || 2);   // emendas automáticas em resposta cortada
@@ -56,20 +23,6 @@ function limparRaciocinio(texto) {
     .trim();
 }
 
-// ── Um `system` só, e na frente ────────────────────────────
-//
-//  O template Jinja do Qwen (e do Qwythos, que herda dele) recusa a conversa
-//  INTEIRA com HTTP 500 se houver `system` fora do começo:
-//
-//    raise_exception('System message must be at the beginning...')
-//
-//  E este arquivo empilha vários: o lembrete de idioma, as regras depois de
-//  ler código, a cobrança quando só houve busca. Os modelos LFM aceitavam;
-//  o Qwen derruba a requisição, e o bot mostrava "o serviço de IA não
-//  respondeu" — apontando para o lado errado do problema.
-//
-//  Normalizamos na saída, e não em cada `push`: assim quem escrever a
-//  próxima instrução amanhã não precisa lembrar da regra.
 function umSystemNaFrente(messages) {
   const lista = Array.isArray(messages) ? messages : [];
   const sistemas = [], resto = [];
@@ -81,7 +34,6 @@ function umSystemNaFrente(messages) {
   return juntos ? [{ role: "system", content: juntos }, ...resto] : resto;
 }
 
-// ── Chamada ao LLM (formato OpenAI) ────────────────────────
 async function llm(messages, { modelo, comFerramentas = true, maxTokens = MAX_TOKENS } = {}) {
   const corpo = {
     model: modelo || MODELO_PADRAO,
@@ -105,9 +57,6 @@ async function llm(messages, { modelo, comFerramentas = true, maxTokens = MAX_TO
     const j = await r.json();
     const escolha = j?.choices?.[0] ?? {};
     const msg = { ...(escolha.message ?? {}) };
-    // O raciocínio nunca vai para o chat: com --reasoning-budget 0 sobra o
-    // par vazio "<think></think>" no content, e nos modelos que pensam o
-    // bloco às vezes vaza para dentro dele. Some ao registro em debug.
     if (msg.reasoning_content) log(`raciocínio (${msg.reasoning_content.length} chars, descartado): ${msg.reasoning_content.slice(0, 200)}`);
     if (typeof msg.content === "string") msg.content = limparRaciocinio(msg.content);
     // Mesmo formato interno de antes, para o resto do arquivo não mudar.
@@ -116,38 +65,12 @@ async function llm(messages, { modelo, comFerramentas = true, maxTokens = MAX_TO
 }
 const ollama = llm;   // nome antigo, mesmos chamadores
 
-// ── Laço de ferramentas ────────────────────────────────────
-// Enquanto o modelo pedir ferramentas, executamos e devolvemos
-// o resultado, até ele responder em texto (ou bater o limite).
-// Lembrete de idioma, reinjetado depois das ferramentas.
-//
-// O resultado de uma ferramenta é um JSON grande — nomes de arquivo, código,
-// chaves em inglês. Isso empurra o modelo para o inglês, e a instrução do
-// system fica longe demais no histórico para competir. O sintoma é o usuário
-// perguntar em português e receber a resposta inteira em inglês.
-//
-// Repetir a instrução logo antes da resposta final resolve, e custa uma linha.
 function lembreteDeIdioma(idioma) {
   return idioma === "en"
     ? "Answer in English, regardless of the language of the tool results."
     : "Responda em português do Brasil, independentemente do idioma dos resultados das ferramentas.";
 }
 
-
-// ── Chamada de ferramenta escrita como TEXTO ──────────────
-//
-//  Perguntada sobre o RPG, ela respondeu literalmente isto no chat:
-//
-//    {"name": "ler_codigo", "arguments": {"acao":"buscar","termo":"tts"}}
-//
-//  O modelo tomou a decisão certa e a escreveu no lugar errado: o texto da
-//  resposta em vez do campo `tool_calls`. É uma falha conhecida de template
-//  em modelos locais — o Jinja do llama.cpp nem sempre emite o formato, e
-//  quando não emite, quem paga é o usuário, que recebe JSON na cara.
-//
-//  Em vez de tratar como resposta, reconhecemos a intenção e executamos.
-//  Isso NÃO é adivinhar: só entra aqui o que tem exatamente a forma de uma
-//  chamada e cujo nome está no registro de ferramentas.
 function chamadasEmTexto(texto) {
   const t = String(texto ?? "").trim();
   if (!t.includes("\"name\"") && !t.includes("\"function\"")) return [];
@@ -193,10 +116,6 @@ async function conversarComFerramentas(messages, { modelo, usarFerramentas = tru
   const hist = [...messages];
   const usos = [];
   const anexos = [];
-  // Evidência para o verificador do bot: o texto cru que as ferramentas
-  // devolveram nesta conversa. O bot compara a resposta final contra isto
-  // (camada determinística + revisão ancorada). Cortado por item e no total
-  // para não inchar a resposta HTTP.
   const evidencias = [];
   const EVID_ITEM_MAX = 4000, EVID_TOTAL_MAX = 12000;
   let usouFerramenta = false;
@@ -212,8 +131,6 @@ async function conversarComFerramentas(messages, { modelo, usarFerramentas = tru
     const msg = data?.message ?? {};
     let chamadas = msg.tool_calls || [];
 
-    // O modelo pode ter escrito a chamada no texto em vez de emiti-la no
-    // campo próprio. Se escreveu, a intenção era usar a ferramenta — usamos.
     if (!chamadas.length && usarFerramentas) {
       const noTexto = chamadasEmTexto(msg.content);
       if (noTexto.length) {
@@ -225,16 +142,6 @@ async function conversarComFerramentas(messages, { modelo, usarFerramentas = tru
     }
 
     if (!chamadas.length) {
-      // ── Buscou, não leu, e já ia responder ──
-      //
-      //  `buscar` devolve uma LISTA de caminhos com quantas linhas citam o
-      //  termo. É um índice, não conteúdo — mas parece informação suficiente,
-      //  e o modelo descreveu o `tts.js` inteiro sem nunca ter aberto o
-      //  arquivo ("gerencia chamadas ao serviço de voz, validação de
-      //  permissões, cooldown…"). Estava certo por sorte: qualquer módulo de
-      //  TTS faz isso. Aqui a volta não é desperdiçada — devolvemos ao laço
-      //  com a ordem explícita de abrir o arquivo. Uma vez só; se insistir em
-      //  responder, respondemos com o que há.
       if (usouBusca && !leuConteudo && !buscaTrouxeMapa && !cobrouLeitura && volta < MAX_VOLTAS - 1) {
         cobrouLeitura = true;
         log("buscou mas não leu — exigindo estrutura/ler antes da resposta");
@@ -244,10 +151,6 @@ async function conversarComFerramentas(messages, { modelo, usarFerramentas = tru
         continue;
       }
 
-      // ── Resposta cortada no limite? Continua sozinha. ──
-      // "…e aí, quer que eu continue?" era o modelo batendo em max_tokens.
-      // Quem pergunta é porque parou; quem parou não precisa perguntar —
-      // pedimos a continuação aqui mesmo, e o usuário recebe o texto inteiro.
       let texto = (msg.content || "").trim();
       let cortes = 0;
       let motivo = data?.done_reason;
@@ -289,11 +192,6 @@ async function conversarComFerramentas(messages, { modelo, usarFerramentas = tru
       const resultado = await ferramentas.executar(nome, args);
       usos.push({ ferramenta: nome, ms: Date.now() - inicio, erro: !!resultado?.erro });
 
-      // Ferramenta que produz IMAGEM: o binário não vai para o modelo (base64
-      // no contexto é caro e inútil) — fica de lado e sai na resposta HTTP,
-      // para o bot anexar na mensagem. O modelo recebe só a confirmação.
-      // A busca que já veio com o mapa do melhor candidato entrega conteúdo
-      // de verdade: exigir uma segunda chamada seria burocracia.
       if (nome === "ler_codigo" && resultado?.estrutura_do_melhor) { buscaTrouxeMapa = true; usouEstrutura = true; }
 
       if (resultado?.anexo_base64) {
@@ -301,8 +199,6 @@ async function conversarComFerramentas(messages, { modelo, usarFerramentas = tru
         delete resultado.anexo_base64;
         resultado.anexo = "gerado e pronto para envio junto da resposta";
       }
-      // Guarda o resultado como evidência — AQUI, depois do anexo_base64 já
-      // ter sido removido, para binário não entrar na comparação.
       try {
         const txt = typeof resultado === "string" ? resultado : JSON.stringify(resultado);
         evidencias.push(`[${nome}]\n${txt.slice(0, EVID_ITEM_MAX)}`);
@@ -319,26 +215,6 @@ async function conversarComFerramentas(messages, { modelo, usarFerramentas = tru
     // Logo depois do JSON da ferramenta, enquanto ainda é a última coisa lida.
     hist.push({ role: "system", content: lembreteDeIdioma(idioma) });
 
-    // ── Explicar, não despejar — e não inventar ──
-    //
-    //  Três falhas em sequência moldaram esta instrução, e a terceira foi
-    //  causada pelas correções das duas primeiras:
-    //
-    //   1. Ela COLOU o arquivo inteiro (1400 linhas para "como funciona?").
-    //      → "explique com as suas palavras, não cole".
-    //   2. Sem o texto na frente, PREENCHEU DE MEMÓRIA: descreveu funções que
-    //      não existem, e um "graceful shutdown" que estava nas linhas que ela
-    //      nunca leu.  → "só o que está no conteúdo; o que não apareceu não
-    //      existe".
-    //   3. Com os dois avisos empilhados mais o "isto é um índice" da busca,
-    //      ela RECUSOU RESPONDER — disse que o arquivo era "um índice de
-    //      metadados", com 600 linhas de código real na frente.
-    //
-    //  A lição da terceira: instrução que só proíbe produz recusa. Uma pilha
-    //  de "não faça" não desenha o que fazer, e o caminho mais seguro para um
-    //  modelo acuado é não responder. Então esta versão é mais curta que a
-    //  anterior, diz primeiro o que ELA PODE afirmar, e deixa a proibição
-    //  como uma linha no fim em vez de cinco regras numeradas.
     if (usouLeitura) {
       const regras = idioma === "en"
         ? [
@@ -372,7 +248,6 @@ async function conversarComFerramentas(messages, { modelo, usarFerramentas = tru
   return { resposta: (final?.message?.content || "").trim(), usos, anexos, limite: true, evidencia: evidencias.join("\n").slice(0, EVID_TOTAL_MAX) };
 }
 
-// ── HTTP ───────────────────────────────────────────────────
 const json = (res, code, obj) => {
   const corpo = JSON.stringify(obj);
   res.writeHead(code, { "Content-Type": "application/json; charset=utf-8", "Content-Length": Buffer.byteLength(corpo) });
@@ -399,8 +274,6 @@ const servidor = createServer(async (req, res) => {
     if (req.method === "GET" && req.url === "/saude") {
       let ollamaOk = false, modelos = [];
       try {
-        // `/v1/models` (padrão OpenAI): llama-swap, llama-server e Ollama
-        // respondem. O `/api/tags` de antes era só do Ollama e virava 404.
         const r = await fetch(`${LLM_URL}/v1/models`, { signal: AbortSignal.timeout(5000) });
         if (r.ok) {
           const d = await r.json().catch(() => ({}));
@@ -414,8 +287,6 @@ const servidor = createServer(async (req, res) => {
       });
     }
 
-    // Diagnóstico sob demanda — sem precisar reiniciar para ver o estado.
-    // `curl localhost:8090/diagnostico` responde o mesmo que o boot.
     if (req.method === "GET" && req.url === "/dns") {
       // Rota curta para conferir só o DNS, sem rodar o diagnóstico inteiro.
       const info = await garantirDNS();
@@ -431,13 +302,6 @@ const servidor = createServer(async (req, res) => {
       return json(res, 200, { ok: problemas.length === 0, problemas });
     }
 
-    // Executa uma ferramenta DIRETO, sem passar pelo modelo.
-    //
-    // Existe porque modelos pequenos às vezes respondem "não consigo ler o
-    // arquivo" em vez de chamar a ferramenta — sobretudo quando o pedido vem
-    // na forma de pergunta ("consegue ler o X?"). Quando o bot já sabe que o
-    // pedido exige a ferramenta, ele chama por aqui e entrega o conteúdo
-    // pronto ao modelo. Determinístico, sem depender de o modelo decidir.
     if (req.method === "POST" && req.url === "/ferramenta") {
       const body = await lerCorpo(req);
       const { nome, args } = body ?? {};
@@ -480,26 +344,9 @@ const servidor = createServer(async (req, res) => {
   }
 });
 
-// ══════════════════════════════════════════════════════════
-//  Autodiagnóstico de boot
-//
-//  Já perdemos horas caçando "a Judy não lê o repositório" que eram, na
-//  verdade, DNS quebrado ou token ausente. Testar isso no boot e gritar no
-//  log troca uma investigação inteira por uma linha visível no log do serviço.
-//
-//  Nada aqui derruba o serviço: são avisos. O bot funciona sem GitHub e sem
-//  busca web — só perde essas capacidades.
-// ══════════════════════════════════════════════════════════
 async function diagnosticoDeBoot() {
   const problemas = [];
 
-  // 1. DNS — a falha mais comum, e a mais confusa quando acontece.
-  //
-  // Antes de acusar, tentamos consertar: se o resolvedor do sistema não
-  // responde (resolv.conf sem `nameserver`, o caso clássico), o serviço passa
-  // a resolver por conta própria com servidores públicos. Assim a Judy volta
-  // a funcionar imediatamente, e o aviso vira "está funcionando POR CIMA de um
-  // problema" em vez de "está tudo parado".
   const dnsInfo = await garantirDNS();
   if (!dnsInfo.trocou) {
     if (dnsInfo.motivo.includes("resolvendo")) {

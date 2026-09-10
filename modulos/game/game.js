@@ -1,15 +1,3 @@
-// ══════════════════════════════════════════════════════════
-//  game.js — &game (RPG)
-//
-//  Fase A: personagem, 9 atributos, XP/nível e distribuição de
-//  pontos. Missões, itens e economia vêm nas fases seguintes.
-//
-//  Regras que vêm do design (DESIGN-rpg-economia.md):
-//    xpParaNivel(n)  = 100 × 1,5^(n−1)
-//    pontosPorNivel  = 1 + 0,25 × √(INT + SORTE)
-//  Sem tetos: Inteligência e Sorte sempre rendem mais, com
-//  retorno decrescente.
-// ══════════════════════════════════════════════════════════
 
 import * as db from "../core/db.js";
 import { resolverUsuario } from "../core/ids.js";
@@ -51,9 +39,6 @@ function acharAtributo(txt) {
   return null;
 }
 
-// ── Progressão ────────────────────────────────────────────
-// XP para ALCANÇAR o nível n. O nível 2 custa a base (100); cada nível
-// seguinte custa 1,5× o anterior.
 export function xpParaNivel(n) {
   const alvo = Math.max(2, n);
   return Math.round(XP_BASE * Math.pow(CRESCIMENTO, alvo - 2));
@@ -67,9 +52,6 @@ export function bonusXp(int, sorte) {
   return 1 + 0.02 * Math.sqrt(Math.max(0, (int ?? 0) + (sorte ?? 0)));
 }
 
-// A cada quantos níveis TODOS os atributos sobem 1 sozinhos.
-// A distribuição é híbrida (§2 do design): a base garante que ninguém fique
-// inviável, e os pontos livres é que fazem a build.
 const NIVEIS_POR_BASE = 2;
 
 // Quanto de base o personagem já deveria ter no nível dado.
@@ -102,7 +84,6 @@ export function aplicarXp(p, xpGanho) {
   };
 }
 
-// ── Itens ─────────────────────────────────────────────────
 const RARIDADE_INFO = {
   comum:    { emoji: "⚪", rotulo: "Comum" },
   incomum:  { emoji: "🟢", rotulo: "Incomum" },
@@ -133,8 +114,6 @@ export function iniciarCatalogo() {
   } catch (e) { console.error("[RPG] falha ao semear itens:", e?.message ?? e); }
 }
 
-// Envia uma lista longa em partes, em vez de cortar no limite do embed.
-// Cortar é pior que paginar: a pessoa não percebe que faltou conteúdo.
 async function enviarLista(sendEmbed, canal, { titulo, linhas, rodape = "", colour }) {
   const blocos = [];
   let atual = [], tam = 0;
@@ -174,8 +153,6 @@ export function bonusEquipados(serverId, userId) {
   return total;
 }
 
-// ── Economia ──────────────────────────────────────────────
-// Garante que o servidor tenha ao menos a moeda padrão.
 export function garantirMoeda(serverId) {
   let m = db.moedaPadrao(serverId);
   if (!m) {
@@ -210,12 +187,6 @@ function jogadorPaga(serverId, userId, moeda, qtd) {
   return pago;
 }
 
-// Lê um número digitado por gente: aceita "0.5", "0,5" e "1.234,56".
-//
-// A ambiguidade do ponto é real — em "1.234" ele é separador de milhar, em
-// "0.5" é decimal. A regra que acerta os dois: se há vírgula, ela é a decimal
-// e os pontos são milhar; se só há ponto, ele é decimal (ninguém digita
-// "1.234" querendo mil e duzentos num comando de jogo).
 function numeroDigitado(txt) {
   const t = String(txt ?? "").trim();
   if (!t) return NaN;
@@ -225,27 +196,14 @@ function numeroDigitado(txt) {
   return Number(limpo);
 }
 
-// Formata dinheiro mostrando SÓ as casas que existem.
-//
-// Arredondar tudo para inteiro escondia o saldo de moedas caras: quem tinha
-// 0,24 Ouro via "0" e concluía que havia perdido o dinheiro. Por outro lado,
-// escrever "150.475,000000" de Cobre é ruído. A regra: valores grandes saem
-// inteiros; abaixo de 100, mostra o quanto for preciso para não virar zero.
 function fmt(n) {
   const v = Number(n) || 0;
   const abs = Math.abs(v);
   if (abs >= 100 || Number.isInteger(v)) return Math.round(v).toLocaleString("pt-BR");
-  // 2 casas resolvem a maioria; moedas muito caras precisam de mais para não
-  // exibirem zero (0,0001 Bitcoin ainda é dinheiro).
   const casas = abs >= 1 ? 2 : abs >= 0.01 ? 4 : 6;
   return v.toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: casas });
 }
 
-// Com qual moeda a pessoa vai pagar?
-//
-// Os preços são cotados na moeda padrão, mas ninguém deveria ficar impedido de
-// comprar por ter ganhado Dólar em vez de Real. Se falta saldo na padrão,
-// procuramos outra que cubra — convertendo pela taxa das duas.
 export function moedaParaPagar(serverId, userId, custoNaPadrao) {
   const padrao = garantirMoeda(serverId);
   if (db.getSaldo(serverId, userId, padrao.id) + 1e-7 >= custoNaPadrao) {
@@ -253,11 +211,6 @@ export function moedaParaPagar(serverId, userId, custoNaPadrao) {
   }
   for (const m of db.listarMoedas(serverId)) {
     if (m.id === padrao.id) continue;
-    // Quanto dessa moeda equivale ao custo cotado na padrão. Usa a mesma taxa
-    // do balcão, para não haver duas cotações diferentes na mesma economia.
-    // Arredondar PARA CIMA aqui cobrava a mais de quem paga em moeda cara:
-    // um item de 1 Real virava 1 Ouro inteiro. Com casas decimais, o preço
-    // convertido é o preço convertido.
     const equivalente = ECO.arredondar(custoNaPadrao / Math.max(1e-9, ECO.taxaCambio(m, padrao)));
     if (db.getSaldo(serverId, userId, m.id) + 1e-7 >= equivalente) {
       return { moeda: m, custo: equivalente, convertido: true, padrao };
@@ -266,7 +219,6 @@ export function moedaParaPagar(serverId, userId, custoNaPadrao) {
   return { moeda: padrao, custo: custoNaPadrao, convertido: false, semSaldo: true };
 }
 
-// ── Followers ─────────────────────────────────────────────
 const ENERGIA_MAX = 5;
 // Resgate na dungeon: o dono tem vantagem clara, mas não garantia.
 const CHANCE_RESGATE = 0.25;
@@ -274,8 +226,6 @@ const BONUS_DONO = 3;        // dono ≈ 75%
 const JANELA_DONO_H = 6;     // horas em que só o dono pode tentar
 const ENERGIA_MS = 60 * 60_000;   // 1 ponto por hora
 
-// Energia regenera por TEMPO, calculada na hora da leitura (timestamp no
-// banco, nunca timer em memória — o bot reinicia).
 export function energiaAtual(f) {
   const base = f.energia ?? 0;
   const desde = f.energiaEm ?? 0;
@@ -289,8 +239,6 @@ function gastarEnergia(f, quanto = 1) {
   db.salvarFollower(f.id, { energia: Math.max(0, atual - quanto), energiaEm: Date.now() });
 }
 
-// Atributos do companheiro somados aos itens que ele carrega. Fica junto do
-// resto do cálculo para o que a ficha mostra ser exatamente o que a missão usa.
 export function atributosDoFollowerComItens(f) {
   const cat = db.getFollowerCatalogo(f.catalogoId);
   const base = FOL.atributosDoFollower(cat, f.nivel);
@@ -316,8 +264,6 @@ function descreverFollower(f, comEnergia = true) {
   return `${rar.emoji ?? ""}${cls.emoji ?? ""} **${cat.nome}** _(${cls.rotulo ?? cat.classe}, nv ${f.nivel})_${e}${naParty}`;
 }
 
-// Atributos efetivos: os do personagem + o que o equipamento acrescenta.
-// É isto que vai para o cálculo da missão — equipar tem que importar.
 export function atributosComEquipamento(p, serverId, userId) {
   const extra = bonusEquipados(serverId, userId);
   const out = {};
@@ -325,9 +271,6 @@ export function atributosComEquipamento(p, serverId, userId) {
   return out;
 }
 
-// Atributos da PARTY inteira: você + followers, com as magias deles.
-// Carisma buffa os companheiros (§2 do design), então entra como multiplicador
-// sobre a contribuição dos NPCs.
 export function atributosDaParty(p, serverId, userId) {
   const meus = atributosComEquipamento(p, serverId, userId);
   const party = db.getParty(serverId, userId);
@@ -345,8 +288,6 @@ export function atributosDaParty(p, serverId, userId) {
     if (m) magias.push(m);
   }
 
-  // As magias que o próprio jogador aprendeu entram na mesma disputa que as
-  // dos followers: quem paga o custo em Mana é a party, não o dono da magia.
   const doGrimorio = db.listarMagias(serverId, userId)
     .map((x) => MAG.getMagia(x.magiaId)).filter(Boolean);
   const todas = [...magias, ...doGrimorio];
@@ -361,8 +302,6 @@ export function atributosDaParty(p, serverId, userId) {
   };
 }
 
-// Em qual slot este item cabe? Acessório tem 3 vagas — usa a primeira livre,
-// ou a indicada pelo usuário.
 function slotParaEquipar(serverId, userId, item, pedido) {
   if (item.slot !== "acessorio") return item.slot;
   if (pedido && /^acessorio[123]$/.test(pedido)) return pedido;
@@ -373,7 +312,6 @@ function slotParaEquipar(serverId, userId, item, pedido) {
   return "acessorio1";   // todas cheias: troca a primeira
 }
 
-// ── Ficha ─────────────────────────────────────────────────
 function barraProgresso(atual, total, largura = 12) {
   const pct = Math.max(0, Math.min(1, total ? atual / total : 0));
   const cheias = Math.round(pct * largura);
@@ -415,10 +353,6 @@ function montarFicha(p, nomeExibido, P, serverId, userId, lang = "pt") {
     : `_Ganho por nível: **${pontosPorNivel(p.inteligencia, p.sorte).toFixed(2)}** ponto(s) · XP +${((bonusXp(p.inteligencia, p.sorte) - 1) * 100).toFixed(0)}%_`);
 
   if (serverId && userId) {
-    // ── Slots ──
-    // Mostrar só o que está equipado esconde a informação que importa: os
-    // buracos. Listar os seis, vazios inclusive, transforma a ficha num
-    // checklist do que ainda dá para melhorar.
     const eq = db.getEquipado(serverId, userId);
     const ocupados = db.SLOTS.filter((s) => eq[s]).length;
     linhas.push("");
@@ -442,9 +376,6 @@ function montarFicha(p, nomeExibido, P, serverId, userId, lang = "pt") {
         : `_${db.SLOTS.length - ocupados} slot(s) livre(s) — \`${P}game itens\` mostra o que dá para equipar._`);
     }
 
-    // ── Magia ──
-    // Mana sem contexto é só um número. Aqui ela vira "quanto do meu poder
-    // está em uso", que é a pergunta de quem decide se investe mais nela.
     const mag = atributosDaParty(p, serverId, userId);
     linhas.push("");
     linhas.push(en
@@ -471,7 +402,6 @@ function montarFicha(p, nomeExibido, P, serverId, userId, lang = "pt") {
   return linhas.join("\n");
 }
 
-// ══════════════════════════════════════════════════════════
 export async function cmdGame(message, args, ctx) {
   const { sendEmbed, COR, PREFIXO: P, serverId, getServer } = ctx;
   const lang = lingua(ctx);
@@ -767,12 +697,6 @@ export async function cmdGame(message, args, ctx) {
       description: en ? `**${nome}** went back to the bag.` : `**${nome}** voltou para a mochila.`, colour: COR.mod });
   }
 
-  // ── catálogo ──
-  //
-  // Um embed não cabe o catálogo inteiro. Sem filtro, mostramos um RESUMO por
-  // raridade; com filtro, a lista completa daquela raridade. Assim nada é
-  // cortado no meio — o que era pior que paginar, porque a pessoa nem via que
-  // faltava conteúdo.
   if (["catalogo", "catálogo", "itens-jogo", "loja"].includes(sub)) {
     const filtro = args[1]?.toLowerCase();
     const raridade = db.RARIDADES.find((r) => r === filtro
@@ -794,8 +718,6 @@ export async function cmdGame(message, args, ctx) {
         colour: COR.aviso });
     }
 
-    // Filtro que não bate em nada: avisa, em vez de cair no resumo como se
-    // a pessoa não tivesse pedido nada.
     if (filtro && !raridade && !slotFiltro) {
       return sendEmbed(message.channel, { title: en ? "❌ Unknown filter" : "❌ Filtro desconhecido",
         description: (en ? [
@@ -858,10 +780,6 @@ export async function cmdGame(message, args, ctx) {
     });
   }
 
-  // ── admin (só o dono do bot) ──
-  //
-  // Existe para testar e depurar sem precisar jogar horas: dar item,
-  // moeda, follower, forçar nível e inspecionar os números da economia.
   if (["admin", "debug"].includes(sub)) {
     if (!ctx.ehSuperAdmin?.(eu)) {
       return sendEmbed(message.channel, { title: en ? "🚫 Restricted command" : "🚫 Comando restrito",
@@ -870,8 +788,6 @@ export async function cmdGame(message, args, ctx) {
     const acao = args[1]?.toLowerCase();
     const resto = args.slice(2);
     const alvoId = message.mentionIds?.[0] ?? eu;
-    // A menção <@id> aparece vazia no cliente quando é o próprio autor.
-    // Dizer "você" é mais claro do que uma menção que não renderiza.
     const quem = alvoId === eu ? "você" : `<@${alvoId}>`;
 
     if (!acao || acao === "ajuda") {
@@ -907,8 +823,6 @@ export async function cmdGame(message, args, ctx) {
         ]).join("\n"), colour: COR.mod });
     }
 
-    // `admin dar <qtd>` credita moeda. Mantemos `admin moeda <número>` por
-    // compatibilidade — mas `admin moeda` sem número abre a configuração.
     if (acao === "dar" || (acao === "moeda" && /^\d+$/.test(resto[0] ?? ""))) {
       const qtd = parseInt(resto[0], 10);
       if (!Number.isFinite(qtd)) return sendEmbed(message.channel, { title: en ? "❌ How much?" : "❌ Quanto?",
@@ -961,9 +875,6 @@ export async function cmdGame(message, args, ctx) {
         description: en ? `${meus.length} companion(s) of ${quem}` : `${meus.length} companheiro(s) de ${quem}`, colour: COR.mod });
     }
 
-    // Rodar a missão de verdade ignorando cooldown — o que você tentou fazer
-    // duas vezes no teste. Zerar o cooldown e repetir o comando funcionava,
-    // mas eram dois passos para algo que é de teste.
     if (acao === "missao" || acao === "missão") {
       db.salvarPersonagem(serverId, alvoId, { ultimaMissao: 0, recuperandoAte: 0 });
       // reentra no próprio comando, agora sem cooldown
@@ -1073,8 +984,6 @@ export async function cmdGame(message, args, ctx) {
       const op = resto[0]?.toLowerCase();
       const args2 = resto.slice(1);
 
-      // Campos configuráveis, com explicação — usada tanto na ajuda quanto
-      // nas mensagens de erro, para não haver duas versões da verdade.
       const CAMPOS = {
         nome:           { tipo: "texto", desc: "como aparece nas mensagens" },
         simbolo:        { tipo: "texto", desc: "emoji ou símbolo (🪙, $, ₿)" },
@@ -1087,8 +996,6 @@ export async function cmdGame(message, args, ctx) {
       const APELIDOS_CAMPO = { nivel: "nivelMin", dif: "dificuldade", suprimento: "suprimentoBase",
         simbolo: "simbolo", "símbolo": "simbolo", estoque: "mercado" };
 
-      // Compara sem diferenciar maiúsculas: `nivelMin`, `nivelmin` e `NivelMin`
-      // devem funcionar igual — quem digita não deve precisar acertar o camelCase.
       const normalizarCampo = (c) => {
         const k = String(c ?? "").toLowerCase();
         const exato = Object.keys(CAMPOS).find((x) => x.toLowerCase() === k);
@@ -1102,8 +1009,6 @@ export async function cmdGame(message, args, ctx) {
         return String(valor);
       };
 
-      // Aceita `campo=valor` soltos em qualquer ordem, para criar e configurar
-      // numa linha só em vez de cinco comandos.
       const extrairPares = (lista) => {
         const pares = {}, sobra = [];
         for (const a of lista) {
@@ -1117,9 +1022,6 @@ export async function cmdGame(message, args, ctx) {
 
       const fichaDaMoeda = (m) => {
         const { pSuave } = pDaMoeda(serverId, m);
-        // Em moeda infinita o "mercado" não é estoque que acaba — é o volume de
-        // referência que o P usa para medir concentração. Chamar de estoque
-        // confundiria: parece que vai esgotar, e não vai.
         const volume = m.finita
           ? `mercado ${fmt(m.mercado)}`
           : `referência ${fmt(m.mercado)}`;
@@ -1176,9 +1078,6 @@ export async function cmdGame(message, args, ctx) {
         });
       }
 
-      // ── duplicadas ──
-      // Serve para bases que já ficaram com repetição antes da checagem por
-      // nome existir. Funde em vez de apagar: os saldos vão para a que fica.
       if (["duplicadas", "duplicates", "limpar", "dedupe", "fundir", "merge"].includes(op)) {
         const grupos = db.moedasDuplicadas(serverId);
         if (!grupos.length) {
@@ -1230,9 +1129,6 @@ export async function cmdGame(message, args, ctx) {
           colour: COR.sucesso });
       }
 
-      // ── perfis avulsos ──
-      // Diferente do `modelo`, que cria um conjunto fechado: aqui a pessoa
-      // escolhe moeda por moeda e monta a economia que quiser.
       if (["perfil", "perfis", "profile", "profiles", "add", "adicionar"].includes(op)) {
         const pedidos = args2.filter(Boolean);
 
@@ -1271,8 +1167,6 @@ export async function cmdGame(message, args, ctx) {
           if (db.getMoeda(serverId, perfil.id) ?? db.acharMoedaPorNome(serverId, perfil.nome)) {
             existentes.push(perfil.nome); continue;
           }
-          // A primeira moeda do servidor vira a padrão sozinha: sem uma
-          // principal, os preços não teriam em que ser cotados.
           const semPadrao = !db.listarMoedas(serverId).some((x) => x.padrao);
           db.upsertMoeda(serverId, PERFIS.paraBanco(perfil, { padrao: semPadrao }));
           criadas.push(perfil);
@@ -1316,11 +1210,6 @@ export async function cmdGame(message, args, ctx) {
         const MODELOS = {
           mundo: {
             rotulo: "Mundo real", desc: "Real, Dólar, Euro, Prata, Ouro e Bitcoin",
-            // Fiat e metais são INFINITOS: banco central imprime, e ninguém sabe
-            // quanto ouro ainda há no subsolo. O que os separa não é estoque, é
-            // a VELOCIDADE de geração — controlada pela dificuldade.
-            // O Bitcoin é a exceção: tem teto real de 21 milhões, então é a
-            // única finita de verdade aqui.
             moedas: [
               { id: "brl", nome: "Real",     simbolo: "🇧🇷", dificuldade: 1,   nivelMin: 1,  suprimentoBase: 200000, finita: false, padrao: true },
               { id: "usd", nome: "Dólar",    simbolo: "💵", dificuldade: 5,   nivelMin: 1,  suprimentoBase: 40000,  finita: false },
@@ -1369,13 +1258,8 @@ export async function cmdGame(message, args, ctx) {
         }
 
         const criadas = [], existentes = [];
-        // Lido ANTES do laço: se o servidor já tem uma principal, nenhuma moeda
-        // nova pode nascer com a estrela — senão ficariam duas.
         const jaTinhaPadrao = db.listarMoedas(serverId).some((x) => x.padrao);
         for (const m of mod.moedas) {
-          // Pelo ID **e** pelo NOME: `mundo` traz Prata como `xag` e `fantasia`
-          // como `prata`. Só checar o id deixava as duas passarem, e a carteira
-          // ficava com "Prata" repetida.
           const jaTem = db.getMoeda(serverId, m.id) ?? db.acharMoedaPorNome(serverId, m.nome);
           if (jaTem) { existentes.push(m.nome); continue; }
           db.upsertMoeda(serverId, {
@@ -1384,8 +1268,6 @@ export async function cmdGame(message, args, ctx) {
           });
           criadas.push(m);
         }
-        // Trocar a principal sem avisar reprecificaria todos os itens do
-        // servidor, então ela só é definida quando ainda não existe nenhuma.
         if (!jaTinhaPadrao && criadas.some((m) => m.padrao)) {
           const padraoId = criadas.find((m) => m.padrao).id;
           for (const x of db.listarMoedas(serverId)) db.salvarMoeda(serverId, x.id, { padrao: x.id === padraoId ? 1 : 0 });
@@ -1496,8 +1378,6 @@ export async function cmdGame(message, args, ctx) {
         }
         db.salvarMoeda(serverId, m.id, pares);
         const atual = db.getMoeda(serverId, m.id);
-        // Referência baixa demais numa moeda infinita empurra o P para o teto
-        // e trava os preços no extremo — vale avisar antes de a economia azedar.
         const avisos = [];
         if (!atual.finita && atual.mercado < 100) {
           avisos.push(`⚠️ A referência (${fmt(atual.mercado)}) está muito baixa para uma moeda infinita — o P vai ficar perto de 100% e os preços travam no mínimo. Use algo próximo do total que os jogadores devem acumular.`);
@@ -1545,9 +1425,6 @@ export async function cmdGame(message, args, ctx) {
       // ── painel (padrão) ──
       if (!db.listarMoedas(serverId).length) garantirMoeda(serverId);
       const lista = db.listarMoedas(serverId);
-      // Aviso de duplicadas ANTES da lista: o rodapé pode cair na segunda
-      // página quando há muitas moedas, e é justamente aqui que a pessoa
-      // percebe a repetição.
       const dupes = db.moedasDuplicadas(serverId);
       return enviarLista(sendEmbed, message.channel, {
         titulo: `🪙 Moedas do servidor (${lista.length})`,
@@ -1574,12 +1451,6 @@ export async function cmdGame(message, args, ctx) {
         colour: COR.mod });
     }
 
-    // ── reset ──
-    //
-    // Três escopos, porque "apagar tudo" significa coisas diferentes:
-    //   servidor — progresso das pessoas (personagens, itens, moedas, ofertas)
-    //   catalogo — o que EXISTE no jogo (volta só aos genéricos)
-    //   tudo     — os dois
     if (["zerar", "reset", "resetar"].includes(acao)) {
       const escopo = (resto[0] ?? "servidor").toLowerCase();
       const confirmou = resto.includes("confirmar");
@@ -1680,12 +1551,6 @@ export async function cmdGame(message, args, ctx) {
         iniciarCatalogo();
       }
 
-      // A moeda padrão NÃO é recriada aqui de propósito.
-      //
-      // Quem reseta normalmente quer aplicar um conjunto de moedas em seguida
-      // (`moeda modelo mundo`), e uma "Ouro" criada automaticamente ficaria
-      // sobrando ao lado das novas — confundindo e bagunçando a economia.
-      // Se ninguém escolher nada, ela nasce sozinha no primeiro uso do jogo.
       const mexeuNoCatalogo = ["catalogo", "catálogo", "tudo"].includes(escopo);
 
       return sendEmbed(message.channel, {
@@ -1732,8 +1597,6 @@ export async function cmdGame(message, args, ctx) {
     const moedas = db.listarMoedas(serverId);
     const padrao = db.moedaPadrao(serverId);
 
-    // Mostra TODAS as moedas — antes só a padrão aparecia, e quem ganhasse
-    // Dólar numa missão via a carteira dizer que tinha só Real.
     const linhas = [];
     let temAlgo = false;
     for (const m of moedas) {
@@ -1779,11 +1642,6 @@ export async function cmdGame(message, args, ctx) {
       titulo: en ? "💰 Your wallet" : "💰 Sua carteira", linhas, colour: COR.info });
   }
 
-  // ── mercado entre jogadores ──
-  //
-  // Três formas, todas com CUSTÓDIA: o que está em jogo sai da carteira de
-  // quem anuncia e fica com o bot até fechar ou cancelar. Sem isso, qualquer
-  // uma delas vira golpe na primeira semana.
   if (["mercado", "bazar", "p2p"].includes(sub)) {
     const p = db.getPersonagem(serverId, eu);
     if (!p) return sendEmbed(message.channel, { title: en ? "🎭 No character" : "🎭 Sem personagem",
@@ -1934,8 +1792,6 @@ export async function cmdGame(message, args, ctx) {
           { title: "💱 Bank rates",
             description: "There's only one currency here — exchange needs at least two.", colour: COR.aviso }));
       }
-      // O P de cada moeda é o que define o valor dela: quanto mais concentrada
-      // (P alto), menos vale — é a escassez que dá preço, não um número fixo.
       const linhas = [];
       for (const de of moedas) {
         const partes = moedas.filter((x) => x.id !== de.id).map((para) => {
@@ -1954,10 +1810,6 @@ export async function cmdGame(message, args, ctx) {
         titulo: en ? "💱 Bank rates" : "💱 Taxas do banco", linhas, colour: COR.info });
     }
 
-    // ── &game cambio <qtd> <moeda> — quanto isso vale em TODAS as outras ──
-    // A tabela geral (`cambio taxas`) mostra 100 de cada, o que obriga a fazer
-    // a regra de três na mão quando você quer saber de outra quantia. Aqui a
-    // pergunta é direta: "1 Bitcoin dá quanto em cada moeda?"
     const mQuanto = texto.match(/^([\d.,]+)\s+(\S+)$/);
     if (mQuanto) {
       const qtd = numeroDigitado(mQuanto[1]);
@@ -1994,9 +1846,6 @@ export async function cmdGame(message, args, ctx) {
       }
     }
 
-    // ── &game cambio <qtd> <moeda> para <moeda> — troca com o BANCO ──
-    // Sem contraparte e sem espera: é o que faltava para quem só quer trocar.
-    // `[\d.,]+` e não `\d+`: moeda cara exige fração ("0,5 xau para brl").
     const mb = texto.match(/^([\d.,]+)\s+(\S+)\s+(?:para|to|por|→|->)\s+(\S+)$/i);
     if (mb) {
       const [, qtdTxt, nomeDe, nomePara] = mb;
@@ -2011,9 +1860,6 @@ export async function cmdGame(message, args, ctx) {
       }
       const qtd = numeroDigitado(qtdTxt);
       const saldo = db.getSaldo(serverId, eu, de.id);
-      // Tolerância de um centésimo da última casa: sem isso, "trocar tudo"
-      // com um saldo de 0,1+0,2 (que em float dá 0,30000000000000004) seria
-      // recusado por saldo insuficiente.
       if (!(qtd > 0) || saldo + 1e-7 < qtd) {
         return sendEmbed(message.channel, {
           title: en ? "💸 Not enough balance" : "💸 Saldo insuficiente",
@@ -2041,9 +1887,6 @@ export async function cmdGame(message, args, ctx) {
           colour: COR.aviso });
       }
 
-      // A troca move as DUAS reservas, sempre: é o deslocamento delas que faz o
-      // preço reagir. `pagarAoJogador` só desconta o estoque de moeda finita —
-      // aqui o banco é o balcão do câmbio, então o débito vale para as duas.
       db.debitar(serverId, eu, de.id, qtd);
       db.salvarMoeda(serverId, de.id, { mercado: (db.getMoeda(serverId, de.id)?.mercado ?? 0) + qtd });
       const recebido = r.recebe;
@@ -2221,10 +2064,6 @@ export async function cmdGame(message, args, ctx) {
       ].join("\n"), colour: COR.sucesso });
   }
 
-  // ── loja: comprar e vender ──
-  // ── &game item <nome> — a ficha de UM item, com preço ──
-  // O catálogo lista dezenas de itens; ver o preço de cada um obrigava a
-  // abrir o mercado inteiro e procurar. Aqui é uma consulta direta.
   if (["item", "ficha-item", "preco", "preço", "price"].includes(sub)) {
     const busca = args.slice(1).join(" ").trim();
     if (!busca) {
@@ -2258,8 +2097,6 @@ export async function cmdGame(message, args, ctx) {
     const si = SLOT_INFO[item.slot] ?? {};
     const temNaMochila = p ? (db.getInventario(serverId, eu).find((x) => x.id === item.id)?.quantidade ?? 0) : 0;
 
-    // Quanto custa em CADA moeda: é a pergunta natural de quem tem carteira
-    // variada, e evita ter de fazer a conta do câmbio na mão.
     const emCadaMoeda = db.listarMoedas(serverId).map((m) => {
       const c = m.id === moeda.id ? preco : ECO.arredondar(preco / Math.max(1e-9, ECO.taxaCambio(m, moeda)));
       const seu = db.getSaldo(serverId, eu, m.id);
@@ -2431,8 +2268,6 @@ export async function cmdGame(message, args, ctx) {
         return enviarLista(sendEmbed, message.channel, {
           titulo: en ? "✦ Spell" : "✦ Magia", linhas: linhas.filter(Boolean), colour: COR.info });
       }
-      // Pediu uma magia que não existe. Cair na lista inteira sem dizer nada
-      // faria parecer que o comando ignorou o argumento.
       return sendEmbed(message.channel, {
         title: en ? "❌ Unknown spell" : "❌ Magia desconhecida",
         description: en
@@ -2488,9 +2323,6 @@ export async function cmdGame(message, args, ctx) {
     const { pSuave } = pDaMoeda(serverId, moeda);
     let busca = args.slice(1).join(" ").trim();
 
-    // `... com <moeda>` / `... with <currency>`: escolher com que moeda pagar.
-    // Antes, o bot escolhia sozinho a primeira que desse — o que é péssimo
-    // quando você está guardando uma moeda rara e ele resolve gastá-la.
     let moedaEscolhida = null;
     const mComMoeda = busca.match(/^(.*?)\s+(?:com|with|em|in)\s+(\S+)$/i);
     if (mComMoeda) {
@@ -2524,8 +2356,6 @@ export async function cmdGame(message, args, ctx) {
         description: en ? `**${item.nome}** ran out in the market. Finite items return when someone sells.` : `**${item.nome}** acabou no mercado. Itens finitos voltam quando alguém vende.`, colour: COR.aviso });
     }
     const preco = ECO.precoDeVenda(item, est, pSuave);
-    // Com moeda escolhida, o preço é convertido para ela pela taxa do balcão —
-    // a mesma do &game cambio, para não haver duas cotações na mesma economia.
     const pag = moedaEscolhida
       ? (() => {
         const custo = moedaEscolhida.id === moeda.id
@@ -2739,13 +2569,6 @@ export async function cmdGame(message, args, ctx) {
         return c && c.nome.toLowerCase().includes(alvoTxt);
       }) ?? null;
     };
-    // "Curandeira Errante Espada Temperada" tem nome composto dos DOIS lados,
-    // e não existe separador. Quebrar no primeiro espaço (o que se fazia antes)
-    // dava "Curandeira" + "Errante Espada Temperada" e falhava.
-    //
-    // A saída é testar TODAS as quebras possíveis e ficar com a única em que os
-    // dois lados resolvem para algo real. Entre várias válidas, ganha a que
-    // acerta o nome inteiro em vez de um pedaço.
     const separarNomes = (texto, acharDireita) => {
       const bruto = String(texto ?? "").trim();
       if (!bruto) return null;
@@ -2824,9 +2647,6 @@ export async function cmdGame(message, args, ctx) {
         : `Não achei **${texto}** entre os seus companheiros. Veja com \`${P}game followers\`.`,
       colour: COR.erro });
 
-    // ── ficha / status de UM companheiro ──
-    // A lista mostra nome, nível e energia; quem decide quem levar precisa dos
-    // atributos e da magia, que é o que de fato muda a chance da missão.
     if (["ficha", "status", "ver", "sheet", "info"].includes(acao)) {
       if (!resto) {
         return sendEmbed(message.channel, tr(ctx,
@@ -2895,8 +2715,6 @@ export async function cmdGame(message, args, ctx) {
 
     // ── mochila: dar e pegar de volta ──
     if (["dar", "equipar", "give", "equip", "mochila", "inventario", "inventário", "bag"].includes(acao)) {
-      // `mochila <nome>` é só a consulta — e "dar <nome>" sem item também,
-      // já que aí não há o que entregar.
       const eConsulta = ["mochila", "inventario", "inventário", "bag"].includes(acao);
       const par = separarNomes(resto, (t) => db.acharItemPorNome(t));
       if (eConsulta || !par) {
@@ -2973,8 +2791,6 @@ export async function cmdGame(message, args, ctx) {
           { title: "❌ Wrong usage",
             description: `\`${P}game follower pegar <companion> <item>\``, colour: COR.erro }));
       }
-      // Aqui a busca da direita é entre os itens QUE ELE CARREGA, não o
-      // catálogo inteiro — senão daria para "pegar" algo que ele nunca teve.
       const limparTxt = (x) => String(x ?? "").trim().toLowerCase()
         .normalize("NFD").replace(/[\u0300-\u036f]/g, "");
       const par = separarNomes(resto, (t) => {
@@ -3191,8 +3007,6 @@ export async function cmdGame(message, args, ctx) {
           : `🩹 **Você está se recuperando.** Nada fica disponível por ~${min} min.`, "");
       }
 
-      // Espera de cada missão, já somando recuperação e cooldown. Sem isso, a
-      // lista mostrava chances de missões que a pessoa nem podia começar.
       const esperaDe = (m) => {
         const liberaEm = Math.max(p.recuperandoAte ?? 0, (p.ultimaMissao ?? 0) + MISS.cooldownMs(m));
         return liberaEm > agora ? Math.ceil((liberaEm - agora) / 60000) : 0;
@@ -3215,9 +3029,6 @@ export async function cmdGame(message, args, ctx) {
         linhas.push("", `${info.emoji} **${info.rotulo}**`);
         for (const m of porTipo[d] ?? []) {
           const v = MISS.previsao(attr, m, magias, tamanhoParty);
-          // As duas chances se MULTIPLICAM: 53% de êxito com 75% de sobrevivência
-          // dá só 40% de missão cumprida. Mostrar as duas soltas engana — quem lê
-          // acha que vence 53% das vezes.
           const completa = v.exito * v.sobrevivencia;
           linhas.push(en
             ? `   • **${m.nome}** — 🏆 **${(completa * 100).toFixed(0)}%** _(success ${(v.exito * 100).toFixed(0)}% × survival ${(v.sobrevivencia * 100).toFixed(0)}%)_${marcaEspera(m)}`
@@ -3251,12 +3062,6 @@ export async function cmdGame(message, args, ctx) {
           : `Não achei **${acao}**. Veja a lista com \`${P}game missao\`.`, colour: COR.erro });
     }
 
-    // ── cooldown e recuperação ──
-    // As duas esperas correm em PARALELO, a partir da mesma missão. Checá-las
-    // em sequência mostrava a mais curta primeiro: você esperava a recuperação
-    // achando que ia partir, e só então descobria o cooldown. Agora a conta é
-    // uma só — o prazo que vale é o mais distante dos dois, e a mensagem diz
-    // o porquê de cada um.
     const agora = Date.now();
     const prontoEm = (p.ultimaMissao ?? 0) + MISS.cooldownMs(missao);
     const liberaEm = Math.max(p.recuperandoAte ?? 0, prontoEm);
@@ -3265,8 +3070,6 @@ export async function cmdGame(message, args, ctx) {
       const recuperando = (p.recuperandoAte ?? 0) > agora;
       const emCooldown = prontoEm > agora;
 
-      // Missões mais leves têm cooldown menor: se alguma já estiver liberada,
-      // vale dizer — é a diferença entre esperar e jogar agora.
       const jaLiberadas = MISS.MISSOES.filter((m) =>
         (p.ultimaMissao ?? 0) + MISS.cooldownMs(m) <= agora
         && (p.recuperandoAte ?? 0) <= agora);
@@ -3377,13 +3180,6 @@ export async function cmdGame(message, args, ctx) {
       }
     }
 
-    // ── resgate automático ──
-    // Antes o resgate era um comando à parte, e ficava estranho: você "ia
-    // à dungeon" sem sair do lugar, num comando que só rolava um dado. Agora
-    // ele acontece onde faz sentido — indo à missão você passa por lá.
-    //
-    // Só uma tentativa por missão, e só se você voltou: quem caiu não estava
-    // em condição de tirar ninguém de lá.
     const resgatados = [];
     if (r.desfecho !== "caiu") {
       const presos = db.listarCapturados(serverId);
@@ -3519,9 +3315,6 @@ export async function cmdGame(message, args, ctx) {
         colour: COR.info });
     }
 
-    // Esta tela é só o painel de quem está lá dentro. O resgate em si acontece
-    // nas missões: rolar um dado num comando parado nunca foi uma decisão —
-    // era só repetir até dar certo. Agora ir à missão É a tentativa.
     const linhas = presos.map((f) => {
       const cat = db.getFollowerCatalogo(f.catalogoId);
       const cls = FOL.CLASSES[cat?.classe] ?? {};

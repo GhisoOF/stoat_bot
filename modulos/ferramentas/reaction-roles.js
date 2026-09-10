@@ -1,16 +1,3 @@
-// ══════════════════════════════════════════════════════════
-//  reaction-roles.js — emoji numa mensagem dá/tira um cargo
-//
-//  &reactionrole add <idMensagem> <emoji> <idCargo>
-//        → o bot reage na mensagem; quem clicar ganha o cargo
-//  &reactionrole remove <idMensagem>
-//        → remove todos os vínculos daquela mensagem
-//  &reactionrole list
-//        → lista os vínculos do servidor
-//
-//  Alias: &rr
-//  Exige ManageRole (para o bot poder atribuir cargos).
-// ══════════════════════════════════════════════════════════
 
 import * as db  from "../core/db.js";
 import * as log from "../core/log.js";
@@ -30,13 +17,6 @@ export function normalizarEmoji(e) {
   return v.replace(/\uFE0F/g, "");   // remove o "variation selector"
 }
 
-// ──────────────────────────────────────────────────────────
-//  Handler: chamado no messageReactionAdd
-//  Dá o cargo se a (mensagem, emoji) estiver registrada.
-// ──────────────────────────────────────────────────────────
-// A lib às vezes lança OBJETOS (resposta HTTP), não Error — aí `err.message`
-// é undefined e o log fica inútil ("[REACTIONROLE] undefined"). Isto extrai
-// alguma coisa legível de qualquer formato.
 function descreverErro(e) {
   if (!e) return "erro desconhecido";
   if (typeof e === "string") return e;
@@ -53,26 +33,6 @@ function descreverErro(e) {
   return partes.join(" | ");
 }
 
-// ══════════════════════════════════════════════════════════
-//  Tirar a reação de UMA pessoa
-//
-//  `message.unreact(emoji, X)` da lib NÃO recebe um usuário: o segundo
-//  parâmetro é `deleteAll`, um booleano.
-//
-//      async unreact(emoji, deleteAll = false) {
-//        return api.delete(`.../reactions/${emoji}`, { remove_all: deleteAll });
-//      }
-//
-//  Passando um userId ali, a string cai como `remove_all: true` (toda string
-//  não vazia é verdadeira) e o backend executa `clear_reaction`, que apaga a
-//  reação de TODO MUNDO — inclusive a do próprio bot, que é a que mantém o
-//  emoji visível com contagem 1. Resultado: no modo exclusivo, trocar de cor
-//  fazia o emoji sumir da mensagem, e ninguém mais conseguia escolher aquela
-//  opção. Era o bug relatado.
-//
-//  A rota certa existe e aceita `user_id` (delta: `OptionsUnreact`), só não
-//  está exposta na lib. Então chamamos a API direto.
-// ══════════════════════════════════════════════════════════
 async function tirarReacaoDe(message, emoji, userId, client) {
   const canalId = message?.channelId ?? message?.channel?.id ?? message?.channel?._id;
   const msgId = message?.id ?? message?._id;
@@ -84,31 +44,11 @@ async function tirarReacaoDe(message, emoji, userId, client) {
     );
     return true;
   } catch (e) {
-    // Remover a reação de outra pessoa exige ManageMessages (o backend
-    // escala a permissão quando vem `user_id`). Sem ela, o cargo já foi
-    // trocado de qualquer forma — o painel é que fica desatualizado.
     console.error(`[REACTIONROLE] não consegui tirar a reação ${emoji} de ${userId}: ${descreverErro(e)}`);
     return false;
   }
 }
 
-// ══════════════════════════════════════════════════════════
-//  Reagir sem levar 429 na cara
-//
-//  O Stoat limita requisições por bucket, e reação cai no bucket do CANAL:
-//
-//      ("channels", Some(id)) => ...   "channels" => 15
-//
-//  São 15 por janela. Um painel de 17 cores, disparado de uma vez, passa
-//  do teto no 15º e os últimos voltam com `{"retry_after": 8270}` — foi
-//  exatamente o que aconteceu: 13 emojis entraram e 4 ficaram de fora, em
-//  silêncio, porque o erro só ia para o log.
-//
-//  Duas medidas: espaçar as reações para caber na janela, e obedecer ao
-//  `retry_after` quando mesmo assim estourar (outra coisa pode estar usando
-//  o mesmo bucket). O tempo total de um painel grande passa a ser previsível
-//  — ~1s por emoji — e é isso que a mensagem de progresso promete.
-// ══════════════════════════════════════════════════════════
 const PAUSA_MS = Number(process.env.RR_PAUSA_MS || 750);   // 15 por 10s = 1 a cada 667ms
 const dormir = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -125,10 +65,6 @@ async function reagirComPaciencia(message, emoji, { tentativas = 3 } = {}) {
         continue;
       }
       if (espera > 0) return `limite de requisições (retry_after ${espera}ms)`;
-      // `InvalidOperation` aqui é quase sempre uma destas duas: a mensagem
-      // bateu no teto de reações do servidor, ou é um emoji personalizado
-      // que o bot não pode usar (de um servidor onde ele não está, ou
-      // apagado). O erro cru não diz qual, então dizemos as duas.
       if (/InvalidOperation/.test(descreverErro(e))) {
         return "o Stoat recusou: ou a mensagem chegou ao teto de reações, ou é um emoji personalizado que eu não posso usar";
       }
@@ -138,8 +74,6 @@ async function reagirComPaciencia(message, emoji, { tentativas = 3 } = {}) {
   return "não consegui depois de várias tentativas";
 }
 
-// Teto de reações por mensagem, anunciado pela própria API. Sem ele, um
-// painel grande demais falharia sempre nos últimos emojis sem explicação.
 let tetoCache = null;
 async function tetoDeReacoes() {
   if (tetoCache) return tetoCache;
@@ -163,18 +97,6 @@ function quemReagiu(message, emoji) {
   return new Set(v ? [...v] : []);
 }
 
-// ══════════════════════════════════════════════════════════
-//  Garantir que o painel continue clicável
-//
-//  A reação do bot é o que segura o emoji na mensagem: sem ela, quando a
-//  última pessoa desmarca, a contagem chega a zero e o emoji desaparece —
-//  aí não há mais onde clicar para pegar aquele cargo.
-//
-//  Repomos SEMPRE na ordem configurada, e só o que falta. Reagir de novo num
-//  emoji que já está lá não muda a posição dele; um que sumiu volta para o
-//  fim da fila, que é o melhor que dá para fazer sem apagar as escolhas de
-//  todo mundo (o `reparar ordem` faz isso, mas só quando alguém pede).
-// ══════════════════════════════════════════════════════════
 export async function reporReacoesQueFaltam(message, client, { forcar = false } = {}) {
   const messageId = message?.id ?? message?._id;
   if (!messageId) return { repostos: [], falhas: [], conferidos: 0 };
@@ -184,8 +106,6 @@ export async function reporReacoesQueFaltam(message, client, { forcar = false } 
   const falhas = [];
   for (const r of regras) {
     const reagiram = quemReagiu(message, r.emoji);
-    // `null` = a mensagem não trouxe as reações; nesse caso só agimos se
-    // pedirem explicitamente, para não martelar a API a cada boot.
     const falta = reagiram === null ? forcar : (reagiram.size === 0 || (forcar && !reagiram.has(meuId)));
     if (!falta) continue;
     if (repostos.length) await dormir(PAUSA_MS);
@@ -222,8 +142,6 @@ export async function aoReagir(message, userId, emoji, ctx) {
     const atuais = (member.roles ?? []).map((r) => r?.id ?? r).filter(Boolean);
     if (atuais.includes(alvo.roleId)) return false;  // já tem o cargo
 
-    // MODO EXCLUSIVO: escolher um emoji desta mensagem TROCA o cargo anterior
-    // (para "escolha sua cor"), em vez de acumular ("escolha seus interesses").
     let removidos = [];
     let novos = atuais;
     if (db.isReactionRoleExclusivo(messageId)) {
@@ -242,8 +160,6 @@ export async function aoReagir(message, userId, emoji, ctx) {
       return false;
     }
 
-    // Tira as reações antigas da pessoa, para o painel refletir a escolha.
-    // Se a lib/permissão não permitir, o cargo já foi trocado — não é crítico.
     if (removidos.length) {
       try {
         const paraTirar = db.listReactionRoles(messageId)
@@ -294,8 +210,6 @@ export async function aoDesreagir(message, userId, emoji, ctx) {
       return false;
     }
     console.log(`[REACTIONROLE] -cargo ${alvo.roleId} de ${userId} (msg ${messageId})`);
-    // Se essa era a última reação daquele emoji, ele some da mensagem e o
-    // painel perde uma opção. Repor a do bot devolve o botão para o próximo.
     await reporReacoesQueFaltam(message, ctx.client).catch(() => {});
     const rctx = { ...ctx, serverId: alvo.serverId, config: ctx.configDoServidor?.(alvo.serverId) ?? ctx.config };
     await log.registrar(rctx, "cargos", {
@@ -309,20 +223,6 @@ export async function aoDesreagir(message, userId, emoji, ctx) {
   }
 }
 
-// ──────────────────────────────────────────────────────────
-//  Pré-carga no boot
-//
-//  Sintoma clássico: "funcionava, o bot reiniciou, parou de entregar
-//  cargos — mas os emojis continuam lá". A causa é que a lib só emite
-//  o evento de reação para mensagens que ela conhece; depois de um
-//  restart, as mensagens antigas não estão em cache e a reação passa
-//  em branco.
-//
-//  Aqui buscamos cada mensagem com reaction role uma vez, no boot,
-//  para que voltem ao cache. Quando o canal não está gravado (regras
-//  antigas), procuramos nos canais do servidor e gravamos para a
-//  próxima vez.
-// ──────────────────────────────────────────────────────────
 export async function precarregarMensagens(client) {
   let ok = 0, perdidas = 0, repostos = 0;
   const falhas = [];
@@ -354,8 +254,6 @@ export async function precarregarMensagens(client) {
     }
     if (msg) {
       ok++;
-      // Aproveita que a mensagem está em mãos para devolver os emojis que
-      // sumiram. Só o que falta, na ordem configurada — nada é apagado aqui.
       const r = await reporReacoesQueFaltam(msg, client).catch(() => ({ repostos: [], falhas: [] }));
       repostos += r.repostos.length;
       falhas.push(...(r.falhas ?? []));
@@ -365,9 +263,6 @@ export async function precarregarMensagens(client) {
   return { ok, perdidas, repostos, falhas, total: registros.length };
 }
 
-// ──────────────────────────────────────────────────────────
-//  Comando &reactionrole
-// ──────────────────────────────────────────────────────────
 export async function cmdReactionRole(message, args, ctx) {
   const { sendEmbed, COR, getServer, membroTemPermissao, PREFIXO, serverId, client } = ctx;
   const lang = lingua(ctx);
@@ -463,13 +358,6 @@ export async function cmdReactionRole(message, args, ctx) {
       colour: COR.sucesso });
   }
 
-  // ── ordem: recompõe o painel exatamente como foi configurado ──
-  //
-  //  Repor só o que falta devolve o emoji perdido no FIM da fila. Para
-  //  voltar à ordem original não há meio-termo: é preciso limpar tudo e
-  //  reagir de novo, um a um. Isso apaga as marcações das pessoas — os
-  //  cargos ficam, mas o "check" visual some. Por isso não acontece
-  //  sozinho, e por isso pede confirmação.
   if (["ordem", "order", "reordenar"].includes(sub)) {
     const mid = resolverMensagem(args[1]).id;
     const regras = mid ? db.listReactionRoles(mid) : [];
@@ -533,9 +421,6 @@ export async function cmdReactionRole(message, args, ctx) {
         { title: "❌ Couldn't clear the reactions",
           description: `\`${descreverErro(e)}\`\n\nClearing other people's reactions needs **ManageMessages** in the channel.`, colour: COR.erro }));
     }
-    // Um painel grande leva tempo: são 15 requisições por janela no bucket do
-    // canal, e é melhor dizer isso antes do que deixar a pessoa achando que
-    // travou. (Foi o que aconteceu: 17 cores, 13 entraram, silêncio.)
     const segundos = Math.ceil((ordem.length * PAUSA_MS) / 1000);
     if (ordem.length > 8) {
       await sendEmbed(message.channel, tr(ctx,
@@ -682,9 +567,6 @@ export async function cmdReactionRole(message, args, ctx) {
         ].join("\n"), colour: COR.erro });
     }
 
-    // Confirma que a mensagem existe e faz o bot reagir nela.
-    // Se o link trouxe o canal, vamos direto nele — mais rápido e confiável
-    // do que varrer todos os canais do servidor.
     try {
       let msg = null;
       if (ref.canalId) {

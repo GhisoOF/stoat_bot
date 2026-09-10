@@ -1,20 +1,3 @@
-// ══════════════════════════════════════════════════════════
-//  help-arvore.js — subtópicos do &help, um por SUBCOMANDO
-//
-//  O &help <comando> mostra o comando inteiro; aqui vive o nível
-//  seguinte: &help <comando> <subcomando>, com a lista do que
-//  existe dentro daquele subcomando e o que cada coisa faz.
-//
-//  Ex.: &help game admin  → todos os &game admin ...
-//       &help xp setup    → todos os parâmetros do assistente
-//
-//  Formato: { comando: { subcomando: { titulo, texto } } }
-//  `titulo` entra depois do prefixo: `📖 Ajuda — &game admin`.
-//
-//  Cada entrada existe em PT e EN. O idioma vem do servidor.
-//  Marque com IA_TAG a linha que só faz sentido onde a IA roda —
-//  o help remove essas linhas nos demais servidores.
-// ══════════════════════════════════════════════════════════
 
 // Precisa bater com a constante do geral.js (marca invisível).
 export const IA_TAG = "\u200b[ia]";
@@ -24,12 +7,8 @@ export function arvoreSubtopicos(P, lang = "pt") {
   return lang === "en" ? arvoreEN(P) : arvorePT(P);
 }
 
-// ══════════════════════════════════════════════════════════
-//  PORTUGUÊS
-// ══════════════════════════════════════════════════════════
 function arvorePT(P) {
   return {
-    // ── &game ────────────────────────────────────────────
     game: {
       admin: {
         titulo: "game admin",
@@ -329,7 +308,6 @@ function arvorePT(P) {
       },
     },
 
-    // ── &xp ──────────────────────────────────────────────
     xp: {
       sincronizar: {
         titulo: "xp sincronizar",
@@ -398,7 +376,6 @@ function arvorePT(P) {
       },
     },
 
-    // ── &acesso ──────────────────────────────────────────
     acesso: {
       cargo: {
         titulo: "acesso cargo",
@@ -438,7 +415,6 @@ function arvorePT(P) {
       },
     },
 
-    // ── &banglobal ───────────────────────────────────────
     banglobal: {
       varrer: {
         titulo: "banglobal varrer",
@@ -576,7 +552,6 @@ function arvorePT(P) {
       },
     },
 
-    // ── &punicao ─────────────────────────────────────────
     punicao: {
       escada: {
         titulo: "punicao escada",
@@ -609,7 +584,6 @@ function arvorePT(P) {
       },
     },
 
-    // ── &sentinela ───────────────────────────────────────
     sentinela: {
       antiguidade: {
         titulo: "sentinela antiguidade",
@@ -673,7 +647,6 @@ function arvorePT(P) {
       },
     },
 
-    // ── &cor ─────────────────────────────────────────────
     cor: {
       painel: {
         titulo: "cor painel",
@@ -714,7 +687,6 @@ function arvorePT(P) {
       },
     },
 
-    // ── &reactionrole ────────────────────────────────────
     reactionrole: {
       exclusivo: {
         titulo: "reactionrole exclusivo",
@@ -751,7 +723,6 @@ function arvorePT(P) {
       },
     },
 
-    // ── &log ─────────────────────────────────────────────
     log: {
       eventos: {
         titulo: "log <evento>",
@@ -773,7 +744,6 @@ function arvorePT(P) {
       },
     },
 
-    // ── &chat (IA) ───────────────────────────────────────
     chat: {
       livre: {
         titulo: "chat livre",
@@ -819,7 +789,6 @@ function arvorePT(P) {
       },
     },
 
-    // ── &modia (IA) ──────────────────────────────────────
     modia: {
       criterios: {
         titulo: "modia criterios",
@@ -843,7 +812,6 @@ function arvorePT(P) {
       },
     },
 
-    // ── &debug ───────────────────────────────────────────
     debug: {
       canais: {
         titulo: "debug canais",
@@ -882,7 +850,6 @@ function arvorePT(P) {
       },
     },
 
-    // ── &blocklist ───────────────────────────────────────
     blocklist: {
       dominios: {
         titulo: "blocklist adddomain",
@@ -910,8 +877,22 @@ function arvorePT(P) {
       },
     },
 
-    // ── &embed ───────────────────────────────────────────
-    // ── &staff / &boasvindas / &adeus ────────────────────
+    personalidade: {
+      prompt: {
+        titulo: "personalidade",
+        texto: [
+          "O **prompt de personalidade** da IA, configurável por servidor.",
+          "",
+          `\`${P}personalidade\` — mostra a atual (personalizada ou padrão)`,
+          `\`${P}personalidade definir <texto>\` — define o prompt deste servidor`,
+          `\`${P}personalidade resetar\` — volta ao padrão embutido`,
+          "",
+          "_Exige ManageServer. O texto substitui só a PERSONALIDADE; as regras de_",
+          "_segurança, formato e idioma continuam valendo. Máx. 2000 caracteres._",
+        ].join("\n"),
+      },
+    },
+
     fuso: {
       cidades: {
         titulo: "fuso",
@@ -1038,7 +1019,6 @@ function arvorePT(P) {
       },
     },
 
-    // ── &comando ─────────────────────────────────────────
     comando: {
       gerenciar: {
         titulo: "comando disable/enable",
@@ -1057,7 +1037,6 @@ function arvorePT(P) {
       },
     },
 
-    // ── &cargomudo ───────────────────────────────────────
     cargomudo: {
       canais: {
         titulo: "cargomudo canais",
@@ -1078,7 +1057,6 @@ function arvorePT(P) {
       },
     },
 
-    // ── &rss ─────────────────────────────────────────────
     rss: {
       feeds: {
         titulo: "rss add/remove",
@@ -1101,7 +1079,6 @@ function arvorePT(P) {
       },
     },
 
-    // ── &tutorial ────────────────────────────────────────
     tts: {
       entrar: {
         titulo: "tts entrar",
@@ -1212,9 +1189,6 @@ function arvorePT(P) {
   };
 }
 
-// ══════════════════════════════════════════════════════════
-//  ENGLISH
-// ══════════════════════════════════════════════════════════
 function arvoreEN(P) {
   return {
     game: {
@@ -2084,7 +2058,22 @@ function arvoreEN(P) {
       },
     },
 
-    // ── &staff / &welcome / &goodbye ─────────────────────
+    personalidade: {
+      prompt: {
+        titulo: "personality",
+        texto: [
+          "The AI **personality prompt**, configurable per server.",
+          "",
+          `\`${P}personality\` — shows the current one (custom or default)`,
+          `\`${P}personality set <text>\` — sets this server's prompt`,
+          `\`${P}personality reset\` — back to the built-in default`,
+          "",
+          "_Requires ManageServer. The text replaces only the PERSONALITY; safety,_",
+          "_format and language rules still apply. Max 2000 characters._",
+        ].join("\n"),
+      },
+    },
+
     fuso: {
       cidades: {
         titulo: "fuso (timezones)",

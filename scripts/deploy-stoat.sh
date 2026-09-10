@@ -1,60 +1,43 @@
 #!/usr/bin/env bash
 # ══════════════════════════════════════════════════════════
 #  deploy-stoat.sh — sobe uma nova versão do bot para o GitHub
+#  (versão container único: bot + ia-servico embutido, voz opcional)
 #
 #  ESTE ARQUIVO MORA FORA DO REPOSITÓRIO (em ~/), de propósito:
 #  o deploy apaga e recria diretórios do repo, e um script que
-#  apaga a si mesmo enquanto roda é uma péssima ideia (o bash lê
-#  o arquivo em pedaços conforme executa).
+#  apaga a si mesmo enquanto roda é uma péssima ideia.
 #
-#  Instalar uma vez:
-#     cp scripts/deploy-stoat.sh ~/deploy-stoat.sh
-#     chmod +x ~/deploy-stoat.sh
+#  Instalar/atualizar:
+#     cp scripts/deploy-stoat.sh ~/deploy-stoat.sh && chmod +x ~/deploy-stoat.sh
 #
 #  Usar:
-#     ~/deploy-stoat.sh ~/Downloads/stoat_bot-atualizado.zip "mensagem do commit"
-#
-#  O que ele garante, e que a sequência manual não garantia:
-#   • o zip é aberto FORA do repositório (foi o zip solto dentro
-#     de ~/Downloads/github que acabou commitado por acidente)
-#   • `set -e` de verdade: qualquer passo que falhe interrompe tudo
-#     ANTES do commit — nada de commitar um repo pela metade
-#   • o GITHUB_TOKEN é salvo antes e devolvido depois
-#   • mostra o que vai subir e pede confirmação
-#   • só apaga o zip depois do push dar certo
+#     ~/deploy-stoat.sh ~/Downloads/stoat_bot-publico.zip "mensagem do commit"
 # ══════════════════════════════════════════════════════════
 
 set -euo pipefail
 
 REPO="${REPO:-$HOME/Downloads/github}"
 TOKEN_BACKUP="${TOKEN_BACKUP:-$HOME/judy-github.env}"
-# Backup do `.env` INTEIRO do ia-servico. O TOKEN_BACKUP guardava só o
-# GITHUB_TOKEN, e a restauração o copiava por cima do arquivo — apagando
-# LLM_URL, LLM_MODEL, CODIGO_DIR e tudo o mais que fosse acrescentado
-# depois. Um backup que destrói o que não conhece é pior que nenhum.
 IA_ENV_BACKUP="${IA_ENV_BACKUP:-$HOME/judy-ia.env}"
+VOZ_ENV_BACKUP="${VOZ_ENV_BACKUP:-$HOME/judy-voz.env}"
+# Backup do .env DA RAIZ — agora é ele que manda: o container único lê tudo
+# dali (BOT_TOKEN, LLM_URL, SUPER_ADMINS…). O do ia-servico virou coadjuvante.
+ENV_BACKUP="${ENV_BACKUP:-$HOME/judy-bot.env}"
 ZIP="${1:-}"
 MSG="${2:-}"
 TMP="$(mktemp -d)"
 
-# Limpeza do temporário aconteça o que acontecer (sucesso, erro ou Ctrl-C).
 trap 'rm -rf "$TMP"' EXIT
 
 erro() { printf '\n\033[31m✗ %s\033[0m\n' "$1" >&2; exit 1; }
 info() { printf '\033[36m→ %s\033[0m\n' "$1"; }
 okay() { printf '\033[32m✓ %s\033[0m\n' "$1"; }
+avis() { printf '\033[33m! %s\033[0m\n' "$1"; }
 
 # ── Conferências antes de tocar em qualquer coisa ──
 [ -n "$ZIP" ] || erro "uso: $0 <caminho-do-zip> [mensagem do commit]"
 [ -f "$ZIP" ] || erro "zip não encontrado: $ZIP"
 [ -d "$REPO/.git" ] || erro "não é um repositório git: $REPO"
-[ -f "$TOKEN_BACKUP" ] || erro "backup do token não encontrado: $TOKEN_BACKUP
-   (era ele que devolvia o GITHUB_TOKEN ao ia-servico depois do deploy)"
-
-# O voz-servico guarda BOT_TOKEN e VOZ_CHAVE. Ele não é apagado pelo passo 3,
-# mas se um dia for, o backup evita ter de gerar a chave de novo (e
-# reconfigurar o Portainer junto).
-VOZ_ENV_BACKUP="${VOZ_ENV_BACKUP:-$HOME/judy-voz.env}"
 
 ZIP="$(cd "$(dirname "$ZIP")" && pwd)/$(basename "$ZIP")"   # caminho absoluto
 
@@ -68,88 +51,105 @@ esac
 # ── 1. Abrir o pacote fora do repositório ──
 info "abrindo o pacote em $TMP"
 unzip -q "$ZIP" -d "$TMP"
-[ -f "$TMP/main.js" ] || erro "o zip não parece ser o projeto (não achei main.js na raiz)"
-okay "pacote válido: $(find "$TMP" -type f | wc -l) arquivo(s)"
+# O conteúdo pode vir na raiz do zip ou embrulhado numa pasta única
+# (stoat_bot/…) — aceita os dois.
+FONTE="$TMP"
+if [ ! -f "$FONTE/main.js" ]; then
+  UNICA="$(find "$TMP" -mindepth 1 -maxdepth 1 -type d | head -1)"
+  [ -n "$UNICA" ] && [ -f "$UNICA/main.js" ] && FONTE="$UNICA"
+fi
+[ -f "$FONTE/main.js" ] || erro "o zip não parece ser o projeto (não achei main.js)"
+okay "pacote válido: $(find "$FONTE" -type f | wc -l) arquivo(s)"
 
-# ── 2. Guardar o token ──
-cp "$TOKEN_BACKUP" "$TMP/.token-guardado"
-okay "GITHUB_TOKEN guardado"
+# ── 2. Guardar os .env que o passo 3 pode levar junto ──
+cd "$REPO"
+[ -f .env ]             && cp .env "$ENV_BACKUP"                 && okay ".env da raiz guardado em $ENV_BACKUP"
+[ -f ia-servico/.env ]  && cp ia-servico/.env "$IA_ENV_BACKUP"   && okay "ia-servico/.env guardado em $IA_ENV_BACKUP"
+[ -f voz-servico/.env ] && cp voz-servico/.env "$VOZ_ENV_BACKUP" && okay "voz-servico/.env guardado em $VOZ_ENV_BACKUP"
 
 # ── 3. Substituir os diretórios versionados ──
-cd "$REPO"
-# Guarda o `.env` completo ANTES do rm -rf. Roda toda vez: assim o backup
-# acompanha as variáveis que forem sendo acrescentadas ao longo do tempo.
-if [ -f ia-servico/.env ]; then
-  cp ia-servico/.env "$IA_ENV_BACKUP"
-  okay "ia-servico/.env guardado em $IA_ENV_BACKUP"
-fi
-
 info "removendo as versões antigas dos módulos"
 git rm -rq --ignore-unmatch modulos scripts ia-servico 2>/dev/null || true
 rm -rf modulos scripts ia-servico
 
 info "copiando os arquivos novos"
-cp -a "$TMP"/. "$REPO"/
-rm -f "$REPO/.token-guardado"
+cp -a "$FONTE"/. "$REPO"/
 
-# ── 4. Devolver o .env (o ia-servico/ foi recriado do zero) ──
-#
-#  Ordem importa: o backup completo vem primeiro; o TOKEN_BACKUP só entra
-#  se não houver backup completo nenhum (primeira execução depois desta
-#  mudança). E nunca sobrescrevemos um .env existente.
-mkdir -p ia-servico
-if [ -f ia-servico/.env ]; then
-  okay "ia-servico/.env já existe — não mexo"
-elif [ -f "$IA_ENV_BACKUP" ]; then
-  cp "$IA_ENV_BACKUP" ia-servico/.env
-  okay "ia-servico/.env devolvido de $IA_ENV_BACKUP ($(wc -l < ia-servico/.env) linhas)"
-elif [ -f "$TOKEN_BACKUP" ]; then
-  cp "$TOKEN_BACKUP" ia-servico/.env
-  printf '\033[33m! %s\033[0m\n' "só havia o backup do token — confira LLM_URL/LLM_MODEL/CODIGO_DIR em ia-servico/.env"
+# Aposentados do layout antigo: se um zip velho (ou sobra local) os trouxer
+# de volta, saem aqui. Um deploy não pode ressuscitar o que foi removido.
+info "varrendo arquivos aposentados"
+rm -f teste-radar.mjs docker-compose.image.yml \
+      modulos/ferramentas/radar.js modulos/moderacao/servidores.js \
+      ia-servico/Dockerfile ia-servico/docker-compose.yml \
+      ia-servico/docker-compose.example.yml
+# Lixo que não pode ir para um repositório público:
+rm -f ./*.zip ./_stoat-bot*_logs.txt
+
+# ── 4. Devolver os .env (nunca sobrescrevendo um existente) ──
+if [ ! -f .env ] && [ -f "$ENV_BACKUP" ]; then
+  cp "$ENV_BACKUP" .env
+  okay ".env da raiz devolvido ($(wc -l < .env) linhas)"
 fi
-
-# ── 4b. Reinstalar as dependências dos serviços nativos ──
-# O passo 3 apaga `ia-servico/` inteira, e com ela some o node_modules.
-# O serviço só quebra no PRÓXIMO restart — então o sintoma aparece dias
-# depois, desconectado da causa. Foi assim que o judy-ia caiu com
-# "Cannot find package 'rss-parser'" muito tempo após o deploy que o
-# esvaziou. Reinstalar aqui fecha o buraco.
-if [ -f "$VOZ_ENV_BACKUP" ] && [ -d voz-servico ] && [ ! -f voz-servico/.env ]; then
+mkdir -p ia-servico
+if [ ! -f ia-servico/.env ]; then
+  if   [ -f "$IA_ENV_BACKUP" ]; then cp "$IA_ENV_BACKUP" ia-servico/.env; okay "ia-servico/.env devolvido"
+  elif [ -f "$TOKEN_BACKUP" ];  then cp "$TOKEN_BACKUP" ia-servico/.env; avis "só havia o backup do token em ia-servico/.env"
+  fi
+fi
+if [ -d voz-servico ] && [ ! -f voz-servico/.env ] && [ -f "$VOZ_ENV_BACKUP" ]; then
   cp "$VOZ_ENV_BACKUP" voz-servico/.env
   okay "BOT_TOKEN/VOZ_CHAVE devolvidos a voz-servico/.env"
 fi
 
-for servico in ia-servico voz-servico; do
-  if [ -f "$servico/package.json" ] && [ ! -d "$servico/node_modules" ]; then
-    info "instalando dependências de $servico (foram apagadas no passo 3)"
-    (cd "$servico" && npm install --silent) \
-      && okay "$servico pronto" \
-      || printf '\033[33m! npm install falhou em %s — rode à mão antes de reiniciar o serviço\033[0m\n' "$servico"
-  fi
+# ── 4b. O .env da raiz agora é o coração — conferir o mínimo vital ──
+FALTA=""
+for VAR in BOT_TOKEN LLM_URL SUPER_ADMINS; do
+  grep -q "^${VAR}=" .env 2>/dev/null || FALTA="$FALTA $VAR"
 done
+if [ -n "$FALTA" ]; then
+  avis "faltam no .env da raiz:$FALTA — o container único precisa deles"
+  avis "acrescente antes de subir o container (o push pode seguir normalmente)"
+fi
+if grep -q "^IA_SERVICO_URL=" .env 2>/dev/null; then
+  avis "IA_SERVICO_URL definido no .env — remova: o serviço agora é embutido (localhost:8090)"
+fi
 
-# Aviso sobre reinício: código novo no disco não vira código novo em
-# execução. Sem isto, você fica achando que o deploy não pegou.
+# ── 4c. Dependências do serviço nativo que sobrou (a voz) ──
+# O ia-servico roda DENTRO do container do bot; as dependências dele vão na
+# imagem, o npm local não interessa mais. Só a voz continua nativa (OpenRC).
+if [ -f voz-servico/package.json ] && [ ! -d voz-servico/node_modules ]; then
+  info "instalando dependências de voz-servico"
+  (cd voz-servico && npm install --silent) \
+    && okay "voz-servico pronto" \
+    || avis "npm install falhou em voz-servico — rode à mão antes de reiniciar o serviço"
+fi
+
+# ── 4d. O judy-ia nativo/antigo tem de PARAR, não reiniciar ──
+# Se ele continuar de pé, vira um segundo cérebro respondendo em paralelo
+# ao embutido — o pior estado possível, porque tudo "parece" funcionar.
 if command -v rc-service >/dev/null 2>&1; then
-  for servico in judy-ia judy-voz; do
-    if rc-service "$servico" status >/dev/null 2>&1; then
-      info "reiniciando $servico para carregar o código novo"
-      # `sudo` sem terminal falha em silêncio, e o serviço fica rodando código
-      # velho enquanto o bot já roda o novo — o pior estado possível, porque
-      # tudo "parece" atualizado. Se não der para reiniciar, o aviso tem de
-      # ser impossível de ignorar.
-      if sudo -n true 2>/dev/null; then
-        sudo rc-service "$servico" restart >/dev/null 2>&1 \
-          && okay "$servico reiniciado" \
-          || printf '\033[31m✗ %s NÃO reiniciou — rode: sudo rc-service %s restart\033[0m\n' "$servico" "$servico"
-      else
-        printf '\033[31m\n╔════════════════════════════════════════════════════════╗\033[0m\n'
-        printf '\033[31m║  ATENÇÃO: %s ainda roda o código ANTIGO          ║\033[0m\n' "$servico"
-        printf '\033[31m╚════════════════════════════════════════════════════════╝\033[0m\n'
-        printf '   Rode agora:  \033[36msudo rc-service %s restart\033[0m\n\n' "$servico"
-      fi
+  if rc-service judy-ia status >/dev/null 2>&1; then
+    if sudo -n true 2>/dev/null; then
+      sudo rc-service judy-ia stop >/dev/null 2>&1 && sudo rc-update del judy-ia >/dev/null 2>&1 \
+        && okay "judy-ia (OpenRC) parado e fora do boot — agora ele vive dentro do container" \
+        || avis "não consegui parar o judy-ia — rode: sudo rc-service judy-ia stop && sudo rc-update del judy-ia"
+    else
+      printf '\033[31m\n╔════════════════════════════════════════════════════════╗\033[0m\n'
+      printf '\033[31m║  ATENÇÃO: o judy-ia antigo AINDA está rodando          ║\033[0m\n'
+      printf '\033[31m╚════════════════════════════════════════════════════════╝\033[0m\n'
+      printf '   Rode:  \033[36msudo rc-service judy-ia stop && sudo rc-update del judy-ia\033[0m\n\n'
     fi
-  done
+  fi
+  # A voz continua nativa: essa sim reinicia para carregar código novo.
+  if rc-service judy-voz status >/dev/null 2>&1; then
+    if sudo -n true 2>/dev/null; then
+      sudo rc-service judy-voz restart >/dev/null 2>&1 \
+        && okay "judy-voz reiniciado" \
+        || avis "judy-voz NÃO reiniciou — rode: sudo rc-service judy-voz restart"
+    else
+      avis "reinicie a voz à mão: sudo rc-service judy-voz restart"
+    fi
+  fi
 fi
 
 # ── 5. Rede de segurança: nada de segredo ou lixo no commit ──
@@ -193,4 +193,5 @@ okay "zip removido: $(basename "$ZIP")"
 
 echo
 info "Actions: https://github.com/GhisoOF/stoat_bot/actions"
-info "quando ficar verde → Portainer → Pull and redeploy (recriar)"
+info "subir na máquina:  cd $REPO && docker compose up -d --build"
+info "ou no Portainer:   Pull and redeploy do stack stoat-bot (e APAGUE o stack judy-ia antigo)"

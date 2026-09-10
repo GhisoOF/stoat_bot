@@ -1,28 +1,3 @@
-// ══════════════════════════════════════════════════════════
-//  assistente.js — &assistente: configuração GUIADA
-//
-//  O &tutorial ensina; o &assistente faz junto. O bot pergunta uma
-//  coisa de cada vez, a pessoa responde em texto normal (sem prefixo),
-//  e no fim aparece um RESUMO do que vai mudar. Só depois do
-//  `confirmar` alguma coisa é aplicada.
-//
-//  Como aplica: chamando os MESMOS handlers dos comandos normais
-//  (`&idioma`, `&acesso cargo add`, `&log canal`, `&automod … on`…),
-//  com um ctx cujo sendEmbed CAPTURA as respostas em vez de publicar.
-//  Três vantagens:
-//   • zero lógica de configuração duplicada — se o comando muda, o
-//     assistente muda junto;
-//   • as checagens de permissão dos comandos continuam valendo;
-//   • o resumo final mostra o comando equivalente de cada passo, então
-//     quem usou o assistente sai sabendo fazer na mão.
-//
-//  Sessão: uma por (canal, pessoa), expira em 10 min sem resposta.
-//  Durante ela: `pular` pula, `voltar` volta, `cancelar` desiste.
-//  Um comando com prefixo continua funcionando normalmente — a sessão
-//  só captura texto SEM prefixo (o main.js garante isso).
-//
-//  Roteiros: rapido · completo · canais · protecao
-// ══════════════════════════════════════════════════════════
 
 import { lingua } from "../core/i18n.js";
 import { resolverCanal, resolverCargo } from "../core/ids.js";
@@ -44,16 +19,7 @@ export function temSessao(message) {
 // Para os testes e o &debug.
 export function sessoesAtivas() { return sessoes.size; }
 
-// ──────────────────────────────────────────────────────────
-//  Texto bilíngue curto
-// ──────────────────────────────────────────────────────────
 const T = (lang, pt, en) => (lang === "en" ? en : pt);
-
-// ──────────────────────────────────────────────────────────
-//  PASSOS — cada um: id, pergunta, parse(resposta) → { valor } | { erro },
-//  e comandos(valor) → lista de args para aplicar via rotas.
-//  `valor === null` significa "pulado".
-// ──────────────────────────────────────────────────────────
 
 function listaDeNomes(texto) {
   return String(texto).split(/[,\n;]+|\s+e\s+|\s+and\s+/i).map((x) => x.trim()).filter(Boolean);
@@ -240,9 +206,6 @@ function nomeDoCanal(server, id) {
   return lista.find((c) => (c?.id ?? c?._id) === id)?.name ?? null;
 }
 
-// ──────────────────────────────────────────────────────────
-//  ROTEIROS
-// ──────────────────────────────────────────────────────────
 export const ROTEIROS = {
   rapido:   ["idioma", "staff", "log", "protecao", "boasvindas"],
   completo: ["idioma", "staff", "log", "protecao", "escada", "banglobal", "boasvindas", "autorole", "xp"],
@@ -257,9 +220,6 @@ const NOME_ROTEIRO = {
   canais:   { pt: "Canais",   en: "Channels" },
 };
 
-// ──────────────────────────────────────────────────────────
-//  &assistente [roteiro|cancelar]
-// ──────────────────────────────────────────────────────────
 export async function cmdAssistente(message, args, ctx) {
   const { sendEmbed, COR, PREFIXO: P, config } = ctx;
   const lang = lingua(ctx);
@@ -277,8 +237,6 @@ export async function cmdAssistente(message, args, ctx) {
     });
   }
 
-  // Quem pode: quem pode configurar o servidor. O `canais` é só leitura, mas
-  // também expõe nomes de canais de bastidores — fica restrito do mesmo jeito.
   const server = await ctx.getServer(message).catch(() => null);
   const pode = ctx.ehSuperAdmin?.(message.authorId)
     || temCargoStaff(message, config)
@@ -340,9 +298,6 @@ async function perguntar(message, ctx, s) {
   });
 }
 
-// ──────────────────────────────────────────────────────────
-//  Resposta da pessoa (texto sem prefixo) — chamado pelo main.js
-// ──────────────────────────────────────────────────────────
 export async function aoResponder(message, ctx) {
   const chave = chaveDe(message);
   const s = sessoes.get(chave);
@@ -417,9 +372,6 @@ export async function aoResponder(message, ctx) {
   return true;
 }
 
-// ──────────────────────────────────────────────────────────
-//  Resumo: o que vai mudar e o comando equivalente de cada coisa
-// ──────────────────────────────────────────────────────────
 function comandosDe(s, ctx) {
   const lista = [];
   for (const id of ROTEIROS[s.roteiro]) {
@@ -453,9 +405,6 @@ async function resumir(message, ctx, s) {
   });
 }
 
-// ──────────────────────────────────────────────────────────
-//  Aplicar: chama os handlers com um sendEmbed que CAPTURA
-// ──────────────────────────────────────────────────────────
 async function aplicar(message, ctx, s) {
   const { sendEmbed, COR, PREFIXO: P } = ctx;
   const rotas = ctx.estado?.rotas ?? {};
@@ -468,8 +417,6 @@ async function aplicar(message, ctx, s) {
     if (!handler) { resultado.push({ args, ok: false, msg: T(s.lang, "comando não encontrado", "command not found") }); continue; }
     const capturadas = [];
     const ctxMudo = { ...ctx, sendEmbed: async (_c, e) => { capturadas.push(e); return { id: "capturada" }; } };
-    // Recarrega a config a cada passo: o passo anterior pode ter mudado algo
-    // que este lê (ex.: `cargomudo` cria o cargo que `punicao` usa).
     ctxMudo.config = ctx.configDoServidor?.(ctx.serverId) ?? ctx.config;
     try {
       await handler(message, resto, ctxMudo);
@@ -496,9 +443,6 @@ async function aplicar(message, ctx, s) {
   });
 }
 
-// ──────────────────────────────────────────────────────────
-//  Roteiro "canais": o guia clique-a-clique + checagem do bot
-// ──────────────────────────────────────────────────────────
 async function guiaDeCanais(message, ctx, s) {
   const { sendEmbed, COR, PREFIXO: P, config, client } = ctx;
   const server = await ctx.getServer(message).catch(() => null);

@@ -1,12 +1,3 @@
-// ══════════════════════════════════════════════════════════
-//  teste-seguranca.mjs — brechas de permissão e injeção
-//
-//  Trava dois achados da auditoria de segurança:
-//   1. &warn exigia permissão (não exigia → qualquer um advertia qualquer um,
-//      e o aviso alimenta o ban automático do modo "acumular")
-//   2. nome de usuário entrava cru nos embeds de boas-vindas → injeção de
-//      menção (@everyone / a um admin) e de link markdown (phishing)
-// ══════════════════════════════════════════════════════════
 
 process.env.BOT_TOKEN = "tok";
 process.env.DB_PATH = "/tmp/seg-teste.db";

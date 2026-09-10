@@ -1,10 +1,3 @@
-// ══════════════════════════════════════════════════════════
-//  cores.js — paleta e normalização de cor, compartilhadas
-//
-//  Antes cada comando tinha a própria lista: `&cor X dourado`
-//  funcionava e `&embed cor: dourado` não, e as cores comuns
-//  tinham hex diferentes entre os dois. Aqui é uma fonte só.
-// ══════════════════════════════════════════════════════════
 
 export const CORES = {
   // básicas
@@ -18,8 +11,6 @@ export const CORES = {
   lavanda: "#C4B5FD", coral: "#FB7185", marrom: "#78350F",
 };
 
-// Normaliza uma cor sólida: nome, #RRGGBB, #RGB ou rgb().
-// Tolera pontuação colada (vírgula, parêntese, aspas) — as pessoas colam assim.
 export function normalizarCor(v) {
   if (!v) return null;
   const t = String(v).trim().toLowerCase()

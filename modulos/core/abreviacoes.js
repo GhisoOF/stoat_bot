@@ -1,30 +1,4 @@
-// ══════════════════════════════════════════════════════════
-//  abreviacoes.js — expande a escrita de chat antes de virar fala
-//
-//  "vc n vai vir hj pq?" lido literalmente sai como "vê-cê ene vai vir
-//  agá-jota pê-quê" — incompreensível. Aqui o texto vira
-//  "você não vai vir hoje porque?" antes de chegar ao Piper.
-//
-//  ── Regras de projeto ──
-//
-//  1. Só troca PALAVRAS INTEIRAS. Sem isso, "n" dentro de "banana" viraria
-//     "banãoana". A fronteira é feita com Unicode, então acentos contam como
-//     letra: em "não", o "n" não é palavra inteira e fica intacto.
-//
-//  2. Preserva a capitalização inicial. "Vc" → "Você", "vc" → "você" —
-//     importa porque algumas vozes mudam a entonação em início de frase.
-//
-//  3. O dicionário do servidor tem prioridade sobre o embutido, e pode
-//     ANULAR uma entrada padrão (basta mapear para ela mesma).
-//
-//  4. Risada é caso à parte: "kkkkkk" tem tamanho variável e não cabe num
-//     mapa. Vira "kkk" (que o Piper lê como risada curta) em vez de soletrar
-//     doze letras.
-// ══════════════════════════════════════════════════════════
 
-// Abreviações que aparecem o tempo todo em chat brasileiro. Deliberadamente
-// conservador: só o que é inequívoco. "ta" → "está" entra; "cm" (comigo? como?)
-// fica de fora, porque errar a expansão é pior que soletrar.
 export const PADRAO = {
   q: "que", n: "não", vc: "você", vcs: "vocês", voce: "você",
   tb: "também", tbm: "também", tmb: "também", tbem: "também",
@@ -68,8 +42,6 @@ export const PADRAO = {
 // Risadas: qualquer sequência de 3+ k/h/rs vira uma risada curta.
 const RISADA = /\b(?:k{3,}|(?:ha){2,}h?|(?:rs){2,}|hue{2,}|hehe+)\b/giu;
 
-// Fronteira de palavra que respeita acentos. O \b do JavaScript trata "ã"
-// como não-letra, o que quebraria a proteção do item 1 acima.
 const LETRA = "0-9A-Za-zÀ-ÖØ-öø-ÿ";
 
 function escapar(t) { return t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }

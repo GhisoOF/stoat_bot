@@ -1,27 +1,4 @@
-// ══════════════════════════════════════════════════════════
-//  desinteresse.js — a Judy não entra nessa
-//
-//  O pessoal brinca com o bot, e parte dessas brincadeiras é de teor
-//  sexual. Deixar isso para o modelo resolver dá três problemas:
-//
-//    1. Ele às vezes ENTRA na brincadeira — que é o oposto do desejado.
-//    2. Ele às vezes faz sermão, o que é chato e vira desafio: quem
-//       provoca quer reação, e um discurso é uma reação enorme.
-//    3. Custa uma inferência inteira (segundos de GPU) para responder
-//       algo que não precisa de inteligência nenhuma.
-//
-//  A resposta certa é curta, seca e entediada. Desinteresse genuíno é
-//  o que encerra o assunto: quem provoca busca reação, e "não" dito com
-//  preguiça é menos divertido de insistir do que um sermão.
-//
-//  Por isso as respostas são fixas e sorteadas aqui, sem modelo: saem
-//  instantâneas e nunca escapam do tom.
-// ══════════════════════════════════════════════════════════
 
-// Termos explícitos e investidas dirigidas ao bot. A lista é propositalmente
-// enxuta: o objetivo é pegar o óbvio, não vigiar a conversa. Falso positivo
-// aqui custa caro (uma resposta seca numa conversa normal), então preferimos
-// deixar passar casos duvidosos — o modelo ainda tem a instrução de persona.
 const EXPLICITO = [
   // atos e partes, incluindo grafias com número/símbolo no meio
   /\b(?:s[e3]xo|tr[a4]nsar?|tr[a4]nsando|f[o0]der|fud[e3]r|c[o0]mer\s+(?:voc[eê]|tu|ela|ele))\b/i,
@@ -35,8 +12,6 @@ const EXPLICITO = [
   /\b(?:horny|nsfw|sexy|hot\s+bot|be\s+my\s+girlfriend|marry\s+me)\b/i,
 ];
 
-// Coisas que parecem, mas não são. Sem isto, "comer alguma coisa" ou uma
-// conversa sobre o jogo (que tem "peito" em item de armadura) viraria desvio.
 const FALSO_POSITIVO = [
   /\bcomer\s+(?:algo|alguma\s+coisa|comida|pizza|pão|bolo|arroz|feijão|lanche)\b/i,
   /\bpeitoral\b/i,
@@ -44,8 +19,6 @@ const FALSO_POSITIVO = [
   /\bsexo\s+(?:d[oa]\s+)?(?:meu|minha|seu|sua|nosso|nossa)?\s*(?:personagem|filhote|beb[êe]|animal|pet)\b|\bsexo\s+(?:masculino|feminino|biol[oó]gico)\b/i,
 ];
 
-// As respostas. Curtas, secas, sem sermão e sem deixar brecha para continuar.
-// Nenhuma repreende: repreender é levar a sério, e levar a sério é o combustível.
 const RESPOSTAS_PT = [
   "Não.",
   "Passo.",
@@ -76,8 +49,6 @@ const RESPOSTAS_EN = [
   "My interest in this is the size of your Bitcoin balance.",
 ];
 
-// Rodízio simples por canal: sem isso, o aleatório repete a mesma frase duas
-// vezes seguidas e a resposta parece automática — o que arruína o efeito.
 const ultimas = new Map();
 
 export function ehInvestida(texto) {
@@ -97,8 +68,6 @@ export function respostaSeca(canalId = "geral", lang = "pt") {
   return escolha;
 }
 
-// Instrução para o modelo, nos casos que escapam da lista acima. Fica junto
-// das frases para o tom ser o mesmo nos dois caminhos.
 export function instrucaoPersona(lang = "pt") {
   return lang === "en"
     ? "SEXUAL/ROMANTIC ADVANCES ONLY (this rule does not apply to anything else): If anyone flirts, makes sexual jokes or advances at you: refuse in ONE short, dry, bored line. "

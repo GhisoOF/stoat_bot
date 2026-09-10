@@ -1,10 +1,3 @@
-// ══════════════════════════════════════════════════════════
-//  automod-engine.js — LÓGICA PESADA do AutoMod
-//  Motor de análise: detecção (golpe/CSAM/+18/gore), listas de
-//  bloqueio (Pi-hole), rastreio de spam, punições e o runAutomod.
-//  Não contém comandos — só o "trabalho pesado".
-//  Recebe tudo pelo objeto de contexto `ctx` (sem imports do main).
-// ══════════════════════════════════════════════════════════
 
 import { analisarConteudo } from "./scorecard.js";
 import * as db  from "../core/db.js";
@@ -22,11 +15,6 @@ export { criarIndiceVazio };   // usado pelo main (estado inicial) e pelo &block
 
 const INVITE_REGEX = /https?:\/\/stt\.gg\/([A-Za-z0-9]+)/gi;
 
-// Logger de depuração — a análise linha a linha de CADA mensagem virou
-// OPT-IN (era o segundo maior ruído do log: ~14 linhas por mensagem para
-// dizer "nenhuma violação"). Liga com AUTOMOD_DEBUG=1 no ambiente ou
-// debug=true na config. Violações, avisos e punições NÃO passam por aqui —
-// usam console.log direto e continuam sempre visíveis.
 function dbg(ctx, ...args) {
   const ligado = process.env.AUTOMOD_DEBUG === "1" || ctx?.cfgGlobal?.debug === true;
   if (ligado) console.log("[AUTOMOD]", ...args);
@@ -34,13 +22,7 @@ function dbg(ctx, ...args) {
 
 // Validação simples de domínio (ex.: 02giga.link, sub.exemplo.com.br)
 export const DOMINIO_VALIDO = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/;
-// ──────────────────────────────────────────────────────────
-//  Listas de bloqueio (estilo Pi-hole / hosts / AdBlock)
-// ──────────────────────────────────────────────────────────
 
-// Normaliza UMA linha de lista (hosts / AdBlock / domínio puro) para um
-// domínio válido, ou null. É o coração do parse — usado tanto pelo
-// parseBlocklist (compatibilidade/testes) quanto pelo download em streaming.
 export function normalizarLinha(line) {
   line = line.trim();
   if (!line || line.startsWith("#") || line.startsWith("!") || line.startsWith("[")) return null;
@@ -67,10 +49,6 @@ export function parseBlocklist(text) {
   return domains;
 }
 
-// Baixa uma lista em STREAMING, alimentando o construtor linha a linha.
-// Antes, o texto inteiro (~60–80 MB para listas grandes) virava uma string
-// e depois um array de 2,5M strings — dois picos de RAM à toa. Agora nada
-// além do bloco em trânsito fica na memória.
 async function baixarParaIndice(url, construtor) {
   const res = await fetch(url, { signal: AbortSignal.timeout(90_000) });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -95,9 +73,6 @@ async function baixarParaIndice(url, construtor) {
   return n;
 }
 
-// Carrega o índice salvo em disco do boot anterior (se a config de listas
-// não mudou). Deixa o anti-link armado em milissegundos, mesmo sem rede —
-// o rebuild de verdade roda em seguida, em segundo plano.
 export function carregarBlocklistCache(ctx) {
   const { cfgGlobal, estado } = ctx;
   const idx = carregarCache(cfgGlobal);
@@ -131,10 +106,6 @@ export async function rebuildBlocklist(ctx) {
 
   const novo = construtor.construir();
 
-  // Proteção contra downgrade: se alguma fonte falhou E o resultado ficou
-  // MENOR do que o que já temos, manter o índice atual. Sem isso, uma queda
-  // de rede num reload substituía 2,5M de domínios por quase nada — e o
-  // anti-link enfraquecia em silêncio.
   const atual = estado.blockedDomains?.size ?? 0;
   if (falhas > 0 && novo.size < atual) {
     console.warn(
@@ -149,12 +120,6 @@ export async function rebuildBlocklist(ctx) {
   salvarCache(novo, cfgGlobal);   // grava em background; boot seguinte carrega na hora
 }
 
-// Extrai todos os domínios presentes numa mensagem.
-// AGORA reconhece links COM e SEM esquema (http/https), com ou sem
-// "www.", com caminho/query, e remove pontuação ao redor.
-//   "02giga.link"                  → 02giga.link
-//   "https://02giga.link/abc?x=1"  → 02giga.link
-//   "(www.02giga.link)!"           → 02giga.link
 function extrairDominios(content) {
   const out = [];
   for (let token of (content ?? "").split(/\s+/)) {
@@ -174,8 +139,6 @@ function extrairDominios(content) {
   return out;
 }
 
-// Resolve o canal da mensagem de forma robusta (antes de qualquer delete).
-// Tenta a referência direta e, se faltar, busca pelo channelId.
 async function resolverCanal(message, ctx) {
   if (message.channel) return message.channel;
   try {
@@ -200,9 +163,6 @@ function dominioBloqueado(dominio, blockedDomains) {
   return false;
 }
 
-// ──────────────────────────────────────────────────────────
-//  Limpeza periódica do rastreio de spam
-// ──────────────────────────────────────────────────────────
 export function agendarLimpezaSpam(ctx) {
   const { config, estado } = ctx;
   setInterval(() => {
@@ -216,20 +176,12 @@ export function agendarLimpezaSpam(ctx) {
   }, 5 * 60_000);
 }
 
-// ──────────────────────────────────────────────────────────
-//  Taxa de mensagens por segundo de um autor (feature do scorecard)
-// ──────────────────────────────────────────────────────────
 function taxaPorSegundo(estado, userId, serverId = null) {
   const now = Date.now();
   const ts = estado.spamData.get(`${serverId ?? "?"}:${userId}`) ?? estado.spamData.get(userId) ?? [];
   return ts.filter((t) => now - t < 1000).length + 1; // +1 conta a atual
 }
 
-// ──────────────────────────────────────────────────────────
-//  PUNIÇÃO — política GLOBAL (config.automod.punicao), usada por
-//  TODOS os automods. Modos: avisar | confirmar | acumular | banir.
-//  opts: { server, channel, message, userId, motivo, apagar?, nota?, grave? }
-// ──────────────────────────────────────────────────────────
 async function aplicarPunicao(ctx, opts) {
   const { server, channel, message, userId, motivo } = opts;
   const apagar = opts.apagar !== false;
@@ -296,8 +248,6 @@ async function aplicarPunicao(ctx, opts) {
     try {
       await server.banUser(userId, { reason: `[AutoMod] ${motivo}` });
       acao = lang === "en" ? "🔨 user BANNED" : "🔨 usuário BANIDO";
-      // O nome vai junto: sem ele a lista vira uma parede de "Unknown User"
-      // justamente para quem já foi banido e saiu.
       await banGlobal.registrar(ctx, userId, motivo, "automod",
         { nome: message?.author?.username ?? null, membro: message?.member ?? message?.author ?? null });
     }
@@ -319,9 +269,6 @@ async function aplicarPunicao(ctx, opts) {
       try {
         await aplicarCargoSilence(server, userId, pol.silenceRoleId, ctx);
         acao = lang === "en" ? "user silenced" : "usuário silenciado";
-        // A permissão do canal e o rank dos cargos vencem o cargo de silêncio.
-        // Se a pessoa tem cargo acima que libera falar, avisamos AGORA — senão
-        // você só descobre quando ela continuar conversando normalmente.
         try {
           const perms = await import("./permissoes.js");
           const membro = await server.fetchMember(userId).catch(() => null);
@@ -357,18 +304,6 @@ async function aplicarPunicao(ctx, opts) {
     return;
   }
 
-  // ── acumular: escada progressiva ──
-  //
-  // Antes eram N avisos e, no limite, ban — do nada. Isso pune igual quem
-  // errou uma vez e quem está claramente atacando o servidor, e dá ao membro
-  // comum um susto desproporcional na única punição que ele vê.
-  //
-  // A escada dá peso crescente e, principalmente, dá CHANCE: aviso → 5 min →
-  // 1 hora → ban. Quem parou no primeiro degrau nunca chega ao último; quem
-  // insiste sobe sozinho.
-  //
-  // Os avisos ficam no BANCO, por (servidor, usuário): sobrevivem a restart do
-  // bot e a sair/reentrar no servidor.
   const sid   = ctx.serverId ?? server?.id;
   const count = db.somarAviso(sid, userId, motivo);
   const degraus = escadaDePunicao(pol);
@@ -405,8 +340,6 @@ async function aplicarPunicao(ctx, opts) {
         acao = lang === "en" ? `failed to silence — ${detalhe}` : `falha ao silenciar — ${detalhe}`;
       }
     } else {
-      // Sem cargo configurado o degrau não tem como ser cumprido. Dizer isso é
-      // melhor do que fingir que puniu.
       acao = lang === "en"
         ? "would be silenced, but there is no silence role configured"
         : "seria silenciado, mas não há cargo de silêncio configurado";
@@ -446,14 +379,6 @@ async function aplicarPunicao(ctx, opts) {
     descricao: `<@${userId}> banido após **${count}** avisos.\n**Motivo:** ${motivo}` });
 }
 
-// ──────────────────────────────────────────────────────────
-//  Alerta à administração: "olhem isto, agora".
-//
-//  Separado da punição de propósito. Nem todo padrão suspeito merece punir —
-//  mas todo padrão suspeito merece um par de olhos humanos ENQUANTO está
-//  acontecendo. O alerta chega no canal de alerta do sentinela (ou no de logs),
-//  marcando quem pode agir.
-// ──────────────────────────────────────────────────────────
 async function alertarAdministracao(ctx, { server, canal, userId, sinal, faixa, nivel, nota }) {
   const { config, sendEmbed, COR, PREFIXO } = ctx;
   const lang = lingua(ctx);
@@ -466,8 +391,6 @@ async function alertarAdministracao(ctx, { server, canal, userId, sinal, faixa, 
     try { destino = await ctx.client.channels.fetch(destinoId); } catch { destino = canal; }
   }
 
-  // Quem marcar: os cargos de staff configurados no &acesso. Sem eles, o
-  // alerta ainda sai — só não marca ninguém, o que é melhor que não alertar.
   const cargos = config.acesso?.cargosStaff ?? [];
   const mencao = cargos.length ? cargos.map((id) => `<%${id}>`).join(" ") : "";
 
@@ -505,21 +428,8 @@ async function alertarAdministracao(ctx, { server, canal, userId, sinal, faixa, 
   console.log(`[SENTINELA] 🚨 Alerta: ${userId} — ${sinal.vezes}× em ${sinal.janelaMin}min`);
 }
 
-// ──────────────────────────────────────────────────────────
-//  A escada do modo `acumular`.
-//
-//  Configurável: `punicao escada aviso,5m,1h,ban`. O padrão é o que a maioria
-//  quer sem pensar — uma chance, dois mutes crescentes, e ban só no fim.
-// ──────────────────────────────────────────────────────────
 export const ESCADA_PADRAO = "aviso,5m,1h,ban";
 
-// ──────────────────────────────────────────────────────────
-//  Devolver a voz quando o prazo vence.
-//
-//  O vencimento vive no banco, então um mute de 1 hora sobrevive a restart do
-//  bot — e é justamente por isso que precisa de alguém conferindo: sem esta
-//  rotina, um mute temporário viraria permanente se o processo reiniciasse.
-// ──────────────────────────────────────────────────────────
 let timerSilencios = null;
 
 export function iniciarVigiaDeSilencios(ctx, intervaloMs = 60_000) {
@@ -528,8 +438,6 @@ export function iniciarVigiaDeSilencios(ctx, intervaloMs = 60_000) {
     liberarSilenciosVencidos(ctx).catch((e) => console.error("[PUNIÇÃO][vigia]", descreverErro(e)));
   }, intervaloMs);
   if (timerSilencios.unref) timerSilencios.unref();
-  // Uma passada imediata: se o bot ficou fora por mais tempo que o mute,
-  // a pessoa não deve esperar mais um ciclo para poder falar.
   liberarSilenciosVencidos(ctx).catch(() => {});
 }
 
@@ -539,40 +447,21 @@ export async function liberarSilenciosVencidos(ctx) {
   let soltos = 0;
   for (const { serverId, userId, motivo } of vencidos) {
     try {
-      // BUG QUE DEIXAVA GENTE MUDA PARA SEMPRE:
-      // `configDoServidor` vive no ctx, não em `ctx.estado`. A busca antiga
-      // (`ctx.estado?.configDoServidor`) falhava SEMPRE e caía no `ctx.config`
-      // — que aqui é a config GLOBAL, porque o vigia roda com
-      // `criarContexto()` sem servidor. Sem `silenceRoleId`, o cargo nunca era
-      // removido. E o pior: o banco era limpo e o log dizia "Silêncio
-      // expirado", então tudo parecia certo enquanto a pessoa seguia sem voz.
       const cfg = ctx.configDoServidor?.(serverId)
         ?? ctx.estado?.configDoServidor?.(serverId)
         ?? ctx.config;
       const roleId = cfg?.automod?.punicao?.silenceRoleId;
-      // `servers.fetch` rejeita com um OBJETO da API (`{ type: "NotFound" }`)
-      // quando o bot foi expulso do servidor — e isso subia como exceção sem
-      // `.message`, virando o `[PUNIÇÃO][vigia] <id>: undefined` do log. Aqui
-      // vira "servidor inacessível", que é o que de fato aconteceu.
       let server = null;
       try { server = await ctx.client?.servers?.fetch?.(serverId); }
       catch (e) { console.error(`[PUNIÇÃO][vigia] ${serverId}: não consegui buscar o servidor (${descreverErro(e)})`); }
 
       if (!roleId) {
-        // Sem cargo configurado não há o que remover — mas o registro precisa
-        // ser limpo mesmo assim, senão o vigia tenta de novo a cada minuto.
         console.warn(`[PUNIÇÃO][vigia] ${serverId}: sem silenceRoleId na config — nada a remover`);
       } else if (!server) {
-        // Não conseguir buscar o servidor é diferente de não ter cargo: aqui
-        // a remoção AINDA é necessária. Deixamos o registro no banco para a
-        // próxima passada tentar de novo, em vez de marcar como resolvido.
         console.error(`[PUNIÇÃO][vigia] ${serverId}: servidor inacessível — tentarei de novo no próximo ciclo`);
         continue;
       } else {
         const r = await removerCargoSilence(server, userId, roleId, ctx);
-        // A pessoa saiu do servidor: não há cargo a tirar (o Stoat descarta os
-        // cargos na saída). O registro fecha como resolvido — antes ficava
-        // preso, e o vigia tentava e falhava de novo a cada minuto, para sempre.
         if (r?.saiu) console.log(`[PUNIÇÃO][vigia] ${userId} já saiu de ${serverId} — silêncio encerrado sem cargo a remover`);
       }
 
@@ -589,8 +478,6 @@ export async function liberarSilenciosVencidos(ctx) {
         descricao: `<@${userId}> voltou a falar — o prazo da punição terminou.\n**Motivo original:** ${motivo ?? "—"}`,
       });
     } catch (e) {
-      // `e.message` só existe em `Error`; a lib do Stoat lança objetos e o log
-      // ficava "…: undefined" — sem dizer NEM o que falhou NEM por quê.
       console.error(`[PUNIÇÃO][vigia] ${userId} em ${serverId}: ${descreverErro(e)}`);
     }
   }
@@ -600,12 +487,7 @@ export async function liberarSilenciosVencidos(ctx) {
 export function escadaDePunicao(pol = {}, { estrito = false } = {}) {
   const bruto = String(pol.escada || ESCADA_PADRAO).split(",").map((x) => x.trim()).filter(Boolean);
   const degraus = bruto.map(interpretarDegrau).filter(Boolean);
-  // No modo estrito (usado ao CONFIGURAR), texto que não vira degrau nenhum é
-  // erro do usuário e precisa ser recusado. Em uso normal, cai no padrão —
-  // uma config estranha não pode desligar a punição sem ninguém perceber.
   if (estrito && degraus.length !== bruto.length) return [];
-  // Sem um ban no fim, um usuário insistente ficaria em loop de mute para
-  // sempre. O último degrau é sempre terminal.
   if (!degraus.length) return [{ tipo: "aviso" }, { tipo: "ban" }];
   if (degraus[degraus.length - 1].tipo !== "ban") degraus.push({ tipo: "ban" });
   return degraus;
@@ -634,19 +516,9 @@ export function rotuloDegrau(degrau, lang = "pt") {
   return lang === "en" ? `${degrau.rotulo} of silence` : `silêncio de ${degrau.rotulo}`;
 }
 
-// ──────────────────────────────────────────────────────────
-//  Motor principal — executado em TODAS as mensagens.
-//  Retorna true se a mensagem foi bloqueada.
-// ──────────────────────────────────────────────────────────
 export async function runAutomod(message, ctx) {
   const { config, estado, getServer } = ctx;
   const userId  = message.authorId;
-  // Normaliza para NFC antes de qualquer análise. Clientes Apple enviam texto
-  // em NFD ("ação" = a+c+cedilha combinante+a+til+o): sem isto, uma mensagem
-  // curta cheia de acentos podia estourar o detector de zalgo, que conta
-  // exatamente marcas combinantes. NFC recompõe o português em caracteres
-  // prontos; zalgo DE VERDADE (marcas empilhadas sem forma pré-composta)
-  // continua decomposto e continua detectável.
   const content = String(message.content ?? "").normalize("NFC");
   const am = config.automod;
 
@@ -662,8 +534,6 @@ export async function runAutomod(message, ctx) {
     return false;
   }
 
-  // Captura o canal ANTES de qualquer message.delete(), pois apos a
-  // delecao a referencia message.channel pode ficar indisponivel.
   const canal = await resolverCanal(message, ctx);
 
   // ── Anti-invite (respeita a whitelist de códigos) ──
@@ -692,10 +562,6 @@ export async function runAutomod(message, ctx) {
     const r = analisarConteudo(content, { rate });
     const base = ({ baixa: 7, media: 6, alta: 5 })[am.antiScam.sensitivity] ?? 6;
 
-    // ── Rigor por antiguidade ──
-    // Só o sentinela usa isto: ele julga, não mede. Conta nova mandando link
-    // de venda é o padrão do golpe; a mesma frase de quem está há semanas no
-    // servidor quase sempre é brincadeira que o detector não entende.
     const { limiar, faixa, nivel } = confianca.limiarPara(
       ctx.serverId ?? server?.id, userId, base,
       { ativo: am.antiScam.porAntiguidade !== false },
@@ -704,10 +570,6 @@ export async function runAutomod(message, ctx) {
       + `${faixa ? `, ${faixa.rotulo} nv${nivel}` : ""})${r.grave ? " GRAVE" : ""}`
       + ` sinais: [${r.sinais.join(", ") || "nenhum"}]`);
 
-    // ── Alerta à administração ──
-    // Um sinal isolado não vira punição nem alarme; um PADRÃO vira. Isto roda
-    // mesmo quando a nota não chegou ao limiar: é justamente o caso em que a
-    // moderação humana precisa olhar antes de o bot decidir sozinho.
     if (r.nota >= Math.max(3, limiar - 2) && am.antiScam.alertarAdmin !== false) {
       const sinal = confianca.registrarSinal(ctx.serverId ?? server?.id, userId,
         { nota: r.nota, sinais: r.sinais });
@@ -754,8 +616,6 @@ export async function runAutomod(message, ctx) {
 
   // ── Anti-mass-mention ──
   if (am.antiMassMention.enabled) {
-    // Menções DISTINTAS: marcar a mesma pessoa seis vezes numa brincadeira é
-    // UMA pessoa incomodada, não seis — e mencionar a si próprio não conta.
     const unicas = new Set((message.mentionIds ?? []).filter((id) => id && id !== userId));
     const n = unicas.size;
     dbg(ctx, `  [anti-mass-mention] ON → ${n} menção(ões) (limite ${am.antiMassMention.maxMentions})`);
@@ -770,10 +630,6 @@ export async function runAutomod(message, ctx) {
     dbg(ctx, "  [anti-mass-mention] OFF");
   }
 
-  // ── Anti-caps ──
-  // Analisa só o que a pessoa DIGITOU: menções (`<@ULID>`, 26 caracteres
-  // maiúsculos), links, emojis nomeados e código ficam de fora. Antes disso,
-  // marcar duas pessoas já bastava para ser punido por "CAIXA ALTA".
   const textoEstilo = textoHumano(content);
   if (am.antiCaps.enabled && textoEstilo.length >= am.antiCaps.minLength) {
     // Siglas curtas ficam fora da conta; `null` = texto insuficiente.
@@ -810,12 +666,7 @@ export async function runAutomod(message, ctx) {
     dbg(ctx, "  [anti-caracteres] OFF");
   }
 
-  // ── Anti-repetição (letra repetida na mesma mensagem) ──
-  // Desligado por padrão: em servidores BR o "kkkkk" é risada. Quando ligado,
-  // ignora por padrão o "k" (configurável em antiRepeticao.ignorar).
   if (am.antiRepeticao?.enabled) {
-    // Também sobre o texto digitado: um link com muitos caracteres iguais
-    // (ou um bloco de código) não é flood visual da pessoa.
     const r = analisarRepeticao(textoEstilo, {
       maxRepeticao: am.antiRepeticao.maxRepeticao ?? 15,
       ignorar:      am.antiRepeticao.ignorar ?? "k",
@@ -835,9 +686,6 @@ export async function runAutomod(message, ctx) {
   if (am.antiSpam.enabled || am.antiMassSpam.enabled) {
     const now = Date.now();
     const maxWindow = Math.max(am.antiSpam.windowMs, am.antiMassSpam.windowMs);
-    // Chave por servidor+usuário: o bot está em vários servidores, e sem o
-    // serverId a contagem VAZAVA entre eles — 4 msgs aqui + 4 acolá na mesma
-    // janela puniam por "flood" alguém com ritmo normal em cada um.
     const chaveSpam = `${ctx.serverId ?? server?.id ?? "?"}:${userId}`;
     const prev = (estado.spamData.get(chaveSpam) ?? []).filter((t) => now - t < maxWindow);
     prev.push(now);
@@ -875,19 +723,9 @@ export async function runAutomod(message, ctx) {
   return false;
 }
 
-// Aplica o cargo de silêncio a um usuário (mantém os cargos atuais)
-// Erros da API do Stoat raramente são `Error`: costumam vir como objetos
-// `{ type: "MissingPermission" }`. Ler `.message` dava `undefined` — foi o que
-// apareceu para o moderador como "falha ao silenciar (undefined)", uma
-// mensagem que não ajuda ninguém a consertar nada.
-// O desembrulho vive em `core/erros.js` (usado também pelo ban-global e por
-// quem mais precisar). Reexportado aqui porque meia dúzia de arquivos já
-// importavam `descreverErro` deste módulo.
 export { descreverErro, tipoDoErro, normalizarErro } from "../core/erros.js";
 
 async function aplicarCargoSilence(server, userId, roleId, ctx) {
-  // Sem cargo configurado não há o que aplicar. Antes, `undefined` ia parar
-  // dentro da lista de cargos e a API recusava com um erro sem mensagem.
   if (!roleId) {
     const lang = lingua(ctx);
     throw new Error(lang === "en"
@@ -904,11 +742,6 @@ async function aplicarCargoSilence(server, userId, roleId, ctx) {
   await member.edit({ roles: atuais });
 }
 
-// ──────────────────────────────────────────────────────────
-//  Reaplica a punição quando um membro ENTRA no servidor.
-//  Fecha o furo de "sair e voltar para escapar do silêncio":
-//  o estado vive no banco, não no cargo que se perde ao sair.
-// ──────────────────────────────────────────────────────────
 export async function reaplicarPunicao(member, ctx) {
   const serverId = member?.id?.server;
   const userId   = member?.id?.user;
@@ -942,10 +775,6 @@ export async function reaplicarPunicao(member, ctx) {
 
 // Remove o cargo de silêncio de um usuário
 export async function removerCargoSilence(server, userId, roleId, ctx) {
-  // `fetchMember` de quem saiu não devolve null: REJEITA com `{ type: "NotFound" }`.
-  // Era a origem mais provável do "undefined" no vigia — e um caso que não é
-  // falha nenhuma: sem membro, não há cargo. Quem chama decide o que fazer
-  // com `saiu`; o que era "erro sem mensagem" vira um resultado com nome.
   let member;
   try { member = await server.fetchMember(userId); }
   catch (e) {
@@ -959,9 +788,6 @@ export async function removerCargoSilence(server, userId, roleId, ctx) {
 
   await member.edit({ roles: atuais.filter((id) => id !== roleId) });
 
-  // Conferir em vez de confiar: a API pode aceitar o edit e não aplicar
-  // (hierarquia de cargos, permissão faltando). Silêncio que não sai é
-  // exatamente o tipo de falha que ninguém percebe até alguém reclamar.
   try {
     const depois = await server.fetchMember(userId);
     const aindaTem = (depois?.roles ?? []).map((r) => r?.id ?? r).includes(roleId);

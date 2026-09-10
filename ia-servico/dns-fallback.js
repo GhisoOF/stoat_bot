@@ -1,30 +1,3 @@
-// ══════════════════════════════════════════════════════════
-//  dns-fallback.js — resolver de emergência
-//
-//  O container pode acabar com um /etc/resolv.conf SEM nenhuma linha
-//  `nameserver` — só os comentários que o dhcpcd deixa. Quando isso
-//  acontece, `getaddrinfo` devolve EAI_AGAIN para tudo, e como o
-//  `fetch` do Node usa `dns.lookup` (que lê esse arquivo), o serviço
-//  inteiro fica sem rede mesmo com o host navegando normalmente.
-//
-//  Consertar o arquivo é a solução certa, mas depende de mexer no
-//  host e de recriar o container — e enquanto isso a Judy fica muda.
-//  Aqui resolvemos por dentro: o Node também sabe consultar DNS por
-//  c-ares (`dns.Resolver`), que aceita servidores explícitos e NÃO lê
-//  o resolv.conf. Basta apontar o `dns.lookup` para ele.
-//
-//  A troca só acontece se o resolvedor do sistema estiver realmente
-//  quebrado. Com DNS funcionando, nada muda — inclusive nomes locais
-//  e do Tailscale, que os servidores públicos não conheceriam.
-//
-//  Env:
-//    DNS_FALLBACK=1.1.1.1,8.8.8.8   servidores, em ordem de preferência
-//    DNS_FALLBACK=off               desliga a rede de segurança
-//
-//  Numa máquina com Tailscale vale pôr o MagicDNS (100.100.100.100) na
-//  frente: com a rede do host ele é alcançável, e é o único que resolve
-//  os nomes internos *.ts.net. Os públicos ficam atrás, como reserva.
-// ══════════════════════════════════════════════════════════
 import dns from "node:dns";
 
 const SERVIDORES = (process.env.DNS_FALLBACK ?? "1.1.1.1,8.8.8.8")
@@ -43,9 +16,6 @@ export async function sistemaResolve(nome = "api.github.com", ms = 4000) {
   });
 }
 
-// Substitui o dns.lookup por um que usa c-ares com servidores fixos.
-// O `fetch` do Node chega aqui através do net.connect, então passa a
-// funcionar sem que nenhum outro arquivo precise saber disso.
 export function instalarFallback() {
   if (instalado || !SERVIDORES.length) return false;
 
@@ -56,8 +26,6 @@ export function instalarFallback() {
     const cb = typeof opcoes === "function" ? opcoes : retorno;
     const op = typeof opcoes === "function" ? {} : (opcoes ?? {});
 
-    // localhost e IPs literais nunca precisam de rede: resolver esses
-    // por DNS público seria lento e, no caso do localhost, errado.
     if (/^(localhost|127\.0\.0\.1|::1)$/i.test(nome)) {
       return op.all
         ? cb(null, [{ address: "127.0.0.1", family: 4 }])
@@ -86,8 +54,6 @@ export function instalarFallback() {
 export function estaInstalado() { return instalado; }
 export function servidoresUsados() { return [...SERVIDORES]; }
 
-// Chamado no boot: só troca se precisar, e devolve o que aconteceu
-// para o diagnóstico contar a história certa.
 export async function garantirDNS() {
   if (process.env.DNS_FALLBACK === "off") {
     return { trocou: false, motivo: "desligado por DNS_FALLBACK=off" };

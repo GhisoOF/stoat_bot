@@ -1,19 +1,3 @@
-// ══════════════════════════════════════════════════════════
-//  log.js — Chat de logs configurável por servidor
-//
-//  &log                      → mostra o status e o canal atual
-//  &log here                 → define o canal ATUAL como chat de log
-//  &log <idDoCanal>          → define um canal por ID
-//  &log off                  → desativa o chat de log
-//  &log <evento> <on|off>    → liga/desliga um tipo de evento
-//
-//  Eventos disponíveis (config.log.eventos):
-//    punicoes   — avisos, silêncios e bans do automod/moderação
-//    membros    — entradas e saídas do servidor
-//    mensagens  — mensagens apagadas e editadas
-//    cargos     — cargos criados/apagados e cargos dados a usuários
-//    comandos   — tentativas de uso de comandos do bot
-// ══════════════════════════════════════════════════════════
 
 import { tr, lingua } from "./i18n.js";
 import { resolverCanal } from "./ids.js";
@@ -43,17 +27,6 @@ const CORES = {
   comandos:  "#3498db",
 };
 
-// Registra um evento no chat de log, se estiver ativo para o servidor.
-// Nunca lança: uma falha de log jamais deve derrubar a moderação.
-// ── Resgate de mídia de mensagem apagada ───────────────────
-//
-//  Id de anexo no Stoat é de uso único: não dá para reaproveitar o da
-//  mensagem morta. O caminho é resgatar os BYTES do CDN (que costuma servir
-//  o arquivo por um instante depois da deleção — e no automod o evento chega
-//  logo após o próprio bot apagar) e re-subir via Autumn. Melhor esforço
-//  declarado: se o CDN já purgou, o log diz isso em vez de fingir que não
-//  havia mídia. `baixar` e `subir` são injetáveis para o teste executar o
-//  caminho de verdade sem rede (lição do embedIdioma/modeloForcado).
 const RESGATE_MAX_BYTES = Number(process.env.LOG_MIDIA_MAX_BYTES || 10 * 1024 * 1024);
 export async function resgatarMidias(atts, { baixar = fetch, subir } = {}) {
   const CDN = (process.env.CDN_URL || "https://cdn.stoatusercontent.com").replace(/\/$/, "");
@@ -96,8 +69,6 @@ export async function registrar(ctx, categoria, { titulo, descricao, imagem = nu
       title: titulo,
       description: `${descricao}\n\n_${agora} UTC_`,
       colour: CORES[categoria] ?? "#95a5a6",
-      // Mídia resgatada de mensagem apagada: a primeira imagem entra no
-      // corpo do embed; o resto (e vídeos) vai como anexo da mensagem.
       imagem,
       anexos,
     });
@@ -106,7 +77,6 @@ export async function registrar(ctx, categoria, { titulo, descricao, imagem = nu
   }
 }
 
-// ── Comando &log ───────────────────────────────────────────
 export async function cmdLog(message, args, ctx) {
   const { config, sendEmbed, COR, getServer, membroTemPermissao, salvarConfig, PREFIXO } = ctx;
   const lang = lingua(ctx);
@@ -224,9 +194,6 @@ export async function cmdLog(message, args, ctx) {
     });
   }
 
-  // ── &log <canal> ── aceita menção, link, ID ou nome do canal.
-  // Também aceita a forma explícita `&log canal <alvo>` / `&log channel <target>`
-  // (é a sintaxe que o &tutorial ensina); sem alvo, usa o canal atual.
   let alvoBruto = args[0];
   if (sub === "canal" || sub === "channel") alvoBruto = args[1] ?? "here";
 

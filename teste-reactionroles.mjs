@@ -1,25 +1,3 @@
-// ══════════════════════════════════════════════════════════
-//  teste-reactionroles.mjs — o painel de cargos por reação
-//
-//  O bug que originou estes testes: no modo exclusivo, alguém trocava de
-//  cor e o emoji ANTERIOR sumia da mensagem inteira. Não era o cargo — era
-//  a reação do bot, que é o que segura o emoji visível quando ninguém está
-//  marcado. Sumindo ela, a contagem chegava a zero e a opção deixava de
-//  existir para todo mundo.
-//
-//  A causa é uma assinatura enganosa da lib:
-//
-//      async unreact(emoji, deleteAll = false)
-//
-//  Passando um userId no segundo parâmetro — que é o que qualquer um
-//  escreveria — a string vira `deleteAll: true` e o backend apaga a reação
-//  de TODOS. O código pedia "tire a reação desta pessoa" e o servidor ouvia
-//  "apague esta reação da mensagem".
-//
-//  Por isso o primeiro teste aqui não olha o resultado: olha a CHAMADA.
-//  Um teste de efeito passaria com o bug presente, já que a reação da
-//  pessoa realmente sai — junto com as outras.
-// ══════════════════════════════════════════════════════════
 process.env.DB_PATH = "/tmp/rr-teste.db";
 process.env.CONFIG_PATH = "/tmp/rr-teste-cfg.json";
 import fs from "node:fs";
@@ -39,9 +17,6 @@ const BOT    = "01BOTRRR000000000000000AAA";
 const PESSOA = "01PESSOARRR000000000000AAA";
 const CORES  = [["💙", "01ROLEAZUL0000000000000AAA"], ["🧡", "01ROLELARANJA000000000AAA"], ["💜", "01ROLEROXO0000000000000AAA"]];
 
-// ── Dublês ────────────────────────────────────────────────
-// A mensagem guarda quem reagiu com o quê, como o cliente faz, para que
-// "sumir da mensagem" seja algo observável no teste.
 function criarMensagem(reacoes = {}) {
   const mapa = new Map(Object.entries(reacoes).map(([e, us]) => [e, new Set(us)]));
   return {
@@ -93,11 +68,9 @@ function criarClient(msg, { cargos = [] } = {}) {
 
 const ctxDe = (client) => ({ client, config: {}, configDoServidor: () => ({}) });
 
-// ── Cenário: painel de cores, modo exclusivo ──────────────
 for (const [emoji, role] of CORES) db.addReactionRole(SERVER, MSG, emoji, role, CANAL);
 db.setReactionRoleExclusivo(MSG, true);
 
-// ══ 1. Trocar de cor não pode apagar o emoji antigo ══
 console.log("── trocar de cor no modo exclusivo ──");
 {
   // Estado inicial: o bot semeou os três; a pessoa está no 💙.
@@ -117,11 +90,6 @@ console.log("── trocar de cor no modo exclusivo ──");
     "  → e o cargo foi trocado, que é o efeito pretendido");
 }
 
-// ══ 2. A última pessoa a desmarcar não pode levar o emoji junto ══
-//
-//  Se, por qualquer motivo, o bot não estiver reagido (regras antigas, ou
-//  reação perdida antes desta correção), quem desmarca zera a contagem e a
-//  opção some. Repor a semente devolve o botão para o próximo.
 console.log("\n── quando a última pessoa desmarca ──");
 {
   const msg = criarMensagem({ "💜": [PESSOA] });     // sem a semente do bot
@@ -134,15 +102,12 @@ console.log("\n── quando a última pessoa desmarca ──");
   ok(msg.reagidos.includes("💜"), "  → porque o bot reage de novo");
 }
 
-// ══ 3. A ordem é do jeito que foi configurada ══
 console.log("\n── a ordem das opções ──");
 {
   const ordem = db.listReactionRoles(MSG).map((r) => r.emoji);
   ok(JSON.stringify(ordem) === JSON.stringify(CORES.map((c) => c[0])),
     `★ a lista sai na ordem em que foi configurada (${ordem.join(" ")})`);
 
-  // Reeditar o cargo de um emoji existente não pode jogá-lo para o fim: a
-  // mensagem não muda de ordem, então a configuração também não deve.
   db.addReactionRole(SERVER, MSG, "💙", "01ROLEAZUL2000000000000AAA", CANAL);
   const depois = db.listReactionRoles(MSG).map((r) => r.emoji);
   ok(depois[0] === "💙", "★ reeditar uma regra existente NÃO a manda para o fim da fila");
@@ -152,7 +117,6 @@ console.log("\n── a ordem das opções ──");
   ok(db.listReactionRoles(MSG).map((r) => r.emoji).at(-1) === "💚", "e um emoji novo entra no fim");
 }
 
-// ══ 4. Repor só o que falta, sem tocar no resto ══
 console.log("\n── repor o que sumiu ──");
 {
   // O 🧡 sumiu; o 💚 foi acrescentado ali em cima e ainda não tem reação.
@@ -163,12 +127,6 @@ console.log("\n── repor o que sumiu ──");
   ok(msg.reactions.get("💙").has(PESSOA), "  → sem mexer em quem já estava marcado");
 }
 
-// ══ 5. Limite de requisições: 17 emojis não cabem numa janela ══
-//
-//  Aconteceu no servidor: um painel de 17 cores foi recomposto e só 13
-//  entraram. O Stoat limita o bucket do canal a 15 requisições por janela e
-//  devolve `{"retry_after": 8270}` nas seguintes. O erro ia só para o log,
-//  então o painel ficava incompleto em silêncio.
 console.log("\n── quando o Stoat diz 'devagar' ──");
 {
   process.env.RR_PAUSA_MS = "1";                    // sem esperar de verdade no teste
@@ -202,11 +160,6 @@ console.log("\n── quando o Stoat diz 'devagar' ──");
   ok(JSON.stringify(msg.reagidos) === JSON.stringify(emojis), "  → na ordem configurada");
 }
 
-// ══ 6. Falha de verdade não pode passar em silêncio ══
-//
-//  Um emoji personalizado de um servidor onde o bot não está devolve
-//  `InvalidOperation`. Isso não se resolve tentando de novo — tem de chegar
-//  a quem configurou.
 console.log("\n── quando o emoji não pode ser usado ──");
 {
   process.env.RR_PAUSA_MS = "1";

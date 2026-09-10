@@ -1,7 +1,3 @@
-// ══════════════════════════════════════════════════════════
-//  teste-help-tutorial.mjs — &help por intenção, &tutorial em páginas,
-//  &assistente guiado, paridade PT/EN e o limite do embed.
-// ══════════════════════════════════════════════════════════
 
 process.env.BOT_TOKEN = "tok";
 process.env.DB_PATH = "/tmp/help-teste.db";
@@ -58,7 +54,6 @@ const titulo = (m) => (m?.edits.length ? m.edits[m.edits.length - 1] : m?.payloa
 const reagir = (m, e, quem = "U1") => c.emitAll("messageReactionAdd", { id: m.id }, quem, encodeURIComponent(e));
 const desreagir = (m, e, quem = "U1") => c.emitAll("messageReactionRemove", { id: m.id }, quem, encodeURIComponent(e));
 
-// ══ &help ══
 console.log("\n── &help (índice por intenção) ──");
 let m = await say("&help");
 ok(titulo(m).includes("Central de Ajuda"), "&help abre o índice");
@@ -97,7 +92,6 @@ for (const lang of ["pt", "en"]) {
   ok(Object.keys(G).every((k) => G[k].linhas.join("\n").length < 2800), `grupos(${lang}): nenhum grupo maior que 2 páginas`);
 }
 
-// ══ &help <comando> com parâmetros ══
 console.log("\n── &help <comando>: parâmetros explicados ──");
 m = await say("&help boasvindas");
 const todasPgs = (mm) => [mm.payload, ...mm.edits].map((p) => p?.embeds?.[0]?.description ?? "").join("\n");
@@ -125,7 +119,6 @@ for (const k of Object.keys(PT)) {
 ok(["boasvindas", "adeus", "automod", "punicao", "sentinela", "log", "acesso", "xp", "assistente", "tutorial"].every((k) => PT[k]),
   "parametros cobre os comandos de configuração principais");
 
-// ══ &tutorial ══
 console.log("\n── &tutorial em páginas ──");
 m = await say("&tutorial");
 ok(titulo(m).includes("Antes de tudo"), "&tutorial abre a página 'Antes de tudo'");
@@ -160,7 +153,6 @@ for (const lang of ["pt", "en"]) {
   ok((lang === "en") === caps[0]?.title?.includes("Getting started"), `guia(${lang}): no idioma certo`);
 }
 
-// ══ &sentinela on e &automod status ══
 console.log("\n── sentinela (antigo antiscam) ──");
 m = await say("&sentinela on");
 ok(texto(m).includes("ativado"), "&sentinela on liga o filtro");
@@ -169,7 +161,6 @@ ok(texto(m).includes("**sentinela**") && !texto(m).includes("**antiscam**"), "&a
 m = await say("&automod antiscam");
 ok(titulo(m).includes("sentinela"), "&automod antiscam ainda funciona (redireciona)");
 
-// ══ &assistente ══
 console.log("\n── &assistente rapido ──");
 m = await say("&assistente");
 ok(texto(m).includes("rapido") && texto(m).includes("canais") && texto(m).includes("protecao"), "&assistente mostra o menu");
@@ -241,7 +232,6 @@ ok(desc(m).includes("Padrão") && desc(m).includes("negar"), "  → instruções
 ok(desc(m).includes("Admin"), "  → cita os cargos de staff atuais");
 ok(sessoesAtivas() === 0, "  → sessão fechada (não há o que aplicar)");
 
-// ══ EN ══
 console.log("\n── EN ──");
 await say("&idioma en");
 m = await say("&help");

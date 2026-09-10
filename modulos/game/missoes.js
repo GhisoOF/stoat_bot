@@ -1,26 +1,6 @@
-// ══════════════════════════════════════════════════════════
-//  missoes.js — catálogo e resolução
-//
-//  Dois tipos, como no design:
-//
-//   • MERCADO — sem risco de morte. Paga pouco e em valor FIXO,
-//     que não escala com o nível. É a rede de segurança de quem
-//     tem medo de perder o que carrega, e deixa de compensar
-//     sozinha conforme a curva de XP cresce. Nenhuma trava
-//     artificial precisa existir para isso.
-//
-//   • DUNGEON — 3 dificuldades, com risco real. O XP acompanha a
-//     curva de 1,5× por nível da missão, então subir de nível leva
-//     mais ou menos o mesmo tempo a vida inteira.
-//
-//  O combate é resolvido por cálculo, de uma vez, sem turnos.
-// ══════════════════════════════════════════════════════════
 
 export const TIPOS = { mercado: "mercado", dungeon: "dungeon" };
 
-// ── Catálogo ──────────────────────────────────────────────
-// `nivel` alimenta a escala de XP; `poder` e `risco` são a
-// dificuldade contra a qual o personagem é comparado.
 export const MISSOES = [
   // ── MERCADO (sem risco) ──
   { id: "m_encomendas",  nome: "Entregar Encomendas",        tipo: "mercado", nivel: 1, poder: 0, risco: 0, cooldownMin: 10,
@@ -63,8 +43,6 @@ export const DIFICULDADE_INFO = {
   dificil: { emoji: "🔴", rotulo: "Difícil" },
 };
 
-// Tabela de loot por dificuldade: chance de cada raridade sair.
-// O que sobra até 1 é "nada" — nem toda missão dá item.
 const LOOT = {
   facil:   { comum: 0.55, incomum: 0.20 },
   medio:   { comum: 0.25, incomum: 0.38, raro: 0.15 },
@@ -83,11 +61,6 @@ export function acharMissao(txt) {
       ?? null;
 }
 
-// ── Poder e Resiliência (§5 do design) ────────────────────
-//
-// As três defesas se MULTIPLICAM de propósito: espalhar rende mais
-// que empilhar, sem precisar de regra proibindo nada.
-
 const precisao = (destreza) => 0.70 + 0.30 * (destreza / (destreza + 10));
 const reducao  = (resistencia) => resistencia / (resistencia + 20);   // < 1 sempre
 const evasao   = (agilidade) => agilidade / (agilidade + 25);
@@ -102,13 +75,6 @@ export function calcularPoder(attr, magias = []) {
 }
 
 export function calcularResiliencia(attr, magias = []) {
-  // As três defesas se MULTIPLICAM. Para que "espalhar renda mais que empilhar"
-  // (§2.1 do design), nenhuma delas pode ser linear: se a Vida entrasse direto,
-  // despejar tudo nela venceria sempre, e Resistência/Agilidade virariam
-  // decoração. Com a Vida também sob raiz, 10/10/10 supera 30/0/0.
-  // Cada defesa vira um FATOR na mesma escala. O produto de fatores é máximo
-  // quando eles são parecidos entre si — é isso que faz 10/10/10 vencer 30/0/0,
-  // sem nenhuma regra dizendo "não empilhe".
   const fVida  = 1 + (attr.vida ?? 0) / 12;
   const fResis = 1 + (attr.resistencia ?? 0) / 12;
   const fAgil  = 1 + (attr.agilidade ?? 0) / 12;
@@ -119,17 +85,9 @@ export function calcularResiliencia(attr, magias = []) {
   return bruto * (1 + bonus);
 }
 
-// Probabilidade no formato "poder próprio contra a exigência":
-// iguais = 50%. Nunca chega a 0% nem 100% — sempre há sorte envolvida.
 const chance = (meu, exigido) => (exigido <= 0 ? 1 : meu / (meu + exigido));
 
-// Levar gente aumenta a exigência da missão: party maior enfrenta inimigo mais
-// forte. Assim followers dão VARIEDADE (classes e magias que você não tem), não
-// só força bruta — do contrário levar 2 sempre seria obviamente melhor.
 export function escalaPorParty(tamanho) {
-  // A exigência sobe menos do que a party acrescenta em atributos+magias.
-  // Levar gente PRECISA valer a pena (senão ninguém recruta), mas não pode
-  // trivializar a missão — daí a escala existir, e ser modesta.
   return 1 + 0.18 * Math.max(0, tamanho);
 }
 
@@ -146,7 +104,6 @@ export function previsao(attr, missao, magias = [], tamanhoParty = 0) {
   };
 }
 
-// ── Resolução ─────────────────────────────────────────────
 export function resolver(attr, missao, aleatorio = Math.random, magias = [], tamanhoParty = 0) {
   const p = previsao(attr, missao, magias, tamanhoParty);
   const exito = aleatorio() < p.exito;
@@ -170,9 +127,6 @@ export function resolver(attr, missao, aleatorio = Math.random, magias = [], tam
 export function sortearRaridade(missao, sorte = 0, aleatorio = Math.random, tamanhoParty = 0) {
   if (missao.tipo === "mercado") return null;   // mercado não dá item
   const tabela = LOOT[missao.dificuldade] ?? {};
-  // Sorte melhora um pouco a chance de sair algo, com retorno decrescente
-  // Levar followers REDUZ o loot do jogador: a parte deles vai para o mercado
-  // (§4 do design) — em vez de criar inventário de NPC.
   const divisao = 1 / (1 + 0.30 * Math.max(0, tamanhoParty));
   const bonus = (1 + 0.03 * Math.sqrt(Math.max(0, sorte))) * divisao;
   let r = aleatorio();

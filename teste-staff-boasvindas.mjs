@@ -1,9 +1,3 @@
-// ══════════════════════════════════════════════════════════
-//  teste-staff-boasvindas.mjs — &staff, &boasvindas e &adeus
-//  Cobre: listagem da equipe, integração com &acesso (a mesma lista),
-//  configuração dos embeds, marcadores, disparo pelos eventos de
-//  entrada/saída e paridade PT/EN.
-// ══════════════════════════════════════════════════════════
 
 process.env.BOT_TOKEN = "tok";
 process.env.DB_PATH = "/tmp/staff-teste.db";
@@ -58,7 +52,6 @@ const mk = (t) => ({
 const say = async (t) => { await c.emitAll("messageCreate", mk(t)); };
 const ult = () => JSON.stringify(env[env.length - 1] ?? {});
 
-// ══ &staff ══
 console.log("\n── &staff ──");
 await say("&staff");
 ok(ult().includes("Nenhum cargo de staff"), "&staff sem cargos → explica como montar a lista");
@@ -97,7 +90,6 @@ ok(ult().includes("removido"), "&staff remove");
 env.length = 0; await say("&acesso status");
 ok(!ult().includes(CARGO_MOD), "★ remover do &staff também tira o acesso à moderação");
 
-// ══ &boasvindas ══
 console.log("\n── &boasvindas ──");
 await say("&boasvindas");
 ok(ult().includes("desligado") || ult().includes("🔴"), "&boasvindas começa desligado");
@@ -124,7 +116,6 @@ ok(teste.includes("1972"), "  → {membros} renderizado");
 ok(teste.includes("<@U1>"), "  → {usuario} vira menção na entrada");
 ok(teste.includes("Chegou gente nova"), "  → título personalizado aplicado");
 
-// ══ evento de entrada ══
 console.log("\n── entrada e saída de verdade ──");
 enviadosPortaria.length = 0;
 await c.emitAll("serverMemberJoin", { id: { server: "S1", user: "01JZZ000000000000000000000" }, user: { username: "Novato" } });
@@ -139,7 +130,6 @@ await c.emitAll("serverMemberJoin", { id: { server: "S1", user: "01JYY0000000000
 ok(enviadosPortaria.length === 0, "&boasvindas off → nada é publicado");
 await say("&boasvindas on");
 
-// ══ &adeus ══
 await say(`&adeus canal <#${CANAL_PORTARIA}>`);
 await say("&adeus texto {usuario} deixou {servidor}. Restam {membros}.");
 enviadosPortaria.length = 0;
@@ -155,7 +145,6 @@ ok(ult().includes("padrão"), "&boasvindas padrao restaura o texto de fábrica")
 await say("&boasvindas");
 ok(ult().includes(CANAL_PORTARIA) || ult().includes("🟢"), "  → canal e estado preservados");
 
-// ══ paridade EN ══
 console.log("\n── inglês ──");
 await say("&idioma en");
 env.length = 0;
@@ -186,7 +175,6 @@ ok(ult().includes("{usuario}") || ult().includes("Marcadores"), "PT: &help boasv
 await say("&config");
 ok(ult().includes("Boas-vindas") || ult().includes("Entrada e saída"), "&config PT mostra o novo estado");
 
-// ══ imagem de capa ══
 console.log("\n── imagem ──");
 {
   await say("&idioma pt");
@@ -195,8 +183,6 @@ console.log("\n── imagem ──");
   ok(ult().includes("Imagem definida"), "&adeus imagem aceita URL direta");
   enviadosPortaria.length = 0;
   await say("&adeus testar");
-  // Link externo: o campo `media` do Revolt/Stoat só aceita ID do Autumn, então
-  // a URL vai no conteúdo e o Stoat gera a pré-visualização.
   ok(enviadosPortaria[0]?.content === "[\u2800](https://exemplo.com/capa.png)",
     "★ link externo vai no conteúdo, MASCARADO (sem URL crua na tela)");
   ok(enviadosPortaria[0]?.content.includes("https://exemplo.com/capa.png"),
@@ -230,8 +216,6 @@ console.log("\n── imagem ──");
     "limpar remove a capa e o link do envio");
 }
 
-// ══ contagem de membros em servidor SEM memberCount ══
-// (o caso real: o Stoat quase nunca traz esse campo, e {membros} saía "?")
 console.log("\n── contagem de membros ──");
 {
   const { invalidar } = await import("./modulos/core/membros.js");

@@ -1,31 +1,7 @@
-// ══════════════════════════════════════════════════════════
-//  indice-dominios.js — índice compacto para a blocklist anti-link
-//
-//  POR QUÊ: guardar ~2,5 milhões de domínios como Set<string> custa
-//  300–450 MB de RAM no V8 (cada string curta vira um objeto com
-//  cabeçalho, ponteiro e bucket de hash). Era, de longe, o maior
-//  consumidor de memória do bot inteiro.
-//
-//  COMO: cada domínio vira um hash de 64 bits (dois FNV-1a de 32 bits
-//  independentes, concatenados). Os hashes ficam num BigUint64Array
-//  ORDENADO — 8 bytes por domínio, ~20 MB para 2,5M — e a consulta é
-//  busca binária: O(log n), sub-microssegundo.
-//
-//  E AS COLISÕES? A chance de um domínio inocente colidir com QUALQUER
-//  um dos 2,5M hashes é ~2,5M / 2^64 ≈ 1,4×10⁻¹³ — na prática zero
-//  (bem mais preciso que um filtro de Bloom típico de 0,1%). O índice
-//  só responde "está/não está"; a lista legível continua nas fontes.
-//
-//  A interface imita o que o resto do código já usava do Set:
-//  `.size` e `.has(dominio)` — troca transparente no automod.
-// ══════════════════════════════════════════════════════════
 
 import fs from "node:fs";
 import path from "node:path";
 
-// ── Hash 64-bit: dois FNV-1a de 32 bits com primos diferentes ──
-// Math.imul mantém tudo em inteiros de 32 bits (rápido); só no fim
-// os dois lados viram UM BigInt. Domínios já chegam minúsculos/ASCII.
 export function hashDominio(str) {
   let h1 = 0x811c9dc5 | 0;
   let h2 = 0x811c9dc5 ^ 0x5bd1e995;
@@ -63,9 +39,6 @@ export class IndiceDominios {
 
 export function criarIndiceVazio() { return new IndiceDominios(); }
 
-// ── Construtor incremental ──
-// Acumula hashes em blocos de tamanho fixo (nada de array gigante de
-// BigInt "boxeado"), depois junta, ordena nativamente e remove duplicatas.
 const BLOCO = 1 << 18;   // 262.144 hashes por bloco (2 MB cada)
 
 export class ConstrutorIndice {
@@ -103,15 +76,6 @@ export class ConstrutorIndice {
     return new IndiceDominios(tudo.slice(0, escreve));
   }
 }
-
-// ── Cache em disco ──
-// O boot não precisa esperar 2,5M domínios baixarem de novo: o índice
-// pronto é salvo em /data (20 MB) e carrega em milissegundos. O download
-// real acontece em segundo plano e substitui o cache quando termina.
-//
-// Formato: 8B magia "SBLKIDX1" + 4B contagem + 4B checksum da config
-// (fontes + manuais) + N×8B hashes little-endian. Se a config de listas
-// mudou desde o cache, ele é ignorado (evita servir lista velha).
 
 const MAGIA = Buffer.from("SBLKIDX1", "ascii");
 

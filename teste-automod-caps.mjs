@@ -1,11 +1,3 @@
-// ══════════════════════════════════════════════════════════
-//  teste-automod-caps.mjs — falsos positivos do anti-caps
-//
-//  O incidente: menções no Stoat são `<@ULID>` — 26 caracteres SEMPRE
-//  maiúsculos. Quem marcava duas pessoas era punido por "CAIXA ALTA".
-//  Estes testes travam a correção e garantem que grito de verdade
-//  continua sendo pego.
-// ══════════════════════════════════════════════════════════
 
 import { textoHumano, razaoDeCaixaAlta } from "./modulos/moderacao/caracteres.js";
 
@@ -77,13 +69,6 @@ console.log("\n── unicode NFD ──");
     "★ zalgo de verdade continua detectado mesmo após NFC");
 }
 
-
-// ══ &punicao: subcomando que mora em outro comando ══
-//
-//  `&punicao test testando` foi digitado de verdade. A ajuda do sentinela
-//  dizia "a punição vem do &punicao. `test <texto>` mostra a nota" — duas
-//  frases coladas que se leem como uma. A resposta era "use &punicao status",
-//  que manda a pessoa procurar o que existe, só que em outro lugar.
 console.log("\n── &punicao aponta o comando certo ──");
 {
   const { cmdPunicao } = await import("./modulos/moderacao/automod-comandos.js");

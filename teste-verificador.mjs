@@ -1,19 +1,3 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// testar-verificador.mjs — smoke test do verificador
-//
-// Princípio do projeto: teste que EXECUTA o código de verdade, porque o
-// `modeloForcado` passou em todo check estático antes de quebrar produção.
-// Aqui: casos determinísticos (contas, nomes inventados) + o caminho da IA
-// contra um servidor OpenAI FALSO local, incluindo o contrato do template
-// (uma única system no índice 0) e o fail-open com JSON quebrado.
-//
-// Project principle: tests must actually run the code. Deterministic cases
-// plus the AI path against a local FAKE OpenAI server, asserting the
-// single-system-at-index-0 template contract and fail-open on broken JSON.
-//
-// Uso / usage:  node scripts/testar-verificador.mjs
-// Sai com código != 0 se algo falhar. / Non-zero exit on failure.
-// ─────────────────────────────────────────────────────────────────────────────
 
 import http from "node:http";
 import {
@@ -125,9 +109,6 @@ console.log("── camada 2 integrada ──");
     JSON.stringify(r.problemas));
 }
 
-// ── servidor OpenAI falso p/ camada 3 ────────────────────────────────────────
-// Decide a resposta pelo conteúdo da mensagem do usuário: marcador
-// [CASO:x] embutido na "pergunta" de teste.
 const fake = http.createServer((req, res) => {
   let corpo = "";
   req.on("data", (c) => (corpo += c));
@@ -240,11 +221,6 @@ console.log("── orquestrador ──");
 
 fake.close();
 
-// ── guard de imagem anexada → caminho com ferramentas ──────────────────────
-// Regressão do log de 2026-08-30: "o que você vê nessa imagem?" roteou como
-// `conversa`, o ver_imagem nunca ficou disponível e ela disse que não tinha
-// acesso à imagem. O guard é textual porque é assim que o chat.js anuncia os
-// anexos na própria pergunta.
 console.log("── guard: imagem anexada força ferramenta ──");
 {
   const fonte = await import("node:fs").then(m => m.readFileSync("./modulos/ai/chat.js", "utf8"));

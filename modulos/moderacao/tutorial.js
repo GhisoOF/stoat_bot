@@ -1,26 +1,7 @@
 import { servidorPermitido as temIA } from "../ai/chat.js";
 import { lingua } from "../core/i18n.js";
 import { enviarPaginado, paginarLinhas } from "../core/paginas.js";
-// ══════════════════════════════════════════════════════════
-//  tutorial.js — &tutorial
-//
-//  Guia de primeiros passos. Não configura nada: mostra o
-//  CAMINHO — por quais áreas passar, em que ordem, e qual
-//  comando usar em cada uma. Cada área tem sua própria página
-//  com os comandos exatos e o que esperar.
-//
-//  `&tutorial`          → o roteiro (visão geral, em ordem)
-//  `&tutorial <área>`   → detalhes daquela área
-//  `&tutorial permissoes` → o que o BOT precisa para funcionar
-//
-//  BILÍNGUE: AREAS(P, lang) devolve o dicionário no idioma do
-//  servidor. As CHAVES das áreas ficam em PT nos dois idiomas
-//  (são "nomes de comando", como &tutorial moderacao).
-// ══════════════════════════════════════════════════════════
 
-// Cada área: título, quando fazer, e os passos concretos.
-// `comIA`: fora do servidor com IA, a Judy simplesmente não existe — nem de
-// passagem. Linha que a menciona só entra quando comIA=true.
 function AREAS(P, lang = "pt", comIA = false) {
   if (lang === "en") return {
     permissoes: {
@@ -877,11 +858,6 @@ const APELIDOS = {
   config: "ajustes", geral: "ajustes", settings: "ajustes", general: "ajustes",
 };
 
-// ══════════════════════════════════════════════════════════
-//  O GUIA: 6 páginas na ordem em que um servidor novo fica pronto.
-//  Cada página é curta, termina apontando o comando que aprofunda,
-//  e o &assistente faz a parte "responda e eu configuro".
-// ══════════════════════════════════════════════════════════
 function GUIA(P, lang = "pt", comIA = false) {
   if (lang === "en") return [
     { title: "📚 Getting started — Before anything",
@@ -1096,8 +1072,6 @@ export async function cmdTutorial(message, args, ctx) {
   const { sendEmbed, COR, PREFIXO: P } = ctx;
   const lang = lingua(ctx);
 
-  // A IA só roda nos servidores da allowlist. Mostrar essa área onde ela não
-  // funciona é pior que omitir: a pessoa tenta e nada acontece.
   const comIA = (() => { try { return temIA(ctx.serverId); } catch { return false; } })();
 
   const todas = AREAS(P, lang, comIA);

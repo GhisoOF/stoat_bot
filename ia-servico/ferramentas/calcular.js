@@ -1,22 +1,3 @@
-// ══════════════════════════════════════════════════════════
-//  calcular.js — cálculos matemáticos VIA PROGRAMAÇÃO
-//
-//  A LLM escreve código JS e nós executamos num PROCESSO
-//  SEPARADO, endurecido em duas camadas:
-//
-//   1) MODELO DE PERMISSÕES DO NODE (--permission): bloqueia
-//      sistema de arquivos, child_process e worker threads no
-//      nível do runtime. Isso vale inclusive para `import()`
-//      dinâmico — que é como um sandbox ingênuo é furado.
-//   2) Prelúdio que remove fetch/rede e esconde process.env,
-//      para não vazar token nem chamar a internet.
-//
-//  Mais: timeout curto (mata laço infinito), limite de memória,
-//  env vazio e cwd em /tmp.
-//
-//  Isso resolve o ponto fraco de LLM em conta: em vez de "achar"
-//  o resultado, ela calcula de verdade.
-// ══════════════════════════════════════════════════════════
 
 import { execFile } from "node:child_process";
 

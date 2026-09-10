@@ -107,18 +107,16 @@ function contextoProjeto() {
   return _readmeCache;
 }
 
-const OLLAMA_MODEL_PADRAO  = process.env.OLLAMA_MODEL
-  || process.env.OLLAMA_MODEL_LEVE || "gemma4:e4b";
-const OLLAMA_MODEL_LEVE    = process.env.OLLAMA_MODEL_LEVE    || "gemma4:e4b";
-// Programação: código, erros, refatoração.
-const OLLAMA_MODEL_CODIGO  = process.env.OLLAMA_MODEL_CODIGO  || "ornith:9b";
-// Lógica/matemática/raciocínio (respostas ao usuário que exigem rigor).
-const OLLAMA_MODEL_LOGICA  = process.env.OLLAMA_MODEL_LOGICA  || "qwen3.5:9b";
-const OLLAMA_MODEL_DECISAO = process.env.OLLAMA_MODEL_DECISAO
-  || process.env.OLLAMA_MODEL_LEVE || "gemma4:e4b";
+// Modelos por papel. Vazio = o servidor usa o modelo que tem carregado
+// (llama-server local); no modo online, env.js já preencheu LLM_MODEL.
+const LLM_MODEL_PADRAO  = process.env.LLM_MODEL || "";
+const LLM_MODEL_LEVE    = process.env.LLM_MODEL_LEVE    || LLM_MODEL_PADRAO;
+const LLM_MODEL_CODIGO  = process.env.LLM_MODEL_CODIGO  || LLM_MODEL_PADRAO;
+const LLM_MODEL_LOGICA  = process.env.LLM_MODEL_LOGICA  || LLM_MODEL_PADRAO;
+const LLM_MODEL_DECISAO = process.env.LLM_MODEL_DECISAO || LLM_MODEL_LEVE;
 
 // URLs dos serviços de IA (fixas por env; troque o IP pelo Portainer).
-const OLLAMA_URL  = (process.env.OLLAMA_URL  || "http://localhost:11434").replace(/\/$/, "");
+const LLM_URL = (process.env.LLM_URL || "").replace(/\/$/, "");
 const SEARXNG_URL = (process.env.SEARXNG_URL || "http://localhost:8080").replace(/\/$/, "");
 
 const IA_SERVICO_URL = (process.env.IA_SERVICO_URL || "").replace(/\/$/, "");
@@ -129,7 +127,7 @@ const IA_SERVICO_CHAVE = process.env.IA_SERVICO_CHAVE || "";
 export function iniciarMemoria() {
   memoria.configurar({
     chamarModelo: (messages) =>
-      ollamaChat(messages, { json: true, modelo: OLLAMA_MODEL_DECISAO, etiqueta: "memoria" }),
+      llmChat(messages, { json: true, modelo: LLM_MODEL_DECISAO, etiqueta: "memoria" }),
   });
 }
 
@@ -168,7 +166,7 @@ export function observarParaComentario(message, ctx) {
 
 // Avaliador para a moderação por IA: usa o modelo pequeno (rápido) em JSON.
 export function avaliarModeracao(messages) {
-  return ollamaChat(messages, { json: true, modelo: OLLAMA_MODEL_DECISAO, etiqueta: "moderacao-ia" });
+  return llmChat(messages, { json: true, modelo: LLM_MODEL_DECISAO, etiqueta: "moderacao-ia" });
 }
 
 export async function resumirRSS(material, quantidade, { categoria = null, lang = "pt", serverId = null } = {}) {
@@ -186,9 +184,9 @@ export async function resumirRSS(material, quantidade, { categoria = null, lang 
     `${en ? "There are" : "São"} ${quantidade} ${en ? "new stories" : "notícia(s) novas"}.`,
   ].filter(Boolean).join(" ");
   try {
-    return await ollamaChat(
+    return await llmChat(
       [{ role: "system", content: sys }, { role: "user", content: material.slice(0, 6000) }],
-      { modelo: OLLAMA_MODEL_LEVE, maxTokens: 1400, etiqueta: categoria ? `resumo-rss:${categoria}` : "resumo-rss" },
+      { modelo: LLM_MODEL_LEVE, maxTokens: 1400, etiqueta: categoria ? `resumo-rss:${categoria}` : "resumo-rss" },
     );
   } catch (e) {
     dlog(`resumo RSS falhou: ${e.message}`);
@@ -207,9 +205,9 @@ export async function gerarComentarioEspontaneo(contextoCanal, serverId = null) 
     "SEM ROLEPLAY: não descreva ações, gestos, poses ou expressões. Nada de *sorri*, *observa*, *inclina a cabeça*, nem entre parênteses. Só o que se digitaria num chat.",
   ].join(" ");
   try {
-    const r = await ollamaChat(
+    const r = await llmChat(
       [{ role: "system", content: sys }, { role: "user", content: contextoCanal.slice(0, 4000) }],
-      { modelo: OLLAMA_MODEL_LEVE, maxTokens: 200, etiqueta: "comentario-espontaneo" },
+      { modelo: LLM_MODEL_LEVE, maxTokens: 200, etiqueta: "comentario-espontaneo" },
     );
     const limpo = (r || "").trim();
     // a Judy pode decidir que não vale comentar
@@ -220,20 +218,18 @@ export async function gerarComentarioEspontaneo(contextoCanal, serverId = null) 
     return "";
   }
 }
-export function getModelo() { return OLLAMA_MODEL_PADRAO; }
+export function getModelo() { return LLM_MODEL_PADRAO; }
 
 export function resumoConfigIA() {
   const linhas = [];
-  const padraoLocal = !process.env.OLLAMA_URL;
-  linhas.push(`[IA] Ollama:  ${OLLAMA_URL}${padraoLocal ? "  ⚠️ (padrão — OLLAMA_URL não definida)" : ""}`);
+  const semLLM = !LLM_URL;
+  linhas.push(`[IA] LLM:     ${LLM_URL || "⚠️ NENHUM — defina IA_MODO=local, IA_MODO=online ou LLM_URL"}`);
   linhas.push(`[IA] Serviço: ${IA_SERVICO_URL || "(não configurado — sem ferramentas)"}`);
-  linhas.push(`[IA] Modelos: conversa=${OLLAMA_MODEL_LEVE} · código=${OLLAMA_MODEL_CODIGO} · ferramentas=${OLLAMA_MODEL_LOGICA}`);
+  linhas.push(`[IA] Modelo:  ${LLM_MODEL_PADRAO || "(o carregado no servidor de LLM)"}`);
   linhas.push(`[IA] Busca:   ${process.env.SEARXNG_URL ? process.env.SEARXNG_URL : "desligada (sem SEARXNG_URL)"}`);
 
-  if (padraoLocal && IA_SERVICO_URL && !/localhost|127\.0\.0\.1/.test(IA_SERVICO_URL)) {
-    linhas.push("[IA] ⚠️ ATENÇÃO: o serviço de IA é remoto, mas o Ollama está em localhost.");
-    linhas.push("[IA]    Isso quase sempre é OLLAMA_URL faltando no container.");
-    linhas.push("[IA]    No Portainer: confira o bloco environment da stack e RECRIE o container.");
+  if (semLLM) {
+    linhas.push("[IA] ⚠️ Sem servidor de LLM configurado, a IA não vai responder nada.");
   }
   return linhas;
 }
@@ -242,7 +238,7 @@ export async function listarModelos() {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), 6000);
   try {
-    const r = await fetch(`${OLLAMA_URL}/v1/models`, { signal: ctrl.signal });
+    const r = await fetch(`${LLM_URL}/v1/models`, { signal: ctrl.signal });
     if (!r.ok) return { ok: false, motivo: `HTTP ${r.status}`, modelos: [] };
     const data = await r.json().catch(() => ({}));
     const modelos = (data.data ?? data.models ?? [])
@@ -267,7 +263,7 @@ function potenciaDeDois(n) {
 const LIMITE_ARQUIVO = Number(process.env.CHAT_MAX_ARQUIVO || 12000);
 const GITHUB_REPO_ROTULO = process.env.GITHUB_REPO || "do bot";
 const MAX_TOKENS   = Number(process.env.CHAT_MAX_TOKENS || 700);
-const DECISAO_TOKENS = Number(process.env.CHAT_DECISAO_TOKENS || 600);   // piso das decisões json (ver ollamaChat)
+const DECISAO_TOKENS = Number(process.env.CHAT_DECISAO_TOKENS || 600);   // piso das decisões json (ver llmChat)
 const TIMEOUT      = Number(process.env.CHAT_TIMEOUT  || 300000);
 
 const SERVIDORES_PERMITIDOS = (process.env.CHAT_SERVIDORES || "")
@@ -331,13 +327,13 @@ async function pedir(url, body) {
   }
 }
 
-async function ollamaDisponivel() {
+async function llmDisponivel() {
   const ctrl = new AbortController();
-  const limite = Number(process.env.OLLAMA_PING_MS || 8000);
+  const limite = Number(process.env.LLM_PING_MS || 8000);
   const t = setTimeout(() => ctrl.abort(), limite);
   const t0 = Date.now();
   try {
-    const r = await fetch(`${OLLAMA_URL}/v1/models`, { signal: ctrl.signal });
+    const r = await fetch(`${LLM_URL}/v1/models`, { signal: ctrl.signal });
     if (!r.ok) {
       return { ok: false, causa: "http",
         motivo: r.status === 404
@@ -482,7 +478,7 @@ export function normalizarMensagens(messages) {
   return juntos ? [{ role: "system", content: juntos }, ...resto] : resto;
 }
 
-const CONTEXTO_MODELO = Number(process.env.OLLAMA_CTX || 8192);
+const CONTEXTO_MODELO = Number(process.env.LLM_CTX || 8192);
 const CHARS_POR_TOKEN = 3.5;   // português com acentos fica perto disso
 
 export function caberNoContexto(messages, { ctxTokens = CONTEXTO_MODELO, reservarSaida = 0 } = {}) {
@@ -511,9 +507,9 @@ export function caberNoContexto(messages, { ctxTokens = CONTEXTO_MODELO, reserva
   return saida;
 }
 
-export async function ollamaChat(messages, { json = false, maxTokens = MAX_TOKENS, etiqueta = "resposta", modelo = null, ctx = null, manter = null, continuarMax = null } = {}) {
+export async function llmChat(messages, { json = false, maxTokens = MAX_TOKENS, etiqueta = "resposta", modelo = null, ctx = null, manter = null, continuarMax = null } = {}) {
   messages = normalizarMensagens(messages);
-  const modeloUsado = modelo || OLLAMA_MODEL_PADRAO;
+  const modeloUsado = modelo || LLM_MODEL_PADRAO;
   const limiteTokens = json ? DECISAO_TOKENS : maxTokens;
 
   const body = {
@@ -531,13 +527,13 @@ export async function ollamaChat(messages, { json = false, maxTokens = MAX_TOKEN
   const t0 = Date.now();
   let data;
   try {
-    data = await pedir(`${OLLAMA_URL}/v1/chat/completions`, body);
+    data = await pedir(`${LLM_URL}/v1/chat/completions`, body);
   } catch (e) {
     if (!e?.contextoEstourado) throw e;
     const teto = e.nCtx || Math.floor(CONTEXTO_MODELO / 2);
     console.warn(`[CHAT] contexto real do modelo é ${teto} tokens — reenviando cortado`);
     body.messages = caberNoContexto(messages, { ctxTokens: teto, reservarSaida: limiteTokens });
-    data = await pedir(`${OLLAMA_URL}/v1/chat/completions`, body);
+    data = await pedir(`${LLM_URL}/v1/chat/completions`, body);
   }
   let escolha = data?.choices?.[0] ?? {};
   let conteudo = limparRaciocinio(escolha?.message?.content ?? "", { aparar: false });
@@ -548,7 +544,7 @@ export async function ollamaChat(messages, { json = false, maxTokens = MAX_TOKEN
 
   if (!conteudo.trim() && motivo === "length") {
     console.warn(`[CHAT][llm] ⚠️ ${etiqueta}: o modelo consumiu ${limiteTokens} tokens raciocinando e não respondeu — refazendo com o dobro`);
-    data = await pedir(`${OLLAMA_URL}/v1/chat/completions`, { ...body, max_tokens: limiteTokens * 2 });
+    data = await pedir(`${LLM_URL}/v1/chat/completions`, { ...body, max_tokens: limiteTokens * 2 });
     escolha = data?.choices?.[0] ?? {};
     conteudo = limparRaciocinio(escolha?.message?.content ?? "", { aparar: false });
     motivo = escolha?.finish_reason ?? "?";
@@ -559,7 +555,7 @@ export async function ollamaChat(messages, { json = false, maxTokens = MAX_TOKEN
   while (!json && motivo === "length" && emendas < tetoEmendas) {
     emendas++;
     console.log(`[CHAT][llm] ✂️ cortada no limite — continuando sozinha (${emendas}/${CONTINUAR_MAX})`);
-    data = await pedir(`${OLLAMA_URL}/v1/chat/completions`, {
+    data = await pedir(`${LLM_URL}/v1/chat/completions`, {
       ...body,
       messages: [
         ...messages,
@@ -580,11 +576,11 @@ export async function ollamaChat(messages, { json = false, maxTokens = MAX_TOKEN
   }
 
   const dur = ((Date.now() - t0) / 1000).toFixed(1);
-  ollamaChat._cortou = motivo === "length";   // ainda cortada DEPOIS das emendas
+  llmChat._cortou = motivo === "length";   // ainda cortada DEPOIS das emendas
 
   const uso = data?.usage ?? {};
   console.log(`[CHAT][llm] ← ${etiqueta} | fim=${motivo}${emendas ? ` (+${emendas} emenda(s))` : ""} tokens_prompt=${uso.prompt_tokens ?? "?"} tokens_gerados=${uso.completion_tokens ?? "?"} saída=${conteudo.length} chars tempo=${dur}s`);
-  if (ollamaChat._cortou)
+  if (llmChat._cortou)
     console.warn(`[CHAT][llm] ⚠️ ainda cortada após ${emendas} emenda(s) — aumente CHAT_MAX_TOKENS ou CONTINUAR_MAX.`);
 
   return conteudo.trim();
@@ -675,9 +671,9 @@ async function decidirBusca(pergunta) {
     'Responda APENAS um JSON: {"buscar": true|false, "query": "termos de busca"}.',
   ].join(" ");
   try {
-    const raw = await ollamaChat(
+    const raw = await llmChat(
       [{ role: "system", content: sys }, { role: "user", content: pergunta }],
-      { json: true, modelo: OLLAMA_MODEL_DECISAO, etiqueta: "decidir-busca" },
+      { json: true, modelo: LLM_MODEL_DECISAO, etiqueta: "decidir-busca" },
     );
     const obj = JSON.parse(raw);
     return { buscar: !!obj.buscar, query: String(obj.query || pergunta).slice(0, 200) };
@@ -870,13 +866,13 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
     dlog(`imagem anexada → forçando caminho com ferramentas (ver_imagem)`);
     tipo = "ferramenta";
     motivo = "imagem";
-    modeloEscolhido = OLLAMA_MODEL_LOGICA;
+    modeloEscolhido = LLM_MODEL_LOGICA;
   }
   if (tipo !== "ferramenta" && seguimentoDeFerramenta(canalId, pergunta)) {
     dlog(`seguimento da conversa anterior (que usou ferramenta) → mantendo o caminho com ferramentas`);
     tipo = "ferramenta";
     motivo = "seguimento";
-    modeloEscolhido = OLLAMA_MODEL_LOGICA;
+    modeloEscolhido = LLM_MODEL_LOGICA;
   }
   lembrarRoteamento(canalId, tipo);
   dlog(`roteamento: tipo=${tipo}${motivo ? `/${motivo}` : ""} → modelo=${modeloEscolhido}`);
@@ -1013,20 +1009,20 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
         responder._evidencia = (evidenciaColetada + "\n" + (chamarServicoIA._evidencia || "")).trim();
         return r.trim();
       }
-      dlog("serviço IA devolveu vazio — caindo para Ollama direto");
+      dlog("serviço IA devolveu vazio — caindo para o LLM direto");
     } catch (e) {
-      dlog(`serviço IA falhou (${e.message}) — caindo para Ollama direto`);
+      dlog(`serviço IA falhou (${e.message}) — caindo para o LLM direto`);
     }
   } else if (IA_SERVICO_URL) {
-    dlog(`sem ferramenta (tipo=${tipo}) → Ollama direto, sem passar pelo judy-ia`);
+    dlog(`sem ferramenta (tipo=${tipo}) → LLM direto, sem passar pelo serviço de IA`);
   }
   // Teto único: o especial era o que pedia um teto maior, e ele saiu.
-  const texto = await ollamaChat(messages, {
+  const texto = await llmChat(messages, {
     maxTokens: MAX_TOKENS,
     modelo: modeloEscolhido,
   });
-  // Lido AGORA, antes de qualquer outra chamada ao ollamaChat poder mudá-lo.
-  responder._cortou = !!ollamaChat._cortou;
+  // Lido AGORA, antes de qualquer outra chamada ao llmChat poder mudá-lo.
+  responder._cortou = !!llmChat._cortou;
   responder._evidencia = evidenciaColetada.trim();
   return texto.trim();
   }
@@ -1267,12 +1263,12 @@ function ehConversaComplexa(texto) {
 
 function escolherModelo(pergunta, citada) {
   const alvo = `${pergunta || ""} ${citada?.conteudo || ""}`;
-  if (ehAritmetica(pergunta)) return { modelo: OLLAMA_MODEL_LOGICA, tipo: "ferramenta", motivo: "calculo" };
-  if (precisaFerramenta(alvo)) return { modelo: OLLAMA_MODEL_LOGICA, tipo: "ferramenta", motivo: "codigo" };
-  if (ehProgramacao(alvo)) return { modelo: OLLAMA_MODEL_CODIGO, tipo: "código" };
-  if (ehLogica(alvo))      return { modelo: OLLAMA_MODEL_LOGICA, tipo: "lógica" };
-  if (ehConversaComplexa(alvo)) return { modelo: OLLAMA_MODEL_LEVE, tipo: "conversa" };
-  return { modelo: OLLAMA_MODEL_LEVE, tipo: "conversa" };
+  if (ehAritmetica(pergunta)) return { modelo: LLM_MODEL_LOGICA, tipo: "ferramenta", motivo: "calculo" };
+  if (precisaFerramenta(alvo)) return { modelo: LLM_MODEL_LOGICA, tipo: "ferramenta", motivo: "codigo" };
+  if (ehProgramacao(alvo)) return { modelo: LLM_MODEL_CODIGO, tipo: "código" };
+  if (ehLogica(alvo))      return { modelo: LLM_MODEL_LOGICA, tipo: "lógica" };
+  if (ehConversaComplexa(alvo)) return { modelo: LLM_MODEL_LEVE, tipo: "conversa" };
+  return { modelo: LLM_MODEL_LEVE, tipo: "conversa" };
 }
 
 export function ehAritmetica(texto) {
@@ -1571,28 +1567,28 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
     }
   } catch (e) { dlog(`ficha falhou (${e?.message ?? e})`); }
 
-  const disp = await ollamaDisponivel();
+  const disp = await llmDisponivel();
   if (!disp.ok) {
     liberarVez();   // libera (ou passa ao próximo): não vamos gerar nada
     // Cada causa tem um conserto próprio — dizer qual poupa a investigação.
-    const alvo = OLLAMA_URL;
+    const alvo = LLM_URL;
     const explica = {
       recusou: en
-        ? `Something is answering at **${alvo}**, but refusing the connection. Ollama is probably listening only on localhost: set \`OLLAMA_HOST\` to the machine's IP and restart it.`
-        : `Tem algo respondendo em **${alvo}**, mas recusando a conexão. Provavelmente o Ollama está escutando só em localhost: defina \`OLLAMA_HOST\` com o IP da máquina e reinicie.`,
+        ? `Something is answering at **${alvo}**, but refusing the connection. If this is the built-in local mode, the model is probably still loading (first boot downloads it — check the container logs). If it's an external server, it may be listening only on localhost on that machine.`
+        : `Tem algo respondendo em **${alvo}**, mas recusando a conexão. Se for o modo local embutido, o modelo provavelmente ainda está carregando (o primeiro arranque baixa ele — veja o log do container). Se for um servidor externo, ele pode estar escutando só em localhost na máquina dele.`,
       "sem-rota": en
-        ? `No route to **${alvo}**. The machine is off, asleep, or Tailscale is down on one of the two ends.`
-        : `Não há rota até **${alvo}**. A máquina está desligada, dormindo, ou o Tailscale caiu numa das duas pontas.`,
+        ? `No route to **${alvo}**. The machine is off, asleep, or the network/VPN between the two is down.`
+        : `Não há rota até **${alvo}**. A máquina está desligada, dormindo, ou a rede/VPN entre as duas caiu.`,
       lento: en
         ? `**${alvo}** didn't answer in time (${disp.motivo}). It's usually loading a model or the machine is under heavy load — this is different from being off.`
         : `**${alvo}** não respondeu a tempo (${disp.motivo}). Costuma ser carga de modelo ou máquina sobrecarregada — o que é diferente de estar desligada.`,
       http: en ? `The AI server responded, but ${disp.motivo}.` : `O servidor de IA respondeu, mas ${disp.motivo}.`,
       offline: en
-        ? `**${alvo}** is unreachable (${disp.motivo}). Check that the machine is on and Tailscale is up.`
-        : `**${alvo}** está inalcançável (${disp.motivo}). Confira se a máquina está ligada e o Tailscale de pé.`,
+        ? `**${alvo}** is unreachable (${disp.motivo}). Check that the LLM server is running (\`IA_MODO\`/\`LLM_URL\` in the .env decide which one).`
+        : `**${alvo}** está inalcançável (${disp.motivo}). Confira se o servidor de LLM está de pé (\`IA_MODO\`/\`LLM_URL\` no .env decidem qual é).`,
     };
     const msg = explica[disp.causa] ?? explica.offline;
-    console.error(`[CHAT] Ollama indisponível — causa=${disp.causa} codigo=${disp.codigo ?? "-"} url=${alvo}`);
+    console.error(`[CHAT] LLM indisponível — causa=${disp.causa} codigo=${disp.codigo ?? "-"} url=${alvo}`);
     return sendEmbed(message.channel, {
       title: en ? "💤 AI unavailable" : "💤 IA indisponível",
       description: msg, colour: COR.aviso });
@@ -1627,7 +1623,7 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
     if (pendente) {
       dlog(`"continue" → retomando a resposta cortada (${pendente.texto.length} chars já entregues)`);
       await editarStatus(en ? "✍️ Picking up where I stopped…" : "✍️ Retomando de onde parei…");
-      const bruto = await ollamaChat([
+      const bruto = await llmChat([
         { role: "system", content: en
           ? `You are Judy. Today is ${hojeExtenso()}. Reply in English.`
           : `Você é a Judy. Hoje é ${hojeExtenso()}. Responda em português do Brasil.` },
@@ -1636,12 +1632,12 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
         { role: "user", content: en
           ? "Continue EXACTLY from the last word above. Do NOT restart, repeat or summarise what is already written; only the missing rest, in the same language."
           : "Continue EXATAMENTE a partir da última palavra acima. NÃO recomece, NÃO repita nem resuma o que já está escrito; só o resto que falta, no mesmo idioma." },
-      ], { maxTokens: MAX_TOKENS, modelo: pendente.modelo ?? OLLAMA_MODEL_LEVE });
+      ], { maxTokens: MAX_TOKENS, modelo: pendente.modelo ?? LLM_MODEL_LEVE });
       let resto = limpar(bruto);
       // Se a "continuação" repetiu o começo, sobra só o que é novo.
       const costurado = costurar(pendente.texto, resto);
       resto = costurado === null ? "" : costurado.slice(pendente.texto.length).trim();
-      const cortouDeNovo = !!ollamaChat._cortou;
+      const cortouDeNovo = !!llmChat._cortou;
       const textoFinal = resto
         || (en ? "_That reply was already complete — nothing left to add._" : "_Aquela resposta já estava inteira — não sobrou nada a acrescentar._");
       lembrarUltimaResposta(canalId, { pergunta: pendente.pergunta, texto: `${pendente.texto}\n${resto}`, cortada: cortouDeNovo, modelo: pendente.modelo });
@@ -1736,13 +1732,13 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
       console.warn(`[CHAT] ⚠️ resposta idêntica à anterior — refazendo`);
       dlog("resposta repetida → refazendo");
       try {
-        const refeita = await ollamaChat([
+        const refeita = await llmChat([
           ...messages,
           { role: "assistant", content: anterior },
           { role: "system", content: lang === "en"
             ? "You already gave the reply above earlier in this conversation. Do NOT repeat it. Answer the person's LAST message specifically, with new wording and new content — if you have nothing to add, say so briefly instead of restating."
             : "Você JÁ deu a resposta acima antes nesta conversa. NÃO a repita. Responda especificamente à ÚLTIMA mensagem da pessoa, com palavras e conteúdo novos — se não tem nada a acrescentar, diga isso em uma frase em vez de repetir." },
-        ], { maxTokens: MAX_TOKENS, modelo: responder._modelo ?? OLLAMA_MODEL_LEVE });
+        ], { maxTokens: MAX_TOKENS, modelo: responder._modelo ?? LLM_MODEL_LEVE });
         const limpa = limpar(refeita);
         if (limpa && !ehRepeticao(limpa, anterior)) resposta = limpa;
         else dlog("a refeita também repetiu — entregando assim mesmo");
@@ -1753,10 +1749,10 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
       console.warn(`[CHAT] ⚠️ resposta veio em espanhol — refazendo: "${resposta.slice(0, 80)}…"`);
       dlog("idioma errado (espanhol) → refazendo");
       try {
-        const refeita = await ollamaChat([
+        const refeita = await llmChat([
           ...messages,
           { role: "system", content: "OBRIGATÓRIO: responda em PORTUGUÊS DO BRASIL. Não use espanhol em hipótese alguma. A pergunta foi feita em português. Reescreva sua resposta inteira em português do Brasil." },
-        ], { maxTokens: MAX_TOKENS, modelo: responder._modelo ?? OLLAMA_MODEL_LEVE });
+        ], { maxTokens: MAX_TOKENS, modelo: responder._modelo ?? LLM_MODEL_LEVE });
         const limpa = limpar(refeita);
         if (limpa && !pareceEspanhol(limpa)) resposta = limpa;
       } catch (e) { dlog(`refazer idioma falhou (${e?.message ?? e})`); }
@@ -1776,12 +1772,12 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
       dlog("identidade vazou → refazendo");
       await editarStatus(en ? "✍️ Polishing the reply…" : "✍️ Refinando a resposta…");
       try {
-        const refeita = await ollamaChat([
+        const refeita = await llmChat([
           ...messages,
           { role: "system", content: lang === "en"
             ? "MANDATORY: you are Judy, an open-source bot. You are NOT any AI model or company (not LFM, Liquid AI, Qwen, Llama, GPT, Claude or anything else). Never name a model as yourself, never describe 'your architecture'. If the person mentions swapping or updating the model/LLM, that's true and it's their business — acknowledge it, don't argue. Rewrite your reply obeying this."
             : "OBRIGATÓRIO: você é a Judy, uma bot de código aberto. Você NÃO é nenhum modelo nem empresa de IA (nem LFM, nem Liquid AI, nem Qwen, Llama, GPT, Claude ou qualquer outro). Nunca se apresente com nome de modelo, nunca descreva 'sua arquitetura'. Se a pessoa falou em trocar ou atualizar o modelo/LLM, isso é verdade e é assunto dela — reconheça, não conteste. Reescreva sua resposta obedecendo a isto." },
-        ], { maxTokens: MAX_TOKENS, modelo: responder._modelo ?? OLLAMA_MODEL_LEVE });
+        ], { maxTokens: MAX_TOKENS, modelo: responder._modelo ?? LLM_MODEL_LEVE });
         const limpa = limpar(refeita);
         resposta = vazaIdentidade(limpa) ? podarIdentidade(limpa) : limpa;
       } catch (e) {
@@ -1800,12 +1796,12 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
       console.log("[CHAT] resposta vazia após limpar — tentando resposta direta");
       dlog("resposta vazia → fallback de resposta direta");
       await editarStatus(en ? "✍️ Polishing the reply…" : "✍️ Refinando a resposta…");
-      const direto = await ollamaChat([
+      const direto = await llmChat([
         { role: "system", content: en
           ? `Today is ${hojeExtenso()}. Reply in English, directly and objectively, WITHOUT explaining your reasoning.`
           : `Hoje é ${hojeExtenso()}. Responda em português do Brasil, de forma direta e objetiva, SEM explicar seu raciocínio.` },
         { role: "user", content: pergunta },
-      ], { maxTokens: MAX_TOKENS, modelo: OLLAMA_MODEL_LEVE });
+      ], { maxTokens: MAX_TOKENS, modelo: LLM_MODEL_LEVE });
       resposta = limpar(direto);
       dlog(`fallback retornou ${resposta.length} chars`);
     }
@@ -1889,7 +1885,7 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
         autor,
         pediuBusca: PEDIDO_EXPLICITO.test(pergunta),
         comandos: comandosParaVerificar(),
-        chamarModelo: (msgs, o) => ollamaChat(msgs, { json: true, maxTokens: o?.maxTokens, modelo: OLLAMA_MODEL_LOGICA, etiqueta: "verificador" }),
+        chamarModelo: (msgs, o) => llmChat(msgs, { json: true, maxTokens: o?.maxTokens, modelo: LLM_MODEL_LOGICA, etiqueta: "verificador" }),
         dlog,
       }).then(async (v) => {
         dlog(`verificador: ok=${v.ok} camadas=${JSON.stringify(v.camadas)}${v.ok ? "" : " | " + v.problemas.join(" · ")}`);
@@ -1913,16 +1909,16 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
     let dica;
     if (/HTTP 404|not found|no such model|try pulling/i.test(err.message)) {
       dica = en
-        ? `One of the configured models wasn't found in Ollama. Check with \`ollama list\` that the models from the envs (OLLAMA_MODEL, OLLAMA_MODEL_CODIGO, OLLAMA_MODEL_LOGICA, OLLAMA_MODEL_DECISAO) are downloaded.`
-        : `Um dos modelos configurados não foi encontrado no Ollama. Confira com \`ollama list\` se os modelos das envs (OLLAMA_MODEL, OLLAMA_MODEL_CODIGO, OLLAMA_MODEL_LOGICA, OLLAMA_MODEL_DECISAO) estão baixados.`;
+        ? `The configured model wasn't found on the LLM server. Check MODELO/LLM_MODEL in the .env against what the server actually has.`
+        : `O modelo configurado não foi encontrado no servidor de LLM. Confira MODELO/LLM_MODEL no .env contra o que o servidor realmente tem.`;
     } else if (/aborted|The operation was aborted|timeout/i.test(err.message)) {
       dica = en
         ? "The AI took too long and timed out. The model may be too big for the machine, or the question asked for a very long reply. Try something shorter, or a smaller model."
         : "A IA demorou demais e o tempo esgotou. O modelo pode ser grande demais para a máquina, ou a pergunta pediu uma resposta muito longa. Tente algo mais curto, ou um modelo menor.";
     } else if (/fetch failed|ECONNREFUSED|HTTP 5/.test(err.message)) {
       dica = en
-        ? "The AI service (Ollama) didn't respond. The machine may be overloaded or the service crashed mid-generation."
-        : "O serviço de IA (Ollama) não respondeu. A máquina pode estar sobrecarregada ou o serviço caiu no meio da geração.";
+        ? "The LLM server didn't respond. The machine may be overloaded or the service crashed mid-generation."
+        : "O servidor de LLM não respondeu. A máquina pode estar sobrecarregada ou o serviço caiu no meio da geração.";
     } else {
       dica = en ? `An error occurred while generating the reply: ${err.message}` : `Ocorreu um erro ao gerar a resposta: ${err.message}`;
     }
@@ -1934,7 +1930,7 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
 }
 
 // Exportada para o RSS/diagnóstico saberem se a IA está no ar.
-export { ollamaDisponivel };
+export { llmDisponivel };
 
 // Comando &chat
 // ── Conversa livre: a Judy decide se entra numa mensagem não-endereçada ──
@@ -1953,9 +1949,9 @@ async function valeResponder(texto) {
       + "Responda 'nao' apenas para: mensagens muito curtas sem conteúdo (ok, kkk, sim), conversa claramente privada entre duas pessoas específicas, ou quando entrar seria intrusivo. "
       + "Na dúvida, prefira 'sim' — você é participativa. "
       + 'Responda só JSON: {"responder": true|false}.';
-    const raw = await ollamaChat(
+    const raw = await llmChat(
       [{ role: "system", content: sys }, { role: "user", content: t.slice(0, 500) }],
-      { json: true, modelo: OLLAMA_MODEL_DECISAO, etiqueta: "vale-responder" },
+      { json: true, modelo: LLM_MODEL_DECISAO, etiqueta: "vale-responder" },
     );
     return !!JSON.parse(raw).responder;
   } catch { return false; }
@@ -2385,20 +2381,20 @@ export async function cmdChat(message, args, ctx) {
           description: "O chat com IA não está habilitado neste servidor.", colour: COR.aviso },
         { title: "🚫 Unavailable here",
           description: "The AI chat isn't enabled on this server.", colour: COR.aviso }));
-    const disp = await ollamaDisponivel();
+    const disp = await llmDisponivel();
     const { modelos: modelosDoServidor = [] } = await listarModelos().catch(() => ({ modelos: [] }));
-    const configurados = [...new Set([OLLAMA_MODEL_PADRAO, OLLAMA_MODEL_LEVE, OLLAMA_MODEL_CODIGO, OLLAMA_MODEL_LOGICA, OLLAMA_MODEL_DECISAO])].filter(Boolean);
+    const configurados = [...new Set([LLM_MODEL_PADRAO, LLM_MODEL_LEVE, LLM_MODEL_CODIGO, LLM_MODEL_LOGICA, LLM_MODEL_DECISAO])].filter(Boolean);
     const faltando = modelosDoServidor.length ? configurados.filter((m) => !modelosDoServidor.includes(m)) : [];
     return sendEmbed(message.channel, cen ? {
       title: disp.ok ? "🟢 AI available" : "🔴 AI unavailable",
       description: [
-        `**Ollama:** ${OLLAMA_URL}`,
-        `**Chat:** ${OLLAMA_MODEL_LEVE} _(also memory and decisions)_`,
-        `**Code:** ${OLLAMA_MODEL_CODIGO} · **Logic:** ${OLLAMA_MODEL_LOGICA} · **Decision:** ${OLLAMA_MODEL_DECISAO}`,
-        `**Server:** ${OLLAMA_URL}`,
-        `**Conversation:** ${OLLAMA_MODEL_PADRAO}`,
-        `**Small talk, memory and decisions:** ${OLLAMA_MODEL_LEVE}`,
-        `**Code:** ${OLLAMA_MODEL_CODIGO} · **Logic:** ${OLLAMA_MODEL_LOGICA} · **Decision:** ${OLLAMA_MODEL_DECISAO}`,
+        `**LLM:** ${LLM_URL || "—"}`,
+        `**Chat:** ${LLM_MODEL_LEVE} _(also memory and decisions)_`,
+        `**Code:** ${LLM_MODEL_CODIGO} · **Logic:** ${LLM_MODEL_LOGICA} · **Decision:** ${LLM_MODEL_DECISAO}`,
+        `**Server:** ${LLM_URL}`,
+        `**Conversation:** ${LLM_MODEL_PADRAO}`,
+        `**Small talk, memory and decisions:** ${LLM_MODEL_LEVE}`,
+        `**Code:** ${LLM_MODEL_CODIGO} · **Logic:** ${LLM_MODEL_LOGICA} · **Decision:** ${LLM_MODEL_DECISAO}`,
         modelosDoServidor.length ? `**On the server:** ${modelosDoServidor.map((m) => `\`${m}\``).join(" · ")}` : "",
         faltando.length ? `⚠️ **Configured but missing on the server:** ${faltando.join(", ")}` : "",
         `**SearXNG:** ${SEARXNG_URL}`,
@@ -2409,10 +2405,10 @@ export async function cmdChat(message, args, ctx) {
     } : {
       title: disp.ok ? "🟢 IA disponível" : "🔴 IA indisponível",
       description: [
-        `**Servidor:** ${OLLAMA_URL}`,
-        `**Conversa:** ${OLLAMA_MODEL_PADRAO}`,
-        `**Papo curto, memória e decisões:** ${OLLAMA_MODEL_LEVE}`,
-        `**Código:** ${OLLAMA_MODEL_CODIGO} · **Lógica:** ${OLLAMA_MODEL_LOGICA} · **Decisão:** ${OLLAMA_MODEL_DECISAO}`,
+        `**Servidor:** ${LLM_URL}`,
+        `**Conversa:** ${LLM_MODEL_PADRAO}`,
+        `**Papo curto, memória e decisões:** ${LLM_MODEL_LEVE}`,
+        `**Código:** ${LLM_MODEL_CODIGO} · **Lógica:** ${LLM_MODEL_LOGICA} · **Decisão:** ${LLM_MODEL_DECISAO}`,
         modelosDoServidor.length
           ? `**No servidor:** ${modelosDoServidor.map((m) => faltando.includes(m) ? m : `\`${m}\``).join(" · ")}`
           : "",

@@ -91,21 +91,34 @@ if (IA_EMBUTIDA) subir("ia-servico", "./ia-servico", "servidor.js", { env: { POR
 if (VOZ_ATIVA) {
   const vozesDir = process.env.PIPER_VOZES || "/data/vozes";
   try { mkdirSync(vozesDir, { recursive: true }); } catch {}
-  const temVoz = existsSync(vozesDir) && readdirSync(vozesDir).some((f) => f.endsWith(".onnx"));
-  if (!temVoz) {
-    // Vozes pt-BR do catálogo oficial do Piper — uma vez, para o volume.
-    const BASE = "https://huggingface.co/rhasspy/piper-voices/resolve/main/pt/pt_BR";
-    const VOZES = [
-      ["faber/medium/pt_BR-faber-medium.onnx", "pt_BR-faber-medium.onnx"],
-      ["faber/medium/pt_BR-faber-medium.onnx.json", "pt_BR-faber-medium.onnx.json"],
-    ];
-    console.info("[INICIAR] voz: baixando as vozes pt-BR (primeiro arranque)…");
-    for (const [rel, nome] of VOZES) {
-      const r = spawnSync("curl", ["-fsSL", `${BASE}/${rel}`, "-o", `${vozesDir}/${nome}`], { stdio: "inherit" });
-      if (r.status !== 0) console.error(`[INICIAR] voz: falhou o download de ${nome} — &tts voz vai listar vazio até resolver a rede.`);
+  // Quais vozes baixar: a env VOZES lista nomes do catálogo oficial do Piper
+  // (https://huggingface.co/rhasspy/piper-voices), separados por vírgula.
+  // O nome carrega o caminho: pt_BR-faber-medium → pt/pt_BR/faber/medium/.
+  const pedidos = (process.env.VOZES || "pt_BR-faber-medium")
+    .split(",").map((v) => v.trim()).filter(Boolean);
+  const urlDaVoz = (nome) => {
+    const m = /^([a-z]{2,3})(?:_([A-Za-z]+))?-(.+)-([a-z_]+)$/.exec(nome);
+    if (!m) return null;
+    const [, lang, regiao, pessoa, qualidade] = m;
+    const pasta = regiao ? `${lang}_${regiao}` : lang;
+    return `https://huggingface.co/rhasspy/piper-voices/resolve/main/${lang}/${pasta}/${pessoa}/${qualidade}/${nome}.onnx`;
+  };
+  const jaTem = new Set(existsSync(vozesDir) ? readdirSync(vozesDir) : []);
+  for (const nome of pedidos) {
+    if (jaTem.has(`${nome}.onnx`) && jaTem.has(`${nome}.onnx.json`)) continue;
+    const url = urlDaVoz(nome);
+    if (!url) { console.error(`[INICIAR] voz: nome "${nome}" fora do padrão idioma_REGIAO-pessoa-qualidade (ex.: pt_BR-faber-medium) — pulando.`); continue; }
+    console.info(`[INICIAR] voz: baixando ${nome} (uma vez, fica no volume)…`);
+    for (const suf of [".onnx", ".onnx.json"]) {
+      const r = spawnSync("curl", ["-fL", "--retry", "2", `${url.replace(/\.onnx$/, "")}${suf}`, "-o", `${vozesDir}/${nome}${suf}`], { stdio: "inherit" });
+      if (r.status !== 0) console.error(`[INICIAR] voz: download de ${nome}${suf} falhou — confira o nome no catálogo rhasspy/piper-voices.`);
     }
   }
-  subir("voz-servico", "./voz-servico", "servidor.js", { env: { VOZ_PORTA: process.env.VOZ_PORTA || "8091" } });
+  subir("voz-servico", "./voz-servico", "servidor.js", { env: {
+    VOZ_PORTA: process.env.VOZ_PORTA || "8091",
+    // A primeira voz da lista vira a padrão, salvo PIPER_VOZ explícito.
+    PIPER_VOZ: process.env.PIPER_VOZ || pedidos[0] || "pt_BR-faber-medium",
+  } });
 }
 
 // O bot é o processo principal: se ele sair, tudo sai.

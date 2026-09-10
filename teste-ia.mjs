@@ -2,7 +2,7 @@ process.env.DB_PATH = "/tmp/ia-teste.db";
 process.env.CONFIG_PATH = "/tmp/ia-teste-cfg.json";
 process.env.CODIGO_DIR = "/tmp/ia-teste-repo";
 const FETCH_NATIVO = globalThis.fetch;
-process.env.OLLAMA_URL = "http://localhost:8097";
+process.env.LLM_URL = "http://localhost:8097";
 process.env.CHAT_DEBUG = "1";
 process.env.CHAT_SERVIDORES = "*";
 process.env.BUSCA_ATIVA = "false";
@@ -27,7 +27,7 @@ console.log("── formato OpenAI (llama.cpp / llama-swap / ollama) ──");
       usage: { prompt_tokens: 10, completion_tokens: 5 },
     }) };
   };
-  const r = await chat.ollamaChat([{ role: "user", content: "oi" }], { json: true, etiqueta: "t" });
+  const r = await chat.llmChat([{ role: "user", content: "oi" }], { json: true, etiqueta: "t" });
   ok(pedidos[0].url.endsWith("/v1/chat/completions"), "★ fala /v1/chat/completions — o endpoint que llama.cpp, llama-swap e Ollama servem");
   ok(pedidos[0].corpo.max_tokens > 0 && !("options" in pedidos[0].corpo) && !("keep_alive" in pedidos[0].corpo),
     "  → max_tokens no lugar de options/num_predict; sem keep_alive (isso agora é do llama-swap)");
@@ -50,13 +50,13 @@ console.log("\n── continuação automática ──");
       choices: [{ message: { content: pedaco }, finish_reason: vez < 3 ? "length" : "stop" }],
     }) };
   };
-  const r = await chat.ollamaChat([{ role: "user", content: "conte uma história" }], { etiqueta: "t" });
+  const r = await chat.llmChat([{ role: "user", content: "conte uma história" }], { etiqueta: "t" });
   ok(r === "Era uma vez um homelab feliz.", `★ os pedaços são emendados sem o usuário pedir ("${r}")`);
   ok(pedidos.length === 3, "  → duas emendas para dois cortes");
   ok(pedidos[1].messages.at(-2)?.role === "assistant" && pedidos[1].messages.at(-2)?.content === "Era uma vez ",
     "  → cada emenda devolve o já-gerado como assistant, para o modelo continuar do ponto");
   ok(/EXATAMENTE de onde parou/i.test(pedidos[1].messages.at(-1)?.content), "  → com a instrução de não repetir nada");
-  ok(chat.ollamaChat._cortou === false, "  → e a resposta completa não carrega mais o aviso de corte");
+  ok(chat.llmChat._cortou === false, "  → e a resposta completa não carrega mais o aviso de corte");
 
   // Decisão json cortada NÃO continua: json truncado é bug de limite.
   vez = 0; pedidos.length = 0;
@@ -64,7 +64,7 @@ console.log("\n── continuação automática ──");
     pedidos.push(JSON.parse(op.body)); vez++;
     return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: '{"a":' }, finish_reason: "length" }] }) };
   };
-  await chat.ollamaChat([{ role: "user", content: "x" }], { json: true, etiqueta: "t" });
+  await chat.llmChat([{ role: "user", content: "x" }], { json: true, etiqueta: "t" });
   ok(pedidos.length === 1, "decisão json cortada não entra no laço de emendas");
 }
 
@@ -95,9 +95,9 @@ console.log("\n── o painel de status não pode mentir ──");
 {
   const fonte = fs.readFileSync("./modulos/ai/chat.js", "utf8");
   const painel = fonte.slice(fonte.indexOf("🟢 IA disponível"), fonte.indexOf("SearXNG:** ${SEARXNG_URL}", fonte.indexOf("🟢 IA disponível")));
-  ok(painel.includes("OLLAMA_MODEL_PADRAO"), "★ o modelo principal aparece no painel");
-  ok(painel.includes("OLLAMA_MODEL_LEVE"), "  → e o leve continua, com rótulo próprio");
-  ok(!/\*\*Conversa:\*\* \$\{OLLAMA_MODEL_LEVE\}/.test(painel), "  → o leve não usurpa mais o rótulo 'Conversa'");
+  ok(painel.includes("LLM_MODEL_PADRAO"), "★ o modelo principal aparece no painel");
+  ok(painel.includes("LLM_MODEL_LEVE"), "  → e o leve continua, com rótulo próprio");
+  ok(!/\*\*Conversa:\*\* \$\{LLM_MODEL_LEVE\}/.test(painel), "  → o leve não usurpa mais o rótulo 'Conversa'");
   ok(painel.includes("faltando"), "  → e o painel avisa quando um modelo configurado não existe no servidor");
 }
 
@@ -121,7 +121,7 @@ console.log("\n── <think> não vaza para o chat ──");
       ? { message: { content: "", reasoning_content: "pensando..." }, finish_reason: "length" }
       : { message: { content: "4" }, finish_reason: "stop" } ] }) };
   };
-  const r = await chat.ollamaChat([{ role: "user", content: "2+2?" }], { etiqueta: "t", maxTokens: 200 });
+  const r = await chat.llmChat([{ role: "user", content: "2+2?" }], { etiqueta: "t", maxTokens: 200 });
   ok(r === "4", "★ resposta vazia por excesso de raciocínio é refeita, não devolvida como silêncio");
   ok(pedidos[1]?.max_tokens === 400, "  → com o dobro do orçamento");
 
@@ -131,7 +131,7 @@ console.log("\n── <think> não vaza para o chat ──");
     pedidos.push(JSON.parse(op.body));
     return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: "{}" }, finish_reason: "stop" }] }) };
   };
-  await chat.ollamaChat([{ role: "user", content: "x" }], { json: true, etiqueta: "t" });
+  await chat.llmChat([{ role: "user", content: "x" }], { json: true, etiqueta: "t" });
   ok(!JSON.stringify(pedidos[0].messages).includes("/no_think"),
     "★ nada de `/no_think` no prompt — desligar raciocínio é do servidor, não do texto");
 }
@@ -283,7 +283,7 @@ console.log("\n── aritmética força o caminho com ferramentas ──");
   ok(sim.every((t) => chat.ehAritmetica(t)), "★ conta explícita é reconhecida (operador, extenso, raiz, porcentagem)");
   ok(nao.every((t) => !chat.ehAritmetica(t)), "  → data, horário, versão, resolução, telefone e intervalo NÃO viram conta");
   const fonte = fs.readFileSync("./modulos/ai/chat.js", "utf8");
-  ok(/ehAritmetica\(pergunta\)\) return \{ modelo: OLLAMA_MODEL_LOGICA, tipo: "ferramenta", motivo: "calculo" \}/.test(fonte),
+  ok(/ehAritmetica\(pergunta\)\) return \{ modelo: LLM_MODEL_LOGICA, tipo: "ferramenta", motivo: "calculo" \}/.test(fonte),
     "  → e no roteamento ela vem ANTES de tudo, com tipo=ferramenta");
   ok(/motivo === "calculo"/.test(fonte) && /Use a ferramenta `calcular`/.test(fonte),
     "  → com instrução própria: use `calcular` antes de responder, nunca de cabeça");
@@ -299,7 +299,7 @@ console.log("\n── piso de tokens nas decisões ──");
     return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: "{}" }, finish_reason: "stop" }], usage: {} }) };
   };
   try {
-    await chat.ollamaChat([{ role: "user", content: "x" }], { json: true, etiqueta: "t" });
+    await chat.llmChat([{ role: "user", content: "x" }], { json: true, etiqueta: "t" });
   } finally { globalThis.fetch = fetchReal; }
   ok(pedidos[0].max_tokens >= 600, `★ decisão json pede ≥600 tokens (pediu ${pedidos[0].max_tokens}); o raciocínio come ~185 e com 200 o JSON vinha cortado`);
 }
@@ -673,7 +673,7 @@ console.log("\n── emendas costuradas, ✂️ honesto ──");
     "  → sobreposição parcial: fica só o que é novo");
 
   const fonte = fs.readFileSync("./modulos/ai/chat.js", "utf8");
-  ok(/const avisoCorte = responder\._cortou/.test(fonte) && /responder\._cortou = !!ollamaChat\._cortou;/.test(fonte),
+  ok(/const avisoCorte = responder\._cortou/.test(fonte) && /responder\._cortou = !!llmChat\._cortou;/.test(fonte),
     "★ o ✂️ lê um flag POR CAMINHO, lido na hora — o global aparecia em respostas inteiras de três linhas");
   ok(/if \(r\) \{\s*responder\._cortou = false;[\s\S]{0,300}?return r\.trim\(\);/.test(fonte), "  → e resposta do judy-ia nunca leva ✂️: o serviço faz a própria continuação");
   ok(/NÃO mude de idioma/.test(fonte), "  → a instrução da emenda proíbe trocar de idioma ('Got it. Let me know…')");
@@ -820,7 +820,7 @@ console.log("\n── mensagens: um system só, e na frente ──");
 
   const fonte = fs.readFileSync("./modulos/ai/chat.js", "utf8");
   ok(/messages = normalizarMensagens\(messages\);/.test(fonte),
-    "★ aplicado dentro do ollamaChat — na SAÍDA, não em cada push");
+    "★ aplicado dentro do llmChat — na SAÍDA, não em cada push");
   const srv = fs.readFileSync("./ia-servico/servidor.js", "utf8");
   ok(/messages: umSystemNaFrente\(messages\)/.test(srv),
     "  → e o judy-ia faz o mesmo: foi ELE que devolveu o HTTP 500");
@@ -831,8 +831,8 @@ console.log("\n── especial: aposentado, sem sobras ──");
   const fonte = fs.readFileSync("./modulos/ai/chat.js", "utf8");
   ok(!/CHAT_ESPECIAL_TOKENS|CHAT_ESPECIAL_CONTINUAR|CHAT_ESPECIAL_COOLDOWN_MS/.test(fonte),
     "★ nenhuma constante do especial sobrou no chat.js");
-  ok(!/OLLAMA_MODEL_ESPECIAL\s*=/.test(fonte),
-    "  → nem o OLLAMA_MODEL_ESPECIAL");
+  ok(!/LLM_MODEL_ESPECIAL\s*=/.test(fonte),
+    "  → nem o LLM_MODEL_ESPECIAL");
   ok(!/ehEspecial/.test(fonte),
     "  → nem o teto de tokens condicional: a conversa tem um teto só");
   ok(!/chatEspecial/.test(fonte),
@@ -1022,7 +1022,7 @@ console.log("\n── ficha técnica: o que ela sabe de si ──");
     ["b", { _id: "b", name: "Queremos acordar tarde!", member_count: 2805 }],
     ["c", { _id: "c", name: "teste", member_count: 2 }],
   ]) };
-  process.env.OLLAMA_MODEL_LEVE = "qwythos-9b-v2-rapido";
+  process.env.LLM_MODEL_LEVE = "qwythos-9b-v2-rapido";
   const txt = await f.fichaTecnica({ client }, { serverIdAtual: "a" });
 
   ok(/Servidores em que você está: 3 \(3023 membros/.test(txt),

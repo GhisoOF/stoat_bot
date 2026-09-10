@@ -20,6 +20,8 @@ services:
       - IMAGEM=${IMAGEM:-1}           # 0 desliga a geração de imagem embutida
       # Voz nas calls: 1 liga (Piper na imagem; vozes baixam no 1º arranque)
       - VOZ_ATIVA=${VOZ_ATIVA:-0}
+      - VOZ_CHAVE=${VOZ_CHAVE:-}   # senha do serviço de voz embutido (recomendado)
+      - VOZES=${VOZES:-}           # vozes do Piper a baixar (ex.: pt_BR-faber-medium,pt_BR-dii-medium)
       # ── Avançado (têm prioridade sobre os amigáveis) ──
       - LLM_URL=${LLM_URL:-}
       - LLM_MODEL=${LLM_MODEL:-}

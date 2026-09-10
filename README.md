@@ -32,7 +32,7 @@ docker compose up -d --build
 | Motor de IA (llama.cpp) | dentro da imagem; com `IA_MODO=local`, o **modelo** é baixado do Hugging Face no primeiro arranque e guardado no volume |
 | Busca na web (SearXNG) | sobe junto no compose, já configurado — a IA pesquisa de fábrica |
 | Leitura de código (GitHub) | dentro; repositórios públicos funcionam sem token |
-| Voz nas calls (Piper + ffmpeg) | dentro da imagem; `VOZ_ATIVA=1` e as vozes pt-BR baixam sozinhas no primeiro arranque |
+| Voz nas calls (Piper + ffmpeg) | dentro da imagem; `VOZ_ATIVA=1` e as vozes baixam sozinhas no primeiro arranque — `VOZES=` escolhe quais (qualquer idioma do catálogo do Piper) |
 | Geração de imagem (stable-diffusion.cpp + SD-Turbo) | dentro da imagem; o modelo (~2,3 GB) baixa no **primeiro pedido de desenho** e fica no volume — `IMAGEM=0` desliga, `SD_URL` troca por um A1111/Forge externo |
 
 Visão (a IA **ler** imagens) depende só de o modelo escolhido enxergar —
@@ -139,6 +139,9 @@ diz exatamente o que clicar.
 - Diagnóstico da cadeia inteira com `&tts estado` e `&tts diagnostico` (diz
   **em qual etapa** a entrada travou). Ligue com `VOZ_ATIVA=1` — o Piper e o
   ffmpeg vêm na imagem, e as vozes baixam sozinhas no primeiro arranque.
+  **Escolha as vozes** com `VOZES=` no `.env` (nomes do catálogo
+  [rhasspy/piper-voices](https://huggingface.co/rhasspy/piper-voices),
+  separados por vírgula — qualquer idioma; a primeira vira a padrão).
   Restrinja com `TTS_SERVIDORES`; `VOZ_SERVICO_URL` aponta para um serviço
   externo, se preferir rodá-lo fora.
 

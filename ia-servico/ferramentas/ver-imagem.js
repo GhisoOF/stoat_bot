@@ -1,5 +1,5 @@
 
-const LLM_URL      = (process.env.LLM_URL || process.env.OLLAMA_URL || "http://localhost:11434").replace(/\/$/, "");
+const LLM_URL      = (process.env.LLM_URL || "").replace(/\/$/, "");
 const MODELO_VISAO = process.env.LLM_MODEL_VISAO || "";        // vazio = visão desligada
 const SD_URL       = (process.env.SD_URL || "").replace(/\/$/, "");  // vazio = geração desligada
 const MAX_BYTES    = Number(process.env.IMAGEM_MAX_BYTES || 8 * 1024 * 1024);

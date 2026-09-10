@@ -49,10 +49,10 @@ export async function fichaTecnica(ctx, { serverIdAtual = null } = {}) {
   try { linhas.push(`De pé há: ${srv.tempoDePe()}.`); } catch {}
 
   const modelos = {
-    conversa: process.env.OLLAMA_MODEL_LEVE,
-    código: process.env.OLLAMA_MODEL_CODIGO,
-    ferramentas: process.env.OLLAMA_MODEL_LOGICA,
-    decisões: process.env.OLLAMA_MODEL_DECISAO,
+    principal: process.env.LLM_MODEL,
+    conversa: process.env.LLM_MODEL_LEVE,
+    código: process.env.LLM_MODEL_CODIGO,
+    ferramentas: process.env.LLM_MODEL_LOGICA,
   };
   const usados = Object.entries(modelos).filter(([, v]) => v);
   if (usados.length) {
@@ -64,7 +64,7 @@ export async function fichaTecnica(ctx, { serverIdAtual = null } = {}) {
 
   const servicos = [
     ["serviço de IA (ferramentas)", process.env.IA_SERVICO_URL],
-    ["servidor de modelos", process.env.OLLAMA_URL],
+    ["servidor de modelos", process.env.LLM_URL],
     ["voz nas calls", process.env.VOZ_SERVICO_URL],
     ["busca na web", process.env.SEARXNG_URL],
   ].filter(([, u]) => u);

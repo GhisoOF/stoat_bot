@@ -1,5 +1,5 @@
 
-const URL_BASE = process.env.OLLAMA_URL || "http://localhost:8081";
+const URL_BASE = process.env.LLM_URL || "http://localhost:8081";
 const REPETIR = Number(process.env.REPETIR || 1);
 const TIMEOUT_MS = Number(process.env.TIMEOUT_MS || 600_000);
 const TENTATIVAS_429 = Number(process.env.TENTATIVAS_429 || 4);
@@ -205,9 +205,9 @@ for (const p of placar.sort((a, b) => b.acertos - a.acertos || a.ms - b.ms)) {
 
 console.log(`
 Como ler:
-  ferramenta  ELIMINATÓRIA para OLLAMA_MODEL_LOGICA. "JSON COMO TEXTO" é o bug
+  ferramenta  ELIMINATÓRIA para LLM_MODEL_LOGICA. "JSON COMO TEXTO" é o bug
               que mandou {"name":"ler_codigo"…} para o chat.
-  json        ELIMINATÓRIA para OLLAMA_MODEL_DECISAO. "cortou pensando" quer
+  json        ELIMINATÓRIA para LLM_MODEL_DECISAO. "cortou pensando" quer
               dizer que o orçamento foi todo para o <think>.
   idioma
   identidade  falhas aqui o bot corrige sozinho, mas cada correção custa uma

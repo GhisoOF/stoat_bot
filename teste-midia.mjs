@@ -13,7 +13,7 @@ const internos = [
   ["http://10.0.0.5/x.png",                    "rede privada 10.x"],
   ["http://172.16.4.4/x.png",                  "rede privada 172.16"],
   ["http://169.254.169.254/latest/meta-data",  "metadata link-local (clássico de SSRF)"],
-  ["http://100.74.70.106:11434/x.png",         "★ o Ollama do Gentoo pela Tailscale"],
+  ["http://100.64.0.7:11434/x.png",            "★ um serviço interno numa VPN (faixa CGNAT/Tailscale)"],
   ["http://umbrel.local/x.png",                "host .local"],
   ["http://nas.lan/foto.png",                  "host .lan"],
   ["http://[::1]/x.png",                       "loopback IPv6"],

@@ -4,17 +4,16 @@ import { garantirDNS, estaInstalado, servidoresUsados } from "./dns-fallback.js"
 import * as ferramentas from "./ferramentas/index.js";
 
 const PORTA        = Number(process.env.PORTA || 8090);
-const LLM_URL      = (process.env.LLM_URL || process.env.OLLAMA_URL || "http://localhost:11434").replace(/\/$/, "");
-const OLLAMA_URL   = LLM_URL;   // rotas antigas de diagnóstico ainda usam o nome
+const LLM_URL      = (process.env.LLM_URL || "").replace(/\/$/, "");
 const TOKEN_LLM = process.env.TOKEN_IA || process.env.LLM_TOKEN || "";
 const cabecalhosLLM = () => TOKEN_LLM
   ? { "Content-Type": "application/json", Authorization: `Bearer ${TOKEN_LLM}` }
   : { "Content-Type": "application/json" };
-const MODELO_PADRAO= process.env.LLM_MODEL || process.env.OLLAMA_MODEL || "qwen3.5:9b";
+const MODELO_PADRAO= process.env.LLM_MODEL || "";
 const NUM_CTX      = Number(process.env.NUM_CTX || 16384);
 const MAX_TOKENS   = Number(process.env.MAX_TOKENS || 4096);
 const MAX_VOLTAS   = Number(process.env.MAX_VOLTAS_FERRAMENTA || 6);
-const TIMEOUT_MS   = Number(process.env.LLM_TIMEOUT_MS || process.env.OLLAMA_TIMEOUT_MS || 300000);
+const TIMEOUT_MS   = Number(process.env.LLM_TIMEOUT_MS || 300000);
 const CONTINUAR_MAX= Number(process.env.CONTINUAR_MAX || 2);   // emendas automáticas em resposta cortada
 const CHAVE        = process.env.IA_CHAVE || "";   // opcional: exige header x-chave
 
@@ -286,7 +285,7 @@ const servidor = createServer(async (req, res) => {
         }
       } catch {}
       return json(res, 200, {
-        ok: true, ollama: { url: OLLAMA_URL, alcancavel: ollamaOk, modelos },
+        ok: true, llm: { url: LLM_URL, alcancavel: ollamaOk, modelos }, ollama: { url: LLM_URL, alcancavel: ollamaOk, modelos },
         modelo_padrao: MODELO_PADRAO, ferramentas: ferramentas.nomes(),
       });
     }
@@ -460,7 +459,7 @@ async function diagnosticoDeBoot() {
 
 servidor.listen(PORTA, () => {
   log(`serviço de IA na porta ${PORTA}`);
-  log(`Ollama: ${OLLAMA_URL} | modelo padrão: ${MODELO_PADRAO}`);
+  log(`LLM: ${LLM_URL || "⚠️ NENHUM (IA_MODO/LLM_URL)"} | modelo: ${MODELO_PADRAO || "(o carregado no servidor)"}`);
   log(`ferramentas: ${ferramentas.nomes().join(", ") || "(nenhuma)"}`);
   // roda depois de subir: um problema de rede não deve impedir o serviço
   diagnosticoDeBoot().catch((e) => console.error("[IA] diagnóstico falhou:", e?.message));

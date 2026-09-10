@@ -115,22 +115,53 @@ export function conferirDestinatario(resposta, autor, pergunta = "") {
   return [...new Set(problemas)].slice(0, 2);
 }
 
-export function conferirNegacaoDeCapacidade(resposta, { pediuBusca = false, evidencia = "" } = {}) {
-  if (!resposta) return [];
-  const negou = /(n[\u00e3a]o|sem)\s+(tenho|tem|possuo)\s+(como\s+)?acess(o|ar)\s+([\u00e0a]\s+)?(internet|web)|n[\u00e3a]o\s+(consigo|posso)\s+(buscar|pesquisar|acessar\s+a\s+internet)|tempo\s+real/i.test(resposta);
-  if (!negou) return [];
-  if (String(evidencia).includes("[buscar")) return ["nega acesso \u00e0 internet, mas a busca RODOU e trouxe resultados (est\u00e3o na evid\u00eancia)"];
-  if (pediuBusca) return ["nega acesso \u00e0 internet num pedido expl\u00edcito de busca — a ferramenta existe e n\u00e3o foi usada"];
-  return [];
+// A evidência tem resultado REAL desta ferramenta (não só um erro dela)?
+function evidenciaTem(evidencia, nome) {
+  const e = String(evidencia ?? "");
+  const re = new RegExp(`\\[${nome}[^\\]]*\\]\\n(.{0,30})`, "g");
+  for (const m of e.matchAll(re)) {
+    if (!/^\s*\{"erro"/.test(m[1] ?? "")) return true;   // veio conteúdo, não erro
+  }
+  return false;
 }
 
-export function verificarDeterministico({ resposta, evidencia = "", pergunta = "", comandos = null, autor = "", pediuBusca = false } = {}) {
+export function conferirNegacaoDeCapacidade(resposta, { pediuBusca = false, evidencia = "", pediuCodigo = false, pediuImagem = false } = {}) {
+  if (!resposta) return [];
+  const problemas = [];
+
+  const negouInternet = /(n[\u00e3a]o|sem)\s+(tenho|tem|possuo)\s+(como\s+)?acess(o|ar)\s+([\u00e0a]\s+)?(internet|web)|n[\u00e3a]o\s+(consigo|posso)\s+(buscar|pesquisar|acessar\s+a\s+internet)|tempo\s+real/i.test(resposta);
+  if (negouInternet) {
+    if (String(evidencia).includes("[buscar")) problemas.push("nega acesso \u00e0 internet, mas a busca RODOU e trouxe resultados (est\u00e3o na evid\u00eancia)");
+    else if (pediuBusca) problemas.push("nega acesso \u00e0 internet num pedido expl\u00edcito de busca — a ferramenta existe e n\u00e3o foi usada");
+  }
+
+  // "não consigo acessar o arquivo/código/repositório" (PT e EN)
+  const NEGA = "(n[\u00e3a]o\\s+(?:consigo|posso|tenho\\s+(?:como|acesso))|sem\\s+acesso|i\\s+can(?:no|')t|cannot|unable\\s+to|i\\s+do\\s+not\\s+have\\s+access)";
+  // O trecho entre a negação e o alvo não pode cruzar fronteira de frase, mas
+  // um ponto DENTRO de nome de arquivo (main.js) é permitido: `\.(?=\w)`.
+  const negouArquivo = new RegExp(`${NEGA}(?:[^.!?\\n]|\\.(?=\\w)){0,60}\\b(arquivo|c[\u00f3o]digo|reposit[\u00f3o]rio|\\brepo\\b|file|repository|code)\\b`, "i").test(resposta);
+  if (negouArquivo) {
+    if (evidenciaTem(evidencia, "ler_codigo")) problemas.push("nega acesso ao arquivo, mas o ler_codigo RODOU e o conte\u00fado est\u00e1 na evid\u00eancia");
+    else if (pediuCodigo) problemas.push("nega acesso ao arquivo num pedido de leitura de c\u00f3digo — a ferramenta ler_codigo existe e n\u00e3o foi usada");
+  }
+
+  // "não consigo ver/acessar a imagem / o CDN" (PT e EN)
+  const negouImagem = new RegExp(`${NEGA}[^.!?\\n]{0,60}\\b(imagens?|anexos?|images?|attachments?|cdn)\\b`, "i").test(resposta);
+  if (negouImagem) {
+    if (evidenciaTem(evidencia, "ver_imagem")) problemas.push("nega conseguir ver a imagem, mas o ver_imagem RODOU e a descri\u00e7\u00e3o est\u00e1 na evid\u00eancia");
+    else if (pediuImagem) problemas.push("nega conseguir ver a imagem com anexo presente — a ferramenta ver_imagem existe e n\u00e3o foi usada");
+  }
+
+  return [...new Set(problemas)];
+}
+
+export function verificarDeterministico({ resposta, evidencia = "", pergunta = "", comandos = null, autor = "", pediuBusca = false, pediuCodigo = false, pediuImagem = false } = {}) {
   const problemas = [
     ...conferirContas(resposta),
     ...conferirNomes(resposta, evidencia, pergunta),
     ...conferirComandos(resposta, comandos),
     ...conferirDestinatario(resposta, autor, pergunta),
-    ...conferirNegacaoDeCapacidade(resposta, { pediuBusca, evidencia }),
+    ...conferirNegacaoDeCapacidade(resposta, { pediuBusca, evidencia, pediuCodigo, pediuImagem }),
   ];
   return { ok: problemas.length === 0, problemas };
 }
@@ -192,8 +223,8 @@ export async function verificarComIA({ pergunta, resposta, evidencia, chamarMode
   }
 }
 
-export async function verificar({ pergunta = "", resposta = "", evidencia = "", comandos = null, autor = "", pediuBusca = false, chamarModelo = null, dlog = () => {} } = {}) {
-  const det = verificarDeterministico({ resposta, evidencia, pergunta, comandos, autor, pediuBusca });
+export async function verificar({ pergunta = "", resposta = "", evidencia = "", comandos = null, autor = "", pediuBusca = false, pediuCodigo = false, pediuImagem = false, chamarModelo = null, dlog = () => {} } = {}) {
+  const det = verificarDeterministico({ resposta, evidencia, pergunta, comandos, autor, pediuBusca, pediuCodigo, pediuImagem });
 
   let ia = null;
   if (evidencia && String(evidencia).length >= VERIF_EVID_MIN) {

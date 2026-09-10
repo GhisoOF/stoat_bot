@@ -12,6 +12,18 @@ const SWAP_BIN = process.env.SWAP_BIN || "/usr/local/bin/llama-swap";
 if (IA_EMBUTIDA && !process.env.IA_SERVICO_URL) process.env.IA_SERVICO_URL = "http://127.0.0.1:8090";
 if (VOZ_ATIVA && !process.env.VOZ_SERVICO_URL) process.env.VOZ_SERVICO_URL = "http://127.0.0.1:8091";
 
+// ler_codigo de fábrica: o código do próprio bot já está na imagem (este
+// diretório). Sem este padrão, quem não configurasse nada ficava com a
+// ferramenta apontando para lugar NENHUM — e toda leitura de arquivo falhava
+// com "nem CODIGO_DIR nem GITHUB_REPO estão configurados". Agora o padrão é
+// ler o próprio código, do disco, sem rede e sem token. Quem definir
+// GITHUB_REPO ou CODIGO_DIR no .env continua mandando (têm prioridade).
+// Segurança: o ler_codigo já ignora dotfiles e bloqueia .env/token/secret/.db.
+if (!process.env.CODIGO_DIR && !process.env.GITHUB_REPO) {
+  process.env.CODIGO_DIR = process.cwd();
+  console.info(`[INICIAR] ler_codigo: lendo o próprio código em ${process.cwd()} (defina GITHUB_REPO ou CODIGO_DIR para mudar).`);
+}
+
 const filhos = new Set();
 let encerrando = false;
 

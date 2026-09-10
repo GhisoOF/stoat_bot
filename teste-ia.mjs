@@ -1259,5 +1259,51 @@ console.log("\n── LaTeX não come mais barra de código ──");
     "  → e o escape só conta quando NÃO vem letra depois: `\\n\"` é escape, `\\neq` é LaTeX");
 }
 
+console.log("\n── idioma errado: inglês num pedido em português ──");
+{
+  const chat = await import("./modulos/ai/chat.js");
+  ok(chat.pareceIngles("I cannot access the main.js file to determine its location or contents."),
+    "★ pega a recusa em inglês do teste ao vivo (main.js)");
+  ok(chat.pareceIngles("Sorry, I am unable to access images from the CDN. If you can share the contents of the image, I can help."),
+    "  → e a recusa de imagem em inglês");
+  ok(!chat.pareceIngles("Não consigo acessar o arquivo `main.js` agora."),
+    "  → resposta em português com nome de arquivo NÃO dispara");
+  ok(!chat.pareceIngles("O arquivo fica em `ia-servico/servidor.js` e expõe o endpoint `/chat` — the tool loop mora lá."),
+    "  → português com termos técnicos em inglês NÃO dispara");
+  ok(!chat.pareceIngles("```js\nconst file = readFile(this.path); // access the contents\n```\nEsse trecho lê o arquivo."),
+    "  → bloco de código em inglês dentro de resposta PT NÃO dispara");
+  ok(!chat.pareceIngles(""), "  → vazio não dispara");
+}
+
+console.log("\n── auto-apresentação com o nome da conta ──");
+{
+  const chat = await import("./modulos/ai/chat.js");
+  ok(chat.corrigirAutoApresentacao("Meu nome é Cobaia.", "Cobaia") === "Meu nome é Judy.",
+    "★ 'Meu nome é Cobaia' vira 'Meu nome é Judy' (o bug do teste ao vivo)");
+  ok(chat.corrigirAutoApresentacao("Oi! Eu sou a Cobaia, prazer.", "Cobaia") === "Oi! Eu sou a Judy, prazer.",
+    "  → 'eu sou a Cobaia' também");
+  ok(chat.corrigirAutoApresentacao("My name is Cobaia and I moderate here.", "Cobaia") === "My name is Judy and I moderate here.",
+    "  → e em inglês");
+  ok(chat.corrigirAutoApresentacao('A conta "Cobaia" é a minha, sim.', "Cobaia") === 'A conta "Cobaia" é a minha, sim.',
+    "  → falar SOBRE a conta fica intocado");
+  ok(chat.corrigirAutoApresentacao("O usuário Cobaia entrou na call.", "Cobaia") === "O usuário Cobaia entrou na call.",
+    "  → citar o nome fora de apresentação fica intocado");
+  ok(chat.corrigirAutoApresentacao("Meu nome é Judy.", "Judy") === "Meu nome é Judy.",
+    "  → conta já chamada Judy: nada muda");
+}
+
+console.log("\n── extração das URLs de imagem do marcador ──");
+{
+  const chat = await import("./modulos/ai/chat.js");
+  const perg = "descreva isto\n\n[imagem(ns) anexada(s), visíveis com a ferramenta ver_imagem: https://cdn.stoatusercontent.com/attachments/A1 https://cdn.stoatusercontent.com/attachments/B2]";
+  const urls = chat.urlsDeImagemNaPergunta(perg);
+  ok(urls.length === 2 && urls[0].endsWith("/A1") && urls[1].endsWith("/B2"),
+    "★ extrai as duas URLs do marcador PT");
+  const pergEn = "describe this\n\n[attached image(s), viewable with the ver_imagem tool: https://cdn.stoatusercontent.com/attachments/C3]";
+  ok(chat.urlsDeImagemNaPergunta(pergEn).length === 1, "  → e do marcador EN");
+  ok(chat.urlsDeImagemNaPergunta("me mostra uma imagem de gato").length === 0,
+    "  → pergunta comum sobre imagem não extrai nada");
+}
+
 console.log(`\nIA: ${pass} ok, ${fail} falha(s)`);
 process.exit(fail ? 1 : 0);

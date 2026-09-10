@@ -32,6 +32,9 @@ services:
       - SEARXNG_URL=${SEARXNG_URL:-http://searxng:8080}
       - SD_URL=${SD_URL:-}            # A1111/Forge externo no lugar do embutido
       - SD_MODELO_URL=${SD_MODELO_URL:-}
+      - GITHUB_REPO=${GITHUB_REPO:-}    # dono/repo que o ler_codigo lê do GitHub (vazio = lê o próprio código da imagem)
+      - GITHUB_BRANCH=${GITHUB_BRANCH:-main}
+      - CODIGO_DIR=${CODIGO_DIR:-}      # pasta local para o ler_codigo (vazio = o código da própria imagem)
       - GITHUB_TOKEN=${GITHUB_TOKEN:-}  # só para ler repositório privado
       - LLAMA_NGL=${LLAMA_NGL:-999}     # camadas do modelo na GPU (IA_MODO=local)
     extra_hosts:

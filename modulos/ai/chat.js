@@ -262,7 +262,11 @@ function potenciaDeDois(n) {
 }
 const LIMITE_ARQUIVO = Number(process.env.CHAT_MAX_ARQUIVO || 12000);
 const GITHUB_REPO_ROTULO = process.env.GITHUB_REPO || "do bot";
-const MAX_TOKENS   = Number(process.env.CHAT_MAX_TOKENS || 700);
+// 1500, não 700: com o raciocínio (thinking) ligado, os tokens de pensamento
+// saem do MESMO orçamento — com 700, sobravam ~200 para a resposta e ela era
+// cortada no meio da palavra (e a emenda automática às vezes continuava do
+// assunto errado). Subir o teto resolve na raiz.
+const MAX_TOKENS   = Number(process.env.CHAT_MAX_TOKENS || 1500);
 const DECISAO_TOKENS = Number(process.env.CHAT_DECISAO_TOKENS || 600);   // piso das decisões json (ver llmChat)
 const TIMEOUT      = Number(process.env.CHAT_TIMEOUT  || 300000);
 
@@ -359,10 +363,10 @@ async function llmDisponivel() {
   }
 }
 
-async function executarFerramenta(nome, args) {
+async function executarFerramenta(nome, args, { timeoutMs = 20000 } = {}) {
   if (!IA_SERVICO_URL) return null;
   const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), 20000);
+  const t = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
     const headers = { "Content-Type": "application/json" };
     if (IA_SERVICO_CHAVE) headers["x-chave"] = IA_SERVICO_CHAVE;
@@ -376,6 +380,14 @@ async function executarFerramenta(nome, args) {
     dlog(`ferramenta direta falhou: ${e?.message ?? e}`);
     return null;
   } finally { clearTimeout(t); }
+}
+
+// Extrai as URLs de imagem do marcador que o fluxo adiciona à pergunta quando
+// há anexos ("[imagem(ns) anexada(s), visíveis com a ferramenta ver_imagem: …]").
+export function urlsDeImagemNaPergunta(texto) {
+  const m = String(texto ?? "").match(/\[(?:imagem\(ns\) anexada|attached image)[^\]]*?:\s*([^\]]+)\]/i);
+  if (!m) return [];
+  return m[1].split(/\s+/).map((u) => u.trim()).filter((u) => /^https:\/\//i.test(u)).slice(0, 3);
 }
 
 // Extrai um caminho de arquivo citado na pergunta ("leia o modulos/x/y.js").
@@ -714,8 +726,8 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
   const meuUsuario = local?.meuUsuario ?? null;
   const apelidos = [...new Set(["Judy", meuUsuario].filter(Boolean))];
   const souTxt = lang === "en"
-    ? `\n\n<quem_voce_e>\nName: Judy. An open-source bot for the Stoat platform.\n${meuUsuario && meuUsuario !== "Judy" ? `Your ACCOUNT username is "${meuUsuario}" — same person as Judy. If anyone writes "${meuUsuario}", they mean YOU, never someone else.\n` : ""}You are software: you have no profile card, no bio, no invite link and no server of your own. You live wherever you were added.\n</quem_voce_e>`
-    : `\n\n<quem_voce_e>\nNome: Judy. Uma bot de código aberto para a plataforma Stoat.\n${meuUsuario && meuUsuario !== "Judy" ? `O nome da sua CONTA no Stoat é "${meuUsuario}" — é a mesma pessoa que a Judy, é VOCÊ. Se alguém escrever "${meuUsuario}", está falando de você, nunca de outra pessoa. Nunca fale de "${meuUsuario}" na terceira pessoa.\n` : ""}Você é software: não tem cartão de perfil, não tem bio, não tem link de convite e não tem servidor próprio. Você está onde te adicionaram.\n</quem_voce_e>`;
+    ? `\n\n<quem_voce_e>\nName: Judy. An open-source bot for the Stoat platform.\n${meuUsuario && meuUsuario !== "Judy" ? `Your ACCOUNT username is "${meuUsuario}" — same person as Judy. If anyone writes "${meuUsuario}", they mean YOU, never someone else. But when you introduce yourself or state your name, the name you give is Judy — NEVER "${meuUsuario}": that is the account label, not your name.\n` : ""}You are software: you have no profile card, no bio, no invite link and no server of your own. You live wherever you were added.\n</quem_voce_e>`
+    : `\n\n<quem_voce_e>\nNome: Judy. Uma bot de código aberto para a plataforma Stoat.\n${meuUsuario && meuUsuario !== "Judy" ? `O nome da sua CONTA no Stoat é "${meuUsuario}" — é a mesma pessoa que a Judy, é VOCÊ. Se alguém escrever "${meuUsuario}", está falando de você, nunca de outra pessoa. Nunca fale de "${meuUsuario}" na terceira pessoa. E quando VOCÊ se apresentar ou disser seu nome, o nome que você diz é Judy — NUNCA "${meuUsuario}": isso é o rótulo da conta, não o seu nome.\n` : ""}Você é software: não tem cartão de perfil, não tem bio, não tem link de convite e não tem servidor próprio. Você está onde te adicionaram.\n</quem_voce_e>`;
 
   const ondeTxt = local?.servidor || local?.canal
     ? (lang === "en"
@@ -880,6 +892,36 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
   let evidenciaColetada = "";
 
   if (tipo === "ferramenta") {
+    // Imagem anexada: descrever é decisão do ROTEADOR, não do modelo. A visão
+    // roda AGORA, direto, e a descrição entra no contexto antes da geração —
+    // um modelo pequeno jamais recebe a chance de "achar" que não consegue
+    // ver imagens ou acessar o CDN (foi exatamente o que ele inventava).
+    const urlsAnexadas = urlsDeImagemNaPergunta(pergunta);
+    for (const urlImg of urlsAnexadas.slice(0, 2)) {
+      const r = await executarFerramenta("ver_imagem",
+        { url: urlImg, pergunta: pergunta.replace(/\[(?:imagem\(ns\) anexada|attached image)[^\]]*\]/i, "").trim().slice(0, 400) },
+        { timeoutMs: Number(process.env.IMAGEM_TIMEOUT_MS || 120_000) + 10_000 });
+      if (r?.descricao) {
+        dlog(`ferramenta direta: ver_imagem descreveu o anexo (${String(r.descricao).length} chars)`);
+        evidenciaColetada += `\n[ver_imagem ${urlImg}]\n${r.descricao}\n`;
+        messages.push({
+          role: "system",
+          content: lang === "en"
+            ? `REAL DESCRIPTION of the attached image, produced JUST NOW by your own vision model:\n\n${r.descricao}\n\n--- end of description ---\nYou HAVE seen the image — answer based on this description as your own perception. NEVER say you cannot access images, attachments or the CDN: you just did.`
+            : `DESCRIÇÃO REAL da imagem anexada, produzida AGORA MESMO pelo seu próprio modelo de visão:\n\n${r.descricao}\n\n--- fim da descrição ---\nVocê JÁ viu a imagem — responda com base nesta descrição como percepção sua. NUNCA diga que não consegue acessar imagens, anexos ou o CDN: você acabou de acessar.`,
+        });
+      } else {
+        const motivoImg = r?.erro ?? "sem resposta do serviço";
+        dlog(`ferramenta direta: ver_imagem falhou (${motivoImg})`);
+        messages.push({
+          role: "system",
+          content: lang === "en"
+            ? `Reading the attached image FAILED: ${motivoImg}. Tell the person, in ONE sentence in English, that you couldn't see the image right now. Do NOT theorise about the reason and do NOT mention CDNs or tokens.`
+            : `A leitura da imagem anexada FALHOU: ${motivoImg}. Diga à pessoa, em UMA frase em português, que não conseguiu ver a imagem agora. NÃO teorize o motivo e NÃO fale de CDN nem de token.`,
+        });
+      }
+    }
+
     const virou = mudouEscopo(pergunta);
     const caminhoDaPessoa = caminhoCitado(pergunta);
 
@@ -976,7 +1018,7 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
           ? "This message contains an ARITHMETIC expression. Use the `calcular` tool to get the exact number BEFORE answering — never compute it in your head, even if it looks easy. Then answer briefly with the result (and the expression, if useful). Do not use ler_codigo for this."
           : "Esta mensagem contém uma CONTA. Use a ferramenta `calcular` para obter o número exato ANTES de responder — nunca faça de cabeça, mesmo que pareça fácil. Depois responda curto, com o resultado (e a expressão, se ajudar). Não use ler_codigo para isso.",
       });
-    } else if (!messages.some((m) => m.role === "system" && /CONTEÚDO REAL do arquivo/.test(m.content ?? ""))) {
+    } else if (!messages.some((m) => m.role === "system" && /CONTEÚDO REAL do arquivo|DESCRIÇÃO REAL da imagem|REAL DESCRIPTION of the attached|leitura da imagem anexada FALHOU|attached image FAILED/.test(m.content ?? ""))) {
       messages.push({
         role: "system",
         content: [
@@ -1141,6 +1183,36 @@ export function suavizarAcusacao(texto) {
 }
 
 const SO_ESPANHOL = /\b(soy|eres|estoy|estás|somos|tú|usted|ustedes|nosotros|pero|porque sí|también|entonces|ahora|aquí|allí|muy|siempre|nunca más|puedo|quieres|tienes|hacer|hola|gracias|por favor te|sí|una bot|un bot|creada por|creado por|entiendo|lo siento|dime|dígame)\b/gi;
+
+// A bot se apresentou com o nome da CONTA ("Meu nome é Cobaia")? Troca pelo
+// nome de verdade, cirurgicamente: só em frases de auto-apresentação — falar
+// SOBRE a conta ('a conta "Cobaia"…') continua intocado.
+export function corrigirAutoApresentacao(texto, conta) {
+  if (!texto || !conta || String(conta).toLowerCase() === "judy") return texto;
+  const c = String(conta).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const re = new RegExp(
+    `\\b(meu nome (?:é|e)|pode(?:m)? me chamar de|me chamo|eu sou|my name is|call me|i am|i'm|sou)(\\s+(?:a|o)\\s+|\\s+)(${c})\\b`,
+    "gi",
+  );
+  return texto.replace(re, (_, antes, meio) => `${antes}${meio}Judy`);
+}
+
+// A resposta veio em INGLÊS quando devia ser português? Contamos palavras
+// funcionais inequívocas do inglês e exigimos ZERO marcador de português —
+// código, crases e URLs saem antes, para nome de arquivo/termo técnico não
+// contar. (Espelho do pareceEspanhol, que já pegava o mesmo desvio em espanhol.)
+export function pareceIngles(texto) {
+  const t = String(texto ?? "")
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/`[^`\n]*`/g, " ")
+    .replace(/https?:\/\/\S+/g, " ");
+  if (!t.trim()) return false;
+  const marcadorPt = (t.match(/[ãõçáéíóúâêô]/g) ?? []).length
+    + (t.match(/\b(n[aã]o|voc[eê]|uma|isso|que|com|para|mas|ent[aã]o|tamb[eé]m|aqui|agora|fazer|posso|consigo|arquivo|imagem|obrigad[ao]|meu|minha)\b/gi) ?? []).length;
+  if (marcadorPt > 0) return false;
+  const ingles = (t.match(/\b(the|i|you|your|cannot|can't|is|are|to|of|and|it|this|that|file|image|access|unable|sorry|determine|contents|with|for|have)\b/gi) ?? []).length;
+  return ingles >= 4;
+}
 
 export function pareceEspanhol(texto) {
   const t = String(texto ?? "");
@@ -1720,6 +1792,12 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
       if (semPlano !== resposta) { dlog("deliberação vazada cortada do início"); resposta = semPlano; }
     }
 
+    // Se apresentou com o nome da CONTA ("meu nome é Cobaia") → vira Judy.
+    if (resposta) {
+      const corrigida = corrigirAutoApresentacao(resposta, local?.meuUsuario);
+      if (corrigida !== resposta) { dlog("auto-apresentação com o nome da conta → corrigida para Judy"); resposta = corrigida; }
+    }
+
     // LaTeX não renderiza no Stoat: convertemos para símbolos legíveis.
     if (resposta) {
       const convertido = semLatex(resposta);
@@ -1756,6 +1834,22 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
         const limpa = limpar(refeita);
         if (limpa && !pareceEspanhol(limpa)) resposta = limpa;
       } catch (e) { dlog(`refazer idioma falhou (${e?.message ?? e})`); }
+    }
+
+    // Mesmo desvio, outra língua: resposta INTEIRA em inglês num pedido em
+    // português (foi como as recusas de arquivo/imagem escaparam no teste).
+    if (resposta && lang !== "en" && !en && pareceIngles(resposta)) {
+      console.warn(`[CHAT] ⚠️ resposta veio em inglês — refazendo: "${resposta.slice(0, 80)}…"`);
+      dlog("idioma errado (inglês) → refazendo");
+      try {
+        const refeita = await llmChat([
+          ...messages,
+          { role: "assistant", content: resposta },
+          { role: "system", content: "OBRIGATÓRIO: a pergunta foi feita em português e sua resposta acima saiu em inglês. Reescreva a resposta INTEIRA em português do Brasil, mantendo o mesmo conteúdo. Não responda em inglês em hipótese alguma." },
+        ], { maxTokens: MAX_TOKENS, modelo: responder._modelo ?? LLM_MODEL_LEVE });
+        const limpa = limpar(refeita);
+        if (limpa && !pareceIngles(limpa)) resposta = limpa;
+      } catch (e) { dlog(`refazer idioma (inglês) falhou (${e?.message ?? e})`); }
     }
 
     if (resposta) {
@@ -1884,6 +1978,8 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
         evidencia: evidenciaVerif,
         autor,
         pediuBusca: PEDIDO_EXPLICITO.test(pergunta),
+        pediuCodigo: precisaFerramenta(pergunta) || !!caminhoCitado(pergunta),
+        pediuImagem: urlsDeImagemNaPergunta(pergunta).length > 0,
         comandos: comandosParaVerificar(),
         chamarModelo: (msgs, o) => llmChat(msgs, { json: true, maxTokens: o?.maxTokens, modelo: LLM_MODEL_LOGICA, etiqueta: "verificador" }),
         dlog,

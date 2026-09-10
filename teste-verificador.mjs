@@ -96,6 +96,21 @@ caso("aprova negação em papo comum sem pedido nem evidência",
   conferirNegacaoDeCapacidade("Não tenho acesso à internet.", {}).length === 0);
 caso("aprova resposta normal com a palavra internet",
   conferirNegacaoDeCapacidade("A internet de vocês está lenta hoje?", { pediuBusca: true }).length === 0);
+// ── os dois bugs do teste ao vivo de 10/09: recusas de arquivo e de imagem ──
+caso("pega 'I cannot access the main.js file' num pedido de código",
+  conferirNegacaoDeCapacidade("I cannot access the main.js file to determine its location or contents.", { pediuCodigo: true }).length === 1);
+caso("pega 'não consigo acessar o arquivo' com ler_codigo JÁ na evidência",
+  conferirNegacaoDeCapacidade("Não consigo acessar o arquivo main.js.", { evidencia: "[ler_codigo main.js]\nimport x from..." }).length === 1);
+caso("aprova a negação quando o ler_codigo FALHOU de verdade (evidência com erro)",
+  conferirNegacaoDeCapacidade("Não consegui acessar o arquivo agora.", { evidencia: '[ler_codigo]\n{"erro":"HTTP 404"}' }).length === 0);
+caso("pega 'não consigo acessar imagens do CDN' com anexo presente",
+  conferirNegacaoDeCapacidade("Desculpe, não consigo acessar imagens diretamente do CDN do Stoat.", { pediuImagem: true }).length === 1);
+caso("pega negação de imagem com ver_imagem JÁ na evidência",
+  conferirNegacaoDeCapacidade("Não consigo ver anexos.", { evidencia: "[ver_imagem https://cdn/x]\nUm guerreiro de armadura azul..." }).length === 1);
+caso("aprova papo comum sobre imagens sem anexo nem evidência",
+  conferirNegacaoDeCapacidade("Não consigo ver imagens, só texto — manda descrito.", {}).length === 0);
+caso("aprova frase que só CITA arquivo sem negar acesso",
+  conferirNegacaoDeCapacidade("O arquivo main.js liga os módulos no boot.", { pediuCodigo: true }).length === 0);
 
 console.log("── camada 2 integrada ──");
 {

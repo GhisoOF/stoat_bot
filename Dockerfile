@@ -73,6 +73,16 @@ RUN set -x; if [ "$TARGETARCH" != "arm64" ]; then \
       else echo "AVISO: sd.cpp indisponível — gerar_imagem só funcionará com SD_URL externo"; fi; \
     else echo "AVISO: sd.cpp sem binário ARM64 — gerar_imagem só com SD_URL nesta arquitetura"; fi
 
+# 0a-ter) llama-swap: só é usado quando há MODELO_VISAO (dois modelos servidos
+#     na mesma API, carregados por demanda). Opcional como os demais.
+RUN set -x; ARQ="amd64"; [ "$TARGETARCH" = "arm64" ] && ARQ="arm64"; \
+    TAG="$(curl -fsSI https://github.com/mostlygeek/llama-swap/releases/latest | grep -i '^location:' | sed 's|.*/tag/||' | tr -d '\r')"; \
+    VER="${TAG#v}"; \
+    if [ -n "$VER" ] && curl -fsSL "https://github.com/mostlygeek/llama-swap/releases/download/$TAG/llama-swap_${VER}_linux_${ARQ}.tar.gz" -o /tmp/swap.tgz; then \
+      tar -xzf /tmp/swap.tgz -C /tmp && rm -f /tmp/swap.tgz && \
+      mv /tmp/llama-swap /usr/local/bin/llama-swap && chmod +x /usr/local/bin/llama-swap && echo "✓ llama-swap $TAG"; \
+    else echo "AVISO: llama-swap indisponível — MODELO_VISAO (dois modelos) não funcionará"; fi
+
 # 0b) Piper (TTS offline) para a voz nas calls (VOZ_ATIVA=1): binário na
 #     imagem; as VOZES (.onnx) são baixadas no primeiro arranque para
 #     /data/vozes — volume, então o download acontece uma vez.

@@ -15,6 +15,7 @@ services:
       - IA=${IA:-1}                   # 0 desliga todos os módulos de IA
       - IA_MODO=${IA_MODO:-}          # local | online (vazio = LLM_URL manual)
       - MODELO=${MODELO:-}            # local: repo:quant do HF · online: nome na plataforma
+      - MODELO_VISAO=${MODELO_VISAO:-} # 2º modelo, multimodal (liga o llama-swap)
       - TOKEN_IA=${TOKEN_IA:-}        # token da plataforma (modo online)
       - PROMPT=${PROMPT:-}            # personalidade padrão da IA
       - IMAGEM=${IMAGEM:-1}           # 0 desliga a geração de imagem embutida

@@ -1,11 +1,12 @@
 
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { iaLigada, modoIA, MODELO_LOCAL_PADRAO } from "./modulos/core/env.js";
 
 const IA_EMBUTIDA = iaLigada() && process.env.IA_EMBUTIDA !== "0";
 const VOZ_ATIVA = process.env.VOZ_ATIVA === "1";
 const LLAMA_BIN = process.env.LLAMA_BIN || "/usr/local/bin/llama-server";
+const SWAP_BIN = process.env.SWAP_BIN || "/usr/local/bin/llama-swap";
 
 // Padrões de localhost quando os serviços estão embutidos.
 if (IA_EMBUTIDA && !process.env.IA_SERVICO_URL) process.env.IA_SERVICO_URL = "http://127.0.0.1:8090";
@@ -67,6 +68,38 @@ process.on("SIGINT", () => encerrar(0));
 
 if (!iaLigada()) {
   console.info("[INICIAR] IA=0 — módulos de IA desligados (nem serviço, nem modelo).");
+} else if (modoIA() === "local" && (process.env.MODELO_VISAO || process.env.LLM_MODEL_VISAO)) {
+  // Dois modelos (conversa + visão) → llama-swap: ele serve os dois na mesma
+  // API OpenAI, carregando cada um por demanda. O bot escolhe por papel
+  // (LLM_MODEL para conversa, LLM_MODEL_VISAO para imagens).
+  if (existsSync(SWAP_BIN)) {
+    const cache = process.env.LLAMA_CACHE || "/data/modelos";
+    try { mkdirSync(cache, { recursive: true }); } catch {}
+    const conversa = process.env.MODELO || MODELO_LOCAL_PADRAO;
+    const visao = process.env.MODELO_VISAO || process.env.LLM_MODEL_VISAO;
+    const ngl = process.env.LLAMA_NGL || "999";
+    const ctx = process.env.LLAMA_CTX || "8192";
+    // Nomes curtos e estáveis: é por eles que o bot pede cada modelo.
+    process.env.LLM_MODEL = process.env.LLM_MODEL || "conversa";
+    process.env.LLM_MODEL_VISAO = "visao";
+    const cfg = `/data/llama-swap.yaml`;
+    const comando = (m) => `${LLAMA_BIN} -hf ${m} --host 127.0.0.1 --port \${PORT} -c ${ctx} -ngl ${ngl} --jinja`;
+    writeFileSync(cfg, [
+      "models:",
+      "  conversa:",
+      `    cmd: ${comando(conversa)}`,
+      "    ttl: 3600",
+      "  visao:",
+      `    cmd: ${comando(visao)}`,
+      "    ttl: 600",
+    ].join("\n") + "\n");
+    console.info(`[INICIAR] IA local (llama-swap): conversa=${conversa} · visão=${visao}`);
+    subirBin("llama-swap", SWAP_BIN,
+      ["-config", cfg, "-listen", `127.0.0.1:${process.env.LLAMA_PORTA || "8082"}`],
+      { LLAMA_CACHE: cache });
+  } else {
+    console.error(`[INICIAR] MODELO_VISAO definido mas ${SWAP_BIN} não existe nesta imagem — seguindo com um modelo só (sem visão).`);
+  }
 } else if (modoIA() === "local") {
   // Modo local: llama-server embutido baixa o modelo do Hugging Face no
   // primeiro arranque (flag -hf) e guarda em /data/modelos — o download de

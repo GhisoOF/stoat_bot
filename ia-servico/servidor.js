@@ -402,8 +402,8 @@ async function diagnosticoDeBoot() {
   const repo = process.env.GITHUB_REPO;
   if (!token) {
     problemas.push(
-      "GITHUB_TOKEN ausente — a leitura de código vai falhar com 404 em repo privado.",
-      "   → defina no .env do diretório do judy-ia",
+      "GITHUB_TOKEN ausente — só é necessário para ler repositório PRIVADO (públicos funcionam sem ele).",
+      "   → se o seu repositório é público, ignore este aviso.",
     );
   } else if (!problemas.length && repo) {
     // só testa o token se a rede estiver de pé, senão o erro seria enganoso

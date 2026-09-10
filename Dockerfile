@@ -19,6 +19,15 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends \
       curl ca-certificates unzip libgomp1 libcurl4 ffmpeg libvulkan1 mesa-vulkan-drivers \
     && rm -rf /var/lib/apt/lists/*
+# GPUs recentes (RDNA 3.5/4, Arc) precisam de um Mesa mais novo que o da imagem
+# base: sem isso o driver não reconhece o chip ("amdgpu: unknown family") e o
+# llama.cpp não lista dispositivo nenhum. Os backports resolvem; se não houver
+# pacote, a imagem segue com o Mesa padrão (e roda em CPU).
+RUN . /etc/os-release; \
+    echo "deb http://deb.debian.org/debian ${VERSION_CODENAME}-backports main" > /etc/apt/sources.list.d/backports.list; \
+    apt-get update && apt-get -t ${VERSION_CODENAME}-backports install -y --no-install-recommends \
+      mesa-vulkan-drivers libvulkan1 || echo "AVISO: backports indisponíveis — Mesa padrão mantido"; \
+    rm -rf /var/lib/apt/lists/*
 # Preferimos o build VULKAN: usa a GPU/iGPU quando existe (muito mais rápido) e
 # cai para CPU sozinho quando não há driver. Se o release não tiver o asset
 # Vulkan, o build de CPU entra no lugar. Os assets Vulkan são .tar.gz e nem

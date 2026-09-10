@@ -23,24 +23,27 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # cai para CPU sozinho quando não há driver. Se o release não tiver o asset
 # Vulkan, o build de CPU entra no lugar. Os assets Vulkan são .tar.gz e nem
 # sempre estão no /latest — por isso a busca nos últimos releases.
+# ATENÇÃO ao escolher o release: /releases/latest aponta para uma tag de
+# ferramenta (v0.4.x) que NÃO tem binários — daí a busca nos últimos releases
+# pelo próprio browser_download_url. Preferimos o build VULKAN (usa GPU/iGPU)
+# e caímos para o de CPU quando não há. LLAMA_BACKEND=cpu força o de CPU.
+ARG LLAMA_BACKEND=vulkan
 RUN set -x; SUF="x64"; [ "$TARGETARCH" = "arm64" ] && SUF="arm64"; \
-    URL="$(curl -fsSL 'https://api.github.com/repos/ggml-org/llama.cpp/releases?per_page=20' \
-          | grep -oE '"browser_download_url": "[^"]*bin-ubuntu-vulkan-'"$SUF"'\.tar\.gz"' | head -1 | cut -d'"' -f4)"; \
+    achar() { curl -fsSL 'https://api.github.com/repos/ggml-org/llama.cpp/releases?per_page=10' \
+              | grep -oE '"browser_download_url": *"[^"]*bin-ubuntu-'"$1$SUF"'\.tar\.gz"' | head -1 | cut -d'"' -f4; }; \
+    URL=""; \
+    [ "$LLAMA_BACKEND" = "vulkan" ] && URL="$(achar 'vulkan-')"; \
+    [ -n "$URL" ] && BACKEND="VULKAN (usa GPU/iGPU)" || { URL="$(achar '')"; BACKEND="CPU"; }; \
+    echo "llama.cpp: $BACKEND — $URL"; \
     if [ -n "$URL" ] && curl -fsSL "$URL" -o /tmp/llama.tgz; then \
-      mkdir -p /opt/llama && tar -xzf /tmp/llama.tgz -C /opt/llama && rm /tmp/llama.tgz; \
-    else \
-      echo "sem build Vulkan — tentando o de CPU"; \
-      URL="$(curl -fsSL https://api.github.com/repos/ggml-org/llama.cpp/releases/latest \
-            | grep -oE '"browser_download_url": "[^"]*bin-ubuntu-'"$SUF"'\.zip"' | head -1 | cut -d'"' -f4)"; \
-      if [ -n "$URL" ] && curl -fsSL "$URL" -o /tmp/llama.zip; then \
-        mkdir -p /opt/llama && unzip -q /tmp/llama.zip -d /opt/llama && rm /tmp/llama.zip; \
-      fi; \
+      mkdir -p /opt/llama && tar -xzf /tmp/llama.tgz -C /opt/llama && rm -f /tmp/llama.tgz; \
     fi; \
     BIN="$(find /opt/llama -name llama-server -type f 2>/dev/null | head -1)"; \
     if [ -n "$BIN" ]; then \
-      chmod +x "$BIN" && LIBDIR="$(dirname "$BIN")" && \
+      chmod +x "$BIN"; LIBDIR="$(dirname "$BIN")"; \
       printf '#!/bin/sh\nexport LD_LIBRARY_PATH="%s:${LD_LIBRARY_PATH:-}"\nexec "%s" "$@"\n' "$LIBDIR" "$BIN" \
-        > /usr/local/bin/llama-server && chmod +x /usr/local/bin/llama-server; \
+        > /usr/local/bin/llama-server; chmod +x /usr/local/bin/llama-server; \
+      if ls "$LIBDIR" | grep -qi vulkan; then echo "✓ backend Vulkan na imagem"; else echo "! sem libggml-vulkan — vai rodar em CPU"; fi; \
     else echo "AVISO: llama.cpp indisponível — IA_MODO=local não funcionará nesta imagem"; fi
 
 # 0a-bis) stable-diffusion.cpp para gerar imagens (gerar_imagem): binário na

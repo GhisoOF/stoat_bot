@@ -131,6 +131,9 @@ if (!iaLigada()) {
     const flagsExtra = (process.env.LLAMA_FLAGS || "").trim();  // ex.: "--temp 1.0 --top-p 0.95 --top-k 64" (Gemma) — cada família tem o seu
     const comando = (m) => `${LLAMA_BIN} -hf ${m} --host 127.0.0.1 --port \${PORT} -c ${ctx} -ngl ${ngl} --jinja${flagsExtra ? " " + flagsExtra : ""}`;
     writeFileSync(cfg, [
+      // 10min de tolerância para o servidor ficar de pé: o padrão de 2min do
+      // llama-swap matava cargas lentas (e qualquer download residual) no meio.
+      "healthCheckTimeout: 600",
       "models:",
       "  conversa:",
       `    cmd: ${comando(conversa)}`,

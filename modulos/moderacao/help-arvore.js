@@ -1079,12 +1079,39 @@ function arvorePT(P) {
       },
     },
 
+    musica: {
+      _raiz: {
+        titulo: "musica",
+        texto: [
+          "**Música na call** — YouTube, SoundCloud e Spotify, com fila e volume.",
+          "",
+          `\`${P}entrar\` dentro da call _(ou \`${P}tts entrar\`)_ e depois:`,
+          `\`${P}musica <link ou nome>\` — toca (ou entra na fila se já tem som)`,
+          `\`${P}musica pausar\` · \`${P}musica play\` — pausa e retoma`,
+          `\`${P}musica skip\` — próxima faixa · \`${P}musica fila\` — a lista atual`,
+          `\`${P}musica parar\` — para e limpa · \`${P}sair\` — saio da call`,
+          `\`${P}musica volume 80\` — 0 a 200% · \`${P}musica loop faixa|fila|nao\``,
+          "",
+          "**Fontes**",
+          "Link ou playlist do YouTube/SoundCloud, busca por texto, e faixa do",
+          "Spotify (resolvo pelo YouTube, sem chave). Playlist/álbum do Spotify",
+          "pede `SPOTIFY_ID`/`SPOTIFY_SECRET` no `.env` de quem roda o bot.",
+          "",
+          "**Convivendo com o TTS**",
+          "Quando alguém usa o TTS na mesma call, a música **abaixa sozinha**",
+          "durante a fala e volta ao volume normal depois (ducking).",
+          "",
+          `_Aliases: \`${P}m\` · \`${P}play\` · \`${P}tocar\`._`,
+        ].join("\n"),
+      },
+    },
+
     tts: {
       entrar: {
         titulo: "tts entrar",
         texto: [
           "**O caminho curto**",
-          `\`${P}tts entrar\` — dentro da call. Eu entro e passo a falar **tudo que for escrito ali**.`,
+          `\`${P}entrar\` (ou \`${P}tts entrar\`) — dentro da call. Eu entro e passo a falar **tudo que for escrito ali**. \`${P}sair\` desfaz.`,
           "Já estando em outra call, eu **saio dela e venho para a sua** — chamar alguém que está em outro lugar é o pedido mais natural do mundo.",
           `\`${P}tts sair\` — saio e paro de ler.`,
           "",

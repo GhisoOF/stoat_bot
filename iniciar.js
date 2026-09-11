@@ -1,6 +1,7 @@
 
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { iaLigada, modoIA, MODELO_LOCAL_PADRAO } from "./modulos/core/env.js";
 
 const IA_EMBUTIDA = iaLigada() && process.env.IA_EMBUTIDA !== "0";
@@ -102,21 +103,42 @@ if (!iaLigada()) {
     // por mensagem. Agora o boot baixa cada modelo até o fim (com progresso
     // no docker logs) e o bot só conecta ao Stoat com tudo pronto no disco.
     // Um marcador em ${cache} evita repetir a checagem nos boots seguintes.
+    // Soma os bytes já em disco de um diretório (recursivo) — é o medidor
+    // honesto do download: o progresso do llama usa \r e o docker logs engole.
+    const tamanhoDir = (d) => {
+      let total = 0;
+      try {
+        for (const f of readdirSync(d, { recursive: true, withFileTypes: true })) {
+          if (f.isFile()) { try { total += statSync(join(f.parentPath ?? f.path, f.name)).size; } catch {} }
+        }
+      } catch {}
+      return total;
+    };
     const baixarModelo = (m) => new Promise((res) => {
       const marca = `${cache}/.pronto-${m.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
       if (existsSync(marca)) return res(true);
       console.info(`[INICIAR] baixando modelo ${m} — o bot só sobe quando terminar (progresso abaixo)…`);
+      const dirModelo = join(cache, `models--${m.split(":")[0].replaceAll("/", "--")}`);
+      let bytesAntes = tamanhoDir(dirModelo);
+      let quando = Date.now();
+      const progresso = setInterval(() => {
+        const agora = tamanhoDir(dirModelo);
+        const vel = Math.max(0, (agora - bytesAntes) / ((Date.now() - quando) / 1000));
+        console.info(`[INICIAR] download: ${(agora / 1e9).toFixed(2)} GB no disco (${(vel / 1e6).toFixed(1)} MB/s)`);
+        bytesAntes = agora; quando = Date.now();
+      }, 10_000);
+      progresso.unref?.();
       const p = spawn(LLAMA_BIN,
         ["-hf", m, "--host", "127.0.0.1", "--port", "8199", "-c", "256", "-ngl", "0"],
         { env: { ...process.env, LLAMA_CACHE: cache }, stdio: ["ignore", "inherit", "inherit"] });
       let vivo = true;
-      p.on("exit", (c) => { if (vivo) { vivo = false; console.error(`[INICIAR] download de ${m} falhou (saída ${c}) — o llama-swap tenta de novo sob demanda.`); res(false); } });
+      p.on("exit", (c) => { if (vivo) { vivo = false; clearInterval(progresso); console.error(`[INICIAR] download de ${m} falhou (saída ${c}) — o llama-swap tenta de novo sob demanda.`); res(false); } });
       const espera = setInterval(async () => {
         if (!vivo) return clearInterval(espera);
         try {
           const r = await fetch("http://127.0.0.1:8199/health").catch(() => null);
           if (r?.ok) {
-            clearInterval(espera); vivo = false;
+            clearInterval(espera); clearInterval(progresso); vivo = false;
             try { writeFileSync(marca, new Date().toISOString()); } catch {}
             console.info(`[INICIAR] modelo pronto no disco: ${m}`);
             try { p.kill("SIGTERM"); } catch {}

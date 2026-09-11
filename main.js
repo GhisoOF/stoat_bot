@@ -616,9 +616,25 @@ client.on("messageCreate", async (message) => {
 
   const SEMPRE_LIBERADOS = new Set(["acesso", "debug", "help", "tutorial", "assistente", "idioma"]);
 
+// O canal da mensagem é um canal de voz/call? (para liberar comandos de voz ali)
+function ehCanalDeVoz(message) {
+  try {
+    const c = message.channel;
+    const tipo = String(c?.type ?? c?.channelType ?? "").toLowerCase();
+    return tipo.includes("voice") || c?.voice != null;
+  } catch { return false; }
+}
+
+  // Comandos de voz DENTRO da call/canal lido ignoram a restrição de canal:
+  // usar `&musica`, `&entrar`/`&sair` ou `&tts` onde o som acontece é o uso
+  // natural — mandar a pessoa ir ao #comandos para pausar uma música que
+  // está tocando ali é o tipo de burocracia que este bot não faz.
   const cfgTts = ctx.config?.tts;
-  const naVoz = canonico === "tts" && cfgTts?.ativo
-    && (message.channelId === cfgTts.canalVoz || message.channelId === cfgTts.canalTexto);
+  const COMANDOS_DE_VOZ = new Set(["tts", "musica", "entrar", "sair"]);
+  const naVoz = COMANDOS_DE_VOZ.has(canonico) && (
+    (cfgTts?.ativo && (message.channelId === cfgTts.canalVoz || message.channelId === cfgTts.canalTexto))
+    || ehCanalDeVoz(message)
+  );
 
   if (!SEMPRE_LIBERADOS.has(canonico) && !naVoz) {
     const ehStaff = acessoMod.temCargoStaff(message, ctx.config)

@@ -20,8 +20,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       curl ca-certificates unzip libgomp1 libcurl4 ffmpeg libvulkan1 mesa-vulkan-drivers \
     && rm -rf /var/lib/apt/lists/*
 
-# yt-dlp: fonte de áudio da música (YouTube/SoundCloud; Spotify resolve por busca)
-RUN curl -fsSL https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux \
+# yt-dlp: fonte de áudio da música (YouTube/SoundCloud; Spotify resolve por busca).
+# O nome do binário muda por arquitetura — sem isso o build arm64 do CI quebra
+# com exit 127 ("not found" = binário da arquitetura errada).
+RUN set -x; ARQ="yt-dlp_linux"; [ "$TARGETARCH" = "arm64" ] && ARQ="yt-dlp_linux_aarch64"; \
+    curl -fsSL "https://github.com/yt-dlp/yt-dlp/releases/latest/download/${ARQ}" \
       -o /usr/local/bin/yt-dlp && chmod +x /usr/local/bin/yt-dlp \
     && /usr/local/bin/yt-dlp --version
 # GPUs recentes (RDNA 3.5/4, Arc) precisam de um Mesa mais novo que o da imagem

@@ -841,11 +841,14 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
   const messages = [{ role: "system", content: sys }];
 
   // histórico curto da conversa (dá continuidade — evita recomeçar/saudar toda vez)
+  const msgsDoHistorico = [];
   if (userId) {
     try {
       const hist = db.getHistorico(userId, 6, { canalId, minutos: Number(process.env.CHAT_HISTORICO_MIN || 30) });
       for (const h of hist) {
-        messages.push({ role: h.papel === "assistant" ? "assistant" : "user", content: h.conteudo });
+        const m = { role: h.papel === "assistant" ? "assistant" : "user", content: h.conteudo };
+        messages.push(m);
+        msgsDoHistorico.push(m);
       }
       if (hist.length) dlog(`histórico: ${hist.length} mensagem(ns) deste canal nos últimos ${process.env.CHAT_HISTORICO_MIN || 30} min`);
     } catch {}
@@ -1028,6 +1031,23 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
           "Se a ferramenta devolver erro, diga em uma frase que não conseguiu acessar e pare. Não teorize o motivo e não descreva o conteúdo de memória.",
         ].join(" "),
       });
+    }
+
+    // ANTI-PAPAGAIO: se este turno já tem material REAL injetado (arquivo lido,
+    // imagem descrita — ou a falha explícita deles), o histórico do canal SAI
+    // do prompt. As falas anteriores da bot entram como turnos assistant, e um
+    // modelo pequeno prefere continuar o padrão delas ("não tenho acesso...")
+    // a olhar a evidência — foi assim que uma negação antiga contaminou a
+    // descrição de imagem seguinte. Turno com material é autocontido:
+    // pergunta + material. Seguimentos e conversa comum mantêm o histórico.
+    const temMaterialReal = messages.some((m) => m.role === "system"
+      && /CONTEÚDO REAL do arquivo|DESCRIÇÃO REAL da imagem|REAL DESCRIPTION of the attached|FALHOU/.test(m.content ?? ""));
+    if (temMaterialReal && msgsDoHistorico.length) {
+      for (const m of msgsDoHistorico) {
+        const i = messages.indexOf(m);
+        if (i >= 0) messages.splice(i, 1);
+      }
+      dlog(`anti-papagaio: histórico (${msgsDoHistorico.length} msg) omitido neste turno — material real injetado manda`);
     }
   }
 

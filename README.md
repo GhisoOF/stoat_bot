@@ -207,6 +207,7 @@ próprio bot: `&help <comando>`. Um resumo:
 | `&log` · `&acesso` · `&staff` | chat de logs, quem usa comandos, equipe |
 | `&banglobal` | lista global *(BanMembers)* |
 | `&whitelist` · `&blocklist` | convites permitidos, listas anti-link |
+| `&musica` (`&m`, `&play`) | música nas calls: YouTube, SoundCloud e Spotify (playlists também), com fila, pausa, skip, volume e loop — e a música **abaixa sozinha quando o `&tts` fala** (ducking); playlists do Spotify pedem `SPOTIFY_ID`/`SPOTIFY_SECRET` no `.env` (app grátis em developer.spotify.com; faixas avulsas funcionam sem chave) |
 | `&comando` · `&cargomudo` | (des)ativar comandos, cargo de silêncio |
 | `&embed` · `&reactionrole` · `&autorole` · `&cor` | utilidades *(permissões próprias)* |
 | `&boasvindas` · `&adeus` · `&fuso` · `&rss` | entrada/saída, fusos, notícias |

@@ -3,6 +3,7 @@ import "dotenv/config";
 import { createServer } from "node:http";
 import * as tts from "./tts.js";
 import * as voz from "./voz.js";
+import * as musica from "./musica.js";
 
 export const API_VERSAO = 11;  // 11: /entrar-com-token (resgate do AlreadyConnected via mover)
 
@@ -64,8 +65,30 @@ const servidor = createServer(async (req, res) => {
       return responder(res, 200, await voz.estado());
     }
 
+    if (rota === "/musica/fila") {
+      const canal = url.searchParams.get("canal") || musica.canalAtivo();
+      if (!canal) return responder(res, 200, { atual: null, fila: [], total: 0 });
+      return responder(res, 200, { canal, ...musica.fila(canal) });
+    }
+
     if (req.method !== "POST") return responder(res, 404, { erro: "rota desconhecida" });
     const corpo = await lerCorpo(req);
+
+    if (rota.startsWith("/musica/")) {
+      const canal = corpo.canal || musica.canalAtivo();
+      if (!canal) return responder(res, 400, { erro: "não estou em nenhuma call — use `&tts entrar #canal` primeiro." });
+      const acao = rota.slice("/musica/".length);
+      let r;
+      if (acao === "tocar") r = await musica.tocar(canal, corpo.consulta);
+      else if (acao === "pausar") r = await musica.pausar(canal);
+      else if (acao === "retomar") r = await musica.retomar(canal);
+      else if (acao === "pular") r = await musica.pular(canal);
+      else if (acao === "parar") r = await musica.parar(canal);
+      else if (acao === "volume") r = await musica.volume(canal, corpo.valor);
+      else if (acao === "loop") r = musica.loop(canal, corpo.modo);
+      else return responder(res, 404, { erro: "ação de música desconhecida" });
+      return responder(res, r?.erro ? 400 : 200, { canal, ...r });
+    }
 
     if (rota === "/entrar") {
       const { canalVoz, serverId, servidores } = corpo;

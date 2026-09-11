@@ -29,6 +29,7 @@ import * as autorole  from "./modulos/ferramentas/autorole.js";
 import * as bemvindo  from "./modulos/ferramentas/boas-vindas.js";
 import * as fuso      from "./modulos/ferramentas/fuso.js";
 import * as ttsVoz    from "./modulos/ferramentas/tts.js";
+import * as musicaCmd from "./modulos/ferramentas/musica.js";
 import * as staff     from "./modulos/moderacao/staff.js";
 import * as tutorial   from "./modulos/moderacao/tutorial.js";
 import * as corCargo   from "./modulos/moderacao/cor-cargo.js";
@@ -340,6 +341,7 @@ const rotas = {
   equipe:        staff.cmdStaff,
   // Voz nas calls (TTS)
   tts:           ttsVoz.cmdTts,
+  musica:        musicaCmd.cmdMusica,
   voz:           ttsVoz.cmdTts,
   falar:         ttsVoz.cmdTts,
   // Relógio com vários fusos
@@ -383,6 +385,7 @@ const CANONICO = {
   equipe: "staff",
   fusos: "fuso", hora: "fuso", timezone: "fuso", timezones: "fuso", tz: "fuso",
   voz: "tts", falar: "tts", speak: "tts",
+  m: "musica", music: "musica", play: "musica", tocar: "musica",
   "boas-vindas": "boasvindas", welcome: "boasvindas", bemvindo: "boasvindas",
   goodbye: "adeus", despedida: "adeus", farewell: "adeus",
   clear: "limpar", purge: "limpar", limpiar: "limpar",
@@ -403,7 +406,7 @@ const COMANDOS_GERENCIAVEIS = [
   "ping", "repete", "userinfo", "kick", "ban", "limpar",
   "warnings", "clearwarnings", "warn", "acesso", "automod", "whitelist", "blocklist",
   "sentinela", "punicao", "tutorial", "assistente", "cor", "log", "banglobal", "embed", "reactionrole", "chat", "rss", "xp", "game", "autorole",
-  "staff", "boasvindas", "adeus", "fuso", "tts",
+  "staff", "boasvindas", "adeus", "fuso", "tts", "musica",
 ];
 // exportado via ctx para o comando &comando consultar
 estado.CANONICO = CANONICO;

@@ -27,6 +27,37 @@ const ENTRAR_MAX_MS = Number(process.env.VOZ_ENTRAR_TIMEOUT_MS || 20_000);
 let Revoice = null, MediaPlayer = null, revoice = null, erroCarga = null;
 const conexoes = new Map();   // canalVoz → { connection, entrouEm, falas, fila:[], ocupado }
 
+// Ganchos que o motor de música registra: `antes` abaixa a música quando o
+// TTS vai falar (ducking) e `depois` restaura — o voz.js só avisa os momentos.
+export const ganchosDeFala = { antes: null, depois: null };
+
+// Pendura um MediaPlayer EXTRA (ex.: música) na conexão existente do canal —
+// LiveKit é multi-trilha, então TTS e música coexistem na mesma call.
+export async function criarPlayerExtra(canalVoz, nome) {
+  if (!conexoes.has(canalVoz)) {
+    const r = await entrar(canalVoz);
+    if (!r?.ok) throw new Error(r?.erro || "não consegui entrar na call");
+  }
+  const c = conexoes.get(canalVoz);
+  c.extras ??= {};
+  if (!c.extras[nome]) {
+    const media = new MediaPlayer();
+    await c.connection.play(media);
+    await esperarPublicacao(c.connection, media);
+    c.extras[nome] = media;
+    log(`faixa extra "${nome}" publicada em ${canalVoz}`);
+  }
+  return c.extras[nome];
+}
+
+export function playerExtraDe(canalVoz, nome) {
+  return conexoes.get(canalVoz)?.extras?.[nome] ?? null;
+}
+
+export function canaisConectados() {
+  return [...conexoes.keys()];
+}
+
 const entrando = new Map();   // canalVoz → Promise<{ ok, … }>
 const jaTentouDestravar = new Set();
 
@@ -566,6 +597,7 @@ async function processarFila(canalVoz) {
     media.on?.("buffer", () => dbg("  ⏳ bufferizando"));
     media.on?.("error", (e) => log(`  ✗ erro no player: ${e?.message ?? e}`));
 
+    try { ganchosDeFala.antes?.(canalVoz); } catch {}
     media.playStream(fs.createReadStream(arquivo));
 
     await new Promise((res) => {
@@ -585,6 +617,7 @@ async function processarFila(canalVoz) {
     }
 
     try { media.stop?.(); } catch {}
+    try { ganchosDeFala.depois?.(canalVoz); } catch {}
     try { fs.unlinkSync(arquivo); } catch {}
     c.falas++;
   } catch (e) {

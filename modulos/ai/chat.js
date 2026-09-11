@@ -1051,6 +1051,17 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
     }
   }
 
+  // Pergunta que pede desenvolvimento → ordem de substância antes de gerar.
+  if (pedeDesenvolvimento(pergunta)) {
+    messages.push({
+      role: "system",
+      content: lang === "en"
+        ? "This question asks for DEVELOPED content (tips, techniques, explanation). Answer with substance: 4-8 sentences or a short list of concrete items — never a single generic line. If you lack specific repertoire on the topic, use the buscar_web tool first and build the answer from what it returns."
+        : "Esta pergunta pede conteúdo DESENVOLVIDO (dicas, técnicas, explicação). Responda com substância: 4 a 8 frases ou uma lista curta de itens concretos — nunca uma única frase genérica. Se faltar repertório específico sobre o tema, use a ferramenta buscar_web primeiro e monte a resposta com o que ela trouxer.",
+    });
+    dlog("pergunta pede desenvolvimento → instrução de substância adicionada");
+  }
+
   memoria.marcarRespondendo();
   try {
     return await gerar();
@@ -1215,6 +1226,15 @@ export function corrigirAutoApresentacao(texto, conta) {
     "gi",
   );
   return texto.replace(re, (_, antes, meio) => `${antes}${meio}Judy`);
+}
+
+// A pergunta pede conteúdo DESENVOLVIDO (dicas, técnicas, explicação, passo
+// a passo)? Nesses casos uma frase genérica é subentrega — o gatilho é
+// determinístico; o modelo só recebe a ordem de ir além.
+export function pedeDesenvolvimento(texto) {
+  const t = String(texto ?? "");
+  if (t.length < 12) return false;
+  return /\b(dicas?|t[ée]cnicas?|estrat[ée]gias?|recomenda(?:[çc][õo]es|r|\u00e7\u00f5es)?|explique|explica|detalh[ae]|desenvolv[ae]|como\s+(fazer|funciona|montar|construir|melhorar)|passo\s+a\s+passo|liste|quais\s+s[ãa]o|tips?|techniques?|explain|how\s+to|step\s+by\s+step)\b/i.test(t);
 }
 
 // A resposta veio em INGLÊS quando devia ser português? Contamos palavras
@@ -1827,6 +1847,25 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
       if (convertido !== resposta) { dlog("LaTeX convertido para texto legível"); resposta = convertido; }
     }
 
+    // Pergunta pedia desenvolvimento e veio uma frase raquítica? Refaz uma vez.
+    const MIN_DESENVOLVIDA = Number(process.env.CHAT_MIN_DESENVOLVIDA || 140);
+    if (resposta && resposta.length < MIN_DESENVOLVIDA && pedeDesenvolvimento(pergunta)) {
+      console.warn(`[CHAT] ⚠️ pergunta pedia desenvolvimento, resposta veio com ${resposta.length} chars — refazendo`);
+      dlog("resposta raquítica p/ pergunta aberta → refazendo");
+      try {
+        const refeita = await llmChat([
+          { role: "user", content: pergunta.slice(0, 2000) },  // `messages` vive dentro do responder — aqui o refazer é autocontido: pergunta + resposta + ordem
+          { role: "assistant", content: resposta },
+          { role: "system", content: lang === "en"
+            ? "Your reply above is too thin for what was asked. Rewrite it with real substance: 4-8 sentences or a short list of CONCRETE items (names, numbers, steps). Do not restate the question and do not philosophise about it — deliver the content."
+            : "Sua resposta acima é rasa demais para o que foi pedido. Reescreva com substância de verdade: 4 a 8 frases ou uma lista curta de itens CONCRETOS (nomes, números, passos). Não repita a pergunta nem filosofe sobre ela — entregue o conteúdo." },
+        ], { maxTokens: MAX_TOKENS, modelo: responder._modelo ?? LLM_MODEL_LEVE });
+        const limpa = limpar(refeita);
+        if (limpa && limpa.length > resposta.length) resposta = limpa;
+        else dlog("a refeita não desenvolveu — entregando a original");
+      } catch (e) { dlog(`refazer raquítica falhou (${e?.message ?? e})`); }
+    }
+
     // Repetiu ALGUMA das últimas respostas deste canal? Refaz uma vez.
     const anterior = resposta ? repetiuAlguma(canalId, resposta) : null;
     if (resposta && anterior) {
@@ -1834,7 +1873,7 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
       dlog("resposta repetida → refazendo");
       try {
         const refeita = await llmChat([
-          ...messages,
+          { role: "user", content: pergunta.slice(0, 2000) },  // `messages` vive dentro do responder — aqui o refazer é autocontido: pergunta + resposta + ordem
           { role: "assistant", content: anterior },
           { role: "system", content: lang === "en"
             ? "You already gave the reply above earlier in this conversation. Do NOT repeat it. Answer the person's LAST message specifically, with new wording and new content — if you have nothing to add, say so briefly instead of restating."
@@ -1851,7 +1890,7 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
       dlog("idioma errado (espanhol) → refazendo");
       try {
         const refeita = await llmChat([
-          ...messages,
+          { role: "user", content: pergunta.slice(0, 2000) },  // `messages` vive dentro do responder — aqui o refazer é autocontido: pergunta + resposta + ordem
           { role: "system", content: "OBRIGATÓRIO: responda em PORTUGUÊS DO BRASIL. Não use espanhol em hipótese alguma. A pergunta foi feita em português. Reescreva sua resposta inteira em português do Brasil." },
         ], { maxTokens: MAX_TOKENS, modelo: responder._modelo ?? LLM_MODEL_LEVE });
         const limpa = limpar(refeita);
@@ -1866,7 +1905,7 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
       dlog("idioma errado (inglês) → refazendo");
       try {
         const refeita = await llmChat([
-          ...messages,
+          { role: "user", content: pergunta.slice(0, 2000) },  // `messages` vive dentro do responder — aqui o refazer é autocontido: pergunta + resposta + ordem
           { role: "assistant", content: resposta },
           { role: "system", content: "OBRIGATÓRIO: a pergunta foi feita em português e sua resposta acima saiu em inglês. Reescreva a resposta INTEIRA em português do Brasil, mantendo o mesmo conteúdo. Não responda em inglês em hipótese alguma." },
         ], { maxTokens: MAX_TOKENS, modelo: responder._modelo ?? LLM_MODEL_LEVE });
@@ -1890,7 +1929,7 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
       await editarStatus(en ? "✍️ Polishing the reply…" : "✍️ Refinando a resposta…");
       try {
         const refeita = await llmChat([
-          ...messages,
+          { role: "user", content: pergunta.slice(0, 2000) },  // `messages` vive dentro do responder — aqui o refazer é autocontido: pergunta + resposta + ordem
           { role: "system", content: lang === "en"
             ? "MANDATORY: you are Judy, an open-source bot. You are NOT any AI model or company (not LFM, Liquid AI, Qwen, Llama, GPT, Claude or anything else). Never name a model as yourself, never describe 'your architecture'. If the person mentions swapping or updating the model/LLM, that's true and it's their business — acknowledge it, don't argue. Rewrite your reply obeying this."
             : "OBRIGATÓRIO: você é a Judy, uma bot de código aberto. Você NÃO é nenhum modelo nem empresa de IA (nem LFM, nem Liquid AI, nem Qwen, Llama, GPT, Claude ou qualquer outro). Nunca se apresente com nome de modelo, nunca descreva 'sua arquitetura'. Se a pessoa falou em trocar ou atualizar o modelo/LLM, isso é verdade e é assunto dela — reconheça, não conteste. Reescreva sua resposta obedecendo a isto." },

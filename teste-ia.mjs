@@ -1309,5 +1309,22 @@ console.log("\n── extração das URLs de imagem do marcador ──");
     "  → pergunta comum sobre imagem não extrai nada");
 }
 
+console.log("\n── perguntas que pedem desenvolvimento ──");
+{
+  const chat = await import("./modulos/ai/chat.js");
+  ok(chat.pedeDesenvolvimento("poderia me dar dicas de técnicas de construção no minecraft?"),
+    "★ 'dicas de técnicas' pede desenvolvimento (o caso do teste ao vivo)");
+  ok(chat.pedeDesenvolvimento("explique a todos o que é o tecnofeudalismo"),
+    "  → 'explique' também");
+  ok(chat.pedeDesenvolvimento("como fazer uma fazenda de ferro?"),
+    "  → 'como fazer' também");
+  ok(!chat.pedeDesenvolvimento("que horas são agora?"),
+    "  → pergunta factual curta NÃO pede");
+  ok(!chat.pedeDesenvolvimento("oi"),
+    "  → saudação NÃO pede");
+  ok(!chat.pedeDesenvolvimento("quanto é a raiz cúbica de 648466?"),
+    "  → conta NÃO pede");
+}
+
 console.log(`\nIA: ${pass} ok, ${fail} falha(s)`);
 process.exit(fail ? 1 : 0);

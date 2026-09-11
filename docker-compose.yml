@@ -37,6 +37,8 @@ services:
       - CODIGO_DIR=${CODIGO_DIR:-}      # pasta local para o ler_codigo (vazio = o código da própria imagem)
       - GITHUB_TOKEN=${GITHUB_TOKEN:-}  # só para ler repositório privado
       - LLAMA_NGL=${LLAMA_NGL:-999}     # camadas do modelo na GPU (IA_MODO=local)
+      - LLAMA_CTX=${LLAMA_CTX:-8192}    # contexto do modelo local (tokens)
+      - LLAMA_FLAGS=${LLAMA_FLAGS:-}    # flags extras do llama-server (ex.: --temp 1.0 --top-k 64)
     extra_hosts:
       - "host.docker.internal:host-gateway"
     # GPU para o modo local: descomente se a máquina tem GPU/iGPU com driver

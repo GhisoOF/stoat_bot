@@ -308,6 +308,12 @@ function sugerir(arqs, pedido) {
 }
 
 export async function executar({ acao, caminho, termo, linha_inicial, quantidade }) {
+  // Teto de leitura: pedir o arquivo INTEIRO (o modelo já pediu quantidade=1000)
+  // estourava o contexto do LLM e derrubava o turno todo. Teto de 400 linhas
+  // por chamada (a página padrão é 300; 400 deixa fechar um arquivo na última
+  // página); para ver mais, pagina-se com linha_inicial — o retorno já diz
+  // onde continua.
+  if (quantidade != null) quantidade = Math.min(Number(quantidade) || 300, 400);
   caminho = normalizarCaminho(caminho);
   const pagina = { linha_inicial, quantidade, termo };
   // ── Plano A: o disco ──

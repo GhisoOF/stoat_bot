@@ -94,8 +94,42 @@ if (!iaLigada()) {
     // Nomes curtos e estáveis: é por eles que o bot pede cada modelo.
     process.env.LLM_MODEL = process.env.LLM_MODEL || "conversa";
     process.env.LLM_MODEL_VISAO = "visao";
+
+    // ── Download dos modelos NO BOOT, antes de tudo ─────────────────────
+    // Antes, o download era refém do primeiro pedido: o llama-swap só ligava
+    // o servidor sob demanda, o pedido estourava o timeout, o swap matava o
+    // servidor e o download morria junto — avançava só em rajadas de ~2min
+    // por mensagem. Agora o boot baixa cada modelo até o fim (com progresso
+    // no docker logs) e o bot só conecta ao Stoat com tudo pronto no disco.
+    // Um marcador em ${cache} evita repetir a checagem nos boots seguintes.
+    const baixarModelo = (m) => new Promise((res) => {
+      const marca = `${cache}/.pronto-${m.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+      if (existsSync(marca)) return res(true);
+      console.info(`[INICIAR] baixando modelo ${m} — o bot só sobe quando terminar (progresso abaixo)…`);
+      const p = spawn(LLAMA_BIN,
+        ["-hf", m, "--host", "127.0.0.1", "--port", "8199", "-c", "256", "-ngl", "0"],
+        { env: { ...process.env, LLAMA_CACHE: cache }, stdio: ["ignore", "inherit", "inherit"] });
+      let vivo = true;
+      p.on("exit", (c) => { if (vivo) { vivo = false; console.error(`[INICIAR] download de ${m} falhou (saída ${c}) — o llama-swap tenta de novo sob demanda.`); res(false); } });
+      const espera = setInterval(async () => {
+        if (!vivo) return clearInterval(espera);
+        try {
+          const r = await fetch("http://127.0.0.1:8199/health").catch(() => null);
+          if (r?.ok) {
+            clearInterval(espera); vivo = false;
+            try { writeFileSync(marca, new Date().toISOString()); } catch {}
+            console.info(`[INICIAR] modelo pronto no disco: ${m}`);
+            try { p.kill("SIGTERM"); } catch {}
+            res(true);
+          }
+        } catch {}
+      }, 3000);
+    });
+    for (const m of [...new Set([conversa, visao])]) await baixarModelo(m);
+
     const cfg = `/data/llama-swap.yaml`;
-    const comando = (m) => `${LLAMA_BIN} -hf ${m} --host 127.0.0.1 --port \${PORT} -c ${ctx} -ngl ${ngl} --jinja --temp 0.2 --top-k 80 --repeat-penalty 1.05`;
+    const flagsExtra = (process.env.LLAMA_FLAGS || "").trim();  // ex.: "--temp 1.0 --top-p 0.95 --top-k 64" (Gemma) — cada família tem o seu
+    const comando = (m) => `${LLAMA_BIN} -hf ${m} --host 127.0.0.1 --port \${PORT} -c ${ctx} -ngl ${ngl} --jinja${flagsExtra ? " " + flagsExtra : ""}`;
     writeFileSync(cfg, [
       "models:",
       "  conversa:",
@@ -125,9 +159,10 @@ if (!iaLigada()) {
     // carrega tudo na CPU mesmo com adaptador disponível. 999 = "tudo o que
     // couber"; sem GPU exposta ao container, ele cai para CPU sozinho.
     const ngl = process.env.LLAMA_NGL || "999";
+    const flagsExtra = (process.env.LLAMA_FLAGS || "").trim().split(/\s+/).filter(Boolean);
     subirBin("llama", LLAMA_BIN,
       ["-hf", modelo, "--host", "127.0.0.1", "--port", process.env.LLAMA_PORTA || "8082",
-       "-c", process.env.LLAMA_CTX || "8192", "-ngl", ngl, "--jinja"],
+       "-c", process.env.LLAMA_CTX || "8192", "-ngl", ngl, "--jinja", ...flagsExtra],
       { LLAMA_CACHE: cache });
   } else {
     console.error(`[INICIAR] IA_MODO=local mas ${LLAMA_BIN} não existe nesta imagem — a IA vai falhar. Use IA_MODO=online ou aponte LLM_URL para um servidor externo.`);

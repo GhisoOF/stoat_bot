@@ -23,7 +23,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # yt-dlp: fonte de áudio da música (YouTube/SoundCloud; Spotify resolve por busca).
 # O nome do binário muda por arquitetura — sem isso o build arm64 do CI quebra
 # com exit 127 ("not found" = binário da arquitetura errada).
-RUN set -x; ARQ="yt-dlp_linux"; [ "$TARGETARCH" = "arm64" ] && ARQ="yt-dlp_linux_aarch64"; \
+# (uname -m em vez de $TARGETARCH: este RUN fica antes da redeclaração do ARG
+# no estágio, onde a variável chega vazia — o uname funciona em qualquer lugar)
+RUN set -x; ARQ="yt-dlp_linux"; [ "$(uname -m)" = "aarch64" ] && ARQ="yt-dlp_linux_aarch64"; \
     curl -fsSL "https://github.com/yt-dlp/yt-dlp/releases/latest/download/${ARQ}" \
       -o /usr/local/bin/yt-dlp && chmod +x /usr/local/bin/yt-dlp \
     && /usr/local/bin/yt-dlp --version

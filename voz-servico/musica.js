@@ -15,6 +15,9 @@ import { spawn } from "node:child_process";
 import * as voz from "./voz.js";
 
 const YTDLP = process.env.YTDLP_BIN || "yt-dlp";
+// O YouTube devolve 403 para o cliente web do yt-dlp; os clientes android/tv
+// passam (mesma manobra do remix-bot). Ajustável por env se o YouTube mudar.
+const CLIENTES_YT = ["--extractor-args", `youtube:player_client=${process.env.MUSICA_YT_CLIENTES || "android,tv"}`];
 const DUCK = Math.min(1, Math.max(0.05, Number(process.env.MUSICA_DUCK || 0.2)));
 const MAX_FILA = Number(process.env.MUSICA_MAX_FILA || 200);
 const SPOTIFY_ID = process.env.SPOTIFY_ID || "";
@@ -58,7 +61,7 @@ export function montarBusca(nome, artistas) {
 // ── yt-dlp: metadados e stream ──────────────────────────────────────────────
 function ytdlpJson(alvo, { playlistOk = true } = {}) {
   return new Promise((res, rej) => {
-    const args = ["-J", "--no-warnings", playlistOk ? "--flat-playlist" : "--no-playlist", alvo];
+    const args = ["-J", "--no-warnings", ...CLIENTES_YT, playlistOk ? "--flat-playlist" : "--no-playlist", alvo];
     const p = spawn(YTDLP, args, { stdio: ["ignore", "pipe", "pipe"] });
     let fora = "", erro = "";
     p.stdout.on("data", (d) => (fora += d));
@@ -205,7 +208,7 @@ async function tocarProxima(canalVoz) {
 
     const media = await garantirPlayer(canalVoz);
     pararStream(st);
-    const proc = spawn(YTDLP, ["-f", "bestaudio/best", "--no-playlist", "-o", "-", "--quiet", "--no-warnings", item.url],
+    const proc = spawn(YTDLP, ["-f", "bestaudio/best", ...CLIENTES_YT, "--no-playlist", "-o", "-", "--quiet", "--no-warnings", item.url],
       { stdio: ["ignore", "pipe", "pipe"] });
     st.proc = proc;
     let erroTxt = "";

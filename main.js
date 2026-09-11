@@ -342,6 +342,8 @@ const rotas = {
   // Voz nas calls (TTS)
   tts:           ttsVoz.cmdTts,
   musica:        musicaCmd.cmdMusica,
+  entrar:        (msg, args, ctx) => ttsVoz.cmdTts(msg, ["entrar", ...args], ctx),
+  sairdacall:    (msg, args, ctx) => ttsVoz.cmdTts(msg, ["sair", ...args], ctx),
   voz:           ttsVoz.cmdTts,
   falar:         ttsVoz.cmdTts,
   // Relógio com vários fusos
@@ -386,6 +388,7 @@ const CANONICO = {
   fusos: "fuso", hora: "fuso", timezone: "fuso", timezones: "fuso", tz: "fuso",
   voz: "tts", falar: "tts", speak: "tts",
   m: "musica", music: "musica", play: "musica", tocar: "musica",
+  join: "entrar", call: "entrar",
   "boas-vindas": "boasvindas", welcome: "boasvindas", bemvindo: "boasvindas",
   goodbye: "adeus", despedida: "adeus", farewell: "adeus",
   clear: "limpar", purge: "limpar", limpiar: "limpar",

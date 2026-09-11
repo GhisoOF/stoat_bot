@@ -769,6 +769,18 @@ export async function cmdTts(message, args, ctx) {
     ultimaFala.set(chaveAcao, Date.now());
 
     if (entrando) {
+      // Fim da meia-verdade: sem o servidor em TTS_SERVIDORES, o bot entrava
+      // na call, prometia ler… e a leitura era barrada em silêncio no
+      // aoMensagem. Agora o entrar avisa na hora, com o id pronto para copiar.
+      if (!servidorPermitido(serverId)) {
+        return sendEmbed(message.channel, tr(ctx,
+          { title: "🔒 Voz desligada neste servidor",
+            description: `A leitura por voz só roda nos servidores listados em \`TTS_SERVIDORES\` no \`.env\` do bot.\nPara liberar aqui, quem cuida do bot adiciona este id à lista:\n\`${serverId}\`\n(vários ids separados por vírgula; reinicie o bot depois)`,
+            colour: COR.aviso },
+          { title: "🔒 Voice disabled on this server",
+            description: `Voice reading only runs on servers listed in \`TTS_SERVIDORES\` in the bot's \`.env\`.\nTo enable it here, whoever runs the bot adds this id to the list:\n\`${serverId}\`\n(comma-separated ids; restart the bot afterwards)`,
+            colour: COR.aviso }));
+      }
       const server = await getServer(message).catch(() => null);
       const achado = descobrirCanalDeVoz(message, server, ctx, c);
 

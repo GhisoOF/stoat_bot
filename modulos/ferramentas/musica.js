@@ -59,8 +59,8 @@ export async function cmdMusica(msg, args, ctx) {
     return ctx.sendEmbed(msg.channel, {
       title: en ? "🎵 Music" : "🎵 Música",
       description: en
-        ? "`&musica <link or name>` — play (YouTube, SoundCloud, Spotify; playlists too)\n`&musica pausar` · `&musica play` — pause / resume\n`&musica skip` — next track\n`&musica fila` — current queue\n`&musica parar` — stop and clear\n`&musica volume 80` — 0 to 200%\n`&musica loop faixa|fila|nao`\n\nThe bot must be in a call (`&tts entrar #channel`). When TTS speaks, the music ducks automatically."
-        : "`&musica <link ou nome>` — tocar (YouTube, SoundCloud, Spotify; playlists também)\n`&musica pausar` · `&musica play` — pausar / retomar\n`&musica skip` — próxima faixa\n`&musica fila` — lista de reprodução atual\n`&musica parar` — parar e limpar\n`&musica volume 80` — 0 a 200%\n`&musica loop faixa|fila|nao`\n\nO bot precisa estar numa call (`&tts entrar #canal`). Quando o TTS fala, a música abaixa sozinha.",
+        ? "`&musica <link or name>` — play (YouTube, SoundCloud, Spotify; playlists too)\n`&musica pausar` · `&musica play` — pause / resume\n`&musica skip` — next track\n`&musica fila` — current queue\n`&musica parar` — stop and clear\n`&musica volume 80` — 0 to 200%\n`&musica loop faixa|fila|nao`\n\nThe bot must be in a call (`&entrar` — new shortcut — or `&tts entrar`). When TTS speaks, the music ducks automatically."
+        : "`&musica <link ou nome>` — tocar (YouTube, SoundCloud, Spotify; playlists também)\n`&musica pausar` · `&musica play` — pausar / retomar\n`&musica skip` — próxima faixa\n`&musica fila` — lista de reprodução atual\n`&musica parar` — parar e limpar\n`&musica volume 80` — 0 a 200%\n`&musica loop faixa|fila|nao`\n\nO bot precisa estar numa call (`&entrar` — atalho novo — ou `&tts entrar`). Quando o TTS fala, a música abaixa sozinha.",
       color: ctx.COR.info,
     });
   }

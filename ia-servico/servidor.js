@@ -190,6 +190,23 @@ async function conversarComFerramentas(messages, { modelo, usarFerramentas = tru
       let args = c?.function?.arguments ?? {};
       if (typeof args === "string") { try { args = JSON.parse(args); } catch { args = {}; } }
 
+      // Releitura do MESMO arquivo que já está no contexto (o fluxo injeta o
+      // conteúdo direto antes da geração): não executa de novo — duplicar o
+      // arquivo no prompt foi o que estourou o contexto (19k > 16k tokens).
+      if (nome === "ler_codigo" && (args?.acao === "ler" || args?.acao === "estrutura") && args?.caminho) {
+        const jaTem = hist.some((m) => m.role === "system"
+          && typeof m.content === "string"
+          && /CONTEÚDO REAL do arquivo|ESTRUTURA REAL/.test(m.content)
+          && m.content.includes(args.caminho));
+        if (jaTem) {
+          log(`ferramenta: ${nome} — releitura de ${args.caminho} pulada (conteúdo já está no contexto)`);
+          usos.push({ ferramenta: nome, ms: 0, erro: false, pulada: true });
+          hist.push({ role: "tool", tool_call_id: c?.id ?? undefined,
+            content: JSON.stringify({ aviso: `O conteúdo de ${args.caminho} JÁ ESTÁ nas mensagens acima (bloco "CONTEÚDO REAL"). Use-o — não é preciso ler de novo. Para OUTRO trecho, chame com linha_inicial.` }) });
+          continue;
+        }
+      }
+
       log(`ferramenta: ${nome}`, JSON.stringify(args).slice(0, 200));
       const inicio = Date.now();
       const resultado = await ferramentas.executar(nome, args);

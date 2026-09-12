@@ -30,6 +30,7 @@ import * as bemvindo  from "./modulos/ferramentas/boas-vindas.js";
 import * as fuso      from "./modulos/ferramentas/fuso.js";
 import * as ttsVoz    from "./modulos/ferramentas/tts.js";
 import * as musicaCmd from "./modulos/ferramentas/musica.js";
+import * as webhooks  from "./modulos/ferramentas/webhooks.js";
 import * as staff     from "./modulos/moderacao/staff.js";
 import * as tutorial   from "./modulos/moderacao/tutorial.js";
 import * as corCargo   from "./modulos/moderacao/cor-cargo.js";
@@ -342,6 +343,7 @@ const rotas = {
   // Voz nas calls (TTS)
   tts:           ttsVoz.cmdTts,
   musica:        musicaCmd.cmdMusica,
+  webhook:       webhooks.cmdWebhook,
   entrar:        (msg, args, ctx) => ttsVoz.cmdTts(msg, ["entrar", ...args], ctx),
   sair:          (msg, args, ctx) => ttsVoz.cmdTts(msg, ["sair", ...args], ctx),
   voz:           ttsVoz.cmdTts,
@@ -389,6 +391,7 @@ const CANONICO = {
   voz: "tts", falar: "tts", speak: "tts",
   m: "musica", music: "musica", play: "musica", tocar: "musica",
   join: "entrar", call: "entrar", leave: "sair", sairdacall: "sair",
+  webhooks: "webhook", gancho: "webhook", wh: "webhook",
   "boas-vindas": "boasvindas", welcome: "boasvindas", bemvindo: "boasvindas",
   goodbye: "adeus", despedida: "adeus", farewell: "adeus",
   clear: "limpar", purge: "limpar", limpiar: "limpar",
@@ -409,7 +412,7 @@ const COMANDOS_GERENCIAVEIS = [
   "ping", "repete", "userinfo", "kick", "ban", "limpar",
   "warnings", "clearwarnings", "warn", "acesso", "automod", "whitelist", "blocklist",
   "sentinela", "punicao", "tutorial", "assistente", "cor", "log", "banglobal", "embed", "reactionrole", "chat", "rss", "xp", "game", "autorole",
-  "staff", "boasvindas", "adeus", "fuso", "tts", "musica",
+  "staff", "boasvindas", "adeus", "fuso", "tts", "musica", "webhook",
 ];
 // exportado via ctx para o comando &comando consultar
 estado.CANONICO = CANONICO;
@@ -480,6 +483,9 @@ client.on("ready", async () => {
   ctxRss.client = client;
   ctxRss.configDoServidor = store.configDoServidor;
   rss.iniciarAgendador(ctxRss);
+
+  // Receptor de webhooks (GitHub, Crafty, formato Discord…) — porta própria
+  webhooks.iniciarReceptor(ctxRss);
 
   banGlobal.iniciarAutoImportacao(client, criarContexto);
 });

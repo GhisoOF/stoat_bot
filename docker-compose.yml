@@ -36,6 +36,8 @@ services:
       - GITHUB_BRANCH=${GITHUB_BRANCH:-main}
       - CODIGO_DIR=${CODIGO_DIR:-}      # pasta local para o ler_codigo (vazio = o código da própria imagem)
       - GITHUB_TOKEN=${GITHUB_TOKEN:-}  # só para ler repositório privado
+      - WEBHOOK_PORTA=${WEBHOOK_PORTA:-8095}      # receptor de webhooks (&webhook)
+      - WEBHOOK_URL_BASE=${WEBHOOK_URL_BASE:-}    # endereço público/da rede que aparece nas URLs geradas
       - LLAMA_NGL=${LLAMA_NGL:-999}     # camadas do modelo na GPU (IA_MODO=local)
       - LLAMA_CTX=${LLAMA_CTX:-8192}    # contexto do modelo local (tokens)
       - LLAMA_FLAGS=${LLAMA_FLAGS:-}    # flags extras do llama-server (ex.: --temp 1.0 --top-k 64)
@@ -48,6 +50,8 @@ services:
     #group_add:
     #  - video
     #  - render
+    ports:
+      - "${WEBHOOK_PORTA:-8095}:${WEBHOOK_PORTA:-8095}"   # receptor de webhooks
     volumes:
       - stoat_data:/data
 

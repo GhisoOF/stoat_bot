@@ -207,7 +207,8 @@ próprio bot: `&help <comando>`. Um resumo:
 | `&log` · `&acesso` · `&staff` | chat de logs, quem usa comandos, equipe |
 | `&banglobal` | lista global *(BanMembers)* |
 | `&whitelist` · `&blocklist` | convites permitidos, listas anti-link |
-| `&musica` (`&m`, `&play`) | música nas calls: YouTube, SoundCloud e Spotify (playlists também), com fila, pausa, skip, volume e loop — e a música **abaixa sozinha quando o `&tts` fala** (ducking); playlists do Spotify pedem `SPOTIFY_ID`/`SPOTIFY_SECRET` no `.env` (app grátis em developer.spotify.com; faixas avulsas funcionam sem chave) |
+| `&webhook` (`&wh`) | receptor universal de webhooks: GitHub (push, issues, PR, releases, Actions), Crafty/Minecraft e qualquer serviço que fale o formato Discord (Uptime Kuma, Grafana…) — cada gancho tem canal próprio e filtro de eventos, então dá para separar issues num chat e o CI noutro; URL secreta por gancho, teto anti-flood |
+| `&musica` (`&m`, `&play`) + `&entrar`/`&sair` | música nas calls: YouTube, SoundCloud e Spotify (playlists também), com fila, pausa, skip, volume e loop — e a música **abaixa sozinha quando o `&tts` fala** (ducking); playlists do Spotify pedem `SPOTIFY_ID`/`SPOTIFY_SECRET` no `.env` (app grátis em developer.spotify.com; faixas avulsas funcionam sem chave) |
 | `&comando` · `&cargomudo` | (des)ativar comandos, cargo de silêncio |
 | `&embed` · `&reactionrole` · `&autorole` · `&cor` | utilidades *(permissões próprias)* |
 | `&boasvindas` · `&adeus` · `&fuso` · `&rss` | entrada/saída, fusos, notícias |

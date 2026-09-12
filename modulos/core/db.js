@@ -113,6 +113,17 @@ export function abrirBanco(caminho) {
 
   // (Curadoria RSS) feeds cadastrados por servidor
   db.exec(`
+    CREATE TABLE IF NOT EXISTS ganchos (
+      id        INTEGER PRIMARY KEY AUTOINCREMENT,
+      serverId  TEXT NOT NULL,
+      nome      TEXT NOT NULL,
+      canalId   TEXT NOT NULL,
+      token     TEXT NOT NULL,
+      eventos   TEXT DEFAULT '',
+      usos      INTEGER DEFAULT 0,
+      criadoEm  TEXT NOT NULL,
+      UNIQUE (serverId, nome)
+    );
     CREATE TABLE IF NOT EXISTS rss_feeds (
       id        INTEGER PRIMARY KEY AUTOINCREMENT,
       serverId  TEXT NOT NULL,
@@ -1506,4 +1517,27 @@ export function volumeRecente(serverId, janelaMs = 3600_000) {
 
 export function getDb() {
   return db;
+}
+
+// ── Webhooks (ganchos) ──────────────────────────────────────────────────────
+export function criarGancho(serverId, nome, canalId, token) {
+  const r = prep("INSERT INTO ganchos (serverId, nome, canalId, token, criadoEm) VALUES (?,?,?,?,?)")
+    .run(serverId, nome, canalId, token, new Date().toISOString());
+  return ganchoPorId(Number(r.lastInsertRowid));
+}
+export function listarGanchos(serverId) {
+  return prep("SELECT * FROM ganchos WHERE serverId = ? ORDER BY nome").all(serverId);
+}
+export function ganchoPorId(id) {
+  return prep("SELECT * FROM ganchos WHERE id = ?").get(id) ?? null;
+}
+export function atualizarGancho(id, campos) {
+  if (campos.canalId != null) prep("UPDATE ganchos SET canalId = ? WHERE id = ?").run(campos.canalId, id);
+  if (campos.eventos != null) prep("UPDATE ganchos SET eventos = ? WHERE id = ?").run(campos.eventos, id);
+}
+export function removerGancho(id) {
+  return prep("DELETE FROM ganchos WHERE id = ?").run(id).changes;
+}
+export function registrarUsoGancho(id) {
+  prep("UPDATE ganchos SET usos = usos + 1 WHERE id = ?").run(id);
 }

@@ -185,6 +185,30 @@ function parametrosPT(P) {
       { nome: "off", desc: "desliga" },
     ],
 
+    musica: [
+      { nome: "<link ou nome>", desc: "toca (YouTube, SoundCloud, Spotify); com som rolando, entra na fila. Playlists de YouTube/SoundCloud entram inteiras" },
+      { nome: "pausar | play", desc: "pausa e retoma (`play` com texto depois vira `tocar`)" },
+      { nome: "skip", desc: "pula para a próxima da fila" },
+      { nome: "fila", desc: "o que está tocando e a lista de reprodução atual" },
+      { nome: "parar", desc: "para e limpa a fila" },
+      { nome: "volume", valor: "<0-200>", desc: "volume da música em % (o ducking respeita esse valor ao voltar)" },
+      { nome: "loop", valor: "faixa | fila | nao", desc: "repete a faixa atual, a fila inteira, ou desliga" },
+      { nome: "Entrar e sair", desc: "`&entrar` e `&sair` — a mesma call serve TTS e música; quando o TTS fala, a música **abaixa sozinha** e volta depois" },
+      { nome: "Spotify", desc: "faixa avulsa sem chave; playlist/álbum pede `SPOTIFY_ID`/`SPOTIFY_SECRET` no `.env` de quem hospeda" },
+    ],
+
+    webhook: [
+      { nome: "criar", valor: "<nome> [#canal]", desc: "novo gancho; a URL secreta aparece uma vez (padrão: publica no canal do comando)" },
+      { nome: "lista", desc: "os ganchos do servidor, com canal, filtro e usos" },
+      { nome: "canal", valor: "<nome> <#canal>", desc: "muda para onde o gancho publica" },
+      { nome: "eventos", valor: "<nome> <lista|todos>", desc: "filtra: `push,issues,workflow_run`… (nomes dos eventos do GitHub; `discord` e `generico` para as outras fontes)" },
+      { nome: "url", valor: "<nome>", desc: "mostra a URL secreta de novo" },
+      { nome: "testar", valor: "<nome>", desc: "publica um embed de teste no canal do gancho" },
+      { nome: "remover", valor: "<nome>", desc: "apaga o gancho — a URL morre na hora" },
+      { nome: "Crafty/Minecraft", desc: "na config do servidor no Crafty: Webhooks → provider **Discord** → cole a URL do gancho" },
+      { nome: "GitHub", desc: "Settings → Webhooks → Add webhook → content type `application/json` → cole a URL" },
+    ],
+
     tts: [
       { nome: "<texto>", desc: "a Judy fala isso na call agora (não passa pela peneira — é pedido explícito)" },
       { nome: "falar", valor: "<texto>", desc: "força a fala mesmo que o texto pareça um subcomando (`&tts falar sair`)" },
@@ -403,6 +427,30 @@ function parametrosEN(P) {
       { nome: "canal", valor: "<#channel|aqui>", desc: "where to post" },
       { nome: "agora", desc: "fetches and posts now (test)" },
       { nome: "off", desc: "turns it off" },
+    ],
+
+    musica: [
+      { nome: "<link or name>", desc: "plays (YouTube, SoundCloud, Spotify); if something is on, it queues. YouTube/SoundCloud playlists come in whole" },
+      { nome: "pausar | play", desc: "pause and resume (`play` followed by text becomes `tocar`)" },
+      { nome: "skip", desc: "skips to the next in the queue" },
+      { nome: "fila", desc: "what's playing and the current queue" },
+      { nome: "parar", desc: "stops and clears the queue" },
+      { nome: "volume", valor: "<0-200>", desc: "music volume in % (ducking restores to this value)" },
+      { nome: "loop", valor: "faixa | fila | nao", desc: "repeats the current track, the whole queue, or turns it off" },
+      { nome: "Joining and leaving", desc: "`&entrar` and `&sair` — the same call serves TTS and music; while TTS speaks, the music **ducks by itself** and comes back after" },
+      { nome: "Spotify", desc: "single tracks keyless; playlists/albums need `SPOTIFY_ID`/`SPOTIFY_SECRET` in the host's `.env`" },
+    ],
+
+    webhook: [
+      { nome: "criar", valor: "<name> [#channel]", desc: "new hook; the secret URL shows once (default: posts to the command's channel)" },
+      { nome: "lista", desc: "the server's hooks, with channel, filter and usage count" },
+      { nome: "canal", valor: "<name> <#channel>", desc: "changes where the hook posts" },
+      { nome: "eventos", valor: "<name> <list|todos>", desc: "filters: `push,issues,workflow_run`… (GitHub event names; `discord` and `generico` for the other sources)" },
+      { nome: "url", valor: "<name>", desc: "shows the secret URL again" },
+      { nome: "testar", valor: "<name>", desc: "posts a test embed to the hook's channel" },
+      { nome: "remover", valor: "<name>", desc: "deletes the hook — the URL dies instantly" },
+      { nome: "Crafty/Minecraft", desc: "in the server config on Crafty: Webhooks → provider **Discord** → paste the hook URL" },
+      { nome: "GitHub", desc: "Settings → Webhooks → Add webhook → content type `application/json` → paste the URL" },
     ],
 
     tts: [

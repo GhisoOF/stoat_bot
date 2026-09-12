@@ -188,6 +188,11 @@ function detalhesPT(P) {
       desc: "Mostra a **equipe do servidor**, agrupada por cargo e com quem tem cada um.\n\nA lista não tem cadastro próprio: ela lê os mesmos cargos do `&acesso cargo`. Então adicionar aqui **também dá acesso aos comandos de moderação** — e remover tira os dois de uma vez, sem o quadro de avisos discordar da permissão real.\n\n`&staff add <@cargo>` · `&staff remove <@cargo>` · `&staff limpar`\n`&staff titulo <@cargo> <texto>` — rótulo exibido no lugar do nome do cargo\n\n_Consultar é público; mexer exige ManagePermissions._",
       perm: "ManagePermissions", ex: `${P}staff add Moderador`,
     },
+    webhook: {
+      uso: `${P}webhook [criar <nome> [#canal]|lista|canal|eventos|url|testar|remover]`,
+      desc: "Receptor **universal** de webhooks: serviços externos publicam num canal seu.\n\n**Funciona com:** GitHub (push, issues, PR, releases, Actions, star, fork…), Crafty/Minecraft, e **qualquer ferramenta que fale o formato Discord** (Uptime Kuma, Grafana…) — é só colar a URL do gancho onde iria a URL do Discord.\n\n**O modelo:** cada *gancho* tem nome, canal próprio e filtro de eventos. Separar por chats é criar um gancho por assunto:\n`&webhook criar issues #issues` + `&webhook eventos issues issues,issue_comment`\n`&webhook criar ci #ci` + `&webhook eventos ci workflow_run`\n`&webhook criar mine #minecraft` ← aponte o Crafty (provider Discord) para ele\n\n**Segurança:** a URL é o segredo (token de 128 bits); `remover` mata a URL na hora; teto de 30 publicações/min por gancho contra flood.\n\n_Defina `WEBHOOK_URL_BASE` no `.env` (endereço público ou da rede) para as URLs saírem prontas._",
+      perm: "ManageMessages (ou staff); `lista` é livre", ex: `${P}webhook criar github #avisos`,
+    },
     musica: {
       uso: `${P}musica <link ou nome> | [pausar|play|skip|fila|parar|volume <0-200>|loop <faixa|fila|nao>]`,
       desc: "Música nas calls — **YouTube, SoundCloud e Spotify**, com fila por canal.\n\n**O básico:**\n`&entrar` — dentro da call (a mesma do TTS)\n`&musica <link ou nome>` — toca; com som rolando, entra na fila\n`&musica pausar` · `&musica play` — pausa e retoma\n`&musica skip` — próxima · `&musica fila` — a lista atual\n`&musica parar` — para e limpa a fila · `&sair` — ela sai da call\n\n**Ajustes:** `&musica volume 80` (0 a 200%) · `&musica loop faixa|fila|nao`\n\n**Fontes:** link ou playlist do YouTube/SoundCloud, busca por texto, e faixa do Spotify (sem chave). Playlist/álbum do Spotify pede `SPOTIFY_ID`/`SPOTIFY_SECRET` no `.env` de quem hospeda o bot.\n\n**Com o TTS na mesma call:** a música **abaixa sozinha** enquanto a fala sai e volta ao volume normal depois (ducking).\n\n_Aliases: `&m` · `&play` · `&tocar`._",
@@ -414,6 +419,11 @@ function detalhesEN(P) {
       uso: `${P}staff [add|remove|title|clear]`,
       desc: "Shows the **server's staff**, grouped by role and listing who holds each one.\n\nThe list has no separate registry: it reads the very same roles as `&acesso cargo`. So adding here **also grants access to the moderation commands** — and removing drops both at once, so the notice board can never disagree with the actual permission.\n\n`&staff add <@role>` · `&staff remove <@role>` · `&staff clear`\n`&staff title <@role> <text>` — label shown instead of the role's name\n\n_Viewing is public; changing requires ManagePermissions._",
       perm: "ManagePermissions", ex: `${P}staff add Moderator`,
+    },
+    webhook: {
+      uso: `${P}webhook [criar <name> [#channel]|lista|canal|eventos|url|testar|remover]`,
+      desc: "**Universal** webhook receiver: external services post into your channels.\n\n**Works with:** GitHub (push, issues, PRs, releases, Actions, star, fork…), Crafty/Minecraft, and **anything that speaks the Discord format** (Uptime Kuma, Grafana…) — just paste the hook URL where the Discord URL would go.\n\n**The model:** each *hook* has a name, its own channel and an event filter. Per-chat separation is one hook per subject:\n`&webhook criar issues #issues` + `&webhook eventos issues issues,issue_comment`\n`&webhook criar ci #ci` + `&webhook eventos ci workflow_run`\n`&webhook criar mine #minecraft` ← point Crafty (Discord provider) at it\n\n**Security:** the URL is the secret (128-bit token); `remover` kills the URL instantly; 30 posts/min cap per hook against floods.\n\n_Set `WEBHOOK_URL_BASE` in `.env` (public or LAN address) so URLs come out ready._",
+      perm: "ManageMessages (or staff); `lista` is open", ex: `${P}webhook criar github #alerts`,
     },
     musica: {
       uso: `${P}musica <link or name> | [pausar|play|skip|fila|parar|volume <0-200>|loop <faixa|fila|nao>]`,

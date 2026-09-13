@@ -2029,6 +2029,17 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
 
     const anexosIA = chamarServicoIA._anexos ?? [];
     chamarServicoIA._anexos = [];
+
+    // Guarda de honestidade: pediu imagem, não veio anexo → a resposta admite,
+    // com o erro real da ferramenta se houver — nunca o "aqui está" mentiroso.
+    if (!anexosIA.length && pedeImagemGerada(pergunta) && resposta && !/não consegui|falhou|can't|couldn't|unable/i.test(resposta)) {
+      const erroFerr = (evidencia ?? "").match(/\[gerar_imagem[^\]]*\]\n\{"erro":"((?:[^"\\]|\\.)*)"/);
+      const motivo = erroFerr ? erroFerr[1].replace(/\\"/g, '"').slice(0, 200) : null;
+      console.warn(`[CHAT] ⚠️ pedido de imagem sem anexo — trocando a resposta pela admissão${motivo ? ` (${motivo})` : ""}`);
+      resposta = (lang === "en")
+        ? `I couldn't generate the image this time${motivo ? ` — the generator said: ${motivo}` : " — the generator failed on my side"}. Try again in a moment.`
+        : `Não consegui gerar a imagem desta vez${motivo ? ` — o gerador disse: ${motivo}` : " — o gerador falhou do meu lado"}. Tenta de novo daqui a pouco.`;
+    }
     for (const a of anexosIA.slice(0, 3)) {
       try {
         const id = await subirAnexo(a);

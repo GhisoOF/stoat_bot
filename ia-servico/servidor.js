@@ -211,6 +211,7 @@ async function conversarComFerramentas(messages, { modelo, usarFerramentas = tru
       const inicio = Date.now();
       const resultado = await ferramentas.executar(nome, args);
       usos.push({ ferramenta: nome, ms: Date.now() - inicio, erro: !!resultado?.erro });
+      if (resultado?.erro) log(`ferramenta ${nome} ERRO: ${String(resultado.erro).slice(0, 300)}`);
 
       if (nome === "ler_codigo" && resultado?.estrutura_do_melhor) { buscaTrouxeMapa = true; usouEstrutura = true; }
 

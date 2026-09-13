@@ -423,8 +423,13 @@ async function chamarServicoIA(messages, { modelo = null, idioma = "pt" } = {}) 
   } finally { clearTimeout(t); }
 }
 
-export async function subirAnexo({ base64, mime = "image/jpeg", nome = "imagem.jpg" }) {
-  const AUTUMN = (process.env.AUTUMN_URL || "https://autumn.stoat.chat").replace(/\/$/, "");
+export async function subirAnexo({ base64, mime = "image/jpeg", nome = "imagem.jpg" }, client = null) {
+  // A URL de upload vem da configuração VIVA da API (o servidor anuncia o seu
+  // autumn no handshake) — o padrão hardcoded apodreceu quando o Stoat migrou
+  // de CDN e o upload morria com "fetch failed" sem pista.
+  const anunciado = client?.configuration?.features?.autumn?.url
+    ?? client?.config?.features?.autumn?.url ?? null;
+  const AUTUMN = (process.env.AUTUMN_URL || anunciado || "https://autumn.stoat.chat").replace(/\/$/, "");
   const form = new FormData();
   form.append("file", new Blob([Buffer.from(base64, "base64")], { type: mime }), nome);
   const r = await fetch(`${AUTUMN}/attachments`, {
@@ -2042,6 +2047,12 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
     }
     responder._erroImagem = null;
 
+    // O E2B às vezes "obedece" à legenda escrevendo literalmente "[Imagem
+    // gerada]" — com anexo presente, isso vira uma legenda padrão de verdade.
+    if (anexosIA.length && resposta && /^\[?\s*imagem\s+gerada\s*\]?\.?$/i.test(resposta.trim())) {
+      resposta = lang === "en" ? "🎨 Here it is!" : "🎨 Aqui está!";
+    }
+
     const textoFinal = (resposta
       || (en ? "_I couldn't put a reply together. Try rephrasing the question._" : "_Não consegui formular uma resposta. Tente reformular a pergunta._"))
       + avisoCorte + rodape;
@@ -2065,7 +2076,7 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
 
     for (const a of anexosIA.slice(0, 3)) {
       try {
-        const id = await subirAnexo(a);
+        const id = await subirAnexo(a, message.client);
         await message.channel.sendMessage({ content: "", attachments: [id] });
       } catch (e) { console.error("[CHAT][anexo]", e?.message ?? e); }
     }

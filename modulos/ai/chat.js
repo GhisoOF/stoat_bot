@@ -2032,7 +2032,9 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
 
     // Guarda de honestidade: pediu imagem, não veio anexo → a resposta admite,
     // com o erro real da ferramenta se houver — nunca o "aqui está" mentiroso.
-    if (!anexosIA.length && pedeImagemGerada(pergunta) && resposta && !/não consegui|falhou|can't|couldn't|unable/i.test(resposta)) {
+    // Sem anexo, não interessa o que o texto diz — inclusive o teatrinho de
+    // "o gerador falhou, mas aqui está: [Imagem gerada]". Substituição total.
+    if (!anexosIA.length && pedeImagemGerada(pergunta) && resposta) {
       const erroFerr = (chamarServicoIA._evidencia ?? "").match(/\[gerar_imagem[^\]]*\]\n\{"erro":"((?:[^"\\]|\\.)*)"/);
       const motivo = erroFerr ? erroFerr[1].replace(/\\"/g, '"').slice(0, 200) : null;
       console.warn(`[CHAT] ⚠️ pedido de imagem sem anexo — trocando a resposta pela admissão${motivo ? ` (${motivo})` : ""}`);

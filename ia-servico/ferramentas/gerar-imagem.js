@@ -87,7 +87,7 @@ function gerarEmbutido({ texto, width, height }) {
     const saida = join(tmpdir(), `sd-${Date.now()}.png`);
     // SD-Turbo: pouquíssimos passos e cfg 1.0 — é o que o torna leve em CPU.
     const passos = String(Math.min(PASSOS_MAX, Number(process.env.IMAGEM_PASSOS || 4)));
-    const finalArgs = ["-M", "txt2img", "-m", modelo, "-p", texto, "-n", NEGATIVO_FIXO,
+    const finalArgs = ["-M", "img_gen", "-m", modelo, "-p", texto, "-n", NEGATIVO_FIXO,
       "-W", String(width), "-H", String(height), "--steps", passos,
       "--cfg-scale", process.env.IMAGEM_CFG || "1.0", "--type", "q8_0", "-o", saida];
     const p = spawnProc(SD_BIN, finalArgs, { stdio: ["ignore", "ignore", "pipe"] });
@@ -150,7 +150,7 @@ export async function executar({ prompt, largura, altura }) {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
   try {
-    const r = await fetch(`${SD_URL}/sdapi/v1/txt2img`, {
+    const r = await fetch(`${SD_URL}/sdapi/v1/img_gen`, {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify(corpo), signal: ctrl.signal,
     });

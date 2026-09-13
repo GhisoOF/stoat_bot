@@ -1052,15 +1052,34 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
     }
   }
 
-  // Pedido de imagem → ordem direta de usar a ferramenta (nada de ASCII).
+  // Pedido de imagem → GERAÇÃO DIRETA, determinística: a Judy gera ANTES do
+  // modelo abrir a boca (deixado ao E2B, ele ora chama a ferramenta, ora
+  // "desenha" com ASCII, ora inventa "[Imagem gerada]"). O modelo só recebe
+  // o fato consumado e escreve a legenda.
   if (tipo === "ferramenta" && pedeImagemGerada(pergunta)) {
-    messages.push({
-      role: "system",
-      content: lang === "en"
-        ? "This request asks for a GENERATED IMAGE. Call the gerar_imagem tool NOW with a good prompt built from the request. NEVER draw with text, ASCII or emoji — if the tool is unavailable or fails, say so in one sentence."
-        : "Este pedido é de GERAÇÃO DE IMAGEM. Chame a ferramenta gerar_imagem AGORA com um bom prompt montado a partir do pedido. NUNCA desenhe com texto, ASCII ou emoji — se a ferramenta não existir ou falhar, diga isso em uma frase.",
-    });
-    dlog("pedido de imagem → ordem de usar gerar_imagem");
+    dlog("pedido de imagem → geração direta");
+    const r = await executarFerramenta("gerar_imagem",
+      { prompt: pergunta.replace(/^\s*(desenh\w+|ger[ae]\w*|cri[ae]\w*|fa[çc]a|draw|generate|create|make)\s*/i, "").slice(0, 400) },
+      { timeoutMs: Number(process.env.IMAGEM_GERACAO_TIMEOUT_MS || 180_000) + 20_000 });
+    if (r?.anexo_base64) {
+      responder._anexoDireto = { base64: r.anexo_base64, mime: r.anexo_mime || "image/png", nome: r.anexo_nome || "imagem.png" };
+      dlog("geração direta ok — imagem pronta para anexar");
+      messages.push({
+        role: "system",
+        content: lang === "en"
+          ? "The image was ALREADY generated and will be attached to your reply. Write ONLY a short one-sentence caption describing it. Do not apologise, do not draw with text, do not say you cannot."
+          : "A imagem JÁ foi gerada e será anexada à sua resposta. Escreva SÓ uma legenda curta de uma frase descrevendo-a. Não peça desculpas, não desenhe com texto, não diga que não consegue.",
+      });
+    } else {
+      responder._erroImagem = r?.erro ?? "sem resposta do gerador";
+      dlog(`geração direta falhou: ${responder._erroImagem}`);
+      messages.push({
+        role: "system",
+        content: lang === "en"
+          ? `Image generation FAILED: ${responder._erroImagem}. Tell the person in ONE sentence that the image couldn't be generated right now. Never draw with text or pretend an image exists.`
+          : `A geração da imagem FALHOU: ${responder._erroImagem}. Diga em UMA frase que a imagem não saiu agora. Nunca desenhe com texto nem finja que existe uma imagem.`,
+      });
+    }
   }
 
   // Pergunta que pede desenvolvimento → ordem de substância antes de gerar.
@@ -2006,6 +2025,23 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
         ? "\n\n_✂️ this one hit the length ceiling even after auto-continuing — ask 'continue' for the rest._"
         : "\n\n_✂️ essa estourou o teto mesmo com a continuação automática — peça 'continue' para o resto._")
       : "";
+    // Anexos vindos do serviço + o da geração direta (quando houve).
+    const anexosIA = chamarServicoIA._anexos ?? [];
+    chamarServicoIA._anexos = [];
+    if (responder._anexoDireto) { anexosIA.unshift(responder._anexoDireto); responder._anexoDireto = null; }
+
+    // Guarda de honestidade — ANTES do textoFinal, senão a troca chega
+    // depois da entrega (foi o bug do "[Imagem gerada]" que passou batido).
+    if (!anexosIA.length && pedeImagemGerada(pergunta) && resposta) {
+      const erroFerr = (chamarServicoIA._evidencia ?? "").match(/\[gerar_imagem[^\]]*\]\n\{"erro":"((?:[^"\\]|\\.)*)"/);
+      const motivo = erroFerr ? erroFerr[1].replace(/\\"/g, '"').slice(0, 200) : (responder._erroImagem ?? null);
+      console.warn(`[CHAT] ⚠️ pedido de imagem sem anexo — trocando a resposta pela admissão${motivo ? ` (${motivo})` : ""}`);
+      resposta = (lang === "en")
+        ? `I couldn't generate the image this time${motivo ? ` — the generator said: ${String(motivo).slice(0, 200)}` : " — the generator failed on my side"}. Try again in a moment.`
+        : `Não consegui gerar a imagem desta vez${motivo ? ` — o gerador disse: ${String(motivo).slice(0, 200)}` : " — o gerador falhou do meu lado"}. Tenta de novo daqui a pouco.`;
+    }
+    responder._erroImagem = null;
+
     const textoFinal = (resposta
       || (en ? "_I couldn't put a reply together. Try rephrasing the question._" : "_Não consegui formular uma resposta. Tente reformular a pergunta._"))
       + avisoCorte + rodape;
@@ -2027,21 +2063,6 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
       ? `${texto}\n\n_(${i + 1}/${partes.length})_`
       : texto;
 
-    const anexosIA = chamarServicoIA._anexos ?? [];
-    chamarServicoIA._anexos = [];
-
-    // Guarda de honestidade: pediu imagem, não veio anexo → a resposta admite,
-    // com o erro real da ferramenta se houver — nunca o "aqui está" mentiroso.
-    // Sem anexo, não interessa o que o texto diz — inclusive o teatrinho de
-    // "o gerador falhou, mas aqui está: [Imagem gerada]". Substituição total.
-    if (!anexosIA.length && pedeImagemGerada(pergunta) && resposta) {
-      const erroFerr = (chamarServicoIA._evidencia ?? "").match(/\[gerar_imagem[^\]]*\]\n\{"erro":"((?:[^"\\]|\\.)*)"/);
-      const motivo = erroFerr ? erroFerr[1].replace(/\\"/g, '"').slice(0, 200) : null;
-      console.warn(`[CHAT] ⚠️ pedido de imagem sem anexo — trocando a resposta pela admissão${motivo ? ` (${motivo})` : ""}`);
-      resposta = (lang === "en")
-        ? `I couldn't generate the image this time${motivo ? ` — the generator said: ${motivo}` : " — the generator failed on my side"}. Try again in a moment.`
-        : `Não consegui gerar a imagem desta vez${motivo ? ` — o gerador disse: ${motivo}` : " — o gerador falhou do meu lado"}. Tenta de novo daqui a pouco.`;
-    }
     for (const a of anexosIA.slice(0, 3)) {
       try {
         const id = await subirAnexo(a);

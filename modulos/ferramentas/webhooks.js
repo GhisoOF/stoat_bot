@@ -68,6 +68,17 @@ export function formatarGitHub(evento, c) {
     if (c?.action !== "created") return null;
     return { titulo: `⭐ ${repo}`, descricao: `${quem} deu uma estrela (${c?.repository?.stargazers_count ?? "?"} no total)`, cor: CORES.aviso };
   }
+  // Sub-eventos do Actions: o workflow_run com ✅/❌ já conta a história —
+  // publicar cada check_run/check_suite/workflow_job é poluição pura.
+  if (["check_run", "check_suite", "workflow_job", "status"].includes(e)) return null;
+  if (e === "package" || e === "registry_package") {
+    if (!["published", "updated"].includes(c?.action)) return null;
+    const p = c?.package ?? c?.registry_package ?? {};
+    const ver = p?.package_version?.version ?? p?.package_version?.name ?? "";
+    return { titulo: `📦 ${repo} — pacote ${c?.action === "published" ? "publicado" : "atualizado"}`,
+      descricao: `**${p?.name ?? "pacote"}**${ver ? ` \`${ver}\`` : ""}${p?.package_type ? ` (${p.package_type})` : ""}\npor ${quem}`,
+      cor: CORES.ok, url: p?.package_version?.html_url ?? p?.html_url };
+  }
   if (e === "fork") {
     return { titulo: `🍴 ${repo}`, descricao: `${quem} fez um fork → ${c?.forkee?.full_name}`, cor: CORES.info, url: c?.forkee?.html_url };
   }
@@ -98,6 +109,21 @@ export function formatarGenerico(c) {
   const linhas = Object.entries(c).slice(0, 10)
     .map(([k, v]) => `**${k}:** ${typeof v === "object" ? JSON.stringify(v).slice(0, 120) : String(v).slice(0, 160)}`);
   return { titulo: String(titulo).slice(0, 100), descricao: linhas.join("\n"), cor: CORES.info };
+}
+
+// GitHub com content type form manda \`payload=<json urlencoded>\` — sem
+// decodificar, o formatador recebia um corpo oco e tudo caía no fallback
+// anônimo ("repositório — evento X de alguém"). Aceitamos os dois formatos.
+export function desembrulharCorpo(bruto) {
+  const t = String(bruto ?? "");
+  if (t.startsWith("payload=")) {
+    try { return JSON.parse(decodeURIComponent(t.slice(8).replace(/\+/g, "%20"))); } catch {}
+  }
+  try {
+    const j = JSON.parse(t || "{}");
+    if (j?.payload && typeof j.payload === "string") { try { return JSON.parse(j.payload); } catch {} }
+    return j;
+  } catch { return { text: t.slice(0, 900) }; }
 }
 
 // Que evento é, para o filtro? ("push", "issues"… no GitHub; "discord"/"generico" nos demais)
@@ -153,10 +179,7 @@ export function iniciarReceptor(ctx) {
         if (!gancho || !tokenConfere(gancho.token, m[2])) return fim(401, { erro: "gancho ou token inválido" });
         if (estourou(gancho.id)) return fim(429, { erro: "calma: teto de publicações por minuto atingido" });
 
-        let json = null;
-        try { json = JSON.parse(corpo || "{}"); } catch { json = { text: corpo.slice(0, 900) }; }
-        // GitHub com content-type form-urlencoded embrulha o JSON em payload=
-        if (json?.payload && typeof json.payload === "string") { try { json = JSON.parse(json.payload); } catch {} }
+        const json = desembrulharCorpo(corpo);
 
         const { evento, embed } = formatar(Object.fromEntries(Object.entries(req.headers)), json);
         const eventos = gancho.eventos ? gancho.eventos.split(",").map((x) => x.trim()).filter(Boolean) : [];

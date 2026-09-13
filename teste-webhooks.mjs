@@ -84,5 +84,31 @@ console.log("\n── formatar() de ponta a ponta ──");
     "★ header + corpo → evento nomeado (é o que o filtro `eventos` usa) + embed");
 }
 
+console.log("\n── content type form do GitHub (o bug do payload oco) ──");
+{
+  const original = { repository: { full_name: "GhisoOF/stoat_bot" }, sender: { login: "ghiso" }, action: "published", registry_package: { name: "stoat_bot", package_type: "CONTAINER", package_version: { version: "latest" } } };
+  const form = "payload=" + encodeURIComponent(JSON.stringify(original)).replace(/%20/g, "+");
+  const j = w.desembrulharCorpo(form);
+  ok(j?.repository?.full_name === "GhisoOF/stoat_bot",
+    "★ corpo form-urlencoded é decodificado (era o que deixava tudo anônimo)");
+  ok(w.desembrulharCorpo(JSON.stringify(original))?.sender?.login === "ghiso",
+    "  → JSON puro continua funcionando");
+  ok(typeof w.desembrulharCorpo("lixo não-json").text === "string",
+    "  → corpo inválido vira {text} sem explodir");
+}
+
+console.log("\n── ruído do Actions silenciado e package formatado ──");
+ok(w.formatarGitHub("check_run", { repository: { full_name: "x/y" } }) === null,
+  "★ check_run fica em silêncio (o workflow_run já conta a história)");
+ok(w.formatarGitHub("check_suite", {}) === null && w.formatarGitHub("workflow_job", {}) === null,
+  "  → check_suite e workflow_job também");
+{
+  const p = w.formatarGitHub("registry_package", { repository: { full_name: "GhisoOF/stoat_bot" }, sender: { login: "ghiso" }, action: "published", registry_package: { name: "stoat_bot", package_type: "CONTAINER", package_version: { version: "latest" } } });
+  ok(p.titulo.includes("pacote publicado") && p.descricao.includes("stoat_bot") && p.descricao.includes("latest"),
+    "★ publicação de imagem no ghcr vira embed com nome e versão");
+  ok(w.formatarGitHub("package", { action: "created", package: {} }) === null,
+    "  → ações de package que não são publish/update ficam em silêncio");
+}
+
 console.log(`\nWEBHOOKS: ${pass} ok, ${fail} falha(s)`);
 process.exit(fail ? 1 : 0);

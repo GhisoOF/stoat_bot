@@ -1326,5 +1326,19 @@ console.log("\n── perguntas que pedem desenvolvimento ──");
     "  → conta NÃO pede");
 }
 
+console.log("\n── pedido de imagem gerada (o caso do castelo em ASCII) ──");
+{
+  const chat = await import("./modulos/ai/chat.js");
+  ok(chat.pedeImagemGerada("desenha um castelo flutuante em pixel art"),
+    "★ 'desenha X' é pedido de imagem (o teste ao vivo virou ASCII art)");
+  ok(chat.pedeImagemGerada("gera uma imagem de um gato astronauta"), "  → 'gera uma imagem' também");
+  ok(chat.pedeImagemGerada("cria uma arte cyberpunk da cidade"), "  → 'cria uma arte' também");
+  ok(chat.pedeImagemGerada("draw me a dragon"), "  → inglês também");
+  ok(!chat.pedeImagemGerada("o que você acha da arte renascentista?"), "  → falar SOBRE arte não dispara");
+  ok(!chat.pedeImagemGerada("me descreve esta imagem"), "  → descrever imagem é ver_imagem, não gerar");
+  ok(chat.precisaFerramenta("desenha um dragão vermelho"),
+    "★ e o roteador agora manda pro caminho de ferramenta");
+}
+
 console.log(`\nIA: ${pass} ok, ${fail} falha(s)`);
 process.exit(fail ? 1 : 0);

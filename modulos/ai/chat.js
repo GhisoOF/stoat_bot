@@ -382,6 +382,7 @@ async function executarFerramenta(nome, args, { timeoutMs = 20000 } = {}) {
   } finally { clearTimeout(t); }
 }
 
+// (pedeImagemGerada é usada também pelo roteador em decidirTipo/precisaFerramenta)
 // Extrai as URLs de imagem do marcador que o fluxo adiciona à pergunta quando
 // há anexos ("[imagem(ns) anexada(s), visíveis com a ferramenta ver_imagem: …]").
 export function urlsDeImagemNaPergunta(texto) {
@@ -1051,6 +1052,17 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
     }
   }
 
+  // Pedido de imagem → ordem direta de usar a ferramenta (nada de ASCII).
+  if (tipo === "ferramenta" && pedeImagemGerada(pergunta)) {
+    messages.push({
+      role: "system",
+      content: lang === "en"
+        ? "This request asks for a GENERATED IMAGE. Call the gerar_imagem tool NOW with a good prompt built from the request. NEVER draw with text, ASCII or emoji — if the tool is unavailable or fails, say so in one sentence."
+        : "Este pedido é de GERAÇÃO DE IMAGEM. Chame a ferramenta gerar_imagem AGORA com um bom prompt montado a partir do pedido. NUNCA desenhe com texto, ASCII ou emoji — se a ferramenta não existir ou falhar, diga isso em uma frase.",
+    });
+    dlog("pedido de imagem → ordem de usar gerar_imagem");
+  }
+
   // Pergunta que pede desenvolvimento → ordem de substância antes de gerar.
   if (pedeDesenvolvimento(pergunta)) {
     messages.push({
@@ -1237,6 +1249,13 @@ export function pedeDesenvolvimento(texto) {
   return /\b(dicas?|t[ée]cnicas?|estrat[ée]gias?|recomenda(?:[çc][õo]es|r|\u00e7\u00f5es)?|explique|explica|detalh[ae]|desenvolv[ae]|como\s+(fazer|funciona|montar|construir|melhorar)|passo\s+a\s+passo|liste|quais\s+s[ãa]o|tips?|techniques?|explain|how\s+to|step\s+by\s+step)\b/i.test(t);
 }
 
+// O pedido é de GERAR uma imagem (desenha, cria uma arte…)? Detectado aqui,
+// deterministicamente — deixado ao modelo, ele "desenha" com ASCII art.
+export function pedeImagemGerada(texto) {
+  const t = String(texto ?? "");
+  return /\b(desenh(?:a|e|ar|o)\b|fa[çc]a\s+(?:um\s+)?desenho|(?:ger[ae]r?|cri[ae]r?|faz(?:er)?|fa[çc]a)\s+(?:uma?\s+)?(?:imagem|arte|ilustra\w+|wallpaper|logo|avatar|pixel\s*art)|draw\s+(?:me\s+)?a?\b|(?:generate|create|make)\s+(?:an?\s+)?(?:image|art|picture|illustration|drawing))/i.test(t);
+}
+
 // A resposta veio em INGLÊS quando devia ser português? Contamos palavras
 // funcionais inequívocas do inglês e exigimos ZERO marcador de português —
 // código, crases e URLs saem antes, para nome de arquivo/termo técnico não
@@ -1410,6 +1429,7 @@ export function mudouEscopo(texto) {
 }
 
 export function precisaFerramenta(texto) {
+  if (pedeImagemGerada(texto)) return true;   // desenhar é trabalho de ferramenta
   const t = (texto || "").toLowerCase();
   if (!t) return false;
   // ler o próprio código / repositório

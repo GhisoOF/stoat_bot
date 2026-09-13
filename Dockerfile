@@ -2,6 +2,15 @@
 # Um container com tudo: o bot, o serviço de IA (ferramentas/tool-calling),
 # o llama.cpp para IA local opcional, e o serviço de voz opcional.
 # Multi-arquitetura (x86-64 e ARM64).
+# ── Estágio: stable-diffusion.cpp compilado DO FONTE ─────────────────────
+# O binário oficial dos releases exige GLIBC 2.38 (Ubuntu 24+) e a nossa base
+# é Debian bookworm (2.36) — quebrava com "version GLIBC_2.38 not found" na
+# primeira geração. Compilar aqui, na MESMA base, casa a glibc por construção
+# — e dá gerador de imagem ao ARM64 de quebra (o release nem tinha binário).
+FROM node:22-slim AS sdcpp
+RUN apt-get update && apt-get install -y --no-install-recommends       git cmake g++ make ca-certificates && rm -rf /var/lib/apt/lists/*
+RUN git clone --depth 1 --recursive https://github.com/leejet/stable-diffusion.cpp /sd     && cmake -S /sd -B /sd/build -DCMAKE_BUILD_TYPE=Release     && cmake --build /sd/build --config Release -j2     && ls -la /sd/build/bin/
+
 FROM node:22-slim
 ARG TARGETARCH=amd64
 
@@ -65,23 +74,16 @@ RUN set -x; SUF="x64"; [ "$TARGETARCH" = "arm64" ] && SUF="arm64"; \
       if ls "$LIBDIR" | grep -qi vulkan; then echo "✓ backend Vulkan na imagem"; else echo "! sem libggml-vulkan — vai rodar em CPU"; fi; \
     else echo "AVISO: llama.cpp indisponível — IA_MODO=local não funcionará nesta imagem"; fi
 
-# 0a-bis) stable-diffusion.cpp para gerar imagens (gerar_imagem): binário na
-#     imagem; o MODELO (SD-Turbo, ~2,3 GB) é baixado no PRIMEIRO USO da
-#     ferramenta — não no boot — e fica no volume (/data/modelos-sd).
-RUN set -x; if [ "$TARGETARCH" != "arm64" ]; then \
-      URL="$(curl -fsSL https://api.github.com/repos/leejet/stable-diffusion.cpp/releases/latest \
-            | grep -oE '"browser_download_url": "[^"]*[Ll]inux[^"]*avx2[^"]*\.zip"' | head -1 | cut -d'"' -f4)"; \
-      [ -z "$URL" ] && URL="$(curl -fsSL https://api.github.com/repos/leejet/stable-diffusion.cpp/releases/latest \
-            | grep -oE '"browser_download_url": "[^"]*[Ll]inux[^"]*\.zip"' | head -1 | cut -d'"' -f4)"; \
-      if [ -n "$URL" ] && curl -fsSL "$URL" -o /tmp/sd.zip; then \
-        mkdir -p /opt/sdcpp && unzip -q /tmp/sd.zip -d /opt/sdcpp && rm /tmp/sd.zip; \
-        BIN="$(find /opt/sdcpp -type f \( -name sd -o -name sd-cli \) | head -1)"; \
-        if [ -n "$BIN" ]; then \
-          chmod +x "$BIN" && printf '#!/bin/sh\nexport LD_LIBRARY_PATH="%s:${LD_LIBRARY_PATH:-}"\nexec "%s" "$@"\n' \
-            "$(dirname "$BIN")" "$BIN" > /usr/local/bin/sd-cpp && chmod +x /usr/local/bin/sd-cpp; \
-        fi; \
-      else echo "AVISO: sd.cpp indisponível — gerar_imagem só funcionará com SD_URL externo"; fi; \
-    else echo "AVISO: sd.cpp sem binário ARM64 — gerar_imagem só com SD_URL nesta arquitetura"; fi
+# 0a-bis) stable-diffusion.cpp para gerar imagens (gerar_imagem): compilado
+#     do fonte no estágio "sdcpp" (mesma base = mesma glibc). O MODELO
+#     (SD-Turbo) é baixado no PRIMEIRO USO e fica no volume (/data/modelos-sd).
+COPY --from=sdcpp /sd/build/bin/ /opt/sdcpp/bin/
+RUN set -x; BIN="$(find /opt/sdcpp/bin -maxdepth 1 -type f \( -name sd -o -name sd-cli \) | head -1)"; \
+    if [ -n "$BIN" ]; then \
+      chmod +x "$BIN" && printf '#!/bin/sh\nexport LD_LIBRARY_PATH="%s:${LD_LIBRARY_PATH:-}"\nexec "%s" "$@"\n' \
+        "$(dirname "$BIN")" "$BIN" > /usr/local/bin/sd-cpp && chmod +x /usr/local/bin/sd-cpp \
+      && (/usr/local/bin/sd-cpp --help >/dev/null 2>&1 && echo "✓ sd-cpp funcional na imagem" || echo "AVISO: sd-cpp copiado mas o --help falhou"); \
+    else echo "AVISO: build do sd.cpp não produziu binário — gerar_imagem só com SD_URL"; fi
 
 # 0a-ter) llama-swap: só é usado quando há MODELO_VISAO (dois modelos servidos
 #     na mesma API, carregados por demanda). Opcional como os demais.

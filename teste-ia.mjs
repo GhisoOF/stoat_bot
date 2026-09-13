@@ -1326,6 +1326,24 @@ console.log("\n── perguntas que pedem desenvolvimento ──");
     "  → conta NÃO pede");
 }
 
+console.log("\n── fumaça: pedido de imagem percorre a entrega sem erro de escopo ──");
+{
+  const chat = await import("./modulos/ai/chat.js?fumaca-img");
+  const capturado = [];
+  const velhoWarn = console.warn, velhoErr = console.error;
+  console.warn = (...a) => capturado.push(a.join(" "));
+  console.error = (...a) => capturado.push(a.join(" "));
+  try {
+    await chat.conversar({
+      pergunta: "desenha um castelo flutuante em pixel art",
+      userId: "u1", canalId: "c1", serverId: "s1", autor: "Fumaça",
+    }).catch((e) => capturado.push(String(e?.message ?? e)));
+  } finally { console.warn = velhoWarn; console.error = velhoErr; }
+  const escopo = capturado.filter((l) => /is not defined|is not a function|Cannot read propert/i.test(l));
+  ok(escopo.length === 0,
+    `★ "desenha…" atravessa roteamento e guarda de honestidade sem ReferenceError${escopo.length ? ` — pegou: ${escopo[0].slice(0, 80)}` : ""}`);
+}
+
 console.log("\n── pedido de imagem gerada (o caso do castelo em ASCII) ──");
 {
   const chat = await import("./modulos/ai/chat.js");

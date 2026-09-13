@@ -9,12 +9,12 @@
 # — e dá gerador de imagem ao ARM64 de quebra (o release nem tinha binário).
 FROM node:22-slim AS sdcpp
 ARG TARGETARCH
-RUN apt-get update && apt-get install -y --no-install-recommends       git cmake g++ make ca-certificates libvulkan-dev glslc && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends       git cmake g++ make ca-certificates && rm -rf /var/lib/apt/lists/*
 # Só na perna amd64: o CI compila as duas plataformas EM PARALELO num runner
 # de 7 GB, e compilar sd.cpp também sob qemu-arm64 estourava a memória no
 # meio do libwebp. ARM64 fica como sempre foi: sem gerador embutido, com o
 # aviso e o SD_URL externo como caminho. (Build local amd64 não sente nada.)
-RUN set -x; mkdir -p /sd/build/bin;     if [ "$TARGETARCH" != "arm64" ]; then       git clone --depth 1 --recursive https://github.com/leejet/stable-diffusion.cpp /sd-src       && cmake -S /sd-src -B /sd-src/build -DCMAKE_BUILD_TYPE=Release -DSD_VULKAN=ON       && cmake --build /sd-src/build --config Release -j2       && cp -a /sd-src/build/bin/. /sd/build/bin/ && ls -la /sd/build/bin/;     else echo "arm64: sem sd.cpp embutido — gerar_imagem via SD_URL nesta arquitetura"; fi
+RUN set -x; mkdir -p /sd/build/bin;     if [ "$TARGETARCH" != "arm64" ]; then       git clone --depth 1 --recursive https://github.com/leejet/stable-diffusion.cpp /sd-src       && cmake -S /sd-src -B /sd-src/build -DCMAKE_BUILD_TYPE=Release       && cmake --build /sd-src/build --config Release -j2       && cp -a /sd-src/build/bin/. /sd/build/bin/ && ls -la /sd/build/bin/;     else echo "arm64: sem sd.cpp embutido — gerar_imagem via SD_URL nesta arquitetura"; fi
 
 FROM node:22-slim
 ARG TARGETARCH=amd64

@@ -113,6 +113,18 @@ export function abrirBanco(caminho) {
 
   // (Curadoria RSS) feeds cadastrados por servidor
   db.exec(`
+    CREATE TABLE IF NOT EXISTS tickets (
+      id        INTEGER PRIMARY KEY AUTOINCREMENT,
+      serverId  TEXT NOT NULL,
+      numero    INTEGER NOT NULL,
+      canalId   TEXT NOT NULL,
+      roleId    TEXT,
+      autorId   TEXT NOT NULL,
+      motivo    TEXT DEFAULT '',
+      status    TEXT DEFAULT 'aberto',
+      abertoEm  TEXT NOT NULL,
+      fechadoEm TEXT
+    );
     CREATE TABLE IF NOT EXISTS ganchos (
       id        INTEGER PRIMARY KEY AUTOINCREMENT,
       serverId  TEXT NOT NULL,
@@ -1540,4 +1552,19 @@ export function removerGancho(id) {
 }
 export function registrarUsoGancho(id) {
   prep("UPDATE ganchos SET usos = usos + 1 WHERE id = ?").run(id);
+}
+
+// ── Tickets ─────────────────────────────────────────────────────────────────
+export function criarTicket(serverId, numero, canalId, roleId, autorId, motivo) {
+  prep("INSERT INTO tickets (serverId, numero, canalId, roleId, autorId, motivo, abertoEm) VALUES (?,?,?,?,?,?,?)")
+    .run(serverId, numero, canalId, roleId, autorId, motivo ?? "", new Date().toISOString());
+}
+export function listarTickets(serverId) {
+  return prep("SELECT * FROM tickets WHERE serverId = ? AND status = 'aberto' ORDER BY numero").all(serverId);
+}
+export function ticketPorCanal(canalId) {
+  return prep("SELECT * FROM tickets WHERE canalId = ? AND status = 'aberto'").get(canalId) ?? null;
+}
+export function fecharTicket(id) {
+  prep("UPDATE tickets SET status = 'fechado', fechadoEm = ? WHERE id = ?").run(new Date().toISOString(), id);
 }

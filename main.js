@@ -31,6 +31,8 @@ import * as fuso      from "./modulos/ferramentas/fuso.js";
 import * as ttsVoz    from "./modulos/ferramentas/tts.js";
 import * as musicaCmd from "./modulos/ferramentas/musica.js";
 import * as webhooks  from "./modulos/ferramentas/webhooks.js";
+import * as dadosRpg  from "./modulos/ferramentas/dados-rpg.js";
+import * as tickets   from "./modulos/ferramentas/tickets.js";
 import * as staff     from "./modulos/moderacao/staff.js";
 import * as tutorial   from "./modulos/moderacao/tutorial.js";
 import * as corCargo   from "./modulos/moderacao/cor-cargo.js";
@@ -344,6 +346,9 @@ const rotas = {
   tts:           ttsVoz.cmdTts,
   musica:        musicaCmd.cmdMusica,
   webhook:       webhooks.cmdWebhook,
+  rolar:         dadosRpg.cmdRolar,
+  iniciativa:    dadosRpg.cmdIniciativa,
+  ticket:        tickets.cmdTicket,
   entrar:        (msg, args, ctx) => ttsVoz.cmdTts(msg, ["entrar", ...args], ctx),
   sair:          (msg, args, ctx) => ttsVoz.cmdTts(msg, ["sair", ...args], ctx),
   voz:           ttsVoz.cmdTts,
@@ -392,6 +397,9 @@ const CANONICO = {
   m: "musica", music: "musica", play: "musica", tocar: "musica",
   join: "entrar", call: "entrar", leave: "sair", sairdacall: "sair",
   webhooks: "webhook", gancho: "webhook", wh: "webhook",
+  r: "rolar", roll: "rolar", dado: "rolar", dados: "rolar",
+  init: "iniciativa", initiative: "iniciativa",
+  tickets: "ticket", suporte: "ticket",
   "boas-vindas": "boasvindas", welcome: "boasvindas", bemvindo: "boasvindas",
   goodbye: "adeus", despedida: "adeus", farewell: "adeus",
   clear: "limpar", purge: "limpar", limpiar: "limpar",
@@ -412,7 +420,7 @@ const COMANDOS_GERENCIAVEIS = [
   "ping", "repete", "userinfo", "kick", "ban", "limpar",
   "warnings", "clearwarnings", "warn", "acesso", "automod", "whitelist", "blocklist",
   "sentinela", "punicao", "tutorial", "assistente", "cor", "log", "banglobal", "embed", "reactionrole", "chat", "rss", "xp", "game", "autorole",
-  "staff", "boasvindas", "adeus", "fuso", "tts", "musica", "webhook",
+  "staff", "boasvindas", "adeus", "fuso", "tts", "musica", "webhook", "rolar", "iniciativa", "ticket",
 ];
 // exportado via ctx para o comando &comando consultar
 estado.CANONICO = CANONICO;

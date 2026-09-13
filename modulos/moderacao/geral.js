@@ -188,6 +188,21 @@ function detalhesPT(P) {
       desc: "Mostra a **equipe do servidor**, agrupada por cargo e com quem tem cada um.\n\nA lista não tem cadastro próprio: ela lê os mesmos cargos do `&acesso cargo`. Então adicionar aqui **também dá acesso aos comandos de moderação** — e remover tira os dois de uma vez, sem o quadro de avisos discordar da permissão real.\n\n`&staff add <@cargo>` · `&staff remove <@cargo>` · `&staff limpar`\n`&staff titulo <@cargo> <texto>` — rótulo exibido no lugar do nome do cargo\n\n_Consultar é público; mexer exige ManagePermissions._",
       perm: "ManagePermissions", ex: `${P}staff add Moderador`,
     },
+    rolar: {
+      uso: `${P}rolar <expressão> | adv | des | moeda | gm <expressão>`,
+      desc: "Dados de RPG de mesa, com tudo:\n`2d20kh1+5` mantém o maior · `4d6kh3` descarta o menor dado\n`adv`/`des` — vantagem/desvantagem · `3d6!` — explosão\n`8d10>=7` — conta sucessos · `d%` · `4dF` (Fate) · `moeda`\n`6x(4d6kh3)` — repete (seis atributos de uma vez)\n`1d20+7 # Percepção` — rótulo na rolagem\n`gm 1d20` — **secreta**: o resultado vai por DM e o pedido some do canal.\n20 natural ganha 🎯, 1 natural ganha 💀.",
+      perm: "todo mundo", ex: `${P}rolar 2d20kh1+5 # Ataque`,
+    },
+    iniciativa: {
+      uso: `${P}iniciativa [add <nome> [rolagem]|next|lista|remover <nome>|limpar]`,
+      desc: "Rastreador de ordem de combate, um por canal:\n`add Goblin 1d20+2` rola e insere já ordenado (sem rolagem, rola `1d20`; número fixo também vale)\n`next` avança a vez (e avisa a rodada nova) · `lista` mostra a ordem com ▶️ em quem age\n`remover <nome>` tira um caído · `limpar` encerra o combate.",
+      perm: "todo mundo", ex: `${P}iniciativa add Elfa 1d20+3`,
+    },
+    ticket: {
+      uso: `${P}ticket [abrir <motivo>|fechar <nota>|log <#canal>|lista]`,
+      desc: "Suporte com canal privado por pedido:\n`abrir` cria o canal **#ticket-N** que só quem abriu e os cargos de staff do `&acesso` enxergam (um cargo por ticket cuida disso)\n`fechar` — staff ou quem abriu — **arquiva a conversa inteira** no canal de log (transcrição com hora e autor) e apaga o canal\n`log <#canal>` define o arquivo (obrigatório antes do primeiro ticket) · `lista` mostra os abertos.\n\nO bot precisa de **ManageChannel, ManageRole, AssignRoles, ManagePermissions** no servidor — cada erro diz qual faltou.",
+      perm: "abrir: todo mundo · resto: staff", ex: `${P}ticket abrir não consigo entrar na call`,
+    },
     webhook: {
       uso: `${P}webhook [criar <nome> [#canal]|lista|canal|eventos|url|testar|remover]`,
       desc: "Receptor **universal** de webhooks: serviços externos publicam num canal seu.\n\n**Funciona com:** GitHub (push, issues, PR, releases, Actions, star, fork…), Crafty/Minecraft, e **qualquer ferramenta que fale o formato Discord** (Uptime Kuma, Grafana…) — é só colar a URL do gancho onde iria a URL do Discord.\n\n**O modelo:** cada *gancho* tem nome, canal próprio e filtro de eventos. Separar por chats é criar um gancho por assunto:\n`&webhook criar issues #issues` + `&webhook eventos issues issues,issue_comment`\n`&webhook criar ci #ci` + `&webhook eventos ci workflow_run`\n`&webhook criar mine #minecraft` ← aponte o Crafty (provider Discord) para ele\n\n**Segurança:** a URL é o segredo (token de 128 bits); `remover` mata a URL na hora; teto de 30 publicações/min por gancho contra flood.\n\n**Qual endereço usar:** serviço da INTERNET (GitHub…) exige base pública https — `sudo tailscale funnel --bg 8095` e `WEBHOOK_URL_BASE=https://<máquina>.ts.net` no `.env`; container da MESMA máquina (Crafty…) usa a ponte do Docker `http://172.17.0.1:8095/...` — a URL interna colada num serviço da internet dá \"failed to connect\" sem explicação.",
@@ -419,6 +434,21 @@ function detalhesEN(P) {
       uso: `${P}staff [add|remove|title|clear]`,
       desc: "Shows the **server's staff**, grouped by role and listing who holds each one.\n\nThe list has no separate registry: it reads the very same roles as `&acesso cargo`. So adding here **also grants access to the moderation commands** — and removing drops both at once, so the notice board can never disagree with the actual permission.\n\n`&staff add <@role>` · `&staff remove <@role>` · `&staff clear`\n`&staff title <@role> <text>` — label shown instead of the role's name\n\n_Viewing is public; changing requires ManagePermissions._",
       perm: "ManagePermissions", ex: `${P}staff add Moderator`,
+    },
+    rolar: {
+      uso: `${P}rolar <expression> | adv | des | moeda | gm <expression>`,
+      desc: "Tabletop RPG dice, fully loaded:\n`2d20kh1+5` keep highest · `4d6kh3` drop the lowest die\n`adv`/`des` — advantage/disadvantage · `3d6!` — exploding\n`8d10>=7` — count successes · `d%` · `4dF` (Fate) · `moeda` (coin)\n`6x(4d6kh3)` — repeat (six ability scores at once)\n`1d20+7 # Perception` — label the roll\n`gm 1d20` — **secret**: result goes by DM and the request vanishes from the channel.\nNatural 20 gets 🎯, natural 1 gets 💀.",
+      perm: "everyone", ex: `${P}rolar 2d20kh1+5 # Attack`,
+    },
+    iniciativa: {
+      uso: `${P}iniciativa [add <name> [roll]|next|lista|remover <name>|limpar]`,
+      desc: "Combat order tracker, one per channel:\n`add Goblin 1d20+2` rolls and inserts already sorted (no roll = `1d20`; fixed numbers work too)\n`next` advances the turn (announcing new rounds) · `lista` shows the order with ▶️ on whoever acts\n`remover <name>` drops the fallen · `limpar` ends the combat.",
+      perm: "everyone", ex: `${P}iniciativa add Elf 1d20+3`,
+    },
+    ticket: {
+      uso: `${P}ticket [abrir <reason>|fechar <note>|log <#channel>|lista]`,
+      desc: "Support with a private channel per request:\n`abrir` creates **#ticket-N**, visible only to the opener and the staff roles from `&acesso` (a per-ticket role handles it)\n`fechar` — staff or the opener — **archives the whole conversation** in the log channel (timed, authored transcript) and deletes the channel\n`log <#channel>` sets the archive (required before the first ticket) · `lista` shows open ones.\n\nThe bot needs **ManageChannel, ManageRole, AssignRoles, ManagePermissions** — each error names what's missing.",
+      perm: "abrir: everyone · rest: staff", ex: `${P}ticket abrir can't join the call`,
     },
     webhook: {
       uso: `${P}webhook [criar <name> [#channel]|lista|canal|eventos|url|testar|remover]`,

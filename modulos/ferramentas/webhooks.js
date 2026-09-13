@@ -131,6 +131,14 @@ function tokenConfere(a, b) {
   return A.length === B.length && A.length > 0 && timingSafeEqual(A, B);
 }
 
+// Resolve o objeto de canal a partir do id (o padrão do RSS): sem isso o
+// sendEmbed responde "Canal indisponível" e a publicação morre em silêncio.
+async function canalPorId(ctx, canalId) {
+  return ctx.client?.channels?.get?.(canalId)
+    ?? await ctx.client?.channels?.fetch?.(canalId).catch(() => null)
+    ?? null;
+}
+
 export function iniciarReceptor(ctx) {
   const srv = createServer((req, res) => {
     const fim = (codigo, obj) => { res.writeHead(codigo, { "Content-Type": "application/json" }); res.end(JSON.stringify(obj)); };
@@ -158,7 +166,9 @@ export function iniciarReceptor(ctx) {
         if (!embed) return fim(200, { ok: true, ignorado: "evento sem conteúdo publicável" });
 
         db.registrarUsoGancho(gancho.id);
-        await ctx.sendEmbed({ id: gancho.canalId }, {
+        const canal = await canalPorId(ctx, gancho.canalId);
+        if (!canal) { console.error(`[WEBHOOK] canal ${gancho.canalId} não encontrado — o bot está nesse servidor?`); return fim(200, { ok: true, aviso: "canal não encontrado" }); }
+        await ctx.sendEmbed(canal, {
           title: embed.titulo,
           description: (embed.url ? `${embed.descricao}\n[abrir ↗](${embed.url})` : embed.descricao).slice(0, 1900),
           colour: embed.cor,
@@ -283,8 +293,10 @@ export async function cmdWebhook(message, args, ctx) {
     db.removerGancho(g.id);
     return sendEmbed(message.channel, { title: "🪝", description: en ? `**${g.nome}** deleted — its URL is dead.` : `**${g.nome}** apagado — a URL dele morreu.`, colour: COR.sucesso });
   }
-  if (sub === "testar" || sub === "test") {
-    await ctx.sendEmbed({ id: g.canalId }, {
+  if (sub === "testar" || sub === "test" || sub === "teste") {
+    const canal = await canalPorId(ctx, g.canalId);
+    if (!canal) return sendEmbed(message.channel, { title: "🪝", description: en ? `I can't reach <#${g.canalId}> — does it still exist?` : `Não alcancei <#${g.canalId}> — ele ainda existe?`, colour: COR.aviso });
+    await ctx.sendEmbed(canal, {
       title: en ? "🧪 Webhook test" : "🧪 Teste de webhook",
       description: (en ? `Hook **${g.nome}** working — this is where its events land.` : `Gancho **${g.nome}** funcionando — é aqui que os eventos dele chegam.`),
       colour: COR.sucesso,

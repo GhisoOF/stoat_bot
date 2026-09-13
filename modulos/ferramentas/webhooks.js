@@ -192,6 +192,25 @@ function urlDoGancho(g) {
   return `${base}/gancho/${g.id}/${g.token}`;
 }
 
+// Bloco padrão de exibição da URL: em TEXTO PLANO (bloco de código não quebra
+// linha no Stoat e cortava a URL — só dava para copiar pela sorte), com as
+// dicas de qual endereço usar em cada caso — a armadilha clássica é colar a
+// URL interna num serviço da internet e ganhar um "failed to connect" mudo.
+function blocoDeUrl(g, en) {
+  const rota = `/gancho/${g.id}/${g.token}`;
+  const linhas = [en ? "**The secret URL** (select and copy the whole line):" : "**A URL secreta** (seleciona e copia a linha inteira):", "", urlDoGancho(g), ""];
+  if (en) {
+    linhas.push("🌐 **Internet service** (GitHub…): the base must be PUBLIC over https — e.g. `sudo tailscale funnel --bg " + PORTA + "` and set `WEBHOOK_URL_BASE=https://<machine>.<tailnet>.ts.net` in `.env`.");
+    linhas.push("🏠 **Same-machine container** (Crafty…): use the Docker bridge instead: `http://172.17.0.1:" + PORTA + rota + "`");
+    if (!URL_BASE) linhas.push("⚠️ `WEBHOOK_URL_BASE` is not set — replace the placeholder above with your machine's address.");
+  } else {
+    linhas.push("🌐 **Serviço da internet** (GitHub…): a base precisa ser PÚBLICA em https — ex.: `sudo tailscale funnel --bg " + PORTA + "` e `WEBHOOK_URL_BASE=https://<máquina>.<tailnet>.ts.net` no `.env`.");
+    linhas.push("🏠 **Container na mesma máquina** (Crafty…): use a ponte do Docker: `http://172.17.0.1:" + PORTA + rota + "`");
+    if (!URL_BASE) linhas.push("⚠️ `WEBHOOK_URL_BASE` não está definido — troque o marcador acima pelo endereço da sua máquina.");
+  }
+  return linhas.join("\n");
+}
+
 export async function cmdWebhook(message, args, ctx) {
   const { sendEmbed, COR, PREFIXO: P, serverId, membroTemPermissao, getServer } = ctx;
   const en = lingua(ctx) === "en";
@@ -262,11 +281,11 @@ export async function cmdWebhook(message, args, ctx) {
     const g = db.criarGancho(serverId, nome, canalId, token);
     return sendEmbed(message.channel, tr(ctx, {
       title: `🪝 Gancho "${nome}" criado`,
-      description: `Publica em <#${canalId}>.\n\n**A URL secreta** _(cole no serviço externo; quem tem a URL publica no canal)_:\n\`\`\`\n${urlDoGancho(g)}\n\`\`\`\nGitHub: Settings → Webhooks → Add, content type \`application/json\`.\nCrafty: Config do servidor → Webhooks → provider **Discord**, cole a URL.\n${URL_BASE ? "" : "\n⚠️ Defina \`WEBHOOK_URL_BASE\` no \`.env\` com o endereço público/da rede para a URL sair pronta."}`,
+      description: `Publica em <#${canalId}>. Quem tem a URL publica no canal — trate como senha.\n\n${blocoDeUrl(g, false)}\n\nGitHub: Settings → Webhooks → Add, content type \`application/json\`.\nCrafty: Config do servidor → Webhooks → provider **Discord**, cole a URL.`,
       colour: COR.sucesso,
     }, {
       title: `🪝 Hook "${nome}" created`,
-      description: `Posts to <#${canalId}>.\n\n**The secret URL** _(paste it in the external service; whoever holds it can post)_:\n\`\`\`\n${urlDoGancho(g)}\n\`\`\`\nGitHub: Settings → Webhooks → Add, content type \`application/json\`.\nCrafty: server config → Webhooks → provider **Discord**, paste the URL.\n${URL_BASE ? "" : "\n⚠️ Set \`WEBHOOK_URL_BASE\` in \`.env\` with the public/LAN address so the URL comes out ready."}`,
+      description: `Posts to <#${canalId}>. Whoever holds the URL can post — treat it like a password.\n\n${blocoDeUrl(g, true)}\n\nGitHub: Settings → Webhooks → Add, content type \`application/json\`.\nCrafty: server config → Webhooks → provider **Discord**, paste the URL.`,
       colour: COR.sucesso,
     }));
   }
@@ -275,7 +294,7 @@ export async function cmdWebhook(message, args, ctx) {
   if (!g) return sendEmbed(message.channel, { title: "🪝", description: en ? `I don't know **${nome || "?"}** — \`${P}webhook lista\`.` : `Não conheço **${nome || "?"}** — \`${P}webhook lista\`.`, colour: COR.aviso });
 
   if (sub === "url") {
-    return sendEmbed(message.channel, { title: `🪝 ${g.nome}`, description: `\`\`\`\n${urlDoGancho(g)}\n\`\`\``, colour: COR.info });
+    return sendEmbed(message.channel, { title: `🪝 ${g.nome}`, description: blocoDeUrl(g, en), colour: COR.info });
   }
   if (sub === "canal") {
     const canalId = ctx.limparId?.(args[2]) || args[2]?.replace(/[<#>]/g, "");

@@ -430,12 +430,26 @@ export async function subirAnexo({ base64, mime = "image/jpeg", nome = "imagem.j
   const anunciado = client?.configuration?.features?.autumn?.url
     ?? client?.config?.features?.autumn?.url ?? null;
   const AUTUMN = (process.env.AUTUMN_URL || anunciado || "https://autumn.stoat.chat").replace(/\/$/, "");
-  const form = new FormData();
-  form.append("file", new Blob([Buffer.from(base64, "base64")], { type: mime }), nome);
+  // Multipart montado NA MÃO, como um Buffer único com Content-Length
+  // explícito — em vez de deixar o fetch/undici "streamar" um FormData(Blob).
+  // Esse streaming automático corta o corpo no meio em conexões com MTU
+  // reduzido (o túnel WireGuard usa 1420 em vez de 1500) e o Autumn recusava
+  // com "incomplete multipart stream" — sem pista nenhuma do lado do cliente.
+  const boundary = `----judy${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`;
+  const dados = Buffer.from(base64, "base64");
+  const abre = Buffer.from(
+    `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${nome.replace(/"/g, "")}"\r\nContent-Type: ${mime}\r\n\r\n`,
+  );
+  const fecha = Buffer.from(`\r\n--${boundary}--\r\n`);
+  const corpo = Buffer.concat([abre, dados, fecha]);
   const r = await fetch(`${AUTUMN}/attachments`, {
     method: "POST",
-    headers: { "X-Bot-Token": process.env.BOT_TOKEN ?? "" },
-    body: form,
+    headers: {
+      "X-Bot-Token": process.env.BOT_TOKEN ?? "",
+      "Content-Type": `multipart/form-data; boundary=${boundary}`,
+      "Content-Length": String(corpo.length),
+    },
+    body: corpo,
     signal: AbortSignal.timeout(30_000),
   });
   if (!r.ok) throw new Error(`Autumn HTTP ${r.status} — ${(await r.text().catch(() => "")).slice(0, 120)}`);

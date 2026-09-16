@@ -150,7 +150,7 @@ export async function executar({ prompt, largura, altura }) {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
   try {
-    const r = await fetch(`${SD_URL}/sdapi/v1/img_gen`, {
+    const r = await fetch(`${SD_URL}/sdapi/v1/txt2img`, {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify(corpo), signal: ctrl.signal,
     });

@@ -1,6 +1,6 @@
 
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { iaLigada, modoIA, MODELO_LOCAL_PADRAO } from "./modulos/core/env.js";
 
@@ -148,6 +148,54 @@ if (!iaLigada()) {
       }, 3000);
     });
     for (const m of [...new Set([conversa, visao])]) await baixarModelo(m);
+
+    // ── Pré-download dos modelos de GERAÇÃO DE IMAGEM (mesma lógica dos de
+    // conversa acima): sem isto, o download acontecia dentro do primeiro
+    // `&chat desenha...`, estourando o timeout do chat — exatamente o mesmo
+    // problema que já resolvemos para os LLMs, agora estendido ao gerador.
+    if ((process.env.IMAGEM ?? "1").trim() !== "0") {
+      const SD_DIR = process.env.SD_MODELOS_DIR || "/data/modelos-sd";
+      const SD_TIPO = (process.env.SD_MODELO_TIPO || "z-image").trim().toLowerCase();
+      const urlsSD = SD_TIPO === "z-image"
+        ? [
+            ["modelo de difusão", process.env.SD_Z_DIFUSAO_URL || "https://huggingface.co/leejet/Z-Image-Turbo-GGUF/resolve/main/z_image_turbo-Q4_K.gguf"],
+            ["VAE", process.env.SD_Z_VAE_URL || "https://huggingface.co/Comfy-Org/z_image_turbo/resolve/main/split_files/vae/ae.safetensors"],
+            ["LLM do prompt", process.env.SD_Z_LLM_URL || "https://huggingface.co/unsloth/Qwen3-4B-Instruct-2507-GGUF/resolve/main/Qwen3-4B-Instruct-2507-Q4_K_M.gguf"],
+          ]
+        : [["modelo de imagem", process.env.SD_MODELO_URL || "https://huggingface.co/stabilityai/sd-turbo/resolve/main/sd_turbo.safetensors"]];
+
+      const baixarArquivoSD = (rotulo, url) => new Promise((res) => {
+        let nome; try { nome = url.split("/").pop().split("?")[0]; } catch { nome = "modelo"; }
+        const destino = join(SD_DIR, nome);
+        const marca = `${SD_DIR}/.pronto-${nome.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+        if (existsSync(destino) && existsSync(marca)) return res(true);
+        try { mkdirSync(SD_DIR, { recursive: true }); } catch {}
+        console.info(`[INICIAR] baixando ${rotulo} (${nome}) — o bot só sobe quando terminar…`);
+        const tmp = `${destino}.baixando`;
+        const p = spawn("curl", ["-fL", "--retry", "2", url, "-o", tmp], { stdio: ["ignore", "ignore", "inherit"] });
+        let bytesAntes = 0, quando = Date.now();
+        const progresso = setInterval(() => {
+          let agora = 0; try { agora = statSync(tmp).size; } catch {}
+          const vel = Math.max(0, (agora - bytesAntes) / ((Date.now() - quando) / 1000));
+          console.info(`[INICIAR] ${rotulo}: ${(agora / 1e9).toFixed(2)} GB no disco (${(vel / 1e6).toFixed(1)} MB/s)`);
+          bytesAntes = agora; quando = Date.now();
+        }, 10_000);
+        progresso.unref?.();
+        p.on("exit", (c) => {
+          clearInterval(progresso);
+          if (c === 0) {
+            try { renameSync(tmp, destino); writeFileSync(marca, new Date().toISOString()); } catch {}
+            console.info(`[INICIAR] ${rotulo} pronto no disco.`);
+            res(true);
+          } else {
+            try { unlinkSync(tmp); } catch {}
+            console.error(`[INICIAR] download de ${rotulo} falhou (saída ${c}) — a ferramenta gerar_imagem tentará de novo sob demanda.`);
+            res(false);
+          }
+        });
+      });
+      for (const [rotulo, url] of urlsSD) await baixarArquivoSD(rotulo, url);
+    }
 
     const cfg = `/data/llama-swap.yaml`;
     const flagsExtra = (process.env.LLAMA_FLAGS || "").trim();  // ex.: "--temp 1.0 --top-p 0.95 --top-k 64" (Gemma) — cada família tem o seu

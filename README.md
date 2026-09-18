@@ -33,7 +33,7 @@ docker compose up -d --build
 | Busca na web (SearXNG) | sobe junto no compose, já configurado — a IA pesquisa de fábrica |
 | Leitura de código (GitHub) | dentro; repositórios públicos funcionam sem token |
 | Voz nas calls (Piper + ffmpeg) | dentro da imagem; `VOZ_ATIVA=1` e as vozes baixam sozinhas no primeiro arranque — `VOZES=` escolhe quais (qualquer idioma do catálogo do Piper) |
-| Geração de imagem (stable-diffusion.cpp + SD-Turbo) | dentro da imagem; o modelo (~2,3 GB) baixa no **primeiro pedido de desenho** e fica no volume — `IMAGEM=0` desliga, `SD_URL` troca por um A1111/Forge externo |
+| Geração de imagem (stable-diffusion.cpp, Vulkan + Z-Image-Turbo por padrão) | dentro da imagem; os modelos (~6,5 GB: difusão + VAE + LLM do prompt) baixam **no arranque**, antes do bot conectar — `IMAGEM=0` desliga, `SD_MODELO_TIPO=sd` volta ao SD-Turbo (1 arquivo, mais leve), `SD_URL` troca por um A1111/Forge externo |
 
 Visão (a IA **ler** imagens) depende só de o modelo escolhido enxergar —
 funciona de fábrica no modo `online` com um modelo multimodal, e no modo
@@ -52,7 +52,8 @@ As variáveis que importam:
 | `MODELO` | local: `repo:quantização` GGUF do HF · online: nome do modelo na plataforma |
 | `TOKEN_IA` | token da plataforma, só no modo `online` |
 | `PROMPT` | personalidade padrão da IA no seu texto — e `&personalidade` troca por servidor, sem redeploy |
-| `IMAGEM` | `0` desliga a geração de imagem embutida (`SD_URL` aponta para um gerador externo) |
+| `IMAGEM` | `0` desliga a geração de imagem embutida (`SD_URL` aponta para um gerador externo); `SD_MODELO_TIPO=sd` troca o padrão (Z-Image-Turbo) pelo SD-Turbo clássico |
+| `AUTUMN_URL` | endereço do serviço de upload de anexos do Stoat (`cdn.stoatusercontent.com` por padrão) — normalmente não precisa mexer |
 
 Nomes internos (`SUPER_ADMINS`, `CHAT_SERVIDORES`, `LLM_URL`, `LLM_MODEL`)
 continuam valendo e têm prioridade — útil para apontar a IA a um servidor de

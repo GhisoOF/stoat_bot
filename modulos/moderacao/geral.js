@@ -976,8 +976,9 @@ export async function cmdSobre(message, args, ctx) {
     `${sim(rssN)} **RSS** — ${rssN} feed(s)`,
     `${sim(banGlobalModo !== "off")} **Global ban list** — mode \`${banGlobalModo}\``,
     `🎲 **RPG** — ${nPersonagens} character(s) · ${moedas.length} currenc${moedas.length === 1 ? "y" : "ies"}${moedas.length > 1 ? " · exchange on" : ""}${nMagias ? ` · ${nMagias} spell(s) learned` : ""}${nCapturados ? ` · ${nCapturados} companion(s) in the dungeon` : ""}${moedas.length < nPerfis ? ` · ${nPerfis} currency profiles available` : ""}${nDupes ? ` · ⚠️ ${nDupes} duplicate currenc${nDupes === 1 ? "y" : "ies"}` : ""}`,
-    comIA ? `🤖 **AI (Judy)** — enabled here: chat, code, web search, exact math and **image reading** (attach one and ask)`
+    comIA ? `🤖 **AI (Judy)** — enabled here: chat, code, web search, exact math, image reading and **image generation**`
           : `🤖 **AI (Judy)** — runs only on the servers enabled by the bot owner: chat, code, web search, exact math and image reading`,
+    `🎫🪝🔊 **Tickets · Webhooks · Voice** — ${db.listarTickets(serverId).length} open ticket(s) · ${db.listarGanchos(serverId).length} webhook(s) · voice ${config?.tts?.ativo ? "on" : "off"}`,
   ] : [
     `${sim(modulosOn)} **AutoMod** — ${modulosOn}/9 módulos ligados${am.antiScam?.enabled ? ` · sentinela ${am.antiScam.porAntiguidade !== false ? "(mais rígido com novatos)" : "ligado"}` : ""}`,
     `⚖️ **Punição** — \`${config?.automod?.punicao?.modo ?? "avisar"}\`${(config?.automod?.punicao?.modo === "acumular") ? ` · ${escadaDePunicao(config.automod.punicao).map((d) => rotuloDegrau(d, "pt")).join(" → ")}` : ""}`,
@@ -986,8 +987,9 @@ export async function cmdSobre(message, args, ctx) {
     `${sim(rssN)} **RSS** — ${rssN} feed(s)`,
     `${sim(banGlobalModo !== "off")} **Lista global de bans** — modo \`${banGlobalModo}\``,
     `🎲 **RPG** — ${nPersonagens} personagem(ns) · ${moedas.length} moeda(s)${moedas.length > 1 ? " · câmbio ativo" : ""}${nMagias ? ` · ${nMagias} magia(s) aprendida(s)` : ""}${nCapturados ? ` · ${nCapturados} companheiro(s) na dungeon` : ""}${moedas.length < nPerfis ? ` · ${nPerfis} perfis de moeda disponíveis` : ""}${nDupes ? ` · ⚠️ ${nDupes} moeda(s) repetida(s)` : ""}`,
-    comIA ? `🤖 **IA (Judy)** — habilitada aqui: conversa, código, busca na web, contas exatas e **leitura de imagens** (anexa uma e pergunta)`
+    comIA ? `🤖 **IA (Judy)** — habilitada aqui: conversa, código, busca na web, contas exatas, leitura de imagens e **geração de imagens**`
           : `🤖 **IA (Judy)** — funciona apenas nos servidores habilitados pelo dono do bot: conversa, código, busca na web, contas exatas e leitura de imagens`,
+    `🎫🪝🔊 **Tickets · Webhooks · Voz** — ${db.listarTickets(serverId).length} ticket(s) aberto(s) · ${db.listarGanchos(serverId).length} webhook(s) · voz ${config?.tts?.ativo ? "ligada" : "desligada"}`,
   ];
 
   const creditos = "_Software livre ([código](https://github.com/GhisoOF/stoat_bot)), feito com [stoat.js](https://github.com/stoatchat/javascript-client-sdk) — rode o seu! 🚀_";

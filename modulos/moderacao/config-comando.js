@@ -240,6 +240,11 @@ export async function cmdConfig(message, args, ctx) {
       `Boas-vindas: ${config.boasVindas?.ativo && config.boasVindas?.canalId ? `🟢 <#${config.boasVindas.canalId}>` : "🔴 desligadas"}`,
       `Despedida: ${config.adeus?.ativo && config.adeus?.canalId ? `🟢 <#${config.adeus.canalId}>` : "🔴 desligada"}`,
       "",
+      "**🎫 Tickets · 🪝 Webhooks · 🔊 Voz**",
+      `Tickets: ${config.tickets?.logCanal ? `log <#${config.tickets.logCanal}> · ${db.listarTickets(serverId).length} aberto(s)` : "_(não configurado — `" + PREFIXO + "ticket log #canal`)_"}`,
+      `Webhooks: ${db.listarGanchos(serverId).length} gancho(s) — \`${PREFIXO}webhook lista\``,
+      `Voz (TTS): ${config.tts?.ativo && config.tts?.canalVoz ? `🟢 <#${config.tts.canalVoz}>` : "🔴 desligada"}`,
+      "",
       ...(temIA(serverId) ? [
         "**🤖 IA (Judy)**",
         `Conversa livre: ${config.chatLivre?.canais?.length ? config.chatLivre.canais.map((c)=>`<#${c}>`).join(", ") + ` (modo \`${config.chatLivre.modo ?? "relevante"}\`)` : "_(desligada)_"}`,

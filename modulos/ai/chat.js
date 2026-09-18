@@ -429,7 +429,11 @@ export async function subirAnexo({ base64, mime = "image/jpeg", nome = "imagem.j
   // de CDN e o upload morria com "fetch failed" sem pista.
   const anunciado = client?.configuration?.features?.autumn?.url
     ?? client?.config?.features?.autumn?.url ?? null;
-  const AUTUMN = (process.env.AUTUMN_URL || anunciado || "https://autumn.stoat.chat").replace(/\/$/, "");
+  // "autumn.stoat.chat" (o nome óbvio) serve certificado inválido em produção
+  // — foi o que causava "fetch failed" sem pista nenhuma. O endereço real é
+  // "cdn.stoatusercontent.com" (confirmado: é o que aparece nos anexos de
+  // verdade do Stoat, e o que a config viva normalmente anuncia).
+  const AUTUMN = (process.env.AUTUMN_URL || anunciado || "https://cdn.stoatusercontent.com").replace(/\/$/, "");
   // Multipart montado NA MÃO, como um Buffer único com Content-Length
   // explícito — em vez de deixar o fetch/undici "streamar" um FormData(Blob).
   // Esse streaming automático corta o corpo no meio em conexões com MTU

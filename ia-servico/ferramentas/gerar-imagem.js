@@ -5,6 +5,20 @@ const SD_BIN       = process.env.SD_BIN || "/usr/local/bin/sd-cpp";
 const SD_DIR       = process.env.SD_MODELOS_DIR || "/data/modelos-sd";
 const SD_MODELO_URL = process.env.SD_MODELO_URL
   || "https://huggingface.co/stabilityai/sd-turbo/resolve/main/sd_turbo.safetensors";
+
+// Dois formatos de modelo. O CLÁSSICO (SD-Turbo) é um arquivo só (-m). O
+// Z-IMAGE é um trio — difusão + VAE + um LLM que interpreta o prompt — e é o
+// que dá a qualidade boa: 6B de parâmetros contra ~1B do SD-Turbo. Em troca
+// pede GPU: em CPU pura ele roda, mas devagar.
+// Para voltar ao SD-Turbo: SD_MODELO_TIPO=sd no .env.
+const SD_TIPO = (process.env.SD_MODELO_TIPO || "z-image").trim().toLowerCase();
+const Z_URLS = {
+  difusao: process.env.SD_Z_DIFUSAO_URL || "https://huggingface.co/leejet/Z-Image-Turbo-GGUF/resolve/main/z_image_turbo-Q4_K.gguf",
+  // O repositório do leejet só hospeda a difusão; VAE e text-encoder vêm de
+  // outros lugares (conferido na API do Hugging Face).
+  vae:     process.env.SD_Z_VAE_URL     || "https://huggingface.co/Comfy-Org/z_image_turbo/resolve/main/split_files/vae/ae.safetensors",
+  llm:     process.env.SD_Z_LLM_URL     || "https://huggingface.co/unsloth/Qwen3-4B-Instruct-2507-GGUF/resolve/main/Qwen3-4B-Instruct-2507-Q4_K_M.gguf",
+};
 const IMAGEM_LIGADA = (process.env.IMAGEM ?? "1").trim() !== "0";
 
 import { existsSync, mkdirSync, readFileSync, unlinkSync, renameSync } from "node:fs";
@@ -13,7 +27,7 @@ import { basename, join } from "node:path";
 import { tmpdir } from "node:os";
 const LADO_MAX     = Number(process.env.IMAGEM_LADO_GERACAO || 768);
 const PASSOS_MAX   = Number(process.env.IMAGEM_PASSOS_MAX || 30);
-const TIMEOUT_MS   = Number(process.env.IMAGEM_GERACAO_TIMEOUT_MS || 180_000);
+const TIMEOUT_MS   = Number(process.env.IMAGEM_GERACAO_TIMEOUT_MS || 420_000);
 const MAX_PIXELS   = Number(process.env.IMAGEM_MAX_PIXELS || 32_000_000);
 
 // Reusa a reescrita do ver-imagem (mesma política, mesmo código).
@@ -67,6 +81,23 @@ export const definicao = {
 };
 
 // ── Backend embutido (sd.cpp + SD-Turbo) ──
+// Baixa um arquivo de modelo pela URL e devolve o caminho local (uma vez só).
+function baixarArquivo(url, rotulo) {
+  const nome = basename(new URL(url).pathname);
+  const destino = join(SD_DIR, nome);
+  if (existsSync(destino)) return destino;
+  try { mkdirSync(SD_DIR, { recursive: true }); } catch {}
+  console.info(`[IA][gerar_imagem] baixando ${rotulo}: ${nome} (uma vez, fica no volume)…`);
+  const tmp = `${destino}.baixando`;
+  const r = spawnSync("curl", ["-fL", "--retry", "2", url, "-o", tmp], { stdio: "inherit" });
+  if (r.status !== 0) {
+    try { unlinkSync(tmp); } catch {}
+    throw new Error(`download de "${rotulo}" (${nome}) falhou — confira a URL no .env e se o arquivo existe nesse repositório do Hugging Face`);
+  }
+  renameSync(tmp, destino);
+  return destino;
+}
+
 function baixarModeloSD() {
   const nome = basename(new URL(SD_MODELO_URL).pathname);
   const destino = join(SD_DIR, nome);
@@ -82,14 +113,37 @@ function baixarModeloSD() {
 
 function gerarEmbutido({ texto, width, height }) {
   return new Promise((res, rej) => {
-    let modelo;
-    try { modelo = baixarModeloSD(); } catch (e) { return rej(e); }
     const saida = join(tmpdir(), `sd-${Date.now()}.png`);
-    // SD-Turbo: pouquíssimos passos e cfg 1.0 — é o que o torna leve em CPU.
-    const passos = String(Math.min(PASSOS_MAX, Number(process.env.IMAGEM_PASSOS || 4)));
-    const finalArgs = ["-M", "img_gen", "-m", modelo, "-p", texto, "-n", NEGATIVO_FIXO,
-      "-W", String(width), "-H", String(height), "--steps", passos,
-      "--cfg-scale", process.env.IMAGEM_CFG || "1.0", "--type", "q8_0", "-o", saida];
+    const cfg = process.env.IMAGEM_CFG || "1.0";
+    let finalArgs;
+
+    if (SD_TIPO === "z-image") {
+      // Z-Image-Turbo: difusão + VAE + LLM, todos em arquivos separados.
+      // --diffusion-fa (flash attention) corta muito o uso de memória; sem
+      // ele o buffer de computação passa de 2 GB. Os GGUF já vêm quantizados,
+      // então NÃO se passa --type (reconverteria à toa).
+      let difusao, vae, llm;
+      try {
+        difusao = baixarArquivo(Z_URLS.difusao, "modelo de difusão");
+        vae     = baixarArquivo(Z_URLS.vae, "VAE");
+        llm     = baixarArquivo(Z_URLS.llm, "LLM do prompt");
+      } catch (e) { return rej(e); }
+      const passos = String(Math.min(PASSOS_MAX, Number(process.env.IMAGEM_PASSOS || 8)));
+      finalArgs = ["-M", "img_gen", "--diffusion-model", difusao, "--vae", vae, "--llm", llm,
+        "-p", texto, "-W", String(width), "-H", String(height), "--steps", passos,
+        "--cfg-scale", cfg, "--diffusion-fa", "-o", saida];
+      // Em GPU com pouca VRAM dedicada (iGPU), descarregar pesos para a RAM
+      // evita estourar. Desligue com IMAGEM_OFFLOAD=0 se a GPU tiver folga.
+      if ((process.env.IMAGEM_OFFLOAD ?? "1").trim() !== "0") finalArgs.push("--offload-to-cpu");
+    } else {
+      let modelo;
+      try { modelo = baixarModeloSD(); } catch (e) { return rej(e); }
+      // SD-Turbo: pouquíssimos passos e cfg 1.0 — é o que o torna leve em CPU.
+      const passos = String(Math.min(PASSOS_MAX, Number(process.env.IMAGEM_PASSOS || 4)));
+      finalArgs = ["-M", "img_gen", "-m", modelo, "-p", texto, "-n", NEGATIVO_FIXO,
+        "-W", String(width), "-H", String(height), "--steps", passos,
+        "--cfg-scale", cfg, "--type", "q8_0", "-o", saida];
+    }
     const p = spawnProc(SD_BIN, finalArgs, { stdio: ["ignore", "ignore", "pipe"] });
     let err = "";
     p.stderr.on("data", (d) => { err += d; });

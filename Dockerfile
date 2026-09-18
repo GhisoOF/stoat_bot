@@ -9,12 +9,21 @@
 # — e dá gerador de imagem ao ARM64 de quebra (o release nem tinha binário).
 FROM node:22-slim AS sdcpp
 ARG TARGETARCH
-RUN apt-get update && apt-get install -y --no-install-recommends       git cmake g++ make ca-certificates && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends       git cmake g++ make ca-certificates libvulkan-dev glslc glslang-tools spirv-headers spirv-tools && rm -rf /var/lib/apt/lists/*
 # Só na perna amd64: o CI compila as duas plataformas EM PARALELO num runner
 # de 7 GB, e compilar sd.cpp também sob qemu-arm64 estourava a memória no
 # meio do libwebp. ARM64 fica como sempre foi: sem gerador embutido, com o
 # aviso e o SD_URL externo como caminho. (Build local amd64 não sente nada.)
-RUN set -x; mkdir -p /sd/build/bin;     if [ "$TARGETARCH" != "arm64" ]; then       git clone --depth 1 --recursive https://github.com/leejet/stable-diffusion.cpp /sd-src       && cmake -S /sd-src -B /sd-src/build -DCMAKE_BUILD_TYPE=Release       && cmake --build /sd-src/build --config Release -j2       && cp -a /sd-src/build/bin/. /sd/build/bin/ && ls -la /sd/build/bin/;     else echo "arm64: sem sd.cpp embutido — gerar_imagem via SD_URL nesta arquitetura"; fi
+# Headers do Vulkan do Debian (1.3.239) sao velhos demais: o ggml-vulkan usa
+# VK_EXT_layer_settings, que so existe da 1.3.272 em diante — sem isto o build
+# morre com "'LayerSettingEXT' is not a member of 'vk'". Instalamos os headers
+# oficiais do Khronos por cima; a glibc continua a do Debian, que e o que
+# importa para o binario rodar na imagem final.
+RUN git clone --depth 1 -b v1.3.296 https://github.com/KhronosGroup/Vulkan-Headers /vkh \
+    && cmake -S /vkh -B /vkh/build -DCMAKE_INSTALL_PREFIX=/usr/local \
+    && cmake --install /vkh/build && rm -rf /vkh
+
+RUN set -x; mkdir -p /sd/build/bin;     if [ "$TARGETARCH" != "arm64" ]; then       git clone --depth 1 --recursive https://github.com/leejet/stable-diffusion.cpp /sd-src       && cmake -S /sd-src -B /sd-src/build -DCMAKE_BUILD_TYPE=Release -DSD_VULKAN=ON -DVulkan_INCLUDE_DIR=/usr/local/include       && cmake --build /sd-src/build --config Release -j2       && cp -a /sd-src/build/bin/. /sd/build/bin/ && ls -la /sd/build/bin/;     else echo "arm64: sem sd.cpp embutido — gerar_imagem via SD_URL nesta arquitetura"; fi
 
 FROM node:22-slim
 ARG TARGETARCH=amd64

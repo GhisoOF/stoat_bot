@@ -10,6 +10,7 @@
 
 import * as db from "../core/db.js";
 import { tr, lingua } from "../core/i18n.js";
+import { descreverErro } from "../core/erros.js";
 
 const DENY_TUDO = Number(0x000fffffffffffffn);   // mesmo GRANT_ALL_SAFE do cargo mudo
 const MAX_MSGS_TRANSCRICAO = Number(process.env.TICKET_MAX_MSGS || 1000);
@@ -66,6 +67,7 @@ async function coletarHistorico(canal) {
 export async function cmdTicket(message, args, ctx) {
   const { sendEmbed, COR, PREFIXO: P, serverId, config, salvarConfig, getServer, membroTemPermissao } = ctx;
   const en = lingua(ctx) === "en";
+  const lang = en ? "en" : "pt";
   const sub = String(args[0] ?? "").toLowerCase();
   const ehStaff = ctx.temCargoStaff?.(message, config)
     || membroTemPermissao(message, await getServer(message).catch(() => null), "ManageChannel");
@@ -150,7 +152,10 @@ export async function cmdTicket(message, args, ctx) {
         if (membro) {
           const atuais = new Set((membro.roles ?? []).map((r) => r?.id ?? r).filter(Boolean));
           atuais.add(roleId);
-          await membro.edit({ roles: [...atuais] }).catch((e) => { throw new Error(`atribuir o cargo falhou (${e.message}) — falta AssignRoles?`); });
+          // A API do Stoat rejeita com um objeto tipado ({type: "MissingPermission"…}),
+          // não um Error comum — e.message vinha "undefined". descreverErro já sabe
+          // traduzir esse formato (o mesmo usado pelo silêncio do automod).
+          await membro.edit({ roles: [...atuais] }).catch((e) => { throw new Error(descreverErro(e, lang)); });
         }
       }
 
@@ -159,8 +164,8 @@ export async function cmdTicket(message, args, ctx) {
       if (!canal?.id) throw new Error("a API não devolveu o canal (falta ManageChannel?)");
 
       // 4) permissões: ninguém vê; o cargo do ticket e a staff veem tudo
-      await canal.setPermissions("default", { allow: 0, deny: DENY_TUDO });
-      await canal.setPermissions(roleId, { allow: DENY_TUDO, deny: 0 });
+      await canal.setPermissions("default", { allow: 0, deny: DENY_TUDO }).catch((e) => { throw new Error(descreverErro(e, lang)); });
+      await canal.setPermissions(roleId, { allow: DENY_TUDO, deny: 0 }).catch((e) => { throw new Error(descreverErro(e, lang)); });
       for (const staffRole of config?.acesso?.cargosStaff ?? []) {
         await canal.setPermissions(staffRole, { allow: DENY_TUDO, deny: 0 }).catch(() => {});
       }
@@ -168,9 +173,11 @@ export async function cmdTicket(message, args, ctx) {
       // desfaz o que deu tempo de criar
       try { if (canal?.delete) await canal.delete(); } catch {}
       try { if (roleId) await server.deleteRole?.(roleId); } catch {}
+      const motivoErro = e instanceof Error ? e.message : descreverErro(e, lang);
+      console.error(`[TICKET] abrir falhou: ${motivoErro}`);
       return sendEmbed(message.channel, {
         title: "🎫", colour: COR.aviso,
-        description: (en ? "I couldn't open the ticket: " : "Não consegui abrir o ticket: ") + `${e.message}\n` + (en ? "The bot needs **ManageChannel, ManageRole, AssignRoles, ManagePermissions**." : "O bot precisa de **ManageChannel, ManageRole, AssignRoles, ManagePermissions**."),
+        description: (en ? "I couldn't open the ticket: " : "Não consegui abrir o ticket: ") + `${motivoErro}\n` + (en ? "The bot needs **ManageChannel, ManageRole, AssignRoles, ManagePermissions** — and its own role must be ABOVE the roles it creates (check the role order)." : "O bot precisa de **ManageChannel, ManageRole, AssignRoles, ManagePermissions** — e o cargo dele precisa estar ACIMA dos cargos que ele cria (confira a ordem dos cargos)."),
       });
     }
 

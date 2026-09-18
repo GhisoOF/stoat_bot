@@ -98,5 +98,47 @@ console.log("\n── tickets: transcrição e fatiamento (puros) ──");
   ok(fatias.join("\n") === grande, "  → juntar as fatias reconstrói o texto inteiro");
 }
 
+console.log("\n── tickets: fumaça do abrir com erro tipado da API (o bug do 'undefined') ──");
+{
+  process.env.DB_PATH = "/tmp/teste-tickets-fumaca.db";
+  try { (await import("node:fs")).rmSync("/tmp/teste-tickets-fumaca.db", { force: true }); } catch {}
+  const dbMod = await import("./modulos/core/db.js");
+  dbMod.abrirBanco("/tmp/teste-tickets-fumaca.db");
+  const t = await import("./modulos/ferramentas/tickets.js?fumaca-ticket");
+
+  let capturado = null;
+  const ctxFake = {
+    sendEmbed: async (_canal, embed) => { capturado = embed; return embed; },
+    COR: { info: "#5865F2", aviso: "#FAA61A", sucesso: "#43B581" },
+    PREFIXO: "&",
+    serverId: "srv1",
+    config: { tickets: { logCanal: "canal-log" }, acesso: { cargosStaff: [] } },
+    salvarConfig: () => {},
+    getServer: async () => ({
+      createRole: async () => ({ id: "role-novo" }),
+      // simula a API do Stoat: rejeita com objeto TIPADO, sem .message —
+      // era exatamente isso que produzia "atribuir o cargo falhou (undefined)".
+      fetchMember: async () => ({ roles: [], edit: async () => { throw { type: "MissingPermission" }; } }),
+      createChannel: async () => ({ id: "canal-novo", delete: async () => {} }),
+      deleteRole: async () => {},
+    }),
+    membroTemPermissao: () => false,
+    temCargoStaff: () => false,
+    client: { user: { id: "bot1" } },
+    limparId: (x) => x,
+  };
+  const msgFake = { channel: {}, channelId: "canal-cmd", authorId: "user1" };
+
+  let explodiu = null;
+  try { await t.cmdTicket(msgFake, ["abrir"], ctxFake); } catch (e) { explodiu = e; }
+
+  ok(!explodiu, `★ "&ticket abrir" não lança exceção não tratada mesmo com erro tipado da API${explodiu ? ` — pegou: ${explodiu.message}` : ""}`);
+  ok(!!capturado, "  → uma resposta foi enviada");
+  ok(capturado && !String(capturado.description).includes("undefined"),
+    `★ a mensagem de erro NUNCA mostra "undefined" cru (o bug real) — veio: "${capturado?.description?.slice(0, 80)}"`);
+  ok(capturado && capturado.description.includes("AssignRoles"),
+    "  → e explica o motivo real (permissão/hierarquia), traduzido");
+}
+
 console.log(`\nRPG+TICKETS: ${pass} ok, ${fail} falha(s)`);
 process.exit(fail ? 1 : 0);

@@ -399,7 +399,7 @@ export function caminhoCitado(texto) {
   return m[1].replace(/^\/+/, "");   // tira a barra inicial: /modulos/x → modulos/x
 }
 
-async function chamarServicoIA(messages, { modelo = null, idioma = "pt" } = {}) {
+async function chamarServicoIA(messages, { modelo = null, idioma = "pt" } = {}, opcoes = {}) {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), TIMEOUT);
   try {
@@ -408,7 +408,7 @@ async function chamarServicoIA(messages, { modelo = null, idioma = "pt" } = {}) 
     const r = await fetch(`${IA_SERVICO_URL}/chat`, {
       method: "POST",
       headers,
-      body: JSON.stringify({ messages, modelo: modelo || undefined, idioma }),
+      body: JSON.stringify({ messages, modelo: modelo || undefined, idioma, ferramentas: opcoes?.ferramentas !== false }),
       signal: ctrl.signal,
     });
     if (!r.ok) {
@@ -1083,6 +1083,10 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
     if (r?.anexo_base64) {
       responder._anexoDireto = { base64: r.anexo_base64, mime: r.anexo_mime || "image/png", nome: r.anexo_nome || "imagem.png" };
       dlog("geração direta ok — imagem pronta para anexar");
+      // O modelo só precisa legendar. Sem desligar as ferramentas aqui ele
+      // chama gerar_imagem DE NOVO por conta própria: duas imagens, dobro do
+      // tempo (foi o que o log de produção mostrou).
+      responder._semFerramentas = true;
       messages.push({
         role: "system",
         content: lang === "en"
@@ -1125,7 +1129,9 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
   const precisaDoServico = tipo === "ferramenta";
   if (IA_SERVICO_URL && precisaDoServico) {
     try {
-      const r = await chamarServicoIA(messages, { modelo: modeloEscolhido, idioma: lang });
+      const r = await chamarServicoIA(messages, { modelo: modeloEscolhido, idioma: lang },
+        { ferramentas: !responder._semFerramentas });
+      responder._semFerramentas = false;
       // O serviço faz a própria continuação; o que volta é inteiro.
       if (r) {
         responder._cortou = false;

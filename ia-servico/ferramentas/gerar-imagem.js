@@ -111,6 +111,10 @@ function baixarModeloSD() {
   return destino;
 }
 
+// O sd.cpp usa semente FIXA por padrão: o mesmo prompt devolvia sempre a mesma
+// imagem, o que parecia um bug de cache ("ele reenviou a figura de ontem").
+const semente = () => Math.floor(Math.random() * 2_147_483_647);
+
 function gerarEmbutido({ texto, width, height }) {
   return new Promise((res, rej) => {
     const saida = join(tmpdir(), `sd-${Date.now()}.png`);
@@ -131,7 +135,7 @@ function gerarEmbutido({ texto, width, height }) {
       const passos = String(Math.min(PASSOS_MAX, Number(process.env.IMAGEM_PASSOS || 8)));
       finalArgs = ["-M", "img_gen", "--diffusion-model", difusao, "--vae", vae, "--llm", llm,
         "-p", texto, "-W", String(width), "-H", String(height), "--steps", passos,
-        "--cfg-scale", cfg, "--diffusion-fa", "-o", saida];
+        "--cfg-scale", cfg, "--diffusion-fa", "--seed", String(semente()), "-o", saida];
       // Em GPU com pouca VRAM dedicada (iGPU), descarregar pesos para a RAM
       // evita estourar. Desligue com IMAGEM_OFFLOAD=0 se a GPU tiver folga.
       if ((process.env.IMAGEM_OFFLOAD ?? "1").trim() !== "0") finalArgs.push("--offload-to-cpu");
@@ -142,7 +146,7 @@ function gerarEmbutido({ texto, width, height }) {
       const passos = String(Math.min(PASSOS_MAX, Number(process.env.IMAGEM_PASSOS || 4)));
       finalArgs = ["-M", "img_gen", "-m", modelo, "-p", texto, "-n", NEGATIVO_FIXO,
         "-W", String(width), "-H", String(height), "--steps", passos,
-        "--cfg-scale", cfg, "--type", "q8_0", "-o", saida];
+        "--cfg-scale", cfg, "--type", "q8_0", "--seed", String(semente()), "-o", saida];
     }
     const p = spawnProc(SD_BIN, finalArgs, { stdio: ["ignore", "ignore", "pipe"] });
     let err = "";

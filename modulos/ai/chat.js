@@ -1297,7 +1297,15 @@ export function pedeDesenvolvimento(texto) {
 // deterministicamente — deixado ao modelo, ele "desenha" com ASCII art.
 export function pedeImagemGerada(texto) {
   const t = String(texto ?? "");
-  return /\b(desenh(?:a|e|ar|o)\b|fa[çc]a\s+(?:um\s+)?desenho|(?:ger[ae]r?|cri[ae]r?|faz(?:er)?|fa[çc]a)\s+(?:uma?\s+)?(?:imagem|arte|ilustra\w+|wallpaper|logo|avatar|pixel\s*art)|draw\s+(?:me\s+)?a?\b|(?:generate|create|make)\s+(?:an?\s+)?(?:image|art|picture|illustration|drawing))/i.test(t);
+  if (/\b(desenh(?:a|e|ar|o)\b|fa[çc]a\s+(?:um\s+)?desenho|(?:ger[ae]r?|cri[ae]r?|faz(?:er)?|fa[çc]a)\s+(?:uma?\s+)?(?:imagem|arte|ilustra\w+|wallpaper|logo|avatar|pixel\s*art)|draw\s+(?:me\s+)?a?\b|(?:generate|create|make)\s+(?:an?\s+)?(?:image|art|picture|illustration|drawing))/i.test(t)) return true;
+  // Pedido "cru": verbo de criação + um sujeito qualquer, sem dizer a palavra
+  // "imagem" — foi o caso real que escapou: "faça uma mulher cibernética
+  // posando com uma arma. Estilo cyberpunk e anime". A menção a estilo/arte
+  // no resto da frase é o que confirma a intenção sem depender de vocabulário
+  // fixo de "desenho/imagem".
+  const verboCriacao = /\b(fa[çc]a|crie|cria|gere|gera|desenh\w*|generate|create|make|draw)\b/i.test(t);
+  const pistaVisual = /\b(estilo|pixel\s*art|anime|mang[aá]|cyberpunk|aquarela|watercolor|realista|hiper.?realista|ilustra\w*|renderiz\w*|arte\s*digital|digital\s*art|posando|pose)\b/i.test(t);
+  return verboCriacao && pistaVisual;
 }
 
 // A resposta veio em INGLÊS quando devia ser português? Contamos palavras

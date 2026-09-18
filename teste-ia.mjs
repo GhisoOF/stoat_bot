@@ -1354,6 +1354,14 @@ console.log("\n── pedido de imagem gerada (o caso do castelo em ASCII) ─�
   ok(chat.pedeImagemGerada("draw me a dragon"), "  → inglês também");
   ok(!chat.pedeImagemGerada("o que você acha da arte renascentista?"), "  → falar SOBRE arte não dispara");
   ok(!chat.pedeImagemGerada("me descreve esta imagem"), "  → descrever imagem é ver_imagem, não gerar");
+  ok(chat.pedeImagemGerada("faça uma mulher cibernética posando com uma arma. Estilo cyberpunk e anime"),
+    "★ o caso real que escapou: 'faça X posando...' + estilo, sem dizer 'imagem'");
+  ok(chat.pedeImagemGerada("crie um guerreiro medieval, estilo realista"),
+    "  → 'crie X, estilo Y' também");
+  ok(!chat.pedeImagemGerada("faça uma lista de compras"),
+    "  → 'faça uma lista' não tem pista visual — não dispara");
+  ok(!chat.pedeImagemGerada("crie um evento para sábado"),
+    "  → 'crie um evento' idem");
   ok(chat.precisaFerramenta("desenha um dragão vermelho"),
     "★ e o roteador agora manda pro caminho de ferramenta");
 }

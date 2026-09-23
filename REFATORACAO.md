@@ -325,6 +325,71 @@ próprio consultando `.ollama.alcancavel`, troque por `.llm.alcancavel`.
 
 ---
 
+## 6c. Anti-duplicata e comandos em árvore (3ª rodada)
+
+### O spam que passou (bot "Stork", 23 set)
+
+A mesma mensagem longa, repetida 5+ vezes, num ritmo calmo. Passou porque as
+três defesas olhavam para lugares diferentes: **anti-spam** mede velocidade
+(5 msg / 4 s), **anti-repeticao** olha *dentro* de uma mensagem (o mesmo
+caractere seguido) e vem desligado, e o **sentinela** julga o *conteúdo* — que
+era inofensivo. **Ninguém comparava uma mensagem com a anterior.** (O automod
+não ignora bots; isso foi verificado, não era a causa.)
+
+**`antiDuplicata`** (novo, ligado por padrão): guarda uma "digital" das
+mensagens recentes de cada autor e conta as repetições. Na 3ª vez em 2 minutos,
+apaga e pune. A digital normaliza acento, caixa, pontuação, espaço e emoji, então
+esses disfarces não passam. Mensagens com menos de 12 caracteres úteis são
+ignoradas (`ok`, `kkkk`), e repetir duas vezes continua aceitável.
+
+No **sentinela**, a repetição virou sinal (peso 2), somado junto com o ritmo.
+Calibrado para **não condenar sozinho**: texto limpo repetido 4× continua com
+nota baixa. Quem pune é a regra determinística; o sinal só soma com o resto.
+
+`teste-duplicata.mjs` (15 asserções) usa o texto real do Stork.
+
+### Comandos em árvore
+
+Levantamento: 90 rotas, mas **47 comandos distintos** — 43 já eram alias. O
+problema não era quantidade, era **hierarquia**: a família do automod estava
+espalhada em 5 comandos de topo.
+
+| Antes | Agora (canônico) | Atalho que continua valendo |
+|---|---|---|
+| `&blocklist` | `&automod blocklist` | `&blocklist` |
+| `&whitelist` | `&automod whitelist` | `&whitelist` |
+| `&sentinela …` | `&automod sentinela …` | `&sentinela` |
+| `&punicao` | `&automod punicao` | `&punicao` |
+| `&warnings` | `&warn lista` | `&warnings` |
+| `&clearwarnings` | `&warn limpar` | `&clearwarnings` |
+| `&tts entrar` / `&tts sair` | `&entrar` / `&sair` | `&tts entrar` |
+
+`&automod sentinela on|off` continua ligando/desligando o módulo; com qualquer
+outro argumento, abre o painel do sentinela.
+
+### `&help` desce a árvore inteira
+
+Antes ele resolvia **dois níveis** fixos. Agora percorre quantas camadas
+existirem: `&help automod` → `&help automod sentinela` → `&help automod
+sentinela antiguidade`. Cada camada mostra o texto **e** lista o que há dentro,
+e um passo inexistente responde com o que existe ali, em vez de só negar.
+
+Os nós **não foram duplicados**: `automod.punicao` é o mesmo objeto que
+`punicao`. Um texto, um lugar — `&help punicao` e `&help automod punicao`
+mostram o mesmo, e mudar um muda os dois.
+
+### Documentação atualizada na mesma rodada
+
+`&config` (lista o `antiduplicata` com o limite e a janela reais), `&info`
+(uso e descrição na forma de árvore), `&tutorial` (passo 3: aprofundar) e o
+`README.md` (nota sobre a árvore + tabela de comandos).
+
+`teste-arvore-comandos.mjs` (17 asserções) trava a família, a profundidade, a
+ausência de nó duplicado, os alias antigos, e checa que **todo nó explica o que
+a coisa é**, não só a sintaxe.
+
+---
+
 ## 7. O que NÃO fiz, e por quê
 
 | Item | Por quê |

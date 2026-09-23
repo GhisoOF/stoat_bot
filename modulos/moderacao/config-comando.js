@@ -58,6 +58,7 @@ export async function cmdConfig(message, args, ctx) {
   const modulos = en ? [
     `${on(am.antiSpam.enabled)} **antispam** — ${am.antiSpam.maxMessages} msg / ${am.antiSpam.windowMs}ms`,
     `${on(am.antiMassSpam.enabled)} **antimassspam** — ${am.antiMassSpam.maxMessages} msg / ${am.antiMassSpam.windowMs}ms`,
+    `${on(am.antiDuplicata?.enabled !== false)} **antiduplicata** — ${am.antiDuplicata?.maxRepetidas ?? 3}× the same message / ${Math.round((am.antiDuplicata?.windowMs ?? 120000) / 1000)}s`,
     `${on(am.antiInvite.enabled)} **antiinvite** — blocks invites`,
     `${on(am.antiMassMention.enabled)} **antimassmention** — max ${am.antiMassMention.maxMentions} mentions`,
     `${on(am.antiCaps.enabled)} **anticaps** — ≥${am.antiCaps.minLength} chars and ${Math.round(am.antiCaps.threshold * 100)}% uppercase`,
@@ -66,6 +67,7 @@ export async function cmdConfig(message, args, ctx) {
   ] : [
     `${on(am.antiSpam.enabled)} **antispam** — ${am.antiSpam.maxMessages} msg / ${am.antiSpam.windowMs}ms`,
     `${on(am.antiMassSpam.enabled)} **antimassspam** — ${am.antiMassSpam.maxMessages} msg / ${am.antiMassSpam.windowMs}ms`,
+    `${on(am.antiDuplicata?.enabled !== false)} **antiduplicata** — ${am.antiDuplicata?.maxRepetidas ?? 3}× a mesma mensagem / ${Math.round((am.antiDuplicata?.windowMs ?? 120000) / 1000)}s`,
     `${on(am.antiInvite.enabled)} **antiinvite** — bloqueia convites`,
     `${on(am.antiMassMention.enabled)} **antimassmention** — máx. ${am.antiMassMention.maxMentions} menções`,
     `${on(am.antiCaps.enabled)} **anticaps** — ≥${am.antiCaps.minLength} chars e ${Math.round(am.antiCaps.threshold * 100)}% maiúsculas`,
@@ -200,7 +202,7 @@ export async function cmdConfig(message, args, ctx) {
       "**🌐 Global** *(shared across servers)*",
       `Debug: ${simL(cfgGlobal.debug !== false)} · Anti-link lists: ${cfgGlobal.linkBlocklistSources.length} source(s), ${cfgGlobal.linkBlocklistManual.length} manual domain(s)`,
       "",
-      `💡 Adjust with \`${PREFIXO}automod\`, \`${PREFIXO}punicao\`, \`${PREFIXO}log\`, \`${PREFIXO}sentinela\` — \`${PREFIXO}tutorial\` shows the path, \`${PREFIXO}assistente\` walks it with you.`,
+      `💡 Adjust with \`${PREFIXO}automod\` (holds blocklist, whitelist, sentinela and punicao), \`${PREFIXO}log\`, \`${PREFIXO}sentinela\` — \`${PREFIXO}tutorial\` shows the path, \`${PREFIXO}assistente\` walks it with you.`,
     ].join("\n"),
     colour: COR.info,
   } : {
@@ -255,7 +257,7 @@ export async function cmdConfig(message, args, ctx) {
       "**🌐 Global** *(compartilhado entre servidores)*",
       `Debug: ${simL(cfgGlobal.debug !== false)} · Listas anti-link: ${cfgGlobal.linkBlocklistSources.length} fonte(s), ${cfgGlobal.linkBlocklistManual.length} domínio(s) manual(is)`,
       "",
-      `💡 Ajuste com \`${PREFIXO}automod\`, \`${PREFIXO}punicao\`, \`${PREFIXO}log\`, \`${PREFIXO}sentinela\` — \`${PREFIXO}tutorial\` mostra o caminho, \`${PREFIXO}assistente\` percorre com você.`,
+      `💡 Ajuste com \`${PREFIXO}automod\` (que reúne blocklist, whitelist, sentinela e punicao), \`${PREFIXO}log\`, \`${PREFIXO}sentinela\` — \`${PREFIXO}tutorial\` mostra o caminho, \`${PREFIXO}assistente\` percorre com você.`,
     ].join("\n"),
     colour: COR.info,
   });

@@ -153,6 +153,7 @@ export const PESOS = {
   pergunta:       -3,
   negacao:        -4,
   taxa_alta:       1.5,
+  duplicata:       2,     // a MESMA mensagem, de novo (bot de propaganda)
   conj_grave_oferta:   6,  // grave + oferta = anúncio de material → topo
   conj_grave_contexto: 5,  // grave + link/cta/venda = contexto suspeito → alerta
   conj_topico_cta:     2,  // tópico proibido + contato = divulgação
@@ -209,6 +210,9 @@ function extrairFeatures(texto, opts = {}) {
 
   // Taxa (mensagens/seg) — passada de fora
   if ((opts.rate ?? 1) >= 3) f.taxa_alta = 1;
+  // Quantas vezes esta mesma mensagem já veio. Repetir texto idêntico é um
+  // comportamento de máquina: sozinho não condena, mas soma com o resto.
+  if ((opts.repetidas ?? 1) >= 2) f.duplicata = Math.min(3, opts.repetidas - 1);
 
   // Conjunções (o "E" que o somatório linear sozinho não captura)
   const temContexto = (f.oferta > 0 || f.cta > 0 || f.link_filehost || f.link_encurtador || f.link_convite || f.link_simples || f.afirmacao > 0);

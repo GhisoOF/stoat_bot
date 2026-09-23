@@ -4,7 +4,101 @@ export const IA_TAG = "\u200b[ia]";
 
 // Monta a árvore completa. `P` é o prefixo do bot.
 export function arvoreSubtopicos(P, lang = "pt") {
-  return lang === "en" ? arvoreEN(P) : arvorePT(P);
+  return comFamilias(lang === "en" ? arvoreEN(P) : arvorePT(P), P, lang);
+}
+
+// Liga os comandos que viraram FAMÍLIA aos assuntos que já existem na árvore.
+//
+// Os nós não são copiados: `automod.punicao` é o MESMO objeto que `punicao`.
+// Assim `&help punicao` e `&help automod punicao` mostram o mesmo texto, e um
+// dia que esse texto mudar, muda nos dois — não há versão para esquecer.
+function comFamilias(arvore, P, lang) {
+  const en = lang === "en";
+  const ramo = (chave, titulo, texto, filhos) => {
+    // Um filho que não existe na árvore não vira chave morta.
+    const reais = Object.fromEntries(Object.entries(filhos).filter(([, v]) => v));
+    arvore[chave] = { ...(arvore[chave] ?? {}), titulo, texto, ...reais };
+  };
+
+  ramo("automod", "automod", [
+    en
+      ? "Everything the bot filters on its own lives here. Each module below **measures** something exact (rate, caps, links) — except the sentinel, which **judges** the content."
+      : "Tudo que o bot filtra sozinho fica aqui. Cada módulo abaixo **mede** algo exato (ritmo, caixa alta, links) — menos o sentinela, que **julga** o conteúdo.",
+    "",
+    en ? "**See what's on**" : "**Ver o que está ligado**",
+    `\`${P}automod\` — ` + (en ? "status of every module" : "status de cada módulo"),
+    `\`${P}automod <módulo> on|off\` — ` + (en ? "turn one on or off" : "liga ou desliga um"),
+    "",
+    en ? "**The modules**" : "**Os módulos**",
+    `\`antispam\` — ` + (en ? "too many messages, too fast" : "mensagens demais, rápido demais"),
+    `\`antimassspam\` — ` + (en ? "the same, but a flood" : "o mesmo, mas em enxurrada"),
+    `\`antiduplicata\` — ` + (en
+      ? "the SAME message over and over (a calm bot passes the two above)"
+      : "a MESMA mensagem várias vezes (um bot calmo passa pelos dois acima)"),
+    `\`anticaps\` — ` + (en ? "CAPS LOCK in excess" : "CAIXA ALTA em excesso"),
+    `\`antilink\` — ` + (en ? "domains on the blocklist" : "domínios da lista de bloqueio"),
+    `\`antiinvite\` — ` + (en ? "invites to other servers" : "convites para outros servidores"),
+    `\`antimassmention\` — ` + (en ? "mentioning a crowd at once" : "mencionar um monte de gente de uma vez"),
+    `\`anticaracteres\` — ` + (en ? "zalgo and invisible characters" : "zalgo e caracteres invisíveis"),
+    `\`antirepeticao\` — ` + (en ? "the same letter dragged on" : "a mesma letra arrastada"),
+    `\`sentinela\` — ` + (en ? "judges the content (see below)" : "julga o conteúdo (veja abaixo)"),
+    "",
+    en ? "**Inside the family**" : "**Dentro da família**",
+    `\`${P}automod blocklist\` · \`${P}automod whitelist\` · \`${P}automod sentinela\` · \`${P}automod punicao\``,
+    "",
+    en
+      ? `_The short names still work: \`${P}blocklist\`, \`${P}sentinela\`, \`${P}punicao\`._`
+      : `_Os nomes curtos continuam valendo: \`${P}blocklist\`, \`${P}sentinela\`, \`${P}punicao\`._`,
+  ].join("\n"), {
+    blocklist: arvore.blocklist,
+    whitelist: arvore.whitelist,
+    sentinela: arvore.sentinela,
+    punicao:   arvore.punicao,
+  });
+
+  ramo("automod whitelist", "automod whitelist", [
+    en
+      ? "Domains and invite codes that pass even when a module would block them."
+      : "Domínios e códigos de convite que passam mesmo quando um módulo bloquearia.",
+    "",
+    `\`${P}whitelist\` — ` + (en ? "see the list" : "vê a lista"),
+    `\`${P}whitelist add <código>\` · \`${P}whitelist remove <código>\``,
+  ].join("\n"), {});
+  arvore.automod.whitelist = arvore["automod whitelist"];
+  delete arvore["automod whitelist"];
+
+  ramo("warn", "warn", [
+    en
+      ? "A warning is a note on someone's record. It's what the punishment ladder counts."
+      : "Um aviso é uma anotação na ficha de alguém. É o que a escada de punição conta.",
+    "",
+    `\`${P}warn @pessoa [motivo]\` — ` + (en ? "record a warning" : "registra um aviso"),
+    `\`${P}warn lista [@pessoa]\` — ` + (en ? "see the warnings" : "vê os avisos"),
+    `\`${P}warn limpar @pessoa\` — ` + (en ? "wipe that record" : "zera a ficha"),
+    "",
+    en
+      ? `_\`${P}warnings\` and \`${P}clearwarnings\` still work._`
+      : `_\`${P}warnings\` e \`${P}clearwarnings\` continuam valendo._`,
+  ].join("\n"), {});
+
+  ramo("entrar", "entrar", [
+    en
+      ? "Brings the bot into a voice call. Once it's there, both the reader (TTS) and the music use the SAME connection."
+      : "Traz o bot para uma call. Uma vez lá dentro, o leitor (TTS) e a música usam a MESMA conexão.",
+    "",
+    `\`${P}entrar\` — ` + (en ? "join the call you're in" : "entra na call em que você está"),
+    `\`${P}sair\` — ` + (en ? "leave it" : "sai dela"),
+    "",
+    en ? "**What to do once inside**" : "**O que dá para fazer lá dentro**",
+    `\`${P}tts\` — ` + (en ? "read the chat out loud" : "ler o chat em voz alta"),
+    `\`${P}musica <link|nome>\` — ` + (en ? "play music" : "tocar música"),
+    "",
+    en
+      ? `_\`${P}tts entrar\` does the same thing — \`${P}entrar\` is just shorter._`
+      : `_\`${P}tts entrar\` faz o mesmo — \`${P}entrar\` é só mais curto._`,
+  ].join("\n"), {});
+
+  return arvore;
 }
 
 function arvorePT(P) {

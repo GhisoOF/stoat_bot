@@ -15,6 +15,8 @@ export const padraoServidor = {
     antiLink:        { enabled: false, punicao: null },
     antiCaracteres:  { enabled: true, limiteZalgo: 0.6, punicao: null },
     antiRepeticao:   { enabled: false, maxRepeticao: 15, ignorar: "k", punicao: null },
+    // Mesma mensagem repetida VÁRIAS VEZES (o anti-spam só vê velocidade).
+    antiDuplicata:   { enabled: true,  maxRepetidas: 3, windowMs: 120000, punicao: null },
     antiScam: {
       enabled: false, sensitivity: "media", alertChannelId: null, punicao: null,
       porAntiguidade: true,   // limiar acompanha o nível do membro
@@ -126,6 +128,7 @@ function mesclarServidor(salvo, tpl) {
       antiLink:        { ...am.antiLink,        ...(s.antiLink ?? {}) },
       antiCaracteres:  { ...am.antiCaracteres,  ...(s.antiCaracteres ?? {}) },
       antiRepeticao:   { ...am.antiRepeticao,   ...(s.antiRepeticao ?? {}) },
+      antiDuplicata:   { ...am.antiDuplicata,   ...(s.antiDuplicata ?? {}) },
       antiScam:        { ...am.antiScam,        ...(s.antiScam ?? {}) },
       punicao:         { ...am.punicao,         ...(s.punicao ?? {}) },
     },

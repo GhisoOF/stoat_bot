@@ -58,6 +58,25 @@ export async function cmdAutomod(message, args, ctx) {
 
   let sub = args[0]?.toLowerCase();
 
+  // ── A família do automod mora aqui dentro ──────────────────────────────
+  // `&automod blocklist ...` e `&blocklist ...` são a MESMA coisa: a árvore é
+  // a forma canônica (uma só para lembrar, e o &help desce por ela), e os
+  // nomes soltos continuam valendo como atalho para quem já tem o costume.
+  const FILHOS = {
+    blocklist: cmdBlocklist, bloqueio: cmdBlocklist,
+    whitelist: cmdWhitelist, permitidos: cmdWhitelist,
+    punicao: cmdPunicao, "punição": cmdPunicao, castigo: cmdPunicao,
+  };
+  if (FILHOS[sub]) return FILHOS[sub](message, args.slice(1), ctx);
+
+  // `sentinela` é os dois: um módulo que liga/desliga (como anticaps) E um
+  // painel com ajustes próprios. `on|off` fica na lista de módulos abaixo;
+  // qualquer outra coisa é assunto do painel.
+  if ((sub === "sentinela" || sub === "antiscam")
+      && args[1] && !["on", "off"].includes(args[1].toLowerCase())) {
+    return cmdScam(message, args.slice(1), ctx);
+  }
+
   // %automod debug <on|off> — liga/desliga os logs (GLOBAL, todos os servidores)
   if (sub === "debug") {
     const v = args[1]?.toLowerCase();

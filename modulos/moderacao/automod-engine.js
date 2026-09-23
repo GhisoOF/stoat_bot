@@ -5,7 +5,7 @@ import { descreverErro, tipoDoErro } from "../core/erros.js";
 import * as log from "../core/log.js";
 import * as banGlobal from "./ban-global.js";
 import * as confianca from "./confianca.js";
-import { analisarCaracteres, analisarRepeticao, textoHumano, razaoDeCaixaAlta } from "./caracteres.js";
+import { analisarCaracteres, analisarRepeticao, analisarDuplicata, digital, textoHumano, razaoDeCaixaAlta } from "./caracteres.js";
 import { lingua } from "../core/i18n.js";
 import {
   ConstrutorIndice, criarIndiceVazio, carregarCache, salvarCache,
@@ -536,6 +536,31 @@ export async function runAutomod(message, ctx) {
 
   const canal = await resolverCanal(message, ctx);
 
+  // ── Quantas vezes esta MESMA mensagem já veio deste autor ──
+  // Fica aqui em cima porque o sentinela usa este número: uma mensagem
+  // repetida pesa na nota dele, mesmo quando o texto em si é inofensivo.
+  const dup = am.antiDuplicata ?? {};
+  let repetidas = 1, registrarDigital = null, anterioresDigitais = [];
+  if (dup.enabled !== false) {
+    const agora = Date.now();
+    const janela = dup.windowMs ?? 120_000;
+    const chaveEco = `${ctx.serverId ?? server?.id ?? "?"}:${userId}`;
+    const recentes = (estado.ecoData?.get(chaveEco) ?? []).filter((x) => agora - x.t < janela);
+    const d = digital(content);
+    if (d) {
+      anterioresDigitais = recentes.map((x) => x.d);
+      repetidas = recentes.filter((x) => x.d === d).length + 1;
+      // Só registra se a mensagem SOBREVIVER às regras abaixo: uma mensagem
+      // apagada por outro motivo não deve contar como repetição depois.
+      registrarDigital = () => {
+        recentes.push({ d, t: agora });
+        estado.ecoData?.set(chaveEco, recentes.slice(-40));
+      };
+    } else if (estado.ecoData) {
+      estado.ecoData.set(chaveEco, recentes);
+    }
+  }
+
   // ── Anti-invite (respeita a whitelist de códigos) ──
   if (am.antiInvite.enabled) {
     INVITE_REGEX.lastIndex = 0;
@@ -559,7 +584,7 @@ export async function runAutomod(message, ctx) {
   // ── Conteúdo proibido (scorecard único: golpe/+18/gore/ilícito/CSAM) ──
   if (am.antiScam?.enabled) {
     const rate = taxaPorSegundo(estado, userId, ctx.serverId ?? server?.id);
-    const r = analisarConteudo(content, { rate });
+    const r = analisarConteudo(content, { rate, repetidas });
     const base = ({ baixa: 7, media: 6, alta: 5 })[am.antiScam.sensitivity] ?? 6;
 
     const { limiar, faixa, nivel } = confianca.limiarPara(
@@ -682,6 +707,23 @@ export async function runAutomod(message, ctx) {
     dbg(ctx, "  [anti-repeticao] OFF");
   }
 
+  // ── Anti-duplicata: a mesma mensagem, de novo e de novo ──
+  // O anti-spam abaixo mede VELOCIDADE (N mensagens em X segundos). Quem
+  // repete o mesmo texto num ritmo calmo passava por ele e por todo o resto.
+  if (dup.enabled !== false) {
+    const r = analisarDuplicata(content, anterioresDigitais, { maxRepetidas: dup.maxRepetidas ?? 3 });
+    dbg(ctx, `  [anti-duplicata] ON → ${repetidas}ª vez desta mensagem (limite ${dup.maxRepetidas ?? 3})`);
+    if (r) {
+      dbg(ctx, "  ✗ BLOQUEADA por anti-duplicata");
+      try { await message.delete(); } catch (e) { dbg(ctx, `  (falha ao deletar: ${e.message})`); }
+      await aplicarPunicao(ctx, { server, channel: canal, message, userId,
+        pol: dup.punicao, motivo: r.motivo });
+      return true;
+    }
+  } else {
+    dbg(ctx, "  [anti-duplicata] OFF");
+  }
+
   // ── Anti-spam / Anti-mass-spam ──
   if (am.antiSpam.enabled || am.antiMassSpam.enabled) {
     const now = Date.now();
@@ -719,6 +761,7 @@ export async function runAutomod(message, ctx) {
     dbg(ctx, "  [anti-spam/mass-spam] OFF");
   }
 
+  registrarDigital?.();
   dbg(ctx, "  ✓ Nenhuma violação detectada");
   return false;
 }

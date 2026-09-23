@@ -142,22 +142,22 @@ function detalhesPT(P) {
       perm: "ManagePermissions",
     },
     automod: {
-      uso: `${P}automod status | ${P}automod <módulo> <on|off>`,
-      desc: "Liga/desliga cada módulo do AutoMod e mostra o estado geral. Filtros: antispam, antimassspam, antiinvite, antimassmention, anticaps, antilink, anticaracteres, antirepeticao e o `sentinela` (o antigo antiscam, que agora julga conteúdo em geral).",
+      uso: `${P}automod [status] | ${P}automod <módulo> <on|off> | ${P}automod <blocklist|whitelist|sentinela|punicao> …`,
+      desc: "Raiz da família de moderação automática: liga/desliga cada módulo e dá acesso a blocklist, whitelist, sentinela e punicao — que também continuam valendo soltos. Filtros: antispam, antimassspam, antiduplicata (a MESMA mensagem repetida), antiinvite, antimassmention, anticaps, antilink, anticaracteres, antirepeticao e o `sentinela` (o antigo antiscam, que agora julga conteúdo em geral).",
       perm: "ManagePermissions", ex: `${P}automod antilink on`,
     },
     whitelist: {
-      uso: `${P}whitelist <add|remove|list> [convite]`,
+      uso: `${P}automod whitelist <add|remove|list> [convite]`,
       desc: "Lista de convites do servidor liberados do anti-invite. Aceita o link completo ou só o código.",
       perm: "ManagePermissions", ex: `${P}whitelist add https://stt.gg/abc123`,
     },
     blocklist: {
-      uso: `${P}blocklist <add|adddomain|remove|removedomain|list|clear|reload> [url|domínio]`,
+      uso: `${P}automod blocklist <add|adddomain|remove|removedomain|list|clear|reload> [url|domínio]`,
       desc: "Gerencia o anti-link. `add <url>` importa listas estilo Pi-hole; `adddomain <domínio>` bloqueia um domínio único.",
       perm: "ManagePermissions", ex: `${P}blocklist adddomain site-ruim.com`,
     },
     sentinela: {
-      uso: `${P}sentinela <config|sensitivity|antiguidade|alerta|channel|test|simulate|ban|dismiss>`,
+      uso: `${P}automod sentinela <config|sensitivity|antiguidade|alerta|channel|test|simulate|ban|dismiss>`,
       desc: `O único módulo que **julga** em vez de medir: dá ao conteúdo uma nota de suspeita (0–10) cobrindo golpe, +18, gore, apologia a ilícito e abuso numa categoria só.\n\nComo julga, ele se adapta a quem escreve:\n**\`antiguidade on\`** — o limiar acompanha o nível de XP do membro. Conta recém-chegada é olhada de perto; quem conversa aqui há semanas ganha margem. Uma frase que soa a golpe vinda de alguém que acabou de entrar é bem mais provável de ser golpe.\n**\`alerta on\`** — marca a staff quando alguém levanta suspeita **repetidas vezes** em pouco tempo, mesmo sem chegar ao limiar de punição. Sinal isolado é ruído; padrão merece olho humano.\n\n\`${P}sentinela test <texto>\` mostra a nota que aquele texto tiraria; \`${P}sentinela simulate <texto>\` dispara o fluxo real no canal de avisos.\n\n_O que **acontece** com quem passa do limiar é decidido no \`${P}punicao\` — ele vale para todos os automods de uma vez, e não tem \`test\` próprio._\n\n_Chamava-se \`${P}scam\`, e esse nome continua funcionando._`,
       perm: "ManagePermissions", ex: `${P}sentinela test ganhe dinheiro fácil chama no pv`,
     },
@@ -762,30 +762,64 @@ export async function cmdHelp(message, args, ctx) {
   })();
 
   const alvo = args[0]?.toLowerCase();
-  const subtopico = args[1]?.toLowerCase();
 
-  // &help <comando> <subtópico>
-  if (alvo && subtopico && SUBTOPICOS[alvo]?.[subtopico]) {
-    const st = SUBTOPICOS[alvo][subtopico];
-    return sendEmbed(message.channel, {
-      title: `📖 ${lang === "en" ? "Help" : "Ajuda"} — ${P}${exibirTitulo(st.titulo, lang, P, ctx.estado?.CANONICO_COMPLETO ?? {})}`,
-      description: filtrarIA(String(st.texto).split("\n"), comIA).join("\n"),
+  // ── Descida por QUALQUER profundidade da árvore ──────────────────────────
+  // Antes só existiam dois níveis (`&help <cmd> <sub>`). Como os comandos
+  // viraram famílias (`&automod blocklist add`), a ajuda desce junto: cada
+  // camada mostra o seu texto E as camadas de dentro, para dar para navegar
+  // sem adivinhar o que existe.
+  const METADADOS = new Set(["titulo", "texto"]);
+  const filhosDe = (no) => Object.keys(no ?? {})
+    .filter((k) => !METADADOS.has(k) && no[k] && typeof no[k] === "object");
+
+  const caminho = args.map((a) => String(a).toLowerCase());
+  if (caminho.length >= 2 && SUBTOPICOS[caminho[0]]) {
+    let no = SUBTOPICOS[caminho[0]];
+    const trilha = [caminho[0]];
+    let i = 1;
+    for (; i < caminho.length; i++) {
+      const proximo = no?.[caminho[i]];
+      if (!proximo || typeof proximo !== "object") break;
+      no = proximo;
+      trilha.push(caminho[i]);
+    }
+
+    // Um passo do caminho não existe: diz o que existe ali, em vez de só negar.
+    if (i < caminho.length) {
+      const opcoes = filhosDe(no);
+      const lista = opcoes.length
+        ? opcoes.map((k) => `\`${P}help ${trilha.join(" ")} ${k}\``).join(" · ")
+        : `\`${P}help ${trilha.join(" ")}\``;
+      return sendEmbed(message.channel, tr(ctx, {
+        title: "❓ Subtópico desconhecido",
+        description: `\`${caminho[i]}\` não existe dentro de \`${P}${trilha.join(" ")}\`.\n\n**Existem:** ${lista}`,
+        colour: COR.aviso,
+      }, {
+        title: "❓ Unknown subtopic",
+        description: `\`${caminho[i]}\` isn't inside \`${P}${trilha.join(" ")}\`.\n\n**Available:** ${lista}`,
+        colour: COR.aviso,
+      }));
+    }
+
+    const filhos = filhosDe(no);
+    const rodape = filhos.length
+      ? ["", lang === "en" ? "**Go deeper:**" : "**Aprofunde:**",
+         filhos.map((k) => `\`${P}help ${trilha.join(" ")} ${k}\``).join(" · ")]
+      : [];
+    const corpo = no.texto
+      ? filtrarIA(String(no.texto).split("\n"), comIA)
+      : [lang === "en"
+          ? `\`${P}${trilha.join(" ")}\` groups the topics below.`
+          : `\`${P}${trilha.join(" ")}\` reúne os assuntos abaixo.`];
+
+    return enviarPaginado(ctx, message.channel, {
+      titulo: `📖 ${lang === "en" ? "Help" : "Ajuda"} — ${P}${exibirTitulo(no.titulo ?? trilha.join(" "), lang, P, ctx.estado?.CANONICO)}`,
+      linhas: [...corpo, ...rodape],
       colour: COR.info,
     });
   }
 
-  if (alvo && subtopico && SUBTOPICOS[alvo] && !SUBTOPICOS[alvo][subtopico]) {
-    const disponiveis = Object.keys(SUBTOPICOS[alvo]).map((k) => `\`${P}help ${alvo} ${k}\``).join(" · ");
-    return sendEmbed(message.channel, tr(ctx, {
-      title: `❓ Subtópico desconhecido`,
-      description: `\`${subtopico}\` não é um subtópico de \`${P}${alvo}\`.\n\n**Existem:** ${disponiveis}`,
-      colour: COR.aviso,
-    }, {
-      title: `❓ Unknown subtopic`,
-      description: `\`${subtopico}\` isn't a subtopic of \`${P}${alvo}\`.\n\n**Available:** ${disponiveis}`,
-      colour: COR.aviso,
-    }));
-  }
+  // (a descida acima já resolve &help <cmd> <sub> e mais fundo)
 
   // ── Grupos: &help <grupo> (aceita os nomes antigos também) ──
   const GRUPOS = gruposHelp(P, lang);

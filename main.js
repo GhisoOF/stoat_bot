@@ -231,6 +231,7 @@ function membroTemPermissao(message, server, permName) {
 
 const estado = {
   spamData:       new Map(),   // userId → number[]  (timestamps)
+  ecoData:        new Map(),   // "server:user" → { d, t }[]  (digitais recentes)
   blockedDomains: engine.criarIndiceVazio(),
 };
 

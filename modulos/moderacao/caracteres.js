@@ -61,6 +61,43 @@ export function analisarRepeticao(texto, opcoes = {}) {
   return null;
 }
 
+// Impressão digital de uma mensagem, para comparar uma com a outra.
+//
+// O buraco que isto fecha: `analisarRepeticao` olha DENTRO de uma mensagem
+// (o mesmo caractere repetido) e o anti-spam conta VELOCIDADE. Quem repete o
+// MESMO texto longo várias vezes, num ritmo tranquilo, passava pelos dois —
+// que é exatamente como um bot de propaganda se comporta.
+//
+// Normaliza para que variações bobas (maiúsculas, acento, pontuação, espaço,
+// emoji trocado) não sirvam de disfarce.
+export function digital(conteudo) {
+  const t = textoHumano(conteudo)
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")   // tira acento
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, "")                        // pontuação e emoji fora
+    .replace(/\s+/g, " ")
+    .trim();
+  return t.length < 12 ? null : t;   // texto curto repete à toa ("ok", "kk")
+}
+
+// Quantas vezes esta mensagem já apareceu igual, na janela.
+//
+// `anteriores` é a lista de digitais recentes daquele autor. Devolve null
+// quando está tudo bem — o mesmo contrato das outras funções deste arquivo.
+export function analisarDuplicata(conteudo, anteriores = [], opcoes = {}) {
+  const { maxRepetidas = 3 } = opcoes;
+  const d = digital(conteudo);
+  if (!d) return null;
+
+  const iguais = anteriores.filter((x) => x === d).length + 1;   // +1 = esta
+  if (iguais < maxRepetidas) return null;
+  return {
+    motivo: `você repetiu a mesma mensagem ${iguais} vezes`,
+    tipo: "duplicata",
+    vezes: iguais,
+  };
+}
+
 export function textoHumano(conteudo) {
   return String(conteudo ?? "")
     .replace(/```[\s\S]*?```/g, " ")          // blocos de código

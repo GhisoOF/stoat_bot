@@ -3,8 +3,19 @@ import * as db from "../core/db.js";
 import * as log from "../core/log.js";
 import { tr, lingua } from "../core/i18n.js";
 import { limparId, ULID, resolverUsuario } from "../core/ids.js";
+import * as automodCmd from "./automod-comandos.js";
 
 export async function cmdWarn(message, args, ctx) {
+  // ── A família dos avisos mora aqui dentro ──
+  // `&warn lista` = `&warnings`; `&warn limpar` = `&clearwarnings`.
+  const subAviso = args[0]?.toLowerCase();
+  if (["lista", "list", "ver", "avisos"].includes(subAviso)) {
+    return automodCmd.cmdWarnings(message, args.slice(1), ctx);
+  }
+  if (["limpar", "clear", "zerar", "apagar"].includes(subAviso)) {
+    return automodCmd.cmdClearwarnings(message, args.slice(1), ctx);
+  }
+
   const { sendEmbed, COR, PREFIXO: P, config, serverId, getServer, membroTemPermissao } = ctx;
   const lang = lingua(ctx);
 

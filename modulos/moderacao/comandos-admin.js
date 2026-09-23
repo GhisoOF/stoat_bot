@@ -162,11 +162,11 @@ export async function cmdCargoMudo(message, args, ctx) {
     if (!roleId)
       return sendEmbed(message.channel, tr(ctx, {
         title: "❌ Sem cargo de silêncio",
-        description: `Nenhum cargo de silêncio definido. Crie um com \`${PREFIXO}cargomudo\` ou defina com \`${PREFIXO}punicao silencerole <id>\`.`,
+        description: `Nenhum cargo de silêncio definido. Crie um com \`${PREFIXO}cargomudo\` ou defina com \`${PREFIXO}automod punicao silencerole <id>\`.`,
         colour: COR.erro,
       }, {
         title: "❌ No silence role",
-        description: `No silence role set. Create one with \`${PREFIXO}cargomudo\` or set one with \`${PREFIXO}punicao silencerole <id>\`.`,
+        description: `No silence role set. Create one with \`${PREFIXO}cargomudo\` or set one with \`${PREFIXO}automod punicao silencerole <id>\`.`,
         colour: COR.erro,
       }));
     try {

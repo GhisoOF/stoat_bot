@@ -282,14 +282,7 @@ const rotas = {
   acesso:        acessoMod.cmdAcesso,
   personalidade: persona.cmdPersonalidade,
   personality:   persona.cmdPersonalidade,
-  warnings:      automodCmd.cmdWarnings,
-  clearwarnings: automodCmd.cmdClearwarnings,
   automod:       automodCmd.cmdAutomod,
-  whitelist:     automodCmd.cmdWhitelist,
-  blocklist:     automodCmd.cmdBlocklist,
-  sentinela:     automodCmd.cmdScam,
-  punicao:       automodCmd.cmdPunicao,
-  punição:       automodCmd.cmdPunicao,
   tutorial:      tutorial.cmdTutorial,
   assistente:    assistente.cmdAssistente,
   wizard:        assistente.cmdAssistente,
@@ -339,8 +332,10 @@ const rotas = {
   rolar:         dadosRpg.cmdRolar,
   iniciativa:    dadosRpg.cmdIniciativa,
   ticket:        tickets.cmdTicket,
-  entrar:        (msg, args, ctx) => ttsVoz.cmdTts(msg, ["entrar", ...args], ctx),
-  sair:          (msg, args, ctx) => ttsVoz.cmdTts(msg, ["sair", ...args], ctx),
+  // `&entrar`/`&sair` são a forma canônica. O cmdTts ainda faz o trabalho, mas
+  // só aceita "entrar"/"sair" vindos daqui — `&tts entrar` deixou de existir.
+  entrar:        (msg, args, ctx) => ttsVoz.cmdTts(msg, ["entrar", ...args], { ...ctx, viaAtalhoVoz: true }),
+  sair:          (msg, args, ctx) => ttsVoz.cmdTts(msg, ["sair", ...args], { ...ctx, viaAtalhoVoz: true }),
   voz:           ttsVoz.cmdTts,
   falar:         ttsVoz.cmdTts,
   // Relógio com vários fusos

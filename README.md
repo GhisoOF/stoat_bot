@@ -93,12 +93,12 @@ diz exatamente o que clicar.
 **Moderação**
 
 - **AutoMod**: anti-spam, **anti-duplicata** (a mesma mensagem repetida), anti-mass-mention, anti-invite (com whitelist),
-  anti-caps, anti-link (listas estilo Pi-hole via `&blocklist`), anti-zalgo/
+  anti-caps, anti-link (listas estilo Pi-hole via `&automod blocklist`), anti-zalgo/
   caracteres invisíveis, e detecção de conteúdo proibido por pontuação 0–10 (`&scam`).
 - **Punições persistentes**: avisos e silêncios ficam no banco por
   `(servidor, usuário)` — quem **sai e volta** recebe o silêncio de novo.
 - **Escada de punição**: cada reincidência sobe um degrau (aviso → 5 min →
-  1 h → ban, tempos configuráveis com `&punicao escada`). Quem escorregou uma
+  1 h → ban, tempos configuráveis com `&automod punicao escada`). Quem escorregou uma
   vez nunca chega ao ban; quem insiste sobe sozinho.
 - **Moderação por IA** (`&modia`): você escreve os critérios em texto livre e
   a IA apaga o que violar, marcando o responsável no log — ela **nunca bane sozinha**.
@@ -133,7 +133,7 @@ diz exatamente o que clicar.
 **Voz nas calls** (`&tts`, opcional)
 
 - A IA entra na call e **fala o que for escrito**: `&entrar` dentro da
-  call liga tudo de uma vez, `&tts sair` desfaz. Síntese **offline** (Piper)
+  call liga tudo de uma vez, `&sair` desfaz. Síntese **offline** (Piper)
   com efeitos de timbre por ffmpeg, dicionário de abreviações (`vc` → `você`)
   e uma **peneira anti-barulho** que filtra spam pela forma e limita falas por
   minuto no canal — risada passa de propósito, e `&tts <texto>` nunca é filtrado.
@@ -178,8 +178,13 @@ Os comandos são uma **árvore**: quem tem família guarda a família dentro de 
 camada — `&help automod`, `&help automod sentinela`, `&help automod sentinela
 antiguidade`. Cada camada explica **o que aquilo é**, não só a sintaxe.
 
-Os nomes curtos continuam funcionando (`&blocklist`, `&warnings`, `&punicao`):
-alias não atrapalha ninguém, e quem já tem o costume não precisa reaprender.
+O que é opção de uma família **só existe dentro dela**: não existem mais
+`&blocklist` nem `&warnings` soltos, para não haver dois caminhos para a mesma
+coisa. Continuam
+valendo as variações de **digitação** (`&clear`/`&purge`/`&limpar`,
+`&info`/`&sobre`), que são a mesma porta com outro nome.
+
+A voz tem uma porta só: `&entrar` e `&sair` (o `&tts entrar` saiu).
 
 Prefixo `&`. A lista completa, com **cada parâmetro explicado**, vive no
 próprio bot: `&help <comando>`. Um resumo:
@@ -192,7 +197,7 @@ próprio bot: `&help <comando>`. Um resumo:
 | `&tutorial [área]` | guia de primeiros passos |
 | `&ping` · `&sobre` | latência · informações do bot |
 | `&userinfo [@user]` | informações + histórico de moderação |
-| `&warn lista [@user]` | avisos acumulados neste servidor _(`&warnings` também vale)_ |
+| `&warn lista [@user]` · `&warn limpar @user` | ver e zerar avisos |
 | `&xp` · `&xp top` | seu nível · ranking |
 
 ### Moderação (exige a permissão correspondente)
@@ -204,7 +209,7 @@ próprio bot: `&help <comando>`. Um resumo:
 | `&limpar <n> [@user]` | ManageMessages | apaga as últimas `n` mensagens |
 | `&limpar tudo` | só o dono | esvazia o canal, com código de confirmação |
 | `&warn @user [motivo]` | staff | aviso manual (soma com os do automod) |
-| `&clearwarnings @user` | ManagePermissions | zera os avisos |
+| `&warn limpar @user` | ManagePermissions | zera os avisos |
 
 ### Configuração (ManagePermissions, salvo indicação)
 
@@ -215,7 +220,7 @@ próprio bot: `&help <comando>`. Um resumo:
 | `&automod` | **raiz da moderação automática** — módulos, e dentro dela `blocklist`, `whitelist`, `sentinela` e `punicao` |
 | `&log` · `&acesso` · `&staff` | chat de logs, quem usa comandos, equipe |
 | `&banglobal` | lista global *(BanMembers)* |
-| `&automod blocklist` · `&automod whitelist` | listas anti-link, convites permitidos _(os nomes soltos continuam valendo)_ |
+| `&automod blocklist` · `&automod whitelist` · `&automod sentinela` · `&automod punicao` | listas anti-link, convites permitidos, o filtro que julga, e o que acontece com quem infringe |
 | `&ticket` | suporte com canal privado por pedido: `abrir` cria um canal que só quem pediu e a staff enxergam (cargo por ticket); `fechar` arquiva a conversa inteira no canal de log e apaga o canal — nada se perde, nada fica largado |
 | `&rolar` (`&r`) · `&iniciativa` | dados de RPG de mesa: `2d20kh1+5`, vantagem/desvantagem, `4d6kh3`, explosão `3d6!`, sucessos `8d10>=7`, `d%`, Fate, moeda, repetição `6x(4d6kh3)`, rótulos e rolagem secreta via DM — mais rastreador de iniciativa por canal (`add`/`next`/`lista`) |
 | `&webhook` (`&wh`) | receptor universal de webhooks: GitHub (push, issues, PR, releases, Actions), Crafty/Minecraft e qualquer serviço que fale o formato Discord (Uptime Kuma, Grafana…) — cada gancho tem canal próprio e filtro de eventos, então dá para separar issues num chat e o CI noutro; URL secreta por gancho, teto anti-flood. **Endereços:** serviço da internet (GitHub) exige base pública — `sudo tailscale funnel --bg 8095` + `WEBHOOK_URL_BASE=https://…` no `.env`; container da mesma máquina (Crafty) usa a ponte `http://172.17.0.1:8095/...` |
@@ -270,11 +275,11 @@ servidor e em cada canal — e já o configura.
 
 | Permissão exigida | Comandos liberados |
 |---|---|
-| *(nenhuma)* | `&help`, `&sobre`, `&ping`, `&userinfo`, `&warnings`, `&xp` |
+| *(nenhuma)* | `&help`, `&sobre`, `&ping`, `&userinfo`, `&warn lista`, `&xp` |
 | **ManageMessages** | `&limpar`, `&embed` |
 | **ManageRole** | `&reactionrole`, `&cor` |
 | **KickMembers** / **BanMembers** | `&kick` / `&ban`, `&banglobal` |
-| **ManagePermissions** | configuração em geral (`&config`, `&automod`, `&punicao`, `&log`, `&acesso`…) |
+| **ManagePermissions** | configuração em geral (`&config`, `&automod`, `&log`, `&acesso`…) |
 | **ManageServer** | `&modia`, `&personalidade`, `&chat esquecer tudo` |
 
 O **dono do servidor** sempre pode tudo; cargos marcados em `&acesso cargo`

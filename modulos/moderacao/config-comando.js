@@ -202,7 +202,7 @@ export async function cmdConfig(message, args, ctx) {
       "**🌐 Global** *(shared across servers)*",
       `Debug: ${simL(cfgGlobal.debug !== false)} · Anti-link lists: ${cfgGlobal.linkBlocklistSources.length} source(s), ${cfgGlobal.linkBlocklistManual.length} manual domain(s)`,
       "",
-      `💡 Adjust with \`${PREFIXO}automod\` (holds blocklist, whitelist, sentinela and punicao), \`${PREFIXO}log\`, \`${PREFIXO}sentinela\` — \`${PREFIXO}tutorial\` shows the path, \`${PREFIXO}assistente\` walks it with you.`,
+      `💡 Adjust with \`${PREFIXO}automod\` (holds blocklist, whitelist, sentinela and punicao), \`${PREFIXO}log\`, \`${PREFIXO}automod sentinela\` — \`${PREFIXO}tutorial\` shows the path, \`${PREFIXO}assistente\` walks it with you.`,
     ].join("\n"),
     colour: COR.info,
   } : {
@@ -257,7 +257,7 @@ export async function cmdConfig(message, args, ctx) {
       "**🌐 Global** *(compartilhado entre servidores)*",
       `Debug: ${simL(cfgGlobal.debug !== false)} · Listas anti-link: ${cfgGlobal.linkBlocklistSources.length} fonte(s), ${cfgGlobal.linkBlocklistManual.length} domínio(s) manual(is)`,
       "",
-      `💡 Ajuste com \`${PREFIXO}automod\` (que reúne blocklist, whitelist, sentinela e punicao), \`${PREFIXO}log\`, \`${PREFIXO}sentinela\` — \`${PREFIXO}tutorial\` mostra o caminho, \`${PREFIXO}assistente\` percorre com você.`,
+      `💡 Ajuste com \`${PREFIXO}automod\` (que reúne blocklist, whitelist, sentinela e punicao), \`${PREFIXO}log\`, \`${PREFIXO}automod sentinela\` — \`${PREFIXO}tutorial\` mostra o caminho, \`${PREFIXO}assistente\` percorre com você.`,
     ].join("\n"),
     colour: COR.info,
   });

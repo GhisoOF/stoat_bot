@@ -408,34 +408,54 @@ a coisa é**, não só a sintaxe.
 
 ```bash
 # 1. No PC (a regra do projeto: git só aqui)
-cd ~/Downloads/github
-unzip -o ~/Downloads/stoat_bot-refatorado.zip -d /tmp/refat && cp -a /tmp/refat/. .
-cp .env.example .env   # SE ainda não existir: o env_file agora exige o arquivo
+cd /home/ghiso/Desktop/GhisoOF/Judy/Stoat_Bot
+unzip -o ~/Downloads/stoat_bot-refatorado.zip -d /tmp/refat && cp -a /tmp/refat/pkg/. .
 
-# 2. Conferir antes de commitar
+# O compose passou a usar env_file: o .env virou obrigatório.
+[ -f .env ] || cp .env.example .env
+
+# 2. Conferir antes de commitar (nenhum destes precisa de rede)
 node scripts/verificar-build.js
+node teste-compatibilidade.mjs    # banco antigo continua funcionando
+node teste-arvore-comandos.mjs    # a árvore de comandos e a ajuda profunda
+node teste-duplicata.mjs          # o spam do Stork é pego
 node teste-refatoracao.mjs && node teste-ia.mjs && node teste-verificador.mjs
 
-git add -A && git commit -m "seguranca: fecha 42 alertas do Dependabot; kiss: cliente unico da API do Stoat" && git push
+git add -A
+git commit -m "automod: anti-duplicata pega mensagem repetida; comandos em arvore com help profundo"
+git push
 
 # 3. No MiniPC
 cd /home/void/judy-repo && git pull && docker compose up -d --build
 
-# 4. Conferir que a configuração agora CHEGA (era o bug do compose)
+# 4. Conferir que a configuração CHEGA ao container (era o bug do compose)
 docker exec stoat-bot printenv | grep -E 'SD_MODELO_TIPO|SPOTIFY|STOAT_API|CDN_URL|LLAMA_CTX'
 ```
 
 **Teste ao vivo, na ordem de risco** (do mais provável de quebrar para o menos):
 
-1. **`&tts entrar` numa call e `&musica`** — é o único ponto com risco real: o
-   `axios` saltou de 0.26 para 0.34 e o `join_call` passa por ele. Se falhar,
-   o culpado mais provável é esse salto: tire `"axios"` dos `overrides`,
-   rebuild, e você recupera a voz perdendo 23 alertas.
-2. **`&chat` com imagem anexada e "desenha ..."** — cobre o `sharp` 0.35.4.
-3. **`&cor <cargo> gradiente ...`, `&reactionrole`, `&ban`/`&desbanir`** —
+1. **`&entrar` numa call e `&musica`** — o único ponto com risco real: o `axios`
+   saltou de 0.26 para 0.34 e o `join_call` passa por ele. Se falhar, o culpado
+   mais provável é esse salto: tire `"axios"` dos `overrides` do
+   `voz-servico/package.json`, rebuild, e você recupera a voz perdendo 23 alertas.
+2. **O anti-duplicata** — mande a mesma mensagem longa 3 vezes seguidas com uma
+   conta de teste. Na 3ª ela tem de sumir. Confira antes em `&config` que o
+   `antiduplicata` aparece ligado, com limite 3 e janela de 120s.
+3. **A ajuda em profundidade** — `&help automod`, depois `&help automod sentinela`,
+   depois `&help automod sentinela antiguidade`. E um caminho errado de
+   propósito (`&help automod xyz`): tem de responder dizendo o que existe ali.
+4. **Os atalhos antigos** — `&blocklist`, `&warnings`, `&punicao`, `&tts entrar`
+   têm de continuar funcionando exatamente como antes.
+5. **`&chat` com imagem anexada e "desenha ..."** — cobre o `sharp` 0.35.4.
+6. **`&cor <cargo> gradiente ...`, `&reactionrole`, `&ban`/`&desbanir`** —
    cobrem os caminhos migrados para o `chamarApi`.
-4. **`&embed` com um anexo do Stoat** — a capa tem de aparecer como imagem, sem
+7. **`&embed` com um anexo do Stoat** — a capa tem de aparecer como imagem, sem
    o aviso de "site de terceiros".
+
+Se o anti-duplicata pegar gente inocente, afrouxe sem rebuild:
+`&automod antiduplicata off`, ou suba o limite no `.env`
+(`maxRepetidas`) e recrie o container.
 
 Para voltar atrás em qualquer ponto: `git revert` do commit. Os lockfiles estão
 no pacote, então o build é reproduzível.
+

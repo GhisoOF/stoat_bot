@@ -89,18 +89,58 @@ await tAsync("&automod blocklist add X == &blocklist add X", async () => {
   void falso;
 });
 
-await tAsync("as rotas antigas continuam existindo (ninguém perde o costume)", async () => {
-  const main = await import("node:fs").then((fs) => fs.readFileSync("./main.js", "utf8"));
-  for (const rota of ["blocklist", "whitelist", "sentinela", "punicao", "warnings",
-                      "clearwarnings", "automod", "warn", "entrar", "sair", "tts"]) {
-    assert.match(main, new RegExp(`\\n\\s+"?${rota}"?\\s*:`), `a rota ${rota} sumiu do main.js`);
+await tAsync("o que virou opção de família NÃO existe mais solto no topo", async () => {
+  const fs = await import("node:fs");
+  const main = fs.readFileSync("./main.js", "utf8");
+  for (const morta of ["blocklist", "whitelist", "sentinela", "punicao", "warnings", "clearwarnings"]) {
+    assert.doesNotMatch(main, new RegExp(`\\n\\s+"?${morta}"?\\s*:\\s*(automodCmd|\\()`),
+      `${morta} ainda é rota de topo — devia existir só dentro da família`);
+  }
+  for (const viva of ["automod", "warn", "entrar", "sair", "tts"]) {
+    assert.match(main, new RegExp(`\\n\\s+"?${viva}"?\\s*:`), `a rota ${viva} sumiu do main.js`);
   }
 });
 
-await tAsync("&entrar e &sair continuam sendo a MESMA coisa que &tts entrar/sair", async () => {
+await tAsync("nenhum texto anuncia um comando que não existe mais", async () => {
+  const fs = await import("node:fs");
+  const alvos = [];
+  const varrer = (dir) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const caminho = `${dir}/${e.name}`;
+      if (e.isDirectory()) varrer(caminho);
+      else if (e.name.endsWith(".js")) alvos.push(caminho);
+    }
+  };
+  varrer("./modulos");
+  const mortos = [];
+  for (const f of alvos) {
+    const txt = fs.readFileSync(f, "utf8");
+    for (const m of ["blocklist", "whitelist", "sentinela", "punicao", "warnings", "clearwarnings"]) {
+      // `${P}blocklist` solto = anúncio de comando morto. Dentro de
+      // `${P}automod blocklist` está certo, e o regex abaixo não pega esse.
+      const re = new RegExp(String.raw`\$\{(P|PREFIXO)\}${m}\b`, "g");
+      if (re.test(txt)) mortos.push(`${f}: \${P}${m}`);
+    }
+    if (/\$\{(P|PREFIXO)\}tts (entrar|sair)\b/.test(txt)) mortos.push(`${f}: tts entrar/sair`);
+  }
+  assert.equal(mortos.length, 0, `textos anunciando comando morto:\n     ${mortos.join("\n     ")}`);
+});
+
+await tAsync("&tts entrar/sair aponta para a porta única", async () => {
+  const tts = await import("./modulos/ferramentas/tts.js");
+  let enviado = null;
+  const ctx = { sendEmbed: (_c, e) => { enviado = e; }, COR: { info: 1 }, PREFIXO: "&", config: {}, serverId: "s" };
+  await tts.cmdTts({ channel: {}, authorId: "u" }, ["entrar"], ctx);
+  assert.match(enviado?.title ?? "", /&entrar/, "devia mandar a pessoa para &entrar");
+  enviado = null;
+  await tts.cmdTts({ channel: {}, authorId: "u" }, ["sair"], ctx);
+  assert.match(enviado?.title ?? "", /&sair/);
+});
+
+await tAsync("&entrar e &sair continuam funcionando (a porta única)", async () => {
   const main = await import("node:fs").then((fs) => fs.readFileSync("./main.js", "utf8"));
-  assert.match(main, /entrar:\s*\(msg, args, ctx\) => ttsVoz\.cmdTts\(msg, \["entrar", \.\.\.args\], ctx\)/);
-  assert.match(main, /sair:\s*\(msg, args, ctx\) => ttsVoz\.cmdTts\(msg, \["sair", \.\.\.args\], ctx\)/);
+  assert.match(main, /entrar:\s*\(msg, args, ctx\) => ttsVoz\.cmdTts\(msg, \["entrar", \.\.\.args\], \{ \.\.\.ctx, viaAtalhoVoz: true \}\)/);
+  assert.match(main, /sair:\s*\(msg, args, ctx\) => ttsVoz\.cmdTts\(msg, \["sair", \.\.\.args\], \{ \.\.\.ctx, viaAtalhoVoz: true \}\)/);
 });
 
 console.log(`\nÁRVORE DE COMANDOS: ${ok} ok, ${falhou} falha(s)`);

@@ -45,8 +45,8 @@ export async function cmdWarn(message, args, ctx) {
           "",
           `Ex.: \`${P}warn @Fulano spam no chat de arte\``,
           "",
-          `Para ver os avisos de alguém: \`${P}warnings @pessoa\``,
-          `Para zerar: \`${P}clearwarnings @pessoa\``,
+          `Para ver os avisos de alguém: \`${P}warn lista @pessoa\``,
+          `Para zerar: \`${P}warn limpar @pessoa\``,
         ].join("\n"), colour: COR.erro },
       { title: "❌ Who should I warn?",
         description: [
@@ -54,8 +54,8 @@ export async function cmdWarn(message, args, ctx) {
           "",
           `E.g.: \`${P}warn @Someone spamming the art channel\``,
           "",
-          `To see someone's warnings: \`${P}warnings @user\``,
-          `To reset them: \`${P}clearwarnings @user\``,
+          `To see someone's warnings: \`${P}warn lista @user\``,
+          `To reset them: \`${P}warn limpar @user\``,
         ].join("\n"), colour: COR.erro }));
     }
 

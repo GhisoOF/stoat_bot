@@ -326,8 +326,8 @@ function relatarResgate(r, { presa, message, ctx, c, lang }) {
       description: [
         ...r.passos, "",
         lang === "en"
-          ? `Stoat had me recorded as already in <#${presa}>, so I came in through <#${r.aux}> and moved myself here. Reading <#${c.canalTexto}>.\n\n⚠️ Applies to **everyone** who writes here · \`${P}tts sair\` to leave.`
-          : `O Stoat me registrava como já estando em <#${presa}>, então entrei por <#${r.aux}> e me movi para cá. Lendo <#${c.canalTexto}>.\n\n⚠️ Vale para **todo mundo** que escrever aqui · \`${P}tts sair\` para eu sair.`,
+          ? `Stoat had me recorded as already in <#${presa}>, so I came in through <#${r.aux}> and moved myself here. Reading <#${c.canalTexto}>.\n\n⚠️ Applies to **everyone** who writes here · \`${P}sair\` to leave.`
+          : `O Stoat me registrava como já estando em <#${presa}>, então entrei por <#${r.aux}> e me movi para cá. Lendo <#${c.canalTexto}>.\n\n⚠️ Vale para **todo mundo** que escrever aqui · \`${P}sair\` para eu sair.`,
       ].join("\n"), colour: COR.sucesso,
     });
   }
@@ -341,10 +341,10 @@ function relatarResgate(r, { presa, message, ctx, c, lang }) {
     "not-connected": lang === "en"
       ? "`NotConnected`: Stoat never recorded my join in the helper call. That's the `participant_joined` webhook not being processed on their side — nothing I can fix from here; try again in a minute."
       : "`NotConnected`: o Stoat não registrou minha entrada na call auxiliar. É o webhook `participant_joined` não sendo processado do lado deles — não tenho como consertar daqui; tente de novo em um minuto.",
-    "mover": lang === "en" ? `I'll stay in the helper call; \`${P}tts sair\` drops me.` : `Fico na call auxiliar; \`${P}tts sair\` me tira.`,
+    "mover": lang === "en" ? `I'll stay in the helper call; \`${P}sair\` drops me.` : `Fico na call auxiliar; \`${P}sair\` me tira.`,
     "sem-evento": lang === "en"
-      ? `Stoat accepted the move but never sent the \`UserMoveVoiceChannel\` event with the token. \`${P}tts sair\` and try again.`
-      : `O Stoat aceitou o mover mas não mandou o evento \`UserMoveVoiceChannel\` com o token. \`${P}tts sair\` e tente de novo.`,
+      ? `Stoat accepted the move but never sent the \`UserMoveVoiceChannel\` event with the token. \`${P}sair\` and try again.`
+      : `O Stoat aceitou o mover mas não mandou o evento \`UserMoveVoiceChannel\` com o token. \`${P}sair\` e tente de novo.`,
     "token-join": lang === "en"
       ? `If the service answered "rota desconhecida", update \`voz-servico/\` on the machine (this needs API version ${VOZ_API_ESPERADA}).`
       : `Se o serviço respondeu "rota desconhecida", atualize o \`voz-servico/\` na máquina (isto precisa da versão ${VOZ_API_ESPERADA} da API).`,
@@ -358,6 +358,25 @@ function relatarResgate(r, { presa, message, ctx, c, lang }) {
 }
 
 export async function cmdTts(message, args, ctx) {
+  // Duas portas para a mesma coisa viraram uma: `&entrar` e `&sair`.
+  // O cmdTts continua executando (o atalho chama ele com viaAtalhoVoz), mas
+  // `&tts entrar` não existe mais — em vez de um erro seco, aponta o caminho.
+  {
+    const p = String(args[0] ?? "").toLowerCase();
+    if ((p === "entrar" || p === "sair") && !ctx.viaAtalhoVoz) {
+      const { sendEmbed, COR, PREFIXO } = ctx;
+      return sendEmbed(message.channel, tr(ctx, {
+        title: `👉 Agora é \`${PREFIXO}${p}\``,
+        description: `\`${PREFIXO}tts ${p}\` virou \`${PREFIXO}${p}\` — é a mesma coisa, com menos para digitar.\n\nO \`${PREFIXO}${p}\` vale para a voz toda: o leitor (TTS) e a música dividem a mesma call.`,
+        colour: COR.info,
+      }, {
+        title: `👉 It's \`${PREFIXO}${p}\` now`,
+        description: `\`${PREFIXO}tts ${p}\` is now \`${PREFIXO}${p}\` — same thing, less typing.\n\nIt covers all voice: the reader (TTS) and music share the same call.`,
+        colour: COR.info,
+      }));
+    }
+  }
+
   const { config, sendEmbed, COR, PREFIXO, getServer, membroTemPermissao, salvarConfig, serverId } = ctx;
   const lang = lingua(ctx);
   const c = garantirConfig(config);
@@ -430,9 +449,9 @@ export async function cmdTts(message, args, ctx) {
     if (!c.canalVoz) {
       return sendEmbed(message.channel, tr(ctx,
         { title: "❌ Não sei em qual call olhar",
-          description: `Mande \`${PREFIXO}tts entrar\` dentro da call primeiro — o diagnóstico examina a call que eu estou usando.`, colour: COR.erro },
+          description: `Mande \`${PREFIXO}entrar\` dentro da call primeiro — o diagnóstico examina a call que eu estou usando.`, colour: COR.erro },
         { title: "❌ I don't know which call to look at",
-          description: `Send \`${PREFIXO}tts entrar\` inside the call first — the diagnostics examine the call I'm using.`, colour: COR.erro }));
+          description: `Send \`${PREFIXO}entrar\` inside the call first — the diagnostics examine the call I'm using.`, colour: COR.erro }));
     }
     let d;
     try { d = await chamar("/diagnostico", { canalVoz: c.canalVoz }); }
@@ -508,16 +527,16 @@ export async function cmdTts(message, args, ctx) {
         "🔎 **Authentication itself fails.** It's not the call: it's the token or reaching the API. Check that `BOT_TOKEN` in `judy-voz`'s `.env` is the **same** as the bot's, and that the machine can reach Stoat's API.");
     } else if (canal?.ok === false) {
       veredito = tr(ctx,
-        `🔎 **Não consigo nem ler esse canal.** Ele pode ter sido apagado, ou o bot não o enxerga. Entre na call e mande \`${PREFIXO}tts entrar\` por lá — eu passo a usar esse canal.`,
-        `🔎 **I can't even read that channel.** It may have been deleted, or the bot can't see it. Join the call and send \`${PREFIXO}tts entrar\` there — I'll switch to that channel.`);
+        `🔎 **Não consigo nem ler esse canal.** Ele pode ter sido apagado, ou o bot não o enxerga. Entre na call e mande \`${PREFIXO}entrar\` por lá — eu passo a usar esse canal.`,
+        `🔎 **I can't even read that channel.** It may have been deleted, or the bot can't see it. Join the call and send \`${PREFIXO}entrar\` there — I'll switch to that channel.`);
     } else if (/UnknownNode/i.test(String(jc?.detalhe ?? ""))) {
       veredito = tr(ctx,
         "🔎 **`UnknownNode`: a call ainda não existe.** O Stoat só sabe em qual servidor de voz uma call está depois que alguém a inicia; antes disso, quem entra precisa **dizer** qual usar. Eu passei a informar isso sozinha ao abrir a sala — se este aviso apareceu, a API não me anunciou nenhum node de voz (veja a etapa `node` acima).\n\nContorno imediato: **entre na call primeiro** e me chame depois.",
         "🔎 **`UnknownNode`: the call doesn't exist yet.** Stoat only knows which voice server a call lives on after someone starts it; before that, whoever joins has to **say** which one to use. I now provide that myself when opening the room — if you're seeing this, the API announced no voice node at all (see the `node` step above).\n\nImmediate workaround: **join the call first**, then call me.");
     } else if (/AlreadyConnected/i.test(String(jc?.detalhe ?? ""))) {
       veredito = tr(ctx,
-        `🔎 **\`AlreadyConnected\`: o Stoat me registra como já estando nesta call.** Não é permissão nem rede: é um registro preso no lado dele, sobra de uma entrada que travou no meio.\n\n\`${PREFIXO}tts entrar\` já resolve isso sozinho: entra por outra call e se move para esta — o mover emite um token sem conferir o registro preso. _(Remover pelo cliente ou kick passam pela mesma chave que o destravar, então não adiantam quando ele não adianta.)_`,
-        `🔎 **\`AlreadyConnected\`: Stoat records me as already in this call.** Not permission, not network: a stuck record on their side, left over from a join that jammed halfway.\n\n\`${PREFIXO}tts entrar\` already handles this by itself: it comes in through another call and moves me here — the move issues a token without checking the stuck record. _(Removing me in the client or kicking go through the same key as destravar, so they won't help when it doesn't.)_`);
+        `🔎 **\`AlreadyConnected\`: o Stoat me registra como já estando nesta call.** Não é permissão nem rede: é um registro preso no lado dele, sobra de uma entrada que travou no meio.\n\n\`${PREFIXO}entrar\` já resolve isso sozinho: entra por outra call e se move para esta — o mover emite um token sem conferir o registro preso. _(Remover pelo cliente ou kick passam pela mesma chave que o destravar, então não adiantam quando ele não adianta.)_`,
+        `🔎 **\`AlreadyConnected\`: Stoat records me as already in this call.** Not permission, not network: a stuck record on their side, left over from a join that jammed halfway.\n\n\`${PREFIXO}entrar\` already handles this by itself: it comes in through another call and moves me here — the move issues a token without checking the stuck record. _(Removing me in the client or kicking go through the same key as destravar, so they won't help when it doesn't.)_`);
     } else if (jc?.ok === false) {
       const html = /HTML/i.test(String(jc.detalhe ?? ""));
       veredito = html
@@ -533,8 +552,8 @@ export async function cmdTts(message, args, ctx) {
         "🔎 **The API authorises, but I can't reach LiveKit.** It's the service machine's network: firewall, DNS or outbound routing. If TCP won't even open, UDP won't either.");
     } else if (jc?.ok && tcp?.ok) {
       veredito = tr(ctx,
-        `🔎 **Todas as etapas passam neste teste, mas entrar trava mesmo assim.** Então a trava está no que este teste não cobre: a mídia do LiveKit, que anda por **UDP**. Libere UDP de saída na máquina do \`judy-voz\` e confira a MTU da Tailscale.\n\nPara ver por dentro: suba o serviço com \`VOZ_DEBUG=1\`, tente \`${PREFIXO}tts entrar\` e olhe o log — com o debug ligado o LiveKit passa a contar o que faz durante os 20s.`,
-        `🔎 **Every step passes in this test, yet joining still jams.** So the jam is in what this test doesn't cover: LiveKit media, which rides on **UDP**. Allow outbound UDP on the \`judy-voz\` machine and check the Tailscale MTU.\n\nTo see inside: start the service with \`VOZ_DEBUG=1\`, try \`${PREFIXO}tts entrar\` and read the log — with debug on, LiveKit narrates what it does during those 20s.`);
+        `🔎 **Todas as etapas passam neste teste, mas entrar trava mesmo assim.** Então a trava está no que este teste não cobre: a mídia do LiveKit, que anda por **UDP**. Libere UDP de saída na máquina do \`judy-voz\` e confira a MTU da Tailscale.\n\nPara ver por dentro: suba o serviço com \`VOZ_DEBUG=1\`, tente \`${PREFIXO}entrar\` e olhe o log — com o debug ligado o LiveKit passa a contar o que faz durante os 20s.`,
+        `🔎 **Every step passes in this test, yet joining still jams.** So the jam is in what this test doesn't cover: LiveKit media, which rides on **UDP**. Allow outbound UDP on the \`judy-voz\` machine and check the Tailscale MTU.\n\nTo see inside: start the service with \`VOZ_DEBUG=1\`, try \`${PREFIXO}entrar\` and read the log — with debug on, LiveKit narrates what it does during those 20s.`);
     } else {
       veredito = tr(ctx, "🔎 Resultado inconclusivo — veja as etapas acima.", "🔎 Inconclusive — see the steps above.");
     }
@@ -581,14 +600,14 @@ export async function cmdTts(message, args, ctx) {
       description: [
         ...linhas, "",
         r?.ok
-          ? `Pedi a desconexão e o Stoat aceitou. Agora \`${PREFIXO}tts entrar\` **de dentro da call** — a entrada é que diz se funcionou.`
+          ? `Pedi a desconexão e o Stoat aceitou. Agora \`${PREFIXO}entrar\` **de dentro da call** — a entrada é que diz se funcionou.`
           : [
             "O Stoat aceitou o pedido (HTTP 200) mas o registro **continua lá** — eu conferi tentando entrar de novo.",
             "",
             "Por quê: essa rota só manda o LiveKit me remover, e quem apaga o registro é o aviso que o LiveKit dispara depois. Se eu já não estava lá (queda de energia, processo morto), não há o que remover e aviso nenhum é disparado.",
             "",
             "**As saídas, da menos à mais drástica:**",
-            `1. Use **outra call** — o Stoat só me bloqueia neste canal; em outro eu entro normalmente. \`${PREFIXO}tts entrar\` lá.`,
+            `1. Use **outra call** — o Stoat só me bloqueia neste canal; em outro eu entro normalmente. \`${PREFIXO}entrar\` lá.`,
             "2. Espere: a sala pode expirar sozinha e liberar.",
             `3. **\`${PREFIXO}tts resgatar\`** — entro numa call auxiliar, me movo para esta pelo PATCH do Stoat (que emite token sem conferir o registro preso) e conecto de verdade. _(Kick não resolve: \`member_remove\` lê a mesma chave que esta rota.)_`,
           ].join("\n"),
@@ -598,14 +617,14 @@ export async function cmdTts(message, args, ctx) {
       description: [
         ...linhas, "",
         r?.ok
-          ? `I asked to be disconnected and Stoat accepted. Now \`${PREFIXO}tts entrar\` **from inside the call** — the join itself will tell.`
+          ? `I asked to be disconnected and Stoat accepted. Now \`${PREFIXO}entrar\` **from inside the call** — the join itself will tell.`
           : [
             "Stoat accepted the request (HTTP 200) but the record **is still there** — I checked by trying to join again.",
             "",
             "Why: that route only tells LiveKit to remove me, and what deletes the record is the notice LiveKit fires afterwards. If I wasn't there anymore (power cut, dead process), there's nothing to remove and no notice is fired.",
             "",
             "**Ways out, least to most drastic:**",
-            `1. Use **another call** — Stoat only blocks me on this channel; elsewhere I join fine. \`${PREFIXO}tts entrar\` there.`,
+            `1. Use **another call** — Stoat only blocks me on this channel; elsewhere I join fine. \`${PREFIXO}entrar\` there.`,
             "2. Wait: the room may expire on its own and free it.",
             `3. **\`${PREFIXO}tts resgatar\`** — I join a helper call, move myself here through Stoat's PATCH (which issues a token without checking the stuck record) and connect for real. _(Kicking doesn't help: \`member_remove\` reads the same key this route does.)_`,
           ].join("\n"),
@@ -641,12 +660,12 @@ export async function cmdTts(message, args, ctx) {
       return sendEmbed(message.channel, tr(ctx,
         { title: r?.ok ? "✅ Voz reiniciada" : "⚠️ Reiniciei, mas com problema",
           description: r?.ok
-            ? `Saí de todas as calls e recriei a conexão.\n\nAgora: \`${PREFIXO}tts entrar\``
+            ? `Saí de todas as calls e recriei a conexão.\n\nAgora: \`${PREFIXO}entrar\``
             : `\`${r?.erro}\`\n\nVeja \`${PREFIXO}tts estado\`.`,
           colour: r?.ok ? COR.sucesso : COR.aviso },
         { title: r?.ok ? "✅ Voice restarted" : "⚠️ Restarted, but with a problem",
           description: r?.ok
-            ? `I left every call and rebuilt the connection.\n\nNow: \`${PREFIXO}tts entrar\``
+            ? `I left every call and rebuilt the connection.\n\nNow: \`${PREFIXO}entrar\``
             : `\`${r?.erro}\`\n\nSee \`${PREFIXO}tts estado\`.`,
           colour: r?.ok ? COR.sucesso : COR.aviso }));
     } catch (e) {
@@ -786,12 +805,12 @@ export async function cmdTts(message, args, ctx) {
           : "";
         return sendEmbed(message.channel, tr(ctx, {
           title: "❓ Em qual call?",
-          description: `Digite \`${PREFIXO}tts entrar\` **dentro da call** e eu entro nela.${
+          description: `Digite \`${PREFIXO}entrar\` **dentro da call** e eu entro nela.${
             opcoes ? `\n\nAs calls que encontrei:${opcoes}` : ""}`,
           colour: COR.aviso,
         }, {
           title: "❓ Which call?",
-          description: `Type \`${PREFIXO}tts entrar\` **inside the call** and I'll join it.${
+          description: `Type \`${PREFIXO}entrar\` **inside the call** and I'll join it.${
             opcoes ? `\n\nThe calls I found:${opcoes}` : ""}`,
           colour: COR.aviso,
         }));
@@ -832,7 +851,7 @@ export async function cmdTts(message, args, ctx) {
           "",
           "⚠️ Vale para **todo mundo** que escrever aqui.",
           "",
-          `\`${PREFIXO}tts sair\` — saio e paro de ler`,
+          `\`${PREFIXO}sair\` — saio e paro de ler`,
           `\`${PREFIXO}tts filtro\` — o que eu ignoro (repetição, parede de texto…)`,
           mudou.length
             ? `\n_Escolhi sozinha: ${mudou.join(" · ")}._`
@@ -847,7 +866,7 @@ export async function cmdTts(message, args, ctx) {
           "",
           "⚠️ That applies to **everyone** writing here.",
           "",
-          `\`${PREFIXO}tts sair\` — I leave and stop reading`,
+          `\`${PREFIXO}sair\` — I leave and stop reading`,
           `\`${PREFIXO}tts filtro\` — what I skip (repetition, walls of text…)`,
           mudou.length
             ? `\n_I picked on my own: ${mudou.join(" · ")}._`
@@ -867,7 +886,7 @@ export async function cmdTts(message, args, ctx) {
       description: [
         lia ? "Parei de ler as mensagens também." : "Até a próxima.",
         "",
-        `Para voltar: \`${PREFIXO}tts entrar\` dentro da call.`,
+        `Para voltar: \`${PREFIXO}entrar\` dentro da call.`,
       ].join("\n"),
       colour: COR.sucesso,
     }, {
@@ -875,7 +894,7 @@ export async function cmdTts(message, args, ctx) {
       description: [
         lia ? "I stopped reading the messages as well." : "See you.",
         "",
-        `To come back: \`${PREFIXO}tts entrar\` inside the call.`,
+        `To come back: \`${PREFIXO}entrar\` inside the call.`,
       ].join("\n"),
       colour: COR.sucesso,
     }));
@@ -1164,8 +1183,8 @@ export async function cmdTts(message, args, ctx) {
     return sendEmbed(message.channel, tr(ctx, {
       title: "🔊 Voz da Judy",
       description: [
-        `**\`${PREFIXO}tts entrar\`** — dentro da call. Eu entro e passo a **falar tudo que for escrito ali**.`,
-        `**\`${PREFIXO}tts sair\`** — saio e paro de ler.`,
+        `**\`${PREFIXO}entrar\`** — dentro da call. Eu entro e passo a **falar tudo que for escrito ali**.`,
+        `**\`${PREFIXO}sair\`** — saio e paro de ler.`,
         "",
         "É só isso para o uso normal. O resto é ajuste fino:",
         "",
@@ -1183,8 +1202,8 @@ export async function cmdTts(message, args, ctx) {
     }, {
       title: "🔊 Judy's voice",
       description: [
-        `**\`${PREFIXO}tts entrar\`** — inside the call. I join and start **speaking everything written there**.`,
-        `**\`${PREFIXO}tts sair\`** — I leave and stop reading.`,
+        `**\`${PREFIXO}entrar\`** — inside the call. I join and start **speaking everything written there**.`,
+        `**\`${PREFIXO}sair\`** — I leave and stop reading.`,
         "",
         "That's it for normal use. The rest is fine-tuning:",
         "",
@@ -1205,10 +1224,10 @@ export async function cmdTts(message, args, ctx) {
   if (!c.ativo || !c.canalVoz) {
     return sendEmbed(message.channel, tr(ctx,
       { title: "🔇 Não estou em nenhuma call",
-        description: `Entre numa call e mande \`${PREFIXO}tts entrar\` por lá — eu configuro o resto sozinha.`,
+        description: `Entre numa call e mande \`${PREFIXO}entrar\` por lá — eu configuro o resto sozinha.`,
         colour: COR.aviso },
       { title: "🔇 I'm not in any call",
-        description: `Join a call and send \`${PREFIXO}tts entrar\` there — I'll set up the rest myself.`,
+        description: `Join a call and send \`${PREFIXO}entrar\` there — I'll set up the rest myself.`,
         colour: COR.aviso }));
   }
 

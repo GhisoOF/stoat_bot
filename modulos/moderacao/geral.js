@@ -133,11 +133,11 @@ function detalhesPT(P) {
       ex: `${P}acesso canal somente`,
     },
     warnings: {
-      uso: `${P}warnings [@usuário]`,
+      uso: `${P}warn lista [@usuário]`,
       desc: "Mostra quantos avisos (0 a 3) o usuário acumulou no AutoMod. 3 avisos = ban.",
     },
     clearwarnings: {
-      uso: `${P}clearwarnings @usuário`,
+      uso: `${P}warn limpar @usuário`,
       desc: "Zera os avisos acumulados de um usuário.",
       perm: "ManagePermissions",
     },
@@ -149,17 +149,17 @@ function detalhesPT(P) {
     whitelist: {
       uso: `${P}automod whitelist <add|remove|list> [convite]`,
       desc: "Lista de convites do servidor liberados do anti-invite. Aceita o link completo ou só o código.",
-      perm: "ManagePermissions", ex: `${P}whitelist add https://stt.gg/abc123`,
+      perm: "ManagePermissions", ex: `${P}automod whitelist add https://stt.gg/abc123`,
     },
     blocklist: {
       uso: `${P}automod blocklist <add|adddomain|remove|removedomain|list|clear|reload> [url|domínio]`,
       desc: "Gerencia o anti-link. `add <url>` importa listas estilo Pi-hole; `adddomain <domínio>` bloqueia um domínio único.",
-      perm: "ManagePermissions", ex: `${P}blocklist adddomain site-ruim.com`,
+      perm: "ManagePermissions", ex: `${P}automod blocklist adddomain site-ruim.com`,
     },
     sentinela: {
       uso: `${P}automod sentinela <config|sensitivity|antiguidade|alerta|channel|test|simulate|ban|dismiss>`,
-      desc: `O único módulo que **julga** em vez de medir: dá ao conteúdo uma nota de suspeita (0–10) cobrindo golpe, +18, gore, apologia a ilícito e abuso numa categoria só.\n\nComo julga, ele se adapta a quem escreve:\n**\`antiguidade on\`** — o limiar acompanha o nível de XP do membro. Conta recém-chegada é olhada de perto; quem conversa aqui há semanas ganha margem. Uma frase que soa a golpe vinda de alguém que acabou de entrar é bem mais provável de ser golpe.\n**\`alerta on\`** — marca a staff quando alguém levanta suspeita **repetidas vezes** em pouco tempo, mesmo sem chegar ao limiar de punição. Sinal isolado é ruído; padrão merece olho humano.\n\n\`${P}sentinela test <texto>\` mostra a nota que aquele texto tiraria; \`${P}sentinela simulate <texto>\` dispara o fluxo real no canal de avisos.\n\n_O que **acontece** com quem passa do limiar é decidido no \`${P}punicao\` — ele vale para todos os automods de uma vez, e não tem \`test\` próprio._\n\n_Chamava-se \`${P}scam\`, e esse nome continua funcionando._`,
-      perm: "ManagePermissions", ex: `${P}sentinela test ganhe dinheiro fácil chama no pv`,
+      desc: `O único módulo que **julga** em vez de medir: dá ao conteúdo uma nota de suspeita (0–10) cobrindo golpe, +18, gore, apologia a ilícito e abuso numa categoria só.\n\nComo julga, ele se adapta a quem escreve:\n**\`antiguidade on\`** — o limiar acompanha o nível de XP do membro. Conta recém-chegada é olhada de perto; quem conversa aqui há semanas ganha margem. Uma frase que soa a golpe vinda de alguém que acabou de entrar é bem mais provável de ser golpe.\n**\`alerta on\`** — marca a staff quando alguém levanta suspeita **repetidas vezes** em pouco tempo, mesmo sem chegar ao limiar de punição. Sinal isolado é ruído; padrão merece olho humano.\n\n\`${P}automod sentinela test <texto>\` mostra a nota que aquele texto tiraria; \`${P}automod sentinela simulate <texto>\` dispara o fluxo real no canal de avisos.\n\n_O que **acontece** com quem passa do limiar é decidido no \`${P}automod punicao\` — ele vale para todos os automods de uma vez, e não tem \`test\` próprio._\n\n_Chamava-se \`${P}automod sentinela\`, e esse nome continua funcionando._`,
+      perm: "ManagePermissions", ex: `${P}automod sentinela test ganhe dinheiro fácil chama no pv`,
     },
     banglobal: {
       uso: `${P}banglobal <off|avisar|banir|lista|revisar|varrer|isentar|desfazer|historico|esquecer>`,
@@ -216,7 +216,7 @@ function detalhesPT(P) {
     tts: {
       uso: `${P}tts <texto> | [entrar|sair|estado|filtro|dicionario|voz|efeito|tom|nomes|cooldown|reiniciar]`,
       desc: "A Judy **fala nas calls**. Alguém escreve, ela lê em voz alta.\n\n**Na prática são dois comandos:**\n`&tts entrar` — dentro da call. Ela entra e passa a falar **tudo que for escrito ali** (estando em outra call, ela vem para a sua)\n`&tts sair` — sai e para de ler\n\nO `entrar` liga o sistema, escolhe a call e liga a leitura sozinho — antes isso eram quatro comandos na ordem certa.\n\n`&tts <texto>` — falar uma frase específica · `&tts estado` — está tudo de pé?\n_Estes valem para **todo mundo**, não só para a equipe._\n\n**Ajustes** _(ver é livre; mudar é ManageMessages)_\n`&tts nomes off` — para de anunciar \"Fulano disse:\"\n`&tts cooldown <s>` — freio entre falas da mesma pessoa (0 desliga)\n`&tts filtro` — a **peneira**: ignora repetição, parede de texto e barulho, e limita as falas por minuto no canal _(`&help tts filtro`)_\n\n**Quando algo trava**\n`&tts reiniciar` — destrava o serviço de voz sem ir ao terminal _(ManageMessages)_. Depois de `&tts sair`, a transmissão **não** traz a Judy de volta: só `&tts entrar`. _(`&help tts problemas`)_\n\n**Dicionário** — a escrita de chat vira fala compreensível\n`vc n vai vir hj pq?` sai como `você não vai vir hoje porque?`\n`&tts dicionario` — vê o que está valendo\n`&tts dicionario add <abrev> <texto>` — entrada própria do servidor\n`&tts dicionario padrao off` — desliga as 114 abreviações embutidas\n\n**Voz e timbre**\n`&tts voz [nome]` — troca a voz do Piper (faber masculina, dii feminina)\n`&tts efeito [nome]` — `feminina`, `sedutora`, `suave`, `glados`, `robo`, `radio`…\n`&tts tom <n>` — altura da voz, **separada** do efeito (1.0 = original)\n_Sobe tom **e formantes** juntos: voz masculina vira feminina de verdade. Se a voz base já é feminina, mexa pouco — acima de 1.05 soa infantil._\n_Os efeitos mudam só o **caráter** e não tocam no tom, então soam igual sobre qualquer voz._\n_Não existe voz GLaDOS em português; o efeito recria o **processamento** dela sobre a voz que você já usa._\n\n_Dentro dos canais de voz configurados, o `&tts` funciona para **todos**, mesmo com restrição de canal ligada._\n_A síntese é **offline**, no computador do dono (Piper)._",
-      perm: "ManageMessages (só para configurar)", ex: `${P}tts entrar`,
+      perm: "ManageMessages (só para configurar)", ex: `${P}entrar`,
     },
     fuso: {
       uso: `${P}fuso [ver|buscar|add|remove|apelido|principal|formato|limpar]`,
@@ -301,12 +301,12 @@ function detalhesPT(P) {
       perm: "ManagePermissions", ex: `${P}log here`,
     },
     punicao: {
-      uso: `${P}punicao <modo|warns|silencerole>`,
+      uso: `${P}automod punicao <modo|warns|silencerole>`,
       desc: "Nível de agressividade da punição para TODOS os automods. `modo avisar` (só avisa) | `confirmar` (remove+silencia+espera mod) | `acumular` (avisos até banir) | `banir` (ban imediato). `warns <n>` define quantos avisos até o ban; `silencerole <id>` define o cargo de silêncio.",
-      perm: "ManagePermissions", ex: `${P}punicao modo acumular`,
+      perm: "ManagePermissions", ex: `${P}automod punicao modo acumular`,
     },
     review: {
-      uso: `${P}sentinela ban <userId> | ${P}sentinela dismiss <userId>`,
+      uso: `${P}automod sentinela ban <userId> | ${P}automod sentinela dismiss <userId>`,
       desc: "No modo confirmação, confirma o banimento ou libera o usuário sinalizado.",
       perm: "BanMembers",
     },
@@ -380,11 +380,11 @@ function detalhesEN(P) {
       ex: `${P}acesso canal somente`,
     },
     warnings: {
-      uso: `${P}warnings [@user]`,
+      uso: `${P}warn lista [@user]`,
       desc: "Shows how many warnings (0 to 3) the user has accumulated in the AutoMod. 3 warnings = ban.",
     },
     clearwarnings: {
-      uso: `${P}clearwarnings @user`,
+      uso: `${P}warn limpar @user`,
       desc: "Resets a user's accumulated warnings.",
       perm: "ManagePermissions",
     },
@@ -394,19 +394,19 @@ function detalhesEN(P) {
       perm: "ManagePermissions", ex: `${P}automod antilink on`,
     },
     whitelist: {
-      uso: `${P}whitelist <add|remove|list> [invite]`,
+      uso: `${P}automod whitelist <add|remove|list> [invite]`,
       desc: "List of this server's invites exempt from the anti-invite. Accepts the full link or just the code.",
-      perm: "ManagePermissions", ex: `${P}whitelist add https://stt.gg/abc123`,
+      perm: "ManagePermissions", ex: `${P}automod whitelist add https://stt.gg/abc123`,
     },
     blocklist: {
-      uso: `${P}blocklist <add|adddomain|remove|removedomain|list|clear|reload> [url|domain]`,
+      uso: `${P}automod blocklist <add|adddomain|remove|removedomain|list|clear|reload> [url|domain]`,
       desc: "Manages the anti-link. `add <url>` imports Pi-hole-style lists; `adddomain <domain>` blocks a single domain.",
-      perm: "ManagePermissions", ex: `${P}blocklist adddomain bad-site.com`,
+      perm: "ManagePermissions", ex: `${P}automod blocklist adddomain bad-site.com`,
     },
     sentinela: {
-      uso: `${P}sentinela <config|sensitivity|antiguidade|alerta|channel|test|simulate|ban|dismiss>`,
-      desc: `The only module that **judges** instead of measuring: it scores content for suspicion (0–10), covering scams, NSFW, gore, glorifying crime and abuse in a single category.\n\nBecause it judges, it adapts to who is writing:\n**\`antiguidade on\`** — the threshold follows the member's XP level. A brand new account gets a closer look; someone who has been talking here for weeks gets slack. A scammy-sounding line from someone who just arrived is far more likely to actually be a scam.\n**\`alerta on\`** — pings the staff when someone raises suspicion **repeatedly** in a short window, even below the punishment threshold. One signal is noise; a pattern deserves human eyes.\n\n\`${P}sentinela test <text>\` shows the score that text would get; \`${P}sentinela simulate <text>\` fires the real flow in the alerts channel.\n\n_What **happens** to whoever crosses the threshold is decided in \`${P}punicao\` — it applies to every automod at once, and has no \`test\` of its own._\n\n_It used to be \`${P}scam\`, and that name still works._`,
-      perm: "ManagePermissions", ex: `${P}sentinela test easy money DM me now`,
+      uso: `${P}automod sentinela <config|sensitivity|antiguidade|alerta|channel|test|simulate|ban|dismiss>`,
+      desc: `The only module that **judges** instead of measuring: it scores content for suspicion (0–10), covering scams, NSFW, gore, glorifying crime and abuse in a single category.\n\nBecause it judges, it adapts to who is writing:\n**\`antiguidade on\`** — the threshold follows the member's XP level. A brand new account gets a closer look; someone who has been talking here for weeks gets slack. A scammy-sounding line from someone who just arrived is far more likely to actually be a scam.\n**\`alerta on\`** — pings the staff when someone raises suspicion **repeatedly** in a short window, even below the punishment threshold. One signal is noise; a pattern deserves human eyes.\n\n\`${P}automod sentinela test <text>\` shows the score that text would get; \`${P}automod sentinela simulate <text>\` fires the real flow in the alerts channel.\n\n_What **happens** to whoever crosses the threshold is decided in \`${P}automod punicao\` — it applies to every automod at once, and has no \`test\` of its own._\n\n_It used to be \`${P}automod sentinela\`, and that name still works._`,
+      perm: "ManagePermissions", ex: `${P}automod sentinela test easy money DM me now`,
     },
     banglobal: {
       uso: `${P}banglobal <off|avisar|banir|lista|revisar|varrer|isentar|desfazer|historico|esquecer>`,
@@ -463,7 +463,7 @@ function detalhesEN(P) {
     tts: {
       uso: `${P}tts <text> | [canal|transmitir|entrar|sair|filtro|reiniciar|voz|estado|on|off]`,
       desc: "Judy **speaks in calls**. Someone writes, she reads it aloud in the voice channel.\n\n`&tts <text>` — speak now\n`&tts entrar` · `&tts sair` — call or dismiss Judy\n`&tts estado` — diagnostics for the whole chain\n_These three are open to **everyone**._\n\n**Broadcast mode** — no extra command\n`&tts entrar` already makes **everything** written in that channel become speech; `&tts sair` stops it.\n\n**Adjustments** _(viewing is open; changing needs ManageMessages)_\n`&tts nomes off` — stops announcing \"Someone said:\"\n`&tts cooldown <s>` — brake between one person's utterances (0 disables)\n`&tts filtro` — the **sieve**: skips repetition, walls of text and noise, and caps utterances per minute _(`&help tts filtro`)_\n\n**When something jams**\n`&tts reiniciar` — unsticks the voice service without a terminal _(ManageMessages)_. After `&tts sair`, the broadcast will **not** bring Judy back: only `&tts entrar`. _(`&help tts problemas`)_\n\n**Voice and timbre**\n`&tts voz [name]` — switch the Piper voice\n`&tts efeito [name]` — `feminina`, `sedutora`, `suave`, `glados`, `robo`, `radio`…\n`&tts tom <n>` — pitch, **separate** from the effect (1.0 = original)\n`&tts dicionario` — how chat shorthand is spoken (`vc` → `você`); `add`/`remove`/`teste`/`padrao on|off`\n_There is no GLaDOS voice in Portuguese; the effect recreates her **processing** over the voice you already use._\n\n_Inside the configured voice channels, `&tts` works for **everyone**, even with channel restriction on._\n_Synthesis runs **offline** on the owner's machine (Piper)._",
-      perm: "ManageMessages (configuration only)", ex: `${P}tts entrar`,
+      perm: "ManageMessages (configuration only)", ex: `${P}entrar`,
     },
     fuso: {
       uso: `${P}fuso [ver|buscar|add|remove|apelido|principal|formato|limpar]`,
@@ -548,12 +548,12 @@ function detalhesEN(P) {
       perm: "ManagePermissions", ex: `${P}log here`,
     },
     punicao: {
-      uso: `${P}punicao <modo|warns|silencerole>`,
+      uso: `${P}automod punicao <modo|warns|silencerole>`,
       desc: "Punishment aggressiveness for ALL automods. `modo avisar` (warn only) | `confirmar` (remove+silence+wait for a mod) | `acumular` (warnings until ban) | `banir` (instant ban). `warns <n>` sets how many warnings until the ban; `silencerole <id>` sets the silence role.",
-      perm: "ManagePermissions", ex: `${P}punicao modo acumular`,
+      perm: "ManagePermissions", ex: `${P}automod punicao modo acumular`,
     },
     review: {
-      uso: `${P}sentinela ban <userId> | ${P}sentinela dismiss <userId>`,
+      uso: `${P}automod sentinela ban <userId> | ${P}automod sentinela dismiss <userId>`,
       desc: "In confirmation mode, confirms the ban or releases the flagged user.",
       perm: "BanMembers",
     },
@@ -574,7 +574,7 @@ function construirSubtopicos(P, lang) {
       sensitivity: {
         titulo: "sentinela sensitivity",
         texto: [
-          `**Usage:** \`${P}sentinela sensitivity <baixa|media|alta>\``,
+          `**Usage:** \`${P}automod sentinela sensitivity <baixa|media|alta>\``,
           "",
           "Sets from which **score (0–10)** the bot acts on suspicious content:",
           "• 🟢 **baixa** (low, threshold 8) — only near-certain cases; fewer false positives.",
@@ -585,7 +585,7 @@ function construirSubtopicos(P, lang) {
       test: {
         titulo: "sentinela test",
         texto: [
-          `**Usage:** \`${P}sentinela test <text>\``,
+          `**Usage:** \`${P}automod sentinela test <text>\``,
           "",
           "Simulates analyzing a text and shows the score (0–10) and detected signals, without punishing anyone. Useful for calibrating the sensitivity.",
         ].join("\n"),
@@ -593,7 +593,7 @@ function construirSubtopicos(P, lang) {
       channel: {
         titulo: "sentinela channel",
         texto: [
-          `**Usage:** \`${P}sentinela channel <aqui|id|off>\``,
+          `**Usage:** \`${P}automod sentinela channel <aqui|id|off>\``,
           "",
           "Sets which channel receives the suspicious-content alerts. `off` goes back to alerting in the message's own channel.",
         ].join("\n"),
@@ -645,7 +645,7 @@ function construirSubtopicos(P, lang) {
       modo: {
         titulo: "punicao modo",
         texto: [
-          `**Usage:** \`${P}punicao modo <avisar|apagar|confirmar|acumular|banir>\``,
+          `**Usage:** \`${P}automod punicao modo <avisar|apagar|confirmar|acumular|banir>\``,
           "",
           "Sets the **global** punishment (applies to every module without its own):",
           "• `avisar` — warn only, don't remove\n• `apagar` — remove the message only\n• `confirmar` — remove, silence (if a role is set) and wait for a mod's approval\n• `acumular` — stack warnings and ban at the limit\n• `banir` — instant ban",
@@ -660,7 +660,7 @@ function construirSubtopicos(P, lang) {
       sensitivity: {
         titulo: "sentinela sensitivity",
         texto: [
-          `**Uso:** \`${P}sentinela sensitivity <baixa|media|alta>\``,
+          `**Uso:** \`${P}automod sentinela sensitivity <baixa|media|alta>\``,
           "",
           "Define a partir de qual **nota (0–10)** o bot age sobre conteúdo suspeito:",
           "• 🟢 **baixa** (limiar 8) — só o que é quase certo; menos falsos positivos.",
@@ -671,7 +671,7 @@ function construirSubtopicos(P, lang) {
       test: {
         titulo: "sentinela test",
         texto: [
-          `**Uso:** \`${P}sentinela test <texto>\``,
+          `**Uso:** \`${P}automod sentinela test <texto>\``,
           "",
           "Simula a análise de um texto e mostra a nota (0–10) e os sinais detectados, sem punir ninguém. Útil para calibrar a sensibilidade.",
         ].join("\n"),
@@ -679,7 +679,7 @@ function construirSubtopicos(P, lang) {
       channel: {
         titulo: "sentinela channel",
         texto: [
-          `**Uso:** \`${P}sentinela channel <aqui|id|off>\``,
+          `**Uso:** \`${P}automod sentinela channel <aqui|id|off>\``,
           "",
           "Define para qual canal vão os alertas de conteúdo suspeito. `off` volta a alertar no próprio canal da mensagem.",
         ].join("\n"),
@@ -731,7 +731,7 @@ function construirSubtopicos(P, lang) {
       modo: {
         titulo: "punicao modo",
         texto: [
-          `**Uso:** \`${P}punicao modo <avisar|apagar|confirmar|acumular|banir>\``,
+          `**Uso:** \`${P}automod punicao modo <avisar|apagar|confirmar|acumular|banir>\``,
           "",
           "Define a punição **global** (vale para todos os módulos que não têm punição própria):",
           "• `avisar` — só avisa, não remove\n• `apagar` — só remove a mensagem\n• `confirmar` — remove, silencia (se houver cargo) e espera um mod aprovar\n• `acumular` — soma avisos e bane ao atingir o limite\n• `banir` — ban imediato",
@@ -773,7 +773,13 @@ export async function cmdHelp(message, args, ctx) {
     .filter((k) => !METADADOS.has(k) && no[k] && typeof no[k] === "object");
 
   const caminho = args.map((a) => String(a).toLowerCase());
-  if (caminho.length >= 2 && SUBTOPICOS[caminho[0]]) {
+  // `&help automod` (1 argumento) também entra aqui quando `automod` é a raiz
+  // de uma família: antes caía no livrinho do grupo "Proteger", que não
+  // mostrava a família nenhuma.
+  const raizDeFamilia = caminho.length === 1
+    && SUBTOPICOS[caminho[0]]?.texto
+    && Object.keys(SUBTOPICOS[caminho[0]]).some((k) => !["titulo", "texto"].includes(k));
+  if ((caminho.length >= 2 || raizDeFamilia) && SUBTOPICOS[caminho[0]]) {
     let no = SUBTOPICOS[caminho[0]];
     const trilha = [caminho[0]];
     let i = 1;
@@ -813,8 +819,10 @@ export async function cmdHelp(message, args, ctx) {
           : `\`${P}${trilha.join(" ")}\` reúne os assuntos abaixo.`];
 
     return enviarPaginado(ctx, message.channel, {
-      titulo: `📖 ${lang === "en" ? "Help" : "Ajuda"} — ${P}${exibirTitulo(no.titulo ?? trilha.join(" "), lang, P, ctx.estado?.CANONICO)}`,
-      linhas: [...corpo, ...rodape],
+      paginas: paginarLinhas([...corpo, ...rodape], {
+        titulo: `📖 ${lang === "en" ? "Help" : "Ajuda"} — ${P}${exibirTitulo(no.titulo ?? trilha.join(" "), lang, P, ctx.estado?.CANONICO)}`,
+      }),
+      autorId: message.authorId,
       colour: COR.info,
     });
   }

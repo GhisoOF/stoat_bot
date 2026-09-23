@@ -294,8 +294,8 @@ async function aplicarPunicao(ctx, opts) {
       description: [`<@${userId}> — ${motivo}${linhaNota}`,
         `**${lang === "en" ? "Action" : "Ação"}:** ${acao}`,
         lang === "en"
-          ? `Confirm the ban with \`${PREFIXO}scam ban ${userId}\` or release with \`${PREFIXO}scam dismiss ${userId}\`.`
-          : `Confirme o ban com \`${PREFIXO}scam ban ${userId}\` ou libere com \`${PREFIXO}scam dismiss ${userId}\`.`,
+          ? `Confirm the ban with \`${PREFIXO}automod sentinela ban ${userId}\` or release with \`${PREFIXO}automod sentinela dismiss ${userId}\`.`
+          : `Confirme o ban com \`${PREFIXO}automod sentinela ban ${userId}\` ou libere com \`${PREFIXO}automod sentinela dismiss ${userId}\`.`,
         ...blocoGrave].join("\n"),
       colour: COR.mod,
     });
@@ -401,7 +401,7 @@ async function alertarAdministracao(ctx, { server, canal, userId, sinal, faixa, 
     sinal.sinais.length ? `**Signals:** ${sinal.sinais.join(", ")}` : null,
     "",
     "Nothing was punished — the score stayed below the threshold. This is a **pattern**, and patterns are worth a human look.",
-    `\`${PREFIXO}scam ban ${userId}\` · \`${PREFIXO}scam dismiss ${userId}\` · \`${PREFIXO}warnings ${userId}\``,
+    `\`${PREFIXO}automod sentinela ban ${userId}\` · \`${PREFIXO}automod sentinela dismiss ${userId}\` · \`${PREFIXO}warn lista ${userId}\``,
   ] : [
     mencao,
     `**Possível ameaça** — <@${userId}> acionou o sentinela **${sinal.vezes}×** em ${sinal.janelaMin} min.`,
@@ -409,7 +409,7 @@ async function alertarAdministracao(ctx, { server, canal, userId, sinal, faixa, 
     sinal.sinais.length ? `**Sinais:** ${sinal.sinais.join(", ")}` : null,
     "",
     "Nada foi punido — a nota ficou abaixo do limiar. Isto é um **padrão**, e padrão merece olho humano.",
-    `\`${PREFIXO}scam ban ${userId}\` · \`${PREFIXO}scam dismiss ${userId}\` · \`${PREFIXO}warnings ${userId}\``,
+    `\`${PREFIXO}automod sentinela ban ${userId}\` · \`${PREFIXO}automod sentinela dismiss ${userId}\` · \`${PREFIXO}warn lista ${userId}\``,
   ];
 
   try {

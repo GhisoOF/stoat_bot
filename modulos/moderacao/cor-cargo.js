@@ -2,8 +2,7 @@ import { limparId, ULID } from "../core/ids.js";
 import * as db from "../core/db.js";
 import { CORES as NOMES, normalizarCor as corSolida, nomesDeCor } from "../core/cores.js";
 import { tr, lingua } from "../core/i18n.js";
-
-const API = (process.env.STOAT_API || "https://api.stoat.chat").replace(/\/$/, "");
+import { chamarApi } from "../core/stoat-api.js";
 
 // Gradientes prontos — o atalho para o efeito bonito sem montar nada.
 const PRESETS = {
@@ -68,27 +67,21 @@ function acharCargo(server, alvo) {
 }
 
 async function aplicarCor(serverId, roleId, colour) {
-  const token = process.env.BOT_TOKEN;
-  if (!token) return { ok: false, erro: "BOT_TOKEN não está definido no ambiente do bot." };
+  if (!process.env.BOT_TOKEN) return { ok: false, erro: "BOT_TOKEN não está definido no ambiente do bot." };
 
-  const url = `${API}/servers/${serverId}/roles/${roleId}`;
-  try {
-    const r = await fetch(url, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json", "X-Bot-Token": token },
-      body: JSON.stringify(colour === null ? { remove: ["Colour"] } : { colour }),
-      signal: AbortSignal.timeout(15000),
-    });
-    if (r.ok) return { ok: true };
-    const corpo = await r.text().catch(() => "");
-    const dica = r.status === 403 ? " — o cargo do bot precisa de **ManageRole** e estar **acima** do cargo que está editando."
-      : r.status === 400 ? " — o Stoat recusou o valor da cor."
-      : r.status === 404 ? " — cargo ou servidor não encontrado."
-      : "";
-    return { ok: false, erro: `API respondeu ${r.status}${dica}${corpo ? `\n\`\`\`\n${corpo.slice(0, 300)}\n\`\`\`` : ""}` };
-  } catch (e) {
-    return { ok: false, erro: `Não consegui falar com a API: ${e?.message ?? e}` };
-  }
+  const r = await chamarApi(`/servers/${serverId}/roles/${roleId}`, {
+    metodo: "PATCH",
+    corpo: colour === null ? { remove: ["Colour"] } : { colour },
+    ms: 15_000,
+  });
+  if (r.ok) return { ok: true };
+  if (r.erro) return { ok: false, erro: `Não consegui falar com a API: ${r.erro}` };
+
+  const dica = r.status === 403 ? " — o cargo do bot precisa de **ManageRole** e estar **acima** do cargo que está editando."
+    : r.status === 400 ? " — o Stoat recusou o valor da cor."
+    : r.status === 404 ? " — cargo ou servidor não encontrado."
+    : "";
+  return { ok: false, erro: `API respondeu ${r.status}${dica}${r.texto ? `\n\`\`\`\n${r.texto.slice(0, 300)}\n\`\`\`` : ""}` };
 }
 
 export async function cmdCor(message, args, ctx) {

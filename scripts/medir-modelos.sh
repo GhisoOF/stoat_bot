@@ -22,12 +22,12 @@
 #
 #  Uso:  ./medir-modelos.sh                          (os que o servidor listar)
 #        ./medir-modelos.sh lfm2.5-2.6b qwen3.8-27b  (só esses)
-#        OLLAMA_URL=http://100.74.70.106:8081 ./medir-modelos.sh
+#        LLM_URL=http://SEU_HOST:8081 ./medir-modelos.sh
 #        PERGUNTA="..." ./medir-modelos.sh
 # ══════════════════════════════════════════════════════════
 set -u
 
-OLLAMA="${OLLAMA_URL:-http://localhost:8081}"
+LLM="${LLM_URL:-http://localhost:8081}"
 PERGUNTA="${PERGUNTA:-Explique em dois paragrafos por que o ceu e azul.}"
 TOKENS="${TOKENS:-150}"
 TMP="$(mktemp -d)"
@@ -35,9 +35,9 @@ trap 'rm -rf "$TMP"' EXIT
 
 command -v curl >/dev/null 2>&1 || { echo "Preciso do curl."; exit 1; }
 
-if ! curl -s --max-time 5 "$OLLAMA/v1/models" >/dev/null 2>&1; then
-  echo "Não consegui falar com o servidor em $OLLAMA"
-  echo "Confira:  curl -s $OLLAMA/v1/models"
+if ! curl -s --max-time 5 "$LLM/v1/models" >/dev/null 2>&1; then
+  echo "Não consegui falar com o servidor em $LLM"
+  echo "Confira:  curl -s $LLM/v1/models"
   exit 1
 fi
 
@@ -45,7 +45,7 @@ MODELOS=("$@")
 if [ ${#MODELOS[@]} -eq 0 ]; then
   while IFS= read -r linha; do
     [ -n "$linha" ] && MODELOS+=("$linha")
-  done < <(curl -s "$OLLAMA/v1/models" | tr ',' '\n' \
+  done < <(curl -s "$LLM/v1/models" | tr ',' '\n' \
            | grep -o '"id":"[^"]*"' | cut -d'"' -f4)
 fi
 [ ${#MODELOS[@]} -eq 0 ] && { echo "Nenhum modelo encontrado."; exit 1; }
@@ -55,7 +55,7 @@ campo() { grep -o "\"$2\":[0-9]*" "$1" | head -1 | cut -d: -f2; }
 
 chamar() {   # $1 = modelo, $2 = arquivo de saída → imprime o tempo total
   curl -s -o "$2" -w '%{time_total}' --max-time 300 \
-    "$OLLAMA/v1/chat/completions" \
+    "$LLM/v1/chat/completions" \
     -H 'Content-Type: application/json' \
     -d "{\"model\":\"$1\",\"stream\":false,\"max_tokens\":$TOKENS,
          \"messages\":[{\"role\":\"user\",\"content\":\"$PERGUNTA\"}]}"
@@ -72,7 +72,7 @@ for m in "${MODELOS[@]}"; do
   # Força a descarga: o llama-swap troca o modelo residente ao servir outro.
   # Sem isto, o "FRIO" do segundo modelo em diante já viria quente.
   if [ -n "$anterior" ] && [ "$anterior" != "$m" ]; then
-    curl -s -o /dev/null --max-time 300 "$OLLAMA/v1/chat/completions" \
+    curl -s -o /dev/null --max-time 300 "$LLM/v1/chat/completions" \
       -H 'Content-Type: application/json' \
       -d "{\"model\":\"$anterior\",\"stream\":false,\"max_tokens\":1,
            \"messages\":[{\"role\":\"user\",\"content\":\"oi\"}]}" 2>/dev/null

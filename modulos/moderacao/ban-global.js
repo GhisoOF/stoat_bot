@@ -5,8 +5,7 @@ import * as log from "../core/log.js";
 import { resolverUsuario as resolverUser, resolverUsuarioDetalhado, ehBot } from "../core/ids.js";
 import { tr, lingua } from "../core/i18n.js";
 import { enviarPaginado, paginarLinhas } from "../core/paginas.js";
-
-const API = (process.env.STOAT_API || "https://api.stoat.chat").replace(/\/$/, "");
+import { chamarApi } from "../core/stoat-api.js";
 
 export const MODOS = {
   off:    "ignora a lista global",
@@ -50,10 +49,9 @@ export async function confirmarSeEhBot(userId, { client, membro = null, comDisco
   };
 
   // 1. A vitrine de bots: pública, sem token, sem conexão mútua.
-  try {
-    const r = await fetch(`${API}/bots/${userId}/invite`, { signal: AbortSignal.timeout(8000) });
-    if (r.ok) return guardar(true, "/bots/{id}/invite");
-  } catch { /* rede: segue para as outras */ }
+  if ((await chamarApi(`/bots/${userId}/invite`, { token: "", ms: 8000 })).ok) {
+    return guardar(true, "/bots/{id}/invite");
+  }
 
   // 2. O cliente, que sabe quando há servidor em comum.
   try {
@@ -62,16 +60,10 @@ export async function confirmarSeEhBot(userId, { client, membro = null, comDisco
   } catch {}
 
   // 3. A API direta — mesma limitação do item 2, mas funciona com o cache frio.
-  try {
-    const token = process.env.BOT_TOKEN;
-    if (token) {
-      const r = await fetch(`${API}/users/${userId}`, {
-        headers: { "X-Bot-Token": token },
-        signal: AbortSignal.timeout(8000),
-      });
-      if (r.ok && ehBot(await r.json().catch(() => null))) return guardar(true, "/users/{id}");
-    }
-  } catch {}
+  if (process.env.BOT_TOKEN) {
+    const r = await chamarApi(`/users/${userId}`, { ms: 8000 });
+    if (r.ok && ehBot(r.json)) return guardar(true, "/users/{id}");
+  }
 
   // 4. O discover: bot privado, sem servidor em comum, ainda pode estar lá.
   if (comDiscover && await estaNoDiscover(userId)) return guardar(true, "discover");
@@ -173,18 +165,11 @@ async function desbanir(server, serverId, userId) {
   } catch (e) { /* cai no REST */ }
   const token = process.env.BOT_TOKEN;
   if (!token) return { ok: false, erro: "sem BOT_TOKEN para falar com a API" };
-  try {
-    const r = await fetch(`${API}/servers/${serverId}/bans/${userId}`, {
-      method: "DELETE", headers: { "X-Bot-Token": token },
-    });
-    if (!r.ok && r.status !== 404) {
-      const corpo = await r.text().catch(() => "");
-      return { ok: false, erro: `HTTP ${r.status} ${corpo.slice(0, 120)}` };
-    }
-    return { ok: true };
-  } catch (e) {
-    return { ok: false, erro: e?.message ?? String(e) };
-  }
+  const r = await chamarApi(`/servers/${serverId}/bans/${userId}`, { metodo: "DELETE" });
+  if (r.erro) return { ok: false, erro: r.erro };
+  // 404 = já não estava banido: para desbanir, isso é sucesso.
+  if (!r.ok && r.status !== 404) return { ok: false, erro: `HTTP ${r.status} ${r.texto.slice(0, 120)}` };
+  return { ok: true };
 }
 
 export async function importarBansDoServidor(server, serverId, client = null) {

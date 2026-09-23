@@ -92,7 +92,9 @@ export function validarUrlImagem(entrada) {
     avisosEn.push("⚠️ The link doesn't end in `.png`/`.jpg`/`.gif`/`.webp`, so it may not be the image itself.");
   }
 
-  const noStoat = /(^|\.)stoat\.(chat|gg)$/i.test(host) || /(^|\.)autumn\./i.test(host);
+  const noStoat = /(^|\.)stoat\.(chat|gg)$/i.test(host)
+    || /(^|\.)stoatusercontent\.com$/i.test(host)
+    || /(^|\.)autumn\./i.test(host);
   if (!noStoat) {
     avisos.push("🔒 A imagem fica num site de terceiros: **o dono daquele site vê o IP de cada pessoa que carregar a mensagem** — numa mensagem de boas-vindas, o de todo mundo que entrar. Enviar o arquivo aqui no Stoat e usar o link do anexo evita isso.");
     avisosEn.push("🔒 The image lives on a third-party site: **its owner sees the IP of everyone who loads the message** — in a welcome message, everyone who joins. Uploading the file here on Stoat and using the attachment link avoids that.");
@@ -107,7 +109,10 @@ export function validarUrlImagem(entrada) {
   };
 }
 
-const ANEXO_STOAT = /^https?:\/\/[^/]*(?:autumn|cdn|media)[^/]*\.(?:stoat\.(?:chat|gg)|revolt\.chat)\/[^/]+\/([0-9A-HJKMNP-TV-Z]{26})(?:\/|$|\?)/i;
+// `stoatusercontent.com` é o CDN ATUAL do Stoat: sem ele aqui, um anexo do
+// próprio Stoat não virava capa de embed (`media`) e ainda levava o aviso de
+// "site de terceiros", que era falso.
+const ANEXO_STOAT = /^https?:\/\/[^/]*(?:autumn|cdn|media)[^/]*\.(?:stoat\.(?:chat|gg)|stoatusercontent\.com|revolt\.chat)\/[^/]+\/([0-9A-HJKMNP-TV-Z]{26})(?:\/|$|\?)/i;
 
 export function extrairAnexoStoat(url) {
   const m = String(url ?? "").match(ANEXO_STOAT);

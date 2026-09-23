@@ -43,8 +43,8 @@ export function explicarErroDeRede(e, alvo = "o serviço") {
     return `${base}: o DNS não respondeu (EAI_AGAIN) mesmo depois de algumas tentativas.`
       + ` Isso é rede do container, não credencial.`
       + ` Confira o /etc/resolv.conf da máquina: precisa ter uma linha \`nameserver\`.`
-      + ` Se o serviço tem um DNS de emergência configurado (DNS_FALLBACK), ele entra sozinho no próximo boot:`
-      + ` \`rc-service judy-ia restart\`.`;
+      + ` Se há um DNS de emergência configurado (DNS_FALLBACK), ele entra sozinho no próximo boot:`
+      + ` \`docker compose restart stoat-bot\`.`;
   }
   if (c === "ENOTFOUND") {
     return `${base}: o nome não existe no DNS (ENOTFOUND). Confira o endereço configurado.`;

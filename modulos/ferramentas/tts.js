@@ -1,6 +1,7 @@
 
 import { resolverCanal } from "../core/ids.js";
 import { tr, lingua } from "../core/i18n.js";
+import { chamarApi } from "../core/stoat-api.js";
 import * as abrev from "../core/abreviacoes.js";
 import * as filtro from "./tts-filtro.js";
 
@@ -222,7 +223,6 @@ async function executarResgate({ presa, auxPreferida = null, message, ctx, c, se
   const client = ctx.client;
   const meuId = client?.user?.id;
   const token = process.env.BOT_TOKEN;
-  const API = (process.env.STOAT_API || "https://api.stoat.chat").replace(/\/$/, "");
   const passos = [];
   const ok = (t) => passos.push(`✅ ${t}`);
   const falha = (t) => passos.push(`❌ ${t}`);
@@ -284,14 +284,10 @@ async function executarResgate({ presa, auxPreferida = null, message, ctx, c, se
   tokenDoMover.catch(() => {});
   let patch;
   try {
-    const r = await fetch(`${API}/servers/${serverId}/members/${meuId}`, {
-      method: "PATCH",
-      headers: { "X-Bot-Token": token, "Content-Type": "application/json" },
-      body: JSON.stringify({ voice_channel: presa }),
-      signal: AbortSignal.timeout(10_000),
+    const r = await chamarApi(`/servers/${serverId}/members/${meuId}`, {
+      metodo: "PATCH", corpo: { voice_channel: presa }, ms: 10_000,
     });
-    const txt = await r.text().catch(() => "");
-    patch = { ok: r.ok, status: r.status, corpo: txt.slice(0, 140) };
+    patch = r.erro ? { ok: false, erro: r.erro } : { ok: r.ok, status: r.status, corpo: r.texto.slice(0, 140) };
   } catch (e) { patch = { ok: false, erro: e?.message ?? String(e) }; }
   if (!patch.ok) {
     client?.events?.off?.("event", ouvir);

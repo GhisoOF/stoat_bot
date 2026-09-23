@@ -46,10 +46,9 @@ function erro404(caminho = "") {
     return marcar(`O GitHub respondeu 404${onde}. O repositório \`${REPO}\` é privado e`
       + ` **não há GITHUB_TOKEN configurado** neste container — sem credencial, o`
       + ` GitHub finge que o repo não existe.`
-      + `\n\nO token vem do arquivo \`.env\` do diretório do judy-ia.`
-      + ` Ele costuma sumir quando a pasta \`ia-servico\` é apagada e recriada no deploy.`
-      + `\n\nRefazer:  \`echo "GITHUB_TOKEN=github_pat_..." > ia-servico/.env\``
-      + ` e reiniciar o serviço:  \`rc-service judy-ia restart\`.`);
+      + `\n\nO token vem do \`.env\` na raiz do projeto, que o compose passa inteiro ao container.`
+      + `\n\nRefazer:  acrescente \`GITHUB_TOKEN=github_pat_...\` ao \`.env\` e RECRIE o container`
+      + ` (\`docker compose up -d --force-recreate stoat-bot\`) — \`restart\` não aplica variável nova.`);
   }
   return marcar(`O GitHub respondeu 404${onde}, mesmo com GITHUB_TOKEN presente.`
     + ` Isso costuma ser uma destas três coisas:`

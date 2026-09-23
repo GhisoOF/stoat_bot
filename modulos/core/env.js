@@ -6,6 +6,7 @@
 //   IA         → 0/1                 (liga/desliga todos os módulos de IA)
 //   IA_MODO    → local | online      (llama.cpp embutido | plataforma com token)
 //   MODELO     → -hf do llama (local) ou LLM_MODEL (online)
+//   MODELO_VISAO → LLM_MODEL_VISAO    (liga a ferramenta de visão)
 //   TOKEN_IA   → Authorization no LLM online
 //   PROMPT     → personalidade padrão da IA (o &personalidade por servidor vence)
 //
@@ -38,4 +39,10 @@ if (iaLigada()) {
     if (!e.LLM_URL) e.LLM_URL = "https://openrouter.ai/api";
     if (e.MODELO && !e.LLM_MODEL) e.LLM_MODEL = e.MODELO;
   }
+  // A ferramenta de visão (ver_imagem) só é registrada quando LLM_MODEL_VISAO
+  // existe. No modo online e com LLM_URL externo, ninguém definia essa
+  // variável: o README prometia visão "de fábrica com um modelo multimodal" e
+  // a ferramenta simplesmente não aparecia. (No modo local com llama-swap o
+  // iniciar.js já define "visao"; este mapeamento não atrapalha.)
+  if (e.MODELO_VISAO && !e.LLM_MODEL_VISAO) e.LLM_MODEL_VISAO = e.MODELO_VISAO;
 }

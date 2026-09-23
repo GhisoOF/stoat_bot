@@ -76,6 +76,33 @@ function comLimite(promessa, ms, ondeParou, aoChegarTarde = null) {
   ]);
 }
 
+// Uma chamada à API do Stoat. Era o MESMO bloco repetido três vezes neste
+// arquivo (com timeouts e assinaturas diferentes) e o endereço relido em cinco
+// lugares. NUNCA lança: devolve o passo pronto para entrar no relatório de
+// diagnóstico, que é o que todos os chamadores queriam.
+const API = (process.env.STOAT_API || "https://api.stoat.chat").replace(/\/$/, "");
+
+async function bater(metodo, rota, corpo = null, ms = 8000) {
+  const t = Date.now();
+  try {
+    const r = await comLimite(fetch(`${API}${rota}`, {
+      method: metodo,
+      headers: { "X-Bot-Token": TOKEN, ...(corpo ? { "Content-Type": "application/json" } : {}) },
+      ...(corpo ? { body: JSON.stringify(corpo) } : {}),
+    }), ms, `${ms / 1000}s sem resposta de ${rota}`);
+    const txt = await r.text().catch(() => "");
+    let json = null;
+    try { json = JSON.parse(txt); } catch {}
+    return {
+      metodo, rota, ok: r.ok, status: r.status, ms: Date.now() - t,
+      corpo: txt.slice(0, 160), texto: txt, json,
+      ehHtml: /^\s*<(!doctype|html)/i.test(txt),
+    };
+  } catch (e) {
+    return { metodo, rota, ok: false, ms: Date.now() - t, erro: e?.message ?? String(e) };
+  }
+}
+
 // Derruba uma conexão de qualquer jeito que a lib permitir.
 async function derrubar(connection) {
   try { connection?.leave?.(); } catch {}
@@ -291,10 +318,8 @@ let nodesCache = null;   // [{ name, public_url }]
 async function nodesDisponiveis(completo = false) {
   const entregar = (l) => completo ? l : l.map((n) => n.name);
   if (nodesCache?.length) return entregar(nodesCache);
-  const API = (process.env.STOAT_API || "https://api.stoat.chat").replace(/\/$/, "");
   try {
-    const r = await comLimite(fetch(`${API}/`), 8000, "8s sem resposta da raiz da API");
-    const j = await r.json().catch(() => null);
+    const j = (await bater("GET", "/")).json;
     const lista = (j?.features?.livekit?.nodes ?? [])
       .filter((n) => n?.name)
       .map((n) => ({ name: n.name, public_url: n.public_url ?? n.url ?? null }));
@@ -315,26 +340,8 @@ export async function nodePreferido() {
 }
 
 export async function forcarSaida(canalVoz, serverId = null, servidores = []) {
-  const API = (process.env.STOAT_API || "https://api.stoat.chat").replace(/\/$/, "");
   const passos = [];
-  const bater = async (metodo, rota, corpo = null) => {
-    const t = Date.now();
-    try {
-      const r = await comLimite(fetch(`${API}${rota}`, {
-        method: metodo,
-        headers: { "X-Bot-Token": TOKEN, ...(corpo ? { "Content-Type": "application/json" } : {}) },
-        ...(corpo ? { body: JSON.stringify(corpo) } : {}),
-      }), 8000, `8s sem resposta de ${rota}`);
-      const txt = await r.text().catch(() => "");
-      let json = null;
-      try { json = JSON.parse(txt); } catch {}
-      return { metodo, rota, ok: r.ok, status: r.status, ms: Date.now() - t, corpo: txt.slice(0, 160), json };
-    } catch (e) {
-      return { metodo, rota, ok: false, ms: Date.now() - t, erro: e?.message ?? String(e) };
-    }
-  };
-
-  const meuId = await meuIdDeBot(bater, passos);
+  const meuId = await meuIdDeBot(passos);
 
   const alvos = [serverId, ...servidores].filter((x, i, a) => x && a.indexOf(x) === i);
   if (!meuId) {
@@ -361,7 +368,7 @@ export async function forcarSaida(canalVoz, serverId = null, servidores = []) {
 
 // O próprio id do bot, descoberto uma vez e lembrado.
 let meuIdCache = null;
-async function meuIdDeBot(bater, passos) {
+async function meuIdDeBot(passos) {
   if (meuIdCache) return meuIdCache;
   const me = await bater("GET", "/users/@me");
   passos.push({ ...me, json: undefined });
@@ -370,24 +377,8 @@ async function meuIdDeBot(bater, passos) {
 }
 
 export async function moverPara(canalVoz, serverId) {
-  const API = (process.env.STOAT_API || "https://api.stoat.chat").replace(/\/$/, "");
   const passos = [];
-  const bater = async (metodo, rota, corpo = null) => {
-    const t = Date.now();
-    try {
-      const r = await comLimite(fetch(`${API}${rota}`, {
-        method: metodo,
-        headers: { "X-Bot-Token": TOKEN, ...(corpo ? { "Content-Type": "application/json" } : {}) },
-        ...(corpo ? { body: JSON.stringify(corpo) } : {}),
-      }), 8000, `8s sem resposta de ${rota}`);
-      const txt = await r.text().catch(() => "");
-      let json = null; try { json = JSON.parse(txt); } catch {}
-      return { metodo, rota, ok: r.ok, status: r.status, ms: Date.now() - t, corpo: txt.slice(0, 160), json };
-    } catch (e) {
-      return { metodo, rota, ok: false, ms: Date.now() - t, erro: e?.message ?? String(e) };
-    }
-  };
-  const meuId = await meuIdDeBot(bater, passos);
+  const meuId = await meuIdDeBot(passos);
   if (!meuId || !serverId) return { ok: false, passos };
   const r = await bater("PATCH", `/servers/${serverId}/members/${meuId}`, { voice_channel: canalVoz });
   passos.push(r);
@@ -396,23 +387,14 @@ export async function moverPara(canalVoz, serverId) {
 }
 
 async function abrirSalaSePreciso(canalVoz) {
-  const API = (process.env.STOAT_API || "https://api.stoat.chat").replace(/\/$/, "");
   const node = await nodePreferido();
   if (!node) return null;
-  try {
-    const r = await comLimite(fetch(`${API}/channels/${canalVoz}/join_call`, {
-      method: "POST",
-      headers: { "X-Bot-Token": TOKEN, "Content-Type": "application/json" },
-      body: JSON.stringify({ node }),
-    }), 10_000, "10s sem resposta ao abrir a sala");
-    if (r.ok) { dbg(`sala aberta no node ${node}`); return { node }; }
-    const txt = await r.text().catch(() => "");
-    dbg(`abrir sala: HTTP ${r.status} ${txt.slice(0, 120)}`);
-    return { recusa: /AlreadyConnected/.test(txt) ? "AlreadyConnected" : (txt.match(/"type"\s*:\s*"(\w+)"/)?.[1] ?? `HTTP ${r.status}`) };
-  } catch (e) {
-    console.warn("[VOZ] falha ao abrir a sala:", e?.message ?? e);
-    return null;
-  }
+  const r = await bater("POST", `/channels/${canalVoz}/join_call`, { node }, 10_000);
+  if (r.erro) { console.warn("[VOZ] falha ao abrir a sala:", r.erro); return null; }
+  if (r.ok) { dbg(`sala aberta no node ${node}`); return { node }; }
+  const txt = r.texto ?? "";
+  dbg(`abrir sala: HTTP ${r.status} ${txt.slice(0, 120)}`);
+  return { recusa: /AlreadyConnected/.test(txt) ? "AlreadyConnected" : (r.json?.type ?? `HTTP ${r.status}`) };
 }
 
 export async function reiniciar() {
@@ -435,29 +417,7 @@ let ultimoServidor = null;
 let servidoresConhecidos = [];
 
 export async function diagnosticar(canalVoz) {
-  const API = (process.env.STOAT_API || "https://api.stoat.chat").replace(/\/$/, "");
   const etapas = [];
-
-  const bater = async (rota, metodo = "GET", payload = null) => {
-    const t = Date.now();
-    try {
-      const r = await comLimite(fetch(`${API}${rota}`, {
-        method: metodo,
-        headers: {
-          "X-Bot-Token": TOKEN,
-          ...(metodo === "POST" ? { "Content-Type": "application/json" } : {}),
-        },
-        ...(metodo === "POST" ? { body: JSON.stringify(payload ?? {}) } : {}),
-      }), 10_000, `10s sem resposta de ${rota}`);
-      const corpo = await r.text().catch(() => "");
-      let json = null;
-      try { json = JSON.parse(corpo); } catch {}
-      const ehHtml = /^\s*<(!doctype|html)/i.test(corpo);
-      return { ok: r.ok, ms: Date.now() - t, status: r.status, json, corpo, ehHtml };
-    } catch (e) {
-      return { ok: false, ms: Date.now() - t, erro: e?.message ?? String(e) };
-    }
-  };
 
   const descrever = (r) => {
     if (r.erro) return r.erro;
@@ -466,13 +426,13 @@ export async function diagnosticar(canalVoz) {
     return r.corpo ? r.corpo.slice(0, 150) : "(vazio)";
   };
 
-  const me = await bater("/users/@me");
+  const me = await bater("GET", "/users/@me", null, 10_000);
   etapas.push({
     etapa: "api+token", ok: me.ok, ms: me.ms, status: me.status,
     detalhe: me.ok ? `autenticado como ${me.json?.username ?? "?"}` : descrever(me),
   });
 
-  const ch = await bater(`/channels/${canalVoz}`);
+  const ch = await bater("GET", `/channels/${canalVoz}`, null, 10_000);
   const tipo = ch.json?.channel_type ?? ch.json?.type ?? null;
   etapas.push({
     etapa: "canal", ok: ch.ok, ms: ch.ms, status: ch.status,
@@ -482,7 +442,7 @@ export async function diagnosticar(canalVoz) {
   const node = await nodePreferido();
   etapas.push({ etapa: "node", ok: !!node, ms: 0,
     detalhe: node ? `usando \`${node}\`` : "a API não anunciou nenhum node de voz" });
-  const jc = await bater(`/channels/${canalVoz}/join_call`, "POST", node ? { node } : null);
+  const jc = await bater("POST", `/channels/${canalVoz}/join_call`, node ? { node } : {}, 10_000);
   etapas.push({
     etapa: "join_call", ok: jc.ok, ms: jc.ms, status: jc.status,
     // NUNCA devolver o token de voz: isto vai parar num chat.

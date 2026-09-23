@@ -1,6 +1,6 @@
 # Config do serviço /etc/init.d/judy-voz
 # Vai em /etc/conf.d/judy-voz
 
-VOZ_USER="ghiso"
-VOZ_DIR="/home/ghiso/Downloads/github/voz-servico"
+VOZ_USER="SEU_USUARIO"
+VOZ_DIR="/caminho/para/stoat_bot/voz-servico"
 VOZ_NODE="/usr/bin/node"

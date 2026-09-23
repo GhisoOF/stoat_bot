@@ -3,6 +3,8 @@ import * as db  from "../core/db.js";
 import * as log from "../core/log.js";
 import { idValido, descreverProblemaDeId, resolverMensagem, resolverCargo } from "../core/ids.js";
 import { tr, lingua } from "../core/i18n.js";
+import { normalizarErro } from "../core/erros.js";
+import { chamarApi } from "../core/stoat-api.js";
 
 const ULID = /^[0-9A-HJKMNP-TV-Z]{26}$/i;
 
@@ -59,7 +61,11 @@ async function reagirComPaciencia(message, emoji, { tentativas = 3 } = {}) {
       await message.react(encodeURIComponent(emoji));
       return true;
     } catch (e) {
-      const espera = Number(e?.retry_after ?? e?.data?.retry_after ?? e?.response?.data?.retry_after ?? 0);
+      // A SDK lança o CORPO CRU da resposta (uma string JSON), não um Error nem
+      // um objeto: sem normalizar, `e.retry_after` é sempre undefined e a espera
+      // do 429 nunca acontecia. normalizarErro entende string, objeto e Error.
+      const err = normalizarErro(e);
+      const espera = Number(err?.retry_after ?? err?.data?.retry_after ?? 0);
       if (espera > 0 && i < tentativas - 1) {
         await dormir(espera + 250);       // margem: o relógio deles não é o nosso
         continue;
@@ -77,13 +83,9 @@ async function reagirComPaciencia(message, emoji, { tentativas = 3 } = {}) {
 let tetoCache = null;
 async function tetoDeReacoes() {
   if (tetoCache) return tetoCache;
-  try {
-    const API = (process.env.STOAT_API || "https://api.stoat.chat").replace(/\/$/, "");
-    const r = await fetch(`${API}/`, { signal: AbortSignal.timeout(8000) });
-    const j = await r.json().catch(() => null);
-    const n = j?.features?.limits?.global?.message_reactions;
-    if (Number.isFinite(n)) tetoCache = n;
-  } catch { /* sem resposta: seguimos sem o aviso */ }
+  const r = await chamarApi("/", { ms: 8000 });
+  const n = r.json?.features?.limits?.global?.message_reactions;
+  if (Number.isFinite(n)) tetoCache = n;   // sem resposta: seguimos sem o aviso
   return tetoCache;
 }
 

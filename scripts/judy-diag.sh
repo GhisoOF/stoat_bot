@@ -1,29 +1,31 @@
 #!/usr/bin/env bash
 # ══════════════════════════════════════════════════════════
-#  judy-diag.sh — diagnóstico e logs dos serviços na máquina do bot
+#  judy-diag.sh — diagnóstico do bot na máquina onde ele roda
 #
-#  A cadeia da voz tem seis elos (Ollama → judy-ia → Piper → judy-voz →
-#  LiveKit → Stoat) e, quando algo não funciona, o sintoma é sempre o
-#  mesmo: "o bot não falou". Este script diz QUAL elo quebrou, em vez de
-#  deixar você abrir cinco terminais para descobrir.
+#  Hoje é UM container (bot + ia-servico + voz opcional). Quando algo não
+#  funciona, o sintoma costuma ser o mesmo — "o bot não falou" — e este
+#  script diz onde quebrou: container, IA, voz ou configuração.
 #
 #  Uso:
 #    judy-diag.sh              → diagnóstico completo (padrão)
-#    judy-diag.sh logs         → acompanha os dois logs ao vivo
-#    judy-diag.sh logs voz     → só o judy-voz
-#    judy-diag.sh logs ia      → só o judy-ia
+#    judy-diag.sh logs         → acompanha o log do container ao vivo
+#    judy-diag.sh logs voz     → só as linhas de voz/TTS/música
+#    judy-diag.sh logs ia      → só as linhas de IA/chat/ferramentas
 #    judy-diag.sh erros        → só as linhas de erro das últimas 24h
-#    judy-diag.sh reiniciar    → reinicia os dois serviços
+#    judy-diag.sh reiniciar    → reinicia o container
 #    judy-diag.sh falar "oi"   → testa a síntese do Piper direto
+#
+#  Variáveis: CONTAINER (padrão stoat-bot), IA_PORTA (8090), VOZ_PORTA (8091).
+#  Os testes de voz (falar/comparar/tom) usam o Piper da MÁQUINA: servem para
+#  quem mantém a voz nativa (VOZ_ATIVA=0 + VOZ_SERVICO_URL).
 # ══════════════════════════════════════════════════════════
 
 set -uo pipefail
 
-VOZ_LOG="${VOZ_LOG:-/var/log/judy-voz.log}"
-IA_LOG="${IA_LOG:-/var/log/judy-ia.log}"
+CONTAINER="${CONTAINER:-stoat-bot}"
 VOZ_PORTA="${VOZ_PORTA:-8091}"
 IA_PORTA="${IA_PORTA:-8090}"
-OLLAMA="${OLLAMA_URL:-http://localhost:11434}"
+IA_PORTA="${IA_PORTA:-8090}"
 VOZ_DIR="${VOZ_DIR:-$HOME/Downloads/github/voz-servico}"
 
 C_OK=$'\033[32m'; C_ERR=$'\033[31m'; C_WARN=$'\033[33m'; C_INFO=$'\033[36m'; C_OFF=$'\033[0m'
@@ -36,115 +38,62 @@ titulo(){ printf '\n%s── %s ──%s\n' "$C_INFO" "$1" "$C_OFF"; }
 diagnostico() {
   local problemas=0
 
-  titulo "Serviços"
-  # A arquitetura deste Gentoo é MISTA e isso já custou uma hora de
-  # investigação: o Ollama roda nativo, o judy-ia roda em CONTAINER Docker
-  # e o judy-voz roda nativo (precisa dos binários do LiveKit e do Piper).
-  # Checar tudo com `rc-service` fazia o judy-ia aparecer como morto enquanto
-  # respondia normalmente — e sugeria "instale o OpenRC", que era o conselho
-  # errado. Aqui cada serviço é checado do jeito que ele realmente roda.
-
-  # judy-voz: nativo, via OpenRC
-  if rc-service judy-voz status >/dev/null 2>&1; then
-    ok "judy-voz rodando como serviço (sobrevive a reboot)"
-  elif curl -sf --max-time 3 "http://localhost:$VOZ_PORTA/saude" >/dev/null 2>&1; then
-    aviso "judy-voz VIVO mas fora do OpenRC — some no próximo reboot"
-    aviso "   registre:  sudo cp scripts/openrc/judy-voz /etc/init.d/ && sudo rc-update add judy-voz default"
+  # Tudo roda num container só (bot + ia-servico + voz opcional). A versão
+  # antiga desta função checava uma cadeia que não existe mais — Ollama nativo,
+  # judy-ia em container e judy-voz por OpenRC — e mandava rodar
+  # `rc-service ollama start`, conselho errado desde a migração.
+  titulo "Container"
+  if ! command -v docker >/dev/null 2>&1; then
+    falha "docker não encontrado nesta máquina"
+    return 1
+  fi
+  local st
+  st=$(docker ps --filter "name=$CONTAINER" --format '{{.Status}}' | head -1)
+  if [ -n "$st" ]; then
+    ok "$CONTAINER — $st"
   else
-    falha "judy-voz NÃO está rodando  →  sudo rc-service judy-voz start"
+    falha "$CONTAINER não está rodando  →  docker compose up -d"
     problemas=$((problemas+1))
   fi
 
-  # judy-ia: container Docker
-  if command -v docker >/dev/null 2>&1 && docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "judy-ia"; then
-    local st; st=$(docker ps --format '{{.Names}}\t{{.Status}}' | grep -P '^judy-ia\t' | cut -f2)
-    ok "judy-ia em container — $st"
-  elif curl -sf --max-time 3 "http://localhost:$IA_PORTA/saude" >/dev/null 2>&1; then
-    ok "judy-ia respondendo (fora do Docker)"
-  else
-    falha "judy-ia parado  →  cd ia-servico && docker compose up -d"
-    problemas=$((problemas+1))
-  fi
-
-  titulo "Ollama (a IA)"
-  if curl -sf --max-time 3 "$OLLAMA/api/tags" >/dev/null 2>&1; then
-    local n; n=$(curl -sf "$OLLAMA/api/tags" | grep -o '"name"' | wc -l)
-    ok "respondendo — $n modelo(s)"
-  else
-    falha "não responde em $OLLAMA  →  sudo rc-service ollama start"
-    problemas=$((problemas+1))
-  fi
-
-  titulo "judy-ia (ferramentas)"
-  if curl -sf --max-time 3 "http://localhost:$IA_PORTA/saude" >/dev/null 2>&1; then
-    ok "respondendo na porta $IA_PORTA"
-  else
-    falha "não responde na porta $IA_PORTA"
-    aviso "   é um container: cd ia-servico && docker compose up -d --build"
-    problemas=$((problemas+1))
-  fi
-
-  titulo "judy-voz (voz nas calls)"
+  titulo "IA (dentro do container)"
   local saude
-  saude=$(curl -sf --max-time 5 "http://localhost:$VOZ_PORTA/saude" 2>/dev/null)
-  if [ -z "$saude" ]; then
-    falha "não responde na porta $VOZ_PORTA"
-    aviso "veja o porquê:  tail -30 $VOZ_LOG"
-    problemas=$((problemas+1))
+  saude=$(docker exec "$CONTAINER" curl -sf --max-time 5 "http://127.0.0.1:$IA_PORTA/saude" 2>/dev/null)
+  if [ -n "$saude" ]; then
+    if echo "$saude" | grep -q '"alcancavel":true'; then
+      ok "ia-servico responde e alcança o LLM"
+    else
+      aviso "ia-servico responde, mas NÃO alcança o LLM (confira LLM_URL / IA_MODO)"
+      problemas=$((problemas+1))
+    fi
+    echo "$saude" | grep -o '"ferramentas":\[[^]]*\]' | head -1
   else
-    ok "respondendo na porta $VOZ_PORTA"
-
-    # Piper
-    if echo "$saude" | grep -q '"piper":{"ok":true'; then
-      local voz; voz=$(echo "$saude" | grep -o '"vozAtual":"[^"]*"' | cut -d'"' -f4)
-      ok "Piper pronto — voz: ${voz:-?}"
-    else
-      local e; e=$(echo "$saude" | grep -o '"erro":"[^"]*"' | head -1 | cut -d'"' -f4)
-      falha "Piper indisponível: ${e:-desconhecido}"
-      aviso "instale com:  bash scripts/instalar-piper.sh"
-      problemas=$((problemas+1))
-    fi
-
-    # LiveKit / revoice
-    if echo "$saude" | grep -q '"pronto":true'; then
-      ok "revoice/LiveKit pronto"
-    else
-      local e; e=$(echo "$saude" | grep -o '"erro":"[^"]*"' | tail -1 | cut -d'"' -f4)
-      falha "revoice/LiveKit indisponível: ${e:-desconhecido}"
-      problemas=$((problemas+1))
-    fi
-
-    # Chave
-    if echo "$saude" | grep -q '"chaveExigida":true'; then
-      ok "protegido por chave"
-    else
-      aviso "SEM chave — qualquer coisa na Tailscale pode fazer o bot falar"
-      aviso "gere uma:  openssl rand -hex 24   → VOZ_CHAVE no $VOZ_DIR/.env"
-    fi
+    falha "ia-servico mudo na porta $IA_PORTA  →  docker logs $CONTAINER"
+    problemas=$((problemas+1))
   fi
 
-  titulo "Configuração"
-  [ -f "$VOZ_DIR/.env" ] && ok ".env presente" || {
-    falha "falta $VOZ_DIR/.env  →  cp ~/judy-voz.env $VOZ_DIR/.env"; problemas=$((problemas+1)); }
-  [ -d "$VOZ_DIR/node_modules" ] && ok "dependências instaladas" || {
-    falha "faltam dependências  →  cd $VOZ_DIR && npm install"; problemas=$((problemas+1)); }
+  titulo "Voz"
+  if docker exec "$CONTAINER" curl -sf --max-time 5 "http://127.0.0.1:$VOZ_PORTA/saude" >/dev/null 2>&1; then
+    ok "voz embutida respondendo na porta $VOZ_PORTA"
+  elif [ -n "${VOZ_SERVICO_URL:-}" ] && curl -sf --max-time 5 "$VOZ_SERVICO_URL/saude" >/dev/null 2>&1; then
+    ok "voz externa respondendo em $VOZ_SERVICO_URL"
+  else
+    aviso "voz não responde — normal se VOZ_ATIVA=0 e não há serviço externo"
+  fi
+
+  titulo "Configuração que CHEGOU ao container"
+  # O .env inteiro entra pelo env_file; o que vale é o que está aqui dentro.
+  docker exec "$CONTAINER" printenv 2>/dev/null \
+    | grep -E '^(IA|IA_MODO|MODELO|MODELO_VISAO|LLM_URL|VOZ_ATIVA|IMAGEM|SD_MODELO_TIPO|SEARXNG_URL|LLAMA_CTX)=' \
+    | sed 's/^/   /' || aviso "não consegui ler o ambiente do container"
 
   titulo "Erros recentes"
-  # O título dizia "últimas 2h" mas mostrava o log inteiro — erros já
-  # resolvidos ficavam assombrando o diagnóstico como se fossem atuais.
-  # Agora olhamos só o fim do arquivo, que é o que de fato é recente.
-  local recentes
-  # Erros do axios vêm como um objeto gigante despejado em dezenas de linhas
-  # (onerror, Symbol(errored), isAxiosError...). Mostrar isso cru não ajuda
-  # ninguém: filtramos as linhas de ruído e ficamos com a mensagem.
-  recentes=$(tail -200 "$VOZ_LOG" 2>/dev/null \
-    | grep -iE "erro|error" \
-    | grep -vE "^\s*(onerror|Symbol\(|isAxiosError|at |\.\.\.|\}|\{|[a-zA-Z_]+: \[Function)" \
-    | tail -5)
-  if [ -n "$recentes" ]; then
-    echo "$recentes" | sed 's/^/   /'
+  local erros
+  erros=$(docker logs --since 24h "$CONTAINER" 2>&1 | grep -ciE '\[(ERRO|FATAL)\]|Error:' || true)
+  if [ "${erros:-0}" -gt 0 ]; then
+    aviso "$erros linha(s) de erro nas últimas 24h  →  $0 erros"
   else
-    ok "nenhum erro registrado"
+    ok "nenhum erro nas últimas 24h"
   fi
 
   echo
@@ -156,26 +105,33 @@ diagnostico() {
 }
 
 # ── Logs ao vivo ──────────────────────────────────────────
+# Com tudo num container só, o log é um só: o do docker. Os arquivos
+# /var/log/judy-*.log eram da época dos serviços nativos e não existem mais.
 logs() {
-  case "${1:-ambos}" in
-    voz) tail -f "$VOZ_LOG" ;;
-    ia)  tail -f "$IA_LOG" ;;
-    *)   echo "Acompanhando os dois (Ctrl-C para sair)"
-         tail -f "$VOZ_LOG" "$IA_LOG" ;;
+  local filtro=""
+  case "${1:-tudo}" in
+    voz) filtro='\[(VOZ|TTS|MUSICA)\]' ;;
+    ia)  filtro='\[(IA|CHAT|FERRAMENTA)\]' ;;
   esac
+  echo "Acompanhando ${1:-tudo} em $CONTAINER (Ctrl-C para sair)"
+  if [ -n "$filtro" ]; then
+    docker logs -f --tail 50 "$CONTAINER" 2>&1 | grep -E --line-buffered "$filtro"
+  else
+    docker logs -f --tail 50 "$CONTAINER" 2>&1
+  fi
 }
 
 erros() {
-  titulo "Erros nos logs"
-  grep -hiE "erro|error|falha|failed|ECONN|timeout" "$VOZ_LOG" "$IA_LOG" 2>/dev/null \
+  titulo "Erros nas últimas 24h"
+  docker logs --since 24h "$CONTAINER" 2>&1 \
+    | grep -iE "erro|error|falha|failed|ECONN|timeout" \
     | tail -40 | sed 's/^/   /' || echo "   nenhum"
 }
 
 reiniciar() {
-  for s in judy-voz judy-ia; do
-    printf '%s→ reiniciando %s%s\n' "$C_INFO" "$s" "$C_OFF"
-    sudo rc-service "$s" restart
-  done
+  printf '%s→ reiniciando %s%s\n' "$C_INFO" "$CONTAINER" "$C_OFF"
+  # `restart` NÃO aplica variável nova do .env: para isso é --force-recreate.
+  docker restart "$CONTAINER"
   sleep 2
   diagnostico
 }

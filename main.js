@@ -1,15 +1,18 @@
 import 'dotenv/config';
 import './modulos/core/env.js';
 
-{
-  const original = console.log.bind(console);
-  console.log = (...args) => {
+// A stoat.js emite "Skipping key X during hydration!" por console.DEBUG (uma
+// linha por campo desconhecido de cada objeto: chega a 70% do log). O filtro
+// ficava em console.log e por isso nunca funcionou.
+for (const canal of ["debug", "log"]) {
+  const original = console[canal].bind(console);
+  console[canal] = (...args) => {
     if (typeof args[0] === "string" && /^Skipping key \S+ during hydration!$/.test(args[0])) return;
     original(...args);
   };
 }
 
-import { Client } from "stoat.js";
+import { Client, Permission } from "stoat.js";
 import { readFileSync, writeFileSync } from "node:fs";
 
 import * as engine   from "./modulos/moderacao/automod-engine.js";
@@ -52,6 +55,7 @@ import * as aliases   from "./modulos/core/aliases.js";
 import * as paginas   from "./modulos/core/paginas.js";
 import * as assistente from "./modulos/moderacao/assistente.js";
 import { tr }         from "./modulos/core/i18n.js";
+import { chamarApi }  from "./modulos/core/stoat-api.js";
 
 const PREFIXO     = "&";
 const CONFIG_PATH = process.env.CONFIG_PATH || "./automod-config.json";
@@ -126,12 +130,6 @@ const COR = {
   mod:     "#9B59B6",
 };
 
-const PERM = {
-  ManagePermissions: 1 << 2,
-  KickMembers:       1 << 6,
-  BanMembers:        1 << 7,
-};
-
 let cfgGlobal = store.getGlobal();  // atualizado após inicializar()
 
 async function sendEmbed(channel, { title, description, colour = COR.info, imagem = null, anexos = null, ocultarLink = true }) {
@@ -173,20 +171,14 @@ async function sendEmbed(channel, { title, description, colour = COR.info, image
 }
 
 async function definirStatus() {
-  const API = (process.env.STOAT_API || "https://api.stoat.chat").replace(/\/$/, "");
-  const token = process.env.BOT_TOKEN;
-  if (!token) return;
+  if (!process.env.BOT_TOKEN) return;
   const texto = process.env.STATUS_TEXT
     || `${PREFIXO}help • ${PREFIXO}tutorial | prefixo/prefix: ${PREFIXO}`;
-  const r = await fetch(`${API}/users/@me`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json", "X-Bot-Token": token },
-    body: JSON.stringify({ status: { text: texto.slice(0, 128), presence: "Online" } }),
+  const r = await chamarApi("/users/@me", {
+    metodo: "PATCH",
+    corpo: { status: { text: texto.slice(0, 128), presence: "Online" } },
   });
-  if (!r.ok) {
-    const corpo = await r.text().catch(() => "");
-    throw new Error(`HTTP ${r.status} ${corpo.slice(0, 200)}`);
-  }
+  if (!r.ok) throw new Error(r.erro ?? `HTTP ${r.status} ${r.texto.slice(0, 200)}`);
   console.info(`[STATUS] Definido: "${texto}"`);
 }
 
@@ -218,22 +210,19 @@ function membroTemPermissao(message, server, permName) {
       } catch {}
     }
 
+    // Só `hasPermission`. O fallback antigo comparava máscaras `number` com o
+    // resultado de `getPermissions()`, que na stoat.js 7 é `bigint` e exige um
+    // alvo — nunca dava true, era código morto. E um nome fora do enum (o erro
+    // clássico: "ManageRoles" no plural) fazia a lib lançar
+    // `Cannot mix BigInt and other types`, que o catch engolia virando `false`
+    // silencioso; por isso a checagem do nome vem antes, e em voz alta.
+    if (!(permName in Permission)) {
+      console.error(`[PERM] Permissão desconhecida: "${permName}" — use o nome exato da stoat.js (singular).`);
+      return false;
+    }
     const member = message.member;
     if (!member) return false;
-
-    if (typeof member.hasPermission === "function") {
-      try { if (member.hasPermission(server, permName)) return true; } catch {}
-    }
-
-    let perms;
-    if (typeof member.getPermissions === "function") { try { perms = member.getPermissions(); } catch {} }
-    else if (typeof member.permissions === "number")  perms = member.permissions;
-    else if (typeof member.permission === "number")   perms = member.permission;
-
-    if (typeof perms === "number" && PERM[permName] != null) {
-      if ((perms & PERM[permName]) === PERM[permName]) return true;
-    }
-    return false;
+    return member.hasPermission?.(server, permName) === true;
   } catch (err) {
     console.error("[PERM] Erro ao checar permissão:", err.message);
     return false;
@@ -255,7 +244,7 @@ function criarContexto(serverId = null) {
   });
 
   return {
-    client, config, cfgGlobal, COR, PERM, PREFIXO,
+    client, config, cfgGlobal, COR, PREFIXO,
     sendEmbed: enviarTraduzido, getServer, membroTemPermissao, ehSuperAdmin,
     // A mesma tradução, para quem EDITA um embed já enviado (páginas).
     exibir: (texto) => aliases.exibir(texto, config?.language, PREFIXO, CANONICO),

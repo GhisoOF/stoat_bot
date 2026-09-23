@@ -15,7 +15,7 @@ const MAX_TOKENS   = Number(process.env.MAX_TOKENS || 4096);
 const MAX_VOLTAS   = Number(process.env.MAX_VOLTAS_FERRAMENTA || 6);
 const TIMEOUT_MS   = Number(process.env.LLM_TIMEOUT_MS || 300000);
 const CONTINUAR_MAX= Number(process.env.CONTINUAR_MAX || 2);   // emendas automáticas em resposta cortada
-const CHAVE        = process.env.IA_CHAVE || "";   // opcional: exige header x-chave
+const CHAVE        = process.env.IA_SERVICO_CHAVE || process.env.IA_CHAVE || "";   // opcional: exige header x-chave
 
 const log = (...a) => console.log("[IA]", ...a);
 
@@ -66,7 +66,6 @@ async function llm(messages, { modelo, comFerramentas = true, maxTokens = MAX_TO
     return { message: msg, done_reason: escolha.finish_reason ?? "?" };
   } finally { clearTimeout(t); }
 }
-const ollama = llm;   // nome antigo, mesmos chamadores
 
 function lembreteDeIdioma(idioma) {
   return idioma === "en"
@@ -130,7 +129,7 @@ async function conversarComFerramentas(messages, { modelo, usarFerramentas = tru
   let buscaTrouxeMapa = false; // a busca já veio com o mapa do melhor candidato?
 
   for (let volta = 0; volta < MAX_VOLTAS; volta++) {
-    const data = await ollama(hist, { modelo, comFerramentas: usarFerramentas });
+    const data = await llm(hist, { modelo, comFerramentas: usarFerramentas });
     const msg = data?.message ?? {};
     let chamadas = msg.tool_calls || [];
 
@@ -160,7 +159,7 @@ async function conversarComFerramentas(messages, { modelo, usarFerramentas = tru
       while (motivo === "length" && cortes < CONTINUAR_MAX) {
         cortes++;
         log(`resposta cortada (length) — continuando (${cortes}/${CONTINUAR_MAX})`);
-        const mais = await ollama([
+        const mais = await llm([
           ...hist,
           { role: "assistant", content: texto },
           { role: "user", content: idioma === "en"
@@ -257,7 +256,7 @@ async function conversarComFerramentas(messages, { modelo, usarFerramentas = tru
   }
 
   // Estourou o limite de voltas: pede uma resposta final sem ferramentas.
-  const final = await ollama(
+  const final = await llm(
     [...hist, {
       role: "user",
       content: idioma === "en"
@@ -293,17 +292,19 @@ const servidor = createServer(async (req, res) => {
 
   try {
     if (req.method === "GET" && req.url === "/saude") {
-      let ollamaOk = false, modelos = [];
+      let llmOk = false, modelos = [];
       try {
         const r = await fetch(`${LLM_URL}/v1/models`, { headers: cabecalhosLLM(), signal: AbortSignal.timeout(5000) });
         if (r.ok) {
           const d = await r.json().catch(() => ({}));
-          ollamaOk = true;
+          llmOk = true;
           modelos = (d.data ?? d.models ?? []).map((m) => m.id || m.model || m.name).filter(Boolean);
         }
       } catch {}
       return json(res, 200, {
-        ok: true, llm: { url: LLM_URL, alcancavel: ollamaOk, modelos }, ollama: { url: LLM_URL, alcancavel: ollamaOk, modelos },
+        // O campo `ollama` que duplicava `llm` saiu: o backend é llama.cpp desde
+        // a migração, nada no bot lia esse campo, e o nome enganava quem depurava.
+        ok: true, llm: { url: LLM_URL, alcancavel: llmOk, modelos },
         modelo_padrao: MODELO_PADRAO, ferramentas: ferramentas.nomes(),
       });
     }

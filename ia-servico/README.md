@@ -1,481 +1,108 @@
 # Serviço de IA da Judy
 
-Roda **embutido no container do bot**: o `iniciar.js` o sobe em
-`localhost:8090` automaticamente (desligável com `IA_EMBUTIDA=0`, se quiser
-rodá-lo em outro lugar e apontar `IA_SERVICO_URL`).
+Tudo que a Judy faz com modelo de linguagem passa por aqui: conversa, busca na
+web, leitura do próprio código, visão e geração de imagem.
 
-## llama.cpp no lugar do Ollama
+Ele **roda dentro do container do bot**, em `127.0.0.1:8090`, subido pelo
+`iniciar.js` junto com o bot. Não é um container separado nem um serviço do
+sistema: se o bot está de pé, ele está de pé.
 
-O serviço fala o formato **OpenAI** (`/v1/chat/completions`) — servido
-igualmente pelo `llama-server` do llama.cpp, pelo **llama-swap** e pelo
-próprio Ollama. Trocar de backend é trocar a `LLM_URL`; nenhum código muda.
+> Versões antigas rodavam como container próprio ou como serviço OpenRC
+> (`rc-service judy-ia`), falando com um Ollama nativo. Nada disso existe mais.
+> Um `.env` de antes continua valendo: os nomes internos têm prioridade sobre
+> os amigáveis (veja `modulos/core/env.js`).
 
-A configuração recomendada da inferência está em `llama-swap.example.yaml`: o llama-swap fica na frente e sobe um
-`llama-server` por modelo conforme o campo `model` do pedido, com `ttl` para
-descarregar — o "vários modelos por nome" do Ollama, com o custo do
-llama.cpp (GGUF direto do disco, contexto alocado uma vez no boot, imagem
-**Vulkan** — na RX 9060 XT/RDNA4, Vulkan funciona onde o ROCm ainda é
-loteria). `--jinja` no llama-server é obrigatório para as ferramentas.
+## Como falar com ele
 
-Variáveis: `LLM_URL` (ex.: `http://llama:8080`), `LLM_MODEL`,
-`LLM_MODEL_VISAO` (multimodal; sem ela a ferramenta de visão nem aparece),
-`SD_URL` (geração de imagem, API do A1111/Forge; idem), `CONTINUAR_MAX`
-(emendas automáticas de resposta cortada, padrão 2).
-
-## Código local no lugar do GITHUB_TOKEN
-
-`CODIGO_DIR=/repo` + o volume `~/Downloads/github:/repo:ro` no compose fazem
-a ferramenta `ler_codigo` ler o repositório do **disco** — o mesmo que o
-deploy acabou de descompactar. Sem token para sumir no deploy, sem limite de
-requisições, sem rede. O GitHub continua como plano B quando o volume não
-está montado (aí valem `GITHUB_REPO`/`GITHUB_TOKEN` como antes).
-
-## Imagens: ver e gerar, sem engolir bytes de ninguém
-
-Toda imagem — recebida (`ver_imagem`) ou produzida (`gerar_imagem`) — é
-**reescrita** pelo `sharp` dentro deste container: os pixels são
-decodificados e um JPEG novo é emitido. Metadados, payloads em chunks e
-arquivos-poliglota morrem na reescrita; o que não decodifica não era imagem
-honesta e para aqui, não no cliente de quem vê a mensagem. Downloads: só
-`https`, só hosts do CDN do Stoat (`IMAGEM_HOSTS_PERMITIDOS`), teto de bytes
-durante o streaming e teto de pixels no decodificador (`limitInputPixels`,
-contra bomba de descompressão). Geração: filtro de prompt por combinação
-(menores+sexual, pessoa real+nudez, gore, símbolos de ódio) recusa ANTES de
-chamar o gerador, e o negative prompt fixo reforça do outro lado; dimensões
-e passos têm teto para a GPU não virar refém de um comando.
-
-```
-┌──────────────┐      HTTP       ┌──────────────┐      HTTP      ┌──────────┐
-│  stoat_bot   │ ──────────────► │   judy-ia    │ ─────────────► │  Ollama  │
-│ (Stoat/chat) │  POST /chat     │  ferramentas │  /api/chat     │  (GPU)   │
-└──────────────┘                 └──────────────┘                └──────────┘
-                                        │
-                                        ├── ler_codigo   (do GitHub, somente leitura)
-                                        ├── calcular     (sandbox isolado)
-                                        ├── buscar_web   (SearXNG)
-                                        └── buscar_rss   (feeds)
-```
-
-## Por que separado
-
-- O bot é estável e não precisa mais mexer nele para adicionar capacidade de IA.
-- Este container é portátil: para mover de máquina, leve a imagem e ajuste `OLLAMA_URL`.
-- Se a IA cair, o bot continua moderando normalmente.
-
-## Rotas
-
-| Rota | O que faz |
+| Rota | Para quê |
 |---|---|
-| `GET /saude` | Diz se o Ollama está alcançável, quais modelos existem e quais ferramentas estão ativas |
-| `GET /ferramentas` | Lista os schemas das ferramentas |
-| `POST /chat` | `{ messages, modelo?, ferramentas? }` → `{ resposta, usos }` |
+| `GET /saude` | o LLM responde? quais modelos, qual o padrão, quais ferramentas |
+| `GET /dns` | só o estado do DNS (sem rodar o diagnóstico inteiro) |
+| `GET /diagnostico` | rede, GitHub, token e LLM, em ordem |
+| `GET /ferramentas` | os schemas das ferramentas |
+| `POST /ferramenta` | executa uma direto: `{ nome, args }` |
+| `POST /chat` | a conversa, com tool calling: `{ messages, modelo, idioma }` |
 
-O `messages` é o array no formato do Ollama (o bot já monta com personalidade,
-memória e histórico). Este serviço acrescenta as ferramentas e o laço de execução.
+Se `IA_SERVICO_CHAVE` estiver definida, toda rota exige o header `x-chave`.
+
+```bash
+docker exec stoat-bot curl -s localhost:8090/saude
+docker exec stoat-bot curl -s localhost:8090/diagnostico
+```
+
+## O LLM
+
+Serve qualquer servidor com a API de chat da OpenAI: o `llama-server` do
+llama.cpp (o padrão, embutido), o llama-swap na frente dele, ou uma plataforma
+online. O que muda é o `.env`:
+
+```ini
+IA_MODO=local      # llama.cpp dentro do container; MODELO baixa no boot
+MODELO=usuario/repositorio:Q4_K_M
+MODELO_VISAO=...   # opcional: liga a ferramenta ver_imagem
+
+IA_MODO=online     # plataforma externa
+TOKEN_IA=...       # vira Authorization: Bearer
+```
+
+O `.env` inteiro chega ao container (o compose usa `env_file`). Para conferir o
+que **de fato** chegou, que é o que vale:
+
+```bash
+docker exec stoat-bot printenv | grep -E 'IA_MODO|MODELO|LLM_URL'
+```
+
+Variável nova exige **recriar** o container (`docker compose up -d
+--force-recreate stoat-bot`); `restart` não aplica.
 
 ## Ferramentas
 
-**`ler_codigo`** — lê o código-fonte do próprio bot direto do **GitHub**
-(o repositório vive no homelab, não na máquina do judy-ia). Configure
-`GITHUB_REPO` (ex.: `GhisoOF/stoat_bot`) e opcionalmente `GITHUB_BRANCH` e
-`GITHUB_TOKEN`. **Repositório privado exige token** (fine-grained, com permissão
-Contents: Read-only no repo). Repositório público funciona sem token — nesse caso
-o token só eleva o limite de 60 para 5000 requisições/hora. Bloqueia `.env`,
-tokens e arquivos binários.
+`calcular`, `buscar_web` (SearXNG), `buscar_rss`, `ler_codigo`, `ver_imagem` e
+`gerar_imagem`. Nenhum `executar` lança: erro vira `{ erro }` e volta para o
+modelo, que explica em vez de travar.
 
-Ações:
+Quais aparecem depende do ambiente: `ver_imagem` exige `MODELO_VISAO`;
+`gerar_imagem` exige `IMAGEM≠0` e um backend (o sd.cpp embutido ou `SD_URL`);
+`FERRAMENTAS_OFF=calcular,buscar_rss` desliga por nome.
 
-- **`buscar`** `{ termo }` — o ponto de partida. Devolve os arquivos que casam
-  com o termo **pelo nome** (`tts` → `tts.js`, `tts-filtro.js`, nome curto
-  primeiro) e **pelo conteúdo** (quantas linhas citam o termo, e a primeira
-  delas). Sem acento, sem maiúscula. Pelo GitHub (plano B) só o nome é varrido.
-  O resultado já traz `estrutura_do_melhor`: o **mapa completo** do arquivo
-  mais provável. Isso nasceu de duas falhas opostas. Primeiro o modelo
-  respondeu a partir da lista, descrevendo um arquivo que nunca abriu. O
-  conserto foi um aviso — "isto é um índice, não o código" — e ele passou a
-  achar que o *arquivo* era um índice de metadados e se recusou a responder,
-  com 600 linhas de código na frente. A saída não era um aviso melhor: era
-  não devolver um resultado que precisa de aviso. Quando o mapa não pode ser
-  montado, o serviço ainda exige `estrutura` ou `ler` antes da resposta final.
-- **`estrutura`** `{ }` **sem caminho** — o mapa do **repositório**: as pastas,
-  os arquivos de cada uma, o tamanho e o que cada um **expõe**. É o que
-  responde "como o código está organizado?". Com o caminho de uma **pasta**,
-  o mesmo mapa limitado a ela. Isto faltava, e a falta tinha um sintoma
-  específico: perguntada sobre a raiz do projeto, ela chamava `buscar` com o
-  termo "package.json" — a única porta que conhecia exigia um termo, e não
-  existe termo para "o projeto todo". `listar` (118 caminhos sem significado)
-  e `estatisticas` (bytes por pasta) não substituem isto.
-- **`estrutura`** `{ caminho }` — o **mapa** do arquivo: cabeçalhos de seção,
-  funções, classes e exports, cada um com o número da linha. É o que responde
-  "como funciona X" — cobre 100% do arquivo em ~2 KB, onde `ler` entregaria
-  21% dele em 15 KB. Depois do mapa, `ler` com `linha_inicial` busca o detalhe.
-  Nasceu de um caso real: perguntada sobre o TTS, ela leu 300 das 1436 linhas
-  de `tts.js` e descreveu o arquivo inteiro — o que acertou estava nas linhas
-  1-300, o que inventou estava depois da 780.
-- **`ler`** `{ caminho, linha_inicial?, quantidade?, termo? }` — devolve uma
-  **página** de linhas numeradas (padrão 300, máximo 600), com `linhas_totais`,
-  `intervalo` e, se houver mais, `proxima_linha` para continuar. Com `termo`, a
-  página abre 15 linhas antes da primeira ocorrência — e avisa se o termo não
-  aparece no arquivo (sinal de arquivo errado). O corte antigo era por bytes,
-  sempre do começo: um arquivo de 1400 linhas virava as 300 primeiras e um
-  `cortado: true` que o modelo ignorava. Hoje a página parcial vem com
-  `porcentagem_lida` e um campo `ATENCAO` **antes** do código (depois de 300
-  linhas, qualquer ressalva no fim já foi esquecida) dizendo, sem meias
-  palavras, para não descrever o que está fora do intervalo.
-- **`listar`** `{ caminho? }` e **`estatisticas`** — visão geral da árvore.
+## Coisas aprendidas doendo
 
-Depois de qualquer leitura, o serviço injeta uma instrução de três partes:
-descrever **só o que está no conteúdo lido**; se o arquivo não responde à
-pergunta, **dizer** e buscar outro; função ou arquivo que não apareceu **não
-existe**. Foi a resposta a um caso real — perguntada sobre TTS, leu
-`modulos/ai/chat.js` e descreveu funções inventadas.
+**O modelo precisa suportar tool calling.** Sem isso ele inventa a resposta em
+vez de usar a ferramenta, e parece que o serviço está quebrado.
 
-`MAX_VOLTAS_FERRAMENTA` (padrão 6) é o teto de idas e vindas com ferramentas
-numa resposta; o fluxo buscar → ler → página seguinte cabe com folga.
-`CODIGO_PAGINA_LINHAS` muda o tamanho padrão da página.
+**Chamada de ferramenta que chega como texto.** Alguns templates não convertem
+a chamada em `tool_calls` e o modelo escreve o JSON no meio da resposta. O
+servidor varre blocos ```` ```json ```` e objetos por chaves balanceadas
+(regex não fecha objeto aninhado), só executa nomes que existem e deduplica.
 
-**`calcular`** — executa JavaScript para fazer contas de verdade. Roda em processo
-separado com o **modelo de permissões do Node** (`--permission`), que bloqueia
-sistema de arquivos, `child_process` e workers — inclusive por `import()` dinâmico.
-Sem rede, sem variáveis de ambiente, timeout de 5s e memória limitada.
+**Um `system` só, no começo.** As mensagens são normalizadas antes de sair:
+vários `system`, ou um no meio, quebram o template de vários modelos.
 
-**`buscar_web`** — busca na internet via SearXNG (`SEARXNG_URL`) quando a Judy
-precisa de informação atual. Devolve os resultados; ela escreve a resposta. Exige
-o formato JSON habilitado no SearXNG.
+**Contexto estoura em silêncio.** Um arquivo grande mais o prompt passavam de
+8192 tokens e o corte de emergência descartava justamente o que tinha sido
+lido — a IA dizia que "não recebeu o arquivo". Hoje o `ler_codigo` tem teto de
+400 linhas por chamada e o servidor não relê arquivo já injetado. Com modelo
+que aguente, use `LLAMA_CTX=32768`.
 
-**`buscar_rss`** — busca os itens dos feeds e devolve crus; quem escreve o resumo
-é a própria Judy, na voz dela. Com `RSS_FEEDS` configurado, funciona sem passar URL.
+**Imagem nunca vai crua para o modelo.** O `ver_imagem` só baixa de uma
+allowlist de hosts (que inclui sempre o host de `CDN_URL`), segue no máximo 2
+redirects **revalidando o destino**, limita a 8 MB e 32 MP, e reescreve tudo
+com `sharp` — aplicando a rotação EXIF e **jogando o EXIF fora**.
 
-## Chamada de ferramenta que vem como texto
+**`EAI_AGAIN` é rede, não credencial.** A Tailscale reescreve o
+`/etc/resolv.conf` e o container fica com um inode velho; aí toda chamada falha
+com `fetch failed`, cuja causa real está em `e.cause.code`. Há um DNS de
+emergência (`DNS_FALLBACK`, padrão `1.1.1.1,8.8.8.8`) que entra sozinho quando
+o resolvedor do sistema falha. `DNS_FALLBACK=off` desliga.
 
-Modelos locais às vezes decidem certo e escrevem no lugar errado: em vez de
-emitir `tool_calls`, colocam `{"name":"ler_codigo","arguments":{…}}` no **texto
-da resposta**. É falha de template Jinja, e sem tratamento o usuário recebe
-JSON cru na cara. O serviço reconhece essa forma (inclusive dentro de
-```` ```json ````, no formato `{function:{…}}` e com objetos aninhados),
-executa a ferramenta e segue o laço. Só passa o que tem exatamente a forma de
-uma chamada **e** cujo nome está no registro — isto executa código, então não
-pode adivinhar. O bot tem ainda uma última barreira: se um JSON de chamada
-escapar até a resposta final, ele é descartado em vez de entregue.
+**GitHub expirado responde `404`, não `401`.** O `ler_codigo` lê o código local
+por padrão (`CODIGO_DIR`, que aponta para `/app`), sem rede nem token. Só usa a
+API quando `GITHUB_REPO` está definido — e aí, num repo privado sem token, o
+GitHub finge que o repositório não existe.
 
-Para adicionar uma ferramenta: crie o arquivo em `ferramentas/` exportando
-`definicao` e `executar(args)`, e registre em `ferramentas/index.js`.
-
-## Modelo: precisa suportar tool calling
-
-Nem todo modelo funciona. **Gemma não suporta ferramentas**; use Qwen, Llama 3.1+
-ou Mistral. Confira a lista de modelos com a categoria *Tools* no site do Ollama.
-
-Se as ferramentas parecerem ignoradas, o modelo provavelmente não as suporta —
-troque com `OLLAMA_MODEL`.
-
-## Subir
+## Quando algo não funciona
 
 ```bash
-cp .env.example .env
-nano .env                 # GITHUB_TOKEN e OLLAMA_URL
-node servidor.js          # teste em primeiro plano
-curl http://localhost:8090/saude
+bash scripts/judy-diag.sh          # container, IA, voz e configuração
+docker logs --since 30m stoat-bot  # o log é um só
 ```
-
-A saída de `/saude` diz na hora se o Ollama está acessível e quais modelos existem.
-
-
----
-
-## Token do GitHub
-
-O repositório é privado, então a leitura de código **exige** um token. Sem ele a
-API responde **404** (não 401) — o que engana: parece "não existe" e é "sem
-permissão".
-
-O token vive num arquivo `.env` **ao lado deste compose**, nunca dentro dele:
-
-```bash
-cd ia-servico
-cp .env.example .env
-nano .env          # cole o token em GITHUB_TOKEN=
-sudo rc-service judy-ia restart
-```
-
-**Por que num arquivo separado:** o serviço é versionado e
-sobrescrito a cada atualização do bot. O `.env` está no `.gitignore` e não vai
-no pacote — então ele é o único lugar onde uma configuração sua sobrevive aos
-deploys.
-
-Crie o token em *github.com/settings/tokens* (fine-grained), com acesso ao
-repositório e permissão **Contents: Read-only**. Prefira sem data de expiração:
-token expirado devolve o mesmo 404 enganoso.
-
-Confira que pegou:
-
-```bash
-grep GITHUB_TOKEN .env
-grep "\[IA\]" /var/log/judy-ia.log
-```
-
-## Ollama só aceita conexão local (OpenRC)
-
-Sintoma: `ollama list` funciona na máquina do Ollama, mas o bot diz
-**"IA indisponível — o servidor está desligado ou inacessível"**.
-
-O `ollama list` fala com o servidor por `127.0.0.1`, então ele funcionar prova
-que o daemon está no ar — e que o problema é o **endereço em que ele escuta**.
-Por padrão o Ollama aceita só conexões locais; de outra máquina, nada entra.
-
-Confirme de onde vem a falha:
-
-```bash
-# na máquina do Ollama
-curl -s localhost:11434/api/tags | head -c 100      # responde?
-
-# da máquina onde o bot roda (troque pelo IP da máquina do LLM)
-curl -s --max-time 5 http://IP_DA_MAQUINA_DO_LLM:11434/api/tags | head -c 100
-```
-
-Responder no primeiro e não no segundo confirma o diagnóstico. Em **systemd**,
-o ajuste é um override (`systemctl edit ollama` → `Environment=OLLAMA_HOST=0.0.0.0:11434`);
-em **OpenRC**, fica em `/etc/conf.d/ollama`:
-
-```sh
-export OLLAMA_HOST="0.0.0.0:11434"
-```
-
-E então:
-
-```bash
-sudo rc-service ollama restart
-sudo rc-update add ollama default     # se ainda não sobe no boot
-```
-
-Se preferir não expor na rede local toda, use um IP de uma rede privada
-(uma VPN como Tailscale/WireGuard, por exemplo) em vez de `0.0.0.0` — assim
-só quem está nessa rede alcança o serviço.
-
-## Busca web (SearXNG) — opcional
-
-Está **desligada** por padrão: sem `SEARXNG_URL` no `.env`, o bot nem gasta
-inferência decidindo se deveria buscar.
-
-Se quiser ligar, o SearXNG precisa rodar nativamente (a receita antiga era em
-container e foi removida junto com o resto do Docker). O detalhe que custa
-tempo redescobrir está no `searxng-settings.example.yml` desta pasta:
-
-```yaml
-search:
-  formats:
-    - html
-    - json      # ← sem isto, /search?format=json devolve 403 Forbidden
-```
-
-Depois é só apontar `SEARXNG_URL=http://localhost:8080` no `.env`.
-
-## O token que some no deploy
-
-Sintoma: tudo funciona, a rede está boa, e a leitura do repositório responde
-**404**. Não é "o arquivo não existe" — em repositório **privado** o GitHub
-responde 404 em vez de 401/403 de propósito, para não revelar que o repo
-existe. Ou seja: 404 aqui quase sempre significa **sem credencial**.
-
-E a credencial some sozinha. O procedimento de deploy apaga a pasta antes de
-descompactar a versão nova:
-
-```bash
-rm -rf modulos scripts ia-servico ia-stack   # ← leva o ia-servico/.env junto
-unzip -o stoat_bot-*.zip
-```
-
-O `.env` está no `.gitignore` (então não vai para o repositório, o que é
-correto), mas justamente por isso ele também não volta no `unzip`. O container
-sobe normalmente, sem erro nenhum, e só o acesso ao código quebra.
-
-**Guarde uma cópia fora da pasta:**
-
-```bash
-cp ia-servico/.env ~/judy-github.env      # uma vez
-```
-
-E restaure ao fim de cada deploy:
-
-```bash
-cp ~/judy-github.env ia-servico/.env
-sudo rc-service judy-ia restart
-```
-
-Para conferir sem adivinhar:
-
-```bash
-grep -q GITHUB_TOKEN ia-servico/.env && echo definido || echo VAZIO
-curl -s localhost:8090/diagnostico
-```
-
-## Diagnóstico
-
-O serviço se autodiagnostica no boot e grita no log quando algo está errado:
-
-```
-[IA] ✓ DNS resolvendo
-[IA] ✓ GitHub alcançável (HTTP 200)
-[IA] ✓ GitHub autenticado (GhisoOF/stoat_bot)
-[IA] ✓ Ollama respondendo (5 modelo(s))
-[IA] ✓ diagnóstico de boot: tudo certo
-```
-
-Quando há problema, ele aparece em bloco destacado com a correção sugerida:
-
-```
-[IA] ═══════════════════════════════════════════
-[IA] ⚠️  PROBLEMAS DETECTADOS NO BOOT
-[IA] DNS NÃO resolve (EAI_AGAIN). O container não consegue traduzir nomes.
-[IA]    → confira /etc/resolv.conf DENTRO do container:
-[IA]      cat /etc/resolv.conf
-[IA]    → se estiver sem 'nameserver', o bind-mount está preso num arquivo antigo.
-[IA]      Recrie: sudo rc-service judy-ia restart
-[IA] ═══════════════════════════════════════════
-```
-
-Verifica quatro coisas: **DNS**, **acesso à internet**, **token do GitHub**
-(distinguindo ausente, expirado e sem permissão) e **Ollama**.
-
-Sem reiniciar, dá para consultar a qualquer momento:
-
-```bash
-curl localhost:8090/diagnostico
-grep "\[IA\]" /var/log/judy-ia.log
-```
-
-Nada disso derruba o serviço — são avisos. O bot funciona sem GitHub e sem
-busca web; só perde essas capacidades.
-
-### Por que existe
-
-O sintoma "a Judy não consegue ler o repositório" já teve três causas
-diferentes: DNS quebrado, token ausente e token expirado. Cada uma exigiu uma
-investigação do zero. O diagnóstico troca isso por uma linha no log.
-
-## EAI_AGAIN: quando o DNS para sozinho
-
-Sintoma característico: **funcionava, ninguém mexeu em nada, e parou**. Todo
-acesso à rede passa a falhar com `EAI_AGAIN`.
-
-`EAI_AGAIN` não significa "esse nome não existe" — é o resolver dizendo *tente
-de novo*. Costuma acontecer quando o `/etc/resolv.conf` é reescrito: o
-**Tailscale** e o **systemd-resolved** fazem isso ao reconectar, e há uma
-janela de segundos em que nada resolve.
-
-Duas defesas, nesta ordem:
-
-**Retentativa automática** (`ferramentas/rede.js`). Três tentativas com espera
-crescente (400ms, 800ms, 1600ms) absorvem a janela sem ninguém perceber.
-`ENOTFOUND` fica de fora de propósito — nome que não existe não vai passar a
-existir na segunda tentativa.
-
-**DNS de emergência** (`dns-fallback.js`). Se o `/etc/resolv.conf` ficar sem
-nenhuma linha `nameserver` — acontece, e aí `getaddrinfo` falha em tudo — o
-serviço passa a resolver por **c-ares** com servidores explícitos
-(`DNS_FALLBACK`), que não lê esse arquivo. Como o `fetch` do Node usa
-`dns.lookup`, tudo volta a funcionar sem nenhuma outra parte do código saber.
-
-A troca só acontece com o resolvedor do sistema realmente quebrado. A **ordem**
-importa: numa máquina com Tailscale, ponha o MagicDNS (`100.100.100.100`) na
-frente — é o único que resolve os nomes internos `*.ts.net`. Os públicos ficam
-atrás, como reserva.
-
-```
-[IA] ⚠ DNS do sistema quebrado — usando 100.100.100.100, 1.1.1.1 por dentro
-```
-
-Isso é contorno, não conserto: o reparo de verdade é o `/etc/resolv.conf`.
-
-### Se acontecer
-
-```bash
-cat /etc/resolv.conf                  # tem linha "nameserver"?
-getent hosts api.github.com
-curl localhost:8090/dns               # qual caminho está em uso
-curl localhost:8090/diagnostico
-```
-
-## O token que some no deploy
-
-Sintoma: tudo funciona, a rede está boa, e a leitura do repositório responde
-**404**. Não é "o arquivo não existe" — em repositório **privado** o GitHub
-responde 404 em vez de 401/403 de propósito, para não revelar que o repo
-existe. Ou seja: 404 aqui quase sempre significa **sem credencial**.
-
-E a credencial some sozinha. O procedimento de deploy apaga a pasta antes de
-descompactar a versão nova:
-
-```bash
-rm -rf modulos scripts ia-servico ia-stack   # ← leva o ia-servico/.env junto
-unzip -o stoat_bot-*.zip
-```
-
-O `.env` está no `.gitignore` (então não vai para o repositório, o que é
-correto), mas justamente por isso ele também não volta no `unzip`. O container
-sobe normalmente, sem erro nenhum, e só o acesso ao código quebra.
-
-**Guarde uma cópia fora da pasta:**
-
-```bash
-cp ia-servico/.env ~/judy-github.env      # uma vez
-```
-
-E restaure ao fim de cada deploy:
-
-```bash
-cp ~/judy-github.env ia-servico/.env
-sudo rc-service judy-ia restart
-```
-
-Para conferir sem adivinhar:
-
-```bash
-grep -q GITHUB_TOKEN ia-servico/.env && echo definido || echo VAZIO
-curl -s localhost:8090/diagnostico
-```
-
-## Diagnóstico
-
-O serviço se autodiagnostica no boot e grita no log quando algo está errado:
-
-```
-[IA] ✓ DNS resolvendo
-[IA] ✓ GitHub alcançável (HTTP 200)
-[IA] ✓ GitHub autenticado (GhisoOF/stoat_bot)
-[IA] ✓ Ollama respondendo (5 modelo(s))
-[IA] ✓ diagnóstico de boot: tudo certo
-```
-
-Quando há problema, ele aparece em bloco destacado com a correção sugerida:
-
-```
-[IA] ═══════════════════════════════════════════
-[IA] ⚠️  PROBLEMAS DETECTADOS NO BOOT
-[IA] DNS NÃO resolve (EAI_AGAIN). O container não consegue traduzir nomes.
-[IA]    → confira /etc/resolv.conf DENTRO do container:
-[IA]      cat /etc/resolv.conf
-[IA]    → se estiver sem 'nameserver', o bind-mount está preso num arquivo antigo.
-[IA]      Recrie: sudo rc-service judy-ia restart
-[IA] ═══════════════════════════════════════════
-```
-
-Verifica quatro coisas: **DNS**, **acesso à internet**, **token do GitHub**
-(distinguindo ausente, expirado e sem permissão) e **Ollama**.
-
-Sem reiniciar, dá para consultar a qualquer momento:
-
-```bash
-curl localhost:8090/diagnostico
-grep "\[IA\]" /var/log/judy-ia.log
-```
-
-Nada disso derruba o serviço — são avisos. O bot funciona sem GitHub e sem
-busca web; só perde essas capacidades.
-
-### Por que existe
-
-O sintoma "a Judy não consegue ler o repositório" já teve três causas
-diferentes: DNS quebrado, token ausente e token expirado. Cada uma exigiu uma
-investigação do zero. O diagnóstico troca isso por uma linha no log.
-

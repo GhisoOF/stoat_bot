@@ -27,7 +27,7 @@ async function sharp() {
   if (sharpMod) return sharpMod;
   try { sharpMod = (await import("sharp")).default; return sharpMod; }
   catch {
-    throw new Error("o pacote `sharp` não está instalado no judy-ia — `npm install` no ia-servico e reinicie. Sem ele não reescrevo imagens, e sem reescrever eu não toco em imagem nenhuma.");
+    throw new Error("o pacote `sharp` não está instalado — rode `npm install` em `ia-servico/` e reconstrua a imagem. Sem ele não reescrevo imagens, e sem reescrever eu não toco em imagem nenhuma.");
   }
 }
 
@@ -104,7 +104,7 @@ export async function executar({ url, pergunta }) {
 
 export async function verImagem({ url, pergunta }) {
   if (!MODELO_VISAO) {
-    return { erro: "visão desligada: defina LLM_MODEL_VISAO no judy-ia (um modelo multimodal no llama-swap, ex.: qwen2.5-vl) para eu poder ver imagens." };
+    return { erro: "visão desligada: defina `MODELO_VISAO` no `.env` (um modelo multimodal, ex.: qwen2.5-vl) para eu poder ver imagens." };
   }
   const v = hostPermitido(String(url ?? ""));
   if (!v.ok) return { erro: v.motivo };

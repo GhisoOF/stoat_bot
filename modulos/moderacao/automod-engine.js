@@ -379,6 +379,47 @@ async function aplicarPunicao(ctx, opts) {
     descricao: `<@${userId}> banido após **${count}** avisos.\n**Motivo:** ${motivo}` });
 }
 
+// Padrão de dano (desafios, humilhação, doxxing): nada foi punido, mas a
+// soma das mensagens de uma pessoa merece olho humano. Mostra os trechos,
+// porque é a conversa inteira — não uma frase — que conta a história.
+async function alertarPadraoDano(ctx, { canal, userId, p }) {
+  const { config, sendEmbed, COR, PREFIXO } = ctx;
+  const lang = lingua(ctx);
+  const destinoId = config.automod?.antiScam?.alertChannelId || config.log?.canalId || null;
+  let destino = canal;
+  if (destinoId) {
+    try { destino = await ctx.client.channels.fetch(destinoId); } catch { destino = canal; }
+  }
+  const cargos = config.acesso?.cargosStaff ?? [];
+  const mencao = cargos.length ? cargos.map((id) => `<%${id}>`).join(" ") : "";
+  const trechos = p.trechos.map((t) => `> ${t}`).join("\n");
+  const en = lang === "en";
+  try {
+    await sendEmbed(destino, {
+      title: en ? "🚩 Harmful pattern" : "🚩 Padrão de dano",
+      description: [
+        mencao,
+        en
+          ? `<@${userId}> adds up **${p.soma.toFixed(1)}** in harm signals across ${p.mensagens} message(s) in ~${p.horas}h.`
+          : `<@${userId}> soma **${p.soma.toFixed(1)}** em sinais de dano, em ${p.mensagens} mensagem(ns) nas últimas ~${p.horas}h.`,
+        `**${en ? "Categories" : "Categorias"}:** ${p.categorias.join(", ")}`,
+        "",
+        trechos,
+        "",
+        en
+          ? "No single message crossed the line, so nothing was punished. The **pattern** — challenges, humiliation, exposing people — is what's worth a human look."
+          : "Nenhuma mensagem sozinha passou do limite, então nada foi punido. É o **padrão** — desafios, humilhação, expor gente — que merece olho humano.",
+        `\`${PREFIXO}automod sentinela ban ${userId}\` · \`${PREFIXO}automod sentinela dismiss ${userId}\``,
+      ].filter((l) => l !== null && l !== undefined).join("\n"),
+      colour: COR.erro,
+    });
+  } catch (e) { console.error("[SENTINELA][dano]", e.message); }
+  await log.registrar(ctx, "punicoes", {
+    titulo: "🚩 Padrão de dano",
+    descricao: `<@${userId}> — ${p.soma.toFixed(1)} em ${p.mensagens} mensagem(ns): ${p.categorias.join(", ")}`,
+  });
+}
+
 async function alertarAdministracao(ctx, { server, canal, userId, sinal, faixa, nivel, nota }) {
   const { config, sendEmbed, COR, PREFIXO } = ctx;
   const lang = lingua(ctx);
@@ -594,6 +635,13 @@ export async function runAutomod(message, ctx) {
     dbg(ctx, `  [sentinela] ON → nota ${r.nota.toFixed(1)}/10 (limiar ${limiar}`
       + `${faixa ? `, ${faixa.rotulo} nv${nivel}` : ""})${r.grave ? " GRAVE" : ""}`
       + ` sinais: [${r.sinais.join(", ") || "nenhum"}]`);
+
+    // Padrão de dano: soma por pessoa, alerta a staff, nunca pune (confianca.js)
+    if (r.dano?.soma > 0 && am.antiScam.alertarAdmin !== false) {
+      const p = confianca.registrarDano(ctx.serverId ?? server?.id, userId, r.dano, content);
+      dbg(ctx, `  [sentinela/dano] +${r.dano.soma} (${r.dano.categorias.join(",")}) → acumulado ${p.soma?.toFixed?.(1) ?? "?"}`);
+      if (p.alertar) await alertarPadraoDano(ctx, { canal, userId, p });
+    }
 
     if (r.nota >= Math.max(3, limiar - 2) && am.antiScam.alertarAdmin !== false) {
       const sinal = confianca.registrarSinal(ctx.serverId ?? server?.id, userId,

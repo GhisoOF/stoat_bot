@@ -134,6 +134,10 @@ RUN cd ia-servico && npm install --omit=dev --no-audit --no-fund
 
 # Voz é opcional (depende de binários de áudio); se falhar, a imagem segue sem ela.
 COPY voz-servico/package.json voz-servico/package-lock.json* ./voz-servico/
+# Os `overrides` apontam para este pacote vazio (file:./vazio): ele tem de
+# estar aqui ANTES do npm install. Sem ele o install falha — e como a linha
+# abaixo tolera falha, a imagem subiria sem voz, sem aviso nenhum.
+COPY voz-servico/vazio ./voz-servico/vazio
 RUN cd voz-servico && (npm install --omit=dev --no-audit --no-fund \
     || echo "AVISO: dependências de voz falharam — o serviço de voz ficará indisponível")
 

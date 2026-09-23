@@ -120,7 +120,11 @@ export async function iniciar() {
     return { ok: false, erro: erroCarga };
   }
   try {
-    ({ Revoice, MediaPlayer } = require("revoice.js"));
+    // Direto no caminho do LiveKit. O `index.js` do revoice.js também carrega o
+    // caminho "Legacy" (msc-node → werift), que a Judy nunca usa e que trazia
+    // `ip` e `elliptic` — duas vulnerabilidades sem correção publicada.
+    Revoice = require("revoice.js/src/Revoice.js");
+    ({ MediaPlayer } = require("revoice.js/src/Media.js"));
     revoice = new Revoice(TOKEN);
     erroCarga = null;
     return { ok: true };

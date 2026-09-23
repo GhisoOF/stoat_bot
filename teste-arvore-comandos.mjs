@@ -126,15 +126,16 @@ await tAsync("nenhum texto anuncia um comando que não existe mais", async () =>
   assert.equal(mortos.length, 0, `textos anunciando comando morto:\n     ${mortos.join("\n     ")}`);
 });
 
-await tAsync("&tts entrar/sair aponta para a porta única", async () => {
-  const tts = await import("./modulos/ferramentas/tts.js");
-  let enviado = null;
-  const ctx = { sendEmbed: (_c, e) => { enviado = e; }, COR: { info: 1 }, PREFIXO: "&", config: {}, serverId: "s" };
-  await tts.cmdTts({ channel: {}, authorId: "u" }, ["entrar"], ctx);
-  assert.match(enviado?.title ?? "", /&entrar/, "devia mandar a pessoa para &entrar");
-  enviado = null;
-  await tts.cmdTts({ channel: {}, authorId: "u" }, ["sair"], ctx);
-  assert.match(enviado?.title ?? "", /&sair/);
+await tAsync("&tts entrar/sair não existem: sem aviso e sem entrar na call", async () => {
+  // Só `&entrar`/`&sair` entram e saem. Por `&tts`, essas palavras não são
+  // comando — e não há mensagem de "agora é &entrar" (o código tem um usuário).
+  const fs = await import("node:fs");
+  const tts = fs.readFileSync("./modulos/ferramentas/tts.js", "utf8");
+  assert.doesNotMatch(tts, /Agora é/, "o aviso de redirecionamento voltou");
+  assert.match(tts, /if \(ctx\.viaAtalhoVoz && \["entrar", "join", "sair"/,
+    "a porta de entrar/sair tem de exigir viaAtalhoVoz");
+  const lista = tts.match(/const SUBCOMANDOS = \[([\s\S]*?)\];/)?.[1] ?? "";
+  assert.doesNotMatch(lista, /"entrar"|"sair"/, "entrar/sair não podem ser sugeridos como subcomando do &tts");
 });
 
 await tAsync("&entrar e &sair continuam funcionando (a porta única)", async () => {

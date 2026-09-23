@@ -17,6 +17,9 @@
     "undici": "^6.28.1",
     "uuid": "^11.1.1",
     "js-yaml": "^4.3.2",
-    "pug": "^3.0.4"
+    "pug": "^3.0.4",
+    "msc-node": "file:../../vazio",
+    "better-docs": "file:../../vazio",
+    "taffydb": "file:../../vazio"
   }
 }

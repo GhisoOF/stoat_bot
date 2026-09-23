@@ -41,14 +41,13 @@ function comFamilias(arvore, P, lang) {
     `\`antimassmention\` — ` + (en ? "mentioning a crowd at once" : "mencionar um monte de gente de uma vez"),
     `\`anticaracteres\` — ` + (en ? "zalgo and invisible characters" : "zalgo e caracteres invisíveis"),
     `\`antirepeticao\` — ` + (en ? "the same letter dragged on" : "a mesma letra arrastada"),
-    `\`sentinela\` — ` + (en ? "judges the content (see below)" : "julga o conteúdo (veja abaixo)"),
+    `\`sentinela\` — ` + (en
+      ? "judges the content, sees through disguises (l33t, s p a c e d, invisible characters), and alerts the staff when someone's messages add up to a harmful pattern (challenges, humiliation, doxxing)"
+      : "julga o conteúdo, enxerga através de disfarces (l33t, l e t r a s  s e p a r a d a s, caracteres invisíveis) e avisa a staff quando as mensagens de alguém somam um padrão de dano (desafios, humilhação, doxxing)"),
     "",
     en ? "**Inside the family**" : "**Dentro da família**",
     `\`${P}automod blocklist\` · \`${P}automod whitelist\` · \`${P}automod sentinela\` · \`${P}automod punicao\``,
-    "",
-    en
-      ? `_These only exist inside \`${P}automod\` — one place to remember, and \`${P}help\` walks it._`
-      : `_Estes só existem dentro do \`${P}automod\` — um lugar só para lembrar, e o \`${P}help\` desce por ele._`,
+
   ].join("\n"), {
     blocklist: arvore.blocklist,
     whitelist: arvore.whitelist,
@@ -75,10 +74,7 @@ function comFamilias(arvore, P, lang) {
     `\`${P}warn @pessoa [motivo]\` — ` + (en ? "record a warning" : "registra um aviso"),
     `\`${P}warn lista [@pessoa]\` — ` + (en ? "see the warnings" : "vê os avisos"),
     `\`${P}warn limpar @pessoa\` — ` + (en ? "wipe that record" : "zera a ficha"),
-    "",
-    en
-      ? `_Warnings live under \`${P}warn\`: there is no separate \`warnings\` command._`
-      : `_Os avisos moram sob \`${P}warn\`: não existe mais um comando \`warnings\` solto._`,
+
   ].join("\n"), {});
 
   ramo("entrar", "entrar", [
@@ -92,10 +88,7 @@ function comFamilias(arvore, P, lang) {
     en ? "**What to do once inside**" : "**O que dá para fazer lá dentro**",
     `\`${P}tts\` — ` + (en ? "read the chat out loud" : "ler o chat em voz alta"),
     `\`${P}musica <link|nome>\` — ` + (en ? "play music" : "tocar música"),
-    "",
-    en
-      ? `_Voice has one door: \`${P}entrar\` and \`${P}sair\`._`
-      : `_A voz tem uma porta só: \`${P}entrar\` e \`${P}sair\`._`,
+
   ].join("\n"), {});
 
   return arvore;

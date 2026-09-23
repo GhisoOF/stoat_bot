@@ -94,7 +94,13 @@ diz exatamente o que clicar.
 
 - **AutoMod**: anti-spam, **anti-duplicata** (a mesma mensagem repetida), anti-mass-mention, anti-invite (com whitelist),
   anti-caps, anti-link (listas estilo Pi-hole via `&automod blocklist`), anti-zalgo/
-  caracteres invisíveis, e detecção de conteúdo proibido por pontuação 0–10 (`&scam`).
+  caracteres invisíveis, e o **sentinela** (`&automod sentinela`): nota de 0–10
+  para golpe, +18, gore, doxxing e extorsão, que enxerga através de disfarces
+  (l33t, letras separadas, caracteres invisíveis, letras de outro alfabeto, link
+  escrito como `bit[.]ly`). Ele também soma as mensagens de cada pessoa ao longo
+  das horas e **avisa a staff** quando formam um padrão de dano — desafios,
+  humilhação, expor gente — mesmo sem nenhuma frase que condene sozinha.
+  Falar de se machucar, sozinho, nunca dispara isso.
 - **Punições persistentes**: avisos e silêncios ficam no banco por
   `(servidor, usuário)` — quem **sai e volta** recebe o silêncio de novo.
 - **Escada de punição**: cada reincidência sobe um degrau (aviso → 5 min →
@@ -178,13 +184,10 @@ Os comandos são uma **árvore**: quem tem família guarda a família dentro de 
 camada — `&help automod`, `&help automod sentinela`, `&help automod sentinela
 antiguidade`. Cada camada explica **o que aquilo é**, não só a sintaxe.
 
-O que é opção de uma família **só existe dentro dela**: não existem mais
-`&blocklist` nem `&warnings` soltos, para não haver dois caminhos para a mesma
-coisa. Continuam
-valendo as variações de **digitação** (`&clear`/`&purge`/`&limpar`,
-`&info`/`&sobre`), que são a mesma porta com outro nome.
-
-A voz tem uma porta só: `&entrar` e `&sair` (o `&tts entrar` saiu).
+O que é opção de uma família **só existe dentro dela**, para não haver dois
+caminhos para a mesma coisa. Variações de **digitação** valem
+(`&clear`/`&purge`/`&limpar`, `&info`/`&sobre`): são a mesma porta com outro
+nome. A voz entra e sai por `&entrar` e `&sair`.
 
 Prefixo `&`. A lista completa, com **cada parâmetro explicado**, vive no
 próprio bot: `&help <comando>`. Um resumo:

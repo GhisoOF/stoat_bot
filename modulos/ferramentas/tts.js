@@ -24,7 +24,7 @@ setInterval(() => {
 
 const SUBCOMANDOS = [
   "estado", "status", "saude", "diagnostico", "reiniciar", "resgatar", "destravar",
-  "filtro", "entrar", "sair", "voz", "efeito", "tom", "cooldown", "nomes",
+  "filtro", "voz", "efeito", "tom", "cooldown", "nomes",
   "dicionario", "ajuda",
 ];
 
@@ -358,25 +358,6 @@ function relatarResgate(r, { presa, message, ctx, c, lang }) {
 }
 
 export async function cmdTts(message, args, ctx) {
-  // Duas portas para a mesma coisa viraram uma: `&entrar` e `&sair`.
-  // O cmdTts continua executando (o atalho chama ele com viaAtalhoVoz), mas
-  // `&tts entrar` não existe mais — em vez de um erro seco, aponta o caminho.
-  {
-    const p = String(args[0] ?? "").toLowerCase();
-    if ((p === "entrar" || p === "sair") && !ctx.viaAtalhoVoz) {
-      const { sendEmbed, COR, PREFIXO } = ctx;
-      return sendEmbed(message.channel, tr(ctx, {
-        title: `👉 Agora é \`${PREFIXO}${p}\``,
-        description: `\`${PREFIXO}tts ${p}\` virou \`${PREFIXO}${p}\` — é a mesma coisa, com menos para digitar.\n\nO \`${PREFIXO}${p}\` vale para a voz toda: o leitor (TTS) e a música dividem a mesma call.`,
-        colour: COR.info,
-      }, {
-        title: `👉 It's \`${PREFIXO}${p}\` now`,
-        description: `\`${PREFIXO}tts ${p}\` is now \`${PREFIXO}${p}\` — same thing, less typing.\n\nIt covers all voice: the reader (TTS) and music share the same call.`,
-        colour: COR.info,
-      }));
-    }
-  }
-
   const { config, sendEmbed, COR, PREFIXO, getServer, membroTemPermissao, salvarConfig, serverId } = ctx;
   const lang = lingua(ctx);
   const c = garantirConfig(config);
@@ -772,7 +753,9 @@ export async function cmdTts(message, args, ctx) {
       { title: "❌ Unknown option", description: `\`${PREFIXO}tts filtro [status|on|off|porminuto <n>|teste <text>]\``, colour: COR.erro }));
   }
 
-  if (["entrar", "join", "sair", "leave", "ler", "comecar", "começar", "start", "stop"].includes(sub)) {
+  // Entrar/sair na call é SÓ `&entrar`/`&sair` (que chegam aqui com
+  // viaAtalhoVoz). Por `&tts`, essas palavras não são comando nenhum.
+  if (ctx.viaAtalhoVoz && ["entrar", "join", "sair", "leave", "ler", "comecar", "começar", "start", "stop"].includes(sub)) {
     const entrando = ["entrar", "join", "ler", "comecar", "começar", "start"].includes(sub);
     const chaveAcao = `${serverId}:${message.authorId}`;
     const faltam = (c.cooldown ?? COOLDOWN_MS) - (Date.now() - (ultimaFala.get(chaveAcao) ?? 0));

@@ -1,0 +1,7 @@
+{
+  "name": "vazio",
+  "version": "1.0.0",
+  "private": true,
+  "main": "index.js",
+  "description": "Substitui depend\u00eancias que o revoice.js lista mas a Judy nunca executa (caminho Legacy V1 e gerador de docs)."
+}

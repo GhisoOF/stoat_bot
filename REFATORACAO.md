@@ -390,6 +390,68 @@ a coisa é**, não só a sintaxe.
 
 ---
 
+## 6d. Sentinela contra disfarces e padrão de dano; 4 vulnerabilidades (4ª rodada)
+
+### As 4 vulnerabilidades sem correção publicada
+
+`ip`, `elliptic`, `taffydb` e `vue-template-compiler` vinham de código que a
+Judy **nunca executa**: o `index.js` do revoice.js carrega o caminho "Legacy V1"
+(`msc-node` → `werift`) só para exportá-lo como `Legacy`, e lista o gerador de
+documentação (`better-docs`) como dependência de execução.
+
+- `voz.js` importa direto o caminho do LiveKit (`revoice.js/src/Revoice.js` e
+  `src/Media.js`), que não depende de nada do legado — verificado lendo os
+  `require` de cada arquivo.
+- `msc-node`, `better-docs` e `taffydb` apontam para `voz-servico/vazio/`, um
+  pacote vazio. O voz-servico caiu de **360 para 129 pacotes**; `npm audit`: 0.
+- Armadilha 1: o `file:` de override é resolvido a partir do pacote que
+  **depende** dele. `file:./vazio` gerava links quebrados para
+  `node_modules/revoice.js/vazio`. O certo é `file:../../vazio`.
+- Armadilha 2: o Dockerfile copiava só o `package.json` antes do `npm install`.
+  Sem a pasta `vazio` ali, o install falharia — e como a linha tolera falha, a
+  imagem subiria **sem voz, sem aviso**. Agora o `vazio` é copiado antes.
+
+`teste-dependencias.mjs` trava os cinco pontos (sem rede, sem npm install).
+
+### Sentinela: 15 brechas → 0
+
+`scripts/simular-automod.mjs` roda conteúdo perigoso, disfarces e conversa
+normal pelas mesmas funções do bot. O resultado completo, caso a caso, está em
+`SIMULACAO-automod.md`.
+
+**A brecha principal:** o sentinela pontuava o texto **cru**. Qualquer disfarce
+derrubava a nota de 8 para 0–3,5. `normalizarParaAnalise()` traz o texto de
+volta para a forma que um humano lê antes de pontuar: letras "fancy" (NFKC),
+caracteres invisíveis, cirílico/grego que imita latino, letras separadas por
+espaço ou pontuação, leetspeak (só em palavra que mistura letra e número —
+`R$50` e `2024` ficam intactos) e link escrito como `bit[.]ly` ou `bit . ly`.
+Link ofuscado e link mascarado (`[texto](url)`) viraram sinais próprios.
+
+**Padrão de dano** (o caso que você mostrou): desafios, humilhação, doxxing,
+extorsão, autolesão. Duas camadas:
+
+- **numa mensagem só**, bloqueia apenas o inequívoco — mandar alguém se cortar,
+  ameaçar vazar dados ou fotos;
+- **o resto soma por pessoa** em até 12h (`confianca.registrarDano`), e vira
+  alerta para a staff com os trechos que motivaram — nunca punição.
+
+O alerta exige soma ≥ 4, sinais de **2+ categorias** e **pelo menos um do lado
+de quem agride**. Falar de se machucar, sozinho, nunca dispara: a conversa
+simulada de alguém pedindo ajuda fica em 1,0 e passa.
+
+O caso real, frase por frase, tirava 0 a 2,5 — nenhuma chegava perto do alerta
+antigo. A conversa inteira soma 5,5 em cinco categorias e alerta.
+
+`teste-sentinela-simulacao.mjs` cobra o simulador: brecha ou falso positivo
+novo quebra o teste.
+
+### Sem avisos de redirecionamento
+
+`&tts entrar`/`&tts sair` simplesmente não são mais comando (não há mais o
+"Agora é `&entrar`"), e as notas de ajuda que citavam comandos removidos saíram.
+
+---
+
 ## 7. O que NÃO fiz, e por quê
 
 | Item | Por quê |
@@ -419,6 +481,8 @@ node scripts/verificar-build.js
 node teste-compatibilidade.mjs    # banco antigo continua funcionando
 node teste-arvore-comandos.mjs    # a árvore de comandos e a ajuda profunda
 node teste-duplicata.mjs          # o spam do Stork é pego
+node teste-sentinela-simulacao.mjs  # disfarces e padrão de dano
+node teste-dependencias.mjs       # as 4 vulnerabilidades continuam fora
 node teste-refatoracao.mjs && node teste-ia.mjs && node teste-verificador.mjs
 
 git add -A

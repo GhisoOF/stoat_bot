@@ -135,6 +135,74 @@ const LINK_SIMPLES    = /\bhttps?:\/\/|\bwww\./i;
 const AFIRMACAO = /\b(vendo|selling|sell|compre|buy|acesse|access|baixe|download|assine|subscribe|clique|click|entre|join)\b/i;
 const PERGUNTA  = /\?/;
 
+// ─── Dano a pessoas: desafios, humilhação, doxxing, extorsão ────────────────
+//
+// Existem comunidades que recrutam em servidores abertos para "desafios" que
+// terminam em alguém se machucando, sendo humilhado ou exposto. Quem recruta
+// raramente escreve uma frase que condene sozinha: o que denuncia é o PADRÃO.
+//
+// Por isso esta categoria funciona em duas camadas:
+//   • numa mensagem só, bloqueia apenas o inequívoco — mandar alguém se
+//     cortar, ameaçar vazar dados ou fotos;
+//   • o resto (falar de desafio "no extremo", de humilhar, divulgar outra
+//     comunidade) SOMA por pessoa ao longo das horas, e quem junta sinais
+//     de categorias diferentes vira alerta para a staff (ver confianca.js).
+//
+// Cuidado que isto NÃO pode ter: tratar como agressor quem está pedindo ajuda.
+// Falar de se machucar, sozinho, nunca pune e nunca alerta como recrutamento.
+
+const LEX_AUTOLESAO = [
+  /\b(se|me|te)\s+cort(ar|ando|ou|a|e|em)\b/i,
+  /\bcort(ar|ando|ou)\s+(os\s+|o\s+|seus?\s+|meus?\s+)?(pulsos?|bra[çc]os?|pernas?)\b/i,
+  /\bauto[\s-]?(mutila\w*|les[ãa]o|agress[ãa]o)\b/i,
+  /\b(self[\s-]?harm|cut\s+(yourself|urself))\b/i,
+];
+const LEX_DESAFIO = [/\bdesafi(o|os|ar|a|e|ou)\b/i, /\bchallenges?\b/i];
+const LEX_EXTREMO = [/\b(no|ao|at[ée]\s+o)\s+extremo\b/i, /\bat[ée]\s+o\s+limite\b/i];
+const LEX_HUMILHACAO = [
+  /\bpass(ar|ando|ou|a|e)\s+vergonha\b/i,
+  /\bcomer\s+(merda|b[oó]sta|coc[ôo])\b/i,
+  /\bhumilh(ar|ando|ou|a|e|a[çc][ãa]o)\b/i,
+];
+// "manda ela ..." / "obriga ele ..." — alguém dando ordem sobre OUTRA pessoa
+const LEX_ORDEM_OUTRO = [
+  /\b(manda|mande|mandar|obrig\w+|fa[çc]a|faz|bota|p[õo]e)\b[^.!?\n]{0,25}\b(ela|ele|eles|elas|voc[êe]|vc|algu[ée]m)\b/i,
+];
+const LEX_DADOS_PESSOAIS = [
+  /\b(endere[çc]o|cpf|rg|telefone|celular|onde\s+mora|placa\s+do\s+carro)\b[^.!?\n]{0,25}\b(dele|dela|deles|delas|daquel\w+)\b/i,
+];
+const LEX_DOX = [/\bdox+(ing|ar|ei|ado|ada|aram)?\b/i];
+const LEX_VAZAR = [
+  /\b(vazar|vazo|vaza|vazei|expor|exponho|espalhar|espalho)\s+(tudo|as?\s+fotos?|suas?\s+fotos?|os\s+dados|seus?\s+dados|os\s+nudes?|seus?\s+nudes?|pra\s+todo\s+mundo|no\s+grupo|na\s+internet)\b/i,
+];
+const LEX_COERCAO = [
+  /\bse\s+(voc[êe]\s+|vc\s+|tu\s+)?n[ãa]o\s+(fizer|mandar|pagar|obedecer|fazer)\b/i,
+  /\bou\s+(eu\s+)?(vazo|exponho|espalho|posto|conto\s+pra)\b/i,
+];
+// Desprezo por gente vulnerável: não pesa na nota, só no padrão acumulado.
+const LEX_DESPREZO = [/\bdoentes?\s+menta(l|is)\b/i, /\bretardad[oa]s?\b/i];
+
+// Quanto cada sinal soma no PADRÃO de uma pessoa (confianca.js acumula).
+// Autolesão sozinha pesa, mas não conta como "lado de quem agride".
+export const PESO_DANO = {
+  autolesao: 1, desafio: 0.5, humilhacao: 1, dados_pessoais: 1.5, dox: 2,
+  vazar: 1.5, coercao: 1.5, desprezo: 0.5, link_convite: 1,
+  conj_desafio_extremo: 1.5, conj_desafio_humilhacao: 1.5,
+};
+const LADO_AGRESSOR = new Set(["desafio", "humilhacao", "dados_pessoais", "dox",
+  "vazar", "coercao", "desprezo", "link_convite"]);
+
+export function danoDe(features) {
+  let soma = 0;
+  const categorias = [];
+  for (const [k, peso] of Object.entries(PESO_DANO)) {
+    if (!features[k]) continue;
+    soma += peso * features[k];
+    categorias.push(k);
+  }
+  return { soma, categorias, agressor: categorias.some((c) => LADO_AGRESSOR.has(c)) };
+}
+
 export const PESOS = {
   vies:            0,
   grave:           1.5,
@@ -154,6 +222,23 @@ export const PESOS = {
   negacao:        -4,
   taxa_alta:       1.5,
   duplicata:       2,     // a MESMA mensagem, de novo (bot de propaganda)
+  // dano a pessoas — sozinhos quase não pesam; o que condena são as conjunções
+  autolesao:       1,
+  desafio:         0.5,
+  humilhacao:      1,
+  dados_pessoais:  1.5,
+  dox:             2,
+  vazar:           1.5,
+  coercao:         1.5,
+  conj_desafio_autolesao:  6,   // mandar alguém se machucar
+  conj_doxxing:            5,   // dados de uma pessoa + expor/ameaçar
+  conj_extorsao:           5,   // "se não fizer" + vazar
+  conj_desafio_extremo:    3.5,
+  conj_desafio_humilhacao: 3,
+  // link cujo texto visível esconde para onde vai: [texto](url)
+  link_mascarado:  2,
+  link_ofuscado:   1.5,
+  conj_topico_link: 2,          // golpe/+18/gore + link encurtado, de arquivo ou mascarado
   conj_grave_oferta:   6,  // grave + oferta = anúncio de material → topo
   conj_grave_contexto: 5,  // grave + link/cta/venda = contexto suspeito → alerta
   conj_topico_cta:     2,  // tópico proibido + contato = divulgação
@@ -176,9 +261,84 @@ const contar = (txt, lista, cap = 99) => {
 };
 const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
 
+// ─── Normalização: desfazer disfarces antes de pontuar ──────────────────────
+//
+// O sentinela olhava o texto CRU. Bastava escrever "g4nh3 d1nh31r0", separar
+// as letras, enfiar um caractere invisível ou trocar um "a" latino por um "а"
+// cirílico (idêntico na tela) para a nota cair de 8 para 0. A simulação em
+// scripts/simular-automod.mjs mostrava 10 disfarces diferentes passando.
+//
+// Aqui o texto é trazido de volta para a forma que um humano LÊ. A detecção
+// continua sendo a mesma de sempre; só deixou de ser enganável pela grafia.
+
+const HOMOGLIFOS = {
+  // cirílico → latino (as letras que são idênticas na tela)
+  "а": "a", "е": "e", "о": "o", "р": "p", "с": "c", "у": "y", "х": "x",
+  "і": "i", "ј": "j", "ѕ": "s", "ԁ": "d", "һ": "h", "ӏ": "l", "ԛ": "q", "ԝ": "w",
+  "А": "A", "В": "B", "Е": "E", "К": "K", "М": "M", "Н": "H", "О": "O",
+  "Р": "P", "С": "C", "Т": "T", "Х": "X", "У": "Y", "І": "I", "Ј": "J", "Ѕ": "S",
+  // grego → latino
+  "α": "a", "ο": "o", "ρ": "p", "ν": "v", "τ": "t", "ι": "i", "κ": "k", "υ": "u",
+  "Α": "A", "Β": "B", "Ε": "E", "Ζ": "Z", "Η": "H", "Ι": "I", "Κ": "K", "Μ": "M",
+  "Ν": "N", "Ο": "O", "Ρ": "P", "Τ": "T", "Υ": "Y", "Χ": "X",
+  // latinos "estendidos" usados como disfarce
+  "ɡ": "g", "ı": "i", "ʟ": "l", "ɴ": "n", "ʀ": "r", "ꜱ": "s",
+};
+const RE_HOMOGLIFO = new RegExp(`[${Object.keys(HOMOGLIFOS).join("")}]`, "g");
+const LEET = { "4": "a", "@": "a", "3": "e", "1": "i", "!": "i", "0": "o", "5": "s", "$": "s", "7": "t", "8": "b" };
+
+export function normalizarParaAnalise(texto) {
+  let t = String(texto ?? "");
+
+  // letras "fancy" (𝐠𝐚𝐧𝐡𝐞, ｇａｎｈｅ) → normais
+  t = t.normalize("NFKC");
+  // invisíveis: espaço de largura zero, joiner, hífen suave, marca de direção
+  t = t.replace(/[\u00AD\u180E\u200B-\u200F\u202A-\u202E\u2060-\u2064\uFEFF]/g, "");
+  // alfabetos que se passam por latino
+  t = t.replace(RE_HOMOGLIFO, (c) => HOMOGLIFOS[c]);
+
+  // link disfarçado: bit[.]ly · bit(.)ly · bit (ponto) ly · bit . ly / x
+  t = t.replace(/\s*[\[\(\{]\s*(?:\.|dot|ponto)\s*[\]\)\}]\s*/gi, ".");
+  t = t.replace(/([\p{L}\p{N}])\s+\.\s+([\p{L}\p{N}])/gu, "$1.$2");
+  t = t.replace(/(\.[a-z]{2,})\s*\/\s*(\S)/gi, "$1/$2");
+
+  // letras separadas por pontuação: g.a.n.h.e · p-a-c-k · w_h_a_t_s
+  t = t.replace(/(?<![\p{L}\p{N}])\p{L}(?:[.\-_*·•]\p{L})+(?![\p{L}\p{N}])/gu,
+    (m) => m.replace(/[.\-_*·•]/g, ""));
+  // letras separadas por UM espaço (4+, para não juntar "e o a"): g a n h e
+  t = t.replace(/(?<![\p{L}\p{N}])\p{L}(?: \p{L}){3,}(?![\p{L}\p{N}])/gu,
+    (m) => m.replace(/ /g, ""));
+
+  // leetspeak — só em palavra que MISTURA letras e números ("g4nh3", "n0").
+  // Número puro (50, 2024), dinheiro ("R$50") e link ficam como estão. Este
+  // texto só serve para pontuar e nunca é exibido, então "5g" virar "sg" não
+  // estraga nada — e "n0" virar "no" é o que faz "chama n0 whats" ser pego.
+  t = t.replace(/\S+/g, (tok) => {
+    if (/[/:]/.test(tok)) return tok;
+    if (/^(r\$|\$|€|£)/i.test(tok)) return tok;
+    if (!/\p{L}/u.test(tok) || !/[0-9@$!]/.test(tok)) return tok;
+    return tok.replace(/[4@3105$78!]/g, (c) => LEET[c] ?? c);
+  });
+
+  return t;
+}
+
 function extrairFeatures(texto, opts = {}) {
-  const t = texto ?? "";
+  const cru = texto ?? "";
+  const t = normalizarParaAnalise(cru);
   const f = {};
+
+  // Link ofuscado: bit[.]ly, bit (ponto) ly, bit . ly — ninguém escreve
+  // assim sem querer esconder o link de um filtro.
+  if (/[\[\(\{]\s*(\.|dot|ponto)\s*[\]\)\}]/i.test(cru)
+      || /[\p{L}\p{N}]\s+\.\s+(com|ly|gg|io|me|net|org|br|link|xyz|site|app)\b/iu.test(cru)) {
+    f.link_ofuscado = 1;
+  }
+  // Link mascarado: o texto que aparece não mostra o domínio de destino.
+  for (const m of cru.matchAll(/\[([^\]]*)\]\((https?:\/\/[^)\s]+)\)/gi)) {
+    const host = (m[2].match(/^https?:\/\/([^/]+)/i)?.[1] ?? "").toLowerCase();
+    if (host && !m[1].toLowerCase().includes(host.replace(/^www\./, ""))) { f.link_mascarado = 1; break; }
+  }
 
   f.grave   = contar(t, LEX_GRAVE, 2);
   f.adulto  = contar(t, LEX_ADULTO, 3);
@@ -192,6 +352,15 @@ function extrairFeatures(texto, opts = {}) {
   f.divisao_lucro  = contar(t, LEX_DIVISAO_LUCRO, 2);
   f.mula           = contar(t, LEX_MULA, 2);
   f.pretexto_conta = contar(t, LEX_PRETEXTO_CONTA, 2);
+
+  f.autolesao      = contar(t, LEX_AUTOLESAO, 2);
+  f.desafio        = contar(t, LEX_DESAFIO, 1);
+  f.humilhacao     = contar(t, LEX_HUMILHACAO, 2);
+  f.dados_pessoais = contar(t, LEX_DADOS_PESSOAIS, 1);
+  f.dox            = contar(t, LEX_DOX, 1);
+  f.vazar          = contar(t, LEX_VAZAR, 1);
+  f.coercao        = contar(t, LEX_COERCAO, 1);
+  f.desprezo       = contar(t, LEX_DESPREZO, 1);
 
   // Tipo de link (apenas o de maior prioridade conta)
   if (LINK_FILEHOST.test(t))        f.link_filehost = 1;
@@ -225,6 +394,16 @@ function extrairFeatures(texto, opts = {}) {
   if (f.pretexto_conta > 0 && (f.divisao_lucro > 0 || f.mula > 0)) f.conj_pretexto_ganho = 1;
   if (f.mula > 0 && f.divisao_lucro > 0) f.conj_mula_ganho = 1;
 
+  // Dano a pessoas: o "E" que transforma conversa em ameaça
+  const ordemSobreOutro = contar(t, LEX_ORDEM_OUTRO, 1) > 0;
+  if (f.autolesao > 0 && (f.desafio > 0 || ordemSobreOutro)) f.conj_desafio_autolesao = 1;
+  if ((f.dados_pessoais > 0 || f.dox > 0) && (f.vazar > 0 || f.coercao > 0)) f.conj_doxxing = 1;
+  if (f.coercao > 0 && f.vazar > 0) f.conj_extorsao = 1;
+  if (f.desafio > 0 && contar(t, LEX_EXTREMO, 1) > 0) f.conj_desafio_extremo = 1;
+  if (f.desafio > 0 && f.humilhacao > 0) f.conj_desafio_humilhacao = 1;
+  if ((f.scam > 0 || f.adulto > 0 || f.gore > 0)
+      && (f.link_encurtador || f.link_filehost || f.link_mascarado || f.link_ofuscado)) f.conj_topico_link = 1;
+
   return f;
 }
 
@@ -241,5 +420,5 @@ export function analisarConteudo(texto, opts = {}) {
   const sinais = Object.entries(f)
     .filter(([, v]) => v)
     .map(([k, v]) => `${k}${v > 1 ? "×" + v : ""}`);
-  return { nota, grave, sinais, features: f };
+  return { nota, grave, sinais, features: f, dano: danoDe(f) };
 }

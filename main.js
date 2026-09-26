@@ -388,12 +388,10 @@ const CANONICO = {
   "boas-vindas": "boasvindas", welcome: "boasvindas", bemvindo: "boasvindas",
   goodbye: "adeus", despedida: "adeus", farewell: "adeus",
   clear: "limpar", purge: "limpar", limpiar: "limpar",
-  punição: "punicao",
   globalban: "banglobal",
   configuracoes: "config", configurações: "config",
   diagnostico: "debug", "diagnóstico": "debug",
   language: "idioma", lang: "idioma",
-  scam: "sentinela", antiscam: "sentinela", sentry: "sentinela", guard: "sentinela",
   ...aliases.COMANDO_EXTRA,
 };
 
@@ -403,8 +401,7 @@ estado.COMANDOS_SO_IA = COMANDOS_SO_IA;
 // Comandos que o admin pode ligar/desligar (nomes canônicos, sem os essenciais).
 const COMANDOS_GERENCIAVEIS = [
   "ping", "repete", "userinfo", "kick", "ban", "limpar",
-  "warnings", "clearwarnings", "warn", "acesso", "automod", "whitelist", "blocklist",
-  "sentinela", "punicao", "tutorial", "assistente", "cor", "log", "banglobal", "embed", "reactionrole", "chat", "rss", "xp", "game", "autorole",
+  "warn", "acesso", "automod", "tutorial", "assistente", "cor", "log", "banglobal", "embed", "reactionrole", "chat", "rss", "xp", "game", "autorole",
   "staff", "boasvindas", "adeus", "fuso", "tts", "musica", "webhook", "rolar", "iniciativa", "ticket",
 ];
 // exportado via ctx para o comando &comando consultar

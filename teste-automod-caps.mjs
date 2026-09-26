@@ -69,7 +69,7 @@ console.log("\n── unicode NFD ──");
     "★ zalgo de verdade continua detectado mesmo após NFC");
 }
 
-console.log("\n── &punicao aponta o comando certo ──");
+console.log("\n── &automod punicao aponta o comando certo ──");
 {
   const { cmdPunicao } = await import("./modulos/moderacao/automod-comandos.js");
   const respostas = [];
@@ -86,13 +86,13 @@ console.log("\n── &punicao aponta o comando certo ──");
   const ult = () => `${respostas.at(-1)?.title ?? ""} ${respostas.at(-1)?.description ?? ""}`;
 
   await cmdPunicao(msg, ["test", "testando"], ctx);
-  ok(ult().includes("&sentinela test testando"),
+  ok(ult().includes("&automod sentinela test testando"),
     "★ `&punicao test testando` devolve o comando certo, já com o texto digitado");
   ok(!ult().includes("punicao status para ver"), "  → em vez de mandar reler o status");
 
   respostas.length = 0;
   await cmdPunicao(msg, ["simulate", "ganhe dinheiro"], ctx);
-  ok(ult().includes("&sentinela simulate ganhe dinheiro"), "o mesmo vale para `simulate`");
+  ok(ult().includes("&automod sentinela simulate ganhe dinheiro"), "o mesmo vale para `simulate`");
 
   respostas.length = 0;
   await cmdPunicao(msg, ["warn", "@alguem", "spam"], ctx);

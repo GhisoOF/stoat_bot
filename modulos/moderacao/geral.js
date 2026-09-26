@@ -1,5 +1,5 @@
 import { servidorPermitido as temIA } from "../ai/chat.js";
-import { arvoreSubtopicos, SUBTOPICOS_SO_IA } from "./help-arvore.js";
+import { arvoreSubtopicos, SUBTOPICOS_SO_IA, ligarFamilias, mesclarNos } from "./help-arvore.js";
 import { nomeExibido, exibirTitulo } from "../core/aliases.js";
 import { grupos as gruposHelp, ALIAS_GRUPO, ORDEM as ORDEM_GRUPOS } from "./help-grupos.js";
 import { secaoParametros } from "./help-parametros.js";
@@ -116,7 +116,7 @@ function detalhesPT(P) {
     },
     warn: {
       uso: `${P}warn <@pessoa|id|nome> [motivo]`,
-      desc: "Dá um aviso manual a alguém. Usa o **mesmo contador** do automod, então no modo `acumular` o aviso manual conta para o ban automático — e o bot avisa quantos faltam.\n\nVer os avisos: `&warnings @pessoa` · Zerar: `&clearwarnings @pessoa`",
+      desc: "Dá um aviso manual a alguém. Usa o **mesmo contador** do automod, então no modo `acumular` o aviso manual conta para o ban automático — e o bot avisa quantos faltam.\n\nVer os avisos: `&warn lista @pessoa` · Zerar: `&warn limpar @pessoa`",
       perm: "KickMembers",
       ex: `${P}warn @Fulano flood no chat de arte`,
     },
@@ -132,34 +132,10 @@ function detalhesPT(P) {
       perm: "ManagePermissions",
       ex: `${P}acesso canal somente`,
     },
-    warnings: {
-      uso: `${P}warn lista [@usuário]`,
-      desc: "Mostra quantos avisos (0 a 3) o usuário acumulou no AutoMod. 3 avisos = ban.",
-    },
-    clearwarnings: {
-      uso: `${P}warn limpar @usuário`,
-      desc: "Zera os avisos acumulados de um usuário.",
-      perm: "ManagePermissions",
-    },
     automod: {
       uso: `${P}automod [status] | ${P}automod <módulo> <on|off> | ${P}automod <blocklist|whitelist|sentinela|punicao> …`,
       desc: "Raiz da família de moderação automática: liga/desliga cada módulo e dá acesso a blocklist, whitelist, sentinela e punicao — que também continuam valendo soltos. Filtros: antispam, antimassspam, antiduplicata (a MESMA mensagem repetida), antiinvite, antimassmention, anticaps, antilink, anticaracteres, antirepeticao e o `sentinela` (o antigo antiscam, que agora julga conteúdo em geral).",
       perm: "ManagePermissions", ex: `${P}automod antilink on`,
-    },
-    whitelist: {
-      uso: `${P}automod whitelist <add|remove|list> [convite]`,
-      desc: "Lista de convites do servidor liberados do anti-invite. Aceita o link completo ou só o código.",
-      perm: "ManagePermissions", ex: `${P}automod whitelist add https://stt.gg/abc123`,
-    },
-    blocklist: {
-      uso: `${P}automod blocklist <add|adddomain|remove|removedomain|list|clear|reload> [url|domínio]`,
-      desc: "Gerencia o anti-link. `add <url>` importa listas estilo Pi-hole; `adddomain <domínio>` bloqueia um domínio único.",
-      perm: "ManagePermissions", ex: `${P}automod blocklist adddomain site-ruim.com`,
-    },
-    sentinela: {
-      uso: `${P}automod sentinela <config|sensitivity|antiguidade|alerta|channel|test|simulate|ban|dismiss>`,
-      desc: `O único módulo que **julga** em vez de medir: dá ao conteúdo uma nota de suspeita (0–10) cobrindo golpe, +18, gore, apologia a ilícito e abuso numa categoria só.\n\nComo julga, ele se adapta a quem escreve:\n**\`antiguidade on\`** — o limiar acompanha o nível de XP do membro. Conta recém-chegada é olhada de perto; quem conversa aqui há semanas ganha margem. Uma frase que soa a golpe vinda de alguém que acabou de entrar é bem mais provável de ser golpe.\n**\`alerta on\`** — marca a staff quando alguém levanta suspeita **repetidas vezes** em pouco tempo, mesmo sem chegar ao limiar de punição. Sinal isolado é ruído; padrão merece olho humano.\n\n\`${P}automod sentinela test <texto>\` mostra a nota que aquele texto tiraria; \`${P}automod sentinela simulate <texto>\` dispara o fluxo real no canal de avisos.\n\n_O que **acontece** com quem passa do limiar é decidido no \`${P}automod punicao\` — ele vale para todos os automods de uma vez, e não tem \`test\` próprio._\n\n_Chamava-se \`${P}automod sentinela\`, e esse nome continua funcionando._`,
-      perm: "ManagePermissions", ex: `${P}automod sentinela test ganhe dinheiro fácil chama no pv`,
     },
     banglobal: {
       uso: `${P}banglobal <off|avisar|banir|lista|revisar|varrer|isentar|desfazer|historico|esquecer>`,
@@ -213,9 +189,19 @@ function detalhesPT(P) {
       desc: "Música nas calls — **YouTube, SoundCloud e Spotify**, com fila por canal.\n\n**O básico:**\n`&entrar` — dentro da call (a mesma do TTS)\n`&musica <link ou nome>` — toca; com som rolando, entra na fila\n`&musica pausar` · `&musica play` — pausa e retoma\n`&musica skip` — próxima · `&musica fila` — a lista atual\n`&musica parar` — para e limpa a fila · `&sair` — ela sai da call\n\n**Ajustes:** `&musica volume 80` (0 a 200%) · `&musica loop faixa|fila|nao`\n\n**Fontes:** link ou playlist do YouTube/SoundCloud, busca por texto, e faixa do Spotify (sem chave). Playlist/álbum do Spotify pede `SPOTIFY_ID`/`SPOTIFY_SECRET` no `.env` de quem hospeda o bot.\n\n**Com o TTS na mesma call:** a música **abaixa sozinha** enquanto a fala sai e volta ao volume normal depois (ducking).\n\n_Aliases: `&m` · `&play` · `&tocar`._",
       perm: "todo mundo", ex: `${P}musica tocar never gonna give you up`,
     },
+    entrar: {
+      uso: `${P}entrar`,
+      desc: "Traz a Judy para a call e ela passa a falar **tudo que for escrito ali**. Lá dentro, **o leitor (TTS) e a música usam a mesma conexão**: dá para mandar `&musica` e ela continua lendo o chat.\n\n**Como ela escolhe a call**\n1. o canal onde você digitou, se for uma call _(o caso normal)_\n2. a que já estiver configurada\n3. a única call do servidor, se houver só uma\n\nHavendo mais de uma e nenhuma pista, ela **pergunta** em vez de chutar. Estando em outra call, sai de lá e vem para a sua.\n\nVale para **todo mundo**, não só para a equipe. Ajustes da fala: `&help tts`.",
+      ex: `${P}entrar`,
+    },
+    sair: {
+      uso: `${P}sair`,
+      desc: "Tira a Judy da call: para de ler o chat e para a música.",
+      ex: `${P}sair`,
+    },
     tts: {
-      uso: `${P}tts <texto> | [entrar|sair|estado|filtro|dicionario|voz|efeito|tom|nomes|cooldown|reiniciar]`,
-      desc: "A Judy **fala nas calls**. Alguém escreve, ela lê em voz alta.\n\n**Na prática são dois comandos:**\n`&tts entrar` — dentro da call. Ela entra e passa a falar **tudo que for escrito ali** (estando em outra call, ela vem para a sua)\n`&tts sair` — sai e para de ler\n\nO `entrar` liga o sistema, escolhe a call e liga a leitura sozinho — antes isso eram quatro comandos na ordem certa.\n\n`&tts <texto>` — falar uma frase específica · `&tts estado` — está tudo de pé?\n_Estes valem para **todo mundo**, não só para a equipe._\n\n**Ajustes** _(ver é livre; mudar é ManageMessages)_\n`&tts nomes off` — para de anunciar \"Fulano disse:\"\n`&tts cooldown <s>` — freio entre falas da mesma pessoa (0 desliga)\n`&tts filtro` — a **peneira**: ignora repetição, parede de texto e barulho, e limita as falas por minuto no canal _(`&help tts filtro`)_\n\n**Quando algo trava**\n`&tts reiniciar` — destrava o serviço de voz sem ir ao terminal _(ManageMessages)_. Depois de `&tts sair`, a transmissão **não** traz a Judy de volta: só `&tts entrar`. _(`&help tts problemas`)_\n\n**Dicionário** — a escrita de chat vira fala compreensível\n`vc n vai vir hj pq?` sai como `você não vai vir hoje porque?`\n`&tts dicionario` — vê o que está valendo\n`&tts dicionario add <abrev> <texto>` — entrada própria do servidor\n`&tts dicionario padrao off` — desliga as 114 abreviações embutidas\n\n**Voz e timbre**\n`&tts voz [nome]` — troca a voz do Piper (faber masculina, dii feminina)\n`&tts efeito [nome]` — `feminina`, `sedutora`, `suave`, `glados`, `robo`, `radio`…\n`&tts tom <n>` — altura da voz, **separada** do efeito (1.0 = original)\n_Sobe tom **e formantes** juntos: voz masculina vira feminina de verdade. Se a voz base já é feminina, mexa pouco — acima de 1.05 soa infantil._\n_Os efeitos mudam só o **caráter** e não tocam no tom, então soam igual sobre qualquer voz._\n_Não existe voz GLaDOS em português; o efeito recria o **processamento** dela sobre a voz que você já usa._\n\n_Dentro dos canais de voz configurados, o `&tts` funciona para **todos**, mesmo com restrição de canal ligada._\n_A síntese é **offline**, no computador do dono (Piper)._",
+      uso: `${P}tts <texto> | [estado|filtro|dicionario|voz|efeito|tom|nomes|cooldown|reiniciar]`,
+      desc: "A Judy **fala nas calls**. Alguém escreve, ela lê em voz alta.\n\n**Entrar e sair é com** `&entrar` **e** `&sair` — dentro da call, ela entra e passa a falar **tudo que for escrito ali** (estando em outra call, ela vem para a sua)\n\nO `entrar` liga o sistema, escolhe a call e liga a leitura sozinho — antes isso eram quatro comandos na ordem certa.\n\n`&tts <texto>` — falar uma frase específica · `&tts estado` — está tudo de pé?\n_Estes valem para **todo mundo**, não só para a equipe._\n\n**Ajustes** _(ver é livre; mudar é ManageMessages)_\n`&tts nomes off` — para de anunciar \"Fulano disse:\"\n`&tts cooldown <s>` — freio entre falas da mesma pessoa (0 desliga)\n`&tts filtro` — a **peneira**: ignora repetição, parede de texto e barulho, e limita as falas por minuto no canal _(`&help tts filtro`)_\n\n**Quando algo trava**\n`&tts reiniciar` — destrava o serviço de voz sem ir ao terminal _(ManageMessages)_. Depois de `&sair`, a transmissão **não** traz a Judy de volta: só `&entrar`. _(`&help tts problemas`)_\n\n**Dicionário** — a escrita de chat vira fala compreensível\n`vc n vai vir hj pq?` sai como `você não vai vir hoje porque?`\n`&tts dicionario` — vê o que está valendo\n`&tts dicionario add <abrev> <texto>` — entrada própria do servidor\n`&tts dicionario padrao off` — desliga as 114 abreviações embutidas\n\n**Voz e timbre**\n`&tts voz [nome]` — troca a voz do Piper (faber masculina, dii feminina)\n`&tts efeito [nome]` — `feminina`, `sedutora`, `suave`, `glados`, `robo`, `radio`…\n`&tts tom <n>` — altura da voz, **separada** do efeito (1.0 = original)\n_Sobe tom **e formantes** juntos: voz masculina vira feminina de verdade. Se a voz base já é feminina, mexa pouco — acima de 1.05 soa infantil._\n_Os efeitos mudam só o **caráter** e não tocam no tom, então soam igual sobre qualquer voz._\n_Não existe voz GLaDOS em português; o efeito recria o **processamento** dela sobre a voz que você já usa._\n\n_Dentro dos canais de voz configurados, o `&tts` funciona para **todos**, mesmo com restrição de canal ligada._\n_A síntese é **offline**, no computador do dono (Piper)._",
       perm: "ManageMessages (só para configurar)", ex: `${P}entrar`,
     },
     fuso: {
@@ -300,11 +286,6 @@ function detalhesPT(P) {
       desc: "Chat de logs do servidor. `here` usa o canal atual; `<idDoCanal>` define por ID; `off` desativa. Eventos: `punicoes`, `membros`, `mensagens`, `cargos`, `comandos` — cada um pode ser ligado/desligado.",
       perm: "ManagePermissions", ex: `${P}log here`,
     },
-    punicao: {
-      uso: `${P}automod punicao <modo|warns|silencerole>`,
-      desc: "Nível de agressividade da punição para TODOS os automods. `modo avisar` (só avisa) | `confirmar` (remove+silencia+espera mod) | `acumular` (avisos até banir) | `banir` (ban imediato). `warns <n>` define quantos avisos até o ban; `silencerole <id>` define o cargo de silêncio.",
-      perm: "ManagePermissions", ex: `${P}automod punicao modo acumular`,
-    },
     review: {
       uso: `${P}automod sentinela ban <userId> | ${P}automod sentinela dismiss <userId>`,
       desc: "No modo confirmação, confirma o banimento ou libera o usuário sinalizado.",
@@ -363,7 +344,7 @@ function detalhesEN(P) {
     },
     warn: {
       uso: `${P}warn <@user|id|name> [reason]`,
-      desc: "Gives someone a manual warning. It uses the **same counter** as the automod, so in `acumular` (accumulate) mode a manual warning counts towards the automatic ban — and the bot tells you how many are left.\n\nSee warnings: `&warnings @user` · Reset: `&clearwarnings @user`",
+      desc: "Gives someone a manual warning. It uses the **same counter** as the automod, so in `acumular` (accumulate) mode a manual warning counts towards the automatic ban — and the bot tells you how many are left.\n\nSee warnings: `&warn lista @user` · Reset: `&warn limpar @user`",
       perm: "KickMembers",
       ex: `${P}warn @Someone flooding the art channel`,
     },
@@ -379,34 +360,10 @@ function detalhesEN(P) {
       perm: "ManagePermissions",
       ex: `${P}acesso canal somente`,
     },
-    warnings: {
-      uso: `${P}warn lista [@user]`,
-      desc: "Shows how many warnings (0 to 3) the user has accumulated in the AutoMod. 3 warnings = ban.",
-    },
-    clearwarnings: {
-      uso: `${P}warn limpar @user`,
-      desc: "Resets a user's accumulated warnings.",
-      perm: "ManagePermissions",
-    },
     automod: {
       uso: `${P}automod status | ${P}automod <module> <on|off>`,
       desc: "Turns each AutoMod module on/off and shows the overall state. Filters: antispam, antimassspam, antiinvite, antimassmention, anticaps, antilink, anticaracteres, antirepeticao and `sentinela` (the former antiscam, which now judges content in general).",
       perm: "ManagePermissions", ex: `${P}automod antilink on`,
-    },
-    whitelist: {
-      uso: `${P}automod whitelist <add|remove|list> [invite]`,
-      desc: "List of this server's invites exempt from the anti-invite. Accepts the full link or just the code.",
-      perm: "ManagePermissions", ex: `${P}automod whitelist add https://stt.gg/abc123`,
-    },
-    blocklist: {
-      uso: `${P}automod blocklist <add|adddomain|remove|removedomain|list|clear|reload> [url|domain]`,
-      desc: "Manages the anti-link. `add <url>` imports Pi-hole-style lists; `adddomain <domain>` blocks a single domain.",
-      perm: "ManagePermissions", ex: `${P}automod blocklist adddomain bad-site.com`,
-    },
-    sentinela: {
-      uso: `${P}automod sentinela <config|sensitivity|antiguidade|alerta|channel|test|simulate|ban|dismiss>`,
-      desc: `The only module that **judges** instead of measuring: it scores content for suspicion (0–10), covering scams, NSFW, gore, glorifying crime and abuse in a single category.\n\nBecause it judges, it adapts to who is writing:\n**\`antiguidade on\`** — the threshold follows the member's XP level. A brand new account gets a closer look; someone who has been talking here for weeks gets slack. A scammy-sounding line from someone who just arrived is far more likely to actually be a scam.\n**\`alerta on\`** — pings the staff when someone raises suspicion **repeatedly** in a short window, even below the punishment threshold. One signal is noise; a pattern deserves human eyes.\n\n\`${P}automod sentinela test <text>\` shows the score that text would get; \`${P}automod sentinela simulate <text>\` fires the real flow in the alerts channel.\n\n_What **happens** to whoever crosses the threshold is decided in \`${P}automod punicao\` — it applies to every automod at once, and has no \`test\` of its own._\n\n_It used to be \`${P}automod sentinela\`, and that name still works._`,
-      perm: "ManagePermissions", ex: `${P}automod sentinela test easy money DM me now`,
     },
     banglobal: {
       uso: `${P}banglobal <off|avisar|banir|lista|revisar|varrer|isentar|desfazer|historico|esquecer>`,
@@ -460,9 +417,19 @@ function detalhesEN(P) {
       desc: "Music in calls — **YouTube, SoundCloud and Spotify**, with a per-channel queue.\n\n**The basics:**\n`&entrar` — inside the call (the same one as TTS)\n`&musica <link or name>` — plays; if something is on, it queues\n`&musica pausar` · `&musica play` — pause and resume\n`&musica skip` — next · `&musica fila` — current queue\n`&musica parar` — stop and clear · `&sair` — she leaves the call\n\n**Tuning:** `&musica volume 80` (0 to 200%) · `&musica loop faixa|fila|nao`\n\n**Sources:** YouTube/SoundCloud link or playlist, free-text search, and Spotify tracks (keyless). Spotify playlists/albums need `SPOTIFY_ID`/`SPOTIFY_SECRET` in the host's `.env`.\n\n**With TTS in the same call:** the music **ducks automatically** while speech plays and comes back after.\n\n_Aliases: `&m` · `&play` · `&tocar`._",
       perm: "everyone", ex: `${P}musica tocar never gonna give you up`,
     },
+    entrar: {
+      uso: `${P}entrar`,
+      desc: "Brings Judy into the call and she starts speaking **everything written there**. Inside, **the reader (TTS) and the music share the same connection**: `&musica` works while she keeps reading the chat.\n\n**How she picks the call**\n1. the channel you typed in, if it's a call _(the usual case)_\n2. the one already configured\n3. the server's only call, if there's just one\n\nWith more than one and no clue, she **asks** instead of guessing. If she's in another call, she leaves it and comes to yours.\n\nWorks for **everyone**, not just staff. Voice settings: `&help tts`.",
+      ex: `${P}entrar`,
+    },
+    sair: {
+      uso: `${P}sair`,
+      desc: "Takes Judy out of the call: she stops reading the chat and stops the music.",
+      ex: `${P}sair`,
+    },
     tts: {
       uso: `${P}tts <text> | [canal|transmitir|entrar|sair|filtro|reiniciar|voz|estado|on|off]`,
-      desc: "Judy **speaks in calls**. Someone writes, she reads it aloud in the voice channel.\n\n`&tts <text>` — speak now\n`&tts entrar` · `&tts sair` — call or dismiss Judy\n`&tts estado` — diagnostics for the whole chain\n_These three are open to **everyone**._\n\n**Broadcast mode** — no extra command\n`&tts entrar` already makes **everything** written in that channel become speech; `&tts sair` stops it.\n\n**Adjustments** _(viewing is open; changing needs ManageMessages)_\n`&tts nomes off` — stops announcing \"Someone said:\"\n`&tts cooldown <s>` — brake between one person's utterances (0 disables)\n`&tts filtro` — the **sieve**: skips repetition, walls of text and noise, and caps utterances per minute _(`&help tts filtro`)_\n\n**When something jams**\n`&tts reiniciar` — unsticks the voice service without a terminal _(ManageMessages)_. After `&tts sair`, the broadcast will **not** bring Judy back: only `&tts entrar`. _(`&help tts problemas`)_\n\n**Voice and timbre**\n`&tts voz [name]` — switch the Piper voice\n`&tts efeito [name]` — `feminina`, `sedutora`, `suave`, `glados`, `robo`, `radio`…\n`&tts tom <n>` — pitch, **separate** from the effect (1.0 = original)\n`&tts dicionario` — how chat shorthand is spoken (`vc` → `você`); `add`/`remove`/`teste`/`padrao on|off`\n_There is no GLaDOS voice in Portuguese; the effect recreates her **processing** over the voice you already use._\n\n_Inside the configured voice channels, `&tts` works for **everyone**, even with channel restriction on._\n_Synthesis runs **offline** on the owner's machine (Piper)._",
+      desc: "Judy **speaks in calls**. Someone writes, she reads it aloud in the voice channel.\n\n`&tts <text>` — speak now\n`&entrar` · `&sair` — call or dismiss Judy\n`&tts estado` — diagnostics for the whole chain\n_These three are open to **everyone**._\n\n**Broadcast mode** — no extra command\n`&entrar` already makes **everything** written in that channel become speech; `&sair` stops it.\n\n**Adjustments** _(viewing is open; changing needs ManageMessages)_\n`&tts nomes off` — stops announcing \"Someone said:\"\n`&tts cooldown <s>` — brake between one person's utterances (0 disables)\n`&tts filtro` — the **sieve**: skips repetition, walls of text and noise, and caps utterances per minute _(`&help tts filtro`)_\n\n**When something jams**\n`&tts reiniciar` — unsticks the voice service without a terminal _(ManageMessages)_. After `&sair`, the broadcast will **not** bring Judy back: only `&entrar`. _(`&help tts problemas`)_\n\n**Voice and timbre**\n`&tts voz [name]` — switch the Piper voice\n`&tts efeito [name]` — `feminina`, `sedutora`, `suave`, `glados`, `robo`, `radio`…\n`&tts tom <n>` — pitch, **separate** from the effect (1.0 = original)\n`&tts dicionario` — how chat shorthand is spoken (`vc` → `você`); `add`/`remove`/`teste`/`padrao on|off`\n_There is no GLaDOS voice in Portuguese; the effect recreates her **processing** over the voice you already use._\n\n_Inside the configured voice channels, `&tts` works for **everyone**, even with channel restriction on._\n_Synthesis runs **offline** on the owner's machine (Piper)._",
       perm: "ManageMessages (configuration only)", ex: `${P}entrar`,
     },
     fuso: {
@@ -546,11 +513,6 @@ function detalhesEN(P) {
       uso: `${P}log [here | <channelId> | off | <event> <on|off>]`,
       desc: "The server's log channel. `here` uses the current channel; `<channelId>` sets it by ID; `off` disables it. Events: `punicoes`, `membros`, `mensagens`, `cargos`, `comandos` — each can be toggled.",
       perm: "ManagePermissions", ex: `${P}log here`,
-    },
-    punicao: {
-      uso: `${P}automod punicao <modo|warns|silencerole>`,
-      desc: "Punishment aggressiveness for ALL automods. `modo avisar` (warn only) | `confirmar` (remove+silence+wait for a mod) | `acumular` (warnings until ban) | `banir` (instant ban). `warns <n>` sets how many warnings until the ban; `silencerole <id>` sets the silence role.",
-      perm: "ManagePermissions", ex: `${P}automod punicao modo acumular`,
     },
     review: {
       uso: `${P}automod sentinela ban <userId> | ${P}automod sentinela dismiss <userId>`,
@@ -753,12 +715,16 @@ export async function cmdHelp(message, args, ctx) {
     const base = construirSubtopicos(P, lang);
     const extra = arvoreSubtopicos(P, lang);
     const fundido = { ...extra };
+    // Fusão em PROFUNDIDADE: as duas árvores podem ter o mesmo assunto com
+    // pedaços diferentes (ex.: `automod.punicao` existe nas duas).
     for (const [cmd, subs] of Object.entries(base)) {
-      fundido[cmd] = { ...(extra[cmd] ?? {}), ...subs };
+      fundido[cmd] = mesclarNos(extra[cmd], subs);
     }
     // Sem IA no servidor, os subtópicos de IA não existem — nem para listar.
     if (!comIA) for (const cmd of SUBTOPICOS_SO_IA) delete fundido[cmd];
-    return fundido;
+    // A fusão acima recria no topo o que a árvore de geral.js tinha solto
+    // (`punicao.escada`, por exemplo). Religa tudo dentro das famílias.
+    return ligarFamilias(fundido);
   })();
 
   const alvo = args[0]?.toLowerCase();
@@ -820,7 +786,7 @@ export async function cmdHelp(message, args, ctx) {
 
     return enviarPaginado(ctx, message.channel, {
       paginas: paginarLinhas([...corpo, ...rodape], {
-        titulo: `📖 ${lang === "en" ? "Help" : "Ajuda"} — ${P}${exibirTitulo(no.titulo ?? trilha.join(" "), lang, P, ctx.estado?.CANONICO)}`,
+        titulo: `📖 ${lang === "en" ? "Help" : "Ajuda"} — ${P}${trilha.join(" ")}`,
       }),
       autorId: message.authorId,
       colour: COR.info,
@@ -906,9 +872,10 @@ export async function cmdHelp(message, args, ctx) {
   // &help <comando> (detalhe individual) — agora com a seção de parâmetros
   if (alvo && DETALHES[alvo]) {
     const d = DETALHES[alvo];
-    const temSub = SUBTOPICOS[alvo]
+    const filhosReais = filhosDe(SUBTOPICOS[alvo]);
+    const temSub = filhosReais.length
       ? `\n\n**${lang === "en" ? "Subtopics" : "Subtópicos"}** ${lang === "en" ? "_(details on each part)_" : "_(o detalhe de cada parte)_"}\n`
-        + Object.keys(SUBTOPICOS[alvo]).map((k) => `\`${P}help ${alvo} ${k}\``).join(" · ")
+        + filhosReais.map((k) => `\`${P}help ${alvo} ${k}\``).join(" · ")
       : "";
     const params = secaoParametros(P, lang, alvo);
     const cabecalho = [

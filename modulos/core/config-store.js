@@ -34,7 +34,8 @@ export const padraoServidor = {
     criterios: "",             // texto livre: o que a Judy deve moderar
     canais:    [],             // canais onde vigia ([] = todos os permitidos)
   },
-  inviteWhitelist:      [],
+  inviteWhitelist:      [],   // códigos de convite do Stoat (anti-invite)
+  dominiosPermitidos:   [],   // domínios que o anti-link nunca bloqueia
   // ── Chat de logs (configurável com &log) ──
   log: {
     canalId: null,            // null = desativado
@@ -136,6 +137,31 @@ function mesclarServidor(salvo, tpl) {
 }
 
 // Config de um servidor (cache → banco → template)
+// A `&automod whitelist` guardava TUDO como código de convite. Um link comum
+// (`https://linksta.cc/@x`) ia parar ali e não servia para nada: quem bloqueia
+// link comum é o anti-link, que nunca olhou essa lista. Aqui, o que parece
+// endereço sai da lista de convites e vira domínio permitido.
+function hostDe(valor) {
+  const v = String(valor ?? "").trim().toLowerCase();
+  if (!/[./]/.test(v)) return null;                       // código de convite puro
+  const host = v.replace(/^https?:\/\//, "").split(/[/?#]/)[0].replace(/^www\./, "");
+  return /^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(host) ? host : null;
+}
+export { hostDe };
+
+function migrarWhitelist(cfg) {
+  cfg.dominiosPermitidos ??= [];
+  let mudou = false;
+  cfg.inviteWhitelist = (cfg.inviteWhitelist ?? []).filter((item) => {
+    const host = hostDe(item);
+    if (!host || host === "stt.gg") return true;          // convite do Stoat: fica
+    if (!cfg.dominiosPermitidos.includes(host)) cfg.dominiosPermitidos.push(host);
+    mudou = true;
+    return false;
+  });
+  return mudou;
+}
+
 export function configDoServidor(serverId) {
   if (!serverId) return structuredClone(templateServidor);
   if (cacheConfig.has(serverId)) return cacheConfig.get(serverId);
@@ -146,6 +172,7 @@ export function configDoServidor(serverId) {
     console.info(`[CONFIG] Novo servidor ${serverId} — config criada do padrão.`);
   } else {
     cfg = mesclarServidor(cfg, templateServidor);
+    if (migrarWhitelist(cfg)) db.gravarConfig(serverId, cfg);
   }
   cacheConfig.set(serverId, cfg);
   return cfg;

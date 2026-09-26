@@ -4,7 +4,49 @@ export const IA_TAG = "\u200b[ia]";
 
 // Monta a árvore completa. `P` é o prefixo do bot.
 export function arvoreSubtopicos(P, lang = "pt") {
-  return comFamilias(lang === "en" ? arvoreEN(P) : arvorePT(P), P, lang);
+  return ligarFamilias(comFamilias(lang === "en" ? arvoreEN(P) : arvorePT(P), P, lang));
+}
+
+// Quem mora dentro de quem. Estes comandos NÃO existem soltos: a ajuda deles
+// só se alcança pela raiz (`&help automod blocklist`).
+export const FAMILIAS = {
+  automod: ["blocklist", "whitelist", "sentinela", "punicao"],
+};
+
+// Move cada filho para dentro da sua raiz, MESCLANDO com o que já estiver lá.
+//
+// A mescla importa: a ajuda vem de duas árvores (esta e a de geral.js), e o
+// mesmo assunto pode ter um pedaço em cada — `punicao.escada` mora em
+// geral.js. Ligar só uma das origens deixava `&help automod punicao escada`
+// sem página. Idempotente: roda aqui e de novo depois da fusão.
+// Funde dois nós da ajuda em profundidade. Quando os dois têm texto, junta
+// os dois (não descarta um): `automod punicao` fala da punição global numa
+// árvore e da punição por filtro na outra, e as duas coisas existem.
+export function mesclarNos(a, b) {
+  if (!a) return b;
+  if (!b) return a;
+  const out = { ...a };
+  for (const [k, v] of Object.entries(b)) {
+    if (k === "titulo") { out.titulo = a.titulo ?? v; continue; }
+    if (k === "texto") {
+      out.texto = a.texto && a.texto !== v ? `${a.texto}\n\n${v}` : (a.texto ?? v);
+      continue;
+    }
+    out[k] = (a[k] && typeof a[k] === "object" && v && typeof v === "object") ? mesclarNos(a[k], v) : v;
+  }
+  return out;
+}
+
+export function ligarFamilias(arvore) {
+  for (const [raiz, filhos] of Object.entries(FAMILIAS)) {
+    if (!arvore[raiz]) continue;
+    for (const filho of filhos) {
+      if (!arvore[filho]) continue;
+      arvore[raiz][filho] = mesclarNos(arvore[filho], arvore[raiz][filho]);
+      delete arvore[filho];
+    }
+  }
+  return arvore;
 }
 
 // Liga os comandos que viraram FAMÍLIA aos assuntos que já existem na árvore.
@@ -48,48 +90,27 @@ function comFamilias(arvore, P, lang) {
     en ? "**Inside the family**" : "**Dentro da família**",
     `\`${P}automod blocklist\` · \`${P}automod whitelist\` · \`${P}automod sentinela\` · \`${P}automod punicao\``,
 
-  ].join("\n"), {
-    blocklist: arvore.blocklist,
-    whitelist: arvore.whitelist,
-    sentinela: arvore.sentinela,
-    punicao:   arvore.punicao,
-  });
-
-  ramo("automod whitelist", "automod whitelist", [
-    en
-      ? "Domains and invite codes that pass even when a module would block them."
-      : "Domínios e códigos de convite que passam mesmo quando um módulo bloquearia.",
-    "",
-    `\`${P}automod whitelist\` — ` + (en ? "see the list" : "vê a lista"),
-    `\`${P}automod whitelist add <código>\` · \`${P}automod whitelist remove <código>\``,
   ].join("\n"), {});
-  arvore.automod.whitelist = arvore["automod whitelist"];
+
+  ramo("automod whitelist", "whitelist", [
+    en
+      ? "What always passes, even when a filter would block it. Paste a link and the bot figures out which list it belongs to:"
+      : "O que sempre passa, mesmo quando um filtro bloquearia. Cole o link e o bot descobre em que lista ele entra:",
+    en
+      ? "• **a site** (`https://linksta.cc/@you`) → the domain is allowed in **anti-link**, subdomains included"
+      : "• **um site** (`https://linksta.cc/@voce`) → o domínio fica liberado no **anti-link**, com os subdomínios",
+    en
+      ? "• **a Stoat invite** (`stt.gg/abc`) → the invite is allowed in **anti-invite**"
+      : "• **um convite do Stoat** (`stt.gg/abc`) → o convite fica liberado no **anti-invite**",
+    "",
+    `\`${P}automod whitelist add <link>\` · \`${P}automod whitelist remove <link>\` · \`${P}automod whitelist\` — ` + (en ? "see both lists" : "vê as duas listas"),
+    "",
+    en
+      ? "Staff (the server owner and the `&staff` roles) **never** goes through the automod — no need to whitelist your own links."
+      : "A staff (o dono do servidor e os cargos do `&staff`) **nunca** passa pelo automod — não é preciso liberar os próprios links.",
+  ].join("\n"), {});
+  arvore.whitelist = { ...(arvore.whitelist ?? {}), ...arvore["automod whitelist"] };
   delete arvore["automod whitelist"];
-
-  ramo("warn", "warn", [
-    en
-      ? "A warning is a note on someone's record. It's what the punishment ladder counts."
-      : "Um aviso é uma anotação na ficha de alguém. É o que a escada de punição conta.",
-    "",
-    `\`${P}warn @pessoa [motivo]\` — ` + (en ? "record a warning" : "registra um aviso"),
-    `\`${P}warn lista [@pessoa]\` — ` + (en ? "see the warnings" : "vê os avisos"),
-    `\`${P}warn limpar @pessoa\` — ` + (en ? "wipe that record" : "zera a ficha"),
-
-  ].join("\n"), {});
-
-  ramo("entrar", "entrar", [
-    en
-      ? "Brings the bot into a voice call. Once it's there, both the reader (TTS) and the music use the SAME connection."
-      : "Traz o bot para uma call. Uma vez lá dentro, o leitor (TTS) e a música usam a MESMA conexão.",
-    "",
-    `\`${P}entrar\` — ` + (en ? "join the call you're in" : "entra na call em que você está"),
-    `\`${P}sair\` — ` + (en ? "leave it" : "sai dela"),
-    "",
-    en ? "**What to do once inside**" : "**O que dá para fazer lá dentro**",
-    `\`${P}tts\` — ` + (en ? "read the chat out loud" : "ler o chat em voz alta"),
-    `\`${P}musica <link|nome>\` — ` + (en ? "play music" : "tocar música"),
-
-  ].join("\n"), {});
 
   return arvore;
 }
@@ -1194,35 +1215,6 @@ function arvorePT(P) {
     },
 
     tts: {
-      entrar: {
-        titulo: "entrar",
-        texto: [
-          "**O caminho curto**",
-          `\`${P}entrar\` (ou \`${P}entrar\`) — dentro da call. Eu entro e passo a falar **tudo que for escrito ali**. \`${P}sair\` desfaz.`,
-          "Já estando em outra call, eu **saio dela e venho para a sua** — chamar alguém que está em outro lugar é o pedido mais natural do mundo.",
-          `\`${P}sair\` — saio e paro de ler.`,
-          "",
-          "Só isso. O `entrar` liga o sistema, escolhe a call e liga a leitura de",
-          "uma vez; o `sair` desfaz os três. Antes eram quatro comandos, e na ordem",
-          "certa — errar a ordem dava um erro que falava de outro comando, e ninguém",
-          "que só queria a Judy lendo a call tinha por que aprender a sequência.",
-          "Por isso eles não existem mais separados.",
-          "",
-          "**Como eu descubro a call**",
-          "1. o canal onde você digitou, se for uma call _(o caso normal)_",
-          "2. a que já estiver configurada",
-          "3. a única call do servidor, se houver só uma",
-          "",
-          "Havendo mais de uma e nenhuma pista, eu **pergunto** em vez de chutar.",
-          "",
-          "**Ajustes da fala** _(mudar é ManageMessages; ver é livre)_",
-          `\`${P}tts dicionario\` — como a escrita de chat vira fala _(\`vc\` → \`você\`)_`,
-          `\`${P}tts voz\` · \`${P}tts efeito\` · \`${P}tts tom\` — timbre`,
-          `\`${P}tts nomes on|off\` — anunciar \"Fulano disse:\" · \`${P}tts cooldown <s>\` — freio por pessoa`,
-          "",
-          `_\`${P}tts <texto>\` continua falando uma frase avulsa, mesmo sem leitura ligada._`,
-        ].join("\n"),
-      },
       filtro: {
         titulo: "tts filtro",
         texto: [
@@ -2375,35 +2367,6 @@ function arvoreEN(P) {
     },
 
     tts: {
-      entrar: {
-        titulo: "entrar",
-        texto: [
-          "**The short path**",
-          `\`${P}entrar\` — inside the call. I join and start speaking **everything written there**.`,
-          "If I'm already in another call, I **leave it and come to yours** — calling someone who's elsewhere is the most natural request there is.",
-          `\`${P}sair\` — I leave and stop reading.`,
-          "",
-          "That's all. `entrar` turns the system on, picks the call and starts the",
-          "reading at once, and `sair` undoes all three. This used to be four",
-          "separate commands, in the right order — and getting the order",
-          "wrong produced an error about a different command, and nobody who just",
-          "wanted Judy reading the call had any reason to learn that sequence.",
-          "",
-          "**How I find the call**",
-          "1. the channel you typed in, if it's a call _(the normal case)_",
-          "2. whichever one is already configured",
-          "3. the server's only call, if there's just one",
-          "",
-          "With more than one and no clue, I **ask** instead of guessing.",
-          "",
-          "**Speech settings** _(changing needs ManageMessages; viewing is open)_",
-          `\`${P}tts dicionario\` — how chat shorthand is spoken _(\`vc\` → \`você\`)_`,
-          `\`${P}tts voz\` · \`${P}tts efeito\` · \`${P}tts tom\` — timbre`,
-          `\`${P}tts nomes on|off\` — announce \"So-and-so said:\" · \`${P}tts cooldown <s>\` — per-person brake`,
-          "",
-          `_\`${P}tts <text>\` still speaks a one-off line, even with reading turned off._`,
-        ].join("\n"),
-      },
       filtro: {
         titulo: "tts filtro",
         texto: [

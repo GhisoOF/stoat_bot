@@ -11,7 +11,7 @@ import {
   ConstrutorIndice, criarIndiceVazio, carregarCache, salvarCache,
 } from "./indice-dominios.js";
 
-export { criarIndiceVazio };   // usado pelo main (estado inicial) e pelo &blocklist clear
+export { criarIndiceVazio };   // usado pelo main (estado inicial) e pelo &automod blocklist clear
 
 const INVITE_REGEX = /https?:\/\/stt\.gg\/([A-Za-z0-9]+)/gi;
 
@@ -577,6 +577,17 @@ export async function runAutomod(message, ctx) {
 
   const canal = await resolverCanal(message, ctx);
 
+  // ── Quem modera não é moderado ──
+  // Dono do servidor, super admin e os cargos do `&staff`/`&acesso` (tudo que
+  // o membroTemPermissao reconhece como ManageMessages) passam direto. Antes
+  // ninguém era isento: o dono de um servidor foi silenciado por 2h no
+  // próprio servidor ao divulgar o próprio link. `isentarStaff: false` na
+  // config do automod desliga a isenção, para testar os filtros em si mesmo.
+  if (am.isentarStaff !== false && ctx.membroTemPermissao?.(message, server, "ManageMessages")) {
+    dbg(ctx, "  ✓ Autor é da staff (ou dono/super admin) — automod não se aplica");
+    return false;
+  }
+
   // ── Quantas vezes esta MESMA mensagem já veio deste autor ──
   // Fica aqui em cima porque o sentinela usa este número: uma mensagem
   // repetida pesa na nota dele, mesmo quando o texto em si é inofensivo.
@@ -670,10 +681,13 @@ export async function runAutomod(message, ctx) {
     dbg(ctx, `  [anti-link] domínios extraídos da mensagem: [${dominios.join(", ") || "nenhum"}]`);
 
     if (estado.blockedDomains.size === 0) {
-      dbg(ctx, "  [anti-link] ⚠️ lista VAZIA — adicione com %blocklist add <url> ou %blocklist adddomain <domínio>");
+      dbg(ctx, "  [anti-link] ⚠️ lista VAZIA — adicione com &automod blocklist add <url> ou &automod blocklist adddomain <domínio>");
     }
 
-    const bloqueado = dominios.find((d) => dominioBloqueado(d, estado.blockedDomains));
+    const permitidos = new Set(config.dominiosPermitidos ?? []);
+    // Permitido vence a lista (vale para o domínio e seus subdomínios).
+    const bloqueado = dominios.find((d) =>
+      !dominioBloqueado(d, permitidos) && dominioBloqueado(d, estado.blockedDomains));
     if (bloqueado) {
       dbg(ctx, `  ✗ BLOQUEADA por anti-link (domínio: ${bloqueado})`);
       try { await message.delete(); } catch (e) { dbg(ctx, `  (falha ao deletar: ${e.message})`); }

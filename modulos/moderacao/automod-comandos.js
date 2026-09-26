@@ -5,8 +5,9 @@ import { limparId } from "../core/ids.js";
 import * as log from "../core/log.js";
 import { analisarConteudo } from "./scorecard.js";
 import { tr, lingua } from "../core/i18n.js";
+import { hostDe } from "../core/config-store.js";
 
-// %warnings [@usuário]
+// &warn lista [@usuário]  (chega aqui por warn.js)
 export async function cmdWarnings(message, args, ctx) {
   const { config, sendEmbed, COR, serverId } = ctx;
   const lang = lingua(ctx);
@@ -27,7 +28,7 @@ export async function cmdWarnings(message, args, ctx) {
   });
 }
 
-// %clearwarnings @usuário   (ManagePermissions)
+// &warn limpar @usuário   (ManagePermissions; chega aqui por warn.js)
 export async function cmdClearwarnings(message, args, ctx) {
   const { estado, sendEmbed, COR, getServer, membroTemPermissao, PREFIXO } = ctx;
   const server = await getServer(message);
@@ -273,55 +274,72 @@ export async function cmdAutomod(message, args, ctx) {
       description: `**${sub}** was **${novoEstado === "on" ? "enabled 🟢" : "disabled 🔴"}**.`, colour: COR.mod }));
 }
 
-// %whitelist <add|remove|list> [convite]   (ManagePermissions)
+// &automod whitelist <add|remove|list> [link|convite]   (ManagePermissions)
 export async function cmdWhitelist(message, args, ctx) {
   const { config, sendEmbed, COR, getServer, membroTemPermissao, salvarConfig, PREFIXO } = ctx;
   const server = await getServer(message);
   if (!membroTemPermissao(message, server, "ManagePermissions"))
     return negarPermissao(ctx, message.channel, "ManagePermissions");
 
+  // Uma lista só para quem usa, dois destinos por dentro:
+  //   • convite do Stoat (stt.gg/abc, ou só "abc")  → anti-invite
+  //   • qualquer outro link ou domínio             → anti-link
+  // Antes tudo ia para a lista de convites, e liberar um link comum não
+  // surtia efeito nenhum: quem bloqueia link comum é o anti-link.
+  config.inviteWhitelist ??= [];
+  config.dominiosPermitidos ??= [];
   const sub = args[0]?.toLowerCase();
-  const raw = args[1] ?? "";
-  const codigo = (raw.match(/stt\.gg\/([A-Za-z0-9]+)/)?.[1] ?? raw).toLowerCase();
+  const raw = (args[1] ?? "").trim();
+  const convite = raw.match(/stt\.gg\/([A-Za-z0-9]+)/i)?.[1]?.toLowerCase()
+    ?? (/^[A-Za-z0-9]+$/.test(raw) ? raw.toLowerCase() : null);
+  const dominio = convite ? null : hostDe(raw);
+  const en = lingua(ctx) === "en";
+  const erroUso = () => sendEmbed(message.channel, {
+    title: en ? "❌ Wrong usage" : "❌ Uso incorreto",
+    description: en
+      ? `\`${PREFIXO}automod whitelist add <link|domain|invite>\` · \`remove\` · \`list\``
+      : `\`${PREFIXO}automod whitelist add <link|domínio|convite>\` · \`remove\` · \`list\``,
+    colour: COR.erro,
+  });
 
-  if (sub === "add") {
-    if (!codigo)
-      return sendEmbed(message.channel, tr(ctx,
-        { title: "❌ Uso incorreto", description: `\`${PREFIXO}automod whitelist add <link ou código>\``, colour: COR.erro },
-        { title: "❌ Wrong usage", description: `\`${PREFIXO}automod whitelist add <link or code>\``, colour: COR.erro }));
-    if (!config.inviteWhitelist.includes(codigo)) {
-      config.inviteWhitelist.push(codigo);
-      salvarConfig();
+  if (sub === "add" || sub === "remove") {
+    if (!convite && !dominio) return erroUso();
+    const lista = convite ? config.inviteWhitelist : config.dominiosPermitidos;
+    const valor = convite ?? dominio;
+    if (sub === "add" && !lista.includes(valor)) lista.push(valor);
+    if (sub === "remove") {
+      const i = lista.indexOf(valor);
+      if (i >= 0) lista.splice(i, 1);
     }
-    return sendEmbed(message.channel, tr(ctx,
-      { title: "✅ Convite liberado", description: `O convite \`${codigo}\` agora é permitido.`, colour: COR.sucesso },
-      { title: "✅ Invite allowed", description: `The \`${codigo}\` invite is now allowed.`, colour: COR.sucesso }));
-  }
-
-  if (sub === "remove") {
-    config.inviteWhitelist = config.inviteWhitelist.filter((c) => c !== codigo);
     salvarConfig();
-    return sendEmbed(message.channel, tr(ctx,
-      { title: "✅ Removido", description: `O convite \`${codigo}\` não está mais na whitelist.`, colour: COR.sucesso },
-      { title: "✅ Removed", description: `The \`${codigo}\` invite is no longer whitelisted.`, colour: COR.sucesso }));
-  }
-
-  if (sub === "list") {
-    const lang = lingua(ctx);
-    const lista = config.inviteWhitelist.length
-      ? config.inviteWhitelist.map((c) => `• \`${c}\``).join("\n")
-      : (lang === "en" ? "_No invites in the whitelist._" : "_Nenhum convite na whitelist._");
+    const oque = convite
+      ? (en ? `the \`${valor}\` invite` : `o convite \`${valor}\``)
+      : (en ? `links to \`${valor}\` (and its subdomains)` : `links para \`${valor}\` (e seus subdomínios)`);
     return sendEmbed(message.channel, {
-      title: lang === "en" ? "📃 Allowed invites" : "📃 Convites permitidos",
-      description: lista, colour: COR.info });
+      title: sub === "add" ? (en ? "✅ Allowed" : "✅ Liberado") : (en ? "✅ Removed" : "✅ Removido"),
+      description: sub === "add"
+        ? (en ? `From now on, ${oque} pass the automod.` : `A partir de agora, ${oque} passam pelo automod.`)
+        : (en ? `${oque} are no longer on the whitelist.` : `${oque[0].toUpperCase()}${oque.slice(1)} saíram da lista de permitidos.`),
+      colour: COR.sucesso,
+    });
   }
 
-  return sendEmbed(message.channel, tr(ctx,
-    { title: "❌ Uso incorreto", description: `\`${PREFIXO}automod whitelist <add|remove|list> [convite]\``, colour: COR.erro },
-    { title: "❌ Wrong usage", description: `\`${PREFIXO}automod whitelist <add|remove|list> [invite]\``, colour: COR.erro }));
+  if (sub === "list" || !sub) {
+    const doms = config.dominiosPermitidos.map((d) => `• \`${d}\``).join("\n") || (en ? "_none_" : "_nenhum_");
+    const convs = config.inviteWhitelist.map((c) => `• \`${c}\``).join("\n") || (en ? "_none_" : "_nenhum_");
+    return sendEmbed(message.channel, {
+      title: en ? "📃 Whitelist" : "📃 Lista de permitidos",
+      description: en
+        ? `**Domains** _(anti-link never blocks these)_\n${doms}\n\n**Stoat invites** _(anti-invite)_\n${convs}`
+        : `**Domínios** _(o anti-link nunca bloqueia)_\n${doms}\n\n**Convites do Stoat** _(anti-invite)_\n${convs}`,
+      colour: COR.info,
+    });
+  }
+
+  return erroUso();
 }
 
-// %blocklist <add|remove|adddomain|removedomain|list|clear|reload> [url|domínio]
+// &automod blocklist <add|remove|adddomain|removedomain|list|clear|reload> [url|domínio]
 // (ManagePermissions)
 export async function cmdBlocklist(message, args, ctx) {
   const { cfgGlobal, estado, sendEmbed, COR, getServer, membroTemPermissao, salvarGlobal, PREFIXO } = ctx;
@@ -892,17 +910,23 @@ export async function cmdPunicao(message, args, ctx) {
         description: `Role used to silence: \`${pol.silenceRoleId}\` (used in \`confirmar\` mode).`, colour: COR.sucesso }));
   }
 
+  // [onde mora, repetir a palavra digitada?] — `&automod punicao test` vira
+  // `&automod sentinela test`; `&automod punicao warnings` vira `&warn lista`.
   const NOUTRO_COMANDO = {
-    test: "sentinela", testar: "sentinela", simulate: "sentinela", simular: "sentinela",
-    sensitivity: "sentinela", sensibilidade: "sentinela", limiar: "sentinela",
-    channel: "sentinela", canal: "sentinela", alerta: "sentinela", antiguidade: "sentinela",
-    warn: "warn", avisar: "warn", warnings: "warnings", avisos: "warnings",
-    clearwarnings: "clearwarnings", cargomudo: "cargomudo",
+    test: ["automod sentinela", true], testar: ["automod sentinela", true],
+    simulate: ["automod sentinela", true], simular: ["automod sentinela", true],
+    sensitivity: ["automod sentinela", true], sensibilidade: ["automod sentinela", true],
+    limiar: ["automod sentinela", true], channel: ["automod sentinela", true],
+    canal: ["automod sentinela", true], alerta: ["automod sentinela", true],
+    antiguidade: ["automod sentinela", true],
+    warn: ["warn", false], avisar: ["warn", false],
+    warnings: ["warn lista", false], avisos: ["warn lista", false],
+    clearwarnings: ["warn limpar", false], cargomudo: ["cargomudo", false],
   };
-  const destino = NOUTRO_COMANDO[sub];
+  const [destino, repete] = NOUTRO_COMANDO[sub] ?? [];
   if (destino) {
     const restante = args.slice(1).join(" ");
-    const cmd = `${PREFIXO}${destino} ${sub === destino ? "" : `${sub} `}${restante}`.replace(/\s+/g, " ").trim();
+    const cmd = `${PREFIXO}${destino} ${repete ? `${sub} ` : ""}${restante}`.replace(/\s+/g, " ").trim();
     return sendEmbed(message.channel, tr(ctx, {
       title: `↪️ Isso é do \`${PREFIXO}${destino}\``,
       description: [

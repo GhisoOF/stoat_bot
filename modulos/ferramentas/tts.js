@@ -47,7 +47,7 @@ function perto(a, b, max = 2) {
   return d[b.length] <= max;
 }
 
-// Só dispara com UMA palavra: `&tts entrar agora na call` é fala de verdade.
+// Só dispara com UMA palavra: `&tts estado da call` é fala de verdade.
 function quaseSubcomando(args) {
   const p = semAcento(args[0] ?? "");
   if (p.length < 4) return null;

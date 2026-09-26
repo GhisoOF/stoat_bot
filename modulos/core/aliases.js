@@ -25,8 +25,6 @@ export const COMANDO_EN = {
 
 export const COMANDO_EXTRA = {
   access: "acesso",
-  sentinel: "sentinela", sentry: "sentinela",
-  punishment: "punicao",
   color: "cor",
   colour: "cor",
   muterole: "cargomudo",

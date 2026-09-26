@@ -101,6 +101,10 @@ diz exatamente o que clicar.
   das horas e **avisa a staff** quando formam um padrão de dano — desafios,
   humilhação, expor gente — mesmo sem nenhuma frase que condene sozinha.
   Falar de se machucar, sozinho, nunca dispara isso.
+- **A staff não é moderada**: o dono do servidor, o super admin e os cargos do
+  `&staff` passam direto pelo automod. `&automod whitelist add <link>` libera o
+  que qualquer um pode postar: um site vai para o anti-link (com subdomínios), um
+  convite do Stoat vai para o anti-invite — o bot descobre sozinho qual é qual.
 - **Punições persistentes**: avisos e silêncios ficam no banco por
   `(servidor, usuário)` — quem **sai e volta** recebe o silêncio de novo.
 - **Escada de punição**: cada reincidência sobe um degrau (aviso → 5 min →

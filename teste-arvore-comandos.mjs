@@ -35,14 +35,17 @@ for (const lang of ["pt", "en"]) {
   t(`[${lang}] a ajuda desce 3 níveis (automod > sentinela > antiguidade)`, () => {
     assert.ok(a.automod.sentinela.antiguidade?.texto, "o 3º nível não tem texto");
   });
-  t(`[${lang}] o assunto vive num lugar só (mesmo objeto, não cópia)`, () => {
-    assert.strictEqual(a.automod.punicao, a.punicao);
-    assert.strictEqual(a.automod.sentinela, a.sentinela);
-    assert.strictEqual(a.automod.blocklist, a.blocklist);
+  t(`[${lang}] o que é da família só existe DENTRO dela (não solto no topo)`, () => {
+    // `&help blocklist` não pode existir: o comando `&blocklist` não existe.
+    for (const filho of ["blocklist", "whitelist", "sentinela", "punicao"]) {
+      assert.equal(a[filho], undefined, `${filho} ainda está solto no topo da árvore`);
+      assert.ok(a.automod[filho], `${filho} sumiu de dentro do automod`);
+    }
   });
-  t(`[${lang}] warn e entrar viraram raiz, com texto próprio`, () => {
-    assert.ok(a.warn?.texto, "warn sem texto");
-    assert.ok(a.entrar?.texto, "entrar sem texto");
+  await tAsync(`[${lang}] warn, entrar e sair têm página de comando própria`, async () => {
+    const { construirDetalhes } = await import("./modulos/moderacao/geral.js");
+    const d = construirDetalhes("&", lang);
+    for (const cmd of ["warn", "entrar", "sair"]) assert.ok(d[cmd]?.desc, `&help ${cmd} sem página`);
   });
   t(`[${lang}] nenhum filho fantasma (chave sem nó)`, () => {
     const varrer = (no, caminho) => {
@@ -67,7 +70,7 @@ for (const lang of ["pt", "en"]) {
       }
       for (const k of filhos(no)) varrer(no[k], `${caminho} ${k}`);
     };
-    for (const raiz of ["automod", "warn", "entrar"]) varrer(a[raiz], raiz);
+    varrer(a.automod, "automod");
     assert.equal(semExplicacao.length, 0, `só listam sintaxe: ${semExplicacao.join(", ")}`);
   });
   t(`[${lang}] automod lista o anti-duplicata (o módulo novo)`, () => {

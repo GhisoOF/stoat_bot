@@ -16,12 +16,91 @@ export function faixaDe(nivel) {
   return FAIXAS.find((f) => nivel <= f.ate) ?? FAIXAS[FAIXAS.length - 1];
 }
 
-export function limiarPara(serverId, userId, base, { ativo = true } = {}) {
+// ─── Anti-raid: três peças que se somam ─────────────────────────────────────
+//
+// Não é um "modo anti-raid" para ligar. É o que o raid de 27/09 mostrou que
+// faltava, espalhado nas peças que já decidem o rigor:
+//   1. IDADE DA CONTA — o ID (ULID) carrega a data de criação. No raid, 7
+//      contas foram criadas 2 a 7 min antes de entrar, uma a cada ban.
+//   2. ONDA — várias contas novas entrando no mesmo servidor em pouco tempo
+//      liga a proteção por 30 min e avisa a staff uma vez.
+//   3. QUARENTENA — quando a punição FALHA (no raid, faltava AssignRoles e o
+//      autor seguiu postando suásticas), tudo que a pessoa mandar é apagado.
+
+const B32 = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+export function criacaoDaConta(userId) {
+  const id = String(userId ?? "").toUpperCase();
+  if (!/^[0-9A-HJKMNP-TV-Z]{26}$/.test(id)) return null;
+  let ms = 0;
+  for (const c of id.slice(0, 10)) ms = ms * 32 + B32.indexOf(c);
+  return ms;
+}
+export function idadeDaConta(userId, agora = Date.now()) {
+  const c = criacaoDaConta(userId);
+  return c == null ? null : Math.max(0, agora - c);
+}
+
+const HORA = 3600_000;
+function ajusteIdade(idade) {
+  if (idade == null) return 0;
+  if (idade < HORA) return -3;          // criada agora: rigor máximo
+  if (idade < 24 * HORA) return -1.5;   // criada hoje
+  return 0;
+}
+
+const RAID_JANELA_MS = Number(process.env.RAID_JANELA_MS || 15 * 60_000);
+const RAID_MIN_CONTAS = Number(process.env.RAID_MIN_CONTAS || 3);
+const RAID_DURACAO_MS = Number(process.env.RAID_DURACAO_MS || 30 * 60_000);
+const entradas = new Map();   // serverId → [{ userId, t }] (só contas com < 24h)
+const raidAte = new Map();    // serverId → até quando a proteção vale
+
+export function registrarEntrada(serverId, userId, agora = Date.now()) {
+  const idade = idadeDaConta(userId, agora);
+  if (idade == null || idade >= 24 * HORA) return { raid: emModoRaid(serverId, agora), iniciou: false };
+  const lista = (entradas.get(serverId) ?? []).filter((e) => agora - e.t < RAID_JANELA_MS);
+  if (!lista.some((e) => e.userId === userId)) lista.push({ userId, t: agora });
+  entradas.set(serverId, lista);
+  const jaEstava = emModoRaid(serverId, agora);
+  if (lista.length >= RAID_MIN_CONTAS) raidAte.set(serverId, agora + RAID_DURACAO_MS);
+  return {
+    raid: emModoRaid(serverId, agora),
+    iniciou: !jaEstava && emModoRaid(serverId, agora),
+    contas: lista.map((e) => e.userId),
+    minutos: Math.round(RAID_DURACAO_MS / 60_000),
+  };
+}
+export function emModoRaid(serverId, agora = Date.now()) {
+  return (raidAte.get(serverId) ?? 0) > agora;
+}
+
+const QUARENTENA_MS = Number(process.env.QUARENTENA_MS || 30 * 60_000);
+const quarentena = new Map();   // "server:user" → até quando
+export function quarentenar(serverId, userId, agora = Date.now()) {
+  quarentena.set(`${serverId}:${userId}`, agora + QUARENTENA_MS);
+}
+export function emQuarentena(serverId, userId, agora = Date.now()) {
+  const ate = quarentena.get(`${serverId}:${userId}`) ?? 0;
+  if (ate <= agora) { quarentena.delete(`${serverId}:${userId}`); return false; }
+  return true;
+}
+
+// Conta nova = criada há menos de 24h, ou qualquer conta de < 7 dias durante
+// uma onda. É ela que recebe o rigor extra no anti-duplicata.
+export function contaNova(serverId, userId, agora = Date.now()) {
+  const idade = idadeDaConta(userId, agora);
+  if (idade == null) return false;
+  return idade < 24 * HORA || (emModoRaid(serverId, agora) && idade < 7 * 24 * HORA);
+}
+
+export function limiarPara(serverId, userId, base, { ativo = true, agora = Date.now() } = {}) {
   if (!ativo) return { limiar: base, faixa: null, nivel: null };
   const nivel = nivelDe(serverId, userId);
   const faixa = faixaDe(nivel);
-  const limiar = Math.max(3.5, Math.min(9, base + faixa.ajuste));
-  return { limiar, faixa, nivel };
+  const idade = idadeDaConta(userId, agora);
+  let ajuste = faixa.ajuste + ajusteIdade(idade);
+  if (emModoRaid(serverId, agora) && idade != null && idade < 7 * 24 * HORA) ajuste -= 1;
+  const limiar = Math.max(3.5, Math.min(9, base + ajuste));
+  return { limiar, faixa, nivel, idade };
 }
 
 const JANELA_MS = Number(process.env.SENTINELA_JANELA_MS || 10 * 60_000);

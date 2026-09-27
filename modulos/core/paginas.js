@@ -104,7 +104,20 @@ export function paginarLinhas(linhas, { titulo, limite = 1350 } = {}) {
     paginas.push({ title: titulo, description: atual.join("\n") });
     atual = []; tam = 0;
   };
+  // Uma linha sozinha maior que a página era cortada com "…" lá no montar.
+  // Quebra ela antes, de preferência num espaço.
+  const partes = [];
   for (const l of linhas) {
+    let resto = String(l);
+    while (resto.length > limite) {
+      let corte = resto.lastIndexOf(" ", limite);
+      if (corte < limite * 0.6) corte = limite;
+      partes.push(resto.slice(0, corte));
+      resto = resto.slice(corte).replace(/^ /, "");
+    }
+    partes.push(resto);
+  }
+  for (const l of partes) {
     const n = l.length + 1;
     if (tam + n > limite) {
       // tenta recuar até a última linha em branco, para a quebra cair num tópico
@@ -119,4 +132,25 @@ export function paginarLinhas(linhas, { titulo, limite = 1350 } = {}) {
   }
   fechar();
   return paginas;
+}
+
+// ─── Qualquer resposta longa vira páginas ────────────────────────────────────
+//
+// O sendEmbed cortava em silêncio toda descrição acima de LIMITE_EMBED e punha
+// um "…". O `&config` em português (1717 caracteres) perdia o final inteiro, e
+// qualquer LISTA que cresce com o uso (blocklist, avisos, reaction roles,
+// feeds, ranking) acabaria igual. Em vez de converter comando por comando, o
+// próprio envio pagina — o mesmo sistema do &help e do &tutorial.
+export const LIMITE_EMBED = 1500;
+
+export function precisaPaginar({ description, imagem, anexos } = {}) {
+  // Com imagem ou anexo não dá para dividir (a mídia iria só na 1ª página).
+  return String(description ?? "").length > LIMITE_EMBED && !imagem && !(anexos?.length);
+}
+
+export async function enviarEmPaginas(enviar, canal, embed, { lang = "pt", COR = {} } = {}) {
+  const paginas = paginarLinhas(String(embed.description ?? "").split("\n"), { titulo: embed.title })
+    .map((p) => ({ ...p, colour: embed.colour }));
+  const ctx = { sendEmbed: enviar, COR, config: { language: lang } };
+  return enviarPaginado(ctx, canal, { paginas, autorId: null, colour: embed.colour });
 }

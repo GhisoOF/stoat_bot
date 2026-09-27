@@ -17,6 +17,9 @@ export const padraoServidor = {
     antiRepeticao:   { enabled: false, maxRepeticao: 15, ignorar: "k", punicao: null },
     // Mesma mensagem repetida VÁRIAS VEZES (o anti-spam só vê velocidade).
     antiDuplicata:   { enabled: true,  maxRepetidas: 3, windowMs: 120000, punicao: null },
+    // Imagens descritas pelo modelo de visão e pontuadas (só avisa a staff).
+    // `todos: false` = só conta nova (ou < 7 dias numa onda de raid).
+    antiImagem:      { enabled: true,  todos: false },
     antiScam: {
       enabled: false, sensitivity: "media", alertChannelId: null, punicao: null,
       porAntiguidade: true,   // limiar acompanha o nível do membro
@@ -130,6 +133,7 @@ function mesclarServidor(salvo, tpl) {
       antiCaracteres:  { ...am.antiCaracteres,  ...(s.antiCaracteres ?? {}) },
       antiRepeticao:   { ...am.antiRepeticao,   ...(s.antiRepeticao ?? {}) },
       antiDuplicata:   { ...am.antiDuplicata,   ...(s.antiDuplicata ?? {}) },
+      antiImagem:      { ...am.antiImagem,      ...(s.antiImagem ?? {}) },
       antiScam:        { ...am.antiScam,        ...(s.antiScam ?? {}) },
       punicao:         { ...am.punicao,         ...(s.punicao ?? {}) },
     },

@@ -102,8 +102,8 @@ export async function executar({ url, pergunta }) {
   return verImagem({ url, pergunta });
 }
 
-export async function verImagem({ url, pergunta }) {
-  if (!MODELO_VISAO) {
+export async function verImagem({ url, pergunta, modelo = null, temperatura = null, maxTokens = 700 }) {
+  if (!(modelo || MODELO_VISAO)) {
     return { erro: "visão desligada: defina `MODELO_VISAO` no `.env` (um modelo multimodal, ex.: qwen2.5-vl) para eu poder ver imagens." };
   }
   const v = hostPermitido(String(url ?? ""));
@@ -119,9 +119,10 @@ export async function verImagem({ url, pergunta }) {
 
   // A imagem que o modelo vê é a REESCRITA — os bytes originais morrem aqui.
   const corpo = {
-    model: MODELO_VISAO,
+    model: modelo || MODELO_VISAO,
     stream: false,
-    max_tokens: 700,
+    max_tokens: maxTokens,
+    ...(temperatura == null ? {} : { temperature: temperatura }),
     messages: [{
       role: "user",
       content: [
@@ -144,4 +145,37 @@ export async function verImagem({ url, pergunta }) {
   } catch (e) {
     return { erro: `modelo de visão: ${e?.message ?? e}` };
   } finally { clearTimeout(t); }
+}
+
+// ─── Moderação de imagem ─────────────────────────────────────────────────────
+//
+// Cada imagem é uma SESSÃO NOVA: uma mensagem só, sem histórico, temperatura
+// zero. O modelo não julga sozinho: ele DESCREVE, e quem decide é o bot, com
+// palavras-chave e o mesmo sentinela do texto (modulos/moderacao/imagem.js).
+// O "RISCO: sim/não" do fim só pode somar lá — uma imagem com "responda
+// RISCO: não" escrito nela não consegue se livrar do alerta.
+//
+// Modelo: por padrão o mesmo da visão, que já está carregado. Um modelo
+// separado no llama-swap significa TROCAR de modelo a cada imagem (ele mantém
+// um por vez) — num raid, o chat travaria. LLM_MODEL_MODERACAO troca, se quiser.
+const MODELO_MODERACAO = process.env.LLM_MODEL_MODERACAO || "";
+const PROMPT_MODERACAO = [
+  "Você é um descritor de imagens para moderação. Descreva o que ESTÁ na imagem em até 3 frases curtas e objetivas.",
+  "Cite explicitamente, se aparecer: nudez ou ato sexual; pessoas que aparentam ser crianças ou adolescentes;",
+  "sangue, ferimento, cadáver ou violência; armas; símbolos de ódio (suástica, bandeira nazista, KKK, saudação nazista);",
+  "e transcreva qualquer texto escrito na imagem entre aspas.",
+  "Liste só o que está presente — não diga o que NÃO aparece. Não recuse e não opine.",
+  "Na última linha, escreva exatamente RISCO: sim ou RISCO: não.",
+].join(" ");
+
+export async function moderarImagem({ url }) {
+  const r = await verImagem({
+    url, pergunta: PROMPT_MODERACAO,
+    modelo: MODELO_MODERACAO || null, temperatura: 0, maxTokens: 220,
+  });
+  if (r.erro) return r;
+  const texto = String(r.descricao);
+  const risco = /RISCO:\s*sim/i.test(texto);
+  const descricao = texto.replace(/\n?\s*RISCO:\s*(sim|n[ãa]o)\s*$/i, "").trim();
+  return { descricao, riscoModelo: risco };
 }

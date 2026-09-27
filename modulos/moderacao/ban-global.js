@@ -293,7 +293,7 @@ export async function registrar(ctx, userId, motivo, origem = "manual", { nome =
   }
 }
 
-export async function verificarEntrada(member, ctx) {
+export async function verificarEntrada(member, ctx, { propagado = false } = {}) {
   const serverId = member?.id?.server;
   const userId   = member?.id?.user;
   if (!serverId || !userId) return false;
@@ -327,7 +327,7 @@ export async function verificarEntrada(member, ctx) {
   // ── modo avisar: só alerta, não age ──
   if (modo === "avisar") {
     await log.registrar(ctx, "punicoes", {
-      titulo: "⚠️ Usuário da lista global entrou",
+      titulo: propagado ? "⚠️ Membro acabou de ser banido em outro servidor" : "⚠️ Usuário da lista global entrou",
       descricao: `${resumo}\n\n_Modo **avisar**: nenhuma ação automática foi tomada._`,
     });
     console.log(`[BANGLOBAL] ⚠️ ${userId} (na lista, ${n} servidor(es)) entrou em ${serverId} — só aviso`);
@@ -348,10 +348,10 @@ export async function verificarEntrada(member, ctx) {
       console.log(`[BANGLOBAL] 🔨 ${userId} banido automaticamente em ${serverId}`);
       return true;
     } catch (err) {
-      console.error("[BANGLOBAL][BAN]", err?.message);
+      console.error("[BANGLOBAL][BAN]", descreverErro(err));
       await log.registrar(ctx, "punicoes", {
         titulo: "❌ Falha no ban automático",
-        descricao: `${resumo}\n\n**Erro:** ${err?.message}`,
+        descricao: `${resumo}\n\n**Erro:** ${descreverErro(err)}`,
       });
       return false;
     }
@@ -1151,4 +1151,56 @@ export async function cmdBanGlobal(message, args, ctx) {
     description: `Use \`${PREFIXO}banglobal\` to see the options.`,
     colour: COR.erro,
   }));
+}
+
+// ─── Propagação: um ban num servidor da Judy vale na hora para os outros ────
+//
+// No raid de 27/09 as mesmas contas pularam entre 3 servidores da Judy. O ban
+// num servidor só chegava aos outros na sincronização de 6h — tarde demais.
+// Agora, quando alguém SAI de um servidor, o bot confere se foi ban; se foi,
+// registra na lista global na hora e aplica o modo de cada OUTRO servidor onde
+// a pessoa ainda está (off: nada · avisar: alerta a staff · banir: bane).
+// A sincronização de 6h continua como rede de segurança.
+const ESPERA_BAN_MS = Number(process.env.BANGLOBAL_PROPAGAR_ESPERA_MS || 1500);
+
+export async function propagarSeFoiBan(serverId, userId, { client, criarContexto, espera = ESPERA_BAN_MS } = {}) {
+  const saida = { foiBan: false, acoes: [] };
+  if (!serverId || !userId || !client) return saida;
+  if (db.estaIgnoradoGlobal(userId) || ehBotConhecido(userId, { client })) return saida;
+
+  // O evento de saída pode chegar antes do ban aparecer na lista.
+  if (espera > 0) await new Promise((r) => setTimeout(r, espera));
+  let origem;
+  try { origem = client.servers?.get?.(serverId) ?? await client.servers.fetch(serverId); } catch { return saida; }
+
+  let ban = null, porId = new Map();
+  try {
+    const bans = await origem.fetchBans();       // exige BanMembers na origem
+    for (const u of bans?.users ?? []) porId.set(u?.id ?? u?._id, u);
+    ban = (bans?.bans ?? bans ?? []).find((x) => (x?.id?.user ?? x?.user?.id ?? x?.id) === userId) ?? null;
+  } catch (e) {
+    console.log(`[BANGLOBAL] propagar: não consegui ler os bans de ${serverId} (${descreverErro(e)}) — fica para a sincronização de 6h`);
+    return saida;
+  }
+  if (!ban) return saida;                        // saiu ou foi expulso: não é ban
+  saida.foiBan = true;
+
+  const u = ban?.user ?? porId.get(userId) ?? null;
+  if (ehBot(ban) || ehBot(u)) return saida;
+  const nome = u?.username ?? null;
+  db.registrarBanGlobal(userId, serverId, ban?.reason ?? "banido no servidor", "propagado", { nome });
+  console.log(`[BANGLOBAL] propagado: ${userId} banido em ${serverId} — conferindo os outros servidores`);
+
+  for (const outro of client.servers?.values?.() ?? []) {
+    const sid = outro?.id;
+    if (!sid || sid === serverId) continue;
+    let membro;
+    try { membro = await outro.fetchMember(userId); } catch { continue; }   // não é membro ali
+    if (!membro) continue;
+    const ctx = criarContexto(sid);
+    const modo = ctx.config?.banGlobal?.modo ?? "off";
+    const baniu = await verificarEntrada(membro, ctx, { propagado: true });
+    saida.acoes.push({ serverId: sid, modo, acao: baniu ? "banido" : modo === "avisar" ? "avisado" : "nada" });
+  }
+  return saida;
 }

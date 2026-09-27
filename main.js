@@ -56,12 +56,18 @@ import * as paginas   from "./modulos/core/paginas.js";
 import * as assistente from "./modulos/moderacao/assistente.js";
 import { tr }         from "./modulos/core/i18n.js";
 import { chamarApi }  from "./modulos/core/stoat-api.js";
+import { vigiarConexao } from "./modulos/core/vida.js";
+import { descreverErro } from "./modulos/core/erros.js";
+import * as confianca from "./modulos/moderacao/confianca.js";
 
 const PREFIXO     = "&";
 const CONFIG_PATH = process.env.CONFIG_PATH || "./automod-config.json";
 const client      = new Client({ autoReconnect: true });
 
 let ultimoEvento = Date.now();       // quando recebemos o último evento do Stoat
+// Vida medida pelo heartbeat do protocolo (Pong a cada 30s), não pelo chat.
+// Ver modulos/core/vida.js — o watchdog antigo reiniciava o bot de madrugada.
+vigiarConexao(client.events, () => { ultimoEvento = Date.now(); });
 let jaConectou = false;              // o login chegou a dar certo alguma vez?
 let jaReiniciando = false;
 
@@ -111,7 +117,7 @@ setInterval(() => {
   }
 
   if (ocioso > INATIVIDADE_MS) {
-    reiniciar(`sem eventos do Stoat há ${Math.round(ocioso / 60000)}min (socket provavelmente zumbi)`);
+    reiniciar(`sem eventos do Stoat há ${Math.round(ocioso / 60000)}min (nem o heartbeat do Stoat respondeu — conexão morta de verdade)`);
   }
 }, 60000);
 
@@ -132,14 +138,30 @@ const COR = {
 
 let cfgGlobal = store.getGlobal();  // atualizado após inicializar()
 
-async function sendEmbed(channel, { title, description, colour = COR.info, imagem = null, anexos = null, ocultarLink = true }) {
+// Resposta longa vira páginas (◀ ▶), como no &help — em vez de ser cortada.
+// Vale para TODO comando: o corte ficava aqui, então a solução também fica.
+async function sendEmbed(channel, embed) {
+  if (paginas.precisaPaginar(embed)) {
+    let lang = "pt";
+    try { lang = store.configDoServidor(channel?.serverId)?.language === "en" ? "en" : "pt"; } catch {}
+    return paginas.enviarEmPaginas(enviarEmbedUnico, channel, { colour: COR.info, ...embed }, { lang, COR });
+  }
+  return enviarEmbedUnico(channel, embed);
+}
+
+async function enviarEmbedUnico(channel, { title, description, colour = COR.info, imagem = null, anexos = null, ocultarLink = true }) {
   if (!channel || typeof channel.sendMessage !== "function") {
     console.error("[EMBED] Canal indisponível — mensagem não enviada:", title ?? description);
     return;
   }
   const erroStr = (e) => e?.message ?? e?.type ?? (typeof e === "object" ? JSON.stringify(e) : String(e));
   let desc = description ?? "";
-  if (desc.length > 1500) desc = desc.slice(0, 1495) + "…";
+  // Último recurso: só chega aqui texto longo que tem imagem ou anexo junto
+  // (esse não dá para paginar). Fica registrado para não passar despercebido.
+  if (desc.length > paginas.LIMITE_EMBED) {
+    console.warn(`[EMBED] "${title ?? ""}" com mídia e ${desc.length} caracteres — cortado em ${paginas.LIMITE_EMBED}`);
+    desc = desc.slice(0, paginas.LIMITE_EMBED - 5) + "…";
+  }
   const base = { title, description: desc, colour };
   console.log(`[CMD] ${title ?? "(sem título)"} | ${desc.replace(/\n/g, " ⏎ ").slice(0, 400)}`);
   const exibicao = imagem ? midia.comoExibir(imagem) : null;
@@ -773,10 +795,37 @@ client.on("serverMemberJoin", async (member) => {
 
     const ctx = criarContexto(serverId);
 
+    // Idade da conta vem do próprio ID. No raid de 27/09, cada conta tinha
+    // 2 a 7 min de vida ao entrar — isso agora aparece no log de entrada.
+    const idade = confianca.idadeDaConta(userId);
+    const idadeTxt = idade == null ? "" : idade < 3600_000
+      ? ` ⚠️ **conta criada há ${Math.max(1, Math.round(idade / 60_000))} min**`
+      : idade < 86_400_000 ? ` · conta criada há ${Math.round(idade / 3600_000)}h` : "";
     await log.registrar(ctx, "membros", {
       titulo: "📥 Membro entrou",
-      descricao: `<@${userId}> entrou no servidor.`,
+      descricao: `<@${userId}> entrou no servidor.${idadeTxt}`,
     });
+
+    const onda = confianca.registrarEntrada(serverId, userId);
+    if (onda.iniciou) {
+      console.warn(`[ANTIRAID] ${serverId}: ${onda.contas.length} contas novas em pouco tempo — proteção por ${onda.minutos} min`);
+      const en = ctx.config?.language === "en";
+      const destinoId = ctx.config?.automod?.antiScam?.alertChannelId || ctx.config?.log?.canalId;
+      const destino = destinoId ? await client.channels.fetch(destinoId).catch(() => null) : null;
+      if (destino) await sendEmbed(destino, {
+        title: en ? "🛡️ Possible raid" : "🛡️ Possível raid",
+        description: [
+          en ? `**${onda.contas.length} accounts created less than 24h ago** joined in a short time:`
+             : `**${onda.contas.length} contas criadas há menos de 24h** entraram em pouco tempo:`,
+          onda.contas.map((u) => `<@${u}>`).join(" · "),
+          "",
+          en ? `For the next **${onda.minutos} min**, new accounts get the strictest automod: lower sentinel threshold and the same message only twice.`
+             : `Pelos próximos **${onda.minutos} min**, conta nova passa pelo automod mais rígido: limiar do sentinela mais baixo e a mesma mensagem só 2 vezes.`,
+          en ? "Nobody was punished for joining." : "Ninguém foi punido por entrar.",
+        ].join("\n"),
+        colour: COR.aviso,
+      });
+    }
 
     // Lista global: pode banir automaticamente (se o servidor optou por isso)
     const banido = await banGlobal.verificarEntrada(member, ctx);
@@ -807,6 +856,12 @@ client.on("serverMemberLeave", async (member, extra) => {
       }
       return;
     }
+
+    // Foi ban? Então vale na hora para os outros servidores da Judy (não
+    // espera a sincronização de 6h). Em segundo plano: não segura o evento.
+    banGlobal.propagarSeFoiBan(serverId, userId, { client, criarContexto })
+      .then((r) => { if (r.acoes.length) console.log(`[BANGLOBAL] propagado ${userId}:`, JSON.stringify(r.acoes)); })
+      .catch((e) => console.error("[BANGLOBAL] propagar:", descreverErro(e)));
     const ctx = criarContexto(serverId);
     await log.registrar(ctx, "membros", {
       titulo: "📤 Membro saiu",

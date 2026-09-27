@@ -135,6 +135,41 @@ const LINK_SIMPLES    = /\bhttps?:\/\/|\bwww\./i;
 const AFIRMACAO = /\b(vendo|selling|sell|compre|buy|acesse|access|baixe|download|assine|subscribe|clique|click|entre|join)\b/i;
 const PERGUNTA  = /\?/;
 
+// ─── Ódio e ameaça violenta ─────────────────────────────────────────────────
+//
+// O raid de 27/09 passou INTEIRO pelo sentinela: injúria racial, ofensa a
+// ciganos, "tem q voltar pra senzala", suástica em massa, "estuprar e matar",
+// ataque a membros marcados pelo nome. A categoria simplesmente não existia —
+// só o anti-duplicata disparou, pelas suásticas repetidas.
+//
+// Mesmo princípio do resto do arquivo: a palavra solta pesa pouco; o que
+// condena é a CONJUNÇÃO. "a população negra", "os ciganos têm uma cultura
+// rica", "o caso de estupro saiu no jornal" não podem virar punição — um
+// grupo junto de um insulto, um "bando de <grupo>", "estuprar e matar", sim.
+
+// Grupos alvo de ódio (a palavra sozinha é neutra).
+const GRUPO = String.raw`(negr[oa]s?|negrinh[oa]s?|negr[aã]o|pret[oa]s?|pretinh[oa]s?|macac[oa]s?|cigan[oa]s?|ciganinh[oa]s?|calon|calom|judeus?|judias?|nordestin[oa]s?|para[ií]bas?|baian[oa]s?|ind[ií]gen[ao]s?|[ií]ndi[oa]s?|viad[oa]s?|viadinh[oa]s?|bichas?|bichinhas?|sap[aã]t[aã]o|sapat[oõ]es|travecos?|trans|gays?|l[ée]sbicas?)`;
+// Palavras que só existem como ofensa (não precisam de contexto).
+const LEX_INJURIA = [/\bnegr[oó]ides?\b/i, /\bviadinh[oa]s?\b/i, /\btravecos?\b/i, /\bciganinh[oa]s?\b/i];
+// Insulto ou desprezo que, colado a um grupo, vira ódio.
+const INSULTO = String.raw`(de\s+merda|filh[oa]s?\s+da\s+puta|imund[oa]s?|suj[oa]s?|nojent[oa]s?|lixos?|podres?|inferior(es)?|vsf|vai\s+se\s+fuder|vai\s+tomar\s+no\s+cu|tem\s+(que|q)\s+morrer|devia[m]?\s+morrer)`;
+const LEX_ODIO_CONJ = [
+  new RegExp(String.raw`\b${GRUPO}\b[^.!?\n]{0,20}\b${INSULTO}`, "i"),   // "ciganos de merda"
+  new RegExp(String.raw`\b${INSULTO}\b[^.!?\n]{0,20}\b${GRUPO}\b`, "i"),  // "vsf negros"
+  new RegExp(String.raw`\bbando\s+de\s+${GRUPO}\b`, "i"),                 // desumaniza o grupo inteiro
+  /\bvolt(ar|a|em)\s+(pra|para\s+a)\s+senzala\b/i,
+  /\bra[çc]a\s+(inferior|imunda|podre|de\s+merda)\b/i,
+];
+// Símbolos de ódio. 卍 também é símbolo budista; o peso vem da REPETIÇÃO.
+const RE_SIMBOLO_ODIO = /[卐卍]|\bsieg\s*heil\b|\bheil\s*hitler\b|\b14\s*\/?\s*88\b|\bwhite\s+power\b/gi;
+// Ameaça violenta: dois verbos de violência juntos, ou ameaça dirigida.
+const VIOLENTO = String.raw`(estuprar|estrupar|matar|esfaquear|espancar|degolar|queimar|enforcar)`;
+const LEX_AMEACA = [
+  new RegExp(String.raw`\b${VIOLENTO}\s+(e|pra|para|depois)\s+${VIOLENTO}\b`, "i"),   // "estuprar e matar"
+  new RegExp(String.raw`\bvou\s+(te\s+)?${VIOLENTO}\s+(voc[êe]|vc|tu|sua\s+fam[ií]lia|seus?\s+filh)`, "i"),
+  new RegExp(String.raw`\bsei\s+onde\s+(voc[êe]|vc|tu)\s+mora\b`, "i"),
+];
+
 // ─── Dano a pessoas: desafios, humilhação, doxxing, extorsão ────────────────
 //
 // Existem comunidades que recrutam em servidores abertos para "desafios" que
@@ -187,10 +222,11 @@ const LEX_DESPREZO = [/\bdoentes?\s+menta(l|is)\b/i, /\bretardad[oa]s?\b/i];
 export const PESO_DANO = {
   autolesao: 1, desafio: 0.5, humilhacao: 1, dados_pessoais: 1.5, dox: 2,
   vazar: 1.5, coercao: 1.5, desprezo: 0.5, link_convite: 1,
+  injuria: 1.5, odio: 2, simbolo_odio: 1, ameaca: 2,
   conj_desafio_extremo: 1.5, conj_desafio_humilhacao: 1.5,
 };
 const LADO_AGRESSOR = new Set(["desafio", "humilhacao", "dados_pessoais", "dox",
-  "vazar", "coercao", "desprezo", "link_convite"]);
+  "vazar", "coercao", "desprezo", "link_convite", "injuria", "odio", "simbolo_odio", "ameaca"]);
 
 export function danoDe(features) {
   let soma = 0;
@@ -238,6 +274,11 @@ export const PESOS = {
   // link cujo texto visível esconde para onde vai: [texto](url)
   link_mascarado:  2,
   link_ofuscado:   1.5,
+  // ódio e ameaça: a injúria sozinha pesa; a conjunção condena
+  injuria:         3.5,   // sozinha não pune membro antigo (limiar 6); pune conta nova
+  odio:            6,     // grupo + insulto, "bando de <grupo>", senzala…
+  simbolo_odio:    2.5,   // por ocorrência, até 3 — uma parede de 卐 condena
+  ameaca:          6,     // "estuprar e matar", "sei onde você mora"
   conj_topico_link: 2,          // golpe/+18/gore + link encurtado, de arquivo ou mascarado
   conj_grave_oferta:   6,  // grave + oferta = anúncio de material → topo
   conj_grave_contexto: 5,  // grave + link/cta/venda = contexto suspeito → alerta
@@ -361,6 +402,10 @@ function extrairFeatures(texto, opts = {}) {
   f.vazar          = contar(t, LEX_VAZAR, 1);
   f.coercao        = contar(t, LEX_COERCAO, 1);
   f.desprezo       = contar(t, LEX_DESPREZO, 1);
+  f.injuria        = contar(t, LEX_INJURIA, 1);
+  f.odio           = contar(t, LEX_ODIO_CONJ, 1);
+  f.simbolo_odio   = Math.min(3, (t.match(RE_SIMBOLO_ODIO) ?? []).length);
+  f.ameaca         = contar(t, LEX_AMEACA, 1);
 
   // Tipo de link (apenas o de maior prioridade conta)
   if (LINK_FILEHOST.test(t))        f.link_filehost = 1;
@@ -404,6 +449,9 @@ function extrairFeatures(texto, opts = {}) {
   if ((f.scam > 0 || f.adulto > 0 || f.gore > 0)
       && (f.link_encurtador || f.link_filehost || f.link_mascarado || f.link_ofuscado)) f.conj_topico_link = 1;
 
+  // A interrogação suaviza golpe ("isso é golpe?"), mas não suaviza ódio:
+  // "vc é um ciganinho né?" continua sendo uma injúria.
+  if (f.injuria || f.odio || f.simbolo_odio || f.ameaca) f.pergunta = 0;
   return f;
 }
 

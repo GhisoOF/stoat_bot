@@ -16,6 +16,13 @@ services:
     # Só o que precisa de um padrão DIFERENTE dentro do container. Continua
     # valendo o que estiver no .env — estes `${...}` leem o mesmo arquivo.
     environment:
+      # O BANCO FICA NO VOLUME, SEMPRE. Estes dois são fixos de propósito (sem
+      # `${...}`): `environment` vence o `env_file`, então nenhum `.env` consegue
+      # desviar o banco. Sem isto, um `DB_PATH=./dados/stoat.db` vindo do
+      # `.env.example` fazia o bot abrir um banco NOVO e vazio fora do volume —
+      # o verdadeiro continuava em /data, intacto, mas sem uso.
+      - DB_PATH=/data/stoat.db
+      - CONFIG_PATH=/data/automod-config.json
       - TZ=${TZ:-America/Sao_Paulo}
       - IA=${IA:-1}                     # 0 desliga todos os módulos de IA
       - IMAGEM=${IMAGEM:-1}             # 0 desliga a geração de imagem embutida

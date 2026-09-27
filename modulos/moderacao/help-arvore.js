@@ -83,6 +83,9 @@ function comFamilias(arvore, P, lang) {
     `\`antimassmention\` — ` + (en ? "mentioning a crowd at once" : "mencionar um monte de gente de uma vez"),
     `\`anticaracteres\` — ` + (en ? "zalgo and invisible characters" : "zalgo e caracteres invisíveis"),
     `\`antirepeticao\` — ` + (en ? "the same letter dragged on" : "a mesma letra arrastada"),
+    `\`antiimagem\` — ` + (en
+      ? "images from new accounts are described by the vision model and scored; if it flags, the staff is pinged (never punishes, never reposts the image)"
+      : "imagens de contas novas são descritas pelo modelo de visão e pontuadas; se apitar, a staff é chamada (nunca pune, nunca republica a imagem)"),
     `\`sentinela\` — ` + (en
       ? "judges the content, sees through disguises (l33t, s p a c e d, invisible characters), and alerts the staff when someone's messages add up to a harmful pattern (challenges, humiliation, doxxing)"
       : "julga o conteúdo, enxerga através de disfarces (l33t, l e t r a s  s e p a r a d a s, caracteres invisíveis) e avisa a staff quando as mensagens de alguém somam um padrão de dano (desafios, humilhação, doxxing)"),

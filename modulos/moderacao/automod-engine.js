@@ -5,6 +5,7 @@ import { descreverErro, tipoDoErro } from "../core/erros.js";
 import * as log from "../core/log.js";
 import * as banGlobal from "./ban-global.js";
 import * as confianca from "./confianca.js";
+import * as imagemSentinela from "./imagem.js";
 import { analisarCaracteres, analisarRepeticao, analisarDuplicata, digital, textoHumano, razaoDeCaixaAlta } from "./caracteres.js";
 import { lingua } from "../core/i18n.js";
 import {
@@ -287,6 +288,12 @@ async function aplicarPunicao(ctx, opts) {
         const detalhe = descreverErro(e, lang);
         console.error("[PUNIÇÃO][SILENCE]", detalhe, e);
         acao = lang === "en" ? `failed to silence — ${detalhe}` : `falha ao silenciar — ${detalhe}`;
+        // Sem silêncio, a pessoa seguia postando (raid de 27/09: suásticas por
+        // mais 1 min, e as mensagens só sumiram quando a staff acordou).
+        confianca.quarentenar(ctx.serverId ?? server?.id, userId);
+        acao += lang === "en"
+          ? " — until then, **everything they post in the next 30 min is deleted**"
+          : " — enquanto isso, **tudo o que a pessoa mandar nos próximos 30 min é apagado**";
       }
     }
     await sendEmbed(channel, {
@@ -338,6 +345,12 @@ async function aplicarPunicao(ctx, opts) {
         const detalhe = descreverErro(e, lang);
         console.error("[PUNIÇÃO][MUTE]", detalhe, e);
         acao = lang === "en" ? `failed to silence — ${detalhe}` : `falha ao silenciar — ${detalhe}`;
+        // Sem silêncio, a pessoa seguia postando (raid de 27/09: suásticas por
+        // mais 1 min, e as mensagens só sumiram quando a staff acordou).
+        confianca.quarentenar(ctx.serverId ?? server?.id, userId);
+        acao += lang === "en"
+          ? " — until then, **everything they post in the next 30 min is deleted**"
+          : " — enquanto isso, **tudo o que a pessoa mandar nos próximos 30 min é apagado**";
       }
     } else {
       acao = lang === "en"
@@ -588,6 +601,22 @@ export async function runAutomod(message, ctx) {
     return false;
   }
 
+  // ── Quarentena: a punição falhou antes; tudo desta pessoa é apagado ──
+  if (confianca.emQuarentena(ctx.serverId ?? server?.id, userId)) {
+    dbg(ctx, "  ✗ Autor em quarentena (punição anterior falhou) — apagando");
+    try { await message.delete(); } catch (err) { dbg(ctx, `  (falha ao deletar: ${err.message})`); }
+    return true;
+  }
+
+  // ── Imagens: descritas pelo modelo e pontuadas em segundo plano ──
+  // Não segura a mensagem nem pune: se apitar, a staff é chamada no log.
+  // (No raid de 27/09 as mensagens "vazias" eram imagens que ninguém viu.)
+  if (imagemSentinela.deveAnalisar(config, ctx.serverId ?? server?.id, userId)) {
+    for (const img of imagemSentinela.imagensDa(message)) {
+      imagemSentinela.agendar({ ctx, userId, canalId: message.channelId, messageId: message.id, url: img.url });
+    }
+  }
+
   // ── Quantas vezes esta MESMA mensagem já veio deste autor ──
   // Fica aqui em cima porque o sentinela usa este número: uma mensagem
   // repetida pesa na nota dele, mesmo quando o texto em si é inofensivo.
@@ -773,8 +802,11 @@ export async function runAutomod(message, ctx) {
   // O anti-spam abaixo mede VELOCIDADE (N mensagens em X segundos). Quem
   // repete o mesmo texto num ritmo calmo passava por ele e por todo o resto.
   if (dup.enabled !== false) {
-    const r = analisarDuplicata(content, anterioresDigitais, { maxRepetidas: dup.maxRepetidas ?? 3 });
-    dbg(ctx, `  [anti-duplicata] ON → ${repetidas}ª vez desta mensagem (limite ${dup.maxRepetidas ?? 3})`);
+    // Conta nova repete 2× e já é pega (no raid, as contas tinham minutos de vida).
+    const limiteDup = confianca.contaNova(ctx.serverId ?? server?.id, userId)
+      ? Math.max(2, (dup.maxRepetidas ?? 3) - 1) : (dup.maxRepetidas ?? 3);
+    const r = analisarDuplicata(content, anterioresDigitais, { maxRepetidas: limiteDup });
+    dbg(ctx, `  [anti-duplicata] ON → ${repetidas}ª vez desta mensagem (limite ${limiteDup})`);
     if (r) {
       dbg(ctx, "  ✗ BLOQUEADA por anti-duplicata");
       try { await message.delete(); } catch (e) { dbg(ctx, `  (falha ao deletar: ${e.message})`); }

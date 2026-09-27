@@ -103,6 +103,8 @@ export async function cmdAutomod(message, args, ctx) {
     antilink:        "antiLink",
     sentinela:       "antiScam",
     anticaracteres:  "antiCaracteres",
+    antiduplicata:   "antiDuplicata",
+    antiimagem:      "antiImagem",
     antirepeticao:   "antiRepeticao",
   };
 

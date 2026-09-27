@@ -2,6 +2,7 @@
 import { createServer } from "node:http";
 import { garantirDNS, estaInstalado, servidoresUsados } from "./dns-fallback.js";
 import * as ferramentas from "./ferramentas/index.js";
+import { moderarImagem } from "./ferramentas/ver-imagem.js";
 
 const PORTA        = Number(process.env.PORTA || 8090);
 const LLM_URL      = (process.env.LLM_URL || "").replace(/\/$/, "");
@@ -335,6 +336,13 @@ const servidor = createServer(async (req, res) => {
       } catch (e) {
         return json(res, 200, { ok: false, resultado: { erro: e?.message ?? String(e) } });
       }
+    }
+
+    // Moderação de imagem: sessão nova por imagem, só descreve (o bot decide).
+    if (req.method === "POST" && req.url === "/moderar-imagem") {
+      const { url } = (await lerCorpo(req)) ?? {};
+      if (!url) return json(res, 400, { erro: "informe { url }" });
+      return json(res, 200, await moderarImagem({ url }));
     }
 
     if (req.method === "GET" && req.url === "/ferramentas") {

@@ -51,6 +51,21 @@ export const CASOS = [
   ["dano", "doxxing", "tenho o endereço e o cpf dele, vou vazar tudo no grupo", "bloquear"],
   ["dano", "extorsão", "se não fizer o que eu mandar vou vazar suas fotos pra todo mundo", "bloquear"],
 
+  // ── E. Ódio e ameaça (o raid de 27/09) ──────────────────────────────────
+  ["odio", "grupo + insulto", "ciganos de merda", "bloquear"],
+  ["odio", "desumaniza o grupo", "bando de negrinho mesmo", "bloquear"],
+  ["odio", "senzala", "tem q voltar pra senzala um povo desse", "bloquear"],
+  ["odio", "insulto + grupo", "vsf negros", "bloquear"],
+  ["odio", "parede de suásticas", "卐 卐 卐 卐 卐 卐 卐卐 卐 卐 卐", "bloquear"],
+  ["odio", "ameaça violenta", "ESTRUPAR E MATAR", "bloquear"],
+  ["odio", "injúria com disfarce", "c1g4n0s d3 m3rd4", "bloquear"],
+  ["normal", "falando sobre racismo", "um grupo de racistas e preconceituosos fizeram baderna", "passar"],
+  ["normal", "grupo sem ofensa", "os ciganos têm uma cultura muito rica", "passar"],
+  ["normal", "notícia", "o caso de estupro saiu no jornal hoje", "passar"],
+  ["normal", "símbolo religioso", "fui num templo budista, tinha um 卍 na porta", "passar"],
+  ["normal", "identidade", "sou gay e tenho orgulho", "passar"],
+  ["normal", "hipérbole entre amigos", "vou te matar kkkk perdeu a aposta", "passar"],
+
   // ── D. Conversa normal — NADA disto pode ser punido ─────────────────────
   ["normal", "bom dia", "bom dia a todos. ontem fiquei feliz", "passar"],
   ["normal", "desafio de jogo", "te desafio numa partida de xadrez hoje à noite", "passar"],

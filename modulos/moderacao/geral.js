@@ -19,6 +19,7 @@ import { tr, lingua } from "../core/i18n.js";
 import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { descreverErro } from "../core/erros.js";
 
 // Conta as linhas de código do projeto (uma vez, com cache).
 let _linhasCache = null;
@@ -1254,14 +1255,14 @@ export async function cmdBan(message, args, ctx) {
     });
     console.log(`[BAN] ${message.authorId} -> ${targetId} | ${reason}`);
   } catch (err) {
-    console.error("[BAN]", err.message);
+    console.error("[BAN]", descreverErro(err));
     await sendEmbed(message.channel, tr(ctx, {
       title: "❌ Não foi possível banir",
-      description: `**Usuário:** \`${targetId}\`\n**Erro:** ${err.message}\n\n_Verifique se o bot tem a permissão **BanMembers** e se o cargo dele está acima do alvo._`,
+      description: `**Usuário:** \`${targetId}\`\n**Erro:** ${descreverErro(err, lingua(ctx))}\n\n_Verifique se o bot tem a permissão **BanMembers** e se o cargo dele está acima do alvo._`,
       colour: COR.erro,
     }, {
       title: "❌ Couldn't ban",
-      description: `**User:** \`${targetId}\`\n**Error:** ${err.message}\n\n_Check that the bot has **BanMembers** and that its role sits above the target's._`,
+      description: `**User:** \`${targetId}\`\n**Error:** ${descreverErro(err, lingua(ctx))}\n\n_Check that the bot has **BanMembers** and that its role sits above the target's._`,
       colour: COR.erro,
     }));
   }

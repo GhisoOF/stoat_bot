@@ -101,6 +101,22 @@ diz exatamente o que clicar.
   das horas e **avisa a staff** quando formam um padrão de dano — desafios,
   humilhação, expor gente — mesmo sem nenhuma frase que condene sozinha.
   Falar de se machucar, sozinho, nunca dispara isso.
+  Também pega **ódio e ameaça**: injúria racial e contra grupos, símbolos de
+  ódio em massa, "estuprar e matar" — sempre por conjunção (grupo + insulto),
+  para que falar **sobre** racismo, notícia ou identidade nunca seja punido.
+- **Anti-raid sem botão**: a idade da conta sai do próprio ID; conta criada há
+  minutos passa pelo automod mais rígido. Três contas novas entrando em 15 min
+  ligam a proteção por 30 min e avisam a staff uma vez. Se uma punição falha
+  (ex.: falta `AssignRoles`), tudo o que a pessoa postar nos 30 min seguintes é
+  apagado.
+- **Imagens** (`&automod antiimagem`): imagens de contas novas são descritas pelo
+  modelo de visão — sessão nova a cada imagem, só descrição — e o bot pontua a
+  descrição por palavras-chave e pelo sentinela (texto escrito na imagem também
+  conta). Se apitar, a staff é chamada no log. Nunca pune e nunca republica a
+  imagem.
+- **Ban propagado na hora**: um ban em um servidor da Judy vale imediatamente nos
+  outros, conforme o modo de cada um (`off` · `avisar` · `banir`), sem esperar a
+  sincronização de 6h.
 - **A staff não é moderada**: o dono do servidor, o super admin e os cargos do
   `&staff` passam direto pelo automod. `&automod whitelist add <link>` libera o
   que qualquer um pode postar: um site vai para o anti-link (com subdomínios), um

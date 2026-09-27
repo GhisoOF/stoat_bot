@@ -325,28 +325,7 @@ próprio consultando `.ollama.alcancavel`, troque por `.llm.alcancavel`.
 
 ---
 
-## 6c. Anti-duplicata e comandos em árvore (3ª rodada)
-
-### O spam que passou (bot "Stork", 23 set)
-
-A mesma mensagem longa, repetida 5+ vezes, num ritmo calmo. Passou porque as
-três defesas olhavam para lugares diferentes: **anti-spam** mede velocidade
-(5 msg / 4 s), **anti-repeticao** olha *dentro* de uma mensagem (o mesmo
-caractere seguido) e vem desligado, e o **sentinela** julga o *conteúdo* — que
-era inofensivo. **Ninguém comparava uma mensagem com a anterior.** (O automod
-não ignora bots; isso foi verificado, não era a causa.)
-
-**`antiDuplicata`** (novo, ligado por padrão): guarda uma "digital" das
-mensagens recentes de cada autor e conta as repetições. Na 3ª vez em 2 minutos,
-apaga e pune. A digital normaliza acento, caixa, pontuação, espaço e emoji, então
-esses disfarces não passam. Mensagens com menos de 12 caracteres úteis são
-ignoradas (`ok`, `kkkk`), e repetir duas vezes continua aceitável.
-
-No **sentinela**, a repetição virou sinal (peso 2), somado junto com o ritmo.
-Calibrado para **não condenar sozinho**: texto limpo repetido 4× continua com
-nota baixa. Quem pune é a regra determinística; o sinal só soma com o resto.
-
-`teste-duplicata.mjs` (15 asserções) usa o texto real do Stork.
+## 6c. Comandos em árvore (3ª rodada)
 
 ### Comandos em árvore
 
@@ -390,7 +369,7 @@ a coisa é**, não só a sintaxe.
 
 ---
 
-## 6d. Sentinela contra disfarces e padrão de dano; 4 vulnerabilidades (4ª rodada)
+## 6d. As 4 vulnerabilidades restantes (4ª rodada)
 
 ### As 4 vulnerabilidades sem correção publicada
 
@@ -413,38 +392,6 @@ documentação (`better-docs`) como dependência de execução.
 
 `teste-dependencias.mjs` trava os cinco pontos (sem rede, sem npm install).
 
-### Sentinela: 15 brechas → 0
-
-`scripts/simular-automod.mjs` roda conteúdo perigoso, disfarces e conversa
-normal pelas mesmas funções do bot. O resultado completo, caso a caso, está em
-`SIMULACAO-automod.md`.
-
-**A brecha principal:** o sentinela pontuava o texto **cru**. Qualquer disfarce
-derrubava a nota de 8 para 0–3,5. `normalizarParaAnalise()` traz o texto de
-volta para a forma que um humano lê antes de pontuar: letras "fancy" (NFKC),
-caracteres invisíveis, cirílico/grego que imita latino, letras separadas por
-espaço ou pontuação, leetspeak (só em palavra que mistura letra e número —
-`R$50` e `2024` ficam intactos) e link escrito como `bit[.]ly` ou `bit . ly`.
-Link ofuscado e link mascarado (`[texto](url)`) viraram sinais próprios.
-
-**Padrão de dano** (o caso que você mostrou): desafios, humilhação, doxxing,
-extorsão, autolesão. Duas camadas:
-
-- **numa mensagem só**, bloqueia apenas o inequívoco — mandar alguém se cortar,
-  ameaçar vazar dados ou fotos;
-- **o resto soma por pessoa** em até 12h (`confianca.registrarDano`), e vira
-  alerta para a staff com os trechos que motivaram — nunca punição.
-
-O alerta exige soma ≥ 4, sinais de **2+ categorias** e **pelo menos um do lado
-de quem agride**. Falar de se machucar, sozinho, nunca dispara: a conversa
-simulada de alguém pedindo ajuda fica em 1,0 e passa.
-
-O caso real, frase por frase, tirava 0 a 2,5 — nenhuma chegava perto do alerta
-antigo. A conversa inteira soma 5,5 em cinco categorias e alerta.
-
-`teste-sentinela-simulacao.mjs` cobra o simulador: brecha ou falso positivo
-novo quebra o teste.
-
 ### Sem avisos de redirecionamento
 
 `&tts entrar`/`&tts sair` simplesmente não são mais comando (não há mais o
@@ -452,28 +399,7 @@ novo quebra o teste.
 
 ---
 
-## 6e. Whitelist, isenção da staff e o legado que sobrou (5ª rodada)
-
-### O dono foi silenciado no próprio servidor
-
-`&automod whitelist add https://linksta.cc/@ghiso` respondia "liberado" e o
-anúncio foi apagado mesmo assim, com silêncio de 2h. Dois bugs antigos:
-
-- **A whitelist gravava no lugar errado.** Tudo virava código de convite, que
-  só o anti-**invite** consulta. Quem bloqueou foi o anti-**link** (o
-  `linksta.cc` está numa das listas estilo Pi-hole), e ele não tinha lista de
-  permitidos. Agora o mesmo comando manda cada coisa para o seu lugar: site →
-  `dominiosPermitidos` (anti-link, com subdomínios); convite do Stoat →
-  `inviteWhitelist`. O que já tinha ido para a lista errada **migra sozinho**
-  quando a config do servidor é carregada.
-- **O automod não isentava ninguém.** Agora dono, super admin e os cargos do
-  `&staff`/`&acesso` (tudo que o `membroTemPermissao` reconhece como
-  `ManageMessages`) passam direto. `automod.isentarStaff: false` desliga, para
-  testar os filtros em si mesmo.
-
-`teste-whitelist-staff.mjs` (9) reproduz o anúncio exato pelo `runAutomod`
-real. Um bloqueio só conta se a mensagem foi **apagada** — uma exceção não
-passa como bloqueio.
+## 6e. O legado que sobrou (5ª rodada)
 
 ### O legado que as varreduras não viam
 
@@ -520,6 +446,31 @@ existia. Agora `mesclarNos` funde em profundidade (juntando os textos) e
 
 ---
 
+## 6f. O banco podia sair do volume (6ª rodada)
+
+Consequência de uma mudança minha da 1ª rodada, pega quando o Ghieh perguntou
+se o deploy apagaria o banco.
+
+- O Dockerfile define `DB_PATH=/data/stoat.db` (dentro do volume `stoat_data`).
+- A 1ª rodada trocou a lista de variáveis do compose por `env_file: .env`, e
+  **`env_file` vence o `ENV` do Dockerfile**.
+- O `.env.example` trazia `DB_PATH=./dados/stoat.db` **descomentado**. Um `.env`
+  feito a partir dele faria o bot abrir `/app/dados/stoat.db`: um banco novo e
+  vazio, fora do volume, que ainda some a cada rebuild.
+
+**Nada seria apagado** — o banco verdadeiro continua intacto em `/data` —, mas o
+bot rodaria sem ele. Correção: `DB_PATH` e `CONFIG_PATH` fixos no `environment`
+do compose, **sem `${...}`**. Pela ordem de precedência documentada do Compose,
+valor fixo em `environment` vence `env_file`, que vence o `ENV` da imagem; e
+valor **interpolado** de um `.env` vence os dois — por isso não pode haver `${}`
+ali. As duas linhas do `.env.example` foram comentadas, com a explicação de que
+só servem fora do Docker.
+
+`teste-compatibilidade.mjs` (agora 31) trava as duas coisas, e foi provado que
+ele falha com o compose antigo.
+
+---
+
 ## 7. O que NÃO fiz, e por quê
 
 | Item | Por quê |
@@ -537,76 +488,43 @@ existia. Agora `mesclarNos` funde em profundidade (juntando os textos) e
 ## 8. Como aplicar
 
 ```bash
-# 1. No PC (a regra do projeto: git só aqui)
+# 1. No PC (git só aqui)
 cd /home/ghiso/Desktop/GhisoOF/Judy/Stoat_Bot
 unzip -o ~/Downloads/stoat_bot-refatorado.zip -d /tmp/refat && cp -a /tmp/refat/pkg/. .
+[ -f .env ] || cp .env.example .env      # o compose usa env_file
 
-# O compose usa env_file: o .env é obrigatório.
-[ -f .env ] || cp .env.example .env
-
-# 2. Conferir antes de commitar (nenhum destes precisa de rede nem npm install,
-#    exceto teste-refatoracao.mjs, que importa stoat.js)
+# 2. Conferir (só o último precisa de npm install)
 node scripts/verificar-build.js
-node teste-compatibilidade.mjs        # banco antigo continua funcionando
-node teste-arvore-comandos.mjs        # a árvore de comandos e a ajuda profunda
-node teste-duplicata.mjs              # o spam do Stork é pego
-node teste-sentinela-simulacao.mjs    # disfarces e padrão de dano
-node teste-dependencias.mjs           # as 4 vulnerabilidades continuam fora
-node teste-whitelist-staff.mjs        # whitelist de links e staff isenta
-node teste-help-render.mjs            # as 211 páginas de ajuda, sem comando morto
+node teste-compatibilidade.mjs           # banco e .env antigos, e o banco no volume
+node teste-arvore-comandos.mjs           # a árvore de comandos
+node teste-help-render.mjs               # nenhuma página de ajuda cita comando removido
+node teste-dependencias.mjs              # as vulnerabilidades continuam fora
 node teste-ia.mjs && node teste-verificador.mjs
+npm install && node teste-refatoracao.mjs
 
-npm install && node teste-refatoracao.mjs   # só este precisa de node_modules
+git add -A && git commit -m "refatoracao: kiss, seguranca e remocao de legado" && git push
 
-git add -A
-git commit -m "automod: normaliza disfarces, alerta padrao de dano; deps: zera as 4 restantes; remove avisos de redirecionamento"
-git push
-
-# 3. No MiniPC, via Tailscale
+# 3. No MiniPC — backup ANTES (o banco usa WAL: são 3 arquivos)
 ssh void@gmktec.tailaeddbe.ts.net
 cd /home/void/judy-repo
+docker compose stop stoat-bot
+B=~/backup-judy-$(date +%F-%H%M); mkdir -p "$B"
+for f in stoat.db stoat.db-wal stoat.db-shm automod-config.json; do
+  docker cp "stoat-bot:/data/$f" "$B/" 2>/dev/null; done
 git pull
+docker compose config | grep -E "DB_PATH|CONFIG_PATH"   # tem de mostrar /data/...
 docker compose up -d --build
-
-# 4. Conferir que a configuração CHEGA ao container
-docker exec stoat-bot printenv | grep -E 'SD_MODELO_TIPO|SPOTIFY|STOAT_API|CDN_URL|LLAMA_CTX'
-
-# 5. Conferir que a voz ainda instalou (as vulnerabilidades saíram por aqui)
-docker exec stoat-bot npm ls --prefix /app/voz-servico ip elliptic werift vue-template-compiler 2>&1 | tail -5
-# esperado: "not found" para os quatro — se aparecer algum, a voz caiu para o modo antigo
+docker logs stoat-bot 2>&1 | grep "Banco aberto" | tail -1
 ```
 
-**Teste ao vivo, na ordem de risco** (do mais provável de quebrar para o menos):
+**Teste ao vivo, na ordem de risco:**
 
-1. **`&entrar` numa call e `&musica`** — o ponto de maior risco: a voz agora
-   importa só o caminho do LiveKit do revoice.js, e `axios` segue em 0.34 (era
-   0.26). Se a call não abrir, confira `docker logs stoat-bot | grep -i voz`
-   primeiro; se for dependência, tire os `overrides` de `msc-node`,
-   `better-docs`, `taffydb` do `voz-servico/package.json`, rebuild.
-2. **Disfarces do sentinela** — mande `g4nh3 d1nh31r0 f4c1l, chama no whats`
-   e uma versão com letras espaçadas. As duas têm de ser bloqueadas agora.
-3. **Padrão de dano** — não dá para testar rápido (soma por pessoa em até
-   12h). Acompanhe `docker logs -f stoat-bot | grep -i "\[sentinela"` por
-   alguns dias.
-4. **O anti-duplicata** — mande a mesma mensagem longa 3 vezes seguidas; na
-   3ª ela tem de sumir. Confira em `&config` que `antiduplicata` está ligado.
-5. **A ajuda em profundidade** — `&help automod`, `&help automod sentinela`,
-   `&help automod sentinela antiguidade`. Um caminho errado de propósito
-   (`&help automod xyz`) tem de responder o que existe ali.
-6. **O que foi removido continua removido** — `&blocklist`, `&warnings`,
-   `&punicao`, `&tts entrar` não podem responder nada (nem aviso): só
-   `&automod blocklist`, `&warn lista`, `&automod punicao`, `&entrar`.
-7. **`&chat` com imagem anexada e "desenha ..."** — cobre o `sharp` 0.35.4.
-8. **`&cor <cargo> gradiente ...`, `&reactionrole`, `&ban`/`&desbanir`** —
-   cobrem os caminhos migrados para o `chamarApi`.
-9. **`&embed` com um anexo do Stoat** — a capa tem de aparecer como imagem,
-   sem o aviso de "site de terceiros".
+1. `&entrar` numa call e `&musica` — o `axios` saltou de 0.26 para 0.34 e a voz
+   passou a importar só o caminho do LiveKit. Se quebrar, tire os `overrides`
+   do `voz-servico/package.json` e rebuild.
+2. `&help automod sentinela antiguidade` e um caminho errado de propósito.
+3. `&blocklist`, `&warnings`, `&tts entrar` não respondem mais nada.
+4. `&chat` com imagem anexada — cobre o `sharp` 0.35.4.
+5. `&cor`, `&reactionrole`, `&ban` — os caminhos migrados para o `chamarApi`.
 
-Se o sentinela ou o anti-duplicata pegarem alguém à toa: `&automod sentinela
-off` ou `&automod antiduplicata off` desligam na hora, sem rebuild. Para
-ajustar em vez de desligar: `SENTINELA_DANO_JANELA_MS` e
-`SENTINELA_DANO_LIMIAR` no `.env` (exige recriar o container).
-
-Para voltar atrás em qualquer ponto: `git revert` do commit. Os lockfiles
-estão no pacote, então o build é reproduzível.
-
+Para voltar atrás: `git revert` do commit.

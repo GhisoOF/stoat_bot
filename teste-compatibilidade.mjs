@@ -214,6 +214,28 @@ for (const host of ["autumn.stoat.chat", "autumn.revolt.chat", "cdn.stoatusercon
   });
 }
 
+console.log("\n── Docker: o banco NUNCA sai do volume ──");
+{
+  const compose = fs.readFileSync("./docker-compose.yml", "utf8");
+  const exemplo = fs.readFileSync("./.env.example", "utf8");
+  const volume = compose.match(/-\s*stoat_data:(\/\S+)/)?.[1];
+  t("o volume persistente está montado", () => assert.ok(volume, "sem `stoat_data:` no compose"));
+  for (const v of ["DB_PATH", "CONFIG_PATH"]) {
+    t(`${v} é FIXO no environment e aponta para dentro do volume`, () => {
+      // Fixo = sem ${...}: `environment` vence o `env_file`, então nenhum
+      // `.env` consegue desviar o banco para fora do volume.
+      const m = compose.match(new RegExp(`-\\s*${v}=(\\S+)`));
+      assert.ok(m, `${v} não está no environment do compose`);
+      assert.ok(!m[1].includes("${"), `${v} usa \${...} — o .env poderia sobrescrever`);
+      assert.ok(m[1].startsWith(volume + "/"), `${v}=${m[1]} está FORA do volume ${volume}`);
+    });
+    t(`${v} está comentado no .env.example`, () => {
+      assert.doesNotMatch(exemplo, new RegExp(`^${v}=`, "m"),
+        `${v} descomentado no .env.example: quem copiar para o .env desvia o banco`);
+    });
+  }
+}
+
 cru.close();
 console.log(`\nCOMPATIBILIDADE: ${ok} ok, ${falhou} falha(s)`);
 process.exit(falhou ? 1 : 0);

@@ -185,5 +185,35 @@ await t("linha de erro cortada em palavra, não no meio dela", () => {
   assert.ok(c.endsWith("…")); assert.doesNotMatch(c, /\s…$/); assert.ok(c.length <= 110);
 });
 
+console.log("\n── o relatório REAL de 27/09 (16:00–17:00) ──");
+await t("assuntos sem nome de servidor ganham o nome (só um tinha amostras)", () => {
+  const prosa = ["**Assuntos**", "*   Discussão sobre o Discord versus alternativas.", "*   Banimentos do Discord por país.", "", "**Erros**", "x"].join("\n");
+  const Q = "01KQ55ZPRP8C5THN5B28DN6AB2";
+  const out = rel.limparAssuntos(prosa, new Map([[Q, { amostras: ["tambem tem tanto clone de discord sendo feito no momento"] }]]),
+    new Map([[Q, "🎃 Queremos acordar tarde!"]]));
+  assert.match(out, /\*\*Assuntos\*\*\n\*\*🎃 Queremos acordar tarde!\*\*\n\*   Discussão/);
+});
+await t("erro do dia inteiro é marcado como persistente, não 'temporário'", () => {
+  const nitter = rel.normalizarErro("[RSS] falha ao ler https://nitter.net/bitdov/rss: connect ECONNREFUSED 185.246.188.105:443");
+  const ate = 3_000 * HORA;
+  const ev = [];
+  for (let h = 0; h < 20; h++) ev.push({ t: ate - h * HORA - 60_000, tipo: "erro", titulo: nitter });   // 1× por hora, 20 horas
+  ev.push({ t: ate - 60_000, tipo: "erro", titulo: "erro novo desta hora" });
+  const p = rel.persistenciaDosErros(ev, ate);
+  assert.equal(p.get(nitter), 20);
+  assert.equal(p.get("erro novo desta hora"), 1);
+  const g = rel.agrupar(ev.filter((e) => e.t >= ate - HORA), { desde: ate - HORA });
+  g.persistencia = p;
+  const n = rel.montarNumeros({ grupos: g, atividade: new Map(), nomes: new Map(), desde: ate - HORA, ate });
+  assert.match(n.texto, /em 20 das últimas 24 h/);
+  assert.match(n.texto, /primeira vez nas últimas 24 h/);
+});
+await t("imagem: o evento aponta quem e onde, e a descrição fica no log", async () => {
+  const src = (await import("node:fs")).readFileSync("./modulos/moderacao/imagem.js", "utf8");
+  assert.match(src, /— <@\$\{userId\}> em <#\$\{canalId\}>/, "o relatório precisa dizer quem e onde");
+  assert.match(src, /\[IMAGEM\] descrição/, "a descrição do modelo tem de ir para o log");
+  assert.match(src, /alerta NÃO entregue/, "sem canal, o alerta não pode sumir calado");
+});
+
 console.log(`\nRELATÓRIO: ${ok} ok, ${falhou} falha(s)`);
 process.exit(falhou ? 1 : 0);

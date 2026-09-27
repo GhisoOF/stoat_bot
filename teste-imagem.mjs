@@ -27,16 +27,39 @@ for (const [nome, d] of [
 }
 
 console.log("\n── menor + conteúdo sexual: grave, e a imagem NUNCA é repostada ──");
-t("é marcado como grave", () => {
-  const r = img.pontuarDescricao("Uma criança nua em um quarto.");
+t("é marcado como grave quando o modelo também aponta risco", () => {
+  const r = img.pontuarDescricao("Uma criança nua em um quarto.", { riscoModelo: true });
   assert.equal(r.grave, true); assert.equal(r.alertar, true);
 });
 t("o alerta não carrega imagem nem anexo", () => {
-  const r = img.pontuarDescricao("Uma criança nua em um quarto.");
+  const r = img.pontuarDescricao("Uma criança nua em um quarto.", { riscoModelo: true });
   const e = img.montarAlerta({ userId: "U", canalId: "C", descricao: "x", r, staff: ["R1"] });
   assert.equal(e.imagem, undefined); assert.equal(e.anexos, undefined);
   assert.match(e.description, /NÃO é repostada/);
   assert.match(e.description, /<%R1>/, "tem de marcar a staff");
+});
+
+t("sem o voto do modelo: ALERTA, mas sem o rótulo grave", () => {
+  const r = img.pontuarDescricao("Uma criança nua em um quarto.", { riscoModelo: false });
+  assert.equal(r.alertar, true, "palavra-chave sozinha ainda tem de chamar a staff");
+  assert.equal(r.grave, false, "'material de abuso' exige o modelo concordar");
+});
+
+console.log("\n── o falso positivo de 27/09 (vídeo de futebol, nota 9.5) ──");
+t("checklist negado não dispara nada", () => {
+  const d = "A imagem é uma captura de tela de um chat com um vídeo de um jogador de futebol celebrando em campo. "
+    + "Nudez ou ato sexual: não. Crianças ou adolescentes: não. Sangue, ferimento ou violência: não. Armas: não. Símbolos de ódio: nenhum.";
+  const r = img.pontuarDescricao(d);
+  assert.ok(!r.alertar, `nota ${r.nota} [${r.categorias}] — falso positivo de volta`);
+});
+t("variações do checklist: travessão, lista, inglês", () => {
+  for (const d of ["- Nudez: não\n- Armas — nenhuma\n- Sangue: ausente", "Nudity: none. Weapons: no. Blood: not present."]) {
+    assert.ok(!img.pontuarDescricao(d).alertar, d);
+  }
+});
+t("contraprova: checklist com 'sim' continua alertando", () => {
+  const r = img.pontuarDescricao("Nudez ou ato sexual: sim, uma pessoa nua. Armas: não.");
+  assert.ok(r.alertar); assert.ok(r.categorias.includes("sexual")); assert.ok(!r.categorias.includes("arma"));
 });
 
 console.log("\n── descrições que NÃO podem alertar ──");

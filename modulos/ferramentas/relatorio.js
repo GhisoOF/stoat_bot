@@ -136,7 +136,11 @@ export function montarNumeros({ grupos, atividade, nomes, desde, ate }) {
   }
   if (grupos.erros.length) {
     linhas.push("**Erros**");
-    for (const [msg, n] of grupos.erros.slice(0, 8)) linhas.push(`• \`${cortar(msg, 140)}\`${n > 1 ? ` ×${n}` : ""}`);
+    for (const [msg, n] of grupos.erros.slice(0, 8)) {
+      const h = grupos.persistencia?.get(msg) ?? 1;
+      const hist = h >= 2 ? ` · **em ${h} das últimas 24 h**` : " · primeira vez nas últimas 24 h";
+      linhas.push(`• \`${cortar(msg, 140)}\`${n > 1 ? ` ×${n}` : ""}${hist}`);
+    }
     if (grupos.erros.length > 8) linhas.push(`_… e mais ${grupos.erros.length - 8} tipo(s) de erro._`);
   }
   return { texto: linhas.join("\n").trim(), algo: algo || grupos.erros.length > 0 || grupos.reinicios > 0 };
@@ -163,7 +167,7 @@ export function montarPrompt({ numeros, amostras, nomes }) {
     "**Destaques** — até 4 linhas: o que merece atenção nesta hora (banimentos, alertas, algo fora do normal). Se foi tranquila, diga em uma linha.",
     "**Assuntos** — SÓ para os servidores que aparecem em \"Amostras de conversa\", 1 a 3 assuntos mais comentados. Sem amostra, não há assunto: nunca deduza assunto pelo NOME do servidor. Sem citar nomes de pessoas nem copiar frases.",
     "Reinício por deploy/restart é manutenção normal, não instabilidade; só \"queda sem aviso\" e \"watchdog\" merecem atenção.",
-    "**Erros** — se houver erros, em até 3 linhas: a causa provável de cada tipo e se parece grave. Se não houver, omita a seção.",
+    "**Erros** — se houver erros, em até 3 linhas: a causa provável de cada tipo e se parece grave. Erro que aparece \"em N das últimas 24 h\" é PERSISTENTE, nunca \"temporário\". Se não houver, omita a seção.",
     "",
     "## Números da hora",
     numeros,
@@ -196,6 +200,7 @@ export async function gerar({ client, cfg, ate = Date.now(), fetcher = fetch, es
   const nomes = new Map();
   for (const s of client?.servers?.values?.() ?? []) nomes.set(s.id, s.name ?? s.id);
   const grupos = agrupar(db.eventosRelatorio(desde - 30 * 60_000, ate), { desde });
+  grupos.persistencia = persistenciaDosErros(db.eventosRelatorio(ate - 24 * HORA, ate), ate);
   const ativ = esvaziar ? esvaziarAtividade() : copiaAtividade();
   const numeros = montarNumeros({ grupos, atividade: ativ, nomes, desde, ate });
   const bruta = numeros.algo ? await redigir(montarPrompt({ numeros: numeros.texto, amostras: ativ, nomes }), { fetcher }) : null;
@@ -264,7 +269,30 @@ export function limparAssuntos(texto, amostras, nomes) {
       : linha;
     saida.push(limpa);
   }
+  // Assuntos sem cabeçalho de servidor (aconteceu com um servidor só): se só um
+  // tinha amostras, o nome é dele — o código põe, em vez de deixar ambíguo.
+  const idx = saida.findIndex((l) => /^\s*\*\*Assuntos\*\*/i.test(l));
+  if (idx >= 0 && comAmostra.size === 1) {
+    const prox = saida.slice(idx + 1).find((l) => l.trim());
+    if (prox && /^\s*[-*•]\s/.test(prox)) {
+      const nome = [...amostras].filter(([, a]) => a.amostras?.length).map(([id]) => nomes.get(id) ?? id)[0];
+      saida.splice(idx + 1, 0, `**${nome}**`);
+    }
+  }
   return saida.join("\n")
     .replace(/\*\*Assuntos\*\*\s*\n(\s*\n)*(?=\*\*(Erros|Destaques)\*\*|$)/i, "")
     .trim();
+}
+
+// Em quantas das últimas 24 horas cada padrão de erro apareceu. Sem isto o
+// modelo chamou de "falha temporária" o nitter.net recusando o dia inteiro.
+export function persistenciaDosErros(eventos, ate) {
+  const horas = new Map();
+  for (const e of eventos) {
+    if (e.tipo !== "erro") continue;
+    const h = Math.floor((ate - 1 - e.t) / HORA);
+    if (!horas.has(e.titulo)) horas.set(e.titulo, new Set());
+    horas.get(e.titulo).add(h);
+  }
+  return new Map([...horas].map(([k, s]) => [k, s.size]));
 }

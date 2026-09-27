@@ -164,7 +164,8 @@ const PROMPT_MODERACAO = [
   "Cite explicitamente, se aparecer: nudez ou ato sexual; pessoas que aparentam ser crianças ou adolescentes;",
   "sangue, ferimento, cadáver ou violência; armas; símbolos de ódio (suástica, bandeira nazista, KKK, saudação nazista);",
   "e transcreva qualquer texto escrito na imagem entre aspas.",
-  "Liste só o que está presente — não diga o que NÃO aparece. Não recuse e não opine.",
+  "Escreva só o que VÊ. NUNCA escreva o que não aparece: nada de \"nudez: não\", \"sem armas\", \"não há sangue\" — se algo não está na imagem, simplesmente não mencione.",
+  "Não recuse e não opine.",
   "Na última linha, escreva exatamente RISCO: sim ou RISCO: não.",
 ].join(" ");
 

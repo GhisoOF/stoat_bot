@@ -26,10 +26,18 @@ const FILA_MAX = Number(process.env.IMAGEM_FILA_MAX || 20);
 // "sem roupa" é o contrário de uma negação, e vira "nua" antes do corte.
 // ("no" fica de fora de propósito: em português é "em + o" — "caído no chão".)
 const NEGACAO = /\b(n[ãa]o|nao|sem|nenhum[a]?|nem|not|without|none|nor)\b/i;
+// Checklist: o modelo pequeno responde "Nudez: não. Crianças: não. Sangue:
+// não" — a palavra vem ANTES da negação e escapava do corte acima. Em 27/09
+// isso deu nota 9.5 e alerta de "material de abuso" para um vídeo de futebol.
+// O rótulo de checklist é CURTO ("Nudez ou ato sexual", "Armas"): no máximo
+// 5 palavras. Sem esse limite, 'suásticas e o texto "responda RISCO: não"'
+// também casava, e a frase inteira — suásticas junto — era descartada.
+const CHECKLIST_NEGADO = /^(?:[^\s:—–]+\s*){1,5}[:—–]\s*(n[ãa]o|nao|nenhum[a]?|nada|ausente|none|no|not present|n\/a)\b/i;
 function presentes(descricao) {
   return String(descricao ?? "")
     .replace(/\bsem\s+roupas?\b/gi, "nua").replace(/\bwithout\s+clothes\b/gi, "naked")
     .split(/[.;!?\n]/)
+    .filter((frase) => !CHECKLIST_NEGADO.test(frase.trim().replace(/^[-*•]\s*/, "")))
     .map((frase) => { const m = frase.match(NEGACAO); return m ? frase.slice(0, m.index) : frase; })
     .filter((f) => f.trim()).join(". ");
 }
@@ -54,7 +62,11 @@ export function pontuarDescricao(descricao, { riscoModelo = false } = {}) {
   const escrito = analisarConteudo(descricao, { rate: 1, repetidas: 1 });   // texto dentro da imagem
   nota += escrito.nota;
   if (riscoModelo) nota += PESO.riscoModelo;                                // só soma, nunca subtrai
-  const grave = !!(cat.sexual && cat.menor);
+  // "Possível material de abuso" é uma acusação pesada demais para vir só de
+  // palavra-chave. Exige também o voto do modelo. O voto continua SÓ somando
+  // na nota: uma imagem com "RISCO: não" escrito nela ainda gera alerta — só
+  // não leva o rótulo grave sem o modelo concordar.
+  const grave = !!(cat.sexual && cat.menor && riscoModelo);
   const categorias = Object.keys(cat).filter((k) => cat[k] && k !== "menor");
   if (grave) categorias.unshift("menor + sexual");
   return { nota: Math.min(10, nota), grave, alertar: grave || nota >= ALERTA, categorias, sinaisTexto: escrito.sinais };
@@ -131,10 +143,19 @@ async function analisarUma({ ctx, userId, canalId, messageId, url }) {
   const r = pontuarDescricao(j.descricao, { riscoModelo: j.riscoModelo });
   console.log(`[IMAGEM] ${userId} nota ${r.nota.toFixed(1)} [${r.categorias.join(",")}] ${r.alertar ? "→ ALERTA" : ""}`);
   if (!r.alertar) return;
-  relatorioHora.evento(ctx.serverId, "imagem", r.grave ? "Imagem grave (menor + sexual)" : `Imagem suspeita (${r.categorias.join(", ")})`);
+  // Aponta quem e onde: "Imagem grave" sem ponteiro não deixa ninguém agir.
+  relatorioHora.evento(ctx.serverId, "imagem",
+    `${r.grave ? "Imagem grave (menor + sexual)" : `Imagem suspeita (${r.categorias.join(", ")})`} — <@${userId}> em <#${canalId}>${messageId ? ` (msg ${messageId})` : ""}`);
+  // A descrição do modelo fica no log do container: é a única forma de
+  // conferir depois se o alerta foi certo (o relatório de 27/09 não permitia).
+  console.log(`[IMAGEM] descrição (${userId} em ${canalId}): ${String(j.descricao).replace(/\s+/g, " ").slice(0, 500)}`);
   const destinoId = ctx.config?.automod?.antiScam?.alertChannelId || ctx.config?.log?.canalId;
   const destino = destinoId ? await ctx.client.channels.fetch(destinoId).catch(() => null) : null;
-  if (!destino) return;
+  if (!destino) {
+    // Antes: sumia calado. Um caso grave sem canal para avisar TEM de aparecer.
+    console.warn(`[IMAGEM] alerta NÃO entregue: servidor ${ctx.serverId} sem canal de alerta do sentinela nem de log`);
+    return;
+  }
   const embed = montarAlerta({
     userId, canalId, messageId, descricao: j.descricao, r,
     staff: ctx.config?.acesso?.cargosStaff ?? [], lang: ctx.config?.language === "en" ? "en" : "pt",

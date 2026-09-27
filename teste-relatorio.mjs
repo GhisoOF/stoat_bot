@@ -111,5 +111,79 @@ await t("teto de erros por hora (um laço de erro não enche o banco)", () => {
   assert.ok(db.eventosRelatorio(h0, h0 + HORA).length <= 300);
 });
 
+console.log("\n── o relatório REAL de 27/09 (14:30–15:30) ──");
+// O texto que o modelo escreveu, como apareceu no canal. Só o Vapor Nexus
+// tinha amostras: os outros dois entraram na lista DEPOIS das mensagens.
+const PROSA_REAL = [
+  "**Destaques**",
+  "O bot reiniciou 3 vezes durante o período, indicando instabilidade na execução dos processos.",
+  "",
+  "**Assuntos**",
+  "**Vapor Nexus**",
+  "*   Discussão sobre recomendações de conteúdo (\"oloco achei daora\").",
+  "*   Planejamento de transmissões ao vivo (lives) futuras.",
+  "",
+  "**🎃 Queremos acordar tarde!**",
+  "*   Foco na temática do despertar tardio como ponto central da conversa.",
+  "",
+  "**Brasil ClJS**",
+  "*   Baixa atividade, com um único registro de interação.",
+  "",
+  "**Erros**",
+  "Falhas de permissão (AssignRoles) em vários servidores.",
+].join("\n");
+const VAPOR = "01KH9SJYWVD7XAHJ28TP0YP4Q0", QUEREMOS = "01KQ55ZPRP8C5THN5B28DN6AB2", CLJS = "01KZKFDGS0SANQEN4CJZ6MAN42";
+const nomes27 = new Map([[VAPOR, "Vapor Nexus"], [QUEREMOS, "🎃 Queremos acordar tarde!"], [CLJS, "Brasil ClJS"]]);
+const amostras27 = new Map([
+  [VAPOR, { msgs: 21, autores: new Set(), amostras: ["oloco achei daora", "quer call?  To pensando em fazer live hj dnv"] }],
+  [QUEREMOS, { msgs: 19, autores: new Set(), amostras: [] }],
+  [CLJS, { msgs: 1, autores: new Set(), amostras: [] }],
+]);
+const limpo = rel.limparAssuntos(PROSA_REAL, amostras27, nomes27);
+await t("assunto inventado pelo NOME do servidor sai", () => {
+  assert.doesNotMatch(limpo, /despertar tardio/);
+  assert.doesNotMatch(limpo, /Queremos acordar tarde/);
+});
+await t("servidor sem amostra não ganha 'assunto' nenhum", () => assert.doesNotMatch(limpo, /Brasil ClJS/));
+await t("o servidor COM amostra fica, com os assuntos", () => {
+  assert.match(limpo, /Vapor Nexus/); assert.match(limpo, /Planejamento de transmissões/);
+});
+await t("frase copiada de um membro sai; o assunto fica", () => {
+  assert.doesNotMatch(limpo, /oloco achei daora/);
+  assert.match(limpo, /recomendações de conteúdo/);
+});
+await t("Destaques e Erros não são tocados", () => {
+  assert.match(limpo, /\*\*Destaques\*\*/); assert.match(limpo, /\*\*Erros\*\*\nFalhas de permissão/);
+});
+await t("se nenhum servidor tinha amostra, a seção Assuntos some inteira", () => {
+  const nada = rel.limparAssuntos(PROSA_REAL, new Map([[QUEREMOS, { amostras: [] }]]), nomes27);
+  assert.doesNotMatch(nada, /Assuntos/); assert.match(nada, /\*\*Erros\*\*/);
+});
+
+console.log("\n── reinícios: manutenção não é instabilidade ──");
+await t("3 reinícios por deploy/restart aparecem como tal", () => {
+  const h0 = 1_000 * HORA;
+  const ev = [
+    { t: h0 - 60_000, tipo: "desligar", titulo: "deploy/restart" }, { t: h0 + 60_000, tipo: "boot", titulo: "x" },
+    { t: h0 + 9e5, tipo: "desligar", titulo: "deploy/restart" },    { t: h0 + 1e6, tipo: "boot", titulo: "x" },
+    { t: h0 + 2e6, tipo: "desligar", titulo: "watchdog" },          { t: h0 + 2.1e6, tipo: "boot", titulo: "x" },
+    { t: h0 + 3e6, tipo: "boot", titulo: "x" },
+  ];
+  const g = rel.agrupar(ev, { desde: h0 });
+  assert.equal(g.reinicios, 4);
+  assert.deepEqual(Object.fromEntries(g.causas), { "deploy/restart": 2, watchdog: 1, "queda sem aviso": 1 });
+  const n = rel.montarNumeros({ grupos: g, atividade: new Map(), nomes: new Map(), desde: h0, ate: h0 + HORA });
+  assert.match(n.texto, /2× deploy\/restart · 1× watchdog · 1× queda sem aviso/);
+});
+await t("o 'desligar' pode vir da hora anterior (boot logo depois das :00)", () => {
+  const h0 = 2_000 * HORA;
+  const g = rel.agrupar([{ t: h0 - 30_000, tipo: "desligar", titulo: "deploy/restart" }, { t: h0 + 90_000, tipo: "boot", titulo: "x" }], { desde: h0 });
+  assert.deepEqual(g.causas, [["deploy/restart", 1]]);
+});
+await t("linha de erro cortada em palavra, não no meio dela", () => {
+  const c = rel.cortar("[BANGLOBAL] auto: falha em teste: o bot não tem a permissão **AssignRoles** (ou o cargo de silêncio está acima do cargo dele)", 110);
+  assert.ok(c.endsWith("…")); assert.doesNotMatch(c, /\s…$/); assert.ok(c.length <= 110);
+});
+
 console.log(`\nRELATÓRIO: ${ok} ok, ${falhou} falha(s)`);
 process.exit(falhou ? 1 : 0);

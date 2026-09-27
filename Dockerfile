@@ -118,7 +118,9 @@ RUN set -x; SUF="x64"; [ "$TARGETARCH" = "arm64" ] && SUF="arm64"; \
 
 # 0a-bis) stable-diffusion.cpp para gerar imagens (gerar_imagem): compilado
 #     do fonte no estágio "sdcpp" (mesma base = mesma glibc). O MODELO
-#     (SD-Turbo) é baixado no PRIMEIRO USO e fica no volume (/data/modelos-sd).
+#     (Z-Image-Turbo por padrão: difusão + VAE + LLM do prompt, ~6,5 GB) é
+#     baixado pelo iniciar.js NO BOOT e fica no volume (/data/modelos-sd).
+#     SD_MODELO_TIPO=sd troca pelo SD-Turbo antigo (um arquivo, mais leve).
 COPY --from=sdcpp /sd/build/bin/ /opt/sdcpp/bin/
 RUN set -x; BIN="$(find /opt/sdcpp/bin -maxdepth 1 -type f \( -name sd -o -name sd-cli \) | head -1)"; \
     if [ -n "$BIN" ]; then \

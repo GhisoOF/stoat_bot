@@ -74,13 +74,29 @@ export function esvaziarAtividade() {
 export function copiaAtividade() { return new Map(atividade); }
 
 // ─── Montagem ───────────────────────────────────────────────────────────────
-export function agrupar(eventos) {
+// Cada boot herda a causa do último "desligar" registrado antes dele
+// (deploy/restart, watchdog, login falhou). Boot sem "desligar" antes = o
+// processo morreu sem conseguir avisar (queda, falta de memória...).
+// `eventos` pode começar ANTES da hora (o gerar busca 30 min a mais) — só os
+// boots de dentro da hora contam, mas o "desligar" pode ter vindo antes dela.
+export function agrupar(eventos, { desde = -Infinity } = {}) {
   const porServidor = new Map();
   const erros = new Map();
-  let reinicios = 0;
+  const causas = new Map();
+  let reinicios = 0, ultimoDesligar = null;
   for (const e of eventos) {
+    if (e.tipo === "desligar") { ultimoDesligar = e.titulo; continue; }
+    if (e.tipo === "boot") {
+      if (e.t >= desde) {
+        reinicios++;
+        const causa = ultimoDesligar ?? "queda sem aviso";
+        causas.set(causa, (causas.get(causa) ?? 0) + 1);
+      }
+      ultimoDesligar = null;
+      continue;
+    }
+    if (e.t < desde) continue;
     if (e.tipo === "erro") { erros.set(e.titulo, (erros.get(e.titulo) ?? 0) + 1); continue; }
-    if (e.tipo === "boot") { reinicios++; continue; }
     const s = porServidor.get(e.serverId) ?? new Map();
     const chave = e.titulo || e.tipo;
     s.set(chave, (s.get(chave) ?? 0) + 1);
@@ -90,6 +106,7 @@ export function agrupar(eventos) {
     porServidor,
     erros: [...erros].sort((a, b) => b[1] - a[1]),
     reinicios,
+    causas: [...causas],
   };
 }
 
@@ -113,16 +130,26 @@ export function montarNumeros({ grupos, atividade, nomes, desde, ate }) {
     linhas.push("");
   }
   if (!algo) linhas.push("_Hora tranquila: nenhum evento em nenhum servidor._", "");
-  if (grupos.reinicios) linhas.push(`🔄 **O bot reiniciou ${grupos.reinicios}×** nesta hora.`, "");
+  if (grupos.reinicios) {
+    const porCausa = (grupos.causas ?? []).map(([c, n]) => `${n}× ${c}`).join(" · ");
+    linhas.push(`🔄 **O bot reiniciou ${grupos.reinicios}×** nesta hora${porCausa ? ` — ${porCausa}` : ""}.`, "");
+  }
   if (grupos.erros.length) {
     linhas.push("**Erros**");
-    for (const [msg, n] of grupos.erros.slice(0, 8)) linhas.push(`• \`${msg.slice(0, 120)}\`${n > 1 ? ` ×${n}` : ""}`);
+    for (const [msg, n] of grupos.erros.slice(0, 8)) linhas.push(`• \`${cortar(msg, 140)}\`${n > 1 ? ` ×${n}` : ""}`);
     if (grupos.erros.length > 8) linhas.push(`_… e mais ${grupos.erros.length - 8} tipo(s) de erro._`);
   }
   return { texto: linhas.join("\n").trim(), algo: algo || grupos.erros.length > 0 || grupos.reinicios > 0 };
 }
 
 const hhmm = (t) => new Date(t).toISOString().slice(11, 16);
+// Corta no último espaço antes do limite ("...acima do car" → "...acima do…").
+export function cortar(txt, max) {
+  const s = String(txt ?? "");
+  if (s.length <= max) return s;
+  const i = s.lastIndexOf(" ", max - 1);
+  return `${s.slice(0, i > max * 0.6 ? i : max - 1)}…`;
+}
 
 // ─── A parte do modelo ─────────────────────────────────────────────────────
 // Sessão nova a cada hora: uma mensagem só, sem histórico.
@@ -134,7 +161,8 @@ export function montarPrompt({ numeros, amostras, nomes }) {
     "Os NÚMEROS abaixo já estão certos e já vão aparecer no relatório — não repita contagens nem invente números.",
     "Escreva só três seções curtas, com estes títulos exatos:",
     "**Destaques** — até 4 linhas: o que merece atenção nesta hora (banimentos, alertas, algo fora do normal). Se foi tranquila, diga em uma linha.",
-    "**Assuntos** — para cada servidor com amostras de conversa, 1 a 3 assuntos mais comentados. Sem citar nomes de pessoas nem copiar frases.",
+    "**Assuntos** — SÓ para os servidores que aparecem em \"Amostras de conversa\", 1 a 3 assuntos mais comentados. Sem amostra, não há assunto: nunca deduza assunto pelo NOME do servidor. Sem citar nomes de pessoas nem copiar frases.",
+    "Reinício por deploy/restart é manutenção normal, não instabilidade; só \"queda sem aviso\" e \"watchdog\" merecem atenção.",
     "**Erros** — se houver erros, em até 3 linhas: a causa provável de cada tipo e se parece grave. Se não houver, omita a seção.",
     "",
     "## Números da hora",
@@ -167,10 +195,11 @@ export async function gerar({ client, cfg, ate = Date.now(), fetcher = fetch, es
   const desde = ate - HORA;
   const nomes = new Map();
   for (const s of client?.servers?.values?.() ?? []) nomes.set(s.id, s.name ?? s.id);
-  const grupos = agrupar(db.eventosRelatorio(desde, ate));
+  const grupos = agrupar(db.eventosRelatorio(desde - 30 * 60_000, ate), { desde });
   const ativ = esvaziar ? esvaziarAtividade() : copiaAtividade();
   const numeros = montarNumeros({ grupos, atividade: ativ, nomes, desde, ate });
-  const prosa = numeros.algo ? await redigir(montarPrompt({ numeros: numeros.texto, amostras: ativ, nomes }), { fetcher }) : null;
+  const bruta = numeros.algo ? await redigir(montarPrompt({ numeros: numeros.texto, amostras: ativ, nomes }), { fetcher }) : null;
+  const prosa = bruta ? limparAssuntos(bruta, ativ, nomes) : null;
   try { db.podarRelatorio(ate - 48 * HORA); } catch {}
   return {
     title: `📊 Relatório ${hhmm(desde)}–${hhmm(ate)} UTC`,
@@ -208,4 +237,34 @@ export function agendar({ client, getCfg, enviar }) {
   };
   timer = setTimeout(rodar, proxima());
   timer.unref?.();
+}
+
+// O modelo escreveu assunto para servidores SEM amostras, deduzido do nome
+// ("Queremos acordar tarde" → "foco no despertar tardio"), e copiou a frase de
+// um membro entre aspas. O prompt pede para não fazer isso; aqui é o código
+// que garante: na seção **Assuntos** só ficam os servidores que tinham
+// amostras, e trecho entre aspas copiado de uma amostra sai.
+export function limparAssuntos(texto, amostras, nomes) {
+  const comAmostra = new Set([...amostras].filter(([, a]) => a.amostras?.length).map(([id]) => (nomes.get(id) ?? id).toLowerCase()));
+  const frases = [...amostras].flatMap(([, a]) => a.amostras ?? []).map((f) => f.toLowerCase());
+  const saida = [];
+  let naSecao = false, manter = true;
+  for (const linha of String(texto).split("\n")) {
+    const t = linha.trim();
+    if (/^\*\*(Destaques|Erros)\*\*/i.test(t)) { naSecao = false; manter = true; }
+    else if (/^\*\*Assuntos\*\*/i.test(t)) { naSecao = true; manter = true; saida.push(linha); continue; }
+    else if (naSecao && t && !/^[-*•]\s/.test(t)) {
+      // cabeçalho de servidor dentro de Assuntos: **Nome**, ### Nome ou Nome:
+      const nome = t.replace(/^#+\s*/, "").replace(/^\*\*|\*\*$/g, "").replace(/:$/, "").trim().toLowerCase();
+      manter = comAmostra.has(nome);
+    }
+    if (naSecao && !manter) continue;
+    const limpa = naSecao
+      ? linha.replace(/\s*\(?["“]([^"”]{3,})["”]\)?/g, (m, q) => (frases.some((f) => f.includes(q.toLowerCase())) ? "" : m))
+      : linha;
+    saida.push(limpa);
+  }
+  return saida.join("\n")
+    .replace(/\*\*Assuntos\*\*\s*\n(\s*\n)*(?=\*\*(Erros|Destaques)\*\*|$)/i, "")
+    .trim();
 }

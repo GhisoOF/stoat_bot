@@ -80,7 +80,7 @@ export const definicao = {
   },
 };
 
-// ── Backend embutido (sd.cpp + SD-Turbo) ──
+// ── Backend embutido (sd.cpp; Z-Image-Turbo por padrão, SD-Turbo com SD_MODELO_TIPO=sd) ──
 // Baixa um arquivo de modelo pela URL e devolve o caminho local (uma vez só).
 function baixarArquivo(url, rotulo) {
   const nome = basename(new URL(url).pathname);
@@ -148,14 +148,29 @@ function gerarEmbutido({ texto, width, height }) {
         "-W", String(width), "-H", String(height), "--steps", passos,
         "--cfg-scale", cfg, "--type", "q8_0", "--seed", String(semente()), "-o", saida];
     }
-    const p = spawnProc(SD_BIN, finalArgs, { stdio: ["ignore", "ignore", "pipe"] });
+    // stdout E stderr: o sd.cpp e o backend Vulkan do ggml espalham o
+    // diagnóstico pelos dois (dispositivo, memória, operação não suportada).
+    const p = spawnProc(SD_BIN, finalArgs, { stdio: ["ignore", "pipe", "pipe"] });
     let err = "";
-    p.stderr.on("data", (d) => { err += d; });
+    const juntar = (d) => { if (err.length < 400_000) err += d; };
+    p.stdout.on("data", juntar);
+    p.stderr.on("data", juntar);
     const t = setTimeout(() => { try { p.kill("SIGKILL"); } catch {} }, TIMEOUT_MS);
     p.on("error", (e) => { clearTimeout(t); rej(new Error(`sd.cpp: ${e.message}`)); });
     p.on("close", (c) => {
       clearTimeout(t);
-      if (c !== 0 || !existsSync(saida)) return rej(new Error(`sd.cpp saiu com ${c}: ${err.trim().slice(-200)}`));
+      if (c !== 0 || !existsSync(saida)) {
+        // Antes guardava só os ÚLTIMOS 200 caracteres: a causa (memória,
+        // operação sem suporte no Vulkan…) vem antes e ficava de fora — o erro
+        // chegava cortado em "odel compute failed". Agora o log do servidor
+        // leva as linhas que importam e o final da saída; a pessoa recebe a
+        // PRIMEIRA linha de erro, que é a causa, não a consequência.
+        const linhas = err.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+        const relevantes = linhas.filter((l) => /error|fail|vulkan|ggml_vk|alloc|out of memory|unsupported|not supported|abort|assert/i.test(l));
+        console.error(`[IMAGEM][sd.cpp] saiu com ${c}. Linhas relevantes:\n${relevantes.slice(0, 40).join("\n")}\n── final da saída ──\n${linhas.slice(-25).join("\n")}`);
+        const causa = linhas.find((l) => /\[ERROR/.test(l)) ?? relevantes[0] ?? linhas.at(-1) ?? "";
+        return rej(new Error(`sd.cpp saiu com ${c}: ${causa.slice(0, 300)}`));
+      }
       const png = readFileSync(saida);
       try { unlinkSync(saida); } catch {}
       res(png);

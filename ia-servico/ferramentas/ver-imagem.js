@@ -169,10 +169,17 @@ const PROMPT_MODERACAO = [
 ].join(" ");
 
 export async function moderarImagem({ url }) {
-  const r = await verImagem({
+  // O Gemma raciocina antes de responder e o raciocínio conta no max_tokens:
+  // com 220 ele gastava tudo pensando e devolvia VAZIO ("o modelo de visão
+  // não respondeu nada", 2× no relatório de 27/09). 1200 e, se vier vazio,
+  // uma segunda tentativa com o dobro — o mesmo remédio do chat.
+  let r = await verImagem({
     url, pergunta: PROMPT_MODERACAO,
-    modelo: MODELO_MODERACAO || null, temperatura: 0, maxTokens: 220,
+    modelo: MODELO_MODERACAO || null, temperatura: 0, maxTokens: 1200,
   });
+  if (r.erro && /não respondeu nada/.test(r.erro)) {
+    r = await verImagem({ url, pergunta: PROMPT_MODERACAO, modelo: MODELO_MODERACAO || null, temperatura: 0, maxTokens: 2400 });
+  }
   if (r.erro) return r;
   const texto = String(r.descricao);
   const risco = /RISCO:\s*sim/i.test(texto);

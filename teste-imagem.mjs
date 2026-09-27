@@ -1,5 +1,7 @@
 // Sentinela de imagem: o modelo descreve, o bot pontua e chama a staff.
 import assert from "node:assert";
+import fs from "node:fs";
+globalThis.__fs = fs;
 process.env.IA_SERVICO_URL = "http://127.0.0.1:1";   // só para deveAnalisar: nada é chamado aqui
 const img = await import("./modulos/moderacao/imagem.js");
 
@@ -98,6 +100,15 @@ t("passou do limite, descarta em vez de acumular", () => {
   let aceitas = 0;
   for (let i = 0; i < 50; i++) if (img.agendar({ ctx: {}, userId: "U" + i, url: "x" })) aceitas++;
   assert.ok(aceitas <= 21, `aceitou ${aceitas}`);
+});
+
+console.log("\n── geração: o bot espera tanto quanto o gerador ──");
+t("o limite padrão do bot cobre o limite padrão do gerador", () => {
+  const fs = globalThis.__fs;
+  const padrao = (arq) => Number((fs.readFileSync(arq, "utf8").match(/IMAGEM_GERACAO_TIMEOUT_MS \|\| ([\d_]+)/) ?? [])[1]?.replace(/_/g, ""));
+  const bot = padrao("./modulos/ai/chat.js"), gerador = padrao("./ia-servico/ferramentas/gerar-imagem.js");
+  assert.ok(bot && gerador, `não achei os padrões (bot ${bot}, gerador ${gerador})`);
+  assert.ok(bot >= gerador, `o bot desiste em ${bot / 1000}s, o gerador ainda trabalha até ${gerador / 1000}s`);
 });
 
 console.log(`\nIMAGEM: ${ok} ok, ${falhou} falha(s)`);

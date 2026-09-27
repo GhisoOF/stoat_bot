@@ -82,10 +82,21 @@ vigiarConexao(client.events, () => { ultimoEvento = Date.now(); });
 let jaConectou = false;              // o login chegou a dar certo alguma vez?
 let jaReiniciando = false;
 
+// Desligamento pedido de fora (docker restart, recreate, deploy): o
+// iniciar.js repassa o SIGTERM. Fica registrado para o relatório horário não
+// chamar manutenção de "instabilidade" (foi o que ele fez em 27/09).
+for (const sinal of ["SIGTERM", "SIGINT"]) {
+  process.on(sinal, () => {
+    relatorioHora.evento(null, "desligar", "deploy/restart");
+    process.exit(0);
+  });
+}
+
 function reiniciar(motivo) {
   if (jaReiniciando) return;
   jaReiniciando = true;
   console.error(`[RECUPERAÇÃO] Reiniciando o processo: ${motivo}`);
+  relatorioHora.evento(null, "desligar", "watchdog");
   // dá um instante para o log sair antes de sair
   setTimeout(() => process.exit(1), 500);
 }
@@ -1048,6 +1059,7 @@ async function conectar(tentativa = 1) {
 
     if (tentativa >= MAX) {
       console.error(`[CONN] Login falhou ${MAX} vezes (${txt}). Encerrando para o supervisor recriar o container.`);
+      relatorioHora.evento(null, "desligar", "login falhou");
       process.exit(1);   // sair é melhor que ficar de pé sem conectar
     }
 

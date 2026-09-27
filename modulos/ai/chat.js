@@ -267,7 +267,9 @@ const GITHUB_REPO_ROTULO = process.env.GITHUB_REPO || "do bot";
 // cortada no meio da palavra (e a emenda automática às vezes continuava do
 // assunto errado). Subir o teto resolve na raiz.
 const MAX_TOKENS   = Number(process.env.CHAT_MAX_TOKENS || 1500);
-const DECISAO_TOKENS = Number(process.env.CHAT_DECISAO_TOKENS || 600);   // piso das decisões json (ver llmChat)
+// 600 cortava a extração de memória (fim=length 3× num quarto de hora, 27/09):
+// o raciocínio do Gemma come o orçamento antes do JSON.
+const DECISAO_TOKENS = Number(process.env.CHAT_DECISAO_TOKENS || 1200);   // piso das decisões json (ver llmChat)
 const TIMEOUT      = Number(process.env.CHAT_TIMEOUT  || 300000);
 
 const SERVIDORES_PERMITIDOS = (process.env.CHAT_SERVIDORES || "")
@@ -1083,7 +1085,10 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
     dlog("pedido de imagem → geração direta");
     const r = await executarFerramenta("gerar_imagem",
       { prompt: pergunta.replace(/^\s*(desenh\w+|ger[ae]\w*|cri[ae]\w*|fa[çc]a|draw|generate|create|make)\s*/i, "").slice(0, 400) },
-      { timeoutMs: Number(process.env.IMAGEM_GERACAO_TIMEOUT_MS || 180_000) + 20_000 });
+      // Tem de ser o MESMO padrão do gerador (ia-servico/ferramentas/gerar-imagem.js,
+      // 420s desde o Z-Image) + folga. Estava em 180s, da época do SD-Turbo: com
+      // o modelo de 6B o bot desistia enquanto o gerador ainda trabalhava.
+      { timeoutMs: Number(process.env.IMAGEM_GERACAO_TIMEOUT_MS || 420_000) + 20_000 });
     if (r?.anexo_base64) {
       responder._anexoDireto = { base64: r.anexo_base64, mime: r.anexo_mime || "image/png", nome: r.anexo_nome || "imagem.png" };
       dlog("geração direta ok — imagem pronta para anexar");

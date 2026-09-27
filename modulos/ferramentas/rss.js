@@ -143,15 +143,19 @@ export async function rodarCiclo(serverId, ctx, { forcado = false } = {}) {
       (a === "Geral") - (b === "Geral") || a.localeCompare(b));
     for (const [cat, itens] of ordenados) {
       try {
-        const material = itens.map((it, i) =>
-          `${i + 1}. [${it.feedTitulo}] ${it.titulo}${it.resumo ? ` — ${it.resumo.slice(0, 250)}` : ""}`
-        ).join("\n");
+        // Item sem texto de verdade é marcado como tal: sem isso o modelo
+        // preenchia a lacuna (o "Comments" do Hacker News virou "os comentários
+        // confirmaram que…" num resumo de 27/09).
+        const material = itens.map((it, i) => {
+          const texto = textoDoItem(it.resumo, it.titulo);
+          return `${i + 1}. [${it.feedTitulo}] ${it.titulo}${texto ? ` — ${texto.slice(0, 250)}` : " — (só o título; não há texto da notícia)"}`;
+        }).join("\n");
         const resumo = await resumirIA(material, itens.length, { categoria: cat === "Geral" ? null : cat, lang: cicloEn ? "en" : "pt", serverId: serverId ?? null });
         if (resumo && resumo.trim()) {
           const rotulo = cat === "Geral" ? "" : ` · ${cat}`;
           await canal.sendMessage({ embeds: [{
             title: cicloEn ? `📰 Judy's digest${rotulo} — ${agora}` : `📰 O resumo da Judy${rotulo} — ${agora}`,
-            description: resumo.trim().slice(0, 1900),
+            description: fecharResumo(resumo, itens),
             colour: "#a78bfa",
           }] });
         }
@@ -423,4 +427,49 @@ export async function cmdRss(message, args, ctx) {
     ].join("\n"),
     colour: COR.mod,
   });
+}
+
+// ─── Precisão do resumo ─────────────────────────────────────────────────────
+
+// O que não é texto de notícia: o "Comments" do Hacker News, as linhas de
+// metadados do hnrss ("Article URL:", "Points:", "# Comments:") e a descrição
+// que só repete o título.
+export function textoDoItem(resumo, titulo = "") {
+  let t = String(resumo ?? "")
+    .replace(/\b(Article URL|Comments URL|Points|# Comments)\s*:\s*\S*/gi, " ")
+    .replace(/https?:\/\/\S+/g, " ")
+    .replace(/\s+/g, " ").trim();
+  if (/^(comments?|coment[áa]rios?|read more|leia mais|continue reading|\[?…\]?)$/i.test(t)) t = "";
+  const norm = (x) => String(x).toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+  if (t && norm(t) === norm(titulo)) t = "";
+  return t.length < 20 ? "" : t;
+}
+
+// Número que não está em nenhuma notícia é invenção: a frase sai inteira.
+// (Números por extenso — "três" — não são checados; os dígitos, sim.)
+function numerosDe(txt) {
+  return (String(txt).match(/\d+(?:[.,]\d+)*/g) ?? []).map((n) => n.replace(/[.,]/g, ""));
+}
+export function tirarNumerosInventados(resumo, itens) {
+  const fonte = new Set(itens.flatMap((it) => numerosDe(`${it.titulo} ${it.resumo ?? ""} ${it.feedTitulo ?? ""}`)));
+  return String(resumo).split(/(?<=[.!?…])\s+/).filter((frase) => {
+    const nums = numerosDe(frase);
+    return nums.every((n) => fonte.has(n) || n.length <= 1);
+  }).join(" ");
+}
+
+// Corta na última frase COMPLETA que cabe — nunca no meio da palavra
+// (o resumo das 21:55 de 27/09 terminou em "A m").
+export function cortarEmFrase(txt, max = 1900) {
+  const s = String(txt).trim();
+  if (s.length <= max) return s;
+  const pedaco = s.slice(0, max);
+  const fim = Math.max(pedaco.lastIndexOf(". "), pedaco.lastIndexOf(".\n"), pedaco.lastIndexOf("! "), pedaco.lastIndexOf("? "));
+  return fim > max * 0.5 ? pedaco.slice(0, fim + 1) : `${pedaco.slice(0, pedaco.lastIndexOf(" "))}…`;
+}
+
+export function fecharResumo(resumo, itens) {
+  // preserva as quebras de parágrafo: filtra número por parágrafo
+  const paragrafos = String(resumo).trim().split(/\n\s*\n/).map((p) => tirarNumerosInventados(p, itens)).filter((p) => p.trim());
+  return cortarEmFrase(paragrafos.join("\n\n"), 1900);
 }

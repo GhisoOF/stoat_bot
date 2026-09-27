@@ -179,8 +179,8 @@ export async function resumirRSS(material, quantidade, { categoria = null, lang 
       : "",
     en ? "Write Judy's digest of the stories below: one short paragraph per real subject (group related stories), saying WHAT happened in each — names, numbers, decisions — in your voice: witty, direct, a touch of elegant snark. No neutral newsroom tone, no bullet lists, no repeating titles verbatim."
        : "Escreva o resumo da Judy das notícias abaixo: um parágrafo curto por assunto real (agrupe notícias relacionadas), dizendo O QUE aconteceu em cada um — nomes, números, decisões — no SEU tom: espirituoso, direto, com deboche elegante. Nada de tom jornalístico neutro, nada de lista, nada de repetir títulos ao pé da letra.",
-    en ? "Never invent anything beyond what the stories say. End with a closing sentence, not mid-thought."
-       : "Não invente nada além do que está nas notícias. Termine com uma frase de fechamento, não no meio de um pensamento.",
+    en ? "Never invent anything beyond what the stories say. The sarcasm goes in the TONE, never in the FACTS: don't attribute comments, opinions, motives, numbers or details that aren't written in the story. A story marked \"(only the title)\": comment only on what the title says. Keep the direction of cause and effect exactly as the title states it. Up to 1500 characters; end with a closing sentence."
+       : "Não invente nada além do que está nas notícias. O sarcasmo vai no TOM, nunca nos FATOS: não atribua comentários, opiniões, motivos, números ou detalhes que não estejam escritos na notícia. Notícia marcada \"(só o título)\": comente só o que o título diz. Mantenha a direção de causa e efeito exatamente como o título diz. Até 1500 caracteres; termine com uma frase de fechamento.",
     `${en ? "There are" : "São"} ${quantidade} ${en ? "new stories" : "notícia(s) novas"}.`,
   ].filter(Boolean).join(" ");
   try {

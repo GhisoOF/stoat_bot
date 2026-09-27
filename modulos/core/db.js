@@ -125,6 +125,16 @@ export function abrirBanco(caminho) {
       abertoEm  TEXT NOT NULL,
       fechadoEm TEXT
     );
+    -- Relatório horário do dono do bot: o que aconteceu, por servidor.
+    -- No banco (e não em memória) para uma hora sobreviver a um reinício.
+    -- Poda automática: só as últimas 48h.
+    CREATE TABLE IF NOT EXISTS relatorio_eventos (
+      t        INTEGER NOT NULL,
+      serverId TEXT,
+      tipo     TEXT NOT NULL,
+      titulo   TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS relatorio_eventos_t ON relatorio_eventos (t);
     CREATE TABLE IF NOT EXISTS ganchos (
       id        INTEGER PRIMARY KEY AUTOINCREMENT,
       serverId  TEXT NOT NULL,
@@ -1567,4 +1577,16 @@ export function ticketPorCanal(canalId) {
 }
 export function fecharTicket(id) {
   prep("UPDATE tickets SET status = 'fechado', fechadoEm = ? WHERE id = ?").run(new Date().toISOString(), id);
+}
+
+// ─── Relatório horário ──────────────────────────────────────────────────────
+export function registrarEventoRelatorio(t, serverId, tipo, titulo) {
+  prep("INSERT INTO relatorio_eventos (t, serverId, tipo, titulo) VALUES (?, ?, ?, ?)")
+    .run(t, serverId ?? null, tipo, String(titulo ?? "").slice(0, 200));
+}
+export function eventosRelatorio(desde, ate) {
+  return prep("SELECT t, serverId, tipo, titulo FROM relatorio_eventos WHERE t >= ? AND t < ? ORDER BY t").all(desde, ate);
+}
+export function podarRelatorio(antesDe) {
+  return prep("DELETE FROM relatorio_eventos WHERE t < ?").run(antesDe).changes;
 }

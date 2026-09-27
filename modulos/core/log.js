@@ -1,6 +1,7 @@
 
 import { tr, lingua } from "./i18n.js";
 import { resolverCanal } from "./ids.js";
+import * as relatorioHora from "../ferramentas/relatorio.js";
 
 // Rótulos amigáveis de cada categoria
 export const EVENTOS = {
@@ -55,6 +56,9 @@ export async function resgatarMidias(atts, { baixar = fetch, subir } = {}) {
 }
 
 export async function registrar(ctx, categoria, { titulo, descricao, imagem = null, anexos = null }) {
+  // Todo evento conta para o relatório horário do dono do bot, inclusive nos
+  // servidores sem canal de log (é justamente a visão de todos os servidores).
+  relatorioHora.evento(ctx?.serverId, categoria, titulo);
   try {
     const cfg = ctx?.config?.log;
     if (!cfg?.canalId) return;                 // sem canal configurado

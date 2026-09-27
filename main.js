@@ -4,6 +4,15 @@ import './modulos/core/env.js';
 // A stoat.js emite "Skipping key X during hydration!" por console.DEBUG (uma
 // linha por campo desconhecido de cada objeto: chega a 70% do log). O filtro
 // ficava em console.log e por isso nunca funcionou.
+// Erros e avisos do bot entram no relatório horário (&servidores relatorio),
+// agrupados por padrão. Serviços filhos (ia/voz) escrevem direto no docker log.
+for (const canal of ["error", "warn"]) {
+  const original = console[canal].bind(console);
+  console[canal] = (...args) => {
+    original(...args);
+    try { relatorioHora.erro(args.map((x) => (x instanceof Error ? x.message : typeof x === "string" ? x : JSON.stringify(x))).join(" ")); } catch {}
+  };
+}
 for (const canal of ["debug", "log"]) {
   const original = console[canal].bind(console);
   console[canal] = (...args) => {
@@ -57,6 +66,8 @@ import * as assistente from "./modulos/moderacao/assistente.js";
 import { tr }         from "./modulos/core/i18n.js";
 import { chamarApi }  from "./modulos/core/stoat-api.js";
 import { vigiarConexao } from "./modulos/core/vida.js";
+import * as relatorioHora from "./modulos/ferramentas/relatorio.js";
+import * as servidoresCmd from "./modulos/moderacao/servidores.js";
 import { descreverErro } from "./modulos/core/erros.js";
 import * as confianca from "./modulos/moderacao/confianca.js";
 
@@ -317,6 +328,8 @@ const rotas = {
   // Panorama de configurações
   config:        cfgCmd.cmdConfig,
   banglobal:     banGlobal.cmdBanGlobal,
+  servidores:    servidoresCmd.cmdServidores,   // só SUPER_ADMINS; fora do &help
+  servers:       servidoresCmd.cmdServidores,
   globalban:     banGlobal.cmdBanGlobal,
   configuracoes: cfgCmd.cmdConfig,
   configurações: cfgCmd.cmdConfig,
@@ -476,6 +489,15 @@ client.on("ready", async () => {
     console.error("[RPG] Falha ao conferir moedas duplicadas:", e.message);
   }
   srvStats.marcarInicio();
+  relatorioHora.evento(null, "boot", "bot iniciou");
+  relatorioHora.agendar({
+    client,
+    getCfg: () => store.getGlobal().relatorio,
+    enviar: async (canalId, rel) => {
+      const canal = await client.channels.fetch(canalId).catch(() => null);
+      if (canal) await sendEmbed(canal, { title: rel.title, description: rel.description, colour: COR.info });
+    },
+  });
   for (const l of chat.resumoConfigIA()) console.info(l);
 
   engine.iniciarVigiaDeSilencios(criarContexto());
@@ -515,6 +537,10 @@ client.on("messageCreate", async (message) => {
   // Cada servidor tem sua própria config
   const serverId = message.serverId ?? message.server?.id ?? message.server?._id ?? null;
   srvStats.registrar(serverId);   // métrica de ritmo (memória, janela deslizante)
+  relatorioHora.mensagem(serverId, message.content, {
+    autorId: message.authorId, ehBot: !!message.author?.bot,
+    comAssunto: relatorioHora.temAssunto(client.servers.get(serverId), store.getGlobal().relatorio),
+  });
   const ctx = criarContexto(serverId);
 
   // Identifica se a mensagem é um COMANDO reconhecido
@@ -808,7 +834,8 @@ client.on("serverMemberJoin", async (member) => {
 
     const onda = confianca.registrarEntrada(serverId, userId);
     if (onda.iniciou) {
-      console.warn(`[ANTIRAID] ${serverId}: ${onda.contas.length} contas novas em pouco tempo — proteção por ${onda.minutos} min`);
+      console.log(`[ANTIRAID] ${serverId}: ${onda.contas.length} contas novas em pouco tempo — proteção por ${onda.minutos} min`);
+      relatorioHora.evento(serverId, "raid", `Possível raid: ${onda.contas.length} contas novas em 15 min`);
       const en = ctx.config?.language === "en";
       const destinoId = ctx.config?.automod?.antiScam?.alertChannelId || ctx.config?.log?.canalId;
       const destino = destinoId ? await client.channels.fetch(destinoId).catch(() => null) : null;

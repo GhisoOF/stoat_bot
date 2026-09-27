@@ -114,6 +114,15 @@ diz exatamente o que clicar.
   descrição por palavras-chave e pelo sentinela (texto escrito na imagem também
   conta). Se apitar, a staff é chamada no log. Nunca pune e nunca republica a
   imagem.
+- **Painel do dono do bot** (`&servidores`, só `SUPER_ADMINS`, fora do `&help`):
+  onde o bot está, com membros e ritmo de mensagens. E o **relatório horário**
+  (`&servidores relatorio canal #canal`): a cada hora cheia, banimentos,
+  punições, entradas, alertas, ritmo de conversa, assuntos mais comentados,
+  erros e reinícios de todos os servidores. Os números saem do código; o modelo
+  só escreve os destaques e os assuntos — e, se ele falhar, o relatório sai só
+  com os números. Assuntos só dos servidores de que você é dono (ou os que
+  listar em `&servidores relatorio assuntos add <id>`); os demais entram só em
+  números.
 - **Ban propagado na hora**: um ban em um servidor da Judy vale imediatamente nos
   outros, conforme o modo de cada um (`off` · `avisar` · `banir`), sem esperar a
   sincronização de 6h.

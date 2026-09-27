@@ -11,6 +11,7 @@
 
 import { analisarConteudo } from "./scorecard.js";
 import * as confianca from "./confianca.js";
+import * as relatorioHora from "../ferramentas/relatorio.js";
 
 const IA_URL = (process.env.IA_SERVICO_URL || "").replace(/\/$/, "");
 const IA_CHAVE = process.env.IA_SERVICO_CHAVE || "";
@@ -130,6 +131,7 @@ async function analisarUma({ ctx, userId, canalId, messageId, url }) {
   const r = pontuarDescricao(j.descricao, { riscoModelo: j.riscoModelo });
   console.log(`[IMAGEM] ${userId} nota ${r.nota.toFixed(1)} [${r.categorias.join(",")}] ${r.alertar ? "→ ALERTA" : ""}`);
   if (!r.alertar) return;
+  relatorioHora.evento(ctx.serverId, "imagem", r.grave ? "Imagem grave (menor + sexual)" : `Imagem suspeita (${r.categorias.join(", ")})`);
   const destinoId = ctx.config?.automod?.antiScam?.alertChannelId || ctx.config?.log?.canalId;
   const destino = destinoId ? await ctx.client.channels.fetch(destinoId).catch(() => null) : null;
   if (!destino) return;

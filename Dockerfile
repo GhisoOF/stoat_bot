@@ -23,7 +23,35 @@ RUN git clone --depth 1 -b v1.3.296 https://github.com/KhronosGroup/Vulkan-Heade
     && cmake -S /vkh -B /vkh/build -DCMAKE_INSTALL_PREFIX=/usr/local \
     && cmake --install /vkh/build && rm -rf /vkh
 
-RUN set -x; mkdir -p /sd/build/bin;     if [ "$TARGETARCH" != "arm64" ]; then       git clone --depth 1 --recursive https://github.com/leejet/stable-diffusion.cpp /sd-src       && cmake -S /sd-src -B /sd-src/build -DCMAKE_BUILD_TYPE=Release -DSD_VULKAN=ON -DVulkan_INCLUDE_DIR=/usr/local/include       && cmake --build /sd-src/build --config Release -j2       && cp -a /sd-src/build/bin/. /sd/build/bin/ && ls -la /sd/build/bin/;     else echo "arm64: sem sd.cpp embutido — gerar_imagem via SD_URL nesta arquitetura"; fi
+# Versão FIXA do sd.cpp. Clonar sempre a mais nova quebrou o CI em 28/09 sem
+# nenhuma mudança deste repositório: o upstream atualizou o ggml em 27/09 e o
+# backend Vulkan novo não compilou nesta base. Para atualizar, troque o SHA de
+# propósito e confira o build. 2f88688 (26/09) = último commit antes daquela
+# atualização do ggml (mesmo ggml da versão de 22/09).
+ARG SD_CPP_REF=2f886889e6e8b78738d6b87f7191f6018557c551
+
+# Se a compilação falhar: mostra o ERRO REAL no fim do log (antes ele ficava
+# milhares de linhas acima e o CI só dizia "exit code: 2") e segue sem o
+# gerador embutido — como a voz, um recurso opcional não trava o deploy do bot.
+# A imagem final já trata a falta do binário (gerar_imagem só via SD_URL).
+RUN set -x; mkdir -p /sd/build/bin; \
+    if [ "$TARGETARCH" = "arm64" ]; then \
+      echo "arm64: sem sd.cpp embutido — gerar_imagem via SD_URL nesta arquitetura"; exit 0; \
+    fi; \
+    { git init -q /sd-src && cd /sd-src \
+      && git remote add origin https://github.com/leejet/stable-diffusion.cpp \
+      && git fetch -q --depth 1 origin "$SD_CPP_REF" && git checkout -q FETCH_HEAD \
+      && git submodule update -q --init --recursive \
+      && cmake -S /sd-src -B /sd-src/build -DCMAKE_BUILD_TYPE=Release -DSD_VULKAN=ON -DVulkan_INCLUDE_DIR=/usr/local/include \
+      && cmake --build /sd-src/build --config Release -j2 \
+      && cp -a /sd-src/build/bin/. /sd/build/bin/ && ls -la /sd/build/bin/; \
+    } > /tmp/sd-build.log 2>&1 \
+    && tail -n 5 /tmp/sd-build.log \
+    || { echo "════ sd.cpp NÃO compilou — o erro real:"; \
+         grep -iE "error|fatal|undefined reference|failed" /tmp/sd-build.log | head -40; \
+         echo "════ últimas linhas do build:"; tail -n 25 /tmp/sd-build.log; \
+         echo "AVISO: imagem SEM gerador de imagem embutido (gerar_imagem só via SD_URL)."; \
+         rm -rf /sd/build/bin/*; }
 
 FROM node:22-slim
 ARG TARGETARCH=amd64

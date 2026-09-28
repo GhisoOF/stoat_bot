@@ -708,11 +708,77 @@ export async function cmdBanGlobal(message, args, ctx) {
 
   if (["desfazer", "undo", "reverter", "revert"].includes(sub)) {
     const confirmou = ["confirmar", "confirm", "sim", "yes"].includes((args[1] ?? "").toLowerCase());
+
+    // &banglobal desfazer <pessoa> — só essa pessoa. Antes, o argumento era
+    // ignorado e a resposta "nada a desfazer" não explicava que estar NA LISTA
+    // é diferente de ter sido BANIDO AQUI pela lista.
+    if (args[1] && !confirmou) {
+      const entrada = args.slice(1).join(" ");
+      const alvo = await alvoDoComando(entrada, { message, server, ctx });
+      if (alvo.erro) return sendEmbed(message.channel,
+        embedAlvoNaoResolvido(ctx, alvo.erro, entrada, `${PREFIXO}banglobal desfazer <@pessoa|id|nome>`));
+      const quem = rotularUsuario(alvo.id, { nome: alvo.nome, client: ctx.client });
+      const aplicado = db.bansGlobaisPorOrigem(serverId, ["banglobal"]).find((b) => b.userId === alvo.id);
+      if (aplicado) {
+        const r = await desbanir(server, serverId, alvo.id);
+        if (!r.ok) return sendEmbed(message.channel, tr(ctx,
+          { title: "❌ Não consegui desbanir", description: `${quem}: ${r.erro}`, colour: COR.erro },
+          { title: "❌ Couldn't unban", description: `${quem}: ${r.erro}`, colour: COR.erro }));
+        db.removerBanGlobal(alvo.id, serverId);
+        config.banGlobal.isentos ??= [];
+        if (!config.banGlobal.isentos.includes(alvo.id)) config.banGlobal.isentos.push(alvo.id);
+        salvarConfig();
+        await log.registrar(ctx, "punicoes", {
+          titulo: "↩️ Ban da lista global desfeito",
+          descricao: `<@${message.authorId}> desfez o ban que a lista global aplicou em ${alvo.nome ?? alvo.id}.`,
+        });
+        return sendEmbed(message.channel, tr(ctx, {
+          title: "↩️ Ban desfeito",
+          description: `${quem} foi **desbanido** e fica **isento** aqui — a próxima varredura não bane de novo.\n\nA pessoa precisa de um **convite novo** para voltar.`,
+          colour: COR.sucesso,
+        }, {
+          title: "↩️ Ban undone",
+          description: `${quem} was **unbanned** and is **exempt** here — the next sweep won't ban them again.\n\nThey need a **fresh invite** to come back.`,
+          colour: COR.sucesso,
+        }));
+      }
+      const servidores = new Set(db.historicoBans(alvo.id).map((b) => b.serverId)).size;
+      const dono = ctx.ehSuperAdmin?.(message.authorId);
+      return sendEmbed(message.channel, tr(ctx, {
+        title: "ℹ️ A lista não baniu essa pessoa aqui",
+        description: [
+          servidores
+            ? `${quem} está **na lista global** (banido em ${servidores} servidor(es)), mas **não foi banido neste servidor** pela lista — não há ban para desfazer.`
+            : `${quem} não está na lista global e não foi banido aqui por ela.`,
+          "",
+          servidores ? "**O que você quer?**" : "",
+          servidores ? `• Que ela não seja afetada **aqui**: \`${PREFIXO}banglobal isentar ${alvo.id}\`` : "",
+          servidores && dono ? `• Tirar da lista **de todos os servidores** (e ela não volta): \`${PREFIXO}banglobal esquecer ${alvo.id}\`` : "",
+          servidores && !dono ? "• Tirar da lista de todos os servidores: só o dono do bot." : "",
+        ].filter(Boolean).join("\n"),
+        colour: COR.info,
+      }, {
+        title: "ℹ️ The list didn't ban this person here",
+        description: [
+          servidores
+            ? `${quem} is **on the global list** (banned on ${servidores} server(s)), but was **not banned on this server** by the list — there's no ban to undo.`
+            : `${quem} isn't on the global list and wasn't banned here by it.`,
+          "",
+          servidores ? "**What do you want?**" : "",
+          servidores ? `• Keep them unaffected **here**: \`${PREFIXO}banglobal isentar ${alvo.id}\`` : "",
+          servidores && dono ? `• Take them off the list **for every server** (they won't come back): \`${PREFIXO}banglobal esquecer ${alvo.id}\`` : "",
+          servidores && !dono ? "• Taking them off the list for every server: bot owner only." : "",
+        ].filter(Boolean).join("\n"),
+        colour: COR.info,
+      }));
+    }
     const aplicados = db.bansGlobaisPorOrigem(serverId, ["banglobal"]);
     if (!aplicados.length) {
       return sendEmbed(message.channel, tr(ctx,
-        { title: "✅ Nada a desfazer", description: "Não há ban aplicado pela lista global neste servidor.", colour: COR.sucesso },
-        { title: "✅ Nothing to undo", description: "There's no ban applied by the global list on this server.", colour: COR.sucesso }));
+        { title: "✅ Nada a desfazer", description: "Não há ban aplicado pela lista global neste servidor.\n\n"
+            + `_Quer que alguém da lista não seja afetado aqui? \`${PREFIXO}banglobal isentar <pessoa>\`._`, colour: COR.sucesso },
+        { title: "✅ Nothing to undo", description: "There's no ban applied by the global list on this server.\n\n"
+            + `_Want someone on the list left alone here? \`${PREFIXO}banglobal isentar <user>\`._`, colour: COR.sucesso }));
     }
 
     const lista = aplicados.slice(0, 20)
@@ -897,8 +963,8 @@ export async function cmdBanGlobal(message, args, ctx) {
       }),
       "",
       tr(ctx,
-        `🛡️ = isento aqui · \`${PREFIXO}banglobal historico <@pessoa>\` mostra o porquê de cada caso\n\`${PREFIXO}banglobal lista servidor\` — só os banidos por este servidor`,
-        `🛡️ = exempt here · \`${PREFIXO}banglobal historico <@user>\` shows the reason for each case\n\`${PREFIXO}banglobal lista servidor\` — only those banned by this server`),
+        `🛡️ = isento aqui · \`${PREFIXO}banglobal historico <@pessoa>\` mostra o porquê de cada caso\nNão afetar alguém aqui: \`${PREFIXO}banglobal isentar <pessoa>\`${ctx.ehSuperAdmin?.(message.authorId) ? ` · tirar da lista de todos: \`${PREFIXO}banglobal esquecer <pessoa>\`` : ""}\n\`${PREFIXO}banglobal lista servidor\` — só os banidos por este servidor`,
+        `🛡️ = exempt here · \`${PREFIXO}banglobal historico <@user>\` shows the reason for each case\nLeave someone alone here: \`${PREFIXO}banglobal isentar <user>\`${ctx.ehSuperAdmin?.(message.authorId) ? ` · take off the list for all: \`${PREFIXO}banglobal esquecer <user>\`` : ""}\n\`${PREFIXO}banglobal lista servidor\` — only those banned by this server`),
     ];
     const paginas = paginarLinhas(linhas, {
       titulo: soDaqui
@@ -955,6 +1021,21 @@ export async function cmdBanGlobal(message, args, ctx) {
 
   // ── &banglobal esquecer <usuário> ──
   if (["esquecer", "forget", "remover", "apagar"].includes(sub)) {
+    // A lista é compartilhada por todos os servidores da Judy: apagar alguém
+    // dela vale para todos. Com BanMembers em QUALQUER servidor, um invasor
+    // limparia o próprio nome em dois comandos — por isso, só o dono do bot.
+    // Admin de servidor tem o `isentar`, que vale só no servidor dele.
+    if (!ctx.ehSuperAdmin?.(message.authorId)) return sendEmbed(message.channel, tr(ctx, {
+      title: "🔒 Só o dono do bot",
+      description: "A lista global é **compartilhada** por todos os servidores da Judy — tirar alguém dela vale para todos.\n\n"
+        + `Para essa pessoa não ser afetada **neste servidor**: \`${PREFIXO}banglobal isentar <@pessoa|id|nome>\`.`,
+      colour: COR.aviso,
+    }, {
+      title: "🔒 Bot owner only",
+      description: "The global list is **shared** by every server Judy is in — taking someone off it applies to all of them.\n\n"
+        + `To keep this person unaffected **on this server**: \`${PREFIXO}banglobal isentar <@user|id|name>\`.`,
+      colour: COR.aviso,
+    }));
     const entrada = args.slice(1).join(" ");
     const alvo = await alvoDoComando(entrada, { message, server, ctx });
     if (alvo.erro) return sendEmbed(message.channel,
@@ -1023,6 +1104,21 @@ export async function cmdBanGlobal(message, args, ctx) {
 
   // ── &banglobal lembrar — desfaz o esquecer ──
   if (["lembrar", "remember", "desesquecer", "unforget", "reincluir"].includes(sub)) {
+    // A lista é compartilhada por todos os servidores da Judy: apagar alguém
+    // dela vale para todos. Com BanMembers em QUALQUER servidor, um invasor
+    // limparia o próprio nome em dois comandos — por isso, só o dono do bot.
+    // Admin de servidor tem o `isentar`, que vale só no servidor dele.
+    if (!ctx.ehSuperAdmin?.(message.authorId)) return sendEmbed(message.channel, tr(ctx, {
+      title: "🔒 Só o dono do bot",
+      description: "A lista global é **compartilhada** por todos os servidores da Judy — tirar alguém dela vale para todos.\n\n"
+        + `Para essa pessoa não ser afetada **neste servidor**: \`${PREFIXO}banglobal isentar <@pessoa|id|nome>\`.`,
+      colour: COR.aviso,
+    }, {
+      title: "🔒 Bot owner only",
+      description: "The global list is **shared** by every server Judy is in — taking someone off it applies to all of them.\n\n"
+        + `To keep this person unaffected **on this server**: \`${PREFIXO}banglobal isentar <@user|id|name>\`.`,
+      colour: COR.aviso,
+    }));
     const entrada = args.slice(1).join(" ");
     const alvo = await alvoDoComando(entrada, { message, server, ctx });
     if (alvo.erro) return sendEmbed(message.channel,

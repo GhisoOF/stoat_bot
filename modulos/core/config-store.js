@@ -1,6 +1,7 @@
 
 import { readFileSync } from "node:fs";
 import * as db from "./db.js";
+import { limparMolde } from "./molde.js";
 
 // ── Template de configuração POR SERVIDOR ──
 export const padraoServidor = {
@@ -199,7 +200,10 @@ export function inicializar(configPathLegado, dbPath) {
 
   if (gSalvo && tplSalvo) {
     cfgGlobal        = { ...structuredClone(padraoGlobal), ...gSalvo };
-    templateServidor = mesclarServidor(tplSalvo, padraoServidor);
+    // O molde salvo pode trazer IDs do servidor da era antiga (cargo de
+    // silêncio, canal de avisos…): servidor novo não herda ID nenhum.
+    templateServidor = limparMolde(mesclarServidor(tplSalvo, padraoServidor));
+    db.gravarConfig("__default__", templateServidor);
     console.info("[CONFIG] Configuração carregada do banco.");
     return;
   }
@@ -218,11 +222,11 @@ export function inicializar(configPathLegado, dbPath) {
       linkBlocklistSources: legado.linkBlocklistSources ?? [],
       linkBlocklistManual:  legado.linkBlocklistManual ?? [],
     };
-    templateServidor = mesclarServidor({
+    templateServidor = limparMolde(mesclarServidor({
       language:        "pt",
       automod:         legado.automod ?? {},
       inviteWhitelist: legado.inviteWhitelist ?? [],
-    }, padraoServidor);
+    }, padraoServidor));
   } else {
     console.info("[CONFIG] Sem config anterior — usando padrões.");
   }

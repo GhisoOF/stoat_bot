@@ -5,6 +5,7 @@ import { descreverErro, tipoDoErro } from "../core/erros.js";
 import * as log from "../core/log.js";
 import * as banGlobal from "./ban-global.js";
 import * as confianca from "./confianca.js";
+import { curarIds, garantirCargoSilencio } from "./pertence.js";
 import * as imagemSentinela from "./imagem.js";
 import { analisarCaracteres, analisarRepeticao, analisarDuplicata, digital, textoHumano, razaoDeCaixaAlta } from "./caracteres.js";
 import { lingua } from "../core/i18n.js";
@@ -266,6 +267,8 @@ async function aplicarPunicao(ctx, opts) {
   // ── confirmar: silencia (se houver cargo) e pede confirmação ──
   if (pol.modo === "confirmar") {
     let acao = lang === "en" ? "message removed" : "mensagem removida";
+    // Sem cargo de silêncio deste servidor, cria um agora (antes: só pelo &cargomudo).
+    pol.silenceRoleId = await garantirCargoSilencio(server, ctx);
     if (pol.silenceRoleId) {
       try {
         await aplicarCargoSilence(server, userId, pol.silenceRoleId, ctx);
@@ -337,6 +340,8 @@ async function aplicarPunicao(ctx, opts) {
   if (degrau.tipo === "mute") {
     const ate = Date.now() + degrau.ms;
     let acao = lang === "en" ? `silenced for ${degrau.rotulo}` : `silenciado por ${degrau.rotulo}`;
+    // Sem cargo de silêncio deste servidor, cria um agora (antes: só pelo &cargomudo).
+    pol.silenceRoleId = await garantirCargoSilencio(server, ctx);
     if (pol.silenceRoleId) {
       try {
         await aplicarCargoSilence(server, userId, pol.silenceRoleId, ctx);
@@ -589,6 +594,9 @@ export async function runAutomod(message, ctx) {
   }
 
   const canal = await resolverCanal(message, ctx);
+
+  // ── IDs de outro servidor (herdados do molde antigo) saem antes de tudo ──
+  if (curarIds(config, server).length) ctx.salvarConfig?.();
 
   // ── Quem modera não é moderado ──
   // Dono do servidor, super admin e os cargos do `&staff`/`&acesso` (tudo que

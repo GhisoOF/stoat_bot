@@ -170,6 +170,10 @@ export async function cmdAutomod(message, args, ctx) {
       `\`${PREFIXO}automod ${sub} <on|off>\``,
       params ? `\`${PREFIXO}automod ${sub} set <${lang === "en" ? "parameter" : "parâmetro"}> <${lang === "en" ? "value" : "valor"}>\`` : null,
       `\`${PREFIXO}automod ${sub} punicao <${MODOS_PUN.join("|")}|herdar>\``,
+      // O sentinela tem um painel próprio além do liga/desliga.
+      sub === "sentinela" ? (lang === "en"
+        ? `\n**Sentinel panel:** \`${PREFIXO}automod sentinela config\` · \`sensitivity\` · \`antiguidade\` · \`alerta\` · \`test <text>\` — details in \`${PREFIXO}help automod sentinela\``
+        : `\n**Painel do sentinela:** \`${PREFIXO}automod sentinela config\` · \`sensitivity\` · \`antiguidade\` · \`alerta\` · \`test <texto>\` — detalhes em \`${PREFIXO}help automod sentinela\``) : null,
     );
     return sendEmbed(message.channel, { title: `🛡 ${sub}`,
       description: linhas.filter((l) => l !== null).join("\n"), colour: COR.mod });

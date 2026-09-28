@@ -194,6 +194,39 @@ export async function resumirRSS(material, quantidade, { categoria = null, lang 
   }
 }
 
+// Relatório do RSS: SEM persona e sem opinião — é informação. Uma linha por
+// item, no formato que o rss.js confere (cobertura e números).
+export async function linhasRSS(material, { modo = "noticias", lang = "pt", quantidade = 0 } = {}) {
+  const en = lang === "en";
+  const regras = modo === "cve"
+    ? (en
+      ? "For EACH CVE below, write ONE line: `CVE-ID | product | flaw`. product = the software name (without the author/vendor handle). flaw = the kind of flaw and where it happens (file/component), in English. Use exactly the IDs given, one line each, same order, nothing before or after."
+      : "Para CADA CVE abaixo, escreva UMA linha: `CVE-ID | produto | falha`. produto = o nome do software (sem o usuário/autor). falha = o tipo de falha e onde ocorre (arquivo/componente), em português. Use exatamente os IDs dados, uma linha cada, na mesma ordem, nada antes nem depois. Não troque termos técnicos: authorization é autorização, authentication é autenticação.")
+    : (en
+      ? "For EACH numbered story below, write ONE line: `N | sentence` — a neutral sentence (up to 25 words) saying what the story is, using ONLY its title, text and address. No opinion, no irony. Copy numbers, names, dates and quantifiers exactly (\"each household\", \"$10k\", \"from 2021\"). One line per story, same order, nothing before or after."
+      : "Para CADA notícia numerada abaixo, escreva UMA linha: `N | frase` — uma frase neutra em português (até 25 palavras) dizendo do que a notícia trata, usando SÓ o título, o texto e o endereço dela. Sem opinião e sem ironia. Copie números, nomes, datas e quantificadores exatamente (\"cada casa\", \"US$ 10 mil\", \"de 2021\"). Uma linha por notícia, na mesma ordem, nada antes nem depois.");
+  const sys = (en ? "You write a neutral technical report. " : "Você escreve um relatório técnico neutro. ") + regras;
+  return llmChat(
+    [{ role: "system", content: sys }, { role: "user", content: material.slice(0, 9000) }],
+    { modelo: LLM_MODEL_LEVE, maxTokens: Math.min(4000, 900 + 110 * quantidade), etiqueta: `relatorio-rss:${modo}` },
+  );
+}
+
+// O comentário da Judy no fim do relatório: no tom dela, sobre o conjunto.
+export async function comentarioRSS(material, { lang = "pt", serverId = null } = {}) {
+  const en = lang === "en";
+  const sys = [
+    persona.resumoPersona(serverId, en ? "en" : "pt"),
+    en
+      ? "Write a short comment (2 to 3 sentences) about the stories below as a whole, in your voice. Don't list them. The sarcasm goes in the TONE, never in the FACTS: say nothing that isn't in the titles or texts."
+      : "Escreva um comentário curto (2 a 3 frases) sobre o conjunto das notícias abaixo, no seu tom. Não liste as notícias. O sarcasmo vai no TOM, nunca nos FATOS: não afirme nada que não esteja nos títulos ou textos.",
+  ].join(" ");
+  return llmChat(
+    [{ role: "system", content: sys }, { role: "user", content: material.slice(0, 6000) }],
+    { modelo: LLM_MODEL_LEVE, maxTokens: 900, etiqueta: "comentario-rss" },
+  );
+}
+
 export async function gerarComentarioEspontaneo(contextoCanal, serverId = null) {
   const sys = [
     persona.resumoPersona(serverId, "pt"),

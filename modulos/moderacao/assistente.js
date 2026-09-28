@@ -3,6 +3,7 @@ import { lingua } from "../core/i18n.js";
 import { resolverCanal, resolverCargo } from "../core/ids.js";
 import { temCargoStaff } from "./acesso.js";
 import { podeNoCanal } from "./permissoes.js";
+import { curarIds } from "./pertence.js";
 
 const TTL_MS = 10 * 60 * 1000;
 const sessoes = new Map();   // `${channelId}:${userId}` → sessão
@@ -25,7 +26,7 @@ function listaDeNomes(texto) {
   return String(texto).split(/[,\n;]+|\s+e\s+|\s+and\s+/i).map((x) => x.trim()).filter(Boolean);
 }
 
-const PASSOS = {
+export const PASSOS = {
   idioma: {
     pergunta: (lang, P) => T(lang,
       "🌐 **Idioma** — em que idioma eu respondo neste servidor?\n`1` Português · `2` English",
@@ -95,15 +96,15 @@ const PASSOS = {
     },
     comandos: (v, { config }) => {
       const c = [["automod", "antispam", "on"], ["automod", "antiinvite", "on"]];
-      if (v === 1) { c.push(["punicao", "modo", "avisar"]); return c; }
+      if (v === 1) { c.push(["automod", "punicao", "modo", "avisar"]); return c; }
       c.push(["automod", "antilink", "on"], ["automod", "antimassmention", "on"],
-        ["sentinela", "on"], ["sentinela", "antiguidade", "on"], ["sentinela", "alerta", "on"]);
-      if (v === 2) c.push(["sentinela", "sensitivity", "media"]);
+        ["automod", "sentinela", "on"], ["automod", "sentinela", "antiguidade", "on"], ["automod", "sentinela", "alerta", "on"]);
+      if (v === 2) c.push(["automod", "sentinela", "sensitivity", "media"]);
       if (v === 3) c.push(["automod", "anticaps", "on"], ["automod", "anticaracteres", "on"],
-        ["automod", "antirepeticao", "on"], ["sentinela", "sensitivity", "alta"], ["banglobal", "banir"]);
+        ["automod", "antirepeticao", "on"], ["automod", "sentinela", "sensitivity", "alta"], ["banglobal", "banir"]);
       // O mute da escada precisa de um cargo de silêncio — cria se não houver.
       if (!config?.automod?.punicao?.silenceRoleId) c.push(["cargomudo"]);
-      c.push(["punicao", "modo", "acumular"]);
+      c.push(["automod", "punicao", "modo", "acumular"]);
       return c;
     },
   },
@@ -130,7 +131,7 @@ const PASSOS = {
       if (!/^(aviso|warning|\d+[smhd]|ban)(,(aviso|warning|\d+[smhd]|ban))*$/.test(v)) return { erro: true };
       return { valor: v, rotulo: v };
     },
-    comandos: (v) => [["punicao", "escada", v]],
+    comandos: (v) => [["automod", "punicao", "escada", v]],
   },
 
   banglobal: {
@@ -222,6 +223,9 @@ const NOME_ROTEIRO = {
 
 export async function cmdAssistente(message, args, ctx) {
   const { sendEmbed, COR, PREFIXO: P, config } = ctx;
+  // IDs herdados de outro servidor (molde antigo) saem antes das perguntas:
+  // senão o passo do &cargomudo é pulado por um cargo que nem existe aqui.
+  try { const srv = await ctx.getServer?.(message); if (curarIds(config, srv).length) ctx.salvarConfig?.(); } catch {}
   const lang = lingua(ctx);
   const pedido = (args[0] ?? "").toLowerCase();
   const chave = chaveDe(message);

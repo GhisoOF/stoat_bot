@@ -122,10 +122,13 @@ function detalhesPT(P) {
       ex: `${P}warn @Fulano flood no chat de arte`,
     },
     servidores: {
-      uso: `${P}servidores`,
-      desc: "Panorama de onde o bot está: nome de cada servidor, quantidade de membros e ritmo de mensagens por minuto.\n\n`&servidores cru` mostra como a API entrega os dados (diagnóstico).\n\n_Restrito ao dono do bot._",
+      uso: `${P}servidores [relatorio …]`,
+      desc: "**Só o dono do bot** (fora do índice). Duas coisas:\n\n"
+        + "`&servidores` — onde o bot está: cada servidor com membros e ritmo de mensagens por minuto.\n\n"
+        + "`&servidores relatorio` — um **relatório por hora** num canal seu: o que o log de moderação registrou em todos os servidores, raids, imagens, reinícios (com a causa), erros agrupados e os assuntos mais comentados. "
+        + "Números vêm do código; o modelo só escreve destaques, assuntos e a leitura dos erros. Detalhes: `&help servidores relatorio`.",
       perm: null,
-      ex: `${P}servidores`,
+      ex: `${P}servidores relatorio canal aqui`,
     },
     acesso: {
       uso: `${P}acesso <cargo|canal|staffignora|status>`,
@@ -350,10 +353,13 @@ function detalhesEN(P) {
       ex: `${P}warn @Someone flooding the art channel`,
     },
     servidores: {
-      uso: `${P}servidores`,
-      desc: "Overview of everywhere the bot is: each server's name, member count and message rate per minute.\n\n`&servidores cru` shows the raw data as the API delivers it (diagnostics).\n\n_Restricted to the bot owner._",
+      uso: `${P}servidores [relatorio …]`,
+      desc: "**Bot owner only** (not in the index). Two things:\n\n"
+        + "`&servidores` — where the bot is: each server with members and message rate per minute.\n\n"
+        + "`&servidores relatorio` — an **hourly report** in a channel of yours: what the moderation log recorded across all servers, raids, images, restarts (with the cause), grouped errors and the most discussed topics. "
+        + "Numbers come from the code; the model only writes highlights, topics and the reading of the errors. Details: `&help servidores relatorio`.",
       perm: null,
-      ex: `${P}servidores`,
+      ex: `${P}servidores relatorio canal aqui`,
     },
     acesso: {
       uso: `${P}acesso <cargo|canal|staffignora|status>`,
@@ -821,14 +827,18 @@ export async function cmdHelp(message, args, ctx) {
         ? "What do you want to do? Pick a group — react ◀ ▶ to browse them all, or type the command."
         : "O que você quer fazer? Escolha um grupo — reaja ◀ ▶ para folhear todos, ou digite o comando.",
       "",
+      lang === "en"
+        ? `🧙 **First time here?** \`${P}assistente\` sets the bot up **with you**, question by question — the fastest way.`
+        : `🧙 **Primeira vez aqui?** \`${P}assistente\` configura o bot **com você**, pergunta por pergunta — é o jeito mais rápido.`,
+      "",
       ...chavesGrupos.map((k) => `${GRUPOS[k].emoji} \`${P}help ${k}\` — ${(!comIA && GRUPOS[k].resumoSemIA) || GRUPOS[k].resumo}`),
       "",
       lang === "en"
-        ? `🆕 New server? \`${P}assistente\` configures it with you, step by step.`
-        : `🆕 Servidor novo? \`${P}assistente\` configura com você, passo a passo.`,
-      lang === "en"
         ? `📖 \`${P}help <command>\` — usage, **each parameter explained**, example (e.g. \`${P}help boasvindas\`)`
         : `📖 \`${P}help <comando>\` — uso, **cada parâmetro explicado**, exemplo (ex.: \`${P}help boasvindas\`)`,
+      lang === "en"
+        ? `📋 Several commands at once: **one per line** in the same message (up to 10).`
+        : `📋 Vários comandos de uma vez: **um por linha** na mesma mensagem (até 10).`,
       lang === "en"
         ? `🔍 \`${P}help <command> <part>\` — one part of it (\`${P}help game admin\`, \`${P}help xp setup\`)`
         : `🔍 \`${P}help <comando> <parte>\` — uma parte dele (\`${P}help game admin\`, \`${P}help xp setup\`)`,

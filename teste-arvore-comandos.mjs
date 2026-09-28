@@ -1,3 +1,4 @@
+import fs from "node:fs";
 // Comandos em árvore: uma família, uma raiz, e a ajuda descendo por ela.
 //
 // O que isto protege:
@@ -146,6 +147,21 @@ await tAsync("&entrar e &sair continuam funcionando (a porta única)", async () 
   assert.match(main, /entrar:\s*\(msg, args, ctx\) => ttsVoz\.cmdTts\(msg, \["entrar", \.\.\.args\], \{ \.\.\.ctx, viaAtalhoVoz: true \}\)/);
   assert.match(main, /sair:\s*\(msg, args, ctx\) => ttsVoz\.cmdTts\(msg, \["sair", \.\.\.args\], \{ \.\.\.ctx, viaAtalhoVoz: true \}\)/);
 });
+
+console.log("\n── &help <grupo> não vira &help <comando> pelo apelido ──");
+{
+  const aliases = await import("./modulos/core/aliases.js");
+  const main = fs.readFileSync("./main.js", "utf8");
+  const CANONICO = Object.fromEntries([...main.match(/const CANONICO = \{([\s\S]*?)\n\};/)[1]
+    .matchAll(/^\s*"?([\wá-ú-]+)"?\s*:\s*"([^"]+)"/gm)].map((x) => [x[1], x[2]]));
+  const { ORDEM } = await import("./modulos/moderacao/help-grupos.js");
+  for (const grupo of ORDEM) {
+    t(`&help ${grupo} abre o grupo (a tabela real diz ${grupo} → ${CANONICO[grupo] ?? "—"})`, () =>
+      assert.equal(aliases.normalizarArgs("help", [grupo], CANONICO)[0], grupo));
+  }
+  t("apelido de comando continua traduzido (&help cores → &help cor)", () =>
+    assert.equal(aliases.normalizarArgs("help", ["cores"], CANONICO)[0], CANONICO.cores ?? "cores"));
+}
 
 console.log(`\nÁRVORE DE COMANDOS: ${ok} ok, ${falhou} falha(s)`);
 process.exit(falhou ? 1 : 0);

@@ -64,7 +64,7 @@ export async function cmdConfig(message, args, ctx) {
     `${on(am.antiMassMention.enabled)} **antimassmention** — max ${am.antiMassMention.maxMentions} mentions`,
     `${on(am.antiCaps.enabled)} **anticaps** — ≥${am.antiCaps.minLength} chars and ${Math.round(am.antiCaps.threshold * 100)}% uppercase`,
     `${on(am.antiLink.enabled)} **antilink** — ${estado.blockedDomains.size.toLocaleString("en-US")} domain(s) listed`,
-    `${on(am.antiScam.enabled)} **antiscam** — sensitivity ${L_SENS[am.antiScam.sensitivity] ?? am.antiScam.sensitivity}`,
+    `${on(am.antiScam.enabled)} **sentinela** — sensitivity ${L_SENS[am.antiScam.sensitivity] ?? am.antiScam.sensitivity}`,
   ] : [
     `${on(am.antiSpam.enabled)} **antispam** — ${am.antiSpam.maxMessages} msg / ${am.antiSpam.windowMs}ms`,
     `${on(am.antiMassSpam.enabled)} **antimassspam** — ${am.antiMassSpam.maxMessages} msg / ${am.antiMassSpam.windowMs}ms`,
@@ -74,7 +74,7 @@ export async function cmdConfig(message, args, ctx) {
     `${on(am.antiMassMention.enabled)} **antimassmention** — máx. ${am.antiMassMention.maxMentions} menções`,
     `${on(am.antiCaps.enabled)} **anticaps** — ≥${am.antiCaps.minLength} chars e ${Math.round(am.antiCaps.threshold * 100)}% maiúsculas`,
     `${on(am.antiLink.enabled)} **antilink** — ${estado.blockedDomains.size.toLocaleString("pt-BR")} domínio(s) na lista`,
-    `${on(am.antiScam.enabled)} **antiscam** — sensibilidade ${L_SENS[am.antiScam.sensitivity] ?? am.antiScam.sensitivity}`,
+    `${on(am.antiScam.enabled)} **sentinela** — sensibilidade ${L_SENS[am.antiScam.sensitivity] ?? am.antiScam.sensitivity}`,
   ];
 
   // ── Punição ──
@@ -153,9 +153,12 @@ export async function cmdConfig(message, args, ctx) {
   } catch { /* banco indisponível: segue sem essa seção */ }
 
   // ── Whitelist de convites ──
-  const wl = config.inviteWhitelist?.length
-    ? config.inviteWhitelist.map((c) => `\`${c}\``).join(", ")
-    : (en ? "_(empty)_" : "_(vazia)_");
+  // A whitelist tem dois destinos: domínios (anti-link) e convites (anti-invite).
+  const wlItens = [
+    ...(config.dominiosPermitidos ?? []).map((d) => `\`${d}\``),
+    ...(config.inviteWhitelist ?? []).map((cv) => `\`stt.gg/${cv}\``),
+  ];
+  const wl = wlItens.length ? wlItens.join(", ") : (en ? "_(empty)_" : "_(vazia)_");
 
   await sendEmbed(message.channel, en ? {
     title: "⚙️ This server's settings",
@@ -169,7 +172,7 @@ export async function cmdConfig(message, args, ctx) {
       "**📜 Log channel**",
       ...logs,
       "",
-      "**✅ Allowed invites**",
+      "**✅ Whitelist** _(`&automod whitelist`)_",
       wl,
       "",
       "**🌐 Global ban list**",
@@ -219,7 +222,7 @@ export async function cmdConfig(message, args, ctx) {
       "**📜 Chat de logs**",
       ...logs,
       "",
-      "**✅ Convites permitidos**",
+      "**✅ Lista de permitidos** _(`&automod whitelist`)_",
       wl,
       "",
       "**🌐 Lista global de banimentos**",

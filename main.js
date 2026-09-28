@@ -66,6 +66,7 @@ import * as assistente from "./modulos/moderacao/assistente.js";
 import { tr }         from "./modulos/core/i18n.js";
 import { chamarApi }  from "./modulos/core/stoat-api.js";
 import { vigiarConexao } from "./modulos/core/vida.js";
+import { comandosPorLinha, mensagemDaLinha } from "./modulos/core/lote.js";
 import * as relatorioHora from "./modulos/ferramentas/relatorio.js";
 import * as servidoresCmd from "./modulos/moderacao/servidores.js";
 import { descreverErro } from "./modulos/core/erros.js";
@@ -217,7 +218,7 @@ async function enviarEmbedUnico(channel, { title, description, colour = COR.info
 async function definirStatus() {
   if (!process.env.BOT_TOKEN) return;
   const texto = process.env.STATUS_TEXT
-    || `${PREFIXO}help • ${PREFIXO}tutorial | prefixo/prefix: ${PREFIXO}`;
+    || `prefix: ${PREFIXO}`;
   const r = await chamarApi("/users/@me", {
     metodo: "PATCH",
     corpo: { status: { text: texto.slice(0, 128), presence: "Online" } },
@@ -517,6 +518,7 @@ client.on("ready", async () => {
   chat.iniciarComentario(client); // liga o comentário espontâneo
   modIA.configurar({ avaliar: chat.avaliarModeracao });   // moderação por IA usa o modelo pequeno
   rss.configurarResumo(chat.resumirRSS);   // RSS agendado passa a resumir com o tom da Judy
+  rss.configurarRelatorio({ linhas: chat.linhasRSS, comentario: chat.comentarioRSS });   // relatório por categoria + comentário no fim
 
   const ctx = criarContexto();    // contexto sem servidor (tarefas globais)
   engine.agendarLimpezaSpam(ctx); // limpeza periódica do rastreio de spam
@@ -535,7 +537,8 @@ client.on("ready", async () => {
   banGlobal.iniciarAutoImportacao(client, criarContexto);
 });
 
-client.on("messageCreate", async (message) => {
+client.on("messageCreate", tratarMensagem);
+async function tratarMensagem(message) {
   ultimoEvento = Date.now();   // prova de vida: recebemos um evento
   if (message.authorId === client.user.id) return;
 
@@ -547,12 +550,24 @@ client.on("messageCreate", async (message) => {
 
   // Cada servidor tem sua própria config
   const serverId = message.serverId ?? message.server?.id ?? message.server?._id ?? null;
-  srvStats.registrar(serverId);   // métrica de ritmo (memória, janela deslizante)
-  relatorioHora.mensagem(serverId, message.content, {
+  if (!message.__lote) srvStats.registrar(serverId);   // métrica de ritmo (memória, janela deslizante)
+  if (!message.__lote) relatorioHora.mensagem(serverId, message.content, {
     autorId: message.authorId, ehBot: !!message.author?.bot,
     comAssunto: relatorioHora.temAssunto(client.servers.get(serverId), store.getGlobal().relatorio),
   });
   const ctx = criarContexto(serverId);
+
+  // ── Vários comandos numa mensagem (um por linha) ──
+  // Cada linha percorre o caminho inteiro de um comando — permissão,
+  // restrição de canal, comando desativado —, uma depois da outra.
+  const lote = message.__lote ? null : comandosPorLinha(message.content, PREFIXO);
+  if (lote) {
+    for (const linha of lote) {
+      try { await tratarMensagem(mensagemDaLinha(message, linha)); }
+      catch (e) { console.error(`[LOTE] "${linha.slice(0, 60)}":`, descreverErro(e)); }
+    }
+    return;
+  }
 
   // Identifica se a mensagem é um COMANDO reconhecido
   let command = null, args = [];
@@ -740,7 +755,7 @@ function ehCanalDeVoz(message) {
       colour: COR.erro,
     }));
   }
-});
+}
 
 client.on("messageReactionAdd", async (...a) => {
   ultimoEvento = Date.now();
@@ -849,7 +864,9 @@ client.on("serverMemberJoin", async (member) => {
       relatorioHora.evento(serverId, "raid", `Possível raid: ${onda.contas.length} contas novas em 15 min`);
       const en = ctx.config?.language === "en";
       const destinoId = ctx.config?.automod?.antiScam?.alertChannelId || ctx.config?.log?.canalId;
-      const destino = destinoId ? await client.channels.fetch(destinoId).catch(() => null) : null;
+      const achado = destinoId ? await client.channels.fetch(destinoId).catch(() => null) : null;
+      // canal de outro servidor (herdado do molde antigo) nunca recebe o alerta
+      const destino = achado && (achado.serverId ?? achado.server?.id) === serverId ? achado : null;
       if (destino) await sendEmbed(destino, {
         title: en ? "🛡️ Possible raid" : "🛡️ Possível raid",
         description: [

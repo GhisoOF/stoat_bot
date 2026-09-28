@@ -6,7 +6,7 @@
 //   &servidores relatorio agora          → a última hora, já (não esvazia a contagem)
 //   &servidores relatorio on|off
 //   &servidores relatorio vazias on|off  → mandar (ou pular) as horas sem nada
-//   &servidores relatorio assuntos [add|remove <idDoServidor>]
+//   &servidores relatorio assuntos [add|remove <id> [id…]]
 //
 // Voltou depois de ter saído na versão pública: aqui ele só mostra números
 // sobre os servidores do próprio bot de quem roda a instância.
@@ -75,15 +75,23 @@ async function cmdRelatorio(message, args, ctx) {
     return sendEmbed(message.channel, { title: "✅ Feito", description: cfg.pularVazias ? "Horas sem nenhum evento serão puladas." : "Horas tranquilas também são enviadas (uma linha).", colour: COR.sucesso });
   }
   if (sub === "assuntos") {
-    const acao = args[1]?.toLowerCase(), id = limparId(args[2] ?? "");
-    if ((acao === "add" || acao === "remove") && id) {
-      cfg.assuntos = (cfg.assuntos ?? []).filter((x) => x !== id);
-      if (acao === "add") cfg.assuntos.push(id);
+    // Vários IDs de uma vez: separados por espaço, vírgula ou ponto e vírgula.
+    const acao = args[1]?.toLowerCase();
+    const ids = [...new Set(args.slice(2).join(" ").split(/[\s,;]+/).map((x) => limparId(x)).filter(Boolean))];
+    const nomeDe = (id) => client.servers.get(id)?.name;
+    const avisos = [];
+    if ((acao === "add" || acao === "remove") && ids.length) {
+      cfg.assuntos = (cfg.assuntos ?? []).filter((x) => !ids.includes(x));
+      if (acao === "add") cfg.assuntos.push(...ids);
       salvar();
+      const fora = ids.filter((id) => !nomeDe(id));
+      if (acao === "add" && fora.length) avisos.push(`⚠️ A Judy não está em: ${fora.map((x) => `\`${x}\``).join(", ")} — ficam na lista, mas sem mensagens não há assunto.`);
     }
-    const lista = cfg.assuntos?.length ? cfg.assuntos.map((x) => `• \`${x}\``).join("\n")
+    const lista = cfg.assuntos?.length
+      ? cfg.assuntos.map((x) => `• ${nomeDe(x) ? `**${nomeDe(x)}** ` : ""}\`${x}\``).join("\n")
       : "_Nenhum listado: valem os servidores de que um dono do bot é dono._";
-    return sendEmbed(message.channel, { title: "🗣️ Servidores com assuntos", description: lista, colour: COR.info });
+    return sendEmbed(message.channel, { title: "🗣️ Servidores com assuntos",
+      description: [lista, ...avisos.map((x) => `\n${x}`)].join("\n"), colour: COR.info });
   }
   if (sub === "agora" || sub === "now") {
     const aviso = await sendEmbed(message.channel, { title: "⏳ Montando o relatório…", description: "Pode levar até alguns minutos (o modelo escreve os destaques).", colour: COR.info });
@@ -100,7 +108,7 @@ async function cmdRelatorio(message, args, ctx) {
       `**Horas tranquilas:** ${cfg.pularVazias ? "puladas" : "enviadas"}`,
       `**Modelo:** \`${process.env.LLM_MODEL_RELATORIO || process.env.LLM_MODEL || "nenhum — só números"}\``,
       "",
-      "`&servidores relatorio canal <#canal|aqui>` · `agora` · `on|off` · `vazias on|off` · `assuntos [add|remove <id>]`",
+      "`&servidores relatorio canal <#canal|aqui>` · `agora` · `on|off` · `vazias on|off` · `assuntos [add|remove <id> [id…]]`",
     ].join("\n"),
     colour: COR.info,
   });

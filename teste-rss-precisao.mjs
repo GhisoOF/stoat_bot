@@ -57,5 +57,84 @@ t("fecharResumo preserva os parágrafos", () => {
   assert.match(r, /2026\.\n\nSegundo/);
 });
 
+console.log("\n── relatório por categoria (notícias reais de 28/09, 03:56) ──");
+const CVES_0356 = [
+  "CVE-2026-100892 - aligungr UERANSIM nr-gnb handler.cpp ULInformationTransfer memory corruption",
+  "CVE-2026-100891 - Trusted Domain Project OpenDMARC Internationalized Domain Name opendmarc_policy.c opendmarc_policy_query_dmarc encoding error",
+  "CVE-2026-100890 - Trusted Domain Project OpenDMARC SPF Parser opendmarc_spf.c opendmarc_spf_ipv6_explode null pointer dereference",
+  "CVE-2026-100895 - Trusted Domain Project OpenARC libopenarc arc-canon.c arc_parse_canon_t null pointer dereference",
+  "CVE-2026-100894 - mathurvishal CloudClassroom-PHP-Project updateguest.php sql injection",
+].map((titulo) => ({ feedTitulo: "Latest Vulnerabilities", titulo, link: "https://cvefeed.io/vuln/detail/x", resumo: "" }));
+const HN_0356 = [
+  { feedTitulo: "Hacker News", titulo: "Self-parking car using genetic algorithm (2021)", link: "https://trekhleb.dev/blog/2021/self-parking-car-evolution/", resumo: "Comments" },
+  { feedTitulo: "Hacker News", titulo: "Every Household in This Rural Town Receives $10k If a Data Center Gets Built", link: "https://www.wsj.com/real-estate/every-household-in-this-rural-town-receives-10-000-if-a-data-center-gets-built-86554cb7", resumo: "Comments" },
+];
+t("CVE vira a categoria Vulnerabilidades, venha do feed que vier", () => {
+  assert.equal(rss.categoriaDoItem(CVES_0356[0], "Tecnologia"), "Vulnerabilidades");
+  assert.equal(rss.categoriaDoItem(HN_0356[0], "Tecnologia"), "Tecnologia");
+});
+t("o link dá sentido ao título (Coltrane) e perde o id do fim (WSJ)", () => {
+  assert.equal(rss.pistaDoLink("https://www.tabletmag.com/sections/arts-letters/articles/coltranes-shadow-tiberi-tapes"), "coltranes shadow tiberi tapes");
+  assert.doesNotMatch(rss.pistaDoLink(HN_0356[1].link), /86554cb7/);
+});
+t("relatório de CVE: a esquecida volta, a inventada sai, cada uma aparece 1 vez", () => {
+  // o modelo esqueceu a OpenARC (como no resumo real), inventou uma e repetiu outra
+  const resposta = [
+    "CVE-2026-100892 | UERANSIM | corrupção de memória em handler.cpp",
+    "CVE-2026-100891 | OpenDMARC | erro de codificação em opendmarc_policy.c",
+    "CVE-2026-100890 | OpenDMARC | ponteiro nulo no parser SPF",
+    "CVE-2026-100890 | OpenDMARC | repetida",
+    "CVE-2026-999999 | Inventado | não existe",
+    "CVE-2026-100894 | CloudClassroom-PHP-Project | SQL injection em updateguest.php",
+  ].join("\n");
+  const r = rss.montarRelatorioCVE(resposta, CVES_0356);
+  for (const it of CVES_0356) {
+    const id = it.titulo.match(/CVE-\d{4}-\d+/)[0];
+    assert.equal(r.split(id).length - 1, 1, `${id} aparece ${r.split(id).length - 1}×`);
+  }
+  assert.doesNotMatch(r, /999999|Inventado|repetida/);
+  assert.match(r, /\*\*OpenDMARC\*\*\n• erro de codificação.*\n• ponteiro nulo/, "agrupa por produto");
+  assert.match(r, /\*\*Outros\*\*\n• Trusted Domain Project OpenARC/, "a esquecida volta pelo título");
+});
+t("relatório de CVE sem o modelo: sai todo pelos títulos", () => {
+  const r = rss.montarRelatorioCVE("", CVES_0356);
+  assert.equal((r.match(/CVE-2026-\d+/g) ?? []).length, CVES_0356.length);
+});
+t("resumo de notícias: uma linha por item; falta volta pelo título; número inventado também", () => {
+  const r = rss.montarResumoNoticias("1 | Um post de 2021 sobre carros que se estacionam com algoritmo genético.\n2 | Cada casa de uma cidade recebe US$ 25 mil se um data center for construído.", HN_0356);
+  const linhas = r.split("\n");
+  assert.equal(linhas.length, 2);
+  assert.match(linhas[0], /de 2021/);
+  assert.equal(linhas[1], `• ${HN_0356[1].titulo}`, "US$ 25 mil não está na notícia: volta o título");
+});
+t("resumo de notícias: número que ESTÁ na notícia fica ($10k)", () => {
+  const r = rss.montarResumoNoticias("2 | Cada casa de uma cidade rural recebe US$ 10 mil se um data center for construído.", HN_0356);
+  assert.match(r.split("\n")[1], /Cada casa .* 10 mil/);
+});
+t("blocos: lista longa é dividida sem cortar linha", () => {
+  const texto = Array.from({ length: 80 }, (_, i) => `• falha número ${i} em algum arquivo.php (CVE-2026-${100000 + i})`).join("\n");
+  const b = rss.blocosDe(texto, 1900);
+  assert.ok(b.length > 1); assert.ok(b.every((x) => x.length <= 1900));
+  assert.equal(b.join("\n"), texto);
+});
+
+console.log("\n── publicação de ponta a ponta ──");
+{
+  const enviados = [];
+  rss.configurarRelatorio({
+    linhas: async (_m, { modo }) => (modo === "cve" ? "" : "1 | Um post de 2021 sobre carros autônomos que aprendem a estacionar."),
+    comentario: async () => "A nuvem agora paga cashback.",
+  });
+  await rss.publicarRelatorio({ sendMessage: async (m) => enviados.push(m.embeds[0]) },
+    [...CVES_0356.map((x) => ({ ...x, categoria: "Vulnerabilidades" })), HN_0356[0]], { agora: "x" });
+  t("ordem: relatório de CVE, resumo, comentário da Judy no fim", () => {
+    assert.match(enviados[0].title, /Relatório de vulnerabilidades/);
+    assert.match(enviados[1].title, /Resumo · Geral/);
+    assert.match(enviados.at(-1).title, /A Judy comenta/);
+  });
+  t("modelo sem resposta para as CVEs: nenhuma se perde", () =>
+    assert.equal((enviados[0].description.match(/CVE-2026-\d+/g) ?? []).length, CVES_0356.length));
+}
+
 console.log(`\nRSS (precisão): ${ok} ok, ${falhou} falha(s)`);
 process.exit(falhou ? 1 : 0);

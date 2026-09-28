@@ -162,8 +162,13 @@ diz exatamente o que clicar.
   assunto vale; `&chat comentar` permite comentários espontâneos com limite
   por dia. `&chat cuidado @user on` marca alguém (opt-in) para tratamento
   gentil e paciente.
-- **RSS com resumo** (`&rss`): o bot posta os itens novos dos feeds a cada
-  hora; onde a IA está ativa, ela escreve um resumo geral no tom dela.
+- **Vários comandos de uma vez**: um por linha na mesma mensagem (até 10);
+  cada um passa pelas mesmas verificações de permissão e de canal, em ordem.
+- **RSS** (`&rss`): a cada ciclo, um **relatório por categoria**, neutro e com uma linha
+  por notícia — vulnerabilidades (`CVE-…`) formam a sua própria categoria,
+  agrupadas por produto —, e no fim **um comentário curto da Judy** sobre o
+  conjunto. O código garante que toda notícia aparece, que nada inventado entra
+  e que número que não está na notícia não passa.
 
 **Voz nas calls** (`&tts`, opcional)
 

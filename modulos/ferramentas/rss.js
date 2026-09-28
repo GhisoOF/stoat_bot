@@ -6,6 +6,9 @@ import { tr, lingua } from "../core/i18n.js";
 
 let resumirIA = null;
 export function configurarResumo(fn) { resumirIA = fn; }
+// Relatório por categoria (neutro, uma linha por item) + comentário da Judy no fim.
+let relatorioIA = null;
+export function configurarRelatorio(fns) { relatorioIA = fns; }
 
 const RSS_SERVIDORES = (process.env.RSS_SERVIDORES || "")
   .split(",").map((x) => x.trim()).filter(Boolean);
@@ -89,7 +92,7 @@ async function coletarNovos(serverId) {
         if (!item.guid) continue;
         // marcarVisto devolve true se era novo
         if (db.marcarVisto(f.id, item.guid)) {
-          novos.push({ feedTitulo: tituloFeed, categoria: f.categoria || null, ...item });
+          novos.push({ feedTitulo: tituloFeed, categoria: categoriaDoItem(item, f.categoria), ...item });
         }
       }
       // se o feed não tinha título salvo, guarda agora
@@ -131,7 +134,10 @@ export async function rodarCiclo(serverId, ctx, { forcado = false } = {}) {
   const cicloEn = config?.language === "en";
   const agora = new Date().toLocaleString(cicloEn ? "en-US" : "pt-BR", { timeZone: process.env.TZ || "UTC" });
 
-  if (resumirIA) {
+  if (relatorioIA) {
+    try { await publicarRelatorio(canal, novos, { lang: cicloEn ? "en" : "pt", agora, serverId }); }
+    catch (e) { console.error("[RSS] relatório falhou:", e.message); }
+  } else if (resumirIA) {
     const grupos = new Map();
     for (const it of novos) {
       const cat = it.categoria || "Geral";
@@ -472,4 +478,136 @@ export function fecharResumo(resumo, itens) {
   // preserva as quebras de parágrafo: filtra número por parágrafo
   const paragrafos = String(resumo).trim().split(/\n\s*\n/).map((p) => tirarNumerosInventados(p, itens)).filter((p) => p.trim());
   return cortarEmFrase(paragrafos.join("\n\n"), 1900);
+}
+
+// ─── Relatório por categoria ────────────────────────────────────────────────
+//
+// O texto corrido com sarcasmo errava do jeito que importa num resumo: CVE
+// sumia no meio da lista (3 de 18 em 28/09), "authorization" virou
+// "autenticação", "every household receives $10k" virou "a vila recebe dez
+// mil dólares". Agora cada categoria é um relatório NEUTRO, uma linha por
+// item, e o código confere a cobertura: todo item da entrada aparece uma vez,
+// nada inventado entra, e o que o modelo não trouxer volta pelo título. O tom
+// da Judy fica num comentário curto no fim, sobre o conjunto.
+
+const RE_CVE = /\bCVE-\d{4}-\d{4,}\b/i;
+export function categoriaDoItem(item, categoriaDoFeed = null) {
+  if (RE_CVE.test(item?.titulo ?? "")) return "Vulnerabilidades";
+  return categoriaDoFeed || null;
+}
+
+// "…/coltranes-shadow-tiberi-tapes" → "coltranes shadow tiberi tapes": o link
+// costuma dizer do que a notícia é quando o feed só manda o título.
+export function pistaDoLink(url) {
+  try {
+    const u = new URL(url);
+    const partes = u.pathname.split("/").filter(Boolean)
+      .filter((x) => /[a-z]/i.test(x) && x.includes("-"));
+    const ultima = partes.at(-1) ?? "";
+    return ultima.replace(/\.[a-z]{2,5}$/i, "").split("-")
+      .filter((w) => w && !/^[0-9a-f]{6,}$/i.test(w))   // ids no fim do slug
+      .join(" ").slice(0, 120);
+  } catch { return ""; }
+}
+
+function materialNumerado(itens) {
+  return itens.map((it, i) => {
+    const texto = textoDoItem(it.resumo, it.titulo);
+    const pista = pistaDoLink(it.link);
+    return `${i + 1}. ${it.titulo}${texto ? ` — ${texto.slice(0, 250)}` : ""}${pista ? ` (endereço: ${pista})` : ""}`;
+  }).join("\n");
+}
+
+// Resposta do modelo: "N | frase". Cada item vira UMA linha; o que faltar ou
+// trouxer número que não está naquele item volta pelo título original.
+export function montarResumoNoticias(resposta, itens) {
+  const porN = new Map();
+  for (const linha of String(resposta ?? "").split("\n")) {
+    const m = linha.match(/^\s*[-*•]?\s*(\d+)\s*[|.)\-–:]\s*(.+?)\s*$/);
+    if (m && !porN.has(Number(m[1]))) porN.set(Number(m[1]), m[2]);
+  }
+  return itens.map((it, i) => {
+    let frase = porN.get(i + 1) ?? "";
+    if (frase) frase = tirarNumerosInventados(frase, [{ ...it, resumo: `${it.resumo ?? ""} ${pistaDoLink(it.link)}` }]);
+    return `• ${frase.trim() || it.titulo}`;
+  }).join("\n");
+}
+
+// Resposta do modelo: "CVE-ID | produto | falha". Toda CVE da entrada aparece
+// exatamente uma vez; CVE que não estava na entrada é descartada; a esquecida
+// volta com o título original, em "Outros".
+export function montarRelatorioCVE(resposta, itens) {
+  const idDe = (t) => (String(t).match(RE_CVE)?.[0] ?? "").toUpperCase();
+  const entrada = new Map(itens.map((it) => [idDe(it.titulo), it]));
+  const linhas = new Map();
+  for (const l of String(resposta ?? "").split("\n")) {
+    const partes = l.split("|").map((x) => x.replace(/^\s*[-*•]\s*/, "").trim());
+    if (partes.length < 3) continue;
+    const id = idDe(partes[0]);
+    if (!entrada.has(id) || linhas.has(id)) continue;          // inventada ou repetida
+    linhas.set(id, { produto: partes[1] || "Outros", falha: partes.slice(2).join(" | ") });
+  }
+  for (const [id, it] of entrada) {
+    if (!linhas.has(id)) linhas.set(id, { produto: "Outros", falha: String(it.titulo).replace(RE_CVE, "").replace(/^\s*[-–—]\s*/, "") });
+  }
+  const grupos = new Map();
+  for (const [id, l] of linhas) {
+    const chave = l.produto.toLowerCase();
+    if (!grupos.has(chave)) grupos.set(chave, { nome: l.produto, itens: [] });
+    grupos.get(chave).itens.push(`• ${l.falha} (${id})`);
+  }
+  const ordem = [...grupos.values()].sort((a, b) => (a.nome === "Outros") - (b.nome === "Outros"));
+  return ordem.map((g) => `**${g.nome}**\n${g.itens.join("\n")}`).join("\n\n");
+}
+
+// Divide em blocos de até `max` sem cortar linha no meio.
+export function blocosDe(texto, max = 1900) {
+  const out = [];
+  let atual = "";
+  for (const linha of String(texto).split("\n")) {
+    if ((atual + "\n" + linha).length > max && atual) { out.push(atual); atual = linha; }
+    else atual = atual ? `${atual}\n${linha}` : linha;
+  }
+  if (atual) out.push(atual);
+  return out;
+}
+
+export async function publicarRelatorio(canal, novos, { lang = "pt", agora = "", serverId = null } = {}) {
+  const en = lang === "en";
+  const grupos = new Map();
+  for (const it of novos) {
+    const cat = it.categoria || (en ? "General" : "Geral");
+    if (!grupos.has(cat)) grupos.set(cat, []);
+    grupos.get(cat).push(it);
+  }
+  const ordenados = [...grupos.entries()].sort(([a], [b]) =>
+    (b === "Vulnerabilidades") - (a === "Vulnerabilidades") || a.localeCompare(b));
+
+  for (const [cat, itens] of ordenados) {
+    const cve = cat === "Vulnerabilidades";
+    let resposta = "";
+    try { resposta = await relatorioIA.linhas(materialNumerado(itens), { modo: cve ? "cve" : "noticias", lang, quantidade: itens.length }); }
+    catch (e) { console.error(`[RSS] relatório (${cat}) sem o modelo:`, e.message); }
+    const texto = cve ? montarRelatorioCVE(resposta, itens) : montarResumoNoticias(resposta, itens);
+    const titulo = cve
+      ? (en ? `📋 Vulnerability report` : `📋 Relatório de vulnerabilidades`)
+      : (en ? `📰 Summary · ${cat}` : `📰 Resumo · ${cat}`);
+    const blocos = blocosDe(texto);
+    for (let i = 0; i < blocos.length; i++) {
+      await canal.sendMessage({ embeds: [{
+        title: `${titulo}${blocos.length > 1 ? ` (${i + 1}/${blocos.length})` : ""} — ${agora}`,
+        description: blocos[i], colour: cve ? "#e5484d" : "#a78bfa",
+      }] });
+    }
+  }
+
+  // O comentário da Judy: no tom dela, sobre o conjunto, e com a mesma trava.
+  try {
+    const bruto = await relatorioIA.comentario(materialNumerado(novos), { lang, serverId });
+    const comentario = cortarEmFrase(tirarNumerosInventados(String(bruto ?? "").trim(),
+      novos.map((it) => ({ ...it, resumo: `${it.resumo ?? ""} ${pistaDoLink(it.link)}` }))), 700);
+    if (comentario) {
+      await canal.sendMessage({ embeds: [{ title: en ? "💬 Judy's take" : "💬 A Judy comenta", description: comentario, colour: "#a78bfa" }] });
+    }
+  } catch (e) { console.error("[RSS] comentário falhou:", e.message); }
 }

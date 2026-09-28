@@ -120,6 +120,38 @@ function comFamilias(arvore, P, lang) {
 
 function arvorePT(P) {
   return {
+    servidores: {
+      relatorio: {
+        titulo: "servidores relatorio",
+        texto: [
+          "**Relatório por hora** — um resumo de todos os servidores da Judy, toda hora cheia (UTC), no canal que você escolher.",
+          "",
+          "**Ligar e escolher o canal**",
+          `\`${P}servidores relatorio canal <#canal|aqui>\` — define o canal e liga`,
+          `\`${P}servidores relatorio on|off\` — liga ou desliga sem perder o canal`,
+          `\`${P}servidores relatorio agora\` — gera o relatório da última hora já`,
+          `\`${P}servidores relatorio\` — mostra como está configurado`,
+          "",
+          "**O que entra**",
+          "• tudo o que o log de moderação registrou (bans, punições, entradas e saídas)",
+          "• raids, imagens suspeitas (com quem e onde) e cargos alterados",
+          "• reinícios do bot **com a causa**: deploy/restart, watchdog ou queda sem aviso",
+          "• erros agrupados por padrão, com **em quantas das últimas 24 h** cada um apareceu",
+          "",
+          "**Horas vazias**",
+          `\`${P}servidores relatorio vazias on|off\` — \`off\` pula as horas sem nenhum evento`,
+          "",
+          "**Assuntos mais comentados** _(privacidade)_",
+          "Por padrão, só dos servidores de que **você é dono**. Os outros entram só em números — texto de servidor alheio nunca chega ao modelo.",
+          `\`${P}servidores relatorio assuntos\` — lista os servidores liberados`,
+          `\`${P}servidores relatorio assuntos add <id> [id…]\` — libera um ou vários (espaço ou vírgula)`,
+          `\`${P}servidores relatorio assuntos remove <id> [id…]\` — tira da lista`,
+          "Um servidor só ganha assunto se tiver **amostras de conversa** daquela hora — nunca pelo nome.",
+          "",
+          "**Divisão do trabalho:** os números saem do código; o modelo escreve só Destaques, Assuntos e a leitura dos Erros. Se o modelo falhar, o relatório sai só com os números.",
+        ].join("\n"),
+      },
+    },
     game: {
       admin: {
         titulo: "game admin",
@@ -1300,6 +1332,38 @@ function arvorePT(P) {
 
 function arvoreEN(P) {
   return {
+    servidores: {
+      relatorio: {
+        titulo: "servidores relatorio",
+        texto: [
+          "**Hourly report** — a summary of every server Judy is in, at the top of each hour (UTC), in the channel you choose.",
+          "",
+          "**Turn it on and pick the channel**",
+          `\`${P}servidores relatorio canal <#channel|aqui>\` — sets the channel and turns it on`,
+          `\`${P}servidores relatorio on|off\` — turns it on or off, keeping the channel`,
+          `\`${P}servidores relatorio agora\` — builds the last hour's report right now`,
+          `\`${P}servidores relatorio\` — shows the current setup`,
+          "",
+          "**What goes in**",
+          "• everything the moderation log recorded (bans, punishments, joins and leaves)",
+          "• raids, suspicious images (who and where) and role changes",
+          "• bot restarts **with the cause**: deploy/restart, watchdog or crash without warning",
+          "• errors grouped by pattern, with **in how many of the last 24 h** each one showed up",
+          "",
+          "**Empty hours**",
+          `\`${P}servidores relatorio vazias on|off\` — \`off\` skips hours with no events`,
+          "",
+          "**Most discussed topics** _(privacy)_",
+          "By default, only from servers **you own**. The others show up as numbers only — text from someone else's server never reaches the model.",
+          `\`${P}servidores relatorio assuntos\` — lists the allowed servers`,
+          `\`${P}servidores relatorio assuntos add <id> [id…]\` — allows one or several (space or comma)`,
+          `\`${P}servidores relatorio assuntos remove <id> [id…]\` — removes from the list`,
+          "A server only gets topics if it has **conversation samples** from that hour — never from its name.",
+          "",
+          "**Division of work:** numbers come from the code; the model only writes Highlights, Topics and the reading of Errors. If the model fails, the report goes out with the numbers only.",
+        ].join("\n"),
+      },
+    },
     game: {
       admin: {
         titulo: "game admin",

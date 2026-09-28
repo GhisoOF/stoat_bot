@@ -1,3 +1,4 @@
+import { ORDEM as ORDEM_GRUPOS } from "../moderacao/help-grupos.js";   // os grupos que o índice do &help promete
 
 export const COMANDO_EN = {
   acesso: "access",
@@ -284,7 +285,11 @@ export function normalizarArgs(canonico, args, CANONICO = {}) {
     const saida = [...args];
     const bruto = String(saida[0] ?? "").toLowerCase();
     // categoria/área (moderation → moderacao) ou nome de comando (color → cor)
-    saida[0] = SUB[canonico]?.[bruto] ?? CANONICO[bruto] ?? COMANDO_EXTRA[bruto] ?? bruto;
+    // Nome de GRUPO da ajuda vence apelido de comando: "comecar" é o grupo
+    // "Começar" do índice e também apelido do &tutorial — o índice promete o
+    // grupo, então `&help comecar` abria a ajuda do &tutorial por engano.
+    const grupos = new Set([...ORDEM_GRUPOS, ...Object.values(SUB.help ?? {})]);
+    saida[0] = SUB[canonico]?.[bruto] ?? (grupos.has(bruto) ? bruto : null) ?? CANONICO[bruto] ?? COMANDO_EXTRA[bruto] ?? bruto;
     const doAlvo = SUB[saida[0]];
     if (doAlvo && saida[1]) {
       const t = String(saida[1]).toLowerCase();

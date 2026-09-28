@@ -5,7 +5,7 @@ import { descreverErro, tipoDoErro } from "../core/erros.js";
 import * as log from "../core/log.js";
 import * as banGlobal from "./ban-global.js";
 import * as confianca from "./confianca.js";
-import { curarIds, garantirCargoSilencio } from "./pertence.js";
+import { curarIds, cargoSilencioValido } from "./pertence.js";
 import * as imagemSentinela from "./imagem.js";
 import { analisarCaracteres, analisarRepeticao, analisarDuplicata, digital, textoHumano, razaoDeCaixaAlta } from "./caracteres.js";
 import { lingua } from "../core/i18n.js";
@@ -267,8 +267,9 @@ async function aplicarPunicao(ctx, opts) {
   // ── confirmar: silencia (se houver cargo) e pede confirmação ──
   if (pol.modo === "confirmar") {
     let acao = lang === "en" ? "message removed" : "mensagem removida";
-    // Sem cargo de silêncio deste servidor, cria um agora (antes: só pelo &cargomudo).
-    pol.silenceRoleId = await garantirCargoSilencio(server, ctx);
+    // Só usa um cargo que é DESTE servidor. Criar na hora da punição foi
+    // descartado: sem conferir a posição, ele pode perder para o autorole.
+    pol.silenceRoleId = cargoSilencioValido(server, ctx);
     if (pol.silenceRoleId) {
       try {
         await aplicarCargoSilence(server, userId, pol.silenceRoleId, ctx);
@@ -298,6 +299,11 @@ async function aplicarPunicao(ctx, opts) {
           ? " — until then, **everything they post in the next 30 min is deleted**"
           : " — enquanto isso, **tudo o que a pessoa mandar nos próximos 30 min é apagado**";
       }
+    } else {
+      // Sem cargo de silêncio deste servidor: quarentena (mensagens apagadas
+      // por 30 min); a staff é avisada para configurar com &cargomudo.
+      confianca.quarentenar(ctx.serverId ?? server?.id, userId);
+      acao = lang === "en" ? "no silence role set up — quarantined for 30 min" : "sem cargo de silêncio configurado — em quarentena por 30 min";
     }
     await sendEmbed(channel, {
       title: lang === "en" ? "⚠️ Violation — confirmation needed" : "⚠️ Violação — confirmação necessária",
@@ -340,8 +346,9 @@ async function aplicarPunicao(ctx, opts) {
   if (degrau.tipo === "mute") {
     const ate = Date.now() + degrau.ms;
     let acao = lang === "en" ? `silenced for ${degrau.rotulo}` : `silenciado por ${degrau.rotulo}`;
-    // Sem cargo de silêncio deste servidor, cria um agora (antes: só pelo &cargomudo).
-    pol.silenceRoleId = await garantirCargoSilencio(server, ctx);
+    // Só usa um cargo que é DESTE servidor. Criar na hora da punição foi
+    // descartado: sem conferir a posição, ele pode perder para o autorole.
+    pol.silenceRoleId = cargoSilencioValido(server, ctx);
     if (pol.silenceRoleId) {
       try {
         await aplicarCargoSilence(server, userId, pol.silenceRoleId, ctx);
@@ -358,9 +365,8 @@ async function aplicarPunicao(ctx, opts) {
           : " — enquanto isso, **tudo o que a pessoa mandar nos próximos 30 min é apagado**";
       }
     } else {
-      acao = lang === "en"
-        ? "would be silenced, but there is no silence role configured"
-        : "seria silenciado, mas não há cargo de silêncio configurado";
+      confianca.quarentenar(ctx.serverId ?? server?.id, userId);
+      acao = lang === "en" ? "no silence role set up — quarantined for 30 min" : "sem cargo de silêncio configurado — em quarentena por 30 min";
     }
     await sendEmbed(channel, { title: lang === "en" ? "🔇 Temporary silence" : "🔇 Silêncio temporário",
       description: [

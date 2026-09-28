@@ -27,7 +27,7 @@ const FAMILIA_AUTOMOD = new Set(["blocklist", "whitelist", "sentinela", "punicao
 const EXEMPLOS = {
   idioma: ["pt", "en"], staff: [[{ id: "R1" }]], log: ["C1"], protecao: [1, 2, 3],
   boasvindas: ["C1"], escada: ["aviso,5m,1h,ban"], banglobal: ["off", "avisar", "banir"],
-  xp: ["on"], autorole: ["R1"], canaisVer: [[]], canaisEscrever: [[]],
+  xp: ["on"], autorole: ["R1"], canaisVer: [[]], canaisEscrever: [[]], silencio: ["novo", "R1"],
 };
 const todos = new Set(Object.values(ROTEIROS).flat());
 for (const passo of todos) {
@@ -46,9 +46,16 @@ for (const passo of todos) {
     }
   });
 }
-t("proteção sem cargo de silêncio inclui o &cargomudo", () => {
+t("todo roteiro que pune tem o passo do cargo de silêncio, e ele vem por último", () => {
+  for (const r of ["rapido", "completo", "protecao"]) assert.equal(ROTEIROS[r].at(-1), "silencio", r);
+});
+t("o passo do silêncio: criar → &cargomudo · cargo existente → &cargomudo usar <id>", () => {
+  assert.deepEqual(PASSOS.silencio.comandos("novo"), [["cargomudo"]]);
+  assert.deepEqual(PASSOS.silencio.comandos("R9"), [["cargomudo", "usar", "R9"]]);
+});
+t("o passo de proteção não cria mais cargo escondido", () => {
   const cmds = PASSOS.protecao.comandos(2, { config: { automod: { punicao: { silenceRoleId: null } } } });
-  assert.ok(cmds.some((c) => c[0] === "cargomudo"));
+  assert.ok(!cmds.some((c) => c[0] === "cargomudo"));
 });
 
 console.log(`\nASSISTENTE: ${ok} ok, ${falhou} falha(s)`);

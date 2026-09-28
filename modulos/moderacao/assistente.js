@@ -102,8 +102,6 @@ export const PASSOS = {
       if (v === 2) c.push(["automod", "sentinela", "sensitivity", "media"]);
       if (v === 3) c.push(["automod", "anticaps", "on"], ["automod", "anticaracteres", "on"],
         ["automod", "antirepeticao", "on"], ["automod", "sentinela", "sensitivity", "alta"], ["banglobal", "banir"]);
-      // O mute da escada precisa de um cargo de silêncio — cria se não houver.
-      if (!config?.automod?.punicao?.silenceRoleId) c.push(["cargomudo"]);
       c.push(["automod", "punicao", "modo", "acumular"]);
       return c;
     },
@@ -173,6 +171,25 @@ export const PASSOS = {
     comandos: (v) => [["autorole", "set", v]],
   },
 
+  // O cargo de silêncio é criado e CONFERIDO aqui, na configuração — não na
+  // hora da punição, quando não dá para ver se ele perde para o autorole.
+  silencio: {
+    pergunta: (lang, P) => T(lang,
+      "🔇 **Cargo de silêncio** — o mute da escada e o modo `confirmar` usam um cargo que tira a fala da pessoa. "
+        + "Eu o ponho **acima do cargo automático e de todo cargo de membro**, nego em cada canal e **confiro** se alguém silenciado ainda consegue falar.\n"
+        + "`1` criar um novo _(recomendado)_ · ou mencione um cargo que já existe para eu configurar · `pular`",
+      "🔇 **Silence role** — the ladder's mute and the `confirmar` mode use a role that takes away someone's voice. "
+        + "I place it **above the auto role and every member role**, deny it in each channel and **check** whether a silenced member can still talk.\n"
+        + "`1` create a new one _(recommended)_ · or mention an existing role for me to set up · `pular`"),
+    parse: (r, { server, lang }) => {
+      if (/^(1|criar|novo|nova|new|create)\b/i.test(r.trim())) return { valor: "novo", rotulo: T(lang, "criar um novo", "create a new one") };
+      const c = resolverCargo(r, server);
+      if (!c) return { erro: true };
+      return { valor: c.id, rotulo: c.nome };
+    },
+    comandos: (v) => (v === "novo" ? [["cargomudo"]] : [["cargomudo", "usar", v]]),
+  },
+
   // ── roteiro "canais": só coleta; o resultado é um guia, não uma aplicação ──
   canaisVer: {
     pergunta: (lang, P) => T(lang,
@@ -208,9 +225,10 @@ function nomeDoCanal(server, id) {
 }
 
 export const ROTEIROS = {
-  rapido:   ["idioma", "staff", "log", "protecao", "boasvindas"],
-  completo: ["idioma", "staff", "log", "protecao", "escada", "banglobal", "boasvindas", "autorole", "xp"],
-  protecao: ["protecao", "escada", "banglobal", "log"],
+  // "silencio" por último: roda depois do cargo automático, e a conferência já o inclui.
+  rapido:   ["idioma", "staff", "log", "protecao", "boasvindas", "silencio"],
+  completo: ["idioma", "staff", "log", "protecao", "escada", "banglobal", "boasvindas", "autorole", "xp", "silencio"],
+  protecao: ["protecao", "escada", "banglobal", "log", "silencio"],
   canais:   ["canaisVer", "canaisEscrever"],
 };
 
@@ -426,25 +444,32 @@ async function aplicar(message, ctx, s) {
       await handler(message, resto, ctxMudo);
       const ult = capturadas[capturadas.length - 1];
       const falhou = ult && /^(❌|🚫)/.test(String(ult.title ?? ""));
-      resultado.push({ args, ok: !falhou, msg: ult ? String(ult.title ?? "").replace(/^[^\w\p{L}]+/u, "") : "" });
+      // ⚠️ = aplicou, mas com pendência: não pode aparecer como ✅ limpo.
+      const pendente = !falhou && ult && /^⚠️/.test(String(ult.title ?? ""));
+      resultado.push({ args, ok: !falhou, pendente, msg: ult ? String(ult.title ?? "").replace(/^[^\w\p{L}]+/u, "") : "",
+        // o relatório do cargo de silêncio é mostrado inteiro: é a conferência
+        mostrar: nome === "cargomudo" ? ult : null });
     } catch (e) {
       resultado.push({ args, ok: false, msg: e?.message ?? String(e) });
     }
   }
 
   const okN = resultado.filter((r) => r.ok).length;
-  const linhas = resultado.map((r) => `${r.ok ? "✅" : "❌"} \`${P}${r.args.join(" ")}\`${r.ok ? "" : ` — ${r.msg}`}`);
+  const linhas = resultado.map((r) => `${!r.ok ? "❌" : r.pendente ? "⚠️" : "✅"} \`${P}${r.args.join(" ")}\`${!r.ok || r.pendente ? ` — ${r.msg}` : ""}`);
   linhas.push("", T(s.lang,
     `${okN}/${resultado.length} aplicado(s). \`${P}config\` mostra como ficou; \`${P}debug canais\` confere se o bot consegue agir em cada canal.`,
     `${okN}/${resultado.length} applied. \`${P}config\` shows the result; \`${P}debug canais\` checks whether the bot can act in each channel.`));
   if (okN < resultado.length) linhas.push(T(s.lang,
     "Para os que falharam, rode o comando na mão para ver a explicação completa.",
     "For the ones that failed, run the command by hand to see the full explanation."));
-  return sendEmbed(message.channel, {
+  const resumo = await sendEmbed(message.channel, {
     title: T(s.lang, "🧙 Pronto", "🧙 Done"),
     description: linhas.join("\n"),
     colour: okN === resultado.length ? COR.sucesso : COR.aviso,
   });
+  // Depois do resumo, o relatório do cargo de silêncio inteiro (a conferência).
+  for (const r of resultado) if (r.mostrar) await sendEmbed(message.channel, r.mostrar);
+  return resumo;
 }
 
 async function guiaDeCanais(message, ctx, s) {

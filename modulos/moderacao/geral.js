@@ -260,8 +260,14 @@ function detalhesPT(P) {
       perm: "ManagePermissions", ex: `${P}comando desativar repete`,
     },
     cargomudo: {
-      uso: `${P}cargomudo [nome]`,
-      desc: `Cria um cargo com TODAS as permissões negadas (serve para silenciar) e já o define como cargo de silêncio do servidor. Nega no servidor E em cada canal. \`${P}cargomudo canais\` reaplica nos canais.`,
+      uso: `${P}cargomudo [nome] · ${P}cargomudo usar <@cargo> · ${P}cargomudo verificar · ${P}cargomudo canais`,
+      desc: `O **cargo de silêncio**: o mute da escada e o modo \`confirmar\` dão esse cargo a quem infringe.\n\n`
+        + `**Por que a posição importa:** no Stoat, o cargo mais alto vence. Se o cargo automático (ou outro cargo de membro) estiver acima do silêncio e liberar a fala num canal, o silenciado continua falando.\n\n`
+        + `\`${P}cargomudo [nome]\` — cria o cargo, **nega tudo** no servidor e em cada canal, **põe logo abaixo do cargo do bot** e **confere** simulando alguém com o cargo automático em cada canal.\n`
+        + `\`${P}cargomudo usar <@cargo>\` — faz o mesmo com um cargo que já existe.\n`
+        + `\`${P}cargomudo verificar\` — só confere, sem mexer, e diz como resolver se algo estiver errado.\n`
+        + `\`${P}cargomudo canais\` — nega em canais criados depois.\n\n`
+        + `O bot precisa de **ManageRole** (criar e posicionar), **ManagePermissions** (negar nos canais) e **AssignRoles** (dar o cargo) — e o **cargo do bot** tem de estar acima dos cargos de membro. O \`${P}assistente\` faz isso por você no fim da configuração.`,
       perm: "ManagePermissions", ex: `${P}cargomudo Silenciado`,
     },
     embed: {
@@ -491,8 +497,14 @@ function detalhesEN(P) {
       perm: "ManagePermissions", ex: `${P}comando disable repete`,
     },
     cargomudo: {
-      uso: `${P}cargomudo [name]`,
-      desc: `Creates a role with ALL permissions denied (used to silence people) and sets it as the server's silence role. Denies at the server level AND in every channel. \`${P}cargomudo canais\` re-applies it to the channels.`,
+      uso: `${P}cargomudo [name] · ${P}cargomudo usar <@role> · ${P}cargomudo verificar · ${P}cargomudo canais`,
+      desc: `The **silence role**: the ladder's mute and the \`confirmar\` mode give this role to whoever breaks the rules.\n\n`
+        + `**Why position matters:** on Stoat, the highest role wins. If the auto role (or another member role) is above the silence role and allows talking in a channel, the silenced member keeps talking.\n\n`
+        + `\`${P}cargomudo [name]\` — creates the role, **denies everything** on the server and in each channel, **places it right below the bot's role** and **checks** by simulating someone with the auto role in each channel.\n`
+        + `\`${P}cargomudo usar <@role>\` — does the same with an existing role.\n`
+        + `\`${P}cargomudo verificar\` — only checks, changes nothing, and says how to fix what's wrong.\n`
+        + `\`${P}cargomudo canais\` — denies in channels created later.\n\n`
+        + `The bot needs **ManageRole** (create and position), **ManagePermissions** (deny in channels) and **AssignRoles** (give the role) — and the **bot's role** must be above member roles. \`${P}assistente\` does this for you at the end of the setup.`,
       perm: "ManagePermissions", ex: `${P}cargomudo Silenced`,
     },
     embed: {

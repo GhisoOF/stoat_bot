@@ -9,7 +9,6 @@
 // Aqui fica a checagem, sem chamada à API: o stoat.js já traz os cargos e os
 // IDs de canais de cada servidor no estado da conexão.
 
-import { criarCargoMudo } from "./comandos-admin.js";
 
 function temChave(colecao, id) {
   if (!colecao || !id) return false;
@@ -55,30 +54,24 @@ export function curarIds(config, server) {
   return mudou;
 }
 
-// O cargo de silêncio deste servidor — e, se não houver, cria um.
-// Uma criação por servidor de cada vez: num raid chegam várias punições
-// juntas, e cada uma não pode criar o seu próprio cargo.
-const criando = new Map();
-export async function garantirCargoSilencio(server, ctx) {
-  const pol = (ctx.config.automod.punicao ??= {});
-  if (pol.silenceRoleId && (!conhecido(server?.roles) || cargoDoServidor(server, pol.silenceRoleId))) return pol.silenceRoleId;
-  pol.silenceRoleId = null;
-  if (criando.has(server.id)) return criando.get(server.id);
-  const tarefa = (async () => {
-    try {
-      const nome = ctx.config?.language === "en" ? "Silenced" : "Silenciado";
-      const { id } = await criarCargoMudo(server, nome, true);
-      pol.silenceRoleId = id;
-      ctx.salvarConfig?.();
-      console.log(`[PUNIÇÃO] ${server.id}: cargo de silêncio criado sozinho (${id})`);
-      return id;
-    } catch (e) {
-      console.warn(`[PUNIÇÃO] ${server.id}: não consegui criar o cargo de silêncio — ${e?.message ?? e}`);
-      return null;
-    } finally { criando.delete(server.id); }
-  })();
-  criando.set(server.id, tarefa);
-  return tarefa;
+// O cargo de silêncio deste servidor, ou null. NÃO cria: o cargo tem de ser
+// criado e CONFERIDO na configuração (&cargomudo / assistente) — posição
+// acima do cargo automático, negação em cada canal. Sem ele, a punição cai na
+// quarentena e a staff é avisada (uma vez por hora por servidor).
+const avisado = new Map();
+export function cargoSilencioValido(server, ctx) {
+  const id = ctx.config?.automod?.punicao?.silenceRoleId ?? null;
+  if (id && (!conhecido(server?.roles) || cargoDoServidor(server, id))) return id;
+  const agora = Date.now();
+  if ((avisado.get(server?.id) ?? 0) < agora - 3_600_000) {
+    avisado.set(server?.id, agora);
+    const P = ctx.PREFIXO ?? "&";
+    import("../core/log.js").then((log) => log.registrar(ctx, "punicoes", {
+      titulo: "🔇 Sem cargo de silêncio",
+      descricao: `Uma punição precisava silenciar alguém, mas este servidor não tem cargo de silêncio configurado — a pessoa ficou em quarentena (mensagens apagadas por 30 min). Configure com \`${P}cargomudo\` (ou \`${P}assistente protecao\`).`,
+    })).catch(() => {});
+  }
+  return null;
 }
 
 export { limparMolde } from "../core/molde.js";

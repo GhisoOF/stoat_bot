@@ -6,7 +6,7 @@ import assert from "node:assert";
 import fs from "node:fs";
 process.env.DB_PATH = "/tmp/pertence.db";
 try { fs.unlinkSync("/tmp/pertence.db"); } catch {}
-const { curarIds, cargoDoServidor, canalDoServidor, limparMolde, garantirCargoSilencio } = await import("./modulos/moderacao/pertence.js");
+const { curarIds, cargoDoServidor, canalDoServidor, limparMolde } = await import("./modulos/moderacao/pertence.js");
 
 let ok = 0, falhou = 0;
 const t = async (nome, fn) => {
@@ -51,26 +51,7 @@ await t("cargos como objeto simples (formato cru) também funcionam", () => {
   assert.equal(canalDoServidor({ channelIds: new Set(["C1"]) }, "C2"), false);
 });
 
-// garantirCargoSilencio com o criador de cargo substituído (sem API)
-const admin = await import("./modulos/moderacao/comandos-admin.js");
-await t("sem cargo válido, cria UM — mesmo com várias punições ao mesmo tempo", async () => {
-  let criados = 0;
-  const server = { id: "S_RAID", roles: new Map([["R", {}]]), channelIds: new Set(["C"]),
-    createRole: async () => { criados++; await new Promise((r) => setTimeout(r, 30)); return { id: "R_NOVO" }; },
-    channels: [], };
-  const ctx = { config: { automod: { punicao: { silenceRoleId: ALHEIO_CARGO } } }, salvarConfig: () => {} };
-  const ids = await Promise.all([1, 2, 3, 4].map(() => garantirCargoSilencio(server, ctx)));
-  assert.equal(criados, 1, `criou ${criados} cargos`);
-  assert.ok(ids.every((x) => x === ids[0]));
-  assert.equal(ctx.config.automod.punicao.silenceRoleId, ids[0]);
-  void admin;
-});
-await t("com cargo válido deste servidor, não cria nada", async () => {
-  let criados = 0;
-  const server = { id: "S2", roles: new Map([["R_OK", {}]]), channelIds: new Set(["C"]), createRole: async () => { criados++; return { id: "X" }; } };
-  const id = await garantirCargoSilencio(server, { config: { automod: { punicao: { silenceRoleId: "R_OK" } } } });
-  assert.equal(id, "R_OK"); assert.equal(criados, 0);
-});
+// (o cargo de silêncio — criar, posicionar, conferir — está em teste-silencio.mjs)
 
 console.log(`\nPERTENCE: ${ok} ok, ${falhou} falha(s)`);
 process.exit(falhou ? 1 : 0);

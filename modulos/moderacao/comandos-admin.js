@@ -1,8 +1,10 @@
 
 import * as log from "../core/log.js";
 import { tr, lingua } from "../core/i18n.js";
+import * as silencio from "./silencio.js";
+import { descreverErro } from "../core/erros.js";
 
-const GRANT_ALL_SAFE = 0x000fffffffffffffn;
+export const GRANT_ALL_SAFE = 0x000fffffffffffffn;
 
 export async function cmdComando(message, args, ctx) {
   const { config, estado, sendEmbed, COR, getServer, membroTemPermissao, salvarConfig, PREFIXO } = ctx;
@@ -196,61 +198,87 @@ export async function cmdCargoMudo(message, args, ctx) {
     }
   }
 
-  const nome = args.join(" ").trim() || (lang === "en" ? "Silenced" : "Silenciado");
+  // ── &cargomudo verificar → só confere o cargo atual ──
+  const sub = args[0]?.toLowerCase();
+  const autoroleId = config.autorole?.roleId ?? null;
+  if (sub === "verificar" || sub === "check") {
+    const roleId = config.automod?.punicao?.silenceRoleId;
+    if (!roleId) return sendEmbed(message.channel, tr(ctx,
+      { title: "❌ Sem cargo de silêncio", description: `Crie um com \`${PREFIXO}cargomudo\` ou adote um existente com \`${PREFIXO}cargomudo usar @cargo\`.`, colour: COR.erro },
+      { title: "❌ No silence role", description: `Create one with \`${PREFIXO}cargomudo\` or adopt one with \`${PREFIXO}cargomudo usar @role\`.`, colour: COR.erro }));
+    const botMember = await silencio.membroDoBot(server, ctx.client);
+    const c = silencio.conferir(server, roleId, { botMember, autoroleId, lang });
+    return sendEmbed(message.channel, relatorioSilencio({ id: roleId, conferencia: c }, { lang, P: PREFIXO, COR, soConferencia: true }));
+  }
+
+  // ── &cargomudo usar <@cargo|id> → adota um cargo que já existe ──
+  let roleId = null;
+  if (sub === "usar" || sub === "use") {
+    roleId = String(args[1] ?? "").replace(/[<%@&>]/g, "").trim() || null;
+    if (!roleId || !silencio.cargoExiste(server, roleId)) return sendEmbed(message.channel, tr(ctx,
+      { title: "❌ Cargo não encontrado", description: `Use \`${PREFIXO}cargomudo usar @cargo\` com um cargo **deste** servidor.`, colour: COR.erro },
+      { title: "❌ Role not found", description: `Use \`${PREFIXO}cargomudo usar @role\` with a role from **this** server.`, colour: COR.erro }));
+  }
+  const nome = roleId ? null : (args.join(" ").trim() || (lang === "en" ? "Silenced" : "Silenciado"));
 
   try {
-    // cria o cargo E já nega em todos os canais
-    const { id, canais } = await criarCargoMudo(server, nome, true);
-
-    // já define como cargo de silêncio da política de punição
+    // Cria (ou adota), nega no servidor e em cada canal, põe logo abaixo do
+    // cargo do bot e CONFERE simulando alguém com o cargo automático.
+    const r = await silencio.preparar(server, ctx.client, { roleId, nome: nome ?? undefined, autoroleId, lang });
     config.automod ??= {};
     config.automod.punicao ??= {};
-    config.automod.punicao.silenceRoleId = id;
+    config.automod.punicao.silenceRoleId = r.id;
     salvarConfig();
-
     await log.registrar(ctx, "cargos", {
-      titulo: "🔇 Cargo de silêncio criado",
-      descricao: `<@${message.authorId}> criou o cargo **${nome}** (\`${id}\`) com todas as permissões negadas`
-               + (canais ? ` e bloqueou ${canais.ok}/${canais.total} canal(is).` : "."),
+      titulo: r.criado ? "🔇 Cargo de silêncio criado" : "🔇 Cargo de silêncio configurado",
+      descricao: `<@${message.authorId}> ${r.criado ? "criou" : "configurou"} o cargo de silêncio <%${r.id}> — canais ${r.canais.ok}/${r.canais.total}, `
+        + (r.conferencia.ok ? "conferência ok." : `${r.conferencia.problemas.length} pendência(s).`),
     });
-
-    return sendEmbed(message.channel, lang === "en" ? {
-      title: "🔇 Silence role created",
-      description: [
-        `**Name:** ${nome}`,
-        `**ID:** \`${id}\``,
-        `**Permissions:** all denied (server-wide)`,
-        canais ? `**Channels blocked:** ${canais.ok}/${canais.total}${canais.falhas ? ` (${canais.falhas} without bot access)` : ""}` : null,
-        "",
-        "✅ Already set as this server's **silence role**.",
-        "",
-        `💡 _Created new channels later? Run \`${PREFIXO}cargomudo canais\` to block them too._`,
-      ].filter(Boolean).join("\n"),
-      colour: COR.sucesso,
-    } : {
-      title: "🔇 Cargo de silêncio criado",
-      description: [
-        `**Nome:** ${nome}`,
-        `**ID:** \`${id}\``,
-        `**Permissões:** todas negadas (no servidor)`,
-        canais ? `**Canais bloqueados:** ${canais.ok}/${canais.total}${canais.falhas ? ` (${canais.falhas} sem acesso do bot)` : ""}` : null,
-        "",
-        "✅ Já definido como **cargo de silêncio** deste servidor.",
-        "",
-        `💡 _Criou canais novos depois? Rode \`${PREFIXO}cargomudo canais\` para bloqueá-los também._`,
-      ].filter(Boolean).join("\n"),
-      colour: COR.sucesso,
-    });
+    return sendEmbed(message.channel, relatorioSilencio(r, { lang, P: PREFIXO, COR }));
   } catch (err) {
-    console.error("[CARGOMUDO]", err.message);
+    const msg = descreverErro(err, lang);
+    console.error("[CARGOMUDO]", msg);
     return sendEmbed(message.channel, tr(ctx, {
-      title: "❌ Não foi possível criar o cargo",
-      description: `**Erro:** ${err.message}\n\n_Verifique se o bot tem **ManageRole** e **AssignRoles**._`,
+      title: "❌ Não foi possível preparar o cargo",
+      description: `**Erro:** ${msg}\n\n_O bot precisa de **ManageRole** (criar e posicionar), **ManagePermissions** (negar nos canais) e **AssignRoles** (dar o cargo)._`,
       colour: COR.erro,
     }, {
-      title: "❌ Couldn't create the role",
-      description: `**Error:** ${err.message}\n\n_Check that the bot has **ManageRole** and **AssignRoles**._`,
+      title: "❌ Couldn't prepare the role",
+      description: `**Error:** ${msg}\n\n_The bot needs **ManageRole** (create and position), **ManagePermissions** (deny in channels) and **AssignRoles** (give the role)._`,
       colour: COR.erro,
     }));
   }
+}
+
+
+// O relatório do cargo de silêncio: o que foi feito e a conferência.
+function relatorioSilencio(r, { lang = "pt", P = "&", COR, soConferencia = false }) {
+  const en = lang === "en";
+  const c = r.conferencia;
+  const linhas = [`**${en ? "Role" : "Cargo"}:** <%${r.id}> (\`${r.id}\`)`];
+  if (!soConferencia) {
+    linhas.push(`**${en ? "Channels denied" : "Canais negados"}:** ${r.canais.ok}/${r.canais.total}${r.canais.falhas ? (en ? ` — ${r.canais.falhas} without bot access` : ` — ${r.canais.falhas} sem acesso do bot`) : ""}`);
+    linhas.push(`**${en ? "Position" : "Posição"}:** ${r.posicao?.ok
+      ? (en ? "right below the bot's role ✅" : "logo abaixo do cargo do bot ✅")
+      : `❌ ${r.posicao?.motivo ?? "?"}`}`);
+  }
+  linhas.push("");
+  if (c.ok) {
+    linhas.push(en
+      ? `✅ **Checked:** a silenced member — **even with the auto role** — can't talk in any of the ${c.canais.total} channel(s).`
+      : `✅ **Conferido:** um silenciado — **mesmo com o cargo automático** — não fala em nenhum dos ${c.canais.total} canal(is).`);
+  } else {
+    linhas.push(en ? "⚠️ **Check found problems:**" : "⚠️ **A conferência achou problemas:**", ...c.problemas.map((x) => `• ${x}`), "");
+    linhas.push(en
+      ? `**How to fix:** in Server settings → Roles, drag the **bot's role** to the top (above every member role), then run \`${P}cargomudo usar <%${r.id}>\` again.`
+      : `**Como resolver:** em Configurações do servidor → Cargos, arraste o **cargo do bot** para o topo (acima de todo cargo de membro) e rode \`${P}cargomudo usar <%${r.id}>\` de novo.`);
+  }
+  linhas.push("", en
+    ? `💡 _New channels later? \`${P}cargomudo canais\` · check anytime: \`${P}cargomudo verificar\`_`
+    : `💡 _Canais novos depois? \`${P}cargomudo canais\` · conferir a qualquer hora: \`${P}cargomudo verificar\`_`);
+  return {
+    title: c.ok ? (en ? "🔇 Silence role ready" : "🔇 Cargo de silêncio pronto") : (en ? "⚠️ Silence role — needs attention" : "⚠️ Cargo de silêncio — precisa de ajuste"),
+    description: linhas.join("\n"),
+    colour: c.ok ? COR.sucesso : COR.aviso,
+  };
 }

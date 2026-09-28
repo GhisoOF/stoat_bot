@@ -162,6 +162,12 @@ diz exatamente o que clicar.
   assunto vale; `&chat comentar` permite comentários espontâneos com limite
   por dia. `&chat cuidado @user on` marca alguém (opt-in) para tratamento
   gentil e paciente.
+- **Cargo de silêncio conferido**: `&cargomudo` (ou o `&assistente`, no fim da
+  configuração) cria o cargo, nega em cada canal, **põe logo abaixo do cargo do
+  bot** — acima do cargo automático — e confere simulando um silenciado com o
+  cargo automático em cada canal. `&cargomudo usar @cargo` adota um existente;
+  `&cargomudo verificar` só confere. Sem cargo válido, a punição cai na
+  quarentena e a staff é avisada.
 - **Vários comandos de uma vez**: um por linha na mesma mensagem (até 10);
   cada um passa pelas mesmas verificações de permissão e de canal, em ordem.
 - **RSS** (`&rss`): a cada ciclo, um **relatório por categoria**, neutro e com uma linha

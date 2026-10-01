@@ -1,4 +1,5 @@
 
+import * as busca from "./busca.js";
 import * as db from "../core/db.js";
 import * as memoria from "./memoria-agente.js";
 import * as comentario from "./comentario-espontaneo.js";
@@ -121,7 +122,7 @@ const SEARXNG_URL = (process.env.SEARXNG_URL || "http://localhost:8080").replace
 
 const IA_SERVICO_URL = (process.env.IA_SERVICO_URL || "").replace(/\/$/, "");
 const CONTINUAR_MAX = Number(process.env.CONTINUAR_MAX || 2);
-const FONTES_MAX = Number(process.env.CHAT_FONTES_MAX || 5);
+const FONTES_MAX = Number(process.env.CHAT_FONTES_MAX || 3);
 const IA_SERVICO_CHAVE = process.env.IA_SERVICO_CHAVE || "";
 
 export function iniciarMemoria() {
@@ -212,6 +213,17 @@ export async function linhasRSS(material, { modo = "noticias", lang = "pt", quan
   );
 }
 
+// Tradução das linhas que ficaram em outro idioma (título que voltou cru,
+// frase que o modelo escreveu em inglês). "N | texto" na entrada e na saída.
+export async function traduzirLinhasRSS(material, quantidade = 1) {
+  const sys = "Traduza cada linha numerada abaixo para o português do Brasil. Formato de saída: `N | tradução`, uma linha por item, na mesma ordem, nada antes nem depois. "
+    + "Mantenha como estão: nomes próprios, nomes de produtos, empresas, jogos e sites, siglas, versões, números e datas. Traduza o sentido, sem acrescentar nada.";
+  return llmChat(
+    [{ role: "system", content: sys }, { role: "user", content: String(material).slice(0, 6000) }],
+    { modelo: LLM_MODEL_LEVE, maxTokens: Math.min(4000, 1200 + 80 * quantidade), etiqueta: "traducao-rss" },
+  );
+}
+
 // O comentário da Judy no fim do relatório: no tom dela, sobre o conjunto.
 export async function comentarioRSS(material, { lang = "pt", serverId = null } = {}) {
   const en = lang === "en";
@@ -240,7 +252,7 @@ export async function gerarComentarioEspontaneo(contextoCanal, serverId = null) 
   try {
     const r = await llmChat(
       [{ role: "system", content: sys }, { role: "user", content: contextoCanal.slice(0, 4000) }],
-      { modelo: LLM_MODEL_LEVE, maxTokens: 200, etiqueta: "comentario-espontaneo" },
+      { modelo: LLM_MODEL_LEVE, maxTokens: Number(process.env.COMENTARIO_MAX_TOKENS || 1200), etiqueta: "comentario-espontaneo" },
     );
     const limpo = (r || "").trim();
     // a Judy pode decidir que não vale comentar
@@ -652,25 +664,9 @@ export async function llmChat(messages, { json = false, maxTokens = MAX_TOKENS, 
   const uso = data?.usage ?? {};
   console.log(`[CHAT][llm] ← ${etiqueta} | fim=${motivo}${emendas ? ` (+${emendas} emenda(s))` : ""} tokens_prompt=${uso.prompt_tokens ?? "?"} tokens_gerados=${uso.completion_tokens ?? "?"} saída=${conteudo.length} chars tempo=${dur}s`);
   if (llmChat._cortou)
-    console.warn(`[CHAT][llm] ⚠️ ainda cortada após ${emendas} emenda(s) — aumente CHAT_MAX_TOKENS ou CONTINUAR_MAX.`);
+    console.warn(`[CHAT][llm] ${etiqueta}: ainda cortada após ${emendas} emenda(s) (max_tokens=${limiteTokens}) — aumente CHAT_MAX_TOKENS ou CONTINUAR_MAX.`);
 
   return conteudo.trim();
-}
-
-async function buscar(query, n = 4) {
-  const url = `${SEARXNG_URL}/search?q=${encodeURIComponent(query)}&format=json&language=pt-BR`;
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), Number(process.env.BUSCA_TIMEOUT_MS || 8000));
-  try {
-    const r = await fetch(url, { signal: ctrl.signal });
-    if (!r.ok) throw new Error(`SearXNG HTTP ${r.status}`);
-    const data = await r.json();
-    return (data.results ?? []).slice(0, n).map((x) => ({
-      titulo: x.title, url: x.url, trecho: (x.content || "").slice(0, 300),
-    }));
-  } finally {
-    clearTimeout(t);
-  }
 }
 
 export const PEDIDO_DE_BUSCA = new RegExp([
@@ -920,12 +916,10 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
     : "";
 
   if (resultados?.length) {
-    const contexto = resultados
-      .map((r, i) => `[${i + 1}] ${r.titulo}\n${r.trecho}\nFonte: ${r.url}`)
-      .join("\n\n");
+    const contexto = busca.blocoResultados(resultados);
     messages.push({
       role: "user",
-      content: `${blocoCitado}Com base nestes resultados de busca (obtidos hoje, ${hoje}), responda à pergunta e cite as fontes pelo número. Se os resultados trouxerem datas, confie nelas em vez do seu conhecimento prévio.\n\nRESULTADOS:\n${contexto}\n\nPERGUNTA (de ${autor}): ${pergunta}`,
+      content: `${blocoCitado}Resultados de busca obtidos hoje (${hoje}). Se trouxerem datas, confie nelas em vez do seu conhecimento prévio. ${busca.instrucaoResposta(lang, !!resultados.fracos)}\n\nRESULTADOS:\n${contexto}\n\nPERGUNTA (de ${autor}): ${pergunta}`,
     });
   } else {
     messages.push({ role: "user", content: `${blocoCitado}[${autor}]: ${pergunta}` });
@@ -1354,6 +1348,7 @@ export function pedeImagemGerada(texto) {
 // funcionais inequívocas do inglês e exigimos ZERO marcador de português —
 // código, crases e URLs saem antes, para nome de arquivo/termo técnico não
 // contar. (Espelho do pareceEspanhol, que já pegava o mesmo desvio em espanhol.)
+export { semPreviaDeLinks } from "./busca.js";
 export function pareceIngles(texto) {
   const t = String(texto ?? "")
     .replace(/```[\s\S]*?```/g, " ")
@@ -1864,7 +1859,7 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
       const costurado = costurar(pendente.texto, resto);
       resto = costurado === null ? "" : costurado.slice(pendente.texto.length).trim();
       const cortouDeNovo = !!llmChat._cortou;
-      const textoFinal = resto
+      const textoFinal = busca.semPreviaDeLinks(resto)
         || (en ? "_That reply was already complete — nothing left to add._" : "_Aquela resposta já estava inteira — não sobrou nada a acrescentar._");
       lembrarUltimaResposta(canalId, { pergunta: pendente.pergunta, texto: `${pendente.texto}\n${resto}`, cortada: cortouDeNovo, modelo: pendente.modelo });
       registrarNoCanal(canalId, { nome: "Judy", userId: message.client?.user?.id, texto: resto || textoFinal, ehJudy: true });
@@ -1892,10 +1887,20 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
     }
     dlog(`decisão de busca: buscar=${decisao.buscar}${decisao.buscar ? ` query="${decisao.query}"` : ""}`);
     let resultados = null;
+    let consultasUsadas = [];
     if (decisao.buscar) {
-      await editarStatus(en ? `🔎 Searching: "${decisao.query}"…` : `🔎 Buscando: "${decisao.query}"…`);
+      await editarStatus(en ? "🔎 Searching…" : "🔎 Pesquisando…");
       try {
-        resultados = await buscar(decisao.query);
+        // A consulta NÃO é mais a mensagem menos os gatilhos (o gatilho
+        // `googl(e)` apagava a palavra "google"): o modelo reescreve o pedido
+        // em consultas curtas, e o código filtra e lê as páginas.
+        const pesq = await busca.pesquisar(pergunta, {
+          chamarJson: (msgs) => llmChat(msgs, { json: true, modelo: LLM_MODEL_DECISAO, etiqueta: "consultas-busca" }),
+          hoje: hojeExtenso(), log: dlog,
+        });
+        resultados = pesq.resultados;
+        resultados.fracos = pesq.fracos;
+        consultasUsadas = pesq.consultas;
         dlog(`busca retornou ${resultados?.length ?? 0} resultado(s)`);
       }
       catch (e) {
@@ -2076,24 +2081,10 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
       dlog(`fallback retornou ${resposta.length} chars`);
     }
 
+    // Só as fontes citadas, como [domínio](<url>): clicáveis e sem a prévia
+    // (embed) que o Stoat gerava para cada link.
     const rodape = resultados?.length
-      ? (() => {
-        const vistos = new Set();
-        const fontes = [];
-        for (const r of resultados) {
-          if (!r?.url) continue;
-          let dominio;
-          try { dominio = new URL(r.url).hostname.replace(/^www\./, ""); } catch { continue; }
-          if (vistos.has(r.url)) continue;
-          vistos.add(r.url);
-          fontes.push(`[${fontes.length + 1}] [${dominio}](${r.url})`);
-          if (fontes.length >= FONTES_MAX) break;
-        }
-        const cabec = en ? `_🔎 I searched: "${decisao.query}"_` : `_🔎 busquei: "${decisao.query}"_`;
-        return fontes.length
-          ? `\n\n${cabec}\n${en ? "**Sources:**" : "**Fontes:**"} ${fontes.join(" · ")}`
-          : `\n\n${cabec}`;
-      })()
+      ? busca.rodapeFontes(resposta, resultados, consultasUsadas.length ? consultasUsadas : [decisao.query], { lang: en ? "en" : "pt", max: FONTES_MAX })
       : "";
     const avisoCorte = responder._cortou
       ? (en
@@ -2123,7 +2114,7 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
       resposta = lang === "en" ? "🎨 Here it is!" : "🎨 Aqui está!";
     }
 
-    const textoFinal = (resposta
+    const textoFinal = busca.semPreviaDeLinks(resposta
       || (en ? "_I couldn't put a reply together. Try rephrasing the question._" : "_Não consegui formular uma resposta. Tente reformular a pergunta._"))
       + avisoCorte + rodape;
 

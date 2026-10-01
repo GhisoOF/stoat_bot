@@ -50,6 +50,7 @@ import * as tutorial   from "./modulos/moderacao/tutorial.js";
 import * as corCargo   from "./modulos/moderacao/cor-cargo.js";
 import * as acessoMod  from "./modulos/moderacao/acesso.js";
 import * as warnMod    from "./modulos/moderacao/warn.js";
+import * as silenciarMod from "./modulos/moderacao/silenciar.js";
 import * as srvStats   from "./modulos/core/metricas.js";
 import * as rpg        from "./modulos/game/game.js";
 import * as modIA      from "./modulos/moderacao/moderacao-ia.js";
@@ -317,6 +318,7 @@ const rotas = {
   userinfo:      geral.cmdUserinfo,
   kick:          geral.cmdKick,
   ban:           geral.cmdBan,
+  silenciar:     silenciarMod.cmdSilenciar,
   limpar:        limpar.cmdLimpar,
   clear:         limpar.cmdLimpar,
   purge:         limpar.cmdLimpar,
@@ -345,7 +347,7 @@ const rotas = {
   globalban:     banGlobal.cmdBanGlobal,
   configuracoes: cfgCmd.cmdConfig,
   configurações: cfgCmd.cmdConfig,
-  // Administração de comandos e cargo de silêncio
+  // Administração de comandos (o &cargomudo só avisa que foi aposentado)
   comando:       admin.cmdComando,
   comandos:      admin.cmdComando,
   cargomudo:     admin.cmdCargoMudo,
@@ -414,6 +416,7 @@ const CANONICO = {
   nivel: "xp",
   level: "xp",
   avisar: "warn",
+  mute: "silenciar", timeout: "silenciar", silencio: "silenciar",
   rpg: "game",
   personagem: "game",
   cores: "cor",
@@ -447,7 +450,7 @@ estado.COMANDOS_SO_IA = COMANDOS_SO_IA;
 
 // Comandos que o admin pode ligar/desligar (nomes canônicos, sem os essenciais).
 const COMANDOS_GERENCIAVEIS = [
-  "ping", "repete", "userinfo", "kick", "ban", "limpar",
+  "ping", "repete", "userinfo", "kick", "ban", "silenciar", "limpar",
   "warn", "acesso", "automod", "tutorial", "assistente", "cor", "log", "banglobal", "embed", "reactionrole", "chat", "rss", "xp", "game", "autorole",
   "staff", "boasvindas", "adeus", "fuso", "tts", "musica", "webhook", "rolar", "iniciativa", "ticket",
 ];
@@ -507,7 +510,13 @@ client.on("ready", async () => {
     getCfg: () => store.getGlobal().relatorio,
     enviar: async (canalId, rel) => {
       const canal = await client.channels.fetch(canalId).catch(() => null);
-      if (canal) await sendEmbed(canal, { title: rel.title, description: rel.description, colour: COR.info });
+      if (!canal) return;
+      const fixo = relatorioHora.servidorDoRelatorio();
+      if (fixo && canal.serverId !== fixo) {
+        console.warn(`[RELATORIO] canal ${canalId} não é do servidor do relatório (${fixo}) — não enviado`);
+        return;
+      }
+      await sendEmbed(canal, { title: rel.title, description: rel.description, colour: COR.info });
     },
   });
   for (const l of chat.resumoConfigIA()) console.info(l);
@@ -518,7 +527,7 @@ client.on("ready", async () => {
   chat.iniciarComentario(client); // liga o comentário espontâneo
   modIA.configurar({ avaliar: chat.avaliarModeracao });   // moderação por IA usa o modelo pequeno
   rss.configurarResumo(chat.resumirRSS);   // RSS agendado passa a resumir com o tom da Judy
-  rss.configurarRelatorio({ linhas: chat.linhasRSS, comentario: chat.comentarioRSS });   // relatório por categoria + comentário no fim
+  rss.configurarRelatorio({ linhas: chat.linhasRSS, comentario: chat.comentarioRSS, traduzir: chat.traduzirLinhasRSS });   // relatório por categoria + comentário no fim
 
   const ctx = criarContexto();    // contexto sem servidor (tarefas globais)
   engine.agendarLimpezaSpam(ctx); // limpeza periódica do rastreio de spam
@@ -781,7 +790,7 @@ client.on("messageReactionAdd", async (...a) => {
     if (userId && client.user && userId === client.user.id) return; // ignora o próprio bot
 
     // Páginas (&help, &tutorial): ◀ ▶ numa mensagem paginada vira a página.
-    if (await paginas.aoReagir(msgId, userId, emoji)) return;
+    if (await paginas.aoReagir(msgId, userId, emoji, a0)) return;
 
     const msgObj = (a0 && typeof a0 === "object") ? a0 : { id: msgId };
     const ctxRR = criarContexto(null);
@@ -789,6 +798,23 @@ client.on("messageReactionAdd", async (...a) => {
     await reactionRoles.aoReagir(msgObj, userId, emoji, ctxRR);
   } catch (err) {
     console.error("[REAÇÃO] erro:", err.message);
+  }
+});
+
+// Mensagem fora do cache (o bot reiniciou depois de enviá-la): a stoat.js nem
+// emite messageReactionAdd/Remove para ela — getOrPartial devolve nada sem
+// `partials`. Era a outra metade do "depois de um tempo os emojis não
+// funcionam". O evento cru traz o canal, e a página é editada pela API.
+client.events.on("event", async (ev) => {
+  try {
+    if (ev?.type !== "MessageReact" && ev?.type !== "MessageUnreact") return;
+    if (!ev.id || client.messages?.has?.(ev.id)) return;      // em cache: o handler normal cuida
+    if (client.user && ev.user_id === client.user.id) return;
+    const editor = { id: ev.id, channelId: ev.channel_id,
+      edit: (data) => client.api.patch(`/channels/${ev.channel_id}/messages/${ev.id}`, data) };
+    await paginas.aoReagir(ev.id, ev.user_id, ev.emoji_id, editor);
+  } catch (err) {
+    console.error("[REAÇÃO][fora do cache]", err?.message ?? err);
   }
 });
 
@@ -817,7 +843,7 @@ client.on("messageReactionRemove", async (...a) => {
     if (userId && client.user && userId === client.user.id) return; // ignora o próprio bot
 
     // Tirar a reação ◀ ▶ também vira a página (assim dá para clicar de novo).
-    if (await paginas.aoReagir(msgId, userId, emoji)) return;
+    if (await paginas.aoReagir(msgId, userId, emoji, a0)) return;
 
     const msgObj = (a0 && typeof a0 === "object") ? a0 : { id: msgId };
     const ctxRR = criarContexto(null);

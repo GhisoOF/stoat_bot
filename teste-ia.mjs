@@ -1099,12 +1099,17 @@ console.log("\n── fontes no rodapé, e o catch largo ──");
   ok(/const seguimentoDaFicha = ultimaFichaCanal\.get\(canalDaMensagem\)/.test(fonte),
     "  → e o try/catch fazia só um dlog: o log dizia 'ficha falhou' e ninguém lia");
 
-  ok(/\*\*Fontes:\*\*|Sources:/.test(fonte) && /new URL\(r\.url\)\.hostname/.test(fonte),
-    "★ o rodapé agora lista as fontes com domínio e link, para quem quiser conferir");
-  ok(/vistos\.has\(r\.url\)/.test(fonte), "  → sem repetir o mesmo link");
-  ok(/CHAT_FONTES_MAX \|\| 5/.test(fonte), "  → com teto, para o rodapé não competir com a resposta");
-  ok(/\[\$\{fontes\.length \+ 1\}\]/.test(fonte),
-    "  → numeradas na ordem em que o modelo as recebeu, casando com os [1], [2] que ele cita no texto");
+  const busca = await import("./modulos/ai/busca.js");
+  const rs = [
+    { titulo: "A", url: "https://www.exemplo.com/a" }, { titulo: "B", url: "https://g1.globo.com/b" },
+    { titulo: "C", url: "https://c.org/c" }, { titulo: "D", url: "https://d.net/d" }, { titulo: "E", url: "https://e.io/e" },
+  ];
+  const rod = busca.rodapeFontes("Resposta com [2] e [4] e [2] de novo.", rs, ["q um", "q dois"], { lang: "pt", max: 3 });
+  ok(/\*\*Fontes:\*\*/.test(rod) && /\[g1\.globo\.com\]\(<https:\/\/g1\.globo\.com\/b>\)/.test(rod),
+    "★ o rodapé lista as fontes com domínio e link — entre < >, para o Stoat não gerar prévia");
+  ok(/\[2\]/.test(rod) && /\[4\]/.test(rod) && !/\[1\]|\[3\]|\[5\]/.test(rod), "  → só as citadas, cada uma uma vez, com o número que o modelo usou");
+  ok(busca.rodapeFontes("sem citação", rs, ["q"], { max: 3 }).match(/\]\(</g).length === 2, "  → sem citação: as 2 primeiras");
+  ok(busca.rodapeFontes("[1][2][3][4][5]", rs, ["q"], { max: 3 }).match(/\]\(</g).length === 3, "  → com teto, para o rodapé não competir com a resposta");
 }
 
 console.log("\n── ritmo, ids e o que ela observa ──");

@@ -135,6 +135,14 @@ export function abrirBanco(caminho) {
       titulo   TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS relatorio_eventos_t ON relatorio_eventos (t);
+    -- Mensagens paginadas (◀ ▶): a sessão vivia só na memória, por 15 min, e
+    -- sumia a cada reinício — o relatório das 3h não virava mais de página de
+    -- manhã. Fica aqui por alguns dias (poda automática).
+    CREATE TABLE IF NOT EXISTS paginas_sessoes (
+      msgId  TEXT PRIMARY KEY,
+      dados  TEXT NOT NULL,
+      expira INTEGER NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS ganchos (
       id        INTEGER PRIMARY KEY AUTOINCREMENT,
       serverId  TEXT NOT NULL,
@@ -1586,6 +1594,17 @@ export function registrarEventoRelatorio(t, serverId, tipo, titulo) {
 }
 export function eventosRelatorio(desde, ate) {
   return prep("SELECT t, serverId, tipo, titulo FROM relatorio_eventos WHERE t >= ? AND t < ? ORDER BY t").all(desde, ate);
+}
+export function salvarSessaoPaginas(msgId, dados, expira) {
+  prep("INSERT OR REPLACE INTO paginas_sessoes (msgId, dados, expira) VALUES (?, ?, ?)").run(msgId, JSON.stringify(dados), expira);
+}
+export function carregarSessaoPaginas(msgId, agora = Date.now()) {
+  const r = prep("SELECT dados FROM paginas_sessoes WHERE msgId = ? AND expira >= ?").get(msgId, agora);
+  if (!r) return null;
+  try { return JSON.parse(r.dados); } catch { return null; }
+}
+export function podarSessoesPaginas(agora = Date.now()) {
+  return prep("DELETE FROM paginas_sessoes WHERE expira < ?").run(agora).changes;
 }
 export function podarRelatorio(antesDe) {
   return prep("DELETE FROM relatorio_eventos WHERE t < ?").run(antesDe).changes;

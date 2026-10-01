@@ -171,25 +171,6 @@ export const PASSOS = {
     comandos: (v) => [["autorole", "set", v]],
   },
 
-  // O cargo de silêncio é criado e CONFERIDO aqui, na configuração — não na
-  // hora da punição, quando não dá para ver se ele perde para o autorole.
-  silencio: {
-    pergunta: (lang, P) => T(lang,
-      "🔇 **Cargo de silêncio** — o mute da escada e o modo `confirmar` usam um cargo que tira a fala da pessoa. "
-        + "Eu o ponho **acima do cargo automático e de todo cargo de membro**, nego em cada canal e **confiro** se alguém silenciado ainda consegue falar.\n"
-        + "`1` criar um novo _(recomendado)_ · ou mencione um cargo que já existe para eu configurar · `pular`",
-      "🔇 **Silence role** — the ladder's mute and the `confirmar` mode use a role that takes away someone's voice. "
-        + "I place it **above the auto role and every member role**, deny it in each channel and **check** whether a silenced member can still talk.\n"
-        + "`1` create a new one _(recommended)_ · or mention an existing role for me to set up · `pular`"),
-    parse: (r, { server, lang }) => {
-      if (/^(1|criar|novo|nova|new|create)\b/i.test(r.trim())) return { valor: "novo", rotulo: T(lang, "criar um novo", "create a new one") };
-      const c = resolverCargo(r, server);
-      if (!c) return { erro: true };
-      return { valor: c.id, rotulo: c.nome };
-    },
-    comandos: (v) => (v === "novo" ? [["cargomudo"]] : [["cargomudo", "usar", v]]),
-  },
-
   // ── roteiro "canais": só coleta; o resultado é um guia, não uma aplicação ──
   canaisVer: {
     pergunta: (lang, P) => T(lang,
@@ -225,10 +206,11 @@ function nomeDoCanal(server, id) {
 }
 
 export const ROTEIROS = {
-  // "silencio" por último: roda depois do cargo automático, e a conferência já o inclui.
-  rapido:   ["idioma", "staff", "log", "protecao", "boasvindas", "silencio"],
-  completo: ["idioma", "staff", "log", "protecao", "escada", "banglobal", "boasvindas", "autorole", "xp", "silencio"],
-  protecao: ["protecao", "escada", "banglobal", "log", "silencio"],
+  // O silêncio é o timeout nativo: não há passo de cargo — o resumo final
+  // confere se o bot tem TimeoutMembers.
+  rapido:   ["idioma", "staff", "log", "protecao", "boasvindas"],
+  completo: ["idioma", "staff", "log", "protecao", "escada", "banglobal", "boasvindas", "autorole", "xp"],
+  protecao: ["protecao", "escada", "banglobal", "log"],
   canais:   ["canaisVer", "canaisEscrever"],
 };
 
@@ -242,7 +224,7 @@ const NOME_ROTEIRO = {
 export async function cmdAssistente(message, args, ctx) {
   const { sendEmbed, COR, PREFIXO: P, config } = ctx;
   // IDs herdados de outro servidor (molde antigo) saem antes das perguntas:
-  // senão o passo do &cargomudo é pulado por um cargo que nem existe aqui.
+  // senão um passo é pulado por um cargo ou canal que nem existe aqui.
   try { const srv = await ctx.getServer?.(message); if (curarIds(config, srv).length) ctx.salvarConfig?.(); } catch {}
   const lang = lingua(ctx);
   const pedido = (args[0] ?? "").toLowerCase();
@@ -446,9 +428,7 @@ async function aplicar(message, ctx, s) {
       const falhou = ult && /^(❌|🚫)/.test(String(ult.title ?? ""));
       // ⚠️ = aplicou, mas com pendência: não pode aparecer como ✅ limpo.
       const pendente = !falhou && ult && /^⚠️/.test(String(ult.title ?? ""));
-      resultado.push({ args, ok: !falhou, pendente, msg: ult ? String(ult.title ?? "").replace(/^[^\w\p{L}]+/u, "") : "",
-        // o relatório do cargo de silêncio é mostrado inteiro: é a conferência
-        mostrar: nome === "cargomudo" ? ult : null });
+      resultado.push({ args, ok: !falhou, pendente, msg: ult ? String(ult.title ?? "").replace(/^[^\w\p{L}]+/u, "") : "" });
     } catch (e) {
       resultado.push({ args, ok: false, msg: e?.message ?? String(e) });
     }
@@ -459,6 +439,16 @@ async function aplicar(message, ctx, s) {
   linhas.push("", T(s.lang,
     `${okN}/${resultado.length} aplicado(s). \`${P}config\` mostra como ficou; \`${P}debug canais\` confere se o bot consegue agir em cada canal.`,
     `${okN}/${resultado.length} applied. \`${P}config\` shows the result; \`${P}debug canais\` checks whether the bot can act in each channel.`));
+  // O silêncio (mute da escada, modo confirmar, &silenciar) é o timeout
+  // nativo: sem TimeoutMembers, toda punição de silêncio vira quarentena.
+  try {
+    const srv = await ctx.getServer?.(message);
+    if (srv && typeof srv.havePermission === "function" && !srv.havePermission("TimeoutMembers")) {
+      linhas.push("", T(s.lang,
+        "⚠️ O cargo do bot não tem **TimeoutMembers** — sem ela o silêncio da escada e do modo `confirmar` não funciona (a pessoa cai na quarentena). Dê essa permissão ao cargo do bot.",
+        "⚠️ The bot's role lacks **TimeoutMembers** — without it the ladder's and `confirmar` mode's silence doesn't work (the person falls into quarantine). Give the bot's role that permission."));
+    }
+  } catch {}
   if (okN < resultado.length) linhas.push(T(s.lang,
     "Para os que falharam, rode o comando na mão para ver a explicação completa.",
     "For the ones that failed, run the command by hand to see the full explanation."));
@@ -467,8 +457,6 @@ async function aplicar(message, ctx, s) {
     description: linhas.join("\n"),
     colour: okN === resultado.length ? COR.sucesso : COR.aviso,
   });
-  // Depois do resumo, o relatório do cargo de silêncio inteiro (a conferência).
-  for (const r of resultado) if (r.mostrar) await sendEmbed(message.channel, r.mostrar);
   return resumo;
 }
 

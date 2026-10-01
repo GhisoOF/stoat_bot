@@ -59,6 +59,9 @@ export const SUB = {
     customize: "personalizar", customise: "personalizar", fun: "diversao",
     diagnostics: "diagnostico", troubleshooting: "diagnostico", owner: "dono",
   },
+  silenciar: {
+    remove: "tirar", undo: "tirar", lift: "tirar", off: "tirar",
+  },
   assistente: {
     quick: "rapido", fast: "rapido", full: "completo", complete: "completo",
     channels: "canais", protection: "protecao", protect: "protecao",
@@ -135,7 +138,7 @@ export const SUB = {
     contribution: "contribuicao",
   },
   punicao: {
-    mode: "modo", warns: "warns", role: "cargo", silencerole: "silencerole",
+    mode: "modo", warns: "warns", role: "cargo",
     status: "status", config: "config",
     warn: "avisar", delete: "apagar", confirm: "confirmar",
     stack: "acumular", ban: "banir",
@@ -211,9 +214,6 @@ export const SUB = {
   modia: {
     criteria: "criterios", channel: "canal", clear: "limpar",
     status: "status", add: "add", remove: "remove",
-  },
-  cargomudo: {
-    channels: "canais",
   },
   debug: {
     channels: "canais", permissions: "permissoes", raw: "cru",

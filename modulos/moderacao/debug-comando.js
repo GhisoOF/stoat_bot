@@ -15,13 +15,12 @@ export const CATALOGO = {
   whitelist:     { admin: "ManagePermissions",bot: null },
   blocklist:     { admin: "ManagePermissions",bot: null },
   scam:          { admin: "ManagePermissions",bot: "ManageMessages" },
-  punicao:       { admin: "ManagePermissions",bot: "AssignRoles" },
+  punicao:       { admin: "ManagePermissions",bot: "TimeoutMembers" },
   setup:         { admin: "ManagePermissions",bot: "React" },
   log:           { admin: "ManagePermissions",bot: "SendEmbeds" },
   config:        { admin: "ManagePermissions",bot: null },
   banglobal:     { admin: "BanMembers",       bot: "BanMembers" },
   comando:       { admin: "ManagePermissions",bot: null },
-  cargomudo:     { admin: "ManagePermissions",bot: "ManageRole" },
   embed:         { admin: "ManageMessages",   bot: "SendEmbeds" },
   reactionrole:  { admin: "ManageRole",       bot: "React" },
 };
@@ -156,75 +155,37 @@ export async function cmdDebug(message, args, ctx) {
       colour: r.problemas.length || r.desconhecidos ? COR.aviso : COR.sucesso });
   }
 
-  // ── &debug silence [@usuário] → o silêncio vai funcionar mesmo? ──
-  if (["silence", "silencio", "silêncio", "mudo"].includes(sub)) {
-    const silenceRoleId = config?.automod?.punicao?.silenceRoleId;
-    if (!silenceRoleId) {
-      return sendEmbed(message.channel, tr(ctx,
-        { title: "🔇 Sem cargo de silêncio",
-          description: `Nenhum cargo de silêncio configurado. Crie um com \`${PREFIXO}cargomudo\`.`, colour: COR.aviso },
-        { title: "🔇 No silence role",
-          description: `No silence role configured. Create one with \`${PREFIXO}cargomudo\`.`, colour: COR.aviso }));
-    }
-
-    const linhas = [en ? `**Silence role:** <%${silenceRoleId}>` : `**Cargo de silêncio:** <%${silenceRoleId}>`, ""];
-
-    // (a) o cargo está negado em todos os canais?
-    const canais = (server?.channels ?? []).filter(Boolean);
-    let comOverride = 0, semOverride = [];
-    for (const c of canais) {
-      const canal = typeof c === "string" ? (ctx.client?.channels?.get?.(c) ?? null) : c;
-      if (!canal) continue;
-      const ov = canal.role_permissions?.[silenceRoleId] ?? canal.rolePermissions?.[silenceRoleId];
-      if (ov) comOverride++;
-      else semOverride.push(canal.name ?? canal.id);
-    }
-    linhas.push(en
-      ? (comOverride
-        ? `📋 Explicitly denied in **${comOverride}** channel(s).`
-        : "⚠️ I found no per-channel denial — the silence may leak in channels with their own permissions.")
-      : (comOverride
-        ? `📋 Negado explicitamente em **${comOverride}** canal(is).`
-        : "⚠️ Não achei negação por canal — o silêncio pode vazar em canais com permissão própria."));
-    if (semOverride.length) {
-      linhas.push(en
-        ? `⚠️ **No denial in:** ${semOverride.slice(0, 10).join(", ")}${semOverride.length > 10 ? "…" : ""}`
-        : `⚠️ **Sem negação em:** ${semOverride.slice(0, 10).join(", ")}${semOverride.length > 10 ? "…" : ""}`);
-      linhas.push(en ? `_Fix it with_ \`${PREFIXO}cargomudo canais\`` : `_Corrija com_ \`${PREFIXO}cargomudo canais\``);
-    }
-
-    // (b) o alvo tem cargo acima que anula o silêncio?
+  // ── &debug silence [@usuário] → o silêncio (timeout) vai funcionar? ──
+  // O silêncio é o timeout nativo do Stoat: depende da permissão do bot, de a
+  // pessoa NÃO ter TimeoutMembers e de ela estar abaixo do cargo do bot.
+  if (["silence", "silencio", "silêncio", "mudo", "timeout"].includes(sub)) {
+    const linhas = [];
+    const temPerm = botTem(server, "TimeoutMembers");
+    linhas.push(temPerm === false
+      ? (en ? "❌ The bot's role lacks **TimeoutMembers** — no silence will work; punishments fall back to quarantine." : "❌ O cargo do bot não tem **TimeoutMembers** — nenhum silêncio funciona; as punições caem na quarentena.")
+      : (en ? "✅ The bot has **TimeoutMembers**." : "✅ O bot tem **TimeoutMembers**."));
     const alvoId = message.mentionIds?.[0] ?? (args[1] ? args[1].replace(/[<@%>]/g, "") : null);
     if (alvoId) {
       const member = await server?.fetchMember?.(alvoId).catch(() => null);
-      if (!member) linhas.push("", en
-        ? `❔ I couldn't find the member \`${alvoId}\` to check their roles.`
-        : `❔ Não achei o membro \`${alvoId}\` para checar os cargos dele.`);
+      linhas.push("", en ? `**Checking <@${alvoId}>:**` : `**Checando <@${alvoId}>:**`);
+      if (!member) linhas.push(en ? `❔ I couldn't find the member \`${alvoId}\`.` : `❔ Não achei o membro \`${alvoId}\`.`);
+      else if (server?.ownerId === alvoId) linhas.push(en ? "👑 The server owner can't be timed out." : "👑 O dono do servidor não pode ser silenciado.");
       else {
-        const c = perms.conflitosDeSilencio(server, member, silenceRoleId);
-        linhas.push("", en ? `**Checking <@${alvoId}>:**` : `**Checando <@${alvoId}>:**`);
-        if (c.erro) linhas.push(`❔ ${c.erro}`);
-        else if (c.dono) linhas.push(`👑 ${c.aviso}`);
-        else if (c.conflitantes.length) {
-          linhas.push(en ? `❌ **The silence will NOT mute this person.**` : `❌ **O silêncio NÃO vai calar essa pessoa.**`);
-          linhas.push(en ? `They have role(s) above the silence one that allow speaking:` : `Ela tem cargo(s) acima do silêncio que liberam falar:`);
-          for (const x of c.conflitantes) linhas.push(`• <%${x.id}> (${x.nome})`);
-          linhas.push("", en
-            ? "_Move the silence role above those in the role list, or remove their SendMessage permission._"
-            : "_Suba o cargo de silêncio acima desses na lista de cargos, ou tire a permissão de SendMessage deles._");
-        } else {
-          linhas.push(en ? "✅ None of their roles overrides the silence." : "✅ Nenhum cargo dela anula o silêncio.");
-        }
+        let elevado = null, acima = null;
+        try { elevado = member.hasPermission?.(server, "TimeoutMembers") ?? null; } catch {}
+        try { const bot = server?.member; acima = bot ? !(member.ranking > bot.ranking) : null; } catch {}
+        if (elevado) linhas.push(en ? "❌ They have **TimeoutMembers** — the Stoat doesn't let anyone time them out." : "❌ A pessoa tem **TimeoutMembers** — o Stoat não deixa ninguém silenciá-la.");
+        else if (acima) linhas.push(en ? "❌ Their highest role is at or above the bot's — move the bot's role up." : "❌ O cargo mais alto dela está na altura do bot ou acima — suba o cargo do bot.");
+        else linhas.push(en ? "✅ The silence will work on this person." : "✅ O silêncio vai funcionar com essa pessoa.");
+        if (member.timeout && new Date(member.timeout).getTime() > Date.now())
+          linhas.push(en ? `🔇 Silenced right now, until ${new Date(member.timeout).toISOString().slice(0, 16).replace("T", " ")} UTC.` : `🔇 Silenciada agora, até ${new Date(member.timeout).toISOString().slice(0, 16).replace("T", " ")} UTC.`);
       }
     } else {
-      linhas.push("", en
-        ? `_To check someone:_ \`${PREFIXO}debug silence @person\``
-        : `_Para checar alguém:_ \`${PREFIXO}debug silence @pessoa\``);
+      linhas.push("", en ? `_To check someone:_ \`${PREFIXO}debug silence @person\`` : `_Para checar alguém:_ \`${PREFIXO}debug silence @pessoa\``);
     }
-
     return sendEmbed(message.channel, { title: en ? "🔇 Silence diagnostics" : "🔇 Diagnóstico do silêncio",
       description: linhas.join("\n").slice(0, 1950),
-      colour: semOverride.length ? COR.aviso : COR.info });
+      colour: temPerm === false ? COR.aviso : COR.info });
   }
 
   const rotas = estado.rotas ?? {};

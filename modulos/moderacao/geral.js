@@ -20,6 +20,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { descreverErro } from "../core/erros.js";
+import { banir } from "../core/banir.js";
 
 // Conta as linhas de código do projeto (uma vez, com cache).
 let _linhasCache = null;
@@ -114,6 +115,14 @@ function detalhesPT(P) {
       uso: `${P}ban @usuário [motivo]`,
       desc: "Bane permanentemente o usuário mencionado.",
       perm: "BanMembers", ex: `${P}ban @fulano divulgação`,
+    },
+    silenciar: {
+      uso: `${P}silenciar @usuário <tempo> [motivo]`,
+      desc: "Silencia alguém por um tempo com o **silêncio nativo do Stoat**: a pessoa só consegue ver o servidor até o tempo acabar — não depende de cargo nem de permissão de canal.\n\n"
+        + "Tempo: `30s`, `10m`, `2h`, `1d`, `1w` ou combinados (`1h30m`); número sozinho = minutos; máximo 28 dias.\n"
+        + "Tirar antes da hora: `&silenciar tirar @usuário`.\n\n"
+        + "_O bot precisa de **TimeoutMembers** e estar acima da pessoa. Quem tem TimeoutMembers não pode ser silenciado (regra do Stoat)._",
+      perm: "TimeoutMembers", ex: `${P}silenciar @fulano 30m flood`,
     },
     warn: {
       uso: `${P}warn <@pessoa|id|nome> [motivo]`,
@@ -250,7 +259,7 @@ function detalhesPT(P) {
     },
     debug: {
       uso: `${P}debug [canais|silence]`,
-      desc: "Diagnóstico do bot neste servidor.\n\n`&debug` — testa todos os comandos e aponta o que está desativado ou sem permissão\n`&debug canais` — **o que eu enxergo e o que consigo fazer em cada canal**. No Stoat a permissão do canal vence a do cargo, então dá para eu ter permissão no servidor e estar mudo num canal específico\n`&debug canais cru` — mostra o formato dos dados (quando o diagnóstico não consegue avaliar)\n`&debug silence [@pessoa]` — se o cargo de silêncio realmente cala: mostra em quais canais falta a negação e, com uma pessoa marcada, avisa se ela tem cargo **acima** do silêncio que anula o efeito",
+      desc: "Diagnóstico do bot neste servidor.\n\n`&debug` — testa todos os comandos e aponta o que está desativado ou sem permissão\n`&debug canais` — **o que eu enxergo e o que consigo fazer em cada canal**. No Stoat a permissão do canal vence a do cargo, então dá para eu ter permissão no servidor e estar mudo num canal específico\n`&debug canais cru` — mostra o formato dos dados (quando o diagnóstico não consegue avaliar)\n`&debug silence [@pessoa]` — se o silêncio (timeout nativo) vai funcionar: confere se o bot tem **TimeoutMembers** e, com uma pessoa marcada, se dá para silenciá-la",
       perm: "ManagePermissions",
       ex: `${P}debug canais`,
     },
@@ -258,17 +267,6 @@ function detalhesPT(P) {
       uso: `${P}comando [disable|enable <nome>]`,
       desc: "Ativa ou desativa comandos do bot neste servidor. `&comando` sozinho lista o estado de cada um. Ex.: `&comando desativar ban`. Os comandos `help` e `comando` não podem ser desativados.\n\n_Aceita as duas línguas: `desativar`/`disable`, `ativar`/`enable`._",
       perm: "ManagePermissions", ex: `${P}comando desativar repete`,
-    },
-    cargomudo: {
-      uso: `${P}cargomudo [nome] · ${P}cargomudo usar <@cargo> · ${P}cargomudo verificar · ${P}cargomudo canais`,
-      desc: `O **cargo de silêncio**: o mute da escada e o modo \`confirmar\` dão esse cargo a quem infringe.\n\n`
-        + `**Por que a posição importa:** no Stoat, o cargo mais alto vence. Se o cargo automático (ou outro cargo de membro) estiver acima do silêncio e liberar a fala num canal, o silenciado continua falando.\n\n`
-        + `\`${P}cargomudo [nome]\` — cria o cargo, **nega tudo** no servidor e em cada canal, **põe logo abaixo do cargo do bot** e **confere** simulando alguém com o cargo automático em cada canal.\n`
-        + `\`${P}cargomudo usar <@cargo>\` — faz o mesmo com um cargo que já existe.\n`
-        + `\`${P}cargomudo verificar\` — só confere, sem mexer, e diz como resolver se algo estiver errado.\n`
-        + `\`${P}cargomudo canais\` — nega em canais criados depois.\n\n`
-        + `O bot precisa de **ManageRole** (criar e posicionar), **ManagePermissions** (negar nos canais) e **AssignRoles** (dar o cargo) — e o **cargo do bot** tem de estar acima dos cargos de membro. O \`${P}assistente\` faz isso por você no fim da configuração.`,
-      perm: "ManagePermissions", ex: `${P}cargomudo Silenciado`,
     },
     embed: {
       uso: `${P}embed` + " → depois `campo: valor`, um por linha",
@@ -351,6 +349,14 @@ function detalhesEN(P) {
       uso: `${P}ban @user [reason]`,
       desc: "Permanently bans the mentioned user.",
       perm: "BanMembers", ex: `${P}ban @someone advertising`,
+    },
+    silenciar: {
+      uso: `${P}silenciar @user <time> [reason]`,
+      desc: "Times someone out with the **Stoat's native timeout**: they can only view the server until it ends — no role or channel permission involved.\n\n"
+        + "Time: `30s`, `10m`, `2h`, `1d`, `1w` or combined (`1h30m`); a bare number = minutes; up to 28 days.\n"
+        + "Lift it early: `&silenciar tirar @user`.\n\n"
+        + "_The bot needs **TimeoutMembers** and must sit above the person. Whoever has TimeoutMembers can't be timed out (Stoat rule)._",
+      perm: "TimeoutMembers", ex: `${P}silenciar @someone 30m flood`,
     },
     warn: {
       uso: `${P}warn <@user|id|name> [reason]`,
@@ -487,7 +493,7 @@ function detalhesEN(P) {
     },
     debug: {
       uso: `${P}debug [canais|silence]`,
-      desc: "Bot diagnostics on this server.\n\n`&debug` — tests every command and points out what's disabled or missing permissions\n`&debug canais` — **what I can see and do in each channel**. On Stoat the channel permission beats the role permission, so I can have a server-wide permission yet be muted in one specific channel\n`&debug canais cru` — shows the raw data format (when the diagnosis can't evaluate)\n`&debug silence [@user]` — whether the silence role actually silences: shows which channels are missing the denial and, with someone mentioned, warns if they hold a role **above** the silence role that cancels it",
+      desc: "Bot diagnostics on this server.\n\n`&debug` — tests every command and points out what's disabled or missing permissions\n`&debug canais` — **what I can see and do in each channel**. On Stoat the channel permission beats the role permission, so I can have a server-wide permission yet be muted in one specific channel\n`&debug canais cru` — shows the raw data format (when the diagnosis can't evaluate)\n`&debug silence [@user]` — whether the silence (native timeout) will work: checks the bot has **TimeoutMembers** and, with someone mentioned, whether they can be timed out",
       perm: "ManagePermissions",
       ex: `${P}debug canais`,
     },
@@ -495,17 +501,6 @@ function detalhesEN(P) {
       uso: `${P}comando [disable|enable <name>]`,
       desc: "Enables or disables bot commands on this server. `&comando` alone lists each one's state. E.g.: `&comando disable ban`. The `help` and `comando` commands can't be disabled.",
       perm: "ManagePermissions", ex: `${P}comando disable repete`,
-    },
-    cargomudo: {
-      uso: `${P}cargomudo [name] · ${P}cargomudo usar <@role> · ${P}cargomudo verificar · ${P}cargomudo canais`,
-      desc: `The **silence role**: the ladder's mute and the \`confirmar\` mode give this role to whoever breaks the rules.\n\n`
-        + `**Why position matters:** on Stoat, the highest role wins. If the auto role (or another member role) is above the silence role and allows talking in a channel, the silenced member keeps talking.\n\n`
-        + `\`${P}cargomudo [name]\` — creates the role, **denies everything** on the server and in each channel, **places it right below the bot's role** and **checks** by simulating someone with the auto role in each channel.\n`
-        + `\`${P}cargomudo usar <@role>\` — does the same with an existing role.\n`
-        + `\`${P}cargomudo verificar\` — only checks, changes nothing, and says how to fix what's wrong.\n`
-        + `\`${P}cargomudo canais\` — denies in channels created later.\n\n`
-        + `The bot needs **ManageRole** (create and position), **ManagePermissions** (deny in channels) and **AssignRoles** (give the role) — and the **bot's role** must be above member roles. \`${P}assistente\` does this for you at the end of the setup.`,
-      perm: "ManagePermissions", ex: `${P}cargomudo Silenced`,
     },
     embed: {
       uso: `${P}embed` + " → then `field: value`, one per line",
@@ -629,7 +624,7 @@ function construirSubtopicos(P, lang) {
           `**Usage:** \`${P}automod punicao modo <avisar|apagar|confirmar|acumular|banir>\``,
           "",
           "Sets the **global** punishment (applies to every module without its own):",
-          "• `avisar` — warn only, don't remove\n• `apagar` — remove the message only\n• `confirmar` — remove, silence (if a role is set) and wait for a mod's approval\n• `acumular` — stack warnings and ban at the limit\n• `banir` — instant ban",
+          "• `avisar` — warn only, don't remove\n• `apagar` — remove the message only\n• `confirmar` — remove, silence (native timeout) and wait for a mod's approval\n• `acumular` — stack warnings and ban at the limit\n• `banir` — instant ban",
         ].join("\n"),
       },
     },
@@ -715,7 +710,7 @@ function construirSubtopicos(P, lang) {
           `**Uso:** \`${P}automod punicao modo <avisar|apagar|confirmar|acumular|banir>\``,
           "",
           "Define a punição **global** (vale para todos os módulos que não têm punição própria):",
-          "• `avisar` — só avisa, não remove\n• `apagar` — só remove a mensagem\n• `confirmar` — remove, silencia (se houver cargo) e espera um mod aprovar\n• `acumular` — soma avisos e bane ao atingir o limite\n• `banir` — ban imediato",
+          "• `avisar` — só avisa, não remove\n• `apagar` — só remove a mensagem\n• `confirmar` — remove, silencia (timeout nativo) e espera um mod aprovar\n• `acumular` — soma avisos e bane ao atingir o limite\n• `banir` — ban imediato",
         ].join("\n"),
       },
     },
@@ -1210,14 +1205,14 @@ export async function cmdKick(message, args, ctx) {
     });
     console.log(`[KICK] ${message.authorId} -> ${targetId} | ${reason}`);
   } catch (err) {
-    console.error("[KICK]", err.message);
+    console.error("[KICK]", descreverErro(err));
     await sendEmbed(message.channel, tr(ctx, {
       title: "❌ Não foi possível expulsar",
-      description: `**Usuário:** \`${targetId}\`\n**Erro:** ${err.message}\n\n_Verifique se o bot tem a permissão **KickMembers** e se o cargo dele está acima do alvo._`,
+      description: `**Usuário:** \`${targetId}\`\n**Erro:** ${descreverErro(err, "pt")}\n\n_Verifique se o bot tem a permissão **KickMembers** e se o cargo dele está acima do alvo._`,
       colour: COR.erro,
     }, {
       title: "❌ Couldn't kick",
-      description: `**User:** \`${targetId}\`\n**Error:** ${err.message}\n\n_Check that the bot has **KickMembers** and that its role sits above the target's._`,
+      description: `**User:** \`${targetId}\`\n**Error:** ${descreverErro(err, "en")}\n\n_Check that the bot has **KickMembers** and that its role sits above the target's._`,
       colour: COR.erro,
     }));
   }
@@ -1247,11 +1242,23 @@ export async function cmdBan(message, args, ctx) {
       { description: "❌ I can't ban myself!", colour: COR.erro }));
 
   try {
-    await server.banUser(targetId, { reason });
+    const { jaEstava } = await banir(server, targetId, { reason });
     // alimenta a lista global — com o nome, para a listagem ser legível depois
     await banGlobal.registrar(ctx, targetId, reason, "manual", {
       nome: ctx.client?.users?.get?.(targetId)?.username ?? null,
     });
+    if (jaEstava) {
+      console.log(`[BAN] ${message.authorId} -> ${targetId} | já estava banido`);
+      return sendEmbed(message.channel, tr(ctx, {
+        title: "✅ Já estava banido",
+        description: `**Usuário:** <@${targetId}> \`${targetId}\`\nEssa pessoa **já está banida** neste servidor — não havia nada a fazer.\n**Lista global:** registrado 🌐`,
+        colour: COR.info,
+      }, {
+        title: "✅ Already banned",
+        description: `**User:** <@${targetId}> \`${targetId}\`\nThis person is **already banned** here — nothing to do.\n**Global list:** recorded 🌐`,
+        colour: COR.info,
+      }));
+    }
     await log.registrar(ctx, "punicoes", { titulo: "🔨 Usuário banido (manual)",
       descricao: `<@${targetId}> foi banido por <@${message.authorId}>.\n**Motivo:** ${reason}` });
     await sendEmbed(message.channel, lang === "en" ? {

@@ -1,4 +1,5 @@
 import { rebuildBlocklist, DOMINIO_VALIDO, simularDeteccao, removerCargoSilence } from "./automod-engine.js";
+import { tirarTimeout } from "./timeout.js";
 import * as engine from "./automod-engine.js";
 import * as db  from "../core/db.js";
 import { limparId } from "../core/ids.js";
@@ -6,6 +7,8 @@ import * as log from "../core/log.js";
 import { analisarConteudo } from "./scorecard.js";
 import { tr, lingua } from "../core/i18n.js";
 import { hostDe } from "../core/config-store.js";
+import { banir } from "../core/banir.js";
+import { descreverErro as descreverErroBan } from "../core/erros.js";
 
 // &warn lista [@usuário]  (chega aqui por warn.js)
 export async function cmdWarnings(message, args, ctx) {
@@ -651,14 +654,14 @@ export async function cmdScam(message, args, ctx) {
       { title: "❌ Uso", description: `\`${PREFIXO}automod sentinela ban <userId>\``, colour: COR.erro },
       { title: "❌ Usage", description: `\`${PREFIXO}automod sentinela ban <userId>\``, colour: COR.erro }));
     try {
-      await server.banUser(uid, { reason: "[AutoMod] Confirmado por moderador" });
+      await banir(server, uid, { reason: "[AutoMod] Confirmado por moderador" });
       return sendEmbed(message.channel, tr(ctx,
         { title: "🔨 Banido", description: `<@${uid}> foi banido (confirmado).`, colour: COR.erro },
         { title: "🔨 Banned", description: `<@${uid}> was banned (confirmed).`, colour: COR.erro }));
     } catch (err) {
       return sendEmbed(message.channel, tr(ctx,
-        { title: "❌ Erro", description: `Não foi possível banir: ${err.message}`, colour: COR.erro },
-        { title: "❌ Error", description: `Couldn't ban: ${err.message}`, colour: COR.erro }));
+        { title: "❌ Erro", description: `Não foi possível banir: ${descreverErroBan(err)}`, colour: COR.erro },
+        { title: "❌ Error", description: `Couldn't ban: ${descreverErroBan(err, "en")}`, colour: COR.erro }));
     }
   }
 
@@ -668,7 +671,9 @@ export async function cmdScam(message, args, ctx) {
       { title: "❌ Uso", description: `\`${PREFIXO}automod sentinela dismiss <userId>\``, colour: COR.erro },
       { title: "❌ Usage", description: `\`${PREFIXO}automod sentinela dismiss <userId>\``, colour: COR.erro }));
     try {
-      if (pol.silenceRoleId) await removerCargoSilence(server, uid, pol.silenceRoleId, ctx);
+      await tirarTimeout(server, uid);
+      // quem foi silenciado ainda com o cargo antigo
+      if (pol.silenceRoleId) await removerCargoSilence(server, uid, pol.silenceRoleId, ctx).catch(() => {});
       db.limparPunicao(ctx.serverId, uid);   // some do banco: não reaplica ao reentrar
       await log.registrar(ctx, "punicoes", { titulo: "✅ Punição removida",
         descricao: `<@${uid}> foi liberado por <@${message.authorId}>.` });
@@ -779,7 +784,7 @@ export async function cmdPunicao(message, args, ctx) {
       description: [
         `**Mode:** ${pol.modo} — ${rotulo(pol.modo)}`,
         `**Warnings until ban (acumular mode):** ${pol.warnsParaBan}`,
-        `**Silence role:** ${pol.silenceRoleId ? `\`${pol.silenceRoleId}\`` : "_(not set)_"}`,
+        "**Silence:** the Stoat's native timeout (the bot needs **TimeoutMembers**)",
         "",
         "**Aggressiveness levels:**",
         "• `avisar` — warn only, doesn't remove or punish",
@@ -794,7 +799,6 @@ export async function cmdPunicao(message, args, ctx) {
         `\`${PREFIXO}automod punicao modo <avisar|apagar|confirmar|acumular|banir>\``,
         `\`${PREFIXO}automod punicao escada [aviso,5m,1h,ban]\` — the steps of \`acumular\` mode`,
         `\`${PREFIXO}automod punicao warns <number>\``,
-        `\`${PREFIXO}automod punicao silencerole <id>\``,
         "",
         `_To try a text out, that's the filter's job: \`${PREFIXO}automod sentinela test <text>\`. This command only decides what **happens** afterwards._`,
       ].join("\n"),
@@ -804,7 +808,7 @@ export async function cmdPunicao(message, args, ctx) {
       description: [
         `**Modo:** ${pol.modo} — ${rotulo(pol.modo)}`,
         `**Avisos p/ ban (modo acumular):** ${pol.warnsParaBan}`,
-        `**Cargo de silêncio:** ${pol.silenceRoleId ? `\`${pol.silenceRoleId}\`` : "_(não definido)_"}`,
+        "**Silêncio:** timeout nativo do Stoat (o bot precisa de **TimeoutMembers**)",
         "",
         "**Níveis de agressividade:**",
         "• `avisar` — só avisa, não remove nem pune",
@@ -819,7 +823,6 @@ export async function cmdPunicao(message, args, ctx) {
         `\`${PREFIXO}automod punicao modo <avisar|apagar|confirmar|acumular|banir>\``,
         `\`${PREFIXO}automod punicao escada [aviso,5m,1h,ban]\` — os degraus do modo \`acumular\``,
         `\`${PREFIXO}automod punicao warns <número>\``,
-        `\`${PREFIXO}automod punicao silencerole <id>\``,
         "",
         `_Para experimentar um texto, quem faz isso é o filtro: \`${PREFIXO}automod sentinela test <texto>\`. Este comando só decide o que **acontece** depois._`,
       ].join("\n"),
@@ -905,15 +908,12 @@ export async function cmdPunicao(message, args, ctx) {
   }
 
   if (sub === "silencerole" || sub === "cargo") {
-    if (!val) return sendEmbed(message.channel, tr(ctx,
-      { title: "❌ Uso", description: `\`${PREFIXO}automod punicao silencerole <id>\``, colour: COR.erro },
-      { title: "❌ Usage", description: `\`${PREFIXO}automod punicao silencerole <id>\``, colour: COR.erro }));
-    pol.silenceRoleId = limparId(val); salvarConfig();
+    // Aposentado: o silêncio é o timeout nativo do Stoat, sem cargo.
     return sendEmbed(message.channel, tr(ctx,
-      { title: "✅ Cargo de silêncio",
-        description: `Cargo para silenciar: \`${pol.silenceRoleId}\` (usado no modo \`confirmar\`).`, colour: COR.sucesso },
-      { title: "✅ Silence role",
-        description: `Role used to silence: \`${pol.silenceRoleId}\` (used in \`confirmar\` mode).`, colour: COR.sucesso }));
+      { title: "🔇 Não há mais cargo de silêncio",
+        description: "O silêncio da punição agora é o **timeout nativo do Stoat** — não precisa de cargo. Basta o cargo do bot ter **TimeoutMembers**.", colour: COR.info },
+      { title: "🔇 There's no silence role anymore",
+        description: "Punishment silences now use the **Stoat's native timeout** — no role needed. The bot's role just needs **TimeoutMembers**.", colour: COR.info }));
   }
 
   // [onde mora, repetir a palavra digitada?] — `&automod punicao test` vira
@@ -927,7 +927,7 @@ export async function cmdPunicao(message, args, ctx) {
     antiguidade: ["automod sentinela", true],
     warn: ["warn", false], avisar: ["warn", false],
     warnings: ["warn lista", false], avisos: ["warn lista", false],
-    clearwarnings: ["warn limpar", false], cargomudo: ["cargomudo", false],
+    clearwarnings: ["warn limpar", false],
   };
   const [destino, repete] = NOUTRO_COMANDO[sub] ?? [];
   if (destino) {
@@ -957,7 +957,7 @@ export async function cmdPunicao(message, args, ctx) {
     description: [
       `\`${sub}\` não é um subcomando do \`${PREFIXO}automod punicao\`.`,
       "",
-      `\`modo\` · \`escada\` · \`warns\` · \`silencerole\` · \`status\``,
+      `\`modo\` · \`escada\` · \`warns\` · \`status\``,
       "",
       `_\`${PREFIXO}automod punicao status\` mostra o que cada um faz._`,
     ].join("\n"), colour: COR.erro,
@@ -966,7 +966,7 @@ export async function cmdPunicao(message, args, ctx) {
     description: [
       `\`${sub}\` isn't a \`${PREFIXO}automod punicao\` subcommand.`,
       "",
-      `\`modo\` · \`escada\` · \`warns\` · \`silencerole\` · \`status\``,
+      `\`modo\` · \`escada\` · \`warns\` · \`status\``,
       "",
       `_\`${PREFIXO}automod punicao status\` shows what each one does._`,
     ].join("\n"), colour: COR.erro,

@@ -1,9 +1,32 @@
+import * as db from "./db.js";
 
 export const EMOJI_ANTERIOR = "◀";
 export const EMOJI_PROXIMA  = "▶";
 export const EMOJI_INICIO   = "⏮";
 
 const TTL_PADRAO_MS = 15 * 60 * 1000;
+// No banco a sessão dura dias: quem abre o relatório de madrugada vira a
+// página de manhã, e um reinício do container não mata os botões.
+const TTL_BANCO_MS = Number(process.env.PAGINAS_DIAS || 7) * 24 * 3600e3;
+
+// O banco é opcional: sem ele (testes, banco fechado) fica o comportamento antigo.
+function gravar(msgId, s) {
+  try {
+    db.salvarSessaoPaginas(msgId, {
+      paginas: s.paginas, idx: s.idx, autorId: s.autorId ?? null,
+      comandoPagina: s.comandoPagina ?? null, lang: s.lang, colour: s.colour ?? null,
+    }, Date.now() + TTL_BANCO_MS);
+  } catch {}
+}
+function recuperar(msgId) {
+  try { return db.carregarSessaoPaginas(msgId); } catch { return null; }
+}
+let ultimaPoda = 0;
+function podarBanco() {
+  if (Date.now() - ultimaPoda < 3600e3) return;
+  ultimaPoda = Date.now();
+  try { db.podarSessoesPaginas(); } catch {}
+}
 
 // messageId → sessão ativa
 const sessoes = new Map();
@@ -50,6 +73,13 @@ export async function enviarPaginado(ctx, canal, {
   const lang = ctx?.config?.language === "en" ? "en" : "pt";
   const idx = Math.min(Math.max(0, paginaInicial | 0), paginas.length - 1);
   const sessao = { paginas, idx, autorId, comandoPagina, lang, colour, expira: agora() + ttlMs, ctx };
+  // O que vai para o banco já sai traduzido (o ctx não sobrevive a um reinício).
+  const exibir = ctx?.exibir ?? ((t) => t);
+  const paraBanco = () => ({
+    ...sessao,
+    paginas: paginas.map((p) => ({ ...p, title: exibir(p.title), description: exibir(p.description) })),
+    comandoPagina: comandoPagina ? exibir(comandoPagina) : null,
+  });
 
   const msg = await ctx.sendEmbed(canal, montar(sessao, idx));
   const msgId = msg?.id ?? msg?._id;
@@ -57,6 +87,8 @@ export async function enviarPaginado(ctx, canal, {
 
   sessao.msg = msg;
   sessoes.set(msgId, sessao);
+  gravar(msgId, paraBanco());
+  podarBanco();
 
   for (const e of [EMOJI_ANTERIOR, EMOJI_PROXIMA]) {
     try { await msg.react?.(encodeURIComponent(e)); }
@@ -65,13 +97,21 @@ export async function enviarPaginado(ctx, canal, {
   return msg;
 }
 
-export async function aoReagir(msgId, userId, emoji) {
-  if (!msgId || !sessoes.has(msgId)) return false;
-  varrer();
-  const s = sessoes.get(msgId);
-  if (!s) return false;
+// `msgObj`: a mensagem que o evento de reação traz — é com ela que uma sessão
+// recuperada do banco (sem o objeto original) consegue editar.
+export async function aoReagir(msgId, userId, emoji, msgObj = null) {
+  if (!msgId) return false;
   const e = limparEmoji(emoji);
   if (e !== EMOJI_ANTERIOR && e !== EMOJI_PROXIMA && e !== EMOJI_INICIO) return false;
+  varrer();
+  let s = sessoes.get(msgId);
+  if (!s) {
+    const salva = recuperar(msgId);
+    if (!salva?.paginas?.length) return false;
+    s = { ...salva, expira: agora() + TTL_PADRAO_MS, ctx: null, msg: (typeof msgObj?.edit === "function") ? msgObj : null, doBanco: true };
+    sessoes.set(msgId, s);
+  }
+  if (!s.msg && typeof msgObj?.edit === "function") s.msg = msgObj;
   if (s.autorId && userId !== s.autorId) return true;   // reação de outra pessoa: ignora, mas era nossa
 
   const total = s.paginas.length;
@@ -80,12 +120,16 @@ export async function aoReagir(msgId, userId, emoji) {
   s.expira = agora() + TTL_PADRAO_MS;   // quem está navegando ganha mais tempo
 
   const embed = montar(s, s.idx);
+  if (!s.msg) { console.warn(`[PAGINAS] sessão de ${msgId} sem a mensagem para editar`); return true; }
   try {
     const exibir = s.ctx?.exibir ?? ((t) => t);
     await s.msg.edit({ embeds: [{ ...embed, title: exibir(embed.title), description: exibir(embed.description) }] });
   } catch (err) {
     console.warn("[PAGINAS] falha ao editar:", err?.message ?? err);
   }
+  // a página atual também fica no banco (a próxima reação continua dela)
+  if (s.doBanco) gravar(msgId, s);
+  else { const salva = recuperar(msgId); if (salva) gravar(msgId, { ...salva, idx: s.idx }); }
   return true;
 }
 

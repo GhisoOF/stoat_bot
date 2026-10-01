@@ -510,27 +510,73 @@ export function pistaDoLink(url) {
   } catch { return ""; }
 }
 
-function materialNumerado(itens) {
+function materialNumerado(itens, numeros = null) {
   return itens.map((it, i) => {
+    const n = numeros ? numeros[i] : i + 1;
     const texto = textoDoItem(it.resumo, it.titulo);
     const pista = pistaDoLink(it.link);
-    return `${i + 1}. ${it.titulo}${texto ? ` — ${texto.slice(0, 250)}` : ""}${pista ? ` (endereço: ${pista})` : ""}`;
+    return `${n}. ${it.titulo}${texto ? ` — ${texto.slice(0, 250)}` : ""}${pista ? ` (endereço: ${pista})` : ""}`;
   }).join("\n");
 }
 
-// Resposta do modelo: "N | frase". Cada item vira UMA linha; o que faltar ou
-// trouxer número que não está naquele item volta pelo título original.
-export function montarResumoNoticias(resposta, itens) {
+// Resposta do modelo: "N | frase" — tolerante ao que o modelo costuma variar
+// ("**1** | …", "[1] …", "1) …", "Notícia 1: …").
+export function lerLinhasNumeradas(resposta) {
   const porN = new Map();
-  for (const linha of String(resposta ?? "").split("\n")) {
-    const m = linha.match(/^\s*[-*•]?\s*(\d+)\s*[|.)\-–:]\s*(.+?)\s*$/);
+  for (const bruta of String(resposta ?? "").split("\n")) {
+    const linha = bruta.replace(/\*\*/g, "").replace(/^\s*[-*•]\s*/, "");
+    const m = linha.match(/^\s*(?:not[ií]cia|item|story)?\s*\[?(\d+)\]?\s*[|.)\-–—:]+\s*\|?\s*(.+?)\s*$/i);
     if (m && !porN.has(Number(m[1]))) porN.set(Number(m[1]), m[2]);
   }
+  return porN;
+}
+
+// Cada item vira UMA linha; o que faltar ou trouxer número que não está
+// naquele item volta pelo título original (marcado com doModelo: false).
+export function linhasDoResumo(resposta, itens) {
+  const porN = lerLinhasNumeradas(resposta);
   return itens.map((it, i) => {
     let frase = porN.get(i + 1) ?? "";
-    if (frase) frase = tirarNumerosInventados(frase, [{ ...it, resumo: `${it.resumo ?? ""} ${pistaDoLink(it.link)}` }]);
-    return `• ${frase.trim() || it.titulo}`;
-  }).join("\n");
+    if (frase) frase = tirarNumerosInventados(frase, [{ ...it, resumo: `${it.resumo ?? ""} ${pistaDoLink(it.link)}` }]).trim();
+    return frase ? { texto: frase, doModelo: true } : { texto: it.titulo, doModelo: false };
+  });
+}
+export function montarResumoNoticias(resposta, itens) {
+  return linhasDoResumo(resposta, itens).map((l) => `• ${l.texto}`).join("\n");
+}
+
+// ─── Idioma ─────────────────────────────────────────────────────────────────
+// Quando o modelo falhava num item, o título voltava CRU — "Extraction is Still
+// a Major Part of Marathon" e "Miracle on FlyDubai" no resumo em português de
+// 01/10. O pareceIngles do chat exige 4 palavras inglesas (feito para
+// respostas longas); um título curto precisa de um teste próprio.
+export { pareceOutroIdioma } from "../core/idioma.js";
+import { pareceOutroIdioma } from "../core/idioma.js";
+
+// Traduz as linhas "• …" de um bloco que não estão em português. O sufixo
+// "(CVE-…)" fica de fora da tradução e volta igual. Sem tradutor, ou se a
+// tradução falhar, o bloco sai como estava.
+export async function portuguesNoBloco(texto, traduzir) {
+  if (typeof traduzir !== "function") return texto;
+  const linhas = String(texto).split("\n");
+  const alvos = [];
+  linhas.forEach((l, i) => {
+    const m = l.match(/^(\s*•\s*)(.+?)(\s*\(CVE-\d{4}-\d+\))?$/i);
+    if (m && pareceOutroIdioma(m[2])) alvos.push({ i, prefixo: m[1], corpo: m[2], sufixo: m[3] ?? "" });
+  });
+  if (!alvos.length) return texto;
+  let porN = new Map();
+  try {
+    const r = await traduzir(alvos.map((a, k) => `${k + 1} | ${a.corpo}`).join("\n"), alvos.length);
+    porN = lerLinhasNumeradas(r);
+  } catch (e) { console.error("[RSS] tradução falhou:", e?.message ?? e); }
+  for (const [k, a] of alvos.entries()) {
+    const tr = (porN.get(k + 1) ?? "").trim();
+    if (tr && !pareceOutroIdioma(tr)) linhas[a.i] = `${a.prefixo}${tr}${a.sufixo}`;
+  }
+  const restam = alvos.filter((a) => pareceOutroIdioma(linhas[a.i])).length;
+  if (restam) console.warn(`[RSS] ${restam} linha(s) seguem em outro idioma depois da tradução`);
+  return linhas.join("\n");
 }
 
 // Resposta do modelo: "CVE-ID | produto | falha". Toda CVE da entrada aparece
@@ -588,7 +634,26 @@ export async function publicarRelatorio(canal, novos, { lang = "pt", agora = "",
     let resposta = "";
     try { resposta = await relatorioIA.linhas(materialNumerado(itens), { modo: cve ? "cve" : "noticias", lang, quantidade: itens.length }); }
     catch (e) { console.error(`[RSS] relatório (${cat}) sem o modelo:`, e.message); }
-    const texto = cve ? montarRelatorioCVE(resposta, itens) : montarResumoNoticias(resposta, itens);
+    let texto;
+    if (cve) texto = montarRelatorioCVE(resposta, itens);
+    else {
+      // Itens sem linha do modelo: uma segunda chance só para eles, com os
+      // números originais, antes de cair no título cru.
+      let linhas = linhasDoResumo(resposta, itens);
+      const faltam = linhas.map((l, i) => (l.doModelo ? -1 : i)).filter((i) => i >= 0);
+      if (faltam.length && resposta) {
+        try {
+          const r2 = await relatorioIA.linhas(materialNumerado(faltam.map((i) => itens[i]), faltam.map((i) => i + 1)),
+            { modo: "noticias", lang, quantidade: faltam.length });
+          const novas = linhasDoResumo(r2, itens);
+          for (const i of faltam) if (novas[i].doModelo) linhas[i] = novas[i];
+        } catch (e) { console.error(`[RSS] 2ª tentativa (${cat}) falhou:`, e?.message ?? e); }
+      }
+      const semModelo = linhas.filter((l) => !l.doModelo).length;
+      if (semModelo) console.warn(`[RSS] resumo (${cat}): ${semModelo} de ${itens.length} item(ns) sem frase do modelo — vão pelo título`);
+      texto = linhas.map((l) => `• ${l.texto}`).join("\n");
+    }
+    if (!en) texto = await portuguesNoBloco(texto, relatorioIA.traduzir);
     const titulo = cve
       ? (en ? `📋 Vulnerability report` : `📋 Relatório de vulnerabilidades`)
       : (en ? `📰 Summary · ${cat}` : `📰 Resumo · ${cat}`);

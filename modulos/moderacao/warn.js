@@ -4,6 +4,8 @@ import * as log from "../core/log.js";
 import { tr, lingua } from "../core/i18n.js";
 import { limparId, ULID, resolverUsuario } from "../core/ids.js";
 import * as automodCmd from "./automod-comandos.js";
+import { banir } from "../core/banir.js";
+import { descreverErro } from "../core/erros.js";
 
 export async function cmdWarn(message, args, ctx) {
   // ── A família dos avisos mora aqui dentro ──
@@ -100,7 +102,7 @@ export async function cmdWarn(message, args, ctx) {
   let banido = false;
   if (pol.modo === "acumular" && total >= limite) {
     try {
-      await server.banUser(alvoId, { reason: lang === "en"
+      await banir(server, alvoId, { reason: lang === "en"
         ? `Reached the limit of ${limite} warnings — last one: ${motivo}`
         : `Limite de ${limite} avisos atingido — último: ${motivo}` });
       banido = true;
@@ -110,10 +112,10 @@ export async function cmdWarn(message, args, ctx) {
         : `🔨 **Limite atingido — usuário banido.**`);
     } catch (e) {
       if (lang === "en") {
-        linhas.push("", `⚠️ Limit reached, but **I couldn't ban**: ${e?.message ?? e}`);
+        linhas.push("", `⚠️ Limit reached, but **I couldn't ban**: ${descreverErro(e, "en")}`);
         linhas.push("_The bot needs **BanMembers** and its role must sit above the person's._");
       } else {
-        linhas.push("", `⚠️ Limite atingido, mas **não consegui banir**: ${e?.message ?? e}`);
+        linhas.push("", `⚠️ Limite atingido, mas **não consegui banir**: ${descreverErro(e)}`);
         linhas.push("_O bot precisa de **BanMembers** e estar acima do cargo da pessoa._");
       }
     }

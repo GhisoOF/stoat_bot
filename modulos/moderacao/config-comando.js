@@ -83,7 +83,7 @@ export async function cmdConfig(message, args, ctx) {
     pol.modo === "acumular"
       ? `**Ladder:** ${escadaDePunicao(pol).map((d) => rotuloDegrau(d, "en")).join(" → ")}`
       : null,
-    `**Silence role:** ${pol.silenceRoleId ? `\`${pol.silenceRoleId}\`` : "_(not set)_"}`,
+    "**Silence:** native timeout (needs **TimeoutMembers**)",
     `**Sentinel — stricter with newcomers:** ${am.antiScam.porAntiguidade !== false ? "🟢 on" : "🔴 off"}`,
     `**Sentinel — staff alerts:** ${am.antiScam.alertarAdmin !== false ? "🟢 on" : "🔴 off"}`,
     `**Alert channel:** ${am.antiScam.alertChannelId ? `<#${am.antiScam.alertChannelId}>` : "_(the message's own channel)_"}`,
@@ -92,7 +92,7 @@ export async function cmdConfig(message, args, ctx) {
     pol.modo === "acumular"
       ? `**Escada:** ${escadaDePunicao(pol).map((d) => rotuloDegrau(d, "pt")).join(" → ")}`
       : null,
-    `**Cargo de silêncio:** ${pol.silenceRoleId ? `\`${pol.silenceRoleId}\`` : "_(não definido)_"}`,
+    "**Silêncio:** timeout nativo (precisa de **TimeoutMembers**)",
     `**Sentinela — mais rígido com novatos:** ${am.antiScam.porAntiguidade !== false ? "🟢 ligado" : "🔴 desligado"}`,
     `**Sentinela — alerta à staff:** ${am.antiScam.alertarAdmin !== false ? "🟢 ligado" : "🔴 desligado"}`,
     `**Canal de avisos:** ${am.antiScam.alertChannelId ? `<#${am.antiScam.alertChannelId}>` : "_(canal da própria mensagem)_"}`,

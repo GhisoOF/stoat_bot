@@ -2,10 +2,12 @@
 import { analisarConteudo } from "./scorecard.js";
 import * as db  from "../core/db.js";
 import { descreverErro, tipoDoErro } from "../core/erros.js";
+import { banir } from "../core/banir.js";
 import * as log from "../core/log.js";
 import * as banGlobal from "./ban-global.js";
 import * as confianca from "./confianca.js";
-import { curarIds, cargoSilencioValido } from "./pertence.js";
+import { curarIds } from "./pertence.js";
+import { aplicarTimeout, CONFIRMAR_MS } from "./timeout.js";
 import * as imagemSentinela from "./imagem.js";
 import { analisarCaracteres, analisarRepeticao, analisarDuplicata, digital, textoHumano, razaoDeCaixaAlta } from "./caracteres.js";
 import { lingua } from "../core/i18n.js";
@@ -248,13 +250,13 @@ async function aplicarPunicao(ctx, opts) {
   if (pol.modo === "banir") {
     let acao = lang === "en" ? "message removed" : "mensagem removida";
     try {
-      await server.banUser(userId, { reason: `[AutoMod] ${motivo}` });
+      await banir(server, userId, { reason: `[AutoMod] ${motivo}` });
       acao = lang === "en" ? "🔨 user BANNED" : "🔨 usuário BANIDO";
       await banGlobal.registrar(ctx, userId, motivo, "automod",
         { nome: message?.author?.username ?? null, membro: message?.member ?? message?.author ?? null });
     }
-    catch (e) { console.error("[PUNIÇÃO][BAN]", e.message);
-      acao = lang === "en" ? `failed to ban (${e.message})` : `falha ao banir (${e.message})`; }
+    catch (e) { console.error("[PUNIÇÃO][BAN]", descreverErro(e));
+      acao = lang === "en" ? `failed to ban (${descreverErro(e, "en")})` : `falha ao banir (${descreverErro(e)})`; }
     await sendEmbed(channel, { title: lang === "en" ? "🔨 Instant ban" : "🔨 Banimento imediato",
       description: [`<@${userId}> — ${motivo}${linhaNota}`,
         `**${lang === "en" ? "Action" : "Ação"}:** ${acao}`, ...blocoGrave].join("\n"),
@@ -267,43 +269,25 @@ async function aplicarPunicao(ctx, opts) {
   // ── confirmar: silencia (se houver cargo) e pede confirmação ──
   if (pol.modo === "confirmar") {
     let acao = lang === "en" ? "message removed" : "mensagem removida";
-    // Só usa um cargo que é DESTE servidor. Criar na hora da punição foi
-    // descartado: sem conferir a posição, ele pode perder para o autorole.
-    pol.silenceRoleId = cargoSilencioValido(server, ctx);
-    if (pol.silenceRoleId) {
-      try {
-        await aplicarCargoSilence(server, userId, pol.silenceRoleId, ctx);
-        acao = lang === "en" ? "user silenced" : "usuário silenciado";
-        try {
-          const perms = await import("./permissoes.js");
-          const membro = await server.fetchMember(userId).catch(() => null);
-          const c = membro ? perms.conflitosDeSilencio(server, membro, pol.silenceRoleId) : null;
-          if (c?.conflitantes?.length) {
-            acao = lang === "en"
-              ? `silenced, but **the silence likely won't work** (role(s) above: ${c.conflitantes.map((x) => x.nome).join(", ")})`
-              : `silenciado, mas **o silêncio não deve funcionar** (cargo(s) acima: ${c.conflitantes.map((x) => x.nome).join(", ")})`;
-            console.log(`[PUNIÇÃO][SILENCE] ⚠️ ${userId} tem cargo acima do silêncio: ${c.conflitantes.map((x) => x.nome).join(", ")}`);
-          }
-        } catch {}
-        // Marca no banco: se ele sair e voltar, o cargo é REAPLICADO.
-        db.definirSilenciado(ctx.serverId ?? server?.id, userId, true, motivo);
-      }
-      catch (e) {
-        const detalhe = descreverErro(e, lang);
-        console.error("[PUNIÇÃO][SILENCE]", detalhe, e);
-        acao = lang === "en" ? `failed to silence — ${detalhe}` : `falha ao silenciar — ${detalhe}`;
-        // Sem silêncio, a pessoa seguia postando (raid de 27/09: suásticas por
-        // mais 1 min, e as mensagens só sumiram quando a staff acordou).
-        confianca.quarentenar(ctx.serverId ?? server?.id, userId);
-        acao += lang === "en"
-          ? " — until then, **everything they post in the next 30 min is deleted**"
-          : " — enquanto isso, **tudo o que a pessoa mandar nos próximos 30 min é apagado**";
-      }
-    } else {
-      // Sem cargo de silêncio deste servidor: quarentena (mensagens apagadas
-      // por 30 min); a staff é avisada para configurar com &cargomudo.
+    // Silêncio = timeout nativo do Stoat (não mais o cargo de silêncio), até a
+    // staff decidir — com teto de AUTOMOD_CONFIRMAR_HORAS (24 h por padrão).
+    try {
+      const ms = CONFIRMAR_MS();
+      await aplicarTimeout(server, userId, ms);
+      const horas = Math.round(ms / 3600e3);
+      acao = lang === "en" ? `user silenced (timeout) until the staff decides — at most ${horas} h` : `usuário silenciado (timeout) até a staff decidir — no máximo ${horas} h`;
+      // Marca no banco: se sair e voltar, o timeout é REAPLICADO pelo tempo que falta.
+      db.silenciarAte(ctx.serverId ?? server?.id, userId, Date.now() + ms, motivo);
+    } catch (e) {
+      const detalhe = descreverErro(e, lang);
+      console.error("[PUNIÇÃO][SILENCE]", detalhe);
+      acao = lang === "en" ? `failed to silence — ${detalhe}` : `falha ao silenciar — ${detalhe}`;
+      // Sem silêncio, a pessoa seguia postando (raid de 27/09: suásticas por
+      // mais 1 min, e as mensagens só sumiram quando a staff acordou).
       confianca.quarentenar(ctx.serverId ?? server?.id, userId);
-      acao = lang === "en" ? "no silence role set up — quarantined for 30 min" : "sem cargo de silêncio configurado — em quarentena por 30 min";
+      acao += lang === "en"
+        ? " — until then, **everything they post in the next 30 min is deleted**"
+        : " — enquanto isso, **tudo o que a pessoa mandar nos próximos 30 min é apagado**";
     }
     await sendEmbed(channel, {
       title: lang === "en" ? "⚠️ Violation — confirmation needed" : "⚠️ Violação — confirmação necessária",
@@ -346,27 +330,20 @@ async function aplicarPunicao(ctx, opts) {
   if (degrau.tipo === "mute") {
     const ate = Date.now() + degrau.ms;
     let acao = lang === "en" ? `silenced for ${degrau.rotulo}` : `silenciado por ${degrau.rotulo}`;
-    // Só usa um cargo que é DESTE servidor. Criar na hora da punição foi
-    // descartado: sem conferir a posição, ele pode perder para o autorole.
-    pol.silenceRoleId = cargoSilencioValido(server, ctx);
-    if (pol.silenceRoleId) {
-      try {
-        await aplicarCargoSilence(server, userId, pol.silenceRoleId, ctx);
-        db.silenciarAte(sid, userId, ate, motivo);
-      } catch (e) {
-        const detalhe = descreverErro(e, lang);
-        console.error("[PUNIÇÃO][MUTE]", detalhe, e);
-        acao = lang === "en" ? `failed to silence — ${detalhe}` : `falha ao silenciar — ${detalhe}`;
-        // Sem silêncio, a pessoa seguia postando (raid de 27/09: suásticas por
-        // mais 1 min, e as mensagens só sumiram quando a staff acordou).
-        confianca.quarentenar(ctx.serverId ?? server?.id, userId);
-        acao += lang === "en"
-          ? " — until then, **everything they post in the next 30 min is deleted**"
-          : " — enquanto isso, **tudo o que a pessoa mandar nos próximos 30 min é apagado**";
-      }
-    } else {
+    // Timeout nativo: o próprio Stoat tira na hora certa (o vigia só limpa o registro).
+    try {
+      await aplicarTimeout(server, userId, degrau.ms);
+      db.silenciarAte(sid, userId, ate, motivo);
+    } catch (e) {
+      const detalhe = descreverErro(e, lang);
+      console.error("[PUNIÇÃO][MUTE]", detalhe);
+      acao = lang === "en" ? `failed to silence — ${detalhe}` : `falha ao silenciar — ${detalhe}`;
+      // Sem silêncio, a pessoa seguia postando (raid de 27/09: suásticas por
+      // mais 1 min, e as mensagens só sumiram quando a staff acordou).
       confianca.quarentenar(ctx.serverId ?? server?.id, userId);
-      acao = lang === "en" ? "no silence role set up — quarantined for 30 min" : "sem cargo de silêncio configurado — em quarentena por 30 min";
+      acao += lang === "en"
+        ? " — until then, **everything they post in the next 30 min is deleted**"
+        : " — enquanto isso, **tudo o que a pessoa mandar nos próximos 30 min é apagado**";
     }
     await sendEmbed(channel, { title: lang === "en" ? "🔇 Temporary silence" : "🔇 Silêncio temporário",
       description: [
@@ -386,12 +363,12 @@ async function aplicarPunicao(ctx, opts) {
   // ── último degrau: ban ──
   let acao = lang === "en" ? "banned" : "banido";
   try {
-    await server.banUser(userId, { reason: `[AutoMod] ${motivo} (${count} avisos)` });
+    await banir(server, userId, { reason: `[AutoMod] ${motivo} (${count} avisos)` });
     await banGlobal.registrar(ctx, userId, `${motivo} (${count} avisos)`, "automod",
       { nome: message?.author?.username ?? null, membro: message?.member ?? message?.author ?? null });
   } catch (e) {
-    console.error("[PUNIÇÃO][BAN]", e.message);
-    acao = lang === "en" ? `failed to ban (${e.message})` : `falha ao banir (${e.message})`;
+    console.error("[PUNIÇÃO][BAN]", descreverErro(e));
+    acao = lang === "en" ? `failed to ban (${descreverErro(e, "en")})` : `falha ao banir (${descreverErro(e)})`;
   }
   db.limparPunicao(sid, userId);
   await sendEmbed(channel, { title: lang === "en" ? "🔨 User banned" : "🔨 Usuário banido",
@@ -515,19 +492,17 @@ export async function liberarSilenciosVencidos(ctx) {
       const cfg = ctx.configDoServidor?.(serverId)
         ?? ctx.estado?.configDoServidor?.(serverId)
         ?? ctx.config;
+      // O timeout vence sozinho no Stoat; aqui só se limpa o registro. Quem foi
+      // silenciado ainda com o CARGO antigo (antes do timeout) perde o cargo.
       const roleId = cfg?.automod?.punicao?.silenceRoleId;
-      let server = null;
-      try { server = await ctx.client?.servers?.fetch?.(serverId); }
-      catch (e) { console.error(`[PUNIÇÃO][vigia] ${serverId}: não consegui buscar o servidor (${descreverErro(e)})`); }
-
-      if (!roleId) {
-        console.warn(`[PUNIÇÃO][vigia] ${serverId}: sem silenceRoleId na config — nada a remover`);
-      } else if (!server) {
-        console.error(`[PUNIÇÃO][vigia] ${serverId}: servidor inacessível — tentarei de novo no próximo ciclo`);
-        continue;
-      } else {
-        const r = await removerCargoSilence(server, userId, roleId, ctx);
-        if (r?.saiu) console.log(`[PUNIÇÃO][vigia] ${userId} já saiu de ${serverId} — silêncio encerrado sem cargo a remover`);
+      if (roleId) {
+        let server = null;
+        try { server = await ctx.client?.servers?.fetch?.(serverId); }
+        catch (e) { console.error(`[PUNIÇÃO][vigia] ${serverId}: não consegui buscar o servidor (${descreverErro(e)})`); }
+        if (server) {
+          try { await removerCargoSilence(server, userId, roleId, ctx); }
+          catch (e) { console.warn(`[PUNIÇÃO][vigia] cargo antigo de ${userId} em ${serverId}: ${descreverErro(e)}`); }
+        }
       }
 
       db.definirSilenciado(serverId, userId, false, motivo);
@@ -876,23 +851,6 @@ export async function runAutomod(message, ctx) {
 
 export { descreverErro, tipoDoErro, normalizarErro } from "../core/erros.js";
 
-async function aplicarCargoSilence(server, userId, roleId, ctx) {
-  if (!roleId) {
-    const lang = lingua(ctx);
-    throw new Error(lang === "en"
-      ? `no silence role configured — set one with \`${ctx?.PREFIXO ?? "&"}cargomudo\``
-      : `nenhum cargo de silêncio configurado — defina com \`${ctx?.PREFIXO ?? "&"}cargomudo\``);
-  }
-  const member = await server.fetchMember(userId);
-  if (!member) {
-    const lang = lingua(ctx);
-    throw new Error(lang === "en" ? "member not found on the server" : "membro não encontrado no servidor");
-  }
-  const atuais = (member.roles ?? []).map((r) => r?.id ?? r).filter(Boolean);
-  if (!atuais.includes(roleId)) atuais.push(roleId);
-  await member.edit({ roles: atuais });
-}
-
 export async function reaplicarPunicao(member, ctx) {
   const serverId = member?.id?.server;
   const userId   = member?.id?.user;
@@ -900,17 +858,15 @@ export async function reaplicarPunicao(member, ctx) {
 
   if (!db.estaSilenciado(serverId, userId)) return false;
 
-  const roleId = ctx.config?.automod?.punicao?.silenceRoleId;
-  if (!roleId) {
-    dbg(ctx, `  ↩ ${userId} estava silenciado, mas não há cargo de silêncio configurado`);
-    return false;
-  }
+  // Sair e voltar zera o timeout (é um campo do membro): reaplica pelo que falta.
+  const reg = db.lerPunicao(serverId, userId);
+  const falta = Number(reg?.silencioAte ?? 0) > 0 ? Number(reg.silencioAte) - Date.now() : CONFIRMAR_MS();
+  if (falta <= 0) return false;
 
   try {
-    const atuais = (member.roles ?? []).map((r) => r?.id ?? r).filter(Boolean);
-    if (!atuais.includes(roleId)) atuais.push(roleId);
-    await member.edit({ roles: atuais });
-    console.log(`[PUNIÇÃO] ↩ Silêncio REAPLICADO a ${userId} ao reentrar em ${serverId}`);
+    const server = member.server ?? await ctx.client?.servers?.fetch?.(serverId);
+    await aplicarTimeout(server, userId, falta);
+    console.log(`[PUNIÇÃO] ↩ Silêncio (timeout) REAPLICADO a ${userId} ao reentrar em ${serverId}`);
 
     const motivo = db.lerPunicao(serverId, userId)?.motivo ?? "punição ativa";
     await log.registrar(ctx, "punicoes", {
@@ -919,7 +875,7 @@ export async function reaplicarPunicao(member, ctx) {
     });
     return true;
   } catch (err) {
-    console.error("[PUNIÇÃO][REAPLICAR]", err?.message);
+    console.error("[PUNIÇÃO][REAPLICAR]", descreverErro(err));
     return false;
   }
 }
@@ -989,3 +945,5 @@ export async function simularDeteccao(texto, ctx, canalAtual) {
   });
   return r;
 }
+// Só para testes: a punição inteira, sem passar pelo detector.
+export const _aplicarPunicao = aplicarPunicao;

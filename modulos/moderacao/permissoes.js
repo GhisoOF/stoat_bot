@@ -286,37 +286,3 @@ export function inspecionarCanal(canal) {
   return { chaves: chaves.slice(0, 25), relevantes: alvo };
 }
 
-export function conflitosDeSilencio(server, member, silenceRoleId) {
-  if (!silenceRoleId) return { erro: "não há cargo de silêncio configurado" };
-  // O DONO do servidor ignora qualquer permissão — silenciá-lo nunca funciona.
-  const uid = member?.id?.user ?? member?.user?.id ?? member?.id;
-  const dono = server?.owner ?? server?.ownerId ?? server?.owner_id;
-  const donoId = typeof dono === "object" ? (dono?.id ?? dono?._id) : dono;
-  if (donoId && uid && String(donoId) === String(uid)) {
-    return { dono: true, conflitantes: [], aviso: "essa pessoa é a **dona do servidor** — nenhuma permissão a limita, o silêncio nunca vai funcionar com ela" };
-  }
-  const roles = server?.roles;
-  if (!roles) return { erro: "não consegui ler os cargos do servidor" };
-
-  const pegar = (id) => (typeof roles.get === "function" ? roles.get(id) : roles[id]);
-  const silence = pegar(silenceRoleId);
-  if (!silence) return { erro: "o cargo de silêncio configurado não existe mais" };
-
-  // rank menor = mais alto na hierarquia (padrão do Revolt/Stoat)
-  const rankSilence = silence.rank ?? 0;
-  const doMembro = (member?.roles ?? []).map((r) => r?.id ?? r).filter(Boolean);
-
-  const conflitantes = [];
-  for (const id of doMembro) {
-    if (id === silenceRoleId) continue;
-    const role = pegar(id);
-    if (!role) continue;
-    const rank = role.rank ?? 0;
-    const acima = rank < rankSilence;
-    const permite = temBit(role.permissions?.a ?? role.permissions?.allow ?? role.permissions, BITS.SendMessage);
-    if (acima && permite) {
-      conflitantes.push({ id, nome: role.name ?? id, rank });
-    }
-  }
-  return { rankSilence, conflitantes, temSilence: doMembro.includes(silenceRoleId) };
-}

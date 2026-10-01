@@ -26,15 +26,18 @@ export function descreverErro(e, lang = "pt") {
   const tipo = e?.type ?? e?.error ?? e?.code;
   const TRADUCAO = {
     MissingPermission: lang === "en"
-      ? "the bot lacks the **AssignRoles** permission (or the silence role is above the bot's)"
-      : "o bot não tem a permissão **AssignRoles** (ou o cargo de silêncio está acima do cargo dele)",
+      ? "the bot lacks a required permission (AssignRoles, TimeoutMembers…)"
+      : "falta ao bot uma permissão necessária (AssignRoles, TimeoutMembers…)",
     NotElevated: lang === "en"
       ? "the bot's role is below the target's — move the bot's role up"
       : "o cargo do bot está abaixo do cargo da pessoa — suba o cargo do bot",
     NotFound: lang === "en" ? "member or role not found" : "membro ou cargo não encontrado",
-    InvalidRole: lang === "en" ? "invalid silence role" : "cargo de silêncio inválido",
+    InvalidRole: lang === "en" ? "invalid or deleted role" : "cargo inválido ou apagado",
     InvalidOperation: lang === "en" ? "the Stoat refused the operation" : "o Stoat recusou a operação",
     MissingUserPermission: lang === "en" ? "the bot lacks a required user permission" : "falta ao bot uma permissão de usuário",
+    DatabaseError: lang === "en" ? "the Stoat's database refused the operation (DatabaseError)" : "o banco de dados do Stoat recusou a operação (DatabaseError)",
+    IsElevated: lang === "en" ? "the person has the TimeoutMembers permission — the Stoat doesn't let anyone time them out" : "a pessoa tem a permissão TimeoutMembers — o Stoat não deixa ninguém silenciá-la",
+    CannotTimeoutYourself: lang === "en" ? "the bot can't time itself out" : "o bot não pode silenciar a si mesmo",
   };
   if (tipo && TRADUCAO[tipo]) return TRADUCAO[tipo];
   if (typeof e?.message === "string" && e.message) return e.message;

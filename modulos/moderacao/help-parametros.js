@@ -37,7 +37,6 @@ function parametrosPT(P) {
       { nome: "modo", valor: "avisar | apagar | confirmar | acumular | banir", desc: "`avisar` só avisa · `apagar` remove a mensagem · `confirmar` silencia e chama um moderador · `acumular` sobe uma escada a cada reincidência · `banir` bane na hora" },
       { nome: "escada", valor: "[aviso,10m,2h,ban]", desc: "os degraus do modo `acumular`. Sem valor, mostra a atual. Padrão: aviso → mute 5 min → mute 1 h → ban" },
       { nome: "warns", valor: "<n>", desc: "quantos avisos até o ban (modo `acumular` antigo)" },
-      { nome: "silencerole", valor: "<cargo>", desc: "qual cargo é o de silêncio (ou crie um com `&cargomudo`)" },
       { nome: "status", desc: "a configuração atual" },
       { nome: "Não existe aqui", desc: "`test`/`simulate` são do `&automod sentinela` (é ele que lê o texto); avisos são com `&warn`, `&warn lista` e `&warn limpar`. O `&automod punicao` só decide **o que acontece** depois" },
     ],
@@ -227,9 +226,9 @@ function parametrosPT(P) {
       { nome: "dicionario", valor: "[lista|teste <frase>|add <abrev> <texto>|remove <abrev>|padrao on|off]", desc: "como abreviações são lidas em voz alta (`vc` → `você`). Ver e testar é livre; mudar é *(ManageMessages)*" },
       { nome: "estado", desc: "diagnóstico da cadeia inteira: serviço, Piper, LiveKit, peneira e em quais calls está" },
     ],
-    cargomudo: [
-      { nome: "[nome]", desc: "cria o cargo de silêncio (padrão \"Silenciado\") e nega \"Enviar mensagens\" nele em todos os canais" },
-      { nome: "canais", desc: "reaplica a negação em todos os canais (depois de criar canais novos)" },
+    silenciar: [
+      { nome: "@pessoa <tempo> [motivo]", desc: "silencia com o timeout nativo do Stoat: `30s`, `10m`, `2h`, `1d`, `1w` ou combinados (`1h30m`); número sozinho = minutos; máximo 28 dias" },
+      { nome: "tirar @pessoa", desc: "devolve a voz antes da hora" },
     ],
 
     tutorial: [
@@ -281,7 +280,6 @@ function parametrosEN(P) {
       { nome: "modo", valor: "avisar | apagar | confirmar | acumular | banir", desc: "`avisar` warns only · `apagar` removes the message · `confirmar` silences and calls a moderator · `acumular` climbs a ladder on repeat · `banir` bans on the spot" },
       { nome: "escada", valor: "[aviso,10m,2h,ban]", desc: "the steps of `acumular` mode. Without a value, shows the current one. Default: warning → 5 min mute → 1 h mute → ban" },
       { nome: "warns", valor: "<n>", desc: "how many warnings until a ban (legacy `acumular`)" },
-      { nome: "silencerole", valor: "<role>", desc: "which role is the silence role (or create one with `&cargomudo`)" },
       { nome: "status", desc: "the current setup" },
       { nome: "Not here", desc: "`test`/`simulate` belong to `&automod sentinela` (it's the one that reads the text); warnings are `&warn`, `&warn lista` and `&warn limpar`. `&automod punicao` only decides **what happens** afterwards" },
     ],
@@ -471,9 +469,9 @@ function parametrosEN(P) {
       { nome: "dicionario", valor: "[lista|teste <phrase>|add <abbrev> <text>|remove <abbrev>|padrao on|off]", desc: "how abbreviations are read aloud (`vc` → `você`). Viewing and testing is open; changing needs *(ManageMessages)*" },
       { nome: "estado", desc: "diagnostics for the whole chain: service, Piper, LiveKit, sieve and which calls it's in" },
     ],
-    cargomudo: [
-      { nome: "[name]", desc: "creates the silence role (default \"Silenciado\") and denies \"Send messages\" for it in every channel" },
-      { nome: "canais", desc: "re-applies the denial in every channel (after creating new channels)" },
+    silenciar: [
+      { nome: "@user <time> [reason]", desc: "times someone out with the Stoat's native timeout: `30s`, `10m`, `2h`, `1d`, `1w` or combined (`1h30m`); a bare number = minutes; up to 28 days" },
+      { nome: "tirar @user", desc: "lifts it early" },
     ],
 
     tutorial: [

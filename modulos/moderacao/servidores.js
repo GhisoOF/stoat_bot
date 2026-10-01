@@ -22,6 +22,12 @@ export async function cmdServidores(message, args, ctx) {
   if (!ehSuperAdmin?.(message.authorId)) {
     return sendEmbed(message.channel, { title: "🚫 Comando restrito", description: "Só o dono do bot pode ver isso.", colour: COR.erro });
   }
+  // Com RELATORIO_SERVIDOR, o painel só abre no servidor do dono: nos outros
+  // servidores da Judy ele não mostra (nem confirma) nada.
+  const fixo = relatorio.servidorDoRelatorio();
+  if (fixo && message.serverId !== fixo) {
+    return sendEmbed(message.channel, { title: "🚫 Aqui não", description: "Este painel só funciona no servidor configurado em `RELATORIO_SERVIDOR`.", colour: COR.erro });
+  }
   if (["relatorio", "relatório", "report"].includes(args[0]?.toLowerCase())) {
     return cmdRelatorio(message, args.slice(1), ctx);
   }
@@ -63,6 +69,11 @@ async function cmdRelatorio(message, args, ctx) {
   if (sub === "canal") {
     const alvo = ["aqui", "here"].includes(args[1]?.toLowerCase()) ? message.channel?.id : limparId(args[1] ?? "");
     if (!alvo) return sendEmbed(message.channel, { title: "❌ Qual canal?", description: "`&servidores relatorio canal #canal` ou `&servidores relatorio canal aqui`", colour: COR.erro });
+    const fixo = relatorio.servidorDoRelatorio();
+    if (fixo) {
+      const canal = client.channels.get?.(alvo) ?? await client.channels.fetch?.(alvo).catch(() => null);
+      if (canal?.serverId !== fixo) return sendEmbed(message.channel, { title: "❌ Canal de outro servidor", description: "O relatório só pode ir para um canal do servidor de `RELATORIO_SERVIDOR`.", colour: COR.erro });
+    }
     cfg.canalId = alvo; cfg.ativo = true; salvar();
     return sendEmbed(message.channel, { title: "✅ Relatório ligado", description: `Toda hora cheia, o resumo vai para <#${alvo}>.`, colour: COR.sucesso });
   }
@@ -87,9 +98,12 @@ async function cmdRelatorio(message, args, ctx) {
       const fora = ids.filter((id) => !nomeDe(id));
       if (acao === "add" && fora.length) avisos.push(`⚠️ A Judy não está em: ${fora.map((x) => `\`${x}\``).join(", ")} — ficam na lista, mas sem mensagens não há assunto.`);
     }
-    const lista = cfg.assuntos?.length
-      ? cfg.assuntos.map((x) => `• ${nomeDe(x) ? `**${nomeDe(x)}** ` : ""}\`${x}\``).join("\n")
-      : "_Nenhum listado: valem os servidores de que um dono do bot é dono._";
+    const fixo = relatorio.servidorDoRelatorio();
+    const lista = fixo
+      ? `• ${nomeDe(fixo) ? `**${nomeDe(fixo)}** ` : ""}\`${fixo}\`\n\n_Fixado por \`RELATORIO_SERVIDOR\`: só este servidor entra nos assuntos (a lista abaixo é ignorada)._`
+      : cfg.assuntos?.length
+        ? cfg.assuntos.map((x) => `• ${nomeDe(x) ? `**${nomeDe(x)}** ` : ""}\`${x}\``).join("\n")
+        : "_Nenhum listado: valem os servidores de que um dono do bot é dono._";
     return sendEmbed(message.channel, { title: "🗣️ Servidores com assuntos",
       description: [lista, ...avisos.map((x) => `\n${x}`)].join("\n"), colour: COR.info });
   }
@@ -97,7 +111,10 @@ async function cmdRelatorio(message, args, ctx) {
     const aviso = await sendEmbed(message.channel, { title: "⏳ Montando o relatório…", description: "Pode levar até alguns minutos (o modelo escreve os destaques).", colour: COR.info });
     const rel = await relatorio.gerar({ client, cfg, esvaziar: false });
     void aviso;
-    return sendEmbed(cfg.canalId ? await client.channels.fetch(cfg.canalId).catch(() => message.channel) : message.channel,
+    let destino = cfg.canalId ? await client.channels.fetch(cfg.canalId).catch(() => message.channel) : message.channel;
+    const fixo = relatorio.servidorDoRelatorio();
+    if (fixo && destino?.serverId !== fixo) destino = message.channel;   // canal antigo de outro servidor
+    return sendEmbed(destino,
       { title: rel.title, description: rel.description, colour: COR.info });
   }
 

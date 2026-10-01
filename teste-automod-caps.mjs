@@ -100,7 +100,7 @@ console.log("\n── &automod punicao aponta o comando certo ──");
 
   respostas.length = 0;
   await cmdPunicao(msg, ["xisbolinha"], ctx);
-  ok(ult().includes("escada") && ult().includes("silencerole"),
+  ok(ult().includes("escada") && ult().includes("warns") && !ult().includes("silencerole"),
     "subcomando de verdade inexistente lista os que existem");
 
   respostas.length = 0;

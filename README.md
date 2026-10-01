@@ -122,7 +122,8 @@ diz exatamente o que clicar.
   só escreve os destaques e os assuntos — e, se ele falhar, o relatório sai só
   com os números. Assuntos só dos servidores de que você é dono (ou os que
   listar em `&servidores relatorio assuntos add <id>`); os demais entram só em
-  números.
+  números. Com `RELATORIO_SERVIDOR=<id>` no `.env`, o painel e o relatório só
+  existem nesse servidor (comando e canal), e só ele entra nos assuntos.
 - **Ban propagado na hora**: um ban em um servidor da Judy vale imediatamente nos
   outros, conforme o modo de cada um (`off` · `avisar` · `banir`), sem esperar a
   sincronização de 6h.
@@ -130,8 +131,15 @@ diz exatamente o que clicar.
   `&staff` passam direto pelo automod. `&automod whitelist add <link>` libera o
   que qualquer um pode postar: um site vai para o anti-link (com subdomínios), um
   convite do Stoat vai para o anti-invite — o bot descobre sozinho qual é qual.
+- **Silêncio = timeout nativo do Stoat**: o mute da escada, o modo `confirmar`
+  (até a staff decidir, no máximo 24 h — `AUTOMOD_CONFIRMAR_HORAS`) e o
+  `&silenciar` usam o timeout da própria plataforma — a pessoa só consegue ver o
+  servidor, e o Stoat a libera na hora. Sem cargo para criar nem posicionar.
+  Precisa de **TimeoutMembers** no cargo do bot; quem tem TimeoutMembers não pode
+  ser silenciado. Se falhar, a pessoa cai na quarentena (tudo apagado por 30 min).
 - **Punições persistentes**: avisos e silêncios ficam no banco por
-  `(servidor, usuário)` — quem **sai e volta** recebe o silêncio de novo.
+  `(servidor, usuário)` — quem **sai e volta** recebe o silêncio de novo, pelo
+  tempo que faltava.
 - **Escada de punição**: cada reincidência sobe um degrau (aviso → 5 min →
   1 h → ban, tempos configuráveis com `&automod punicao escada`). Quem escorregou uma
   vez nunca chega ao ban; quem insiste sobe sozinho.
@@ -140,8 +148,9 @@ diz exatamente o que clicar.
 - **Lista global de banimentos** (`&banglobal`): compartilhada entre os
   servidores da mesma instância, com modos `off`/`avisar`/`banir`, isenção por
   pessoa e `desfazer`.
-- **Manual**: `&kick`, `&ban` (menção **ou** ID), `&limpar`, `&warn`,
-  `&cargomudo` (cria o cargo de silêncio com tudo negado, servidor e canais).
+- **Manual**: `&kick`, `&ban` (menção **ou** ID — banir quem já está banido
+  responde "já estava banido"), `&silenciar @pessoa 10m [motivo]` /
+  `&silenciar tirar @pessoa`, `&limpar`, `&warn`.
 - **Logs** (`&log`): punições, entradas/saídas, mensagens apagadas/editadas,
   cargos e comandos — cada categoria liga/desliga.
 - **Acesso** (`&acesso` + `&staff`): cargos de staff moderam sem permissão
@@ -152,6 +161,12 @@ diz exatamente o que clicar.
 - **Chat** (`&chat` ou menção): conversa com memória curta do canal, contas
   exatas, leitura de código e **busca na web** (via SearXNG) através do serviço
   de ferramentas embutido.
+- **Busca que responde**: o modelo reescreve o pedido em até 2 consultas
+  curtas (corrige digitação; `r/Nome` vira busca no reddit), os resultados que
+  não falam do pedido saem, as 3 melhores páginas são lidas
+  (`BUSCA_LER_PAGINAS`) e a resposta cita só o que usou. As fontes vêm como
+  `[domínio](<link>)` — clicáveis, **sem a prévia** que o Stoat gera para cada
+  link (`CHAT_PREVIA_LINKS=1` traz de volta).
 - **Personalidade sua** (`&personalidade`): o prompt de personalidade é
   configurável **por servidor**, por comando — e `PROMPT` no `.env` define o
   padrão global. Regras de segurança e formato continuam fixas.
@@ -162,12 +177,6 @@ diz exatamente o que clicar.
   assunto vale; `&chat comentar` permite comentários espontâneos com limite
   por dia. `&chat cuidado @user on` marca alguém (opt-in) para tratamento
   gentil e paciente.
-- **Cargo de silêncio conferido**: `&cargomudo` (ou o `&assistente`, no fim da
-  configuração) cria o cargo, nega em cada canal, **põe logo abaixo do cargo do
-  bot** — acima do cargo automático — e confere simulando um silenciado com o
-  cargo automático em cada canal. `&cargomudo usar @cargo` adota um existente;
-  `&cargomudo verificar` só confere. Sem cargo válido, a punição cai na
-  quarentena e a staff é avisada.
 - **Vários comandos de uma vez**: um por linha na mesma mensagem (até 10);
   cada um passa pelas mesmas verificações de permissão e de canal, em ordem.
 - **RSS** (`&rss`): a cada ciclo, um **relatório por categoria**, neutro e com uma linha
@@ -249,6 +258,7 @@ próprio bot: `&help <comando>`. Um resumo:
 |---|---|---|
 | `&kick @user [motivo]` | KickMembers | expulsa (menção **ou** ID) |
 | `&ban @user [motivo]` | BanMembers | bane e registra na lista global |
+| `&silenciar @user <tempo> [motivo]` | TimeoutMembers | timeout nativo (`10m`, `2h`, `1d`…, até 28 dias); `&silenciar tirar @user` devolve a voz |
 | `&limpar <n> [@user]` | ManageMessages | apaga as últimas `n` mensagens |
 | `&limpar tudo` | só o dono | esvazia o canal, com código de confirmação |
 | `&warn @user [motivo]` | staff | aviso manual (soma com os do automod) |
@@ -268,7 +278,7 @@ próprio bot: `&help <comando>`. Um resumo:
 | `&rolar` (`&r`) · `&iniciativa` | dados de RPG de mesa: `2d20kh1+5`, vantagem/desvantagem, `4d6kh3`, explosão `3d6!`, sucessos `8d10>=7`, `d%`, Fate, moeda, repetição `6x(4d6kh3)`, rótulos e rolagem secreta via DM — mais rastreador de iniciativa por canal (`add`/`next`/`lista`) |
 | `&webhook` (`&wh`) | receptor universal de webhooks: GitHub (push, issues, PR, releases, Actions), Crafty/Minecraft e qualquer serviço que fale o formato Discord (Uptime Kuma, Grafana…) — cada gancho tem canal próprio e filtro de eventos, então dá para separar issues num chat e o CI noutro; URL secreta por gancho, teto anti-flood. **Endereços:** serviço da internet (GitHub) exige base pública — `sudo tailscale funnel --bg 8095` + `WEBHOOK_URL_BASE=https://…` no `.env`; container da mesma máquina (Crafty) usa a ponte `http://172.17.0.1:8095/...` |
 | `&musica` (`&m`, `&play`) + `&entrar`/`&sair` | música nas calls: YouTube, SoundCloud e Spotify (playlists também), com fila, pausa, skip, volume e loop — e a música **abaixa sozinha quando o `&tts` fala** (ducking); playlists do Spotify pedem `SPOTIFY_ID`/`SPOTIFY_SECRET` no `.env` (app grátis em developer.spotify.com; faixas avulsas funcionam sem chave) |
-| `&comando` · `&cargomudo` | (des)ativar comandos, cargo de silêncio |
+| `&comando` | (des)ativar comandos |
 | `&embed` · `&reactionrole` · `&autorole` · `&cor` | utilidades *(permissões próprias)* |
 | `&boasvindas` · `&adeus` · `&fuso` · `&rss` | entrada/saída, fusos, notícias |
 | `&debug canais` · `&debug silence` | diagnóstico do que o bot enxerga |
@@ -296,9 +306,9 @@ próprio bot: `&help <comando>`. Um resumo:
 | **ViewChannel** + **ReadMessageHistory** | ler os canais | não analisa nem responde nada |
 | **SendMessage** + **SendEmbeds** | responder | fica mudo / respostas não aparecem |
 | **React** | reaction roles, navegação do help | reações não funcionam |
-| **ManageRole** | **criar** cargos (`&cargomudo`, nível, reaction role) | não cria cargos |
+| **ManageRole** | **criar** cargos (nível, reaction role, tickets) | não cria cargos |
 | **AssignRoles** | **aplicar** cargos em membros | cria o cargo mas não dá a ninguém |
-| **ManageChannel** | reforçar o silêncio em cada canal | o silêncio pode vazar |
+| **TimeoutMembers** | silêncio (`&silenciar`, mute da escada, modo `confirmar`) | o silêncio vira quarentena |
 | **KickMembers** / **BanMembers** | `&kick`, `&ban`, automod, lista global | punições falham |
 | **ManageMessages** | apagar (automod, `&limpar`, `&modia`) | não remove mensagens |
 
@@ -308,11 +318,9 @@ próprio bot: `&help <comando>`. Um resumo:
 > de aplicar.
 
 > **Hierarquia importa:** o cargo do bot precisa estar **acima** do alvo. O
-> bot não pune quem tem cargo igual ou superior ao dele.
-
-**Cargo de silêncio:** o silêncio (e a reaplicação ao reentrar) depende de um
-cargo com permissões negadas. `&cargomudo` cria um pronto — tudo negado, no
-servidor e em cada canal — e já o configura.
+> bot não pune quem tem cargo igual ou superior ao dele — e só dá cargos (nível,
+> autorole) que estão abaixo do dele, a quem também está abaixo. `&xp cargos`
+> marca com ⚠️ os cargos de nível que o bot não alcança.
 
 ### 2) De quem USA os comandos
 
@@ -322,6 +330,7 @@ servidor e em cada canal — e já o configura.
 | **ManageMessages** | `&limpar`, `&embed` |
 | **ManageRole** | `&reactionrole`, `&cor` |
 | **KickMembers** / **BanMembers** | `&kick` / `&ban`, `&banglobal` |
+| **TimeoutMembers** | `&silenciar` |
 | **ManagePermissions** | configuração em geral (`&config`, `&automod`, `&log`, `&acesso`…) |
 | **ManageServer** | `&modia`, `&personalidade`, `&chat esquecer tudo` |
 

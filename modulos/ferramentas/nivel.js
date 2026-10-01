@@ -3,6 +3,7 @@ import * as db from "../core/db.js";
 import { limparId, ULID, resolverUsuario } from "../core/ids.js";
 import { tr, lingua } from "../core/i18n.js";
 import * as log from "../core/log.js";
+import { descreverErro, tipoDoErro } from "../core/erros.js";
 
 const _tabelasXp = new Map();   // `${base}|${mult}` → number[] (acumulado por nível)
 function tabelaXp(base, mult, ateNivel) {
@@ -45,59 +46,52 @@ function barra(pct, tam = 12) {
   return "▰".repeat(cheio) + "▱".repeat(tam - cheio);
 }
 
-function acharCargoMute(server, config) {
-  const salvo = config?.cargoMudoId ?? config?.automod?.punicao?.silenceRoleId ?? null;
-  if (salvo && server.roles?.get?.(salvo)) return server.roles.get(salvo);
-  // fallback: procura por nome
-  for (const [id, role] of server.roles ?? []) {
-    if (/mud[oa]|mute|silenc|silêncio/i.test(role.name || "")) return role;
-  }
-  return null;
+// ── Hierarquia do Stoat (crates/delta/src/routes/servers/member_edit.rs) ──
+// O bot só edita quem está ABAIXO do cargo mais alto dele, e só dá cargos que
+// também estão abaixo dele; cargo apagado vira InvalidRole. A sincronização
+// mandava todos os cargos que faltavam numa edição só: UM cargo acima do bot
+// derrubava a edição inteira com NotElevated, e a pessoa ficava sem nenhum —
+// para sempre, porque só se tentava de novo no próximo nível.
+const rankDoCargo = (server, id) => {
+  try { const r = server?.roles?.get?.(id) ?? server?.roles?.[id]; return Number.isFinite(r?.rank) ? r.rank : null; }
+  catch { return null; }
+};
+const idsDeCargos = (m) => (m?.roles ?? []).map((r) => r?.id ?? r).filter(Boolean);
+function rankDoMembro(server, member) {
+  const ranks = idsDeCargos(member).map((id) => rankDoCargo(server, id)).filter((r) => r !== null);
+  return ranks.length ? Math.min(...ranks) : Infinity;   // sem cargo = o mais baixo
 }
 
-async function ordenarAbaixoDoMute(server, config, idsCargosNivel) {
-  const mute = acharCargoMute(server, config);
-  if (!mute) return { ok: true, semMute: true };
-
-  try {
-    // pega a ordem atual (orderedRoles: mais alto → mais baixo)
-    const ordenados = server.orderedRoles ?? [];
-    const ids = ordenados.map((r) => r.id ?? r.role?.id).filter(Boolean);
-
-    // remove os cargos de nível da lista e reinsere logo DEPOIS do mute
-    const semNiveis = ids.filter((id) => !idsCargosNivel.includes(id));
-    const posMute = semNiveis.indexOf(mute.id);
-    if (posMute === -1) return { ok: false, motivo: "mute não está na ordenação" };
-
-    const nova = [
-      ...semNiveis.slice(0, posMute + 1),   // tudo até o mute (inclusive)
-      ...idsCargosNivel,                     // cargos de nível logo abaixo
-      ...semNiveis.slice(posMute + 1),       // o resto
-    ];
-    await server.setRoleOrdering(nova);
-    return { ok: true };
-  } catch (e) {
-    console.error("[GAME][ordenar]", e.message);
-    return { ok: false, motivo: e.message };
-  }
+// Divide os cargos que faltam entre os que o bot consegue dar e os que não.
+// Sem saber quem é o bot (testes, cache vazio), não bloqueia nada: tenta.
+export function planejarCargos({ server, botMember, member, faltando }) {
+  if (!botMember) return { dar: [...faltando], acimaDoBot: [], membroAcima: false, botSemCargo: false };
+  const topo = rankDoMembro(server, botMember);
+  if (topo === Infinity) return { dar: [], acimaDoBot: [], membroAcima: false, botSemCargo: true };
+  const membroAcima = rankDoMembro(server, member) <= topo;
+  const acimaDoBot = faltando.filter((id) => { const r = rankDoCargo(server, id); return r !== null && r <= topo; });
+  const dar = membroAcima ? [] : faltando.filter((id) => !acimaDoBot.includes(id));
+  return { dar, acimaDoBot, membroAcima, botSemCargo: false };
 }
 
-// ── Concede o cargo do nível (e remove o do nível anterior, opcional) ──
-async function aplicarCargoNivel(server, member, serverId, nivel, config) {
-  const roleId = db.cargoDoNivel(serverId, nivel);
-  if (!roleId) return null;
-  try {
-    const atuais = new Set(member.roles ?? []);
-    atuais.add(roleId);
-    await member.edit({ roles: [...atuais] });
-    return roleId;
-  } catch (e) {
-    console.error("[GAME][cargo]", e.message);
-    return null;
-  }
+function botDoServidor(server, botMember) {
+  if (botMember) return botMember;
+  try { return server?.member ?? null; } catch { return null; }   // stoat.js: o membro do próprio bot
 }
 
-export async function sincronizarCargos(server, member, serverId, { nivel = null } = {}) {
+// Falha de configuração (cargo acima do bot, falta de AssignRoles) se repete a
+// cada mensagem; no log e no relatório ela entra UMA vez a cada 6 h por servidor.
+const avisados = new Map();
+const AVISO_MS = 6 * 3600e3;
+function avisarUmaVez(chave, ...msg) {
+  const t = avisados.get(chave) ?? 0;
+  if (Date.now() - t < AVISO_MS) return;
+  avisados.set(chave, Date.now());
+  console.warn(...msg);
+}
+const nomeServ = (server) => `"${server?.name ?? server?.id ?? "?"}"`;
+
+export async function sincronizarCargos(server, member, serverId, { nivel = null, botMember = null } = {}) {
   if (!server || !member || !serverId) return null;
   const userId = member?.id?.user ?? member?.user?.id ?? member?.id;
   if (!userId) return null;
@@ -108,21 +102,62 @@ export async function sincronizarCargos(server, member, serverId, { nivel = null
   const marcos = db.listarCargosNivel(serverId).filter((c) => c.nivel <= nivelAtual);
   if (!marcos.length) return null;
 
-  const atuais = new Set((member.roles ?? []).map((r) => r?.id ?? r).filter(Boolean));
+  const atuais = new Set(idsDeCargos(member));
   const existe = (id) => {
     try { return !!(server.roles?.get?.(id) ?? server.roles?.[id]); } catch { return true; }
   };
+  const apagados = marcos.map((c) => c.roleId).filter((id) => id && !existe(id));
+  if (apagados.length) avisarUmaVez(`apagado:${serverId}`, `[XP][sincronizar] servidor ${nomeServ(server)}: ${apagados.length} cargo(s) de nível foram apagados do servidor — recrie com &xp criarcargos`);
   const faltando = marcos.map((c) => c.roleId).filter((id) => id && !atuais.has(id) && existe(id));
-  if (!faltando.length) return { concedidos: [], nivel: nivelAtual };
+  if (!faltando.length) return { concedidos: [], nivel: nivelAtual, bloqueados: null };
 
+  const plano = planejarCargos({ server, botMember: botDoServidor(server, botMember), member, faltando });
+  const bloqueados = (plano.membroAcima || plano.acimaDoBot.length || plano.botSemCargo)
+    ? { membroAcima: plano.membroAcima, acimaDoBot: plano.acimaDoBot, botSemCargo: plano.botSemCargo } : null;
+  if (plano.botSemCargo) avisarUmaVez(`semcargo:${serverId}`, `[XP][sincronizar] servidor ${nomeServ(server)}: o bot não tem nenhum cargo — o Stoat não deixa ele dar cargos a ninguém; dê um cargo ao bot acima dos cargos de nível`);
+  if (plano.acimaDoBot.length) avisarUmaVez(`acima:${serverId}`, `[XP][sincronizar] servidor ${nomeServ(server)}: ${plano.acimaDoBot.length} cargo(s) de nível acima do cargo do bot — suba o cargo do bot (&xp cargos mostra quais)`);
+  if (plano.membroAcima) console.log(`[XP] ${userId} em ${serverId} está acima do bot na hierarquia — cargos de nível não podem ser dados`);
+  if (!plano.dar.length) return { concedidos: [], nivel: nivelAtual, bloqueados };
+
+  const editar = (ids) => member.edit({ roles: [...new Set([...idsDeCargos(member), ...ids])] });
   try {
-    await member.edit({ roles: [...atuais, ...faltando] });
-    console.log(`[XP] cargos sincronizados para ${userId} em ${serverId}: +${faltando.length} (nível ${nivelAtual})`);
-    return { concedidos: faltando, nivel: nivelAtual };
+    await editar(plano.dar);
+    console.log(`[XP] cargos sincronizados para ${userId} em ${serverId}: +${plano.dar.length} (nível ${nivelAtual})`);
+    return { concedidos: plano.dar, nivel: nivelAtual, bloqueados };
   } catch (e) {
-    console.error("[XP][sincronizar]", e?.message ?? e);
-    return { concedidos: [], nivel: nivelAtual, erro: e?.message ?? String(e) };
+    const tipo = tipoDoErro(e);
+    if (tipo === "MissingPermission") {
+      avisarUmaVez(`perm:${serverId}`, `[XP][sincronizar] servidor ${nomeServ(server)}: falta a permissão AssignRoles ao bot — sem ela nenhum cargo de nível é dado`);
+      return { concedidos: [], nivel: nivelAtual, bloqueados, erro: descreverErro(e) };
+    }
+    // Cache desatualizado (alguém mexeu na ordem agora): tenta um a um, para
+    // que o cargo problemático não leve os outros junto.
+    const dados = [];
+    let ultimoErro = e;
+    for (const id of plano.dar) {
+      try { await editar([...dados, id]); dados.push(id); }
+      catch (e2) { ultimoErro = e2; }
+    }
+    if (dados.length) {
+      console.log(`[XP] cargos sincronizados (um a um) para ${userId} em ${serverId}: +${dados.length} de ${plano.dar.length}`);
+      return { concedidos: dados, nivel: nivelAtual, bloqueados };
+    }
+    avisarUmaVez(`erro:${serverId}:${tipoDoErro(ultimoErro)}`, `[XP][sincronizar] servidor ${nomeServ(server)}: ${descreverErro(ultimoErro)}`);
+    return { concedidos: [], nivel: nivelAtual, bloqueados, erro: descreverErro(ultimoErro) };
   }
+}
+
+// Quem já tinha o nível quando os cargos foram criados, ou falhou uma vez,
+// nunca era tentado de novo (só no próximo nível ou ao reentrar). Agora, ao
+// ganhar XP, confere de novo — no máximo a cada 6 h por pessoa.
+const conferidos = new Map();
+const RECONFERIR_MS = Number(process.env.XP_RECONFERIR_MS || 6 * 3600e3);
+export function deveReconferir(serverId, userId, agora = Date.now()) {
+  const k = `${serverId}:${userId}`;
+  if (conferidos.has(k) && agora - conferidos.get(k) < RECONFERIR_MS) return false;
+  conferidos.set(k, agora);
+  if (conferidos.size > 20000) conferidos.clear();
+  return true;
 }
 
 export async function aoEntrar(member, ctx) {
@@ -173,6 +208,23 @@ export async function aoMensagem(message, ctx) {
   db.setXp(serverId, userId, novoXp, novoNivel, new Date(agora).toISOString());
   if (DBG) console.log(`[XP] +${ganho} para ${userId} → ${novoXp} XP (nível ${novoNivel}) em ${serverId}`);
 
+  // não subiu, mas pode estar devendo cargo (cargos criados depois, falha antiga)
+  if (novoNivel <= atual.nivel && novoNivel >= 1 && deveReconferir(serverId, userId)) {
+    try {
+      if (db.listarCargosNivel(serverId).some((c) => c.nivel <= novoNivel)) {
+        const server = await ctx.getServer(message);
+        const member = message.member?.roles ? message.member : await server.fetchMember(userId).catch(() => null);
+        if (member) {
+          const r = await sincronizarCargos(server, member, serverId, { nivel: novoNivel });
+          if (r?.concedidos?.length) {
+            await log.registrar(ctx, "cargos", { titulo: "🎖 Cargos de nível acertados",
+              descricao: `<@${userId}> (nível ${novoNivel}) recebeu **${r.concedidos.length}** cargo(s) de nível que estavam faltando.` });
+          }
+        }
+      }
+    } catch (e) { console.error("[XP][reconferir]", descreverErro(e)); }
+  }
+
   // subiu de nível?
   if (novoNivel > atual.nivel) {
     let ganhouCargo = null;
@@ -181,9 +233,9 @@ export async function aoMensagem(message, ctx) {
       const member = await server.fetchMember(userId).catch(() => null);
       if (member) {
         const r = await sincronizarCargos(server, member, serverId, { nivel: novoNivel });
-        ganhouCargo = r?.concedidos?.length
-          ? r.concedidos[r.concedidos.length - 1]
-          : await aplicarCargoNivel(server, member, serverId, novoNivel, config);
+        // (o sincronizar já cobre o cargo deste nível; o caminho antigo
+        // tentava de novo e repetia o mesmo NotElevated no log)
+        ganhouCargo = r?.concedidos?.length ? r.concedidos[r.concedidos.length - 1] : null;
       }
     } catch (e) { console.error("[GAME][levelup]", e.message); }
 
@@ -205,6 +257,22 @@ export async function aoMensagem(message, ctx) {
       } catch (e) { console.error("[GAME][anuncio]", e.message); }
     }
   }
+}
+
+export function explicarBloqueio(r, lang = "pt") {
+  const b = r?.bloqueados;
+  if (!b) return "";
+  const en = lang === "en";
+  const L = [];
+  if (b.botSemCargo) L.push(en ? "⚠️ The bot has **no role** — the Stoat doesn't let it give roles to anyone. Give it a role above the level roles."
+    : "⚠️ O bot **não tem nenhum cargo** — o Stoat não deixa ele dar cargos a ninguém. Dê a ele um cargo acima dos cargos de nível.");
+  if (b.acimaDoBot?.length) L.push(en
+    ? `⚠️ ${b.acimaDoBot.map((id) => `<@&${id}>`).join(" ")} ${b.acimaDoBot.length > 1 ? "are" : "is"} **above the bot's role** — move the bot's role up.`
+    : `⚠️ ${b.acimaDoBot.map((id) => `<@&${id}>`).join(" ")} ${b.acimaDoBot.length > 1 ? "estão" : "está"} **acima do cargo do bot** — suba o cargo do bot.`);
+  if (b.membroAcima) L.push(en
+    ? `ℹ️ ${r.membrosAcima ? `**${r.membrosAcima}** person(s) have` : "This person has"} a role at or above the bot's (usually staff) — the Stoat doesn't let the bot edit them.`
+    : `ℹ️ ${r.membrosAcima ? `**${r.membrosAcima}** pessoa(s) têm` : "Essa pessoa tem"} um cargo na altura do bot ou acima (normalmente staff) — o Stoat não deixa o bot editá-la(s).`);
+  return L.join("\n");
 }
 
 export async function cmdXp(message, args, ctx) {
@@ -274,18 +342,21 @@ export async function cmdXp(message, args, ctx) {
         { title: "🤷 Nada a fazer", description: `<@${alvoId}> ainda não alcançou nenhum cargo de nível.`, colour: COR.info },
         { title: "🤷 Nothing to do", description: `<@${alvoId}> hasn't reached any level role yet.`, colour: COR.info }));
 
+      const pend = explicarBloqueio(r, lang);
       return sendEmbed(message.channel, tr(ctx, {
-        title: r.concedidos.length ? "🎖 Cargos devolvidos" : "✅ Já estava em dia",
-        description: r.concedidos.length
+        title: r.concedidos.length ? "🎖 Cargos devolvidos" : (pend || r.erro ? "⚠️ Não consegui dar os cargos" : "✅ Já estava em dia"),
+        description: (r.concedidos.length
           ? `<@${alvoId}> (nível **${r.nivel}**) recebeu **${r.concedidos.length}** cargo(s):\n${r.concedidos.map((id) => `<@&${id}>`).join(" ")}`
-          : `<@${alvoId}> (nível **${r.nivel}**) já tinha todos os cargos do nível dela.`,
-        colour: r.concedidos.length ? COR.sucesso : COR.info,
+          : (pend || r.erro ? `<@${alvoId}> (nível **${r.nivel}**) está sem cargo(s) do nível dela.` : `<@${alvoId}> (nível **${r.nivel}**) já tinha todos os cargos do nível dela.`))
+          + (pend ? `\n\n${pend}` : "") + (r.erro ? `\n\n**Erro:** ${r.erro}` : ""),
+        colour: r.concedidos.length ? COR.sucesso : (pend || r.erro ? COR.aviso : COR.info),
       }, {
-        title: r.concedidos.length ? "🎖 Roles restored" : "✅ Already up to date",
-        description: r.concedidos.length
+        title: r.concedidos.length ? "🎖 Roles restored" : (pend || r.erro ? "⚠️ Couldn't give the roles" : "✅ Already up to date"),
+        description: (r.concedidos.length
           ? `<@${alvoId}> (level **${r.nivel}**) received **${r.concedidos.length}** role(s):\n${r.concedidos.map((id) => `<@&${id}>`).join(" ")}`
-          : `<@${alvoId}> (level **${r.nivel}**) already had every role for their level.`,
-        colour: r.concedidos.length ? COR.sucesso : COR.info,
+          : (pend || r.erro ? `<@${alvoId}> (level **${r.nivel}**) is missing level role(s).` : `<@${alvoId}> (level **${r.nivel}**) already had every role for their level.`))
+          + (pend ? `\n\n${pend}` : "") + (r.erro ? `\n\n**Error:** ${r.erro}` : ""),
+        colour: r.concedidos.length ? COR.sucesso : (pend || r.erro ? COR.aviso : COR.info),
       }));
     }
 
@@ -310,14 +381,21 @@ export async function cmdXp(message, args, ctx) {
     }
 
     const arrumados = [];
-    let falhas = 0;
+    let falhas = 0, acimaDoBot = new Set(), membrosAcima = 0, botSemCargo = false;
+    const erros = new Set();
     for (const m of membros) {
       const uid = m?.id?.user ?? m?.user?.id;
       if (!uid) continue;
       const r = await sincronizarCargos(server, m, serverId);
-      if (r?.erro) { falhas++; continue; }
+      if (r?.bloqueados) {
+        r.bloqueados.acimaDoBot.forEach((id) => acimaDoBot.add(id));
+        if (r.bloqueados.membroAcima) membrosAcima++;
+        if (r.bloqueados.botSemCargo) botSemCargo = true;
+      }
+      if (r?.erro) { falhas++; erros.add(r.erro); }
       if (r?.concedidos?.length) arrumados.push({ uid, n: r.concedidos.length, nivel: r.nivel });
     }
+    const pendencias = explicarBloqueio({ bloqueados: { acimaDoBot: [...acimaDoBot], membroAcima: membrosAcima > 0, botSemCargo }, membrosAcima }, lang);
 
     const lista = arrumados.slice(0, 20)
       .map((a) => `• <@${a.uid}> — nível ${a.nivel}, +${a.n} cargo(s)`).join("\n");
@@ -327,18 +405,20 @@ export async function cmdXp(message, args, ctx) {
         `Conferi **${membros.length}** membro(s).`,
         arrumados.length ? "\n" + lista : "\n_Todo mundo já estava com os cargos certos._",
         arrumados.length > 20 ? `\n_… e mais ${arrumados.length - 20}._` : "",
-        falhas ? `\n⚠️ **${falhas}** falha(s) — o cargo do bot precisa de **AssignRoles** e estar **acima** dos cargos de nível.` : "",
+        pendencias ? `\n${pendencias}` : "",
+        falhas ? `\n⚠️ **${falhas}** falha(s): ${[...erros].slice(0, 2).join(" · ")}` : "",
       ].filter(Boolean).join("\n").slice(0, 1900),
-      colour: falhas ? COR.aviso : COR.sucesso,
+      colour: falhas || pendencias ? COR.aviso : COR.sucesso,
     }, {
       title: `🎖 ${arrumados.length} person(s) updated`,
       description: [
         `I checked **${membros.length}** member(s).`,
         arrumados.length ? "\n" + lista : "\n_Everyone already had the right roles._",
         arrumados.length > 20 ? `\n_… and ${arrumados.length - 20} more._` : "",
-        falhas ? `\n⚠️ **${falhas}** failure(s) — the bot's role needs **AssignRoles** and must sit **above** the level roles.` : "",
+        pendencias ? `\n${pendencias}` : "",
+        falhas ? `\n⚠️ **${falhas}** failure(s): ${[...erros].slice(0, 2).join(" · ")}` : "",
       ].filter(Boolean).join("\n").slice(0, 1900),
-      colour: falhas ? COR.aviso : COR.sucesso,
+      colour: falhas || pendencias ? COR.aviso : COR.sucesso,
     }));
   }
 
@@ -367,9 +447,25 @@ export async function cmdXp(message, args, ctx) {
           description: `Nenhum cargo configurado. Use \`${PREFIXO}xp criarcargos\` para criar automaticamente.`, colour: COR.mod },
         { title: "🎖 Level roles",
           description: `No roles configured. Use \`${PREFIXO}xp criarcargos\` to create them automatically.`, colour: COR.mod }));
+    const srv = await getServer(message).catch(() => null);
+    const bot = botDoServidor(srv, null);
+    const topo = bot ? rankDoMembro(srv, bot) : null;
+    const marca = (id) => {
+      if (!srv) return "";
+      const existe = !!(srv.roles?.get?.(id) ?? srv.roles?.[id]);
+      if (!existe) return lang === "en" ? " ⚠️ _deleted from the server_" : " ⚠️ _apagado do servidor_";
+      const r = rankDoCargo(srv, id);
+      if (topo !== null && r !== null && r <= topo) return lang === "en" ? " ⚠️ _above the bot — it can't give this one_" : " ⚠️ _acima do bot — ele não consegue dar_";
+      return "";
+    };
+    const linhas = cargos.map((c) => (lang === "en" ? `Level **${c.nivel}** → <@&${c.roleId}>` : `Nível **${c.nivel}** → <@&${c.roleId}>`) + marca(c.roleId));
+    const algum = linhas.some((l) => l.includes("⚠️"));
     return sendEmbed(message.channel, {
       title: lang === "en" ? "🎖 Level roles" : "🎖 Cargos de nível",
-      description: cargos.map((c) => (lang === "en" ? `Level **${c.nivel}** → <@&${c.roleId}>` : `Nível **${c.nivel}** → <@&${c.roleId}>`)).join("\n"), colour: COR.mod });
+      description: linhas.join("\n") + (algum ? (lang === "en"
+        ? "\n\n_Move the bot's role above the marked roles (or recreate the deleted ones with `&xp criarcargos`), then run `&xp sincronizar todos`._"
+        : "\n\n_Suba o cargo do bot acima dos marcados (ou recrie os apagados com `&xp criarcargos`) e rode `&xp sincronizar todos`._") : ""),
+      colour: algum ? COR.aviso : COR.mod });
   }
 
   // ── criarcargos ──
@@ -570,22 +666,12 @@ export async function criarCargos(message, ctx) {
     } catch (e) { console.error("[GAME][criarCargo]", e.message); }
   }
 
-  // ⚠️ Segurança: ordena TODOS os cargos de nível abaixo do mute
-  const todosIds = db.listarCargosNivel(serverId).map((c) => c.roleId);
-  const ord = await ordenarAbaixoDoMute(server, config, todosIds);
-
+  // Cargo novo nasce no fim da lista — abaixo do bot e de todo cargo de membro.
+  // O silêncio é o timeout nativo, então não há cargo de mute para ordenar.
   const ccLang = lingua(ctx);
   const notaMute = ccLang === "en"
-    ? (ord.semMute
-      ? "\n\n⚠️ No mute role detected — once you create/set one, run `&xp criarcargos` again to reorder."
-      : ord.ok
-        ? "\n\n🔒 All the level roles were positioned **below** the mute role."
-        : `\n\n⚠️ I couldn't reorder below the mute role (${ord.motivo}). Adjust it manually.`)
-    : (ord.semMute
-      ? "\n\n⚠️ Nenhum cargo de mute detectado — quando você criar/definir um, rode `&xp criarcargos` de novo para reordenar."
-      : ord.ok
-        ? "\n\n🔒 Todos os cargos de nível foram posicionados **abaixo** do cargo de mute."
-        : `\n\n⚠️ Não consegui reordenar abaixo do mute (${ord.motivo}). Ajuste manualmente.`);
+    ? `\n\n_New roles are born at the bottom of the list, below the bot. Already-reached levels are handed out as people talk, or now with \`${ctx.PREFIXO ?? "&"}xp sincronizar todos\`._`
+    : `\n\n_Cargos novos nascem no fim da lista, abaixo do bot. Os níveis já alcançados são entregues conforme as pessoas conversam, ou agora com \`${ctx.PREFIXO ?? "&"}xp sincronizar todos\`._`;
 
   return sendEmbed(message.channel, ccLang === "en" ? {
     title: "🎖 Level roles created",
@@ -599,4 +685,4 @@ export async function criarCargos(message, ctx) {
 }
 
 // Exportado para testes
-export const _interno = { xpParaNivel, nivelPorXp, progresso, acharCargoMute };
+export const _interno = { xpParaNivel, nivelPorXp, progresso };

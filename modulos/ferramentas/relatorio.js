@@ -220,7 +220,15 @@ export async function gerar({ client, cfg, ate = Date.now(), fetcher = fetch, es
 export function listaSuperAdmins() {
   return (process.env.SUPER_ADMINS || "").split(",").map((x) => x.trim()).filter(Boolean);
 }
+// RELATORIO_SERVIDOR: o servidor do dono do bot. Definido, o painel e o
+// relatório só existem lá (comando, canal de envio) e só ELE entra nos
+// assuntos — dos outros servidores, só números (pedido de Ghieh, 1 out 2026).
+export function servidorDoRelatorio() {
+  return (process.env.RELATORIO_SERVIDOR || "").trim() || null;
+}
 export function temAssunto(server, cfg, superAdmins = listaSuperAdmins()) {
+  const fixo = servidorDoRelatorio();
+  if (fixo) return server?.id === fixo;
   const lista = cfg?.assuntos ?? [];
   if (lista.length) return lista.includes(server?.id);
   return !!server?.ownerId && superAdmins.includes(server.ownerId);

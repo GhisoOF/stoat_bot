@@ -1,6 +1,7 @@
 
 import * as db  from "../core/db.js";
 import { descreverErro } from "../core/erros.js";
+import { banir } from "../core/banir.js";
 import * as log from "../core/log.js";
 import { resolverUsuario as resolverUser, resolverUsuarioDetalhado, ehBot } from "../core/ids.js";
 import { tr, lingua } from "../core/i18n.js";
@@ -338,7 +339,7 @@ export async function verificarEntrada(member, ctx, { propagado = false } = {}) 
   if (modo === "banir") {
     try {
       const server = member.server ?? await ctx.client.servers.fetch(serverId);
-      await server.banUser(userId, { reason: `[Ban global] banido em ${n} outro(s) servidor(es)` });
+      await banir(server, userId, { reason: `[Ban global] banido em ${n} outro(s) servidor(es)` });
       db.registrarBanGlobal(userId, serverId, `ban global (${n} servidores)`, "banglobal",
         { nome: member?.user?.username ?? member?.nickname ?? null });
       await log.registrar(ctx, "punicoes", {
@@ -391,13 +392,13 @@ export async function varrer(ctx, message, { aplicar = true } = {}) {
   const aplicados = [];
   for (const a of achados) {
     try {
-      await server.banUser(a.uid, { reason: `[Ban global] banido em ${a.n} outro(s) servidor(es)` });
+      await banir(server, a.uid, { reason: `[Ban global] banido em ${a.n} outro(s) servidor(es)` });
       db.registrarBanGlobal(a.uid, serverId, `ban global (${a.n} servidores, varredura)`, "banglobal", { nome: a.nome });
       aplicados.push({ ...a, ok: true });
       console.log(`[BANGLOBAL] 🔨 ${a.uid} banido na varredura de ${serverId}`);
     } catch (e) {
-      aplicados.push({ ...a, ok: false, erro: e?.message ?? String(e) });
-      console.error(`[BANGLOBAL][varredura] falha em ${a.uid}:`, e?.message);
+      aplicados.push({ ...a, ok: false, erro: descreverErro(e) });
+      console.error(`[BANGLOBAL][varredura] falha em ${a.uid}:`, descreverErro(e));
     }
   }
   if (aplicados.length) {

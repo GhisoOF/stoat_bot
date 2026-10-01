@@ -54,24 +54,4 @@ export function curarIds(config, server) {
   return mudou;
 }
 
-// O cargo de silêncio deste servidor, ou null. NÃO cria: o cargo tem de ser
-// criado e CONFERIDO na configuração (&cargomudo / assistente) — posição
-// acima do cargo automático, negação em cada canal. Sem ele, a punição cai na
-// quarentena e a staff é avisada (uma vez por hora por servidor).
-const avisado = new Map();
-export function cargoSilencioValido(server, ctx) {
-  const id = ctx.config?.automod?.punicao?.silenceRoleId ?? null;
-  if (id && (!conhecido(server?.roles) || cargoDoServidor(server, id))) return id;
-  const agora = Date.now();
-  if ((avisado.get(server?.id) ?? 0) < agora - 3_600_000) {
-    avisado.set(server?.id, agora);
-    const P = ctx.PREFIXO ?? "&";
-    import("../core/log.js").then((log) => log.registrar(ctx, "punicoes", {
-      titulo: "🔇 Sem cargo de silêncio",
-      descricao: `Uma punição precisava silenciar alguém, mas este servidor não tem cargo de silêncio configurado — a pessoa ficou em quarentena (mensagens apagadas por 30 min). Configure com \`${P}cargomudo\` (ou \`${P}assistente protecao\`).`,
-    })).catch(() => {});
-  }
-  return null;
-}
-
 export { limparMolde } from "../core/molde.js";

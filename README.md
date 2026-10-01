@@ -167,6 +167,10 @@ diz exatamente o que clicar.
   (`BUSCA_LER_PAGINAS`) e a resposta cita só o que usou. As fontes vêm como
   `[domínio](<link>)` — clicáveis, **sem a prévia** que o Stoat gera para cada
   link (`CHAT_PREVIA_LINKS=1` traz de volta).
+- **Quem a criou** (`CRIADOR` e `SOBRE_CRIADOR` no `.env`): o que a IA conta
+  sobre o criador — só o texto escrito ali, vale em todo servidor (o
+  `&personalidade` não apaga) e ela recusa deduzir dado pessoal. O criador é
+  reconhecido pelo ID do `DONO`, nunca por alguém dizer que é.
 - **Personalidade sua** (`&personalidade`): o prompt de personalidade é
   configurável **por servidor**, por comando — e `PROMPT` no `.env` define o
   padrão global. Regras de segurança e formato continuam fixas.

@@ -241,5 +241,22 @@ await t("&servidores fora do servidor do dono não abre o painel", async () => {
   delete process.env.RELATORIO_SERVIDOR;
 });
 
+// ─── Criador ─────────────────────────────────────────────────────────────────
+console.log("\n── quem criou a Judy ──");
+await t("CRIADOR/SOBRE_CRIADOR entram no prompt, com a trava de dados pessoais e de impostor", async () => {
+  const persona = await import("./modulos/ai/persona.js");
+  delete process.env.CRIADOR; delete process.env.SOBRE_CRIADOR;
+  assert.equal(persona.blocoCriador("pt"), "", "sem as variáveis, nada");
+  process.env.CRIADOR = "Ghiso"; process.env.SOBRE_CRIADOR = "Desenvolve a Judy sozinho, por hobby.";
+  const b = persona.blocoCriador("pt");
+  assert.match(b, /Criador: Ghiso/); assert.match(b, /por hobby/);
+  assert.match(b, /nome real, idade, cidade/); assert.match(b, /DIZER que é seu criador/);
+  delete process.env.CRIADOR; delete process.env.SOBRE_CRIADOR;
+});
+await t("o bloco do criador fica fora do &personalidade (não some ao trocar a persona)", () => {
+  const fonte = fs.readFileSync("./modulos/ai/chat.js", "utf8");
+  assert.match(fonte, /persona\.blocoCriador\(lang\)/);
+});
+
 console.log(`\nRODADA 01/10: ${ok} ok, ${falhou} falha(s)`);
 process.exit(falhou ? 1 : 0);

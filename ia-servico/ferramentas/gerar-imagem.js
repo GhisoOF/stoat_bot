@@ -31,7 +31,6 @@ const TIMEOUT_MS   = Number(process.env.IMAGEM_GERACAO_TIMEOUT_MS || 420_000);
 const MAX_PIXELS   = Number(process.env.IMAGEM_MAX_PIXELS || 32_000_000);
 
 // Reusa a reescrita do ver-imagem (mesma política, mesmo código).
-import * as visao from "./ver-imagem.js";
 
 let sharpMod = null;
 async function sharp() {

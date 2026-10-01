@@ -46,3 +46,11 @@ if (iaLigada()) {
   // iniciar.js já define "visao"; este mapeamento não atrapalha.)
   if (e.MODELO_VISAO && !e.LLM_MODEL_VISAO) e.LLM_MODEL_VISAO = e.MODELO_VISAO;
 }
+
+// "Este servidor está na lista?" para as variáveis de lista (TTS_SERVIDORES,
+// CHAT_SERVIDORES…): ids separados por vírgula, "*" = todos. Lido na hora —
+// antes cada módulo tinha a sua cópia desta conta.
+export function servidorNaLista(variavel, serverId) {
+  const lista = (process.env[variavel] || "").split(",").map((x) => x.trim()).filter(Boolean);
+  return lista.includes("*") || (!!serverId && lista.includes(serverId));
+}

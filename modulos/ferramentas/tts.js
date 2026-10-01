@@ -1,5 +1,6 @@
 
 import { resolverCanal } from "../core/ids.js";
+import { servidorNaLista } from "../core/env.js";
 import { tr, lingua } from "../core/i18n.js";
 import { chamarApi } from "../core/stoat-api.js";
 import * as abrev from "../core/abreviacoes.js";
@@ -7,8 +8,6 @@ import * as filtro from "./tts-filtro.js";
 
 const VOZ_URL   = (process.env.VOZ_SERVICO_URL || "").replace(/\/$/, "");
 const VOZ_CHAVE = process.env.VOZ_CHAVE || "";
-const SERVIDORES = (process.env.TTS_SERVIDORES || "")
-  .split(",").map((s) => s.trim()).filter(Boolean);
 const VOZ_API_ESPERADA = 11;
 
 const COOLDOWN_MS = Number(process.env.TTS_COOLDOWN_MS || 8000);
@@ -69,11 +68,23 @@ function servidoresConhecidos(ctx) {
   catch { return []; }
 }
 
-function pareceCanalDeVoz(canal) {
+// Só canal que tem CALL serve. Antes qualquer canal de texto "servia": o
+// `&entrar` digitado em #colocar-musicas tentava entrar no próprio canal de
+// texto e o Stoat devolvia NotAVoiceChannel (1 out 2026).
+export function pareceCanalDeVoz(canal) {
   if (!canal) return false;
   const t = String(canal.type ?? canal.channel_type ?? "");
-  // Canal de servidor (texto ou voz) serve; DM e categoria, não.
-  return /text|voice/i.test(t) || !!canal.voice || !!canal.activeCall;
+  if (/^(DirectMessage|Group|SavedMessages)$/i.test(t)) return false;
+  return /voice/i.test(t) || canal.isVoice === true || (typeof canal.voice === "object" && canal.voice !== null) || !!canal.activeCall;
+}
+
+// A call em que a PESSOA está agora (a stoat.js mantém voiceParticipants por canal).
+export function callDaPessoa(server, client, userId) {
+  if (!userId) return null;
+  const achadas = canaisDeVozDo(server, client).filter((c) => {
+    try { return c.voiceParticipants?.has?.(userId); } catch { return false; }
+  });
+  return achadas.length === 1 ? achadas[0] : null;   // em duas ao mesmo tempo: estado velho, não arrisca
 }
 
 function canaisDeVozDo(server, client) {
@@ -84,19 +95,35 @@ function canaisDeVozDo(server, client) {
   return resolvidos.filter(pareceCanalDeVoz);
 }
 
-function descobrirCanalDeVoz(message, server, ctx, config) {
-  const atual = message.channel ?? ctx.client?.channels?.get?.(message.channelId);
-  if (message.channelId && pareceCanalDeVoz(atual)) {
-    return { id: message.channelId, fonte: "aqui" };
-  }
-  if (config?.canalVoz) return { id: config.canalVoz, fonte: "configurado" };
+// A call para entrar — o `&entrar` pode vir de QUALQUER canal de texto (há
+// servidores que fecham o chat das calls e usam um canal à parte, como
+// #call-sem-mic e #colocar-musicas). Ordem:
+//   1. a call escrita no comando (`&entrar call 1`)
+//   2. a call em que a pessoa está agora
+//   3. o próprio canal, se ele tem call
+//   4. a call de antes (se ainda existe) · 5. a única call do servidor
+export function descobrirCanalDeVoz(message, server, ctx, config, pedido = "") {
   const vozes = canaisDeVozDo(server, ctx.client);
+  const porId = (id) => vozes.find((v) => (v.id ?? v._id) === id) ?? null;
+  if (pedido) {
+    const id = resolverCanal(pedido, { message, server });
+    const alvo = id ? porId(id) : null;
+    if (alvo) return { id: alvo.id ?? alvo._id, fonte: "pedido" };
+    const parecido = vozes.find((v) => String(v.name ?? "").toLowerCase().includes(pedido.replace(/^#/, "").toLowerCase()));
+    if (parecido) return { id: parecido.id ?? parecido._id, fonte: "pedido" };
+    return { id: null, naoAchou: pedido, opcoes: vozes.slice(0, 10) };
+  }
+  const daPessoa = callDaPessoa(server, ctx.client, message.authorId);
+  if (daPessoa) return { id: daPessoa.id ?? daPessoa._id, fonte: "pessoa" };
+  const atual = message.channel ?? ctx.client?.channels?.get?.(message.channelId);
+  if (message.channelId && pareceCanalDeVoz(atual)) return { id: message.channelId, fonte: "aqui" };
+  if (config?.canalVoz && (porId(config.canalVoz) || !vozes.length)) return { id: config.canalVoz, fonte: "configurado" };
   if (vozes.length === 1) return { id: vozes[0].id ?? vozes[0]._id, fonte: "unico" };
   return { id: null, opcoes: vozes.slice(0, 10) };
 }
 
 export function servidorPermitido(serverId) {
-  return !!serverId && SERVIDORES.includes(serverId);
+  return servidorNaLista("TTS_SERVIDORES", serverId);
 }
 
 function garantirConfig(config) {
@@ -376,7 +403,11 @@ export async function cmdTts(message, args, ctx) {
   if (sub === "estado" || sub === "status" || sub === "saude" || sub === "health") {
     let saude = null, erroSaude = null;
     try { saude = await chamar("/saude", null, "GET"); }
-    catch (e) { erroSaude = e?.message ?? String(e); }
+    catch (e) {
+      erroSaude = !VOZ_URL
+        ? (lang === "en" ? "`VOZ_SERVICO_URL` isn't set in the bot's environment" : "`VOZ_SERVICO_URL` não configurada no ambiente do bot")
+        : (e?.message ?? String(e));
+    }
 
     const linhas = [
       `**${lang === "en" ? "Enabled" : "Ligado"}:** ${c.ativo ? "🟢" : "🔴"}`,
@@ -430,9 +461,9 @@ export async function cmdTts(message, args, ctx) {
     if (!c.canalVoz) {
       return sendEmbed(message.channel, tr(ctx,
         { title: "❌ Não sei em qual call olhar",
-          description: `Mande \`${PREFIXO}entrar\` dentro da call primeiro — o diagnóstico examina a call que eu estou usando.`, colour: COR.erro },
+          description: `Mande \`${PREFIXO}entrar\` primeiro (estando numa call) — o diagnóstico examina a call que eu estou usando.`, colour: COR.erro },
         { title: "❌ I don't know which call to look at",
-          description: `Send \`${PREFIXO}entrar\` inside the call first — the diagnostics examine the call I'm using.`, colour: COR.erro }));
+          description: `Send \`${PREFIXO}entrar\` first (while in a call) — the diagnostics examine the call I'm using.`, colour: COR.erro }));
     }
     let d;
     try { d = await chamar("/diagnostico", { canalVoz: c.canalVoz }); }
@@ -581,7 +612,7 @@ export async function cmdTts(message, args, ctx) {
       description: [
         ...linhas, "",
         r?.ok
-          ? `Pedi a desconexão e o Stoat aceitou. Agora \`${PREFIXO}entrar\` **de dentro da call** — a entrada é que diz se funcionou.`
+          ? `Pedi a desconexão e o Stoat aceitou. Agora \`${PREFIXO}entrar\` **estando na call** — a entrada é que diz se funcionou.`
           : [
             "O Stoat aceitou o pedido (HTTP 200) mas o registro **continua lá** — eu conferi tentando entrar de novo.",
             "",
@@ -598,7 +629,7 @@ export async function cmdTts(message, args, ctx) {
       description: [
         ...linhas, "",
         r?.ok
-          ? `I asked to be disconnected and Stoat accepted. Now \`${PREFIXO}entrar\` **from inside the call** — the join itself will tell.`
+          ? `I asked to be disconnected and Stoat accepted. Now \`${PREFIXO}entrar\` **while in the call** — the join itself will tell.`
           : [
             "Stoat accepted the request (HTTP 200) but the record **is still there** — I checked by trying to join again.",
             "",
@@ -780,20 +811,20 @@ export async function cmdTts(message, args, ctx) {
             colour: COR.aviso }));
       }
       const server = await getServer(message).catch(() => null);
-      const achado = descobrirCanalDeVoz(message, server, ctx, c);
+      const achado = descobrirCanalDeVoz(message, server, ctx, c, resto);
 
       if (!achado.id) {
         const opcoes = achado.opcoes?.length
-          ? "\n\n" + achado.opcoes.map((v) => `• <#${v.id ?? v._id}>`).join("\n")
+          ? "\n\n" + achado.opcoes.map((v) => `• <#${v.id ?? v._id}> — \`${PREFIXO}entrar ${v.name ?? v.id}\``).join("\n")
           : "";
         return sendEmbed(message.channel, tr(ctx, {
-          title: "❓ Em qual call?",
-          description: `Digite \`${PREFIXO}entrar\` **dentro da call** e eu entro nela.${
+          title: achado.naoAchou ? "❓ Não achei essa call" : "❓ Em qual call?",
+          description: `${achado.naoAchou ? `\`${achado.naoAchou}\` não é uma call deste servidor.` : "Entre numa call e digite `" + PREFIXO + "entrar` de qualquer canal — eu vou até você."}${
             opcoes ? `\n\nAs calls que encontrei:${opcoes}` : ""}`,
           colour: COR.aviso,
         }, {
-          title: "❓ Which call?",
-          description: `Type \`${PREFIXO}entrar\` **inside the call** and I'll join it.${
+          title: achado.naoAchou ? "❓ Couldn't find that call" : "❓ Which call?",
+          description: `${achado.naoAchou ? `\`${achado.naoAchou}\` isn't a call on this server.` : "Join a call and type `" + PREFIXO + "entrar` from any channel — I'll come to you."}${
             opcoes ? `\n\nThe calls I found:${opcoes}` : ""}`,
           colour: COR.aviso,
         }));
@@ -869,7 +900,7 @@ export async function cmdTts(message, args, ctx) {
       description: [
         lia ? "Parei de ler as mensagens também." : "Até a próxima.",
         "",
-        `Para voltar: \`${PREFIXO}entrar\` dentro da call.`,
+        `Para voltar: \`${PREFIXO}entrar\` estando numa call.`,
       ].join("\n"),
       colour: COR.sucesso,
     }, {
@@ -877,7 +908,7 @@ export async function cmdTts(message, args, ctx) {
       description: [
         lia ? "I stopped reading the messages as well." : "See you.",
         "",
-        `To come back: \`${PREFIXO}entrar\` inside the call.`,
+        `To come back: \`${PREFIXO}entrar\` while in a call.`,
       ].join("\n"),
       colour: COR.sucesso,
     }));
@@ -1166,7 +1197,7 @@ export async function cmdTts(message, args, ctx) {
     return sendEmbed(message.channel, tr(ctx, {
       title: "🔊 Voz da Judy",
       description: [
-        `**\`${PREFIXO}entrar\`** — dentro da call. Eu entro e passo a **falar tudo que for escrito ali**.`,
+        `**\`${PREFIXO}entrar\`** — de qualquer canal, estando numa call. Eu entro na sua call e passo a **falar tudo que for escrito no canal onde você digitou** (\`${PREFIXO}entrar call 1\` escolhe a call).`,
         `**\`${PREFIXO}sair\`** — saio e paro de ler.`,
         "",
         "É só isso para o uso normal. O resto é ajuste fino:",
@@ -1185,7 +1216,7 @@ export async function cmdTts(message, args, ctx) {
     }, {
       title: "🔊 Judy's voice",
       description: [
-        `**\`${PREFIXO}entrar\`** — inside the call. I join and start **speaking everything written there**.`,
+        `**\`${PREFIXO}entrar\`** — from any channel, while you're in a call. I join your call and start **speaking everything written in the channel where you typed it** (\`${PREFIXO}entrar call 1\` picks the call).`,
         `**\`${PREFIXO}sair\`** — I leave and stop reading.`,
         "",
         "That's it for normal use. The rest is fine-tuning:",
@@ -1239,4 +1270,26 @@ export async function cmdTts(message, args, ctx) {
       description: `\`${motivo}\`\n\n${lang === "en" ? "Diagnose with" : "Diagnostique com"} \`${PREFIXO}tts diagnostico\``,
       colour: COR.erro });
   }
+}
+
+// ── Para a música: a call DESTE servidor ──────────────────────────────────────
+// A música ia para "a call ativa" do serviço de voz — com o bot em calls de
+// dois servidores, ia para a errada — e só funcionava no canal da call. Agora
+// o &musica de qualquer canal usa a call do bot neste servidor; se ele não
+// está em nenhuma e a pessoa está numa, ele entra nela (sem ligar a leitura
+// de texto: o TTS só lê onde alguém deu `&entrar`).
+export async function callParaMusica(message, ctx) {
+  const c = garantirConfig(ctx.config);
+  if (c.ativo && c.canalVoz) return { canal: c.canalVoz };
+  if (!servidorPermitido(ctx.serverId)) return { erro: "fora" };
+  const server = await ctx.getServer?.(message).catch(() => null);
+  const daPessoa = callDaPessoa(server, ctx.client, message.authorId);
+  if (!daPessoa) return { erro: "sem-call" };
+  const id = daPessoa.id ?? daPessoa._id;
+  try {
+    await chamar("/entrar", { canalVoz: id, serverId: ctx.serverId, servidores: servidoresConhecidos(ctx) });
+  } catch (e) { return { erro: "entrar", detalhe: String(e?.message ?? e) }; }
+  c.ativo = true; c.canalVoz = id;
+  ctx.salvarConfig?.();
+  return { canal: id, entrou: true };
 }

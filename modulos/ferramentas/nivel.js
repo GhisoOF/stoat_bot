@@ -3,6 +3,7 @@ import * as db from "../core/db.js";
 import { limparId, ULID, resolverUsuario } from "../core/ids.js";
 import { tr, lingua } from "../core/i18n.js";
 import * as log from "../core/log.js";
+import { idsDeCargos, rankDoCargo, rankDoMembro } from "../core/hierarquia.js";
 import { descreverErro, tipoDoErro } from "../core/erros.js";
 
 const _tabelasXp = new Map();   // `${base}|${mult}` → number[] (acumulado por nível)
@@ -52,15 +53,6 @@ function barra(pct, tam = 12) {
 // mandava todos os cargos que faltavam numa edição só: UM cargo acima do bot
 // derrubava a edição inteira com NotElevated, e a pessoa ficava sem nenhum —
 // para sempre, porque só se tentava de novo no próximo nível.
-const rankDoCargo = (server, id) => {
-  try { const r = server?.roles?.get?.(id) ?? server?.roles?.[id]; return Number.isFinite(r?.rank) ? r.rank : null; }
-  catch { return null; }
-};
-const idsDeCargos = (m) => (m?.roles ?? []).map((r) => r?.id ?? r).filter(Boolean);
-function rankDoMembro(server, member) {
-  const ranks = idsDeCargos(member).map((id) => rankDoCargo(server, id)).filter((r) => r !== null);
-  return ranks.length ? Math.min(...ranks) : Infinity;   // sem cargo = o mais baixo
-}
 
 // Divide os cargos que faltam entre os que o bot consegue dar e os que não.
 // Sem saber quem é o bot (testes, cache vazio), não bloqueia nada: tenta.

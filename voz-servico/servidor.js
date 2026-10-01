@@ -76,7 +76,7 @@ const servidor = createServer(async (req, res) => {
 
     if (rota.startsWith("/musica/")) {
       const canal = corpo.canal || musica.canalAtivo();
-      if (!canal) return responder(res, 400, { erro: "não estou em nenhuma call — use `&tts entrar #canal` primeiro." });
+      if (!canal) return responder(res, 400, { erro: "não estou em nenhuma call — entre numa call e use `&entrar` primeiro." });
       const acao = rota.slice("/musica/".length);
       let r;
       if (acao === "tocar") r = await musica.tocar(canal, corpo.consulta);

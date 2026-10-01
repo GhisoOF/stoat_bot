@@ -1,5 +1,5 @@
 
-import { buscarFuso, fusoValido, agoraEm, diferenca, cidadeDoFuso } from "../core/fusos.js";
+import { buscarFuso, agoraEm, diferenca, cidadeDoFuso } from "../core/fusos.js";
 import { tr, lingua } from "../core/i18n.js";
 
 const LIMITE = 12;   // além disso o embed vira parede de texto

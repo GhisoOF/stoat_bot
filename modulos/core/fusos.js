@@ -57,6 +57,36 @@ const APELIDOS = {
   "canada": "America/Toronto",
   "utc": "UTC",
   "gmt": "UTC",
+  // Estados e capitais do Brasil (1 out 2026: "que horas são em Goiás?" não
+  // achava nada e o modelo chutou "dezessete horas"). A maior parte segue o
+  // horário de Brasília; o Norte e o Centro-Oeste têm fusos próprios.
+  "goias": "America/Sao_Paulo", "goiania": "America/Sao_Paulo",
+  "distrito federal": "America/Sao_Paulo", "df": "America/Sao_Paulo",
+  "sao paulo": "America/Sao_Paulo", "minas gerais": "America/Sao_Paulo", "minas": "America/Sao_Paulo", "belo horizonte": "America/Sao_Paulo", "bh": "America/Sao_Paulo",
+  "espirito santo": "America/Sao_Paulo", "vitoria": "America/Sao_Paulo",
+  "parana": "America/Sao_Paulo", "curitiba": "America/Sao_Paulo",
+  "santa catarina": "America/Sao_Paulo", "florianopolis": "America/Sao_Paulo",
+  "rio grande do sul": "America/Sao_Paulo", "porto alegre": "America/Sao_Paulo",
+  "bahia": "America/Bahia", "salvador": "America/Bahia",
+  "pernambuco": "America/Recife", "recife": "America/Recife",
+  "paraiba": "America/Fortaleza", "joao pessoa": "America/Fortaleza",
+  "ceara": "America/Fortaleza", "fortaleza": "America/Fortaleza",
+  "rio grande do norte": "America/Fortaleza", "natal": "America/Fortaleza",
+  "piaui": "America/Fortaleza", "teresina": "America/Fortaleza",
+  "alagoas": "America/Maceio", "maceio": "America/Maceio",
+  "sergipe": "America/Maceio", "aracaju": "America/Maceio",
+  "maranhao": "America/Fortaleza", "sao luis": "America/Fortaleza",
+  "para": "America/Belem", "belem": "America/Belem",
+  "amapa": "America/Belem", "macapa": "America/Belem",
+  "tocantins": "America/Araguaina", "palmas": "America/Araguaina",
+  "amazonas": "America/Manaus", "manaus": "America/Manaus",
+  "roraima": "America/Boa_Vista", "boa vista": "America/Boa_Vista",
+  "rondonia": "America/Porto_Velho", "porto velho": "America/Porto_Velho",
+  "mato grosso": "America/Cuiaba", "cuiaba": "America/Cuiaba",
+  "mato grosso do sul": "America/Campo_Grande", "campo grande": "America/Campo_Grande",
+  "acre": "America/Rio_Branco", "rio branco": "America/Rio_Branco",
+  "fernando de noronha": "America/Noronha", "noronha": "America/Noronha",
+  "madri": "Europe/Madrid", "madrid": "Europe/Madrid",
 };
 
 let _zonas = null;

@@ -1,3 +1,4 @@
+// As contas do mercado do RPG (preço, P, câmbio, dungeon) — só do jogo.
 
 export const CFG = {
   // perda ao cair, em fração do que carrega
@@ -103,8 +104,6 @@ export function converter(quantidade, de, para) {
 
 export const TAXA_BASE = 0.005;   // 0,5%
 export const VOLUME_REF = 20000;
-export const TAXA_K = 1.5;
-
 export const TAXA_TETO = 0.08;   // 8%
 
 export function taxaMercado(volumeRecente = 0) {

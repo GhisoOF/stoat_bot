@@ -125,6 +125,16 @@ export function abrirBanco(caminho) {
       abertoEm  TEXT NOT NULL,
       fechadoEm TEXT
     );
+    -- Mensagens do bot que respondem a reação nos tickets: o painel (abrir
+    -- por categoria), o controle dentro do ticket (🔒 fechar) e o aviso de
+    -- fechado (🗑️ apagar). A reação chega sem servidor — é daqui que ele vem.
+    CREATE TABLE IF NOT EXISTS ticket_mensagens (
+      msgId    TEXT PRIMARY KEY,
+      serverId TEXT NOT NULL,
+      canalId  TEXT NOT NULL,
+      tipo     TEXT NOT NULL,          -- painel | controle | fechado
+      ticketId INTEGER
+    );
     -- Relatório horário do dono do bot: o que aconteceu, por servidor.
     -- No banco (e não em memória) para uma hora sobreviver a um reinício.
     -- Poda automática: só as últimas 48h.
@@ -379,7 +389,7 @@ export function abrirBanco(caminho) {
   `);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_folw_dono ON rpg_followers (serverId, donoId)`);
 
-  // ── RPG: economia ──
+  // ── RPG: moedas e mercado do jogo ──
   db.exec(`
     CREATE TABLE IF NOT EXISTS rpg_moedas (
       serverId   TEXT NOT NULL,
@@ -452,6 +462,10 @@ export function abrirBanco(caminho) {
     if (!cols.includes("missoesFeitas"))  db.exec("ALTER TABLE rpg_personagem ADD COLUMN missoesFeitas INTEGER NOT NULL DEFAULT 0");
   } catch (e) { console.error("[DB] migração missões:", e.message); }
 
+  // Tickets: categoria e quem fechou. Na ABERTURA do banco — um SELECT * já
+  // preparado antes do ALTER TABLE não enxerga a coluna nova.
+  try { colunasTicket(); } catch (e) { console.error("[DB] migração tickets:", e.message); }
+
   migrarTabelasGame();   // XP: game_* → xp_* (preserva os dados)
 
   console.info("[DB] Banco aberto em", DB_PATH);
@@ -467,10 +481,6 @@ export function lerConfig(serverId) {
 export function gravarConfig(serverId, obj) {
   prep("INSERT OR REPLACE INTO config (serverId, json) VALUES (?, ?)")
     .run(serverId, JSON.stringify(obj));
-}
-
-export function listarServidoresConfig() {
-  return prep("SELECT serverId FROM config").all().map((r) => r.serverId);
 }
 
 export function lerPunicao(serverId, userId) {
@@ -537,10 +547,6 @@ export function silenciarAte(serverId, userId, ate, motivo = null) {
   });
 }
 
-export function silencioExpiraEm(serverId, userId) {
-  return lerPunicao(serverId, userId)?.silencioAte ?? 0;
-}
-
 // Quem já cumpriu a pena — chamado periodicamente para devolver a voz.
 export function silenciosVencidos(agora = Date.now()) {
   return prep(`SELECT serverId, userId, motivo FROM punicoes
@@ -569,15 +575,6 @@ export function nomeDeBanido(userId) {
   return prep(
     "SELECT userNome FROM bans_globais WHERE userId = ? AND userNome IS NOT NULL ORDER BY criadoEm DESC LIMIT 1"
   ).get(userId)?.userNome ?? null;
-}
-
-// Preenche o nome de um registro que entrou sem ele (descoberto depois).
-export function anotarNomeBanido(userId, nome, ehBot = null) {
-  if (!userId || !nome) return 0;
-  const r = ehBot === null
-    ? prep("UPDATE bans_globais SET userNome = ? WHERE userId = ? AND (userNome IS NULL OR userNome = '')").run(nome, userId)
-    : prep("UPDATE bans_globais SET userNome = ?, ehBot = ? WHERE userId = ?").run(nome, ehBot ? 1 : 0, userId);
-  return r.changes ?? 0;
 }
 
 // Todos os IDs da lista, para varreduras de manutenção.
@@ -789,10 +786,6 @@ export function marcarVisto(feedId, guid) {
   return r.changes > 0;
 }
 
-export function jaVisto(feedId, guid) {
-  return !!prep("SELECT 1 FROM rss_vistos WHERE feedId = ? AND guid = ?").get(feedId, guid);
-}
-
 // Limpeza opcional: remove itens vistos com mais de N dias (evita crescer sem fim)
 export function limparVistosAntigos(dias = 30) {
   const limite = new Date(Date.now() - dias * 864e5).toISOString();
@@ -841,10 +834,6 @@ export function listarCargosNivel(serverId) {
 
 export function cargoDoNivel(serverId, nivel) {
   return prep("SELECT roleId FROM xp_cargos WHERE serverId = ? AND nivel = ?").get(serverId, nivel)?.roleId ?? null;
-}
-
-export function limparCargosNivel(serverId) {
-  return prep("DELETE FROM xp_cargos WHERE serverId = ?").run(serverId).changes ?? 0;
 }
 
 export function getMemoria(userId) {
@@ -926,11 +915,6 @@ export function getFatosPessoa(serverId, userId, { limite = 12, minConf = 0.4 } 
      WHERE serverId = ? AND userId = ? AND confianca >= ?
      ORDER BY confianca DESC, vezes DESC, momento DESC LIMIT ?`
   ).all(serverId, userId, minConf, limite);
-}
-
-export function limparFatosPessoa(serverId, userId) {
-  return prep("DELETE FROM ia_fatos_pessoa WHERE serverId = ? AND userId = ?")
-    .run(serverId, userId).changes ?? 0;
 }
 
 // ── Perfil do usuário (cartão: bio, grupos, jogos, status + flag de cuidado) ──
@@ -1096,10 +1080,6 @@ export function tirarItemDoFollower(followerId, itemId) {
   return prep(`DELETE FROM rpg_follower_itens WHERE followerId = ? AND itemId = ?`)
     .run(followerId, itemId).changes;
 }
-export function limparItensDoFollower(followerId) {
-  return prep(`DELETE FROM rpg_follower_itens WHERE followerId = ?`).run(followerId).changes;
-}
-
 export function aprenderMagia(serverId, userId, magiaId) {
   prep(`INSERT OR IGNORE INTO rpg_magias (serverId, userId, magiaId, criadoEm)
     VALUES (?, ?, ?, ?)`).run(serverId, userId, magiaId, Date.now());
@@ -1108,14 +1088,6 @@ export function aprenderMagia(serverId, userId, magiaId) {
 export function listarMagias(serverId, userId) {
   return prep(`SELECT magiaId, criadoEm FROM rpg_magias
     WHERE serverId = ? AND userId = ? ORDER BY criadoEm`).all(serverId, userId);
-}
-export function temMagia(serverId, userId, magiaId) {
-  return !!prep(`SELECT 1 FROM rpg_magias WHERE serverId = ? AND userId = ? AND magiaId = ?`)
-    .get(serverId, userId, magiaId);
-}
-export function esquecerMagia(serverId, userId, magiaId) {
-  return prep(`DELETE FROM rpg_magias WHERE serverId = ? AND userId = ? AND magiaId = ?`)
-    .run(serverId, userId, magiaId).changes;
 }
 export function limparMagias(serverId, userId = null) {
   return userId
@@ -1165,11 +1137,6 @@ export function listarItens({ slot = null, raridade = null, apenasAtivos = true 
   if (raridade) { sql += " AND raridade = ?"; p.push(raridade); }
   sql += " ORDER BY raridade, nome";
   return prep(sql).all(...p).map(hidratarItem);
-}
-
-// Descontinuar em vez de apagar: quem já tem, continua tendo.
-export function descontinuarItem(id) {
-  return prep("UPDATE rpg_itens SET ativo = 0 WHERE id = ?").run(id).changes ?? 0;
 }
 
 // ── Inventário ──
@@ -1268,19 +1235,6 @@ export function listarFollowersCatalogo({ soVendidos = false } = {}) {
   let sql = "SELECT * FROM rpg_followers_catalogo WHERE ativo = 1";
   if (soVendidos) sql += " AND soDungeon = 0 AND preco > 0";
   return prep(sql + " ORDER BY raridade, nome").all().map(hidratarFollower);
-}
-
-// ── Fotos (álbum) ──
-export function setFotosFollower(catalogoId, fotos) {
-  return prep("UPDATE rpg_followers_catalogo SET fotos = ? WHERE id = ?")
-    .run(JSON.stringify(fotos ?? []), catalogoId).changes ?? 0;
-}
-
-export function addFotoFollower(catalogoId, url) {
-  const f = getFollowerCatalogo(catalogoId);
-  if (!f) return 0;
-  const fotos = [...f.fotos, url];
-  return setFotosFollower(catalogoId, fotos);
 }
 
 // ── Instâncias ──
@@ -1382,72 +1336,6 @@ export function acharMoeda(serverId, txt) {
 
 const CAMPOS_MOEDA = new Set(["mercado", "dungeon", "pSuave", "pEm", "nome", "simbolo",
   "finita", "padrao", "dificuldade", "suprimentoBase", "nivelMin"]);
-export function moedasDuplicadas(serverId) {
-  const semAcento = (x) => String(x ?? "").trim().toLowerCase()
-    .normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-  const porNome = new Map();
-  for (const m of listarMoedas(serverId)) {
-    const chave = semAcento(m.nome);
-    if (!porNome.has(chave)) porNome.set(chave, []);
-    porNome.get(chave).push(m);
-  }
-  const grupos = [];
-  for (const [, lista] of porNome) {
-    if (lista.length < 2) continue;
-    const ordenada = [...lista].sort((a, b) =>
-      (b.padrao ? 1 : 0) - (a.padrao ? 1 : 0)
-      || totalNasCarteiras(serverId, b.id) - totalNasCarteiras(serverId, a.id)
-      || (b.suprimentoBase ?? 0) - (a.suprimentoBase ?? 0));
-    grupos.push({ fica: ordenada[0], some: ordenada.slice(1) });
-  }
-  return grupos;
-}
-
-// Executa a fusão. Devolve o relatório do que foi feito.
-export function fundirMoedasDuplicadas(serverId) {
-  const grupos = moedasDuplicadas(serverId);
-  const feitos = [];
-  for (const g of grupos) {
-    let saldosMovidos = 0, usuarios = 0;
-    for (const velha of g.some) {
-      const linhas = prep(`SELECT userId, quantidade FROM rpg_carteira
-        WHERE serverId = ? AND moedaId = ? AND quantidade > 0`).all(serverId, velha.id);
-      for (const l of linhas) {
-        creditar(serverId, l.userId, g.fica.id, l.quantidade);
-        saldosMovidos += l.quantidade;
-        usuarios++;
-      }
-      salvarMoeda(serverId, g.fica.id, {
-        mercado: (getMoeda(serverId, g.fica.id)?.mercado ?? 0) + (velha.mercado ?? 0),
-        dungeon: (getMoeda(serverId, g.fica.id)?.dungeon ?? 0) + (velha.dungeon ?? 0),
-      });
-      prep(`UPDATE rpg_ofertas SET moedaOferecida = ?
-        WHERE serverId = ? AND moedaOferecida = ?`).run(g.fica.id, serverId, velha.id);
-      prep(`UPDATE rpg_ofertas SET moedaPedida = ?
-        WHERE serverId = ? AND moedaPedida = ?`).run(g.fica.id, serverId, velha.id);
-      removerMoeda(serverId, velha.id);
-    }
-    feitos.push({
-      nome: g.fica.nome, ficou: g.fica.id,
-      sumiram: g.some.map((x) => x.id), saldosMovidos, usuarios,
-    });
-  }
-  return feitos;
-}
-
-// Servidores que têm alguma moeda — o universo que a fusão precisa varrer.
-export function servidoresComMoeda() {
-  return prep("SELECT DISTINCT serverId FROM rpg_moedas").all().map((r) => r.serverId);
-}
-
-// Já existe uma moeda com esse NOME? (a checagem que faltava)
-export function acharMoedaPorNome(serverId, nome) {
-  const semAcento = (x) => String(x ?? "").trim().toLowerCase()
-    .normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-  const alvo = semAcento(nome);
-  return listarMoedas(serverId).find((m) => semAcento(m.nome) === alvo) ?? null;
-}
-
 export function salvarMoeda(serverId, id, campos = {}) {
   const e = Object.entries(campos).filter(([k]) => CAMPOS_MOEDA.has(k));
   if (!e.length) return getMoeda(serverId, id);
@@ -1573,9 +1461,39 @@ export function registrarUsoGancho(id) {
 }
 
 // ── Tickets ─────────────────────────────────────────────────────────────────
-export function criarTicket(serverId, numero, canalId, roleId, autorId, motivo) {
-  prep("INSERT INTO tickets (serverId, numero, canalId, roleId, autorId, motivo, abertoEm) VALUES (?,?,?,?,?,?,?)")
-    .run(serverId, numero, canalId, roleId, autorId, motivo ?? "", new Date().toISOString());
+function colunasTicket() {
+  const cols = prep("PRAGMA table_info(tickets)").all().map((c) => c.name);
+  if (!cols.includes("categoria")) db.exec("ALTER TABLE tickets ADD COLUMN categoria TEXT");
+  if (!cols.includes("fechadoPor")) db.exec("ALTER TABLE tickets ADD COLUMN fechadoPor TEXT");
+}
+export function criarTicket(serverId, numero, canalId, roleId, autorId, motivo, categoria = null) {
+  colunasTicket();
+  return prep("INSERT INTO tickets (serverId, numero, canalId, roleId, autorId, motivo, abertoEm, categoria) VALUES (?,?,?,?,?,?,?,?)")
+    .run(serverId, numero, canalId, roleId, autorId, motivo ?? "", new Date().toISOString(), categoria).lastInsertRowid;
+}
+export function ticketPorId(id) {
+  colunasTicket();
+  return prep("SELECT * FROM tickets WHERE id = ?").get(id) ?? null;
+}
+export function ticketDoCanal(canalId) {   // aberto OU fechado (o canal fechado continua lá, travado)
+  colunasTicket();
+  return prep("SELECT * FROM tickets WHERE canalId = ? ORDER BY id DESC LIMIT 1").get(canalId) ?? null;
+}
+export function marcarTicketFechado(id, porId) {
+  colunasTicket();
+  prep("UPDATE tickets SET status = 'fechado', fechadoEm = ?, fechadoPor = ? WHERE id = ?").run(new Date().toISOString(), porId ?? null, id);
+}
+export function marcarTicketApagado(id) {
+  prep("UPDATE tickets SET status = 'apagado' WHERE id = ?").run(id);
+}
+export function registrarMsgTicket(msgId, serverId, canalId, tipo, ticketId = null) {
+  prep("INSERT OR REPLACE INTO ticket_mensagens (msgId, serverId, canalId, tipo, ticketId) VALUES (?,?,?,?,?)").run(msgId, serverId, canalId, tipo, ticketId);
+}
+export function msgTicket(msgId) {
+  return prep("SELECT * FROM ticket_mensagens WHERE msgId = ?").get(msgId) ?? null;
+}
+export function esquecerMsgTicket(msgId) {
+  prep("DELETE FROM ticket_mensagens WHERE msgId = ?").run(msgId);
 }
 export function listarTickets(serverId) {
   return prep("SELECT * FROM tickets WHERE serverId = ? AND status = 'aberto' ORDER BY numero").all(serverId);

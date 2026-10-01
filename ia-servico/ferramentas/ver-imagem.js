@@ -5,7 +5,6 @@ const SD_URL       = (process.env.SD_URL || "").replace(/\/$/, "");  // vazio = 
 const MAX_BYTES    = Number(process.env.IMAGEM_MAX_BYTES || 8 * 1024 * 1024);
 const MAX_PIXELS   = Number(process.env.IMAGEM_MAX_PIXELS || 32_000_000);   // ~32MP decodificados
 const LADO_VISAO   = Number(process.env.IMAGEM_LADO_VISAO || 1280);
-const LADO_GERACAO = Number(process.env.IMAGEM_LADO_GERACAO || 768);
 const TIMEOUT_MS   = Number(process.env.IMAGEM_TIMEOUT_MS || 120_000);
 
 // O host do CDN_URL configurado no bot entra SEMPRE na allowlist: foi a

@@ -1,7 +1,6 @@
 
 import * as log from "../core/log.js";
 import { tr, lingua } from "../core/i18n.js";
-import { descreverErro } from "../core/erros.js";
 
 export const GRANT_ALL_SAFE = 0x000fffffffffffffn;
 

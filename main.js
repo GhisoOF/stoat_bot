@@ -22,12 +22,10 @@ for (const canal of ["debug", "log"]) {
 }
 
 import { Client, Permission } from "stoat.js";
-import { readFileSync, writeFileSync } from "node:fs";
 
 import * as engine   from "./modulos/moderacao/automod-engine.js";
 import * as automodCmd from "./modulos/moderacao/automod-comandos.js";
 import * as geral   from "./modulos/moderacao/geral.js";
-import * as db       from "./modulos/core/db.js";
 import * as store    from "./modulos/core/config-store.js";
 import * as log      from "./modulos/core/log.js";
 import * as cfgCmd   from "./modulos/moderacao/config-comando.js";
@@ -51,12 +49,14 @@ import * as corCargo   from "./modulos/moderacao/cor-cargo.js";
 import * as acessoMod  from "./modulos/moderacao/acesso.js";
 import * as warnMod    from "./modulos/moderacao/warn.js";
 import * as silenciarMod from "./modulos/moderacao/silenciar.js";
+import * as economiaMod from "./modulos/ferramentas/economia.js";
 import * as srvStats   from "./modulos/core/metricas.js";
 import * as rpg        from "./modulos/game/game.js";
 import * as modIA      from "./modulos/moderacao/moderacao-ia.js";
 import * as modiaCmd   from "./modulos/moderacao/modia-comando.js";
 import * as persona    from "./modulos/ai/persona.js";
 import * as debugCmd  from "./modulos/moderacao/debug-comando.js";
+import { dirigidoAoBot } from "./modulos/ai/destinatario.js";
 import * as chat      from "./modulos/ai/chat.js";
 import * as rss       from "./modulos/ferramentas/rss.js";
 import * as nivel     from "./modulos/ferramentas/nivel.js";
@@ -381,6 +381,7 @@ const rotas = {
   rolar:         dadosRpg.cmdRolar,
   iniciativa:    dadosRpg.cmdIniciativa,
   ticket:        tickets.cmdTicket,
+  economia:      economiaMod.cmdEconomia,
   // `&entrar`/`&sair` são a forma canônica. O cmdTts ainda faz o trabalho, mas
   // só aceita "entrar"/"sair" vindos daqui — `&tts entrar` deixou de existir.
   entrar:        (msg, args, ctx) => ttsVoz.cmdTts(msg, ["entrar", ...args], { ...ctx, viaAtalhoVoz: true }),
@@ -433,6 +434,7 @@ const CANONICO = {
   join: "entrar", call: "entrar", leave: "sair", sairdacall: "sair",
   webhooks: "webhook", gancho: "webhook", wh: "webhook",
   r: "rolar", roll: "rolar", dado: "rolar", dados: "rolar",
+  eco: "economia", economy: "economia",
   init: "iniciativa", initiative: "iniciativa",
   tickets: "ticket", suporte: "ticket",
   "boas-vindas": "boasvindas", welcome: "boasvindas", bemvindo: "boasvindas",
@@ -452,7 +454,7 @@ estado.COMANDOS_SO_IA = COMANDOS_SO_IA;
 const COMANDOS_GERENCIAVEIS = [
   "ping", "repete", "userinfo", "kick", "ban", "silenciar", "limpar",
   "warn", "acesso", "automod", "tutorial", "assistente", "cor", "log", "banglobal", "embed", "reactionrole", "chat", "rss", "xp", "game", "autorole",
-  "staff", "boasvindas", "adeus", "fuso", "tts", "musica", "webhook", "rolar", "iniciativa", "ticket",
+  "staff", "boasvindas", "adeus", "fuso", "tts", "musica", "webhook", "rolar", "iniciativa", "ticket", "economia",
 ];
 // exportado via ctx para o comando &comando consultar
 estado.CANONICO = CANONICO;
@@ -490,19 +492,8 @@ client.on("ready", async () => {
 
   reactionRoles.precarregarMensagens(client).catch((e) => console.error("[REACTIONROLE][boot]", e?.message));
 
-  rpg.iniciarCatalogo();   // semeia os itens genéricos (idempotente)
+  rpg.iniciarCatalogo();   // semeia os itens genéricos e prepara o mundo (idempotente)
 
-  try {
-    for (const sid of db.servidoresComMoeda()) {
-      const feitos = db.fundirMoedasDuplicadas(sid);
-      if (feitos.length) {
-        console.info(`[RPG] ${sid}: ${feitos.length} moeda(s) duplicada(s) fundida(s) — `
-          + feitos.map((f) => `${f.nome} → ${f.ficou}`).join(", "));
-      }
-    }
-  } catch (e) {
-    console.error("[RPG] Falha ao conferir moedas duplicadas:", e.message);
-  }
   srvStats.marcarInicio();
   relatorioHora.evento(null, "boot", "bot iniciou");
   relatorioHora.agendar({
@@ -594,11 +585,17 @@ async function tratarMensagem(message) {
 
   if (!command) {
     const meuId = client.user?.id;
-    const mencionado =
-      (Array.isArray(message.mentionIds) && meuId && message.mentionIds.includes(meuId)) ||
-      (meuId && message.content?.includes(`<@${meuId}>`));
+    // Responder a uma mensagem dela com @OutraPessoa no texto é falar com a
+    // outra pessoa — o "ping" da resposta não conta (ver destinatario.js).
+    const mencionado = dirigidoAoBot({ conteudo: message.content, mentionIds: message.mentionIds, botId: meuId });
     if (mencionado && chat.servidorPermitido(serverId) && !(ctx.config.comandosDesativados ?? []).includes("chat")) {
       const pergunta = (message.content || "").replace(new RegExp(`<@${meuId}>`, "g"), "").trim();
+      // A pergunta entra no fio do canal (antes só a RESPOSTA dela entrava, e
+      // o modelo via respostas soltas sem saber o que tinham perguntado).
+      chat.registrarNoCanal(message.channelId, {
+        id: message.id, nome: message.author?.username ?? message.member?.nickname ?? message.authorId,
+        userId: message.authorId, texto: message.content, respondeuAId: message.replyIds?.[0] ?? null,
+      });
       // conversa com a IA conta XP (é interação legítima)
       try { await nivel.aoMensagem(message, { ...ctx, client }); }
       catch (e) { console.error("[NIVEL]", e.message); }
@@ -629,9 +626,10 @@ async function tratarMensagem(message) {
         texto: message.content, ehBot: !!message.author?.bot,
       });
       // Cache do canal: registra o fio da conversa (quem falou, a quem respondeu).
-      const respNome = message.reply_ids?.length ? "uma mensagem anterior" : null;
+      // (era `reply_ids`, que a stoat.js não tem: o "respondendo a" nunca aparecia)
       chat.registrarNoCanal(message.channelId, {
-        nome, userId: message.authorId, texto: message.content, respondeuA: respNome,
+        id: message.id, nome, userId: message.authorId, texto: message.content,
+        respondeuAId: message.replyIds?.[0] ?? null, respondeuA: message.replyIds?.length ? "uma mensagem anterior" : null,
       });
       if (!message.author?.bot) {
         chat.observarParaComentario(message, { ...ctx, client });
@@ -793,6 +791,8 @@ client.on("messageReactionAdd", async (...a) => {
     if (await paginas.aoReagir(msgId, userId, emoji, a0)) return;
 
     const msgObj = (a0 && typeof a0 === "object") ? a0 : { id: msgId };
+    // Tickets: painel (🎫 abre), controle (🔒 fecha), fechado (🗑️ apaga).
+    if (await tickets.aoReagir(msgObj, userId, emoji, { client, criarContexto })) return;
     const ctxRR = criarContexto(null);
     ctxRR.configDoServidor = store.configDoServidor;   // p/ o log usar a config certa
     await reactionRoles.aoReagir(msgObj, userId, emoji, ctxRR);
@@ -812,6 +812,7 @@ client.events.on("event", async (ev) => {
     if (client.user && ev.user_id === client.user.id) return;
     const editor = { id: ev.id, channelId: ev.channel_id,
       edit: (data) => client.api.patch(`/channels/${ev.channel_id}/messages/${ev.id}`, data) };
+    if (ev.type === "MessageReact" && await tickets.aoReagir({ id: ev.id }, ev.user_id, ev.emoji_id, { client, criarContexto })) return;
     await paginas.aoReagir(ev.id, ev.user_id, ev.emoji_id, editor);
   } catch (err) {
     console.error("[REAÇÃO][fora do cache]", err?.message ?? err);

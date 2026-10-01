@@ -16,32 +16,9 @@ import * as log from "../core/log.js";
 import { tr } from "../core/i18n.js";
 import { descreverErro, tipoDoErro } from "../core/erros.js";
 import { resolverUsuario } from "../core/ids.js";
+import { lerDuracao, duracaoTexto } from "../core/duracao.js";
+import { MAX_TIMEOUT_MS as MAX_MS } from "./timeout.js";
 import * as db from "../core/db.js";
-
-export const MAX_MS = 28 * 24 * 60 * 60 * 1000;   // 28 dias
-const UNIDADE = { s: 1e3, m: 60e3, h: 3600e3, d: 86400e3, w: 7 * 86400e3, sem: 7 * 86400e3 };
-
-// "10m", "2h30m", "1d", "45s", "1w", "90" (minutos) → ms; null se inválido.
-export function lerDuracao(txt) {
-  const t = String(txt ?? "").trim().toLowerCase().replace(/min(utos?)?/g, "m").replace(/horas?/g, "h").replace(/dias?/g, "d").replace(/semanas?/g, "sem");
-  if (!t) return null;
-  if (/^\d+$/.test(t)) return Number(t) * 60e3;   // número puro = minutos
-  const partes = [...t.matchAll(/(\d+)\s*(sem|[smhdw])/g)];
-  if (!partes.length || partes.map((p) => p[0]).join("").replace(/\s/g, "") !== t.replace(/\s/g, "")) return null;
-  const ms = partes.reduce((n, [, v, u]) => n + Number(v) * UNIDADE[u], 0);
-  return ms > 0 ? ms : null;
-}
-
-export function duracaoTexto(ms, lang = "pt") {
-  const en = lang === "en";
-  const d = Math.floor(ms / 86400e3), h = Math.floor((ms % 86400e3) / 3600e3), m = Math.floor((ms % 3600e3) / 60e3), s = Math.floor((ms % 60e3) / 1e3);
-  const p = [];
-  if (d) p.push(`${d} ${en ? (d > 1 ? "days" : "day") : (d > 1 ? "dias" : "dia")}`);
-  if (h) p.push(`${h} h`);
-  if (m) p.push(`${m} min`);
-  if (s && !d && !h) p.push(`${s} s`);
-  return p.join(" ") || (en ? "0 s" : "0 s");
-}
 
 const TIRAR = new Set(["tirar", "remover", "desfazer", "off", "remove", "undo", "fim", "liberar"]);
 

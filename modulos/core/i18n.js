@@ -1,6 +1,4 @@
 
-export const IDIOMAS = ["pt", "en"];
-
 // Idioma efetivo do servidor deste ctx. Qualquer valor desconhecido → pt.
 export function lingua(ctx) {
   return ctx?.config?.language === "en" ? "en" : "pt";

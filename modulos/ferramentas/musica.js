@@ -4,6 +4,7 @@
 // (voz-servico/musica.js); aqui é só o comando conversando com as rotas.
 
 import { lingua } from "../core/i18n.js";
+import { callParaMusica } from "./tts.js";
 
 const VOZ_URL   = (process.env.VOZ_SERVICO_URL || "").replace(/\/$/, "");
 const VOZ_CHAVE = process.env.VOZ_CHAVE || "";
@@ -61,18 +62,31 @@ export async function cmdMusica(msg, args, ctx) {
       description: en
         ? "`&musica <link or name>` — play (YouTube, SoundCloud, Spotify; playlists too)\n`&musica pausar` · `&musica play` — pause / resume\n`&musica skip` — next track\n`&musica fila` — current queue\n`&musica parar` — stop and clear\n`&musica volume 80` — 0 to 200%\n`&musica loop faixa|fila|nao`\n\nThe bot must be in a call (`&entrar`). When TTS speaks, the music ducks automatically."
         : "`&musica <link ou nome>` — tocar (YouTube, SoundCloud, Spotify; playlists também)\n`&musica pausar` · `&musica play` — pausar / retomar\n`&musica skip` — próxima faixa\n`&musica fila` — lista de reprodução atual\n`&musica parar` — parar e limpar\n`&musica volume 80` — 0 a 200%\n`&musica loop faixa|fila|nao`\n\nO bot precisa estar numa call (`&entrar`). Quando o TTS fala, a música abaixa sozinha.",
-      color: ctx.COR.info,
+      colour: ctx.COR.info,
     });
   }
 
+  // A call deste servidor (ou a da pessoa, entrando nela) — de qualquer canal.
+  const alvo = await callParaMusica(msg, ctx);
+  if (alvo.erro) {
+    const txt = {
+      fora: en ? "Music isn't enabled on this server (`TTS_SERVIDORES`)." : "A música não está liberada neste servidor (`TTS_SERVIDORES`).",
+      "sem-call": en ? "I'm not in a call on this server. Join a call and use `&musica` (or `&entrar`) from any channel — I'll come to you." : "Não estou em nenhuma call deste servidor. Entre numa call e use `&musica` (ou `&entrar`) de qualquer canal — eu vou até você.",
+      entrar: en ? `I couldn't join your call: \`${alvo.detalhe}\`` : `Não consegui entrar na sua call: \`${alvo.detalhe}\``,
+    }[alvo.erro];
+    return ctx.sendEmbed(msg.channel, { title: "🎵", description: `⚠️ ${txt}`, colour: ctx.COR.aviso });
+  }
+  const canal = alvo.canal;
+  const aviso = alvo.entrou ? (en ? `_Joined <#${canal}>._\n` : `_Entrei em <#${canal}>._\n`) : "";
+
   if (sub === "fila") {
-    const r = await pedirVoz("/musica/fila");
-    if (r.erro) return ctx.sendEmbed(msg.channel, { title: "🎵", description: `⚠️ ${r.erro}`, color: ctx.COR.aviso });
+    const r = await pedirVoz(`/musica/fila?canal=${encodeURIComponent(canal)}`);
+    if (r.erro) return ctx.sendEmbed(msg.channel, { title: "🎵", description: `⚠️ ${r.erro}`, colour: ctx.COR.aviso });
     if (!r.atual && !r.total) {
       return ctx.sendEmbed(msg.channel, {
         title: en ? "🎵 Queue" : "🎵 Fila",
         description: en ? "Nothing playing. `&musica <link or name>` to start." : "Nada tocando. `&musica <link ou nome>` para começar.",
-        color: ctx.COR.info,
+        colour: ctx.COR.info,
       });
     }
     const linhas = [];
@@ -80,7 +94,7 @@ export async function cmdMusica(msg, args, ctx) {
     for (const i of r.fila ?? []) linhas.push(`\`${i.n}.\` ${i.titulo}${duracaoTxt(i.duracao)}`);
     if (r.total > (r.fila?.length ?? 0)) linhas.push(en ? `…and ${r.total - r.fila.length} more` : `…e mais ${r.total - r.fila.length}`);
     if (r.loop && r.loop !== "nao") linhas.push(`🔁 loop: ${r.loop}`);
-    return ctx.sendEmbed(msg.channel, { title: en ? "🎵 Queue" : "🎵 Fila", description: linhas.join("\n"), color: ctx.COR.info });
+    return ctx.sendEmbed(msg.channel, { title: en ? "🎵 Queue" : "🎵 Fila", description: linhas.join("\n"), colour: ctx.COR.info });
   }
 
   let r;
@@ -89,19 +103,19 @@ export async function cmdMusica(msg, args, ctx) {
       return ctx.sendEmbed(msg.channel, {
         title: "🎵",
         description: en ? "Tell me what to play: `&musica <link or name>`." : "Me diga o que tocar: `&musica <link ou nome>`.",
-        color: ctx.COR.aviso,
+        colour: ctx.COR.aviso,
       });
     }
-    r = await pedirVoz("/musica/tocar", { consulta: resto });
+    r = await pedirVoz("/musica/tocar", { canal, consulta: resto });
   } else if (sub === "volume") {
     const v = Number(String(resto).replace("%", ""));
-    r = await pedirVoz("/musica/volume", { valor: Number.isFinite(v) ? v / 100 : NaN });
+    r = await pedirVoz("/musica/volume", { canal, valor: Number.isFinite(v) ? v / 100 : NaN });
   } else if (sub === "loop") {
-    r = await pedirVoz("/musica/loop", { modo: resto || "nao" });
+    r = await pedirVoz("/musica/loop", { canal, modo: resto || "nao" });
   } else {
-    r = await pedirVoz(`/musica/${sub}`, {});
+    r = await pedirVoz(`/musica/${sub}`, { canal });
   }
 
-  if (r.erro) return ctx.sendEmbed(msg.channel, { title: "🎵", description: `⚠️ ${r.erro}`, color: ctx.COR.aviso });
-  return ctx.sendEmbed(msg.channel, { title: "🎵", description: r.mensagem ?? "ok", color: ctx.COR.sucesso });
+  if (r.erro) return ctx.sendEmbed(msg.channel, { title: "🎵", description: `⚠️ ${r.erro}`, colour: ctx.COR.aviso });
+  return ctx.sendEmbed(msg.channel, { title: "🎵", description: aviso + (r.mensagem ?? "ok"), colour: ctx.COR.sucesso });
 }

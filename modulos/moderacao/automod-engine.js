@@ -472,6 +472,29 @@ async function alertarAdministracao(ctx, { server, canal, userId, sinal, faixa, 
 
 export const ESCADA_PADRAO = "aviso,5m,1h,ban";
 
+// Os filtros do automod: nome do comando → chave na config. Uma lista só para
+// o &automod, o &config e o &info (o &info contava 9 de 11, e o &config não
+// mostrava o anticaracteres nem o antirepeticao).
+export const MODULOS_AUTOMOD = {
+  antispam:        "antiSpam",
+  antimassspam:    "antiMassSpam",
+  antiinvite:      "antiInvite",
+  antimassmention: "antiMassMention",
+  anticaps:        "antiCaps",
+  antilink:        "antiLink",
+  sentinela:       "antiScam",
+  anticaracteres:  "antiCaracteres",
+  antiduplicata:   "antiDuplicata",
+  antiimagem:      "antiImagem",
+  antirepeticao:   "antiRepeticao",
+};
+// Ligado de verdade: os que nascem ligados contam como ligados até alguém desligar.
+const PADRAO_LIGADO = new Set(["antiDuplicata", "antiImagem"]);
+export function moduloLigado(am, chave) {
+  const m = am?.[chave];
+  return PADRAO_LIGADO.has(chave) ? m?.enabled !== false : !!m?.enabled;
+}
+
 let timerSilencios = null;
 
 export function iniciarVigiaDeSilencios(ctx, intervaloMs = 60_000) {

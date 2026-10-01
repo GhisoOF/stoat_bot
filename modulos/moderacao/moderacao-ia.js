@@ -1,5 +1,4 @@
 
-import * as db from "../core/db.js";
 import * as log from "../core/log.js";
 
 const CRIADOR_ID = process.env.SUPER_ADMINS?.split(",")[0]?.trim() || "";

@@ -437,8 +437,8 @@ async function aplicar(message, ctx, s) {
   const okN = resultado.filter((r) => r.ok).length;
   const linhas = resultado.map((r) => `${!r.ok ? "❌" : r.pendente ? "⚠️" : "✅"} \`${P}${r.args.join(" ")}\`${!r.ok || r.pendente ? ` — ${r.msg}` : ""}`);
   linhas.push("", T(s.lang,
-    `${okN}/${resultado.length} aplicado(s). \`${P}config\` mostra como ficou; \`${P}debug canais\` confere se o bot consegue agir em cada canal.`,
-    `${okN}/${resultado.length} applied. \`${P}config\` shows the result; \`${P}debug canais\` checks whether the bot can act in each channel.`));
+    `${okN}/${resultado.length} aplicado(s). \`${P}config\` mostra como ficou; \`${P}debug\` confere se o bot consegue agir em cada canal.`,
+    `${okN}/${resultado.length} applied. \`${P}config\` shows the result; \`${P}debug\` checks whether the bot can act in each channel.`));
   // O silêncio (mute da escada, modo confirmar, &silenciar) é o timeout
   // nativo: sem TimeoutMembers, toda punição de silêncio vira quarentena.
   try {
@@ -498,8 +498,8 @@ async function guiaDeCanais(message, ctx, s) {
   linhas.push("",
     T(s.lang, "**💬 Geral** — os demais: não mexa.", "**💬 General** — the rest: leave them."),
     "",
-    T(s.lang, "❌ ao lado de um canal = o bot **não** consegue agir ali hoje. Ajuste e confira com `&debug canais`.",
-              "❌ next to a channel = the bot **can't** act there today. Fix it and check with `&debug canais`."),
+    T(s.lang, "❌ ao lado de um canal = o bot **não** consegue agir ali hoje. Ajuste e confira com `&debug`.",
+              "❌ next to a channel = the bot **can't** act there today. Fix it and check with `&debug`."),
     T(s.lang, "_(Eu não altero permissões de canal: o Stoat pede que isso seja feito na interface.)_",
               "_(I don't change channel permissions: Stoat wants that done in the UI.)_"),
   );

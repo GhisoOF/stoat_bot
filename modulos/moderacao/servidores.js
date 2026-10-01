@@ -25,7 +25,10 @@ export async function cmdServidores(message, args, ctx) {
   // Com RELATORIO_SERVIDOR, o painel só abre no servidor do dono: nos outros
   // servidores da Judy ele não mostra (nem confirma) nada.
   const fixo = relatorio.servidorDoRelatorio();
-  if (fixo && message.serverId !== fixo) {
+  // (a Message da stoat.js NÃO tem `serverId` — o servidor vem do ctx ou do
+  // canal; com `message.serverId` o painel dizia "Aqui não" até no servidor certo)
+  const aqui = ctx.serverId ?? message.server?.id ?? message.channel?.serverId ?? null;
+  if (fixo && aqui !== fixo) {
     return sendEmbed(message.channel, { title: "🚫 Aqui não", description: "Este painel só funciona no servidor configurado em `RELATORIO_SERVIDOR`.", colour: COR.erro });
   }
   if (["relatorio", "relatório", "report"].includes(args[0]?.toLowerCase())) {

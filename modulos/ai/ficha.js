@@ -3,8 +3,6 @@ import * as srv from "../core/metricas.js";
 import { contarMembros } from "../core/membros.js";
 import * as db from "../core/db.js";
 
-const seg = (ms) => Math.round(ms / 1000);
-
 const MAX_SERVIDORES = Number(process.env.FICHA_MAX_SERVIDORES || 12);
 
 /**

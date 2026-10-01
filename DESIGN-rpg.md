@@ -1,6 +1,6 @@
-# RPG + Economia — Especificação
+# RPG — Especificação
 
-> Especificação do sistema de RPG e economia do bot. Descreve **o que será
+> Especificação do sistema de RPG do bot (personagem, mercado e moedas do jogo). Descreve **o que será
 > construído**. Números marcados como *inicial* vão para configuração e se
 > ajustam jogando.
 >
@@ -92,7 +92,7 @@ Onde algo puder disparar, a resposta é **retorno decrescente** (raiz quadrada),
 não teto. O jogador nunca lê "você atingiu o máximo".
 
 > **Única exceção:** o `rMax < 1` da recompra do NPC (§7.3). Não é limite de
-> poder — é o que impede dinheiro infinito. Se cair, a economia colapsa.
+> poder — é o que impede dinheiro infinito. Se cair, o mercado do jogo colapsa.
 
 ---
 
@@ -198,7 +198,7 @@ Membros caem individualmente; a missão segue enquanto houver alguém de pé.
 
 ---
 
-## 7. Itens, equipamento e economia
+## 7. Itens, equipamento e mercado
 
 ### 7.1 Equipamento
 - Slots: **Armadura, Capacete, Arma, Acessório 1, 2, 3**.
@@ -394,7 +394,7 @@ Listas parciais já bastam para modelar o banco e as fórmulas.
 | **C — Itens** | slots, equipar, bônus, conjunto genérico |
 | **B — Missões** | resolução automática, 3 desfechos, loot, cooldown |
 | **D — Followers** | recrutar, classes, magias, energia, álbum, co-op |
-| **E — Economia** | moedas, funções P, câmbio, dungeon, resgate |
+| **E — Mercado** | moedas, funções P, câmbio, dungeon, resgate |
 | **F — Mercado** | marketplace, balcão P2P, escambo |
 
 **Ordem de trabalho: A → C → B → D → E → F.**

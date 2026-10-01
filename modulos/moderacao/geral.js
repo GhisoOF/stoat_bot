@@ -1,17 +1,15 @@
 import { servidorPermitido as temIA } from "../ai/chat.js";
 import { arvoreSubtopicos, SUBTOPICOS_SO_IA, ligarFamilias, mesclarNos } from "./help-arvore.js";
-import { nomeExibido, exibirTitulo } from "../core/aliases.js";
+import { nomeExibido } from "../core/aliases.js";
 import { grupos as gruposHelp, ALIAS_GRUPO, ORDEM as ORDEM_GRUPOS } from "./help-grupos.js";
 import { secaoParametros } from "./help-parametros.js";
 import { enviarPaginado, paginarLinhas } from "../core/paginas.js";
-import { escadaDePunicao, rotuloDegrau } from "./automod-engine.js";
-import * as PERFIS_MOEDA from "../game/moedas-perfis.js";
+import { escadaDePunicao, rotuloDegrau, MODULOS_AUTOMOD, moduloLigado } from "./automod-engine.js";
+import { MUNDO } from "../game/mundo.js";
+import { servidorNaLista } from "../core/env.js";
 
 // Comandos que só existem onde a IA roda (espelha a lista do main.js).
 const COMANDOS_SO_IA = new Set(["chat", "modia"]);
-
-// Só o suficiente para o cabeçalho do subtópico achar o canônico do comando.
-const CANONICO_LOCAL = { rpg: "game", nivel: "xp", level: "xp", logs: "log" };
 
 import * as log from "../core/log.js";
 import * as db  from "../core/db.js";
@@ -88,10 +86,6 @@ function detalhesPT(P) {
       perm: "ManagePermissions",
       ex: `${P}assistente rapido`,
     },
-    hello: {
-      uso: `${P}hello`,
-      desc: "Responde com uma saudação simples. Serve para testar se o bot está online.",
-    },
     ping: {
       uso: `${P}ping`,
       desc: "Mostra a latência entre o envio da mensagem e o processamento do bot.",
@@ -158,7 +152,7 @@ function detalhesPT(P) {
     },
     game: {
       uso: `${P}game [criar|ficha|pontos|top|apagar]`,
-      desc: "RPG do servidor: crie um personagem, suba de nível e distribua pontos em 9 atributos.\n\n`&game criar [nome]` — cria seu personagem\n`&game` — sua ficha\n`&game ficha @pessoa` — a ficha de outro\n`&game pontos <atributo> [quantos]` — distribui pontos (aceita abreviação: for, int, sor…)\n\n_A cada 2 níveis todos os atributos sobem 1 sozinhos; os pontos livres é que fazem a build._\n`&game carteira` — saldo e estado da economia\n`&game comprar [item] [com <moeda>]` · `&game vender <item>` — mercado\n`&game contratar [nome]` — mercenários\n`&game descansar` — restaura energia pagando\n`&game mercado` — bazar entre jogadores (vender, comprar, cancelar)\n`&game cambio <qtd> <moeda>` — quanto isso vale em todas as moedas\n`&game cambio <qtd> <moeda> para <moeda>` — troca com o banco, na hora\n`&game cambio <qtd> <moeda> por <qtd> <moeda>` — oferta a outro jogador\n`&game cambio taxas` — as taxas do banco\n`&game trocar @pessoa <item> por <item>` — escambo\n\n_Para **configurar** o RPG no servidor: `&tutorial game`._\n_Dono do bot: `&game admin` tem as ferramentas de teste._\n`&game followers` — seus companheiros\n`&game follower ficha <nome>` — atributos, magia e mochila dele\n`&game follower dar <nome> <item>` — entrega um item (nomes com espaço ok; `|` separa se preciso)\n`&game follower levar <nome>` — coloca na party (até 2)\n`&game recrutas` — quem existe no jogo\n`&game dungeon` — quem está capturado (o resgate é automático nas missões)\n`&game missao` — missões disponíveis (com sua chance em cada uma)\n`&game missao <nome>` — parte para a missão\n`&game itens` — sua mochila\n`&game item <nome>` — ficha de um item, com preço em cada moeda\n`&game equipar <item>` / `&game desequipar <slot|item>`\n`&game magias` — o grimório · `&game aprender <nome>` — aprende uma magia\n`&game catalogo` — resumo dos itens · `&game catalogo <raridade|slot>` — a lista completa daquele grupo\n`&game top` — ranking do servidor\n`&game apagar confirmar` — recomeça do zero\n\n**Atributos:** Força, Destreza, Resistência, Agilidade, Vida, Mana, Inteligência, Sorte, Carisma.\n\n_Inteligência e Sorte aumentam o XP ganho e os pontos por nível, com retorno decrescente — nunca param de valer._\n\n⚠️ Não confundir com `&xp`, que é o sistema de níveis por mensagem.",
+      desc: "RPG — um mundo só, o mesmo em todos os servidores, com mercado e moedas próprios: crie um personagem, suba de nível e distribua pontos em 9 atributos.\n\n`&game criar [nome]` — cria seu personagem\n`&game` — sua ficha\n`&game ficha @pessoa` — a ficha de outro\n`&game pontos <atributo> [quantos]` — distribui pontos (aceita abreviação: for, int, sor…)\n\n_A cada 2 níveis todos os atributos sobem 1 sozinhos; os pontos livres é que fazem a build._\n`&game carteira` — saldo e estado das moedas do jogo\n`&game comprar [item] [com <moeda>]` · `&game vender <item>` — mercado\n`&game contratar [nome]` — mercenários\n`&game descansar` — restaura energia pagando\n`&game mercado` — bazar entre jogadores (vender, comprar, cancelar)\n`&game cambio <qtd> <moeda>` — quanto isso vale em todas as moedas\n`&game cambio <qtd> <moeda> para <moeda>` — troca com o banco, na hora\n`&game cambio <qtd> <moeda> por <qtd> <moeda>` — oferta a outro jogador\n`&game cambio taxas` — as taxas do banco\n`&game trocar @pessoa <item> por <item>` — escambo\n\n_Para **configurar** o RPG no servidor: `&tutorial game`._\n_Dono do bot: `&game admin` tem as ferramentas de teste._\n`&game followers` — seus companheiros\n`&game follower ficha <nome>` — atributos, magia e mochila dele\n`&game follower dar <nome> <item>` — entrega um item (nomes com espaço ok; `|` separa se preciso)\n`&game follower levar <nome>` — coloca na party (até 2)\n`&game recrutas` — quem existe no jogo\n`&game dungeon` — quem está capturado (o resgate é automático nas missões)\n`&game missao` — missões disponíveis (com sua chance em cada uma)\n`&game missao <nome>` — parte para a missão\n`&game itens` — sua mochila\n`&game item <nome>` — ficha de um item, com preço em cada moeda\n`&game equipar <item>` / `&game desequipar <slot|item>`\n`&game magias` — o grimório · `&game aprender <nome>` — aprende uma magia\n`&game catalogo` — resumo dos itens · `&game catalogo <raridade|slot>` — a lista completa daquele grupo\n`&game top` — ranking do servidor\n`&game apagar confirmar` — recomeça do zero\n\n**Atributos:** Força, Destreza, Resistência, Agilidade, Vida, Mana, Inteligência, Sorte, Carisma.\n\n_Inteligência e Sorte aumentam o XP ganho e os pontos por nível, com retorno decrescente — nunca param de valer._\n\n⚠️ Não confundir com `&xp`, que é o sistema de níveis por mensagem.",
       perm: null,
       ex: `${P}game criar Kael`,
     },
@@ -177,6 +171,20 @@ function detalhesPT(P) {
       desc: "Mostra a **equipe do servidor**, agrupada por cargo e com quem tem cada um.\n\nA lista não tem cadastro próprio: ela lê os mesmos cargos do `&acesso cargo`. Então adicionar aqui **também dá acesso aos comandos de moderação** — e remover tira os dois de uma vez, sem o quadro de avisos discordar da permissão real.\n\n`&staff add <@cargo>` · `&staff remove <@cargo>` · `&staff limpar`\n`&staff titulo <@cargo> <texto>` — rótulo exibido no lugar do nome do cargo\n\n_Consultar é público; mexer exige ManagePermissions._",
       perm: "ManagePermissions", ex: `${P}staff add Moderador`,
     },
+    economia: {
+      uso: `${P}economia [minerar|saldo|top|loja|comprar|pagar]`,
+      desc: "A **moeda do servidor** — à parte do RPG, uma moeda só por servidor.\n\n"
+        + "`&economia minerar` — ganha um punhado, com espera entre uma e outra\n"
+        + "`&economia saldo [@pessoa]` · `&economia top` — quem tem mais\n"
+        + "`&economia loja` · `&economia comprar <cargo>` — cargos à venda (só cobra se o cargo for entregue)\n"
+        + "`&economia pagar @pessoa <quantia>`\n\n"
+        + "**Staff** _(ManageServer)_\n"
+        + "`&economia config nome <nome>` · `simbolo <emoji>` · `ganho <mín> <máx>` · `intervalo <tempo>`\n"
+        + "`&economia loja add <cargo> <preço>` · `&economia loja remover <cargo>`\n"
+        + "`&economia dar|tirar @pessoa <quantia>` · `&economia zerar confirmar`\n\n"
+        + "_O bot só entrega cargos que estão abaixo do cargo dele._",
+      ex: `${P}economia minerar`,
+    },
     rolar: {
       uso: `${P}rolar <expressão> | adv | des | moeda | gm <expressão>`,
       desc: "Dados de RPG de mesa, com tudo:\n`2d20kh1+5` mantém o maior · `4d6kh3` descarta o menor dado\n`adv`/`des` — vantagem/desvantagem · `3d6!` — explosão\n`8d10>=7` — conta sucessos · `d%` · `4dF` (Fate) · `moeda`\n`6x(4d6kh3)` — repete (seis atributos de uma vez)\n`1d20+7 # Percepção` — rótulo na rolagem\n`gm 1d20` — **secreta**: o resultado vai por DM e o pedido some do canal.\n20 natural ganha 🎯, 1 natural ganha 💀.",
@@ -188,10 +196,17 @@ function detalhesPT(P) {
       perm: "todo mundo", ex: `${P}iniciativa add Elfa 1d20+3`,
     },
     ticket: {
-      uso: `${P}ticket [abrir <motivo>|fechar <nota>|log <#canal>|lista]`,
-      desc: "Suporte com canal privado por pedido:\n`abrir` cria o canal **#ticket-N** que só quem abriu e os cargos de staff do `&acesso` enxergam (um cargo por ticket cuida disso)\n`fechar` — staff ou quem abriu — **arquiva a conversa inteira** no canal de log (transcrição com hora e autor) e apaga o canal\n`log <#canal>` define o arquivo (obrigatório antes do primeiro ticket) · `lista` mostra os abertos.\n\nO bot precisa de **ManageChannel, ManageRole, AssignRoles, ManagePermissions** no servidor — cada erro diz qual faltou.",
-      perm: "abrir: todo mundo · resto: staff", ex: `${P}ticket abrir não consigo entrar na call`,
+      uso: `${P}ticket [painel <#canal>|categorias|log <#canal>|lista]`,
+      desc: "Suporte com canal privado por pedido, **por reação**:\n\n"
+        + "`painel <#canal>` — posta no canal escolhido uma mensagem com uma reação por assunto (🎫 Suporte, 🚨 Denúncia, 💡 Sugestão). **Reagiu = abriu**: nasce o canal **#ticket-N**, que só quem abriu e a staff do `&acesso` enxergam\n"
+        + "Dentro do ticket, 🔒 **fecha — só a staff**: a conversa **trava** (quem abriu lê, mas não escreve mais) e o registro inteiro vai para o log como **arquivo .txt**. Depois, 🗑️ (staff) apaga o canal\n\n"
+        + "`categorias 🎫 Suporte | 🚨 Denúncia` — troca os assuntos (poste o painel de novo)\n"
+        + "`log <#canal>` — para onde vão os registros (obrigatório) · `lista` — os abertos\n"
+        + "_Digitando também dá: `abrir [motivo]`, `fechar [nota]`, `apagar`._\n\n"
+        + "O bot precisa de **ManageChannel, ManageRole, AssignRoles, ManagePermissions** e **ManageMessages** (para limpar as reações).",
+      perm: "reagir/abrir: todo mundo · resto: staff", ex: `${P}ticket painel #suporte`,
     },
+
     webhook: {
       uso: `${P}webhook [criar <nome> [#canal]|lista|canal|eventos|url|testar|remover]`,
       desc: "Receptor **universal** de webhooks: serviços externos publicam num canal seu.\n\n**Funciona com:** GitHub (push, issues, PR, releases, Actions, star, fork…), Crafty/Minecraft, e **qualquer ferramenta que fale o formato Discord** (Uptime Kuma, Grafana…) — é só colar a URL do gancho onde iria a URL do Discord.\n\n**O modelo:** cada *gancho* tem nome, canal próprio e filtro de eventos. Separar por chats é criar um gancho por assunto:\n`&webhook criar issues #issues` + `&webhook eventos issues issues,issue_comment`\n`&webhook criar ci #ci` + `&webhook eventos ci workflow_run`\n`&webhook criar mine #minecraft` ← aponte o Crafty (provider Discord) para ele\n\n**Segurança:** a URL é o segredo (token de 128 bits); `remover` mata a URL na hora; teto de 30 publicações/min por gancho contra flood.\n\n**Qual endereço usar:** serviço da INTERNET (GitHub…) exige base pública https — `sudo tailscale funnel --bg 8095` e `WEBHOOK_URL_BASE=https://<máquina>.ts.net` no `.env`; container da MESMA máquina (Crafty…) usa a ponte do Docker `http://172.17.0.1:8095/...` — a URL interna colada num serviço da internet dá \"failed to connect\" sem explicação.",
@@ -199,7 +214,7 @@ function detalhesPT(P) {
     },
     musica: {
       uso: `${P}musica <link ou nome> | [pausar|play|skip|fila|parar|volume <0-200>|loop <faixa|fila|nao>]`,
-      desc: "Música nas calls — **YouTube, SoundCloud e Spotify**, com fila por canal.\n\n**O básico:**\n`&entrar` — dentro da call (a mesma do TTS)\n`&musica <link ou nome>` — toca; com som rolando, entra na fila\n`&musica pausar` · `&musica play` — pausa e retoma\n`&musica skip` — próxima · `&musica fila` — a lista atual\n`&musica parar` — para e limpa a fila · `&sair` — ela sai da call\n\n**Ajustes:** `&musica volume 80` (0 a 200%) · `&musica loop faixa|fila|nao`\n\n**Fontes:** link ou playlist do YouTube/SoundCloud, busca por texto, e faixa do Spotify (sem chave). Playlist/álbum do Spotify pede `SPOTIFY_ID`/`SPOTIFY_SECRET` no `.env` de quem hospeda o bot.\n\n**Com o TTS na mesma call:** a música **abaixa sozinha** enquanto a fala sai e volta ao volume normal depois (ducking).\n\n_Aliases: `&m` · `&play` · `&tocar`._",
+      desc: "Música nas calls — **YouTube, SoundCloud e Spotify**, com fila por canal.\n\n**O básico:**\n`&entrar` — de qualquer canal, estando numa call: ela vai até você (ou `&entrar call 1`). O `&musica` funciona de qualquer canal e, se ela não estiver em call, entra na sua\n`&musica <link ou nome>` — toca; com som rolando, entra na fila\n`&musica pausar` · `&musica play` — pausa e retoma\n`&musica skip` — próxima · `&musica fila` — a lista atual\n`&musica parar` — para e limpa a fila · `&sair` — ela sai da call\n\n**Ajustes:** `&musica volume 80` (0 a 200%) · `&musica loop faixa|fila|nao`\n\n**Fontes:** link ou playlist do YouTube/SoundCloud, busca por texto, e faixa do Spotify (sem chave). Playlist/álbum do Spotify pede `SPOTIFY_ID`/`SPOTIFY_SECRET` no `.env` de quem hospeda o bot.\n\n**Com o TTS na mesma call:** a música **abaixa sozinha** enquanto a fala sai e volta ao volume normal depois (ducking).\n\n_Aliases: `&m` · `&play` · `&tocar`._",
       perm: "todo mundo", ex: `${P}musica tocar never gonna give you up`,
     },
     entrar: {
@@ -214,7 +229,7 @@ function detalhesPT(P) {
     },
     tts: {
       uso: `${P}tts <texto> | [estado|filtro|dicionario|voz|efeito|tom|nomes|cooldown|reiniciar]`,
-      desc: "A Judy **fala nas calls**. Alguém escreve, ela lê em voz alta.\n\n**Entrar e sair é com** `&entrar` **e** `&sair` — dentro da call, ela entra e passa a falar **tudo que for escrito ali** (estando em outra call, ela vem para a sua)\n\nO `entrar` liga o sistema, escolhe a call e liga a leitura sozinho — antes isso eram quatro comandos na ordem certa.\n\n`&tts <texto>` — falar uma frase específica · `&tts estado` — está tudo de pé?\n_Estes valem para **todo mundo**, não só para a equipe._\n\n**Ajustes** _(ver é livre; mudar é ManageMessages)_\n`&tts nomes off` — para de anunciar \"Fulano disse:\"\n`&tts cooldown <s>` — freio entre falas da mesma pessoa (0 desliga)\n`&tts filtro` — a **peneira**: ignora repetição, parede de texto e barulho, e limita as falas por minuto no canal _(`&help tts filtro`)_\n\n**Quando algo trava**\n`&tts reiniciar` — destrava o serviço de voz sem ir ao terminal _(ManageMessages)_. Depois de `&sair`, a transmissão **não** traz a Judy de volta: só `&entrar`. _(`&help tts problemas`)_\n\n**Dicionário** — a escrita de chat vira fala compreensível\n`vc n vai vir hj pq?` sai como `você não vai vir hoje porque?`\n`&tts dicionario` — vê o que está valendo\n`&tts dicionario add <abrev> <texto>` — entrada própria do servidor\n`&tts dicionario padrao off` — desliga as 114 abreviações embutidas\n\n**Voz e timbre**\n`&tts voz [nome]` — troca a voz do Piper (faber masculina, dii feminina)\n`&tts efeito [nome]` — `feminina`, `sedutora`, `suave`, `glados`, `robo`, `radio`…\n`&tts tom <n>` — altura da voz, **separada** do efeito (1.0 = original)\n_Sobe tom **e formantes** juntos: voz masculina vira feminina de verdade. Se a voz base já é feminina, mexa pouco — acima de 1.05 soa infantil._\n_Os efeitos mudam só o **caráter** e não tocam no tom, então soam igual sobre qualquer voz._\n_Não existe voz GLaDOS em português; o efeito recria o **processamento** dela sobre a voz que você já usa._\n\n_Dentro dos canais de voz configurados, o `&tts` funciona para **todos**, mesmo com restrição de canal ligada._\n_A síntese é **offline**, no computador do dono (Piper)._",
+      desc: "A Judy **fala nas calls**. Alguém escreve, ela lê em voz alta.\n\n**Entrar e sair é com** `&entrar` **e** `&sair` — de **qualquer canal**: ela entra na call em que você está (ou na que você disser: `&entrar call 1`) e passa a falar **tudo que for escrito no canal onde você digitou** — dá para usar um canal só para isso, como #call-sem-mic\n\nO `entrar` liga o sistema, escolhe a call e liga a leitura sozinho — antes isso eram quatro comandos na ordem certa.\n\n`&tts <texto>` — falar uma frase específica · `&tts estado` — está tudo de pé?\n_Estes valem para **todo mundo**, não só para a equipe._\n\n**Ajustes** _(ver é livre; mudar é ManageMessages)_\n`&tts nomes off` — para de anunciar \"Fulano disse:\"\n`&tts cooldown <s>` — freio entre falas da mesma pessoa (0 desliga)\n`&tts filtro` — a **peneira**: ignora repetição, parede de texto e barulho, e limita as falas por minuto no canal _(`&help tts filtro`)_\n\n**Quando algo trava**\n`&tts reiniciar` — destrava o serviço de voz sem ir ao terminal _(ManageMessages)_. Depois de `&sair`, a transmissão **não** traz a Judy de volta: só `&entrar`. _(`&help tts problemas`)_\n\n**Dicionário** — a escrita de chat vira fala compreensível\n`vc n vai vir hj pq?` sai como `você não vai vir hoje porque?`\n`&tts dicionario` — vê o que está valendo\n`&tts dicionario add <abrev> <texto>` — entrada própria do servidor\n`&tts dicionario padrao off` — desliga as 114 abreviações embutidas\n\n**Voz e timbre**\n`&tts voz [nome]` — troca a voz do Piper (faber masculina, dii feminina)\n`&tts efeito [nome]` — `feminina`, `sedutora`, `suave`, `glados`, `robo`, `radio`…\n`&tts tom <n>` — altura da voz, **separada** do efeito (1.0 = original)\n_Sobe tom **e formantes** juntos: voz masculina vira feminina de verdade. Se a voz base já é feminina, mexa pouco — acima de 1.05 soa infantil._\n_Os efeitos mudam só o **caráter** e não tocam no tom, então soam igual sobre qualquer voz._\n_Não existe voz GLaDOS em português; o efeito recria o **processamento** dela sobre a voz que você já usa._\n\n_Dentro dos canais de voz configurados, o `&tts` funciona para **todos**, mesmo com restrição de canal ligada._\n_A síntese é **offline**, no computador do dono (Piper)._",
       perm: "ManageMessages (só para configurar)", ex: `${P}entrar`,
     },
     fuso: {
@@ -258,10 +273,10 @@ function detalhesPT(P) {
       perm: "ManageServer", ex: `${P}modia criterios Apague divulgacao de outros servidores e ataques pessoais`,
     },
     debug: {
-      uso: `${P}debug [canais|silence]`,
-      desc: "Diagnóstico do bot neste servidor.\n\n`&debug` — testa todos os comandos e aponta o que está desativado ou sem permissão\n`&debug canais` — **o que eu enxergo e o que consigo fazer em cada canal**. No Stoat a permissão do canal vence a do cargo, então dá para eu ter permissão no servidor e estar mudo num canal específico\n`&debug canais cru` — mostra o formato dos dados (quando o diagnóstico não consegue avaliar)\n`&debug silence [@pessoa]` — se o silêncio (timeout nativo) vai funcionar: confere se o bot tem **TimeoutMembers** e, com uma pessoa marcada, se dá para silenciá-la",
+      uso: `${P}debug [@pessoa | #canal]`,
+      desc: "O diagnóstico do bot neste servidor, numa mensagem só.\n\n`&debug` — **o relatório completo**: primeiro o que está quebrado e como resolver; depois permissões do bot, hierarquia de cargos, canais configurados, todos os canais, moderação, voz e IA (e os erros recentes, para o dono do bot)\n`&debug @pessoa` — o que o bot consegue fazer com essa pessoa: punir, silenciar, dar os cargos de nível\n`&debug #canal` — a conta de permissão do bot nesse canal, cargo por cargo (aceita o nome do canal)\n\n`&help debug ler` explica os ícones.",
       perm: "ManagePermissions",
-      ex: `${P}debug canais`,
+      ex: `${P}debug`,
     },
     comando: {
       uso: `${P}comando [disable|enable <nome>]`,
@@ -294,11 +309,6 @@ function detalhesPT(P) {
       desc: "Chat de logs do servidor. `here` usa o canal atual; `<idDoCanal>` define por ID; `off` desativa. Eventos: `punicoes`, `membros`, `mensagens`, `cargos`, `comandos` — cada um pode ser ligado/desligado.",
       perm: "ManagePermissions", ex: `${P}log here`,
     },
-    review: {
-      uso: `${P}automod sentinela ban <userId> | ${P}automod sentinela dismiss <userId>`,
-      desc: "No modo confirmação, confirma o banimento ou libera o usuário sinalizado.",
-      perm: "BanMembers",
-    },
   };
 }
 
@@ -321,10 +331,6 @@ function detalhesEN(P) {
       desc: "**Guided** setup: the bot asks one question at a time, you answer in plain text, and at the end it shows a summary and applies everything — using the same commands you would type by hand (and shows which ones, so you learn them).\n\n`&assistente` — menu\n`&assistente rapido` — language, staff, log, protection, welcome (~2 min)\n`&assistente completo` — quick + punishment ladder, global list, XP, autorole\n`&assistente canais` — sorts your channels into the 3 types and tells you what to click in Stoat\n`&assistente protecao` — only automod, sentinel and punishment\n\nDuring the questions: `pular` skips, `voltar` goes back, `cancelar` quits. Each person has their own; it expires after 10 min without an answer.",
       perm: "ManagePermissions",
       ex: `${P}assistente rapido`,
-    },
-    hello: {
-      uso: `${P}hello`,
-      desc: "Replies with a simple greeting. Handy to check whether the bot is online.",
     },
     ping: {
       uso: `${P}ping`,
@@ -392,7 +398,7 @@ function detalhesEN(P) {
     },
     game: {
       uso: `${P}game [criar|ficha|pontos|top|apagar]`,
-      desc: "Server RPG: create a character, level up and spend points across 9 attributes.\n\n`&game criar [name]` — creates your character\n`&game` — your sheet\n`&game ficha @user` — someone else's sheet\n`&game pontos <attribute> [amount]` — spends points (abbreviations work: for, int, sor…)\n\n_Every 2 levels all attributes rise by 1 on their own; the free points are what shape your build._\n`&game carteira` — balance and economy state\n`&game comprar [item] [com <currency>]` · `&game vender <item>` — market\n`&game contratar [name]` — mercenaries\n`&game descansar` — restores energy for a fee\n`&game mercado` — player-to-player bazaar (sell, buy, cancel)\n`&game cambio <qty> <currency>` — what it's worth in every currency\n`&game cambio <qty> <currency> para <currency>` — exchange with the bank, instantly\n`&game cambio <qty> <currency> por <qty> <currency>` — offer to another player\n`&game cambio taxas` — the bank's rates\n`&game trocar @user <item> por <item>` — bartering\n\n_To **configure** the RPG on the server: `&tutorial game`._\n_Bot owner: `&game admin` has the testing tools._\n`&game followers` — your companions\n`&game follower ficha <name>` — his attributes, spell and bag\n`&game follower dar <name> <item>` — hands over an item (spaces are fine; `|` separates if needed)\n`&game follower levar <name>` — adds to the party (up to 2)\n`&game recrutas` — who exists in the game\n`&game dungeon` — who's captured (the rescue happens automatically on missions)\n`&game missao` — available missions (with your odds in each)\n`&game missao <name>` — sets off on the mission\n`&game itens` — your backpack\n`&game item <name>` — one item's sheet, with the price in each currency\n`&game equipar <item>` / `&game desequipar <slot|item>`\n`&game magias` — the grimoire · `&game aprender <name>` — learn a spell\n`&game catalogo` — item summary · `&game catalogo <rarity|slot>` — the full list of that group\n`&game top` — server ranking\n`&game apagar confirmar` — starts over from scratch\n\n**Attributes:** Strength, Dexterity, Endurance, Agility, Health, Mana, Intelligence, Luck, Charisma.\n\n_Intelligence and Luck boost XP gains and points per level, with diminishing returns — they never stop mattering._\n\n⚠️ Not to be confused with `&xp`, the per-message leveling system.",
+      desc: "RPG — one world, the same on every server, with its own market and currencies: create a character, level up and spend points across 9 attributes.\n\n`&game criar [name]` — creates your character\n`&game` — your sheet\n`&game ficha @user` — someone else's sheet\n`&game pontos <attribute> [amount]` — spends points (abbreviations work: for, int, sor…)\n\n_Every 2 levels all attributes rise by 1 on their own; the free points are what shape your build._\n`&game carteira` — balance and the state of the game's currencies\n`&game comprar [item] [com <currency>]` · `&game vender <item>` — market\n`&game contratar [name]` — mercenaries\n`&game descansar` — restores energy for a fee\n`&game mercado` — player-to-player bazaar (sell, buy, cancel)\n`&game cambio <qty> <currency>` — what it's worth in every currency\n`&game cambio <qty> <currency> para <currency>` — exchange with the bank, instantly\n`&game cambio <qty> <currency> por <qty> <currency>` — offer to another player\n`&game cambio taxas` — the bank's rates\n`&game trocar @user <item> por <item>` — bartering\n\n_To **configure** the RPG on the server: `&tutorial game`._\n_Bot owner: `&game admin` has the testing tools._\n`&game followers` — your companions\n`&game follower ficha <name>` — his attributes, spell and bag\n`&game follower dar <name> <item>` — hands over an item (spaces are fine; `|` separates if needed)\n`&game follower levar <name>` — adds to the party (up to 2)\n`&game recrutas` — who exists in the game\n`&game dungeon` — who's captured (the rescue happens automatically on missions)\n`&game missao` — available missions (with your odds in each)\n`&game missao <name>` — sets off on the mission\n`&game itens` — your backpack\n`&game item <name>` — one item's sheet, with the price in each currency\n`&game equipar <item>` / `&game desequipar <slot|item>`\n`&game magias` — the grimoire · `&game aprender <name>` — learn a spell\n`&game catalogo` — item summary · `&game catalogo <rarity|slot>` — the full list of that group\n`&game top` — server ranking\n`&game apagar confirmar` — starts over from scratch\n\n**Attributes:** Strength, Dexterity, Endurance, Agility, Health, Mana, Intelligence, Luck, Charisma.\n\n_Intelligence and Luck boost XP gains and points per level, with diminishing returns — they never stop mattering._\n\n⚠️ Not to be confused with `&xp`, the per-message leveling system.",
       perm: null,
       ex: `${P}game criar Kael`,
     },
@@ -411,6 +417,20 @@ function detalhesEN(P) {
       desc: "Shows the **server's staff**, grouped by role and listing who holds each one.\n\nThe list has no separate registry: it reads the very same roles as `&acesso cargo`. So adding here **also grants access to the moderation commands** — and removing drops both at once, so the notice board can never disagree with the actual permission.\n\n`&staff add <@role>` · `&staff remove <@role>` · `&staff clear`\n`&staff title <@role> <text>` — label shown instead of the role's name\n\n_Viewing is public; changing requires ManagePermissions._",
       perm: "ManagePermissions", ex: `${P}staff add Moderator`,
     },
+    economia: {
+      uso: `${P}economia [minerar|saldo|top|loja|comprar|pagar]`,
+      desc: "The **server's currency** — separate from the RPG, one currency per server.\n\n"
+        + "`&economia minerar` — earn a handful, with a wait between rounds\n"
+        + "`&economia saldo [@user]` · `&economia top` — who has the most\n"
+        + "`&economia loja` · `&economia comprar <role>` — roles for sale (only charged if the role is delivered)\n"
+        + "`&economia pagar @user <amount>`\n\n"
+        + "**Staff** _(ManageServer)_\n"
+        + "`&economia config nome <name>` · `simbolo <emoji>` · `ganho <min> <max>` · `intervalo <time>`\n"
+        + "`&economia loja add <role> <price>` · `&economia loja remover <role>`\n"
+        + "`&economia dar|tirar @user <amount>` · `&economia zerar confirmar`\n\n"
+        + "_The bot only hands out roles below its own._",
+      ex: `${P}economia minerar`,
+    },
     rolar: {
       uso: `${P}rolar <expression> | adv | des | moeda | gm <expression>`,
       desc: "Tabletop RPG dice, fully loaded:\n`2d20kh1+5` keep highest · `4d6kh3` drop the lowest die\n`adv`/`des` — advantage/disadvantage · `3d6!` — exploding\n`8d10>=7` — count successes · `d%` · `4dF` (Fate) · `moeda` (coin)\n`6x(4d6kh3)` — repeat (six ability scores at once)\n`1d20+7 # Perception` — label the roll\n`gm 1d20` — **secret**: result goes by DM and the request vanishes from the channel.\nNatural 20 gets 🎯, natural 1 gets 💀.",
@@ -422,10 +442,17 @@ function detalhesEN(P) {
       perm: "everyone", ex: `${P}iniciativa add Elf 1d20+3`,
     },
     ticket: {
-      uso: `${P}ticket [abrir <reason>|fechar <note>|log <#channel>|lista]`,
-      desc: "Support with a private channel per request:\n`abrir` creates **#ticket-N**, visible only to the opener and the staff roles from `&acesso` (a per-ticket role handles it)\n`fechar` — staff or the opener — **archives the whole conversation** in the log channel (timed, authored transcript) and deletes the channel\n`log <#channel>` sets the archive (required before the first ticket) · `lista` shows open ones.\n\nThe bot needs **ManageChannel, ManageRole, AssignRoles, ManagePermissions** — each error names what's missing.",
-      perm: "abrir: everyone · rest: staff", ex: `${P}ticket abrir can't join the call`,
+      uso: `${P}ticket [painel <#channel>|categorias|log <#channel>|lista]`,
+      desc: "Support with a private channel per request, **by reaction**:\n\n"
+        + "`painel <#channel>` — posts in the chosen channel a message with one reaction per topic (🎫 Support, 🚨 Report, 💡 Suggestion). **React = open**: a **#ticket-N** channel is born, visible only to the opener and the staff from `&acesso`\n"
+        + "Inside the ticket, 🔒 **closes it — staff only**: the conversation **locks** (the opener can read, not write) and the whole record goes to the log as a **.txt file**. Then 🗑️ (staff) deletes the channel\n\n"
+        + "`categorias 🎫 Support | 🚨 Report` — changes the topics (repost the panel)\n"
+        + "`log <#channel>` — where records go (required) · `lista` — open ones\n"
+        + "_Typing works too: `abrir [reason]`, `fechar [note]`, `apagar`._\n\n"
+        + "The bot needs **ManageChannel, ManageRole, AssignRoles, ManagePermissions** and **ManageMessages** (to clear reactions).",
+      perm: "react/open: everyone · rest: staff", ex: `${P}ticket painel #support`,
     },
+
     webhook: {
       uso: `${P}webhook [criar <name> [#channel]|lista|canal|eventos|url|testar|remover]`,
       desc: "**Universal** webhook receiver: external services post into your channels.\n\n**Works with:** GitHub (push, issues, PRs, releases, Actions, star, fork…), Crafty/Minecraft, and **anything that speaks the Discord format** (Uptime Kuma, Grafana…) — just paste the hook URL where the Discord URL would go.\n\n**The model:** each *hook* has a name, its own channel and an event filter. Per-chat separation is one hook per subject:\n`&webhook criar issues #issues` + `&webhook eventos issues issues,issue_comment`\n`&webhook criar ci #ci` + `&webhook eventos ci workflow_run`\n`&webhook criar mine #minecraft` ← point Crafty (Discord provider) at it\n\n**Security:** the URL is the secret (128-bit token); `remover` kills the URL instantly; 30 posts/min cap per hook against floods.\n\n**Which address to use:** INTERNET services (GitHub…) need a public https base — `sudo tailscale funnel --bg 8095` and `WEBHOOK_URL_BASE=https://<machine>.ts.net` in `.env`; SAME-machine containers (Crafty…) use the Docker bridge `http://172.17.0.1:8095/...` — an internal URL pasted into an internet service fails with an unexplained \"failed to connect\".",
@@ -433,7 +460,7 @@ function detalhesEN(P) {
     },
     musica: {
       uso: `${P}musica <link or name> | [pausar|play|skip|fila|parar|volume <0-200>|loop <faixa|fila|nao>]`,
-      desc: "Music in calls — **YouTube, SoundCloud and Spotify**, with a per-channel queue.\n\n**The basics:**\n`&entrar` — inside the call (the same one as TTS)\n`&musica <link or name>` — plays; if something is on, it queues\n`&musica pausar` · `&musica play` — pause and resume\n`&musica skip` — next · `&musica fila` — current queue\n`&musica parar` — stop and clear · `&sair` — she leaves the call\n\n**Tuning:** `&musica volume 80` (0 to 200%) · `&musica loop faixa|fila|nao`\n\n**Sources:** YouTube/SoundCloud link or playlist, free-text search, and Spotify tracks (keyless). Spotify playlists/albums need `SPOTIFY_ID`/`SPOTIFY_SECRET` in the host's `.env`.\n\n**With TTS in the same call:** the music **ducks automatically** while speech plays and comes back after.\n\n_Aliases: `&m` · `&play` · `&tocar`._",
+      desc: "Music in calls — **YouTube, SoundCloud and Spotify**, with a per-channel queue.\n\n**The basics:**\n`&entrar` — from any channel, while you're in a call: she comes to you (or `&entrar call 1`). `&musica` works from any channel and, if she isn't in a call, joins yours\n`&musica <link or name>` — plays; if something is on, it queues\n`&musica pausar` · `&musica play` — pause and resume\n`&musica skip` — next · `&musica fila` — current queue\n`&musica parar` — stop and clear · `&sair` — she leaves the call\n\n**Tuning:** `&musica volume 80` (0 to 200%) · `&musica loop faixa|fila|nao`\n\n**Sources:** YouTube/SoundCloud link or playlist, free-text search, and Spotify tracks (keyless). Spotify playlists/albums need `SPOTIFY_ID`/`SPOTIFY_SECRET` in the host's `.env`.\n\n**With TTS in the same call:** the music **ducks automatically** while speech plays and comes back after.\n\n_Aliases: `&m` · `&play` · `&tocar`._",
       perm: "everyone", ex: `${P}musica tocar never gonna give you up`,
     },
     entrar: {
@@ -492,10 +519,10 @@ function detalhesEN(P) {
       perm: "ManageServer", ex: `${P}modia criterios Delete ads for other servers and personal attacks`,
     },
     debug: {
-      uso: `${P}debug [canais|silence]`,
-      desc: "Bot diagnostics on this server.\n\n`&debug` — tests every command and points out what's disabled or missing permissions\n`&debug canais` — **what I can see and do in each channel**. On Stoat the channel permission beats the role permission, so I can have a server-wide permission yet be muted in one specific channel\n`&debug canais cru` — shows the raw data format (when the diagnosis can't evaluate)\n`&debug silence [@user]` — whether the silence (native timeout) will work: checks the bot has **TimeoutMembers** and, with someone mentioned, whether they can be timed out",
+      uso: `${P}debug [@user | #channel]`,
+      desc: "The bot's diagnostics on this server, in one message.\n\n`&debug` — **the full report**: first what's broken and how to fix it; then the bot's permissions, role hierarchy, configured channels, every channel, moderation, voice and AI (and recent errors, for the bot owner)\n`&debug @user` — what the bot can do with that person: punish, time out, give level roles\n`&debug #channel` — the bot's permission math in that channel, role by role (the channel name works too)\n\n`&help debug ler` explains the icons.",
       perm: "ManagePermissions",
-      ex: `${P}debug canais`,
+      ex: `${P}debug`,
     },
     comando: {
       uso: `${P}comando [disable|enable <name>]`,
@@ -527,11 +554,6 @@ function detalhesEN(P) {
       uso: `${P}log [here | <channelId> | off | <event> <on|off>]`,
       desc: "The server's log channel. `here` uses the current channel; `<channelId>` sets it by ID; `off` disables it. Events: `punicoes`, `membros`, `mensagens`, `cargos`, `comandos` — each can be toggled.",
       perm: "ManagePermissions", ex: `${P}log here`,
-    },
-    review: {
-      uso: `${P}automod sentinela ban <userId> | ${P}automod sentinela dismiss <userId>`,
-      desc: "In confirmation mode, confirms the ban or releases the flagged user.",
-      perm: "BanMembers",
     },
   };
 }
@@ -800,7 +822,7 @@ export async function cmdHelp(message, args, ctx) {
 
     return enviarPaginado(ctx, message.channel, {
       paginas: paginarLinhas([...corpo, ...rodape], {
-        titulo: `📖 ${lang === "en" ? "Help" : "Ajuda"} — ${P}${trilha.join(" ")}`,
+        titulo: `📖 ${lang === "en" ? "Help" : "Ajuda"} — ${P}${trilha.join(" › ")}`,
       }),
       autorId: message.authorId,
       colour: COR.info,
@@ -904,10 +926,10 @@ export async function cmdHelp(message, args, ctx) {
       d.ex ? `\n**${lang === "en" ? "Example" : "Exemplo"}:** \`${d.ex}\`` : null,
     ].filter(Boolean).join("\n");
     const titulo = `📖 ${lang === "en" ? "Help" : "Ajuda"} — ${P}${nomeExibido(alvo, lang)}`;
-    const paginas = [{ title: titulo, description: cabecalho }];
-    if (params) paginas.push({ title: titulo, description: params.trim() });
-    if (temSub) paginas.push({ title: titulo, description: temSub.trim() });
-    if (paginas.length === 1 || (cabecalho.length + params.length + temSub.length) < 1350) {
+    // Páginas montadas por tamanho, quebrando entre linhas (o cabeçalho do
+    // &help tts tinha 2.300 caracteres e era cortado no meio de "dicionario").
+    const paginas = paginarLinhas([cabecalho, params.trim(), temSub.trim()].filter(Boolean).join("\n\n").split("\n"), { titulo });
+    if (paginas.length === 1) {
       return sendEmbed(message.channel, { title: titulo, colour: COR.info,
         description: cabecalho + params + temSub });
     }
@@ -961,10 +983,16 @@ export async function cmdSobre(message, args, ctx) {
   const comIA = (() => { try { return temIA(serverId); } catch { return false; } })();
 
   // conta comandos, linhas e uptime de forma resiliente
-  const todasRotas = estado?.rotas ? new Set(Object.values(estado.rotas)) : null;
-  const nComandos = todasRotas
-    ? (comIA ? todasRotas.size : todasRotas.size - (estado?.COMANDOS_SO_IA?.size ?? 0))
-    : null;
+  // Um comando por função (os apelidos apontam para a mesma), sem os que não
+  // valem aqui: desativados neste servidor, só-IA fora da IA, o painel do
+  // dono e o &cargomudo aposentado.
+  const nComandos = (() => {
+    if (!estado?.rotas) return null;
+    const porFuncao = new Map();
+    for (const [nome, fn] of Object.entries(estado.rotas)) if (!porFuncao.has(fn)) porFuncao.set(fn, nome);
+    const fora = new Set(["servidores", "cargomudo", ...(config?.comandosDesativados ?? [])]);
+    return [...porFuncao.values()].filter((n) => !fora.has(n) && (comIA || !estado.COMANDOS_SO_IA?.has(n))).length;
+  })();
   const nLinhas = contarLinhas();
   const up = process.uptime();
   const dias = Math.floor(up / 86400);
@@ -973,22 +1001,25 @@ export async function cmdSobre(message, args, ctx) {
   const uptime = dias > 0 ? `${dias}d ${horas}h` : horas > 0 ? `${horas}h ${mins}min` : `${mins}min`;
 
   const am = config?.automod ?? {};
-  const modulosOn = ["antiSpam", "antiMassSpam", "antiInvite", "antiMassMention",
-    "antiCaps", "antiLink", "antiScam", "antiCaracteres", "antiRepeticao"]
-    .filter((k) => am[k]?.enabled).length;
+  // A mesma lista do &automod (antes: 9 fixos, sem o antiduplicata e o antiimagem).
+  const chavesAutomod = Object.values(MODULOS_AUTOMOD);
+  const modulosOn = chavesAutomod.filter((k) => moduloLigado(am, k)).length;
+  const nModulos = chavesAutomod.length;
+  const vozAqui = servidorNaLista("TTS_SERVIDORES", serverId);
+  const geraImagem = (process.env.IMAGEM ?? "1").trim() !== "0";
+  const nomeBot = ctx.client?.user?.displayName || "Judy";   // o nome de exibição; a conta (username) pode chamar outra coisa, como "Cobaia"
+  const criador = (process.env.CRIADOR || "").trim();
   const xpOn = !!config?.xp?.enabled;
   const logOn = !!config?.log?.canalId;
   const rssN = (() => { try { return db.listarFeeds?.(serverId)?.length ?? 0; } catch { return 0; } })();
-  const moedas = (() => { try { return db.listarMoedas?.(serverId) ?? []; } catch { return []; } })();
-  const nPerfis = (() => { try { return PERFIS_MOEDA.PERFIS.length; } catch { return 0; } })();
-  const nDupes = (() => { try { return db.moedasDuplicadas?.(serverId)?.length ?? 0; } catch { return 0; } })();
-  const nPersonagens = (() => { try { return db.listarPersonagens?.(serverId, 9999)?.length ?? 0; } catch { return 0; } })();
+  const moedas = (() => { try { return db.listarMoedas?.(MUNDO) ?? []; } catch { return []; } })();
+  const nPersonagens = (() => { try { return db.listarPersonagens?.(MUNDO, 9999)?.length ?? 0; } catch { return 0; } })();
   // Magias aprendidas no servidor inteiro: mostra se a mecânica pegou ou não.
-  const nCapturados = (() => { try { return db.listarCapturados?.(serverId)?.length ?? 0; } catch { return 0; } })();
+  const nCapturados = (() => { try { return db.listarCapturados?.(MUNDO)?.length ?? 0; } catch { return 0; } })();
   const nMagias = (() => {
     try {
-      return db.listarPersonagens(serverId, 9999)
-        .reduce((t, x) => t + (db.listarMagias(serverId, x.userId)?.length ?? 0), 0);
+      return db.listarPersonagens(MUNDO, 9999)
+        .reduce((t, x) => t + (db.listarMagias(MUNDO, x.userId)?.length ?? 0), 0);
     } catch { return 0; }
   })();
   const banGlobalModo = config?.banGlobal?.modo ?? "off";
@@ -996,36 +1027,37 @@ export async function cmdSobre(message, args, ctx) {
 
   const sim = (v) => v ? "🟢" : "🔴";
   const estadoLinhas = en ? [
-    `${sim(modulosOn)} **AutoMod** — ${modulosOn}/9 modules on${am.antiScam?.enabled ? ` · sentinel ${am.antiScam.porAntiguidade !== false ? "(stricter with newcomers)" : "on"}` : ""}`,
+    `${sim(modulosOn)} **AutoMod** — ${modulosOn}/${nModulos} modules on${am.antiScam?.enabled ? ` · sentinel ${am.antiScam.porAntiguidade !== false ? "(stricter with newcomers)" : "on"}` : ""}`,
     `⚖️ **Punishment** — \`${config?.automod?.punicao?.modo ?? "avisar"}\`${(config?.automod?.punicao?.modo === "acumular") ? ` · ${escadaDePunicao(config.automod.punicao).map((d) => rotuloDegrau(d, "en")).join(" → ")}` : ""}`,
     `${sim(xpOn)} **Leveling (XP)** — ${xpOn ? "on" : "off"}`,
     `${sim(logOn)} **Log channel** — ${logOn ? `<#${config.log.canalId}>` : "not set"}`,
     `${sim(rssN)} **RSS** — ${rssN} feed(s)`,
     `${sim(banGlobalModo !== "off")} **Global ban list** — mode \`${banGlobalModo}\``,
-    `🎲 **RPG** — ${nPersonagens} character(s) · ${moedas.length} currenc${moedas.length === 1 ? "y" : "ies"}${moedas.length > 1 ? " · exchange on" : ""}${nMagias ? ` · ${nMagias} spell(s) learned` : ""}${nCapturados ? ` · ${nCapturados} companion(s) in the dungeon` : ""}${moedas.length < nPerfis ? ` · ${nPerfis} currency profiles available` : ""}${nDupes ? ` · ⚠️ ${nDupes} duplicate currenc${nDupes === 1 ? "y" : "ies"}` : ""}`,
-    comIA ? `🤖 **AI (Judy)** — enabled here: chat, code, web search, exact math, image reading and **image generation**`
+    `🎲 **RPG** _(one world for every server)_ — ${nPersonagens} character(s) · ${moedas.length} currenc${moedas.length === 1 ? "y" : "ies"}${moedas.length > 1 ? " · exchange on" : ""}${nMagias ? ` · ${nMagias} spell(s) learned` : ""}${nCapturados ? ` · ${nCapturados} companion(s) in the dungeon` : ""}`,
+    comIA ? `🤖 **AI (Judy)** — enabled here: chat, code, web search, exact math, image reading${geraImagem ? " and **image generation**" : ""}`
           : `🤖 **AI (Judy)** — runs only on the servers enabled by the bot owner: chat, code, web search, exact math and image reading`,
-    `🎫🪝🔊 **Tickets · Webhooks · Voice** — ${db.listarTickets(serverId).length} open ticket(s) · ${db.listarGanchos(serverId).length} webhook(s) · voice ${config?.tts?.ativo ? "on" : "off"}`,
+    `🎫🪝🔊 **Tickets · Webhooks · Voice** — ${db.listarTickets(serverId).length} open ticket(s) · ${db.listarGanchos(serverId).length} webhook(s) · ${!vozAqui ? "voice and music not available here" : config?.tts?.ativo && config?.tts?.canalVoz ? `voice and music in <#${config.tts.canalVoz}>` : `voice and music: \`${PREFIXO}entrar\` in a call`}`,
   ] : [
-    `${sim(modulosOn)} **AutoMod** — ${modulosOn}/9 módulos ligados${am.antiScam?.enabled ? ` · sentinela ${am.antiScam.porAntiguidade !== false ? "(mais rígido com novatos)" : "ligado"}` : ""}`,
+    `${sim(modulosOn)} **AutoMod** — ${modulosOn}/${nModulos} módulos ligados${am.antiScam?.enabled ? ` · sentinela ${am.antiScam.porAntiguidade !== false ? "(mais rígido com novatos)" : "ligado"}` : ""}`,
     `⚖️ **Punição** — \`${config?.automod?.punicao?.modo ?? "avisar"}\`${(config?.automod?.punicao?.modo === "acumular") ? ` · ${escadaDePunicao(config.automod.punicao).map((d) => rotuloDegrau(d, "pt")).join(" → ")}` : ""}`,
     `${sim(xpOn)} **Níveis (XP)** — ${xpOn ? "ligado" : "desligado"}`,
-    `${sim(logOn)} **Chat de logs** — ${logOn ? `<#${config.log.canalId}>` : "não definido"}`,
+    `${sim(logOn)} **Canal de log** — ${logOn ? `<#${config.log.canalId}>` : "não definido"}`,
     `${sim(rssN)} **RSS** — ${rssN} feed(s)`,
     `${sim(banGlobalModo !== "off")} **Lista global de bans** — modo \`${banGlobalModo}\``,
-    `🎲 **RPG** — ${nPersonagens} personagem(ns) · ${moedas.length} moeda(s)${moedas.length > 1 ? " · câmbio ativo" : ""}${nMagias ? ` · ${nMagias} magia(s) aprendida(s)` : ""}${nCapturados ? ` · ${nCapturados} companheiro(s) na dungeon` : ""}${moedas.length < nPerfis ? ` · ${nPerfis} perfis de moeda disponíveis` : ""}${nDupes ? ` · ⚠️ ${nDupes} moeda(s) repetida(s)` : ""}`,
-    comIA ? `🤖 **IA (Judy)** — habilitada aqui: conversa, código, busca na web, contas exatas, leitura de imagens e **geração de imagens**`
+    `🎲 **RPG** _(um mundo só, em todos os servidores)_ — ${nPersonagens} personagem(ns) · ${moedas.length} moeda(s)${moedas.length > 1 ? " · câmbio ativo" : ""}${nMagias ? ` · ${nMagias} magia(s) aprendida(s)` : ""}${nCapturados ? ` · ${nCapturados} companheiro(s) na dungeon` : ""}`,
+    comIA ? `🤖 **IA (Judy)** — habilitada aqui: conversa, código, busca na web, contas exatas, leitura de imagens${geraImagem ? " e **geração de imagens**" : ""}`
           : `🤖 **IA (Judy)** — funciona apenas nos servidores habilitados pelo dono do bot: conversa, código, busca na web, contas exatas e leitura de imagens`,
-    `🎫🪝🔊 **Tickets · Webhooks · Voz** — ${db.listarTickets(serverId).length} ticket(s) aberto(s) · ${db.listarGanchos(serverId).length} webhook(s) · voz ${config?.tts?.ativo ? "ligada" : "desligada"}`,
+    `🎫🪝🔊 **Tickets · Webhooks · Voz** — ${db.listarTickets(serverId).length} ticket(s) aberto(s) · ${db.listarGanchos(serverId).length} webhook(s) · ${!vozAqui ? "voz e música indisponíveis aqui" : config?.tts?.ativo && config?.tts?.canalVoz ? `voz e música em <#${config.tts.canalVoz}>` : `voz e música: \`${PREFIXO}entrar\` numa call`}`,
   ];
 
-  const creditos = "_Software livre ([código](https://github.com/GhisoOF/stoat_bot)), feito com [stoat.js](https://github.com/stoatchat/javascript-client-sdk) — rode o seu! 🚀_";
-  const creditosEN = "_Free software ([source](https://github.com/GhisoOF/stoat_bot)), built with [stoat.js](https://github.com/stoatchat/javascript-client-sdk) — run your own! 🚀_";
+  // Links entre < >: continuam clicáveis, sem a prévia que o Stoat gera.
+  const creditos = `_${criador ? `Criada por **${criador}**. ` : ""}Software livre ([código](<https://github.com/GhisoOF/stoat_bot>)), feito com [stoat.js](<https://github.com/stoatchat/javascript-client-sdk>) — rode o seu! 🚀_`;
+  const creditosEN = `_${criador ? `Made by **${criador}**. ` : ""}Free software ([source](<https://github.com/GhisoOF/stoat_bot>)), built with [stoat.js](<https://github.com/stoatchat/javascript-client-sdk>) — run your own! 🚀_`;
 
   await sendEmbed(message.channel, en ? {
-    title: "🤖 Cobaia",
+    title: `🤖 ${nomeBot}`,
     description: [
-      "Moderation, automod and leveling bot for Stoat.",
+      `Moderation, automod, levels, voice${comIA ? ", AI" : ""} and RPG bot for Stoat.`,
       "",
       "**On this server**",
       ...estadoLinhas.filter(Boolean),
@@ -1043,9 +1075,9 @@ export async function cmdSobre(message, args, ctx) {
     ].filter((l) => l !== null).join("\n"),
     colour: COR.info,
   } : {
-    title: "🤖 Cobaia",
+    title: `🤖 ${nomeBot}`,
     description: [
-      "Bot de moderação, automod e níveis para o Stoat.",
+      `Bot de moderação, automod, níveis, voz${comIA ? ", IA" : ""} e RPG para o Stoat.`,
       "",
       "**Neste servidor**",
       ...estadoLinhas.filter(Boolean),
@@ -1069,7 +1101,8 @@ export async function cmdSobre(message, args, ctx) {
 export async function cmdRepete(message, args, ctx) {
   const { sendEmbed, COR } = ctx;
   const txt = args.join(" ");
-  if (!txt) return;
+  // sem texto, respondia nada — parecia que o comando nem existia
+  if (!txt) return sendEmbed(message.channel, { description: lingua(ctx) === "en" ? "What should I repeat? `&repete <text>`" : "Repetir o quê? `&repete <texto>`", colour: COR.aviso });
   await sendEmbed(message.channel, { description: txt, colour: COR.info });
 }
 

@@ -3,9 +3,6 @@ export function parametros(P, lang = "pt") {
   return lang === "en" ? parametrosEN(P) : parametrosPT(P);
 }
 
-// Marcadores aceitos nos textos de boas-vindas/adeus/embed.
-export const MARCADORES = ["{usuario}", "{nome}", "{servidor}", "{membros}"];
-
 function parametrosPT(P) {
   const entradaSaida = (nome) => [
     { nome: "canal", valor: "<#canal|aqui|id>", desc: "onde publicar. `aqui` = este canal. Definir o canal já **liga** a mensagem" },
@@ -211,7 +208,7 @@ function parametrosPT(P) {
     tts: [
       { nome: "<texto>", desc: "a Judy fala isso na call agora (não passa pela peneira — é pedido explícito)" },
       { nome: "falar", valor: "<texto>", desc: "força a fala mesmo que o texto pareça um subcomando (`&tts falar sair`)" },
-      { nome: "entrar", desc: "⭐ **o único comando que importa**: dentro da call, ela entra e passa a falar tudo que for escrito ali. Se já estiver em outra call, **vem para a sua**. Liga o sistema, escolhe a call e a leitura sozinha" },
+      { nome: "entrar", desc: "⭐ **o único comando que importa**: de qualquer canal, ela entra na call em que você está (ou `&entrar <call>`) e passa a falar tudo que for escrito **no canal onde você digitou**. Se já estiver em outra call, **vem para a sua**. Liga o sistema, escolhe a call e a leitura sozinha" },
       { nome: "sair", desc: "sai da call **e** para de ler. Depois disso, só `entrar` traz o bot de volta" },
       { nome: "diagnostico", desc: "**onde** a entrada trava: na API do Stoat ou na rede até o LiveKit — com o veredito de cada caso *(ManageMessages)*" },
       { nome: "destravar", desc: "limpa o `AlreadyConnected` — quando o Stoat acha que o bot já está numa call e recusa toda entrada nova *(ManageMessages)*" },
@@ -225,6 +222,11 @@ function parametrosPT(P) {
       { nome: "efeito", valor: "<nome>", desc: "caráter da voz: robo, radio, glados…" },
       { nome: "dicionario", valor: "[lista|teste <frase>|add <abrev> <texto>|remove <abrev>|padrao on|off]", desc: "como abreviações são lidas em voz alta (`vc` → `você`). Ver e testar é livre; mudar é *(ManageMessages)*" },
       { nome: "estado", desc: "diagnóstico da cadeia inteira: serviço, Piper, LiveKit, peneira e em quais calls está" },
+    ],
+    debug: [
+      { nome: "(nada)", desc: "o relatório completo: o que está quebrado primeiro, depois cada área" },
+      { nome: "@pessoa", desc: "o que o bot consegue fazer com essa pessoa" },
+      { nome: "#canal", desc: "a conta de permissão do bot nesse canal (aceita o nome)" },
     ],
     silenciar: [
       { nome: "@pessoa <tempo> [motivo]", desc: "silencia com o timeout nativo do Stoat: `30s`, `10m`, `2h`, `1d`, `1w` ou combinados (`1h30m`); número sozinho = minutos; máximo 28 dias" },
@@ -454,7 +456,7 @@ function parametrosEN(P) {
     tts: [
       { nome: "<text>", desc: "Judy says it in the call right now (skips the sieve — it's an explicit request)" },
       { nome: "falar", valor: "<text>", desc: "forces speech even when the text looks like a subcommand (`&tts falar sair`)" },
-      { nome: "entrar", desc: "⭐ **the only command that matters**: inside the call, she joins and starts speaking everything written there. If she's in another call, she **moves to yours**. Turns the system on, picks the call and the reading by herself" },
+      { nome: "entrar", desc: "⭐ **the only command that matters**: from any channel, she joins the call you're in (or `&entrar <call>`) and starts speaking everything written **in the channel where you typed it**. If she's in another call, she **moves to yours**. Turns the system on, picks the call and the reading by herself" },
       { nome: "sair", desc: "leaves the call **and** stops reading. After that, only `entrar` brings the bot back" },
       { nome: "diagnostico", desc: "**where** joining jams: at Stoat's API or on the network to LiveKit — with a verdict for each case *(ManageMessages)*" },
       { nome: "destravar", desc: "clears `AlreadyConnected` — when Stoat thinks the bot is already in a call and refuses every new join *(ManageMessages)*" },
@@ -468,6 +470,11 @@ function parametrosEN(P) {
       { nome: "efeito", valor: "<name>", desc: "voice character: robo, radio, glados…" },
       { nome: "dicionario", valor: "[lista|teste <phrase>|add <abbrev> <text>|remove <abbrev>|padrao on|off]", desc: "how abbreviations are read aloud (`vc` → `você`). Viewing and testing is open; changing needs *(ManageMessages)*" },
       { nome: "estado", desc: "diagnostics for the whole chain: service, Piper, LiveKit, sieve and which calls it's in" },
+    ],
+    debug: [
+      { nome: "(nothing)", desc: "the full report: what's broken first, then each area" },
+      { nome: "@user", desc: "what the bot can do with that person" },
+      { nome: "#channel", desc: "the bot's permission math in that channel (the name works too)" },
     ],
     silenciar: [
       { nome: "@user <time> [reason]", desc: "times someone out with the Stoat's native timeout: `30s`, `10m`, `2h`, `1d`, `1w` or combined (`1h30m`); a bare number = minutes; up to 28 days" },

@@ -11,7 +11,7 @@ function passo(nome, fn) {
 }
 
 export async function rodarTesteGeral(ctx, serverId, donoId, deps) {
-  const { db, G, MISS, FOL, ECO } = deps;
+  const { db, G, MISS, FOL, MERC } = deps;
   const uid = idSandbox(donoId);
   const linhas = [];
   let ok = 0, falhas = 0;
@@ -39,7 +39,7 @@ export async function rodarTesteGeral(ctx, serverId, donoId, deps) {
     // ── 3. Comprar ──
     const { pSuave } = G.pDaMoeda(serverId, moeda);
     const item = db.listarItens({ raridade: "comum" })[0];
-    const preco = ECO.precoDeVenda(item, db.getEstoque(serverId, item.id), pSuave);
+    const preco = MERC.precoDeVenda(item, db.getEstoque(serverId, item.id), pSuave);
     db.debitar(serverId, uid, moeda.id, preco);
     db.darItem(serverId, uid, item.id);
     registrar(db.temItem(serverId, uid, item.id), "Comprar item", `${item.nome} por ${preco}`);
@@ -53,7 +53,7 @@ export async function rodarTesteGeral(ctx, serverId, donoId, deps) {
     // ── 5. Vender dá prejuízo (anti-exploit) ──
     const antesV = db.getSaldo(serverId, uid, moeda.id);
     const attrV = G.atributosComEquipamento(db.getPersonagem(serverId, uid), serverId, uid);
-    const recebe = ECO.precoDeRecompra(preco, attrV.carisma);
+    const recebe = MERC.precoDeRecompra(preco, attrV.carisma);
     registrar(recebe < preco, "Revender dá prejuízo (sem dinheiro infinito)",
       `comprou ${preco}, venderia ${recebe}`);
 
@@ -89,7 +89,7 @@ export async function rodarTesteGeral(ctx, serverId, donoId, deps) {
       xpTotal += xp;
       if (r.desfecho === "sucesso") {
         sucessos++;
-        const g = ECO.moedaDaMissao(missaoFacil, pSuave, attr.sorte);
+        const g = MERC.moedaDaMissao(missaoFacil, pSuave, attr.sorte);
         db.creditar(serverId, uid, moeda.id, g);
         moedaTotal += g;
         if (MISS.sortearRaridade(missaoFacil, attr.sorte, Math.random, tamanhoParty)) loots++;
@@ -117,7 +117,7 @@ export async function rodarTesteGeral(ctx, serverId, donoId, deps) {
 
     // ── 11. Morte: perde moeda para a dungeon ──
     const saldoAntes = db.getSaldo(serverId, uid, moeda.id);
-    const perdaPct = ECO.perda(pSuave);
+    const perdaPct = MERC.perda(pSuave);
     const perdido = Math.floor(saldoAntes * perdaPct);
     db.debitar(serverId, uid, moeda.id, perdido);
     const mAtual = db.getMoeda(serverId, moeda.id);
@@ -142,9 +142,9 @@ export async function rodarTesteGeral(ctx, serverId, donoId, deps) {
 
     // ── 14. Prêmio da dungeon ──
     const pote = db.getMoeda(serverId, moeda.id)?.dungeon ?? 0;
-    const premio = ECO.premioDungeon(pote);
+    const premio = MERC.premioDungeon(pote);
     registrar(premio >= 0 && premio <= pote, "Prêmio da dungeon é uma fração",
-      `pote ${Math.round(pote)} → prêmio ${premio} (${(ECO.fracaoDungeon(pote) * 100).toFixed(0)}%)`);
+      `pote ${Math.round(pote)} → prêmio ${premio} (${(MERC.fracaoDungeon(pote) * 100).toFixed(0)}%)`);
 
     // ── 15. Mercado entre jogadores (custódia) ──
     const itemP2P = db.listarItens({ raridade: "incomum" })[0];
@@ -163,7 +163,7 @@ export async function rodarTesteGeral(ctx, serverId, donoId, deps) {
       registrar(db.temItem(serverId, uid, itemP2P.id), "Cancelar devolve a custódia");
 
       const vol = db.volumeRecente(serverId);
-      const { pct } = ECO.calcularTaxa(500, vol);
+      const { pct } = MERC.calcularTaxa(500, vol);
       registrar(pct > 0 && pct < 0.15, "Taxa do mercado dentro da faixa",
         `${(pct * 100).toFixed(2)}% (volume ${Math.round(vol)})`);
     }

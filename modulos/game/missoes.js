@@ -62,9 +62,6 @@ export function acharMissao(txt) {
 }
 
 const precisao = (destreza) => 0.70 + 0.30 * (destreza / (destreza + 10));
-const reducao  = (resistencia) => resistencia / (resistencia + 20);   // < 1 sempre
-const evasao   = (agilidade) => agilidade / (agilidade + 25);
-
 export function calcularPoder(attr, magias = []) {
   const base = (attr.forca ?? 0) * 1.00 + (attr.inteligencia ?? 0) * 0.70;
   const bruto = base * precisao(attr.destreza ?? 0) + (attr.carisma ?? 0) * 0.30;

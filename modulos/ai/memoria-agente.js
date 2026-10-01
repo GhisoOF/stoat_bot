@@ -220,6 +220,3 @@ export function descartarPendentes(serverId = null) {
   return n;
 }
 
-export function esquecerPessoa(serverId, userId) {
-  return db.limparFatosPessoa(serverId, userId);
-}

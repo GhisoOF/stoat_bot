@@ -69,6 +69,12 @@ export async function enviarPaginado(ctx, canal, {
   ttlMs = TTL_PADRAO_MS, colour = ctx?.COR?.info,
 } = {}) {
   if (!Array.isArray(paginas) || !paginas.length) return;
+  // Página maior que o embed era CORTADA com "…" no montar — e o resto sumia
+  // (o &help tts perdia o fim da 1ª página: "dicionar…"). Agora ela vira
+  // mais páginas, quebrando entre linhas.
+  paginas = paginas.flatMap((p) => String(p.description ?? "").length > LIMITE_PAGINA
+    ? paginarLinhas(String(p.description).split("\n"), { titulo: p.title }).map((x) => ({ ...p, description: x.description }))
+    : [p]);
   varrer();
   const lang = ctx?.config?.language === "en" ? "en" : "pt";
   const idx = Math.min(Math.max(0, paginaInicial | 0), paginas.length - 1);
@@ -136,10 +142,8 @@ export async function aoReagir(msgId, userId, emoji, msgObj = null) {
 // Quantas sessões ativas (para o &debug e os testes).
 export function ativas() { varrer(); return sessoes.size; }
 
-// Página atual de uma mensagem (testes).
-export function paginaDe(msgId) { return sessoes.get(msgId)?.idx ?? null; }
-
-export function paginarLinhas(linhas, { titulo, limite = 1350 } = {}) {
+const LIMITE_PAGINA = 1350;
+export function paginarLinhas(linhas, { titulo, limite = LIMITE_PAGINA } = {}) {
   const paginas = [];
   let atual = [];
   let tam = 0;

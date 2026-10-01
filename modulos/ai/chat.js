@@ -1,11 +1,12 @@
 
 import * as busca from "./busca.js";
+import * as extra from "./contexto-extra.js";
+import * as store from "../core/config-store.js";
 import * as db from "../core/db.js";
 import * as memoria from "./memoria-agente.js";
 import * as comentario from "./comentario-espontaneo.js";
 import * as cacheCanal from "./cache-canal.js";
 import * as ficha from "./ficha.js";
-import { resolverCargo } from "../core/ids.js";
 import { construirDetalhes } from "../moderacao/geral.js";
 import { verificar } from "./verificar.js";
 import { SUB as SUBCOMANDOS_REAIS } from "../core/aliases.js";
@@ -263,8 +264,6 @@ export async function gerarComentarioEspontaneo(contextoCanal, serverId = null) 
     return "";
   }
 }
-export function getModelo() { return LLM_MODEL_PADRAO; }
-
 export function resumoConfigIA() {
   const linhas = [];
   const semLLM = !LLM_URL;
@@ -296,14 +295,6 @@ export async function listarModelos() {
   } finally {
     clearTimeout(t);
   }
-}
-const NUM_CTX      = Number(process.env.CHAT_NUM_CTX  || 16384);
-const KEEP_LEVE   = process.env.CHAT_KEEP_LEVE   || "30m";
-const KEEP_PESADO = process.env.CHAT_KEEP_PESADO || "60s";
-function potenciaDeDois(n) {
-  let p = 1024;
-  while (p < n && p < 65536) p *= 2;
-  return p;
 }
 const LIMITE_ARQUIVO = Number(process.env.CHAT_MAX_ARQUIVO || 12000);
 const GITHUB_REPO_ROTULO = process.env.GITHUB_REPO || "do bot";
@@ -470,49 +461,33 @@ async function chamarServicoIA(messages, { modelo = null, idioma = "pt" } = {}, 
   } finally { clearTimeout(t); }
 }
 
-export async function subirAnexo({ base64, mime = "image/jpeg", nome = "imagem.jpg" }, client = null) {
-  // A URL de upload vem da configuração VIVA da API (o servidor anuncia o seu
-  // autumn no handshake) — o padrão hardcoded apodreceu quando o Stoat migrou
-  // de CDN e o upload morria com "fetch failed" sem pista.
-  const anunciado = client?.configuration?.features?.autumn?.url
-    ?? client?.config?.features?.autumn?.url ?? null;
-  // "autumn.stoat.chat" (o nome óbvio) serve certificado inválido em produção
-  // — foi o que causava "fetch failed" sem pista nenhuma. O endereço real é
-  // "cdn.stoatusercontent.com" (confirmado: é o que aparece nos anexos de
-  // verdade do Stoat, e o que a config viva normalmente anuncia).
-  const AUTUMN = (process.env.AUTUMN_URL || anunciado || "https://cdn.stoatusercontent.com").replace(/\/$/, "");
-  // Multipart montado NA MÃO, como um Buffer único com Content-Length
-  // explícito — em vez de deixar o fetch/undici "streamar" um FormData(Blob).
-  // Esse streaming automático corta o corpo no meio em conexões com MTU
-  // reduzido (o túnel WireGuard usa 1420 em vez de 1500) e o Autumn recusava
-  // com "incomplete multipart stream" — sem pista nenhuma do lado do cliente.
-  const boundary = `----judy${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`;
-  const dados = Buffer.from(base64, "base64");
-  const abre = Buffer.from(
-    `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${nome.replace(/"/g, "")}"\r\nContent-Type: ${mime}\r\n\r\n`,
-  );
-  const fecha = Buffer.from(`\r\n--${boundary}--\r\n`);
-  const corpo = Buffer.concat([abre, dados, fecha]);
-  const r = await fetch(`${AUTUMN}/attachments`, {
-    method: "POST",
-    headers: {
-      "X-Bot-Token": process.env.BOT_TOKEN ?? "",
-      "Content-Type": `multipart/form-data; boundary=${boundary}`,
-      "Content-Length": String(corpo.length),
-    },
-    body: corpo,
-    signal: AbortSignal.timeout(30_000),
-  });
-  if (!r.ok) throw new Error(`Autumn HTTP ${r.status} — ${(await r.text().catch(() => "")).slice(0, 120)}`);
-  const j = await r.json().catch(() => null);
-  if (!j?.id) throw new Error("Autumn não devolveu o id do anexo");
-  return j.id;
+// (mudou para core/anexos.js: tickets e outros módulos também sobem arquivos)
+export { subirAnexo } from "../core/anexos.js";
+import { subirAnexo } from "../core/anexos.js";
+
+// A "continuação" que na verdade é a resposta de novo, com outras palavras
+// (1 out 2026: "A beleza da dualidade reside…" seguido de "O conceito de
+// dualidade é fundamentalmente complexo…", dois começos na mesma mensagem).
+// Sinal: o texto já tinha terminado uma frase, o pedaço abre outra do zero, e
+// o começo dos dois fala das mesmas coisas.
+const PALAVRA_VAZIA = new Set("sobre entre pelas pelos porque quando onde como mais menos muito muita ainda apenas sempre nunca também essa esse isso esta este isto aquele aquela outra outro outras outros todos todas cada sendo seria serão estão estava tinha temos podem pode fazer feito their there which about would could should these those".split(" "));
+const radicais = (t) => new Set(String(t).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+  .split(/[^a-z]+/).filter((w) => w.length >= 5 && !PALAVRA_VAZIA.has(w)).map((w) => w.slice(0, 6)));
+export function pareceRecomeco(a, b) {
+  const A = String(a ?? "").trim(), B = String(b ?? "").trim();
+  if (A.length < 120 || B.length < 120) return false;
+  if (!/[.!?…]["')\]]?$/.test(A) || !/^[A-ZÁÉÍÓÚÂÊÔÃÕÇ]/.test(B)) return false;
+  const ra = radicais(A.slice(0, 300)), rb = radicais(B.slice(0, 300));
+  let comuns = 0;
+  for (const w of rb) if (ra.has(w)) comuns++;
+  return comuns >= 4 && comuns / Math.min(ra.size, rb.size) >= 0.25;
 }
 
 export function costurar(texto, pedaco) {
   const a = String(texto ?? "");
   let b = String(pedaco ?? "");
   if (!b.trim()) return a;
+  if (pareceRecomeco(a, b)) return null;   // recomeçou a resposta: fica a primeira
 
   // 1. Repetição em bloco: o começo do pedaço (80 chars) já aparece no texto?
   const inicio = b.trim().slice(0, 80);
@@ -679,6 +654,10 @@ export const PEDIDO_DE_BUSCA = new RegExp([
 
 const PERGUNTA_DE_IDENTIDADE = /\b(quem|o que|que)\s+(é|e|foi|seria|são|sao)\b|\bpersonagem\b|\bconhece\b/i;
 const NOME_PROPRIO_NO_MEIO = /(?<!^)(?<=[\s(])(?!Judy\b|Stoat\b|Eu\b|Você\b|Voce\b)[A-ZÀ-Þ][a-zà-þ]+/;
+// Pedidos de FATO sobre algo específico (1 out 2026: "conte tudo o que sabe
+// sobre o Beni Lagarto" e "fato ou boato?" foram respondidos de memória — e
+// errado). Com um nome próprio junto, vão ao juiz de busca.
+export const PEDIDO_DE_FATO = /\b(fato\s+ou\s+(?:boato|fake)|[ée]\s+verdade\s+que|verdade\s+ou\s+mentira|(?:falou|disse|contou|afirmou)\s+que|conte?(?:-nos|-me)?\s+(?:tudo|mais)|(?:me\s+)?fal[ae]\s+(?:sobre|mais\s+sobre)|o\s+que\s+(?:voc[êe]|vc)\s+sabe\s+sobre|sabe\s+(?:algo|alguma\s+coisa|quem)|quem\s+(?:ganha|venceria|ganharia)|existe(?:m)?\b|is\s+it\s+true|tell\s+(?:me|us)\s+(?:everything|about))/i;
 const PISTAS_BUSCA = /(?:\b(?:hoje|ontem|agora|atual|atualmente|recente|not[ií]cias?|pre[çc]o|cota[çc][ãa]o|lan[çc]ou|lan[çc]amento|vers[ãa]o|resultado|placar|clima)\b|[uú]ltim[ao]s|quanto\s+custa|quando\s+(?:sai|saiu|foi)|em\s+20\d\d|tempo\s+em)/i;
 
 export const PEDIDO_EXPLICITO = /\b(pesquis(a|ar|e|ue)|busca(r|e)?|procur(a|ar|e)|d[aá] uma olhada na (web|internet)|consult(a|ar|e) a (web|internet)|olha na (web|internet)|search|searx(ng)?|googl(a|e|ar)|(usa|use|utiliza|utilize|roda|rode)r?\s+(a\s+|o\s+)?(tool|ferramenta)(\s+de\s+busca)?)\b/i;
@@ -724,16 +703,18 @@ async function decidirBusca(pergunta) {
   }
 
   const identidade = PERGUNTA_DE_IDENTIDADE.test(texto) && NOME_PROPRIO_NO_MEIO.test(texto);
-  if (!PISTAS_BUSCA.test(texto) && !identidade) {
+  const fato = PEDIDO_DE_FATO.test(texto) && NOME_PROPRIO_NO_MEIO.test(texto);
+  if (!PISTAS_BUSCA.test(texto) && !identidade && !fato) {
     return { buscar: false, query: pergunta };
   }
-  if (identidade) dlog("pergunta de identidade sobre nome próprio → consultando o juiz de busca");
+  if (identidade || fato) dlog(`pergunta ${fato ? "de fato" : "de identidade"} sobre nome próprio → consultando o juiz de busca`);
   const sys = [
     `Hoje é ${hojeExtenso()}.`,
     "Você decide se uma pergunta precisa de busca na internet para ser respondida com precisão.",
     "Precisa buscar se envolve fatos atuais, notícias, preços, datas recentes, ou algo que muda com o tempo.",
     "NÃO precisa buscar se é conversa, opinião, criatividade ou conhecimento geral estável.",
     "BUSQUE quando perguntam 'quem é' ou 'o que é' sobre um nome próprio que você não conhece com CERTEZA (personagens de jogos/séries, produtos, pessoas de nicho) — chutar ou negar é pior que buscar.",
+    "BUSQUE também quando pedem fatos sobre algo específico com nome próprio (\"conte tudo sobre X\", \"fato ou boato?\", \"fulano disse que X…\", \"X existe?\"): personagens de séries antigas, tokusatsu, anime, jogos, celebridades e boatos são exatamente o que um modelo pequeno erra de memória. Na dúvida entre buscar e não buscar, BUSQUE.",
     "NÃO busque se a pergunta for sobre os SEUS comandos, SUA configuração ou COMO VOCÊ funciona — isso você já sabe. Perguntas sobre a plataforma Stoat, sites, serviços ou qualquer assunto externo PODEM e DEVEM ser buscadas.",
     'Responda APENAS um JSON: {"buscar": true|false, "query": "termos de busca"}.',
   ].join(" ");
@@ -811,7 +792,8 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
   let canalTxt = "";
   try {
     const limiteFio = Number(process.env.CHAT_FIO_MSGS || (sobreOBot ? 14 : 6));
-    let fio = cacheCanal.contexto(canalId, { limite: limiteFio, excluirUltima: false });
+    // a mensagem respondida agora vai à parte, destacada (bloco de FOCO)
+    let fio = cacheCanal.contexto(canalId, { limite: limiteFio, excluirId: local?.msgId ?? null });
     const TETO_FIO = Number(process.env.CHAT_FIO_CHARS || 2500);
     if (fio && fio.length > TETO_FIO) fio = "…\n" + fio.slice(-TETO_FIO);
     if (fio) canalTxt = `\n\n<conversa_recente_do_canal>\n${fio}\n</conversa_recente_do_canal>\nAtenção: se a mensagem que você vai responder já não é mais o foco da conversa (o assunto mudou), reconheça isso com naturalidade em vez de responder fora de contexto.`;
@@ -882,6 +864,7 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
     desinteresse.instrucaoPersona(lang),
     "DISCUSSÕES: ao discordar, defenda seu ponto com argumentos lógicos — não recue só para agradar. Mas se a lógica da outra pessoa for superior e você perceber que está errada, admita sem drama. A verdade importa mais que ter razão.",
     `A data de hoje é ${hoje}. Use esta data como referência para qualquer noção de tempo; não invente outra data.`,
+    (() => { try { return extra.relogio({ pergunta, fusos: store.configDoServidor(serverId)?.fusos ?? null, lang }); } catch { return ""; } })(),
     autor ? `O nome de quem fala com você é **${autor}** — é o ÚNICO nome pelo qual você pode chamá-lo. Não use nomes vindos da bio, do perfil ou da memória dele como se fossem o nome dele: bio é o que a PESSOA escreveu, e costuma citar bots, servidores e projetos. "Judy" e "Cobaia" são VOCÊ, nunca o interlocutor. E não precisa repetir o nome a cada resposta.` : "",
     memoriaTxt,
     souTxt,
@@ -892,6 +875,8 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
     tomTxt,
     canalTxt,
     projetoTxt,
+    extra.haRisco(pergunta, citada?.conteudo, canalTxt) ? extra.avisoDeCuidado(lang) : "",
+    extra.blocoFoco(autor, lang),
   ].filter(Boolean).join(" ");
 
   const messages = [{ role: "system", content: sys }];
@@ -1765,6 +1750,7 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
   try {
     const srv = await ctx.getServer?.(message);
     local = {
+      msgId: message.id ?? null,
       servidor: srv?.name ?? null,
       canal: message.channel?.name ?? null,
       meuUsuario: message.client?.user?.username ?? ctx.client?.user?.username ?? null,
@@ -1929,6 +1915,10 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
     let resposta;
     try {
       resposta = limpar(await responder(pergunta, resultados, autor, userId, citada, serverId, canalId, lang, modeloForcado, local, fichaTxt));
+      // Dois começos na mesma resposta (ver pareceRecomeco): se vier da emenda,
+      // o costurar já corta; fora dela, só registra — cortar parágrafos sem
+      // ver o caso real arrisca apagar resposta boa.
+      { const ps = String(resposta ?? "").split(/\n{2,}/); for (let i = 1; i < ps.length; i++) if (pareceRecomeco(ps.slice(0, i).join("\n\n"), ps[i])) { console.warn(`[CHAT] resposta com dois começos (parágrafo ${i + 1}) — modelo ${responder._modelo ?? "?"}`); break; } }
       var evidenciaVerif = String(responder._evidencia || "");
     } finally {
       clearInterval(animacao);   // para a animação aconteça o que acontecer
@@ -2154,7 +2144,9 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
       }
     }
     try {
-      registrarNoCanal(canalId, { nome: "Judy", userId: message.client?.user?.id, texto: resposta, ehJudy: true });
+      // com o id da mensagem dela: quem responder a ela aparece no fio como
+      // "respondendo a Judy (você)"
+      registrarNoCanal(canalId, { id: (mostrarEmbed._msg ?? statusMsg)?.id ?? null, nome: "Judy", userId: message.client?.user?.id, texto: resposta, ehJudy: true });
       lembrarUltimaResposta(canalId, { pergunta, texto: resposta, cortada: !!responder._cortou, modelo: responder._modelo });
     } catch {}
 

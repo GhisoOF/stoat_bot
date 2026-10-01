@@ -83,7 +83,7 @@ Acabou de adicionar o bot? Três comandos resolvem quase tudo:
 
 Separe os canais em três tipos — 🔒 só staff vê (#log, #staff), 📢 só staff
 escreve (#regras, #avisos), 💬 geral — e configure as exceções **no canal**.
-`&debug canais` confere o que o bot enxerga em cada um; `&assistente canais`
+`&debug` confere o que o bot enxerga em cada um; `&assistente canais`
 diz exatamente o que clicar.
 
 ---
@@ -207,11 +207,16 @@ diz exatamente o que clicar.
 
 **Engajamento**
 
-- **Níveis** (`&xp`): XP por mensagem, cargos por nível (posicionados abaixo
-  do mute), leaderboard e parâmetros configuráveis.
-- **RPG** (`&game`): personagem com 9 atributos, progressão e builds — sistema
-  próprio, separado do XP. Detalhes em [`GUIA-moedas.md`](GUIA-moedas.md) e
-  [`DESIGN-rpg-economia.md`](DESIGN-rpg-economia.md).
+- **Níveis** (`&xp`): XP por mensagem, cargos por nível (o bot entrega os que estão
+  abaixo do cargo dele), leaderboard e parâmetros configuráveis.
+- **RPG** (`&game`): **um mundo só** para todos os servidores — o mesmo
+  personagem (9 atributos, progressão e builds), mercado, dungeon e ranking
+  em qualquer servidor onde a Judy está. Duas moedas: 🪙 Ouro (infinita) e 💎
+  Cristal (finita, 5 000 para sempre). Sistema próprio, separado do XP.
+  Detalhes em [`GUIA-moedas.md`](GUIA-moedas.md).
+- **Economia do servidor** (`&economia`): à parte do RPG, **uma** moeda por
+  servidor. `minerar` rende de tempos em tempos, `top` mostra quem tem mais e a
+  `loja` vende cargos — só cobra se o cargo for entregue.
 - **Cargos por reação** (`&reactionrole`), **autorole**, **boas-vindas e
   despedida** (`&boasvindas`/`&adeus`, embeds com marcadores e `testar`),
   **embed customizável** (`&embed`), **cor de cargo com gradiente** (`&cor` —
@@ -278,14 +283,14 @@ próprio bot: `&help <comando>`. Um resumo:
 | `&log` · `&acesso` · `&staff` | chat de logs, quem usa comandos, equipe |
 | `&banglobal` | lista global *(BanMembers)* |
 | `&automod blocklist` · `&automod whitelist` · `&automod sentinela` · `&automod punicao` | listas anti-link, convites permitidos, o filtro que julga, e o que acontece com quem infringe |
-| `&ticket` | suporte com canal privado por pedido: `abrir` cria um canal que só quem pediu e a staff enxergam (cargo por ticket); `fechar` arquiva a conversa inteira no canal de log e apaga o canal — nada se perde, nada fica largado |
+| `&ticket` | suporte por **reação**: `painel #canal` posta uma mensagem com um emoji por assunto; reagir abre um canal privado (quem pediu + staff). Lá, 🔒 (só staff) **trava** a conversa e manda o registro inteiro ao log como **arquivo .txt**; depois 🗑️ apaga o canal |
 | `&rolar` (`&r`) · `&iniciativa` | dados de RPG de mesa: `2d20kh1+5`, vantagem/desvantagem, `4d6kh3`, explosão `3d6!`, sucessos `8d10>=7`, `d%`, Fate, moeda, repetição `6x(4d6kh3)`, rótulos e rolagem secreta via DM — mais rastreador de iniciativa por canal (`add`/`next`/`lista`) |
 | `&webhook` (`&wh`) | receptor universal de webhooks: GitHub (push, issues, PR, releases, Actions), Crafty/Minecraft e qualquer serviço que fale o formato Discord (Uptime Kuma, Grafana…) — cada gancho tem canal próprio e filtro de eventos, então dá para separar issues num chat e o CI noutro; URL secreta por gancho, teto anti-flood. **Endereços:** serviço da internet (GitHub) exige base pública — `sudo tailscale funnel --bg 8095` + `WEBHOOK_URL_BASE=https://…` no `.env`; container da mesma máquina (Crafty) usa a ponte `http://172.17.0.1:8095/...` |
 | `&musica` (`&m`, `&play`) + `&entrar`/`&sair` | música nas calls: YouTube, SoundCloud e Spotify (playlists também), com fila, pausa, skip, volume e loop — e a música **abaixa sozinha quando o `&tts` fala** (ducking); playlists do Spotify pedem `SPOTIFY_ID`/`SPOTIFY_SECRET` no `.env` (app grátis em developer.spotify.com; faixas avulsas funcionam sem chave) |
 | `&comando` | (des)ativar comandos |
 | `&embed` · `&reactionrole` · `&autorole` · `&cor` | utilidades *(permissões próprias)* |
 | `&boasvindas` · `&adeus` · `&fuso` · `&rss` | entrada/saída, fusos, notícias |
-| `&debug canais` · `&debug silence` | diagnóstico do que o bot enxerga |
+| `&debug` · `&debug @pessoa` · `&debug #canal` | diagnóstico completo: o que está quebrado e como resolver |
 | `&modia` | moderação por IA *(ManageServer)* |
 | `&personalidade` | prompt de personalidade da IA *(ManageServer)* |
 | `&chat livre` · `&chat comentar` · `&chat cuidado` | iniciativa e tom da IA |
@@ -293,6 +298,7 @@ próprio bot: `&help <comando>`. Um resumo:
 | `&entrar` / `&sair` | põe o bot na call (TTS e música dividem a mesma conexão) |
 | `&tts …` | voz nas calls (`estado`/`filtro`/`diagnostico`…) |
 | `&game …` | RPG (personagem, atributos, progressão) |
+| `&economia …` | a moeda do servidor: `minerar`, `saldo`, `top`, `loja`/`comprar` cargos, `pagar` — à parte do RPG |
 
 > `help` e `comando` não podem ser desativados — para o admin não se trancar
 > para fora.
@@ -389,7 +395,7 @@ versões antigas continuam funcionando.
 ├── ia-servico/                 # serviço de IA (tool-calling: calcular, ler código, web, rss)
 ├── voz-servico/                # voz nas calls: LiveKit + Piper (opcional, VOZ_ATIVA=1)
 ├── scripts/verificar-build.js  # sanidade do repositório (roda no CI e no build da imagem)
-├── teste-*.mjs                 # suítes de teste por área
+├── testes.mjs                  # todas as suítes de teste (cada uma roda no seu processo)
 ├── .env.example                # modelo de configuração comentado
 ├── Dockerfile · docker-compose.yml   # bot (tudo dentro) + SearXNG para a busca
 └── .github/workflows/build.yml # build multi-arch (x86-64 e ARM64)
@@ -400,7 +406,7 @@ versões antigas continuam funcionando.
 ```bash
 npm install
 node scripts/verificar-build.js   # imports, rotas e consistência
-node teste-ia.mjs                 # (e as demais suítes teste-*.mjs)
+node testes.mjs                   # todas as suítes · `node testes.mjs ia tickets` roda só essas · `--lista`
 ```
 
 O `verificar-build.js` roda também **dentro do build da imagem** — um

@@ -1,8 +1,7 @@
-import { rebuildBlocklist, DOMINIO_VALIDO, simularDeteccao, removerCargoSilence } from "./automod-engine.js";
+import { rebuildBlocklist, DOMINIO_VALIDO, simularDeteccao, removerCargoSilence, MODULOS_AUTOMOD } from "./automod-engine.js";
 import { tirarTimeout } from "./timeout.js";
 import * as engine from "./automod-engine.js";
 import * as db  from "../core/db.js";
-import { limparId } from "../core/ids.js";
 import * as log from "../core/log.js";
 import { analisarConteudo } from "./scorecard.js";
 import { tr, lingua } from "../core/i18n.js";
@@ -97,19 +96,7 @@ export async function cmdAutomod(message, args, ctx) {
       colour: COR.mod });
   }
 
-  const modulos = {
-    antispam:        "antiSpam",
-    antimassspam:    "antiMassSpam",
-    antiinvite:      "antiInvite",
-    antimassmention: "antiMassMention",
-    anticaps:        "antiCaps",
-    antilink:        "antiLink",
-    sentinela:       "antiScam",
-    anticaracteres:  "antiCaracteres",
-    antiduplicata:   "antiDuplicata",
-    antiimagem:      "antiImagem",
-    antirepeticao:   "antiRepeticao",
-  };
+  const modulos = MODULOS_AUTOMOD;
 
   // `antiscam` → `sentinela`: mesmo filtro, nome novo.
   if (sub === "antiscam") sub = "sentinela";

@@ -1,5 +1,5 @@
-import { ULID } from "../core/ids.js";
-import { tr, lingua } from "../core/i18n.js";
+import { ULID, resolverCargo } from "../core/ids.js";
+import { tr } from "../core/i18n.js";
 
 // Extrai um ID de cargo de "<@&ID>", "<%ID>" ou ID cru.
 function extrairRoleId(txt) {
@@ -50,8 +50,12 @@ export async function cmdAutorole(message, args, ctx) {
         description: "New members will no longer receive an automatic role.", colour: COR.sucesso }));
   }
 
-  if (sub === "set" || sub === "definir") {
-    const roleId = extrairRoleId(args[1]);
+  // `&autorole set <cargo>` — e também `&autorole <cargo>` direto, como o
+  // tutorial ensinava (antes caía no "Uso:"). O cargo vale por menção, ID ou nome.
+  const direto = !["set", "definir"].includes(sub);
+  if (!direto || resolverCargo(args.join(" "), server)) {
+    const entrada = direto ? args.join(" ") : args.slice(1).join(" ");
+    const roleId = extrairRoleId(entrada) ?? resolverCargo(entrada, server)?.id ?? null;
     if (!roleId)
       return sendEmbed(message.channel, tr(ctx,
         { title: "❌ Cargo inválido",

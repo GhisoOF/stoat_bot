@@ -3,7 +3,7 @@ import * as db  from "../core/db.js";
 import { descreverErro } from "../core/erros.js";
 import { banir } from "../core/banir.js";
 import * as log from "../core/log.js";
-import { resolverUsuario as resolverUser, resolverUsuarioDetalhado, ehBot } from "../core/ids.js";
+import { resolverUsuarioDetalhado, ehBot } from "../core/ids.js";
 import { tr, lingua } from "../core/i18n.js";
 import { enviarPaginado, paginarLinhas } from "../core/paginas.js";
 import { chamarApi } from "../core/stoat-api.js";

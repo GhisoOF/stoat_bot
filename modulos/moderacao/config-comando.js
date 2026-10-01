@@ -3,10 +3,12 @@ import { servidorPermitido as temIA } from "../ai/chat.js";
 import * as db from "../core/db.js";
 import { EVENTOS } from "../core/log.js";
 import { MODOS as MODOS_BG, MODOS_EN as MODOS_BG_EN } from "./ban-global.js";
-import { escadaDePunicao, rotuloDegrau } from "./automod-engine.js";
+import { escadaDePunicao, rotuloDegrau, MODULOS_AUTOMOD, moduloLigado } from "./automod-engine.js";
 import { tr, lingua } from "../core/i18n.js";
 import * as MAG from "../game/magias.js";
-import * as PERFIS_MOEDA from "../game/moedas-perfis.js";
+import { MUNDO } from "../game/mundo.js";
+import { servidorNaLista } from "../core/env.js";
+import { loja as ecoLoja, totalEmCirculacao as ecoCirc, configDe as ecoConfigDe } from "../ferramentas/economia.js";
 
 const on  = (v) => (v ? "🟢" : "🔴");
 const sim = (v) => (v ? "sim" : "não");
@@ -14,12 +16,14 @@ const sim = (v) => (v ? "sim" : "não");
 // Rótulos legíveis dos modos de punição
 const MODOS = {
   avisar:    "apenas avisa (não remove nem pune)",
+  apagar:    "remove a mensagem, não pune a pessoa",
   confirmar: "remove, silencia e espera um moderador",
   acumular:  "soma avisos até banir",
   banir:     "ban imediato",
 };
 const MODOS_EN = {
   avisar:    "warn only (doesn't remove or punish)",
+  apagar:    "removes the message, doesn't punish the person",
   confirmar: "removes, silences and waits for a moderator",
   acumular:  "stacks warnings until a ban",
   banir:     "instant ban",
@@ -54,76 +58,62 @@ export async function cmdConfig(message, args, ctx) {
   const pol = am.punicao;
   const lg  = config.log ?? { canalId: null, eventos: {} };
 
-  // ── Módulos do automod ──
-  const modulos = en ? [
-    `${on(am.antiSpam.enabled)} **antispam** — ${am.antiSpam.maxMessages} msg / ${am.antiSpam.windowMs}ms`,
-    `${on(am.antiMassSpam.enabled)} **antimassspam** — ${am.antiMassSpam.maxMessages} msg / ${am.antiMassSpam.windowMs}ms`,
-    `${on(am.antiDuplicata?.enabled !== false)} **antiduplicata** — ${am.antiDuplicata?.maxRepetidas ?? 3}× the same message / ${Math.round((am.antiDuplicata?.windowMs ?? 120000) / 1000)}s`,
-    `${on(am.antiImagem?.enabled !== false)} **antiimagem** — images of new accounts described by the vision model; alerts staff`,
-    `${on(am.antiInvite.enabled)} **antiinvite** — blocks invites`,
-    `${on(am.antiMassMention.enabled)} **antimassmention** — max ${am.antiMassMention.maxMentions} mentions`,
-    `${on(am.antiCaps.enabled)} **anticaps** — ≥${am.antiCaps.minLength} chars and ${Math.round(am.antiCaps.threshold * 100)}% uppercase`,
-    `${on(am.antiLink.enabled)} **antilink** — ${estado.blockedDomains.size.toLocaleString("en-US")} domain(s) listed`,
-    `${on(am.antiScam.enabled)} **sentinela** — sensitivity ${L_SENS[am.antiScam.sensitivity] ?? am.antiScam.sensitivity}`,
-  ] : [
-    `${on(am.antiSpam.enabled)} **antispam** — ${am.antiSpam.maxMessages} msg / ${am.antiSpam.windowMs}ms`,
-    `${on(am.antiMassSpam.enabled)} **antimassspam** — ${am.antiMassSpam.maxMessages} msg / ${am.antiMassSpam.windowMs}ms`,
-    `${on(am.antiDuplicata?.enabled !== false)} **antiduplicata** — ${am.antiDuplicata?.maxRepetidas ?? 3}× a mesma mensagem / ${Math.round((am.antiDuplicata?.windowMs ?? 120000) / 1000)}s`,
-    `${on(am.antiImagem?.enabled !== false)} **antiimagem** — imagens de contas novas descritas pelo modelo de visão; avisa a staff`,
-    `${on(am.antiInvite.enabled)} **antiinvite** — bloqueia convites`,
-    `${on(am.antiMassMention.enabled)} **antimassmention** — máx. ${am.antiMassMention.maxMentions} menções`,
-    `${on(am.antiCaps.enabled)} **anticaps** — ≥${am.antiCaps.minLength} chars e ${Math.round(am.antiCaps.threshold * 100)}% maiúsculas`,
-    `${on(am.antiLink.enabled)} **antilink** — ${estado.blockedDomains.size.toLocaleString("pt-BR")} domínio(s) na lista`,
-    `${on(am.antiScam.enabled)} **sentinela** — sensibilidade ${L_SENS[am.antiScam.sensitivity] ?? am.antiScam.sensitivity}`,
-  ];
+  // Os dois idiomas lado a lado, linha por linha: com duas cópias separadas, o
+  // inglês tinha perdido a seção de tickets/webhooks/voz.
+  const T = (pt, enTxt) => (en ? enTxt : pt);
+  const seg = (ms) => `${Math.round((ms ?? 0) / 100) / 10}s`;
+
+  // ── Módulos do automod (a mesma lista do &automod) ──
+  const detalhe = {
+    antiSpam:        () => T(`${am.antiSpam.maxMessages} msg em ${seg(am.antiSpam.windowMs)}`, `${am.antiSpam.maxMessages} msg in ${seg(am.antiSpam.windowMs)}`),
+    antiMassSpam:    () => T(`${am.antiMassSpam.maxMessages} msg em ${seg(am.antiMassSpam.windowMs)}`, `${am.antiMassSpam.maxMessages} msg in ${seg(am.antiMassSpam.windowMs)}`),
+    antiDuplicata:   () => T(`${am.antiDuplicata?.maxRepetidas ?? 3}× a mesma mensagem em ${seg(am.antiDuplicata?.windowMs ?? 120000)}`, `${am.antiDuplicata?.maxRepetidas ?? 3}× the same message in ${seg(am.antiDuplicata?.windowMs ?? 120000)}`),
+    antiImagem:      () => T("imagens de contas novas descritas pelo modelo de visão; avisa a staff", "images from new accounts described by the vision model; alerts staff"),
+    antiInvite:      () => T("bloqueia convites", "blocks invites"),
+    antiMassMention: () => T(`máx. ${am.antiMassMention.maxMentions} menções`, `max ${am.antiMassMention.maxMentions} mentions`),
+    antiCaps:        () => T(`≥${am.antiCaps.minLength} caracteres e ${Math.round(am.antiCaps.threshold * 100)}% maiúsculas`, `≥${am.antiCaps.minLength} chars and ${Math.round(am.antiCaps.threshold * 100)}% uppercase`),
+    antiLink:        () => T(`${estado.blockedDomains.size.toLocaleString("pt-BR")} domínio(s) na lista`, `${estado.blockedDomains.size.toLocaleString("en-US")} domain(s) listed`),
+    antiScam:        () => T(`sensibilidade ${L_SENS[am.antiScam.sensitivity] ?? am.antiScam.sensitivity}`, `sensitivity ${L_SENS[am.antiScam.sensitivity] ?? am.antiScam.sensitivity}`),
+    antiCaracteres:  () => T("texto distorcido (zalgo) e caracteres invisíveis", "distorted (zalgo) text and invisible characters"),
+    antiRepeticao:   () => T(`mais de ${am.antiRepeticao?.maxRepeticao ?? 15} caracteres repetidos${am.antiRepeticao?.ignorar ? ` (ignora \`${am.antiRepeticao.ignorar}\`)` : ""}`, `over ${am.antiRepeticao?.maxRepeticao ?? 15} repeated characters${am.antiRepeticao?.ignorar ? ` (ignores \`${am.antiRepeticao.ignorar}\`)` : ""}`),
+  };
+  const modulos = Object.entries(MODULOS_AUTOMOD)
+    .map(([nome, chave]) => `${on(moduloLigado(am, chave))} **${nome}** — ${detalhe[chave]?.() ?? ""}`);
 
   // ── Punição ──
-  const punicao = (en ? [
-    `**Mode:** \`${pol.modo}\` — ${L_MODOS[pol.modo] ?? "?"}`,
+  const punicao = [
+    `${T("**Modo:**", "**Mode:**")} \`${pol.modo}\` — ${L_MODOS[pol.modo] ?? "?"}`,
     pol.modo === "acumular"
-      ? `**Ladder:** ${escadaDePunicao(pol).map((d) => rotuloDegrau(d, "en")).join(" → ")}`
+      ? `${T("**Escada:**", "**Ladder:**")} ${escadaDePunicao(pol).map((d) => rotuloDegrau(d, lang)).join(" → ")}`
       : null,
-    "**Silence:** native timeout (needs **TimeoutMembers**)",
-    `**Sentinel — stricter with newcomers:** ${am.antiScam.porAntiguidade !== false ? "🟢 on" : "🔴 off"}`,
-    `**Sentinel — staff alerts:** ${am.antiScam.alertarAdmin !== false ? "🟢 on" : "🔴 off"}`,
-    `**Alert channel:** ${am.antiScam.alertChannelId ? `<#${am.antiScam.alertChannelId}>` : "_(the message's own channel)_"}`,
-  ] : [
-    `**Modo:** \`${pol.modo}\` — ${L_MODOS[pol.modo] ?? "?"}`,
-    pol.modo === "acumular"
-      ? `**Escada:** ${escadaDePunicao(pol).map((d) => rotuloDegrau(d, "pt")).join(" → ")}`
-      : null,
-    "**Silêncio:** timeout nativo (precisa de **TimeoutMembers**)",
-    `**Sentinela — mais rígido com novatos:** ${am.antiScam.porAntiguidade !== false ? "🟢 ligado" : "🔴 desligado"}`,
-    `**Sentinela — alerta à staff:** ${am.antiScam.alertarAdmin !== false ? "🟢 ligado" : "🔴 desligado"}`,
-    `**Canal de avisos:** ${am.antiScam.alertChannelId ? `<#${am.antiScam.alertChannelId}>` : "_(canal da própria mensagem)_"}`,
-  ]).filter(Boolean);
+    T("**Silêncio:** timeout nativo (precisa de **TimeoutMembers**)", "**Silence:** native timeout (needs **TimeoutMembers**)"),
+    `${T("**Sentinela — mais rígido com novatos:**", "**Sentinel — stricter with newcomers:**")} ${am.antiScam.porAntiguidade !== false ? T("🟢 ligado", "🟢 on") : T("🔴 desligado", "🔴 off")}`,
+    `${T("**Sentinela — alerta à staff:**", "**Sentinel — staff alerts:**")} ${am.antiScam.alertarAdmin !== false ? T("🟢 ligado", "🟢 on") : T("🔴 desligado", "🔴 off")}`,
+    `${T("**Canal de avisos:**", "**Alert channel:**")} ${am.antiScam.alertChannelId ? `<#${am.antiScam.alertChannelId}>` : T("_(canal da própria mensagem)_", "_(the message's own channel)_")}`,
+  ].filter(Boolean);
 
-  // ── Chat de logs ──
+  // ── Canal de log ──
   const logs = [
-    en
-      ? `**Channel:** ${lg.canalId ? `<#${lg.canalId}>` : "_(disabled)_"}`
-      : `**Canal:** ${lg.canalId ? `<#${lg.canalId}>` : "_(desativado)_"}`,
-    ...Object.keys(EVENTOS).map((k) => `${on(lg.eventos?.[k] !== false)} ${k}`),
+    `${T("**Canal:**", "**Channel:**")} ${lg.canalId ? `<#${lg.canalId}>` : T("_(desativado)_", "_(disabled)_")}`,
+    // o nome da categoria é o que se digita em `&log <categoria> on|off` — vai como código
+    Object.keys(EVENTOS).map((k) => `${on(lg.eventos?.[k] !== false)} \`${k}\``).join(" · "),
   ];
 
-  const moedas = (() => { try { return db.listarMoedas(serverId) ?? []; } catch { return []; } })();
+  const moedas = (() => { try { return db.listarMoedas(MUNDO) ?? []; } catch { return []; } })();
   const padraoMoeda = moedas.find((m) => m.padrao) ?? moedas[0] ?? null;
-  const nJogadores = (() => { try { return db.listarPersonagens(serverId, 9999)?.length ?? null; } catch { return null; } })();
+  const nJogadores = (() => { try { return db.listarPersonagens(MUNDO, 9999)?.length ?? null; } catch { return null; } })();
   const nMagias = MAG.CATALOGO.length;
-  const nCapturados = (() => { try { return db.listarCapturados(serverId)?.length ?? 0; } catch { return 0; } })();
-  const nDupes = (() => { try { return db.moedasDuplicadas(serverId)?.length ?? 0; } catch { return 0; } })();
+  const nCapturados = (() => { try { return db.listarCapturados(MUNDO)?.length ?? 0; } catch { return 0; } })();
   const nFollowers = (() => {
     try {
-      return db.listarPersonagens(serverId, 9999)
-        .reduce((t, x) => t + (db.listarFollowersDe(serverId, x.userId)?.length ?? 0), 0);
+      return db.listarPersonagens(MUNDO, 9999)
+        .reduce((t, x) => t + (db.listarFollowersDe(MUNDO, x.userId)?.length ?? 0), 0);
     } catch { return 0; }
   })();
-  const economia = moedas.length ? (en ? [
+  const rpgLinhas = moedas.length ? (en ? [
     `**Currencies:** ${moedas.length} — ${moedas.map((m) => `${m.simbolo}${m.id}`).join(" · ")}`,
     `**Main:** ${padraoMoeda ? `${padraoMoeda.simbolo} ${padraoMoeda.nome}` : "_(none)_"}  ·  prices are shown in it`,
     `**Exchange:** ${moedas.length > 1 ? `🟢 on — bank and player counter (\`${PREFIXO}game cambio\`)` : "🔴 needs at least 2 currencies"}`,
-    `**Catalog:** ${PERFIS_MOEDA.PERFIS.length} ready-made profiles — add with \`${PREFIXO}game admin moeda perfil\``,
-    nDupes ? `⚠️ **${nDupes} duplicate name(s)** — merge with \`${PREFIXO}game admin moeda duplicadas\`` : null,
     nJogadores != null ? `**Characters:** ${nJogadores}` : null,
     `**Magic:** ${nMagias} spell(s) in the catalog · learned with \`${PREFIXO}game aprender\``,
     `**Companions:** ${nFollowers} in play${nCapturados ? ` · ${nCapturados} captured (rescued on missions)` : ""}`,
@@ -131,138 +121,120 @@ export async function cmdConfig(message, args, ctx) {
     `**Moedas:** ${moedas.length} — ${moedas.map((m) => `${m.simbolo}${m.id}`).join(" · ")}`,
     `**Principal:** ${padraoMoeda ? `${padraoMoeda.simbolo} ${padraoMoeda.nome}` : "_(nenhuma)_"}  ·  os preços aparecem nela`,
     `**Câmbio:** ${moedas.length > 1 ? `🟢 ativo — banco e balcão (\`${PREFIXO}game cambio\`)` : "🔴 precisa de ao menos 2 moedas"}`,
-    `**Catálogo:** ${PERFIS_MOEDA.PERFIS.length} perfis prontos — some com \`${PREFIXO}game admin moeda perfil\``,
-    nDupes ? `⚠️ **${nDupes} nome(s) repetido(s)** — funda com \`${PREFIXO}game admin moeda duplicadas\`` : null,
     nJogadores != null ? `**Personagens:** ${nJogadores}` : null,
     `**Magia:** ${nMagias} magia(s) no catálogo · aprendidas com \`${PREFIXO}game aprender\``,
     `**Companheiros:** ${nFollowers} em jogo${nCapturados ? ` · ${nCapturados} capturado(s) (resgate nas missões)` : ""}`,
   ]).filter(Boolean) : [en
-    ? "_No currency yet — one is born as soon as someone plays._"
-    : "_Nenhuma moeda ainda — uma nasce assim que alguém jogar._"];
+    ? "_The world's currencies are created when the bot starts._"
+    : "_As moedas do mundo são criadas quando o bot sobe._"];
 
-  let ativas = en ? "_(none)_" : "_(nenhuma)_";
+  let ativas = T("_(nenhuma)_", "_(none)_");
   try {
+    // Só quem tem aviso ou está silenciado AGORA (o registro antigo de quem
+    // já cumpriu o silêncio ficava aparecendo como "silenciado").
+    const agora = Date.now();
     const linhas = db.getDb()
-      .prepare("SELECT userId, avisos, silenciado FROM punicoes WHERE serverId = ? ORDER BY avisos DESC LIMIT 5")
+      .prepare("SELECT userId, avisos, silenciado, silencioAte FROM punicoes WHERE serverId = ? AND (avisos > 0 OR silenciado = 1) ORDER BY avisos DESC LIMIT 5")
       .all(serverId);
-    if (linhas.length) {
-      ativas = linhas.map((p) => en
-        ? `• <@${p.userId}> — ${p.avisos} warning(s)${p.silenciado ? " · 🔇 silenced" : ""}`
-        : `• <@${p.userId}> — ${p.avisos} aviso(s)${p.silenciado ? " · 🔇 silenciado" : ""}`).join("\n");
+    const vivas = linhas.map((p) => ({ ...p, calado: p.silenciado && (!p.silencioAte || p.silencioAte > agora) }))
+      .filter((p) => p.avisos > 0 || p.calado);
+    if (vivas.length) {
+      ativas = vivas.map((p) => `• <@${p.userId}> — ${p.avisos} ${T("aviso(s)", "warning(s)")}${p.calado ? T(" · 🔇 silenciado", " · 🔇 silenced") : ""}`).join("\n");
     }
   } catch { /* banco indisponível: segue sem essa seção */ }
 
-  // ── Whitelist de convites ──
-  // A whitelist tem dois destinos: domínios (anti-link) e convites (anti-invite).
+  // ── Lista de permitidos: domínios (anti-link) e convites (anti-invite) ──
   const wlItens = [
     ...(config.dominiosPermitidos ?? []).map((d) => `\`${d}\``),
     ...(config.inviteWhitelist ?? []).map((cv) => `\`stt.gg/${cv}\``),
   ];
-  const wl = wlItens.length ? wlItens.join(", ") : (en ? "_(empty)_" : "_(vazia)_");
+  const wl = wlItens.length ? wlItens.join(", ") : T("_(vazia)_", "_(empty)_");
 
-  await sendEmbed(message.channel, en ? {
-    title: "⚙️ This server's settings",
+  // ── O resto que o servidor configura (antes não aparecia aqui) ──
+  const nCargosNivel = (() => { try { return db.listarCargosNivel(serverId).length; } catch { return 0; } })();
+  const nFeeds = (() => { try { return db.listarFeeds(serverId).length; } catch { return 0; } })();
+  const nReacoes = (() => { try { return db.listReactionRolesServidor(serverId).length; } catch { return 0; } })();
+  const nFusos = config.fusos?.lista?.length ?? 0;
+  const vozAqui = servidorNaLista("TTS_SERVIDORES", serverId);
+  const nTickets = (() => { try { return db.listarTickets(serverId).length; } catch { return 0; } })();
+  const nGanchos = (() => { try { return db.listarGanchos(serverId).length; } catch { return 0; } })();
+
+  const recursos = [
+    `${T("**Idioma:**", "**Language:**")} ${en ? "English" : "Português"} — \`${PREFIXO}idioma\``,
+    `${on(config.xp?.enabled)} ${T("**Níveis (XP)**", "**Levels (XP)**")} — ${nCargosNivel} ${T("cargo(s) de nível", "level role(s)")}${config.xp?.canalAnuncio ? ` · ${T("anúncio em", "announced in")} <#${config.xp.canalAnuncio}>` : ""}`,
+    `${on(config.autorole?.roleId)} ${T("**Cargo automático**", "**Auto role**")} — ${config.autorole?.roleId ? `<%${config.autorole.roleId}>` : T("_(nenhum)_", "_(none)_")}`,
+    `${on(nReacoes)} ${T("**Cargos por reação**", "**Reaction roles**")} — ${nReacoes} ${T("regra(s)", "rule(s)")}`,
+    `${on(config.rss?.canalId && nFeeds)} **RSS** — ${nFeeds} feed(s)${config.rss?.canalId ? ` → <#${config.rss.canalId}>` : T(" _(sem canal)_", " _(no channel)_")}`,
+    `${on(nFusos)} ${T("**Fusos horários**", "**Time zones**")} — ${nFusos}`,
+    (() => {
+      let nLoja = 0, circ = { t: 0, n: 0 };
+      try { nLoja = ecoLoja(serverId).length; circ = ecoCirc(serverId); } catch {}
+      const e = ecoConfigDe(config);
+      return `${on(circ.n || nLoja)} ${T("**Economia**", "**Economy**")} — ${e.simbolo} ${e.nome} · ${circ.n} ${T("carteira(s)", "wallet(s)")} · ${nLoja} ${T("cargo(s) na loja", "role(s) in the shop")}`;
+    })(),
+  ];
+  const tickVoz = [
+    `${T("**Tickets:**", "**Tickets:**")} ${config.tickets?.painel?.canalId ? `${T("painel", "panel")} <#${config.tickets.painel.canalId}> · ` : ""}${config.tickets?.logCanal ? `log <#${config.tickets.logCanal}> · ${nTickets} ${T("aberto(s)", "open")}` : T(`_(não configurado — \`${PREFIXO}ticket log #canal\`)_`, `_(not set up — \`${PREFIXO}ticket log #channel\`)_`)}`,
+    `**Webhooks:** ${nGanchos} ${T("gancho(s)", "hook(s)")} — \`${PREFIXO}webhook lista\``,
+    `${T("**Voz e música:**", "**Voice and music:**")} ${!vozAqui
+      ? T("_indisponível neste servidor (o dono do bot libera em `TTS_SERVIDORES`)_", "_not available on this server (the bot owner enables it in `TTS_SERVIDORES`)_")
+      : config.tts?.ativo && config.tts?.canalVoz ? `🟢 <#${config.tts.canalVoz}>` : T(`🔴 fora da call — \`${PREFIXO}entrar\``, `🔴 not in a call — \`${PREFIXO}entrar\``)}`,
+  ];
+
+  await sendEmbed(message.channel, {
+    title: T("⚙️ Configurações deste servidor", "⚙️ This server's settings"),
     description: [
-      "**🛡 AutoMod modules**",
+      T("**🛡 Módulos do AutoMod**", "**🛡 AutoMod modules**"),
       ...modulos,
       "",
-      "**⚖️ Punishment** *(applies to every module)*",
+      T("**⚖️ Punição** *(vale para todos os módulos)*", "**⚖️ Punishment** *(applies to every module)*"),
       ...punicao,
       "",
-      "**📜 Log channel**",
+      T("**📜 Canal de log**", "**📜 Log channel**"),
       ...logs,
       "",
-      "**✅ Whitelist** _(`&automod whitelist`)_",
+      `${T("**✅ Lista de permitidos**", "**✅ Allow list**")} _(\`${PREFIXO}automod whitelist\`)_`,
       wl,
       "",
-      "**🌐 Global ban list**",
-      `**Mode:** \`${config.banGlobal?.modo ?? "off"}\` — ${L_BG[config.banGlobal?.modo ?? "off"]}`,
-      `**Listed:** ${db.usuariosBanidosDistintos()} user(s) in ${db.totalBansGlobais()} record(s)`,
+      T("**🌐 Lista global de banimentos**", "**🌐 Global ban list**"),
+      `${T("**Modo:**", "**Mode:**")} \`${config.banGlobal?.modo ?? "off"}\` — ${L_BG[config.banGlobal?.modo ?? "off"]}`,
+      `${T("**Na lista:**", "**Listed:**")} ${db.usuariosBanidosDistintos()} ${T("usuário(s) em", "user(s) in")} ${db.totalBansGlobais()} ${T("registro(s)", "record(s)")}`,
       "",
-      "**🎛 Disabled commands**",
-      (config.comandosDesativados?.length ? config.comandosDesativados.map(c=>`\`${c}\``).join(", ") : "_(none)_"),
+      T("**🎛 Comandos desativados**", "**🎛 Disabled commands**"),
+      (config.comandosDesativados?.length ? config.comandosDesativados.map((c) => `\`${c}\``).join(", ") : T("_(nenhum)_", "_(none)_")),
       "",
-      "**🚨 Active punishments** *(top 5)*",
+      T("**🚨 Punições ativas** *(top 5)*", "**🚨 Active punishments** *(top 5)*"),
       ativas,
       "",
-      "**🎲 RPG and economy**",
-      ...economia,
+      T("**🔐 Acesso aos comandos**", "**🔐 Command access**"),
+      `${T("Cargos de staff:", "Staff roles:")} ${config.acesso?.cargosStaff?.length ? config.acesso.cargosStaff.map((r) => `<%${r}>`).join(" ") : T("_(só permissões nativas)_", "_(native permissions only)_")}`,
+      `${T("Canais:", "Channels:")} ${(config.acesso?.canais?.modo ?? "todos") === "todos" ? T("qualquer um", "any") : `\`${config.acesso.canais.modo}\` ${config.acesso.canais.lista?.length ? config.acesso.canais.lista.map((c) => `<#${c}>`).join(", ") : T("_(lista vazia)_", "_(empty list)_")}`}`,
       "",
-      "**🔐 Command access**",
-      `Staff roles: ${config.acesso?.cargosStaff?.length ? config.acesso.cargosStaff.map((r)=>`<%${r}>`).join(" ") : "_(native permissions only)_"}`,
-      `Channels: ${(config.acesso?.canais?.modo ?? "todos") === "todos" ? "any" : `\`${config.acesso.canais.modo}\` ${config.acesso.canais.lista?.length ? config.acesso.canais.lista.map((c)=>`<#${c}>`).join(", ") : "_(empty list)_"}`}`,
-      `Staff list: ${config.acesso?.cargosStaff?.length ? `\`${PREFIXO}staff\` shows ${config.acesso.cargosStaff.length} role(s)` : "_(empty)_"}`,
+      T("**👋 Entrada e saída**", "**👋 Join and leave**"),
+      `${T("Boas-vindas:", "Welcome:")} ${config.boasVindas?.ativo && config.boasVindas?.canalId ? `🟢 <#${config.boasVindas.canalId}>` : T("🔴 desligadas", "🔴 off")}`,
+      `${T("Despedida:", "Farewell:")} ${config.adeus?.ativo && config.adeus?.canalId ? `🟢 <#${config.adeus.canalId}>` : T("🔴 desligada", "🔴 off")}`,
       "",
-      "**👋 Join and leave**",
-      `Welcome: ${config.boasVindas?.ativo && config.boasVindas?.canalId ? `🟢 <#${config.boasVindas.canalId}>` : "🔴 off"}`,
-      `Farewell: ${config.adeus?.ativo && config.adeus?.canalId ? `🟢 <#${config.adeus.canalId}>` : "🔴 off"}`,
+      T("**🧩 Recursos**", "**🧩 Features**"),
+      ...recursos,
       "",
-      ...(temIA(serverId) ? [
-        "**🤖 AI (Judy)**",
-        `Free chat: ${config.chatLivre?.canais?.length ? config.chatLivre.canais.map((c)=>`<#${c}>`).join(", ") + ` (mode \`${config.chatLivre.modo ?? "relevante"}\`)` : "_(off)_"}`,
-        `Spontaneous comments: ${config.comentarioEspontaneo?.canalId ? `<#${config.comentarioEspontaneo.canalId}> (up to ${config.comentarioEspontaneo.porDia ?? 4}/day)` : "_(off)_"}`,
-        `AI moderation: ${config.moderacaoIA?.ativa ? "🟢 active" : "🔴 off"}${config.moderacaoIA?.criterios ? "" : " _(no criteria)_"}`,
-        "",
-      ] : []),
-      "**🌐 Global** *(shared across servers)*",
-      `Debug: ${simL(cfgGlobal.debug !== false)} · Anti-link lists: ${cfgGlobal.linkBlocklistSources.length} source(s), ${cfgGlobal.linkBlocklistManual.length} manual domain(s)`,
+      T("**🎫 Tickets · 🪝 Webhooks · 🔊 Voz**", "**🎫 Tickets · 🪝 Webhooks · 🔊 Voice**"),
+      ...tickVoz,
       "",
-      `💡 Adjust with \`${PREFIXO}automod\` (holds blocklist, whitelist, sentinela and punicao), \`${PREFIXO}log\`, \`${PREFIXO}automod sentinela\` — \`${PREFIXO}tutorial\` shows the path, \`${PREFIXO}assistente\` walks it with you.`,
-    ].join("\n"),
-    colour: COR.info,
-  } : {
-    title: "⚙️ Configurações deste servidor",
-    description: [
-      "**🛡 Módulos do AutoMod**",
-      ...modulos,
-      "",
-      "**⚖️ Punição** *(vale para todos os módulos)*",
-      ...punicao,
-      "",
-      "**📜 Chat de logs**",
-      ...logs,
-      "",
-      "**✅ Lista de permitidos** _(`&automod whitelist`)_",
-      wl,
-      "",
-      "**🌐 Lista global de banimentos**",
-      `**Modo:** \`${config.banGlobal?.modo ?? "off"}\` — ${L_BG[config.banGlobal?.modo ?? "off"]}`,
-      `**Na lista:** ${db.usuariosBanidosDistintos()} usuário(s) em ${db.totalBansGlobais()} registro(s)`,
-      "",
-      "**🎛 Comandos desativados**",
-      (config.comandosDesativados?.length ? config.comandosDesativados.map(c=>`\`${c}\``).join(", ") : "_(nenhum)_"),
-      "",
-      "**🚨 Punições ativas** *(top 5)*",
-      ativas,
-      "",
-      "**🎲 RPG e economia**",
-      ...economia,
-      "",
-      "**🔐 Acesso aos comandos**",
-      `Cargos de staff: ${config.acesso?.cargosStaff?.length ? config.acesso.cargosStaff.map((r)=>`<%${r}>`).join(" ") : "_(só permissões nativas)_"}`,
-      `Canais: ${(config.acesso?.canais?.modo ?? "todos") === "todos" ? "qualquer um" : `\`${config.acesso.canais.modo}\` ${config.acesso.canais.lista?.length ? config.acesso.canais.lista.map((c)=>`<#${c}>`).join(", ") : "_(lista vazia)_"}`}`,
-      `Lista da equipe: ${config.acesso?.cargosStaff?.length ? `\`${PREFIXO}staff\` mostra ${config.acesso.cargosStaff.length} cargo(s)` : "_(vazia)_"}`,
-      "",
-      "**👋 Entrada e saída**",
-      `Boas-vindas: ${config.boasVindas?.ativo && config.boasVindas?.canalId ? `🟢 <#${config.boasVindas.canalId}>` : "🔴 desligadas"}`,
-      `Despedida: ${config.adeus?.ativo && config.adeus?.canalId ? `🟢 <#${config.adeus.canalId}>` : "🔴 desligada"}`,
-      "",
-      "**🎫 Tickets · 🪝 Webhooks · 🔊 Voz**",
-      `Tickets: ${config.tickets?.logCanal ? `log <#${config.tickets.logCanal}> · ${db.listarTickets(serverId).length} aberto(s)` : "_(não configurado — `" + PREFIXO + "ticket log #canal`)_"}`,
-      `Webhooks: ${db.listarGanchos(serverId).length} gancho(s) — \`${PREFIXO}webhook lista\``,
-      `Voz (TTS): ${config.tts?.ativo && config.tts?.canalVoz ? `🟢 <#${config.tts.canalVoz}>` : "🔴 desligada"}`,
+      T("**🎲 RPG** *(um mundo só, igual em todos os servidores — mercado e moedas próprios)*", "**🎲 RPG** *(one world, the same on every server — its own market and currencies)*"),
+      ...rpgLinhas,
       "",
       ...(temIA(serverId) ? [
-        "**🤖 IA (Judy)**",
-        `Conversa livre: ${config.chatLivre?.canais?.length ? config.chatLivre.canais.map((c)=>`<#${c}>`).join(", ") + ` (modo \`${config.chatLivre.modo ?? "relevante"}\`)` : "_(desligada)_"}`,
-        `Comentários espontâneos: ${config.comentarioEspontaneo?.canalId ? `<#${config.comentarioEspontaneo.canalId}> (até ${config.comentarioEspontaneo.porDia ?? 4}/dia)` : "_(desligados)_"}`,
-        `Moderação por IA: ${config.moderacaoIA?.ativa ? "🟢 ativa" : "🔴 desligada"}${config.moderacaoIA?.criterios ? "" : " _(sem critérios)_"}`,
+        T("**🤖 IA (Judy)**", "**🤖 AI (Judy)**"),
+        `${T("Conversa livre:", "Free chat:")} ${config.chatLivre?.canais?.length ? config.chatLivre.canais.map((c) => `<#${c}>`).join(", ") + ` (${T("modo", "mode")} \`${config.chatLivre.modo ?? "relevante"}\`)` : T("_(desligada)_", "_(off)_")}`,
+        `${T("Comentários espontâneos:", "Spontaneous comments:")} ${config.comentarioEspontaneo?.canalId ? `<#${config.comentarioEspontaneo.canalId}> (${T("até", "up to")} ${config.comentarioEspontaneo.porDia ?? 4}/${T("dia", "day")})` : T("_(desligados)_", "_(off)_")}`,
+        `${T("Moderação por IA:", "AI moderation:")} ${config.moderacaoIA?.ativa ? T("🟢 ativa", "🟢 active") : T("🔴 desligada", "🔴 off")}${config.moderacaoIA?.criterios ? "" : T(" _(sem critérios)_", " _(no criteria)_")}`,
         "",
       ] : []),
-      "**🌐 Global** *(compartilhado entre servidores)*",
-      `Debug: ${simL(cfgGlobal.debug !== false)} · Listas anti-link: ${cfgGlobal.linkBlocklistSources.length} fonte(s), ${cfgGlobal.linkBlocklistManual.length} domínio(s) manual(is)`,
+      T("**🌐 Global** *(compartilhado entre servidores)*", "**🌐 Global** *(shared across servers)*"),
+      `Debug: ${simL(cfgGlobal.debug !== false)} · ${T("Listas anti-link:", "Anti-link lists:")} ${cfgGlobal.linkBlocklistSources.length} ${T("fonte(s)", "source(s)")}, ${cfgGlobal.linkBlocklistManual.length} ${T("domínio(s) manual(is)", "manual domain(s)")}`,
       "",
-      `💡 Ajuste com \`${PREFIXO}automod\` (que reúne blocklist, whitelist, sentinela e punicao), \`${PREFIXO}log\`, \`${PREFIXO}automod sentinela\` — \`${PREFIXO}tutorial\` mostra o caminho, \`${PREFIXO}assistente\` percorre com você.`,
+      T(`💡 Ajuste com \`${PREFIXO}automod\` (que reúne blocklist, whitelist, sentinela e punicao) e \`${PREFIXO}log\` — \`${PREFIXO}tutorial\` mostra o caminho, \`${PREFIXO}assistente\` percorre com você.`,
+        `💡 Adjust with \`${PREFIXO}automod\` (holds blocklist, whitelist, sentinela and punicao) and \`${PREFIXO}log\` — \`${PREFIXO}tutorial\` shows the path, \`${PREFIXO}assistente\` walks it with you.`),
     ].join("\n"),
     colour: COR.info,
   });

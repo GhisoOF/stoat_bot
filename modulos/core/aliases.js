@@ -69,7 +69,7 @@ export const SUB = {
   },
   tutorial: {
     moderation: "moderacao", roles: "cargos", levels: "xp",
-    character: "rpg", adventure: "aventura", economy: "economia",
+    character: "rpg", adventure: "aventura", market: "rpg", economy: "economia",
     setup: "game", permissions: "permissoes", logging: "logs",
     news: "noticias", messages: "mensagens", settings: "ajustes",
     ai: "ia", channels: "canais",
@@ -82,7 +82,7 @@ export const SUB = {
     grimoire: "grimorio", magic: "magia",
     equip: "equipar", unequip: "desequipar", wear: "vestir",
     catalog: "catalogo", shop: "loja",
-    wallet: "carteira", balance: "saldo", economy: "economia",
+    wallet: "carteira", balance: "saldo",
     market: "mercado", exchange: "cambio", trade: "trocar", barter: "escambo", rates: "taxas", bank: "banco",
     buy: "comprar", sell: "vender", hire: "contratar", recruit: "recrutar",
     rest: "descansar",
@@ -421,12 +421,6 @@ export function exibir(texto, lang, prefixo = "&", CANONICO = {}) {
       return "`" + traduzido + "`";
     });
   }).join("\n");
-}
-
-export function exibirTitulo(titulo, lang, prefixo = "&", CANONICO = {}) {
-  if (lang !== "en" || typeof titulo !== "string") return titulo;
-  const r = traduzirTrecho(prefixo + titulo, prefixo, CANONICO);
-  return r.texto.startsWith(prefixo) ? r.texto.slice(prefixo.length) : r.texto;
 }
 
 // Nome de exibição de um comando isolado (sem prefixo, sem argumentos).

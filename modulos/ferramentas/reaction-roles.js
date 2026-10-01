@@ -1,15 +1,12 @@
 
 import * as db  from "../core/db.js";
 import * as log from "../core/log.js";
-import { idValido, descreverProblemaDeId, resolverMensagem, resolverCargo } from "../core/ids.js";
+import { idValido, descreverProblemaDeId, resolverMensagem } from "../core/ids.js";
 import { tr, lingua } from "../core/i18n.js";
 import { normalizarErro } from "../core/erros.js";
 import { chamarApi } from "../core/stoat-api.js";
 
-const ULID = /^[0-9A-HJKMNP-TV-Z]{26}$/i;
-
 // Reexporta o resolvedor central, para quem já importava daqui.
-export { resolverMensagem as extrairIdMensagem } from "../core/ids.js";
 
 // Normaliza emoji recebido (pode vir URL-encoded / com seletor de variação)
 export function normalizarEmoji(e) {

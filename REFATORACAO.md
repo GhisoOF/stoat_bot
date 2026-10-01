@@ -495,12 +495,8 @@ unzip -o ~/Downloads/stoat_bot-refatorado.zip -d /tmp/refat && cp -a /tmp/refat/
 
 # 2. Conferir (só o último precisa de npm install)
 node scripts/verificar-build.js
-node teste-compatibilidade.mjs           # banco e .env antigos, e o banco no volume
-node teste-arvore-comandos.mjs           # a árvore de comandos
-node teste-help-render.mjs               # nenhuma página de ajuda cita comando removido
-node teste-dependencias.mjs              # as vulnerabilidades continuam fora
-node teste-ia.mjs && node teste-verificador.mjs
-npm install && node teste-refatoracao.mjs
+# (1 out 2026: as suítes viraram um arquivo só, testes.mjs — o nome de cada uma é o antigo sem "teste-")
+node testes.mjs compatibilidade arvore-comandos help-render dependencias ia verificador refatoracao
 
 git add -A && git commit -m "refatoracao: kiss, seguranca e remocao de legado" && git push
 

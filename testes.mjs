@@ -3837,7 +3837,9 @@ console.log("\n── o 'undefined' que sobrou: erro em string JSON ──");
     "★ string JSON vira frase legível — era o que o vigia repetia a cada minuto");
   ok(tipoDoErro(comoAPILanca) === "NotFound",
     "  → e o tipo é encontrado: quem testava `e.type` nunca via, o type estava DENTRO do texto");
-  ok(descreverErro({ type: "MissingPermission" }).includes("AssignRoles"), "  → objeto continua funcionando");
+  ok(/permissão necessária/.test(descreverErro({ type: "MissingPermission" })), "  → objeto continua funcionando");
+  // (2 out) o Stoat diz qual permissão faltou — a frase antiga chutava "AssignRoles, TimeoutMembers…" sempre
+  ok(/\*\*BanMembers\*\*/.test(descreverErro({ type: "MissingPermission", permission: "BanMembers" })), "  → e nomeia a permissão que o Stoat apontou");
   ok(descreverErro(new Error("deu ruim")) === "deu ruim", "  → Error comum continua funcionando");
   ok(descreverErro(undefined) === "erro desconhecido" && normalizarErro(null) && descreverErro("timeout") === "timeout",
     "  → e nada disso quebra com nulo ou texto solto");
@@ -7191,6 +7193,30 @@ await t("&ticket categorias troca os assuntos do painel (só a staff)", async ()
 await t("a transcrição inclui os embeds (o que o bot mostrou também é registro)", () => {
   const txt = tickets.formatarTranscricao([{ autor: "Judy", quando: "2026-10-01T10:00:00Z", texto: "", embeds: [{ title: "🎫 Ticket #1", description: "Aberto por ANA" }] }]);
   assert.match(txt, /\[embed\] 🎫 Ticket #1 — Aberto por ANA/);
+});
+
+await t("★ o 🔒 que não chegou como evento é achado pela vigia (ticket #8, 2 out)", async () => {
+  // um ticket novo, aberto pelo painel
+  await quieto(() => reagir(w, painel.id, "ANA", "🛠️"));   // (os assuntos mudaram no teste das categorias)
+  const tk = db.listarTickets("SRV").find((x) => x.autorId === "ANA" && x.status === "aberto");
+  const ctl = w.canais.get(tk.canalId).mensagens.find((m) => m.reacoes.includes("🔒"));
+  // a API conta quem reagiu (o evento nunca chegou ao bot)
+  const api = async (rota) => rota.endsWith(`/messages/${ctl.id}`)
+    ? { ok: true, status: 200, json: { _id: ctl.id, reactions: { "🔒": ["BOT", "STAFF1"] } } }
+    : { ok: false, status: 404, json: null };
+  await quieto(() => tickets.conferirReacoes({ client: w.client, criarContexto: w.criarContexto, api }));
+  assert.equal(db.ticketDoCanal(tk.canalId).status, "fechado");
+  assert.equal(db.ticketDoCanal(tk.canalId).fechadoPor, "STAFF1");
+});
+await t("a vigia não fecha pelo 🔒 de quem não é staff (e tira a reação)", async () => {
+  rede.reacoesTiradas.length = 0;
+  await quieto(() => reagir(w, painel.id, "BEA", "🛠️"));
+  const tk = db.listarTickets("SRV").find((x) => x.autorId === "BEA" && x.status === "aberto");
+  const ctl = w.canais.get(tk.canalId).mensagens.find((m) => m.reacoes.includes("🔒"));
+  const api = async () => ({ ok: true, status: 200, json: { reactions: { "🔒": ["BEA"] } } });
+  await quieto(() => tickets.conferirReacoes({ client: w.client, criarContexto: w.criarContexto, api }));
+  assert.equal(db.ticketDoCanal(tk.canalId).status, "aberto");
+  assert.ok(rede.reacoesTiradas.some((u) => u.includes(ctl.id) && u.includes("BEA")));
 });
 
 console.log(`\nTICKETS: ${ok} ok, ${falhou} falha(s)`);

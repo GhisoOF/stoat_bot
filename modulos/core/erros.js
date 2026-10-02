@@ -25,9 +25,11 @@ export function descreverErro(e, lang = "pt") {
   e = normalizarErro(e);
   const tipo = e?.type ?? e?.error ?? e?.code;
   const TRADUCAO = {
-    MissingPermission: lang === "en"
-      ? "the bot lacks a required permission (AssignRoles, TimeoutMembers…)"
-      : "falta ao bot uma permissão necessária (AssignRoles, TimeoutMembers…)",
+    // o Stoat diz QUAL permissão faltou (campo `permission`) — antes a mensagem
+    // listava sempre "AssignRoles, TimeoutMembers…", mesmo quando era outra
+    MissingPermission: e?.permission
+      ? (lang === "en" ? `the bot lacks the **${e.permission}** permission here` : `falta ao bot a permissão **${e.permission}** aqui`)
+      : (lang === "en" ? "the bot lacks a required permission" : "falta ao bot uma permissão necessária"),
     NotElevated: lang === "en"
       ? "the bot's role is below the target's — move the bot's role up"
       : "o cargo do bot está abaixo do cargo da pessoa — suba o cargo do bot",

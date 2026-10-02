@@ -121,9 +121,10 @@ async function coletarHistorico(canal) {
 }
 
 // ── Quem é staff (para 🔒 e 🗑️) ─────────────────────────────────────────────
-export async function ehStaff(server, userId, config) {
+export async function ehStaff(server, userId, config, ctx = null) {
   if (!server || !userId) return false;
   if (server.ownerId === userId) return true;
+  try { if (ctx?.ehSuperAdmin?.(userId)) return true; } catch {}
   const membro = await server.fetchMember?.(userId).catch(() => null);
   if (!membro) return false;
   const cargos = (membro.roles ?? []).map((r) => r?.id ?? r);
@@ -220,7 +221,7 @@ export async function abrirTicket({ ctx, server, userId, motivo = "", categoria 
       "",
       "Só você e a staff enxergam este canal. Conte o que precisa.",
       "",
-      `${E_FECHAR} — **a staff fecha o ticket**: a conversa trava e o registro vai para o log.`,
+      `${E_FECHAR} — **a staff fecha o ticket** (ou \`&ticket fechar\`): a conversa trava e o registro vai para o log.`,
     ].join("\n"),
     colour: ctx.COR.sucesso,
   }, {
@@ -230,7 +231,7 @@ export async function abrirTicket({ ctx, server, userId, motivo = "", categoria 
       "",
       "Only you and staff can see this channel. Tell us what you need.",
       "",
-      `${E_FECHAR} — **staff closes the ticket**: the conversation locks and the record goes to the log.`,
+      `${E_FECHAR} — **staff closes the ticket** (or \`&ticket fechar\`): the conversation locks and the record goes to the log.`,
     ].join("\n"),
     colour: ctx.COR.sucesso,
   }));
@@ -370,8 +371,9 @@ export async function aoReagir(msgObj, userId, emoji, { client, criarContexto })
 
   const ticket = reg.ticketId ? db.ticketPorId(reg.ticketId) : null;
   if (!ticket) return true;
+  console.log(`[TICKET] ${semVS(emoji)} de ${userId} no ticket #${ticket.numero} (${reg.tipo}, ${ticket.status})`);
   if (reg.tipo === "controle" && mesmoEmoji(emoji, E_FECHAR)) {
-    if (!(await ehStaff(server, userId, ctx.config))) {
+    if (!(await ehStaff(server, userId, ctx.config, ctx))) {
       await tirarReacao(reg.canalId, msgId, emoji, userId);
       await avisar(`<@${userId}>, só a staff fecha o ticket.`, `<@${userId}>, only staff can close the ticket.`);
       return true;
@@ -380,7 +382,7 @@ export async function aoReagir(msgObj, userId, emoji, { client, criarContexto })
     return true;
   }
   if (reg.tipo === "fechado" && mesmoEmoji(emoji, E_APAGAR)) {
-    if (!(await ehStaff(server, userId, ctx.config))) { await tirarReacao(reg.canalId, msgId, emoji, userId); return true; }
+    if (!(await ehStaff(server, userId, ctx.config, ctx))) { await tirarReacao(reg.canalId, msgId, emoji, userId); return true; }
     await apagarTicket({ ctx, server, ticket });
     return true;
   }
@@ -493,4 +495,40 @@ export async function cmdTicket(message, args, ctx) {
   }
 
   return enviar("🎫", en ? `Unknown subcommand — \`${P}ticket\`.` : `Subcomando desconhecido — \`${P}ticket\`.`, COR.aviso);
+}
+
+// ── Vigia das reações (2 out 2026) ───────────────────────────────────────────
+// O 🔒 no ticket #8 não chegou ao bot: nenhuma linha de reação no log. O canal
+// do ticket nasce no meio da sessão, e a sessão do bot no Stoat não recebeu os
+// eventos dele (o painel, num canal que já existia, funcionou). Em vez de
+// depender do evento, o bot confere de tempos em tempos, pela API, quem reagiu
+// nas mensagens de controle (🔒) e de fechado (🗑️) — e trata como se fosse o
+// evento. Quem não é staff tem a reação tirada, então nada é tratado duas vezes.
+const VIGIA_MS = Number(process.env.TICKET_VIGIA_MS || 15_000);
+const emAndamento = new Set();
+export async function conferirReacoes({ client, criarContexto, api = chamarApi }) {
+  const regs = db.getDb().prepare("SELECT * FROM ticket_mensagens WHERE tipo IN ('controle', 'fechado')").all();
+  for (const reg of regs) {
+    if (emAndamento.has(reg.msgId)) continue;
+    const r = await api(`/channels/${reg.canalId}/messages/${reg.msgId}`);
+    if (r.status === 404) { db.esquecerMsgTicket(reg.msgId); continue; }   // mensagem ou canal sumiu
+    const reacoes = r.json?.reactions ?? {};
+    const alvo = reg.tipo === "controle" ? E_FECHAR : E_APAGAR;
+    const quem = Object.entries(reacoes).filter(([e]) => mesmoEmoji(e, alvo)).flatMap(([, ids]) => ids ?? []);
+    for (const userId of quem) {
+      if (userId === client?.user?.id) continue;
+      emAndamento.add(reg.msgId);
+      try {
+        console.log(`[TICKET] vigia: ${alvo} de ${userId} na mensagem ${reg.msgId} (${reg.tipo})`);
+        await aoReagir({ id: reg.msgId }, userId, alvo, { client, criarContexto });
+      } catch (e) { console.error(`[TICKET] vigia: ${e?.message ?? e}`); }
+      finally { emAndamento.delete(reg.msgId); }
+      if (!db.msgTicket(reg.msgId)) break;   // fechou/apagou: essa mensagem não vale mais
+    }
+  }
+}
+export function iniciarVigia(client, criarContexto) {
+  const t = setInterval(() => conferirReacoes({ client, criarContexto }).catch((e) => console.error("[TICKET] vigia:", e?.message ?? e)), VIGIA_MS);
+  t.unref?.();
+  return t;
 }

@@ -535,6 +535,7 @@ client.on("ready", async () => {
   webhooks.iniciarReceptor(ctxRss);
 
   banGlobal.iniciarAutoImportacao(client, criarContexto);
+  tickets.iniciarVigia(client, criarContexto);   // 🔒/🗑️ dos tickets, mesmo sem o evento de reação
 });
 
 client.on("messageCreate", tratarMensagem);

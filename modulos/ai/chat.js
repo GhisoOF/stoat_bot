@@ -1,5 +1,6 @@
 
 import * as busca from "./busca.js";
+import { semPingEmMassa } from "../core/seguranca.js";
 import * as extra from "./contexto-extra.js";
 import * as store from "../core/config-store.js";
 import * as db from "../core/db.js";
@@ -149,6 +150,7 @@ export function iniciarComentario(client) {
     gerar: (contexto, serverId) => gerarComentarioEspontaneo(contexto, serverId),
     enviar: async (canalId, texto) => {
       if (vazaIdentidade(texto)) texto = podarIdentidade(texto);
+      texto = semPingEmMassa(texto);
       if (!texto.trim()) return;
       const canal = client.channels.get(canalId) ?? await client.channels.fetch(canalId).catch(() => null);
       if (canal) {
@@ -1718,6 +1720,7 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
   let statusQuebrado = false;   // se uma edição falhar (ex.: rate limit), paramos de insistir
   const editarStatus = async (texto) => {
     if (statusQuebrado) return;
+    texto = semPingEmMassa(texto);
     try {
       if (statusMsg) await statusMsg.edit({ content: texto, embeds: [] });
       else statusMsg = await message.channel.sendMessage(texto);
@@ -1809,7 +1812,8 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
     const partes = [];
     if (embed.title && !/^(💬|🤔|💭)/.test(embed.title)) partes.push(`**${embed.title}**`);
     if (embed.description) partes.push(embed.description);
-    let texto = partes.join("\n").trim() || "…";
+    // a resposta sai como mensagem comum (que notifica): sem @everyone, cargo nem enxurrada de menções
+    let texto = semPingEmMassa(partes.join("\n").trim()) || "…";
     if (texto.length > LIMITE_RESPOSTA) texto = texto.slice(0, LIMITE_RESPOSTA - 1) + "…";
 
     if (statusMsg && !statusQuebrado) {
@@ -2175,7 +2179,7 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
         const conteudo = (textoEntregue + nota).length > teto
           ? textoEntregue + nota.slice(0, Math.max(0, teto - textoEntregue.length - 1)) + "…"
           : textoEntregue + nota;
-        try { await msgVerif.edit({ content: conteudo, embeds: [] }); }
+        try { await msgVerif.edit({ content: semPingEmMassa(conteudo), embeds: [] }); }
         catch (e) { dlog(`verificador: edição falhou (${e?.message ?? e})`); }
       }).catch((e) => dlog(`verificador: erro externo (${e?.message ?? e})`));
     }

@@ -484,7 +484,7 @@ async function diagnosticoDeBoot() {
   return problemas;
 }
 
-servidor.listen(PORTA, () => {
+servidor.listen(PORTA, process.env.SERVICO_HOST || undefined, () => {
   log(`serviço de IA na porta ${PORTA}`);
   log(`LLM: ${LLM_URL || "⚠️ NENHUM (IA_MODO/LLM_URL)"} | modelo: ${MODELO_PADRAO || "(o carregado no servidor)"}`);
   log(`ferramentas: ${ferramentas.nomes().join(", ") || "(nenhuma)"}`);

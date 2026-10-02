@@ -1,4 +1,5 @@
 import { ULID, resolverCargo } from "../core/ids.js";
+import { editarCargos } from "../core/hierarquia.js";
 import { tr } from "../core/i18n.js";
 
 // Extrai um ID de cargo de "<@&ID>", "<%ID>" ou ID cru.
@@ -96,10 +97,8 @@ export async function aoEntrar(member, ctx) {
     const server = await ctx.getServer({ serverId: ctx.serverId });
     const alvo = await server.fetchMember(userId).catch(() => null);
     if (!alvo) return;
-    const atuais = new Set(alvo.roles ?? []);
-    if (atuais.has(roleId)) return;   // já tem
-    atuais.add(roleId);
-    await alvo.edit({ roles: [...atuais] });
+    if ((alvo.roles ?? []).map((r) => r?.id ?? r).includes(roleId)) return;   // já tem
+    await editarCargos(server, alvo, (a) => [...a, roleId]);
     console.log(`[AUTOROLE] cargo ${roleId} dado a ${userId} em ${ctx.serverId}`);
   } catch (e) {
     console.error("[AUTOROLE]", e.message);

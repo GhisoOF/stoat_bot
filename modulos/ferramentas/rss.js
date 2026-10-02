@@ -1,4 +1,5 @@
 
+import { buscarSeguro } from "../core/seguranca.js";
 import * as db from "../core/db.js";
 import { ULID } from "../core/ids.js";
 import * as log from "../core/log.js";
@@ -55,7 +56,9 @@ async function parseFeedManual(url) {
   const t = setTimeout(() => ctrl.abort(), 20000);
   let xml;
   try {
-    const r = await fetch(url, { signal: ctrl.signal, headers: { "User-Agent": "CobaiaRSS/1.0" } });
+    // o endereço vem da staff: só internet pública (um feed em 127.0.0.1 ou na
+    // rede interna fazia o bot sondar os próprios serviços)
+    const r = await buscarSeguro(url, { signal: ctrl.signal, headers: { "User-Agent": "JudyRSS/1.0" } });
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     xml = await r.text();
   } finally { clearTimeout(t); }

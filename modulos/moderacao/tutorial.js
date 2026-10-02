@@ -1,3 +1,4 @@
+import * as visaoMod from "./visao.js";
 import { servidorPermitido as temIA } from "../ai/chat.js";
 import { lingua } from "../core/i18n.js";
 import { enviarPaginado, paginarLinhas } from "../core/paginas.js";
@@ -1079,13 +1080,39 @@ export async function cmdTutorial(message, args, ctx) {
 
   const comIA = (() => { try { return temIA(ctx.serverId); } catch { return false; } })();
 
+  // Membro vê o guia de quem joga e usa; a staff vê a configuração inteira
+  // (ver visao.js). E ninguém vê IA/voz onde elas não estão liberadas.
+  const visao = await visaoMod.quemVe(message, ctx);
+  const membro = visao.nivel === "membro";
   const todas = AREAS(P, lang, comIA);
   const areas = {};
   for (const [k, v] of Object.entries(todas)) {
     if (v.soComIA && !comIA) continue;
-    areas[k] = v;
+    if (membro && !visaoMod.AREAS_DO_MEMBRO.has(k)) continue;
+    areas[k] = { ...v, corpo: visaoMod.filtrarLinhas(v.corpo, visao) };
   }
   const pedido = args[0]?.toLowerCase();
+
+  // O membro que pede uma área da staff (ou o guia de configuração em páginas)
+  const chavePedida = pedido && !/^\d+$/.test(pedido) ? (todas[pedido] ? pedido : APELIDOS[pedido]) : null;
+  if (membro && (!pedido || /^\d+$/.test(pedido) || (chavePedida && todas[chavePedida] && !areas[chavePedida]))) {
+    const lista = Object.entries(areas).sort((a, b) => a[1].ordem - b[1].ordem)
+      .map(([k, v]) => `\`${P}tutorial ${k}\` — ${v.titulo}${v.resumo ? `: ${v.resumo}` : ""}`);
+    return sendEmbed(message.channel, {
+      title: lang === "en" ? "📚 Tutorial" : "📚 Tutorial",
+      description: [
+        chavePedida && todas[chavePedida] && !areas[chavePedida]
+          ? (lang === "en" ? `🔒 \`${P}tutorial ${pedido}\` is the staff's setup guide.\n` : `🔒 \`${P}tutorial ${pedido}\` é o guia de configuração da staff.\n`)
+          : null,
+        lang === "en" ? "What you can learn here:" : "O que dá para aprender por aqui:",
+        "",
+        ...lista,
+        "",
+        lang === "en" ? `_\`${P}help\` lists the commands you can use._` : `_\`${P}help\` lista os comandos que você pode usar._`,
+      ].filter((x) => x !== null).join("\n"),
+      colour: COR.info,
+    });
+  }
 
   // ── Página de uma área (aprofundamento) ──
   if (pedido && !/^\d+$/.test(pedido)) {
@@ -1121,7 +1148,7 @@ export async function cmdTutorial(message, args, ctx) {
   }
 
   // ── O guia em páginas (&tutorial, &tutorial <n>) ──
-  const paginas = GUIA(P, lang, comIA).map((pg) => ({ ...pg, colour: COR.info }));
+  const paginas = GUIA(P, lang, comIA).map((pg) => ({ ...pg, description: visaoMod.filtrarLinhas(String(pg.description ?? "").split("\n"), visao).join("\n"), colour: COR.info }));
   const n = pedido ? parseInt(pedido, 10) : 0;
   return enviarPaginado(ctx, message.channel, {
     paginas, autorId: message.authorId,

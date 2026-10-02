@@ -274,7 +274,8 @@ await t("resultado que não fala do pedido fica de fora; página lida entra no c
     return { ok: true, headers: { get: () => "text/html" }, text: async () => "<html><script>x</script><p>Google search enshittification: ads first, results later, AI overviews pushing links down the page.</p></html>" };
   };
   process.env.SEARXNG_URL = "http://searx";
-  const r = await busca.pesquisar("enshittification do google", { fetcher, chamarJson: async () => '{"consultas":["google enshittification"]}' });
+  // resolver falso: "blog.ex" é um endereço público (a leitura só sai para a internet pública)
+  const r = await busca.pesquisar("enshittification do google", { fetcher, resolver: async () => [{ address: "93.184.216.34" }], chamarJson: async () => '{"consultas":["google enshittification"]}' });
   assert.equal(r.resultados.length, 1); assert.match(r.resultados[0].url, /enshit/);
   assert.match(r.resultados[0].texto, /ads first/); assert.doesNotMatch(r.resultados[0].texto, /<script>|x<\/script>/);
 });
@@ -3242,7 +3243,8 @@ const { cmdTutorial } = await import("./modulos/moderacao/tutorial.js");
 for (const lang of ["pt", "en"]) {
   const caps = [];
   const ctxFake = { sendEmbed: async (_c, e) => { caps.push(e); return { id: "x", react: async () => {}, edit: async (p) => caps.push(p.embeds[0]) }; },
-    COR: { info: "#fff", aviso: "#fff" }, PREFIXO: "&", config: { language: lang }, serverId: "S1", exibir: (t) => t };
+    COR: { info: "#fff", aviso: "#fff" }, PREFIXO: "&", config: { language: lang }, serverId: "S1", exibir: (t) => t,
+    membroTemPermissao: () => true };   // o guia em páginas é o da staff (o membro vê outro índice)
   await cmdTutorial({ channel: {}, authorId: "U1" }, [], ctxFake);
   ok(caps[0]?.description?.length <= 1500, `guia(${lang}): página 1 ≤ 1500`);
   ok((lang === "en") === caps[0]?.title?.includes("Getting started"), `guia(${lang}): no idioma certo`);
@@ -8948,6 +8950,246 @@ const ranks = Object.entries(texto).filter(([a, s]) => a.startsWith("modulos/") 
 ok(!ranks.length, "a conta de rank de cargo só existe em core/hierarquia.js", ranks.map(([a]) => a).join(", "));
 
 console.log(`\nCÓDIGO MORTO: ${pass} ok, ${fail} falha(s)`);
+process.exit(fail ? 1 : 0);
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+// visao  (o &help e o &tutorial em três versões — 1 out 2026)
+// ════════════════════════════════════════════════════════════════════════════
+SUITES["visao"] = async () => {
+const fs = (await import("node:fs")).default;
+process.env.DB_PATH = "/tmp/visao.db"; process.env.CONFIG_PATH = "/tmp/visao.json";
+process.env.CHAT_SERVIDORES = "S_IA"; process.env.TTS_SERVIDORES = "S_IA";
+for (const f of ["/tmp/visao.db", "/tmp/visao.db-wal", "/tmp/visao.db-shm"]) fs.rmSync(f, { force: true });
+const db = await import("./modulos/core/db.js"); db.abrirBanco(process.env.DB_PATH);
+const geral = await import("./modulos/moderacao/geral.js");
+const tutorial = await import("./modulos/moderacao/tutorial.js");
+let pass = 0, fail = 0;
+const ok = (cond, msg) => { cond ? pass++ : fail++; console.log(`${cond ? "✅" : "❌"} ${msg}`); };
+let seq = 0;
+async function ver(fn, args, { nivel = "membro", sid = "S_IA", lang = "pt" } = {}) {
+  const id = `V${seq++}`; const env = [];
+  const ctx = { config: { language: lang, comandosDesativados: [] }, COR: {}, PREFIXO: "&", serverId: sid,
+    estado: { CANONICO: {}, COMANDOS_SO_IA: new Set(), COMANDOS_GERENCIAVEIS: [] },
+    sendEmbed: async (_c, e) => { env.push(e); return { id, react: async () => {} }; },
+    membroTemPermissao: () => nivel !== "membro", ehSuperAdmin: () => nivel === "dono", getServer: async () => ({ id: sid }) };
+  await fn({ channel: { id: "c" }, authorId: "u", content: "" }, args, ctx);
+  const sessao = db.carregarSessaoPaginas(id);
+  return (sessao?.paginas?.length ? sessao.paginas : env).map((p) => `${p.title ?? ""}\n${p.description ?? ""}`).join("\n");
+}
+const help = (args, o) => ver(geral.cmdHelp, args, o);
+const tut = (args, o) => ver(tutorial.cmdTutorial, args, o);
+
+console.log("\n── membro ──");
+let t = await help([], { nivel: "membro" });
+ok(!/`&ban\b|`&automod\b|`&kick\b|`&log\b/.test(t), "★ o &help do membro não mostra comandos de moderação");
+ok(/`&economia minerar`/.test(t) || /`&economia`/.test(t), "  → mas mostra o que ele usa (&economia, &game, &xp…)");
+ok(!/&help proteger|&help diagnostico|&help comecar|&help dono/.test(t), "  → e nem lista os grupos da staff");
+ok(/&help voce/.test(t) && !/assistente/.test(t), "  → tem o grupo \"Para você\" e não oferece o &assistente");
+ok(/é da staff/.test(await help(["repete"], { nivel: "membro" })) || /Comando da staff/.test(await help(["repete"], { nivel: "membro" })), "&repete agora é da staff (era aberto: qualquer um \"anunciava\" pela bot)");
+ok(/Você está vendo os comandos que pode usar/.test(t), "  → e diz que é a visão de membro");
+ok(/Comando da staff/.test(await help(["ban"], { nivel: "membro" })), "&help ban para o membro: \"comando da staff\" (sem o detalhe)");
+ok(/Não encontrado/.test(await help(["servidores"], { nivel: "membro" })), "&help servidores para o membro: como se não existisse");
+t = await help(["xp"], { nivel: "membro" });
+ok(/&xp top|&nivel/.test(t) && !/`&xp setup|`&xp criarcargos/.test(t), "&help xp do membro: o ranking sim, a configuração não");
+ok(/Comando da staff/.test(await help(["game", "admin"], { nivel: "membro" })) || /Não encontrado/.test(await help(["game", "admin"], { nivel: "membro" })), "&help game admin: fechado para o membro");
+
+console.log("\n── staff ──");
+t = await help([], { nivel: "staff" });
+ok(/&help proteger/.test(t) && !/&help dono/.test(t), "★ a staff vê os grupos de configuração, não o do dono");
+ok(/`&ban/.test(await help(["proteger"], { nivel: "staff" })), "  → e o &ban no grupo Proteger");
+ok(/Não encontrado/.test(await help(["servidores"], { nivel: "staff" })), "  → o &servidores segue invisível para a staff");
+
+console.log("\n── dono ──");
+t = await help([], { nivel: "dono" });
+ok(/&help dono/.test(t) && /visão do dono/i.test(t), "★ o dono vê tudo, com o grupo dele");
+ok(!/Comando da staff|Não encontrado/.test(await help(["servidores"], { nivel: "dono" })), "  → e a ajuda do &servidores");
+
+console.log("\n── recursos do servidor ──");
+t = await help(["diversao"], { nivel: "staff", sid: "S_SEM" });
+ok(!/`&entrar|`&musica|`&tts/.test(t), "★ sem voz liberada, a ajuda não ensina &entrar/&musica/&tts");
+ok(/Não liberado neste servidor: IA, voz e música/.test(await help([], { nivel: "staff", sid: "S_SEM" })), "  → e o índice avisa o que não está liberado");
+ok(/Não existe aqui/.test(await help(["musica"], { nivel: "membro", sid: "S_SEM" })), "  → &help musica: não existe aqui");
+ok(/`&entrar/.test(await help(["diversao"], { nivel: "membro", sid: "S_IA" })), "com voz liberada, o membro vê o &entrar");
+
+console.log("\n── tutorial ──");
+t = await tut([], { nivel: "membro" });
+ok(/tutorial rpg/.test(t) && /tutorial economia/.test(t) && !/Getting started|Antes de tudo|tutorial permissoes/.test(t), "★ o membro recebe o índice de quem joga/usa, não o guia de configuração");
+ok(/guia de configuração da staff/.test(await tut(["moderacao"], { nivel: "membro" })), "  → área da staff: avisa e mostra as dele");
+t = await tut(["economia"], { nivel: "membro" });
+ok(/economia minerar/.test(t) && !/loja add|config nome/.test(t), "  → na área da economia, só a parte de quem usa");
+ok(/permissoes|Antes de tudo|Before anything|Getting started/i.test(await tut([], { nivel: "staff" })), "a staff recebe o guia de configuração inteiro");
+
+console.log(`\nVISÃO: ${pass} ok, ${fail} falha(s)`);
+process.exit(fail ? 1 : 0);
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+// brechas  (revisão de segurança — 1 out 2026)
+// ════════════════════════════════════════════════════════════════════════════
+// O que a revisão achou e fechou: a IA podia pingar @everyone, cargos e uma
+// enxurrada de gente (o texto dela sai como mensagem comum); a leitura de
+// páginas da busca e o RSS buscavam qualquer endereço, inclusive os internos
+// (SSRF); o &economia aceitava quantias absurdas (1e300); os serviços de IA e
+// voz ouviam em todas as interfaces. E roda os comandos da staff como membro
+// comum: nenhum pode mudar nada.
+SUITES["brechas"] = async () => {
+const fs = (await import("node:fs")).default;
+const crypto = (await import("node:crypto")).default;
+let pass = 0, fail = 0;
+const ok = (cond, msg, extra = "") => { cond ? pass++ : fail++; console.log(`${cond ? "✅" : "❌"} ${msg}${!cond && extra ? `\n     ${extra}` : ""}`); };
+const seg = await import("./modulos/core/seguranca.js");
+
+console.log("\n── pings em massa ──");
+const s1 = seg.semPingEmMassa("@everyone olha <%01KZMR4B94Q7Q2EH5CYHFW0AAA> @online <@01AAAAAAAAAAAAAAAAAAAAAAA1> <@01AAAAAAAAAAAAAAAAAAAAAAA2> <@01AAAAAAAAAAAAAAAAAAAAAAA3> <@01AAAAAAAAAAAAAAAAAAAAAAA4>");
+ok(!/@everyone|@online/.test(s1), "★ @everyone e @online não pingam");
+ok(!/<%/.test(s1), "  → menção a cargo vira texto");
+ok((s1.match(/<@/g) ?? []).length === 3 && /@alguém/.test(s1), "  → no máximo 3 pessoas mencionadas; o resto vira texto");
+
+console.log("\n── endereços internos (SSRF) ──");
+const publico = async () => [{ address: "93.184.216.34" }];
+for (const u of ["http://127.0.0.1:8090/saude", "http://10.0.0.5/", "http://192.168.1.1/", "http://100.101.102.103/", "http://[::1]/", "http://localhost:8091/", "http://gmktec.tailaeddbe.ts.net/", "file:///etc/passwd", "http://169.254.169.254/latest/meta-data"]) {
+  ok(!(await seg.urlPublica(u, { resolver: publico })).ok, `bloqueia ${u}`);
+}
+ok(!(await seg.urlPublica("http://interno.exemplo.com/", { resolver: async () => [{ address: "192.168.0.10" }] })).ok, "★ bloqueia domínio que aponta para IP interno");
+ok((await seg.urlPublica("https://exemplo.com/feed.xml", { resolver: publico })).ok, "deixa a internet pública");
+const fetcherRedirect = async (u) => u.startsWith("https://exemplo.com")
+  ? { status: 302, headers: { get: () => "http://127.0.0.1:8090/saude" } } : { status: 200, ok: true, headers: { get: () => "text/html" }, text: async () => "segredo" };
+let bloqueou = false;
+try { await seg.buscarSeguro("https://exemplo.com/x", {}, { fetcher: fetcherRedirect, resolver: publico }); } catch { bloqueou = true; }
+ok(bloqueou, "★ um redirect para dentro da rede também é barrado");
+const busca = await import("./modulos/ai/busca.js");
+ok((await busca.lerPagina("http://127.0.0.1:8090/saude", ["x"], { fetcher: async () => ({ ok: true, status: 200, headers: { get: () => "text/html" }, text: async () => "<p>segredo interno do serviço</p>".repeat(10) }) })) === null,
+  "★ a IA não lê página interna, nem que ela apareça na busca");
+
+console.log("\n── quantias e serviços ──");
+ok(!seg.quantiaValida(1e300) && !seg.quantiaValida(-5) && !seg.quantiaValida(2.5) && seg.quantiaValida(500), "★ quantias: inteiras, positivas, com teto (1e300 não passa)");
+const iniciar = fs.readFileSync("iniciar.js", "utf8");
+ok(/SERVICO_HOST: "127\.0\.0\.1"/.test(iniciar), "os serviços embutidos sobem só em 127.0.0.1");
+for (const a of ["ia-servico/servidor.js", "voz-servico/servidor.js"]) ok(/listen\(PORTA, process\.env\.SERVICO_HOST/.test(fs.readFileSync(a, "utf8")), `  → ${a} respeita o SERVICO_HOST`);
+
+console.log("\n── comandos da staff, digitados por um membro comum ──");
+process.env.BOT_TOKEN = "tok"; process.env.DB_PATH = "/tmp/brechas.db"; process.env.CONFIG_PATH = "/tmp/brechas.json";
+process.env.SUPER_ADMINS = "DONO"; process.env.CHAT_SERVIDORES = "S1"; process.env.TTS_SERVIDORES = "S1";
+for (const f of ["/tmp/brechas.db", "/tmp/brechas.db-wal", "/tmp/brechas.db-shm", "/tmp/brechas.json", "/tmp/blocklist-cache.bin"]) fs.rmSync(f, { force: true });
+globalThis.fetch = async () => ({ ok: false, status: 503, text: async () => "", json: async () => ({}) });
+await import("./main.js");
+const c = globalThis.__client;
+await c.emitAll("ready");
+const db = await import("./modulos/core/db.js");
+const store = await import("./modulos/core/config-store.js");
+const efeitos = [];
+const canal = { id: "C1", serverId: "S1", name: "geral", type: "TextChannel", sendMessage: async () => ({ id: "M", react: async () => {}, edit: async () => {}, delete: async () => {} }),
+  fetchMessages: async () => [], setPermissions: async () => efeitos.push("permissão de canal"), delete: async () => efeitos.push("apagou canal") };
+const comum = { id: { server: "S1", user: "U2" }, roles: [], hasPermission: () => false, edit: async () => efeitos.push("editou membro") };
+const server = { id: "S1", ownerId: "DONOSRV", name: "Teste", roles: new Map([["R1", { name: "VIP", rank: 5 }]]), channels: [canal], member: { roles: [] }, havePermission: () => true,
+  fetchMember: async () => comum, fetchMembers: async () => ({ members: [comum] }), fetchBans: async () => [],
+  banUser: async () => efeitos.push("baniu"), kickUser: async () => efeitos.push("expulsou"), createRole: async () => { efeitos.push("criou cargo"); return { id: "RN" }; },
+  createChannel: async () => { efeitos.push("criou canal"); return canal; }, deleteRole: async () => efeitos.push("apagou cargo") };
+c.servers.set("S1", server); c.channels.set("C1", canal);
+const say = async (t) => {
+  const q = [console.log, console.info, console.warn, console.error]; console.log = console.info = console.warn = console.error = () => {};
+  try { await Promise.race([c.emitAll("messageCreate", { id: "X" + Math.random(), authorId: "U2", content: t, serverId: "S1", server, channel: canal, channelId: "C1", mentionIds: t.includes("<@U3>") ? ["U3"] : [], createdAt: new Date(), author: { username: "Comum" }, member: comum, replyIds: [] }), new Promise((r) => setTimeout(r, 6000))]); }
+  finally { [console.log, console.info, console.warn, console.error] = q; }
+};
+const estado = () => {
+  const d = db.getDb();
+  const h = crypto.createHash("sha1");
+  h.update(JSON.stringify(store.configDoServidor("S1"))); h.update(JSON.stringify(store.getGlobal()));
+  for (const { name } of d.prepare("SELECT name FROM sqlite_master WHERE type='table'").all())
+    if (!/relatorio_eventos|paginas_sessoes|metricas|xp_|eco_saldos/.test(name)) h.update(name + JSON.stringify(d.prepare(`SELECT * FROM ${name}`).all()));
+  return h.digest("hex");
+};
+const STAFF = ["&ban <@U3> x", "&kick <@U3> x", "&silenciar <@U3> 10m x", "&warn <@U3> x", "&limpar 10", "&automod antispam off", "&automod punicao modo banir",
+  "&automod whitelist add exemplo.com", "&log canal aqui", "&banglobal banir", "&banglobal esquecer U3", "&comando desativar ping", "&acesso cargo add R1",
+  "&staff add R1", "&autorole set R1", "&cor R1 #ff0000", "&xp on", "&xp dar <@U3> 1000", "&boasvindas canal aqui", "&adeus canal aqui", "&embed titulo: x | descricao: y",
+  "&rss add https://exemplo.com/feed.xml", "&webhook criar teste", "&ticket log aqui", "&ticket painel aqui", "&economia config nome Hack", "&economia dar <@U3> 999",
+  "&economia loja add R1 1", "&economia zerar confirmar", "&fuso add Madrid", "&idioma en", "&personalidade hacker", "&chat livre on", "&tts cooldown 0",
+  "&tts filtro off", "&game admin moeda set ouro nome=Hack", "&game admin reset mundo confirmar", "&servidores"];
+await say("&ping");            // a primeira mensagem cria a config do servidor
+for (const cmd of STAFF) await say(cmd);   // 1ª rodada: pode preencher padrões
+const brechas = [];
+for (const cmd of STAFF) {
+  const antes = estado(); efeitos.length = 0;
+  await say(cmd);
+  if (antes !== estado() || efeitos.length) brechas.push(`${cmd} (${efeitos.join(", ") || "mudou a config/banco"})`);
+}
+ok(!brechas.length, `★ ${STAFF.length} comandos da staff, digitados por um membro, não mudam nada`, brechas.join(" · "));
+
+console.log(`\nBRECHAS: ${pass} ok, ${fail} falha(s)`);
+process.exit(fail ? 1 : 0);
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+// cargos-apagados  (o "Não consegui abrir o ticket: cargo inválido ou apagado" — 2 out 2026)
+// ════════════════════════════════════════════════════════════════════════════
+// O backend recusa (InvalidRole) qualquer cargo ADICIONADO que não exista. O
+// bot mandava a lista inteira de cargos da pessoa — a do cache da stoat.js, que
+// pode ter um cargo já apagado — e esse id contava como "adicionado". O teste
+// imita o backend de verdade (crates/delta/src/routes/servers/member_edit.rs).
+SUITES["cargos-apagados"] = async () => {
+const fs = (await import("node:fs")).default;
+process.env.DB_PATH = "/tmp/cargos-apagados.db"; process.env.CONFIG_PATH = "/tmp/cargos-apagados.json";
+for (const f of ["/tmp/cargos-apagados.db", "/tmp/cargos-apagados.db-wal", "/tmp/cargos-apagados.db-shm"]) fs.rmSync(f, { force: true });
+const db = await import("./modulos/core/db.js"); db.abrirBanco(process.env.DB_PATH);
+const { editarCargos, semCargosApagados } = await import("./modulos/core/hierarquia.js");
+const tickets = await import("./modulos/ferramentas/tickets.js");
+let pass = 0, fail = 0;
+const ok = (cond, msg, extra = "") => { cond ? pass++ : fail++; console.log(`${cond ? "✅" : "❌"} ${msg}${!cond && extra ? `\n     ${extra}` : ""}`); };
+
+// servidor que valida como o Stoat: cargo adicionado precisa existir
+function servidorDeVerdade({ cargoNovoAtrasa = 0 } = {}) {
+  const roles = new Map([["RBOT", { name: "Judy", rank: 1 }], ["RVIP", { name: "VIP", rank: 5 }]]);
+  const pendentes = new Map();
+  const edicoes = [];
+  const membro = (uid, noBanco, noCache) => {
+    const m = { id: { user: uid }, banco: [...noBanco], roles: [...noCache], hasPermission: () => false,
+      edit: async ({ roles: novos }) => {
+        for (const [id, falta] of pendentes) { if (falta <= 0) { roles.set(id, { name: "ticket", rank: 9 }); pendentes.delete(id); } else pendentes.set(id, falta - 1); }
+        const adicionados = novos.filter((id) => !m.banco.includes(id));
+        if (adicionados.some((id) => !roles.has(id))) throw '{"type":"InvalidRole","location":"crates/delta/src/routes/servers/member_edit.rs:183:24"}';
+        edicoes.push(novos); m.banco = [...novos]; m.roles = [...novos];
+      } };
+    return m;
+  };
+  // ANA tem no cache um cargo que o servidor já apagou ("R_VELHO")
+  const ana = membro("ANA", ["RVIP"], ["RVIP", "R_VELHO"]);
+  const bot = membro("BOT", ["RBOT"], ["RBOT", "R_VELHO"]);
+  const canais = [];
+  const server = { id: "S1", roles, member: bot, edicoes,
+    fetchMember: async (u) => (u === "ANA" ? ana : u === "BOT" ? bot : null),
+    createRole: async () => { const id = "R_TICKET"; if (cargoNovoAtrasa) pendentes.set(id, cargoNovoAtrasa - 1); else roles.set(id, { name: "ticket", rank: 9 }); return { id }; },
+    deleteRole: async (id) => roles.delete(id),
+    createChannel: async () => { const c = { id: "C_T", perms: {}, setPermissions: async (a, p) => { c.perms[a] = p; }, delete: async () => {} }; canais.push(c); return c; } };
+  return { server, ana, bot, canais };
+}
+
+ok(JSON.stringify(semCargosApagados(servidorDeVerdade().server, ["RVIP", "R_VELHO"])) === '["RVIP"]', "o cargo apagado sai da lista antes de enviar");
+
+{
+  const { server, ana } = servidorDeVerdade();
+  let erro = null;
+  try { await editarCargos(server, ana, (a) => [...a, "RBOT"].filter((x) => x !== "RBOT")); } catch (e) { erro = e; }
+  ok(!erro, "★ editar os cargos de quem tem um cargo apagado no cache não dá mais InvalidRole", String(erro));
+}
+
+const ctx = (server) => ({ serverId: "S1", config: { tickets: { logCanal: "C_LOG" } }, client: { user: { id: "BOT" }, channels: { get: () => null, fetch: async () => null } },
+  COR: { info: 1, sucesso: 2, aviso: 3 }, salvarConfig: () => {}, sendEmbed: async () => ({ id: "MCTL", react: async () => {} }) });
+{
+  const { server, ana, canais } = servidorDeVerdade();
+  const r = await tickets.abrirTicket({ ctx: ctx(server), server, userId: "ANA" });
+  ok(r.ok, "★ o ticket abre com o cargo apagado no cache da pessoa e do bot (o bug de 2 out)", r.erro);
+  ok(ana.roles.includes("R_TICKET") && !ana.roles.includes("R_VELHO"), "  → ela ganha o cargo do ticket, e o cargo velho não volta");
+  ok(canais[0]?.perms?.RBOT?.allow > 0, "  → o bot entra no canal pelo cargo DELE (não se dá mais o cargo do ticket)");
+}
+{
+  const { server } = servidorDeVerdade({ cargoNovoAtrasa: 1 });
+  db.getDb().prepare("DELETE FROM tickets").run();
+  const r = await tickets.abrirTicket({ ctx: ctx(server), server, userId: "ANA" });
+  ok(r.ok, "cargo recém-criado que o servidor ainda não enxerga: tenta de novo e abre", r.erro);
+}
+
+console.log(`\nCARGOS APAGADOS: ${pass} ok, ${fail} falha(s)`);
 process.exit(fail ? 1 : 0);
 };
 

@@ -37,7 +37,9 @@ function subir(nome, cwd, arquivo, { reiniciar = true, env = {}, flags = [] } = 
   const lancar = () => {
     const p = spawn(process.execPath, [...flags, arquivo], {
       cwd, stdio: "inherit",
-      env: { ...process.env, ...env },
+      // SERVICO_HOST: os serviços embutidos ouvem só em 127.0.0.1 — o bot fala com
+      // eles por ali, e ninguém mais na rede (nem outro contêiner) alcança
+      env: { SERVICO_HOST: "127.0.0.1", ...process.env, ...env },
     });
     filhos.add(p);
     console.info(`[INICIAR] ${nome} de pé (pid ${p.pid}).`);

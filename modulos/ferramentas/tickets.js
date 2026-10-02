@@ -18,6 +18,7 @@ import { tr, lingua } from "../core/i18n.js";
 import { descreverErro } from "../core/erros.js";
 import { subirAnexo } from "../core/anexos.js";
 import { chamarApi } from "../core/stoat-api.js";
+import { editarCargos, semCargosApagados, idsDeCargos, rankDoCargo } from "../core/hierarquia.js";
 
 const DENY_TUDO = 0x000fffffffffffffn;            // mesmo GRANT_ALL_SAFE do resto do bot
 const VER_E_LER = (1n << 20n) | (1n << 21n);      // ViewChannel + ReadMessageHistory
@@ -166,19 +167,23 @@ export async function abrirTicket({ ctx, server, userId, motivo = "", categoria 
     const criado = await server.createRole(nome);
     roleId = criado?.id ?? criado?.role?._id ?? criado?.role?.id;
     if (!roleId) throw new Error(en ? "the API didn't return the role id (missing ManageRole?)" : "a API não devolveu o id do cargo (falta ManageRole?)");
-    // o cargo vai para quem abriu E para o bot (senão o bot se tranca fora)
-    for (const uid of [userId, ctx.client?.user?.id].filter(Boolean)) {
-      const membro = await server.fetchMember(uid).catch(() => null);
-      if (!membro) continue;
-      const atuais = new Set((membro.roles ?? []).map((r) => r?.id ?? r).filter(Boolean));
-      atuais.add(roleId);
-      await membro.edit({ roles: [...atuais] }).catch((e) => { throw new Error(descreverErro(e, lang)); });
-    }
+    // o cargo do ticket vai para quem abriu
+    const membro = await server.fetchMember(userId).catch(() => null);
+    if (!membro) throw new Error(en ? "I couldn't find you on the server" : "não te achei no servidor");
+    await editarCargos(server, membro, (atuais) => [...atuais, roleId]).catch((e) => { throw new Error(descreverErro(e, lang)); });
+    // e o bot entra no canal pelo cargo DELE (antes ele se dava o cargo do ticket —
+    // mais uma edição de membro, mais uma chance de tropeçar num cargo velho)
+    const bot = (() => { try { return server.member ?? null; } catch { return null; } })()
+      ?? await server.fetchMember(ctx.client?.user?.id).catch(() => null);
+    const cargosDoBot = semCargosApagados(server, idsDeCargos(bot));
+    const topoDoBot = cargosDoBot.sort((a, b) => (rankDoCargo(server, a) ?? 1e9) - (rankDoCargo(server, b) ?? 1e9))[0] ?? null;
+    if (!topoDoBot && bot) await editarCargos(server, bot, (atuais) => [...atuais, roleId]).catch((e) => { throw new Error(descreverErro(e, lang)); });
     const descricao = [categoria?.nome, motivo].filter(Boolean).join(" — ") || (en ? "Support ticket" : "Ticket de suporte");
     canal = await server.createChannel({ type: "Text", name: nome, description: descricao.slice(0, 1000) });
     if (!canal?.id) throw new Error(en ? "the API didn't return the channel (missing ManageChannel?)" : "a API não devolveu o canal (falta ManageChannel?)");
     await canal.setPermissions("default", { allow: 0, deny: Number(DENY_TUDO) }).catch((e) => { throw new Error(descreverErro(e, lang)); });
     await canal.setPermissions(roleId, { allow: Number(DENY_TUDO), deny: 0 }).catch((e) => { throw new Error(descreverErro(e, lang)); });
+    if (topoDoBot) await canal.setPermissions(topoDoBot, { allow: Number(DENY_TUDO), deny: 0 }).catch((e) => { throw new Error(descreverErro(e, lang)); });
     for (const staffRole of ctx.config?.acesso?.cargosStaff ?? []) {
       await canal.setPermissions(staffRole, { allow: Number(DENY_TUDO), deny: 0 }).catch(() => {});
     }

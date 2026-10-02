@@ -19,6 +19,7 @@
 // (crates/core/database/src/tasks/process_embeds.rs, RE_IGNORED).
 
 import { pareceOutroIdioma } from "../core/idioma.js";
+import { buscarSeguro } from "../core/seguranca.js";
 
 const SEARXNG_URL = () => (process.env.SEARXNG_URL || "").replace(/\/$/, "");
 const N_POR_CONSULTA = () => Number(process.env.BUSCA_RESULTADOS || 8);
@@ -189,12 +190,13 @@ export function melhoresTrechos(texto, termos, max = 1200) {
   return out.sort((a, b) => a.i - b.i).map((x) => (x.p.length > 600 ? `${x.p.slice(0, 600)}…` : x.p)).join("\n");
 }
 
-export async function lerPagina(url, termos, { fetcher = fetch } = {}) {
+export async function lerPagina(url, termos, { fetcher = fetch, resolver } = {}) {
   try {
-    const r = await fetcher(url, {
-      signal: AbortSignal.timeout(6000), redirect: "follow",
+    // só internet pública, redirect conferido a cada salto (ver core/seguranca.js)
+    const r = await buscarSeguro(url, {
+      signal: AbortSignal.timeout(6000),
       headers: { "user-agent": "Mozilla/5.0 (compatible; JudyBot/1.0)", accept: "text/html,application/xhtml+xml" },
-    });
+    }, { fetcher, resolver });
     if (!r.ok) return null;
     if (!/text\/html|xhtml/i.test(r.headers?.get?.("content-type") ?? "text/html")) return null;
     const html = (await r.text()).slice(0, 600_000);
@@ -205,7 +207,7 @@ export async function lerPagina(url, termos, { fetcher = fetch } = {}) {
 
 // ─── O fluxo inteiro ─────────────────────────────────────────────────────────
 
-export async function pesquisar(pergunta, { chamarJson = null, hoje = "", fetcher = fetch, log = () => {} } = {}) {
+export async function pesquisar(pergunta, { chamarJson = null, hoje = "", fetcher = fetch, resolver, log = () => {} } = {}) {
   const { consultas, origem } = await decidirConsultas(pergunta, { chamarJson, hoje });
   log(`consultas (${origem}): ${consultas.map((q) => `"${q}"`).join(" · ")}`);
   const lotes = await Promise.all(consultas.map((q) => buscarSearx(q, { fetcher }).catch((e) => { log(`busca "${q}" falhou: ${e.message}`); return { erro: e }; })));
@@ -229,7 +231,7 @@ export async function pesquisar(pergunta, { chamarJson = null, hoje = "", fetche
 
   const nLer = Math.min(LER_PAGINAS(), resultados.length);
   if (nLer > 0) {
-    const textos = await Promise.all(resultados.slice(0, nLer).map((r) => lerPagina(r.url, termos, { fetcher })));
+    const textos = await Promise.all(resultados.slice(0, nLer).map((r) => lerPagina(r.url, termos, { fetcher, resolver })));
     textos.forEach((t, i) => { if (t) resultados[i].texto = t; });
     log(`páginas lidas: ${textos.filter(Boolean).length}/${nLer}`);
   }

@@ -98,7 +98,6 @@ function gruposPT(P) {
         `\`${P}rss add <url>\` — curadoria de notícias num canal`,
         `\`${P}fuso add <cidade>\` — relógio com várias cidades`,
         `\`${P}webhook criar <nome> [#canal]\` — GitHub, Crafty/Minecraft e afins publicando nos seus canais, um gancho por assunto`,
-        `\`${P}economia\` — a moeda do servidor: \`minerar\`, \`top\`, \`loja\` de cargos e \`comprar\``,
         `\`${P}rolar 2d20kh1+5\` — dados de RPG completos (vantagem, explosão, sucessos, Fate) · \`${P}iniciativa\` — ordem de combate`,
         `\`${P}ticket painel #canal\` — painel em que se **reage** para abrir um ticket; 🔒 (staff) trava e manda o registro .txt ao log`,
         "",
@@ -110,12 +109,13 @@ function gruposPT(P) {
 
     diversao: {
       emoji: "🎮", titulo: "Diversão",
-      resumo: "níveis por XP, conversa com a Judy, voz",
-      resumoSemIA: "níveis por XP e voz",
+      resumo: "níveis por XP, a moeda do servidor, conversa com a Judy, voz",
+      resumoSemIA: "níveis por XP, a moeda do servidor e voz",
       linhas: [
         "**Níveis (XP por mensagem)**",
         `\`${P}xp\` — seu nível e progresso · \`${P}xp rank [@pessoa]\``,
         `\`${P}xp top\` — ranking do servidor`,
+        `\`${P}economia\` — a moeda do servidor: \`minerar\`, \`top\`, \`loja\` de cargos e \`comprar\``,
         `\`${P}xp setup\` — configurar: cargos por nível, multiplicador, canal de anúncio *(ManagePermissions)*`,
         `\`${P}xp criarcargos\` — cria os cargos de nível sozinho`,
         "",
@@ -269,7 +269,6 @@ function gruposEN(P) {
         `\`${P}rss add <url>\` — news curation in a channel`,
         `\`${P}fuso add <city>\` — clock with several cities`,
         `\`${P}webhook criar <name> [#channel]\` — GitHub, Crafty/Minecraft and friends posting into your channels, one hook per subject`,
-        `\`${P}economia\` — the server's currency: \`minerar\`, \`top\`, the role \`loja\` and \`comprar\``,
         `\`${P}rolar 2d20kh1+5\` — full tabletop dice (advantage, exploding, successes, Fate) · \`${P}iniciativa\` — combat order`,
         `\`${P}ticket painel #channel\` — a panel people **react** on to open a ticket; 🔒 (staff) locks it and sends the .txt record to the log`,
         "",
@@ -281,12 +280,13 @@ function gruposEN(P) {
 
     diversao: {
       emoji: "🎮", titulo: "Fun",
-      resumo: "XP levels, chatting with Judy, voice",
-      resumoSemIA: "XP levels and voice",
+      resumo: "XP levels, the server currency, chatting with Judy, voice",
+      resumoSemIA: "XP levels, the server currency and voice",
       linhas: [
         "**Levels (message XP)**",
         `\`${P}xp\` — your level and progress · \`${P}xp rank [@user]\``,
         `\`${P}xp top\` — server ranking`,
+        `\`${P}economia\` — the server's currency: \`minerar\`, \`top\`, the role \`loja\` and \`comprar\``,
         `\`${P}xp setup\` — configure: level roles, multiplier, announcement channel *(ManagePermissions)*`,
         `\`${P}xp criarcargos\` — creates the level roles by itself`,
         "",

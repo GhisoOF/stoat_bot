@@ -3,7 +3,7 @@ import * as db from "../core/db.js";
 import { limparId, ULID, resolverUsuario } from "../core/ids.js";
 import { tr, lingua } from "../core/i18n.js";
 import * as log from "../core/log.js";
-import { idsDeCargos, rankDoCargo, rankDoMembro } from "../core/hierarquia.js";
+import { idsDeCargos, rankDoCargo, rankDoMembro, editarCargos } from "../core/hierarquia.js";
 import { descreverErro, tipoDoErro } from "../core/erros.js";
 
 const _tabelasXp = new Map();   // `${base}|${mult}` → number[] (acumulado por nível)
@@ -111,7 +111,7 @@ export async function sincronizarCargos(server, member, serverId, { nivel = null
   if (plano.membroAcima) console.log(`[XP] ${userId} em ${serverId} está acima do bot na hierarquia — cargos de nível não podem ser dados`);
   if (!plano.dar.length) return { concedidos: [], nivel: nivelAtual, bloqueados };
 
-  const editar = (ids) => member.edit({ roles: [...new Set([...idsDeCargos(member), ...ids])] });
+  const editar = (ids) => editarCargos(server, member, (atuais) => [...atuais, ...ids]);
   try {
     await editar(plano.dar);
     console.log(`[XP] cargos sincronizados para ${userId} em ${serverId}: +${plano.dar.length} (nível ${nivelAtual})`);

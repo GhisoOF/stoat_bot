@@ -18,6 +18,8 @@ import { resolverUsuario, resolverCargo } from "../core/ids.js";
 import { descreverErro } from "../core/erros.js";
 import { planejarCargos } from "./nivel.js";
 import { lerDuracao, duracaoTexto } from "../core/duracao.js";
+import { quantiaValida } from "../core/seguranca.js";
+import { editarCargos } from "../core/hierarquia.js";
 
 export const PADRAO = { nome: "Moeda", simbolo: "🪙", ganhoMin: 10, ganhoMax: 30, intervaloMs: 3600e3 };
 
@@ -111,7 +113,7 @@ const VERBOS = {
   ajuda: ["ajuda", "help", "?"],
 };
 const verbo = (x) => Object.keys(VERBOS).find((k) => VERBOS[k].includes(String(x ?? "").toLowerCase())) ?? null;
-const inteiro = (x) => { const n = Number(String(x ?? "").replace(/[._\s]/g, "")); return Number.isInteger(n) ? n : NaN; };
+const inteiro = (x) => { const n = Number(String(x ?? "").replace(/[._\s]/g, "")); return quantiaValida(n) ? n : NaN; };   // inteiro, positivo, com teto
 
 export async function cmdEconomia(message, args, ctx) {
   const { sendEmbed, COR, PREFIXO: P, serverId: sid, getServer, membroTemPermissao, salvarConfig, client } = ctx;
@@ -222,7 +224,7 @@ export async function cmdEconomia(message, args, ctx) {
     }
     if (!debitar(sid, eu, item.preco)) return enviar("🛒", T("Seu saldo mudou no meio do caminho. Tente de novo.", "Your balance changed midway. Try again."), COR.aviso);
     try {
-      await member.edit({ roles: [...new Set([...atuais, item.roleId])] });
+      await editarCargos(server, member, (a) => [...a, item.roleId]);
     } catch (e) {
       creditar(sid, eu, item.preco);   // não entregou: devolve
       return enviar("❌", T(`O Stoat recusou o cargo (${descreverErro(e)}). Seu dinheiro foi devolvido.`, `The Stoat refused the role (${descreverErro(e, "en")}). Your money was refunded.`), COR.erro);

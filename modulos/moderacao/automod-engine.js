@@ -8,6 +8,7 @@ import * as banGlobal from "./ban-global.js";
 import * as confianca from "./confianca.js";
 import { curarIds } from "./pertence.js";
 import { aplicarTimeout, CONFIRMAR_MS } from "./timeout.js";
+import { editarCargos } from "../core/hierarquia.js";
 import * as imagemSentinela from "./imagem.js";
 import { analisarCaracteres, analisarRepeticao, analisarDuplicata, digital, textoHumano, razaoDeCaixaAlta } from "./caracteres.js";
 import { lingua } from "../core/i18n.js";
@@ -916,7 +917,7 @@ export async function removerCargoSilence(server, userId, roleId, ctx) {
   const atuais = (member.roles ?? []).map((r) => r?.id ?? r).filter(Boolean);
   if (!atuais.includes(roleId)) return { jaEstavaSemCargo: true };
 
-  await member.edit({ roles: atuais.filter((id) => id !== roleId) });
+  await editarCargos(server, member, (a) => a.filter((id) => id !== roleId));
 
   try {
     const depois = await server.fetchMember(userId);

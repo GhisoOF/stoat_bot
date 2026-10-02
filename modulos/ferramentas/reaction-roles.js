@@ -2,6 +2,7 @@
 import * as db  from "../core/db.js";
 import * as log from "../core/log.js";
 import { idValido, descreverProblemaDeId, resolverMensagem } from "../core/ids.js";
+import { editarCargos } from "../core/hierarquia.js";
 import { tr, lingua } from "../core/i18n.js";
 import { normalizarErro } from "../core/erros.js";
 import { chamarApi } from "../core/stoat-api.js";
@@ -152,7 +153,7 @@ export async function aoReagir(message, userId, emoji, ctx) {
     }
     novos = [...novos, alvo.roleId];
     try {
-      await member.edit({ roles: novos });
+      await editarCargos(server, member, (a) => novos.filter((id) => a.includes(id) || id === alvo.roleId));
     } catch (e) {
       console.error(`[REACTIONROLE] ❌ falhei ao dar o cargo ${alvo.roleId} para ${userId}: ${descreverErro(e)}`);
       console.error("[REACTIONROLE]    → confira: o bot tem **AssignRoles**? o cargo dele está ACIMA de <@&" + alvo.roleId + "> na lista de cargos?");
@@ -203,7 +204,7 @@ export async function aoDesreagir(message, userId, emoji, ctx) {
     const atuais = (member.roles ?? []).map((r) => r?.id ?? r).filter(Boolean);
     if (!atuais.includes(alvo.roleId)) return false;   // já não tem
     try {
-      await member.edit({ roles: atuais.filter((id) => id !== alvo.roleId) });
+      await editarCargos(server, member, (a) => a.filter((id) => id !== alvo.roleId));
     } catch (e) {
       console.error(`[REACTIONROLE] ❌ falhei ao remover o cargo ${alvo.roleId} de ${userId}: ${descreverErro(e)}`);
       return false;

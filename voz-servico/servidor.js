@@ -146,7 +146,7 @@ const servidor = createServer(async (req, res) => {
   }
 });
 
-servidor.listen(PORTA, () => {
+servidor.listen(PORTA, process.env.SERVICO_HOST || undefined, () => {
   log(`judy-voz ouvindo na porta ${PORTA}`);
   log(`chave exigida: ${CHAVE ? "sim" : "NÃO (defina VOZ_CHAVE!)"}`);
   if (!CHAVE) {

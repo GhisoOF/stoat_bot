@@ -1,4 +1,5 @@
 import { servidorPermitido as temIA } from "../ai/chat.js";
+import * as visaoMod from "./visao.js";
 import { arvoreSubtopicos, SUBTOPICOS_SO_IA, ligarFamilias, mesclarNos } from "./help-arvore.js";
 import { nomeExibido } from "../core/aliases.js";
 import { grupos as gruposHelp, ALIAS_GRUPO, ORDEM as ORDEM_GRUPOS } from "./help-grupos.js";
@@ -93,7 +94,7 @@ function detalhesPT(P) {
     repete: {
       uso: `${P}repete <texto>`,
       desc: "O bot repete exatamente o texto informado. Útil para anúncios.",
-      ex: `${P}repete Bem-vindos ao servidor!`,
+      perm: "ManageMessages", ex: `${P}repete Bem-vindos ao servidor!`,
     },
     userinfo: {
       uso: `${P}userinfo [@usuário]`,
@@ -339,7 +340,7 @@ function detalhesEN(P) {
     repete: {
       uso: `${P}repete <text>`,
       desc: "The bot repeats the given text verbatim. Useful for announcements.",
-      ex: `${P}repete Welcome to the server!`,
+      perm: "ManageMessages", ex: `${P}repete Welcome to the server!`,
     },
     userinfo: {
       uso: `${P}userinfo [@user]`,
@@ -765,6 +766,26 @@ export async function cmdHelp(message, args, ctx) {
 
   const alvo = args[0]?.toLowerCase();
 
+  // ── Quem está vendo (membro, staff ou dono) e o que o servidor tem ──
+  // Cada um vê só o que pode usar aqui — ver modulos/moderacao/visao.js.
+  const visao = await visaoMod.quemVe(message, ctx);
+  const ehComando = (c) => !!(DETALHES[c] || SUBTOPICOS[c]);
+  const barrar = (cmd, sub = "", sub2 = "") => {
+    if (!ehComando(cmd) || visaoMod.podeVer(visao, cmd, sub, sub2)) return null;
+    const nome = `\`${P}${cmd}\``;   // só o comando: o resto pode ser assunto da ajuda, não subcomando
+    const recurso = visaoMod.recursoDoComando(cmd);
+    if ((recurso === "ia" && !visao.ia) || (recurso === "voz" && !visao.voz)) {
+      return tr(ctx, { title: "🚫 Não existe aqui", description: `${nome} não está disponível neste servidor.\n\nUse \`${P}help\` para ver o que existe por aqui.`, colour: COR.aviso },
+        { title: "🚫 Not available here", description: `${nome} isn't available on this server.\n\nUse \`${P}help\` to see what's available here.`, colour: COR.aviso });
+    }
+    if (visaoMod.nivelDoComando(cmd, sub, sub2) === "dono") {
+      return tr(ctx, { title: "❓ Não encontrado", description: `Não há ajuda para ${nome}. Use \`${P}help\` para o índice.`, colour: COR.aviso },
+        { title: "❓ Not found", description: `There's no help for ${nome}. Use \`${P}help\` for the index.`, colour: COR.aviso });
+    }
+    return tr(ctx, { title: "🔒 Comando da staff", description: `${nome} é usado pela equipe do servidor.\n\nUse \`${P}help\` para ver os comandos que você pode usar.`, colour: COR.info },
+      { title: "🔒 Staff command", description: `${nome} is used by the server's staff.\n\nUse \`${P}help\` to see the commands you can use.`, colour: COR.info });
+  };
+
   // ── Descida por QUALQUER profundidade da árvore ──────────────────────────
   // Antes só existiam dois níveis (`&help <cmd> <sub>`). Como os comandos
   // viraram famílias (`&automod blocklist add`), a ajuda desce junto: cada
@@ -782,6 +803,8 @@ export async function cmdHelp(message, args, ctx) {
     && SUBTOPICOS[caminho[0]]?.texto
     && Object.keys(SUBTOPICOS[caminho[0]]).some((k) => !["titulo", "texto"].includes(k));
   if ((caminho.length >= 2 || raizDeFamilia) && SUBTOPICOS[caminho[0]]) {
+    const barrado = barrar(caminho[0], caminho[1] ?? "", caminho[2] ?? "");
+    if (barrado) return sendEmbed(message.channel, barrado);
     let no = SUBTOPICOS[caminho[0]];
     const trilha = [caminho[0]];
     let i = 1;
@@ -809,13 +832,13 @@ export async function cmdHelp(message, args, ctx) {
       }));
     }
 
-    const filhos = filhosDe(no);
+    const filhos = filhosDe(no).filter((k) => visaoMod.podeVer(visao, trilha[0], trilha[1] ?? k, trilha[1] ? k : ""));
     const rodape = filhos.length
       ? ["", lang === "en" ? "**Go deeper:**" : "**Aprofunde:**",
          filhos.map((k) => `\`${P}help ${trilha.join(" ")} ${k}\``).join(" · ")]
       : [];
     const corpo = no.texto
-      ? filtrarIA(String(no.texto).split("\n"), comIA)
+      ? visaoMod.filtrarLinhas(filtrarIA(String(no.texto).split("\n"), comIA), visao)
       : [lang === "en"
           ? `\`${P}${trilha.join(" ")}\` groups the topics below.`
           : `\`${P}${trilha.join(" ")}\` reúne os assuntos abaixo.`];
@@ -833,13 +856,39 @@ export async function cmdHelp(message, args, ctx) {
 
   // ── Grupos: &help <grupo> (aceita os nomes antigos também) ──
   const GRUPOS = gruposHelp(P, lang);
+  // O membro tem um grupo só dele com o básico — os grupos de configuração
+  // (começar, proteger, personalizar, diagnóstico) são da staff.
+  GRUPOS.voce = lang === "en" ? {
+    emoji: "📌", titulo: "For you", resumo: "the basics: who's staff, server clock, info, tickets",
+    linhas: [
+      `\`${P}userinfo [@user]\` — ID, join date and roles`,
+      `\`${P}staff\` — who the staff is`,
+      `\`${P}fuso\` — the server clock (several cities at once)`,
+      `\`${P}sobre\` · \`${P}ping\` — about the bot and its latency`,
+      `\`${P}tutorial\` — the guide for players and members`,
+      "Need the staff? React on the server's **ticket panel** — a private channel opens.",
+    ],
+  } : {
+    emoji: "📌", titulo: "Para você", resumo: "o básico: quem é a staff, relógio do servidor, informações, tickets",
+    linhas: [
+      `\`${P}userinfo [@pessoa]\` — ID, data de entrada e cargos`,
+      `\`${P}staff\` — quem é a equipe`,
+      `\`${P}fuso\` — o relógio do servidor (várias cidades de uma vez)`,
+      `\`${P}sobre\` · \`${P}ping\` — sobre o bot e a latência`,
+      `\`${P}tutorial\` — o guia de quem joga e usa`,
+      "Precisa da staff? Reaja no **painel de tickets** do servidor — abre um canal privado.",
+    ],
+  };
+  const GRUPOS_DO_MEMBRO = ["voce", "diversao", "rpg"];
   const ehDono = (() => { try { return ctx.ehSuperAdmin?.(message.authorId); } catch { return false; } })();
-  const chavesGrupos = ehDono ? [...ORDEM_GRUPOS, "dono"] : [...ORDEM_GRUPOS];
+  // só os grupos com algum comando que quem vê pode usar aqui
+  const chavesGrupos = (visao.nivel === "membro" ? GRUPOS_DO_MEMBRO : ehDono ? [...ORDEM_GRUPOS, "dono"] : [...ORDEM_GRUPOS])
+    .filter((k) => k === "dono" || visaoMod.temComandoVisivel(filtrarIA(GRUPOS[k].linhas, comIA), visao));
 
   // Página de um grupo: cabeçalho + linhas (quebra em 2 páginas se não couber).
   const paginasDoGrupo = (chave) => {
     const g = GRUPOS[chave];
-    const linhas = filtrarIA(g.linhas, comIA);
+    const linhas = visaoMod.filtrarLinhas(filtrarIA(g.linhas, comIA), visao);
     const rodape = [
       "",
       lang === "en"
@@ -856,10 +905,9 @@ export async function cmdHelp(message, args, ctx) {
         ? "What do you want to do? Pick a group — react ◀ ▶ to browse them all, or type the command."
         : "O que você quer fazer? Escolha um grupo — reaja ◀ ▶ para folhear todos, ou digite o comando.",
       "",
-      lang === "en"
+      ...(visao.nivel === "membro" ? [] : [lang === "en"
         ? `🧙 **First time here?** \`${P}assistente\` sets the bot up **with you**, question by question — the fastest way.`
-        : `🧙 **Primeira vez aqui?** \`${P}assistente\` configura o bot **com você**, pergunta por pergunta — é o jeito mais rápido.`,
-      "",
+        : `🧙 **Primeira vez aqui?** \`${P}assistente\` configura o bot **com você**, pergunta por pergunta — é o jeito mais rápido.`, ""]),
       ...chavesGrupos.map((k) => `${GRUPOS[k].emoji} \`${P}help ${k}\` — ${(!comIA && GRUPOS[k].resumoSemIA) || GRUPOS[k].resumo}`),
       "",
       lang === "en"
@@ -868,11 +916,21 @@ export async function cmdHelp(message, args, ctx) {
       lang === "en"
         ? `📋 Several commands at once: **one per line** in the same message (up to 10).`
         : `📋 Vários comandos de uma vez: **um por linha** na mesma mensagem (até 10).`,
-      lang === "en"
-        ? `🔍 \`${P}help <command> <part>\` — one part of it (\`${P}help game admin\`, \`${P}help xp setup\`)`
-        : `🔍 \`${P}help <comando> <parte>\` — uma parte dele (\`${P}help game admin\`, \`${P}help xp setup\`)`,
-      lang === "en" ? `🌐 \`${P}idioma pt|en\` — server language` : `🌐 \`${P}idioma pt|en\` — idioma do servidor`,
-    ].join("\n"),
+      visao.nivel === "membro"
+        ? (lang === "en" ? `🔍 \`${P}help <command> <part>\` — one part of it (\`${P}help game missao\`)` : `🔍 \`${P}help <comando> <parte>\` — uma parte dele (\`${P}help game missao\`)`)
+        : (lang === "en"
+          ? `🔍 \`${P}help <command> <part>\` — one part of it (\`${P}help game admin\`, \`${P}help xp setup\`)`
+          : `🔍 \`${P}help <comando> <parte>\` — uma parte dele (\`${P}help game admin\`, \`${P}help xp setup\`)`),
+      visao.nivel === "membro" ? null : (lang === "en" ? `🌐 \`${P}idioma pt|en\` — server language` : `🌐 \`${P}idioma pt|en\` — idioma do servidor`),
+      "",
+      ({ membro: lang === "en" ? "_👤 You're seeing the commands you can use. Staff sees the setup ones too._" : "_👤 Você está vendo os comandos que pode usar. A staff vê também os de configuração._",
+         staff: lang === "en" ? "_🛡️ Staff view: everything this server has._" : "_🛡️ Visão da staff: tudo o que este servidor tem._",
+         dono: lang === "en" ? "_👑 Bot owner view: everything, including the owner's commands._" : "_👑 Visão do dono do bot: tudo, inclusive os comandos do dono._" })[visao.nivel],
+      [!visao.ia && (lang === "en" ? "AI" : "IA"), !visao.voz && (lang === "en" ? "voice and music" : "voz e música")].filter(Boolean).length
+        ? (lang === "en" ? `_Not enabled on this server: ${[!visao.ia && "AI", !visao.voz && "voice and music"].filter(Boolean).join(", ")}._`
+          : `_Não liberado neste servidor: ${[!visao.ia && "IA", !visao.voz && "voz e música"].filter(Boolean).join(", ")}._`)
+        : null,
+    ].filter((x) => x !== null).join("\n"),
     colour: COR.info,
   });
 
@@ -880,7 +938,7 @@ export async function cmdHelp(message, args, ctx) {
   const numero = /^\d+$/.test(alvo ?? "") ? parseInt(alvo, 10) : null;
   const chaveGrupo = ALIAS_GRUPO[alvo];
 
-  if (!alvo || numero !== null || (chaveGrupo && GRUPOS[chaveGrupo] && (chaveGrupo !== "dono" || ehDono))) {
+  if (!alvo || numero !== null || (chaveGrupo && GRUPOS[chaveGrupo] && chavesGrupos.includes(chaveGrupo))) {
     // Um livrinho: índice + uma página (ou duas) por grupo.
     const paginas = [indice()];
     const inicioDe = {};
@@ -911,13 +969,21 @@ export async function cmdHelp(message, args, ctx) {
 
   // &help <comando> (detalhe individual) — agora com a seção de parâmetros
   if (alvo && DETALHES[alvo]) {
-    const d = DETALHES[alvo];
-    const filhosReais = filhosDe(SUBTOPICOS[alvo]);
+    const barrado = barrar(alvo);
+    if (barrado) return sendEmbed(message.channel, barrado);
+    const d0 = DETALHES[alvo];
+    // a descrição também perde as partes que quem vê não usa (o membro vê o `&xp top`, não o `&xp setup`)
+    const d = { ...d0, desc: visaoMod.filtrarLinhas(String(d0.desc ?? "").split("\n"), visao).join("\n") };
+    const filhosReais = filhosDe(SUBTOPICOS[alvo]).filter((k) => visaoMod.podeVer(visao, alvo, k));
     const temSub = filhosReais.length
       ? `\n\n**${lang === "en" ? "Subtopics" : "Subtópicos"}** ${lang === "en" ? "_(details on each part)_" : "_(o detalhe de cada parte)_"}\n`
         + filhosReais.map((k) => `\`${P}help ${alvo} ${k}\``).join(" · ")
       : "";
-    const params = secaoParametros(P, lang, alvo);
+    // parâmetros que são subcomandos de outro nível (o `setup` do &xp para um membro) saem
+    const params = secaoParametros(P, lang, alvo).split("\n").filter((l) => {
+      const m = l.match(/^• `([a-zçãéí]+)/i);
+      return !m || visaoMod.podeVer(visao, alvo, m[1].toLowerCase());
+    }).join("\n");
     const cabecalho = [
       `**${lang === "en" ? "Usage" : "Uso"}:** \`${d.uso}\``,
       d.perm ? `**${lang === "en" ? "Permission" : "Permissão"}:** ${d.perm}` : null,
@@ -1099,7 +1165,13 @@ export async function cmdSobre(message, args, ctx) {
 
 // %repete <texto> — repete o texto fornecido
 export async function cmdRepete(message, args, ctx) {
-  const { sendEmbed, COR } = ctx;
+  const { sendEmbed, COR, getServer, membroTemPermissao } = ctx;
+  // Era aberto a todos: qualquer membro fazia a bot "anunciar" o que quisesse,
+  // num cartão com a cara dela — prato cheio para golpe ("@staff mandou…").
+  const server = await getServer?.(message).catch(() => null);
+  if (membroTemPermissao && !membroTemPermissao(message, server, "ManageMessages")) {
+    return sendEmbed(message.channel, { description: lingua(ctx) === "en" ? "🔒 `&repete` is for staff (ManageMessages)." : "🔒 O `&repete` é da staff (ManageMessages).", colour: COR.aviso });
+  }
   const txt = args.join(" ");
   // sem texto, respondia nada — parecia que o comando nem existia
   if (!txt) return sendEmbed(message.channel, { description: lingua(ctx) === "en" ? "What should I repeat? `&repete <text>`" : "Repetir o quê? `&repete <texto>`", colour: COR.aviso });

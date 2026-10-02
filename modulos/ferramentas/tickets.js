@@ -18,10 +18,27 @@ import { tr, lingua } from "../core/i18n.js";
 import { descreverErro } from "../core/erros.js";
 import { subirAnexo } from "../core/anexos.js";
 import { chamarApi } from "../core/stoat-api.js";
-import { editarCargos, semCargosApagados, idsDeCargos, rankDoCargo } from "../core/hierarquia.js";
+import { editarCargos } from "../core/hierarquia.js";
 
 const DENY_TUDO = 0x000fffffffffffffn;            // mesmo GRANT_ALL_SAFE do resto do bot
 const VER_E_LER = (1n << 20n) | (1n << 21n);      // ViewChannel + ReadMessageHistory
+// O que quem abriu (e a staff) faz no ticket. Não é "tudo": o Stoat só deixa o
+// bot conceder permissão que ELE tem — e a máscara "tudo" (0x000F_FFFF_FFFF_FFFF)
+// tem 52 bits, dos quais só uns 33 são permissões de verdade. Ninguém "tem" os
+// bits vazios, então o pedido era recusado (CannotGiveMissingPermissions) até
+// com o bot tendo todas as permissões que o Stoat oferece — o erro de 2 out 2026.
+const PERMS_TICKET = { ViewChannel: 1n << 20n, ReadMessageHistory: 1n << 21n, SendMessage: 1n << 22n, SendEmbeds: 1n << 26n, UploadFiles: 1n << 27n, React: 1n << 29n };
+const ESCREVER = PERMS_TICKET.SendMessage | PERMS_TICKET.SendEmbeds | PERMS_TICKET.UploadFiles | PERMS_TICKET.React;
+// só as que o bot tem no servidor (sem como saber, pede todas e o Stoat decide)
+function permsQueOBotDa(server) {
+  let bits = 0n;
+  for (const [nome, bit] of Object.entries(PERMS_TICKET)) {
+    let tem = null;
+    try { tem = typeof server?.havePermission === "function" ? server.havePermission(nome) : null; } catch {}
+    if (tem !== false) bits |= bit;
+  }
+  return bits;
+}
 const MAX_MSGS_TRANSCRICAO = Number(process.env.TICKET_MAX_MSGS || 1000);
 export const E_FECHAR = "🔒";
 export const E_APAGAR = "🗑️";
@@ -175,18 +192,20 @@ export async function abrirTicket({ ctx, server, userId, motivo = "", categoria 
     // mais uma edição de membro, mais uma chance de tropeçar num cargo velho)
     const bot = (() => { try { return server.member ?? null; } catch { return null; } })()
       ?? await server.fetchMember(ctx.client?.user?.id).catch(() => null);
-    const cargosDoBot = semCargosApagados(server, idsDeCargos(bot));
-    const topoDoBot = cargosDoBot.sort((a, b) => (rankDoCargo(server, a) ?? 1e9) - (rankDoCargo(server, b) ?? 1e9))[0] ?? null;
-    if (!topoDoBot && bot) await editarCargos(server, bot, (atuais) => [...atuais, roleId]).catch((e) => { throw new Error(descreverErro(e, lang)); });
+    // O bot também ganha o cargo do ticket: é por ele que enxerga o canal. (Pôr a
+    // permissão no cargo do PRÓPRIO bot não dá: o Stoat recusa mexer no cargo de
+    // quem está na mesma altura — NotElevated.)
+    if (bot) await editarCargos(server, bot, (atuais) => [...atuais, roleId]).catch((e) => { throw new Error(descreverErro(e, lang)); });
     const descricao = [categoria?.nome, motivo].filter(Boolean).join(" — ") || (en ? "Support ticket" : "Ticket de suporte");
     canal = await server.createChannel({ type: "Text", name: nome, description: descricao.slice(0, 1000) });
     if (!canal?.id) throw new Error(en ? "the API didn't return the channel (missing ManageChannel?)" : "a API não devolveu o canal (falta ManageChannel?)");
-    await canal.setPermissions("default", { allow: 0, deny: Number(DENY_TUDO) }).catch((e) => { throw new Error(descreverErro(e, lang)); });
-    await canal.setPermissions(roleId, { allow: Number(DENY_TUDO), deny: 0 }).catch((e) => { throw new Error(descreverErro(e, lang)); });
-    if (topoDoBot) await canal.setPermissions(topoDoBot, { allow: Number(DENY_TUDO), deny: 0 }).catch((e) => { throw new Error(descreverErro(e, lang)); });
+    const permitidas = Number(permsQueOBotDa(server));
+    // primeiro quem pode entrar, depois fecha para o resto
+    await canal.setPermissions(roleId, { allow: permitidas, deny: 0 }).catch((e) => { throw new Error(descreverErro(e, lang)); });
     for (const staffRole of ctx.config?.acesso?.cargosStaff ?? []) {
-      await canal.setPermissions(staffRole, { allow: Number(DENY_TUDO), deny: 0 }).catch(() => {});
+      await canal.setPermissions(staffRole, { allow: permitidas, deny: 0 }).catch(() => {});
     }
+    await canal.setPermissions("default", { allow: 0, deny: Number(DENY_TUDO) }).catch((e) => { throw new Error(descreverErro(e, lang)); });
   } catch (e) {
     try { if (canal?.delete) await canal.delete(); } catch {}
     try { if (roleId) await server.deleteRole?.(roleId); } catch {}
@@ -239,16 +258,8 @@ export async function fecharTicket({ ctx, server, ticket, porId, nota = "" }) {
     nota ? `${en ? "Closing note" : "Nota de fechamento"}: ${nota}` : null,
   ].filter(Boolean) });
 
-  // 1) trava: quem abriu continua vendo, mas não escreve, não reage, não envia nada
-  let travou = false;
-  if (canal && ticket.roleId) {
-    try {
-      await canal.setPermissions(ticket.roleId, { allow: Number(VER_E_LER), deny: Number(DENY_TUDO & ~VER_E_LER) });
-      travou = true;
-    } catch (e) { console.error(`[TICKET] não travei ${nome}: ${descreverErro(e)}`); }
-  }
-
   // 2) o registro vai para o log como .txt (e, se o upload falhar, em blocos de texto)
+  let travou = false;
   const logCanal = cfg.logCanal ? await canalPorId(ctx.client, cfg.logCanal) : null;
   let arquivo = false;
   if (logCanal) {
@@ -284,7 +295,7 @@ export async function fecharTicket({ ctx, server, ticket, porId, nota = "" }) {
       title: `${E_FECHAR} Ticket fechado`,
       description: [
         `Fechado por <@${porId}>.${nota ? `\n**Nota:** ${nota}` : ""}`,
-        travou ? "A conversa está travada: dá para ler, não dá para escrever." : "⚠️ Não consegui travar o canal (falta ManagePermissions?).",
+        "A conversa está travada: dá para ler, não dá para escrever.",
         logCanal ? `O registro completo foi para <#${cfg.logCanal}>.` : "⚠️ Sem canal de log configurado — o registro não foi guardado.",
         "",
         `${E_APAGAR} — a staff apaga este canal.`,
@@ -294,7 +305,7 @@ export async function fecharTicket({ ctx, server, ticket, porId, nota = "" }) {
       title: `${E_FECHAR} Ticket closed`,
       description: [
         `Closed by <@${porId}>.${nota ? `\n**Note:** ${nota}` : ""}`,
-        travou ? "The conversation is locked: it can be read, not written." : "⚠️ I couldn't lock the channel (missing ManagePermissions?).",
+        "The conversation is locked: it can be read, not written.",
         logCanal ? `The full record went to <#${cfg.logCanal}>.` : "⚠️ No log channel set — the record wasn't kept.",
         "",
         `${E_APAGAR} — staff deletes this channel.`,
@@ -306,6 +317,17 @@ export async function fecharTicket({ ctx, server, ticket, porId, nota = "" }) {
       db.registrarMsgTicket(aviso.id, ctx.serverId, ticket.canalId, "fechado", ticket.id);
     }
   }
+  // 4) trava — DEPOIS do aviso: o bot também tem o cargo do ticket, e depois
+  //    de travar nem ele escreve ali. Só o que é escrever sai (ler fica; e o bot
+  //    segue podendo apagar o canal e limpar reações, que vêm do cargo dele).
+  if (canal && ticket.roleId) {
+    try {
+      await canal.setPermissions(ticket.roleId, { allow: Number(VER_E_LER), deny: Number(ESCREVER) });
+      travou = true;
+    } catch (e) { console.error(`[TICKET] não travei ${nome}: ${descreverErro(e)}`); }
+  }
+
+  if (!travou && canal) await canal.sendMessage?.({ content: en ? "⚠️ I couldn't lock this channel (missing ManagePermissions?)." : "⚠️ Não consegui travar este canal (falta ManagePermissions?)." }).catch(() => {});
   return { ok: true, travou, arquivo, mensagens: msgs.length };
 }
 

@@ -9180,13 +9180,62 @@ const ctx = (server) => ({ serverId: "S1", config: { tickets: { logCanal: "C_LOG
   const r = await tickets.abrirTicket({ ctx: ctx(server), server, userId: "ANA" });
   ok(r.ok, "★ o ticket abre com o cargo apagado no cache da pessoa e do bot (o bug de 2 out)", r.erro);
   ok(ana.roles.includes("R_TICKET") && !ana.roles.includes("R_VELHO"), "  → ela ganha o cargo do ticket, e o cargo velho não volta");
-  ok(canais[0]?.perms?.RBOT?.allow > 0, "  → o bot entra no canal pelo cargo DELE (não se dá mais o cargo do ticket)");
+  ok(server.member.roles.includes("R_TICKET"), "  → o bot também ganha o cargo do ticket (é por ele que enxerga o canal)");
 }
 {
   const { server } = servidorDeVerdade({ cargoNovoAtrasa: 1 });
   db.getDb().prepare("DELETE FROM tickets").run();
   const r = await tickets.abrirTicket({ ctx: ctx(server), server, userId: "ANA" });
   ok(r.ok, "cargo recém-criado que o servidor ainda não enxerga: tenta de novo e abre", r.erro);
+}
+
+// ── 2 out, segunda tentativa: CannotGiveMissingPermissions ──
+// O Stoat só deixa o bot CONCEDER permissão que ele tem, e não deixa mexer no
+// cargo de quem está na altura dele (NotElevated). O ticket dava "tudo" ao
+// cargo do ticket. O servidor abaixo valida como o backend.
+{
+  const BITS = { ViewChannel: 1n << 20n, ReadMessageHistory: 1n << 21n, SendMessage: 1n << 22n, SendEmbeds: 1n << 26n, UploadFiles: 1n << 27n, React: 1n << 29n, ManageChannel: 1n << 0n, ManagePermissions: 1n << 2n };
+  const doBot = ["ViewChannel", "ReadMessageHistory", "SendMessage", "SendEmbeds", "React", "ManageChannel", "ManagePermissions"];   // sem UploadFiles
+  const temBot = doBot.reduce((t, n) => t | BITS[n], 0n);
+  const { server, ana, canais } = servidorDeVerdade();
+  server.havePermission = (n) => doBot.includes(n);
+  server.roles.set("RSTAFF", { name: "Staff", rank: 0 });   // staff ACIMA do bot
+  const ordem = [];
+  server.createChannel = async () => {
+    const c = { id: "C_T2", perms: {}, enviadas: [], delete: async () => {},
+      setPermissions: async (alvo, { allow = 0, deny = 0 }) => {
+        if (alvo !== "default") {
+          const r = server.roles.get(alvo);
+          if (r && r.rank <= 1) throw '{"type":"NotElevated"}';
+          if (BigInt(allow) & ~temBot) throw '{"type":"CannotGiveMissingPermissions"}';
+        }
+        c.perms[alvo] = { allow, deny }; ordem.push(alvo);
+      },
+      sendMessage: async (p) => {
+        const trav = c.perms.R_TICKET && (BigInt(c.perms.R_TICKET.deny) & BITS.SendMessage);
+        if (trav) throw '{"type":"MissingPermission","permission":"SendMessage"}';   // o bot tem o cargo do ticket
+        c.enviadas.push(p); return { id: "MX" + c.enviadas.length, react: async () => {} };
+      } };
+    canais.push(c); return c;
+  };
+  const cx = { ...ctx(server), config: { tickets: { logCanal: "C_LOG" }, acesso: { cargosStaff: ["RSTAFF"] } } };
+  cx.sendEmbed = async (canal, e) => canal.sendMessage ? canal.sendMessage({ embeds: [e] }) : { id: "M", react: async () => {} };
+  db.getDb().prepare("DELETE FROM tickets").run();
+  const r = await tickets.abrirTicket({ ctx: cx, server, userId: "ANA" });
+  ok(r.ok, "★ abre mesmo com o bot SEM alguma permissão (aqui, UploadFiles) e com a staff acima dele", r.erro);
+  const c = canais.at(-1);
+  ok(!(BigInt(c.perms.R_TICKET?.allow ?? 0) & BITS.UploadFiles), "  → o cargo do ticket só ganha o que o bot tem");
+  // as permissões que EXISTEM no Stoat (crates/core/permissions/src/models/channel.rs)
+  const EXISTEM = [0, 1, 2, 3, 4, 6, 7, 8, 9, 10, 11, 12, 13, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41].reduce((t, b) => t | (1n << BigInt(b)), 0n);
+  const pedidos = Object.entries(c.perms).filter(([alvo]) => alvo !== "default").map(([, p]) => BigInt(p.allow));
+  ok(pedidos.every((a) => (a & ~EXISTEM) === 0n), "★ nenhum \"allow\" pede bit que não é permissão (a máscara \"tudo\" pedia 52 bits; o Stoat tem ~33)");
+  ok(ordem.at(-1) === "default", "  → o canal fecha para o @everyone por último (depois de quem pode entrar)");
+  // fechar: o aviso precisa sair ANTES de travar (depois, nem o bot escreve ali)
+  const tk = db.ticketDoCanal(c.id);
+  const fechado = await tickets.fecharTicket({ ctx: { ...cx, client: { ...cx.client, channels: { get: (id) => (id === c.id ? c : null), fetch: async () => null } } }, server, ticket: tk, porId: "STAFF" });
+  ok(fechado.travou, "★ fecha e trava");
+  ok(c.enviadas.some((m) => /Ticket fechado|Ticket closed/.test(m.embeds?.[0]?.title ?? "")), "  → e o aviso com o 🗑️ saiu antes da trava");
+  ok(BigInt(c.perms.R_TICKET.deny) === (BITS.SendMessage | BITS.SendEmbeds | BITS.UploadFiles | BITS.React), "  → a trava nega só escrever/reagir (ler fica, e o bot segue apagando o canal)");
 }
 
 console.log(`\nCARGOS APAGADOS: ${pass} ok, ${fail} falha(s)`);

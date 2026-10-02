@@ -84,7 +84,8 @@ export function deveAnalisar(config, serverId, userId) {
 export function imagensDa(message) {
   return (message?.attachments ?? [])
     .filter((a) => /^image\//.test(String(a?.metadata?.type ?? a?.contentType ?? a?.content_type ?? "")) || a?.metadata?.type === "Image")
-    .map((a) => ({ id: a?.id ?? a?._id, url: `${CDN}/attachments/${a?.id ?? a?._id}` }))
+    .map((a) => ({ id: a?.id ?? a?._id, url: `${CDN}/attachments/${a?.id ?? a?._id}`,
+      digital: `${a?.size ?? "?"}:${a?.metadata?.width ?? "?"}x${a?.metadata?.height ?? "?"}` }))
     .filter((a) => a.id);
 }
 
@@ -114,9 +115,24 @@ const fila = [];
 let rodando = false;
 export function tamanhoFila() { return fila.length; }
 
+// A mesma imagem (tamanho + dimensões) é analisada uma vez só a cada 30 min —
+// no ataque de 2 out a mesma bandeira entrou na fila dezenas de vezes e
+// estourou o limite (74 avisos de "fila cheia" no relatório).
+const vistas = new Map();   // digital → quando
+let descartadas = 0, ultimoAvisoFila = 0;
 export function agendar(tarefa) {
+  const agora = Date.now();
+  if (tarefa.digital && !tarefa.digital.startsWith("?:")) {
+    for (const [k, t] of vistas) if (agora - t > 30 * 60_000) vistas.delete(k);
+    if (vistas.has(tarefa.digital)) return false;
+    vistas.set(tarefa.digital, agora);
+  }
   if (fila.length >= FILA_MAX) {
-    console.warn(`[IMAGEM] fila cheia (${FILA_MAX}) — imagem de ${tarefa.userId} não analisada`);
+    descartadas++;
+    if (agora - ultimoAvisoFila > 60_000) {   // um aviso por minuto, com a soma — não um por imagem
+      console.warn(`[IMAGEM] fila cheia (${FILA_MAX}) — ${descartadas} imagem(ns) não analisada(s) no último minuto`);
+      descartadas = 0; ultimoAvisoFila = agora;
+    }
     return false;
   }
   fila.push(tarefa);

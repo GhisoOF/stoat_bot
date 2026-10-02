@@ -20,7 +20,7 @@ import { servidorNaLista } from "../core/env.js";
 import * as db from "../core/db.js";
 import { lingua } from "../core/i18n.js";
 import { descreverErro } from "../core/erros.js";
-import { MODULOS_AUTOMOD, moduloLigado, escadaDePunicao } from "./automod-engine.js";
+import { MODULOS_AUTOMOD, moduloLigado, escadaDePunicao, GRUPOS_AUTOMOD, estadoDoGrupo } from "./automod-engine.js";
 import { servidorPermitido as temIA } from "../ai/chat.js";
 import { loja as lojaEconomia } from "../ferramentas/economia.js";
 
@@ -175,8 +175,9 @@ function secaoCanaisGerais(d, T, lang) {
 
 function secaoModeracao(d, T) {
   const itens = [];
-  const n = Object.keys(MODULOS_AUTOMOD).length;
-  itens.push({ nivel: "info", texto: T(`automod: ${d.filtrosLigados.length}/${n} filtros ligados · punição \`${d.pol.modo ?? "avisar"}\``, `automod: ${d.filtrosLigados.length}/${n} filters on · punishment \`${d.pol.modo ?? "avisar"}\``) });
+  const grupos = Object.keys(GRUPOS_AUTOMOD).map((g) => ({ g, ...estadoDoGrupo(d.am, g) }));
+  const resumo = grupos.map((x) => `${x.g} ${x.ligadas}/${x.total}`).join(" · ");
+  itens.push({ nivel: "info", texto: T(`automod: ${resumo} · punição \`${d.pol.modo ?? "avisar"}\``, `automod: ${resumo} · punishment \`${d.pol.modo ?? "avisar"}\``) });
   if (!d.config?.log?.canalId) itens.push({ nivel: "aviso", texto: T("sem canal de log — punições e alertas não ficam registrados", "no log channel — punishments and alerts aren't recorded"), dica: T("`&log canal aqui` num canal só-staff", "`&log canal aqui` in a staff-only channel") });
   const off = d.config?.comandosDesativados ?? [];
   if (off.length) itens.push({ nivel: "info", texto: `${T("comandos desativados", "disabled commands")}: ${off.map((c) => `\`${c}\``).join(", ")}` });

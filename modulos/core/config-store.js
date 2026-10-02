@@ -16,6 +16,10 @@ export const padraoServidor = {
     antiLink:        { enabled: false, punicao: null },
     antiCaracteres:  { enabled: true, limiteZalgo: 0.6, punicao: null },
     antiRepeticao:   { enabled: false, maxRepeticao: 15, ignorar: "k", punicao: null },
+    // (2 out 2026) o que o ataque de imagens e emoji mostrou que faltava:
+    antiOdio:        { enabled: true,  termos: [], punicao: null },                 // insulto racial/homofóbico
+    antiEmoji:       { enabled: true,  maxEmojis: 20, punicao: null },              // enxurrada de emoji
+    antiMidia:       { enabled: true,  maxPorMinuto: 8, maxNovato: 3, punicao: null }, // rajada de anexos
     // Mesma mensagem repetida VÁRIAS VEZES (o anti-spam só vê velocidade).
     antiDuplicata:   { enabled: true,  maxRepetidas: 3, windowMs: 120000, punicao: null },
     // Imagens descritas pelo modelo de visão e pontuadas (só avisa a staff).

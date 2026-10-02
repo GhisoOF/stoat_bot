@@ -1,4 +1,5 @@
 
+import * as rajada from "./rajada.js";
 import { analisarConteudo } from "./scorecard.js";
 import * as db  from "../core/db.js";
 import { descreverErro, tipoDoErro } from "../core/erros.js";
@@ -477,6 +478,9 @@ export const ESCADA_PADRAO = "aviso,5m,1h,ban";
 // o &automod, o &config e o &info (o &info contava 9 de 11, e o &config não
 // mostrava o anticaracteres nem o antirepeticao).
 export const MODULOS_AUTOMOD = {
+  antiodio:        "antiOdio",
+  antiemoji:       "antiEmoji",
+  antimidia:       "antiMidia",
   antispam:        "antiSpam",
   antimassspam:    "antiMassSpam",
   antiinvite:      "antiInvite",
@@ -489,8 +493,50 @@ export const MODULOS_AUTOMOD = {
   antiimagem:      "antiImagem",
   antirepeticao:   "antiRepeticao",
 };
+// ── Os quatro grupos (pedido de Ghieh, 2 out 2026) ──────────────────────────
+// Eram 14 filtros soltos, vários fazendo quase a mesma coisa com outra régua
+// (antispam e antimassspam são a mesma conta em duas velocidades) e quase
+// sempre ligados juntos. Para quem configura, agora são QUATRO — cada um com
+// partes que dá para ajustar ou desligar uma a uma. Por baixo, as partes
+// continuam sendo os filtros de antes (a mesma config, a mesma lógica): nada
+// de configuração antiga se perde.
+export const GRUPOS_AUTOMOD = {
+  antispam: {
+    emoji: "🌊", pt: "enxurrada de mensagens", en: "message floods",
+    partes: { velocidade: "antispam", rajada: "antimassspam", repeticao: "antiduplicata", midia: "antimidia", mencoes: "antimassmention" },
+  },
+  antiruido: {
+    emoji: "🔊", pt: "texto poluído", en: "noisy text",
+    partes: { caps: "anticaps", caracteres: "anticaracteres", letras: "antirepeticao", emoji: "antiemoji" },
+  },
+  antilink: {
+    emoji: "🔗", pt: "links e convites", en: "links and invites",
+    partes: { dominios: "antilink", convites: "antiinvite" },
+  },
+  sentinela: {
+    emoji: "🛡️", pt: "conteúdo nocivo (golpe, +18, gore, ódio, imagens)", en: "harmful content (scams, NSFW, gore, hate, images)",
+    partes: { conteudo: "sentinela", odio: "antiodio", imagens: "antiimagem" },
+  },
+};
+// Rótulos das partes (o nome que se digita é a chave; este é o que se lê)
+export const ROTULO_PARTE = {
+  velocidade: ["mensagens rápidas demais", "messages too fast"], rajada: ["rajada longa", "long burst"],
+  repeticao: ["a mesma mensagem ou imagem várias vezes", "the same message or image over and over"],
+  midia: ["muitos anexos por minuto", "too many attachments per minute"], mencoes: ["mencionar muita gente", "mentioning a crowd"],
+  caps: ["CAIXA ALTA", "CAPS LOCK"], caracteres: ["zalgo e invisíveis", "zalgo and invisible characters"],
+  letras: ["letra arrastada (kkkkkk…)", "dragged-out letters"], emoji: ["enxurrada de emoji", "emoji floods"],
+  dominios: ["domínios da lista de bloqueio", "blocklisted domains"], convites: ["convites de outros servidores", "invites to other servers"],
+  conteudo: ["golpe, +18, gore, ilícito, abuso", "scams, NSFW, gore, illicit, abuse"], odio: ["ofensas raciais/homofóbicas", "racial/homophobic slurs"],
+  imagens: ["imagens de conta nova (modelo de visão)", "new accounts' images (vision model)"],
+};
+export function estadoDoGrupo(am, grupo) {
+  const partes = Object.entries(GRUPOS_AUTOMOD[grupo]?.partes ?? {});
+  const ligadas = partes.filter(([, f]) => moduloLigado(am, MODULOS_AUTOMOD[f]));
+  return { ligadas: ligadas.length, total: partes.length, partes: partes.map(([p, f]) => ({ parte: p, filtro: f, chave: MODULOS_AUTOMOD[f], ligada: moduloLigado(am, MODULOS_AUTOMOD[f]) })) };
+}
+
 // Ligado de verdade: os que nascem ligados contam como ligados até alguém desligar.
-const PADRAO_LIGADO = new Set(["antiDuplicata", "antiImagem"]);
+const PADRAO_LIGADO = new Set(["antiDuplicata", "antiImagem", "antiOdio", "antiEmoji", "antiMidia"]);
 export function moduloLigado(am, chave) {
   const m = am?.[chave];
   return PADRAO_LIGADO.has(chave) ? m?.enabled !== false : !!m?.enabled;
@@ -621,12 +667,49 @@ export async function runAutomod(message, ctx) {
     return true;
   }
 
+  const sid = ctx.serverId ?? server?.id;
+  const barrar = async (pol, motivo, rotulo) => {
+    dbg(ctx, `  ✗ BLOQUEADA por ${rotulo}`);
+    try { await message.delete(); } catch (e) { dbg(ctx, `  (falha ao deletar: ${e.message})`); }
+    await aplicarPunicao(ctx, { server, channel: canal, message, userId, pol, motivo });
+    return true;
+  };
+
+  // ── Termos de ódio (2 out 2026: a ofensa racial passou por todos os filtros) ──
+  if (am.antiOdio?.enabled !== false) {
+    const termo = rajada.acharOdio(content, am.antiOdio?.termos ?? []);
+    dbg(ctx, `  [anti-ódio] ${termo ? "ACHOU termo da lista" : "nada"}`);
+    // o termo não vai para o motivo: a punição é publicada no canal
+    if (termo) return barrar(am.antiOdio?.punicao, "linguagem de ódio não é tolerada aqui", "anti-ódio");
+  }
+
+  // ── Enxurrada de emoji (o ataque colava ~170 emojis por mensagem) ──
+  if (am.antiEmoji?.enabled !== false) {
+    const e = rajada.enxurradaDeEmoji(content, { max: am.antiEmoji?.maxEmojis ?? 20 });
+    dbg(ctx, `  [anti-emoji] ${rajada.contarEmojis(content)} emoji(s)${e ? " — ENXURRADA" : ""}`);
+    if (e) return barrar(am.antiEmoji?.punicao, `enxurrada de emoji (${e.n})`, "anti-emoji");
+  }
+
+  // ── Rajada de mídia: muitos anexos em pouco tempo, somando TODOS os canais ──
+  // A conta de 2 minutos repostou a mesma bandeira em #RSS e #Midia sem parar.
+  // Conta nova tem limite menor.
+  const anexos = (message.attachments ?? []).length;
+  if (anexos && am.antiMidia?.enabled !== false) {
+    estado.midiaData ??= new Map();
+    const n = rajada.contarMidias(estado.midiaData, `${sid}:${userId}`, anexos);
+    const nova = confianca.contaNova(sid, userId);
+    const max = nova ? (am.antiMidia?.maxNovato ?? 3) : (am.antiMidia?.maxPorMinuto ?? 8);
+    dbg(ctx, `  [anti-mídia] ${n} anexo(s) no último minuto (máx. ${max}${nova ? ", conta nova" : ""})`);
+    if (n > max) return barrar(am.antiMidia?.punicao, `muitas imagens/arquivos em pouco tempo (${n} em 1 min)`, "anti-mídia");
+  }
+
   // ── Imagens: descritas pelo modelo e pontuadas em segundo plano ──
   // Não segura a mensagem nem pune: se apitar, a staff é chamada no log.
   // (No raid de 27/09 as mensagens "vazias" eram imagens que ninguém viu.)
-  if (imagemSentinela.deveAnalisar(config, ctx.serverId ?? server?.id, userId)) {
+  // Fica DEPOIS das rajadas: o que já foi barrado não ocupa a fila do modelo.
+  if (imagemSentinela.deveAnalisar(config, sid, userId)) {
     for (const img of imagemSentinela.imagensDa(message)) {
-      imagemSentinela.agendar({ ctx, userId, canalId: message.channelId, messageId: message.id, url: img.url });
+      imagemSentinela.agendar({ ctx, userId, canalId: message.channelId, messageId: message.id, url: img.url, digital: img.digital });
     }
   }
 
@@ -640,7 +723,9 @@ export async function runAutomod(message, ctx) {
     const janela = dup.windowMs ?? 120_000;
     const chaveEco = `${ctx.serverId ?? server?.id ?? "?"}:${userId}`;
     const recentes = (estado.ecoData?.get(chaveEco) ?? []).filter((x) => agora - x.t < janela);
-    const d = digital(content);
+    // texto, ou — mensagem só com anexo — a digital da mídia (tamanho + dimensões):
+    // antes a mesma imagem repostada nunca contava como repetição
+    const d = digital(content) ?? rajada.digitalMidia(message);
     if (d) {
       anterioresDigitais = recentes.map((x) => x.d);
       repetidas = recentes.filter((x) => x.d === d).length + 1;

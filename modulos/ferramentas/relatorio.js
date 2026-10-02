@@ -37,9 +37,11 @@ export function limparTitulo(t) {
 export function normalizarErro(texto) {
   return String(texto ?? "")
     .replace(/^\S+Z\s+/, "")
-    .replace(/[0-9A-HJKMNP-TV-Z]{26}/g, "<id>")
+    // marcadores com chaves, não com <…>: o Stoat esconde "<id>" como se fosse
+    // tag, e o relatório saía "repor <> em :" e "fila cheia ()" (2 out 2026)
+    .replace(/[0-9A-HJKMNP-TV-Z]{26}/g, "{id}")
     .replace(/https?:\/\/\S+/g, (u) => u.replace(/^(https?:\/\/[^/]+).*/, "$1/…"))
-    .replace(/\b\d+([.,]\d+)?\b/g, "<n>")
+    .replace(/\b\d+([.,]\d+)?\b/g, "{n}")
     .replace(/\s+/g, " ").trim().slice(0, 180);
 }
 let errosNestaHora = 0, horaDosErros = 0;

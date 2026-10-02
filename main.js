@@ -590,6 +590,10 @@ async function tratarMensagem(message) {
     // outra pessoa — o "ping" da resposta não conta (ver destinatario.js).
     const mencionado = dirigidoAoBot({ conteudo: message.content, mentionIds: message.mentionIds, botId: meuId });
     if (mencionado && chat.servidorPermitido(serverId) && !(ctx.config.comandosDesativados ?? []).includes("chat")) {
+      // O AUTOMOD VEM ANTES DA IA. Antes, mencionar a Judy pulava a moderação
+      // inteira — o ataque de 2 out 2026 colava "@Judy" em cada mensagem de
+      // emoji + ofensa racial, e nenhum filtro rodava (e ainda ganhava XP).
+      if (await engine.runAutomod(message, ctx)) return;
       const pergunta = (message.content || "").replace(new RegExp(`<@${meuId}>`, "g"), "").trim();
       // A pergunta entra no fio do canal (antes só a RESPOSTA dela entrava, e
       // o modelo via respostas soltas sem saber o que tinham perguntado).
@@ -1004,11 +1008,17 @@ client.on("messageDelete", async (message) => {
     const texto = (message?.content ?? "").slice(0, 500) || "_(sem texto)_";
     const autor = message?.authorId ? `<@${message.authorId}>` : "_desconhecido_";
 
-    // Mídia apagada volta no log: resgatada do CDN e re-subida.
-    const { ids: midias, perdidas } = await log.resgatarMidias(message?.attachments, { subir: chat.subirAnexo });
+    // Mídia apagada volta no log: resgatada do CDN e re-subida — com freio. No
+    // ataque de 2 out, cada bandeira apagada voltava inteira no #log, que virou
+    // um segundo canal de spam. Por autor: no máximo 3 resgates a cada 10 min, e
+    // a mesma imagem (tamanho + dimensões) só uma vez.
+    const anexosApagados = message?.attachments ?? [];
+    const freio = log.freioDeResgate(`${serverId}:${message?.authorId}`, anexosApagados);
+    const { ids: midias, perdidas } = await log.resgatarMidias(freio.resgatar, { subir: chat.subirAnexo });
     const notaMidia =
       (midias.length ? `\n**Mídia:** ${midias.length} anexo(s) resgatado(s) abaixo` : "") +
-      (perdidas.length ? `\n**Mídia não recuperável:** ${perdidas.join(", ")}` : "");
+      (perdidas.length ? `\n**Mídia não recuperável:** ${perdidas.join(", ")}` : "") +
+      (freio.segurados ? `\n**Mídia não reenviada:** ${freio.segurados} anexo(s) — repetido(s) ou rajada do mesmo autor` : "");
 
     await log.registrar(ctx, "mensagens", {
       titulo: "🗑 Mensagem apagada",

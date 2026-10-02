@@ -64,31 +64,23 @@ function comFamilias(arvore, P, lang) {
 
   ramo("automod", "automod", [
     en
-      ? "Everything the bot filters on its own lives here. Each module below **measures** something exact (rate, caps, links) — except the sentinel, which **judges** the content."
-      : "Tudo que o bot filtra sozinho fica aqui. Cada módulo abaixo **mede** algo exato (ritmo, caixa alta, links) — menos o sentinela, que **julga** o conteúdo.",
+      ? "Everything the bot filters on its own lives here, in four groups. Most parts **measure** something exact (rate, caps, links) — except the sentinel, which **judges** the content."
+      : "Tudo que o bot filtra sozinho fica aqui, em quatro grupos. A maioria das partes **mede** algo exato (ritmo, caixa alta, links) — menos o sentinela, que **julga** o conteúdo.",
     "",
     en ? "**See what's on**" : "**Ver o que está ligado**",
-    `\`${P}automod\` — ` + (en ? "status of every module" : "status de cada módulo"),
-    `\`${P}automod <módulo> on|off\` — ` + (en ? "turn one on or off" : "liga ou desliga um"),
+    `\`${P}automod\` — ` + (en ? "the four groups and their parts" : "os quatro grupos e as partes de cada um"),
+    `\`${P}automod <grupo>\` — ` + (en ? "one group: each part, its numbers and its punishment" : "um grupo: cada parte, os números e a punição"),
+    `\`${P}automod <grupo> on|off\` — ` + (en ? "the whole group" : "o grupo inteiro"),
+    `\`${P}automod <grupo> <parte> on|off\` — ` + (en ? "one part only" : "só uma parte"),
     "",
-    en ? "**The modules**" : "**Os módulos**",
-    `\`antispam\` — ` + (en ? "too many messages, too fast" : "mensagens demais, rápido demais"),
-    `\`antimassspam\` — ` + (en ? "the same, but a flood" : "o mesmo, mas em enxurrada"),
-    `\`antiduplicata\` — ` + (en
-      ? "the SAME message over and over (a calm bot passes the two above)"
-      : "a MESMA mensagem várias vezes (um bot calmo passa pelos dois acima)"),
-    `\`anticaps\` — ` + (en ? "CAPS LOCK in excess" : "CAIXA ALTA em excesso"),
-    `\`antilink\` — ` + (en ? "domains on the blocklist" : "domínios da lista de bloqueio"),
-    `\`antiinvite\` — ` + (en ? "invites to other servers" : "convites para outros servidores"),
-    `\`antimassmention\` — ` + (en ? "mentioning a crowd at once" : "mencionar um monte de gente de uma vez"),
-    `\`anticaracteres\` — ` + (en ? "zalgo and invisible characters" : "zalgo e caracteres invisíveis"),
-    `\`antirepeticao\` — ` + (en ? "the same letter dragged on" : "a mesma letra arrastada"),
-    `\`antiimagem\` — ` + (en
-      ? "images from new accounts are described by the vision model and scored; if it flags, the staff is pinged (never punishes, never reposts the image)"
-      : "imagens de contas novas são descritas pelo modelo de visão e pontuadas; se apitar, a staff é chamada (nunca pune, nunca republica a imagem)"),
-    `\`sentinela\` — ` + (en
-      ? "judges the content, sees through disguises (l33t, s p a c e d, invisible characters), and alerts the staff when someone's messages add up to a harmful pattern (challenges, humiliation, doxxing)"
-      : "julga o conteúdo, enxerga através de disfarces (l33t, l e t r a s  s e p a r a d a s, caracteres invisíveis) e avisa a staff quando as mensagens de alguém somam um padrão de dano (desafios, humilhação, doxxing)"),
+    en ? "**The four groups**" : "**Os quatro grupos**",
+    `🌊 \`antispam\` — ` + (en ? "floods: `velocidade` and `rajada` (too many messages), `repeticao` (the SAME message or image again and again), `midia` (attachments per minute, stricter for new accounts), `mencoes`"
+      : "enxurrada: `velocidade` e `rajada` (mensagens demais), `repeticao` (a MESMA mensagem ou imagem de novo e de novo), `midia` (anexos por minuto, mais rígido com conta nova), `mencoes`"),
+    `🔊 \`antiruido\` — ` + (en ? "noisy text: `caps`, `caracteres` (zalgo, invisible), `letras` (dragged-out letters — off by default, `kkkkk` is laughter), `emoji` (20+ in one message)"
+      : "texto poluído: `caps`, `caracteres` (zalgo, invisíveis), `letras` (letra arrastada — desligada de fábrica, `kkkkk` é risada), `emoji` (20+ numa mensagem)"),
+    `🔗 \`antilink\` — ` + (en ? "`dominios` (blocklist domains) and `convites` (invites to other servers)" : "`dominios` (domínios da lista de bloqueio) e `convites` (convites de outros servidores)"),
+    `🛡️ \`sentinela\` — ` + (en ? "harmful content: `conteudo` (judges scams, NSFW, gore, illicit — sees through disguises), `odio` (slurs, even disguised; `odio add <term>` adds more), `imagens` (new accounts' images, described by the vision model; only alerts)"
+      : "conteúdo nocivo: `conteudo` (julga golpe, +18, gore, ilícito — enxerga disfarces), `odio` (ofensas, mesmo disfarçadas; `odio add <termo>` acrescenta), `imagens` (imagens de conta nova, descritas pelo modelo de visão; só avisa)"),
     "",
     en ? "**Inside the family**" : "**Dentro da família**",
     `\`${P}automod blocklist\` · \`${P}automod whitelist\` · \`${P}automod sentinela\` · \`${P}automod punicao\``,

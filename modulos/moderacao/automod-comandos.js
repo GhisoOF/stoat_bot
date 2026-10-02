@@ -1,4 +1,6 @@
-import { rebuildBlocklist, DOMINIO_VALIDO, simularDeteccao, removerCargoSilence, MODULOS_AUTOMOD } from "./automod-engine.js";
+import { TERMOS_ODIO } from "./rajada.js";
+import { descreverFiltro } from "./config-comando.js";
+import { rebuildBlocklist, DOMINIO_VALIDO, simularDeteccao, removerCargoSilence, MODULOS_AUTOMOD, GRUPOS_AUTOMOD, ROTULO_PARTE, estadoDoGrupo } from "./automod-engine.js";
 import { tirarTimeout } from "./timeout.js";
 import * as engine from "./automod-engine.js";
 import * as db  from "../core/db.js";
@@ -71,6 +73,88 @@ export async function cmdAutomod(message, args, ctx) {
     punicao: cmdPunicao, "punição": cmdPunicao, castigo: cmdPunicao,
   };
   if (FILHOS[sub]) return FILHOS[sub](message, args.slice(1), ctx);
+  if (sub === "antiscam") sub = "sentinela";
+
+  // ── Os quatro grupos (2 out 2026) ──────────────────────────────────────
+  // antispam · antiruido · antilink · sentinela. `on|off` e `punicao` valem
+  // para o grupo inteiro; `&automod <grupo> <parte> …` ajusta uma parte (que
+  // por baixo é um dos filtros de antes — os nomes antigos continuam valendo).
+  const G = GRUPOS_AUTOMOD;
+  if (G[sub]) {
+    const grupo = sub, def = G[grupo];
+    const a1 = args[1]?.toLowerCase();
+    const T = (pt, en) => (lang === "en" ? en : pt);
+    const PARAM_PARTE = {
+      antispam: { mensagens: "velocidade", tempo: "velocidade", mencoes: "mencoes", minuto: "midia", novato: "midia", vezes: "repeticao" },
+      antiruido: { tamanho: "caps", limiar: "caps", zalgo: "caracteres", repeticao: "letras", ignorar: "letras", emojis: "emoji" },
+    }[grupo] ?? {};
+    if (a1 && def.partes[a1]) {
+      // uma parte: vira o comando do filtro de antes
+      args = [def.partes[a1], ...args.slice(2)];
+      sub = args[0];
+      if (grupo === "sentinela" && a1 === "conteudo" && args[1] && !["on", "off", "punicao", "punição"].includes(args[1].toLowerCase())) {
+        return cmdScam(message, args.slice(1), ctx);
+      }
+      return executarFiltro(sub, args);
+    }
+    if (!a1) {
+      const st = estadoDoGrupo(config.automod, grupo);
+      const pm = (f) => config.automod[MODULOS_AUTOMOD[f]]?.punicao?.modo;
+      return sendEmbed(message.channel, { title: `${def.emoji} ${grupo} — ${T(def.pt, def.en)}`, colour: COR.mod, description: [
+        `**${st.ligadas}/${st.total}** ${T("partes ligadas", "parts on")}`,
+        "",
+        ...st.partes.map((x) => `${x.ligada ? "🟢" : "🔴"} \`${x.parte}\` — ${ROTULO_PARTE[x.parte]?.[lang === "en" ? 1 : 0] ?? x.parte}`
+          + `${descreverFiltro(config.automod, x.chave, lang, ctx.estado) ? ` _(${descreverFiltro(config.automod, x.chave, lang, ctx.estado)})_` : ""}`
+          + `${pm(x.filtro) ? ` · ${T("punição", "punishment")} \`${pm(x.filtro)}\`` : ""}`),
+        "",
+        `\`${PREFIXO}automod ${grupo} on|off\` — ${T("o grupo inteiro", "the whole group")}`,
+        `\`${PREFIXO}automod ${grupo} <${T("parte", "part")}> on|off\` — ${T("só uma parte", "one part only")}`,
+        Object.keys(PARAM_PARTE).length ? `\`${PREFIXO}automod ${grupo} set <${Object.keys(PARAM_PARTE).join("|")}> <${T("valor", "value")}>\`` : null,
+        `\`${PREFIXO}automod ${grupo} punicao <avisar|apagar|confirmar|acumular|banir|herdar>\``,
+        grupo === "sentinela" ? T(`_Painel do sentinela: \`${PREFIXO}automod sentinela config\` · \`sensitivity\` · \`test <texto>\` · \`odio add <termo>\`_`, `_Sentinel panel: \`${PREFIXO}automod sentinela config\` · \`sensitivity\` · \`test <text>\` · \`odio add <term>\`_`) : null,
+      ].filter((x) => x !== null).join("\n") });
+    }
+    if (a1 === "on" || a1 === "off") {
+      for (const f of Object.values(def.partes)) {
+        const ck = MODULOS_AUTOMOD[f];
+        config.automod[ck] = { ...(config.automod[ck] ?? {}), enabled: a1 === "on" };
+      }
+      salvarConfig();
+      return sendEmbed(message.channel, { title: "🛡 AutoMod", colour: COR.mod, description: T(
+        `**${grupo}** ${a1 === "on" ? "ligado 🟢" : "desligado 🔴"} — ${Object.keys(def.partes).length} parte(s): ${Object.keys(def.partes).map((x) => `\`${x}\``).join(", ")}.`,
+        `**${grupo}** ${a1 === "on" ? "enabled 🟢" : "disabled 🔴"} — ${Object.keys(def.partes).length} part(s): ${Object.keys(def.partes).map((x) => `\`${x}\``).join(", ")}.`) });
+    }
+    if (a1 === "punicao" || a1 === "punição") {
+      const modo = args[2]?.toLowerCase();
+      const MODOS = ["avisar", "apagar", "confirmar", "acumular", "banir"];
+      const herdar = ["herdar", "global", "null"].includes(modo);
+      if (!herdar && !MODOS.includes(modo)) {
+        return sendEmbed(message.channel, { title: T("❌ Modo inválido", "❌ Invalid mode"), colour: COR.erro,
+          description: `\`${PREFIXO}automod ${grupo} punicao <${MODOS.join("|")}|herdar>\`` });
+      }
+      for (const f of Object.values(def.partes)) {
+        const mod = config.automod[MODULOS_AUTOMOD[f]] ??= {};
+        mod.punicao = herdar ? null : { ...(mod.punicao ?? {}), modo, ...(modo === "acumular" && !mod.punicao?.warnsParaBan ? { warnsParaBan: 3 } : {}) };
+      }
+      salvarConfig();
+      return sendEmbed(message.channel, { title: "🛡 AutoMod", colour: COR.sucesso, description: herdar
+        ? T(`**${grupo}** agora herda a punição global.`, `**${grupo}** now inherits the global punishment.`)
+        : T(`**${grupo}** agora usa a punição **\`${modo}\`** (todas as partes).`, `**${grupo}** now uses the **\`${modo}\`** punishment (all parts).`) });
+    }
+    if (a1 === "set" && PARAM_PARTE[args[2]?.toLowerCase()]) {
+      const parte = PARAM_PARTE[args[2].toLowerCase()];
+      args = [def.partes[parte], "set", ...args.slice(2)];
+      sub = args[0];
+      return executarFiltro(sub, args);
+    }
+    if (grupo === "sentinela") return cmdScam(message, args.slice(1), ctx);   // o painel: config, sensitivity, test…
+    return sendEmbed(message.channel, { title: T("❌ Parte desconhecida", "❌ Unknown part"), colour: COR.erro,
+      description: `${T("Partes", "Parts")} ${T("de", "of")} \`${grupo}\`: ${Object.keys(def.partes).map((x) => `\`${x}\``).join(", ")}` });
+  }
+  return executarFiltro(sub, args);
+
+  // ── Um filtro só (o nome antigo, ou a parte de um grupo) ──
+  async function executarFiltro(sub, args) {
 
   // `sentinela` é os dois: um módulo que liga/desliga (como anticaps) E um
   // painel com ajustes próprios. `on|off` fica na lista de módulos abaixo;
@@ -98,16 +182,15 @@ export async function cmdAutomod(message, args, ctx) {
 
   const modulos = MODULOS_AUTOMOD;
 
-  // `antiscam` → `sentinela`: mesmo filtro, nome novo.
-  if (sub === "antiscam") sub = "sentinela";
 
   if (!sub || sub === "status") {
-    const linhas = Object.entries(modulos).map(([nome, chave]) => {
-      const on = config.automod[chave]?.enabled;
-      return lang === "en"
-        ? `${on ? "🟢" : "🔴"} **${nome}** — ${on ? "enabled" : "disabled"}`
-        : `${on ? "🟢" : "🔴"} **${nome}** — ${on ? "ativado" : "desativado"}`;
+    const linhas = Object.entries(GRUPOS_AUTOMOD).flatMap(([nome, def]) => {
+      const st = estadoDoGrupo(config.automod, nome);
+      const icone = st.ligadas === st.total ? "🟢" : st.ligadas ? "🟡" : "🔴";
+      return [`${icone} **${nome}** — ${lang === "en" ? def.en : def.pt} · ${st.ligadas}/${st.total}`,
+        `   ${st.partes.map((x) => `${x.ligada ? "✓" : "✗"} ${x.parte}`).join(" · ")}`];
     });
+    linhas.push("", lang === "en" ? `_Details: \`${PREFIXO}automod <group>\`_` : `_Detalhes: \`${PREFIXO}automod <grupo>\`_`);
     linhas.push(lang === "en"
       ? `${cfgGlobal.debug !== false ? "🟢" : "🔴"} **debug (global)** — ${cfgGlobal.debug !== false ? "enabled" : "disabled"}`
       : `${cfgGlobal.debug !== false ? "🟢" : "🔴"} **debug (global)** — ${cfgGlobal.debug !== false ? "ativado" : "desativado"}`);
@@ -139,6 +222,9 @@ export async function cmdAutomod(message, args, ctx) {
     anticaps:        { tamanho: "minLength", limiar: "threshold" },
     anticaracteres:  { zalgo: "limiteZalgo" },
     antirepeticao:   { repeticao: "maxRepeticao", ignorar: "ignorar" },
+    antiemoji:       { emojis: "maxEmojis" },
+    antimidia:       { minuto: "maxPorMinuto", novato: "maxNovato" },
+    antiduplicata:   { vezes: "maxRepetidas" },
   };
   const MODOS_PUN = ["avisar", "apagar", "confirmar", "acumular", "banir"];
 
@@ -167,6 +253,21 @@ export async function cmdAutomod(message, args, ctx) {
     );
     return sendEmbed(message.channel, { title: `🛡 ${sub}`,
       description: linhas.filter((l) => l !== null).join("\n"), colour: COR.mod });
+  }
+
+  // ── &automod antiodio add|remover|lista <termo> — termos além dos de fábrica ──
+  if (sub === "antiodio" && ["add", "adicionar", "remover", "remove", "tirar", "lista", "list"].includes(acao)) {
+    mod.termos ??= [];
+    const termo = args.slice(2).join(" ").trim().toLowerCase().slice(0, 60);
+    if (["add", "adicionar"].includes(acao) && termo && !mod.termos.includes(termo)) mod.termos.push(termo);
+    if (["remover", "remove", "tirar"].includes(acao)) mod.termos = mod.termos.filter((x) => x !== termo);
+    if (!["lista", "list"].includes(acao)) salvarConfig();
+    return sendEmbed(message.channel, { title: "🛡 antiodio", colour: COR.mod, description: [
+      lang === "en" ? `**Built-in terms:** ${TERMOS_ODIO.length} (unambiguous slurs, PT and EN)` : `**Termos de fábrica:** ${TERMOS_ODIO.length} (ofensas inequívocas, PT e EN)`,
+      `**${lang === "en" ? "Added here" : "Acrescentados aqui"}:** ${mod.termos.length ? mod.termos.map((x) => `\`${x}\``).join(", ") : "—"}`,
+      "",
+      lang === "en" ? "_Spelling tricks are caught too: n.i.g.g.a, N1GG4, niiiigga._" : "_Os disfarces também são pegos: n.i.g.g.a, N1GG4, niiiigga._",
+    ].join("\n") });
   }
 
   // ── set <parâmetro> <valor> ──
@@ -268,6 +369,7 @@ export async function cmdAutomod(message, args, ctx) {
       description: `**${sub}** foi **${novoEstado === "on" ? "ativado 🟢" : "desativado 🔴"}**.`, colour: COR.mod },
     { title: "🛡 AutoMod updated",
       description: `**${sub}** was **${novoEstado === "on" ? "enabled 🟢" : "disabled 🔴"}**.`, colour: COR.mod }));
+  }
 }
 
 // &automod whitelist <add|remove|list> [link|convite]   (ManagePermissions)

@@ -3,7 +3,7 @@ import { servidorPermitido as temIA } from "../ai/chat.js";
 import * as db from "../core/db.js";
 import { EVENTOS } from "../core/log.js";
 import { MODOS as MODOS_BG, MODOS_EN as MODOS_BG_EN } from "./ban-global.js";
-import { escadaDePunicao, rotuloDegrau, MODULOS_AUTOMOD, moduloLigado } from "./automod-engine.js";
+import { escadaDePunicao, rotuloDegrau, GRUPOS_AUTOMOD, estadoDoGrupo } from "./automod-engine.js";
 import { tr, lingua } from "../core/i18n.js";
 import * as MAG from "../game/magias.js";
 import { MUNDO } from "../game/mundo.js";
@@ -63,22 +63,16 @@ export async function cmdConfig(message, args, ctx) {
   const T = (pt, enTxt) => (en ? enTxt : pt);
   const seg = (ms) => `${Math.round((ms ?? 0) / 100) / 10}s`;
 
-  // ── Módulos do automod (a mesma lista do &automod) ──
-  const detalhe = {
-    antiSpam:        () => T(`${am.antiSpam.maxMessages} msg em ${seg(am.antiSpam.windowMs)}`, `${am.antiSpam.maxMessages} msg in ${seg(am.antiSpam.windowMs)}`),
-    antiMassSpam:    () => T(`${am.antiMassSpam.maxMessages} msg em ${seg(am.antiMassSpam.windowMs)}`, `${am.antiMassSpam.maxMessages} msg in ${seg(am.antiMassSpam.windowMs)}`),
-    antiDuplicata:   () => T(`${am.antiDuplicata?.maxRepetidas ?? 3}× a mesma mensagem em ${seg(am.antiDuplicata?.windowMs ?? 120000)}`, `${am.antiDuplicata?.maxRepetidas ?? 3}× the same message in ${seg(am.antiDuplicata?.windowMs ?? 120000)}`),
-    antiImagem:      () => T("imagens de contas novas descritas pelo modelo de visão; avisa a staff", "images from new accounts described by the vision model; alerts staff"),
-    antiInvite:      () => T("bloqueia convites", "blocks invites"),
-    antiMassMention: () => T(`máx. ${am.antiMassMention.maxMentions} menções`, `max ${am.antiMassMention.maxMentions} mentions`),
-    antiCaps:        () => T(`≥${am.antiCaps.minLength} caracteres e ${Math.round(am.antiCaps.threshold * 100)}% maiúsculas`, `≥${am.antiCaps.minLength} chars and ${Math.round(am.antiCaps.threshold * 100)}% uppercase`),
-    antiLink:        () => T(`${estado.blockedDomains.size.toLocaleString("pt-BR")} domínio(s) na lista`, `${estado.blockedDomains.size.toLocaleString("en-US")} domain(s) listed`),
-    antiScam:        () => T(`sensibilidade ${L_SENS[am.antiScam.sensitivity] ?? am.antiScam.sensitivity}`, `sensitivity ${L_SENS[am.antiScam.sensitivity] ?? am.antiScam.sensitivity}`),
-    antiCaracteres:  () => T("texto distorcido (zalgo) e caracteres invisíveis", "distorted (zalgo) text and invisible characters"),
-    antiRepeticao:   () => T(`mais de ${am.antiRepeticao?.maxRepeticao ?? 15} caracteres repetidos${am.antiRepeticao?.ignorar ? ` (ignora \`${am.antiRepeticao.ignorar}\`)` : ""}`, `over ${am.antiRepeticao?.maxRepeticao ?? 15} repeated characters${am.antiRepeticao?.ignorar ? ` (ignores \`${am.antiRepeticao.ignorar}\`)` : ""}`),
-  };
-  const modulos = Object.entries(MODULOS_AUTOMOD)
-    .map(([nome, chave]) => `${on(moduloLigado(am, chave))} **${nome}** — ${detalhe[chave]?.() ?? ""}`);
+
+  // Os quatro grupos, cada um com as partes (o detalhe de cada parte é o do filtro de antes)
+  const modulos = Object.entries(GRUPOS_AUTOMOD).flatMap(([grupo, def]) => {
+    const st = estadoDoGrupo(am, grupo);
+    return [
+      `${st.ligadas === st.total ? "🟢" : st.ligadas ? "🟡" : "🔴"} **${grupo}** — ${T(def.pt, def.en)} · ${st.ligadas}/${st.total}`,
+      // as partes numa linha só (o detalhe de cada uma fica no `&automod <grupo>`)
+      `   ${st.partes.map((x) => `${x.ligada ? "✓" : "✗"} \`${x.parte}\``).join(" · ")}`,
+    ];
+  });
 
   // ── Punição ──
   const punicao = [
@@ -238,4 +232,30 @@ export async function cmdConfig(message, args, ctx) {
     ].join("\n"),
     colour: COR.info,
   });
+}
+
+
+// O que cada parte do automod faz, com os números DESTE servidor — usado no
+// painel `&automod <grupo>` (no &config as partes saem só pelo nome).
+export function descreverFiltro(am, chave, lang = "pt", estado = {}) {
+  const en = lang === "en";
+  const L_SENS = en ? SENSIBILIDADE_EN : SENSIBILIDADE;
+  const T = (pt, enTxt) => (en ? enTxt : pt);
+  const seg = (ms) => `${Math.round((ms ?? 0) / 100) / 10}s`;
+  const detalhe = {
+    antiSpam:        () => T(`${am.antiSpam.maxMessages} msg em ${seg(am.antiSpam.windowMs)}`, `${am.antiSpam.maxMessages} msg in ${seg(am.antiSpam.windowMs)}`),
+    antiMassSpam:    () => T(`${am.antiMassSpam.maxMessages} msg em ${seg(am.antiMassSpam.windowMs)}`, `${am.antiMassSpam.maxMessages} msg in ${seg(am.antiMassSpam.windowMs)}`),
+    antiDuplicata:   () => T(`${am.antiDuplicata?.maxRepetidas ?? 3}× a mesma mensagem em ${seg(am.antiDuplicata?.windowMs ?? 120000)}`, `${am.antiDuplicata?.maxRepetidas ?? 3}× the same message in ${seg(am.antiDuplicata?.windowMs ?? 120000)}`),
+    antiImagem:      () => T("imagens de contas novas descritas pelo modelo de visão; avisa a staff", "images from new accounts described by the vision model; alerts staff"),
+    antiInvite:      () => T("bloqueia convites", "blocks invites"),
+    antiMassMention: () => T(`máx. ${am.antiMassMention.maxMentions} menções`, `max ${am.antiMassMention.maxMentions} mentions`),
+    antiCaps:        () => T(`≥${am.antiCaps.minLength} caracteres e ${Math.round(am.antiCaps.threshold * 100)}% maiúsculas`, `≥${am.antiCaps.minLength} chars and ${Math.round(am.antiCaps.threshold * 100)}% uppercase`),
+    antiLink:        () => T(`${(estado?.blockedDomains?.size ?? 0).toLocaleString("pt-BR")} domínio(s) na lista`, `${(estado?.blockedDomains?.size ?? 0).toLocaleString("en-US")} domain(s) listed`),
+    antiScam:        () => T(`sensibilidade ${L_SENS[am.antiScam.sensitivity] ?? am.antiScam.sensitivity}`, `sensitivity ${L_SENS[am.antiScam.sensitivity] ?? am.antiScam.sensitivity}`),
+    antiCaracteres:  () => T("texto distorcido (zalgo) e caracteres invisíveis", "distorted (zalgo) text and invisible characters"),
+    antiOdio:        () => T(`ofensas raciais/homofóbicas (de fábrica${am.antiOdio?.termos?.length ? ` + ${am.antiOdio.termos.length}` : ""})`, `racial/homophobic slurs (built-in${am.antiOdio?.termos?.length ? ` + ${am.antiOdio.termos.length}` : ""})`),
+    antiEmoji:       () => T(`${am.antiEmoji?.maxEmojis ?? 20}+ emojis numa mensagem`, `${am.antiEmoji?.maxEmojis ?? 20}+ emojis in one message`),
+    antiMidia:       () => T(`mais de ${am.antiMidia?.maxPorMinuto ?? 8} anexos/min (conta nova: ${am.antiMidia?.maxNovato ?? 3})`, `over ${am.antiMidia?.maxPorMinuto ?? 8} attachments/min (new account: ${am.antiMidia?.maxNovato ?? 3})`),
+    antiRepeticao:   () => T(`mais de ${am.antiRepeticao?.maxRepeticao ?? 15} caracteres repetidos${am.antiRepeticao?.ignorar ? ` (ignora \`${am.antiRepeticao.ignorar}\`)` : ""}`, `over ${am.antiRepeticao?.maxRepeticao ?? 15} repeated characters${am.antiRepeticao?.ignorar ? ` (ignores \`${am.antiRepeticao.ignorar}\`)` : ""}`),
+  };  return detalhe[chave]?.() ?? "";
 }

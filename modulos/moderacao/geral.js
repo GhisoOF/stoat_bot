@@ -5,7 +5,7 @@ import { nomeExibido } from "../core/aliases.js";
 import { grupos as gruposHelp, ALIAS_GRUPO, ORDEM as ORDEM_GRUPOS } from "./help-grupos.js";
 import { secaoParametros } from "./help-parametros.js";
 import { enviarPaginado, paginarLinhas } from "../core/paginas.js";
-import { escadaDePunicao, rotuloDegrau, MODULOS_AUTOMOD, moduloLigado } from "./automod-engine.js";
+import { escadaDePunicao, rotuloDegrau, GRUPOS_AUTOMOD, estadoDoGrupo } from "./automod-engine.js";
 import { MUNDO } from "../game/mundo.js";
 import { servidorNaLista } from "../core/env.js";
 
@@ -141,10 +141,17 @@ function detalhesPT(P) {
       ex: `${P}acesso canal somente`,
     },
     automod: {
-      uso: `${P}automod [status] | ${P}automod <módulo> <on|off> | ${P}automod <blocklist|whitelist|sentinela|punicao> …`,
-      desc: "Raiz da família de moderação automática: liga/desliga cada módulo e dá acesso a blocklist, whitelist, sentinela e punicao — que também continuam valendo soltos. Filtros: antispam, antimassspam, antiduplicata (a MESMA mensagem repetida), antiinvite, antimassmention, anticaps, antilink, anticaracteres, antirepeticao e o `sentinela` (o antigo antiscam, que agora julga conteúdo em geral).",
-      perm: "ManagePermissions", ex: `${P}automod antilink on`,
+      uso: `${P}automod [status] | ${P}automod <grupo> [parte] <on|off> | ${P}automod <grupo> punicao <modo>`,
+      desc: "A moderação automática em **quatro grupos**, cada um com partes que dá para ajustar uma a uma:\n\n"
+        + "🌊 `antispam` — enxurrada: `velocidade`, `rajada`, `repeticao` (a mesma mensagem ou imagem), `midia` (anexos por minuto), `mencoes`\n"
+        + "🔊 `antiruido` — texto poluído: `caps`, `caracteres` (zalgo, invisíveis), `letras` (kkkkkk…), `emoji`\n"
+        + "🔗 `antilink` — `dominios` (lista de bloqueio) e `convites`\n"
+        + "🛡️ `sentinela` — conteúdo nocivo: `conteudo` (golpe, +18, gore, ilícito), `odio` (ofensas), `imagens` (modelo de visão)\n\n"
+        + "`&automod <grupo>` mostra as partes e os números · `&automod <grupo> on|off` liga/desliga o grupo · `&automod <grupo> <parte> on|off` só uma parte · `&automod <grupo> set <parâmetro> <valor>` · `&automod <grupo> punicao <modo>`\n\n"
+        + "Também: `&automod blocklist`, `&automod whitelist`, `&automod punicao` (a escada geral). Os nomes antigos (`anticaps`, `antiinvite`…) continuam valendo.",
+      perm: "ManagePermissions", ex: `${P}automod antispam`,
     },
+
     banglobal: {
       uso: `${P}banglobal <off|avisar|banir|lista|revisar|varrer|isentar|desfazer|historico|esquecer>`,
       desc: "Lista global de banimentos compartilhada entre os servidores onde o bot está.\n\n`off` — ignora · `avisar` — alerta os moderadores · `banir` — bane automaticamente **ao entrar**\n\n**Ver quem está na lista**\n`&banglobal lista` — todo mundo, em páginas · `&banglobal lista servidor` — só os deste servidor\n`&banglobal historico <@pessoa>` — onde e por que aquela pessoa foi banida\n\n**Quem já está no servidor**\n`&banglobal revisar` — confere e **só mostra**. Nunca bane.\n`&banglobal varrer` — mostra e **espera confirmação** · `&banglobal varrer confirmar` — ⚠️ bane\n\n**Quando a lista erra**\n`&banglobal isentar <@pessoa>` — aceita a pessoa **aqui** apesar da lista (e desfaz o ban dela, se foi o bot que aplicou)\n`&banglobal isentos` — quem está isento · `&banglobal desfazer` — ↩️ reverte os bans que a lista aplicou aqui\n`&banglobal esquecer <@pessoa>` — apaga o registro **para todos os servidores**\n\n**A contribuição é automática e permanente.** Os bans deste servidor — os antigos e os novos — alimentam a lista sozinhos, sem comando e sem chave para desligar. O modo acima decide só se este servidor **se aproveita** da lista: dá para não usar, não dá para usar sem alimentar.",
@@ -387,10 +394,17 @@ function detalhesEN(P) {
       ex: `${P}acesso canal somente`,
     },
     automod: {
-      uso: `${P}automod status | ${P}automod <module> <on|off>`,
-      desc: "Turns each AutoMod module on/off and shows the overall state. Filters: antispam, antimassspam, antiinvite, antimassmention, anticaps, antilink, anticaracteres, antirepeticao and `sentinela` (the former antiscam, which now judges content in general).",
-      perm: "ManagePermissions", ex: `${P}automod antilink on`,
+      uso: `${P}automod [status] | ${P}automod <group> [part] <on|off> | ${P}automod <group> punicao <mode>`,
+      desc: "Automatic moderation in **four groups**, each with parts you can tune one by one:\n\n"
+        + "🌊 `antispam` — floods: `velocidade`, `rajada`, `repeticao` (the same message or image), `midia` (attachments per minute), `mencoes`\n"
+        + "🔊 `antiruido` — noisy text: `caps`, `caracteres` (zalgo, invisible), `letras` (dragged-out letters), `emoji`\n"
+        + "🔗 `antilink` — `dominios` (blocklist) and `convites`\n"
+        + "🛡️ `sentinela` — harmful content: `conteudo` (scams, NSFW, gore, illicit), `odio` (slurs), `imagens` (vision model)\n\n"
+        + "`&automod <group>` shows the parts and numbers · `&automod <group> on|off` toggles the group · `&automod <group> <part> on|off` one part only · `&automod <group> set <parameter> <value>` · `&automod <group> punicao <mode>`\n\n"
+        + "Also: `&automod blocklist`, `&automod whitelist`, `&automod punicao` (the overall ladder). The old names (`anticaps`, `antiinvite`…) still work.",
+      perm: "ManagePermissions", ex: `${P}automod antispam`,
     },
+
     banglobal: {
       uso: `${P}banglobal <off|avisar|banir|lista|revisar|varrer|isentar|desfazer|historico|esquecer>`,
       desc: "Global ban list shared across every server the bot is in.\n\n`off` — ignore · `avisar` — alert the moderators · `banir` — ban automatically **on join**\n\n**Seeing who's listed**\n`&banglobal lista` — everyone, in pages · `&banglobal lista servidor` — only this server's\n`&banglobal historico <@user>` — where and why that person was banned\n\n**People already in the server**\n`&banglobal revisar` — checks and **shows only**. Never bans.\n`&banglobal varrer` — shows and **waits for confirmation** · `&banglobal varrer confirmar` — ⚠️ bans\n\n**When the list gets it wrong**\n`&banglobal isentar <@user>` — accepts that person **here** despite the list (and undoes their ban, if the bot applied it)\n`&banglobal isentos` — who's exempt · `&banglobal desfazer` — ↩️ reverts the bans the list applied here\n`&banglobal esquecer <@user>` — deletes the record **for every server**\n\n**Contributing is automatic and permanent.** This server's bans — old and new — feed the list on their own, with no command and no switch to turn it off. The mode above only decides whether this server **benefits** from the list: you can opt out of using it, not out of feeding it.",
@@ -602,15 +616,12 @@ function construirSubtopicos(P, lang) {
       set: {
         titulo: "automod set",
         texto: [
-          `**Usage:** \`${P}automod <module> set <parameter> <value>\``,
+          `**Usage:** \`${P}automod <group> set <parameter> <value>\``,
           "",
           "Adjusts a module's parameter. Parameters per module:",
-          "• `antispam` / `antimassspam`: `mensagens`, `tempo` (ms)",
-          "• `antimassmention`: `mencoes`",
-          "• `anticaps`: `tamanho`, `limiar` (0–1 or %)",
+          "• `antispam`: `mensagens`, `tempo` (ms) — velocidade · `vezes` — repetição · `minuto`, `novato` — mídia · `mencoes`",
+          "• `antiruido`: `tamanho`, `limiar` (0–1 or %) — caps · `zalgo` — caracteres · `repeticao`, `ignorar` — letras · `emojis` — emoji",
           "  _Measurement ignores mentions, links, named emojis and code — only typed text counts._",
-          "• `anticaracteres`: `zalgo`",
-          "• `antirepeticao`: `repeticao`, `ignorar` (laughter letters, e.g. `k`)",
           "",
           `E.g.: \`${P}automod antispam set mensagens 3\` · \`${P}automod antispam set tempo 10000\``,
         ].join("\n"),
@@ -688,15 +699,12 @@ function construirSubtopicos(P, lang) {
       set: {
         titulo: "automod set",
         texto: [
-          `**Uso:** \`${P}automod <módulo> set <parâmetro> <valor>\``,
+          `**Uso:** \`${P}automod <grupo> set <parâmetro> <valor>\``,
           "",
           "Ajusta um parâmetro de um módulo. Parâmetros por módulo:",
-          "• `antispam` / `antimassspam`: `mensagens`, `tempo` (ms)",
-          "• `antimassmention`: `mencoes`",
-          "• `anticaps`: `tamanho`, `limiar` (0–1 ou %)",
+          "• `antispam`: `mensagens`, `tempo` (ms) — velocidade · `vezes` — repetição · `minuto`, `novato` — mídia · `mencoes`",
+          "• `antiruido`: `tamanho`, `limiar` (0–1 ou %) — caps · `zalgo` — caracteres · `repeticao`, `ignorar` — letras · `emojis` — emoji",
           "  _A medição ignora menções, links, emojis nomeados e código — só conta o texto digitado._",
-          "• `anticaracteres`: `zalgo`",
-          "• `antirepeticao`: `repeticao`, `ignorar` (letras da risada, ex.: `k`)",
           "",
           `Ex.: \`${P}automod antispam set mensagens 3\` · \`${P}automod antispam set tempo 10000\``,
         ].join("\n"),
@@ -1068,9 +1076,10 @@ export async function cmdSobre(message, args, ctx) {
 
   const am = config?.automod ?? {};
   // A mesma lista do &automod (antes: 9 fixos, sem o antiduplicata e o antiimagem).
-  const chavesAutomod = Object.values(MODULOS_AUTOMOD);
-  const modulosOn = chavesAutomod.filter((k) => moduloLigado(am, k)).length;
-  const nModulos = chavesAutomod.length;
+  // os quatro grupos do automod (um grupo conta como ligado se alguma parte está)
+  const gruposAm = Object.keys(GRUPOS_AUTOMOD).map((g) => estadoDoGrupo(am, g));
+  const modulosOn = gruposAm.filter((x) => x.ligadas > 0).length;
+  const nModulos = gruposAm.length;
   const vozAqui = servidorNaLista("TTS_SERVIDORES", serverId);
   const geraImagem = (process.env.IMAGEM ?? "1").trim() !== "0";
   const nomeBot = ctx.client?.user?.displayName || "Judy";   // o nome de exibição; a conta (username) pode chamar outra coisa, como "Cobaia"
@@ -1093,7 +1102,7 @@ export async function cmdSobre(message, args, ctx) {
 
   const sim = (v) => v ? "🟢" : "🔴";
   const estadoLinhas = en ? [
-    `${sim(modulosOn)} **AutoMod** — ${modulosOn}/${nModulos} modules on${am.antiScam?.enabled ? ` · sentinel ${am.antiScam.porAntiguidade !== false ? "(stricter with newcomers)" : "on"}` : ""}`,
+    `${sim(modulosOn)} **AutoMod** — ${modulosOn}/${nModulos} groups on${am.antiScam?.enabled ? ` · sentinel ${am.antiScam.porAntiguidade !== false ? "(stricter with newcomers)" : "on"}` : ""}`,
     `⚖️ **Punishment** — \`${config?.automod?.punicao?.modo ?? "avisar"}\`${(config?.automod?.punicao?.modo === "acumular") ? ` · ${escadaDePunicao(config.automod.punicao).map((d) => rotuloDegrau(d, "en")).join(" → ")}` : ""}`,
     `${sim(xpOn)} **Leveling (XP)** — ${xpOn ? "on" : "off"}`,
     `${sim(logOn)} **Log channel** — ${logOn ? `<#${config.log.canalId}>` : "not set"}`,
@@ -1104,7 +1113,7 @@ export async function cmdSobre(message, args, ctx) {
           : `🤖 **AI (Judy)** — runs only on the servers enabled by the bot owner: chat, code, web search, exact math and image reading`,
     `🎫🪝🔊 **Tickets · Webhooks · Voice** — ${db.listarTickets(serverId).length} open ticket(s) · ${db.listarGanchos(serverId).length} webhook(s) · ${!vozAqui ? "voice and music not available here" : config?.tts?.ativo && config?.tts?.canalVoz ? `voice and music in <#${config.tts.canalVoz}>` : `voice and music: \`${PREFIXO}entrar\` in a call`}`,
   ] : [
-    `${sim(modulosOn)} **AutoMod** — ${modulosOn}/${nModulos} módulos ligados${am.antiScam?.enabled ? ` · sentinela ${am.antiScam.porAntiguidade !== false ? "(mais rígido com novatos)" : "ligado"}` : ""}`,
+    `${sim(modulosOn)} **AutoMod** — ${modulosOn}/${nModulos} grupos ligados${am.antiScam?.enabled ? ` · sentinela ${am.antiScam.porAntiguidade !== false ? "(mais rígido com novatos)" : "ligado"}` : ""}`,
     `⚖️ **Punição** — \`${config?.automod?.punicao?.modo ?? "avisar"}\`${(config?.automod?.punicao?.modo === "acumular") ? ` · ${escadaDePunicao(config.automod.punicao).map((d) => rotuloDegrau(d, "pt")).join(" → ")}` : ""}`,
     `${sim(xpOn)} **Níveis (XP)** — ${xpOn ? "ligado" : "desligado"}`,
     `${sim(logOn)} **Canal de log** — ${logOn ? `<#${config.log.canalId}>` : "não definido"}`,

@@ -255,7 +255,7 @@ export async function sincronizarServidor(server, criarContexto) {
       });
     }
   } catch (err) {
-    console.error(`[BANGLOBAL] servidor novo ${sid}:`, err?.message);
+    console.error(`[BANGLOBAL] servidor novo ${server?.name ?? sid}: ${descreverErro(err)}`);   // (err?.message vinha vazio: o erro da API é texto)
   }
 }
 

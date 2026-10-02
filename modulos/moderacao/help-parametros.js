@@ -24,7 +24,8 @@ function parametrosPT(P) {
     automod: [
       { nome: "status", desc: "lista cada filtro e se está ligado" },
       { nome: "<filtro>", desc: "só o nome: mostra os parâmetros daquele filtro e a punição dele" },
-      { nome: "<filtro> on|off", desc: "liga/desliga. Filtros: `antispam`, `antimassspam`, `antiinvite`, `antimassmention`, `anticaps`, `antilink`, `sentinela`, `anticaracteres`, `antirepeticao`" },
+      { nome: "<grupo> on|off", desc: "liga/desliga o grupo inteiro: `antispam`, `antiruido`, `antilink`, `sentinela`" },
+      { nome: "<grupo> <parte> on|off", desc: "só uma parte (ex.: `antiruido caps off`, `antispam midia on`) — `&automod <grupo>` lista as partes" },
       { nome: "<filtro> set", valor: "<parâmetro> <valor>", desc: "ajusta um número: `antispam set mensagens 5`, `anticaps set limiar 0.7`" },
       { nome: "<filtro> punicao", valor: "<modo|herdar>", desc: "punição só desse filtro; `herdar` volta a usar a global do `&punicao`" },
       { nome: "debug on|off", desc: "log detalhado no console (global, só o dono)" },
@@ -272,7 +273,8 @@ function parametrosEN(P) {
     automod: [
       { nome: "status", desc: "lists each filter and whether it's on" },
       { nome: "<filter>", desc: "name only: shows that filter's parameters and punishment" },
-      { nome: "<filter> on|off", desc: "toggles. Filters: `antispam`, `antimassspam`, `antiinvite`, `antimassmention`, `anticaps`, `antilink`, `sentinela`, `anticaracteres`, `antirepeticao`" },
+      { nome: "<group> on|off", desc: "toggles the whole group: `antispam`, `antiruido`, `antilink`, `sentinela`" },
+      { nome: "<group> <part> on|off", desc: "one part only (e.g. `antiruido caps off`, `antispam midia on`) — `&automod <group>` lists the parts" },
       { nome: "<filter> set", valor: "<parameter> <value>", desc: "tunes a number: `antispam set mensagens 5`, `anticaps set limiar 0.7`" },
       { nome: "<filter> punicao", valor: "<mode|herdar>", desc: "punishment for that filter only; `herdar` goes back to the global one from `&punicao`" },
       { nome: "debug on|off", desc: "verbose console log (global, owner only)" },

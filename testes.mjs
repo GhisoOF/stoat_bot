@@ -486,8 +486,10 @@ for (const lang of ["pt", "en"]) {
     varrer(a.automod, "automod");
     assert.equal(semExplicacao.length, 0, `só listam sintaxe: ${semExplicacao.join(", ")}`);
   });
-  t(`[${lang}] automod lista o anti-duplicata (o módulo novo)`, () => {
-    assert.match(a.automod.texto, /antiduplicata/i);
+  t(`[${lang}] automod lista os 4 grupos (e a repetição, que era o antiduplicata, dentro do antispam)`, () => {
+    const txt = a.automod.texto;
+    for (const g of ["antispam", "antiruido", "antilink", "sentinela"]) assert.ok(txt.includes(`\`${g}\``), g);
+    assert.ok(txt.includes("`repeticao`"), "repeticao");
   });
 }
 
@@ -1721,11 +1723,15 @@ async function info$(sid, config, rotas = { help: () => 1, ping: () => 2, chat: 
 }
 
 console.log("\n── &config ──");
-await t("mostra TODOS os filtros do &automod, nos dois idiomas", async () => {
+await t("mostra os 4 grupos do &automod e TODAS as partes, nos dois idiomas", async () => {
+  const { GRUPOS_AUTOMOD } = await import("./modulos/moderacao/automod-engine.js");
   for (const lang of ["pt", "en"]) {
     const { sid, config } = novoServidor(lang);
     const d = await config$(sid, config);
-    for (const nome of Object.keys(MODULOS_AUTOMOD)) assert.match(d, new RegExp(`\\*\\*${nome}\\*\\*`), `${lang}: ${nome}`);
+    for (const [g, def] of Object.entries(GRUPOS_AUTOMOD)) {
+      assert.match(d, new RegExp(`\\*\\*${g}\\*\\*`), `${lang}: ${g}`);
+      for (const parte of Object.keys(def.partes)) assert.match(d, new RegExp("`" + parte + "`"), `${lang}: ${g}/${parte}`);
+    }
   }
 });
 await t("todo modo de punição tem descrição (o `apagar` era \"?\")", async () => {
@@ -1773,10 +1779,10 @@ await t("o título é o nome do bot, não \"Cobaia\"", async () => {
   const e = await info$(sid, config);
   assert.equal(e.title, "🤖 Judy");
 });
-await t("conta os filtros pela lista do &automod (x/11, não x/9)", async () => {
+await t("conta os grupos do &automod (x/4)", async () => {
   const { sid, config } = novoServidor("pt");
   const d = (await info$(sid, config)).description;
-  assert.match(d, new RegExp(`/${Object.keys(MODULOS_AUTOMOD).length} módulos`));
+  assert.match(d, /\/4 grupos/);
 });
 await t("comandos: sem os desativados, sem os só-IA fora da IA e sem o painel do dono", async () => {
   const { sid, config } = novoServidor("pt");
@@ -3253,7 +3259,7 @@ for (const lang of ["pt", "en"]) {
 console.log("\n── sentinela (antigo antiscam) ──");
 // (desde a árvore de comandos, o sentinela mora em &automod: não há &sentinela solto)
 m = await say("&automod sentinela on");
-ok(texto(m).includes("ativado"), "&automod sentinela on liga o filtro");
+ok(/ativado|ligado/.test(texto(m)), "&automod sentinela on liga o grupo");
 m = await say("&automod status");
 ok(texto(m).includes("**sentinela**") && !texto(m).includes("**antiscam**"), "&automod status lista `sentinela`, não `antiscam`");
 m = await say("&automod antiscam");
@@ -9265,6 +9271,141 @@ const ctx = (server) => ({ serverId: "S1", config: { tickets: { logCanal: "C_LOG
 }
 
 console.log(`\nCARGOS APAGADOS: ${pass} ok, ${fail} falha(s)`);
+process.exit(fail ? 1 : 0);
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+// ataque-2out  (o ataque de imagens, emoji e ofensa racial — 2 out 2026)
+// ════════════════════════════════════════════════════════════════════════════
+// O que passou, e por quê:
+//  • "@Judy" + ~170 emojis + ofensa racial, repetido em #RSS e #Comando: a
+//    menção à Judy PULAVA o automod inteiro (a IA era chamada antes); e nenhum
+//    filtro olhava emoji nem ódio;
+//  • uma conta de 2 minutos repostando a mesma bandeira em vários canais: o
+//    anti-duplicata só comparava texto, e o modelo de visão engasgou (74 "fila
+//    cheia"); cada imagem apagada voltava inteira no #log.
+SUITES["ataque-2out"] = async () => {
+const fs = (await import("node:fs")).default;
+let pass = 0, fail = 0;
+const ok = (cond, msg, extra = "") => { cond ? pass++ : fail++; console.log(`${cond ? "✅" : "❌"} ${msg}${!cond && extra ? `\n     ${extra}` : ""}`); };
+const r = await import("./modulos/moderacao/rajada.js");
+const TROLL = "😀😃😄😁😘😅🤣😂😭😉😗😚😘🙃😘😍🤩🥳🫠🙃🙂🥹🥲😊☺️😌😔😪🤤😏😋😛😝😜🤪😑😐😶🫥😶‍🌫️😬🤐🫡🤔🤫🫢🤭🥱🤗🫣😱🤨🧐😒🙄 <@01KHBPN31QT1THM1A0CEM8JA91> nigga nigga nigga";
+
+console.log("\n── os filtros ──");
+ok(!!r.enxurradaDeEmoji(TROLL), "★ a mensagem do ataque é enxurrada de emoji");
+ok(!r.enxurradaDeEmoji("bom dia pessoal 😀😀") && !r.enxurradaDeEmoji("🎉🎉🎉 parabéns!!! 🎂"), "  → conversa normal com emoji passa");
+ok(r.acharOdio(TROLL) === "nigga", "★ a ofensa racial é achada");
+ok(["n i g g a", "N1GG4", "niiiigggaaa", "n.i.g.g.a", "NIGGAS"].every((x) => r.acharOdio(x)), "  → também disfarçada (espaços, números, letras repetidas, plural)");
+ok(["snigger", "niagara falls", "o macaco do zoológico", "bicha de piscina"].every((x) => !r.acharOdio(x)), "  → sem falso positivo em palavra comum");
+ok(r.acharOdio("seu otário", ["otario"]) === "otario", "  → termos que a staff acrescenta também valem");
+const img = (id, size = 34567) => ({ attachments: [{ id, size, metadata: { type: "Image", width: 1200, height: 800 } }] });
+ok(r.digitalMidia(img("A1")) === r.digitalMidia(img("B2")) && r.digitalMidia(img("A1")) !== r.digitalMidia(img("C3", 999)), "★ a mesma imagem repostada tem a mesma digital (o id muda, o arquivo não)");
+
+console.log("\n── no bot de verdade (menção à Judy não pula mais a moderação) ──");
+process.env.BOT_TOKEN = "tok"; process.env.DB_PATH = "/tmp/ataque.db"; process.env.CONFIG_PATH = "/tmp/ataque.json";
+process.env.SUPER_ADMINS = "DONO"; process.env.CHAT_SERVIDORES = "S1"; process.env.LLM_URL = "http://llm.teste";
+for (const f of ["/tmp/ataque.db", "/tmp/ataque.db-wal", "/tmp/ataque.db-shm", "/tmp/ataque.json", "/tmp/blocklist-cache.bin"]) fs.rmSync(f, { force: true });
+let chamadasLLM = 0;
+globalThis.fetch = async (u) => { if (String(u).includes("llm.teste")) chamadasLLM++; return { ok: false, status: 503, text: async () => "", json: async () => ({}) }; };
+await import("./main.js");
+const c = globalThis.__client;
+await c.emitAll("ready");
+const apagadas = [];
+const enviadas = [];
+const canal = { id: "C1", serverId: "S1", name: "rss", type: "TextChannel", sendMessage: async (p) => { enviadas.push(p); return { id: "M" + enviadas.length, react: async () => {}, edit: async () => {}, delete: async () => {} }; }, fetchMessages: async () => [] };
+const troll = { id: { server: "S1", user: "TROLL" }, roles: [], hasPermission: () => false, joinedAt: new Date(), edit: async () => {} };
+const server = { id: "S1", ownerId: "DONO", name: "Teste", roles: new Map(), channels: [canal], member: { roles: [] }, havePermission: () => true,
+  fetchMember: async () => troll, fetchBans: async () => [] };
+c.servers.set("S1", server); c.channels.set("C1", canal);
+const manda = async (content, extra = {}) => {
+  const m = { id: "X" + Math.random(), authorId: "TROLL", content, serverId: "S1", server, channel: canal, channelId: "C1", mentionIds: content.includes("<@BOT>") ? ["BOT"] : [],
+    createdAt: new Date(), author: { username: "troll" }, member: troll, replyIds: [], attachments: [], delete: async () => { apagadas.push(m.id); }, ...extra };
+  const q = [console.log, console.info, console.warn, console.error]; console.log = console.info = console.warn = console.error = () => {};
+  try { await Promise.race([c.emitAll("messageCreate", m), new Promise((res) => setTimeout(res, 5000))]); } finally { [console.log, console.info, console.warn, console.error] = q; }
+  return m;
+};
+await manda("oi");   // a primeira cria a config
+let m = await manda(TROLL.replace("<@01KHBPN31QT1THM1A0CEM8JA91>", "<@BOT>"));
+ok(apagadas.includes(m.id), "★ \"@Judy\" + emoji + ofensa: apagada pelo automod");
+ok(chamadasLLM === 0, "  → e a IA nem é chamada (antes a menção levava direto ao modelo)");
+apagadas.length = 0;
+m = await manda("<@BOT> seu nigga");
+ok(apagadas.includes(m.id), "★ ofensa racial curta também é apagada");
+apagadas.length = 0;
+const fotos = [];
+for (let i = 0; i < 4; i++) fotos.push(await manda("", { attachments: img(`IMG${i}`).attachments }));
+ok(fotos.slice(0, 2).every((x) => !apagadas.includes(x.id)), "as duas primeiras fotos passam");
+ok(fotos.slice(2).some((x) => apagadas.includes(x.id)), "★ a mesma imagem repetida por conta nova é barrada (duplicata/rajada de mídia)");
+
+console.log("\n── a fila do modelo de visão e o #log ──");
+const imagem = await import("./modulos/moderacao/imagem.js");
+const tarefa = (n) => ({ ctx: {}, userId: "TROLL", canalId: "C1", messageId: "MI" + n, url: "x", digital: "34567:1200x800" });
+ok(imagem.agendar(tarefa(1)) && !imagem.agendar(tarefa(2)), "★ a mesma imagem entra na fila do modelo uma vez só (antes: 74× \"fila cheia\")");
+const log = await import("./modulos/core/log.js");
+const anexo = (size) => ({ size, metadata: { width: 10, height: 10 } });
+const f1 = log.freioDeResgate("S1:TROLL", [anexo(1), anexo(1)]);
+const f2 = log.freioDeResgate("S1:TROLL", [anexo(2), anexo(3), anexo(4), anexo(5)]);
+ok(f1.resgatar.length === 1 && f1.segurados === 1, "★ imagem repetida não volta duas vezes no #log");
+ok(f2.resgatar.length === 2 && f2.segurados === 2, "  → e no máximo 3 resgates por autor a cada 10 min");
+
+console.log("\n── o relatório de erros ──");
+const rel = await import("./modulos/ferramentas/relatorio.js");
+const n = rel.normalizarErro("[REACTIONROLE] não consegui repor 🎮 em 01M3XPJDTEQR7D7DRMKQBH3BZY: 3 vezes");
+ok(!/[<>]/.test(n) && /\{id\}/.test(n) && /\{n\}/.test(n), "★ o relatório marca ids e números com {id}/{n} — com <id> o Stoat escondia e saía \"repor <> em :\"", n);
+const { descreverErro } = await import("./modulos/core/erros.js");
+const httpErr = Object.assign(new Error("Request failed with status code 403"), { response: { data: { type: "NotElevated" } } });
+ok(/cargo do bot está abaixo/.test(descreverErro(httpErr)), "erro HTTP com o corpo do Stoat em response.data vira frase (não JSON cru)");
+
+console.log(`\nATAQUE 2/10: ${pass} ok, ${fail} falha(s)`);
+process.exit(fail ? 1 : 0);
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+// automod-grupos  (14 filtros → 4 grupos com partes — 2 out 2026)
+// ════════════════════════════════════════════════════════════════════════════
+SUITES["automod-grupos"] = async () => {
+const fs = (await import("node:fs")).default;
+process.env.DB_PATH = "/tmp/am-grupos.db"; process.env.CONFIG_PATH = "/tmp/am-grupos.json";
+for (const f of ["/tmp/am-grupos.db", "/tmp/am-grupos.json"]) fs.rmSync(f, { force: true });
+const store = await import("./modulos/core/config-store.js"); store.inicializar(process.env.CONFIG_PATH, process.env.DB_PATH);
+const { cmdAutomod } = await import("./modulos/moderacao/automod-comandos.js");
+const { GRUPOS_AUTOMOD, MODULOS_AUTOMOD, estadoDoGrupo } = await import("./modulos/moderacao/automod-engine.js");
+let pass = 0, fail = 0;
+const ok = (cond, msg, extra = "") => { cond ? pass++ : fail++; console.log(`${cond ? "✅" : "❌"} ${msg}${!cond && extra ? `\n     ${extra}` : ""}`); };
+const config = store.configDoServidor("S");
+const am = config.automod;
+let ult = null;
+const ctx = { config, cfgGlobal: {}, COR: {}, PREFIXO: "&", serverId: "S", estado: { blockedDomains: new Set(["x.com"]) },
+  sendEmbed: async (_c, e) => { ult = e; return { id: "m", react: async () => {} }; }, getServer: async () => ({ id: "S" }),
+  membroTemPermissao: () => true, salvarConfig() {}, salvarGlobal() {} };
+const am$ = async (txt) => { await cmdAutomod({ channel: {}, authorId: "u" }, txt.split(" ").filter(Boolean), ctx); return `${ult?.title}\n${ult?.description}`; };
+
+const todas = Object.values(GRUPOS_AUTOMOD).flatMap((g) => Object.values(g.partes));
+ok(todas.length === Object.keys(MODULOS_AUTOMOD).length && new Set(todas).size === todas.length, "★ os 14 filtros estão nos 4 grupos, cada um uma vez só");
+let t = await am$("");
+ok(Object.keys(GRUPOS_AUTOMOD).every((g) => t.includes(`**${g}**`)) && /velocidade/.test(t), "&automod mostra os 4 grupos com as partes");
+t = await am$("antispam");
+ok(/5 msg em 4s/.test(t) && /`midia`/.test(t), "&automod antispam: as partes com os números deste servidor");
+await am$("antispam off");
+ok(["antiSpam", "antiMassSpam", "antiDuplicata", "antiMidia", "antiMassMention"].every((k) => am[k].enabled === false), "★ &automod antispam off desliga o grupo inteiro (as 5 partes)");
+await am$("antispam on");
+await am$("antiruido caps off");
+ok(am.antiCaps.enabled === false && am.antiEmoji.enabled !== false, "&automod antiruido caps off: só a parte");
+await am$("antispam set mensagens 7");
+ok(am.antiSpam.maxMessages === 7, "&automod antispam set mensagens 7 → a velocidade (como antes)");
+await am$("antiruido set emojis 30");
+ok(am.antiEmoji.maxEmojis === 30, "&automod antiruido set emojis 30 → a parte certa");
+await am$("sentinela punicao confirmar");
+ok(["antiScam", "antiOdio", "antiImagem"].every((k) => am[k].punicao?.modo === "confirmar"), "★ punição do grupo vale para todas as partes");
+await am$("sentinela odio add otario");
+ok(am.antiOdio.termos.includes("otario"), "&automod sentinela odio add: termo novo");
+await am$("sentinela sensitivity alta");
+ok(am.antiScam.sensitivity === "alta", "o painel do sentinela continua (sensitivity)");
+await am$("antiinvite off");
+ok(am.antiInvite.enabled === false, "os nomes antigos continuam valendo (antiinvite off)");
+ok(estadoDoGrupo(am, "antilink").ligadas < 2, "  → e o grupo antilink mostra a parte desligada");
+
+console.log(`\nAUTOMOD (grupos): ${pass} ok, ${fail} falha(s)`);
 process.exit(fail ? 1 : 0);
 };
 

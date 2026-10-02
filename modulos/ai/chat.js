@@ -130,7 +130,9 @@ const IA_SERVICO_CHAVE = process.env.IA_SERVICO_CHAVE || "";
 export function iniciarMemoria() {
   memoria.configurar({
     chamarModelo: (messages) =>
-      llmChat(messages, { json: true, modelo: LLM_MODEL_DECISAO, etiqueta: "memoria" }),
+      // a memória extrai vários fatos num JSON só; com o raciocínio do modelo,
+      // 1200 tokens cortavam ("memoria: ainda cortada após emendas", 2 out)
+      llmChat(messages, { json: true, jsonTokens: Number(process.env.MEMORIA_MAX_TOKENS || 2400), modelo: LLM_MODEL_DECISAO, etiqueta: "memoria" }),
   });
 }
 
@@ -567,10 +569,10 @@ export function caberNoContexto(messages, { ctxTokens = CONTEXTO_MODELO, reserva
   return saida;
 }
 
-export async function llmChat(messages, { json = false, maxTokens = MAX_TOKENS, etiqueta = "resposta", modelo = null, ctx = null, manter = null, continuarMax = null } = {}) {
+export async function llmChat(messages, { json = false, maxTokens = MAX_TOKENS, jsonTokens = null, etiqueta = "resposta", modelo = null, ctx = null, manter = null, continuarMax = null } = {}) {
   messages = normalizarMensagens(messages);
   const modeloUsado = modelo || LLM_MODEL_PADRAO;
-  const limiteTokens = json ? DECISAO_TOKENS : maxTokens;
+  const limiteTokens = json ? (jsonTokens ?? DECISAO_TOKENS) : maxTokens;
 
   const body = {
     model: modeloUsado,

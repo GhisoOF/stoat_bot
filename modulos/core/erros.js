@@ -8,6 +8,11 @@ export function normalizarErro(e) {
     }
     return { message: e };
   }
+  // Erro de HTTP com o corpo da API em `response.data` (o Stoat responde
+  // {"type":"NotElevated",…}): o tipo está lá, não no `message`.
+  if (!e?.type && e?.response?.data && typeof e.response.data === "object" && e.response.data.type) {
+    return { ...e.response.data, _original: e };
+  }
   // Alguns caminhos embrulham o JSON dentro de `message`.
   if (typeof e?.message === "string" && e.message.trim().startsWith("{") && !e.type) {
     try { return { ...JSON.parse(e.message), _original: e }; } catch { return e; }

@@ -253,3 +253,23 @@ export async function cmdLog(message, args, ctx) {
     colour: COR.mod,
   }));
 }
+
+
+// Freio do resgate de mídia (2 out 2026): por autor, no máximo 3 anexos
+// resgatados a cada 10 min, e a mesma imagem (tamanho + dimensões) uma vez só.
+const resgates = new Map();   // chave → { t: [quando…], digitais: Map(digital → quando) }
+export function freioDeResgate(chave, anexos, { agora = Date.now(), max = 3, janelaMs = 10 * 60_000 } = {}) {
+  const st = resgates.get(chave) ?? { t: [], digitais: new Map() };
+  st.t = st.t.filter((x) => agora - x < janelaMs);
+  for (const [d, x] of st.digitais) if (agora - x > janelaMs) st.digitais.delete(d);
+  const resgatar = [];
+  let segurados = 0;
+  for (const a of anexos ?? []) {
+    const d = `${a?.size ?? "?"}:${a?.metadata?.width ?? "?"}x${a?.metadata?.height ?? "?"}`;
+    if (st.digitais.has(d) || st.t.length >= max) { segurados++; continue; }
+    st.digitais.set(d, agora); st.t.push(agora); resgatar.push(a);
+  }
+  resgates.set(chave, st);
+  if (resgates.size > 500) resgates.delete(resgates.keys().next().value);
+  return { resgatar, segurados };
+}

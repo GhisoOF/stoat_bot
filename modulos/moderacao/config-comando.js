@@ -5,8 +5,6 @@ import { EVENTOS } from "../core/log.js";
 import { MODOS as MODOS_BG, MODOS_EN as MODOS_BG_EN } from "./ban-global.js";
 import { escadaDePunicao, rotuloDegrau, GRUPOS_AUTOMOD, estadoDoGrupo } from "./automod-engine.js";
 import { tr, lingua } from "../core/i18n.js";
-import * as MAG from "../game/magias.js";
-import { MUNDO } from "../game/mundo.js";
 import { servidorNaLista } from "../core/env.js";
 import { loja as ecoLoja, totalEmCirculacao as ecoCirc, configDe as ecoConfigDe } from "../ferramentas/economia.js";
 
@@ -93,35 +91,9 @@ export async function cmdConfig(message, args, ctx) {
     Object.keys(EVENTOS).map((k) => `${on(lg.eventos?.[k] !== false)} \`${k}\``).join(" · "),
   ];
 
-  const moedas = (() => { try { return db.listarMoedas(MUNDO) ?? []; } catch { return []; } })();
-  const padraoMoeda = moedas.find((m) => m.padrao) ?? moedas[0] ?? null;
-  const nJogadores = (() => { try { return db.listarPersonagens(MUNDO, 9999)?.length ?? null; } catch { return null; } })();
-  const nMagias = MAG.CATALOGO.length;
-  const nCapturados = (() => { try { return db.listarCapturados(MUNDO)?.length ?? 0; } catch { return 0; } })();
-  const nFollowers = (() => {
-    try {
-      return db.listarPersonagens(MUNDO, 9999)
-        .reduce((t, x) => t + (db.listarFollowersDe(MUNDO, x.userId)?.length ?? 0), 0);
-    } catch { return 0; }
-  })();
-  const rpgLinhas = moedas.length ? (en ? [
-    `**Currencies:** ${moedas.length} — ${moedas.map((m) => `${m.simbolo}${m.id}`).join(" · ")}`,
-    `**Main:** ${padraoMoeda ? `${padraoMoeda.simbolo} ${padraoMoeda.nome}` : "_(none)_"}  ·  prices are shown in it`,
-    `**Exchange:** ${moedas.length > 1 ? `🟢 on — bank and player counter (\`${PREFIXO}game cambio\`)` : "🔴 needs at least 2 currencies"}`,
-    nJogadores != null ? `**Characters:** ${nJogadores}` : null,
-    `**Magic:** ${nMagias} spell(s) in the catalog · learned with \`${PREFIXO}game aprender\``,
-    `**Companions:** ${nFollowers} in play${nCapturados ? ` · ${nCapturados} captured (rescued on missions)` : ""}`,
-  ] : [
-    `**Moedas:** ${moedas.length} — ${moedas.map((m) => `${m.simbolo}${m.id}`).join(" · ")}`,
-    `**Principal:** ${padraoMoeda ? `${padraoMoeda.simbolo} ${padraoMoeda.nome}` : "_(nenhuma)_"}  ·  os preços aparecem nela`,
-    `**Câmbio:** ${moedas.length > 1 ? `🟢 ativo — banco e balcão (\`${PREFIXO}game cambio\`)` : "🔴 precisa de ao menos 2 moedas"}`,
-    nJogadores != null ? `**Personagens:** ${nJogadores}` : null,
-    `**Magia:** ${nMagias} magia(s) no catálogo · aprendidas com \`${PREFIXO}game aprender\``,
-    `**Companheiros:** ${nFollowers} em jogo${nCapturados ? ` · ${nCapturados} capturado(s) (resgate nas missões)` : ""}`,
-  ]).filter(Boolean) : [en
-    ? "_The world's currencies are created when the bot starts._"
-    : "_As moedas do mundo são criadas quando o bot sobe._"];
-
+  // (2 out 2026) O RPG saiu do &config: ele é um mundo só, configurado pelo dono
+  // do bot — nada ali é ajuste deste servidor. Onde se joga é o &acesso; quem
+  // quer tirar o jogo daqui usa `&comando desativar game` (aparece nos comandos).
   let ativas = T("_(nenhuma)_", "_(none)_");
   try {
     // Só quem tem aviso ou está silenciado AGORA (o registro antigo de quem
@@ -213,9 +185,6 @@ export async function cmdConfig(message, args, ctx) {
       "",
       T("**🎫 Tickets · 🪝 Webhooks · 🔊 Voz**", "**🎫 Tickets · 🪝 Webhooks · 🔊 Voice**"),
       ...tickVoz,
-      "",
-      T("**🎲 RPG** *(um mundo só, igual em todos os servidores — mercado e moedas próprios)*", "**🎲 RPG** *(one world, the same on every server — its own market and currencies)*"),
-      ...rpgLinhas,
       "",
       ...(temIA(serverId) ? [
         T("**🤖 IA (Judy)**", "**🤖 AI (Judy)**"),

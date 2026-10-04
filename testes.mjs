@@ -2625,9 +2625,9 @@ await t("&tutorial economia é a moeda do SERVIDOR; o mercado do RPG é PARTE do
     return (db.carregarSessaoPaginas(id)?.paginas ?? []).map((p) => `${p.title}\n${p.description}`).join("\n");
   };
   const rpg = await lerTudo("rpg");
-  assert.match(rpg, /Mercado e moedas do jogo/); assert.match(rpg, /&game carteira/);
+  assert.match(rpg, /Moedas e mercado/); assert.match(rpg, /&game carteira/);
   assert.doesNotMatch(rpg, /econom/i, "o RPG não fala em economia");
-  assert.match(await ler("mercado"), /RPG — como jogar/, "\"mercado\" leva ao tutorial do RPG");
+  assert.match(await ler("mercado"), /Wiki do RPG/, "\"mercado\" leva à wiki do RPG");
 });
 await t("&game economia não abre mais a carteira do jogo (o nome é da &economia)", async () => {
   const fonte = fs.readFileSync("./modulos/game/game.js", "utf8");
@@ -7999,7 +7999,8 @@ await t("nada do cargo de silêncio aposentado", () => {
   for (const p of todas) assert.doesNotMatch(String(p.texto), /tudo negado|everything denied|cargo de silêncio|silence role|cargomudo/i, p.onde);
 });
 await t("limitar canais com &acesso avisa que vale para todos os comandos", () => {
-  const jogo = todas.filter((p) => /acesso canal somente/.test(p.texto) && /game|jogo/i.test(p.texto));
+  // (2 out 2026: a área "game" do tutorial saiu — o aviso continua onde o &acesso aparece)
+  const jogo = todas.filter((p) => /acesso canal somente/.test(p.texto));
   assert.ok(jogo.length >= 2);
   for (const p of jogo) assert.match(p.texto, /todos|every/, p.onde);
   for (const p of todas) assert.doesNotMatch(p.texto, /continua funcionando nos outros canais|keeps working in the other channels/, p.onde);
@@ -9406,6 +9407,109 @@ ok(am.antiInvite.enabled === false, "os nomes antigos continuam valendo (antiinv
 ok(estadoDoGrupo(am, "antilink").ligadas < 2, "  → e o grupo antilink mostra a parte desligada");
 
 console.log(`\nAUTOMOD (grupos): ${pass} ok, ${fail} falha(s)`);
+process.exit(fail ? 1 : 0);
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+// wiki-rpg  (o &tutorial rpg como wiki do jogo — 2 out 2026)
+// ════════════════════════════════════════════════════════════════════════════
+SUITES["wiki-rpg"] = async () => {
+const fs = (await import("node:fs")).default;
+process.env.DB_PATH = "/tmp/wiki-rpg.db";
+for (const f of ["/tmp/wiki-rpg.db", "/tmp/wiki-rpg.db-wal", "/tmp/wiki-rpg.db-shm"]) fs.rmSync(f, { force: true });
+const db = await import("./modulos/core/db.js"); db.abrirBanco(process.env.DB_PATH);
+const tutorial = await import("./modulos/moderacao/tutorial.js");
+let pass = 0, fail = 0;
+const ok = (cond, msg, extra = "") => { cond ? pass++ : fail++; console.log(`${cond ? "✅" : "❌"} ${msg}${!cond && extra ? `\n     ${extra}` : ""}`); };
+let seq = 0;
+const ler = async (args, lang, nivel = "membro") => {
+  const id = `W${seq++}`;
+  await tutorial.cmdTutorial({ channel: {}, authorId: "u" }, args, { config: { language: lang }, COR: {}, PREFIXO: "&", serverId: "s",
+    sendEmbed: async () => ({ id, react: async () => {} }), membroTemPermissao: () => nivel !== "membro", ehSuperAdmin: () => false, getServer: async () => ({ id: "s" }) });
+  return (db.carregarSessaoPaginas(id)?.paginas ?? []).map((p) => `${p.title}\n${p.description}`).join("\n");
+};
+for (const lang of ["pt", "en"]) {
+  const w = await ler(["rpg"], lang);
+  const ATRIB = lang === "pt"
+    ? ["Força", "Destreza", "Inteligência", "Carisma", "Vida", "Resistência", "Agilidade", "Sorte", "Mana"]
+    : ["Strength", "Dexterity", "Intelligence", "Charisma", "Health", "Resistance", "Agility", "Luck", "Mana"];
+  // cada atributo aparece com uma explicação (o print mostrava só os nomes)
+  const semExplicacao = ATRIB.filter((a) => !new RegExp(`\\*\\*${a}\\*\\*[^\\n]* — .{25,}`).test(w));
+  ok(!semExplicacao.length, `★ [${lang}] a wiki explica o que cada um dos 9 atributos faz`, semExplicacao.join(", "));
+  const SECOES = lang === "pt" ? ["Personagem", "atributos", "Missões", "Co-op", "resetar pontos", "Magias", "Itens", "Companheiros", "Moedas", "Dungeon"]
+    : ["Character", "attributes", "Missions", "co-op", "resetar pontos", "Spells", "Items", "Companions", "Currencies", "Dungeon"];
+  ok(SECOES.every((x) => w.includes(x)), `[${lang}] tem as seções de uma wiki (personagem, atributos, missões, magias, itens, companheiros, moedas, dungeon)`);
+  ok(/Página \*\*1\/|Page \*\*1\//.test(w) || (w.match(/🎲/g) ?? []).length >= 2, `[${lang}] e vem em páginas`);
+}
+const indiceStaff = await ler(["game"], "pt", "staff");
+ok(!/RPG neste servidor/.test(indiceStaff), "a área de configuração do RPG saiu (o dono configura; onde se joga é o &acesso)");
+
+console.log(`\nWIKI DO RPG: ${pass} ok, ${fail} falha(s)`);
+process.exit(fail ? 1 : 0);
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+// coop-respec  (co-op de dungeon e resetar pontos pagando — 2 out 2026)
+// ════════════════════════════════════════════════════════════════════════════
+SUITES["coop-respec"] = async () => {
+const fs = (await import("node:fs")).default;
+process.env.DB_PATH = "/tmp/coop.db"; process.env.CONFIG_PATH = "/tmp/coop.json";
+for (const f of ["/tmp/coop.db", "/tmp/coop.db-wal", "/tmp/coop.db-shm", "/tmp/coop.json"]) fs.rmSync(f, { force: true });
+const db = await import("./modulos/core/db.js"); db.abrirBanco(process.env.DB_PATH);
+const game = await import("./modulos/game/game.js");
+const { MUNDO } = await import("./modulos/game/mundo.js");
+const q = [console.log, console.info, console.warn]; console.log = console.info = console.warn = () => {};
+game.iniciarCatalogo();
+[console.log, console.info, console.warn] = q;
+let pass = 0, fail = 0;
+const ok = (cond, msg, extra = "") => { cond ? pass++ : fail++; console.log(`${cond ? "✅" : "❌"} ${msg}${!cond && extra ? `\n     ${extra}` : ""}`); };
+let ult = null;
+const jogar = async (uid, txt, canal = "C1") => {
+  const ctx = { serverId: "S", PREFIXO: "&", COR: { erro: 1, aviso: 2, sucesso: 3, info: 4, mod: 5 }, config: { language: "pt" },
+    sendEmbed: async (_c, e) => { ult = e; return { id: "m", react: async () => {} }; }, getServer: async () => ({ id: "S", channels: [] }), ehSuperAdmin: () => false, membroTemPermissao: () => true };
+  await game.cmdGame({ authorId: uid, author: { username: uid }, channel: { id: canal }, channelId: canal, mentionIds: [] }, txt.split(" "), ctx);
+  return `${ult?.title}\n${ult?.description}`;
+};
+
+console.log("\n── resetar pontos ──");
+await jogar("RUI", "criar Rui");
+db.salvarPersonagem(MUNDO, "RUI", { nivel: 5, forca: 9, destreza: 4, pontos: 0.5 });   // base do nível 5 = 3
+let t = await jogar("RUI", "resetar pontos");
+ok(/7\*\* ponto\(s\) voltam/.test(t) && /Preço/.test(t), "★ mostra quantos pontos voltam (6 da força + 1 da destreza) e o preço, sem cobrar ainda", t);
+t = await jogar("RUI", "resetar pontos confirmar");
+ok(/Não dá ainda/.test(t) && db.getPersonagem(MUNDO, "RUI").forca === 9, "sem Ouro suficiente, nada muda");
+db.creditar(MUNDO, "RUI", "ouro", 100000);
+t = await jogar("RUI", "resetar pontos confirmar");
+const rui = db.getPersonagem(MUNDO, "RUI");
+ok(rui.forca === 3 && rui.destreza === 3 && Math.abs(rui.pontos - 7.5) < 1e-9, "★ confirmado: atributos na base do nível e os 7 pontos de volta (7,5 com o que sobrava)", JSON.stringify({ f: rui.forca, d: rui.destreza, p: rui.pontos }));
+ok(db.getSaldo(MUNDO, "RUI", "ouro") < 100000, "  → e cobrou em Ouro");
+ok(/^🎭|Isso apaga/.test(await jogar("RUI", "resetar")) && !!db.getPersonagem(MUNDO, "RUI"), "`&game resetar` sozinho continua sendo o apagar (pede confirmação) — não confunde com o respec");
+
+console.log("\n── co-op de dungeon ──");
+for (const u of ["ANA", "BIA", "CAU", "DUD", "EVA"]) await jogar(u, `criar ${u}`);
+t = await jogar("ANA", "coop abrir entregar encomendas");
+ok(/missões de dungeon/.test(t), "missão de mercado não vira co-op (é solo)");
+t = await jogar("ANA", "coop abrir cacar o lobo branco");
+ok(/Grupo para Caçar o Lobo Branco/.test(t) && /1\/4/.test(t), "★ abre o chamado (sem acento também acha a missão)");
+t = await jogar("BIA", "coop partir");
+ok(/Só quem abriu/.test(t), "só quem abriu decide partir");
+await jogar("BIA", "coop entrar"); await jogar("CAU", "coop entrar");
+const r0 = Math.random; Math.random = () => 0;   // tudo dá certo
+let antes = db.getPersonagem(MUNDO, "ANA").xp;
+t = await jogar("DUD", "coop entrar");
+Math.random = r0;
+ok(/Missão do grupo cumprida/.test(t) && /4 aventureiro/.test(t), "★ com 4, parte sozinho — um desfecho para o grupo", t);
+ok(["ANA", "BIA", "CAU", "DUD"].every((u) => t.includes(`<@${u}>`)), "  → e cada um aparece com o seu resultado");
+const xpAna = db.getPersonagem(MUNDO, "ANA").xp - antes;
+ok(/\+\d+ XP/.test(t) && xpAna > 0, "  → XP para cada um");
+t = await jogar("EVA", "coop entrar");
+ok(/Nenhum grupo aberto/.test(t), "depois de partir, o chamado fecha");
+t = await jogar("EVA", "coop abrir cacar o lobo branco");
+await jogar("ANA", "coop entrar");
+ok(/espera desta missão|já|aventureiro|Grupo/.test(ult?.description ?? "") , "quem acabou de ir respeita a espera da missão");
+t = await jogar("EVA", "coop cancelar");
+ok(/cancelado/.test(t), "quem abriu pode cancelar");
+console.log(`\nCO-OP E RESPEC: ${pass} ok, ${fail} falha(s)`);
 process.exit(fail ? 1 : 0);
 };
 

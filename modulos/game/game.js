@@ -228,6 +228,12 @@ const ENERGIA_MAX = 5;
 const CHANCE_RESGATE = 0.25;
 const BONUS_DONO = 3;        // dono ≈ 75%
 const JANELA_DONO_H = 6;     // horas em que só o dono pode tentar
+// Co-op de dungeon: um grupo aberto por canal, até 4 pessoas, vale 10 min.
+const GRUPOS_COOP = new Map();
+const COOP_MAX = 4;
+const COOP_VALIDADE_MS = 10 * 60_000;
+// Resetar pontos: Ouro por nível (segue o P do mercado)
+const RESPEC_POR_NIVEL = 60;
 const ENERGIA_MS = 60 * 60_000;   // 1 ponto por hora
 
 export function energiaAtual(f) {
@@ -406,6 +412,126 @@ function montarFicha(p, nomeExibido, P, serverId, userId, lang = "pt") {
   return linhas.join("\n");
 }
 
+// O que uma missão faz com UM personagem depois de resolvida: XP, nível, moeda,
+// energia e captura dos companheiros, resgate na dungeon e loot. Saiu de dentro
+// do `&game missao` (2 out 2026) para o co-op usar a mesma coisa com cada
+// membro do grupo — o desfecho é um só, as consequências são de cada um.
+//   divisao: em quantos as moedas se dividem (co-op) · multXp: bônus de grupo
+//   tamanhoLoot: o tamanho que divide a chance de loot (a party + o grupo)
+function aplicarDesfecho({ serverId, eu, p, missao, r, attr, tamanhoParty, party, agora, divisao = 1, multXp = 1, tamanhoLoot = null }) {
+  // XP com o bônus de INT/Sorte
+  const xpFinal = Math.round(r.xp * bonusXp(attr.inteligencia, attr.sorte) * multXp);
+  const depois = aplicarXp(p, xpFinal);
+
+  const campos = {
+    xp: depois.xp, nivel: depois.nivel, pontos: depois.pontos,
+    ultimaMissao: agora,
+    missoesFeitas: (p.missoesFeitas ?? 0) + 1,
+  };
+  // base sobe sozinha com o nível (§2 do design)
+  if (depois.ganhoBase > 0) {
+    for (const a of db.ATRIBUTOS) campos[a] = (p[a] ?? 1) + depois.ganhoBase;
+  }
+  if (r.desfecho === "caiu") campos.recuperandoAte = agora + 30 * 60_000;
+  db.salvarPersonagem(serverId, eu, campos);
+
+  // ── moeda ──
+  const moeda = garantirMoeda(serverId);
+  const { pSuave } = pDaMoeda(serverId, moeda);
+  let moedaGanha = 0, moedaPerdida = 0;
+
+  let moedaSorteada = moeda;
+  if (r.exito && r.sobreviveu) {
+    // Qual moeda cai depende da dificuldade configurada em cada uma
+    const sorteada = MERC.sortearMoeda(db.listarMoedas(serverId), missao);
+    if (sorteada) moedaSorteada = sorteada;
+    const bruto = MERC.moedaDaMissao(missao, pSuave, attr.sorte, moedaSorteada.dificuldade ?? 1);
+    const meu = Math.round((tamanhoParty ? bruto / (1 + 0.30 * tamanhoParty) : bruto) / divisao);
+    moedaGanha = pagarAoJogador(serverId, eu, db.getMoeda(serverId, moedaSorteada.id), meu);
+  } else if (r.desfecho === "caiu") {
+    // perde uma fração do que carrega — e vai para a DUNGEON
+    const carrega = db.getSaldo(serverId, eu, moeda.id);
+    moedaPerdida = Math.floor(carrega * MERC.perda(pSuave));
+    if (moedaPerdida > 0) {
+      db.debitar(serverId, eu, moeda.id, moedaPerdida);
+      const m = db.getMoeda(serverId, moeda.id);
+      db.salvarMoeda(serverId, moeda.id, { dungeon: (m?.dungeon ?? 0) + moedaPerdida });
+    }
+  }
+
+  // followers gastam energia em dungeon
+  if (missao.tipo !== "mercado") for (const f of party) gastarEnergia(f, 1);
+
+  // ── se a party caiu, os followers são CAPTURADOS na dungeon ──
+  const capturados = [];
+  if (r.desfecho === "caiu") {
+    for (const f of party) {
+      // em fácil/médio eles só ficam feridos; em difícil, podem ser capturados
+      const chanceCaptura = missao.dificuldade === "dificil" ? 0.5
+        : missao.dificuldade === "medio" ? 0.2 : 0;
+      if (Math.random() < chanceCaptura) {
+        const cat = db.getFollowerCatalogo(f.catalogoId);
+        db.capturarFollower(f.id);
+        capturados.push(cat?.nome ?? "?");
+      } else {
+        db.salvarFollower(f.id, { naParty: 0, energia: 0, energiaEm: Date.now() });
+      }
+    }
+  }
+
+  const resgatados = [];
+  if (r.desfecho !== "caiu") {
+    const presos = db.listarCapturados(serverId);
+    const meus = presos.filter((f) => f.donoOriginal === eu);
+    // Fora da janela do dono, qualquer um pode trazer qualquer um de volta.
+    const livres = presos.filter((f) => f.donoOriginal !== eu
+      && (Date.now() - (f.capturadoEm ?? 0)) / 3600000 >= JANELA_DONO_H);
+    const candidato = meus[0] ?? livres[0] ?? null;
+    if (candidato) {
+      const ehDono = candidato.donoOriginal === eu;
+      // Missão cumprida dá a chance cheia; ter voltado sem cumprir dá metade.
+      const chance = CHANCE_RESGATE * (ehDono ? BONUS_DONO : 1) * (r.exito ? 1 : 0.5);
+      if (Math.random() < Math.min(0.95, chance)) {
+        db.resgatarFollower(candidato.id, eu);
+        const cat = db.getFollowerCatalogo(candidato.catalogoId);
+        resgatados.push({ nome: cat?.nome ?? "?", ehDono });
+      }
+    }
+  }
+
+  // ── loot ──
+  let ganhou = null;
+  let ganhouFollower = null;
+  if (r.exito && r.sobreviveu) {
+    const raridade = MISS.sortearRaridade(missao, attr.sorte, Math.random, tamanhoLoot ?? tamanhoParty);
+    if (raridade) {
+      const candidatos = db.listarItens({ raridade });
+      if (candidatos.length) {
+        ganhou = candidatos[Math.floor(Math.random() * candidatos.length)];
+        db.darItem(serverId, eu, ganhou.id);
+      }
+    }
+    // chance de um FOLLOWER aparecer como loot (só em dungeon)
+    if (missao.tipo !== "mercado") {
+      const chanceFol = { facil: 0.04, medio: 0.07, dificil: 0.12 }[missao.dificuldade] ?? 0;
+      if (Math.random() < chanceFol) {
+        const raridades = { facil: ["comum"], medio: ["comum", "incomum"],
+          dificil: ["incomum", "raro", "epico", "lendario"] }[missao.dificuldade] ?? ["comum"];
+        const pool = db.listarFollowersCatalogo()
+          .filter((f) => raridades.includes(f.raridade));
+        if (pool.length) {
+          const cat = pool[Math.floor(Math.random() * pool.length)];
+          const nv = Math.max(1, Math.round((missao.nivel ?? 1) * 0.6));
+          db.recrutarFollower(serverId, eu, cat.id, nv);
+          ganhouFollower = { cat, nivel: nv };
+        }
+      }
+    }
+  }
+
+  return { xpFinal, depois, moedaGanha, moedaPerdida, moedaSorteada, moeda, pSuave, capturados, resgatados, ganhou, ganhouFollower };
+}
+
 export async function cmdGame(message, args, ctx) {
   const { COR, PREFIXO: P, getServer } = ctx;
   const lang = lingua(ctx);
@@ -462,7 +588,8 @@ export async function cmdGame(message, args, ctx) {
   }
 
   // ── apagar ──
-  if (["apagar", "deletar", "resetar"].includes(sub)) {
+  // ("resetar pontos" é o respec, mais abaixo — não apaga o personagem)
+  if (["apagar", "deletar", "resetar"].includes(sub) && !["pontos", "points", "atributos"].includes(String(args[1] ?? "").toLowerCase())) {
     const p = db.getPersonagem(serverId, eu);
     if (!p) {
       return sendEmbed(message.channel, tr(ctx,
@@ -2140,6 +2267,180 @@ export async function cmdGame(message, args, ctx) {
       ]).filter(Boolean).join("\n"), colour: COR.sucesso });
   }
 
+  // ── resetar pontos (respec, pago) — 2 out 2026 ──
+  // Devolve todos os pontos gastos para redistribuir. Os atributos voltam à
+  // base do nível (1 + 1 a cada 2 níveis) e o que estava acima disso vira
+  // ponto livre de novo. Custa Ouro (cresce com o nível e segue o P, como
+  // tudo no mercado) — o dinheiro volta para o banco.
+  if (["resetar", "respec", "redistribuir", "reset"].includes(sub) && ["pontos", "points", "atributos"].includes(String(args[1] ?? "").toLowerCase())) {
+    const p = db.getPersonagem(serverId, eu);
+    if (!p) return sendEmbed(message.channel, { title: en ? "🎭 No character" : "🎭 Sem personagem", description: `\`${P}game criar\``, colour: COR.aviso });
+    const base = 1 + baseDoNivel(p.nivel ?? 1);
+    let devolver = 0;
+    for (const a of db.ATRIBUTOS) devolver += Math.max(0, (p[a] ?? 1) - base);
+    const moeda = garantirMoeda(serverId);
+    const { pSuave } = pDaMoeda(serverId, moeda);
+    const preco = Math.max(1, Math.round(RESPEC_POR_NIVEL * (p.nivel ?? 1) * MERC.mult(pSuave)));
+    if (!devolver) {
+      return sendEmbed(message.channel, { title: en ? "🔄 Nothing to reset" : "🔄 Nada para resetar", colour: COR.info,
+        description: en ? "You haven't spent any points above your level's base." : "Você não gastou nenhum ponto acima da base do seu nível." });
+    }
+    if (!args.slice(2).some((x) => ["confirmar", "confirm"].includes(String(x).toLowerCase()))) {
+      return sendEmbed(message.channel, { title: en ? "🔄 Reset points" : "🔄 Resetar pontos", colour: COR.aviso, description: [
+        en ? `All attributes go back to the level-${p.nivel} base (**${base}** each) and **${devolver}** point(s) come back to spend again.`
+          : `Todos os atributos voltam à base do nível ${p.nivel} (**${base}** cada) e **${devolver}** ponto(s) voltam para você gastar de novo.`,
+        en ? `**Price:** ${moeda.simbolo} ${fmt(preco)} ${moeda.nome} · you have ${fmt(db.getSaldo(serverId, eu, moeda.id))}`
+          : `**Preço:** ${moeda.simbolo} ${fmt(preco)} ${moeda.nome} · você tem ${fmt(db.getSaldo(serverId, eu, moeda.id))}`,
+        "",
+        `\`${P}game resetar pontos confirmar\``,
+      ].join("\n") });
+    }
+    if (db.getSaldo(serverId, eu, moeda.id) < preco) {
+      return sendEmbed(message.channel, { title: en ? "🔄 Not enough" : "🔄 Não dá ainda", colour: COR.aviso,
+        description: en ? `It costs ${moeda.simbolo} ${fmt(preco)}; you have ${fmt(db.getSaldo(serverId, eu, moeda.id))}.` : `Custa ${moeda.simbolo} ${fmt(preco)}; você tem ${fmt(db.getSaldo(serverId, eu, moeda.id))}.` });
+    }
+    jogadorPaga(serverId, eu, moeda, preco);
+    const campos = { pontos: (p.pontos ?? 0) + devolver };
+    for (const a of db.ATRIBUTOS) campos[a] = base;
+    db.salvarPersonagem(serverId, eu, campos);
+    return sendEmbed(message.channel, { title: en ? "🔄 Points reset" : "🔄 Pontos resetados", colour: COR.sucesso, description: en
+      ? `**${devolver}** point(s) back — **${fmt(campos.pontos)}** free now. \`${P}game pontos <attribute> [how many]\``
+      : `**${devolver}** ponto(s) de volta — **${fmt(campos.pontos)}** livres agora. \`${P}game pontos <atributo> [quantos]\`` });
+  }
+
+  // ── co-op de dungeon (2 out 2026) ──
+  // Alguém abre um chamado para uma missão de dungeon; até 4 pessoas entram
+  // (cada uma com os companheiros que leva). Parte quando enche, quando quem
+  // abriu manda partir, ou some em 10 min. O desfecho é UM para o grupo (os
+  // atributos somam; cada membro a mais pesa 18%, como na party) e as
+  // consequências são de cada um: XP inteiro (+10% por parceiro), as moedas
+  // divididas, loot e quedas de cada um.
+  if (["coop", "co-op", "grupo", "chamado", "group"].includes(sub)) {
+    const acao = String(args[1] ?? "").toLowerCase();
+    const canalId = message.channelId ?? message.channel?.id;
+    const agora = Date.now();
+    const g0 = GRUPOS_COOP.get(canalId);
+    if (g0 && agora - g0.criadoEm > COOP_VALIDADE_MS) GRUPOS_COOP.delete(canalId);
+    const grupo = GRUPOS_COOP.get(canalId) ?? null;
+    const prev = (g) => {
+      const ms = g.membros.map((uid) => ({ uid, p: db.getPersonagem(serverId, uid) })).filter((x) => x.p)
+        .map(({ uid, p }) => ({ p, ...atributosDaParty(p, serverId, uid) }));
+      const soma = {};
+      for (const m of ms) for (const a of db.ATRIBUTOS) soma[a] = (soma[a] ?? 0) + (m.attr[a] ?? 0);
+      const tamanho = Math.max(0, ms.length - 1) + ms.reduce((t, m) => t + (m.tamanhoParty ?? 0), 0);
+      return MISS.previsao(soma, g.missao, ms.flatMap((m) => m.magias ?? []), tamanho);
+    };
+    const painel = (g, titulo) => {
+      const pv = prev(g);
+      return { title: titulo ?? (en ? `⚔️ Group for ${g.missao.nome}` : `⚔️ Grupo para ${g.missao.nome}`), colour: COR.info, description: [
+        `_${g.missao.descricao}_`, "",
+        `${en ? "**Members**" : "**Membros**"} (${g.membros.length}/${COOP_MAX}): ${g.membros.map((u) => `<@${u}>`).join(" · ")}`,
+        en ? `**Together:** ${(pv.exito * 100).toFixed(0)}% to complete · ${(pv.sobrevivencia * 100).toFixed(0)}% to survive`
+          : `**Juntos:** ${(pv.exito * 100).toFixed(0)}% de cumprir · ${(pv.sobrevivencia * 100).toFixed(0)}% de sobreviver`,
+        "",
+        en ? `\`${P}game coop entrar\` — join · \`${P}game coop sair\` — leave` : `\`${P}game coop entrar\` — entra · \`${P}game coop sair\` — sai`,
+        en ? `_<@${g.lider}>: \`${P}game coop partir\` leaves now · \`${P}game coop cancelar\`. It leaves by itself at ${COOP_MAX}, and expires in 10 min._`
+          : `_<@${g.lider}>: \`${P}game coop partir\` parte agora · \`${P}game coop cancelar\`. Parte sozinho com ${COOP_MAX}, e expira em 10 min._`,
+      ].join("\n") };
+    };
+    // quem pode ir agora (personagem, recuperação, espera da missão, energia dos companheiros)
+    const impedimento = (uid, missao) => {
+      const p = db.getPersonagem(serverId, uid);
+      if (!p) return en ? "has no character" : "não tem personagem";
+      if ((p.recuperandoAte ?? 0) > Date.now()) return en ? "is still recovering" : "ainda está se recuperando";
+      if ((p.ultimaMissao ?? 0) + MISS.cooldownMs(missao) > Date.now()) return en ? "is still in this mission's cooldown" : "ainda está na espera desta missão";
+      if (db.getParty(serverId, uid).some((f) => energiaAtual(f) < 1)) return en ? "has a companion out of energy" : "tem companheiro sem energia";
+      return null;
+    };
+
+    if (!acao) {
+      return sendEmbed(message.channel, grupo ? painel(grupo) : { title: en ? "⚔️ Dungeon co-op" : "⚔️ Co-op de dungeon", colour: COR.info, description: [
+        en ? "Up to 4 people (each with their companions) take on a dungeon mission together." : "Até 4 pessoas (cada uma com seus companheiros) encaram juntas uma missão de dungeon.",
+        en ? "One outcome for the group — attributes add up; full XP for each (+10% per partner), coins split, each one's own loot."
+          : "Um desfecho para o grupo — os atributos somam; XP inteiro para cada um (+10% por parceiro), moedas divididas, loot de cada um.",
+        "",
+        `\`${P}game coop abrir <${en ? "mission" : "missão"}>\` · \`${P}game coop entrar\` · \`${P}game coop partir\``,
+      ].join("\n") });
+    }
+
+    if (["abrir", "open", "criar"].includes(acao)) {
+      if (grupo) return sendEmbed(message.channel, painel(grupo, en ? "⚔️ There's already an open group here" : "⚔️ Já tem um grupo aberto aqui"));
+      const missao = MISS.acharMissao(args.slice(2).join(" "));
+      if (!missao) return sendEmbed(message.channel, { title: en ? "❓ Which mission?" : "❓ Qual missão?", colour: COR.aviso, description: `\`${P}game missao\` · \`${P}game coop abrir <${en ? "name" : "nome"}>\`` });
+      if (missao.tipo === "mercado") return sendEmbed(message.channel, { title: "⚔️", colour: COR.aviso, description: en ? "Co-op is for dungeon missions (the market ones are solo)." : "O co-op é para missões de dungeon (as do mercado são solo)." });
+      const imp = impedimento(eu, missao);
+      if (imp) return sendEmbed(message.channel, { title: "⚔️", colour: COR.aviso, description: `<@${eu}> ${imp}.` });
+      const novo = { lider: eu, missao, membros: [eu], criadoEm: agora, canalId };
+      GRUPOS_COOP.set(canalId, novo);
+      setTimeout(() => { if (GRUPOS_COOP.get(canalId) === novo) GRUPOS_COOP.delete(canalId); }, COOP_VALIDADE_MS).unref?.();
+      return sendEmbed(message.channel, painel(novo));
+    }
+    if (!grupo) return sendEmbed(message.channel, { title: "⚔️", colour: COR.aviso, description: en ? `No open group in this channel. \`${P}game coop abrir <mission>\`` : `Nenhum grupo aberto neste canal. \`${P}game coop abrir <missão>\`` });
+
+    if (["entrar", "join"].includes(acao)) {
+      if (grupo.membros.includes(eu)) return sendEmbed(message.channel, painel(grupo));
+      if (grupo.membros.length >= COOP_MAX) return sendEmbed(message.channel, { title: "⚔️", colour: COR.aviso, description: en ? "The group is full." : "O grupo está cheio." });
+      const imp = impedimento(eu, grupo.missao);
+      if (imp) return sendEmbed(message.channel, { title: "⚔️", colour: COR.aviso, description: `<@${eu}> ${imp}.` });
+      grupo.membros.push(eu);
+      if (grupo.membros.length < COOP_MAX) return sendEmbed(message.channel, painel(grupo));
+      // cheio: parte sozinho
+    } else if (["sair", "leave"].includes(acao)) {
+      if (eu === grupo.lider) { GRUPOS_COOP.delete(canalId); return sendEmbed(message.channel, { title: "⚔️", colour: COR.aviso, description: en ? "The leader left — the group was disbanded." : "Quem abriu saiu — o grupo foi desfeito." }); }
+      grupo.membros = grupo.membros.filter((u) => u !== eu);
+      return sendEmbed(message.channel, painel(grupo));
+    } else if (["cancelar", "cancel", "fechar"].includes(acao)) {
+      if (eu !== grupo.lider) return sendEmbed(message.channel, { title: "⚔️", colour: COR.aviso, description: en ? "Only whoever opened it can cancel." : "Só quem abriu pode cancelar." });
+      GRUPOS_COOP.delete(canalId);
+      return sendEmbed(message.channel, { title: "⚔️", colour: COR.info, description: en ? "Group cancelled." : "Grupo cancelado." });
+    } else if (["partir", "ir", "go", "start"].includes(acao)) {
+      if (eu !== grupo.lider) return sendEmbed(message.channel, { title: "⚔️", colour: COR.aviso, description: en ? "Only whoever opened it decides when to leave." : "Só quem abriu decide a hora de partir." });
+    } else {
+      return sendEmbed(message.channel, painel(grupo));
+    }
+
+    // ── parte ──
+    GRUPOS_COOP.delete(canalId);
+    const missao = grupo.missao;
+    const vao = [], ficaram = [];
+    for (const uid of grupo.membros) {
+      const imp = impedimento(uid, missao);
+      if (imp) { ficaram.push(`<@${uid}> ${imp}`); continue; }
+      const p = db.getPersonagem(serverId, uid);
+      vao.push({ uid, p, ...atributosDaParty(p, serverId, uid), party: db.getParty(serverId, uid) });
+    }
+    if (!vao.length) return sendEmbed(message.channel, { title: "⚔️", colour: COR.aviso, description: ficaram.join("\n") });
+    const n = vao.length;
+    const soma = {};
+    for (const m of vao) for (const a of db.ATRIBUTOS) soma[a] = (soma[a] ?? 0) + (m.attr[a] ?? 0);
+    const tamanho = (n - 1) + vao.reduce((t, m) => t + (m.tamanhoParty ?? 0), 0);
+    const r = MISS.resolver(soma, missao, Math.random, vao.flatMap((m) => m.magias ?? []), tamanho);
+    const multXp = 1 + 0.10 * (n - 1);
+    const linhas = [`**${missao.nome}** — ${n} ${en ? "adventurer(s)" : "aventureiro(s)"}`,
+      en ? `_${(r.previsao.exito * 100).toFixed(0)}% to complete · ${(r.previsao.sobrevivencia * 100).toFixed(0)}% to survive_`
+        : `_${(r.previsao.exito * 100).toFixed(0)}% de cumprir · ${(r.previsao.sobrevivencia * 100).toFixed(0)}% de sobreviver_`, ""];
+    for (const m of vao) {
+      const res = aplicarDesfecho({ serverId, eu: m.uid, p: m.p, missao, r, attr: m.attr, tamanhoParty: m.tamanhoParty,
+        party: m.party, agora: Date.now(), divisao: n, multXp, tamanhoLoot: (m.tamanhoParty ?? 0) + (n - 1) });
+      const partes = [`+${res.xpFinal} XP`];
+      if (res.moedaGanha > 0) partes.push(`${res.moedaSorteada.simbolo} +${fmt(res.moedaGanha)}`);
+      if (res.moedaPerdida > 0) partes.push(`${res.moeda.simbolo} −${fmt(res.moedaPerdida)}`);
+      if (res.depois.subiu) partes.push(en ? `🎉 level ${res.depois.nivel}` : `🎉 nível ${res.depois.nivel}`);
+      if (res.ganhou) partes.push(`🎁 ${(RARIDADE_INFO[res.ganhou.raridade] ?? {}).emoji ?? ""} ${res.ganhou.nome}`);
+      if (res.ganhouFollower) partes.push(`👥 ${res.ganhouFollower.cat.nome}`);
+      if (res.capturados.length) partes.push(`⛓️ ${res.capturados.join(", ")}`);
+      if (res.resgatados.length) partes.push(`🔓 ${res.resgatados.map((x) => x.nome).join(", ")}`);
+      linhas.push(`<@${m.uid}>${m.tamanhoParty ? ` _(+${m.tamanhoParty})_` : ""} — ${partes.join(" · ")}`);
+    }
+    if (ficaram.length) linhas.push("", (en ? "**Stayed behind:** " : "**Ficaram para trás:** ") + ficaram.join(" · "));
+    if (r.desfecho === "caiu") linhas.push("", en ? "_The whole group fell: ~30 min recovering each. Levels and gear are never lost._" : "_O grupo inteiro caiu: ~30 min se recuperando cada um. Nível e equipamento nunca se perdem._");
+    return sendEmbed(message.channel, {
+      title: (en ? { sucesso: "🏆 Group mission complete", falha: "😐 The group didn't make it", caiu: "💀 The group fell" }
+        : { sucesso: "🏆 Missão do grupo cumprida", falha: "😐 O grupo não conseguiu", caiu: "💀 O grupo caiu" })[r.desfecho],
+      description: linhas.join("\n"),
+      colour: { sucesso: COR.sucesso, falha: COR.aviso, caiu: COR.erro }[r.desfecho] });
+  }
+
   // ── contratar mercenário ──
   if (["contratar", "recrutar"].includes(sub)) {
     const p = db.getPersonagem(serverId, eu);
@@ -2821,115 +3122,8 @@ export async function cmdGame(message, args, ctx) {
 
     const r = MISS.resolver(attr, missao, Math.random, magias, tamanhoParty);
 
-    // XP com o bônus de INT/Sorte
-    const xpFinal = Math.round(r.xp * bonusXp(attr.inteligencia, attr.sorte));
-    const depois = aplicarXp(p, xpFinal);
-
-    const campos = {
-      xp: depois.xp, nivel: depois.nivel, pontos: depois.pontos,
-      ultimaMissao: agora,
-      missoesFeitas: (p.missoesFeitas ?? 0) + 1,
-    };
-    // base sobe sozinha com o nível (§2 do design)
-    if (depois.ganhoBase > 0) {
-      for (const a of db.ATRIBUTOS) campos[a] = (p[a] ?? 1) + depois.ganhoBase;
-    }
-    if (r.desfecho === "caiu") campos.recuperandoAte = agora + 30 * 60_000;
-    db.salvarPersonagem(serverId, eu, campos);
-
-    // ── moeda ──
-    const moeda = garantirMoeda(serverId);
-    const { pSuave } = pDaMoeda(serverId, moeda);
-    let moedaGanha = 0, moedaPerdida = 0;
-
-    let moedaSorteada = moeda;
-    if (r.exito && r.sobreviveu) {
-      // Qual moeda cai depende da dificuldade configurada em cada uma
-      const sorteada = MERC.sortearMoeda(db.listarMoedas(serverId), missao);
-      if (sorteada) moedaSorteada = sorteada;
-      const bruto = MERC.moedaDaMissao(missao, pSuave, attr.sorte, moedaSorteada.dificuldade ?? 1);
-      const meu = tamanhoParty ? Math.round(bruto / (1 + 0.30 * tamanhoParty)) : bruto;
-      moedaGanha = pagarAoJogador(serverId, eu, db.getMoeda(serverId, moedaSorteada.id), meu);
-    } else if (r.desfecho === "caiu") {
-      // perde uma fração do que carrega — e vai para a DUNGEON
-      const carrega = db.getSaldo(serverId, eu, moeda.id);
-      moedaPerdida = Math.floor(carrega * MERC.perda(pSuave));
-      if (moedaPerdida > 0) {
-        db.debitar(serverId, eu, moeda.id, moedaPerdida);
-        const m = db.getMoeda(serverId, moeda.id);
-        db.salvarMoeda(serverId, moeda.id, { dungeon: (m?.dungeon ?? 0) + moedaPerdida });
-      }
-    }
-
-    // followers gastam energia em dungeon
-    if (missao.tipo !== "mercado") for (const f of party) gastarEnergia(f, 1);
-
-    // ── se a party caiu, os followers são CAPTURADOS na dungeon ──
-    const capturados = [];
-    if (r.desfecho === "caiu") {
-      for (const f of party) {
-        // em fácil/médio eles só ficam feridos; em difícil, podem ser capturados
-        const chanceCaptura = missao.dificuldade === "dificil" ? 0.5
-          : missao.dificuldade === "medio" ? 0.2 : 0;
-        if (Math.random() < chanceCaptura) {
-          const cat = db.getFollowerCatalogo(f.catalogoId);
-          db.capturarFollower(f.id);
-          capturados.push(cat?.nome ?? "?");
-        } else {
-          db.salvarFollower(f.id, { naParty: 0, energia: 0, energiaEm: Date.now() });
-        }
-      }
-    }
-
-    const resgatados = [];
-    if (r.desfecho !== "caiu") {
-      const presos = db.listarCapturados(serverId);
-      const meus = presos.filter((f) => f.donoOriginal === eu);
-      // Fora da janela do dono, qualquer um pode trazer qualquer um de volta.
-      const livres = presos.filter((f) => f.donoOriginal !== eu
-        && (Date.now() - (f.capturadoEm ?? 0)) / 3600000 >= JANELA_DONO_H);
-      const candidato = meus[0] ?? livres[0] ?? null;
-      if (candidato) {
-        const ehDono = candidato.donoOriginal === eu;
-        // Missão cumprida dá a chance cheia; ter voltado sem cumprir dá metade.
-        const chance = CHANCE_RESGATE * (ehDono ? BONUS_DONO : 1) * (r.exito ? 1 : 0.5);
-        if (Math.random() < Math.min(0.95, chance)) {
-          db.resgatarFollower(candidato.id, eu);
-          const cat = db.getFollowerCatalogo(candidato.catalogoId);
-          resgatados.push({ nome: cat?.nome ?? "?", ehDono });
-        }
-      }
-    }
-
-    // ── loot ──
-    let ganhou = null;
-    let ganhouFollower = null;
-    if (r.exito && r.sobreviveu) {
-      const raridade = MISS.sortearRaridade(missao, attr.sorte, Math.random, tamanhoParty);
-      if (raridade) {
-        const candidatos = db.listarItens({ raridade });
-        if (candidatos.length) {
-          ganhou = candidatos[Math.floor(Math.random() * candidatos.length)];
-          db.darItem(serverId, eu, ganhou.id);
-        }
-      }
-      // chance de um FOLLOWER aparecer como loot (só em dungeon)
-      if (missao.tipo !== "mercado") {
-        const chanceFol = { facil: 0.04, medio: 0.07, dificil: 0.12 }[missao.dificuldade] ?? 0;
-        if (Math.random() < chanceFol) {
-          const raridades = { facil: ["comum"], medio: ["comum", "incomum"],
-            dificil: ["incomum", "raro", "epico", "lendario"] }[missao.dificuldade] ?? ["comum"];
-          const pool = db.listarFollowersCatalogo()
-            .filter((f) => raridades.includes(f.raridade));
-          if (pool.length) {
-            const cat = pool[Math.floor(Math.random() * pool.length)];
-            const nv = Math.max(1, Math.round((missao.nivel ?? 1) * 0.6));
-            db.recrutarFollower(serverId, eu, cat.id, nv);
-            ganhouFollower = { cat, nivel: nv };
-          }
-        }
-      }
-    }
+    const { xpFinal, depois, moedaGanha, moedaPerdida, moedaSorteada, moeda, pSuave, capturados, resgatados, ganhou, ganhouFollower }
+      = aplicarDesfecho({ serverId, eu, p, missao, r, attr, tamanhoParty, party, agora });
 
     // ── relato ──
     const titulo = (en

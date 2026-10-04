@@ -237,7 +237,7 @@ function parametrosPT(P) {
     tutorial: [
       { nome: "(nada)", desc: "o guia em páginas, na ordem: permissões → canais → proteção → boas-vindas e cargos → XP e RPG → checklist" },
       { nome: "<número>", desc: "abre direto aquela página (para celular ou quando não dá para reagir)" },
-      { nome: "<área>", desc: "aprofunda um assunto: `canais`, `permissoes`, `moderacao`, `logs`, `cargos`, `xp`, `mensagens`, `noticias`, `game`, `rpg`, `aventura`, `economia`, `ajustes`" },
+      { nome: "<área>", desc: "aprofunda um assunto: `canais`, `permissoes`, `moderacao`, `logs`, `cargos`, `xp`, `mensagens`, `noticias`, `rpg`, `aventura`, `economia`, `ajustes`" },
     ],
 
     assistente: [
@@ -486,7 +486,7 @@ function parametrosEN(P) {
     tutorial: [
       { nome: "(nothing)", desc: "the paged guide, in order: permissions → channels → protection → welcome and roles → XP and RPG → checklist" },
       { nome: "<number>", desc: "opens that page directly (for mobile or when you can't react)" },
-      { nome: "<area>", desc: "goes deeper on one subject: `canais`, `permissoes`, `moderacao`, `logs`, `cargos`, `xp`, `mensagens`, `noticias`, `game`, `rpg`, `aventura`, `economia`, `ajustes`" },
+      { nome: "<area>", desc: "goes deeper on one subject: `canais`, `permissoes`, `moderacao`, `logs`, `cargos`, `xp`, `mensagens`, `noticias`, `rpg`, `aventura`, `economia`, `ajustes`" },
     ],
 
     assistente: [

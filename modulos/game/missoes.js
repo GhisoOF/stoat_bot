@@ -52,12 +52,14 @@ const LOOT = {
 // XP base por dificuldade (antes da escala por nível da missão).
 const XP_BASE = { mercado: 12, facil: 25, medio: 40, dificil: 70 };
 
+// Sem acento e sem caixa: "cacar o lobo branco" acha "Caçar o Lobo Branco".
+const semAcento = (t) => String(t ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
 export function acharMissao(txt) {
-  const alvo = String(txt ?? "").trim().toLowerCase();
+  const alvo = semAcento(txt);
   if (!alvo) return null;
   return MISSOES.find((m) => m.id === alvo)
-      ?? MISSOES.find((m) => m.nome.toLowerCase() === alvo)
-      ?? MISSOES.find((m) => m.nome.toLowerCase().includes(alvo))
+      ?? MISSOES.find((m) => semAcento(m.nome) === alvo)
+      ?? MISSOES.find((m) => semAcento(m.nome).includes(alvo))
       ?? null;
 }
 

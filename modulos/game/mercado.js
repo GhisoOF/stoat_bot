@@ -61,8 +61,17 @@ export function fatorRecompra(carisma) {
   return CFG.rMin + (rMax - CFG.rMin) * norm;
 }
 
+// (4 out 2026) Dinheiro do jogo é SEMPRE inteiro: o que o jogador recebe
+// arredonda para baixo, o que ele paga arredonda para cima. Antes sobravam
+// frações ("0,1849 Ouro", "4,02 Cristal") que não compravam nada.
 export function precoDeRecompra(precoVenda, carisma) {
-  return Math.max(0.000001, arredondar(precoVenda * fatorRecompra(carisma)));
+  return Math.max(1, Math.floor(precoVenda * fatorRecompra(carisma)));
+}
+// Um preço na moeda principal convertido para outra moeda: arredonda para CIMA
+// (quem paga não paga fração — e nunca menos que 1).
+export function custoEm(preco, moedaPreco, moedaPaga) {
+  if (moedaPreco?.id === moedaPaga?.id) return Math.ceil(preco);
+  return Math.max(1, Math.ceil(preco / Math.max(1e-9, taxaCambio(moedaPaga, moedaPreco))));
 }
 
 export function fracaoDungeon(R) {
@@ -72,10 +81,10 @@ export function fracaoDungeon(R) {
 }
 
 export function premioDungeon(R) {
-  return arredondar((R ?? 0) * fracaoDungeon(R));
+  return Math.floor((R ?? 0) * fracaoDungeon(R));
 }
 
-export const CASAS = 6;
+export const CASAS = 0;   // moedas inteiras (4 out 2026)
 export function arredondar(n, casas = CASAS) {
   if (!Number.isFinite(n)) return 0;
   const f = Math.pow(10, casas);
@@ -90,16 +99,20 @@ export function taxaCambio(de, para) {
   return reservaDe(para) / reservaDe(de);
 }
 
+// Câmbio com o banco, em unidades INTEIRAS: recebe o máximo de unidades
+// inteiras que a quantidade compra, e `gasta` é só o necessário para elas —
+// o resto fica com o jogador (antes ele gastava tudo e recebia "4,02").
 export function converter(quantidade, de, para) {
   const Rin = reservaDe(de), Rout = reservaDe(para);
-  const q = Math.max(0, quantidade ?? 0);
-  const bruto = (Rout * q) / (Rin + q);
-  const taxa = bruto * CFG.spread;
-  // Sem piso: o que sobra em fração continua sendo dinheiro do jogador.
-  return {
-    recebe: Math.max(0, arredondar(bruto - taxa)),
-    taxa: arredondar(taxa),
-  };
+  const q = Math.max(0, Math.floor(quantidade ?? 0));
+  const s = CFG.spread;
+  const liquido = ((Rout * q) / (Rin + q)) * (1 - s);
+  const recebe = Math.max(0, Math.floor(liquido + 1e-9));
+  if (!recebe) return { recebe: 0, gasta: 0, taxa: 0 };
+  // quanto de `de` compra exatamente `recebe` unidades (resolve a fórmula de cima)
+  const precisa = Math.min(q, Math.ceil((recebe * Rin) / (Rout * (1 - s) - recebe) - 1e-9));
+  const bruto = (Rout * precisa) / (Rin + precisa);
+  return { recebe, gasta: Math.max(1, precisa), taxa: Math.max(0, Math.round(bruto * s)) };
 }
 
 export const TAXA_BASE = 0.005;   // 0,5%

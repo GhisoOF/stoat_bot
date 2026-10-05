@@ -1120,12 +1120,13 @@ export function getItem(id) {
   return hidratarItem(prep("SELECT * FROM rpg_itens WHERE id = ?").get(id));
 }
 
+const semAcentoDb = (t) => String(t ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
 export function acharItemPorNome(txt) {
-  const alvo = String(txt ?? "").trim().toLowerCase();
+  const alvo = semAcentoDb(txt);   // "espada temperada", "lamina aurora" acham com ou sem acento
   if (!alvo) return null;
   const todos = prep("SELECT * FROM rpg_itens").all().map(hidratarItem);
-  return todos.find((i) => i.nome.toLowerCase() === alvo)
-      ?? todos.find((i) => i.nome.toLowerCase().includes(alvo))
+  return todos.find((i) => semAcentoDb(i.nome) === alvo)
+      ?? todos.find((i) => semAcentoDb(i.nome).includes(alvo))
       ?? null;
 }
 
@@ -1222,12 +1223,12 @@ export function getFollowerCatalogo(id) {
 }
 
 export function acharFollowerCatalogo(txt) {
-  const alvo = String(txt ?? "").trim().toLowerCase();
+  const alvo = semAcentoDb(txt);
   if (!alvo) return null;
   const todos = prep("SELECT * FROM rpg_followers_catalogo WHERE ativo = 1").all().map(hidratarFollower);
   return todos.find((f) => f.id === alvo)
-      ?? todos.find((f) => f.nome.toLowerCase() === alvo)
-      ?? todos.find((f) => f.nome.toLowerCase().includes(alvo))
+      ?? todos.find((f) => semAcentoDb(f.nome) === alvo)
+      ?? todos.find((f) => semAcentoDb(f.nome).includes(alvo))
       ?? null;
 }
 

@@ -30,6 +30,14 @@ moedas: é isso que define o mundo.
   com 3% de taxa. Com 200 000 Ouro e 5 000 Cristal, 1 Cristal ≈ 39 Ouro.
 - **Finita** paga do estoque do banco: se o banco não tem, não paga. O que os
   jogadores gastam volta ao banco.
+- **Moedas inteiras** (4 out 2026): ninguém tem "0,18 Ouro". O banco entrega o
+  máximo de unidades inteiras e cobra só o que elas custam; preço em outra moeda
+  arredonda para cima; o que o jogador recebe arredonda para baixo.
+  `&game cambio tudo ouro para cristal` (ou sem a quantidade) troca o saldo todo.
+- **Pote da dungeon**: o Ouro perdido nas quedas vai para o pote; quem vence uma
+  missão de dungeon leva 25% do prêmio (Fácil), 60% (Médio) ou tudo (Difícil).
+- **Folga de nível**: cada nível acima da missão fecha 1/6 do que falta para
+  100% — com 6 níveis de folga, a missão é garantida.
 
 ## Recomeçar
 

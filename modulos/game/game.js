@@ -191,6 +191,11 @@ function jogadorPaga(serverId, userId, moeda, qtd) {
   return pago;
 }
 
+// Nome digitado × nome no jogo: sem acento, sem caixa, espaço único
+// (5 out 2026: "&game follower ficha mercenario novato" não achava o
+// "Mercenário Novato" por causa do á).
+export const semAcento = (t) => String(t ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+
 function numeroDigitado(txt) {
   const t = String(txt ?? "").trim();
   if (!t) return NaN;
@@ -215,7 +220,7 @@ export function moedaParaPagar(serverId, userId, custoNaPadrao) {
   }
   for (const m of db.listarMoedas(serverId)) {
     if (m.id === padrao.id) continue;
-    const equivalente = MERC.arredondar(custoNaPadrao / Math.max(1e-9, MERC.taxaCambio(m, padrao)));
+    const equivalente = MERC.custoEm(custoNaPadrao, padrao, m);
     if (db.getSaldo(serverId, userId, m.id) + 1e-7 >= equivalente) {
       return { moeda: m, custo: equivalente, convertido: true, padrao };
     }
@@ -418,7 +423,29 @@ function montarFicha(p, nomeExibido, P, serverId, userId, lang = "pt") {
 // membro do grupo — o desfecho é um só, as consequências são de cada um.
 //   divisao: em quantos as moedas se dividem (co-op) · multXp: bônus de grupo
 //   tamanhoLoot: o tamanho que divide a chance de loot (a party + o grupo)
-function aplicarDesfecho({ serverId, eu, p, missao, r, attr, tamanhoParty, party, agora, divisao = 1, multXp = 1, tamanhoLoot = null }) {
+// Quanto do pote da dungeon uma vitória leva (4 out 2026: o pote enchia com as
+// quedas e NUNCA pagava ninguém — o tutorial prometia e o código não fazia).
+// No co-op, a folga de nível é a da MÉDIA do grupo (um nível 30 não carrega três nível 2)
+function nivelDoGrupo(personagens) {
+  const ns = personagens.map((p) => p?.nivel ?? 1);
+  return ns.length ? Math.floor(ns.reduce((a, b) => a + b, 0) / ns.length) : 1;
+}
+const PESO_POTE = { facil: 0.25, medio: 0.6, dificil: 1 };
+export function premioDoPote(moeda, missao) {
+  if (!moeda || missao?.tipo === "mercado") return 0;
+  return Math.floor(MERC.premioDungeon(moeda.dungeon ?? 0) * (PESO_POTE[missao.dificuldade] ?? 0));
+}
+function pagarPote(serverId, userId, moeda, qtd) {
+  if (!(qtd >= 1)) return 0;
+  const atual = db.getMoeda(serverId, moeda.id);
+  const paga = Math.min(Math.floor(qtd), Math.floor(atual?.dungeon ?? 0));
+  if (paga < 1) return 0;
+  db.salvarMoeda(serverId, moeda.id, { dungeon: (atual.dungeon ?? 0) - paga });
+  db.creditar(serverId, userId, moeda.id, paga);
+  return paga;
+}
+
+function aplicarDesfecho({ serverId, eu, p, missao, r, attr, tamanhoParty, party, agora, divisao = 1, multXp = 1, tamanhoLoot = null, poteFixo = null }) {
   // XP com o bônus de INT/Sorte
   const xpFinal = Math.round(r.xp * bonusXp(attr.inteligencia, attr.sorte) * multXp);
   const depois = aplicarXp(p, xpFinal);
@@ -438,7 +465,7 @@ function aplicarDesfecho({ serverId, eu, p, missao, r, attr, tamanhoParty, party
   // ── moeda ──
   const moeda = garantirMoeda(serverId);
   const { pSuave } = pDaMoeda(serverId, moeda);
-  let moedaGanha = 0, moedaPerdida = 0;
+  let moedaGanha = 0, moedaPerdida = 0, poteGanho = 0;
 
   let moedaSorteada = moeda;
   if (r.exito && r.sobreviveu) {
@@ -448,6 +475,8 @@ function aplicarDesfecho({ serverId, eu, p, missao, r, attr, tamanhoParty, party
     const bruto = MERC.moedaDaMissao(missao, pSuave, attr.sorte, moedaSorteada.dificuldade ?? 1);
     const meu = Math.round((tamanhoParty ? bruto / (1 + 0.30 * tamanhoParty) : bruto) / divisao);
     moedaGanha = pagarAoJogador(serverId, eu, db.getMoeda(serverId, moedaSorteada.id), meu);
+    // o pote da dungeon (no co-op, a parte de cada um já vem calculada)
+    poteGanho = pagarPote(serverId, eu, moeda, poteFixo ?? premioDoPote(db.getMoeda(serverId, moeda.id), missao));
   } else if (r.desfecho === "caiu") {
     // perde uma fração do que carrega — e vai para a DUNGEON
     const carrega = db.getSaldo(serverId, eu, moeda.id);
@@ -529,7 +558,7 @@ function aplicarDesfecho({ serverId, eu, p, missao, r, attr, tamanhoParty, party
     }
   }
 
-  return { xpFinal, depois, moedaGanha, moedaPerdida, moedaSorteada, moeda, pSuave, capturados, resgatados, ganhou, ganhouFollower };
+  return { xpFinal, depois, moedaGanha, moedaPerdida, moedaSorteada, moeda, pSuave, capturados, resgatados, ganhou, ganhouFollower, poteGanho };
 }
 
 export async function cmdGame(message, args, ctx) {
@@ -1098,12 +1127,12 @@ export async function cmdGame(message, args, ctx) {
       const { attr, magias, tamanhoParty } = atributosDaParty(alvo, serverId, alvoId);
       let ok = 0, falha = 0, caiu = 0, xpTotal = 0, loot = 0;
       for (let i = 0; i < vezes; i++) {
-        const r = MISS.resolver(attr, missao, Math.random, magias, tamanhoParty);
+        const r = MISS.resolver(attr, missao, Math.random, magias, tamanhoParty, alvo.nivel);
         if (r.desfecho === "sucesso") ok++; else if (r.desfecho === "falha") falha++; else caiu++;
         xpTotal += r.xp;
         if (r.exito && r.sobreviveu && MISS.sortearRaridade(missao, attr.sorte, Math.random, tamanhoParty)) loot++;
       }
-      const prev = MISS.previsao(attr, missao, magias, tamanhoParty);
+      const prev = MISS.previsao(attr, missao, magias, tamanhoParty, alvo.nivel);
       return sendEmbed(message.channel, { title: `🔧 Simulação — ${missao.nome}`,
         description: [
           `**${vezes}** tentativas${tamanhoParty ? ` · party de ${tamanhoParty}` : " · solo"}`,
@@ -1452,18 +1481,22 @@ export async function cmdGame(message, args, ctx) {
           : `Cair custa **${(MERC.perda(pSuave) * 100).toFixed(0)}%** do que você carrega`,
       );
       if (padrao.dungeon > 0) {
+        const premio = MERC.premioDungeon(padrao.dungeon);
         linhas.push("", en ? `🕳️ In the dungeon: ${fmt(padrao.dungeon)} ${padrao.simbolo}` : `🕳️ Na dungeon: ${fmt(padrao.dungeon)} ${padrao.simbolo}`,
-          en ? `_Beating the dungeon returns ~${fmt(MERC.premioDungeon(padrao.dungeon))}._` : `_Vencer a dungeon devolve ~${fmt(MERC.premioDungeon(padrao.dungeon))}._`);
+          premio >= 1
+            ? (en ? `_Beating the dungeon returns ~${fmt(premio)}._` : `_Vencer a dungeon devolve ~${fmt(premio)}._`)
+            : (en ? "_Still too little in the pot to pay anyone._" : "_Ainda é pouco no pote para pagar alguém._"));
       }
     }
 
     if (moedas.length > 1) {
-      linhas.push("", en
-        ? `_Each currency has its own P. See everything with \`${P}game admin moeda\`._`
-        : `_Cada moeda tem seu próprio P. Veja tudo com \`${P}game admin moeda\`._`);
+      // (o painel das moedas é do dono do bot; para o jogador, o que importa é trocar)
+      if (ctx.ehSuperAdmin?.(eu)) linhas.push("", en
+        ? `_Each currency has its own P — \`${P}game admin moeda\`._`
+        : `_Cada moeda tem seu próprio P — \`${P}game admin moeda\`._`);
       linhas.push(en
-        ? `_Exchange with the bank: \`${P}game cambio <qty> <currency> para <currency>\` · rates: \`${P}game cambio taxas\`_`
-        : `_Trocar com o banco: \`${P}game cambio <qtd> <moeda> para <moeda>\` · taxas: \`${P}game cambio taxas\`_`);
+        ? `_Exchange with the bank: \`${P}game cambio <qty|tudo> <currency> para <currency>\` · rates: \`${P}game cambio taxas\`_`
+        : `_Trocar com o banco: \`${P}game cambio <qtd|tudo> <moeda> para <moeda>\` · taxas: \`${P}game cambio taxas\`_`);
     }
 
     return enviarLista(sendEmbed, message.channel, {
@@ -1674,9 +1707,13 @@ export async function cmdGame(message, args, ctx) {
       }
     }
 
-    const mb = texto.match(/^([\d.,]+)\s+(\S+)\s+(?:para|to|por|→|->)\s+(\S+)$/i);
+    // (4 out 2026) a quantidade é opcional: sem ela — ou com "tudo" — troca o
+    // saldo inteiro ("&game cambio ouro para cristal" mostrava só a ajuda)
+    const mb = texto.match(/^(?:([\d.,]+|tudo|todo|all|max|máx)\s+)?(\S+)\s+(?:para|to|→|->)\s+(\S+)$/i);
     if (mb) {
-      const [, qtdTxt, nomeDe, nomePara] = mb;
+      const [, qtdBruta, nomeDe, nomePara] = mb;
+      const deTudo = !qtdBruta || /^(tudo|todo|all|max|máx)$/i.test(qtdBruta);
+      const qtdTxt = deTudo ? String(Math.floor(db.getSaldo(serverId, eu, db.acharMoeda(serverId, nomeDe)?.id ?? "") || 0)) : qtdBruta;
       const de = db.acharMoeda(serverId, nomeDe);
       const para = db.acharMoeda(serverId, nomePara);
       if (!de || !para || de.id === para.id) {
@@ -1688,6 +1725,10 @@ export async function cmdGame(message, args, ctx) {
       }
       const qtd = numeroDigitado(qtdTxt);
       const saldo = db.getSaldo(serverId, eu, de.id);
+      if (Number.isFinite(qtd) && !Number.isInteger(qtd)) {
+        return sendEmbed(message.channel, { title: en ? "💱 Whole units only" : "💱 Só unidades inteiras", colour: COR.aviso,
+          description: en ? `The game's currencies don't split: use a whole number (or \`tudo\`).` : `As moedas do jogo não se dividem: use um número inteiro (ou \`tudo\`).` });
+      }
       if (!(qtd > 0) || saldo + 1e-7 < qtd) {
         return sendEmbed(message.channel, {
           title: en ? "💸 Not enough balance" : "💸 Saldo insuficiente",
@@ -1695,17 +1736,24 @@ export async function cmdGame(message, args, ctx) {
           colour: COR.erro });
       }
 
-      const r = MERC.converter(qtd, de, para);
+      let r = MERC.converter(qtd, de, para);
       if (r.recebe <= 0) {
+        const um = MERC.converter(1e9, de, para).recebe > 0 ? Math.ceil(1 / MERC.taxaCambio(de, para) / (1 - MERC.CFG.spread)) : null;
         return sendEmbed(message.channel, tr(ctx,
           { title: "💱 Valor pequeno demais",
-            description: `${fmt(qtd)} ${de.nome} não chega a 1 ${para.nome} pela taxa de hoje.`, colour: COR.aviso },
+            description: `${fmt(qtd)} ${de.nome} não chega a 1 ${para.nome} pela taxa de hoje.${um ? ` 1 ${para.nome} custa uns ${fmt(um)} ${de.nome}.` : ""}`, colour: COR.aviso },
           { title: "💱 Amount too small",
-            description: `${fmt(qtd)} ${de.nome} doesn't reach 1 ${para.nome} at today's rate.`, colour: COR.aviso }));
+            description: `${fmt(qtd)} ${de.nome} doesn't reach 1 ${para.nome} at today's rate.${um ? ` 1 ${para.nome} costs about ${fmt(um)} ${de.nome}.` : ""}`, colour: COR.aviso }));
       }
 
-      // Moeda finita tem estoque: o banco não pode pagar o que não tem.
+      // Moeda finita tem estoque: o banco não pode pagar o que não tem. No
+      // "tudo", paga o que o banco tiver (e usa só o necessário para isso).
       const atualPara = db.getMoeda(serverId, para.id);
+      if (atualPara?.finita && deTudo && (atualPara.mercado ?? 0) < r.recebe && (atualPara.mercado ?? 0) >= 1) {
+        let lo = 1, hi = qtd;
+        while (lo < hi) { const mid = Math.ceil((lo + hi) / 2); if (MERC.converter(mid, de, para).recebe <= atualPara.mercado) lo = mid; else hi = mid - 1; }
+        r = MERC.converter(lo, de, para);
+      }
       if (atualPara?.finita && (atualPara.mercado ?? 0) < r.recebe) {
         return sendEmbed(message.channel, {
           title: en ? "🏦 The bank is short" : "🏦 O banco não tem tanto",
@@ -1715,8 +1763,10 @@ export async function cmdGame(message, args, ctx) {
           colour: COR.aviso });
       }
 
-      db.debitar(serverId, eu, de.id, qtd);
-      db.salvarMoeda(serverId, de.id, { mercado: (db.getMoeda(serverId, de.id)?.mercado ?? 0) + qtd });
+      // só o necessário para as unidades inteiras sai da carteira
+      const gasto = r.gasta;
+      db.debitar(serverId, eu, de.id, gasto);
+      db.salvarMoeda(serverId, de.id, { mercado: (db.getMoeda(serverId, de.id)?.mercado ?? 0) + gasto });
       const recebido = r.recebe;
       db.creditar(serverId, eu, para.id, recebido);
       db.salvarMoeda(serverId, para.id, {
@@ -1727,16 +1777,18 @@ export async function cmdGame(message, args, ctx) {
       return sendEmbed(message.channel, {
         title: en ? "💱 Exchanged" : "💱 Trocado",
         description: (en ? [
-          `${de.simbolo}**${fmt(qtd)} ${de.nome}** → ${para.simbolo}**${fmt(recebido)} ${para.nome}**`,
-          `_Rate: 1 ${de.nome} = ${MERC.taxaCambio(de, para).toFixed(4)} ${para.nome} · spread ${para.simbolo}${fmt(r.taxa)}_`,
+          `${de.simbolo}**${fmt(gasto)} ${de.nome}** → ${para.simbolo}**${fmt(recebido)} ${para.nome}**`,
+          gasto < qtd ? `_${fmt(qtd - gasto)} ${de.nome} weren't needed — they stayed in your wallet._` : null,
+          `_Rate: 1 ${para.nome} ≈ ${fmt(Math.ceil(gasto / recebido))} ${de.nome} · spread ${para.simbolo}${fmt(r.taxa)}_`,
           "",
           `**Your wallet:** ${carteira}`,
         ] : [
-          `${de.simbolo}**${fmt(qtd)} ${de.nome}** → ${para.simbolo}**${fmt(recebido)} ${para.nome}**`,
-          `_Taxa: 1 ${de.nome} = ${MERC.taxaCambio(de, para).toFixed(4)} ${para.nome} · spread ${para.simbolo}${fmt(r.taxa)}_`,
+          `${de.simbolo}**${fmt(gasto)} ${de.nome}** → ${para.simbolo}**${fmt(recebido)} ${para.nome}**`,
+          gasto < qtd ? `_${fmt(qtd - gasto)} ${de.nome} não foram necessários — ficaram na sua carteira._` : null,
+          `_Taxa: 1 ${para.nome} ≈ ${fmt(Math.ceil(gasto / recebido))} ${de.nome} · spread ${para.simbolo}${fmt(r.taxa)}_`,
           "",
           `**Sua carteira:** ${carteira}`,
-        ]).join("\n"), colour: COR.sucesso });
+        ]).filter((x) => x !== null).join("\n"), colour: COR.sucesso });
     }
 
     const m = texto.match(/^([\d.,]+)\s+(\S+)\s+por\s+([\d.,]+)\s+(\S+)$/i);
@@ -1744,11 +1796,12 @@ export async function cmdGame(message, args, ctx) {
       const linhas = en ? [
         "**Two ways to exchange**",
         `\`${P}game cambio <qty> <currency> para <currency>\` — **with the bank**, instantly`,
-        `   e.g. \`${P}game cambio 100 real para dolar\``,
+        `   e.g. \`${P}game cambio 200 ouro para cristal\` · everything: \`${P}game cambio tudo ouro para cristal\``,
         `\`${P}game cambio <qty> <currency> por <qty> <currency>\` — offer to **another player**`,
-        `   e.g. \`${P}game cambio 100 real por 5 dolar\``,
+        `   e.g. \`${P}game cambio 100 ouro por 2 cristal\``,
+        "_Whole units only: the bank uses just what the whole units cost — the rest stays with you._",
         "",
-        "**Server currencies:**",
+        "**World currencies:**",
         ...moedas.map((x) => `${x.simbolo} **${x.nome}** \`${x.id}\` — you have ${fmt(db.getSaldo(serverId, eu, x.id))}`),
         "",
         `\`${P}game cambio <qty> <currency>\` — what that amount is worth in EVERY currency`,
@@ -1758,9 +1811,10 @@ export async function cmdGame(message, args, ctx) {
       ] : [
         "**Duas formas de trocar**",
         `\`${P}game cambio <qtd> <moeda> para <moeda>\` — **com o banco**, na hora`,
-        `   ex.: \`${P}game cambio 100 real para dolar\``,
+        `   ex.: \`${P}game cambio 200 ouro para cristal\` · tudo: \`${P}game cambio tudo ouro para cristal\``,
         `\`${P}game cambio <qtd> <moeda> por <qtd> <moeda>\` — oferta a **outro jogador**`,
-        `   ex.: \`${P}game cambio 100 real por 5 dolar\``,
+        `   ex.: \`${P}game cambio 100 ouro por 2 cristal\``,
+        "_Só unidades inteiras: o banco usa só o que as unidades inteiras custam — o resto fica com você._",
         "",
         "**Moedas do mundo:**",
         ...moedas.map((x) => `${x.simbolo} **${x.nome}** \`${x.id}\` — você tem ${fmt(db.getSaldo(serverId, eu, x.id))}`),
@@ -1783,6 +1837,10 @@ export async function cmdGame(message, args, ctx) {
     if (!de || !para || de.id === para.id) {
       return sendEmbed(message.channel, { title: en ? "❌ Invalid currencies" : "❌ Moedas inválidas",
         description: en ? "They must be the world's two different currencies." : "Precisam ser as duas moedas diferentes do mundo.", colour: COR.erro });
+    }
+    if (![numeroDigitado(qtdDe), numeroDigitado(qtdPara)].every((x) => Number.isInteger(x) && x > 0)) {
+      return sendEmbed(message.channel, { title: en ? "💱 Whole units only" : "💱 Só unidades inteiras", colour: COR.aviso,
+        description: en ? "Both amounts must be whole numbers above zero." : "As duas quantias precisam ser números inteiros acima de zero." });
     }
     const saldo = db.getSaldo(serverId, eu, de.id);
     if (saldo + 1e-7 < numeroDigitado(qtdDe)) {
@@ -1926,7 +1984,7 @@ export async function cmdGame(message, args, ctx) {
     const temNaMochila = p ? (db.getInventario(serverId, eu).find((x) => x.id === item.id)?.quantidade ?? 0) : 0;
 
     const emCadaMoeda = db.listarMoedas(serverId).map((m) => {
-      const c = m.id === moeda.id ? preco : MERC.arredondar(preco / Math.max(1e-9, MERC.taxaCambio(m, moeda)));
+      const c = MERC.custoEm(preco, moeda, m);
       const seu = db.getSaldo(serverId, eu, m.id);
       return `${m.simbolo} ${fmt(c)} ${m.id}${seu >= c ? " ✅" : ""}`;
     });
@@ -2020,7 +2078,7 @@ export async function cmdGame(message, args, ctx) {
         ? (() => {
           const custo = moedaEscolhida.id === moedaPadrao.id
             ? preco
-            : MERC.arredondar(preco / Math.max(1e-9, MERC.taxaCambio(moedaEscolhida, moedaPadrao)));
+            : MERC.custoEm(preco, moedaPadrao, moedaEscolhida);
           return { moeda: moedaEscolhida, custo, convertido: moedaEscolhida.id !== moedaPadrao.id,
             semSaldo: db.getSaldo(serverId, eu, moedaEscolhida.id) < custo, escolhida: true };
         })()
@@ -2067,7 +2125,7 @@ export async function cmdGame(message, args, ctx) {
         const esc = MAG.ESCOLAS[magia.tipo] ?? {};
         const preco = MAG.precoComCarisma(magia.preco, attr.carisma);
         const emCada = db.listarMoedas(serverId).map((m) => {
-          const c = m.id === moedaPadrao.id ? preco : MERC.arredondar(preco / Math.max(1e-9, MERC.taxaCambio(m, moedaPadrao)));
+          const c = MERC.custoEm(preco, moedaPadrao, m);
           return `${m.simbolo} ${fmt(c)} ${m.id}${db.getSaldo(serverId, eu, m.id) >= c ? " ✅" : ""}`;
         });
         const linhas = en ? [
@@ -2188,7 +2246,7 @@ export async function cmdGame(message, args, ctx) {
       ? (() => {
         const custo = moedaEscolhida.id === moeda.id
           ? preco
-          : MERC.arredondar(preco / Math.max(1e-9, MERC.taxaCambio(moedaEscolhida, moeda)));
+          : MERC.custoEm(preco, moeda, moedaEscolhida);
         const temSaldo = db.getSaldo(serverId, eu, moedaEscolhida.id) >= custo;
         return { moeda: moedaEscolhida, custo, convertido: moedaEscolhida.id !== moeda.id,
           padrao: moeda, semSaldo: !temSaldo, escolhida: true };
@@ -2328,7 +2386,7 @@ export async function cmdGame(message, args, ctx) {
       const soma = {};
       for (const m of ms) for (const a of db.ATRIBUTOS) soma[a] = (soma[a] ?? 0) + (m.attr[a] ?? 0);
       const tamanho = Math.max(0, ms.length - 1) + ms.reduce((t, m) => t + (m.tamanhoParty ?? 0), 0);
-      return MISS.previsao(soma, g.missao, ms.flatMap((m) => m.magias ?? []), tamanho);
+      return MISS.previsao(soma, g.missao, ms.flatMap((m) => m.magias ?? []), tamanho, nivelDoGrupo(ms.map((m) => m.p)));
     };
     const painel = (g, titulo) => {
       const pv = prev(g);
@@ -2414,16 +2472,18 @@ export async function cmdGame(message, args, ctx) {
     const soma = {};
     for (const m of vao) for (const a of db.ATRIBUTOS) soma[a] = (soma[a] ?? 0) + (m.attr[a] ?? 0);
     const tamanho = (n - 1) + vao.reduce((t, m) => t + (m.tamanhoParty ?? 0), 0);
-    const r = MISS.resolver(soma, missao, Math.random, vao.flatMap((m) => m.magias ?? []), tamanho);
+    const r = MISS.resolver(soma, missao, Math.random, vao.flatMap((m) => m.magias ?? []), tamanho, nivelDoGrupo(vao.map((m) => m.p)));
     const multXp = 1 + 0.10 * (n - 1);
+    const poteParte = Math.floor(premioDoPote(db.getMoeda(serverId, garantirMoeda(serverId).id), missao) / n);
     const linhas = [`**${missao.nome}** — ${n} ${en ? "adventurer(s)" : "aventureiro(s)"}`,
       en ? `_${(r.previsao.exito * 100).toFixed(0)}% to complete · ${(r.previsao.sobrevivencia * 100).toFixed(0)}% to survive_`
         : `_${(r.previsao.exito * 100).toFixed(0)}% de cumprir · ${(r.previsao.sobrevivencia * 100).toFixed(0)}% de sobreviver_`, ""];
     for (const m of vao) {
       const res = aplicarDesfecho({ serverId, eu: m.uid, p: m.p, missao, r, attr: m.attr, tamanhoParty: m.tamanhoParty,
-        party: m.party, agora: Date.now(), divisao: n, multXp, tamanhoLoot: (m.tamanhoParty ?? 0) + (n - 1) });
+        party: m.party, agora: Date.now(), divisao: n, multXp, tamanhoLoot: (m.tamanhoParty ?? 0) + (n - 1), poteFixo: poteParte });
       const partes = [`+${res.xpFinal} XP`];
       if (res.moedaGanha > 0) partes.push(`${res.moedaSorteada.simbolo} +${fmt(res.moedaGanha)}`);
+      if (res.poteGanho > 0) partes.push(`🕳️ +${fmt(res.poteGanho)}`);
       if (res.moedaPerdida > 0) partes.push(`${res.moeda.simbolo} −${fmt(res.moedaPerdida)}`);
       if (res.depois.subiu) partes.push(en ? `🎉 level ${res.depois.nivel}` : `🎉 nível ${res.depois.nivel}`);
       if (res.ganhou) partes.push(`🎁 ${(RARIDADE_INFO[res.ganhou.raridade] ?? {}).emoji ?? ""} ${res.ganhou.nome}`);
@@ -2558,18 +2618,23 @@ export async function cmdGame(message, args, ctx) {
         { title: "🎭 You don't have a character",
           description: `Create one with \`${P}game criar\`.`, colour: COR.aviso }));
     }
-    const acao = args[1]?.toLowerCase();
-    const resto = args.slice(2).join(" ").trim();
+    // só as que pedem UM companheiro (dar/pegar pedem companheiro + item: a ordem lá é fixa)
+    const ACOES_FOLLOWER = ["ficha", "status", "ver", "sheet", "info", "levar", "adicionar", "party+", "tirar", "remover", "party-",
+      "dispensar", "demitir", "fotos", "foto", "album", "álbum"];
+    let acao = args[1]?.toLowerCase();
+    let resto = args.slice(2).join(" ").trim();
+    const ultima = args.at(-1)?.toLowerCase();
+    if (args.length > 2 && !ACOES_FOLLOWER.includes(acao) && ACOES_FOLLOWER.includes(ultima)) {
+      resto = args.slice(1, -1).join(" ").trim();
+      acao = ultima;
+    }
 
     // Acha um companheiro SEU pelo nome. Usado por quase todos os subcomandos.
-    const acharMeu = (texto) => {
-      const alvoTxt = String(texto ?? "").trim().toLowerCase();
+    const acharMeu = (texto, lista = null) => {
+      const alvoTxt = semAcento(texto);
       if (!alvoTxt) return null;
-      const meus = db.listarFollowersDe(serverId, eu);
-      return meus.find((f) => {
-        const c = db.getFollowerCatalogo(f.catalogoId);
-        return c && c.nome.toLowerCase().includes(alvoTxt);
-      }) ?? null;
+      const meus = (lista ?? db.listarFollowersDe(serverId, eu)).map((f) => ({ f, nome: semAcento(db.getFollowerCatalogo(f.catalogoId)?.nome) }));
+      return (meus.find((x) => x.nome === alvoTxt) ?? meus.find((x) => x.nome.includes(alvoTxt)))?.f ?? null;
     };
     const separarNomes = (texto, acharDireita) => {
       const bruto = String(texto ?? "").trim();
@@ -2650,14 +2715,16 @@ export async function cmdGame(message, args, ctx) {
       colour: COR.erro });
 
     if (["ficha", "status", "ver", "sheet", "info"].includes(acao)) {
-      if (!resto) {
+      const todosMeus = db.listarFollowersDe(serverId, eu);
+      if (!resto && todosMeus.length !== 1) {
+        const nomes = todosMeus.map((x) => `\`${P}game follower ficha ${db.getFollowerCatalogo(x.catalogoId)?.nome ?? "?"}\``);
         return sendEmbed(message.channel, tr(ctx,
           { title: "❌ Qual companheiro?",
-            description: `\`${P}game follower ficha <nome>\`\n\nVeja os seus com \`${P}game followers\`.`, colour: COR.erro },
+            description: todosMeus.length ? nomes.join("\n") : `Você ainda não tem companheiros — \`${P}game recrutas\`.`, colour: COR.erro },
           { title: "❌ Which companion?",
-            description: `\`${P}game follower ficha <name>\`\n\nSee yours with \`${P}game followers\`.`, colour: COR.erro }));
+            description: todosMeus.length ? nomes.join("\n") : `You have no companions yet — \`${P}game recrutas\`.`, colour: COR.erro }));
       }
-      const f = acharMeu(resto);
+      const f = resto ? acharMeu(resto) : todosMeus[0];
       if (!f) return semEsse(resto);
 
       const cat = db.getFollowerCatalogo(f.catalogoId);
@@ -2830,11 +2897,7 @@ export async function cmdGame(message, args, ctx) {
 
     // ── levar / tirar da party ──
     if (["levar", "adicionar", "party+"].includes(acao)) {
-      const meus = db.listarFollowersDe(serverId, eu);
-      const alvo = meus.find((f) => {
-        const c = db.getFollowerCatalogo(f.catalogoId);
-        return c && c.nome.toLowerCase().includes(resto.toLowerCase());
-      });
+      const alvo = acharMeu(resto);
       if (!resto || !alvo) {
         return sendEmbed(message.channel, { title: en ? "❌ Take who?" : "❌ Levar quem?",
           description: en
@@ -2866,10 +2929,7 @@ export async function cmdGame(message, args, ctx) {
 
     if (["tirar", "remover", "party-"].includes(acao)) {
       const naParty = db.getParty(serverId, eu);
-      const alvo = naParty.find((f) => {
-        const c = db.getFollowerCatalogo(f.catalogoId);
-        return c && c.nome.toLowerCase().includes((resto || "").toLowerCase());
-      }) ?? (naParty.length === 1 && !resto ? naParty[0] : null);
+      const alvo = (resto ? acharMeu(resto, naParty) : null) ?? (naParty.length === 1 && !resto ? naParty[0] : null);
       if (!alvo) {
         return sendEmbed(message.channel, { title: en ? "❌ Remove who?" : "❌ Tirar quem?",
           description: naParty.length
@@ -2884,11 +2944,7 @@ export async function cmdGame(message, args, ctx) {
 
     // ── dispensar ──
     if (["dispensar", "demitir"].includes(acao)) {
-      const meus = db.listarFollowersDe(serverId, eu);
-      const alvo = meus.find((f) => {
-        const c = db.getFollowerCatalogo(f.catalogoId);
-        return c && c.nome.toLowerCase().includes((resto || "").toLowerCase());
-      });
+      const alvo = acharMeu(resto);
       if (!resto || !alvo) {
         return sendEmbed(message.channel, { title: en ? "❌ Dismiss who?" : "❌ Dispensar quem?",
           description: en ? `\`${P}game follower dispensar <name>\`` : `\`${P}game follower dispensar <nome>\``, colour: COR.erro });
@@ -3030,16 +3086,22 @@ export async function cmdGame(message, args, ctx) {
         const info = MISS.DIFICULDADE_INFO[d];
         linhas.push("", `${info.emoji} **${info.rotulo}**`);
         for (const m of porTipo[d] ?? []) {
-          const v = MISS.previsao(attr, m, magias, tamanhoParty);
+          const v = MISS.previsao(attr, m, magias, tamanhoParty, p.nivel);
           const completa = v.exito * v.sobrevivencia;
+          // garantida pela folga de nível: diz isso em vez de "100% (100% × 100%)"
+          if (completa >= 0.9995) {
+            linhas.push(en ? `   • **${m.nome}** — ✅ **guaranteed** _(you're ${MISS.MARGEM_NIVEL}+ levels above it)_${marcaEspera(m)}`
+              : `   • **${m.nome}** — ✅ **garantida** _(você está ${MISS.MARGEM_NIVEL}+ níveis acima)_${marcaEspera(m)}`);
+            continue;
+          }
           linhas.push(en
             ? `   • **${m.nome}** — 🏆 **${(completa * 100).toFixed(0)}%** _(success ${(v.exito * 100).toFixed(0)}% × survival ${(v.sobrevivencia * 100).toFixed(0)}%)_${marcaEspera(m)}`
             : `   • **${m.nome}** — 🏆 **${(completa * 100).toFixed(0)}%** _(êxito ${(v.exito * 100).toFixed(0)}% × sobrevive ${(v.sobrevivencia * 100).toFixed(0)}%)_${marcaEspera(m)}`);
         }
       }
       linhas.push("", en
-        ? "_🏆 = chance to complete AND come back alive. The two chances multiply._"
-        : "_🏆 = chance de cumprir E voltar vivo. As duas chances se multiplicam._");
+        ? `_🏆 = chance to complete AND come back alive. The two chances multiply. Each level you have above a mission closes 1/${MISS.MARGEM_NIVEL} of what's missing to 100%._`
+        : `_🏆 = chance de cumprir E voltar vivo. As duas chances se multiplicam. Cada nível seu acima da missão fecha 1/${MISS.MARGEM_NIVEL} do que falta para 100%._`);
       if (MISS.MISSOES.some((m) => esperaDe(m) > 0)) {
         linhas.push(en
           ? "_⏳ = still on cooldown. Lighter missions come back sooner._"
@@ -3120,9 +3182,9 @@ export async function cmdGame(message, args, ctx) {
       }
     }
 
-    const r = MISS.resolver(attr, missao, Math.random, magias, tamanhoParty);
+    const r = MISS.resolver(attr, missao, Math.random, magias, tamanhoParty, p.nivel);
 
-    const { xpFinal, depois, moedaGanha, moedaPerdida, moedaSorteada, moeda, pSuave, capturados, resgatados, ganhou, ganhouFollower }
+    const { xpFinal, depois, moedaGanha, moedaPerdida, moedaSorteada, moeda, pSuave, capturados, resgatados, ganhou, ganhouFollower, poteGanho }
       = aplicarDesfecho({ serverId, eu, p, missao, r, attr, tamanhoParty, party, agora });
 
     // ── relato ──
@@ -3138,6 +3200,7 @@ export async function cmdGame(message, args, ctx) {
 
     linhas.push("", `✨ **+${xpFinal} XP**`);
     if (moedaGanha > 0) linhas.push(`${moedaSorteada.simbolo} **+${fmt(moedaGanha)} ${moedaSorteada.nome}**`);
+    if (poteGanho > 0) linhas.push(en ? `🕳️ **+${fmt(poteGanho)} ${moeda.nome}** from the dungeon pot` : `🕳️ **+${fmt(poteGanho)} ${moeda.nome}** do pote da dungeon`);
     if (moedaPerdida > 0) {
       linhas.push(en
         ? `${moeda.simbolo} **−${fmt(moedaPerdida)}** _(${(MERC.perda(pSuave) * 100).toFixed(0)}% of what you carried, it went to the dungeon)_`

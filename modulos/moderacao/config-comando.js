@@ -66,7 +66,9 @@ export async function cmdConfig(message, args, ctx) {
   const modulos = Object.entries(GRUPOS_AUTOMOD).flatMap(([grupo, def]) => {
     const st = estadoDoGrupo(am, grupo);
     return [
-      `${st.ligadas === st.total ? "🟢" : st.ligadas ? "🟡" : "🔴"} **${grupo}** — ${T(def.pt, def.en)} · ${st.ligadas}/${st.total}`,
+      `${st.ligadas === st.total ? "🟢" : st.ligadas ? "🟡" : "🔴"} **${grupo}** — ${T(def.pt, def.en)} · ${st.ligadas}/${st.total}`
+        // punição própria do grupo (quando alguma parte não herda a geral)
+        + (() => { const ms = [...new Set(st.partes.map((x) => am[x.chave]?.punicao?.modo).filter(Boolean))]; return ms.length ? ` · ${T("punição", "punishment")} ${ms.map((m) => `\`${m}\``).join("/")}` : ""; })(),
       // as partes numa linha só (o detalhe de cada uma fica no `&automod <grupo>`)
       `   ${st.partes.map((x) => `${x.ligada ? "✓" : "✗"} \`${x.parte}\``).join(" · ")}`,
     ];
@@ -150,10 +152,10 @@ export async function cmdConfig(message, args, ctx) {
   await sendEmbed(message.channel, {
     title: T("⚙️ Configurações deste servidor", "⚙️ This server's settings"),
     description: [
-      T("**🛡 Módulos do AutoMod**", "**🛡 AutoMod modules**"),
+      T("**🛡 AutoMod — 4 grupos**", "**🛡 AutoMod — 4 groups**"),
       ...modulos,
       "",
-      T("**⚖️ Punição** *(vale para todos os módulos)*", "**⚖️ Punishment** *(applies to every module)*"),
+      T("**⚖️ Punição** *(vale para todos os grupos, se não tiverem a própria)*", "**⚖️ Punishment** *(applies to every group that doesn't have its own)*"),
       ...punicao,
       "",
       T("**📜 Canal de log**", "**📜 Log channel**"),

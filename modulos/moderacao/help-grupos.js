@@ -56,9 +56,9 @@ function gruposPT(P) {
       resumo: "spam, golpe, links, invasão e punições",
       linhas: [
         "**Automático** *(ManagePermissions)*",
-        `\`${P}automod\` — estado de cada filtro: antispam, antilink, anticaps, antiinvite…`,
-        `\`${P}automod <filtro> on|off\` — liga/desliga um filtro`,
-        `\`${P}automod sentinela\` — o filtro que **julga** conteúdo (golpe, +18, gore); antes chamava \`antiscam\``,
+        `\`${P}automod\` — os 4 grupos: antispam, antiruido, antilink, sentinela — e as partes de cada um`,
+        `\`${P}automod <grupo> on|off\` · \`${P}automod <grupo> <parte> on|off\` — o grupo inteiro ou só uma parte`,
+        `\`${P}automod sentinela\` — o que **julga** conteúdo (golpe, +18, gore, ódio, imagens de conta nova)`,
         `\`${P}automod punicao modo <avisar|apagar|confirmar|acumular|banir>\` — o que acontece com quem infringe`,
         `\`${P}automod punicao escada\` — os degraus do modo \`acumular\` (aviso → mute → ban)`,
         `\`${P}banglobal <off|avisar|banir>\` — o que fazer com quem já foi banido em outro servidor *(BanMembers)*`,
@@ -162,7 +162,7 @@ function gruposPT(P) {
         `\`${P}game mercado\` — bazar entre jogadores · \`${P}game trocar\` — escambo`,
         `\`${P}game cambio <qtd> <moeda> [para <moeda>]\` — câmbio com o banco`,
         "",
-        `_Para **montar** o RPG no servidor: \`${P}tutorial game\`. Não confundir com \`${P}xp\`._`,
+        `_O RPG é um mundo só, igual em todo servidor — a wiki: \`${P}tutorial game\`. Não confundir com \`${P}xp\`._`,
       ],
     },
 
@@ -229,9 +229,9 @@ function gruposEN(P) {
       resumo: "spam, scams, links, raids and punishments",
       linhas: [
         "**Automatic** *(ManagePermissions)*",
-        `\`${P}automod\` — each filter's state: antispam, antilink, anticaps, antiinvite…`,
-        `\`${P}automod <filter> on|off\` — toggles a filter`,
-        `\`${P}automod sentinela\` — the filter that **judges** content (scams, NSFW, gore); formerly \`antiscam\``,
+        `\`${P}automod\` — the 4 groups: antispam, antiruido, antilink, sentinela — and each one's parts`,
+        `\`${P}automod <group> on|off\` · \`${P}automod <group> <part> on|off\` — the whole group or one part`,
+        `\`${P}automod sentinela\` — what **judges** content (scams, NSFW, gore, hate, new accounts' images)`,
         `\`${P}automod punicao modo <avisar|apagar|confirmar|acumular|banir>\` — what happens to offenders`,
         `\`${P}automod punicao escada\` — the steps of \`acumular\` mode (warning → mute → ban)`,
         `\`${P}banglobal <off|avisar|banir>\` — what to do with people banned on other servers *(BanMembers)*`,
@@ -335,7 +335,7 @@ function gruposEN(P) {
         `\`${P}game mercado\` — player bazaar · \`${P}game trocar\` — bartering`,
         `\`${P}game cambio <qty> <currency> [para <currency>]\` — exchange with the bank`,
         "",
-        `_To **set up** the RPG on the server: \`${P}tutorial game\`. Not to be confused with \`${P}xp\`._`,
+        `_The RPG is one world, the same on every server — the wiki: \`${P}tutorial game\`. Not to be confused with \`${P}xp\`._`,
       ],
     },
 

@@ -70,7 +70,7 @@ export const SUB = {
   tutorial: {
     moderation: "moderacao", roles: "cargos", levels: "xp",
     character: "rpg", adventure: "aventura", market: "rpg", economy: "economia",
-    setup: "game", permissions: "permissoes", logging: "logs",
+    game: "rpg", wiki: "rpg", permissions: "permissoes", logging: "logs",
     news: "noticias", messages: "mensagens", settings: "ajustes",
     ai: "ia", channels: "canais",
   },

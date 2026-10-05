@@ -70,5 +70,20 @@ export function prepararMundo({ log = console.log } = {}) {
     db.gravarConfig(MARCA, { versao: VERSAO_MUNDO, resetEm: Date.now(), apagados });
     log(`[RPG] mundo global criado — jogo dos servidores zerado: ${Object.entries(apagados).filter(([, n]) => n).map(([t, n]) => `${t}=${n}`).join(" ") || "nada a apagar"}`);
   }
+  arredondarSaldosUmaVez({ log });
   return garantirMoedasDoMundo();
+}
+
+// (4 out 2026) As moedas passaram a ser inteiras. Os saldos com fração que já
+// existiam ("0,1849 Ouro", "4,02 Cristal") são arredondados para baixo uma vez.
+const MARCA_INTEIROS = "__rpg_inteiros__";
+export function arredondarSaldosUmaVez({ log = console.log } = {}) {
+  if (db.lerConfig(MARCA_INTEIROS)?.feito) return;
+  const d = db.getDb();
+  let n = 0;
+  try { n += d.prepare("UPDATE rpg_carteira SET quantidade = CAST(quantidade AS INTEGER) WHERE quantidade != CAST(quantidade AS INTEGER)").run().changes ?? 0; } catch (e) { log(`[RPG] inteiros (carteira): ${e.message}`); }
+  try { d.prepare("UPDATE rpg_moedas SET mercado = CAST(mercado AS INTEGER), dungeon = CAST(dungeon AS INTEGER)").run(); } catch (e) { log(`[RPG] inteiros (moedas): ${e.message}`); }
+  try { d.prepare("UPDATE rpg_ofertas SET qtdOferecida = CAST(qtdOferecida AS INTEGER), qtdPedida = CAST(qtdPedida AS INTEGER)").run(); } catch {}
+  db.gravarConfig(MARCA_INTEIROS, { feito: true, em: Date.now(), saldos: n });
+  if (n) log(`[RPG] moedas inteiras: ${n} saldo(s) com fração arredondado(s) para baixo`);
 }

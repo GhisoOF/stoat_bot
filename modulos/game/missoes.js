@@ -90,21 +90,33 @@ export function escalaPorParty(tamanho) {
   return 1 + 0.18 * Math.max(0, tamanho);
 }
 
-export function previsao(attr, missao, magias = [], tamanhoParty = 0) {
+// Folga de nível (4 out 2026): no nível 19, "Limpar os Ratos do Porão" (nível
+// 2) dava 91% — e o Lobo Branco (nível 6), 24%. Missão bem abaixo do seu nível
+// tem que ser certa. Cada nível acima da missão fecha 1/6 do que falta para
+// 100%; com 6 níveis de folga, êxito e sobrevivência ficam garantidos.
+export const MARGEM_NIVEL = 6;
+export function folgaDeNivel(nivel, missao) {
+  if (!Number.isFinite(nivel) || missao?.tipo === "mercado") return 0;
+  return Math.min(1, Math.max(0, (nivel - (missao.nivel ?? 1)) / MARGEM_NIVEL));
+}
+const comFolga = (c, f) => c + (1 - c) * f;
+
+export function previsao(attr, missao, magias = [], tamanhoParty = 0, nivel = null) {
   const poder = calcularPoder(attr, magias);
   const resil = calcularResiliencia(attr, magias);
   const esc = escalaPorParty(tamanhoParty);
   const poderExigido = (missao.poder ?? 0) * esc;
   const riscoExigido = (missao.risco ?? 0) * esc;
+  const f = folgaDeNivel(nivel, missao);
   return {
-    poder, resil, escala: esc,
-    exito: chance(poder, poderExigido),
-    sobrevivencia: riscoExigido > 0 ? chance(resil, riscoExigido) : 1,
+    poder, resil, escala: esc, folga: f,
+    exito: comFolga(chance(poder, poderExigido), f),
+    sobrevivencia: riscoExigido > 0 ? comFolga(chance(resil, riscoExigido), f) : 1,
   };
 }
 
-export function resolver(attr, missao, aleatorio = Math.random, magias = [], tamanhoParty = 0) {
-  const p = previsao(attr, missao, magias, tamanhoParty);
+export function resolver(attr, missao, aleatorio = Math.random, magias = [], tamanhoParty = 0, nivel = null) {
+  const p = previsao(attr, missao, magias, tamanhoParty, nivel);
   const exito = aleatorio() < p.exito;
   const sobreviveu = missao.risco <= 0 ? true : aleatorio() < p.sobrevivencia;
 

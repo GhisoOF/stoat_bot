@@ -57,6 +57,7 @@ import * as modiaCmd   from "./modulos/moderacao/modia-comando.js";
 import * as persona    from "./modulos/ai/persona.js";
 import * as debugCmd  from "./modulos/moderacao/debug-comando.js";
 import { dirigidoAoBot } from "./modulos/ai/destinatario.js";
+import { protegerMarcadores } from "./modulos/core/marcadores.js";
 import * as chat      from "./modulos/ai/chat.js";
 import * as rss       from "./modulos/ferramentas/rss.js";
 import * as nivel     from "./modulos/ferramentas/nivel.js";
@@ -174,6 +175,9 @@ async function sendEmbed(channel, embed) {
 }
 
 async function enviarEmbedUnico(channel, { title, description, colour = COR.info, imagem = null, anexos = null, ocultarLink = true }) {
+  // "<parâmetro>" some no Stoat: vira ‹parâmetro› (ver core/marcadores.js)
+  title = protegerMarcadores(title);
+  description = protegerMarcadores(description);
   if (!channel || typeof channel.sendMessage !== "function") {
     console.error("[EMBED] Canal indisponível — mensagem não enviada:", title ?? description);
     return;
@@ -305,6 +309,22 @@ function criarContexto(serverId = null) {
     configDoServidor: store.configDoServidor,
     estado, serverId,
   };
+}
+
+// Distância de edição (com troca de duas letras vizinhas) para o "você quis dizer"
+function comandoParecido(digitado, nomes) {
+  const d = (a, b) => {
+    const m = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
+    for (let j = 1; j <= b.length; j++) m[0][j] = j;
+    for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++) {
+      m[i][j] = Math.min(m[i - 1][j] + 1, m[i][j - 1] + 1, m[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) m[i][j] = Math.min(m[i][j], m[i - 2][j - 2] + 1);
+    }
+    return m[a.length][b.length];
+  };
+  let melhor = null, menor = 3;
+  for (const n of nomes) { const x = d(String(digitado), n); if (x < menor && x <= Math.max(1, Math.floor(n.length / 3))) { menor = x; melhor = n; } }
+  return melhor;
 }
 
 const rotas = {
@@ -649,13 +669,16 @@ async function tratarMensagem(message) {
   if (!command) return;            // mensagem normal, sem prefixo
 
   if (!handler) {                  // tinha prefixo, mas o comando não existe
+    // "&gams follower ficha" → "você quis dizer &game?" (o mais parecido, até 2 letras de diferença)
+    const parecido = comandoParecido(command, Object.keys(rotas));
+    const sugestao = parecido ? `${PREFIXO}${parecido}${message.content.slice(PREFIXO.length + command.length)}` : null;
     await sendEmbed(message.channel, tr(ctx, {
       title: "❓ Comando desconhecido",
-      description: `Use \`${PREFIXO}help\` para ver os comandos disponíveis.`,
+      description: (sugestao ? `Você quis dizer \`${sugestao.trim().slice(0, 120)}\`?\n\n` : "") + `Use \`${PREFIXO}help\` para ver os comandos disponíveis.`,
       colour: COR.aviso,
     }, {
       title: "❓ Unknown command",
-      description: `Use \`${PREFIXO}help\` to see the available commands.`,
+      description: (sugestao ? `Did you mean \`${sugestao.trim().slice(0, 120)}\`?\n\n` : "") + `Use \`${PREFIXO}help\` to see the available commands.`,
       colour: COR.aviso,
     }));
     return;

@@ -1,5 +1,6 @@
 import * as db from "./db.js";
 
+import { protegerMarcadores } from "./marcadores.js";
 export const EMOJI_ANTERIOR = "◀";
 export const EMOJI_PROXIMA  = "▶";
 export const EMOJI_INICIO   = "⏮";
@@ -61,7 +62,7 @@ function montar(sessao, i) {
     if (desc.length > max) desc = desc.slice(0, max - 1) + "…";
     desc += rodape;
   }
-  return { title: p.title, description: desc, colour: p.colour ?? colour };
+  return { title: protegerMarcadores(p.title), description: protegerMarcadores(desc), colour: p.colour ?? colour };
 }
 
 export async function enviarPaginado(ctx, canal, {

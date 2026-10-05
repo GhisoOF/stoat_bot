@@ -3185,7 +3185,8 @@ m = await say("&help config");
 ok(titulo(m).includes("Personalizar"), "nome antigo `config` leva ao grupo Personalizar");
 m = await say("&help proteger");
 ok(desc(m).includes("&automod sentinela") && !desc(m).includes("automod antiscam"), "Proteger fala em `&automod sentinela` (não mais em antiscam)");
-ok(desc(m).includes("&help <comando>") || desc(m).includes("&help <command>"), "  → página de grupo aponta o detalhe por comando");
+// (o Stoat esconde "<palavra>"; o bot manda ‹palavra›)
+ok(/&help [<‹](comando|command)[>›]/.test(desc(m)), "  → página de grupo aponta o detalhe por comando");
 
 // limite do embed em TODAS as páginas/grupos/idiomas
 for (const lang of ["pt", "en"]) {
@@ -9510,6 +9511,162 @@ ok(/espera desta missão|já|aventureiro|Grupo/.test(ult?.description ?? "") , "
 t = await jogar("EVA", "coop cancelar");
 ok(/cancelado/.test(t), "quem abriu pode cancelar");
 console.log(`\nCO-OP E RESPEC: ${pass} ok, ${fail} falha(s)`);
+process.exit(fail ? 1 : 0);
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+// jogo-4out  (os 5 problemas vistos em jogo — 4 out 2026)
+// ════════════════════════════════════════════════════════════════════════════
+//  1. "&tutorial game" dava "Área desconhecida"
+//  2. o câmbio ensinava "100 real para dolar" (moedas que não existem mais)
+//  3. não dava para trocar TODO o Ouro por Cristal
+//  4. moeda com fração ("0,1849 Ouro", "4,02 Cristal")
+//  5. no nível 19, missão de nível 2 dava 91% — e a de nível 6, 24%
+// E dois achados do pente fino: "<parâmetro>" sumia no Stoat (a ajuda inteira
+// mostrava "&game pontos [quantos]"), e o pote da dungeon nunca pagava ninguém.
+SUITES["jogo-4out"] = async () => {
+const fs = (await import("node:fs")).default;
+process.env.DB_PATH = "/tmp/jogo4.db"; process.env.CONFIG_PATH = "/tmp/jogo4.json";
+for (const f of ["/tmp/jogo4.db", "/tmp/jogo4.db-wal", "/tmp/jogo4.db-shm", "/tmp/jogo4.json"]) fs.rmSync(f, { force: true });
+const db = await import("./modulos/core/db.js"); db.abrirBanco(process.env.DB_PATH);
+const game = await import("./modulos/game/game.js");
+const MERC = await import("./modulos/game/mercado.js");
+const MISS = await import("./modulos/game/missoes.js");
+const { MUNDO } = await import("./modulos/game/mundo.js");
+const tutorial = await import("./modulos/moderacao/tutorial.js");
+const { protegerMarcadores } = await import("./modulos/core/marcadores.js");
+const q = [console.log, console.info, console.warn]; console.log = console.info = console.warn = () => {};
+game.iniciarCatalogo();
+[console.log, console.info, console.warn] = q;
+let pass = 0, fail = 0;
+const ok = (cond, msg, extra = "") => { cond ? pass++ : fail++; console.log(`${cond ? "✅" : "❌"} ${msg}${!cond && extra ? `\n     ${extra}` : ""}`); };
+let ult = null;
+const jogar = async (uid, txt, { dono = false } = {}) => {
+  const ctx = { serverId: "S", PREFIXO: "&", COR: { erro: 1, aviso: 2, sucesso: 3, info: 4, mod: 5 }, config: { language: "pt" },
+    sendEmbed: async (_c, e) => { ult = e; return { id: "m", react: async () => {} }; }, getServer: async () => ({ id: "S", channels: [] }), ehSuperAdmin: () => dono, membroTemPermissao: () => true };
+  await game.cmdGame({ authorId: uid, author: { username: uid }, channel: { id: "C" }, channelId: "C", mentionIds: [] }, txt.split(" "), ctx);
+  return `${ult?.title}\n${ult?.description}`;
+};
+let seq = 0;
+const tut = async (args, lang = "pt") => {
+  const id = `T4${seq++}`;
+  await tutorial.cmdTutorial({ channel: {}, authorId: "u" }, args, { config: { language: lang }, COR: {}, PREFIXO: "&", serverId: "s",
+    sendEmbed: async (_c, e) => { ult = e; return { id, react: async () => {} }; }, membroTemPermissao: () => false, ehSuperAdmin: () => false, getServer: async () => ({ id: "s" }) });
+  return (db.carregarSessaoPaginas(id)?.paginas ?? [ult]).map((p) => `${p.title}\n${p.description}`).join("\n");
+};
+
+console.log("\n── 1. &tutorial game ──");
+for (const nome of ["game", "jogo", "wiki"]) ok(/Wiki do RPG/.test(await tut([nome])), `★ &tutorial ${nome} abre a wiki do jogo`);
+ok(/RPG wiki/.test(await tut(["game"], "en")), "  → em inglês também");
+
+console.log("\n── 2. exemplos do mundo de hoje ──");
+await jogar("ANA", "criar Ana");
+let t = await jogar("ANA", "cambio");
+ok(!/real|dolar|dólar/i.test(t) && /ouro para cristal/.test(t), "★ o balcão de câmbio ensina com Ouro e Cristal (não \"real para dolar\")", t.slice(0, 200));
+t = await jogar("ANA", "carteira");
+ok(!/admin moeda/.test(t), "a carteira do jogador não manda para o &game admin moeda (é do dono)");
+ok(/admin moeda/.test(await jogar("ANA", "carteira", { dono: true })), "  → o dono continua vendo");
+
+console.log("\n── 3 e 4. trocar tudo, em unidades inteiras ──");
+db.creditar(MUNDO, "ANA", "ouro", 166);
+t = await jogar("ANA", "cambio ouro para cristal");
+const ouro = db.getSaldo(MUNDO, "ANA", "ouro"), cristal = db.getSaldo(MUNDO, "ANA", "cristal");
+ok(/Trocado/.test(t) && cristal >= 1, "★ \"&game cambio ouro para cristal\" (sem quantidade) troca o saldo inteiro", t.slice(0, 160));
+ok(Number.isInteger(ouro) && Number.isInteger(cristal), "★ saldos inteiros depois da troca (antes: 0,1849 Ouro e 4,02 Cristal)", `${ouro} / ${cristal}`);
+const custo1 = MERC.converter(1e6, db.getMoeda(MUNDO, "ouro"), db.getMoeda(MUNDO, "cristal")).recebe > 0;
+ok(custo1 && MERC.converter(ouro, db.getMoeda(MUNDO, "ouro"), db.getMoeda(MUNDO, "cristal")).recebe === 0, "  → o que sobrou de Ouro não compraria nem mais 1 Cristal (usou tudo o que dava)");
+db.creditar(MUNDO, "ANA", "ouro", 500);
+await jogar("ANA", "cambio tudo ouro para cristal");
+ok(Number.isInteger(db.getSaldo(MUNDO, "ANA", "cristal")), "\"tudo\" também funciona");
+ok(/inteiras/.test(await jogar("ANA", "cambio 10,5 ouro para cristal")), "quantia com fração é recusada com explicação");
+const o = { id: "ouro", mercado: 200000 }, c = { id: "cristal", mercado: 5000 };
+const r = MERC.converter(1000, o, c);
+ok(Number.isInteger(r.recebe) && r.gasta <= 1000 && MERC.converter(r.gasta, o, c).recebe === r.recebe, "o banco usa só o que as unidades inteiras custam");
+ok(MERC.custoEm(21, o, c) === 1 && MERC.precoDeRecompra(21, 0) === Math.floor(MERC.precoDeRecompra(21, 0)), "preço em outra moeda arredonda para cima; venda ao mercado é inteira");
+
+console.log("\n── 5. missão abaixo do seu nível é garantida ──");
+const attr = { forca: 10, destreza: 10, resistencia: 12, agilidade: 10, vida: 11, mana: 11, inteligencia: 26, sorte: 25, carisma: 15 };   // a ficha do print
+const ratos = MISS.MISSOES.find((m) => m.nivel === 2), lobo = MISS.MISSOES.find((m) => m.nivel === 6);
+const pr = MISS.previsao(attr, ratos, [], 0, 19), pl = MISS.previsao(attr, lobo, [], 0, 19);
+ok(pr.exito * pr.sobrevivencia === 1 && pl.exito * pl.sobrevivencia === 1, "★ nível 19: Ratos (nv 2) e Lobo Branco (nv 6) garantidos — antes 91% e 24%");
+const p14 = MISS.previsao(attr, MISS.MISSOES.find((m) => m.nivel === 14), [], 0, 19);
+ok(p14.exito > 0.5 && p14.exito < 1, "  → a de nível 14 (5 de folga) fica bem mais fácil, mas não certa");
+ok(MISS.previsao(attr, ratos, [], 0, null).exito < 1, "  → sem nível informado, nada muda (simulações antigas)");
+db.salvarPersonagem(MUNDO, "ANA", { nivel: 19 });
+t = await jogar("ANA", "missao");
+ok(/garantida/.test(t), "a lista de missões mostra \"garantida\"");
+
+console.log("\n── o pente fino ──");
+ok(protegerMarcadores("`&game pontos <atributo> [quantos]`") === "`&game pontos ‹atributo› [quantos]`", "★ \"<parâmetro>\" vira ‹parâmetro› (o Stoat escondia — \"&game pontos [quantos]\")");
+ok(protegerMarcadores("<@01KHBPN31QT1THM1A0CEM8JA91> <#01KHBPN31QT1THM1A0CEM8JA91> [x](<https://a.com>) a < b > c") === "<@01KHBPN31QT1THM1A0CEM8JA91> <#01KHBPN31QT1THM1A0CEM8JA91> [x](<https://a.com>) a < b > c", "  → menções, links e comparações ficam como estão");
+db.salvarMoeda(MUNDO, "ouro", { dungeon: 5000 });
+const antes = db.getSaldo(MUNDO, "ANA", "ouro");
+const r0 = Math.random; Math.random = () => 0.999;   // sem loot, mas vence (folga garante)
+await jogar("ANA", "missao limpar os ratos");
+Math.random = r0;
+ok(db.getMoeda(MUNDO, "ouro").dungeon < 5000 && db.getSaldo(MUNDO, "ANA", "ouro") > antes, "★ vencer uma missão de dungeon paga uma fatia do pote (antes ele só enchia)");
+
+console.log(`\nJOGO 4/10: ${pass} ok, ${fail} falha(s)`);
+process.exit(fail ? 1 : 0);
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+// follower-ficha  (5 out 2026: "&game follower ficha mercenario novato" não achava)
+// ════════════════════════════════════════════════════════════════════════════
+SUITES["follower-ficha"] = async () => {
+const fs = (await import("node:fs")).default;
+process.env.DB_PATH = "/tmp/fficha.db"; process.env.CONFIG_PATH = "/tmp/fficha.json";
+for (const f of ["/tmp/fficha.db", "/tmp/fficha.db-wal", "/tmp/fficha.db-shm", "/tmp/fficha.json"]) fs.rmSync(f, { force: true });
+const db = await import("./modulos/core/db.js"); db.abrirBanco(process.env.DB_PATH);
+const game = await import("./modulos/game/game.js");
+const { MUNDO } = await import("./modulos/game/mundo.js");
+const q = [console.log, console.info, console.warn]; console.log = console.info = console.warn = () => {};
+game.iniciarCatalogo();
+[console.log, console.info, console.warn] = q;
+let pass = 0, fail = 0;
+const ok = (cond, msg, extra = "") => { cond ? pass++ : fail++; console.log(`${cond ? "✅" : "❌"} ${msg}${!cond && extra ? `\n     ${extra}` : ""}`); };
+let ult = null;
+const jogar = async (txt) => {
+  const ctx = { serverId: "S", PREFIXO: "&", COR: { erro: 1, aviso: 2, sucesso: 3, info: 4, mod: 5 }, config: { language: "pt" },
+    sendEmbed: async (_c, e) => { ult = e; return { id: "m", react: async () => {} }; }, getServer: async () => ({ id: "S", channels: [] }), ehSuperAdmin: () => false, membroTemPermissao: () => true };
+  await game.cmdGame({ authorId: "GH", author: { username: "Ghiso" }, channel: { id: "C" }, channelId: "C", mentionIds: [] }, txt.split(" "), ctx);
+  return `${ult?.title}\n${ult?.description}`;
+};
+await jogar("criar Ghiso");
+const merc = db.acharFollowerCatalogo("Mercenário Novato");
+db.recrutarFollower(MUNDO, "GH", merc.id, 1);
+const ehFicha = (t) => /Mercenário Novato/.test(t) && !/Não é um dos seus|Qual companheiro/.test(t);
+ok(ehFicha(await jogar("follower ficha mercenario novato")), "★ sem acento acha o \"Mercenário Novato\" (o print de 5 out)");
+ok(ehFicha(await jogar("follower ficha Mercenário Novato")), "com acento também");
+ok(ehFicha(await jogar("follower Mercenario Novato ficha")), "★ com a ação depois do nome (como você digitou primeiro)");
+ok(ehFicha(await jogar("follower ficha")), "★ com um companheiro só, `ficha` sem nome mostra ele");
+ok(ehFicha(await jogar("follower ficha merc")), "pedaço do nome basta");
+const outro = db.listarFollowersCatalogo().find((f) => f.id !== merc.id);
+db.recrutarFollower(MUNDO, "GH", outro.id, 1);
+let t = await jogar("follower ficha");
+ok(/Qual companheiro/.test(t) && t.includes("Mercenário Novato") && t.includes(outro.nome), "com vários, `ficha` sem nome lista os nomes prontos para copiar", t);
+ok(/Levou|party|Na party|entrou/i.test(await jogar("follower levar mercenario novato")), "levar também acha sem acento");
+ok(!!db.acharItemPorNome("lamina aurora") && !!db.acharFollowerCatalogo("curandeira errante"), "catálogo de itens e companheiros sem acento");
+
+console.log("\n── você quis dizer ──");
+process.env.BOT_TOKEN = "tok"; process.env.DB_PATH = "/tmp/fficha2.db"; process.env.CONFIG_PATH = "/tmp/fficha2.json";
+for (const f of ["/tmp/fficha2.db", "/tmp/fficha2.json", "/tmp/blocklist-cache.bin"]) fs.rmSync(f, { force: true });
+globalThis.fetch = async () => ({ ok: false, status: 503, text: async () => "", json: async () => ({}) });
+const qq = [console.log, console.info, console.warn, console.error]; console.log = console.info = console.warn = console.error = () => {};
+await import("./main.js");
+const c = globalThis.__client;
+await c.emitAll("ready");
+const env = [];
+const canal = { id: "C1", serverId: "S1", name: "comandos", sendMessage: async (p) => { env.push(p); return { id: "M", react: async () => {}, edit: async () => {} }; } };
+const server = { id: "S1", ownerId: "X", name: "T", roles: new Map(), channels: [canal], member: { roles: [] }, havePermission: () => true, fetchMember: async () => null };
+c.servers.set("S1", server); c.channels.set("C1", canal);
+const say = (t) => c.emitAll("messageCreate", { id: "Y" + Math.random(), authorId: "U1", content: t, serverId: "S1", server, channel: canal, channelId: "C1", mentionIds: [], createdAt: new Date(), author: { username: "u" }, member: { roles: [], hasPermission: () => false }, replyIds: [] });
+await say("oi");
+env.length = 0; await say("&gams follower ficha");
+[console.log, console.info, console.warn, console.error] = qq;
+ok(/Você quis dizer `&game follower ficha`/.test(env.at(-1)?.embeds?.[0]?.description ?? ""), "★ \"&gams follower ficha\" → \"você quis dizer `&game follower ficha`?\"", env.at(-1)?.embeds?.[0]?.description);
+
+console.log(`\nFOLLOWER (ficha): ${pass} ok, ${fail} falha(s)`);
 process.exit(fail ? 1 : 0);
 };
 

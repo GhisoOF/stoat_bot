@@ -28,33 +28,63 @@ export function enxurradaDeEmoji(texto, { max = 20, minimo = 10, proporcao = 0.7
 // ── Termos de ódio ─────────────────────────────────────────────────────────
 // Só os inequívocos (insulto racial/homofóbico/transfóbico, PT e EN). Palavras
 // que também são uso comum ("macaco", "bicha", "viado" entre amigos) ficam de
-// fora do padrão — a staff acrescenta com `&automod antiodio add <termo>`.
+// fora do padrão — a staff acrescenta com `&automod sentinela odio add <termo>`.
+//
+// 9 out 2026 — falsos positivos tirados da lista de fábrica:
+//  • "coon": "Falandooo con la pared" foi punido. A comparação "colapsava" as
+//    letras repetidas também no TERMO ("coon" → "con"), e "con" é palavra
+//    comum em espanhol e português ("cones" também caía, pelo sufixo). Além
+//    disso "Maine Coon" é raça de gato;
+//  • "kike": apelido comum de Enrique em espanhol;
+//  • "chink": "a chink in the armor" é expressão do inglês;
+//  • "fagot"/"niga": grafias que colidem com palavras/nomes ("fagote", "Niga");
+//  • "lugar de preto": "lugar de preto é onde ele quiser" é lema ANTIrracista.
 export const TERMOS_ODIO = [
-  "nigger", "nigga", "niga", "negger", "faggot", "fagot", "tranny", "kike", "chink", "spic", "wetback", "coon",
-  "crioulo imundo", "preto imundo", "macaco imundo", "volta pra senzala", "lugar de preto",
+  "nigger", "nigga", "negger", "faggot", "tranny", "spic", "wetback",
+  "crioulo imundo", "preto imundo", "macaco imundo", "volta pra senzala",
 ];
 const LEET = { 0: "o", 1: "i", 3: "e", 4: "a", 5: "s", 7: "t", 8: "b", "@": "a", "$": "s", "!": "i", "|": "i" };
+// Normaliza o TEXTO: minúsculas, sem acento, leet desfeito, menções fora,
+// letras soltas juntadas ("n i g g a", "n.i.g.g.a"). NÃO colapsa as letras
+// repetidas — quem faz isso é o padrão de cada termo (letra+), que aceita
+// "niiiigggaaa" sem transformar "coon" em "con".
 export function normalizarOdio(texto) {
   return String(texto ?? "")
     .toLowerCase()
     .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-    .replace(/[0134578@$!|]/g, (c) => LEET[c] ?? c)
     .replace(/<[@#%][^>]+>/g, " ")
+    // "!" e "|" no fim da palavra são pontuação ("imundo!!"), não um "i"
+    .replace(/[!|]+(?![a-z0-9@$!|])/g, " ")
+    .replace(/[0134578@$!|]/g, (c) => LEET[c] ?? c)
     .replace(/[^a-z\s]/g, " ")
-    // "n i g g a" e "n.i.g.g.a" — letras soltas viram uma palavra
-    .replace(/\b(?:[a-z]\s+){2,}[a-z]\b/g, (m) => m.replace(/\s+/g, ""))
-    .replace(/([a-z])\1+/g, "$1")   // "niiiigggaaa" → "niga"
+    // "n i g g a" e "n.i.g.g.a" — 4+ letras soltas viram uma palavra
+    // (com 3, "e o a"/"a e i" da conversa comum se juntavam à toa)
+    .replace(/\b(?:[a-z]\s+){3,}[a-z]\b/g, (m) => m.replace(/\s+/g, ""))
     .replace(/\s+/g, " ")
     .trim();
 }
-const colapsar = (t) => normalizarOdio(t);
+// "nigga" → /(?<![a-z])n+i+g+g+a+(?:s|z|es|inha|inho|ao)?(?![a-z])/ — cada letra
+// pode vir repetida, mas nenhuma pode SUMIR; palavra inteira, sufixo opcional.
+const cachePadrao = new Map();
+function padraoDoTermo(termo) {
+  const chave = String(termo);
+  if (cachePadrao.has(chave)) return cachePadrao.get(chave);
+  const limpo = String(termo ?? "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z\s]/g, " ").replace(/\s+/g, " ").trim();
+  let re = null;
+  if (limpo.length >= 3) {
+    const corpo = limpo.split(" ").map((p) => [...p].map((c) => `${c}+`).join("")).join(" +");
+    re = new RegExp(`(?<![a-z])${corpo}(?:s|z|es|inha|inho|ao)?(?![a-z])`);
+  }
+  cachePadrao.set(chave, re);
+  return re;
+}
 export function acharOdio(texto, extras = []) {
-  const alvo = ` ${normalizarOdio(texto)} `;
+  const alvo = normalizarOdio(texto);
+  if (!alvo) return null;
   for (const termo of [...TERMOS_ODIO, ...extras]) {
-    const n = colapsar(termo);
-    if (n && alvo.includes(` ${n} `)) return termo;
-    // plural / sufixo comum: "niggas", "faggots"
-    if (n && new RegExp(` ${n}(s|z|es|inha|inho|ao)? `).test(alvo)) return termo;
+    const re = padraoDoTermo(termo);
+    if (re && re.test(alvo)) return termo;
   }
   return null;
 }
@@ -65,6 +95,9 @@ export function acharOdio(texto, extras = []) {
 export function digitalMidia(message) {
   const anexos = message?.attachments ?? [];
   if (!anexos.length) return null;
+  // Sem o tamanho não há digital: "?:?x?" seria IGUAL para qualquer arquivo
+  // sem metadados, e fotos diferentes contariam como a mesma repetida.
+  if (anexos.some((a) => !(Number(a?.size) > 0))) return null;
   const partes = anexos.map((a) => {
     const m = a?.metadata ?? {};
     return `${a?.size ?? "?"}:${m.width ?? "?"}x${m.height ?? "?"}`;

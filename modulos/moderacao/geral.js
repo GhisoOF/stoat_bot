@@ -5,9 +5,10 @@ import { nomeExibido } from "../core/aliases.js";
 import { grupos as gruposHelp, ALIAS_GRUPO, ORDEM as ORDEM_GRUPOS } from "./help-grupos.js";
 import { secaoParametros } from "./help-parametros.js";
 import { enviarPaginado, paginarLinhas } from "../core/paginas.js";
-import { escadaDePunicao, rotuloDegrau, GRUPOS_AUTOMOD, estadoDoGrupo } from "./automod-engine.js";
+import { escadaDePunicao, rotuloDegrau, GRUPOS_AUTOMOD, estadoDoGrupo, validadeDosAvisos } from "./automod-engine.js";
 import { MUNDO } from "../game/mundo.js";
 import { servidorNaLista } from "../core/env.js";
+import { idEscrito } from "../core/ids.js";
 
 // Comandos que só existem onde a IA roda (espelha a lista do main.js).
 const COMANDOS_SO_IA = new Set(["chat", "modia"]);
@@ -48,13 +49,13 @@ function contarLinhas() {
 import * as banGlobal from "./ban-global.js";
 
 function extrairAlvo(message, args) {
-  // 1) menção resolvida pela plataforma
-  let id = message.mentionIds?.[0] ?? null;
-
-  // 2) primeiro argumento: <@ID>, <ID> ou ID puro (ULID de 26 chars)
-  const bruto = (args[0] ?? "").replace(/[<@#>]/g, "");
+  // 1) primeiro argumento: <@ID>, <ID> ou ID puro (ULID de 26 chars). Vem
+  //    ANTES do mentionIds: numa resposta, o mentionIds pode trazer o autor da
+  //    mensagem respondida — "&ban @Fulano" banía outra pessoa.
+  const bruto = (args[0] ?? "").replace(/[<@#>!]/g, "");
   const ehUlid = /^[0-9A-HJKMNP-TV-Z]{26}$/i.test(bruto);
-  if (!id && ehUlid) id = bruto;
+  // 2) senão, a menção resolvida pela plataforma
+  const id = ehUlid ? bruto.toUpperCase() : (message.mentionIds?.[0] ?? null);
 
   // Se o 1º arg era o alvo (menção ou ID), o motivo é o resto
   const primeiroEraAlvo = ehUlid || (args[0] ?? "").includes("@");
@@ -121,8 +122,8 @@ function detalhesPT(P) {
     },
     warn: {
       uso: `${P}warn <@pessoa|id|nome> [motivo]`,
-      desc: "Dá um aviso manual a alguém. Usa o **mesmo contador** do automod, então no modo `acumular` o aviso manual conta para o ban automático — e o bot avisa quantos faltam.\n\nVer os avisos: `&warn lista @pessoa` · Zerar: `&warn limpar @pessoa`",
-      perm: "KickMembers",
+      desc: "Dá um aviso manual a alguém. Usa o **mesmo contador e a mesma escada** do automod: no modo `acumular`, o aviso manual sobe um degrau (aviso → silêncio → … → ban) — e o bot diz qual é o próximo. Os avisos zeram depois de 30 dias sem um novo (`&automod punicao validade`).\n\nA pessoa pode ser **menção, ID ou nome**.\nVer os avisos: `&warn lista [@pessoa]` · Zerar: `&warn limpar @pessoa` _(ManagePermissions)_",
+      perm: "ManageMessages",
       ex: `${P}warn @Fulano flood no chat de arte`,
     },
     servidores: {
@@ -374,8 +375,8 @@ function detalhesEN(P) {
     },
     warn: {
       uso: `${P}warn <@user|id|name> [reason]`,
-      desc: "Gives someone a manual warning. It uses the **same counter** as the automod, so in `acumular` (accumulate) mode a manual warning counts towards the automatic ban — and the bot tells you how many are left.\n\nSee warnings: `&warn lista @user` · Reset: `&warn limpar @user`",
-      perm: "KickMembers",
+      desc: "Gives someone a manual warning. It uses the **same counter and the same ladder** as the automod: in `acumular` (accumulate) mode a manual warning climbs one step (warning → silence → … → ban) — and the bot tells you the next one. Warnings reset after 30 days without a new one (`&automod punicao validade`).\n\nThe person can be a **mention, ID or name**.\nSee warnings: `&warn lista [@user]` · Reset: `&warn limpar @user` _(ManagePermissions)_",
+      perm: "ManageMessages",
       ex: `${P}warn @Someone flooding the art channel`,
     },
     servidores: {
@@ -1191,7 +1192,7 @@ export async function cmdRepete(message, args, ctx) {
 export async function cmdUserinfo(message, args, ctx) {
   const { sendEmbed, COR, getServer, serverId, PREFIXO } = ctx;
   const lang = lingua(ctx);
-  const targetId = message.mentionIds?.[0] ?? message.authorId;
+  const targetId = idEscrito(args.join(" ")) ?? message.mentionIds?.[0] ?? message.authorId;
   const locale = lang === "en" ? "en-US" : "pt-BR";
   const desconhecido = lang === "en" ? "Unknown" : "Desconhecido";
 
@@ -1221,7 +1222,7 @@ export async function cmdUserinfo(message, args, ctx) {
     ];
 
     try {
-      const avisos     = db.contarAvisos(serverId, targetId);
+      const avisos     = db.contarAvisos(serverId, targetId, { validadeMs: validadeDosAvisos(ctx.config?.automod?.punicao) });
       const silenciado = db.estaSilenciado(serverId, targetId);
       const hist       = db.historicoBans(targetId);
       const outros     = hist.filter((b) => b.serverId !== serverId);

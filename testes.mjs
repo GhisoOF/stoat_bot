@@ -9670,6 +9670,159 @@ console.log(`\nFOLLOWER (ficha): ${pass} ok, ${fail} falha(s)`);
 process.exit(fail ? 1 : 0);
 };
 
+// ════════════════════════════════════════════════════════════════════════════
+// warn-justo  (9 out 2026: "&warn limpar @pessoa" não funcionava e gente
+// levando aviso injusto — "Falandooo con la pared" como ódio, "Miguel miguel")
+// ════════════════════════════════════════════════════════════════════════════
+SUITES["warn-justo"] = async () => {
+const fs = (await import("node:fs")).default;
+let pass = 0, fail = 0;
+const ok = (cond, msg, extra = "") => { cond ? pass++ : fail++; console.log(`${cond ? "✅" : "❌"} ${msg}${!cond && extra ? `\n     ${extra}` : ""}`); };
+const r = await import("./modulos/moderacao/rajada.js");
+const car = await import("./modulos/moderacao/caracteres.js");
+
+console.log("── anti-ódio sem falso positivo ──");
+const comuns = ["Falandooo con la pared 😭", "con quién hablas?", "cones de trânsito", "o Níger é um país", "Nigéria", "meu gato é Maine Coon",
+  "Kike vem hoje?", "a chink in the armor", "toco fagote", "lugar de preto é onde ele quiser", "snigger", "niagara falls", "spicy",
+  "o macaco do zoológico", "bicha de piscina", "Miguel miguel", "a e i o u", "tranquilo", "PRETO NO BRANCO", "niga"];
+const fp = comuns.filter((t) => r.acharOdio(t));
+ok(!fp.length, "★ frases comuns (PT/ES/EN) não são ódio — \"con\" não é mais \"coon\"", fp.join(" | "));
+const ofensas = ["nigga", "n i g g a", "N1GG4", "niiiigggaaa", "n.i.g.g.a", "NIGGAS", "n!gga", "seu nigger", "faggots", "f4gg0t", "tranny", "PRETO IMUNDO!!", "volta pra senzala"];
+const passou = ofensas.filter((t) => !r.acharOdio(t));
+ok(!passou.length, "  → e as ofensas (com disfarce) continuam sendo achadas", passou.join(" | "));
+ok(r.acharOdio("seu otaaaario", ["otário"]) === "otário" && !r.acharOdio("otar", ["otário"]), "  → termo da staff aceita letra esticada, mas não letra a menos");
+
+console.log("\n── filtros de ruído ──");
+ok(["KKKKKKKKKKKKKKKKKK", "HAHAHAHAHAHAHAHA", "KSKSKSKSKSKSKSKS", "JAJAJAJAJAJAJA", "AAAAAAAAAAAAAAAAAAH", "KKKKKKK QUE ISSO MANO"].every((t) => !(car.razaoDeCaixaAlta(car.textoHumano(t)) >= 0.7)),
+  "★ risada em maiúsculas (KKKK, HAHAHA, KSKS) não é caixa alta");
+ok(car.razaoDeCaixaAlta("MEU DEUS QUE ÓDIO DESSA FILA") >= 0.7, "  → grito de verdade continua contando");
+ok(["Família 👨‍👩‍👧‍👦 reunida", "🏳️‍🌈🏳️‍⚧️", "❤️‍🔥 ❤️‍🔥 ❤️‍🔥", "🧑🏽‍💻🧑🏽‍💻"].every((t) => !car.analisarCaracteres(t)), "★ emoji composto (com o \"juntador\" invisível) não é caractere invisível");
+ok(!!car.analisarCaracteres("oi​​​tudo"), "  → invisível solto no texto continua pego");
+ok(!car.analisarDuplicata("Miguel miguel", ["miguel miguel", "miguel miguel"]) && !car.analisarDuplicata("Miguel miguel", Array(3).fill("miguel miguel")),
+  "★ \"Miguel miguel\" 3 e 4 vezes não é duplicata (mensagem curta tem folga)");
+ok(!!car.analisarDuplicata("Miguel miguel", Array(4).fill("miguel miguel")), "  → na 5ª vez é");
+const longa = "compre seguidores baratos no meu perfil agora mesmo";
+ok(!!car.analisarDuplicata(longa, [car.digital(longa), car.digital(longa)]), "  → texto longo (propaganda) segue no limite de 3");
+const sc = await import("./modulos/moderacao/scorecard.js");
+const golpe = "free nitro giveaway click here discord-gift.xyz/abc";
+ok(sc.analisarConteudo("Miguel miguel", { repetidas: 4 }).nota < 3, "★ sentinela: repetir texto inocente não vira \"conteúdo proibido\" (antes: nota 6 na 4ª vez)");
+ok(sc.analisarConteudo(golpe, { repetidas: 3 }).nota > sc.analisarConteudo(golpe, { repetidas: 1 }).nota, "  → mas repetir golpe continua pesando");
+ok(r.digitalMidia({ attachments: [{ id: "a" }] }) === null && r.digitalMidia({ attachments: [{ id: "a", size: 10, metadata: { width: 1, height: 1 } }] }), "anexo sem tamanho não ganha digital (\"?:?x?\" igualava fotos diferentes)");
+
+console.log("\n── avisos vencem ──");
+process.env.DB_PATH = "/tmp/wjusto.db";
+for (const f of ["/tmp/wjusto.db", "/tmp/wjusto.db-wal", "/tmp/wjusto.db-shm", "/tmp/wjusto.json", "/tmp/blocklist-cache.bin"]) fs.rmSync(f, { force: true });
+const db = await import("./modulos/core/db.js");
+const eng = await import("./modulos/moderacao/automod-engine.js");
+const DIA = 86_400_000;
+ok(db.avisosVigentes({ avisos: 2, atualizadoEm: Date.now() - 31 * DIA }, eng.validadeDosAvisos({})) === 0
+  && db.avisosVigentes({ avisos: 2, atualizadoEm: Date.now() - 5 * DIA }, eng.validadeDosAvisos({})) === 2, "★ avisos de mais de 30 dias sem nada novo não contam");
+ok(db.avisosVigentes({ avisos: 2, atualizadoEm: Date.now() - 400 * DIA }, eng.validadeDosAvisos({ validadeDias: 0 })) === 2, "  → `validade 0` = nunca vencem");
+ok(eng.limiteDeAvisos({}) === 4 && eng.limiteDeAvisos({ escada: "aviso,ban" }) === 2, "o limite de avisos é o tamanho da escada (um número só)");
+
+console.log("\n── no bot de verdade ──");
+process.env.BOT_TOKEN = "tok"; process.env.CONFIG_PATH = "/tmp/wjusto.json"; process.env.SUPER_ADMINS = "DONO";
+globalThis.fetch = async () => ({ ok: false, status: 503, text: async () => "", json: async () => ({}) });
+const q = [console.log, console.info, console.warn, console.error];
+const mudo = () => { console.log = console.info = console.warn = console.error = () => {}; };
+const fala = () => { [console.log, console.info, console.warn, console.error] = q; };
+mudo();
+await import("./main.js");
+const c = globalThis.__client;
+await c.emitAll("ready");
+fala();
+const B32 = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+const ulid = (ms, fim) => { let t = ""; for (let i = 0; i < 10; i++) { t = B32[ms % 32] + t; ms = Math.floor(ms / 32); } return (t + fim.padEnd(16, "0")).slice(0, 26); };
+const LAU = ulid(Date.now() - 400 * DIA, "AAAA1"), CYB = ulid(Date.now() - 300 * DIA, "BBBB2"), OUT = ulid(Date.now() - 200 * DIA, "CCCC3");
+const env = [], apagadas = [], timeouts = [];
+const canal = { id: "C1", serverId: "S1", name: "chat", sendMessage: async (p) => { env.push(p); return { id: "M" + env.length, react: async () => {}, edit: async () => {}, delete: async () => {} }; }, fetchMessages: async () => [] };
+const membro = (id, nome) => ({ id: { server: "S1", user: id }, user: { id, username: nome }, nickname: null, roles: [], hasPermission: () => false, edit: async (p) => { if (p.timeout) timeouts.push(id); } });
+const membros = { [LAU]: membro(LAU, "Laufeyy"), [CYB]: membro(CYB, "cyberghostgirl18"), [OUT]: membro(OUT, "Outra") };
+const server = { id: "S1", ownerId: "DONO", name: "T", roles: new Map(), channels: [canal], member: { roles: [] }, havePermission: () => true,
+  fetchMember: async (id) => membros[id] ?? null, fetchMembers: async () => ({ members: Object.values(membros) }), fetchBans: async () => [] };
+c.servers.set("S1", server); c.channels.set("C1", canal);
+const manda = async (autor, content, extra = {}) => {
+  const m = { id: "X" + Math.random(), authorId: autor, content, serverId: "S1", server, channel: canal, channelId: "C1", mentionIds: [], createdAt: new Date(),
+    author: { username: membros[autor]?.user.username ?? "dono" }, member: membros[autor] ?? { roles: [], hasPermission: () => true }, replyIds: [], attachments: [],
+    delete: async () => { apagadas.push(m.id); }, ...extra };
+  mudo();
+  try { await Promise.race([c.emitAll("messageCreate", m), new Promise((res) => setTimeout(res, 5000))]); } finally { fala(); }
+  return m;
+};
+const ultimo = () => { const e = env.at(-1)?.embeds?.[0]; return `${e?.title ?? ""}\n${e?.description ?? env.at(-1)?.content ?? ""}`; };
+await manda("DONO", "oi");
+const store = await import("./modulos/core/config-store.js");
+const cfg = store.configDoServidor("S1");
+cfg.automod.punicao.modo = "acumular"; cfg.language = "pt"; cfg.idiomaPerguntado = true;
+
+env.length = 0;
+let m = await manda(CYB, "Falandooo con la pared 😭");
+ok(!apagadas.includes(m.id) && !env.length && db.contarAvisos("S1", CYB) === 0, "★ \"Falandooo con la pared 😭\" passa (o print de 9 out)", ultimo());
+for (let i = 0; i < 3; i++) m = await manda(LAU, "Miguel miguel");
+ok(!apagadas.includes(m.id) && db.contarAvisos("S1", LAU) === 0, "★ \"Miguel miguel\" 3× passa (o outro print de 9 out)", ultimo());
+m = await manda(LAU, "Miguel miguel"); m = await manda(LAU, "Miguel miguel");
+ok(apagadas.includes(m.id) && db.contarAvisos("S1", LAU) === 0 && /Só um toque/.test(ultimo()), "★ na 5ª: apaga e dá um toque, SEM contar aviso", ultimo());
+m = await manda(LAU, "Miguel miguel");
+ok(db.contarAvisos("S1", LAU) === 1 && /Aviso do AutoMod/.test(ultimo()), "  → insistiu dentro de 10 min: aí conta o aviso", ultimo());
+env.length = 0;
+for (const t of ["KKKKKKKKKKKKKKKKKKKKKK", "HAHAHAHAHAHAHAHAHAHA", "Família 👨‍👩‍👧‍👦 reunida hoje", "😭😭😭😭😭😭😭😭😭😭😭"]) m = await manda(OUT, t);
+ok(db.contarAvisos("S1", OUT) === 0 && !env.length, "★ risada em caixa alta, emoji de família e 11 😭 de quem já é do servidor passam", ultimo());
+const NOVA = ulid(Date.now() - 60_000, "DDDD4");
+membros[NOVA] = membro(NOVA, "nova");
+m = await manda(NOVA, "nigga");
+ok(apagadas.includes(m.id) && db.contarAvisos("S1", NOVA) === 1, "ofensa de verdade: apagada e aviso na hora (sem toque)");
+
+console.log("\n── &warn ──");
+const cmd = async (t, mencoes = []) => { env.length = 0; await manda("DONO", t, { mentionIds: mencoes }); return ultimo(); };
+let t = await cmd(`&warn limpar <@${LAU}>`, []);
+ok(/O aviso de <@.*> foi zerado/.test(t) && db.contarAvisos("S1", LAU) === 0, "★ `&warn limpar <@pessoa>` funciona mesmo sem o mentionIds do Stoat", t);
+db.somarAviso("S1", LAU, "x");
+t = await cmd(`&warn limpar <@${LAU}>`, [OUT]);
+ok(db.contarAvisos("S1", LAU) === 0 && db.contarAvisos("S1", OUT) === 0 && t.includes(LAU), "★ numa resposta (mentionIds traz outra pessoa) zera quem foi escrito", t);
+db.somarAviso("S1", LAU, "x");
+t = await cmd("&warn limpar Laufeyy");
+ok(db.contarAvisos("S1", LAU) === 0 && /zerado/.test(t), "`&warn limpar Laufeyy` (pelo nome) também", t);
+db.somarAviso("S1", LAU, "x"); db.silenciarAte("S1", LAU, Date.now() + 60_000, "x");
+t = await cmd(`&warn limpar ${LAU}`);
+ok(db.contarAvisos("S1", LAU) === 0 && db.estaSilenciado("S1", LAU) && /silêncio em curso continua/.test(t), "limpar pelo ID zera os avisos e mantém o silêncio em curso (e diz como tirar)", t);
+t = await cmd("&warn limpar ninguemexiste");
+ok(/Não achei/.test(t), "nome que não existe: diz que não achou (não \"uso incorreto\")", t);
+t = await cmd(`&warn lista ${CYB}`);
+ok(/tem \*\*0\/4\*\*/.test(t), "`&warn lista <id>` mostra x/4 (a escada padrão)", t);
+t = await cmd("&warn Outra flood no chat");
+ok(/\*\*Motivo:\*\* flood no chat/.test(t) && !/Outra flood/.test(t), "★ `&warn Nome motivo`: o nome não vai parar no motivo", t);
+timeouts.length = 0;
+t = await cmd(`&warn <@${OUT}> de novo`, [OUT]);
+ok(/Silenciado por \*\*5 min\*\*/.test(t) && timeouts.includes(OUT), "★ o 2º aviso manual segue a escada (silêncio de 5 min), como o automod", t);
+ok(!/banido/i.test(await cmd(`&warn <@${OUT}> terceiro`, [OUT])), "★ o 3º aviso NÃO bane mais (antes: warnsParaBan=3 no manual × ban no 4º no automod)");
+t = await cmd("&warn <@DONO> teste", ["DONO"]);
+ok(/não pode dar um aviso a si mesmo|dono do servidor/.test(t), "o dono não recebe aviso", t);
+
+console.log("\n── o alvo escrito vale mais que o mentionIds (respostas) ──");
+const ids = await import("./modulos/core/ids.js");
+ok(ids.idEscrito(`motivo <@${OUT}> x`) === OUT && ids.idEscrito(OUT) === OUT && ids.idEscrito("sem id") === null, "idEscrito acha a menção ou o ID no texto");
+t = await cmd(`&userinfo <@${OUT}>`, [LAU]);
+ok(t.includes(OUT) && !t.includes(LAU), "★ `&userinfo @Outra` respondendo à Laufeyy mostra a Outra", t);
+let buscou = false; canal.fetchMessages = async () => { buscou = true; return []; };
+t = await cmd("&limpar 5 ninguemexiste");
+ok(/Não achei/.test(t) && !buscou, "★ `&limpar 5 <nome que não existe>` não apaga as de todo mundo", t);
+
+console.log("\n── &automod punicao ──");
+t = await cmd("&automod punicao warns 3");
+ok(cfg.automod.punicao.escada === "aviso,5m,ban" && eng.limiteDeAvisos(cfg.automod.punicao) === 3, "★ `punicao warns 3` ajusta a escada (aviso → 5 min → ban)", cfg.automod.punicao.escada);
+await cmd("&automod punicao warns 6");
+ok(eng.limiteDeAvisos(cfg.automod.punicao) === 6, "  → `warns 6` estica a escada", cfg.automod.punicao.escada);
+await cmd("&automod punicao validade 7");
+ok(cfg.automod.punicao.validadeDias === 7 && eng.validadeDosAvisos(cfg.automod.punicao) === 7 * DIA, "`punicao validade 7`");
+t = await cmd("&automod punicao");
+ok(/vencem/.test(t) && /toque/.test(t) && /ban no aviso/.test(t), "o status mostra a escada, a validade e o toque", t);
+t = await cmd("&help warn");
+ok(/ManageMessages/.test(t) && /menção, ID ou nome/.test(t) && !/KickMembers/.test(t), "&help warn: permissão certa e o alvo por menção/ID/nome", t);
+
+console.log(`\nWARN JUSTO: ${pass} ok, ${fail} falha(s)`);
+process.exit(fail ? 1 : 0);
+};
+
 // ── O executor ───────────────────────────────────────────────────────────────
 const PRECISA_DO_BOT = (nome) => /import\("\.\/main\.js"\)/.test(String(SUITES[nome]));
 

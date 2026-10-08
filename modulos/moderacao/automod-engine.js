@@ -188,6 +188,48 @@ function taxaPorSegundo(estado, userId, serverId = null) {
   return ts.filter((t) => now - t < 1000).length + 1; // +1 conta a atual
 }
 
+// ── Primeiro toque (9 out 2026) ─────────────────────────────────────────────
+// Os filtros de "ruído" (repetir mensagem, caixa alta, emoji, velocidade,
+// letras repetidas, caracteres estranhos, muitos anexos) pegam gente normal
+// empolgada — "Miguel miguel" três vezes chamando um amigo virou aviso. Para
+// quem NÃO é conta nova e fora de uma onda de raid, a primeira vez em
+// TOQUE_MS só apaga e explica, sem contar aviso. Se repetir dentro da
+// janela, aí segue a escada normal. Só vale no modo `acumular` (nos modos
+// avisar/apagar já não há aviso; confirmar/banir foi escolha explícita).
+export const TOQUE_MS = 10 * 60_000;
+const toques = new Map();   // "server:user" → quando levou o último toque
+export function primeiroToque(sid, userId, { agora = Date.now(), novato = false, raid = false } = {}) {
+  if (novato || raid) return false;
+  const chave = `${sid}:${userId}`;
+  const ultimo = toques.get(chave);
+  if (ultimo && agora - ultimo < TOQUE_MS) return false;
+  toques.set(chave, agora);
+  if (toques.size > 5000) for (const [k, t] of toques) if (agora - t > TOQUE_MS) toques.delete(k);
+  return true;
+}
+function modoEfetivo(config, pol) {
+  return (pol && pol.modo) ? pol.modo : (config.automod?.punicao?.modo ?? "avisar");
+}
+async function darToque(ctx, { server, channel, message, userId, motivo }) {
+  const { sendEmbed, COR } = ctx;
+  const lang = lingua(ctx);
+  if (message) { try { await message.delete(); } catch {} }
+  let aviso = null;
+  try {
+    aviso = await sendEmbed(channel, {
+      title: lang === "en" ? "🙂 Just a heads-up" : "🙂 Só um toque",
+      description: lang === "en"
+        ? `<@${userId}> — ${motivo}.\n_Message removed, **no warning counted**. If it happens again in the next 10 min, it counts._`
+        : `<@${userId}> — ${motivo}.\n_A mensagem foi apagada, **sem contar aviso**. Se repetir nos próximos 10 min, aí conta._`,
+      colour: COR.aviso,
+    });
+  } catch {}
+  // some sozinho: é um lembrete, não um registro público
+  if (aviso?.delete) setTimeout(() => aviso.delete().catch?.(() => {}), 20_000).unref?.();
+  await log.registrar(ctx, "punicoes", { titulo: "🙂 Toque do AutoMod (sem aviso)",
+    descricao: `<@${userId}> — ${motivo}` });
+}
+
 async function aplicarPunicao(ctx, opts) {
   const { server, channel, message, userId, motivo } = opts;
   const apagar = opts.apagar !== false;
@@ -307,7 +349,7 @@ async function aplicarPunicao(ctx, opts) {
   }
 
   const sid   = ctx.serverId ?? server?.id;
-  const count = db.somarAviso(sid, userId, motivo);
+  const count = db.somarAviso(sid, userId, motivo, { validadeMs: validadeDosAvisos(polGlobal) });
   const degraus = escadaDePunicao(pol);
   // Passou do último degrau definido? Fica no último (que é o ban).
   const degrau = degraus[Math.min(count, degraus.length) - 1];
@@ -342,10 +384,15 @@ async function aplicarPunicao(ctx, opts) {
       acao = lang === "en" ? `failed to silence — ${detalhe}` : `falha ao silenciar — ${detalhe}`;
       // Sem silêncio, a pessoa seguia postando (raid de 27/09: suásticas por
       // mais 1 min, e as mensagens só sumiram quando a staff acordou).
-      confianca.quarentenar(ctx.serverId ?? server?.id, userId);
-      acao += lang === "en"
-        ? " — until then, **everything they post in the next 30 min is deleted**"
-        : " — enquanto isso, **tudo o que a pessoa mandar nos próximos 30 min é apagado**";
+      // Mas só para o que é grave ou para conta nova: quem já é do servidor e
+      // escorregou num filtro de ruído não fica 30 min com tudo apagado
+      // porque o BOT não tinha a permissão (9 out 2026).
+      if (!opts.ruido || confianca.contaNova(sid, userId) || confianca.emModoRaid(sid)) {
+        confianca.quarentenar(ctx.serverId ?? server?.id, userId);
+        acao += lang === "en"
+          ? " — until then, **everything they post in the next 30 min is deleted**"
+          : " — enquanto isso, **tudo o que a pessoa mandar nos próximos 30 min é apagado**";
+      }
     }
     await sendEmbed(channel, { title: lang === "en" ? "🔇 Temporary silence" : "🔇 Silêncio temporário",
       description: [
@@ -473,6 +520,20 @@ async function alertarAdministracao(ctx, { server, canal, userId, sinal, faixa, 
 }
 
 export const ESCADA_PADRAO = "aviso,5m,1h,ban";
+
+// Quantos avisos até o ban = o tamanho da escada (o ban é o último degrau).
+// Antes havia DOIS números: o automod seguia a escada (ban no 4º) e o `&warn`
+// manual banía no `warnsParaBan` (3) — um aviso manual depois de dois do
+// automod banía quem o automod só teria silenciado por 1h.
+export function limiteDeAvisos(pol = {}) {
+  return escadaDePunicao(pol).length;
+}
+// Depois de quantos dias sem punição nova os avisos zeram (0 = nunca).
+export const VALIDADE_PADRAO_DIAS = 30;
+export function validadeDosAvisos(pol = {}) {
+  const d = Number(pol?.validadeDias ?? VALIDADE_PADRAO_DIAS);
+  return Number.isFinite(d) && d > 0 ? d * 86_400_000 : 0;
+}
 
 // Os filtros do automod: nome do comando → chave na config. Uma lista só para
 // o &automod, o &config e o &info (o &info contava 9 de 11, e o &config não
@@ -655,6 +716,12 @@ export async function runAutomod(message, ctx) {
   // ninguém era isento: o dono de um servidor foi silenciado por 2h no
   // próprio servidor ao divulgar o próprio link. `isentarStaff: false` na
   // config do automod desliga a isenção, para testar os filtros em si mesmo.
+  // Bots (contas de bot de verdade, que só entram adicionados pela staff) não
+  // são moderados: o card de outro bot de moderação repetido não é spam.
+  if (message.author?.bot) {
+    dbg(ctx, "  ✓ Autor é um bot — automod não se aplica");
+    return false;
+  }
   if (am.isentarStaff !== false && ctx.membroTemPermissao?.(message, server, "ManageMessages")) {
     dbg(ctx, "  ✓ Autor é da staff (ou dono/super admin) — automod não se aplica");
     return false;
@@ -675,6 +742,21 @@ export async function runAutomod(message, ctx) {
     return true;
   };
 
+  // Filtros de ruído: a primeira vez é só um toque (ver primeiroToque).
+  const novato = confianca.contaNova(sid, userId);
+  const raid = confianca.emModoRaid(sid);
+  const punirRuido = async (pol, motivo, rotulo) => {
+    dbg(ctx, `  ✗ BLOQUEADA por ${rotulo}`);
+    if (modoEfetivo(config, pol) === "acumular" && primeiroToque(sid, userId, { novato, raid })) {
+      dbg(ctx, "  → primeiro toque: apaga e explica, sem contar aviso");
+      await darToque(ctx, { server, channel: canal, message, userId, motivo });
+      return true;
+    }
+    try { await message.delete(); } catch (e) { dbg(ctx, `  (falha ao deletar: ${e.message})`); }
+    await aplicarPunicao(ctx, { server, channel: canal, message, userId, pol, motivo, ruido: true });
+    return true;
+  };
+
   // ── Termos de ódio (2 out 2026: a ofensa racial passou por todos os filtros) ──
   if (am.antiOdio?.enabled !== false) {
     const termo = rajada.acharOdio(content, am.antiOdio?.termos ?? []);
@@ -685,9 +767,12 @@ export async function runAutomod(message, ctx) {
 
   // ── Enxurrada de emoji (o ataque colava ~170 emojis por mensagem) ──
   if (am.antiEmoji?.enabled !== false) {
-    const e = rajada.enxurradaDeEmoji(content, { max: am.antiEmoji?.maxEmojis ?? 20 });
+    // "quase só emoji" (10+ e 70% da mensagem) só para conta nova: "😭" ×10
+    // é reação normal de quem já está no servidor.
+    const maxE = am.antiEmoji?.maxEmojis ?? 20;
+    const e = rajada.enxurradaDeEmoji(content, { max: maxE, minimo: novato ? 10 : maxE });
     dbg(ctx, `  [anti-emoji] ${rajada.contarEmojis(content)} emoji(s)${e ? " — ENXURRADA" : ""}`);
-    if (e) return barrar(am.antiEmoji?.punicao, `enxurrada de emoji (${e.n})`, "anti-emoji");
+    if (e) return punirRuido(am.antiEmoji?.punicao, `muitos emojis numa mensagem só (${e.n})`, "anti-emoji");
   }
 
   // ── Rajada de mídia: muitos anexos em pouco tempo, somando TODOS os canais ──
@@ -697,10 +782,9 @@ export async function runAutomod(message, ctx) {
   if (anexos && am.antiMidia?.enabled !== false) {
     estado.midiaData ??= new Map();
     const n = rajada.contarMidias(estado.midiaData, `${sid}:${userId}`, anexos);
-    const nova = confianca.contaNova(sid, userId);
-    const max = nova ? (am.antiMidia?.maxNovato ?? 3) : (am.antiMidia?.maxPorMinuto ?? 8);
-    dbg(ctx, `  [anti-mídia] ${n} anexo(s) no último minuto (máx. ${max}${nova ? ", conta nova" : ""})`);
-    if (n > max) return barrar(am.antiMidia?.punicao, `muitas imagens/arquivos em pouco tempo (${n} em 1 min)`, "anti-mídia");
+    const max = novato ? (am.antiMidia?.maxNovato ?? 3) : (am.antiMidia?.maxPorMinuto ?? 8);
+    dbg(ctx, `  [anti-mídia] ${n} anexo(s) no último minuto (máx. ${max}${novato ? ", conta nova" : ""})`);
+    if (n > max) return punirRuido(am.antiMidia?.punicao, `muitas imagens/arquivos em pouco tempo (${n} em 1 min)`, "anti-mídia");
   }
 
   // ── Imagens: descritas pelo modelo e pontuadas em segundo plano ──
@@ -749,11 +833,7 @@ export async function runAutomod(message, ctx) {
       const naoPermitidos = codigos.filter((c) => !config.inviteWhitelist.includes(c.toLowerCase()));
       dbg(ctx, `  [anti-invite] não permitidos: [${naoPermitidos.join(", ") || "nenhum"}]`);
       if (naoPermitidos.length > 0) {
-        dbg(ctx, "  ✗ BLOQUEADA por anti-invite");
-        try { await message.delete(); } catch (e) { dbg(ctx, `  (falha ao deletar: ${e.message})`); }
-        await aplicarPunicao(ctx, { server, channel: canal, message, userId, pol: am.antiInvite.punicao,
-          motivo: "não é permitido enviar convites neste servidor" });
-        return true;
+        return punirRuido(am.antiInvite.punicao, "não é permitido enviar convites neste servidor", "anti-invite");
       }
     }
   } else {
@@ -834,11 +914,7 @@ export async function runAutomod(message, ctx) {
     const n = unicas.size;
     dbg(ctx, `  [anti-mass-mention] ON → ${n} menção(ões) (limite ${am.antiMassMention.maxMentions})`);
     if (n > am.antiMassMention.maxMentions) {
-      dbg(ctx, "  ✗ BLOQUEADA por anti-mass-mention");
-      try { await message.delete(); } catch {}
-      await aplicarPunicao(ctx, { server, channel: canal, message, userId,
-        pol: am.antiMassMention.punicao, motivo: `você mencionou ${n} usuários diferentes de uma só vez` });
-      return true;
+      return punirRuido(am.antiMassMention.punicao, `você mencionou ${n} usuários diferentes de uma só vez`, "anti-mass-mention");
     }
   } else {
     dbg(ctx, "  [anti-mass-mention] OFF");
@@ -851,11 +927,7 @@ export async function runAutomod(message, ctx) {
     if (ratio !== null) {
       dbg(ctx, `  [anti-caps] ON → ${(ratio * 100).toFixed(0)}% maiúsculas em "${textoEstilo.slice(0, 60)}" (limite ${(am.antiCaps.threshold * 100).toFixed(0)}%)`);
       if (ratio >= am.antiCaps.threshold) {
-        dbg(ctx, "  ✗ BLOQUEADA por anti-caps");
-        try { await message.delete(); } catch {}
-        await aplicarPunicao(ctx, { server, channel: canal, message, userId,
-          pol: am.antiCaps.punicao, motivo: "evite escrever em CAIXA ALTA em excesso" });
-        return true;
+        return punirRuido(am.antiCaps.punicao, "evite escrever em CAIXA ALTA em excesso", "anti-caps");
       }
     }
   } else if (am.antiCaps.enabled) {
@@ -871,10 +943,7 @@ export async function runAutomod(message, ctx) {
     });
     dbg(ctx, `  [anti-caracteres] ON → ${r ? "detectado: " + r.tipo : "ok"}`);
     if (r) {
-      dbg(ctx, `  ✗ BLOQUEADA por anti-caracteres (${r.tipo})`);
-      try { await message.delete(); } catch {}
-      await aplicarPunicao(ctx, { server, channel: canal, message, userId, pol: am.antiCaracteres.punicao, motivo: r.motivo });
-      return true;
+      return punirRuido(am.antiCaracteres.punicao, r.motivo, `anti-caracteres (${r.tipo})`);
     }
   } else {
     dbg(ctx, "  [anti-caracteres] OFF");
@@ -887,10 +956,7 @@ export async function runAutomod(message, ctx) {
     });
     dbg(ctx, `  [anti-repeticao] ON → ${r ? "detectado" : "ok"} (ignora "${am.antiRepeticao.ignorar ?? "k"}")`);
     if (r) {
-      dbg(ctx, "  ✗ BLOQUEADA por anti-repeticao");
-      try { await message.delete(); } catch {}
-      await aplicarPunicao(ctx, { server, channel: canal, message, userId, pol: am.antiRepeticao.punicao, motivo: r.motivo });
-      return true;
+      return punirRuido(am.antiRepeticao.punicao, r.motivo, "anti-repeticao");
     }
   } else {
     dbg(ctx, "  [anti-repeticao] OFF");
@@ -901,16 +967,11 @@ export async function runAutomod(message, ctx) {
   // repete o mesmo texto num ritmo calmo passava por ele e por todo o resto.
   if (dup.enabled !== false) {
     // Conta nova repete 2× e já é pega (no raid, as contas tinham minutos de vida).
-    const limiteDup = confianca.contaNova(ctx.serverId ?? server?.id, userId)
-      ? Math.max(2, (dup.maxRepetidas ?? 3) - 1) : (dup.maxRepetidas ?? 3);
+    const limiteDup = novato ? Math.max(2, (dup.maxRepetidas ?? 3) - 1) : (dup.maxRepetidas ?? 3);
     const r = analisarDuplicata(content, anterioresDigitais, { maxRepetidas: limiteDup });
     dbg(ctx, `  [anti-duplicata] ON → ${repetidas}ª vez desta mensagem (limite ${limiteDup})`);
     if (r) {
-      dbg(ctx, "  ✗ BLOQUEADA por anti-duplicata");
-      try { await message.delete(); } catch (e) { dbg(ctx, `  (falha ao deletar: ${e.message})`); }
-      await aplicarPunicao(ctx, { server, channel: canal, message, userId,
-        pol: dup.punicao, motivo: r.motivo });
-      return true;
+      return punirRuido(dup.punicao, r.motivo, "anti-duplicata");
     }
   } else {
     dbg(ctx, "  [anti-duplicata] OFF");
@@ -941,12 +1002,8 @@ export async function runAutomod(message, ctx) {
       const c = prev.filter((t) => now - t < am.antiSpam.windowMs).length;
       dbg(ctx, `  [anti-spam] ON → ${c} msg em ${am.antiSpam.windowMs}ms (limite ${am.antiSpam.maxMessages})`);
       if (c >= am.antiSpam.maxMessages) {
-        dbg(ctx, "  ✗ BLOQUEADA por anti-spam");
         estado.spamData.set(chaveSpam, []);
-        try { await message.delete(); } catch {}
-        await aplicarPunicao(ctx, { server, channel: canal, message, userId,
-          pol: am.antiSpam.punicao, motivo: "você está enviando mensagens muito rapidamente" });
-        return true;
+        return punirRuido(am.antiSpam.punicao, "você está enviando mensagens muito rapidamente", "anti-spam");
       }
     }
   } else {

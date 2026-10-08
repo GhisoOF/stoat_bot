@@ -142,7 +142,13 @@ diz exatamente o que clicar.
   tempo que faltava.
 - **Escada de punição**: cada reincidência sobe um degrau (aviso → 5 min →
   1 h → ban, tempos configuráveis com `&automod punicao escada`). Quem escorregou uma
-  vez nunca chega ao ban; quem insiste sobe sozinho.
+  vez nunca chega ao ban; quem insiste sobe sozinho. O `&warn` manual sobe a
+  **mesma** escada, e os avisos **vencem** depois de 30 dias sem um novo
+  (`&automod punicao validade <dias|0>`).
+- **Primeiro toque**: nos filtros de ruído (repetição, caixa alta, emoji,
+  velocidade, convite, menções), o 1º deslize em 10 min de quem já é do
+  servidor só apaga e explica, sem contar aviso. Conta nova e onda de raid
+  continuam no rigor total. Ódio, golpe e links bloqueados não têm toque.
 - **Moderação por IA** (`&modia`): você escreve os critérios em texto livre e
   a IA apaga o que violar, marcando o responsável no log — ela **nunca bane sozinha**.
 - **Lista global de banimentos** (`&banglobal`): compartilhada entre os
@@ -270,7 +276,7 @@ próprio bot: `&help <comando>`. Um resumo:
 | `&silenciar @user <tempo> [motivo]` | TimeoutMembers | timeout nativo (`10m`, `2h`, `1d`…, até 28 dias); `&silenciar tirar @user` devolve a voz |
 | `&limpar <n> [@user]` | ManageMessages | apaga as últimas `n` mensagens |
 | `&limpar tudo` | só o dono | esvazia o canal, com código de confirmação |
-| `&warn @user [motivo]` | staff | aviso manual (soma com os do automod) |
+| `&warn <@user\|id\|nome> [motivo]` | ManageMessages | aviso manual (mesma escada do automod) |
 | `&warn limpar @user` | ManagePermissions | zera os avisos |
 
 ### Configuração (ManagePermissions, salvo indicação)

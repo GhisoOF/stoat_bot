@@ -35,7 +35,11 @@ export function analisarCaracteres(texto, opcoes = {}) {
   const emoticon = pareceEmoticon(texto);
 
   if (!emoticon) {
-    const leves = (texto.match(INVISIVEIS_LEVES) || []).length;
+    // O "juntador" (ZWJ, U+200D) é PARTE de emojis compostos — 👨‍👩‍👧‍👦, 🏳️‍🌈,
+    // 🧑🏽‍💻, ❤️‍🔥. Entre dois emojis ele não é invisível suspeito (9 out 2026:
+    // "Família 👨‍👩‍👧‍👦 reunida" caía como "caracteres invisíveis").
+    const semJuntaEmoji = texto.replace(/(?<=[\p{Extended_Pictographic}\u{1F3FB}-\u{1F3FF}\uFE0F])\u200D(?=\p{Extended_Pictographic})/gu, "");
+    const leves = (semJuntaEmoji.match(INVISIVEIS_LEVES) || []).length;
     if (leves > 2) {
       return { motivo: "uso de caracteres invisíveis ou de controle de texto", tipo: "invisiveis", qtd: leves };
     }
@@ -84,13 +88,21 @@ export function digital(conteudo) {
 //
 // `anteriores` é a lista de digitais recentes daquele autor. Devolve null
 // quando está tudo bem — o mesmo contrato das outras funções deste arquivo.
+// Mensagem CURTA (até 3 palavras ou menos de 25 letras) tem folga de +2:
+// "Miguel miguel" três vezes chamando um amigo é conversa, não propaganda
+// (9 out 2026). Bot de spam repete texto longo — esse segue no limite normal.
+export const FOLGA_CURTA = 2;
+export function ehCurta(d) {
+  return String(d ?? "").length < 25 || String(d ?? "").split(" ").length <= 3;
+}
 export function analisarDuplicata(conteudo, anteriores = [], opcoes = {}) {
   const { maxRepetidas = 3 } = opcoes;
   const d = digital(conteudo);
   if (!d) return null;
 
+  const limite = maxRepetidas + (ehCurta(d) ? FOLGA_CURTA : 0);
   const iguais = anteriores.filter((x) => x === d).length + 1;   // +1 = esta
-  if (iguais < maxRepetidas) return null;
+  if (iguais < limite) return null;
   return {
     motivo: `você repetiu a mesma mensagem ${iguais} vezes`,
     tipo: "duplicata",
@@ -114,8 +126,16 @@ const MAIUSCULAS = /[A-ZÀÁÂÃÄÉÊÍÓÔÕÚÜÇ]/g;
 const SO_LETRAS  = /[^a-zA-ZÀ-ÿ]/g;
 const MIN_LETRAS = 12;   // abaixo disso a conta é ruído (siglas, "OK OK OK")
 
+// Risada e grito de uma letra só não são "caixa alta" (9 out 2026): "KKKKKKK",
+// "HAHAHAHA", "KSKSKS", "JAJAJA", "RSRS", "HUAHUA", "AAAAAAH" — tudo vinha
+// 100% maiúsculo e virava aviso.
+const RISADA = /^(?:k{3,}|[kj]{4,}|[ha]{4,}|[he]{4,}|[hi]{4,}|[ks]{4,}|[ja]{4,}|[je]{4,}|[rs]{4,}|[ka]{4,}|[hua]{5,}|[hue]{5,}|[sh]{4,}|(\p{L})\1{3,})$/iu;
+export function semRisada(texto) {
+  return String(texto ?? "").split(/\s+/).filter((p) => !RISADA.test(p.replace(/[^\p{L}]/gu, ""))).join(" ");
+}
+
 export function razaoDeCaixaAlta(texto) {
-  const letras = String(texto ?? "").replace(SO_LETRAS, "");
+  const letras = semRisada(texto).replace(SO_LETRAS, "");
   if (letras.length < MIN_LETRAS) return null;
   const maius = (letras.match(MAIUSCULAS) ?? []).length;
   return maius / letras.length;

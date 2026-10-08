@@ -34,7 +34,8 @@ function parametrosPT(P) {
     punicao: [
       { nome: "modo", valor: "avisar | apagar | confirmar | acumular | banir", desc: "`avisar` só avisa · `apagar` remove a mensagem · `confirmar` silencia e chama um moderador · `acumular` sobe uma escada a cada reincidência · `banir` bane na hora" },
       { nome: "escada", valor: "[aviso,10m,2h,ban]", desc: "os degraus do modo `acumular`. Sem valor, mostra a atual. Padrão: aviso → mute 5 min → mute 1 h → ban" },
-      { nome: "warns", valor: "<n>", desc: "quantos avisos até o ban (modo `acumular` antigo)" },
+      { nome: "warns", valor: "<n>", desc: "quantos avisos até o ban — ajusta a escada (o ban é sempre o último degrau). Vale para o automod e para o `&warn`" },
+      { nome: "validade", valor: "<dias|0>", desc: "os avisos zeram depois de tantos dias sem um novo (padrão 30; 0 = nunca)" },
       { nome: "status", desc: "a configuração atual" },
       { nome: "Não existe aqui", desc: "`test`/`simulate` são do `&automod sentinela` (é ele que lê o texto); avisos são com `&warn`, `&warn lista` e `&warn limpar`. O `&automod punicao` só decide **o que acontece** depois" },
     ],
@@ -283,7 +284,8 @@ function parametrosEN(P) {
     punicao: [
       { nome: "modo", valor: "avisar | apagar | confirmar | acumular | banir", desc: "`avisar` warns only · `apagar` removes the message · `confirmar` silences and calls a moderator · `acumular` climbs a ladder on repeat · `banir` bans on the spot" },
       { nome: "escada", valor: "[aviso,10m,2h,ban]", desc: "the steps of `acumular` mode. Without a value, shows the current one. Default: warning → 5 min mute → 1 h mute → ban" },
-      { nome: "warns", valor: "<n>", desc: "how many warnings until a ban (legacy `acumular`)" },
+      { nome: "warns", valor: "<n>", desc: "how many warnings until a ban — adjusts the ladder (the ban is always the last step). Applies to the automod and to `&warn`" },
+      { nome: "validade", valor: "<days|0>", desc: "warnings reset after that many days without a new one (default 30; 0 = never)" },
       { nome: "status", desc: "the current setup" },
       { nome: "Not here", desc: "`test`/`simulate` belong to `&automod sentinela` (it's the one that reads the text); warnings are `&warn`, `&warn lista` and `&warn limpar`. `&automod punicao` only decides **what happens** afterwards" },
     ],

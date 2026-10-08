@@ -2,8 +2,10 @@
 import * as db from "../core/db.js";
 import * as log from "../core/log.js";
 import { tr, lingua } from "../core/i18n.js";
-import { limparId, ULID, resolverUsuario } from "../core/ids.js";
+import { resolverUsuario } from "../core/ids.js";
 import * as automodCmd from "./automod-comandos.js";
+import { escadaDePunicao, rotuloDegrau, validadeDosAvisos } from "./automod-engine.js";
+import { aplicarTimeout } from "./timeout.js";
 import { banir } from "../core/banir.js";
 import { descreverErro } from "../core/erros.js";
 
@@ -77,41 +79,51 @@ export async function cmdWarn(message, args, ctx) {
         description: "I'm not going to warn myself.", colour: COR.aviso }));
   }
 
-  const primeiro = args[0] ?? "";
-  const primeiroEhAlvo = limparId(primeiro) === alvoId
-    || ULID.test(limparId(primeiro))
-    || /^<[%@#]/.test(primeiro);
-  const motivo = args.slice(primeiroEhAlvo ? 1 : 0).join(" ").trim()
+  // O alvo saiu SEMPRE do primeiro argumento (menção, ID ou nome), então o
+  // motivo é o resto. Antes o nome digitado ("&warn Fulano spam") ia parar
+  // dentro do motivo.
+  const motivo = args.slice(1).join(" ").trim()
     || (lang === "en" ? "no reason given" : "sem motivo informado");
 
-  const total = db.somarAviso(serverId, alvoId, motivo);
-  const pol = config?.automod?.punicao ?? { modo: "avisar", warnsParaBan: 3 };
-  const limite = pol.warnsParaBan ?? 3;
+  // Dono do servidor e dono do bot não recebem aviso (no modo acumular, o
+  // aviso levaria a uma tentativa de ban que o Stoat recusa no meio do caminho).
+  if (alvoId === server.ownerId || ctx.ehSuperAdmin?.(alvoId)) {
+    return sendEmbed(message.channel, tr(ctx,
+      { title: "🚫 Não dá", description: `<@${alvoId}> é dono do servidor (ou do bot) — não recebe avisos.`, colour: COR.aviso },
+      { title: "🚫 Can't do that", description: `<@${alvoId}> owns the server (or the bot) — they can't be warned.`, colour: COR.aviso }));
+  }
 
-  const linhas = lang === "en" ? [
+  const pol = config?.automod?.punicao ?? { modo: "avisar" };
+  const total = db.somarAviso(serverId, alvoId, motivo, { validadeMs: validadeDosAvisos(pol) });
+  // O aviso manual segue a MESMA escada do automod (antes: ban no
+  // `warnsParaBan`, enquanto o automod silenciava — dois limites diferentes).
+  const degraus = escadaDePunicao(pol);
+  const limite = degraus.length;
+  const acumular = pol.modo === "acumular";
+  const degrau = acumular ? degraus[Math.min(total, limite) - 1] : { tipo: "aviso" };
+  const en = lang === "en";
+
+  const linhas = en ? [
     `<@${alvoId}> received a warning.`,
     `**Reason:** ${motivo}`,
-    `**Total warnings:** ${total}${pol.modo === "acumular" ? ` of ${limite}` : ""}`,
+    `**Total warnings:** ${total}${acumular ? ` of ${limite}` : ""}`,
   ] : [
     `<@${alvoId}> recebeu um aviso.`,
     `**Motivo:** ${motivo}`,
-    `**Total de avisos:** ${total}${pol.modo === "acumular" ? ` de ${limite}` : ""}`,
+    `**Total de avisos:** ${total}${acumular ? ` de ${limite}` : ""}`,
   ];
 
-  // No modo acumular, o aviso manual conta para o ban — cumprimos a política.
   let banido = false;
-  if (pol.modo === "acumular" && total >= limite) {
+  if (degrau.tipo === "ban") {
     try {
-      await banir(server, alvoId, { reason: lang === "en"
+      await banir(server, alvoId, { reason: en
         ? `Reached the limit of ${limite} warnings — last one: ${motivo}`
         : `Limite de ${limite} avisos atingido — último: ${motivo}` });
       banido = true;
       db.limparPunicao(serverId, alvoId);
-      linhas.push("", lang === "en"
-        ? `🔨 **Limit reached — user banned.**`
-        : `🔨 **Limite atingido — usuário banido.**`);
+      linhas.push("", en ? "🔨 **Limit reached — user banned.**" : "🔨 **Limite atingido — usuário banido.**");
     } catch (e) {
-      if (lang === "en") {
+      if (en) {
         linhas.push("", `⚠️ Limit reached, but **I couldn't ban**: ${descreverErro(e, "en")}`);
         linhas.push("_The bot needs **BanMembers** and its role must sit above the person's._");
       } else {
@@ -119,11 +131,21 @@ export async function cmdWarn(message, args, ctx) {
         linhas.push("_O bot precisa de **BanMembers** e estar acima do cargo da pessoa._");
       }
     }
-  } else if (pol.modo === "acumular") {
-    linhas.push(lang === "en"
-      ? `_**${limite - total}** more until the automatic ban._`
-      : `_Faltam **${limite - total}** para o ban automático._`);
+  } else if (degrau.tipo === "mute") {
+    try {
+      await aplicarTimeout(server, alvoId, degrau.ms);
+      db.silenciarAte(serverId, alvoId, Date.now() + degrau.ms, motivo);
+      linhas.push(en ? `🔇 Silenced for **${degrau.rotulo}** (step ${total} of the ladder).` : `🔇 Silenciado por **${degrau.rotulo}** (degrau ${total} da escada).`);
+    } catch (e) {
+      linhas.push(en ? `⚠️ This step silences for ${degrau.rotulo}, but **I couldn't**: ${descreverErro(e, "en")}`
+                     : `⚠️ Este degrau silencia por ${degrau.rotulo}, mas **não consegui**: ${descreverErro(e)}`);
+    }
   }
+  if (acumular && !banido && degraus[total]) {
+    linhas.push(en ? `_Next step: ${rotuloDegrau(degraus[total], "en")}._` : `_Próximo passo: ${rotuloDegrau(degraus[total], "pt")}._`);
+  }
+  const dias = Math.round(validadeDosAvisos(pol) / 86_400_000);
+  if (dias && !banido) linhas.push(en ? `_Warnings reset after ${dias} days without a new one._` : `_Os avisos zeram depois de ${dias} dias sem um novo._`);
 
   await log.registrar(ctx, "punicoes", {
     titulo: banido ? "🔨 Ban por acúmulo de avisos" : "⚠️ Aviso manual",
@@ -134,8 +156,8 @@ export async function cmdWarn(message, args, ctx) {
 
   return sendEmbed(message.channel, {
     title: banido
-      ? (lang === "en" ? "🔨 Warning applied — and limit reached" : "🔨 Aviso aplicado — e limite atingido")
-      : (lang === "en" ? "⚠️ Warning applied" : "⚠️ Aviso aplicado"),
+      ? (en ? "🔨 Warning applied — and limit reached" : "🔨 Aviso aplicado — e limite atingido")
+      : (en ? "⚠️ Warning applied" : "⚠️ Aviso aplicado"),
     description: linhas.join("\n"),
     colour: banido ? COR.erro : COR.aviso,
   });

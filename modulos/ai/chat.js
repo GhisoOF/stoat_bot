@@ -18,6 +18,7 @@ import { tr, lingua } from "../core/i18n.js";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { idEscrito } from "../core/ids.js";
 
 let _refCache;
 // Verbete por comando, montado uma vez.
@@ -2534,7 +2535,7 @@ export async function cmdChat(message, args, ctx) {
 
   // &chat mapear [@usuário] → captura o perfil (bio, status, etc.) do cartão
   if (["mapear", "map"].includes(args[0]?.toLowerCase())) {
-    const alvoId = message.mentionIds?.[0] || message.mentions?.[0]?.id || message.authorId;
+    const alvoId = idEscrito(args.slice(1).join(" ")) || message.mentionIds?.[0] || message.mentions?.[0]?.id || message.authorId;
     try {
       const server = await ctx.getServer?.(message);
       const member = (alvoId === message.authorId && message.member) ? message.member
@@ -2585,7 +2586,7 @@ export async function cmdChat(message, args, ctx) {
 
   // &chat perfil [@usuário] → mostra o que a Judy sabe sobre alguém
   if (["perfil", "profile"].includes(args[0]?.toLowerCase())) {
-    const alvoId = message.mentionIds?.[0] || message.mentions?.[0]?.id || message.authorId;
+    const alvoId = idEscrito(args.slice(1).join(" ")) || message.mentionIds?.[0] || message.mentions?.[0]?.id || message.authorId;
     const perfil = db.getPerfil?.(ctx.serverId, alvoId);
     const fatos = db.getFatosPessoa?.(ctx.serverId, alvoId, { limite: 20, minConf: 0.4 }) || [];
     if (!perfil && !fatos.length) {
@@ -2625,7 +2626,7 @@ export async function cmdChat(message, args, ctx) {
   if (["cuidado", "gentil"].includes(args[0]?.toLowerCase())) {
     const server = await ctx.getServer?.(message);
     const podeGerir = !ctx.membroTemPermissao || ctx.membroTemPermissao(message, server, "ManagePermissions");
-    const alvoId = message.mentionIds?.[0] || message.mentions?.[0]?.id || message.authorId;
+    const alvoId = idEscrito(args.slice(1).join(" ")) || message.mentionIds?.[0] || message.mentions?.[0]?.id || message.authorId;
     // qualquer um pode ligar para SI; para OUTROS, precisa de ManagePermissions
     if (alvoId !== message.authorId && !podeGerir) {
       return sendEmbed(message.channel, tr(ctx,

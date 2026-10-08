@@ -152,7 +152,7 @@ export async function cmdEconomia(message, args, ctx) {
 
   if (v === "saldo") {
     const quem = resto.length
-      ? (message.mentionIds?.[0] ?? await resolverUsuario(resto.join(" "), { message, server, client }).catch(() => null) ?? eu)
+      ? (await resolverUsuario(resto.join(" "), { message, server, client }).catch(() => null) ?? message.mentionIds?.[0] ?? eu)
       : eu;
     const l = linha(sid, quem);
     const pos = posicao(sid, quem);
@@ -234,7 +234,7 @@ export async function cmdEconomia(message, args, ctx) {
   }
 
   if (v === "pagar") {
-    const alvo = message.mentionIds?.[0] ?? await resolverUsuario(resto[0] ?? "", { message, server, client }).catch(() => null);
+    const alvo = (resto[0] ? await resolverUsuario(resto[0], { message, server, client }).catch(() => null) : null) ?? message.mentionIds?.[0] ?? null;
     const qtd = inteiro(resto.at(-1));
     if (!alvo || !Number.isInteger(qtd) || qtd <= 0) return enviar(T("❌ Uso", "❌ Usage"), `\`${P}economia pagar @pessoa <quantia>\``, COR.erro);
     if (alvo === eu) return enviar("🤨", T("Pagar a si mesmo não muda nada.", "Paying yourself changes nothing."), COR.aviso);

@@ -1,4 +1,5 @@
 
+import { idEscrito, resolverUsuario } from "../core/ids.js";
 import * as log from "../core/log.js";
 import { tr, lingua } from "../core/i18n.js";
 
@@ -195,9 +196,19 @@ export async function cmdLimpar(message, args, ctx) {
   }
 
   // Filtro opcional por usuário (menção ou ID)
-  const alvo = message.mentionIds?.[0]
-    ?? (/^[0-9A-HJKMNP-TV-Z]{26}$/i.test((args[1] ?? "").replace(/[<@>]/g, ""))
-        ? args[1].replace(/[<@>]/g, "") : null);
+  // (o ID escrito vem antes do mentionIds: numa resposta, ele traz o autor
+  // da mensagem respondida — e "&limpar 50" respondendo filtrava por ele)
+  const textoAlvo = args.slice(1).join(" ").trim();
+  let alvo = null;
+  if (textoAlvo) {
+    const server = await ctx.getServer?.(message).catch?.(() => null);
+    alvo = idEscrito(textoAlvo)
+      ?? await resolverUsuario(textoAlvo, { message, server, client: ctx.client }).catch(() => null);
+    // Pediu para filtrar e não achou a pessoa: NÃO apaga as de todo mundo.
+    if (!alvo) return sendEmbed(message.channel, tr(ctx,
+      { title: "❌ Não achei essa pessoa", description: `Não encontrei \`${textoAlvo.slice(0, 60)}\` — nada foi apagado.\n\`${PREFIXO}limpar <quantidade> <@pessoa|id|nome>\``, colour: COR.erro },
+      { title: "❌ Couldn't find that person", description: `I couldn't find \`${textoAlvo.slice(0, 60)}\` — nothing was deleted.\n\`${PREFIXO}limpar <amount> <@user|id|name>\``, colour: COR.erro }));
+  }
 
   try {
     // Busca um pouco mais que n para conseguir filtrar por usuário

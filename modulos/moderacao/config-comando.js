@@ -3,7 +3,7 @@ import { servidorPermitido as temIA } from "../ai/chat.js";
 import * as db from "../core/db.js";
 import { EVENTOS } from "../core/log.js";
 import { MODOS as MODOS_BG, MODOS_EN as MODOS_BG_EN } from "./ban-global.js";
-import { escadaDePunicao, rotuloDegrau, GRUPOS_AUTOMOD, estadoDoGrupo } from "./automod-engine.js";
+import { escadaDePunicao, rotuloDegrau, GRUPOS_AUTOMOD, estadoDoGrupo, validadeDosAvisos } from "./automod-engine.js";
 import { tr, lingua } from "../core/i18n.js";
 import { servidorNaLista } from "../core/env.js";
 import { loja as ecoLoja, totalEmCirculacao as ecoCirc, configDe as ecoConfigDe } from "../ferramentas/economia.js";
@@ -79,6 +79,12 @@ export async function cmdConfig(message, args, ctx) {
     `${T("**Modo:**", "**Mode:**")} \`${pol.modo}\` — ${L_MODOS[pol.modo] ?? "?"}`,
     pol.modo === "acumular"
       ? `${T("**Escada:**", "**Ladder:**")} ${escadaDePunicao(pol).map((d) => rotuloDegrau(d, lang)).join(" → ")}`
+      : null,
+    pol.modo === "acumular"
+      ? (validadeDosAvisos(pol)
+        ? T(`**Avisos vencem:** ${Math.round(validadeDosAvisos(pol) / 86_400_000)} dias sem um novo · **ruído:** 1º deslize = só um toque`,
+            `**Warnings expire:** ${Math.round(validadeDosAvisos(pol) / 86_400_000)} days without a new one · **noise:** 1st slip = just a heads-up`)
+        : T("**Avisos vencem:** nunca · **ruído:** 1º deslize = só um toque", "**Warnings expire:** never · **noise:** 1st slip = just a heads-up"))
       : null,
     T("**Silêncio:** timeout nativo (precisa de **TimeoutMembers**)", "**Silence:** native timeout (needs **TimeoutMembers**)"),
     `${T("**Sentinela — mais rígido com novatos:**", "**Sentinel — stricter with newcomers:**")} ${am.antiScam.porAntiguidade !== false ? T("🟢 ligado", "🟢 on") : T("🔴 desligado", "🔴 off")}`,
@@ -216,7 +222,7 @@ export function descreverFiltro(am, chave, lang = "pt", estado = {}) {
   const detalhe = {
     antiSpam:        () => T(`${am.antiSpam.maxMessages} msg em ${seg(am.antiSpam.windowMs)}`, `${am.antiSpam.maxMessages} msg in ${seg(am.antiSpam.windowMs)}`),
     antiMassSpam:    () => T(`${am.antiMassSpam.maxMessages} msg em ${seg(am.antiMassSpam.windowMs)}`, `${am.antiMassSpam.maxMessages} msg in ${seg(am.antiMassSpam.windowMs)}`),
-    antiDuplicata:   () => T(`${am.antiDuplicata?.maxRepetidas ?? 3}× a mesma mensagem em ${seg(am.antiDuplicata?.windowMs ?? 120000)}`, `${am.antiDuplicata?.maxRepetidas ?? 3}× the same message in ${seg(am.antiDuplicata?.windowMs ?? 120000)}`),
+    antiDuplicata:   () => T(`${am.antiDuplicata?.maxRepetidas ?? 3}× a mesma mensagem em ${seg(am.antiDuplicata?.windowMs ?? 120000)} (curta: ${(am.antiDuplicata?.maxRepetidas ?? 3) + 2}×)`, `${am.antiDuplicata?.maxRepetidas ?? 3}× the same message in ${seg(am.antiDuplicata?.windowMs ?? 120000)} (short: ${(am.antiDuplicata?.maxRepetidas ?? 3) + 2}×)`),
     antiImagem:      () => T("imagens de contas novas descritas pelo modelo de visão; avisa a staff", "images from new accounts described by the vision model; alerts staff"),
     antiInvite:      () => T("bloqueia convites", "blocks invites"),
     antiMassMention: () => T(`máx. ${am.antiMassMention.maxMentions} menções`, `max ${am.antiMassMention.maxMentions} mentions`),

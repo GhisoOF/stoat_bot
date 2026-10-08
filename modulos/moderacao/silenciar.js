@@ -61,8 +61,10 @@ export async function cmdSilenciar(message, args, ctx) {
   const resto = tirar ? args.slice(1) : args;
 
   // alvo: menção, ID ou nome — o primeiro argumento
-  const alvoId = message.mentionIds?.[0]
-    ?? await resolverUsuario(String(resto[0] ?? ""), { message, server, client }).catch(() => null);
+  // (o que está ESCRITO vem antes do mentionIds — numa resposta ele traz o
+  // autor da mensagem respondida)
+  const alvoId = (resto[0] ? await resolverUsuario(String(resto[0]), { message, server, client }).catch(() => null) : null)
+    ?? message.mentionIds?.[0] ?? null;
   if (!alvoId) return sendEmbed(message.channel, ajuda(ctx));
   if (alvoId === client?.user?.id) {
     return sendEmbed(message.channel, tr(ctx,

@@ -11,6 +11,15 @@ export function limparId(entrada) {
 }
 
 // Igual a limparId, mas só devolve se for um ULID válido.
+// O ID de usuário ESCRITO num texto: a primeira menção `<@ID>` (ou ID cru).
+// Vem antes do mentionIds[0] do Stoat, que numa resposta pode ser o autor da
+// mensagem respondida — e a ordem do mentionIds não é garantida.
+export function idEscrito(texto) {
+  const t = String(texto ?? "");
+  const m = /<@!?([0-9A-HJKMNP-TV-Z]{26})>/i.exec(t) ?? /(?:^|\s)([0-9A-HJKMNP-TV-Z]{26})(?=\s|$)/i.exec(t);
+  return m ? m[1].toUpperCase() : null;
+}
+
 export function idValido(entrada) {
   const id = limparId(entrada);
   return ULID.test(id) ? id : "";
@@ -123,6 +132,11 @@ export async function resolverUsuarioDetalhado(entrada, { message, server, clien
   const bruto = String(entrada ?? "").trim();
   const pareceMencao = /^<[@%]?[^>]+>$/.test(bruto);
 
+  // Uma menção escrita (`<@ID>`) vale pelo ID que está NELA: o mentionIds[0]
+  // pode ser outra pessoa (numa resposta, o autor da mensagem respondida entra
+  // nas menções) ou vir vazio (o Stoat nem sempre preenche) — 9 out 2026:
+  // `&warn limpar @pessoa` respondia "uso incorreto".
+  if (pareceMencao && idValido(bruto)) return { id: idValido(bruto), nome: null, fonte: "menção" };
   if ((!bruto || pareceMencao) && (message?.mentionIds?.[0] || message?.mentions?.[0]?.id)) {
     const id = message.mentionIds?.[0] ?? message.mentions[0].id;
     return { id, nome: null, fonte: "menção" };

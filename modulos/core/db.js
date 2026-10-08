@@ -485,7 +485,7 @@ export function gravarConfig(serverId, obj) {
 
 export function lerPunicao(serverId, userId) {
   return prep(
-    "SELECT avisos, silenciado, silencioAte, motivo FROM punicoes WHERE serverId = ? AND userId = ?"
+    "SELECT avisos, silenciado, silencioAte, motivo, atualizadoEm FROM punicoes WHERE serverId = ? AND userId = ?"
   ).get(serverId, userId) ?? null;
 }
 
@@ -507,16 +507,36 @@ export function gravarPunicao(serverId, userId, { avisos = 0, silenciado = 0, mo
   `).run(serverId, userId, avisos, silenciado ? 1 : 0, anterior, motivo, Date.now());
 }
 
+// Avisos VENCEM (9 out 2026): sem nenhuma punição nova por `validadeMs`, o
+// contador volta a zero — antes três deslizes em meses diferentes davam o
+// mesmo resultado que três numa tarde. 0 = nunca vencem.
+export function avisosVigentes(reg, validadeMs = 0, agora = Date.now()) {
+  if (!reg) return 0;
+  const n = reg.avisos ?? 0;
+  if (n > 0 && validadeMs > 0 && reg.atualizadoEm && agora - reg.atualizadoEm > validadeMs) return 0;
+  return n;
+}
+
 // Soma 1 aviso e devolve o total atualizado
-export function somarAviso(serverId, userId, motivo = null) {
+export function somarAviso(serverId, userId, motivo = null, { validadeMs = 0 } = {}) {
   const atual = lerPunicao(serverId, userId);
-  const avisos = (atual?.avisos ?? 0) + 1;
+  const avisos = avisosVigentes(atual, validadeMs) + 1;
   gravarPunicao(serverId, userId, { avisos, silenciado: atual?.silenciado ?? 0, motivo });
   return avisos;
 }
 
-export function contarAvisos(serverId, userId) {
-  return lerPunicao(serverId, userId)?.avisos ?? 0;
+export function contarAvisos(serverId, userId, { validadeMs = 0 } = {}) {
+  return avisosVigentes(lerPunicao(serverId, userId), validadeMs);
+}
+
+// `&warn limpar`: zera só os AVISOS. O silêncio em curso continua registrado
+// (é ele que reaplica o timeout se a pessoa sair e voltar).
+export function zerarAvisos(serverId, userId) {
+  const atual = lerPunicao(serverId, userId);
+  if (!atual) return 0;
+  if (!atual.silenciado) { limparPunicao(serverId, userId); return atual.avisos ?? 0; }
+  prep("UPDATE punicoes SET avisos = 0, atualizadoEm = ? WHERE serverId = ? AND userId = ?").run(Date.now(), serverId, userId);
+  return atual.avisos ?? 0;
 }
 
 export function limparPunicao(serverId, userId) {

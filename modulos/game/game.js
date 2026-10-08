@@ -1,6 +1,6 @@
 
 import * as db from "../core/db.js";
-import { resolverUsuario } from "../core/ids.js";
+import { resolverUsuario, idEscrito } from "../core/ids.js";
 import { tr, lingua } from "../core/i18n.js";
 import { semear as semearItens } from "./itens-genericos.js";
 import * as MISS from "./missoes.js";
@@ -954,7 +954,7 @@ export async function cmdGame(message, args, ctx) {
     }
     const acao = args[1]?.toLowerCase();
     const resto = args.slice(2);
-    const alvoId = message.mentionIds?.[0] ?? eu;
+    const alvoId = idEscrito(resto.join(" ")) ?? message.mentionIds?.[0] ?? eu;
     const quem = alvoId === eu ? "você" : `<@${alvoId}>`;
 
     if (!acao || acao === "ajuda") {
@@ -1922,7 +1922,7 @@ export async function cmdGame(message, args, ctx) {
         titulo: en ? "🔄 Barter" : "🔄 Escambo", linhas, colour: COR.info });
     }
 
-    const alvoId = message.mentionIds?.[0] ?? null;
+    const alvoId = idEscrito(mm[0] ?? "") ?? message.mentionIds?.[0] ?? null;
     const meuNome = mm[1].replace(/<[@%#][^>]*>/g, "").trim();
     const item = db.acharItemPorNome(meuNome);
     const quer = db.acharItemPorNome(mm[2].trim());

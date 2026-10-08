@@ -427,6 +427,17 @@ function extrairFeatures(texto, opts = {}) {
   // Quantas vezes esta mesma mensagem já veio. Repetir texto idêntico é um
   // comportamento de máquina: sozinho não condena, mas soma com o resto.
   if ((opts.repetidas ?? 1) >= 2) f.duplicata = Math.min(3, opts.repetidas - 1);
+  // ...e "sozinho não condena" agora é verdade (9 out 2026): só soma quando
+  // há algum sinal de CONTEÚDO. Antes "Miguel miguel" 4× dava nota 6 e saía
+  // como "conteúdo proibido" para quem tinha pouco XP. Repetir texto inocente
+  // é com o anti-duplicata (que tem folga e o primeiro toque).
+  if (f.duplicata) {
+    const NEUTROS = new Set(["duplicata", "afirmacao", "cta", "taxa_alta", "pergunta", "negacao"]);
+    const temConteudo = Object.entries(f).some(([k, v]) => v > 0 && !NEUTROS.has(k) && (PESOS[k] ?? 0) > 0);
+    // Sem conteúdo suspeito, texto curto não soma nada; parede de texto
+    // repetida (comportamento de bot — o caso do Stork) continua somando.
+    if (!temConteudo && String(texto ?? "").length < 80) f.duplicata = 0;
+  }
 
   // Conjunções (o "E" que o somatório linear sozinho não captura)
   const temContexto = (f.oferta > 0 || f.cta > 0 || f.link_filehost || f.link_encurtador || f.link_convite || f.link_simples || f.afirmacao > 0);

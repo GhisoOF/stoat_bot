@@ -8,20 +8,47 @@ import * as log from "../core/log.js";
 import { analisarConteudo } from "./scorecard.js";
 import { tr, lingua } from "../core/i18n.js";
 import { hostDe } from "../core/config-store.js";
+import { resolverUsuario } from "../core/ids.js";
 import { banir } from "../core/banir.js";
 import { descreverErro as descreverErroBan } from "../core/erros.js";
 
-// &warn lista [@usuário]  (chega aqui por warn.js)
+// Quem é o alvo de `&warn lista|limpar …`: a menção, o ID ou o nome ESCRITOS
+// no comando. Antes só valia o mentionIds[0] — que vem vazio quando o Stoat
+// não preenche (ID colado, nome digitado) e é outra pessoa numa resposta.
+async function alvoDosAvisos(message, args, ctx, server) {
+  const texto = args.join(" ").trim();
+  if (!texto) return { id: null, vazio: true };
+  const id = await resolverUsuario(texto, { message, server, client: ctx.client }).catch(() => null)
+    ?? await resolverUsuario(args[0], { message, server, client: ctx.client }).catch(() => null);
+  return { id, vazio: false, texto };
+}
+
+// &warn lista [@usuário|id|nome]  (chega aqui por warn.js)
 export async function cmdWarnings(message, args, ctx) {
-  const { config, sendEmbed, COR, serverId } = ctx;
+  const { config, sendEmbed, COR, serverId, getServer, PREFIXO } = ctx;
   const lang = lingua(ctx);
-  const targetId = message.mentionIds?.[0] ?? message.authorId;
-  const count  = db.contarAvisos(serverId, targetId);
-  const limite = config.automod.punicao.warnsParaBan ?? 3;
+  const server = await getServer?.(message).catch?.(() => null) ?? null;
+  const alvo = await alvoDosAvisos(message, args, ctx, server);
+  if (!alvo.vazio && !alvo.id) {
+    return sendEmbed(message.channel, tr(ctx,
+      { title: "❌ Não achei essa pessoa", description: `Não encontrei \`${alvo.texto.slice(0, 60)}\` no servidor.\n\`${PREFIXO}warn lista <@pessoa|id|nome>\``, colour: COR.erro },
+      { title: "❌ Couldn't find that person", description: `I couldn't find \`${alvo.texto.slice(0, 60)}\` in the server.\n\`${PREFIXO}warn lista <@user|id|name>\``, colour: COR.erro }));
+  }
+  const targetId = alvo.id ?? message.authorId;
+  const pol = config.automod.punicao ?? {};
+  const count  = db.contarAvisos(serverId, targetId, { validadeMs: engine.validadeDosAvisos(pol) });
+  const degraus = engine.escadaDePunicao(pol);
+  const limite = degraus.length;
   const silenciado = db.estaSilenciado(serverId, targetId);
+  const motivo = db.lerPunicao(serverId, targetId)?.motivo;
   const linhas = [lang === "en"
     ? `<@${targetId}> has **${count}/${limite}** warning(s).`
     : `<@${targetId}> tem **${count}/${limite}** aviso(s).`];
+  if (count && motivo) linhas.push(lang === "en" ? `**Last reason:** ${motivo}` : `**Último motivo:** ${motivo}`);
+  if (pol.modo === "acumular" && degraus[count]) linhas.push(lang === "en"
+    ? `_Next one: ${engine.rotuloDegrau(degraus[count], "en")}._` : `_O próximo: ${engine.rotuloDegrau(degraus[count], "pt")}._`);
+  const dias = Math.round(engine.validadeDosAvisos(pol) / 86_400_000);
+  if (count && dias) linhas.push(lang === "en" ? `_They reset after ${dias} days without a new one._` : `_Zeram depois de ${dias} dias sem um novo._`);
   if (silenciado) linhas.push(lang === "en"
     ? "🔇 They are **silenced** (the role is re-applied if they leave and come back)."
     : "🔇 Está **silenciado** (o cargo é reaplicado se sair e voltar).");
@@ -32,25 +59,33 @@ export async function cmdWarnings(message, args, ctx) {
   });
 }
 
-// &warn limpar @usuário   (ManagePermissions; chega aqui por warn.js)
+// &warn limpar <@usuário|id|nome>   (ManagePermissions; chega aqui por warn.js)
 export async function cmdClearwarnings(message, args, ctx) {
-  const { estado, sendEmbed, COR, getServer, membroTemPermissao, PREFIXO } = ctx;
+  const { sendEmbed, COR, getServer, membroTemPermissao, PREFIXO } = ctx;
   const server = await getServer(message);
   if (!membroTemPermissao(message, server, "ManagePermissions"))
     return negarPermissao(ctx, message.channel, "ManagePermissions");
 
-  const targetId = message.mentionIds?.[0];
-  if (!targetId)
+  const alvo = await alvoDosAvisos(message, args, ctx, server);
+  if (!alvo.id)
     return sendEmbed(message.channel, tr(ctx,
-      { title: "❌ Uso incorreto", description: `\`${PREFIXO}warn limpar @usuário\``, colour: COR.erro },
-      { title: "❌ Wrong usage", description: `\`${PREFIXO}warn limpar @user\``, colour: COR.erro }));
+      { title: alvo.vazio ? "❌ De quem?" : "❌ Não achei essa pessoa",
+        description: `${alvo.vazio ? "" : `Não encontrei \`${alvo.texto.slice(0, 60)}\` no servidor.\n`}\`${PREFIXO}warn limpar <@pessoa|id|nome>\``, colour: COR.erro },
+      { title: alvo.vazio ? "❌ Whose?" : "❌ Couldn't find that person",
+        description: `${alvo.vazio ? "" : `I couldn't find \`${alvo.texto.slice(0, 60)}\` in the server.\n`}\`${PREFIXO}warn limpar <@user|id|name>\``, colour: COR.erro }));
+  const targetId = alvo.id;
 
-  db.limparPunicao(ctx.serverId, targetId);
+  const tinha = db.zerarAvisos(ctx.serverId, targetId);
+  const silenciado = db.estaSilenciado(ctx.serverId, targetId);
+  const extraPt = silenciado ? `\n🔇 O silêncio em curso continua — para tirar: \`${PREFIXO}silenciar tirar <@${targetId}>\`` : "";
+  const extraEn = silenciado ? `\n🔇 The current silence stays — to lift it: \`${PREFIXO}silenciar tirar <@${targetId}>\`` : "";
   await sendEmbed(message.channel, tr(ctx,
-    { title: "✅ Avisos limpos", description: `Os avisos de <@${targetId}> foram zerados.`, colour: COR.sucesso },
-    { title: "✅ Warnings cleared", description: `<@${targetId}>'s warnings were reset.`, colour: COR.sucesso }));
-  await log.registrar(ctx, "punicoes", { titulo: "🧹 Avisos limpos",
-    descricao: `<@${targetId}> teve os avisos zerados por <@${message.authorId}>.` });
+    { title: "✅ Avisos limpos", description: (tinha
+        ? (tinha === 1 ? `O aviso de <@${targetId}> foi zerado.` : `Os **${tinha}** avisos de <@${targetId}> foram zerados.`) : `<@${targetId}> não tinha avisos — nada a zerar.`) + extraPt, colour: COR.sucesso },
+    { title: "✅ Warnings cleared", description: (tinha
+        ? (tinha === 1 ? `<@${targetId}>'s warning was reset.` : `<@${targetId}>'s **${tinha}** warnings were reset.`) : `<@${targetId}> had no warnings — nothing to reset.`) + extraEn, colour: COR.sucesso }));
+  if (tinha) await log.registrar(ctx, "punicoes", { titulo: "🧹 Avisos limpos",
+    descricao: `<@${targetId}> teve os avisos (${tinha}) zerados por <@${message.authorId}>.` });
 }
 
 // %automod status | %automod <módulo> <on|off> | %automod debug <on|off>   (ManagePermissions)
@@ -858,11 +893,11 @@ export async function cmdPunicao(message, args, ctx) {
 
   const rotulo = (m) => lang === "en"
     ? (m === "banir"     ? "instant ban"
-     : m === "acumular"  ? `stacked warnings → ban at ${pol.warnsParaBan}`
+     : m === "acumular"  ? `stacked warnings → ban at ${engine.limiteDeAvisos(pol)}`
      : m === "confirmar" ? "confirm (silences and waits for a moderator)"
      :                     "warning only (doesn't delete or punish)")
     : (m === "banir"     ? "banimento imediato"
-     : m === "acumular"  ? `avisos acumulados → ban em ${pol.warnsParaBan}`
+     : m === "acumular"  ? `avisos acumulados → ban em ${engine.limiteDeAvisos(pol)}`
      : m === "confirmar" ? "confirmar (silencia e espera moderador)"
      :                     "apenas aviso (não apaga nem pune)");
 
@@ -872,7 +907,9 @@ export async function cmdPunicao(message, args, ctx) {
       colour: COR.mod,
       description: [
         `**Mode:** ${pol.modo} — ${rotulo(pol.modo)}`,
-        `**Warnings until ban (acumular mode):** ${pol.warnsParaBan}`,
+        `**Ladder (acumular mode):** ${engine.escadaDePunicao(pol).map((d) => engine.rotuloDegrau(d, "en")).join(" → ")} — ban at warning **${engine.limiteDeAvisos(pol)}**`,
+        `**Warnings expire:** ${engine.validadeDosAvisos(pol) ? `after ${Math.round(engine.validadeDosAvisos(pol) / 86_400_000)} days without a new one` : "never"}`,
+        "**Noise filters** (repeat, caps, emoji, speed…): the 1st time in 10 min is just a heads-up, without a warning (except new accounts and during a raid)",
         "**Silence:** the Stoat's native timeout (the bot needs **TimeoutMembers**)",
         "",
         "**Aggressiveness levels:**",
@@ -887,7 +924,8 @@ export async function cmdPunicao(message, args, ctx) {
         "**Commands:**",
         `\`${PREFIXO}automod punicao modo <avisar|apagar|confirmar|acumular|banir>\``,
         `\`${PREFIXO}automod punicao escada [aviso,5m,1h,ban]\` — the steps of \`acumular\` mode`,
-        `\`${PREFIXO}automod punicao warns <number>\``,
+        `\`${PREFIXO}automod punicao warns <number>\` — how many warnings until the ban (adjusts the ladder)`,
+        `\`${PREFIXO}automod punicao validade <days|0>\` — after how many days warnings reset (0 = never)`,
         "",
         `_To try a text out, that's the filter's job: \`${PREFIXO}automod sentinela test <text>\`. This command only decides what **happens** afterwards._`,
       ].join("\n"),
@@ -896,7 +934,9 @@ export async function cmdPunicao(message, args, ctx) {
       colour: COR.mod,
       description: [
         `**Modo:** ${pol.modo} — ${rotulo(pol.modo)}`,
-        `**Avisos p/ ban (modo acumular):** ${pol.warnsParaBan}`,
+        `**Escada (modo acumular):** ${engine.escadaDePunicao(pol).map((d) => engine.rotuloDegrau(d, "pt")).join(" → ")} — ban no aviso **${engine.limiteDeAvisos(pol)}**`,
+        `**Avisos vencem:** ${engine.validadeDosAvisos(pol) ? `depois de ${Math.round(engine.validadeDosAvisos(pol) / 86_400_000)} dias sem um novo` : "nunca"}`,
+        "**Filtros de ruído** (repetição, caixa alta, emoji, velocidade…): a 1ª vez em 10 min é só um toque, sem aviso (menos conta nova e em raid)",
         "**Silêncio:** timeout nativo do Stoat (o bot precisa de **TimeoutMembers**)",
         "",
         "**Níveis de agressividade:**",
@@ -911,7 +951,8 @@ export async function cmdPunicao(message, args, ctx) {
         "**Comandos:**",
         `\`${PREFIXO}automod punicao modo <avisar|apagar|confirmar|acumular|banir>\``,
         `\`${PREFIXO}automod punicao escada [aviso,5m,1h,ban]\` — os degraus do modo \`acumular\``,
-        `\`${PREFIXO}automod punicao warns <número>\``,
+        `\`${PREFIXO}automod punicao warns <número>\` — quantos avisos até o ban (ajusta a escada)`,
+        `\`${PREFIXO}automod punicao validade <dias|0>\` — em quantos dias os avisos zeram (0 = nunca)`,
         "",
         `_Para experimentar um texto, quem faz isso é o filtro: \`${PREFIXO}automod sentinela test <texto>\`. Este comando só decide o que **acontece** depois._`,
       ].join("\n"),
@@ -972,7 +1013,7 @@ export async function cmdPunicao(message, args, ctx) {
         { title: "❌ Escada inválida", description: `Não entendi \`${bruto}\`.\n\nEx.: \`aviso,5m,1h,ban\``, colour: COR.erro },
         { title: "❌ Invalid ladder", description: `I didn't understand \`${bruto}\`.\n\nE.g.: \`aviso,5m,1h,ban\``, colour: COR.erro }));
     }
-    pol.escada = bruto; salvarConfig();
+    pol.escada = bruto; pol.warnsParaBan = teste.length; salvarConfig();
     return sendEmbed(message.channel, tr(ctx, {
       title: "🪜 Escada atualizada",
       description: teste.map((d, i) => `**${i + 1}.** ${engine.rotuloDegrau(d, "pt")}`).join("\n"),
@@ -990,10 +1031,29 @@ export async function cmdPunicao(message, args, ctx) {
       return sendEmbed(message.channel, tr(ctx,
         { title: "❌ Uso", description: `\`${PREFIXO}automod punicao warns <1-20>\``, colour: COR.erro },
         { title: "❌ Usage", description: `\`${PREFIXO}automod punicao warns <1-20>\``, colour: COR.erro }));
+    // O ban é o último degrau da escada: "warns N" ajusta a escada para N
+    // degraus — corta os do fim ou repete o último antes do ban.
+    const antes = engine.escadaDePunicao(pol).slice(0, -1).map((d) => d.tipo === "aviso" ? "aviso" : d.rotulo.replace(" min", "m"));
+    const passos = antes.slice(0, n - 1);
+    while (passos.length < n - 1) passos.push(passos.at(-1) ?? "aviso");
+    pol.escada = [...passos, "ban"].join(",");
     pol.warnsParaBan = n; salvarConfig();
+    const nova = engine.escadaDePunicao(pol);
     return sendEmbed(message.channel, tr(ctx,
-      { title: "✅ Avisos para ban", description: `No modo \`acumular\`, o ban ocorre em **${n}** avisos.`, colour: COR.sucesso },
-      { title: "✅ Warnings until ban", description: `In \`acumular\` mode, the ban happens at **${n}** warnings.`, colour: COR.sucesso }));
+      { title: "✅ Avisos para ban", description: `No modo \`acumular\`, o ban ocorre no aviso **${n}**.\n🪜 ${nova.map((d) => engine.rotuloDegrau(d, "pt")).join(" → ")}`, colour: COR.sucesso },
+      { title: "✅ Warnings until ban", description: `In \`acumular\` mode, the ban happens at warning **${n}**.\n🪜 ${nova.map((d) => engine.rotuloDegrau(d, "en")).join(" → ")}`, colour: COR.sucesso }));
+  }
+
+  if (["validade", "vencimento", "expira", "expiry", "expire"].includes(sub)) {
+    const d = parseInt(val, 10);
+    if (!Number.isInteger(d) || d < 0 || d > 365)
+      return sendEmbed(message.channel, tr(ctx,
+        { title: "❌ Uso", description: `\`${PREFIXO}automod punicao validade <0-365>\` — dias sem aviso novo até zerar (0 = nunca zeram)`, colour: COR.erro },
+        { title: "❌ Usage", description: `\`${PREFIXO}automod punicao validade <0-365>\` — days without a new warning until they reset (0 = never)`, colour: COR.erro }));
+    pol.validadeDias = d; salvarConfig();
+    return sendEmbed(message.channel, tr(ctx,
+      { title: "✅ Validade dos avisos", description: d ? `Os avisos zeram depois de **${d}** dia(s) sem um novo.` : "Os avisos **nunca** zeram sozinhos.", colour: COR.sucesso },
+      { title: "✅ Warning expiry", description: d ? `Warnings reset after **${d}** day(s) without a new one.` : "Warnings **never** reset on their own.", colour: COR.sucesso }));
   }
 
   if (sub === "silencerole" || sub === "cargo") {

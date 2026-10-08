@@ -20,7 +20,7 @@ import { servidorNaLista } from "../core/env.js";
 import * as db from "../core/db.js";
 import { lingua } from "../core/i18n.js";
 import { descreverErro } from "../core/erros.js";
-import { MODULOS_AUTOMOD, moduloLigado, escadaDePunicao, GRUPOS_AUTOMOD, estadoDoGrupo } from "./automod-engine.js";
+import { MODULOS_AUTOMOD, moduloLigado, escadaDePunicao, GRUPOS_AUTOMOD, estadoDoGrupo, validadeDosAvisos } from "./automod-engine.js";
 import { servidorPermitido as temIA } from "../ai/chat.js";
 import { loja as lojaEconomia } from "../ferramentas/economia.js";
 
@@ -337,7 +337,9 @@ export function relatorioPessoa(d, member, alvoId, lang = "pt") {
 
   // punições
   const p = (() => { try { return db.lerPunicao(d.serverId, alvoId); } catch { return null; } })();
-  if (p?.avisos) L.push(T(`⚠️ ${p.avisos} aviso(s) acumulado(s)`, `⚠️ ${p.avisos} warning(s) on record`));
+  const vigentes = db.avisosVigentes(p, validadeDosAvisos(d.pol));
+  if (vigentes) L.push(T(`⚠️ ${vigentes} aviso(s) valendo — de ${escadaDePunicao(d.pol).length} até o ban`, `⚠️ ${vigentes} active warning(s) — of ${escadaDePunicao(d.pol).length} until a ban`));
+  else if (p?.avisos) L.push(T(`✓ ${p.avisos} aviso(s) antigo(s), já vencido(s)`, `✓ ${p.avisos} old warning(s), already expired`));
 
   // cargos de nível
   if (d.config?.xp?.enabled && d.cargosNivel.length) {

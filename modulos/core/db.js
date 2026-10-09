@@ -462,6 +462,61 @@ export function abrirBanco(caminho) {
     if (!cols.includes("missoesFeitas"))  db.exec("ALTER TABLE rpg_personagem ADD COLUMN missoesFeitas INTEGER NOT NULL DEFAULT 0");
   } catch (e) { console.error("[DB] migração missões:", e.message); }
 
+  // RPG v4 (9 out 2026): progresso dentro do nível (D11), classe do jogador
+  // e evolucionador (D24), histórico das histórias; itens e companheiros com
+  // dados próprios (dano, defesa, implante, contrato…); tabelas de únicos,
+  // esperas e das dungeons (D8).
+  try {
+    const addCol = (tabela, col, tipo) => {
+      const cols = prep(`PRAGMA table_info(${tabela})`).all().map((c) => c.name);
+      if (!cols.includes(col)) db.exec(`ALTER TABLE ${tabela} ADD COLUMN ${col} ${tipo}`);
+    };
+    addCol("rpg_personagem", "progresso", "REAL NOT NULL DEFAULT 0");
+    addCol("rpg_personagem", "classe", "TEXT");
+    addCol("rpg_personagem", "evoluirAuto", "INTEGER NOT NULL DEFAULT 0");
+    addCol("rpg_personagem", "historia", "TEXT");
+    addCol("rpg_itens", "dados", "TEXT NOT NULL DEFAULT '{}'");
+    addCol("rpg_itens", "nomeEN", "TEXT");
+    addCol("rpg_itens", "obra", "TEXT");
+    addCol("rpg_itens", "especial", "INTEGER NOT NULL DEFAULT 0");
+    addCol("rpg_itens", "dif", "INTEGER NOT NULL DEFAULT 1");
+    addCol("rpg_followers_catalogo", "dados", "TEXT NOT NULL DEFAULT '{}'");
+    addCol("rpg_followers", "dungeonId", "TEXT");
+  } catch (e) { console.error("[DB] migração RPG v4:", e.message); }
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS rpg_unicos (
+      userId TEXT NOT NULL,
+      chave  TEXT NOT NULL,          -- especial:<id> · chefe:<id> · item:<id> · companheiro:<id>
+      em     INTEGER NOT NULL,
+      PRIMARY KEY (userId, chave)
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS rpg_espera (
+      userId TEXT NOT NULL,
+      chave  TEXT NOT NULL,          -- chefe:<id> (24 h, D19) · especial:<id> (2 h até o 1º êxito)
+      ate    INTEGER NOT NULL,
+      PRIMARY KEY (userId, chave)
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS rpg_dungeons (
+      id         TEXT PRIMARY KEY,
+      ouro       REAL NOT NULL DEFAULT 0,
+      cristal    REAL NOT NULL DEFAULT 0,
+      renovadoEm INTEGER NOT NULL DEFAULT 0
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS rpg_dungeon_ativos (
+      dungeonId TEXT NOT NULL,
+      userId    TEXT NOT NULL,
+      nivel     INTEGER NOT NULL DEFAULT 1,
+      em        INTEGER NOT NULL,
+      PRIMARY KEY (dungeonId, userId)
+    )
+  `);
+
   // Tickets: categoria e quem fechou. Na ABERTURA do banco — um SELECT * já
   // preparado antes do ALTER TABLE não enxerga a coluna nova.
   try { colunasTicket(); } catch (e) { console.error("[DB] migração tickets:", e.message); }
@@ -1062,7 +1117,7 @@ export function criarPersonagem(serverId, userId, nome) {
 }
 
 const COLUNAS_OK = new Set([...ATRIBUTOS, "nome", "nivel", "xp", "pontos",
-  "ultimaMissao", "recuperandoAte", "missoesFeitas"]);
+  "ultimaMissao", "recuperandoAte", "missoesFeitas", "progresso", "classe", "evoluirAuto", "historia"]);
 export function salvarPersonagem(serverId, userId, campos = {}) {
   const entradas = Object.entries(campos).filter(([k]) => COLUNAS_OK.has(k));
   if (!entradas.length) return getPersonagem(serverId, userId);
@@ -1078,28 +1133,16 @@ export function apagarPersonagem(serverId, userId) {
 }
 
 export function listarPersonagens(serverId, limite = 10) {
-  return prep(`SELECT userId, nome, nivel, xp FROM rpg_personagem
-    WHERE serverId = ? ORDER BY nivel DESC, xp DESC LIMIT ?`).all(serverId, limite);
+  return prep(`SELECT userId, nome, nivel, xp, progresso FROM rpg_personagem
+    WHERE serverId = ? ORDER BY nivel DESC, progresso DESC, xp DESC LIMIT ?`).all(serverId, limite);
 }
 
-export const SLOTS = ["arma", "capacete", "armadura", "acessorio1", "acessorio2", "acessorio3"];
+// Vagas equipáveis (v4): as duas mãos (D14), cabeça e corpo, três acessórios e
+// 3 + 3 implantes (D23). O catálogo usa os slots "mao", "capacete", "armadura",
+// "acessorio", "implante" (e "contrato"/"pergaminho", que não se equipam).
+export const SLOTS = ["mao1", "mao2", "capacete", "armadura", "acessorio1", "acessorio2", "acessorio3",
+  "bio1", "bio2", "bio3", "ciber1", "ciber2", "ciber3"];
 
-export const FOLLOWER_MOCHILA = 2;
-
-export function itensDoFollower(followerId) {
-  const linhas = prep(`SELECT itemId FROM rpg_follower_itens
-    WHERE followerId = ? ORDER BY criadoEm`).all(followerId);
-  return linhas.map((l) => getItem(l.itemId)).filter(Boolean);
-}
-export function darItemAoFollower(followerId, itemId) {
-  prep(`INSERT OR IGNORE INTO rpg_follower_itens (followerId, itemId, criadoEm)
-    VALUES (?, ?, ?)`).run(followerId, itemId, Date.now());
-  return true;
-}
-export function tirarItemDoFollower(followerId, itemId) {
-  return prep(`DELETE FROM rpg_follower_itens WHERE followerId = ? AND itemId = ?`)
-    .run(followerId, itemId).changes;
-}
 export function aprenderMagia(serverId, userId, magiaId) {
   prep(`INSERT OR IGNORE INTO rpg_magias (serverId, userId, magiaId, criadoEm)
     VALUES (?, ?, ?, ?)`).run(serverId, userId, magiaId, Date.now());
@@ -1114,26 +1157,31 @@ export function limparMagias(serverId, userId = null) {
     ? prep(`DELETE FROM rpg_magias WHERE serverId = ? AND userId = ?`).run(serverId, userId).changes
     : prep(`DELETE FROM rpg_magias WHERE serverId = ?`).run(serverId).changes;
 }
-export const RARIDADES = ["comum", "incomum", "raro", "epico", "lendario"];
+export const RARIDADES = ["comum", "incomum", "raro", "epico", "lendario", "mitico", "celestial", "divino", "primordial", "supremo"];
 
 // ── Catálogo ──
 export function upsertItem(item) {
-  prep(`INSERT INTO rpg_itens (id, nome, slot, raridade, bonus, origem, infinito, precoBase, ativo)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
+  prep(`INSERT INTO rpg_itens (id, nome, slot, raridade, bonus, origem, infinito, precoBase, ativo, dados, nomeEN, obra, especial, dif)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       nome=excluded.nome, slot=excluded.slot, raridade=excluded.raridade,
       bonus=excluded.bonus, origem=excluded.origem,
-      infinito=excluded.infinito, precoBase=excluded.precoBase`)
+      infinito=excluded.infinito, precoBase=excluded.precoBase,
+      dados=excluded.dados, nomeEN=excluded.nomeEN, obra=excluded.obra,
+      especial=excluded.especial, dif=excluded.dif`)
     .run(item.id, item.nome, item.slot, item.raridade,
          JSON.stringify(item.bonus ?? {}), item.origem ?? "generico",
-         item.infinito ? 1 : 0, item.precoBase ?? 10);
+         item.infinito ? 1 : 0, item.precoBase ?? 10,
+         JSON.stringify(item.dados ?? {}), item.nomeEN ?? null, item.obra ?? null,
+         item.especial ? 1 : 0, item.dif ?? 1);
 }
 
 function hidratarItem(r) {
   if (!r) return null;
-  let bonus = {};
+  let bonus = {}, dados = {};
   try { bonus = JSON.parse(r.bonus ?? "{}"); } catch {}
-  return { ...r, bonus, infinito: !!r.infinito, ativo: !!r.ativo };
+  try { dados = JSON.parse(r.dados ?? "{}"); } catch {}
+  return { ...r, bonus, dados, infinito: !!r.infinito, ativo: !!r.ativo, especial: !!r.especial };
 }
 
 export function getItem(id) {
@@ -1145,8 +1193,11 @@ export function acharItemPorNome(txt) {
   const alvo = semAcentoDb(txt);   // "espada temperada", "lamina aurora" acham com ou sem acento
   if (!alvo) return null;
   const todos = prep("SELECT * FROM rpg_itens").all().map(hidratarItem);
-  return todos.find((i) => semAcentoDb(i.nome) === alvo)
+  return todos.find((i) => i.id === alvo)
+      ?? todos.find((i) => semAcentoDb(i.nome) === alvo)
+      ?? todos.find((i) => semAcentoDb(i.nomeEN) === alvo)
       ?? todos.find((i) => semAcentoDb(i.nome).includes(alvo))
+      ?? todos.find((i) => semAcentoDb(i.nomeEN).includes(alvo))
       ?? null;
 }
 
@@ -1156,7 +1207,7 @@ export function listarItens({ slot = null, raridade = null, apenasAtivos = true 
   if (apenasAtivos) sql += " AND ativo = 1";
   if (slot) { sql += " AND slot = ?"; p.push(slot); }
   if (raridade) { sql += " AND raridade = ?"; p.push(raridade); }
-  sql += " ORDER BY raridade, nome";
+  sql += " ORDER BY dif, nome";
   return prep(sql).all(...p).map(hidratarItem);
 }
 
@@ -1223,19 +1274,20 @@ export function slotDoItem(serverId, userId, itemId) {
 }
 
 export function upsertFollowerCatalogo(f) {
-  prep(`INSERT INTO rpg_followers_catalogo (id, nome, classe, raridade, preco, soDungeon, fotos, origem, ativo)
-    VALUES (?, ?, ?, ?, ?, ?, COALESCE((SELECT fotos FROM rpg_followers_catalogo WHERE id = ?), '[]'), ?, 1)
+  prep(`INSERT INTO rpg_followers_catalogo (id, nome, classe, raridade, preco, soDungeon, fotos, origem, ativo, dados)
+    VALUES (?, ?, ?, ?, ?, ?, COALESCE((SELECT fotos FROM rpg_followers_catalogo WHERE id = ?), '[]'), ?, 1, ?)
     ON CONFLICT(id) DO UPDATE SET nome=excluded.nome, classe=excluded.classe,
       raridade=excluded.raridade, preco=excluded.preco, soDungeon=excluded.soDungeon,
-      origem=excluded.origem`)
-    .run(f.id, f.nome, f.classe, f.raridade, f.preco ?? 0, f.soDungeon ? 1 : 0, f.id, f.origem ?? "generico");
+      origem=excluded.origem, dados=excluded.dados`)
+    .run(f.id, f.nome, f.classe, f.raridade, f.preco ?? 0, f.soDungeon ? 1 : 0, f.id, f.origem ?? "generico", JSON.stringify(f.dados ?? {}));
 }
 
 function hidratarFollower(r) {
   if (!r) return null;
-  let fotos = [];
+  let fotos = [], dados = {};
   try { fotos = JSON.parse(r.fotos ?? "[]"); } catch {}
-  return { ...r, fotos, soDungeon: !!r.soDungeon, ativo: !!r.ativo };
+  try { dados = JSON.parse(r.dados ?? "{}"); } catch {}
+  return { ...r, fotos, dados, soDungeon: !!r.soDungeon, ativo: !!r.ativo };
 }
 
 export function getFollowerCatalogo(id) {
@@ -1248,7 +1300,9 @@ export function acharFollowerCatalogo(txt) {
   const todos = prep("SELECT * FROM rpg_followers_catalogo WHERE ativo = 1").all().map(hidratarFollower);
   return todos.find((f) => f.id === alvo)
       ?? todos.find((f) => semAcentoDb(f.nome) === alvo)
+      ?? todos.find((f) => semAcentoDb(f.dados?.nomeEN) === alvo)
       ?? todos.find((f) => semAcentoDb(f.nome).includes(alvo))
+      ?? todos.find((f) => semAcentoDb(f.dados?.nomeEN).includes(alvo))
       ?? null;
 }
 
@@ -1279,7 +1333,7 @@ export function getParty(serverId, donoId) {
     .all(serverId, donoId);
 }
 
-const CAMPOS_FOLLOWER = new Set(["nivel", "energia", "energiaEm", "naParty", "capturado", "donoId", "capturadoEm"]);
+const CAMPOS_FOLLOWER = new Set(["nivel", "energia", "energiaEm", "naParty", "capturado", "donoId", "capturadoEm", "dungeonId"]);
 export function salvarFollower(id, campos = {}) {
   const e = Object.entries(campos).filter(([k]) => CAMPOS_FOLLOWER.has(k));
   if (!e.length) return getFollower(id);
@@ -1293,11 +1347,11 @@ export function dispensarFollower(id) {
 }
 
 // ── Dungeon: followers capturados ──
-export function capturarFollower(id) {
+export function capturarFollower(id, dungeonId = null) {
   const f = getFollower(id);
   if (!f) return null;
-  prep("UPDATE rpg_followers SET capturado=1, naParty=0, donoId=NULL, capturadoEm=? WHERE id=?")
-    .run(Date.now(), id);
+  prep("UPDATE rpg_followers SET capturado=1, naParty=0, donoId=NULL, capturadoEm=?, dungeonId=? WHERE id=?")
+    .run(Date.now(), dungeonId, id);
   return getFollower(id);
 }
 
@@ -1307,8 +1361,9 @@ export function listarCapturados(serverId) {
 }
 
 export function resgatarFollower(id, novoDono) {
-  prep("UPDATE rpg_followers SET capturado=0, donoId=?, capturadoEm=0, energia=1, energiaEm=? WHERE id=?")
-    .run(novoDono, Date.now(), id);
+  // quem resgata vira o dono (também o "original", para a próxima captura)
+  prep("UPDATE rpg_followers SET capturado=0, donoId=?, donoOriginal=?, capturadoEm=0, energia=1, energiaEm=? WHERE id=?")
+    .run(novoDono, novoDono, Date.now(), id);
   return getFollower(id);
 }
 
@@ -1457,6 +1512,42 @@ export function volumeRecente(serverId, janelaMs = 3600_000) {
 export function getDb() {
   return db;
 }
+
+// ── RPG v4: únicos, esperas e dungeons ──
+export function temUnico(userId, chave) {
+  return !!prep("SELECT 1 FROM rpg_unicos WHERE userId=? AND chave=?").get(userId, chave);
+}
+export function marcarUnico(userId, chave) {
+  return (prep("INSERT OR IGNORE INTO rpg_unicos (userId, chave, em) VALUES (?, ?, ?)").run(userId, chave, Date.now()).changes ?? 0) > 0;
+}
+export function esperaAte(userId, chave) {
+  return prep("SELECT ate FROM rpg_espera WHERE userId=? AND chave=?").get(userId, chave)?.ate ?? 0;
+}
+export function marcarEspera(userId, chave, ate) {
+  prep("INSERT INTO rpg_espera (userId, chave, ate) VALUES (?, ?, ?) ON CONFLICT(userId, chave) DO UPDATE SET ate=excluded.ate").run(userId, chave, ate);
+}
+export function limparEsperas(userId) {
+  return prep("DELETE FROM rpg_espera WHERE userId=?").run(userId).changes ?? 0;
+}
+export function getDungeon(id) {
+  return prep("SELECT * FROM rpg_dungeons WHERE id=?").get(id) ?? null;
+}
+export function salvarDungeon(id, campos = {}) {
+  const atual = getDungeon(id) ?? { id, ouro: 0, cristal: 0, renovadoEm: 0 };
+  const n = { ...atual, ...campos };
+  prep(`INSERT INTO rpg_dungeons (id, ouro, cristal, renovadoEm) VALUES (?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET ouro=excluded.ouro, cristal=excluded.cristal, renovadoEm=excluded.renovadoEm`)
+    .run(id, Math.max(0, n.ouro ?? 0), Math.max(0, n.cristal ?? 0), n.renovadoEm ?? 0);
+  return getDungeon(id);
+}
+export function marcarAtivoDungeon(dungeonId, userId, nivel) {
+  prep(`INSERT INTO rpg_dungeon_ativos (dungeonId, userId, nivel, em) VALUES (?, ?, ?, ?)
+    ON CONFLICT(dungeonId, userId) DO UPDATE SET nivel=excluded.nivel, em=excluded.em`).run(dungeonId, userId, nivel, Date.now());
+}
+export function ativosDungeon(dungeonId, desde) {
+  return prep("SELECT userId, nivel, em FROM rpg_dungeon_ativos WHERE dungeonId=? AND em > ?").all(dungeonId, desde);
+}
+
 
 // ── Webhooks (ganchos) ──────────────────────────────────────────────────────
 export function criarGancho(serverId, nome, canalId, token) {

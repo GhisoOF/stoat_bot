@@ -1,0 +1,1009 @@
+{
+  "abertura": [
+    {
+      "id": "ab1",
+      "pt": "{jogador} chegou {a_local} quando já não havia mais ninguém para avisar que era má ideia.",
+      "en": "{jogador} reached {local} when there was no one left to say it was a bad idea."
+    },
+    {
+      "id": "ab2",
+      "pt": "{local}. Silêncio demais para o gosto de {jogador}.",
+      "en": "{local}. Too quiet for {jogador}'s taste."
+    },
+    {
+      "id": "ab3",
+      "pt": "Chegar {a_local} era a parte fácil. Foi o que disseram.",
+      "en": "Getting to {local} was the easy part. That's what they said."
+    },
+    {
+      "id": "ab4",
+      "generos": [
+        "medieval"
+      ],
+      "pt": "As tochas {de_local} tremiam como se soubessem de algo.",
+      "en": "The torches of {local} flickered as if they knew something."
+    },
+    {
+      "id": "ab5",
+      "generos": [
+        "moderno"
+      ],
+      "pt": "O sinal do celular morreu na entrada {de_local}. Ninguém achou estranho a tempo.",
+      "en": "Phone signal died at the entrance to {local}. Nobody found it strange in time."
+    },
+    {
+      "id": "ab6",
+      "generos": [
+        "scifi"
+      ],
+      "pt": "Os sensores diziam que não havia nada {em_local}. Os sensores estavam errados.",
+      "en": "The sensors said there was nothing {em_local}. The sensors were wrong."
+    },
+    {
+      "id": "ab7",
+      "generos": [
+        "cosmico"
+      ],
+      "pt": "{em_local}, até a luz chegava atrasada.",
+      "en": "{em_local}, even light arrived late."
+    },
+    {
+      "id": "ab8",
+      "pt": "{jogador} conferiu o equipamento duas vezes antes de entrar {em_local}. Não ajudou.",
+      "en": "{jogador} checked the gear twice before heading into {local}. It didn't help."
+    },
+    {
+      "id": "ab9",
+      "pt": "O caminho {a_local} tinha placas. Todas diziam para voltar.",
+      "en": "The road to {local} had signs. All of them said to turn back."
+    },
+    {
+      "id": "ab10",
+      "pt": "{jogador} chegou {a_local} com um plano. O plano não chegou junto.",
+      "en": "{jogador} got to {local} with a plan. The plan didn't make the trip."
+    },
+    {
+      "id": "ab11",
+      "generos": [
+        "medieval"
+      ],
+      "pt": "O taverneiro jurou que não havia perigo {em_local}. O taverneiro jura muita coisa.",
+      "en": "The innkeeper swore there was no danger {em_local}. The innkeeper swears a lot of things."
+    },
+    {
+      "id": "ab12",
+      "generos": [
+        "medieval"
+      ],
+      "pt": "Um corvo seguiu {jogador} o caminho todo e desistiu na entrada {de_local}. Corvo esperto.",
+      "en": "A crow followed {jogador} the whole way and gave up at the entrance to {local}. Smart crow."
+    },
+    {
+      "id": "ab13",
+      "generos": [
+        "medieval"
+      ],
+      "pt": "Os aldeões apontaram na direção {de_local} e fecharam as janelas.",
+      "en": "The villagers pointed toward {local} and shut their windows."
+    },
+    {
+      "id": "ab14",
+      "generos": [
+        "medieval"
+      ],
+      "pt": "{em_local}, o cheiro era de musgo, ferro velho e más decisões.",
+      "en": "{em_local}, it smelled of moss, old iron and bad decisions."
+    },
+    {
+      "id": "ab15",
+      "generos": [
+        "moderno"
+      ],
+      "pt": "No GPS, {local} era só um borrão cinza. O GPS sabia de alguma coisa.",
+      "en": "On the GPS, {local} was just a gray smudge. The GPS knew something."
+    },
+    {
+      "id": "ab16",
+      "generos": [
+        "moderno"
+      ],
+      "pt": "A fita amarela na entrada {de_local} já tinha sido arrancada. Não por {jogador}.",
+      "en": "The yellow tape at the entrance to {local} had already been torn down. Not by {jogador}."
+    },
+    {
+      "id": "ab17",
+      "generos": [
+        "moderno"
+      ],
+      "pt": "As luzes {de_local} piscavam como se ninguém pagasse a conta havia meses.",
+      "en": "The lights in {local} flickered like nobody had paid the bill in months."
+    },
+    {
+      "id": "ab18",
+      "generos": [
+        "moderno"
+      ],
+      "pt": "{jogador} chegou {a_local} de madrugada, que é quando as más ideias parecem boas.",
+      "en": "{jogador} reached {local} in the small hours, when bad ideas look good."
+    },
+    {
+      "id": "ab19",
+      "generos": [
+        "scifi"
+      ],
+      "pt": "A porta {de_local} abriu sozinha. Portas não deveriam fazer isso.",
+      "en": "The door to {local} opened by itself. Doors shouldn't do that."
+    },
+    {
+      "id": "ab20",
+      "generos": [
+        "scifi"
+      ],
+      "pt": "O computador de bordo pediu confirmação três vezes antes de liberar a descida {a_local}.",
+      "en": "The onboard computer asked for confirmation three times before clearing the drop to {local}."
+    },
+    {
+      "id": "ab21",
+      "generos": [
+        "scifi"
+      ],
+      "pt": "{em_local}, a gravidade só funcionava quando queria.",
+      "en": "{em_local}, gravity only worked when it felt like it."
+    },
+    {
+      "id": "ab22",
+      "generos": [
+        "scifi"
+      ],
+      "pt": "Os registros {de_local} terminavam no meio de uma frase.",
+      "en": "The logs from {local} ended mid-sentence."
+    },
+    {
+      "id": "ab23",
+      "generos": [
+        "cosmico"
+      ],
+      "pt": "Nos mapas, {local} ficava em outro lugar. Toda vez, em outro lugar.",
+      "en": "On the maps, {local} was somewhere else. Somewhere else every time."
+    },
+    {
+      "id": "ab24",
+      "generos": [
+        "cosmico"
+      ],
+      "pt": "{em_local}, as estrelas pareciam mais perto do que deviam. E olhavam de volta.",
+      "en": "{em_local}, the stars seemed closer than they should. And they looked back."
+    },
+    {
+      "id": "ab25",
+      "generos": [
+        "cosmico"
+      ],
+      "pt": "O tempo andava de lado {em_local}. {jogador} chegou antes de sair, mais ou menos.",
+      "en": "Time moved sideways {em_local}. {jogador} arrived before leaving, more or less."
+    },
+    {
+      "id": "ab26",
+      "generos": [
+        "cosmico"
+      ],
+      "pt": "{jogador} sentiu o silêncio {de_local} antes de ouvi-lo.",
+      "en": "{jogador} felt the silence of {local} before hearing it."
+    }
+  ],
+  "obstaculo": [
+    {
+      "id": "ob1",
+      "pt": "{inimigo} já {i:estava|estavam} esperando.",
+      "en": "{inimigo} {i:was|were} already waiting."
+    },
+    {
+      "id": "ob2",
+      "pt": "Então {i:apareceu|apareceram} {inimigo}, sem pressa nenhuma.",
+      "en": "Then {inimigo} showed up, in no hurry at all."
+    },
+    {
+      "id": "ob3",
+      "pt": "{inimigo} {i:bloqueava|bloqueavam} a única saída — e {i:parecia|pareciam} gostar disso.",
+      "en": "{inimigo} blocked the only way out — and seemed to enjoy it."
+    },
+    {
+      "id": "ob4",
+      "quando": [
+        "coop"
+      ],
+      "pt": "{inimigo} {i:olhou|olharam} para o grupo inteiro e não se {i:impressionou|impressionaram}.",
+      "en": "{inimigo} looked at the whole group and didn't seem impressed."
+    },
+    {
+      "id": "ob5",
+      "pt": "Entre {jogador} e a saída: {inimigo}.",
+      "en": "Between {jogador} and the way out: {inimigo}."
+    },
+    {
+      "id": "ob6",
+      "pt": "No caminho, {inimigo}. Claro.",
+      "en": "In the way, {inimigo}. Of course."
+    },
+    {
+      "id": "ob7",
+      "pt": "O problema tinha nome, e o nome era {inimigo}.",
+      "en": "The problem had a name, and the name was {inimigo}."
+    },
+    {
+      "id": "ob8",
+      "pt": "Ninguém tinha mencionado {inimigo}. Talvez de propósito.",
+      "en": "Nobody had mentioned {inimigo}. Maybe on purpose."
+    },
+    {
+      "id": "ob9",
+      "pt": "Algo se mexeu {em_local}. Spoiler: {inimigo}.",
+      "en": "Something moved {em_local}. Spoiler: {inimigo}."
+    },
+    {
+      "id": "ob10",
+      "quando": [
+        "coop"
+      ],
+      "pt": "O grupo chegou com um plano para {inimigo}. Cada um com um plano diferente.",
+      "en": "The group showed up with a plan for {inimigo}. Each of them with a different plan."
+    },
+    {
+      "id": "ob11",
+      "quando": [
+        "coop"
+      ],
+      "pt": "Mais gente, mais coragem. Até aparecer {inimigo}.",
+      "en": "More people, more courage. Until {inimigo} showed up."
+    },
+    {
+      "id": "ob12",
+      "quando": [
+        "chefe"
+      ],
+      "pt": "{inimigo} se levantou devagar, como quem já fez isso muitas vezes.",
+      "en": "{inimigo} rose slowly, like someone who had done this many times before."
+    },
+    {
+      "id": "ob13",
+      "quando": [
+        "chefe"
+      ],
+      "pt": "Tudo até ali tinha sido aquecimento. {inimigo} não era.",
+      "en": "Everything up to that point had been a warm-up. {inimigo} was not."
+    },
+    {
+      "id": "ob14",
+      "quando": [
+        "chefe"
+      ],
+      "pt": "Primeiro o chão tremeu. Depois veio {inimigo}.",
+      "en": "First the floor shook. Then came {inimigo}."
+    },
+    {
+      "id": "ob15",
+      "quando": [
+        "chefe"
+      ],
+      "pt": "Havia um motivo para ninguém voltar {de_local}: {inimigo}.",
+      "en": "There was a reason nobody came back from {local}: {inimigo}."
+    }
+  ],
+  "momento": [
+    {
+      "id": "mo1",
+      "heroi": "jogador",
+      "pt": "{jogador} foi na frente, porque alguém tinha de ir.",
+      "en": "{jogador} went first, because someone had to."
+    },
+    {
+      "id": "mo2",
+      "heroi": "combatente",
+      "pt": "{heroi} abriu caminho do jeito mais direto possível.",
+      "en": "{heroi} cleared the way the most direct way possible."
+    },
+    {
+      "id": "mo3",
+      "heroi": "combatente",
+      "pt": "{heroi} não esperou ordem nenhuma.",
+      "en": "{heroi} didn't wait for any order."
+    },
+    {
+      "id": "mo4",
+      "heroi": "tank",
+      "pt": "{heroi} ficou na frente e recebeu o que vinha.",
+      "en": "{heroi} stood in front and took whatever came."
+    },
+    {
+      "id": "mo5",
+      "heroi": "tank",
+      "pt": "{heroi} segurou a linha por tempo demais para alguém normal.",
+      "en": "{heroi} held the line longer than any normal person could."
+    },
+    {
+      "id": "mo6",
+      "heroi": "mago",
+      "pt": "{heroi} murmurou algo que ninguém quis repetir.",
+      "en": "{heroi} muttered something nobody wanted to repeat."
+    },
+    {
+      "id": "mo7",
+      "heroi": "suporte",
+      "pt": "{heroi} manteve todo mundo de pé — e de bom humor, o que foi mais difícil.",
+      "en": "{heroi} kept everyone standing — and in a good mood, which was harder."
+    },
+    {
+      "id": "mo8",
+      "magia": "ataque",
+      "pt": "{magia} rasgou o ar no momento certo.",
+      "en": "{magia} tore through the air at just the right moment."
+    },
+    {
+      "id": "mo9",
+      "magia": "suporte",
+      "pt": "{magia} segurou o grupo quando nada mais segurava.",
+      "en": "{magia} held the group together when nothing else would."
+    },
+    {
+      "id": "mo10",
+      "heroi": "coop",
+      "pt": "Foi {heroi} quem deu o golpe que importou; o resto do grupo vai dizer outra coisa.",
+      "en": "It was {heroi} who landed the blow that mattered; the rest of the group will tell it differently."
+    },
+    {
+      "id": "mo11",
+      "heroi": "jogador",
+      "pt": "{jogador} improvisou, e o improviso virou o plano.",
+      "en": "{jogador} improvised, and the improvisation became the plan."
+    },
+    {
+      "id": "mo12",
+      "heroi": "jogador",
+      "pt": "{jogador} fez a única coisa que ainda fazia sentido. Ou quase.",
+      "en": "{jogador} did the only thing that still made sense. More or less."
+    },
+    {
+      "id": "mo13",
+      "heroi": "jogador",
+      "pt": "{jogador} lembrou de um conselho ouvido uma vez e resolveu confiar nele.",
+      "en": "{jogador} remembered some advice heard once and decided to trust it."
+    },
+    {
+      "id": "mo14",
+      "heroi": "jogador",
+      "pt": "Tudo dependeu de {jogador}, que preferia que não dependesse.",
+      "en": "It all came down to {jogador}, who would have preferred otherwise."
+    },
+    {
+      "id": "mo15",
+      "heroi": "combatente",
+      "pt": "{heroi} resolveu a parte que dava para resolver na força.",
+      "en": "{heroi} handled the part that could be handled by force."
+    },
+    {
+      "id": "mo16",
+      "heroi": "combatente",
+      "pt": "{heroi} atacou primeiro e deixou as perguntas para depois.",
+      "en": "{heroi} struck first and left the questions for later."
+    },
+    {
+      "id": "mo17",
+      "heroi": "combatente",
+      "pt": "{heroi} achou uma brecha e entrou nela sem pedir licença.",
+      "en": "{heroi} found an opening and went through it without asking."
+    },
+    {
+      "id": "mo18",
+      "heroi": "tank",
+      "pt": "{heroi} virou parede. Uma parede com opiniões.",
+      "en": "{heroi} became a wall. A wall with opinions."
+    },
+    {
+      "id": "mo19",
+      "heroi": "tank",
+      "pt": "{heroi} recebeu tudo de frente e ainda reclamou que era pouco.",
+      "en": "{heroi} took everything head-on and still complained it wasn't enough."
+    },
+    {
+      "id": "mo20",
+      "heroi": "tank",
+      "pt": "{heroi} não recuou um passo, por princípio ou por teimosia.",
+      "en": "{heroi} didn't give a single step, out of principle or stubbornness."
+    },
+    {
+      "id": "mo21",
+      "heroi": "mago",
+      "pt": "{heroi} fez alguma coisa com as mãos, e o ar mudou de ideia.",
+      "en": "{heroi} did something with their hands, and the air changed its mind."
+    },
+    {
+      "id": "mo22",
+      "heroi": "mago",
+      "pt": "{heroi} explicou o que ia fazer. Ninguém entendeu, e {heroi} fez mesmo assim.",
+      "en": "{heroi} explained what was about to happen. Nobody understood, and {heroi} did it anyway."
+    },
+    {
+      "id": "mo23",
+      "heroi": "mago",
+      "pt": "{heroi} leu a situação como quem lê um manual — e pulou direto para o fim.",
+      "en": "{heroi} read the situation like a manual — and skipped straight to the end."
+    },
+    {
+      "id": "mo24",
+      "heroi": "mago",
+      "pt": "Por um instante, {heroi} brilhou. Literalmente.",
+      "en": "For a moment, {heroi} glowed. Literally."
+    },
+    {
+      "id": "mo25",
+      "heroi": "suporte",
+      "pt": "{heroi} remendou o que dava para remendar, inclusive o moral.",
+      "en": "{heroi} patched up whatever could be patched, morale included."
+    },
+    {
+      "id": "mo26",
+      "heroi": "suporte",
+      "pt": "{heroi} viu o problema antes de todo mundo e avisou. Alto.",
+      "en": "{heroi} saw the problem before anyone else and said so. Loudly."
+    },
+    {
+      "id": "mo27",
+      "heroi": "suporte",
+      "pt": "{heroi} manteve todo mundo inteiro tempo suficiente para ver como ia acabar.",
+      "en": "{heroi} kept everyone in one piece long enough to see how it would end."
+    },
+    {
+      "id": "mo28",
+      "heroi": "suporte",
+      "pt": "{heroi} carregava curativos, água e a paciência do grupo inteiro.",
+      "en": "{heroi} carried bandages, water and the whole group's patience."
+    },
+    {
+      "id": "mo29",
+      "heroi": "coop",
+      "pt": "{heroi} teve a ideia, {jogador} teve a coragem. Os dois vão discutir quem teve o quê.",
+      "en": "{heroi} had the idea, {jogador} had the nerve. They'll argue about who had what."
+    },
+    {
+      "id": "mo30",
+      "heroi": "coop",
+      "pt": "{heroi} gritou um plano no meio da confusão. Metade do grupo ouviu.",
+      "en": "{heroi} shouted a plan in the middle of the chaos. Half the group heard it."
+    },
+    {
+      "id": "mo31",
+      "heroi": "coop",
+      "pt": "{heroi} cobriu as costas de {jogador} mais vezes do que vai admitir.",
+      "en": "{heroi} covered {jogador}'s back more times than they'll ever admit."
+    },
+    {
+      "id": "mo32",
+      "heroi": "coop",
+      "pt": "O momento foi de {heroi}. Até quem estava lá concorda, o que é raro.",
+      "en": "The moment belonged to {heroi}. Even the people who were there agree, which is rare."
+    },
+    {
+      "id": "mo33",
+      "magia": "ataque",
+      "pt": "{magia} saiu antes de alguém mandar, e ninguém reclamou.",
+      "en": "{magia} went off before anyone gave the word, and nobody complained."
+    },
+    {
+      "id": "mo34",
+      "magia": "ataque",
+      "pt": "Quando {magia} estourou, ficou difícil ouvir qualquer outra coisa.",
+      "en": "When {magia} went off, it was hard to hear anything else."
+    },
+    {
+      "id": "mo35",
+      "magia": "ataque",
+      "pt": "{magia} deixou uma marca no chão que ainda vai estar lá amanhã.",
+      "en": "{magia} left a mark on the floor that will still be there tomorrow."
+    },
+    {
+      "id": "mo36",
+      "magia": "ataque",
+      "pt": "{magia} acertou exatamente onde devia — e um pouco em volta.",
+      "en": "{magia} hit exactly where it should — and a bit around it."
+    },
+    {
+      "id": "mo37",
+      "magia": "suporte",
+      "pt": "{magia} fechou os cortes antes de alguém perceber que estavam lá.",
+      "en": "{magia} closed the cuts before anyone noticed them."
+    },
+    {
+      "id": "mo38",
+      "magia": "suporte",
+      "pt": "Por um tempo, {magia} fez todo mundo se sentir invencível. Por um tempo.",
+      "en": "For a while, {magia} made everyone feel invincible. For a while."
+    },
+    {
+      "id": "mo39",
+      "magia": "suporte",
+      "pt": "{magia} chegou como um segundo fôlego que ninguém sabia que precisava.",
+      "en": "{magia} came like a second wind nobody knew they needed."
+    },
+    {
+      "id": "mo40",
+      "magia": "suporte",
+      "pt": "{magia} brilhou baixinho e segurou o pior do lado de fora.",
+      "en": "{magia} glowed softly and kept the worst of it outside."
+    }
+  ],
+  "virada": {
+    "folgado": [
+      {
+        "id": "vi1",
+        "pt": "Não chegou a ser uma luta.",
+        "en": "It never really became a fight."
+      },
+      {
+        "id": "vi2",
+        "pt": "{inimigo} {i:entendeu|entenderam} cedo demais que {i:tinha|tinham} escolhido o dia errado.",
+        "en": "{inimigo} realized too early {i:it|they} had picked the wrong day."
+      },
+      {
+        "id": "vi14",
+        "pt": "Acabou tão rápido que deu tempo de sentar.",
+        "en": "It ended so fast there was time to sit down."
+      },
+      {
+        "id": "vi15",
+        "pt": "{jogador} nem precisou do plano B. Nem do plano A, para ser honesto.",
+        "en": "{jogador} didn't even need plan B. Or plan A, to be honest."
+      },
+      {
+        "id": "vi16",
+        "pt": "Foi o tipo de vitória que dá vontade de contar duas vezes.",
+        "en": "The kind of win you want to tell twice."
+      },
+      {
+        "id": "vi17",
+        "pt": "Sobrou fôlego, sobrou tempo e sobrou vontade de fazer de novo.",
+        "en": "There was breath to spare, time to spare, and the urge to do it again."
+      }
+    ],
+    "limpo": [
+      {
+        "id": "vi3",
+        "pt": "Deu trabalho, mas deu certo.",
+        "en": "It took work, but it worked."
+      },
+      {
+        "id": "vi4",
+        "pt": "Ninguém saiu bonito, mas todo mundo saiu.",
+        "en": "Nobody came out looking good, but everybody came out."
+      },
+      {
+        "id": "vi18",
+        "pt": "Sem drama. Ou com o mínimo de drama possível.",
+        "en": "No drama. Or the bare minimum of it."
+      },
+      {
+        "id": "vi19",
+        "pt": "Funcionou do jeito que planos raramente funcionam.",
+        "en": "It worked the way plans rarely do."
+      },
+      {
+        "id": "vi20",
+        "pt": "Alguns arranhões, nenhum arrependimento.",
+        "en": "A few scratches, no regrets."
+      },
+      {
+        "id": "vi21",
+        "pt": "No fim, {local} ficou para trás, e o problema também.",
+        "en": "In the end, {local} was left behind, and so was the problem."
+      }
+    ],
+    "apertado": [
+      {
+        "id": "vi5",
+        "pt": "Foi por um fio. Um fio bem fino.",
+        "en": "It was by a thread. A very thin thread."
+      },
+      {
+        "id": "vi6",
+        "pt": "Mais um segundo e esta história seria outra.",
+        "en": "One more second and this would be a different story."
+      },
+      {
+        "id": "vi22",
+        "pt": "Deu certo, mas ninguém quer repetir a dose tão cedo.",
+        "en": "It worked, but nobody wants a second helping any time soon."
+      },
+      {
+        "id": "vi23",
+        "pt": "Deu certo na última tentativa. Não havia outra depois dela.",
+        "en": "It worked on the last try. There wasn't another one after it."
+      },
+      {
+        "id": "vi24",
+        "pt": "Ninguém sabe direito como deu certo. Melhor não perguntar.",
+        "en": "Nobody's quite sure how it worked. Better not to ask."
+      },
+      {
+        "id": "vi25",
+        "pt": "{jogador} ganhou por tão pouco que ainda está conferindo.",
+        "en": "{jogador} won by so little they're still double-checking."
+      },
+      {
+        "id": "vi26",
+        "pt": "Terminou com {jogador} de pé, que era o mínimo exigido.",
+        "en": "It ended with {jogador} still standing, which was the minimum requirement."
+      }
+    ],
+    "quase": [
+      {
+        "id": "vi7",
+        "pt": "Faltou pouco. Pouco o bastante para doer.",
+        "en": "It came close. Close enough to hurt."
+      },
+      {
+        "id": "vi8",
+        "pt": "Quase. A palavra que mais se ouve na volta para casa.",
+        "en": "Almost. The word you hear most on the way home."
+      },
+      {
+        "id": "vi27",
+        "pt": "Mais um empurrão e teria dado. Não houve mais um empurrão.",
+        "en": "One more push and it would have worked. There was no more push."
+      },
+      {
+        "id": "vi28",
+        "pt": "{jogador} chegou a ver a vitória. De perto, inclusive.",
+        "en": "{jogador} got a look at victory. Up close, even."
+      },
+      {
+        "id": "vi29",
+        "pt": "Faltou um passo. Sempre falta um passo.",
+        "en": "One step short. It's always one step."
+      },
+      {
+        "id": "vi30",
+        "pt": "Por um momento, pareceu que ia. Não foi.",
+        "en": "For a moment it looked like it would. It didn't."
+      },
+      {
+        "id": "vi31",
+        "pt": "A diferença entre ganhar e isto aqui caberia num bolso.",
+        "en": "The gap between winning and this would fit in a pocket."
+      }
+    ],
+    "longe": [
+      {
+        "id": "vi9",
+        "pt": "Não era o dia. Ficou claro rápido.",
+        "en": "It wasn't the day. That became clear fast."
+      },
+      {
+        "id": "vi10",
+        "pt": "{inimigo} {i:venceu|venceram} sem nem precisar se esforçar.",
+        "en": "{inimigo} won without even trying."
+      },
+      {
+        "id": "vi32",
+        "pt": "Nada funcionou, e o que funcionou não ajudou.",
+        "en": "Nothing worked, and what did work didn't help."
+      },
+      {
+        "id": "vi33",
+        "pt": "{jogador} recuou {de_local} com dignidade. Pouca, mas alguma.",
+        "en": "{jogador} retreated from {local} with dignity. Not much, but some."
+      },
+      {
+        "id": "vi34",
+        "pt": "O plano durou menos que a caminhada até lá.",
+        "en": "The plan lasted less than the walk there."
+      },
+      {
+        "id": "vi35",
+        "pt": "Foi uma lição. Cara, mas uma lição.",
+        "en": "It was a lesson. An expensive one, but a lesson."
+      }
+    ],
+    "caiu": [
+      {
+        "id": "vi11",
+        "pt": "Em algum momento, o chão chegou antes do plano.",
+        "en": "At some point, the floor arrived before the plan did."
+      },
+      {
+        "id": "vi12",
+        "pt": "A última coisa que {jogador} lembra é de achar que estava indo bem.",
+        "en": "The last thing {jogador} remembers is thinking it was going well."
+      },
+      {
+        "id": "vi13",
+        "pt": "{inimigo} não {i:foi|foram} {i:cruel|cruéis}. Só {i:foi|foram} {i:melhor|melhores}.",
+        "en": "{inimigo} {i:wasn't|weren't} cruel. Just better."
+      },
+      {
+        "id": "vi36",
+        "pt": "{jogador} acordou longe {de_local}, sem lembrar como saiu.",
+        "en": "{jogador} woke up far from {local}, with no memory of getting out."
+      },
+      {
+        "id": "vi37",
+        "pt": "Alguém carregou {jogador} de volta. Ninguém quer dizer quem.",
+        "en": "Someone carried {jogador} back. Nobody will say who."
+      },
+      {
+        "id": "vi38",
+        "pt": "O chão {de_local} é mais duro do que parece. {jogador} pode confirmar.",
+        "en": "The floor of {local} is harder than it looks. {jogador} can confirm."
+      },
+      {
+        "id": "vi39",
+        "pt": "Tudo ficou escuro. Depois, um teto. Um teto conhecido, felizmente.",
+        "en": "Everything went dark. Then, a ceiling. A familiar one, thankfully."
+      },
+      {
+        "id": "vi40",
+        "pt": "No fim, {jogador} ficou com um galo na cabeça e uma história mal contada.",
+        "en": "In the end, {jogador} got a bump on the head and a story nobody tells right."
+      }
+    ]
+  },
+  "fecho": {
+    "loot": [
+      {
+        "id": "fe1",
+        "pt": "No meio dos restos, {item} — ainda inteiro.",
+        "en": "Among the remains, {item} — still in one piece."
+      },
+      {
+        "id": "fe2",
+        "pt": "{item} estava lá, como se esperasse alguém.",
+        "en": "{item} was there, as if waiting for someone."
+      },
+      {
+        "id": "fe9",
+        "pt": "Na volta, uma coisa a mais no bolso: {item}.",
+        "en": "On the way back, one extra thing in the pocket: {item}."
+      },
+      {
+        "id": "fe10",
+        "pt": "{item} trocou de dono. Ninguém fez objeção.",
+        "en": "{item} changed hands. Nobody objected."
+      },
+      {
+        "id": "fe11",
+        "pt": "Sobrou {item}, que agora é de {jogador}.",
+        "en": "What was left was {item}, which now belongs to {jogador}."
+      }
+    ],
+    "companheiro": [
+      {
+        "id": "fe3",
+        "pt": "{comp} viu tudo de longe e decidiu que queria estar do lado vencedor.",
+        "en": "{comp} watched from afar and decided to be on the winning side."
+      },
+      {
+        "id": "fe12",
+        "pt": "{comp} se apresentou na saída, como quem já tinha decidido.",
+        "en": "{comp} showed up at the exit, like someone whose mind was already made up."
+      },
+      {
+        "id": "fe13",
+        "pt": "No caminho de volta, alguém a mais: {comp}.",
+        "en": "On the way back, one more face: {comp}."
+      },
+      {
+        "id": "fe14",
+        "pt": "{comp} perguntou se havia vaga. Havia.",
+        "en": "{comp} asked if there was room. There was."
+      }
+    ],
+    "capturado": [
+      {
+        "id": "fe4",
+        "pt": "Na saída, faltava gente: {nomes} {n:ficou|ficaram} para trás.",
+        "en": "On the way out, people were missing: {nomes} stayed behind."
+      },
+      {
+        "id": "fe15",
+        "pt": "{nomes} não {n:voltou|voltaram}. Ainda.",
+        "en": "{nomes} didn't come back. Not yet."
+      },
+      {
+        "id": "fe16",
+        "pt": "Na contagem final, {n:faltou|faltaram} {nomes}.",
+        "en": "At the final headcount, {nomes} {n:was|were} missing."
+      },
+      {
+        "id": "fe17",
+        "pt": "{nomes} {n:ficou|ficaram} lá dentro. Alguém vai ter de voltar.",
+        "en": "{nomes} got left inside. Someone will have to go back."
+      }
+    ],
+    "resgatado": [
+      {
+        "id": "fe5",
+        "pt": "Na volta, uma cela aberta: {nomes} {n:veio|vieram} junto.",
+        "en": "On the way back, an open cell: {nomes} came along."
+      },
+      {
+        "id": "fe18",
+        "pt": "{nomes} {n:estava|estavam} numa cela e não {n:reclamou|reclamaram} da demora.",
+        "en": "{nomes} {n:was|were} in a cell and didn't complain about the wait."
+      },
+      {
+        "id": "fe19",
+        "pt": "Na saída, a conta fechou com gente a mais: {nomes}.",
+        "en": "On the way out, the headcount came up high: {nomes}."
+      },
+      {
+        "id": "fe20",
+        "pt": "{nomes} {n:voltou|voltaram} para o grupo como se nunca {n:tivesse|tivessem} saído.",
+        "en": "{nomes} rejoined the group as if nothing had happened."
+      }
+    ],
+    "subiu": [
+      {
+        "id": "fe6",
+        "pt": "{jogador} voltou diferente. Melhor, provavelmente.",
+        "en": "{jogador} came back different. Better, probably."
+      },
+      {
+        "id": "fe21",
+        "pt": "{jogador} subiu de nível. Ninguém notou, exceto {jogador}.",
+        "en": "{jogador} leveled up. Nobody noticed, except {jogador}."
+      },
+      {
+        "id": "fe22",
+        "pt": "Alguma coisa em {jogador} estalou no lugar certo.",
+        "en": "Something in {jogador} clicked into place."
+      },
+      {
+        "id": "fe23",
+        "pt": "{jogador} aprendeu algo hoje. Doeu, mas ficou.",
+        "en": "{jogador} learned something today. It hurt, but it stuck."
+      }
+    ],
+    "especial": [
+      {
+        "id": "fe7",
+        "pt": "E ali estava o motivo da viagem: {item}. Só existe um desses para cada um.",
+        "en": "And there it was, the reason for the trip: {item}. There's only one of these for each person."
+      },
+      {
+        "id": "fe24",
+        "pt": "{item} estava lá, exatamente como diziam. Isso quase nunca acontece.",
+        "en": "{item} was there, exactly as they said. That almost never happens."
+      },
+      {
+        "id": "fe25",
+        "pt": "Valeu a viagem: {item}, agora nas mãos de {jogador}.",
+        "en": "Worth the trip: {item}, now in {jogador}'s hands."
+      }
+    ],
+    "especialVazio": [
+      {
+        "id": "fe8",
+        "pt": "O lugar onde {item} esteve continuava vazio. {jogador} sabia; veio mesmo assim.",
+        "en": "The spot where {item} used to be was still empty. {jogador} knew; came anyway."
+      },
+      {
+        "id": "fe26",
+        "pt": "{item} já tinha ido para casa com {jogador} da outra vez. Hoje, só a lembrança.",
+        "en": "{item} already went home with {jogador} last time. Today, just the memory."
+      },
+      {
+        "id": "fe27",
+        "pt": "Nada de {item} desta vez. Ficou, pelo menos, a vista.",
+        "en": "No {item} this time. There was, at least, the view."
+      }
+    ],
+    "chefe": [
+      {
+        "id": "fe28",
+        "pt": "{inimigo} caiu, e {local} ficou em silêncio pela primeira vez em muito tempo.",
+        "en": "{inimigo} went down, and {local} went quiet for the first time in ages."
+      },
+      {
+        "id": "fe29",
+        "pt": "Vão contar essa história {em_local} por um bom tempo. Com exageros.",
+        "en": "They'll be telling this one {em_local} for a long time. With embellishments."
+      },
+      {
+        "id": "fe30",
+        "pt": "{jogador} derrotou {inimigo}. Já dá para dizer isso em voz alta.",
+        "en": "{jogador} beat {inimigo}. It can be said out loud now."
+      },
+      {
+        "id": "fe31",
+        "pt": "Depois {de_inimigo}, todo o resto vai parecer fácil. Não vai ser, mas vai parecer.",
+        "en": "After {inimigo}, everything else will look easy. It won't be, but it'll look it."
+      }
+    ],
+    "bico": [
+      {
+        "id": "fe32",
+        "pt": "Serviço feito, pagamento no bolso, nenhuma cicatriz.",
+        "en": "Job done, pay in pocket, not a single scar."
+      },
+      {
+        "id": "fe33",
+        "pt": "{jogador} recebeu o pagamento e um aceno de cabeça. O aceno valia menos.",
+        "en": "{jogador} got paid and a nod. The nod was worth less."
+      },
+      {
+        "id": "fe34",
+        "pt": "Não foi épico, mas pagou a janta.",
+        "en": "It wasn't epic, but it paid for dinner."
+      },
+      {
+        "id": "fe35",
+        "pt": "Ninguém vai cantar sobre isso. Ninguém precisa.",
+        "en": "Nobody will sing about this. Nobody needs to."
+      }
+    ]
+  },
+  "bico": {
+    "abertura": [
+      {
+        "id": "bi1",
+        "pt": "{jogador} pegou o primeiro pacote e conferiu o endereço. Depois conferiu de novo.",
+        "en": "{jogador} picked up the first parcel and checked the address. Then checked it again."
+      },
+      {
+        "id": "bi2",
+        "pt": "{local} estava uma bagunça. Era para isso que pagavam.",
+        "en": "{local} was a mess. That's what the pay was for."
+      },
+      {
+        "id": "bi3",
+        "pt": "{em_local}, alguém já tinha deixado uma lista. Comprida.",
+        "en": "{em_local}, someone had already left a list. A long one."
+      },
+      {
+        "id": "bi4",
+        "pt": "{jogador} chegou {a_local} na hora certa, que pelo relógio do dono é sempre uns minutos atrasado.",
+        "en": "{jogador} got to {local} on time, which by the owner's clock is always a few minutes late."
+      },
+      {
+        "id": "bi5",
+        "pt": "O dia {em_local} começou com pão dormido e ordens novas.",
+        "en": "The day {em_local} started with stale bread and fresh orders."
+      },
+      {
+        "id": "bi6",
+        "pt": "Primeira tarefa do dia: lidar com {inimigo}.",
+        "en": "First task of the day: dealing with {inimigo}."
+      }
+    ],
+    "momento": [
+      {
+        "id": "bi7",
+        "pt": "{inimigo} mudou de ideia três vezes. {jogador} não mudou de expressão nenhuma.",
+        "en": "{inimigo} changed their mind three times. {jogador}'s face didn't change once."
+      },
+      {
+        "id": "bi8",
+        "pt": "{jogador} carregou, empilhou, contou e recontou. Bateu na terceira vez.",
+        "en": "{jogador} carried, stacked, counted and recounted. It added up on the third try."
+      },
+      {
+        "id": "bi9",
+        "pt": "Houve um momento de tensão com {inimigo}, resolvido com paciência e um sorriso amarelo.",
+        "en": "There was a tense moment with {inimigo}, settled with patience and a forced smile."
+      },
+      {
+        "id": "bi10",
+        "pt": "{jogador} descobriu um jeito mais rápido de fazer o serviço e decidiu não contar para ninguém.",
+        "en": "{jogador} found a faster way to do the job and decided to keep it quiet."
+      },
+      {
+        "id": "bi11",
+        "pt": "Nada pegou fogo, nada quebrou, nada fugiu. Para um bico, foi quase uma aventura.",
+        "en": "Nothing caught fire, nothing broke, nothing ran off. For an odd job, that's practically an adventure."
+      },
+      {
+        "id": "bi12",
+        "pt": "{jogador} ouviu a mesma história {de_inimigo} pela quarta vez e riu em todas.",
+        "en": "{jogador} heard the same story from {inimigo} for the fourth time and laughed every time."
+      }
+    ]
+  }
+}

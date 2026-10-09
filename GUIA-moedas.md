@@ -6,16 +6,17 @@ dungeon e ranking em todos os servidores onde a Judy está. E o mercado do jogo 
 
 | Moeda | Tipo | O que significa |
 |---|---|---|
-| 🪙 Ouro (`ouro`) | ♾️ infinita | O dinheiro do dia a dia. As missões geram quanto for preciso; o suprimento (200 000) é só a referência do P. |
-| 💎 Cristal (`cristal`) | 🔒 finita | Existem 5 000, para sempre. Cai 40× menos nas missões (só do nível 5 para cima) e rende 40× menos — então 1 Cristal vale ~40 Ouro no câmbio do banco. Quando o banco esgota, só circula entre jogadores. |
+| 🪙 Ouro (`ouro`) | ♾️ infinita | O dinheiro do dia a dia. Só o tesouro das dungeons cria Ouro novo; o suprimento (200 000) é só a referência do P. |
+| 💎 Cristal (`cristal`) | 🔒 finita | Começa com 5 000 no banco; só o tesouro das dungeons cria Cristal novo, devagar. Cada êxito paga ¼ do valor em Cristal (1 Cristal ≈ 40 Ouro), arredondado pela sorte. Quando o banco esgota, só circula entre jogadores. |
 
 ## O que o dono do bot pode ajustar
 
 `&game admin moeda set <id> <campo> <valor>` (vários de uma vez: `campo=valor`):
 
 - `nome`, `simbolo` — como a moeda aparece;
-- `dificuldade` — o quanto ela é rara nas missões **e** quanto rende por vez;
-- `nivelMin` — só cai em missões desse nível para cima;
+- `dificuldade`, `nivelMin` — eram o ritmo de cada moeda nas missões; no RPG v4
+  o pagamento segue o nível da missão e o estoque (banco ou tesouro), e esses
+  dois campos só aparecem na ficha;
 - `mercado` — o que o banco tem agora; `suprimentoBase` — o total de referência.
 
 O **tipo** (finita ou infinita) não muda, e não dá para criar nem apagar
@@ -34,10 +35,16 @@ moedas: é isso que define o mundo.
   máximo de unidades inteiras e cobra só o que elas custam; preço em outra moeda
   arredonda para cima; o que o jogador recebe arredonda para baixo.
   `&game cambio tudo ouro para cristal` (ou sem a quantidade) troca o saldo todo.
-- **Pote da dungeon**: o Ouro perdido nas quedas vai para o pote; quem vence uma
-  missão de dungeon leva 25% do prêmio (Fácil), 60% (Médio) ou tudo (Difícil).
-- **Folga de nível**: cada nível acima da missão fecha 1/6 do que falta para
-  100% — com 6 níveis de folga, a missão é garantida.
+- **Quem paga (RPG v4, 9 out 2026)**: o **contrato** da guilda paga do banco
+  (não cria moeda); a **dungeon** paga do tesouro dela, que se renova no ritmo
+  de quem joga lá (3 pagamentos por dia por jogador ativo, até 1,5× a
+  capacidade) — a única fonte de moeda nova. Banco ou tesouro cheio paga mais,
+  vazio paga menos: `alvo × 2x/(1+x)`. Metade do que se gasta no NPC volta ao
+  banco; quem cai num contrato deixa a perda no banco, numa dungeon, no tesouro
+  dela. O pote antigo foi dividido entre as dungeons genéricas.
+- **Folga pela força**: a chance sobe com a força da party, nunca pelo nível —
+  com 3× a força para a qual a missão foi feita, ela é garantida.
+- Regras completas: [`docs/rpg/`](docs/rpg/README.md).
 
 ## Recomeçar
 

@@ -7,8 +7,6 @@ export const CFG = {
   multMin: 0.5, multMax: 2.5,
   // recompra do NPC — rMax PRECISA ser < 1 (ver abaixo)
   rMin: 0.35, rMax: 0.70,
-  // dungeon
-  fMin: 0.05, fMax: 0.20, rRef: 5000,
   // câmbio do sistema
   spread: 0.03,
   // suavização do P (peso do valor novo na média móvel)
@@ -74,16 +72,6 @@ export function custoEm(preco, moedaPreco, moedaPaga) {
   return Math.max(1, Math.ceil(preco / Math.max(1e-9, taxaCambio(moedaPaga, moedaPreco))));
 }
 
-export function fracaoDungeon(R) {
-  const { fMin, fMax, rRef } = CFG;
-  const razao = Math.min(1, Math.max(0, (R ?? 0) / rRef));
-  return fMin + (fMax - fMin) * Math.sqrt(razao);
-}
-
-export function premioDungeon(R) {
-  return Math.floor((R ?? 0) * fracaoDungeon(R));
-}
-
 export const CASAS = 0;   // moedas inteiras (4 out 2026)
 export function arredondar(n, casas = CASAS) {
   if (!Number.isFinite(n)) return 0;
@@ -128,31 +116,4 @@ export function taxaMercado(volumeRecente = 0) {
 export function calcularTaxa(valor, volumeRecente = 0) {
   const pct = taxaMercado(volumeRecente);
   return { pct, valor: Math.max(0, arredondar(valor * pct)) };
-}
-
-export function sortearMoeda(moedas, missao, aleatorio = Math.random) {
-  const nivel = missao.nivel ?? 1;
-  const elegiveis = (moedas ?? []).filter((m) => (m.nivelMin ?? 1) <= nivel);
-  if (!elegiveis.length) return null;
-
-  // peso inversamente proporcional à dificuldade
-  const pesos = elegiveis.map((m) => 1 / Math.max(0.1, m.dificuldade ?? 1));
-  const total = pesos.reduce((a, b) => a + b, 0);
-  let r = aleatorio() * total;
-  for (let i = 0; i < elegiveis.length; i++) {
-    if (r < pesos[i]) return elegiveis[i];
-    r -= pesos[i];
-  }
-  return elegiveis[0];
-}
-
-// Quanto sai. Moeda difícil rende MENOS unidades — ela vale mais.
-export function moedaDaMissao(missao, P, sorte = 0, dificuldade = 1) {
-  const base = { mercado: 8, facil: 20, medio: 60, dificil: 180 }[
-    missao.tipo === "mercado" ? "mercado" : missao.dificuldade] ?? 10;
-  const escala = missao.tipo === "mercado" ? 1 : Math.pow(1.35, (missao.nivel ?? 1) - 1);
-  const bonusSorte = 1 + 0.04 * Math.sqrt(Math.max(0, sorte));
-  const ajusteP = 0.6 + 0.8 * (1 - (P ?? 0.5));
-  const ajusteDif = 1 / Math.max(0.1, dificuldade);
-  return Math.max(1, Math.round(base * escala * bonusSorte * ajusteP * ajusteDif));
 }

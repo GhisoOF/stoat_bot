@@ -1,154 +1,81 @@
+// Missões do RPG v4 (G3, D6, D8, D26): contratos da guilda (pagos pelo banco),
+// bicos sem risco, missões especiais (recompensa única, uma vez por pessoa),
+// encontros de dungeon (pagos pelo tesouro dela) e chefes. A luta é uma só
+// para todos — regras.preverLuta — e a força de cada uma sai de regras.missao.
+//
+// Os números de antes (fácil/médio/difícil, folga de nível, XP ×1,5 por nível)
+// saíram: docs/rpg/PLANO-RPG-CONTEUDO.md §1.
 
-export const TIPOS = { mercado: "mercado", dungeon: "dungeon" };
+import * as R from "./regras.js";
+import { CONTRATOS, BICOS, ESPECIAIS, DUNGEONS, CHEFES } from "./conteudo.js";
 
-export const MISSOES = [
-  // ── MERCADO (sem risco) ──
-  { id: "m_encomendas",  nome: "Entregar Encomendas",        tipo: "mercado", nivel: 1, poder: 0, risco: 0, cooldownMin: 10,
-    descricao: "Levar pacotes de um lado a outro do mercado. Ninguém morre carregando caixa." },
-  { id: "m_estoque",     nome: "Organizar o Estoque",        tipo: "mercado", nivel: 1, poder: 0, risco: 0, cooldownMin: 10,
-    descricao: "O ferreiro perdeu a conta dos lingotes. De novo." },
-  { id: "m_taverna",     nome: "Ajudar na Taverna",          tipo: "mercado", nivel: 1, poder: 0, risco: 0, cooldownMin: 10,
-    descricao: "Servir, limpar, ouvir histórias repetidas. Pagam em moeda e paciência." },
-  { id: "m_estabulo",    nome: "Cuidar dos Cavalos",         tipo: "mercado", nivel: 1, poder: 0, risco: 0, cooldownMin: 10,
-    descricao: "Alimentar, escovar, fingir que não pisou onde não devia." },
-
-  // ── DUNGEON — FÁCIL ──
-  { id: "d_ratos",   nome: "Limpar os Ratos do Porão",   tipo: "dungeon", dificuldade: "facil", nivel: 2, poder: 2,  risco: 1.5, cooldownMin: 20,
-    descricao: "São ratos. Grandes, mas ratos." },
-  { id: "d_goblins", nome: "Espantar Goblins da Estrada", tipo: "dungeon", dificuldade: "facil", nivel: 3, poder: 6,  risco: 4,  cooldownMin: 20,
-    descricao: "Cobram pedágio numa ponte que nem é deles." },
-  { id: "d_ervas",   nome: "Colher Ervas na Mata Rasa",  tipo: "dungeon", dificuldade: "facil", nivel: 4, poder: 12, risco: 9,  cooldownMin: 20,
-    descricao: "A mata é rasa. O que vive nela, nem tanto." },
-
-  // ── DUNGEON — MÉDIO ──
-  { id: "d_lobo",     nome: "Caçar o Lobo Branco",      tipo: "dungeon", dificuldade: "medio", nivel: 6,  poder: 45,  risco: 35, cooldownMin: 45,
-    descricao: "Já levou três rebanhos. E dois caçadores." },
-  { id: "d_cripta",   nome: "Explorar a Cripta Submersa", tipo: "dungeon", dificuldade: "medio", nivel: 8, poder: 70,  risco: 55, cooldownMin: 45,
-    descricao: "A água subiu, mas o que estava lá dentro não saiu." },
-  { id: "d_caravana", nome: "Escoltar a Caravana de Sal", tipo: "dungeon", dificuldade: "medio", nivel: 10, poder: 110, risco: 85, cooldownMin: 45,
-    descricao: "Três dias de estrada. Alguém sempre observa." },
-
-  // ── DUNGEON — DIFÍCIL ──
-  { id: "d_poco",      nome: "Descer ao Poço sem Fundo",  tipo: "dungeon", dificuldade: "dificil", nivel: 14, poder: 260, risco: 210, cooldownMin: 90,
-    descricao: "Tem fundo. Ninguém voltou para confirmar." },
-  { id: "d_guardiao",  nome: "Enfrentar o Guardião de Pedra", tipo: "dungeon", dificuldade: "dificil", nivel: 18, poder: 520, risco: 420, cooldownMin: 90,
-    descricao: "Não dorme, não come, não negocia." },
-  { id: "d_serpente",  nome: "Invadir o Ninho da Serpente", tipo: "dungeon", dificuldade: "dificil", nivel: 22, poder: 950, risco: 780, cooldownMin: 90,
-    descricao: "O ninho é quente por um motivo." },
-];
-
-export const DIFICULDADE_INFO = {
-  facil:   { emoji: "🟢", rotulo: "Fácil" },
-  medio:   { emoji: "🟡", rotulo: "Médio" },
-  dificil: { emoji: "🔴", rotulo: "Difícil" },
-};
-
-const LOOT = {
-  facil:   { comum: 0.55, incomum: 0.20 },
-  medio:   { comum: 0.25, incomum: 0.38, raro: 0.15 },
-  dificil: { incomum: 0.28, raro: 0.32, epico: 0.14, lendario: 0.03 },
-};
-
-// XP base por dificuldade (antes da escala por nível da missão).
-const XP_BASE = { mercado: 12, facil: 25, medio: 40, dificil: 70 };
+export { CONTRATOS, BICOS, ESPECIAIS, DUNGEONS, CHEFES };
+// bico: sem risco e paga 10% — com 30 min de espera rende metade de um contrato
+// por hora (com 10 min rendia mais que o contrato, e esvaziava o banco)
+export const ESPERA_MIN = { contrato: R.MISSAO.espera, dungeon: R.MISSAO.espera, especial: R.MISSAO.espera, bico: 30 };
+// quantos níveis uma vitória pode dar, no máximo (o nível 1 carregado no co-op
+// por um chefe do nível 60 não pula para o 51)
+export const NIVEIS_POR_LUTA = 2;
+export const ESPECIAL_PRIMEIRA_H = 2;   // até o primeiro êxito de uma especial
+export const CHEFE_ESPERA_H = 24;      // D19: por pessoa, por chefe
+export const CAPTURA = 0.20;           // só na dungeon (§6.4)
+export const COMPANHEIRO_LOOT = 0.07;  // por êxito, da faixa ou uma abaixo
+export const LOOT_TEMA = 0.70;         // na dungeon, 70% do loot é do tema
 
 // Sem acento e sem caixa: "cacar o lobo branco" acha "Caçar o Lobo Branco".
-const semAcento = (t) => String(t ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
-export function acharMissao(txt) {
+const semAcento = (t) => String(t ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+function achar(lista, txt) {
   const alvo = semAcento(txt);
   if (!alvo) return null;
-  return MISSOES.find((m) => m.id === alvo)
-      ?? MISSOES.find((m) => semAcento(m.nome) === alvo)
-      ?? MISSOES.find((m) => semAcento(m.nome).includes(alvo))
+  return lista.find((m) => m.id === alvo)
+      ?? lista.find((m) => semAcento(m.nome) === alvo || semAcento(m.nomeEN) === alvo)
+      ?? lista.find((m) => semAcento(m.nome).includes(alvo) || semAcento(m.nomeEN).includes(alvo))
       ?? null;
 }
+export const acharContrato = (t) => achar([...CONTRATOS, ...BICOS], t);
+export const acharEspecial = (t) => achar(ESPECIAIS, t);
+export const acharDungeon = (t) => achar([...DUNGEONS.values()], t);
+export const acharChefe = (t) => achar([...CHEFES.values()], t);
+// (compatibilidade: o co-op e o admin acham missões pelo nome)
 
-const precisao = (destreza) => 0.70 + 0.30 * (destreza / (destreza + 10));
-export function calcularPoder(attr, magias = []) {
-  const base = (attr.forca ?? 0) * 1.00 + (attr.inteligencia ?? 0) * 0.70;
-  const bruto = base * precisao(attr.destreza ?? 0) + (attr.carisma ?? 0) * 0.30;
-  // Magias de ATAQUE somam por cima, proporcionais ao que a party já tem
-  const bonus = magias.filter((m) => m.tipo === "ataque")
-    .reduce((acc, m) => acc + m.poder, 0);
-  return bruto * (1 + bonus);
+// ── A força de cada luta ─────────────────────────────────────────────────────
+// alvo: { poder, risco, base, perigo, nivel, dificuldade }
+export function alvoDe(missao, nivelJogador = 1) {
+  if (missao.tipo === "bico") return { poder: 0, risco: 0, base: R.BASE.normal, perigo: "baixo", nivel: Math.max(1, nivelJogador), dificuldade: R.faixaDoNivel(nivelJogador).n };
+  if (missao.tipo === "chefe") { const c = R.chefeDungeon(missao.nivel); return { ...c, base: R.BASE.chefe, perigo: missao.perigo ?? "normal" }; }
+  if (missao.tipo === "especial") return { ...R.missao(missao.nivel, R.BASE.especial), base: R.BASE.especial, perigo: missao.perigo ?? "normal" };
+  return { ...R.missao(missao.nivel), base: R.BASE.normal, perigo: missao.perigo ?? "normal" };
+}
+// O encontro da dungeon: o nível de quem joga, dentro dos níveis da dungeon.
+export function nivelDoEncontro(dungeon, nivelJogador) {
+  return Math.max(dungeon.niveis[0], Math.min(dungeon.niveis[1], Math.round(nivelJogador)));
+}
+export function areaDoNivel(dungeon, nivel) {
+  const dif = R.faixaDoNivel(nivel).n;
+  return dungeon.areas.find((a) => a.dif === dif) ?? dungeon.areas.at(-1);
+}
+export function encontro(dungeon, nivelJogador, aleatorio = Math.random) {
+  const nivel = nivelDoEncontro(dungeon, nivelJogador);
+  const area = areaDoNivel(dungeon, nivel);
+  const ini = area.inimigos[Math.floor(aleatorio() * area.inimigos.length)] ?? area.inimigos[0];
+  const nomeArea = area.nome?.pt ?? dungeon.nome;
+  return { id: `${dungeon.id}:${nivel}`, tipo: "dungeon", dungeon: dungeon.id, nome: dungeon.nome, nomeEN: dungeon.nomeEN, nivel, perigo: dungeon.perigo ?? "normal",
+    descricao: dungeon.descricao, area,
+    historia: { generos: dungeon.generos, local: [{ pt: nomeArea, art: "", en: area.nome?.en ?? dungeon.nomeEN }], inimigo: [ini] }, inimigo: ini };
 }
 
-export function calcularResiliencia(attr, magias = []) {
-  const fVida  = 1 + (attr.vida ?? 0) / 12;
-  const fResis = 1 + (attr.resistencia ?? 0) / 12;
-  const fAgil  = 1 + (attr.agilidade ?? 0) / 12;
-  const bruto = 3 * fVida * fResis * fAgil + (attr.sorte ?? 0) * 0.60;
-  // Magias de SUPORTE aumentam a sobrevivência
-  const bonus = magias.filter((m) => m.tipo === "suporte")
-    .reduce((acc, m) => acc + m.poder, 0);
-  return bruto * (1 + bonus);
+// ── Recompensa (D6): a força da missão, igual para todos ────────────────────
+// XP = o poder da missão (× perigo); o custo do nível acompanha a força.
+export function xpDa(missao, alvo, nivelJogador) {
+  const pg = R.PERIGO[alvo.perigo ?? "normal"] ?? R.PERIGO.normal;
+  if (missao.tipo === "bico") return R.missao(nivelJogador).poder * 0.1;   // 10% de um êxito no seu nível
+  return alvo.poder * pg.recompensa;
 }
+export const multRecompensa = (alvo) => (R.PERIGO[alvo.perigo ?? "normal"] ?? R.PERIGO.normal).recompensa;
+export const nivelPago = (missao, alvo, nivelJogador) => (missao.tipo === "bico" ? nivelJogador : alvo.nivel);
 
-const chance = (meu, exigido) => (exigido <= 0 ? 1 : meu / (meu + exigido));
-
-export function escalaPorParty(tamanho) {
-  return 1 + 0.18 * Math.max(0, tamanho);
-}
-
-// Folga de nível (4 out 2026): no nível 19, "Limpar os Ratos do Porão" (nível
-// 2) dava 91% — e o Lobo Branco (nível 6), 24%. Missão bem abaixo do seu nível
-// tem que ser certa. Cada nível acima da missão fecha 1/6 do que falta para
-// 100%; com 6 níveis de folga, êxito e sobrevivência ficam garantidos.
-export const MARGEM_NIVEL = 6;
-export function folgaDeNivel(nivel, missao) {
-  if (!Number.isFinite(nivel) || missao?.tipo === "mercado") return 0;
-  return Math.min(1, Math.max(0, (nivel - (missao.nivel ?? 1)) / MARGEM_NIVEL));
-}
-const comFolga = (c, f) => c + (1 - c) * f;
-
-export function previsao(attr, missao, magias = [], tamanhoParty = 0, nivel = null) {
-  const poder = calcularPoder(attr, magias);
-  const resil = calcularResiliencia(attr, magias);
-  const esc = escalaPorParty(tamanhoParty);
-  const poderExigido = (missao.poder ?? 0) * esc;
-  const riscoExigido = (missao.risco ?? 0) * esc;
-  const f = folgaDeNivel(nivel, missao);
-  return {
-    poder, resil, escala: esc, folga: f,
-    exito: comFolga(chance(poder, poderExigido), f),
-    sobrevivencia: riscoExigido > 0 ? comFolga(chance(resil, riscoExigido), f) : 1,
-  };
-}
-
-export function resolver(attr, missao, aleatorio = Math.random, magias = [], tamanhoParty = 0, nivel = null) {
-  const p = previsao(attr, missao, magias, tamanhoParty, nivel);
-  const exito = aleatorio() < p.exito;
-  const sobreviveu = missao.risco <= 0 ? true : aleatorio() < p.sobrevivencia;
-
-  // XP acompanha a curva: missão de nível alto paga exponencialmente mais.
-  const base = XP_BASE[missao.tipo === "mercado" ? "mercado" : missao.dificuldade] ?? 20;
-  const escala = missao.tipo === "mercado" ? 1 : Math.pow(1.5, (missao.nivel ?? 1) - 1);
-  let xp = Math.round(base * escala);
-  if (!exito) xp = Math.round(xp * 0.3);        // tentou e falhou ainda ensina algo
-  if (!sobreviveu) xp = Math.round(xp * 0.15);  // cair ensina menos
-
-  return {
-    exito, sobreviveu, xp,
-    desfecho: !sobreviveu ? "caiu" : exito ? "sucesso" : "falha",
-    previsao: p,
-  };
-}
-
-// Sorteia uma raridade de loot; devolve null quando não sai nada.
-export function sortearRaridade(missao, sorte = 0, aleatorio = Math.random, tamanhoParty = 0) {
-  if (missao.tipo === "mercado") return null;   // mercado não dá item
-  const tabela = LOOT[missao.dificuldade] ?? {};
-  const divisao = 1 / (1 + 0.30 * Math.max(0, tamanhoParty));
-  const bonus = (1 + 0.03 * Math.sqrt(Math.max(0, sorte))) * divisao;
-  let r = aleatorio();
-  for (const [raridade, chanceBase] of Object.entries(tabela)) {
-    const c = chanceBase * bonus;
-    if (r < c) return raridade;
-    r -= c;
-  }
-  return null;
-}
-
-export function cooldownMs(missao) {
-  return (missao.cooldownMin ?? 20) * 60_000;
+// Previsão rápida para listas (só números): quanto um êxito vale em nível.
+export function valeNiveis(xp, nivel, progresso = 0) {
+  const s = R.subirForca(nivel, progresso, xp);
+  return (s.nivel - nivel) + (s.progresso - progresso);
 }

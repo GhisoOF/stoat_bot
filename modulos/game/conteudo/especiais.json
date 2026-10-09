@@ -1,0 +1,46 @@
+{
+  "especiais": [
+    { "id": "e_relogio", "nome": { "pt": "O Relógio Parado", "en": "The Stopped Clock" }, "nivel": 15,
+      "descricao": { "pt": "Uma relojoaria fechada desde 1987, e o dono nunca saiu.", "en": "A watch shop closed since 1987, and the owner never left." },
+      "recompensa": { "tipo": "item", "id": "g_e_relogio_avo" },
+      "historia": { "generos": ["moderno"], "local": [ { "pt": "relojoaria fechada desde 1987", "art": "a", "en": "the watch shop closed since 1987" } ], "inimigo": [ { "pt": "dono que nunca saiu de lá", "art": "o", "en": "the owner who never left" } ] } },
+    { "id": "e_transmissao", "nome": { "pt": "A Última Transmissão", "en": "The Last Broadcast" }, "nivel": 37,
+      "descricao": { "pt": "Uma rádio pirata que ainda toca, sem ninguém na cabine.", "en": "A pirate radio still playing, with nobody in the booth." },
+      "recompensa": { "tipo": "magia", "id": "m_e_eco_radio" },
+      "historia": { "generos": ["moderno"], "local": [ { "pt": "cabine da rádio", "art": "a", "en": "the radio booth" } ], "inimigo": [ { "pt": "voz no ar", "art": "a", "en": "the voice on air" } ] } },
+    { "id": "e_clinica", "nome": { "pt": "A Clínica do Beco", "en": "The Back-Alley Clinic" }, "nivel": 45,
+      "descricao": { "pt": "Um médico de implantes que só atende de madrugada, num porão sem placa.", "en": "An implant doctor who only sees patients at night, in an unmarked basement." },
+      "recompensa": { "tipo": "item", "id": "g_e_coracao_segunda_mao" },
+      "historia": { "generos": ["moderno", "scifi"], "local": [ { "pt": "porão sem placa", "art": "o", "en": "the unmarked basement" } ], "inimigo": [ { "pt": "médico de implantes", "art": "o", "en": "the implant doctor" } ] } },
+    { "id": "e_elevador", "nome": { "pt": "O Elevador que Desce Demais", "en": "The Elevator That Goes Too Far Down" }, "nivel": 55,
+      "descricao": { "pt": "O prédio tem doze andares. O elevador tem botão para o menos cem.", "en": "The building has twelve floors. The elevator has a button for minus one hundred." },
+      "recompensa": { "tipo": "item", "id": "g_e_revolver_ascensorista" },
+      "historia": { "generos": ["moderno", "cosmico"], "local": [ { "pt": "andar menos cem", "art": "o", "en": "floor minus one hundred" } ], "inimigo": [ { "pt": "ascensorista", "art": "o", "en": "the elevator operator" } ] } },
+    { "id": "e_arquivo", "nome": { "pt": "O Arquivo das Estrelas Mortas", "en": "The Archive of Dead Stars" }, "nivel": 76,
+      "descricao": { "pt": "Cada gaveta guarda a última luz de uma estrela que já apagou.", "en": "Every drawer keeps the last light of a star that already went out." },
+      "recompensa": { "tipo": "magia", "id": "m_e_ultima_luz" },
+      "historia": { "generos": ["cosmico"], "local": [ { "pt": "arquivo das estrelas mortas", "art": "o", "en": "the archive of dead stars" } ], "inimigo": [ { "pt": "arquivista sem rosto", "art": "o", "en": "the faceless archivist" } ] } },
+    { "id": "e_pagina_branco", "nome": { "pt": "A Página em Branco", "en": "The Blank Page" }, "nivel": 95,
+      "descricao": { "pt": "Alguém precisa revisar o mundo antes da próxima edição.", "en": "Someone has to proofread the world before the next edition." },
+      "recompensa": { "tipo": "companheiro", "id": "f_e_revisora" },
+      "historia": { "generos": ["cosmico"], "local": [ { "pt": "margem da página", "art": "a", "en": "the margin of the page" } ], "inimigo": [ { "pt": "errata", "art": "a", "en": "the erratum" } ] } }
+  ],
+  "itens": [
+    { "id": "g_e_relogio_avo", "nome": { "pt": "Relógio do Avô", "en": "Grandfather's Watch" }, "dif": 2, "slot": "acessorio", "bonus": { "sorte": 2, "agilidade": 1 }, "especial": true,
+      "descricao": { "pt": "Parou em 1987. Ainda acerta a hora duas vezes por dia.", "en": "It stopped in 1987. It's still right twice a day." } },
+    { "id": "g_e_coracao_segunda_mao", "nome": { "pt": "Coração de Segunda Mão", "en": "Second-Hand Heart" }, "dif": 5, "implante": "c_coracao", "especial": true,
+      "descricao": { "pt": "Bate um pouco fora do ritmo. Bate.", "en": "It beats a little off-rhythm. But it beats." } },
+    { "id": "g_e_revolver_ascensorista", "nome": { "pt": "Revólver do Ascensorista", "en": "Elevator Operator's Revolver" }, "dif": 6, "molde": "fogo_leve", "especial": true,
+      "descricao": { "pt": "Seis balas, uma para cada andar que não existe.", "en": "Six bullets, one for each floor that doesn't exist." } }
+  ],
+  "magias": [
+    { "id": "m_e_eco_radio", "nome": { "pt": "Eco de Rádio", "en": "Radio Echo" }, "tipo": "suporte", "dif": 4, "custo": 4, "poder": 0.65 },
+    { "id": "m_e_ultima_luz", "nome": { "pt": "Última Luz", "en": "Last Light" }, "tipo": "ataque", "dif": 8, "custo": 18, "poder": 1.68 }
+  ],
+  "companheiros": [
+    { "id": "f_e_revisora", "nome": { "pt": "A Revisora", "en": "The Proofreader" }, "classe": "suporte", "dif": 10, "mult": 1.2,
+      "magia": { "nome": { "pt": "Bênção", "en": "Blessing" }, "tipo": "suporte" },
+      "obtencao": "especial:e_pagina_branco",
+      "descricao": { "pt": "Corrige o mundo com caneta vermelha. Às vezes, você também.", "en": "She corrects the world in red ink. Sometimes you too." } }
+  ]
+}

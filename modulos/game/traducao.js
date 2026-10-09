@@ -7,7 +7,12 @@
 // só: o sendEmbed do &game). Itens e companheiros CURADOS pelo dono do bot
 // ficam como ele escreveu.
 
-export const EN = {
+import { dicionarioEN } from "./conteudo.js";
+
+// v4 (9 out 2026): o catálogo novo (280+ itens, 60+ companheiros, contratos,
+// dungeons, chefes) traz o inglês no próprio conteúdo (conteudo/*.json) — este
+// dicionário só completa e, quando um nome repete, vale o daqui.
+const MANUAL = {
   // ── missões ──
   "Entregar Encomendas": "Deliver Parcels",
   "Levar pacotes de um lado a outro do mercado. Ninguém morre carregando caixa.": "Carry parcels from one end of the market to the other. Nobody dies carrying a box.",
@@ -70,7 +75,11 @@ export const EN = {
   "nada": "nothing", "magia": "spell",
   // ── moedas do mundo ──
   "Ouro": "Gold", "Cristal": "Crystal",
+  // ── v4: raridades novas, vagas e o resto da tela ──
+  "Mítico": "Mythic", "Divino": "Divine", "Supremo": "Supreme",
+  "Mão principal": "Main hand", "Mão secundária": "Off hand", "Cabeça": "Head", "Corpo": "Body", "Acessório": "Accessory",
 };
+export const EN = { ...dicionarioEN(), ...MANUAL };
 
 // Os mais longos primeiro ("Lança Arcana" antes de "Lança"); só palavra inteira.
 const ORDEM = Object.keys(EN).sort((a, b) => b.length - a.length);

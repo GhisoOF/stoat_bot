@@ -1,0 +1,72 @@
+{
+  "obra": "The Elder Scrolls V: Skyrim",
+  "companheiros": [
+    {
+      "id": "f_tes_serana", "nome": { "pt": "Serana", "en": "Serana" }, "obra": "The Elder Scrolls V: Skyrim — Dawnguard",
+      "vsb": "https://vsbattles.fandom.com/wiki/Lord_Harkon", "tier": "6-A",
+      "estrelas": { "inteligencia": 3, "vida": 3, "mana": 2, "agilidade": 2, "carisma": 2, "forca": 1, "destreza": 1, "resistencia": 1 },
+      "magia": { "nome": { "pt": "Dreno Vampírico", "en": "Vampiric Drain" }, "tipo": "ataque" },
+      "obtencao": "chefe:b_tes_harkon",
+      "descricao": { "pt": "Dormiu séculos num sarcófago. Acordou de mau humor e com um Pergaminho Ancião nas costas.", "en": "Slept for centuries in a sarcophagus. Woke up cranky, with an Elder Scroll on her back." }
+    },
+    {
+      "id": "f_tes_jzargo", "nome": { "pt": "J'zargo", "en": "J'zargo" },
+      "vsb": "https://vsbattles.fandom.com/wiki/J%27zargo", "tier": "High 8-C",
+      "estrelas": { "inteligencia": 3, "mana": 2, "vida": 2, "resistencia": 2, "destreza": 2, "agilidade": 2, "forca": 1, "carisma": 1 },
+      "magia": { "nome": { "pt": "Faíscas Duplas", "en": "Twin Sparks" }, "tipo": "ataque" },
+      "obtencao": "especial:e_tes_experimento_jzargo",
+      "descricao": { "pt": "J'zargo será Arquimago. J'zargo só precisa que alguém teste os pergaminhos antes.", "en": "J'zargo will be Arch-Mage. J'zargo only needs someone to test the scrolls first." }
+    },
+    {
+      "id": "f_tes_ebony_warrior", "nome": { "pt": "Ebony Warrior", "en": "Ebony Warrior" }, "obra": "The Elder Scrolls V: Skyrim — Dragonborn",
+      "vsb": "https://vsbattles.fandom.com/wiki/The_Ebony_Warrior", "tier": "Low 2-C",
+      "estrelas": { "forca": 3, "vida": 2, "resistencia": 2, "destreza": 1, "agilidade": 1, "mana": 1 },
+      "magia": { "nome": { "pt": "Força Implacável", "en": "Unrelenting Force" }, "tipo": "ataque" },
+      "obtencao": "chefe:b_tes_ebony_warrior",
+      "descricao": { "pt": "Fez tudo o que havia para fazer. Faltava perder para alguém que valesse a pena.", "en": "He did everything there was to do. All that was left was losing to someone worth it." }
+    }
+  ],
+  "itens": [
+    {
+      "id": "g_tes_espada_ebano_vampiro", "nome": { "pt": "Espada de Ébano do Vampiro", "en": "Vampire's Ebony Sword" }, "obra": "The Elder Scrolls V: Skyrim — Dragonborn",
+      "dif": 9, "molde": "branca_media", "especial": true,
+      "descricao": { "pt": "A do Ebony Warrior. Cai uma vez por pessoa.", "en": "The Ebony Warrior's own. Drops once per person." }
+    }
+  ],
+  "chefes": [
+    {
+      "id": "b_tes_harkon", "nome": { "pt": "Lorde Harkon", "en": "Lord Harkon" }, "obra": "The Elder Scrolls V: Skyrim — Dawnguard",
+      "tier": "High 6-A", "dungeon": "dg_tes_volkihar", "recompensa": { "contrato": "f_tes_serana" },
+      "descricao": { "pt": "Quer apagar o sol. Já começou pelas velas.", "en": "He wants to blot out the sun. He started with the candles." },
+      "falas": { "inicio": { "pt": "Você entrou no meu castelo. Não vai sair dele.", "en": "You walked into my castle. You won't walk out of it." },
+                 "derrota": { "pt": "Serana... minha filha... você escolheu o lado errado.", "en": "Serana... my daughter... you chose the wrong side." } },
+      "historia": { "generos": ["medieval"], "local": [ { "pt": "salão do trono de Volkihar", "art": "o", "en": "the throne hall of Volkihar" } ], "inimigo": [ { "pt": "Lorde Harkon", "art": "", "en": "Lord Harkon" } ] }
+    },
+    {
+      "id": "b_tes_ebony_warrior", "nome": { "pt": "Ebony Warrior", "en": "Ebony Warrior" }, "obra": "The Elder Scrolls V: Skyrim — Dragonborn",
+      "tier": "Low 2-C", "recompensa": { "contrato": "f_tes_ebony_warrior", "item": "g_tes_espada_ebano_vampiro" },
+      "descricao": { "pt": "Procura alguém à altura há tempo demais.", "en": "He's been looking for a worthy opponent for far too long." },
+      "falas": { "inicio": { "pt": "Chegou a hora.", "en": "The time has come." },
+                 "derrota": { "pt": "Enfim... Sovngarde pode esperar mais um pouco.", "en": "At last... Sovngarde can wait a little longer." } },
+      "historia": { "generos": ["medieval"], "local": [ { "pt": "estrada de Riften", "art": "a", "en": "the road to Riften" } ], "inimigo": [ { "pt": "Ebony Warrior", "art": "o", "en": "the Ebony Warrior" } ] }
+    }
+  ],
+  "dungeons": [
+    {
+      "id": "dg_tes_volkihar", "nome": { "pt": "Castelo Volkihar", "en": "Castle Volkihar" }, "difs": [5, 5], "generos": ["medieval"],
+      "descricao": { "pt": "Uma ilha de pedra, um castelo de vampiros e um banquete em que você é o prato.", "en": "A stone island, a vampire castle and a feast where you are the main course." },
+      "areas": [ { "dif": 5, "nome": { "pt": "Castelo Volkihar", "en": "Castle Volkihar" },
+        "inimigos": [ { "pt": "vampiros da corte", "art": "os", "en": "court vampires" }, { "pt": "servos de sangue", "art": "os", "en": "blood thralls" }, { "pt": "gárgulas", "art": "as", "en": "gargoyles" } ] } ],
+      "chefe": "b_tes_harkon"
+    }
+  ],
+  "especiais": [
+    {
+      "id": "e_tes_experimento_jzargo", "nome": { "pt": "O Experimento de J'zargo", "en": "J'zargo's Experiment" }, "nivel": 24,
+      "descricao": { "pt": "Os pergaminhos dele explodem. Ele precisa saber quanto.", "en": "His scrolls explode. He needs to know how much." },
+      "recompensa": { "tipo": "companheiro", "id": "f_tes_jzargo" },
+      "historia": { "generos": ["medieval"], "local": [ { "pt": "Colégio de Winterhold", "art": "o", "en": "the College of Winterhold" } ], "inimigo": [ { "pt": "pergaminho instável", "art": "o", "en": "the unstable scroll" } ] },
+      "falas": { "primeira_vez": { "pt": "J'zargo viu tudo. J'zargo vai com você — alguém precisa ver o resto.", "en": "J'zargo saw everything. J'zargo comes with you — someone must see the rest." } }
+    }
+  ]
+}

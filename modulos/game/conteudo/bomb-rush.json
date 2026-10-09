@@ -1,0 +1,29 @@
+{
+  "obra": "Bomb Rush Cyberfunk",
+  "companheiros": [
+    {
+      "id": "f_brc_tryce", "nome": { "pt": "Tryce", "en": "Tryce" },
+      "wiki": "https://bombrushcyberfunk.wiki.gg/wiki/Tryce", "tier": "9-C", "classe": "suporte",
+      "estrelas": { "carisma": 3, "agilidade": 2, "destreza": 1, "sorte": 1 },
+      "magia": { "nome": { "pt": "Somos uma Crew", "en": "We're a Crew" }, "tipo": "suporte" },
+      "obtencao": "chefe:b_brc_tryce",
+      "descricao": { "pt": "Fundou a crew com uma meta só: All City. Ainda está decidindo se você cabe nela.", "en": "He founded the crew with one goal: All City. He's still deciding if you make the cut." }
+    }
+  ],
+  "itens": [
+    {
+      "id": "g_brc_boostpack_reserva", "nome": { "pt": "Boostpack Reserva", "en": "Spare Boostpack" }, "dif": 2, "molde": "acess_mobilidade", "especial": true,
+      "descricao": { "pt": "O que ele deu ao Faux na fuga da delegacia.", "en": "The one he gave Faux during the jailbreak." }
+    }
+  ],
+  "chefes": [
+    {
+      "id": "b_brc_tryce", "nome": { "pt": "Tryce — Crew Battle da Bomb Rush Crew", "en": "Tryce — Bomb Rush Crew Battle" },
+      "tier": "9-C", "perigo": "baixo", "recompensa": { "contrato": "f_brc_tryce", "item": "g_brc_boostpack_reserva" },
+      "descricao": { "pt": "Crew battle pelo Código da Rua: ganha quem tiver mais REP, ninguém morre.", "en": "A crew battle by the Code of the Street: most REP wins, nobody dies." },
+      "falas": { "inicio": { "pt": "Código da Rua: quem perder sai do bairro.", "en": "Code of the Street: whoever loses leaves the block." },
+                 "derrota": { "pt": "Tá, tá... vocês têm REP. Bem-vindos à crew.", "en": "Alright, alright... you've got REP. Welcome to the crew." } },
+      "historia": { "generos": ["moderno"], "local": [ { "pt": "Millennium Square", "art": "", "en": "Millennium Square" }, { "pt": "Versum Hill", "art": "", "en": "Versum Hill" } ], "inimigo": [ { "pt": "Bomb Rush Crew", "art": "a", "en": "the Bomb Rush Crew" } ] }
+    }
+  ]
+}

@@ -1,0 +1,35 @@
+{
+  "obra": "Tokyo Ghoul",
+  "companheiros": [
+    {
+      "id": "f_tg_rize", "nome": { "pt": "Rize Kamishiro", "en": "Rize Kamishiro" },
+      "vsb": "https://vsbattles.fandom.com/wiki/Rize_Kamishiro", "tier": "8-B", "classe": "combatente",
+      "estrelas": { "forca": 3, "vida": 2, "agilidade": 1, "destreza": 1 },
+      "magia": { "nome": { "pt": "Seis Garras", "en": "Six Claws" }, "tipo": "ataque" },
+      "obtencao": "chefe:b_tg_rize",
+      "descricao": { "pt": "Lia os mesmos livros que você. Só queria saber qual era o seu gosto.", "en": "She read the same books you did. She only wanted to know how you'd taste." }
+    }
+  ],
+  "itens": [
+    {
+      "id": "g_tg_kakuhou_rize", "nome": { "pt": "Kakuhou da Rize", "en": "Rize's Kakuhou" }, "dif": 4, "implante": "b_rubro_of", "especial": true,
+      "descricao": { "pt": "O órgão de Rc dela — o mesmo que foi parar no Kaneki.", "en": "Her Rc organ — the same one that ended up in Kaneki." }
+    }
+  ],
+  "chefes": [
+    {
+      "id": "b_tg_rize", "nome": { "pt": "Rize Kamishiro, a Glutona", "en": "Rize Kamishiro, the Binge Eater" },
+      "tier": "8-B", "recompensa": { "contrato": "f_tg_rize" },
+      "descricao": { "pt": "A Glutona de Tóquio. Come primeiro, pergunta nunca.", "en": "Tokyo's Binge Eater. She eats first and never asks." },
+      "falas": { "inicio": { "pt": "Você parece delicioso.", "en": "You look delicious." },
+                 "derrota": { "pt": "Que pena... eu estava com tanta fome.", "en": "What a shame... I was so hungry." } },
+      "historia": { "generos": ["moderno"], "local": [ { "pt": "café Anteiku", "art": "o", "en": "Anteiku café" }, { "pt": "beco do 20º distrito", "art": "o", "en": "the 20th ward alley" } ], "inimigo": [ { "pt": "Rize", "art": "", "en": "Rize" } ] }
+    },
+    {
+      "id": "b_tg_dragao", "nome": { "pt": "Dragão", "en": "Dragon" }, "tier": "7-A", "requer": "b_tg_rize",
+      "recompensa": { "item": "g_tg_kakuhou_rize" },
+      "descricao": { "pt": "Uma massa de kagune do tamanho de um bairro. A Rize está lá dentro.", "en": "A kagune mass the size of a district. Rize is inside it." },
+      "historia": { "generos": ["moderno"], "local": [ { "pt": "Tóquio coberta de kagune", "art": "", "en": "kagune-covered Tokyo" } ], "inimigo": [ { "pt": "Dragão", "art": "o", "en": "the Dragon" } ] }
+    }
+  ]
+}

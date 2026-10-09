@@ -1,0 +1,1962 @@
+{
+  "obra": "Warhammer 40,000",
+  "armas": [
+    {
+      "id": "g_wh40k_faca_de_combate",
+      "nome": {
+        "pt": "Faca de Combate",
+        "en": "Combat Knife"
+      },
+      "dif": 1,
+      "porte": "leve",
+      "tipo": "branca",
+      "esc": {
+        "forca": "D",
+        "destreza": "B"
+      },
+      "req": {
+        "for1": 2,
+        "des": 3,
+        "int": 0
+      },
+      "dano": 8,
+      "lore": {
+        "pt": "a dos Catachan; o básico de todo soldado",
+        "en": "the Catachans' blade; every soldier's basic kit"
+      }
+    },
+    {
+      "id": "g_wh40k_cassetete_de_choque",
+      "nome": {
+        "pt": "Cassetete de Choque",
+        "en": "Shock Maul"
+      },
+      "dif": 2,
+      "porte": "leve",
+      "tipo": "branca",
+      "esc": {
+        "forca": "B"
+      },
+      "req": {
+        "for1": 4,
+        "des": 1,
+        "int": 0
+      },
+      "dano": 18,
+      "lore": {
+        "pt": "do Adeptus Arbites; no mínimo atordoa, no máximo arranca membros",
+        "en": "Adeptus Arbites issue; at the very least it stuns, at worst it tears off limbs"
+      }
+    },
+    {
+      "id": "g_wh40k_espada_serra",
+      "nome": {
+        "pt": "Espada-serra",
+        "en": "Chainsword"
+      },
+      "dif": 2,
+      "porte": "medio",
+      "tipo": "branca",
+      "esc": {
+        "forca": "C",
+        "destreza": "C"
+      },
+      "req": {
+        "for1": 8,
+        "des": 4,
+        "int": 0
+      },
+      "dano": 25,
+      "lore": {
+        "pt": "dentes motorizados; a arma corpo a corpo mais comum do Imperium",
+        "en": "motorized teeth; the most common melee weapon in the Imperium"
+      }
+    },
+    {
+      "id": "g_wh40k_machado_serra",
+      "nome": {
+        "pt": "Machado-serra",
+        "en": "Chainaxe"
+      },
+      "dif": 2,
+      "porte": "medio",
+      "tipo": "branca",
+      "esc": {
+        "forca": "B",
+        "destreza": "E"
+      },
+      "req": {
+        "for1": 8,
+        "des": 2,
+        "int": 0
+      },
+      "dano": 26,
+      "lore": {
+        "pt": "o favorito dos berserkers do Caos",
+        "en": "the favorite of Chaos berserkers"
+      }
+    },
+    {
+      "id": "g_wh40k_eviscerador",
+      "nome": {
+        "pt": "Eviscerador",
+        "en": "Eviscerator"
+      },
+      "dif": 3,
+      "porte": "colossal",
+      "tipo": "branca",
+      "esc": {
+        "forca": "A",
+        "destreza": "E"
+      },
+      "req": {
+        "for1": 36,
+        "des": 3,
+        "int": 0
+      },
+      "dano": 83,
+      "lore": {
+        "pt": "espada-serra de duas mãos; o texto diz que esquenta e deixa lento",
+        "en": "a two-handed chainsword; the texts say it overheats and slows you down"
+      }
+    },
+    {
+      "id": "g_wh40k_espada_de_energia",
+      "nome": {
+        "pt": "Espada de Energia",
+        "en": "Power Sword"
+      },
+      "dif": 3,
+      "porte": "medio",
+      "tipo": "branca",
+      "esc": {
+        "forca": "C",
+        "destreza": "C"
+      },
+      "req": {
+        "for1": 12,
+        "des": 6,
+        "int": 0
+      },
+      "dano": 50,
+      "lore": {
+        "pt": "campo de energia que desfaz a matéria — ignora armadura",
+        "en": "an energy field that unravels matter — ignores armor"
+      }
+    },
+    {
+      "id": "g_wh40k_maca_de_energia",
+      "nome": {
+        "pt": "Maça de Energia",
+        "en": "Power Maul"
+      },
+      "dif": 3,
+      "porte": "medio",
+      "tipo": "branca",
+      "esc": {
+        "forca": "B"
+      },
+      "req": {
+        "for1": 12,
+        "des": 2,
+        "int": 0
+      },
+      "dano": 48,
+      "lore": {
+        "pt": "campo gravitacional constante",
+        "en": "a constant gravitational field"
+      }
+    },
+    {
+      "id": "g_wh40k_crozius_arcanum",
+      "nome": {
+        "pt": "Crozius Arcanum",
+        "en": "Crozius Arcanum"
+      },
+      "dif": 3,
+      "porte": "medio",
+      "tipo": "branca",
+      "esc": {
+        "forca": "B",
+        "inteligencia": "D"
+      },
+      "req": {
+        "for1": 12,
+        "des": 2,
+        "int": 2
+      },
+      "dano": 48,
+      "lore": {
+        "pt": "maça e símbolo dos capelães; arma e oração",
+        "en": "mace and symbol of the Chaplains; weapon and prayer in one"
+      }
+    },
+    {
+      "id": "g_wh40k_lamina_glacial",
+      "nome": {
+        "pt": "Lâmina Glacial",
+        "en": "Frost Blade"
+      },
+      "dif": 3,
+      "porte": "medio",
+      "tipo": "branca",
+      "esc": {
+        "forca": "C",
+        "destreza": "C"
+      },
+      "req": {
+        "for1": 12,
+        "des": 6,
+        "int": 0
+      },
+      "dano": 48,
+      "lore": {
+        "pt": "com dentes de kraken de Fenris",
+        "en": "set with kraken teeth from Fenris"
+      }
+    },
+    {
+      "id": "g_wh40k_lanca_de_energia",
+      "nome": {
+        "pt": "Lança de Energia",
+        "en": "Power Lance"
+      },
+      "dif": 3,
+      "porte": "pesado",
+      "tipo": "branca",
+      "esc": {
+        "forca": "C",
+        "destreza": "C"
+      },
+      "req": {
+        "for1": 21,
+        "des": 6,
+        "int": 0
+      },
+      "dano": 72,
+      "lore": {
+        "pt": "mortal na carga",
+        "en": "deadly on the charge"
+      }
+    },
+    {
+      "id": "g_wh40k_machado_omnissiano",
+      "nome": {
+        "pt": "Machado Omnissiano",
+        "en": "Omnissian Axe"
+      },
+      "dif": 3,
+      "porte": "medio",
+      "tipo": "branca",
+      "esc": {
+        "forca": "C",
+        "inteligencia": "D"
+      },
+      "req": {
+        "for1": 12,
+        "des": 3,
+        "int": 2
+      },
+      "dano": 48,
+      "lore": {
+        "pt": "símbolo do Deus-Máquina",
+        "en": "symbol of the Machine God"
+      }
+    },
+    {
+      "id": "g_wh40k_garras_relampago",
+      "nome": {
+        "pt": "Garras Relâmpago",
+        "en": "Lightning Claws"
+      },
+      "dif": 4,
+      "porte": "leve",
+      "tipo": "branca",
+      "esc": {
+        "forca": "C",
+        "destreza": "B"
+      },
+      "req": {
+        "for1": 8,
+        "des": 12,
+        "int": 0
+      },
+      "dano": 69,
+      "lore": {
+        "pt": "quase sempre em par — o exemplo de duas armas de uma mão",
+        "en": "almost always paired — the textbook case of two one-handed weapons"
+      }
+    },
+    {
+      "id": "g_wh40k_lamina_reliquia",
+      "nome": {
+        "pt": "Lâmina-relíquia",
+        "en": "Relic Blade"
+      },
+      "dif": 4,
+      "porte": "pesado",
+      "tipo": "branca",
+      "esc": {
+        "forca": "B",
+        "destreza": "C"
+      },
+      "req": {
+        "for1": 28,
+        "des": 8,
+        "int": 0
+      },
+      "dano": 138,
+      "lore": {
+        "pt": "a espada de energia de duas mãos",
+        "en": "the two-handed power sword"
+      }
+    },
+    {
+      "id": "g_wh40k_glaive_encarmine",
+      "nome": {
+        "pt": "Glaive Encarmine",
+        "en": "Glaive Encarmine"
+      },
+      "dif": 4,
+      "porte": "pesado",
+      "tipo": "branca",
+      "esc": {
+        "forca": "B",
+        "destreza": "C"
+      },
+      "req": {
+        "for1": 28,
+        "des": 8,
+        "int": 0
+      },
+      "dano": 138,
+      "lore": {
+        "pt": "da Guarda Sanguinária dos Blood Angels",
+        "en": "wielded by the Blood Angels' Sanguinary Guard"
+      }
+    },
+    {
+      "id": "g_wh40k_punho_de_energia",
+      "nome": {
+        "pt": "Punho de Energia",
+        "en": "Power Fist"
+      },
+      "dif": 4,
+      "porte": "pesado",
+      "tipo": "branca",
+      "esc": {
+        "forca": "S"
+      },
+      "req": {
+        "for1": 28,
+        "des": 2,
+        "int": 0
+      },
+      "dano": 132,
+      "lore": {
+        "pt": "lento, mas esmaga tanques",
+        "en": "slow, but it crushes tanks"
+      }
+    },
+    {
+      "id": "g_wh40k_punho_serra",
+      "nome": {
+        "pt": "Punho-serra",
+        "en": "Chainfist"
+      },
+      "dif": 4,
+      "porte": "pesado",
+      "tipo": "branca",
+      "esc": {
+        "forca": "S"
+      },
+      "req": {
+        "for1": 28,
+        "des": 2,
+        "int": 0
+      },
+      "dano": 138,
+      "lore": {
+        "pt": "feito para abrir anteparas e cascos",
+        "en": "built to cut open bulkheads and hulls"
+      }
+    },
+    {
+      "id": "g_wh40k_martelo_trovao",
+      "nome": {
+        "pt": "Martelo-trovão",
+        "en": "Thunder Hammer"
+      },
+      "dif": 4,
+      "porte": "pesado",
+      "tipo": "branca",
+      "esc": {
+        "forca": "S"
+      },
+      "req": {
+        "for1": 28,
+        "des": 2,
+        "int": 0
+      },
+      "dano": 144,
+      "lore": {
+        "pt": "descarrega tudo no impacto — o golpe de uma nave caindo",
+        "en": "unleashes everything on impact — a blow like a falling starship"
+      }
+    },
+    {
+      "id": "g_wh40k_manopla_neural",
+      "nome": {
+        "pt": "Manopla Neural",
+        "en": "Neuro Gauntlet"
+      },
+      "dif": 4,
+      "porte": "leve",
+      "tipo": "branca",
+      "esc": {
+        "destreza": "B",
+        "inteligencia": "C"
+      },
+      "req": {
+        "for1": 8,
+        "des": 12,
+        "int": 4
+      },
+      "dano": 60,
+      "lore": {
+        "pt": "agulhas que atacam o sistema nervoso — ignora o tamanho do alvo",
+        "en": "needles that attack the nervous system — the target's size doesn't matter"
+      }
+    },
+    {
+      "id": "g_wh40k_garra_de_poder",
+      "nome": {
+        "pt": "Garra de Poder",
+        "en": "Power Klaw"
+      },
+      "dif": 4,
+      "porte": "colossal",
+      "tipo": "branca",
+      "esc": {
+        "forca": "S"
+      },
+      "req": {
+        "for1": 48,
+        "des": 2,
+        "int": 0
+      },
+      "dano": 138,
+      "lore": {
+        "pt": "a pinça dos Orks grandes o bastante",
+        "en": "the claw of Orks big enough to wield one"
+      }
+    },
+    {
+      "id": "g_wh40k_arma_de_forca",
+      "nome": {
+        "pt": "Arma de Força",
+        "en": "Force Weapon"
+      },
+      "dif": 5,
+      "porte": "medio",
+      "tipo": "branca",
+      "esc": {
+        "forca": "D",
+        "inteligencia": "S"
+      },
+      "req": {
+        "for1": 20,
+        "des": 5,
+        "int": 20
+      },
+      "dano": 132,
+      "lore": {
+        "pt": "canal psíquico com lâmina; queima a alma",
+        "en": "a psychic conduit with a blade; it burns the soul"
+      }
+    },
+    {
+      "id": "g_wh40k_cajado_de_forca",
+      "nome": {
+        "pt": "Cajado de Força",
+        "en": "Force Staff"
+      },
+      "dif": 5,
+      "porte": "pesado",
+      "tipo": "magica",
+      "esc": {
+        "inteligencia": "A",
+        "forca": "E"
+      },
+      "req": {
+        "for1": 14,
+        "des": 0,
+        "int": 20
+      },
+      "dano": 210,
+      "lore": {
+        "pt": "o de Tigurius, bibliotecário dos Ultramarines",
+        "en": "the staff of Tigurius, Librarian of the Ultramarines"
+      }
+    },
+    {
+      "id": "g_wh40k_espada_de_fase_ctan",
+      "nome": {
+        "pt": "Espada de Fase C'tan",
+        "en": "C'tan Phase Sword"
+      },
+      "dif": 5,
+      "porte": "leve",
+      "tipo": "branca",
+      "esc": {
+        "destreza": "B",
+        "inteligencia": "B"
+      },
+      "req": {
+        "for1": 10,
+        "des": 15,
+        "int": 10
+      },
+      "dano": 130,
+      "lore": {
+        "pt": "entra e sai da realidade: atravessa armadura e campo de força",
+        "en": "slips in and out of reality: passes through armor and force fields"
+      }
+    },
+    {
+      "id": "g_wh40k_pistola_de_projetil",
+      "nome": {
+        "pt": "Pistola de Projétil",
+        "en": "Stub Pistol"
+      },
+      "dif": 1,
+      "porte": "leve",
+      "tipo": "fogo",
+      "esc": {
+        "destreza": "C",
+        "forca": "E"
+      },
+      "req": {
+        "for1": 1,
+        "des": 3,
+        "int": 0
+      },
+      "dano": 8,
+      "lore": {
+        "pt": "um revólver de mundo industrial",
+        "en": "a revolver from an industrial world"
+      }
+    },
+    {
+      "id": "g_wh40k_autopistola",
+      "nome": {
+        "pt": "Autopistola",
+        "en": "Autopistol"
+      },
+      "dif": 2,
+      "porte": "leve",
+      "tipo": "fogo",
+      "esc": {
+        "destreza": "B",
+        "forca": "E"
+      },
+      "req": {
+        "for1": 2,
+        "des": 6,
+        "int": 0
+      },
+      "dano": 19,
+      "lore": {
+        "pt": "rajadas curtas",
+        "en": "short bursts"
+      }
+    },
+    {
+      "id": "g_wh40k_autofuzil",
+      "nome": {
+        "pt": "Autofuzil",
+        "en": "Autogun"
+      },
+      "dif": 2,
+      "porte": "pesado",
+      "tipo": "fogo",
+      "esc": {
+        "destreza": "A",
+        "forca": "E"
+      },
+      "req": {
+        "for1": 7,
+        "des": 8,
+        "int": 0
+      },
+      "dano": 36,
+      "lore": {
+        "pt": "projétil sólido; foi a arma padrão até o laser",
+        "en": "solid slugs; the standard weapon until the lasgun took over"
+      }
+    },
+    {
+      "id": "g_wh40k_laspistola",
+      "nome": {
+        "pt": "Laspistola",
+        "en": "Laspistol"
+      },
+      "dif": 2,
+      "porte": "leve",
+      "tipo": "fogo",
+      "esc": {
+        "destreza": "B",
+        "forca": "E"
+      },
+      "req": {
+        "for1": 2,
+        "des": 6,
+        "int": 0
+      },
+      "dano": 18,
+      "lore": {
+        "pt": "a dos oficiais e comissários",
+        "en": "carried by officers and commissars"
+      }
+    },
+    {
+      "id": "g_wh40k_fuzil_laser",
+      "nome": {
+        "pt": "Fuzil Laser",
+        "en": "Lasgun"
+      },
+      "dif": 2,
+      "porte": "pesado",
+      "tipo": "fogo",
+      "esc": {
+        "destreza": "A",
+        "forca": "E"
+      },
+      "req": {
+        "for1": 7,
+        "des": 8,
+        "int": 0
+      },
+      "dano": 34,
+      "lore": {
+        "pt": "a 'lanterna' da Guarda: fraca sozinha, quase indestrutível",
+        "en": "the Guard's 'flashlight': weak on its own, nearly indestructible"
+      }
+    },
+    {
+      "id": "g_wh40k_escopeta_de_combate",
+      "nome": {
+        "pt": "Escopeta de Combate",
+        "en": "Combat Shotgun"
+      },
+      "dif": 2,
+      "porte": "medio",
+      "tipo": "fogo",
+      "esc": {
+        "forca": "D",
+        "destreza": "C"
+      },
+      "req": {
+        "for1": 5,
+        "des": 4,
+        "int": 0
+      },
+      "dano": 24,
+      "lore": {
+        "pt": "chumbo que se espalha; não fura o casco da nave",
+        "en": "spreading shot that won't breach a starship hull"
+      }
+    },
+    {
+      "id": "g_wh40k_pistola_de_teia",
+      "nome": {
+        "pt": "Pistola de Teia",
+        "en": "Web Pistol"
+      },
+      "dif": 2,
+      "porte": "leve",
+      "tipo": "fogo",
+      "esc": {
+        "destreza": "C"
+      },
+      "req": {
+        "for1": 2,
+        "des": 4,
+        "int": 0
+      },
+      "dano": 12,
+      "lore": {
+        "pt": "imobiliza mais do que fere",
+        "en": "immobilizes more than it wounds"
+      }
+    },
+    {
+      "id": "g_wh40k_lanca_chamas_de_mao",
+      "nome": {
+        "pt": "Lança-chamas de Mão",
+        "en": "Hand Flamer"
+      },
+      "dif": 2,
+      "porte": "leve",
+      "tipo": "fogo",
+      "esc": {
+        "forca": "E",
+        "destreza": "E"
+      },
+      "req": {
+        "for1": 2,
+        "des": 1,
+        "int": 0
+      },
+      "dano": 22,
+      "lore": {
+        "pt": "acerta sem mirar — escala pouco",
+        "en": "hits without aiming — scales very little"
+      }
+    },
+    {
+      "id": "g_wh40k_pistola_bolt",
+      "nome": {
+        "pt": "Pistola Bolt",
+        "en": "Bolt Pistol"
+      },
+      "dif": 3,
+      "porte": "leve",
+      "tipo": "fogo",
+      "esc": {
+        "destreza": "B",
+        "forca": "D"
+      },
+      "req": {
+        "for1": 5,
+        "des": 9,
+        "int": 0
+      },
+      "dano": 36,
+      "lore": {
+        "pt": "o bolter de uma mão",
+        "en": "the one-handed bolter"
+      }
+    },
+    {
+      "id": "g_wh40k_bolter",
+      "nome": {
+        "pt": "Bolter",
+        "en": "Boltgun"
+      },
+      "dif": 3,
+      "porte": "pesado",
+      "tipo": "fogo",
+      "esc": {
+        "destreza": "A",
+        "forca": "D"
+      },
+      "req": {
+        "for1": 15,
+        "des": 12,
+        "int": 0
+      },
+      "dano": 72,
+      "lore": {
+        "pt": "projéteis que explodem por dentro — a arma dos Space Marines",
+        "en": "rounds that explode inside the target — the weapon of the Space Marines"
+      }
+    },
+    {
+      "id": "g_wh40k_lanca_chamas",
+      "nome": {
+        "pt": "Lança-chamas",
+        "en": "Flamer"
+      },
+      "dif": 3,
+      "porte": "pesado",
+      "tipo": "fogo",
+      "esc": {
+        "forca": "C",
+        "destreza": "E"
+      },
+      "req": {
+        "for1": 13,
+        "des": 2,
+        "int": 0
+      },
+      "dano": 72,
+      "lore": {
+        "pt": "no jogo de mesa acerta sem rolar dado; aqui, escala com quem carrega",
+        "en": "on the tabletop it hits without a roll; here, it scales with whoever carries it"
+      }
+    },
+    {
+      "id": "g_wh40k_fuzil_laser_hot_shot",
+      "nome": {
+        "pt": "Fuzil Laser Hot-shot",
+        "en": "Hellgun / Hot-shot Lasgun"
+      },
+      "dif": 3,
+      "porte": "pesado",
+      "tipo": "fogo",
+      "esc": {
+        "destreza": "A"
+      },
+      "req": {
+        "for1": 11,
+        "des": 12,
+        "int": 0
+      },
+      "dano": 76,
+      "lore": {
+        "pt": "fura armadura de infantaria pesada",
+        "en": "punches through heavy infantry armor"
+      }
+    },
+    {
+      "id": "g_wh40k_rifle_de_precisao",
+      "nome": {
+        "pt": "Rifle de Precisão",
+        "en": "Long-Las / Sniper Rifle"
+      },
+      "dif": 3,
+      "porte": "pesado",
+      "tipo": "fogo",
+      "esc": {
+        "destreza": "S"
+      },
+      "req": {
+        "for1": 11,
+        "des": 15,
+        "int": 0
+      },
+      "dano": 68,
+      "lore": {
+        "pt": "um tiro, um comandante a menos",
+        "en": "one shot, one less commander"
+      }
+    },
+    {
+      "id": "g_wh40k_rifle_de_agulhas",
+      "nome": {
+        "pt": "Rifle de Agulhas",
+        "en": "Needler"
+      },
+      "dif": 3,
+      "porte": "pesado",
+      "tipo": "fogo",
+      "esc": {
+        "destreza": "A"
+      },
+      "req": {
+        "for1": 9,
+        "des": 15,
+        "int": 0
+      },
+      "dano": 65,
+      "lore": {
+        "pt": "laser e agulha envenenada; silencioso",
+        "en": "laser and a poisoned needle; silent"
+      }
+    },
+    {
+      "id": "g_wh40k_pistola_de_plasma",
+      "nome": {
+        "pt": "Pistola de Plasma",
+        "en": "Plasma Pistol"
+      },
+      "dif": 3,
+      "porte": "leve",
+      "tipo": "fogo",
+      "esc": {
+        "destreza": "B",
+        "inteligencia": "E"
+      },
+      "req": {
+        "for1": 3,
+        "des": 9,
+        "int": 0
+      },
+      "dano": 41,
+      "lore": {
+        "pt": "pode superaquecer e queimar quem atira",
+        "en": "it can overheat and burn whoever fires it"
+      }
+    },
+    {
+      "id": "g_wh40k_fuzil_de_arco",
+      "nome": {
+        "pt": "Fuzil de Arco",
+        "en": "Arc Weapons"
+      },
+      "dif": 3,
+      "porte": "pesado",
+      "tipo": "fogo",
+      "esc": {
+        "destreza": "B",
+        "inteligencia": "C"
+      },
+      "req": {
+        "for1": 11,
+        "des": 9,
+        "int": 3
+      },
+      "dano": 72,
+      "lore": {
+        "pt": "eletricidade sagrada do Mechanicus",
+        "en": "the sacred electricity of the Mechanicus"
+      }
+    },
+    {
+      "id": "g_wh40k_fuzil_de_pulso",
+      "nome": {
+        "pt": "Fuzil de Pulso",
+        "en": "Pulse Rifle (T'au)"
+      },
+      "dif": 3,
+      "porte": "pesado",
+      "tipo": "fogo",
+      "esc": {
+        "destreza": "A"
+      },
+      "req": {
+        "for1": 11,
+        "des": 12,
+        "int": 0
+      },
+      "dano": 76,
+      "lore": {
+        "pt": "alcança onde os fuzis inimigos não respondem",
+        "en": "reaches where enemy rifles can't answer back"
+      }
+    },
+    {
+      "id": "g_wh40k_catapulta_shuriken",
+      "nome": {
+        "pt": "Catapulta Shuriken",
+        "en": "Shuriken Catapult (Aeldari)"
+      },
+      "dif": 3,
+      "porte": "medio",
+      "tipo": "fogo",
+      "esc": {
+        "destreza": "A"
+      },
+      "req": {
+        "for1": 6,
+        "des": 12,
+        "int": 0
+      },
+      "dano": 43,
+      "lore": {
+        "pt": "discos monomoleculares",
+        "en": "monomolecular discs"
+      }
+    },
+    {
+      "id": "g_wh40k_fuzil_de_lascas",
+      "nome": {
+        "pt": "Fuzil de Lascas",
+        "en": "Splinter Rifle (Drukhari)"
+      },
+      "dif": 3,
+      "porte": "pesado",
+      "tipo": "fogo",
+      "esc": {
+        "destreza": "A"
+      },
+      "req": {
+        "for1": 9,
+        "des": 12,
+        "int": 0
+      },
+      "dano": 68,
+      "lore": {
+        "pt": "um arranhão de toxina basta",
+        "en": "a single scratch of toxin is enough"
+      }
+    },
+    {
+      "id": "g_wh40k_storm_bolter",
+      "nome": {
+        "pt": "Storm Bolter",
+        "en": "Storm Bolter"
+      },
+      "dif": 4,
+      "porte": "pesado",
+      "tipo": "fogo",
+      "esc": {
+        "destreza": "B",
+        "forca": "C"
+      },
+      "req": {
+        "for1": 23,
+        "des": 12,
+        "int": 0
+      },
+      "dano": 132,
+      "lore": {
+        "pt": "dois bolters num só",
+        "en": "two bolters in one"
+      }
+    },
+    {
+      "id": "g_wh40k_bolter_pesado",
+      "nome": {
+        "pt": "Bolter Pesado",
+        "en": "Heavy Bolter"
+      },
+      "dif": 4,
+      "porte": "colossal",
+      "tipo": "fogo",
+      "esc": {
+        "forca": "B",
+        "destreza": "C"
+      },
+      "req": {
+        "for1": 39,
+        "des": 8,
+        "int": 0
+      },
+      "dano": 138,
+      "lore": {
+        "pt": "alimentado por fita",
+        "en": "belt-fed"
+      }
+    },
+    {
+      "id": "g_wh40k_meltagun",
+      "nome": {
+        "pt": "Meltagun",
+        "en": "Meltagun"
+      },
+      "dif": 4,
+      "porte": "pesado",
+      "tipo": "fogo",
+      "esc": {
+        "destreza": "B",
+        "forca": "D"
+      },
+      "req": {
+        "for1": 17,
+        "des": 12,
+        "int": 0
+      },
+      "dano": 138,
+      "lore": {
+        "pt": "vaporiza blindagem a curta distância",
+        "en": "vaporizes armor at close range"
+      }
+    },
+    {
+      "id": "g_wh40k_pistola_inferno",
+      "nome": {
+        "pt": "Pistola Inferno",
+        "en": "Inferno Pistol"
+      },
+      "dif": 4,
+      "porte": "leve",
+      "tipo": "fogo",
+      "esc": {
+        "destreza": "B"
+      },
+      "req": {
+        "for1": 4,
+        "des": 12,
+        "int": 0
+      },
+      "dano": 72,
+      "lore": {
+        "pt": "um meltagun de bolso — e raríssimo",
+        "en": "a pocket meltagun — and exceedingly rare"
+      }
+    },
+    {
+      "id": "g_wh40k_arma_de_plasma",
+      "nome": {
+        "pt": "Arma de Plasma",
+        "en": "Plasma Gun"
+      },
+      "dif": 4,
+      "porte": "pesado",
+      "tipo": "fogo",
+      "esc": {
+        "destreza": "A",
+        "inteligencia": "E"
+      },
+      "req": {
+        "for1": 17,
+        "des": 16,
+        "int": 0
+      },
+      "dano": 132,
+      "lore": {
+        "pt": "fogo de estrela engarrafado",
+        "en": "bottled starfire"
+      }
+    },
+    {
+      "id": "g_wh40k_pistola_grav",
+      "nome": {
+        "pt": "Pistola Grav",
+        "en": "Grav-pistol"
+      },
+      "dif": 4,
+      "porte": "leve",
+      "tipo": "fogo",
+      "esc": {
+        "destreza": "B",
+        "inteligencia": "D"
+      },
+      "req": {
+        "for1": 4,
+        "des": 12,
+        "int": 4
+      },
+      "dano": 60,
+      "lore": {
+        "pt": "quanto mais pesado o alvo, pior para ele",
+        "en": "the heavier the target, the worse for it"
+      }
+    },
+    {
+      "id": "g_wh40k_arma_grav",
+      "nome": {
+        "pt": "Arma Grav",
+        "en": "Grav-gun"
+      },
+      "dif": 4,
+      "porte": "pesado",
+      "tipo": "fogo",
+      "esc": {
+        "destreza": "B",
+        "inteligencia": "C"
+      },
+      "req": {
+        "for1": 17,
+        "des": 12,
+        "int": 8
+      },
+      "dano": 126,
+      "lore": {
+        "pt": "gravidade fantasma esmaga o alvo",
+        "en": "phantom gravity crushes the target"
+      }
+    },
+    {
+      "id": "g_wh40k_lascannon",
+      "nome": {
+        "pt": "Lascannon",
+        "en": "Lascannon"
+      },
+      "dif": 4,
+      "porte": "colossal",
+      "tipo": "fogo",
+      "esc": {
+        "destreza": "B",
+        "forca": "C"
+      },
+      "req": {
+        "for1": 34,
+        "des": 12,
+        "int": 0
+      },
+      "dano": 152,
+      "lore": {
+        "pt": "o antitanque de laser do Imperium",
+        "en": "the Imperium's laser anti-tank weapon"
+      }
+    },
+    {
+      "id": "g_wh40k_lanca_misseis",
+      "nome": {
+        "pt": "Lança-mísseis",
+        "en": "Missile Launcher"
+      },
+      "dif": 4,
+      "porte": "colossal",
+      "tipo": "fogo",
+      "esc": {
+        "forca": "C",
+        "destreza": "C"
+      },
+      "req": {
+        "for1": 34,
+        "des": 8,
+        "int": 0
+      },
+      "dano": 145,
+      "lore": {
+        "pt": "ogivas trocáveis",
+        "en": "interchangeable warheads"
+      }
+    },
+    {
+      "id": "g_wh40k_autocanhao",
+      "nome": {
+        "pt": "Autocanhão",
+        "en": "Autocannon"
+      },
+      "dif": 4,
+      "porte": "colossal",
+      "tipo": "fogo",
+      "esc": {
+        "forca": "B",
+        "destreza": "D"
+      },
+      "req": {
+        "for1": 39,
+        "des": 4,
+        "int": 0
+      },
+      "dano": 138,
+      "lore": {
+        "pt": "rajadas de projéteis pesados",
+        "en": "bursts of heavy shells"
+      }
+    },
+    {
+      "id": "g_wh40k_canhao_de_assalto",
+      "nome": {
+        "pt": "Canhão de Assalto",
+        "en": "Assault Cannon"
+      },
+      "dif": 4,
+      "porte": "colossal",
+      "tipo": "fogo",
+      "esc": {
+        "forca": "A",
+        "destreza": "E"
+      },
+      "req": {
+        "for1": 44,
+        "des": 4,
+        "int": 0
+      },
+      "dano": 145,
+      "lore": {
+        "pt": "seis canos; milhares de tiros por minuto",
+        "en": "six barrels; thousands of rounds per minute"
+      }
+    },
+    {
+      "id": "g_wh40k_lanca_chamas_pesado",
+      "nome": {
+        "pt": "Lança-chamas Pesado",
+        "en": "Heavy Flamer"
+      },
+      "dif": 4,
+      "porte": "colossal",
+      "tipo": "fogo",
+      "esc": {
+        "forca": "B"
+      },
+      "req": {
+        "for1": 34,
+        "des": 2,
+        "int": 0
+      },
+      "dano": 138,
+      "lore": {
+        "pt": "uma parede de fogo",
+        "en": "a wall of fire"
+      }
+    },
+    {
+      "id": "g_wh40k_carregador_volkite",
+      "nome": {
+        "pt": "Carregador Volkite",
+        "en": "Volkite Charger"
+      },
+      "dif": 4,
+      "porte": "medio",
+      "tipo": "fogo",
+      "esc": {
+        "destreza": "B",
+        "inteligencia": "D"
+      },
+      "req": {
+        "for1": 8,
+        "des": 12,
+        "int": 4
+      },
+      "dano": 79,
+      "lore": {
+        "pt": "raio térmico de uma era dourada perdida",
+        "en": "a heat ray from a lost golden age"
+      }
+    },
+    {
+      "id": "g_wh40k_fuzil_de_trilho",
+      "nome": {
+        "pt": "Fuzil de Trilho",
+        "en": "Rail Rifle (T'au)"
+      },
+      "dif": 4,
+      "porte": "pesado",
+      "tipo": "fogo",
+      "esc": {
+        "destreza": "S"
+      },
+      "req": {
+        "for1": 14,
+        "des": 20,
+        "int": 0
+      },
+      "dano": 120,
+      "lore": {
+        "pt": "projétil hipersônico de precisão",
+        "en": "a hypersonic precision slug"
+      }
+    },
+    {
+      "id": "g_wh40k_carabina_tesla",
+      "nome": {
+        "pt": "Carabina Tesla",
+        "en": "Tesla Carbine (Necron)"
+      },
+      "dif": 4,
+      "porte": "pesado",
+      "tipo": "fogo",
+      "esc": {
+        "destreza": "B",
+        "inteligencia": "C"
+      },
+      "req": {
+        "for1": 14,
+        "des": 12,
+        "int": 4
+      },
+      "dano": 126,
+      "lore": {
+        "pt": "raios que pulam de corpo em corpo",
+        "en": "lightning that leaps from body to body"
+      }
+    },
+    {
+      "id": "g_wh40k_esfolador_gauss",
+      "nome": {
+        "pt": "Esfolador Gauss",
+        "en": "Gauss Flayer (Necron)"
+      },
+      "dif": 4,
+      "porte": "pesado",
+      "tipo": "fogo",
+      "esc": {
+        "destreza": "A",
+        "inteligencia": "D"
+      },
+      "req": {
+        "for1": 14,
+        "des": 16,
+        "int": 4
+      },
+      "dano": 126,
+      "lore": {
+        "pt": "desfaz o alvo átomo por átomo",
+        "en": "unmakes the target atom by atom"
+      }
+    },
+    {
+      "id": "g_wh40k_combi_arma",
+      "nome": {
+        "pt": "Combi-arma",
+        "en": "Combi-weapon"
+      },
+      "dif": 4,
+      "porte": "pesado",
+      "tipo": "fogo",
+      "esc": {
+        "destreza": "A",
+        "forca": "D"
+      },
+      "req": {
+        "for1": 20,
+        "des": 16,
+        "int": 0
+      },
+      "dano": 132,
+      "lore": {
+        "pt": "bolter com um segundo cano para o tiro decisivo",
+        "en": "a bolter with a second barrel for the decisive shot"
+      }
+    },
+    {
+      "id": "g_wh40k_multi_melta",
+      "nome": {
+        "pt": "Multi-melta",
+        "en": "Multi-melta"
+      },
+      "dif": 5,
+      "porte": "colossal",
+      "tipo": "fogo",
+      "esc": {
+        "forca": "B",
+        "destreza": "C"
+      },
+      "req": {
+        "for1": 48,
+        "des": 10,
+        "int": 0
+      },
+      "dano": 276,
+      "lore": {
+        "pt": "derruba máquinas de guerra num disparo",
+        "en": "brings down war machines in a single shot"
+      }
+    },
+    {
+      "id": "g_wh40k_canhao_de_plasma",
+      "nome": {
+        "pt": "Canhão de Plasma",
+        "en": "Plasma Cannon"
+      },
+      "dif": 5,
+      "porte": "colossal",
+      "tipo": "fogo",
+      "esc": {
+        "destreza": "B",
+        "forca": "C",
+        "inteligencia": "E"
+      },
+      "req": {
+        "for1": 48,
+        "des": 15,
+        "int": 0
+      },
+      "dano": 264,
+      "lore": {
+        "pt": "vaporiza armadura, carne e às vezes o atirador",
+        "en": "vaporizes armor, flesh, and sometimes the shooter"
+      }
+    },
+    {
+      "id": "g_wh40k_canhao_grav",
+      "nome": {
+        "pt": "Canhão Grav",
+        "en": "Grav-cannon"
+      },
+      "dif": 5,
+      "porte": "colossal",
+      "tipo": "fogo",
+      "esc": {
+        "forca": "B",
+        "destreza": "D",
+        "inteligencia": "D"
+      },
+      "req": {
+        "for1": 48,
+        "des": 10,
+        "int": 5
+      },
+      "dano": 253,
+      "lore": {
+        "pt": "quanto mais blindado, mais mortal",
+        "en": "the more armored the target, the deadlier it is"
+      }
+    },
+    {
+      "id": "g_wh40k_raio_de_conversao",
+      "nome": {
+        "pt": "Raio de Conversão",
+        "en": "Conversion Beamer"
+      },
+      "dif": 5,
+      "porte": "colossal",
+      "tipo": "fogo",
+      "esc": {
+        "destreza": "B",
+        "inteligencia": "B"
+      },
+      "req": {
+        "for1": 42,
+        "des": 15,
+        "int": 15
+      },
+      "dano": 253,
+      "lore": {
+        "pt": "converte matéria em energia; piora com a distância — para o alvo",
+        "en": "converts matter into energy; it gets worse with distance — for the target"
+      }
+    },
+    {
+      "id": "g_wh40k_caliver_volkite",
+      "nome": {
+        "pt": "Caliver Volkite",
+        "en": "Volkite Caliver"
+      },
+      "dif": 5,
+      "porte": "pesado",
+      "tipo": "fogo",
+      "esc": {
+        "destreza": "A",
+        "inteligencia": "D"
+      },
+      "req": {
+        "for1": 21,
+        "des": 20,
+        "int": 5
+      },
+      "dano": 220,
+      "lore": {
+        "pt": "o alvo pega fogo por dentro",
+        "en": "the target catches fire from the inside"
+      }
+    },
+    {
+      "id": "g_wh40k_blaster_gauss",
+      "nome": {
+        "pt": "Blaster Gauss",
+        "en": "Gauss Blaster (Necron)"
+      },
+      "dif": 5,
+      "porte": "pesado",
+      "tipo": "fogo",
+      "esc": {
+        "destreza": "A",
+        "inteligencia": "C"
+      },
+      "req": {
+        "for1": 21,
+        "des": 20,
+        "int": 10
+      },
+      "dano": 220,
+      "lore": {
+        "pt": "o esfolador, maior",
+        "en": "the flayer, only bigger"
+      }
+    },
+    {
+      "id": "g_wh40k_lanca_escura",
+      "nome": {
+        "pt": "Lança Escura",
+        "en": "Dark Lance (Drukhari)"
+      },
+      "dif": 5,
+      "porte": "colossal",
+      "tipo": "fogo",
+      "esc": {
+        "destreza": "B",
+        "forca": "C"
+      },
+      "req": {
+        "for1": 42,
+        "des": 15,
+        "int": 0
+      },
+      "dano": 276,
+      "lore": {
+        "pt": "luz-escura que fura a blindagem mais grossa",
+        "en": "darklight that pierces the thickest armor"
+      }
+    },
+    {
+      "id": "g_wh40k_triturador_neural",
+      "nome": {
+        "pt": "Triturador Neural",
+        "en": "Neural Shredder"
+      },
+      "dif": 5,
+      "porte": "medio",
+      "tipo": "fogo",
+      "esc": {
+        "destreza": "C",
+        "inteligencia": "A"
+      },
+      "req": {
+        "for1": 10,
+        "des": 10,
+        "int": 15
+      },
+      "dano": 126,
+      "lore": {
+        "pt": "devasta o sistema nervoso; origem desconhecida",
+        "en": "ravages the nervous system; origin unknown"
+      }
+    },
+    {
+      "id": "g_wh40k_pistola_exitus",
+      "nome": {
+        "pt": "Pistola Exitus",
+        "en": "Exitus Pistol"
+      },
+      "dif": 5,
+      "porte": "leve",
+      "tipo": "fogo",
+      "esc": {
+        "destreza": "S"
+      },
+      "req": {
+        "for1": 5,
+        "des": 25,
+        "int": 0
+      },
+      "dano": 110,
+      "lore": {
+        "pt": "a reserva dos Vindicare",
+        "en": "the Vindicare's backup weapon"
+      }
+    },
+    {
+      "id": "g_wh40k_rifle_exitus",
+      "nome": {
+        "pt": "Rifle Exitus",
+        "en": "Exitus Rifle"
+      },
+      "dif": 5,
+      "porte": "pesado",
+      "tipo": "fogo",
+      "esc": {
+        "destreza": "S"
+      },
+      "req": {
+        "for1": 18,
+        "des": 30,
+        "int": 0
+      },
+      "dano": 250,
+      "lore": {
+        "pt": "munição que fura escudos, blindagem ou envenena",
+        "en": "rounds that pierce shields or armor, or poison the target"
+      }
+    }
+  ],
+  "outros": [
+    {
+      "id": "g_wh40k_escudo_tempestade",
+      "nome": {
+        "pt": "Escudo de Tempestade",
+        "en": "Storm Shield"
+      },
+      "dif": 4,
+      "molde": "escudo",
+      "lore": {
+        "pt": "o par clássico do martelo-trovão nos Exterminadores",
+        "en": "the thunder hammer's classic partner among the Terminators"
+      }
+    },
+    {
+      "id": "g_wh40k_halo_ferro",
+      "nome": {
+        "pt": "Halo de Ferro",
+        "en": "Iron Halo"
+      },
+      "dif": 4,
+      "molde": "acess_vigor",
+      "lore": {
+        "pt": "gerador de campo de força dos campeões",
+        "en": "a champion's force field generator"
+      }
+    }
+  ],
+  "dungeon": {
+    "id": "dg_wh40k_armageddon",
+    "nome": {
+      "pt": "Guerra de Armageddon: Humanidade × Orks",
+      "en": "War of Armageddon: Humanity × Orks"
+    },
+    "difs": [
+      1,
+      5
+    ],
+    "descricao": {
+      "pt": "Lute pelo Imperium contra a invasão Ork do planeta Armageddon — dos subníveis da Colmeia Hades até a Linha de Tartarus, onde espera o Senhor da Guerra.",
+      "en": "Fight for the Imperium against the Ork invasion of the planet Armageddon — from the underhive of Hades Hive to the Tartarus Line, where the Warlord awaits."
+    },
+    "generos": [
+      "scifi"
+    ],
+    "areas": [
+      {
+        "dif": 1,
+        "nome": {
+          "pt": "Colmeia Hades, os subníveis",
+          "en": "Hades Hive, the underhive"
+        },
+        "inimigos": [
+          {
+            "pt": "Gretchin",
+            "art": "os",
+            "en": "Gretchin"
+          },
+          {
+            "pt": "Snotlings",
+            "art": "os",
+            "en": "Snotlings"
+          },
+          {
+            "pt": "Ork Boy perdido",
+            "art": "o",
+            "en": "stray Ork Boy"
+          }
+        ]
+      },
+      {
+        "dif": 2,
+        "nome": {
+          "pt": "Colmeia Hades, a muralha",
+          "en": "Hades Hive, the wall"
+        },
+        "inimigos": [
+          {
+            "pt": "bandos de Ork Boyz (Choppa e Slugga)",
+            "art": "os",
+            "en": "Ork Boyz mobs (Choppa and Slugga)"
+          },
+          {
+            "pt": "Shoota Boyz",
+            "art": "os",
+            "en": "Shoota Boyz"
+          },
+          {
+            "pt": "Nob",
+            "art": "o",
+            "en": "Nob"
+          }
+        ]
+      },
+      {
+        "dif": 3,
+        "nome": {
+          "pt": "Ermos de Cinza",
+          "en": "Ash Wastes"
+        },
+        "inimigos": [
+          {
+            "pt": "Kommandos",
+            "art": "os",
+            "en": "Kommandos"
+          },
+          {
+            "pt": "Burna Boyz",
+            "art": "os",
+            "en": "Burna Boyz"
+          },
+          {
+            "pt": "Deff Koptas",
+            "art": "os",
+            "en": "Deff Koptas"
+          },
+          {
+            "pt": "Warbikers",
+            "art": "os",
+            "en": "Warbikers"
+          }
+        ]
+      },
+      {
+        "dif": 4,
+        "nome": {
+          "pt": "Helsreach, o porto",
+          "en": "Helsreach, the docks"
+        },
+        "inimigos": [
+          {
+            "pt": "Meganobz",
+            "art": "os",
+            "en": "Meganobz"
+          },
+          {
+            "pt": "Deff Dreads",
+            "art": "os",
+            "en": "Deff Dreads"
+          },
+          {
+            "pt": "Killa Kans",
+            "art": "os",
+            "en": "Killa Kans"
+          },
+          {
+            "pt": "Lootas",
+            "art": "os",
+            "en": "Lootas"
+          }
+        ]
+      },
+      {
+        "dif": 5,
+        "nome": {
+          "pt": "Linha de Tartarus",
+          "en": "Tartarus Line"
+        },
+        "inimigos": [
+          {
+            "pt": "Gorkanauts",
+            "art": "os",
+            "en": "Gorkanauts"
+          },
+          {
+            "pt": "Stompas",
+            "art": "os",
+            "en": "Stompas"
+          },
+          {
+            "pt": "guarda do Senhor da Guerra",
+            "art": "a",
+            "en": "Warlord's guard"
+          }
+        ]
+      }
+    ],
+    "chefe": "b_wh40k_senhor_guerra_ork"
+  },
+  "itens": [
+    {
+      "id": "g_wh40k_escamas_serpente",
+      "nome": {
+        "pt": "Escamas da Serpente",
+        "en": "Serpent's Scales"
+      },
+      "dif": 7,
+      "slot": "armadura",
+      "especial": true,
+      "descricao": {
+        "pt": "A armadura de exterminador do Senhor da Guerra.",
+        "en": "The Warmaster's Terminator armour."
+      }
+    },
+    {
+      "id": "g_wh40k_quebra_mundos",
+      "nome": {
+        "pt": "Quebra-Mundos",
+        "en": "Worldbreaker"
+      },
+      "dif": 10,
+      "especial": true,
+      "arma": {
+        "porte": "pesado",
+        "tipo": "branca",
+        "esc": {
+          "forca": "S"
+        },
+        "reqDes": 0.5,
+        "base": 1.2
+      },
+      "descricao": {
+        "pt": "A maça de energia do Horus. Na lore, ele usa numa mão só.",
+        "en": "Horus's power maul. In the lore, he wields it one-handed."
+      }
+    }
+  ],
+  "chefes": [
+    {
+      "id": "b_wh40k_horus_cerco",
+      "nome": {
+        "pt": "Horus — O Cerco de Terra",
+        "en": "Horus — The Siege of Terra"
+      },
+      "tier": "4-B",
+      "vsb": "https://vsbattles.fandom.com/wiki/Horus_Lupercal",
+      "recompensa": {
+        "item": "g_wh40k_escamas_serpente"
+      },
+      "descricao": {
+        "pt": "O Senhor da Guerra no corpo a corpo: um golpe da maça cria uma supernova.",
+        "en": "The Warmaster in melee: one blow of the maul makes a supernova."
+      },
+      "falas": {
+        "inicio": {
+          "pt": "Eu vi o fim de todas as coisas. Vim apressá-lo.",
+          "en": "I have seen the end of all things. I came to hasten it."
+        }
+      },
+      "historia": {
+        "generos": [
+          "scifi"
+        ],
+        "local": [
+          {
+            "pt": "ponte do Espírito Vingativo",
+            "art": "a",
+            "en": "the bridge of the Vengeful Spirit",
+            "en_em": "on the bridge of the Vengeful Spirit"
+          }
+        ],
+        "inimigo": [
+          {
+            "pt": "Horus",
+            "art": "",
+            "en": "Horus"
+          }
+        ]
+      }
+    },
+    {
+      "id": "b_wh40k_horus_rei",
+      "nome": {
+        "pt": "Horus — O Rei Sombrio",
+        "en": "Horus — The Dark King"
+      },
+      "tier": "High 1-B",
+      "requer": "b_wh40k_horus_cerco",
+      "recompensa": {
+        "item": "g_wh40k_quebra_mundos"
+      },
+      "descricao": {
+        "pt": "Horus com o poder dos deuses do Caos: tempo, espaço e alma.",
+        "en": "Horus with the power of the Chaos gods: time, space and soul."
+      },
+      "falas": {
+        "derrota": {
+          "pt": "Os deuses... me soltaram.",
+          "en": "The gods... let me go."
+        }
+      },
+      "historia": {
+        "generos": [
+          "scifi",
+          "cosmico"
+        ],
+        "local": [
+          {
+            "pt": "coração do Espírito Vingativo",
+            "art": "o",
+            "en": "the heart of the Vengeful Spirit"
+          }
+        ],
+        "inimigo": [
+          {
+            "pt": "Rei Sombrio",
+            "art": "o",
+            "en": "the Dark King"
+          }
+        ]
+      }
+    },
+    {
+      "id": "b_wh40k_senhor_guerra_ork",
+      "nome": {
+        "pt": "Senhor da Guerra Ork",
+        "en": "Ork Warboss"
+      },
+      "nivel": 50,
+      "dungeon": "dg_wh40k_armageddon",
+      "descricao": {
+        "pt": "O maior, o mais verde, o que grita mais alto. A invasão é dele.",
+        "en": "The biggest, the greenest, the loudest. The invasion is his."
+      },
+      "falas": {
+        "inicio": {
+          "pt": "WAAAGH!",
+          "en": "WAAAGH!"
+        }
+      },
+      "historia": {
+        "generos": [
+          "scifi"
+        ],
+        "local": [
+          {
+            "pt": "Linha de Tartarus",
+            "art": "a",
+            "en": "the Tartarus Line"
+          }
+        ],
+        "inimigo": [
+          {
+            "pt": "Senhor da Guerra Ork",
+            "art": "o",
+            "en": "the Ork Warboss"
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -218,8 +218,10 @@ diz exatamente o que clicar.
 - **RPG** (`&game`): **um mundo só** para todos os servidores — o mesmo
   personagem (9 atributos, progressão e builds), mercado, dungeon e ranking
   em qualquer servidor onde a Judy está. Duas moedas: 🪙 Ouro (infinita) e 💎
-  Cristal (finita, 5 000 para sempre). Sistema próprio, separado do XP.
-  Detalhes em [`GUIA-moedas.md`](GUIA-moedas.md).
+  Cristal (finita: começa com 5 000 e só os tesouros das dungeons criam mais, devagar). Sistema próprio, separado do XP.
+  Níveis 1–100, contratos da guilda, dungeons com chefes, missões especiais,
+  companheiros com nome e o evolucionador automático (RPG v4). Detalhes em
+  [`docs/rpg/`](docs/rpg/README.md) e [`GUIA-moedas.md`](GUIA-moedas.md).
 - **Economia do servidor** (`&economia`): à parte do RPG, **uma** moeda por
   servidor. `minerar` rende de tempos em tempos, `top` mostra quem tem mais e a
   `loja` vende cargos — só cobra se o cargo for entregue.

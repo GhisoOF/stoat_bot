@@ -1,0 +1,3987 @@
+{
+  "companheiros": [
+    {
+      "id": "f_mercenario_novato",
+      "nome": {
+        "pt": "Mercenário Novato",
+        "en": "Rookie Mercenary"
+      },
+      "classe": "combatente",
+      "dif": 1
+    },
+    {
+      "id": "f_aprendiz_magia",
+      "nome": {
+        "pt": "Aprendiz de Magia",
+        "en": "Magic Apprentice"
+      },
+      "classe": "mago",
+      "dif": 1
+    },
+    {
+      "id": "f_guarda_bisonho",
+      "nome": {
+        "pt": "Guarda Bisonho",
+        "en": "Green Guard"
+      },
+      "classe": "tank",
+      "dif": 1
+    },
+    {
+      "id": "f_curandeira_errante",
+      "nome": {
+        "pt": "Curandeira Errante",
+        "en": "Wandering Healer"
+      },
+      "classe": "suporte",
+      "dif": 1
+    },
+    {
+      "id": "f_seguranca",
+      "nome": {
+        "pt": "Segurança de Boate",
+        "en": "Nightclub Bouncer"
+      },
+      "classe": "combatente",
+      "dif": 1
+    },
+    {
+      "id": "f_estudante_ocultismo",
+      "nome": {
+        "pt": "Estudante de Ocultismo",
+        "en": "Occult Student"
+      },
+      "classe": "mago",
+      "dif": 1
+    },
+    {
+      "id": "f_bombeiro",
+      "nome": {
+        "pt": "Bombeiro Voluntário",
+        "en": "Volunteer Firefighter"
+      },
+      "classe": "tank",
+      "dif": 1
+    },
+    {
+      "id": "f_paramedica",
+      "nome": {
+        "pt": "Paramédica de Plantão",
+        "en": "On-Call Paramedic"
+      },
+      "classe": "suporte",
+      "dif": 1
+    },
+    {
+      "id": "f_batedor_silencioso",
+      "nome": {
+        "pt": "Batedor Silencioso",
+        "en": "Silent Scout"
+      },
+      "classe": "combatente",
+      "dif": 2
+    },
+    {
+      "id": "f_escriba_runico",
+      "nome": {
+        "pt": "Escriba Rúnico",
+        "en": "Runic Scribe"
+      },
+      "classe": "mago",
+      "dif": 2
+    },
+    {
+      "id": "f_sentinela_muro",
+      "nome": {
+        "pt": "Sentinela do Muro",
+        "en": "Wall Sentinel"
+      },
+      "classe": "tank",
+      "dif": 2
+    },
+    {
+      "id": "f_bardo_estrada",
+      "nome": {
+        "pt": "Bardo de Estrada",
+        "en": "Road Bard"
+      },
+      "classe": "suporte",
+      "dif": 2
+    },
+    {
+      "id": "f_lutadora",
+      "nome": {
+        "pt": "Lutadora de Jaula",
+        "en": "Cage Fighter"
+      },
+      "classe": "combatente",
+      "dif": 2
+    },
+    {
+      "id": "f_medium",
+      "nome": {
+        "pt": "Médium de Esquina",
+        "en": "Street-Corner Medium"
+      },
+      "classe": "mago",
+      "dif": 2
+    },
+    {
+      "id": "f_policial_choque",
+      "nome": {
+        "pt": "Policial de Choque",
+        "en": "Riot Cop"
+      },
+      "classe": "tank",
+      "dif": 2
+    },
+    {
+      "id": "f_apostador",
+      "nome": {
+        "pt": "Apostador Profissional",
+        "en": "Professional Gambler"
+      },
+      "classe": "suporte",
+      "dif": 2
+    },
+    {
+      "id": "f_espadachim_cinzas",
+      "nome": {
+        "pt": "Espadachim das Cinzas",
+        "en": "Ash Swordsman"
+      },
+      "classe": "combatente",
+      "dif": 3
+    },
+    {
+      "id": "f_vidente_lago",
+      "nome": {
+        "pt": "Vidente do Lago",
+        "en": "Lake Seer"
+      },
+      "classe": "mago",
+      "dif": 3
+    },
+    {
+      "id": "f_couraceiro",
+      "nome": {
+        "pt": "Couraceiro de Ferro",
+        "en": "Iron Cuirassier"
+      },
+      "classe": "tank",
+      "dif": 3
+    },
+    {
+      "id": "f_alquimista",
+      "nome": {
+        "pt": "Alquimista Viajante",
+        "en": "Traveling Alchemist"
+      },
+      "classe": "suporte",
+      "dif": 3
+    },
+    {
+      "id": "f_ronin",
+      "nome": {
+        "pt": "Ronin Cibernético",
+        "en": "Cyber Ronin"
+      },
+      "classe": "combatente",
+      "dif": 3
+    },
+    {
+      "id": "f_tecnica_drones",
+      "nome": {
+        "pt": "Técnica de Drones",
+        "en": "Drone Technician"
+      },
+      "classe": "mago",
+      "dif": 3
+    },
+    {
+      "id": "f_exoesqueleto",
+      "nome": {
+        "pt": "Soldado de Exoesqueleto",
+        "en": "Exosuit Soldier"
+      },
+      "classe": "tank",
+      "dif": 3
+    },
+    {
+      "id": "f_negociadora",
+      "nome": {
+        "pt": "Negociadora de Reféns",
+        "en": "Hostage Negotiator"
+      },
+      "classe": "suporte",
+      "dif": 3
+    },
+    {
+      "id": "f_lamina_juramentada",
+      "nome": {
+        "pt": "Lâmina Juramentada",
+        "en": "Sworn Blade"
+      },
+      "classe": "combatente",
+      "dif": 4
+    },
+    {
+      "id": "f_arquimago_exilado",
+      "nome": {
+        "pt": "Arquimago Exilado",
+        "en": "Exiled Archmage"
+      },
+      "classe": "mago",
+      "dif": 4
+    },
+    {
+      "id": "f_baluarte",
+      "nome": {
+        "pt": "Baluarte Silente",
+        "en": "Silent Bastion"
+      },
+      "classe": "tank",
+      "dif": 4
+    },
+    {
+      "id": "f_oraculo",
+      "nome": {
+        "pt": "Oráculo de Bronze",
+        "en": "Bronze Oracle"
+      },
+      "classe": "suporte",
+      "dif": 4
+    },
+    {
+      "id": "f_supersoldado",
+      "nome": {
+        "pt": "Supersoldado Clonado",
+        "en": "Cloned Supersoldier"
+      },
+      "classe": "combatente",
+      "dif": 4
+    },
+    {
+      "id": "f_fisico",
+      "nome": {
+        "pt": "Físico Nuclear Renegado",
+        "en": "Rogue Nuclear Physicist"
+      },
+      "classe": "mago",
+      "dif": 4
+    },
+    {
+      "id": "f_piloto_mecha",
+      "nome": {
+        "pt": "Piloto de Mecha Pesado",
+        "en": "Heavy Mech Pilot"
+      },
+      "classe": "tank",
+      "dif": 4
+    },
+    {
+      "id": "f_androide",
+      "nome": {
+        "pt": "Androide Diplomata",
+        "en": "Diplomat Android"
+      },
+      "classe": "suporte",
+      "dif": 4
+    },
+    {
+      "id": "f_ceifador",
+      "nome": {
+        "pt": "Ceifador de Auroras",
+        "en": "Reaper of Dawns"
+      },
+      "classe": "combatente",
+      "dif": 5
+    },
+    {
+      "id": "f_tecelao",
+      "nome": {
+        "pt": "Tecelão do Vazio",
+        "en": "Void Weaver"
+      },
+      "classe": "mago",
+      "dif": 5
+    },
+    {
+      "id": "f_inabalavel",
+      "nome": {
+        "pt": "O Inabalável",
+        "en": "The Unshakable"
+      },
+      "classe": "tank",
+      "dif": 5
+    },
+    {
+      "id": "f_estrela",
+      "nome": {
+        "pt": "Estrela Cadente",
+        "en": "Falling Star"
+      },
+      "classe": "suporte",
+      "dif": 5
+    },
+    {
+      "id": "f_cacador_kaiju",
+      "nome": {
+        "pt": "Caçador de Kaiju",
+        "en": "Kaiju Hunter"
+      },
+      "classe": "combatente",
+      "dif": 5
+    },
+    {
+      "id": "f_xama_placas",
+      "nome": {
+        "pt": "Xamã das Placas",
+        "en": "Shaman of the Plates"
+      },
+      "classe": "mago",
+      "dif": 5
+    },
+    {
+      "id": "f_tita_concreto",
+      "nome": {
+        "pt": "Titã de Concreto Armado",
+        "en": "Reinforced Concrete Titan"
+      },
+      "classe": "tank",
+      "dif": 5
+    },
+    {
+      "id": "f_sismografo",
+      "nome": {
+        "pt": "Oráculo Sismógrafo",
+        "en": "Seismograph Oracle"
+      },
+      "classe": "suporte",
+      "dif": 5
+    },
+    {
+      "id": "f_rachador",
+      "nome": {
+        "pt": "Rachador de Continentes",
+        "en": "Continent Splitter"
+      },
+      "classe": "combatente",
+      "dif": 6
+    },
+    {
+      "id": "f_geomante",
+      "nome": {
+        "pt": "Geomante do Núcleo",
+        "en": "Core Geomancer"
+      },
+      "classe": "mago",
+      "dif": 6
+    },
+    {
+      "id": "f_colosso",
+      "nome": {
+        "pt": "Colosso de Basalto",
+        "en": "Basalt Colossus"
+      },
+      "classe": "tank",
+      "dif": 6
+    },
+    {
+      "id": "f_pastora",
+      "nome": {
+        "pt": "Pastora das Marés",
+        "en": "Shepherdess of the Tides"
+      },
+      "classe": "suporte",
+      "dif": 6
+    },
+    {
+      "id": "f_cavaleiro_solar",
+      "nome": {
+        "pt": "Cavaleiro da Coroa Solar",
+        "en": "Knight of the Solar Corona"
+      },
+      "classe": "combatente",
+      "dif": 7
+    },
+    {
+      "id": "f_astrologo",
+      "nome": {
+        "pt": "Astrólogo de Supernovas",
+        "en": "Supernova Astrologer"
+      },
+      "classe": "mago",
+      "dif": 7
+    },
+    {
+      "id": "f_sentinela_orbita",
+      "nome": {
+        "pt": "Sentinela de Órbita",
+        "en": "Orbit Sentinel"
+      },
+      "classe": "tank",
+      "dif": 7
+    },
+    {
+      "id": "f_cantora",
+      "nome": {
+        "pt": "Cantora das Constelações",
+        "en": "Singer of Constellations"
+      },
+      "classe": "suporte",
+      "dif": 7
+    },
+    {
+      "id": "f_ceifador_galaxias",
+      "nome": {
+        "pt": "Ceifador de Galáxias",
+        "en": "Galaxy Reaper"
+      },
+      "classe": "combatente",
+      "dif": 8
+    },
+    {
+      "id": "f_arquiteto",
+      "nome": {
+        "pt": "Arquiteto do Vácuo",
+        "en": "Vacuum Architect"
+      },
+      "classe": "mago",
+      "dif": 8
+    },
+    {
+      "id": "f_muralha",
+      "nome": {
+        "pt": "Muralha do Horizonte",
+        "en": "Horizon Bulwark"
+      },
+      "classe": "tank",
+      "dif": 8
+    },
+    {
+      "id": "f_teceloa",
+      "nome": {
+        "pt": "Tecelã de Nebulosas",
+        "en": "Nebula Weaver"
+      },
+      "classe": "suporte",
+      "dif": 8
+    },
+    {
+      "id": "f_espadachim_mundos",
+      "nome": {
+        "pt": "Espadachim dos Mundos Partidos",
+        "en": "Swordsman of Broken Worlds"
+      },
+      "classe": "combatente",
+      "dif": 9
+    },
+    {
+      "id": "f_escriba_ramos",
+      "nome": {
+        "pt": "Escriba dos Ramos do Tempo",
+        "en": "Scribe of Time's Branches"
+      },
+      "classe": "mago",
+      "dif": 9
+    },
+    {
+      "id": "f_guardiao_limiar",
+      "nome": {
+        "pt": "Guardião do Limiar",
+        "en": "Threshold Guardian"
+      },
+      "classe": "tank",
+      "dif": 9
+    },
+    {
+      "id": "f_oraculo_versoes",
+      "nome": {
+        "pt": "Oráculo das Mil Versões",
+        "en": "Oracle of a Thousand Versions"
+      },
+      "classe": "suporte",
+      "dif": 9
+    },
+    {
+      "id": "f_ultimo_golpe",
+      "nome": {
+        "pt": "O Último Golpe",
+        "en": "The Last Blow"
+      },
+      "classe": "combatente",
+      "dif": 10
+    },
+    {
+      "id": "f_autor",
+      "nome": {
+        "pt": "Autor Sem Nome",
+        "en": "Nameless Author"
+      },
+      "classe": "mago",
+      "dif": 10
+    },
+    {
+      "id": "f_que_nao_cede",
+      "nome": {
+        "pt": "O Que Não Cede",
+        "en": "The One Who Won't Yield"
+      },
+      "classe": "tank",
+      "dif": 10
+    },
+    {
+      "id": "f_eco",
+      "nome": {
+        "pt": "Eco do Primeiro Verbo",
+        "en": "Echo of the First Word"
+      },
+      "classe": "suporte",
+      "dif": 10
+    }
+  ],
+  "itens": [
+    {
+      "id": "g_adaga_simples",
+      "nome": {
+        "pt": "Adaga Simples",
+        "en": "Simple Dagger"
+      },
+      "dif": 1,
+      "molde": "branca_leve"
+    },
+    {
+      "id": "g_espada_ferro",
+      "nome": {
+        "pt": "Espada de Ferro",
+        "en": "Iron Sword"
+      },
+      "dif": 1,
+      "molde": "branca_pesada"
+    },
+    {
+      "id": "g_revolver_enferrujado",
+      "nome": {
+        "pt": "Revólver Enferrujado",
+        "en": "Rusty Revolver"
+      },
+      "dif": 1,
+      "molde": "fogo_leve"
+    },
+    {
+      "id": "g_espingarda_caca",
+      "nome": {
+        "pt": "Espingarda de Caça",
+        "en": "Hunting Shotgun"
+      },
+      "dif": 1,
+      "molde": "fogo_pesada"
+    },
+    {
+      "id": "g_varinha_galho",
+      "nome": {
+        "pt": "Varinha de Galho",
+        "en": "Twig Wand"
+      },
+      "dif": 1,
+      "molde": "magica_leve"
+    },
+    {
+      "id": "g_cajado_rachado",
+      "nome": {
+        "pt": "Cajado Rachado",
+        "en": "Cracked Staff"
+      },
+      "dif": 1,
+      "molde": "magica_pesada"
+    },
+    {
+      "id": "g_escudo_tabuas",
+      "nome": {
+        "pt": "Escudo de Tábuas",
+        "en": "Plank Shield"
+      },
+      "dif": 1,
+      "molde": "escudo"
+    },
+    {
+      "id": "g_caderno_feiticos",
+      "nome": {
+        "pt": "Caderno de Feitiços",
+        "en": "Spell Notebook"
+      },
+      "dif": 1,
+      "molde": "foco"
+    },
+    {
+      "id": "g_elmo_amassado",
+      "nome": {
+        "pt": "Elmo Amassado",
+        "en": "Dented Helm"
+      },
+      "dif": 1,
+      "molde": "capacete"
+    },
+    {
+      "id": "g_tunica_puida",
+      "nome": {
+        "pt": "Túnica Puída",
+        "en": "Threadbare Tunic"
+      },
+      "dif": 1,
+      "molde": "armadura"
+    },
+    {
+      "id": "g_amuleto_opaco",
+      "nome": {
+        "pt": "Amuleto Opaco",
+        "en": "Dull Amulet"
+      },
+      "dif": 1,
+      "molde": "acess_sorte"
+    },
+    {
+      "id": "g_cordao_couro",
+      "nome": {
+        "pt": "Cordão de Couro",
+        "en": "Leather Cord"
+      },
+      "dif": 1,
+      "molde": "acess_vigor"
+    },
+    {
+      "id": "g_sabre_cavalaria",
+      "nome": {
+        "pt": "Sabre de Cavalaria",
+        "en": "Cavalry Saber"
+      },
+      "dif": 2,
+      "molde": "branca_media"
+    },
+    {
+      "id": "g_espada_temperada",
+      "nome": {
+        "pt": "Espada Temperada",
+        "en": "Tempered Sword"
+      },
+      "dif": 2,
+      "molde": "branca_pesada"
+    },
+    {
+      "id": "g_pistola_servico",
+      "nome": {
+        "pt": "Pistola de Serviço",
+        "en": "Service Pistol"
+      },
+      "dif": 2,
+      "molde": "fogo_leve"
+    },
+    {
+      "id": "g_carabina_ferrolho",
+      "nome": {
+        "pt": "Carabina de Ferrolho",
+        "en": "Bolt-Action Carbine"
+      },
+      "dif": 2,
+      "molde": "fogo_pesada"
+    },
+    {
+      "id": "g_varinha_runica",
+      "nome": {
+        "pt": "Varinha Rúnica",
+        "en": "Runic Wand"
+      },
+      "dif": 2,
+      "molde": "magica_leve"
+    },
+    {
+      "id": "g_bordao_runico",
+      "nome": {
+        "pt": "Bordão Rúnico",
+        "en": "Runic Quarterstaff"
+      },
+      "dif": 2,
+      "molde": "magica_pesada"
+    },
+    {
+      "id": "g_escudo_choque",
+      "nome": {
+        "pt": "Escudo de Choque",
+        "en": "Riot Shield"
+      },
+      "dif": 2,
+      "molde": "escudo"
+    },
+    {
+      "id": "g_orbe_quartzo",
+      "nome": {
+        "pt": "Orbe de Quartzo",
+        "en": "Quartz Orb"
+      },
+      "dif": 2,
+      "molde": "foco"
+    },
+    {
+      "id": "g_elmo_bronze",
+      "nome": {
+        "pt": "Elmo de Bronze",
+        "en": "Bronze Helm"
+      },
+      "dif": 2,
+      "molde": "capacete"
+    },
+    {
+      "id": "g_cota_malha",
+      "nome": {
+        "pt": "Cota de Malha",
+        "en": "Chainmail"
+      },
+      "dif": 2,
+      "molde": "armadura"
+    },
+    {
+      "id": "g_anel_prata",
+      "nome": {
+        "pt": "Anel de Prata",
+        "en": "Silver Ring"
+      },
+      "dif": 2,
+      "molde": "acess_sorte"
+    },
+    {
+      "id": "g_bracelete_ferro",
+      "nome": {
+        "pt": "Bracelete de Ferro",
+        "en": "Iron Bracelet"
+      },
+      "dif": 2,
+      "molde": "acess_vigor"
+    },
+    {
+      "id": "g_katana_aco_dobrado",
+      "nome": {
+        "pt": "Katana de Aço Dobrado",
+        "en": "Folded Steel Katana"
+      },
+      "dif": 3,
+      "molde": "branca_media"
+    },
+    {
+      "id": "g_lamina_vento",
+      "nome": {
+        "pt": "Lâmina do Vento",
+        "en": "Wind Blade"
+      },
+      "dif": 3,
+      "molde": "branca_pesada"
+    },
+    {
+      "id": "g_pistola_magnum",
+      "nome": {
+        "pt": "Pistola Magnum",
+        "en": "Magnum Pistol"
+      },
+      "dif": 3,
+      "molde": "fogo_leve"
+    },
+    {
+      "id": "g_fuzil_assalto",
+      "nome": {
+        "pt": "Fuzil de Assalto",
+        "en": "Assault Rifle"
+      },
+      "dif": 3,
+      "molde": "fogo_pesada"
+    },
+    {
+      "id": "g_luva_conjuracao",
+      "nome": {
+        "pt": "Luva de Conjuração",
+        "en": "Casting Glove"
+      },
+      "dif": 3,
+      "molde": "magica_leve"
+    },
+    {
+      "id": "g_cetro_cristal",
+      "nome": {
+        "pt": "Cetro de Cristal",
+        "en": "Crystal Scepter"
+      },
+      "dif": 3,
+      "molde": "magica_pesada"
+    },
+    {
+      "id": "g_escudo_balistico",
+      "nome": {
+        "pt": "Escudo Balístico",
+        "en": "Ballistic Shield"
+      },
+      "dif": 3,
+      "molde": "escudo"
+    },
+    {
+      "id": "g_tomo_bolso",
+      "nome": {
+        "pt": "Tomo de Bolso",
+        "en": "Pocket Tome"
+      },
+      "dif": 3,
+      "molde": "foco"
+    },
+    {
+      "id": "g_elmo_vigia",
+      "nome": {
+        "pt": "Elmo do Vigia",
+        "en": "Watchman's Helm"
+      },
+      "dif": 3,
+      "molde": "capacete"
+    },
+    {
+      "id": "g_peitoral_runico",
+      "nome": {
+        "pt": "Peitoral Rúnico",
+        "en": "Runic Breastplate"
+      },
+      "dif": 3,
+      "molde": "armadura"
+    },
+    {
+      "id": "g_talisma_corvo",
+      "nome": {
+        "pt": "Talismã do Corvo",
+        "en": "Raven Talisman"
+      },
+      "dif": 3,
+      "molde": "acess_sorte"
+    },
+    {
+      "id": "g_amuleto_urso",
+      "nome": {
+        "pt": "Amuleto do Urso",
+        "en": "Bear Amulet"
+      },
+      "dif": 3,
+      "molde": "acess_vigor"
+    },
+    {
+      "id": "g_lamina_vibratoria",
+      "nome": {
+        "pt": "Lâmina Vibratória",
+        "en": "Vibroblade"
+      },
+      "dif": 4,
+      "molde": "branca_media"
+    },
+    {
+      "id": "g_montante_flamejante",
+      "nome": {
+        "pt": "Montante Flamejante",
+        "en": "Flaming Greatsword"
+      },
+      "dif": 4,
+      "molde": "branca_pesada"
+    },
+    {
+      "id": "g_pistola_plasma",
+      "nome": {
+        "pt": "Pistola de Plasma",
+        "en": "Plasma Pistol"
+      },
+      "dif": 4,
+      "molde": "fogo_leve"
+    },
+    {
+      "id": "g_canhao_gauss",
+      "nome": {
+        "pt": "Canhão Gauss",
+        "en": "Gauss Cannon"
+      },
+      "dif": 4,
+      "molde": "fogo_pesada"
+    },
+    {
+      "id": "g_selo_fissao",
+      "nome": {
+        "pt": "Selo de Fissão",
+        "en": "Fission Seal"
+      },
+      "dif": 4,
+      "molde": "magica_leve"
+    },
+    {
+      "id": "g_grimorio_selado",
+      "nome": {
+        "pt": "Grimório Selado",
+        "en": "Sealed Grimoire"
+      },
+      "dif": 4,
+      "molde": "magica_pesada"
+    },
+    {
+      "id": "g_gerador_escudo_pessoal",
+      "nome": {
+        "pt": "Gerador de Escudo Pessoal",
+        "en": "Personal Shield Generator"
+      },
+      "dif": 4,
+      "molde": "escudo"
+    },
+    {
+      "id": "g_nucleo_uranio_encantado",
+      "nome": {
+        "pt": "Núcleo de Urânio Encantado",
+        "en": "Enchanted Uranium Core"
+      },
+      "dif": 4,
+      "molde": "foco"
+    },
+    {
+      "id": "g_coroa_estrategista",
+      "nome": {
+        "pt": "Coroa do Estrategista",
+        "en": "Strategist's Crown"
+      },
+      "dif": 4,
+      "molde": "capacete"
+    },
+    {
+      "id": "g_armadura_placas",
+      "nome": {
+        "pt": "Armadura de Placas",
+        "en": "Plate Armor"
+      },
+      "dif": 4,
+      "molde": "armadura"
+    },
+    {
+      "id": "g_colar_destino",
+      "nome": {
+        "pt": "Colar do Destino",
+        "en": "Necklace of Fate"
+      },
+      "dif": 4,
+      "molde": "acess_sorte"
+    },
+    {
+      "id": "g_pingente_ambar",
+      "nome": {
+        "pt": "Pingente de Âmbar",
+        "en": "Amber Pendant"
+      },
+      "dif": 4,
+      "molde": "acess_vigor"
+    },
+    {
+      "id": "g_machado_sismico",
+      "nome": {
+        "pt": "Machado Sísmico",
+        "en": "Seismic Axe"
+      },
+      "dif": 5,
+      "molde": "branca_media"
+    },
+    {
+      "id": "g_lamina_aurora",
+      "nome": {
+        "pt": "Lâmina Aurora",
+        "en": "Dawn Blade"
+      },
+      "dif": 5,
+      "molde": "branca_pesada"
+    },
+    {
+      "id": "g_pistola_pulso_sismico",
+      "nome": {
+        "pt": "Pistola de Pulso Sísmico",
+        "en": "Seismic Pulse Pistol"
+      },
+      "dif": 5,
+      "molde": "fogo_leve"
+    },
+    {
+      "id": "g_lanca_magma",
+      "nome": {
+        "pt": "Lança-Magma",
+        "en": "Magma Launcher"
+      },
+      "dif": 5,
+      "molde": "fogo_pesada"
+    },
+    {
+      "id": "g_varinha_placa_continental",
+      "nome": {
+        "pt": "Varinha da Placa Continental",
+        "en": "Continental Plate Wand"
+      },
+      "dif": 5,
+      "molde": "magica_leve"
+    },
+    {
+      "id": "g_cajado_vazio",
+      "nome": {
+        "pt": "Cajado do Vazio",
+        "en": "Void Staff"
+      },
+      "dif": 5,
+      "molde": "magica_pesada"
+    },
+    {
+      "id": "g_escudo_crosta",
+      "nome": {
+        "pt": "Escudo de Crosta",
+        "en": "Crust Shield"
+      },
+      "dif": 5,
+      "molde": "escudo"
+    },
+    {
+      "id": "g_prisma_tectonico",
+      "nome": {
+        "pt": "Prisma Tectônico",
+        "en": "Tectonic Prism"
+      },
+      "dif": 5,
+      "molde": "foco"
+    },
+    {
+      "id": "g_elmo_dragao",
+      "nome": {
+        "pt": "Elmo do Dragão",
+        "en": "Dragon Helm"
+      },
+      "dif": 5,
+      "molde": "capacete"
+    },
+    {
+      "id": "g_manto_estelar",
+      "nome": {
+        "pt": "Manto Estelar",
+        "en": "Starry Mantle"
+      },
+      "dif": 5,
+      "molde": "armadura"
+    },
+    {
+      "id": "g_anel_infinito",
+      "nome": {
+        "pt": "Anel do Infinito",
+        "en": "Ring of Infinity"
+      },
+      "dif": 5,
+      "molde": "acess_sorte"
+    },
+    {
+      "id": "g_coracao_ferro_estelar",
+      "nome": {
+        "pt": "Coração de Ferro-Estelar",
+        "en": "Star-Iron Heart"
+      },
+      "dif": 5,
+      "molde": "acess_vigor"
+    },
+    {
+      "id": "g_gladio_nucleo_fundido",
+      "nome": {
+        "pt": "Gládio de Núcleo Fundido",
+        "en": "Molten Core Gladius"
+      },
+      "dif": 6,
+      "molde": "branca_media"
+    },
+    {
+      "id": "g_martelo_placa_tectonica",
+      "nome": {
+        "pt": "Martelo da Placa Tectônica",
+        "en": "Tectonic Plate Hammer"
+      },
+      "dif": 6,
+      "molde": "branca_pesada"
+    },
+    {
+      "id": "g_pistola_gravidade",
+      "nome": {
+        "pt": "Pistola de Gravidade",
+        "en": "Gravity Pistol"
+      },
+      "dif": 6,
+      "molde": "fogo_leve"
+    },
+    {
+      "id": "g_canhao_orbital_portatil",
+      "nome": {
+        "pt": "Canhão Orbital Portátil",
+        "en": "Portable Orbital Cannon"
+      },
+      "dif": 6,
+      "molde": "fogo_pesada"
+    },
+    {
+      "id": "g_varinha_magma",
+      "nome": {
+        "pt": "Varinha de Magma",
+        "en": "Magma Wand"
+      },
+      "dif": 6,
+      "molde": "magica_leve"
+    },
+    {
+      "id": "g_cetro_nucleo_fundido",
+      "nome": {
+        "pt": "Cetro do Núcleo Fundido",
+        "en": "Molten Core Scepter"
+      },
+      "dif": 6,
+      "molde": "magica_pesada"
+    },
+    {
+      "id": "g_escudo_magnetosfera",
+      "nome": {
+        "pt": "Escudo de Magnetosfera",
+        "en": "Magnetosphere Shield"
+      },
+      "dif": 6,
+      "molde": "escudo"
+    },
+    {
+      "id": "g_orbe_atmosferico",
+      "nome": {
+        "pt": "Orbe Atmosférico",
+        "en": "Atmospheric Orb"
+      },
+      "dif": 6,
+      "molde": "foco"
+    },
+    {
+      "id": "g_elmo_obsidiana",
+      "nome": {
+        "pt": "Elmo de Obsidiana",
+        "en": "Obsidian Helm"
+      },
+      "dif": 6,
+      "molde": "capacete"
+    },
+    {
+      "id": "g_couraca_basalto",
+      "nome": {
+        "pt": "Couraça de Basalto",
+        "en": "Basalt Cuirass"
+      },
+      "dif": 6,
+      "molde": "armadura"
+    },
+    {
+      "id": "g_anel_mares",
+      "nome": {
+        "pt": "Anel das Marés",
+        "en": "Ring of the Tides"
+      },
+      "dif": 6,
+      "molde": "acess_sorte"
+    },
+    {
+      "id": "g_amuleto_manto_terrestre",
+      "nome": {
+        "pt": "Amuleto do Manto Terrestre",
+        "en": "Earth's Mantle Amulet"
+      },
+      "dif": 6,
+      "molde": "acess_vigor"
+    },
+    {
+      "id": "g_adaga_plasma_solar",
+      "nome": {
+        "pt": "Adaga de Plasma Solar",
+        "en": "Solar Plasma Dagger"
+      },
+      "dif": 7,
+      "molde": "branca_media"
+    },
+    {
+      "id": "g_espada_coroa_solar",
+      "nome": {
+        "pt": "Espada da Coroa Solar",
+        "en": "Sword of the Solar Corona"
+      },
+      "dif": 7,
+      "molde": "branca_pesada"
+    },
+    {
+      "id": "g_pistola_fusao",
+      "nome": {
+        "pt": "Pistola de Fusão",
+        "en": "Fusion Pistol"
+      },
+      "dif": 7,
+      "molde": "fogo_leve"
+    },
+    {
+      "id": "g_rifle_raio_estelar",
+      "nome": {
+        "pt": "Rifle de Raio Estelar",
+        "en": "Starbeam Rifle"
+      },
+      "dif": 7,
+      "molde": "fogo_pesada"
+    },
+    {
+      "id": "g_varinha_luz_fossil",
+      "nome": {
+        "pt": "Varinha de Luz Fóssil",
+        "en": "Fossil Light Wand"
+      },
+      "dif": 7,
+      "molde": "magica_leve"
+    },
+    {
+      "id": "g_astrolabio_vivo",
+      "nome": {
+        "pt": "Astrolábio Vivo",
+        "en": "Living Astrolabe"
+      },
+      "dif": 7,
+      "molde": "magica_pesada"
+    },
+    {
+      "id": "g_egide_vento_solar",
+      "nome": {
+        "pt": "Égide de Vento Solar",
+        "en": "Solar Wind Aegis"
+      },
+      "dif": 7,
+      "molde": "escudo"
+    },
+    {
+      "id": "g_fragmento_ana_branca",
+      "nome": {
+        "pt": "Fragmento de Anã Branca",
+        "en": "White Dwarf Shard"
+      },
+      "dif": 7,
+      "molde": "foco"
+    },
+    {
+      "id": "g_elmo_orbita",
+      "nome": {
+        "pt": "Elmo de Órbita",
+        "en": "Orbit Helm"
+      },
+      "dif": 7,
+      "molde": "capacete"
+    },
+    {
+      "id": "g_armadura_fotosfera",
+      "nome": {
+        "pt": "Armadura de Fotosfera",
+        "en": "Photosphere Armor"
+      },
+      "dif": 7,
+      "molde": "armadura"
+    },
+    {
+      "id": "g_broche_constelacao",
+      "nome": {
+        "pt": "Broche da Constelação",
+        "en": "Constellation Brooch"
+      },
+      "dif": 7,
+      "molde": "acess_sorte"
+    },
+    {
+      "id": "g_talisma_gravidade",
+      "nome": {
+        "pt": "Talismã da Gravidade",
+        "en": "Gravity Talisman"
+      },
+      "dif": 7,
+      "molde": "acess_vigor"
+    },
+    {
+      "id": "g_faca_horizonte",
+      "nome": {
+        "pt": "Faca de Horizonte",
+        "en": "Horizon Knife"
+      },
+      "dif": 8,
+      "molde": "branca_media"
+    },
+    {
+      "id": "g_foice_horizonte_eventos",
+      "nome": {
+        "pt": "Foice do Horizonte de Eventos",
+        "en": "Event Horizon Scythe"
+      },
+      "dif": 8,
+      "molde": "branca_pesada"
+    },
+    {
+      "id": "g_pistola_antimateria",
+      "nome": {
+        "pt": "Pistola de Antimatéria",
+        "en": "Antimatter Pistol"
+      },
+      "dif": 8,
+      "molde": "fogo_leve"
+    },
+    {
+      "id": "g_canhao_quasar",
+      "nome": {
+        "pt": "Canhão de Quasar",
+        "en": "Quasar Cannon"
+      },
+      "dif": 8,
+      "molde": "fogo_pesada"
+    },
+    {
+      "id": "g_varinha_materia_escura",
+      "nome": {
+        "pt": "Varinha de Matéria Escura",
+        "en": "Dark Matter Wand"
+      },
+      "dif": 8,
+      "molde": "magica_leve"
+    },
+    {
+      "id": "g_grimorio_vacuo",
+      "nome": {
+        "pt": "Grimório do Vácuo",
+        "en": "Vacuum Grimoire"
+      },
+      "dif": 8,
+      "molde": "magica_pesada"
+    },
+    {
+      "id": "g_escudo_lente_gravitacional",
+      "nome": {
+        "pt": "Escudo de Lente Gravitacional",
+        "en": "Gravitational Lens Shield"
+      },
+      "dif": 8,
+      "molde": "escudo"
+    },
+    {
+      "id": "g_semente_galaxia",
+      "nome": {
+        "pt": "Semente de Galáxia",
+        "en": "Galaxy Seed"
+      },
+      "dif": 8,
+      "molde": "foco"
+    },
+    {
+      "id": "g_coroa_nebulosa",
+      "nome": {
+        "pt": "Coroa da Nebulosa",
+        "en": "Nebula Crown"
+      },
+      "dif": 8,
+      "molde": "capacete"
+    },
+    {
+      "id": "g_manto_materia_escura",
+      "nome": {
+        "pt": "Manto de Matéria Escura",
+        "en": "Dark Matter Mantle"
+      },
+      "dif": 8,
+      "molde": "armadura"
+    },
+    {
+      "id": "g_dado_deuses",
+      "nome": {
+        "pt": "Dado dos Deuses",
+        "en": "Dice of the Gods"
+      },
+      "dif": 8,
+      "molde": "acess_sorte"
+    },
+    {
+      "id": "g_coracao_pulsar",
+      "nome": {
+        "pt": "Coração de Pulsar",
+        "en": "Pulsar Heart"
+      },
+      "dif": 8,
+      "molde": "acess_vigor"
+    },
+    {
+      "id": "g_estilete_entre_mundos",
+      "nome": {
+        "pt": "Estilete entre Mundos",
+        "en": "Between-Worlds Stiletto"
+      },
+      "dif": 9,
+      "molde": "branca_media"
+    },
+    {
+      "id": "g_lamina_ramo_partido",
+      "nome": {
+        "pt": "Lâmina do Ramo Partido",
+        "en": "Blade of the Broken Branch"
+      },
+      "dif": 9,
+      "molde": "branca_pesada"
+    },
+    {
+      "id": "g_revolver_mil_balas_possiveis",
+      "nome": {
+        "pt": "Revólver de Mil Balas Possíveis",
+        "en": "Revolver of a Thousand Possible Bullets"
+      },
+      "dif": 9,
+      "molde": "fogo_leve"
+    },
+    {
+      "id": "g_rifle_linha_tempo",
+      "nome": {
+        "pt": "Rifle de Linha do Tempo",
+        "en": "Timeline Rifle"
+      },
+      "dif": 9,
+      "molde": "fogo_pesada"
+    },
+    {
+      "id": "g_varinha_duas_realidades",
+      "nome": {
+        "pt": "Varinha de Duas Realidades",
+        "en": "Wand of Two Realities"
+      },
+      "dif": 9,
+      "molde": "magica_leve"
+    },
+    {
+      "id": "g_cajado_linhas_tempo",
+      "nome": {
+        "pt": "Cajado das Linhas do Tempo",
+        "en": "Staff of Timelines"
+      },
+      "dif": 9,
+      "molde": "magica_pesada"
+    },
+    {
+      "id": "g_escudo_futuro_recusado",
+      "nome": {
+        "pt": "Escudo do Futuro Recusado",
+        "en": "Shield of the Refused Future"
+      },
+      "dif": 9,
+      "molde": "escudo"
+    },
+    {
+      "id": "g_bussola_ramos",
+      "nome": {
+        "pt": "Bússola de Ramos",
+        "en": "Branch Compass"
+      },
+      "dif": 9,
+      "molde": "foco"
+    },
+    {
+      "id": "g_elmo_limiar",
+      "nome": {
+        "pt": "Elmo do Limiar",
+        "en": "Threshold Helm"
+      },
+      "dif": 9,
+      "molde": "capacete"
+    },
+    {
+      "id": "g_armadura_paradoxo",
+      "nome": {
+        "pt": "Armadura do Paradoxo",
+        "en": "Paradox Armor"
+      },
+      "dif": 9,
+      "molde": "armadura"
+    },
+    {
+      "id": "g_moeda_duas_faces",
+      "nome": {
+        "pt": "Moeda de Duas Faces",
+        "en": "Two-Faced Coin"
+      },
+      "dif": 9,
+      "molde": "acess_sorte"
+    },
+    {
+      "id": "g_ancora_portatil",
+      "nome": {
+        "pt": "Âncora Portátil",
+        "en": "Pocket Anchor"
+      },
+      "dif": 9,
+      "molde": "acess_vigor"
+    },
+    {
+      "id": "g_ponto_final",
+      "nome": {
+        "pt": "Ponto Final",
+        "en": "Full Stop"
+      },
+      "dif": 10,
+      "molde": "branca_media"
+    },
+    {
+      "id": "g_primeira_espada",
+      "nome": {
+        "pt": "A Primeira Espada",
+        "en": "The First Sword"
+      },
+      "dif": 10,
+      "molde": "branca_pesada"
+    },
+    {
+      "id": "g_arma_uma_frase_so",
+      "nome": {
+        "pt": "Arma de Uma Frase Só",
+        "en": "One-Sentence Gun"
+      },
+      "dif": 10,
+      "molde": "fogo_leve"
+    },
+    {
+      "id": "g_canhao_argumento_definitivo",
+      "nome": {
+        "pt": "Canhão do Argumento Definitivo",
+        "en": "Cannon of the Final Argument"
+      },
+      "dif": 10,
+      "molde": "fogo_pesada"
+    },
+    {
+      "id": "g_borracha_realidade",
+      "nome": {
+        "pt": "Borracha da Realidade",
+        "en": "Reality Eraser"
+      },
+      "dif": 10,
+      "molde": "magica_leve"
+    },
+    {
+      "id": "g_pena_autor",
+      "nome": {
+        "pt": "Pena do Autor",
+        "en": "The Author's Quill"
+      },
+      "dif": 10,
+      "molde": "magica_pesada"
+    },
+    {
+      "id": "g_margem_pagina",
+      "nome": {
+        "pt": "Margem da Página",
+        "en": "Page Margin"
+      },
+      "dif": 10,
+      "molde": "escudo"
+    },
+    {
+      "id": "g_sumario_tudo",
+      "nome": {
+        "pt": "Sumário de Tudo",
+        "en": "Index of Everything"
+      },
+      "dif": 10,
+      "molde": "foco"
+    },
+    {
+      "id": "g_coroa_sem_reino",
+      "nome": {
+        "pt": "Coroa Sem Reino",
+        "en": "Crown Without a Kingdom"
+      },
+      "dif": 10,
+      "molde": "capacete"
+    },
+    {
+      "id": "g_veste_que_antecede",
+      "nome": {
+        "pt": "Veste do Que Antecede",
+        "en": "Robe of What Came Before"
+      },
+      "dif": 10,
+      "molde": "armadura"
+    },
+    {
+      "id": "g_sorte_escrita",
+      "nome": {
+        "pt": "Sorte Escrita",
+        "en": "Written Luck"
+      },
+      "dif": 10,
+      "molde": "acess_sorte"
+    },
+    {
+      "id": "g_selo_fim",
+      "nome": {
+        "pt": "Selo do Fim",
+        "en": "Seal of the End"
+      },
+      "dif": 10,
+      "molde": "acess_vigor"
+    }
+  ],
+  "contratos": [
+    {
+      "id": "d_ratos",
+      "nome": {
+        "pt": "Limpar os Ratos do Porão",
+        "en": "Clear the Cellar Rats"
+      },
+      "nivel": 3,
+      "descricao": {
+        "pt": "São ratos. Grandes, mas ratos.",
+        "en": "They're rats. Big ones, but rats."
+      },
+      "historia": {
+        "generos": [
+          "medieval"
+        ],
+        "local": [
+          {
+            "pt": "porão da taverna",
+            "art": "o",
+            "en": "the tavern cellar"
+          }
+        ],
+        "inimigo": [
+          {
+            "pt": "ratos",
+            "art": "os",
+            "en": "the rats"
+          },
+          {
+            "pt": "rato que manda nos outros",
+            "art": "o",
+            "en": "the rat that bosses the others"
+          }
+        ]
+      }
+    },
+    {
+      "id": "d_goblins",
+      "nome": {
+        "pt": "Espantar Goblins da Estrada",
+        "en": "Drive the Goblins off the Road"
+      },
+      "nivel": 5,
+      "descricao": {
+        "pt": "Cobram pedágio numa ponte que nem é deles.",
+        "en": "They charge a toll on a bridge that isn't even theirs."
+      },
+      "historia": {
+        "generos": [
+          "medieval"
+        ],
+        "local": [
+          {
+            "pt": "estrada do moinho",
+            "art": "a",
+            "en": "the mill road"
+          }
+        ],
+        "inimigo": [
+          {
+            "pt": "bando de goblins",
+            "art": "o",
+            "en": "the goblin band"
+          }
+        ]
+      }
+    },
+    {
+      "id": "d_ervas",
+      "nome": {
+        "pt": "Colher Ervas na Mata Rasa",
+        "en": "Gather Herbs in the Shallow Woods"
+      },
+      "nivel": 7,
+      "perigo": "baixo",
+      "descricao": {
+        "pt": "A mata é rasa. O que vive nela, nem tanto.",
+        "en": "The woods are shallow. What lives in them, not so much."
+      },
+      "historia": {
+        "generos": [
+          "medieval"
+        ],
+        "local": [
+          {
+            "pt": "mata rasa",
+            "art": "a",
+            "en": "the shallow woods"
+          }
+        ],
+        "inimigo": [
+          {
+            "pt": "urtigas",
+            "art": "as",
+            "en": "the nettles"
+          },
+          {
+            "pt": "javali que mora lá",
+            "art": "o",
+            "en": "the boar that lives there"
+          }
+        ]
+      }
+    },
+    {
+      "id": "d_sino",
+      "nome": {
+        "pt": "Recuperar o Sino Roubado",
+        "en": "Recover the Stolen Bell"
+      },
+      "nivel": 9,
+      "descricao": {
+        "pt": "Roubaram o sino da capela. Pesa meia tonelada; ninguém viu nada.",
+        "en": "Someone stole the chapel bell. It weighs half a ton; nobody saw a thing."
+      },
+      "historia": {
+        "generos": [
+          "medieval"
+        ],
+        "local": [
+          {
+            "pt": "campanário vazio",
+            "art": "o",
+            "en": "the empty bell tower"
+          },
+          {
+            "pt": "esconderijo dos ladrões",
+            "art": "o",
+            "en": "the thieves' hideout"
+          }
+        ],
+        "inimigo": [
+          {
+            "pt": "ladrões de sino",
+            "art": "os",
+            "en": "the bell thieves"
+          }
+        ]
+      }
+    },
+    {
+      "id": "d_lobo",
+      "nome": {
+        "pt": "Caçar o Lobo Branco",
+        "en": "Hunt the White Wolf"
+      },
+      "nivel": 11,
+      "descricao": {
+        "pt": "Já levou três rebanhos. E dois caçadores.",
+        "en": "It has taken three herds already. And two hunters."
+      },
+      "historia": {
+        "generos": [
+          "medieval"
+        ],
+        "local": [
+          {
+            "pt": "mata congelada",
+            "art": "a",
+            "en": "the frozen woods"
+          },
+          {
+            "pt": "trilha dos lenhadores",
+            "art": "a",
+            "en": "the woodcutters' trail"
+          }
+        ],
+        "inimigo": [
+          {
+            "pt": "Lobo Branco",
+            "art": "o",
+            "en": "the White Wolf"
+          },
+          {
+            "pt": "alcateia faminta",
+            "art": "a",
+            "en": "the hungry pack"
+          }
+        ]
+      }
+    },
+    {
+      "id": "d_assalto",
+      "nome": {
+        "pt": "Conter o Assalto ao Banco",
+        "en": "Stop the Bank Robbery"
+      },
+      "nivel": 13,
+      "descricao": {
+        "pt": "Eles têm reféns, máscaras e um plano. Você tem pressa.",
+        "en": "They have hostages, masks and a plan. You have a deadline."
+      },
+      "historia": {
+        "generos": [
+          "moderno"
+        ],
+        "local": [
+          {
+            "pt": "cofre do banco",
+            "art": "o",
+            "en": "the bank vault"
+          },
+          {
+            "pt": "saguão",
+            "art": "o",
+            "en": "the lobby"
+          }
+        ],
+        "inimigo": [
+          {
+            "pt": "assaltantes",
+            "art": "os",
+            "en": "the robbers"
+          },
+          {
+            "pt": "líder do bando",
+            "art": "o",
+            "en": "the gang leader"
+          }
+        ]
+      }
+    },
+    {
+      "id": "d_cripta",
+      "nome": {
+        "pt": "Explorar a Cripta Submersa",
+        "en": "Explore the Sunken Crypt"
+      },
+      "nivel": 15,
+      "descricao": {
+        "pt": "A água subiu, mas o que estava lá dentro não saiu.",
+        "en": "The water rose, but what was inside never left."
+      },
+      "historia": {
+        "generos": [
+          "medieval"
+        ],
+        "local": [
+          {
+            "pt": "cripta alagada",
+            "art": "a",
+            "en": "the flooded crypt"
+          }
+        ],
+        "inimigo": [
+          {
+            "pt": "afogados que não ficaram deitados",
+            "art": "os",
+            "en": "the drowned who didn't stay down"
+          }
+        ]
+      }
+    },
+    {
+      "id": "d_caravana",
+      "nome": {
+        "pt": "Escoltar a Caravana de Sal",
+        "en": "Escort the Salt Caravan"
+      },
+      "nivel": 19,
+      "descricao": {
+        "pt": "Três dias de estrada. Alguém sempre observa.",
+        "en": "Three days on the road. Someone is always watching."
+      },
+      "historia": {
+        "generos": [
+          "medieval"
+        ],
+        "local": [
+          {
+            "pt": "rota do deserto de sal",
+            "art": "a",
+            "en": "the salt desert route"
+          }
+        ],
+        "inimigo": [
+          {
+            "pt": "saqueadores",
+            "art": "os",
+            "en": "the raiders"
+          }
+        ]
+      }
+    },
+    {
+      "id": "d_bomba",
+      "nome": {
+        "pt": "Desativar a Bomba do Metrô",
+        "en": "Defuse the Subway Bomb"
+      },
+      "nivel": 22,
+      "descricao": {
+        "pt": "Fio vermelho ou fio azul. O manual não ajuda.",
+        "en": "Red wire or blue wire. The manual doesn't help."
+      },
+      "historia": {
+        "generos": [
+          "moderno"
+        ],
+        "local": [
+          {
+            "pt": "plataforma do metrô",
+            "art": "a",
+            "en": "the subway platform"
+          },
+          {
+            "pt": "túnel de manutenção",
+            "art": "o",
+            "en": "the maintenance tunnel"
+          }
+        ],
+        "inimigo": [
+          {
+            "pt": "bomba",
+            "art": "a",
+            "en": "the bomb"
+          },
+          {
+            "pt": "terroristas",
+            "art": "os",
+            "en": "the bombers"
+          }
+        ]
+      }
+    },
+    {
+      "id": "d_mineiro",
+      "nome": {
+        "pt": "Resgatar o Mineiro Soterrado",
+        "en": "Rescue the Buried Miner"
+      },
+      "nivel": 24,
+      "descricao": {
+        "pt": "Ele ainda bate na rocha. Cada vez mais devagar.",
+        "en": "He's still knocking on the rock. Slower each time."
+      },
+      "historia": {
+        "generos": [
+          "moderno",
+          "medieval"
+        ],
+        "local": [
+          {
+            "pt": "galeria desabada",
+            "art": "a",
+            "en": "the collapsed tunnel"
+          },
+          {
+            "pt": "poço da mina",
+            "art": "o",
+            "en": "the mine shaft"
+          }
+        ],
+        "inimigo": [
+          {
+            "pt": "desabamento",
+            "art": "o",
+            "en": "the cave-in"
+          },
+          {
+            "pt": "vermes da rocha",
+            "art": "os",
+            "en": "the rock worms"
+          }
+        ]
+      }
+    },
+    {
+      "id": "d_poco",
+      "nome": {
+        "pt": "Descer ao Poço sem Fundo",
+        "en": "Descend the Bottomless Well"
+      },
+      "nivel": 27,
+      "descricao": {
+        "pt": "Tem fundo. Ninguém voltou para confirmar.",
+        "en": "It has a bottom. Nobody came back to confirm."
+      },
+      "historia": {
+        "generos": [
+          "medieval"
+        ],
+        "local": [
+          {
+            "pt": "fundo do poço",
+            "art": "o",
+            "en": "the bottom of the well"
+          },
+          {
+            "pt": "terceiro patamar",
+            "art": "o",
+            "en": "the third landing"
+          }
+        ],
+        "inimigo": [
+          {
+            "pt": "coisa que mora lá embaixo",
+            "art": "a",
+            "en": "the thing that lives down there"
+          }
+        ]
+      }
+    },
+    {
+      "id": "d_laboratorio",
+      "nome": {
+        "pt": "Invadir o Laboratório Clandestino",
+        "en": "Raid the Secret Lab"
+      },
+      "nivel": 30,
+      "descricao": {
+        "pt": "O que fazem lá é ilegal. O que escapou de lá é pior.",
+        "en": "What they do in there is illegal. What got out is worse."
+      },
+      "historia": {
+        "generos": [
+          "scifi",
+          "moderno"
+        ],
+        "local": [
+          {
+            "pt": "laboratório subterrâneo",
+            "art": "o",
+            "en": "the underground lab"
+          },
+          {
+            "pt": "ala de contenção",
+            "art": "a",
+            "en": "the containment wing"
+          }
+        ],
+        "inimigo": [
+          {
+            "pt": "cobaias soltas",
+            "art": "as",
+            "en": "the escaped test subjects"
+          },
+          {
+            "pt": "seguranças da empresa",
+            "art": "os",
+            "en": "the company guards"
+          }
+        ]
+      }
+    },
+    {
+      "id": "d_pantano",
+      "nome": {
+        "pt": "Atravessar o Pântano Fervente",
+        "en": "Cross the Boiling Swamp"
+      },
+      "nivel": 31,
+      "descricao": {
+        "pt": "A água borbulha. Não é só do calor.",
+        "en": "The water bubbles. Not just from the heat."
+      },
+      "historia": {
+        "generos": [
+          "moderno",
+          "scifi"
+        ],
+        "local": [
+          {
+            "pt": "pântano fervente",
+            "art": "o",
+            "en": "the boiling swamp"
+          },
+          {
+            "pt": "ponte de troncos",
+            "art": "a",
+            "en": "the log bridge"
+          }
+        ],
+        "inimigo": [
+          {
+            "pt": "crocodilos mutantes",
+            "art": "os",
+            "en": "the mutant crocodiles"
+          },
+          {
+            "pt": "névoa venenosa",
+            "art": "a",
+            "en": "the poison fog"
+          }
+        ]
+      }
+    },
+    {
+      "id": "d_mecha",
+      "nome": {
+        "pt": "Derrubar o Mecha Desgovernado",
+        "en": "Take Down the Rogue Mech"
+      },
+      "nivel": 33,
+      "descricao": {
+        "pt": "Doze andares de aço e nenhum piloto. Alguém esqueceu de desligar.",
+        "en": "Twelve stories of steel and no pilot. Someone forgot to switch it off."
+      },
+      "historia": {
+        "generos": [
+          "scifi"
+        ],
+        "local": [
+          {
+            "pt": "avenida destruída",
+            "art": "a",
+            "en": "the wrecked avenue"
+          },
+          {
+            "pt": "pátio da fábrica",
+            "art": "o",
+            "en": "the factory yard"
+          }
+        ],
+        "inimigo": [
+          {
+            "pt": "mecha desgovernado",
+            "art": "o",
+            "en": "the rogue mech"
+          }
+        ]
+      }
+    },
+    {
+      "id": "d_guardiao",
+      "nome": {
+        "pt": "Enfrentar o Guardião de Pedra",
+        "en": "Face the Stone Guardian"
+      },
+      "nivel": 35,
+      "descricao": {
+        "pt": "Não dorme, não come, não negocia.",
+        "en": "It doesn't sleep, doesn't eat, doesn't bargain."
+      },
+      "historia": {
+        "generos": [
+          "medieval"
+        ],
+        "local": [
+          {
+            "pt": "salão do guardião",
+            "art": "o",
+            "en": "the guardian's hall"
+          }
+        ],
+        "inimigo": [
+          {
+            "pt": "Guardião de Pedra",
+            "art": "o",
+            "en": "the Stone Guardian"
+          }
+        ]
+      }
+    },
+    {
+      "id": "d_reator",
+      "nome": {
+        "pt": "Fechar o Reator em Colapso",
+        "en": "Shut Down the Failing Reactor"
+      },
+      "nivel": 39,
+      "descricao": {
+        "pt": "O alarme parou de tocar. Isso não é bom sinal.",
+        "en": "The alarm stopped ringing. That's not a good sign."
+      },
+      "historia": {
+        "generos": [
+          "scifi",
+          "moderno"
+        ],
+        "local": [
+          {
+            "pt": "sala de controle",
+            "art": "a",
+            "en": "the control room"
+          },
+          {
+            "pt": "núcleo do reator",
+            "art": "o",
+            "en": "the reactor core"
+          }
+        ],
+        "inimigo": [
+          {
+            "pt": "robôs de manutenção enlouquecidos",
+            "art": "os",
+            "en": "the crazed maintenance robots"
+          },
+          {
+            "pt": "radiação",
+            "art": "a",
+            "en": "the radiation"
+          }
+        ]
+      }
+    },
+    {
+      "id": "d_fenda",
+      "nome": {
+        "pt": "Selar a Fenda do Vale",
+        "en": "Seal the Valley Rift"
+      },
+      "nivel": 41,
+      "descricao": {
+        "pt": "A terra se abriu e algo está subindo. Sem pressa, por enquanto.",
+        "en": "The ground split open and something is climbing out. In no hurry, for now."
+      },
+      "historia": {
+        "generos": [
+          "medieval",
+          "scifi"
+        ],
+        "local": [
+          {
+            "pt": "fenda do vale",
+            "art": "a",
+            "en": "the valley rift"
+          },
+          {
+            "pt": "beira do abismo",
+            "art": "a",
+            "en": "the edge of the chasm"
+          }
+        ],
+        "inimigo": [
+          {
+            "pt": "criaturas da fenda",
+            "art": "as",
+            "en": "the rift creatures"
+          }
+        ]
+      }
+    },
+    {
+      "id": "d_serpente",
+      "nome": {
+        "pt": "Invadir o Ninho da Serpente",
+        "en": "Raid the Serpent's Nest"
+      },
+      "nivel": 43,
+      "descricao": {
+        "pt": "O ninho é quente por um motivo.",
+        "en": "The nest is warm for a reason."
+      },
+      "historia": {
+        "generos": [
+          "medieval"
+        ],
+        "local": [
+          {
+            "pt": "ninho",
+            "art": "o",
+            "en": "the nest"
+          },
+          {
+            "pt": "câmara dos ovos",
+            "art": "a",
+            "en": "the egg chamber"
+          }
+        ],
+        "inimigo": [
+          {
+            "pt": "Serpente",
+            "art": "a",
+            "en": "the Serpent"
+          },
+          {
+            "pt": "crias",
+            "art": "as",
+            "en": "the hatchlings"
+          }
+        ]
+      }
+    },
+    {
+      "id": "d_avalanche",
+      "nome": {
+        "pt": "Conter a Avalanche Viva",
+        "en": "Stop the Living Avalanche"
+      },
+      "nivel": 46,
+      "descricao": {
+        "pt": "Avalanches descem a montanha. Esta escolhe o caminho.",
+        "en": "Avalanches roll downhill. This one picks its route."
+      },
+      "historia": {
+        "generos": [
+          "medieval",
+          "moderno"
+        ],
+        "local": [
+          {
+            "pt": "encosta nevada",
+            "art": "a",
+            "en": "the snowy slope"
+          },
+          {
+            "pt": "vila no sopé",
+            "art": "a",
+            "en": "the village at the foot of the mountain"
+          }
+        ],
+        "inimigo": [
+          {
+            "pt": "avalanche viva",
+            "art": "a",
+            "en": "the living avalanche"
+          }
+        ]
+      }
+    },
+    {
+      "id": "d_kaiju",
+      "nome": {
+        "pt": "Afundar o Kaiju na Baía",
+        "en": "Sink the Kaiju in the Bay"
+      },
+      "nivel": 49,
+      "descricao": {
+        "pt": "Ele só queria nadar. Pelo meio da cidade.",
+        "en": "It just wanted a swim. Through the middle of the city."
+      },
+      "historia": {
+        "generos": [
+          "moderno",
+          "scifi"
+        ],
+        "local": [
+          {
+            "pt": "baía",
+            "art": "a",
+            "en": "the bay"
+          },
+          {
+            "pt": "porto",
+            "art": "o",
+            "en": "the harbor"
+          }
+        ],
+        "inimigo": [
+          {
+            "pt": "kaiju",
+            "art": "o",
+            "en": "the kaiju"
+          }
+        ]
+      }
+    },
+    {
+      "id": "d_vulcao",
+      "nome": {
+        "pt": "Fechar um Vulcão Desperto",
+        "en": "Close an Awakened Volcano"
+      },
+      "nivel": 52,
+      "descricao": {
+        "pt": "Dormiu mil anos. Acordou de mau humor.",
+        "en": "It slept for a thousand years. It woke up cranky."
+      },
+      "historia": {
+        "generos": [
+          "scifi",
+          "medieval"
+        ],
+        "local": [
+          {
+            "pt": "cratera",
+            "art": "a",
+            "en": "the crater"
+          },
+          {
+            "pt": "câmara de magma",
+            "art": "a",
+            "en": "the magma chamber"
+          }
+        ],
+        "inimigo": [
+          {
+            "pt": "vulcão",
+            "art": "o",
+            "en": "the volcano"
+          },
+          {
+            "pt": "elementais de lava",
+            "art": "os",
+            "en": "the lava elementals"
+          }
+        ]
+      }
+    },
+    {
+      "id": "d_ilha",
+      "nome": {
+        "pt": "Afundar a Ilha Errante",
+        "en": "Sink the Wandering Island"
+      },
+      "nivel": 55,
+      "descricao": {
+        "pt": "Ela passeia pelo oceano. Já pisou em três portos.",
+        "en": "It roams the ocean. It has already stepped on three ports."
+      },
+      "historia": {
+        "generos": [
+          "scifi",
+          "medieval"
+        ],
+        "local": [
+          {
+            "pt": "ilha errante",
+            "art": "a",
+            "en": "the wandering island"
+          },
+          {
+            "pt": "costa de pedra",
+            "art": "a",
+            "en": "the rocky shore"
+          }
+        ],
+        "inimigo": [
+          {
+            "pt": "ilha",
+            "art": "a",
+            "en": "the island"
+          },
+          {
+            "pt": "guardiões de coral",
+            "art": "os",
+            "en": "the coral guardians"
+          }
+        ]
+      }
+    },
+    {
+      "id": "d_arca",
+      "nome": {
+        "pt": "Derrubar a Arca de Guerra Orbital",
+        "en": "Bring Down the Orbital War Ark"
+      },
+      "nivel": 57,
+      "descricao": {
+        "pt": "Ficou décadas lá em cima. Agora resolveu descer.",
+        "en": "It stayed up there for decades. Now it has decided to come down."
+      },
+      "historia": {
+        "generos": [
+          "scifi"
+        ],
+        "local": [
+          {
+            "pt": "hangar da arca",
+            "art": "o",
+            "en": "the ark's hangar"
+          },
+          {
+            "pt": "ponte de comando",
+            "art": "a",
+            "en": "the command bridge"
+          }
+        ],
+        "inimigo": [
+          {
+            "pt": "drones de defesa",
+            "art": "os",
+            "en": "the defense drones"
+          },
+          {
+            "pt": "inteligência da arca",
+            "art": "a",
+            "en": "the ark's AI"
+          }
+        ]
+      }
+    },
+    {
+      "id": "d_terremoto",
+      "nome": {
+        "pt": "Domar o Terremoto Encarnado",
+        "en": "Tame the Earthquake Incarnate"
+      },
+      "nivel": 59,
+      "descricao": {
+        "pt": "Tem pernas, tem raiva e não tem onde parar.",
+        "en": "It has legs, a temper and nowhere to stop."
+      },
+      "historia": {
+        "generos": [
+          "scifi",
+          "medieval"
+        ],
+        "local": [
+          {
+            "pt": "falha geológica",
+            "art": "a",
+            "en": "the fault line"
+          },
+          {
+            "pt": "cidade rachada",
+            "art": "a",
+            "en": "the cracked city"
+          }
+        ],
+        "inimigo": [
+          {
+            "pt": "terremoto encarnado",
+            "art": "o",
+            "en": "the earthquake incarnate"
+          }
+        ]
+      }
+    },
+    {
+      "id": "d_destrocos",
+      "nome": {
+        "pt": "Recolher Destroços de Lua",
+        "en": "Collect Moon Debris"
+      },
+      "nivel": 62,
+      "descricao": {
+        "pt": "A lua quebrou. Alguém tem que varrer.",
+        "en": "The moon broke. Someone has to sweep up."
+      },
+      "historia": {
+        "generos": [
+          "scifi",
+          "cosmico"
+        ],
+        "local": [
+          {
+            "pt": "anel de destroços",
+            "art": "o",
+            "en": "the debris ring"
+          },
+          {
+            "pt": "cratera lunar",
+            "art": "a",
+            "en": "the lunar crater"
+          }
+        ],
+        "inimigo": [
+          {
+            "pt": "catadores rivais",
+            "art": "os",
+            "en": "the rival scavengers"
+          },
+          {
+            "pt": "rochas à deriva",
+            "art": "as",
+            "en": "the drifting rocks"
+          }
+        ]
+      }
+    },
+    {
+      "id": "d_cruzador",
+      "nome": {
+        "pt": "Abordar o Cruzador Estelar",
+        "en": "Board the Star Cruiser"
+      },
+      "nivel": 64,
+      "descricao": {
+        "pt": "Quinhentos tripulantes. Nenhum feliz com a visita.",
+        "en": "Five hundred crew. None of them happy about the visit."
+      },
+      "historia": {
+        "generos": [
+          "scifi"
+        ],
+        "local": [
+          {
+            "pt": "convés do cruzador",
+            "art": "o",
+            "en": "the cruiser's deck"
+          },
+          {
+            "pt": "sala de máquinas",
+            "art": "a",
+            "en": "the engine room"
+          }
+        ],
+        "inimigo": [
+          {
+            "pt": "fuzileiros espaciais",
+            "art": "os",
+            "en": "the space marines"
+          },
+          {
+            "pt": "capitão",
+            "art": "o",
+            "en": "the captain"
+          }
+        ]
+      }
+    },
+    {
+      "id": "d_cometa",
+      "nome": {
+        "pt": "Desviar o Cometa Faminto",
+        "en": "Divert the Hungry Comet"
+      },
+      "nivel": 67,
+      "descricao": {
+        "pt": "Já comeu duas luas. Está de olho na terceira.",
+        "en": "It has eaten two moons already. It has its eye on a third."
+      },
+      "historia": {
+        "generos": [
+          "scifi",
+          "cosmico"
+        ],
+        "local": [
+          {
+            "pt": "cauda do cometa",
+            "art": "a",
+            "en": "the comet's tail"
+          },
+          {
+            "pt": "núcleo de gelo",
+            "art": "o",
+            "en": "the ice core"
+          }
+        ],
+        "inimigo": [
+          {
+            "pt": "cometa faminto",
+            "art": "o",
+            "en": "the hungry comet"
+          }
+        ]
+      }
+    },
+    {
+      "id": "d_sol",
+      "nome": {
+        "pt": "Reacender o Sol Moribundo",
+        "en": "Rekindle the Dying Sun"
+      },
+      "nivel": 69,
+      "descricao": {
+        "pt": "Está apagando. Ninguém lembra onde fica o interruptor.",
+        "en": "It's going out. Nobody remembers where the switch is."
+      },
+      "historia": {
+        "generos": [
+          "cosmico",
+          "scifi"
+        ],
+        "local": [
+          {
+            "pt": "coroa solar",
+            "art": "a",
+            "en": "the solar corona"
+          },
+          {
+            "pt": "coração do sol",
+            "art": "o",
+            "en": "the heart of the sun"
+          }
+        ],
+        "inimigo": [
+          {
+            "pt": "escuridão que avança",
+            "art": "a",
+            "en": "the creeping darkness"
+          },
+          {
+            "pt": "parasitas estelares",
+            "art": "os",
+            "en": "the star parasites"
+          }
+        ]
+      }
+    },
+    {
+      "id": "d_vazio",
+      "nome": {
+        "pt": "Mapear o Vazio entre Galáxias",
+        "en": "Map the Void Between Galaxies"
+      },
+      "nivel": 72,
+      "descricao": {
+        "pt": "Não tem nada lá. Esse é o problema.",
+        "en": "There's nothing out there. That's the problem."
+      },
+      "historia": {
+        "generos": [
+          "cosmico"
+        ],
+        "local": [
+          {
+            "pt": "vazio intergaláctico",
+            "art": "o",
+            "en": "the intergalactic void"
+          }
+        ],
+        "inimigo": [
+          {
+            "pt": "coisas que vivem no nada",
+            "art": "as",
+            "en": "the things that live in nothing"
+          }
+        ]
+      }
+    },
+    {
+      "id": "d_minhoca",
+      "nome": {
+        "pt": "Fechar o Buraco de Minhoca",
+        "en": "Close the Wormhole"
+      },
+      "nivel": 75,
+      "descricao": {
+        "pt": "Leva a outro lugar. E traz de lá também.",
+        "en": "It leads somewhere else. And brings things back, too."
+      },
+      "historia": {
+        "generos": [
+          "scifi",
+          "cosmico"
+        ],
+        "local": [
+          {
+            "pt": "boca do buraco de minhoca",
+            "art": "a",
+            "en": "the mouth of the wormhole"
+          },
+          {
+            "pt": "túnel dobrado",
+            "art": "o",
+            "en": "the folded tunnel"
+          }
+        ],
+        "inimigo": [
+          {
+            "pt": "visitantes do outro lado",
+            "art": "os",
+            "en": "the visitors from the other side"
+          }
+        ]
+      }
+    },
+    {
+      "id": "d_enxame",
+      "nome": {
+        "pt": "Sabotar a Frota do Enxame",
+        "en": "Sabotage the Swarm Fleet"
+      },
+      "nivel": 77,
+      "descricao": {
+        "pt": "Um bilhão de naves, uma mente só. E ela não gosta de você.",
+        "en": "A billion ships, a single mind. And it doesn't like you."
+      },
+      "historia": {
+        "generos": [
+          "scifi",
+          "cosmico"
+        ],
+        "local": [
+          {
+            "pt": "nave-colmeia",
+            "art": "a",
+            "en": "the hive ship"
+          },
+          {
+            "pt": "núcleo da frota",
+            "art": "o",
+            "en": "the fleet core"
+          }
+        ],
+        "inimigo": [
+          {
+            "pt": "enxame",
+            "art": "o",
+            "en": "the swarm"
+          },
+          {
+            "pt": "rainha da colmeia",
+            "art": "a",
+            "en": "the hive queen"
+          }
+        ]
+      }
+    },
+    {
+      "id": "d_acrecao",
+      "nome": {
+        "pt": "Atravessar o Disco de Acreção",
+        "en": "Cross the Accretion Disk"
+      },
+      "nivel": 79,
+      "descricao": {
+        "pt": "É o caminho mais curto. Também é o mais quente.",
+        "en": "It's the shortest way. It's also the hottest."
+      },
+      "historia": {
+        "generos": [
+          "cosmico",
+          "scifi"
+        ],
+        "local": [
+          {
+            "pt": "disco de acreção",
+            "art": "o",
+            "en": "the accretion disk"
+          },
+          {
+            "pt": "beira do horizonte de eventos",
+            "art": "a",
+            "en": "the edge of the event horizon"
+          }
+        ],
+        "inimigo": [
+          {
+            "pt": "buraco negro",
+            "art": "o",
+            "en": "the black hole"
+          },
+          {
+            "pt": "destroços em chamas",
+            "art": "os",
+            "en": "the burning debris"
+          }
+        ]
+      }
+    },
+    {
+      "id": "d_remendo",
+      "nome": {
+        "pt": "Remendar uma Linha do Tempo",
+        "en": "Patch a Timeline"
+      },
+      "nivel": 82,
+      "descricao": {
+        "pt": "Alguém puxou um fio. Agora ontem não para de acontecer.",
+        "en": "Someone pulled a thread. Now yesterday won't stop happening."
+      },
+      "historia": {
+        "generos": [
+          "cosmico"
+        ],
+        "local": [
+          {
+            "pt": "linha do tempo rasgada",
+            "art": "a",
+            "en": "the torn timeline"
+          },
+          {
+            "pt": "dia que se repete",
+            "art": "o",
+            "en": "the day that keeps repeating"
+          }
+        ],
+        "inimigo": [
+          {
+            "pt": "paradoxos",
+            "art": "os",
+            "en": "the paradoxes"
+          }
+        ]
+      }
+    },
+    {
+      "id": "d_duplo",
+      "nome": {
+        "pt": "Expulsar o Duplo de Outro Mundo",
+        "en": "Evict the Double from Another World"
+      },
+      "nivel": 84,
+      "descricao": {
+        "pt": "Ele tem a sua cara. E jura que o falso é você.",
+        "en": "He has your face. And swears you're the fake."
+      },
+      "historia": {
+        "generos": [
+          "cosmico",
+          "scifi"
+        ],
+        "local": [
+          {
+            "pt": "espelho rachado",
+            "art": "o",
+            "en": "the cracked mirror"
+          },
+          {
+            "pt": "casa que era sua",
+            "art": "a",
+            "en": "the house that used to be yours"
+          }
+        ],
+        "inimigo": [
+          {
+            "pt": "duplo",
+            "art": "o",
+            "en": "the double"
+          }
+        ]
+      }
+    },
+    {
+      "id": "d_desaba",
+      "nome": {
+        "pt": "Fugir de um Universo que Desaba",
+        "en": "Escape a Collapsing Universe"
+      },
+      "nivel": 87,
+      "descricao": {
+        "pt": "As estrelas estão caindo. Literalmente.",
+        "en": "The stars are falling. Literally."
+      },
+      "historia": {
+        "generos": [
+          "cosmico"
+        ],
+        "local": [
+          {
+            "pt": "universo em colapso",
+            "art": "o",
+            "en": "the collapsing universe"
+          },
+          {
+            "pt": "última saída",
+            "art": "a",
+            "en": "the last exit"
+          }
+        ],
+        "inimigo": [
+          {
+            "pt": "colapso",
+            "art": "o",
+            "en": "the collapse"
+          },
+          {
+            "pt": "nada que avança",
+            "art": "o",
+            "en": "the advancing nothing"
+          }
+        ]
+      }
+    },
+    {
+      "id": "d_colisao",
+      "nome": {
+        "pt": "Impedir a Colisão de Universos",
+        "en": "Prevent the Universe Collision"
+      },
+      "nivel": 89,
+      "descricao": {
+        "pt": "Dois universos, uma pista só. Nenhum quer dar a preferência.",
+        "en": "Two universes, one lane. Neither wants to yield."
+      },
+      "historia": {
+        "generos": [
+          "cosmico"
+        ],
+        "local": [
+          {
+            "pt": "ponto de impacto",
+            "art": "o",
+            "en": "the point of impact"
+          },
+          {
+            "pt": "fronteira entre universos",
+            "art": "a",
+            "en": "the border between universes"
+          }
+        ],
+        "inimigo": [
+          {
+            "pt": "universo vizinho",
+            "art": "o",
+            "en": "the neighboring universe"
+          },
+          {
+            "pt": "guardas da fronteira",
+            "art": "os",
+            "en": "the border guards"
+          }
+        ]
+      }
+    },
+    {
+      "id": "d_paragrafo",
+      "nome": {
+        "pt": "Reescrever um Parágrafo da Realidade",
+        "en": "Rewrite a Paragraph of Reality"
+      },
+      "nivel": 92,
+      "descricao": {
+        "pt": "Tem um erro de digitação na lei da gravidade.",
+        "en": "There's a typo in the law of gravity."
+      },
+      "historia": {
+        "generos": [
+          "cosmico"
+        ],
+        "local": [
+          {
+            "pt": "parágrafo errado",
+            "art": "o",
+            "en": "the wrong paragraph"
+          },
+          {
+            "pt": "página rasurada",
+            "art": "a",
+            "en": "the scribbled-over page"
+          }
+        ],
+        "inimigo": [
+          {
+            "pt": "erro de digitação",
+            "art": "o",
+            "en": "the typo"
+          },
+          {
+            "pt": "frases soltas",
+            "art": "as",
+            "en": "the loose sentences"
+          }
+        ]
+      }
+    },
+    {
+      "id": "d_margem",
+      "nome": {
+        "pt": "Atravessar a Margem da História",
+        "en": "Cross the Margin of the Story"
+      },
+      "nivel": 94,
+      "descricao": {
+        "pt": "Do lado de lá não tem enredo. Nem chão.",
+        "en": "On the other side there's no plot. No floor, either."
+      },
+      "historia": {
+        "generos": [
+          "cosmico"
+        ],
+        "local": [
+          {
+            "pt": "margem da história",
+            "art": "a",
+            "en": "the margin of the story"
+          },
+          {
+            "pt": "espaço em branco",
+            "art": "o",
+            "en": "the blank space"
+          }
+        ],
+        "inimigo": [
+          {
+            "pt": "rascunhos abandonados",
+            "art": "os",
+            "en": "the abandoned drafts"
+          }
+        ]
+      }
+    },
+    {
+      "id": "d_narrador",
+      "nome": {
+        "pt": "Discutir com o Narrador",
+        "en": "Argue with the Narrator"
+      },
+      "nivel": 97,
+      "descricao": {
+        "pt": "Ele tem a última palavra. Sempre teve.",
+        "en": "He gets the last word. He always has."
+      },
+      "historia": {
+        "generos": [
+          "cosmico"
+        ],
+        "local": [
+          {
+            "pt": "sala do narrador",
+            "art": "a",
+            "en": "the narrator's room"
+          },
+          {
+            "pt": "nota de rodapé",
+            "art": "a",
+            "en": "the footnote"
+          }
+        ],
+        "inimigo": [
+          {
+            "pt": "Narrador",
+            "art": "o",
+            "en": "the Narrator"
+          }
+        ]
+      }
+    },
+    {
+      "id": "d_capitulo",
+      "nome": {
+        "pt": "Sobreviver ao Último Capítulo",
+        "en": "Survive the Last Chapter"
+      },
+      "nivel": 99,
+      "descricao": {
+        "pt": "Ninguém sabe como termina. Nem quem escreveu.",
+        "en": "Nobody knows how it ends. Not even whoever wrote it."
+      },
+      "historia": {
+        "generos": [
+          "cosmico"
+        ],
+        "local": [
+          {
+            "pt": "último capítulo",
+            "art": "o",
+            "en": "the last chapter"
+          },
+          {
+            "pt": "página final",
+            "art": "a",
+            "en": "the final page"
+          }
+        ],
+        "inimigo": [
+          {
+            "pt": "desfecho",
+            "art": "o",
+            "en": "the ending"
+          },
+          {
+            "pt": "ponto final",
+            "art": "o",
+            "en": "the full stop"
+          }
+        ]
+      }
+    }
+  ],
+  "dungeons": [
+    {
+      "id": "dg_esgotos_cidade_velha",
+      "nome": {
+        "pt": "Esgotos da Cidade Velha",
+        "en": "Old Town Sewers"
+      },
+      "dif": 1,
+      "descricao": {
+        "pt": "Tudo o que a cidade joga fora vem parar aqui. Gente inclusive.",
+        "en": "Everything the city throws away ends up here. People included."
+      },
+      "inimigos": [
+        {
+          "pt": "ratos gigantes",
+          "art": "os",
+          "en": "giant rats"
+        },
+        {
+          "pt": "ladrões de beco",
+          "art": "os",
+          "en": "alley thieves"
+        },
+        {
+          "pt": "cães de guarda",
+          "art": "os",
+          "en": "guard dogs"
+        }
+      ],
+      "generos": [
+        "medieval",
+        "moderno"
+      ],
+      "chefe": "b_rei_ratos"
+    },
+    {
+      "id": "dg_floresta_neve_eterna",
+      "nome": {
+        "pt": "Floresta da Neve Eterna",
+        "en": "Forest of Eternal Snow"
+      },
+      "dif": 2,
+      "descricao": {
+        "pt": "A neve nunca derrete. O que fica embaixo dela, também não.",
+        "en": "The snow never melts. Neither does whatever is under it."
+      },
+      "inimigos": [
+        {
+          "pt": "lobos",
+          "art": "os",
+          "en": "wolves"
+        },
+        {
+          "pt": "bandidos da estrada",
+          "art": "os",
+          "en": "highway bandits"
+        },
+        {
+          "pt": "cultistas",
+          "art": "os",
+          "en": "cultists"
+        }
+      ],
+      "generos": [
+        "medieval"
+      ],
+      "chefe": "b_lobo_ancestral"
+    },
+    {
+      "id": "dg_distrito_sindicato",
+      "nome": {
+        "pt": "Distrito do Sindicato",
+        "en": "Syndicate District"
+      },
+      "dif": 3,
+      "descricao": {
+        "pt": "Doze quarteirões, um dono só. Ele não gosta de visitas.",
+        "en": "Twelve blocks, one owner. He doesn't like visitors."
+      },
+      "inimigos": [
+        {
+          "pt": "capangas ciborgues",
+          "art": "os",
+          "en": "cyborg thugs"
+        },
+        {
+          "pt": "drones",
+          "art": "os",
+          "en": "drones"
+        },
+        {
+          "pt": "atiradores",
+          "art": "os",
+          "en": "gunmen"
+        }
+      ],
+      "generos": [
+        "moderno",
+        "scifi"
+      ],
+      "chefe": "b_sindicato"
+    },
+    {
+      "id": "dg_zona_reator",
+      "nome": {
+        "pt": "Zona do Reator",
+        "en": "Reactor Zone"
+      },
+      "dif": 4,
+      "descricao": {
+        "pt": "Evacuada há vinte anos. Nem tudo foi embora.",
+        "en": "Evacuated twenty years ago. Not everything left."
+      },
+      "inimigos": [
+        {
+          "pt": "mutantes",
+          "art": "os",
+          "en": "mutants"
+        },
+        {
+          "pt": "robôs de contenção",
+          "art": "os",
+          "en": "containment robots"
+        },
+        {
+          "pt": "enxames radioativos",
+          "art": "os",
+          "en": "radioactive swarms"
+        }
+      ],
+      "generos": [
+        "scifi",
+        "moderno"
+      ],
+      "chefe": "b_hidra"
+    },
+    {
+      "id": "dg_montanha_partida",
+      "nome": {
+        "pt": "Montanha Partida",
+        "en": "Broken Mountain"
+      },
+      "dif": 5,
+      "descricao": {
+        "pt": "Algo partiu a montanha ao meio. E continua morando lá.",
+        "en": "Something split the mountain in half. And it still lives there."
+      },
+      "inimigos": [
+        {
+          "pt": "serpes",
+          "art": "as",
+          "en": "wyverns"
+        },
+        {
+          "pt": "golens de lava",
+          "art": "os",
+          "en": "lava golems"
+        },
+        {
+          "pt": "cultistas do dragão",
+          "art": "os",
+          "en": "dragon cultists"
+        }
+      ],
+      "generos": [
+        "medieval",
+        "scifi"
+      ],
+      "chefe": "b_dragao"
+    },
+    {
+      "id": "dg_nucleo_mundo",
+      "nome": {
+        "pt": "Núcleo do Mundo",
+        "en": "Core of the World"
+      },
+      "dif": 6,
+      "descricao": {
+        "pt": "Desce até a rocha virar líquido. Depois continua descendo.",
+        "en": "It goes down until the rock turns liquid. Then it keeps going."
+      },
+      "inimigos": [
+        {
+          "pt": "elementais de magma",
+          "art": "os",
+          "en": "magma elementals"
+        },
+        {
+          "pt": "máquinas escavadoras",
+          "art": "as",
+          "en": "digging machines"
+        },
+        {
+          "pt": "titãs menores",
+          "art": "os",
+          "en": "lesser titans"
+        }
+      ],
+      "generos": [
+        "scifi",
+        "medieval"
+      ],
+      "chefe": "b_tita"
+    },
+    {
+      "id": "dg_coroa_estrela_negra",
+      "nome": {
+        "pt": "Coroa da Estrela Negra",
+        "en": "Crown of the Black Star"
+      },
+      "dif": 7,
+      "descricao": {
+        "pt": "Uma estrela que não brilha, cercada de quem prefere assim.",
+        "en": "A star that doesn't shine, surrounded by those who like it that way."
+      },
+      "inimigos": [
+        {
+          "pt": "anjos caídos",
+          "art": "os",
+          "en": "fallen angels"
+        },
+        {
+          "pt": "naves-sentinela",
+          "art": "as",
+          "en": "sentinel ships"
+        },
+        {
+          "pt": "plasma vivo",
+          "art": "o",
+          "en": "living plasma"
+        }
+      ],
+      "generos": [
+        "scifi",
+        "cosmico"
+      ],
+      "chefe": "b_serafim"
+    },
+    {
+      "id": "dg_rastro_devorador",
+      "nome": {
+        "pt": "Rastro do Devorador",
+        "en": "Trail of the Devourer"
+      },
+      "dif": 8,
+      "descricao": {
+        "pt": "Por onde ele passou, as migalhas têm o tamanho de sistemas solares.",
+        "en": "Where it passed, the crumbs are the size of solar systems."
+      },
+      "inimigos": [
+        {
+          "pt": "arautos",
+          "art": "os",
+          "en": "heralds"
+        },
+        {
+          "pt": "enxames estelares",
+          "art": "os",
+          "en": "star swarms"
+        },
+        {
+          "pt": "bocas do vazio",
+          "art": "as",
+          "en": "void maws"
+        }
+      ],
+      "generos": [
+        "cosmico"
+      ],
+      "chefe": "b_devorador"
+    },
+    {
+      "id": "dg_encruzilhada_mundos",
+      "nome": {
+        "pt": "Encruzilhada dos Mundos",
+        "en": "Crossroads of Worlds"
+      },
+      "dif": 9,
+      "descricao": {
+        "pt": "Todo caminho leva a algum lugar. Aqui, leva a todos.",
+        "en": "Every road leads somewhere. Here, they lead everywhere."
+      },
+      "inimigos": [
+        {
+          "pt": "duplos",
+          "art": "os",
+          "en": "doubles"
+        },
+        {
+          "pt": "cavaleiros de outra linha do tempo",
+          "art": "os",
+          "en": "knights from another timeline"
+        },
+        {
+          "pt": "paradoxos",
+          "art": "os",
+          "en": "paradoxes"
+        }
+      ],
+      "generos": [
+        "cosmico"
+      ],
+      "chefe": "b_rei_mundos"
+    },
+    {
+      "id": "dg_ultima_pagina",
+      "nome": {
+        "pt": "A Última Página",
+        "en": "The Last Page"
+      },
+      "dif": 10,
+      "descricao": {
+        "pt": "Depois dela não tem mais nada escrito. Ainda.",
+        "en": "Nothing is written after it. Yet."
+      },
+      "inimigos": [
+        {
+          "pt": "personagens apagados",
+          "art": "os",
+          "en": "erased characters"
+        },
+        {
+          "pt": "rascunhos",
+          "art": "os",
+          "en": "drafts"
+        },
+        {
+          "pt": "própria narrativa",
+          "art": "a",
+          "en": "the narrative itself"
+        }
+      ],
+      "generos": [
+        "cosmico"
+      ],
+      "chefe": "b_leitor"
+    }
+  ],
+  "chefes": [
+    {
+      "id": "b_rei_ratos",
+      "nome": {
+        "pt": "O Rei dos Ratos",
+        "en": "The Rat King"
+      },
+      "dif": 1,
+      "nivel": 10,
+      "descricao": {
+        "pt": "Ninguém sabe quantos ratos ele comanda. Nem ele.",
+        "en": "Nobody knows how many rats he commands. Not even him."
+      },
+      "historia": {
+        "generos": [
+          "medieval",
+          "moderno"
+        ],
+        "local": [
+          {
+            "pt": "trono de lixo",
+            "art": "o",
+            "en": "the garbage throne"
+          },
+          {
+            "pt": "galeria central dos esgotos",
+            "art": "a",
+            "en": "the central sewer chamber"
+          }
+        ],
+        "inimigo": [
+          {
+            "pt": "Rei dos Ratos",
+            "art": "o",
+            "en": "the Rat King"
+          }
+        ]
+      }
+    },
+    {
+      "id": "b_lobo_ancestral",
+      "nome": {
+        "pt": "Lobo Ancestral da Neve",
+        "en": "Ancient Snow Wolf"
+      },
+      "dif": 2,
+      "nivel": 20,
+      "descricao": {
+        "pt": "O Lobo Branco é um dos filhotes dele.",
+        "en": "The White Wolf is one of its pups."
+      },
+      "historia": {
+        "generos": [
+          "medieval"
+        ],
+        "local": [
+          {
+            "pt": "clareira congelada",
+            "art": "a",
+            "en": "the frozen clearing"
+          },
+          {
+            "pt": "covil sob o gelo",
+            "art": "o",
+            "en": "the den under the ice"
+          }
+        ],
+        "inimigo": [
+          {
+            "pt": "Lobo Ancestral",
+            "art": "o",
+            "en": "the Ancient Wolf"
+          }
+        ]
+      }
+    },
+    {
+      "id": "b_sindicato",
+      "nome": {
+        "pt": "O Chefe do Sindicato Ciborgue",
+        "en": "The Cyborg Syndicate Boss"
+      },
+      "dif": 3,
+      "nivel": 30,
+      "descricao": {
+        "pt": "Metade homem, metade máquina, inteiramente dono do bairro.",
+        "en": "Half man, half machine, entirely in charge of the neighborhood."
+      },
+      "historia": {
+        "generos": [
+          "moderno",
+          "scifi"
+        ],
+        "local": [
+          {
+            "pt": "cobertura do sindicato",
+            "art": "a",
+            "en": "the syndicate penthouse"
+          }
+        ],
+        "inimigo": [
+          {
+            "pt": "Chefe do Sindicato",
+            "art": "o",
+            "en": "the Syndicate Boss"
+          }
+        ]
+      }
+    },
+    {
+      "id": "b_hidra",
+      "nome": {
+        "pt": "Hidra do Reator",
+        "en": "Reactor Hydra"
+      },
+      "dif": 4,
+      "nivel": 40,
+      "descricao": {
+        "pt": "Corte uma cabeça e nascem duas. Radioativas.",
+        "en": "Cut off one head and two grow back. Radioactive ones."
+      },
+      "historia": {
+        "generos": [
+          "scifi"
+        ],
+        "local": [
+          {
+            "pt": "piscina de resfriamento",
+            "art": "a",
+            "en": "the cooling pool"
+          },
+          {
+            "pt": "câmara do núcleo",
+            "art": "a",
+            "en": "the core chamber"
+          }
+        ],
+        "inimigo": [
+          {
+            "pt": "Hidra do Reator",
+            "art": "a",
+            "en": "the Reactor Hydra"
+          }
+        ]
+      }
+    },
+    {
+      "id": "b_dragao",
+      "nome": {
+        "pt": "Dragão da Montanha Partida",
+        "en": "Dragon of the Broken Mountain"
+      },
+      "dif": 5,
+      "nivel": 50,
+      "descricao": {
+        "pt": "Foi ele que partiu a montanha. Estava só se espreguiçando.",
+        "en": "It's the one that split the mountain. It was only stretching."
+      },
+      "historia": {
+        "generos": [
+          "medieval"
+        ],
+        "local": [
+          {
+            "pt": "covil no topo",
+            "art": "o",
+            "en": "the lair at the summit"
+          },
+          {
+            "pt": "salão do tesouro",
+            "art": "o",
+            "en": "the treasure hall"
+          }
+        ],
+        "inimigo": [
+          {
+            "pt": "Dragão",
+            "art": "o",
+            "en": "the Dragon"
+          }
+        ]
+      }
+    },
+    {
+      "id": "b_tita",
+      "nome": {
+        "pt": "Titã do Núcleo",
+        "en": "Core Titan"
+      },
+      "dif": 6,
+      "nivel": 60,
+      "descricao": {
+        "pt": "Segura o mundo por dentro. Está pensando em largar.",
+        "en": "It holds the world up from the inside. It's thinking of letting go."
+      },
+      "historia": {
+        "generos": [
+          "scifi",
+          "medieval"
+        ],
+        "local": [
+          {
+            "pt": "centro do planeta",
+            "art": "o",
+            "en": "the center of the planet"
+          }
+        ],
+        "inimigo": [
+          {
+            "pt": "Titã do Núcleo",
+            "art": "o",
+            "en": "the Core Titan"
+          }
+        ]
+      }
+    },
+    {
+      "id": "b_serafim",
+      "nome": {
+        "pt": "Serafim da Estrela Negra",
+        "en": "Seraph of the Black Star"
+      },
+      "dif": 7,
+      "nivel": 70,
+      "descricao": {
+        "pt": "Seis asas, nenhuma luz. Quando canta, estrelas se apagam.",
+        "en": "Six wings, no light. When it sings, stars go out."
+      },
+      "historia": {
+        "generos": [
+          "cosmico",
+          "scifi"
+        ],
+        "local": [
+          {
+            "pt": "trono da estrela negra",
+            "art": "o",
+            "en": "the throne of the black star"
+          }
+        ],
+        "inimigo": [
+          {
+            "pt": "Serafim",
+            "art": "o",
+            "en": "the Seraph"
+          }
+        ]
+      }
+    },
+    {
+      "id": "b_devorador",
+      "nome": {
+        "pt": "O Devorador de Galáxias",
+        "en": "The Galaxy Devourer"
+      },
+      "dif": 8,
+      "nivel": 80,
+      "descricao": {
+        "pt": "Está com fome desde o Big Bang.",
+        "en": "It has been hungry since the Big Bang."
+      },
+      "historia": {
+        "generos": [
+          "cosmico"
+        ],
+        "local": [
+          {
+            "pt": "galáxia pela metade",
+            "art": "a",
+            "en": "the half-eaten galaxy"
+          }
+        ],
+        "inimigo": [
+          {
+            "pt": "Devorador de Galáxias",
+            "art": "o",
+            "en": "the Galaxy Devourer"
+          }
+        ]
+      }
+    },
+    {
+      "id": "b_rei_mundos",
+      "nome": {
+        "pt": "O Rei de Todos os Mundos",
+        "en": "The King of All Worlds"
+      },
+      "dif": 9,
+      "nivel": 90,
+      "descricao": {
+        "pt": "Governa todas as versões de tudo. Inclusive a sua.",
+        "en": "He rules every version of everything. Yours included."
+      },
+      "historia": {
+        "generos": [
+          "cosmico"
+        ],
+        "local": [
+          {
+            "pt": "trono no centro da encruzilhada",
+            "art": "o",
+            "en": "the throne at the heart of the crossroads"
+          }
+        ],
+        "inimigo": [
+          {
+            "pt": "Rei de Todos os Mundos",
+            "art": "o",
+            "en": "the King of All Worlds"
+          }
+        ]
+      }
+    },
+    {
+      "id": "b_leitor",
+      "nome": {
+        "pt": "Aquele que Lê o Mundo",
+        "en": "The One Who Reads the World"
+      },
+      "dif": 10,
+      "nivel": 100,
+      "descricao": {
+        "pt": "Já sabe como isso termina. Leu antes de você.",
+        "en": "It already knows how this ends. It read ahead."
+      },
+      "historia": {
+        "generos": [
+          "cosmico"
+        ],
+        "local": [
+          {
+            "pt": "última linha",
+            "art": "a",
+            "en": "the last line"
+          }
+        ],
+        "inimigo": [
+          {
+            "pt": "Aquele que Lê o Mundo",
+            "art": "",
+            "en": "the One Who Reads the World"
+          }
+        ]
+      }
+    }
+  ],
+  "bicos": [
+    {
+      "id": "m_encomendas",
+      "nome": {
+        "pt": "Entregar Encomendas",
+        "en": "Deliver Parcels"
+      },
+      "descricao": {
+        "pt": "Levar pacotes de um lado a outro do mercado. Ninguém morre carregando caixa.",
+        "en": "Carry parcels from one end of the market to the other. Nobody dies carrying a box."
+      },
+      "historia": {
+        "generos": [
+          "medieval"
+        ],
+        "local": [
+          {
+            "pt": "mercado",
+            "art": "o",
+            "en": "the market"
+          }
+        ],
+        "inimigo": [
+          {
+            "pt": "cliente",
+            "art": "o",
+            "en": "the customer"
+          }
+        ]
+      }
+    },
+    {
+      "id": "m_estoque",
+      "nome": {
+        "pt": "Organizar o Estoque",
+        "en": "Sort the Stockroom"
+      },
+      "descricao": {
+        "pt": "O ferreiro perdeu a conta dos lingotes. De novo.",
+        "en": "The blacksmith lost count of the ingots. Again."
+      },
+      "historia": {
+        "generos": [
+          "medieval"
+        ],
+        "local": [
+          {
+            "pt": "estoque",
+            "art": "o",
+            "en": "the stockroom"
+          },
+          {
+            "pt": "forja",
+            "art": "a",
+            "en": "the forge"
+          }
+        ],
+        "inimigo": [
+          {
+            "pt": "cliente",
+            "art": "o",
+            "en": "the customer"
+          },
+          {
+            "pt": "ferreiro",
+            "art": "o",
+            "en": "the blacksmith"
+          }
+        ]
+      }
+    },
+    {
+      "id": "m_taverna",
+      "nome": {
+        "pt": "Ajudar na Taverna",
+        "en": "Help at the Tavern"
+      },
+      "descricao": {
+        "pt": "Servir, limpar, ouvir histórias repetidas. Pagam em moeda e paciência.",
+        "en": "Serve, clean, hear the same stories again. Paid in coin and patience."
+      },
+      "historia": {
+        "generos": [
+          "medieval"
+        ],
+        "local": [
+          {
+            "pt": "taverna",
+            "art": "a",
+            "en": "the tavern"
+          }
+        ],
+        "inimigo": [
+          {
+            "pt": "cliente",
+            "art": "o",
+            "en": "the customer"
+          },
+          {
+            "pt": "bêbado de sempre",
+            "art": "o",
+            "en": "the usual drunk"
+          }
+        ]
+      }
+    },
+    {
+      "id": "m_estabulo",
+      "nome": {
+        "pt": "Cuidar dos Cavalos",
+        "en": "Tend the Horses"
+      },
+      "descricao": {
+        "pt": "Alimentar, escovar, fingir que não pisou onde não devia.",
+        "en": "Feed, brush, pretend you didn't step where you shouldn't have."
+      },
+      "historia": {
+        "generos": [
+          "medieval"
+        ],
+        "local": [
+          {
+            "pt": "estábulo",
+            "art": "o",
+            "en": "the stable"
+          }
+        ],
+        "inimigo": [
+          {
+            "pt": "cliente",
+            "art": "o",
+            "en": "the customer"
+          },
+          {
+            "pt": "cavalo que não queria sair",
+            "art": "o",
+            "en": "the horse that wouldn't come out"
+          }
+        ]
+      }
+    }
+  ]
+}

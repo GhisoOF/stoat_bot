@@ -1,5 +1,12 @@
 # RPG — Especificação
 
+> ⚠️ **Substituída em parte pelo RPG v4 (9 out 2026).** Combate (armas com dano
+> e escala, duas mãos, escudo, implantes), níveis 1–100 com progresso dentro do
+> nível, companheiros que sobem com o dono, contratos, dungeons com tesouro,
+> chefes, missões especiais e o evolucionador estão em
+> [`docs/rpg/`](docs/rpg/README.md). O que segue vale para o que o v4 não mudou
+> (atributos, mercado, câmbio, P).
+
 > Especificação do sistema de RPG do bot (personagem, mercado e moedas do jogo). Descreve **o que será
 > construído**. Números marcados como *inicial* vão para configuração e se
 > ajustam jogando.

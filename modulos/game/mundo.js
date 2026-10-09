@@ -14,6 +14,10 @@
 import * as db from "../core/db.js";
 
 export const MUNDO = "mundo";
+// O personagem descartável do `&game admin teste`: luta de verdade, mas não mexe
+// na moeda do mundo (banco, tesouros) nem resgata companheiro de ninguém.
+export const SANDBOX = "sandbox:";
+export const ehSandbox = (uid) => String(uid ?? "").startsWith(SANDBOX);
 
 // As duas moedas. Nome e símbolo podem mudar (&game admin moeda set); o tipo,
 // não — é o que define o mundo.

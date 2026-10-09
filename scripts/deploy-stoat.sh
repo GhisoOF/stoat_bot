@@ -12,11 +12,24 @@
 #
 #  Usar:
 #     ~/deploy-stoat.sh ~/Downloads/stoat_bot-publico.zip "mensagem do commit"
+#
+#  Variáveis: REPO (o checkout), FORCAR=1 (sobe mesmo com o main à frente
+#  da base do zip — desfaz esses commits!), TESTAR=1 (roda os testes antes
+#  do commit; precisa de node_modules no checkout).
+#
+#  Depois do push, no MiniPC: ~/atualizar-minipc.sh (backup do banco, pull,
+#  build e o log da subida).
 # ══════════════════════════════════════════════════════════
 
 set -euo pipefail
 
-REPO="${REPO:-$HOME/Downloads/github}"
+# o checkout mudou de lugar em 23 set 2026 (a pasta antiga em Downloads foi apagada)
+if [ -z "${REPO:-}" ]; then
+  for c in "$HOME/Desktop/GhisoOF/Judy/Stoat_Bot" "$HOME/Downloads/github"; do
+    [ -d "$c/.git" ] && { REPO="$c"; break; }
+  done
+fi
+REPO="${REPO:-$HOME/Desktop/GhisoOF/Judy/Stoat_Bot}"
 TOKEN_BACKUP="${TOKEN_BACKUP:-$HOME/judy-github.env}"
 IA_ENV_BACKUP="${IA_ENV_BACKUP:-$HOME/judy-ia.env}"
 VOZ_ENV_BACKUP="${VOZ_ENV_BACKUP:-$HOME/judy-voz.env}"
@@ -48,6 +61,43 @@ case "$ZIP" in
              ZIP="$HOME/$(basename "$ZIP")" ;;
 esac
 
+# ── 0. O checkout tem de estar no main, limpo e em dia com o GitHub ──
+cd "$REPO"
+RAMO="$(git rev-parse --abbrev-ref HEAD)"
+[ "$RAMO" = "main" ] || erro "o checkout está no ramo '$RAMO' — volte para o main (git checkout main)"
+if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
+  git status --short --untracked-files=no
+  erro "há mudanças locais não commitadas no checkout — commite ou descarte antes do deploy"
+fi
+info "atualizando o main com o GitHub"
+git pull --ff-only -q || erro "git pull --ff-only falhou — o main local divergiu do GitHub; resolva à mão"
+okay "main em $(git rev-parse --short HEAD)"
+
+# ── 0b. O zip foi feito sobre o main de agora? ──
+# O zip substitui os arquivos inteiros: se o main recebeu commits depois da
+# base do zip, eles seriam DESFEITOS em silêncio. O zip do Claude traz a base
+# no comentário ("stoat_bot base=<commit>"); zip sem isso pede confirmação.
+BASE="$(unzip -z "$ZIP" 2>/dev/null | grep -oE 'base=[0-9a-f]{7,40}' | head -1 | cut -d= -f2 || true)"
+if [ -n "$BASE" ]; then
+  if ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
+    avis "a base do zip ($BASE) não existe neste checkout — confira se o zip é deste repositório"
+  elif [ "$(git rev-parse "$BASE")" != "$(git rev-parse HEAD)" ]; then
+    DEPOIS="$(git rev-list --count "$BASE"..HEAD)"
+    if [ "$DEPOIS" -gt 0 ]; then
+      printf '\n\033[31m✗ o zip foi feito sobre %s, mas o main tem %s commit(s) depois dele:\033[0m\n' "$(git rev-parse --short "$BASE")" "$DEPOIS"
+      git log --oneline "$BASE"..HEAD | head -20
+      if [ "${FORCAR:-0}" != "1" ]; then
+        printf '\nSubir este zip DESFARIA esses commits. Peça um zip novo (sobre o main de agora)\nou rode com FORCAR=1 se tem certeza.\n'
+        exit 1
+      fi
+      avis "FORCAR=1 — seguindo mesmo assim"
+    fi
+  fi
+  okay "zip feito sobre $(git rev-parse --short "$BASE" 2>/dev/null || echo "$BASE")"
+else
+  avis "o zip não diz sobre qual commit foi feito — confira que ele já inclui o último commit do main ($(git log -1 --format='%h %s' | cut -c1-70))"
+fi
+
 # ── 1. Abrir o pacote fora do repositório ──
 info "abrindo o pacote em $TMP"
 unzip -q "$ZIP" -d "$TMP"
@@ -62,15 +112,15 @@ fi
 okay "pacote válido: $(find "$FONTE" -type f | wc -l) arquivo(s)"
 
 # ── 2. Guardar os .env que o passo 3 pode levar junto ──
-cd "$REPO"
 [ -f .env ]             && cp .env "$ENV_BACKUP"                 && okay ".env da raiz guardado em $ENV_BACKUP"
 [ -f ia-servico/.env ]  && cp ia-servico/.env "$IA_ENV_BACKUP"   && okay "ia-servico/.env guardado em $IA_ENV_BACKUP"
 [ -f voz-servico/.env ] && cp voz-servico/.env "$VOZ_ENV_BACKUP" && okay "voz-servico/.env guardado em $VOZ_ENV_BACKUP"
 
 # ── 3. Substituir os diretórios versionados ──
 info "removendo as versões antigas dos módulos"
-git rm -rq --ignore-unmatch modulos scripts ia-servico 2>/dev/null || true
-rm -rf modulos scripts ia-servico
+# (docs/ também: um documento removido no zip tem de sumir do repositório)
+git rm -rq --ignore-unmatch modulos scripts ia-servico docs 2>/dev/null || true
+rm -rf modulos scripts ia-servico docs
 
 info "copiando os arquivos novos"
 cp -a "$FONTE"/. "$REPO"/
@@ -78,8 +128,10 @@ cp -a "$FONTE"/. "$REPO"/
 # Aposentados do layout antigo: se um zip velho (ou sobra local) os trouxer
 # de volta, saem aqui. Um deploy não pode ressuscitar o que foi removido.
 info "varrendo arquivos aposentados"
+# (modulos/moderacao/servidores.js NÃO: ele voltou — o main.js importa o
+#  &servidores dele, e apagá-lo derrubava o bot na subida)
 rm -f teste-radar.mjs docker-compose.image.yml \
-      modulos/ferramentas/radar.js modulos/moderacao/servidores.js \
+      modulos/ferramentas/radar.js \
       ia-servico/Dockerfile ia-servico/docker-compose.yml \
       ia-servico/docker-compose.example.yml
 # Lixo que não pode ir para um repositório público:
@@ -120,7 +172,11 @@ fi
 # ── 4c. Dependências do serviço nativo que sobrou (a voz) ──
 # O ia-servico roda DENTRO do container do bot; as dependências dele vão na
 # imagem, o npm local não interessa mais. Só a voz continua nativa (OpenRC).
-if [ -f voz-servico/package.json ] && [ ! -d voz-servico/node_modules ]; then
+# Só para quem ainda roda a voz nativa (judy-voz no OpenRC): com a voz
+# embutida no container (VOZ_ATIVA=1), o npm install aqui só mexia no
+# package-lock e o mudava no commit.
+if [ -f voz-servico/package.json ] && [ ! -d voz-servico/node_modules ] \
+   && command -v rc-service >/dev/null 2>&1 && rc-service judy-voz status >/dev/null 2>&1; then
   info "instalando dependências de voz-servico"
   (cd voz-servico && npm install --silent) \
     && okay "voz-servico pronto" \
@@ -169,6 +225,17 @@ if [ -n "$SUSPEITO" ]; then
 fi
 okay "nenhum segredo ou artefato no commit"
 
+# ── 5b. Testes (opcional: TESTAR=1) ──
+if [ "${TESTAR:-0}" = "1" ]; then
+  if [ -d node_modules ]; then
+    info "rodando os testes (node testes.mjs -j 4)"
+    node testes.mjs -j 4 || { git reset -q; erro "testes falharam — nada foi enviado"; }
+    okay "testes verdes"
+  else
+    avis "TESTAR=1, mas não há node_modules no checkout (rode npm ci uma vez) — pulando os testes"
+  fi
+fi
+
 echo
 git status --short
 echo
@@ -194,7 +261,14 @@ okay "enviado: $MSG"
 rm -f "$ZIP"
 okay "zip removido: $(basename "$ZIP")"
 
+# ── 9. O próprio deploy mudou? ──
+for s in deploy-stoat.sh atualizar-minipc.sh; do
+  if [ -f "scripts/$s" ] && ! cmp -s "scripts/$s" "$HOME/$s" 2>/dev/null; then
+    avis "scripts/$s mudou no repositório — atualize a cópia: cp \"$REPO/scripts/$s\" ~/$s && chmod +x ~/$s"
+  fi
+done
+
 echo
 info "Actions: https://github.com/GhisoOF/stoat_bot/actions"
-info "subir na máquina:  cd $REPO && docker compose up -d --build"
-info "ou no Portainer:   Pull and redeploy do stack stoat-bot (e APAGUE o stack judy-ia antigo)"
+info "no MiniPC:  ssh void@gmktec.tailaeddbe.ts.net '~/atualizar-minipc.sh'"
+info "            (backup do banco → git pull → docker compose up -d --build → log da subida)"

@@ -6395,7 +6395,8 @@ await t("só o dono do bot mexe nas moedas do mundo", async () => {
 });
 
 await t("o RPG não tem nada chamado \"economia\" (o nome é da moeda do servidor, &economia)", () => {
-  const arquivos = [...fs.readdirSync("./modulos/game").map((f) => `./modulos/game/${f}`), "./DESIGN-rpg.md", "./GUIA-moedas.md"];
+  // (v4: modulos/game/conteudo/ é uma pasta — entra o que tem dentro dela também)
+  const arquivos = [...fs.readdirSync("./modulos/game", { recursive: true }).map((f) => `./modulos/game/${f}`).filter((f) => fs.statSync(f).isFile()), "./DESIGN-rpg.md", "./GUIA-moedas.md"];
   for (const a of arquivos) assert.doesNotMatch(fs.readFileSync(a, "utf8"), /econom/i, a);
   assert.ok(!fs.existsSync("./modulos/game/economia.js") && !fs.existsSync("./DESIGN-rpg-economia.md"));
 });
@@ -8908,6 +8909,7 @@ const say = async (t) => {
 };
 await say("&idioma en");
 const COMANDOS = ["&game criar Test", "&game", "&game missao", "&game loja", "&game catalogo comum", "&game magias", "&game recrutas",
+  "&game contratos 3", "&game dungeons", "&game chefes", "&game especiais", "&game classe", "&game itens", "&game catalogo implante", "&game evoluir",
   "&game carteira", "&game comprar Simple Dagger", "&game top", "&game admin moeda", "&economia", "&economia minerar", "&economia loja",
   "&ticket", "&ticket categorias", "&debug", "&config", "&info", "&silenciar", "&tts", "&tts estado", "&musica", "&banglobal", "&automod status",
   "&xp", "&staff", "&log", "&rss", "&fuso", "&repete", "&help"];
@@ -8924,8 +8926,8 @@ for (const cmd of COMANDOS) {
 ok(!ruins.length, `${COMANDOS.length} comandos em inglês sem português (incluindo o catálogo do RPG)`, ruins.slice(0, 4).join(" | "));
 ok(!mudos.length, "todo comando responde alguma coisa (o &repete sem texto ficava mudo)", mudos.join(", "));
 
-env.length = 0; await say("&game missao");
-ok(env.some((p) => /Descend the Bottomless Well/.test(p.embeds?.[0]?.description ?? "")), "★ missão traduzida: \"Descer ao Poço sem Fundo\" → \"Descend the Bottomless Well\"");
+env.length = 0; await say("&game contratos 3");
+ok(env.some((p) => /Descend the Bottomless Well/.test(p.embeds?.[0]?.description ?? "")), "★ missão traduzida: \"Descer ao Poço sem Fundo\" → \"Descend the Bottomless Well\" (v4: contrato da dificuldade 3)");
 env.length = 0; await say("&game comprar Simple Dagger");
 ok(env.some((p) => /Simple Dagger/.test(p.embeds?.[0]?.description ?? "") && !/n[ãa]o (achei|existe)|unknown|not found/i.test(p.embeds?.[0]?.description ?? "")), "★ o nome em inglês funciona no comando (\"buy Simple Dagger\" acha a Adaga Simples)");
 
@@ -9489,25 +9491,25 @@ ok(/^🎭|Isso apaga/.test(await jogar("RUI", "resetar")) && !!db.getPersonagem(
 console.log("\n── co-op de dungeon ──");
 for (const u of ["ANA", "BIA", "CAU", "DUD", "EVA"]) await jogar(u, `criar ${u}`);
 t = await jogar("ANA", "coop abrir entregar encomendas");
-ok(/missões de dungeon/.test(t), "missão de mercado não vira co-op (é solo)");
+ok(/solo/.test(t), "bico (sem risco) não vira co-op (é solo)");
 t = await jogar("ANA", "coop abrir cacar o lobo branco");
 ok(/Grupo para Caçar o Lobo Branco/.test(t) && /1\/4/.test(t), "★ abre o chamado (sem acento também acha a missão)");
 t = await jogar("BIA", "coop partir");
 ok(/Só quem abriu/.test(t), "só quem abriu decide partir");
 await jogar("BIA", "coop entrar"); await jogar("CAU", "coop entrar");
 const r0 = Math.random; Math.random = () => 0;   // tudo dá certo
-let antes = db.getPersonagem(MUNDO, "ANA").xp;
+const antes = db.getPersonagem(MUNDO, "ANA");
 t = await jogar("DUD", "coop entrar");
 Math.random = r0;
-ok(/Missão do grupo cumprida/.test(t) && /4 aventureiro/.test(t), "★ com 4, parte sozinho — um desfecho para o grupo", t);
+ok(/Vitória/.test(t) && /4 aventureiro/.test(t), "★ com 4, parte sozinho — um desfecho para o grupo", t);
 ok(["ANA", "BIA", "CAU", "DUD"].every((u) => t.includes(`<@${u}>`)), "  → e cada um aparece com o seu resultado");
-const xpAna = db.getPersonagem(MUNDO, "ANA").xp - antes;
-ok(/\+\d+ XP/.test(t) && xpAna > 0, "  → XP para cada um");
+const depoisAna = db.getPersonagem(MUNDO, "ANA");
+ok(/de nível|nível \d+!/.test(t) && (depoisAna.nivel > antes.nivel || depoisAna.progresso > antes.progresso), "  → progresso para cada um (a força da missão, igual para todos — D6)");
 t = await jogar("EVA", "coop entrar");
 ok(/Nenhum grupo aberto/.test(t), "depois de partir, o chamado fecha");
 t = await jogar("EVA", "coop abrir cacar o lobo branco");
 await jogar("ANA", "coop entrar");
-ok(/espera desta missão|já|aventureiro|Grupo/.test(ult?.description ?? "") , "quem acabou de ir respeita a espera da missão");
+ok(/na espera|espera desta missão|aventureiro|Grupo/.test(ult?.description ?? "") , "quem acabou de ir respeita a espera da missão");
 t = await jogar("EVA", "coop cancelar");
 ok(/cancelado/.test(t), "quem abriu pode cancelar");
 console.log(`\nCO-OP E RESPEC: ${pass} ok, ${fail} falha(s)`);
@@ -9584,27 +9586,31 @@ const r = MERC.converter(1000, o, c);
 ok(Number.isInteger(r.recebe) && r.gasta <= 1000 && MERC.converter(r.gasta, o, c).recebe === r.recebe, "o banco usa só o que as unidades inteiras custam");
 ok(MERC.custoEm(21, o, c) === 1 && MERC.precoDeRecompra(21, 0) === Math.floor(MERC.precoDeRecompra(21, 0)), "preço em outra moeda arredonda para cima; venda ao mercado é inteira");
 
-console.log("\n── 5. missão abaixo do seu nível é garantida ──");
-const attr = { forca: 10, destreza: 10, resistencia: 12, agilidade: 10, vida: 11, mana: 11, inteligencia: 26, sorte: 25, carisma: 15 };   // a ficha do print
-const ratos = MISS.MISSOES.find((m) => m.nivel === 2), lobo = MISS.MISSOES.find((m) => m.nivel === 6);
-const pr = MISS.previsao(attr, ratos, [], 0, 19), pl = MISS.previsao(attr, lobo, [], 0, 19);
-ok(pr.exito * pr.sobrevivencia === 1 && pl.exito * pl.sobrevivencia === 1, "★ nível 19: Ratos (nv 2) e Lobo Branco (nv 6) garantidos — antes 91% e 24%");
-const p14 = MISS.previsao(attr, MISS.MISSOES.find((m) => m.nivel === 14), [], 0, 19);
-ok(p14.exito > 0.5 && p14.exito < 1, "  → a de nível 14 (5 de folga) fica bem mais fácil, mas não certa");
-ok(MISS.previsao(attr, ratos, [], 0, null).exito < 1, "  → sem nível informado, nada muda (simulações antigas)");
-db.salvarPersonagem(MUNDO, "ANA", { nivel: 19 });
-t = await jogar("ANA", "missao");
-ok(/garantida/.test(t), "a lista de missões mostra \"garantida\"");
+console.log("\n── 5. missão bem abaixo da sua força é garantida (v4: pela FORÇA, nunca pelo nível — D26) ──");
+const R = await import("./modulos/game/regras.js");
+const forte = R.ref(20), fraca = R.missao(2);
+const pv = R.preverLuta(forte.membros, forte.magias, { ...fraca, base: R.BASE.normal });
+ok(pv.exito === 1 && pv.sobrevivencia === 1, "★ a party do nível 20 numa missão do nível 2: garantida (3× a força para a qual ela foi feita)");
+const justa = R.preverLuta(forte.membros, forte.magias, { ...R.missao(20), base: R.BASE.normal });
+ok(Math.abs(justa.exito - 0.40) < 0.06 && Math.abs(justa.sobrevivencia - 0.70) < 0.06, "  → e a do próprio nível continua 40% / 70% (sem a sinergia, que é por cima)", `${justa.exito} / ${justa.sobrevivencia}`);
+const semNada = R.preverLuta([{ attr: Object.fromEntries(R.ATR.map((a) => [a, 1])), nivel: 20 }], [], { ...fraca, base: R.BASE.normal });
+ok(semNada.exito < 0.5, "  → o nível sozinho não garante nada: um nível 20 sem força nenhuma não leva a do nível 2");
+db.salvarPersonagem(MUNDO, "ANA", { nivel: 19, ...Object.fromEntries(R.ATR.map((a) => [a, 400])) });
+t = await jogar("ANA", "contratos 1");
+ok(/garantida/.test(t), "a lista de contratos mostra \"garantida\" quando a força sobra");
 
 console.log("\n── o pente fino ──");
 ok(protegerMarcadores("`&game pontos <atributo> [quantos]`") === "`&game pontos ‹atributo› [quantos]`", "★ \"<parâmetro>\" vira ‹parâmetro› (o Stoat escondia — \"&game pontos [quantos]\")");
 ok(protegerMarcadores("<@01KHBPN31QT1THM1A0CEM8JA91> <#01KHBPN31QT1THM1A0CEM8JA91> [x](<https://a.com>) a < b > c") === "<@01KHBPN31QT1THM1A0CEM8JA91> <#01KHBPN31QT1THM1A0CEM8JA91> [x](<https://a.com>) a < b > c", "  → menções, links e comparações ficam como estão");
-db.salvarMoeda(MUNDO, "ouro", { dungeon: 5000 });
+// (v4, D8: o pote da dungeon virou o tesouro de cada dungeon — que paga quem vence lá)
+const dg = [...MISS.DUNGEONS.values()][0];
+db.salvarDungeon(dg.id, { ouro: 50000, cristal: 500, renovadoEm: Date.now() });
+db.salvarPersonagem(MUNDO, "ANA", { nivel: 30, ultimaMissao: 0, recuperandoAte: 0 });
 const antes = db.getSaldo(MUNDO, "ANA", "ouro");
-const r0 = Math.random; Math.random = () => 0.999;   // sem loot, mas vence (folga garante)
-await jogar("ANA", "missao limpar os ratos");
+const r0 = Math.random; Math.random = () => 0.001;   // vence
+await jogar("ANA", `dungeon ${dg.nome}`);
 Math.random = r0;
-ok(db.getMoeda(MUNDO, "ouro").dungeon < 5000 && db.getSaldo(MUNDO, "ANA", "ouro") > antes, "★ vencer uma missão de dungeon paga uma fatia do pote (antes ele só enchia)");
+ok(db.getDungeon(dg.id).ouro < 50000 && db.getSaldo(MUNDO, "ANA", "ouro") > antes, "★ vencer na dungeon paga do tesouro dela (o pote de antes só enchia)");
 
 console.log(`\nJOGO 4/10: ${pass} ok, ${fail} falha(s)`);
 process.exit(fail ? 1 : 0);
@@ -9633,6 +9639,8 @@ const jogar = async (txt) => {
   return `${ult?.title}\n${ult?.description}`;
 };
 await jogar("criar Ghiso");
+// (v4: o kit inicial traz dois companheiros — aqui o teste quer começar com um só)
+for (const f of db.listarFollowersDe(MUNDO, "GH")) db.dispensarFollower(f.id);
 const merc = db.acharFollowerCatalogo("Mercenário Novato");
 db.recrutarFollower(MUNDO, "GH", merc.id, 1);
 const ehFicha = (t) => /Mercenário Novato/.test(t) && !/Não é um dos seus|Qual companheiro/.test(t);
@@ -9820,6 +9828,260 @@ t = await cmd("&help warn");
 ok(/ManageMessages/.test(t) && /menção, ID ou nome/.test(t) && !/KickMembers/.test(t), "&help warn: permissão certa e o alvo por menção/ID/nome", t);
 
 console.log(`\nWARN JUSTO: ${pass} ok, ${fail} falha(s)`);
+process.exit(fail ? 1 : 0);
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+// rpg-v4  (o RPG v4 — docs/rpg/PLANO-RPG-CONTEUDO.md, D1–D28)
+// ════════════════════════════════════════════════════════════════════════════
+// As fórmulas (regras.js) batem com o script de balanceamento; o jogo de verdade
+// (banco, comandos) segue as fórmulas: chance-base, progresso, migração, folga e
+// perigo, quem paga, arma única e escudo, implantes, evolucionador, especial e
+// chefe uma vez por pessoa, contrato e pergaminho, e a história.
+SUITES["rpg-v4"] = async () => {
+const fs = (await import("node:fs")).default;
+process.env.DB_PATH = "/tmp/rpgv4.db"; process.env.CONFIG_PATH = "/tmp/rpgv4.json";
+for (const f of ["/tmp/rpgv4.db", "/tmp/rpgv4.db-wal", "/tmp/rpgv4.db-shm", "/tmp/rpgv4.json"]) fs.rmSync(f, { force: true });
+const db = await import("./modulos/core/db.js"); db.abrirBanco(process.env.DB_PATH);
+const game = await import("./modulos/game/game.js");
+const R = await import("./modulos/game/regras.js");
+const CB = await import("./modulos/game/combate.js");
+const MISS = await import("./modulos/game/missoes.js");
+const AV = await import("./modulos/game/aventura.js");
+const TS = await import("./modulos/game/tesouro.js");
+const EV = await import("./modulos/game/evolucionador.js");
+const H = await import("./modulos/game/historia.js");
+const MIG = await import("./modulos/game/migracao.js");
+const { ITENS, HISTORIAS } = await import("./modulos/game/conteudo.js");
+const { MUNDO } = await import("./modulos/game/mundo.js");
+const q = [console.log, console.info, console.warn]; console.log = console.info = console.warn = () => {};
+game.iniciarCatalogo();
+[console.log, console.info, console.warn] = q;
+let pass = 0, fail = 0;
+const ok = (cond, msg, extra = "") => { cond ? pass++ : fail++; console.log(`${cond ? "✅" : "❌"} ${msg}${!cond && extra ? `\n     ${extra}` : ""}`); };
+const perto = (a, b, tol) => Math.abs(a - b) <= tol;
+let ult = null;
+const jogar = async (uid, txt, lang = "pt") => {
+  const ctx = { serverId: "S", PREFIXO: "&", COR: { erro: 1, aviso: 2, sucesso: 3, info: 4, mod: 5 }, config: { language: lang },
+    sendEmbed: async (_c, e) => { ult = e; return { id: "m", react: async () => {} }; }, getServer: async () => ({ id: "S", channels: [] }), ehSuperAdmin: () => false, membroTemPermissao: () => true };
+  await game.cmdGame({ authorId: uid, author: { username: uid }, channel: { id: "C" }, channelId: "C", mentionIds: [] }, txt.split(" "), ctx);
+  return `${ult?.title}\n${ult?.description}`;
+};
+const descansar = (uid) => {
+  db.salvarPersonagem(MUNDO, uid, { ultimaMissao: 0, recuperandoAte: 0 });
+  for (const f of db.listarFollowersDe(MUNDO, uid)) db.salvarFollower(f.id, { energia: 5, energiaEm: Date.now() });
+};
+const sempre = (x) => () => x;
+
+console.log("\n── 1. a party de referência tem a chance-base (D3) ──");
+for (const n of [1, 10, 37, 73, 100]) {
+  const p = R.ref(n), m = R.missao(n);
+  const pv = R.preverLuta(p.membros, p.magias, { ...m, base: R.BASE.normal });
+  ok(perto(pv.exito, 0.40, 0.06) && perto(pv.sobrevivencia, 0.70, 0.06), `nível ${n}: ~40% / 70%`, `${pv.exito.toFixed(3)} / ${pv.sobrevivencia.toFixed(3)}`);
+}
+const ne = 50, pe = R.ref(ne);
+const esp = R.preverLuta(pe.membros, pe.magias, { ...R.missao(ne, R.BASE.especial), base: R.BASE.especial });
+ok(perto(esp.exito, 0.30, 0.06) && perto(esp.sobrevivencia, 0.60, 0.06), "especial: ~30% / 60%", `${esp.exito.toFixed(3)} / ${esp.sobrevivencia.toFixed(3)}`);
+
+console.log("\n── 2. no banco: personagem novo, com o kit inicial ──");
+let t = await jogar("ANA", "criar Ana");
+const party0 = CB.partyDe(MUNDO, "ANA");
+ok(party0.companheiros.length === 2 && party0.jogador.maos.length === 1, "★ o kit inicial: arma, armaduras, acessórios e dois companheiros na party");
+ok(party0.jogador.maos[0].modo === "2m", "  → a arma sozinha vai nas duas mãos");
+const pv1 = CB.prever([party0], { ...R.missao(1), base: R.BASE.normal });
+ok(pv1.exito > 0.2 && pv1.exito < 0.6 && pv1.sobrevivencia > 0.5, "  → uma missão do nível 1 fica perto da chance-base (não 5%)", `${pv1.exito.toFixed(2)} / ${pv1.sobrevivencia.toFixed(2)}`);
+
+console.log("\n── 3. progresso: um êxito no próprio nível vale 80% de nível (D11) ──");
+for (const n of [1, 20, 60]) {
+  const s = R.subirForca(n, 0, R.missao(n).poder);
+  ok(s.nivel === n && perto(s.progresso, 0.8, 0.001), `nível ${n}: +80%`, JSON.stringify(s));
+}
+const dois = R.subirForca(5, 0.5, R.missao(5).poder);
+ok(dois.nivel === 6 && dois.progresso > 0 && dois.progresso < 0.5, "  → o que sobra passa para o nível seguinte");
+
+console.log("\n── 4. migração (D13) ──");
+const m22 = MIG.migrarPersonagem({ nivel: 22, xp: Math.round(100 * Math.pow(1.5, 21) / 2), pontos: 0, inteligencia: 30, sorte: 10, forca: 20 });
+ok(m22.nivel === 43 && perto(m22.progresso, 0.5, 0.01), "★ nível 22 com meia barra vira 43 com meia barra", JSON.stringify(m22).slice(0, 120));
+ok(m22.pontos > 0 && m22.forca > 20, "  → ganha os pontos dos níveis novos e a base sobe");
+db.criarPersonagem(MUNDO, "VELHO", "Velho");
+db.salvarPersonagem(MUNDO, "VELHO", { nivel: 5, xp: 0 });
+db.getDb().prepare("INSERT OR REPLACE INTO rpg_equipado (serverId, userId, slot, itemId) VALUES (?, ?, 'arma', 'g_espada_ferro')").run(MUNDO, "VELHO");
+db.gravarConfig("__rpg_v4__", { versao: 0 });
+const feito = MIG.migrarParaV4({ log: () => {} });
+ok(feito && db.getPersonagem(MUNDO, "VELHO").nivel === 9, "o personagem antigo (nível 5) vira nível 9");
+ok(db.getEquipado(MUNDO, "VELHO").mao1?.id === "g_espada_ferro", "  → a arma vai para a mão principal");
+ok(MIG.migrarParaV4({ log: () => {} }) === null, "  → roda uma vez só");
+ok(db.getPersonagem(MUNDO, "ANA").nivel === 2 - 1 || db.getPersonagem(MUNDO, "ANA").nivel === 1, "  → (nível 1 continua 1)");
+
+console.log("\n── 5. folga pela força e perigo (D26) ──");
+const r20 = R.ref(20);
+const pvN = R.preverLuta(r20.membros, r20.magias, { ...R.missao(20), base: R.BASE.normal, perigo: "normal" });
+const pvB = R.preverLuta(r20.membros, r20.magias, { ...R.missao(20), base: R.BASE.normal, perigo: "baixo" });
+const pvA = R.preverLuta(r20.membros, r20.magias, { ...R.missao(20), base: R.BASE.normal, perigo: "alto" });
+ok(pvB.sobrevivencia > pvN.sobrevivencia && pvN.sobrevivencia > pvA.sobrevivencia && pvB.exito === pvN.exito, "perigo mexe só na sobrevivência: baixo > normal > alto");
+ok(R.PERIGO.baixo.recompensa < 1 && R.PERIGO.alto.recompensa > 1, "  → e paga um pouco menos / mais");
+ok(R.chanceComFolga(3, 1, 0.5) === 1 && R.chanceComFolga(1, 1, 0.5) === 0.5, "com 3× a força, garantido; com a força exata, a base");
+
+console.log("\n── 6. quem paga (D8) ──");
+const ouro = db.getMoeda(MUNDO, "ouro");
+db.salvarMoeda(MUNDO, "ouro", { mercado: 1_000_000 });
+const s0 = db.getSaldo(MUNDO, "ANA", "ouro");
+const pago = TS.pagarDoBanco("ANA", 10, { cristal: false });
+ok(pago.ouro > 0 && db.getMoeda(MUNDO, "ouro").mercado === 1_000_000 - pago.ouro && db.getSaldo(MUNDO, "ANA", "ouro") === s0 + pago.ouro, "★ o contrato sai do banco: o que um ganha, o banco perde");
+db.salvarMoeda(MUNDO, "ouro", { mercado: 0 });
+ok(TS.pagarDoBanco("ANA", 10, { cristal: false }).ouro === 0, "  → banco vazio não paga (não cria moeda)");
+ok(TS.npcRecebe("ouro", 100) === 50 && db.getMoeda(MUNDO, "ouro").mercado === 50, "  → metade do que se gasta no NPC volta ao banco");
+const dg = [...MISS.DUNGEONS.values()][0];
+db.salvarDungeon(dg.id, { ouro: 50000, cristal: 500, renovadoEm: Date.now() });
+const pd = TS.pagarDaDungeon(dg.id, "ANA", 10);
+ok(pd.ouro > 0 && Math.abs(db.getDungeon(dg.id).ouro - (50000 - pd.ouro)) < 1e-6, "a dungeon paga do tesouro dela");
+db.creditar(MUNDO, "ANA", "ouro", 1000);
+const antesT = db.getDungeon(dg.id).ouro;
+const perdeu = TS.cair("ANA", 0.1, dg.id);
+ok(perdeu.ouro > 0 && Math.abs(db.getDungeon(dg.id).ouro - (antesT + perdeu.ouro)) < 1e-6, "  → quem cai lá deixa moeda no tesouro");
+db.salvarMoeda(MUNDO, "ouro", { mercado: ouro?.mercado ?? 0 });
+
+console.log("\n── 7. arma única e escudo (D14, D27) ──");
+const forte = { attr: Object.fromEntries(R.ATR.map((a) => [a, 30])), nivel: 30 };
+const espada = R.ARMAS.branca_pesada;
+const uma = R.poderMembro({ ...forte, maos: [{ arma: espada, raridade: "raro", modo: "1m" }] });
+const duas = R.poderMembro({ ...forte, maos: [{ arma: espada, raridade: "raro", modo: "1m" }, { arma: espada, raridade: "raro", modo: "1m" }] });
+const nada = R.poderMembro({ ...forte, maos: [] });
+ok(perto((uma - nada) * 2 / 1.8, duas - nada, (duas - nada) * 0.02), "★ uma arma só rende +80% (duas armas = 2 × a parte da arma)", `${uma.toFixed(1)} · ${duas.toFixed(1)} · ${nada.toFixed(1)}`);
+const semEsc = R.defesaMembro({ ...forte, defesa: [{ tipo: "armadura", raridade: "raro" }] });
+const comEsc = R.defesaMembro({ ...forte, defesa: [{ tipo: "armadura", raridade: "raro" }, { tipo: "escudo", raridade: "raro" }] });
+ok(comEsc > semEsc * 1.1, "escudo: a defesa dele e +10% por cima");
+const qm = ITENS.get("g_wh40k_quebra_mundos");
+ok(CB.statsItem(qm).dano > 0 && qm.dados.mult === 1.2 && qm.especial, "a arma única de obra tem ×1,2 e não se compra");
+
+console.log("\n── 8. implantes: uma peça de ciber por região ──");
+const bracos = [ITENS.get("i_c_lamina_1"), ITENS.get("i_c_lamina_2")];
+db.darItem(MUNDO, "ANA", bracos[0].id); db.darItem(MUNDO, "ANA", bracos[1].id);
+await jogar("ANA", `equipar ${bracos[0].id}`);
+await jogar("ANA", `equipar ${bracos[1].id}`);
+const eqI = db.getEquipado(MUNDO, "ANA");
+const ciber = ["ciber1", "ciber2", "ciber3"].map((s) => eqI[s]?.id).filter(Boolean);
+ok(ciber.length === 1 && ciber[0] === bracos[1].id, "★ o segundo implante dos braços troca o primeiro (não ocupa outra vaga)", JSON.stringify(ciber));
+const mb = CB.partyDe(MUNDO, "ANA").jogador;
+ok(mb.implantes.length === 1, "  → e entra na conta da luta");
+
+console.log("\n── 9. evolucionador (D24) ──");
+db.salvarPersonagem(MUNDO, "ANA", { pontos: 6 });
+t = await jogar("ANA", "classe guerreiro");
+ok(db.getPersonagem(MUNDO, "ANA").classe === "guerreiro", "escolher a classe");
+const antesEv = db.getPersonagem(MUNDO, "ANA");
+t = await jogar("ANA", "evoluir prever");
+const depoisPrev = db.getPersonagem(MUNDO, "ANA");
+ok(depoisPrev.forca === antesEv.forca && depoisPrev.pontos === antesEv.pontos, "★ a prévia não grava nada");
+t = await jogar("ANA", "evoluir pontos");
+const depoisEv = db.getPersonagem(MUNDO, "ANA");
+ok(depoisEv.pontos < 1 && depoisEv.forca > antesEv.forca, "evoluir pontos gasta os pontos, com Força primeiro (guerreiro)", `${antesEv.forca}→${depoisEv.forca}, pontos ${depoisEv.pontos}`);
+const dist = EV.distribuirPontos({ nivel: 30, pontos: 100, ...Object.fromEntries(R.ATR.map((a) => [a, 1 + R.baseDoNivel(30)])) }, "mago");
+ok(dist.gastos.inteligencia >= Math.max(...Object.entries(dist.gastos).filter(([k]) => k !== "inteligencia").map(([, v]) => v)), "  → o mago põe mais em Inteligência");
+
+console.log("\n── 10. especial: a recompensa é uma vez por pessoa ──");
+const espM = MISS.ESPECIAIS.find((e) => e.id === "e_relogio");
+db.salvarPersonagem(MUNDO, "ANA", { nivel: espM.nivel, ...Object.fromEntries(R.ATR.map((a) => [a, 2000])) });
+descansar("ANA");
+let res = AV.lutar(["ANA"], espM, { aleatorio: sempre(0.001) });
+ok(res.r.desfecho === "sucesso" && db.temItem(MUNDO, "ANA", "g_e_relogio_avo"), "★ o primeiro êxito dá o item único", res.r.desfecho);
+const qtd = db.getInventario(MUNDO, "ANA").find((x) => x.id === "g_e_relogio_avo")?.quantidade;
+descansar("ANA");
+res = AV.lutar(["ANA"], espM, { aleatorio: sempre(0.001) });
+ok(db.getInventario(MUNDO, "ANA").find((x) => x.id === "g_e_relogio_avo")?.quantidade === qtd && res.resultados[0].especial?.jaTinha, "  → o segundo não dá outro");
+
+console.log("\n── 11. chefe: espera de 24 h e recompensa única ──");
+const harkon = MISS.CHEFES.get("b_tes_harkon");
+db.salvarPersonagem(MUNDO, "ANA", { nivel: harkon.nivel });
+descansar("ANA");
+res = AV.lutar(["ANA"], harkon, { aleatorio: sempre(0.001) });
+ok(res.r.desfecho === "sucesso" && db.temItem(MUNDO, "ANA", "c_f_tes_serana"), "★ vencer Harkon dá o contrato da Serana", res.r.desfecho);
+descansar("ANA");
+const imp = AV.impedimento("ANA", AV.montarAlvo(harkon, harkon.nivel));
+ok(/já tentou/.test(imp ?? ""), "  → e o mesmo chefe só de novo amanhã", imp);
+
+console.log("\n── 12. contrato vira companheiro; pergaminho vira magia ──");
+t = await jogar("ANA", "usar c_f_tes_serana");
+ok(/Contrato assinado/.test(t) && db.listarFollowersDe(MUNDO, "ANA").some((f) => f.catalogoId === "f_tes_serana") && !db.temItem(MUNDO, "ANA", "c_f_tes_serana"), "★ o contrato sai da mochila e a Serana entra", t.slice(0, 120));
+db.darItem(MUNDO, "ANA", "c_f_tes_serana");
+t = await jogar("ANA", "usar c_f_tes_serana");
+ok(/Você já tem/.test(t) && db.temItem(MUNDO, "ANA", "c_f_tes_serana"), "  → um segundo contrato da mesma é recusado (um por jogador)");
+db.darItem(MUNDO, "ANA", "p_m_e_eco_radio");
+t = await jogar("ANA", "usar p_m_e_eco_radio");
+ok(/Magia aprendida/.test(t) && db.listarMagias(MUNDO, "ANA").some((m) => m.magiaId === "m_e_eco_radio"), "o pergaminho vira magia no grimório");
+
+console.log("\n── 13. a história ──");
+const ctxH = { jogador: "Ana", missao: MISS.acharContrato("d_ratos"), desfecho: "sucesso", lingua: "pt", chances: { exito: 0.4, sobrevivencia: 0.7 },
+  rolagens: { exito: 0.1, sobrev: 0.2 }, contribuicoes: [], magias: [], coop: false, extras: {} };
+const h1 = H.contarHistoria(ctxH, { semente: 42 }), h2 = H.contarHistoria(ctxH, { semente: 42 });
+ok(h1.texto === h2.texto && h1.texto.length > 40, "★ mesma semente, mesma história");
+const ids = H.todosOsIds();
+ok(new Set(ids).size === ids.length, "ids dos trechos são únicos", `${ids.length} ids`);
+let faltaEN = 0, vagas = 0;
+const andar = (x) => { if (Array.isArray(x)) for (const s of x) { if (s?.id && (!s.pt || !s.en)) faltaEN++; } else if (x && typeof x === "object") for (const v of Object.values(x)) andar(v); };
+andar(HISTORIAS);
+ok(!faltaEN, "todo trecho tem PT e EN", `${faltaEN} sem`);
+for (let s = 0; s < 300; s++) for (const lingua of ["pt", "en"]) for (const desfecho of ["sucesso", "falha", "caiu"]) {
+  const missao = [MISS.acharContrato("d_ratos"), MISS.CHEFES.get("b_tg_rize"), MISS.BICOS[0]][s % 3];
+  const h = H.contarHistoria({ ...ctxH, missao, lingua, desfecho, extras: { subiu: s % 2 === 0, capturados: s % 5 ? [] : ["Guarda", "Mercenário"] } }, { semente: s });
+  if (/[{}]|undefined|null/.test(h.texto)) { vagas++; if (vagas < 3) console.log("     ", h.texto.slice(0, 200)); }
+}
+ok(!vagas, "★ nenhuma vaga sem preencher ({...}, undefined) em 1800 histórias", `${vagas}`);
+t = await jogar("ANA", "historia");
+ok(t.length > 60 && !/undefined/.test(t), "&game historia mostra a última");
+
+console.log("\n── 14. o que a revisão achou ──");
+const nPartyAntes = db.getParty(MUNDO, "ANA").length, espadas = () => db.getInventario(MUNDO, "ANA").find((x) => x.id === "g_espada_ferro")?.quantidade ?? 0;
+const espadasAntes = espadas(), compAntes = db.listarFollowersDe(MUNDO, "ANA").length;
+await jogar("ANA", "apagar confirmar"); await jogar("ANA", "criar Ana");
+ok(espadas() === espadasAntes && db.listarFollowersDe(MUNDO, "ANA").length === compAntes && db.getParty(MUNDO, "ANA").length <= 2,
+  "★ apagar e criar de novo não dá outro kit (nem passa de 2 na party)", `${espadasAntes}→${espadas()}, ${compAntes}→${db.listarFollowersDe(MUNDO, "ANA").length}, party ${nPartyAntes}→${db.getParty(MUNDO, "ANA").length}`);
+ok(db.esperaAte("ANA", "chefe:b_tes_harkon") > Date.now(), "  → e não zera a espera de 24 h do chefe");
+db.criarPersonagem(MUNDO, "NOVATO", "Novato");
+db.salvarPersonagem(MUNDO, "NOVATO", Object.fromEntries(R.ATR.map((a) => [a, 5000])));
+const chefe60 = [...MISS.CHEFES.values()].find((c) => c.nivel === 60);
+res = AV.lutar(["NOVATO"], chefe60, { aleatorio: sempre(0.001) });
+ok(res.r.desfecho === "sucesso" && db.getPersonagem(MUNDO, "NOVATO").nivel === 1 + MISS.NIVEIS_POR_LUTA, "★ no máximo 2 níveis por vitória (nível 1 contra um chefe do nível 60)", `nível ${db.getPersonagem(MUNDO, "NOVATO").nivel}`);
+const bancoAntes = db.getMoeda(MUNDO, "ouro").mercado, tesouros = JSON.stringify([...MISS.DUNGEONS.keys()].map((id) => db.getDungeon(id)?.ouro ?? 0));
+const { rodarTesteGeral } = await import("./modulos/game/teste-geral.js");
+const G = { garantirMoeda: () => db.getMoeda(MUNDO, "ouro"), pDaMoeda: () => ({ pSuave: 0.5 }) };
+const rt = await rodarTesteGeral(MUNDO, "DONO", G);
+ok(!rt.falhas, "&game admin teste passa", rt.linhas.filter((l) => l.startsWith("❌")).join(" | "));
+ok(db.getMoeda(MUNDO, "ouro").mercado === bancoAntes && JSON.stringify([...MISS.DUNGEONS.keys()].map((id) => db.getDungeon(id)?.ouro ?? 0)) === tesouros,
+  "  → e não mexe no banco nem nos tesouros");
+
+console.log("\n── 15. imagens (fora do repositório: o link fica no banco) ──");
+const IMG = await import("./modulos/game/imagens.js");
+let ultI = null, todosI = [];
+const admin = async (txt, anexos = []) => {
+  todosI = [];
+  const ctx = { serverId: "S", PREFIXO: "&", COR: { erro: 1, aviso: 2, sucesso: 3, info: 4, mod: 5 }, config: { language: "pt" },
+    sendEmbed: async (_c, e) => { ultI = e; todosI.push(e); return { id: "m", react: async () => {} }; }, getServer: async () => ({ id: "S", channels: [] }), ehSuperAdmin: () => true, membroTemPermissao: () => true };
+  await game.cmdGame({ authorId: "DONO", author: { username: "dono" }, channel: { id: "C" }, channelId: "C", mentionIds: [], attachments: anexos }, txt.split(" "), ctx);
+  return ultI;
+};
+await admin("admin imagem");
+const listaI = todosI.map((x) => x.description).join("\n");
+let e;
+ok(/0 de \d+/.test(listaI) && /f_tes_serana/.test(listaI) && /b_tes_harkon/.test(listaI), "★ &game admin imagem lista o que falta (Serana, Harkon…)");
+const ANEXO = "01JABCDEFGHJKMNPQRSTVWXYZ0";
+e = await admin("admin imagem Serana", [{ _id: ANEXO, metadata: { type: "Image" } }]);
+ok(/Imagem salva/.test(e.title) && e.imagem?.endsWith(`/attachments/${ANEXO}`) && IMG.imagemDe("f_tes_serana") === e.imagem, "★ com a imagem anexada, liga pelo nome", e.title);
+e = await admin("admin imagem b_tes_harkon https://cdn.stoatusercontent.com/attachments/01JABCDEFGHJKMNPQRSTVWXYZ1");
+ok(/Imagem salva/.test(e.title) && IMG.imagemDe("b_tes_harkon"), "  → ou por id e link");
+e = await admin("admin imagem b_tes_harkon javascript:alert(1)");
+ok(IMG.imagemDe("b_tes_harkon")?.startsWith("https://"), "  → link que não é http(s) não entra");
+t = await jogar("ANA", "follower ficha Serana");
+ok(ult?.imagem === IMG.imagemDe("f_tes_serana"), "a ficha da Serana sai com a imagem dela");
+t = await jogar("ANA", "item c_f_tes_serana");
+ok(ult?.imagem === IMG.imagemDe("f_tes_serana"), "  → e o contrato dela também");
+const rH = AV.embedResultado({ ...AV.lutar(["NOVATO"], harkon, { aleatorio: sempre(0.001) }) }, { en: false, COR: { sucesso: 1, aviso: 2, erro: 3 }, P: "&" });
+ok(rH.imagem === IMG.imagemDe("b_tes_harkon"), "a luta contra Harkon sai com a imagem dele");
+e = await admin("admin imagem Harkon remover");
+ok(!IMG.imagemDe("b_tes_harkon") && /removida/.test(e.title), "remover tira");
+ok(!/imagem/.test(JSON.stringify(await import("./modulos/game/conteudo/skyrim.json", { with: { type: "json" } }))), "  → e nada disso vai para o JSON do repositório");
+
+console.log(`\nRPG v4: ${pass} ok, ${fail} falha(s)`);
 process.exit(fail ? 1 : 0);
 };
 

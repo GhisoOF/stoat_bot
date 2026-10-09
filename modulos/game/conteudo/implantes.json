@@ -1,0 +1,1042 @@
+[
+  {
+    "id": "i_c_lamina_1",
+    "nome": {
+      "pt": "Gancho de Ferro",
+      "en": "Iron Hook"
+    },
+    "dif": 1,
+    "base": "c_lamina",
+    "descricao": {
+      "pt": "prótese de pirata — o cyberware mais antigo que existe",
+      "en": "a pirate's prosthetic — the oldest cyberware there is"
+    }
+  },
+  {
+    "id": "i_c_esqueleto_1",
+    "nome": {
+      "pt": "Placa de Costela",
+      "en": "Rib Plate"
+    },
+    "dif": 1,
+    "base": "c_esqueleto",
+    "descricao": {
+      "pt": "placa de metal de cirurgia de guerra",
+      "en": "a metal plate from wartime surgery"
+    }
+  },
+  {
+    "id": "i_c_optico_1",
+    "nome": {
+      "pt": "Lente de Relojoeiro",
+      "en": "Watchmaker's Lens"
+    },
+    "dif": 1,
+    "base": "c_optico",
+    "descricao": {
+      "pt": "monóculo parafusado no osso",
+      "en": "a monocle screwed into the bone"
+    }
+  },
+  {
+    "id": "i_b_rubro_of_1",
+    "nome": {
+      "pt": "Garras de Urso Enxertadas",
+      "en": "Grafted Bear Claws"
+    },
+    "dif": 1,
+    "base": "b_rubro_of",
+    "descricao": {
+      "pt": "enxerto de curandeiro de aldeia",
+      "en": "a village healer's graft"
+    }
+  },
+  {
+    "id": "i_b_verde_def_1",
+    "nome": {
+      "pt": "Sangue de Troll Diluído",
+      "en": "Diluted Troll Blood"
+    },
+    "dif": 1,
+    "base": "b_verde_def",
+    "descricao": {
+      "pt": "fecha cortes pequenos sozinho",
+      "en": "closes small cuts on its own"
+    }
+  },
+  {
+    "id": "i_b_rubro_mut_1",
+    "nome": {
+      "pt": "Mutágeno de Lobo",
+      "en": "Wolf Mutagen"
+    },
+    "dif": 1,
+    "base": "b_rubro_mut",
+    "descricao": {
+      "pt": "tirado de um lobo grande demais",
+      "en": "taken from a wolf that was far too big"
+    }
+  },
+  {
+    "id": "i_c_for_1",
+    "nome": {
+      "pt": "Tala de Ferro",
+      "en": "Iron Splint"
+    },
+    "dif": 1,
+    "base": "c_for",
+    "descricao": {
+      "pt": "ferro preso ao braço; carrega mais do que devia",
+      "en": "iron strapped to the arm; it carries more than it should"
+    }
+  },
+  {
+    "id": "i_b_rubro_atr_1",
+    "nome": {
+      "pt": "Sangue de Boi",
+      "en": "Ox Blood"
+    },
+    "dif": 1,
+    "base": "b_rubro_atr",
+    "descricao": {
+      "pt": "bebido quente, antes do sol nascer",
+      "en": "drunk warm, before sunrise"
+    }
+  },
+  {
+    "id": "i_c_lamina_2",
+    "nome": {
+      "pt": "Braço de Pistão",
+      "en": "Piston Arm"
+    },
+    "dif": 2,
+    "base": "c_lamina",
+    "descricao": {
+      "pt": "prótese industrial de fábrica",
+      "en": "an industrial factory prosthetic"
+    }
+  },
+  {
+    "id": "i_c_pele_2",
+    "nome": {
+      "pt": "Pele Subdérmica de Kevlar",
+      "en": "Subdermal Kevlar Skin"
+    },
+    "dif": 2,
+    "base": "c_pele",
+    "descricao": {
+      "pt": "colete costurado por baixo da pele",
+      "en": "a vest stitched under the skin"
+    }
+  },
+  {
+    "id": "i_c_reflexos_2",
+    "nome": {
+      "pt": "Estimulador de Reflexos",
+      "en": "Reflex Booster"
+    },
+    "dif": 2,
+    "base": "c_reflexos",
+    "descricao": {
+      "pt": "esquiva antes de pensar",
+      "en": "you dodge before you think"
+    }
+  },
+  {
+    "id": "i_b_ambar_of_2",
+    "nome": {
+      "pt": "Glândula de Espinhos",
+      "en": "Spine Gland"
+    },
+    "dif": 2,
+    "base": "b_ambar_of",
+    "descricao": {
+      "pt": "cospe espinhos a vinte passos",
+      "en": "spits spines at twenty paces"
+    }
+  },
+  {
+    "id": "i_b_verde_def_2",
+    "nome": {
+      "pt": "Couro de Basilisco",
+      "en": "Basilisk Hide"
+    },
+    "dif": 2,
+    "base": "b_verde_def",
+    "descricao": {
+      "pt": "pele que endurece onde apanha",
+      "en": "skin that hardens wherever it's hit"
+    }
+  },
+  {
+    "id": "i_b_ceruleo_mut_2",
+    "nome": {
+      "pt": "Decocção de Bruxa do Pântano",
+      "en": "Swamp Witch Decoction"
+    },
+    "dif": 2,
+    "base": "b_ceruleo_mut",
+    "descricao": {
+      "pt": "o feitiço sai mais forte e a boca, amarga",
+      "en": "the spell comes out stronger, and the mouth bitter"
+    }
+  },
+  {
+    "id": "i_c_des_2",
+    "nome": {
+      "pt": "Estabilizador de Mão",
+      "en": "Hand Stabilizer"
+    },
+    "dif": 2,
+    "base": "c_des",
+    "descricao": {
+      "pt": "a mão não treme nem no frio",
+      "en": "the hand doesn't shake, not even in the cold"
+    }
+  },
+  {
+    "id": "i_b_verde_atr_2",
+    "nome": {
+      "pt": "CRISPR de Vitamina C",
+      "en": "Vitamin C CRISPR"
+    },
+    "dif": 2,
+    "base": "b_verde_atr",
+    "descricao": {
+      "pt": "edição genética de farmácia: o corpo passa a fazer a própria vitamina C",
+      "en": "pharmacy-grade gene editing: the body starts making its own vitamin C"
+    }
+  },
+  {
+    "id": "i_c_lamina_3",
+    "nome": {
+      "pt": "Lâminas de Antebraço",
+      "en": "Forearm Blades"
+    },
+    "dif": 3,
+    "base": "c_lamina",
+    "descricao": {
+      "pt": "saem do pulso, voltam limpas",
+      "en": "out of the wrist, back in clean"
+    }
+  },
+  {
+    "id": "i_c_esqueleto_3",
+    "nome": {
+      "pt": "Ossos de Titânio",
+      "en": "Titanium Bones"
+    },
+    "dif": 3,
+    "base": "c_esqueleto",
+    "descricao": {
+      "pt": "aguentam um carro em cima",
+      "en": "they can hold up a car"
+    }
+  },
+  {
+    "id": "i_c_optico_3",
+    "nome": {
+      "pt": "Óptica de Mira Balística",
+      "en": "Ballistic Targeting Optics"
+    },
+    "dif": 3,
+    "base": "c_optico",
+    "descricao": {
+      "pt": "mostra o vento e a queda da bala",
+      "en": "shows the wind and the bullet drop"
+    }
+  },
+  {
+    "id": "i_b_ceruleo_of_3",
+    "nome": {
+      "pt": "Glândula de Salamandra",
+      "en": "Salamander Gland"
+    },
+    "dif": 3,
+    "base": "b_ceruleo_of",
+    "descricao": {
+      "pt": "o fogo vem de dentro",
+      "en": "the fire comes from within"
+    }
+  },
+  {
+    "id": "i_b_verde_def_3",
+    "nome": {
+      "pt": "Regenerador de Medula",
+      "en": "Marrow Regenerator"
+    },
+    "dif": 3,
+    "base": "b_verde_def",
+    "descricao": {
+      "pt": "sangue novo a cada minuto",
+      "en": "fresh blood every minute"
+    }
+  },
+  {
+    "id": "i_b_rubro_mut_3",
+    "nome": {
+      "pt": "Mutágeno de Lobisomem",
+      "en": "Werewolf Mutagen"
+    },
+    "dif": 3,
+    "base": "b_rubro_mut",
+    "descricao": {
+      "pt": "força de lua cheia, sem a lua",
+      "en": "full-moon strength, without the moon"
+    }
+  },
+  {
+    "id": "i_c_int_3",
+    "nome": {
+      "pt": "Implante Melhorador de Inteligência",
+      "en": "Intelligence Booster Implant"
+    },
+    "dif": 3,
+    "base": "c_int",
+    "descricao": {
+      "pt": "chip atrás da orelha; pensa mais rápido, sonha em código",
+      "en": "a chip behind the ear; you think faster and dream in code"
+    }
+  },
+  {
+    "id": "i_b_ambar_atr_3",
+    "nome": {
+      "pt": "Colírio de Coruja",
+      "en": "Owl Eye Drops"
+    },
+    "dif": 3,
+    "base": "b_ambar_atr",
+    "descricao": {
+      "pt": "enxerga no escuro e erra menos",
+      "en": "see in the dark and miss less"
+    }
+  },
+  {
+    "id": "i_c_lancador_4",
+    "nome": {
+      "pt": "Lança-Mísseis de Pulso",
+      "en": "Pulse Missile Launcher"
+    },
+    "dif": 4,
+    "base": "c_lancador",
+    "descricao": {
+      "pt": "o antebraço abre e dispara",
+      "en": "the forearm opens up and fires"
+    }
+  },
+  {
+    "id": "i_c_pele_4",
+    "nome": {
+      "pt": "Blindagem Dérmica Reativa",
+      "en": "Reactive Dermal Armor"
+    },
+    "dif": 4,
+    "base": "c_pele",
+    "descricao": {
+      "pt": "a pele explode para fora antes do impacto",
+      "en": "the skin blasts outward before the impact"
+    }
+  },
+  {
+    "id": "i_c_sandevistan_4",
+    "nome": {
+      "pt": "Acelerador Neural",
+      "en": "Neural Accelerator"
+    },
+    "dif": 4,
+    "base": "c_sandevistan",
+    "descricao": {
+      "pt": "o mundo fica em câmera lenta",
+      "en": "the world goes into slow motion"
+    }
+  },
+  {
+    "id": "i_b_ambar_of_4",
+    "nome": {
+      "pt": "Glândula de Ácido",
+      "en": "Acid Gland"
+    },
+    "dif": 4,
+    "base": "b_ambar_of",
+    "descricao": {
+      "pt": "jato corrosivo de longe",
+      "en": "a corrosive jet from afar"
+    }
+  },
+  {
+    "id": "i_b_verde_def_4",
+    "nome": {
+      "pt": "Segundo Coração",
+      "en": "Second Heart"
+    },
+    "dif": 4,
+    "base": "b_verde_def",
+    "descricao": {
+      "pt": "se um para, o outro segura",
+      "en": "if one stops, the other holds on"
+    }
+  },
+  {
+    "id": "i_b_ceruleo_mut_4",
+    "nome": {
+      "pt": "Mutágeno Radiativo",
+      "en": "Radioactive Mutagen"
+    },
+    "dif": 4,
+    "base": "b_ceruleo_mut",
+    "descricao": {
+      "pt": "o brilho verde ajuda a conjurar",
+      "en": "the green glow helps with casting"
+    }
+  },
+  {
+    "id": "i_c_vida_4",
+    "nome": {
+      "pt": "Filtro Imunológico Antirradiação",
+      "en": "Anti-Radiation Immune Filter"
+    },
+    "dif": 4,
+    "base": "c_vida",
+    "descricao": {
+      "pt": "rim de chumbo e fígado de titânio",
+      "en": "a lead kidney and a titanium liver"
+    }
+  },
+  {
+    "id": "i_b_ceruleo_atr_4",
+    "nome": {
+      "pt": "Gene da Memória Perfeita",
+      "en": "Perfect Memory Gene"
+    },
+    "dif": 4,
+    "base": "b_ceruleo_atr",
+    "descricao": {
+      "pt": "não esquece nada — nem o que queria",
+      "en": "forgets nothing — not even what you'd rather forget"
+    }
+  },
+  {
+    "id": "i_c_deck_5",
+    "nome": {
+      "pt": "Cyberdeck Militar",
+      "en": "Military Cyberdeck"
+    },
+    "dif": 5,
+    "base": "c_deck",
+    "descricao": {
+      "pt": "ataca a mente e as máquinas — dano mágico",
+      "en": "attacks minds and machines — magic damage"
+    }
+  },
+  {
+    "id": "i_c_esqueleto_5",
+    "nome": {
+      "pt": "Esqueleto de Liga Densa",
+      "en": "Dense Alloy Skeleton"
+    },
+    "dif": 5,
+    "base": "c_esqueleto",
+    "descricao": {
+      "pt": "pesa o dobro e não quebra",
+      "en": "twice the weight, and it never breaks"
+    }
+  },
+  {
+    "id": "i_c_coracao_5",
+    "nome": {
+      "pt": "Bomba Circulatória",
+      "en": "Circulatory Pump"
+    },
+    "dif": 5,
+    "base": "c_coracao",
+    "descricao": {
+      "pt": "sangue sintético sob pressão",
+      "en": "synthetic blood under pressure"
+    }
+  },
+  {
+    "id": "i_b_rubro_of_5",
+    "nome": {
+      "pt": "Garra de Dragão Enxertada",
+      "en": "Grafted Dragon Claw"
+    },
+    "dif": 5,
+    "base": "b_rubro_of",
+    "descricao": {
+      "pt": "escamas até o cotovelo",
+      "en": "scales up to the elbow"
+    }
+  },
+  {
+    "id": "i_b_verde_def_5",
+    "nome": {
+      "pt": "Escamas Dracônicas",
+      "en": "Draconic Scales"
+    },
+    "dif": 5,
+    "base": "b_verde_def",
+    "descricao": {
+      "pt": "pele de quem dorme sobre ouro",
+      "en": "the skin of one who sleeps on gold"
+    }
+  },
+  {
+    "id": "i_b_rubro_mut_5",
+    "nome": {
+      "pt": "Mutágeno de Dragão",
+      "en": "Dragon Mutagen"
+    },
+    "dif": 5,
+    "base": "b_rubro_mut",
+    "descricao": {
+      "pt": "o golpe pesa como uma cauda",
+      "en": "every blow lands heavy as a tail"
+    }
+  },
+  {
+    "id": "i_c_for_5",
+    "nome": {
+      "pt": "Miômeros de Fibra Sintética",
+      "en": "Synthetic Fiber Myomers"
+    },
+    "dif": 5,
+    "base": "c_for",
+    "descricao": {
+      "pt": "músculo de laboratório, cabo de aço por dentro",
+      "en": "lab-grown muscle with steel cable inside"
+    }
+  },
+  {
+    "id": "i_b_verde_atr_5",
+    "nome": {
+      "pt": "Sangue de Hidra",
+      "en": "Hydra Blood"
+    },
+    "dif": 5,
+    "base": "b_verde_atr",
+    "descricao": {
+      "pt": "corta uma veia, nascem duas",
+      "en": "cut one vein and two grow back"
+    }
+  },
+  {
+    "id": "i_c_lancador_6",
+    "nome": {
+      "pt": "Canhão de Plasma de Pulso",
+      "en": "Pulse Plasma Cannon"
+    },
+    "dif": 6,
+    "base": "c_lancador",
+    "descricao": {
+      "pt": "o braço inteiro é a arma",
+      "en": "the whole arm is the weapon"
+    }
+  },
+  {
+    "id": "i_c_pele_6",
+    "nome": {
+      "pt": "Malha de Nanofibra",
+      "en": "Nanofiber Mesh"
+    },
+    "dif": 6,
+    "base": "c_pele",
+    "descricao": {
+      "pt": "costura sozinha o que rasga",
+      "en": "stitches up whatever tears, all by itself"
+    }
+  },
+  {
+    "id": "i_c_cortex_6",
+    "nome": {
+      "pt": "Córtex Quântico",
+      "en": "Quantum Cortex"
+    },
+    "dif": 6,
+    "base": "c_cortex",
+    "descricao": {
+      "pt": "calcula o feitiço antes de dizer",
+      "en": "calculates the spell before you speak it"
+    }
+  },
+  {
+    "id": "i_b_ceruleo_of_6",
+    "nome": {
+      "pt": "Simbionte Psiônico",
+      "en": "Psionic Symbiote"
+    },
+    "dif": 6,
+    "base": "b_ceruleo_of",
+    "descricao": {
+      "pt": "outra mente, morando junto, ajudando",
+      "en": "another mind, living alongside yours, helping"
+    }
+  },
+  {
+    "id": "i_b_verde_def_6",
+    "nome": {
+      "pt": "Carapaça de Titã",
+      "en": "Titan Carapace"
+    },
+    "dif": 6,
+    "base": "b_verde_def",
+    "descricao": {
+      "pt": "crosta de rocha viva",
+      "en": "a crust of living rock"
+    }
+  },
+  {
+    "id": "i_b_ambar_mut_6",
+    "nome": {
+      "pt": "Mutágeno do Falcão Solar",
+      "en": "Sun Falcon Mutagen"
+    },
+    "dif": 6,
+    "base": "b_ambar_mut",
+    "descricao": {
+      "pt": "olho que acerta a um planeta de distância",
+      "en": "an eye that hits from a planet away"
+    }
+  },
+  {
+    "id": "i_c_des_6",
+    "nome": {
+      "pt": "Mãos de Relojoeiro Quântico",
+      "en": "Quantum Watchmaker Hands"
+    },
+    "dif": 6,
+    "base": "c_des",
+    "descricao": {
+      "pt": "acertam o parafuso em dois lugares ao mesmo tempo",
+      "en": "they turn the screw in two places at once"
+    }
+  },
+  {
+    "id": "i_b_rubro_atr_6",
+    "nome": {
+      "pt": "Gene do Gigante",
+      "en": "Giant Gene"
+    },
+    "dif": 6,
+    "base": "b_rubro_atr",
+    "descricao": {
+      "pt": "três metros por dentro",
+      "en": "ten feet tall on the inside"
+    }
+  },
+  {
+    "id": "i_c_lamina_7",
+    "nome": {
+      "pt": "Monofilamento Estelar",
+      "en": "Stellar Monofilament"
+    },
+    "dif": 7,
+    "base": "c_lamina",
+    "descricao": {
+      "pt": "fio de um átomo de espessura",
+      "en": "a wire one atom thick"
+    }
+  },
+  {
+    "id": "i_c_esqueleto_7",
+    "nome": {
+      "pt": "Exoesqueleto de Matéria Degenerada",
+      "en": "Degenerate Matter Exoskeleton"
+    },
+    "dif": 7,
+    "base": "c_esqueleto",
+    "descricao": {
+      "pt": "um centímetro pesa uma montanha",
+      "en": "one centimeter weighs as much as a mountain"
+    }
+  },
+  {
+    "id": "i_c_pernas_7",
+    "nome": {
+      "pt": "Pernas de Propulsão Iônica",
+      "en": "Ion Thruster Legs"
+    },
+    "dif": 7,
+    "base": "c_pernas",
+    "descricao": {
+      "pt": "chega no golpe antes do som",
+      "en": "you reach the strike before the sound does"
+    }
+  },
+  {
+    "id": "i_b_ambar_of_7",
+    "nome": {
+      "pt": "Glândula de Vento Solar",
+      "en": "Solar Wind Gland"
+    },
+    "dif": 7,
+    "base": "b_ambar_of",
+    "descricao": {
+      "pt": "sopra partículas como balas",
+      "en": "blows particles like bullets"
+    }
+  },
+  {
+    "id": "i_b_verde_def_7",
+    "nome": {
+      "pt": "Plasma Vital de Estrela",
+      "en": "Vital Starplasma"
+    },
+    "dif": 7,
+    "base": "b_verde_def",
+    "descricao": {
+      "pt": "o sangue brilha e cicatriza",
+      "en": "the blood glows and heals"
+    }
+  },
+  {
+    "id": "i_b_ceruleo_mut_7",
+    "nome": {
+      "pt": "Mutágeno de Serafim",
+      "en": "Seraph Mutagen"
+    },
+    "dif": 7,
+    "base": "b_ceruleo_mut",
+    "descricao": {
+      "pt": "seis asas por dentro",
+      "en": "six wings on the inside"
+    }
+  },
+  {
+    "id": "i_c_int_7",
+    "nome": {
+      "pt": "Coprocessador Estelar",
+      "en": "Stellar Coprocessor"
+    },
+    "dif": 7,
+    "base": "c_int",
+    "descricao": {
+      "pt": "pensa na velocidade da luz",
+      "en": "thinks at the speed of light"
+    }
+  },
+  {
+    "id": "i_b_ambar_atr_7",
+    "nome": {
+      "pt": "Retina de Pulsar",
+      "en": "Pulsar Retina"
+    },
+    "dif": 7,
+    "base": "b_ambar_atr",
+    "descricao": {
+      "pt": "pisca mil vezes por segundo e vê tudo",
+      "en": "blinks a thousand times a second and sees everything"
+    }
+  },
+  {
+    "id": "i_c_deck_8",
+    "nome": {
+      "pt": "Deck de Reescrita de Constantes",
+      "en": "Constant-Rewriting Deck"
+    },
+    "dif": 8,
+    "base": "c_deck",
+    "descricao": {
+      "pt": "muda a gravidade só onde o inimigo está",
+      "en": "changes gravity only where the enemy stands"
+    }
+  },
+  {
+    "id": "i_c_pele_8",
+    "nome": {
+      "pt": "Pele de Horizonte de Eventos",
+      "en": "Event Horizon Skin"
+    },
+    "dif": 8,
+    "base": "c_pele",
+    "descricao": {
+      "pt": "o golpe entra e não sai",
+      "en": "the blow goes in and never comes out"
+    }
+  },
+  {
+    "id": "i_c_optico_8",
+    "nome": {
+      "pt": "Olhos de Lente Gravitacional",
+      "en": "Gravitational Lens Eyes"
+    },
+    "dif": 8,
+    "base": "c_optico",
+    "descricao": {
+      "pt": "mira pela curva do espaço",
+      "en": "aims along the curve of space"
+    }
+  },
+  {
+    "id": "i_b_rubro_of_8",
+    "nome": {
+      "pt": "Enxerto de Devorador",
+      "en": "Devourer Graft"
+    },
+    "dif": 8,
+    "base": "b_rubro_of",
+    "descricao": {
+      "pt": "boca nas mãos, com fome",
+      "en": "mouths on the hands, and hungry"
+    }
+  },
+  {
+    "id": "i_b_verde_def_8",
+    "nome": {
+      "pt": "Medula de Nebulosa",
+      "en": "Nebula Marrow"
+    },
+    "dif": 8,
+    "base": "b_verde_def",
+    "descricao": {
+      "pt": "o corpo se refaz de poeira",
+      "en": "the body rebuilds itself from dust"
+    }
+  },
+  {
+    "id": "i_b_rubro_mut_8",
+    "nome": {
+      "pt": "Mutágeno Primevo",
+      "en": "Primeval Mutagen"
+    },
+    "dif": 8,
+    "base": "b_rubro_mut",
+    "descricao": {
+      "pt": "força de antes das estrelas",
+      "en": "strength from before the stars"
+    }
+  },
+  {
+    "id": "i_c_vida_8",
+    "nome": {
+      "pt": "Sistema Imune de Nanorrobôs",
+      "en": "Nanobot Immune System"
+    },
+    "dif": 8,
+    "base": "c_vida",
+    "descricao": {
+      "pt": "um exército no sangue",
+      "en": "an army in the blood"
+    }
+  },
+  {
+    "id": "i_b_ceruleo_atr_8",
+    "nome": {
+      "pt": "Neurônios de Nebulosa",
+      "en": "Nebula Neurons"
+    },
+    "dif": 8,
+    "base": "b_ceruleo_atr",
+    "descricao": {
+      "pt": "ideias do tamanho de galáxias",
+      "en": "ideas the size of galaxies"
+    }
+  },
+  {
+    "id": "i_c_lancador_9",
+    "nome": {
+      "pt": "Canhão de Ramo Temporal",
+      "en": "Timeline Branch Cannon"
+    },
+    "dif": 9,
+    "base": "c_lancador",
+    "descricao": {
+      "pt": "atira onde o alvo vai estar em outro mundo",
+      "en": "shoots where the target will be in another world"
+    }
+  },
+  {
+    "id": "i_c_esqueleto_9",
+    "nome": {
+      "pt": "Esqueleto de Probabilidade Fixa",
+      "en": "Fixed-Probability Skeleton"
+    },
+    "dif": 9,
+    "base": "c_esqueleto",
+    "descricao": {
+      "pt": "nas versões em que quebra, ele não está",
+      "en": "in the versions where it breaks, you aren't there"
+    }
+  },
+  {
+    "id": "i_c_reflexos_9",
+    "nome": {
+      "pt": "Sincronizador de Linhas do Tempo",
+      "en": "Timeline Synchronizer"
+    },
+    "dif": 9,
+    "base": "c_reflexos",
+    "descricao": {
+      "pt": "desvia do golpe de todas as versões",
+      "en": "dodges the blow from every version"
+    }
+  },
+  {
+    "id": "i_b_ceruleo_of_9",
+    "nome": {
+      "pt": "Simbionte de Mil Versões",
+      "en": "Thousand-Versions Symbiote"
+    },
+    "dif": 9,
+    "base": "b_ceruleo_of",
+    "descricao": {
+      "pt": "conjura com a mão de outro eu",
+      "en": "casts with another self's hand"
+    }
+  },
+  {
+    "id": "i_b_verde_def_9",
+    "nome": {
+      "pt": "Sangue de Paradoxo",
+      "en": "Paradox Blood"
+    },
+    "dif": 9,
+    "base": "b_verde_def",
+    "descricao": {
+      "pt": "a ferida acontece e desacontece",
+      "en": "the wound happens, then unhappens"
+    }
+  },
+  {
+    "id": "i_b_ambar_mut_9",
+    "nome": {
+      "pt": "Mutágeno do Eu de Outro Mundo",
+      "en": "Otherworld Self Mutagen"
+    },
+    "dif": 9,
+    "base": "b_ambar_mut",
+    "descricao": {
+      "pt": "a pontaria do melhor de você",
+      "en": "the aim of the best version of you"
+    }
+  },
+  {
+    "id": "i_c_for_9",
+    "nome": {
+      "pt": "Músculo de Corda Cósmica",
+      "en": "Cosmic String Muscle"
+    },
+    "dif": 9,
+    "base": "c_for",
+    "descricao": {
+      "pt": "fio que segura universos",
+      "en": "a thread that holds universes together"
+    }
+  },
+  {
+    "id": "i_b_verde_atr_9",
+    "nome": {
+      "pt": "DNA de Mil Versões",
+      "en": "Thousand-Versions DNA"
+    },
+    "dif": 9,
+    "base": "b_verde_atr",
+    "descricao": {
+      "pt": "o corpo pega o melhor de cada eu",
+      "en": "the body takes the best of every self"
+    }
+  },
+  {
+    "id": "i_c_lamina_10",
+    "nome": {
+      "pt": "Dedo do Autor",
+      "en": "The Author's Finger"
+    },
+    "dif": 10,
+    "base": "c_lamina",
+    "descricao": {
+      "pt": "risca a frase em que o inimigo existe",
+      "en": "strikes out the sentence the enemy exists in"
+    }
+  },
+  {
+    "id": "i_c_esqueleto_10",
+    "nome": {
+      "pt": "Encadernação Óssea",
+      "en": "Bone Binding"
+    },
+    "dif": 10,
+    "base": "c_esqueleto",
+    "descricao": {
+      "pt": "capa dura por dentro",
+      "en": "hardcover on the inside"
+    }
+  },
+  {
+    "id": "i_c_cortex_10",
+    "nome": {
+      "pt": "Córtex de Narrador",
+      "en": "Narrator's Cortex"
+    },
+    "dif": 10,
+    "base": "c_cortex",
+    "descricao": {
+      "pt": "sabe o próximo parágrafo",
+      "en": "knows the next paragraph"
+    }
+  },
+  {
+    "id": "i_b_ceruleo_of_10",
+    "nome": {
+      "pt": "Verbo Enxertado",
+      "en": "Grafted Word"
+    },
+    "dif": 10,
+    "base": "b_ceruleo_of",
+    "descricao": {
+      "pt": "uma palavra que faz o que diz",
+      "en": "a word that does what it says"
+    }
+  },
+  {
+    "id": "i_b_verde_def_10",
+    "nome": {
+      "pt": "Tinta Viva",
+      "en": "Living Ink"
+    },
+    "dif": 10,
+    "base": "b_verde_def",
+    "descricao": {
+      "pt": "o que apagam, ela reescreve",
+      "en": "whatever they erase, it rewrites"
+    }
+  },
+  {
+    "id": "i_b_rubro_mut_10",
+    "nome": {
+      "pt": "Mutágeno da Primeira Palavra",
+      "en": "First Word Mutagen"
+    },
+    "dif": 10,
+    "base": "b_rubro_mut",
+    "descricao": {
+      "pt": "o golpe que veio antes do mundo",
+      "en": "the blow that came before the world"
+    }
+  },
+  {
+    "id": "i_c_des_10",
+    "nome": {
+      "pt": "Mão que Escreve",
+      "en": "The Hand That Writes"
+    },
+    "dif": 10,
+    "base": "c_des",
+    "descricao": {
+      "pt": "tudo o que toca fica do jeito que ela quer",
+      "en": "everything it touches turns out the way it wants"
+    }
+  },
+  {
+    "id": "i_b_rubro_atr_10",
+    "nome": {
+      "pt": "Fôlego do Primeiro Herói",
+      "en": "Breath of the First Hero"
+    },
+    "dif": 10,
+    "base": "b_rubro_atr",
+    "descricao": {
+      "pt": "a força de quem veio antes de todas as histórias",
+      "en": "the strength of the one who came before every story"
+    }
+  }
+]

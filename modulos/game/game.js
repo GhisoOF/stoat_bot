@@ -18,8 +18,8 @@ import { validarUrlImagem } from "../core/midia.js";
 import { rodarTesteGeral } from "./teste-geral.js";
 import { traduzirEmbed, argsParaPortugues } from "./traducao.js";
 import { MUNDO, prepararMundo, garantirMoedasDoMundo, MOEDAS_DO_MUNDO } from "./mundo.js";
-import { ATRIB, acharAtributo, RARIDADE_INFO, SLOT_INFO, rotuloSlot, rotuloRaridade, acharRaridade, fmt, pct, semAcento,
-  numeroDigitado, barraProgresso, enviarLista, descreverItem } from "./ui.js";
+import { ATRIB, acharAtributo, RARIDADE_INFO, SLOT_INFO, rotuloSlot, rotuloRaridade, fmt, pct, semAcento,
+  numeroDigitado, barraProgresso, enviarLista, descreverItem, TIPOS_ITEM, palavraTipo, palavraRaridade, rotuloTipo, tipoDoItem, agruparPorTipo, lerFiltroDeItens } from "./ui.js";
 
 // ── Progresso (D6, D11 — RPG v4) ─────────────────────────────────────────────
 // O nível guarda o progresso dentro dele (0 a 1). A missão paga a força dela
@@ -425,7 +425,7 @@ export async function cmdGame(message, args, ctx) {
   }
 
   // ── itens / inventário ──
-  if (["itens", "inventario", "inventário", "mochila", "bag"].includes(sub)) {
+  if (["itens", "inventario", "inventário", "mochila", "bag", "items", "inventory"].includes(sub)) {
     const p = db.getPersonagem(serverId, eu);
     if (!p) {
       return sendEmbed(message.channel, tr(ctx,
@@ -446,22 +446,25 @@ export async function cmdGame(message, args, ctx) {
         colour: COR.info,
       }));
     }
-    const porRaridade = {};
-    for (const i of inv) (porRaridade[i.raridade] ??= []).push(i);
-
+    // v4: separada por tipo (a vaga onde vai), do mais raro para o mais comum;
+    // &game itens <tipo|raridade> filtra
+    const fInv = lerFiltroDeItens(args.slice(1).join(" "));
+    const ordemRar = (r) => -R.ORDEM.indexOf(r);
+    const filtrada = inv.filter((i) => (!fInv.raridade || i.raridade === fInv.raridade) && (!fInv.tipos || fInv.tipos.includes(tipoDoItem(i))))
+      .sort((a, b) => ordemRar(a.raridade) - ordemRar(b.raridade) || a.nome.localeCompare(b.nome));
+    const eq = db.getEquipado(serverId, eu);
     const linhas = [];
-    for (const r of db.RARIDADES.slice().reverse()) {
-      const lista = porRaridade[r];
-      if (!lista?.length) continue;
-      const info = RARIDADE_INFO[r] ?? {};
-      linhas.push(`${info.emoji} **${rotuloRaridade(r, en)}**`);
-      const eq = db.getEquipado(serverId, eu);
+    for (const [t, lista] of agruparPorTipo(filtrada)) {
+      linhas.push("", `${TIPOS_ITEM[t].emoji} **${rotuloTipo(t, en)}** — ${lista.reduce((n, i) => n + (i.quantidade ?? 1), 0)}`);
       for (const i of lista) {
         const marca = db.SLOTS.some((s) => eq[s]?.id === i.id) ? " ✅" : "";
         const qtd = i.quantidade > 1 ? ` ×${i.quantidade}` : "";
-        linhas.push(`   ${SLOT_INFO[i.slot]?.emoji ?? "•"} **${i.nome}**${qtd}${marca} — ${descreverItem(i, en)}`);
+        linhas.push(`   ${RARIDADE_INFO[i.raridade]?.emoji ?? ""} **${i.nome}**${qtd}${marca} — ${descreverItem(i, en)}`);
       }
     }
+    linhas.shift();
+    if (!filtrada.length) linhas.push(en ? "_Nothing with that filter in your bag._" : "_Nada com esse filtro na sua mochila._");
+    else if (!fInv.raridade && !fInv.tipos && filtrada.length > 12) linhas.unshift(en ? `_Just one type: \`${P}game itens firearms\` · \`${P}game itens bioware\` · \`${P}game itens epic\`_` : `_Só um tipo: \`${P}game itens fogo\` · \`${P}game itens bioware\` · \`${P}game itens epico\`_`, "");
     return enviarLista(sendEmbed, message.channel, {
       titulo: en ? "🎒 Your bag" : "🎒 Sua mochila",
       linhas,
@@ -597,40 +600,81 @@ export async function cmdGame(message, args, ctx) {
   }
 
   if (["catalogo", "catálogo", "itens-jogo", "loja"].includes(sub)) {
-    const filtro = semAcento(args.slice(1).join(" "));
-    const raridade = acharRaridade(filtro);
-    const SLOTS_F = { arma: "mao", armas: "mao", mao: "mao", "mão": "mao", weapon: "mao", capacete: "capacete", cabeca: "capacete", head: "capacete",
-      armadura: "armadura", corpo: "armadura", body: "armadura", armor: "armadura", acessorio: "acessorio", acessorios: "acessorio", accessory: "acessorio",
-      implante: "implante", implantes: "implante", implant: "implante", bioware: "implante", cyberware: "implante" };
-    const slotFiltro = SLOTS_F[filtro] ?? null;
+    // v4: dentro da raridade, separado por tipo (corpo a corpo, fogo, mágica,
+    // escudo, foco, cabeça, corpo, acessório, bioware, cyberware) — num lote
+    // grande, primeiro o resumo por tipo; o tipo pedido lista inteiro.
+    const filtro = args.slice(1).join(" ").trim();
+    const f = lerFiltroDeItens(filtro);
     const todos = db.listarItens().filter((i) => !["contrato", "pergaminho"].includes(i.slot));
     const obras = [...new Set(todos.map((i) => i.obra).filter(Boolean))];
-    const obraFiltro = filtro && !raridade && !slotFiltro ? obras.find((o) => semAcento(o).includes(filtro)) : null;
-    const lista = todos.filter((i) => (!raridade || i.raridade === raridade) && (!slotFiltro || i.slot === slotFiltro) && (!obraFiltro || i.obra === obraFiltro));
-    const ajudaFiltros = en
-      ? [`**Rarities:** ${R.ORDEM.map((r) => rotuloRaridade(r, true)).join(" · ")}`, "**Slots:** arma · capacete · armadura · acessorio · implante", obras.length ? `**Works:** ${obras.join(" · ")}` : ""]
-      : [`**Raridades:** ${R.ORDEM.map((r) => rotuloRaridade(r, false)).join(" · ")}`, "**Vagas:** arma · capacete · armadura · acessorio · implante", obras.length ? `**Obras:** ${obras.join(" · ")}` : ""];
-    if (filtro && !raridade && !slotFiltro && !obraFiltro) {
+    const obraFiltro = f.resto ? obras.find((o) => semAcento(o).includes(semAcento(f.resto))) ?? null : null;
+    const tiposEquip = Object.keys(TIPOS_ITEM).filter((t) => !["contrato", "pergaminho"].includes(t));
+    const ajudaFiltros = [
+      `**${en ? "Rarities" : "Raridades"}:** ${R.ORDEM.map((r) => rotuloRaridade(r, en)).join(" · ")}`,
+      `**${en ? "Types" : "Tipos"}:** ${tiposEquip.map((t) => `${TIPOS_ITEM[t].emoji} \`${palavraTipo(t, en)}\``).join(" · ")} · \`${en ? "weapons" : "armas"}\` · \`${en ? "implants" : "implantes"}\``,
+      obras.length ? `**${en ? "Works" : "Obras"}:** ${obras.join(" · ")}` : "",
+      en ? `_Mix them: \`${P}game catalogo epic firearms\` · \`${P}game catalogo bioware\`_` : `_Combine: \`${P}game catalogo epico fogo\` · \`${P}game catalogo bioware\`_`,
+    ];
+    if (f.resto && !obraFiltro) {
       return sendEmbed(message.channel, { title: en ? "❌ Unknown filter" : "❌ Filtro desconhecido",
-        description: [en ? `I don't know **${filtro}**.` : `Não conheço **${filtro}**.`, "", ...ajudaFiltros].filter(Boolean).join("\n"), colour: COR.erro });
+        description: [en ? `I don't know **${f.resto}**.` : `Não conheço **${f.resto}**.`, "", ...ajudaFiltros].filter(Boolean).join("\n"), colour: COR.erro });
     }
-    // Sem filtro: resumo por raridade (cabe sempre)
+    // dentro do tipo: dificuldade, depois o porte (leve → colossal), depois o nome
+    const PORTE_ORDEM = { leve: 0, medio: 1, pesado: 2, colossal: 3 };
+    const porte = (i) => PORTE_ORDEM[i.dados?.arma?.porte] ?? 9;
+    const lista = todos.filter((i) => (!f.raridade || i.raridade === f.raridade) && (!f.tipos || f.tipos.includes(tipoDoItem(i))) && (!obraFiltro || i.obra === obraFiltro))
+      .sort((a, b) => (a.dif ?? 0) - (b.dif ?? 0) || porte(a) - porte(b) || a.nome.localeCompare(b.nome));
+    // a obra no comando sugerido: a primeira palavra que a identifica ("warhammer", "tokyo", "elder")
+    const palavraObra = obraFiltro ? semAcento(obraFiltro).split(/[^a-z0-9]+/).find((w) => w.length >= 4 && w !== "the") ?? semAcento(f.resto) : null;
+    const rodape = en ? `_♾️ = infinite stock · ✦ unique · price and details:_ \`${P}game item <name>\`` : `_♾️ = estoque infinito · ✦ único · preço e detalhes:_ \`${P}game item <nome>\``;
+    const contagem = (itens) => agruparPorTipo(itens).map(([t, l]) => `${TIPOS_ITEM[t].emoji}${l.length}`).join(" ");
+
+    // Sem filtro: uma linha por raridade, com a contagem por tipo
     if (!filtro) {
       const linhas = [en ? `**${lista.length}** items in the game — 10 rarities, one per difficulty:` : `**${lista.length}** itens no jogo — 10 raridades, uma por dificuldade:`, ""];
       for (const r of R.ORDEM) {
         const itens = lista.filter((i) => i.raridade === r);
         if (!itens.length) continue;
-        const info = RARIDADE_INFO[r] ?? {}, d = R.difDaRaridade(r);
-        const porSlot = ["mao", "capacete", "armadura", "acessorio", "implante"].map((sl) => [sl, itens.filter((i) => i.slot === sl).length]).filter(([, n]) => n);
-        linhas.push(`${info.emoji} **${rotuloRaridade(r, en)}** _(${en ? "difficulty" : "dificuldade"} ${d})_ — ${porSlot.map(([sl, n]) => `${SLOT_INFO[sl].emoji}${n}`).join(" ")} · \`${P}game catalogo ${r}\``);
+        linhas.push(`${RARIDADE_INFO[r]?.emoji} **${rotuloRaridade(r, en)}** _(${en ? "difficulty" : "dificuldade"} ${R.difDaRaridade(r)})_ — ${contagem(itens)} · \`${P}game catalogo ${palavraRaridade(r, en)}\``);
       }
-      linhas.push("", ...ajudaFiltros.filter(Boolean), "", en ? `_♾️ = infinite stock · ✦ = unique (never sold by the NPC) · details: \`${P}game item <name>\`_` : `_♾️ = estoque infinito · ✦ = único (o NPC não vende) · detalhes: \`${P}game item <nome>\`_`);
+      linhas.push("", ...ajudaFiltros.filter(Boolean), "", en ? `_♾️ = infinite stock · ✦ = unique (never sold by the NPC)_` : `_♾️ = estoque infinito · ✦ = único (o NPC não vende)_`);
       return sendEmbed(message.channel, { title: en ? "📖 Game items" : "📖 Itens do jogo", description: linhas.join("\n").slice(0, 3900), colour: COR.info });
     }
-    const titulo = raridade ? `${RARIDADE_INFO[raridade].emoji} ${rotuloRaridade(raridade, en)}` : slotFiltro ? `${SLOT_INFO[slotFiltro].emoji} ${rotuloSlot(slotFiltro, en)}` : `📚 ${obraFiltro}`;
-    const linhas = lista.map((i) => `${raridade ? "" : RARIDADE_INFO[i.raridade]?.emoji ?? ""}${SLOT_INFO[i.slot]?.emoji ?? "•"} **${i.nome}**${i.infinito ? " ♾️" : ""}${i.especial ? " ✦" : ""}${i.obra && !obraFiltro ? ` _(${i.obra})_` : ""}\n   ${descreverItem(i, en)}`);
-    return enviarLista(sendEmbed, message.channel, { titulo: `${titulo} — ${lista.length}`, linhas,
-      rodape: en ? `_♾️ = infinite stock · ✦ unique · price and details:_ \`${P}game item <name>\`` : `_♾️ = estoque infinito · ✦ único · preço e detalhes:_ \`${P}game item <nome>\``, colour: COR.info });
+    if (!lista.length) {
+      return sendEmbed(message.channel, { title: en ? "📖 Nothing here" : "📖 Nada aqui", colour: COR.aviso,
+        description: [en ? "No item matches that filter." : "Nenhum item com esse filtro.", "", ...ajudaFiltros].filter(Boolean).join("\n") });
+    }
+    const titulo = [f.raridade ? `${RARIDADE_INFO[f.raridade].emoji} ${rotuloRaridade(f.raridade, en)}` : null,
+      f.tipos ? (f.tipos.length === 1 ? `${TIPOS_ITEM[f.tipos[0]].emoji} ${rotuloTipo(f.tipos[0], en)}` : f.tipos.length === 5 ? (en ? "⚔️ Weapons" : "⚔️ Armas") : (en ? "🧬 Implants" : "🧬 Implantes")) : null,
+      obraFiltro ? `📚 ${obraFiltro}` : null].filter(Boolean).join(" · ");
+
+    // Lote grande sem tipo escolhido: o resumo por tipo, com o comando de cada um
+    if (!f.tipos && lista.length > 20) {
+      const L = [en ? `**${lista.length}** items — pick a type:` : `**${lista.length}** itens — escolha um tipo:`, ""];
+      for (const [t, l] of agruparPorTipo(lista)) {
+        const cmd = [P + "game catalogo", f.raridade && palavraRaridade(f.raridade, en), palavraTipo(t, en), palavraObra].filter(Boolean).join(" ");
+        const amostra = l.slice(0, 3).map((i) => i.nome).join(", ") + (l.length > 3 ? "…" : "");
+        L.push(`${TIPOS_ITEM[t].emoji} **${rotuloTipo(t, en)}** — ${l.length} · \`${cmd}\``, `   _${amostra}_`);
+      }
+      return enviarLista(sendEmbed, message.channel, { titulo: `${titulo} — ${lista.length}`, linhas: L, rodape, colour: COR.info });
+    }
+    // Tipo escolhido sem raridade, e muitos: o resumo por raridade
+    if (f.tipos && !f.raridade && lista.length > 25) {
+      const L = [en ? `**${lista.length}** items — pick a rarity:` : `**${lista.length}** itens — escolha a raridade:`, ""];
+      for (const r of R.ORDEM) {
+        const l = lista.filter((i) => i.raridade === r);
+        if (!l.length) continue;
+        L.push(`${RARIDADE_INFO[r].emoji} **${rotuloRaridade(r, en)}** — ${contagem(l)} · \`${[P + "game catalogo", palavraRaridade(r, en), f.tipos.length === 1 ? palavraTipo(f.tipos[0], en) : f.tipos.length === 5 ? (en ? "weapons" : "armas") : (en ? "implants" : "implantes"), palavraObra].filter(Boolean).join(" ")}\``);
+      }
+      return enviarLista(sendEmbed, message.channel, { titulo: `${titulo} — ${lista.length}`, linhas: L, rodape, colour: COR.info });
+    }
+    // A lista, separada por tipo
+    const L = [];
+    for (const [t, l] of agruparPorTipo(lista)) {
+      L.push("", `${TIPOS_ITEM[t].emoji} **${rotuloTipo(t, en)}** — ${l.length}`);
+      for (const i of l) L.push(`${f.raridade ? "" : `${RARIDADE_INFO[i.raridade]?.emoji ?? ""} `}**${i.nome}**${i.infinito ? " ♾️" : ""}${i.especial ? " ✦" : ""}${i.obra && !obraFiltro ? ` _(${i.obra})_` : ""}\n   ${descreverItem(i, en)}`);
+    }
+    return enviarLista(sendEmbed, message.channel, { titulo: `${titulo} — ${lista.length}`, linhas: L.slice(1), rodape, colour: COR.info });
   }
 
   if (["admin", "debug"].includes(sub)) {
@@ -1936,17 +1980,24 @@ export async function cmdGame(message, args, ctx) {
       if (achada) { busca = mComMoeda[1].trim(); moedaEscolhida = achada; }
     }
 
-    if (!busca || acharRaridade(busca) || /^\d+$/.test(busca)) {
-      // a loja mostra a raridade da sua faixa (ou a pedida): ninguém lê 280 itens
-      const rar = acharRaridade(busca) ?? (/^\d+$/.test(busca) ? R.faixaDaDif(Math.max(1, Math.min(10, parseInt(busca, 10)))).raridade : R.faixaDoNivel(p.nivel).raridade);
-      const itens = db.listarItens({ raridade: rar }).filter((i) => !i.especial && !["contrato", "pergaminho"].includes(i.slot));
-      const linhas = [en ? `${RARIDADE_INFO[rar].emoji} **${rotuloRaridade(rar, true)}** — other rarities: \`${P}game comprar <rarity>\`` : `${RARIDADE_INFO[rar].emoji} **${rotuloRaridade(rar, false)}** — outras raridades: \`${P}game comprar <raridade>\``, ""];
-      for (const i of itens) {
-        const est = db.getEstoque(serverId, i.id);
-        const preco = MERC.precoDeVenda(i, est, pSuave);
-        const qtd = i.infinito ? "♾️" : `${est?.quantidade ?? est?.base ?? 10}un`;
-        linhas.push(`${SLOT_INFO[i.slot]?.emoji ?? "•"} **${i.nome}** — ${moeda.simbolo}${fmt(preco)} _(${qtd})_${i.obra ? ` · _${i.obra}_` : ""}`);
+    const fLoja = lerFiltroDeItens(busca);
+    if (!busca || /^\d+$/.test(busca) || ((fLoja.raridade || fLoja.tipos) && !fLoja.resto)) {
+      // a loja mostra a raridade da sua faixa (ou a pedida), separada por tipo: ninguém lê 280 itens
+      const rar = fLoja.raridade ?? (/^\d+$/.test(busca) ? R.faixaDaDif(Math.max(1, Math.min(10, parseInt(busca, 10)))).raridade : R.faixaDoNivel(p.nivel).raridade);
+      const itens = db.listarItens({ raridade: rar }).filter((i) => !i.especial && !["contrato", "pergaminho"].includes(i.slot) && (!fLoja.tipos || fLoja.tipos.includes(tipoDoItem(i))))
+        .sort((a, b) => a.nome.localeCompare(b.nome));
+      const linhas = [en ? `${RARIDADE_INFO[rar].emoji} **${rotuloRaridade(rar, true)}** — other rarities: \`${P}game comprar <rarity>\` · one type: \`${P}game comprar ${palavraRaridade(rar, true)} firearms\``
+        : `${RARIDADE_INFO[rar].emoji} **${rotuloRaridade(rar, false)}** — outras raridades: \`${P}game comprar <raridade>\` · um tipo só: \`${P}game comprar ${rar} fogo\``];
+      for (const [t, l] of agruparPorTipo(itens)) {
+        linhas.push("", `${TIPOS_ITEM[t].emoji} **${rotuloTipo(t, en)}**`);
+        for (const i of l) {
+          const est = db.getEstoque(serverId, i.id);
+          const preco = MERC.precoDeVenda(i, est, pSuave);
+          const qtd = i.infinito ? "♾️" : `${est?.quantidade ?? est?.base ?? 10}un`;
+          linhas.push(`   **${i.nome}** — ${moeda.simbolo}${fmt(preco)} _(${qtd})_${i.obra ? ` · _${i.obra}_` : ""}`);
+        }
       }
+      if (!itens.length) linhas.push("", en ? "_Nothing of that type in this rarity._" : "_Nada desse tipo nesta raridade._");
       linhas.push("", en
         ? `_\`${P}game comprar <item>\` · your balance: ${moeda.simbolo}${fmt(db.getSaldo(serverId, eu, moeda.id))}_`
         : `_\`${P}game comprar <item>\` · seu saldo: ${moeda.simbolo}${fmt(db.getSaldo(serverId, eu, moeda.id))}_`);
@@ -2518,7 +2569,7 @@ export async function cmdGame(message, args, ctx) {
         `\`${P}game criar [name]\` — creates your character · \`${P}game\` — your sheet · \`${P}game ficha @person\``,
         `\`${P}game pontos <attribute> [how many]\` · \`${P}game classe\` · \`${P}game evoluir\` — spends points and equips for you`,
         `\`${P}game itens\` · \`${P}game equipar <item> [mao1|mao2]\` · \`${P}game usar <contract|scroll>\` · \`${P}game desequipar <slot>\``,
-        `\`${P}game catalogo [rarity|slot]\` · \`${P}game item <name>\` · \`${P}game comprar [rarity|item]\``,
+        `\`${P}game catalogo [rarity] [type]\` · \`${P}game item <name>\` · \`${P}game comprar [rarity] [type]\``,
         `\`${P}game magias\` · \`${P}game aprender <name>\` — the grimoire`,
         `\`${P}game contratos\` — the guild board · \`${P}game dungeons\` · \`${P}game chefes\` · \`${P}game especiais\``,
         `\`${P}game coop abrir <…>\` — together, up to 4 · \`${P}game historia\` — your last story`,
@@ -2535,7 +2586,7 @@ export async function cmdGame(message, args, ctx) {
         `\`${P}game criar [nome]\` — cria seu personagem · \`${P}game\` — sua ficha · \`${P}game ficha @pessoa\``,
         `\`${P}game pontos <atributo> [quantos]\` · \`${P}game classe\` · \`${P}game evoluir\` — gasta os pontos e equipa por você`,
         `\`${P}game itens\` · \`${P}game equipar <item> [mao1|mao2]\` · \`${P}game usar <contrato|pergaminho>\` · \`${P}game desequipar <vaga>\``,
-        `\`${P}game catalogo [raridade|vaga]\` · \`${P}game item <nome>\` · \`${P}game comprar [raridade|item]\``,
+        `\`${P}game catalogo [raridade] [tipo]\` · \`${P}game item <nome>\` · \`${P}game comprar [raridade] [tipo]\``,
         `\`${P}game magias\` · \`${P}game aprender <nome>\` — o grimório`,
         `\`${P}game contratos\` — o quadro da guilda · \`${P}game dungeons\` · \`${P}game chefes\` · \`${P}game especiais\``,
         `\`${P}game coop abrir <…>\` — em grupo, até 4 · \`${P}game historia\` — sua última história`,

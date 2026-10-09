@@ -26,17 +26,35 @@ inglês dos itens e personagens ("buy Iron Sword" acha a "Espada de Ferro").
 
 | comando | o quê |
 |---|---|
-| `&game itens` | a mochila |
+| `&game itens [raridade] [tipo]` | a mochila, separada por tipo (ex.: `&game itens fogo`, `&game itens implantes`) |
 | `&game equipar <item> [mao1\|mao2]` | equipa. Uma arma sozinha vai nas duas mãos; o escudo vai na mão 2; o implante de cyberware substitui o da mesma região do corpo |
 | `&game usar <contrato>` | o contrato vira o companheiro (um de cada por jogador) |
 | `&game usar <pergaminho>` | o pergaminho vira magia no grimório |
 | `&game desequipar <vaga>` | `mao1`, `mao2`, `cabeca`, `corpo`, `acessorio1-3`, `bio1-3`, `ciber1-3` |
-| `&game catalogo [raridade\|vaga\|obra]` | o catálogo inteiro, por raridade, vaga ou obra |
+| `&game catalogo [raridade] [tipo] [obra]` | o catálogo, em qualquer combinação (ex.: `&game catalogo epico fogo`, `&game catalogo bioware`, `&game catalogo warhammer fogo`). Uma raridade sozinha mostra o resumo por tipo, e o tipo pedido lista inteiro |
 | `&game item <nome>` | ficha do item: dano ou defesa, requisitos, preço e imagem |
-| `&game comprar [raridade\|item]` | compra do NPC (os únicos ✦ não são vendidos) |
+| `&game comprar [raridade] [tipo]` · `&game comprar <item>` | a loja, separada por tipo (ex.: `&game comprar raro escudo`), ou compra um item (os únicos ✦ não são vendidos) |
 | `&game vender <item>` | vende ao NPC (os únicos não são aceitos) |
 | `&game magias` · `&game magia <nome>` | o grimório (as magias pedem Inteligência) |
 | `&game aprender <nome> [com <moeda>]` | compra uma magia |
+
+### Tipos de item (para `catalogo`, `comprar` e `itens`)
+
+| tipo | palavras aceitas |
+|---|---|
+| ⚔️ Armas corpo a corpo | `corpo-a-corpo`, `corpo a corpo`, `branca`, `espada`, `melee` |
+| 🔫 Armas de fogo | `fogo`, `armas de fogo`, `pistola`, `rifle`, `firearms` |
+| 🪄 Armas mágicas | `magica`, `cajado`, `varinha`, `magic` |
+| 🔰 Escudos | `escudo`, `shield` |
+| 🔮 Focos | `foco`, `focus` |
+| 🪖 Cabeça | `cabeca`, `capacete`, `elmo`, `head` |
+| 🛡️ Corpo | `armadura`, `corpo`, `roupa`, `armor` |
+| 💍 Acessórios | `acessorio`, `anel`, `amuleto`, `accessory` |
+| 🧬 Bioware | `bioware`, `bio` |
+| 🦾 Cyberware | `cyberware`, `ciber`, `cyber` |
+| (grupos) | `armas` (os cinco de mão) · `implantes` (bio + ciber) |
+
+A raridade aceita o nome em PT ou EN (`epico`, `epic`) e a ordem não importa.
 
 ## Missões e lutas
 

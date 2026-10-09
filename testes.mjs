@@ -10081,6 +10081,29 @@ e = await admin("admin imagem Harkon remover");
 ok(!IMG.imagemDe("b_tes_harkon") && /removida/.test(e.title), "remover tira");
 ok(!/imagem/.test(JSON.stringify(await import("./modulos/game/conteudo/skyrim.json", { with: { type: "json" } }))), "  → e nada disso vai para o JSON do repositório");
 
+console.log("\n── 16. listas separadas por tipo (catálogo, loja, mochila) ──");
+const UI = await import("./modulos/game/ui.js");
+ok(JSON.stringify(UI.lerFiltroDeItens("armas de fogo epico")) === JSON.stringify({ raridade: "epico", tipos: ["fogo"], resto: "" }), "★ \"armas de fogo epico\" = raridade + tipo, em qualquer ordem");
+ok(UI.lerFiltroDeItens("raro corpo").tipos[0] === "armadura" && UI.lerFiltroDeItens("raro corpo a corpo").tipos[0] === "melee", "  → \"corpo\" é armadura; \"corpo a corpo\" é arma");
+ok(UI.tipoDoItem(ITENS.get("i_c_lamina_1")) === "cyberware" && UI.tipoDoItem(ITENS.get("g_escudo_tabuas")) === "escudo", "  → implante e escudo têm tipo próprio");
+let pags = [];
+const cat = async (txt, lang = "pt") => { pags = []; const ctx = { serverId: "S", PREFIXO: "&", COR: { erro: 1, aviso: 2, sucesso: 3, info: 4, mod: 5 }, config: { language: lang },
+  sendEmbed: async (_c, e) => { pags.push(e); return { id: "m", react: async () => {} }; }, getServer: async () => ({ id: "S", channels: [] }), ehSuperAdmin: () => false, membroTemPermissao: () => true };
+  await game.cmdGame({ authorId: "ANA", author: { username: "ANA" }, channel: { id: "C" }, channelId: "C", mentionIds: [] }, txt.split(" "), ctx);
+  return pags.map((x) => `${x.title}\n${x.description}`).join("\n"); };
+t = await cat("catalogo epico");
+ok(/escolha um tipo/.test(t) && /Armas de fogo\*\* — \d+ · `&game catalogo epico fogo`/.test(t) && pags.length === 1, "★ a raridade grande mostra o resumo por tipo, numa página só");
+t = await cat("catalogo epico fogo");
+ok(/Armas de fogo/.test(t) && !/Bioware|Cabeça/.test(t), "  → e o tipo pedido lista só ele");
+t = await cat("catalogo warhammer fogo");
+ok(/escolha a raridade/.test(t) && /catalogo raro fogo warhammer/.test(t), "  → obra + tipo também (e sugere o comando com a obra)");
+t = await cat("catalogo epic firearms", "en");
+ok(/Firearms/.test(t) && !/Armas de fogo/.test(t), "  → em inglês, com as palavras em inglês");
+t = await cat("comprar raro escudo");
+ok(/Escudos/.test(t) && !/Armas de fogo/.test(t), "a loja filtra por raridade e tipo");
+t = await cat("itens implantes");
+ok(!/Armas corpo a corpo/.test(t), "a mochila filtra por tipo");
+
 console.log(`\nRPG v4: ${pass} ok, ${fail} falha(s)`);
 process.exit(fail ? 1 : 0);
 };

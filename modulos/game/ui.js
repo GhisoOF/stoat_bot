@@ -58,6 +58,86 @@ export const SLOT_INFO = {
   ciber2:     { emoji: "🦾", rotulo: "Cyberware 2", rotuloEN: "Cyberware 2" },
   ciber3:     { emoji: "🦾", rotulo: "Cyberware 3", rotuloEN: "Cyberware 3" },
 };
+// ── Tipos de item (para listar separado dentro da raridade) ─────────────────
+// Mais fino que a vaga: arma corpo a corpo / de fogo / mágica, escudo, foco,
+// cabeça, corpo, acessório, bioware, cyberware (e contrato, pergaminho).
+export const TIPOS_ITEM = {
+  melee:      { emoji: "⚔️", rotulo: "Armas corpo a corpo", rotuloEN: "Melee weapons" },
+  fogo:       { emoji: "🔫", rotulo: "Armas de fogo", rotuloEN: "Firearms" },
+  magica:     { emoji: "🪄", rotulo: "Armas mágicas", rotuloEN: "Magic weapons" },
+  escudo:     { emoji: "🔰", rotulo: "Escudos", rotuloEN: "Shields" },
+  foco:       { emoji: "🔮", rotulo: "Focos", rotuloEN: "Foci" },
+  capacete:   { emoji: "🪖", rotulo: "Cabeça", rotuloEN: "Head" },
+  armadura:   { emoji: "🛡️", rotulo: "Corpo", rotuloEN: "Body" },
+  acessorio:  { emoji: "💍", rotulo: "Acessórios", rotuloEN: "Accessories" },
+  bioware:    { emoji: "🧬", rotulo: "Bioware", rotuloEN: "Bioware" },
+  cyberware:  { emoji: "🦾", rotulo: "Cyberware", rotuloEN: "Cyberware" },
+  contrato:   { emoji: "📜", rotulo: "Contratos", rotuloEN: "Contracts" },
+  pergaminho: { emoji: "📖", rotulo: "Pergaminhos", rotuloEN: "Scrolls" },
+};
+// a palavra que o jogo sugere nos comandos ("&game catalogo epico fogo")
+export const PALAVRA_TIPO = { melee: "corpo-a-corpo", fogo: "fogo", magica: "magica", escudo: "escudo", foco: "foco", capacete: "cabeca",
+  armadura: "armadura", acessorio: "acessorio", bioware: "bioware", cyberware: "cyberware", contrato: "contrato", pergaminho: "pergaminho" };
+const PALAVRA_TIPO_EN = { melee: "melee", fogo: "firearms", magica: "magic", escudo: "shield", foco: "focus", capacete: "head",
+  armadura: "armor", acessorio: "accessory", bioware: "bioware", cyberware: "cyberware", contrato: "contract", pergaminho: "scroll" };
+export const palavraTipo = (t, en) => (en ? PALAVRA_TIPO_EN[t] : PALAVRA_TIPO[t]) ?? t;
+export const palavraRaridade = (r, en) => (en ? RARIDADE_INFO[r]?.rotuloEN.toLowerCase() : r) ?? r;
+export const rotuloTipo = (t, en) => (en ? TIPOS_ITEM[t]?.rotuloEN : TIPOS_ITEM[t]?.rotulo) ?? t;
+export function tipoDoItem(i) {
+  const d = i?.dados ?? {};
+  if (d.tipo === "arma") return d.foco ? "foco" : d.arma?.tipo === "fogo" ? "fogo" : d.arma?.tipo === "magica" ? "magica" : "melee";
+  if (d.tipo === "escudo") return "escudo";
+  if (d.tipo === "implante") return d.familia === "bio" ? "bioware" : "cyberware";
+  if (TIPOS_ITEM[i?.slot]) return i.slot;   // capacete, armadura, acessorio, contrato, pergaminho
+  return "acessorio";
+}
+// Palavra digitada → os tipos que ela cobre ("armas" = os cinco de mão)
+const ALIAS_TIPO = {
+  melee: ["corpo a corpo", "corpo-a-corpo", "corpoacorpo", "branca", "brancas", "melee", "espada", "espadas", "lamina", "laminas"],
+  fogo: ["fogo", "armas de fogo", "arma de fogo", "distancia", "ranged", "firearm", "firearms", "gun", "guns", "tiro", "pistola", "pistolas", "rifle", "rifles"],
+  magica: ["magica", "magicas", "armas magicas", "magic", "cajado", "cajados", "varinha", "varinhas", "staff"],
+  escudo: ["escudo", "escudos", "shield", "shields"],
+  foco: ["foco", "focos", "focus", "foci"],
+  capacete: ["capacete", "capacetes", "cabeca", "elmo", "elmos", "head", "helmet", "helmets"],
+  armadura: ["armadura", "armaduras", "corpo", "body", "armor", "armour", "roupa", "roupas"],
+  acessorio: ["acessorio", "acessorios", "accessory", "accessories", "anel", "aneis", "amuleto", "amuletos"],
+  bioware: ["bio", "bioware"],
+  cyberware: ["ciber", "cyber", "cyberware", "ciberware"],
+  contrato: ["contrato", "contratos", "contract", "contracts"],
+  pergaminho: ["pergaminho", "pergaminhos", "scroll", "scrolls"],
+};
+const GRUPOS_TIPO = { armas: ["melee", "fogo", "magica", "escudo", "foco"], arma: ["melee", "fogo", "magica", "escudo", "foco"],
+  weapon: ["melee", "fogo", "magica", "escudo", "foco"], weapons: ["melee", "fogo", "magica", "escudo", "foco"], mao: ["melee", "fogo", "magica", "escudo", "foco"],
+  implante: ["bioware", "cyberware"], implantes: ["bioware", "cyberware"], implant: ["bioware", "cyberware"], implants: ["bioware", "cyberware"] };
+export function acharTipo(txt) {
+  const t = String(txt ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+  if (!t) return null;
+  if (GRUPOS_TIPO[t]) return GRUPOS_TIPO[t];
+  const k = Object.keys(ALIAS_TIPO).find((x) => x === t || ALIAS_TIPO[x].includes(t));
+  return k ? [k] : null;
+}
+// Itens agrupados por tipo, na ordem de TIPOS_ITEM: [[tipo, itens], …]
+export function agruparPorTipo(itens) {
+  const g = new Map(Object.keys(TIPOS_ITEM).map((k) => [k, []]));
+  for (const i of itens) g.get(tipoDoItem(i))?.push(i);
+  return [...g].filter(([, l]) => l.length);
+}
+// Lê "<raridade> <tipo>" em qualquer ordem; o que sobra volta em `resto`
+export function lerFiltroDeItens(txt) {
+  const palavras = String(txt ?? "").trim().split(/\s+/).filter(Boolean);
+  let raridade = null, tipos = null;
+  const sobra = [];
+  for (let k = 0; k < palavras.length; k++) {
+    const dupla = palavras.slice(k, k + 3).join(" "), dupla2 = palavras.slice(k, k + 2).join(" ");
+    if (!tipos && acharTipo(dupla) && palavras.length - k >= 3) { tipos = acharTipo(dupla); k += 2; continue; }
+    if (!tipos && acharTipo(dupla2) && palavras.length - k >= 2) { tipos = acharTipo(dupla2); k += 1; continue; }
+    if (!raridade && acharRaridade(palavras[k])) { raridade = acharRaridade(palavras[k]); continue; }
+    if (!tipos && acharTipo(palavras[k])) { tipos = acharTipo(palavras[k]); continue; }
+    sobra.push(palavras[k]);
+  }
+  return { raridade, tipos, resto: sobra.join(" ") };
+}
+
 export const rotuloSlot = (s, en) => (en ? SLOT_INFO[s]?.rotuloEN : SLOT_INFO[s]?.rotulo) ?? s;
 export const rotuloRaridade = (r, en) => (en ? RARIDADE_INFO[r]?.rotuloEN : RARIDADE_INFO[r]?.rotulo) ?? r;
 export function acharRaridade(txt) {

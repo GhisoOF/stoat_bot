@@ -76,24 +76,37 @@ okay "main em $(git rev-parse --short HEAD)"
 # ── 0b. O zip foi feito sobre o main de agora? ──
 # O zip substitui os arquivos inteiros: se o main recebeu commits depois da
 # base do zip, eles seriam DESFEITOS em silêncio. O zip do Claude traz a base
-# no comentário ("stoat_bot base=<commit>"); zip sem isso pede confirmação.
-BASE="$(unzip -z "$ZIP" 2>/dev/null | grep -oE 'base=[0-9a-f]{7,40}' | head -1 | cut -d= -f2 || true)"
-if [ -n "$BASE" ]; then
-  if ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
-    avis "a base do zip ($BASE) não existe neste checkout — confira se o zip é deste repositório"
-  elif [ "$(git rev-parse "$BASE")" != "$(git rev-parse HEAD)" ]; then
-    DEPOIS="$(git rev-list --count "$BASE"..HEAD)"
-    if [ "$DEPOIS" -gt 0 ]; then
-      printf '\n\033[31m✗ o zip foi feito sobre %s, mas o main tem %s commit(s) depois dele:\033[0m\n' "$(git rev-parse --short "$BASE")" "$DEPOIS"
-      git log --oneline "$BASE"..HEAD | head -20
-      if [ "${FORCAR:-0}" != "1" ]; then
-        printf '\nSubir este zip DESFARIA esses commits. Peça um zip novo (sobre o main de agora)\nou rode com FORCAR=1 se tem certeza.\n'
-        exit 1
-      fi
-      avis "FORCAR=1 — seguindo mesmo assim"
+# no comentário: "base=<commit>" e "arvore=<árvore>". A árvore (o conteúdo)
+# vale mesmo quando o commit de lá tem outro id que o daqui (o deploy por zip
+# cria um commit novo com o mesmo conteúdo).
+COMENTARIO="$(unzip -z "$ZIP" 2>/dev/null || true)"
+BASE="$(printf '%s' "$COMENTARIO" | grep -oE 'base=[0-9a-f]{7,40}' | head -1 | cut -d= -f2 || true)"
+ARVORE="$(printf '%s' "$COMENTARIO" | grep -oE 'arvore=[0-9a-f]{40}' | head -1 | cut -d= -f2 || true)"
+# o commit mais novo do main com o mesmo conteúdo da base; senão, o próprio
+# commit da base — se ele estiver no histórico do main
+BASEC=""
+[ -n "$ARVORE" ] && BASEC="$(git log --format='%H %T' HEAD | awk -v t="$ARVORE" '$2 == t { print $1; exit }')"
+if [ -z "$BASEC" ] && [ -n "$BASE" ] && git cat-file -e "$BASE^{commit}" 2>/dev/null \
+   && git merge-base --is-ancestor "$BASE" HEAD 2>/dev/null; then
+  BASEC="$(git rev-parse "$BASE")"
+fi
+if [ -n "$BASEC" ]; then
+  DEPOIS="$(git rev-list --count "$BASEC"..HEAD)"
+  if [ "$DEPOIS" -gt 0 ]; then
+    printf '\n\033[31m✗ o zip foi feito sobre %s, mas o main tem %s commit(s) depois dele:\033[0m\n' "$(git rev-parse --short "$BASEC")" "$DEPOIS"
+    git log --oneline "$BASEC"..HEAD | head -20
+    if [ "${FORCAR:-0}" != "1" ]; then
+      printf '\nSubir este zip DESFARIA esses commits. Peça um zip novo (sobre o main de agora)\nou rode com FORCAR=1 se tem certeza.\n'
+      exit 1
     fi
+    avis "FORCAR=1 — seguindo mesmo assim"
   fi
-  okay "zip feito sobre $(git rev-parse --short "$BASE" 2>/dev/null || echo "$BASE")"
+  okay "zip feito sobre $(git log -1 --format='%h %s' "$BASEC" | cut -c1-70)"
+elif [ -n "$BASE$ARVORE" ]; then
+  printf '\n\033[31m✗ a base do zip não está no histórico deste main (base=%s)\033[0m\n' "${BASE:-?}"
+  printf 'Ou o zip é de outro repositório, ou foi feito sobre um main que não é este.\n'
+  [ "${FORCAR:-0}" = "1" ] || { printf 'Peça um zip novo, ou rode com FORCAR=1 se tem certeza.\n'; exit 1; }
+  avis "FORCAR=1 — seguindo mesmo assim"
 else
   avis "o zip não diz sobre qual commit foi feito — confira que ele já inclui o último commit do main ($(git log -1 --format='%h %s' | cut -c1-70))"
 fi

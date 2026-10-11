@@ -155,7 +155,7 @@ function detalhesPT(P) {
 
     banglobal: {
       uso: `${P}banglobal <off|avisar|banir|lista|revisar|varrer|isentar|desfazer|historico|esquecer>`,
-      desc: "Lista global de banimentos compartilhada entre os servidores onde o bot está.\n\n`off` — ignora · `avisar` — alerta os moderadores · `banir` — bane automaticamente **ao entrar**\n\n**Ver quem está na lista**\n`&banglobal lista` — todo mundo, em páginas · `&banglobal lista servidor` — só os deste servidor\n`&banglobal historico <@pessoa>` — onde e por que aquela pessoa foi banida\n\n**Quem já está no servidor**\n`&banglobal revisar` — confere e **só mostra**. Nunca bane.\n`&banglobal varrer` — mostra e **espera confirmação** · `&banglobal varrer confirmar` — ⚠️ bane\n\n**Quando a lista erra**\n`&banglobal isentar <@pessoa>` — aceita a pessoa **aqui** apesar da lista (e desfaz o ban dela, se foi o bot que aplicou)\n`&banglobal isentos` — quem está isento · `&banglobal desfazer` — ↩️ reverte os bans que a lista aplicou aqui\n`&banglobal esquecer <@pessoa>` — apaga o registro **para todos os servidores**\n\n**A contribuição é automática e permanente.** Os bans deste servidor — os antigos e os novos — alimentam a lista sozinhos, sem comando e sem chave para desligar. O modo acima decide só se este servidor **se aproveita** da lista: dá para não usar, não dá para usar sem alimentar.",
+      desc: "Lista global de banimentos compartilhada entre os servidores onde o bot está.\n\n`off` — ignora · `avisar` — alerta os moderadores · `banir` — bane automaticamente **ao entrar**\n\n**Ver quem está na lista**\n`&banglobal lista` — todo mundo, em páginas · `&banglobal lista servidor` — só os deste servidor\n`&banglobal historico <@pessoa>` — onde e por que aquela pessoa foi banida\n\n**Quem já está no servidor**\n`&banglobal revisar` — confere e **só mostra**. Nunca bane.\n`&banglobal varrer` — mostra e **espera confirmação** · `&banglobal varrer confirmar` — ⚠️ bane\n\n**Quando a lista erra**\n`&banglobal isentar <@pessoa>` — aceita a pessoa **aqui** apesar da lista (e desfaz o ban dela, se foi o bot que aplicou)\n`&banglobal isentos` — quem está isento · `&banglobal desfazer` — ↩️ reverte os bans que a lista aplicou aqui\n`&banglobal esquecer <@pessoa>` — apaga o registro **para todos os servidores**\n\n**Pôr alguém na lista pelo ID** _(dono do bot)_\n`&banglobal add <id> [id…] [motivo]` — vale mesmo para quem não está em nenhum servidor da Judy; quem já está num deles sente na hora (banido no modo `banir`, aviso no `avisar`)\n\n**A contribuição é automática e permanente.** Os bans deste servidor — os antigos e os novos — alimentam a lista sozinhos, sem comando e sem chave para desligar. O modo acima decide só se este servidor **se aproveita** da lista: dá para não usar, não dá para usar sem alimentar.",
       perm: "BanMembers",
       ex: `${P}banglobal revisar`,
     },
@@ -205,12 +205,13 @@ function detalhesPT(P) {
       perm: "todo mundo", ex: `${P}iniciativa add Elfa 1d20+3`,
     },
     ticket: {
-      uso: `${P}ticket [painel <#canal>|categorias|log <#canal>|lista]`,
+      uso: `${P}ticket [painel <#canal>|categorias|log <#canal>|lista|equipe]`,
       desc: "Suporte com canal privado por pedido, **por reação**:\n\n"
         + "`painel <#canal>` — posta no canal escolhido uma mensagem com uma reação por assunto (🎫 Suporte, 🚨 Denúncia, 💡 Sugestão). **Reagiu = abriu**: nasce o canal **#ticket-N**, que só quem abriu e a staff do `&acesso` enxergam\n"
         + "Dentro do ticket, 🔒 **fecha — só a staff**: a conversa **trava** (quem abriu lê, mas não escreve mais) e o registro inteiro vai para o log como **arquivo .txt**. Depois, 🗑️ (staff) apaga o canal\n\n"
         + "`categorias 🎫 Suporte | 🚨 Denúncia` — troca os assuntos (poste o painel de novo)\n"
         + "`log <#canal>` — para onde vão os registros (obrigatório) · `lista` — os abertos\n"
+        + "`equipe` — confere se a **staff entra em todo ticket** (cargos do `&acesso` + quem tem Gerenciar canais). O Stoat não deixa a Judy pôr no ticket um cargo **acima** do dela: para esses, ela cria o cargo **Equipe de tickets**, dá a quem alcança e diz a quem um admin precisa dar à mão. O `painel` já faz essa conferência\n"
         + "_Digitando também dá: `abrir [motivo]`, `fechar [nota]`, `apagar`._\n\n"
         + "O bot precisa de **ManageChannel, ManageRole, AssignRoles, ManagePermissions** e **ManageMessages** (para limpar as reações).",
       perm: "reagir/abrir: todo mundo · resto: staff", ex: `${P}ticket painel #suporte`,
@@ -408,7 +409,7 @@ function detalhesEN(P) {
 
     banglobal: {
       uso: `${P}banglobal <off|avisar|banir|lista|revisar|varrer|isentar|desfazer|historico|esquecer>`,
-      desc: "Global ban list shared across every server the bot is in.\n\n`off` — ignore · `avisar` — alert the moderators · `banir` — ban automatically **on join**\n\n**Seeing who's listed**\n`&banglobal lista` — everyone, in pages · `&banglobal lista servidor` — only this server's\n`&banglobal historico <@user>` — where and why that person was banned\n\n**People already in the server**\n`&banglobal revisar` — checks and **shows only**. Never bans.\n`&banglobal varrer` — shows and **waits for confirmation** · `&banglobal varrer confirmar` — ⚠️ bans\n\n**When the list gets it wrong**\n`&banglobal isentar <@user>` — accepts that person **here** despite the list (and undoes their ban, if the bot applied it)\n`&banglobal isentos` — who's exempt · `&banglobal desfazer` — ↩️ reverts the bans the list applied here\n`&banglobal esquecer <@user>` — deletes the record **for every server**\n\n**Contributing is automatic and permanent.** This server's bans — old and new — feed the list on their own, with no command and no switch to turn it off. The mode above only decides whether this server **benefits** from the list: you can opt out of using it, not out of feeding it.",
+      desc: "Global ban list shared across every server the bot is in.\n\n`off` — ignore · `avisar` — alert the moderators · `banir` — ban automatically **on join**\n\n**Seeing who's listed**\n`&banglobal lista` — everyone, in pages · `&banglobal lista servidor` — only this server's\n`&banglobal historico <@user>` — where and why that person was banned\n\n**People already in the server**\n`&banglobal revisar` — checks and **shows only**. Never bans.\n`&banglobal varrer` — shows and **waits for confirmation** · `&banglobal varrer confirmar` — ⚠️ bans\n\n**When the list gets it wrong**\n`&banglobal isentar <@user>` — accepts that person **here** despite the list (and undoes their ban, if the bot applied it)\n`&banglobal isentos` — who's exempt · `&banglobal desfazer` — ↩️ reverts the bans the list applied here\n`&banglobal esquecer <@user>` — deletes the record **for every server**\n\n**Putting someone on the list by ID** _(bot owner)_\n`&banglobal add <id> [id…] [reason]` — works even for people in none of Judy's servers; anyone already in one feels it right away (banned in `banir` mode, warning in `avisar`)\n\n**Contributing is automatic and permanent.** This server's bans — old and new — feed the list on their own, with no command and no switch to turn it off. The mode above only decides whether this server **benefits** from the list: you can opt out of using it, not out of feeding it.",
       perm: "BanMembers",
       ex: `${P}banglobal revisar`,
     },
@@ -458,12 +459,13 @@ function detalhesEN(P) {
       perm: "everyone", ex: `${P}iniciativa add Elf 1d20+3`,
     },
     ticket: {
-      uso: `${P}ticket [painel <#channel>|categorias|log <#channel>|lista]`,
+      uso: `${P}ticket [painel <#channel>|categorias|log <#channel>|lista|equipe]`,
       desc: "Support with a private channel per request, **by reaction**:\n\n"
         + "`painel <#channel>` — posts in the chosen channel a message with one reaction per topic (🎫 Support, 🚨 Report, 💡 Suggestion). **React = open**: a **#ticket-N** channel is born, visible only to the opener and the staff from `&acesso`\n"
         + "Inside the ticket, 🔒 **closes it — staff only**: the conversation **locks** (the opener can read, not write) and the whole record goes to the log as a **.txt file**. Then 🗑️ (staff) deletes the channel\n\n"
         + "`categorias 🎫 Support | 🚨 Report` — changes the topics (repost the panel)\n"
         + "`log <#channel>` — where records go (required) · `lista` — open ones\n"
+        + "`equipe` — checks that the **staff gets into every ticket** (`&acesso` roles + whoever has Manage channels). Stoat won't let Judy add a role **above** hers to a ticket: for those, she creates the **Ticket team** role, gives it to whoever she can reach and tells you who an admin must give it to by hand. `painel` already runs this check\n"
         + "_Typing works too: `abrir [reason]`, `fechar [note]`, `apagar`._\n\n"
         + "The bot needs **ManageChannel, ManageRole, AssignRoles, ManagePermissions** and **ManageMessages** (to clear reactions).",
       perm: "react/open: everyone · rest: staff", ex: `${P}ticket painel #support`,

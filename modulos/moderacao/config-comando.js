@@ -148,7 +148,7 @@ export async function cmdConfig(message, args, ctx) {
     })(),
   ];
   const tickVoz = [
-    `${T("**Tickets:**", "**Tickets:**")} ${config.tickets?.painel?.canalId ? `${T("painel", "panel")} <#${config.tickets.painel.canalId}> · ` : ""}${config.tickets?.logCanal ? `log <#${config.tickets.logCanal}> · ${nTickets} ${T("aberto(s)", "open")}` : T(`_(não configurado — \`${PREFIXO}ticket log #canal\`)_`, `_(not set up — \`${PREFIXO}ticket log #channel\`)_`)}`,
+    `${T("**Tickets:**", "**Tickets:**")} ${config.tickets?.painel?.canalId ? `${T("painel", "panel")} <#${config.tickets.painel.canalId}> · ` : ""}${config.tickets?.logCanal ? `log <#${config.tickets.logCanal}> · ${nTickets} ${T("aberto(s)", "open")}${config.tickets?.cargoEquipe ? ` · ${T("equipe", "team")} <%${config.tickets.cargoEquipe}>` : ""}` : T(`_(não configurado — \`${PREFIXO}ticket log #canal\`)_`, `_(not set up — \`${PREFIXO}ticket log #channel\`)_`)}`,
     `**Webhooks:** ${nGanchos} ${T("gancho(s)", "hook(s)")} — \`${PREFIXO}webhook lista\``,
     `${T("**Voz e música:**", "**Voice and music:**")} ${!vozAqui
       ? T("_indisponível neste servidor (o dono do bot libera em `TTS_SERVIDORES`)_", "_not available on this server (the bot owner enables it in `TTS_SERVIDORES`)_")

@@ -153,7 +153,11 @@ diz exatamente o que clicar.
   a IA apaga o que violar, marcando o responsável no log — ela **nunca bane sozinha**.
 - **Lista global de banimentos** (`&banglobal`): compartilhada entre os
   servidores da mesma instância, com modos `off`/`avisar`/`banir`, isenção por
-  pessoa e `desfazer`.
+  pessoa e `desfazer`. O dono do bot põe alguém na lista **pelo ID** com
+  `&banglobal add <id> [id…] [motivo]`, mesmo que a pessoa não esteja em
+  nenhum servidor — quem já está num deles sente na hora.
+  *Global ban list shared across the instance's servers; the bot owner can add
+  anyone **by ID** (`&banglobal add`), even people in none of the servers.*
 - **Manual**: `&kick`, `&ban` (menção **ou** ID — banir quem já está banido
   responde "já estava banido"), `&silenciar @pessoa 10m [motivo]` /
   `&silenciar tirar @pessoa`, `&limpar`, `&warn`.
@@ -291,7 +295,7 @@ próprio bot: `&help <comando>`. Um resumo:
 | `&log` · `&acesso` · `&staff` | chat de logs, quem usa comandos, equipe |
 | `&banglobal` | lista global *(BanMembers)* |
 | `&automod blocklist` · `&automod whitelist` · `&automod sentinela` · `&automod punicao` | listas anti-link, convites permitidos, o filtro que julga, e o que acontece com quem infringe |
-| `&ticket` | suporte por **reação**: `painel #canal` posta uma mensagem com um emoji por assunto; reagir abre um canal privado (quem pediu + staff). Lá, 🔒 (só staff) **trava** a conversa e manda o registro inteiro ao log como **arquivo .txt**; depois 🗑️ apaga o canal |
+| `&ticket` | suporte por **reação**: `painel #canal` posta uma mensagem com um emoji por assunto; reagir abre um canal privado (quem pediu + staff). Lá, 🔒 (só staff) **trava** a conversa e manda o registro inteiro ao log como **arquivo .txt**; depois 🗑️ apaga o canal. A staff entra pelos cargos do `&acesso` e por quem tem Gerenciar canais; o Stoat não deixa a Judy pôr no ticket cargo **acima** do dela — `&ticket equipe` cria o cargo **Equipe de tickets** para esses (o `painel` já confere) |
 | `&rolar` (`&r`) · `&iniciativa` | dados de RPG de mesa: `2d20kh1+5`, vantagem/desvantagem, `4d6kh3`, explosão `3d6!`, sucessos `8d10>=7`, `d%`, Fate, moeda, repetição `6x(4d6kh3)`, rótulos e rolagem secreta via DM — mais rastreador de iniciativa por canal (`add`/`next`/`lista`) |
 | `&webhook` (`&wh`) | receptor universal de webhooks: GitHub (push, issues, PR, releases, Actions), Crafty/Minecraft e qualquer serviço que fale o formato Discord (Uptime Kuma, Grafana…) — cada gancho tem canal próprio e filtro de eventos, então dá para separar issues num chat e o CI noutro; URL secreta por gancho, teto anti-flood. **Endereços:** serviço da internet (GitHub) exige base pública — `sudo tailscale funnel --bg 8095` + `WEBHOOK_URL_BASE=https://…` no `.env`; container da mesma máquina (Crafty) usa a ponte `http://172.17.0.1:8095/...` |
 | `&musica` (`&m`, `&play`) + `&entrar`/`&sair` | música nas calls: YouTube, SoundCloud e Spotify (playlists também), com fila, pausa, skip, volume e loop — e a música **abaixa sozinha quando o `&tts` fala** (ducking); playlists do Spotify pedem `SPOTIFY_ID`/`SPOTIFY_SECRET` no `.env` (app grátis em developer.spotify.com; faixas avulsas funcionam sem chave) |

@@ -307,6 +307,8 @@ function criarContexto(serverId = null) {
     salvarGlobal: store.salvarGlobal,
     getGlobal: store.getGlobal,
     configDoServidor: store.configDoServidor,
+    // para o que age em OUTROS servidores (ex.: &banglobal add aplica o modo de cada um)
+    criarContexto,
     estado, serverId,
   };
 }

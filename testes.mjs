@@ -10108,6 +10108,474 @@ console.log(`\nRPG v4: ${pass} ok, ${fail} falha(s)`);
 process.exit(fail ? 1 : 0);
 };
 
+// ════════════════════════════════════════════════════════════════════════════
+// tickets-staff  (11 out 2026) — "o ticket não está adicionando as staffs"
+// ════════════════════════════════════════════════════════════════════════════
+SUITES["tickets-staff"] = async () => {
+const __m0 = await import("node:assert"); const assert = __m0.default;
+const __m1 = await import("node:fs"); const fs = __m1.default;
+// O servidor falso segue as regras REAIS do Stoat (stoatchat/stoatchat):
+//  - permissions_set.rs: o bot só mexe na permissão de canal de cargo com
+//    rank MAIOR que o dele (abaixo dele) → senão NotElevated;
+//  - member_edit.rs: o bot só edita membro abaixo dele, e só dá cargo abaixo dele.
+// Antes da correção: só os cargos do &acesso entravam, e o erro dos cargos
+// acima da Judy era engolido — a staff ficava fora sem ninguém saber.
+
+process.env.DB_PATH = "/tmp/teste-tickets-staff.db"; process.env.CONFIG_PATH = "/tmp/teste-tickets-staff.json";
+process.env.AUTUMN_URL = "http://autumn.teste"; process.env.STOAT_API = "http://api.teste";
+for (const f of [process.env.DB_PATH, process.env.CONFIG_PATH]) { try { fs.unlinkSync(f); } catch {} }
+const db = await import("./modulos/core/db.js");
+db.abrirBanco(process.env.DB_PATH);
+const store = await import("./modulos/core/config-store.js");
+store.inicializar(process.env.CONFIG_PATH, process.env.DB_PATH);
+globalThis.fetch = async (url) => {
+  if (String(url).startsWith("http://api.teste")) return { ok: true, status: 204, text: async () => "", json: async () => ({}) };
+  return { ok: true, json: async () => ({ id: "ANEXO" }) };
+};
+const tickets = await import("./modulos/ferramentas/tickets.js");
+
+let ok = 0, falhou = 0;
+const t = async (nome, fn) => {
+  try { await fn(); console.log(`  ✅ ${nome}`); ok++; }
+  catch (e) { console.log(`  ❌ ${nome}\n     ${e.message}`); falhou++; }
+};
+const quieto = async (fn) => { const o = [console.log, console.error]; console.log = console.error = () => {}; try { return await fn(); } finally { [console.log, console.error] = o; } };
+
+const NAO_ELEVADO = JSON.stringify({ type: "NotElevated", location: "teste" });   // a SDK lança o corpo cru, em string
+const V = 1 << 20, L = 1 << 21, E = 1 << 22;
+
+function mundo() {
+  let seq = 0;
+  const cargos = new Map([
+    ["RBOT", { name: "Judy", rank: 5, permissions: { a: 0, d: 0 } }],
+    ["RADM", { name: "Admin", rank: 1, permissions: { a: 0, d: 0 } }],          // acima da Judy, marcado no &acesso
+    ["RVIP", { name: "Sênior", rank: 2, permissions: { a: V | L | E, d: 0 } }],  // acima, mas vê sozinho
+    ["RMOD", { name: "Mod", rank: 10, permissions: { a: 0, d: 0 } }],           // abaixo, marcado no &acesso
+    ["RGER", { name: "Gerente", rank: 12, permissions: { a: 1, d: 0 } }],       // abaixo, só Gerenciar canais
+    ["RMEM", { name: "Membro", rank: 20, permissions: { a: 0, d: 0 } }],        // gente comum
+  ]);
+  const rankDe = (ids) => Math.min(Infinity, ...ids.map((id) => cargos.get(id)?.rank).filter((r) => r !== undefined));
+  const membros = new Map();
+  const RANK_BOT = () => rankDe(membros.get("BOT").roles);
+  const membro = (uid, roles = []) => {
+    const m = { id: { user: uid }, roles: [...roles], hasPermission: () => false,
+      edit: async ({ roles: novos }) => {
+        if (uid !== "BOT" && rankDe(m.roles) <= RANK_BOT()) throw NAO_ELEVADO;
+        for (const r of novos) if (!m.roles.includes(r) && (cargos.get(r)?.rank ?? -1) <= RANK_BOT()) throw NAO_ELEVADO;
+        m.roles = novos;
+      } };
+    membros.set(uid, m); return m;
+  };
+  membro("BOT", ["RBOT"]); membro("ADM1", ["RADM"]); membro("VIP1", ["RVIP"]); membro("MOD1", ["RMOD"]);
+  membro("GER1", ["RGER"]); membro("ANA", ["RMEM"]); membro("BEA", ["RMEM"]); membro("CAU", ["RMEM"]);
+  const canais = new Map();
+  const novoCanal = (id, name) => {
+    const c = { id, name, mensagens: [], perms: {}, recusas: [],
+      setPermissions: async (alvo, p) => {
+        if (alvo !== "default") {
+          const cargo = cargos.get(alvo);
+          if (!cargo) throw JSON.stringify({ type: "NotFound" });
+          if (cargo.rank <= RANK_BOT()) { c.recusas.push(alvo); throw NAO_ELEVADO; }
+        }
+        c.perms[alvo] = p;
+      },
+      sendMessage: async (payload) => { const m = { id: `M${++seq}`, ...payload, reacoes: [], react: async (e) => m.reacoes.push(decodeURIComponent(e)) }; c.mensagens.push(m); return m; },
+      fetchMessages: async () => [], delete: async () => {} };
+    canais.set(id, c); return c;
+  };
+  const server = { id: "SRV", ownerId: "DONO", roles: cargos,
+    get member() { return membros.get("BOT"); },
+    havePermission: () => true,
+    createRole: async (nome) => { const id = `RNOVO${++seq}`; cargos.set(id, { name: nome, rank: 100 + seq, permissions: { a: 0, d: 0 } }); return { id }; },
+    deleteRole: async (id) => { cargos.delete(id); },
+    fetchMember: async (uid) => membros.get(uid) ?? null,
+    fetchMembers: async () => ({ members: [...membros.values()] }),
+    createChannel: async ({ name }) => novoCanal(`C${++seq}`, name) };
+  const client = { user: { id: "BOT" }, servers: { fetch: async () => server }, channels: { get: (id) => canais.get(id) ?? null, fetch: async (id) => canais.get(id) ?? null } };
+  const config = store.configDoServidor("SRV");
+  config.acesso = { cargosStaff: ["RADM", "RVIP", "RMOD"], canais: { modo: "todos", lista: [] }, staffIgnoraCanais: true };
+  const log = novoCanal("C_LOG", "log-tickets");
+  const geral = novoCanal("C_GERAL", "geral");
+  const ctx = { client, config, serverId: "SRV", PREFIXO: "&", COR: { info: 1, sucesso: 2, aviso: 3, erro: 4, mod: 5 },
+    salvarConfig: () => {}, sendEmbed: async (canal, e) => canal.sendMessage({ embed: e }),
+    getServer: async () => server, membroTemPermissao: () => true };
+  config.tickets = { logCanal: "C_LOG" };
+  return { cargos, membros, canais, server, client, config, ctx, log, geral };
+}
+
+const w = mundo();
+const avisosNoLog = () => w.log.mensagens.filter((m) => /staff ficou de fora/.test(m.embed?.title ?? ""));
+
+console.log("── quem é staff e o que a Judy alcança ──");
+await t("★ classificação: abaixo da Judy entra; acima fica de fora; acima com permissão própria vê sozinho", async () => {
+  const c = tickets.classificarStaff(w.server, w.config, w.membros.get("BOT"));
+  assert.deepEqual(c.entram.sort(), ["RGER", "RMOD"]);
+  assert.deepEqual(c.acima, ["RADM"]);
+  assert.deepEqual(c.veemSozinhos, ["RVIP"]);
+});
+await t("★ o cargo com Gerenciar canais conta como staff mesmo fora do &acesso", async () => {
+  const c = tickets.classificarStaff(w.server, w.config, w.membros.get("BOT"));
+  assert.ok(c.entram.includes("RGER"));
+});
+
+console.log("\n── abrir um ticket ──");
+let r1;
+await t("★ o ticket abre mesmo com staff acima da Judy, e os cargos que ela alcança entram no canal", async () => {
+  r1 = await quieto(() => tickets.abrirTicket({ ctx: w.ctx, server: w.server, userId: "ANA" }));
+  assert.ok(r1.ok, JSON.stringify(r1));
+  const canal = w.canais.get(r1.canal.id);
+  assert.ok(canal.perms.RMOD?.allow > 0, "Mod (&acesso, abaixo) tem de ver o ticket");
+  assert.ok(canal.perms.RGER?.allow > 0, "Gerente (Gerenciar canais) tem de ver o ticket");
+  assert.ok(canal.perms.default.deny > 0, "e o resto continua de fora");
+});
+await t("★ quem ficou de fora vira aviso no log, com o conserto (&ticket equipe) — nada mudo", async () => {
+  assert.deepEqual(r1.staffFora, ["RADM"]);
+  assert.equal(avisosNoLog().length, 1);
+  assert.match(avisosNoLog()[0].embed.description, /&ticket equipe/);
+  assert.match(avisosNoLog()[0].embed.description, /<%RADM>/);
+});
+await t("o aviso não vira enxurrada: o 2º ticket seguido não repete", async () => {
+  const r2 = await quieto(() => tickets.abrirTicket({ ctx: w.ctx, server: w.server, userId: "BEA" }));
+  assert.ok(r2.ok);
+  assert.equal(avisosNoLog().length, 1);
+});
+
+console.log("\n── a Equipe de tickets ──");
+let eq;
+await t("★ &ticket equipe cria o cargo, dá a quem a Judy alcança e diz a quem um admin precisa dar", async () => {
+  await quieto(() => tickets.cmdTicket({ channel: w.geral, channelId: "C_GERAL", authorId: "MOD1", member: w.membros.get("MOD1") }, ["equipe"], w.ctx));
+  eq = w.config.tickets.cargoEquipe;
+  assert.ok(eq && w.cargos.has(eq), "o cargo da equipe existe");
+  assert.ok(w.membros.get("MOD1").roles.includes(eq), "Mod (abaixo) ganhou o cargo");
+  assert.ok(w.membros.get("GER1").roles.includes(eq), "Gerente (abaixo) ganhou o cargo");
+  assert.ok(!w.membros.get("ANA").roles.includes(eq), "quem não é staff não ganha");
+  const resp = w.geral.mensagens.at(-1).embed.description;
+  assert.match(resp, /<@ADM1>/, "o admin acima da Judy aparece como 'dar à mão'");
+  assert.match(resp, /<@VIP1>/, "o Sênior também (o cargo da equipe vale para quem tem cargo de staff)");
+});
+await t("★ os tickets já abertos passam a aceitar a equipe", async () => {
+  for (const tk of db.listarTickets("SRV")) assert.ok(w.canais.get(tk.canalId).perms[eq]?.allow > 0, `ticket #${tk.numero}`);
+});
+await t("★ ticket novo já nasce com a equipe dentro, e sem aviso de staff de fora", async () => {
+  const antes = avisosNoLog().length;
+  const r = await quieto(() => tickets.abrirTicket({ ctx: w.ctx, server: w.server, userId: "CAU" }));
+  assert.ok(w.canais.get(r.canal.id).perms[eq]?.allow > 0);
+  assert.equal(avisosNoLog().length, antes);
+});
+await t("quem tem o cargo da equipe conta como staff (fecha com 🔒)", async () => {
+  w.membros.get("ADM1").roles.push(eq);   // um admin deu à mão
+  assert.equal(await tickets.ehStaff(w.server, "ADM1", w.config), true);
+  assert.equal(await tickets.ehStaff(w.server, "ANA", w.config), false);
+});
+await t("cargo da equipe apagado por alguém: o próximo &ticket equipe recria", async () => {
+  w.cargos.delete(eq);
+  await quieto(() => tickets.cmdTicket({ channel: w.geral, channelId: "C_GERAL", authorId: "MOD1", member: w.membros.get("MOD1") }, ["equipe"], w.ctx));
+  assert.ok(w.config.tickets.cargoEquipe && w.config.tickets.cargoEquipe !== eq && w.cargos.has(w.config.tickets.cargoEquipe));
+});
+
+console.log("\n── o painel confere a staff na configuração ──");
+await t("★ &ticket painel mostra quem entra nos tickets", async () => {
+  const w2 = mundo();
+  await quieto(() => tickets.cmdTicket({ channel: w2.geral, channelId: "C_GERAL", authorId: "MOD1", member: w2.membros.get("MOD1") }, ["painel", "<#C_GERAL>"], w2.ctx));
+  const resp = w2.geral.mensagens.at(-1).embed.description;
+  assert.match(resp, /Staff nos tickets/);
+  assert.match(resp, /<%RMOD>/);
+  assert.ok(w2.config.tickets.cargoEquipe, "com staff acima da Judy, o painel já prepara a equipe");
+});
+await t("servidor sem cargo de staff nenhum: o painel diz como marcar", async () => {
+  const w3 = mundo();
+  w3.config.acesso.cargosStaff = [];
+  w3.cargos.get("RGER").permissions.a = 0;
+  await quieto(() => tickets.cmdTicket({ channel: w3.geral, channelId: "C_GERAL", authorId: "MOD1" }, ["painel", "<#C_GERAL>"], w3.ctx));
+  assert.match(w3.geral.mensagens.at(-1).embed.description, /acesso cargo add/);
+});
+
+console.log(`\nTICKETS-STAFF: ${ok} ok, ${falhou} falha(s)`);
+process.exit(falhou ? 1 : 0);
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+// musica-skip  (11 out 2026) — "o skip da música não está funcionando"
+// ════════════════════════════════════════════════════════════════════════════
+SUITES["musica-skip"] = async () => {
+const __m0 = await import("node:events"); const { EventEmitter } = __m0;
+const __m1 = await import("node:stream"); const { PassThrough } = __m1;
+// O player de mentira imita o MediaPlayer do revoice.js 0.2.1696 (src/Media.js)
+// nos pontos que importam: o ffmpeg decodifica MAIS RÁPIDO que o tempo real e
+// guarda tudo em `chunks`; `playStream` NÃO para o que já toca (só acrescenta);
+// `stop()` esvazia o buffer, zera o volume e emite "finish"; o "error" do
+// ffmpeg chama `stop()`. O yt-dlp de mentira entrega a faixa inteira de uma vez.
+process.env.VOZ_DEBUG = "0";
+let pass = 0, fail = 0;
+const ok = (cond, rotulo) => { cond ? pass++ : fail++; console.log(`  ${cond ? "✅" : "❌"} ${rotulo}`); };
+const espera = (ms = 30) => new Promise((r) => setTimeout(r, ms));
+
+class PlayerFalso extends EventEmitter {
+  constructor() { super(); this.iniciar(); this.publicacoes = 0; }
+  iniciar() { this.chunks = []; this.paused = false; this.ffmpegFinished = false; this.fProc = null; this.volume = 1; }
+  pause() { this.paused = true; }
+  resume() { this.paused = false; }
+  setVolume(v) { this.volume = v; }
+  stop() { this.iniciar(); this.emit("finish"); }
+  playStream(stream) {
+    const ff = new EventEmitter();
+    const saida = new PassThrough();
+    ff._outputs = [{ target: saida }];
+    ff.kill = () => setImmediate(() => ff.emit("error", new Error("ffmpeg was killed with signal SIGKILL")));
+    ff.on("error", () => { this.ffmpegFinished = true; this.stop(); });   // o handler do revoice
+    ff.on("end", () => { this.ffmpegFinished = true; });
+    this.fProc = ff; this.ffmpegFinished = false;
+    stream.on("data", (c) => saida.write(c));
+    stream.on("end", () => setImmediate(() => ff.emit("end")));
+    saida.on("data", (c) => this.chunks.push(String(c)));
+  }
+  agora() { return this.chunks[0] ?? null; }
+  // o tempo real passando: o buffer toca até o fim e o revoice chama stop()
+  tocarAteOFim() { this.chunks = []; if (this.ffmpegFinished) this.stop(); }
+}
+
+const processos = [];
+function spawnFalso(_bin, args) {
+  const p = new EventEmitter();
+  p.stdout = new PassThrough(); p.stderr = new PassThrough();
+  p.morto = false; p.stream = !args.includes("-J"); p.fechou = false;
+  p.on("close", () => { p.fechou = true; });
+  p.kill = () => { if (p.morto) return; p.morto = true; p.stdout.end(); setImmediate(() => p.emit("close", null)); };
+  processos.push(p);
+  const alvo = args[args.length - 1];
+  if (args.includes("-J")) {
+    setImmediate(() => { p.stdout.end(JSON.stringify({ title: alvo.split("/").pop(), webpage_url: alvo, duration: 60 })); p.emit("close", 0); });
+  } else {
+    const nome = alvo.split("/").pop();
+    setImmediate(() => { for (let i = 0; i < 20; i++) p.stdout.write(`${nome}|`); p.stdout.end(); setImmediate(() => { if (!p.morto) p.emit("close", 0); }); });
+  }
+  return p;
+}
+
+const m = await import("./voz-servico/musica.js");
+const player = new PlayerFalso();
+m._trocarDependencias({ spawn: spawnFalso, criarPlayer: async () => player, playerDe: () => player, esperaCorteMs: 200 });
+const C = "call-teste";
+const so = (nome) => player.chunks.length > 0 && player.chunks.every((c) => c === `${nome}|`);
+
+console.log("── o skip corta de verdade ──");
+await m.tocar(C, "https://www.youtube.com/watch/A");
+await espera();
+ok(so("A"), "a faixa A toca (e já está toda no buffer, como no revoice)");
+await m.tocar(C, "https://www.youtube.com/watch/B");
+await m.tocar(C, "https://www.youtube.com/watch/C");
+await m.volume(C, 0.5);
+const r = await m.pular(C);
+await espera();
+ok(!player.chunks.includes("A|"), "★ depois do skip não sobra NADA da faixa A no buffer");
+ok(so("B"), "★ e o que toca é a B");
+ok(/Pulei \*\*A\*\*/.test(r.mensagem) && /Agora: \*\*B\*\*/.test(r.mensagem), "  → a resposta diz o que saiu e o que entrou");
+await espera(120);
+ok(m.fila(C).atual?.titulo === "B" && m.fila(C).total === 1, "★ sem skip fantasma: os eventos da faixa A (finish, close do yt-dlp) não puxam outra");
+ok(player.volume === 0.5, "  → o volume escolhido sobrevive ao corte (o stop() do revoice zera)");
+
+console.log("\n── o resto da fila segue normal ──");
+player.tocarAteOFim();
+await espera();
+ok(m.fila(C).atual?.titulo === "C" && so("C"), "★ quando a B acaba sozinha, entra a C");
+await espera(120);
+ok(m.fila(C).atual?.titulo === "C", "  → e só a C (nada pula duas vezes)");
+const r2 = await m.pular(C);
+await espera();
+ok(/Fila vazia/.test(r2.mensagem) && player.chunks.length === 0 && m.fila(C).atual === null, "skip na última: silêncio e fila vazia");
+
+console.log("\n── skip com a música pausada e com loop ──");
+await m.tocar(C, "https://www.youtube.com/watch/D");
+await m.tocar(C, "https://www.youtube.com/watch/E");
+await espera();
+await m.pausar(C);
+await m.pular(C);
+await espera();
+ok(so("E") && player.paused === false, "★ pausado + skip: a próxima toca (não fica presa na pausa)");
+await m.tocar(C, "https://www.youtube.com/watch/F");
+m.loop(C, "fila");
+await m.pular(C);
+await espera();
+ok(m.fila(C).atual?.titulo === "F" && m.fila(C).fila.some((i) => i.titulo === "E"), "loop de fila: a pulada volta para o fim");
+m.loop(C, "faixa");
+await m.pular(C);
+await espera();
+ok(m.fila(C).atual?.titulo === "E" && m.fila(C).loop === "nao", "loop de faixa: o skip vence o loop");
+
+console.log("\n── parar ──");
+const r3 = await m.parar(C);
+await espera(120);
+ok(/Parei/.test(r3.mensagem) && player.chunks.length === 0 && m.fila(C).atual === null && m.fila(C).total === 0, "★ parar esvazia o buffer e a fila, e nada volta a tocar");
+ok(processos.filter((p) => p.stream).length >= 6 && processos.filter((p) => p.stream).every((p) => p.fechou), "  → nenhum yt-dlp de faixa fica pendurado");
+
+m.limparCanal(C);
+console.log(`\nMÚSICA-SKIP: ${pass} ok, ${fail} falha(s)`);
+process.exit(fail ? 1 : 0);
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+// banglobal-add  (11 out 2026) — pôr na lista pelo ID quem não está em servidor
+// ════════════════════════════════════════════════════════════════════════════
+SUITES["banglobal-add"] = async () => {
+const __m0 = await import("node:assert"); const assert = __m0.default;
+const __m1 = await import("node:fs"); const fs = __m1.default;
+// Pedido de Ghieh: adicionar pessoas ao ban global mesmo que não estejam em
+// nenhum servidor da Judy, pelo ID. Antes a lista só se alimentava de bans
+// feitos dentro dos servidores — quem nunca entrou não tinha como ser listado.
+for (const f of ["/tmp/bg-add.db", "/tmp/bg-add.db-wal", "/tmp/bg-add.db-shm"]) { try { fs.unlinkSync(f); } catch {} }
+process.env.DB_PATH = "/tmp/bg-add.db";
+const db = await import("./modulos/core/db.js"); db.abrirBanco("/tmp/bg-add.db");
+const bg = await import("./modulos/moderacao/ban-global.js");
+
+let ok = 0, falhou = 0;
+const t = async (nome, fn) => {
+  try { await fn(); console.log(`  ✅ ${nome}`); ok++; }
+  catch (e) { console.log(`  ❌ ${nome}\n     ${e.message}`); falhou++; }
+};
+const quieto = async (fn) => { const o = [console.log, console.error]; console.log = console.error = () => {}; try { return await fn(); } finally { [console.log, console.error] = o; } };
+
+const id = (c) => `01K${c.repeat(22)}1`;
+const FORA = id("A"), FORA2 = id("B"), NA_CALL = id("C"), FANTASMA = id("D"), ROBO = id("E"), REDE = id("F"), ESQUECIDO = id("G");
+const DONO = id("H"), ADMIN = id("J"), BOT = id("K");
+const SERV = { BANIR: "S_BANIR", AVISAR: "S_AVISAR", OFF: "S_OFF" };
+
+const banidos = [];
+const servidores = Object.entries({ [SERV.BANIR]: "banir", [SERV.AVISAR]: "avisar", [SERV.OFF]: "off" }).map(([sid, modo]) => ({
+  id: sid, modo,
+  async fetchMember(uid) { if (uid === NA_CALL) return { id: { server: sid, user: uid }, user: { username: "Intruso" } }; throw JSON.stringify({ type: "NotFound" }); },
+  async banUser(uid) { banidos.push({ sid, uid }); },
+}));
+const usuarios = { [FORA]: "Raider1", [FORA2]: "Raider2", [NA_CALL]: "Intruso", [ESQUECIDO]: "Antigo" };
+const client = {
+  user: { id: BOT },
+  users: {
+    get: () => null,
+    fetch: async (uid) => {
+      if (uid === FANTASMA) throw JSON.stringify({ type: "NotFound", location: "x" });   // a SDK lança o corpo cru
+      if (uid === REDE) throw new Error("fetch failed");
+      if (uid === ROBO) return { id: uid, username: "UmBot", bot: { owner: "alguém" } };
+      return { id: uid, username: usuarios[uid] ?? uid };
+    },
+  },
+  servers: { get: (sid) => servidores.find((s) => s.id === sid) ?? null, fetch: async (sid) => servidores.find((s) => s.id === sid), values: () => servidores.values() },
+  channels: { get: (cid) => ({ id: cid }), fetch: async (cid) => ({ id: cid }) },
+};
+const logs = [];
+const criarContexto = (sid) => ({
+  client, serverId: sid, PREFIXO: "&", COR: { sucesso: 1, erro: 2, aviso: 3, info: 4, mod: 5 },
+  config: { language: "pt", banGlobal: { modo: servidores.find((s) => s.id === sid)?.modo ?? "off", isentos: [] }, log: { canalId: `LOG_${sid}` } },
+  sendEmbed: async (c, e) => { logs.push({ canal: c?.id, ...e }); return { id: "m" }; },
+  ehSuperAdmin: (u) => u === DONO,
+});
+async function rodar(autor, ...args) {
+  const enviados = [];
+  const ctx = { ...criarContexto("S_DONO"), criarContexto,
+    sendEmbed: async (_c, e) => { enviados.push(e); return { id: "m" }; },
+    getServer: async () => ({ id: "S_DONO" }), membroTemPermissao: () => true, salvarConfig: () => {} };
+  await quieto(() => bg.cmdBanGlobal({ authorId: autor, channel: { id: "C" }, content: "", mentionIds: [] }, args, ctx));
+  return enviados.at(-1);
+}
+
+console.log("── quem pode ──");
+await t("★ admin de servidor (BanMembers) NÃO pode — a lista vale para todos os servidores", async () => {
+  const e = await rodar(ADMIN, "add", FORA, "raid");
+  assert.match(e.title, /Só o dono do bot/);
+  assert.match(e.description, /&ban/, "mostra o caminho dele (o ban normal alimenta a lista)");
+  assert.equal(db.historicoBans(FORA).length, 0);
+});
+
+console.log("\n── adicionar quem não está em servidor nenhum ──");
+await t("★ o dono põe dois IDs de uma vez, com motivo — sem a pessoa estar em servidor nenhum", async () => {
+  const e = await rodar(DONO, "add", FORA, FORA2, "raid", "de", "27/09");
+  assert.match(e.title, /2 adicionado/);
+  assert.match(e.description, /Raider1/); assert.match(e.description, /Raider2/);
+  assert.match(e.description, /raid de 27\/09/);
+  const h = db.historicoBans(FORA);
+  assert.equal(h.length, 1); assert.equal(h[0].motivo, "raid de 27/09"); assert.equal(h[0].origem, "adicionado");
+  assert.equal(db.nomeDeBanido(FORA), "Raider1", "o nome vem da conta no Stoat");
+});
+await t("★ a entrada fica numa origem própria — o servidor onde o dono digitou TAMBÉM barra a pessoa", async () => {
+  assert.equal(db.historicoBans(FORA)[0].serverId, bg.ORIGEM_DONO);
+  // o verificarEntrada ignora os bans do próprio servidor; se a origem fosse
+  // o servidor do comando, ali a pessoa entraria livre
+  const ctx = criarContexto("S_DONO"); ctx.config.banGlobal.modo = "banir";
+  const servidorDoDono = { id: "S_DONO", async banUser(uid) { banidos.push({ sid: "S_DONO", uid }); } };
+  const baniu = await quieto(() => bg.verificarEntrada({ id: { server: "S_DONO", user: FORA }, server: servidorDoDono, user: { username: "Raider1" } }, ctx));
+  assert.equal(baniu, true);
+});
+await t("o histórico mostra de onde veio, legível", async () => {
+  const e = await rodar(DONO, "historico", FORA);
+  assert.match(e.description, /adicionado pelo dono do bot/);
+});
+
+console.log("\n── quem já está num servidor da Judy sente na hora ──");
+await t("★ banido onde o modo é banir, aviso à staff onde é avisar, nada onde é off", async () => {
+  banidos.length = 0; logs.length = 0;
+  const e = await rodar(DONO, "add", NA_CALL);
+  assert.deepEqual(banidos.map((b) => b.sid), [SERV.BANIR]);
+  assert.ok(logs.some((l) => l.canal === `LOG_${SERV.AVISAR}` && /banido em outro servidor/.test(l.title)), "a staff do servidor em 'avisar' é avisada no log dela");
+  assert.ok(!logs.some((l) => l.canal === `LOG_${SERV.OFF}`), "o servidor em 'off' não ouve nada");
+  assert.match(e.description, /banido agora\*\* em 1 servidor/);
+  assert.match(e.description, /staff avisada em 1/);
+});
+
+console.log("\n── o que NÃO entra ──");
+await t("★ ID que não é de conta nenhuma (um caractere trocado) não entra na lista para sempre", async () => {
+  const e = await rodar(DONO, "add", FANTASMA);
+  assert.match(e.description, /nenhuma conta do Stoat tem esse ID/);
+  assert.equal(db.historicoBans(FANTASMA).length, 0);
+});
+await t("bot não entra (a lista não vale para bot)", async () => {
+  const e = await rodar(DONO, "add", ROBO);
+  assert.match(e.description, /é um bot/);
+  assert.equal(db.historicoBans(ROBO).length, 0);
+});
+await t("nem a própria Judy, nem o dono", async () => {
+  const e = await rodar(DONO, "add", BOT, DONO);
+  assert.match(e.description, /sou eu/); assert.match(e.description, /é o dono do bot/);
+});
+await t("API fora do ar: entra assim mesmo, com o aviso de que não confirmou", async () => {
+  const e = await rodar(DONO, "add", REDE);
+  assert.match(e.description, /não consegui confirmar/);
+  assert.equal(db.historicoBans(REDE).length, 1);
+});
+
+console.log("\n── os detalhes ──");
+await t("quem estava nos ignorados (esquecer) volta — o dono pediu pelo ID", async () => {
+  db.ignorarNaListaGlobal(ESQUECIDO, { nome: "Antigo", motivo: "teste" });
+  const e = await rodar(DONO, "add", ESQUECIDO);
+  assert.match(e.description, /estava nos ignorados/);
+  assert.equal(db.estaIgnoradoGlobal(ESQUECIDO), false);
+  assert.equal(db.historicoBans(ESQUECIDO).length, 1);
+});
+await t("adicionar de novo não duplica (atualiza o registro)", async () => {
+  const e = await rodar(DONO, "add", FORA, "motivo novo");
+  assert.match(e.description, /já estava na lista/);
+  const doDono = db.historicoBans(FORA).filter((b) => b.serverId === bg.ORIGEM_DONO);
+  assert.equal(doDono.length, 1);
+  assert.equal(doDono[0].motivo, "motivo novo");
+});
+await t("menção e link de perfil valem como ID; algo com cara de ID quebrado é apontado", async () => {
+  const r = bg.separarIdsEMotivo([`<@${FORA}>`, `https://stoat.chat/user/${FORA2}`, "01KQQQQQQQQQQQQQQQQQQQQQ", "flood"]);
+  assert.deepEqual(r.ids, [FORA, FORA2]);
+  assert.equal(r.motivo, "01KQQQQQQQQQQQQQQQQQQQQQ flood");
+  assert.deepEqual(r.descartados, ["01KQQQQQQQQQQQQQQQQQQQQQ"]);
+});
+await t("sem ID nenhum: mostra o uso, não mexe na lista", async () => {
+  const antes = db.totalBansGlobais();
+  const e = await rodar(DONO, "add", "raid");
+  assert.match(e.title, /Adicionar à lista global/);
+  assert.equal(db.totalBansGlobais(), antes);
+});
+await t("o &banglobal (status) ensina o add", async () => {
+  const e = await rodar(DONO);
+  assert.match(e.description, /banglobal add <id>/);
+});
+
+console.log(`\nBANGLOBAL (add): ${ok} ok, ${falhou} falha(s)`);
+process.exit(falhou ? 1 : 0);
+};
+
 // ── O executor ───────────────────────────────────────────────────────────────
 const PRECISA_DO_BOT = (nome) => /import\("\.\/main\.js"\)/.test(String(SUITES[nome]));
 

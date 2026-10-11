@@ -10,6 +10,16 @@
 //   pelo endpoint público oEmbed (título + artista → busca no YouTube), e
 //   playlist/álbum usa a API oficial com SPOTIFY_ID/SPOTIFY_SECRET (.env);
 // - o fim de faixa (`finish`/`end` do MediaPlayer) puxa a próxima da fila.
+//
+// O skip (11 out 2026 — "o skip da música não está funcionando"): o pular só
+// matava o yt-dlp, mas o MediaPlayer do revoice (src/Media.js) decodifica com
+// o ffmpeg MAIS RÁPIDO que o tempo real e guarda o áudio pronto em `chunks`.
+// A faixa velha seguia tocando do buffer; a nova era só ENFILEIRADA atrás dela
+// (o `playStream` não para o que já tocava). E quando o buffer velho acabava,
+// o `finish` dele — e o `close` do yt-dlp morto — puxavam OUTRA faixa: o
+// segundo skip fantasma. Agora cada faixa tem uma geração (eventos de faixa
+// velha não fazem nada), e trocar de faixa corta o ffmpeg velho e esvazia o
+// buffer (`stop()`) antes de tocar a próxima.
 
 import { spawn } from "node:child_process";
 import * as voz from "./voz.js";
@@ -26,12 +36,22 @@ const DEBUG = process.env.VOZ_DEBUG === "1";
 const log = (...a) => console.log(new Date().toISOString(), "[MUSICA]", ...a);
 const dbg = (...a) => { if (DEBUG) log(...a); };
 
-// canalVoz → { fila:[], atual, volume, loop:"nao"|"faixa"|"fila", proc, trocando }
+// canalVoz → { fila:[], atual, volume, loop:"nao"|"faixa"|"fila", proc, trocando, geracao, soltar }
 const estados = new Map();
+
+// O que vem de fora (processo e player) passa por aqui — os testes trocam por
+// versões de mentira que imitam o revoice de verdade.
+const deps = {
+  spawn,
+  criarPlayer: (canalVoz) => voz.criarPlayerExtra(canalVoz, "musica"),
+  playerDe: (canalVoz) => voz.playerExtraDe(canalVoz, "musica"),
+  esperaCorteMs: 1500,
+};
+export function _trocarDependencias(novas) { Object.assign(deps, novas); }
 
 function estadoDe(canalVoz) {
   if (!estados.has(canalVoz)) {
-    estados.set(canalVoz, { fila: [], atual: null, volume: 1, loop: "nao", proc: null, trocando: false });
+    estados.set(canalVoz, { fila: [], atual: null, volume: 1, loop: "nao", proc: null, trocando: false, geracao: 0, soltar: null });
   }
   return estados.get(canalVoz);
 }
@@ -62,7 +82,7 @@ export function montarBusca(nome, artistas) {
 function ytdlpJson(alvo, { playlistOk = true } = {}) {
   return new Promise((res, rej) => {
     const args = ["-J", "--no-warnings", ...CLIENTES_YT, playlistOk ? "--flat-playlist" : "--no-playlist", alvo];
-    const p = spawn(YTDLP, args, { stdio: ["ignore", "pipe", "pipe"] });
+    const p = deps.spawn(YTDLP, args, { stdio: ["ignore", "pipe", "pipe"] });
     let fora = "", erro = "";
     p.stdout.on("data", (d) => (fora += d));
     p.stderr.on("data", (d) => (erro += d));
@@ -174,15 +194,36 @@ async function spotifyColecao(tipo, id) {
 }
 
 // ── Player ──────────────────────────────────────────────────────────────────
-async function garantirPlayer(canalVoz) {
-  const media = await voz.criarPlayerExtra(canalVoz, "musica");
-  return media;
+// Corta a faixa que está no player: solta os ouvintes dela, mata o yt-dlp,
+// mata o ffmpeg do revoice SEM deixar o handler de erro dele chamar `stop()`
+// depois (ele pararia a faixa NOVA), espera o ffmpeg sair e só então esvazia o
+// buffer — senão o resto do áudio velho já no pipe entraria na faixa nova.
+async function cortarFaixa(st, media) {
+  try { st.soltar?.(); } catch {}
+  st.soltar = null;
+  pararStream(st);
+  if (!media) return;
+  const ff = media.fProc;
+  // o áudio que ainda está no pipe do ffmpeg velho não pode cair no buffer novo
+  try { (ff?._outputs ?? []).find((o) => o?.target && typeof o.target !== "string")?.target?.removeAllListeners?.("data"); } catch {}
+  if (ff && !media.ffmpegFinished) {
+    try { ff.removeAllListeners?.("end"); ff.removeAllListeners?.("error"); ff.on?.("error", () => {}); } catch {}
+    const saiu = new Promise((r) => {
+      const t = setTimeout(r, deps.esperaCorteMs);
+      const pronto = () => { clearTimeout(t); r(); };
+      try { ff.once?.("error", pronto); ff.once?.("end", pronto); } catch { pronto(); }
+    });
+    try { ff.kill?.("SIGKILL"); } catch {}
+    await saiu;
+  }
+  try { media.stop?.(); } catch {}   // esvazia o áudio já decodificado (e zera o volume do revoice)
 }
 
 async function tocarProxima(canalVoz) {
   const st = estadoDe(canalVoz);
   if (st.trocando) return;
   st.trocando = true;
+  const g = ++st.geracao;
   try {
     let item = null;
     if (st.loop === "faixa" && st.atual) item = st.atual;
@@ -191,7 +232,11 @@ async function tocarProxima(canalVoz) {
       item = st.fila.shift() ?? null;
     }
     st.atual = item;
-    if (!item) { dbg(`${canalVoz}: fila acabou`); pararStream(st); return; }
+    if (!item) {
+      dbg(`${canalVoz}: fila acabou`);
+      await cortarFaixa(st, deps.playerDe(canalVoz));
+      return;
+    }
 
     if (!item.url && item.busca) {   // faixa do Spotify resolvida na hora
       try {
@@ -206,33 +251,36 @@ async function tocarProxima(canalVoz) {
       }
     }
 
-    const media = await garantirPlayer(canalVoz);
-    pararStream(st);
-    const proc = spawn(YTDLP, ["-f", "bestaudio/best", ...CLIENTES_YT, "--no-playlist", "-o", "-", "--quiet", "--no-warnings", item.url],
+    const media = await deps.criarPlayer(canalVoz);
+    await cortarFaixa(st, media);
+    if (g !== st.geracao) return;   // outro skip/parar chegou enquanto cortava
+
+    const proc = deps.spawn(YTDLP, ["-f", "bestaudio/best", ...CLIENTES_YT, "--no-playlist", "-o", "-", "--quiet", "--no-warnings", item.url],
       { stdio: ["ignore", "pipe", "pipe"] });
     st.proc = proc;
     let erroTxt = "";
-    proc.stderr.on("data", (d) => (erroTxt += d));
+    proc.stderr?.on?.("data", (d) => (erroTxt += d));
     proc.on("error", (e) => log(`yt-dlp falhou: ${e.message}`));
 
     let fimDisparado = false;
     const fim = () => {
-      if (fimDisparado) return;
+      // evento de faixa que já saiu (cortada por skip/parar): não puxa nada
+      if (fimDisparado || g !== st.geracao) return;
       fimDisparado = true;
       dbg(`${canalVoz}: fim de "${item.titulo}"`);
-      st.trocando = false;
       tocarProxima(canalVoz).catch((e) => log(`próxima falhou: ${e.message}`));
     };
-    media.once?.("finish", fim);
-    media.once?.("end", fim);
+    media.on?.("finish", fim);
+    media.on?.("end", fim);
+    st.soltar = () => { media.off?.("finish", fim); media.off?.("end", fim); };
     proc.on("close", (c) => {
-      if (c !== 0 && !fimDisparado) {
+      if (c !== 0 && !fimDisparado && g === st.geracao) {
         log(`stream de "${item.titulo}" caiu (${erroTxt.trim().split("\n").pop() || c}) — pulando`);
         setTimeout(fim, 500);
       }
     });
 
-    try { media.setVolume?.(st.volume); } catch {}
+    try { media.setVolume?.(st.volume); } catch {}   // depois do corte: o stop() do revoice zera o volume
     media.playStream(proc.stdout);
     log(`${canalVoz}: ▶ ${item.titulo}`);
   } finally {
@@ -271,14 +319,14 @@ function duracaoTxt(s) {
 }
 
 export async function pausar(canalVoz) {
-  const media = voz.playerExtraDe(canalVoz, "musica");
+  const media = deps.playerDe(canalVoz);
   if (!media || !estadoDe(canalVoz).atual) return { erro: "não há nada tocando." };
   media.pause?.();
   return { mensagem: "⏸ Pausado." };
 }
 
 export async function retomar(canalVoz) {
-  const media = voz.playerExtraDe(canalVoz, "musica");
+  const media = deps.playerDe(canalVoz);
   if (!media || !estadoDe(canalVoz).atual) return { erro: "não há nada pausado." };
   media.resume?.();
   return { mensagem: "▶ Voltando." };
@@ -289,8 +337,10 @@ export async function pular(canalVoz) {
   if (!st.atual) return { erro: "não há nada tocando." };
   const era = st.atual.titulo;
   if (st.loop === "faixa") st.loop = "nao";   // pular vence o loop de faixa
-  st.atual = null;
-  pararStream(st);
+  // no loop de fila a faixa pulada volta para o fim (o tocarProxima a recoloca)
+  if (st.loop !== "fila") st.atual = null;
+  // um skip no meio de uma troca (ex.: resolvendo faixa do Spotify) espera ela acabar
+  for (let i = 0; st.trocando && i < 100; i++) await new Promise((r) => setTimeout(r, 50));
   await tocarProxima(canalVoz);
   return { mensagem: `⏭ Pulei **${era}**.${st.atual ? ` Agora: **${st.atual.titulo}**.` : " Fila vazia."}` };
 }
@@ -299,8 +349,8 @@ export async function parar(canalVoz) {
   const st = estadoDe(canalVoz);
   const tinha = !!(st.atual || st.fila.length);
   st.fila = []; st.atual = null; st.loop = "nao";
-  pararStream(st);
-  try { voz.playerExtraDe(canalVoz, "musica")?.stop?.(); } catch {}
+  st.geracao++;
+  await cortarFaixa(st, deps.playerDe(canalVoz));
   return { mensagem: tinha ? "⏹ Parei e limpei a fila." : "já estava tudo parado." };
 }
 
@@ -320,7 +370,7 @@ export async function volume(canalVoz, v) {
   const alvo = Math.min(2, Math.max(0, Number(v)));
   if (!Number.isFinite(alvo)) return { erro: "volume entre 0 e 200 (em %)." };
   st.volume = alvo;
-  try { voz.playerExtraDe(canalVoz, "musica")?.setVolume?.(alvo); } catch {}
+  try { deps.playerDe(canalVoz)?.setVolume?.(alvo); } catch {}
   return { mensagem: `🔊 Volume em ${Math.round(alvo * 100)}%.` };
 }
 
@@ -339,7 +389,7 @@ export function canalAtivo() {
 
 export function limparCanal(canalVoz) {
   const st = estados.get(canalVoz);
-  if (st) pararStream(st);
+  if (st) { st.geracao++; try { st.soltar?.(); } catch {} st.soltar = null; pararStream(st); }
   estados.delete(canalVoz);
 }
 
@@ -347,10 +397,10 @@ export function limparCanal(canalVoz) {
 voz.ganchosDeFala.antes = (canalVoz) => {
   const st = estados.get(canalVoz);
   if (!st?.atual) return;
-  try { voz.playerExtraDe(canalVoz, "musica")?.setVolume?.(st.volume * DUCK); dbg(`${canalVoz}: 🔉 duck`); } catch {}
+  try { deps.playerDe(canalVoz)?.setVolume?.(st.volume * DUCK); dbg(`${canalVoz}: 🔉 duck`); } catch {}
 };
 voz.ganchosDeFala.depois = (canalVoz) => {
   const st = estados.get(canalVoz);
   if (!st?.atual) return;
-  try { voz.playerExtraDe(canalVoz, "musica")?.setVolume?.(st.volume); dbg(`${canalVoz}: 🔊 volta`); } catch {}
+  try { deps.playerDe(canalVoz)?.setVolume?.(st.volume); dbg(`${canalVoz}: 🔊 volta`); } catch {}
 };

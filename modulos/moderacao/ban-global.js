@@ -1,9 +1,9 @@
 
 import * as db  from "../core/db.js";
-import { descreverErro } from "../core/erros.js";
+import { descreverErro, tipoDoErro } from "../core/erros.js";
 import { banir } from "../core/banir.js";
 import * as log from "../core/log.js";
-import { resolverUsuarioDetalhado, ehBot } from "../core/ids.js";
+import { resolverUsuarioDetalhado, ehBot, idValido } from "../core/ids.js";
 import { tr, lingua } from "../core/i18n.js";
 import { enviarPaginado, paginarLinhas } from "../core/paginas.js";
 import { chamarApi } from "../core/stoat-api.js";
@@ -148,6 +148,14 @@ function embedAlvoNaoResolvido(ctx, r, entrada, uso) {
     ].filter(Boolean).join("\n"), colour: COR.erro,
   });
 }
+
+// Quem o dono do bot põe na lista à mão (`&banglobal add`) fica registrado
+// numa origem própria, não no servidor onde o comando foi digitado: o
+// `verificarEntrada` ignora os bans do PRÓPRIO servidor (ele já baniu), e
+// a pessoa adicionada a partir do Vapor Nexus nunca seria barrada lá.
+export const ORIGEM_DONO = "lista-do-dono";
+export const rotuloOrigem = (serverId, en = false) =>
+  serverId === ORIGEM_DONO ? (en ? "_added by the bot owner_" : "_adicionado pelo dono do bot_") : `\`${serverId}\``;
 
 export function rotularUsuario(userId, { nome = null, client = null } = {}) {
   const conhecido = nome
@@ -319,7 +327,7 @@ export async function verificarEntrada(member, ctx, { propagado = false } = {}) 
 
   const n = historico.length;
   const motivos = historico.slice(0, 3)
-    .map((b) => `• \`${b.serverId}\` — ${b.motivo ?? "_sem motivo_"} _(${data(b.criadoEm)})_`)
+    .map((b) => `• ${rotuloOrigem(b.serverId)} — ${b.motivo ?? "_sem motivo_"} _(${data(b.criadoEm)})_`)
     .join("\n");
   const quemEntrou = member?.user?.username ?? member?.nickname ?? null;
   const resumo = `${rotularUsuario(userId, { nome: quemEntrou, client: ctx.client })} consta na lista global: banido em **${n}** servidor(es).\n${motivos}`
@@ -444,6 +452,7 @@ export async function cmdBanGlobal(message, args, ctx) {
         "",
         `**Listed:** ${db.usuariosBanidosDistintos()} user(s), ${db.totalBansGlobais()} record(s) — ${db.bansGlobaisDoServidor(serverId)} from this server.`,
         `**Exempt here:** ${(config.banGlobal.isentos ?? []).length} person(s) this server accepts despite the list.`,
+        `**Contribution:** 🟢 always on — this server's bans (old and new) feed the list on their own. There's nothing to configure and no command to run.`,
         "",
         "**Commands:**",
         `\`${PREFIXO}banglobal <off|avisar|banir>\` — sets the mode`,
@@ -454,11 +463,10 @@ export async function cmdBanGlobal(message, args, ctx) {
         `\`${PREFIXO}banglobal isentar <@user>\` — accept someone despite the list _(and unban them here)_`,
         `\`${PREFIXO}banglobal isentos\` — who is exempt here`,
         `\`${PREFIXO}banglobal desfazer\` — ↩️ reverts the bans the list applied here`,
+        `\`${PREFIXO}banglobal add <id> [id…] [reason]\` — puts someone on the list **by ID**, even if they're in none of Judy's servers _(bot owner)_`,
         `\`${PREFIXO}banglobal esquecer <@user|id> [nota]\` — removes a user from the list **for everyone**, and keeps them out for good`,
         `\`${PREFIXO}banglobal ignorados\` — who is kept out · \`lembrar <@user>\` undoes it`,
         `\`${PREFIXO}banglobal bots\` — finds bots on the list and drops them`,
-        "",
-        `**Contribution:** 🟢 always on — this server's bans (old and new) feed the list on their own. There's nothing to configure and no command to run.`,
         "",
         "_The mode above only decides whether this server **benefits** from the list. You can opt out of using it, but not out of feeding it._",
         "",
@@ -478,6 +486,7 @@ export async function cmdBanGlobal(message, args, ctx) {
         "",
         `**Na lista:** ${db.usuariosBanidosDistintos()} usuário(s), ${db.totalBansGlobais()} registro(s) — ${db.bansGlobaisDoServidor(serverId)} deste servidor.`,
         `**Isentos aqui:** ${(config.banGlobal.isentos ?? []).length} pessoa(s) que este servidor aceita apesar da lista.`,
+        `**Contribuição:** 🟢 sempre ligada — os bans deste servidor (antigos e novos) alimentam a lista sozinhos. Não há o que configurar nem comando a rodar.`,
         "",
         "**Comandos:**",
         `\`${PREFIXO}banglobal <off|avisar|banir>\` — define o modo`,
@@ -488,11 +497,10 @@ export async function cmdBanGlobal(message, args, ctx) {
         `\`${PREFIXO}banglobal isentar <@pessoa>\` — aceitar alguém apesar da lista _(e desbanir aqui)_`,
         `\`${PREFIXO}banglobal isentos\` — quem está isento neste servidor`,
         `\`${PREFIXO}banglobal desfazer\` — ↩️ reverte os bans que a lista aplicou aqui`,
+        `\`${PREFIXO}banglobal add <id> [id…] [motivo]\` — põe alguém na lista **pelo ID**, mesmo sem estar em nenhum servidor da Judy _(dono do bot)_`,
         `\`${PREFIXO}banglobal esquecer <@usuário|id> [nota]\` — tira alguém da lista **para todos os servidores**, e o mantém fora`,
         `\`${PREFIXO}banglobal ignorados\` — quem está fora · \`lembrar <@pessoa>\` desfaz`,
         `\`${PREFIXO}banglobal bots\` — acha bots na lista e os tira`,
-        "",
-        `**Contribuição:** 🟢 sempre ligada — os bans deste servidor (antigos e novos) alimentam a lista sozinhos. Não há o que configurar nem comando a rodar.`,
         "",
         "_O modo acima decide só se este servidor **se aproveita** da lista. Dá para não usar a lista, mas não dá para usá-la sem alimentá-la._",
         "",
@@ -547,7 +555,7 @@ export async function cmdBanGlobal(message, args, ctx) {
         `${nome} — banido em **${hist.length}** servidor(es):`,
         "",
         ...hist.slice(0, 10).map((b) =>
-          `• \`${b.serverId}\` — ${b.motivo ?? "_sem motivo_"} _(${data(b.criadoEm)}, ${b.origem})_`),
+          `• ${rotuloOrigem(b.serverId)} — ${b.motivo ?? "_sem motivo_"} _(${data(b.criadoEm)}, ${b.origem})_`),
         hist.length > 10 ? `\n_… e mais ${hist.length - 10}._` : "",
         "",
         `_Aceita aqui mesmo assim: \`${PREFIXO}banglobal isentar ${uid}\`_`,
@@ -559,7 +567,7 @@ export async function cmdBanGlobal(message, args, ctx) {
         `${nome} — banned on **${hist.length}** server(s):`,
         "",
         ...hist.slice(0, 10).map((b) =>
-          `• \`${b.serverId}\` — ${b.motivo ?? "_no reason_"} _(${data(b.criadoEm)}, ${b.origem})_`),
+          `• ${rotuloOrigem(b.serverId, true)} — ${b.motivo ?? "_no reason_"} _(${data(b.criadoEm)}, ${b.origem})_`),
         hist.length > 10 ? `\n_… and ${hist.length - 10} more._` : "",
         "",
         `_Accept them here anyway: \`${PREFIXO}banglobal isentar ${uid}\`_`,
@@ -1020,6 +1028,80 @@ export async function cmdBanGlobal(message, args, ctx) {
     }));
   }
 
+  // ── &banglobal add <id> [id…] [motivo] — pôr na lista quem não está em servidor nenhum ──
+  // (pedido de Ghieh, 11 out 2026). Só o dono do bot: a lista vale para TODOS
+  // os servidores (no modo `banir`, entrar na lista = ser banido em todos),
+  // pelo mesmo motivo que o `esquecer` é só dele.
+  if (["add", "adicionar", "incluir", "colocar"].includes(sub)) {
+    if (!ctx.ehSuperAdmin?.(message.authorId)) return sendEmbed(message.channel, tr(ctx, {
+      title: "🔒 Só o dono do bot",
+      description: "A lista global é **compartilhada** por todos os servidores da Judy — pôr alguém nela vale para todos.\n\n"
+        + `Para tirar alguém **deste servidor**, use o ban normal: \`${PREFIXO}ban <@pessoa|id> [motivo]\` — ele alimenta a lista sozinho.`,
+      colour: COR.aviso,
+    }, {
+      title: "🔒 Bot owner only",
+      description: "The global list is **shared** by every server Judy is in — putting someone on it applies to all of them.\n\n"
+        + `To remove someone from **this server**, use the normal ban: \`${PREFIXO}ban <@user|id> [reason]\` — it feeds the list by itself.`,
+      colour: COR.aviso,
+    }));
+    const { ids, motivo, descartados } = separarIdsEMotivo(args.slice(1));
+    if (!ids.length) return sendEmbed(message.channel, tr(ctx, {
+      title: "🌐 Adicionar à lista global",
+      description: [
+        `\`${PREFIXO}banglobal add <id> [id…] [motivo]\``,
+        "",
+        "Põe na lista **pelo ID** — a pessoa não precisa estar em nenhum servidor da Judy. Aceito até 25 IDs de uma vez (menção e link de perfil também valem).",
+        `Ex.: \`${PREFIXO}banglobal add 01KMBX60MHVS8F0P0CJ0VK3326 01KMBX60MHVS8F0P0CJ0VK3327 raid de 27/09\``,
+        "",
+        "_Quem já estiver num servidor da Judy sente na hora: banido onde o modo é `banir`, aviso à staff onde é `avisar`._",
+      ].join("\n"), colour: COR.info,
+    }, {
+      title: "🌐 Add to the global list",
+      description: [
+        `\`${PREFIXO}banglobal add <id> [id…] [reason]\``,
+        "",
+        "Puts someone on the list **by ID** — they don't need to be in any of Judy's servers. Up to 25 IDs at once (mentions and profile links work too).",
+        `E.g.: \`${PREFIXO}banglobal add 01KMBX60MHVS8F0P0CJ0VK3326 01KMBX60MHVS8F0P0CJ0VK3327 raid of 09/27\``,
+        "",
+        "_Anyone already in one of Judy's servers feels it right away: banned where the mode is `banir`, staff warned where it's `avisar`._",
+      ].join("\n"), colour: COR.info,
+    }));
+
+    const r = await adicionarPorId(ids, { ctx, motivo, porId: message.authorId });
+    const en = lang === "en";
+    const L = [];
+    for (const a of r.adicionados) {
+      const onde = a.acoes.filter((x) => x.acao === "banido").length, avisos = a.acoes.filter((x) => x.acao === "avisado").length;
+      L.push(`✅ ${rotularUsuario(a.id, { nome: a.nome })}`
+        + (a.jaEstava ? (en ? " — was already listed (record updated)" : " — já estava na lista (registro atualizado)") : "")
+        + (a.voltouDosIgnorados ? (en ? " — was on the ignored list; taken off it" : " — estava nos ignorados; saiu de lá") : "")
+        + (a.semConfirmar ? (en ? " — ⚠️ I couldn't confirm the account with Stoat" : " — ⚠️ não consegui confirmar a conta no Stoat") : "")
+        + (onde ? (en ? ` — **banned now** in ${onde} server(s)` : ` — **banido agora** em ${onde} servidor(es)`) : "")
+        + (avisos ? (en ? ` — staff warned in ${avisos}` : ` — staff avisada em ${avisos}`) : ""));
+    }
+    const MOTIVOS = en
+      ? { "nao-existe": "no Stoat account has this ID", bot: "it's a bot", "eu": "that's me", dono: "that's the bot owner" }
+      : { "nao-existe": "nenhuma conta do Stoat tem esse ID", bot: "é um bot", "eu": "sou eu", dono: "é o dono do bot" };
+    for (const x of r.recusados) L.push(`❌ \`${x.id}\` — ${MOTIVOS[x.motivo] ?? x.motivo}`);
+    if (descartados.length) L.push("", en
+      ? `_Not IDs (they went into the reason): ${descartados.map((d) => `\`${d}\``).join(" ")}_`
+      : `_Não são IDs (entraram no motivo): ${descartados.map((d) => `\`${d}\``).join(" ")}_`);
+    L.push("", `**${en ? "Reason" : "Motivo"}:** ${motivo || (en ? "_none_" : "_sem motivo_")}`);
+    if (r.adicionados.length) L.push(en
+      ? `_Changed your mind: \`${PREFIXO}banglobal esquecer <id>\`._`
+      : `_Mudou de ideia: \`${PREFIXO}banglobal esquecer <id>\`._`);
+
+    if (r.adicionados.length) await log.registrar(ctx, "punicoes", {
+      titulo: "🌐 Adicionado(s) à lista global pelo dono",
+      descricao: `<@${message.authorId}> pôs ${r.adicionados.map((a) => `**${a.nome ?? a.id}** \`${a.id}\``).join(", ")} na lista global.${motivo ? `\n**Motivo:** ${motivo}` : ""}`,
+    });
+    return enviarPaginado(ctx, message.channel, {
+      paginas: paginarLinhas(L, { titulo: en ? `🌐 Global list — ${r.adicionados.length} added` : `🌐 Lista global — ${r.adicionados.length} adicionado(s)`, limite: 1500 }),
+      autorId: message.authorId,
+      colour: r.recusados.length ? COR.aviso : COR.mod,
+    });
+  }
+
   // ── &banglobal esquecer <usuário> ──
   if (["esquecer", "forget", "remover", "apagar"].includes(sub)) {
     // A lista é compartilhada por todos os servidores da Judy: apagar alguém
@@ -1288,16 +1370,71 @@ export async function propagarSeFoiBan(serverId, userId, { client, criarContexto
   db.registrarBanGlobal(userId, serverId, ban?.reason ?? "banido no servidor", "propagado", { nome });
   console.log(`[BANGLOBAL] propagado: ${userId} banido em ${serverId} — conferindo os outros servidores`);
 
-  for (const outro of client.servers?.values?.() ?? []) {
+  saida.acoes = await aplicarNosServidores(userId, { client, criarContexto, exceto: serverId });
+  return saida;
+}
+
+// Aplica o modo de cada servidor onde a pessoa ESTÁ agora (off: nada ·
+// avisar: alerta a staff · banir: bane). Usado pela propagação de ban e pelo
+// `&banglobal add`.
+export async function aplicarNosServidores(userId, { client, criarContexto, exceto = null } = {}) {
+  const acoes = [];
+  if (!criarContexto) return acoes;
+  for (const outro of client?.servers?.values?.() ?? []) {
     const sid = outro?.id;
-    if (!sid || sid === serverId) continue;
+    if (!sid || sid === exceto) continue;
     let membro;
     try { membro = await outro.fetchMember(userId); } catch { continue; }   // não é membro ali
     if (!membro) continue;
     const ctx = criarContexto(sid);
     const modo = ctx.config?.banGlobal?.modo ?? "off";
     const baniu = await verificarEntrada(membro, ctx, { propagado: true });
-    saida.acoes.push({ serverId: sid, modo, acao: baniu ? "banido" : modo === "avisar" ? "avisado" : "nada" });
+    acoes.push({ serverId: sid, modo, acao: baniu ? "banido" : modo === "avisar" ? "avisado" : "nada" });
   }
-  return saida;
+  return acoes;
+}
+
+// ── &banglobal add: o núcleo, testável sem comando ──────────────────────────
+// Separa os IDs (no começo) do motivo (o resto). Menção e link de perfil valem.
+export function separarIdsEMotivo(tokens, max = 25) {
+  const ids = [], descartados = [];
+  let i = 0;
+  for (; i < tokens.length; i++) {
+    const t = String(tokens[i] ?? "").trim();
+    if (!t) continue;
+    const id = idValido(t) || (t.match(/(?:\/user\/|\/@)([0-9A-HJKMNP-TV-Z]{26})/i)?.[1]?.toUpperCase() ?? "");
+    if (!id) break;
+    if (!ids.includes(id)) ids.push(id);
+  }
+  // algo com cara de ID logo depois (ex.: um caractere a menos) não some calado
+  for (const t of tokens.slice(i, i + 3)) if (/^<?@?[0-9A-Za-z]{20,30}>?$/.test(String(t))) descartados.push(String(t));
+  return { ids: ids.slice(0, max), motivo: tokens.slice(i).join(" ").trim().slice(0, 300), descartados };
+}
+
+export async function adicionarPorId(ids, { ctx, motivo = "", porId = null }) {
+  const client = ctx?.client;
+  const r = { adicionados: [], recusados: [] };
+  for (const id of ids) {
+    if (id === client?.user?.id) { r.recusados.push({ id, motivo: "eu" }); continue; }
+    if (ctx?.ehSuperAdmin?.(id)) { r.recusados.push({ id, motivo: "dono" }); continue; }
+    // A conta existe? (o ID pode ter um caractere trocado — e então entraria
+    // na lista para sempre sem ninguém notar)
+    let usuario = null, semConfirmar = false;
+    try { usuario = await client?.users?.fetch?.(id); }
+    catch (e) {
+      if (tipoDoErro(e) === "NotFound") { r.recusados.push({ id, motivo: "nao-existe" }); continue; }
+      semConfirmar = true;
+      console.log(`[BANGLOBAL] add: não confirmei ${id} (${descreverErro(e)}) — entra assim mesmo`);
+    }
+    if (ehBot(usuario) || ehBotConhecido(id, { client })) { r.recusados.push({ id, motivo: "bot" }); continue; }
+    // o dono pediu pelo ID: a marca de "não volta" de um `esquecer` antigo cede
+    const voltouDosIgnorados = db.estaIgnoradoGlobal(id) ? db.deixarDeIgnorarGlobal(id) > 0 : false;
+    const jaEstava = db.historicoBans(id).length > 0;
+    const nome = usuario?.username ?? db.nomeDeBanido(id) ?? null;
+    db.registrarBanGlobal(id, ORIGEM_DONO, motivo || "adicionado pelo dono do bot", "adicionado", { nome });
+    console.log(`[BANGLOBAL] add: ${id} (${nome ?? "?"}) posto na lista por ${porId ?? "?"}`);
+    const acoes = await aplicarNosServidores(id, { client, criarContexto: ctx?.criarContexto });
+    r.adicionados.push({ id, nome, jaEstava, voltouDosIgnorados, semConfirmar, acoes });
+  }
+  return r;
 }

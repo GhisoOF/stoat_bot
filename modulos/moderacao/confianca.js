@@ -1,12 +1,28 @@
 import * as db from "../core/db.js";
 
+// Ajustes mais suaves desde 12 out 2026 (pedido de Ghieh: o sentinela punia
+// gente comum — "cool"/"YO" de um membro deu timeout num servidor sem XP).
 export const FAIXAS = [
-  { ate: 0,  ajuste: -1.5, id: "novato",     rotulo: "recém-chegado", rotuloEN: "newcomer" },
-  { ate: 2,  ajuste: -1.0, id: "conhecido",  rotulo: "conhecido",     rotuloEN: "getting known" },
-  { ate: 5,  ajuste: -0.5, id: "frequente",  rotulo: "frequente",     rotuloEN: "regular" },
-  { ate: 10, ajuste: 0,    id: "estabelecido", rotulo: "estabelecido", rotuloEN: "established" },
+  { ate: 0,  ajuste: -0.75, id: "novato",     rotulo: "recém-chegado", rotuloEN: "newcomer" },
+  { ate: 2,  ajuste: -0.5,  id: "conhecido",  rotulo: "conhecido",     rotuloEN: "getting known" },
+  { ate: 5,  ajuste: -0.25, id: "frequente",  rotulo: "frequente",     rotuloEN: "regular" },
+  { ate: 10, ajuste: 0,     id: "estabelecido", rotulo: "estabelecido", rotuloEN: "established" },
   { ate: Infinity, ajuste: +0.5, id: "veterano", rotulo: "veterano",  rotuloEN: "veteran" },
 ];
+
+// Sem XP no servidor, o nível é 0 para TODO MUNDO, para sempre — e todos eram
+// tratados como recém-chegados (o limiar mais baixo). A confiança passa a vir
+// do TEMPO no servidor; sem saber quando a pessoa entrou, fica neutra.
+const DIA = 86_400_000;
+export function faixaPorTempo(entrouEm, agora = Date.now()) {
+  const t = entrouEm ? Date.parse(entrouEm) || Number(entrouEm) : NaN;
+  if (!Number.isFinite(t)) return { ...FAIXAS[3], porTempo: true };          // desconhecido: neutro
+  const dias = (agora - t) / DIA;
+  if (dias < 1)  return { ...FAIXAS[0], porTempo: true };
+  if (dias < 7)  return { ...FAIXAS[2], porTempo: true };
+  if (dias < 30) return { ...FAIXAS[3], porTempo: true };
+  return { ...FAIXAS[4], porTempo: true };
+}
 
 export function nivelDe(serverId, userId) {
   try { return db.getXp(serverId, userId)?.nivel ?? 0; } catch { return 0; }
@@ -43,8 +59,8 @@ export function idadeDaConta(userId, agora = Date.now()) {
 const HORA = 3600_000;
 function ajusteIdade(idade) {
   if (idade == null) return 0;
-  if (idade < HORA) return -3;          // criada agora: rigor máximo
-  if (idade < 24 * HORA) return -1.5;   // criada hoje
+  if (idade < HORA) return -2.5;        // criada agora: rigor máximo (as contas do raid tinham 2–7 min)
+  if (idade < 24 * HORA) return -1;     // criada hoje
   return 0;
 }
 
@@ -92,10 +108,12 @@ export function contaNova(serverId, userId, agora = Date.now()) {
   return idade < 24 * HORA || (emModoRaid(serverId, agora) && idade < 7 * 24 * HORA);
 }
 
-export function limiarPara(serverId, userId, base, { ativo = true, agora = Date.now() } = {}) {
+// `xpAtivo: false` = o servidor não usa XP → a faixa vem do tempo no servidor
+// (`entrouEm`, o joinedAt do membro), não do nível.
+export function limiarPara(serverId, userId, base, { ativo = true, agora = Date.now(), xpAtivo = true, entrouEm = null } = {}) {
   if (!ativo) return { limiar: base, faixa: null, nivel: null };
-  const nivel = nivelDe(serverId, userId);
-  const faixa = faixaDe(nivel);
+  const nivel = xpAtivo ? nivelDe(serverId, userId) : null;
+  const faixa = xpAtivo ? faixaDe(nivel) : faixaPorTempo(entrouEm, agora);
   const idade = idadeDaConta(userId, agora);
   let ajuste = faixa.ajuste + ajusteIdade(idade);
   if (emModoRaid(serverId, agora) && idade != null && idade < 7 * 24 * HORA) ajuste -= 1;

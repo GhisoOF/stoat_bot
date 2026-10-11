@@ -9321,6 +9321,10 @@ const troll = { id: { server: "S1", user: "TROLL" }, roles: [], hasPermission: (
 const server = { id: "S1", ownerId: "DONO", name: "Teste", roles: new Map(), channels: [canal], member: { roles: [] }, havePermission: () => true,
   fetchMember: async () => troll, fetchBans: async () => [] };
 c.servers.set("S1", server); c.channels.set("C1", canal);
+// Servidor novo nasce com o automod desligado (12 out 2026); este cenário é o
+// de um servidor que ligou o automod com os padrões de fábrica.
+{ const store = await import("./modulos/core/config-store.js"); const cfg = store.configDoServidor("S1");
+  for (const [k, v] of Object.entries(store.padraoServidor.automod)) if (v && typeof v === "object" && "enabled" in v) cfg.automod[k].enabled = v.enabled; }
 const manda = async (content, extra = {}) => {
   const m = { id: "X" + Math.random(), authorId: "TROLL", content, serverId: "S1", server, channel: canal, channelId: "C1", mentionIds: content.includes("<@BOT>") ? ["BOT"] : [],
     createdAt: new Date(), author: { username: "troll" }, member: troll, replyIds: [], attachments: [], delete: async () => { apagadas.push(m.id); }, ...extra };
@@ -9393,6 +9397,7 @@ ok(/5 msg em 4s/.test(t) && /`midia`/.test(t), "&automod antispam: as partes com
 await am$("antispam off");
 ok(["antiSpam", "antiMassSpam", "antiDuplicata", "antiMidia", "antiMassMention"].every((k) => am[k].enabled === false), "★ &automod antispam off desliga o grupo inteiro (as 5 partes)");
 await am$("antispam on");
+await am$("antiruido on");   // servidor novo nasce com tudo desligado (12 out 2026)
 await am$("antiruido caps off");
 ok(am.antiCaps.enabled === false && am.antiEmoji.enabled !== false, "&automod antiruido caps off: só a parte");
 await am$("antispam set mensagens 7");
@@ -9749,6 +9754,10 @@ const membros = { [LAU]: membro(LAU, "Laufeyy"), [CYB]: membro(CYB, "cyberghostg
 const server = { id: "S1", ownerId: "DONO", name: "T", roles: new Map(), channels: [canal], member: { roles: [] }, havePermission: () => true,
   fetchMember: async (id) => membros[id] ?? null, fetchMembers: async () => ({ members: Object.values(membros) }), fetchBans: async () => [] };
 c.servers.set("S1", server); c.channels.set("C1", canal);
+// Servidor novo nasce com o automod desligado (12 out 2026); este cenário é o
+// de um servidor que ligou o automod com os padrões de fábrica.
+{ const store = await import("./modulos/core/config-store.js"); const cfg = store.configDoServidor("S1");
+  for (const [k, v] of Object.entries(store.padraoServidor.automod)) if (v && typeof v === "object" && "enabled" in v) cfg.automod[k].enabled = v.enabled; }
 const manda = async (autor, content, extra = {}) => {
   const m = { id: "X" + Math.random(), authorId: autor, content, serverId: "S1", server, channel: canal, channelId: "C1", mentionIds: [], createdAt: new Date(),
     author: { username: membros[autor]?.user.username ?? "dono" }, member: membros[autor] ?? { roles: [], hasPermission: () => true }, replyIds: [], attachments: [],
@@ -10574,6 +10583,301 @@ await t("o &banglobal (status) ensina o add", async () => {
 
 console.log(`\nBANGLOBAL (add): ${ok} ok, ${falhou} falha(s)`);
 process.exit(falhou ? 1 : 0);
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+// automod-12out  (12 out 2026) — "deixa os módulos desativados por padrão,
+// melhora a sintaxe, deixa os pesos mais suaves, nem todo mundo usa XP"
+// ════════════════════════════════════════════════════════════════════════════
+SUITES["automod-12out"] = async () => {
+const __m0 = await import("node:fs"); const fs = __m0.default;
+// O caso real: num servidor sem XP, "cool" e "YO" de um membro terminaram em
+// "Violação — conteúdo proibido, nota 4.5/10, silenciado". Sem XP todo mundo
+// ficava no nível 0 para sempre = recém-chegado = limiar 4,5. E o dono tentou
+// `&automod off` e `&automod <group> off` (copiado da ajuda): as duas deram
+// "Unknown module" com 14 nomes antigos que a ajuda nem ensina mais.
+process.env.BOT_TOKEN = "tok";
+process.env.DB_PATH = "/tmp/automod-12out.db";
+process.env.CONFIG_PATH = "/tmp/automod-12out-cfg.json";
+for (const f of ["/tmp/automod-12out.db", "/tmp/automod-12out.db-wal", "/tmp/automod-12out.db-shm",
+                 "/tmp/automod-12out-cfg.json", "/tmp/blocklist-cache.bin"]) fs.rmSync(f, { force: true });
+
+let pass = 0, fail = 0;
+const ok = (cond, msg) => { cond ? pass++ : fail++; console.log(`  ${cond ? "✅" : "❌"} ${msg}`); };
+
+await import("./main.js");
+const c = globalThis.__client;
+await c.emitAll("ready");
+const store = await import("./modulos/core/config-store.js");
+const engine = await import("./modulos/moderacao/automod-engine.js");
+const confianca = await import("./modulos/moderacao/confianca.js");
+const aliases = await import("./modulos/core/aliases.js");
+const { analisarConteudo } = await import("./modulos/moderacao/scorecard.js");
+
+const env = [];
+const server = {
+  id: "S1", ownerId: "U1", name: "Teste", roles: new Map(), channels: [],
+  fetchMember: async () => null, fetchMembers: async () => ({ members: [] }), fetchBans: async () => [],
+};
+c.servers.set("S1", server);
+c.channels.set("C1", { id: "C1", sendMessage: async () => {} });
+const mk = (t) => ({
+  authorId: "U1", content: t, serverId: "S1", server,
+  channel: { id: "C1", sendMessage: async (p) => env.push(p) }, channelId: "C1",
+  mentionIds: [], createdAt: new Date(), author: { username: "Dono" }, member: { roles: [] },
+});
+const say = async (t) => { await c.emitAll("messageCreate", mk(t)); };
+const ult = () => JSON.stringify(env[env.length - 1] ?? {});
+const ligados = (cfg) => Object.values(engine.MODULOS_AUTOMOD).filter((k) => engine.moduloLigado(cfg.automod, k));
+
+console.log("── servidor novo nasce com o automod desligado ──");
+{
+  const cfg = store.configDoServidor("SERVIDOR_NOVO_1");
+  ok(ligados(cfg).length === 0, `★ nenhum módulo ligado num servidor novo (ligados: ${ligados(cfg).join(", ") || "nenhum"})`);
+  ok(cfg.automod.antiSpam.maxMessages === 5, "  → os números de fábrica ficam (ligar depois volta com eles)");
+}
+{
+  // servidor que JÁ existia e tinha ligado: continua como estava
+  const db = await import("./modulos/core/db.js");
+  db.gravarConfig("SERVIDOR_ANTIGO", { automod: { antiSpam: { enabled: true }, antiOdio: { enabled: true } } });
+  const cfg = store.configDoServidor("SERVIDOR_ANTIGO");
+  ok(cfg.automod.antiSpam.enabled === true && engine.moduloLigado(cfg.automod, "antiOdio"), "servidor que já existia não muda");
+}
+
+console.log("\n── &automod off / on ──");
+await say("&automod on");
+ok(ligados(store.configDoServidor("S1")).length === Object.keys(engine.MODULOS_AUTOMOD).length, "★ &automod on liga tudo");
+await say("&automod off");
+ok(ligados(store.configDoServidor("S1")).length === 0, "★ &automod off desliga tudo (o que o dono tentou)");
+ok(/Tudo desligado/.test(ult()) && /automod antispam on/.test(ult()), "  → e diz como ligar só um");
+
+console.log("\n── quem copia a ajuda ao pé da letra ──");
+await say("&automod <group> off");
+ok(/espaço para preencher/.test(ult()) && /antispam/.test(ult()) && /sentinela/.test(ult()), "★ &automod <group> off explica e mostra os 4 grupos");
+ok(!/antimassspam|antiduplicata/.test(ult()), "  → sem a lista de nomes antigos");
+await say("&automod ‹grupo› on");
+ok(/espaço para preencher/.test(ult()), "  → ‹grupo› (como o Stoat mostra) também");
+await say("&automod antiruido <parte> off");
+ok(/espaço para preencher/.test(ult()) && /caps/.test(ult()), "  → e <parte> mostra as partes do grupo");
+await say("&acesso cargo add <cargo>");
+ok(/espaço para preencher/.test(ult()) && /help acesso/.test(ult()), "★ fora do automod também: aponta o &help do comando");
+await say("&chat o que é a tag <div>?");
+ok(!/espaço para preencher/.test(ult()), "  → mas não em comando de texto livre (&chat)");
+
+console.log("\n── erro que ensina ──");
+await say("&automod antispan off");
+ok(/Você quis dizer/.test(ult()) && /automod antispam/.test(ult()), "★ erro de digitação sugere o grupo certo");
+await say("&automod qualquercoisa");
+ok(/não é um grupo/.test(ult()) && /antiruido/.test(ult()) && !/antimassmention/.test(ult()), "  → nome desconhecido mostra os 4 grupos, com exemplo pronto");
+await say("&automod antiruido capz off");
+ok(/Você quis dizer/.test(ult()) && /antiruido caps/.test(ult()), "  → parte errada sugere a parte certa");
+await say("&automod antispam off");
+ok(!engine.moduloLigado(store.configDoServidor("S1").automod, "antiSpam"), "os nomes de verdade continuam funcionando");
+
+console.log("\n── a ajuda em inglês, e o que ela mostra funciona ──");
+ok(aliases.exibir("`&automod punicao modo <avisar|banir>`", "en", "&", {}) === "`&automod punishment mode <warn|ban>`",
+  "★ \"&automod punishment modo\" saía meio traduzido; agora sai tudo em inglês");
+ok(aliases.exibir("`&banglobal ‹off|avisar|banir›`", "en", "&", {}) === "`&globalban ‹off|warn|ban›`", "  → ‹…› também se traduz");
+await say("&automod punicao mode warn");
+ok(store.configDoServidor("S1").automod.punicao.modo === "avisar", "★ e \"mode warn\" (o que a ajuda em inglês mostra) é aceito");
+await say("&automod punicao modo banir");
+await say("&automod punicao modo Avisar");
+ok(store.configDoServidor("S1").automod.punicao.modo === "avisar", "  → maiúscula não atrapalha");
+
+console.log("\n── confiança sem XP e pesos mais suaves ──");
+const AGORA = Date.parse("2026-10-12T00:00:00Z");
+const CONTA_ANTIGA = "01J00000000000000000000000";   // 2024
+{
+  const sem = confianca.limiarPara("S1", CONTA_ANTIGA, 6.5, { agora: AGORA, xpAtivo: false });
+  ok(sem.faixa.id === "estabelecido" && sem.limiar === 6.5, `★ sem XP e sem data de entrada: neutro (limiar ${sem.limiar}), não "recém-chegado"`);
+  const velho = confianca.limiarPara("S1", CONTA_ANTIGA, 6.5, { agora: AGORA, xpAtivo: false, entrouEm: "2026-08-01T00:00:00Z" });
+  ok(velho.faixa.id === "veterano", "  → no servidor há 2 meses: veterano");
+  const hoje = confianca.limiarPara("S1", CONTA_ANTIGA, 6.5, { agora: AGORA, xpAtivo: false, entrouEm: "2026-10-11T20:00:00Z" });
+  ok(hoje.faixa.id === "novato", "  → entrou hoje: recém-chegado (pelo tempo, não pelo XP)");
+  const comXp = confianca.limiarPara("S1", CONTA_ANTIGA, 6.5, { agora: AGORA, xpAtivo: true });
+  ok(comXp.faixa.id === "novato" && comXp.limiar === 5.75, "  → com XP ligado e nível 0: recém-chegado, mas mais suave (5,75)");
+}
+{
+  // o caso do print: nota 4,5 — com a regra nova, nem a conta criada hoje e
+  // que entrou hoje é punida por isso
+  const contaDeHoje = "01M" + "0".repeat(23);
+  const idade = confianca.idadeDaConta(contaDeHoje, AGORA);
+  const quando = confianca.criacaoDaConta(contaDeHoje) + 3 * 3600_000;   // 3h depois de criada
+  const r = confianca.limiarPara("S1", contaDeHoje, engine.limiarBase("media"), { agora: quando, xpAtivo: false, entrouEm: new Date(quando - 600_000).toISOString() });
+  ok(idade !== null && r.limiar > 4.5, `★ nota 4,5 não pune mais (limiar ${r.limiar} para conta e entrada de hoje, servidor sem XP)`);
+}
+ok(engine.limiarBase("media") === 6.5 && engine.limiarBase("baixa") === 7.5 && engine.limiarBase("alta") === 5.5, "sensibilidades +0,5 (um lugar só)");
+{
+  const r = analisarConteudo("compre agora, chama no privado, é verdade!", { rate: 3 });
+  ok(r.nota < 6.5, `sinais de contexto pesam menos: oferta sem conteúdo nocivo fica abaixo do limiar (${r.nota})`);
+}
+
+console.log(`\nAUTOMOD (12 out): ${pass} ok, ${fail} falha(s)`);
+process.exit(fail ? 1 : 0);
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+// entretenimento  (12 out 2026) — a família das brincadeiras
+// ════════════════════════════════════════════════════════════════════════════
+SUITES["entretenimento"] = async () => {
+const __m0 = await import("node:fs"); const fs = __m0.default;
+// Pedido de Ghieh: uma família nova com ship (% de combinação), "quem ganha
+// numa briga", cowsay e mais algumas. Regra da árvore: os subcomandos só
+// existem DENTRO da família — `&ship` sugere `&entretenimento ship`.
+process.env.BOT_TOKEN = "tok";
+process.env.DB_PATH = "/tmp/entretenimento.db";
+process.env.CONFIG_PATH = "/tmp/entretenimento-cfg.json";
+for (const f of ["/tmp/entretenimento.db", "/tmp/entretenimento.db-wal", "/tmp/entretenimento.db-shm",
+                 "/tmp/entretenimento-cfg.json", "/tmp/blocklist-cache.bin"]) fs.rmSync(f, { force: true });
+
+let pass = 0, fail = 0;
+const ok = (cond, msg) => { cond ? pass++ : fail++; console.log(`  ${cond ? "✅" : "❌"} ${msg}`); };
+const e = await import("./modulos/ferramentas/entretenimento.js");
+
+console.log("── ship ──");
+ok(e.porcentagemShip("u:A", "u:B") === e.porcentagemShip("u:B", "u:A"), "★ a ordem não importa: A×B = B×A");
+ok(e.porcentagemShip("u:A", "u:B") === e.porcentagemShip("u:A", "u:B"), "★ o mesmo par dá sempre o mesmo % (não dá para rolar até sair 100)");
+ok(e.porcentagemShip("u:A", "u:A") === 100, "consigo mesmo: 100%");
+{
+  const vals = new Set(); for (let i = 0; i < 300; i++) vals.add(e.porcentagemShip(`u:X${i}`, "u:Y"));
+  ok([...vals].every((v) => v >= 0 && v <= 100) && vals.size > 50, `espalha por 0–100 (${vals.size} valores diferentes em 300 pares)`);
+}
+ok(e.nomeDoCasal("Ana", "Bruno") === "Anuno", "nome do casal: metade de um + metade do outro (Ana + Bruno = Anuno)");
+ok(e.nomeDoCasal("Zé", "Lúcia").length > 0 && e.nomeDoCasal("**x**", "y") === "Xy", "  → acentos ficam, markdown sai");
+ok(e.vereditoShip(100) !== e.vereditoShip(5) && /Soulmates/.test(e.vereditoShip(100, true)), "veredito muda com o % (PT e EN)");
+ok(JSON.stringify(e.separarDois("pizza e abacaxi")) === '["pizza","abacaxi"]' && JSON.stringify(e.separarDois("Goku x Superman")) === '["Goku","Superman"]',
+  "separa 'A e B' e 'A x B'");
+ok(JSON.stringify(e.separarDois("Darth Vader | Luke")) === '["Darth Vader","Luke"]', "  → '|' separa nomes com espaço");
+
+console.log("\n── briga ──");
+{
+  let seed = 7; const rng = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+  const r = e.simularBriga("Ana", "Bia", rng);
+  ok(r.rodadas.length >= 1 && r.rodadas.length <= 8, `rodadas entre 1 e 8 (${r.rodadas.length})`);
+  ok(r.hp.every((h) => h >= 0 && h <= 100) && (r.vencedor === 0 || r.vencedor === 1), "vida entre 0 e 100 e um vencedor");
+  ok(r.nocaute ? r.hp[1 - r.vencedor] === 0 : r.hp[r.vencedor] >= r.hp[1 - r.vencedor], "★ quem vence é quem derrubou ou quem tem mais vida");
+  ok(r.rodadas.every((x, i) => i === 0 || x.atacante !== r.rodadas[i - 1].atacante), "eles se revezam");
+  const sempreErra = e.simularBriga("A", "B", () => 0.01);
+  ok(sempreErra.rodadas.length === 8 && sempreErra.rodadas.every((x) => x.tipo === "erro" && x.dano === 0), "erro não tira vida");
+  const critico = e.simularBriga("A", "B", () => 0.95);
+  ok(critico.rodadas[0].tipo === "critico" && critico.rodadas[0].dano >= 20, "crítico dobra o dano");
+  ok(/\*\*Ana\*\*/.test(e.narrarRodada(r.rodadas[0], ["Ana", "Bia"])) && /CRITICAL/.test(e.narrarRodada(critico.rodadas[0], ["A", "B"], true)), "narração com os nomes (PT e EN)");
+}
+
+console.log("\n── cowsay ──");
+{
+  const um = e.cowsay("Muuu!");
+  ok(um.includes("< Muuu! >") && um.includes("(oo)"), "★ balão de uma linha + vaca");
+  const varias = e.cowsay("uma frase comprida o bastante para quebrar em mais de uma linha no balão");
+  ok(/^\/ /m.test(varias) && /^\\ /m.test(varias), "várias linhas: / … \\ no balão");
+  const balao = varias.split("\n").filter((l) => /^[/|\\<(]/.test(l));
+  ok(balao.length >= 2 && balao.every((l) => Array.from(l).length <= 42), "  → quebra em até 38 colunas (+ bordas)");
+  const pensa = e.cowsay("hmm", { figura: "gato", pensando: true });
+  ok(pensa.includes("( hmm )") && pensa.includes(" o") && pensa.includes("/\\_/\\"), "★ pensando + gato: balão ( ) e fio de bolinhas");
+  ok(!e.cowsay("```fim```").includes("```"), "``` no texto não fecha o bloco de código");
+  ok(Object.keys(e.FIGURAS).every((f) => e.FIGURAS[f].every((l) => !/<(?![\s/])[^<>\n]{1,60}?>/.test(l))),
+    "★ nenhum desenho tem <…> (o Stoat esconderia como tag HTML)");
+  ok(e.figuraDe("dragão") === "dragao" && e.figuraDe("penguin") === "pinguim" && e.figuraDe("banana") === null, "nomes dos bichos em PT/EN, com acento");
+  ok(e.cowsay("x".repeat(500)).split("\n").length < 25, "texto gigante não vira parede (limite de linhas)");
+}
+
+console.log("\n── os outros ──");
+ok(e.zoeira("texto de zoeira!") === "tExTo De ZoEiRa!", "zoeira alterna só as letras");
+ok(e.inverter("abc 👨‍👩‍👧") === "👨‍👩‍👧 cba", "inverter não parte emoji composto");
+ok(e.notaDe("t:lasanha") === e.notaDe("t:lasanha") && e.notaDe("t:lasanha") >= 0 && e.notaDe("t:lasanha") <= 10, "nota fixa e entre 0 e 10");
+{
+  const d1 = new Date("2026-10-12T10:00:00Z"), d2 = new Date("2026-10-12T22:00:00Z"), d3 = new Date("2026-10-13T10:00:00Z");
+  const a = e.sorteDoDia("U1", d1), b = e.sorteDoDia("U1", d2);
+  ok(a.frase === b.frase && a.numero === b.numero, "★ a sorte fica igual o dia todo");
+  let mudou = false; for (let i = 0; i < 10; i++) if (e.sorteDoDia(`U${i}`, d1).frase !== e.sorteDoDia(`U${i}`, d3).frase) mudou = true;
+  ok(mudou && a.numero >= 1 && a.numero <= 99, "  → muda de um dia para o outro; número entre 1 e 99");
+}
+ok(JSON.stringify(e.separarOpcoes("pizza, sushi ou lasanha")) === '["pizza","sushi","lasanha"]' && e.separarOpcoes("a | b | A").length === 2,
+  "escolher: separa por vírgula/ou/| e tira repetidas");
+ok(new Set(e.RESPOSTAS_BOLA8.map((r) => r.tom)).size === 3, "bola 8 tem sim, talvez e não");
+
+console.log("\n── pelo bot ──");
+await import("./main.js");
+const c = globalThis.__client;
+await c.emitAll("ready");
+const ANA = "01KANA0000000000000000000A", BIA = "01KB1A0000000000000000000B";
+const membros = { [ANA]: { displayName: "Ana" }, [BIA]: { displayName: "Bia" }, U1: { displayName: "Dono" } };
+const server = {
+  id: "S1", ownerId: "U1", name: "Teste", roles: new Map(), channels: [],
+  fetchMember: async (id) => membros[id] ?? null, fetchMembers: async () => ({ members: [] }), fetchBans: async () => [],
+};
+c.servers.set("S1", server);
+c.channels.set("C1", { id: "C1", sendMessage: async () => {} });
+const env = [];
+const mk = (t) => ({
+  authorId: "U1", content: t, serverId: "S1", server,
+  channel: { id: "C1", sendMessage: async (p) => env.push(p) }, channelId: "C1",
+  mentionIds: [], createdAt: new Date(), author: { username: "Dono" }, member: { roles: [], displayName: "Dono" },
+});
+const say = async (t) => { await c.emitAll("messageCreate", mk(t)); };
+const ult = () => JSON.stringify(env[env.length - 1] ?? {});
+
+await say("&entretenimento");
+ok(/ship/.test(ult()) && /briga/.test(ult()) && /cowsay/.test(ult()) && /bola8/.test(ult()), "★ &entretenimento mostra o menu da família");
+await say(`&entretenimento ship <@${ANA}> <@${BIA}>`);
+const ship1 = ult();
+ok(/Ana × Bia/.test(ship1) && /%/.test(ship1) && /Nome do casal/.test(ship1), "★ ship com duas menções: nomes, %, nome do casal");
+ok(!new RegExp(`<@${ANA}>`).test(ship1), "  → ninguém é mencionado na resposta (sem ping)");
+await say(`&entretenimento ship <@${BIA}> <@${ANA}>`);
+ok(ult().match(/\*\*(\d+)%\*\*/)?.[1] === ship1.match(/\*\*(\d+)%\*\*/)?.[1], "  → invertido dá o mesmo %");
+await say(`&entretenimento ship <@${ANA}>`);
+ok(/Dono × Ana/.test(ult()), "com uma pessoa só, o outro lado é quem pediu");
+await say("&entretenimento briga Goku x Superman");
+ok(/Goku × Superman/.test(ult()) && /venceu/.test(ult()), "★ briga entre personagens tem rodadas e vencedor");
+await say("&entretenimento cowsay gato oi gente");
+ok(/```/.test(ult()) && /oi gente/.test(ult()) && /o\.o/.test(ult()), "★ cowsay com bicho escolhido, em bloco de código");
+await say(`&entretenimento cowsay oi <@${ANA}>`);
+ok(/@Ana/.test(ult()) && !new RegExp(ANA).test(ult()), "  → menção no texto vira @nome");
+await say("&entretenimento bola8 vai dar certo?");
+ok(/🎱/.test(ult()) && /vai dar certo/.test(ult()), "bola8 responde citando a pergunta");
+await say("&entretenimento escolher pizza ou sushi");
+ok(/pizza|sushi/.test(ult()) && /eu fico com/.test(ult()), "escolher escolhe uma");
+await say("&entretenimento nota lasanha");
+ok(/\/10/.test(ult()), "nota de 0 a 10");
+await say("&entretenimento sorte");
+ok(/sorte de Dono hoje/.test(ult()) && /Número da sorte/.test(ult()), "sorte do dia");
+await say(`&entretenimento zoeira oi <@${ANA}>`);
+ok(/oI @aNa|oI @AnA/.test(ult()), "zoeira não quebra a menção (vira @nome antes)");
+await say("&entretenimento inverter abc");
+ok(/cba/.test(ult()), "inverter");
+await say("&entretenimento banana");
+ok(/Não conheço/.test(ult()) && /ship/.test(ult()), "subcomando desconhecido mostra o menu");
+await say("&fun ship pizza and pineapple");
+ok(/pizza × pineapple/.test(ult()), "&fun é o mesmo comando (atalho em inglês)");
+await say("&entreterimento sorte");
+ok(/sorte de Dono/.test(ult()), "&entreterimento (digitado rápido) também");
+
+console.log("\n── a árvore: o subcomando só existe dentro da família ──");
+await say(`&ship <@${ANA}> <@${BIA}>`);
+ok(/Você quis dizer/.test(ult()) && /entretenimento ship/.test(ult()), "★ &ship sugere &entretenimento ship (não existe solto)");
+await say("&cowsay oi");
+ok(/entretenimento cowsay oi/.test(ult()), "  → &cowsay também");
+
+console.log("\n── em inglês ──");
+await say("&idioma en");
+await say("&entretenimento");
+ok(/entertainment fight/.test(ult()) && /entertainment 8ball/.test(ult()), "★ o menu em inglês mostra &entertainment fight / 8ball");
+await say("&entertainment fight Ana x Bia");
+ok(/Ana × Bia/.test(ult()) && /wins/.test(ult()), "  → e 'fight' funciona (normalizado para briga)");
+await say("&entertainment choose tea or coffee");
+ok(/I'll go with/.test(ult()), "  → 'choose' também");
+await say("&help entertainment fight");
+ok(/Who wins a fight/.test(ult()), "★ &help entertainment fight abre a página da briga");
+await say("&idioma pt");
+
+console.log("\n── ajuda ──");
+await say("&help entretenimento");
+ok(/brincadeiras/.test(ult()) && /bola8/.test(ult()), "&help entretenimento");
+await say("&help entretenimento cowsay");
+ok(/bicho em ASCII/.test(ult()) && /pinguim/.test(ult()), "&help entretenimento cowsay (camada de baixo)");
+
+console.log(`\nENTRETENIMENTO: ${pass} ok, ${fail} falha(s)`);
+process.exit(fail ? 1 : 0);
 };
 
 // ── O executor ───────────────────────────────────────────────────────────────

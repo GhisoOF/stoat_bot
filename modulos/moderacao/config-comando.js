@@ -27,8 +27,8 @@ const MODOS_EN = {
   banir:     "instant ban",
 };
 
-const SENSIBILIDADE = { baixa: "baixa (limiar 8/10)", media: "média (limiar 6/10)", alta: "alta (limiar 4/10)" };
-const SENSIBILIDADE_EN = { baixa: "low (threshold 8/10)", media: "medium (threshold 6/10)", alta: "high (threshold 4/10)" };
+const SENSIBILIDADE = { baixa: "baixa (limiar 7,5/10)", media: "média (limiar 6,5/10)", alta: "alta (limiar 5,5/10)" };
+const SENSIBILIDADE_EN = { baixa: "low (threshold 7.5/10)", media: "medium (threshold 6.5/10)", alta: "high (threshold 5.5/10)" };
 
 export async function cmdConfig(message, args, ctx) {
   const { config, cfgGlobal, estado, sendEmbed, COR, getServer, membroTemPermissao, PREFIXO, serverId } = ctx;

@@ -22,6 +22,8 @@ export const COMANDO_EN = {
   fuso: "timezone",
   boasvindas: "welcome",
   adeus: "goodbye",
+  // "fun" não: `&help fun` já é o grupo Diversão da ajuda
+  entretenimento: "entertainment",
 };
 
 export const COMANDO_EXTRA = {
@@ -48,9 +50,15 @@ export const COMANDO_EXTRA = {
   greeting: "boasvindas",
   goodbye: "adeus",
   farewell: "adeus",
+  entertainment: "entretenimento",
+  fun: "entretenimento",
 };
 
 export const SUB = {
+  entretenimento: {
+    fight: "briga", choose: "escolher", pick: "escolher", rate: "nota",
+    fortune: "sorte", mock: "zoeira", reverse: "inverter", "8ball": "bola8",
+  },
   help: {
     moderation: "moderacao", settings: "config", configuration: "config",
     tools: "ferramentas", general: "geral", levels: "xp", character: "game",
@@ -141,7 +149,7 @@ export const SUB = {
     contribution: "contribuicao",
   },
   punicao: {
-    mode: "modo", warns: "warns", role: "cargo",
+    mode: "modo", ladder: "escada", steps: "escada", warns: "warns", role: "cargo",
     status: "status", config: "config",
     warn: "avisar", delete: "apagar", confirm: "confirmar",
     stack: "acumular", ban: "banir",
@@ -351,7 +359,8 @@ function traduzirLista(dentro, rev) {
 
 function traduzirToken(tok, rev) {
   // placeholder: preserva os delimitadores e traduz o miolo
-  const m = tok.match(/^([<[(])(.+)([>\])])$/);
+  // ‹…› também: o protegerMarcadores troca <…> por ‹…› e o texto pode chegar já trocado
+  const m = tok.match(/^([<[(‹])(.+)([>\])›])$/);
   if (m) return m[1] + traduzirLista(m[2], rev) + m[3];
   if (tok.includes("|")) return traduzirLista(tok, rev);
   return rev[tok.toLowerCase()] ?? tok;
@@ -386,17 +395,22 @@ function traduzirTrecho(trecho, prefixo, CANONICO) {
     return { texto: saida.join(" "), comando: alvoCanon };
   }
 
-  const rev = SUB_REVERSO[canonico] ?? {};
+  let rev = SUB_REVERSO[canonico] ?? {};
   let acabaramOsSubcomandos = false;
   const traduzidas = partes.map((tok, i) => {
     if (i === 0) return prefixo + nomeEN;
-    if (/^[<[(]/.test(tok)) return traduzirToken(tok, rev);   // placeholder: sempre
+    if (/^[<[(‹]/.test(tok)) return traduzirToken(tok, rev);   // placeholder: sempre
     if (acabaramOsSubcomandos) return tok;
-    const t = rev[tok.toLowerCase()];
+    const baixo = tok.toLowerCase();
+    const t = rev[baixo];
     if (t === undefined) {
       if (i > 1) acabaramOsSubcomandos = true;
       return tok;
     }
+    // Família: `&automod punicao modo` — depois de "punicao", vale o
+    // vocabulário DELE ("modo" → "mode", "escada" → "ladder"). Antes a ajuda em
+    // inglês saía "&automod punishment modo".
+    if (baixo !== canonico && SUB_REVERSO[baixo]) rev = { ...rev, ...SUB_REVERSO[baixo] };
     return t;
   });
   return { texto: traduzidas.join(" "), comando: canonico };

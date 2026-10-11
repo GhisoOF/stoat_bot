@@ -247,16 +247,16 @@ export const PESOS = {
   scam:            1.5,
   oferta:          2,
   cta:             2,
-  urgencia:        1,
+  urgencia:        0.5,   // 12 out 2026: sinais de CONTEXTO pesam menos (mais suave)
   link_filehost:   2.5,
   link_encurtador: 2,
   link_convite:    1,
   link_simples:    0.5,
   mass_ping:       2.5,
-  afirmacao:       1,
+  afirmacao:       0.5,
   pergunta:       -3,
   negacao:        -4,
-  taxa_alta:       1.5,
+  taxa_alta:       1,
   duplicata:       2,     // a MESMA mensagem, de novo (bot de propaganda)
   // dano a pessoas — sozinhos quase não pesam; o que condena são as conjunções
   autolesao:       1,

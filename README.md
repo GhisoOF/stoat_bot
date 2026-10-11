@@ -104,6 +104,13 @@ diz exatamente o que clicar.
   Também pega **ódio e ameaça**: injúria racial e contra grupos, símbolos de
   ódio em massa, "estuprar e matar" — sempre por conjunção (grupo + insulto),
   para que falar **sobre** racismo, notícia ou identidade nunca seja punido.
+- **Começa desligado**: servidor novo entra com o automod inteiro desligado —
+  `&automod on` liga tudo, `&automod antispam on` liga um grupo, `&automod off`
+  desliga tudo de uma vez. *New servers start with automod off; `&automod on|off`
+  toggles everything.*
+- **Confiança**: o rigor do sentinela acompanha o nível de XP **quando o servidor
+  usa XP**; sem XP, acompanha o tempo da pessoa no servidor (antes, sem XP, todo
+  mundo ficava para sempre como "recém-chegado", no rigor máximo).
 - **Anti-raid sem botão**: a idade da conta sai do próprio ID; conta criada há
   minutos passa pelo automod mais rígido. Três contas novas entrando em 15 min
   ligam a proteção por 30 min e avisam a staff uma vez. Se uma punição falha
@@ -311,6 +318,7 @@ próprio bot: `&help <comando>`. Um resumo:
 | `&tts …` | voz nas calls (`estado`/`filtro`/`diagnostico`…) |
 | `&game …` | RPG (personagem, atributos, progressão) |
 | `&economia …` | a moeda do servidor: `minerar`, `saldo`, `top`, `loja`/`comprar` cargos, `pagar` — à parte do RPG |
+| `&entretenimento …` (`&fun`) | brincadeiras: `ship` (% de combinação, fixo por par, com nome do casal), `briga` (quem ganha, rodada por rodada), `cowsay` (6 bichos em ASCII, fala ou pensamento), `bola8`, `escolher`, `nota` (0–10, fixa), `sorte` (do dia), `zoeira`, `inverter` — *fun & games family: ship, fight, cowsay, 8-ball, choose, rate, fortune, mock, reverse* |
 
 > `help` e `comando` não podem ser desativados — para o admin não se trancar
 > para fora.

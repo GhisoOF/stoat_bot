@@ -145,6 +145,18 @@ function mesclarServidor(salvo, tpl) {
   };
 }
 
+// Servidor NOVO nasce com o automod inteiro desligado (pedido de Ghieh, 12 out
+// 2026): quem chega escolhe o que ligar (`&automod on`, `&automod antispam on`
+// ou o `&assistente`), em vez de descobrir o filtro punindo alguém. Os
+// parâmetros ficam (ligar depois volta com os números de fábrica). Servidores
+// que já existem não mudam: a config deles é decisão de quem já configurou.
+export function desligarAutomod(cfg) {
+  for (const [k, v] of Object.entries(cfg?.automod ?? {})) {
+    if (k !== "punicao" && v && typeof v === "object") v.enabled = false;
+  }
+  return cfg;
+}
+
 // Config de um servidor (cache → banco → template)
 // A `&automod whitelist` guardava TUDO como código de convite. Um link comum
 // (`https://linksta.cc/@x`) ia parar ali e não servia para nada: quem bloqueia
@@ -177,6 +189,7 @@ export function configDoServidor(serverId) {
   let cfg = db.lerConfig(serverId);
   if (!cfg) {
     cfg = structuredClone(templateServidor);
+    desligarAutomod(cfg);
     db.gravarConfig(serverId, cfg);
     console.info(`[CONFIG] Novo servidor ${serverId} — config criada do padrão.`);
   } else {

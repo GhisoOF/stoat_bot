@@ -57,7 +57,7 @@ function gruposPT(P) {
       linhas: [
         "**Automático** *(ManagePermissions)*",
         `\`${P}automod\` — os 4 grupos: antispam, antiruido, antilink, sentinela — e as partes de cada um`,
-        `\`${P}automod <grupo> on|off\` · \`${P}automod <grupo> <parte> on|off\` — o grupo inteiro ou só uma parte`,
+        `\`${P}automod antispam off\` · \`${P}automod off\` — um grupo · tudo _(começa desligado)_`,
         `\`${P}automod sentinela\` — o que **julga** conteúdo (golpe, +18, gore, ódio, imagens de conta nova)`,
         `\`${P}automod punicao modo <avisar|apagar|confirmar|acumular|banir>\` — o que acontece com quem infringe`,
         `\`${P}automod punicao escada\` — os degraus do modo \`acumular\` (aviso → mute → ban)`,
@@ -109,8 +109,8 @@ function gruposPT(P) {
 
     diversao: {
       emoji: "🎮", titulo: "Diversão",
-      resumo: "níveis por XP, a moeda do servidor, conversa com a Judy, voz",
-      resumoSemIA: "níveis por XP, a moeda do servidor e voz",
+      resumo: "níveis por XP, a moeda do servidor, brincadeiras, conversa com a Judy, voz",
+      resumoSemIA: "níveis por XP, a moeda do servidor, brincadeiras e voz",
       linhas: [
         "**Níveis (XP por mensagem)**",
         `\`${P}xp\` — seu nível e progresso · \`${P}xp rank [@pessoa]\``,
@@ -118,6 +118,10 @@ function gruposPT(P) {
         `\`${P}economia\` — a moeda do servidor: \`minerar\`, \`top\`, \`loja\` de cargos e \`comprar\``,
         `\`${P}xp setup\` — configurar: cargos por nível, multiplicador, canal de anúncio *(ManagePermissions)*`,
         `\`${P}xp criarcargos\` — cria os cargos de nível sozinho`,
+        "",
+        "**Entretenimento**",
+        `\`${P}entretenimento ship @a @b\` — quantos % combinam · \`${P}entretenimento briga @a @b\` — quem ganha`,
+        `\`${P}entretenimento cowsay <texto>\` — um bicho em ASCII falando · e mais: \`bola8\`, \`escolher\`, \`nota\`, \`sorte\`, \`zoeira\`, \`inverter\``,
         "",
         "**Judy (IA)**" + IA_TAG,
         `\`${P}chat <mensagem>\` — conversa (ou só mencione o bot)` + IA_TAG,
@@ -230,7 +234,7 @@ function gruposEN(P) {
       linhas: [
         "**Automatic** *(ManagePermissions)*",
         `\`${P}automod\` — the 4 groups: antispam, antiruido, antilink, sentinela — and each one's parts`,
-        `\`${P}automod <group> on|off\` · \`${P}automod <group> <part> on|off\` — the whole group or one part`,
+        `\`${P}automod antispam off\` · \`${P}automod off\` — one group · everything _(starts off)_`,
         `\`${P}automod sentinela\` — what **judges** content (scams, NSFW, gore, hate, new accounts' images)`,
         `\`${P}automod punicao modo <avisar|apagar|confirmar|acumular|banir>\` — what happens to offenders`,
         `\`${P}automod punicao escada\` — the steps of \`acumular\` mode (warning → mute → ban)`,
@@ -282,8 +286,8 @@ function gruposEN(P) {
 
     diversao: {
       emoji: "🎮", titulo: "Fun",
-      resumo: "XP levels, the server currency, chatting with Judy, voice",
-      resumoSemIA: "XP levels, the server currency and voice",
+      resumo: "XP levels, the server currency, games, chatting with Judy, voice",
+      resumoSemIA: "XP levels, the server currency, games and voice",
       linhas: [
         "**Levels (message XP)**",
         `\`${P}xp\` — your level and progress · \`${P}xp rank [@user]\``,
@@ -291,6 +295,10 @@ function gruposEN(P) {
         `\`${P}economia\` — the server's currency: \`minerar\`, \`top\`, the role \`loja\` and \`comprar\``,
         `\`${P}xp setup\` — configure: level roles, multiplier, announcement channel *(ManagePermissions)*`,
         `\`${P}xp criarcargos\` — creates the level roles by itself`,
+        "",
+        "**Entertainment**",
+        `\`${P}entretenimento ship @a @b\` — how many % they match · \`${P}entretenimento briga @a @b\` — who wins`,
+        `\`${P}entretenimento cowsay <text>\` — an ASCII critter talking · and more: \`8ball\`, \`choose\`, \`rate\`, \`fortune\`, \`mock\`, \`reverse\``,
         "",
         "**Judy (AI)**" + IA_TAG,
         `\`${P}chat <message>\` — talk (or just mention the bot)` + IA_TAG,

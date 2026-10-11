@@ -142,12 +142,13 @@ function detalhesPT(P) {
       ex: `${P}acesso canal somente`,
     },
     automod: {
-      uso: `${P}automod [status] | ${P}automod <grupo> [parte] <on|off> | ${P}automod <grupo> punicao <modo>`,
+      uso: `${P}automod [status] | ${P}automod on|off | ${P}automod <grupo> [parte] <on|off> | ${P}automod <grupo> punicao <modo>`,
       desc: "A moderação automática em **quatro grupos**, cada um com partes que dá para ajustar uma a uma:\n\n"
         + "🌊 `antispam` — enxurrada: `velocidade`, `rajada`, `repeticao` (a mesma mensagem ou imagem), `midia` (anexos por minuto), `mencoes`\n"
         + "🔊 `antiruido` — texto poluído: `caps`, `caracteres` (zalgo, invisíveis), `letras` (kkkkkk…), `emoji`\n"
         + "🔗 `antilink` — `dominios` (lista de bloqueio) e `convites`\n"
         + "🛡️ `sentinela` — conteúdo nocivo: `conteudo` (golpe, +18, gore, ilícito), `odio` (ofensas), `imagens` (modelo de visão)\n\n"
+        + "**Exemplos prontos:** `&automod off` desliga **tudo** · `&automod antispam on` liga um grupo · `&automod antiruido caps off` desliga só uma parte. _Servidor novo começa com tudo desligado._\n\n"
         + "`&automod <grupo>` mostra as partes e os números · `&automod <grupo> on|off` liga/desliga o grupo · `&automod <grupo> <parte> on|off` só uma parte · `&automod <grupo> set <parâmetro> <valor>` · `&automod <grupo> punicao <modo>`\n\n"
         + "Também: `&automod blocklist`, `&automod whitelist`, `&automod punicao` (a escada geral). Os nomes antigos (`anticaps`, `antiinvite`…) continuam valendo.",
       perm: "ManagePermissions", ex: `${P}automod antispam`,
@@ -193,6 +194,21 @@ function detalhesPT(P) {
         + "`&economia dar|tirar @pessoa <quantia>` · `&economia zerar confirmar`\n\n"
         + "_O bot só entrega cargos que estão abaixo do cargo dele._",
       ex: `${P}economia minerar`,
+    },
+    entretenimento: {
+      uso: `${P}entretenimento <ship|briga|cowsay|bola8|escolher|nota|sorte|zoeira|inverter>`,
+      desc: "A família das **brincadeiras**. Cada uma mora aqui dentro:\n\n"
+        + "`ship @a @b` — quantos % combinam (o mesmo par dá sempre o mesmo %), com o nome do casal\n"
+        + "`briga @a @b` — quem ganha numa briga, rodada por rodada, com crítico e erro\n"
+        + "`cowsay [bicho] [pensa] <texto>` — um bicho em ASCII falando (ou pensando) o texto · `cowsay figuras` lista os bichos\n"
+        + "`bola8 <pergunta>` — a bola mágica responde\n"
+        + "`escolher a | b | c` — escolho uma (também vale `a, b ou c`)\n"
+        + "`nota <coisa>` — nota de 0 a 10, fixa para a mesma coisa\n"
+        + "`sorte` — a sua sorte do dia, com número da sorte\n"
+        + "`zoeira <texto>` · `inverter <texto>` — tExTo De ZoEiRa · texto ao contrário\n\n"
+        + "Com **uma** pessoa só, o outro lado é você. Coisas também valem: `ship pizza e abacaxi`, `briga Goku x Superman`.\n"
+        + "_Ninguém é mencionado nas respostas: os nomes saem em texto, sem notificar._",
+      perm: "todo mundo", ex: `${P}entretenimento ship @Ana @Bia`,
     },
     rolar: {
       uso: `${P}rolar <expressão> | adv | des | moeda | gm <expressão>`,
@@ -396,12 +412,13 @@ function detalhesEN(P) {
       ex: `${P}acesso canal somente`,
     },
     automod: {
-      uso: `${P}automod [status] | ${P}automod <group> [part] <on|off> | ${P}automod <group> punicao <mode>`,
+      uso: `${P}automod [status] | ${P}automod on|off | ${P}automod <group> [part] <on|off> | ${P}automod <group> punicao <mode>`,
       desc: "Automatic moderation in **four groups**, each with parts you can tune one by one:\n\n"
         + "🌊 `antispam` — floods: `velocidade`, `rajada`, `repeticao` (the same message or image), `midia` (attachments per minute), `mencoes`\n"
         + "🔊 `antiruido` — noisy text: `caps`, `caracteres` (zalgo, invisible), `letras` (dragged-out letters), `emoji`\n"
         + "🔗 `antilink` — `dominios` (blocklist) and `convites`\n"
         + "🛡️ `sentinela` — harmful content: `conteudo` (scams, NSFW, gore, illicit), `odio` (slurs), `imagens` (vision model)\n\n"
+        + "**Ready-made examples:** `&automod off` turns **everything** off · `&automod antispam on` turns a group on · `&automod antiruido caps off` turns off just one part. _A new server starts with everything off._\n\n"
         + "`&automod <group>` shows the parts and numbers · `&automod <group> on|off` toggles the group · `&automod <group> <part> on|off` one part only · `&automod <group> set <parameter> <value>` · `&automod <group> punicao <mode>`\n\n"
         + "Also: `&automod blocklist`, `&automod whitelist`, `&automod punicao` (the overall ladder). The old names (`anticaps`, `antiinvite`…) still work.",
       perm: "ManagePermissions", ex: `${P}automod antispam`,
@@ -447,6 +464,21 @@ function detalhesEN(P) {
         + "`&economia dar|tirar @user <amount>` · `&economia zerar confirmar`\n\n"
         + "_The bot only hands out roles below its own._",
       ex: `${P}economia minerar`,
+    },
+    entretenimento: {
+      uso: `${P}entretenimento <ship|fight|cowsay|8ball|choose|rate|fortune|mock|reverse>`,
+      desc: "The **fun & games** family. Each one lives in here:\n\n"
+        + "`ship @a @b` — how many % they match (the same pair always gets the same %), plus the ship name\n"
+        + "`fight @a @b` — who wins a fight, round by round, with crits and misses\n"
+        + "`cowsay [critter] [think] <text>` — an ASCII critter saying (or thinking) your text · `cowsay figures` lists the critters\n"
+        + "`8ball <question>` — the magic 8-ball answers\n"
+        + "`choose a | b | c` — I pick one (`a, b or c` works too)\n"
+        + "`rate <thing>` — a 0–10 rating, fixed for the same thing\n"
+        + "`fortune` — your fortune for the day, with a lucky number\n"
+        + "`mock <text>` · `reverse <text>` — mOcKiNg TeXt · text backwards\n\n"
+        + "With **one** person only, the other side is you. Things work too: `ship pizza and pineapple`, `fight Goku x Superman`.\n"
+        + "_Nobody gets pinged by the answers: names come out as plain text._",
+      perm: "everyone", ex: `${P}entretenimento ship @Ana @Bia`,
     },
     rolar: {
       uso: `${P}rolar <expression> | adv | des | moeda | gm <expression>`,
@@ -593,9 +625,9 @@ function construirSubtopicos(P, lang) {
           `**Usage:** \`${P}automod sentinela sensitivity <baixa|media|alta>\``,
           "",
           "Sets from which **score (0–10)** the bot acts on suspicious content:",
-          "• 🟢 **baixa** (low, threshold 8) — only near-certain cases; fewer false positives.",
-          "• 🟡 **media** (medium, threshold 6) — recommended balance.",
-          "• 🔴 **alta** (high, threshold 4) — catches faint signs; protects more, errs more.",
+          "• 🟢 **baixa** (low, threshold 7.5) — only near-certain cases; fewer false positives.",
+          "• 🟡 **media** (medium, threshold 6.5) — recommended balance.",
+          "• 🔴 **alta** (high, threshold 5.5) — catches faint signs; protects more, errs more.",
         ].join("\n"),
       },
       test: {
@@ -676,9 +708,9 @@ function construirSubtopicos(P, lang) {
           `**Uso:** \`${P}automod sentinela sensitivity <baixa|media|alta>\``,
           "",
           "Define a partir de qual **nota (0–10)** o bot age sobre conteúdo suspeito:",
-          "• 🟢 **baixa** (limiar 8) — só o que é quase certo; menos falsos positivos.",
-          "• 🟡 **media** (limiar 6) — equilíbrio recomendado.",
-          "• 🔴 **alta** (limiar 4) — pega indícios leves; protege mais, erra mais.",
+          "• 🟢 **baixa** (limiar 7,5) — só o que é quase certo; menos falsos positivos.",
+          "• 🟡 **media** (limiar 6,5) — equilíbrio recomendado.",
+          "• 🔴 **alta** (limiar 5,5) — pega indícios leves; protege mais, erra mais.",
         ].join("\n"),
       },
       test: {

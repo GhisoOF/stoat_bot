@@ -41,7 +41,8 @@ const MAPA = {
   entrar: { padrao: "membro" }, sair: { padrao: "membro" }, musica: { padrao: "membro" },
   chat: { padrao: "membro", subs: { livre: "staff", esquecer: "staff", projeto: "staff", espontaneo: "staff", "espontâneo": "staff" } },
   servidores: { padrao: "dono" },
-  banglobal: { padrao: "staff", subs: { esquecer: "dono" } },
+  banglobal: { padrao: "staff", subs: { esquecer: "dono", lembrar: "dono", add: "dono" } },
+  entretenimento: { padrao: "membro" },
 };
 export const SO_IA = new Set(["chat", "modia", "personalidade"]);
 export const SO_VOZ = new Set(["tts", "entrar", "sair", "musica"]);

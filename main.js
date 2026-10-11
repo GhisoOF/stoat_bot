@@ -50,6 +50,7 @@ import * as acessoMod  from "./modulos/moderacao/acesso.js";
 import * as warnMod    from "./modulos/moderacao/warn.js";
 import * as silenciarMod from "./modulos/moderacao/silenciar.js";
 import * as economiaMod from "./modulos/ferramentas/economia.js";
+import * as entretenimento from "./modulos/ferramentas/entretenimento.js";
 import * as srvStats   from "./modulos/core/metricas.js";
 import * as rpg        from "./modulos/game/game.js";
 import * as modIA      from "./modulos/moderacao/moderacao-ia.js";
@@ -404,6 +405,7 @@ const rotas = {
   iniciativa:    dadosRpg.cmdIniciativa,
   ticket:        tickets.cmdTicket,
   economia:      economiaMod.cmdEconomia,
+  entretenimento: entretenimento.cmdEntretenimento,
   // `&entrar`/`&sair` são a forma canônica. O cmdTts ainda faz o trabalho, mas
   // só aceita "entrar"/"sair" vindos daqui — `&tts entrar` deixou de existir.
   entrar:        (msg, args, ctx) => ttsVoz.cmdTts(msg, ["entrar", ...args], { ...ctx, viaAtalhoVoz: true }),
@@ -457,6 +459,8 @@ const CANONICO = {
   webhooks: "webhook", gancho: "webhook", wh: "webhook",
   r: "rolar", roll: "rolar", dado: "rolar", dados: "rolar",
   eco: "economia", economy: "economia",
+  // "entreterimento": o jeito que o nome sai digitado rápido (variação de digitação)
+  ent: "entretenimento", entreterimento: "entretenimento",
   init: "iniciativa", initiative: "iniciativa",
   tickets: "ticket", suporte: "ticket",
   "boas-vindas": "boasvindas", welcome: "boasvindas", bemvindo: "boasvindas",
@@ -476,7 +480,7 @@ estado.COMANDOS_SO_IA = COMANDOS_SO_IA;
 const COMANDOS_GERENCIAVEIS = [
   "ping", "repete", "userinfo", "kick", "ban", "silenciar", "limpar",
   "warn", "acesso", "automod", "tutorial", "assistente", "cor", "log", "banglobal", "embed", "reactionrole", "chat", "rss", "xp", "game", "autorole",
-  "staff", "boasvindas", "adeus", "fuso", "tts", "musica", "webhook", "rolar", "iniciativa", "ticket", "economia",
+  "staff", "boasvindas", "adeus", "fuso", "tts", "musica", "webhook", "rolar", "iniciativa", "ticket", "economia", "entretenimento",
 ];
 // exportado via ctx para o comando &comando consultar
 estado.CANONICO = CANONICO;
@@ -672,7 +676,9 @@ async function tratarMensagem(message) {
 
   if (!handler) {                  // tinha prefixo, mas o comando não existe
     // "&gams follower ficha" → "você quis dizer &game?" (o mais parecido, até 2 letras de diferença)
-    const parecido = comandoParecido(command, Object.keys(rotas));
+    // "&ship @a @b" → "&entretenimento ship @a @b": o subcomando só existe dentro da família
+    const daFamilia = entretenimento.subcomandoDe(command) ? `entretenimento ${command}` : null;
+    const parecido = daFamilia ?? comandoParecido(command, Object.keys(rotas));
     const sugestao = parecido ? `${PREFIXO}${parecido}${message.content.slice(PREFIXO.length + command.length)}` : null;
     await sendEmbed(message.channel, tr(ctx, {
       title: "❓ Comando desconhecido",
@@ -772,6 +778,25 @@ function ehCanalDeVoz(message) {
   });
 
   const argsFinais = aliases.normalizarArgs(canonico, args, CANONICO);
+
+  // `<grupo>`, `<@pessoa>`, `‹cargo›` copiados da ajuda ao pé da letra (12 out
+  // 2026: "as pessoas não estão sabendo usar o bot"). Comando de texto livre
+  // fica de fora (falar de <div> no &chat é legítimo); o &automod tem a cola
+  // dele, com os grupos.
+  const TEXTO_LIVRE = new Set(["chat", "tts", "repete", "embed", "entretenimento", "personalidade", "modia", "boasvindas", "adeus", "rolar", "musica", "webhook", "rss", "automod"]);
+  const marcador = TEXTO_LIVRE.has(canonico) ? null
+    : args.find((a) => /^[<‹][^<>‹›@#%:]{1,30}[>›]$/.test(a) && !/^<[@#%]/.test(a));
+  if (marcador) {
+    return sendEmbed(message.channel, tr(ctx, {
+      title: "✏️ Troque o ‹…› por um valor",
+      description: `\`${marcador}\` na ajuda é um **espaço para preencher** — não é para digitar com os sinais.\n\nEx.: em \`${PREFIXO}warn <@pessoa>\`, mencione a pessoa: \`${PREFIXO}warn @Ana\`.\nOs valores que \`${PREFIXO}${canonico}\` aceita: \`${PREFIXO}help ${canonico}\``,
+      colour: COR.aviso,
+    }, {
+      title: "✏️ Replace the ‹…› with a value",
+      description: `\`${marcador}\` in the help is a **blank to fill in** — not something to type with the brackets.\n\nE.g.: in \`${PREFIXO}warn <@user>\`, mention the person: \`${PREFIXO}warn @Ana\`.\nThe values \`${PREFIXO}${canonico}\` accepts: \`${PREFIXO}help ${canonico}\``,
+      colour: COR.aviso,
+    }));
+  }
 
   try {
     await handler(message, argsFinais, ctx);

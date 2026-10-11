@@ -597,6 +597,11 @@ export function estadoDoGrupo(am, grupo) {
 }
 
 // Ligado de verdade: os que nascem ligados contam como ligados até alguém desligar.
+// Nota a partir da qual o sentinela age, por sensibilidade (+0,5 desde 12 out
+// 2026 — mais suave). Um lugar só: engine, &automod sentinela, &config, ajuda.
+export const LIMIAR_BASE = { baixa: 7.5, media: 6.5, alta: 5.5 };
+export const limiarBase = (sens) => LIMIAR_BASE[sens] ?? LIMIAR_BASE.media;
+
 const PADRAO_LIGADO = new Set(["antiDuplicata", "antiImagem", "antiOdio", "antiEmoji", "antiMidia"]);
 export function moduloLigado(am, chave) {
   const m = am?.[chave];
@@ -844,14 +849,17 @@ export async function runAutomod(message, ctx) {
   if (am.antiScam?.enabled) {
     const rate = taxaPorSegundo(estado, userId, ctx.serverId ?? server?.id);
     const r = analisarConteudo(content, { rate, repetidas });
-    const base = ({ baixa: 7, media: 6, alta: 5 })[am.antiScam.sensitivity] ?? 6;
+    // +0,5 em cada sensibilidade desde 12 out 2026 (mais suave)
+    const base = limiarBase(am.antiScam.sensitivity);
 
     const { limiar, faixa, nivel } = confianca.limiarPara(
       ctx.serverId ?? server?.id, userId, base,
-      { ativo: am.antiScam.porAntiguidade !== false },
+      { ativo: am.antiScam.porAntiguidade !== false,
+        xpAtivo: config.xp?.enabled === true,
+        entrouEm: message.member?.joinedAt ?? null },
     );
     dbg(ctx, `  [sentinela] ON → nota ${r.nota.toFixed(1)}/10 (limiar ${limiar}`
-      + `${faixa ? `, ${faixa.rotulo} nv${nivel}` : ""})${r.grave ? " GRAVE" : ""}`
+      + `${faixa ? `, ${faixa.rotulo}${nivel != null ? ` nv${nivel}` : " (tempo no servidor)"}` : ""})${r.grave ? " GRAVE" : ""}`
       + ` sinais: [${r.sinais.join(", ") || "nenhum"}]`);
 
     // Padrão de dano: soma por pessoa, alerta a staff, nunca pune (confianca.js)
@@ -1089,7 +1097,7 @@ export async function simularDeteccao(texto, ctx, canalAtual) {
   const { sendEmbed, COR, config } = ctx;
   const t = texto ?? "";
   const r = analisarConteudo(t, { rate: 1 });
-  const limiar = ({ baixa: 7, media: 6, alta: 5 })[config.automod.antiScam.sensitivity] ?? 6;
+  const limiar = limiarBase(config.automod.antiScam.sensitivity);
   const flag = r.nota >= limiar;
   const canalAviso = await canalDeAviso(ctx, canalAtual);
   const resumoSeguro = r.grave ? "[conteúdo não exibido por segurança]"

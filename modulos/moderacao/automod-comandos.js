@@ -89,6 +89,42 @@ export async function cmdClearwarnings(message, args, ctx) {
 }
 
 // %automod status | %automod <módulo> <on|off> | %automod debug <on|off>   (ManagePermissions)
+const G_AUTOMOD = GRUPOS_AUTOMOD;
+
+// A cola dos quatro grupos, com exemplos que dá para copiar como estão.
+function guiaDosGrupos(lang, P, abertura) {
+  const en = lang === "en";
+  return [
+    abertura, "",
+    ...Object.entries(G_AUTOMOD).map(([nome, d]) => `${d.emoji} \`${nome}\` — ${en ? d.en : d.pt}`),
+    "",
+    en ? "**Copy as is:**" : "**Copie assim mesmo:**",
+    `\`${P}automod antispam off\` — ${en ? "turns one group off" : "desliga um grupo"}`,
+    `\`${P}automod antiruido caps off\` — ${en ? "turns off just one part" : "desliga só uma parte"}`,
+    `\`${P}automod off\` · \`${P}automod on\` — ${en ? "everything at once" : "tudo de uma vez"}`,
+    `\`${P}automod\` — ${en ? "what's on and off right now" : "o que está ligado agora"}`,
+  ].join("\n");
+}
+
+// Distância de edição curta (o "você quis dizer"): até 2 letras de diferença.
+function maisParecido(digitado, nomes) {
+  const a = String(digitado ?? "").toLowerCase();
+  if (!a) return null;
+  const d = (x, y) => {
+    const m = Array.from({ length: x.length + 1 }, (_, i) => [i, ...Array(y.length).fill(0)]);
+    for (let j = 1; j <= y.length; j++) m[0][j] = j;
+    for (let i = 1; i <= x.length; i++) for (let j = 1; j <= y.length; j++)
+      m[i][j] = Math.min(m[i - 1][j] + 1, m[i][j - 1] + 1, m[i - 1][j - 1] + (x[i - 1] === y[j - 1] ? 0 : 1));
+    return m[x.length][y.length];
+  };
+  let melhor = null, menor = 3;
+  for (const n of nomes) { const k = d(a, n); if (k < menor && k <= Math.max(1, Math.floor(n.length / 3))) { menor = k; melhor = n; } }
+  return melhor;
+}
+
+// Modos de punição: os nomes em inglês que a ajuda em inglês mostra também valem.
+const MODO_EN = { warn: "avisar", delete: "apagar", confirm: "confirmar", stack: "acumular", ban: "banir", inherit: "herdar" };
+
 export async function cmdAutomod(message, args, ctx) {
   const { config, cfgGlobal, sendEmbed, COR, getServer, membroTemPermissao, salvarConfig, salvarGlobal, PREFIXO } = ctx;
   const lang = lingua(ctx);
@@ -109,6 +145,30 @@ export async function cmdAutomod(message, args, ctx) {
   };
   if (FILHOS[sub]) return FILHOS[sub](message, args.slice(1), ctx);
   if (sub === "antiscam") sub = "sentinela";
+
+  // ── Quem copia a ajuda ao pé da letra (12 out 2026) ──────────────────
+  // `&automod <group> off` chegava assim mesmo, com os sinais, e a resposta
+  // era uma lista de nomes antigos que ninguém reconhecia.
+  const ehMarcador = (x) => /^[<‹\[].+[>›\]]$/.test(String(x ?? ""));
+  if (ehMarcador(sub) || (G_AUTOMOD[sub] && ehMarcador(args[1]))) {
+    return sendEmbed(message.channel, { title: lang === "en" ? "✏️ Replace the ‹…› with a value" : "✏️ Troque o ‹…› por um valor", colour: COR.aviso,
+      description: guiaDosGrupos(lang, PREFIXO, ehMarcador(sub)
+        ? (lang === "en" ? `\`${sub}\` in the help is a **blank to fill in**, not something to type. Use one of the groups below:` : `\`${sub}\` na ajuda é um **espaço para preencher**, não para digitar. Use um dos grupos abaixo:`)
+        : (lang === "en" ? `\`${args[1]}\` is a **blank to fill in** — the parts of \`${sub}\` are: ${Object.keys(G_AUTOMOD[sub].partes).map((x) => `\`${x}\``).join(", ")}.` : `\`${args[1]}\` é um **espaço para preencher** — as partes de \`${sub}\` são: ${Object.keys(G_AUTOMOD[sub].partes).map((x) => `\`${x}\``).join(", ")}.`)) });
+  }
+
+  // ── `&automod off` / `&automod on` — tudo de uma vez ─────────────────
+  const TUDO = { on: true, ligar: true, ativar: true, enable: true, off: false, desligar: false, desativar: false, disable: false };
+  if (sub in TUDO && !args[1]) {
+    const on = TUDO[sub];
+    for (const chave of Object.values(MODULOS_AUTOMOD)) config.automod[chave] = { ...(config.automod[chave] ?? {}), enabled: on };
+    salvarConfig();
+    return sendEmbed(message.channel, { title: "🛡 AutoMod", colour: on ? COR.sucesso : COR.mod, description: lang === "en"
+      ? (on ? `**Everything on** 🟢 — the 4 groups: \`antispam\`, \`antiruido\`, \`antilink\`, \`sentinela\`.\n\nTo turn one off: \`${PREFIXO}automod antiruido off\` · see each one: \`${PREFIXO}automod\``
+            : `**Everything off** 🔴 — nothing is filtered or punished automatically now.\n\nTo turn just one on: \`${PREFIXO}automod antispam on\` · all back: \`${PREFIXO}automod on\``)
+      : (on ? `**Tudo ligado** 🟢 — os 4 grupos: \`antispam\`, \`antiruido\`, \`antilink\`, \`sentinela\`.\n\nPara desligar um: \`${PREFIXO}automod antiruido off\` · ver cada um: \`${PREFIXO}automod\``
+            : `**Tudo desligado** 🔴 — nada é filtrado nem punido automaticamente agora.\n\nPara ligar só um: \`${PREFIXO}automod antispam on\` · tudo de volta: \`${PREFIXO}automod on\``) });
+  }
 
   // ── Os quatro grupos (2 out 2026) ──────────────────────────────────────
   // antispam · antiruido · antilink · sentinela. `on|off` e `punicao` valem
@@ -159,8 +219,8 @@ export async function cmdAutomod(message, args, ctx) {
         `**${grupo}** ${a1 === "on" ? "ligado 🟢" : "desligado 🔴"} — ${Object.keys(def.partes).length} parte(s): ${Object.keys(def.partes).map((x) => `\`${x}\``).join(", ")}.`,
         `**${grupo}** ${a1 === "on" ? "enabled 🟢" : "disabled 🔴"} — ${Object.keys(def.partes).length} part(s): ${Object.keys(def.partes).map((x) => `\`${x}\``).join(", ")}.`) });
     }
-    if (a1 === "punicao" || a1 === "punição") {
-      const modo = args[2]?.toLowerCase();
+    if (a1 === "punicao" || a1 === "punição" || a1 === "punishment") {
+      const modo = MODO_EN[args[2]?.toLowerCase()] ?? args[2]?.toLowerCase();
       const MODOS = ["avisar", "apagar", "confirmar", "acumular", "banir"];
       const herdar = ["herdar", "global", "null"].includes(modo);
       if (!herdar && !MODOS.includes(modo)) {
@@ -183,8 +243,15 @@ export async function cmdAutomod(message, args, ctx) {
       return executarFiltro(sub, args);
     }
     if (grupo === "sentinela") return cmdScam(message, args.slice(1), ctx);   // o painel: config, sensitivity, test…
+    const parecida = maisParecido(a1, [...Object.keys(def.partes), "on", "off", "punicao", "set"]);
     return sendEmbed(message.channel, { title: T("❌ Parte desconhecida", "❌ Unknown part"), colour: COR.erro,
-      description: `${T("Partes", "Parts")} ${T("de", "of")} \`${grupo}\`: ${Object.keys(def.partes).map((x) => `\`${x}\``).join(", ")}` });
+      description: [
+        parecida ? T(`Você quis dizer \`${PREFIXO}automod ${grupo} ${parecida}\`?`, `Did you mean \`${PREFIXO}automod ${grupo} ${parecida}\`?`) + "\n" : null,
+        `${T("Partes", "Parts")} ${T("de", "of")} \`${grupo}\`: ${Object.keys(def.partes).map((x) => `\`${x}\``).join(", ")}`,
+        "",
+        `\`${PREFIXO}automod ${grupo} on|off\` — ${T("o grupo inteiro", "the whole group")}`,
+        `${T("Ex.:", "E.g.:")} \`${PREFIXO}automod ${grupo} ${Object.keys(def.partes)[0]} off\` — ${T("só essa parte", "just that part")}`,
+      ].filter((x) => x !== null).join("\n") });
   }
   return executarFiltro(sub, args);
 
@@ -225,7 +292,9 @@ export async function cmdAutomod(message, args, ctx) {
       return [`${icone} **${nome}** — ${lang === "en" ? def.en : def.pt} · ${st.ligadas}/${st.total}`,
         `   ${st.partes.map((x) => `${x.ligada ? "✓" : "✗"} ${x.parte}`).join(" · ")}`];
     });
-    linhas.push("", lang === "en" ? `_Details: \`${PREFIXO}automod <group>\`_` : `_Detalhes: \`${PREFIXO}automod <grupo>\`_`);
+    linhas.push("", lang === "en"
+      ? `_Details of one group: \`${PREFIXO}automod antispam\` · turn one off: \`${PREFIXO}automod antispam off\` · everything: \`${PREFIXO}automod off\`_`
+      : `_Detalhes de um grupo: \`${PREFIXO}automod antispam\` · desligar um: \`${PREFIXO}automod antispam off\` · tudo: \`${PREFIXO}automod off\`_`);
     linhas.push(lang === "en"
       ? `${cfgGlobal.debug !== false ? "🟢" : "🔴"} **debug (global)** — ${cfgGlobal.debug !== false ? "enabled" : "disabled"}`
       : `${cfgGlobal.debug !== false ? "🟢" : "🔴"} **debug (global)** — ${cfgGlobal.debug !== false ? "ativado" : "desativado"}`);
@@ -235,16 +304,15 @@ export async function cmdAutomod(message, args, ctx) {
   }
 
   const chave = modulos[sub];
-  if (!chave)
-    return sendEmbed(message.channel, tr(ctx, {
-      title: "❌ Módulo desconhecido",
-      description: `Módulos: ${Object.keys(modulos).map((m) => `\`${m}\``).join(", ")}, \`debug\``,
-      colour: COR.erro,
-    }, {
-      title: "❌ Unknown module",
-      description: `Modules: ${Object.keys(modulos).map((m) => `\`${m}\``).join(", ")}, \`debug\``,
-      colour: COR.erro,
-    }));
+  if (!chave) {
+    // Os nomes antigos (antiodio, anticaps…) continuam valendo, mas não se
+    // ensinam mais: quem erra vê os QUATRO grupos, com exemplo pronto.
+    const parecido = maisParecido(sub, [...Object.keys(G_AUTOMOD), ...Object.keys(modulos), "on", "off", "blocklist", "whitelist", "punicao"]);
+    return sendEmbed(message.channel, { title: lang === "en" ? "❌ I don't know that one" : "❌ Não conheço esse", colour: COR.erro,
+      description: guiaDosGrupos(lang, PREFIXO, parecido
+        ? (lang === "en" ? `Did you mean \`${PREFIXO}automod ${parecido}\`?` : `Você quis dizer \`${PREFIXO}automod ${parecido}\`?`)
+        : (lang === "en" ? `\`${String(sub).slice(0, 30)}\` isn't a group. The automod has four:` : `\`${String(sub).slice(0, 30)}\` não é um grupo. O automod tem quatro:`)) });
+  }
 
   const mod = config.automod[chave];
   const acao = args[1]?.toLowerCase();
@@ -637,7 +705,7 @@ export async function cmdScam(message, args, ctx) {
   const pol = config.automod.punicao;
   const sub = args[0]?.toLowerCase();
   const val = args[1];
-  const limiarDe = (sens) => ({ baixa: 7, media: 6, alta: 5 })[sens] ?? 6;
+  const limiarDe = (sens) => engine.limiarBase(sens);
 
   if (!sub || sub === "config" || sub === "status") {
     return sendEmbed(message.channel, lang === "en" ? {
@@ -889,7 +957,8 @@ export async function cmdPunicao(message, args, ctx) {
 
   const pol = config.automod.punicao;
   const sub = args[0]?.toLowerCase();
-  const val = args[1];
+  const bruto = String(args[1] ?? "").toLowerCase();
+  const val = MODO_EN[bruto] ?? (["avisar", "apagar", "confirmar", "acumular", "banir"].includes(bruto) ? bruto : args[1]);
 
   const rotulo = (m) => lang === "en"
     ? (m === "banir"     ? "instant ban"

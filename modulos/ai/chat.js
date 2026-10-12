@@ -13,7 +13,7 @@ import { verificar } from "./verificar.js";
 import { SUB as SUBCOMANDOS_REAIS } from "../core/aliases.js";
 import * as desinteresse from "./desinteresse.js";
 import * as persona from "./persona.js";
-import { iaLigada } from "../core/env.js";
+import { iaLigada, modoIA } from "../core/env.js";
 import { tr, lingua } from "../core/i18n.js";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -275,7 +275,7 @@ export function resumoConfigIA() {
   linhas.push(`[IA] LLM:     ${LLM_URL || "⚠️ NENHUM — defina IA_MODO=local, IA_MODO=online ou LLM_URL"}`);
   linhas.push(`[IA] Serviço: ${IA_SERVICO_URL || "(não configurado — sem ferramentas)"}`);
   linhas.push(`[IA] Modelo:  ${LLM_MODEL_PADRAO || "(o carregado no servidor de LLM)"}`);
-  linhas.push(`[IA] Busca:   ${process.env.SEARXNG_URL ? process.env.SEARXNG_URL : "desligada (sem SEARXNG_URL)"}`);
+  linhas.push(`[IA] Busca:   ${process.env.SEARXNG_URL ? `${process.env.SEARXNG_URL} — ${buscaSempre() ? "sempre (links só quando pedem a busca)" : "só quando pedem/precisa (BUSCA_SEMPRE=0)"}` : "desligada (sem SEARXNG_URL)"}`);
 
   if (semLLM) {
     linhas.push("[IA] ⚠️ Sem servidor de LLM configurado, a IA não vai responder nada.");
@@ -570,7 +570,11 @@ export function caberNoContexto(messages, { ctxTokens = CONTEXTO_MODELO, reserva
   return saida;
 }
 
-export async function llmChat(messages, { json = false, maxTokens = MAX_TOKENS, jsonTokens = null, etiqueta = "resposta", modelo = null, ctx = null, manter = null, continuarMax = null } = {}) {
+// `pensar: false` desliga o raciocínio (thinking) NESTA chamada — só no modo
+// local (llama.cpp aceita `chat_template_kwargs` por pedido; uma API online
+// pode recusar o campo). Usado em tarefa mecânica e frequente, como reescrever
+// a consulta da busca de fundo: pensar ali só gasta segundos.
+export async function llmChat(messages, { json = false, maxTokens = MAX_TOKENS, jsonTokens = null, etiqueta = "resposta", modelo = null, ctx = null, manter = null, continuarMax = null, pensar = null } = {}) {
   messages = normalizarMensagens(messages);
   const modeloUsado = modelo || LLM_MODEL_PADRAO;
   const limiteTokens = json ? (jsonTokens ?? DECISAO_TOKENS) : maxTokens;
@@ -583,6 +587,7 @@ export async function llmChat(messages, { json = false, maxTokens = MAX_TOKENS, 
     temperature: json ? 0 : 0.6,   // decisão determinística; conversa criativa
   };
   if (json) body.response_format = { type: "json_object" };
+  if (pensar === false && modoIA() === "local") body.chat_template_kwargs = { enable_thinking: false };
 
   const entradaChars = messages.reduce((n, m) => n + (m.content?.length || 0), 0);
   console.log(`[CHAT][llm] → ${etiqueta} | modelo=${modeloUsado} max_tokens=${limiteTokens} entrada≈${entradaChars} chars${json ? " (json)" : ""}`);
@@ -690,7 +695,23 @@ function comandosParaVerificar() {
   return _comandosVerif;
 }
 
-async function decidirBusca(pergunta) {
+// Busca SEMPRE (12 out 2026, pedido de Ghieh): toda mensagem com assunto vai
+// ao buscador, em silêncio; os links só aparecem quando a pessoa PEDIU a busca
+// (as duas regex acima). `BUSCA_SEMPRE=0` volta ao jeito antigo (busca só com
+// pedido, pista de atualidade ou o juiz de busca) — e mesmo assim sem link
+// quando ninguém pediu.
+export function buscaSempre() {
+  return !/^(0|false|nao|não|off|no)$/i.test(String(process.env.BUSCA_SEMPRE ?? "1").trim());
+}
+export function pediuBusca(texto) {
+  const t = String(texto ?? "");
+  return PEDIDO_EXPLICITO.test(t) || PEDIDO_DE_BUSCA.test(t);
+}
+
+// → { buscar, query, explicito?, links, fundo }
+//   links: a pessoa pediu a busca → resposta cita [n] e ganha o rodapé de fontes
+//   fundo: busca silenciosa → sem [n], sem rodapé, sem link
+export async function decidirBusca(pergunta) {
   const texto = String(pergunta ?? "");
 
   if (PEDIDO_EXPLICITO.test(texto)) {
@@ -699,12 +720,21 @@ async function decidirBusca(pergunta) {
       .replace(/\b(para mim|pra mim|por favor|pfv|você|voce|vc|judy)\b/gi, " ")
       .replace(/<@[^>]+>/g, " ")
       .replace(/\s+/g, " ").trim();
-    return { buscar: true, query: (query || texto).slice(0, 200), explicito: true };
+    return { buscar: true, query: (query || texto).slice(0, 200), explicito: true, links: true, fundo: false };
   }
 
   if (PEDIDO_DE_BUSCA.test(texto)) {
     dlog("pedido explícito de pesquisa → buscando sem consultar o modelo de decisão");
-    return { buscar: true, query: String(texto).replace(PEDIDO_DE_BUSCA, " ").replace(/\s+/g, " ").trim().slice(0, 120) };
+    return { buscar: true, query: String(texto).replace(PEDIDO_DE_BUSCA, " ").replace(/\s+/g, " ").trim().slice(0, 120), links: true, fundo: false };
+  }
+
+  if (buscaSempre()) {
+    if (busca.valeBuscarDeFundo(texto)) {
+      dlog("busca de fundo (BUSCA_SEMPRE): sem pedido de busca → resultados entram em silêncio, sem links");
+      return { buscar: true, query: busca.limparConsulta(texto) || texto.slice(0, 120), links: false, fundo: true };
+    }
+    dlog("busca de fundo: mensagem sem assunto para buscar (social, conta ou curta demais)");
+    return { buscar: false, query: pergunta, links: false, fundo: false };
   }
 
   const identidade = PERGUNTA_DE_IDENTIDADE.test(texto) && NOME_PROPRIO_NO_MEIO.test(texto);
@@ -729,7 +759,8 @@ async function decidirBusca(pergunta) {
       { json: true, modelo: LLM_MODEL_DECISAO, etiqueta: "decidir-busca" },
     );
     const obj = JSON.parse(raw);
-    return { buscar: !!obj.buscar, query: String(obj.query || pergunta).slice(0, 200) };
+    // o juiz decidiu buscar, mas ninguém PEDIU: busca silenciosa, sem links
+    return { buscar: !!obj.buscar, query: String(obj.query || pergunta).slice(0, 200), links: false, fundo: !!obj.buscar };
   } catch {
     return { buscar: false, query: pergunta };   // na dúvida, não busca
   }
@@ -910,7 +941,7 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
     const contexto = busca.blocoResultados(resultados);
     messages.push({
       role: "user",
-      content: `${blocoCitado}Resultados de busca obtidos hoje (${hoje}). Se trouxerem datas, confie nelas em vez do seu conhecimento prévio. ${busca.instrucaoResposta(lang, !!resultados.fracos)}\n\nRESULTADOS:\n${contexto}\n\nPERGUNTA (de ${autor}): ${pergunta}`,
+      content: `${blocoCitado}Resultados de busca obtidos hoje (${hoje}). Se trouxerem datas, confie nelas em vez do seu conhecimento prévio. ${resultados.fundo ? busca.instrucaoFundo(lang) : busca.instrucaoResposta(lang, !!resultados.fracos)}\n\nRESULTADOS:\n${contexto}\n\n${resultados.fundo ? `[${autor}]` : `PERGUNTA (de ${autor})`}: ${pergunta}`,
     });
   } else {
     messages.push({ role: "user", content: `${blocoCitado}[${autor}]: ${pergunta}` });
@@ -1879,7 +1910,13 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
     } else if (sobreOBot && decisao.explicito) {
       dlog("menciona o bot, mas a busca foi PEDIDA explicitamente → busca mantida");
     }
-    dlog(`decisão de busca: buscar=${decisao.buscar}${decisao.buscar ? ` query="${decisao.query}"` : ""}`);
+    // Busca de fundo não serve para gerar imagem, ler arquivo do repositório
+    // nem cumprimento — o que se procuraria ali não está na internet.
+    if (decisao.buscar && decisao.fundo && (pedeImagemGerada(pergunta) || caminhoCitado(pergunta) || ehCumprimento(pergunta))) {
+      decisao.buscar = false;
+      dlog("busca de fundo pulada: pedido de imagem, arquivo citado ou cumprimento");
+    }
+    dlog(`decisão de busca: buscar=${decisao.buscar}${decisao.buscar ? ` query="${decisao.query}" ${decisao.links ? "(pedida → com links)" : "(de fundo → sem links)"}` : ""}`);
     let resultados = null;
     let consultasUsadas = [];
     if (decisao.buscar) {
@@ -1889,13 +1926,20 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
         // `googl(e)` apagava a palavra "google"): o modelo reescreve o pedido
         // em consultas curtas, e o código filtra e lê as páginas.
         const pesq = await busca.pesquisar(pergunta, {
-          chamarJson: (msgs) => llmChat(msgs, { json: true, modelo: LLM_MODEL_DECISAO, etiqueta: "consultas-busca" }),
+          // na de fundo, sem raciocínio: reescrever consulta é mecânico, e
+          // acontece em quase toda mensagem agora
+          chamarJson: (msgs) => llmChat(msgs, { json: true, modelo: LLM_MODEL_DECISAO, etiqueta: "consultas-busca", pensar: decisao.fundo ? false : null }),
           hoje: hojeExtenso(), log: dlog,
+          notaMinima: decisao.fundo ? 2 : 1,   // de fundo, só o que fala mesmo do assunto
         });
         resultados = pesq.resultados;
         resultados.fracos = pesq.fracos;
+        resultados.fundo = !!decisao.fundo;
         consultasUsadas = pesq.consultas;
         dlog(`busca retornou ${resultados?.length ?? 0} resultado(s)`);
+        // De fundo e nada bate com a mensagem: nada entra no prompt — resultado
+        // aleatório faria a Judy falar dele em vez de conversar.
+        if (decisao.fundo && pesq.fracos) { dlog("busca de fundo sem resultado relevante → respondendo sem ela"); resultados = null; }
       }
       catch (e) {
         const msg = e?.message ?? String(e);
@@ -1905,7 +1949,8 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
       }
     }
 
-    await editarStatus(en ? (resultados?.length ? "✍️ Writing the reply with the sources…" : "✍️ Writing the reply…") : (resultados?.length ? "✍️ Gerando resposta com as fontes…" : "✍️ Gerando resposta…"));
+    const comFontes = !!(resultados?.length && decisao.links);
+    await editarStatus(en ? (comFontes ? "✍️ Writing the reply with the sources…" : "✍️ Writing the reply…") : (comFontes ? "✍️ Gerando resposta com as fontes…" : "✍️ Gerando resposta…"));
 
     const inicio = Date.now();
     const frames = ["✍️ Gerando resposta", "✍️ Gerando resposta.", "✍️ Gerando resposta..", "✍️ Gerando resposta..."];
@@ -2081,7 +2126,15 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
 
     // Só as fontes citadas, como [domínio](<url>): clicáveis e sem a prévia
     // (embed) que o Stoat gerava para cada link.
-    const rodape = resultados?.length
+    // …e SÓ quando a pessoa pediu a busca. Sem pedido (busca de fundo, juiz ou
+    // a ferramenta buscar_web), a resposta sai sem [n] e sem os links que o
+    // modelo copiou dos resultados.
+    if (resposta && !decisao.links) {
+      const vistas = busca.urlsVistas(resultados ?? [], evidenciaVerif);
+      const semLinks = busca.semLinksDaBusca(resultados?.length || /"url"/.test(evidenciaVerif ?? "") ? busca.semCitacoes(resposta) : resposta, vistas);
+      if (semLinks !== resposta) { dlog("sem pedido de busca → citações e links dos resultados tirados da resposta"); resposta = semLinks.trim() || resposta; }
+    }
+    const rodape = resultados?.length && decisao.links
       ? busca.rodapeFontes(resposta, resultados, consultasUsadas.length ? consultasUsadas : [decisao.query], { lang: en ? "en" : "pt", max: FONTES_MAX })
       : "";
     const avisoCorte = responder._cortou

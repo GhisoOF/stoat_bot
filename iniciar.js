@@ -3,6 +3,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { iaLigada, modoIA, MODELO_LOCAL_PADRAO } from "./modulos/core/env.js";
+import { montarConfigSwap } from "./modulos/core/llama-swap-config.js";
 
 const IA_EMBUTIDA = iaLigada() && process.env.IA_EMBUTIDA !== "0";
 const VOZ_ATIVA = process.env.VOZ_ATIVA === "1";
@@ -202,19 +203,9 @@ if (!iaLigada()) {
     const cfg = `/data/llama-swap.yaml`;
     const flagsExtra = (process.env.LLAMA_FLAGS || "").trim();  // ex.: "--temp 1.0 --top-p 0.95 --top-k 64" (Gemma) — cada família tem o seu
     const comando = (m) => `${LLAMA_BIN} -hf ${m} --host 127.0.0.1 --port \${PORT} -c ${ctx} -ngl ${ngl} --jinja${flagsExtra ? " " + flagsExtra : ""}`;
-    writeFileSync(cfg, [
-      // 10min de tolerância para o servidor ficar de pé: o padrão de 2min do
-      // llama-swap matava cargas lentas (e qualquer download residual) no meio.
-      "healthCheckTimeout: 600",
-      "models:",
-      "  conversa:",
-      `    cmd: ${comando(conversa)}`,
-      "    ttl: 3600",
-      "  visao:",
-      `    cmd: ${comando(visao)}`,
-      "    ttl: 600",
-    ].join("\n") + "\n");
-    console.info(`[INICIAR] IA local (llama-swap): conversa=${conversa} · visão=${visao}`);
+    // mesmo modelo nos dois papéis → uma entrada só, "visao" é apelido dela
+    writeFileSync(cfg, montarConfigSwap({ conversa, visao, comando }));
+    console.info(`[INICIAR] IA local (llama-swap): conversa=${conversa} · visão=${visao === conversa ? "o mesmo modelo (apelido, sem 2ª cópia)" : visao}`);
     subirBin("llama-swap", SWAP_BIN,
       ["-config", cfg, "-listen", `127.0.0.1:${process.env.LLAMA_PORTA || "8082"}`],
       { LLAMA_CACHE: cache });

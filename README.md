@@ -178,6 +178,19 @@ diz exatamente o que clicar.
 - **Chat** (`&chat` ou menção): conversa com memória curta do canal, contas
   exatas, leitura de código e **busca na web** (via SearXNG) através do serviço
   de ferramentas embutido.
+- **Busca sempre, links só quando pedem**: toda mensagem com assunto vai ao
+  SearXNG em silêncio — os resultados entram no prompt para a Judy errar menos
+  fato de memória, mas a resposta sai como conversa, sem `[n]`, sem rodapé e
+  sem os links dos resultados. Fontes e links aparecem **só quando a pessoa
+  pede a busca** ("pesquisa…", "procura na internet…", "dá um google…").
+  Mensagem só social, conta e imagem anexada não buscam; resultado que não
+  fala do assunto fica de fora; a consulta da busca de fundo é escrita sem
+  raciocínio (mais rápida). `BUSCA_SEMPRE=0` volta a buscar só quando pedem.
+- **Um modelo nos dois papéis**: com o mesmo valor em `MODELO` e
+  `MODELO_VISAO` (Gemma 4, multimodal), o llama-swap fica com uma entrada só e
+  `visao` vira apelido dela — ver uma imagem não descarrega a conversa nem
+  carrega uma 2ª cópia do modelo (o que, com um modelo de 17 GB, custaria
+  dezenas de segundos por imagem).
 - **Busca que responde**: o modelo reescreve o pedido em até 2 consultas
   curtas (corrige digitação; `r/Nome` vira busca no reddit), os resultados que
   não falam do pedido saem, as 3 melhores páginas são lidas

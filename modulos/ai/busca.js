@@ -207,7 +207,9 @@ export async function lerPagina(url, termos, { fetcher = null, resolver } = {}) 
 
 // ─── O fluxo inteiro ─────────────────────────────────────────────────────────
 
-export async function pesquisar(pergunta, { chamarJson = null, hoje = "", fetcher = fetch, resolver, log = () => {} } = {}) {
+// `notaMinima`: quantos termos do pedido um resultado precisa ter para contar
+// como relevante (a busca de fundo pede 2 — ver valeBuscarDeFundo).
+export async function pesquisar(pergunta, { chamarJson = null, hoje = "", fetcher = fetch, resolver, log = () => {}, notaMinima = 1 } = {}) {
   const { consultas, origem } = await decidirConsultas(pergunta, { chamarJson, hoje });
   log(`consultas (${origem}): ${consultas.map((q) => `"${q}"`).join(" · ")}`);
   const lotes = await Promise.all(consultas.map((q) => buscarSearx(q, { fetcher }).catch((e) => { log(`busca "${q}" falhou: ${e.message}`); return { erro: e }; })));
@@ -224,7 +226,7 @@ export async function pesquisar(pergunta, { chamarJson = null, hoje = "", fetche
   const termos = termosDe(pergunta, ...consultas);
   const pontuados = todos.map((r, ordem) => ({ ...r, nota: pontuar(r, termos, subs), ordem }))
     .sort((a, b) => b.nota - a.nota || a.ordem - b.ordem);
-  let resultados = pontuados.filter((r) => r.nota >= 1).slice(0, 5);
+  let resultados = pontuados.filter((r) => r.nota >= notaMinima).slice(0, 5);
   const fracos = !resultados.length;
   if (fracos) resultados = pontuados.slice(0, 3);
   log(`${todos.length} resultado(s), ${resultados.length} relevante(s)${fracos ? " (nenhum bate com o pedido)" : ""}`);
@@ -258,6 +260,85 @@ export function instrucaoResposta(lang = "pt", fracos = false) {
     : "Responda à PERGUNTA diretamente, usando só o que os resultados dizem. Não descreva os resultados um por um (nunca \"o texto [1] fala de…\") — responda. Cite [n] só dos resultados que você usou de fato. "
       + (fracos ? "Os resultados quase não batem com a pergunta: diga com franqueza que não achou uma resposta direta e conte o que encontrou de mais próximo. " : "Se os resultados não respondem, diga isso numa frase e conte o que encontrou de mais próximo. ")
       + "Não coloque links nem URLs no texto — as fontes são acrescentadas embaixo, sozinhas.";
+}
+
+// ─── Busca de fundo (12 out 2026) ────────────────────────────────────────────
+// Pedido de Ghieh: a Judy pesquisa SEMPRE, não só quando alguém pede — e os
+// links aparecem só quando a pessoa pediu a busca (PEDIDO_EXPLICITO /
+// PEDIDO_DE_BUSCA no chat.js). Sem pedido, a busca é silenciosa: os resultados
+// entram no prompt para ela errar menos (modelo pequeno erra fato de memória),
+// mas a resposta sai como conversa — sem [n], sem "Fontes", sem link.
+//
+// "Sempre" tem bom senso: mensagem só social ("oi", "valeu", "kkkk"), conta,
+// imagem anexada e mensagem sem assunto não vão ao buscador — não há o que
+// procurar, e resultado aleatório no prompt atrapalha mais do que ajuda.
+const SOCIAL = new Set(("oi ola opa eae eai salve hey hello hii bom boa dia tarde noite tudo bem beleza blz obrigado obrigada brigado brigada "
+  + "valeu vlw thanks thx tchau falou bye sim nao ok okay certo entendi legal top show massa quanto quanta tambem ainda agora "
+  + "aqui ali isso tipo cara mano mana gente pessoal vamos bora acho achei acha sei sabe gosto gosta quero queria fala fale diz diga conte "
+  + "kkk haha rsrs lol").split(" "));
+const NOME_PROPRIO = /(?:^|[\s(])(?!Judy\b|Stoat\b|Eu\b|Você\b|Voce\b|Oi\b|Ola\b|Olá\b)[A-ZÀ-Þ][a-zà-þ]{2,}/;
+
+export function termosDeAssunto(texto) {
+  const limpo = String(texto ?? "").replace(/<@[^>]+>/g, " ").replace(/https?:\/\/\S+/g, " ");
+  return termosDe(limpo).filter((w) => !SOCIAL.has(w) && !/^k{2,}$|^(?:ha){2,}h?$|^(?:rs){2,}$|^\d+$/.test(w));
+}
+
+export function valeBuscarDeFundo(pergunta) {
+  const t = String(pergunta ?? "");
+  if (!t.trim()) return false;
+  if (/\[(imagem\(ns\) anexada|attached image)/i.test(t)) return false;
+  const termos = termosDeAssunto(t);
+  if (termos.length >= 2) return true;
+  // um termo só vale quando é pergunta ou nome próprio ("quem é Pelé?")
+  return termos.length === 1 && (/\?/.test(t) || /\b(quem|qual|quando|onde|o que|what|who|when|where)\b/i.test(t) || NOME_PROPRIO.test(t));
+}
+
+// Instrução da busca de fundo: ajuda se servir, some se não servir.
+export function instrucaoFundo(lang = "pt") {
+  return lang === "en"
+    ? "Before answering, a web search about the message was run in the background (the person did NOT ask for a search). Use the results only if they help you answer accurately — facts, dates, names, current numbers; if they have nothing to do with the message, ignore them and answer normally, as in a conversation. Don't mention that you searched, don't cite [n], sources or sites, and don't put links."
+    : "Antes de responder, foi feita por conta própria uma busca na internet sobre a mensagem (a pessoa NÃO pediu busca). Use os resultados só se ajudarem a responder com precisão — fatos, datas, nomes, números atuais; se não tiverem a ver com a mensagem, ignore-os e responda normalmente, como numa conversa. Não mencione que pesquisou, não cite [n], fontes nem sites, e não coloque links.";
+}
+
+// Protege blocos de código enquanto `fn` mexe no texto.
+function foraDoCodigo(texto, fn) {
+  const blocos = [];
+  let t = String(texto ?? "").replace(/```[\s\S]*?```|`[^`\n]*`/g, (m) => { blocos.push(m); return `\u0000${blocos.length - 1}\u0000`; });
+  t = fn(t);
+  return t.replace(/\u0000(\d+)\u0000/g, (_, i) => blocos[Number(i)]);
+}
+
+// "[1]", "[1][3]", "[1, 2]" saem — sem rodapé, a citação aponta para o nada.
+export function semCitacoes(texto) {
+  return foraDoCodigo(texto, (t) => t
+    .replace(/[ \t]*\[\d{1,2}(?:\s*[,;–-]\s*\d{1,2})*\](?!\()/g, "")
+    .replace(/[ \t]+([.,;:!?])/g, "$1"));
+}
+
+// Sem pedido de busca, link que veio dos resultados não vai para o chat:
+// [texto](link) vira só o texto, link solto some. Link que a própria pessoa
+// mandou (ou de site que a busca não trouxe) fica.
+export function semLinksDaBusca(texto, urls = []) {
+  const hosts = new Set(urls.map((u) => dominioDe(u)).filter(Boolean));
+  if (!hosts.size) return String(texto ?? "");
+  const daBusca = (u) => hosts.has(dominioDe(u));
+  return foraDoCodigo(texto, (t) => t
+    .replace(/\[([^\]\n]*)\]\(<?(https?:\/\/[^)>\s]+)>?\)/g, (m, rotulo, u) => (!daBusca(u) ? m : /^\s*(?:\[?\d{1,2}\]?|[\w-]+(?:\.[\w-]+)+)\s*$/.test(rotulo) ? "" : rotulo))   // rótulo que é só domínio ou número some junto
+    .replace(/\(?<?(https?:\/\/[^\s<>)\]]+[^\s<>)\].,;:!?'"])>?\)?/g, (m, u) => (daBusca(u) ? "" : m))
+    .replace(/\(\s*\)|<\s*>/g, "")
+    // a frase que só apresentava o link ("Mais em  e .") vai embora com ele
+    .replace(/[ \t]*\b(?:mais (?:informa\S* )?(?:em|no|na)|veja (?:mais )?(?:em|no|na)?|saiba mais(?: em| no| na)?|leia mais(?: em| no| na)?|confira(?: em| no| na)?|more (?:at|on|info at)|see)\b(?:[ \t,;:]|\be\b|\bou\b|\band\b|\bor\b)*([.!?]|$)/gim, (m, fim, off, tudo) => (off > 0 && /[.!?]\s*$/.test(tudo.slice(0, off)) ? "" : fim))
+    .replace(/^[ \t]*(?:fontes?|sources?|links?|saiba mais)[ \t]*:[ \t·|,;–-]*$/gim, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/[ \t]+([.,;:!?])/g, "$1")
+    .replace(/[ \t]{2,}/g, " "));
+}
+
+// URLs que o modelo viu: resultados da busca e as da ferramenta buscar_web
+// (o caminho com ferramentas traz a sua própria lista na evidência).
+export function urlsVistas(resultados = [], evidencia = "") {
+  const daEvidencia = [...String(evidencia ?? "").matchAll(/"url"\s*:\s*"(https?:\/\/[^"]+)"/g)].map((m) => m[1]);
+  return [...(resultados ?? []).map((r) => r.url), ...daEvidencia].filter(Boolean);
 }
 
 // Só as fontes citadas na resposta (máx. `max`); sem citação, as 2 primeiras.

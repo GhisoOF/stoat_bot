@@ -11167,6 +11167,144 @@ console.log(`\nMÚSICA (versões): ${pass} ok, ${fail} falha(s)`);
 process.exit(fail ? 1 : 0);
 };
 
+// ════════════════════════════════════════════════════════════════════════════
+// llm-12out  (12 out 2026) — "pesquise sempre, link só quando pedirem" + o modelo maior
+// ════════════════════════════════════════════════════════════════════════════
+SUITES["llm-12out"] = async () => {
+const __m0 = await import("node:fs"); const fs = __m0.default;
+// Pedido de Ghieh: a Judy só pesquisava quando a mensagem tinha um gatilho
+// ("pesquisa…") ou parecia de atualidade — o resto ela respondia de memória, e
+// o modelo pequeno (Gemma E2B) erra fato de memória. Agora toda mensagem com
+// assunto vai ao buscador em silêncio, e os links/fontes só aparecem quando a
+// pessoa pediu a busca (PEDIDO_EXPLICITO / PEDIDO_DE_BUSCA).
+process.env.DB_PATH = "/tmp/busca-sempre.db";
+process.env.CONFIG_PATH = "/tmp/busca-sempre-cfg.json";
+process.env.LLM_URL = "http://llm.teste";
+process.env.IA_MODO = "local";
+process.env.SEARXNG_URL = "http://searx.teste";
+process.env.BUSCA_LER_PAGINAS = "0";
+process.env.CHAT_SERVIDORES = "*";
+process.env.CHAT_DEBUG = "0";
+delete process.env.IA_SERVICO_URL;
+delete process.env.BUSCA_SEMPRE; delete process.env.BUSCA_ATIVA;
+for (const f of [process.env.DB_PATH, process.env.CONFIG_PATH]) fs.rmSync(f, { force: true });
+
+let pass = 0, fail = 0;
+const ok = (cond, msg) => { cond ? pass++ : fail++; console.log(`  ${cond ? "✅" : "❌"} ${msg}`); };
+
+// SearXNG e llama.cpp de mentira
+let buscas = [], pedidosLLM = [], resultadosSearx = [];
+const COPA = [{ title: "Argentina é campeã da Copa do Mundo de 2022", url: "https://ge.globo.com/copa-2022", content: "Argentina vence a França nos pênaltis e ganhou a copa do mundo de 2022 no Catar" }];
+const RESPOSTA = "A Argentina ganhou a Copa de 2022 [1], nos pênaltis contra a França [1]. Mais em [ge.globo.com](<https://ge.globo.com/copa-2022>) e https://ge.globo.com/outra.";
+globalThis.fetch = async (url, op = {}) => {
+  url = String(url);
+  if (url.startsWith("http://searx.teste/")) {
+    buscas.push(decodeURIComponent(new URL(url).searchParams.get("q")));
+    return { ok: true, status: 200, json: async () => ({ results: resultadosSearx }) };
+  }
+  if (url.startsWith("http://llm.teste/") && !op.body) return { ok: true, status: 200, json: async () => ({ data: [{ id: "fake" }] }), text: async () => '{"data":[{"id":"fake"}]}' };
+  if (url.startsWith("http://llm.teste/v1/chat/completions")) {
+    const corpo = JSON.parse(op.body);
+    pedidosLLM.push(corpo);
+    const sys = corpo.messages?.[0]?.content ?? "";
+    let content = '{"ok":true}';
+    if (corpo.response_format) content = /consultas para um buscador/.test(sys) ? '{"consultas":["campeão copa do mundo 2022"]}' : '{"buscar":false}';
+    else content = RESPOSTA;
+    return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content }, finish_reason: "stop" }], usage: { prompt_tokens: 10, completion_tokens: 20 } }) };
+  }
+  return { ok: false, status: 404, json: async () => ({}), text: async () => "" };
+};
+
+const db = await import("./modulos/core/db.js");
+db.abrirBanco(process.env.DB_PATH);
+const chat = await import("./modulos/ai/chat.js");
+const busca = await import("./modulos/ai/busca.js");
+
+const saidas = [];
+const canal = { sendMessage: async (t) => { saidas.push(typeof t === "string" ? t : (t.content ?? t.embeds?.[0]?.description ?? "")); return { edit: async (x) => { saidas.push(typeof x === "string" ? x : (x.content ?? x.embeds?.[0]?.description ?? "")); } }; } };
+const ctx = { sendEmbed: async (_c, e) => saidas.push(e.description ?? e.title), COR: { info: 1, erro: 2, aviso: 3, sucesso: 4 }, serverId: "S1",
+  PREFIXO: "&", config: {}, ehSuperAdmin: () => false, getServer: async () => ({}) };
+let n = 0;
+const diz = async (texto) => {
+  buscas = []; pedidosLLM = []; saidas.length = 0;
+  await chat.conversar({ id: `m${n++}`, content: texto, authorId: "u1", username: "Ana", channelId: `c${n}`, channel: canal, client: { user: { id: "bot" } }, reply_ids: [] }, texto, ctx);
+  return saidas.filter((x) => x && !/^[💭🔎✍️]/u.test(x)).at(-1) ?? "";
+};
+const promptFinal = () => JSON.stringify(pedidosLLM.filter((p) => !p.response_format).at(0)?.messages ?? []);
+const consultaDaBusca = () => pedidosLLM.find((p) => p.response_format && /consultas para um buscador/.test(p.messages?.[0]?.content ?? ""));
+
+console.log("── quem decide buscar ──");
+ok(!busca.valeBuscarDeFundo("oi") && !busca.valeBuscarDeFundo("valeu judy") && !busca.valeBuscarDeFundo("kkkkk") && !busca.valeBuscarDeFundo("tudo bem?"), "mensagem só social não vai ao buscador");
+ok(!busca.valeBuscarDeFundo("quanto é 263857 * 3?"), "  → conta também não (é da calculadora)");
+ok(busca.valeBuscarDeFundo("quem é Pelé?") && busca.valeBuscarDeFundo("eu gosto de jogar minecraft") && busca.valeBuscarDeFundo("quem ganhou a copa de 2022"), "★ mensagem com assunto vai — sem precisar de \"pesquisa\"");
+
+console.log("\n── sem pedido de busca: pesquisa em silêncio ──");
+resultadosSearx = COPA;
+let r = await diz("quem ganhou a copa de 2022");
+ok(buscas.length > 0, `★ pesquisou sem ninguém pedir (consulta: ${buscas.join(" · ")})`);
+ok(/NÃO pediu busca/.test(promptFinal()) && /Argentina vence a França/.test(promptFinal()), "  → os resultados entram no prompt, com a instrução de usar só se ajudar");
+ok(!/\[\d\]/.test(r) && !/Fontes|busquei/.test(r), `★ resposta sem [n] e sem rodapé de fontes (${r.slice(0, 80)})`);
+ok(!/ge\.globo\.com/.test(r) && /Argentina ganhou a Copa de 2022/.test(r) && !/Mais em/.test(r), "★ e sem os links que o modelo copiou dos resultados (nem o \"Mais em\" que os apresentava) — o texto fica");
+ok(consultaDaBusca()?.chat_template_kwargs?.enable_thinking === false, "★ a consulta de fundo é escrita sem raciocínio (modo local) — não pesa em toda mensagem");
+
+console.log("\n── com pedido de busca: links ──");
+r = await diz("pesquisa quem ganhou a copa de 2022");
+ok(/\*\*Fontes:\*\*/.test(r) && /\[ge\.globo\.com\]\(<https:\/\/ge\.globo\.com\/copa-2022>\)/.test(r), "★ \"pesquisa …\" → rodapé com as fontes clicáveis");
+ok(/\[1\]/.test(r), "  → e a resposta cita [n]");
+ok(!consultaDaBusca()?.chat_template_kwargs, "  → busca pedida mantém o raciocínio na consulta");
+r = await diz("procura na internet quem ganhou a copa de 2022");
+ok(/\*\*Fontes:\*\*/.test(r), "  → \"procura na internet\" também");
+
+console.log("\n── o que não busca ──");
+await diz("oi");
+ok(buscas.length === 0, "★ \"oi\" não vai ao buscador");
+await diz("quanto é 263857 * 3?");
+ok(buscas.length === 0, "  → nem conta");
+
+console.log("\n── resultado que não tem a ver ──");
+resultadosSearx = [{ title: "G1 — últimas notícias", url: "https://g1.globo.com/", content: "política e economia" }];
+r = await diz("eu gosto de jogar minecraft");
+ok(buscas.length > 0 && !/RESULTADOS:/.test(promptFinal()), "★ de fundo e nada bate com a mensagem: nada entra no prompt (senão ela fala da manchete)");
+
+console.log("\n── BUSCA_SEMPRE=0 ──");
+process.env.BUSCA_SEMPRE = "0";
+await diz("eu gosto de jogar minecraft");
+ok(buscas.length === 0, "★ volta ao jeito antigo: sem pedido nem pista de atualidade, não busca");
+resultadosSearx = COPA;
+r = await diz("pesquisa quem ganhou a copa de 2022");
+ok(/\*\*Fontes:\*\*/.test(r), "  → pedido de busca continua com links");
+delete process.env.BUSCA_SEMPRE;
+
+console.log("\n── limpeza da resposta ──");
+ok(busca.semCitacoes("Venceu [1] em 2022 [2, 3]. Veja `a[1]`.") === "Venceu em 2022. Veja `a[1]`.", "[n] some, mas código fica intacto");
+const limpo = busca.semLinksDaBusca("Leia [esta matéria](https://ge.globo.com/x) e meu site https://meu.site/a.\nFontes: [ge.globo.com](<https://ge.globo.com/y>)", ["https://ge.globo.com/z"]);
+ok(limpo.includes("Leia esta matéria") && limpo.includes("https://meu.site/a") && !/ge\.globo|Fontes/.test(limpo), "★ só sai link de site que a busca trouxe — o link que a pessoa mandou fica");
+ok(busca.urlsVistas([], '[buscar_web] {"resultados":[{"url":"https://x.com/a"}]}').includes("https://x.com/a"), "  → links da ferramenta buscar_web também contam");
+
+console.log("\n── pensar:false só no modo local ──");
+pedidosLLM = [];
+process.env.IA_MODO = "online";
+await chat.llmChat([{ role: "user", content: "x" }], { json: true, pensar: false, etiqueta: "t" });
+ok(!pedidosLLM.at(-1)?.chat_template_kwargs, "★ API online não recebe chat_template_kwargs (poderia recusar o campo)");
+process.env.IA_MODO = "local";
+await chat.llmChat([{ role: "user", content: "x" }], { json: true, etiqueta: "t" });
+ok(!pedidosLLM.at(-1)?.chat_template_kwargs, "  → e sem pensar:false, o servidor decide (raciocínio ligado)");
+
+console.log("\n── llama-swap: o mesmo modelo nos dois papéis ──");
+{
+  const { montarConfigSwap } = await import("./modulos/core/llama-swap-config.js");
+  const cmd = (m) => `llama-server -hf ${m} --jinja`;
+  const um = montarConfigSwap({ conversa: "HauhauCS/Gemma4-26B-A4B:Q4_K_P", visao: "HauhauCS/Gemma4-26B-A4B:Q4_K_P", comando: cmd });
+  ok((um.match(/llama-server/g) ?? []).length === 1 && /aliases:\n\s+- visao/.test(um), "★ MODELO = MODELO_VISAO → uma entrada só, \"visao\" vira apelido (antes: cada imagem carregava uma 2ª cópia do modelo)");
+  ok(/includeAliasesInList: true/.test(um), "  → e o apelido aparece no /v1/models");
+  const dois = montarConfigSwap({ conversa: "a/conversa:Q4", visao: "b/visao:Q4", comando: cmd });
+  ok((dois.match(/llama-server/g) ?? []).length === 2 && /\n  visao:\n/.test(dois) && !/aliases/.test(dois), "  → modelos diferentes continuam como duas entradas");
+}
+
+console.log(`\nLLM (12 out): ${pass} ok, ${fail} falha(s)`);
+process.exit(fail ? 1 : 0);
+};
+
 // ── O executor ───────────────────────────────────────────────────────────────
 const PRECISA_DO_BOT = (nome) => /import\("\.\/main\.js"\)/.test(String(SUITES[nome]));
 

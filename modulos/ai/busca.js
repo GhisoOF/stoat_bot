@@ -378,6 +378,24 @@ export function urlsVistas(resultados = [], evidencia = "") {
   return [...(resultados ?? []).map((r) => r.url), ...daEvidencia].filter(Boolean);
 }
 
+// "Fontes:" + lista que o PRÓPRIO modelo escreveu (o rodapé é do código). Sai
+// o cabeçalho e as linhas de lista logo abaixo dele; o resto fica.
+export function semFontesDoModelo(texto) {
+  const linhas = String(texto ?? "").split("\n");
+  const cab = /^\s*(?:\*\*|__)?\s*(?:fontes?|sources?|refer[êe]ncias?|references?)\s*(?:\*\*|__)?\s*:?\s*(?:\*\*|__)?\s*$/i;
+  const item = /^\s*(?:\[\d{1,2}\]|[-*•]|\d{1,2}[.)])\s*\S/;
+  const saida = [];
+  for (let i = 0; i < linhas.length; i++) {
+    if (cab.test(linhas[i])) {
+      let j = i + 1;
+      while (j < linhas.length && (item.test(linhas[j]) || !linhas[j].trim())) j++;
+      if (j > i + 1 || i === linhas.length - 1) { i = j - 1; continue; }
+    }
+    saida.push(linhas[i]);
+  }
+  return saida.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+
 // Só as fontes citadas na resposta (máx. `max`); sem citação, as 2 primeiras.
 export function rodapeFontes(resposta, resultados, consultas, { lang = "pt", max = Number(process.env.CHAT_FONTES_MAX || 3) } = {}) {
   if (!resultados?.length) return "";

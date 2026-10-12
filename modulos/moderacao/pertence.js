@@ -59,6 +59,7 @@ export function curarIds(config, server) {
   zerar(config.xp, "canalAnuncio", "canal");
   zerar(config.tickets, "logCanal", "canal");
   zerar(config.comentarioEspontaneo, "canalId", "canal");
+  zerar(config.servidorInfo, "regrasCanal", "canal");   // senão o &servidor regras leria outro servidor
   zerar(config.autorole, "roleId", "cargo");
   if (Array.isArray(config.acesso?.cargosStaff) && cargosOk) {
     const antes = config.acesso.cargosStaff.length;

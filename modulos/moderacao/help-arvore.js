@@ -999,11 +999,39 @@ function arvorePT(P) {
       },
     },
 
+    servidor: {
+      regras: {
+        titulo: "servidor regras",
+        texto: [
+          "As **regras do servidor**, de onde estiverem:",
+          "1. o texto que a staff definir — vence tudo;",
+          "2. o canal apontado com `regras canal`;",
+          "3. sozinho: o canal chamado **regras**/**rules** (as mensagens, na ordem em que foram escritas).",
+          "",
+          `\`${P}servidor regras\` — mostra (e diz de onde veio)`,
+          `\`${P}servidor regras definir <texto>\` — texto próprio, pode ter várias linhas *(ManagePermissions)*`,
+          `\`${P}servidor regras canal #canal\` · \`auto\` — de qual canal ler *(ManagePermissions)*`,
+          `\`${P}servidor regras limpar\` — apaga o texto e volta ao canal *(ManagePermissions)*`,
+          "",
+          "_A Judy usa as mesmas regras quando alguém pergunta \"quais são as regras?\". Para ler o canal ela precisa de **ViewChannel** e **ReadMessageHistory** nele._",
+        ].join("\n"),
+      },
+      faq: {
+        titulo: "servidor faq",
+        texto: [
+          "**Avisos e perguntas frequentes** que a staff cadastra (até 25). A Judy usa nas respostas sobre o servidor.",
+          "",
+          `\`${P}servidor faq\` — a lista · \`${P}servidor faq 2\` — um item inteiro`,
+          `\`${P}servidor faq add Como subir de nível? | Conversando: cada mensagem dá XP.\` *(ManagePermissions)*`,
+          `\`${P}servidor faq remover 2\` · \`${P}servidor faq limpar\` *(ManagePermissions)*`,
+        ].join("\n"),
+      },
+    },
     staff: {
       equipe: {
         titulo: "staff",
         texto: [
-          "A **equipe do servidor**, agrupada por cargo, com quem tem cada um.",
+          "A **equipe do servidor**, agrupada por cargo, com quem tem cada um: o dono, os cargos marcados, o cargo de equipe dos tickets e os cargos com permissão de moderar.",
           "",
           "**A lista não é um cadastro à parte.** Ela lê os mesmos cargos que o",
           `\`${P}acesso cargo\` usa para decidir quem pode moderar. Promover no`,
@@ -2198,11 +2226,39 @@ function arvoreEN(P) {
       },
     },
 
+    servidor: {
+      regras: {
+        titulo: "servidor rules",
+        texto: [
+          "The **server rules**, wherever they are:",
+          "1. the text the staff set — beats everything;",
+          "2. the channel pointed to with `rules channel`;",
+          "3. on its own: the channel named **rules**/**regras** (its messages, in the order they were written).",
+          "",
+          `\`${P}servidor rules\` — show them (and where they came from)`,
+          `\`${P}servidor rules set <text>\` — your own text, multiple lines allowed *(ManagePermissions)*`,
+          `\`${P}servidor rules channel #channel\` · \`auto\` — which channel to read *(ManagePermissions)*`,
+          `\`${P}servidor rules clear\` — drop the text and go back to the channel *(ManagePermissions)*`,
+          "",
+          "_Judy uses the same rules when someone asks \"what are the rules?\". To read the channel she needs **ViewChannel** and **ReadMessageHistory** there._",
+        ].join("\n"),
+      },
+      faq: {
+        titulo: "servidor faq",
+        texto: [
+          "**Notices and frequent questions** the staff register (up to 25). Judy uses them when answering about the server.",
+          "",
+          `\`${P}servidor faq\` — the list · \`${P}servidor faq 2\` — one full item`,
+          `\`${P}servidor faq add How do I level up? | By chatting: every message gives XP.\` *(ManagePermissions)*`,
+          `\`${P}servidor faq remove 2\` · \`${P}servidor faq clear\` *(ManagePermissions)*`,
+        ].join("\n"),
+      },
+    },
     staff: {
       equipe: {
         titulo: "staff",
         texto: [
-          "The **server's staff**, grouped by role, showing who holds each one.",
+          "The **server's staff**, grouped by role, showing who holds each one: the owner, the marked roles, the ticket team role and the roles allowed to moderate.",
           "",
           "**The list isn't a separate registry.** It reads the very same roles that",
           `\`${P}acesso cargo\` uses to decide who may moderate. Promoting with`,

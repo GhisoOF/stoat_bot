@@ -11,31 +11,8 @@ function garantirConfig(config) {
   return config;
 }
 
-function rotuloDoCargo(roleId, server, config) {
-  const custom = config?.staff?.titulos?.[roleId];
-  if (custom) return custom;
-  try {
-    const r = typeof server?.roles?.get === "function"
-      ? server.roles.get(roleId)
-      : server?.roles?.[roleId];
-    if (r?.name) return r.name;
-  } catch { /* servidor sem roles acessível */ }
-  return roleId;
-}
 
-import { listarMembros } from "../core/membros.js";
-
-// IDs dos membros que têm um cargo específico.
-function quemTem(membros, roleId) {
-  const out = [];
-  for (const m of membros ?? []) {
-    const cargos = (m?.roles ?? []).map((r) => r?.id ?? r);
-    if (!cargos.includes(roleId)) continue;
-    const uid = m?.id?.user ?? m?._id?.user ?? m?.userId ?? m?.user?.id ?? m?.id;
-    if (typeof uid === "string") out.push(uid);
-  }
-  return out;
-}
+import { equipe } from "../ferramentas/servidor-info.js";
 
 export async function cmdStaff(message, args, ctx) {
   const { config, sendEmbed, COR, PREFIXO, getServer, membroTemPermissao, salvarConfig } = ctx;
@@ -46,57 +23,37 @@ export async function cmdStaff(message, args, ctx) {
   const server = await getServer(message).catch(() => null);
 
   // ── &staff → a lista (público: qualquer um pode consultar) ──
+  // 12 out 2026: além dos cargos marcados, o dono do servidor, o cargo de
+  // equipe dos tickets e os cargos com permissão de moderar (decisão de Ghieh)
+  // — o mesmo levantamento que a Judy usa quando perguntam "quem é da staff?".
   if (!sub || sub === "lista" || sub === "list") {
-    const cargos = config.acesso.cargosStaff;
-    if (!cargos.length) {
-      return sendEmbed(message.channel, tr(ctx, {
-        title: "👥 Equipe",
-        description: [
-          "Nenhum cargo de staff foi marcado ainda.",
-          "",
-          `Quem tem **ManagePermissions** pode montar a lista com \`${PREFIXO}staff add <@cargo>\`.`,
-          `_Os mesmos cargos passam a valer para os comandos de moderação (\`${PREFIXO}acesso\`)._`,
-        ].join("\n"),
-        colour: COR.info,
-      }, {
-        title: "👥 Staff",
-        description: [
-          "No staff role has been marked yet.",
-          "",
-          `Anyone with **ManagePermissions** can build the list with \`${PREFIXO}staff add <@role>\`.`,
-          `_The same roles then count for the moderation commands (\`${PREFIXO}acesso\`)._`,
-        ].join("\n"),
-        colour: COR.info,
-      }));
-    }
-
-    const membros = await listarMembros(server);
+    const en = lang === "en";
+    const T = (pt, eng) => (en ? eng : pt);
+    const e = await equipe(server, config, { client: [ctx.client, message.client].find((c) => typeof c?.users?.get === "function") ?? null });
     const blocos = [];
-    for (const roleId of cargos) {
-      const nome = rotuloDoCargo(roleId, server, config);
-      if (!membros) {
-        // Sem a lista de membros, ainda dá para mostrar a estrutura da equipe.
-        blocos.push(`**${nome}** — <%${roleId}>`);
-        continue;
-      }
-      const ids = quemTem(membros, roleId);
-      const pessoas = ids.length
-        ? ids.slice(0, 15).map((u) => `<@${u}>`).join(" · ") +
-          (ids.length > 15 ? (lang === "en" ? ` _+${ids.length - 15} more_` : ` _+${ids.length - 15}_`) : "")
-        : (lang === "en" ? "_nobody with this role_" : "_ninguém com este cargo_");
-      blocos.push(`**${nome}** (${ids.length})\n${pessoas}`);
+    if (e.donoId) blocos.push(`👑 **${T("Dono do servidor", "Server owner")}** — <@${e.donoId}>`);
+    for (const b of e.blocos) {
+      const origem = b.origem === "permissao" ? T(" _(pode moderar)_", " _(can moderate)_")
+        : b.origem === "tickets" ? T(" _(equipe dos tickets)_", " _(ticket team)_") : "";
+      if (!b.pessoas) { blocos.push(`**${b.nome}**${origem} — <%${b.roleId}>`); continue; }
+      const pessoas = b.pessoas.length
+        ? b.pessoas.slice(0, 15).map((p) => `<@${p.id}>`).join(" · ") +
+          (b.pessoas.length > 15 ? T(` _+${b.pessoas.length - 15}_`, ` _+${b.pessoas.length - 15} more_`) : "")
+        : T("_ninguém com este cargo_", "_nobody with this role_");
+      blocos.push(`**${b.nome}** (${b.pessoas.length})${origem}\n${pessoas}`);
     }
-
-    const rodape = membros
-      ? null
-      : (lang === "en"
-        ? "_I couldn't read the member list, so I'm showing the roles only._"
-        : "_Não consegui ler a lista de membros, então mostro só os cargos._");
-
+    const semMarcados = !config.acesso.cargosStaff.length;
+    const orientacao = semMarcados ? [
+      T("Nenhum cargo de staff foi marcado ainda.", "No staff role has been marked yet."),
+      T(`Quem tem **ManagePermissions** pode montar a lista com \`${PREFIXO}staff add <@cargo>\`.`, `Anyone with **ManagePermissions** can build the list with \`${PREFIXO}staff add <@role>\`.`),
+      T(`_Os mesmos cargos passam a valer para os comandos de moderação (\`${PREFIXO}acesso\`)._`, `_The same roles then count for the moderation commands (\`${PREFIXO}acesso\`)._`),
+    ] : [];
+    const rodape = e.membrosLidos ? null
+      : T("_Não consegui ler a lista de membros, então mostro só os cargos._", "_I couldn't read the member list, so I'm showing the roles only._");
     return sendEmbed(message.channel, {
-      title: lang === "en" ? "👥 Staff" : "👥 Equipe",
-      description: [...blocos, ...(rodape ? ["", rodape] : [])].join("\n\n"),
-      colour: COR.mod,
+      title: T("👥 Equipe", "👥 Staff"),
+      description: [blocos.join("\n\n"), orientacao.length ? orientacao.join("\n") : null, rodape].filter(Boolean).join("\n\n"),
+      colour: semMarcados && !e.blocos.length ? COR.info : COR.mod,
     });
   }
 

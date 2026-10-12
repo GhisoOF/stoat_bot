@@ -43,6 +43,7 @@ const MAPA = {
   servidores: { padrao: "dono" },
   banglobal: { padrao: "staff", subs: { esquecer: "dono", lembrar: "dono", add: "dono" } },
   entretenimento: { padrao: "membro" },
+  servidor: { padrao: "membro", subs: { "regras definir": "staff", "regras canal": "staff", "regras limpar": "staff", "faq add": "staff", "faq remover": "staff", "faq limpar": "staff" } },
 };
 export const SO_IA = new Set(["chat", "modia", "personalidade"]);
 export const SO_VOZ = new Set(["tts", "entrar", "sair", "musica"]);

@@ -11467,6 +11467,245 @@ console.log(`\nSLOWMODE (12 out): ${pass} ok, ${fail} falha(s)`);
 process.exit(fail ? 1 : 0);
 };
 
+// ════════════════════════════════════════════════════════════════════════════
+// servidor-github-12out  (12 out 2026) — "quais os últimos updates em você?",
+// "o commit X", "quem são os staffs?", "quais são as regras?"
+// ════════════════════════════════════════════════════════════════════════════
+SUITES["servidor-github-12out"] = async () => {
+const __m0 = await import("node:fs"); const fs = __m0.default;
+// O print de 12/10: "os últimos updates feitos em você?" → resposta inventada
+// e vaga; "Pesquise no seu github o commit 0eb26f0…" → busca na web achou um
+// gist sobre COMO escrever commits, comentou o gist e repetiu "Fontes:" duas
+// vezes. E a Judy não sabia nada do servidor (staff, regras, canais).
+process.env.DB_PATH = "/tmp/srv-gh-12out.db";
+process.env.CONFIG_PATH = "/tmp/srv-gh-12out-cfg.json";
+process.env.LLM_URL = "http://llm.teste";
+process.env.IA_MODO = "local";
+process.env.SEARXNG_URL = "http://searx.teste";
+process.env.CHAT_SERVIDORES = "*";
+process.env.CHAT_DEBUG = "0";
+process.env.GITHUB_REPO = "GhisoOF/stoat_bot";
+delete process.env.IA_SERVICO_URL; delete process.env.BUSCA_SEMPRE; delete process.env.GITHUB_TOKEN;
+for (const f of [process.env.DB_PATH, process.env.CONFIG_PATH]) fs.rmSync(f, { force: true });
+let pass = 0, fail = 0;
+const ok = (cond, msg) => { cond ? pass++ : fail++; console.log(`  ${cond ? "✅" : "❌"} ${msg}`); };
+
+const HASH = "0eb26f0eba59634751355c24269774bb3be89408";
+const COMMIT = {
+  sha: HASH, html_url: `https://github.com/GhisoOF/stoat_bot/commit/${HASH}`,
+  commit: { author: { name: "Ghieh", date: "2026-10-12T01:00:00Z" }, message: "automod: desligado em servidor novo, &automod off|on, sintaxe que ensina; &entretenimento (ship, briga, cowsay)\n\nCo-Authored-By: Claude <noreply@anthropic.com>" },
+  stats: { additions: 900, deletions: 120 },
+  files: [{ filename: "modulos/ferramentas/entretenimento.js", status: "added", additions: 600, deletions: 0 }, { filename: "modulos/moderacao/confianca.js", status: "modified", additions: 40, deletions: 20 }],
+};
+const LISTA = [
+  { sha: "a".repeat(40), html_url: "u1", commit: { author: { date: "2026-10-12T10:00:00Z" }, message: "IA: busca de fundo só para pergunta do mundo; modo lento: mensagens esperam a vez" } },
+  { sha: "b".repeat(40), html_url: "u2", commit: { author: { date: "2026-10-11T10:00:00Z" }, message: "música: toca outra versão quando o YouTube recusa (idade)" } },
+];
+let pedidosGh = [];
+const gh = await import("./modulos/ai/github.js");
+gh._trocarBusca(async (url, opcoes) => {
+  pedidosGh.push({ url, headers: opcoes?.headers ?? {} });
+  const corpo = url.includes(`/commits/${HASH}`) ? COMMIT : url.includes("/commits/") ? null : url.includes("/commits?") ? LISTA : null;
+  return { ok: !!corpo, status: corpo ? 200 : 404, text: async () => JSON.stringify(corpo ?? { message: "Not Found" }) };
+});
+
+console.log("── GitHub: o que a pessoa pediu ──");
+ok(gh.pedeMudancas("poderia dizer os últimos updates feitos em você?") && gh.pedeMudancas("features novas que foram adicionadas, tiveram algumas na semana passada que eu adicionei em você"), "★ as duas perguntas do print são \"mudanças em você\" (com acento: o \\b do JS não pega \"você\")");
+ok(!gh.pedeMudancas("quais as últimas notícias?") && !gh.pedeMudancas("o que mudou na Copa?"), "  → notícia e assunto de fora não");
+ok(gh.hashDeCommit(`Pesquise no seu github o commit ${HASH} e comente sobre ele.`) === HASH && gh.hashDeCommit("comenta o commit 0eb26f0") === "0eb26f0", "★ hash inteiro ou curto (com a palavra commit)");
+ok(gh.hashDeCommit("a cor deadbeef é bonita") === null, "  → hexadecimal solto sem \"commit\" não é hash");
+ok(gh.diasDoPeriodo("na semana passada") === 14, "  → \"semana passada\" olha 14 dias");
+
+console.log("\n── GitHub: o material ──");
+let m = await gh.materialPara(`comente o commit ${HASH}`);
+ok(m?.tipo === "commit" && /COMMIT REAL 0eb26f0/.test(m.texto) && /&entretenimento \(ship, briga, cowsay\)/.test(m.texto) && /entretenimento\.js/.test(m.texto), "★ o commit vem com mensagem, data e arquivos — lido do GitHub, não da web");
+ok(!/Co-Authored-By/.test(m.texto) && m.link === COMMIT.html_url, "  → sem as linhas de coautoria; com o link do commit");
+m = await gh.materialPara("quais os últimos updates feitos em você?");
+ok(m?.tipo === "historico" && /busca de fundo só para pergunta do mundo/.test(m.texto) && /2026-10-11 · música/.test(m.texto), "★ \"últimos updates\" → a lista de commits, mais recente primeiro");
+m = await gh.materialPara("comente o commit 1234567abc");
+ok(m?.tipo === "falha" && /não existe nesse repositório/.test(m.texto) && /NÃO chute/.test(m.texto), "★ hash que não existe: ela diz que não achou, sem chutar");
+process.env.GITHUB_TOKEN = "tok-123"; pedidosGh = [];
+gh._trocarBusca(async (url, opcoes) => { pedidosGh.push({ url, headers: opcoes?.headers ?? {} }); return { ok: true, status: 200, text: async () => JSON.stringify(LISTA) }; });
+await gh.materialPara("o que mudou em você?");
+ok(pedidosGh[0]?.headers?.authorization === "Bearer tok-123", "  → com GITHUB_TOKEN, a API recebe o token");
+delete process.env.GITHUB_TOKEN;
+gh._trocarBusca(async (url) => {
+  const corpo = url.includes(`/commits/${HASH}`) ? COMMIT : url.includes("/commits?") ? LISTA : null;
+  return { ok: !!corpo, status: corpo ? 200 : 404, text: async () => JSON.stringify(corpo ?? {}) };
+});
+
+console.log("\n── servidor: o levantamento ──");
+const si = await import("./modulos/ferramentas/servidor-info.js");
+si._zerarCache();
+const BAN = 2 ** 7, APAGAR = 2 ** 23;
+const roles = new Map([
+  ["R_ADM", { name: "Administração", rank: 0, permissions: { a: BAN + APAGAR, d: 0 } }],
+  ["R_MOD", { name: "Moderador", rank: 1, permissions: { a: APAGAR, d: 0 } }],
+  ["R_BOT", { name: "Judy", rank: 2, permissions: { a: BAN, d: 0 } }],
+  ["R_VIP", { name: "VIP", rank: 3, permissions: { a: 0, d: 0 } }],
+]);
+const usuarios = new Map([["U_DONO", { username: "Ghiso" }], ["U_ANA", { username: "Ana" }], ["U_BIA", { username: "Bia" }], ["U_CAIO", { username: "Caio" }], ["U_JUDY", { username: "Judy", bot: { owner: "U_DONO" } }]]);
+const membros = [
+  { id: { user: "U_DONO" }, roles: ["R_ADM"] }, { id: { user: "U_ANA" }, roles: ["R_MOD"] }, { id: { user: "U_BIA" }, roles: ["R_MOD", "R_VIP"] },
+  { id: { user: "U_CAIO" }, roles: ["R_VIP"] }, { id: { user: "U_JUDY" }, roles: ["R_BOT"] },
+];
+const msgsRegras = [   // fetchMessages devolve da mais nova para a mais velha
+  { id: "01K00000000000000000000003", content: "3. Nada de spam ou divulgação sem permissão." },
+  { id: "01K00000000000000000000002", content: "2. Sem NSFW fora do canal próprio." },
+  { id: "01K00000000000000000000001", content: "", embeds: [{ title: "📜 Regras", description: "1. Respeite todo mundo." }] },
+];
+const chRegras = { id: "CH_REGRAS", name: "📜regras", type: "TextChannel", serverId: "S1", fetchMessages: async () => msgsRegras };
+const chGeral = { id: "CH_GERAL", name: "geral", description: "papo livre", type: "TextChannel", serverId: "S1" };
+const chDiv = { id: "CH_DIV", name: "divulgação", description: "divulgue aqui seu servidor ou canal", type: "TextChannel", serverId: "S1" };
+const chVoz = { id: "CH_VOZ", name: "Call", type: "VoiceChannel", serverId: "S1" };
+const server = {
+  id: "01JA0000000000000000000000", name: "Vapor Nexus", description: "Servidor de tecnologia e jogos.", ownerId: "U_DONO",
+  roles, channels: [chRegras, chGeral, chDiv, chVoz], channelIds: new Set(["CH_REGRAS", "CH_GERAL", "CH_DIV", "CH_VOZ"]),
+  categories: [{ id: "cat1", title: "Informações", channels: ["CH_REGRAS"] }, { id: "cat2", title: "Conversa", channels: ["CH_GERAL", "CH_DIV", "CH_VOZ"] }],
+  memberCount: 5, fetchMembers: async () => ({ members: membros }),
+};
+const client = { users: { get: (id) => usuarios.get(id) } };
+const config = { acesso: { cargosStaff: ["R_ADM"] }, staff: { titulos: {} } };
+
+const e = await si.equipe(server, config, { client });
+const nomes = (b) => (b?.pessoas ?? []).map((p) => p.nome).join(",");
+ok(e.dono === "Ghiso" && e.blocos[0]?.nome === "Administração" && e.blocos[0]?.origem === "acesso", "★ equipe: o dono e, primeiro, os cargos marcados no &acesso/&staff");
+ok(e.blocos.some((b) => b.nome === "Moderador" && b.origem === "permissao" && nomes(b) === "Ana,Bia"), "★ + os cargos que podem moderar (apagar mensagens), com quem tem cada um");
+ok(!e.blocos.some((b) => b.nome === "Judy") && !e.blocos.some((b) => b.nome === "VIP"), "  → cargo só de bot e cargo sem permissão de moderar ficam fora");
+let r = await si.regras(server, config);
+ok(r.fonte === "canal" && /^📜 Regras\n1\. Respeite[\s\S]*2\. Sem NSFW[\s\S]*3\. Nada de spam/.test(r.texto), "★ regras lidas do canal \"regras\" sozinhas, na ordem em que foram escritas (embeds também)");
+config.servidorInfo = { regrasTexto: "Regra única: seja gente boa." };
+r = await si.regras(server, config);
+ok(r.fonte === "texto" && r.texto === "Regra única: seja gente boa.", "★ o texto definido pela staff vence o canal");
+config.servidorInfo = { regrasCanal: "CANAL_DE_OUTRO_SERVIDOR", faq: [] };
+si._zerarCache();
+r = await si.regras(server, config);
+ok(r.fonte === "canal" && r.canal.id === "CH_REGRAS", "★ canal de regras fixado que NÃO é deste servidor é ignorado (não lê outro servidor)");
+delete config.servidorInfo;
+
+ok(si.secoesDaPergunta("quem são os staffs?").has("equipe") && si.secoesDaPergunta("quais são as regras?").has("regras"), "★ \"quem são os staffs?\" e \"quais são as regras?\" são sobre o servidor");
+ok(!si.secoesDaPergunta("quais as regras do xadrez?").size && !si.secoesDaPergunta("quem é seu dono?").size && !si.secoesDaPergunta("quais mods do minecraft você recomenda?").size, "  → regras do xadrez, o dono DELA e mods de jogo não");
+const mat = await si.materialParaIA("quem são os staffs?", { server, config, client });
+ok(/DADOS REAIS do servidor "Vapor Nexus"/.test(mat) && /Administração: Ghiso/.test(mat) && /Moderador \(pode moderar\): Ana, Bia/.test(mat), "★ material para a IA: a equipe com nomes (não IDs)");
+ok(/5 membros/.test(mat) && /criado em/.test(mat) && /Servidor de tecnologia/.test(mat), "  → e a linha geral (membros, criação, descrição)");
+const mat2 = await si.materialParaIA("em que canal posso divulgar?", { server, config, client });
+ok(/#divulgação — divulgue aqui/.test(mat2) && /\[Conversa\]/.test(mat2), "★ \"em que canal posso divulgar?\" → os canais com descrição e categoria");
+
+console.log("\n── no chat ──");
+let pedidosLLM = [], buscas = 0, RESPOSTA = "Ok.";
+globalThis.fetch = async (url, op = {}) => {
+  url = String(url);
+  if (url.startsWith("http://searx.teste/")) { buscas++; return { ok: true, status: 200, json: async () => ({ results: [{ title: "Gist: como escrever commits", url: "https://gist.github.com/x", content: "boas práticas de commit staffs regras" }] }) }; }
+  if (url.startsWith("http://llm.teste/") && !op.body) return { ok: true, status: 200, json: async () => ({ data: [{ id: "fake" }] }), text: async () => "{}" };
+  if (url.startsWith("http://llm.teste/")) {
+    const corpo = JSON.parse(op.body); pedidosLLM.push(corpo);
+    const content = corpo.response_format ? '{"consultas":["x"]}' : RESPOSTA;
+    return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content }, finish_reason: "stop" }], usage: {} }) };
+  }
+  return { ok: false, status: 404, json: async () => ({}), text: async () => "" };
+};
+const db = await import("./modulos/core/db.js");
+db.abrirBanco(process.env.DB_PATH);
+const chat = await import("./modulos/ai/chat.js");
+const saidas = [];
+const canal = { id: "CH_GERAL", sendMessage: async (t) => { saidas.push(typeof t === "string" ? t : (t.content ?? t.embeds?.[0]?.description ?? "")); return { edit: async (x) => { saidas.push(typeof x === "string" ? x : (x.content ?? x.embeds?.[0]?.description ?? "")); } }; } };
+const ctx = { sendEmbed: async (_c, e2) => saidas.push(e2.description ?? e2.title), COR: { info: 1, erro: 2, aviso: 3, sucesso: 4 }, serverId: "S1",
+  PREFIXO: "&", config, client, ehSuperAdmin: () => false, getServer: async () => server };
+let n = 0;
+const diz = async (texto) => {
+  pedidosLLM = []; buscas = 0; saidas.length = 0;
+  await chat.conversar({ id: `m${n++}`, content: texto, authorId: "U_ANA", username: "Ana", channelId: `c${n}`, channel: canal, client: { user: { id: "bot" } }, reply_ids: [] }, texto, ctx);
+  return saidas.filter((x) => x && !/^[💭🔎✍️]/u.test(x)).at(-1) ?? "";
+};
+const sistema = () => pedidosLLM.filter((p) => !p.response_format).at(0)?.messages?.[0]?.content ?? "";
+
+RESPOSTA = "Esse commit desligou o automod nos servidores novos e trouxe a família &entretenimento.\n\nFontes:\n[1] gist.github.com\n[3] gist.github.com";
+let saida = await diz(`Pesquise no seu github o commit ${HASH} e comente sobre ele.`);
+ok(buscas === 0 && /COMMIT REAL 0eb26f0/.test(sistema()), "★ \"pesquise no seu github o commit X\": lê o commit no GitHub, NÃO vai à web (antes: gist sobre boas práticas)");
+ok(!/gist/.test(saida) && (saida.match(/Fontes/g) ?? []).length === 0 && /🔗 commit \[0eb26f0\]\(<https:\/\/github\.com\/GhisoOF\/stoat_bot\/commit\//.test(saida), `★ sem a lista "Fontes:" que o modelo inventa; com o link do commit (${saida.slice(-90).replace(/\n/g, " ")})`);
+ok(!pedidosLLM.filter((p) => !p.response_format).at(0)?.chat_template_kwargs, "  → resumir commit vai COM raciocínio (sem ele o modelo pequeno cola a lista crua)");
+RESPOSTA = "Teve busca de fundo mais esperta e música que acha outra versão.";
+saida = await diz("poderia dizer os últimos updates feitos em você?");
+ok(/HISTÓRICO REAL do repositório GhisoOF\/stoat_bot/.test(sistema()) && /música: toca outra versão/.test(sistema()) && buscas === 0, "★ \"últimos updates feitos em você\" → o histórico real do GitHub no prompt");
+
+RESPOSTA = "A equipe é a Administração (Ghiso) e os moderadores Ana e Bia.";
+saida = await diz("quem são os staffs?");
+ok(buscas === 0 && /DADOS REAIS do servidor "Vapor Nexus"/.test(sistema()) && /Moderador \(pode moderar\): Ana, Bia/.test(sistema()), "★ \"quem são os staffs?\" → dados reais do servidor, sem ir ao buscador");
+RESPOSTA = "As regras são: respeito, sem NSFW fora do canal e sem spam.";
+await diz("quais são as regras?");
+ok(/1\. Respeite todo mundo/.test(sistema()) && buscas === 0, "★ \"quais são as regras?\" → as regras lidas do canal");
+await diz("me conta uma curiosidade sobre polvos");
+ok(!/DADOS REAIS do servidor|HISTÓRICO REAL/.test(sistema()), "  → pergunta que não é do servidor nem do GitHub não carrega nada disso");
+
+console.log("\n── &servidor ──");
+const env = [];
+const ctxCmd = (pode) => ({ sendEmbed: async (_c, x) => env.push(x), COR: { info: 1, erro: 2, aviso: 3, sucesso: 4, mod: 5 }, PREFIXO: "&", config, client, salvarConfig: () => {},
+  getServer: async () => server, membroTemPermissao: () => pode, lang: "pt" });
+const msg = (content) => ({ content, channel: canal, channelId: "CH_GERAL", authorId: "U_ANA" });
+const ultimo = () => `${env.at(-1)?.title ?? ""} ${env.at(-1)?.description ?? ""}`;
+si._zerarCache();
+await si.cmdServidor(msg("&servidor"), [], ctxCmd(false));
+ok(/Vapor Nexus/.test(ultimo()) && /<@U_DONO>/.test(ultimo()) && /5 membros/.test(ultimo()) && /&servidor regras/.test(ultimo()), "★ &servidor → dados gerais e o caminho para o resto");
+await si.cmdServidor(msg("&servidor regras"), ["regras"], ctxCmd(false));
+ok(/1\. Respeite todo mundo/.test(ultimo()) && /Lidas de <#CH_REGRAS>/.test(ultimo()), "★ &servidor regras → do canal, dizendo de onde veio");
+await si.cmdServidor(msg("&servidor regras definir 1. Seja gentil.\n2. Sem spam."), ["regras", "definir", "1.", "Seja", "gentil.", "2.", "Sem", "spam."], ctxCmd(false));
+ok(/ManagePermissions/.test(ultimo()) && !config.servidorInfo?.regrasTexto, "★ membro comum não muda as regras");
+await si.cmdServidor(msg("&servidor regras definir 1. Seja gentil.\n2. Sem spam."), ["regras", "definir", "1.", "Seja", "gentil.", "2.", "Sem", "spam."], ctxCmd(true));
+ok(config.servidorInfo?.regrasTexto === "1. Seja gentil.\n2. Sem spam.", "★ staff define as regras — com as quebras de linha");
+await si.cmdServidor(msg("&servidor regras canal #canal-de-fora"), ["regras", "canal", "01KOUTROSERVIDOR0000000000"], ctxCmd(true));
+ok(/neste servidor/.test(ultimo()) && !config.servidorInfo.regrasCanal, "★ canal de outro servidor não vira canal de regras");
+await si.cmdServidor(msg("&servidor faq add Como subir de nível? | Conversando: cada mensagem dá XP."), ["faq", "add", "Como", "subir", "de", "nível?", "|", "Conversando:"], ctxCmd(true));
+await si.cmdServidor(msg("&servidor faq"), ["faq"], ctxCmd(false));
+ok(/1\. Como subir de nível\?/.test(ultimo()) && /cada mensagem dá XP/.test(ultimo()), "★ &servidor faq add | lista");
+await si.cmdServidor(msg("&servidor cargos"), ["cargos"], ctxCmd(false));
+ok(/<%R_ADM> — 1/.test(ultimo()) && /<%R_MOD> — 2/.test(ultimo()) && ultimo().indexOf("R_ADM") < ultimo().indexOf("R_VIP"), "★ &servidor cargos → do mais alto ao mais baixo, com quantos têm");
+await si.cmdServidor(msg("&servidor canais"), ["canais"], ctxCmd(false));
+ok(/\*\*Informações\*\*/.test(ultimo()) && /<#CH_DIV> — divulgue aqui/.test(ultimo()) && /🔊 <#CH_VOZ>/.test(ultimo()), "★ &servidor canais → por categoria, com descrição");
+ok(si.subcomandoDe("regras") === "regras" && si.subcomandoDe("rules") === "regras" && si.subcomandoDe("info") === null, "  → \"&regras\" sugere \"&servidor regras\"");
+
+console.log("\n── &staff ──");
+const { cmdStaff } = await import("./modulos/moderacao/staff.js");
+await cmdStaff(msg("&staff"), [], ctxCmd(false));
+ok(/Dono do servidor\*\* — <@U_DONO>/.test(ultimo()) && /\*\*Administração\*\* \(1\)/.test(ultimo()) && /\*\*Moderador\*\* \(2\) _\(pode moderar\)_/.test(ultimo()) && /<@U_ANA> · <@U_BIA>/.test(ultimo()), "★ &staff: dono + cargos marcados + quem pode moderar (decisão de Ghieh)");
+ok(!/U_JUDY|U_CAIO/.test(ultimo()), "  → sem bots e sem quem não é da equipe");
+
+console.log(`\nSERVIDOR/GITHUB (12 out): ${pass} ok, ${fail} falha(s)`);
+process.exit(fail ? 1 : 0);
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+// servidor-bot-12out  (12 out 2026) — &servidor pelo bot inteiro
+// ════════════════════════════════════════════════════════════════════════════
+SUITES["servidor-bot-12out"] = async () => {
+const __m0 = await import("node:fs"); const fs = __m0.default;
+process.env.BOT_TOKEN = "tok";
+process.env.DB_PATH = "/tmp/srv-bot-12out.db";
+process.env.CONFIG_PATH = "/tmp/srv-bot-12out-cfg.json";
+for (const f of ["/tmp/srv-bot-12out.db", "/tmp/srv-bot-12out-cfg.json"]) fs.rmSync(f, { force: true });
+let pass = 0, fail = 0;
+const ok = (cond, msg) => { cond ? pass++ : fail++; console.log(`  ${cond ? "✅" : "❌"} ${msg}`); };
+await import("./main.js");
+const c = globalThis.__client;
+await c.emitAll("ready");
+const env = [];
+const chRegras = { id: "01KREGRAS00000000000000000", name: "regras", serverId: "S1", fetchMessages: async () => [{ id: "01K1", content: "1. Respeito acima de tudo." }], sendMessage: async () => ({}) };
+const C1 = { id: "C1", serverId: "S1", name: "geral", sendMessage: async (p) => { env.push(p); return { id: "M", react: async () => {} }; }, fetchMessages: async () => [] };
+const S1 = { id: "S1", ownerId: "DONO", name: "Vapor Nexus", roles: new Map(), channels: [C1, chRegras], channelIds: new Set(["C1", chRegras.id]), categories: [],
+  member: { roles: [] }, havePermission: () => true, fetchMember: async () => null, fetchMembers: async () => ({ members: [] }), fetchBans: async () => [] };
+c.servers.set("S1", S1); c.channels.set("C1", C1); c.channels.set(chRegras.id, chRegras);
+const diz = async (t) => { env.length = 0; await c.emitAll("messageCreate", { authorId: "MEMBRO", content: t, serverId: "S1", server: S1, channel: C1, channelId: "C1", mentionIds: [], createdAt: new Date(), author: { username: "Ana" }, member: { roles: [] } }); await new Promise((r) => setTimeout(r, 30)); return JSON.stringify(env); };
+
+ok(/Vapor Nexus/.test(await diz("&servidor")), "★ &servidor responde pelo bot (rota registrada)");
+ok(/Respeito acima de tudo/.test(await diz("&servidor regras")), "★ &servidor regras lê o canal #regras sozinho");
+ok(/Respeito acima de tudo/.test(await diz("&server rules")), "  → em inglês: &server rules");
+ok(/servidor regras/.test(await diz("&regras")), "★ \"&regras\" (que não existe sozinho) sugere \"&servidor regras\"");
+ok(/servidor regras/.test(await diz("&help servidor")) && /faq/.test(JSON.stringify(env)), "★ &help servidor tem o verbete");
+ok(/ViewChannel/.test(await diz("&help servidor regras")), "  → e &help servidor regras abre o nó da árvore");
+
+console.log(`\nSERVIDOR (bot): ${pass} ok, ${fail} falha(s)`);
+process.exit(fail ? 1 : 0);
+};
+
 // ── O executor ───────────────────────────────────────────────────────────────
 const PRECISA_DO_BOT = (nome) => /import\("\.\/main\.js"\)/.test(String(SUITES[nome]));
 

@@ -51,6 +51,7 @@ import * as warnMod    from "./modulos/moderacao/warn.js";
 import * as silenciarMod from "./modulos/moderacao/silenciar.js";
 import * as economiaMod from "./modulos/ferramentas/economia.js";
 import * as entretenimento from "./modulos/ferramentas/entretenimento.js";
+import * as servidorInfo from "./modulos/ferramentas/servidor-info.js";
 import * as srvStats   from "./modulos/core/metricas.js";
 import * as rpg        from "./modulos/game/game.js";
 import * as modIA      from "./modulos/moderacao/moderacao-ia.js";
@@ -429,6 +430,8 @@ const rotas = {
   ticket:        tickets.cmdTicket,
   economia:      economiaMod.cmdEconomia,
   entretenimento: entretenimento.cmdEntretenimento,
+  // O servidor em que se está: regras, cargos, canais, FAQ (a equipe é o &staff)
+  servidor:      servidorInfo.cmdServidor,
   // `&entrar`/`&sair` são a forma canônica. O cmdTts ainda faz o trabalho, mas
   // só aceita "entrar"/"sair" vindos daqui — `&tts entrar` deixou de existir.
   entrar:        (msg, args, ctx) => ttsVoz.cmdTts(msg, ["entrar", ...args], { ...ctx, viaAtalhoVoz: true }),
@@ -484,6 +487,7 @@ const CANONICO = {
   eco: "economia", economy: "economia",
   // "entreterimento": o jeito que o nome sai digitado rápido (variação de digitação)
   ent: "entretenimento", entreterimento: "entretenimento",
+  server: "servidor", serverinfo: "servidor", servidorinfo: "servidor",
   init: "iniciativa", initiative: "iniciativa",
   tickets: "ticket", suporte: "ticket",
   "boas-vindas": "boasvindas", welcome: "boasvindas", bemvindo: "boasvindas",
@@ -503,7 +507,7 @@ estado.COMANDOS_SO_IA = COMANDOS_SO_IA;
 const COMANDOS_GERENCIAVEIS = [
   "ping", "repete", "userinfo", "kick", "ban", "silenciar", "limpar",
   "warn", "acesso", "automod", "tutorial", "assistente", "cor", "log", "banglobal", "embed", "reactionrole", "chat", "rss", "xp", "game", "autorole",
-  "staff", "boasvindas", "adeus", "fuso", "tts", "musica", "webhook", "rolar", "iniciativa", "ticket", "economia", "entretenimento",
+  "staff", "boasvindas", "adeus", "fuso", "tts", "musica", "webhook", "rolar", "iniciativa", "ticket", "economia", "entretenimento", "servidor",
 ];
 // exportado via ctx para o comando &comando consultar
 estado.CANONICO = CANONICO;
@@ -700,7 +704,9 @@ async function tratarMensagem(message) {
   if (!handler) {                  // tinha prefixo, mas o comando não existe
     // "&gams follower ficha" → "você quis dizer &game?" (o mais parecido, até 2 letras de diferença)
     // "&ship @a @b" → "&entretenimento ship @a @b": o subcomando só existe dentro da família
-    const daFamilia = entretenimento.subcomandoDe(command) ? `entretenimento ${command}` : null;
+    // "&regras" → "&servidor regras" (idem cargos, canais, faq)
+    const daFamilia = entretenimento.subcomandoDe(command) ? `entretenimento ${command}`
+      : servidorInfo.subcomandoDe(command) ? `servidor ${command}` : null;
     const parecido = daFamilia ?? comandoParecido(command, Object.keys(rotas));
     const sugestao = parecido ? `${PREFIXO}${parecido}${message.content.slice(PREFIXO.length + command.length)}` : null;
     await sendEmbed(message.channel, tr(ctx, {
@@ -806,7 +812,7 @@ function ehCanalDeVoz(message) {
   // 2026: "as pessoas não estão sabendo usar o bot"). Comando de texto livre
   // fica de fora (falar de <div> no &chat é legítimo); o &automod tem a cola
   // dele, com os grupos.
-  const TEXTO_LIVRE = new Set(["chat", "tts", "repete", "embed", "entretenimento", "personalidade", "modia", "boasvindas", "adeus", "rolar", "musica", "webhook", "rss", "automod"]);
+  const TEXTO_LIVRE = new Set(["chat", "tts", "repete", "embed", "entretenimento", "servidor", "personalidade", "modia", "boasvindas", "adeus", "rolar", "musica", "webhook", "rss", "automod"]);
   const marcador = TEXTO_LIVRE.has(canonico) ? null
     : args.find((a) => /^[<‹][^<>‹›@#%:]{1,30}[>›]$/.test(a) && !/^<[@#%]/.test(a));
   if (marcador) {

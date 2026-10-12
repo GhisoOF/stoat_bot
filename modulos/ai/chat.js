@@ -1,5 +1,7 @@
 
 import * as busca from "./busca.js";
+import * as github from "./github.js";
+import * as servidorInfo from "../ferramentas/servidor-info.js";
 import { semPingEmMassa } from "../core/seguranca.js";
 import * as extra from "./contexto-extra.js";
 import * as store from "../core/config-store.js";
@@ -1200,6 +1202,13 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
       dlog(`anti-papagaio: histórico (${msgsDoHistorico.length} msg) omitido neste turno — material real injetado manda`);
     }
   }
+  // Idem com o histórico do GitHub: a resposta inventada de antes ("os mais
+  // recentes focaram na inteligência do LLM") não pode ditar a de agora.
+  if (/HISTÓRICO REAL do repositório|COMMIT REAL|REAL HISTORY of the repository|REAL COMMIT|LEITURA DO GITHUB FALHOU|READING GITHUB FAILED/.test(fichaTxt) && msgsDoHistorico.length) {
+    let tirou = 0;
+    for (const m of msgsDoHistorico) { const i = messages.indexOf(m); if (i >= 0) { messages.splice(i, 1); tirou++; } }
+    if (tirou) dlog(`anti-papagaio: histórico (${tirou} msg) omitido — histórico real do GitHub injetado`);
+  }
 
   // Pedido de imagem → GERAÇÃO DIRETA, determinística: a Judy gera ANTES do
   // modelo abrir a boca (deixado ao E2B, ele ora chama a ferramenta, ora
@@ -1279,7 +1288,10 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
     dlog(`sem ferramenta (tipo=${tipo}) → LLM direto, sem passar pelo serviço de IA`);
   }
   // Teto único: o especial era o que pedia um teto maior, e ele saiu.
-  const pensa = precisaPensar({ tipo, pergunta, citada });
+  // resumir commits para quem usa o bot pede raciocínio (sem ele, o modelo
+  // pequeno cola a lista crua)
+  const comGithub = /HISTÓRICO REAL do repositório|COMMIT REAL|REAL HISTORY of the repository|REAL COMMIT/.test(fichaTxt);
+  const pensa = comGithub || precisaPensar({ tipo, pergunta, citada });
   responder._pensou = pensa;
   dlog(`raciocínio: ${pensa ? "ligado" : "desligado (conversa leve)"} — tipo=${tipo}`);
   const texto = await llmChat(messages, {
@@ -1907,6 +1919,26 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
     }
   } catch (e) { dlog(`ficha falhou (${e?.message ?? e})`); }
 
+  // O próprio código (GitHub) e o servidor: material REAL no prompt, em vez de
+  // chute ou busca na web (12 out 2026 — "últimos updates feitos em você" era
+  // inventado; "o commit 0eb26f0…" virou busca que achou um gist sobre como
+  // escrever commits; "quem é da staff?" ela não tinha como saber).
+  let materialGithub = null, materialServidor = "";
+  try {
+    materialGithub = await github.materialPara(pergunta, { lang });
+    if (materialGithub) dlog(`GitHub: ${materialGithub.tipo} injetado (${materialGithub.texto.length} chars)`);
+  } catch (e) { dlog(`GitHub falhou (${e?.message ?? e})`); }
+  if (!materialGithub) {
+    try {
+      const srvAtual = await Promise.resolve(ctx.getServer?.(message)).catch(() => null);
+      materialServidor = await servidorInfo.materialParaIA(pergunta, {
+        server: srvAtual, config: ctx.config ?? store.configDoServidor(serverId), client: [message.client, ctx.client].find((c) => typeof c?.users?.get === "function") ?? null, lang,
+      });
+      if (materialServidor) dlog(`servidor: dados reais injetados (${materialServidor.length} chars)`);
+    } catch (e) { dlog(`dados do servidor falharam (${e?.message ?? e})`); }
+  }
+  fichaTxt = [fichaTxt, materialGithub?.texto, materialServidor].filter(Boolean).join("\n\n");
+
   const disp = await llmDisponivel();
   if (!disp.ok) {
     liberarVez();   // libera (ou passa ao próximo): não vamos gerar nada
@@ -2010,6 +2042,12 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
     if (decisao.buscar && decisao.fundo && (pedeImagemGerada(pergunta) || caminhoCitado(pergunta) || ehCumprimento(pergunta))) {
       decisao.buscar = false;
       dlog("busca de fundo pulada: pedido de imagem, arquivo citado ou cumprimento");
+    }
+    // GitHub e servidor já trouxeram o material de verdade: a web só atrapalha
+    // ("pesquise no seu github o commit X" achava um gist qualquer)
+    if (decisao.buscar && (materialGithub || materialServidor)) {
+      decisao.buscar = false; decisao.links = false;
+      dlog("material do GitHub/servidor no prompt → sem busca na web");
     }
     dlog(`decisão de busca: buscar=${decisao.buscar}${decisao.buscar ? ` query="${decisao.query}" ${decisao.links ? "(pedida → com links)" : "(de fundo → sem links)"}` : ""}`);
     let resultados = null;
@@ -2235,9 +2273,16 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
       const semLinks = busca.semLinksDaBusca(base, vistas);
       if (semLinks !== resposta) { dlog("sem pedido de busca → citações e links dos resultados tirados da resposta"); resposta = semLinks.trim() || resposta; }
     }
-    const rodape = resultados?.length && decisao.links
+    // O modelo às vezes escreve a própria lista "Fontes: [1] gist.github.com…"
+    // além do rodapé — saía duplicado (print de 12/10). O rodapé é do código.
+    if (resposta) {
+      const semLista = busca.semFontesDoModelo(resposta);
+      if (semLista !== resposta) { dlog("lista de fontes escrita pelo modelo removida (o rodapé é do código)"); resposta = semLista || resposta; }
+    }
+    const rodape = (resultados?.length && decisao.links
       ? busca.rodapeFontes(resposta, resultados, consultasUsadas.length ? consultasUsadas : [decisao.query], { lang: en ? "en" : "pt", max: FONTES_MAX })
-      : "";
+      : "")
+      + (materialGithub?.link ? `\n\n🔗 ${en ? "commit" : "commit"} [${materialGithub.link.split("/").pop().slice(0, 7)}](<${materialGithub.link}>)` : "");
     const avisoCorte = responder._cortou
       ? (en
         ? "\n\n_✂️ this one hit the length ceiling even after auto-continuing — ask 'continue' for the rest._"

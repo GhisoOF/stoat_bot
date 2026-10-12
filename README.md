@@ -200,6 +200,13 @@ diz exatamente o que clicar.
   `visao` vira apelido dela — ver uma imagem não descarrega a conversa nem
   carrega uma 2ª cópia do modelo (o que, com um modelo de 17 GB, custaria
   dezenas de segundos por imagem).
+- **Conhece o servidor**: "quais são as regras?", "quem é da staff?", "em que
+  canal posso divulgar?" → a Judy responde com os dados reais do `&servidor` e
+  do `&staff` (lidos na hora do Stoat), sem chutar e sem ir à web.
+- **Sabe o que mudou nela**: "quais os últimos updates feitos em você?" lê os
+  commits do repositório (`GITHUB_REPO`, padrão `GhisoOF/stoat_bot`) na API do
+  GitHub; "o commit 0eb26f0…" lê aquele commit (mensagem, arquivos, +/−) e
+  responde com o link dele. Repositório público dispensa `GITHUB_TOKEN`.
 - **Busca que responde**: o modelo reescreve o pedido em até 2 consultas
   curtas (corrige digitação; `r/Nome` vira busca no reddit), os resultados que
   não falam do pedido saem, as 3 melhores páginas são lidas
@@ -298,6 +305,7 @@ próprio bot: `&help <comando>`. Um resumo:
 | `&help [grupo\|comando]` | índice por intenção, em páginas |
 | `&tutorial [área]` | guia de primeiros passos |
 | `&ping` · `&sobre` | latência · informações do bot |
+| `&servidor [regras\|cargos\|canais\|faq]` · `&staff` | o servidor: dono, membros, regras (canal **regras** lido sozinho ou texto da staff — `&servidor regras definir`), cargos com contagem, canais com descrição, FAQ da staff · a equipe (dono + cargos marcados + quem pode moderar) |
 | `&userinfo [@user]` | informações + histórico de moderação |
 | `&warn lista [@user]` · `&warn limpar @user` | ver e zerar avisos |
 | `&xp` · `&xp top` | seu nível · ranking |

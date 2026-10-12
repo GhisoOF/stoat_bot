@@ -24,6 +24,7 @@ export const COMANDO_EN = {
   adeus: "goodbye",
   // "fun" não: `&help fun` já é o grupo Diversão da ajuda
   entretenimento: "entertainment",
+  servidor: "server",
 };
 
 export const COMANDO_EXTRA = {
@@ -52,9 +53,13 @@ export const COMANDO_EXTRA = {
   farewell: "adeus",
   entertainment: "entretenimento",
   fun: "entretenimento",
+  server: "servidor",
 };
 
 export const SUB = {
+  servidor: {
+    rules: "regras", roles: "cargos", channels: "canais", about: "info",
+  },
   entretenimento: {
     fight: "briga", choose: "escolher", pick: "escolher", rate: "nota",
     fortune: "sorte", mock: "zoeira", reverse: "inverter", "8ball": "bola8",

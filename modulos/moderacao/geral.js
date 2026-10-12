@@ -176,9 +176,20 @@ function detalhesPT(P) {
       desc: "Curadoria de notícias por RSS, com resumo da Judy. `add <url>` cadastra um feed, `canal aqui` define o destino, `list` mostra os feeds, `remove <url|n>` remove, `agora` força um ciclo. A cada hora a Judy posta um resumo geral no tom dela e depois os itens novos (título, feed, horário, link).",
       perm: "ManagePermissions", ex: `${P}rss add https://exemplo.com/feed.xml`,
     },
+    servidor: {
+      uso: `${P}servidor [regras|cargos|canais|faq]`,
+      desc: "O **servidor em que você está**: dono, criação, membros e descrição — e, dentro da família:\n\n"
+        + "`regras` — as regras: o texto que a staff definir ou, sem ele, o canal **regras/rules** lido sozinho\n"
+        + "`cargos` — do mais alto ao mais baixo, com quantos têm cada um\n"
+        + "`canais` — por categoria, com a descrição de cada um\n"
+        + "`faq` — avisos e perguntas frequentes da staff (`faq <número>` abre um)\n\n"
+        + "**Staff** *(ManagePermissions)*: `regras definir <texto>` (várias linhas) · `regras canal #canal|auto` · `regras limpar` · `faq add <título> | <texto>` · `faq remover <n>` · `faq limpar`\n\n"
+        + "A equipe fica em `&staff`. E dá para **perguntar à Judy**: \"quais são as regras?\", \"quem é da staff?\", \"em que canal posso divulgar?\" — ela responde com estes dados, não de cabeça.",
+      perm: "todo mundo (mudar: ManagePermissions)", ex: `${P}servidor regras`,
+    },
     staff: {
       uso: `${P}staff [add|remove|titulo|limpar]`,
-      desc: "Mostra a **equipe do servidor**, agrupada por cargo e com quem tem cada um.\n\nA lista não tem cadastro próprio: ela lê os mesmos cargos do `&acesso cargo`. Então adicionar aqui **também dá acesso aos comandos de moderação** — e remover tira os dois de uma vez, sem o quadro de avisos discordar da permissão real.\n\n`&staff add <@cargo>` · `&staff remove <@cargo>` · `&staff limpar`\n`&staff titulo <@cargo> <texto>` — rótulo exibido no lugar do nome do cargo\n\n_Consultar é público; mexer exige ManagePermissions._",
+      desc: "Mostra a **equipe do servidor**: o dono, os cargos marcados aqui, o cargo de equipe dos tickets e os cargos com permissão de moderar (banir, expulsar, silenciar, apagar mensagens, gerenciar o servidor) — com quem tem cada um, sem bots.\n\nOs cargos marcados não têm cadastro próprio: são os mesmos do `&acesso cargo`. Então adicionar aqui **também dá acesso aos comandos de moderação** — e remover tira os dois de uma vez, sem o quadro de avisos discordar da permissão real.\n\n`&staff add <@cargo>` · `&staff remove <@cargo>` · `&staff limpar`\n`&staff titulo <@cargo> <texto>` — rótulo exibido no lugar do nome do cargo\n\n_Consultar é público; mexer exige ManagePermissions._",
       perm: "ManagePermissions", ex: `${P}staff add Moderador`,
     },
     economia: {
@@ -446,9 +457,20 @@ function detalhesEN(P) {
       desc: "RSS news curation with Judy's summaries. `add <url>` registers a feed, `canal aqui` sets the destination, `list` shows the feeds, `remove <url|n>` removes one, `agora` forces a cycle. Every hour Judy posts an overall summary in her own voice, followed by the new items (title, feed, time, link).",
       perm: "ManagePermissions", ex: `${P}rss add https://example.com/feed.xml`,
     },
+    servidor: {
+      uso: `${P}servidor [rules|roles|channels|faq]`,
+      desc: "The **server you're in**: owner, creation date, members and description — and, inside the family:\n\n"
+        + "`rules` — the rules: the text the staff set or, without it, the **rules** channel read on its own\n"
+        + "`roles` — highest to lowest, with how many people hold each\n"
+        + "`channels` — by category, with each one's description\n"
+        + "`faq` — staff notices and frequent questions (`faq <number>` opens one)\n\n"
+        + "**Staff** *(ManagePermissions)*: `rules set <text>` (multiple lines) · `rules channel #channel|auto` · `rules clear` · `faq add <title> | <text>` · `faq remove <n>` · `faq clear`\n\n"
+        + "The staff list is `&staff`. And you can **ask Judy**: \"what are the rules?\", \"who's on staff?\", \"which channel can I promote in?\" — she answers from this data, not from memory.",
+      perm: "everyone (changing: ManagePermissions)", ex: `${P}servidor rules`,
+    },
     staff: {
       uso: `${P}staff [add|remove|title|clear]`,
-      desc: "Shows the **server's staff**, grouped by role and listing who holds each one.\n\nThe list has no separate registry: it reads the very same roles as `&acesso cargo`. So adding here **also grants access to the moderation commands** — and removing drops both at once, so the notice board can never disagree with the actual permission.\n\n`&staff add <@role>` · `&staff remove <@role>` · `&staff clear`\n`&staff title <@role> <text>` — label shown instead of the role's name\n\n_Viewing is public; changing requires ManagePermissions._",
+      desc: "Shows the **server's staff**: the owner, the roles marked here, the ticket team role and the roles allowed to moderate (ban, kick, timeout, delete messages, manage the server) — with who holds each one, no bots.\n\nThe marked roles have no separate registry: they're the very same as `&acesso cargo`. So adding here **also grants access to the moderation commands** — and removing drops both at once, so the notice board can never disagree with the actual permission.\n\n`&staff add <@role>` · `&staff remove <@role>` · `&staff clear`\n`&staff title <@role> <text>` — label shown instead of the role's name\n\n_Viewing is public; changing requires ManagePermissions._",
       perm: "ManagePermissions", ex: `${P}staff add Moderator`,
     },
     economia: {

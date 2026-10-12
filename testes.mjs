@@ -12145,17 +12145,51 @@ const as = await import("./modulos/moderacao/assuntos.js");
 const av = await import("./modulos/moderacao/avatar.js");
 const { cmdAutomod } = await import("./modulos/moderacao/automod-comandos.js");
 
-console.log("── temas: a palavra-chave só levanta a mão ──");
-const cfgT = (acoes, extra = {}) => ({ enabled: true, acoes, termos: {}, canaisLiberados: [], punicao: null, ...extra });
-ok(as.acharAssuntos("o Lula vai ganhar a eleição de novo", cfgT({ politica: "apagar" })).some((x) => x.tema === "politica"), "★ política: \"Lula\" / \"eleição\" levantam a mão");
-ok(as.acharAssuntos("o Lula vai ganhar a eleição de novo", cfgT({ politica: "off" })).length === 0, "  → tema desligado não olha nada");
-ok(as.acharAssuntos("religiao nao se discute", cfgT({ religiao: "alertar" }))[0]?.tema === "religiao", "  → sem acento também (religiao)");
-ok(as.acharAssuntos("meu deus, que droga de jogo", cfgT({ religiao: "apagar", drogas: "apagar" })).length === 0, "★ expressão do dia a dia (\"meu deus\", \"que droga\") nem chama o modelo");
-ok(as.acharAssuntos("o temer de perder é normal", cfgT({ politica: "apagar" })).length === 0 && as.acharAssuntos("a maga do time morreu", cfgT({ politica: "apagar" })).length === 0, "  → palavras comuns que só parecem política (temer, maga) ficam de fora");
-ok(as.acharAssuntos("quem quer comprar maconha?", cfgT({ drogas: "punir" }))[0]?.tema === "drogas", "  → drogas");
-ok(as.acharAssuntos("vendo pack completo", cfgT({ sexual: "apagar" }))[0]?.tema === "sexual", "  → conteúdo sexual (texto)");
-ok(as.acharAssuntos("o candidato X é o melhor", cfgT({ politica: "apagar" }, { termos: { politica: ["candidato x"] } }))[0]?.termo === "candidato x", "★ termos do servidor somam aos de fábrica");
-ok(as.acharAssuntos("o Lula vai ganhar", { ...cfgT({ politica: "apagar" }), enabled: false }).length === 0, "  → chave geral desligada: nada");
+console.log("── temas: nota por peso (como o sentinela) ──");
+const cfgT = (acoes, extra = {}) => ({ enabled: true, acoes, termos: {}, canaisLiberados: [], punicao: null, sensibilidade: "media", ia: true, ...extra });
+const POL = cfgT({ politica: "apagar" });
+const nota = (texto, cfg = POL, op = {}) => as.analisarAssuntos(texto, cfg, op)[0] ?? { nota: 0, sinais: [], passou: false };
+const LIM = as.LIMIAR_ASSUNTO.media;
+let n = nota("quem vota no Bolsonaro é burro, a eleição foi roubada");
+ok(n.passou && n.sinais.some((s) => /^nomes/.test(s)) && n.sinais.some((s) => /^debate/.test(s)) && n.sinais.some((s) => /^ataque/.test(s)), `★ debate + ataque + nome: passa do limiar (${n.nota} ≥ ${LIM})`);
+ok(!nota("a eleição é dia 4, gente").passou, "  → o tema só aparecendo (\"a eleição é dia 4\") não passa");
+const seco = nota("o Lula é o melhor presidente"), rindo = nota("o Lula é o melhor presidente kkkk");
+ok(seco.passou && !rindo.passou && rindo.sinais.includes("−risada"), `★ "kkkk" ameniza (${seco.nota} → ${rindo.nota})`);
+const comEmoji = nota("o bolsonarista é um gado 😂"), semEmoji = nota("o bolsonarista é um gado");
+ok(comEmoji.nota < semEmoji.nota && comEmoji.sinais.includes("−emoji de riso"), `★ emoji de riso ameniza (${semEmoji.nota} → ${comEmoji.nota})`);
+ok(nota("comunismo nunca funcionou, os fatos mostram, só idiota defende, to zoando").nota < nota("comunismo nunca funcionou, os fatos mostram, só idiota defende").nota, "  → \"zoando\"/\"zoeira\" também");
+const PALAVRAS = cfgT({ religiao: "apagar", drogas: "apagar" });
+ok(as.analisarAssuntos("meu deus, que droga de jogo", PALAVRAS).every((x) => x.nota === 0), "★ expressão do dia a dia (\"meu deus\", \"que droga\") não pontua");
+ok(nota("vira à direita no mercado").nota === 0 && nota("o botão fica na esquerda da tela").nota === 0, "★ \"vira à direita\", \"na esquerda da tela\" não são política");
+n = nota("a esquerda destruiu o país, vocês não sabem de nada, acorda");
+ok(n.passou && n.sinais.some((s) => /ideias:esquerda/.test(s)), `  → mas "a esquerda destruiu o país…" é (${n.nota})`);
+ok(nota("o temer de perder é normal").nota === 0 && nota("a maga do time morreu").nota === 0, "  → palavras comuns (temer, maga) ficam de fora");
+ok(nota("b0ls0n4ro é o pior presidente da história, vocês não sabem de nada").sinais.some((s) => /nomes:bolsonaro/.test(s)), "★ disfarce (b0ls0n4ro) é desfeito antes, como no sentinela");
+ok(nota("o que é comunismo?").nota < LIM, "  → pergunta neutra e curta fica baixa");
+n = nota("vendo maconha, chama no privado", cfgT({ drogas: "punir" }));
+ok(n.passou, `★ drogas: oferta (\"vendo\", \"chama no privado\") passa (${n.nota})`);
+ok(!nota("o crack do jogo foi absurdo kkkk", cfgT({ drogas: "punir" })).passou, "  → \"crack do jogo kkkk\" não");
+ok(nota("vendo pack completo", cfgT({ sexual: "apagar" })).passou, "  → sexual: \"vendo pack\" passa");
+
+console.log("\n── o contexto pesa ──");
+as._zerar();
+const base = "o Lula vai ganhar a eleição de novo";
+const sozinho = nota(base);
+as.anotar("CTX", { id: "c1", autor: "BIA", nome: "bia", texto: "o bolsonaro fez tal coisa" });
+as.anotar("CTX", { id: "c2", autor: "CAIO", nome: "caio", texto: "o lula também, governo horrível" });
+as.anotar("CTX", { id: "c3", autor: "BIA", nome: "bia", texto: "essa eleição vai ser uma guerra" });
+const quente = nota(base, POL, { canalId: "CTX", autor: "ANA" });
+ok(!sozinho.passou && quente.passou && quente.sinais.some((s) => /^contexto/.test(s)), `★ o mesmo texto: sozinho ${sozinho.nota}, no meio de uma discussão de 2 pessoas ${quente.nota}`);
+as._zerar();
+["kkkkk", "kkkk o lula", "hahaha morri 😂", "kkk"].forEach((t, i) => as.anotar("RIR", { id: `r${i}`, autor: `P${i}`, nome: `p${i}`, texto: t }));
+const zoeira = nota(base, POL, { canalId: "RIR", autor: "ANA" });
+ok(zoeira.sinais.includes("−canal rindo"), `★ o canal rindo puxa para baixo (${zoeira.nota})`);
+
+console.log("\n── sensibilidade, termos do servidor, liga/desliga ──");
+const meio = "o Lula vai ganhar a eleição de novo, vai votar nele?";
+ok(nota(meio, cfgT({ politica: "apagar" }, { sensibilidade: "alta" })).passou && !nota(meio, cfgT({ politica: "apagar" }, { sensibilidade: "baixa" })).passou, "★ sensibilidade alta pega o que a baixa deixa passar");
+ok(nota("o candidato fulano é o melhor", cfgT({ politica: "apagar" }, { termos: { politica: ["candidato fulano"] } })).sinais.some((s) => /do servidor:candidato fulano/.test(s)), "★ termos do servidor somam (peso de nome)");
+ok(as.analisarAssuntos(base, cfgT({ politica: "off" })).length === 0 && as.analisarAssuntos(base, { ...POL, enabled: false }).length === 0, "  → tema desligado / chave geral desligada: nada");
 ok(engine.moduloLigado({ antiAssuntos: cfgT({}) }, "antiAssuntos") === false && engine.moduloLigado({ antiAssuntos: cfgT({ religiao: "alertar" }) }, "antiAssuntos") === true, "  → a parte só conta como ligada com algum tema escolhido");
 
 console.log("\n── o juiz: o modelo lê o fio ──");
@@ -12186,53 +12220,64 @@ function msg(texto, { canal = "C1", autor = "ANA" } = {}) {
   return m;
 }
 async function checar(ctx, m) {
-  as.anotar(m.channelId, { id: m.id, nome: m.author.username, texto: m.content });
+  as.anotar(m.channelId, { id: m.id, autor: m.authorId, nome: m.author.username, texto: m.content });
   return as.verificar({ ctx, server: { id: "S" }, canal: m.channel, message: m, userId: m.authorId,
     aplicarPunicao: async (o) => { punicoes.push(o); } });
 }
+const FORTE = "quem vota no Bolsonaro é burro, a eleição foi roubada";
 
-as._zerar();
-as.anotar("C1", { id: "A0", nome: "bia", texto: "vocês viram o debate ontem?" });
+as._zerar(); pedidos.length = 0;
 let m = msg("o Lula é o melhor presidente kkkk");
-let r = await checar(ctxCom(cfgT({ politica: "apagar" })), m);
-ok(pedidos.length === 1 && /vocês viram o debate ontem/.test(pedidos[0].msgs[1].content) && /MENSAGEM AVALIADA \(ana\): o Lula/.test(pedidos[0].msgs[1].content), "★ o modelo recebe o fio do canal e a mensagem avaliada à parte");
+let r = await checar(ctxCom(POL), m);
+ok(r === null && !pedidos.length && !m.apagada, "★ abaixo do limiar: nem chama o modelo");
+
+as._zerar(); pedidos.length = 0;
+as.anotar("C1", { id: "A0", autor: "BIA", nome: "bia", texto: "vocês viram o debate ontem?" });
+m = msg("o Lula é o melhor presidente");
+r = await checar(ctxCom(POL), m);
+ok(pedidos.length === 1 && /vocês viram o debate ontem/.test(pedidos[0].msgs[1].content) && /MENSAGEM AVALIADA \(ana\): o Lula/.test(pedidos[0].msgs[1].content), "★ passou do limiar: o modelo recebe o fio do canal e a mensagem avaliada à parte");
 ok(pedidos[0].op?.etiqueta === "assunto:politica", "  → etiqueta própria nos logs da fila do modelo");
-ok(r.acao === "nada" && !m.apagada && !punicoes.length, "★ zoeira: nada acontece (a mensagem fica)");
+ok(r.acao === "nada" && !m.apagada && !punicoes.length, "★ o modelo diz zoeira: nada acontece (a mensagem fica)");
 
 as._zerar(); pedidos.length = 0; resposta = '{"discussao": true, "motivo": "briga de opinião sobre eleição"}';
-m = msg("quem vota no Bolsonaro é burro, a eleição foi roubada");
-r = await checar(ctxCom(cfgT({ politica: "apagar" })), m);
+m = msg(FORTE);
+r = await checar(ctxCom(POL), m);
 ok(r.acao === "apagar" && m.apagada && !punicoes.length, "★ discussão + `apagar`: só tira a mensagem, sem punição");
 ok(enviados.some((e) => e.canal === "C1" && /não é assunto deste servidor/.test(e.description) && /ninguém foi punido/.test(e.description)), "  → e explica no canal");
 const avisosAntes = enviados.filter((e) => e.canal === "C1").length;
-const m2 = msg("eleição roubada sim, aceita");
-r = await checar(ctxCom(cfgT({ politica: "apagar" })), m2);
+const m2 = msg("o bolsonarista é gado, quem vota nele é burro", { autor: "CAIO" });
+r = await checar(ctxCom(POL), m2);
 ok(m2.apagada && pedidos.length === 1, "★ a discussão seguinte usa o veredito recente (não enche a fila do modelo)");
 ok(enviados.filter((e) => e.canal === "C1").length === avisosAntes, "  → e o canal não vira um mural de avisos (um a cada 2 min)");
 
 as._zerar(); pedidos.length = 0; enviados.length = 0;
 m = msg("a igreja X é uma farsa e quem vai lá é otário");
 r = await checar(ctxCom(cfgT({ religiao: "alertar" })), m);
-ok(r.acao === "alertar" && !m.apagada, "★ `alertar`: a mensagem fica…");
-ok(enviados.some((e) => e.canal === "ALERTA" && /<%R_STAFF>/.test(e.description) && /Assunto proibido: religião/.test(e.title)), "  → …e a staff é chamada no canal do sentinela");
+ok(r?.acao === "alertar" && !m.apagada, "★ `alertar`: a mensagem fica…");
+ok(enviados.some((e) => e.canal === "ALERTA" && /<%R_STAFF>/.test(e.description) && /Assunto proibido: religião/.test(e.title) && /Nota:\*\* [\d.]+\/10/.test(e.description)), "  → …e a staff é chamada no canal do sentinela, com a nota e os sinais");
 
 as._zerar(); pedidos.length = 0;
 m = msg("vendo maconha, chama no privado");
 r = await checar(ctxCom(cfgT({ drogas: "punir" })), m);
-ok(r.acao === "punir" && punicoes.length === 1 && punicoes[0].pol.modo === "acumular" && /drogas não é assunto/.test(punicoes[0].motivo), "★ `punir`: a punição do automod, na escada (`acumular`) por padrão");
+ok(r?.acao === "punir" && punicoes.length === 1 && punicoes[0].pol.modo === "acumular" && /drogas não é assunto/.test(punicoes[0].motivo), "★ `punir`: a punição do automod, na escada (`acumular`) por padrão");
 punicoes.length = 0; as._zerar();
 await checar(ctxCom(cfgT({ drogas: "punir" }, { punicao: { modo: "confirmar" } })), msg("vendo maconha barato"));
 ok(punicoes[0]?.pol.modo === "confirmar", "  → `&automod sentinela assuntos punicao` troca o modo");
 
 as._zerar(); pedidos.length = 0;
-m = msg("o Lula e a eleição", { canal: "DEBATE" });
+m = msg(FORTE, { canal: "DEBATE" });
 r = await checar(ctxCom(cfgT({ politica: "apagar" }, { canaisLiberados: ["DEBATE"] })), m);
 ok(r === null && !pedidos.length && !m.apagada, "★ canal liberado (ex.: #debate): o tema pode lá");
 
 as._zerar(); pedidos.length = 0; punicoes.length = 0; resposta = new Error("modelo fora do ar");
-m = msg("eleição roubada!");
+m = msg(FORTE);
 r = await checar(ctxCom(cfgT({ politica: "punir" })), m);
-ok(!m.apagada && !punicoes.length, "★ modelo com erro: nada acontece (erro nunca vira punição)");
+ok(pedidos.length === 1 && !m.apagada && !punicoes.length, "★ modelo com erro: nada acontece (erro nunca vira punição)");
+
+as._zerar(); pedidos.length = 0; resposta = '{"discussao": false, "motivo": "zoeira"}';
+m = msg(FORTE);
+r = await checar(ctxCom(cfgT({ politica: "apagar" }, { ia: false })), m);
+ok(!pedidos.length && m.apagada && r.veredito?.semIA, "★ `ia off`: a nota decide sozinha (o modelo nem é chamado)");
 resposta = '{"discussao": true, "motivo": "x"}';
 
 console.log("\n── no automod: em segundo plano, staff de fora ──");
@@ -12245,7 +12290,7 @@ const ctxA = (staff) => ({
 });
 let segurou = true;
 resposta = new Promise(() => {});   // o modelo "pensando" para sempre
-const lento = msg("a eleição foi roubada");
+const lento = msg(FORTE);
 as.configurar({ avaliar: async () => resposta });
 const parou = await Promise.race([engine.runAutomod(lento, ctxA(false)), new Promise((res) => setTimeout(() => res("travou"), 1500))]);
 segurou = parou === "travou";
@@ -12255,17 +12300,17 @@ as._zerar(); pedidos.length = 0;
 const m3 = msg("vota no Lula quem é inteligente, eleição é isso");
 await engine.runAutomod(m3, ctxA(false));
 await engine._ultimaVerificacaoDeAssunto();
-ok(m3.apagada && pedidos.length === 1, "★ runAutomod → modelo confirma → a mensagem sai");
+ok(m3.apagada && pedidos.length === 1, "★ runAutomod → nota passa → modelo confirma → a mensagem sai");
 as._zerar(); pedidos.length = 0;
-const m4 = msg("a eleição é dia 4, gente", { autor: "MOD" });
+const m4 = msg(FORTE, { autor: "MOD" });
 await engine.runAutomod(m4, ctxA(true));
 ok(!pedidos.length && !m4.apagada, "  → staff não é moderada");
 as._zerar();
 await engine.runAutomod(msg("vocês viram a notícia do governo?", { autor: "MOD" }), ctxA(true));
 pedidos.length = 0;
-await engine.runAutomod(msg("eleição roubada", { autor: "ANA" }), ctxA(false));
+await engine.runAutomod(msg(FORTE, { autor: "ANA" }), ctxA(false));
 await engine._ultimaVerificacaoDeAssunto();
-ok(/mod: vocês viram a notícia do governo/.test(pedidos[0]?.msgs[1].content ?? ""), "  → mas a fala da staff entra no fio que o modelo lê");
+ok(/mod: vocês viram a notícia do governo/.test(pedidos[0]?.msgs[1].content ?? ""), "  → mas a fala da staff entra no fio (e no contexto)");
 
 console.log("\n── foto de perfil: o que apita ──");
 ok(av.avaliarAvatar("Uma foto de um pênis ereto em close.").apitou, "★ genitália descrita apita sozinha");
@@ -12380,6 +12425,15 @@ t = await am$("sentinela assuntos politica explodir");
 ok(/Ação inválida/.test(t) && config.automod.antiAssuntos.acoes.politica === "apagar", "  → ação inválida não muda nada");
 await am$("sentinela assuntos punicao confirmar");
 ok(config.automod.antiAssuntos.punicao?.modo === "confirmar", "  → `punicao` do `punir`");
+await am$("sentinela assuntos sensibilidade alta");
+ok(config.automod.antiAssuntos.sensibilidade === "alta", "★ `sensibilidade alta`");
+await am$("sentinela assuntos sensitivity low");
+ok(config.automod.antiAssuntos.sensibilidade === "baixa", "  → em inglês também (sensitivity low)");
+await am$("sentinela assuntos ia off");
+ok(config.automod.antiAssuntos.ia === false, "★ `ia off`: a nota decide sozinha");
+await am$("sentinela assuntos ia on");
+t = await am$("sentinela assuntos test quem vota no Bolsonaro é burro, a eleição foi roubada");
+ok(/politica` — \*\*[\d.]+\/10\*\*/.test(t) && /nomes:bolsonaro/.test(t) && /Ninguém foi punido/.test(t), "★ `test <texto>`: a nota de cada tema, com os sinais");
 await am$("sentinela assuntos politica off");
 ok(config.automod.antiAssuntos.acoes.politica === "off", "  → `off` desliga o tema");
 await am$("sentinela avatar on");

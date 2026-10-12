@@ -125,11 +125,18 @@ diz exatamente o que clicar.
   "aqui não se discute política, religião…" onde zoar com o tema é OK. Cada tema
   — `politica`, `religiao`, `drogas`, `sexual` (texto) — tem a sua ação: `off`
   (padrão), `alertar` (chama a staff), `apagar` (só tira a mensagem) ou `punir`
-  (apaga e conta na escada). A palavra-chave só levanta a mão: a IA lê o fio do
-  canal e decide se é discussão de verdade ou zoeira — na dúvida, zoeira; erro do
-  modelo nunca pune. `liberar #canal` deixa um canal (ex.: #debate) de fora.
-  *Forbidden topics: per-topic action (off · alert · delete · punish); keywords
-  only raise a flag and the AI decides whether it's a real discussion or banter.*
+  (apaga e conta na escada). Cada mensagem ganha uma **nota de 0 a 10** por tema,
+  como o sentinela: termos com peso (forte 3 · nomes de políticos e partidos 2,5 ·
+  ideologias e instituições 2 · genérico 1), sinais de debate e de ataque,
+  tamanho e o **contexto** do canal (o tema voltando com outras pessoas) sobem;
+  "kkkk", emoji de riso, "zoeira", mensagem curta, pergunta neutra e o canal
+  rindo amenizam; "meu deus", "que droga" e "vira à direita" não contam. Passou
+  do limiar (`sensibilidade` baixa 6 · média 4,5 · alta 3,5), a IA lê o fio e
+  confirma se é discussão de verdade (`ia off` = a nota decide sozinha); erro do
+  modelo nunca pune. `test <texto>` mostra a nota; `liberar #canal` deixa um
+  canal (ex.: #debate) de fora. *Forbidden topics: per-topic action (off ·
+  alert · delete · punish); a weighted 0–10 score (terms, debate, attacks,
+  channel context; laughter and emoji soften it), confirmed by the AI.*
 - **Foto de perfil** (`&automod sentinela avatar`): a foto de quem entra ou troca
   (a do perfil e a de servidor) passa pelo modelo de visão. Genitália, ato sexual
   ou pornografia descritos apitam sozinhos; nudez, gore e símbolo de ódio só com

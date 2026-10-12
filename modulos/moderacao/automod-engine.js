@@ -715,7 +715,7 @@ export async function runAutomod(message, ctx) {
   // O fio do canal para o juiz dos temas proibidos (inclui a fala da staff,
   // que sai do automod logo abaixo — ela também faz parte da conversa).
   if (assuntos.temasAtivos(am?.antiAssuntos).length) {
-    assuntos.anotar(message.channelId, { id: message.id, nome: message.author?.username ?? message.member?.nickname ?? userId, texto: content });
+    assuntos.anotar(message.channelId, { id: message.id, autor: userId, nome: message.author?.username ?? message.member?.nickname ?? userId, texto: content });
   }
 
   let server;
@@ -787,8 +787,9 @@ export async function runAutomod(message, ctx) {
   }
 
   // ── Temas proibidos pela regra do servidor (13 out 2026) ──
-  // A palavra-chave só levanta a mão; o modelo lê o fio e decide se é
-  // discussão de verdade ou zoeira. Em segundo plano: a mensagem não espera.
+  // Nota por peso (termos, debate, ataque, risada, contexto do canal); passou
+  // do limiar, o modelo lê o fio e confirma se é discussão ou zoeira. Em
+  // segundo plano: a mensagem não espera.
   if (assuntos.temasAtivos(am.antiAssuntos).length) {
     const p = assuntos.verificar({ ctx, server, canal, message, userId,
       aplicarPunicao: (opts) => aplicarPunicao(ctx, opts) });

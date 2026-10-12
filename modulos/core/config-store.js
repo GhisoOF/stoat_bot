@@ -26,11 +26,13 @@ export const padraoServidor = {
     // `todos: false` = só conta nova (ou < 7 dias numa onda de raid).
     antiImagem:      { enabled: true,  todos: false },
     // (13 out 2026) temas proibidos pela regra: cada tema com sua ação
-    // (off · alertar · apagar · punir); a IA confirma se é discussão ou zoeira.
+    // (off · alertar · apagar · punir); nota por peso + a IA confirma.
     antiAssuntos: {
       enabled: false,
       acoes: { politica: "off", religiao: "off", drogas: "off", sexual: "off" },
       termos: {}, canaisLiberados: [], punicao: null,
+      sensibilidade: "media",   // limiar da nota: baixa 6 · media 4,5 · alta 3,5
+      ia: true,                 // a IA confirma (off = a nota decide sozinha)
     },
     // (13 out 2026) foto de perfil ao entrar/trocar, vista pelo modelo de visão.
     // acao: alertar · silenciar · expulsar · banir (a staff é sempre avisada).

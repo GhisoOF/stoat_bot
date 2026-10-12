@@ -494,11 +494,14 @@ export async function cmdAutomod(message, args, ctx) {
     mod.acoes ??= {}; mod.termos ??= {}; mod.canaisLiberados ??= [];
     const op = a[0]?.toLowerCase();
     const ROT_ACAO = { off: T("desligado", "off"), alertar: T("só alerta a staff", "alerts staff only"), apagar: T("apaga a mensagem", "deletes the message"), punir: T("apaga e pune (escada)", "deletes and punishes (ladder)") };
+    const SENS_ROT = { baixa: T("baixa", "low"), media: T("média", "medium"), alta: T("alta", "high") };
+    const sensAtual = assuntos.sensibilidadeValida(mod.sensibilidade) ?? "media";
     const painel = (titulo = null) => sendEmbed(message.channel, { title: titulo ?? `🛡️ ${T("Temas proibidos", "Forbidden topics")}`, colour: COR.mod, description: [
-      T("A palavra-chave só **levanta a mão**; a IA lê a conversa e decide se é **discussão de verdade** ou zoeira — brincadeira não é punida.",
-        "A keyword only **raises a hand**; the AI reads the conversation and decides whether it's a **real discussion** or banter — joking isn't punished."),
+      T("Cada mensagem ganha uma **nota de 0 a 10** por tema: termos com peso, sinais de debate e de ataque, e o **contexto** do canal sobem; \"kkkk\", emoji de riso e \"zoeira\" amenizam. Passou do limiar, a IA confirma se é **discussão de verdade** ou zoeira.",
+        "Each message gets a **0–10 score** per topic: weighted terms, debate and attack signals, and the channel's **context** raise it; \"lol\", laughing emoji and \"joking\" soften it. Above the threshold, the AI confirms whether it's a **real discussion** or banter."),
       "",
       `**${T("Chave geral", "Master switch")}:** ${mod.enabled ? T("🟢 ligada", "🟢 on") : T("🔴 desligada", "🔴 off")}`,
+      `**${T("Sensibilidade", "Sensitivity")}:** ${SENS_ROT[sensAtual]} (${T("limiar", "threshold")} ${assuntos.limiarDoAssunto(mod)}/10) · **IA:** ${mod.ia === false ? T("🔴 desligada — a nota decide sozinha", "🔴 off — the score decides alone") : T("🟢 confirma", "🟢 confirms")}`,
       ...assuntos.NOMES_TEMAS.map((t) => {
         const ac = assuntos.acaoDoTema(mod, t), d = assuntos.TEMAS[t];
         const extras = (mod.termos[t] ?? []).length;
@@ -508,10 +511,12 @@ export async function cmdAutomod(message, args, ctx) {
       `**${T("Punição do `punir`", "Punishment of `punir`")}:** \`${mod.punicao?.modo ?? "acumular"}\``,
       "",
       `\`${base} <${assuntos.NOMES_TEMAS.join("|")}> <off|alertar|apagar|punir>\``,
-      `\`${base} <${T("tema", "topic")}> add|remover <${T("termo", "term")}>\` — ${T("palavras a mais (a IA ainda confirma)", "extra words (the AI still confirms)")}`,
+      `\`${base} <${T("tema", "topic")}> add|remover <${T("termo", "term")}>\` — ${T("palavras a mais (peso de nome: 2,5)", "extra words (name weight: 2.5)")}`,
       `\`${base} liberar|vigiar <#${T("canal", "channel")}|aqui>\` — ${T("um canal onde o tema pode (ex.: #debate)", "a channel where the topic is fine (e.g. #debate)")}`,
+      `\`${base} sensibilidade <baixa|media|alta>\` · \`${base} ia on|off\``,
+      `\`${base} test <${T("texto", "text")}>\` — ${T("a nota de cada tema, sem punir", "each topic's score, without punishing")}`,
       `\`${base} on|off\` · \`${base} punicao <${T("modo", "mode")}>\``,
-      T("_Precisa da IA ligada. Alertas vão para o canal do sentinela (ou o de log)._", "_Needs the AI on. Alerts go to the sentinel channel (or the log channel)._"),
+      T("_Alertas vão para o canal do sentinela (ou o de log)._", "_Alerts go to the sentinel channel (or the log channel)._"),
     ].join("\n") });
 
     if (!op || op === "status" || op === "config") return painel();
@@ -519,6 +524,30 @@ export async function cmdAutomod(message, args, ctx) {
       mod.enabled = op === "on"; salvarConfig();
       const nenhum = op === "on" && !assuntos.temasAtivos(mod).length;
       return painel(op === "on" ? (nenhum ? T("🟡 Ligado — falta escolher os temas", "🟡 On — now pick the topics") : T("🟢 Temas proibidos ligados", "🟢 Forbidden topics on")) : T("🔴 Temas proibidos desligados", "🔴 Forbidden topics off"));
+    }
+    if (["sensibilidade", "sensitivity", "sens"].includes(op)) {
+      const nova = assuntos.sensibilidadeValida(a[1]);
+      if (!nova) return sendEmbed(message.channel, { title: T("❌ Sensibilidade inválida", "❌ Invalid sensitivity"), colour: COR.erro,
+        description: Object.entries(assuntos.LIMIAR_ASSUNTO).map(([k, v]) => `• \`${k}\` — ${T("age a partir de", "acts from")} ${v}/10`).join("\n") });
+      mod.sensibilidade = nova; salvarConfig();
+      return painel(`🛡️ ${T("Sensibilidade", "Sensitivity")} → ${SENS_ROT[nova]} (${assuntos.LIMIAR_ASSUNTO[nova]}/10)`);
+    }
+    if (op === "ia" || op === "ai") {
+      const v = a[1]?.toLowerCase();
+      if (v !== "on" && v !== "off") return sendEmbed(message.channel, { title: T("❌ Uso", "❌ Usage"), colour: COR.erro, description: `\`${base} ia on|off\`` });
+      mod.ia = v === "on"; salvarConfig();
+      return painel(mod.ia ? T("🟢 A IA confirma antes de agir", "🟢 The AI confirms before acting") : T("🔴 Sem IA: a nota decide sozinha", "🔴 No AI: the score decides alone"));
+    }
+    if (op === "test" || op === "testar" || op === "teste") {
+      const texto = a.slice(1).join(" ").trim();
+      if (!texto) return sendEmbed(message.channel, { title: T("❌ Uso", "❌ Usage"), colour: COR.erro, description: `\`${base} test <${T("texto", "text")}>\`` });
+      const notas = assuntos.analisarAssuntos(texto, mod, { canalId: message.channelId, autor: message.authorId, todos: true });
+      return sendEmbed(message.channel, { title: `🧪 ${T("Nota por tema", "Score per topic")}`, colour: COR.mod, description: [
+        ...notas.map((n) => `${assuntos.TEMAS[n.tema].emoji} \`${n.tema}\` — **${n.nota}/10** ${n.passou ? "⚠️" : "·"} ${assuntos.acaoDoTema(mod, n.tema) === "off" ? T("_(tema desligado)_", "_(topic off)_") : ""}${n.sinais.length ? `\n   ${n.sinais.join(", ")}` : ""}`),
+        "",
+        T(`_Limiar ${assuntos.limiarDoAssunto(mod)}/10; o contexto é o deste canal. ${mod.ia === false ? "Sem IA, passar do limiar já age." : "Passando do limiar, a IA ainda confirma."} Ninguém foi punido._`,
+          `_Threshold ${assuntos.limiarDoAssunto(mod)}/10; context is this channel's. ${mod.ia === false ? "Without AI, crossing it already acts." : "Crossing it, the AI still confirms."} Nobody was punished._`),
+      ].join("\n") });
     }
     if (["liberar", "allow", "vigiar", "watch"].includes(op)) {
       const bruto = String(a[1] ?? "").toLowerCase();

@@ -1,5 +1,5 @@
 
-import { buscarSeguro } from "../core/seguranca.js";
+import { buscarSeguro, lerTexto } from "../core/seguranca.js";
 import * as db from "../core/db.js";
 import { ULID } from "../core/ids.js";
 import * as log from "../core/log.js";
@@ -19,6 +19,7 @@ function servidorPermitido(serverId) {
 }
 
 const MAX_ITENS   = Number(process.env.RSS_MAX_ITENS || 50);
+const MAX_FEEDS_SERVIDOR = Number(process.env.RSS_MAX_FEEDS || 25);
 const INTERVALO_MS = Number(process.env.RSS_INTERVALO_MS || 3600_000);  // 1 hora
 
 // O canal de destino por servidor fica na config (rss.canalId).
@@ -34,8 +35,12 @@ async function parseFeed(url) {
     catch { ParserRSS = false; }   // não instalado → usa fallback
   }
   if (ParserRSS) {
-    const parser = new ParserRSS({ timeout: 20000 });
-    const feed = await parser.parseURL(url);
+    // O rss-parser buscava a URL SOZINHO (parseURL), por fora da trava
+    // anti-SSRF — qualquer staff de qualquer servidor fazia o bot sondar a
+    // rede interna. Agora a busca é nossa (IP conferido, teto de tamanho) e o
+    // rss-parser só interpreta o texto (12 out 2026).
+    const parser = new ParserRSS();
+    const feed = await parser.parseString(await baixarFeed(url));
     return {
       titulo: feed.title || url,
       itens: (feed.items || []).map((i) => ({
@@ -50,18 +55,18 @@ async function parseFeed(url) {
   return await parseFeedManual(url);
 }
 
+// O endereço vem da staff: só internet pública (um feed em 127.0.0.1 ou na
+// rede interna fazia o bot sondar os próprios serviços), com teto de tamanho.
+const MAX_FEED = Number(process.env.RSS_MAX_BYTES || 3 * 1024 * 1024);
+async function baixarFeed(url) {
+  const r = await buscarSeguro(url, { signal: AbortSignal.timeout(20_000), headers: { "User-Agent": "JudyRSS/1.0" } });
+  if (!r.ok) { r.descartar?.(); throw new Error(`HTTP ${r.status}`); }
+  return await lerTexto(r, MAX_FEED);
+}
+
 // Fallback sem dependência: regex simples para <item>/<entry>
 async function parseFeedManual(url) {
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), 20000);
-  let xml;
-  try {
-    // o endereço vem da staff: só internet pública (um feed em 127.0.0.1 ou na
-    // rede interna fazia o bot sondar os próprios serviços)
-    const r = await buscarSeguro(url, { signal: ctrl.signal, headers: { "User-Agent": "JudyRSS/1.0" } });
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    xml = await r.text();
-  } finally { clearTimeout(t); }
+  const xml = await baixarFeed(url);
 
   const tituloFeed = (xml.match(/<title>([\s\S]*?)<\/title>/i)?.[1] || url).trim();
   const blocos = xml.match(/<(item|entry)[\s\S]*?<\/\1>/gi) || [];
@@ -267,6 +272,11 @@ export async function cmdRss(message, args, ctx) {
           description: `\`${PREFIXO}rss add <url> [categoria]\` — a URL precisa começar com http(s). A categoria agrupa os resumos: \`${PREFIXO}rss add https://... tecnologia\`.`, colour: COR.erro },
         { title: "❌ Invalid URL",
           description: `\`${PREFIXO}rss add <url> [category]\` — the URL must start with http(s). The category groups the digests: \`${PREFIXO}rss add https://... tech\`.`, colour: COR.erro }));
+    // teto por servidor: cada feed é uma busca por hora saindo da máquina do bot
+    if (db.listarFeeds(serverId).length >= MAX_FEEDS_SERVIDOR && !db.listarFeeds(serverId).some((f) => f.url === url))
+      return sendEmbed(message.channel, tr(ctx,
+        { title: "❌ Feeds demais", description: `Este servidor já tem **${MAX_FEEDS_SERVIDOR}** feeds — o máximo. Tire um com \`${PREFIXO}rss remove <id>\`.`, colour: COR.erro },
+        { title: "❌ Too many feeds", description: `This server already has **${MAX_FEEDS_SERVIDOR}** feeds — the maximum. Remove one with \`${PREFIXO}rss remove <id>\`.`, colour: COR.erro }));
     // valida buscando o feed uma vez
     let titulo = null;
     try { titulo = (await parseFeed(url)).titulo; }

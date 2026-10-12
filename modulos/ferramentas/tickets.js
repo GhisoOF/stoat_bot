@@ -20,6 +20,7 @@ import { subirAnexo } from "../core/anexos.js";
 import { chamarApi } from "../core/stoat-api.js";
 import { editarCargos, cargoDe, rankDoCargo, rankDoMembro, idsDeCargos } from "../core/hierarquia.js";
 import { tipoDoErro } from "../core/erros.js";
+import { canalDeOutroServidor } from "../moderacao/pertence.js";
 
 const DENY_TUDO = 0x000fffffffffffffn;            // mesmo GRANT_ALL_SAFE do resto do bot
 const VER_E_LER = (1n << 20n) | (1n << 21n);      // ViewChannel + ReadMessageHistory
@@ -449,7 +450,8 @@ export async function fecharTicket({ ctx, server, ticket, porId, nota = "" }) {
 
   // 2) o registro vai para o log como .txt (e, se o upload falhar, em blocos de texto)
   let travou = false;
-  const logCanal = cfg.logCanal ? await canalPorId(ctx.client, cfg.logCanal) : null;
+  let logCanal = cfg.logCanal ? await canalPorId(ctx.client, cfg.logCanal) : null;
+  if (canalDeOutroServidor(logCanal, ctx.serverId)) logCanal = null;   // o registro nunca vai para outro servidor
   let arquivo = false;
   if (logCanal) {
     let anexoId = null;

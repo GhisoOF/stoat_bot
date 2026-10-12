@@ -29,6 +29,16 @@ export function canalDoServidor(server, id) {
   return temChave(server?.channelIds, id) || (server?.channels ?? []).some?.((c) => c?.id === id);
 }
 
+// O canal é de OUTRO servidor? (12 out 2026) Com o bot global, um admin do
+// servidor A digitava o ID de um canal do servidor B (`&embed canal:`,
+// `&webhook canal`, `&cor painel`, canal de log/boas-vindas…) e a Judy
+// publicava lá o que ele quisesse. Só afirma quando sabe: canal sem servidor
+// (DM) ou sem a informação não é barrado.
+export function canalDeOutroServidor(canal, serverId) {
+  const dele = canal?.serverId ?? canal?.server?.id ?? null;
+  return !!(serverId && dele && dele !== serverId);
+}
+
 // Tira da config os IDs que não são deste servidor. Devolve o que mudou.
 export function curarIds(config, server) {
   if (!config || !server) return [];
@@ -44,6 +54,11 @@ export function curarIds(config, server) {
   zerar(config.automod?.antiScam, "alertChannelId", "canal");
   zerar(config.log, "canalId", "canal");
   zerar(config.rss, "canalId", "canal");
+  zerar(config.boasVindas, "canalId", "canal");
+  zerar(config.adeus, "canalId", "canal");
+  zerar(config.xp, "canalAnuncio", "canal");
+  zerar(config.tickets, "logCanal", "canal");
+  zerar(config.comentarioEspontaneo, "canalId", "canal");
   zerar(config.autorole, "roleId", "cargo");
   if (Array.isArray(config.acesso?.cargosStaff) && cargosOk) {
     const antes = config.acesso.cargosStaff.length;

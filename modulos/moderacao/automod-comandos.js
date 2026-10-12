@@ -268,6 +268,11 @@ export async function cmdAutomod(message, args, ctx) {
 
   // %automod debug <on|off> — liga/desliga os logs (GLOBAL, todos os servidores)
   if (sub === "debug") {
+    // vale para todos os servidores (e enche o log da máquina): só o dono do bot
+    if (!ctx.ehSuperAdmin?.(message.authorId))
+      return sendEmbed(message.channel, tr(ctx,
+        { title: "🔒 Só o dono do bot", description: "Os logs de depuração são **globais** — valem para todos os servidores da Judy.", colour: COR.aviso },
+        { title: "🔒 Bot owner only", description: "Debug logs are **global** — they apply to every server Judy is in.", colour: COR.aviso }));
     const v = args[1]?.toLowerCase();
     if (v !== "on" && v !== "off")
       return sendEmbed(message.channel, tr(ctx,
@@ -551,6 +556,25 @@ export async function cmdBlocklist(message, args, ctx) {
 
   const sub = args[0]?.toLowerCase();
   const arg = args[1];
+
+  // A lista de bloqueio é UMA SÓ para todos os servidores da Judy (o índice
+  // tem milhões de domínios e mora na memória uma vez). Com o bot global,
+  // qualquer admin de qualquer servidor apagava a lista de todos (`clear`),
+  // bloqueava um domínio em todos (`adddomain`) ou fazia o bot baixar o que
+  // quisesse (`add <url>`). Mexer nela é do dono do bot; olhar, de todos
+  // (12 out 2026). Para liberar um domínio só aqui: `&automod whitelist`.
+  const MUDA = ["add", "remove", "adddomain", "removedomain", "clear", "reload"];
+  if (MUDA.includes(sub) && !ctx.ehSuperAdmin?.(message.authorId)) {
+    return sendEmbed(message.channel, tr(ctx, {
+      title: "🔒 Só o dono do bot",
+      description: `A lista de bloqueio é **compartilhada** por todos os servidores da Judy — mudar aqui mudaria para todos.\n\n\`${PREFIXO}automod blocklist list\` — ver o que está nela\n\`${PREFIXO}automod whitelist add <link>\` — liberar um site **só neste servidor**\n\`${PREFIXO}automod antilink dominios off\` — desligar o bloqueio por lista **só aqui**`,
+      colour: COR.aviso,
+    }, {
+      title: "🔒 Bot owner only",
+      description: `The blocklist is **shared** by every server Judy is in — changing it here would change it for all of them.\n\n\`${PREFIXO}automod blocklist list\` — see what's on it\n\`${PREFIXO}automod whitelist add <link>\` — allow a site **on this server only**\n\`${PREFIXO}automod antilink dominios off\` — turn off list blocking **here only**`,
+      colour: COR.aviso,
+    }));
+  }
 
   // ── Adicionar uma FONTE (URL de lista Pi-hole) ──
   if (sub === "add") {

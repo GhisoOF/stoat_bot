@@ -28,6 +28,9 @@ const YTDLP = process.env.YTDLP_BIN || "yt-dlp";
 // O YouTube devolve 403 para o cliente web do yt-dlp; os clientes android/tv
 // passam (mesma manobra do remix-bot). Ajustável por env se o YouTube mudar.
 const CLIENTES_YT = ["--extractor-args", `youtube:player_client=${process.env.MUSICA_YT_CLIENTES || "android,tv"}`];
+// Sem o extrator genérico: mesmo um link do YouTube que redirecione para
+// fora (youtube.com/redirect?q=…) não faz o yt-dlp baixar outro site.
+const SEM_GENERICO = ["--ies", "default,-generic"];
 const DUCK = Math.min(1, Math.max(0.05, Number(process.env.MUSICA_DUCK || 0.2)));
 const MAX_FILA = Number(process.env.MUSICA_MAX_FILA || 200);
 const SPOTIFY_ID = process.env.SPOTIFY_ID || "";
@@ -57,12 +60,30 @@ function estadoDe(canalVoz) {
 }
 
 // ── Classificação da consulta (puro, testável) ──────────────────────────────
+// Link só de onde a música vem (12 out 2026). O yt-dlp tem um extrator
+// "genérico" que baixa QUALQUER endereço: `&musica http://192.168.1.1/`
+// fazia a máquina do bot sondar a rede de casa (e mostrava o <title> da
+// página), e `&musica https://site-de-alguem/x.mp3` entregava o IP da casa
+// a quem quisesse. Busca por texto continua livre (vai para o YouTube).
+const HOSTS_MUSICA = new Set([
+  "youtube.com", "www.youtube.com", "m.youtube.com", "music.youtube.com", "youtu.be",
+  "soundcloud.com", "www.soundcloud.com", "m.soundcloud.com", "on.soundcloud.com",
+  "open.spotify.com",
+  ...(process.env.MUSICA_HOSTS || "").split(",").map((h) => h.trim().toLowerCase()).filter(Boolean),
+]);
+export function hostDeMusica(url) {
+  try {
+    const u = new URL(url);
+    return /^https?:$/.test(u.protocol) && !u.username && !u.password && !u.port && HOSTS_MUSICA.has(u.hostname.toLowerCase());
+  } catch { return false; }
+}
+
 export function classificar(consulta) {
   const t = String(consulta ?? "").trim();
   if (!t) return { tipo: "vazio" };
   const sp = spotifyInfoDeUrl(t);
-  if (sp) return { tipo: `spotify-${sp.tipo}`, id: sp.id };
-  if (/^https?:\/\//i.test(t)) return { tipo: "url", url: t };
+  if (sp && hostDeMusica(t)) return { tipo: `spotify-${sp.tipo}`, id: sp.id };
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(t)) return hostDeMusica(t) ? { tipo: "url", url: t } : { tipo: "bloqueado" };
   return { tipo: "busca", busca: t };
 }
 
@@ -81,7 +102,7 @@ export function montarBusca(nome, artistas) {
 // ── yt-dlp: metadados e stream ──────────────────────────────────────────────
 function ytdlpJson(alvo, { playlistOk = true } = {}) {
   return new Promise((res, rej) => {
-    const args = ["-J", "--no-warnings", ...CLIENTES_YT, playlistOk ? "--flat-playlist" : "--no-playlist", alvo];
+    const args = ["-J", "--no-warnings", ...SEM_GENERICO, ...CLIENTES_YT, playlistOk ? "--flat-playlist" : "--no-playlist", alvo];
     const p = deps.spawn(YTDLP, args, { stdio: ["ignore", "pipe", "pipe"] });
     let fora = "", erro = "";
     p.stdout.on("data", (d) => (fora += d));
@@ -106,6 +127,7 @@ function itemDeEntrada(e) {
 async function resolverParaItens(consulta) {
   const c = classificar(consulta);
   if (c.tipo === "vazio") throw new Error("me diga um link (YouTube, SoundCloud, Spotify) ou o nome da música.");
+  if (c.tipo === "bloqueado") throw new Error("só toco links do YouTube, SoundCloud e Spotify — para o resto, escreva o nome da música.");
 
   if (c.tipo === "spotify-track") {
     const busca = await spotifyFaixaSemChave(consulta);
@@ -255,7 +277,7 @@ async function tocarProxima(canalVoz) {
     await cortarFaixa(st, media);
     if (g !== st.geracao) return;   // outro skip/parar chegou enquanto cortava
 
-    const proc = deps.spawn(YTDLP, ["-f", "bestaudio/best", ...CLIENTES_YT, "--no-playlist", "-o", "-", "--quiet", "--no-warnings", item.url],
+    const proc = deps.spawn(YTDLP, ["-f", "bestaudio/best", ...SEM_GENERICO, ...CLIENTES_YT, "--no-playlist", "-o", "-", "--quiet", "--no-warnings", item.url],
       { stdio: ["ignore", "pipe", "pipe"] });
     st.proc = proc;
     let erroTxt = "";

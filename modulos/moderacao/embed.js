@@ -4,6 +4,7 @@ import { validarUrlImagem, comoExibir, formatarLinkConteudo } from "../core/midi
 
 import * as log from "../core/log.js";
 import { tr, lingua } from "../core/i18n.js";
+import { canalDeOutroServidor } from "./pertence.js";
 
 // Converte "#RRGGBB" ou nome comum em cor aceita pelo embed
 
@@ -135,10 +136,10 @@ export async function cmdEmbed(message, args, ctx) {
         { title: "❌ Invalid channel", description: `\`${campos.canal}\` is not a valid channel ID.`, colour: COR.erro }));
     canalDestino = client.channels.get(campos.canal)
       ?? await client.channels.fetch(campos.canal).catch(() => null);
-    if (!canalDestino)
+    if (!canalDestino || canalDeOutroServidor(canalDestino, ctx.serverId))
       return sendEmbed(message.channel, tr(ctx,
-        { title: "❌ Canal não encontrado", description: `Não consegui acessar o canal \`${campos.canal}\`.`, colour: COR.erro },
-        { title: "❌ Channel not found", description: `I couldn't access the \`${campos.canal}\` channel.`, colour: COR.erro }));
+        { title: "❌ Canal não encontrado", description: `Não consegui acessar o canal \`${campos.canal}\` **neste servidor**.`, colour: COR.erro },
+        { title: "❌ Channel not found", description: `I couldn't access the \`${campos.canal}\` channel **on this server**.`, colour: COR.erro }));
   }
 
   const cor = normalizarCor(campos.cor) ?? "#5865F2";

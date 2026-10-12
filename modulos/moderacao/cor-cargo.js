@@ -3,6 +3,7 @@ import * as db from "../core/db.js";
 import { CORES as NOMES, normalizarCor as corSolida } from "../core/cores.js";
 import { tr, lingua } from "../core/i18n.js";
 import { chamarApi } from "../core/stoat-api.js";
+import { canalDeOutroServidor } from "./pertence.js";
 
 // Gradientes prontos — o atalho para o efeito bonito sem montar nada.
 const PRESETS = {
@@ -222,6 +223,15 @@ export async function cmdCor(message, args, ctx) {
         colour: COR.erro,
       }));
     }
+    // o canal do painel tem de ser deste servidor — confere ANTES de criar cargos
+    if (canalAlvoId && canalAlvoId !== message.channelId) {
+      const alvo = ctx.client?.channels?.get?.(canalAlvoId) ?? await ctx.client?.channels?.fetch?.(canalAlvoId).catch(() => null);
+      if (!alvo || canalDeOutroServidor(alvo, ctx.serverId)) {
+        return sendEmbed(message.channel, tr(ctx,
+          { title: "❌ Canal inválido", description: `<#${canalAlvoId}> não é um canal **deste servidor** onde eu possa escrever. Use \`${P}cor painel aqui\`.`, colour: COR.erro },
+          { title: "❌ Invalid channel", description: `<#${canalAlvoId}> isn't a channel **on this server** I can write to. Use \`${P}cor painel aqui\`.`, colour: COR.erro }));
+      }
+    }
     const alvos = pedidos.length ? pedidos : Object.keys(PRESETS);
     const soCargos = !canalAlvoId && ["criar", "criarpresets", "criartodos", "gerar"].includes(sub);
 
@@ -297,6 +307,7 @@ export async function cmdCor(message, args, ctx) {
       canal = destinoId === message.channelId ? message.channel
         : (ctx.client?.channels?.get?.(destinoId) ?? await ctx.client?.channels?.fetch?.(destinoId));
     } catch {}
+    if (canalDeOutroServidor(canal, ctx.serverId)) canal = null;   // canal de outro servidor: não
     if (!canal?.sendMessage) {
       return sendEmbed(message.channel, tr(ctx, {
         title: "❌ Canal inválido",

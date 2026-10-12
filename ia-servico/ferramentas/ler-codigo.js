@@ -13,7 +13,14 @@ function raizLocal() {
 
 function caminhoSeguro(raiz, pedido) {
   const alvo = path.resolve(raiz, pedido ?? "");
-  return alvo === raiz || alvo.startsWith(raiz + path.sep) ? alvo : null;
+  if (!(alvo === raiz || alvo.startsWith(raiz + path.sep))) return null;
+  // um atalho (symlink) dentro da pasta não pode levar para fora dela —
+  // /proc/self/environ tem o BOT_TOKEN (12 out 2026)
+  try {
+    const real = fs.realpathSync(alvo), raizReal = fs.realpathSync(raiz);
+    if (!(real === raizReal || real.startsWith(raizReal + path.sep))) return null;
+  } catch { /* não existe: quem chama responde "não existe" */ }
+  return alvo;
 }
 
 const IGNORAR_DIRS = new Set(["node_modules", ".git", ".github"]);

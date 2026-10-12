@@ -19,11 +19,29 @@ import { createServer } from "node:http";
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import * as db from "../core/db.js";
 import { tr, lingua } from "../core/i18n.js";
+import { canalDeOutroServidor, canalDoServidor } from "../moderacao/pertence.js";
 
 const PORTA = Number(process.env.WEBHOOK_PORTA || 8095);
 const URL_BASE = (process.env.WEBHOOK_URL_BASE || "").replace(/\/$/, "");
 const MAX_CORPO = 256 * 1024;
 const TETO_POR_MIN = Number(process.env.WEBHOOK_TETO_MIN || 30);
+// ── Exposição (12 out 2026) ──
+// O receptor fica na internet (Tailscale Funnel) e, com o bot global, qualquer
+// admin de qualquer servidor criava ganchos nele. Tetos que não dependem de
+// quem pede: total por minuto (todos os ganchos somados), tentativas com token
+// errado, conexões abertas, tempo para mandar o pedido, ganchos por servidor.
+const TETO_GLOBAL_MIN = Number(process.env.WEBHOOK_TETO_GLOBAL_MIN || 240);
+const TETO_ERROS_MIN = Number(process.env.WEBHOOK_TETO_ERROS_MIN || 60);
+const MAX_GANCHOS_SERVIDOR = Number(process.env.WEBHOOK_MAX_POR_SERVIDOR || 10);
+// Quem pode criar ganchos: ids de servidor separados por vírgula, ou `*` (padrão: todos)
+const SERVIDORES_PERMITIDOS = (process.env.WEBHOOK_SERVIDORES || "*").split(",").map((x) => x.trim()).filter(Boolean);
+export function servidorPodeTerWebhook(serverId) {
+  return SERVIDORES_PERMITIDOS.includes("*") || SERVIDORES_PERMITIDOS.includes(serverId);
+}
+// O link "abrir ↗" do embed vem do corpo do pedido: só http(s)
+export function linkSeguro(url) {
+  try { const u = new URL(String(url ?? "")); return /^https?:$/.test(u.protocol) ? u.href : null; } catch { return null; }
+}
 
 // ── Formatadores (puros, testáveis) ─────────────────────────────────────────
 const CORES = { ok: "#43B581", aviso: "#FAA61A", erro: "#F04747", info: "#5865F2", git: "#6e5494" };
@@ -144,13 +162,14 @@ export function formatar(headers, corpo) {
 // ── Receptor HTTP ───────────────────────────────────────────────────────────
 const usoRecente = new Map();   // ganchoId → timestamps do último minuto
 
-function estourou(ganchoId) {
+function estourou(ganchoId, teto = TETO_POR_MIN) {
   const agora = Date.now();
   const lista = (usoRecente.get(ganchoId) ?? []).filter((t) => agora - t < 60_000);
   lista.push(agora);
   usoRecente.set(ganchoId, lista);
-  return lista.length > TETO_POR_MIN;
+  return lista.length > teto;
 }
+export function _zerarTetos() { usoRecente.clear(); }   // só testes
 
 function tokenConfere(a, b) {
   const A = Buffer.from(String(a ?? "")), B = Buffer.from(String(b ?? ""));
@@ -167,16 +186,21 @@ async function canalPorId(ctx, canalId) {
 
 export function iniciarReceptor(ctx) {
   const srv = createServer((req, res) => {
-    const fim = (codigo, obj) => { res.writeHead(codigo, { "Content-Type": "application/json" }); res.end(JSON.stringify(obj)); };
+    const fim = (codigo, obj) => { res.writeHead(codigo, { "Content-Type": "application/json", "X-Content-Type-Options": "nosniff" }); res.end(JSON.stringify(obj)); };
     const m = req.url?.match(/^\/gancho\/(\d+)\/([A-Za-z0-9_-]+)$/);
     if (!m || req.method !== "POST") return fim(404, { erro: "use POST /gancho/<id>/<token>" });
+    // quem erra o token demais (varredura) leva 429 antes de tocar no banco
+    if ((usoRecente.get("__erros__") ?? []).filter((t) => Date.now() - t < 60_000).length >= TETO_ERROS_MIN) return fim(429, { erro: "tentativas demais" });
+    if (estourou("__todos__", TETO_GLOBAL_MIN)) return fim(429, { erro: "calma: teto de publicações por minuto atingido" });
+    if (Number(req.headers["content-length"] || 0) > MAX_CORPO) { res.setHeader("Connection", "close"); return fim(413, { erro: "corpo grande demais" }); }
 
-    let corpo = "";
-    req.on("data", (d) => { corpo += d; if (corpo.length > MAX_CORPO) { req.destroy(); } });
+    let corpo = "", estourouCorpo = false;
+    req.on("data", (d) => { corpo += d; if (corpo.length > MAX_CORPO) { estourouCorpo = true; req.destroy(); } });
     req.on("end", async () => {
+      if (estourouCorpo) return;
       try {
         const gancho = db.ganchoPorId(Number(m[1]));
-        if (!gancho || !tokenConfere(gancho.token, m[2])) return fim(401, { erro: "gancho ou token inválido" });
+        if (!gancho || !tokenConfere(gancho.token, m[2])) { estourou("__erros__", Infinity); return fim(401, { erro: "gancho ou token inválido" }); }
         if (estourou(gancho.id)) return fim(429, { erro: "calma: teto de publicações por minuto atingido" });
 
         const json = desembrulharCorpo(corpo);
@@ -191,9 +215,15 @@ export function iniciarReceptor(ctx) {
         db.registrarUsoGancho(gancho.id);
         const canal = await canalPorId(ctx, gancho.canalId);
         if (!canal) { console.error(`[WEBHOOK] canal ${gancho.canalId} não encontrado — o bot está nesse servidor?`); return fim(200, { ok: true, aviso: "canal não encontrado" }); }
+        // o gancho é do servidor que o criou: nunca publica em canal de outro
+        if (canalDeOutroServidor(canal, gancho.serverId)) {
+          console.warn(`[SEGURANCA] gancho ${gancho.id} (servidor ${gancho.serverId}) aponta para canal de outro servidor (${canal.serverId}) — bloqueado`);
+          return fim(403, { erro: "o canal deste gancho não é do servidor dele" });
+        }
+        const link = linkSeguro(embed.url);
         await ctx.sendEmbed(canal, {
           title: embed.titulo,
-          description: (embed.url ? `${embed.descricao}\n[abrir ↗](${embed.url})` : embed.descricao).slice(0, 1900),
+          description: (link ? `${embed.descricao}\n[abrir ↗](${link})` : embed.descricao).slice(0, 1900),
           colour: embed.cor,
         });
         console.log(`[WEBHOOK] gancho "${gancho.nome}" publicou "${evento}" em ${gancho.canalId}`);
@@ -204,6 +234,12 @@ export function iniciarReceptor(ctx) {
       }
     });
   });
+  // pedido lento ou pendurado não segura conexão aberta (slowloris)
+  srv.headersTimeout = 10_000;
+  srv.requestTimeout = 15_000;
+  srv.keepAliveTimeout = 5_000;
+  srv.maxHeadersCount = 50;
+  srv.maxConnections = Number(process.env.WEBHOOK_MAX_CONEXOES || 64);
   srv.on("error", (e) => console.error(`[WEBHOOK] receptor não subiu na porta ${PORTA}: ${e.message}`));
   srv.listen(PORTA, () => console.log(`[WEBHOOK] receptor de pé na porta ${PORTA} (POST /gancho/<id>/<token>)`));
   return srv;
@@ -296,10 +332,34 @@ export async function cmdWebhook(message, args, ctx) {
   const nome = String(args[1] ?? "").toLowerCase().replace(/[^a-z0-9_-]/g, "").slice(0, 32);
   const acharGancho = () => db.listarGanchos(serverId).find((g) => g.nome === nome);
 
+  // O canal precisa ser DESTE servidor (antes dava para apontar um gancho para
+  // o canal de outro servidor e publicar lá pela Judy).
+  const servidor = await getServer(message).catch(() => null);
+  const canalValido = async (canalId) => {
+    if (!canalId) return false;
+    if (canalDoServidor(servidor, canalId)) return true;
+    const c = ctx.client?.channels?.get?.(canalId) ?? await ctx.client?.channels?.fetch?.(canalId).catch(() => null);
+    return !!c && !canalDeOutroServidor(c, serverId) && (c.serverId ?? c.server?.id) === serverId;
+  };
+  const canalDeOutro = () => sendEmbed(message.channel, tr(ctx,
+    { title: "🪝", description: "Esse canal não é **deste servidor** — um gancho só publica nos canais daqui.", colour: COR.aviso },
+    { title: "🪝", description: "That channel isn't **on this server** — a hook can only post to channels here.", colour: COR.aviso }));
+
   if (sub === "criar" || sub === "novo" || sub === "add") {
     if (!nome) return sendEmbed(message.channel, { title: "🪝", description: en ? `Give it a name: \`${P}webhook criar github\`` : `Dê um nome: \`${P}webhook criar github\``, colour: COR.aviso });
     if (acharGancho()) return sendEmbed(message.channel, { title: "🪝", description: en ? `**${nome}** already exists — \`${P}webhook url ${nome}\`.` : `**${nome}** já existe — \`${P}webhook url ${nome}\`.`, colour: COR.aviso });
+    if (!servidorPodeTerWebhook(serverId)) {
+      return sendEmbed(message.channel, tr(ctx,
+        { title: "🪝", description: "Webhooks não estão liberados neste servidor (`WEBHOOK_SERVIDORES`).", colour: COR.aviso },
+        { title: "🪝", description: "Webhooks aren't enabled on this server (`WEBHOOK_SERVIDORES`).", colour: COR.aviso }));
+    }
+    if (db.listarGanchos(serverId).length >= MAX_GANCHOS_SERVIDOR) {
+      return sendEmbed(message.channel, tr(ctx,
+        { title: "🪝", description: `Este servidor já tem **${MAX_GANCHOS_SERVIDOR}** ganchos — o máximo. Apague um com \`${P}webhook remover <nome>\`.`, colour: COR.aviso },
+        { title: "🪝", description: `This server already has **${MAX_GANCHOS_SERVIDOR}** hooks — the maximum. Delete one with \`${P}webhook remover <name>\`.`, colour: COR.aviso }));
+    }
     const canalId = ctx.limparId?.(args[2]) || args[2]?.replace(/[<#>]/g, "") || message.channelId;
+    if (canalId !== message.channelId && !(await canalValido(canalId))) return canalDeOutro();
     const token = randomBytes(16).toString("base64url");
     const g = db.criarGancho(serverId, nome, canalId, token);
     return sendEmbed(message.channel, tr(ctx, {
@@ -322,6 +382,7 @@ export async function cmdWebhook(message, args, ctx) {
   if (sub === "canal") {
     const canalId = ctx.limparId?.(args[2]) || args[2]?.replace(/[<#>]/g, "");
     if (!canalId) return sendEmbed(message.channel, { title: "🪝", description: en ? "Which channel?" : "Qual canal?", colour: COR.aviso });
+    if (canalId !== message.channelId && !(await canalValido(canalId))) return canalDeOutro();
     db.atualizarGancho(g.id, { canalId });
     return sendEmbed(message.channel, { title: "🪝", description: (en ? `**${g.nome}** now posts to ` : `**${g.nome}** agora publica em `) + `<#${canalId}>.`, colour: COR.sucesso });
   }

@@ -1375,7 +1375,11 @@ const ok = (cond, msg) => { cond ? pass++ : fail++; console.log(`${cond ? "✅" 
     linkBlocklistSources: [url],
     debug: false,
   };
-  const ctx = { cfgGlobal, estado: { blockedDomains: criarIndiceVazio() } };
+  // a fonte passa pela trava anti-SSRF (12 out 2026): 127.0.0.1 é bloqueado de
+  // verdade — o teste libera só o servidor local dele
+  const seg = await import("./modulos/core/seguranca.js");
+  const ctx = { cfgGlobal, estado: { blockedDomains: criarIndiceVazio() },
+    buscarLista: (u, o) => seg.buscarSeguro(u, o, { _ehInterno: () => false }) };
 
   await engine.rebuildBlocklist(ctx);
   ok(ctx.estado.blockedDomains.size === 5001, "rebuild: 5000 da fonte + 1 manual = 5001");
@@ -10877,6 +10881,166 @@ await say("&help entretenimento cowsay");
 ok(/bicho em ASCII/.test(ult()) && /pinguim/.test(ult()), "&help entretenimento cowsay (camada de baixo)");
 
 console.log(`\nENTRETENIMENTO: ${pass} ok, ${fail} falha(s)`);
+process.exit(fail ? 1 : 0);
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+// seguranca-12out  (12 out 2026) — "o bot está global: o que expõe a minha máquina?"
+// ════════════════════════════════════════════════════════════════════════════
+SUITES["seguranca-12out"] = async () => {
+const __m0 = await import("node:fs"); const fs = __m0.default;
+const __m1 = await import("node:http"); const http = __m1.default;
+const __m2 = await import("node:os"); const os = __m2.default;
+const __m3 = await import("node:path"); const path = __m3.default;
+// A auditoria achou: (1) o RSS buscava pelo rss-parser, por FORA da trava
+// anti-SSRF; (2) a fonte da lista de bloqueio era um fetch cru e a lista é
+// GLOBAL — qualquer admin de qualquer servidor a apagava ou fazia o bot baixar
+// o que quisesse; (3) dava para mandar a Judy publicar em canal de OUTRO
+// servidor (&embed canal:, &webhook canal, &cor painel); (4) a trava conferia
+// o DNS e a conexão resolvia de novo (DNS rebinding); (5) a música aceitava
+// qualquer link no yt-dlp; (6) o receptor de webhook não tinha teto global.
+process.env.BOT_TOKEN = "tok";
+process.env.SUPER_ADMINS = "DONO";
+process.env.WEBHOOK_PORTA = "18195";
+process.env.DB_PATH = "/tmp/seg-12out.db";
+process.env.CONFIG_PATH = "/tmp/seg-12out-cfg.json";
+for (const f of ["/tmp/seg-12out.db", "/tmp/seg-12out.db-wal", "/tmp/seg-12out.db-shm", "/tmp/seg-12out-cfg.json", "/tmp/blocklist-cache.bin"]) fs.rmSync(f, { force: true });
+
+let pass = 0, fail = 0;
+const ok = (cond, msg) => { cond ? pass++ : fail++; console.log(`  ${cond ? "✅" : "❌"} ${msg}`); };
+const espera = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// Um "serviço interno" na própria máquina: conta quantas vezes foi tocado.
+let toques = 0;
+const interno = http.createServer((req, res) => { toques++; res.writeHead(200, { "content-type": "application/rss+xml" }); res.end('<?xml version="1.0"?><rss><channel><title>PAINEL DO ROTEADOR</title><item><title>x</title></item></channel></rss>'); });
+await new Promise((r) => interno.listen(0, "127.0.0.1", r));
+const INTERNO = `http://127.0.0.1:${interno.address().port}`;
+
+console.log("── a trava de rede ──");
+const seg = await import("./modulos/core/seguranca.js");
+{
+  let n = 0; const vira = async () => (n++ === 0 ? [{ address: "93.184.216.34" }] : [{ address: "127.0.0.1" }]);
+  const antes = toques;
+  let erro = null; try { await seg.buscarSeguro(`http://rebind.exemplo:${interno.address().port}/`, {}, { resolver: vira }); } catch (e) { erro = e.message; }
+  ok(erro && toques === antes, `★ DNS rebinding: a conferência via IP público, a conexão via 127.0.0.1 — bloqueado na conexão (${erro})`);
+}
+{
+  const grande = http.createServer((q, r) => { r.writeHead(200); for (let i = 0; i < 40; i++) r.write("x".repeat(100_000)); r.end(); });
+  await new Promise((r) => grande.listen(0, "127.0.0.1", r));
+  const r = await seg.buscarSeguro(`http://127.0.0.1:${grande.address().port}/`, {}, { _ehInterno: () => false });
+  let erro = null; try { await seg.lerTexto(r, 1_000_000); } catch (e) { erro = e.message; }
+  ok(/grande demais/.test(erro ?? ""), "★ resposta gigante para no teto (um feed infinito não enche a RAM)");
+  grande.close();
+}
+
+console.log("\n── música: só de onde a música vem ──");
+{
+  const m = await import("./voz-servico/musica.js");
+  ok(m.classificar("http://192.168.1.1/").tipo === "bloqueado" && m.classificar(INTERNO).tipo === "bloqueado", "★ link para a rede de casa é recusado (antes ia direto para o yt-dlp)");
+  ok(m.classificar("https://site-de-alguem.com/x.mp3").tipo === "bloqueado", "  → e link de site qualquer (entregaria o IP da casa)");
+  ok(m.classificar("https://youtube.com.evil.com/x").tipo === "bloqueado" && m.classificar("https://evil.com/open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC").tipo === "bloqueado", "  → disfarce de domínio também");
+  ok(m.classificar("https://youtu.be/abc").tipo === "url" && m.classificar("https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC").tipo === "spotify-track" && m.classificar("lofi beats").tipo === "busca", "YouTube, Spotify e busca por nome continuam");
+  const fonte = fs.readFileSync("./voz-servico/musica.js", "utf8");
+  ok(/"--ies", "default,-generic"/.test(fonte), "yt-dlp sem o extrator genérico (redirect do YouTube não leva para fora)");
+}
+
+console.log("\n── ler código: atalho não sai da pasta ──");
+{
+  const raiz = fs.mkdtempSync(path.join(os.tmpdir(), "codigo-"));
+  fs.writeFileSync(path.join(raiz, "main.js"), "// ok\n");
+  fs.symlinkSync("/etc/hostname", path.join(raiz, "fora.js"));
+  process.env.CODIGO_DIR = raiz;
+  const lc = await import("./ia-servico/ferramentas/ler-codigo.js");
+  const r = await lc.executar({ acao: "ler", caminho: "fora.js" });
+  ok(/fora do repositório/.test(r.erro ?? ""), "★ symlink para fora da pasta é recusado (/proc/self/environ tem o BOT_TOKEN)");
+  const r2 = await lc.executar({ acao: "ler", caminho: "main.js" });
+  ok(!r2.erro, "  → arquivo de verdade continua legível");
+}
+
+console.log("\n── pelo bot: um servidor não mexe no outro ──");
+await import("./main.js");
+const c = globalThis.__client;
+await c.emitAll("ready");
+const C1ID = "01KCANA1000000000000000001", C2ID = "01KCANA2000000000000000002";
+const enviados = { [C1ID]: [], [C2ID]: [] };
+const canal = (id, serverId) => ({ id, serverId, sendMessage: async (p) => { enviados[id].push(p); return { id: "M" + Math.random(), react: async () => {} }; }, fetchMessages: async () => [] });
+const C1 = canal(C1ID, "S1"), C2 = canal(C2ID, "S2");
+const srv = (id, dono, canais) => ({ id, ownerId: dono, name: id, roles: new Map(), channels: canais, channelIds: new Set(canais.map((x) => x.id)),
+  member: { roles: [] }, havePermission: () => true, fetchMember: async () => null, fetchMembers: async () => ({ members: [] }), fetchBans: async () => [] });
+const S1 = srv("S1", "ADM", [C1]), S2 = srv("S2", "OUTRO", [C2]);
+c.servers.set("S1", S1); c.servers.set("S2", S2);
+c.channels.set(C1ID, C1); c.channels.set(C2ID, C2);
+const diz = async (autor, t) => {
+  await c.emitAll("messageCreate", { authorId: autor, content: t, serverId: "S1", server: S1, channel: C1, channelId: C1ID,
+    mentionIds: [], createdAt: new Date(), author: { username: autor }, member: { roles: [] } });
+  await espera(20);
+};
+const ult = () => JSON.stringify(enviados[C1ID].at(-1) ?? {});
+
+await diz("ADM", `&embed canal: ${C2ID} | titulo: Golpe | descricao: clique aqui`);
+ok(enviados[C2ID].length === 0 && /neste servidor/.test(ult()), "★ &embed canal: <canal de outro servidor> é recusado (antes publicava lá)");
+await diz("ADM", `&webhook criar ataque ${C2ID}`);
+ok(/não é \*\*deste servidor\*\*/.test(ult()), "★ &webhook criar com canal de outro servidor é recusado");
+await diz("ADM", `&cor painel ${C2ID} fogo`);
+ok(enviados[C2ID].length === 0 && /deste servidor/.test(ult()), "★ &cor painel em canal de outro servidor é recusado (antes de criar cargo nenhum)");
+
+console.log("\n── o que é de todos, só o dono do bot muda ──");
+const store = await import("./modulos/core/config-store.js");
+store.getGlobal().linkBlocklistManual = ["golpe.exemplo"];
+await diz("ADM", "&automod blocklist clear");
+ok(store.getGlobal().linkBlocklistManual.length === 1 && /Só o dono do bot/.test(ult()), "★ admin de um servidor NÃO apaga a lista de bloqueio de todos");
+const antes = toques;
+await diz("ADM", `&automod blocklist add ${INTERNO}/lista.txt`);
+await espera(200);
+ok(toques === antes && !store.getGlobal().linkBlocklistSources.length, "★ nem faz o bot baixar uma \"lista\" da rede interna");
+await diz("ADM", "&automod blocklist adddomain youtube.com");
+ok(!store.getGlobal().linkBlocklistManual.includes("youtube.com"), "  → nem bloqueia um domínio para todos os servidores");
+await diz("ADM", "&automod blocklist list");
+ok(/golpe\.exemplo/.test(ult()), "  → ver a lista continua livre");
+await diz("ADM", "&automod debug off");
+ok(/Só o dono do bot/.test(ult()), "  → o debug (global) também é só do dono");
+await diz("DONO", `&automod blocklist add ${INTERNO}/lista.txt`);
+await espera(300);
+ok(toques === antes, "★ e mesmo o dono não faz o bot baixar da rede interna (a fonte passa pela trava)");
+
+console.log("\n── RSS ──");
+const antesRss = toques;
+await diz("ADM", `&rss add ${INTERNO}/feed.xml`);
+await espera(300);
+ok(toques === antesRss, "★ &rss add de endereço interno não toca o serviço (antes o rss-parser buscava por fora da trava)");
+ok(/inacess/i.test(ult()) && !/PAINEL DO ROTEADOR/.test(ult()), "  → responde que não leu, sem mostrar nada do serviço interno");
+
+console.log("\n── receptor de webhook ──");
+const db = await import("./modulos/core/db.js");
+const BASE = "http://127.0.0.1:18195";
+const post = (p, corpo, h = {}) => fetch(`${BASE}${p}`, { method: "POST", headers: { "content-type": "application/json", ...h }, body: corpo });
+{
+  const id = db.criarGancho("S1", "intruso", C2ID, "tokenSecreto123456").id;   // gancho antigo, apontando para outro servidor
+  const r = await post(`/gancho/${id}/tokenSecreto123456`, JSON.stringify({ content: "propaganda" }));
+  ok(r.status === 403 && enviados[C2ID].length === 0, `★ gancho apontando para canal de outro servidor: recusado na chegada (${r.status})`);
+}
+{
+  const id = db.criarGancho("S1", "ok", C1ID, "tokenBom1234567890").id;
+  const r = await post(`/gancho/${id}/tokenBom1234567890`, JSON.stringify({ content: "oi", embeds: [{ title: "t", url: "javascript:alert(1)" }] }));
+  ok(r.status === 200 && !/javascript:/.test(JSON.stringify(enviados[C1ID].at(-1))), "★ link do corpo só se for http(s) (javascript: some)");
+  const grande = await post(`/gancho/${id}/tokenBom1234567890`, "x".repeat(300 * 1024)).catch(() => ({ status: "fechou" }));
+  ok(grande.status === 413 || grande.status === "fechou", `corpo acima de 256 KB não entra (${grande.status})`);
+  let ultimo = 0;
+  for (let i = 0; i < 65; i++) ultimo = (await post(`/gancho/${id}/tokenErrado${i}`, "{}")).status;
+  ok(ultimo === 429, "★ varredura de token leva 429 depois de 60 erros por minuto");
+  const certo = await post(`/gancho/${id}/tokenBom1234567890`, "{}");
+  ok(certo.status === 429, "  → e por um minuto nem o token certo passa (o receptor nem consulta o banco)");
+}
+{
+  const wh = await import("./modulos/ferramentas/webhooks.js");
+  wh._zerarTetos();
+  for (let i = 0; i < 12; i++) db.criarGancho("S1", `g${i}`, C1ID, `token${i}abcdefghijkl`);
+  await diz("ADM", "&webhook criar mais");
+  ok(/o máximo/.test(ult()), "★ ganchos por servidor têm teto (10)");
+}
+
+interno.close();
+console.log(`\nSEGURANÇA (12 out): ${pass} ok, ${fail} falha(s)`);
 process.exit(fail ? 1 : 0);
 };
 

@@ -117,7 +117,10 @@ async function cmdRelatorio(message, args, ctx) {
     let destino = cfg.canalId ? await client.channels.fetch(cfg.canalId).catch(() => message.channel) : message.channel;
     const fixo = relatorio.servidorDoRelatorio();
     if (fixo && destino?.serverId !== fixo) destino = message.channel;   // canal antigo de outro servidor
-    return sendEmbed(destino,
+    // o painel é do dono do bot: o canal do relatório pode ser de outro servidor
+    // (o dele) — a porta de saída de um servidor recusaria, a global não
+    const enviarGlobal = ctx.criarContexto?.(null)?.sendEmbed ?? sendEmbed;
+    return enviarGlobal(destino,
       { title: rel.title, description: rel.description, colour: COR.info });
   }
 

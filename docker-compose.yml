@@ -42,7 +42,11 @@ services:
     # NÃO acrescente "render": a imagem é Debian e não tem esse grupo — o
     # container morre com "unable to find group render". Só `video`.
     ports:
-      - "${WEBHOOK_PORTA:-8095}:${WEBHOOK_PORTA:-8095}"   # receptor de webhooks
+      # receptor de webhooks. WEBHOOK_BIND escolhe em que endereço da máquina ele
+      # fica: 0.0.0.0 (padrão) = toda a rede de casa enxerga; 127.0.0.1 = só a
+      # própria máquina (o Tailscale Funnel continua funcionando, ele fala com
+      # o localhost); 172.17.0.1 = só os containers (ex.: Crafty)
+      - "${WEBHOOK_BIND:-0.0.0.0}:${WEBHOOK_PORTA:-8095}:${WEBHOOK_PORTA:-8095}"
     volumes:
       - stoat_data:/data
 

@@ -71,8 +71,13 @@ async function baixarLimitado(url) {
   } finally { clearTimeout(t); }
 }
 
+// Só formato de foto: SVG/PDF/TIFF passam por bibliotecas maiores (librsvg,
+// poppler) que não têm por que rodar com arquivo de estranho (12 out 2026).
+const FORMATOS = new Set(["jpeg", "png", "webp", "gif", "avif", "heif"]);
 async function reescrever(buffer, ladoMax) {
   const s = await sharp();
+  const meta = await s(buffer, { limitInputPixels: MAX_PIXELS }).metadata().catch(() => null);
+  if (!meta || !FORMATOS.has(meta.format)) throw new Error(`formato de imagem não aceito (${meta?.format ?? "desconhecido"}) — mande JPEG, PNG, WebP ou GIF`);
   return s(buffer, { limitInputPixels: MAX_PIXELS, animated: false })
     .rotate()                                   // aplica a orientação EXIF… e joga o EXIF fora
     .resize({ width: ladoMax, height: ladoMax, fit: "inside", withoutEnlargement: true })

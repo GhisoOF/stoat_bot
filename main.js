@@ -64,6 +64,7 @@ import * as rss       from "./modulos/ferramentas/rss.js";
 import * as nivel     from "./modulos/ferramentas/nivel.js";
 import * as i18n      from "./modulos/core/i18n.js";
 import * as aliases   from "./modulos/core/aliases.js";
+import { canalDeOutroServidor } from "./modulos/moderacao/pertence.js";
 import * as paginas   from "./modulos/core/paginas.js";
 import * as assistente from "./modulos/moderacao/assistente.js";
 import { tr }         from "./modulos/core/i18n.js";
@@ -289,11 +290,19 @@ const estado = {
 function criarContexto(serverId = null) {
   const config = store.configDoServidor(serverId);
 
-  const enviarTraduzido = (canal, embed = {}) => sendEmbed(canal, {
-    ...embed,
-    title: aliases.exibir(embed.title, config?.language, PREFIXO, CANONICO),
-    description: aliases.exibir(embed.description, config?.language, PREFIXO, CANONICO),
-  });
+  // A porta de saída de todo comando de um servidor: o canal tem de ser DELE
+  // (ver pertence.js — um admin do servidor A publicava no servidor B).
+  const enviarTraduzido = (canal, embed = {}) => {
+    if (canalDeOutroServidor(canal, serverId)) {
+      console.warn(`[SEGURANCA] servidor ${serverId} tentou publicar no canal ${canal?.id} do servidor ${canal?.serverId} — bloqueado`);
+      return Promise.resolve(null);
+    }
+    return sendEmbed(canal, {
+      ...embed,
+      title: aliases.exibir(embed.title, config?.language, PREFIXO, CANONICO),
+      description: aliases.exibir(embed.description, config?.language, PREFIXO, CANONICO),
+    });
+  };
 
   return {
     client, config, cfgGlobal, COR, PREFIXO,

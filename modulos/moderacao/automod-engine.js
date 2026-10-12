@@ -8,6 +8,7 @@ import * as log from "../core/log.js";
 import * as banGlobal from "./ban-global.js";
 import * as confianca from "./confianca.js";
 import { curarIds } from "./pertence.js";
+import { buscarSeguro } from "../core/seguranca.js";
 import { aplicarTimeout, CONFIRMAR_MS } from "./timeout.js";
 import { editarCargos } from "../core/hierarquia.js";
 import * as imagemSentinela from "./imagem.js";
@@ -55,23 +56,25 @@ export function parseBlocklist(text) {
   return domains;
 }
 
-async function baixarParaIndice(url, construtor) {
-  const res = await fetch(url, { signal: AbortSignal.timeout(90_000) });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const reader = res.body.getReader();
+// A fonte é uma URL: busca pela trava anti-SSRF (IP conferido na conexão) e
+// com teto de tamanho — antes era um fetch cru, sem limite (12 out 2026).
+const MAX_LISTA_BYTES = Number(process.env.BLOCKLIST_MAX_MB || 200) * 1024 * 1024;
+async function baixarParaIndice(url, construtor, { buscar = buscarSeguro } = {}) {
+  const res = await buscar(url, { signal: AbortSignal.timeout(90_000) });
+  if (!res.ok) { res.descartar?.(); throw new Error(`HTTP ${res.status}`); }
   const dec = new TextDecoder();
-  let resto = "", n = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    const texto = resto + dec.decode(value ?? new Uint8Array(), { stream: !done });
-    const linhas = texto.split("\n");
-    resto = done ? "" : linhas.pop();
+  let resto = "", n = 0, bytes = 0;
+  for await (const pedaco of res.body) {
+    bytes += pedaco.length;
+    if (bytes > MAX_LISTA_BYTES) { res.body.destroy?.(); throw new Error(`lista grande demais (mais de ${MAX_LISTA_BYTES / 1024 / 1024} MB)`); }
+    const linhas = (resto + dec.decode(pedaco, { stream: true })).split("\n");
+    resto = linhas.pop();
     for (const l of linhas) {
       const d = normalizarLinha(l);
       if (d) { construtor.adicionar(d); n++; }
     }
-    if (done) break;
   }
+  resto += dec.decode();
   if (resto) {
     const d = normalizarLinha(resto);
     if (d) { construtor.adicionar(d); n++; }
@@ -102,7 +105,7 @@ export async function rebuildBlocklist(ctx) {
   for (const url of cfgGlobal.linkBlocklistSources) {
     try {
       dbg(ctx, `[BLOCKLIST] Baixando ${url} …`);
-      const n = await baixarParaIndice(url, construtor);
+      const n = await baixarParaIndice(url, construtor, ctx?.buscarLista ? { buscar: ctx.buscarLista } : {});   // buscarLista: só teste (servidor local)
       console.info(`[BLOCKLIST] ${n.toLocaleString("pt-BR")} domínios de ${url}`);
     } catch (err) {
       falhas++;

@@ -391,6 +391,33 @@ qualquer servidor) exigem estar em `DONO`/`SUPER_ADMINS`.
 
 ---
 
+## Exposição da máquina (bot em muitos servidores)
+
+O que um estranho, de qualquer servidor onde o bot está, consegue fazer a
+máquina onde ele roda **buscar** — e a trava de cada caminho.
+*What a stranger in any server can make the host machine fetch, and how each path is locked.*
+
+- **Imagens**: só do CDN do Stoat (lista fechada, https, redirect conferido),
+  teto de 8 MB e 32 MP, e só formato de foto (JPEG, PNG, WebP, GIF, AVIF, HEIF).
+- **Páginas da busca, RSS e listas de bloqueio**: só internet pública. O IP é
+  conferido **na conexão** (sem DNS rebinding), cada redirect é conferido de
+  novo, e há teto de tamanho. O RSS tem até 25 feeds por servidor
+  (`RSS_MAX_FEEDS`) e pode ser restrito a alguns servidores (`RSS_SERVIDORES`).
+- **Música**: links só do YouTube, SoundCloud e Spotify (`MUSICA_HOSTS`
+  acrescenta), e o yt-dlp roda sem o extrator genérico.
+- **Webhooks**: o receptor é a única porta aberta. Token de 128 bits por
+  gancho, tetos por gancho, total e de tentativas erradas, tempo curto para
+  mandar o pedido, até 10 ganchos por servidor, canal sempre do servidor do
+  gancho. `WEBHOOK_BIND=127.0.0.1` tira a porta da rede de casa (o Tailscale
+  Funnel continua funcionando); `WEBHOOK_SERVIDORES` limita quem cria ganchos.
+- **Um servidor não mexe no outro**: nada publica em canal de outro servidor,
+  e o que é de todos (a lista de bloqueio, o debug, a lista global de bans)
+  só o dono do bot muda.
+- **Serviços internos** (IA, voz, modelo) ouvem só em `127.0.0.1`.
+- **O que não dá para esconder sem VPN**: toda busca que o bot faz (feed,
+  página, vídeo) sai pela conexão da máquina — o dono do site vê esse IP.
+  Para escondê-lo, rode o container atrás de uma VPN.
+
 ## Persistência e compatibilidade
 
 Tudo vive num **SQLite** embutido (`node:sqlite`, sem serviço externo) mais um

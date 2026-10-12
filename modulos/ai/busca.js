@@ -19,7 +19,7 @@
 // (crates/core/database/src/tasks/process_embeds.rs, RE_IGNORED).
 
 import { pareceOutroIdioma } from "../core/idioma.js";
-import { buscarSeguro } from "../core/seguranca.js";
+import { buscarSeguro, lerTexto } from "../core/seguranca.js";
 
 const SEARXNG_URL = () => (process.env.SEARXNG_URL || "").replace(/\/$/, "");
 const N_POR_CONSULTA = () => Number(process.env.BUSCA_RESULTADOS || 8);
@@ -190,7 +190,7 @@ export function melhoresTrechos(texto, termos, max = 1200) {
   return out.sort((a, b) => a.i - b.i).map((x) => (x.p.length > 600 ? `${x.p.slice(0, 600)}…` : x.p)).join("\n");
 }
 
-export async function lerPagina(url, termos, { fetcher = fetch, resolver } = {}) {
+export async function lerPagina(url, termos, { fetcher = null, resolver } = {}) {
   try {
     // só internet pública, redirect conferido a cada salto (ver core/seguranca.js)
     const r = await buscarSeguro(url, {
@@ -199,7 +199,7 @@ export async function lerPagina(url, termos, { fetcher = fetch, resolver } = {})
     }, { fetcher, resolver });
     if (!r.ok) return null;
     if (!/text\/html|xhtml/i.test(r.headers?.get?.("content-type") ?? "text/html")) return null;
-    const html = (await r.text()).slice(0, 600_000);
+    const html = (await lerTexto(r, 2 * 1024 * 1024)).slice(0, 600_000);
     const t = melhoresTrechos(textoDoHtml(html), termos);
     return t.length >= 80 ? t : null;
   } catch { return null; }

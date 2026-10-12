@@ -5,6 +5,7 @@ import { tr, lingua } from "../core/i18n.js";
 import * as log from "../core/log.js";
 import { idsDeCargos, rankDoCargo, rankDoMembro, editarCargos } from "../core/hierarquia.js";
 import { descreverErro, tipoDoErro } from "../core/erros.js";
+import { canalDeOutroServidor } from "../moderacao/pertence.js";
 
 const _tabelasXp = new Map();   // `${base}|${mult}` → number[] (acumulado por nível)
 function tabelaXp(base, mult, ateNivel) {
@@ -232,9 +233,10 @@ export async function aoMensagem(message, ctx) {
     } catch (e) { console.error("[GAME][levelup]", e.message); }
 
     if (g.anunciarLevelUp) {
-      const canal = g.canalAnuncio
+      let canal = g.canalAnuncio
         ? (ctx.client?.channels?.get?.(g.canalAnuncio) ?? message.channel)
         : message.channel;
+      if (canalDeOutroServidor(canal, ctx.serverId)) canal = message.channel;   // canal de outro servidor: anuncia aqui
       const lvLang = lingua(ctx);
       const extra = ganhouCargo
         ? (lvLang === "en" ? `\n🎖 You earned a new role!` : `\n🎖 Você ganhou um novo cargo!`) : "";

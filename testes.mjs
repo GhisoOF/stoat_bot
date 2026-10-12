@@ -11767,6 +11767,89 @@ console.log(`\nMENÇÕES (12 out): ${pass} ok, ${fail} falha(s)`);
 process.exit(fail ? 1 : 0);
 };
 
+// ════════════════════════════════════════════════════════════════════════════
+// imagem-memoria-12out  (12 out 2026) — "z_image segment 1/1 (graph) failed
+// during workspace capacity check"
+// ════════════════════════════════════════════════════════════════════════════
+SUITES["imagem-memoria-12out"] = async () => {
+const __m0 = await import("node:fs"); const fs = __m0.default;
+const __m1 = await import("node:os"); const os = __m1.default;
+const __m2 = await import("node:path"); const path = __m2.default;
+// Log real: o sd.cpp mede a memória livre da GPU antes de rodar o grafo do
+// Z-Image, e o LLM da conversa (carregado na mesma iGPU) não deixava sobrar.
+const ERRO_REAL = "sd.cpp saiu com 1: [ERROR ] ggml_runner.cpp:898 - z_image segment 1/1 (graph) failed during workspace capacity check";
+let pass = 0, fail = 0;
+const ok = (cond, msg) => { cond ? pass++ : fail++; console.log(`  ${cond ? "✅" : "❌"} ${msg}`); };
+
+// sd.cpp de mentira: sem --clip-on-cpu falha como no log; com ele, desenha
+const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sdfalso-"));
+const modelos = path.join(dir, "modelos"); fs.mkdirSync(modelos);
+for (const f of ["z_image_turbo-Q4_K.gguf", "ae.safetensors", "Qwen3-4B-Instruct-2507-Q4_K_M.gguf"]) fs.writeFileSync(path.join(modelos, f), "x");
+const argsLog = path.join(dir, "args.log");
+const bin = path.join(dir, "sd-falso");
+fs.writeFileSync(bin, `#!/bin/sh
+echo "$@" >> "${argsLog}"
+case "$*" in *--clip-on-cpu*) ;; *) echo "[ERROR ] ggml_runner.cpp:898 - z_image segment 1/1 (graph) failed during workspace capacity check" >&2; exit 1;; esac
+while [ $# -gt 0 ]; do if [ "$1" = "-o" ]; then printf 'PNGFALSO' > "$2"; fi; shift; done
+exit 0
+`);
+fs.chmodSync(bin, 0o755);
+process.env.SD_BIN = bin; process.env.SD_MODELOS_DIR = modelos; delete process.env.SD_URL; delete process.env.SD_MODELO_TIPO;
+process.env.LLM_URL = "http://127.0.0.1:8082";
+
+const gi = await import("./ia-servico/ferramentas/gerar-imagem.js");
+console.log("── reconhecer a falta de memória ──");
+ok(gi.faltouMemoria(ERRO_REAL), "★ o erro do print é falta de memória na GPU");
+ok(gi.faltouMemoria("ggml_vulkan: vk::Device::allocateMemory: ErrorOutOfDeviceMemory") && !gi.faltouMemoria("sd.cpp saiu com 1: unsupported op ROPE"), "  → OutOfDeviceMemory também; operação sem suporte não");
+
+console.log("\n── liberar a GPU antes de desenhar ──");
+const fetchAntes = globalThis.fetch;
+let unloads = [];
+globalThis.fetch = async (url, op = {}) => { unloads.push(`${op.method ?? "GET"} ${url}`); return { ok: true, status: 200 }; };
+await gi.liberarGpu({ log: () => {} });
+ok(unloads[0] === "POST http://127.0.0.1:8082/api/models/unload", "★ LLM local (llama-swap): descarrega antes do desenho");
+unloads = []; process.env.LLM_URL = "https://openrouter.ai/api";
+await gi.liberarGpu({ log: () => {} });
+ok(!unloads.length, "  → LLM online/em outra máquina: não mexe (não divide a GPU daqui)");
+process.env.LLM_URL = "http://127.0.0.1:8082"; process.env.IMAGEM_LIBERAR_GPU = "0"; unloads = [];
+await gi.liberarGpu({ log: () => {} });
+ok(!unloads.length, "  → IMAGEM_LIBERAR_GPU=0 desliga");
+delete process.env.IMAGEM_LIBERAR_GPU;
+
+console.log("\n── 2ª tentativa no modo econômico ──");
+unloads = [];
+const png = await gi.gerarComFolga({ texto: "garota android estilo anime", width: 512, height: 512 });
+const tentativas = fs.readFileSync(argsLog, "utf8").trim().split("\n");
+ok(String(png) === "PNGFALSO", "★ com o erro do print na 1ª, a imagem sai na 2ª");
+ok(tentativas.length === 2 && !/--clip-on-cpu/.test(tentativas[0]) && /--clip-on-cpu/.test(tentativas[1]) && /--vae-tiling/.test(tentativas[1]), "  → a 2ª vai no modo econômico (LLM do prompt na CPU, VAE em blocos)");
+ok(unloads.length === 2, "  → e o LLM foi descarregado antes de cada uma");
+let erro = null;
+try { await gi.gerarComFolga({ texto: "x" }, { gerar: async () => { throw new Error(ERRO_REAL); }, liberar: async () => {} }); } catch (e) { erro = e.message; }
+ok(/ficou sem memória/.test(erro ?? "") && !/ggml_runner/.test(erro ?? ""), "★ se faltar nas duas: explica em português, sem o log cru do sd.cpp");
+let chamadas = 0; erro = null;
+try { await gi.gerarComFolga({ texto: "x" }, { gerar: async () => { chamadas++; throw new Error("sd.cpp saiu com 1: unsupported op"); }, liberar: async () => {} }); } catch (e) { erro = e.message; }
+ok(chamadas === 1 && /unsupported/.test(erro ?? ""), "  → erro que não é de memória não é repetido");
+globalThis.fetch = fetchAntes;
+
+console.log("\n── no bot: a IA de fundo espera o desenho ──");
+process.env.LLM_URL = "http://llm.teste"; process.env.IA_MODO = "local";
+const chat = await import("./modulos/ai/chat.js");
+const pedidos = [];
+globalThis.fetch = async (url, op = {}) => { pedidos.push(JSON.parse(op.body ?? "{}")); return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: "{}" }, finish_reason: "stop" }], usage: {} }) }; };
+chat.pausarFundo();
+const memoria = chat.llmChat([{ role: "user", content: "x" }], { json: true, etiqueta: "memoria" });
+await new Promise((r) => setTimeout(r, 30));
+ok(pedidos.length === 0, "★ enquanto a imagem é desenhada, a extração de memória NÃO recarrega o LLM");
+chat.retomarFundo();
+await memoria;
+ok(pedidos.length === 1, "  → e roda logo depois");
+const fonte = fs.readFileSync("./modulos/ai/chat.js", "utf8");
+ok(/pausarFundo\(\);[\s\S]{0,400}executarFerramenta\("gerar_imagem"[\s\S]{0,900}finally \{ retomarFundo\(\); \}/.test(fonte), "  → a geração direta pausa e retoma (mesmo se falhar)");
+
+console.log(`\nIMAGEM/MEMÓRIA (12 out): ${pass} ok, ${fail} falha(s)`);
+process.exit(fail ? 1 : 0);
+};
+
 // ── O executor ───────────────────────────────────────────────────────────────
 const PRECISA_DO_BOT = (nome) => /import\("\.\/main\.js"\)/.test(String(SUITES[nome]));
 

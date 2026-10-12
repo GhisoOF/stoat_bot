@@ -610,16 +610,21 @@ export function caberNoContexto(messages, { ctxTokens = CONTEXTO_MODELO, reserva
 const FUNDO = new Set(["memoria", "comentario-espontaneo", "verificador", "vale-responder"]);
 const LLM_PARALELO = () => Math.max(1, Number(process.env.LLM_PARALELO || 2));
 const LLM_FILA_FUNDO = () => Math.max(0, Number(process.env.LLM_FILA_FUNDO ?? 6));
-const fila429 = { emVoo: 0, chat: [], fundo: [] };
+const fila429 = { emVoo: 0, chat: [], fundo: [], pausaFundo: 0 };
+// Enquanto uma imagem é desenhada, o LLM foi descarregado da GPU para dar
+// lugar ao sd.cpp: uma tarefa de fundo (memória, comentário) recarregaria o
+// modelo no meio do desenho e a memória faltaria de novo. Elas esperam.
+export function pausarFundo() { fila429.pausaFundo++; }
+export function retomarFundo() { fila429.pausaFundo = Math.max(0, fila429.pausaFundo - 1); proximaVaga(); }
 export function estadoFilaLLM() { return { emVoo: fila429.emVoo, chat: fila429.chat.length, fundo: fila429.fundo.length }; }
 function proximaVaga() {
   while (fila429.emVoo < LLM_PARALELO() && fila429.chat.length) { fila429.emVoo++; fila429.chat.shift()(); }
   // fundo só com o llama-server vazio: não divide a GPU com uma resposta
-  if (fila429.emVoo === 0 && !fila429.chat.length && fila429.fundo.length) { fila429.emVoo++; fila429.fundo.shift()(); }
+  if (fila429.emVoo === 0 && !fila429.pausaFundo && !fila429.chat.length && fila429.fundo.length) { fila429.emVoo++; fila429.fundo.shift()(); }
 }
 async function pegarVaga(deFundo, etiqueta) {
   if (!deFundo && fila429.emVoo < LLM_PARALELO() && !fila429.chat.length) { fila429.emVoo++; return; }
-  if (deFundo && fila429.emVoo === 0 && !fila429.chat.length && !fila429.fundo.length) { fila429.emVoo++; return; }
+  if (deFundo && fila429.emVoo === 0 && !fila429.pausaFundo && !fila429.chat.length && !fila429.fundo.length) { fila429.emVoo++; return; }
   if (deFundo && fila429.fundo.length >= LLM_FILA_FUNDO()) {
     const e = new Error(`fila da IA cheia — ${etiqueta} (tarefa de fundo) descartada`);
     e.filaCheia = true;
@@ -1219,12 +1224,17 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
   // o fato consumado e escreve a legenda.
   if (tipo === "ferramenta" && pedeImagemGerada(pergunta)) {
     dlog("pedido de imagem → geração direta");
-    const r = await executarFerramenta("gerar_imagem",
-      { prompt: pergunta.replace(/^\s*(desenh\w+|ger[ae]\w*|cri[ae]\w*|fa[çc]a|draw|generate|create|make)\s*/i, "").slice(0, 400) },
-      // Tem de ser o MESMO padrão do gerador (ia-servico/ferramentas/gerar-imagem.js,
-      // 420s desde o Z-Image) + folga. Estava em 180s, da época do SD-Turbo: com
-      // o modelo de 6B o bot desistia enquanto o gerador ainda trabalhava.
-      { timeoutMs: Number(process.env.IMAGEM_GERACAO_TIMEOUT_MS || 420_000) + 20_000 });
+    pausarFundo();   // o gerador descarrega o LLM: nada de fundo o recarrega no meio
+    let r;
+    try {
+      r = await executarFerramenta("gerar_imagem",
+        { prompt: pergunta.replace(/^\s*(desenh\w+|ger[ae]\w*|cri[ae]\w*|fa[çc]a|draw|generate|create|make)\s*/i, "").slice(0, 400) },
+        // Tem de ser o MESMO padrão do gerador (ia-servico/ferramentas/gerar-imagem.js,
+        // 420s desde o Z-Image) + folga. Estava em 180s, da época do SD-Turbo: com
+        // o modelo de 6B o bot desistia enquanto o gerador ainda trabalhava.
+        // ×2: agora pode haver uma 2ª tentativa no modo econômico.
+        { timeoutMs: 2 * Number(process.env.IMAGEM_GERACAO_TIMEOUT_MS || 420_000) + 30_000 });
+    } finally { retomarFundo(); }
     if (r?.anexo_base64) {
       responder._anexoDireto = { base64: r.anexo_base64, mime: r.anexo_mime || "image/png", nome: r.anexo_nome || "imagem.png" };
       dlog("geração direta ok — imagem pronta para anexar");

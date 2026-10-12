@@ -114,7 +114,58 @@ function baixarModeloSD() {
 // imagem, o que parecia um bug de cache ("ele reenviou a figura de ontem").
 const semente = () => Math.floor(Math.random() * 2_147_483_647);
 
-function gerarEmbutido({ texto, width, height }) {
+// ─── Memória da GPU (12 out 2026) ────────────────────────────────────────────
+// "sd.cpp saiu com 1: [ERROR] ggml_runner.cpp:898 - z_image segment 1/1
+// (graph) failed during workspace capacity check": o sd.cpp mede a memória
+// livre da GPU antes de rodar o grafo do Z-Image e ela não bastava — o LLM da
+// conversa fica carregado na mesma iGPU (o llama-swap o mantém por 1 h), e no
+// MiniPC a GPU só enxerga ~14,5 GB da RAM. Agora: antes de desenhar, o LLM é
+// descarregado (ele volta sozinho na próxima mensagem, em segundos); se mesmo
+// assim faltar memória, uma 2ª tentativa no modo econômico (o LLM do prompt
+// na CPU e o VAE em blocos).
+const RE_FALTA_MEMORIA = /capacity check|workspace (?:preparation|allocation)|allocated capacity|ALLOC_FAILED|out of (?:device )?memory|OutOfDeviceMemory|failed to allocate|cannot allocate|not enough memory/i;
+export const faltouMemoria = (txt) => RE_FALTA_MEMORIA.test(String(txt ?? ""));
+
+const LLM_LOCAL = () => {
+  const u = (process.env.LLM_URL || "").replace(/\/$/, "");
+  return /^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$/i.test(u) ? u : null;
+};
+// llama-swap: POST /api/models/unload descarrega os modelos (validado no MiniPC).
+export async function liberarGpu({ log = console.info } = {}) {
+  if ((process.env.IMAGEM_LIBERAR_GPU ?? "1").trim() === "0") return false;
+  const base = LLM_LOCAL();
+  if (!base) return false;   // LLM em outra máquina/online: não divide a GPU daqui
+  try {
+    const r = await fetch(`${base}/api/models/unload`, { method: "POST", signal: AbortSignal.timeout(15_000) });
+    log(`[IMAGEM] GPU liberada para o desenho: LLM descarregado (${r.status}); ele volta sozinho na próxima mensagem`);
+    return r.ok;
+  } catch (e) {
+    log(`[IMAGEM] não consegui descarregar o LLM antes de desenhar (${e?.message ?? e}) — sigo assim mesmo`);
+    return false;
+  }
+}
+
+// Desenha; se faltar memória na GPU, libera e tenta de novo no modo econômico.
+export async function gerarComFolga(pedido, { gerar = gerarEmbutido, liberar = liberarGpu } = {}) {
+  await liberar();
+  try {
+    return await gerar(pedido);
+  } catch (e) {
+    if (!faltouMemoria(e?.message)) throw e;
+    console.warn(`[IMAGEM] faltou memória na GPU (${String(e.message).slice(0, 160)}) — 2ª tentativa no modo econômico`);
+    await liberar();
+    try {
+      return await gerar({ ...pedido, economico: true });
+    } catch (e2) {
+      if (faltouMemoria(e2?.message)) {
+        throw new Error("a GPU ficou sem memória para desenhar, mesmo com o LLM descarregado e no modo econômico — tenta uma imagem menor ou de novo daqui a pouco (IMAGEM_LADO_GERACAO no .env diminui o tamanho)");
+      }
+      throw e2;
+    }
+  }
+}
+
+function gerarEmbutido({ texto, width, height, economico = false }) {
   return new Promise((res, rej) => {
     const saida = join(tmpdir(), `sd-${Date.now()}.png`);
     const cfg = process.env.IMAGEM_CFG || "1.0";
@@ -138,6 +189,9 @@ function gerarEmbutido({ texto, width, height }) {
       // Em GPU com pouca VRAM dedicada (iGPU), descarregar pesos para a RAM
       // evita estourar. Desligue com IMAGEM_OFFLOAD=0 se a GPU tiver folga.
       if ((process.env.IMAGEM_OFFLOAD ?? "1").trim() !== "0") finalArgs.push("--offload-to-cpu");
+      // modo econômico: o LLM do prompt (Qwen3-4B, ~2,5 GB) roda na CPU e o
+      // VAE decodifica em blocos — sobra GPU para o grafo da difusão
+      if (economico) finalArgs.push("--clip-on-cpu", "--vae-tiling");
     } else {
       let modelo;
       try { modelo = baixarModeloSD(); } catch (e) { return rej(e); }
@@ -146,6 +200,7 @@ function gerarEmbutido({ texto, width, height }) {
       finalArgs = ["-M", "img_gen", "-m", modelo, "-p", texto, "-n", NEGATIVO_FIXO,
         "-W", String(width), "-H", String(height), "--steps", passos,
         "--cfg-scale", cfg, "--type", "q8_0", "--seed", String(semente()), "-o", saida];
+      if (economico) finalArgs.push("--vae-tiling", "--offload-to-cpu");
     }
     // stdout E stderr: o sd.cpp e o backend Vulkan do ggml espalham o
     // diagnóstico pelos dois (dispositivo, memória, operação não suportada).
@@ -202,7 +257,7 @@ export async function executar({ prompt, largura, altura }) {
 
   if (!SD_URL) {
     try {
-      const png = await gerarEmbutido({ texto, width: corpo.width, height: corpo.height });
+      const png = await gerarComFolga({ texto, width: corpo.width, height: corpo.height });
       const s2 = await sharp();
       const limpa = await s2(png, { limitInputPixels: MAX_PIXELS })
         .jpeg({ quality: 90, mozjpeg: true })

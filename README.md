@@ -33,7 +33,7 @@ docker compose up -d --build
 | Busca na web (SearXNG) | sobe junto no compose, já configurado — a IA pesquisa de fábrica |
 | Leitura de código (GitHub) | dentro; repositórios públicos funcionam sem token |
 | Voz nas calls (Piper + ffmpeg) | dentro da imagem; `VOZ_ATIVA=1` e as vozes baixam sozinhas no primeiro arranque — `VOZES=` escolhe quais (qualquer idioma do catálogo do Piper) |
-| Geração de imagem (stable-diffusion.cpp, Vulkan + Z-Image-Turbo por padrão) | dentro da imagem; os modelos (~6,5 GB: difusão + VAE + LLM do prompt) baixam **no arranque**, antes do bot conectar — `IMAGEM=0` desliga, `SD_MODELO_TIPO=sd` volta ao SD-Turbo (1 arquivo, mais leve), `SD_URL` troca por um A1111/Forge externo |
+| Geração de imagem (stable-diffusion.cpp, Vulkan + Z-Image-Turbo por padrão) | dentro da imagem; os modelos (~6,5 GB: difusão + VAE + LLM do prompt) baixam **no arranque**, antes do bot conectar — `IMAGEM=0` desliga, `SD_MODELO_TIPO=sd` volta ao SD-Turbo (1 arquivo, mais leve), `SD_URL` troca por um A1111/Forge externo. Antes de desenhar, o LLM local é **descarregado da GPU** (volta sozinho na próxima mensagem) e, se ainda faltar memória, a 2ª tentativa vai no modo econômico (LLM do prompt na CPU, VAE em blocos) — `IMAGEM_LIBERAR_GPU=0` desliga |
 
 Visão (a IA **ler** imagens) depende só de o modelo escolhido enxergar —
 funciona de fábrica no modo `online` com um modelo multimodal, e no modo

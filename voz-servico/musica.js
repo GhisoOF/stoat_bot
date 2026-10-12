@@ -430,17 +430,43 @@ function pararStream(st) {
 }
 
 // ── API (usada pelas rotas do servidor) ─────────────────────────────────────
-export async function tocar(canalVoz, consulta) {
+// Teto de músicas tocando ao mesmo tempo (13 out 2026): cada uma é um yt-dlp
+// + ffmpeg rodando no MiniPC. No teto, quem tem prioridade (o servidor do dono
+// do bot / o dono — o bot manda `prioridade` 1 ou 2, ver core/prioridade.js)
+// tira a música de menor prioridade que estiver tocando há mais tempo; quem
+// não tem recebe "no limite, tenta daqui a pouco". 0 = sem teto.
+const MAX_SIMULTANEAS = () => Number(process.env.MUSICA_MAX_SIMULTANEAS ?? 3);
+const tocandoAgora = () => [...estados.entries()].filter(([, st]) => st.atual || st.trocando);
+
+export async function tocar(canalVoz, consulta, { prioridade = 0 } = {}) {
   const st = estadoDe(canalVoz);
+  if (!st.atual && !st.fila.length) st.prioridade = 0;   // call começando do zero: vale quem pede agora
+  st.prioridade = Math.max(st.prioridade ?? 0, Number(prioridade) || 0);
+  const teto = MAX_SIMULTANEAS();
+  const outras = tocandoAgora().filter(([c]) => c !== canalVoz);
+  if (teto > 0 && !st.atual && outras.length >= teto) {
+    const vitima = outras
+      .filter(([, o]) => (o.prioridade ?? 0) < st.prioridade)
+      .sort((a, b) => (a[1].prioridade ?? 0) - (b[1].prioridade ?? 0) || (a[1].desde ?? 0) - (b[1].desde ?? 0))[0];
+    if (!vitima) {
+      return { erro: `estou tocando música em ${outras.length} calls agora — o máximo desta máquina (${teto}). Tenta de novo daqui a pouco.`, limite: true };
+    }
+    const [canalVitima, ov] = vitima;
+    const titulo = ov.atual?.titulo ?? "a música";
+    log(`teto de ${teto} músicas: ${canalVitima} (prioridade ${ov.prioridade ?? 0}) para, ${canalVoz} (prioridade ${st.prioridade}) toca`);
+    await parar(canalVitima);
+    ov.ultimoAviso = { titulo, motivo: "parei para dar lugar a um servidor com prioridade (a máquina estava no limite de músicas ao mesmo tempo)", quando: Date.now() };
+  }
   const { itens, rotulo } = await resolverParaItens(consulta);
   const sobra = Math.max(0, MAX_FILA - st.fila.length);
   const entram = itens.slice(0, sobra);
   st.fila.push(...entram);
-  const tocandoAgora = !st.atual;
-  const r = tocandoAgora ? resumo(await tocarProxima(canalVoz), st) : null;
+  const comecaAgora = !st.atual;
+  if (comecaAgora) st.desde = Date.now();
+  const r = comecaAgora ? resumo(await tocarProxima(canalVoz), st) : null;
   if (rotulo) return { mensagem: `${entram.length} faixa(s) de **${rotulo}** na fila.${r?.texto ? `\n${r.texto}` : ""}`, itens: entram.length };
   const it = entram[0];
-  if (!tocandoAgora) return { mensagem: `➕ **${it.titulo}**${duracaoTxt(it.duracao)} na fila (posição ${st.fila.length}).`, itens: entram.length };
+  if (!comecaAgora) return { mensagem: `➕ **${it.titulo}**${duracaoTxt(it.duracao)} na fila (posição ${st.fila.length}).`, itens: entram.length };
   // nada tocou (nem esta, nem outra versão, nem o resto da fila): é erro, não "tocando"
   if (r.falhou) return { erro: r.texto.replace(/^⚠️ /, ""), itens: entram.length };
   return { mensagem: r.texto, itens: entram.length };
@@ -483,7 +509,7 @@ export async function pular(canalVoz) {
 export async function parar(canalVoz) {
   const st = estadoDe(canalVoz);
   const tinha = !!(st.atual || st.fila.length);
-  st.fila = []; st.atual = null; st.loop = "nao";
+  st.fila = []; st.atual = null; st.loop = "nao"; st.prioridade = 0;
   st.geracao++;
   await cortarFaixa(st, deps.playerDe(canalVoz));
   return { mensagem: tinha ? "⏹ Parei e limpei a fila." : "já estava tudo parado." };

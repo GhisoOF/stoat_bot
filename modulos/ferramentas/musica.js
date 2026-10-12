@@ -5,6 +5,7 @@
 
 import { lingua } from "../core/i18n.js";
 import { callParaMusica } from "./tts.js";
+import { nivelDePrioridade } from "../core/prioridade.js";
 
 const VOZ_URL   = (process.env.VOZ_SERVICO_URL || "").replace(/\/$/, "");
 const VOZ_CHAVE = process.env.VOZ_CHAVE || "";
@@ -107,7 +108,9 @@ export async function cmdMusica(msg, args, ctx) {
         colour: ctx.COR.aviso,
       });
     }
-    r = await pedirVoz("/musica/tocar", { canal, consulta: resto });
+    // servidor do dono do bot / o dono: passa na frente se a máquina estiver no teto de músicas
+    const server = await Promise.resolve(ctx.getServer?.(msg)).catch(() => null);
+    r = await pedirVoz("/musica/tocar", { canal, consulta: resto, prioridade: nivelDePrioridade({ userId: msg.authorId, serverId: ctx.serverId, server }) });
   } else if (sub === "volume") {
     const v = Number(String(resto).replace("%", ""));
     r = await pedirVoz("/musica/volume", { canal, valor: Number.isFinite(v) ? v / 100 : NaN });

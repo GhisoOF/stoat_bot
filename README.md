@@ -188,6 +188,10 @@ diz exatamente o que clicar.
   Conta e imagem anexada também não buscam; resultado que não
   fala do assunto fica de fora; a consulta da busca de fundo é escrita sem
   raciocínio (mais rápida). `BUSCA_SEMPRE=0` volta a buscar só quando pedem.
+- **Prioridade do dono**: no limite (fila de conversas cheia, teto de
+  músicas), o dono do bot (`DONO`) passa na frente de todos e o servidor dele
+  (o que ele criou, os de `PRIORIDADE_SERVIDORES` e o `RELATORIO_SERVIDOR`)
+  na frente dos outros servidores — e entram mesmo com a fila cheia.
 - **Ritmo**: a resposta só raciocina quando a mensagem pede (conta, lógica,
   código, explicação, comparação, mensagem longa — `PENSAR=auto`); conversa
   leve sai direto. Todo pedido ao modelo passa por uma fila: chat, moderação
@@ -342,7 +346,7 @@ próprio bot: `&help <comando>`. Um resumo:
 | `&ticket` | suporte por **reação**: `painel #canal` posta uma mensagem com um emoji por assunto; reagir abre um canal privado (quem pediu + staff). Lá, 🔒 (só staff) **trava** a conversa e manda o registro inteiro ao log como **arquivo .txt**; depois 🗑️ apaga o canal. A staff entra pelos cargos do `&acesso` e por quem tem Gerenciar canais; o Stoat não deixa a Judy pôr no ticket cargo **acima** do dela — `&ticket equipe` cria o cargo **Equipe de tickets** para esses (o `painel` já confere) |
 | `&rolar` (`&r`) · `&iniciativa` | dados de RPG de mesa: `2d20kh1+5`, vantagem/desvantagem, `4d6kh3`, explosão `3d6!`, sucessos `8d10>=7`, `d%`, Fate, moeda, repetição `6x(4d6kh3)`, rótulos e rolagem secreta via DM — mais rastreador de iniciativa por canal (`add`/`next`/`lista`) |
 | `&webhook` (`&wh`) | receptor universal de webhooks: GitHub (push, issues, PR, releases, Actions), Crafty/Minecraft e qualquer serviço que fale o formato Discord (Uptime Kuma, Grafana…) — cada gancho tem canal próprio e filtro de eventos, então dá para separar issues num chat e o CI noutro; URL secreta por gancho, teto anti-flood. **Endereços:** serviço da internet (GitHub) exige base pública — `sudo tailscale funnel --bg 8095` + `WEBHOOK_URL_BASE=https://…` no `.env`; container da mesma máquina (Crafty) usa a ponte `http://172.17.0.1:8095/...` |
-| `&musica` (`&m`, `&play`) + `&entrar`/`&sair` | uma call **por servidor**, em vários servidores ao mesmo tempo (chamar num servidor não a tira da call de outro); música nas calls: YouTube, SoundCloud e Spotify (playlists também), com fila, pausa, skip, volume e loop — e a música **abaixa sozinha quando o `&tts` fala** (ducking); playlists do Spotify pedem `SPOTIFY_ID`/`SPOTIFY_SECRET` no `.env` (app grátis em developer.spotify.com; faixas avulsas funcionam sem chave). Vídeo que o YouTube recusa (restrição de idade, indisponível) vira **outra versão** da mesma música, avisando qual; `MUSICA_COOKIES` faz o original com restrição de idade tocar |
+| `&musica` (`&m`, `&play`) + `&entrar`/`&sair` | uma call **por servidor**, em vários servidores ao mesmo tempo (chamar num servidor não a tira da call de outro); até `MUSICA_MAX_SIMULTANEAS` músicas tocando ao mesmo tempo (padrão 3) — no limite, o **servidor do dono** toca e a música de menor prioridade para (avisando o motivo no `&musica fila` de lá); música nas calls: YouTube, SoundCloud e Spotify (playlists também), com fila, pausa, skip, volume e loop — e a música **abaixa sozinha quando o `&tts` fala** (ducking); playlists do Spotify pedem `SPOTIFY_ID`/`SPOTIFY_SECRET` no `.env` (app grátis em developer.spotify.com; faixas avulsas funcionam sem chave). Vídeo que o YouTube recusa (restrição de idade, indisponível) vira **outra versão** da mesma música, avisando qual; `MUSICA_COOKIES` faz o original com restrição de idade tocar |
 | `&comando` | (des)ativar comandos |
 | `&embed` · `&reactionrole` · `&autorole` · `&cor` | utilidades *(permissões próprias)* |
 | `&boasvindas` · `&adeus` · `&fuso` · `&rss` | entrada/saída, fusos, notícias |

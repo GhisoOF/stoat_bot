@@ -79,7 +79,7 @@ const servidor = createServer(async (req, res) => {
       if (!canal) return responder(res, 400, { erro: "não estou em nenhuma call — entre numa call e use `&entrar` primeiro." });
       const acao = rota.slice("/musica/".length);
       let r;
-      if (acao === "tocar") r = await musica.tocar(canal, corpo.consulta);
+      if (acao === "tocar") r = await musica.tocar(canal, corpo.consulta, { prioridade: Number(corpo.prioridade) || 0 });
       else if (acao === "pausar") r = await musica.pausar(canal);
       else if (acao === "retomar") r = await musica.retomar(canal);
       else if (acao === "pular") r = await musica.pular(canal);

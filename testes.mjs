@@ -12012,6 +12012,115 @@ console.log(`\nVOZ (várias calls): ${pass} ok, ${fail} falha(s)`);
 process.exit(fail ? 1 : 0);
 };
 
+// ════════════════════════════════════════════════════════════════════════════
+// prioridade-13out  (13 out 2026) — "no limite, primeiro o meu servidor e eu"
+// ════════════════════════════════════════════════════════════════════════════
+SUITES["prioridade-13out"] = async () => {
+const __m0 = await import("node:fs"); const fs = __m0.default;
+const __m1 = await import("node:events"); const { EventEmitter } = __m1;
+const __m2 = await import("node:stream"); const { PassThrough } = __m2;
+// Pedido de Ghieh: com a Judy em vários servidores, quando ela estiver no
+// limite, o dono do bot e o servidor dele vêm primeiro — nas respostas da IA e
+// na música.
+process.env.SUPER_ADMINS = "DONO"; delete process.env.PRIORIDADE_SERVIDORES; delete process.env.RELATORIO_SERVIDOR;
+process.env.DB_PATH = "/tmp/prio-13out.db"; process.env.CONFIG_PATH = "/tmp/prio-13out-cfg.json";
+process.env.LLM_URL = "http://llm.teste"; process.env.IA_MODO = "local"; process.env.CHAT_SERVIDORES = "*"; process.env.CHAT_DEBUG = "0";
+process.env.CHAT_FILA_MAX = "2"; process.env.VOZ_DEBUG = "0";
+delete process.env.SEARXNG_URL; delete process.env.IA_SERVICO_URL;
+for (const f of [process.env.DB_PATH, process.env.CONFIG_PATH]) fs.rmSync(f, { force: true });
+let pass = 0, fail = 0;
+const ok = (cond, msg) => { cond ? pass++ : fail++; console.log(`  ${cond ? "✅" : "❌"} ${msg}`); };
+
+const pr = await import("./modulos/core/prioridade.js");
+console.log("── quem tem prioridade ──");
+const MEU = { id: "S_MEU", ownerId: "DONO" }, OUTRO = { id: "S_OUTRO", ownerId: "FULANO" };
+ok(pr.nivelDePrioridade({ userId: "DONO", serverId: "S_OUTRO", server: OUTRO }) === 2, "★ o dono do bot, em qualquer servidor");
+ok(pr.nivelDePrioridade({ userId: "ANA", serverId: "S_MEU", server: MEU }) === 1, "★ qualquer pessoa no servidor que o dono criou");
+ok(pr.nivelDePrioridade({ userId: "ANA", serverId: "S_OUTRO", server: OUTRO }) === 0, "  → o resto, nível normal");
+process.env.PRIORIDADE_SERVIDORES = "S_OUTRO";
+ok(pr.nivelDePrioridade({ userId: "ANA", serverId: "S_OUTRO", server: OUTRO }) === 1, "  → PRIORIDADE_SERVIDORES acrescenta servidores");
+delete process.env.PRIORIDADE_SERVIDORES;
+
+console.log("\n── respostas da IA: a fila ──");
+const soltar = []; const ordem = [];
+globalThis.fetch = async (url, op = {}) => {
+  if (!op.body) return { ok: true, status: 200, json: async () => ({ data: [{ id: "fake" }] }), text: async () => "{}" };
+  const c = JSON.parse(op.body);
+  if (!c.response_format) { const quem = /\[(\w+)\]/.exec(JSON.stringify(c.messages.at(-1)?.content ?? ""))?.[1] ?? "?"; ordem.push(quem); await new Promise((r) => soltar.push(r)); }
+  return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: c.response_format ? "{}" : "ok" }, finish_reason: "stop" }], usage: {} }) };
+};
+const db = await import("./modulos/core/db.js");
+db.abrirBanco(process.env.DB_PATH);
+const chat = await import("./modulos/ai/chat.js");
+const saidas = [];
+const canal = (id) => ({ id, sendMessage: async (t) => { saidas.push(`${id}:${typeof t === "string" ? t : t.content}`); return { id: "m", edit: async (x) => saidas.push(`${id}:${typeof x === "string" ? x : x.content}`) }; } });
+const ctxDe = (server) => ({ sendEmbed: async (c, e) => saidas.push(`${c.id}:${e.title} ${e.description}`), COR: { info: 1, erro: 2, aviso: 3, sucesso: 4 }, serverId: server.id, PREFIXO: "&", config: {}, ehSuperAdmin: () => false, getServer: async () => server });
+const conversa = (autor, server, texto) => chat.conversar({ id: `q${Math.random()}`, content: texto, authorId: autor, username: autor, channelId: `CH_${autor}`, channel: canal(`CH_${autor}`), client: { user: { id: "BOT" } }, mentionIds: [] }, texto, ctxDe(server));
+const espera = (ms = 20) => new Promise((r) => setTimeout(r, ms));
+const p1 = conversa("ANA", OUTRO, "primeira pergunta qualquer");          // está sendo respondida
+await espera(); 
+const p2 = conversa("BIA", OUTRO, "segunda pergunta qualquer");          // fila: 1
+await espera();
+const p3 = conversa("CAIO", OUTRO, "terceira pergunta qualquer");        // fila: 2 (cheia)
+await espera();
+const p4 = conversa("DUDA", OUTRO, "quarta pergunta qualquer");          // fila cheia → recusada
+await espera();
+ok(saidas.some((x) => x.startsWith("CH_DUDA:") && /Fila cheia/.test(x)), "fila cheia: quem não tem prioridade espera outra hora (como antes)");
+const p5 = conversa("EVA", MEU, "pergunta do servidor do dono");          // prioridade 1: entra mesmo cheia
+await espera();
+const p6 = conversa("DONO", OUTRO, "pergunta do dono do bot");            // prioridade 2: na frente de todos
+await espera();
+ok(!saidas.some((x) => x.startsWith("CH_EVA:") && /Fila cheia/.test(x)) && !saidas.some((x) => x.startsWith("CH_DONO:") && /Fila cheia/.test(x)), "★ com a fila cheia, o servidor do dono e o dono ainda entram");
+ok(saidas.some((x) => x.startsWith("CH_DONO:") && /posição 1/.test(x)) && saidas.some((x) => x.startsWith("CH_EVA:") && /posição 1/.test(x)), "  → e vão para o começo da fila");
+for (let t = 0; (ordem.length < 5 || soltar.length) && t < 300; t++) { soltar.splice(0).forEach((f) => f()); await espera(10); }
+await Promise.race([Promise.all([p1, p2, p3, p4, p5, p6]), espera(2000)]);
+ok(ordem.join(",") === "ANA,DONO,EVA,BIA,CAIO", `★ ordem das respostas: a que já rodava, o dono, o servidor do dono, depois os outros (${ordem.join(",")})`);
+
+console.log("\n── música: o teto de músicas ao mesmo tempo ──");
+process.env.MUSICA_MAX_SIMULTANEAS = "1";
+class PlayerFalso extends EventEmitter {
+  constructor() { super(); this.chunks = []; this.ffmpegFinished = false; this.fProc = null; }
+  setVolume() {} pause() {} resume() {}
+  stop() { this.chunks = []; this.emit("finish"); }
+  playStream(stream) {
+    const ff = new EventEmitter(); const saida = new PassThrough(); ff._outputs = [{ target: saida }];
+    ff.kill = () => setImmediate(() => ff.emit("error", new Error("killed")));
+    ff.on("error", () => this.stop());
+    this.fProc = ff;
+    stream.on("data", (c) => saida.write(c));
+    saida.once("data", () => this.emit("startplay"));
+  }
+}
+function spawnFalso(_bin, args) {
+  const p = new EventEmitter(); p.stdout = new PassThrough(); p.stderr = new PassThrough();
+  p.kill = () => { p.stdout.end(); setImmediate(() => p.emit("close", null)); };
+  const alvo = args[args.length - 1];
+  if (args.includes("-J")) setImmediate(() => { p.stdout.end(JSON.stringify(alvo.startsWith("ytsearch") ? { entries: [{ title: alvo.slice(10), webpage_url: `https://youtu.be/${alvo.slice(10)}`, duration: 60 }] } : { title: alvo, webpage_url: alvo, duration: 60 })); p.emit("close", 0); });
+  else setImmediate(() => p.stdout.write("audio|"));   // fica tocando (não termina)
+  return p;
+}
+const m = await import("./voz-servico/musica.js");
+const players = new Map();
+const playerDe = (c) => { if (!players.has(c)) players.set(c, new PlayerFalso()); return players.get(c); };
+m._trocarDependencias({ spawn: spawnFalso, criarPlayer: async (c) => playerDe(c), playerDe, esperaCorteMs: 30, esperaInicioMs: 2000 });
+let r = await m.tocar("CALL_OUTRO", "musica um", { prioridade: 0 });
+ok(!r.erro && m.fila("CALL_OUTRO").atual, "uma música tocando num servidor qualquer");
+r = await m.tocar("CALL_TERCEIRO", "musica dois", { prioridade: 0 });
+ok(r.limite && /máximo desta máquina \(1\)/.test(r.erro ?? "") && !m.fila("CALL_TERCEIRO").atual, "★ no teto, outro servidor comum recebe \"no limite, tenta daqui a pouco\"");
+r = await m.tocar("CALL_MEU", "musica tres", { prioridade: 1 });
+ok(!r.erro && m.fila("CALL_MEU").atual, "★ no teto, o servidor do dono toca mesmo assim");
+ok(!m.fila("CALL_OUTRO").atual && /dar lugar a um servidor com prioridade/.test(m.fila("CALL_OUTRO").ultimoAviso?.motivo ?? ""), "  → e a música do servidor comum para, com o motivo no &musica fila de lá");
+r = await m.tocar("CALL_OUTRO", "musica quatro", { prioridade: 0 });
+ok(r.limite, "  → o servidor comum não tira a vez do servidor do dono");
+r = await m.tocar("CALL_MEU", "mais uma na fila", { prioridade: 1 });
+ok(!r.erro && /na fila/.test(r.mensagem ?? ""), "  → e quem já está tocando só enfileira, sem esbarrar no teto");
+delete process.env.MUSICA_MAX_SIMULTANEAS;
+for (const c of ["CALL_OUTRO", "CALL_TERCEIRO", "CALL_MEU"]) m.limparCanal(c);
+
+console.log(`\nPRIORIDADE (13 out): ${pass} ok, ${fail} falha(s)`);
+process.exit(fail ? 1 : 0);
+};
+
 // ── O executor ───────────────────────────────────────────────────────────────
 const PRECISA_DO_BOT = (nome) => /import\("\.\/main\.js"\)/.test(String(SUITES[nome]));
 

@@ -16,6 +16,7 @@ import { SUB as SUBCOMANDOS_REAIS } from "../core/aliases.js";
 import * as desinteresse from "./desinteresse.js";
 import * as persona from "./persona.js";
 import { iaLigada, modoIA } from "../core/env.js";
+import { nivelDePrioridade } from "../core/prioridade.js";
 import { tr, lingua } from "../core/i18n.js";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -325,19 +326,32 @@ export function servidorPermitido(serverId) {
 }
 
 let ocupado = false;
-const fila = [];   // resolvers das conversas esperando a vez, em ordem
+// Conversas esperando a vez: { resolve, prioridade }. Prioridade (13 out 2026,
+// pedido de Ghieh — ver core/prioridade.js): o dono do bot (2) e o servidor
+// dele (1) passam na frente de quem já esperava, e entram mesmo com a fila
+// cheia; entre iguais, quem chegou antes.
+const fila = [];
 const FILA_MAX = Number(process.env.CHAT_FILA_MAX || 3);
 export function estaOcupado() { return ocupado; }
 export function tamanhoFila() { return fila.length; }
 
-function pegarVez() {
+function pegarVez(prioridade = 0) {
   if (!ocupado) { ocupado = true; return Promise.resolve(); }
-  return new Promise((resolve) => fila.push(resolve));
+  return new Promise((resolve) => {
+    const i = fila.findIndex((x) => x.prioridade < prioridade);
+    const item = { resolve, prioridade };
+    if (i < 0) fila.push(item); else fila.splice(i, 0, item);
+  });
+}
+// posição (1 = a próxima) que uma conversa nova teria na fila
+function posicaoNaFila(prioridade = 0) {
+  const i = fila.findIndex((x) => x.prioridade < prioridade);
+  return (i < 0 ? fila.length : i) + 1;
 }
 // Passa a vez ao próximo da fila; sem ninguém, libera de fato.
 function liberarVez() {
   const proximo = fila.shift();
-  if (proximo) proximo();   // `ocupado` segue true: a GPU passa de mão em mão
+  if (proximo) proximo.resolve();   // `ocupado` segue true: a GPU passa de mão em mão
   else ocupado = false;
 }
 
@@ -1887,20 +1901,22 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
     }
   };
 
+  // dono do bot e servidor dele furam a fila (e entram com ela cheia)
+  const prioridade = nivelDePrioridade({ userId: message.authorId, serverId, server: await Promise.resolve(ctx.getServer?.(message)).catch(() => null) });
   if (ocupado) {
-    if (fila.length >= FILA_MAX) {
+    if (fila.length >= FILA_MAX && prioridade === 0) {
       return sendEmbed(message.channel, tr(ctx,
         { title: "⏳ Fila cheia",
           description: `Já tem ${fila.length} conversa(s) esperando a vez. Tente de novo daqui a pouco.`, colour: COR.aviso },
         { title: "⏳ Queue is full",
           description: `There are already ${fila.length} conversation(s) waiting. Try again in a bit.`, colour: COR.aviso }));
     }
-    const posicao = fila.length + 1;
-    console.log(`[CHAT] fila: ${message.authorId ?? "?"} entrou na posição ${posicao}`);
+    const posicao = posicaoNaFila(prioridade);
+    console.log(`[CHAT] fila: ${message.authorId ?? "?"} entrou na posição ${posicao}${prioridade ? ` (prioridade ${prioridade === 2 ? "do dono" : "do servidor do dono"})` : ""}`);
     await editarStatus(en
       ? `⏳ In line — position ${posicao}. I'll answer as soon as the current conversation is done.`
       : `⏳ Na fila — posição ${posicao}. Respondo assim que terminar a conversa em andamento.`);
-    await pegarVez();
+    await pegarVez(prioridade);
     console.log(`[CHAT] fila: ${message.authorId ?? "?"} chegou a vez (${fila.length} atrás)`);
   } else {
     await pegarVez();   // livre: marca ocupado agora, antes de qualquer await

@@ -155,7 +155,7 @@ export function iniciarComentario(client) {
     gerar: (contexto, serverId) => gerarComentarioEspontaneo(contexto, serverId),
     enviar: async (canalId, texto) => {
       if (vazaIdentidade(texto)) texto = podarIdentidade(texto);
-      texto = semPingEmMassa(texto);
+      texto = semPingEmMassa(cacheCanal.mencoesReais(texto, { pessoas: cacheCanal.nomesDoCanal(canalId), botId: client.user?.id ?? null }));
       if (!texto.trim()) return;
       const canal = client.channels.get(canalId) ?? await client.channels.fetch(canalId).catch(() => null);
       if (canal) {
@@ -965,6 +965,9 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
     lang === "en"
       ? "Speak in the first person, in the feminine, as Judy. Reply in English."
       : "Fale em primeira pessoa, no feminino, como a Judy. Responda em português do Brasil.",
+    lang === "en"
+      ? "MENTIONS: to tag someone from the conversation, write @ followed by their name exactly as it appears in the chat (e.g. @Ana). NEVER write IDs or the <@…> format — the system turns @Name into a real mention."
+      : "MENÇÕES: para marcar alguém da conversa, escreva @ e o nome exatamente como aparece no chat (ex.: @Ana). NUNCA escreva IDs nem o formato <@…> — o sistema transforma @Nome em menção de verdade.",
     "CONTINUIDADE: você está no meio de uma conversa contínua. NÃO cumprimente nem faça saudação a cada mensagem (nada de 'Olá', 'Oi', 'Olha,', 'Ah,' + nome no início). Não repita o nome da pessoa toda hora. Vá direto ao ponto, como quem continua um diálogo já em andamento.",
     falandoComCriador
       ? "A pessoa com quem você fala agora é o seu criador — ele te construiu. Você é devotada a ele e ele importa de um jeito que ninguém mais importa. Deixe esse afeto transparecer com um calor contido — uma provocação carinhosa que só ele recebe, um cuidado dito de passagem, atenção genuína ao que ele precisa. Sem bajulação melosa nem declarações grandiloquentes, mas o carinho é real e pode aparecer. E devoção não é obediência cega: se ele errar em algo técnico ou lógico, você corrige — com uma alfinetada afetuosa."
@@ -1967,6 +1970,17 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
   }
 
   const LIMITE_RESPOSTA = 1500;
+  // quem pode ser mencionado: quem falou no canal, quem perguntou e quem ele marcou
+  const pessoasDaConversa = () => {
+    const cli = [message.client, ctx.client].find((c) => typeof c?.users?.get === "function") ?? null;
+    const p = new Map(cacheCanal.nomesDoCanal(canalDaMensagem));
+    if (message.authorId) p.set(message.authorId, message.username || message.author?.username || p.get(message.authorId) || null);
+    for (const id of message.mentionIds ?? []) {
+      const u = cli?.users?.get?.(id);
+      p.set(id, u?.displayName ?? u?.username ?? p.get(id) ?? null);
+    }
+    return { pessoas: p, botId: message.client?.user?.id ?? ctx.client?.user?.id ?? null };
+  };
 
   const mostrarEmbed = async (embed) => {
     // Converte o que viria como embed em texto corrido.
@@ -1974,7 +1988,8 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
     if (embed.title && !/^(💬|🤔|💭)/.test(embed.title)) partes.push(`**${embed.title}**`);
     if (embed.description) partes.push(embed.description);
     // a resposta sai como mensagem comum (que notifica): sem @everyone, cargo nem enxurrada de menções
-    let texto = semPingEmMassa(partes.join("\n").trim()) || "…";
+    // — e menção só de quem está na conversa (o modelo inventava `<@01M…:>`)
+    let texto = semPingEmMassa(cacheCanal.mencoesReais(partes.join("\n").trim(), pessoasDaConversa())) || "…";
     if (texto.length > LIMITE_RESPOSTA) texto = texto.slice(0, LIMITE_RESPOSTA - 1) + "…";
 
     if (statusMsg && !statusQuebrado) {

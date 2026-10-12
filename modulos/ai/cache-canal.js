@@ -43,6 +43,27 @@ export function recentes(canalId, limite = MAX_MSGS) {
 export function mencoesLegiveis(texto, nomes = new Map()) {
   return String(texto ?? "").replace(/<@!?([A-Za-z0-9]{20,32})>/g, (_, id) => `@${nomes.get(id) ?? "alguém"}`);
 }
+// Menções que a JUDY escreve (12 out 2026): "crie um ship aleatório meu" saiu
+// com `<@01M3NGY6WP3CB4GESV5DRYVV1T:>` — um ID que não existe (01M… seria uma
+// data de 2027: inventado) e com ":" que o Stoat não entende; na tela, lixo.
+// Ela nunca vê IDs (o fio mostra @nome), então quem decide é o código:
+//   • `<@ID>`, `<@!ID>`, `<@ID:>` de alguém que está MESMO na conversa → menção limpa;
+//     ID que ninguém conhece → "@alguém" (nunca um ID inventado);
+//   • `@Nome` de quem está na conversa → menção de verdade `<@id>`.
+const escapar = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+export function mencoesReais(texto, { pessoas = new Map(), botId = null } = {}) {
+  let t = String(texto ?? "");
+  t = t.replace(/<@!?\s*([0-9A-Za-z]{10,40})\s*[:;,.]?\s*>/g, (_, id) => (pessoas.has(id) && id !== botId ? `<@${id}>` : "@alguém"));
+  const nomes = [...pessoas.entries()]
+    .filter(([id, n]) => id !== botId && typeof n === "string" && n.trim().length >= 2 && !/^(judy|alguém|alguem)$/i.test(n.trim()))
+    .sort((a, b) => b[1].length - a[1].length);   // "Ana Clara" antes de "Ana"
+  for (const [id, nome] of nomes) {
+    const re = new RegExp(`(^|[^\\p{L}\\p{N}<@])@${escapar(nome.trim())}(?![\\p{L}\\p{N}])`, "giu");
+    t = t.replace(re, (_, antes) => `${antes}<@${id}>`);
+  }
+  return t;
+}
+
 export function nomesDoCanal(canalId) {
   const todas = cache.get(canalId) || [];
   return new Map(todas.filter((m) => m.userId).map((m) => [m.userId, m.ehJudy ? "Judy" : m.nome]));

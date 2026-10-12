@@ -11706,6 +11706,67 @@ console.log(`\nSERVIDOR (bot): ${pass} ok, ${fail} falha(s)`);
 process.exit(fail ? 1 : 0);
 };
 
+// ════════════════════════════════════════════════════════════════════════════
+// mencoes-12out  (12 out 2026) — "as menções dela parecem quebradas"
+// ════════════════════════════════════════════════════════════════════════════
+SUITES["mencoes-12out"] = async () => {
+const __m0 = await import("node:fs"); const fs = __m0.default;
+// Print real: "@Judy crie um ship aleatório meu aí" → "um ship entre o
+// <@01M3NGY6WP3CB4GESV5DRYVV1T:> e o <@01M4K88XSWRE5MCH5GRV9V9KYN:>". IDs
+// inventados (01M… seria 2027) e com ":" — o Stoat mostrou o texto cru.
+process.env.DB_PATH = "/tmp/mencoes-12out.db";
+process.env.CONFIG_PATH = "/tmp/mencoes-12out-cfg.json";
+process.env.LLM_URL = "http://llm.teste"; process.env.IA_MODO = "local";
+process.env.CHAT_SERVIDORES = "*"; process.env.CHAT_DEBUG = "0";
+delete process.env.SEARXNG_URL; delete process.env.IA_SERVICO_URL;
+for (const f of [process.env.DB_PATH, process.env.CONFIG_PATH]) fs.rmSync(f, { force: true });
+let pass = 0, fail = 0;
+const ok = (cond, msg) => { cond ? pass++ : fail++; console.log(`  ${cond ? "✅" : "❌"} ${msg}`); };
+const CEDILHA = "01KZ16ENP4RFZ79HZ2H8JX5GCD", NESQUIK = "01KQ566RHQC8V8YAFH79G67MSJ", BIA = "01KA1B2C3D4E5F6G7H8J9K0MNP", BOT = "01KBOT00000000000000000000";
+const INVENTADO = "Sugiro que você faça um ship entre o <@01M3NGY6WP3CB4GESV5DRYVV1T:> e o <@01M4K88XSWRE5MCH5GRV9V9KYN:>. A combinação deve render brigas sarcásticas.";
+
+const cc = await import("./modulos/ai/cache-canal.js");
+const pessoas = new Map([[CEDILHA, "CabeçaComÇedilha"], [NESQUIK, "nesquik"], [BIA, "Bia Souza"], [BOT, "Judy"]]);
+let r = cc.mencoesReais(INVENTADO, { pessoas, botId: BOT });
+ok(!/<@01M|:>/.test(r) && /entre o @alguém e o @alguém/.test(r), "★ ID inventado (e o \":\" no fim) não chega ao chat — vira @alguém, nunca lixo");
+r = cc.mencoesReais(`já falei com <@${NESQUIK}:> e <@!${BIA}>`, { pessoas, botId: BOT });
+ok(r === `já falei com <@${NESQUIK}> e <@${BIA}>`, "★ ID de quem está na conversa, com ':' ou '!', vira menção limpa");
+r = cc.mencoesReais("Ship: @CabeçaComÇedilha + @Bia Souza = 87% 💘 (e @Judy de madrinha)", { pessoas, botId: BOT });
+ok(r === `Ship: <@${CEDILHA}> + <@${BIA}> = 87% 💘 (e @Judy de madrinha)`, "★ @Nome de quem está na conversa vira menção de verdade (com acento, ç e espaço); ela não se marca");
+ok(cc.mencoesReais("mande para ana@nesquik.com", { pessoas, botId: BOT }) === "mande para ana@nesquik.com", "  → e-mail não vira menção");
+
+console.log("\n── no chat ──");
+let RESPOSTA = INVENTADO, pedido = null;
+globalThis.fetch = async (url, op = {}) => {
+  url = String(url);
+  if (url.startsWith("http://llm.teste/") && !op.body) return { ok: true, status: 200, json: async () => ({ data: [{ id: "fake" }] }), text: async () => "{}" };
+  if (url.startsWith("http://llm.teste/")) { const c = JSON.parse(op.body); if (!c.response_format) pedido = c; return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: c.response_format ? "{}" : RESPOSTA }, finish_reason: "stop" }], usage: {} }) }; }
+  return { ok: false, status: 404, json: async () => ({}), text: async () => "" };
+};
+const db = await import("./modulos/core/db.js");
+db.abrirBanco(process.env.DB_PATH);
+const chat = await import("./modulos/ai/chat.js");
+chat.registrarNoCanal("CH", { id: "m1", nome: "nesquik", userId: NESQUIK, texto: "alguém joga hoje?" });
+chat.registrarNoCanal("CH", { id: "m2", nome: "Bia Souza", userId: BIA, texto: "eu jogo" });
+const saidas = [];
+const canal = { id: "CH", sendMessage: async (t) => { saidas.push(typeof t === "string" ? t : (t.content ?? "")); return { edit: async (x) => saidas.push(typeof x === "string" ? x : (x.content ?? "")) }; } };
+const ctx = { sendEmbed: async (_c, e) => saidas.push(e.description ?? e.title), COR: { info: 1, erro: 2, aviso: 3, sucesso: 4 }, serverId: "S1", PREFIXO: "&", config: {}, ehSuperAdmin: () => false, getServer: async () => null };
+const diz = async (texto) => {
+  saidas.length = 0;
+  await chat.conversar({ id: `q${Math.random()}`, content: texto, authorId: CEDILHA, username: "CabeçaComÇedilha", channelId: "CH", channel: canal, client: { user: { id: BOT } }, mentionIds: [], reply_ids: [] }, texto, ctx);
+  return saidas.filter((x) => x && !/^[💭🔎✍️]/u.test(x)).at(-1) ?? "";
+};
+let saida = await diz("crie um ship aleatório meu aí pfv");
+ok(!/<@01M|:>/.test(saida), `★ a resposta do print chega sem as menções quebradas (${saida.slice(0, 80)})`);
+ok(/NUNCA escreva IDs nem o formato <@…>/.test(pedido?.messages?.[0]?.content ?? ""), "  → e o prompt ensina a marcar com @Nome");
+RESPOSTA = "Ship do dia: @CabeçaComÇedilha + @Bia Souza = 92% 💘";
+saida = await diz("crie um ship aleatório meu aí pfv");
+ok(saida.includes(`<@${CEDILHA}>`) && saida.includes(`<@${BIA}>`), "★ quando ela escreve @Nome de quem está no chat, sai menção de verdade");
+
+console.log(`\nMENÇÕES (12 out): ${pass} ok, ${fail} falha(s)`);
+process.exit(fail ? 1 : 0);
+};
+
 // ── O executor ───────────────────────────────────────────────────────────────
 const PRECISA_DO_BOT = (nome) => /import\("\.\/main\.js"\)/.test(String(SUITES[nome]));
 

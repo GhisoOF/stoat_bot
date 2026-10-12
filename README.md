@@ -200,6 +200,9 @@ diz exatamente o que clicar.
   `visao` vira apelido dela — ver uma imagem não descarrega a conversa nem
   carrega uma 2ª cópia do modelo (o que, com um modelo de 17 GB, custaria
   dezenas de segundos por imagem).
+- **Menções**: a Judy marca alguém escrevendo `@Nome` de quem está na
+  conversa, e o código transforma em menção de verdade; ID que ela inventar (o
+  modelo escrevia `<@01M…:>`) nunca chega ao chat — vira `@alguém`.
 - **Conhece o servidor**: "quais são as regras?", "quem é da staff?", "em que
   canal posso divulgar?" → a Judy responde com os dados reais do `&servidor` e
   do `&staff` (lidos na hora do Stoat), sem chutar e sem ir à web.

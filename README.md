@@ -227,7 +227,11 @@ diz exatamente o que clicar.
   pessoa (com data) e adapta o tom. `&chat perfil` mostra; `&chat esquecer
   [tudo]` apaga de verdade — banco **e** processo.
 - **Iniciativa com freios**: `&chat livre` deixa a IA participar quando o
-  assunto vale; `&chat comentar` permite comentários espontâneos com limite
+  assunto vale — nunca em mensagem para outra pessoa (resposta, @menção,
+  vocativo) nem em reação solta; sem convite, só pergunta ao grupo ou foto
+  mostrada ao grupo, com juiz conservador e no máximo 1 entrada a cada 5 min
+  (`CHAT_LIVRE_INTERVALO_MS`) e 4 por hora (`CHAT_LIVRE_POR_HORA`); o log
+  mostra cada decisão (`[CHAT-LIVRE]`); `&chat comentar` permite comentários espontâneos com limite
   por dia. `&chat cuidado @user on` marca alguém (opt-in) para tratamento
   gentil e paciente.
 - **Vários comandos de uma vez**: um por linha na mesma mensagem (até 10);

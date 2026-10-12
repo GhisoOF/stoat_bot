@@ -973,6 +973,9 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
     lang === "en"
       ? "MENTIONS: to tag someone from the conversation, write @ followed by their name exactly as it appears in the chat (e.g. @Ana). NEVER write IDs or the <@…> format — the system turns @Name into a real mention."
       : "MENÇÕES: para marcar alguém da conversa, escreva @ e o nome exatamente como aparece no chat (ex.: @Ana). NUNCA escreva IDs nem o formato <@…> — o sistema transforma @Nome em menção de verdade.",
+    lang === "en"
+      ? "HOW YOU TALK (12 Oct 2026 — people found you 'evasive', 'mysterious in an annoying way'): you're in a chat among friends, often pure banter. Talk like a person in the chat: casual, short, everyday words, slang is fine; no formality, no flowery metaphors ('that's like saying…'), no riddles. ANSWER what was said and stop — do NOT end with a question back ('what else do you want to test?', 'what exactly do you mean?') unless you truly need a piece of information to help. If it's a joke, play along with a joke; if you don't know what it's about, say so in a few words instead of guessing out loud."
+      : "COMO VOCÊ FALA (12 out 2026 — o pessoal achou você \"evasiva\", \"misteriosa de um jeito chato\"): você está num chat de amigos, muitas vezes pura zoeira. Fale como gente do chat: informal, curto, palavras do dia a dia, gíria leve à vontade; nada de formalidade, metáfora rebuscada (\"isso é como dizer…\") nem charada. RESPONDA o que foi dito e pare — NÃO termine devolvendo pergunta (\"o que mais quer testar?\", \"o que exatamente você quer dizer?\") a não ser que precise mesmo de uma informação para ajudar. Se é piada, entre na piada; se não sabe do que se trata, diga em poucas palavras em vez de chutar em voz alta.",
     "CONTINUIDADE: você está no meio de uma conversa contínua. NÃO cumprimente nem faça saudação a cada mensagem (nada de 'Olá', 'Oi', 'Olha,', 'Ah,' + nome no início). Não repita o nome da pessoa toda hora. Vá direto ao ponto, como quem continua um diálogo já em andamento.",
     falandoComCriador
       ? "A pessoa com quem você fala agora é o seu criador — ele te construiu. Você é devotada a ele e ele importa de um jeito que ninguém mais importa. Deixe esse afeto transparecer com um calor contido — uma provocação carinhosa que só ele recebe, um cuidado dito de passagem, atenção genuína ao que ele precisa. Sem bajulação melosa nem declarações grandiloquentes, mas o carinho é real e pode aparecer. E devoção não é obediência cega: se ele errar em algo técnico ou lógico, você corrige — com uma alfinetada afetuosa."
@@ -2450,24 +2453,94 @@ export function canalTemChatLivre(config, canalId) {
   return !!config?.chatLivre?.canais?.includes(canalId);
 }
 
-async function valeResponder(texto) {
+// 12 out 2026 — "ela está achando que é com ela": o juiz dizia "na dúvida,
+// prefira sim — você é participativa" e via só a mensagem solta, sem saber
+// que era a continuação de uma conversa entre duas outras pessoas. Agora ele
+// vê o fio e é conservador: na dúvida, não.
+async function valeResponder(texto, fio = "") {
   const t = (texto || "").trim();
   if (t.length < 8) return false;
   if (/^\s*[\p{Emoji}\s]+$/u.test(t) && !/[a-zA-Z0-9]/.test(t)) return false;   // só emoji/símbolo
   try {
-    const sys = "Você é a Judy, uma personagem que participa de um servidor de chat como se fosse mais uma pessoa da turma — espirituosa e presente, não um assistente formal. "
-      + "Decida se vale a pena você entrar NESTA mensagem com um comentário ou resposta. "
-      + "Responda 'sim' se: for pergunta, pedido, tema interessante, algo em que você tenha o que comentar, provocação, ou uma deixa boa para um comentário seu. "
-      + "Responda 'nao' apenas para: mensagens muito curtas sem conteúdo (ok, kkk, sim), conversa claramente privada entre duas pessoas específicas, ou quando entrar seria intrusivo. "
-      + "Na dúvida, prefira 'sim' — você é participativa. "
+    const sys = "Você é a Judy, uma bot num chat de amigos. Ninguém te chamou nesta mensagem. "
+      + "Decida se você deve ENTRAR nela sem ser chamada. "
+      + "Responda 'sim' SÓ se for (a) uma pergunta ou pedido feito ao grupo (não a uma pessoa específica) em que você tenha algo concreto e útil a dizer, ou (b) alguém mostrando algo ao grupo com foto (uma novidade, uma gambiarra, uma conquista) em que um comentário curto e divertido cabe bem. "
+      + "Responda 'nao' para: conversa entre outras pessoas, resposta a alguém, reação, risada, zoeira entre amigos, comentário solto, desabafo, mensagem curta ou vaga. "
+      + "Na dúvida, 'nao' — entrar sem ser chamada em conversa dos outros é chato. "
       + 'Responda só JSON: {"responder": true|false}.';
     const raw = await llmChat(
-      [{ role: "system", content: sys }, { role: "user", content: t.slice(0, 500) }],
+      [{ role: "system", content: sys }, { role: "user", content: `${fio ? `CONVERSA ATÉ AGORA:\n${fio.slice(-1200)}\n\n` : ""}MENSAGEM NOVA:\n${t.slice(0, 500)}` }],
       { json: true, modelo: LLM_MODEL_DECISAO, etiqueta: "vale-responder" },
     );
     return !!JSON.parse(raw).responder;
   } catch { return false; }
 }
+
+// ─── Para quem é a mensagem? (12 out 2026) ───────────────────────────────────
+// Os prints: "@CabeçaComÇedilha" sozinho virou "você está me enviando o seu
+// próprio identificador?"; "Obrigado :) @CabeçaComÇedilha" virou "de nada";
+// "Que" (respondendo a outra pessoa) virou um parágrafo sobre Ctrl+F. Na
+// conversa livre, quem falava com ela há pouco (90 s de "engajamento") tinha
+// TODA mensagem respondida, sem filtro nenhum. Agora o código decide primeiro
+// para quem é a mensagem — e só o que é para ela, ou para o grupo, chega ao juiz.
+export function destinoDaMensagem(message, { botId = null, canalId = null } = {}) {
+  const conteudo = String(message?.content ?? "");
+  const mencoes = [...conteudo.matchAll(/<@!?([0-9A-Za-z]{20,32})>/g)].map((m) => m[1]);
+  if (botId && mencoes.includes(botId)) return "judy";
+  if (/(?<![\p{L}\p{N}])(judy|cobaia)(?![\p{L}\p{N}])/iu.test(conteudo)) return "judy";
+  const respondeu = message?.replyIds?.[0] ?? message?.reply_ids?.[0] ?? null;
+  if (respondeu) {
+    const alvo = cacheCanal.recentes(canalId).find((m) => m.id === respondeu);
+    return alvo && (alvo.ehJudy || (botId && alvo.userId === botId)) ? "judy" : "outra-pessoa";
+  }
+  if (mencoes.some((id) => id !== botId)) return "outra-pessoa";
+  // vocativo: "obrigado, Fulano", "Fulano, viu isso?", "... né Fulano"
+  const t = conteudo.toLowerCase().trim();
+  const nomes = [...cacheCanal.nomesDoCanal(canalId)]
+    .filter(([id, n]) => id !== botId && id !== message?.authorId && typeof n === "string" && n.trim().length >= 3 && !/^judy$/i.test(n.trim()))
+    .map(([, n]) => n.trim().toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  for (const n of nomes) {
+    if (new RegExp(`^@?${n}(?![\\p{L}\\p{N}])|(?<![\\p{L}\\p{N}])@?${n}[\\s!?.,:;)]*$`, "u").test(t)) return "outra-pessoa";
+  }
+  return "grupo";
+}
+
+const RE_PERGUNTA = /\?|(?<![\p{L}])(como|qual|quais|quem|quando|onde|porque|por que|quanto|algu[eé]m sabe|algu[eé]m tem|me ajuda|recomenda|indica|o que [eé])(?![\p{L}])/iu;
+const RE_SO_REACAO = /^(?:[kKhHaAsSrR]{3,}|ixi+|oxe+|eita+|vish+|que|q|kk+|lol|uai|af+|mds|pqp|ue|hm+|ah+|oh+|ok|blz|sim|n[aã]o|[.!?…]+)[\s!?.…]*$/i;
+
+const LIVRE_MIN_CHARS = () => Number(process.env.CHAT_LIVRE_MIN_CHARS || 12);
+const LIVRE_INTERVALO_MS = () => Number(process.env.CHAT_LIVRE_INTERVALO_MS || 5 * 60_000);   // entre entradas sem convite, por canal
+const LIVRE_POR_HORA = () => Number(process.env.CHAT_LIVRE_POR_HORA || 4);
+const _entradasLivres = new Map();   // canalId → [timestamps]
+
+// → { entrar, avaliar, motivo }. `avaliar`: ainda passa pelo juiz (modelo).
+export function decidirEntradaLivre(message, { botId = null, canalId = null, modo = "relevante", engajado = false, agora = Date.now() } = {}) {
+  const destino = destinoDaMensagem(message, { botId, canalId });
+  if (destino === "judy") return { entrar: true, avaliar: false, motivo: "falou com ela" };
+  if (destino === "outra-pessoa") return { entrar: false, motivo: "fala com outra pessoa" };
+  const texto = String(message?.content ?? "").replace(/<@!?[0-9A-Za-z]{20,32}>/g, "").trim();
+  if (RE_SO_REACAO.test(texto) || texto.replace(/[^\p{L}\p{N}]/gu, "").length < 4) return { entrar: false, motivo: "só reação" };
+  const pergunta = RE_PERGUNTA.test(texto);
+  if (engajado) {
+    // continuação de uma conversa COM ela: pergunta ou frase com conteúdo
+    return pergunta || texto.length >= 20 ? { entrar: true, avaliar: false, motivo: "continua a conversa com ela" } : { entrar: false, motivo: "curta demais para continuar" };
+  }
+  if (modo === "todas") return texto.length >= LIVRE_MIN_CHARS() ? { entrar: true, avaliar: false, motivo: "modo todas" } : { entrar: false, motivo: "curta demais" };
+  // Mostrar algo ao grupo com foto ("peguei a case do fone com as lapiseiras
+  // kakaka" + foto) é deixa boa — e foi o acerto que Ghieh quer manter.
+  const mostrou = (message?.attachments?.length ?? 0) > 0;
+  if (!pergunta && !mostrou) return { entrar: false, motivo: "não é pergunta nem algo mostrado ao grupo" };
+  if (!mostrou && texto.length < LIVRE_MIN_CHARS()) return { entrar: false, motivo: "curta demais" };
+  const recentes = (_entradasLivres.get(canalId) ?? []).filter((t) => agora - t < 3_600_000);
+  if (recentes.length && agora - recentes.at(-1) < LIVRE_INTERVALO_MS()) return { entrar: false, motivo: "entrou sem convite há pouco" };
+  if (recentes.length >= LIVRE_POR_HORA()) return { entrar: false, motivo: "teto de entradas sem convite por hora" };
+  return { entrar: true, avaliar: true, motivo: mostrou && !pergunta ? "mostrou algo ao grupo (com foto)" : "pergunta ao grupo" };
+}
+function registrarEntradaLivre(canalId, agora = Date.now()) {
+  const l = (_entradasLivres.get(canalId) ?? []).filter((t) => agora - t < 3_600_000);
+  l.push(agora); _entradasLivres.set(canalId, l);
+}
+export function _zerarLivre() { _entradasLivres.clear(); _engajamento.clear(); _ultimaAvaliacaoLivre.clear(); }
 
 // Cooldown por canal para a conversa livre (evita avaliar toda mensagem).
 const _ultimaAvaliacaoLivre = new Map();   // canalId → timestamp
@@ -2535,19 +2608,26 @@ export async function talvezResponderLivre(message, ctx) {
 
     const modo = config?.chatLivre?.modo || "relevante";
     const userId = message.authorId;
+    const canalId = message.channelId;
+    const botId = message.client?.user?.id ?? ctx.client?.user?.id ?? null;
 
-    const engajado = estaEngajado(message.channelId, userId);
+    const engajado = estaEngajado(canalId, userId);
+    const d = decidirEntradaLivre(message, { botId, canalId, modo, engajado });
+    console.log(`[CHAT-LIVRE] ${d.entrar ? (d.avaliar ? "avaliar" : "entrar") : "fora"}: ${d.motivo} — "${texto.slice(0, 60)}"`);
+    if (!d.entrar) return false;
 
-    if (modo !== "todas" && !engajado) {
+    if (d.avaliar) {
       const agora = Date.now();
-      const ultima = _ultimaAvaliacaoLivre.get(message.channelId) || 0;
+      const ultima = _ultimaAvaliacaoLivre.get(canalId) || 0;
       if (agora - ultima < LIVRE_COOLDOWN_MS) return false;
-      _ultimaAvaliacaoLivre.set(message.channelId, agora);
-      if (!(await valeResponder(texto))) return false;
+      _ultimaAvaliacaoLivre.set(canalId, agora);
+      const fio = cacheCanal.contexto(canalId, { limite: 6, excluirId: message.id ?? null });
+      if (!(await valeResponder((message.attachments?.length ? `${texto} [com foto anexada]` : texto), fio))) { console.log("[CHAT-LIVRE] fora: o juiz achou que não é com ela"); return false; }
       if (ocupado) return false;   // pode ter ficado ocupado durante a avaliação
+      registrarEntradaLivre(canalId);
     }
 
-    marcarEngajado(message.channelId, userId);
+    marcarEngajado(canalId, userId);
 
     if (!engajado) { try { await message.react?.(encodeURIComponent("👀")); } catch {} }
 

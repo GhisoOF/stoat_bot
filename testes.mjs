@@ -11850,6 +11850,87 @@ console.log(`\nIMAGEM/MEMÓRIA (12 out): ${pass} ok, ${fail} falha(s)`);
 process.exit(fail ? 1 : 0);
 };
 
+// ════════════════════════════════════════════════════════════════════════════
+// chat-livre-12out  (12 out 2026) — "ela está achando que é com ela"
+// ════════════════════════════════════════════════════════════════════════════
+SUITES["chat-livre-12out"] = async () => {
+const __m0 = await import("node:fs"); const fs = __m0.default;
+// Prints do servidor (zoação): na conversa livre ela respondia mensagens que
+// eram para OUTRA pessoa — "@CabeçaComÇedilha" sozinho, "Obrigado :)
+// @CabeçaComÇedilha", "Que" respondendo ao Ryuque, "que isto meu amigo" — e o
+// pessoal reclamou que ela é "evasiva", termina tudo devolvendo pergunta. O
+// acerto a manter: foto mostrada ao grupo ("peguei a case do fone com as
+// lapiseiras kakaka") ganhou um comentário dela.
+process.env.DB_PATH = "/tmp/livre-12out.db"; process.env.CONFIG_PATH = "/tmp/livre-12out-cfg.json";
+process.env.LLM_URL = "http://llm.teste"; process.env.IA_MODO = "local";
+process.env.CHAT_SERVIDORES = "*"; process.env.CHAT_DEBUG = "0"; process.env.CHAT_LIVRE_COOLDOWN = "0";
+delete process.env.SEARXNG_URL; delete process.env.IA_SERVICO_URL;
+for (const f of [process.env.DB_PATH, process.env.CONFIG_PATH]) fs.rmSync(f, { force: true });
+let pass = 0, fail = 0;
+const ok = (cond, msg) => { cond ? pass++ : fail++; console.log(`  ${cond ? "✅" : "❌"} ${msg}`); };
+const BOT = "01KBOT00000000000000000000", CED = "01KZ16ENP4RFZ79HZ2H8JX5GCD", RYU = "01KRYU00000000000000000000", ACE = "01KACE00000000000000000000", LAU = "01KLAU00000000000000000000";
+
+let pedidos = [], juizDiz = true;
+globalThis.fetch = async (url, op = {}) => {
+  url = String(url);
+  if (!op.body) return { ok: true, status: 200, json: async () => ({ data: [{ id: "fake" }] }), text: async () => "{}" };
+  const c = JSON.parse(op.body); pedidos.push(c);
+  const content = c.response_format ? JSON.stringify({ responder: juizDiz }) : "Gambiarra de respeito, virou estojo kkkk";
+  return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content }, finish_reason: "stop" }], usage: {} }) };
+};
+const db = await import("./modulos/core/db.js");
+db.abrirBanco(process.env.DB_PATH);
+const chat = await import("./modulos/ai/chat.js");
+const CH = "CH-LIVRE";
+chat.registrarNoCanal(CH, { id: "r1", nome: "Ryuque", userId: RYU, texto: "como usou control f 778" });
+chat.registrarNoCanal(CH, { id: "j1", nome: "Judy", userId: BOT, texto: "De nada.", ehJudy: true });
+chat.registrarNoCanal(CH, { id: "c1", nome: "CabeçaComÇedilha", userId: CED, texto: "vsfd" });
+
+console.log("── para quem é a mensagem ──");
+const m = (content, extra = {}) => ({ content, authorId: ACE, ...extra });
+const decide = (t, x = {}, o = {}) => chat.decidirEntradaLivre(m(t, x), { botId: BOT, canalId: CH, ...o });
+for (const engajado of [false, true]) {
+  const rot = engajado ? " (mesmo falando com ela há pouco)" : "";
+  ok(!decide(`<@${CED}>`, {}, { engajado }).entrar, `★ "@CabeçaComÇedilha" sozinho é com ela, não com a Judy${rot}`);
+  ok(!decide(`Obrigado :) <@${CED}>`, {}, { engajado }).entrar, `★ "Obrigado :) @CabeçaComÇedilha" não ganha "de nada" da Judy${rot}`);
+  ok(!decide("Que", { replyIds: ["r1"] }, { engajado }).entrar, `★ "Que" respondendo ao Ryuque não é com a Judy${rot}`);
+  ok(!decide("que isto meu amigo", {}, { engajado }).entrar && !decide("Olha meu banner", {}, { engajado }).entrar && !decide("Kkkkkkkkk", {}, { engajado }).entrar, `★ reação, risada e frase solta não puxam a Judy${rot}`);
+  ok(!decide("obrigado CabeçaComÇedilha", {}, { engajado }).entrar, `  → vocativo com o nome de outra pessoa também não${rot}`);
+}
+ok(decide("valeu judy kkkk").entrar && decide("qual o melhor anime da temporada?", { replyIds: ["j1"] }).entrar, "★ chamar pelo nome ou responder a uma mensagem DELA continua funcionando");
+const foto = decide("Peguei a case do meu fone com as lapiseira kakaka", { attachments: [{ _id: "a" }] });
+ok(foto.entrar && foto.avaliar, "★ foto mostrada ao grupo continua indo ao juiz (o acerto do print)");
+ok(decide("alguém sabe como entra na call?").avaliar && !decide("Peguei a case do meu fone com as lapiseira kakaka").entrar, "  → pergunta ao grupo vai ao juiz; comentário solto sem foto não");
+
+console.log("\n── no fluxo da conversa livre ──");
+const enviados = [];
+const canal = { id: CH, sendMessage: async (t) => { enviados.push(typeof t === "string" ? t : t.content); return { id: `M${enviados.length}`, edit: async (x) => enviados.push(typeof x === "string" ? x : x.content) }; } };
+const ctx = { sendEmbed: async (_c, e) => enviados.push(e.description ?? e.title), COR: { info: 1, erro: 2, aviso: 3, sucesso: 4 }, serverId: "S1", PREFIXO: "&",
+  config: { chatLivre: { canais: [CH], modo: "relevante" } }, ehSuperAdmin: () => false, getServer: async () => null };
+const msg = (content, extra = {}) => ({ id: `q${Math.random()}`, content, authorId: ACE, author: { username: "AceDummy" }, channelId: CH, channel: canal, client: { user: { id: BOT } }, mentionIds: [], react: async () => {}, ...extra });
+chat._zerarLivre();
+for (const t of [`<@${CED}>`, `Obrigado :) <@${CED}>`, "que isto meu amigo", "Kkkkkkkkk"]) {
+  pedidos = []; enviados.length = 0;
+  const r = await chat.talvezResponderLivre(msg(t), ctx);
+  ok(r === false && !enviados.length && !pedidos.length, `★ "${t.replace(CED, "Cedilha").slice(0, 40)}": não responde e nem gasta o modelo perguntando ao juiz`);
+}
+pedidos = []; enviados.length = 0;
+let r = await chat.talvezResponderLivre(msg("Peguei a case do meu fone com as lapiseira kakaka", { attachments: [{ _id: "a" }] }), ctx);
+const juiz = pedidos.find((p) => p.response_format);
+ok(r === true && enviados.some((e) => /Gambiarra/.test(e)), "★ a foto mostrada ao grupo ganha o comentário dela");
+ok(/com foto anexada/.test(JSON.stringify(juiz?.messages ?? [])) && /CONVERSA ATÉ AGORA/.test(JSON.stringify(juiz?.messages ?? [])), "  → o juiz vê a foto e o fio da conversa (antes: só a frase solta)");
+ok(/Na dúvida, 'nao'/.test(juiz?.messages?.[0]?.content ?? ""), "  → e é conservador: na dúvida, não entra");
+pedidos = []; enviados.length = 0;
+r = await chat.talvezResponderLivre(msg("alguém sabe como entra na call?", { authorId: LAU, author: { username: "Laufeyy" } }), ctx);
+ok(r === false && !pedidos.length, "★ entrou sem convite há pouco: espera uns minutos antes de entrar de novo noutra conversa");
+await chat.conversar(msg("oi judy"), "oi judy", ctx);
+const ultimoSistema = [...pedidos].reverse().find((p) => !p.response_format)?.messages?.[0]?.content ?? "";
+ok(/NÃO termine devolvendo pergunta/.test(ultimoSistema) && /fala como gente num chat de amigos/.test(ultimoSistema), "★ tom: informal, direto, sem devolver pergunta nem fazer mistério (\"evasiva\")");
+
+console.log(`\nCHAT LIVRE (12 out): ${pass} ok, ${fail} falha(s)`);
+process.exit(fail ? 1 : 0);
+};
+
 // ── O executor ───────────────────────────────────────────────────────────────
 const PRECISA_DO_BOT = (nome) => /import\("\.\/main\.js"\)/.test(String(SUITES[nome]));
 

@@ -186,6 +186,13 @@ diz exatamente o que clicar.
   Mensagem só social, conta e imagem anexada não buscam; resultado que não
   fala do assunto fica de fora; a consulta da busca de fundo é escrita sem
   raciocínio (mais rápida). `BUSCA_SEMPRE=0` volta a buscar só quando pedem.
+- **Ritmo**: a resposta só raciocina quando a mensagem pede (conta, lógica,
+  código, explicação, comparação, mensagem longa — `PENSAR=auto`); conversa
+  leve sai direto. Todo pedido ao modelo passa por uma fila: chat, moderação
+  e RSS na frente; memória, comentário espontâneo e verificador só com o
+  modelo livre, sem raciocínio, e descartados se a fila de fundo encher
+  (`LLM_PARALELO`, `LLM_FILA_FUNDO`). Um 429 do llama-swap é repetido com
+  espera; se persistir, a Judy diz que está sobrecarregada.
 - **Um modelo nos dois papéis**: com o mesmo valor em `MODELO` e
   `MODELO_VISAO` (Gemma 4, multimodal), o llama-swap fica com uma entrada só e
   `visao` vira apelido dela — ver uma imagem não descarrega a conversa nem

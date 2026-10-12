@@ -141,12 +141,12 @@ export function pontuar(r, termos, subs = []) {
   return p;
 }
 
-export async function buscarSearx(consulta, { fetcher = fetch, n = N_POR_CONSULTA() } = {}) {
+export async function buscarSearx(consulta, { fetcher = fetch, n = N_POR_CONSULTA(), timeoutMs = TIMEOUT() } = {}) {
   const base = SEARXNG_URL();
   if (!base) throw new Error("SEARXNG_URL não configurado");
   const idioma = process.env.SEARXNG_IDIOMA || (pareceOutroIdioma(consulta) ? "en" : "pt-BR");
   const url = `${base}/search?q=${encodeURIComponent(consulta)}&format=json&language=${encodeURIComponent(idioma)}`;
-  const r = await fetcher(url, { signal: AbortSignal.timeout(TIMEOUT()) });
+  const r = await fetcher(url, { signal: AbortSignal.timeout(timeoutMs) });
   if (!r.ok) throw new Error(`SearXNG HTTP ${r.status}`);
   const data = await r.json();
   return (data.results ?? []).slice(0, n).map((x) => ({
@@ -209,10 +209,10 @@ export async function lerPagina(url, termos, { fetcher = null, resolver } = {}) 
 
 // `notaMinima`: quantos termos do pedido um resultado precisa ter para contar
 // como relevante (a busca de fundo pede 2 — ver valeBuscarDeFundo).
-export async function pesquisar(pergunta, { chamarJson = null, hoje = "", fetcher = fetch, resolver, log = () => {}, notaMinima = 1 } = {}) {
+export async function pesquisar(pergunta, { chamarJson = null, hoje = "", fetcher = fetch, resolver, log = () => {}, notaMinima = 1, lerPaginas = LER_PAGINAS(), timeoutMs = TIMEOUT() } = {}) {
   const { consultas, origem } = await decidirConsultas(pergunta, { chamarJson, hoje });
   log(`consultas (${origem}): ${consultas.map((q) => `"${q}"`).join(" · ")}`);
-  const lotes = await Promise.all(consultas.map((q) => buscarSearx(q, { fetcher }).catch((e) => { log(`busca "${q}" falhou: ${e.message}`); return { erro: e }; })));
+  const lotes = await Promise.all(consultas.map((q) => buscarSearx(q, { fetcher, timeoutMs }).catch((e) => { log(`busca "${q}" falhou: ${e.message}`); return { erro: e }; })));
   if (lotes.every((l) => l?.erro)) throw lotes[0].erro;
 
   const vistos = new Set();
@@ -231,7 +231,7 @@ export async function pesquisar(pergunta, { chamarJson = null, hoje = "", fetche
   if (fracos) resultados = pontuados.slice(0, 3);
   log(`${todos.length} resultado(s), ${resultados.length} relevante(s)${fracos ? " (nenhum bate com o pedido)" : ""}`);
 
-  const nLer = Math.min(LER_PAGINAS(), resultados.length);
+  const nLer = Math.min(lerPaginas ?? LER_PAGINAS(), resultados.length);
   if (nLer > 0) {
     const textos = await Promise.all(resultados.slice(0, nLer).map((r) => lerPagina(r.url, termos, { fetcher, resolver })));
     textos.forEach((t, i) => { if (t) resultados[i].texto = t; });

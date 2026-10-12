@@ -11245,13 +11245,13 @@ ok(buscas.length > 0, `★ pesquisou sem ninguém pedir (consulta: ${buscas.join
 ok(/NÃO pediu busca/.test(promptFinal()) && /Argentina vence a França/.test(promptFinal()), "  → os resultados entram no prompt, com a instrução de usar só se ajudar");
 ok(!/\[\d\]/.test(r) && !/Fontes|busquei/.test(r), `★ resposta sem [n] e sem rodapé de fontes (${r.slice(0, 80)})`);
 ok(!/ge\.globo\.com/.test(r) && /Argentina ganhou a Copa de 2022/.test(r) && !/Mais em/.test(r), "★ e sem os links que o modelo copiou dos resultados (nem o \"Mais em\" que os apresentava) — o texto fica");
-ok(consultaDaBusca()?.chat_template_kwargs?.enable_thinking === false, "★ a consulta de fundo é escrita sem raciocínio (modo local) — não pesa em toda mensagem");
+ok(!consultaDaBusca() && buscas[0] === busca.limparConsulta("quem ganhou a copa de 2022"), "★ a busca de fundo nem chama o modelo para escrever a consulta — o código limpa a mensagem");
 
 console.log("\n── com pedido de busca: links ──");
 r = await diz("pesquisa quem ganhou a copa de 2022");
 ok(/\*\*Fontes:\*\*/.test(r) && /\[ge\.globo\.com\]\(<https:\/\/ge\.globo\.com\/copa-2022>\)/.test(r), "★ \"pesquisa …\" → rodapé com as fontes clicáveis");
 ok(/\[1\]/.test(r), "  → e a resposta cita [n]");
-ok(!consultaDaBusca()?.chat_template_kwargs, "  → busca pedida mantém o raciocínio na consulta");
+ok(!!consultaDaBusca(), "  → busca pedida: o modelo reescreve a consulta (corrige digitação, escolhe idioma)");
 r = await diz("procura na internet quem ganhou a copa de 2022");
 ok(/\*\*Fontes:\*\*/.test(r), "  → \"procura na internet\" também");
 
@@ -11281,14 +11281,78 @@ const limpo = busca.semLinksDaBusca("Leia [esta matéria](https://ge.globo.com/x
 ok(limpo.includes("Leia esta matéria") && limpo.includes("https://meu.site/a") && !/ge\.globo|Fontes/.test(limpo), "★ só sai link de site que a busca trouxe — o link que a pessoa mandou fica");
 ok(busca.urlsVistas([], '[buscar_web] {"resultados":[{"url":"https://x.com/a"}]}').includes("https://x.com/a"), "  → links da ferramenta buscar_web também contam");
 
+console.log("\n── raciocínio conforme a mensagem ──");
+resultadosSearx = [];
+await diz("tá operacional agora?");
+const rapida = pedidosLLM.filter((p) => !p.response_format).at(0);
+ok(rapida?.chat_template_kwargs?.enable_thinking === false, "★ conversa leve (\"tá operacional agora?\") responde SEM raciocínio — era o grosso dos 40–80 s");
+await diz("explique por que o céu é azul e compare com o pôr do sol");
+const pensada = pedidosLLM.filter((p) => !p.response_format).at(0);
+ok(pensada && !pensada.chat_template_kwargs, "★ pedido de explicação/comparação mantém o raciocínio");
+ok(chat.precisaPensar({ tipo: "lógica", pergunta: "x" }) && chat.precisaPensar({ tipo: "ferramenta", pergunta: "x" }) && !chat.precisaPensar({ tipo: "conversa", pergunta: "kkk e aí" }), "  → conta, lógica e ferramenta pensam; papo não");
+process.env.PENSAR = "sempre"; ok(chat.precisaPensar({ pergunta: "oi" }), "  → PENSAR=sempre força"); process.env.PENSAR = "nunca"; ok(!chat.precisaPensar({ tipo: "lógica" }), "  → PENSAR=nunca desliga"); delete process.env.PENSAR;
+pedidosLLM = [];
+await chat.llmChat([{ role: "user", content: "x" }], { json: true, etiqueta: "memoria" });
+ok(pedidosLLM.at(-1)?.chat_template_kwargs?.enable_thinking === false, "★ extração de memória (JSON, de fundo) vai sem raciocínio");
+process.env.PENSAR_DECISOES = "1";
+await chat.llmChat([{ role: "user", content: "x" }], { json: true, etiqueta: "memoria" });
+ok(!pedidosLLM.at(-1)?.chat_template_kwargs, "  → PENSAR_DECISOES=1 devolve o raciocínio às decisões");
+delete process.env.PENSAR_DECISOES;
+
+console.log("\n── fila: o chat na frente, o fundo espera ou cai ──");
+{
+  const fetchAntes = globalThis.fetch;
+  const ordem = []; const soltar = [];
+  globalThis.fetch = async (url, op = {}) => {
+    const corpo = JSON.parse(op.body);
+    const rot = corpo.messages?.[0]?.content;
+    ordem.push(rot);
+    await new Promise((ok) => soltar.push(ok));
+    return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: "{}" }, finish_reason: "stop" }], usage: {} }) };
+  };
+  const pede = (rot, etiqueta) => chat.llmChat([{ role: "user", content: rot }], { json: true, etiqueta });
+  const c1 = pede("chat-1", "resposta");
+  await new Promise((ok) => setTimeout(ok, 10));
+  const fundos = Array.from({ length: 8 }, (_, i) => pede(`fundo-${i}`, "memoria").then(() => "ok", (e) => (e.filaCheia ? "caiu" : e.message)));
+  await new Promise((ok) => setTimeout(ok, 10));
+  ok(ordem.length === 1 && chat.estadoFilaLLM().fundo === 6, `★ com uma resposta em andamento, nada de fundo entra no llama-server (fila de fundo: ${chat.estadoFilaLLM().fundo})`);
+  const c2 = pede("chat-2", "resposta");
+  await new Promise((ok) => setTimeout(ok, 10));
+  ok(ordem.includes("chat-2"), "★ um 2º pedido de chat entra na hora (LLM_PARALELO=2), na frente dos 6 de fundo");
+  while (ordem.length < 8 || soltar.length) { soltar.splice(0).forEach((f) => f()); await new Promise((ok) => setTimeout(ok, 5)); }
+  await Promise.all([c1, c2]);
+  const res = await Promise.all(fundos);
+  ok(res.filter((x) => x === "caiu").length === 2 && res.filter((x) => x === "ok").length === 6, `★ fila de fundo cheia: os excedentes são descartados, não empilham (${res.join(",")})`);
+  ok(ordem.indexOf("chat-2") < ordem.indexOf("fundo-0"), "  → e o fundo só rodou depois do chat");
+  globalThis.fetch = fetchAntes;
+}
+
+console.log("\n── 429 do llama-swap ──");
+{
+  const fetchAntes = globalThis.fetch;
+  process.env.LLM_ESPERAS_429 = "5,5";
+  let n429 = 1;
+  globalThis.fetch = async (url, op = {}) => {
+    if (!op.body) return fetchAntes(url, op);
+    if (n429-- > 0) return { ok: false, status: 429, text: async () => '{"src":"llama-swap","error":{"message":"Too many requests","code":"concurrency_limit"}}' };
+    return fetchAntes(url, op);
+  };
+  const r = await chat.llmChat([{ role: "user", content: "x" }], { etiqueta: "t" });
+  ok(r.length > 0, "★ um 429 passageiro é repetido com espera — a resposta sai normal");
+  n429 = 99;
+  const saida = await diz("me conta uma curiosidade sobre polvos");
+  ok(/sobrecarregada/.test(saida) && !/concurrency_limit|llama-swap/.test(saida), `★ se o 429 persistir: aviso humano, não o JSON do erro (${saida.slice(0, 70)})`);
+  globalThis.fetch = fetchAntes; delete process.env.LLM_ESPERAS_429;
+}
+
 console.log("\n── pensar:false só no modo local ──");
 pedidosLLM = [];
 process.env.IA_MODO = "online";
 await chat.llmChat([{ role: "user", content: "x" }], { json: true, pensar: false, etiqueta: "t" });
 ok(!pedidosLLM.at(-1)?.chat_template_kwargs, "★ API online não recebe chat_template_kwargs (poderia recusar o campo)");
 process.env.IA_MODO = "local";
-await chat.llmChat([{ role: "user", content: "x" }], { json: true, etiqueta: "t" });
-ok(!pedidosLLM.at(-1)?.chat_template_kwargs, "  → e sem pensar:false, o servidor decide (raciocínio ligado)");
+await chat.llmChat([{ role: "user", content: "x" }], { etiqueta: "t" });
+ok(!pedidosLLM.at(-1)?.chat_template_kwargs, "  → e resposta comum sem pensar:false, o servidor decide (raciocínio ligado)");
 
 console.log("\n── llama-swap: o mesmo modelo nos dois papéis ──");
 {

@@ -346,7 +346,21 @@ export function limparRaciocinio(texto, { aparar = true } = {}) {
   return aparar ? limpo.trim() : limpo;
 }
 
+// 429 (llama-swap cheio: "concurrency_limit") é passageiro — espera e repete
+// em vez de mostrar o JSON do erro no chat (12 out 2026).
+const ESPERAS_429 = () => String(process.env.LLM_ESPERAS_429 ?? "2000,5000,10000").split(",").map(Number).filter((n) => n >= 0);
 async function pedir(url, body) {
+  const esperas = ESPERAS_429();
+  for (let tentativa = 0; ; tentativa++) {
+    try { return await pedirUmaVez(url, body); }
+    catch (e) {
+      if (!e?.lotado || tentativa >= esperas.length) throw e;
+      console.warn(`[CHAT][llm] servidor de IA lotado (429) — tentando de novo em ${esperas[tentativa] / 1000}s`);
+      await new Promise((ok) => setTimeout(ok, esperas[tentativa]));
+    }
+  }
+}
+async function pedirUmaVez(url, body) {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), TIMEOUT);
   try {
@@ -366,7 +380,9 @@ async function pedir(url, body) {
         e.nCtx = Number(corpo.match(/"n_ctx"\s*:\s*(\d+)/)?.[1]) || null;
         throw e;
       }
-      throw new Error(`HTTP ${r.status}${detalhe ? ` — ${detalhe}` : ""}`);
+      const e = new Error(`HTTP ${r.status}${detalhe ? ` — ${detalhe}` : ""}`);
+      if (r.status === 429) e.lotado = true;
+      throw e;
     }
     return await r.json();
   } finally {
@@ -570,12 +586,66 @@ export function caberNoContexto(messages, { ctxTokens = CONTEXTO_MODELO, reserva
   return saida;
 }
 
-// `pensar: false` desliga o raciocínio (thinking) NESTA chamada — só no modo
+// ─── Ritmo da IA (12 out 2026) ──────────────────────────────────────────────
+// "Ela empaca": 40–80 s por resposta e "HTTP 429 concurrency_limit" do
+// llama-swap. Com a Judy em muitos servidores, cada pessoa que conversa
+// dispara a extração de memória (JSON, até 2400 tokens), a moderação por IA
+// avalia mensagens, o comentário espontâneo e o verificador rodam — tudo
+// COM raciocínio e tudo ao mesmo tempo. Os pedidos se empilhavam no
+// llama-server, a resposta do chat dividia a GPU com eles e, passando de 10
+// pedidos simultâneos, o llama-swap recusava com 429.
+//
+// Agora todo pedido do bot passa por uma fila só:
+//   • no máximo LLM_PARALELO (padrão 2) pedidos no llama-server de cada vez;
+//   • chat, moderação e RSS furam a fila; memória, comentário espontâneo,
+//     verificador e o "vale responder?" são "de fundo" e só rodam com o
+//     llama-server VAZIO;
+//   • fila de fundo cheia (LLM_FILA_FUNDO, padrão 6) → a tarefa é descartada
+//     (perder uma extração de memória é melhor que atrasar todas as respostas);
+//   • decisão em JSON e tarefa de fundo vão SEM raciocínio (PENSAR_DECISOES=1
+//     devolve); 429 que escapar é repetido com espera, não vira "Falha no chat".
+// (RSS fica fora: é pedido por comando ou tem hora marcada, e não pode ser descartado)
+const FUNDO = new Set(["memoria", "comentario-espontaneo", "verificador", "vale-responder"]);
+const LLM_PARALELO = () => Math.max(1, Number(process.env.LLM_PARALELO || 2));
+const LLM_FILA_FUNDO = () => Math.max(0, Number(process.env.LLM_FILA_FUNDO ?? 6));
+const fila429 = { emVoo: 0, chat: [], fundo: [] };
+export function estadoFilaLLM() { return { emVoo: fila429.emVoo, chat: fila429.chat.length, fundo: fila429.fundo.length }; }
+function proximaVaga() {
+  while (fila429.emVoo < LLM_PARALELO() && fila429.chat.length) { fila429.emVoo++; fila429.chat.shift()(); }
+  // fundo só com o llama-server vazio: não divide a GPU com uma resposta
+  if (fila429.emVoo === 0 && !fila429.chat.length && fila429.fundo.length) { fila429.emVoo++; fila429.fundo.shift()(); }
+}
+async function pegarVaga(deFundo, etiqueta) {
+  if (!deFundo && fila429.emVoo < LLM_PARALELO() && !fila429.chat.length) { fila429.emVoo++; return; }
+  if (deFundo && fila429.emVoo === 0 && !fila429.chat.length && !fila429.fundo.length) { fila429.emVoo++; return; }
+  if (deFundo && fila429.fundo.length >= LLM_FILA_FUNDO()) {
+    const e = new Error(`fila da IA cheia — ${etiqueta} (tarefa de fundo) descartada`);
+    e.filaCheia = true;
+    throw e;
+  }
+  await new Promise((ok) => (deFundo ? fila429.fundo : fila429.chat).push(ok));
+}
+function soltarVaga() { fila429.emVoo = Math.max(0, fila429.emVoo - 1); proximaVaga(); }
+
+// `pensar`: true/false força; null decide — decisão em JSON e tarefa de fundo
+// vão sem raciocínio, o resto deixa o servidor decidir (ligado). Só no modo
 // local (llama.cpp aceita `chat_template_kwargs` por pedido; uma API online
-// pode recusar o campo). Usado em tarefa mecânica e frequente, como reescrever
-// a consulta da busca de fundo: pensar ali só gasta segundos.
-export async function llmChat(messages, { json = false, maxTokens = MAX_TOKENS, jsonTokens = null, etiqueta = "resposta", modelo = null, ctx = null, manter = null, continuarMax = null, pensar = null } = {}) {
+// pode recusar o campo).
+// `fundo`: força a prioridade (por padrão vem da etiqueta, ver FUNDO).
+export async function llmChat(messages, opcoes = {}) {
+  const etiqueta = opcoes.etiqueta ?? "resposta";
+  const deFundo = opcoes.fundo ?? FUNDO.has(etiqueta);
+  await pegarVaga(deFundo, etiqueta);
+  try {
+    return await llmChatDireto(messages, { ...opcoes, etiqueta, deFundo });
+  } finally {
+    soltarVaga();
+  }
+}
+
+async function llmChatDireto(messages, { json = false, maxTokens = MAX_TOKENS, jsonTokens = null, etiqueta = "resposta", modelo = null, ctx = null, manter = null, continuarMax = null, pensar = null, deFundo = false } = {}) {
   messages = normalizarMensagens(messages);
+  if (pensar === null && (json || deFundo) && !/^(1|true|sim|on)$/i.test(process.env.PENSAR_DECISOES ?? "")) pensar = false;
   const modeloUsado = modelo || LLM_MODEL_PADRAO;
   const limiteTokens = json ? (jsonTokens ?? DECISAO_TOKENS) : maxTokens;
 
@@ -590,7 +660,7 @@ export async function llmChat(messages, { json = false, maxTokens = MAX_TOKENS, 
   if (pensar === false && modoIA() === "local") body.chat_template_kwargs = { enable_thinking: false };
 
   const entradaChars = messages.reduce((n, m) => n + (m.content?.length || 0), 0);
-  console.log(`[CHAT][llm] → ${etiqueta} | modelo=${modeloUsado} max_tokens=${limiteTokens} entrada≈${entradaChars} chars${json ? " (json)" : ""}`);
+  console.log(`[CHAT][llm] → ${etiqueta} | modelo=${modeloUsado} max_tokens=${limiteTokens} entrada≈${entradaChars} chars${json ? " (json)" : ""}${body.chat_template_kwargs ? " (sem raciocínio)" : ""}`);
 
   const t0 = Date.now();
   let data;
@@ -1204,9 +1274,14 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
     dlog(`sem ferramenta (tipo=${tipo}) → LLM direto, sem passar pelo serviço de IA`);
   }
   // Teto único: o especial era o que pedia um teto maior, e ele saiu.
+  const pensa = precisaPensar({ tipo, pergunta, citada });
+  responder._pensou = pensa;
+  dlog(`raciocínio: ${pensa ? "ligado" : "desligado (conversa leve)"} — tipo=${tipo}`);
   const texto = await llmChat(messages, {
     maxTokens: MAX_TOKENS,
     modelo: modeloEscolhido,
+    pensar: pensa ? null : false,
+    etiqueta: pensa ? "resposta" : "resposta-rapida",
   });
   // Lido AGORA, antes de qualquer outra chamada ao llmChat poder mudá-lo.
   responder._cortou = !!llmChat._cortou;
@@ -1501,6 +1576,21 @@ function ehConversaComplexa(texto) {
   // discussão/debate (a Judy precisa de mais capacidade para se sair bem)
   if (/(discord|na verdade|será que|tenho certeza|prov[ae]|contradi|falácia|faz sentido)/i.test(t)) return true;
   return false;
+}
+
+// Raciocínio conforme a necessidade (12 out 2026): conversa leve ("tá
+// operacional?", "kkk e aí") responde sem pensar — o raciocínio do Gemma
+// gasta centenas de tokens antes da 1ª palavra, e era a maior parte dos 40–80 s.
+// Pensa quando vale: conta e lógica, código, ferramenta, pedido de explicação
+// ou comparação, mensagem longa, pedido de conteúdo desenvolvido.
+// PENSAR=sempre | nunca | auto (padrão).
+export function precisaPensar({ tipo = "conversa", pergunta = "", citada = null } = {}) {
+  const modo = String(process.env.PENSAR || "auto").trim().toLowerCase();
+  if (/^(sempre|always|1|on|true)$/.test(modo)) return true;
+  if (/^(nunca|never|0|off|false)$/.test(modo)) return false;
+  if (tipo && tipo !== "conversa") return true;           // lógica, código, ferramenta
+  const alvo = `${pergunta || ""} ${citada?.conteudo || ""}`;
+  return ehConversaComplexa(alvo) || pedeDesenvolvimento(pergunta) || ehAritmetica(pergunta);
 }
 
 function escolherModelo(pergunta, citada) {
@@ -1926,11 +2016,15 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
         // `googl(e)` apagava a palavra "google"): o modelo reescreve o pedido
         // em consultas curtas, e o código filtra e lê as páginas.
         const pesq = await busca.pesquisar(pergunta, {
-          // na de fundo, sem raciocínio: reescrever consulta é mecânico, e
-          // acontece em quase toda mensagem agora
-          chamarJson: (msgs) => llmChat(msgs, { json: true, modelo: LLM_MODEL_DECISAO, etiqueta: "consultas-busca", pensar: decisao.fundo ? false : null }),
+          // De fundo (quase toda mensagem): sem chamar o modelo para escrever a
+          // consulta (a limpeza do código basta), sem ler páginas (os trechos
+          // do buscador bastam para não errar fato) e com tempo curto — a busca
+          // silenciosa não pode custar mais que uns 2 s.
+          chamarJson: decisao.fundo ? null : (msgs) => llmChat(msgs, { json: true, modelo: LLM_MODEL_DECISAO, etiqueta: "consultas-busca" }),
           hoje: hojeExtenso(), log: dlog,
           notaMinima: decisao.fundo ? 2 : 1,   // de fundo, só o que fala mesmo do assunto
+          lerPaginas: decisao.fundo ? Number(process.env.BUSCA_FUNDO_LER_PAGINAS ?? 0) : undefined,
+          timeoutMs: decisao.fundo ? Number(process.env.BUSCA_FUNDO_TIMEOUT_MS || 4000) : undefined,
         });
         resultados = pesq.resultados;
         resultados.fracos = pesq.fracos;
@@ -2248,6 +2342,10 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
       dica = en
         ? `The configured model wasn't found on the LLM server. Check MODELO/LLM_MODEL in the .env against what the server actually has.`
         : `O modelo configurado não foi encontrado no servidor de LLM. Confira MODELO/LLM_MODEL no .env contra o que o servidor realmente tem.`;
+    } else if (/HTTP 429|Too many requests|concurrency_limit/i.test(err.message)) {
+      dica = en
+        ? "I'm overloaded right now — too many requests at once. Try again in a few seconds."
+        : "Estou sobrecarregada agora — pedidos demais ao mesmo tempo. Tenta de novo em alguns segundos.";
     } else if (/aborted|The operation was aborted|timeout/i.test(err.message)) {
       dica = en
         ? "The AI took too long and timed out. The model may be too big for the machine, or the question asked for a very long reply. Try something shorter, or a smaller model."

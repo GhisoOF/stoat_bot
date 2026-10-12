@@ -7830,7 +7830,10 @@ ok(rLongo.ok === true, "★ com um perfil longo, o id ainda é descoberto (era o
 ok(pedidos2.some((p) => p.metodo === "PATCH" && p.url.includes("01JBOTAA00000000000000AAAA")),
   "  → e o PATCH sai com o id certo");
 
-// procura em vários servidores: a call presa pode ser de outro servidor
+// procura em vários servidores quando NÃO se sabe o servidor da call. Desde
+// 13 out 2026 (várias calls ao mesmo tempo), com o servidor conhecido a
+// limpeza mexe só nele: para bot, o Stoat só recusa a MESMA call
+// (AlreadyConnected), então o registro preso é do servidor dela.
 pedidos2.length = 0;
 globalThis.fetch = async (url, op) => {
   const u = String(url);
@@ -7840,9 +7843,9 @@ globalThis.fetch = async (url, op) => {
   const certo = u.includes("01JSRVB00000000000000000AA");
   return { ok: certo, status: certo ? 200 : 404, text: async () => "{}" };
 };
-const rVarios = await voz.forcarSaida("01JCALLR000000000000000AA", "01JSRVA00000000000000000AA",
+const rVarios = await voz.forcarSaida("01JCALLR000000000000000AA", null,
   ["01JSRVA00000000000000000AA", "01JSRVB00000000000000000AA"]);
-ok(rVarios.ok === true, "★ procura a call presa em TODOS os servidores conhecidos");
+ok(rVarios.ok === true, "★ sem saber o servidor da call, procura a call presa nos servidores conhecidos");
 
 // ── Mover-se de uma call para outra ──
 console.log("\n── mover para a call de quem chamou ──");
@@ -7876,11 +7879,15 @@ ok(!chamadasD.some((c) => c.url.includes("/join_call")),
   "★ o destrave NUNCA chama join_call (isso criaria a sala e o registro de novo)");
 
 chamadasD.length = 0;
-await voz.forcarSaida("01JCALLR000000000000000AA", "01JSRVA00000000000000000AA",
+await voz.forcarSaida("01JCALLR000000000000000AA", null,
   ["01JSRVA00000000000000000AA", "01JSRVB00000000000000000AA", "01JSRVC00000000000000000AA"]);
 const patches = chamadasD.filter((c) => c.metodo === "PATCH");
-ok(patches.length === 3, `★ tenta em todos os servidores — 200 não é prova (foram ${patches.length} PATCH, não 1)`);
+ok(patches.length === 3, `★ sem o servidor da call, tenta em todos — 200 não é prova (foram ${patches.length} PATCH, não 1)`);
 ok(new Set(patches.map((c) => c.url)).size === 3, "  → um PATCH por servidor, sem repetir");
+chamadasD.length = 0;
+await voz.forcarSaida("01JCALLR000000000000000AA", "01JSRVA00000000000000000AA",
+  ["01JSRVA00000000000000000AA", "01JSRVB00000000000000000AA", "01JSRVC00000000000000000AA"]);
+ok(chamadasD.filter((c) => c.metodo === "PATCH").length === 1, "★ com o servidor da call conhecido, só ele — os outros podem ter a Judy numa call (13 out)");
 
 console.log("\n── UnknownNode (call vazia) ──");
 const vistas = [];
@@ -11928,6 +11935,80 @@ const ultimoSistema = [...pedidos].reverse().find((p) => !p.response_format)?.me
 ok(/NÃO termine devolvendo pergunta/.test(ultimoSistema) && /fala como gente num chat de amigos/.test(ultimoSistema), "★ tom: informal, direto, sem devolver pergunta nem fazer mistério (\"evasiva\")");
 
 console.log(`\nCHAT LIVRE (12 out): ${pass} ok, ${fail} falha(s)`);
+process.exit(fail ? 1 : 0);
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+// voz-multi-13out  (13 out 2026) — "ela sai da call de um servidor quando
+// chamam no outro"
+// ════════════════════════════════════════════════════════════════════════════
+SUITES["voz-multi-13out"] = async () => {
+// O voz.js saía de TODAS as calls antes de entrar numa nova ("já estou em X —
+// saindo antes de entrar em Y") e, ao limpar registro preso, mandava
+// PATCH remove VoiceChannel em TODOS os servidores. O Stoat deixa bot em
+// várias calls (stoatchat voice/mod.rs: raise_if_in_voice só barra a MESMA).
+let pass = 0, fail = 0;
+const ok = (cond, msg) => { cond ? pass++ : fail++; console.log(`  ${cond ? "✅" : "❌"} ${msg}`); };
+process.env.BOT_TOKEN = "tok"; process.env.VOZ_DEBUG = "0"; delete process.env.VOZ_NODE_LIVEKIT;
+try { delete globalThis.navigator; } catch {}
+
+// revoice.js de mentira: uma conexão por canal, sala sempre conectada
+const { EventEmitter } = await import("node:events");
+const salas = new Map();   // canal → { conectada }
+class SalaFalsa { constructor(canal) { this.canal = canal; this.isConnected = true; this.localParticipant = { trackPublications: new Map([["t", { sid: "t" }]]) }; salas.set(canal, this); }
+  async disconnect() { this.isConnected = false; salas.delete(this.canal); } }
+class RevoiceFalso { constructor() { this.connections = new Map(); this.api = { post: async () => ({ token: "t", url: "wss://x" }) }; }
+  async join(canal) { const c = new EventEmitter(); c.room = new SalaFalsa(canal); c.play = async () => {}; c.leave = () => { c.room.disconnect(); }; this.connections.set(canal, c); return c; } }
+class MediaFalsa extends EventEmitter { constructor() { super(); this.track = { sid: "t" }; } destroy() {} stop() {} playStream() {} }
+const Module = (await import("node:module")).default;
+const carregar = Module._load;
+Module._load = function (pedido, ...resto) {
+  if (pedido === "revoice.js/src/Revoice.js") return RevoiceFalso;
+  if (pedido === "revoice.js/src/Media.js") return { MediaPlayer: MediaFalsa };
+  return carregar.call(this, pedido, ...resto);
+};
+// API do Stoat de mentira: registra os PATCH de desconexão
+const patches = [];
+globalThis.fetch = async (url, op = {}) => {
+  url = String(url); const metodo = op.method ?? "GET";
+  if (metodo === "PATCH") patches.push(url.replace(/^.*\/servers\//, "").replace(/\/members.*$/, ""));
+  const corpo = url.endsWith("/users/@me") ? { _id: "BOT" } : url.match(/\/$|\.chat$/) ? { features: { livekit: { nodes: [{ name: "worldwide", public_url: "wss://x" }] } } } : {};
+  return { ok: true, status: 200, text: async () => JSON.stringify(corpo) };
+};
+
+const voz = await import("./voz-servico/voz.js");
+const ini = await voz.iniciar();
+ok(ini.ok, `serviço de voz sobe com o revoice falso (${ini.erro ?? "ok"})`);
+
+console.log("── duas calls de servidores diferentes ──");
+let r = await voz.entrar("CALL_A", "S_GHIEH");
+ok(r.ok && voz.canaisConectados().includes("CALL_A"), "entra na call do servidor A");
+patches.length = 0;
+r = await voz.entrar("CALL_B", "S_OUTRO");
+ok(r.ok && voz.canaisConectados().includes("CALL_A") && voz.canaisConectados().includes("CALL_B"), "★ chamar no servidor B NÃO a tira da call do servidor A (as duas ao mesmo tempo)");
+ok(!patches.includes("S_GHIEH"), "★ e a limpeza de registro do servidor B não derruba nada no servidor A");
+ok(salas.get("CALL_A")?.isConnected === true, "  → a sala do A continua conectada de verdade");
+
+console.log("\n── no mesmo servidor, troca de call ──");
+r = await voz.entrar("CALL_A2", "S_GHIEH");
+ok(r.ok && !voz.canaisConectados().includes("CALL_A") && voz.canaisConectados().includes("CALL_A2") && voz.canaisConectados().includes("CALL_B"), "★ outra call do MESMO servidor: troca (sai da A, entra na A2) e a do B fica");
+
+console.log("\n── sair e destravar ──");
+await voz.sair("CALL_B");
+ok(!voz.canaisConectados().includes("CALL_B") && voz.canaisConectados().includes("CALL_A2"), "★ &sair num servidor só sai da call dele");
+await voz.entrar("CALL_B", "S_OUTRO");
+patches.length = 0;
+await voz.forcarSaida("CALL_B", "S_OUTRO", ["S_GHIEH", "S_OUTRO", "S_TERCEIRO"]);
+ok(patches.join(",") === "S_OUTRO", `★ &tts destravar no servidor B mexe só no B (antes: em todos os servidores conhecidos) — ${patches.join(",")}`);
+patches.length = 0;
+await voz.forcarSaida("CALL_X", null, ["S_GHIEH", "S_OUTRO", "S_TERCEIRO"]);
+ok(!patches.includes("S_GHIEH") && !patches.includes("S_OUTRO") && patches.includes("S_TERCEIRO"), "  → sem servidor conhecido: nunca nos servidores onde ela está numa call");
+const est = await voz.estado();
+ok(est.conexoes.length === 2 && est.conexoes.every((c) => c.serverId), "  → &tts estado mostra cada call com o seu servidor");
+await voz.sair(null);
+Module._load = carregar;
+
+console.log(`\nVOZ (várias calls): ${pass} ok, ${fail} falha(s)`);
 process.exit(fail ? 1 : 0);
 };
 

@@ -25,7 +25,19 @@ const ESPERA_JOIN_MS = Number(process.env.VOZ_JOIN_TIMEOUT_MS || 25_000);
 const ENTRAR_MAX_MS = Number(process.env.VOZ_ENTRAR_TIMEOUT_MS || 20_000);
 
 let Revoice = null, MediaPlayer = null, revoice = null, erroCarga = null;
-const conexoes = new Map();   // canalVoz → { connection, entrouEm, falas, fila:[], ocupado }
+const conexoes = new Map();   // canalVoz → { connection, serverId, entrouEm, falas, fila:[], ocupado }
+
+// VÁRIAS CALLS AO MESMO TEMPO (13 out 2026). Antes, entrar numa call saía de
+// TODAS as outras ("já estou em X — saindo antes de entrar em Y"): com a Judy
+// em vários servidores, chamar no servidor A a tirava da call do B, e vice-
+// versa. O Stoat deixa bot ficar em quantas calls quiser (stoatchat,
+// crates/core/database/src/voice/mod.rs: `raise_if_in_voice` só recusa a
+// MESMA call para bots) e o revoice.js guarda uma conexão por canal. A regra
+// agora: UMA call por SERVIDOR — entrar noutra call do mesmo servidor troca
+// de call; calls de outros servidores ficam como estão. E a limpeza de
+// registro preso (PATCH remove VoiceChannel) só mexe no servidor da call em
+// questão — antes ia em todos os servidores conhecidos e derrubava as outras.
+const servidorDoCanal = new Map();   // canalVoz → serverId (lembrado do &entrar)
 
 // Ganchos que o motor de música registra: `antes` abaixa a música quando o
 // TTS vai falar (ducking) e `depois` restaura — o voz.js só avisa os momentos.
@@ -158,7 +170,8 @@ function explicar(e) {
 }
 
 export async function entrar(canalVoz, serverId = null, servidores = null, credenciais = null) {
-  ultimoServidor = serverId ?? ultimoServidor;
+  if (serverId) servidorDoCanal.set(canalVoz, serverId);
+  serverId = serverId ?? servidorDoCanal.get(canalVoz) ?? null;
   if (Array.isArray(servidores) && servidores.length) servidoresConhecidos = servidores;
   if (erroCarga) return { ok: false, erro: erroCarga };
   if (conexoes.has(canalVoz)) return { ok: true, jaEstava: true, canalVoz };
@@ -187,16 +200,20 @@ async function entrarDeFato(canalVoz, serverId = null, credenciais = null) {
     dbg(`entrando em ${canalVoz}…`);
     marco("inicio");
 
-    if (!credenciais && !conexoes.size && (serverId ?? ultimoServidor)) {
-      const previa = await forcarSaida(canalVoz, serverId ?? ultimoServidor, servidoresConhecidos).catch(() => null);
-      marco(previa?.ok ? "residuo-limpo" : "sem-residuo");
+    // uma call por servidor: a outra call DESTE servidor sai; as dos outros ficam
+    const doMesmoServidor = serverId ? [...conexoes.entries()].filter(([id, c]) => id !== canalVoz && c.serverId === serverId).map(([id]) => id) : [];
+    for (const id of doMesmoServidor) {
+      log(`já estou em ${id} neste servidor (${serverId}) — trocando para ${canalVoz}; as calls dos outros servidores continuam`);
+      await sair(id);
+      marco("saiu-da-call-anterior-do-servidor");
     }
 
-    const outras = [...conexoes.keys()].filter((id) => id !== canalVoz);
-    if (outras.length) {
-      log(`já estou em ${outras.join(", ")} — saindo antes de entrar em ${canalVoz}`);
-      await sair(null);
-      marco("saiu-da-call-anterior");
+    // registro preso de uma sessão anterior: limpa SÓ neste servidor e só se
+    // eu não estou em nenhuma call dele
+    const nesteServidor = serverId && [...conexoes.values()].some((c) => c.serverId === serverId);
+    if (!credenciais && serverId && !nesteServidor) {
+      const previa = await forcarSaida(canalVoz, serverId, []).catch(() => null);
+      marco(previa?.ok ? "residuo-limpo" : "sem-residuo");
     }
     const abriu = credenciais ? null : await abrirSalaSePreciso(canalVoz);
     if (abriu?.node) marco(`sala-aberta(${abriu.node})`);
@@ -240,7 +257,7 @@ async function entrarDeFato(canalVoz, serverId = null, credenciais = null) {
 
     marco("faixa-publicada");
     conexoes.set(canalVoz, {
-      connection, media, entrouEm: Date.now(), falas: 0, fila: [], ocupado: false,
+      connection, media, serverId: serverId ?? null, entrouEm: Date.now(), falas: 0, fila: [], ocupado: false,
     });
     log(`entrou na call ${canalVoz} (faixa de áudio publicada)`);
     return { ok: true, canalVoz };
@@ -252,21 +269,21 @@ async function entrarDeFato(canalVoz, serverId = null, credenciais = null) {
 
     if (/sem resposta ao pedido de entrar/i.test(String(e?.message ?? e))) {
       log(`entrada travou em ${canalVoz} — limpando o registro que ela deixou`);
-      const limpeza = await forcarSaida(canalVoz, serverId ?? ultimoServidor, servidoresConhecidos);
+      const limpeza = await forcarSaida(canalVoz, serverId, serverId ? [] : servidoresConhecidos);
       marcos.push({ nome: limpeza.ok ? "registro-limpo" : "limpeza-falhou", ms: Date.now() - t0 });
       ultimaFalha.marcos = [...marcos];
     }
 
     if (/AlreadyConnected/i.test(String(e?.message ?? e)) && !jaTentouDestravar.has(canalVoz)) {
       jaTentouDestravar.add(canalVoz);
-      const sid = serverId ?? ultimoServidor;
+      const sid = serverId;
 
       log(`AlreadyConnected em ${canalVoz} — tentando me mover para lá`);
       const m = await moverPara(canalVoz, sid);
       marcos.push({ nome: m.ok ? "movida" : "mover-falhou", ms: Date.now() - t0 });
 
       // 2ª: desconectar de vez e entrar do zero (funciona entre servidores).
-      const f = m.ok ? { ok: true } : await forcarSaida(canalVoz, sid, servidoresConhecidos);
+      const f = m.ok ? { ok: true } : await forcarSaida(canalVoz, sid, sid ? [] : servidoresConhecidos);
       if (!m.ok) marcos.push({ nome: f.ok ? "destravado" : "destravar-falhou", ms: Date.now() - t0 });
 
       if (f.ok) {
@@ -347,7 +364,11 @@ export async function forcarSaida(canalVoz, serverId = null, servidores = []) {
   const passos = [];
   const meuId = await meuIdDeBot(passos);
 
-  const alvos = [serverId, ...servidores].filter((x, i, a) => x && a.indexOf(x) === i);
+  // Com o servidor conhecido, só ele. Sem ele, os da lista — menos os
+  // servidores onde estou numa call de verdade (senão derrubaria essas calls).
+  const ocupados = new Set([...conexoes.values()].map((c) => c.serverId).filter(Boolean));
+  const alvos = (serverId ? [serverId] : (servidores ?? []).filter((x) => !ocupados.has(x)))
+    .filter((x, i, a) => x && a.indexOf(x) === i);
   if (!meuId) {
     passos.push({ rota: "(auto-desconexão)", ok: false, erro: "não descobri meu próprio id" });
     return { ok: false, passos };
@@ -417,7 +438,6 @@ export async function reiniciar() {
 
 let ultimaFalha = null;
 let ultimosMarcos = null;
-let ultimoServidor = null;
 let servidoresConhecidos = [];
 
 export async function diagnosticar(canalVoz) {
@@ -494,6 +514,7 @@ export async function estado() {
     erro: erroCarga,
     conexoes: [...conexoes.entries()].map(([id, c]) => ({
       canalVoz: id,
+      serverId: c.serverId ?? null,
       haMs: Date.now() - c.entrouEm,
       falas: c.falas,
       naFila: c.fila.length,

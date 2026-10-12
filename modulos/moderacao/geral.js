@@ -256,7 +256,7 @@ function detalhesPT(P) {
     },
     entrar: {
       uso: `${P}entrar`,
-      desc: "Traz a Judy para a call e ela passa a falar **tudo que for escrito ali**. Lá dentro, **o leitor (TTS) e a música usam a mesma conexão**: dá para mandar `&musica` e ela continua lendo o chat.\n\n**Como ela escolhe a call**\n1. o canal onde você digitou, se for uma call _(o caso normal)_\n2. a que já estiver configurada\n3. a única call do servidor, se houver só uma\n\nHavendo mais de uma e nenhuma pista, ela **pergunta** em vez de chutar. Estando em outra call, sai de lá e vem para a sua.\n\nVale para **todo mundo**, não só para a equipe. Ajustes da fala: `&help tts`.",
+      desc: "Traz a Judy para a call e ela passa a falar **tudo que for escrito ali**. Lá dentro, **o leitor (TTS) e a música usam a mesma conexão**: dá para mandar `&musica` e ela continua lendo o chat.\n\n**Vários servidores ao mesmo tempo:** ela fica numa call por servidor — chamar em outro servidor não a tira desta. No mesmo servidor, `&entrar` em outra call troca de call.\n\n**Como ela escolhe a call**\n1. o canal onde você digitou, se for uma call _(o caso normal)_\n2. a que já estiver configurada\n3. a única call do servidor, se houver só uma\n\nHavendo mais de uma e nenhuma pista, ela **pergunta** em vez de chutar. Estando em outra call, sai de lá e vem para a sua.\n\nVale para **todo mundo**, não só para a equipe. Ajustes da fala: `&help tts`.",
       ex: `${P}entrar`,
     },
     sair: {
@@ -537,7 +537,7 @@ function detalhesEN(P) {
     },
     entrar: {
       uso: `${P}entrar`,
-      desc: "Brings Judy into the call and she starts speaking **everything written there**. Inside, **the reader (TTS) and the music share the same connection**: `&musica` works while she keeps reading the chat.\n\n**How she picks the call**\n1. the channel you typed in, if it's a call _(the usual case)_\n2. the one already configured\n3. the server's only call, if there's just one\n\nWith more than one and no clue, she **asks** instead of guessing. If she's in another call, she leaves it and comes to yours.\n\nWorks for **everyone**, not just staff. Voice settings: `&help tts`.",
+      desc: "Brings Judy into the call and she starts speaking **everything written there**. Inside, **the reader (TTS) and the music share the same connection**: `&musica` works while she keeps reading the chat.\n\n**Several servers at once:** she stays in one call per server — being called on another server doesn't pull her out of this one. On the same server, `&entrar` in another call switches calls.\n\n**How she picks the call**\n1. the channel you typed in, if it's a call _(the usual case)_\n2. the one already configured\n3. the server's only call, if there's just one\n\nWith more than one and no clue, she **asks** instead of guessing. If she's in another call, she leaves it and comes to yours.\n\nWorks for **everyone**, not just staff. Voice settings: `&help tts`.",
       ex: `${P}entrar`,
     },
     sair: {

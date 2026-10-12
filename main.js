@@ -55,6 +55,9 @@ import * as servidorInfo from "./modulos/ferramentas/servidor-info.js";
 import * as srvStats   from "./modulos/core/metricas.js";
 import * as rpg        from "./modulos/game/game.js";
 import * as modIA      from "./modulos/moderacao/moderacao-ia.js";
+import * as assuntos   from "./modulos/moderacao/assuntos.js";
+import { iaLigada } from "./modulos/core/env.js";
+import * as avatarMod from "./modulos/moderacao/avatar.js";
 import * as modiaCmd   from "./modulos/moderacao/modia-comando.js";
 import * as persona    from "./modulos/ai/persona.js";
 import * as debugCmd  from "./modulos/moderacao/debug-comando.js";
@@ -570,6 +573,8 @@ client.on("ready", async () => {
   chat.iniciarMemoria();          // liga o agente de memória (extração em background)
   chat.iniciarComentario(client); // liga o comentário espontâneo
   modIA.configurar({ avaliar: chat.avaliarModeracao });   // moderação por IA usa o modelo pequeno
+  // temas proibidos: o mesmo juiz (JSON, sem raciocínio, fila da conversa)
+  if (iaLigada()) assuntos.configurar({ avaliar: chat.avaliarModeracao });
   rss.configurarResumo(chat.resumirRSS);   // RSS agendado passa a resumir com o tom da Judy
   rss.configurarRelatorio({ linhas: chat.linhasRSS, comentario: chat.comentarioRSS, traduzir: chat.traduzirLinhasRSS });   // relatório por categoria + comentário no fim
 
@@ -997,6 +1002,10 @@ client.on("serverMemberJoin", async (member) => {
     const banido = await banGlobal.verificarEntrada(member, ctx);
     if (banido) return;   // já foi banido: não faz sentido dar cargo/reaplicar silêncio
 
+    // Foto de perfil pelo modelo de visão (13 out 2026). Em segundo plano:
+    // a análise leva segundos e as boas-vindas não esperam por ela.
+    avatarMod.aoEntrar(member, ctx).catch((e) => console.error("[AVATAR] entrada:", descreverErro(e)));
+
     await autorole.aoEntrar(member, ctx);          // ← cargo automático (se configurado)
     await nivel.aoEntrar(member, ctx);
     await engine.reaplicarPunicao(member, ctx);   // ← reaplica o silêncio, se houver
@@ -1051,6 +1060,10 @@ client.on("serverMemberUpdate", async (member, anterior) => {
     const userId   = member?.id?.user;
     if (!serverId || !userId) return;
 
+    // trocou a foto DESTE servidor? (em segundo plano)
+    avatarMod.aoTrocarNoServidor(member, anterior, criarContexto(serverId))
+      .catch((e) => console.error("[AVATAR] troca (servidor):", descreverErro(e)));
+
     const antes  = (anterior?.roles ?? []).map((r) => r?.id ?? r).filter(Boolean);
     const agora  = (member.roles ?? []).map((r) => r?.id ?? r).filter(Boolean);
     const ganhou = agora.filter((r) => !antes.includes(r));
@@ -1066,6 +1079,13 @@ client.on("serverMemberUpdate", async (member, anterior) => {
       descricao: `<@${userId}>\n${partes.join("\n")}`,
     });
   } catch (err) { console.error("[EVENTO][MEMBER_UPDATE]", err?.message); }
+});
+
+// TROCOU A FOTO DO PERFIL (vale em todo servidor da Judy onde a pessoa está).
+// A presença (online/offline) também chega por aqui — sem foto nova, nada.
+client.on("userUpdate", (user, anterior) => {
+  avatarMod.aoTrocarPerfil(user, anterior, { client, criarContexto })
+    .catch((e) => console.error("[AVATAR] troca (perfil):", descreverErro(e)));
 });
 
 // MENSAGEM APAGADA

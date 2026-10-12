@@ -11,6 +11,9 @@ import { hostDe } from "../core/config-store.js";
 import { resolverUsuario } from "../core/ids.js";
 import { banir } from "../core/banir.js";
 import { descreverErro as descreverErroBan } from "../core/erros.js";
+import * as assuntos from "./assuntos.js";
+import * as avatar from "./avatar.js";
+import { lerDuracao, duracaoTexto } from "../core/duracao.js";
 
 // Quem é o alvo de `&warn lista|limpar …`: a menção, o ID ou o nome ESCRITOS
 // no comando. Antes só valia o mentionIds[0] — que vem vazio quando o Stoat
@@ -319,8 +322,13 @@ export async function cmdAutomod(message, args, ctx) {
         : (lang === "en" ? `\`${String(sub).slice(0, 30)}\` isn't a group. The automod has four:` : `\`${String(sub).slice(0, 30)}\` não é um grupo. O automod tem quatro:`)) });
   }
 
-  const mod = config.automod[chave];
+  const mod = config.automod[chave] ??= {};
   const acao = args[1]?.toLowerCase();
+
+  // Os dois painéis novos do sentinela (13 out 2026). `punicao` segue o
+  // caminho comum lá embaixo (vale para o `punir` dos temas).
+  if (sub === "antiassuntos" && !["punicao", "punição"].includes(acao)) return painelAssuntos(mod, args.slice(1));
+  if (sub === "antiavatar" && !["punicao", "punição"].includes(acao)) return painelAvatar(mod, args.slice(1));
 
   // Parâmetros configuráveis por módulo (nome do arg → chave interna + validação)
   const PARAMS = {
@@ -477,6 +485,133 @@ export async function cmdAutomod(message, args, ctx) {
       description: `**${sub}** foi **${novoEstado === "on" ? "ativado 🟢" : "desativado 🔴"}**.`, colour: COR.mod },
     { title: "🛡 AutoMod updated",
       description: `**${sub}** was **${novoEstado === "on" ? "enabled 🟢" : "disabled 🔴"}**.`, colour: COR.mod }));
+  }
+
+  // ── &automod sentinela assuntos … (temas proibidos pela regra) ──────────
+  async function painelAssuntos(mod, a) {
+    const T = (pt, en) => (lang === "en" ? en : pt);
+    const P = PREFIXO, base = `${P}automod sentinela assuntos`;
+    mod.acoes ??= {}; mod.termos ??= {}; mod.canaisLiberados ??= [];
+    const op = a[0]?.toLowerCase();
+    const ROT_ACAO = { off: T("desligado", "off"), alertar: T("só alerta a staff", "alerts staff only"), apagar: T("apaga a mensagem", "deletes the message"), punir: T("apaga e pune (escada)", "deletes and punishes (ladder)") };
+    const painel = (titulo = null) => sendEmbed(message.channel, { title: titulo ?? `🛡️ ${T("Temas proibidos", "Forbidden topics")}`, colour: COR.mod, description: [
+      T("A palavra-chave só **levanta a mão**; a IA lê a conversa e decide se é **discussão de verdade** ou zoeira — brincadeira não é punida.",
+        "A keyword only **raises a hand**; the AI reads the conversation and decides whether it's a **real discussion** or banter — joking isn't punished."),
+      "",
+      `**${T("Chave geral", "Master switch")}:** ${mod.enabled ? T("🟢 ligada", "🟢 on") : T("🔴 desligada", "🔴 off")}`,
+      ...assuntos.NOMES_TEMAS.map((t) => {
+        const ac = assuntos.acaoDoTema(mod, t), d = assuntos.TEMAS[t];
+        const extras = (mod.termos[t] ?? []).length;
+        return `${d.emoji} \`${t}\` — **${ac}** · ${ROT_ACAO[ac]}${extras ? T(` · +${extras} termo(s) daqui`, ` · +${extras} term(s) of yours`) : ""}`;
+      }),
+      `**${T("Canais liberados", "Allowed channels")}:** ${mod.canaisLiberados.length ? mod.canaisLiberados.map((c) => `<#${c}>`).join(" ") : "—"}`,
+      `**${T("Punição do `punir`", "Punishment of `punir`")}:** \`${mod.punicao?.modo ?? "acumular"}\``,
+      "",
+      `\`${base} <${assuntos.NOMES_TEMAS.join("|")}> <off|alertar|apagar|punir>\``,
+      `\`${base} <${T("tema", "topic")}> add|remover <${T("termo", "term")}>\` — ${T("palavras a mais (a IA ainda confirma)", "extra words (the AI still confirms)")}`,
+      `\`${base} liberar|vigiar <#${T("canal", "channel")}|aqui>\` — ${T("um canal onde o tema pode (ex.: #debate)", "a channel where the topic is fine (e.g. #debate)")}`,
+      `\`${base} on|off\` · \`${base} punicao <${T("modo", "mode")}>\``,
+      T("_Precisa da IA ligada. Alertas vão para o canal do sentinela (ou o de log)._", "_Needs the AI on. Alerts go to the sentinel channel (or the log channel)._"),
+    ].join("\n") });
+
+    if (!op || op === "status" || op === "config") return painel();
+    if (op === "on" || op === "off") {
+      mod.enabled = op === "on"; salvarConfig();
+      const nenhum = op === "on" && !assuntos.temasAtivos(mod).length;
+      return painel(op === "on" ? (nenhum ? T("🟡 Ligado — falta escolher os temas", "🟡 On — now pick the topics") : T("🟢 Temas proibidos ligados", "🟢 Forbidden topics on")) : T("🔴 Temas proibidos desligados", "🔴 Forbidden topics off"));
+    }
+    if (["liberar", "allow", "vigiar", "watch"].includes(op)) {
+      const bruto = String(a[1] ?? "").toLowerCase();
+      const canal = (bruto === "aqui" || bruto === "here" || !bruto) ? message.channelId : bruto.replace(/[<#>]/g, "");
+      const dele = server?.channelIds ? (server.channelIds.has?.(canal) ?? true) : true;
+      if (!dele) return sendEmbed(message.channel, { title: T("❌ Canal de outro servidor", "❌ Channel from another server"), colour: COR.erro, description: `\`${canal}\`` });
+      const liberar = op === "liberar" || op === "allow";
+      mod.canaisLiberados = liberar ? [...new Set([...mod.canaisLiberados, canal])] : mod.canaisLiberados.filter((c) => c !== canal);
+      salvarConfig();
+      return painel(liberar ? T(`✅ <#${canal}> liberado: os temas podem lá`, `✅ <#${canal}> allowed: topics are fine there`) : T(`✅ <#${canal}> vigiado de novo`, `✅ <#${canal}> watched again`));
+    }
+    const tema = assuntos.temaValido(op);
+    if (!tema) {
+      return sendEmbed(message.channel, { title: T("❌ Tema desconhecido", "❌ Unknown topic"), colour: COR.erro,
+        description: `${T("Temas", "Topics")}: ${assuntos.NOMES_TEMAS.map((t) => `\`${t}\``).join(", ")}\n${T("Ex.:", "E.g.:")} \`${base} politica apagar\`` });
+    }
+    const op2 = a[1]?.toLowerCase();
+    if (["add", "adicionar", "remover", "remove", "tirar"].includes(op2)) {
+      const termo = a.slice(2).join(" ").trim().toLowerCase().slice(0, 60);
+      if (!termo) return sendEmbed(message.channel, { title: T("❌ Falta o termo", "❌ Missing term"), colour: COR.erro, description: `\`${base} ${tema} ${op2} <${T("termo", "term")}>\`` });
+      const lista = mod.termos[tema] ?? [];
+      mod.termos[tema] = ["add", "adicionar"].includes(op2) ? [...new Set([...lista, termo])] : lista.filter((x) => x !== termo);
+      salvarConfig();
+      return painel(T(`✅ ${tema}: ${mod.termos[tema].length} termo(s) daqui`, `✅ ${tema}: ${mod.termos[tema].length} term(s) of yours`));
+    }
+    const nova = assuntos.acaoValida(op2);
+    if (!nova) {
+      return sendEmbed(message.channel, { title: T("❌ Ação inválida", "❌ Invalid action"), colour: COR.erro, description: [
+        `\`${base} ${tema} <off|alertar|apagar|punir>\``, "",
+        ...assuntos.ACOES.map((x) => `• \`${x}\` — ${ROT_ACAO[x]}`),
+      ].join("\n") });
+    }
+    mod.acoes[tema] = nova;
+    if (nova !== "off") mod.enabled = true;   // escolher um tema já liga a chave geral
+    salvarConfig();
+    return painel(`${assuntos.TEMAS[tema].emoji} ${tema} → ${nova}`);
+  }
+
+  // ── &automod sentinela avatar … (foto de perfil) ─────────────────────────
+  async function painelAvatar(mod, a) {
+    const T = (pt, en) => (lang === "en" ? en : pt);
+    const P = PREFIXO, base = `${P}automod sentinela avatar`;
+    const op = a[0]?.toLowerCase();
+    const ROT = { alertar: T("só alerta a staff", "alerts staff only"), silenciar: T("silencia (timeout) e alerta", "silences (timeout) and alerts"), expulsar: T("expulsa e alerta", "kicks and alerts"), banir: T("bane e alerta", "bans and alerts") };
+    const painel = (titulo = null) => sendEmbed(message.channel, { title: titulo ?? `🖼️ ${T("Foto de perfil", "Profile picture")}`, colour: COR.mod, description: [
+      T("A foto de quem **entra** e de quem **troca** passa pelo modelo de visão. Apita com genitália, ato sexual ou pornografia descritos — ou nudez, gore e símbolo de ódio com o voto de risco do modelo.",
+        "The picture of whoever **joins** or **changes** it goes through the vision model. It flags genitals, sex acts or porn described — or nudity, gore and hate symbols with the model's risk vote."),
+      "",
+      `**${T("Estado", "State")}:** ${mod.enabled !== false ? T("🟢 ligado", "🟢 on") : T("🔴 desligado", "🔴 off")}${process.env.IA_SERVICO_URL ? "" : T(" · ⚠️ sem IA_SERVICO_URL: não analisa", " · ⚠️ no IA_SERVICO_URL: nothing is analysed")}`,
+      `**${T("Ação", "Action")}:** \`${avatar.acaoDoAvatar(mod)}\` — ${ROT[avatar.acaoDoAvatar(mod)]}`,
+      avatar.acaoDoAvatar(mod) === "silenciar" ? `**${T("Tempo", "Time")}:** ${duracaoTexto(avatar.tempoDoAvatar(mod), lang)}` : null,
+      "",
+      `\`${base} on|off\``,
+      `\`${base} acao <alertar|silenciar|expulsar|banir>\``,
+      `\`${base} tempo <24h|2d|…>\` — ${T("quanto dura o silêncio", "how long the silence lasts")}`,
+      `\`${base} checar <@${T("pessoa", "person")}>\` — ${T("analisa a foto agora, sem punir", "analyses the picture now, without punishing")}`,
+      T("_Staff, dono e bots não passam pela checagem. A foto nunca é republicada no alerta._", "_Staff, owner and bots are skipped. The picture is never reposted in the alert._"),
+    ].filter((x) => x !== null).join("\n") });
+
+    if (!op || op === "status" || op === "config") return painel();
+    if (op === "on" || op === "off") { mod.enabled = op === "on"; salvarConfig(); return painel(); }
+    if (op === "acao" || op === "ação" || op === "action") {
+      const nova = avatar.acaoAvatarValida(a[1]);
+      if (!nova) return sendEmbed(message.channel, { title: T("❌ Ação inválida", "❌ Invalid action"), colour: COR.erro,
+        description: [`\`${base} acao <alertar|silenciar|expulsar|banir>\``, "", ...avatar.ACOES_AVATAR.map((x) => `• \`${x}\` — ${ROT[x]}`)].join("\n") });
+      mod.acao = nova; salvarConfig();
+      return painel(`🖼️ ${T("Ação", "Action")} → ${nova}`);
+    }
+    if (op === "tempo" || op === "time") {
+      const ms = lerDuracao(a[1]);
+      if (!ms) return sendEmbed(message.channel, { title: T("❌ Tempo inválido", "❌ Invalid time"), colour: COR.erro, description: `\`${base} tempo 24h\` · \`2d\` · \`30m\`` });
+      mod.tempo = String(a[1]).toLowerCase(); salvarConfig();
+      return painel(`🖼️ ${T("Tempo", "Time")} → ${duracaoTexto(avatar.tempoDoAvatar(mod), lang)}`);
+    }
+    if (op === "checar" || op === "check" || op === "testar" || op === "test") {
+      const uid = await resolverUsuario(a.slice(1).join(" "), { message, server, client: ctx.client }).catch(() => null);
+      if (!uid) return sendEmbed(message.channel, { title: T("❌ De quem?", "❌ Whose?"), colour: COR.erro, description: `\`${base} checar @${T("pessoa", "person")}\`` });
+      const membro = await server?.fetchMember?.(uid).catch(() => null);
+      const user = membro?.user ?? await ctx.client?.users?.fetch?.(uid).catch(() => null);
+      const arq = avatar.arquivoDe(membro?.avatar) ?? avatar.arquivoDe(user?.avatar);
+      if (!arq) return sendEmbed(message.channel, { title: T("🖼️ Sem foto", "🖼️ No picture"), colour: COR.mod, description: T(`<@${uid}> não tem foto de perfil.`, `<@${uid}> has no profile picture.`) });
+      if (!process.env.IA_SERVICO_URL) return sendEmbed(message.channel, { title: T("⚠️ Sem modelo de visão", "⚠️ No vision model"), colour: COR.aviso, description: T("Falta `IA_SERVICO_URL` no `.env`.", "`IA_SERVICO_URL` is missing from `.env`.") });
+      const r = await avatar.analisarFoto(arq);
+      if (!r) return sendEmbed(message.channel, { title: T("⚠️ Não consegui analisar", "⚠️ Couldn't analyse it"), colour: COR.aviso, description: T("O modelo de visão não respondeu — veja o log do container.", "The vision model didn't answer — check the container log.") });
+      return sendEmbed(message.channel, { title: r.apitou ? T("🖼️ Apitaria", "🖼️ Would flag") : T("🖼️ Passaria", "🖼️ Would pass"), colour: r.apitou ? COR.aviso : COR.sucesso, description: [
+        `<@${uid}>${r.apitou ? ` · **${T("Sinais", "Signals")}:** ${r.motivos.join(", ")}` : ""}`,
+        `> ${r.descricao.replace(/\n+/g, " ").slice(0, 400)}`,
+        T("_Só checagem: ninguém foi punido._", "_Check only: nobody was punished._"),
+      ].join("\n") });
+    }
+    const parecida = maisParecido(op, ["on", "off", "acao", "tempo", "checar"]);
+    return sendEmbed(message.channel, { title: T("❌ Não conheço esse", "❌ I don't know that one"), colour: COR.erro,
+      description: `${parecida ? T(`Você quis dizer \`${base} ${parecida}\`?\n\n`, `Did you mean \`${base} ${parecida}\`?\n\n`) : ""}\`${base} on|off\` · \`acao\` · \`tempo\` · \`checar\`` });
   }
 }
 

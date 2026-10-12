@@ -175,8 +175,8 @@ export function observarParaComentario(message, ctx) {
 }
 
 // Avaliador para a moderação por IA: usa o modelo pequeno (rápido) em JSON.
-export function avaliarModeracao(messages) {
-  return llmChat(messages, { json: true, modelo: LLM_MODEL_DECISAO, etiqueta: "moderacao-ia" });
+export function avaliarModeracao(messages, { etiqueta = "moderacao-ia" } = {}) {
+  return llmChat(messages, { json: true, modelo: LLM_MODEL_DECISAO, etiqueta });
 }
 
 export async function resumirRSS(material, quantidade, { categoria = null, lang = "pt", serverId = null } = {}) {

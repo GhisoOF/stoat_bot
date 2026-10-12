@@ -10658,7 +10658,9 @@ console.log("── servidor novo nasce com o automod desligado ──");
 
 console.log("\n── &automod off / on ──");
 await say("&automod on");
-ok(ligados(store.configDoServidor("S1")).length === Object.keys(engine.MODULOS_AUTOMOD).length, "★ &automod on liga tudo");
+// os temas proibidos ligam a chave geral, mas só contam com um tema escolhido (13 out 2026)
+ok(ligados(store.configDoServidor("S1")).length === Object.keys(engine.MODULOS_AUTOMOD).length - 1
+  && store.configDoServidor("S1").automod.antiAssuntos.enabled === true, "★ &automod on liga tudo");
 await say("&automod off");
 ok(ligados(store.configDoServidor("S1")).length === 0, "★ &automod off desliga tudo (o que o dono tentou)");
 ok(/Tudo desligado/.test(ult()) && /automod antispam on/.test(ult()), "  → e diz como ligar só um");
@@ -12118,6 +12120,279 @@ delete process.env.MUSICA_MAX_SIMULTANEAS;
 for (const c of ["CALL_OUTRO", "CALL_TERCEIRO", "CALL_MEU"]) m.limparCanal(c);
 
 console.log(`\nPRIORIDADE (13 out): ${pass} ok, ${fail} falha(s)`);
+process.exit(fail ? 1 : 0);
+};
+
+SUITES["assuntos-avatar-13out"] = async () => {
+const __m0 = await import("node:fs"); const fs = __m0.default;
+// Pedido de Ghieh (13 out 2026): servidores com regra de "aqui não se discute
+// política, religião…", mas onde o pessoal zoa e isso é OK — cada tema vira um
+// módulo com a ação que o servidor quiser, e a palavra-chave só levanta a mão
+// (o modelo decide se é discussão ou zoeira). E contas entrando com foto de
+// genitália no perfil: a foto passa pelo modelo de visão ao entrar e ao trocar.
+process.env.DB_PATH = "/tmp/assuntos-13out.db"; process.env.CONFIG_PATH = "/tmp/assuntos-13out-cfg.json";
+process.env.IA_SERVICO_URL = "http://ia.teste"; process.env.CDN_URL = "https://cdn.stoatusercontent.com";
+process.env.SUPER_ADMINS = "DONO_BOT";
+for (const f of [process.env.DB_PATH, process.env.CONFIG_PATH]) fs.rmSync(f, { force: true });
+let pass = 0, fail = 0;
+const ok = (cond, msg) => { cond ? pass++ : fail++; console.log(`  ${cond ? "✅" : "❌"} ${msg}`); };
+
+const db = await import("./modulos/core/db.js");
+db.abrirBanco(process.env.DB_PATH);
+const store = await import("./modulos/core/config-store.js");
+const engine = await import("./modulos/moderacao/automod-engine.js");
+const as = await import("./modulos/moderacao/assuntos.js");
+const av = await import("./modulos/moderacao/avatar.js");
+const { cmdAutomod } = await import("./modulos/moderacao/automod-comandos.js");
+
+console.log("── temas: a palavra-chave só levanta a mão ──");
+const cfgT = (acoes, extra = {}) => ({ enabled: true, acoes, termos: {}, canaisLiberados: [], punicao: null, ...extra });
+ok(as.acharAssuntos("o Lula vai ganhar a eleição de novo", cfgT({ politica: "apagar" })).some((x) => x.tema === "politica"), "★ política: \"Lula\" / \"eleição\" levantam a mão");
+ok(as.acharAssuntos("o Lula vai ganhar a eleição de novo", cfgT({ politica: "off" })).length === 0, "  → tema desligado não olha nada");
+ok(as.acharAssuntos("religiao nao se discute", cfgT({ religiao: "alertar" }))[0]?.tema === "religiao", "  → sem acento também (religiao)");
+ok(as.acharAssuntos("meu deus, que droga de jogo", cfgT({ religiao: "apagar", drogas: "apagar" })).length === 0, "★ expressão do dia a dia (\"meu deus\", \"que droga\") nem chama o modelo");
+ok(as.acharAssuntos("o temer de perder é normal", cfgT({ politica: "apagar" })).length === 0 && as.acharAssuntos("a maga do time morreu", cfgT({ politica: "apagar" })).length === 0, "  → palavras comuns que só parecem política (temer, maga) ficam de fora");
+ok(as.acharAssuntos("quem quer comprar maconha?", cfgT({ drogas: "punir" }))[0]?.tema === "drogas", "  → drogas");
+ok(as.acharAssuntos("vendo pack completo", cfgT({ sexual: "apagar" }))[0]?.tema === "sexual", "  → conteúdo sexual (texto)");
+ok(as.acharAssuntos("o candidato X é o melhor", cfgT({ politica: "apagar" }, { termos: { politica: ["candidato x"] } }))[0]?.termo === "candidato x", "★ termos do servidor somam aos de fábrica");
+ok(as.acharAssuntos("o Lula vai ganhar", { ...cfgT({ politica: "apagar" }), enabled: false }).length === 0, "  → chave geral desligada: nada");
+ok(engine.moduloLigado({ antiAssuntos: cfgT({}) }, "antiAssuntos") === false && engine.moduloLigado({ antiAssuntos: cfgT({ religiao: "alertar" }) }, "antiAssuntos") === true, "  → a parte só conta como ligada com algum tema escolhido");
+
+console.log("\n── o juiz: o modelo lê o fio ──");
+ok(as.lerVeredito('```json\n{"discussao": true, "motivo": "debate sobre eleição"}\n```')?.discussao === true, "lê o JSON (com cerca de código)");
+ok(as.lerVeredito('{"discussao": "não"}')?.discussao === false && as.lerVeredito("sei lá") === null, "  → \"não\" é false; resposta sem JSON é null (nada acontece)");
+ok(/brincadeira é PERMITIDA/.test(as.promptDoTema("politica")) && /Na dúvida, é brincadeira/.test(as.promptDoTema("politica")), "★ o prompt diz que zoeira pode e que, na dúvida, é brincadeira");
+
+const pedidos = [];
+let resposta = '{"discussao": false, "motivo": "zoeira"}';
+as.configurar({ avaliar: async (msgs, op) => { pedidos.push({ msgs, op }); if (resposta instanceof Error) throw resposta; return resposta; } });
+
+const enviados = [], punicoes = [];
+const CANAIS = { ALERTA: { id: "ALERTA", serverId: "S" } };
+function ctxCom(antiAssuntos, extra = {}) {
+  return {
+    config: { language: "pt", automod: { antiAssuntos, antiScam: { alertChannelId: "ALERTA" } }, log: { canalId: null }, acesso: { cargosStaff: ["R_STAFF"] } },
+    serverId: "S", COR: { mod: 1, aviso: 2, erro: 3 }, PREFIXO: "&",
+    sendEmbed: async (canal, e) => { enviados.push({ canal: canal?.id, ...e }); return {}; },
+    client: { channels: { get: (id) => CANAIS[id] ?? null, fetch: async (id) => CANAIS[id] ?? null } },
+    ...extra,
+  };
+}
+let seq = 0;
+function msg(texto, { canal = "C1", autor = "ANA" } = {}) {
+  const m = { id: `M${++seq}`, content: texto, channelId: canal, authorId: autor, author: { username: autor.toLowerCase() },
+    channel: { id: canal }, apagada: false };
+  m.delete = async () => { m.apagada = true; };
+  return m;
+}
+async function checar(ctx, m) {
+  as.anotar(m.channelId, { id: m.id, nome: m.author.username, texto: m.content });
+  return as.verificar({ ctx, server: { id: "S" }, canal: m.channel, message: m, userId: m.authorId,
+    aplicarPunicao: async (o) => { punicoes.push(o); } });
+}
+
+as._zerar();
+as.anotar("C1", { id: "A0", nome: "bia", texto: "vocês viram o debate ontem?" });
+let m = msg("o Lula é o melhor presidente kkkk");
+let r = await checar(ctxCom(cfgT({ politica: "apagar" })), m);
+ok(pedidos.length === 1 && /vocês viram o debate ontem/.test(pedidos[0].msgs[1].content) && /MENSAGEM AVALIADA \(ana\): o Lula/.test(pedidos[0].msgs[1].content), "★ o modelo recebe o fio do canal e a mensagem avaliada à parte");
+ok(pedidos[0].op?.etiqueta === "assunto:politica", "  → etiqueta própria nos logs da fila do modelo");
+ok(r.acao === "nada" && !m.apagada && !punicoes.length, "★ zoeira: nada acontece (a mensagem fica)");
+
+as._zerar(); pedidos.length = 0; resposta = '{"discussao": true, "motivo": "briga de opinião sobre eleição"}';
+m = msg("quem vota no Bolsonaro é burro, a eleição foi roubada");
+r = await checar(ctxCom(cfgT({ politica: "apagar" })), m);
+ok(r.acao === "apagar" && m.apagada && !punicoes.length, "★ discussão + `apagar`: só tira a mensagem, sem punição");
+ok(enviados.some((e) => e.canal === "C1" && /não é assunto deste servidor/.test(e.description) && /ninguém foi punido/.test(e.description)), "  → e explica no canal");
+const avisosAntes = enviados.filter((e) => e.canal === "C1").length;
+const m2 = msg("eleição roubada sim, aceita");
+r = await checar(ctxCom(cfgT({ politica: "apagar" })), m2);
+ok(m2.apagada && pedidos.length === 1, "★ a discussão seguinte usa o veredito recente (não enche a fila do modelo)");
+ok(enviados.filter((e) => e.canal === "C1").length === avisosAntes, "  → e o canal não vira um mural de avisos (um a cada 2 min)");
+
+as._zerar(); pedidos.length = 0; enviados.length = 0;
+m = msg("a igreja X é uma farsa e quem vai lá é otário");
+r = await checar(ctxCom(cfgT({ religiao: "alertar" })), m);
+ok(r.acao === "alertar" && !m.apagada, "★ `alertar`: a mensagem fica…");
+ok(enviados.some((e) => e.canal === "ALERTA" && /<%R_STAFF>/.test(e.description) && /Assunto proibido: religião/.test(e.title)), "  → …e a staff é chamada no canal do sentinela");
+
+as._zerar(); pedidos.length = 0;
+m = msg("vendo maconha, chama no privado");
+r = await checar(ctxCom(cfgT({ drogas: "punir" })), m);
+ok(r.acao === "punir" && punicoes.length === 1 && punicoes[0].pol.modo === "acumular" && /drogas não é assunto/.test(punicoes[0].motivo), "★ `punir`: a punição do automod, na escada (`acumular`) por padrão");
+punicoes.length = 0; as._zerar();
+await checar(ctxCom(cfgT({ drogas: "punir" }, { punicao: { modo: "confirmar" } })), msg("vendo maconha barato"));
+ok(punicoes[0]?.pol.modo === "confirmar", "  → `&automod sentinela assuntos punicao` troca o modo");
+
+as._zerar(); pedidos.length = 0;
+m = msg("o Lula e a eleição", { canal: "DEBATE" });
+r = await checar(ctxCom(cfgT({ politica: "apagar" }, { canaisLiberados: ["DEBATE"] })), m);
+ok(r === null && !pedidos.length && !m.apagada, "★ canal liberado (ex.: #debate): o tema pode lá");
+
+as._zerar(); pedidos.length = 0; punicoes.length = 0; resposta = new Error("modelo fora do ar");
+m = msg("eleição roubada!");
+r = await checar(ctxCom(cfgT({ politica: "punir" })), m);
+ok(!m.apagada && !punicoes.length, "★ modelo com erro: nada acontece (erro nunca vira punição)");
+resposta = '{"discussao": true, "motivo": "x"}';
+
+console.log("\n── no automod: em segundo plano, staff de fora ──");
+as._zerar(); pedidos.length = 0;
+const cfgS = store.configDoServidor("S_AUTOMOD");
+cfgS.automod.antiAssuntos = cfgT({ politica: "apagar" });
+const ctxA = (staff) => ({
+  ...ctxCom(cfgS.automod.antiAssuntos), config: cfgS, estado: { blockedDomains: new Set(), spamData: new Map(), ecoData: new Map() },
+  getServer: async () => ({ id: "S_AUTOMOD" }), membroTemPermissao: (_m, _s, p) => staff && p === "ManageMessages", salvarConfig: () => {},
+});
+let segurou = true;
+resposta = new Promise(() => {});   // o modelo "pensando" para sempre
+const lento = msg("a eleição foi roubada");
+as.configurar({ avaliar: async () => resposta });
+const parou = await Promise.race([engine.runAutomod(lento, ctxA(false)), new Promise((res) => setTimeout(() => res("travou"), 1500))]);
+segurou = parou === "travou";
+ok(!segurou && parou === false, "★ a mensagem não espera o modelo (o automod segue na hora)");
+as.configurar({ avaliar: async (msgs, op) => { pedidos.push({ msgs, op }); return '{"discussao": true, "motivo": "debate"}'; } });
+as._zerar(); pedidos.length = 0;
+const m3 = msg("vota no Lula quem é inteligente, eleição é isso");
+await engine.runAutomod(m3, ctxA(false));
+await engine._ultimaVerificacaoDeAssunto();
+ok(m3.apagada && pedidos.length === 1, "★ runAutomod → modelo confirma → a mensagem sai");
+as._zerar(); pedidos.length = 0;
+const m4 = msg("a eleição é dia 4, gente", { autor: "MOD" });
+await engine.runAutomod(m4, ctxA(true));
+ok(!pedidos.length && !m4.apagada, "  → staff não é moderada");
+as._zerar();
+await engine.runAutomod(msg("vocês viram a notícia do governo?", { autor: "MOD" }), ctxA(true));
+pedidos.length = 0;
+await engine.runAutomod(msg("eleição roubada", { autor: "ANA" }), ctxA(false));
+await engine._ultimaVerificacaoDeAssunto();
+ok(/mod: vocês viram a notícia do governo/.test(pedidos[0]?.msgs[1].content ?? ""), "  → mas a fala da staff entra no fio que o modelo lê");
+
+console.log("\n── foto de perfil: o que apita ──");
+ok(av.avaliarAvatar("Uma foto de um pênis ereto em close.").apitou, "★ genitália descrita apita sozinha");
+ok(av.avaliarAvatar("Desenho de anime: personagem com genitais expostos.").motivos[0] === "sexual explícito", "  → desenho também");
+ok(!av.avaliarAvatar("Homem de torso nu na praia, sorrindo.").apitou, "★ torso nu na praia, sem o voto de risco do modelo: não apita");
+ok(av.avaliarAvatar("Mulher nua deitada na cama.", { riscoModelo: true }).motivos.includes("nudez"), "  → nudez COM o voto de risco: apita");
+ok(!av.avaliarAvatar("Nudez: não. Genitália: não. Um gato laranja.", { riscoModelo: false }).apitou, "  → checklist negado (\"Genitália: não\") não apita");
+ok(!av.avaliarAvatar("Um gato laranja dormindo.", { riscoModelo: true }).apitou, "  → foto comum não apita nem com o voto do modelo sozinho");
+ok(av.arquivoDe({ _id: "AV1", tag: "avatars" })?.url === "https://cdn.stoatusercontent.com/avatars/AV1" && av.arquivoDe(null) === null, "a URL da foto no CDN do Stoat");
+
+console.log("\n── foto de perfil: a ação ──");
+const analises = [];
+let descricao = "Close de genitália masculina.";
+av._trocarAnalise(async (url) => { analises.push(url); return { descricao, riscoModelo: true }; });
+av._zerar();
+const editados = [], expulsos = [], banidos = [];
+function servidor(id, { membros = ["NOVO"] } = {}) {
+  return {
+    id, ownerId: "DONA",
+    fetchMember: async (u) => { if (!membros.includes(u)) throw { type: "NotFound" }; return { id: { server: id, user: u }, edit: async (d) => { editados.push({ id, u, d }); } }; },
+    kickUser: async (u) => { expulsos.push({ id, u }); },
+    banUser: async (u) => { banidos.push({ id, u }); },
+  };
+}
+const cfgAv = (acao = "silenciar", extra = {}) => ({ language: "pt", automod: { antiAvatar: { enabled: true, acao, tempo: "24h", ...extra }, antiScam: { alertChannelId: "ALERTA" } }, log: { canalId: null }, acesso: { cargosStaff: ["R_STAFF"] } });
+const ctxAv = (config, staff = false) => ({
+  config, serverId: "S", COR: { aviso: 2, erro: 3 }, PREFIXO: "&",
+  sendEmbed: async (canal, e) => { enviados.push({ canal: canal?.id, ...e }); return {}; },
+  client: { channels: { get: (id) => (id === "ALERTA" ? { id } : id === "ALHEIO" ? { id, serverId: "OUTRO_SERVIDOR" } : null) } },
+  membroTemPermissao: () => staff, ehSuperAdmin: (u) => u === "DONO_BOT",
+});
+enviados.length = 0;
+const S = servidor("S");
+const membro = { id: { server: "S", user: "NOVO" }, server: S, user: { id: "NOVO", avatar: { id: "FOTO1", tag: "avatars" } }, avatar: null };
+let res = await av.aoEntrar(membro, ctxAv(cfgAv()));
+ok(res[0]?.apitou && editados.some((x) => x.u === "NOVO" && x.d.timeout), "★ entrou com a foto imprópria: silenciado (timeout nativo) — o padrão");
+ok(db.lerPunicao("S", "NOVO")?.silencioAte > Date.now() + 23 * 3600e3, "  → por 24 h, gravado (sair e voltar reaplica)");
+const alerta = enviados.find((e) => e.canal === "ALERTA");
+ok(alerta && /<%R_STAFF>/.test(alerta.description) && /acabou de entrar/.test(alerta.description) && /dismiss NOVO/.test(alerta.description), "★ a staff é chamada, com como liberar");
+ok(alerta && !alerta.imagem && !alerta.anexos && /NÃO é repostada/.test(alerta.description), "  → e a foto nunca vai no alerta");
+ok(analises[0] === "https://cdn.stoatusercontent.com/avatars/FOTO1", "  → o modelo viu a foto do CDN");
+
+analises.length = 0;
+const S2 = servidor("S2");
+await av.verificar({ ctx: ctxAv(cfgAv("expulsar")), server: S2, userId: "NOVO", avatar: { id: "FOTO1", tag: "avatars" } });
+ok(expulsos.some((x) => x.id === "S2") && analises.length === 0, "★ `expulsar`; e a mesma foto não é analisada de novo (vale em vários servidores)");
+await av.verificar({ ctx: ctxAv(cfgAv("banir")), server: servidor("S3"), userId: "NOVO", avatar: { id: "FOTO1", tag: "avatars" } });
+ok(banidos.some((x) => x.id === "S3"), "  → `banir`");
+const nEd = editados.length, nEx = expulsos.length;
+res = await av.verificar({ ctx: ctxAv(cfgAv("alertar")), server: servidor("S4"), userId: "NOVO", avatar: { id: "FOTO1", tag: "avatars" } });
+ok(res.apitou && editados.length === nEd && expulsos.length === nEx && /só alerta/.test(res.feito), "  → `alertar`: só chama a staff");
+
+ok(await av.verificar({ ctx: ctxAv(cfgAv(), true), server: servidor("S5"), userId: "NOVO", avatar: { id: "FOTO1" } }) === null, "★ staff não passa pela checagem");
+ok(await av.verificar({ ctx: ctxAv(cfgAv()), server: servidor("S5"), userId: "DONO_BOT", avatar: { id: "FOTO1" } }) === null
+  && await av.verificar({ ctx: ctxAv(cfgAv()), server: servidor("S5"), userId: "DONA", avatar: { id: "FOTO1" } }) === null, "  → nem o dono do bot, nem o dono do servidor");
+ok(await av.verificar({ ctx: ctxAv(cfgAv("silenciar", { enabled: false })), server: servidor("S5"), userId: "NOVO", avatar: { id: "FOTO1" } }) === null, "  → desligado: nada");
+
+descricao = "Um cachorro de óculos escuros.";
+analises.length = 0;
+res = await av.verificar({ ctx: ctxAv(cfgAv()), server: servidor("S6"), userId: "NOVO", avatar: { id: "FOTO2" } });
+ok(res?.apitou === false && analises.length === 1, "foto comum: analisada e nada acontece");
+descricao = "Close de genitália masculina."; enviados.length = 0;
+await av.verificar({ ctx: ctxAv({ ...cfgAv("alertar"), automod: { antiAvatar: { enabled: true, acao: "alertar" }, antiScam: { alertChannelId: "ALHEIO" } } }), server: servidor("S7"), userId: "NOVO", avatar: { id: "FOTO1" } });
+ok(!enviados.some((e) => e.canal === "ALHEIO"), "  → canal de alerta de OUTRO servidor nunca recebe o alerta");
+
+console.log("\n── foto de perfil: trocou ──");
+analises.length = 0;
+ok((await av.aoTrocarPerfil({ id: "NOVO", avatar: { id: "FOTO2" } }, { avatar: { _id: "FOTO2" } }, { client: { servers: new Map() }, criarContexto: () => ctxAv(cfgAv()) })).length === 0
+  && !analises.length, "★ presença (online/offline) chega como userUpdate — sem foto nova, nada");
+descricao = "Foto pornográfica.";
+const SA = servidor("SA", { membros: ["TROCOU"] }), SB = servidor("SB", { membros: [] });
+editados.length = 0;
+res = await av.aoTrocarPerfil({ id: "TROCOU", avatar: { id: "FOTO3", tag: "avatars" } }, { avatar: { _id: "FOTO_VELHA" } },
+  { client: { servers: new Map([["SA", SA], ["SB", SB]]) }, criarContexto: () => ctxAv(cfgAv()) });
+ok(res.length === 1 && editados.some((x) => x.id === "SA" && x.u === "TROCOU") && !editados.some((x) => x.id === "SB"), "★ trocou a foto do perfil: checa nos servidores onde a pessoa está");
+ok(enviados.some((e) => /trocou a foto/.test(e.description ?? "")), "  → e o alerta diz que foi troca");
+ok(await av.aoTrocarNoServidor({ id: { server: "SA", user: "TROCOU" }, server: SA, avatar: { id: "X" } }, { avatar: { _id: "X" } }, ctxAv(cfgAv())) === null, "  → foto de servidor igual à de antes: nada");
+editados.length = 0;
+await av.aoTrocarNoServidor({ id: { server: "SA", user: "TROCOU" }, server: SA, avatar: { id: "FOTO4" } }, { avatar: null }, ctxAv(cfgAv()));
+ok(editados.some((x) => x.id === "SA"), "★ trocou a foto DESTE servidor: checa aqui");
+
+console.log("\n── config e comandos ──");
+db.gravarConfig("SERVIDOR_ANTIGO_AV", { automod: { antiSpam: { enabled: true }, antiAssuntos: { acoes: { politica: "apagar" } } } });
+store._limparCache?.();
+const antigo = store.configDoServidor("SERVIDOR_ANTIGO_AV");
+ok(antigo.automod.antiAvatar.enabled === true && antigo.automod.antiAvatar.acao === "silenciar", "★ servidor que já existia: foto de perfil ligada, padrão alertar + silenciar");
+ok(antigo.automod.antiAssuntos.acoes.politica === "apagar" && antigo.automod.antiAssuntos.acoes.religiao === "off", "  → temas: o que foi salvo + o resto desligado");
+const novo = store.configDoServidor("SERVIDOR_NOVO_AV");
+ok(novo.automod.antiAvatar.enabled === false && !engine.moduloLigado(novo.automod, "antiAssuntos"), "  → servidor novo nasce com tudo desligado (como o resto do automod)");
+
+const config = store.configDoServidor("S_CMD");
+let ult = null;
+const ctxC = { config, cfgGlobal: {}, COR: {}, PREFIXO: "&", serverId: "S_CMD", estado: { blockedDomains: new Set() },
+  sendEmbed: async (_c, e) => { ult = e; return {}; }, getServer: async () => ({ id: "S_CMD", channelIds: new Set(["C_DEBATE"]) }),
+  membroTemPermissao: () => true, salvarConfig() {}, salvarGlobal() {}, client: {} };
+const am$ = async (txt) => { await cmdAutomod({ channel: {}, channelId: "C_DEBATE", authorId: "u", mentionIds: [] }, txt.split(" ").filter(Boolean), ctxC); return `${ult?.title}\n${ult?.description}`; };
+let t = await am$("sentinela");
+ok(/`assuntos`/.test(t) && /`avatar`/.test(t), "★ &automod sentinela mostra as partes novas");
+t = await am$("sentinela assuntos");
+ok(/politica/.test(t) && /religiao/.test(t) && /drogas/.test(t) && /sexual/.test(t) && /zoeira/.test(t), "&automod sentinela assuntos: o painel com os 4 temas");
+await am$("sentinela assuntos politica apagar");
+ok(config.automod.antiAssuntos.acoes.politica === "apagar" && config.automod.antiAssuntos.enabled === true, "★ `politica apagar`: o tema e a chave geral ligam juntos");
+await am$("sentinela assuntos religion alert");
+ok(config.automod.antiAssuntos.acoes.religiao === "alertar", "  → em inglês também (religion alert)");
+await am$("sentinela assuntos politica add candidato fulano");
+ok(config.automod.antiAssuntos.termos.politica?.includes("candidato fulano"), "  → termo a mais");
+await am$("sentinela assuntos liberar aqui");
+ok(config.automod.antiAssuntos.canaisLiberados.includes("C_DEBATE"), "  → `liberar aqui`: o canal pode");
+await am$("sentinela assuntos vigiar aqui");
+ok(!config.automod.antiAssuntos.canaisLiberados.includes("C_DEBATE"), "  → `vigiar aqui`: volta a vigiar");
+t = await am$("sentinela assuntos politica explodir");
+ok(/Ação inválida/.test(t) && config.automod.antiAssuntos.acoes.politica === "apagar", "  → ação inválida não muda nada");
+await am$("sentinela assuntos punicao confirmar");
+ok(config.automod.antiAssuntos.punicao?.modo === "confirmar", "  → `punicao` do `punir`");
+await am$("sentinela assuntos politica off");
+ok(config.automod.antiAssuntos.acoes.politica === "off", "  → `off` desliga o tema");
+await am$("sentinela avatar on");
+await am$("sentinela avatar acao banir");
+ok(config.automod.antiAvatar.acao === "banir" && config.automod.antiAvatar.enabled === true, "★ &automod sentinela avatar acao banir");
+await am$("sentinela avatar tempo 2h");
+ok(config.automod.antiAvatar.tempo === "2h" && av.tempoDoAvatar(config.automod.antiAvatar) === 2 * 3600e3, "  → tempo do silêncio");
+t = await am$("sentinela avatar acao explodir");
+ok(/Ação inválida/.test(t) && config.automod.antiAvatar.acao === "banir", "  → ação inválida não muda nada");
+await am$("sentinela avatar off");
+ok(config.automod.antiAvatar.enabled === false, "  → off");
+
+console.log(`\nASSUNTOS/AVATAR (13 out): ${pass} ok, ${fail} falha(s)`);
 process.exit(fail ? 1 : 0);
 };
 

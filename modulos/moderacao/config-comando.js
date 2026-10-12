@@ -224,6 +224,11 @@ export function descreverFiltro(am, chave, lang = "pt", estado = {}) {
     antiMassSpam:    () => T(`${am.antiMassSpam.maxMessages} msg em ${seg(am.antiMassSpam.windowMs)}`, `${am.antiMassSpam.maxMessages} msg in ${seg(am.antiMassSpam.windowMs)}`),
     antiDuplicata:   () => T(`${am.antiDuplicata?.maxRepetidas ?? 3}× a mesma mensagem em ${seg(am.antiDuplicata?.windowMs ?? 120000)} (curta: ${(am.antiDuplicata?.maxRepetidas ?? 3) + 2}×)`, `${am.antiDuplicata?.maxRepetidas ?? 3}× the same message in ${seg(am.antiDuplicata?.windowMs ?? 120000)} (short: ${(am.antiDuplicata?.maxRepetidas ?? 3) + 2}×)`),
     antiImagem:      () => T("imagens de contas novas descritas pelo modelo de visão; avisa a staff", "images from new accounts described by the vision model; alerts staff"),
+    antiAssuntos:    () => {
+      const ativos = Object.entries(am.antiAssuntos?.acoes ?? {}).filter(([, a]) => a && a !== "off");
+      return ativos.length ? ativos.map(([t, a]) => `${t} → ${a}`).join(", ") : T("nenhum tema ligado", "no topic on");
+    },
+    antiAvatar:      () => T(`ao entrar e ao trocar → ${am.antiAvatar?.acao ?? "silenciar"}`, `on join and on change → ${am.antiAvatar?.acao ?? "silenciar"}`),
     antiInvite:      () => T("bloqueia convites", "blocks invites"),
     antiMassMention: () => T(`máx. ${am.antiMassMention.maxMentions} menções`, `max ${am.antiMassMention.maxMentions} mentions`),
     antiCaps:        () => T(`≥${am.antiCaps.minLength} caracteres e ${Math.round(am.antiCaps.threshold * 100)}% maiúsculas`, `≥${am.antiCaps.minLength} chars and ${Math.round(am.antiCaps.threshold * 100)}% uppercase`),

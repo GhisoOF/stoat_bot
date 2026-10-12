@@ -49,6 +49,8 @@ function parametrosPT(P) {
       { nome: "test", valor: "<texto>", desc: "mostra a nota (0–10) que esse texto levaria — não pune ninguém" },
       { nome: "simulate", valor: "<texto>", desc: "dispara o fluxo real no canal de avisos" },
       { nome: "ban | dismiss", valor: "<id>", desc: "decide um caso pendente do modo `confirmar`" },
+      { nome: "assuntos", valor: "<tema> <off|alertar|apagar|punir>", desc: "temas proibidos pela regra (`politica`, `religiao`, `drogas`, `sexual`): a palavra-chave levanta a mão e a IA decide se é discussão ou zoeira" },
+      { nome: "avatar", valor: "acao <alertar|silenciar|expulsar|banir>", desc: "foto de perfil de quem entra ou troca, pelo modelo de visão (padrão: silencia 24 h e avisa a staff)" },
     ],
 
     log: [
@@ -299,6 +301,8 @@ function parametrosEN(P) {
       { nome: "test", valor: "<text>", desc: "shows the score (0–10) that text would get — punishes no one" },
       { nome: "simulate", valor: "<text>", desc: "fires the real flow in the alerts channel" },
       { nome: "ban | dismiss", valor: "<id>", desc: "decides a pending case from `confirmar` mode" },
+      { nome: "assuntos", valor: "<topic> <off|alertar|apagar|punir>", desc: "topics the rules forbid (`politica`, `religiao`, `drogas`, `sexual`): a keyword raises a hand and the AI decides whether it's a discussion or banter" },
+      { nome: "avatar", valor: "acao <alertar|silenciar|expulsar|banir>", desc: "profile picture of whoever joins or changes it, through the vision model (default: 24 h silence + staff alert)" },
     ],
 
     log: [

@@ -61,6 +61,11 @@ export function curarIds(config, server) {
   zerar(config.comentarioEspontaneo, "canalId", "canal");
   zerar(config.servidorInfo, "regrasCanal", "canal");   // senão o &servidor regras leria outro servidor
   zerar(config.autorole, "roleId", "cargo");
+  if (Array.isArray(config.automod?.antiAssuntos?.canaisLiberados) && canaisOk) {
+    const antes = config.automod.antiAssuntos.canaisLiberados.length;
+    config.automod.antiAssuntos.canaisLiberados = config.automod.antiAssuntos.canaisLiberados.filter((id) => canalDoServidor(server, id));
+    if (config.automod.antiAssuntos.canaisLiberados.length !== antes) mudou.push("canaisLiberados");
+  }
   if (Array.isArray(config.acesso?.cargosStaff) && cargosOk) {
     const antes = config.acesso.cargosStaff.length;
     config.acesso.cargosStaff = config.acesso.cargosStaff.filter((id) => cargoDoServidor(server, id));

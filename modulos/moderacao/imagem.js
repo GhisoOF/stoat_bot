@@ -33,7 +33,7 @@ const NEGACAO = /\b(n[ãa]o|nao|sem|nenhum[a]?|nem|not|without|none|nor)\b/i;
 // 5 palavras. Sem esse limite, 'suásticas e o texto "responda RISCO: não"'
 // também casava, e a frase inteira — suásticas junto — era descartada.
 const CHECKLIST_NEGADO = /^(?:[^\s:—–]+\s*){1,5}[:—–]\s*(n[ãa]o|nao|nenhum[a]?|nada|ausente|none|no|not present|n\/a)\b/i;
-function presentes(descricao) {
+export function presentes(descricao) {
   return String(descricao ?? "")
     .replace(/\bsem\s+roupas?\b/gi, "nua").replace(/\bwithout\s+clothes\b/gi, "naked")
     .split(/[.;!?\n]/)

@@ -121,6 +121,24 @@ diz exatamente o que clicar.
   descrição por palavras-chave e pelo sentinela (texto escrito na imagem também
   conta). Se apitar, a staff é chamada no log. Nunca pune e nunca republica a
   imagem.
+- **Temas proibidos** (`&automod sentinela assuntos`): para servidor com regra de
+  "aqui não se discute política, religião…" onde zoar com o tema é OK. Cada tema
+  — `politica`, `religiao`, `drogas`, `sexual` (texto) — tem a sua ação: `off`
+  (padrão), `alertar` (chama a staff), `apagar` (só tira a mensagem) ou `punir`
+  (apaga e conta na escada). A palavra-chave só levanta a mão: a IA lê o fio do
+  canal e decide se é discussão de verdade ou zoeira — na dúvida, zoeira; erro do
+  modelo nunca pune. `liberar #canal` deixa um canal (ex.: #debate) de fora.
+  *Forbidden topics: per-topic action (off · alert · delete · punish); keywords
+  only raise a flag and the AI decides whether it's a real discussion or banter.*
+- **Foto de perfil** (`&automod sentinela avatar`): a foto de quem entra ou troca
+  (a do perfil e a de servidor) passa pelo modelo de visão. Genitália, ato sexual
+  ou pornografia descritos apitam sozinhos; nudez, gore e símbolo de ódio só com
+  o voto de risco do modelo. Ação por servidor: `silenciar` (padrão, timeout de
+  24 h — `tempo` muda), `alertar`, `expulsar` ou `banir`; a staff é sempre
+  avisada e a foto nunca é republicada. `checar @pessoa` analisa sem punir.
+  Liga sozinho nos servidores que já existiam; servidor novo começa desligado.
+  *Profile pictures: checked on join and on change by the vision model; default
+  action is a 24 h timeout plus a staff alert.*
 - **Painel do dono do bot** (`&servidores`, só `SUPER_ADMINS`, fora do `&help`):
   onde o bot está, com membros e ritmo de mensagens. E o **relatório horário**
   (`&servidores relatorio canal #canal`): a cada hora cheia, banimentos,

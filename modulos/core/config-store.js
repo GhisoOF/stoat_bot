@@ -25,6 +25,16 @@ export const padraoServidor = {
     // Imagens descritas pelo modelo de visão e pontuadas (só avisa a staff).
     // `todos: false` = só conta nova (ou < 7 dias numa onda de raid).
     antiImagem:      { enabled: true,  todos: false },
+    // (13 out 2026) temas proibidos pela regra: cada tema com sua ação
+    // (off · alertar · apagar · punir); a IA confirma se é discussão ou zoeira.
+    antiAssuntos: {
+      enabled: false,
+      acoes: { politica: "off", religiao: "off", drogas: "off", sexual: "off" },
+      termos: {}, canaisLiberados: [], punicao: null,
+    },
+    // (13 out 2026) foto de perfil ao entrar/trocar, vista pelo modelo de visão.
+    // acao: alertar · silenciar · expulsar · banir (a staff é sempre avisada).
+    antiAvatar:      { enabled: true,  acao: "silenciar", tempo: "24h" },
     antiScam: {
       enabled: false, sensitivity: "media", alertChannelId: null, punicao: null,
       porAntiguidade: true,   // limiar acompanha o nível do membro
@@ -139,6 +149,11 @@ function mesclarServidor(salvo, tpl) {
       antiRepeticao:   { ...am.antiRepeticao,   ...(s.antiRepeticao ?? {}) },
       antiDuplicata:   { ...am.antiDuplicata,   ...(s.antiDuplicata ?? {}) },
       antiImagem:      { ...am.antiImagem,      ...(s.antiImagem ?? {}) },
+      antiAssuntos:    { ...am.antiAssuntos,    ...(s.antiAssuntos ?? {}),
+        acoes: { ...am.antiAssuntos.acoes, ...(s.antiAssuntos?.acoes ?? {}) },
+        termos: { ...(s.antiAssuntos?.termos ?? {}) },
+        canaisLiberados: [...(s.antiAssuntos?.canaisLiberados ?? [])] },
+      antiAvatar:      { ...am.antiAvatar,      ...(s.antiAvatar ?? {}) },
       antiScam:        { ...am.antiScam,        ...(s.antiScam ?? {}) },
       punicao:         { ...am.punicao,         ...(s.punicao ?? {}) },
     },

@@ -12,6 +12,7 @@ import { buscarSeguro } from "../core/seguranca.js";
 import { aplicarTimeout, CONFIRMAR_MS } from "./timeout.js";
 import { editarCargos } from "../core/hierarquia.js";
 import * as imagemSentinela from "./imagem.js";
+import * as assuntos from "./assuntos.js";
 import { analisarCaracteres, analisarRepeticao, analisarDuplicata, digital, textoHumano, razaoDeCaixaAlta } from "./caracteres.js";
 import { lingua } from "../core/i18n.js";
 import {
@@ -556,6 +557,8 @@ export const MODULOS_AUTOMOD = {
   antiduplicata:   "antiDuplicata",
   antiimagem:      "antiImagem",
   antirepeticao:   "antiRepeticao",
+  antiassuntos:    "antiAssuntos",   // temas proibidos (13 out 2026)
+  antiavatar:      "antiAvatar",     // foto de perfil (13 out 2026)
 };
 // ── Os quatro grupos (pedido de Ghieh, 2 out 2026) ──────────────────────────
 // Eram 14 filtros soltos, vários fazendo quase a mesma coisa com outra régua
@@ -578,8 +581,8 @@ export const GRUPOS_AUTOMOD = {
     partes: { dominios: "antilink", convites: "antiinvite" },
   },
   sentinela: {
-    emoji: "🛡️", pt: "conteúdo nocivo (golpe, +18, gore, ódio, imagens)", en: "harmful content (scams, NSFW, gore, hate, images)",
-    partes: { conteudo: "sentinela", odio: "antiodio", imagens: "antiimagem" },
+    emoji: "🛡️", pt: "conteúdo nocivo (golpe, +18, gore, ódio, imagens, temas proibidos, foto de perfil)", en: "harmful content (scams, NSFW, gore, hate, images, forbidden topics, profile pictures)",
+    partes: { conteudo: "sentinela", odio: "antiodio", imagens: "antiimagem", assuntos: "antiassuntos", avatar: "antiavatar" },
   },
 };
 // Rótulos das partes (o nome que se digita é a chave; este é o que se lê)
@@ -592,6 +595,8 @@ export const ROTULO_PARTE = {
   dominios: ["domínios da lista de bloqueio", "blocklisted domains"], convites: ["convites de outros servidores", "invites to other servers"],
   conteudo: ["golpe, +18, gore, ilícito, abuso", "scams, NSFW, gore, illicit, abuse"], odio: ["ofensas raciais/homofóbicas", "racial/homophobic slurs"],
   imagens: ["imagens de conta nova (modelo de visão)", "new accounts' images (vision model)"],
+  assuntos: ["temas proibidos pela regra (política, religião, drogas, sexual) — a IA separa discussão de zoeira", "topics the rules forbid (politics, religion, drugs, sexual) — the AI tells discussion from banter"],
+  avatar: ["foto de perfil de quem entra ou troca (modelo de visão)", "profile picture on join or change (vision model)"],
 };
 export function estadoDoGrupo(am, grupo) {
   const partes = Object.entries(GRUPOS_AUTOMOD[grupo]?.partes ?? {});
@@ -605,9 +610,11 @@ export function estadoDoGrupo(am, grupo) {
 export const LIMIAR_BASE = { baixa: 7.5, media: 6.5, alta: 5.5 };
 export const limiarBase = (sens) => LIMIAR_BASE[sens] ?? LIMIAR_BASE.media;
 
-const PADRAO_LIGADO = new Set(["antiDuplicata", "antiImagem", "antiOdio", "antiEmoji", "antiMidia"]);
+const PADRAO_LIGADO = new Set(["antiDuplicata", "antiImagem", "antiOdio", "antiEmoji", "antiMidia", "antiAvatar"]);
 export function moduloLigado(am, chave) {
   const m = am?.[chave];
+  // temas: ligado = chave geral E ao menos um tema com ação
+  if (chave === "antiAssuntos") return assuntos.temasAtivos(m).length > 0;
   return PADRAO_LIGADO.has(chave) ? m?.enabled !== false : !!m?.enabled;
 }
 
@@ -705,6 +712,12 @@ export async function runAutomod(message, ctx) {
   dbg(ctx, `▶ Analisando mensagem de ${userId}`);
   dbg(ctx, `  conteúdo: ${JSON.stringify(content)}`);
 
+  // O fio do canal para o juiz dos temas proibidos (inclui a fala da staff,
+  // que sai do automod logo abaixo — ela também faz parte da conversa).
+  if (assuntos.temasAtivos(am?.antiAssuntos).length) {
+    assuntos.anotar(message.channelId, { id: message.id, nome: message.author?.username ?? message.member?.nickname ?? userId, texto: content });
+  }
+
   let server;
   try {
     server = await getServer(message);
@@ -771,6 +784,16 @@ export async function runAutomod(message, ctx) {
     dbg(ctx, `  [anti-ódio] ${termo ? "ACHOU termo da lista" : "nada"}`);
     // o termo não vai para o motivo: a punição é publicada no canal
     if (termo) return barrar(am.antiOdio?.punicao, "linguagem de ódio não é tolerada aqui", "anti-ódio");
+  }
+
+  // ── Temas proibidos pela regra do servidor (13 out 2026) ──
+  // A palavra-chave só levanta a mão; o modelo lê o fio e decide se é
+  // discussão de verdade ou zoeira. Em segundo plano: a mensagem não espera.
+  if (assuntos.temasAtivos(am.antiAssuntos).length) {
+    const p = assuntos.verificar({ ctx, server, canal, message, userId,
+      aplicarPunicao: (opts) => aplicarPunicao(ctx, opts) });
+    ultimaVerificacaoDeAssunto = p;
+    p.catch((e) => console.error("[ASSUNTOS]", descreverErro(e)));
   }
 
   // ── Enxurrada de emoji (o ataque colava ~170 emojis por mensagem) ──
@@ -1122,5 +1145,8 @@ export async function simularDeteccao(texto, ctx, canalAtual) {
   });
   return r;
 }
+// Só para testes: a checagem de tema da última mensagem (roda em segundo plano).
+let ultimaVerificacaoDeAssunto = null;
+export const _ultimaVerificacaoDeAssunto = () => ultimaVerificacaoDeAssunto;
 // Só para testes: a punição inteira, sem passar pelo detector.
 export const _aplicarPunicao = aplicarPunicao;

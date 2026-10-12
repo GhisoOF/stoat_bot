@@ -178,12 +178,14 @@ diz exatamente o que clicar.
 - **Chat** (`&chat` ou menção): conversa com memória curta do canal, contas
   exatas, leitura de código e **busca na web** (via SearXNG) através do serviço
   de ferramentas embutido.
-- **Busca sempre, links só quando pedem**: toda mensagem com assunto vai ao
-  SearXNG em silêncio — os resultados entram no prompt para a Judy errar menos
-  fato de memória, mas a resposta sai como conversa, sem `[n]`, sem rodapé e
-  sem os links dos resultados. Fontes e links aparecem **só quando a pessoa
+- **Busca sempre, links só quando pedem**: toda pergunta sobre o mundo vai ao
+  SearXNG em silêncio — o que voltar entra como notas de referência no prompt
+  para a Judy errar menos fato de memória, mas a resposta sai como conversa,
+  sem `[n]`, sem rodapé, sem os links e sem "os resultados mostram…".
+  Pergunta sobre a própria conversa ("como está o servidor?"), afirmação,
+  pedido e papo não buscam. Fontes e links aparecem **só quando a pessoa
   pede a busca** ("pesquisa…", "procura na internet…", "dá um google…").
-  Mensagem só social, conta e imagem anexada não buscam; resultado que não
+  Conta e imagem anexada também não buscam; resultado que não
   fala do assunto fica de fora; a consulta da busca de fundo é escrita sem
   raciocínio (mais rápida). `BUSCA_SEMPRE=0` volta a buscar só quando pedem.
 - **Ritmo**: a resposta só raciocina quando a mensagem pede (conta, lógica,
@@ -361,6 +363,7 @@ próprio bot: `&help <comando>`. Um resumo:
 | **TimeoutMembers** | silêncio (`&silenciar`, mute da escada, modo `confirmar`) | o silêncio vira quarentena |
 | **KickMembers** / **BanMembers** | `&kick`, `&ban`, automod, lista global | punições falham |
 | **ManageMessages** | apagar (automod, `&limpar`, `&modia`) | não remove mensagens |
+| **BypassSlowmode** (Ignorar modo lento) | responder na hora em canal com modo lento | ela espera o tempo do modo lento entre uma mensagem e outra; acima de `SLOWMODE_ESPERA_MAX_S` (30 s), a resposta não sai |
 
 > ⚠️ **A mais esquecida:** `AssignRoles`. `ManageRole` cria o cargo;
 > `AssignRoles` o entrega a alguém — são permissões **diferentes**, e sem a

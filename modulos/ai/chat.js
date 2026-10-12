@@ -1007,11 +1007,16 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
       : `A pessoa está respondendo a esta mensagem do chat:\n<mensagem_citada autor="${citada.autor}">\n${citada.conteudo}\n</mensagem_citada>\nUse esse conteúdo como o assunto em questão.\n\n`)
     : "";
 
-  if (resultados?.length) {
+  if (resultados?.length && resultados.fundo) {
+    // De fundo: notas no system (juntadas no topo pelo normalizarMensagens),
+    // e a mensagem da pessoa chega limpa, como numa conversa comum.
+    messages.push({ role: "system", content: busca.instrucaoFundo(lang, hoje) + "\n" + busca.blocoReferencia(resultados) });
+    messages.push({ role: "user", content: `${blocoCitado}[${autor}]: ${pergunta}` });
+  } else if (resultados?.length) {
     const contexto = busca.blocoResultados(resultados);
     messages.push({
       role: "user",
-      content: `${blocoCitado}Resultados de busca obtidos hoje (${hoje}). Se trouxerem datas, confie nelas em vez do seu conhecimento prévio. ${resultados.fundo ? busca.instrucaoFundo(lang) : busca.instrucaoResposta(lang, !!resultados.fracos)}\n\nRESULTADOS:\n${contexto}\n\n${resultados.fundo ? `[${autor}]` : `PERGUNTA (de ${autor})`}: ${pergunta}`,
+      content: `${blocoCitado}Resultados de busca obtidos hoje (${hoje}). Se trouxerem datas, confie nelas em vez do seu conhecimento prévio. ${busca.instrucaoResposta(lang, !!resultados.fracos)}\n\nRESULTADOS:\n${contexto}\n\nPERGUNTA (de ${autor}): ${pergunta}`,
     });
   } else {
     messages.push({ role: "user", content: `${blocoCitado}[${autor}]: ${pergunta}` });
@@ -2225,7 +2230,9 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
     // modelo copiou dos resultados.
     if (resposta && !decisao.links) {
       const vistas = busca.urlsVistas(resultados ?? [], evidenciaVerif);
-      const semLinks = busca.semLinksDaBusca(resultados?.length || /"url"/.test(evidenciaVerif ?? "") ? busca.semCitacoes(resposta) : resposta, vistas);
+      let base = resultados?.length || /"url"/.test(evidenciaVerif ?? "") ? busca.semCitacoes(resposta) : resposta;
+      if (resultados?.length) base = busca.semMencaoDaBusca(base);   // "os resultados de busca mostram…" sai
+      const semLinks = busca.semLinksDaBusca(base, vistas);
       if (semLinks !== resposta) { dlog("sem pedido de busca → citações e links dos resultados tirados da resposta"); resposta = semLinks.trim() || resposta; }
     }
     const rodape = resultados?.length && decisao.links

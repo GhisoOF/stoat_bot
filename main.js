@@ -21,7 +21,7 @@ for (const canal of ["debug", "log"]) {
   };
 }
 
-import { Client, Permission } from "stoat.js";
+import { Client, Permission, Channel } from "stoat.js";
 
 import * as engine   from "./modulos/moderacao/automod-engine.js";
 import * as automodCmd from "./modulos/moderacao/automod-comandos.js";
@@ -69,6 +69,14 @@ import * as paginas   from "./modulos/core/paginas.js";
 import * as assistente from "./modulos/moderacao/assistente.js";
 import { tr }         from "./modulos/core/i18n.js";
 import { chamarApi }  from "./modulos/core/stoat-api.js";
+import * as slowmode from "./modulos/core/slowmode.js";
+
+// Modo lento do canal vale para o bot: toda mensagem espera a vez em vez de
+// falhar com InSlowmode (ver core/slowmode.js). O tempo do canal vem da API
+// (a stoat.js 7.3.6 não guarda o campo `slowmode`).
+slowmode.instalar(Channel, {
+  duracaoDo: async (canalId) => (await chamarApi(`/channels/${canalId}`, { ms: 5000 })).json?.slowmode ?? null,
+});
 import { vigiarConexao } from "./modulos/core/vida.js";
 import { comandosPorLinha, mensagemDaLinha } from "./modulos/core/lote.js";
 import * as relatorioHora from "./modulos/ferramentas/relatorio.js";
@@ -204,6 +212,12 @@ async function enviarEmbedUnico(channel, { title, description, colour = COR.info
     return await channel.sendMessage(payload);
   } catch (err) {
     console.error("[EMBED] Falha ao enviar embed:", erroStr(err));
+    // Modo lento longo demais para esperar: tentar de novo AGORA (sem capa, em
+    // texto) só bate no mesmo muro — era o "Fallback de texto também falhou".
+    if (slowmode.esperaDoSlowmode(err) !== null) {
+      console.warn("[EMBED] canal em modo lento além da espera máxima (SLOWMODE_ESPERA_MAX_S) — mensagem não enviada");
+      return;
+    }
     if (exibicao) {
       try {
         const m = await channel.sendMessage({ embeds: [base] });

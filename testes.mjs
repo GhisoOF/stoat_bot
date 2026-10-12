@@ -11195,7 +11195,8 @@ const ok = (cond, msg) => { cond ? pass++ : fail++; console.log(`  ${cond ? "✅
 // SearXNG e llama.cpp de mentira
 let buscas = [], pedidosLLM = [], resultadosSearx = [];
 const COPA = [{ title: "Argentina é campeã da Copa do Mundo de 2022", url: "https://ge.globo.com/copa-2022", content: "Argentina vence a França nos pênaltis e ganhou a copa do mundo de 2022 no Catar" }];
-const RESPOSTA = "A Argentina ganhou a Copa de 2022 [1], nos pênaltis contra a França [1]. Mais em [ge.globo.com](<https://ge.globo.com/copa-2022>) e https://ge.globo.com/outra.";
+let RESPOSTA_FIXA = null;
+const RESPOSTA_PADRAO = "A Argentina ganhou a Copa de 2022 [1], nos pênaltis contra a França [1]. Mais em [ge.globo.com](<https://ge.globo.com/copa-2022>) e https://ge.globo.com/outra.";
 globalThis.fetch = async (url, op = {}) => {
   url = String(url);
   if (url.startsWith("http://searx.teste/")) {
@@ -11209,7 +11210,7 @@ globalThis.fetch = async (url, op = {}) => {
     const sys = corpo.messages?.[0]?.content ?? "";
     let content = '{"ok":true}';
     if (corpo.response_format) content = /consultas para um buscador/.test(sys) ? '{"consultas":["campeão copa do mundo 2022"]}' : '{"buscar":false}';
-    else content = RESPOSTA;
+    else content = RESPOSTA_FIXA ?? RESPOSTA_PADRAO;
     return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content }, finish_reason: "stop" }], usage: { prompt_tokens: 10, completion_tokens: 20 } }) };
   }
   return { ok: false, status: 404, json: async () => ({}), text: async () => "" };
@@ -11236,16 +11237,32 @@ const consultaDaBusca = () => pedidosLLM.find((p) => p.response_format && /consu
 console.log("── quem decide buscar ──");
 ok(!busca.valeBuscarDeFundo("oi") && !busca.valeBuscarDeFundo("valeu judy") && !busca.valeBuscarDeFundo("kkkkk") && !busca.valeBuscarDeFundo("tudo bem?"), "mensagem só social não vai ao buscador");
 ok(!busca.valeBuscarDeFundo("quanto é 263857 * 3?"), "  → conta também não (é da calculadora)");
-ok(busca.valeBuscarDeFundo("quem é Pelé?") && busca.valeBuscarDeFundo("eu gosto de jogar minecraft") && busca.valeBuscarDeFundo("quem ganhou a copa de 2022"), "★ mensagem com assunto vai — sem precisar de \"pesquisa\"");
+ok(busca.valeBuscarDeFundo("quem é Pelé?") && busca.valeBuscarDeFundo("qual a capital da frança") && busca.valeBuscarDeFundo("quem ganhou a copa de 2022"), "★ mensagem com assunto vai — sem precisar de \"pesquisa\"");
+// 2ª rodada (print de 12/10): "como está o servidor atualmente?" foi ao buscador
+// e voltou notícia de reajuste de servidor público, contada como o estado do
+// servidor do Stoat. Sem pergunta do mundo, sem busca.
+ok(!busca.valeBuscarDeFundo("tudo certo sim, como está o servidor atualmente?"), "★ \"como está o servidor?\" é sobre a conversa — não vai ao buscador (voltava reajuste de servidor público)");
+ok(!busca.valeBuscarDeFundo("dê bom dia a todos") && !busca.valeBuscarDeFundo("Dar boa noite") && !busca.valeBuscarDeFundo("eu gosto de jogar minecraft") && !busca.valeBuscarDeFundo("tudo bem, Ditador?"), "★ pedido, afirmação e papo também não");
+ok(busca.valeBuscarDeFundo("você sabe quem é o Pelé?") && busca.valeBuscarDeFundo("quanto custa uma RTX 5090?"), "  → pergunta do mundo continua indo, mesmo com \"você\" no meio");
 
 console.log("\n── sem pedido de busca: pesquisa em silêncio ──");
 resultadosSearx = COPA;
 let r = await diz("quem ganhou a copa de 2022");
 ok(buscas.length > 0, `★ pesquisou sem ninguém pedir (consulta: ${buscas.join(" · ")})`);
-ok(/NÃO pediu busca/.test(promptFinal()) && /Argentina vence a França/.test(promptFinal()), "  → os resultados entram no prompt, com a instrução de usar só se ajudar");
+{
+  const msgs = pedidosLLM.filter((p) => !p.response_format).at(0)?.messages ?? [];
+  const sys = msgs[0]?.content ?? "", fala = msgs.at(-1)?.content ?? "";
+  ok(/NOTAS DE REFERÊNCIA/.test(sys) && /Argentina vence a França/.test(sys) && !/RESULTADOS|\[1\]/.test(fala), "★ de fundo, o que a busca trouxe vai como NOTAS no system — a fala da pessoa chega limpa, sem \"RESULTADOS: [1]\"");
+}
 ok(!/\[\d\]/.test(r) && !/Fontes|busquei/.test(r), `★ resposta sem [n] e sem rodapé de fontes (${r.slice(0, 80)})`);
 ok(!/ge\.globo\.com/.test(r) && /Argentina ganhou a Copa de 2022/.test(r) && !/Mais em/.test(r), "★ e sem os links que o modelo copiou dos resultados (nem o \"Mais em\" que os apresentava) — o texto fica");
 ok(!consultaDaBusca() && buscas[0] === busca.limparConsulta("quem ganhou a copa de 2022"), "★ a busca de fundo nem chama o modelo para escrever a consulta — o código limpa a mensagem");
+
+console.log("\n── a resposta não conta da busca ──");
+RESPOSTA_FIXA = "Os resultados de busca mostram que a Argentina ganhou a Copa de 2022 [1].";
+r = await diz("quem ganhou a copa de 2022");
+ok(/^A Argentina ganhou a Copa de 2022/.test(r) && !/resultado|busca/i.test(r), `★ "os resultados de busca mostram que…" sai, o fato fica (${r.slice(0, 60)})`);
+RESPOSTA_FIXA = null;
 
 console.log("\n── com pedido de busca: links ──");
 r = await diz("pesquisa quem ganhou a copa de 2022");
@@ -11263,8 +11280,8 @@ ok(buscas.length === 0, "  → nem conta");
 
 console.log("\n── resultado que não tem a ver ──");
 resultadosSearx = [{ title: "G1 — últimas notícias", url: "https://g1.globo.com/", content: "política e economia" }];
-r = await diz("eu gosto de jogar minecraft");
-ok(buscas.length > 0 && !/RESULTADOS:/.test(promptFinal()), "★ de fundo e nada bate com a mensagem: nada entra no prompt (senão ela fala da manchete)");
+r = await diz("qual é o melhor bioma do minecraft?");
+ok(buscas.length > 0 && !/NOTAS DE REFERÊNCIA|RESULTADOS:/.test(promptFinal()), "★ de fundo e nada bate com a mensagem: nada entra no prompt (senão ela fala da manchete)");
 
 console.log("\n── BUSCA_SEMPRE=0 ──");
 process.env.BUSCA_SEMPRE = "0";
@@ -11366,6 +11383,87 @@ console.log("\n── llama-swap: o mesmo modelo nos dois papéis ──");
 }
 
 console.log(`\nLLM (12 out): ${pass} ok, ${fail} falha(s)`);
+process.exit(fail ? 1 : 0);
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+// slowmode-12out  (12 out 2026) — "tem horas falhando em enviar o comando"
+// ════════════════════════════════════════════════════════════════════════════
+SUITES["slowmode-12out"] = async () => {
+const __m0 = await import("node:fs"); const fs = __m0.default;
+// Log real: `&fuso add França` e `&fuso` seguidos num canal com modo lento →
+// [EMBED] Falha ao enviar embed: {"type":"InSlowmode","retry_after":1,…} e o
+// fallback de texto, tentado na mesma hora, também falhou. O Stoat aplica o
+// modo lento ao bot (sem a permissão BypassSlowmode); retry_after é em segundos.
+process.env.BOT_TOKEN = "tok";
+process.env.DB_PATH = "/tmp/slowmode-12out.db";
+process.env.CONFIG_PATH = "/tmp/slowmode-12out-cfg.json";
+for (const f of ["/tmp/slowmode-12out.db", "/tmp/slowmode-12out-cfg.json"]) fs.rmSync(f, { force: true });
+let pass = 0, fail = 0;
+const ok = (cond, msg) => { cond ? pass++ : fail++; console.log(`  ${cond ? "✅" : "❌"} ${msg}`); };
+const ERRO_REAL = '{"type":"InSlowmode","retry_after":1,"location":"crates/delta/src/routes/channels/message_send.rs:116:40"}';
+const sm = await import("./modulos/core/slowmode.js");
+
+console.log("── reconhecer o erro ──");
+ok(sm.esperaDoSlowmode(ERRO_REAL) === 1, "★ o corpo cru do log (string) → esperar 1 s");
+ok(sm.esperaDoSlowmode({ type: "InSlowmode", retry_after: 3 }) === 3 && sm.esperaDoSlowmode(new Error(ERRO_REAL)) === 1, "  → objeto e Error também");
+ok(sm.esperaDoSlowmode('{"type":"MissingPermission"}') === null && sm.esperaDoSlowmode("x") === null, "  → outro erro não é modo lento");
+
+console.log("\n── esperar a vez em vez de perder a mensagem ──");
+{
+  sm._zerar();
+  const lento = (s) => JSON.stringify({ type: "InSlowmode", retry_after: s });
+  let ultimo = 0; const enviados = []; const DUR = 0.3;
+  class CanalFalso {
+    constructor(id) { this.id = id; }
+    async sendMessage(data) {
+      const agora = Date.now();
+      if (agora - ultimo < DUR * 1000) throw lento(Math.max(0.05, (DUR * 1000 - (agora - ultimo)) / 1000));
+      ultimo = agora; enviados.push(typeof data === "string" ? data : data.content); return { id: `M${enviados.length}` };
+    }
+  }
+  let perguntas = 0;
+  sm.instalar(CanalFalso, { duracaoDo: async () => { perguntas++; return DUR; }, log: () => {} });
+  const c = new CanalFalso("C-lento");
+  await c.sendMessage("um");
+  const t0 = Date.now();
+  const r = await c.sendMessage("dois");
+  ok(r?.id && enviados.join(",") === "um,dois", `★ a 2ª mensagem em modo lento espera e sai (antes: perdida) — ${Date.now() - t0} ms`);
+  ok(perguntas === 1 && sm._estado("C-lento")?.dur === DUR, "  → o tempo do canal vem da API, uma vez só");
+  const t1 = Date.now();
+  await Promise.all(["três", "quatro", "cinco"].map((x) => c.sendMessage(x)));
+  ok(enviados.slice(2).join(",") === "três,quatro,cinco", `★ rajada no canal lento: todas saem, na ordem, espaçadas (${Date.now() - t1} ms)`);
+  const outro = new CanalFalso("C-normal");
+  ultimo = 0; const t2 = Date.now(); await outro.sendMessage("livre");
+  ok(Date.now() - t2 < 50, "  → canal sem modo lento não espera nada");
+}
+{
+  sm._zerar();
+  process.env.SLOWMODE_ESPERA_MAX_S = "0.2";
+  class CanalMuitoLento { constructor() { this.id = "C-hora"; this.n = 0; } async sendMessage() { this.n++; throw JSON.stringify({ type: "InSlowmode", retry_after: 3600 }); } }
+  sm.instalar(CanalMuitoLento, { duracaoDo: async () => 3600, log: () => {} });
+  const c = new CanalMuitoLento();
+  let erro = null; const t0 = Date.now();
+  try { await c.sendMessage("x"); } catch (e) { erro = e; }
+  ok(sm.esperaDoSlowmode(erro) === 3600 && c.n === 1 && Date.now() - t0 < 1000, "★ modo lento de 1 h: não fica pendurada esperando — o erro sobe na hora");
+  delete process.env.SLOWMODE_ESPERA_MAX_S;
+}
+
+console.log("\n── no bot: sem fallback que bate no mesmo muro ──");
+await import("./main.js");
+const c = globalThis.__client;
+await c.emitAll("ready");
+const envios = [];
+const C1 = { id: "C1", serverId: "S1", sendMessage: async (p) => { envios.push(p); throw JSON.stringify({ type: "InSlowmode", retry_after: 999 }); }, fetchMessages: async () => [] };
+const S1 = { id: "S1", ownerId: "ADM", name: "S1", roles: new Map(), channels: [C1], channelIds: new Set(["C1"]), member: { roles: [] }, havePermission: () => true, fetchMember: async () => null, fetchMembers: async () => ({ members: [] }), fetchBans: async () => [] };
+c.servers.set("S1", S1); c.channels.set("C1", C1);
+await c.emitAll("messageCreate", { authorId: "ADM", content: "&fuso", serverId: "S1", server: S1, channel: C1, channelId: "C1", mentionIds: [], createdAt: new Date(), author: { username: "ADM" }, member: { roles: [] } });
+await new Promise((r) => setTimeout(r, 50));
+ok(envios.length >= 1 && envios.every((p) => typeof p !== "string") && envios.some((p) => /Fusos horários/.test(JSON.stringify(p))), `★ InSlowmode além da espera: uma tentativa por mensagem, sem o "fallback de texto" que falhava igual (${envios.length} envio(s), ${envios.filter((p) => typeof p === "string").length} em texto)`);
+const fonte = fs.readFileSync("./main.js", "utf8");
+ok(/slowmode\.instalar\(Channel/.test(fonte), "  → o embrulho está instalado no Channel da stoat.js (vale para todo envio)");
+
+console.log(`\nSLOWMODE (12 out): ${pass} ok, ${fail} falha(s)`);
 process.exit(fail ? 1 : 0);
 };
 

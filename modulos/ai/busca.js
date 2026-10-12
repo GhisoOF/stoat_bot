@@ -283,21 +283,58 @@ export function termosDeAssunto(texto) {
   return termosDe(limpo).filter((w) => !SOCIAL.has(w) && !/^k{2,}$|^(?:ha){2,}h?$|^(?:rs){2,}$|^\d+$/.test(w));
 }
 
+// 12 out 2026, 2ª rodada — "está misturando a pesquisa com a conversa":
+// "como está o servidor atualmente?" foi ao buscador, voltou notícia de
+// reajuste de SERVIDOR PÚBLICO e a Judy contou isso como estado do servidor do
+// Stoat. A busca de fundo agora só vai quando a mensagem PEDE informação do
+// mundo: pergunta (? ou interrogativo) que não é sobre a própria conversa
+// (servidor, canal, você, a gente…) — ou que cita um nome próprio, ano ou
+// termo entre aspas. Afirmação ("eu gosto de minecraft"), pedido ("dá boa
+// noite") e papo ("tudo bem?") respondem sem busca.
+const PEDE_INFO = /\?|\b(quem|qual|quais|quando|onde|quant[oa]s?|por ?que|o que (?:é|e|foi|significa|aconteceu)|como funciona|existe|é verdade|what|who|when|where|which|how (?:many|much|does))\b/i;
+const SOBRE_A_CONVERSA = /\b(servidor|server|chat|canal|grupo|aqui|a[ií]|voc[eê]s?|vcs?|tu|teu|tua|seu|sua|judy|gente|galera|pessoal|n[oó]s|eu|meu|minha|comigo|contigo|you|your|we|our|here)\b/i;
+const PAPO = /\b(tudo (?:bem|bom|certo|tranquilo)|como (?:vai|vc|voc[eê]|tu)|e a[ií]|beleza|blz|bom dia|boa (?:tarde|noite)|how are you|what'?s up)\b/i;
+const ENTIDADE = new RegExp(`${NOME_PROPRIO.source}|\\b(1[89]|20)\\d\\d\\b|["“][^"”]{2,40}["”]`);
+
 export function valeBuscarDeFundo(pergunta) {
-  const t = String(pergunta ?? "");
+  const t = String(pergunta ?? "").replace(/<@[^>]+>/g, " ").replace(/^\s*judy\b[,:]?\s*/i, "");
   if (!t.trim()) return false;
   if (/\[(imagem\(ns\) anexada|attached image)/i.test(t)) return false;
+  if (PAPO.test(t)) return false;
+  if (!PEDE_INFO.test(t)) return false;                 // afirmação ou pedido: nada a procurar
   const termos = termosDeAssunto(t);
-  if (termos.length >= 2) return true;
-  // um termo só vale quando é pergunta ou nome próprio ("quem é Pelé?")
-  return termos.length === 1 && (/\?/.test(t) || /\b(quem|qual|quando|onde|o que|what|who|when|where)\b/i.test(t) || NOME_PROPRIO.test(t));
+  if (!termos.length) return false;
+  if (SOBRE_A_CONVERSA.test(t) && !ENTIDADE.test(t)) return false;   // "como está o servidor?"
+  return termos.length >= 2 || ENTIDADE.test(t) || /\b(quem|qual|o que|who|what)\b/i.test(t);
+}
+
+// Busca de fundo entra como NOTAS no system, longe da fala da pessoa, sem
+// número, domínio nem a palavra "resultado" — com "RESULTADOS: [1]…" colado na
+// mensagem, o modelo pequeno respondia "os resultados de busca mostram…".
+export function blocoReferencia(resultados, max = 3) {
+  return (resultados ?? []).slice(0, max)
+    .map((r) => `- ${r.titulo}${r.data ? ` (${String(r.data).slice(0, 10)})` : ""}: ${r.trecho || ""}`.trim())
+    .join("\n");
+}
+
+// Frases que contam da busca ("os resultados de busca mostram que…",
+// "segundo a pesquisa,", "pesquisei e…") saem; o fato fica.
+export function semMencaoDaBusca(texto) {
+  let t = foraDoCodigo(texto, (x) => x
+    .replace(/\b(?:e |mas )?(?:os|pelos|nos|segundo os|de acordo com os|conforme os|pelo que vi n[oa]s)\s+(?:resultados?|links?|sites?|fontes?)(?:\s+d[ae]\s+(?:busca|pesquisa|internet))?(?:\s+(?:que\s+)?(?:encontrei|achei|vi))?(?:\s+(?:mostram|indicam|sugerem|apontam|trazem|dizem|falam(?: de)?|citam|mencionam))?(?:\s+que)?\s*[,:]?\s*/gi, (m) => (/^(?:e|mas) /i.test(m) ? m.match(/^(?:e|mas) /i)[0] : ""))
+    .replace(/\b(?:segundo|de acordo com|conforme|pelo que vi n)(?:\s+(?:a|minha|uma|essa))?\s+(?:busca|pesquisa)(?:\s+r[aá]pida)?\s*[,:]?\s*/gi, "")
+    .replace(/\b(?:pesquisei|busquei|procurei|dei uma olhada)(?:\s+(?:aqui|rapidinho|na internet|na web|online))*(?:\s+e)?\s*[,:]?\s*/gi, "")
+    .replace(/\b(?:according to (?:the |my )?(?:search )?(?:results|search)|(?:the )?search results (?:show|suggest|indicate|say)(?: that)?|I (?:searched|looked it up)(?: and)?)\s*[,:]?\s*/gi, ""));
+  // começo de frase que ficou em minúscula volta a ser maiúscula
+  t = t.replace(/(^|[.!?]\s+)([a-zà-ÿ])/g, (_, a, b) => a + b.toUpperCase());
+  return t.replace(/[ \t]{2,}/g, " ").replace(/\s+([,.;:!?])/g, "$1").trim();
 }
 
 // Instrução da busca de fundo: ajuda se servir, some se não servir.
-export function instrucaoFundo(lang = "pt") {
+export function instrucaoFundo(lang = "pt", hoje = "") {
   return lang === "en"
-    ? "Before answering, a web search about the message was run in the background (the person did NOT ask for a search). Use the results only if they help you answer accurately — facts, dates, names, current numbers; if they have nothing to do with the message, ignore them and answer normally, as in a conversation. Don't mention that you searched, don't cite [n], sources or sites, and don't put links."
-    : "Antes de responder, foi feita por conta própria uma busca na internet sobre a mensagem (a pessoa NÃO pediu busca). Use os resultados só se ajudarem a responder com precisão — fatos, datas, nomes, números atuais; se não tiverem a ver com a mensagem, ignore-os e responda normalmente, como numa conversa. Não mencione que pesquisou, não cite [n], fontes nem sites, e não coloque links.";
+    ? `REFERENCE NOTES (background knowledge${hoje ? ` as of ${hoje}` : ""}; may be unrelated to the conversation). Use a note only if the person is asking about exactly that subject; otherwise ignore them completely. Never mention notes, results, searches, sources or sites — talk as if you simply knew it.`
+    : `NOTAS DE REFERÊNCIA (conhecimento de apoio${hoje ? ` de ${hoje}` : ""}; podem não ter relação com a conversa). Use uma nota só se a pessoa estiver perguntando exatamente sobre aquele assunto; senão ignore todas. Nunca fale de notas, resultados, busca, pesquisa, fontes ou sites — fale como quem simplesmente sabe.`;
 }
 
 // Protege blocos de código enquanto `fn` mexe no texto.

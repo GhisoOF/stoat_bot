@@ -22,6 +22,7 @@
 // buffer (`stop()`) antes de tocar a próxima.
 
 import { spawn } from "node:child_process";
+import fs from "node:fs";
 import * as voz from "./voz.js";
 
 const YTDLP = process.env.YTDLP_BIN || "yt-dlp";
@@ -31,6 +32,12 @@ const CLIENTES_YT = ["--extractor-args", `youtube:player_client=${process.env.MU
 // Sem o extrator genérico: mesmo um link do YouTube que redirecione para
 // fora (youtube.com/redirect?q=…) não faz o yt-dlp baixar outro site.
 const SEM_GENERICO = ["--ies", "default,-generic"];
+// Vídeo com restrição de idade só toca logado: o YouTube responde "Sign in to
+// confirm your age". Com um cookies.txt de uma conta (de preferência uma
+// conta só para isso) em MUSICA_COOKIES, o yt-dlp entra logado. Sem ele, a
+// Judy procura outra versão da mesma música (12 out 2026).
+const COOKIES = process.env.MUSICA_COOKIES || "";
+const comCookies = () => (COOKIES && fs.existsSync(COOKIES) ? ["--cookies", COOKIES] : []);
 const DUCK = Math.min(1, Math.max(0.05, Number(process.env.MUSICA_DUCK || 0.2)));
 const MAX_FILA = Number(process.env.MUSICA_MAX_FILA || 200);
 const SPOTIFY_ID = process.env.SPOTIFY_ID || "";
@@ -49,6 +56,7 @@ const deps = {
   criarPlayer: (canalVoz) => voz.criarPlayerExtra(canalVoz, "musica"),
   playerDe: (canalVoz) => voz.playerExtraDe(canalVoz, "musica"),
   esperaCorteMs: 1500,
+  esperaInicioMs: Number(process.env.MUSICA_ESPERA_INICIO_MS || 20_000),   // até o áudio começar
 };
 export function _trocarDependencias(novas) { Object.assign(deps, novas); }
 
@@ -102,7 +110,7 @@ export function montarBusca(nome, artistas) {
 // ── yt-dlp: metadados e stream ──────────────────────────────────────────────
 function ytdlpJson(alvo, { playlistOk = true } = {}) {
   return new Promise((res, rej) => {
-    const args = ["-J", "--no-warnings", ...SEM_GENERICO, ...CLIENTES_YT, playlistOk ? "--flat-playlist" : "--no-playlist", alvo];
+    const args = ["-J", "--no-warnings", ...SEM_GENERICO, ...comCookies(), ...CLIENTES_YT, playlistOk ? "--flat-playlist" : "--no-playlist", alvo];
     const p = deps.spawn(YTDLP, args, { stdio: ["ignore", "pipe", "pipe"] });
     let fora = "", erro = "";
     p.stdout.on("data", (d) => (fora += d));
@@ -241,23 +249,116 @@ async function cortarFaixa(st, media) {
   try { media.stop?.(); } catch {}   // esvazia o áudio já decodificado (e zera o volume do revoice)
 }
 
+// Por que um vídeo não tocou, em português de gente (a última linha do yt-dlp
+// é para quem lê log). `outra`: vale procurar outra versão da mesma música.
+export function motivoDaFalha(erroTxt) {
+  const t = String(erroTxt ?? "");
+  if (/confirm your age|age[- ]restricted|inappropriate for some users/i.test(t)) return { id: "idade", texto: "restrição de idade no YouTube" };
+  if (/confirm you.?re not a bot/i.test(t)) return { id: "robo", texto: "o YouTube pediu verificação anti-robô" };
+  if (/not available in your country|geo.?restrict|blocked it in your country/i.test(t)) return { id: "regiao", texto: "bloqueado na região" };
+  if (/video unavailable|private video|has been removed|is not available|members-only|premieres in/i.test(t)) return { id: "indisponivel", texto: "vídeo indisponível" };
+  const ultima = t.trim().split("\n").pop()?.replace(/^ERROR:\s*(\[[^\]]+\]\s*)?([\w-]{6,}:\s*)?/i, "").slice(0, 120);
+  return { id: "outro", texto: ultima || "o vídeo não abriu" };
+}
+
+// Outras versões da mesma música: os próximos resultados do YouTube com o
+// mesmo título (outro upload quase sempre não tem a restrição) e o SoundCloud.
+const idDoVideo = (url) => String(url ?? "").match(/(?:v=|youtu\.be\/|shorts\/)([\w-]{11})/)?.[1] ?? url;
+async function alternativas(item) {
+  const termo = item.busca || item.titulo;
+  const lista = [];
+  try {
+    const j = await ytdlpJson(`ytsearch5:${termo}`);
+    for (const e of j.entries ?? []) {
+      const it = itemDeEntrada(e);
+      if (it.url && idDoVideo(it.url) !== idDoVideo(item.url) && !lista.some((x) => idDoVideo(x.url) === idDoVideo(it.url))) lista.push(it);
+    }
+  } catch (e) { dbg(`alternativas no YouTube falharam: ${e.message}`); }
+  lista.splice(2);
+  try {
+    const j = await ytdlpJson(`scsearch1:${termo}`);
+    const e = j.entries?.[0];
+    if (e) lista.push(itemDeEntrada(e));
+  } catch (e) { dbg(`alternativa no SoundCloud falhou: ${e.message}`); }
+  return lista;
+}
+
+// Toca UM item e espera o áudio começar DE VERDADE (o "startplay" do revoice)
+// ou o yt-dlp morrer. Antes a Judy dizia "▶ Tocando" assim que o processo
+// nascia; quando o YouTube recusava o vídeo, ela pulava calada e a call
+// ficava muda.
+function tentarTocar(canalVoz, st, g, media, item) {
+  return new Promise((resolver) => {
+    let fase = "esperando";   // → "tocando" | "acabou"
+    let fimDisparado = false;
+    let erroTxt = "";
+    const proc = deps.spawn(YTDLP, ["-f", "bestaudio/best", ...SEM_GENERICO, ...comCookies(), ...CLIENTES_YT, "--no-playlist", "-o", "-", "--quiet", "--no-warnings", item.url],
+      { stdio: ["ignore", "pipe", "pipe"] });
+    st.proc = proc;
+    const desfecho = (r) => {
+      if (fase !== "esperando") return;
+      fase = r.ok ? "tocando" : "acabou";
+      clearTimeout(timer);
+      media.off?.("startplay", comecou);
+      if (r.ok) log(`${canalVoz}: ▶ ${item.titulo}`);
+      resolver(r);
+    };
+    const comecou = () => desfecho({ ok: true });
+    // demora sem erro (download lento): assume que vai tocar
+    const timer = setTimeout(() => desfecho({ ok: true }), deps.esperaInicioMs);
+    proc.stderr?.on?.("data", (d) => (erroTxt += d));
+    proc.on("error", (e) => { erroTxt += `\n${e.message}`; desfecho({ ok: false, erro: erroTxt }); });
+
+    const fim = () => {
+      if (g !== st.geracao) return desfecho({ ok: false, cortada: true });
+      if (fase === "esperando") return desfecho({ ok: false, erro: erroTxt });   // acabou antes de começar
+      if (fase !== "tocando" || fimDisparado) return;   // tentativa que já falhou não puxa nada
+      fimDisparado = true;
+      dbg(`${canalVoz}: fim de "${item.titulo}"`);
+      tocarProxima(canalVoz).catch((e) => log(`próxima falhou: ${e.message}`));
+    };
+    media.on?.("finish", fim);
+    media.on?.("end", fim);
+    media.once?.("startplay", comecou);
+    st.soltar = () => {
+      media.off?.("finish", fim); media.off?.("end", fim); media.off?.("startplay", comecou);
+      desfecho({ ok: false, cortada: true });
+    };
+    proc.on("close", (c) => {
+      if (g !== st.geracao) return desfecho({ ok: false, cortada: true });
+      if (c === 0) return;
+      if (fase === "esperando") return desfecho({ ok: false, erro: erroTxt || `yt-dlp saiu com ${c}` });
+      if (fase === "tocando" && !fimDisparado) {
+        log(`stream de "${item.titulo}" caiu (${motivoDaFalha(erroTxt).texto}) — pulando`);
+        setTimeout(fim, 500);
+      }
+    });
+
+    try { media.setVolume?.(st.volume); } catch {}   // depois do corte: o stop() do revoice zera o volume
+    media.playStream(proc.stdout);
+  });
+}
+
+// Devolve o que aconteceu, para a resposta do comando:
+// { item } tocando · { trocada: {de, motivo} } outra versão · { falhou: {titulo, motivo}, depois } não deu
 async function tocarProxima(canalVoz) {
   const st = estadoDe(canalVoz);
-  if (st.trocando) return;
+  if (st.trocando) return { ocupado: true };
   st.trocando = true;
   const g = ++st.geracao;
+  const saida = { item: null };
   try {
     let item = null;
-    if (st.loop === "faixa" && st.atual) item = st.atual;
+    if (st.loop === "faixa" && st.atual && !st.atual.falhou) item = st.atual;
     else {
-      if (st.loop === "fila" && st.atual) st.fila.push(st.atual);
+      if (st.loop === "fila" && st.atual && !st.atual.falhou) st.fila.push(st.atual);
       item = st.fila.shift() ?? null;
     }
     st.atual = item;
     if (!item) {
       dbg(`${canalVoz}: fila acabou`);
       await cortarFaixa(st, deps.playerDe(canalVoz));
-      return;
+      return saida;
     }
 
     if (!item.url && item.busca) {   // faixa do Spotify resolvida na hora
@@ -268,46 +369,59 @@ async function tocarProxima(canalVoz) {
         Object.assign(item, itemDeEntrada(e), { titulo: item.titulo });
       } catch (e) {
         log(`não resolvi "${item.busca}" (${e.message}) — pulando`);
+        item.falhou = true;
         st.trocando = false;
-        return tocarProxima(canalVoz);
+        return { falhou: { titulo: item.titulo, motivo: "não achei no YouTube" }, depois: await tocarProxima(canalVoz) };
       }
     }
 
     const media = await deps.criarPlayer(canalVoz);
     await cortarFaixa(st, media);
-    if (g !== st.geracao) return;   // outro skip/parar chegou enquanto cortava
+    if (g !== st.geracao) return saida;   // outro skip/parar chegou enquanto cortava
 
-    const proc = deps.spawn(YTDLP, ["-f", "bestaudio/best", ...SEM_GENERICO, ...CLIENTES_YT, "--no-playlist", "-o", "-", "--quiet", "--no-warnings", item.url],
-      { stdio: ["ignore", "pipe", "pipe"] });
-    st.proc = proc;
-    let erroTxt = "";
-    proc.stderr?.on?.("data", (d) => (erroTxt += d));
-    proc.on("error", (e) => log(`yt-dlp falhou: ${e.message}`));
-
-    let fimDisparado = false;
-    const fim = () => {
-      // evento de faixa que já saiu (cortada por skip/parar): não puxa nada
-      if (fimDisparado || g !== st.geracao) return;
-      fimDisparado = true;
-      dbg(`${canalVoz}: fim de "${item.titulo}"`);
-      tocarProxima(canalVoz).catch((e) => log(`próxima falhou: ${e.message}`));
-    };
-    media.on?.("finish", fim);
-    media.on?.("end", fim);
-    st.soltar = () => { media.off?.("finish", fim); media.off?.("end", fim); };
-    proc.on("close", (c) => {
-      if (c !== 0 && !fimDisparado && g === st.geracao) {
-        log(`stream de "${item.titulo}" caiu (${erroTxt.trim().split("\n").pop() || c}) — pulando`);
-        setTimeout(fim, 500);
+    let r = await tentarTocar(canalVoz, st, g, media, item);
+    if (!r.ok && !r.cortada && g === st.geracao) {
+      const motivo = motivoDaFalha(r.erro);
+      log(`"${item.titulo}" não tocou (${motivo.texto}) — procurando outra versão`);
+      for (const alt of await alternativas(item)) {
+        if (g !== st.geracao) return saida;
+        await cortarFaixa(st, media);
+        r = await tentarTocar(canalVoz, st, g, media, alt);
+        if (r.ok) {
+          saida.trocada = { de: item.titulo, motivo: motivo.texto };
+          Object.assign(item, { url: alt.url, titulo: alt.titulo, duracao: alt.duracao ?? item.duracao, fonte: alt.fonte });
+          break;
+        }
+        if (r.cortada) return saida;
       }
-    });
-
-    try { media.setVolume?.(st.volume); } catch {}   // depois do corte: o stop() do revoice zera o volume
-    media.playStream(proc.stdout);
-    log(`${canalVoz}: ▶ ${item.titulo}`);
+      if (!r.ok && !r.cortada) {
+        item.falhou = true;
+        st.ultimoAviso = { titulo: item.titulo, motivo: motivo.texto, idade: motivo.id === "idade", quando: Date.now() };
+        log(`"${item.titulo}" não tocou em nenhuma versão (${motivo.texto})`);
+        await cortarFaixa(st, media);
+        st.trocando = false;
+        return { falhou: { titulo: item.titulo, motivo: motivo.texto, idade: motivo.id === "idade" }, depois: await tocarProxima(canalVoz) };
+      }
+    }
+    saida.item = r.ok ? item : null;
+    return saida;
   } finally {
     st.trocando = false;
   }
+}
+
+// Frase para a resposta do comando a partir do que o tocarProxima devolveu.
+function resumo(r, st) {
+  const partes = [];
+  let x = r;
+  while (x?.falhou) {
+    partes.push(`⚠️ Não consegui tocar **${x.falhou.titulo}** — ${x.falhou.motivo}, e nenhuma outra versão funcionou.`
+      + (x.falhou.idade && !comCookies().length ? " _(vídeo com restrição de idade só toca com `MUSICA_COOKIES` configurado)_" : ""));
+    x = x.depois;
+  }
+  if (x?.trocada) partes.push(`▶ Tocando **${st.atual?.titulo}**${duracaoTxt(st.atual?.duracao)} — a versão pedida (**${x.trocada.de}**) tem ${x.trocada.motivo}, então achei outra.`);
+  else if (st.atual && x?.item) partes.push(`▶ Tocando **${st.atual.titulo}**${duracaoTxt(st.atual.duracao)}.`);
+  return { texto: partes.join("\n"), tocando: !!(st.atual && (x?.item || x?.trocada)), falhou: partes.length > 0 && !(st.atual && (x?.item || x?.trocada)) };
 }
 
 function pararStream(st) {
@@ -323,15 +437,13 @@ export async function tocar(canalVoz, consulta) {
   const entram = itens.slice(0, sobra);
   st.fila.push(...entram);
   const tocandoAgora = !st.atual;
-  if (tocandoAgora) await tocarProxima(canalVoz);
-  if (rotulo) return { mensagem: `${entram.length} faixa(s) de **${rotulo}** na fila${tocandoAgora ? " — começando" : ""}.`, itens: entram.length };
+  const r = tocandoAgora ? resumo(await tocarProxima(canalVoz), st) : null;
+  if (rotulo) return { mensagem: `${entram.length} faixa(s) de **${rotulo}** na fila.${r?.texto ? `\n${r.texto}` : ""}`, itens: entram.length };
   const it = entram[0];
-  return {
-    mensagem: tocandoAgora
-      ? `▶ Tocando **${it.titulo}**${duracaoTxt(it.duracao)}.`
-      : `➕ **${it.titulo}**${duracaoTxt(it.duracao)} na fila (posição ${st.fila.length}).`,
-    itens: entram.length,
-  };
+  if (!tocandoAgora) return { mensagem: `➕ **${it.titulo}**${duracaoTxt(it.duracao)} na fila (posição ${st.fila.length}).`, itens: entram.length };
+  // nada tocou (nem esta, nem outra versão, nem o resto da fila): é erro, não "tocando"
+  if (r.falhou) return { erro: r.texto.replace(/^⚠️ /, ""), itens: entram.length };
+  return { mensagem: r.texto, itens: entram.length };
 }
 
 function duracaoTxt(s) {
@@ -363,8 +475,9 @@ export async function pular(canalVoz) {
   if (st.loop !== "fila") st.atual = null;
   // um skip no meio de uma troca (ex.: resolvendo faixa do Spotify) espera ela acabar
   for (let i = 0; st.trocando && i < 100; i++) await new Promise((r) => setTimeout(r, 50));
-  await tocarProxima(canalVoz);
-  return { mensagem: `⏭ Pulei **${era}**.${st.atual ? ` Agora: **${st.atual.titulo}**.` : " Fila vazia."}` };
+  const r = resumo(await tocarProxima(canalVoz), st);
+  const agora = r.tocando ? `\n${r.texto}` : `${r.texto ? `\n${r.texto}` : ""}\nFila vazia.`;
+  return { mensagem: `⏭ Pulei **${era}**.${agora}` };
 }
 
 export async function parar(canalVoz) {
@@ -384,6 +497,9 @@ export function fila(canalVoz) {
     total: st.fila.length,
     loop: st.loop,
     volume: st.volume,
+    // a última que não tocou (nos últimos 15 min): quem pede `&musica fila` vê o porquê
+    ultimoAviso: st.ultimoAviso && Date.now() - st.ultimoAviso.quando < 15 * 60_000
+      ? { titulo: st.ultimoAviso.titulo, motivo: st.ultimoAviso.motivo } : null,
   };
 }
 

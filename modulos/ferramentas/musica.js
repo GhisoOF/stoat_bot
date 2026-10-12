@@ -82,7 +82,7 @@ export async function cmdMusica(msg, args, ctx) {
   if (sub === "fila") {
     const r = await pedirVoz(`/musica/fila?canal=${encodeURIComponent(canal)}`);
     if (r.erro) return ctx.sendEmbed(msg.channel, { title: "🎵", description: `⚠️ ${r.erro}`, colour: ctx.COR.aviso });
-    if (!r.atual && !r.total) {
+    if (!r.atual && !r.total && !r.ultimoAviso) {
       return ctx.sendEmbed(msg.channel, {
         title: en ? "🎵 Queue" : "🎵 Fila",
         description: en ? "Nothing playing. `&musica <link or name>` to start." : "Nada tocando. `&musica <link ou nome>` para começar.",
@@ -94,6 +94,7 @@ export async function cmdMusica(msg, args, ctx) {
     for (const i of r.fila ?? []) linhas.push(`\`${i.n}.\` ${i.titulo}${duracaoTxt(i.duracao)}`);
     if (r.total > (r.fila?.length ?? 0)) linhas.push(en ? `…and ${r.total - r.fila.length} more` : `…e mais ${r.total - r.fila.length}`);
     if (r.loop && r.loop !== "nao") linhas.push(`🔁 loop: ${r.loop}`);
+    if (r.ultimoAviso) linhas.push(en ? `⚠️ Didn't play: **${r.ultimoAviso.titulo}** — ${r.ultimoAviso.motivo}` : `⚠️ Não tocou: **${r.ultimoAviso.titulo}** — ${r.ultimoAviso.motivo}`);
     return ctx.sendEmbed(msg.channel, { title: en ? "🎵 Queue" : "🎵 Fila", description: linhas.join("\n"), colour: ctx.COR.info });
   }
 

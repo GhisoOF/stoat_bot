@@ -10325,7 +10325,7 @@ const espera = (ms = 30) => new Promise((r) => setTimeout(r, ms));
 
 class PlayerFalso extends EventEmitter {
   constructor() { super(); this.iniciar(); this.publicacoes = 0; }
-  iniciar() { this.chunks = []; this.paused = false; this.ffmpegFinished = false; this.fProc = null; this.volume = 1; }
+  iniciar() { this.chunks = []; this.paused = false; this.ffmpegFinished = false; this.fProc = null; this.volume = 1; this.comecou = false; }
   pause() { this.paused = true; }
   resume() { this.paused = false; }
   setVolume(v) { this.volume = v; }
@@ -10340,7 +10340,8 @@ class PlayerFalso extends EventEmitter {
     this.fProc = ff; this.ffmpegFinished = false;
     stream.on("data", (c) => saida.write(c));
     stream.on("end", () => setImmediate(() => ff.emit("end")));
-    saida.on("data", (c) => this.chunks.push(String(c)));
+    // o revoice avisa "startplay" quando o primeiro áudio sai — é o sinal de que tocou
+    saida.on("data", (c) => { this.chunks.push(String(c)); if (!this.comecou) { this.comecou = true; this.emit("startplay"); } });
   }
   agora() { return this.chunks[0] ?? null; }
   // o tempo real passando: o buffer toca até o fim e o revoice chama stop()
@@ -10382,7 +10383,7 @@ const r = await m.pular(C);
 await espera();
 ok(!player.chunks.includes("A|"), "★ depois do skip não sobra NADA da faixa A no buffer");
 ok(so("B"), "★ e o que toca é a B");
-ok(/Pulei \*\*A\*\*/.test(r.mensagem) && /Agora: \*\*B\*\*/.test(r.mensagem), "  → a resposta diz o que saiu e o que entrou");
+ok(/Pulei \*\*A\*\*/.test(r.mensagem) && /Tocando \*\*B\*\*/.test(r.mensagem), "  → a resposta diz o que saiu e o que entrou");
 await espera(120);
 ok(m.fila(C).atual?.titulo === "B" && m.fila(C).total === 1, "★ sem skip fantasma: os eventos da faixa A (finish, close do yt-dlp) não puxam outra");
 ok(player.volume === 0.5, "  → o volume escolhido sobrevive ao corte (o stop() do revoice zera)");
@@ -11041,6 +11042,128 @@ const post = (p, corpo, h = {}) => fetch(`${BASE}${p}`, { method: "POST", header
 
 interno.close();
 console.log(`\nSEGURANÇA (12 out): ${pass} ok, ${fail} falha(s)`);
+process.exit(fail ? 1 : 0);
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+// musica-versao  (12 out 2026) — "tem músicas que não funcionam"
+// ════════════════════════════════════════════════════════════════════════════
+SUITES["musica-versao"] = async () => {
+const __m0 = await import("node:events"); const { EventEmitter } = __m0;
+const __m1 = await import("node:stream"); const { PassThrough } = __m1;
+// O caso real (log de 12/10): "&musica play fnf - shucks" → a Judy respondeu
+// "▶ Tocando FNF: Jeffy's Infinite Irida! - Shucks (FC)", mas o yt-dlp morreu
+// com "Sign in to confirm your age" (vídeo com restrição de idade) e ela pulou
+// CALADA — a call ficou muda e ninguém soube por quê. Agora: espera o áudio
+// começar de verdade, tenta outra versão sozinha e, se nada der, diz o motivo.
+process.env.VOZ_DEBUG = "0";
+let pass = 0, fail = 0;
+const ok = (cond, msg) => { cond ? pass++ : fail++; console.log(`  ${cond ? "✅" : "❌"} ${msg}`); };
+const espera = (ms = 30) => new Promise((r) => setTimeout(r, ms));
+const ERRO_IDADE = "ERROR: [youtube] -X2KN-XV5EQ: Sign in to confirm your age. This video may be inappropriate for some users. Use --cookies-from-browser or --cookies for the authentication.";
+
+class PlayerFalso extends EventEmitter {
+  constructor() { super(); this.iniciar(); }
+  iniciar() { this.chunks = []; this.ffmpegFinished = false; this.fProc = null; this.volume = 1; this.comecou = false; }
+  setVolume(v) { this.volume = v; } pause() {} resume() {}
+  stop() { this.iniciar(); this.emit("finish"); }
+  playStream(stream) {
+    const ff = new EventEmitter(); const saida = new PassThrough();
+    ff._outputs = [{ target: saida }];
+    ff.kill = () => setImmediate(() => ff.emit("error", new Error("killed")));
+    // como o revoice: stream vazio → o ffmpeg dá erro → stop() → "finish"
+    ff.on("error", () => { this.ffmpegFinished = true; this.stop(); });
+    ff.on("end", () => { this.ffmpegFinished = true; if (!this.chunks.length && !this.comecou) this.stop(); });
+    this.fProc = ff;
+    stream.on("data", (c) => saida.write(c));
+    stream.on("end", () => setImmediate(() => ff.emit("end")));
+    saida.on("data", (c) => { this.chunks.push(String(c)); if (!this.comecou) { this.comecou = true; this.emit("startplay"); } });
+  }
+}
+
+// yt-dlp de mentira: vídeos "PROIBIDO*" dão o erro de idade; buscas devolvem
+// a lista combinada; o resto toca.
+const buscas = [];
+let resultadosYT = [], resultadoSC = null;
+function spawnFalso(_bin, args) {
+  const p = new EventEmitter();
+  p.stdout = new PassThrough(); p.stderr = new PassThrough();
+  p.morto = false;
+  p.kill = () => { if (p.morto) return; p.morto = true; p.stdout.end(); setImmediate(() => p.emit("close", null)); };
+  const alvo = args[args.length - 1];
+  if (args.includes("-J")) {
+    buscas.push(alvo);
+    setImmediate(() => {
+      let j;
+      if (alvo.startsWith("ytsearch5:")) j = { entries: resultadosYT.map((u) => ({ title: u.split("/").pop(), webpage_url: u, duration: 60 })) };
+      else if (alvo.startsWith("scsearch1:")) j = { entries: resultadoSC ? [{ title: "versão do SoundCloud", webpage_url: resultadoSC, extractor: "soundcloud", duration: 61 }] : [] };
+      else if (alvo.startsWith("ytsearch1:")) j = { entries: [{ title: "FNF: Jeffy's Infinite Irida! - Shucks (FC)", webpage_url: "https://www.youtube.com/watch?v=PROIBIDO001", duration: 392 }] };
+      else j = { title: alvo.split("=").pop(), webpage_url: alvo, duration: 60 };
+      p.stdout.end(JSON.stringify(j)); p.emit("close", 0);
+    });
+  } else if (/PROIBIDO/.test(alvo)) {
+    setImmediate(() => { p.stderr.write(ERRO_IDADE); p.stdout.end(); setImmediate(() => p.emit("close", 1)); });
+  } else {
+    setImmediate(() => { for (let i = 0; i < 5; i++) p.stdout.write(`${alvo}|`); p.stdout.end(); setImmediate(() => { if (!p.morto) p.emit("close", 0); }); });
+  }
+  return p;
+}
+
+const m = await import("./voz-servico/musica.js");
+const player = new PlayerFalso();
+m._trocarDependencias({ spawn: spawnFalso, criarPlayer: async () => player, playerDe: () => player, esperaCorteMs: 50, esperaInicioMs: 3000 });
+const C = "call-versao";
+
+console.log("── o motivo, em português ──");
+ok(m.motivoDaFalha(ERRO_IDADE).id === "idade", "★ \"Sign in to confirm your age\" → restrição de idade");
+ok(m.motivoDaFalha("ERROR: [youtube] abc: Video unavailable").id === "indisponivel" && m.motivoDaFalha("Sign in to confirm you're not a bot").id === "robo", "  → indisponível e anti-robô também");
+
+console.log("\n── vídeo com restrição de idade: outra versão ──");
+resultadosYT = ["https://www.youtube.com/watch?v=PROIBIDO001", "https://www.youtube.com/watch?v=REUPLOAD001"];
+let r = await m.tocar(C, "fnf - shucks");
+await espera();
+ok(/achei outra/.test(r.mensagem ?? "") && /restrição de idade/.test(r.mensagem ?? ""), `★ a versão bloqueada é trocada por outra, e a resposta conta (${(r.mensagem ?? r.erro ?? "").slice(0, 90)}…)`);
+ok(player.chunks.every((c) => c.includes("REUPLOAD001")) && player.chunks.length > 0, "  → e é o áudio da outra versão que toca");
+ok(buscas.some((b) => b.startsWith("ytsearch5:FNF")), "  → procura pelo título da música");
+await m.parar(C); await espera(80);
+
+console.log("\n── nenhuma versão no YouTube: SoundCloud ──");
+resultadosYT = ["https://www.youtube.com/watch?v=PROIBIDO001", "https://www.youtube.com/watch?v=PROIBIDO002"];
+resultadoSC = "https://soundcloud.com/alguem/shucks";
+r = await m.tocar(C, "https://www.youtube.com/watch?v=PROIBIDO001");
+await espera();
+ok(/achei outra/.test(r.mensagem ?? "") && player.chunks.some((c) => c.includes("soundcloud")), "★ todas bloqueadas no YouTube → toca a do SoundCloud");
+await m.parar(C); await espera(80);
+
+console.log("\n── nada funciona: diz por quê, sem fingir que está tocando ──");
+resultadosYT = ["https://www.youtube.com/watch?v=PROIBIDO001"]; resultadoSC = null;
+r = await m.tocar(C, "https://www.youtube.com/watch?v=PROIBIDO003");
+await espera();
+ok(!r.mensagem && /restrição de idade/.test(r.erro ?? "") && !/Tocando/.test(r.erro ?? ""), `★ responde com o motivo e NÃO diz "Tocando" (${(r.erro ?? "").slice(0, 70)}…)`);
+ok(/MUSICA_COOKIES/.test(r.erro ?? ""), "  → e diz o que resolveria (cookies de uma conta)");
+ok(m.fila(C).ultimoAviso?.motivo === "restrição de idade no YouTube", "  → &musica fila mostra a última que não tocou");
+ok(m.fila(C).atual === null, "  → e a call não fica presa numa faixa morta");
+
+console.log("\n── na fila: a quebrada passa para a próxima, avisando ──");
+await m.tocar(C, "https://www.youtube.com/watch?v=BOA0000001");
+await espera();
+await m.tocar(C, "https://www.youtube.com/watch?v=PROIBIDO004");
+await m.tocar(C, "https://www.youtube.com/watch?v=BOA0000002");
+r = await m.pular(C);
+await espera();
+ok(/Não consegui tocar/.test(r.mensagem) && /Tocando \*\*BOA0000002/.test(r.mensagem), "★ skip para uma bloqueada: avisa e segue para a seguinte");
+await espera(150);
+ok(m.fila(C).atual?.titulo === "BOA0000002", "  → sem pular duas vezes");
+
+console.log("\n── loop de fila com uma quebrada não vira laço infinito ──");
+await m.parar(C); await espera(80);
+m.loop(C, "fila");
+await m.tocar(C, "https://www.youtube.com/watch?v=PROIBIDO005");
+await espera(200);
+ok(m.fila(C).total === 0, "★ loop de fila não recoloca a faixa que não toca");
+
+m.limparCanal(C);
+console.log(`\nMÚSICA (versões): ${pass} ok, ${fail} falha(s)`);
 process.exit(fail ? 1 : 0);
 };
 

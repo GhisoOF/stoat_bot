@@ -293,12 +293,14 @@ await t("link solto na resposta vira <link>; código e link já protegido ficam 
 // ─── Relatório só no servidor do dono ────────────────────────────────────────
 console.log("\n── relatório só no servidor do dono ──");
 const rel = await import("./modulos/ferramentas/relatorio.js");
-await t("RELATORIO_SERVIDOR: só ele tem assuntos, mesmo com outros na lista ou de dono do bot", () => {
+await t("RELATORIO_SERVIDOR: ele sempre tem assuntos; os outros só se LISTADOS (13 out 2026: o add era ignorado)", () => {
   process.env.RELATORIO_SERVIDOR = "MEU";
   const cfg = { assuntos: ["OUTRO"] };
   assert.equal(rel.temAssunto({ id: "MEU" }, cfg), true);
-  assert.equal(rel.temAssunto({ id: "OUTRO" }, cfg), false);
-  assert.equal(rel.temAssunto({ id: "DO_DONO", ownerId: "EU" }, {}, ["EU"]), false);
+  assert.equal(rel.temAssunto({ id: "MEU" }, {}), true, "o fixo entra mesmo sem lista");
+  assert.equal(rel.temAssunto({ id: "OUTRO" }, cfg), true, "★ listado com `assuntos add` entra");
+  assert.equal(rel.temAssunto({ id: "TERCEIRO" }, cfg), false, "não listado: só números");
+  assert.equal(rel.temAssunto({ id: "DO_DONO", ownerId: "EU" }, {}, ["EU"]), false, "servidor do dono não entra sozinho com a variável");
   delete process.env.RELATORIO_SERVIDOR;
   assert.equal(rel.temAssunto({ id: "OUTRO" }, cfg), true, "sem a variável, vale a lista como antes");
 });
@@ -312,6 +314,28 @@ await t("&servidores fora do servidor do dono não abre o painel — e NO servid
   assert.match(e.title, /Aqui não/);
   await cmdServidores({ authorId: "EU", channel: {} }, ["relatorio"], ctxDe("MEU"));
   assert.doesNotMatch(e.title, /Aqui não/, "no servidor do dono o painel tem de abrir (1 out: dizia \"Aqui não\")");
+  delete process.env.RELATORIO_SERVIDOR;
+});
+await t("&servidores relatorio assuntos add <vários ids> com RELATORIO_SERVIDOR: entram e aparecem na lista", async () => {
+  process.env.RELATORIO_SERVIDOR = "MEU";
+  const store = await import("./modulos/core/config-store.js");
+  const { cmdServidores } = await import("./modulos/moderacao/servidores.js");
+  store.getGlobal().relatorio = { canalId: null, ativo: true, pularVazias: false, assuntos: [] };
+  let e = null;
+  const ctx = { serverId: "MEU", COR: { erro: 1, info: 2, aviso: 3, sucesso: 4 }, ehSuperAdmin: () => true,
+    client: { servers: new Map([["MEU", { name: "Vapor Nexus" }], ["A1", { name: "Servidor A" }], ["B2", { name: "Servidor B" }]]) },
+    sendEmbed: async (_c, x) => { e = x; } };
+  await cmdServidores({ authorId: "EU", channel: {} }, ["relatorio", "assuntos", "add", "A1", "B2", "MEU", "C3"], ctx);
+  assert.deepEqual(store.getGlobal().relatorio.assuntos, ["A1", "B2", "C3"], "o fixo não precisa ir para a lista");
+  assert.match(e.description, /Vapor Nexus.*sempre/);
+  assert.match(e.description, /Servidor A/); assert.match(e.description, /Servidor B/);
+  assert.match(e.description, /Entraram/);
+  assert.match(e.description, /não está em: `C3`/);
+  assert.doesNotMatch(e.description, /ignorada/);
+  await cmdServidores({ authorId: "EU", channel: {} }, ["relatorio", "assuntos", "remove", "B2"], ctx);
+  assert.deepEqual(store.getGlobal().relatorio.assuntos, ["A1", "C3"]);
+  assert.equal(rel.temAssunto({ id: "A1" }, store.getGlobal().relatorio), true);
+  assert.equal(rel.temAssunto({ id: "B2" }, store.getGlobal().relatorio), false);
   delete process.env.RELATORIO_SERVIDOR;
 });
 

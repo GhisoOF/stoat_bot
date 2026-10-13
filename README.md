@@ -155,7 +155,10 @@ diz exatamente o que clicar.
   com os números. Assuntos só dos servidores de que você é dono (ou os que
   listar em `&servidores relatorio assuntos add <id>`); os demais entram só em
   números. Com `RELATORIO_SERVIDOR=<id>` no `.env`, o painel e o relatório só
-  existem nesse servidor (comando e canal), e só ele entra nos assuntos.
+  existem nesse servidor (comando e canal), e ele sempre entra nos assuntos;
+  os outros entram só se listados com `assuntos add` (antes a variável ignorava
+  a lista). *With `RELATORIO_SERVIDOR`, that server always has topics; others
+  only if added with `assuntos add`.*
 - **Ban propagado na hora**: um ban em um servidor da Judy vale imediatamente nos
   outros, conforme o modo de cada um (`off` · `avisar` · `banir`), sem esperar a
   sincronização de 6h.

@@ -93,22 +93,34 @@ async function cmdRelatorio(message, args, ctx) {
     const acao = args[1]?.toLowerCase();
     const ids = [...new Set(args.slice(2).join(" ").split(/[\s,;]+/).map((x) => limparId(x)).filter(Boolean))];
     const nomeDe = (id) => client.servers.get(id)?.name;
+    const fixo = relatorio.servidorDoRelatorio();
     const avisos = [];
+    if ((acao === "add" || acao === "remove") && !ids.length) {
+      avisos.push(`⚠️ Faltou o ID: \`&servidores relatorio assuntos ${acao} <id> [id…]\``);
+    }
     if ((acao === "add" || acao === "remove") && ids.length) {
+      const antes = new Set(cfg.assuntos ?? []);
       cfg.assuntos = (cfg.assuntos ?? []).filter((x) => !ids.includes(x));
-      if (acao === "add") cfg.assuntos.push(...ids);
+      // o servidor fixo já entra sempre: não precisa (nem sai) da lista
+      if (acao === "add") cfg.assuntos.push(...ids.filter((id) => id !== fixo));
       salvar();
+      const novos = acao === "add" ? ids.filter((id) => id !== fixo && !antes.has(id)) : ids.filter((id) => antes.has(id));
+      if (novos.length) avisos.push(`${acao === "add" ? "✅ Entraram" : "✅ Saíram"}: ${novos.map((x) => nomeDe(x) ? `**${nomeDe(x)}**` : `\`${x}\``).join(", ")}`);
+      if (acao === "remove" && fixo && ids.includes(fixo)) avisos.push(`ℹ️ \`${fixo}\` é o \`RELATORIO_SERVIDOR\`: entra sempre (para tirar, mude o \`.env\`).`);
       const fora = ids.filter((id) => !nomeDe(id));
       if (acao === "add" && fora.length) avisos.push(`⚠️ A Judy não está em: ${fora.map((x) => `\`${x}\``).join(", ")} — ficam na lista, mas sem mensagens não há assunto.`);
     }
-    const fixo = relatorio.servidorDoRelatorio();
+    const linha = (x, extra = "") => `• ${nomeDe(x) ? `**${nomeDe(x)}** ` : ""}\`${x}\`${extra}`;
+    const listados = (cfg.assuntos ?? []).filter((x) => x !== fixo);
     const lista = fixo
-      ? `• ${nomeDe(fixo) ? `**${nomeDe(fixo)}** ` : ""}\`${fixo}\`\n\n_Fixado por \`RELATORIO_SERVIDOR\`: só este servidor entra nos assuntos (a lista abaixo é ignorada)._`
-      : cfg.assuntos?.length
-        ? cfg.assuntos.map((x) => `• ${nomeDe(x) ? `**${nomeDe(x)}** ` : ""}\`${x}\``).join("\n")
+      ? [linha(fixo, " _(RELATORIO_SERVIDOR — sempre)_"), ...listados.map((x) => linha(x))].join("\n")
+      : listados.length
+        ? listados.map((x) => linha(x)).join("\n")
         : "_Nenhum listado: valem os servidores de que um dono do bot é dono._";
     return sendEmbed(message.channel, { title: "🗣️ Servidores com assuntos",
-      description: [lista, ...avisos.map((x) => `\n${x}`)].join("\n"), colour: COR.info });
+      description: [lista, ...avisos.map((x) => `\n${x}`),
+        fixo && !listados.length ? "\n_Os outros servidores entram só em números — para incluir: `&servidores relatorio assuntos add <id> [id…]`._" : null,
+      ].filter(Boolean).join("\n"), colour: COR.info });
   }
   if (sub === "agora" || sub === "now") {
     const aviso = await sendEmbed(message.channel, { title: "⏳ Montando o relatório…", description: "Pode levar até alguns minutos (o modelo escreve os destaques).", colour: COR.info });

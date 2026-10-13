@@ -223,14 +223,17 @@ export function listaSuperAdmins() {
   return (process.env.SUPER_ADMINS || "").split(",").map((x) => x.trim()).filter(Boolean);
 }
 // RELATORIO_SERVIDOR: o servidor do dono do bot. Definido, o painel e o
-// relatório só existem lá (comando, canal de envio) e só ELE entra nos
-// assuntos — dos outros servidores, só números (pedido de Ghieh, 1 out 2026).
+// relatório só existem lá (comando, canal de envio) e ele SEMPRE entra nos
+// assuntos (pedido de Ghieh, 1 out 2026). Os outros entram só se o dono do bot
+// os listar em `&servidores relatorio assuntos add` (13 out 2026: antes a
+// variável ignorava a lista e o `add` respondia como se nada tivesse
+// acontecido) — sem lista, dos outros, só números.
 export function servidorDoRelatorio() {
   return (process.env.RELATORIO_SERVIDOR || "").trim() || null;
 }
 export function temAssunto(server, cfg, superAdmins = listaSuperAdmins()) {
   const fixo = servidorDoRelatorio();
-  if (fixo) return server?.id === fixo;
+  if (fixo) return server?.id === fixo || (cfg?.assuntos ?? []).includes(server?.id);
   const lista = cfg?.assuntos ?? [];
   if (lista.length) return lista.includes(server?.id);
   return !!server?.ownerId && superAdmins.includes(server.ownerId);

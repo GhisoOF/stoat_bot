@@ -43,6 +43,15 @@ const servidorDoCanal = new Map();   // canalVoz → serverId (lembrado do &entr
 // TTS vai falar (ducking) e `depois` restaura — o voz.js só avisa os momentos.
 export const ganchosDeFala = { antes: null, depois: null };
 
+// Quem precisa saber que a Judy SAIU de uma call (13 out 2026): a música de
+// lá tem de morrer junto. Antes, trocar de call no mesmo servidor tirava a
+// Judy da call velha mas deixava a música dela viva — quando a faixa acabava
+// (ou o yt-dlp caía), o "próxima da fila" pedia um player na call velha, o
+// criarPlayerExtra ENTRAVA de novo lá e, pela regra de uma call por servidor,
+// saía da call nova: "ela volta para a call de antes depois de uns 10 min,
+// mesmo sem ninguém lá".
+export const ganchosDeSaida = new Set();   // (canalVoz) => void
+
 // Pendura um MediaPlayer EXTRA (ex.: música) na conexão existente do canal —
 // LiveKit é multi-trilha, então TTS e música coexistem na mesma call.
 export async function criarPlayerExtra(canalVoz, nome) {
@@ -312,6 +321,7 @@ export async function sair(canalVoz = null) {
     conexoes.delete(id);
     saiu.push(id);
     log(`saiu da call ${id}`);
+    for (const g of ganchosDeSaida) { try { g(id); } catch (e) { log(`gancho de saída: ${e?.message ?? e}`); } }
   }
   return { ok: true, saiu };
 }
@@ -562,6 +572,8 @@ async function processarFila(canalVoz) {
     }
     dbg(`falando em ${canalVoz} (voz ${voz}): "${item.texto.slice(0, 60)}"`);
 
+    // saí desta call enquanto a fala era gerada (troca de call, &sair): não volto
+    if (conexoes.get(canalVoz) !== c) { log(`fala descartada: não estou mais em ${canalVoz}`); return; }
     if (!jaConectado(c.connection)) {
       log(`sala de ${canalVoz} caiu — reconectando antes de falar`);
       conexoes.delete(canalVoz);

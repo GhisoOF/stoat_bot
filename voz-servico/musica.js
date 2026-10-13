@@ -55,6 +55,7 @@ const deps = {
   spawn,
   criarPlayer: (canalVoz) => voz.criarPlayerExtra(canalVoz, "musica"),
   playerDe: (canalVoz) => voz.playerExtraDe(canalVoz, "musica"),
+  conectado: (canalVoz) => voz.canaisConectados().includes(canalVoz),
   esperaCorteMs: 1500,
   esperaInicioMs: Number(process.env.MUSICA_ESPERA_INICIO_MS || 20_000),   // até o áudio começar
 };
@@ -315,6 +316,13 @@ function tentarTocar(canalVoz, st, g, media, item) {
       if (fase !== "tocando" || fimDisparado) return;   // tentativa que já falhou não puxa nada
       fimDisparado = true;
       dbg(`${canalVoz}: fim de "${item.titulo}"`);
+      // a próxima SÓ se eu ainda estou nesta call — "próxima da fila" nunca
+      // é motivo para entrar numa call (13 out 2026: ela voltava para a call
+      // velha e saía da nova)
+      if (!deps.conectado(canalVoz)) {
+        log(`${canalVoz}: fim de "${item.titulo}", mas não estou mais nesta call — a fila daqui foi descartada`);
+        return limparCanal(canalVoz);
+      }
       tocarProxima(canalVoz).catch((e) => log(`próxima falhou: ${e.message}`));
     };
     media.on?.("finish", fim);
@@ -556,6 +564,11 @@ export function limparCanal(canalVoz) {
   if (st) { st.geracao++; try { st.soltar?.(); } catch {} st.soltar = null; pararStream(st); }
   estados.delete(canalVoz);
 }
+// saiu da call (troca de call, &sair, reinício da voz): a música de lá acaba junto
+voz.ganchosDeSaida.add((canalVoz) => {
+  if (estados.has(canalVoz)) log(`${canalVoz}: saí da call — música e fila de lá descartadas`);
+  limparCanal(canalVoz);
+});
 
 // ── Ducking: registrado nos ganchos de fala do voz.js ───────────────────────
 voz.ganchosDeFala.antes = (canalVoz) => {

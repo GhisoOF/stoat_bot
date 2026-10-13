@@ -10375,7 +10375,8 @@ function spawnFalso(_bin, args) {
 
 const m = await import("./voz-servico/musica.js");
 const player = new PlayerFalso();
-m._trocarDependencias({ spawn: spawnFalso, criarPlayer: async () => player, playerDe: () => player, esperaCorteMs: 200 });
+// conectado: aqui não há call de verdade; a regra "fim de faixa fora da call descarta a fila" tem a suíte voz-volta-13out
+m._trocarDependencias({ spawn: spawnFalso, criarPlayer: async () => player, playerDe: () => player, conectado: () => true, esperaCorteMs: 200 });
 const C = "call-teste";
 const so = (nome) => player.chunks.length > 0 && player.chunks.every((c) => c === `${nome}|`);
 
@@ -12447,6 +12448,116 @@ await am$("sentinela avatar off");
 ok(config.automod.antiAvatar.enabled === false, "  → off");
 
 console.log(`\nASSUNTOS/AVATAR (13 out): ${pass} ok, ${fail} falha(s)`);
+process.exit(fail ? 1 : 0);
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+// voz-volta-13out  (13 out 2026) — "ela volta para a call de antes depois de
+// uns 10 min, mesmo sem ninguém lá"
+// ════════════════════════════════════════════════════════════════════════════
+SUITES["voz-volta-13out"] = async () => {
+// Trocar de call no mesmo servidor tirava a Judy da call velha, mas a música
+// de lá continuava viva: quando a faixa acabava, o "próxima da fila" pedia um
+// player na call velha, o criarPlayerExtra ENTRAVA de novo nela e, pela regra
+// de uma call por servidor, saía da call nova.
+let pass = 0, fail = 0;
+const ok = (cond, msg) => { cond ? pass++ : fail++; console.log(`  ${cond ? "✅" : "❌"} ${msg}`); };
+const espera = (ms = 40) => new Promise((r) => setTimeout(r, ms));
+process.env.BOT_TOKEN = "tok"; process.env.VOZ_DEBUG = "0"; delete process.env.VOZ_NODE_LIVEKIT;
+try { delete globalThis.navigator; } catch {}
+const { EventEmitter } = await import("node:events");
+const { PassThrough } = await import("node:stream");
+
+// revoice.js de mentira (uma conexão por canal), como na voz-multi-13out
+class SalaFalsa { constructor() { this.isConnected = true; this.localParticipant = { trackPublications: new Map([["t", { sid: "t" }]]) }; }
+  async disconnect() { this.isConnected = false; } }
+class RevoiceFalso { constructor() { this.connections = new Map(); this.api = { post: async () => ({ token: "t", url: "wss://x" }) }; }
+  async join(canal) { const c = new EventEmitter(); c.room = new SalaFalsa(); c.play = async () => {}; c.leave = () => { c.room.disconnect(); }; this.connections.set(canal, c); return c; } }
+class MediaFalsa extends EventEmitter { constructor() { super(); this.track = { sid: "t" }; } destroy() {} stop() {} playStream() {} }
+const Module = (await import("node:module")).default;
+const carregar = Module._load;
+Module._load = function (pedido, ...resto) {
+  if (pedido === "revoice.js/src/Revoice.js") return RevoiceFalso;
+  if (pedido === "revoice.js/src/Media.js") return { MediaPlayer: MediaFalsa };
+  return carregar.call(this, pedido, ...resto);
+};
+globalThis.fetch = async (url) => {
+  url = String(url);
+  const corpo = url.endsWith("/users/@me") ? { _id: "BOT" } : url.match(/\/$|\.chat$/) ? { features: { livekit: { nodes: [{ name: "worldwide", public_url: "wss://x" }] } } } : {};
+  return { ok: true, status: 200, text: async () => JSON.stringify(corpo) };
+};
+
+// O player da música e o yt-dlp de mentira (como na musica-skip): o buffer
+// guarda a faixa inteira; `tocarAteOFim` é o tempo real passando.
+class PlayerFalso extends EventEmitter {
+  constructor() { super(); this.iniciar(); }
+  iniciar() { this.chunks = []; this.ffmpegFinished = false; this.volume = 1; this.comecou = false; }
+  pause() {} resume() {} setVolume(v) { this.volume = v; }
+  stop() { this.iniciar(); this.emit("finish"); }
+  playStream(stream) {
+    stream.on("data", (c) => { this.chunks.push(String(c)); if (!this.comecou) { this.comecou = true; this.emit("startplay"); } });
+    stream.on("end", () => { this.ffmpegFinished = true; });
+  }
+  tocarAteOFim() { this.chunks = []; if (this.ffmpegFinished) this.stop(); }
+}
+function spawnFalso(_bin, args) {
+  const p = new EventEmitter();
+  p.stdout = new PassThrough(); p.stderr = new PassThrough();
+  p.kill = () => { p.stdout.end(); setImmediate(() => p.emit("close", null)); };
+  const alvo = args[args.length - 1];
+  if (args.includes("-J")) setImmediate(() => { p.stdout.end(JSON.stringify({ title: alvo.split("/").pop(), webpage_url: alvo, duration: 600 })); p.emit("close", 0); });
+  else setImmediate(() => { p.stdout.write(`${alvo.split("/").pop()}|`); p.stdout.end(); setImmediate(() => p.emit("close", 0)); });
+  return p;
+}
+
+const voz = await import("./voz-servico/voz.js");
+const m = await import("./voz-servico/musica.js");
+const ini = await voz.iniciar();
+ok(ini.ok, `serviço de voz sobe com o revoice falso (${ini.erro ?? "ok"})`);
+const player = new PlayerFalso();
+const pedidosDePlayer = [];
+// o criarPlayer de VERDADE (o que entra na call se não estiver nela), com o áudio no player falso
+m._trocarDependencias({ spawn: spawnFalso, esperaCorteMs: 50,
+  criarPlayer: async (c) => { pedidosDePlayer.push(c); await voz.criarPlayerExtra(c, "musica"); return player; },
+  playerDe: () => player });
+
+console.log("── troca de call com música tocando ──");
+await voz.entrar("CALL_ANTIGA", "S_MENINO");
+await m.tocar("CALL_ANTIGA", "https://www.youtube.com/watch/faixa1");
+await m.tocar("CALL_ANTIGA", "https://www.youtube.com/watch/faixa2");
+m.loop("CALL_ANTIGA", "fila");
+await espera();
+ok(m.fila("CALL_ANTIGA").atual?.titulo === "faixa1" && m.fila("CALL_ANTIGA").total === 1, "música tocando na call antiga, com fila e loop");
+await voz.entrar("CALL_NOVA", "S_MENINO");   // o &entrar na outra call do mesmo servidor
+ok(voz.canaisConectados().join() === "CALL_NOVA", "&entrar na outra call do mesmo servidor: troca de call");
+ok(m.fila("CALL_ANTIGA").atual === null && m.fila("CALL_ANTIGA").total === 0 && m.fila("CALL_ANTIGA").loop === "nao", "★ ao sair da call, a música e a fila de lá acabam junto");
+pedidosDePlayer.length = 0;
+player.tocarAteOFim();                        // ~10 min depois: a faixa da call antiga acaba
+await espera(150);
+ok(voz.canaisConectados().join() === "CALL_NOVA", "★ quando a faixa velha acaba, ela CONTINUA na call nova (não volta para a antiga)");
+ok(!pedidosDePlayer.includes("CALL_ANTIGA"), "  → e nada pede player (= entrar) na call antiga");
+
+console.log("\n── a próxima da fila nunca entra numa call ──");
+m._trocarDependencias({ conectado: () => true });
+await m.tocar("CALL_NOVA", "https://www.youtube.com/watch/faixa3");
+await m.tocar("CALL_NOVA", "https://www.youtube.com/watch/faixa4");
+await espera();
+m._trocarDependencias({ conectado: () => false });   // a conexão sumiu por outro caminho
+pedidosDePlayer.length = 0;
+player.tocarAteOFim();
+await espera(150);
+ok(!pedidosDePlayer.length && m.fila("CALL_NOVA").total === 0, "★ fim da faixa sem estar na call: descarta a fila em vez de entrar de novo");
+m._trocarDependencias({ conectado: (c) => voz.canaisConectados().includes(c) });
+
+console.log("\n── &sair também limpa ──");
+await m.tocar("CALL_NOVA", "https://www.youtube.com/watch/faixa5");
+await espera();
+await voz.sair("CALL_NOVA");
+ok(m.fila("CALL_NOVA").atual === null, "★ &sair: a música daquela call acaba junto");
+await voz.sair(null);
+Module._load = carregar;
+
+console.log(`\nVOZ (volta para a call antiga): ${pass} ok, ${fail} falha(s)`);
 process.exit(fail ? 1 : 0);
 };
 

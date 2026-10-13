@@ -380,7 +380,7 @@ próprio bot: `&help <comando>`. Um resumo:
 | `&personalidade` | prompt de personalidade da IA *(ManageServer)* |
 | `&chat livre` · `&chat comentar` · `&chat cuidado` | iniciativa e tom da IA |
 | `&chat perfil` · `&chat esquecer [tudo]` | memória da IA |
-| `&entrar` / `&sair` | põe o bot na call (TTS e música dividem a mesma conexão) |
+| `&entrar` / `&sair` | põe o bot na call (TTS e música dividem a mesma conexão); trocar de call ou sair **encerra a música e a fila da call anterior** — ela nunca volta sozinha para uma call de onde saiu (*leaving or switching calls ends that call's music; she never rejoins a call on her own*) |
 | `&tts …` | voz nas calls (`estado`/`filtro`/`diagnostico`…) |
 | `&game …` | RPG (personagem, atributos, progressão) |
 | `&economia …` | a moeda do servidor: `minerar`, `saldo`, `top`, `loja`/`comprar` cargos, `pagar` — à parte do RPG |

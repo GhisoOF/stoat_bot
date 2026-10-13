@@ -1,6 +1,7 @@
 
 import * as log from "../core/log.js";
 import { tr, lingua } from "../core/i18n.js";
+import { nomeExibido } from "../core/aliases.js";
 
 export const GRANT_ALL_SAFE = 0x000fffffffffffffn;
 
@@ -26,7 +27,7 @@ export async function cmdComando(message, args, ctx) {
   if (!sub) {
     const linhas = geren.map((c) => {
       const off = config.comandosDesativados.includes(c);
-      return `${off ? "🔴" : "🟢"} \`${c}\``;
+      return `${off ? "🔴" : "🟢"} \`${nomeExibido(c, lang)}\``;
     });
     return sendEmbed(message.channel, lang === "en" ? {
       title: "🎛 Server commands",
@@ -82,7 +83,7 @@ export async function cmdComando(message, args, ctx) {
       colour: COR.erro,
     }, {
       title: "❌ Invalid command",
-      description: `\`${alvo}\` can't be managed.\nManageable: ${geren.map((c) => `\`${c}\``).join(", ")}`,
+      description: `\`${alvo}\` can't be managed.\nManageable: ${geren.map((c) => `\`${nomeExibido(c, "en")}\``).join(", ")}`,
       colour: COR.erro,
     }));
   }

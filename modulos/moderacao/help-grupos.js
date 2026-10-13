@@ -270,7 +270,7 @@ function gruposEN(P) {
         `\`${P}cor painel aqui\` — a ready-made "pick your color" panel, in one command`,
         "",
         "**Messages and logging**",
-        `\`${P}embed titulo: … | descricao: …\` — posts a pretty embed *(ManageMessages)*`,
+        `\`${P}embed title: … | description: …\` — posts a pretty embed *(ManageMessages)*`,
         `\`${P}log canal aqui\` — where the bot writes down what happened *(ManagePermissions)*`,
         `\`${P}rss add <url>\` — news curation in a channel`,
         `\`${P}fuso add <city>\` — clock with several cities`,

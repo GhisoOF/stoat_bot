@@ -331,6 +331,19 @@ caminhos para a mesma coisa. Variações de **digitação** valem
 (`&clear`/`&purge`/`&limpar`, `&info`/`&sobre`): são a mesma porta com outro
 nome. A voz entra e sai por `&entrar` e `&sair`.
 
+**Em inglês, tudo em inglês** (13 out 2026): com `&idioma en`, a tela mostra os
+nomes em inglês também entre crases — grupos, partes, modos e opções — e eles
+funcionam ao digitar, em qualquer nível da árvore: `&automod sentinel topics
+politics delete` = `&automod sentinela assuntos politica apagar`;
+`&automod antinoise caps off`, `&automod antispam speed off`, `&automod
+punishment mode stack`, `&automod sentinel avatar action kick`, `&wizard`
+(`skip` · `back` · `cancel`), `&embed title: … | description: …`, cores em
+inglês (`blue`, `pink`…). Os nomes em português continuam valendo. A tabela
+PT ⇄ EN do automod fica em `modulos/core/nomes-automod.js`; a suíte
+`traducao-en-13out` lê toda a ajuda e ~150 telas em inglês procurando
+português, inclusive dentro do código. *In English servers, every name on
+screen is English and works when typed; Portuguese names keep working.*
+
 Prefixo `&`. A lista completa, com **cada parâmetro explicado**, vive no
 próprio bot: `&help <comando>`. Um resumo:
 

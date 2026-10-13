@@ -1,4 +1,4 @@
-import { CORES as CORES_NOMEADAS, normalizarCor } from "../core/cores.js";
+import { CORES as CORES_NOMEADAS, normalizarCor, nomesDeCor } from "../core/cores.js";
 import { ULID } from "../core/ids.js";
 import { validarUrlImagem, comoExibir, formatarLinkConteudo } from "../core/midia.js";
 
@@ -35,17 +35,17 @@ export async function cmdEmbed(message, args, ctx) {
         "**Example — copy and edit:**",
         "```",
         `${PREFIXO}embed`,
-        "titulo: Age",
-        "descricao: Are you over or under 18?",
+        "title: Age",
+        "description: Are you over or under 18?",
         "cor: #FF00FF",
         "```",
         "",
-        "**Fields** (only `titulo` or `descricao` is required):",
-        "`titulo:` · `descricao:` (multi-line allowed) · `cor:` · `rodape:` · `imagem:` (URL) · `canal:` (ID, to post in another channel)",
+        "**Fields** (only `title` or `description` is required — Portuguese names work too):",
+        "`title:` · `description:` (multi-line allowed) · `color:` · `footer:` · `image:` (URL) · `channel:` (ID, to post in another channel)",
         "",
-        "**Colors:** hex `#RRGGBB` or names: " + Object.keys(CORES_NOMEADAS).map((c) => `\`${c}\``).join(", "),
+        "**Colors:** hex `#RRGGBB` or names: " + nomesDeCor(0, "en").map((c) => `\`${c}\``).join(", "),
         "",
-        `_I also accept everything on one line separated by \`|\`:_ \`${PREFIXO}embed titulo: Age | descricao: 18+ or under? | cor: rosa\``,
+        `_I also accept everything on one line separated by \`|\`:_ \`${PREFIXO}embed title: Age | description: 18+ or under? | color: pink\``,
       ].join("\n"),
       colour: COR.info,
     } : {
@@ -145,7 +145,7 @@ export async function cmdEmbed(message, args, ctx) {
   const cor = normalizarCor(campos.cor) ?? "#5865F2";
   if (campos.cor && !normalizarCor(campos.cor)) {
     avisos.push(lang === "en"
-      ? `the color \`${campos.cor}\` isn't valid — I used the default blue (use \`#RRGGBB\` or a name: ${Object.keys(CORES_NOMEADAS).slice(0, 5).join(", ")}…)`
+      ? `the color \`${campos.cor}\` isn't valid — I used the default blue (use \`#RRGGBB\` or a name: ${nomesDeCor(5, "en").join(", ")}…)`
       : `a cor \`${campos.cor}\` não é válida — usei o azul padrão (use \`#RRGGBB\` ou um nome: ${Object.keys(CORES_NOMEADAS).slice(0, 5).join(", ")}…)`);
   }
 

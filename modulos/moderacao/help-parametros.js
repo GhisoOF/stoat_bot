@@ -360,13 +360,13 @@ function parametrosEN(P) {
     ],
 
     embed: [
-      { nome: "titulo:", valor: "<text>", desc: "the top line" },
-      { nome: "descricao:", valor: "<text>", desc: "the body (can span lines; everything until the next field)" },
-      { nome: "cor:", valor: "<#hex|name>", desc: "bar color" },
-      { nome: "rodape:", valor: "<text>", desc: "small line at the end" },
-      { nome: "imagem:", valor: "<url>", desc: "cover (Stoat attachment) or preview (external URL)" },
-      { nome: "canal:", valor: "<#channel>", desc: "posts in another channel" },
-      { nome: "Format", desc: "fields separated by `|` on one line, or one per line. E.g. `&embed titulo: Rules | descricao: Be kind | cor: azul`" },
+      { nome: "title:", valor: "<text>", desc: "the top line" },
+      { nome: "description:", valor: "<text>", desc: "the body (can span lines; everything until the next field)" },
+      { nome: "color:", valor: "<#hex|name>", desc: "bar color" },
+      { nome: "footer:", valor: "<text>", desc: "small line at the end" },
+      { nome: "image:", valor: "<url>", desc: "cover (Stoat attachment) or preview (external URL)" },
+      { nome: "channel:", valor: "<#channel>", desc: "posts in another channel" },
+      { nome: "Format", desc: "fields separated by `|` on one line, or one per line. E.g. `&embed title: Rules | description: Be kind | color: blue`" },
     ],
 
     xp: [
@@ -502,7 +502,7 @@ function parametrosEN(P) {
       { nome: "canais", desc: "sorts your channels into the 3 types and shows exactly what to click in Stoat" },
       { nome: "protecao", desc: "only the automod, sentinel and punishment part" },
       { nome: "cancelar", desc: "abandons the running wizard" },
-      { nome: "Answers", desc: "during the wizard, answer in plain text. `pular` skips a question, `voltar` goes back one" },
+      { nome: "Answers", desc: "during the wizard, answer in plain text. `skip` skips a question, `back` goes back one" },
     ],
   };
 }

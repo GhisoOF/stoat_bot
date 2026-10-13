@@ -47,6 +47,7 @@ function contarLinhas() {
 }
 
 import * as banGlobal from "./ban-global.js";
+import { nomeModo } from "../core/nomes-automod.js";
 
 function extrairAlvo(message, args) {
   // 1) primeiro argumento: <@ID>, <ID> ou ID puro (ULID de 26 chars). Vem
@@ -365,7 +366,7 @@ function detalhesEN(P) {
     },
     assistente: {
       uso: `${P}assistente [rapido|completo|canais|protecao|cancelar]`,
-      desc: "**Guided** setup: the bot asks one question at a time, you answer in plain text, and at the end it shows a summary and applies everything — using the same commands you would type by hand (and shows which ones, so you learn them).\n\n`&assistente` — menu\n`&assistente rapido` — language, staff, log, protection, welcome (~2 min)\n`&assistente completo` — quick + punishment ladder, global list, XP, autorole\n`&assistente canais` — sorts your channels into the 3 types and tells you what to click in Stoat\n`&assistente protecao` — only automod, sentinel and punishment\n\nDuring the questions: `pular` skips, `voltar` goes back, `cancelar` quits. Each person has their own; it expires after 10 min without an answer.",
+      desc: "**Guided** setup: the bot asks one question at a time, you answer in plain text, and at the end it shows a summary and applies everything — using the same commands you would type by hand (and shows which ones, so you learn them).\n\n`&assistente` — menu\n`&assistente rapido` — language, staff, log, protection, welcome (~2 min)\n`&assistente completo` — quick + punishment ladder, global list, XP, autorole\n`&assistente canais` — sorts your channels into the 3 types and tells you what to click in Stoat\n`&assistente protecao` — only automod, sentinel and punishment\n\nDuring the questions: `skip` skips, `back` goes back, `cancel` quits. Each person has their own; it expires after 10 min without an answer.",
       perm: "ManagePermissions",
       ex: `${P}assistente rapido`,
     },
@@ -408,7 +409,7 @@ function detalhesEN(P) {
       ex: `${P}warn @Someone flooding the art channel`,
     },
     servidores: {
-      uso: `${P}servidores [relatorio …]`,
+      uso: `${P}servidores [report …]`,
       desc: "**Bot owner only** (not in the index). Two things:\n\n"
         + "`&servidores` — where the bot is: each server with members and message rate per minute.\n\n"
         + "`&servidores relatorio` — an **hourly report** in a channel of yours: what the moderation log recorded across all servers, raids, images, restarts (with the cause), grouped errors and the most discussed topics. "
@@ -503,7 +504,7 @@ function detalhesEN(P) {
       perm: "everyone", ex: `${P}entretenimento ship @Ana @Bia`,
     },
     rolar: {
-      uso: `${P}rolar <expression> | adv | des | moeda | gm <expression>`,
+      uso: `${P}rolar <expression> | adv | des | coin | gm <expression>`,
       desc: "Tabletop RPG dice, fully loaded:\n`2d20kh1+5` keep highest · `4d6kh3` drop the lowest die\n`adv`/`des` — advantage/disadvantage · `3d6!` — exploding\n`8d10>=7` — count successes · `d%` · `4dF` (Fate) · `moeda` (coin)\n`6x(4d6kh3)` — repeat (six ability scores at once)\n`1d20+7 # Perception` — label the roll\n`gm 1d20` — **secret**: result goes by DM and the request vanishes from the channel.\nNatural 20 gets 🎯, natural 1 gets 💀.",
       perm: "everyone", ex: `${P}rolar 2d20kh1+5 # Attack`,
     },
@@ -513,7 +514,7 @@ function detalhesEN(P) {
       perm: "everyone", ex: `${P}iniciativa add Elf 1d20+3`,
     },
     ticket: {
-      uso: `${P}ticket [painel <#channel>|categorias|log <#channel>|lista|equipe]`,
+      uso: `${P}ticket [panel <#channel>|categories|log <#channel>|list|team]`,
       desc: "Support with a private channel per request, **by reaction**:\n\n"
         + "`painel <#channel>` — posts in the chosen channel a message with one reaction per topic (🎫 Support, 🚨 Report, 💡 Suggestion). **React = open**: a **#ticket-N** channel is born, visible only to the opener and the staff from `&acesso`\n"
         + "Inside the ticket, 🔒 **closes it — staff only**: the conversation **locks** (the opener can read, not write) and the whole record goes to the log as a **.txt file**. Then 🗑️ (staff) deletes the channel\n\n"
@@ -526,7 +527,7 @@ function detalhesEN(P) {
     },
 
     webhook: {
-      uso: `${P}webhook [criar <name> [#channel]|lista|canal|eventos|url|testar|remover]`,
+      uso: `${P}webhook [create <name> [#channel]|list|channel|events|url|test|remove]`,
       desc: "**Universal** webhook receiver: external services post into your channels.\n\n**Works with:** GitHub (push, issues, PRs, releases, Actions, star, fork…), Crafty/Minecraft, and **anything that speaks the Discord format** (Uptime Kuma, Grafana…) — just paste the hook URL where the Discord URL would go.\n\n**The model:** each *hook* has a name, its own channel and an event filter. Per-chat separation is one hook per subject:\n`&webhook criar issues #issues` + `&webhook eventos issues issues,issue_comment`\n`&webhook criar ci #ci` + `&webhook eventos ci workflow_run`\n`&webhook criar mine #minecraft` ← point Crafty (Discord provider) at it\n\n**Security:** the URL is the secret (128-bit token); `remover` kills the URL instantly; 30 posts/min cap per hook against floods; up to 10 hooks per server; the channel must be **on this server**.\n\n**Which address to use:** INTERNET services (GitHub…) need a public https base — `sudo tailscale funnel --bg 8095` and `WEBHOOK_URL_BASE=https://<machine>.ts.net` in `.env`; SAME-machine containers (Crafty…) use the Docker bridge `http://172.17.0.1:8095/...` — an internal URL pasted into an internet service fails with an unexplained \"failed to connect\".",
       perm: "ManageMessages (or staff); `lista` is open", ex: `${P}webhook criar github #alerts`,
     },
@@ -603,8 +604,8 @@ function detalhesEN(P) {
     },
     embed: {
       uso: `${P}embed` + " → then `field: value`, one per line",
-      desc: "Posts a customizable embed message.\n\n**Write it like this** (no parentheses, no trailing comma):\n```\n&embed\ntitulo: Age\ndescricao: Are you over or under 18?\ncor: #FF00FF\n```\n**Fields:** `titulo:` `descricao:` `cor:` `rodape:` `imagem:` (URL) `canal:` (ID to post in another channel).\nColor by hex (`#5865F2`) or name (azul, verde, rosa…).\nAlso accepts everything on one line separated by `|`.",
-      perm: "ManageMessages", ex: `${P}embed titulo: Age | descricao: 18+ or under? | cor: rosa`,
+      desc: "Posts a customizable embed message.\n\n**Write it like this** (no parentheses, no trailing comma):\n```\n&embed\ntitle: Age\ndescription: Are you over or under 18?\ncolor: #FF00FF\n```\n**Fields:** `title:` `description:` `color:` `footer:` `image:` (URL) `channel:` (ID to post in another channel) — the Portuguese names work too.\nColor by hex (`#5865F2`) or name (blue, green, pink…).\nAlso accepts everything on one line separated by `|`.",
+      perm: "ManageMessages", ex: `${P}embed title: Age | description: 18+ or under? | color: pink`,
     },
     reactionrole: {
       uso: `${P}reactionrole <add|remove|list>`,
@@ -1070,13 +1071,23 @@ export async function cmdHelp(message, args, ctx) {
   }
   if (alvo) {
     const lista = chavesGrupos.filter((k) => k !== "dono").join(", ");
+    // os grupos com o nome que o índice em inglês mostra (13 out 2026)
+    const GRUPO_EN = { comecar: "start", proteger: "protect", personalizar: "customize", diversao: "fun", rpg: "game", diagnostico: "diagnostics" };
+    const listaEN = chavesGrupos.filter((k) => k !== "dono").map((k) => GRUPO_EN[k] ?? k).join(", ");
+    // "&help assistent" → "você quis dizer &help assistente?"
+    const nomes = Object.keys(DETALHES ?? {});
+    const perto = (a, b) => { if (Math.abs(a.length - b.length) > 2) return 9; const d = Array.from({ length: b.length + 1 }, (_, j) => j);
+      for (let i = 1; i <= a.length; i++) { let ant = d[0]; d[0] = i; for (let j = 1; j <= b.length; j++) { const t = d[j]; d[j] = Math.min(d[j] + 1, d[j - 1] + 1, ant + (a[i - 1] === b[j - 1] ? 0 : 1)); ant = t; } } return d[b.length]; };
+    const candidatos = [...nomes, ...nomes.map((k) => nomeExibido(k, "en"))];
+    const sugestao = candidatos.map((k) => [k, perto(String(alvo).toLowerCase(), k)]).filter(([, d]) => d <= 2).sort((a, b) => a[1] - b[1])[0]?.[0];
+    const sug = sugestao ? (lang === "en" ? nomeExibido(sugestao, "en") : sugestao) : null;
     return sendEmbed(message.channel, tr(ctx, {
       title: "❓ Não encontrado",
-      description: `Não há ajuda para \`${alvo}\`. Use \`${P}help\` para o índice, ou \`${P}help <grupo>\` (${lista}).`,
+      description: `${sug ? `Você quis dizer \`${P}help ${sug}\`?\n\n` : ""}Não há ajuda para \`${alvo}\`. Use \`${P}help\` para o índice, ou \`${P}help <grupo>\` (${lista}).`,
       colour: COR.aviso,
     }, {
       title: "❓ Not found",
-      description: `There's no help for \`${alvo}\`. Use \`${P}help\` for the index, or \`${P}help <group>\` (${lista}).`,
+      description: `${sug ? `Did you mean \`${P}help ${sug}\`?\n\n` : ""}There's no help for \`${alvo}\`. Use \`${P}help\` for the index, or \`${P}help <group>\` (${listaEN}).`,
       colour: COR.aviso,
     }));
   }
@@ -1160,7 +1171,7 @@ export async function cmdSobre(message, args, ctx) {
   const sim = (v) => v ? "🟢" : "🔴";
   const estadoLinhas = en ? [
     `${sim(modulosOn)} **AutoMod** — ${modulosOn}/${nModulos} groups on${am.antiScam?.enabled ? ` · sentinel ${am.antiScam.porAntiguidade !== false ? "(stricter with newcomers)" : "on"}` : ""}`,
-    `⚖️ **Punishment** — \`${config?.automod?.punicao?.modo ?? "avisar"}\`${(config?.automod?.punicao?.modo === "acumular") ? ` · ${escadaDePunicao(config.automod.punicao).map((d) => rotuloDegrau(d, "en")).join(" → ")}` : ""}`,
+    `⚖️ **Punishment** — \`${nomeModo(config?.automod?.punicao?.modo ?? "avisar", "en")}\`${(config?.automod?.punicao?.modo === "acumular") ? ` · ${escadaDePunicao(config.automod.punicao).map((d) => rotuloDegrau(d, "en")).join(" → ")}` : ""}`,
     `${sim(xpOn)} **Leveling (XP)** — ${xpOn ? "on" : "off"}`,
     `${sim(logOn)} **Log channel** — ${logOn ? `<#${config.log.canalId}>` : "not set"}`,
     `${sim(rssN)} **RSS** — ${rssN} feed(s)`,

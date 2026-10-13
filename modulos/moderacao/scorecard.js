@@ -24,12 +24,15 @@ const LEX_CTA = [
   /\bconta\s+(suspens|bloquead|banid)/i,
   /\b(clique|click)\s+(aqui|here|para|to)\b/i,
   /\b(login|senha|password|verify\s+your\s+account)\b/i,
+  // inglês (13 out 2026): o golpe do "nitro grátis" em servidor em inglês
+  /\b(claim|redeem)\s+(your|it|now|here|the|this)\b/i,
 ];
 
 // Urgência
 const LEX_URGENCIA = [
   /\b(vagas\s+limitadas|[úu]ltim\w+\s+(vagas|chance)|por\s+tempo\s+limitado|promo[çc][ãa]o\s+rel[âa]mpago)\b/i,
   /\b(limited\s+time|act\s+now|hurry|s[óo]\s+hoje|agora\s+mesmo|corre)\b/i,
+  /\b(before\s+it'?s\s+gone|first\s+\d+\s+(people|users|members)|expires?\s+(soon|today|in))\b/i,
 ];
 
 // Marcadores de DISCUSSÃO/ALERTA/NEGAÇÃO — empurram a nota PARA BAIXO
@@ -127,6 +130,9 @@ const LEX_OFERTA = [
 
 // Links por tipo (avaliados em ordem de prioridade)
 const LINK_FILEHOST   = /\b(mega(\.nz)?|anonfiles|gofile|pixeldrain|mediafire|\w+\.pages\.dev|\w+\.(tk|ml|ga|cf|gq))\b/i;
+// domínio que IMITA o Discord/Steam/Stoat ou anuncia "nitro/gift" num TLD barato
+// (discord-gift.xyz, dlscord.app, steamcommunlty.com) — pesa como o de arquivo
+const LINK_IMITACAO   = /\b(?:(?:disc[o0]rd|dlscord|d1scord|discrod|stoat)[\w-]*\.(?!com\b|gg\b|chat\b|app\b)[a-z]{2,}|steamcommun[l1]ty\.\w+|steamcomunity\.\w+|stearncommunity\.\w+|[\w-]*(?:nitro|gift)[\w-]*\.(?:xyz|ru|top|click|link|site|online|shop|live|gift|icu|cyou))\b/i;
 const LINK_ENCURTADOR = /\b(bit\.ly|tinyurl|cutt\.ly|is\.gd|rb\.gy|t\.me|wa\.me|encurta|grabify|iplogger)\b/i;
 const LINK_CONVITE    = /https?:\/\/stt\.gg\/[A-Za-z0-9]+/i;
 const LINK_SIMPLES    = /\bhttps?:\/\/|\bwww\./i;
@@ -408,7 +414,7 @@ function extrairFeatures(texto, opts = {}) {
   f.ameaca         = contar(t, LEX_AMEACA, 1);
 
   // Tipo de link (apenas o de maior prioridade conta)
-  if (LINK_FILEHOST.test(t))        f.link_filehost = 1;
+  if (LINK_FILEHOST.test(t) || LINK_IMITACAO.test(t)) f.link_filehost = 1;
   else if (LINK_ENCURTADOR.test(t)) f.link_encurtador = 1;
   else if (LINK_CONVITE.test(t))    f.link_convite = 1;
   else if (LINK_SIMPLES.test(t))    f.link_simples = 1;

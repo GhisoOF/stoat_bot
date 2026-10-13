@@ -286,7 +286,7 @@ function criarComando(tipoId) {
           { title: "❌ Cor inválida",
             description: `Use \`#RRGGBB\` ou um nome: ${nomesDeCor(12).map((n) => `\`${n}\``).join(", ")}…`, colour: COR.erro },
           { title: "❌ Invalid colour",
-            description: `Use \`#RRGGBB\` or a name: ${nomesDeCor(12).map((n) => `\`${n}\``).join(", ")}…`, colour: COR.erro }));
+            description: `Use \`#RRGGBB\` or a name: ${nomesDeCor(12, "en").map((n) => `\`${n}\``).join(", ")}…`, colour: COR.erro }));
       }
       c.cor = nova;
       salvarConfig?.();

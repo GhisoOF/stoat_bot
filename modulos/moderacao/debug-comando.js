@@ -23,6 +23,7 @@ import { descreverErro } from "../core/erros.js";
 import { MODULOS_AUTOMOD, moduloLigado, escadaDePunicao, GRUPOS_AUTOMOD, estadoDoGrupo, validadeDosAvisos } from "./automod-engine.js";
 import { servidorPermitido as temIA } from "../ai/chat.js";
 import { loja as lojaEconomia } from "../ferramentas/economia.js";
+import { nomeModo } from "../core/nomes-automod.js";
 
 const ICONE = { erro: "🔴", aviso: "🟡", ok: "🟢", info: "▫️" };
 const ANTIGOS = new Set(["canais", "voz", "tts", "voice", "silence", "silencio", "silêncio", "mudo", "timeout", "cru", "raw", "perms", "permissoes", "permissões", "tudo", "all", "completo"]);
@@ -177,7 +178,7 @@ function secaoModeracao(d, T) {
   const itens = [];
   const grupos = Object.keys(GRUPOS_AUTOMOD).map((g) => ({ g, ...estadoDoGrupo(d.am, g) }));
   const resumo = grupos.map((x) => `${x.g} ${x.ligadas}/${x.total}`).join(" · ");
-  itens.push({ nivel: "info", texto: T(`automod: ${resumo} · punição \`${d.pol.modo ?? "avisar"}\``, `automod: ${resumo} · punishment \`${d.pol.modo ?? "avisar"}\``) });
+  itens.push({ nivel: "info", texto: T(`automod: ${resumo} · punição \`${d.pol.modo ?? "avisar"}\``, `automod: ${resumo} · punishment \`${nomeModo(d.pol.modo ?? "avisar", "en")}\``) });
   if (!d.config?.log?.canalId) itens.push({ nivel: "aviso", texto: T("sem canal de log — punições e alertas não ficam registrados", "no log channel — punishments and alerts aren't recorded"), dica: T("`&log canal aqui` num canal só-staff", "`&log canal aqui` in a staff-only channel") });
   const off = d.config?.comandosDesativados ?? [];
   if (off.length) itens.push({ nivel: "info", texto: `${T("comandos desativados", "disabled commands")}: ${off.map((c) => `\`${c}\``).join(", ")}` });

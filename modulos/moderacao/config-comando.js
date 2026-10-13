@@ -2,6 +2,7 @@ import { servidorPermitido as temIA } from "../ai/chat.js";
 
 import * as db from "../core/db.js";
 import { EVENTOS } from "../core/log.js";
+import { nomeGrupo, nomeParte, nomeModo, nomeEventoLog } from "../core/nomes-automod.js";
 import { MODOS as MODOS_BG, MODOS_EN as MODOS_BG_EN } from "./ban-global.js";
 import { escadaDePunicao, rotuloDegrau, GRUPOS_AUTOMOD, estadoDoGrupo, validadeDosAvisos } from "./automod-engine.js";
 import { tr, lingua } from "../core/i18n.js";
@@ -66,17 +67,17 @@ export async function cmdConfig(message, args, ctx) {
   const modulos = Object.entries(GRUPOS_AUTOMOD).flatMap(([grupo, def]) => {
     const st = estadoDoGrupo(am, grupo);
     return [
-      `${st.ligadas === st.total ? "🟢" : st.ligadas ? "🟡" : "🔴"} **${grupo}** — ${T(def.pt, def.en)} · ${st.ligadas}/${st.total}`
+      `${st.ligadas === st.total ? "🟢" : st.ligadas ? "🟡" : "🔴"} **${nomeGrupo(grupo, lang)}** — ${T(def.pt, def.en)} · ${st.ligadas}/${st.total}`
         // punição própria do grupo (quando alguma parte não herda a geral)
-        + (() => { const ms = [...new Set(st.partes.map((x) => am[x.chave]?.punicao?.modo).filter(Boolean))]; return ms.length ? ` · ${T("punição", "punishment")} ${ms.map((m) => `\`${m}\``).join("/")}` : ""; })(),
+        + (() => { const ms = [...new Set(st.partes.map((x) => am[x.chave]?.punicao?.modo).filter(Boolean))]; return ms.length ? ` · ${T("punição", "punishment")} ${ms.map((m) => `\`${nomeModo(m, lang)}\``).join("/")}` : ""; })(),
       // as partes numa linha só (o detalhe de cada uma fica no `&automod <grupo>`)
-      `   ${st.partes.map((x) => `${x.ligada ? "✓" : "✗"} \`${x.parte}\``).join(" · ")}`,
+      `   ${st.partes.map((x) => `${x.ligada ? "✓" : "✗"} \`${nomeParte(x.parte, lang)}\``).join(" · ")}`,
     ];
   });
 
   // ── Punição ──
   const punicao = [
-    `${T("**Modo:**", "**Mode:**")} \`${pol.modo}\` — ${L_MODOS[pol.modo] ?? "?"}`,
+    `${T("**Modo:**", "**Mode:**")} \`${nomeModo(pol.modo, lang)}\` — ${L_MODOS[pol.modo] ?? "?"}`,
     pol.modo === "acumular"
       ? `${T("**Escada:**", "**Ladder:**")} ${escadaDePunicao(pol).map((d) => rotuloDegrau(d, lang)).join(" → ")}`
       : null,
@@ -96,7 +97,7 @@ export async function cmdConfig(message, args, ctx) {
   const logs = [
     `${T("**Canal:**", "**Channel:**")} ${lg.canalId ? `<#${lg.canalId}>` : T("_(desativado)_", "_(disabled)_")}`,
     // o nome da categoria é o que se digita em `&log <categoria> on|off` — vai como código
-    Object.keys(EVENTOS).map((k) => `${on(lg.eventos?.[k] !== false)} \`${k}\``).join(" · "),
+    Object.keys(EVENTOS).map((k) => `${on(lg.eventos?.[k] !== false)} \`${nomeEventoLog(k, lang)}\``).join(" · "),
   ];
 
   // (2 out 2026) O RPG saiu do &config: ele é um mundo só, configurado pelo dono

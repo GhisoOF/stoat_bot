@@ -79,16 +79,20 @@ export async function enviarPaginado(ctx, canal, {
   varrer();
   const lang = ctx?.config?.language === "en" ? "en" : "pt";
   const idx = Math.min(Math.max(0, paginaInicial | 0), paginas.length - 1);
-  const sessao = { paginas, idx, autorId, comandoPagina, lang, colour, expira: agora() + ttlMs, ctx };
+  // dica: o texto de TODAS as páginas — na tradução para o inglês, a página 2
+  // (só com `politica`, `apagar`…) sabe de que comando é (13 out 2026)
+  const dica = paginas.length > 1 ? paginas.map((p) => String(p.description ?? "")).join("\n") : null;
+  const sessao = { paginas, idx, autorId, comandoPagina, lang, colour, expira: agora() + ttlMs, ctx, dica };
   // O que vai para o banco já sai traduzido (o ctx não sobrevive a um reinício).
   const exibir = ctx?.exibir ?? ((t) => t);
   const paraBanco = () => ({
     ...sessao,
-    paginas: paginas.map((p) => ({ ...p, title: exibir(p.title), description: exibir(p.description) })),
+    paginas: paginas.map((p) => ({ ...p, title: exibir(p.title, dica), description: exibir(p.description, dica) })),
+    dica: null,
     comandoPagina: comandoPagina ? exibir(comandoPagina) : null,
   });
 
-  const msg = await ctx.sendEmbed(canal, montar(sessao, idx));
+  const msg = await ctx.sendEmbed(canal, montar(sessao, idx), { dica });
   const msgId = msg?.id ?? msg?._id;
   if (!msgId || paginas.length < 2) return msg;
 
@@ -130,7 +134,7 @@ export async function aoReagir(msgId, userId, emoji, msgObj = null) {
   if (!s.msg) { console.warn(`[PAGINAS] sessão de ${msgId} sem a mensagem para editar`); return true; }
   try {
     const exibir = s.ctx?.exibir ?? ((t) => t);
-    await s.msg.edit({ embeds: [{ ...embed, title: exibir(embed.title), description: exibir(embed.description) }] });
+    await s.msg.edit({ embeds: [{ ...embed, title: exibir(embed.title, s.dica), description: exibir(embed.description, s.dica) }] });
   } catch (err) {
     console.warn("[PAGINAS] falha ao editar:", err?.message ?? err);
   }

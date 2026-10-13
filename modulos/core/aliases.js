@@ -1,4 +1,5 @@
 import { ORDEM as ORDEM_GRUPOS } from "../moderacao/help-grupos.js";   // os grupos que o índice do &help promete
+import { EN_PARA_PT } from "./nomes-automod.js";
 
 export const COMANDO_EN = {
   acesso: "access",
@@ -25,6 +26,11 @@ export const COMANDO_EN = {
   // "fun" não: `&help fun` já é o grupo Diversão da ajuda
   entretenimento: "entertainment",
   servidor: "server",
+  // (13 out 2026) a tela em inglês ainda mostrava estes em português
+  entrar: "join",
+  sair: "leave",
+  silenciar: "silence",
+  economia: "economy",
 };
 
 export const COMANDO_EXTRA = {
@@ -40,6 +46,7 @@ export const COMANDO_EXTRA = {
   guide: "tutorial",
   start: "tutorial",
   wizard: "assistente",
+  assistant: "assistente",
   setup: "assistente",
   configure: "assistente",
   team: "staff",
@@ -54,6 +61,9 @@ export const COMANDO_EXTRA = {
   entertainment: "entretenimento",
   fun: "entretenimento",
   server: "servidor",
+  silence: "silenciar",
+  economy: "economia",
+  purge: "limpar",
 };
 
 export const SUB = {
@@ -108,7 +118,7 @@ export const SUB = {
     class: "classe", evolve: "evoluir", use: "usar", story: "historia", preview: "prever", redo: "refazer",
     top: "top", ranking: "ranking",
     sheet: "ficha", profile: "perfil",
-    help: "ajuda", commands: "comandos",
+    help: "ajuda", commands: "comandos", join: "entrar", leave: "sair",
     // dentro de `game admin` e `game follower`
     give: "dar", item: "item", level: "nivel", energy: "energia",
     admin: "admin", eco: "eco", status: "status", top: "top",
@@ -120,7 +130,7 @@ export const SUB = {
     take: "levar", add: "adicionar", drop: "tirar", dismiss: "dispensar",
     sheet: "ficha", status: "status", give: "dar", retrieve: "pegar",
     bag: "mochila", inventory: "inventario",
-    photos: "fotos", album: "album",
+    photos: "fotos", album: "album", image: "imagem", picture: "imagem",
     cancel: "cancelar", accept: "aceitar", announce: "anunciar",
   },
   xp: {
@@ -160,6 +170,8 @@ export const SUB = {
     stack: "acumular", ban: "banir",
   },
   automod: {
+    // os grupos em inglês (13 out 2026) — as partes ficam na família de cada um
+    ...EN_PARA_PT.grupos, antinoise: "antiruido",
     punishment: "punicao", inherit: "herdar", global: "global",
     set: "set", status: "status", debug: "debug",
     warn: "avisar", delete: "apagar", confirm: "confirmar",
@@ -168,6 +180,44 @@ export const SUB = {
     size: "tamanho", threshold: "limiar", ignore: "ignorar",
     repetition: "repeticao",
   },
+  // ── Famílias dentro do &automod (13 out 2026): `&automod sentinel topics
+  // politics delete` vira `&automod sentinela assuntos politica apagar`. Cada
+  // nível usa o vocabulário do nível de cima (ver traduzirCaminho).
+  "automod.antispam": {
+    speed: "velocidade", burst: "rajada", repeat: "repeticao", media: "midia", mentions: "mencoes",
+    messages: "mensagens", time: "tempo", minute: "minuto", newcomer: "novato", newcomers: "novato", times: "vezes",
+  },
+  "automod.antiruido": {
+    characters: "caracteres", letters: "letras",
+    size: "tamanho", threshold: "limiar", repetition: "repeticao", ignore: "ignorar",
+  },
+  "automod.antilink": { domains: "dominios", invites: "convites" },
+  "automod.sentinela": {
+    content: "conteudo", hate: "odio", images: "imagens", topics: "assuntos", subjects: "assuntos", avatar: "avatar", pfp: "avatar",
+    sensitivity: "sensitivity", channel: "channel", test: "test", simulate: "simulate", ban: "ban", dismiss: "dismiss",
+    config: "config", status: "status", tenure: "antiguidade", alerts: "alerta", alert: "alerta",
+    low: "baixa", medium: "media", high: "alta",
+  },
+  "automod.odio": { add: "add", remove: "remover", list: "lista" },
+  "automod.assuntos": {
+    ...EN_PARA_PT.temas, ...EN_PARA_PT.acoesTema, ...EN_PARA_PT.sens,
+    sensitivity: "sensibilidade", allow: "liberar", watch: "vigiar", ai: "ia", test: "test",
+    add: "add", remove: "remover",
+  },
+  "automod.avatar": { action: "acao", time: "tempo", check: "checar", ...EN_PARA_PT.acoesAvatar },
+  warn: { list: "lista", clear: "limpar" },
+  ticket: { panel: "painel", list: "lista", delete: "apagar", categories: "categorias", team: "equipe" },
+  webhook: { create: "criar", list: "lista", remove: "remover", test: "testar", events: "eventos", channel: "canal" },
+  economia: {
+    shop: "loja", buy: "comprar", mine: "minerar", balance: "saldo", pay: "pagar", give: "dar", take: "tirar",
+    reset: "zerar", interval: "intervalo", remove: "remover", confirm: "confirmar",
+  },
+  servidores: {
+    report: "relatorio", channel: "canal", now: "agora", subjects: "assuntos", topics: "assuntos", empty: "vazias", here: "aqui",
+  },
+  rolar: { coin: "moeda" },
+  iniciativa: { list: "lista", remove: "remover", clear: "limpar" },
+  limpar: { all: "tudo", everything: "tudo" },
   cor: {
     panel: "painel", create: "criar", generate: "gerar",
     gradient: "gradiente", preset: "preset", presets: "presets",
@@ -185,13 +235,13 @@ export const SUB = {
   },
   staff: {
     add: "add", remove: "remove", list: "lista", clear: "limpar",
-    title: "titulo", label: "titulo",
+    title: "titulo", label: "titulo", team: "equipe",
   },
   boasvindas: {
     channel: "canal", title: "titulo", text: "texto", message: "texto",
     colour: "cor", color: "cor", image: "imagem", test: "testar",
     default: "padrao", status: "status", clear: "limpar", here: "aqui",
-    hidden: "oculto", hide: "oculto", visible: "visivel", show: "visivel",
+    hidden: "oculto", hide: "oculto", visible: "visivel", show: "visivel", messages: "mensagens",
   },
   adeus: {
     channel: "canal", title: "titulo", text: "texto", message: "texto",
@@ -209,6 +259,7 @@ export const SUB = {
     perminute: "porminuto", cap: "porminuto",
     join: "entrar", leave: "sair", voice: "voz", status: "estado",
     names: "nomes", cooldown: "cooldown",
+    effect: "efeito", pitch: "tom", tone: "tom", dictionary: "dicionario",
   },
   fuso: {
     add: "add", remove: "remove", list: "lista", clear: "limpar",
@@ -219,12 +270,12 @@ export const SUB = {
   log: {
     here: "here", off: "off", channel: "canal",
     punishments: "punicoes", members: "membros", messages: "mensagens",
-    roles: "cargos", commands: "comandos",
+    roles: "cargos", commands: "comandos", events: "eventos",
   },
   chat: {
     free: "livre", forget: "esquecer", all: "tudo",
     profile: "perfil", map: "mapear", care: "cuidado", gentle: "gentil",
-    comment: "comentar", perday: "pordia", status: "status",
+    comment: "comentar", perday: "pordia", status: "status", here: "aqui",
     mode: "modo", relevant: "relevante", every: "todas",
   },
   modia: {
@@ -233,7 +284,7 @@ export const SUB = {
   },
   debug: {
     channels: "canais", permissions: "permissoes", raw: "cru",
-    silence: "silence", mute: "mudo",
+    silence: "silence", mute: "mudo", read: "ler",
   },
   blocklist: {
     add: "add", remove: "remove", list: "list", clear: "clear",
@@ -266,7 +317,7 @@ export const SUB = {
 };
 
 const ANINHADOS = {
-  game: new Set(["admin", "moeda", "mercado", "follower", "followers",
+  game: new Set(["admin", "moeda", "mercado", "follower", "followers", "coop",
     "trocar", "escambo", "party", "equipe", "reset"]),
   acesso: new Set(["cargo", "cargos", "staff", "canal", "canais"]),
   xp: new Set(["setup", "config", "configurar", "sincronizar"]),
@@ -280,17 +331,50 @@ const ANINHADOS = {
   modia: new Set(["canal", "criterios"]),
   debug: new Set(["canais", "permissoes", "silence", "mudo"]),
   punicao: new Set(["modo", "mode"]),
+  economia: new Set(["zerar", "loja", "config"]),
+  servidores: new Set(["relatorio"]),
   log: new Set([]),
 };
 
+// Só para a TELA: palavras que o comando aceita nos dois idiomas, mas que a
+// ajuda escreve em português (`&log channel aqui`).
+const SO_EXIBIR = {
+  automod: { aviso: "warn" }, punicao: { aviso: "warn" }, "automod.punicao": { aviso: "warn" },
+  warn: { acumular: "stack" }, xp: { aqui: "here" }, tts: { aqui: "here", padrao: "default" },
+  log: { aqui: "here" }, rss: { aqui: "here" }, chat: { aqui: "here" },
+  "automod.sentinela": { assuntos: "topics", aqui: "here" }, "automod.antispam": { repeticao: "repeat" },
+};
 const SUB_REVERSO = {};
 for (const [cmd, mapa] of Object.entries(SUB)) {
-  SUB_REVERSO[cmd] = {};
+  SUB_REVERSO[cmd] = { ...(SO_EXIBIR[cmd] ?? {}) };
   for (const [en, pt] of Object.entries(mapa)) {
     // O primeiro inglês encontrado para cada token PT é o preferido na tela.
     if (!SUB_REVERSO[cmd][pt]) SUB_REVERSO[cmd][pt] = en;
   }
 }
+for (const [cmd, mapa] of Object.entries(SO_EXIBIR)) SUB_REVERSO[cmd] ??= { ...mapa };
+// A família de um token dentro de um comando: `automod` + `sentinela` →
+// "automod.sentinela"; sem família própria, o mapa com o nome do token
+// (`punicao` dentro do automod usa o do &punicao).
+const familia = (tabela, canonico, token) => {
+  const a = tabela[token], b = tabela[`${canonico}.${token}`];
+  return a || b ? { ...(a ?? {}), ...(b ?? {}) } : null;
+};
+
+// Traduz um CAMINHO de subcomandos (inglês → interno), descendo pelas famílias.
+function traduzirCaminho(canonico, args, inicio = 0, max = 4) {
+  const saida = [...args];
+  let mapa = SUB[canonico] ?? {};
+  for (let i = inicio; i < Math.min(saida.length, inicio + max); i++) {
+    if (typeof saida[i] !== "string") break;
+    const pt = mapa[saida[i].toLowerCase()];
+    if (pt) saida[i] = pt;
+    const prox = familia(SUB, canonico, String(saida[i]).toLowerCase());
+    if (prox) mapa = { ...(SUB[canonico] ?? {}), ...prox };
+  }
+  return saida;
+}
+const FAMILIAS_EM_CAMINHO = new Set(["automod"]);
 
 export function normalizarArgs(canonico, args, CANONICO = {}) {
   if (!Array.isArray(args) || !args.length) return args;
@@ -306,6 +390,7 @@ export function normalizarArgs(canonico, args, CANONICO = {}) {
     // grupo, então `&help comecar` abria a ajuda do &tutorial por engano.
     const grupos = new Set([...ORDEM_GRUPOS, ...Object.values(SUB.help ?? {})]);
     saida[0] = SUB[canonico]?.[bruto] ?? (grupos.has(bruto) ? bruto : null) ?? CANONICO[bruto] ?? COMANDO_EXTRA[bruto] ?? bruto;
+    if (FAMILIAS_EM_CAMINHO.has(saida[0])) return traduzirCaminho(saida[0], saida, 1, 3);
     const doAlvo = SUB[saida[0]];
     if (doAlvo && saida[1]) {
       const t = String(saida[1]).toLowerCase();
@@ -314,6 +399,7 @@ export function normalizarArgs(canonico, args, CANONICO = {}) {
     return saida;
   }
 
+  if (FAMILIAS_EM_CAMINHO.has(canonico)) return traduzirCaminho(canonico, args);
   const mapa = SUB[canonico];
   if (!mapa) return args;
 
@@ -353,11 +439,14 @@ const PLACEHOLDER_EN = {
   iddocanal: "channelId", idcargo: "roleId", link: "link", url: "url",
   "símbolo": "symbol", simbolo: "symbol", "nível": "level", nivel: "level",
   "opção": "option", opcao: "option", motivo: "reason", dias: "days",
+  nota: "note", termo: "term", tema: "topic", parte: "part", grupo: "group", modo: "mode", tempo: "time",
+  "ação": "action", acao: "action", "descrição": "description", descricao: "description",
 };
 
 function traduzirLista(dentro, rev) {
   return dentro.split("|").map((parte) => {
     const t = parte.trim().toLowerCase();
+    if (t.includes(",")) return parte.split(",").map((x) => rev[x.trim().toLowerCase()] ?? x).join(",");
     return rev[t] ?? PLACEHOLDER_EN[t] ?? parte;
   }).join("|");
 }
@@ -368,6 +457,8 @@ function traduzirToken(tok, rev) {
   const m = tok.match(/^([<[(‹])(.+)([>\])›])$/);
   if (m) return m[1] + traduzirLista(m[2], rev) + m[3];
   if (tok.includes("|")) return traduzirLista(tok, rev);
+  // "aviso,5m,1h,ban" → "warn,5m,1h,ban"
+  if (tok.includes(",") && !/\s/.test(tok)) return tok.split(",").map((x) => rev[x.toLowerCase()] ?? x).join(",");
   return rev[tok.toLowerCase()] ?? tok;
 }
 
@@ -394,39 +485,67 @@ function traduzirTrecho(trecho, prefixo, CANONICO) {
       return { texto: saida.join(" "), comando: canonAlvo };
     }
     const alvoCanon = SUB[canonico]?.[alvoBruto] ?? canonicoDe(alvoBruto, CANONICO);
-    const revAlvo = SUB_REVERSO[alvoCanon] ?? {};
-    const saida = [prefixo + nomeEN, COMANDO_EN[alvoCanon] ?? alvoCanon];
-    for (let i = 2; i < partes.length; i++) saida.push(traduzirToken(partes[i], revAlvo));
+    const saida = [prefixo + nomeEN, COMANDO_EN[alvoCanon] ?? alvoCanon, ...traduzirResto(partes.slice(2), alvoCanon)];
     return { texto: saida.join(" "), comando: alvoCanon };
   }
 
-  let rev = SUB_REVERSO[canonico] ?? {};
-  let acabaramOsSubcomandos = false;
-  const traduzidas = partes.map((tok, i) => {
-    if (i === 0) return prefixo + nomeEN;
-    if (/^[<[(‹]/.test(tok)) return traduzirToken(tok, rev);   // placeholder: sempre
-    if (acabaramOsSubcomandos) return tok;
-    const baixo = tok.toLowerCase();
-    const t = rev[baixo];
-    if (t === undefined) {
-      if (i > 1) acabaramOsSubcomandos = true;
-      return tok;
-    }
-    // Família: `&automod punicao modo` — depois de "punicao", vale o
-    // vocabulário DELE ("modo" → "mode", "escada" → "ladder"). Antes a ajuda em
-    // inglês saía "&automod punishment modo".
-    if (baixo !== canonico && SUB_REVERSO[baixo]) rev = { ...rev, ...SUB_REVERSO[baixo] };
-    return t;
-  });
-  return { texto: traduzidas.join(" "), comando: canonico };
+  return { texto: [prefixo + nomeEN, ...traduzirResto(partes.slice(1), canonico)].join(" "), comando: canonico };
 }
 
-export function exibir(texto, lang, prefixo = "&", CANONICO = {}) {
+// Os argumentos de um comando, na tela em inglês. Família: `&automod punicao
+// modo` — depois de "punicao", vale o vocabulário DELE ("modo" → "mode"). Antes
+// a ajuda em inglês saía "&automod punishment modo"; e agora desce quantos
+// níveis houver: `&automod sentinela assuntos politica apagar` →
+// `&automod sentinel topics politics delete`.
+function traduzirResto(tokens, canonico) {
+  let rev = SUB_REVERSO[canonico] ?? {};
+  let acabaramOsSubcomandos = false;
+  return tokens.map((tok, j) => {
+    if (/^[<[(‹]/.test(tok)) return traduzirToken(tok, rev);   // placeholder: sempre
+    if (acabaramOsSubcomandos) return tok;
+    if (tok.includes("|") || tok.includes(",")) return traduzirToken(tok, rev);
+    const baixo = tok.toLowerCase();
+    const t = rev[baixo];
+    const prox = baixo !== canonico ? familia(SUB_REVERSO, canonico, baixo) : null;
+    if (t === undefined && !prox) {
+      if (j > 0) acabaramOsSubcomandos = true;
+      return tok;
+    }
+    if (prox) rev = { ...rev, ...prox };
+    return t ?? tok;
+  });
+}
+
+// Código solto (`velocidade`, `religiao`) depois de um comando: o vocabulário
+// do comando E de todas as famílias dele.
+const revCache = new Map();
+function revDoContexto(contexto) {
+  if (!revCache.has(contexto)) {
+    const fams = Object.keys(SUB_REVERSO).filter((k) => k.startsWith(`${contexto}.`)).map((k) => SUB_REVERSO[k]);
+    revCache.set(contexto, Object.assign({}, ...fams, SUB_REVERSO[contexto] ?? {}));
+  }
+  return revCache.get(contexto);
+}
+
+// `dica`: um texto maior de onde tirar o comando de contexto (as outras
+// páginas de uma ajuda paginada).
+export function exibir(texto, lang, prefixo = "&", CANONICO = {}, dica = null) {
   if (lang !== "en" || typeof texto !== "string") return texto;
 
   const linhas = texto.split("\n");
   let dentroDeBloco = false;
-  let contexto = null;
+  // O código solto ANTES do primeiro comando (`acumular` numa lista de modos
+  // que só depois mostra `&automod punicao modo …`) também é daquele comando.
+  // Vale o comando que MAIS aparece (um "veja `&tutorial`" no meio não manda).
+  const contagem = new Map();
+  for (const m of String(dica ?? texto).matchAll(new RegExp("`" + prefixo.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "([a-zçãéíóú]+)", "gi"))) {
+    const c = canonicoDe(m[1], CANONICO);
+    if (c !== "help") contagem.set(c, (contagem.get(c) ?? 0) + 1);
+  }
+  const porFrequencia = [...contagem.entries()].sort((a, b) => b[1] - a[1]).map(([c]) => c);
+  let contexto = porFrequencia[0] ?? null;
+  // código solto: primeiro o comando da linha/acima; o que faltar, os outros do texto
+  const revSolto = (ctx) => Object.assign({}, ...porFrequencia.slice().reverse().map(revDoContexto), revDoContexto(ctx));
 
   return linhas.map((linha) => {
     if (linha.trim().startsWith("```")) { dentroDeBloco = !dentroDeBloco; return linha; }
@@ -438,7 +557,7 @@ export function exibir(texto, lang, prefixo = "&", CANONICO = {}) {
         return "`" + r.texto + "`";
       }
       if (!contexto) return todo;
-      const rev = SUB_REVERSO[contexto] ?? {};
+      const rev = revSolto(contexto);
       const traduzido = dentro.trim().split(/\s+/).map((t) => traduzirToken(t, rev)).join(" ");
       return "`" + traduzido + "`";
     });

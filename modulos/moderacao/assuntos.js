@@ -71,7 +71,7 @@ export const TEMAS = {
       "comunismo", "socialis\\w*", "capitalis\\w*", "fascismo", "liberalismo", "neoliberal\\w*", "conservador\\w*",
       "progressist\\w*", "anarquis\\w*", "marxis\\w*", "nazismo", "bolsonarismo", "lulismo", "petismo", "lacra\\w*",
       "woke", "centrao", "direita", "esquerda", "liberais", "communism", "socialism", "capitalism", "leftists?",
-      "right[- ]wing", "left[- ]wing", "liberals?", "conservatives?", "democrats?", "republicans?",
+      "right[- ]wing", "left[- ]wing", "the (left|right)", "lefties", "right[- ]wingers?", "liberals?", "conservatives?", "democrats?", "republicans?",
     ],
     generico: [
       "politic\\w*", "governo", "presidente", "eleicao", "eleicoes", "eleitor\\w*", "vota\\w*", "voto", "votou", "urnas?",
@@ -84,6 +84,8 @@ export const TEMAS = {
       "vai votar", "quem vota", "votar n[oa]", "eleitor d[eo]", "(pior|melhor) presidente", "fora (lula|bolsonaro|pt)",
       "gado", "minions?", "mamata", "corrupt\\w*", "rouba\\w*", "ladra[ao]\\w*", "lavagem cerebral", "fake news",
       "destrui\\w*", "(o|nosso|esse) pais",
+      // inglês (13 out 2026)
+      "vote for", "who votes?", "voting for", "rigged", "stolen", "brainwash\\w*", "sheep", "ruin(ed|ing)? (the|this|our) country",
     ],
     discussao_pt: "debate ou briga de opinião sobre política, políticos, partidos, eleições ou governo; defender ou atacar um lado; campanha ou propaganda política; tentar convencer alguém a votar",
     discussao_en: "a debate or argument about politics, politicians, parties, elections or government; defending or attacking a side; campaigning or political propaganda; trying to convince someone how to vote",
@@ -119,6 +121,7 @@ export const TEMAS = {
     marcadores: [
       "sua religiao", "minha religiao", "farsa", "mentira", "lavagem cerebral", "fanatic\\w*", "esta escrito",
       "religiao e", "crente e", "ateu e", "voce (vai|precisa|deveria)", "seita",
+      "your religion", "my religion", "fake", "brainwash\\w*", "cult", "you('ll| will) burn", "repent",
     ],
     discussao_pt: "debate ou briga sobre religião ou crença; atacar ou defender uma religião; pregação ou tentar converter alguém",
     discussao_en: "a debate or argument about religion or belief; attacking or defending a religion; preaching or trying to convert someone",
@@ -139,6 +142,7 @@ export const TEMAS = {
       "vend[eo]\\w*", "compr[oa]\\w*", "quem tem", "onde (compro|consigo|acho|arrumo)", "chama no (pv|privado|dm|zap|whats)",
       "entrego", "delivery", "\\d+ ?(g|gramas?)", "doses?", "como (usar|fazer|plantar|cultivar)", "plantar", "cultivar",
       "preco", "quanto (custa|e)", "pix", "experimenta\\w*", "vale a pena",
+      "selling", "sell", "buy(ing)?", "dm me", "hmu", "plug", "grams?", "how (to|do i) (get|grow|make|use)", "price", "cashapp", "venmo",
     ],
     pesoForte: 3.5,
     discussao_pt: "oferecer, vender ou pedir drogas ilícitas; ensinar a conseguir, preparar ou usar; incentivar o uso",
@@ -158,6 +162,7 @@ export const TEMAS = {
     marcadores: [
       "vend[eo]\\w*", "manda", "me manda", "quer ver", "chama no (pv|privado|dm)", "quanto (custa|e)", "pix",
       "gostosa", "delicia", "com voce", "em voce",
+      "selling", "send( me)?", "dm me", "wanna see", "sexy", "hot",
     ],
     discussao_pt: "conteúdo sexual explícito em texto: descrever ato sexual, pedir ou oferecer nudes/pack/conteúdo adulto, assédio ou cantada sexual insistente",
     discussao_en: "explicit sexual content in text: describing a sexual act, asking for or offering nudes/adult content, sexual harassment or insistent sexual advances",
@@ -176,10 +181,13 @@ const DEBATE = [
   "voces? (nao )?sabe\\w*", "argumento\\w*", "fatos?", "concordo", "discordo", "na verdade", "a verdade e", "o problema e",
   "defend\\w*", "culpa d[eoa]", "por causa d[eoa]", "comprovad\\w*", "pesquisa", "estudos?", "absurdo", "vergonha",
   "nao tem como", "e obvio", "acorda", "abre o olho", "you('re| are) wrong", "the fact is",
+  "you (don'?t|do not) (know|understand)", "wake up", "facts?", "obviously", "educate yourself", "do your research",
+  "the problem is", "because of (them|him|her)", "shame",
 ];
 const AGRESSAO = [
   "burr[oa]s?", "idiotas?", "imbecis?", "imbecil", "otari[oa]s?", "ignorantes?", "lixos?", "ridicul\\w*", "babaca\\w*",
   "alienad\\w*", "escrot\\w*", "vagabund\\w*", "cala a boca", "stupid", "idiots?", "morons?",
+  "dumb(ass)?", "clowns?", "brain ?dead", "shut up", "retards?", "pathetic",
 ];
 // O que ameniza
 const RE_RISADA = /(?<![\p{L}\p{N}])(k{3,}|(?:ha){2,}h?|(?:he){2,}h?|(?:rs){2,}|lol|lmao|kek|ksks\w*|huehue\w*|kakak\w*|aushau\w*|ahsuah\w*|kkj\w*|kk)(?![\p{L}\p{N}])/iu;

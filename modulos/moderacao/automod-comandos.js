@@ -12,6 +12,7 @@ import { resolverUsuario } from "../core/ids.js";
 import { banir } from "../core/banir.js";
 import { descreverErro as descreverErroBan } from "../core/erros.js";
 import * as assuntos from "./assuntos.js";
+import { nomeGrupo, nomeParte, nomeModo, nomeTema, nomeAcaoTema, nomeAcaoAvatar, nomeSens } from "../core/nomes-automod.js";
 import * as avatar from "./avatar.js";
 import { lerDuracao, duracaoTexto } from "../core/duracao.js";
 
@@ -91,6 +92,11 @@ export async function cmdClearwarnings(message, args, ctx) {
     descricao: `<@${targetId}> teve os avisos (${tinha}) zerados por <@${message.authorId}>.` });
 }
 
+// Os parâmetros em inglês, para a tela (o que se digita em inglês o aliases.js traduz)
+const PARAM_EN = { mensagens: "messages", tempo: "time", mencoes: "mentions", tamanho: "size", limiar: "threshold", repeticao: "repetition",
+  ignorar: "ignore", minuto: "minute", novato: "newcomer", vezes: "times" };
+const nomeParam = (p, lang) => (lang === "en" ? PARAM_EN[p] ?? p : p);
+
 // %automod status | %automod <módulo> <on|off> | %automod debug <on|off>   (ManagePermissions)
 const G_AUTOMOD = GRUPOS_AUTOMOD;
 
@@ -99,11 +105,11 @@ function guiaDosGrupos(lang, P, abertura) {
   const en = lang === "en";
   return [
     abertura, "",
-    ...Object.entries(G_AUTOMOD).map(([nome, d]) => `${d.emoji} \`${nome}\` — ${en ? d.en : d.pt}`),
+    ...Object.entries(G_AUTOMOD).map(([nome, d]) => `${d.emoji} \`${nomeGrupo(nome, lang)}\` — ${en ? d.en : d.pt}`),
     "",
     en ? "**Copy as is:**" : "**Copie assim mesmo:**",
     `\`${P}automod antispam off\` — ${en ? "turns one group off" : "desliga um grupo"}`,
-    `\`${P}automod antiruido caps off\` — ${en ? "turns off just one part" : "desliga só uma parte"}`,
+    `\`${P}automod ${nomeGrupo("antiruido", lang)} caps off\` — ${en ? "turns off just one part" : "desliga só uma parte"}`,
     `\`${P}automod off\` · \`${P}automod on\` — ${en ? "everything at once" : "tudo de uma vez"}`,
     `\`${P}automod\` — ${en ? "what's on and off right now" : "o que está ligado agora"}`,
   ].join("\n");
@@ -198,12 +204,12 @@ export async function cmdAutomod(message, args, ctx) {
     if (!a1) {
       const st = estadoDoGrupo(config.automod, grupo);
       const pm = (f) => config.automod[MODULOS_AUTOMOD[f]]?.punicao?.modo;
-      return sendEmbed(message.channel, { title: `${def.emoji} ${grupo} — ${T(def.pt, def.en)}`, colour: COR.mod, description: [
+      return sendEmbed(message.channel, { title: `${def.emoji} ${nomeGrupo(grupo, lang)} — ${T(def.pt, def.en)}`, colour: COR.mod, description: [
         `**${st.ligadas}/${st.total}** ${T("partes ligadas", "parts on")}`,
         "",
-        ...st.partes.map((x) => `${x.ligada ? "🟢" : "🔴"} \`${x.parte}\` — ${ROTULO_PARTE[x.parte]?.[lang === "en" ? 1 : 0] ?? x.parte}`
+        ...st.partes.map((x) => `${x.ligada ? "🟢" : "🔴"} \`${nomeParte(x.parte, lang)}\` — ${ROTULO_PARTE[x.parte]?.[lang === "en" ? 1 : 0] ?? x.parte}`
           + `${descreverFiltro(config.automod, x.chave, lang, ctx.estado) ? ` _(${descreverFiltro(config.automod, x.chave, lang, ctx.estado)})_` : ""}`
-          + `${pm(x.filtro) ? ` · ${T("punição", "punishment")} \`${pm(x.filtro)}\`` : ""}`),
+          + `${pm(x.filtro) ? ` · ${T("punição", "punishment")} \`${nomeModo(pm(x.filtro), lang)}\`` : ""}`),
         "",
         `\`${PREFIXO}automod ${grupo} on|off\` — ${T("o grupo inteiro", "the whole group")}`,
         `\`${PREFIXO}automod ${grupo} <${T("parte", "part")}> on|off\` — ${T("só uma parte", "one part only")}`,
@@ -220,7 +226,7 @@ export async function cmdAutomod(message, args, ctx) {
       salvarConfig();
       return sendEmbed(message.channel, { title: "🛡 AutoMod", colour: COR.mod, description: T(
         `**${grupo}** ${a1 === "on" ? "ligado 🟢" : "desligado 🔴"} — ${Object.keys(def.partes).length} parte(s): ${Object.keys(def.partes).map((x) => `\`${x}\``).join(", ")}.`,
-        `**${grupo}** ${a1 === "on" ? "enabled 🟢" : "disabled 🔴"} — ${Object.keys(def.partes).length} part(s): ${Object.keys(def.partes).map((x) => `\`${x}\``).join(", ")}.`) });
+        `**${nomeGrupo(grupo, "en")}** ${a1 === "on" ? "enabled 🟢" : "disabled 🔴"} — ${Object.keys(def.partes).length} part(s): ${Object.keys(def.partes).map((x) => `\`${nomeParte(x, "en")}\``).join(", ")}.`) });
     }
     if (a1 === "punicao" || a1 === "punição" || a1 === "punishment") {
       const modo = MODO_EN[args[2]?.toLowerCase()] ?? args[2]?.toLowerCase();
@@ -237,7 +243,7 @@ export async function cmdAutomod(message, args, ctx) {
       salvarConfig();
       return sendEmbed(message.channel, { title: "🛡 AutoMod", colour: COR.sucesso, description: herdar
         ? T(`**${grupo}** agora herda a punição global.`, `**${grupo}** now inherits the global punishment.`)
-        : T(`**${grupo}** agora usa a punição **\`${modo}\`** (todas as partes).`, `**${grupo}** now uses the **\`${modo}\`** punishment (all parts).`) });
+        : T(`**${grupo}** agora usa a punição **\`${modo}\`** (todas as partes).`, `**${nomeGrupo(grupo, "en")}** now uses the **\`${nomeModo(modo, "en")}\`** punishment (all parts).`) });
     }
     if (a1 === "set" && PARAM_PARTE[args[2]?.toLowerCase()]) {
       const parte = PARAM_PARTE[args[2].toLowerCase()];
@@ -246,11 +252,12 @@ export async function cmdAutomod(message, args, ctx) {
       return executarFiltro(sub, args);
     }
     if (grupo === "sentinela") return cmdScam(message, args.slice(1), ctx);   // o painel: config, sensitivity, test…
-    const parecida = maisParecido(a1, [...Object.keys(def.partes), "on", "off", "punicao", "set"]);
+    const parecidaInterna = maisParecido(a1, [...Object.keys(def.partes), ...Object.keys(def.partes).map((x) => nomeParte(x, "en")), "on", "off", "punicao", "punishment", "set"]);
+    const parecida = parecidaInterna && lang === "en" ? nomeParte(parecidaInterna, "en") : parecidaInterna;
     return sendEmbed(message.channel, { title: T("❌ Parte desconhecida", "❌ Unknown part"), colour: COR.erro,
       description: [
         parecida ? T(`Você quis dizer \`${PREFIXO}automod ${grupo} ${parecida}\`?`, `Did you mean \`${PREFIXO}automod ${grupo} ${parecida}\`?`) + "\n" : null,
-        `${T("Partes", "Parts")} ${T("de", "of")} \`${grupo}\`: ${Object.keys(def.partes).map((x) => `\`${x}\``).join(", ")}`,
+        `${T("Partes", "Parts")} ${T("de", "of")} \`${nomeGrupo(grupo, lang)}\`: ${Object.keys(def.partes).map((x) => `\`${nomeParte(x, lang)}\``).join(", ")}`,
         "",
         `\`${PREFIXO}automod ${grupo} on|off\` — ${T("o grupo inteiro", "the whole group")}`,
         `${T("Ex.:", "E.g.:")} \`${PREFIXO}automod ${grupo} ${Object.keys(def.partes)[0]} off\` — ${T("só essa parte", "just that part")}`,
@@ -297,8 +304,8 @@ export async function cmdAutomod(message, args, ctx) {
     const linhas = Object.entries(GRUPOS_AUTOMOD).flatMap(([nome, def]) => {
       const st = estadoDoGrupo(config.automod, nome);
       const icone = st.ligadas === st.total ? "🟢" : st.ligadas ? "🟡" : "🔴";
-      return [`${icone} **${nome}** — ${lang === "en" ? def.en : def.pt} · ${st.ligadas}/${st.total}`,
-        `   ${st.partes.map((x) => `${x.ligada ? "✓" : "✗"} ${x.parte}`).join(" · ")}`];
+      return [`${icone} **${nomeGrupo(nome, lang)}** — ${lang === "en" ? def.en : def.pt} · ${st.ligadas}/${st.total}`,
+        `   ${st.partes.map((x) => `${x.ligada ? "✓" : "✗"} ${nomeParte(x.parte, lang)}`).join(" · ")}`];
     });
     linhas.push("", lang === "en"
       ? `_Details of one group: \`${PREFIXO}automod antispam\` · turn one off: \`${PREFIXO}automod antispam off\` · everything: \`${PREFIXO}automod off\`_`
@@ -315,7 +322,8 @@ export async function cmdAutomod(message, args, ctx) {
   if (!chave) {
     // Os nomes antigos (antiodio, anticaps…) continuam valendo, mas não se
     // ensinam mais: quem erra vê os QUATRO grupos, com exemplo pronto.
-    const parecido = maisParecido(sub, [...Object.keys(G_AUTOMOD), ...Object.keys(modulos), "on", "off", "blocklist", "whitelist", "punicao"]);
+    const parecidoInterno = maisParecido(sub, [...Object.keys(G_AUTOMOD), ...Object.keys(G_AUTOMOD).map((g) => nomeGrupo(g, "en")), ...Object.keys(modulos), "on", "off", "blocklist", "whitelist", "punicao", "punishment"]);
+    const parecido = parecidoInterno && lang === "en" ? nomeGrupo(parecidoInterno, "en") : parecidoInterno;
     return sendEmbed(message.channel, { title: lang === "en" ? "❌ I don't know that one" : "❌ Não conheço esse", colour: COR.erro,
       description: guiaDosGrupos(lang, PREFIXO, parecido
         ? (lang === "en" ? `Did you mean \`${PREFIXO}automod ${parecido}\`?` : `Você quis dizer \`${PREFIXO}automod ${parecido}\`?`)
@@ -352,7 +360,7 @@ export async function cmdAutomod(message, args, ctx) {
       : `${mod.enabled ? "🟢 ativado" : "🔴 desativado"}`];
     if (params) {
       linhas.push("", lang === "en" ? "**Parameters:**" : "**Parâmetros:**");
-      for (const [nome, ck] of Object.entries(params)) linhas.push(`• \`${nome}\` = ${mod[ck]}`);
+      for (const [nome, ck] of Object.entries(params)) linhas.push(`• \`${nomeParam(nome, lang)}\` = ${mod[ck]}`);
     }
     const pm = mod.punicao?.modo;
     linhas.push("", lang === "en"
@@ -408,7 +416,7 @@ export async function cmdAutomod(message, args, ctx) {
         { title: "🛡 Parâmetro atualizado",
           description: `\`${sub}.${nome}\` = **"${mod[ck]}"** (letras ignoradas na repetição)`, colour: COR.sucesso },
         { title: "🛡 Parameter updated",
-          description: `\`${sub}.${nome}\` = **"${mod[ck]}"** (letters ignored in repetition)`, colour: COR.sucesso }));
+          description: `\`${sub}.${nomeParam(nome, "en")}\` = **"${mod[ck]}"** (letters ignored in repetition)`, colour: COR.sucesso }));
     }
     let valor = Number(bruto);
     if (Number.isNaN(valor) || valor < 0)
@@ -421,7 +429,7 @@ export async function cmdAutomod(message, args, ctx) {
     salvarConfig();
     return sendEmbed(message.channel, tr(ctx,
       { title: "🛡 Parâmetro atualizado", description: `\`${sub}.${nome}\` = **${valor}**`, colour: COR.sucesso },
-      { title: "🛡 Parameter updated", description: `\`${sub}.${nome}\` = **${valor}**`, colour: COR.sucesso }));
+      { title: "🛡 Parameter updated", description: `\`${sub}.${nomeParam(nome, "en")}\` = **${valor}**`, colour: COR.sucesso }));
   }
 
   // ── punicao <modo|herdar> ──
@@ -505,12 +513,12 @@ export async function cmdAutomod(message, args, ctx) {
       ...assuntos.NOMES_TEMAS.map((t) => {
         const ac = assuntos.acaoDoTema(mod, t), d = assuntos.TEMAS[t];
         const extras = (mod.termos[t] ?? []).length;
-        return `${d.emoji} \`${t}\` — **${ac}** · ${ROT_ACAO[ac]}${extras ? T(` · +${extras} termo(s) daqui`, ` · +${extras} term(s) of yours`) : ""}`;
+        return `${d.emoji} \`${nomeTema(t, lang)}\` — **${nomeAcaoTema(ac, lang)}** · ${ROT_ACAO[ac]}${extras ? T(` · +${extras} termo(s) daqui`, ` · +${extras} term(s) of yours`) : ""}`;
       }),
       `**${T("Canais liberados", "Allowed channels")}:** ${mod.canaisLiberados.length ? mod.canaisLiberados.map((c) => `<#${c}>`).join(" ") : "—"}`,
-      `**${T("Punição do `punir`", "Punishment of `punir`")}:** \`${mod.punicao?.modo ?? "acumular"}\``,
+      `**${T("Punição do `punir`", "Punishment of `punish`")}:** \`${nomeModo(mod.punicao?.modo ?? "acumular", lang)}\``,
       "",
-      `\`${base} <${assuntos.NOMES_TEMAS.join("|")}> <off|alertar|apagar|punir>\``,
+      `\`${base} <${assuntos.NOMES_TEMAS.join("|")}> <off|alertar|apagar|punir>\``,   // a tela em inglês traduz (família automod.assuntos)
       `\`${base} <${T("tema", "topic")}> add|remover <${T("termo", "term")}>\` — ${T("palavras a mais (peso de nome: 2,5)", "extra words (name weight: 2.5)")}`,
       `\`${base} liberar|vigiar <#${T("canal", "channel")}|aqui>\` — ${T("um canal onde o tema pode (ex.: #debate)", "a channel where the topic is fine (e.g. #debate)")}`,
       `\`${base} sensibilidade <baixa|media|alta>\` · \`${base} ia on|off\``,
@@ -528,7 +536,7 @@ export async function cmdAutomod(message, args, ctx) {
     if (["sensibilidade", "sensitivity", "sens"].includes(op)) {
       const nova = assuntos.sensibilidadeValida(a[1]);
       if (!nova) return sendEmbed(message.channel, { title: T("❌ Sensibilidade inválida", "❌ Invalid sensitivity"), colour: COR.erro,
-        description: Object.entries(assuntos.LIMIAR_ASSUNTO).map(([k, v]) => `• \`${k}\` — ${T("age a partir de", "acts from")} ${v}/10`).join("\n") });
+        description: Object.entries(assuntos.LIMIAR_ASSUNTO).map(([k, v]) => `• \`${nomeSens(k, lang)}\` — ${T("age a partir de", "acts from")} ${v}/10`).join("\n") });
       mod.sensibilidade = nova; salvarConfig();
       return painel(`🛡️ ${T("Sensibilidade", "Sensitivity")} → ${SENS_ROT[nova]} (${assuntos.LIMIAR_ASSUNTO[nova]}/10)`);
     }
@@ -543,7 +551,7 @@ export async function cmdAutomod(message, args, ctx) {
       if (!texto) return sendEmbed(message.channel, { title: T("❌ Uso", "❌ Usage"), colour: COR.erro, description: `\`${base} test <${T("texto", "text")}>\`` });
       const notas = assuntos.analisarAssuntos(texto, mod, { canalId: message.channelId, autor: message.authorId, todos: true });
       return sendEmbed(message.channel, { title: `🧪 ${T("Nota por tema", "Score per topic")}`, colour: COR.mod, description: [
-        ...notas.map((n) => `${assuntos.TEMAS[n.tema].emoji} \`${n.tema}\` — **${n.nota}/10** ${n.passou ? "⚠️" : "·"} ${assuntos.acaoDoTema(mod, n.tema) === "off" ? T("_(tema desligado)_", "_(topic off)_") : ""}${n.sinais.length ? `\n   ${n.sinais.join(", ")}` : ""}`),
+        ...notas.map((n) => `${assuntos.TEMAS[n.tema].emoji} \`${nomeTema(n.tema, lang)}\` — **${n.nota}/10** ${n.passou ? "⚠️" : "·"} ${assuntos.acaoDoTema(mod, n.tema) === "off" ? T("_(tema desligado)_", "_(topic off)_") : ""}${n.sinais.length ? `\n   ${n.sinais.join(", ")}` : ""}`),
         "",
         T(`_Limiar ${assuntos.limiarDoAssunto(mod)}/10; o contexto é o deste canal. ${mod.ia === false ? "Sem IA, passar do limiar já age." : "Passando do limiar, a IA ainda confirma."} Ninguém foi punido._`,
           `_Threshold ${assuntos.limiarDoAssunto(mod)}/10; context is this channel's. ${mod.ia === false ? "Without AI, crossing it already acts." : "Crossing it, the AI still confirms."} Nobody was punished._`),
@@ -577,13 +585,13 @@ export async function cmdAutomod(message, args, ctx) {
     if (!nova) {
       return sendEmbed(message.channel, { title: T("❌ Ação inválida", "❌ Invalid action"), colour: COR.erro, description: [
         `\`${base} ${tema} <off|alertar|apagar|punir>\``, "",
-        ...assuntos.ACOES.map((x) => `• \`${x}\` — ${ROT_ACAO[x]}`),
+        ...assuntos.ACOES.map((x) => `• \`${nomeAcaoTema(x, lang)}\` — ${ROT_ACAO[x]}`),
       ].join("\n") });
     }
     mod.acoes[tema] = nova;
     if (nova !== "off") mod.enabled = true;   // escolher um tema já liga a chave geral
     salvarConfig();
-    return painel(`${assuntos.TEMAS[tema].emoji} ${tema} → ${nova}`);
+    return painel(`${assuntos.TEMAS[tema].emoji} ${nomeTema(tema, lang)} → ${nomeAcaoTema(nova, lang)}`);
   }
 
   // ── &automod sentinela avatar … (foto de perfil) ─────────────────────────
@@ -597,7 +605,7 @@ export async function cmdAutomod(message, args, ctx) {
         "The picture of whoever **joins** or **changes** it goes through the vision model. It flags genitals, sex acts or porn described — or nudity, gore and hate symbols with the model's risk vote."),
       "",
       `**${T("Estado", "State")}:** ${mod.enabled !== false ? T("🟢 ligado", "🟢 on") : T("🔴 desligado", "🔴 off")}${process.env.IA_SERVICO_URL ? "" : T(" · ⚠️ sem IA_SERVICO_URL: não analisa", " · ⚠️ no IA_SERVICO_URL: nothing is analysed")}`,
-      `**${T("Ação", "Action")}:** \`${avatar.acaoDoAvatar(mod)}\` — ${ROT[avatar.acaoDoAvatar(mod)]}`,
+      `**${T("Ação", "Action")}:** \`${nomeAcaoAvatar(avatar.acaoDoAvatar(mod), lang)}\` — ${ROT[avatar.acaoDoAvatar(mod)]}`,
       avatar.acaoDoAvatar(mod) === "silenciar" ? `**${T("Tempo", "Time")}:** ${duracaoTexto(avatar.tempoDoAvatar(mod), lang)}` : null,
       "",
       `\`${base} on|off\``,
@@ -612,9 +620,9 @@ export async function cmdAutomod(message, args, ctx) {
     if (op === "acao" || op === "ação" || op === "action") {
       const nova = avatar.acaoAvatarValida(a[1]);
       if (!nova) return sendEmbed(message.channel, { title: T("❌ Ação inválida", "❌ Invalid action"), colour: COR.erro,
-        description: [`\`${base} acao <alertar|silenciar|expulsar|banir>\``, "", ...avatar.ACOES_AVATAR.map((x) => `• \`${x}\` — ${ROT[x]}`)].join("\n") });
+        description: [`\`${base} acao <alertar|silenciar|expulsar|banir>\``, "", ...avatar.ACOES_AVATAR.map((x) => `• \`${nomeAcaoAvatar(x, lang)}\` — ${ROT[x]}`)].join("\n") });
       mod.acao = nova; salvarConfig();
-      return painel(`🖼️ ${T("Ação", "Action")} → ${nova}`);
+      return painel(`🖼️ ${T("Ação", "Action")} → ${nomeAcaoAvatar(nova, lang)}`);
     }
     if (op === "tempo" || op === "time") {
       const ms = lerDuracao(a[1]);
@@ -1163,8 +1171,8 @@ export async function cmdPunicao(message, args, ctx) {
       title: "⚖️ Punishment policy — applies to ALL automods",
       colour: COR.mod,
       description: [
-        `**Mode:** ${pol.modo} — ${rotulo(pol.modo)}`,
-        `**Ladder (acumular mode):** ${engine.escadaDePunicao(pol).map((d) => engine.rotuloDegrau(d, "en")).join(" → ")} — ban at warning **${engine.limiteDeAvisos(pol)}**`,
+        `**Mode:** \`${nomeModo(pol.modo, "en")}\` — ${rotulo(pol.modo)}`,
+        `**Ladder (\`stack\` mode):** ${engine.escadaDePunicao(pol).map((d) => engine.rotuloDegrau(d, "en")).join(" → ")} — ban at warning **${engine.limiteDeAvisos(pol)}**`,
         `**Warnings expire:** ${engine.validadeDosAvisos(pol) ? `after ${Math.round(engine.validadeDosAvisos(pol) / 86_400_000)} days without a new one` : "never"}`,
         "**Noise filters** (repeat, caps, emoji, speed…): the 1st time in 10 min is just a heads-up, without a warning (except new accounts and during a raid)",
         "**Silence:** the Stoat's native timeout (the bot needs **TimeoutMembers**)",
@@ -1180,7 +1188,7 @@ export async function cmdPunicao(message, args, ctx) {
         "",
         "**Commands:**",
         `\`${PREFIXO}automod punicao modo <avisar|apagar|confirmar|acumular|banir>\``,
-        `\`${PREFIXO}automod punicao escada [aviso,5m,1h,ban]\` — the steps of \`acumular\` mode`,
+        `\`${PREFIXO}automod punicao escada [aviso,5m,1h,ban]\` — the steps of \`stack\` mode`,
         `\`${PREFIXO}automod punicao warns <number>\` — how many warnings until the ban (adjusts the ladder)`,
         `\`${PREFIXO}automod punicao validade <days|0>\` — after how many days warnings reset (0 = never)`,
         "",
@@ -1224,7 +1232,7 @@ export async function cmdPunicao(message, args, ctx) {
     pol.modo = val; salvarConfig();
     return sendEmbed(message.channel, tr(ctx,
       { title: "✅ Modo de punição atualizado", description: `Agora: **${val}** — ${rotulo(val)}.`, colour: COR.sucesso },
-      { title: "✅ Punishment mode updated", description: `Now: **${val}** — ${rotulo(val)}.`, colour: COR.sucesso }));
+      { title: "✅ Punishment mode updated", description: `Now: **${nomeModo(val, "en")}** — ${rotulo(val)}.`, colour: COR.sucesso }));
   }
 
   // ── Os degraus do modo acumular ──
@@ -1250,7 +1258,7 @@ export async function cmdPunicao(message, args, ctx) {
       }, {
         title: "🪜 Punishment ladder",
         description: [
-          "In `acumular` mode, each repeat offence climbs a step:",
+          "In `stack` mode, each repeat offence climbs a step:",
           "",
           ...atual.map((d, i) => `**${i + 1}.** ${engine.rotuloDegrau(d, "en")}`),
           "",
@@ -1259,7 +1267,7 @@ export async function cmdPunicao(message, args, ctx) {
           `\`${PREFIXO}automod punicao escada aviso,5m,1h,ban\` — the default`,
           `\`${PREFIXO}automod punicao escada aviso,10m,1h,12h,ban\` — more steps`,
           "",
-          "_Accepts `aviso`, `ban` and durations like `30s`, `10m`, `2h`, `1d`._",
+          "_Accepts `warn`, `ban` and durations like `30s`, `10m`, `2h`, `1d`._",
           "_A ban is always the last step, even if you don't write it._",
         ].join("\n"), colour: COR.mod,
       }));
@@ -1268,7 +1276,7 @@ export async function cmdPunicao(message, args, ctx) {
     if (teste.length < 2) {
       return sendEmbed(message.channel, tr(ctx,
         { title: "❌ Escada inválida", description: `Não entendi \`${bruto}\`.\n\nEx.: \`aviso,5m,1h,ban\``, colour: COR.erro },
-        { title: "❌ Invalid ladder", description: `I didn't understand \`${bruto}\`.\n\nE.g.: \`aviso,5m,1h,ban\``, colour: COR.erro }));
+        { title: "❌ Invalid ladder", description: `I didn't understand \`${bruto}\`.\n\nE.g.: \`warn,5m,1h,ban\``, colour: COR.erro }));
     }
     pol.escada = bruto; pol.warnsParaBan = teste.length; salvarConfig();
     return sendEmbed(message.channel, tr(ctx, {
@@ -1298,7 +1306,7 @@ export async function cmdPunicao(message, args, ctx) {
     const nova = engine.escadaDePunicao(pol);
     return sendEmbed(message.channel, tr(ctx,
       { title: "✅ Avisos para ban", description: `No modo \`acumular\`, o ban ocorre no aviso **${n}**.\n🪜 ${nova.map((d) => engine.rotuloDegrau(d, "pt")).join(" → ")}`, colour: COR.sucesso },
-      { title: "✅ Warnings until ban", description: `In \`acumular\` mode, the ban happens at warning **${n}**.\n🪜 ${nova.map((d) => engine.rotuloDegrau(d, "en")).join(" → ")}`, colour: COR.sucesso }));
+      { title: "✅ Warnings until ban", description: `In \`stack\` mode, the ban happens at warning **${n}**.\n🪜 ${nova.map((d) => engine.rotuloDegrau(d, "en")).join(" → ")}`, colour: COR.sucesso }));
   }
 
   if (["validade", "vencimento", "expira", "expiry", "expire"].includes(sub)) {

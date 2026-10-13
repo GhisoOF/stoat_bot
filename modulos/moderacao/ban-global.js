@@ -422,6 +422,7 @@ export async function cmdBanGlobal(message, args, ctx) {
   const { config, sendEmbed, COR, getServer, membroTemPermissao, salvarConfig, PREFIXO, serverId } = ctx;
   const lang = lingua(ctx);
   const L_MODOS = lang === "en" ? MODOS_EN : MODOS;
+  const MODO_BG_EN = { avisar: "warn", banir: "ban", off: "off" };
 
   const server = await getServer(message);
   if (!membroTemPermissao(message, server, "BanMembers")) {
@@ -445,7 +446,7 @@ export async function cmdBanGlobal(message, args, ctx) {
     if (lang === "en") return sendEmbed(message.channel, {
       title: "🌐 Global ban list",
       description: [
-        `**Current mode:** \`${modo}\` — ${L_MODOS[modo]}`,
+        `**Current mode:** \`${MODO_BG_EN[modo] ?? modo}\` — ${L_MODOS[modo]}`,
         "",
         "**Available modes:**",
         ...Object.entries(L_MODOS).map(([k, v]) => `\`${k}\` — ${v}`),
@@ -528,7 +529,7 @@ export async function cmdBanGlobal(message, args, ctx) {
     return sendEmbed(message.channel, {
       title: lang === "en" ? "🌐 Global ban updated" : "🌐 Ban global atualizado",
       description: lang === "en"
-        ? `**Mode:** \`${sub}\` — ${L_MODOS[sub]}.${extra}`
+        ? `**Mode:** \`${MODO_BG_EN[sub] ?? sub}\` — ${L_MODOS[sub]}.${extra}`
         : `**Modo:** \`${sub}\` — ${L_MODOS[sub]}.${extra}`,
       colour: COR.mod,
     });
@@ -632,7 +633,7 @@ export async function cmdBanGlobal(message, args, ctx) {
       }, {
         title: "🌐 The sweep only bans in `banir` mode",
         description: [
-          `The current mode is \`${modo}\`.`,
+          `The current mode is \`${MODO_BG_EN[modo] ?? modo}\`.`,
           "",
           `To **just check**, use \`${PREFIXO}banglobal revisar\` — it shows who's on the list and does nothing.`,
           `To ban, switch with \`${PREFIXO}banglobal banir\` and sweep again.`,
@@ -1063,7 +1064,7 @@ export async function cmdBanGlobal(message, args, ctx) {
         "Puts someone on the list **by ID** — they don't need to be in any of Judy's servers. Up to 25 IDs at once (mentions and profile links work too).",
         `E.g.: \`${PREFIXO}banglobal add 01KMBX60MHVS8F0P0CJ0VK3326 01KMBX60MHVS8F0P0CJ0VK3327 raid of 09/27\``,
         "",
-        "_Anyone already in one of Judy's servers feels it right away: banned where the mode is `banir`, staff warned where it's `avisar`._",
+        "_Anyone already in one of Judy's servers feels it right away: banned where the mode is `ban`, staff warned where it's `warn`._",
       ].join("\n"), colour: COR.info,
     }));
 

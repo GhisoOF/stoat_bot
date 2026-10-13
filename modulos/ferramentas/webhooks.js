@@ -302,7 +302,7 @@ export async function cmdWebhook(message, args, ctx) {
         `\`${P}webhook criar <name> [#channel]\` — new hook (the secret URL shows once)`,
         `\`${P}webhook lista\` — this server's hooks`,
         `\`${P}webhook canal <name> <#channel>\` — change destination`,
-        `\`${P}webhook eventos <name> <push,issues,…|todos>\` — filter what this hook posts`,
+        `\`${P}webhook eventos <name> <push,issues,…|all>\` — filter what this hook posts`,
         `\`${P}webhook url <name>\` — show the URL again · \`${P}webhook testar <name>\` — post a test`,
         `\`${P}webhook remover <name>\` — delete (the URL dies instantly)`,
         "",
@@ -317,7 +317,7 @@ export async function cmdWebhook(message, args, ctx) {
     return sendEmbed(message.channel, {
       title: en ? "🪝 Hooks on this server" : "🪝 Ganchos deste servidor",
       description: ganchos.length
-        ? ganchos.map((g) => `**${g.nome}** → <#${g.canalId}> · eventos: ${g.eventos || (en ? "all" : "todos")} · ${g.usos} uso(s)`).join("\n")
+        ? ganchos.map((g) => `**${g.nome}** → <#${g.canalId}> · ${en ? "events" : "eventos"}: ${g.eventos || (en ? "all" : "todos")} · ${g.usos} ${en ? "use(s)" : "uso(s)"}`).join("\n")
         : (en ? `None yet. \`${P}webhook criar <name>\`` : `Nenhum ainda. \`${P}webhook criar <nome>\``),
       colour: COR.info,
     });

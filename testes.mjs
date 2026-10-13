@@ -1729,12 +1729,14 @@ async function info$(sid, config, rotas = { help: () => 1, ping: () => 2, chat: 
 console.log("\n── &config ──");
 await t("mostra os 4 grupos do &automod e TODAS as partes, nos dois idiomas", async () => {
   const { GRUPOS_AUTOMOD } = await import("./modulos/moderacao/automod-engine.js");
+  // em inglês, com o nome em inglês (13 out 2026): `speed`, não `velocidade`
+  const { nomeGrupo, nomeParte } = await import("./modulos/core/nomes-automod.js");
   for (const lang of ["pt", "en"]) {
     const { sid, config } = novoServidor(lang);
     const d = await config$(sid, config);
     for (const [g, def] of Object.entries(GRUPOS_AUTOMOD)) {
-      assert.match(d, new RegExp(`\\*\\*${g}\\*\\*`), `${lang}: ${g}`);
-      for (const parte of Object.keys(def.partes)) assert.match(d, new RegExp("`" + parte + "`"), `${lang}: ${g}/${parte}`);
+      assert.match(d, new RegExp(`\\*\\*${nomeGrupo(g, lang)}\\*\\*`), `${lang}: ${g}`);
+      for (const parte of Object.keys(def.partes)) assert.match(d, new RegExp("`" + nomeParte(parte, lang) + "`"), `${lang}: ${g}/${parte}`);
     }
   }
 });
@@ -9728,7 +9730,9 @@ ok(!!car.analisarDuplicata("Miguel miguel", Array(4).fill("miguel miguel")), "  
 const longa = "compre seguidores baratos no meu perfil agora mesmo";
 ok(!!car.analisarDuplicata(longa, [car.digital(longa), car.digital(longa)]), "  → texto longo (propaganda) segue no limite de 3");
 const sc = await import("./modulos/moderacao/scorecard.js");
-const golpe = "free nitro giveaway click here discord-gift.xyz/abc";
+// (13 out 2026: com o domínio que imita o Discord esta já dá 10 de primeira —
+// o teto não deixa ver a repetição; sem o link, ela ainda tem espaço)
+const golpe = "free nitro giveaway click here";
 ok(sc.analisarConteudo("Miguel miguel", { repetidas: 4 }).nota < 3, "★ sentinela: repetir texto inocente não vira \"conteúdo proibido\" (antes: nota 6 na 4ª vez)");
 ok(sc.analisarConteudo(golpe, { repetidas: 3 }).nota > sc.analisarConteudo(golpe, { repetidas: 1 }).nota, "  → mas repetir golpe continua pesando");
 ok(r.digitalMidia({ attachments: [{ id: "a" }] }) === null && r.digitalMidia({ attachments: [{ id: "a", size: 10, metadata: { width: 1, height: 1 } }] }), "anexo sem tamanho não ganha digital (\"?:?x?\" igualava fotos diferentes)");
@@ -12558,6 +12562,183 @@ await voz.sair(null);
 Module._load = carregar;
 
 console.log(`\nVOZ (volta para a call antiga): ${pass} ok, ${fail} falha(s)`);
+process.exit(fail ? 1 : 0);
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+// traducao-en-13out  (13 out 2026) — "estive num servidor grande e vi que a
+// tradução precisa melhorar; veja se o automod funciona em inglês"
+// ════════════════════════════════════════════════════════════════════════════
+// A suíte "traducao" lia só o texto CORRIDO (tirava o que está entre crases).
+// Na tela em inglês sobravam, entre crases: `velocidade`, `rajada`, `conteudo`,
+// `confirmar`, `pular`, `voltar`, `punicoes`, `&embed titulo:`… — e esses
+// nomes só funcionavam digitados em português. Aqui: (1) TODAS as páginas da
+// ajuda em inglês e ~150 comandos, olhando também o código; (2) cada comando
+// do automod digitado em inglês muda a config igual ao português; (3) o
+// automod pega mensagem em inglês (golpe do nitro, tema, termo de ódio).
+SUITES["traducao-en-13out"] = async () => {
+const fs = (await import("node:fs")).default;
+process.env.BOT_TOKEN = "tok"; process.env.DB_PATH = "/tmp/trad13.db"; process.env.CONFIG_PATH = "/tmp/trad13.json";
+process.env.SUPER_ADMINS = "U1"; process.env.TTS_SERVIDORES = "S1"; process.env.CHAT_SERVIDORES = "S1";
+for (const f of ["/tmp/trad13.db", "/tmp/trad13.db-wal", "/tmp/trad13.db-shm", "/tmp/trad13.json", "/tmp/blocklist-cache.bin"]) fs.rmSync(f, { force: true });
+globalThis.fetch = async () => ({ ok: false, status: 503, text: async () => "", json: async () => ({}) });
+let pass = 0, fail = 0;
+const ok = (cond, msg, extra = "") => { cond ? pass++ : fail++; console.log(`${cond ? "✅" : "❌"} ${msg}${!cond && extra ? `\n     ${extra}` : ""}`); };
+
+await import("./main.js");
+const c = globalThis.__client;
+await c.emitAll("ready");
+const db = await import("./modulos/core/db.js");
+const { SUB } = await import("./modulos/core/aliases.js");
+
+// Tokens PORTUGUESES que têm (ou deveriam ter) um nome em inglês na tela
+const PT_TOKENS = new Set();
+for (const mapa of Object.values(SUB)) for (const [en, pt] of Object.entries(mapa)) if (en !== pt && /^[a-zçãéíóú]+$/.test(pt)) PT_TOKENS.add(pt);
+for (const t of ["velocidade", "rajada", "repeticao", "midia", "mencoes", "caracteres", "letras", "dominios", "convites", "conteudo", "odio",
+  "imagens", "assuntos", "antiruido", "sentinela", "pular", "voltar", "cancelar", "aqui", "padrao", "aviso", "avisar", "apagar", "confirmar",
+  "acumular", "banir", "herdar", "punicoes", "membros", "mensagens", "cargos", "comandos", "comecar", "proteger", "personalizar", "diversao",
+  "diagnostico", "baixa", "media", "alta", "politica", "religiao", "drogas", "alertar", "punir", "silenciar", "expulsar", "tempo", "acao",
+  "checar", "liberar", "vigiar", "sensibilidade", "antiguidade", "alerta", "rapido", "completo", "protecao", "canais", "lista", "limpar",
+  "texto", "titulo", "cor", "imagem", "testar", "canal", "cargo", "modo", "escada", "tirar", "entrar", "sair", "estado", "filtro",
+  "destravar", "resgatar", "nomes", "dicionario", "efeito", "tom", "ligar", "desligar", "ativar", "desativar", "remover", "adicionar"]) PT_TOKENS.add(t);
+for (const ok_ of ["status", "config", "set", "debug", "on", "off", "add", "remove", "list", "test", "ban", "top", "admin", "xp", "game", "log", "staff", "tutorial", "avatar", "emoji", "caps", "rpg", "media", "auto", "url", "zalgo", "emojis"]) PT_TOKENS.delete(ok_);
+const PROSA_PT = /\b(não|você|está|também|então|já|só|até|após|porque|quando|ainda|aqui|agora|depois|isso|esse|essa|nenhum|nenhuma|todos|cada|outro|outra|pelo|pela|para|com|sem|uma|dos|das|seu|sua|quem|qual|onde|como|muito|mais|menos|tudo|nada|sempre|nunca|pode|precisa|tem|foi|ser|canal|canais|servidor|cargo|cargos|mensagem|mensagens|pessoa|usuário|comando|comandos|ajuda|configuração|permissão|aviso|erro|motivo|nível|exemplo|página|ligado|desligado|ligada|desligada|ativado|desativado|parte|partes|grupo|nota|limiar|sinais|punição)\b/gi;
+
+function achar(txt) {
+  const r = [];
+  const semLinks = String(txt).replace(/https?:\/\/\S+/g, " ").replace(/<[@#%][^>]+>/g, " ");
+  for (const m of semLinks.matchAll(/`([^`\n]+)`/g)) {
+    for (const tok of m[1].replace(/[<>‹›\[\]()|,.:]/g, " ").split(/\s+/)) {
+      const t = tok.replace(/^&/, "").toLowerCase();
+      if (PT_TOKENS.has(t)) r.push(`\`${m[1]}\`→${t}`);
+    }
+  }
+  const prosa = semLinks.replace(/`[^`\n]*`/g, " ");
+  for (const l of prosa.split("\n")) {
+    const ws = new Set((l.match(PROSA_PT) ?? []).map((x) => x.toLowerCase()));
+    if (ws.size >= 2 || /[ãõç]/i.test(l.replace(/São Paulo|Goiás|Brasília/g, ""))) r.push(`prosa: ${l.trim().slice(0, 90)}`);
+  }
+  return r;
+}
+
+const roles = new Map([["R1", { name: "VIP", rank: 5 }], ["RBOT", { name: "Judy", rank: 1 }]]);
+const env = [];
+let nmsg = 0;
+const canal = { id: "C1", serverId: "S1", name: "general", type: "TextChannel", sendMessage: async (p) => { env.push(p); const id = "M" + (++nmsg); env[env.length - 1].__id = id; return { id, react: async () => {}, edit: async () => {}, delete: async () => {} }; }, fetchMessages: async () => [], setPermissions: async () => {} };
+const membro = { id: { server: "S1", user: "U1" }, roles: [], hasPermission: () => true, edit: async () => {} };
+const server = { id: "S1", ownerId: "U1", name: "Test", roles, channels: [canal], channelIds: new Set(["C1"]), member: { roles: ["RBOT"] }, havePermission: () => true,
+  fetchMember: async () => membro, fetchMembers: async () => ({ members: [membro] }), fetchBans: async () => [] };
+c.servers.set("S1", server); c.channels.set("C1", canal);
+const say = async (t) => {
+  const quieto = [console.log, console.info, console.warn, console.error]; console.log = console.info = console.warn = console.error = () => {};
+  try { await Promise.race([c.emitAll("messageCreate", { id: "X" + Math.random(), authorId: "U1", content: t, serverId: "S1", server, channel: canal, channelId: "C1", mentionIds: [], createdAt: new Date(), author: { username: "Ghiso" }, member: membro, replyIds: [] }), new Promise((r) => setTimeout(r, 8000))]); }
+  finally { [console.log, console.info, console.warn, console.error] = quieto; }
+};
+const texto = () => env.flatMap((p) => {
+  const sess = p.__id ? db.carregarSessaoPaginas(p.__id) : null;
+  const ems = sess?.paginas?.length ? sess.paginas : [p.embeds?.[0] ?? {}];
+  return ems.map((e) => `${e.title ?? ""}\n${e.description ?? ""}`).concat(typeof p.content === "string" ? [p.content] : []);
+}).join("\n");
+await say("&language en");
+const geral = await import("./modulos/moderacao/geral.js");
+const { arvoreSubtopicos } = await import("./modulos/moderacao/help-arvore.js");
+const { grupos } = await import("./modulos/moderacao/help-grupos.js");
+const AJUDA = ["&help", ...Object.keys(grupos("en", "&")).map((g) => `&help ${g}`), ...Object.keys(geral.construirDetalhes("&", "en")).map((k) => `&help ${k}`)];
+const desce = (no, cam) => { for (const k of Object.keys(no ?? {})) { if (k === "titulo" || k === "texto" || typeof no[k] !== "object") continue; AJUDA.push(`&help ${[...cam, k].join(" ")}`); desce(no[k], [...cam, k]); } };
+desce(arvoreSubtopicos("&", "en"), []);
+const PAINEIS = '&config;&info;&debug;&debug channels;&debug permissions;&automod;&automod status;&automod antispam;&automod antinoise;&automod antilink;&automod sentinel;&automod sentinel config;&automod sentinel topics;&automod sentinel topics test the election was stolen you idiots;&automod sentinel topics sensitivity high;&automod sentinel topics ai off;&automod sentinel topics politics alert;&automod sentinel topics politics punish;&automod sentinel topics politics explode;&automod sentinel avatar;&automod sentinel avatar action kick;&automod sentinel avatar time 2h;&automod sentinel avatar action explode;&automod sentinel images;&automod sentinel hate;&automod sentinel hate list;&automod sentinel content;&automod sentinel sensitivity high;&automod sentinel tenure on;&automod sentinel alerts on;&automod sentinel test free nitro click here;&automod antispam speed;&automod antispam speed off;&automod antispam set messages 6;&automod antinoise caps off;&automod antinoise set size 20;&automod antilink domains on;&automod antilink invites on;&automod sentinel punishment stack;&automod sentinel xyz;&automod antispam xyz;&automod xyz;&automod on;&automod off;&automod <group> off;&automod punishment;&automod punishment mode stack;&automod punishment mode xyz;&automod punishment ladder;&automod punishment ladder warn,10m,1h,ban;&automod punishment ladder xx;&automod punishment warns 4;&automod punishment test;&automod whitelist;&automod blocklist;&automod blocklist list;&wizard;&wizard quick;cancel;&wizard full;skip;back;cancel;&wizard channels;cancel;&wizard protection;cancel;&tutorial;&tutorial moderation;&tutorial channels;&tutorial roles;&tutorial levels;&tutorial ai;&tutorial logging;&staff;&staff list;&server;&server rules;&server roles;&server channels;&server faq;&log;&log status;&log punishments off;&log here;&access;&access status;&access role;&access channel;&globalban;&globalban list;&globalban warn;&globalban off;&warn;&warn list;&warn clear;&silence;&mute;&tts;&tts status;&tts filter;&tts voice;&tts effect;&tts dictionary;&music;&music queue;&join;&leave;&welcome;&welcome status;&goodbye;&goodbye status;&xp;&xp setup;&xp config;&xp roles;&color;&color presets;&color list;&rss;&rss list;&timezone;&timezone list;&modia;&entertainment;&language;&chat;&chat comment;&ticket;&ticket list;&economy;&economy shop;&economy balance;&reactionrole;&embed;&autorole;&command;&command list;&purge;&ping;&userinfo;&about;&roll;&initiative;&webhook;&webhook list'.split(";");
+const COMANDOS = process.env.AUD_CMDS ? process.env.AUD_CMDS.split(";") : [...AJUDA, ...PAINEIS];
+const ruins = [];
+for (const cmd of COMANDOS) {
+  env.length = 0;
+  await say(cmd);
+  const t = texto();
+  const a = [...new Set(achar(t))];
+  if (!env.length) ruins.push(`${cmd}: (mudo)`);
+  else if (a.length) ruins.push(`${cmd}: ${a.slice(0, 12).join(" ; ")}`);
+}
+for (const r of ruins.slice(0, 15)) console.log("   ✗ " + r);
+ok(!ruins.length, `★ ${COMANDOS.length} telas em inglês (toda a ajuda + painéis) sem português — nem entre crases`);
+if (process.env.AUD_CMDS) process.exit(fail ? 1 : 0);
+
+// ── 2. O automod digitado em inglês ──
+const store = await import("./modulos/core/config-store.js");
+const cfg = () => store.configDoServidor("S1");
+const ultimo = () => { const p = env[env.length - 1]; const e = p?.embeds?.[0] ?? {}; return `${e.title ?? ""}\n${e.description ?? ""}`; };
+const faz = async (cmd) => { env.length = 0; await say(cmd); return ultimo(); };
+await faz("&automod on");
+await faz("&automod antispam speed off");
+ok(cfg().automod.antiSpam.enabled === false && cfg().automod.antiMassSpam.enabled !== false, "★ &automod antispam speed off → só a parte velocidade");
+await faz("&automod antinoise caps off");
+ok(cfg().automod.antiCaps.enabled === false, "★ &automod antinoise caps off (antiruido em inglês)");
+await faz("&automod antilink domains off");
+await faz("&automod antilink invites off");
+ok(cfg().automod.antiLink.enabled === false && cfg().automod.antiInvite.enabled === false, "  → &automod antilink domains|invites off");
+await faz("&automod antispam set messages 7");
+ok(cfg().automod.antiSpam.maxMessages === 7, "  → &automod antispam set messages 7");
+await faz("&automod antinoise set size 20");
+ok(cfg().automod.antiCaps.minLength === 20, "  → &automod antinoise set size 20");
+await faz("&automod sentinel hate add jerkface");
+ok(cfg().automod.antiOdio.termos.includes("jerkface"), "★ &automod sentinel hate add <term>");
+await faz("&automod sentinel images off");
+ok(cfg().automod.antiImagem.enabled === false, "  → &automod sentinel images off");
+await faz("&automod sentinel sensitivity high");
+ok(cfg().automod.antiScam.sensitivity === "alta", "★ &automod sentinel sensitivity high");
+await faz("&automod sentinel tenure off");
+await faz("&automod sentinel alerts off");
+ok(cfg().automod.antiScam.porAntiguidade === false && cfg().automod.antiScam.alertarAdmin === false, "  → &automod sentinel tenure off · alerts off");
+await faz("&automod sentinel channel here");
+ok(cfg().automod.antiScam.alertChannelId === "C1", "  → &automod sentinel channel here");
+await faz("&automod sentinel topics politics delete");
+await faz("&automod sentinel topics religion alert");
+ok(cfg().automod.antiAssuntos.acoes.politica === "apagar" && cfg().automod.antiAssuntos.acoes.religiao === "alertar", "★ &automod sentinel topics politics delete · religion alert");
+await faz("&automod sentinel topics sensitivity high");
+await faz("&automod sentinel topics ai off");
+ok(cfg().automod.antiAssuntos.sensibilidade === "alta" && cfg().automod.antiAssuntos.ia === false, "  → topics sensitivity high · ai off");
+await faz("&automod sentinel avatar action kick");
+await faz("&automod sentinel avatar time 2h");
+ok(cfg().automod.antiAvatar.acao === "expulsar" && cfg().automod.antiAvatar.tempo === "2h", "★ &automod sentinel avatar action kick · time 2h");
+let t = await faz("&automod sentinel punishment stack");
+ok(["antiScam", "antiOdio", "antiImagem", "antiAssuntos", "antiAvatar"].every((k) => cfg().automod[k].punicao?.modo === "acumular") && /`stack`/.test(t), "★ &automod sentinel punishment stack (e a resposta diz `stack`)");
+await faz("&automod punishment mode confirm");
+ok(cfg().automod.punicao.modo === "confirmar", "★ &automod punishment mode confirm");
+await faz("&automod punishment ladder warn,10m,1h,ban");
+ok(cfg().automod.punicao.escada === "warn,10m,1h,ban", "  → &automod punishment ladder warn,10m,1h,ban");
+await faz("&log punishments off");
+ok(cfg().log.eventos.punicoes === false, "  → &log punishments off");
+t = await faz("&automod sentinel");
+ok(/`topics`/.test(t) && /`avatar`/.test(t) && /`hate`/.test(t) && !/`assuntos`|`odio`/.test(t), "★ o painel do sentinela mostra os nomes em inglês");
+t = await faz("&automod antinoyse");
+ok(/antinoise/.test(t), "  → \"você quis dizer\" sugere o nome em inglês");
+t = await faz("&silence");
+ok(!/Unknown command|Comando desconhecido/.test(t), "  → &silence existe (era só &mute/&silenciar)");
+t = await faz("&help assistant");
+ok(!/Not found/.test(t), "  → &help assistant (era \"Not found\")");
+t = await faz("&help assistent");
+ok(/Did you mean `&help wizard`/.test(t) && /start, protect, customize, fun, game, diagnostics/.test(t), "★ &help com erro de digitação: \"did you mean\" e os grupos com o nome em inglês");
+
+// ── 3. O automod pega mensagem em inglês ──
+const engine = await import("./modulos/moderacao/automod-engine.js");
+const { analisarConteudo } = await import("./modulos/moderacao/scorecard.js");
+const as = await import("./modulos/moderacao/assuntos.js");
+ok(analisarConteudo("FREE NITRO GIVEAWAY claim now at discord-gift.xyz", { rate: 1 }).nota >= 7.5, "★ golpe do nitro em inglês (sem http, domínio imitando o Discord) passa do limiar mais alto");
+ok(analisarConteudo("join our giveaway this weekend, winners get a role!", { rate: 1 }).nota < 3, "  → sorteio de verdade do servidor não");
+const POL = { enabled: true, acoes: { politica: "apagar", religiao: "apagar", drogas: "apagar" } };
+const n = (x) => as.analisarAssuntos(x, POL).reduce((m, r) => Math.max(m, r.nota), 0);
+ok(n("the election was stolen, you idiots who vote for trump dont know the facts") >= as.LIMIAR_ASSUNTO.media, "★ tema em inglês: debate + ataque passa");
+ok(n("lol trump is so funny 😂") < as.LIMIAR_ASSUNTO.media && n("the president visited my school today") < as.LIMIAR_ASSUNTO.media, "  → \"lol\" + emoji ameniza; menção de passagem não");
+ok(n("the left ruined this country, wake up sheep") >= as.LIMIAR_ASSUNTO.media && n("turn left at the church") < as.LIMIAR_ASSUNTO.media, "  → \"the left\" é política; \"turn left at the church\" não");
+ok(n("selling weed, dm me") >= as.LIMIAR_ASSUNTO.media, "  → drogas: oferta em inglês");
+// mensagem de verdade pelo automod: o termo acrescentado em inglês bloqueia
+const msgAm = (texto) => { const m = { id: "AM" + Math.random(), authorId: "U9", content: texto, channelId: "C1", channel: canal, serverId: "S1", author: { username: "x" }, member: { roles: [] }, apagada: false };
+  m.delete = async () => { m.apagada = true; }; return m; };
+const ctxAm = { config: cfg(), serverId: "S1", COR: {}, PREFIXO: "&", estado: { blockedDomains: new Set(), spamData: new Map(), ecoData: new Map() },
+  getServer: async () => server, membroTemPermissao: () => false, sendEmbed: async () => ({}), client: c, salvarConfig: () => {} };
+const mOdio = msgAm("you jerkface");
+const quieto = console.log; console.log = () => {};
+try { await engine.runAutomod(mOdio, ctxAm); } finally { console.log = quieto; }
+ok(mOdio.apagada, "★ termo de ódio acrescentado com `hate add` (em inglês) apaga a mensagem");
+console.log(`\nTRADUÇÃO EN (13 out): ${pass} ok, ${fail} falha(s)`);
 process.exit(fail ? 1 : 0);
 };
 

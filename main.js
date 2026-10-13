@@ -310,15 +310,15 @@ function criarContexto(serverId = null) {
 
   // A porta de saída de todo comando de um servidor: o canal tem de ser DELE
   // (ver pertence.js — um admin do servidor A publicava no servidor B).
-  const enviarTraduzido = (canal, embed = {}) => {
+  const enviarTraduzido = (canal, embed = {}, { dica = null } = {}) => {
     if (canalDeOutroServidor(canal, serverId)) {
       console.warn(`[SEGURANCA] servidor ${serverId} tentou publicar no canal ${canal?.id} do servidor ${canal?.serverId} — bloqueado`);
       return Promise.resolve(null);
     }
     return sendEmbed(canal, {
       ...embed,
-      title: aliases.exibir(embed.title, config?.language, PREFIXO, CANONICO),
-      description: aliases.exibir(embed.description, config?.language, PREFIXO, CANONICO),
+      title: aliases.exibir(embed.title, config?.language, PREFIXO, CANONICO, dica),
+      description: aliases.exibir(embed.description, config?.language, PREFIXO, CANONICO, dica),
     });
   };
 
@@ -326,7 +326,7 @@ function criarContexto(serverId = null) {
     client, config, cfgGlobal, COR, PREFIXO,
     sendEmbed: enviarTraduzido, getServer, membroTemPermissao, ehSuperAdmin,
     // A mesma tradução, para quem EDITA um embed já enviado (páginas).
-    exibir: (texto) => aliases.exibir(texto, config?.language, PREFIXO, CANONICO),
+    exibir: (texto, dica = null) => aliases.exibir(texto, config?.language, PREFIXO, CANONICO, dica),
     getServerPorId: async (sid) => {
       if (!sid) return null;
       return client.servers.get?.(sid) ?? await client.servers.fetch(sid).catch(() => null);

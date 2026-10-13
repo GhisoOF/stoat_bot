@@ -11,6 +11,16 @@ export const CORES = {
   lavanda: "#C4B5FD", coral: "#FB7185", marrom: "#78350F",
 };
 
+// Os nomes em inglês (13 out 2026): num servidor em inglês, "blue" não
+// funcionava. Ficam fora do CORES para a lista de nomes não sair em dobro.
+export const CORES_EN = {
+  red: "vermelho", orange: "laranja", yellow: "amarelo", green: "verde", blue: "azul", purple: "roxo",
+  pink: "rosa", white: "branco", black: "preto", gray: "cinza", grey: "cinza", emerald: "esmeralda",
+  cyan: "ciano", indigo: "indigo", magenta: "magenta", gold: "dourado", golden: "dourado", silver: "prata",
+  turquoise: "turquesa", wine: "vinho", burgundy: "vinho", lime: "lima", lavender: "lavanda", coral: "coral", brown: "marrom",
+};
+const NOME_EN = Object.fromEntries(Object.entries(CORES_EN).reverse().map(([en, pt]) => [pt, en]));
+
 export function normalizarCor(v) {
   if (!v) return null;
   const t = String(v).trim().toLowerCase()
@@ -18,6 +28,7 @@ export function normalizarCor(v) {
     .replace(/[,;.)\]}]+$/g, "")
     .trim();
   if (CORES[t]) return CORES[t];
+  if (CORES[CORES_EN[t]]) return CORES[CORES_EN[t]];
   if (/^#?[0-9a-f]{6}$/i.test(t)) return (t.startsWith("#") ? t : `#${t}`).toUpperCase();
   if (/^#?[0-9a-f]{3}$/i.test(t)) {                 // #f0f → #FF00FF
     const h = t.replace("#", "");
@@ -28,7 +39,7 @@ export function normalizarCor(v) {
 }
 
 // Lista dos nomes, para mensagens de ajuda.
-export function nomesDeCor(limite = 0) {
-  const n = Object.keys(CORES);
+export function nomesDeCor(limite = 0, lang = "pt") {
+  const n = Object.keys(CORES).map((x) => (lang === "en" ? NOME_EN[x] ?? x : x));
   return limite ? n.slice(0, limite) : n;
 }

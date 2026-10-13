@@ -43,7 +43,7 @@ export const PASSOS = {
   staff: {
     pergunta: (lang, P) => T(lang,
       "👥 **Staff** — quais cargos são a equipe? Eles ganham acesso aos comandos de moderação.\nMencione ou escreva os nomes separados por vírgula (ex.: `Admin, Moderador`) — ou `pular`.",
-      "👥 **Staff** — which roles are the team? They get access to moderation commands.\nMention them or type the names separated by commas (e.g. `Admin, Moderator`) — or `pular`."),
+      "👥 **Staff** — which roles are the team? They get access to moderation commands.\nMention them or type the names separated by commas (e.g. `Admin, Moderator`) — or `skip`."),
     parse: (r, { server }) => {
       const nomes = listaDeNomes(r);
       const ids = [], falhas = [];
@@ -60,7 +60,7 @@ export const PASSOS = {
   log: {
     pergunta: (lang, P) => T(lang,
       "📋 **Registro** — em que canal eu escrevo o que aconteceu (punições, entradas, saídas)?\nO ideal é um canal 🔒 que só a staff vê. Responda `aqui`, mencione o canal, ou `pular`.",
-      "📋 **Logging** — which channel should I write what happened in (punishments, joins, leaves)?\nIdeally a 🔒 staff-only channel. Answer `aqui`, mention the channel, or `pular`."),
+      "📋 **Logging** — which channel should I write what happened in (punishments, joins, leaves)?\nIdeally a 🔒 staff-only channel. Answer `here`, mention the channel, or `skip`."),
     parse: (r, { message, server }) => {
       const id = resolverCanal(r, { message, server });
       if (!id) return { erro: true };
@@ -110,7 +110,7 @@ export const PASSOS = {
   boasvindas: {
     pergunta: (lang, P) => T(lang,
       "👋 **Boas-vindas** — em que canal eu dou as boas-vindas a quem entra?\n`aqui`, mencione o canal, ou `pular`. (O texto você ajusta depois com `&boasvindas texto …` — `&help boasvindas` explica cada parâmetro.)",
-      "👋 **Welcome** — which channel should I welcome newcomers in?\n`aqui`, mention the channel, or `pular`. (You tune the text later with `&boasvindas texto …` — `&help boasvindas` explains every parameter.)"),
+      "👋 **Welcome** — which channel should I welcome newcomers in?\n`here`, mention the channel, or `skip`. (You tune the text later with `&boasvindas texto …` — `&help boasvindas` explains every parameter.)"),
     parse: (r, { message, server }) => {
       const id = resolverCanal(r, { message, server });
       if (!id) return { erro: true };
@@ -122,11 +122,11 @@ export const PASSOS = {
   escada: {
     pergunta: (lang, P) => T(lang,
       "🪜 **Escada de punição** (modo `acumular`) — os degraus, separados por vírgula.\nPadrão: `aviso,5m,1h,ban`. Aceita `aviso`, tempos (`10m`, `2h`, `1d`) e `ban`. Responda `padrao` para manter, ou `pular`.",
-      "🪜 **Punishment ladder** (`acumular` mode) — the steps, comma-separated.\nDefault: `aviso,5m,1h,ban`. Accepts `aviso`, durations (`10m`, `2h`, `1d`) and `ban`. Answer `padrao` to keep it, or `pular`."),
+      "🪜 **Punishment ladder** (`stack` mode) — the steps, comma-separated.\nDefault: `warn,5m,1h,ban`. Accepts `warn`, durations (`10m`, `2h`, `1d`) and `ban`. Answer `default` to keep it, or `skip`."),
     parse: (r) => {
       const v = r.toLowerCase().replace(/\s+/g, "");
       if (/^(padrao|padrão|default)$/.test(v)) return { valor: "aviso,5m,1h,ban", rotulo: "aviso,5m,1h,ban" };
-      if (!/^(aviso|warning|\d+[smhd]|ban)(,(aviso|warning|\d+[smhd]|ban))*$/.test(v)) return { erro: true };
+      if (!/^(aviso|warn|warning|\d+[smhd]|ban)(,(aviso|warn|warning|\d+[smhd]|ban))*$/.test(v)) return { erro: true };
       return { valor: v, rotulo: v };
     },
     comandos: (v) => [["automod", "punicao", "escada", v]],
@@ -162,7 +162,7 @@ export const PASSOS = {
   autorole: {
     pergunta: (lang, P) => T(lang,
       "🎭 **Cargo automático** — que cargo quem entra recebe na hora? Mencione ou escreva o nome — ou `pular`.",
-      "🎭 **Autorole** — which role does everyone get on join? Mention it or type the name — or `pular`."),
+      "🎭 **Autorole** — which role does everyone get on join? Mention it or type the name — or `skip`."),
     parse: (r, { server }) => {
       const c = resolverCargo(r, server);
       if (!c) return { erro: true };
@@ -175,14 +175,14 @@ export const PASSOS = {
   canaisVer: {
     pergunta: (lang, P) => T(lang,
       "🔒 **Só a staff vê** — quais canais são de bastidores (log, alertas, staff-chat)?\nMencione ou escreva os nomes separados por vírgula — ou `pular`.",
-      "🔒 **Staff-only to see** — which channels are backstage (log, alerts, staff-chat)?\nMention them or type the names separated by commas — or `pular`."),
+      "🔒 **Staff-only to see** — which channels are backstage (log, alerts, staff-chat)?\nMention them or type the names separated by commas — or `skip`."),
     parse: (r, { message, server }) => resolverCanais(r, message, server),
     comandos: () => [],
   },
   canaisEscrever: {
     pergunta: (lang, P) => T(lang,
       "📢 **Só a staff escreve** — quais canais todo mundo lê mas só a staff publica (regras, avisos, painéis)?\nMencione ou escreva os nomes — ou `pular`.",
-      "📢 **Staff-only to write** — which channels does everyone read but only staff posts in (rules, announcements, panels)?\nMention them or type the names — or `pular`."),
+      "📢 **Staff-only to write** — which channels does everyone read but only staff posts in (rules, announcements, panels)?\nMention them or type the names — or `skip`."),
     parse: (r, { message, server }) => resolverCanais(r, message, server),
     comandos: () => [],
   },
@@ -269,7 +269,7 @@ export async function cmdAssistente(message, args, ctx) {
         `🛡️ \`${P}assistente protecao\` — ${T(lang, "só automod, Sentinela e punição", "only automod, Sentinel and punishment")}`,
         "",
         T(lang, "Durante as perguntas: `pular` pula · `voltar` volta · `cancelar` desiste.",
-                "During the questions: `pular` skips · `voltar` goes back · `cancelar` quits."),
+                "During the questions: `skip` skips · `back` goes back · `cancel` quits."),
         T(lang, `Prefere só ler? \`${P}tutorial\`.`, `Rather just read? \`${P}tutorial\`.`),
       ].join("\n"),
       colour: COR.info,
@@ -284,7 +284,7 @@ export async function cmdAssistente(message, args, ctx) {
     title: T(lang, `🧙 Assistente — ${NOME_ROTEIRO[roteiro].pt}`, `🧙 Wizard — ${NOME_ROTEIRO[roteiro].en}`),
     description: T(lang,
       `${ROTEIROS[roteiro].length} pergunta(s). Responda aqui mesmo, sem prefixo. \`pular\` · \`voltar\` · \`cancelar\`.`,
-      `${ROTEIROS[roteiro].length} question(s). Answer right here, no prefix. \`pular\` · \`voltar\` · \`cancelar\`.`),
+      `${ROTEIROS[roteiro].length} question(s). Answer right here, no prefix. \`skip\` · \`back\` · \`cancel\`.`),
     colour: COR.info,
   });
   return perguntar(message, ctx, sessoes.get(chave));
@@ -334,7 +334,7 @@ export async function aoResponder(message, ctx) {
     }
     await sendEmbed(message.channel, { title: "🧙", description: T(s.lang,
       "Responda `confirmar` para aplicar, `voltar` para mudar a última resposta, ou `cancelar`.",
-      "Answer `confirmar` to apply, `voltar` to change the last answer, or `cancelar`."), colour: COR.aviso });
+      "Answer `confirm` to apply, `back` to change the last answer, or `cancel`."), colour: COR.aviso });
     return true;
   }
 
@@ -359,7 +359,7 @@ export async function aoResponder(message, ctx) {
       title: T(s.lang, "🤔 Não entendi", "🤔 I didn't get that"),
       description: (r.detalhe
         ? T(s.lang, `Não encontrei: \`${r.detalhe}\`.\n\n`, `Couldn't find: \`${r.detalhe}\`.\n\n`) : "")
-        + T(s.lang, "Tente de novo, ou `pular`.", "Try again, or `pular`.")
+        + T(s.lang, "Tente de novo, ou `pular`.", "Try again, or `skip`.")
         + "\n\n" + passo.pergunta(s.lang, ctx.PREFIXO),
       colour: COR.aviso,
     });
@@ -401,7 +401,7 @@ async function resumir(message, ctx, s) {
   for (const c of cmds) linhas.push(`\`${P}${c.args.join(" ")}\``);
   if (!cmds.length) linhas.push(T(s.lang, "_(nada — tudo foi pulado)_", "_(nothing — everything was skipped)_"));
   linhas.push("", T(s.lang, "Responda `confirmar` para aplicar, `voltar` para mudar a última, `cancelar` para desistir.",
-                         "Answer `confirmar` to apply, `voltar` to change the last one, `cancelar` to quit."));
+                         "Answer `confirm` to apply, `back` to change the last one, `cancel` to quit."));
   s.fase = "confirmar";
   return sendEmbed(message.channel, {
     title: T(s.lang, "📝 Resumo — confirma?", "📝 Summary — confirm?"),
@@ -446,7 +446,7 @@ async function aplicar(message, ctx, s) {
     if (srv && typeof srv.havePermission === "function" && !srv.havePermission("TimeoutMembers")) {
       linhas.push("", T(s.lang,
         "⚠️ O cargo do bot não tem **TimeoutMembers** — sem ela o silêncio da escada e do modo `confirmar` não funciona (a pessoa cai na quarentena). Dê essa permissão ao cargo do bot.",
-        "⚠️ The bot's role lacks **TimeoutMembers** — without it the ladder's and `confirmar` mode's silence doesn't work (the person falls into quarantine). Give the bot's role that permission."));
+        "⚠️ The bot's role lacks **TimeoutMembers** — without it the ladder's and `confirm` mode's silence doesn't work (the person falls into quarantine). Give the bot's role that permission."));
     }
   } catch {}
   if (okN < resultado.length) linhas.push(T(s.lang,

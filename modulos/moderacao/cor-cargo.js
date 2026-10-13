@@ -1,6 +1,6 @@
 import { limparId, ULID } from "../core/ids.js";
 import * as db from "../core/db.js";
-import { CORES as NOMES, normalizarCor as corSolida } from "../core/cores.js";
+import { CORES as NOMES, normalizarCor as corSolida, nomesDeCor } from "../core/cores.js";
 import { tr, lingua } from "../core/i18n.js";
 import { chamarApi } from "../core/stoat-api.js";
 import { canalDeOutroServidor } from "./pertence.js";
@@ -469,7 +469,7 @@ export async function cmdCor(message, args, ctx) {
           colour: COR.erro,
         }, {
           title: "❌ Invalid color in the gradient",
-          description: `I didn't understand **${bruto}**. Use hex (\`#FF0000\`) or a name: ${Object.keys(NOMES).slice(0, 8).map((n) => `\`${n}\``).join(", ")}…`,
+          description: `I didn't understand **${bruto}**. Use hex (\`#FF0000\`) or a name: ${nomesDeCor(8, "en").map((n) => `\`${n}\``).join(", ")}…`,
           colour: COR.erro,
         }));
       }

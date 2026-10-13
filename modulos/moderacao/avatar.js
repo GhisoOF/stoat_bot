@@ -20,7 +20,8 @@ import * as db from "../core/db.js";
 import { banir } from "../core/banir.js";
 import { lerDuracao, duracaoTexto } from "../core/duracao.js";
 import { aplicarTimeout, CONFIRMAR_MS, MAX_TIMEOUT_MS } from "./timeout.js";
-import { pontuarDescricao, presentes } from "./imagem.js";
+import { pontuarDescricao } from "./imagem.js";
+import { descreverErro, tipoDoErro } from "../core/erros.js";
 
 export const ACOES_AVATAR = ["alertar", "silenciar", "expulsar", "banir"];
 const ACAO_EN = { alert: "alertar", silence: "silenciar", mute: "silenciar", timeout: "silenciar", kick: "expulsar", ban: "banir" };
@@ -48,18 +49,38 @@ export function arquivoDe(avatar) {
   return { id, url: `${CDN()}/${avatar?.tag || "avatars"}/${id}` };
 }
 
-const EXPLICITO = /(?<![\p{L}\p{N}])(genit\w*|p[eê]nis|vaginas?|vulvas?|[aâ]nus|test[ií]culos?|escroto|ere[cç][aã]o|pornogr\w*|ato sexual|sexo (oral|expl[ií]cito)|masturba\w*|penetra[cç][aã]o|genitals?|penis|testicles?|erect penis|porn\w*|sexual act|oral sex|masturbat\w*|intercourse)(?![\p{L}\p{N}])/iu;
+const EXPLICITO = /(?<![\p{L}\p{N}])(genit\p{L}*|p[eê]nis|vaginas?|vulvas?|[aâ]nus|test[ií]culos?|escroto|ere[cç][aã]o|pornogr\p{L}*|ato sexual|sexo (oral|expl[ií]cito)|masturba\p{L}*|penetra[cç][aã]o|genitals?|penis|testicles?|erect penis|porn\p{L}*|sexual act|oral sex|masturbat\p{L}*|intercourse)(?![\p{L}\p{N}])/iu;
 
+// Só o que a descrição AFIRMA (13 out 2026). O modelo, mesmo instruído a não
+// fazer isso, escreve o que NÃO há: "Dois homens de terno… Não há armas nem
+// símbolos de ódio; o ato sexual ou nudez não são explícitos na imagem" — e o
+// "ato sexual" antes do "não" silenciou uma foto inocente. Agora a descrição é
+// partida em orações e TODA oração com negação sai, em qualquer posição.
+// ("no" fica de fora: em português é "em + o".)
+const NEGA = /(?<![\p{L}\p{N}])(n[ãa]o|sem|nenhum[a]?|nem|nunca|jamais|not|without|none|nor|never|isn'?t|aren'?t|doesn'?t|don'?t)(?![\p{L}\p{N}])/iu;
+export function afirmado(descricao) {
+  return String(descricao ?? "")
+    .replace(/\bsem\s+roupas?\b/gi, "nua").replace(/\bwithout\s+clothes\b/gi, "naked")
+    .split(/[.;!?\n,]|\s+(?:mas|porém|but)\s+/i)   // ":" não: "Genitália: não" é uma oração só
+    .map((c) => c.trim()).filter((c) => c && !NEGA.test(c)).join(". ");
+}
+
+// Decide sobre a foto. Para AGIR (silenciar, expulsar, banir) é preciso o voto
+// de risco do modelo junto com o que a descrição afirma; termo explícito sem o
+// voto vira só `suspeita` — a staff é avisada, ninguém é punido.
 export function avaliarAvatar(descricao, { riscoModelo = false } = {}) {
-  const ali = presentes(descricao);
-  const r = pontuarDescricao(descricao, { riscoModelo });
+  const ali = afirmado(descricao);
+  const r = pontuarDescricao(ali, { riscoModelo });
+  const explicito = EXPLICITO.test(ali);
   const motivos = [];
-  if (EXPLICITO.test(ali)) motivos.push("sexual explícito");
+  if (explicito && riscoModelo) motivos.push("sexual explícito");
   else if (r.grave) motivos.push("menor + sexual");
   else if (riscoModelo) {
     for (const c of ["sexual", "gore", "odio"]) if (r.categorias.includes(c)) motivos.push(c === "sexual" ? "nudez" : c === "odio" ? "ódio" : c);
   }
-  return { apitou: motivos.length > 0, motivos, grave: r.grave };
+  const apitou = motivos.length > 0;
+  const suspeita = !apitou && explicito;
+  return { apitou, suspeita, motivos: suspeita ? ["possível conteúdo sexual (o modelo não confirmou o risco)"] : motivos, grave: r.grave };
 }
 
 // ── Análise (uma por vez; a mesma foto, uma vez só) ─────────────────────────
@@ -116,14 +137,16 @@ export async function verificar({ ctx, server, userId, avatar, origem = "entrada
   if (!arquivo || !server || !userId) return null;
   if (isento(ctx, server, userId, member, user)) return null;
   const r = await analisarFoto(arquivo);
-  console.log(`[AVATAR] ${userId} em ${server.id} (${origem}): ${r ? (r.apitou ? `APITOU [${r.motivos.join(", ")}]` : "ok") : "sem análise"}`);
-  if (!r?.apitou) return { apitou: false };
+  console.log(`[AVATAR] ${userId} em ${server.id} (${origem}): ${r ? (r.apitou ? `APITOU [${r.motivos.join(", ")}]` : r.suspeita ? "suspeita (só alerta)" : "ok") : "sem análise"}`);
+  if (!r?.apitou && !r?.suspeita) return { apitou: false };
 
   const cfg = ctx.config.automod.antiAvatar ?? {};
-  const acao = acaoDoAvatar(cfg);
+  // suspeita (termo sem o voto do modelo): avisa a staff, não pune
+  const acao = r.apitou ? acaoDoAvatar(cfg) : "alertar";
   const en = ctx.config?.language === "en";
-  const motivo = en ? `profile picture flagged (${r.motivos.join(", ")})` : `foto de perfil imprópria (${r.motivos.join(", ")})`;
-  let feito = en ? "nothing — alert only" : "nada — só alerta";
+  const motivo = en ? `profile picture flagged (${r.motivos.map((m) => MOTIVO_EN[m] ?? m).join(", ")})` : `foto de perfil imprópria (${r.motivos.join(", ")})`;
+  let feito = r.apitou ? (en ? "nothing — alert only" : "nada — só alerta")
+    : (en ? "nothing — the model didn't confirm the risk; check the profile" : "nada — o modelo não confirmou o risco; confira o perfil");
 
   try {
     if (acao === "silenciar") {
@@ -139,33 +162,46 @@ export async function verificar({ ctx, server, userId, avatar, origem = "entrada
       feito = en ? "banned" : "banido";
     }
   } catch (e) {
-    const det = e?.message ?? e?.type ?? String(e);
-    feito = en ? `failed (${acao}): ${det} — check the bot's role and permissions` : `falhou (${acao}): ${det} — confira o cargo e as permissões do bot`;
+    // o erro do Stoat chega como JSON cru ({"type":"MissingPermission",…}) — em
+    // texto de gente, com o que fazer (13 out 2026)
+    const lang = en ? "en" : "pt";
+    const det = descreverErro(e, lang);
+    const P = ctx.PREFIXO ?? "&";
+    const dica = tipoDoErro(e) === "MissingPermission"
+      ? (en ? `give Judy's role that permission, or change the action: \`${P}automod sentinel avatar action alert\``
+            : `dê essa permissão ao cargo da Judy, ou mude a ação: \`${P}automod sentinela avatar acao alertar\``)
+      : tipoDoErro(e) === "NotElevated"
+        ? (en ? "move Judy's role above the member's roles" : "suba o cargo da Judy acima dos cargos da pessoa")
+        : (en ? "check the bot's role and permissions" : "confira o cargo e as permissões do bot");
+    const nomeAcao = en ? ({ silenciar: "silence", expulsar: "kick", banir: "ban" }[acao] ?? acao) : acao;
+    feito = en ? `couldn't ${nomeAcao} — ${det}. ${dica[0].toUpperCase()}${dica.slice(1)}.` : `não consegui ${nomeAcao} — ${det}. ${dica[0].toUpperCase()}${dica.slice(1)}.`;
     console.warn(`[AVATAR] ${acao} de ${userId} em ${server.id}: ${det}`);
   }
 
-  await alertar(ctx, { server, userId, origem, r, feito, acao, en });
-  await log.registrar(ctx, "punicoes", {
+  const alertouEm = await alertar(ctx, { server, userId, origem, r, feito, acao, en });
+  // o alerta já foi para o canal de log (sem canal do sentinela): não repete
+  if (r.apitou && alertouEm !== ctx.config?.log?.canalId) await log.registrar(ctx, "punicoes", {
     titulo: en ? "🖼️ Profile picture flagged" : "🖼️ Foto de perfil imprópria",
     descricao: `<@${userId}> — ${motivo} (${origem === "troca" ? (en ? "changed picture" : "trocou a foto") : (en ? "on join" : "ao entrar")}).\n**${en ? "Action" : "Ação"}:** ${feito}`,
   });
-  return { apitou: true, acao, feito, motivos: r.motivos };
+  return { apitou: r.apitou, suspeita: !!r.suspeita, acao, feito, motivos: r.motivos };
 }
 
 async function alertar(ctx, { server, userId, origem, r, feito, acao, en }) {
   const destinoId = ctx.config?.automod?.antiScam?.alertChannelId || ctx.config?.log?.canalId || null;
   const achado = destinoId ? await Promise.resolve(ctx.client?.channels?.get?.(destinoId) ?? ctx.client?.channels?.fetch?.(destinoId)).catch(() => null) : null;
   const destino = achado && (achado.serverId ?? achado.server?.id ?? server.id) === server.id ? achado : null;
-  if (!destino) { console.warn(`[AVATAR] alerta NÃO entregue: servidor ${server.id} sem canal de alerta do sentinela nem de log`); return; }
+  if (!destino) { console.warn(`[AVATAR] alerta NÃO entregue: servidor ${server.id} sem canal de alerta do sentinela nem de log`); return null; }
   const P = ctx.PREFIXO ?? "&";
   const staff = (ctx.config?.acesso?.cargosStaff ?? []).map((id) => `<%${id}>`).join(" ");
   await ctx.sendEmbed(destino, {
     title: r.grave ? (en ? "🚨 Profile picture — possible abuse material" : "🚨 Foto de perfil — possível material de abuso")
-                   : (en ? "🖼️ Inappropriate profile picture" : "🖼️ Foto de perfil imprópria"),
+      : r.suspeita ? (en ? "🖼️ Profile picture to check" : "🖼️ Foto de perfil para conferir")
+      : (en ? "🖼️ Inappropriate profile picture" : "🖼️ Foto de perfil imprópria"),
     description: [
       staff || null,
       `<@${userId}> · ${origem === "troca" ? (en ? "changed their picture" : "trocou a foto") : (en ? "just joined" : "acabou de entrar")}`,
-      `**${en ? "Signals" : "Sinais"}:** ${r.motivos.join(", ")}`,
+      `**${en ? "Signals" : "Sinais"}:** ${r.motivos.map((m) => (en ? MOTIVO_EN[m] ?? m : m)).join(", ")}`,
       `**${en ? "Action" : "Ação"}:** ${feito}`,
       "",
       `> ${r.descricao.replace(/\n+/g, " ").slice(0, 400)}`,
@@ -175,7 +211,10 @@ async function alertar(ctx, { server, userId, origem, r, feito, acao, en }) {
     ].filter((x) => x !== null).join("\n"),
     colour: r.grave ? ctx.COR?.erro : ctx.COR?.aviso,
   });
+  return destino.id ?? destinoId;
 }
+const MOTIVO_EN = { "sexual explícito": "explicit sexual", "menor + sexual": "minor + sexual", nudez: "nudity", "ódio": "hate", gore: "gore",
+  "possível conteúdo sexual (o modelo não confirmou o risco)": "possible sexual content (the model didn't confirm the risk)" };
 
 // ── Os eventos ──────────────────────────────────────────────────────────────
 // Entrou: a foto do perfil e, se tiver, a de servidor.

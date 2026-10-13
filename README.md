@@ -385,7 +385,7 @@ próprio bot: `&help <comando>`. Um resumo:
 | `&log` · `&acesso` · `&staff` | chat de logs, quem usa comandos, equipe |
 | `&banglobal` | lista global *(BanMembers)* |
 | `&automod blocklist` · `&automod whitelist` · `&automod sentinela` · `&automod punicao` | listas anti-link, convites permitidos, o filtro que julga, e o que acontece com quem infringe |
-| `&ticket` | suporte por **reação**: `painel #canal` posta uma mensagem com um emoji por assunto; reagir abre um canal privado (quem pediu + staff). Lá, 🔒 (só staff) **trava** a conversa e manda o registro inteiro ao log como **arquivo .txt**; depois 🗑️ apaga o canal. A staff entra pelos cargos do `&acesso` e por quem tem Gerenciar canais; o Stoat não deixa a Judy pôr no ticket cargo **acima** do dela — `&ticket equipe` cria o cargo **Equipe de tickets** para esses (o `painel` já confere) |
+| `&ticket` | suporte por **reação**: `painel #canal` posta uma mensagem com um emoji por assunto; reagir abre um canal privado (quem pediu + staff). Lá, 🔒 (só staff) **trava** a conversa e manda o registro inteiro ao log como **arquivo .txt**; depois 🗑️ apaga o canal. A staff entra pelos cargos do `&acesso` e por quem tem Gerenciar canais; o Stoat não deixa a Judy pôr no ticket cargo **acima** do dela — **arraste o cargo da Judy para cima dos cargos da staff** (ou dê a eles *Ver canal + Ler histórico + Enviar* no servidor; ou `&ticket equipe`, o cargo **Equipe de tickets**, que um admin dá à mão a quem está acima dela). O `painel` já confere; o log de cargos mostra o **nome** do cargo e ignora os `ticket-NNNN` |
 | `&rolar` (`&r`) · `&iniciativa` | dados de RPG de mesa: `2d20kh1+5`, vantagem/desvantagem, `4d6kh3`, explosão `3d6!`, sucessos `8d10>=7`, `d%`, Fate, moeda, repetição `6x(4d6kh3)`, rótulos e rolagem secreta via DM — mais rastreador de iniciativa por canal (`add`/`next`/`lista`) |
 | `&webhook` (`&wh`) | receptor universal de webhooks: GitHub (push, issues, PR, releases, Actions), Crafty/Minecraft e qualquer serviço que fale o formato Discord (Uptime Kuma, Grafana…) — cada gancho tem canal próprio e filtro de eventos, então dá para separar issues num chat e o CI noutro; URL secreta por gancho, teto anti-flood. **Endereços:** serviço da internet (GitHub) exige base pública — `sudo tailscale funnel --bg 8095` + `WEBHOOK_URL_BASE=https://…` no `.env`; container da mesma máquina (Crafty) usa a ponte `http://172.17.0.1:8095/...` |
 | `&musica` (`&m`, `&play`) + `&entrar`/`&sair` | uma call **por servidor**, em vários servidores ao mesmo tempo (chamar num servidor não a tira da call de outro); até `MUSICA_MAX_SIMULTANEAS` músicas tocando ao mesmo tempo (padrão 3) — no limite, o **servidor do dono** toca e a música de menor prioridade para (avisando o motivo no `&musica fila` de lá); música nas calls: YouTube, SoundCloud e Spotify (playlists também), com fila, pausa, skip, volume e loop — e a música **abaixa sozinha quando o `&tts` fala** (ducking); playlists do Spotify pedem `SPOTIFY_ID`/`SPOTIFY_SECRET` no `.env` (app grátis em developer.spotify.com; faixas avulsas funcionam sem chave). Vídeo que o YouTube recusa (restrição de idade, indisponível) vira **outra versão** da mesma música, avisando qual; `MUSICA_COOKIES` faz o original com restrição de idade tocar |
@@ -435,6 +435,10 @@ próprio bot: `&help <comando>`. Um resumo:
 > bot não pune quem tem cargo igual ou superior ao dele — e só dá cargos (nível,
 > autorole) que estão abaixo do dele, a quem também está abaixo. `&xp cargos`
 > marca com ⚠️ os cargos de nível que o bot não alcança.
+> Nos **tickets** é igual: um cargo de staff acima da Judy não entra no canal
+> do ticket. Um cargo do bot **lá embaixo** na lista (o caso mais comum: o
+> cargo "bots" criado por último) deixa a staff de fora — arraste-o para o
+> topo, logo abaixo do cargo do dono.
 
 ### 2) De quem USA os comandos
 

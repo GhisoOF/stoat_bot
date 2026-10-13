@@ -12348,8 +12348,10 @@ await engine._ultimaVerificacaoDeAssunto();
 ok(/mod: vocês viram a notícia do governo/.test(pedidos[0]?.msgs[1].content ?? ""), "  → mas a fala da staff entra no fio (e no contexto)");
 
 console.log("\n── foto de perfil: o que apita ──");
-ok(av.avaliarAvatar("Uma foto de um pênis ereto em close.").apitou, "★ genitália descrita apita sozinha");
-ok(av.avaliarAvatar("Desenho de anime: personagem com genitais expostos.").motivos[0] === "sexual explícito", "  → desenho também");
+// (13 out 2026: para AGIR é preciso o voto de risco do modelo; sem ele, só a staff é avisada)
+ok(av.avaliarAvatar("Uma foto de um pênis ereto em close.", { riscoModelo: true }).apitou, "★ genitália descrita + o voto do modelo apita");
+ok(!av.avaliarAvatar("Uma foto de um pênis ereto em close.").apitou && av.avaliarAvatar("Uma foto de um pênis ereto em close.").suspeita, "  → sem o voto: suspeita (alerta, sem punir)");
+ok(av.avaliarAvatar("Desenho de anime: personagem com genitais expostos.", { riscoModelo: true }).motivos[0] === "sexual explícito", "  → desenho também");
 ok(!av.avaliarAvatar("Homem de torso nu na praia, sorrindo.").apitou, "★ torso nu na praia, sem o voto de risco do modelo: não apita");
 ok(av.avaliarAvatar("Mulher nua deitada na cama.", { riscoModelo: true }).motivos.includes("nudez"), "  → nudez COM o voto de risco: apita");
 ok(!av.avaliarAvatar("Nudez: não. Genitália: não. Um gato laranja.", { riscoModelo: false }).apitou, "  → checklist negado (\"Genitália: não\") não apita");
@@ -12410,6 +12412,26 @@ ok(res?.apitou === false && analises.length === 1, "foto comum: analisada e nada
 descricao = "Close de genitália masculina."; enviados.length = 0;
 await av.verificar({ ctx: ctxAv({ ...cfgAv("alertar"), automod: { antiAvatar: { enabled: true, acao: "alertar" }, antiScam: { alertChannelId: "ALHEIO" } } }), server: servidor("S7"), userId: "NOVO", avatar: { id: "FOTO1" } });
 ok(!enviados.some((e) => e.canal === "ALHEIO"), "  → canal de alerta de OUTRO servidor nunca recebe o alerta");
+
+console.log("\n── foto de perfil: o caso real de 13 out (dois homens de terno silenciados) ──");
+let risco = false;
+av._trocarAnalise(async (url) => { analises.push(url); return { descricao, riscoModelo: risco }; });
+descricao = "Dois homens adultos vestindo ternos escuros e camisas brancas estão em pé ao ar livre, sorrindo e acenando para a câmera. Eles se encontram em uma estrada asfaltada com vegetação densa no fundo sob um céu claro. Não há armas visíveis nem símbolos de ódio; o ato sexual ou nudez não são explícitos na imagem.";
+ok(!av.avaliarAvatar(descricao).apitou && !av.avaliarAvatar(descricao).suspeita && !av.avaliarAvatar(descricao, { riscoModelo: true }).apitou,
+  "★ \"o ato sexual ou nudez NÃO são explícitos\" não apita (toda oração com negação sai, em qualquer posição)");
+editados.length = 0; enviados.length = 0;
+res = await av.verificar({ ctx: ctxAv(cfgAv()), server: servidor("S8"), userId: "NOVO", avatar: { id: "FOTO_TERNO" } });
+ok(res?.apitou === false && !editados.length && !enviados.length, "  → e pela checagem inteira: ninguém silenciado, nenhum alerta");
+descricao = "Close de genitália masculina."; risco = false; editados.length = 0; enviados.length = 0;
+res = await av.verificar({ ctx: ctxAv(cfgAv()), server: servidor("S8"), userId: "NOVO", avatar: { id: "FOTO_SEM_VOTO" } });
+ok(res?.suspeita && !editados.length && enviados.some((e) => /para conferir/.test(e.title) && /não confirmou/.test(e.description)), "★ termo explícito sem o voto do modelo: só avisa a staff (\"para conferir\"), não silencia");
+// sem permissão: o erro do Stoat em texto de gente, e um alerta só (o canal de alerta É o de log)
+risco = true; enviados.length = 0;
+const semPerm = { ...servidor("S9"), fetchMember: async (u) => ({ id: { server: "S9", user: u }, edit: async () => { throw JSON.stringify({ type: "MissingPermission", permission: "TimeoutMembers", location: "crates/core/permissions/src/models/mod.rs:80:17" }); } }) };
+const cfgLog = { ...cfgAv("silenciar"), automod: { antiAvatar: { enabled: true, acao: "silenciar", tempo: "24h" }, antiScam: { alertChannelId: null } }, log: { canalId: "ALERTA", eventos: {} } };
+res = await av.verificar({ ctx: ctxAv(cfgLog), server: semPerm, userId: "NOVO", avatar: { id: "FOTO_PERM" } });
+ok(/TimeoutMembers/.test(res.feito) && !/[{}]|crates\//.test(res.feito) && /acao alertar/.test(res.feito), "★ falta de permissão vira texto (\"falta ao bot a permissão TimeoutMembers\") com o que fazer — sem o JSON cru");
+ok(enviados.filter((e) => e.canal === "ALERTA").length === 1, "★ um alerta só: sem canal do sentinela, ele vai ao de log — e o log não repete");
 
 console.log("\n── foto de perfil: trocou ──");
 analises.length = 0;
@@ -12853,6 +12875,189 @@ ok(/reset confirm [A-Z0-9]{4}/.test(t), "★ o dono do bot também pode (e o ape
 
 console.log(`\nRESET/IDIOMA (13 out): ${pass} ok, ${fail} falha(s)`);
 process.exit(fail ? 1 : 0);
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+// tickets-13out — o cargo da Judy lá embaixo e o log de cargos ilegível
+// ════════════════════════════════════════════════════════════════════════════
+// O print de Ghieh (13 out 2026): o cargo "bots" da Judy era o ÚLTIMO da
+// lista, então dono e mod ficavam acima dela e fora de todo ticket — e o aviso
+// só oferecia `&ticket equipe`, que também não chega a quem está acima. O log
+// de cargos mostrava IDs crus ("Cargo `01M4VJX4…` foi criado ou modificado")
+// e registrava a própria Judy recebendo o cargo `ticket-0005`.
+SUITES["tickets-13out"] = async () => {
+const __m0 = await import("node:assert"); const assert = __m0.default;
+const __m1 = await import("node:fs"); const fs = __m1.default;
+process.env.BOT_TOKEN = "tok";
+process.env.DB_PATH = "/tmp/tk13-teste.db"; process.env.CONFIG_PATH = "/tmp/tk13-teste.json";
+process.env.AUTUMN_URL = "http://autumn.teste"; process.env.STOAT_API = "http://api.teste";
+for (const f of ["/tmp/tk13-teste.db", "/tmp/tk13-teste.db-wal", "/tmp/tk13-teste.db-shm", "/tmp/tk13-teste.json"]) fs.rmSync(f, { force: true });
+await import("./main.js");
+const c = globalThis.__client;
+await c.emitAll("ready");
+globalThis.fetch = async (url) => {
+  if (String(url).startsWith("http://api.teste")) return { ok: true, status: 204, text: async () => "", json: async () => ({}) };
+  return { ok: true, json: async () => ({ id: "ANEXO" }) };
+};
+const store = await import("./modulos/core/config-store.js");
+const tickets = await import("./modulos/ferramentas/tickets.js");
+
+let ok = 0, falhou = 0;
+const t = async (nome, fn) => {
+  try { await fn(); console.log(`  ✅ ${nome}`); ok++; }
+  catch (e) { console.log(`  ❌ ${nome}\n     ${e.message}`); falhou++; }
+};
+const quieto = async (fn) => { const o = [console.log, console.error]; console.log = console.error = () => {}; try { return await fn(); } finally { [console.log, console.error] = o; } };
+const NAO_ELEVADO = JSON.stringify({ type: "NotElevated", location: "teste" });
+
+// ── o servidor do print: o cargo da Judy é o último ──
+let seq = 0;
+const cargos = new Map([
+  ["RDONO", { name: "dono", rank: 1, permissions: { a: 0, d: 0 } }],
+  ["RMOD", { name: "mod", rank: 2, permissions: { a: 0, d: 0 } }],
+  ["RAJU", { name: "ajudante", rank: 30, permissions: { a: 0, d: 0 } }],
+  ["RBOT", { name: "bots", rank: 20, permissions: { a: 0, d: 0 } }],
+]);
+const rankDe = (ids) => Math.min(Infinity, ...ids.map((id) => cargos.get(id)?.rank).filter((r) => r !== undefined));
+const membros = new Map();
+const RANK_BOT = () => rankDe(membros.get("BOT").roles);
+const membro = (uid, roles = [], bot = false) => {
+  const m = { id: { server: "STK", user: uid }, roles: [...roles], user: bot ? { bot: { owner: "X" } } : { username: uid }, hasPermission: () => false,
+    edit: async ({ roles: novos }) => {
+      if (uid !== "BOT" && rankDe(m.roles) <= RANK_BOT()) throw NAO_ELEVADO;
+      for (const r of novos) if (!m.roles.includes(r) && (cargos.get(r)?.rank ?? -1) <= RANK_BOT()) throw NAO_ELEVADO;
+      m.roles = novos;
+    } };
+  membros.set(uid, m); return m;
+};
+membro("BOT", ["RBOT"]); membro("MOD1", ["RMOD"]); membro("AJU1", ["RAJU"]); membro("ROBO", ["RAJU"], true); membro("ANA", []);
+const canais = new Map();
+const novoCanal = (id, name) => {
+  const ch = { id, name, mensagens: [], perms: {},
+    setPermissions: async (alvo, p) => {
+      if (alvo !== "default") { const cg = cargos.get(alvo); if (!cg) throw JSON.stringify({ type: "NotFound" }); if (cg.rank <= RANK_BOT()) throw NAO_ELEVADO; }
+      ch.perms[alvo] = p;
+    },
+    sendMessage: async (payload) => { const m = { id: `M${++seq}`, ...payload, react: async () => {} }; ch.mensagens.push(m); return m; },
+    fetchMessages: async () => [], delete: async () => {} };
+  canais.set(id, ch); c.channels.set(id, ch); return ch;
+};
+const server = { id: "STK", ownerId: "DONO", roles: cargos,
+  get member() { return membros.get("BOT"); },
+  havePermission: () => true,
+  createRole: async (nome) => { const id = `RNOVO${++seq}`; cargos.set(id, { name: nome, rank: 100 + seq, permissions: { a: 0, d: 0 } }); return { id }; },
+  deleteRole: async (id) => { cargos.delete(id); },
+  fetchMember: async (uid) => membros.get(uid) ?? null,
+  fetchMembers: async () => ({ members: [...membros.values()] }),
+  createChannel: async ({ name }) => novoCanal(`C${++seq}`, name) };
+c.servers.set("STK", server);
+const config = store.configDoServidor("STK");
+config.acesso = { cargosStaff: ["RDONO", "RMOD", "RAJU"], canais: { modo: "todos", lista: [] }, staffIgnoraCanais: true };
+const logT = novoCanal("C_LOGT", "log-tickets");
+const geral = novoCanal("C_GERAL", "geral");
+config.tickets = { logCanal: "C_LOGT" };
+const ctx = { client: c, config, serverId: "STK", PREFIXO: "&", COR: { info: 1, sucesso: 2, aviso: 3, erro: 4, mod: 5 },
+  salvarConfig: () => {}, sendEmbed: async (canal, e) => canal.sendMessage({ embed: e }),
+  getServer: async () => server, membroTemPermissao: () => true };
+
+console.log("── o aviso de staff de fora ──");
+await t("★ o cargo mais alto da Judy é achado (é ele que precisa subir)", async () => {
+  membros.get("BOT").roles.push("RAJU");   // um cargo mais baixo junto não confunde
+  assert.equal(tickets.cargoMaisAltoDoBot(server, membros.get("BOT")), "RBOT");
+  membros.get("BOT").roles = ["RBOT"];
+});
+await t("★ as saídas, PT e EN: subir o cargo da Judy, permissões do servidor, e só então &ticket equipe", async () => {
+  const pt = tickets.saidasParaAcima({ acima: ["RMOD"], cargoBot: "RBOT", P: "&" }).join("\n");
+  assert.match(pt, /arraste <%RBOT> para \*\*cima\*\* de <%RMOD>/);
+  assert.match(pt, /permissões do servidor/);
+  assert.match(pt, /Ver canal/);
+  assert.match(pt, /&ticket equipe/);
+  assert.match(pt, /admin precisa dar o cargo à mão/);
+  const en = tickets.saidasParaAcima({ acima: ["RMOD"], cargoBot: "RBOT", en: true }).join("\n");
+  assert.match(en, /drag <%RBOT> \*\*above\*\* <%RMOD>/);
+  assert.match(en, /View channel/);
+});
+let r1;
+await t("★ abrir o ticket com dono/mod acima: o aviso nomeia o cargo da Judy e diz para subi-lo", async () => {
+  r1 = await quieto(() => tickets.abrirTicket({ ctx, server, userId: "ANA" }));
+  assert.ok(r1.ok, JSON.stringify(r1));
+  assert.deepEqual(r1.staffFora.sort(), ["RDONO", "RMOD"]);
+  const aviso = logT.mensagens.find((m) => /staff ficou de fora/.test(m.embed?.title ?? ""));
+  assert.ok(aviso, "o aviso foi ao log dos tickets");
+  const d = aviso.embed.description;
+  assert.match(d, /o cargo dela é <%RBOT>/);
+  assert.match(d, /arraste <%RBOT>/);
+  assert.match(d, /Ver canal/);
+  assert.ok(d.indexOf("arraste") < d.indexOf("&ticket equipe"), "subir o cargo vem antes do &ticket equipe");
+});
+await t("o cargo de staff ABAIXO da Judy entrou no ticket", async () => {
+  assert.ok(canais.get(r1.canal.id).perms.RAJU?.allow > 0);
+});
+
+console.log("\n── &ticket equipe ──");
+await t("★ outro bot com cargo de staff não ganha o cargo da equipe", async () => {
+  await quieto(() => tickets.cmdTicket({ channel: geral, channelId: "C_GERAL", authorId: "MOD1", member: membros.get("MOD1") }, ["equipe"], ctx));
+  const eq = config.tickets.cargoEquipe;
+  assert.ok(eq, "o cargo da equipe foi criado");
+  assert.ok(membros.get("AJU1").roles.includes(eq), "o ajudante (gente) ganhou");
+  assert.ok(!membros.get("ROBO").roles.includes(eq), "o outro bot não");
+});
+await t("★ a resposta lembra de subir o cargo da Judy para ela mesma dar o cargo", async () => {
+  const resp = geral.mensagens.at(-1).embed.description;
+  assert.match(resp, /<@MOD1>/, "o mod acima da Judy aparece como 'dar à mão'");
+  assert.match(resp, /suba <%RBOT> acima/);
+});
+
+console.log("\n── o log de cargos ──");
+const SL = "SLOG";
+const cargosL = new Map([
+  ["R_VIP", { name: "VIP", rank: 5, permissions: { a: 1n, d: 0n } }],
+  ["R_TK", { name: "ticket-0005", rank: 50, permissions: { a: 0n, d: 0n } }],
+]);
+c.servers.set(SL, { id: SL, ownerId: "DONO", roles: cargosL, fetchMember: async () => null });
+const logC = novoCanal("C_LOGC", "log");
+const cfgL = store.configDoServidor(SL);
+cfgL.log = { ...(cfgL.log ?? {}), canalId: "C_LOGC", eventos: {} };
+const registros = () => logC.mensagens.map((m) => m.embed ?? m);
+const ultimo = () => JSON.stringify(registros().at(-1) ?? {});
+const srvL = c.servers.get(SL);
+await t("★ cargo criado: o título diz 'criado' e mostra o NOME (a stoat.js manda `{}` como anterior)", async () => {
+  await quieto(() => c.emitAll("serverRoleUpdate", srvL, "R_VIP", {}));
+  assert.match(ultimo(), /Cargo criado/);
+  assert.match(ultimo(), /\*\*VIP\*\*/);
+  assert.doesNotMatch(ultimo(), /`R_VIP`/);
+});
+await t("★ cargo modificado: diz o que mudou", async () => {
+  await quieto(() => c.emitAll("serverRoleUpdate", srvL, "R_VIP", { name: "Vip antigo", rank: 5, permissions: { a: 0n, d: 0n } }));
+  assert.match(ultimo(), /Cargo atualizado/);
+  assert.match(ultimo(), /Vip antigo/);
+  assert.match(ultimo(), /permissões/);
+});
+await t("★ os cargos ticket-NNNN não entram no log (nem criados, nem apagados)", async () => {
+  const antes = registros().length;
+  await quieto(() => c.emitAll("serverRoleUpdate", srvL, "R_TK", {}));
+  await quieto(() => c.emitAll("serverRoleDelete", srvL, "R_TK", { name: "ticket-0005" }));
+  assert.equal(registros().length, antes);
+});
+await t("★ a Judy (ou quem abriu) recebendo só o cargo do ticket não vira registro", async () => {
+  const antes = registros().length;
+  await quieto(() => c.emitAll("serverMemberUpdate", { id: { server: SL, user: "BOT" }, roles: ["R_TK"] }, { roles: [] }));
+  await quieto(() => c.emitAll("serverMemberUpdate", { id: { server: SL, user: "ANA" }, roles: ["R_TK"] }, { roles: [] }));
+  assert.equal(registros().length, antes);
+});
+await t("★ …nem perdendo o cargo do ticket depois que ele já foi apagado do servidor", async () => {
+  cargosL.delete("R_TK");
+  const antes = registros().length;
+  await quieto(() => c.emitAll("serverMemberUpdate", { id: { server: SL, user: "ANA" }, roles: [] }, { roles: ["R_TK"] }));
+  assert.equal(registros().length, antes);
+});
+await t("★ cargo comum dado a alguém: aparece pelo NOME, não pelo ID", async () => {
+  await quieto(() => c.emitAll("serverMemberUpdate", { id: { server: SL, user: "ANA" }, roles: ["R_VIP"] }, { roles: [] }));
+  assert.match(ultimo(), /Recebeu:\*\* <%R_VIP> \*\*VIP\*\*/);
+});
+
+console.log(`\nTICKETS 13 OUT: ${ok} ok, ${falhou} falha(s)`);
+process.exit(falhou ? 1 : 0);
 };
 
 // ── O executor ───────────────────────────────────────────────────────────────

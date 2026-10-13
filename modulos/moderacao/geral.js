@@ -239,7 +239,7 @@ function detalhesPT(P) {
         + "Dentro do ticket, 🔒 **fecha — só a staff**: a conversa **trava** (quem abriu lê, mas não escreve mais) e o registro inteiro vai para o log como **arquivo .txt**. Depois, 🗑️ (staff) apaga o canal\n\n"
         + "`categorias 🎫 Suporte | 🚨 Denúncia` — troca os assuntos (poste o painel de novo)\n"
         + "`log <#canal>` — para onde vão os registros (obrigatório) · `lista` — os abertos\n"
-        + "`equipe` — confere se a **staff entra em todo ticket** (cargos do `&acesso` + quem tem Gerenciar canais). O Stoat não deixa a Judy pôr no ticket um cargo **acima** do dela: para esses, ela cria o cargo **Equipe de tickets**, dá a quem alcança e diz a quem um admin precisa dar à mão. O `painel` já faz essa conferência\n"
+        + "`equipe` — confere se a **staff entra em todo ticket** (cargos do `&acesso` + quem tem Gerenciar canais). O Stoat não deixa a Judy pôr no ticket um cargo **acima** do dela. **O jeito certo:** em Configurações do servidor → Cargos, arraste o cargo da Judy para cima dos cargos da staff. Ou dê a esses cargos, nas permissões do servidor, *Ver canal + Ler histórico + Enviar mensagens*. Ou use o cargo **Equipe de tickets** que o `equipe` cria (um admin dá à mão a quem está acima da Judy). O `painel` já faz essa conferência\n"
         + "_Digitando também dá: `abrir [motivo]`, `fechar [nota]`, `apagar`._\n\n"
         + "O bot precisa de **ManageChannel, ManageRole, AssignRoles, ManagePermissions** e **ManageMessages** (para limpar as reações).",
       perm: "reagir/abrir: todo mundo · resto: staff", ex: `${P}ticket painel #suporte`,
@@ -525,7 +525,7 @@ function detalhesEN(P) {
         + "Inside the ticket, 🔒 **closes it — staff only**: the conversation **locks** (the opener can read, not write) and the whole record goes to the log as a **.txt file**. Then 🗑️ (staff) deletes the channel\n\n"
         + "`categorias 🎫 Support | 🚨 Report` — changes the topics (repost the panel)\n"
         + "`log <#channel>` — where records go (required) · `lista` — open ones\n"
-        + "`equipe` — checks that the **staff gets into every ticket** (`&acesso` roles + whoever has Manage channels). Stoat won't let Judy add a role **above** hers to a ticket: for those, she creates the **Ticket team** role, gives it to whoever she can reach and tells you who an admin must give it to by hand. `painel` already runs this check\n"
+        + "`equipe` — checks that the **staff gets into every ticket** (`&acesso` roles + whoever has Manage channels). Stoat won't let Judy add a role **above** hers to a ticket. **The proper fix:** in Server settings → Roles, drag Judy's role above the staff roles. Or give those roles, in their server permissions, *View channel + Read message history + Send messages*. Or use the **Ticket team** role that `equipe` creates (an admin gives it by hand to whoever is above Judy). `painel` already runs this check\n"
         + "_Typing works too: `abrir [reason]`, `fechar [note]`, `apagar`._\n\n"
         + "The bot needs **ManageChannel, ManageRole, AssignRoles, ManagePermissions** and **ManageMessages** (to clear reactions).",
       perm: "react/open: everyone · rest: staff", ex: `${P}ticket painel #support`,

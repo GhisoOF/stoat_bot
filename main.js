@@ -1075,9 +1075,15 @@ client.on("serverMemberUpdate", async (member, anterior) => {
     if (!ganhou.length && !perdeu.length) return;
 
     const ctx = criarContexto(serverId);
+    // (13 out 2026) os cargos `ticket-NNNN` (o que a Judy dá a si mesma e a
+    // quem abriu, para enxergarem o canal) não são notícia — o log do ticket já
+    // conta quem abriu e quem fechou; e o cargo aparece pelo NOME, não pelo ID
+    const srv = member.server ?? client.servers.get?.(serverId);
+    const ehDoTicket = (r) => cargosDeTicket.has(r) || /^ticket-\d+$/.test(nomeDoCargo(srv, r) ?? "");
+    if ([...ganhou, ...perdeu].every(ehDoTicket)) return;
     const partes = [];
-    if (ganhou.length) partes.push(`**Recebeu:** ${ganhou.map((r) => `\`${r}\``).join(", ")}`);
-    if (perdeu.length) partes.push(`**Perdeu:** ${perdeu.map((r) => `\`${r}\``).join(", ")}`);
+    if (ganhou.length) partes.push(`**Recebeu:** ${ganhou.map((r) => cargoLegivel(srv, r)).join(", ")}`);
+    if (perdeu.length) partes.push(`**Perdeu:** ${perdeu.map((r) => cargoLegivel(srv, r)).join(", ")}`);
     await log.registrar(ctx, "cargos", {
       titulo: "🏷 Cargos alterados",
       descricao: `<@${userId}>\n${partes.join("\n")}`,
@@ -1174,23 +1180,49 @@ client.on("messageDeleteBulk", async (mensagens, canal) => {
 });
 
 // CARGO CRIADO / ATUALIZADO
-client.on("serverRoleUpdate", async (server, roleId) => {
+// O nome do cargo (o log mostrava só o ID: "Cargo `01M4VJX4…` foi criado").
+// ids dos cargos `ticket-NNNN` já vistos: quando o ticket fecha, o cargo some
+// do servidor antes de o "perdeu o cargo" chegar, e aí não dá mais para ler o nome
+const cargosDeTicket = new Set();
+function nomeDoCargo(server, roleId) {
+  try { return server?.roles?.get?.(roleId)?.name ?? server?.roles?.[roleId]?.name ?? null; } catch { return null; }
+}
+function cargoLegivel(server, roleId) {
+  const nome = nomeDoCargo(server, roleId);
+  return nome ? `<%${roleId}> **${nome}**${/^ticket-\d+$/.test(nome) ? " _(cargo do ticket)_" : ""}` : `\`${roleId}\``;
+}
+
+client.on("serverRoleUpdate", async (server, roleId, anterior) => {
   try {
+    // os cargos `ticket-NNNN` nascem e morrem com cada ticket: o log do ticket já conta
+    if (/^ticket-\d+$/.test(nomeDoCargo(server, roleId) ?? "")) { cargosDeTicket.add(roleId); return; }
+    // a stoat.js manda `{}` como "anterior" quando o cargo é novo — só um
+    // anterior COM nome quer dizer que o cargo já existia
+    const jaExistia = !!anterior?.name;
+    const atual = server?.roles?.get?.(roleId);
+    const mudou = [];
+    if (jaExistia && atual) {
+      if (atual.name !== anterior.name) mudou.push(`nome: **${anterior.name}** → **${atual.name}**`);
+      if (String(atual.permissions?.a) !== String(anterior.permissions?.a) || String(atual.permissions?.d) !== String(anterior.permissions?.d)) mudou.push("permissões");
+      if (atual.rank !== anterior.rank) mudou.push("posição na lista");
+      if ((atual.colour ?? null) !== (anterior.colour ?? null)) mudou.push("cor");
+    }
     const ctx = criarContexto(server?.id);
     await log.registrar(ctx, "cargos", {
-      titulo: "🏷 Cargo criado/atualizado",
-      descricao: `Cargo \`${roleId}\` foi criado ou modificado.`,
+      titulo: jaExistia ? "🏷 Cargo atualizado" : "🏷 Cargo criado",
+      descricao: `${cargoLegivel(server, roleId)} ${jaExistia ? "foi modificado" + (mudou.length ? ` — ${mudou.join(", ")}.` : ".") : "foi criado."}`,
     });
   } catch (err) { console.error("[EVENTO][ROLE_UPDATE]", err?.message); }
 });
 
 // CARGO APAGADO
-client.on("serverRoleDelete", async (server, roleId) => {
+client.on("serverRoleDelete", async (server, roleId, cargo) => {
   try {
+    if (/^ticket-\d+$/.test(cargo?.name ?? "")) { cargosDeTicket.add(roleId); return; }   // apagado junto com o ticket
     const ctx = criarContexto(server?.id);
     await log.registrar(ctx, "cargos", {
       titulo: "🗑 Cargo apagado",
-      descricao: `Cargo \`${roleId}\` foi removido do servidor.`,
+      descricao: `${cargo?.name ? `**${cargo.name}**` : "Cargo"} \`${roleId}\` foi removido do servidor.`,
     });
   } catch (err) { console.error("[EVENTO][ROLE_DELETE]", err?.message); }
 });

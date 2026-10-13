@@ -194,10 +194,35 @@ export function classificarStaff(server, config, botMembro) {
   return r;
 }
 
+// O cargo mais alto da Judy — é ele que precisa subir na lista de cargos.
+export function cargoMaisAltoDoBot(server, botMembro) {
+  const ids = idsDeCargos(botMembro).filter((id) => rankDoCargo(server, id) !== null);
+  return ids.sort((a, b) => rankDoCargo(server, a) - rankDoCargo(server, b))[0] ?? null;
+}
+
+// As três saídas para cargos acima da Judy, do melhor para o pior (13 out
+// 2026: o aviso só oferecia o `&ticket equipe`, que não resolve para quem tem
+// esses cargos — eles também estão acima dela, então ela não lhes dá cargo).
+export function saidasParaAcima({ acima, cargoBot = null, en = false, P = "&" }) {
+  const cargos = acima.map((id) => `<%${id}>`).join(" ");
+  const meu = cargoBot ? `<%${cargoBot}>` : (en ? "Judy's role" : "o cargo da Judy");
+  return en ? [
+    `**1. Best:** in Server settings → Roles, drag ${meu} **above** ${cargos}. Every ticket then includes them on its own.`,
+    `**2. Or:** in each of those roles' **server permissions**, turn on *View channel*, *Read message history* and *Send messages* — they'll see every ticket without Judy touching them.`,
+    `**3. Or:** \`${P}ticket equipe\` creates a **Ticket team** role — but whoever holds those roles is above Judy too, so an admin has to give it to them by hand.`,
+    "_The server owner always sees every ticket._",
+  ] : [
+    `**1. Melhor:** em Configurações do servidor → Cargos, arraste ${meu} para **cima** de ${cargos}. Aí todo ticket já inclui esses cargos sozinho.`,
+    `**2. Ou:** nas **permissões do servidor** de cada um desses cargos, ligue *Ver canal*, *Ler histórico* e *Enviar mensagens* — eles passam a ver todo ticket sem a Judy mexer neles.`,
+    `**3. Ou:** \`${P}ticket equipe\` cria o cargo **Equipe de tickets** — mas quem tem esses cargos também está acima da Judy, então um admin precisa dar o cargo à mão.`,
+    "_O dono do servidor sempre vê todos os tickets._",
+  ];
+}
+
 const ultimoAvisoEquipe = new Map();   // serverId → ms
 const AVISO_EQUIPE_MS = 6 * 3600_000;
 
-function linhasDoRelatorioStaff(cls, { equipe = null, deram = [], faltam = [], en = false, P = "&" } = {}) {
+function linhasDoRelatorioStaff(cls, { equipe = null, deram = [], faltam = [], en = false, P = "&", cargoBot = null } = {}) {
   const cargos = (lista) => lista.map((id) => `<%${id}>`).join(" ");
   const L = [];
   if (cls.entram.length) L.push(`✅ ${en ? "Enter every ticket:" : "Entram em todo ticket:"} ${cargos(cls.entram)}`);
@@ -205,12 +230,12 @@ function linhasDoRelatorioStaff(cls, { equipe = null, deram = [], faltam = [], e
   if (equipe) L.push(`✅ ${en ? "Ticket team role:" : "Cargo da equipe de tickets:"} <%${equipe}>${deram.length ? ` — ${en ? "given to" : "dado a"} ${deram.map((u) => `<@${u}>`).join(" ")}` : ""}`);
   if (cls.acima.length && !equipe) {
     L.push(`⚠️ ${en ? "Above Judy — Stoat won't let her add them:" : "Acima da Judy — o Stoat não deixa ela pôr no ticket:"} ${cargos(cls.acima)}`);
-    L.push(en
-      ? `→ \`${P}ticket equipe\` creates a **Ticket team** role she can use, or move Judy's role above these.`
-      : `→ \`${P}ticket equipe\` cria um cargo **Equipe de tickets** que ela consegue usar, ou suba o cargo da Judy acima desses.`);
+    L.push(...saidasParaAcima({ acima: cls.acima, cargoBot, en, P }));
   }
   if (faltam.length) {
     L.push(`⚠️ ${en ? "Above Judy, so she can't give them the role — an admin gives it by hand:" : "Estão acima da Judy, então ela não consegue dar o cargo — um admin dá à mão:"} ${faltam.map((u) => `<@${u}>`).join(" ")}`);
+    L.push(en ? `_Or move ${cargoBot ? `<%${cargoBot}>` : "Judy's role"} above their roles — then she does it herself._`
+              : `_Ou suba ${cargoBot ? `<%${cargoBot}>` : "o cargo da Judy"} acima dos cargos dessas pessoas — aí ela mesma dá._`);
   }
   if (!cls.entram.length && !cls.veemSozinhos.length && !cls.acima.length && !equipe) {
     L.push(en
@@ -231,7 +256,8 @@ export async function prepararEquipe({ ctx, server, criar = true }) {
     cfg.cargoEquipe = null; ctx.salvarConfig?.();     // apagado por alguém: recria
   }
   const precisa = cls.acima.length > 0;
-  if (!cfg.cargoEquipe && (!precisa || !criar)) return { cls, equipe: null, deram: [], faltam: [], linhas: linhasDoRelatorioStaff(cls, { en, P: ctx.PREFIXO }) };
+  const cargoBot = cargoMaisAltoDoBot(server, bot);
+  if (!cfg.cargoEquipe && (!precisa || !criar)) return { cls, equipe: null, deram: [], faltam: [], linhas: linhasDoRelatorioStaff(cls, { en, P: ctx.PREFIXO, cargoBot }) };
 
   if (!cfg.cargoEquipe) {
     try {
@@ -239,7 +265,7 @@ export async function prepararEquipe({ ctx, server, criar = true }) {
       cfg.cargoEquipe = criado?.id ?? criado?.role?._id ?? criado?.role?.id ?? null;
       ctx.salvarConfig?.();
     } catch (e) {
-      const L = linhasDoRelatorioStaff(cls, { en, P: ctx.PREFIXO });
+      const L = linhasDoRelatorioStaff(cls, { en, P: ctx.PREFIXO, cargoBot });
       L.push(`❌ ${en ? "I couldn't create the role" : "Não consegui criar o cargo"}: ${descreverErro(e, en ? "en" : "pt")}`);
       return { cls, equipe: null, deram: [], faltam: [], linhas: L, erro: true };
     }
@@ -255,7 +281,7 @@ export async function prepararEquipe({ ctx, server, criar = true }) {
   const botId = ctx.client?.user?.id;
   for (const m of membros) {
     const uid = m?.id?.user ?? m?.id;
-    if (!uid || uid === botId || uid === server.ownerId) continue;
+    if (!uid || uid === botId || uid === server.ownerId || m?.user?.bot) continue;
     const ids = idsDeCargos(m);
     if (!ids.some((id) => cargosStaff.has(id)) || ids.includes(equipe)) continue;
     if (rankDoMembro(server, m) <= rankBot) { faltam.push(uid); continue; }
@@ -270,7 +296,7 @@ export async function prepararEquipe({ ctx, server, criar = true }) {
     await canal?.setPermissions?.(equipe, { allow: perms, deny: 0 }).catch((e) => console.error(`[TICKET] equipe no #${t.numero}: ${descreverErro(e)}`));
   }
   cls = classificarStaff(server, ctx.config, bot);
-  return { cls, equipe, deram, faltam, linhas: linhasDoRelatorioStaff(cls, { equipe, deram, faltam, en, P: ctx.PREFIXO }) };
+  return { cls, equipe, deram, faltam, linhas: linhasDoRelatorioStaff(cls, { equipe, deram, faltam, en, P: ctx.PREFIXO, cargoBot }) };
 }
 
 // Põe a staff no canal recém-criado. Nunca derruba a abertura: o que não
@@ -288,10 +314,10 @@ async function porStaffNoCanal({ ctx, server, canal, permitidas }) {
       if (id !== cfg.cargoEquipe) fora.push(id);
     }
   }
-  return { cls, fora, temEquipe: !!cfg.cargoEquipe };
+  return { cls, fora, temEquipe: !!cfg.cargoEquipe, cargoBot: cargoMaisAltoDoBot(server, bot) };
 }
 
-async function avisarStaffDeFora({ ctx, fora, numero }) {
+async function avisarStaffDeFora({ ctx, fora, numero, cargoBot = null }) {
   const cfg = garantirCfg(ctx.config);
   if (!fora.length || cfg.cargoEquipe || !cfg.logCanal) return false;
   const agora = Date.now();
@@ -303,19 +329,21 @@ async function avisarStaffDeFora({ ctx, fora, numero }) {
   await ctx.sendEmbed(logCanal, tr(ctx, {
     title: `⚠️ Ticket #${numero}: parte da staff ficou de fora`,
     description: [
-      `Os cargos ${fora.map((id) => `<%${id}>`).join(" ")} estão **acima da Judy** — o Stoat não deixa ela pô-los no canal do ticket.`,
+      `Os cargos ${fora.map((id) => `<%${id}>`).join(" ")} estão **acima da Judy**${cargoBot ? ` (o cargo dela é <%${cargoBot}>)` : ""} — o Stoat não deixa ela pô-los no canal do ticket.`,
       "",
-      `**Resolve de uma vez:** \`${P}ticket equipe\` — cria o cargo **Equipe de tickets**, dá a quem ela alcança e diz a quem um admin precisa dar à mão.`,
-      "_Ou suba o cargo da Judy acima desses cargos._",
+      ...saidasParaAcima({ acima: fora, cargoBot, en: false, P }),
+      "",
+      `_Este aviso volta no máximo a cada 6 h. Conferir agora: \`${P}ticket equipe\`._`,
     ].join("\n"),
     colour: ctx.COR.aviso,
   }, {
     title: `⚠️ Ticket #${numero}: part of the staff was left out`,
     description: [
-      `The roles ${fora.map((id) => `<%${id}>`).join(" ")} are **above Judy** — Stoat won't let her add them to the ticket channel.`,
+      `The roles ${fora.map((id) => `<%${id}>`).join(" ")} are **above Judy**${cargoBot ? ` (her role is <%${cargoBot}>)` : ""} — Stoat won't let her add them to the ticket channel.`,
       "",
-      `**One-time fix:** \`${P}ticket equipe\` — creates a **Ticket team** role, gives it to whoever she can reach and tells you who an admin must give it to by hand.`,
-      "_Or move Judy's role above those roles._",
+      ...saidasParaAcima({ acima: fora, cargoBot, en: true, P }),
+      "",
+      `_This warning comes back at most every 6 h. Check now: \`${P}ticket equipe\`._`,
     ].join("\n"),
     colour: ctx.COR.aviso,
   })).catch(() => {});
@@ -370,7 +398,7 @@ export async function abrirTicket({ ctx, server, userId, motivo = "", categoria 
   const numero = ++cfg.contador;
   ctx.salvarConfig?.();
   const nome = `ticket-${num4(numero)}`;
-  let roleId = null, canal = null, staffFora = [];
+  let roleId = null, canal = null, staffFora = [], cargoBotTicket = null;
   try {
     const criado = await server.createRole(nome);
     roleId = criado?.id ?? criado?.role?._id ?? criado?.role?.id;
@@ -393,7 +421,8 @@ export async function abrirTicket({ ctx, server, userId, motivo = "", categoria 
     const permitidas = Number(permsQueOBotDa(server));
     // primeiro quem pode entrar, depois fecha para o resto
     await canal.setPermissions(roleId, { allow: permitidas, deny: 0 }).catch((e) => { throw new Error(descreverErro(e, lang)); });
-    staffFora = (await porStaffNoCanal({ ctx, server, canal, permitidas })).fora;
+    const st = await porStaffNoCanal({ ctx, server, canal, permitidas });
+    staffFora = st.fora; cargoBotTicket = st.cargoBot;
     await canal.setPermissions("default", { allow: 0, deny: Number(DENY_TUDO) }).catch((e) => { throw new Error(descreverErro(e, lang)); });
   } catch (e) {
     try { if (canal?.delete) await canal.delete(); } catch {}
@@ -427,7 +456,7 @@ export async function abrirTicket({ ctx, server, userId, motivo = "", categoria 
     await controle.react?.(encodeURIComponent(E_FECHAR)).catch(() => {});
     db.registrarMsgTicket(controle.id, ctx.serverId, canal.id, "controle", ticketId);
   }
-  if (staffFora.length) await avisarStaffDeFora({ ctx, fora: staffFora, numero });
+  if (staffFora.length) await avisarStaffDeFora({ ctx, fora: staffFora, numero, cargoBot: cargoBotTicket });
   return { ok: true, canal, numero, ticketId, staffFora };
 }
 

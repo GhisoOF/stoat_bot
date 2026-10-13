@@ -20,6 +20,12 @@ import path from "node:path";
 
 const ESTE = fileURLToPath(import.meta.url);
 const RAIZ = path.dirname(ESTE);
+// O idioma oficial do bot virou o inglês (13 out 2026). As suítes anteriores
+// foram escritas com servidor novo em português e conferem os textos em PT —
+// elas fixam o padrão antigo; quem testa o padrão em inglês é a
+// `reset-idioma-13out` (que troca a variável no próprio processo).
+process.env.IDIOMA_PADRAO ??= "pt";
+
 const SUITES = {};
 
 // ── O Stoat de mentira ───────────────────────────────────────────────────────
@@ -12763,6 +12769,89 @@ const quieto = console.log; console.log = () => {};
 try { await engine.runAutomod(mOdio, ctxAm); } finally { console.log = quieto; }
 ok(mOdio.apagada, "★ termo de ódio acrescentado com `hate add` (em inglês) apaga a mensagem");
 console.log(`\nTRADUÇÃO EN (13 out): ${pass} ok, ${fail} falha(s)`);
+process.exit(fail ? 1 : 0);
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+// reset-idioma-13out  (13 out 2026) — "&reset para a configuração de fábrica,
+// só o dono e eu; e o idioma oficial do bot é o inglês"
+// ════════════════════════════════════════════════════════════════════════════
+SUITES["reset-idioma-13out"] = async () => {
+const fs = (await import("node:fs")).default;
+process.env.IDIOMA_PADRAO = "en";   // o padrão de verdade (as suítes antigas fixam "pt")
+process.env.BOT_TOKEN = "tok"; process.env.SUPER_ADMINS = "DONO_BOT";
+process.env.DB_PATH = "/tmp/reset13.db"; process.env.CONFIG_PATH = "/tmp/reset13.json";
+for (const f of ["/tmp/reset13.db", "/tmp/reset13.db-wal", "/tmp/reset13.db-shm", "/tmp/reset13.json", "/tmp/blocklist-cache.bin"]) fs.rmSync(f, { force: true });
+globalThis.fetch = async () => ({ ok: false, status: 503, text: async () => "", json: async () => ({}) });
+let pass = 0, fail = 0;
+const ok = (cond, msg) => { cond ? pass++ : fail++; console.log(`  ${cond ? "✅" : "❌"} ${msg}`); };
+
+await import("./main.js");
+const c = globalThis.__client;
+await c.emitAll("ready");
+const db = await import("./modulos/core/db.js");
+const store = await import("./modulos/core/config-store.js");
+const { lingua } = await import("./modulos/core/i18n.js");
+
+console.log("── o idioma oficial é o inglês ──");
+ok(store.configDoServidor("S_NOVO_EN").language === "en", "★ servidor novo nasce em inglês");
+db.gravarConfig("S_ANTIGO_SEM_IDIOMA", { automod: { antiSpam: { enabled: true } } });
+ok(store.configDoServidor("S_ANTIGO_SEM_IDIOMA").language === "pt", "★ servidor que já existia (config salva sem idioma) continua em português");
+db.gravarConfig("S_ANTIGO_PT", { language: "pt" });
+ok(store.configDoServidor("S_ANTIGO_PT").language === "pt", "  → e quem tinha escolhido português também");
+ok(lingua({}) === "en" && lingua({ config: { language: "pt" } }) === "pt", "  → sem servidor (ou sem idioma), inglês");
+process.env.IDIOMA_PADRAO = "pt";
+ok(store.configDoServidor("S_NOVO_PT").language === "pt", "  → IDIOMA_PADRAO=pt no .env volta ao português");
+process.env.IDIOMA_PADRAO = "en";
+
+console.log("\n── &reset: só o dono do servidor e o dono do bot ──");
+const env = [];
+const canal = { id: "C1", serverId: "S1", sendMessage: async (p) => { env.push(p); return { id: "M" + env.length, react: async () => {} }; } };
+const membro = { id: { server: "S1", user: "X" }, roles: ["R_ADMIN"], hasPermission: () => true, edit: async () => {} };
+const server = { id: "S1", ownerId: "DONA", name: "Teste", roles: new Map([["R_ADMIN", { name: "Admin", rank: 1 }]]), channels: [canal], channelIds: new Set(["C1"]),
+  havePermission: () => true, member: { roles: [] }, fetchMember: async () => membro, fetchMembers: async () => ({ members: [] }), fetchBans: async () => [] };
+c.servers.set("S1", server); c.channels.set("C1", canal);
+const say = async (autor, t) => {
+  env.length = 0;
+  const q = [console.log, console.info, console.warn]; console.log = console.info = console.warn = () => {};
+  try { await c.emitAll("messageCreate", { id: "X" + Math.random(), authorId: autor, content: t, serverId: "S1", server, channel: canal, channelId: "C1", mentionIds: [], createdAt: new Date(), author: { username: autor }, member: { ...membro, id: { server: "S1", user: autor } }, replyIds: [] }); }
+  finally { [console.log, console.info, console.warn] = q; }
+  const e = env[env.length - 1]?.embeds?.[0] ?? {};
+  return `${e.title ?? ""}\n${e.description ?? ""}`;
+};
+// o servidor configurado: português, automod ligado, log, staff
+const cfg0 = store.configDoServidor("S1");
+cfg0.language = "pt"; cfg0.automod.antiSpam.enabled = true; cfg0.log.canalId = "C1"; cfg0.acesso.cargosStaff = ["R_ADMIN"];
+cfg0.comandosDesativados = ["ping"]; store.salvarConfigServidor("S1");
+db.somarAviso("S1", "MEMBRO", "teste", {});
+
+let t = await say("ADMIN_COM_TUDO", "&reset");
+ok(/Só o dono do servidor/.test(t) && store.configDoServidor("S1").automod.antiSpam.enabled === true, "★ staff com todas as permissões NÃO pode (só o dono)");
+t = await say("DONA", "&reset");
+const codigo = (t.match(/reset confirm ([A-Z0-9]{4})/) ?? [])[1];
+ok(!!codigo && /Volta ao padrão/.test(t) && /Fica:/.test(t), "★ o dono do servidor vê o que volta ao padrão, o que fica e um código");
+ok(store.configDoServidor("S1").automod.antiSpam.enabled === true, "  → nada muda antes de confirmar");
+t = await say("OUTRA_PESSOA", `&reset confirm ${codigo}`);
+ok(store.configDoServidor("S1").log.canalId === "C1", "  → outra pessoa não confirma o pedido do dono");
+t = await say("DONA", "&reset confirm ZZZZ");
+ok(/Código errado/.test(t) && store.configDoServidor("S1").log.canalId === "C1", "  → código errado não reseta");
+t = await say("DONA", `&reset confirm ${codigo}`);
+const depois = store.configDoServidor("S1");
+ok(depois.automod.antiSpam.enabled === false && depois.log.canalId === null && depois.acesso.cargosStaff.length === 0 && depois.comandosDesativados.length === 0,
+  "★ confirmado: automod desligado, sem log, sem staff, sem comandos desativados");
+ok(depois.language === "en" && /Factory settings restored/.test(t), "★ e volta no idioma oficial (inglês)");
+ok(db.lerPunicao("S1", "MEMBRO")?.avisos === 1, "★ os dados ficam (o aviso do membro continua)");
+t = await say("DONA", `&reset confirm ${codigo}`);
+ok(/expired|vencido/i.test(t), "  → o mesmo código não vale duas vezes");
+t = await say("DONA", "&reset undo");
+const volta = store.configDoServidor("S1");
+ok(volta.automod.antiSpam.enabled === true && volta.log.canalId === "C1" && volta.language === "pt" && volta.acesso.cargosStaff[0] === "R_ADMIN", "★ &reset undo traz a configuração de antes, inteira");
+t = await say("DONA", "&reset undo");
+ok(/Nada para desfazer/.test(t), "  → desfazer de novo: nada a desfazer");
+t = await say("DONO_BOT", "&resetar");
+ok(/reset confirm [A-Z0-9]{4}/.test(t), "★ o dono do bot também pode (e o apelido &resetar funciona)");
+
+console.log(`\nRESET/IDIOMA (13 out): ${pass} ok, ${fail} falha(s)`);
 process.exit(fail ? 1 : 0);
 };
 

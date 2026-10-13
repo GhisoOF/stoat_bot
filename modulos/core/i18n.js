@@ -1,7 +1,10 @@
 
-// Idioma efetivo do servidor deste ctx. Qualquer valor desconhecido → pt.
+// Idioma efetivo do servidor deste ctx. Sem idioma definido → o padrão do bot
+// (inglês desde 13 out 2026; IDIOMA_PADRAO=pt no .env volta ao português).
+const padrao = () => ((process.env.IDIOMA_PADRAO || "en").trim().toLowerCase() === "pt" ? "pt" : "en");
 export function lingua(ctx) {
-  return ctx?.config?.language === "en" ? "en" : "pt";
+  const l = ctx?.config?.language;
+  return l === "en" || l === "pt" ? l : padrao();
 }
 
 // Escolhe entre dois valores (strings, objetos de embed, arrays…).
@@ -83,17 +86,19 @@ export async function talvezSugerirIdioma(message, ctx) {
   config.idiomaPerguntado = true;
   salvarConfig();
 
+  // inglês primeiro: é o idioma oficial do bot (13 out 2026)
+  const en = lingua(ctx) === "en";
+  const blocoEN = ["🇺🇸 **English** — this server hasn't picked a language yet. Anyone with",
+    `**ManagePermissions** can set it with: \`${P}language en\``];
+  const blocoPT = ["🇧🇷 **Português** — este servidor ainda não escolheu um idioma. Quem tem",
+    `**ManagePermissions** define com: \`${P}idioma pt\``];
   await sendEmbed(message.channel, {
-    title: "🌐 Escolha o idioma / Choose the language",
+    title: en ? "🌐 Choose the language / Escolha o idioma" : "🌐 Escolha o idioma / Choose the language",
     colour: COR.info,
     description: [
-      "🇧🇷 **Português** — este servidor ainda não escolheu um idioma. Quem tem",
-      `**ManagePermissions** define com: \`${P}idioma pt\``,
-      "",
-      "🇺🇸 **English** — this server hasn't picked a language yet. Anyone with",
-      `**ManagePermissions** can set it with: \`${P}language en\``,
-      "",
-      "_Enquanto ninguém escolher, respondo em Português. / Until someone picks, I reply in Portuguese._",
+      ...(en ? blocoEN : blocoPT), "", ...(en ? blocoPT : blocoEN), "",
+      en ? "_Until someone picks, I reply in English. / Enquanto ninguém escolher, respondo em inglês._"
+         : "_Enquanto ninguém escolher, respondo em Português. / Until someone picks, I reply in Portuguese._",
     ].join("\n"),
   });
 }

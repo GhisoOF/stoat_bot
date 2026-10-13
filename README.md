@@ -2,7 +2,7 @@
 
 ![Licença](https://img.shields.io/badge/licen%C3%A7a-WTFPL-green) ![Node](https://img.shields.io/badge/node-%E2%89%A522-brightgreen) ![Docker](https://img.shields.io/badge/docker-multi--arch-blue) ![Idiomas](https://img.shields.io/badge/bot-pt--BR%20%C2%B7%20en-orange)
 
-> 🇬🇧 *The bot itself is fully bilingual (pt-BR/English — `&idioma en`); this documentation is in Portuguese.*
+> 🇬🇧 *The bot's official language is **English** (new servers start in it); it is fully bilingual (`&language pt` switches to pt-BR). This documentation is in Portuguese.*
 
 Bot de moderação para a plataforma **Stoat** (fork/rebrand do Revolt), escrito em
 Node.js (ESM) com a biblioteca [`stoat.js`](https://www.npmjs.com/package/stoat.js).
@@ -72,6 +72,7 @@ Acabou de adicionar o bot? Três comandos resolvem quase tudo:
 | Comando | O que faz |
 |---|---|
 | `&assistente rapido` | ⭐ **configuração guiada**: o bot pergunta (idioma, staff, log, proteção, boas-vindas), você responde em texto normal, ele mostra o resumo e aplica |
+| `&reset` | volta a Judy à **configuração de fábrica** neste servidor (automod desligado, sem log/staff, idioma inglês) — os dados (XP, avisos, saldos, RPG) ficam; só o **dono do servidor** ou o dono do bot; confirma com código e `&reset undo` desfaz por 24 h |
 | `&tutorial` | guia **em páginas** (reaja ◀ ▶): permissões → canais → proteção → boas-vindas e cargos → XP e RPG → checklist |
 | `&help` | índice **por intenção** (começar · proteger · personalizar · diversão · rpg · diagnóstico); `&help <comando>` explica **cada parâmetro** |
 
@@ -318,7 +319,7 @@ diz exatamente o que clicar.
 - **Anti-SSRF**: URLs de imagem configuradas (boas-vindas etc.) são validadas —
   endereços de rede interna e esquemas `javascript:`/`data:` são recusados, e o
   bot **nunca baixa** a imagem, só repassa o link.
-- **Dois idiomas**: comandos, help e tutorial em pt-BR e inglês (`&idioma`).
+- **Dois idiomas**: comandos, help e tutorial em inglês e pt-BR (`&idioma`). O **idioma oficial é o inglês** (13 out 2026): servidor novo e `&reset` começam nele; servidores que já existiam continuam no idioma que tinham. `IDIOMA_PADRAO=pt` no `.env` volta o padrão ao português. *The official language is English; existing servers keep theirs.*
 
 ---
 

@@ -103,7 +103,7 @@ function gruposPT(P) {
         "",
         "**O próprio bot**",
         `\`${P}comando desativar|ativar <nome>\` — liga/desliga um comando neste servidor`,
-        `\`${P}idioma pt|en\` — idioma das respostas`,
+        `\`${P}idioma pt|en\` — idioma das respostas · \`${P}reset\` — configuração de fábrica *(dono do servidor)*`,
       ],
     },
 
@@ -280,7 +280,7 @@ function gruposEN(P) {
         "",
         "**The bot itself**",
         `\`${P}comando disable|enable <name>\` — toggles a command on this server`,
-        `\`${P}idioma pt|en\` — language of the replies`,
+        `\`${P}idioma pt|en\` — language of the replies · \`${P}reset\` — factory settings *(server owner)*`,
       ],
     },
 

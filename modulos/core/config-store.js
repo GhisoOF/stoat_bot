@@ -4,8 +4,13 @@ import * as db from "./db.js";
 import { limparMolde } from "./molde.js";
 
 // ── Template de configuração POR SERVIDOR ──
+// O idioma OFICIAL do bot é o inglês (13 out 2026, pedido de Ghieh): servidor
+// novo (e o &reset) nasce em inglês. IDIOMA_PADRAO=pt no .env muda isso.
+// Servidores que já existem não mudam: config salva sem idioma era português.
+export const idiomaPadrao = () => ((process.env.IDIOMA_PADRAO || "en").trim().toLowerCase() === "pt" ? "pt" : "en");
+
 export const padraoServidor = {
-  language: "pt",                  // pt | en (definido pelo admin com &idioma)
+  language: "en",                  // en | pt (definido pelo admin com &idioma) — o padrão é idiomaPadrao()
   idiomaPerguntado: false,         // já sugerimos a escolha de idioma uma vez?
   automod: {
     antiSpam:        { enabled: true,  maxMessages: 5,  windowMs: 4000, punicao: null },
@@ -201,21 +206,35 @@ function migrarWhitelist(cfg) {
 }
 
 export function configDoServidor(serverId) {
-  if (!serverId) return structuredClone(templateServidor);
+  if (!serverId) return { ...structuredClone(templateServidor), language: idiomaPadrao() };
   if (cacheConfig.has(serverId)) return cacheConfig.get(serverId);
   let cfg = db.lerConfig(serverId);
   if (!cfg) {
     cfg = structuredClone(templateServidor);
     desligarAutomod(cfg);
+    cfg.language = idiomaPadrao();
     db.gravarConfig(serverId, cfg);
     console.info(`[CONFIG] Novo servidor ${serverId} — config criada do padrão.`);
   } else {
+    // config antiga sem idioma salvo: era o padrão de então (português)
+    if (cfg.language == null) cfg.language = "pt";
     cfg = mesclarServidor(cfg, templateServidor);
     if (migrarWhitelist(cfg)) db.gravarConfig(serverId, cfg);
   }
   cacheConfig.set(serverId, cfg);
   return cfg;
 }
+
+// &reset: a configuração de FÁBRICA (o padrão do código, não o molde antigo),
+// como um servidor novo — automod desligado, idioma padrão.
+export function configDeFabrica() {
+  const cfg = structuredClone(padraoServidor);
+  desligarAutomod(cfg);
+  cfg.language = idiomaPadrao();
+  return cfg;
+}
+// Depois de gravar uma config direto no banco: a próxima leitura vem de lá.
+export function recarregarServidor(serverId) { cacheConfig.delete(serverId); }
 
 export function salvarConfigServidor(serverId) {
   const cfg = cacheConfig.get(serverId);

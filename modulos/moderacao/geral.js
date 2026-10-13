@@ -297,8 +297,13 @@ function detalhesPT(P) {
     },
     idioma: {
       uso: `${P}idioma [pt|en]`,
-      desc: "Define o idioma em que o bot responde **neste servidor**: Português ou Inglês. Sem argumento, mostra o idioma atual. Também responde por `&language` e `&lang`.",
-      perm: "ManagePermissions (para mudar)", ex: `${P}idioma en`,
+      desc: "Define o idioma em que o bot responde **neste servidor**: Português ou Inglês. Sem argumento, mostra o idioma atual. Também responde por `&language` e `&lang`. O idioma oficial do bot é o **inglês**: servidor novo começa nele.",
+      perm: "ManagePermissions (para mudar)", ex: `${P}idioma pt`,
+    },
+    reset: {
+      uso: `${P}reset · ${P}reset confirm <código> · ${P}reset undo`,
+      desc: "Volta a Judy à **configuração de fábrica** neste servidor: automod (tudo desligado), punição, canal de log, boas-vindas/adeus, cargo automático, staff e acesso, comandos desativados, ajustes de XP/TTS/tickets/IA, regras e FAQ, e o idioma (inglês).\n\n**Fica:** níveis de XP, avisos, saldos, personagens do RPG, cargos por reação, webhooks, feeds RSS, tickets abertos e a lista global de bans.\n\nEm três passos: `&reset` mostra o que muda e dá um código; `&reset confirm <código>` (em até 2 min, a mesma pessoa) aplica; `&reset undo` desfaz por 24 h.",
+      perm: "dono do servidor (ou o dono do bot)", ex: `${P}reset`,
     },
     chat: {
       uso: `${P}chat <mensagem>`,
@@ -578,8 +583,13 @@ function detalhesEN(P) {
     },
     idioma: {
       uso: `${P}language [pt|en]`,
-      desc: "Sets the language the bot replies in **on this server**: Portuguese or English. Without an argument, shows the current language. Also answers to `&idioma` and `&lang`.",
-      perm: "ManagePermissions (to change)", ex: `${P}language en`,
+      desc: "Sets the language the bot replies in **on this server**: Portuguese or English. Without an argument, shows the current language. Also answers to `&idioma` and `&lang`. The bot's official language is **English**: new servers start in it.",
+      perm: "ManagePermissions (to change)", ex: `${P}language pt`,
+    },
+    reset: {
+      uso: `${P}reset · ${P}reset confirm <code> · ${P}reset undo`,
+      desc: "Puts Judy back to **factory settings** on this server: automod (all off), punishment, log channel, welcome/goodbye, autorole, staff and access, disabled commands, XP/TTS/ticket/AI settings, rules and FAQ, and the language (English).\n\n**Stays:** members' XP levels, warnings, balances, RPG characters, reaction roles, webhooks, RSS feeds, open tickets and the global ban list.\n\nThree steps: `&reset` shows what changes and gives a code; `&reset confirm <code>` (within 2 min, same person) applies it; `&reset undo` reverts it for 24 h.",
+      perm: "server owner (or the bot owner)", ex: `${P}reset`,
     },
     chat: {
       uso: `${P}chat <message>`,

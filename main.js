@@ -56,6 +56,7 @@ import * as srvStats   from "./modulos/core/metricas.js";
 import * as rpg        from "./modulos/game/game.js";
 import * as modIA      from "./modulos/moderacao/moderacao-ia.js";
 import * as assuntos   from "./modulos/moderacao/assuntos.js";
+import * as resetMod  from "./modulos/moderacao/reset.js";
 import { iaLigada } from "./modulos/core/env.js";
 import * as avatarMod from "./modulos/moderacao/avatar.js";
 import * as modiaCmd   from "./modulos/moderacao/modia-comando.js";
@@ -459,6 +460,8 @@ const rotas = {
   xp:            nivel.cmdXp,
   nivel:         nivel.cmdXp,
   level:         nivel.cmdXp,
+  // Configuração de fábrica (só o dono do servidor e o dono do bot)
+  reset:         resetMod.cmdReset,
   // Idioma do servidor (pt | en)
   idioma:        i18n.cmdIdioma,
   language:      i18n.cmdIdioma,
@@ -497,6 +500,7 @@ const CANONICO = {
   goodbye: "adeus", despedida: "adeus", farewell: "adeus",
   clear: "limpar", purge: "limpar", limpiar: "limpar",
   globalban: "banglobal",
+  resetar: "reset", redefinir: "reset", factoryreset: "reset", fabrica: "reset",
   configuracoes: "config", configurações: "config",
   diagnostico: "debug", "diagnóstico": "debug",
   language: "idioma", lang: "idioma",

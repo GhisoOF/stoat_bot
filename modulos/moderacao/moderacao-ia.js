@@ -83,9 +83,27 @@ export async function moderar(message, ctx) {
     `• Silenciar — \`&silence ${autorId} <tempo>\``,
     `• Banir — \`&ban ${autorId} <motivo>\``,
   ].join("\n");
+  const descricaoEn = [
+    `<@${CRIADOR_ID}> — Judy flagged a message on moderation grounds.`,
+    "",
+    `**Author:** ${nome} (\`${autorId}\`)`,
+    `**Channel:** <#${canalId}>`,
+    `**Reason:** ${veredito.motivo || "(no detail)"}`,
+    `**Action taken:** ${apagou ? "message deleted" : "⚠️ couldn't delete it (missing permission?)"}`,
+    "",
+    "**Removed content:**",
+    `> ${trecho.replace(/\n/g, "\n> ")}`,
+    "",
+    "**What you can do** (copy the command):",
+    "• Ignore — do nothing.",
+    `• Warn — \`&warn ${autorId} <reason>\``,
+    `• Silence — \`&silence ${autorId} <time>\``,
+    `• Ban — \`&ban ${autorId} <reason>\``,
+  ].join("\n");
 
   try {
-    await log.registrar(ctx, "punicoes", { titulo: "🤖 Moderação por IA — sinalizado", descricao });
+    await log.registrar(ctx, "punicoes", { titulo: "🤖 Moderação por IA — sinalizado", descricao,
+      en: { titulo: "🤖 AI moderation — flagged", descricao: descricaoEn } });
   } catch (e) { dlog("falha ao logar:", e.message); }
 
   dlog(`sinalizou msg de ${nome}: ${veredito.motivo}`);

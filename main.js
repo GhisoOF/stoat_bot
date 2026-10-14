@@ -753,6 +753,8 @@ async function tratarMensagem(message) {
     await log.registrar(ctx, "comandos", {
       titulo: "🚫 Comando desativado",
       descricao: `<@${message.authorId}> tentou usar \`${PREFIXO}${command}\`, que está desativado neste servidor.`,
+      en: { titulo: "🚫 Disabled command",
+        descricao: `<@${message.authorId}> tried to use \`${PREFIXO}${command}\`, which is disabled on this server.` },
     });
     return sendEmbed(message.channel, tr(ctx, {
       title: "🚫 Comando desativado",
@@ -813,6 +815,12 @@ function ehCanalDeVoz(message) {
       `**Canal:** <#${message.channelId}>`,
       `**Comando:** \`${PREFIXO}${command}${args.length ? " " + args.join(" ") : ""}\``,
     ].join("\n"),
+    en: { titulo: "⌨️ Command used",
+      descricao: [
+        `**User:** <@${message.authorId}>`,
+        `**Channel:** <#${message.channelId}>`,
+        `**Command:** \`${PREFIXO}${command}${args.length ? " " + args.join(" ") : ""}\``,
+      ].join("\n") },
   });
 
   const argsFinais = aliases.normalizarArgs(canonico, args, CANONICO);
@@ -970,12 +978,13 @@ client.on("serverMemberJoin", async (member) => {
     // Idade da conta vem do próprio ID. No raid de 27/09, cada conta tinha
     // 2 a 7 min de vida ao entrar — isso agora aparece no log de entrada.
     const idade = confianca.idadeDaConta(userId);
-    const idadeTxt = idade == null ? "" : idade < 3600_000
-      ? ` ⚠️ **conta criada há ${Math.max(1, Math.round(idade / 60_000))} min**`
-      : idade < 86_400_000 ? ` · conta criada há ${Math.round(idade / 3600_000)}h` : "";
+    const idadeTxt = (en) => idade == null ? "" : idade < 3600_000
+      ? (en ? ` ⚠️ **account created ${Math.max(1, Math.round(idade / 60_000))} min ago**` : ` ⚠️ **conta criada há ${Math.max(1, Math.round(idade / 60_000))} min**`)
+      : idade < 86_400_000 ? (en ? ` · account created ${Math.round(idade / 3600_000)}h ago` : ` · conta criada há ${Math.round(idade / 3600_000)}h`) : "";
     await log.registrar(ctx, "membros", {
       titulo: "📥 Membro entrou",
-      descricao: `<@${userId}> entrou no servidor.${idadeTxt}`,
+      descricao: `<@${userId}> entrou no servidor.${idadeTxt(false)}`,
+      en: { titulo: "📥 Member joined", descricao: `<@${userId}> joined the server.${idadeTxt(true)}` },
     });
 
     const onda = confianca.registrarEntrada(serverId, userId);
@@ -1045,6 +1054,7 @@ client.on("serverMemberLeave", async (member, extra) => {
     await log.registrar(ctx, "membros", {
       titulo: "📤 Membro saiu",
       descricao: `<@${userId}> saiu do servidor (saída, expulsão ou ban).`,
+      en: { titulo: "📤 Member left", descricao: `<@${userId}> left the server (left, kicked or banned).` },
     });
     const nome = member?.user?.username ?? member?.nickname ?? null;
     await bemvindo.aoSair(userId, serverId, ctx, nome);
@@ -1081,12 +1091,14 @@ client.on("serverMemberUpdate", async (member, anterior) => {
     const srv = member.server ?? client.servers.get?.(serverId);
     const ehDoTicket = (r) => cargosDeTicket.has(r) || /^ticket-\d+$/.test(nomeDoCargo(srv, r) ?? "");
     if ([...ganhou, ...perdeu].every(ehDoTicket)) return;
-    const partes = [];
-    if (ganhou.length) partes.push(`**Recebeu:** ${ganhou.map((r) => cargoLegivel(srv, r)).join(", ")}`);
-    if (perdeu.length) partes.push(`**Perdeu:** ${perdeu.map((r) => cargoLegivel(srv, r)).join(", ")}`);
+    const partes = (en) => [
+      ganhou.length ? `**${en ? "Received" : "Recebeu"}:** ${ganhou.map((r) => cargoLegivel(srv, r, en)).join(", ")}` : null,
+      perdeu.length ? `**${en ? "Lost" : "Perdeu"}:** ${perdeu.map((r) => cargoLegivel(srv, r, en)).join(", ")}` : null,
+    ].filter(Boolean).join("\n");
     await log.registrar(ctx, "cargos", {
       titulo: "🏷 Cargos alterados",
-      descricao: `<@${userId}>\n${partes.join("\n")}`,
+      descricao: `<@${userId}>\n${partes(false)}`,
+      en: { titulo: "🏷 Roles changed", descricao: `<@${userId}>\n${partes(true)}` },
     });
   } catch (err) { console.error("[EVENTO][MEMBER_UPDATE]", err?.message); }
 });
@@ -1116,6 +1128,8 @@ client.on("messageDelete", async (message) => {
     const ctx = criarContexto(serverId);
     const texto = (message?.content ?? "").slice(0, 500) || "_(sem texto)_";
     const autor = message?.authorId ? `<@${message.authorId}>` : "_desconhecido_";
+    const textoEn = (message?.content ?? "").slice(0, 500) || "_(no text)_";
+    const autorEn = message?.authorId ? `<@${message.authorId}>` : "_unknown_";
 
     // Mídia apagada volta no log: resgatada do CDN e re-subida — com freio. No
     // ataque de 2 out, cada bandeira apagada voltava inteira no #log, que virou
@@ -1128,10 +1142,16 @@ client.on("messageDelete", async (message) => {
       (midias.length ? `\n**Mídia:** ${midias.length} anexo(s) resgatado(s) abaixo` : "") +
       (perdidas.length ? `\n**Mídia não recuperável:** ${perdidas.join(", ")}` : "") +
       (freio.segurados ? `\n**Mídia não reenviada:** ${freio.segurados} anexo(s) — repetido(s) ou rajada do mesmo autor` : "");
+    const notaMidiaEn =
+      (midias.length ? `\n**Media:** ${midias.length} attachment(s) recovered below` : "") +
+      (perdidas.length ? `\n**Media not recoverable:** ${perdidas.join(", ")}` : "") +
+      (freio.segurados ? `\n**Media not re-sent:** ${freio.segurados} attachment(s) — repeated or a burst from the same author` : "");
 
     await log.registrar(ctx, "mensagens", {
       titulo: "🗑 Mensagem apagada",
       descricao: `**Autor:** ${autor}\n**Canal:** <#${message.channelId}>\n**Conteúdo:** ${texto}${notaMidia}`,
+      en: { titulo: "🗑 Message deleted",
+        descricao: `**Author:** ${autorEn}\n**Channel:** <#${message.channelId}>\n**Content:** ${textoEn}${notaMidiaEn}` },
       anexos: midias.length ? midias : null,
     });
   } catch (err) { console.error("[EVENTO][MSG_DELETE]", err?.message); }
@@ -1161,6 +1181,13 @@ client.on("messageUpdate", async (message, anterior) => {
         `**Antes:** ${antes || "_(vazio)_"}`,
         `**Depois:** ${agora || "_(vazio)_"}`,
       ].join("\n"),
+      en: { titulo: "✏️ Message edited",
+        descricao: [
+          `**Author:** ${autor ? `<@${autor}>` : "_unknown_"}`,
+          `**Channel:** <#${canalId}>`,
+          `**Before:** ${antes || "_(empty)_"}`,
+          `**After:** ${agora || "_(empty)_"}`,
+        ].join("\n") },
     });
   } catch (err) { console.error("[EVENTO][MSG_UPDATE]", err?.message); }
 });
@@ -1175,6 +1202,7 @@ client.on("messageDeleteBulk", async (mensagens, canal) => {
     await log.registrar(ctx, "mensagens", {
       titulo: "🗑 Mensagens apagadas em massa",
       descricao: `**${mensagens?.length ?? 0}** mensagem(ns) removida(s) em <#${canalId}>.`,
+      en: { titulo: "🗑 Messages bulk-deleted", descricao: `**${mensagens?.length ?? 0}** message(s) removed in <#${canalId}>.` },
     });
   } catch (err) { console.error("[EVENTO][MSG_BULK]", err?.message); }
 });
@@ -1187,9 +1215,9 @@ const cargosDeTicket = new Set();
 function nomeDoCargo(server, roleId) {
   try { return server?.roles?.get?.(roleId)?.name ?? server?.roles?.[roleId]?.name ?? null; } catch { return null; }
 }
-function cargoLegivel(server, roleId) {
+function cargoLegivel(server, roleId, en = false) {
   const nome = nomeDoCargo(server, roleId);
-  return nome ? `<%${roleId}> **${nome}**${/^ticket-\d+$/.test(nome) ? " _(cargo do ticket)_" : ""}` : `\`${roleId}\``;
+  return nome ? `<%${roleId}> **${nome}**${/^ticket-\d+$/.test(nome) ? (en ? " _(ticket role)_" : " _(cargo do ticket)_") : ""}` : `\`${roleId}\``;
 }
 
 client.on("serverRoleUpdate", async (server, roleId, anterior) => {
@@ -1200,17 +1228,20 @@ client.on("serverRoleUpdate", async (server, roleId, anterior) => {
     // anterior COM nome quer dizer que o cargo já existia
     const jaExistia = !!anterior?.name;
     const atual = server?.roles?.get?.(roleId);
-    const mudou = [];
+    const mudou = [];   // [pt, en]
     if (jaExistia && atual) {
-      if (atual.name !== anterior.name) mudou.push(`nome: **${anterior.name}** → **${atual.name}**`);
-      if (String(atual.permissions?.a) !== String(anterior.permissions?.a) || String(atual.permissions?.d) !== String(anterior.permissions?.d)) mudou.push("permissões");
-      if (atual.rank !== anterior.rank) mudou.push("posição na lista");
-      if ((atual.colour ?? null) !== (anterior.colour ?? null)) mudou.push("cor");
+      if (atual.name !== anterior.name) mudou.push([`nome: **${anterior.name}** → **${atual.name}**`, `name: **${anterior.name}** → **${atual.name}**`]);
+      if (String(atual.permissions?.a) !== String(anterior.permissions?.a) || String(atual.permissions?.d) !== String(anterior.permissions?.d)) mudou.push(["permissões", "permissions"]);
+      if (atual.rank !== anterior.rank) mudou.push(["posição na lista", "position in the list"]);
+      if ((atual.colour ?? null) !== (anterior.colour ?? null)) mudou.push(["cor", "colour"]);
     }
+    const oQue = (i) => (mudou.length ? ` — ${mudou.map((m) => m[i]).join(", ")}.` : ".");
     const ctx = criarContexto(server?.id);
     await log.registrar(ctx, "cargos", {
       titulo: jaExistia ? "🏷 Cargo atualizado" : "🏷 Cargo criado",
-      descricao: `${cargoLegivel(server, roleId)} ${jaExistia ? "foi modificado" + (mudou.length ? ` — ${mudou.join(", ")}.` : ".") : "foi criado."}`,
+      descricao: `${cargoLegivel(server, roleId)} ${jaExistia ? "foi modificado" + oQue(0) : "foi criado."}`,
+      en: { titulo: jaExistia ? "🏷 Role updated" : "🏷 Role created",
+        descricao: `${cargoLegivel(server, roleId, true)} ${jaExistia ? "was modified" + oQue(1) : "was created."}` },
     });
   } catch (err) { console.error("[EVENTO][ROLE_UPDATE]", err?.message); }
 });
@@ -1223,6 +1254,7 @@ client.on("serverRoleDelete", async (server, roleId, cargo) => {
     await log.registrar(ctx, "cargos", {
       titulo: "🗑 Cargo apagado",
       descricao: `${cargo?.name ? `**${cargo.name}**` : "Cargo"} \`${roleId}\` foi removido do servidor.`,
+      en: { titulo: "🗑 Role deleted", descricao: `${cargo?.name ? `**${cargo.name}**` : "Role"} \`${roleId}\` was removed from the server.` },
     });
   } catch (err) { console.error("[EVENTO][ROLE_DELETE]", err?.message); }
 });

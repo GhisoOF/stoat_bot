@@ -2,7 +2,10 @@
 import * as db  from "../core/db.js";
 import * as log from "../core/log.js";
 import { idValido, descreverProblemaDeId, resolverMensagem } from "../core/ids.js";
-import { editarCargos } from "../core/hierarquia.js";
+import { editarCargos, cargoDe } from "../core/hierarquia.js";
+
+// o cargo no log: menção + nome (o log mostrava só o ID — 14 out 2026)
+const cargoNoLog = (server, id) => { const n = cargoDe(server, id)?.name; return n ? `<%${id}> **${n}**` : `<%${id}>`; };
 import { tr, lingua } from "../core/i18n.js";
 import { normalizarErro } from "../core/erros.js";
 import { chamarApi } from "../core/stoat-api.js";
@@ -175,8 +178,11 @@ export async function aoReagir(message, userId, emoji, ctx) {
     const rctx = { ...ctx, serverId, config: ctx.configDoServidor?.(serverId) ?? ctx.config };
     await log.registrar(rctx, "cargos", {
       titulo: "🎭 Cargo por reação",
-      descricao: `<@${userId}> recebeu o cargo \`${alvo.roleId}\` ao reagir.`
-        + (removidos.length ? `\n_Modo exclusivo: perdeu ${removidos.map((r) => `\`${r}\``).join(", ")}._` : ""),
+      descricao: `<@${userId}> recebeu o cargo ${cargoNoLog(server, alvo.roleId)} ao reagir.`
+        + (removidos.length ? `\n_Modo exclusivo: perdeu ${removidos.map((r) => cargoNoLog(server, r)).join(", ")}._` : ""),
+      en: { titulo: "🎭 Reaction role",
+        descricao: `<@${userId}> got the role ${cargoNoLog(server, alvo.roleId)} by reacting.`
+          + (removidos.length ? `\n_Exclusive mode: lost ${removidos.map((r) => cargoNoLog(server, r)).join(", ")}._` : "") },
     });
     return true;
   } catch (err) {
@@ -214,7 +220,8 @@ export async function aoDesreagir(message, userId, emoji, ctx) {
     const rctx = { ...ctx, serverId: alvo.serverId, config: ctx.configDoServidor?.(alvo.serverId) ?? ctx.config };
     await log.registrar(rctx, "cargos", {
       titulo: "🎭 Cargo por reação",
-      descricao: `<@${userId}> perdeu o cargo \`${alvo.roleId}\` ao tirar a reação.`,
+      descricao: `<@${userId}> perdeu o cargo ${cargoNoLog(server, alvo.roleId)} ao tirar a reação.`,
+      en: { titulo: "🎭 Reaction role", descricao: `<@${userId}> lost the role ${cargoNoLog(server, alvo.roleId)} by removing the reaction.` },
     });
     return true;
   } catch (err) {
@@ -596,7 +603,8 @@ export async function cmdReactionRole(message, args, ctx) {
       }
 
       await log.registrar(ctx, "cargos", { titulo: "🎭 Cargo por reação configurado",
-        descricao: `<@${message.authorId}> vinculou ${emoji} → \`${role}\` na mensagem \`${mid}\`.` });
+        descricao: `<@${message.authorId}> vinculou ${emoji} → <%${role}> na mensagem \`${mid}\`.`,
+        en: { titulo: "🎭 Reaction role set up", descricao: `<@${message.authorId}> linked ${emoji} → <%${role}> on message \`${mid}\`.` } });
 
       return sendEmbed(message.channel, en ? {
         title: "🎭 Reaction role configured",

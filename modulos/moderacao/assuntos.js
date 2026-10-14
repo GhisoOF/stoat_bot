@@ -439,7 +439,7 @@ export async function verificar({ ctx, server, canal, message, userId, aplicarPu
     }
     await log.registrar(ctx, "punicoes", {
       titulo: `🧹 ${lang === "en" ? "Message removed — topic" : "Mensagem removida — assunto"}: ${rotulo}`,
-      descricao: `<@${userId}> em <#${message.channelId}> · **${lang === "en" ? "Score" : "Nota"}:** ${nota}/10\n**${lang === "en" ? "Why" : "Por quê"}:** ${v.motivo || "—"}\n> ${texto.replace(/\n+/g, " ").slice(0, 300)}`,
+      descricao: `<@${userId}> ${lang === "en" ? "in" : "em"} <#${message.channelId}> · **${lang === "en" ? "Score" : "Nota"}:** ${nota}/10\n**${lang === "en" ? "Why" : "Por quê"}:** ${v.motivo || "—"}\n> ${texto.replace(/\n+/g, " ").slice(0, 300)}`,
     });
     return { tema, nota, acao, veredito: v };
   }

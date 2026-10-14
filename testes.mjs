@@ -13060,6 +13060,101 @@ console.log(`\nTICKETS 13 OUT: ${ok} ok, ${falhou} falha(s)`);
 process.exit(falhou ? 1 : 0);
 };
 
+// ════════════════════════════════════════════════════════════════════════════
+// log-en-14out — o log de um servidor em inglês saía em português
+// ════════════════════════════════════════════════════════════════════════════
+// O print de Ghieh (14 out 2026), num servidor EN: "Cargos alterados",
+// "Recebeu", "Mensagem editada", "Autor/Canal/Antes/Depois", e o "Cargo por
+// reação" ainda com o ID cru do cargo. Agora toda chamada de log.registrar
+// leva a versão em inglês (`en: {...}`) — e este teste confere isso no
+// código-fonte, para nenhum log novo nascer só em português.
+SUITES["log-en-14out"] = async () => {
+const __m0 = await import("node:assert"); const assert = __m0.default;
+const __m1 = await import("node:fs"); const fs = __m1.default;
+const __m2 = await import("node:path"); const path = __m2.default;
+process.env.BOT_TOKEN = "tok";
+process.env.DB_PATH = "/tmp/logen-teste.db"; process.env.CONFIG_PATH = "/tmp/logen-teste.json";
+for (const f of ["/tmp/logen-teste.db", "/tmp/logen-teste.db-wal", "/tmp/logen-teste.db-shm", "/tmp/logen-teste.json"]) fs.rmSync(f, { force: true });
+await import("./main.js");
+const c = globalThis.__client;
+await c.emitAll("ready");
+const store = await import("./modulos/core/config-store.js");
+const log = await import("./modulos/core/log.js");
+
+let ok = 0, falhou = 0;
+const t = async (nome, fn) => {
+  try { await fn(); console.log(`  ✅ ${nome}`); ok++; }
+  catch (e) { console.log(`  ❌ ${nome}\n     ${e.message}`); falhou++; }
+};
+const quieto = async (fn) => { const o = [console.log, console.error]; console.log = console.error = () => {}; try { return await fn(); } finally { [console.log, console.error] = o; } };
+
+console.log("── toda chamada de log.registrar tem inglês ──");
+await t("★ nenhuma chamada de log.registrar só em português (código-fonte)", async () => {
+  const arquivos = [];
+  const andar = (d) => { for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+    const p = path.join(d, e.name);
+    if (e.isDirectory()) andar(p); else if (p.endsWith(".js")) arquivos.push(p);
+  } };
+  andar("modulos"); arquivos.push("main.js");
+  const faltam = [];
+  for (const arq of arquivos) {
+    const s = fs.readFileSync(arq, "utf8");
+    for (const m of s.matchAll(/log\.registrar\(/g)) {
+      let i = m.index + m[0].length, d = 1;
+      while (d && i < s.length) { const ch = s[i++]; if (ch === "(") d++; else if (ch === ")") d--; }
+      const bloco = s.slice(m.index, i);
+      if (/\ben:\s*\{/.test(bloco) || /lang === "en"|\ben \?/.test(bloco)) continue;
+      faltam.push(`${arq}:${s.slice(0, m.index).split("\n").length}`);
+    }
+  }
+  assert.deepEqual(faltam, [], `sem versão em inglês: ${faltam.join(", ")}`);
+});
+
+console.log("\n── log.registrar escolhe a língua do servidor ──");
+const canalLog = { id: "C_LOG_EN", mensagens: [], sendMessage: async (p) => { canalLog.mensagens.push(p); return { id: "M" }; } };
+c.channels.set("C_LOG_EN", canalLog);
+const embedsDoLog = () => canalLog.mensagens.map((m) => m.embeds?.[0] ?? m.embed ?? m);
+const ultimo = () => JSON.stringify(embedsDoLog().at(-1) ?? {});
+const SEN = "S_EN", SPT = "S_PT";
+const cfgEn = store.configDoServidor(SEN); cfgEn.language = "en"; cfgEn.log = { ...(cfgEn.log ?? {}), canalId: "C_LOG_EN", eventos: {} };
+const cfgPt = store.configDoServidor(SPT); cfgPt.language = "pt"; cfgPt.log = { ...(cfgPt.log ?? {}), canalId: "C_LOG_EN", eventos: {} };
+const ctxDe = (sid, config) => ({ client: c, serverId: sid, config, sendEmbed: async (canal, e) => canal.sendMessage({ embeds: [e] }) });
+await t("★ servidor EN: título e descrição em inglês", async () => {
+  await log.registrar(ctxDe(SEN, cfgEn), "comandos", { titulo: "PT título", descricao: "PT texto", en: { titulo: "EN title", descricao: "EN text" } });
+  assert.match(ultimo(), /EN title/); assert.match(ultimo(), /EN text/); assert.doesNotMatch(ultimo(), /PT/);
+});
+await t("servidor PT: continua em português", async () => {
+  await log.registrar(ctxDe(SPT, cfgPt), "comandos", { titulo: "PT título", descricao: "PT texto", en: { titulo: "EN title", descricao: "EN text" } });
+  assert.match(ultimo(), /PT título/); assert.doesNotMatch(ultimo(), /EN/);
+});
+
+console.log("\n── os eventos do print, num servidor EN ──");
+const cargos = new Map([["R_VAP", { name: "vaporwave", rank: 9, permissions: { a: 0n, d: 0n } }]]);
+c.servers.set(SEN, { id: SEN, ownerId: "DONO", roles: cargos, fetchMember: async () => null });
+const tavern = { id: "C_TAV", serverId: SEN, sendMessage: async () => ({ id: "X" }) };
+c.channels.set("C_TAV", tavern);
+await t("★ cargo recebido: 'Roles changed' / 'Received', com o nome do cargo", async () => {
+  await quieto(() => c.emitAll("serverMemberUpdate", { id: { server: SEN, user: "GHISO" }, roles: ["R_VAP"] }, { roles: [] }));
+  assert.match(ultimo(), /Roles changed/);
+  assert.match(ultimo(), /Received:\*\* <%R_VAP> \*\*vaporwave\*\*/);
+  assert.doesNotMatch(ultimo(), /Cargos alterados|Recebeu/);
+});
+await t("★ mensagem editada: 'Message edited' / Author / Channel / Before / After", async () => {
+  await quieto(() => c.emitAll("messageUpdate", { channelId: "C_TAV", authorId: "GHISO", content: "i know sometimes i fail" },
+    { channelId: "C_TAV", authorId: "GHISO", content: "i know some times i fail" }));
+  const u = ultimo();
+  for (const r of [/Message edited/, /\*\*Author:\*\*/, /\*\*Channel:\*\*/, /\*\*Before:\*\*/, /\*\*After:\*\*/]) assert.match(u, r);
+  assert.doesNotMatch(u, /Mensagem editada|Autor|Antes|Depois/);
+});
+await t("★ cargo criado num servidor EN: 'Role created'", async () => {
+  await quieto(() => c.emitAll("serverRoleUpdate", c.servers.get(SEN), "R_VAP", {}));
+  assert.match(ultimo(), /Role created/); assert.match(ultimo(), /was created/);
+});
+
+console.log(`\nLOG EN 14 OUT: ${ok} ok, ${falhou} falha(s)`);
+process.exit(falhou ? 1 : 0);
+};
+
 // ── O executor ───────────────────────────────────────────────────────────────
 const PRECISA_DO_BOT = (nome) => /import\("\.\/main\.js"\)/.test(String(SUITES[nome]));
 

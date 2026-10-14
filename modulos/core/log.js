@@ -55,10 +55,18 @@ export async function resgatarMidias(atts, { baixar = fetch, subir } = {}) {
   return { ids, perdidas };
 }
 
-export async function registrar(ctx, categoria, { titulo, descricao, imagem = null, anexos = null }) {
+// `en: { titulo, descricao }` é a versão em inglês — usada quando o servidor
+// está em inglês (14 out 2026: num servidor EN o log saía todo em português).
+// Toda chamada de `registrar` passa as duas línguas; o teste `log-en-14out`
+// confere isso no código-fonte.
+export async function registrar(ctx, categoria, { titulo, descricao, en = null, imagem = null, anexos = null }) {
   // Todo evento conta para o relatório horário do dono do bot, inclusive nos
   // servidores sem canal de log (é justamente a visão de todos os servidores).
   relatorioHora.evento(ctx?.serverId, categoria, titulo);
+  if (en && lingua(ctx) === "en") {
+    titulo = en.titulo ?? titulo;
+    descricao = en.descricao ?? descricao;
+  }
   try {
     const cfg = ctx?.config?.log;
     if (!cfg?.canalId) return;                 // sem canal configurado

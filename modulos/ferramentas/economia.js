@@ -229,7 +229,8 @@ export async function cmdEconomia(message, args, ctx) {
       creditar(sid, eu, item.preco);   // não entregou: devolve
       return enviar("❌", T(`O Stoat recusou o cargo (${descreverErro(e)}). Seu dinheiro foi devolvido.`, `The Stoat refused the role (${descreverErro(e, "en")}). Your money was refunded.`), COR.erro);
     }
-    await log.registrar(ctx, "cargos", { titulo: "🛒 Cargo comprado", descricao: `<@${eu}> comprou <%${item.roleId}> por ${item.preco} ${cfg.nome}.` }).catch(() => {});
+    await log.registrar(ctx, "cargos", { titulo: "🛒 Cargo comprado", descricao: `<@${eu}> comprou <%${item.roleId}> por ${item.preco} ${cfg.nome}.`,
+      en: { titulo: "🛒 Role bought", descricao: `<@${eu}> bought <%${item.roleId}> for ${item.preco} ${cfg.nome}.` } }).catch(() => {});
     return enviar("🛒", T(`Agora você tem <%${item.roleId}>! Saldo: ${$(saldo(sid, eu))}`, `You now have <%${item.roleId}>! Balance: ${$(saldo(sid, eu))}`), COR.sucesso);
   }
 

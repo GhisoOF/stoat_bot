@@ -177,7 +177,8 @@ export async function cmdEmbed(message, args, ctx) {
   try {
     await canalDestino.sendMessage(payload);
     await log.registrar(ctx, "comandos", { titulo: "📝 Embed enviado",
-      descricao: `<@${message.authorId}> enviou um embed em <#${campos.canal ?? message.channelId}>.` });
+      descricao: `<@${message.authorId}> enviou um embed em <#${campos.canal ?? message.channelId}>.`,
+      en: { titulo: "📝 Embed sent", descricao: `<@${message.authorId}> sent an embed in <#${campos.canal ?? message.channelId}>.` } });
     // confirma discretamente se foi para OUTRO canal
     if (campos.canal && campos.canal !== message.channelId) {
       await sendEmbed(message.channel, tr(ctx,

@@ -89,7 +89,8 @@ export async function cmdClearwarnings(message, args, ctx) {
     { title: "✅ Warnings cleared", description: (tinha
         ? (tinha === 1 ? `<@${targetId}>'s warning was reset.` : `<@${targetId}>'s **${tinha}** warnings were reset.`) : `<@${targetId}> had no warnings — nothing to reset.`) + extraEn, colour: COR.sucesso }));
   if (tinha) await log.registrar(ctx, "punicoes", { titulo: "🧹 Avisos limpos",
-    descricao: `<@${targetId}> teve os avisos (${tinha}) zerados por <@${message.authorId}>.` });
+    descricao: `<@${targetId}> teve os avisos (${tinha}) zerados por <@${message.authorId}>.`,
+    en: { titulo: "🧹 Warnings cleared", descricao: `<@${targetId}>'s warnings (${tinha}) were cleared by <@${message.authorId}>.` } });
 }
 
 // Os parâmetros em inglês, para a tela (o que se digita em inglês o aliases.js traduz)
@@ -1064,7 +1065,8 @@ export async function cmdScam(message, args, ctx) {
       if (pol.silenceRoleId) await removerCargoSilence(server, uid, pol.silenceRoleId, ctx).catch(() => {});
       db.limparPunicao(ctx.serverId, uid);   // some do banco: não reaplica ao reentrar
       await log.registrar(ctx, "punicoes", { titulo: "✅ Punição removida",
-        descricao: `<@${uid}> foi liberado por <@${message.authorId}>.` });
+        descricao: `<@${uid}> foi liberado por <@${message.authorId}>.`,
+        en: { titulo: "✅ Punishment removed", descricao: `<@${uid}> was released by <@${message.authorId}>.` } });
       return sendEmbed(message.channel, tr(ctx,
         { title: "✅ Liberado", description: `Punição de <@${uid}> removida.`, colour: COR.sucesso },
         { title: "✅ Released", description: `<@${uid}>'s punishment was removed.`, colour: COR.sucesso }));

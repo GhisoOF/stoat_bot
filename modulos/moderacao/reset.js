@@ -61,7 +61,8 @@ export async function cmdReset(message, args, ctx) {
     store.recarregarServidor(sid);
     db.gravarConfig(chaveBackup(sid), { ...b, usado: true });
     await log.registrar({ ...ctx, config: store.configDoServidor(sid) }, "comandos", {
-      titulo: "↩️ Reset desfeito", descricao: `<@${message.authorId}> desfez o reset — a configuração anterior voltou.` });
+      titulo: "↩️ Reset desfeito", descricao: `<@${message.authorId}> desfez o reset — a configuração anterior voltou.`,
+      en: { titulo: "↩️ Reset undone", descricao: `<@${message.authorId}> undid the reset — the previous configuration is back.` } });
     const enDepois = store.configDoServidor(sid).language === "en";
     return sendEmbed(message.channel, { title: enDepois ? "↩️ Reset undone" : "↩️ Reset desfeito", colour: COR.sucesso,
       description: enDepois ? "The previous configuration is back, exactly as it was." : "A configuração anterior voltou, exatamente como estava." });
@@ -89,7 +90,8 @@ export async function cmdReset(message, args, ctx) {
     console.log(`[RESET] servidor ${sid} voltou à configuração de fábrica (por ${message.authorId})`);
     // o log de antes ainda recebe o aviso (o canal de log também foi zerado)
     await log.registrar({ ...ctx, config: antes }, "comandos", {
-      titulo: "🏭 Configuração de fábrica", descricao: `<@${message.authorId}> resetou a Judy neste servidor. \`${P}reset undo\` desfaz por 24 h.` });
+      titulo: "🏭 Configuração de fábrica", descricao: `<@${message.authorId}> resetou a Judy neste servidor. \`${P}reset undo\` desfaz por 24 h.`,
+      en: { titulo: "🏭 Factory settings", descricao: `<@${message.authorId}> reset Judy on this server. \`${P}reset undo\` undoes it for 24 h.` } });
     const enDepois = depois.language === "en";
     return sendEmbed(message.channel, { title: enDepois ? "🏭 Factory settings restored" : "🏭 Configuração de fábrica", colour: COR.sucesso,
       description: (enDepois ? [

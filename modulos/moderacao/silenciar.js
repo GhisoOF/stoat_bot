@@ -84,7 +84,8 @@ export async function cmdSilenciar(message, args, ctx) {
       await membro.edit({ remove: ["Timeout"] });
       try { db.silenciarAte(ctx.serverId ?? server?.id, alvoId, 0); db.definirSilenciado(ctx.serverId ?? server?.id, alvoId, false); } catch {}
       await log.registrar(ctx, "punicoes", { titulo: "🔊 Silêncio retirado (manual)",
-        descricao: `<@${alvoId}> teve o silêncio retirado por <@${message.authorId}>.` });
+        descricao: `<@${alvoId}> teve o silêncio retirado por <@${message.authorId}>.`,
+        en: { titulo: "🔊 Silence lifted (manual)", descricao: `<@${alvoId}>'s silence was lifted by <@${message.authorId}>.` } });
       return sendEmbed(message.channel, tr(ctx,
         { title: "🔊 Silêncio retirado", description: `<@${alvoId}> pode falar de novo.`, colour: COR.sucesso },
         { title: "🔊 Timeout lifted", description: `<@${alvoId}> can talk again.`, colour: COR.sucesso }));
@@ -119,7 +120,8 @@ export async function cmdSilenciar(message, args, ctx) {
 
   const quando = (lang) => { try { return ate.toLocaleString(lang === "en" ? "en-GB" : "pt-BR", { timeZone: process.env.TZ || "UTC", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) + ` (${process.env.TZ || "UTC"})`; } catch { return ate.toISOString(); } };
   await log.registrar(ctx, "punicoes", { titulo: "🔇 Silenciado (manual)",
-    descricao: `<@${alvoId}> silenciado por <@${message.authorId}> por **${duracaoTexto(dur)}**.\n**Motivo:** ${motivo || "_(nenhum)_"}` });
+    descricao: `<@${alvoId}> silenciado por <@${message.authorId}> por **${duracaoTexto(dur)}**.\n**Motivo:** ${motivo || "_(nenhum)_"}`,
+    en: { titulo: "🔇 Silenced (manual)", descricao: `<@${alvoId}> silenced by <@${message.authorId}> for **${duracaoTexto(dur, "en")}**.\n**Reason:** ${motivo || "_(none)_"}` } });
   console.log(`[SILENCIAR] ${message.authorId} -> ${alvoId} | ${duracaoTexto(dur)} | ${motivo}`);
   return sendEmbed(message.channel, tr(ctx, {
     title: "🔇 Ação executada: SILÊNCIO",

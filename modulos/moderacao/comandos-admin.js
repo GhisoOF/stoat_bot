@@ -99,6 +99,8 @@ export async function cmdComando(message, args, ctx) {
   await log.registrar(ctx, "comandos", {
     titulo: desativar ? "🔴 Comando desativado" : "🟢 Comando reativado",
     descricao: `<@${message.authorId}> ${desativar ? "desativou" : "reativou"} \`${PREFIXO}${alvo}\`.`,
+    en: { titulo: desativar ? "🔴 Command disabled" : "🟢 Command re-enabled",
+      descricao: `<@${message.authorId}> ${desativar ? "disabled" : "re-enabled"} \`${PREFIXO}${alvo}\`.` },
   });
 
   return sendEmbed(message.channel, lang === "en" ? {

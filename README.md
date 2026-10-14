@@ -198,7 +198,8 @@ diz exatamente o que clicar.
   responde "já estava banido"), `&silenciar @pessoa 10m [motivo]` /
   `&silenciar tirar @pessoa`, `&limpar`, `&warn`.
 - **Logs** (`&log`): punições, entradas/saídas, mensagens apagadas/editadas,
-  cargos e comandos — cada categoria liga/desliga.
+  cargos e comandos — cada categoria liga/desliga. Sai no idioma do servidor
+  (`&idioma`), e cargos aparecem pelo nome.
 - **Acesso** (`&acesso` + `&staff`): cargos de staff moderam sem permissão
   nativa; comandos restritos a canais escolhidos.
 

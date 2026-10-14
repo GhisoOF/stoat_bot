@@ -231,7 +231,8 @@ async function darToque(ctx, { server, channel, message, userId, motivo }) {
   // some sozinho: é um lembrete, não um registro público
   if (aviso?.delete) setTimeout(() => aviso.delete().catch?.(() => {}), 20_000).unref?.();
   await log.registrar(ctx, "punicoes", { titulo: "🙂 Toque do AutoMod (sem aviso)",
-    descricao: `<@${userId}> — ${motivo}` });
+    descricao: `<@${userId}> — ${motivo}`,
+    en: { titulo: "🙂 AutoMod heads-up (no warning)", descricao: `<@${userId}> — ${motivo}` } });
 }
 
 async function aplicarPunicao(ctx, opts) {
@@ -290,7 +291,8 @@ async function aplicarPunicao(ctx, opts) {
       colour: COR.mod,
     });
     await log.registrar(ctx, "punicoes", { titulo: "🧹 Mensagem removida (automod)",
-      descricao: `<@${userId}> — ${motivo}` });
+      descricao: `<@${userId}> — ${motivo}`,
+      en: { titulo: "🧹 Message removed (automod)", descricao: `<@${userId}> — ${motivo}` } });
     return;
   }
 
@@ -310,7 +312,8 @@ async function aplicarPunicao(ctx, opts) {
         `**${lang === "en" ? "Action" : "Ação"}:** ${acao}`, ...blocoGrave].join("\n"),
       colour: COR.erro });
     await log.registrar(ctx, "punicoes", { titulo: "🔨 Banimento imediato",
-      descricao: `<@${userId}> — ${acao}.\n**Motivo:** ${motivo}` });
+      descricao: `<@${userId}> — ${acao}.\n**Motivo:** ${motivo}`,
+      en: { titulo: "🔨 Instant ban", descricao: `<@${userId}> — ${acao}.\n**Reason:** ${motivo}` } });
     return;
   }
 
@@ -348,7 +351,8 @@ async function aplicarPunicao(ctx, opts) {
       colour: COR.mod,
     });
     await log.registrar(ctx, "punicoes", { titulo: "⚠️ Violação — aguardando confirmação",
-      descricao: `<@${userId}> — ${acao}.\n**Motivo:** ${motivo}` });
+      descricao: `<@${userId}> — ${acao}.\n**Motivo:** ${motivo}`,
+      en: { titulo: "⚠️ Violation — awaiting confirmation", descricao: `<@${userId}> — ${acao}.\n**Reason:** ${motivo}` } });
     return;
   }
 
@@ -371,7 +375,8 @@ async function aplicarPunicao(ctx, opts) {
         ...blocoGrave].join("\n"),
       colour: COR.aviso });
     await log.registrar(ctx, "punicoes", { titulo: "⚠️ Aviso aplicado",
-      descricao: `<@${userId}> recebeu o aviso **${count}**.\n**Motivo:** ${motivo}` });
+      descricao: `<@${userId}> recebeu o aviso **${count}**.\n**Motivo:** ${motivo}`,
+      en: { titulo: "⚠️ Warning given", descricao: `<@${userId}> got warning **${count}**.\n**Reason:** ${motivo}` } });
     return;
   }
 
@@ -409,7 +414,8 @@ async function aplicarPunicao(ctx, opts) {
         ...blocoGrave].filter(Boolean).join("\n"),
       colour: COR.mod });
     await log.registrar(ctx, "punicoes", { titulo: "🔇 Silêncio temporário",
-      descricao: `<@${userId}> silenciado por **${degrau.rotulo}** (aviso ${count}).\n**Motivo:** ${motivo}` });
+      descricao: `<@${userId}> silenciado por **${degrau.rotulo}** (aviso ${count}).\n**Motivo:** ${motivo}`,
+      en: { titulo: "🔇 Temporary silence", descricao: `<@${userId}> silenced for **${degrau.rotulo}** (warning ${count}).\n**Reason:** ${motivo}` } });
     return;
   }
 
@@ -430,7 +436,8 @@ async function aplicarPunicao(ctx, opts) {
       `**${lang === "en" ? "Reason" : "Motivo"}:** ${motivo}${linhaNota}`, ...blocoGrave].join("\n"),
     colour: COR.erro });
   await log.registrar(ctx, "punicoes", { titulo: "🔨 Ban automático",
-    descricao: `<@${userId}> banido após **${count}** avisos.\n**Motivo:** ${motivo}` });
+    descricao: `<@${userId}> banido após **${count}** avisos.\n**Motivo:** ${motivo}`,
+    en: { titulo: "🔨 Automatic ban", descricao: `<@${userId}> banned after **${count}** warnings.\n**Reason:** ${motivo}` } });
 }
 
 // Padrão de dano (desafios, humilhação, doxxing): nada foi punido, mas a
@@ -471,6 +478,7 @@ async function alertarPadraoDano(ctx, { canal, userId, p }) {
   await log.registrar(ctx, "punicoes", {
     titulo: "🚩 Padrão de dano",
     descricao: `<@${userId}> — ${p.soma.toFixed(1)} em ${p.mensagens} mensagem(ns): ${p.categorias.join(", ")}`,
+    en: { titulo: "🚩 Harm pattern", descricao: `<@${userId}> — ${p.soma.toFixed(1)} across ${p.mensagens} message(s): ${p.categorias.join(", ")}` },
   });
 }
 
@@ -519,6 +527,9 @@ async function alertarAdministracao(ctx, { server, canal, userId, sinal, faixa, 
     titulo: "🚨 Possível ameaça",
     descricao: `<@${userId}> acionou o sentinela **${sinal.vezes}×** em ${sinal.janelaMin} min`
       + ` (${faixa?.rotulo ?? "?"}, nível ${nivel ?? "?"}). Sinais: ${sinal.sinais.join(", ") || "—"}`,
+    en: { titulo: "🚨 Possible threat",
+      descricao: `<@${userId}> tripped the sentinel **${sinal.vezes}×** in ${sinal.janelaMin} min`
+        + ` (${faixa?.rotuloEN ?? faixa?.rotulo ?? "?"}, level ${nivel ?? "?"}). Signals: ${sinal.sinais.join(", ") || "—"}` },
   });
   console.log(`[SENTINELA] 🚨 Alerta: ${userId} — ${sinal.vezes}× em ${sinal.janelaMin}min`);
 }
@@ -662,6 +673,7 @@ export async function liberarSilenciosVencidos(ctx) {
       await log.registrar({ ...ctx, serverId }, "punicoes", {
         titulo: "🔊 Silêncio expirado",
         descricao: `<@${userId}> voltou a falar — o prazo da punição terminou.\n**Motivo original:** ${motivo ?? "—"}`,
+        en: { titulo: "🔊 Silence expired", descricao: `<@${userId}> can talk again — the punishment ran out.\n**Original reason:** ${motivo ?? "—"}` },
       });
     } catch (e) {
       console.error(`[PUNIÇÃO][vigia] ${userId} em ${serverId}: ${descreverErro(e)}`);
@@ -1069,10 +1081,11 @@ export async function reaplicarPunicao(member, ctx) {
     await aplicarTimeout(server, userId, falta);
     console.log(`[PUNIÇÃO] ↩ Silêncio (timeout) REAPLICADO a ${userId} ao reentrar em ${serverId}`);
 
-    const motivo = db.lerPunicao(serverId, userId)?.motivo ?? "punição ativa";
+    const motivo = db.lerPunicao(serverId, userId)?.motivo ?? null;
     await log.registrar(ctx, "punicoes", {
       titulo: "↩ Punição reaplicada",
-      descricao: `<@${userId}> saiu e voltou ao servidor — o silêncio foi **reaplicado**.\n**Motivo original:** ${motivo}`,
+      descricao: `<@${userId}> saiu e voltou ao servidor — o silêncio foi **reaplicado**.\n**Motivo original:** ${motivo ?? "punição ativa"}`,
+      en: { titulo: "↩ Punishment reapplied", descricao: `<@${userId}> left and rejoined — the silence was **reapplied**.\n**Original reason:** ${motivo ?? "active punishment"}` },
     });
     return true;
   } catch (err) {

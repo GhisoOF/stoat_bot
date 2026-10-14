@@ -166,6 +166,7 @@ export async function aoEntrar(member, ctx) {
       await log.registrar(ctx, "cargos", {
         titulo: "🎖 Cargos de nível devolvidos",
         descricao: `<@${member?.id?.user}> voltou e recuperou **${r.concedidos.length}** cargo(s) de nível (nível ${r.nivel}).`,
+        en: { titulo: "🎖 Level roles restored", descricao: `<@${member?.id?.user}> came back and got **${r.concedidos.length}** level role(s) back (level ${r.nivel}).` },
       });
     }
     return r;
@@ -211,7 +212,8 @@ export async function aoMensagem(message, ctx) {
           const r = await sincronizarCargos(server, member, serverId, { nivel: novoNivel });
           if (r?.concedidos?.length) {
             await log.registrar(ctx, "cargos", { titulo: "🎖 Cargos de nível acertados",
-              descricao: `<@${userId}> (nível ${novoNivel}) recebeu **${r.concedidos.length}** cargo(s) de nível que estavam faltando.` });
+              descricao: `<@${userId}> (nível ${novoNivel}) recebeu **${r.concedidos.length}** cargo(s) de nível que estavam faltando.`,
+              en: { titulo: "🎖 Level roles fixed", descricao: `<@${userId}> (level ${novoNivel}) got **${r.concedidos.length}** missing level role(s).` } });
           }
         }
       }

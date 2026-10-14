@@ -103,6 +103,7 @@ export async function cmdLimpar(message, args, ctx) {
       await log.registrar(ctx, "mensagens", {
         titulo: "🧹 LIMPEZA TOTAL do canal",
         descricao: `<@${message.authorId}> esvaziou <#${message.channelId}> — **${total}** mensagem(ns) apagada(s).`,
+        en: { titulo: "🧹 Channel FULLY cleared", descricao: `<@${message.authorId}> emptied <#${message.channelId}> — **${total}** message(s) deleted.` },
       });
       console.log(`[LIMPAR][TUDO] ${message.authorId} esvaziou ${message.channelId}: ${total} msg`);
     } catch (err) {
@@ -260,6 +261,8 @@ export async function cmdLimpar(message, args, ctx) {
       titulo: "🧹 Limpeza de chat",
       descricao: `<@${message.authorId}> apagou **${ids.length}** mensagem(ns) em <#${message.channelId}>`
                + (alvo ? ` (só de <@${alvo}>).` : "."),
+      en: { titulo: "🧹 Chat cleanup", descricao: `<@${message.authorId}> deleted **${ids.length}** message(s) in <#${message.channelId}>`
+               + (alvo ? ` (only from <@${alvo}>).` : ".") },
     });
 
     console.log(`[LIMPAR] ${message.authorId} apagou ${ids.length} msg em ${message.channelId}${alvo ? ` (alvo ${alvo})` : ""}`);

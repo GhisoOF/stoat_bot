@@ -210,6 +210,7 @@ export async function rodarCiclo(serverId, ctx, { forcado = false } = {}) {
     await log.registrar({ ...ctx, serverId, config }, "mensagens", {
       titulo: "📰 RSS publicado",
       descricao: `${novos.length} notícia(s) postada(s) em <#${canalId}>.`,
+      en: { titulo: "📰 RSS posted", descricao: `${novos.length} news item(s) posted in <#${canalId}>.` },
     });
   } catch {}
 

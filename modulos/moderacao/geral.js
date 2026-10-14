@@ -349,7 +349,7 @@ function detalhesPT(P) {
     },
     log: {
       uso: `${P}log [here | <idDoCanal> | off | <evento> <on|off>]`,
-      desc: "Chat de logs do servidor. `here` usa o canal atual; `<idDoCanal>` define por ID; `off` desativa. Eventos: `punicoes`, `membros`, `mensagens`, `cargos`, `comandos` — cada um pode ser ligado/desligado.",
+      desc: "Chat de logs do servidor. `here` usa o canal atual; `<idDoCanal>` define por ID; `off` desativa. Eventos: `punicoes`, `membros`, `mensagens`, `cargos`, `comandos` — cada um pode ser ligado/desligado. O log sai no idioma do servidor (`&idioma`).",
       perm: "ManagePermissions", ex: `${P}log here`,
     },
   };
@@ -635,7 +635,7 @@ function detalhesEN(P) {
     },
     log: {
       uso: `${P}log [here | <channelId> | off | <event> <on|off>]`,
-      desc: "The server's log channel. `here` uses the current channel; `<channelId>` sets it by ID; `off` disables it. Events: `punicoes`, `membros`, `mensagens`, `cargos`, `comandos` — each can be toggled.",
+      desc: "The server's log channel. `here` uses the current channel; `<channelId>` sets it by ID; `off` disables it. Events: `punicoes`, `membros`, `mensagens`, `cargos`, `comandos` — each can be toggled. The log follows the server's language (`&language`).",
       perm: "ManagePermissions", ex: `${P}log here`,
     },
   };
@@ -1375,7 +1375,8 @@ export async function cmdKick(message, args, ctx) {
   try {
     await server.kickUser(targetId);
     await log.registrar(ctx, "punicoes", { titulo: "👢 Usuário expulso (manual)",
-      descricao: `<@${targetId}> foi expulso por <@${message.authorId}>.\n**Motivo:** ${reason}` });
+      descricao: `<@${targetId}> foi expulso por <@${message.authorId}>.\n**Motivo:** ${reason}`,
+      en: { titulo: "👢 User kicked (manual)", descricao: `<@${targetId}> was kicked by <@${message.authorId}>.\n**Reason:** ${reason}` } });
     await sendEmbed(message.channel, lang === "en" ? {
       title: "✅ Action executed: KICK",
       description: [
@@ -1452,7 +1453,8 @@ export async function cmdBan(message, args, ctx) {
       }));
     }
     await log.registrar(ctx, "punicoes", { titulo: "🔨 Usuário banido (manual)",
-      descricao: `<@${targetId}> foi banido por <@${message.authorId}>.\n**Motivo:** ${reason}` });
+      descricao: `<@${targetId}> foi banido por <@${message.authorId}>.\n**Motivo:** ${reason}`,
+      en: { titulo: "🔨 User banned (manual)", descricao: `<@${targetId}> was banned by <@${message.authorId}>.\n**Reason:** ${reason}` } });
     await sendEmbed(message.channel, lang === "en" ? {
       title: "🔨 Action executed: BAN",
       description: [

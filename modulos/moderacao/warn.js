@@ -150,6 +150,8 @@ export async function cmdWarn(message, args, ctx) {
   await log.registrar(ctx, "punicoes", {
     titulo: banido ? "🔨 Ban por acúmulo de avisos" : "⚠️ Aviso manual",
     descricao: `<@${alvoId}> — ${motivo}\n**Por:** <@${message.authorId}>\n**Total:** ${total}`,
+    en: { titulo: banido ? "🔨 Ban for too many warnings" : "⚠️ Manual warning",
+      descricao: `<@${alvoId}> — ${motivo}\n**By:** <@${message.authorId}>\n**Total:** ${total}` },
   });
 
   console.log(`[WARN] ${message.authorId} avisou ${alvoId} (${total} aviso(s))${banido ? " → BANIDO" : ""}`);

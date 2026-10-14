@@ -157,11 +157,11 @@ export const ORIGEM_DONO = "lista-do-dono";
 export const rotuloOrigem = (serverId, en = false) =>
   serverId === ORIGEM_DONO ? (en ? "_added by the bot owner_" : "_adicionado pelo dono do bot_") : `\`${serverId}\``;
 
-export function rotularUsuario(userId, { nome = null, client = null } = {}) {
+export function rotularUsuario(userId, { nome = null, client = null, en = false } = {}) {
   const conhecido = nome
     ?? (() => { try { return db.nomeDeBanido(userId); } catch { return null; } })()
     ?? (() => { try { return client?.users?.get?.(userId)?.username ?? null; } catch { return null; } })();
-  return conhecido ? `**${conhecido}** \`${userId}\`` : `\`${userId}\` _(nome desconhecido)_`;
+  return conhecido ? `**${conhecido}** \`${userId}\`` : `\`${userId}\` ${en ? "_(unknown name)_" : "_(nome desconhecido)_"}`;
 }
 
 export function estaIsento(config, userId) {
@@ -236,6 +236,7 @@ async function sincronizarTodos(client, criarContexto) {
         await log.registrar(ctx, "punicoes", {
           titulo: "🌐 Bans importados automaticamente",
           descricao: `**${novos}** ban(s) deste servidor entraram na lista global.`,
+en: { titulo: "🌐 Bans imported automatically", descricao: `**${novos}** ban(s) from this server joined the global list.` },
         });
       }
     } catch (err) {
@@ -260,6 +261,7 @@ export async function sincronizarServidor(server, criarContexto) {
       await log.registrar(ctx, "punicoes", {
         titulo: "🌐 Bans importados automaticamente",
         descricao: `**${novos}** ban(s) deste servidor entraram na lista global.`,
+en: { titulo: "🌐 Bans imported automatically", descricao: `**${novos}** ban(s) from this server joined the global list.` },
       });
     }
   } catch (err) {
@@ -332,12 +334,17 @@ export async function verificarEntrada(member, ctx, { propagado = false } = {}) 
   const quemEntrou = member?.user?.username ?? member?.nickname ?? null;
   const resumo = `${rotularUsuario(userId, { nome: quemEntrou, client: ctx.client })} consta na lista global: banido em **${n}** servidor(es).\n${motivos}`
     + (n > 3 ? `\n_… e mais ${n - 3}._` : "");
+  const resumoEn = `${rotularUsuario(userId, { nome: quemEntrou, client: ctx.client, en: true })} is on the global list: banned in **${n}** server(s).\n`
+    + historico.slice(0, 3).map((b) => `• ${rotuloOrigem(b.serverId, true)} — ${b.motivo ?? "_no reason_"} _(${data(b.criadoEm)})_`).join("\n")
+    + (n > 3 ? `\n_… and ${n - 3} more._` : "");
 
   // ── modo avisar: só alerta, não age ──
   if (modo === "avisar") {
     await log.registrar(ctx, "punicoes", {
       titulo: propagado ? "⚠️ Membro acabou de ser banido em outro servidor" : "⚠️ Usuário da lista global entrou",
       descricao: `${resumo}\n\n_Modo **avisar**: nenhuma ação automática foi tomada._`,
+      en: { titulo: propagado ? "⚠️ Member was just banned on another server" : "⚠️ User from the global list joined",
+        descricao: `${resumoEn}\n\n_**Warn** mode: no automatic action was taken._` },
     });
     console.log(`[BANGLOBAL] ⚠️ ${userId} (na lista, ${n} servidor(es)) entrou em ${serverId} — só aviso`);
     return false;
@@ -353,6 +360,7 @@ export async function verificarEntrada(member, ctx, { propagado = false } = {}) 
       await log.registrar(ctx, "punicoes", {
         titulo: "🔨 Ban automático (lista global)",
         descricao: `${resumo}\n\n_Modo **banir**: usuário banido automaticamente._`,
+        en: { titulo: "🔨 Automatic ban (global list)", descricao: `${resumoEn}\n\n_**Ban** mode: user banned automatically._` },
       });
       console.log(`[BANGLOBAL] 🔨 ${userId} banido automaticamente em ${serverId}`);
       return true;
@@ -361,6 +369,7 @@ export async function verificarEntrada(member, ctx, { propagado = false } = {}) 
       await log.registrar(ctx, "punicoes", {
         titulo: "❌ Falha no ban automático",
         descricao: `${resumo}\n\n**Erro:** ${descreverErro(err)}`,
+        en: { titulo: "❌ Automatic ban failed", descricao: `${resumoEn}\n\n**Error:** ${descreverErro(err, "en")}` },
       });
       return false;
     }
@@ -413,6 +422,8 @@ export async function varrer(ctx, message, { aplicar = true } = {}) {
     await log.registrar(ctx, "punicoes", {
       titulo: "🔨 Varredura da lista global",
       descricao: aplicados.map((a) => `${a.ok ? "🔨" : "❌"} ${a.nome} \`${a.uid}\` — ${a.n} servidor(es)${a.ok ? "" : ` — erro: ${a.erro}`}`).join("\n").slice(0, 1800),
+      en: { titulo: "🔨 Global list sweep",
+        descricao: aplicados.map((a) => `${a.ok ? "🔨" : "❌"} ${a.nome} \`${a.uid}\` — ${a.n} server(s)${a.ok ? "" : ` — error: ${a.erro}`}`).join("\n").slice(0, 1800) },
     });
   }
   return { total: membros.length, achados, isentos, aplicados, modo };
@@ -525,6 +536,7 @@ export async function cmdBanGlobal(message, args, ctx) {
     await log.registrar(ctx, "punicoes", {
       titulo: "🌐 Ban global reconfigurado",
       descricao: `Modo alterado para **${sub}** por <@${message.authorId}>.`,
+      en: { titulo: "🌐 Global ban reconfigured", descricao: `Mode changed to **${sub}** by <@${message.authorId}>.` },
     });
     return sendEmbed(message.channel, {
       title: lang === "en" ? "🌐 Global ban updated" : "🌐 Ban global atualizado",
@@ -741,6 +753,7 @@ export async function cmdBanGlobal(message, args, ctx) {
         await log.registrar(ctx, "punicoes", {
           titulo: "↩️ Ban da lista global desfeito",
           descricao: `<@${message.authorId}> desfez o ban que a lista global aplicou em ${alvo.nome ?? alvo.id}.`,
+          en: { titulo: "↩️ Global list ban undone", descricao: `<@${message.authorId}> undid the ban the global list applied to ${alvo.nome ?? alvo.id}.` },
         });
         return sendEmbed(message.channel, tr(ctx, {
           title: "↩️ Ban desfeito",
@@ -835,6 +848,7 @@ export async function cmdBanGlobal(message, args, ctx) {
     await log.registrar(ctx, "punicoes", {
       titulo: "↩️ Bans da lista global desfeitos",
       descricao: `<@${message.authorId}> reverteu **${feitos.length}** ban(s) aplicado(s) pela lista global.`,
+      en: { titulo: "↩️ Global list bans undone", descricao: `<@${message.authorId}> reverted **${feitos.length}** ban(s) applied by the global list.` },
     });
     return sendEmbed(message.channel, tr(ctx, {
       title: `↩️ ${feitos.length} ban(s) desfeito(s)`,
@@ -925,6 +939,7 @@ export async function cmdBanGlobal(message, args, ctx) {
     await log.registrar(ctx, "punicoes", {
       titulo: "🛡️ Isenção da lista global",
       descricao: `<@${message.authorId}> isentou <@${uid}>${desbanida ? " (e desfez o ban aplicado pela lista)" : ""}.`,
+      en: { titulo: "🛡️ Global list exemption", descricao: `<@${message.authorId}> exempted <@${uid}>${desbanida ? " (and undid the ban applied by the list)" : ""}.` },
     });
     const n = db.contarBansGlobais(uid);
     return sendEmbed(message.channel, tr(ctx, {
@@ -1095,6 +1110,8 @@ export async function cmdBanGlobal(message, args, ctx) {
     if (r.adicionados.length) await log.registrar(ctx, "punicoes", {
       titulo: "🌐 Adicionado(s) à lista global pelo dono",
       descricao: `<@${message.authorId}> pôs ${r.adicionados.map((a) => `**${a.nome ?? a.id}** \`${a.id}\``).join(", ")} na lista global.${motivo ? `\n**Motivo:** ${motivo}` : ""}`,
+      en: { titulo: "🌐 Added to the global list by the owner",
+        descricao: `<@${message.authorId}> put ${r.adicionados.map((a) => `**${a.nome ?? a.id}** \`${a.id}\``).join(", ")} on the global list.${motivo ? `\n**Reason:** ${motivo}` : ""}` },
     });
     return enviarPaginado(ctx, message.channel, {
       paginas: paginarLinhas(L, { titulo: en ? `🌐 Global list — ${r.adicionados.length} added` : `🌐 Lista global — ${r.adicionados.length} adicionado(s)`, limite: 1500 }),
@@ -1136,6 +1153,7 @@ export async function cmdBanGlobal(message, args, ctx) {
     await log.registrar(ctx, "punicoes", {
       titulo: "🌐 Usuário removido da lista global",
       descricao: `<@${message.authorId}> removeu ${alvo.nome ?? uid} da lista global (**${n}** registro(s)) — e ela não voltará com bans futuros.`,
+      en: { titulo: "🌐 User removed from the global list", descricao: `<@${message.authorId}> removed ${alvo.nome ?? uid} from the global list (**${n}** record(s)) — and future bans won't bring them back.` },
     });
     return sendEmbed(message.channel, tr(ctx, {
       title: n ? "🌐 Removido da lista global" : "🌐 Marcado para ficar de fora",
@@ -1213,6 +1231,7 @@ export async function cmdBanGlobal(message, args, ctx) {
       await log.registrar(ctx, "punicoes", {
         titulo: "🌐 Marca de exceção removida",
         descricao: `<@${message.authorId}> permitiu que ${alvo.nome ?? alvo.id} volte a entrar na lista global.`,
+        en: { titulo: "🌐 Exception mark removed", descricao: `<@${message.authorId}> allowed ${alvo.nome ?? alvo.id} back onto the global list.` },
       });
     }
     return sendEmbed(message.channel, tr(ctx, {
@@ -1314,6 +1333,7 @@ export async function cmdBanGlobal(message, args, ctx) {
     await log.registrar(ctx, "punicoes", {
       titulo: "🤖 Bots removidos da lista global",
       descricao: `<@${message.authorId}> removeu **${achados.length}** bot(s) (**${n}** registro(s)).`,
+      en: { titulo: "🤖 Bots removed from the global list", descricao: `<@${message.authorId}> removed **${achados.length}** bot(s) (**${n}** record(s)).` },
     });
     return sendEmbed(message.channel, tr(ctx,
       { title: `🤖 ${achados.length} bot(s) removido(s)`,

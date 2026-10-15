@@ -4917,10 +4917,10 @@ t("passou do limite, descarta em vez de acumular", () => {
 console.log("\n── geração: o bot espera tanto quanto o gerador ──");
 t("o limite padrão do bot cobre o limite padrão do gerador", () => {
   const fs = globalThis.__fs;
-  const padrao = (arq) => Number((fs.readFileSync(arq, "utf8").match(/IMAGEM_GERACAO_TIMEOUT_MS \|\| ([\d_]+)/) ?? [])[1]?.replace(/_/g, ""));
-  const bot = padrao("./modulos/ai/chat.js"), gerador = padrao("./ia-servico/ferramentas/gerar-imagem.js");
-  assert.ok(bot && gerador, `não achei os padrões (bot ${bot}, gerador ${gerador})`);
-  assert.ok(bot >= gerador, `o bot desiste em ${bot / 1000}s, o gerador ainda trabalha até ${gerador / 1000}s`);
+  // (15 out 2026) os dois leem o MESMO tempoDeGeracaoMs() de modulos/core/imagem-modelo.js
+  const chat = fs.readFileSync("./modulos/ai/chat.js", "utf8"), gerador = fs.readFileSync("./ia-servico/ferramentas/gerar-imagem.js", "utf8");
+  assert.match(chat, /timeoutMs: 2 \* tempoDeGeracaoMs\(\) \+ 30_000/, "o chat espera 2× o limite do gerador (há a 2ª tentativa econômica)");
+  assert.match(gerador, /const TIMEOUT_MS\s+= tempoDeGeracaoMs\(\);/, "o gerador usa o mesmo limite");
 });
 
 console.log(`\nIMAGEM: ${ok} ok, ${falhou} falha(s)`);
@@ -13783,6 +13783,95 @@ await t("★ canal que a Judy não consegue ver: o &debug diz por quê (em vez d
 });
 
 console.log(`\nCANAL SEM CACHE (15 out): ${ok} ok, ${falhou} falha(s)`);
+process.exit(falhou ? 1 : 0);
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+// imagem-qwen-15out — Qwen-Image 2.1 como gerador embutido
+// ════════════════════════════════════════════════════════════════════════════
+// Pedido de Ghieh (15 out 2026): testar o Qwen-Image-2.1 "Uncensored" (Q8_0).
+// SD_MODELO_TIPO=qwen-image escolhe; as URLs saem de modulos/core/imagem-modelo.js
+// (o gerador, o pré-download do arranque e o chat leem o mesmo lugar).
+SUITES["imagem-qwen-15out"] = async () => {
+const __m0 = await import("node:assert"); const assert = __m0.default;
+const m = await import("./modulos/core/imagem-modelo.js");
+
+let ok = 0, falhou = 0;
+const t = async (nome, fn) => {
+  try { await fn(); console.log(`  ✅ ${nome}`); ok++; }
+  catch (e) { console.log(`  ❌ ${nome}\n     ${e.message}`); falhou++; }
+};
+const QWEN = { SD_MODELO_TIPO: "qwen-image" };
+
+await t("padrão continua o Z-Image (nada muda para quem não configurou)", () => {
+  assert.equal(m.tipoDoModelo({}), "z-image");
+  assert.equal(m.tempoDeGeracaoMs({}), 420_000);
+  assert.equal(m.ladoMaximo({}), 768);
+  assert.equal(m.modeloSemFiltro({}), false);
+  assert.equal(m.arquivosParaBaixar({}).length, 3);
+});
+await t("★ SD_MODELO_TIPO=qwen-image: o Q8_0 Uncensored, o VAE do 2.1 e o Qwen3-VL-8B", () => {
+  assert.equal(m.tipoDoModelo(QWEN), "qwen-image");
+  assert.equal(m.tipoDoModelo({ SD_MODELO_TIPO: "Qwen" }), "qwen-image");
+  const [dif, vae, llm] = m.arquivosParaBaixar(QWEN).map(([, url]) => url);
+  assert.match(dif, /abenzerps\/Qwen-Image-2\.1-Uncensored-Quantized\/resolve\/main\/qwen-image-2\.1-UC-Q8_0\.gguf$/);
+  assert.match(vae, /qwen_image_2\.1_vae_bf16\.safetensors$/);
+  assert.match(llm, /Qwen3-VL-8B-Instruct-GGUF\/resolve\/main\/Qwen3VL-8B-Instruct-Q4_K_M\.gguf$/);
+});
+await t("★ o base (sem \"turbo\" no nome) leva minutos: tempo e lado por padrão de acordo", () => {
+  assert.equal(m.ehTurbo(QWEN), false);
+  assert.equal(m.tempoDeGeracaoMs(QWEN), 1_200_000);
+  assert.equal(m.ladoMaximo(QWEN), 512);
+  assert.equal(m.tempoDeGeracaoMs({ ...QWEN, IMAGEM_GERACAO_TIMEOUT_MS: "900000" }), 900_000);
+  assert.equal(m.ladoMaximo({ ...QWEN, IMAGEM_LADO_GERACAO: "768" }), 768);
+});
+await t("Turbo (\"turbo\" no nome do arquivo): 8 passos, mais rápido", () => {
+  const env = { ...QWEN, SD_Q_DIFUSAO_URL: "https://huggingface.co/unsloth/Qwen-Image-2.1-Turbo-GGUF/resolve/main/qwen-image-2.1-turbo-Q8_0.gguf" };
+  assert.equal(m.ehTurbo(env), true);
+  assert.equal(m.tempoDeGeracaoMs(env), 600_000);
+  assert.equal(m.ladoMaximo(env), 768);
+});
+await t("★ modelo \"Uncensored\" é reconhecido como sem filtro (toda imagem passa pela visão)", () => {
+  assert.equal(m.modeloSemFiltro(QWEN), true);
+  assert.equal(m.modeloSemFiltro({ ...QWEN, SD_Q_DIFUSAO_URL: "https://x/qwen-image-2.1-turbo-Q8_0.gguf" }), false);
+  assert.equal(m.modeloSemFiltro({ IMAGEM_SEM_FILTRO: "1" }), true);
+});
+
+// o gerador, com o tipo qwen-image no ambiente
+process.env.SD_MODELO_TIPO = "qwen-image";
+process.env.SD_URL = "http://127.0.0.1:9";
+delete process.env.LLM_MODEL_VISAO; delete process.env.LLM_MODEL_MODERACAO;
+const gi = await import("./ia-servico/ferramentas/gerar-imagem.js");
+const base = { difusao: "/m/d.gguf", vae: "/m/v.st", llm: "/m/l.gguf", texto: "a cat", width: 512, height: 512, saida: "/tmp/o.png", negativo: "nsfw, nude" };
+await t("★ os argumentos do sd.cpp: base com cfg 6, 20 passos e o prompt negativo", () => {
+  const a = gi.argsQwenImage({ ...base, env: QWEN });
+  const v = (f) => a[a.indexOf(f) + 1];
+  assert.equal(v("--diffusion-model"), "/m/d.gguf"); assert.equal(v("--vae"), "/m/v.st"); assert.equal(v("--llm"), "/m/l.gguf");
+  assert.equal(v("--steps"), "20"); assert.equal(v("--cfg-scale"), "6.0"); assert.equal(v("--sampling-method"), "euler");
+  assert.equal(v("-n"), "nsfw, nude");
+  assert.ok(a.includes("--diffusion-fa") && a.includes("--offload-to-cpu"));
+  assert.ok(!a.includes("--sigmas"));
+});
+await t("Turbo: 8 passos, cfg 1 e o sigma do checkpoint (sem negativo)", () => {
+  const a = gi.argsQwenImage({ ...base, env: { ...QWEN, SD_Q_DIFUSAO_URL: "https://x/qwen-image-2.1-turbo-Q8_0.gguf" } });
+  const v = (f) => a[a.indexOf(f) + 1];
+  assert.equal(v("--steps"), "8"); assert.equal(v("--cfg-scale"), "1.0"); assert.equal(v("--sigmas"), m.SIGMAS_QWEN_TURBO);
+  assert.ok(!a.includes("-n"));
+});
+await t("modo econômico: o Qwen3-VL na CPU e o VAE em blocos", () => {
+  const a = gi.argsQwenImage({ ...base, economico: true, env: QWEN });
+  assert.ok(a.includes("--clip-on-cpu") && a.includes("--vae-tiling"));
+});
+await t("★ modelo sem filtro e sem modelo de visão: não desenha nem em servidor comum", async () => {
+  const r = await gi.executar({ prompt: "a cat astronaut, watercolor" });
+  assert.match(r.erro ?? "", /não tem filtro de segurança/);
+});
+await t("★ modelo sem filtro: se a conferência falhar, a imagem não sai (servidor comum também)", async () => {
+  assert.match(await gi.conferirSaida(Buffer.from("x"), { exigir: true, temVisao: () => true, moderar: async () => ({ erro: "timeout" }) }) ?? "", /conferir/);
+  assert.match(await gi.conferirSaida(Buffer.from("x"), { exigir: true, temVisao: () => false }) ?? "", /conferência/);
+});
+
+console.log(`\nIMAGEM QWEN (15 out): ${ok} ok, ${falhou} falha(s)`);
 process.exit(falhou ? 1 : 0);
 };
 

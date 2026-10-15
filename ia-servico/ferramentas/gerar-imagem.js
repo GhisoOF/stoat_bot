@@ -3,22 +3,9 @@ const SD_URL       = (process.env.SD_URL || "").replace(/\/$/, "");
 // Gerador embutido (stable-diffusion.cpp): usado quando não há SD_URL.
 const SD_BIN       = process.env.SD_BIN || "/usr/local/bin/sd-cpp";
 const SD_DIR       = process.env.SD_MODELOS_DIR || "/data/modelos-sd";
-const SD_MODELO_URL = process.env.SD_MODELO_URL
-  || "https://huggingface.co/stabilityai/sd-turbo/resolve/main/sd_turbo.safetensors";
-
-// Dois formatos de modelo. O CLÁSSICO (SD-Turbo) é um arquivo só (-m). O
-// Z-IMAGE é um trio — difusão + VAE + um LLM que interpreta o prompt — e é o
-// que dá a qualidade boa: 6B de parâmetros contra ~1B do SD-Turbo. Em troca
-// pede GPU: em CPU pura ele roda, mas devagar.
-// Para voltar ao SD-Turbo: SD_MODELO_TIPO=sd no .env.
-const SD_TIPO = (process.env.SD_MODELO_TIPO || "z-image").trim().toLowerCase();
-const Z_URLS = {
-  difusao: process.env.SD_Z_DIFUSAO_URL || "https://huggingface.co/leejet/Z-Image-Turbo-GGUF/resolve/main/z_image_turbo-Q4_K.gguf",
-  // O repositório do leejet só hospeda a difusão; VAE e text-encoder vêm de
-  // outros lugares (conferido na API do Hugging Face).
-  vae:     process.env.SD_Z_VAE_URL     || "https://huggingface.co/Comfy-Org/z_image_turbo/resolve/main/split_files/vae/ae.safetensors",
-  llm:     process.env.SD_Z_LLM_URL     || "https://huggingface.co/unsloth/Qwen3-4B-Instruct-2507-GGUF/resolve/main/Qwen3-4B-Instruct-2507-Q4_K_M.gguf",
-};
+// Qual modelo (z-image · qwen-image · sd) e de onde vem: modulos/core/imagem-modelo.js
+const SD_TIPO = tipoDoModelo();
+const URLS = urlsDoModelo();
 const IMAGEM_LIGADA = (process.env.IMAGEM ?? "1").trim() !== "0";
 
 import { existsSync, mkdirSync, readFileSync, unlinkSync, renameSync } from "node:fs";
@@ -26,9 +13,10 @@ import { spawn as spawnProc, spawnSync } from "node:child_process";
 import { basename, join } from "node:path";
 import { tmpdir } from "node:os";
 import { moderarBuffer, visaoDisponivel } from "./ver-imagem.js";
-const LADO_MAX     = Number(process.env.IMAGEM_LADO_GERACAO || 768);
+import { tipoDoModelo, urlsDoModelo, ehTurbo, modeloSemFiltro, tempoDeGeracaoMs, ladoMaximo, SIGMAS_QWEN_TURBO } from "../../modulos/core/imagem-modelo.js";
+const LADO_MAX     = ladoMaximo();
 const PASSOS_MAX   = Number(process.env.IMAGEM_PASSOS_MAX || 30);
-const TIMEOUT_MS   = Number(process.env.IMAGEM_GERACAO_TIMEOUT_MS || 420_000);
+const TIMEOUT_MS   = tempoDeGeracaoMs();
 const MAX_PIXELS   = Number(process.env.IMAGEM_MAX_PIXELS || 32_000_000);
 
 // Reusa a reescrita do ver-imagem (mesma política, mesmo código).
@@ -93,12 +81,15 @@ export function julgarSaida(descricao, { adulto = false } = {}) {
 // A imagem pronta (JPEG) passa pela visão. No modo +18, sem visão ou com erro
 // dela, a imagem NÃO sai (fecha no erro); fora dele, o filtro do prompt já
 // barrou o pedido e a visão é uma segunda rede.
-export async function conferirSaida(jpeg, { adulto = false, moderar = moderarBuffer, temVisao = visaoDisponivel } = {}) {
-  if (!temVisao()) return adulto ? "sem modelo de visão para conferir a imagem — +18 fica desligado" : null;
+// `exigir`: modelo sem filtro do fabricante — sem conferência, nada sai.
+export async function conferirSaida(jpeg, { adulto = false, exigir = adulto, moderar = moderarBuffer, temVisao = visaoDisponivel } = {}) {
+  if (!temVisao()) return adulto ? "sem modelo de visão para conferir a imagem — +18 fica desligado"
+    : exigir ? "sem modelo de visão para conferir a imagem — com este modelo, nada sai sem conferência" : null;
   const r = await moderar(jpeg);
   if (r?.erro) {
     console.warn(`[IA][gerar_imagem] conferência da saída falhou: ${r.erro}`);
-    return adulto ? "não consegui conferir a imagem antes de enviar — +18 não sai sem conferência" : null;
+    return adulto ? "não consegui conferir a imagem antes de enviar — +18 não sai sem conferência"
+      : exigir ? "não consegui conferir a imagem antes de enviar" : null;
   }
   const veredito = julgarSaida(r.descricao, { adulto });
   if (veredito) console.warn(`[IA][gerar_imagem] SAÍDA DESCARTADA (${adulto ? "+18" : "normal"}): ${String(r.descricao).replace(/\s+/g, " ").slice(0, 300)}`);
@@ -143,6 +134,7 @@ function baixarArquivo(url, rotulo) {
 }
 
 function baixarModeloSD() {
+  const SD_MODELO_URL = URLS.modelo;
   const nome = basename(new URL(SD_MODELO_URL).pathname);
   const destino = join(SD_DIR, nome);
   if (existsSync(destino)) return destino;
@@ -210,6 +202,21 @@ export async function gerarComFolga(pedido, { gerar = gerarEmbutido, liberar = l
   }
 }
 
+// Os argumentos do sd.cpp para o Qwen-Image 2.1 (puro: testável sem o binário)
+export function argsQwenImage({ difusao, vae, llm, texto, width, height, economico = false, negativo = NEGATIVO_FIXO, saida, env = process.env }) {
+  const turbo = ehTurbo(env);
+  const passos = String(Math.min(PASSOS_MAX, Number(env.IMAGEM_PASSOS || (turbo ? 8 : 20))));
+  const cfg = env.IMAGEM_CFG || (turbo ? "1.0" : "6.0");
+  const a = ["-M", "img_gen", "--diffusion-model", difusao, "--vae", vae, "--llm", llm,
+    "-p", texto, "-W", String(width), "-H", String(height), "--steps", passos,
+    "--cfg-scale", cfg, "--sampling-method", "euler", "--diffusion-fa", "--seed", String(semente()), "-o", saida];
+  if (turbo) a.push("--sigmas", SIGMAS_QWEN_TURBO);   // destilado: cfg 1, sem prompt negativo
+  else a.push("-n", negativo);                          // base: com cfg, o negativo vale
+  if ((env.IMAGEM_OFFLOAD ?? "1").trim() !== "0") a.push("--offload-to-cpu");
+  if (economico) a.push("--clip-on-cpu", "--vae-tiling");
+  return a;
+}
+
 function gerarEmbutido({ texto, width, height, economico = false, negativo = NEGATIVO_FIXO }) {
   return new Promise((res, rej) => {
     const saida = join(tmpdir(), `sd-${Date.now()}.png`);
@@ -223,9 +230,9 @@ function gerarEmbutido({ texto, width, height, economico = false, negativo = NEG
       // então NÃO se passa --type (reconverteria à toa).
       let difusao, vae, llm;
       try {
-        difusao = baixarArquivo(Z_URLS.difusao, "modelo de difusão");
-        vae     = baixarArquivo(Z_URLS.vae, "VAE");
-        llm     = baixarArquivo(Z_URLS.llm, "LLM do prompt");
+        difusao = baixarArquivo(URLS.difusao, "modelo de difusão");
+        vae     = baixarArquivo(URLS.vae, "VAE");
+        llm     = baixarArquivo(URLS.llm, "LLM do prompt");
       } catch (e) { return rej(e); }
       const passos = String(Math.min(PASSOS_MAX, Number(process.env.IMAGEM_PASSOS || 8)));
       finalArgs = ["-M", "img_gen", "--diffusion-model", difusao, "--vae", vae, "--llm", llm,
@@ -237,6 +244,18 @@ function gerarEmbutido({ texto, width, height, economico = false, negativo = NEG
       // modo econômico: o LLM do prompt (Qwen3-4B, ~2,5 GB) roda na CPU e o
       // VAE decodifica em blocos — sobra GPU para o grafo da difusão
       if (economico) finalArgs.push("--clip-on-cpu", "--vae-tiling");
+    } else if (SD_TIPO === "qwen-image") {
+      // Qwen-Image 2.1 (15 out 2026): difusão + VAE próprio (o do Qwen-Image
+      // 1 e o do Z-Image NÃO servem) + Qwen3-VL-8B como codificador do texto.
+      // Turbo (destilado): 8 passos, cfg 1 e o sigma do checkpoint. Base: ~20
+      // passos com cfg (aí o prompt negativo vale — inclusive o "sem nudez").
+      let difusao, vae, llm;
+      try {
+        difusao = baixarArquivo(URLS.difusao, "modelo de difusão");
+        vae     = baixarArquivo(URLS.vae, "VAE");
+        llm     = baixarArquivo(URLS.llm, "LLM do prompt");
+      } catch (e) { return rej(e); }
+      finalArgs = argsQwenImage({ difusao, vae, llm, texto, width, height, economico, negativo, saida });
     } else {
       let modelo;
       try { modelo = baixarModeloSD(); } catch (e) { return rej(e); }
@@ -285,6 +304,10 @@ export async function executar({ prompt, largura, altura }, contexto = {}) {
   }
   const texto = String(prompt ?? "").trim();
   if (!texto) return { erro: "descreva o que desenhar." };
+  const exigir = adulto || modeloSemFiltro();
+  if (!adulto && exigir && !visaoDisponivel()) {
+    return { erro: "geração desligada: o modelo de imagem configurado não tem filtro de segurança, e sem o modelo de visão (LLM_MODEL_VISAO) para conferir cada imagem eu não desenho." };
+  }
   if (adulto && !visaoDisponivel()) {
     return { erro: "recusado: +18 precisa do modelo de visão para conferir a imagem antes de enviar, e ele não está configurado (LLM_MODEL_VISAO)." };
   }
@@ -311,7 +334,7 @@ export async function executar({ prompt, largura, altura }, contexto = {}) {
       const limpa = await s2(png, { limitInputPixels: MAX_PIXELS })
         .jpeg({ quality: 90, mozjpeg: true })
         .toBuffer();
-      const barrada = await conferirSaida(limpa, { adulto });
+      const barrada = await conferirSaida(limpa, { adulto, exigir });
       if (barrada) return { erro: `recusado: ${barrada}.` };
       return {
         ok: true,
@@ -342,7 +365,7 @@ export async function executar({ prompt, largura, altura }, contexto = {}) {
     const limpa = await s(Buffer.from(b64, "base64"), { limitInputPixels: MAX_PIXELS })
       .jpeg({ quality: 90, mozjpeg: true })
       .toBuffer();
-    const barrada = await conferirSaida(limpa, { adulto });
+    const barrada = await conferirSaida(limpa, { adulto, exigir });
     if (barrada) return { erro: `recusado: ${barrada}.` };
 
     return {

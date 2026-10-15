@@ -6,6 +6,7 @@ import { semPingEmMassa } from "../core/seguranca.js";
 import * as extra from "./contexto-extra.js";
 import * as store from "../core/config-store.js";
 import * as imagemAdulta from "./imagem-adulta.js";
+import { tempoDeGeracaoMs } from "../core/imagem-modelo.js";
 import * as db from "../core/db.js";
 import * as memoria from "./memoria-agente.js";
 import * as comentario from "./comentario-espontaneo.js";
@@ -1252,7 +1253,7 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
         // 420s desde o Z-Image) + folga. Estava em 180s, da época do SD-Turbo: com
         // o modelo de 6B o bot desistia enquanto o gerador ainda trabalhava.
         // ×2: agora pode haver uma 2ª tentativa no modo econômico.
-        { timeoutMs: 2 * Number(process.env.IMAGEM_GERACAO_TIMEOUT_MS || 420_000) + 30_000,
+        { timeoutMs: 2 * tempoDeGeracaoMs() + 30_000,
           contexto: { imagemAdulta: imagemAdulta.liberadaAqui(serverId, canalId) } });
     } finally { retomarFundo(); }
     if (r?.anexo_base64) {

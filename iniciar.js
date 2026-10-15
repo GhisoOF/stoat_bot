@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { randomBytes } from "node:crypto";
 import { iaLigada, modoIA, MODELO_LOCAL_PADRAO } from "./modulos/core/env.js";
 import { montarConfigSwap } from "./modulos/core/llama-swap-config.js";
+import { arquivosParaBaixar, tipoDoModelo } from "./modulos/core/imagem-modelo.js";
 
 const IA_EMBUTIDA = iaLigada() && process.env.IA_EMBUTIDA !== "0";
 const VOZ_ATIVA = process.env.VOZ_ATIVA === "1";
@@ -166,14 +167,9 @@ if (!iaLigada()) {
     // problema que já resolvemos para os LLMs, agora estendido ao gerador.
     if ((process.env.IMAGEM ?? "1").trim() !== "0") {
       const SD_DIR = process.env.SD_MODELOS_DIR || "/data/modelos-sd";
-      const SD_TIPO = (process.env.SD_MODELO_TIPO || "z-image").trim().toLowerCase();
-      const urlsSD = SD_TIPO === "z-image"
-        ? [
-            ["modelo de difusão", process.env.SD_Z_DIFUSAO_URL || "https://huggingface.co/leejet/Z-Image-Turbo-GGUF/resolve/main/z_image_turbo-Q4_K.gguf"],
-            ["VAE", process.env.SD_Z_VAE_URL || "https://huggingface.co/Comfy-Org/z_image_turbo/resolve/main/split_files/vae/ae.safetensors"],
-            ["LLM do prompt", process.env.SD_Z_LLM_URL || "https://huggingface.co/unsloth/Qwen3-4B-Instruct-2507-GGUF/resolve/main/Qwen3-4B-Instruct-2507-Q4_K_M.gguf"],
-          ]
-        : [["modelo de imagem", process.env.SD_MODELO_URL || "https://huggingface.co/stabilityai/sd-turbo/resolve/main/sd_turbo.safetensors"]];
+      // as URLs saem do mesmo lugar que o gerador usa (modulos/core/imagem-modelo.js)
+      const urlsSD = arquivosParaBaixar();
+      console.info(`[INICIAR] gerador de imagem: ${tipoDoModelo()}`);
 
       const baixarArquivoSD = (rotulo, url) => new Promise((res) => {
         let nome; try { nome = url.split("/").pop().split("?")[0]; } catch { nome = "modelo"; }

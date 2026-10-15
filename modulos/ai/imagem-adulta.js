@@ -13,6 +13,12 @@
 //
 // A lista fica na configuração GLOBAL (`imagemAdulta`), não na do servidor:
 // o admin de um servidor não consegue se liberar sozinho.
+//
+// 16 out 2026 (Ghieh: "limitando tudo apenas ao meu server, no qual quero
+// remover todas as amarras do bot em chats que têm a marcação +18"): o
+// servidor que está PELO ID em `SERVIDOR`/`CHAT_SERVIDORES` é o da casa — os
+// canais NSFW dele já valem como liberados, sem `&servidores adulto`. O "*"
+// não conta: liberar tudo para todos não é escolher um servidor.
 
 import * as store from "../core/config-store.js";
 
@@ -25,6 +31,11 @@ export function servidoresLiberados() {
 export function servidorLiberado(serverId) {
   return !!serverId && servidoresLiberados().includes(serverId);
 }
+export function servidorDaCasa(serverId) {
+  const lista = (process.env.CHAT_SERVIDORES || process.env.SERVIDOR || "")
+    .split(",").map((x) => x.trim()).filter((x) => x && x !== "*");
+  return !!serverId && lista.includes(serverId);
+}
 export function definirServidores(ids) {
   const g = store.getGlobal();
   g.imagemAdulta = [...new Set(ids.filter(Boolean))];
@@ -32,14 +43,15 @@ export function definirServidores(ids) {
   return g.imagemAdulta;
 }
 
-// O chat anota o canal a cada conversa (a flag `nsfw` vem do Stoat).
+// O chat anota o canal a cada conversa (a flag `nsfw` vem do Stoat). Um
+// servidor inteiro marcado como NSFW no Stoat conta para todos os canais dele.
 export function lembrarCanal(canal) {
   const id = canal?.id ?? canal?._id;
-  if (id) nsfwDoCanal.set(id, canal?.nsfw === true);
+  if (id) nsfwDoCanal.set(id, canal?.nsfw === true || canal?.server?.nsfw === true);
 }
 export function canalNsfw(canalId) { return nsfwDoCanal.get(canalId) === true; }
 
-// Liberado AQUI = servidor na lista do dono E canal NSFW.
+// Liberado AQUI = (servidor na lista do dono OU o servidor da casa) E canal NSFW.
 export function liberadaAqui(serverId, canalId) {
-  return servidorLiberado(serverId) && canalNsfw(canalId);
+  return (servidorLiberado(serverId) || servidorDaCasa(serverId)) && canalNsfw(canalId);
 }

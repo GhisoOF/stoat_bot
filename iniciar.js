@@ -96,7 +96,7 @@ if (iaLigada() && !conversaLigada()) {
 }
 if (!iaLigada()) {
   console.info("[INICIAR] IA=0 — módulos de IA desligados (nem serviço, nem modelo).");
-} else if (modoIA() === "local" && (process.env.MODELO_VISAO || process.env.LLM_MODEL_VISAO)) {
+} else if (modoIA() === "local" && (process.env.MODELO_VISAO || process.env.LLM_MODEL_VISAO || process.env.MODELO_MODERACAO)) {
   // Dois modelos (conversa + visão) → llama-swap: ele serve os dois na mesma
   // API OpenAI, carregando cada um por demanda. O bot escolhe por papel
   // (LLM_MODEL para conversa, LLM_MODEL_VISAO para imagens).
@@ -104,12 +104,15 @@ if (!iaLigada()) {
     const cache = process.env.LLAMA_CACHE || "/data/modelos";
     try { mkdirSync(cache, { recursive: true }); } catch {}
     const conversa = process.env.MODELO || MODELO_LOCAL_PADRAO;
-    const visao = process.env.MODELO_VISAO || process.env.LLM_MODEL_VISAO;
+    const visao = process.env.MODELO_VISAO || process.env.LLM_MODEL_VISAO || null;
+    // modelo pequeno só para julgar a moderação (fica carregado junto da conversa)
+    const moderacao = (process.env.MODELO_MODERACAO || "").trim() || null;
     const ngl = process.env.LLAMA_NGL || "999";
     const ctx = process.env.LLAMA_CTX || "8192";
     // Nomes curtos e estáveis: é por eles que o bot pede cada modelo.
     process.env.LLM_MODEL = process.env.LLM_MODEL || "conversa";
-    process.env.LLM_MODEL_VISAO = "visao";
+    if (visao) process.env.LLM_MODEL_VISAO = "visao";
+    if (moderacao) process.env.LLM_MODEL_JUIZ = "moderacao";
 
     // ── Download dos modelos NO BOOT, antes de tudo ─────────────────────
     // Antes, o download era refém do primeiro pedido: o llama-swap só ligava
@@ -162,7 +165,7 @@ if (!iaLigada()) {
         } catch {}
       }, 3000);
     });
-    for (const m of [...new Set([conversa, visao])]) await baixarModelo(m);
+    for (const m of [...new Set([conversa, visao, moderacao].filter(Boolean))]) await baixarModelo(m);
 
     // ── Pré-download dos modelos de GERAÇÃO DE IMAGEM (mesma lógica dos de
     // conversa acima): sem isto, o download acontecia dentro do primeiro
@@ -214,13 +217,13 @@ if (!iaLigada()) {
     // IA_TTL: quanto tempo o modelo fica na memória sem uso (s). Padrão 1 h; no
     // modo enxuto (CONVERSA=0) 5 min — a RAM/GPU volta para o resto da máquina.
     const ttl = Number(process.env.IA_TTL) > 0 ? Number(process.env.IA_TTL) : 3600;
-    writeFileSync(cfg, montarConfigSwap({ conversa, visao, comando, ttlConversa: ttl, ttlVisao: Math.min(600, ttl) }));
-    console.info(`[INICIAR] IA local (llama-swap): conversa=${conversa} · visão=${visao === conversa ? "o mesmo modelo (apelido, sem 2ª cópia)" : visao}`);
+    writeFileSync(cfg, montarConfigSwap({ conversa, visao, moderacao, comando, ttlConversa: ttl, ttlVisao: Math.min(600, ttl) }));
+    console.info(`[INICIAR] IA local (llama-swap): conversa=${conversa} · visão=${!visao ? "nenhuma" : visao === conversa ? "o mesmo modelo (apelido, sem 2ª cópia)" : visao}${moderacao ? ` · moderação=${moderacao === conversa ? "o mesmo modelo" : `${moderacao} (fica carregado junto)`}` : ""}`);
     subirBin("llama-swap", SWAP_BIN,
       ["-config", cfg, "-listen", `127.0.0.1:${process.env.LLAMA_PORTA || "8082"}`],
       { LLAMA_CACHE: cache });
   } else {
-    console.error(`[INICIAR] MODELO_VISAO definido mas ${SWAP_BIN} não existe nesta imagem — seguindo com um modelo só (sem visão).`);
+    console.error(`[INICIAR] MODELO_VISAO/MODELO_MODERACAO definido mas ${SWAP_BIN} não existe nesta imagem — seguindo com um modelo só (sem visão nem modelo de moderação).`);
   }
 } else if (modoIA() === "local") {
   // Modo local: llama-server embutido baixa o modelo do Hugging Face no

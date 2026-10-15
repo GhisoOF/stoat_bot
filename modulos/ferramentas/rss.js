@@ -5,6 +5,7 @@ import { ULID } from "../core/ids.js";
 import { canalDeOutroServidor } from "../moderacao/pertence.js";
 import * as log from "../core/log.js";
 import { tr, lingua } from "../core/i18n.js";
+import { servidorNaLista } from "../core/env.js";
 
 let resumirIA = null;
 export function configurarResumo(fn) { resumirIA = fn; }
@@ -145,10 +146,14 @@ export async function rodarCiclo(serverId, ctx, { forcado = false } = {}) {
   const cicloEn = config?.language === "en";
   const agora = new Date().toLocaleString(cicloEn ? "en-US" : "pt-BR", { timeZone: process.env.TZ || "UTC" });
 
-  if (relatorioIA) {
+  // A parte de IA do RSS (o relatório e o comentário da Judy) só nos servidores
+  // da conversa (SERVIDOR/CHAT_SERVIDORES; 16 out 2026). Nos outros, a lista
+  // de notícias sai do mesmo jeito, sem modelo.
+  const iaNoRss = servidorNaLista("CHAT_SERVIDORES", serverId);
+  if (relatorioIA && iaNoRss) {
     try { await publicarRelatorio(canal, novos, { lang: cicloEn ? "en" : "pt", agora, serverId }); }
     catch (e) { console.error("[RSS] relatório falhou:", e.message); }
-  } else if (resumirIA) {
+  } else if (resumirIA && iaNoRss) {
     const grupos = new Map();
     for (const it of novos) {
       const cat = it.categoria || "Geral";

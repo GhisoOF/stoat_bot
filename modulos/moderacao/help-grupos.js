@@ -1,5 +1,5 @@
 
-import { IA_TAG } from "./help-arvore.js";
+import { IA_TAG, MODIA_TAG } from "./help-arvore.js";
 
 // nome digitado → chave do grupo (aceita PT e EN, novos e antigos)
 export const ALIAS_GRUPO = {
@@ -56,19 +56,19 @@ function gruposPT(P) {
       resumo: "spam, golpe, links, invasão e punições",
       linhas: [
         "**Automático** *(ManagePermissions)*",
-        `\`${P}automod\` — os 4 grupos: antispam, antiruido, antilink, sentinela — e as partes de cada um`,
+        `\`${P}automod\` — os 4 grupos: antispam, antiruido, antilink, sentinela`,
         `\`${P}automod antispam off\` · \`${P}automod off\` — um grupo · tudo _(começa desligado)_`,
-        `\`${P}automod sentinela\` — o que **julga** conteúdo (golpe, +18, ódio, imagens, temas, foto de perfil)`,
+        `\`${P}automod sentinela\` — o que **julga** conteúdo (golpe, +18, ódio, imagem, tema, avatar)`,
         `\`${P}automod punicao modo <avisar|apagar|confirmar|acumular|banir>\` — o que acontece com quem infringe`,
-        `\`${P}automod punicao escada\` — os degraus do modo \`acumular\` (aviso → mute → ban)`,
-        `\`${P}banglobal <off|avisar|imediato|consenso>\` — o que fazer com quem já foi banido em outro servidor *(BanMembers)*`,
+        `\`${P}automod punicao escada\` — os degraus do \`acumular\` (aviso → mute → ban)`,
+        `\`${P}banglobal <off|avisar|imediato|consenso>\` — quem já foi banido em outro servidor *(BanMembers)*`,
         `\`${P}automod whitelist\` · \`${P}automod blocklist\` — convites permitidos · domínios proibidos`,
-        `\`${P}modia\` — moderação por IA, com critérios em texto livre *(ManageServer)*` + IA_TAG,
+        `\`${P}modia\` — moderação por IA, critérios em texto livre *(ManageServer)*` + MODIA_TAG,
         "",
         "**Manual**",
         `\`${P}warn @pessoa [motivo]\` — aviso (conta na escada) *(ManageMessages)*`,
         `\`${P}warn lista [@pessoa]\` · \`${P}warn limpar @pessoa\` — ver e zerar avisos`,
-        `\`${P}silenciar @pessoa <tempo> [motivo]\` — silêncio nativo do Stoat por um tempo *(TimeoutMembers)*`,
+        `\`${P}silenciar @pessoa <tempo> [motivo]\` — silêncio nativo do Stoat *(TimeoutMembers)*`,
         `\`${P}kick @pessoa [motivo]\` · \`${P}ban @pessoa [motivo]\``,
         `\`${P}limpar <n> [@pessoa]\` — apaga mensagens *(ManageMessages)*`,
         "",
@@ -198,7 +198,7 @@ function gruposPT(P) {
         `\`${P}automod debug on|off\` — log detalhado do automod (global)`,
         `\`${P}banglobal revisar\` — revisa a lista global`,
         "",
-        "_A IA (\`chat\`, \`modia\`, comentário espontâneo) roda só nos servidores de `CHAT_SERVIDORES`._" + IA_TAG,
+        "_A IA de conversa (\`chat\`, comentário espontâneo, gerar imagem, resumo do RSS) roda só nos servidores de `SERVIDOR`; nos outros fica só a moderação por IA (\`modia\`, temas proibidos, imagens e fotos de perfil)._" + IA_TAG,
       ],
     },
   };
@@ -233,14 +233,14 @@ function gruposEN(P) {
       resumo: "spam, scams, links, raids and punishments",
       linhas: [
         "**Automatic** *(ManagePermissions)*",
-        `\`${P}automod\` — the 4 groups: antispam, antiruido, antilink, sentinela — and each one's parts`,
+        `\`${P}automod\` — the 4 groups: antispam, antiruido, antilink, sentinela`,
         `\`${P}automod antispam off\` · \`${P}automod off\` — one group · everything _(starts off)_`,
-        `\`${P}automod sentinela\` — what **judges** content (scams, NSFW, hate, images, topics, profile pictures)`,
+        `\`${P}automod sentinela\` — what **judges** content (scams, NSFW, hate, images, topics, avatars)`,
         `\`${P}automod punicao modo <avisar|apagar|confirmar|acumular|banir>\` — what happens to offenders`,
         `\`${P}automod punicao escada\` — the steps of \`acumular\` mode (warning → mute → ban)`,
-        `\`${P}banglobal <off|avisar|imediato|consenso>\` — what to do with people banned on other servers *(BanMembers)*`,
+        `\`${P}banglobal <off|avisar|imediato|consenso>\` — people banned on other servers *(BanMembers)*`,
         `\`${P}automod whitelist\` · \`${P}automod blocklist\` — allowed invites · forbidden domains`,
-        `\`${P}modia\` — AI moderation with free-text criteria *(ManageServer)*` + IA_TAG,
+        `\`${P}modia\` — AI moderation with free-text criteria *(ManageServer)*` + MODIA_TAG,
         "",
         "**Manual**",
         `\`${P}warn @user [reason]\` — warning (counts on the ladder) *(ManageMessages)*`,
@@ -375,7 +375,7 @@ function gruposEN(P) {
         `\`${P}automod debug on|off\` — verbose automod log (global)`,
         `\`${P}banglobal revisar\` — reviews the global list`,
         "",
-        "_The AI (\`chat\`, \`modia\`, spontaneous comments) only runs on the servers in `CHAT_SERVIDORES`._" + IA_TAG,
+        "_The chat AI (\`chat\`, spontaneous comments, image generation, RSS digest) only runs on the servers in `SERVIDOR`; elsewhere only AI moderation stays (\`modia\`, banned topics, images and profile pictures)._" + IA_TAG,
       ],
     },
   };

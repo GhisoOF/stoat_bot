@@ -1,6 +1,8 @@
 
 // Precisa bater com a constante do geral.js (marca invisível).
 export const IA_TAG = "\u200b[ia]";
+// linha do &modia: a moderação por IA aparece também fora dos servidores da conversa
+export const MODIA_TAG = "\u200b[mia]";
 
 // Monta a árvore completa. `P` é o prefixo do bot.
 export function arvoreSubtopicos(P, lang = "pt") {

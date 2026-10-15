@@ -45,9 +45,15 @@ export function prompProibido(prompt, { adulto = false } = {}) {
   if (SEXUAL.test(p) && PESSOA_REAL.test(p)) {
     return "nudez ou conteúdo sexual de pessoa real identificável é deepfake — recusado.";
   }
+  if (GORE.test(p) && PESSOA_REAL.test(p)) {
+    return "violência explícita com pessoa real identificável — recusado.";
+  }
   if (SEXUAL.test(p) && !adulto) {
     return "conteúdo +18 não está liberado aqui — só em servidor liberado pelo dono do bot, e só em canal marcado como NSFW.";
   }
+  // canal +18 liberado (16 out 2026, "sem amarras"): gore e símbolos saem —
+  // ficção sombria é do canal. Os limites acima continuam valendo.
+  if (adulto) return null;
   if (GORE.test(p)) return "gore explícito não — posso fazer algo sombrio ou sinistro sem vísceras.";
   if (ODIO.test(p)) return "símbolos de ódio não saem daqui.";
   return null;
@@ -55,7 +61,7 @@ export function prompProibido(prompt, { adulto = false } = {}) {
 
 const NEGATIVO_FIXO = "nsfw, nude, naked, child, loli, underage, gore, dismemberment, watermark, text, low quality, deformed";
 // no servidor liberado: tira só o "sem nudez"; criança/menor continua proibido
-const NEGATIVO_ADULTO = "child, children, kid, loli, shota, underage, teen, young-looking, petite body, school uniform, gore, dismemberment, watermark, text, low quality, deformed";
+const NEGATIVO_ADULTO = "child, children, kid, loli, shota, underage, teen, young-looking, petite body, school uniform, watermark, text, low quality, deformed";
 
 // ── A imagem pronta é conferida pelo modelo de visão (15 out 2026) ──────────
 // O prompt sozinho não basta: o Z-Image (o padrão) nem usa prompt negativo, e

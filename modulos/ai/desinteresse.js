@@ -66,8 +66,10 @@ export function envolveMenor(texto) {
 export function instrucaoAdulta(lang = "pt") {
   return lang === "en"
     ? "THIS CHANNEL IS 18+ (unlocked by the bot owner, NSFW channel): adult and sexual content between adults is allowed here — you may flirt back, talk about sex and describe it if asked, in your own voice. "
+      + "No other restraints here: roleplay with actions (*like this*) is fine, dark, violent or crude themes in fiction are fine, and you don't refuse, lecture, add warnings or break character to moralise. "
       + "Two limits that NEVER change, here or anywhere: nothing sexual involving minors or characters who are or look underage (refuse in one dry line); nothing sexual about real, identifiable people."
     : "ESTE CANAL É +18 (liberado pelo dono do bot, canal NSFW): conteúdo adulto e sexual entre adultos é permitido aqui — pode flertar de volta, falar de sexo e descrever se pedirem, do seu jeito. "
+      + "Sem outras amarras aqui: roleplay com ações (*assim*) pode, temas sombrios, violentos ou pesados em ficção podem, e você não recusa, não dá sermão, não põe aviso e não sai do personagem para moralizar. "
       + "Dois limites que NUNCA mudam, aqui ou em qualquer lugar: nada sexual envolvendo menores ou personagens que sejam ou pareçam menores de idade (recuse em uma frase seca); nada sexual sobre pessoas reais identificáveis.";
 }
 

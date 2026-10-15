@@ -1,4 +1,4 @@
-import { servidorPermitido as temIA } from "../ai/chat.js";
+import { servidorPermitido as temIA, comandoIAPermitido } from "../ai/chat.js";
 
 import * as db from "../core/db.js";
 import { EVENTOS } from "../core/log.js";
@@ -199,6 +199,11 @@ export async function cmdConfig(message, args, ctx) {
         T("**🤖 IA (Judy)**", "**🤖 AI (Judy)**"),
         `${T("Conversa livre:", "Free chat:")} ${config.chatLivre?.canais?.length ? config.chatLivre.canais.map((c) => `<#${c}>`).join(", ") + ` (${T("modo", "mode")} \`${config.chatLivre.modo ?? "relevante"}\`)` : T("_(desligada)_", "_(off)_")}`,
         `${T("Comentários espontâneos:", "Spontaneous comments:")} ${config.comentarioEspontaneo?.canalId ? `<#${config.comentarioEspontaneo.canalId}> (${T("até", "up to")} ${config.comentarioEspontaneo.porDia ?? 4}/${T("dia", "day")})` : T("_(desligados)_", "_(off)_")}`,
+        `${T("Moderação por IA:", "AI moderation:")} ${config.moderacaoIA?.ativa ? T("🟢 ativa", "🟢 active") : T("🔴 desligada", "🔴 off")}${config.moderacaoIA?.criterios ? "" : T(" _(sem critérios)_", " _(no criteria)_")}`,
+        "",
+      ] : comandoIAPermitido("modia", serverId) ? [
+        // fora dos servidores da conversa, só a moderação por IA (16 out 2026)
+        T("**🤖 Moderação por IA**", "**🤖 AI moderation**"),
         `${T("Moderação por IA:", "AI moderation:")} ${config.moderacaoIA?.ativa ? T("🟢 ativa", "🟢 active") : T("🔴 desligada", "🔴 off")}${config.moderacaoIA?.criterios ? "" : T(" _(sem critérios)_", " _(no criteria)_")}`,
         "",
       ] : []),

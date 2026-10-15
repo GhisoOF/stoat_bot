@@ -46,7 +46,8 @@ As variáveis que importam:
 |---|---|
 | `BOT_TOKEN` | token do bot na plataforma |
 | `DONO` | ID do **seu perfil** — ganha os comandos administrativos do bot |
-| `SERVIDOR` | ID do servidor onde a **IA** funciona (`*` = em todos; vazio = IA em lugar nenhum) |
+| `SERVIDOR` | ID do servidor onde a **IA** funciona (`*` = em todos; vazio = IA em lugar nenhum). Fora dele fica **só a moderação por IA** (temas proibidos, visão de imagens e fotos de perfil, `&modia`); chat, geração de imagem e resumo do RSS ficam só nele. Posto **pelo ID**, é o servidor da casa: os canais NSFW dele saem das travas sem `&servidores adulto` (ver abaixo). *Chat AI only here; elsewhere, AI moderation only.* |
+| `MODELO_MODERACAO` | modelo **pequeno** só para o juiz da moderação (temas proibidos, `&modia`), ex.: `ggml-org/gemma-3-1b-it-GGUF:Q4_K_M` (~0,8 GB). No modo local fica carregado junto do de conversa (grupo sem troca no llama-swap). *Small model for the moderation judge, kept loaded next to the chat model.* |
 | `IA` | `0` desliga todos os módulos de IA — o bot de moderação segue completo |
 | `CONVERSA` | `0` = **modo enxuto**: a IA fica só para moderação (temas proibidos, visão de imagens e fotos de perfil), o relatório horário e o RSS. Sem chat, `&modia`, memória, comentários e geração de imagem; o modelo usa contexto 4096 e sai da memória após 5 min parado (`IA_TTL`). Com `BUSCA_WEB=0`, o SearXNG nem sobe. *Lean mode: AI only for moderation, the log report and RSS.* |
 | `IA_MODO` | `local` roda um modelo na sua máquina (o **MODELO** é baixado do Hugging Face no primeiro arranque e guardado no volume); `online` usa uma plataforma via `TOKEN_IA` (padrão: OpenRouter) |
@@ -170,8 +171,17 @@ diz exatamente o que clicar.
   trava do assunto sexual: a Judy conversa sobre conteúdo adulto em vez do
   "Não."/"Passo." — com os mesmos dois limites fixos (menores, pessoas reais),
   conferidos na pergunta e na resposta.
+  **Sem amarras no servidor da casa:** o servidor posto pelo ID em `SERVIDOR`
+  já conta como liberado (sem `&servidores adulto`), e nos canais NSFW dele —
+  ou em todos, se o servidor inteiro estiver marcado como NSFW no Stoat — a
+  Judy também larga o "sem roleplay" e o deboche de "tentativa de quebrar", e
+  a geração de imagem larga as travas de gore e de símbolos. Ficam só os
+  limites fixos: nada sexual com menores e nada sexual (nem violência
+  explícita) com pessoa real identificável.
   *+18 images are off everywhere; the bot owner unlocks servers one by one
-  (`&servidores adulto add`), and only NSFW channels there get them.*
+  (`&servidores adulto add`), and only NSFW channels there get them. The
+  server listed by ID in `SERVIDOR` is unlocked by default, and its NSFW
+  channels drop every restraint except the fixed limits (minors, real people).*
 - **Painel do dono do bot** (`&servidores`, só `SUPER_ADMINS`, fora do `&help`):
   onde o bot está, com membros e ritmo de mensagens. E o **relatório horário**
   (`&servidores relatorio canal #canal`): a cada hora cheia, banimentos,
@@ -502,10 +512,16 @@ qualquer servidor) exigem estar em `DONO`/`SUPER_ADMINS`.
 
 ## A IA por dentro
 
-- **Gating explícito:** a IA só existe nos servidores de `SERVIDOR`
-  (`CHAT_SERVIDORES`). Fora deles, os comandos de IA **não aparecem** nem no
-  `&help` — o bot se apresenta como um bot de moderação comum. `IA=0` desliga
-  tudo globalmente.
+- **Gating explícito:** a IA de conversa só existe nos servidores de
+  `SERVIDOR` (`CHAT_SERVIDORES`). Fora deles, o `&chat` **não aparece** nem no
+  `&help` — o bot se apresenta como um bot de moderação comum — e da IA fica
+  só a moderação: temas proibidos, visão de imagens e fotos de perfil, e o
+  `&modia`. O RSS sai como lista, sem o resumo da Judy. `IA=0` desliga tudo
+  globalmente. *Outside `SERVIDOR`, only AI moderation runs.*
+- **Modelo de moderação:** `MODELO_MODERACAO` põe um modelo pequeno só para o
+  juiz (temas proibidos, `&modia`). No modo local ele entra no llama-swap como
+  `moderacao`, num grupo `swap: false · exclusive: false · persistent: true` —
+  fica na memória ao lado da conversa, sem uma derrubar a outra.
 - **Arquitetura:** o bot conversa com um serviço de ferramentas embutido
   (`ia-servico/`, tool-calling: calcular, ler código do GitHub, buscar na web
   pelo SearXNG que sobe junto, RSS), e esse serviço fala com **qualquer LLM de

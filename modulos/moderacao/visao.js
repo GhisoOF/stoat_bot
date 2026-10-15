@@ -6,7 +6,7 @@
 // MEMBRO, STAFF e DONO (do bot) — e cada uma só vê os recursos que o servidor
 // tem liberados (IA, voz e música).
 
-import { servidorPermitido as temIA } from "../ai/chat.js";
+import { servidorPermitido as temIA, comandoIAPermitido } from "../ai/chat.js";
 import { servidorPermitido as temVoz } from "../ferramentas/tts.js";
 
 export const NIVEIS = { membro: 0, staff: 1, dono: 2 };
@@ -21,8 +21,10 @@ export async function quemVe(message, ctx) {
     } catch {}
   }
   const ia = (() => { try { return temIA(ctx.serverId); } catch { return false; } })();
+  // o &modia é moderação: aparece também fora dos servidores da conversa (16 out 2026)
+  const modIA = (() => { try { return comandoIAPermitido("modia", ctx.serverId); } catch { return false; } })();
   const voz = (() => { try { return temVoz(ctx.serverId); } catch { return false; } })();
-  return { nivel: dono ? "dono" : staff ? "staff" : "membro", ia, voz };
+  return { nivel: dono ? "dono" : staff ? "staff" : "membro", ia, voz, modIA };
 }
 
 // Nível de cada comando (e das partes que fogem do padrão do comando).
@@ -58,7 +60,7 @@ export function recursoDoComando(cmd) {
 }
 export function podeVer(visao, cmd, sub = "", sub2 = "") {
   const r = recursoDoComando(cmd);
-  if (r === "ia" && !visao.ia) return false;
+  if (r === "ia" && !(cmd === "modia" ? (visao.modIA ?? visao.ia) : visao.ia)) return false;
   if (r === "voz" && !visao.voz) return false;
   return NIVEIS[visao.nivel] >= NIVEIS[nivelDoComando(cmd, sub, sub2)];
 }

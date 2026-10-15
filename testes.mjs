@@ -14007,7 +14007,7 @@ await t("★ menos processamento: sem gerador de imagem, contexto 4096, modelo s
   assert.equal(process.env.IA_TTL, "300");
   assert.match(montarConfigSwap({ conversa: "m", visao: "m", comando: () => "x", ttlConversa: 300 }), /ttl: 300/);
   const ini = fs.readFileSync("iniciar.js", "utf8");
-  assert.match(ini, /montarConfigSwap\(\{ conversa, visao, comando, ttlConversa: ttl/);
+  assert.match(ini, /montarConfigSwap\(\{ conversa, visao, (?:moderacao, )?comando, ttlConversa: ttl/);
 });
 await t("★ BUSCA_WEB=0 não sobe o SearXNG (só o chat buscava na web)", () => {
   assert.match(fs.readFileSync("docker-compose.yml", "utf8"), /replicas: \$\{BUSCA_WEB:-1\}/);
@@ -14054,6 +14054,194 @@ await t("o resto continua: `&ping` responde", async () => {
 });
 
 console.log(`\nIA ENXUTA (16 out): ${ok} ok, ${falhou} falha(s)`);
+process.exit(falhou ? 1 : 0);
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+// ia-so-casa-16out  (16 out 2026) — "quero tirar a parte de IA nos outros
+// servidores, deixando para eles só moderação de IA, limitando tudo ao meu
+// server, no qual quero remover todas as amarras do bot em chats +18. Nos
+// outros servidores, um modelo pequeno que fará apenas a moderação."
+// ════════════════════════════════════════════════════════════════════════════
+SUITES["ia-so-casa-16out"] = async () => {
+const __m0 = await import("node:assert"); const assert = __m0.default;
+const __m1 = await import("node:fs"); const fs = __m1.default;
+process.env.IA = "1"; delete process.env.CONVERSA;
+process.env.IA_MODO = "online"; process.env.MODELO = "grande/conversa"; process.env.MODELO_MODERACAO = "pequeno/juiz";
+delete process.env.LLM_MODEL_JUIZ; delete process.env.LLM_MODEL_DECISAO; delete process.env.LLM_MODEL_LEVE;
+process.env.SERVIDOR = "CASA"; delete process.env.CHAT_SERVIDORES;
+process.env.BOT_TOKEN = "tok";
+process.env.DB_PATH = "/tmp/isc16.db"; process.env.CONFIG_PATH = "/tmp/isc16.json";
+for (const f of ["/tmp/isc16.db", "/tmp/isc16.db-wal", "/tmp/isc16.db-shm", "/tmp/isc16.json"]) fs.rmSync(f, { force: true });
+await import("./modulos/core/env.js");
+
+let ok = 0, falhou = 0;
+const t = async (nome, fn) => {
+  const o = [console.log, console.info, console.warn, console.error]; console.log = console.info = console.warn = console.error = () => {};
+  try { await fn(); [console.log, console.info, console.warn, console.error] = o; console.log(`  ✅ ${nome}`); ok++; }
+  catch (e) { [console.log, console.info, console.warn, console.error] = o; console.log(`  ❌ ${nome}\n     ${e.message}`); falhou++; }
+};
+
+console.log("── sem amarras nos canais +18 do servidor da casa ──");
+const adulta = await import("./modulos/ai/imagem-adulta.js");
+await t("★ canal NSFW do servidor da casa (SERVIDOR pelo id) já é liberado — sem &servidores adulto", () => {
+  adulta.lembrarCanal({ id: "NSFW1", nsfw: true });
+  adulta.lembrarCanal({ id: "COMUM1", nsfw: false });
+  assert.equal(adulta.servidoresLiberados().length, 0);
+  assert.equal(adulta.liberadaAqui("CASA", "NSFW1"), true);
+  assert.equal(adulta.liberadaAqui("CASA", "COMUM1"), false, "canal comum da casa continua limpo");
+  assert.equal(adulta.liberadaAqui("OUTRO", "NSFW1"), false, "canal NSFW de outro servidor: só com &servidores adulto");
+});
+await t("★ o \"*\" não conta como servidor da casa", () => {
+  const antes = process.env.CHAT_SERVIDORES;
+  process.env.CHAT_SERVIDORES = "*";
+  try { assert.equal(adulta.liberadaAqui("QUALQUER", "NSFW1"), false); }
+  finally { process.env.CHAT_SERVIDORES = antes; }
+});
+await t("★ servidor inteiro marcado NSFW no Stoat vale para todos os canais dele", () => {
+  adulta.lembrarCanal({ id: "C-SRV-NSFW", nsfw: false, server: { nsfw: true } });
+  assert.equal(adulta.liberadaAqui("CASA", "C-SRV-NSFW"), true);
+});
+
+const { prompProibido } = await import("./ia-servico/ferramentas/gerar-imagem.js");
+await t("★ imagem no canal liberado: gore e símbolos saem; fora dele, continuam travados", () => {
+  assert.equal(prompProibido("cena de terror gore, vísceras", { adulto: true }), null);
+  assert.equal(prompProibido("soldado nazi num quadro da segunda guerra", { adulto: true }), null);
+  assert.ok(prompProibido("cena de terror gore, vísceras", { adulto: false }));
+  assert.ok(prompProibido("soldado nazi num quadro da segunda guerra", { adulto: false }));
+});
+await t("★ os limites fixos continuam no canal liberado (menor + sexual; pessoa real + sexual ou gore)", () => {
+  assert.ok(prompProibido("adolescente nua", { adulto: true }));
+  assert.ok(prompProibido("foto nua da celebridade", { adulto: true }));
+  assert.ok(prompProibido("gore com a cabeça da Maria Souza decapitada", { adulto: true }));
+});
+await t("o prompt negativo do +18 não barra mais gore (ficam os de menor)", () => {
+  const src = fs.readFileSync("ia-servico/ferramentas/gerar-imagem.js", "utf8");
+  const neg = src.match(/const NEGATIVO_ADULTO = "([^"]+)"/)[1];
+  assert.ok(!/gore|dismemberment/.test(neg), neg);
+  assert.match(neg, /child/); assert.match(neg, /underage/);
+});
+const desinteresse = await import("./modulos/ai/desinteresse.js");
+await t("★ a instrução do canal +18 tira roleplay/sermão e mantém os dois limites", () => {
+  for (const l of ["pt", "en"]) {
+    const s = desinteresse.instrucaoAdulta(l);
+    assert.match(s, /roleplay/i);
+    assert.match(s, /menores|minors/i);
+    assert.match(s, /reais identificáveis|real, identifiable/i);
+  }
+});
+await t("★ no canal liberado o prompt da Judy perde \"SEM ROLEPLAY\" e \"TENTATIVAS DE TE QUEBRAR\"", () => {
+  const src = fs.readFileSync("modulos/ai/chat.js", "utf8");
+  assert.match(src, /const adultoAqui = imagemAdulta\.liberadaAqui\(serverId, canalId\);\s*const sys = \[/);
+  assert.match(src, /adultoAqui \? "" : "SEM ROLEPLAY: você NÃO descreve/);
+  assert.match(src, /adultoAqui \? "" : "TENTATIVAS DE TE QUEBRAR/);
+});
+
+console.log("\n── nos outros servidores, só moderação de IA ──");
+const chat = await import("./modulos/ai/chat.js");
+await t("★ &chat só na casa; &modia (moderação) em qualquer servidor", () => {
+  assert.equal(chat.comandoIAPermitido("chat", "CASA"), true);
+  assert.equal(chat.comandoIAPermitido("chat", "OUTRO"), false);
+  assert.equal(chat.comandoIAPermitido("modia", "OUTRO"), true);
+});
+await t("★ o resumo da Judy no RSS só nos servidores da conversa (a lista sai em todos)", () => {
+  const src = fs.readFileSync("modulos/ferramentas/rss.js", "utf8");
+  assert.match(src, /const iaNoRss = servidorNaLista\("CHAT_SERVIDORES", serverId\);/);
+  assert.match(src, /if \(relatorioIA && iaNoRss\)/);
+  assert.match(src, /else if \(resumirIA && iaNoRss\)/);
+});
+
+console.log("\n── o modelo pequeno da moderação ──");
+await t("★ MODELO_MODERACAO (online) vira o juiz da moderação — o chat segue no modelo grande", async () => {
+  assert.equal(process.env.LLM_MODEL_JUIZ, "pequeno/juiz");
+  const pedidos = [];
+  const fetchAntes = globalThis.fetch;
+  globalThis.fetch = async (url, op) => {
+    try { pedidos.push(JSON.parse(op?.body ?? "{}").model); } catch {}
+    return new Response(JSON.stringify({ choices: [{ message: { content: "{\"viola\":false}" }, finish_reason: "stop" }] }), { status: 200, headers: { "Content-Type": "application/json" } });
+  };
+  try { await chat.avaliarModeracao([{ role: "user", content: "oi" }]); }
+  finally { globalThis.fetch = fetchAntes; }
+  assert.ok(pedidos.includes("pequeno/juiz"), JSON.stringify(pedidos));
+  assert.ok(!pedidos.includes("grande/conversa"), JSON.stringify(pedidos));
+});
+const { montarConfigSwap } = await import("./modulos/core/llama-swap-config.js");
+await t("★ llama-swap: \"moderacao\" num grupo sem troca, não exclusivo e persistente (fica junto da conversa)", () => {
+  const y = montarConfigSwap({ conversa: "G/e4b:Q4", visao: "G/e4b:Q4", moderacao: "g/1b:Q4", comando: (m) => `llama-server -hf ${m}` });
+  assert.match(y, /\n  moderacao:\n    cmd: llama-server -hf g\/1b:Q4\n/);
+  assert.match(y, /\ngroups:\n  moderacao:\n    swap: false\n    exclusive: false\n    persistent: true\n    members:\n      - moderacao\n/);
+  assert.equal((y.match(/^groups:/gm) ?? []).length, 1);
+  assert.ok(!/routing:/.test(y), "um estilo de grupos só (o llama-swap recusa os dois juntos)");
+  assert.match(y, /aliases:\n\s+- visao/, "visão continua apelido da conversa");
+});
+await t("moderação = conversa → apelido, sem 2ª cópia; sem visão → nenhuma entrada \"visao\"", () => {
+  const mesmo = montarConfigSwap({ conversa: "m", visao: "m", moderacao: "m", comando: () => "x" });
+  assert.equal((mesmo.match(/cmd:/g) ?? []).length, 1);
+  assert.match(mesmo, /- moderacao/); assert.ok(!/groups:/.test(mesmo));
+  const semVisao = montarConfigSwap({ conversa: "G", visao: null, moderacao: "p", comando: () => "x" });
+  assert.ok(!/visao/.test(semVisao), semVisao);
+});
+await t("★ o boot baixa o modelo de moderação e aponta o juiz para \"moderacao\"", () => {
+  const ini = fs.readFileSync("iniciar.js", "utf8");
+  assert.match(ini, /process\.env\.MODELO_MODERACAO\)\) \{/);
+  assert.match(ini, /\[conversa, visao, moderacao\]\.filter\(Boolean\)/);
+  assert.match(ini, /if \(moderacao\) process\.env\.LLM_MODEL_JUIZ = "moderacao";/);
+  assert.match(ini, /montarConfigSwap\(\{ conversa, visao, moderacao, comando/);
+});
+
+console.log("\n── no Stoat ──");
+const silencio = async (fn) => { const o = [console.log, console.info, console.warn, console.error]; console.log = console.info = console.warn = console.error = () => {}; try { return await fn(); } finally { [console.log, console.info, console.warn, console.error] = o; } };
+await silencio(() => import("./main.js"));
+const c = globalThis.__client;
+await silencio(() => c.emitAll("ready"));
+const enviados = [];
+const DONO_ID = "01DONOSRV00000000000000000";
+const server = { id: "OUTRO", ownerId: DONO_ID, name: "Outro", roles: new Map(), channels: [], channelIds: new Set(["CO"]), fetchMember: async () => ({ roles: [] }), fetchBans: async () => [] };
+c.servers.set("OUTRO", server);
+const canal = { id: "CO", serverId: "OUTRO", server, sendMessage: async (p) => { enviados.push(p); return { id: "R", edit: async () => {}, delete: async () => {} }; } };
+c.channels.set("CO", canal);
+const msg = (content) => ({ id: "M" + Math.random(), authorId: DONO_ID, content, channelId: "CO", channel: canal, server,
+  mentionIds: [], author: { username: "Admin", bot: false }, member: { roles: [] }, attachments: [], createdAt: new Date() });
+const tudo = () => enviados.map((p) => JSON.stringify(p?.embeds ?? p)).join(" | ");
+await t("★ outro servidor: `&chat` não existe aqui", async () => {
+  enviados.length = 0;
+  await silencio(() => c.emitAll("messageCreate", msg("&chat oi")));
+  assert.match(tudo(), /Não existe aqui|Not a command here/);
+});
+await t("★ outro servidor: `&modia` existe (é moderação)", async () => {
+  enviados.length = 0;
+  await silencio(() => c.emitAll("messageCreate", msg("&modia status")));
+  assert.ok(enviados.length >= 1);
+  assert.doesNotMatch(tudo(), /Não existe aqui|Not a command here/);
+});
+await t("★ outro servidor: o `&help` mostra o &modia e esconde o &chat", async () => {
+  enviados.length = 0;
+  await silencio(() => c.emitAll("messageCreate", msg("&help moderacao")));
+  const s = tudo();
+  assert.match(s, /modia/, s.slice(0, 3000));
+  enviados.length = 0;
+  await silencio(() => c.emitAll("messageCreate", msg("&help modia")));
+  assert.doesNotMatch(tudo(), /Não existe aqui|Not a command here/);
+});
+await t("com o &modia à mostra, o grupo Proteger ainda cabe numa página (pt e en)", async () => {
+  const hg = await import("./modulos/moderacao/help-grupos.js");
+  const { paginarLinhas } = await import("./modulos/core/paginas.js");
+  for (const l of ["pt", "en"]) {
+    const ls = hg.grupos("&", l).proteger.linhas.map((x) => x.replace(/\u200b\[m?ia\]/, ""));
+    assert.ok(ls.some((x) => x.includes("&modia")));
+    const rod = ["", "💡 `&help <comando>` explica cada parâmetro · `&help` para o índice"];
+    assert.equal(paginarLinhas([...ls, ...rod], { titulo: "x", limite: 1300 }).length, 1, l);
+  }
+});
+await t("outro servidor: o `&tutorial ia` vira só a moderação por IA", async () => {
+  enviados.length = 0;
+  await silencio(() => c.emitAll("messageCreate", msg("&tutorial ia")));
+  const s = tudo();
+  assert.match(s, /Moderação por IA|AI moderation/);
+  assert.doesNotMatch(s, /chat livre/);
+});
+
+console.log(`\nIA SÓ NA CASA (16 out): ${ok} ok, ${falhou} falha(s)`);
 process.exit(falhou ? 1 : 0);
 };
 

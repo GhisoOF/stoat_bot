@@ -50,6 +50,8 @@ if (iaLigada()) {
   } else if (modoIA() === "online") {
     if (!e.LLM_URL) e.LLM_URL = "https://openrouter.ai/api";
     if (e.MODELO && !e.LLM_MODEL) e.LLM_MODEL = e.MODELO;
+    // o juiz da moderação (no modo local, o iniciar.js aponta para "moderacao")
+    if (e.MODELO_MODERACAO && !e.LLM_MODEL_JUIZ) e.LLM_MODEL_JUIZ = e.MODELO_MODERACAO;
   }
   // A ferramenta de visão (ver_imagem) só é registrada quando LLM_MODEL_VISAO
   // existe. No modo online e com LLM_URL externo, ninguém definia essa

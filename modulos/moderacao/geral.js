@@ -1,6 +1,6 @@
-import { servidorPermitido as temIA } from "../ai/chat.js";
+import { servidorPermitido as temIA, comandoIAPermitido } from "../ai/chat.js";
 import * as visaoMod from "./visao.js";
-import { arvoreSubtopicos, SUBTOPICOS_SO_IA, ligarFamilias, mesclarNos } from "./help-arvore.js";
+import { arvoreSubtopicos, SUBTOPICOS_SO_IA, ligarFamilias, mesclarNos, MODIA_TAG } from "./help-arvore.js";
 import { nomeExibido } from "../core/aliases.js";
 import { grupos as gruposHelp, ALIAS_GRUPO, ORDEM as ORDEM_GRUPOS } from "./help-grupos.js";
 import { secaoParametros } from "./help-parametros.js";
@@ -643,12 +643,14 @@ function detalhesEN(P) {
 }
 
 const IA_TAG = "\u200b[ia]";
-function filtrarIA(linhas, comIA) {
+// `comModIA`: o &modia vale fora dos servidores da conversa (16 out 2026)
+function filtrarIA(linhas, comIA, comModIA = comIA) {
   if (!Array.isArray(linhas)) return [];   // categoria inexistente/malformada
   return linhas
-    .filter((l) => comIA || !String(l).includes(IA_TAG))
-    .map((l) => String(l).replace(IA_TAG, ""));
+    .filter((l) => (comIA || !String(l).includes(IA_TAG)) && (comModIA || !String(l).includes(MODIA_TAG)))
+    .map((l) => String(l).replace(IA_TAG, "").replace(MODIA_TAG, ""));
 }
+const podeIA = (cmd, sid) => { try { return comandoIAPermitido(cmd, sid); } catch { return false; } };
 
 function construirSubtopicos(P, lang) {
   if (lang === "en") return {
@@ -822,6 +824,7 @@ export async function cmdHelp(message, args, ctx) {
   const P = PREFIXO;
   const lang = lingua(ctx);
   const comIA = (() => { try { return temIA(ctx.serverId); } catch { return false; } })();
+  const comModIA = podeIA("modia", ctx.serverId);
 
   // Ajuda detalhada por comando: &help <comando>
   const DETALHES  = construirDetalhes(P, lang);
@@ -835,7 +838,7 @@ export async function cmdHelp(message, args, ctx) {
       fundido[cmd] = mesclarNos(extra[cmd], subs);
     }
     // Sem IA no servidor, os subtópicos de IA não existem — nem para listar.
-    if (!comIA) for (const cmd of SUBTOPICOS_SO_IA) delete fundido[cmd];
+    for (const cmd of SUBTOPICOS_SO_IA) if (!podeIA(cmd, ctx.serverId)) delete fundido[cmd];
     // A fusão acima recria no topo o que a árvore de geral.js tinha solto
     // (`punicao.escada`, por exemplo). Religa tudo dentro das famílias.
     return ligarFamilias(fundido);
@@ -915,7 +918,7 @@ export async function cmdHelp(message, args, ctx) {
          filhos.map((k) => `\`${P}help ${trilha.join(" ")} ${k}\``).join(" · ")]
       : [];
     const corpo = no.texto
-      ? visaoMod.filtrarLinhas(filtrarIA(String(no.texto).split("\n"), comIA), visao)
+      ? visaoMod.filtrarLinhas(filtrarIA(String(no.texto).split("\n"), comIA, comModIA), visao)
       : [lang === "en"
           ? `\`${P}${trilha.join(" ")}\` groups the topics below.`
           : `\`${P}${trilha.join(" ")}\` reúne os assuntos abaixo.`];
@@ -960,12 +963,12 @@ export async function cmdHelp(message, args, ctx) {
   const ehDono = (() => { try { return ctx.ehSuperAdmin?.(message.authorId); } catch { return false; } })();
   // só os grupos com algum comando que quem vê pode usar aqui
   const chavesGrupos = (visao.nivel === "membro" ? GRUPOS_DO_MEMBRO : ehDono ? [...ORDEM_GRUPOS, "dono"] : [...ORDEM_GRUPOS])
-    .filter((k) => k === "dono" || visaoMod.temComandoVisivel(filtrarIA(GRUPOS[k].linhas, comIA), visao));
+    .filter((k) => k === "dono" || visaoMod.temComandoVisivel(filtrarIA(GRUPOS[k].linhas, comIA, comModIA), visao));
 
   // Página de um grupo: cabeçalho + linhas (quebra em 2 páginas se não couber).
   const paginasDoGrupo = (chave) => {
     const g = GRUPOS[chave];
-    const linhas = visaoMod.filtrarLinhas(filtrarIA(g.linhas, comIA), visao);
+    const linhas = visaoMod.filtrarLinhas(filtrarIA(g.linhas, comIA, comModIA), visao);
     const rodape = [
       "",
       lang === "en"
@@ -1032,7 +1035,7 @@ export async function cmdHelp(message, args, ctx) {
   }
 
   // Comando de IA num servidor sem IA: ele não roda aqui, então não há ajuda.
-  if (alvo && !comIA && COMANDOS_SO_IA.has(alvo)) {
+  if (alvo && COMANDOS_SO_IA.has(alvo) && !podeIA(alvo, ctx.serverId)) {
     return sendEmbed(message.channel, tr(ctx, {
       title: "🚫 Não existe aqui",
       description: `\`${P}${alvo}\` não existe neste servidor.\n\nUse \`${P}help\` para ver o que existe por aqui.`,
@@ -1144,7 +1147,7 @@ export async function cmdSobre(message, args, ctx) {
     const porFuncao = new Map();
     for (const [nome, fn] of Object.entries(estado.rotas)) if (!porFuncao.has(fn)) porFuncao.set(fn, nome);
     const fora = new Set(["servidores", "cargomudo", ...(config?.comandosDesativados ?? [])]);
-    return [...porFuncao.values()].filter((n) => !fora.has(n) && (comIA || !estado.COMANDOS_SO_IA?.has(n))).length;
+    return [...porFuncao.values()].filter((n) => !fora.has(n) && (!estado.COMANDOS_SO_IA?.has(n) || podeIA(n, serverId))).length;
   })();
   const nLinhas = contarLinhas();
   const up = process.uptime();

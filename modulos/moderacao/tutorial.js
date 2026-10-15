@@ -1,5 +1,5 @@
 import * as visaoMod from "./visao.js";
-import { servidorPermitido as temIA } from "../ai/chat.js";
+import { servidorPermitido as temIA, comandoIAPermitido } from "../ai/chat.js";
 import { lingua } from "../core/i18n.js";
 import { enviarPaginado, paginarLinhas } from "../core/paginas.js";
 
@@ -1017,6 +1017,15 @@ export async function cmdTutorial(message, args, ctx) {
   const visao = await visaoMod.quemVe(message, ctx);
   const membro = visao.nivel === "membro";
   const todas = AREAS(P, lang, comIA);
+  // Fora dos servidores da conversa (16 out 2026) a área "ia" vira só a
+  // moderação por IA — as duas últimas linhas dela são as do &modia.
+  const comModIA = (() => { try { return comandoIAPermitido("modia", ctx.serverId); } catch { return false; } })();
+  if (!comIA && comModIA && todas.ia) {
+    todas.ia = { ...todas.ia, soComIA: false,
+      titulo: lang === "en" ? "🤖 AI moderation" : "🤖 Moderação por IA",
+      resumo: lang === "en" ? "AI moderation with free-text criteria." : "Moderação por IA com critérios em texto livre.",
+      corpo: todas.ia.corpo.slice(-2) };
+  }
   const areas = {};
   for (const [k, v] of Object.entries(todas)) {
     if (v.soComIA && !comIA) continue;

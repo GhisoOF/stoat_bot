@@ -531,8 +531,8 @@ estado.CANONICO = CANONICO;
 estado.COMANDOS_GERENCIAVEIS = COMANDOS_GERENCIAVEIS;
 // Versão filtrada por servidor: esconde os comandos de IA onde ela não roda.
 estado.comandosGerenciaveisDe = (sid) => {
-  const comIA = (() => { try { return chat.servidorPermitido(sid); } catch { return false; } })();
-  return comIA ? COMANDOS_GERENCIAVEIS : COMANDOS_GERENCIAVEIS.filter((c) => !COMANDOS_SO_IA.has(c));
+  const pode = (c) => { try { return chat.comandoIAPermitido(c, sid); } catch { return false; } };
+  return COMANDOS_GERENCIAVEIS.filter((c) => !COMANDOS_SO_IA.has(c) || pode(c));
 };
 for (const [alias, canonico] of Object.entries(aliases.COMANDO_EXTRA)) {
   if (!rotas[alias] && rotas[canonico]) rotas[alias] = rotas[canonico];
@@ -807,7 +807,8 @@ async function tratarMensagem(message) {
   const ESSENCIAIS = new Set(["help", "comando", "comandos", "command", "debug", "diagnostico", "diagnóstico", "idioma"]);
   const canonico = CANONICO[command] ?? command;
 
-  if (COMANDOS_SO_IA.has(canonico) && !chat.servidorPermitido(serverId)) {
+  // &chat só nos servidores da conversa; &modia (moderação) em todos
+  if (COMANDOS_SO_IA.has(canonico) && !chat.comandoIAPermitido(canonico, serverId)) {
     return sendEmbed(message.channel, tr(ctx, {
       title: "🚫 Não existe aqui",
       description: `\`${PREFIXO}${canonico}\` não existe neste servidor.\n\nVeja o que existe por aqui com \`${PREFIXO}help\`.`,

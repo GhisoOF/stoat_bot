@@ -813,6 +813,11 @@ export function listReactionRolesServidor(serverId) {
     .all(serverId);
 }
 
+// De que servidor é a mensagem com cargo por reação? (null = nenhuma regra)
+export function servidorDoReactionRole(messageId) {
+  return prep("SELECT serverId FROM reaction_roles WHERE messageId = ? LIMIT 1").get(messageId)?.serverId ?? null;
+}
+
 export function removeReactionRolesMensagem(messageId) {
   const r = prep("DELETE FROM reaction_roles WHERE messageId = ?").run(messageId);
   return r.changes ?? 0;

@@ -1,5 +1,5 @@
 import { ULID, resolverCargo } from "../core/ids.js";
-import { editarCargos } from "../core/hierarquia.js";
+import { editarCargos, podeUsarCargo } from "../core/hierarquia.js";
 import { tr } from "../core/i18n.js";
 
 // Extrai um ID de cargo de "<@&ID>", "<%ID>" ou ID cru.
@@ -72,6 +72,13 @@ export async function cmdAutorole(message, args, ctx) {
           description: "Esse cargo não existe neste servidor.", colour: COR.erro },
         { title: "❌ Role not found",
           description: "That role doesn't exist on this server.", colour: COR.erro }));
+
+    // quem configura precisa estar ACIMA do cargo (15 out 2026)
+    const pode = await podeUsarCargo(server, message, roleId, ctx);
+    if (!pode.ok)
+      return sendEmbed(message.channel, tr(ctx,
+        { title: "🚫 Cargo acima do seu", description: `${pode.pt}.`, colour: COR.erro },
+        { title: "🚫 Role above yours", description: `${pode.en}.`, colour: COR.erro }));
 
     config.autorole.roleId = roleId;
     salvarConfig();

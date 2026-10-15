@@ -114,7 +114,10 @@ export function formatarDiscord(c) {
   }
   if (emb?.footer?.text) partes.push(`_${String(emb.footer.text).slice(0, 120)}_`);
   if (!titulo && !partes.length) return null;
-  const cor = Number.isFinite(emb?.color) ? `#${Number(emb.color).toString(16).padStart(6, "0")}` : CORES.info;
+  // só uma cor válida (#rrggbb): `color: 16777216` virava "#1000000", o Stoat
+  // recusava o embed e a mensagem ia como texto comum (15 out 2026)
+  const cor = Number.isInteger(emb?.color) && emb.color >= 0 && emb.color <= 0xffffff
+    ? `#${emb.color.toString(16).padStart(6, "0")}` : CORES.info;
   return { titulo: titulo ?? "🔔 Aviso", descricao: partes.join("\n") || "_(sem texto)_", cor, url: emb?.url };
 }
 

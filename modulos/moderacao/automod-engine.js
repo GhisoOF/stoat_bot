@@ -260,16 +260,24 @@ async function aplicarPunicao(ctx, opts) {
       : "🚨 **Conteúdo grave.** Preserve evidências (ID do usuário) e denuncie à plataforma/autoridades — no Brasil: SaferNet + Polícia Federal; abuso infantil: report.cybertip.org.",
   ] : [];
 
-  // ── avisar: só notifica, não apaga, não pune ──
+  // ── avisar: só notifica, não pune ──
+  // Os filtros de regra fixa (ódio, convite, link da lista, spam, caps…)
+  // apagam a mensagem mesmo assim — é o que segurou o ataque de 2 out. O
+  // sentinela (nota, pode errar) não apaga. Antes o texto dizia "nada foi
+  // removido" com a mensagem já apagada (15 out 2026).
   if (pol.modo === "avisar") {
+    const apagou = opts.regraFixa === true && apagar && !!message
+      && await Promise.resolve(message.delete()).then(() => true, (e) => { console.error("[PUNIÇÃO][DEL]", descreverErro(e)); return false; });
     await sendEmbed(channel, {
       title: grave
         ? (lang === "en" ? "🚨 Detection (warning only)" : "🚨 Detecção (somente aviso)")
         : (lang === "en" ? "👁 AutoMod notice" : "👁 Aviso do AutoMod"),
       description: [`<@${userId}> — ${motivo}${linhaNota}`,
-        lang === "en"
-          ? "_Warn-only mode: nothing was removed or punished automatically._"
-          : "_Modo apenas-aviso: nada foi removido ou punido automaticamente._",
+        apagou
+          ? (lang === "en" ? "_Warn-only mode: the message was removed, but nobody was punished._"
+                           : "_Modo apenas-aviso: a mensagem foi apagada, mas ninguém foi punido._")
+          : (lang === "en" ? "_Warn-only mode: nothing was removed or punished automatically._"
+                           : "_Modo apenas-aviso: nada foi removido ou punido automaticamente._"),
         ...blocoGrave].join("\n"),
       colour: grave ? COR.erro : COR.aviso,
     });
@@ -714,7 +722,13 @@ export function rotuloDegrau(degrau, lang = "pt") {
   return lang === "en" ? `${degrau.rotulo} of silence` : `silêncio de ${degrau.rotulo}`;
 }
 
-export async function runAutomod(message, ctx) {
+// opts.soConteudo (15 out 2026): só os filtros de CONTEÚDO — para comandos e
+// mensagens editadas. Antes, `&ping <convite>` e `&help <12 menções>` passavam
+// por fora do automod, e editar uma mensagem inocente para um golpe também.
+// Os filtros de ritmo (spam, rajada de mídia, repetição) ficam de fora: dez
+// comandos seguidos não são flood, e uma edição não é mensagem nova.
+export async function runAutomod(message, ctx, opts = {}) {
+  const soConteudo = opts.soConteudo === true;
   const { config, estado, getServer } = ctx;
   const userId  = message.authorId;
   const content = String(message.content ?? "").normalize("NFC");
@@ -726,7 +740,7 @@ export async function runAutomod(message, ctx) {
 
   // O fio do canal para o juiz dos temas proibidos (inclui a fala da staff,
   // que sai do automod logo abaixo — ela também faz parte da conversa).
-  if (assuntos.temasAtivos(am?.antiAssuntos).length) {
+  if (!soConteudo && assuntos.temasAtivos(am?.antiAssuntos).length) {
     assuntos.anotar(message.channelId, { id: message.id, autor: userId, nome: message.author?.username ?? message.member?.nickname ?? userId, texto: content });
   }
 
@@ -761,7 +775,8 @@ export async function runAutomod(message, ctx) {
   }
 
   // ── Quarentena: a punição falhou antes; tudo desta pessoa é apagado ──
-  if (confianca.emQuarentena(ctx.serverId ?? server?.id, userId)) {
+  // (só com algum filtro ligado: "automod off" é off de verdade)
+  if (algumFiltroLigado(am) && confianca.emQuarentena(ctx.serverId ?? server?.id, userId)) {
     dbg(ctx, "  ✗ Autor em quarentena (punição anterior falhou) — apagando");
     try { await message.delete(); } catch (err) { dbg(ctx, `  (falha ao deletar: ${err.message})`); }
     return true;
@@ -770,8 +785,9 @@ export async function runAutomod(message, ctx) {
   const sid = ctx.serverId ?? server?.id;
   const barrar = async (pol, motivo, rotulo) => {
     dbg(ctx, `  ✗ BLOQUEADA por ${rotulo}`);
-    try { await message.delete(); } catch (e) { dbg(ctx, `  (falha ao deletar: ${e.message})`); }
-    await aplicarPunicao(ctx, { server, channel: canal, message, userId, pol, motivo });
+    // quem apaga é o aplicarPunicao, uma vez só (15 out 2026: antes apagava
+    // aqui E lá). Regra fixa apaga até no modo avisar — e agora o aviso diz isso.
+    await aplicarPunicao(ctx, { server, channel: canal, message, userId, pol, motivo, regraFixa: true });
     return true;
   };
 
@@ -785,8 +801,7 @@ export async function runAutomod(message, ctx) {
       await darToque(ctx, { server, channel: canal, message, userId, motivo });
       return true;
     }
-    try { await message.delete(); } catch (e) { dbg(ctx, `  (falha ao deletar: ${e.message})`); }
-    await aplicarPunicao(ctx, { server, channel: canal, message, userId, pol, motivo, ruido: true });
+    await aplicarPunicao(ctx, { server, channel: canal, message, userId, pol, motivo, ruido: true, regraFixa: true });
     return true;
   };
 
@@ -796,17 +811,6 @@ export async function runAutomod(message, ctx) {
     dbg(ctx, `  [anti-ódio] ${termo ? "ACHOU termo da lista" : "nada"}`);
     // o termo não vai para o motivo: a punição é publicada no canal
     if (termo) return barrar(am.antiOdio?.punicao, "linguagem de ódio não é tolerada aqui", "anti-ódio");
-  }
-
-  // ── Temas proibidos pela regra do servidor (13 out 2026) ──
-  // Nota por peso (termos, debate, ataque, risada, contexto do canal); passou
-  // do limiar, o modelo lê o fio e confirma se é discussão ou zoeira. Em
-  // segundo plano: a mensagem não espera.
-  if (assuntos.temasAtivos(am.antiAssuntos).length) {
-    const p = assuntos.verificar({ ctx, server, canal, message, userId,
-      aplicarPunicao: (opts) => aplicarPunicao(ctx, opts) });
-    ultimaVerificacaoDeAssunto = p;
-    p.catch((e) => console.error("[ASSUNTOS]", descreverErro(e)));
   }
 
   // ── Enxurrada de emoji (o ataque colava ~170 emojis por mensagem) ──
@@ -823,7 +827,7 @@ export async function runAutomod(message, ctx) {
   // A conta de 2 minutos repostou a mesma bandeira em #RSS e #Midia sem parar.
   // Conta nova tem limite menor.
   const anexos = (message.attachments ?? []).length;
-  if (anexos && am.antiMidia?.enabled !== false) {
+  if (!soConteudo && anexos && am.antiMidia?.enabled !== false) {
     estado.midiaData ??= new Map();
     const n = rajada.contarMidias(estado.midiaData, `${sid}:${userId}`, anexos);
     const max = novato ? (am.antiMidia?.maxNovato ?? 3) : (am.antiMidia?.maxPorMinuto ?? 8);
@@ -831,22 +835,12 @@ export async function runAutomod(message, ctx) {
     if (n > max) return punirRuido(am.antiMidia?.punicao, `muitas imagens/arquivos em pouco tempo (${n} em 1 min)`, "anti-mídia");
   }
 
-  // ── Imagens: descritas pelo modelo e pontuadas em segundo plano ──
-  // Não segura a mensagem nem pune: se apitar, a staff é chamada no log.
-  // (No raid de 27/09 as mensagens "vazias" eram imagens que ninguém viu.)
-  // Fica DEPOIS das rajadas: o que já foi barrado não ocupa a fila do modelo.
-  if (imagemSentinela.deveAnalisar(config, sid, userId)) {
-    for (const img of imagemSentinela.imagensDa(message)) {
-      imagemSentinela.agendar({ ctx, userId, canalId: message.channelId, messageId: message.id, url: img.url, digital: img.digital });
-    }
-  }
-
   // ── Quantas vezes esta MESMA mensagem já veio deste autor ──
   // Fica aqui em cima porque o sentinela usa este número: uma mensagem
   // repetida pesa na nota dele, mesmo quando o texto em si é inofensivo.
   const dup = am.antiDuplicata ?? {};
   let repetidas = 1, registrarDigital = null, anterioresDigitais = [];
-  if (dup.enabled !== false) {
+  if (!soConteudo && dup.enabled !== false) {
     const agora = Date.now();
     const janela = dup.windowMs ?? 120_000;
     const chaveEco = `${ctx.serverId ?? server?.id ?? "?"}:${userId}`;
@@ -944,8 +938,7 @@ export async function runAutomod(message, ctx) {
       !dominioBloqueado(d, permitidos) && dominioBloqueado(d, estado.blockedDomains));
     if (bloqueado) {
       dbg(ctx, `  ✗ BLOQUEADA por anti-link (domínio: ${bloqueado})`);
-      try { await message.delete(); } catch (e) { dbg(ctx, `  (falha ao deletar: ${e.message})`); }
-      await aplicarPunicao(ctx, { server, channel: canal, message, userId,
+      await aplicarPunicao(ctx, { server, channel: canal, message, userId, regraFixa: true,
         pol: am.antiLink.punicao, motivo: "este link está em uma lista de bloqueio do servidor" });
       return true;
     } else if (dominios.length > 0) {
@@ -1012,7 +1005,7 @@ export async function runAutomod(message, ctx) {
   // ── Anti-duplicata: a mesma mensagem, de novo e de novo ──
   // O anti-spam abaixo mede VELOCIDADE (N mensagens em X segundos). Quem
   // repete o mesmo texto num ritmo calmo passava por ele e por todo o resto.
-  if (dup.enabled !== false) {
+  if (!soConteudo && dup.enabled !== false) {
     // Conta nova repete 2× e já é pega (no raid, as contas tinham minutos de vida).
     const limiteDup = novato ? Math.max(2, (dup.maxRepetidas ?? 3) - 1) : (dup.maxRepetidas ?? 3);
     const r = analisarDuplicata(content, anterioresDigitais, { maxRepetidas: limiteDup });
@@ -1025,7 +1018,7 @@ export async function runAutomod(message, ctx) {
   }
 
   // ── Anti-spam / Anti-mass-spam ──
-  if (am.antiSpam.enabled || am.antiMassSpam.enabled) {
+  if (!soConteudo && (am.antiSpam.enabled || am.antiMassSpam.enabled)) {
     const now = Date.now();
     const maxWindow = Math.max(am.antiSpam.windowMs, am.antiMassSpam.windowMs);
     const chaveSpam = `${ctx.serverId ?? server?.id ?? "?"}:${userId}`;
@@ -1058,8 +1051,38 @@ export async function runAutomod(message, ctx) {
   }
 
   registrarDigital?.();
+
+  // ── Imagens: descritas pelo modelo e pontuadas em segundo plano ──
+  // Não segura a mensagem nem pune: se apitar, a staff é chamada no log.
+  // (No raid de 27/09 as mensagens "vazias" eram imagens que ninguém viu.)
+  // Fica no FIM: o que já foi barrado não ocupa a fila do modelo.
+  if (!soConteudo && imagemSentinela.deveAnalisar(config, sid, userId)) {
+    for (const img of imagemSentinela.imagensDa(message)) {
+      imagemSentinela.agendar({ ctx, userId, canalId: message.channelId, messageId: message.id, url: img.url, digital: img.digital });
+    }
+  }
+
+  // ── Temas proibidos pela regra do servidor (13 out 2026) ──
+  // Nota por peso (termos, debate, ataque, risada, contexto do canal); passou
+  // do limiar, o modelo lê o fio e confirma se é discussão ou zoeira. Em
+  // segundo plano: a mensagem não espera. Fica no FIM (15 out 2026): antes
+  // rodava antes dos outros filtros, e a mesma mensagem levava dois avisos —
+  // um do tema e outro do caps/link/etc.
+  if (!soConteudo && assuntos.temasAtivos(am.antiAssuntos).length) {
+    const p = assuntos.verificar({ ctx, server, canal, message, userId,
+      aplicarPunicao: (opts) => aplicarPunicao(ctx, opts) });
+    ultimaVerificacaoDeAssunto = p;
+    p.catch((e) => console.error("[ASSUNTOS]", descreverErro(e)));
+  }
+
   dbg(ctx, "  ✓ Nenhuma violação detectada");
   return false;
+}
+
+// Algum filtro do automod ligado? (a quarentena só vale com algum)
+export function algumFiltroLigado(am) {
+  if (!am) return false;
+  return Object.values(MODULOS_AUTOMOD).some((chave) => chave !== "antiAvatar" && moduloLigado(am, chave));
 }
 
 export { descreverErro, tipoDoErro, normalizarErro } from "../core/erros.js";

@@ -9,6 +9,13 @@ const LEX_SCAM = [
   /\b(investimento|invista|trader|trading|sinais?\s+de\s+trade)\b/i,
   /\bdouble\s+your\s+(money|crypto|bitcoin|btc)\b/i,
   /\b(renda\s+extra|dinheiro\s+r[áa]pido|money\s+fast|quick\s+cash)\b/i,
+  // 15 out 2026 — o golpe do "monetize suas contas de IA" passou com nota 3:
+  // "generate profit", "earning over $2,000 per month", "can be monetized"
+  /\b(earn|earning|earned|make|making|generate|generating|ganh\w+|fatur\w+|ger(ar|ando|e)|lucr\w+)\s+(over\s+|up\s+to\s+|more\s+than\s+|at\s+least\s+|mais\s+de\s+|at[ée]\s+|uns\s+)?(\$|€|£|r\$|\d|money|profit|income|cash|lucro|renda|dinheiro)/i,
+  /(\$|€|£|r\$|usd|\b\d+\s*k)\s?[\d.,]*\s*(\+\s*)?(per|a|an|every|\/|por|ao|na|todo)\s*(month|week|day|mo|wk|hour|m[êe]s|semana|dia|hora)\b/i,
+  /\bmonetiz\w+|\bmonetiza[çc][ãa]o\b|\bmonetizar\b/i,
+  /\b(passive\s+income|renda\s+passiva|side\s+income|financial\s+freedom|liberdade\s+financeira)\b/i,
+  /\b(i'?m|i\s+am|eu)\s+(already\s+|j[áa]\s+)?(earning|making|ganho|ganhando|faturo|faturando|lucro|lucrando)\b/i,
 ];
 
 // CTA / contato fora da plataforma / pagamento / phishing
@@ -26,6 +33,11 @@ const LEX_CTA = [
   /\b(login|senha|password|verify\s+your\s+account)\b/i,
   // inglês (13 out 2026): o golpe do "nitro grátis" em servidor em inglês
   /\b(claim|redeem)\s+(your|it|now|here|the|this)\b/i,
+  // 15 out 2026: o convite para o privado, em inglês e português
+  /\b(send|drop|shoot)\s+me\s+(a\s+)?(dm|pm|message|msg|text)\b/i,
+  /\b(message|text|contact|reach|hit\s+up)\s+me\b/i,
+  /\b(if|whoever)\s+(you\s+are|you'?re|is|are)\s+interest(ed)?\b/i,
+  /\b(se\s+(tiver|tem|estiver)\s+interess\w+|quem\s+(tiver\s+)?interess\w+|interessad[oa]s?\s+(me\s+)?(chama|chamem|mand\w+))/i,
 ];
 
 // Urgência
@@ -78,6 +90,9 @@ const LEX_CONTA_ALHEIA = [
   /\b(empresta\w*|alug\w+|ced[ae]r?|ceder)\s+(a\s+|o\s+|sua\s+|seu\s+)?(conta|perfil|cart[ãa]o|documento|cpf)/i,
   /\b(em|no)\s+(seu|teu)\s+nome\b/i, /\bin\s+your\s+name\b/i,
   /\byour\s+(identity|documents?|id|credentials?)\b/i,
+  // 15 out 2026: "the AI accounts you aren't currently utilizing", "your AI accounts"
+  /\b(accounts?|contas?)\s+(that\s+)?(you\s+aren'?t|you\s+are\s+not|you\s+don'?t|que\s+(voc[êe]|vc)\s+n[ãa]o)\s+(currently\s+|est[áa]\s+)?(using|utilizing|use|usa|usando)\b/i,
+  /\b(your|sua?s?|seus?)\s+(ai|ia|chatgpt|openai|gpt|claude|gemini|midjourney|unused|inactive|old|antigas?|paradas?)\s+(accounts?|contas?)\b/i,
   /\b(seus?|suas?)\s+(documentos?|dados\s+banc\w+)\b/i,
 ];
 
@@ -110,6 +125,11 @@ const LEX_RECRUTAMENTO = [
   /\b(vaga|oportunidade|opportunity)\s+(de\s+)?(emprego|trabalho|home\s*office|remote|remoto)/i,
   /\b(trabalh\w+|work|renda)\s+(de\s+|em\s+|from\s+)?(casa|home|remoto|remote|meio\s+per[íi]odo|part[\s-]?time)\b/i,
   /\b(collaboration|colabora[çc][ãa]o)\s+(method|m[ée]todo|proposta)\b/i,
+  // 15 out 2026: "If you collaborate with me, I can help you generate profit"
+  /\b(collaborate|partner|team\s+up|work)\s+with\s+me\b/i,
+  /\b(colabor\w+|trabalh\w+|parceria)\s+comigo\b/i,
+  /\b(i\s+can|i'?ll|i\s+will|posso|vou)\s+(help|teach|show|te\s+ajudar|te\s+ensinar|ajudar\s+voc[êe]|ensinar\s+voc[êe])\b[^.\n]{0,25}\b(earn|make|generate|profit|income|money|ganhar|lucrar|faturar|dinheiro|renda)/i,
+  /\b(online\s+freelancer|worked\s+as\s+an?\s+(online\s+)?freelancer|anos\s+de\s+experi[êe]ncia\s+(como|em)\s+freela)/i,
 ];
 
 const LEX_PRETEXTO_CONTA = [
@@ -299,6 +319,8 @@ export const PESOS = {
   conj_mula_conta:    3,  // a conta é sua E o dinheiro passa por ela
   conj_pretexto_ganho: 3,  // "não posso usar a minha" + divisão/dinheiro
   conj_mula_ganho:     3,  // o dinheiro passa por você E é dividido
+  conj_recrutamento_lucro: 3,  // "trabalhe comigo" + "dividimos o lucro" (15 out 2026)
+  conj_ganho_recrutamento: 2,  // promessa de dinheiro + "trabalhe comigo"/"te ajudo a ganhar"
 };
 
 const contar = (txt, lista, cap = 99) => {
@@ -455,6 +477,10 @@ function extrairFeatures(texto, opts = {}) {
   if (f.conta_alheia > 0 && (f.mula > 0 || f.pretexto_conta > 0)) f.conj_mula_conta = 1;
   if (f.pretexto_conta > 0 && (f.divisao_lucro > 0 || f.mula > 0)) f.conj_pretexto_ganho = 1;
   if (f.mula > 0 && f.divisao_lucro > 0) f.conj_mula_ganho = 1;
+  // "procuro parceiro, a gente divide 50/50" é parceria honesta: só condena
+  // com o lucro dito com todas as letras (×2) ou com promessa de dinheiro
+  if (f.recrutamento > 0 && (f.divisao_lucro >= 2 || (f.divisao_lucro > 0 && f.scam > 0))) f.conj_recrutamento_lucro = 1;
+  if (f.recrutamento > 0 && f.scam > 0) f.conj_ganho_recrutamento = 1;
 
   // Dano a pessoas: o "E" que transforma conversa em ameaça
   const ordemSobreOutro = contar(t, LEX_ORDEM_OUTRO, 1) > 0;

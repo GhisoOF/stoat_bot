@@ -51,6 +51,13 @@ export async function moderar(message, ctx) {
 
   const autorId = message.authorId;
   if (autorId === CRIADOR_ID) return false;          // criador é imune
+  // bots e staff passam, como no automod (15 out 2026: a IA apagava mensagem
+  // do dono do servidor e de moderador — o automod já os isentava)
+  if (message.author?.bot) return false;
+  if (cfg?.automod?.isentarStaff !== false && ctx.membroTemPermissao) {
+    const server = await Promise.resolve(ctx.getServer?.(message)).catch(() => null);
+    if (server && ctx.membroTemPermissao(message, server, "ManageMessages")) return false;
+  }
 
   const texto = (message.content || "").trim();
   if (texto.length < MIN_CHARS) return false;

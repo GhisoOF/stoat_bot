@@ -2,6 +2,7 @@
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { randomBytes } from "node:crypto";
 import { iaLigada, modoIA, MODELO_LOCAL_PADRAO } from "./modulos/core/env.js";
 import { montarConfigSwap } from "./modulos/core/llama-swap-config.js";
 
@@ -13,6 +14,13 @@ const SWAP_BIN = process.env.SWAP_BIN || "/usr/local/bin/llama-swap";
 // Padrões de localhost quando os serviços estão embutidos.
 if (IA_EMBUTIDA && !process.env.IA_SERVICO_URL) process.env.IA_SERVICO_URL = "http://127.0.0.1:8090";
 if (VOZ_ATIVA && !process.env.VOZ_SERVICO_URL) process.env.VOZ_SERVICO_URL = "http://127.0.0.1:8091";
+
+// Chave dos serviços internos (15 out 2026): sem VOZ_CHAVE/IA_SERVICO_CHAVE no
+// .env, qualquer processo que alcançasse 127.0.0.1:8090/8091 mandava a Judy
+// falar ou rodar ferramentas. Embutidos, bot e serviços são filhos DESTE
+// processo: uma chave aleatória por boot basta, e ninguém precisa configurar.
+if (IA_EMBUTIDA && !process.env.IA_SERVICO_CHAVE && !process.env.IA_CHAVE) process.env.IA_SERVICO_CHAVE = randomBytes(24).toString("hex");
+if (VOZ_ATIVA && !process.env.VOZ_CHAVE) process.env.VOZ_CHAVE = randomBytes(24).toString("hex");
 
 // ler_codigo de fábrica: o código do próprio bot já está na imagem (este
 // diretório). Sem este padrão, quem não configurasse nada ficava com a

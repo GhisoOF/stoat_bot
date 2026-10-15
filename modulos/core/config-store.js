@@ -119,7 +119,27 @@ let cfgGlobal        = structuredClone(padraoGlobal);
 const cacheConfig    = new Map();   // serverId → config (por servidor)
 
 // Mescla config salva com o template (preenche campos novos de updates)
+// Um servidor que DESLIGOU todos os filtros não ganha filtro novo ligado só
+// porque a Judy foi atualizada (15 out 2026: o antiAvatar nasceu ligado e
+// silenciava gente em servidor com "automod off" — já tinha acontecido em
+// 2 out com antiOdio/antiEmoji/antiMidia/antiDuplicata/antiImagem).
+function tudoDesligadoNoSalvo(s) {
+  const mods = Object.entries(s ?? {}).filter(([k, v]) => /^anti[A-Z]/.test(k) && v && typeof v === "object" && "enabled" in v);
+  return mods.length >= 3 && mods.every(([, v]) => v.enabled === false);
+}
+
 function mesclarServidor(salvo, tpl) {
+  const cfg = mesclarServidorBruto(salvo, tpl);
+  const s = salvo.automod ?? {};
+  if (tudoDesligadoNoSalvo(s)) {
+    for (const [k, v] of Object.entries(cfg.automod)) {
+      if (/^anti[A-Z]/.test(k) && v && typeof v === "object" && !(k in s)) v.enabled = false;
+    }
+  }
+  return cfg;
+}
+
+function mesclarServidorBruto(salvo, tpl) {
   const am = tpl.automod;
   const s  = salvo.automod ?? {};
   const lg = salvo.log ?? {};

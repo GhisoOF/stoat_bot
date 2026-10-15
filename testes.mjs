@@ -2584,6 +2584,7 @@ await t("só a staff põe cargo na loja; cargo acima do bot já avisa", async ()
   await eco.cmdEconomia(msg("Z"), ["loja", "add", "VIP", "100"], comum.ctx);
   assert.match(comum.saidas.at(-1).title, /Permissão/);
   const staff = ctxDe(srv, {}, { staff: true });
+  srv.membro("Z", ["RSTAFF"]);   // quem põe na loja está acima dos cargos (15 out 2026)
   await eco.cmdEconomia(msg("Z"), ["loja", "add", "VIP", "100"], staff.ctx);
   await eco.cmdEconomia(msg("Z"), ["loja", "add", "Elite", "500"], staff.ctx);
   assert.match(staff.saidas.at(-1).description, /acima do cargo do bot/);
@@ -3329,7 +3330,7 @@ m = await say("2");
 ok(titulo(m).includes("5/5") && desc(m).includes("Boas-vindas"), "'2' (médio) → pergunta 5: boas-vindas");
 m = await say("pular");
 ok(titulo(m).includes("Resumo"), "`pular` na última leva ao resumo");
-ok(desc(m).includes("&acesso cargo add") && desc(m).includes("&log canal") && desc(m).includes("&automod sentinela on") && desc(m).includes("&automod punicao modo acumular"),
+ok(desc(m).includes("&acesso cargo add") && desc(m).includes("&log canal") && desc(m).includes("&automod sentinela conteudo on") && desc(m).includes("&automod punicao modo acumular"),
   "  → resumo mostra os comandos equivalentes");
 ok(!desc(m).includes("&cargomudo"), "  → sem &cargomudo: o silêncio é o timeout nativo (1 out 2026)");
 ok(desc(m).includes("boasvindas** — _(pulado)_"), "  → marca o que foi pulado");
@@ -3342,7 +3343,8 @@ const rel = desc(m);
 ok(rel.includes("✅ `&acesso cargo add"), "  → acesso aplicado");
 ok(rel.includes("✅ `&log canal"), "  → log aplicado");
 ok(rel.includes("✅ `&automod antispam on"), "  → automod aplicado");
-ok(rel.includes("✅ `&automod sentinela on"), "  → sentinela aplicado");
+ok(rel.includes("✅ `&automod sentinela conteudo on"), "  → sentinela aplicado");
+ok(!rel.includes("`&automod sentinela on"), "  → e não o GRUPO inteiro (que ligaria a foto de perfil, que silencia na entrada)");
 ok(!rel.includes("❌"), "  → nada falhou: " + (rel.match(/❌.*/g) ?? []).join(" | "));
 m = await say("&config");
 ok(texto(m).includes(LOGC), "&config mostra o canal de log configurado pelo assistente");
@@ -13152,6 +13154,294 @@ await t("★ cargo criado num servidor EN: 'Role created'", async () => {
 });
 
 console.log(`\nLOG EN 14 OUT: ${ok} ok, ${falhou} falha(s)`);
+process.exit(falhou ? 1 : 0);
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+// seguranca-15out — o golpe "monetize suas contas de IA", a revisão do automod
+// e a revisão de segurança de 15 out 2026
+// ════════════════════════════════════════════════════════════════════════════
+SUITES["seguranca-15out"] = async () => {
+const __m0 = await import("node:assert"); const assert = __m0.default;
+const __m1 = await import("node:fs"); const fs = __m1.default;
+process.env.BOT_TOKEN = "tok";
+process.env.DB_PATH = "/tmp/seg15-teste.db"; process.env.CONFIG_PATH = "/tmp/seg15-teste.json";
+for (const f of ["/tmp/seg15-teste.db", "/tmp/seg15-teste.db-wal", "/tmp/seg15-teste.db-shm", "/tmp/seg15-teste.json"]) fs.rmSync(f, { force: true });
+const silencio = async (fn) => { const o = [console.log, console.info, console.warn, console.error]; console.log = console.info = console.warn = console.error = () => {}; try { return await fn(); } finally { [console.log, console.info, console.warn, console.error] = o; } };
+await silencio(() => import("./main.js"));
+const c = globalThis.__client;
+await silencio(() => c.emitAll("ready"));
+const db = await import("./modulos/core/db.js");
+const store = await import("./modulos/core/config-store.js");
+const engine = await import("./modulos/moderacao/automod-engine.js");
+const assuntos = await import("./modulos/moderacao/assuntos.js");
+const scorecard = await import("./modulos/moderacao/scorecard.js");
+const cmdAm = await import("./modulos/moderacao/automod-comandos.js");
+const aliases = await import("./modulos/core/aliases.js");
+const confianca = await import("./modulos/moderacao/confianca.js");
+const modIA = await import("./modulos/moderacao/moderacao-ia.js");
+const seguranca = await import("./modulos/core/seguranca.js");
+const hierarquia = await import("./modulos/core/hierarquia.js");
+const rr = await import("./modulos/ferramentas/reaction-roles.js");
+const log = await import("./modulos/core/log.js");
+const webhooks = await import("./modulos/ferramentas/webhooks.js");
+
+let ok = 0, falhou = 0;
+const t = async (nome, fn) => {
+  try { await silencio(fn); console.log(`  ✅ ${nome}`); ok++; }
+  catch (e) { console.log(`  ❌ ${nome}\n     ${e.message}`); falhou++; }
+};
+
+// ── um contexto de automod de mentira ──
+const cfgNova = () => { const x = structuredClone(store.padraoServidor); x.language = "pt"; return x; };
+let nMsg = 0;
+const mkMsg = (content, { author = "USER1", channel = "CH1" } = {}) => {
+  const ev = { deletes: 0 };
+  const m = { id: "M" + (++nMsg), authorId: author, channelId: channel, content, attachments: [], mentionIds: [],
+    author: { id: author, username: "u_" + author, bot: false }, member: { joinedAt: new Date(Date.now() - 365 * 86400e3) },
+    channel: { id: channel }, async delete() { ev.deletes++; if (ev.deletes > 1) throw new Error("já apagada (404)"); } };
+  return { m, ev };
+};
+const mkCtx = (config, { staff = false } = {}) => {
+  const embeds = [];
+  const ctx = { config, serverId: "SRV1", cfgGlobal: { debug: false },
+    estado: { spamData: new Map(), ecoData: new Map(), blockedDomains: new Set(), midiaData: new Map() },
+    getServer: async () => ({ id: "SRV1", ownerId: "OWNER", channelIds: new Set(["CH1"]) }),
+    membroTemPermissao: () => staff, sendEmbed: async (_c, e) => { embeds.push(e); return { delete: async () => {} }; },
+    COR: { aviso: 1, erro: 2, mod: 3, sucesso: 4, info: 5 }, PREFIXO: "&",
+    client: { channels: { get: () => null, fetch: async () => null } }, salvarConfig: () => {} };
+  return { ctx, embeds };
+};
+
+console.log("── o golpe que escapou ──");
+const GOLPE = [
+  "Let’s generate profit using the AI accounts you aren't currently utilizing.",
+  "You may not yet realize that your AI accounts can be monetized.",
+  "I have extensive experience in this field, having worked as an online freelancer for 6 years.",
+  "I am already generating income through AI platforms.",
+  "If you collaborate with me, I can help you generate profit as well.",
+  "We can split the earnings 50/50.",
+  "I am already earning over $2,000 per month.",
+  "I do not collaborate with residents of Africa.",
+  "If you are interest",
+].join("\n");
+await t("★ a mensagem do print passa do limiar até na sensibilidade baixa (era nota 3)", () => {
+  const r = scorecard.analisarConteudo(GOLPE);
+  assert.ok(r.nota >= engine.LIMIAR_BASE.baixa, `nota ${r.nota} — sinais: ${r.sinais.join(", ")}`);
+});
+await t("★ a versão em português também", () => {
+  const r = scorecard.analisarConteudo("Vamos gerar lucro com as contas de IA que você não está usando. Trabalhe comigo, dividimos os ganhos 50/50. Já ganho mais de R$ 10.000 por mês. Se tiver interesse me chama na DM");
+  assert.ok(r.nota >= engine.LIMIAR_BASE.media, `nota ${r.nota}`);
+});
+await t("conversa normal sobre dinheiro e parceria continua passando (sensibilidade alta)", () => {
+  for (const x of ["we split the bill 50/50 at dinner", "I earn $2000 per month at my job, rent is killing me",
+    "how do I monetize my youtube channel?", "anyone wanna work with me on the minecraft build?",
+    "if you are interested in the tournament, sign up in #events", "to procurando um parceiro pro projeto, a gente divide 50/50 o que sair",
+    "is this a scam? someone said split earnings 50/50 and earn $2000 per month"]) {
+    const r = scorecard.analisarConteudo(x);
+    assert.ok(r.nota < engine.LIMIAR_BASE.alta, `"${x}" → ${r.nota} (${r.sinais.join(", ")})`);
+  }
+});
+
+console.log("\n── automod: apagar uma vez só, e dizer a verdade ──");
+await t("★ modo avisar: o filtro de regra fixa apaga UMA vez e o aviso diz que apagou", async () => {
+  const cfg = cfgNova(); cfg.automod.antiCaps.enabled = true;
+  const { ctx, embeds } = mkCtx(cfg);
+  const { m, ev } = mkMsg("ISTO E UM TEXTO TODO EM CAIXA ALTA GRITANDO");
+  assert.equal(await engine.runAutomod(m, ctx), true);
+  assert.equal(ev.deletes, 1);
+  assert.match(embeds.at(-1).description, /a mensagem foi apagada/);
+  assert.doesNotMatch(embeds.at(-1).description, /nada foi removido/);
+});
+await t("★ modo apagar: uma chamada de delete (antes eram duas, e a segunda dava erro no log)", async () => {
+  const cfg = cfgNova(); cfg.automod.antiCaps.enabled = true; cfg.automod.punicao.modo = "apagar";
+  const { ctx } = mkCtx(cfg);
+  const { m, ev } = mkMsg("OUTRO TEXTO TODO EM CAIXA ALTA AQUI GRITANDO");
+  await engine.runAutomod(m, ctx);
+  assert.equal(ev.deletes, 1);
+});
+await t("★ tema proibido + caps na mesma mensagem: UM aviso, não dois", async () => {
+  const cfg = cfgNova(); cfg.automod.antiCaps.enabled = true; cfg.automod.punicao.modo = "acumular";
+  cfg.automod.antiAssuntos = { ...cfg.automod.antiAssuntos, enabled: true, ia: false, sensibilidade: "alta",
+    acoes: { politica: "punir", religiao: "off", drogas: "off", sexual: "off" } };
+  const { ctx } = mkCtx(cfg);
+  engine.primeiroToque("SRV1", "USER2");
+  const { m } = mkMsg("O LULA E O BOLSONARO SAO CORRUPTOS, QUEM VOTA NO PT E GADO, A ESQUERDA DESTRUIU O PAIS!!!", { author: "USER2" });
+  await engine.runAutomod(m, ctx);
+  await engine._ultimaVerificacaoDeAssunto?.();
+  assert.equal(db.contarAvisos("SRV1", "USER2"), 1);
+});
+await t("★ servidor antigo com tudo desligado não ganha filtro novo ligado na atualização", () => {
+  const velho = cfgNova(); delete velho.automod.antiAvatar; delete velho.automod.antiAssuntos;
+  for (const v of Object.values(velho.automod)) if (v && typeof v === "object" && "enabled" in v) v.enabled = false;
+  db.gravarConfig("SRVOLD", velho);
+  store._limparCache?.();
+  const cfg = store.configDoServidor("SRVOLD");
+  assert.equal(engine.moduloLigado(cfg.automod, "antiAvatar"), false);
+});
+await t("servidor antigo com filtros ligados continua ganhando os padrões novos", () => {
+  const velho = cfgNova(); delete velho.automod.antiAvatar; velho.automod.antiSpam.enabled = true;
+  db.gravarConfig("SRVOLD2", velho);
+  store._limparCache?.();
+  assert.equal(store.configDoServidor("SRVOLD2").automod.antiAvatar.enabled, true);
+});
+
+console.log("\n── automod: comandos de liga/desliga ──");
+const rodarAm = async (cfg, args) => {
+  const { ctx, embeds } = mkCtx(cfg, { staff: true });
+  await cmdAm.cmdAutomod(mkMsg("x").m, aliases.normalizarArgs("automod", args), ctx);
+  return embeds.at(-1);
+};
+await t("★ `&automod sentinela conteudo punicao banir` (PT e EN) muda só a punição do conteúdo", async () => {
+  for (const args of [["sentinela", "conteudo", "punicao", "banir"], ["sentinel", "content", "punishment", "ban"]]) {
+    const cfg = cfgNova();
+    await rodarAm(cfg, args);
+    assert.equal(cfg.automod.antiScam.punicao?.modo, "banir", args.join(" "));
+  }
+});
+await t("★ `disable`/`desligar` desligam o GRUPO inteiro, como `off`", async () => {
+  for (const args of [["sentinel", "disable"], ["sentinela", "desligar"], ["antispam", "disable"]]) {
+    const cfg = cfgNova(); cfg.automod.antiScam.enabled = true; cfg.automod.antiSpam.enabled = true;
+    await rodarAm(cfg, args);
+    const grupo = aliases.normalizarArgs("automod", args)[0];
+    assert.deepEqual(engine.estadoDoGrupo(cfg.automod, grupo).partes.filter((p) => p.ligada).map((p) => p.parte), [], args.join(" "));
+  }
+});
+await t("★ liberar a pessoa tira a quarentena; e com o automod desligado não há quarentena", async () => {
+  const cfg = cfgNova(); store.desligarAutomod(cfg);
+  confianca.quarentenar("SRV1", "USERQ");
+  const { ctx } = mkCtx(cfg, { staff: true });
+  ctx.getServer = async () => ({ id: "SRV1", editMember: async () => {}, fetchMember: async () => ({ roles: [], edit: async () => {} }) });
+  await cmdAm.cmdAutomod(mkMsg("x", { author: "ADMIN" }).m, ["sentinela", "dismiss", "USERQ"], ctx);
+  assert.equal(confianca.emQuarentena("SRV1", "USERQ"), false);
+  confianca.quarentenar("SRV1", "USERQ2");
+  const { m, ev } = mkMsg("oi gente, tudo bem?", { author: "USERQ2" });
+  assert.equal(await engine.runAutomod(m, mkCtx(cfg).ctx), false);
+  assert.equal(ev.deletes, 0);
+});
+await t("★ moderação por IA não apaga mensagem da staff nem de outro bot", async () => {
+  modIA.configurar({ avaliar: async () => '{"viola": true, "motivo": "x"}' });
+  const cfg = cfgNova(); cfg.moderacaoIA = { ativa: true, criterios: "sem spoilers", canais: [] };
+  const staff = mkMsg("spoiler: o vilão morre no fim, isso todo mundo já sabe");
+  assert.equal(await modIA.moderar(staff.m, mkCtx(cfg, { staff: true }).ctx), false);
+  const bot = mkMsg("spoiler: o vilão morre no fim, isso todo mundo já sabe"); bot.m.author.bot = true;
+  assert.equal(await modIA.moderar(bot.m, mkCtx(cfg).ctx), false);
+  assert.equal(staff.ev.deletes + bot.ev.deletes, 0);
+});
+
+console.log("\n── automod: comandos e edições não passam por fora ──");
+const server = { id: "S1", ownerId: "OWNER", name: "S", roles: new Map(), channels: [], channelIds: new Set(["C1"]),
+  fetchMember: async () => ({ roles: [] }), fetchBans: async () => [] };
+c.servers.set("S1", server);
+const env = [];
+const canalC1 = { id: "C1", serverId: "S1", sendMessage: async (p) => { env.push(p); return { id: "R" + env.length, delete: async () => {} }; } };
+c.channels.set("C1", canalC1);
+const cfgS1 = store.configDoServidor("S1");
+cfgS1.language = "pt";
+cfgS1.automod.antiInvite.enabled = true; cfgS1.automod.punicao.modo = "apagar";
+cfgS1.comandosDesativados = ["reactionrole", "rss"];
+const semPoder = { roles: [], hasPermission: () => false, getPermissions: () => 0 };
+let apagadas = 0;
+const mkM = (content) => ({ id: "MM" + (++nMsg), authorId: "01COMUM0000000000000000000", content, serverId: "S1", server,
+  channel: canalC1, channelId: "C1", mentionIds: [], createdAt: new Date(), author: { username: "T", bot: false },
+  member: semPoder, attachments: [], delete: async () => { apagadas++; } });
+const dizer = async (content) => { env.length = 0; apagadas = 0; await c.emitAll("messageCreate", mkM(content)); };
+const titulos = () => env.map((p) => p?.embeds?.[0]?.title ?? p?.content ?? "").join(" | ");
+await t("★ `&ping <convite>` é apagado (antes o comando pulava o automod)", async () => {
+  await dizer("&ping entra no meu server https://stt.gg/abcdef");
+  assert.equal(apagadas, 1, titulos());
+});
+await t("★ `&rr` e `&feed` respeitam o comando desativado (apelidos sem nome canônico)", async () => {
+  await dizer("&rr list");
+  assert.match(titulos(), /Comando desativado/);
+  await dizer("&feed list");
+  assert.match(titulos(), /Comando desativado/);
+});
+await t("★ editar uma mensagem para um convite: o automod pega", async () => {
+  apagadas = 0;
+  const editada = mkM("olha https://stt.gg/abcdef");
+  await c.emitAll("messageUpdate", editada, { content: "oi", channelId: "C1", authorId: editada.authorId });
+  await new Promise((r) => setTimeout(r, 50));
+  assert.equal(apagadas, 1);
+});
+
+console.log("\n── segurança ──");
+await t("★ calcular: sem rede, sem módulos do Node — e a conta continua funcionando", async () => {
+  const calc = await import("./ia-servico/ferramentas/calcular.js");
+  assert.equal((await calc.executar({ codigo: "return (1234*5678)/3" })).resultado, "2335550.6666666665");
+  const rede = await calc.executar({ codigo: 'const http = await import("node:http"); return "abriu " + typeof http.request;' });
+  assert.doesNotMatch(JSON.stringify(rede), /abriu/);
+  const fuga = await calc.executar({ codigo: 'return this.constructor.constructor("return process")().pid' });
+  assert.doesNotMatch(JSON.stringify(fuga), /"resultado":"\d+"/);
+  assert.match((await calc.executar({ codigo: "return typeof require + typeof process" })).resultado, /^undefinedundefined$/);
+});
+await t("★ buscar_rss não busca endereço interno", async () => {
+  const rss = await import("./ia-servico/ferramentas/rss.js");
+  const r = await rss.executar({ urls: ["http://127.0.0.1:8091/x", "http://[::ffff:7f00:1]/", "file:///etc/passwd"] });
+  assert.equal(r.falhas.length, 3);
+  for (const f of r.falhas) assert.match(f.motivo, /bloqueado/);
+});
+await t("★ IPv6 com IPv4 interno embutido conta como interno", async () => {
+  for (const ip of ["::ffff:7f00:1", "::ffff:127.0.0.1", "64:ff9b::7f00:1", "2002:7f00:1::", "::1", "fd12::1", "fe80::1"]) assert.equal(seguranca.ipPrivado(ip), true, ip);
+  assert.equal(seguranca.ipPrivado("2606:4700:4700::1111"), false);
+  assert.equal((await seguranca.urlPublica("http://[::ffff:127.0.0.1]:8091/")).ok, false);
+});
+const cargosH = new Map([["RDONO", { name: "dono", rank: 1 }], ["RMOD", { name: "mod", rank: 5 }], ["RVIP", { name: "vip", rank: 3 }], ["RBAIXO", { name: "baixo", rank: 9 }]]);
+const membrosH = { MOD: { roles: ["RMOD"] }, VIPP: { roles: ["RVIP"] }, NOVO: { roles: [] } };
+const srvH = { id: "SH", ownerId: "DONO", roles: cargosH, fetchMember: async (u) => membrosH[u] ?? null };
+await t("★ quem pede precisa estar acima do cargo que dá ou configura", async () => {
+  assert.equal((await hierarquia.podeUsarCargo(srvH, { authorId: "MOD", member: membrosH.MOD }, "RVIP", {})).ok, false);
+  assert.equal((await hierarquia.podeUsarCargo(srvH, { authorId: "MOD", member: membrosH.MOD }, "RBAIXO", {})).ok, true);
+  assert.equal((await hierarquia.podeUsarCargo(srvH, { authorId: "DONO" }, "RDONO", {})).ok, true);
+  assert.equal((await hierarquia.podeUsarCargo(srvH, { authorId: "MOD", member: membrosH.MOD }, "RINEXISTENTE", {})).ok, false);
+});
+await t("★ quem pede precisa estar acima de quem expulsa, bane ou silencia", async () => {
+  assert.equal((await hierarquia.podeAgirSobre(srvH, { authorId: "MOD", member: membrosH.MOD }, "VIPP", {})).ok, false);
+  assert.equal((await hierarquia.podeAgirSobre(srvH, { authorId: "VIPP", member: membrosH.VIPP }, "MOD", {})).ok, true);
+  assert.equal((await hierarquia.podeAgirSobre(srvH, { authorId: "VIPP", member: membrosH.VIPP }, "DONO", {})).ok, false);
+  assert.equal((await hierarquia.podeAgirSobre(srvH, { authorId: "MOD", member: membrosH.MOD }, "JASAIU", {})).ok, true);
+});
+await t("★ reaction role: o servidor A não mexe na mensagem do servidor B", async () => {
+  db.addReactionRole("SERVER_B", "01HZZZZZZZZZZZZZZZZZZZZZZB", "🎮", "ROLE_B", "CHAN_B");
+  const saidas = [];
+  const ctxA = { sendEmbed: async (_c, e) => saidas.push(e.title), COR: {}, PREFIXO: "&", serverId: "SERVER_A",
+    getServer: async () => ({ ownerId: "ATACANTE", roles: new Map(), channels: [] }),
+    membroTemPermissao: () => true, client: { channels: { get: () => null, fetch: async () => null } }, config: {} };
+  const msgA = { authorId: "ATACANTE", channelId: "CHAN_A", channel: {} };
+  await rr.cmdReactionRole(msgA, ["exclusivo", "01HZZZZZZZZZZZZZZZZZZZZZZB", "on"], ctxA);
+  await rr.cmdReactionRole(msgA, ["remove", "01HZZZZZZZZZZZZZZZZZZZZZZB"], ctxA);
+  const regras = db.listReactionRoles("01HZZZZZZZZZZZZZZZZZZZZZZB");
+  assert.equal(regras.length, 1);
+  assert.equal(regras[0].exclusivo, 0);
+  assert.match(saidas.join(" "), /outro servidor/);
+});
+await t("★ o log de um servidor não sai no canal de outro (nem definido, nem enviado)", async () => {
+  const deB = { id: "CANAL_B", serverId: "SERVER_B", recebidas: [], sendMessage: async (p) => { deB.recebidas.push(p); return {}; } };
+  c.channels.set("CANAL_B", deB);
+  const cfgA = cfgNova(); cfgA.log = { ...(cfgA.log ?? {}), canalId: "CANAL_B", eventos: {} };
+  await log.registrar({ client: c, serverId: "SERVER_A", config: cfgA, sendEmbed: async (canal, e) => canal.sendMessage({ embeds: [e] }) },
+    "comandos", { titulo: "x", descricao: "y", en: { titulo: "x", descricao: "y" } });
+  assert.equal(deB.recebidas.length, 0);
+  const saidas = [];
+  const cfgA2 = cfgNova();
+  await log.cmdLog({ authorId: "ADM", channelId: "CANAL_A", channel: {} }, ["CANAL_B"], { client: c, serverId: "SERVER_A", config: cfgA2,
+    sendEmbed: async (_c, e) => saidas.push(e.title), COR: { erro: 1, sucesso: 2 }, PREFIXO: "&",
+    getServer: async () => ({ id: "SERVER_A" }), membroTemPermissao: () => true, salvarConfig: () => {} });
+  assert.notEqual(cfgA2.log?.canalId, "CANAL_B");
+});
+await t("★ webhook: cor fora de #rrggbb vira a cor padrão (o embed não é recusado)", () => {
+  const r = webhooks.formatarDiscord({ embeds: [{ title: "x", description: "y", color: 16777216 }] });
+  assert.match(r.cor, /^#[0-9a-f]{6}$/i);
+  assert.equal(webhooks.formatarDiscord({ embeds: [{ title: "x", color: 0xff0000 }] }).cor, "#ff0000");
+});
+await t("★ cada parte de uma resposta longa da IA passa pelo filtro de ping em massa", () => {
+  const fonte = fs.readFileSync("modulos/ai/chat.js", "utf8");
+  const partes = [...fonte.matchAll(/const partes = fragmentar\([\s\S]{0,260}?;/g)].map((m) => m[0]);
+  assert.ok(partes.length >= 2, "achei os dois pontos de entrega");
+  for (const p of partes) assert.match(p, /semPingEmMassa/);
+});
+
+console.log(`\nSEGURANÇA 15 OUT: ${ok} ok, ${falhou} falha(s)`);
 process.exit(falhou ? 1 : 0);
 };
 

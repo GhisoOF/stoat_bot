@@ -88,6 +88,7 @@ import * as relatorioHora from "./modulos/ferramentas/relatorio.js";
 import * as servidoresCmd from "./modulos/moderacao/servidores.js";
 import { descreverErro } from "./modulos/core/erros.js";
 import * as confianca from "./modulos/moderacao/confianca.js";
+import { semPingEmMassa } from "./modulos/core/seguranca.js";
 
 const PREFIXO     = "&";
 const CONFIG_PATH = process.env.CONFIG_PATH || "./automod-config.json";
@@ -234,7 +235,8 @@ async function enviarEmbedUnico(channel, { title, description, colour = COR.info
     }
     // fallback: texto puro, ainda mais curto
     try {
-      return await channel.sendMessage([title, desc].filter(Boolean).join("\n").slice(0, 1500));
+      // texto comum NOTIFICA menção (embed não): sem @everyone nem cargo (15 out 2026)
+      return await channel.sendMessage(semPingEmMassa([title, desc].filter(Boolean).join("\n").slice(0, 1500)));
     } catch (err3) {
       console.error("[EMBED] Fallback de texto também falhou:", erroStr(err3));
     }
@@ -516,6 +518,14 @@ const COMANDOS_GERENCIAVEIS = [
   "warn", "acesso", "automod", "tutorial", "assistente", "cor", "log", "banglobal", "embed", "reactionrole", "chat", "rss", "xp", "game", "autorole",
   "staff", "boasvindas", "adeus", "fuso", "tts", "musica", "webhook", "rolar", "iniciativa", "ticket", "economia", "entretenimento", "servidor",
 ];
+// Todo apelido que aponta para a MESMA função de um comando gerenciável vira
+// esse comando (15 out 2026: `&rr`, `&feed`, `&ia` e `&moderacaoia` passavam
+// por cima do "comando desativado" e, os dois últimos, do "só com IA").
+for (const [nome, fn] of Object.entries(rotas)) {
+  if (CANONICO[nome] || COMANDOS_GERENCIAVEIS.includes(nome) || COMANDOS_SO_IA.has(nome)) continue;
+  const dono = [...COMANDOS_GERENCIAVEIS, ...COMANDOS_SO_IA].find((c) => rotas[c] === fn);
+  if (dono) CANONICO[nome] = dono;
+}
 // exportado via ctx para o comando &comando consultar
 estado.CANONICO = CANONICO;
 estado.COMANDOS_GERENCIAVEIS = COMANDOS_GERENCIAVEIS;
@@ -619,6 +629,16 @@ async function tratarMensagem(message) {
     comAssunto: relatorioHora.temAssunto(client.servers.get(serverId), store.getGlobal().relatorio),
   });
   const ctx = criarContexto(serverId);
+
+  // ── Comando também passa pelo automod (os filtros de CONTEÚDO) ──
+  // Antes, qualquer mensagem que começasse com um comando de verdade pulava o
+  // automod inteiro: `&ping <convite>`, `&help <12 menções>`, um golpe colado
+  // depois de `&rank`… (15 out 2026). A staff continua isenta lá dentro, e os
+  // filtros de ritmo ficam de fora (dez comandos seguidos não são flood).
+  if (!message.__lote && message.content?.startsWith(PREFIXO)) {
+    const primeira = message.content.slice(PREFIXO.length).trim().split(/\s+/)[0]?.toLowerCase();
+    if (primeira && rotas[primeira] && await engine.runAutomod(message, ctx, { soConteudo: true })) return;
+  }
 
   // ── Vários comandos numa mensagem (um por linha) ──
   // Cada linha percorre o caminho inteiro de um comando — permissão,
@@ -1173,6 +1193,12 @@ client.on("messageUpdate", async (message, anterior) => {
 
     const ctx = criarContexto(serverId);
     const autor = message?.authorId ?? anterior?.authorId;
+    // Editar também passa pelo automod (os filtros de conteúdo): antes, uma
+    // mensagem inocente editada para um golpe ou um convite ficava lá.
+    if (message?.content && typeof message.delete === "function") {
+      engine.runAutomod(message, ctx, { soConteudo: true })
+        .catch((e) => console.error("[AUTOMOD][edição]", descreverErro(e)));
+    }
     await log.registrar(ctx, "mensagens", {
       titulo: "✏️ Mensagem editada",
       descricao: [

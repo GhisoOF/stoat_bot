@@ -2,7 +2,8 @@
 import * as db  from "../core/db.js";
 import * as log from "../core/log.js";
 import { idValido, descreverProblemaDeId, resolverMensagem } from "../core/ids.js";
-import { editarCargos, cargoDe } from "../core/hierarquia.js";
+import { editarCargos, cargoDe, podeUsarCargo } from "../core/hierarquia.js";
+import { canalDeOutroServidor } from "../moderacao/pertence.js";
 
 // o cargo no log: menção + nome (o log mostrava só o ID — 14 out 2026)
 const cargoNoLog = (server, id) => { const n = cargoDe(server, id)?.name; return n ? `<%${id}> **${n}**` : `<%${id}>`; };
@@ -285,6 +286,21 @@ export async function cmdReactionRole(message, args, ctx) {
   }
 
   const sub = args[0]?.toLowerCase();
+
+  // ── A mensagem é DESTE servidor? (15 out 2026) ──
+  // As regras eram achadas só pelo ID da mensagem: um admin do servidor A
+  // podia apagar, trocar o modo, reordenar (limpando as reações) ou
+  // sobrescrever as regras de uma mensagem do servidor B.
+  const MEXEM_NA_MENSAGEM = ["exclusivo", "exclusive", "unico", "único", "ordem", "order", "reordenar", "remove", "remover", "add", "adicionar"];
+  if (MEXEM_NA_MENSAGEM.includes(sub)) {
+    const midAlvo = resolverMensagem(args[1] ?? "").id;
+    const dono = midAlvo ? db.servidorDoReactionRole(midAlvo) : null;
+    if (dono && dono !== serverId) {
+      return sendEmbed(message.channel, tr(ctx,
+        { title: "🚫 Mensagem de outro servidor", description: "Essa mensagem é de outro servidor — aqui só dá para mexer nas mensagens deste.", colour: COR.erro },
+        { title: "🚫 Message from another server", description: "That message belongs to another server — here you can only change this server's messages.", colour: COR.erro }));
+    }
+  }
 
   // ── list ──
   if (sub === "list" || sub === "lista") {
@@ -583,6 +599,17 @@ export async function cmdReactionRole(message, args, ctx) {
       }
       msg ??= await message.channel.fetchMessage(mid).catch(() => null)
         ?? await buscarEmCanais(server, client, mid);
+      const canalAchado = msg ? (msg.channel ?? client.channels.get(msg.channelId) ?? null) : null;
+      if (msg && canalDeOutroServidor(canalAchado, serverId)) msg = null;   // mensagem de outro servidor: como se não existisse
+      if (msg) {
+        // quem pede precisa estar ACIMA do cargo (antes só a Judy precisava)
+        const pode = await podeUsarCargo(server, message, role, ctx);
+        if (!pode.ok) {
+          return sendEmbed(message.channel, tr(ctx,
+            { title: "🚫 Cargo acima do seu", description: `${pode.pt}.`, colour: COR.erro },
+            { title: "🚫 Role above yours", description: `${pode.en}.`, colour: COR.erro }));
+        }
+      }
       if (!msg) {
         return sendEmbed(message.channel, tr(ctx, {
           title: "❌ Mensagem não encontrada",

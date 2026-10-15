@@ -230,7 +230,8 @@ async function secaoIA(d, T) {
   if (!servico) itens.push({ nivel: "aviso", texto: T("`IA_SERVICO_URL` não definida — sem ferramentas (busca, código, imagem)", "`IA_SERVICO_URL` isn't set — no tools (search, code, images)") });
   else {
     try {
-      const r = await d.fetcher(`${servico}/saude`, { signal: AbortSignal.timeout(6000) });
+      const r = await d.fetcher(`${servico}/saude`, { signal: AbortSignal.timeout(6000),
+        headers: process.env.IA_SERVICO_CHAVE ? { "x-chave": process.env.IA_SERVICO_CHAVE } : {} });
       const s = await r.json();
       itens.push({ nivel: s.llm?.alcancavel ? "ok" : "erro", texto: s.llm?.alcancavel
         ? T(`modelo respondendo (${(s.llm.modelos ?? []).length} carregado(s))`, `model answering (${(s.llm.modelos ?? []).length} loaded)`)

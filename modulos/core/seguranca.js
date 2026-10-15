@@ -37,14 +37,32 @@ function ipv4Privado(ip) {
     || (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127)   // CGNAT — inclui a Tailscale
     || (a === 192 && b === 0) || (a === 198 && (b === 18 || b === 19)) || a >= 224;
 }
+// IPv6 que não é internet pública. O `new URL` escreve o IPv4 embutido em hex
+// (`[::ffff:127.0.0.1]` vira `::ffff:7f00:1`), e o teste antigo só via a forma
+// com pontos — o 127.0.0.1 passava como "público" (15 out 2026). Aqui é por
+// faixa (net.BlockList entende todas as grafias), e as faixas que EMBUTEM um
+// IPv4 (mapeado, compatível, NAT64, 6to4, Teredo) ficam todas de fora.
+const FAIXAS_V6 = new net.BlockList();
+for (const [rede, bits] of [
+  ["::", 96],            // não especificado, loopback (::1) e IPv4-compatível (::a.b.c.d)
+  ["::ffff:0:0", 96],    // IPv4 mapeado
+  ["::ffff:0:0:0", 96],  // IPv4 traduzido
+  ["64:ff9b::", 96], ["64:ff9b:1::", 48],   // NAT64
+  ["100::", 64],         // descarte
+  ["2001::", 32],        // Teredo
+  ["2001:db8::", 32],    // documentação
+  ["2002::", 16],        // 6to4
+  ["fc00::", 7],         // ULA
+  ["fe80::", 10],        // link-local
+  ["fec0::", 10],        // site-local (antigo)
+  ["ff00::", 8],         // multicast
+]) FAIXAS_V6.addSubnet(rede, bits, "ipv6");
+
 export function ipPrivado(ip) {
-  if (net.isIPv4(ip)) return ipv4Privado(ip);
-  if (net.isIPv6(ip)) {
-    const x = ip.toLowerCase();
-    if (x === "::" || x === "::1") return true;
-    const v4 = x.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
-    if (v4) return ipv4Privado(v4[1]);
-    return /^(fc|fd|fe8|fe9|fea|feb|ff)/.test(x);   // ULA, link-local, multicast
+  const h = String(ip ?? "").replace(/^\[|\]$/g, "").split("%")[0];
+  if (net.isIPv4(h)) return ipv4Privado(h);
+  if (net.isIPv6(h)) {
+    try { return FAIXAS_V6.check(h, "ipv6"); } catch { return true; }
   }
   return true;   // não é IP válido: não arrisca
 }

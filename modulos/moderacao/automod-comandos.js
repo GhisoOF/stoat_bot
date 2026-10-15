@@ -14,6 +14,7 @@ import { descreverErro as descreverErroBan } from "../core/erros.js";
 import * as assuntos from "./assuntos.js";
 import { nomeGrupo, nomeParte, nomeModo, nomeTema, nomeAcaoTema, nomeAcaoAvatar, nomeSens } from "../core/nomes-automod.js";
 import * as avatar from "./avatar.js";
+import { liberarQuarentena } from "./confianca.js";
 import { lerDuracao, duracaoTexto } from "../core/duracao.js";
 
 // Quem é o alvo de `&warn lista|limpar …`: a menção, o ID ou o nome ESCRITOS
@@ -80,6 +81,7 @@ export async function cmdClearwarnings(message, args, ctx) {
   const targetId = alvo.id;
 
   const tinha = db.zerarAvisos(ctx.serverId, targetId);
+  liberarQuarentena(ctx.serverId, targetId);
   const silenciado = db.estaSilenciado(ctx.serverId, targetId);
   const extraPt = silenciado ? `\n🔇 O silêncio em curso continua — para tirar: \`${PREFIXO}silenciar tirar <@${targetId}>\`` : "";
   const extraEn = silenciado ? `\n🔇 The current silence stays — to lift it: \`${PREFIXO}silenciar tirar <@${targetId}>\`` : "";
@@ -185,8 +187,17 @@ export async function cmdAutomod(message, args, ctx) {
   // para o grupo inteiro; `&automod <grupo> <parte> …` ajusta uma parte (que
   // por baixo é um dos filtros de antes — os nomes antigos continuam valendo).
   const G = GRUPOS_AUTOMOD;
+  // o que é do FILTRO (liga/desliga/punição), não do painel do sentinela —
+  // antes `&automod sentinela conteudo punicao banir` caía no painel e dava
+  // "subcomando desconhecido" (15 out 2026)
+  const PARA_O_FILTRO = ["on", "off", "punicao", "punição", "punishment"];
   if (G[sub]) {
     const grupo = sub, def = G[grupo];
+    // `desligar`/`disable`/`ativar`… valem como off/on no grupo e na parte
+    // (15 out 2026: `&automod sentinel disable` desligava só o conteúdo, dizendo
+    // que tinha desligado o sentinela; `&automod antispam disable` dava erro)
+    if (args[1] && args[1].toLowerCase() in TUDO) args[1] = TUDO[args[1].toLowerCase()] ? "on" : "off";
+    if (args[2] && def.partes[args[1]?.toLowerCase()] && args[2].toLowerCase() in TUDO) args[2] = TUDO[args[2].toLowerCase()] ? "on" : "off";
     const a1 = args[1]?.toLowerCase();
     const T = (pt, en) => (lang === "en" ? en : pt);
     const PARAM_PARTE = {
@@ -197,7 +208,7 @@ export async function cmdAutomod(message, args, ctx) {
       // uma parte: vira o comando do filtro de antes
       args = [def.partes[a1], ...args.slice(2)];
       sub = args[0];
-      if (grupo === "sentinela" && a1 === "conteudo" && args[1] && !["on", "off", "punicao", "punição"].includes(args[1].toLowerCase())) {
+      if (grupo === "sentinela" && a1 === "conteudo" && args[1] && !PARA_O_FILTRO.includes(args[1].toLowerCase())) {
         return cmdScam(message, args.slice(1), ctx);
       }
       return executarFiltro(sub, args);
@@ -273,7 +284,7 @@ export async function cmdAutomod(message, args, ctx) {
   // painel com ajustes próprios. `on|off` fica na lista de módulos abaixo;
   // qualquer outra coisa é assunto do painel.
   if ((sub === "sentinela" || sub === "antiscam")
-      && args[1] && !["on", "off"].includes(args[1].toLowerCase())) {
+      && args[1] && !PARA_O_FILTRO.includes(args[1].toLowerCase())) {
     return cmdScam(message, args.slice(1), ctx);
   }
 
@@ -448,12 +459,12 @@ export async function cmdAutomod(message, args, ctx) {
       return sendEmbed(message.channel, tr(ctx, {
         title: "❌ Modo inválido",
         description: `Modos: ${MODOS_PUN.map((m) => `\`${m}\``).join(", ")}, ou \`herdar\`.\n\n`
-          + "• `avisar` — só avisa\n• `apagar` — só remove a mensagem\n• `confirmar` — silencia e espera mod\n• `acumular` — soma avisos até banir\n• `banir` — ban imediato",
+          + "• `avisar` — só avisa, não pune (filtro de regra fixa ainda apaga; o sentinela não)\n• `apagar` — só remove a mensagem\n• `confirmar` — silencia e espera mod\n• `acumular` — soma avisos até banir\n• `banir` — ban imediato",
         colour: COR.erro,
       }, {
         title: "❌ Invalid mode",
         description: `Modes: ${MODOS_PUN.map((m) => `\`${m}\``).join(", ")}, or \`herdar\` (inherit).\n\n`
-          + "• `avisar` — warn only\n• `apagar` — remove the message only\n• `confirmar` — silence and wait for a mod\n• `acumular` — stack warnings until a ban\n• `banir` — instant ban",
+          + "• `avisar` — warn only, no punishment (fixed-rule filters still delete; the sentinel doesn't)\n• `apagar` — remove the message only\n• `confirmar` — silence and wait for a mod\n• `acumular` — stack warnings until a ban\n• `banir` — instant ban",
         colour: COR.erro,
       }));
     mod.punicao = { ...(mod.punicao ?? {}), modo };
@@ -1064,6 +1075,7 @@ export async function cmdScam(message, args, ctx) {
       // quem foi silenciado ainda com o cargo antigo
       if (pol.silenceRoleId) await removerCargoSilence(server, uid, pol.silenceRoleId, ctx).catch(() => {});
       db.limparPunicao(ctx.serverId, uid);   // some do banco: não reaplica ao reentrar
+      liberarQuarentena(ctx.serverId, uid);
       await log.registrar(ctx, "punicoes", { titulo: "✅ Punição removida",
         descricao: `<@${uid}> foi liberado por <@${message.authorId}>.`,
         en: { titulo: "✅ Punishment removed", descricao: `<@${uid}> was released by <@${message.authorId}>.` } });
@@ -1180,7 +1192,7 @@ export async function cmdPunicao(message, args, ctx) {
         "**Silence:** the Stoat's native timeout (the bot needs **TimeoutMembers**)",
         "",
         "**Aggressiveness levels:**",
-        "• `avisar` — warn only, doesn't remove or punish",
+        "• `avisar` — warn only, no punishment (fixed-rule filters such as hate, invites, blocked links and spam still delete the message; the sentinel doesn't)",
         "• `apagar` — removes the message without punishing the person",
         "• `confirmar` — removes, silences and waits for a moderator's confirmation",
         "• `acumular` — issues warnings; at the limit, bans",
@@ -1207,7 +1219,7 @@ export async function cmdPunicao(message, args, ctx) {
         "**Silêncio:** timeout nativo do Stoat (o bot precisa de **TimeoutMembers**)",
         "",
         "**Níveis de agressividade:**",
-        "• `avisar` — só avisa, não remove nem pune",
+        "• `avisar` — só avisa, não pune (filtro de regra fixa — ódio, convite, link da lista, spam — ainda apaga a mensagem; o sentinela não)",
         "• `apagar` — remove a mensagem, sem punir a pessoa",
         "• `confirmar` — remove, silencia e espera um moderador confirmar",
         "• `acumular` — dá avisos; ao atingir o limite, bane",

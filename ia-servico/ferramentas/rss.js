@@ -1,7 +1,19 @@
 
 import Parser from "rss-parser";
+import { buscarSeguro, lerTexto } from "../../modulos/core/seguranca.js";
 
 const parser = new Parser({ timeout: 15000 });
+const MAX_FEED_BYTES = 2 * 1024 * 1024;
+
+// O feed passa pela busca que só fala com a internet pública (15 out 2026):
+// o parseURL do rss-parser buscava QUALQUER endereço que a IA pedisse —
+// localhost, a rede interna, a Tailscale — seguindo redirect e sem teto.
+async function lerFeed(url) {
+  const r = await buscarSeguro(url, { signal: AbortSignal.timeout(15000),
+    headers: { "user-agent": "Mozilla/5.0 (Judy RSS)", accept: "application/rss+xml, application/atom+xml, application/xml, text/xml, */*" } });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return parser.parseString(await lerTexto(r, MAX_FEED_BYTES));
+}
 const MAX_ITENS = Number(process.env.RSS_MAX_ITENS || 12);
 
 const feedsPadrao = () =>
@@ -36,7 +48,7 @@ export async function executar({ urls, maximo } = {}) {
 
   for (const url of alvos.slice(0, 10)) {
     try {
-      const feed = await parser.parseURL(url);
+      const feed = await lerFeed(String(url));
       for (const it of (feed.items || []).slice(0, limite)) {
         itens.push({
           feed: feed.title || url,

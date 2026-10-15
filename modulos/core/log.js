@@ -2,6 +2,7 @@
 import { tr, lingua } from "./i18n.js";
 import { resolverCanal } from "./ids.js";
 import * as relatorioHora from "../ferramentas/relatorio.js";
+import { canalDeOutroServidor } from "../moderacao/pertence.js";
 
 // Rótulos amigáveis de cada categoria
 export const EVENTOS = {
@@ -75,6 +76,8 @@ export async function registrar(ctx, categoria, { titulo, descricao, en = null, 
     const canal = ctx.client.channels.get(cfg.canalId)
               ?? await ctx.client.channels.fetch(cfg.canalId).catch(() => null);
     if (!canal) return;
+    // o log de um servidor nunca sai no canal de OUTRO (15 out 2026)
+    if (canalDeOutroServidor(canal, ctx.serverId)) return;
 
     const agora = new Date().toISOString().replace("T", " ").slice(0, 19);
     await ctx.sendEmbed(canal, {
@@ -247,6 +250,12 @@ export async function cmdLog(message, args, ctx) {
       description: `I couldn't access the \`${id}\` channel. Check the ID and the bot's permissions.`,
       colour: COR.erro,
     }));
+  }
+
+  if (canalDeOutroServidor(canal, ctx.serverId)) {
+    return sendEmbed(message.channel, tr(ctx,
+      { title: "🚫 Canal de outro servidor", description: "Esse canal é de outro servidor — escolha um canal daqui.", colour: COR.erro },
+      { title: "🚫 Channel from another server", description: "That channel belongs to another server — pick one from here.", colour: COR.erro }));
   }
 
   config.log.canalId = id;

@@ -105,6 +105,17 @@ diz exatamente o que clicar.
   Também pega **ódio e ameaça**: injúria racial e contra grupos, símbolos de
   ódio em massa, "estuprar e matar" — sempre por conjunção (grupo + insulto),
   para que falar **sobre** racismo, notícia ou identidade nunca seja punido.
+  E o **golpe do recrutamento** em inglês e português ("monetize suas contas
+  de IA", "trabalhe comigo, dividimos 50/50", "ganho $2.000 por mês", "me chama
+  na DM") — por conjunção, para que "dividimos a conta 50/50" ou "procuro
+  parceiro pro projeto" passem.
+- **Comandos e edições também passam**: uma mensagem que começa com um comando
+  (`&ping <convite>`) e uma mensagem **editada** passam pelos filtros de
+  conteúdo (ódio, convite, link, sentinela, menções, caps…); os de ritmo (spam,
+  repetição, rajada de mídia) não, porque dez comandos seguidos não são flood.
+- **Modo `avisar`**: não pune ninguém. Os filtros de regra fixa (ódio, convite,
+  link da lista, spam, caps…) ainda apagam a mensagem — e o aviso diz isso; o
+  sentinela, que dá nota e pode errar, não apaga.
 - **Começa desligado**: servidor novo entra com o automod inteiro desligado —
   `&automod on` liga tudo, `&automod antispam on` liga um grupo, `&automod off`
   desliga tudo de uma vez. *New servers start with automod off; `&automod on|off`
@@ -436,6 +447,10 @@ próprio bot: `&help <comando>`. Um resumo:
 > bot não pune quem tem cargo igual ou superior ao dele — e só dá cargos (nível,
 > autorole) que estão abaixo do dele, a quem também está abaixo. `&xp cargos`
 > marca com ⚠️ os cargos de nível que o bot não alcança.
+> **Quem pede também precisa estar acima:** `&kick`, `&ban`, `&silenciar`
+> só valem sobre quem tem cargo abaixo do seu, e `&reactionrole add`,
+> `&autorole` e `&economia loja add` só aceitam cargos abaixo do seu cargo mais
+> alto. O dono do servidor e o dono do bot passam sempre.
 > Nos **tickets** é igual: um cargo de staff acima da Judy não entra no canal
 > do ticket. Um cargo do bot **lá embaixo** na lista (o caso mais comum: o
 > cargo "bots" criado por último) deixa a staff de fora — arraste-o para o

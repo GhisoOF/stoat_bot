@@ -19,7 +19,7 @@ import { descreverErro } from "../core/erros.js";
 import { planejarCargos } from "./nivel.js";
 import { lerDuracao, duracaoTexto } from "../core/duracao.js";
 import { quantiaValida } from "../core/seguranca.js";
-import { editarCargos } from "../core/hierarquia.js";
+import { editarCargos, podeUsarCargo } from "../core/hierarquia.js";
 
 export const PADRAO = { nome: "Moeda", simbolo: "🪙", ganhoMin: 10, ganhoMax: 30, intervaloMs: 3600e3 };
 
@@ -186,6 +186,9 @@ export async function cmdEconomia(message, args, ctx) {
       const preco = inteiro(resto.at(-1));
       const cargo = resolverCargo(resto.slice(1, -1).join(" "), server);
       if (!cargo || !Number.isInteger(preco) || preco <= 0) return enviar(T("❌ Uso", "❌ Usage"), `\`${P}economia loja add <cargo> <preço>\``, COR.erro);
+      // quem põe na loja precisa estar ACIMA do cargo (15 out 2026)
+      const pode = await podeUsarCargo(server, message, cargo.id, ctx);
+      if (!pode.ok) return enviar(T("🚫 Cargo acima do seu", "🚫 Role above yours"), T(`${pode.pt}.`, `${pode.en}.`), COR.erro);
       tabelas().prepare("INSERT INTO eco_loja (serverId, roleId, preco, criadoEm) VALUES (?, ?, ?, ?) ON CONFLICT(serverId, roleId) DO UPDATE SET preco=excluded.preco")
         .run(sid, cargo.id, preco, Date.now());
       // Avisa já se o bot não consegue entregar esse cargo

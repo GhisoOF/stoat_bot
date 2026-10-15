@@ -2,6 +2,7 @@
 import { buscarSeguro, lerTexto } from "../core/seguranca.js";
 import * as db from "../core/db.js";
 import { ULID } from "../core/ids.js";
+import { canalDeOutroServidor } from "../moderacao/pertence.js";
 import * as log from "../core/log.js";
 import { tr, lingua } from "../core/i18n.js";
 
@@ -124,6 +125,8 @@ export async function rodarCiclo(serverId, ctx, { forcado = false } = {}) {
   const canal = ctx.client.channels.get(canalId)
     ?? await ctx.client.channels.fetch(canalId).catch(() => null);
   if (!canal) return { ok: false, motivo: "canal inacessível" };
+  // canal de OUTRO servidor nunca recebe o resumo (15 out 2026)
+  if (canalDeOutroServidor(canal, serverId)) return { ok: false, motivo: "canal de outro servidor" };
 
   let novos = await coletarNovos(serverId);
   if (!novos.length) {
@@ -385,6 +388,13 @@ export async function cmdRss(message, args, ctx) {
         description: `\`${PREFIXO}rss canal aqui\` · \`${PREFIXO}rss canal <id>\` · \`${PREFIXO}rss canal off\``, colour: COR.erro },
       { title: "❌ Wrong usage",
         description: `\`${PREFIXO}rss canal aqui\` · \`${PREFIXO}rss canal <id>\` · \`${PREFIXO}rss canal off\``, colour: COR.erro }));
+    // o canal precisa ser DESTE servidor (15 out 2026: um ID de outro servidor
+    // fazia a Judy postar o resumo lá)
+    const canalAlvo = ctx.client?.channels?.get?.(canalId) ?? await ctx.client?.channels?.fetch?.(canalId)?.catch?.(() => null);
+    if (canalDeOutroServidor(canalAlvo, ctx.serverId))
+      return sendEmbed(message.channel, tr(ctx,
+        { title: "🚫 Canal de outro servidor", description: "Esse canal é de outro servidor — escolha um canal daqui.", colour: COR.erro },
+        { title: "🚫 Channel from another server", description: "That channel belongs to another server — pick one from here.", colour: COR.erro }));
     config.rss.canalId = canalId; salvarConfig();
     return sendEmbed(message.channel, tr(ctx,
       { title: "📰 Canal definido", description: `Os resumos serão postados em <#${canalId}>.`, colour: COR.sucesso },

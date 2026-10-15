@@ -2059,7 +2059,9 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
         || (en ? "_That reply was already complete — nothing left to add._" : "_Aquela resposta já estava inteira — não sobrou nada a acrescentar._");
       lembrarUltimaResposta(canalId, { pergunta: pendente.pergunta, texto: `${pendente.texto}\n${resto}`, cortada: cortouDeNovo, modelo: pendente.modelo });
       registrarNoCanal(canalId, { nome: "Judy", userId: message.client?.user?.id, texto: resto || textoFinal, ehJudy: true });
-      const partes = fragmentar(textoFinal + (cortouDeNovo ? (en ? "\n\n_✂️ still more — say 'continue' again._" : "\n\n_✂️ ainda tem mais — peça 'continue' de novo._") : ""), 1500);
+      // cada parte sai sem ping em massa (15 out 2026: só a 1ª passava pelo filtro)
+      const partes = fragmentar(textoFinal + (cortouDeNovo ? (en ? "\n\n_✂️ still more — say 'continue' again._" : "\n\n_✂️ ainda tem mais — peça 'continue' de novo._") : ""), 1500)
+        .map((p) => semPingEmMassa(p));
       await mostrarEmbed({ description: partes[0], colour: COR.info });
       for (let i = 1; i < partes.length; i++) { try { await message.channel.sendMessage(partes[i]); } catch {} }
       dlog(`══════ conversa concluída (continuação) ══════`);
@@ -2369,7 +2371,9 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
       } catch (e) { dlog(`histórico não salvo: ${e.message}`); }
     }
 
-    const partes = fragmentar(textoFinal, 1500);
+    // cada parte sai sem ping em massa (15 out 2026: as partes 2..N iam como
+    // mensagem comum sem filtro — "@everyone" no meio de uma resposta longa pingava)
+    const partes = fragmentar(textoFinal, 1500).map((p) => semPingEmMassa(p));
     dlog(`entregando resposta em ${partes.length} parte(s) | total ${textoFinal.length} chars | tempo total ${((Date.now() - tInicio) / 1000).toFixed(1)}s`);
 
     const marcar = (texto, i) => partes.length > 1

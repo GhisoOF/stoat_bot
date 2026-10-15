@@ -98,7 +98,10 @@ export const PASSOS = {
       const c = [["automod", "antispam", "on"], ["automod", "antiinvite", "on"]];
       if (v === 1) { c.push(["automod", "punicao", "modo", "avisar"]); return c; }
       c.push(["automod", "antilink", "on"], ["automod", "antimassmention", "on"],
-        ["automod", "sentinela", "on"], ["automod", "sentinela", "antiguidade", "on"], ["automod", "sentinela", "alerta", "on"]);
+        // as partes, uma a uma: `sentinela on` é o GRUPO, e ligaria também a foto de
+        // perfil (que silencia na entrada) — escolha que o assistente não faz por ninguém
+        ["automod", "sentinela", "conteudo", "on"], ["automod", "sentinela", "odio", "on"], ["automod", "sentinela", "imagens", "on"],
+        ["automod", "sentinela", "antiguidade", "on"], ["automod", "sentinela", "alerta", "on"]);
       if (v === 2) c.push(["automod", "sentinela", "sensitivity", "media"]);
       if (v === 3) c.push(["automod", "anticaps", "on"], ["automod", "anticaracteres", "on"],
         ["automod", "antirepeticao", "on"], ["automod", "sentinela", "sensitivity", "alta"], ["banglobal", "banir"]);

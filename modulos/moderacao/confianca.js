@@ -94,6 +94,12 @@ const quarentena = new Map();   // "server:user" → até quando
 export function quarentenar(serverId, userId, agora = Date.now()) {
   quarentena.set(`${serverId}:${userId}`, agora + QUARENTENA_MS);
 }
+// A staff liberou a pessoa (&automod sentinela dismiss, &warn limpar,
+// &silenciar tirar): a quarentena acaba junto (15 out 2026 — antes ela
+// continuava apagando tudo por até 30 min, mesmo com o automod desligado).
+export function liberarQuarentena(serverId, userId) {
+  return quarentena.delete(`${serverId}:${userId}`);
+}
 export function emQuarentena(serverId, userId, agora = Date.now()) {
   const ate = quarentena.get(`${serverId}:${userId}`) ?? 0;
   if (ate <= agora) { quarentena.delete(`${serverId}:${userId}`); return false; }

@@ -19,6 +19,8 @@ import { resolverUsuario } from "../core/ids.js";
 import { lerDuracao, duracaoTexto } from "../core/duracao.js";
 import { MAX_TIMEOUT_MS as MAX_MS } from "./timeout.js";
 import * as db from "../core/db.js";
+import { liberarQuarentena } from "./confianca.js";
+import { podeAgirSobre } from "../core/hierarquia.js";
 
 const TIRAR = new Set(["tirar", "remover", "desfazer", "off", "remove", "undo", "fim", "liberar"]);
 
@@ -79,10 +81,17 @@ export async function cmdSilenciar(message, args, ctx) {
       { title: "❌ Not in the server", description: `<@${alvoId}> isn't a member here — nothing to time out.`, colour: COR.erro }));
   }
 
+  // quem pede precisa estar ACIMA do alvo (15 out 2026)
+  const pode = await podeAgirSobre(server, message, alvoId, ctx);
+  if (!pode.ok) return sendEmbed(message.channel, tr(ctx,
+    { title: "🚫 Acima de você", description: `${pode.pt}.`, colour: COR.erro },
+    { title: "🚫 Above you", description: `${pode.en}.`, colour: COR.erro }));
+
   if (tirar) {
     try {
       await membro.edit({ remove: ["Timeout"] });
       try { db.silenciarAte(ctx.serverId ?? server?.id, alvoId, 0); db.definirSilenciado(ctx.serverId ?? server?.id, alvoId, false); } catch {}
+      liberarQuarentena(ctx.serverId ?? server?.id, alvoId);
       await log.registrar(ctx, "punicoes", { titulo: "🔊 Silêncio retirado (manual)",
         descricao: `<@${alvoId}> teve o silêncio retirado por <@${message.authorId}>.`,
         en: { titulo: "🔊 Silence lifted (manual)", descricao: `<@${alvoId}>'s silence was lifted by <@${message.authorId}>.` } });

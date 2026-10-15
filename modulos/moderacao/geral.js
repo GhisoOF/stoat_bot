@@ -48,6 +48,7 @@ function contarLinhas() {
 
 import * as banGlobal from "./ban-global.js";
 import { nomeModo } from "../core/nomes-automod.js";
+import { podeAgirSobre } from "../core/hierarquia.js";
 
 function extrairAlvo(message, args) {
   // 1) primeiro argumento: <@ID>, <ID> ou ID puro (ULID de 26 chars). Vem
@@ -105,12 +106,12 @@ function detalhesPT(P) {
     },
     kick: {
       uso: `${P}kick @usuário [motivo]`,
-      desc: "Expulsa o usuário mencionado. Ele pode voltar com um novo convite.",
+      desc: "Expulsa o usuário mencionado. Ele pode voltar com um novo convite.\n\n_Só vale sobre quem tem cargo **abaixo** do seu (o dono do servidor passa sempre)._",
       perm: "KickMembers", ex: `${P}kick @fulano spam`,
     },
     ban: {
       uso: `${P}ban @usuário [motivo]`,
-      desc: "Bane permanentemente o usuário mencionado.",
+      desc: "Bane permanentemente o usuário mencionado.\n\n_Só vale sobre quem tem cargo **abaixo** do seu (o dono do servidor passa sempre)._",
       perm: "BanMembers", ex: `${P}ban @fulano divulgação`,
     },
     silenciar: {
@@ -391,12 +392,12 @@ function detalhesEN(P) {
     },
     kick: {
       uso: `${P}kick @user [reason]`,
-      desc: "Kicks the mentioned user. They can come back with a new invite.",
+      desc: "Kicks the mentioned user. They can come back with a new invite.\n\n_Only works on people whose roles are **below** yours (the server owner always can)._",
       perm: "KickMembers", ex: `${P}kick @someone spam`,
     },
     ban: {
       uso: `${P}ban @user [reason]`,
-      desc: "Permanently bans the mentioned user.",
+      desc: "Permanently bans the mentioned user.\n\n_Only works on people whose roles are **below** yours (the server owner always can)._",
       perm: "BanMembers", ex: `${P}ban @someone advertising`,
     },
     silenciar: {
@@ -1372,6 +1373,14 @@ export async function cmdKick(message, args, ctx) {
       { description: "❌ Não posso me expulsar!", colour: COR.erro },
       { description: "❌ I can't kick myself!", colour: COR.erro }));
 
+  // quem pede precisa estar ACIMA do alvo (15 out 2026: antes só a Judy precisava)
+  {
+    const pode = await podeAgirSobre(server, message, targetId, ctx);
+    if (!pode.ok) return sendEmbed(message.channel, tr(ctx,
+      { title: "🚫 Acima de você", description: `${pode.pt}.`, colour: COR.erro },
+      { title: "🚫 Above you", description: `${pode.en}.`, colour: COR.erro }));
+  }
+
   try {
     await server.kickUser(targetId);
     await log.registrar(ctx, "punicoes", { titulo: "👢 Usuário expulso (manual)",
@@ -1433,6 +1442,14 @@ export async function cmdBan(message, args, ctx) {
     return sendEmbed(message.channel, tr(ctx,
       { description: "❌ Não posso me banir!", colour: COR.erro },
       { description: "❌ I can't ban myself!", colour: COR.erro }));
+
+  // quem pede precisa estar ACIMA do alvo (15 out 2026: antes só a Judy precisava)
+  {
+    const pode = await podeAgirSobre(server, message, targetId, ctx);
+    if (!pode.ok) return sendEmbed(message.channel, tr(ctx,
+      { title: "🚫 Acima de você", description: `${pode.pt}.`, colour: COR.erro },
+      { title: "🚫 Above you", description: `${pode.en}.`, colour: COR.erro }));
+  }
 
   try {
     const { jaEstava } = await banir(server, targetId, { reason });

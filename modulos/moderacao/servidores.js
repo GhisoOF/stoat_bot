@@ -7,6 +7,7 @@
 //   &servidores relatorio on|off
 //   &servidores relatorio vazias on|off  → mandar (ou pular) as horas sem nada
 //   &servidores relatorio assuntos [add|remove <id> [id…]]
+//   &servidores adulto [add|remove <id|aqui> [id…]]  → imagem +18 (só em canal NSFW)
 //
 // Voltou depois de ter saído na versão pública: aqui ele só mostra números
 // sobre os servidores do próprio bot de quem roda a instância.
@@ -16,6 +17,7 @@ import { contarMembros } from "../core/membros.js";
 import { limparId } from "../core/ids.js";
 import * as relatorio from "../ferramentas/relatorio.js";
 import * as store from "../core/config-store.js";
+import * as imagemAdulta from "../ai/imagem-adulta.js";
 
 export async function cmdServidores(message, args, ctx) {
   const { sendEmbed, COR, client, ehSuperAdmin } = ctx;
@@ -33,6 +35,9 @@ export async function cmdServidores(message, args, ctx) {
   }
   if (["relatorio", "relatório", "report"].includes(args[0]?.toLowerCase())) {
     return cmdRelatorio(message, args.slice(1), ctx);
+  }
+  if (["adulto", "+18", "18", "nsfw", "adult"].includes(args[0]?.toLowerCase())) {
+    return cmdAdulto(message, args.slice(1), { ...ctx, aqui });
   }
 
   let lista = [];
@@ -59,6 +64,45 @@ export async function cmdServidores(message, args, ctx) {
       "_Ritmo = média dos últimos minutos, em memória (zera se o bot reiniciar)._"].join("\n"),
     colour: COR.info,
   });
+}
+
+// ── Imagem +18: quais servidores podem (15 out 2026) ─────────────────────────
+// Só o dono do bot mexe aqui (o cmdServidores já barrou o resto). Mesmo num
+// servidor liberado, a imagem +18 só sai em canal marcado como NSFW no Stoat.
+async function cmdAdulto(message, args, ctx) {
+  const { sendEmbed, COR, client, aqui } = ctx;
+  const acao = String(args[0] ?? "").toLowerCase();
+  const ids = [...new Set(args.slice(1).join(" ").split(/[\s,;]+/)
+    .map((x) => (["aqui", "here"].includes(x.toLowerCase()) ? aqui : limparId(x))).filter(Boolean))];
+  const nomeDe = (id) => client.servers.get(id)?.name;
+  const rotulo = (id) => (nomeDe(id) ? `**${nomeDe(id)}** \`${id}\`` : `\`${id}\``);
+  const avisos = [];
+  const ADD = ["add", "adicionar", "liberar", "on"], REM = ["remove", "remover", "tirar", "bloquear", "off"];
+  if ((ADD.includes(acao) || REM.includes(acao)) && !ids.length) {
+    avisos.push(`⚠️ Faltou o servidor: \`&servidores adulto ${acao} <id|aqui> [id…]\``);
+  } else if (ADD.includes(acao)) {
+    const antes = new Set(imagemAdulta.servidoresLiberados());
+    imagemAdulta.definirServidores([...antes, ...ids]);
+    const novos = ids.filter((id) => !antes.has(id));
+    if (novos.length) avisos.push(`🔓 Liberado: ${novos.map(rotulo).join(", ")}`);
+    const fora = ids.filter((id) => !nomeDe(id));
+    if (fora.length) avisos.push(`⚠️ A Judy não está em ${fora.map((x) => `\`${x}\``).join(", ")} — fica na lista mesmo assim.`);
+    console.log(`[IMAGEM+18] liberado por ${message.authorId}: ${ids.join(", ")}`);
+  } else if (REM.includes(acao)) {
+    const antes = imagemAdulta.servidoresLiberados();
+    imagemAdulta.definirServidores(antes.filter((id) => !ids.includes(id)));
+    const sairam = ids.filter((id) => antes.includes(id));
+    avisos.push(sairam.length ? `🔒 Bloqueado de novo: ${sairam.map(rotulo).join(", ")}` : "Nenhum desses estava liberado.");
+    console.log(`[IMAGEM+18] bloqueado por ${message.authorId}: ${ids.join(", ")}`);
+  }
+  const lista = imagemAdulta.servidoresLiberados();
+  return sendEmbed(message.channel, { title: "🔞 Imagem +18 por servidor", colour: COR.info, description: [
+    lista.length ? lista.map((id) => `• ${rotulo(id)}`).join("\n") : "_Nenhum servidor liberado — a Judy não desenha +18 em lugar nenhum._",
+    ...avisos.map((x) => `\n${x}`),
+    "",
+    "`&servidores adulto add <id|aqui> [id…]` · `&servidores adulto remove <id|aqui>`",
+    "_Num servidor liberado, a imagem +18 só sai em canal marcado como **NSFW** no Stoat. Menores em cena sexual e pessoa real continuam recusados em qualquer lugar, e toda imagem passa pelo modelo de visão antes de sair._",
+  ].join("\n") });
 }
 
 async function cmdRelatorio(message, args, ctx) {

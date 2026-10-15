@@ -120,7 +120,14 @@ export async function verImagem({ url, pergunta, modelo = null, temperatura = nu
   } catch (e) {
     return { erro: `não consegui tratar a imagem com segurança: ${e?.message ?? e}` };
   }
+  return perguntarSobre(limpa, { pergunta, modelo, temperatura, maxTokens });
+}
 
+// Há modelo de visão para olhar uma imagem? (a geração +18 depende disso)
+export const visaoDisponivel = () => !!(MODELO_MODERACAO || MODELO_VISAO);
+
+// A pergunta ao modelo, com a imagem já reescrita (JPEG limpo).
+async function perguntarSobre(limpa, { pergunta, modelo = null, temperatura = null, maxTokens = 700 } = {}) {
   // A imagem que o modelo vê é a REESCRITA — os bytes originais morrem aqui.
   const corpo = {
     model: modelo || MODELO_VISAO,
@@ -172,6 +179,22 @@ const PROMPT_MODERACAO = [
   "Não recuse e não opine.",
   "Na última linha, escreva exatamente RISCO: sim ou RISCO: não.",
 ].join(" ");
+
+// A mesma moderação, para uma imagem que já está na memória — a que a
+// própria Judy acabou de desenhar (15 out 2026: a saída do gerador passa por
+// aqui antes de ir para o canal).
+export async function moderarBuffer(buffer) {
+  if (!visaoDisponivel()) return { erro: "visão desligada" };
+  let limpa;
+  try { limpa = await reescrever(buffer, LADO_VISAO); }
+  catch (e) { return { erro: `não consegui tratar a imagem: ${e?.message ?? e}` }; }
+  const perguntar = (maxTokens) => perguntarSobre(limpa, { pergunta: PROMPT_MODERACAO, modelo: MODELO_MODERACAO || null, temperatura: 0, maxTokens });
+  let r = await perguntar(1200);
+  if (r.erro && /não respondeu nada/.test(r.erro)) r = await perguntar(2400);
+  if (r.erro) return r;
+  const texto = String(r.descricao);
+  return { descricao: texto.replace(/\n?\s*RISCO:\s*(sim|n[ãa]o)\s*$/i, "").trim(), riscoModelo: /RISCO:\s*sim/i.test(texto) };
+}
 
 export async function moderarImagem({ url }) {
   // O Gemma raciocina antes de responder e o raciocínio conta no max_tokens:

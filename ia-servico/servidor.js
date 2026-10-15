@@ -115,7 +115,12 @@ function chamadasEmTexto(texto) {
   return achadas;
 }
 
-async function conversarComFerramentas(messages, { modelo, usarFerramentas = true, idioma = "pt" } = {}) {
+// O contexto que o BOT manda junto (só campos conhecidos, só booleanos).
+function contextoDe(corpo) {
+  return { imagemAdulta: corpo?.contexto?.imagemAdulta === true };
+}
+
+async function conversarComFerramentas(messages, { modelo, usarFerramentas = true, idioma = "pt", contexto = {} } = {}) {
   const hist = [...messages];
   const usos = [];
   const anexos = [];
@@ -209,7 +214,7 @@ async function conversarComFerramentas(messages, { modelo, usarFerramentas = tru
 
       log(`ferramenta: ${nome}`, JSON.stringify(args).slice(0, 200));
       const inicio = Date.now();
-      const resultado = await ferramentas.executar(nome, args);
+      const resultado = await ferramentas.executar(nome, args, contexto);
       usos.push({ ferramenta: nome, ms: Date.now() - inicio, erro: !!resultado?.erro });
       if (resultado?.erro) log(`ferramenta ${nome} ERRO: ${String(resultado.erro).slice(0, 300)}`);
 
@@ -330,7 +335,7 @@ const servidor = createServer(async (req, res) => {
       const { nome, args } = body ?? {};
       if (!nome) return json(res, 400, { erro: "informe { nome, args }" });
       try {
-        const resultado = await ferramentas.executar(nome, args ?? {});
+        const resultado = await ferramentas.executar(nome, args ?? {}, contextoDe(body));
         log(`ferramenta direta: ${nome} ${JSON.stringify(args ?? {}).slice(0, 120)}`);
         return json(res, 200, { ok: !resultado?.erro, resultado });
       } catch (e) {
@@ -362,6 +367,7 @@ const servidor = createServer(async (req, res) => {
         // Quem chama diz o idioma; sem isso, assumimos português (o padrão
         // dos servidores onde a Judy roda).
         idioma: corpo.idioma === "en" ? "en" : "pt",
+        contexto: contextoDe(corpo),
       });
       log(`chat ok em ${Date.now() - t0}ms | ferramentas: ${r.usos.map((u) => u.ferramenta).join(",") || "nenhuma"}`);
       return json(res, 200, r);

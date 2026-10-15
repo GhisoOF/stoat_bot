@@ -5,6 +5,7 @@ import * as servidorInfo from "../ferramentas/servidor-info.js";
 import { semPingEmMassa } from "../core/seguranca.js";
 import * as extra from "./contexto-extra.js";
 import * as store from "../core/config-store.js";
+import * as imagemAdulta from "./imagem-adulta.js";
 import * as db from "../core/db.js";
 import * as memoria from "./memoria-agente.js";
 import * as comentario from "./comentario-espontaneo.js";
@@ -438,7 +439,7 @@ async function llmDisponivel() {
   }
 }
 
-async function executarFerramenta(nome, args, { timeoutMs = 20000 } = {}) {
+async function executarFerramenta(nome, args, { timeoutMs = 20000, contexto = {} } = {}) {
   if (!IA_SERVICO_URL) return null;
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), timeoutMs);
@@ -446,7 +447,7 @@ async function executarFerramenta(nome, args, { timeoutMs = 20000 } = {}) {
     const headers = { "Content-Type": "application/json" };
     if (IA_SERVICO_CHAVE) headers["x-chave"] = IA_SERVICO_CHAVE;
     const r = await fetch(`${IA_SERVICO_URL}/ferramenta`, {
-      method: "POST", headers, body: JSON.stringify({ nome, args }), signal: ctrl.signal,
+      method: "POST", headers, body: JSON.stringify({ nome, args, contexto }), signal: ctrl.signal,
     });
     if (!r.ok) return null;
     const d = await r.json();
@@ -483,7 +484,8 @@ async function chamarServicoIA(messages, { modelo = null, idioma = "pt" } = {}, 
     const r = await fetch(`${IA_SERVICO_URL}/chat`, {
       method: "POST",
       headers,
-      body: JSON.stringify({ messages, modelo: modelo || undefined, idioma, ferramentas: opcoes?.ferramentas !== false }),
+      body: JSON.stringify({ messages, modelo: modelo || undefined, idioma, ferramentas: opcoes?.ferramentas !== false,
+        contexto: { imagemAdulta: opcoes?.imagemAdulta === true } }),
       signal: ctrl.signal,
     });
     if (!r.ok) {
@@ -1250,7 +1252,8 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
         // 420s desde o Z-Image) + folga. Estava em 180s, da época do SD-Turbo: com
         // o modelo de 6B o bot desistia enquanto o gerador ainda trabalhava.
         // ×2: agora pode haver uma 2ª tentativa no modo econômico.
-        { timeoutMs: 2 * Number(process.env.IMAGEM_GERACAO_TIMEOUT_MS || 420_000) + 30_000 });
+        { timeoutMs: 2 * Number(process.env.IMAGEM_GERACAO_TIMEOUT_MS || 420_000) + 30_000,
+          contexto: { imagemAdulta: imagemAdulta.liberadaAqui(serverId, canalId) } });
     } finally { retomarFundo(); }
     if (r?.anexo_base64) {
       responder._anexoDireto = { base64: r.anexo_base64, mime: r.anexo_mime || "image/png", nome: r.anexo_nome || "imagem.png" };
@@ -1302,7 +1305,7 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
   if (IA_SERVICO_URL && precisaDoServico) {
     try {
       const r = await chamarServicoIA(messages, { modelo: modeloEscolhido, idioma: lang },
-        { ferramentas: !responder._semFerramentas });
+        { ferramentas: !responder._semFerramentas, imagemAdulta: imagemAdulta.liberadaAqui(serverId, canalId) });
       responder._semFerramentas = false;
       // O serviço faz a própria continuação; o que volta é inteiro.
       if (r) {
@@ -1810,6 +1813,7 @@ async function lerMensagemCitada(message) {
 export async function conversar(message, pergunta, ctx, opcoes = {}) {
   const { modeloForcado = null, avisoEspera = null } = opcoes;
   const { sendEmbed, COR, serverId } = ctx;
+  imagemAdulta.lembrarCanal(message.channel);   // canal NSFW? (a imagem +18 depende disso)
   const lang = lingua(ctx);
   const en = lang === "en";
 

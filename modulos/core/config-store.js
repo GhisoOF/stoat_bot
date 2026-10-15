@@ -112,6 +112,7 @@ export const padraoGlobal = {
   debug:                true,
   linkBlocklistSources: [],   // recurso pesado (milhões de domínios) — compartilhado
   linkBlocklistManual:  [],
+  imagemAdulta:         [],   // servidores onde a imagem +18 é liberada (só o dono do bot; ver modulos/ai/imagem-adulta.js)
 };
 
 let templateServidor = structuredClone(padraoServidor);

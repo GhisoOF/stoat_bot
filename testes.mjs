@@ -13585,6 +13585,129 @@ console.log(`\nBANGLOBAL CONSENSO 15 OUT: ${ok} ok, ${falhou} falha(s)`);
 process.exit(falhou ? 1 : 0);
 };
 
+// ════════════════════════════════════════════════════════════════════════════
+// imagem-adulta-15out — imagem +18 só onde o dono do bot liberar
+// ════════════════════════════════════════════════════════════════════════════
+// Ghieh descobriu (15 out 2026) que a Judy desenhava +18 em qualquer servidor.
+// Agora: bloqueado por padrão; `&servidores adulto add` libera um servidor, e
+// mesmo lá só em canal NSFW. Menor + sexual e pessoa real continuam recusados
+// em todo lugar, e a imagem pronta passa pelo modelo de visão.
+SUITES["imagem-adulta-15out"] = async () => {
+const __m0 = await import("node:assert"); const assert = __m0.default;
+const __m1 = await import("node:fs"); const fs = __m1.default;
+process.env.SD_URL = "http://127.0.0.1:9";          // "há gerador" (nada chega a ser chamado)
+delete process.env.LLM_MODEL_VISAO; delete process.env.LLM_MODEL_MODERACAO;
+process.env.DB_PATH = "/tmp/ima15.db"; process.env.CONFIG_PATH = "/tmp/ima15.json";
+for (const f of ["/tmp/ima15.db", "/tmp/ima15.db-wal", "/tmp/ima15.db-shm", "/tmp/ima15.json"]) fs.rmSync(f, { force: true });
+const store = await import("./modulos/core/config-store.js");
+store.inicializar(process.env.CONFIG_PATH, process.env.DB_PATH);
+const gi = await import("./ia-servico/ferramentas/gerar-imagem.js");
+const ferramentas = await import("./ia-servico/ferramentas/index.js");
+const adulta = await import("./modulos/ai/imagem-adulta.js");
+const servidores = await import("./modulos/moderacao/servidores.js");
+
+let ok = 0, falhou = 0;
+const t = async (nome, fn) => {
+  const o = [console.log, console.warn, console.info]; console.log = console.warn = console.info = () => {};
+  try { await fn(); [console.log, console.warn, console.info] = o; console.log(`  ✅ ${nome}`); ok++; }
+  catch (e) { [console.log, console.warn, console.info] = o; console.log(`  ❌ ${nome}\n     ${e.message}`); falhou++; }
+};
+
+console.log("── o pedido (prompt) ──");
+await t("★ servidor comum: pedido +18 é recusado, dizendo onde é liberado", () => {
+  for (const p of ["a naked woman on the beach", "mulher pelada na praia", "hentai girl", "sexy lingerie photo"]) {
+    assert.match(gi.prompProibido(p) ?? "", /\+18 não está liberado/, p);
+  }
+});
+await t("★ servidor liberado: o mesmo pedido passa", () => {
+  assert.equal(gi.prompProibido("a naked woman on the beach", { adulto: true }), null);
+});
+await t("★ menor + sexual e pessoa real + sexual: recusados MESMO no servidor liberado", () => {
+  for (const p of ["naked schoolgirl", "nude teen", "menina de 15 anos pelada", "little girl in lingerie", "young boy nude"]) {
+    assert.match(gi.prompProibido(p, { adulto: true }) ?? "", /menores/, p);
+  }
+  assert.match(gi.prompProibido("foto nua da Taylor Swift", { adulto: true }) ?? "", /deepfake/);
+});
+await t("pedido comum passa nos dois", () => {
+  for (const p of ["a cat astronaut, watercolor", "um castelo medieval ao pôr do sol", "chicken breast recipe illustration", "18 balloons at a party"]) {
+    assert.equal(gi.prompProibido(p), null, p);
+    assert.equal(gi.prompProibido(p, { adulto: true }), null, p);
+  }
+});
+
+console.log("\n── a imagem pronta (o que o modelo de visão descreve) ──");
+await t("★ nudez na saída: descartada no servidor comum, aceita no liberado", () => {
+  assert.match(gi.julgarSaida("Uma mulher nua deitada numa cama.") ?? "", /nudez/);
+  assert.equal(gi.julgarSaida("Uma mulher nua deitada numa cama.", { adulto: true }), null);
+});
+await t("★ alguém que aparenta ser menor + nudez: descartada em qualquer lugar", () => {
+  assert.match(gi.julgarSaida("A naked teenager in a bedroom.", { adulto: true }) ?? "", /menor/);
+  assert.match(gi.julgarSaida("Duas crianças, uma delas sem roupa e nua.", { adulto: true }) ?? "", /menor/);
+});
+await t("negação não conta: \"sem nudez\", \"Nudez: não\"", () => {
+  assert.equal(gi.julgarSaida("Um gato num jardim. Sem nudez. Nudez: não."), null);
+});
+await t("★ +18 sem modelo de visão, ou com a visão falhando: a imagem NÃO sai", async () => {
+  assert.match(await gi.conferirSaida(Buffer.from("x"), { adulto: true, temVisao: () => false }) ?? "", /sem modelo de visão/);
+  assert.match(await gi.conferirSaida(Buffer.from("x"), { adulto: true, temVisao: () => true, moderar: async () => ({ erro: "timeout" }) }) ?? "", /conferir/);
+  assert.equal(await gi.conferirSaida(Buffer.from("x"), { adulto: false, temVisao: () => true, moderar: async () => ({ erro: "timeout" }) }), null);
+  assert.match(await gi.conferirSaida(Buffer.from("x"), { adulto: false, temVisao: () => true, moderar: async () => ({ descricao: "a nude woman" }) }) ?? "", /nudez/);
+});
+
+console.log("\n── quem libera é o bot, não o modelo ──");
+await t("★ o modelo pondo `imagemAdulta` nos argumentos não libera nada", async () => {
+  const r = await ferramentas.executar("gerar_imagem", { prompt: "a naked woman", imagemAdulta: true });
+  assert.match(r.erro ?? "", /\+18 não está liberado/);
+});
+await t("★ liberado pelo contexto do bot, mas sem visão configurada: recusa antes de desenhar", async () => {
+  const r = await ferramentas.executar("gerar_imagem", { prompt: "a naked woman" }, { imagemAdulta: true });
+  assert.match(r.erro ?? "", /modelo de visão/);
+});
+await t("★ o chat manda o contexto nas duas chamadas ao serviço (direta e com ferramentas)", () => {
+  const fonte = fs.readFileSync("modulos/ai/chat.js", "utf8");
+  assert.match(fonte, /body: JSON\.stringify\(\{ nome, args, contexto \}\)/);
+  assert.match(fonte, /contexto: \{ imagemAdulta: opcoes\?\.imagemAdulta === true \}/);
+  assert.equal((fonte.match(/imagemAdulta\.liberadaAqui\(serverId, canalId\)/g) ?? []).length, 2);
+  const servico = fs.readFileSync("ia-servico/servidor.js", "utf8");
+  assert.match(servico, /ferramentas\.executar\(nome, args, contexto\)/);
+});
+
+console.log("\n── servidor liberado E canal NSFW ──");
+await t("★ só vale com o servidor na lista do dono E o canal marcado como NSFW", () => {
+  adulta.definirServidores(["SRV18"]);
+  adulta.lembrarCanal({ id: "C_NSFW", nsfw: true });
+  adulta.lembrarCanal({ id: "C_GERAL", nsfw: false });
+  assert.equal(adulta.liberadaAqui("SRV18", "C_NSFW"), true);
+  assert.equal(adulta.liberadaAqui("SRV18", "C_GERAL"), false);
+  assert.equal(adulta.liberadaAqui("OUTRO", "C_NSFW"), false);
+  adulta.definirServidores([]);
+});
+const rodar = async (args, { dono = true } = {}) => {
+  const saidas = [];
+  await servidores.cmdServidores({ authorId: dono ? "DONO" : "ADMIN", channel: { id: "C1" } }, args, {
+    sendEmbed: async (_c, e) => saidas.push(e), COR: {}, serverId: "SRV_AQUI",
+    client: { servers: { get: (id) => (id === "SRV_AQUI" ? { name: "Servidor Aqui" } : null) } },
+    ehSuperAdmin: (id) => id === "DONO" });
+  return saidas.at(-1);
+};
+await t("★ `&servidores adulto add aqui` / `remove aqui` (só o dono do bot)", async () => {
+  await rodar(["adulto", "add", "aqui"]);
+  assert.deepEqual(adulta.servidoresLiberados(), ["SRV_AQUI"]);
+  assert.deepEqual(store.getGlobal().imagemAdulta, ["SRV_AQUI"]);
+  const negado = await rodar(["adulto", "remove", "aqui"], { dono: false });
+  assert.match(negado.title, /restrito/);
+  assert.deepEqual(adulta.servidoresLiberados(), ["SRV_AQUI"]);
+  await rodar(["adulto", "remove", "aqui"]);
+  assert.deepEqual(adulta.servidoresLiberados(), []);
+});
+await t("por padrão, nenhum servidor liberado", () => {
+  assert.deepEqual(store.padraoGlobal.imagemAdulta, []);
+});
+
+console.log(`\nIMAGEM +18 (15 out): ${ok} ok, ${falhou} falha(s)`);
+process.exit(falhou ? 1 : 0);
+};
+
 // ── O executor ───────────────────────────────────────────────────────────────
 const PRECISA_DO_BOT = (nome) => /import\("\.\/main\.js"\)/.test(String(SUITES[nome]));
 

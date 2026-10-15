@@ -158,6 +158,15 @@ diz exatamente o que clicar.
   Liga sozinho nos servidores que já existiam; servidor novo começa desligado.
   *Profile pictures: checked on join and on change by the vision model; default
   action is a 24 h timeout plus a staff alert.*
+- **Imagem +18 por servidor** (`&servidores adulto`, só o dono do bot): a
+  geração de imagem vem com +18 **bloqueado** em todo servidor.
+  `&servidores adulto add <id|aqui>` libera um servidor, e mesmo nele a imagem
+  +18 só sai em canal marcado como **NSFW** no Stoat; `remove` bloqueia de novo.
+  Em lugar nenhum saem menores em cena sexual nem pessoa real (deepfake), e
+  toda imagem pronta passa pelo modelo de visão antes de ir para o canal — no
+  servidor liberado, sem visão configurada (`LLM_MODEL_VISAO`) o +18 não sai.
+  *+18 images are off everywhere; the bot owner unlocks servers one by one
+  (`&servidores adulto add`), and only NSFW channels there get them.*
 - **Painel do dono do bot** (`&servidores`, só `SUPER_ADMINS`, fora do `&help`):
   onde o bot está, com membros e ritmo de mensagens. E o **relatório horário**
   (`&servidores relatorio canal #canal`): a cada hora cheia, banimentos,

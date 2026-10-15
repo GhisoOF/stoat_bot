@@ -25,6 +25,7 @@ import { existsSync, mkdirSync, readFileSync, unlinkSync, renameSync } from "nod
 import { spawn as spawnProc, spawnSync } from "node:child_process";
 import { basename, join } from "node:path";
 import { tmpdir } from "node:os";
+import { moderarBuffer, visaoDisponivel } from "./ver-imagem.js";
 const LADO_MAX     = Number(process.env.IMAGEM_LADO_GERACAO || 768);
 const PASSOS_MAX   = Number(process.env.IMAGEM_PASSOS_MAX || 30);
 const TIMEOUT_MS   = Number(process.env.IMAGEM_GERACAO_TIMEOUT_MS || 420_000);
@@ -39,13 +40,16 @@ async function sharp() {
   return sharpMod;
 }
 
-const MENOR   = /\b(crian[çc]a|menor(?:es)?|adolescente|teen|loli|shota|infantil|kid|child|underage|1[0-7]\s*(anos|years?|yo)\b)/i;
-const SEXUAL  = /\b(nu[aá]?s?|nude?s?|naked|pelad[ao]s?|sem\s+roupa|nsfw|sexual\w*|er[óo]tic\w*|sensual\w*|lingerie|fetiche|fetish|hentai|porn\w*|explicit\w*|seminu\w*)\b/i;
+const MENOR   = /\b(crian[çc]as?|menor(?:es)?|adolescentes?|teens?|teenagers?|loli|shota|infantil|kids?|child(?:ren)?|underage|preteens?|toddlers?|bab(?:y|ies)|beb[êe]s?|schoolgirls?|schoolboys?|colegiais?|garotinh[ao]s?|menininh[ao]s?|novinh[ao]s?|ninfetas?|young\s+(?:girl|boy)s?|little\s+(?:girl|boy)s?|(?:[1-9]|1[0-7])\s*(anos|years?|yo|y\/o)\b)/i;
+const SEXUAL  = /\b(nu[aá]?s?|nude?s?|nudez|nudity|naked|pelad[ao]s?|sem\s+roupa|topless|nsfw|sexo|sex|sexy|sexual\w*|er[óo]tic\w*|sensual\w*|lingerie|fetiche|fetish|hentai|porn\w*|explicit\w*|seminu\w*|seios|boobs?|nipples?|mamilos?|genit\w*|p[êe]nis|vagina|bunda|butt|ass|orgasm\w*|transa\w*|bdsm|bondage)\b/i;
 const PESSOA_REAL = /\b(da|do|de)\s+[A-ZÀ-Ú][a-zà-ú]+\s+[A-ZÀ-Ú][a-zà-ú]+|celebridade|celebrity|famos[ao]/;
 const GORE    = /\b(gore|decapita\w+|desmembr\w+|mutila\w+|v[íi]sceras|entranhas|tortura(?:ndo|r)?\b.*\b(real|pessoa)|corpo\s+esquartejado)\b/i;
 const ODIO    = /\b(su[áa]stica|swastika|nazi\w*|kkk\b|supremac\w+)\b/i;
 
-export function prompProibido(prompt) {
+// `adulto`: o servidor (e o canal) liberaram +18 — quem decide é o bot, nunca
+// o modelo (o flag vem do contexto da chamada, não dos argumentos da ferramenta).
+// Menor + sexual e pessoa real + sexual continuam recusados EM QUALQUER servidor.
+export function prompProibido(prompt, { adulto = false } = {}) {
   const p = String(prompt ?? "");
   if (MENOR.test(p) && SEXUAL.test(p)) {
     return "esse pedido combina menores com conteúdo sexualizado — recusado, sem exceção, e fica registrado no log.";
@@ -53,12 +57,53 @@ export function prompProibido(prompt) {
   if (SEXUAL.test(p) && PESSOA_REAL.test(p)) {
     return "nudez ou conteúdo sexual de pessoa real identificável é deepfake — recusado.";
   }
+  if (SEXUAL.test(p) && !adulto) {
+    return "conteúdo +18 não está liberado aqui — só em servidor liberado pelo dono do bot, e só em canal marcado como NSFW.";
+  }
   if (GORE.test(p)) return "gore explícito não — posso fazer algo sombrio ou sinistro sem vísceras.";
   if (ODIO.test(p)) return "símbolos de ódio não saem daqui.";
   return null;
 }
 
 const NEGATIVO_FIXO = "nsfw, nude, naked, child, loli, underage, gore, dismemberment, watermark, text, low quality, deformed";
+// no servidor liberado: tira só o "sem nudez"; criança/menor continua proibido
+const NEGATIVO_ADULTO = "child, children, kid, loli, shota, underage, teen, young-looking, petite body, school uniform, gore, dismemberment, watermark, text, low quality, deformed";
+
+// ── A imagem pronta é conferida pelo modelo de visão (15 out 2026) ──────────
+// O prompt sozinho não basta: o Z-Image (o padrão) nem usa prompt negativo, e
+// às vezes desenha nudez que ninguém pediu. A descrição do modelo é lida como
+// no automod de imagens: só vale o que ele AFIRMA ("sem nudez" não conta).
+const NEGA = /\b(n[ãa]o|nenhum\w*|sem|nada\s+de|aus[êe]ncia|no|not|none|without|absent)\b/i;
+// "sem roupa" / "without clothes" AFIRMAM nudez: viram "nua" antes de o "sem"
+// derrubar a frase como negação
+const afirmado = (descricao) => String(descricao ?? "")
+  .replace(/\bsem\s+(nenhuma\s+)?roupas?\b|\bdespid[ao]s?\b/gi, "nua")
+  .replace(/\b(without|no)\s+(any\s+)?cloth(es|ing)\b|\bunclothed\b|\bundressed\b/gi, "naked")
+  .split(/[.;!?\n,]|\s+(?:mas|porém|but)\s+/i).filter((c) => !NEGA.test(c)).join(". ");
+const SEXUAL_DESC = /\b(nu[ao]?s?|nudez|nudity|nude|naked|pelad[ao]s?|topless|seios?|breasts?|mamilos?|nipples?|genit\w*|p[êe]nis|vagina|ato\s+sexual|sexual\w*|sexo|sex|er[óo]tic\w*|pornogr\w*|lingerie|roupa\s+[íi]ntima|underwear)\b/i;
+const MENOR_DESC  = /\b(crian[çc]as?|menin[ao]s?|garot[ao]s?|garotinh[ao]s?|adolescentes?|infantil|beb[êe]s?|child(?:ren)?|kids?|toddlers?|bab(?:y|ies)|teen(?:ager)?s?|minors?|boys?|girls?|schoolgirls?|uniforme\s+escolar|school\s+uniform)\b/i;
+export function julgarSaida(descricao, { adulto = false } = {}) {
+  const d = afirmado(descricao);
+  const sexual = SEXUAL_DESC.test(d), menor = MENOR_DESC.test(d);
+  if (sexual && menor) return "a imagem saiu com alguém que aparenta ser menor numa cena com nudez — descartada";
+  if (sexual && !adulto) return "a imagem saiu com nudez — +18 não está liberado aqui, então ela foi descartada";
+  return null;
+}
+
+// A imagem pronta (JPEG) passa pela visão. No modo +18, sem visão ou com erro
+// dela, a imagem NÃO sai (fecha no erro); fora dele, o filtro do prompt já
+// barrou o pedido e a visão é uma segunda rede.
+export async function conferirSaida(jpeg, { adulto = false, moderar = moderarBuffer, temVisao = visaoDisponivel } = {}) {
+  if (!temVisao()) return adulto ? "sem modelo de visão para conferir a imagem — +18 fica desligado" : null;
+  const r = await moderar(jpeg);
+  if (r?.erro) {
+    console.warn(`[IA][gerar_imagem] conferência da saída falhou: ${r.erro}`);
+    return adulto ? "não consegui conferir a imagem antes de enviar — +18 não sai sem conferência" : null;
+  }
+  const veredito = julgarSaida(r.descricao, { adulto });
+  if (veredito) console.warn(`[IA][gerar_imagem] SAÍDA DESCARTADA (${adulto ? "+18" : "normal"}): ${String(r.descricao).replace(/\s+/g, " ").slice(0, 300)}`);
+  return veredito;
+}
 
 const multiploDe64 = (n) => Math.max(256, Math.min(LADO_MAX, Math.round(n / 64) * 64));
 
@@ -165,7 +210,7 @@ export async function gerarComFolga(pedido, { gerar = gerarEmbutido, liberar = l
   }
 }
 
-function gerarEmbutido({ texto, width, height, economico = false }) {
+function gerarEmbutido({ texto, width, height, economico = false, negativo = NEGATIVO_FIXO }) {
   return new Promise((res, rej) => {
     const saida = join(tmpdir(), `sd-${Date.now()}.png`);
     const cfg = process.env.IMAGEM_CFG || "1.0";
@@ -197,7 +242,7 @@ function gerarEmbutido({ texto, width, height, economico = false }) {
       try { modelo = baixarModeloSD(); } catch (e) { return rej(e); }
       // SD-Turbo: pouquíssimos passos e cfg 1.0 — é o que o torna leve em CPU.
       const passos = String(Math.min(PASSOS_MAX, Number(process.env.IMAGEM_PASSOS || 4)));
-      finalArgs = ["-M", "img_gen", "-m", modelo, "-p", texto, "-n", NEGATIVO_FIXO,
+      finalArgs = ["-M", "img_gen", "-m", modelo, "-p", texto, "-n", negativo,
         "-W", String(width), "-H", String(height), "--steps", passos,
         "--cfg-scale", cfg, "--type", "q8_0", "--seed", String(semente()), "-o", saida];
       if (economico) finalArgs.push("--vae-tiling", "--offload-to-cpu");
@@ -232,14 +277,18 @@ function gerarEmbutido({ texto, width, height, economico = false }) {
   });
 }
 
-export async function executar({ prompt, largura, altura }) {
+export async function executar({ prompt, largura, altura }, contexto = {}) {
+  const adulto = contexto?.imagemAdulta === true;
   const embutidoDisponivel = IMAGEM_LIGADA && existsSync(SD_BIN);
   if (!SD_URL && !embutidoDisponivel) {
     return { erro: "geração de imagem indisponível: o binário embutido (sd.cpp) não está nesta imagem e não há SD_URL apontando para um servidor A1111 (Forge/SD.Next) — ver ia-servico/README." };
   }
   const texto = String(prompt ?? "").trim();
   if (!texto) return { erro: "descreva o que desenhar." };
-  const recusa = prompProibido(texto);
+  if (adulto && !visaoDisponivel()) {
+    return { erro: "recusado: +18 precisa do modelo de visão para conferir a imagem antes de enviar, e ele não está configurado (LLM_MODEL_VISAO)." };
+  }
+  const recusa = prompProibido(texto, { adulto });
   if (recusa) {
     console.warn(`[IA][gerar_imagem] RECUSADO: ${texto.slice(0, 160)}`);
     return { erro: `recusado: ${recusa}` };
@@ -247,7 +296,7 @@ export async function executar({ prompt, largura, altura }) {
 
   const corpo = {
     prompt: texto.slice(0, 1500),
-    negative_prompt: NEGATIVO_FIXO,
+    negative_prompt: adulto ? NEGATIVO_ADULTO : NEGATIVO_FIXO,
     width: multiploDe64(Number(largura) || LADO_MAX),
     height: multiploDe64(Number(altura) || LADO_MAX),
     steps: Math.min(PASSOS_MAX, Number(process.env.IMAGEM_PASSOS || 22)),
@@ -257,11 +306,13 @@ export async function executar({ prompt, largura, altura }) {
 
   if (!SD_URL) {
     try {
-      const png = await gerarComFolga({ texto, width: corpo.width, height: corpo.height });
+      const png = await gerarComFolga({ texto, width: corpo.width, height: corpo.height, negativo: corpo.negative_prompt });
       const s2 = await sharp();
       const limpa = await s2(png, { limitInputPixels: MAX_PIXELS })
         .jpeg({ quality: 90, mozjpeg: true })
         .toBuffer();
+      const barrada = await conferirSaida(limpa, { adulto });
+      if (barrada) return { erro: `recusado: ${barrada}.` };
       return {
         ok: true,
         dimensoes: `${corpo.width}x${corpo.height}`,
@@ -291,6 +342,8 @@ export async function executar({ prompt, largura, altura }) {
     const limpa = await s(Buffer.from(b64, "base64"), { limitInputPixels: MAX_PIXELS })
       .jpeg({ quality: 90, mozjpeg: true })
       .toBuffer();
+    const barrada = await conferirSaida(limpa, { adulto });
+    if (barrada) return { erro: `recusado: ${barrada}.` };
 
     return {
       ok: true,

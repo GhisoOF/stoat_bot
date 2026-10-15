@@ -43,11 +43,13 @@ export function definicoes() {
 export function nomes() { return [...registro.keys()]; }
 
 // Executa uma ferramenta pelo nome. Nunca lança: erro vira resultado.
-export async function executar(nome, args) {
+// `contexto` vem de QUEM CHAMA o serviço (o bot: ex. { imagemAdulta }), nunca
+// dos argumentos que o modelo escreveu — o modelo não consegue se liberar.
+export async function executar(nome, args, contexto = {}) {
   const mod = registro.get(nome);
   if (!mod) return { erro: `Ferramenta desconhecida: ${nome}` };
   try {
-    return await mod.executar(args || {});
+    return await mod.executar(args || {}, contexto || {});
   } catch (e) {
     return { erro: `Falha em ${nome}: ${(e?.message ?? e).toString().slice(0, 300)}` };
   }

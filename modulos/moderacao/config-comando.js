@@ -3,7 +3,7 @@ import { servidorPermitido as temIA } from "../ai/chat.js";
 import * as db from "../core/db.js";
 import { EVENTOS } from "../core/log.js";
 import { nomeGrupo, nomeParte, nomeModo, nomeEventoLog } from "../core/nomes-automod.js";
-import { MODOS as MODOS_BG, MODOS_EN as MODOS_BG_EN } from "./ban-global.js";
+import { MODOS as MODOS_BG, MODOS_EN as MODOS_BG_EN, modoDe as modoBanGlobal } from "./ban-global.js";
 import { escadaDePunicao, rotuloDegrau, GRUPOS_AUTOMOD, estadoDoGrupo, validadeDosAvisos } from "./automod-engine.js";
 import { tr, lingua } from "../core/i18n.js";
 import { servidorNaLista } from "../core/env.js";
@@ -172,7 +172,7 @@ export async function cmdConfig(message, args, ctx) {
       wl,
       "",
       T("**🌐 Lista global de banimentos**", "**🌐 Global ban list**"),
-      `${T("**Modo:**", "**Mode:**")} \`${config.banGlobal?.modo ?? "off"}\` — ${L_BG[config.banGlobal?.modo ?? "off"]}`,
+      `${T("**Modo:**", "**Mode:**")} \`${modoBanGlobal(config)}\` — ${L_BG[modoBanGlobal(config)]}`,
       `${T("**Na lista:**", "**Listed:**")} ${db.usuariosBanidosDistintos()} ${T("usuário(s) em", "user(s) in")} ${db.totalBansGlobais()} ${T("registro(s)", "record(s)")}`,
       "",
       T("**🎛 Comandos desativados**", "**🎛 Disabled commands**"),

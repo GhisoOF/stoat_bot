@@ -40,7 +40,7 @@ export async function coletar({ server, client, config, serverId, botMember, ehD
   const escada = (() => { try { return escadaDePunicao(pol); } catch { return []; } })();
   const usaMute = pol.modo === "confirmar" || (pol.modo === "acumular" && escada.some((d) => d?.tipo === "mute" || d?.ms));
   const usaBan = pol.modo === "banir" || (pol.modo === "acumular" && escada.some((d) => d?.tipo === "ban" || d === "ban"))
-    || config?.banGlobal?.modo === "banir";
+    || ["banir", "imediato", "consenso"].includes(config?.banGlobal?.modo);
   const filtrosLigados = Object.values(MODULOS_AUTOMOD).filter((k) => moduloLigado(am, k));
   const cargosNivel = (() => { try { return db.listarCargosNivel(serverId); } catch { return []; } })();
   const reacoes = (() => { try { return db.listReactionRolesServidor(serverId); } catch { return []; } })();

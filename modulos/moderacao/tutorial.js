@@ -373,7 +373,7 @@ function AREAS(P, lang = "pt", comIA = false) {
       corpo: [
         `\`${P}config\` — overview of everything configured on this server`,
         `\`${P}comando disable|enable <name>\` — toggles a command here`,
-        `\`${P}banglobal <off|avisar|banir>\` — what to do when someone banned elsewhere joins`,
+        `\`${P}banglobal <off|avisar|imediato|consenso>\` — what to do when someone banned elsewhere joins`,
         `\`${P}idioma pt|en\` — the language I reply in on this server`,
         `\`${P}debug\` — full diagnostics: what's broken, and how to fix it`,
         `\`${P}debug @user\` · \`${P}debug #channel\` — one person, one channel`,
@@ -753,7 +753,7 @@ function AREAS(P, lang = "pt", comIA = false) {
       corpo: [
         `\`${P}config\` — panorama de tudo que está configurado neste servidor`,
         `\`${P}comando desativar|ativar <nome>\` — liga/desliga um comando aqui`,
-        `\`${P}banglobal <off|avisar|banir>\` — o que fazer quando entra alguém banido em outro servidor`,
+        `\`${P}banglobal <off|avisar|imediato|consenso>\` — o que fazer quando entra alguém banido em outro servidor`,
         `\`${P}idioma pt|en\` — em que idioma eu respondo neste servidor`,
         `\`${P}debug\` — diagnóstico completo: o que está quebrado e como resolver`,
         `\`${P}debug @pessoa\` · \`${P}debug #canal\` — uma pessoa, um canal`,

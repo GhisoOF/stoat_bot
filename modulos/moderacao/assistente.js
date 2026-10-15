@@ -75,7 +75,7 @@ export const PASSOS = {
         "🛡️ **Proteção** — que nível você quer?",
         "`1` **Leve** — antispam e anti-convite; só avisa",
         "`2` **Médio** — + anti-link, menções em massa e Sentinela (julga golpe/+18); punição em escada: aviso → mute → ban",
-        "`3` **Rígido** — + caps, caracteres estranhos, repetição; Sentinela em sensibilidade alta; bane quem já foi banido em outro servidor",
+        "`3` **Rígido** — + caps, caracteres estranhos, repetição; Sentinela em sensibilidade alta; bane quem já foi banido em 3+ outros servidores (consenso)",
         "",
         "_Dá para ajustar cada filtro depois com `&automod`._",
       ].join("\n"),
@@ -83,7 +83,7 @@ export const PASSOS = {
         "🛡️ **Protection** — which level do you want?",
         "`1` **Light** — antispam and anti-invite; warns only",
         "`2` **Medium** — + anti-link, mass mentions and Sentinel (judges scams/NSFW); ladder punishment: warning → mute → ban",
-        "`3` **Strict** — + caps, odd characters, repetition; Sentinel at high sensitivity; bans people already banned on other servers",
+        "`3` **Strict** — + caps, odd characters, repetition; Sentinel at high sensitivity; bans people already banned on 3+ other servers (consensus)",
         "",
         "_Every filter can be tuned later with `&automod`._",
       ].join("\n")),
@@ -104,7 +104,7 @@ export const PASSOS = {
         ["automod", "sentinela", "antiguidade", "on"], ["automod", "sentinela", "alerta", "on"]);
       if (v === 2) c.push(["automod", "sentinela", "sensitivity", "media"]);
       if (v === 3) c.push(["automod", "anticaps", "on"], ["automod", "anticaracteres", "on"],
-        ["automod", "antirepeticao", "on"], ["automod", "sentinela", "sensitivity", "alta"], ["banglobal", "banir"]);
+        ["automod", "antirepeticao", "on"], ["automod", "sentinela", "sensitivity", "alta"], ["banglobal", "consenso"]);
       c.push(["automod", "punicao", "modo", "acumular"]);
       return c;
     },
@@ -137,13 +137,14 @@ export const PASSOS = {
 
   banglobal: {
     pergunta: (lang, P) => T(lang,
-      "🌍 **Lista global** — quando entra alguém que já foi banido em outro servidor que uso:\n`1` ignorar · `2` avisar no log · `3` banir automaticamente",
-      "🌍 **Global list** — when someone banned on another server I'm in joins:\n`1` ignore · `2` warn in the log · `3` ban automatically"),
+      "🌍 **Lista global** — quando entra alguém que já foi banido em outro servidor que uso:\n`1` ignorar · `2` avisar no log · `3` banir se foi banido em **3+ servidores** (consenso) · `4` banir com **um** ban (imediato)",
+      "🌍 **Global list** — when someone banned on another server I'm in joins:\n`1` ignore · `2` warn in the log · `3` ban if banned on **3+ servers** (consensus) · `4` ban on **one** ban (instant)"),
     parse: (r, { lang }) => {
       const v = r.toLowerCase();
       if (/^(1|ignor|off)/.test(v)) return { valor: "off", rotulo: T(lang, "ignorar", "ignore") };
       if (/^(2|avis|warn)/.test(v)) return { valor: "avisar", rotulo: T(lang, "avisar", "warn") };
-      if (/^(3|ban)/.test(v)) return { valor: "banir", rotulo: T(lang, "banir", "ban") };
+      if (/^(3|cons)/.test(v)) return { valor: "consenso", rotulo: T(lang, "consenso (3+ servidores)", "consensus (3+ servers)") };
+      if (/^(4|imed|inst|ban)/.test(v)) return { valor: "imediato", rotulo: T(lang, "imediato", "instant") };
       return { erro: true };
     },
     comandos: (v) => [["banglobal", v]],

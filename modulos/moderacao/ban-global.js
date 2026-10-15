@@ -8,16 +8,60 @@ import { tr, lingua } from "../core/i18n.js";
 import { enviarPaginado, paginarLinhas } from "../core/paginas.js";
 import { chamarApi } from "../core/stoat-api.js";
 
+// ── Os modos (15 out 2026, pedido de Ghieh) ─────────────────────────────────
+// Eram três: off · avisar · banir — e no `banir` UM ban em QUALQUER servidor da
+// Judy já derrubava a pessoa em todos os outros. Um servidor mal-intencionado
+// (ou um ban por engano) virava ban em toda parte. Agora o ban automático tem
+// dois níveis:
+//   • imediato — um ban em outro servidor basta (era o `banir`)
+//   • consenso — só bane quem foi banido em pelo menos MINIMO_CONSENSO
+//     servidores DIFERENTES; abaixo disso, avisa a staff e não faz nada
+// Os bans que a própria lista aplicou não contam para o consenso: senão um
+// único ban, repassado por três servidores no modo imediato, viraria "três".
+export const MINIMO_CONSENSO = 3;
 export const MODOS = {
-  off:    "ignora a lista global",
-  avisar: "alerta os moderadores quando um banido entra",
-  banir:  "bane automaticamente quem está na lista",
+  off:      "ignora a lista global",
+  avisar:   "alerta os moderadores quando um banido entra",
+  imediato: "bane quem foi banido em **qualquer** outro servidor (1 ban basta)",
+  consenso: `bane só quem foi banido em **${MINIMO_CONSENSO}+ servidores diferentes**; com menos, só avisa a staff`,
 };
 export const MODOS_EN = {
-  off:    "ignores the global list",
-  avisar: "alerts the moderators when a banned user joins",
-  banir:  "automatically bans anyone on the list",
+  off:      "ignores the global list",
+  avisar:   "alerts the moderators when a banned user joins",
+  imediato: "bans anyone banned on **any** other server (1 ban is enough)",
+  consenso: `bans only people banned on **${MINIMO_CONSENSO}+ different servers**; below that, just alerts the staff`,
 };
+// nomes antigos e em inglês → o modo de hoje (`banir` salvo antes continua valendo, como imediato)
+const MODO_SINONIMO = {
+  banir: "imediato", ban: "imediato", instant: "imediato", immediate: "imediato", cego: "imediato",
+  consensus: "consenso", cautela: "consenso", cautious: "consenso",
+  warn: "avisar", alert: "avisar", alertar: "avisar", ignorar: "off", ignore: "off",
+};
+export const nomeModoBG = (m, en = false) => (en ? { off: "off", avisar: "warn", imediato: "instant", consenso: "consensus" }[m] ?? m : m);
+export function lerModo(valor) {
+  const v = String(valor ?? "").toLowerCase();
+  return Object.hasOwn(MODOS, v) ? v : (MODO_SINONIMO[v] ?? null);
+}
+export function modoDe(config) { return lerModo(config?.banGlobal?.modo) ?? "off"; }
+export const modoBane = (m) => m === "imediato" || m === "consenso";
+
+// Ban que a PRÓPRIA lista aplicou (ou que veio dele: importado/propagado de um
+// servidor onde a lista baniu) — o motivo começa com "[Ban global]" ou "ban global (".
+export function ehDaPropriaLista(b) {
+  return b?.origem === "banglobal" || /^\s*(\[ban global\]|ban global \()/i.test(String(b?.motivo ?? ""));
+}
+// Quantos servidores DIFERENTES baniram de verdade (fora o atual, que o
+// chamador já tirou). A lista do dono do bot vale como decisão de confiança.
+export function forcaNaLista(historico) {
+  const reais = (historico ?? []).filter((b) => !ehDaPropriaLista(b));
+  const servidores = new Set(reais.map((b) => b.serverId));
+  return { servidores: servidores.size, doDono: servidores.has(ORIGEM_DONO), daLista: (historico?.length ?? 0) - reais.length, total: historico?.length ?? 0 };
+}
+export function bastaParaBanir(modo, forca) {
+  if (modo === "imediato") return forca.total > 0;
+  if (modo === "consenso") return forca.doDono || forca.servidores >= MINIMO_CONSENSO;
+  return false;
+}
 
 // Formata uma data legível a partir de um timestamp
 const data = (ms) => new Date(ms).toISOString().slice(0, 10);
@@ -309,7 +353,7 @@ export async function verificarEntrada(member, ctx, { propagado = false } = {}) 
   const userId   = member?.id?.user;
   if (!serverId || !userId) return false;
 
-  const modo = ctx.config?.banGlobal?.modo ?? "off";
+  const modo = modoDe(ctx.config);
   if (modo === "off") return false;
 
   // Bot: não escolheu entrar, alguém o adicionou. A lista não vale para ele.
@@ -327,16 +371,31 @@ export async function verificarEntrada(member, ctx, { propagado = false } = {}) 
     .filter((b) => b.serverId !== serverId);   // bans deste próprio servidor não contam
   if (!historico.length) return false;
 
-  const n = historico.length;
+  const forca = forcaNaLista(historico);
+  const n = forca.servidores || historico.length;
+  const daLista = forca.daLista ? ` _(+${forca.daLista} pela própria lista)_` : "";
+  const daListaEn = forca.daLista ? ` _(+${forca.daLista} by the list itself)_` : "";
   const motivos = historico.slice(0, 3)
     .map((b) => `• ${rotuloOrigem(b.serverId)} — ${b.motivo ?? "_sem motivo_"} _(${data(b.criadoEm)})_`)
     .join("\n");
   const quemEntrou = member?.user?.username ?? member?.nickname ?? null;
-  const resumo = `${rotularUsuario(userId, { nome: quemEntrou, client: ctx.client })} consta na lista global: banido em **${n}** servidor(es).\n${motivos}`
+  const resumo = `${rotularUsuario(userId, { nome: quemEntrou, client: ctx.client })} consta na lista global: banido em **${n}** servidor(es)${daLista}.\n${motivos}`
     + (n > 3 ? `\n_… e mais ${n - 3}._` : "");
-  const resumoEn = `${rotularUsuario(userId, { nome: quemEntrou, client: ctx.client, en: true })} is on the global list: banned in **${n}** server(s).\n`
+  const resumoEn = `${rotularUsuario(userId, { nome: quemEntrou, client: ctx.client, en: true })} is on the global list: banned in **${n}** server(s)${daListaEn}.\n`
     + historico.slice(0, 3).map((b) => `• ${rotuloOrigem(b.serverId, true)} — ${b.motivo ?? "_no reason_"} _(${data(b.criadoEm)})_`).join("\n")
     + (n > 3 ? `\n_… and ${n - 3} more._` : "");
+
+  // ── modo consenso abaixo do mínimo: avisa como o `avisar`, dizendo por quê ──
+  if (modo === "consenso" && !bastaParaBanir(modo, forca)) {
+    await log.registrar(ctx, "punicoes", {
+      titulo: propagado ? "⚠️ Membro acabou de ser banido em outro servidor" : "⚠️ Usuário da lista global entrou",
+      descricao: `${resumo}\n\n_Modo **consenso**: só bane com ${MINIMO_CONSENSO}+ servidores diferentes — aqui são ${forca.servidores}. Nada foi feito._`,
+      en: { titulo: propagado ? "⚠️ Member was just banned on another server" : "⚠️ User from the global list joined",
+        descricao: `${resumoEn}\n\n_**Consensus** mode: bans only with ${MINIMO_CONSENSO}+ different servers — this is ${forca.servidores}. Nothing was done._` },
+    });
+    console.log(`[BANGLOBAL] ⚠️ ${userId} (${forca.servidores} servidor(es), consenso pede ${MINIMO_CONSENSO}) entrou em ${serverId} — só aviso`);
+    return false;
+  }
 
   // ── modo avisar: só alerta, não age ──
   if (modo === "avisar") {
@@ -350,8 +409,8 @@ export async function verificarEntrada(member, ctx, { propagado = false } = {}) 
     return false;
   }
 
-  // ── modo banir: bane automaticamente ──
-  if (modo === "banir") {
+  // ── imediato / consenso (com o mínimo): bane automaticamente ──
+  if (modoBane(modo) && bastaParaBanir(modo, forca)) {
     try {
       const server = member.server ?? await ctx.client.servers.fetch(serverId);
       await banir(server, userId, { reason: `[Ban global] banido em ${n} outro(s) servidor(es)` });
@@ -359,8 +418,8 @@ export async function verificarEntrada(member, ctx, { propagado = false } = {}) 
         { nome: member?.user?.username ?? member?.nickname ?? null });
       await log.registrar(ctx, "punicoes", {
         titulo: "🔨 Ban automático (lista global)",
-        descricao: `${resumo}\n\n_Modo **banir**: usuário banido automaticamente._`,
-        en: { titulo: "🔨 Automatic ban (global list)", descricao: `${resumoEn}\n\n_**Ban** mode: user banned automatically._` },
+        descricao: `${resumo}\n\n_Modo **${modo}**: usuário banido automaticamente._`,
+        en: { titulo: "🔨 Automatic ban (global list)", descricao: `${resumoEn}\n\n_**${nomeModoBG(modo, true)}** mode: user banned automatically._` },
       });
       console.log(`[BANGLOBAL] 🔨 ${userId} banido automaticamente em ${serverId}`);
       return true;
@@ -379,7 +438,7 @@ export async function verificarEntrada(member, ctx, { propagado = false } = {}) 
 
 export async function varrer(ctx, message, { aplicar = true } = {}) {
   const serverId = ctx.serverId;
-  const modo = ctx.config?.banGlobal?.modo ?? "off";
+  const modo = modoDe(ctx.config);
   const server = await ctx.getServer?.(message);
   if (!server) return { erro: "não consegui acessar o servidor" };
 
@@ -393,6 +452,7 @@ export async function varrer(ctx, message, { aplicar = true } = {}) {
 
   const achados = [];
   const isentos = [];
+  const abaixo = [];   // no consenso: na lista, mas com menos de MINIMO_CONSENSO servidores
   for (const m of membros) {
     const uid = m?.id?.user ?? m?.user?.id ?? m?.id;
     if (!uid) continue;
@@ -401,10 +461,13 @@ export async function varrer(ctx, message, { aplicar = true } = {}) {
     if (!hist.length) continue;
     const nome = m?.user?.username ?? m?.nickname ?? db.nomeDeBanido(uid) ?? uid;
     if (estaIsento(ctx.config, uid)) { isentos.push({ uid, nome, n: hist.length }); continue; }
-    achados.push({ uid, nome, n: hist.length, membro: m });
+    const forca = forcaNaLista(hist);
+    // no consenso, quem está abaixo do mínimo não é achado da varredura
+    if (modo === "consenso" && !bastaParaBanir(modo, forca)) { abaixo.push({ uid, nome, n: forca.servidores }); continue; }
+    achados.push({ uid, nome, n: forca.servidores || hist.length, membro: m });
   }
 
-  if (!aplicar || modo !== "banir") return { total: membros.length, achados, isentos, aplicados: [], modo };
+  if (!aplicar || !modoBane(modo)) return { total: membros.length, achados, isentos, abaixo, aplicados: [], modo };
 
   const aplicados = [];
   for (const a of achados) {
@@ -426,14 +489,14 @@ export async function varrer(ctx, message, { aplicar = true } = {}) {
         descricao: aplicados.map((a) => `${a.ok ? "🔨" : "❌"} ${a.nome} \`${a.uid}\` — ${a.n} server(s)${a.ok ? "" : ` — error: ${a.erro}`}`).join("\n").slice(0, 1800) },
     });
   }
-  return { total: membros.length, achados, isentos, aplicados, modo };
+  return { total: membros.length, achados, isentos, abaixo, aplicados, modo };
 }
 
 export async function cmdBanGlobal(message, args, ctx) {
   const { config, sendEmbed, COR, getServer, membroTemPermissao, salvarConfig, PREFIXO, serverId } = ctx;
   const lang = lingua(ctx);
   const L_MODOS = lang === "en" ? MODOS_EN : MODOS;
-  const MODO_BG_EN = { avisar: "warn", banir: "ban", off: "off" };
+  const MODO_BG_EN = { avisar: "warn", imediato: "instant", consenso: "consensus", off: "off" };
 
   const server = await getServer(message);
   if (!membroTemPermissao(message, server, "BanMembers")) {
@@ -453,7 +516,7 @@ export async function cmdBanGlobal(message, args, ctx) {
 
   // ── &banglobal → status ──
   if (!sub) {
-    const modo = config.banGlobal.modo ?? "off";
+    const modo = modoDe(config);
     if (lang === "en") return sendEmbed(message.channel, {
       title: "🌐 Global ban list",
       description: [
@@ -467,7 +530,7 @@ export async function cmdBanGlobal(message, args, ctx) {
         `**Contribution:** 🟢 always on — this server's bans (old and new) feed the list on their own. There's nothing to configure and no command to run.`,
         "",
         "**Commands:**",
-        `\`${PREFIXO}banglobal <off|avisar|banir>\` — sets the mode`,
+        `\`${PREFIXO}banglobal <off|avisar|imediato|consenso>\` — sets the mode`,
         `\`${PREFIXO}banglobal lista\` — **everyone on the list** · \`lista servidor\` for this server's only`,
         `\`${PREFIXO}banglobal historico <@user|id>\` — one user's history`,
         `\`${PREFIXO}banglobal revisar\` — checks who's already here. **Shows only, never acts**`,
@@ -482,7 +545,7 @@ export async function cmdBanGlobal(message, args, ctx) {
         "",
         "_The mode above only decides whether this server **benefits** from the list. You can opt out of using it, but not out of feeding it._",
         "",
-        "⚠️ _The `banir` mode acts on its own based on bans from **other** servers. Use it only if you trust the sources._",
+        `⚠️ _\`imediato\` acts on a **single** ban from another server — use it only if you trust the other servers. \`consenso\` waits for ${MINIMO_CONSENSO} different servers: much harder to abuse._`,
         "",
         "_`revisar` **looks**; `varrer confirmar` **bans**. They used to be the same thing and that already caused accidental bans — now they're separate commands, and the sweep always shows the list first._",
       ].join("\n"),
@@ -501,7 +564,7 @@ export async function cmdBanGlobal(message, args, ctx) {
         `**Contribuição:** 🟢 sempre ligada — os bans deste servidor (antigos e novos) alimentam a lista sozinhos. Não há o que configurar nem comando a rodar.`,
         "",
         "**Comandos:**",
-        `\`${PREFIXO}banglobal <off|avisar|banir>\` — define o modo`,
+        `\`${PREFIXO}banglobal <off|avisar|imediato|consenso>\` — define o modo`,
         `\`${PREFIXO}banglobal lista\` — **todos os banidos** · \`lista servidor\` só os deste servidor`,
         `\`${PREFIXO}banglobal historico <@usuário|id>\` — histórico de uma pessoa`,
         `\`${PREFIXO}banglobal revisar\` — confere quem já está aqui. **Só mostra, nunca age**`,
@@ -516,7 +579,7 @@ export async function cmdBanGlobal(message, args, ctx) {
         "",
         "_O modo acima decide só se este servidor **se aproveita** da lista. Dá para não usar a lista, mas não dá para usá-la sem alimentá-la._",
         "",
-        "⚠️ _O modo `banir` age sozinho com base em bans de **outros** servidores. Use com confiança na origem._",
+        `⚠️ _\`imediato\` age com **um só** ban de outro servidor — use só se confia nos outros servidores. \`consenso\` espera ${MINIMO_CONSENSO} servidores diferentes: bem mais difícil de abusar._`,
         "",
         "_`revisar` **olha**; `varrer confirmar` **bane**. Os dois eram a mesma coisa e isso já custou bans por engano — agora são comandos separados, e a varredura sempre mostra a lista antes._",
       ].join("\n"),
@@ -524,25 +587,31 @@ export async function cmdBanGlobal(message, args, ctx) {
     });
   }
 
-  // ── &banglobal <off|avisar|banir> ──
-  if (Object.hasOwn(MODOS, sub)) {
-    config.banGlobal.modo = sub;
+  // ── &banglobal <off|avisar|imediato|consenso> (e `banir`, o nome antigo do imediato) ──
+  if (lerModo(sub)) {
+    const novo = lerModo(sub);
+    config.banGlobal.modo = novo;
     salvarConfig();
-    const extra = sub === "banir"
+    const extra = novo === "imediato"
       ? (lang === "en"
-        ? "\n\n⚠️ _From now on, anyone on the list will be **automatically banned** on joining._"
-        : "\n\n⚠️ _A partir de agora, quem consta na lista será **banido automaticamente** ao entrar._")
-      : "";
+        ? "\n\n⚠️ _From now on, anyone banned on **any** other server will be **automatically banned** on joining._"
+        : "\n\n⚠️ _A partir de agora, quem foi banido em **qualquer** outro servidor será **banido automaticamente** ao entrar._")
+      : novo === "consenso"
+        ? (lang === "en"
+          ? `\n\n_From now on, anyone banned on **${MINIMO_CONSENSO}+ different servers** is banned on joining; with fewer, the staff gets a warning in the log._`
+          : `\n\n_A partir de agora, quem foi banido em **${MINIMO_CONSENSO}+ servidores diferentes** é banido ao entrar; com menos, a staff recebe um aviso no log._`)
+        : "";
+    const sub2 = novo;
     await log.registrar(ctx, "punicoes", {
       titulo: "🌐 Ban global reconfigurado",
-      descricao: `Modo alterado para **${sub}** por <@${message.authorId}>.`,
-      en: { titulo: "🌐 Global ban reconfigured", descricao: `Mode changed to **${sub}** by <@${message.authorId}>.` },
+      descricao: `Modo alterado para **${sub2}** por <@${message.authorId}>.`,
+      en: { titulo: "🌐 Global ban reconfigured", descricao: `Mode changed to **${MODO_BG_EN[sub2] ?? sub2}** by <@${message.authorId}>.` },
     });
     return sendEmbed(message.channel, {
       title: lang === "en" ? "🌐 Global ban updated" : "🌐 Ban global atualizado",
       description: lang === "en"
-        ? `**Mode:** \`${MODO_BG_EN[sub] ?? sub}\` — ${L_MODOS[sub]}.${extra}`
-        : `**Modo:** \`${sub}\` — ${L_MODOS[sub]}.${extra}`,
+        ? `**Mode:** \`${MODO_BG_EN[sub2] ?? sub2}\` — ${L_MODOS[sub2]}.${extra}`
+        : `**Modo:** \`${sub2}\` — ${L_MODOS[sub2]}.${extra}`,
       colour: COR.mod,
     });
   }
@@ -600,7 +669,7 @@ export async function cmdBanGlobal(message, args, ctx) {
         { title: "❌ Revisão falhou", description: `${r.erro}\n\n_O bot precisa de permissão para ver os membros._`, colour: COR.erro },
         { title: "❌ Review failed", description: `${r.erro}\n\n_The bot needs permission to see the members._`, colour: COR.erro }));
     }
-    if (!r.achados.length && !r.isentos.length) {
+    if (!r.achados.length && !r.isentos.length && !r.abaixo?.length) {
       return sendEmbed(message.channel, tr(ctx,
         { title: "✅ Nenhum encontrado", description: `Conferi **${r.total}** membro(s) e ninguém consta na lista global.`, colour: COR.sucesso },
         { title: "✅ Nobody found", description: `I checked **${r.total}** member(s) and nobody is on the global list.`, colour: COR.sucesso }));
@@ -612,6 +681,10 @@ export async function cmdBanGlobal(message, args, ctx) {
         `• **${a.nome}** \`${a.uid}\` — banido em ${a.n} servidor(es)`,
         `• **${a.nome}** \`${a.uid}\` — banned on ${a.n} server(s)`)),
     ];
+    if (r.abaixo?.length) {
+      linhas.push("", tr(ctx, `**Abaixo do consenso** _(menos de ${MINIMO_CONSENSO} servidores — o modo \`consenso\` não os bane)_`, `**Below consensus** _(fewer than ${MINIMO_CONSENSO} servers — \`consenso\` mode won't ban them)_`),
+        ...r.abaixo.map((a) => `• **${a.nome}** \`${a.uid}\` — ${a.n}`));
+    }
     if (r.isentos.length) {
       linhas.push("", tr(ctx, `**Isentos** _(este servidor já decidiu aceitar)_`, `**Exempt** _(this server already chose to accept them)_`),
         ...r.isentos.map((a) => `• **${a.nome}** \`${a.uid}\` — ${a.n}`));
@@ -631,24 +704,24 @@ export async function cmdBanGlobal(message, args, ctx) {
   if (["varrer", "varredura", "scan", "sweep"].includes(sub)) {
     const arg1 = (args[1] ?? "").toLowerCase();
     const confirmou = ["confirmar", "confirm", "sim", "yes"].includes(arg1);
-    const modo = config?.banGlobal?.modo ?? "off";
+    const modo = modoDe(config);
 
-    if (modo !== "banir") {
+    if (!modoBane(modo)) {
       return sendEmbed(message.channel, tr(ctx, {
-        title: "🌐 A varredura só bane no modo `banir`",
+        title: "🌐 A varredura só bane nos modos `imediato` e `consenso`",
         description: [
           `O modo atual é \`${modo}\`.`,
           "",
           `Para **só conferir**, use \`${PREFIXO}banglobal revisar\` — ele mostra quem consta na lista e não faz nada.`,
-          `Para banir, mude o modo com \`${PREFIXO}banglobal banir\` e varra de novo.`,
+          `Para banir, mude o modo com \`${PREFIXO}banglobal consenso\` (ou \`imediato\`) e varra de novo.`,
         ].join("\n"), colour: COR.aviso,
       }, {
-        title: "🌐 The sweep only bans in `banir` mode",
+        title: "🌐 The sweep only bans in `imediato` and `consenso` modes",
         description: [
           `The current mode is \`${MODO_BG_EN[modo] ?? modo}\`.`,
           "",
           `To **just check**, use \`${PREFIXO}banglobal revisar\` — it shows who's on the list and does nothing.`,
-          `To ban, switch with \`${PREFIXO}banglobal banir\` and sweep again.`,
+          `To ban, switch with \`${PREFIXO}banglobal consenso\` (or \`imediato\`) and sweep again.`,
         ].join("\n"), colour: COR.aviso,
       }));
     }
@@ -1021,7 +1094,7 @@ export async function cmdBanGlobal(message, args, ctx) {
         "• Os bans **antigos** deste servidor são sincronizados sozinhos: logo após o bot subir e a cada 6 horas.",
         ...(linhaServidor ? ["", linhaServidor] : []),
         "",
-        `A única escolha deste servidor é se ele **se aproveita** da lista: \`${PREFIXO}banglobal <off|avisar|banir>\`.`,
+        `A única escolha deste servidor é se ele **se aproveita** da lista: \`${PREFIXO}banglobal <off|avisar|imediato|consenso>\`.`,
         "",
         `_Um registro específico que não se sustente pode sair com \`${PREFIXO}banglobal esquecer <@usuário>\`._`,
       ].join("\n"),
@@ -1036,7 +1109,7 @@ export async function cmdBanGlobal(message, args, ctx) {
         "• This server's **old** bans sync on their own: shortly after the bot boots and every 6 hours.",
         ...(linhaServidor ? ["", linhaServidor] : []),
         "",
-        `This server's only choice is whether it **benefits** from the list: \`${PREFIXO}banglobal <off|avisar|banir>\`.`,
+        `This server's only choice is whether it **benefits** from the list: \`${PREFIXO}banglobal <off|avisar|imediato|consenso>\`.`,
         "",
         `_A specific record that doesn't hold up can be dropped with \`${PREFIXO}banglobal esquecer <@user>\`._`,
       ].join("\n"),
@@ -1046,7 +1119,7 @@ export async function cmdBanGlobal(message, args, ctx) {
 
   // ── &banglobal add <id> [id…] [motivo] — pôr na lista quem não está em servidor nenhum ──
   // (pedido de Ghieh, 11 out 2026). Só o dono do bot: a lista vale para TODOS
-  // os servidores (no modo `banir`, entrar na lista = ser banido em todos),
+  // os servidores (nos modos que banem, entrar na lista = ser banido em todos),
   // pelo mesmo motivo que o `esquecer` é só dele.
   if (["add", "adicionar", "incluir", "colocar"].includes(sub)) {
     if (!ctx.ehSuperAdmin?.(message.authorId)) return sendEmbed(message.channel, tr(ctx, {
@@ -1069,7 +1142,7 @@ export async function cmdBanGlobal(message, args, ctx) {
         "Põe na lista **pelo ID** — a pessoa não precisa estar em nenhum servidor da Judy. Aceito até 25 IDs de uma vez (menção e link de perfil também valem).",
         `Ex.: \`${PREFIXO}banglobal add 01KMBX60MHVS8F0P0CJ0VK3326 01KMBX60MHVS8F0P0CJ0VK3327 raid de 27/09\``,
         "",
-        "_Quem já estiver num servidor da Judy sente na hora: banido onde o modo é `banir`, aviso à staff onde é `avisar`._",
+        "_Quem já estiver num servidor da Judy sente na hora: banido onde o modo é `imediato` ou `consenso` (a lista do dono vale como consenso), aviso à staff onde é `avisar`._",
       ].join("\n"), colour: COR.info,
     }, {
       title: "🌐 Add to the global list",
@@ -1079,7 +1152,7 @@ export async function cmdBanGlobal(message, args, ctx) {
         "Puts someone on the list **by ID** — they don't need to be in any of Judy's servers. Up to 25 IDs at once (mentions and profile links work too).",
         `E.g.: \`${PREFIXO}banglobal add 01KMBX60MHVS8F0P0CJ0VK3326 01KMBX60MHVS8F0P0CJ0VK3327 raid of 09/27\``,
         "",
-        "_Anyone already in one of Judy's servers feels it right away: banned where the mode is `ban`, staff warned where it's `warn`._",
+        "_Anyone already in one of Judy's servers feels it right away: banned where the mode is `imediato` or `consenso` (the owner's list counts as consensus), staff warned where it's `avisar`._",
       ].join("\n"), colour: COR.info,
     }));
 
@@ -1316,14 +1389,14 @@ export async function cmdBanGlobal(message, args, ctx) {
       return sendEmbed(message.channel, tr(ctx, {
         title: `🤖 ${achados.length} bot(s) na lista global`,
         description: [lista, achados.length > 20 ? `\n_… e mais ${achados.length - 20}._` : "", "",
-          "Bots não escolhem entrar em servidor nenhum — alguém os adiciona. Manter isso na lista faria o modo `banir` derrubar integrações que o dono acabou de instalar.",
+          "Bots não escolhem entrar em servidor nenhum — alguém os adiciona. Manter isso na lista faria o ban automático derrubar integrações que o dono acabou de instalar.",
           "", `_Descobertos por: ${[...porVia].map(([v, n]) => `${v} (${n})`).join(" · ")}_`,
           "", `Remover todos: \`${PREFIXO}banglobal bots confirmar\``].filter(Boolean).join("\n").slice(0, 1900),
         colour: COR.aviso,
       }, {
         title: `🤖 ${achados.length} bot(s) on the global list`,
         description: [lista, achados.length > 20 ? `\n_… and ${achados.length - 20} more._` : "", "",
-          "Bots don't choose to join anywhere — someone adds them. Keeping them listed would make `banir` mode knock out integrations the owner just installed.",
+          "Bots don't choose to join anywhere — someone adds them. Keeping them listed would make the auto-ban knock out integrations the owner just installed.",
           "", `_Found via: ${[...porVia].map(([v, n]) => `${v} (${n})`).join(" · ")}_`,
           "", `Remove them all: \`${PREFIXO}banglobal bots confirmar\``].filter(Boolean).join("\n").slice(0, 1900),
         colour: COR.aviso,
@@ -1359,7 +1432,7 @@ export async function cmdBanGlobal(message, args, ctx) {
 // num servidor só chegava aos outros na sincronização de 6h — tarde demais.
 // Agora, quando alguém SAI de um servidor, o bot confere se foi ban; se foi,
 // registra na lista global na hora e aplica o modo de cada OUTRO servidor onde
-// a pessoa ainda está (off: nada · avisar: alerta a staff · banir: bane).
+// a pessoa ainda está (off: nada · avisar: alerta a staff · imediato/consenso: bane, o consenso só com o mínimo).
 // A sincronização de 6h continua como rede de segurança.
 const ESPERA_BAN_MS = Number(process.env.BANGLOBAL_PROPAGAR_ESPERA_MS || 1500);
 
@@ -1388,6 +1461,13 @@ export async function propagarSeFoiBan(serverId, userId, { client, criarContexto
   const u = ban?.user ?? porId.get(userId) ?? null;
   if (ehBot(ban) || ehBot(u)) return saida;
   const nome = u?.username ?? null;
+  // Ban que a PRÓPRIA lista aplicou ali: registra como dela e não repassa —
+  // senão um ban só, ecoando por servidores no modo imediato, inflava a
+  // contagem do consenso (15 out 2026).
+  if (ehDaPropriaLista({ motivo: ban?.reason })) {
+    db.registrarBanGlobal(userId, serverId, ban.reason, "banglobal", { nome });
+    return saida;
+  }
   db.registrarBanGlobal(userId, serverId, ban?.reason ?? "banido no servidor", "propagado", { nome });
   console.log(`[BANGLOBAL] propagado: ${userId} banido em ${serverId} — conferindo os outros servidores`);
 
@@ -1396,7 +1476,7 @@ export async function propagarSeFoiBan(serverId, userId, { client, criarContexto
 }
 
 // Aplica o modo de cada servidor onde a pessoa ESTÁ agora (off: nada ·
-// avisar: alerta a staff · banir: bane). Usado pela propagação de ban e pelo
+// avisar: alerta a staff · imediato/consenso: bane). Usado pela propagação de ban e pelo
 // `&banglobal add`.
 export async function aplicarNosServidores(userId, { client, criarContexto, exceto = null } = {}) {
   const acoes = [];
@@ -1408,9 +1488,9 @@ export async function aplicarNosServidores(userId, { client, criarContexto, exce
     try { membro = await outro.fetchMember(userId); } catch { continue; }   // não é membro ali
     if (!membro) continue;
     const ctx = criarContexto(sid);
-    const modo = ctx.config?.banGlobal?.modo ?? "off";
+    const modo = modoDe(ctx.config);
     const baniu = await verificarEntrada(membro, ctx, { propagado: true });
-    acoes.push({ serverId: sid, modo, acao: baniu ? "banido" : modo === "avisar" ? "avisado" : "nada" });
+    acoes.push({ serverId: sid, modo, acao: baniu ? "banido" : (modo === "avisar" || modo === "consenso") ? "avisado" : "nada" });
   }
   return acoes;
 }

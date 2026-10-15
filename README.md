@@ -199,8 +199,14 @@ diz exatamente o que clicar.
 - **Moderação por IA** (`&modia`): você escreve os critérios em texto livre e
   a IA apaga o que violar, marcando o responsável no log — ela **nunca bane sozinha**.
 - **Lista global de banimentos** (`&banglobal`): compartilhada entre os
-  servidores da mesma instância, com modos `off`/`avisar`/`banir`, isenção por
-  pessoa e `desfazer`. O dono do bot põe alguém na lista **pelo ID** com
+  servidores da mesma instância, com isenção por pessoa e `desfazer`. Modos:
+  `off`, `avisar` (só alerta a staff), `imediato` (bane com **um** ban em outro
+  servidor — o antigo `banir`, que continua valendo) e `consenso` (bane só quem
+  foi banido em **3+ servidores diferentes**; com menos, avisa a staff). Os bans
+  que a própria lista aplicou não contam para o consenso, e a lista do dono do
+  bot vale como consenso. *Modes: `off`, `avisar` (warn), `imediato`/`instant`
+  (one ban elsewhere is enough) and `consenso`/`consensus` (3+ different
+  servers).* O dono do bot põe alguém na lista **pelo ID** com
   `&banglobal add <id> [id…] [motivo]`, mesmo que a pessoa não esteja em
   nenhum servidor — quem já está num deles sente na hora.
   *Global ban list shared across the instance's servers; the bot owner can add

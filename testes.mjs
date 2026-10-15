@@ -13445,6 +13445,146 @@ console.log(`\nSEGURANÇA 15 OUT: ${ok} ok, ${falhou} falha(s)`);
 process.exit(falhou ? 1 : 0);
 };
 
+// ════════════════════════════════════════════════════════════════════════════
+// banglobal-consenso-15out — dois níveis de ban automático
+// ════════════════════════════════════════════════════════════════════════════
+// Pedido de Ghieh (15 out 2026): no `banir`, UM ban em qualquer servidor da
+// Judy derrubava a pessoa em todos — um servidor mal-intencionado banía gente
+// em toda parte. Agora: `imediato` (1 ban basta, o antigo `banir`) e
+// `consenso` (só com 3+ servidores DIFERENTES; abaixo disso, avisa a staff).
+// Os bans que a própria lista aplicou não contam para o consenso.
+SUITES["banglobal-consenso-15out"] = async () => {
+const __m0 = await import("node:assert"); const assert = __m0.default;
+const __m1 = await import("node:fs"); const fs = __m1.default;
+process.env.DB_PATH = "/tmp/bgc15.db"; process.env.CONFIG_PATH = "/tmp/bgc15.json";
+for (const f of ["/tmp/bgc15.db", "/tmp/bgc15.db-wal", "/tmp/bgc15.db-shm", "/tmp/bgc15.json"]) fs.rmSync(f, { force: true });
+const db = await import("./modulos/core/db.js"); db.abrirBanco("/tmp/bgc15.db");
+const bg = await import("./modulos/moderacao/ban-global.js");
+const aliases = await import("./modulos/core/aliases.js");
+
+let ok = 0, falhou = 0;
+const t = async (nome, fn) => {
+  const o = [console.log, console.info]; console.log = console.info = () => {};
+  try { await fn(); [console.log, console.info] = o; console.log(`  ✅ ${nome}`); ok++; }
+  catch (e) { [console.log, console.info] = o; console.log(`  ❌ ${nome}\n     ${e.message}`); falhou++; }
+};
+
+let seq = 0;
+const novoId = () => `01BGC${String(++seq).padStart(21, "0")}`;
+// um servidor "AQUI" com o modo escolhido; quem entra é `uid`
+async function entrar(uid, modo) {
+  const banidos = [], logs = [];
+  const server = { id: "AQUI", banUser: async (u) => { banidos.push(u); }, fetchBans: async () => [] };
+  const canalLog = { id: "LOG_AQUI", serverId: "AQUI", sendMessage: async (p) => { logs.push(p); return {}; } };
+  const ctx = { serverId: "AQUI", client: { users: { get: () => null }, channels: { get: () => canalLog, fetch: async () => canalLog }, servers: { fetch: async () => server } },
+    config: { banGlobal: { modo, isentos: [] }, log: { canalId: "LOG_AQUI", eventos: {} }, language: "pt" },
+    sendEmbed: async (canal, e) => canal.sendMessage({ embeds: [e] }), COR: {}, PREFIXO: "&" };
+  const membro = { id: { server: "AQUI", user: uid }, user: { username: "fulano" }, server };
+  const baniu = await bg.verificarEntrada(membro, ctx);
+  return { baniu, banidos, logs: logs.map((l) => JSON.stringify(l)).join("\n") };
+}
+const banidoEm = (uid, servidores, { motivo = "spam", origem = "manual" } = {}) => {
+  for (const s of servidores) db.registrarBanGlobal(uid, s, motivo, origem, { nome: "fulano" });
+};
+
+console.log("── consenso ──");
+await t("★ banido em 2 servidores: o consenso NÃO bane — avisa a staff e diz por quê", async () => {
+  const u = novoId(); banidoEm(u, ["S1", "S2"]);
+  const r = await entrar(u, "consenso");
+  assert.equal(r.baniu, false); assert.deepEqual(r.banidos, []);
+  assert.match(r.logs, /consenso/); assert.match(r.logs, /aqui são 2/);
+});
+await t("★ banido em 3 servidores diferentes: o consenso bane", async () => {
+  const u = novoId(); banidoEm(u, ["S1", "S2", "S3"]);
+  const r = await entrar(u, "consenso");
+  assert.equal(r.baniu, true); assert.deepEqual(r.banidos, [u]);
+});
+await t("★ bans que a PRÓPRIA lista aplicou não contam (1 ban real + 3 repassados ≠ consenso)", async () => {
+  const u = novoId();
+  banidoEm(u, ["S1"]);
+  banidoEm(u, ["S2"], { motivo: "ban global (1 servidores)", origem: "banglobal" });
+  banidoEm(u, ["S3"], { motivo: "[Ban global] banido em 1 outro(s) servidor(es)", origem: "propagado" });
+  banidoEm(u, ["S4"], { motivo: "[Ban global] banido em 1 outro(s) servidor(es)", origem: "importado" });
+  assert.equal(bg.forcaNaLista(db.historicoBans(u)).servidores, 1);
+  const r = await entrar(u, "consenso");
+  assert.equal(r.baniu, false);
+});
+await t("o ban deste próprio servidor não conta para entrar nele", async () => {
+  const u = novoId(); banidoEm(u, ["S1", "S2", "AQUI"]);
+  assert.equal((await entrar(u, "consenso")).baniu, false);
+});
+await t("a lista do dono do bot vale como consenso", async () => {
+  const u = novoId(); db.registrarBanGlobal(u, bg.ORIGEM_DONO, "raid", "adicionado", { nome: "x" });
+  assert.equal((await entrar(u, "consenso")).baniu, true);
+});
+
+console.log("\n── imediato (o antigo banir) ──");
+await t("★ imediato: um ban em outro servidor basta", async () => {
+  const u = novoId(); banidoEm(u, ["S1"]);
+  assert.equal((await entrar(u, "imediato")).baniu, true);
+});
+await t("★ config salva com `banir` continua banindo como imediato", async () => {
+  const u = novoId(); banidoEm(u, ["S1"]);
+  assert.equal((await entrar(u, "banir")).baniu, true);
+  assert.equal(bg.modoDe({ banGlobal: { modo: "banir" } }), "imediato");
+});
+await t("avisar continua só avisando", async () => {
+  const u = novoId(); banidoEm(u, ["S1", "S2", "S3"]);
+  const r = await entrar(u, "avisar");
+  assert.equal(r.baniu, false); assert.match(r.logs, /avisar/);
+});
+
+console.log("\n── o comando ──");
+const rodar = async (args) => {
+  const config = { banGlobal: { modo: "off", isentos: [] }, log: {}, language: "pt" };
+  const saidas = [];
+  await bg.cmdBanGlobal({ authorId: "ADM", channel: {} }, args, { config, serverId: "AQUI", PREFIXO: "&", COR: {},
+    sendEmbed: async (_c, e) => saidas.push(e), getServer: async () => ({ id: "AQUI" }), membroTemPermissao: () => true,
+    salvarConfig: () => {}, client: { channels: { get: () => null, fetch: async () => null } } });
+  return { modo: config.banGlobal.modo, texto: JSON.stringify(saidas) };
+};
+await t("★ `&banglobal consenso` e `&banglobal imediato`; `banir` vira imediato", async () => {
+  assert.equal((await rodar(["consenso"])).modo, "consenso");
+  assert.equal((await rodar(["imediato"])).modo, "imediato");
+  assert.equal((await rodar(["banir"])).modo, "imediato");
+});
+await t("★ em inglês: `&globalban consensus` / `instant`", async () => {
+  assert.equal((await rodar(aliases.normalizarArgs("banglobal", ["consensus"]))).modo, "consenso");
+  assert.equal((await rodar(aliases.normalizarArgs("banglobal", ["instant"]))).modo, "imediato");
+});
+await t("o status mostra os quatro modos", async () => {
+  const r = await rodar([]);
+  for (const m of ["off", "avisar", "imediato", "consenso"]) assert.match(r.texto, new RegExp("`" + m + "`"));
+});
+
+await t("★ varredura no consenso: só bane quem tem 3+; os outros aparecem à parte", async () => {
+  const forte = novoId(), fraco = novoId();
+  banidoEm(forte, ["S1", "S2", "S3"]); banidoEm(fraco, ["S1"]);
+  const banidos = [];
+  const server = { id: "AQUI", banUser: async (u) => { banidos.push(u); }, fetchBans: async () => [],
+    fetchMembers: async () => ({ members: [forte, fraco].map((u) => ({ id: { server: "AQUI", user: u }, user: { username: u } })) }) };
+  const ctx = { serverId: "AQUI", config: { banGlobal: { modo: "consenso", isentos: [] }, log: {} }, getServer: async () => server,
+    client: { channels: { get: () => null, fetch: async () => null } } };
+  const r = await bg.varrer(ctx, {}, { aplicar: true });
+  assert.deepEqual(banidos, [forte]);
+  assert.deepEqual(r.abaixo.map((a) => a.uid), [fraco]);
+});
+
+console.log("\n── propagação ──");
+await t("★ ban que a própria lista aplicou num servidor não se repassa (não infla o consenso)", async () => {
+  const u = novoId();
+  let chamou = 0;
+  const origem = { id: "SB", fetchBans: async () => ({ bans: [{ id: { server: "SB", user: u }, reason: "[Ban global] banido em 1 outro(s) servidor(es)" }], users: [{ _id: u, username: "x" }] }) };
+  const client = { servers: { get: (id) => (id === "SB" ? origem : null), values: () => [origem].values(), fetch: async () => origem }, users: { get: () => null } };
+  const r = await bg.propagarSeFoiBan("SB", u, { client, criarContexto: () => { chamou++; return {}; }, espera: 0 });
+  assert.equal(r.foiBan, true); assert.deepEqual(r.acoes, []); assert.equal(chamou, 0);
+  assert.equal(bg.forcaNaLista(db.historicoBans(u)).servidores, 0);
+});
+
+console.log(`\nBANGLOBAL CONSENSO 15 OUT: ${ok} ok, ${falhou} falha(s)`);
+process.exit(falhou ? 1 : 0);
+};
+
 // ── O executor ───────────────────────────────────────────────────────────────
 const PRECISA_DO_BOT = (nome) => /import\("\.\/main\.js"\)/.test(String(SUITES[nome]));
 

@@ -160,6 +160,7 @@ export const SUB = {
     server: "servidor", remove: "remover",
     forget: "esquecer", history: "historico",
     warn: "avisar", ban: "banir", off: "off",
+    instant: "imediato", consensus: "consenso",   // os dois modos de ban automático (15 out 2026)
     import: "importar", auto: "auto", automatic: "auto", autoimport: "auto",
     contribution: "contribuicao",
   },

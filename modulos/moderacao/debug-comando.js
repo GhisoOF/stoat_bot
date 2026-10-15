@@ -393,8 +393,26 @@ export async function cmdDebug(message, args, ctx) {
     const canais = (server?.channels ?? []).map((c) => (typeof c === "string" ? client?.channels?.get?.(c) : c)).filter(Boolean);
     const id = /^<#([A-Z0-9]{26})>$/i.exec(arg)?.[1] ?? arg;
     const alvo = args.join(" ").replace(/^#/, "").toLowerCase();
-    const canal = canais.find((c) => c?.id === id) ?? canais.find((c) => String(c?.name ?? "").toLowerCase() === alvo)
+    let canal = canais.find((c) => c?.id === id) ?? canais.find((c) => String(c?.name ?? "").toLowerCase() === alvo)
       ?? canais.find((c) => String(c?.name ?? "").toLowerCase().includes(alvo));
+    // Menção/ID de um canal que não está no cache: pergunta à API (15 out
+    // 2026 — o canal ao qual a Judy acabara de ganhar acesso dava "Não achei")
+    if (!canal && /^[A-Z0-9]{26}$/i.test(id)) {
+      const daApi = await client?.channels?.fetch?.(id).catch(() => null);
+      const sidDele = daApi?.serverId ?? daApi?.server?.id ?? null;
+      if (daApi && (!sidDele || sidDele === (serverId ?? server?.id))) canal = daApi;
+      else {
+        return sendEmbed(message.channel, { title: T("🔒 Não vejo esse canal", "🔒 I can't see that channel"), colour: COR.aviso,
+          description: daApi
+            ? T("Esse canal é de **outro servidor**.", "That channel belongs to **another server**.")
+            : T(`O Stoat não me deixa abrir <#${id}>: falta **Ver canal** para o cargo da Judy nele (permissões do canal, ou da categoria acima dele).
+
+_Se você acabou de dar a permissão e eu continuo sem ver, me reinicie (\`docker compose restart\`)._`,
+                `Stoat won't let me open <#${id}>: Judy's role is missing **View channel** there (the channel's permissions, or the category above it).
+
+_If you just granted it and I still can't see it, restart me (\`docker compose restart\`)._`) });
+      }
+    }
     if (!canal) {
       return sendEmbed(message.channel, { title: T("🔍 Não achei", "🔍 Not found"),
         description: T(`Nenhuma pessoa ou canal com "${args.join(" ")}".\n\n\`${PREFIXO}debug\` · \`${PREFIXO}debug @pessoa\` · \`${PREFIXO}debug #canal\``,

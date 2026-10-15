@@ -462,6 +462,12 @@ próprio bot: `&help <comando>`. Um resumo:
 > bot não pune quem tem cargo igual ou superior ao dele — e só dá cargos (nível,
 > autorole) que estão abaixo do dele, a quem também está abaixo. `&xp cargos`
 > marca com ⚠️ os cargos de nível que o bot não alcança.
+> **Canal novo ou permissão nova:** quando a Judy ganha acesso a um canal, o
+> Stoat nem sempre avisa o bot do canal novo — ela o busca sozinha na primeira
+> mensagem que chega de lá. `&debug #canal` mostra a conta de permissão dela
+> naquele canal e diz se o Stoat não a deixa ver (falta *Ver canal* no canal
+> ou na categoria acima). *When Judy gains access to a channel she fetches it on
+> the first message; `&debug #channel` explains when she can't see it.*
 > **Quem pede também precisa estar acima:** `&kick`, `&ban`, `&silenciar`
 > só valem sobre quem tem cargo abaixo do seu, e `&reactionrole add`,
 > `&autorole` e `&economia loja add` só aceitam cargos abaixo do seu cargo mais

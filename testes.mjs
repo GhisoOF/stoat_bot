@@ -13708,6 +13708,84 @@ console.log(`\nIMAGEM +18 (15 out): ${ok} ok, ${falhou} falha(s)`);
 process.exit(falhou ? 1 : 0);
 };
 
+// ════════════════════════════════════════════════════════════════════════════
+// canal-sem-cache-15out — "garanti a permissão e ela não responde"
+// ════════════════════════════════════════════════════════════════════════════
+// Ghieh mexeu nos canais de teste e deu a permissão à Judy: o Stoat passou a
+// mandar as mensagens, mas não o canal (o servidor de eventos só manda o
+// "canal novo" em alguns casos). A stoat.js entrega a mensagem com
+// `channel`/`server` vazios, e a Judy ficava muda ali; o `&debug #canal`
+// respondia "Não achei". Agora o canal é buscado na API.
+SUITES["canal-sem-cache-15out"] = async () => {
+const __m0 = await import("node:assert"); const assert = __m0.default;
+const __m1 = await import("node:fs"); const fs = __m1.default;
+process.env.BOT_TOKEN = "tok";
+process.env.DB_PATH = "/tmp/csc15.db"; process.env.CONFIG_PATH = "/tmp/csc15.json";
+for (const f of ["/tmp/csc15.db", "/tmp/csc15.db-wal", "/tmp/csc15.db-shm", "/tmp/csc15.json"]) fs.rmSync(f, { force: true });
+const silencio = async (fn) => { const o = [console.log, console.info, console.warn, console.error]; console.log = console.info = console.warn = console.error = () => {}; try { return await fn(); } finally { [console.log, console.info, console.warn, console.error] = o; } };
+await silencio(() => import("./main.js"));
+const c = globalThis.__client;
+await silencio(() => c.emitAll("ready"));
+const store = await import("./modulos/core/config-store.js");
+const debugCmd = await import("./modulos/moderacao/debug-comando.js");
+
+let ok = 0, falhou = 0;
+const t = async (nome, fn) => {
+  try { await silencio(fn); console.log(`  ✅ ${nome}`); ok++; }
+  catch (e) { console.log(`  ❌ ${nome}\n     ${e.message}`); falhou++; }
+};
+
+const CNOVO = "01CNOVO0000000000000000000", CFECHADO = "01CFECHADO0000000000000000";
+const enviados = [];
+const server = { id: "SCSC", ownerId: "DONO", name: "Teste", roles: new Map(), channelIds: new Set([CNOVO, CFECHADO]),
+  get channels() { return [...this.channelIds].map((id) => c.channels.get(id)).filter(Boolean); },
+  fetchMember: async () => ({ roles: [] }), member: { roles: [] } };
+c.servers.set("SCSC", server);
+const cfg = store.configDoServidor("SCSC"); cfg.language = "pt";
+const canalNovo = { id: CNOVO, name: "bot test", serverId: "SCSC", server, sendMessage: async (p) => { enviados.push(p); return { id: "R" }; } };
+// a "API": o canal novo existe e a Judy o vê; o fechado, não
+let buscas = 0;
+c.channels.fetch = async (id) => {
+  buscas++;
+  if (id === CNOVO) { c.channels.set(id, canalNovo); return canalNovo; }
+  throw JSON.stringify({ type: "MissingPermission" });
+};
+const msg = (content) => ({ id: "M" + Math.random(), authorId: "01PESSOA000000000000000000", content, channelId: CNOVO, mentionIds: [],
+  get channel() { return c.channels.get(CNOVO); }, get server() { return this.channel?.server; },
+  author: { username: "Ghiso", bot: false }, member: { roles: [] }, attachments: [], createdAt: new Date() });
+
+await t("★ mensagem num canal que a Judy não tinha em cache: ela busca o canal e responde", async () => {
+  assert.equal(c.channels.get(CNOVO), undefined);
+  await c.emitAll("messageCreate", msg("&ping"));
+  assert.ok(c.channels.get(CNOVO), "o canal entrou no cache");
+  assert.ok(enviados.length >= 1, "a Judy respondeu no canal");
+});
+await t("e só busca uma vez (o canal fica no cache)", async () => {
+  const antes = buscas;
+  await c.emitAll("messageCreate", msg("&ping"));
+  assert.equal(buscas, antes);
+});
+await t("★ &debug #canal acha o canal fora do cache pela API", async () => {
+  c.channels.delete(CNOVO);
+  const saidas = [];
+  await debugCmd.cmdDebug({ authorId: "DONO", channel: canalNovo, mentionIds: [] }, [`<#${CNOVO}>`], {
+    sendEmbed: async (_c, e) => saidas.push(e), COR: {}, getServer: async () => server, membroTemPermissao: () => true,
+    PREFIXO: "&", config: cfg, serverId: "SCSC", client: c, ehSuperAdmin: () => true });
+  assert.doesNotMatch(saidas.at(-1).title, /Não achei/);
+});
+await t("★ canal que a Judy não consegue ver: o &debug diz por quê (em vez de \"Não achei\")", async () => {
+  const saidas = [];
+  await debugCmd.cmdDebug({ authorId: "DONO", channel: canalNovo, mentionIds: [] }, [`<#${CFECHADO}>`], {
+    sendEmbed: async (_c, e) => saidas.push(e), COR: {}, getServer: async () => server, membroTemPermissao: () => true,
+    PREFIXO: "&", config: cfg, serverId: "SCSC", client: c, ehSuperAdmin: () => true });
+  assert.match(saidas.at(-1).title, /Não vejo esse canal/);
+  assert.match(saidas.at(-1).description, /Ver canal/);
+});
+
+console.log(`\nCANAL SEM CACHE (15 out): ${ok} ok, ${falhou} falha(s)`);
+process.exit(falhou ? 1 : 0);
+};
+
 // ── O executor ───────────────────────────────────────────────────────────────
 const PRECISA_DO_BOT = (nome) => /import\("\.\/main\.js"\)/.test(String(SUITES[nome]));
 

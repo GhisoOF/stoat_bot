@@ -611,6 +611,38 @@ client.on("ready", async () => {
 });
 
 client.on("messageCreate", tratarMensagem);
+
+// Busca na API um canal que não está no cache (a stoat.js guarda o que vem).
+// Uma tentativa por canal a cada 60 s: canal sem acesso não vira enxurrada.
+const tentouCanal = new Map();   // canalId → ms
+async function buscarCanalDesconhecido(canalId) {
+  const agora = Date.now();
+  if (agora - (tentouCanal.get(canalId) ?? 0) < 60_000) return null;
+  tentouCanal.set(canalId, agora);
+  if (tentouCanal.size > 2000) tentouCanal.clear();
+  try { return await client.channels.fetch(canalId); } catch { return null; }
+}
+
+// Depois de mexer em cargo ou canal, os canais do servidor que a Judy ainda
+// não tem em cache são buscados (o &debug #canal e a resolução de nomes
+// dependem do cache). No máximo uma varredura por servidor a cada 30 s.
+const varreuCanais = new Map();   // serverId → ms
+async function completarCanais(server) {
+  const sid = server?.id;
+  if (!sid) return 0;
+  const agora = Date.now();
+  if (agora - (varreuCanais.get(sid) ?? 0) < 30_000) return 0;
+  varreuCanais.set(sid, agora);
+  let n = 0;
+  for (const id of server.channelIds ?? []) {
+    if (client.channels.get?.(id)) continue;
+    if (await buscarCanalDesconhecido(id)) n++;
+  }
+  if (n) console.log(`[CANAL] ${n} canal(is) de ${server.name ?? sid} entraram no cache depois de uma mudança de permissão`);
+  return n;
+}
+client.on("serverUpdate", (server) => { completarCanais(server).catch(() => {}); });
+client.on("channelUpdate", (canal) => { completarCanais(canal?.server).catch(() => {}); });
 async function tratarMensagem(message) {
   ultimoEvento = Date.now();   // prova de vida: recebemos um evento
   if (message.authorId === client.user.id) return;
@@ -619,6 +651,18 @@ async function tratarMensagem(message) {
     const c = message.content ?? "";
     const resumo = c.length > 120 ? c.slice(0, 120) + `… (+${c.length - 120})` : c;
     console.log(`[MSG] ${message.authorId} no canal ${message.channelId}: ${JSON.stringify(resumo)}`);
+  }
+
+  // ── Canal que a Judy ainda não conhecia (15 out 2026) ──
+  // Quando a staff dá a ela a permissão de ver um canal, o Stoat passa a
+  // mandar as mensagens dele — mas nem sempre manda o CANAL junto (o servidor
+  // de eventos só avisa "canal novo" em alguns casos). Sem o canal no cache da
+  // stoat.js, a mensagem chega sem canal e sem servidor, e a Judy ficava muda
+  // ali até reiniciar ("garanti a permissão e ela não responde"). Agora ela
+  // busca o canal na API na primeira mensagem.
+  if (!message.channel && message.channelId) {
+    const achado = await buscarCanalDesconhecido(message.channelId);
+    if (achado) console.log(`[CANAL] ${message.channelId} não estava no cache (permissão nova?) — buscado na API`);
   }
 
   // Cada servidor tem sua própria config
@@ -1247,6 +1291,7 @@ function cargoLegivel(server, roleId, en = false) {
 }
 
 client.on("serverRoleUpdate", async (server, roleId, anterior) => {
+  completarCanais(server).catch(() => {});   // cargo mudou: pode ter canal novo visível
   try {
     // os cargos `ticket-NNNN` nascem e morrem com cada ticket: o log do ticket já conta
     if (/^ticket-\d+$/.test(nomeDoCargo(server, roleId) ?? "")) { cargosDeTicket.add(roleId); return; }

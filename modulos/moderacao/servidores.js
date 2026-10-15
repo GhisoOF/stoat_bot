@@ -101,7 +101,7 @@ async function cmdAdulto(message, args, ctx) {
     ...avisos.map((x) => `\n${x}`),
     "",
     "`&servidores adulto add <id|aqui> [id…]` · `&servidores adulto remove <id|aqui>`",
-    "_Num servidor liberado, a imagem +18 só sai em canal marcado como **NSFW** no Stoat. Menores em cena sexual e pessoa real continuam recusados em qualquer lugar, e toda imagem passa pelo modelo de visão antes de sair._",
+    "_Num servidor liberado, a imagem +18 e a conversa adulta no chat só valem em canal marcado como **NSFW** no Stoat. Menores em cena sexual e pessoa real continuam recusados em qualquer lugar, e toda imagem passa pelo modelo de visão antes de sair._",
   ].join("\n") });
 }
 

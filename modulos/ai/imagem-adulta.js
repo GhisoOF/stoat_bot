@@ -8,6 +8,9 @@
 // pessoa real (deepfake): isso o gerador recusa sempre, e a imagem pronta
 // passa pelo modelo de visão antes de ir para o canal.
 //
+// O mesmo "liberado aqui" tira do chat a trava do assunto sexual (15 out
+// 2026; ver desinteresse.instrucaoAdulta) — com os mesmos dois limites.
+//
 // A lista fica na configuração GLOBAL (`imagemAdulta`), não na do servidor:
 // o admin de um servidor não consegue se liberar sozinho.
 

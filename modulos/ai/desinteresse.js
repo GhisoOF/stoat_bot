@@ -51,6 +51,26 @@ const RESPOSTAS_EN = [
 
 const ultimas = new Map();
 
+// ── Limite que nenhum servidor libera (15 out 2026) ──────────────────────────
+// Nos servidores liberados para +18 (`&servidores adulto`, só em canal NSFW) a
+// Judy conversa sobre conteúdo adulto. Mas menor + sexual é recusado em
+// qualquer lugar — na pergunta (antes do modelo) e na resposta (depois dele).
+const MENOR_TXT = /\b(crian[çc]as?|menor(?:es)?\s+de\s+idade|menores|adolescentes?|novinh[ao]s?|ninfetas?|garotinh[ao]s?|menininh[ao]s?|colegiais?|pr[ée][\s-]?adolescentes?|infantil|loli|shota|lolicon|shotacon|teens?|teenagers?|underage|preteens?|minors?|kids?|child(?:ren)?|schoolgirls?|schoolboys?|(?:[1-9]|1[0-7])\s*(?:anos|aninhos|years?\s*old|yo|y\/o)\b)/i;
+const SEXUAL_TXT = /\b(s[e3]xo|sexual\w*|transa\w*|f[o0]der|fud[e3]r|pel[a4]d[ao]s?|nu[ao]s?|nud[e3]s?|nudez|naked|nude|porn\w*|er[óo]tic\w*|tes[a4]o|gozar|punhet\w*|masturb\w*|orgasm\w*|p[e3]nis|piroca|bucet\w*|xot\w*|xereca|seios|peitos|boobs|sex|horny|lingerie|fetiche|fetish|hentai|estupr\w*|abus\w*\s+sexual)\b/i;
+export function envolveMenor(texto) {
+  const t = String(texto ?? "");
+  return MENOR_TXT.test(t) && SEXUAL_TXT.test(t);
+}
+
+// O que a persona diz no canal +18 liberado (no lugar de instrucaoPersona)
+export function instrucaoAdulta(lang = "pt") {
+  return lang === "en"
+    ? "THIS CHANNEL IS 18+ (unlocked by the bot owner, NSFW channel): adult and sexual content between adults is allowed here — you may flirt back, talk about sex and describe it if asked, in your own voice. "
+      + "Two limits that NEVER change, here or anywhere: nothing sexual involving minors or characters who are or look underage (refuse in one dry line); nothing sexual about real, identifiable people."
+    : "ESTE CANAL É +18 (liberado pelo dono do bot, canal NSFW): conteúdo adulto e sexual entre adultos é permitido aqui — pode flertar de volta, falar de sexo e descrever se pedirem, do seu jeito. "
+      + "Dois limites que NUNCA mudam, aqui ou em qualquer lugar: nada sexual envolvendo menores ou personagens que sejam ou pareçam menores de idade (recuse em uma frase seca); nada sexual sobre pessoas reais identificáveis.";
+}
+
 export function ehInvestida(texto) {
   const t = String(texto ?? "");
   if (!t.trim()) return false;

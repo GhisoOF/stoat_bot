@@ -57,7 +57,7 @@ import * as rpg        from "./modulos/game/game.js";
 import * as modIA      from "./modulos/moderacao/moderacao-ia.js";
 import * as assuntos   from "./modulos/moderacao/assuntos.js";
 import * as resetMod  from "./modulos/moderacao/reset.js";
-import { iaLigada } from "./modulos/core/env.js";
+import { iaLigada, conversaLigada } from "./modulos/core/env.js";
 import * as avatarMod from "./modulos/moderacao/avatar.js";
 import * as modiaCmd   from "./modulos/moderacao/modia-comando.js";
 import * as persona    from "./modulos/ai/persona.js";
@@ -584,9 +584,14 @@ client.on("ready", async () => {
 
   engine.iniciarVigiaDeSilencios(criarContexto());
 
-  chat.iniciarMemoria();          // liga o agente de memória (extração em background)
-  chat.iniciarComentario(client); // liga o comentário espontâneo
-  modIA.configurar({ avaliar: chat.avaliarModeracao });   // moderação por IA usa o modelo pequeno
+  // CONVERSA=0 (modo enxuto): nada de IA rodando em segundo plano — memória,
+  // comentário espontâneo e o juiz do &modia (que lê TODA mensagem) ficam
+  // parados. Ficam: temas proibidos, visão de imagens, relatório e RSS.
+  if (conversaLigada()) {
+    chat.iniciarMemoria();          // liga o agente de memória (extração em background)
+    chat.iniciarComentario(client); // liga o comentário espontâneo
+    modIA.configurar({ avaliar: chat.avaliarModeracao });   // moderação por IA usa o modelo pequeno
+  }
   // temas proibidos: o mesmo juiz (JSON, sem raciocínio, fila da conversa)
   if (iaLigada()) assuntos.configurar({ avaliar: chat.avaliarModeracao });
   rss.configurarResumo(chat.resumirRSS);   // RSS agendado passa a resumir com o tom da Judy

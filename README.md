@@ -48,6 +48,7 @@ As variáveis que importam:
 | `DONO` | ID do **seu perfil** — ganha os comandos administrativos do bot |
 | `SERVIDOR` | ID do servidor onde a **IA** funciona (`*` = em todos; vazio = IA em lugar nenhum) |
 | `IA` | `0` desliga todos os módulos de IA — o bot de moderação segue completo |
+| `CONVERSA` | `0` = **modo enxuto**: a IA fica só para moderação (temas proibidos, visão de imagens e fotos de perfil), o relatório horário e o RSS. Sem chat, `&modia`, memória, comentários e geração de imagem; o modelo usa contexto 4096 e sai da memória após 5 min parado (`IA_TTL`). Com `BUSCA_WEB=0`, o SearXNG nem sobe. *Lean mode: AI only for moderation, the log report and RSS.* |
 | `IA_MODO` | `local` roda um modelo na sua máquina (o **MODELO** é baixado do Hugging Face no primeiro arranque e guardado no volume); `online` usa uma plataforma via `TOKEN_IA` (padrão: OpenRouter) |
 | `MODELO` | local: `repo:quantização` GGUF do HF · online: nome do modelo na plataforma |
 | `TOKEN_IA` | token da plataforma, só no modo `online` |
@@ -165,6 +166,10 @@ diz exatamente o que clicar.
   Em lugar nenhum saem menores em cena sexual nem pessoa real (deepfake), e
   toda imagem pronta passa pelo modelo de visão antes de ir para o canal — no
   servidor liberado, sem visão configurada (`LLM_MODEL_VISAO`) o +18 não sai.
+  No mesmo canal (servidor liberado + canal NSFW), o **chat** também sai da
+  trava do assunto sexual: a Judy conversa sobre conteúdo adulto em vez do
+  "Não."/"Passo." — com os mesmos dois limites fixos (menores, pessoas reais),
+  conferidos na pergunta e na resposta.
   *+18 images are off everywhere; the bot owner unlocks servers one by one
   (`&servidores adulto add`), and only NSFW channels there get them.*
 - **Painel do dono do bot** (`&servidores`, só `SUPER_ADMINS`, fora do `&help`):

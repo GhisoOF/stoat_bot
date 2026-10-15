@@ -9,6 +9,8 @@
 //   MODELO_VISAO → LLM_MODEL_VISAO    (liga a ferramenta de visão)
 //   TOKEN_IA   → Authorization no LLM online
 //   PROMPT     → personalidade padrão da IA (o &personalidade por servidor vence)
+//   CONVERSA   → 0 = modo enxuto: a IA fica SÓ para moderação, relatório do
+//                log e RSS (sem chat, sem gerar imagem, sem memória/comentários)
 //
 // Os nomes internos continuam valendo e têm prioridade se definidos.
 
@@ -20,6 +22,16 @@ if (e.SERVIDOR && !e.CHAT_SERVIDORES) e.CHAT_SERVIDORES = e.SERVIDOR;
 
 export function iaLigada() {
   return !DESLIGADO.has((e.IA ?? "1").trim().toLowerCase());
+}
+
+// A IA de CONVERSA (16 out 2026, pedido de Ghieh: "quero tirar a parte de IA
+// por hora, deixar só o justo e necessário para a moderação, o log e o RSS").
+// CONVERSA=0 desliga o chat (&chat, menção, chat livre, comentário espontâneo,
+// memória), a moderação por IA com critério livre (&modia — ela lê TODA
+// mensagem) e a geração de imagem. Ficam: a confirmação dos temas proibidos,
+// a visão das imagens/fotos de perfil, o relatório horário e o RSS.
+export function conversaLigada() {
+  return iaLigada() && !DESLIGADO.has((e.CONVERSA ?? "1").trim().toLowerCase());
 }
 
 export function modoIA() {
@@ -45,6 +57,15 @@ if (iaLigada()) {
   // a ferramenta simplesmente não aparecia. (No modo local com llama-swap o
   // iniciar.js já define "visao"; este mapeamento não atrapalha.)
   if (e.MODELO_VISAO && !e.LLM_MODEL_VISAO) e.LLM_MODEL_VISAO = e.MODELO_VISAO;
+
+  // Modo enxuto: menos processamento. Sem gerador de imagem (nem o download
+  // dos ~6–13 GB dos modelos dele), contexto menor e o modelo sai da memória
+  // depois de 5 min parado (os pedidos de moderação são esporádicos).
+  if (!conversaLigada()) {
+    e.IMAGEM = "0";
+    if (!e.LLAMA_CTX) e.LLAMA_CTX = "4096";
+    if (!e.IA_TTL) e.IA_TTL = "300";
+  }
 }
 
 // "Este servidor está na lista?" para as variáveis de lista (TTS_SERVIDORES,

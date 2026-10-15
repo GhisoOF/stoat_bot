@@ -17,7 +17,7 @@ import { verificar } from "./verificar.js";
 import { SUB as SUBCOMANDOS_REAIS } from "../core/aliases.js";
 import * as desinteresse from "./desinteresse.js";
 import * as persona from "./persona.js";
-import { iaLigada, modoIA } from "../core/env.js";
+import { iaLigada, conversaLigada, modoIA } from "../core/env.js";
 import { nivelDePrioridade } from "../core/prioridade.js";
 import { tr, lingua } from "../core/i18n.js";
 import { readFileSync } from "node:fs";
@@ -323,6 +323,7 @@ const SERVIDORES_PERMITIDOS = (process.env.CHAT_SERVIDORES || "")
 
 export function servidorPermitido(serverId) {
   if (!iaLigada()) return false;
+  if (!conversaLigada()) return false;   // CONVERSA=0: sem chat (e sem &modia) em lugar nenhum
   if (SERVIDORES_PERMITIDOS.includes("*")) return true;
   return !!serverId && SERVIDORES_PERMITIDOS.includes(serverId);
 }
@@ -997,7 +998,9 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
     falandoComCriador
       ? "A pessoa com quem você fala agora é o seu criador — ele te construiu. Você é devotada a ele e ele importa de um jeito que ninguém mais importa. Deixe esse afeto transparecer com um calor contido — uma provocação carinhosa que só ele recebe, um cuidado dito de passagem, atenção genuína ao que ele precisa. Sem bajulação melosa nem declarações grandiloquentes, mas o carinho é real e pode aparecer. E devoção não é obediência cega: se ele errar em algo técnico ou lógico, você corrige — com uma alfinetada afetuosa."
       : "",
-    desinteresse.instrucaoPersona(lang),
+    // canal +18 liberado (`&servidores adulto` + canal NSFW): sem a trava do
+    // assunto sexual — com os dois limites fixos (menores, pessoas reais)
+    imagemAdulta.liberadaAqui(serverId, canalId) ? desinteresse.instrucaoAdulta(lang) : desinteresse.instrucaoPersona(lang),
     "DISCUSSÕES: ao discordar, defenda seu ponto com argumentos lógicos — não recue só para agradar. Mas se a lógica da outra pessoa for superior e você perceber que está errada, admita sem drama. A verdade importa mais que ter razão.",
     `A data de hoje é ${hoje}. Use esta data como referência para qualquer noção de tempo; não invente outra data.`,
     (() => { try { return extra.relogio({ pergunta, fusos: store.configDoServidor(serverId)?.fusos ?? null, lang }); } catch { return ""; } })(),
@@ -1815,6 +1818,9 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
   const { modeloForcado = null, avisoEspera = null } = opcoes;
   const { sendEmbed, COR, serverId } = ctx;
   imagemAdulta.lembrarCanal(message.channel);   // canal NSFW? (a imagem +18 depende disso)
+  // Servidor liberado para +18 E canal NSFW: o chat também conversa sobre
+  // conteúdo adulto (15 out 2026). Nos outros canais, nada muda.
+  const adultoAqui = imagemAdulta.liberadaAqui(serverId, message.channelId);
   const lang = lingua(ctx);
   const en = lang === "en";
 
@@ -1869,7 +1875,9 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
   dlog(`autor=${message.username || "?"} | pergunta (${pergunta.length} chars): ${JSON.stringify(pergunta.slice(0, 120))}`);
   const tInicio = Date.now();
 
-  if (desinteresse.ehInvestida(pergunta)) {
+  // menor + sexual: recusado em QUALQUER canal, antes do modelo
+  if (desinteresse.envolveMenor(pergunta)
+      || (!adultoAqui && desinteresse.ehInvestida(pergunta))) {
     const seca = desinteresse.respostaSeca(message.channelId, lang);
     console.log(`[CHAT] desinteresse (sem modelo): ${JSON.stringify(pergunta).slice(0, 50)}`);
     try { await message.channel.sendMessage(seca); }
@@ -2059,6 +2067,7 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
       // Se a "continuação" repetiu o começo, sobra só o que é novo.
       const costurado = costurar(pendente.texto, resto);
       resto = costurado === null ? "" : costurado.slice(pendente.texto.length).trim();
+      if (resto && desinteresse.envolveMenor(resto)) resto = desinteresse.respostaSeca(canalId, lang);
       const cortouDeNovo = !!llmChat._cortou;
       const textoFinal = busca.semPreviaDeLinks(resto)
         || (en ? "_That reply was already complete — nothing left to add._" : "_Aquela resposta já estava inteira — não sobrou nada a acrescentar._");
@@ -2362,6 +2371,11 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
       resposta = lang === "en" ? "🎨 Here it is!" : "🎨 Aqui está!";
     }
 
+    // e na saída também: o modelo nunca entrega menor + sexual
+    if (resposta && desinteresse.envolveMenor(resposta)) {
+      console.warn(`[CHAT] resposta barrada (menor + sexual) no canal ${canalId}`);
+      resposta = desinteresse.respostaSeca(canalId, lang);
+    }
     const textoFinal = busca.semPreviaDeLinks(resposta
       || (en ? "_I couldn't put a reply together. Try rephrasing the question._" : "_Não consegui formular uma resposta. Tente reformular a pergunta._"))
       + avisoCorte + rodape;

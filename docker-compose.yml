@@ -30,7 +30,7 @@ services:
       - SEARXNG_URL=${SEARXNG_URL:-http://searxng:8080}   # o serviço que sobe no compose
       - WEBHOOK_PORTA=${WEBHOOK_PORTA:-8095}
       - LLAMA_NGL=${LLAMA_NGL:-999}     # camadas do modelo na GPU (IA_MODO=local)
-      - LLAMA_CTX=${LLAMA_CTX:-8192}    # contexto do modelo local (tokens)
+      - LLAMA_CTX=${LLAMA_CTX:-}        # contexto do modelo local (tokens; vazio = 8192, ou 4096 com CONVERSA=0)
     extra_hosts:
       - "host.docker.internal:host-gateway"
     # GPU para o modo local: descomente se a máquina tem GPU/iGPU com driver
@@ -57,6 +57,10 @@ services:
     image: searxng/searxng:latest
     container_name: stoat-searxng
     restart: unless-stopped
+    # a busca na web só serve ao chat: BUSCA_WEB=0 no .env não sobe este
+    # container (junto com CONVERSA=0, para economizar memória e CPU)
+    deploy:
+      replicas: ${BUSCA_WEB:-1}
     volumes:
       - ./ia-servico/searxng-settings.example.yml:/etc/searxng/settings.yml:ro
       - searxng_data:/var/cache/searxng

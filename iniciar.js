@@ -3,7 +3,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { randomBytes } from "node:crypto";
-import { iaLigada, modoIA, MODELO_LOCAL_PADRAO } from "./modulos/core/env.js";
+import { iaLigada, conversaLigada, modoIA, MODELO_LOCAL_PADRAO } from "./modulos/core/env.js";
 import { montarConfigSwap } from "./modulos/core/llama-swap-config.js";
 import { arquivosParaBaixar, tipoDoModelo } from "./modulos/core/imagem-modelo.js";
 
@@ -91,6 +91,9 @@ function encerrar(code = 0) {
 process.on("SIGTERM", () => encerrar(0));
 process.on("SIGINT", () => encerrar(0));
 
+if (iaLigada() && !conversaLigada()) {
+  console.info(`[INICIAR] CONVERSA=0 — modo enxuto: IA só para moderação, relatório e RSS (sem chat, sem gerar imagem; contexto ${process.env.LLAMA_CTX}, modelo sai da memória após ${process.env.IA_TTL}s parado).`);
+}
 if (!iaLigada()) {
   console.info("[INICIAR] IA=0 — módulos de IA desligados (nem serviço, nem modelo).");
 } else if (modoIA() === "local" && (process.env.MODELO_VISAO || process.env.LLM_MODEL_VISAO)) {
@@ -208,7 +211,10 @@ if (!iaLigada()) {
     const flagsExtra = (process.env.LLAMA_FLAGS || "").trim();  // ex.: "--temp 1.0 --top-p 0.95 --top-k 64" (Gemma) — cada família tem o seu
     const comando = (m) => `${LLAMA_BIN} -hf ${m} --host 127.0.0.1 --port \${PORT} -c ${ctx} -ngl ${ngl} --jinja${flagsExtra ? " " + flagsExtra : ""}`;
     // mesmo modelo nos dois papéis → uma entrada só, "visao" é apelido dela
-    writeFileSync(cfg, montarConfigSwap({ conversa, visao, comando }));
+    // IA_TTL: quanto tempo o modelo fica na memória sem uso (s). Padrão 1 h; no
+    // modo enxuto (CONVERSA=0) 5 min — a RAM/GPU volta para o resto da máquina.
+    const ttl = Number(process.env.IA_TTL) > 0 ? Number(process.env.IA_TTL) : 3600;
+    writeFileSync(cfg, montarConfigSwap({ conversa, visao, comando, ttlConversa: ttl, ttlVisao: Math.min(600, ttl) }));
     console.info(`[INICIAR] IA local (llama-swap): conversa=${conversa} · visão=${visao === conversa ? "o mesmo modelo (apelido, sem 2ª cópia)" : visao}`);
     subirBin("llama-swap", SWAP_BIN,
       ["-config", cfg, "-listen", `127.0.0.1:${process.env.LLAMA_PORTA || "8082"}`],

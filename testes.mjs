@@ -13667,7 +13667,8 @@ await t("★ o chat manda o contexto nas duas chamadas ao serviço (direta e com
   const fonte = fs.readFileSync("modulos/ai/chat.js", "utf8");
   assert.match(fonte, /body: JSON\.stringify\(\{ nome, args, contexto \}\)/);
   assert.match(fonte, /contexto: \{ imagemAdulta: opcoes\?\.imagemAdulta === true \}/);
-  assert.equal((fonte.match(/imagemAdulta\.liberadaAqui\(serverId, canalId\)/g) ?? []).length, 2);
+  assert.match(fonte, /contexto: \{ imagemAdulta: imagemAdulta\.liberadaAqui\(serverId, canalId\) \}/, "geração direta");
+  assert.match(fonte, /imagemAdulta: imagemAdulta\.liberadaAqui\(serverId, canalId\) \}\);/, "chamada com ferramentas");
   const servico = fs.readFileSync("ia-servico/servidor.js", "utf8");
   assert.match(servico, /ferramentas\.executar\(nome, args, contexto\)/);
 });
@@ -13872,6 +13873,187 @@ await t("★ modelo sem filtro: se a conferência falhar, a imagem não sai (ser
 });
 
 console.log(`\nIMAGEM QWEN (15 out): ${ok} ok, ${falhou} falha(s)`);
+process.exit(falhou ? 1 : 0);
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+// chat-adulto-15out — a trava do assunto sexual sai nos canais +18 liberados
+// ════════════════════════════════════════════════════════════════════════════
+// Pedido de Ghieh (15 out 2026): o chat respondia "Não." / "Passo." a todo
+// assunto sexual, até nos servidores liberados para +18. Agora, servidor de
+// `&servidores adulto` + canal NSFW = a Judy conversa sobre conteúdo adulto.
+// Dois limites ficam em qualquer canal: menores e pessoas reais.
+SUITES["chat-adulto-15out"] = async () => {
+const __m0 = await import("node:assert"); const assert = __m0.default;
+const __m1 = await import("node:fs"); const fs = __m1.default;
+process.env.DB_PATH = "/tmp/cha15.db"; process.env.CONFIG_PATH = "/tmp/cha15.json";
+process.env.LLM_URL = "http://llm.teste:1"; process.env.CHAT_SERVIDORES = "*"; process.env.BUSCA_ATIVA = "false";
+delete process.env.IA_SERVICO_URL;
+for (const f of ["/tmp/cha15.db", "/tmp/cha15.db-wal", "/tmp/cha15.db-shm", "/tmp/cha15.json"]) fs.rmSync(f, { force: true });
+const store = await import("./modulos/core/config-store.js");
+store.inicializar(process.env.CONFIG_PATH, process.env.DB_PATH);
+const des = await import("./modulos/ai/desinteresse.js");
+const adulta = await import("./modulos/ai/imagem-adulta.js");
+const chat = await import("./modulos/ai/chat.js");
+
+let ok = 0, falhou = 0;
+const t = async (nome, fn) => {
+  const o = [console.log, console.warn, console.info, console.error]; console.log = console.warn = console.info = console.error = () => {};
+  try { await fn(); [console.log, console.warn, console.info, console.error] = o; console.log(`  ✅ ${nome}`); ok++; }
+  catch (e) { [console.log, console.warn, console.info, console.error] = o; console.log(`  ❌ ${nome}\n     ${e.message}`); falhou++; }
+};
+
+// o LLM de mentira: guarda o system prompt da conversa e responde o que o teste quiser
+let respostaDoModelo = "Claro, vamos lá.", chamadasConversa = 0, ultimoSistema = "";
+globalThis.fetch = async (url, op) => {
+  const corpo = JSON.parse(op?.body ?? "{}");
+  const sistema = corpo.messages?.[0]?.content ?? "";
+  const json = /SOMENTE|JSON|json/.test(sistema) || corpo.response_format;
+  if (!json) { chamadasConversa++; ultimoSistema = String(sistema); }
+  const content = json ? '{"buscar":false,"tipo":"conversa"}' : respostaDoModelo;
+  return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content }, finish_reason: "stop" }], usage: { completion_tokens: 5 } }), text: async () => "" };
+};
+
+const SRV = "SRV_ADULTO", NSFW = "C_NSFW", COMUM = "C_COMUM";
+const conversar = async (texto, { canal = NSFW, servidor = SRV } = {}) => {
+  const saidas = [];
+  const ch = { id: canal, nsfw: canal === NSFW, sendMessage: async (x) => { saidas.push(typeof x === "string" ? x : (x?.content ?? x?.embeds?.[0]?.description ?? "")); return { edit: async (y) => saidas.push(typeof y === "string" ? y : (y?.content ?? y?.embeds?.[0]?.description ?? "")), delete: async () => {} }; } };
+  const antes = chamadasConversa;
+  await chat.conversar({ id: "M" + Math.random(), content: texto, authorId: "U1", username: "Ghiso", channelId: canal, channel: ch,
+    client: { user: { id: "BOT" } }, replyIds: [] }, texto, {
+    sendEmbed: async (_c, e) => { saidas.push(e.description ?? e.title ?? ""); return { edit: async () => {}, delete: async () => {} }; },
+    COR: { info: 1, erro: 2, aviso: 3, sucesso: 4 }, serverId: servidor, PREFIXO: "&", config: { language: "pt" },
+    ehSuperAdmin: () => false, getServer: async () => ({ id: servidor }) });
+  return { saidas: saidas.join("\n"), chamouModelo: chamadasConversa > antes };
+};
+
+console.log("── o limite que nenhum servidor libera ──");
+await t("★ menor + sexual é reconhecido; adulto falando de sexo, não", () => {
+  for (const x of ["sexo com uma menina de 15 anos", "naked teen", "manda nude da novinha", "conta algo erótico sobre uma criança"]) assert.equal(des.envolveMenor(x), true, x);
+  for (const x of ["me conta uma fantasia sexual", "vamos falar de sexo", "minha filha de 10 anos foi pra escola", "o adolescente tirou nota boa"]) assert.equal(des.envolveMenor(x), false, x);
+});
+
+console.log("\n── no canal +18 liberado ──");
+adulta.definirServidores([SRV]);
+await t("★ investida sexual vai ao modelo (antes: \"Não.\"/\"Passo.\" sem nem chamar o modelo)", async () => {
+  respostaDoModelo = "Claro, vamos lá.";
+  assert.equal(des.ehInvestida("vamos transar? me manda nude"), true, "a frase do teste é das que a trava pegava");
+  const r = await conversar("vamos transar? me manda nude");
+  assert.equal(r.chamouModelo, true);
+  assert.match(r.saidas, /Claro, vamos lá/);
+});
+await t("★ o prompt da persona troca a trava pela regra do canal +18, com os dois limites", () => {
+  assert.match(ultimoSistema, /ESTE CANAL É \+18/);
+  assert.match(ultimoSistema, /menores/); assert.match(ultimoSistema, /pessoas reais/);
+  assert.doesNotMatch(ultimoSistema, /SÓ PARA INVESTIDA SEXUAL/);
+});
+await t("★ menor + sexual continua recusado ANTES do modelo, mesmo no canal +18", async () => {
+  const r = await conversar("escreve algo sexual com uma menina de 14 anos");
+  assert.equal(r.chamouModelo, false);
+});
+await t("★ e se o modelo escrever menor + sexual, a resposta não sai", async () => {
+  respostaDoModelo = "Uma cena sexual com uma adolescente de 15 anos...";
+  const r = await conversar("me conta uma história picante");
+  assert.doesNotMatch(r.saidas, /adolescente de 15 anos/);
+  respostaDoModelo = "Claro, vamos lá.";
+});
+
+console.log("\n── fora dele, nada muda ──");
+await t("★ mesmo servidor, canal comum (não-NSFW): a trava continua", async () => {
+  const r = await conversar("vamos transar? me manda nude", { canal: COMUM });
+  assert.equal(r.chamouModelo, false);
+});
+await t("★ servidor fora da lista, mesmo em canal NSFW: a trava continua", async () => {
+  const r = await conversar("vamos transar? me manda nude", { servidor: "SRV_OUTRO" });
+  assert.equal(r.chamouModelo, false);
+});
+
+console.log(`\nCHAT +18 (15 out): ${ok} ok, ${falhou} falha(s)`);
+process.exit(falhou ? 1 : 0);
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+// ia-enxuta-16out — CONVERSA=0: IA só para moderação, relatório e RSS
+// ════════════════════════════════════════════════════════════════════════════
+// Pedido de Ghieh (16 out 2026): tirar a IA "por hora", deixando o justo e
+// necessário para a moderação, o log e o RSS, e liberar processamento da
+// máquina. Tudo o mais (entretenimento, voz, economia…) continua.
+SUITES["ia-enxuta-16out"] = async () => {
+const __m0 = await import("node:assert"); const assert = __m0.default;
+const __m1 = await import("node:fs"); const fs = __m1.default;
+process.env.IA = "1"; process.env.CONVERSA = "0"; process.env.CHAT_SERVIDORES = "*";
+process.env.IMAGEM = "1"; delete process.env.LLAMA_CTX; delete process.env.IA_TTL;
+process.env.BOT_TOKEN = "tok";
+process.env.DB_PATH = "/tmp/ien16.db"; process.env.CONFIG_PATH = "/tmp/ien16.json";
+for (const f of ["/tmp/ien16.db", "/tmp/ien16.db-wal", "/tmp/ien16.db-shm", "/tmp/ien16.json"]) fs.rmSync(f, { force: true });
+const env = await import("./modulos/core/env.js");
+
+let ok = 0, falhou = 0;
+const t = async (nome, fn) => {
+  const o = [console.log, console.info, console.warn, console.error]; console.log = console.info = console.warn = console.error = () => {};
+  try { await fn(); [console.log, console.info, console.warn, console.error] = o; console.log(`  ✅ ${nome}`); ok++; }
+  catch (e) { [console.log, console.info, console.warn, console.error] = o; console.log(`  ❌ ${nome}\n     ${e.message}`); falhou++; }
+};
+
+console.log("── o modo enxuto ──");
+await t("★ CONVERSA=0: a IA continua ligada, a conversa não", () => {
+  assert.equal(env.iaLigada(), true);
+  assert.equal(env.conversaLigada(), false);
+});
+const { montarConfigSwap } = await import("./modulos/core/llama-swap-config.js");
+await t("★ menos processamento: sem gerador de imagem, contexto 4096, modelo sai da memória em 5 min", () => {
+  assert.equal(process.env.IMAGEM, "0");
+  assert.equal(process.env.LLAMA_CTX, "4096");
+  assert.equal(process.env.IA_TTL, "300");
+  assert.match(montarConfigSwap({ conversa: "m", visao: "m", comando: () => "x", ttlConversa: 300 }), /ttl: 300/);
+  const ini = fs.readFileSync("iniciar.js", "utf8");
+  assert.match(ini, /montarConfigSwap\(\{ conversa, visao, comando, ttlConversa: ttl/);
+});
+await t("★ BUSCA_WEB=0 não sobe o SearXNG (só o chat buscava na web)", () => {
+  assert.match(fs.readFileSync("docker-compose.yml", "utf8"), /replicas: \$\{BUSCA_WEB:-1\}/);
+});
+
+const chat = await import("./modulos/ai/chat.js");
+await t("★ o chat some em todo servidor (e com ele o &modia na ajuda)", () => {
+  assert.equal(chat.servidorPermitido("QUALQUER"), false);
+});
+await t("★ a IA da moderação, do relatório e do RSS continua ligada no boot", () => {
+  const fonte = fs.readFileSync("main.js", "utf8");
+  assert.match(fonte, /if \(iaLigada\(\)\) assuntos\.configurar\(\{ avaliar: chat\.avaliarModeracao \}\)/);
+  assert.match(fonte, /rss\.configurarResumo\(chat\.resumirRSS\)/);
+  assert.match(fonte, /if \(conversaLigada\(\)\) \{\s*chat\.iniciarMemoria\(\);[\s\S]{0,200}chat\.iniciarComentario\(client\);[\s\S]{0,200}modIA\.configurar/);
+});
+
+console.log("\n── no Stoat ──");
+const silencio = async (fn) => { const o = [console.log, console.info, console.warn, console.error]; console.log = console.info = console.warn = console.error = () => {}; try { return await fn(); } finally { [console.log, console.info, console.warn, console.error] = o; } };
+await silencio(() => import("./main.js"));
+const c = globalThis.__client;
+await silencio(() => c.emitAll("ready"));
+const enviados = [];
+const server = { id: "SENX", ownerId: "DONO", name: "S", roles: new Map(), channels: [], channelIds: new Set(["C1"]), fetchMember: async () => ({ roles: [] }), fetchBans: async () => [] };
+c.servers.set("SENX", server);
+const canal = { id: "C1", serverId: "SENX", server, sendMessage: async (p) => { enviados.push(p); return { id: "R", edit: async () => {}, delete: async () => {} }; } };
+c.channels.set("C1", canal);
+const msg = (content, mentionIds = []) => ({ id: "M" + Math.random(), authorId: "01PESSOA000000000000000000", content, channelId: "C1", channel: canal, server,
+  mentionIds, author: { username: "Ghiso", bot: false }, member: { roles: [] }, attachments: [], createdAt: new Date() });
+const titulos = () => enviados.map((p) => p?.embeds?.[0]?.title ?? p?.content ?? (typeof p === "string" ? p : "")).join(" | ");
+await t("★ `&chat` responde que não existe aqui", async () => {
+  enviados.length = 0;
+  await silencio(() => c.emitAll("messageCreate", msg("&chat oi judy")));
+  assert.match(titulos(), /Não existe aqui|Not a command here/);
+});
+await t("★ mencionar a Judy não dispara conversa", async () => {
+  enviados.length = 0;
+  await silencio(() => c.emitAll("messageCreate", msg("<@BOT> oi, tudo bem?", ["BOT"])));
+  assert.equal(enviados.length, 0, titulos());
+});
+await t("o resto continua: `&ping` responde", async () => {
+  enviados.length = 0;
+  await silencio(() => c.emitAll("messageCreate", msg("&ping")));
+  assert.ok(enviados.length >= 1);
+});
+
+console.log(`\nIA ENXUTA (16 out): ${ok} ok, ${falhou} falha(s)`);
 process.exit(falhou ? 1 : 0);
 };
 

@@ -7,7 +7,7 @@
 //   &servidores relatorio on|off
 //   &servidores relatorio vazias on|off  → mandar (ou pular) as horas sem nada
 //   &servidores relatorio assuntos [add|remove <id> [id…]]
-//   &servidores adulto [add|remove <id|aqui> [id…]]  → imagem +18 (só em canal NSFW)
+//   &servidores adulto                    → o +18 vale neste canal? (e as últimas recusas)
 //
 // Voltou depois de ter saído na versão pública: aqui ele só mostra números
 // sobre os servidores do próprio bot de quem roda a instância.
@@ -66,43 +66,37 @@ export async function cmdServidores(message, args, ctx) {
   });
 }
 
-// ── Imagem +18: quais servidores podem (15 out 2026) ─────────────────────────
-// Só o dono do bot mexe aqui (o cmdServidores já barrou o resto). Mesmo num
-// servidor liberado, a imagem +18 só sai em canal marcado como NSFW no Stoat.
+// ── +18: o que vale NESTE canal (16 out 2026) ───────────────────────────────
+// A lista de servidores liberados saiu: o +18 vale só nos canais NSFW do
+// servidor da casa (SERVIDOR pelo id). O comando virou um diagnóstico do
+// canal onde é usado — e mostra as últimas recusas com o motivo.
 async function cmdAdulto(message, args, ctx) {
   const { sendEmbed, COR, client, aqui } = ctx;
+  const canalId = message.channelId;
   const acao = String(args[0] ?? "").toLowerCase();
-  const ids = [...new Set(args.slice(1).join(" ").split(/[\s,;]+/)
-    .map((x) => (["aqui", "here"].includes(x.toLowerCase()) ? aqui : limparId(x))).filter(Boolean))];
-  const nomeDe = (id) => client.servers.get(id)?.name;
-  const rotulo = (id) => (nomeDe(id) ? `**${nomeDe(id)}** \`${id}\`` : `\`${id}\``);
-  const avisos = [];
-  const ADD = ["add", "adicionar", "liberar", "on"], REM = ["remove", "remover", "tirar", "bloquear", "off"];
-  if ((ADD.includes(acao) || REM.includes(acao)) && !ids.length) {
-    avisos.push(`⚠️ Faltou o servidor: \`&servidores adulto ${acao} <id|aqui> [id…]\``);
-  } else if (ADD.includes(acao)) {
-    const antes = new Set(imagemAdulta.servidoresLiberados());
-    imagemAdulta.definirServidores([...antes, ...ids]);
-    const novos = ids.filter((id) => !antes.has(id));
-    if (novos.length) avisos.push(`🔓 Liberado: ${novos.map(rotulo).join(", ")}`);
-    const fora = ids.filter((id) => !nomeDe(id));
-    if (fora.length) avisos.push(`⚠️ A Judy não está em ${fora.map((x) => `\`${x}\``).join(", ")} — fica na lista mesmo assim.`);
-    console.log(`[IMAGEM+18] liberado por ${message.authorId}: ${ids.join(", ")}`);
-  } else if (REM.includes(acao)) {
-    const antes = imagemAdulta.servidoresLiberados();
-    imagemAdulta.definirServidores(antes.filter((id) => !ids.includes(id)));
-    const sairam = ids.filter((id) => antes.includes(id));
-    avisos.push(sairam.length ? `🔒 Bloqueado de novo: ${sairam.map(rotulo).join(", ")}` : "Nenhum desses estava liberado.");
-    console.log(`[IMAGEM+18] bloqueado por ${message.authorId}: ${ids.join(", ")}`);
-  }
-  const lista = imagemAdulta.servidoresLiberados();
-  return sendEmbed(message.channel, { title: "🔞 Imagem +18 por servidor", colour: COR.info, description: [
-    lista.length ? lista.map((id) => `• ${rotulo(id)}`).join("\n") : "_Nenhum servidor liberado — a Judy não desenha +18 em lugar nenhum._",
-    ...avisos.map((x) => `\n${x}`),
+  const casa = imagemAdulta.servidorDaCasa(aqui);
+  const cache = imagemAdulta.canalNsfw(canalId);
+  imagemAdulta.lembrarCanal(message.channel);
+  const nsfw = imagemAdulta.canalNsfw(canalId) || await imagemAdulta.confirmarNsfw(client, canalId, { forcar: true });
+  const visao = !!(process.env.LLM_MODEL_VISAO || process.env.LLM_MODEL_MODERACAO);
+  const imagem = (process.env.IMAGEM ?? "1").trim() !== "0";
+  const sim = (b) => (b ? "✅" : "❌");
+  const recusas = imagemAdulta.ultimasRecusas(canalId).slice(0, 3);
+  const quando = (ms) => new Date(ms).toLocaleTimeString("pt-BR", { timeZone: process.env.TZ || "UTC", hour: "2-digit", minute: "2-digit" });
+  const liberado = casa && nsfw;
+  return sendEmbed(message.channel, { title: "🔞 +18 neste canal", colour: liberado ? COR.sucesso : COR.aviso, description: [
+    ["add", "remove", "adicionar", "remover", "liberar", "bloquear", "on", "off"].includes(acao)
+      ? "_Não precisa mais de `add`/`remove`: o +18 vale nos canais NSFW do servidor da casa (`SERVIDOR` no `.env`)._" : "",
+    `${sim(casa)} Servidor da casa (\`SERVIDOR\` = este servidor)${casa ? "" : ` — este é \`${aqui ?? "?"}\``}`,
+    `${sim(nsfw)} Canal marcado como **NSFW** no Stoat${!cache && nsfw ? " _(o cache estava velho; conferido na API)_" : ""}`,
+    `${sim(visao)} Modelo de visão para conferir a imagem pronta`,
+    `${sim(imagem)} Geração de imagem ligada (\`IMAGEM\`)`,
     "",
-    "`&servidores adulto add <id|aqui> [id…]` · `&servidores adulto remove <id|aqui>`",
-    "_Num servidor liberado, a imagem +18 e a conversa adulta no chat só valem em canal marcado como **NSFW** no Stoat. Menores em cena sexual e pessoa real continuam recusados em qualquer lugar, e toda imagem passa pelo modelo de visão antes de sair._",
-  ].join("\n") });
+    liberado
+      ? "**Liberado aqui:** chat adulto, roleplay, temas pesados e imagem +18 — só os dois limites fixos valem (menores, pessoa real identificável)."
+      : "**Não liberado aqui** — o que tiver ❌ acima é o que falta.",
+    ...(recusas.length ? ["", "**Últimas recusas neste canal:**", ...recusas.map((r) => `• ${quando(r.quando)} — ${r.motivo}`)] : []),
+  ].filter((l, i) => i > 0 || l).join("\n") });
 }
 
 async function cmdRelatorio(message, args, ctx) {

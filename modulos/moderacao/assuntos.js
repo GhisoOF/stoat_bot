@@ -360,7 +360,7 @@ const JULGAR_MS = 20_000;
 const vereditos = new Map();   // `${canal}:${tema}` → { t, discussao, motivo }
 let ultimoAvisoSemIA = 0;
 
-async function julgar({ tema, canalId, messageId, nome, texto, lang }, agora = Date.now()) {
+async function julgar({ tema, canalId, messageId, nome, texto, lang, serverId = null }, agora = Date.now()) {
   const chave = `${canalId}:${tema}`;
   const v = vereditos.get(chave);
   if (v && agora - v.t < JULGAR_MS) return { ...v, cache: true };
@@ -374,7 +374,7 @@ async function julgar({ tema, canalId, messageId, nome, texto, lang }, agora = D
     : `CONVERSA RECENTE:\n${fio || "(nada antes)"}\n\nMENSAGEM AVALIADA (${nome}): ${texto.slice(0, 500)}`;
   let r = null;
   try {
-    r = lerVeredito(await avaliarLLM([{ role: "system", content: promptDoTema(tema, lang) }, { role: "user", content: corpo }], { etiqueta: `assunto:${tema}` }));
+    r = lerVeredito(await avaliarLLM([{ role: "system", content: promptDoTema(tema, lang) }, { role: "user", content: corpo }], { etiqueta: `assunto:${tema}`, serverId }));
   } catch (e) {
     console.warn(`[ASSUNTOS] o modelo falhou (${e?.message ?? e}) — nada é feito`);
     return null;   // fail-safe: erro nunca vira punição
@@ -412,7 +412,7 @@ export async function verificar({ ctx, server, canal, message, userId, aplicarPu
   // `ia off`: a nota decide sozinha
   const v = cfg.ia === false
     ? { discussao: true, motivo: lang === "en" ? `score ${nota} ≥ ${limiar}` : `nota ${nota} ≥ ${limiar}`, semIA: true }
-    : await julgar({ tema, canalId: message.channelId, messageId: message.id, nome, texto, lang });
+    : await julgar({ tema, canalId: message.channelId, messageId: message.id, nome, texto, lang, serverId: ctx?.serverId ?? null });
   const T = TEMAS[tema];
   console.log(`[ASSUNTOS] ${tema} nota ${nota}/${limiar} [${sinais.join(", ")}] em ${message.channelId} por ${userId} → ${v ? (v.discussao ? "DISCUSSÃO" : "brincadeira/menção") : "sem veredito"}${v?.cache ? " (veredito recente)" : ""}${v?.semIA ? " (sem IA: só a nota)" : ""}${v?.motivo ? ` — ${v.motivo}` : ""}`);
   if (!v?.discussao) return { tema, nota, acao: "nada", veredito: v };

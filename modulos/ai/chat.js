@@ -180,9 +180,16 @@ export function observarParaComentario(message, ctx) {
   try { comentario.observar(message, ctx); } catch {}
 }
 
-// Avaliador para a moderação por IA: usa o modelo pequeno (rápido) em JSON.
-export function avaliarModeracao(messages, { etiqueta = "moderacao-ia" } = {}) {
-  return llmChat(messages, { json: true, modelo: LLM_MODEL_JUIZ, etiqueta });
+// Avaliador para a moderação por IA, em JSON. O modelo pequeno
+// (MODELO_MODERACAO) julga os OUTROS servidores; o servidor da casa (o que
+// está pelo id em SERVIDOR) segue com o modelo da conversa (16 out 2026,
+// Ghieh: "a moderação [pequena] eu quero para os outros servers; para o meu,
+// tudo incluso").
+export function modeloDoJuiz(serverId = null) {
+  return imagemAdulta.servidorDaCasa(serverId) ? LLM_MODEL_DECISAO : LLM_MODEL_JUIZ;
+}
+export function avaliarModeracao(messages, { etiqueta = "moderacao-ia", serverId = null } = {}) {
+  return llmChat(messages, { json: true, modelo: modeloDoJuiz(serverId), etiqueta });
 }
 
 export async function resumirRSS(material, quantidade, { categoria = null, lang = "pt", serverId = null } = {}) {
@@ -1291,6 +1298,7 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
       });
     } else {
       responder._erroImagem = r?.erro ?? "sem resposta do gerador";
+      imagemAdulta.registrarRecusa(canalId, `imagem: ${responder._erroImagem}`);
       dlog(`geração direta falhou: ${responder._erroImagem}`);
       messages.push({
         role: "system",
@@ -1835,8 +1843,15 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
   const { modeloForcado = null, avisoEspera = null } = opcoes;
   const { sendEmbed, COR, serverId } = ctx;
   imagemAdulta.lembrarCanal(message.channel);   // canal NSFW? (a imagem +18 depende disso)
-  // Servidor liberado para +18 E canal NSFW: o chat também conversa sobre
-  // conteúdo adulto (15 out 2026). Nos outros canais, nada muda.
+  // Servidor da casa: o cache pode dizer "não NSFW" de um canal marcado depois
+  // do boot (16 out 2026: "ainda se recusa"). Num pedido sexual ou de imagem,
+  // a API confirma (1×/min por canal).
+  if (imagemAdulta.servidorDaCasa(serverId) && !imagemAdulta.canalNsfw(message.channelId)
+      && (desinteresse.ehInvestida(pergunta) || pedeImagemGerada(pergunta))) {
+    await imagemAdulta.confirmarNsfw(message.client ?? ctx.client, message.channelId);
+  }
+  // Servidor da casa E canal NSFW: o chat também conversa sobre conteúdo
+  // adulto (15 out 2026). Nos outros canais, nada muda.
   const adultoAqui = imagemAdulta.liberadaAqui(serverId, message.channelId);
   const lang = lingua(ctx);
   const en = lang === "en";
@@ -1896,7 +1911,11 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
   if (desinteresse.envolveMenor(pergunta)
       || (!adultoAqui && desinteresse.ehInvestida(pergunta))) {
     const seca = desinteresse.respostaSeca(message.channelId, lang);
-    console.log(`[CHAT] desinteresse (sem modelo): ${JSON.stringify(pergunta).slice(0, 50)}`);
+    const porque = desinteresse.envolveMenor(pergunta)
+      ? "menor + sexual (limite fixo, vale em qualquer canal)"
+      : `resposta seca: este canal não está liberado (servidor da casa: ${imagemAdulta.servidorDaCasa(serverId) ? "sim" : "não"}, canal NSFW: ${imagemAdulta.canalNsfw(message.channelId) ? "sim" : "não"})`;
+    imagemAdulta.registrarRecusa(message.channelId, porque);
+    console.log(`[CHAT] desinteresse (sem modelo) — ${porque}: ${JSON.stringify(pergunta).slice(0, 50)}`);
     try { await message.channel.sendMessage(seca); }
     catch { await sendEmbed(message.channel, { description: seca, colour: COR.info }); }
     return;

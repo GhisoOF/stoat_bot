@@ -52,7 +52,7 @@ const RESPOSTAS_EN = [
 const ultimas = new Map();
 
 // ── Limite que nenhum servidor libera (15 out 2026) ──────────────────────────
-// Nos servidores liberados para +18 (`&servidores adulto`, só em canal NSFW) a
+// Nos canais NSFW do servidor da casa (SERVIDOR pelo id) a
 // Judy conversa sobre conteúdo adulto. Mas menor + sexual é recusado em
 // qualquer lugar — na pergunta (antes do modelo) e na resposta (depois dele).
 const MENOR_TXT = /\b(crian[çc]as?|menor(?:es)?\s+de\s+idade|menores|adolescentes?|novinh[ao]s?|ninfetas?|garotinh[ao]s?|menininh[ao]s?|colegiais?|pr[ée][\s-]?adolescentes?|infantil|loli|shota|lolicon|shotacon|teens?|teenagers?|underage|preteens?|minors?|kids?|child(?:ren)?|schoolgirls?|schoolboys?|(?:[1-9]|1[0-7])\s*(?:anos|aninhos|years?\s*old|yo|y\/o)\b)/i;

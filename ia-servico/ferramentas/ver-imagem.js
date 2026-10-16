@@ -1,3 +1,4 @@
+import { esperarDesenho } from "./vez-da-gpu.js";
 
 const LLM_URL      = (process.env.LLM_URL || "").replace(/\/$/, "");
 const MODELO_VISAO = process.env.LLM_MODEL_VISAO || "";        // vazio = visão desligada
@@ -127,7 +128,9 @@ export async function verImagem({ url, pergunta, modelo = null, temperatura = nu
 export const visaoDisponivel = () => !!(MODELO_MODERACAO || MODELO_VISAO);
 
 // A pergunta ao modelo, com a imagem já reescrita (JPEG limpo).
-async function perguntarSobre(limpa, { pergunta, modelo = null, temperatura = null, maxTokens = 700 } = {}) {
+export async function perguntarSobre(limpa, { pergunta, modelo = null, temperatura = null, maxTokens = 700 } = {}) {
+  // enquanto o sd.cpp desenha, a GPU é dele (vez-da-gpu.js)
+  await esperarDesenho();
   // A imagem que o modelo vê é a REESCRITA — os bytes originais morrem aqui.
   const corpo = {
     model: modelo || MODELO_VISAO,
@@ -137,7 +140,10 @@ async function perguntarSobre(limpa, { pergunta, modelo = null, temperatura = nu
     messages: [{
       role: "user",
       content: [
-        { type: "text", text: (pergunta || "Descreva esta imagem com detalhes úteis.").slice(0, 500) },
+        // 1200: o PROMPT_MODERACAO tem ~650 caracteres — com o corte antigo em
+        // 500, a instrução "RISCO: sim/não" da última linha nunca chegava ao
+        // modelo (achado em 16 out 2026)
+        { type: "text", text: (pergunta || "Descreva esta imagem com detalhes úteis.").slice(0, 1200) },
         { type: "image_url", image_url: { url: `data:image/jpeg;base64,${limpa.toString("base64")}` } },
       ],
     }],
@@ -183,17 +189,31 @@ const PROMPT_MODERACAO = [
 // A mesma moderação, para uma imagem que já está na memória — a que a
 // própria Judy acabou de desenhar (15 out 2026: a saída do gerador passa por
 // aqui antes de ir para o canal).
-export async function moderarBuffer(buffer) {
+// `adulta`: a imagem vai para um canal +18 — a pergunta pede também a IDADE
+// APARENTE explícita (16 out 2026). Antes, "girl"/"garota" numa descrição de
+// mulher adulta descartava a imagem; agora o modelo diz se todos são adultos.
+const PROMPT_SAIDA_ADULTA = [
+  "Você confere uma imagem antes de ela ir para um canal adulto. Descreva em até 3 frases curtas o que aparece (pessoas, nudez, ato sexual).",
+  "Depois, numa linha própria, a IDADE APARENTE das pessoas: escreva exatamente IDADE: adulto (todas claramente adultas),",
+  "IDADE: menor (alguém aparenta ter menos de 18 anos) ou IDADE: incerto (não dá para ter certeza). Sem pessoas: IDADE: adulto.",
+  "Escreva só o que VÊ. Não recuse e não opine. Na última linha, escreva exatamente RISCO: sim ou RISCO: não.",
+].join(" ");
+export async function moderarBuffer(buffer, { adulta = false } = {}) {
   if (!visaoDisponivel()) return { erro: "visão desligada" };
   let limpa;
   try { limpa = await reescrever(buffer, LADO_VISAO); }
   catch (e) { return { erro: `não consegui tratar a imagem: ${e?.message ?? e}` }; }
-  const perguntar = (maxTokens) => perguntarSobre(limpa, { pergunta: PROMPT_MODERACAO, modelo: MODELO_MODERACAO || null, temperatura: 0, maxTokens });
+  const pergunta = adulta ? PROMPT_SAIDA_ADULTA : PROMPT_MODERACAO;
+  const perguntar = (maxTokens) => perguntarSobre(limpa, { pergunta, modelo: MODELO_MODERACAO || null, temperatura: 0, maxTokens });
   let r = await perguntar(1200);
   if (r.erro && /não respondeu nada/.test(r.erro)) r = await perguntar(2400);
   if (r.erro) return r;
   const texto = String(r.descricao);
-  return { descricao: texto.replace(/\n?\s*RISCO:\s*(sim|n[ãa]o)\s*$/i, "").trim(), riscoModelo: /RISCO:\s*sim/i.test(texto) };
+  const idade = (texto.match(/IDADE:\s*(adulto|menor|incerto)/i)?.[1] ?? "").toLowerCase() || null;
+  return {
+    descricao: texto.replace(/\n?\s*RISCO:\s*(sim|n[ãa]o)\s*$/i, "").replace(/^.*IDADE:.*$/gim, "").trim(),
+    riscoModelo: /RISCO:\s*sim/i.test(texto), idade,
+  };
 }
 
 export async function moderarImagem({ url }) {

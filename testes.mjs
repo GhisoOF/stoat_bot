@@ -13674,35 +13674,51 @@ await t("★ o chat manda o contexto nas duas chamadas ao serviço (direta e com
 });
 
 console.log("\n── servidor liberado E canal NSFW ──");
-await t("★ só vale com o servidor na lista do dono E o canal marcado como NSFW", () => {
-  adulta.definirServidores(["SRV18"]);
-  adulta.lembrarCanal({ id: "C_NSFW", nsfw: true });
-  adulta.lembrarCanal({ id: "C_GERAL", nsfw: false });
-  assert.equal(adulta.liberadaAqui("SRV18", "C_NSFW"), true);
-  assert.equal(adulta.liberadaAqui("SRV18", "C_GERAL"), false);
-  assert.equal(adulta.liberadaAqui("OUTRO", "C_NSFW"), false);
-  adulta.definirServidores([]);
+await t("★ só vale no servidor da casa (SERVIDOR pelo id) E em canal marcado como NSFW", () => {
+  const antes = process.env.CHAT_SERVIDORES; process.env.CHAT_SERVIDORES = "SRV18";
+  try {
+    adulta.lembrarCanal({ id: "C_NSFW", nsfw: true });
+    adulta.lembrarCanal({ id: "C_GERAL", nsfw: false });
+    assert.equal(adulta.liberadaAqui("SRV18", "C_NSFW"), true);
+    assert.equal(adulta.liberadaAqui("SRV18", "C_GERAL"), false);
+    assert.equal(adulta.liberadaAqui("OUTRO", "C_NSFW"), false);
+  } finally { if (antes === undefined) delete process.env.CHAT_SERVIDORES; else process.env.CHAT_SERVIDORES = antes; }
 });
-const rodar = async (args, { dono = true } = {}) => {
+const rodar = async (args, { dono = true, canal = { id: "C1" } } = {}) => {
   const saidas = [];
-  await servidores.cmdServidores({ authorId: dono ? "DONO" : "ADMIN", channel: { id: "C1" } }, args, {
+  await servidores.cmdServidores({ authorId: dono ? "DONO" : "ADMIN", channelId: canal.id, channel: canal }, args, {
     sendEmbed: async (_c, e) => saidas.push(e), COR: {}, serverId: "SRV_AQUI",
-    client: { servers: { get: (id) => (id === "SRV_AQUI" ? { name: "Servidor Aqui" } : null) } },
+    client: { servers: { get: (id) => (id === "SRV_AQUI" ? { name: "Servidor Aqui" } : null) },
+      api: { get: async (rota) => (rota === "/channels/C_API" ? { _id: "C_API", nsfw: true } : { nsfw: false }) } },
     ehSuperAdmin: (id) => id === "DONO" });
   return saidas.at(-1);
 };
-await t("★ `&servidores adulto add aqui` / `remove aqui` (só o dono do bot)", async () => {
-  await rodar(["adulto", "add", "aqui"]);
-  assert.deepEqual(adulta.servidoresLiberados(), ["SRV_AQUI"]);
-  assert.deepEqual(store.getGlobal().imagemAdulta, ["SRV_AQUI"]);
-  const negado = await rodar(["adulto", "remove", "aqui"], { dono: false });
-  assert.match(negado.title, /restrito/);
-  assert.deepEqual(adulta.servidoresLiberados(), ["SRV_AQUI"]);
-  await rodar(["adulto", "remove", "aqui"]);
-  assert.deepEqual(adulta.servidoresLiberados(), []);
+await t("★ `&servidores adulto` virou diagnóstico do canal — sem lista para adicionar (16 out 2026)", async () => {
+  const antes = process.env.CHAT_SERVIDORES; process.env.CHAT_SERVIDORES = "SRV_AQUI";
+  try {
+    const r = await rodar(["adulto", "add", "aqui"]);
+    assert.match(r.description, /Não precisa mais de `add`/);
+    assert.match(r.description, /✅ Servidor da casa/);
+    assert.match(r.description, /❌ Canal marcado como \*\*NSFW\*\*/);
+    assert.equal(typeof adulta.definirServidores, "undefined", "a lista do dono saiu");
+    const negado = await rodar(["adulto"], { dono: false });
+    assert.match(negado.title, /restrito/);
+  } finally { if (antes === undefined) delete process.env.CHAT_SERVIDORES; else process.env.CHAT_SERVIDORES = antes; }
 });
-await t("por padrão, nenhum servidor liberado", () => {
-  assert.deepEqual(store.padraoGlobal.imagemAdulta, []);
+await t("★ cache velho: o canal marcado NSFW depois do boot é conferido na API", async () => {
+  const antes = process.env.CHAT_SERVIDORES; process.env.CHAT_SERVIDORES = "SRV_AQUI";
+  try {
+    adulta.lembrarCanal({ id: "C_API", nsfw: false });
+    const r = await rodar(["adulto"], { canal: { id: "C_API", nsfw: false } });
+    assert.match(r.description, /✅ Canal marcado como \*\*NSFW\*\* no Stoat _\(o cache estava velho/);
+    assert.equal(adulta.liberadaAqui("SRV_AQUI", "C_API"), true);
+  } finally { if (antes === undefined) delete process.env.CHAT_SERVIDORES; else process.env.CHAT_SERVIDORES = antes; }
+});
+await t("a recusa fica registrada com o motivo (o diagnóstico mostra)", async () => {
+  adulta.registrarRecusa("C1", "imagem: recusado: teste");
+  const r = await rodar(["adulto"]);
+  assert.match(r.description, /Últimas recusas neste canal/);
+  assert.match(r.description, /recusado: teste/);
 });
 
 console.log(`\nIMAGEM +18 (15 out): ${ok} ok, ${falhou} falha(s)`);
@@ -13881,13 +13897,13 @@ process.exit(falhou ? 1 : 0);
 // ════════════════════════════════════════════════════════════════════════════
 // Pedido de Ghieh (15 out 2026): o chat respondia "Não." / "Passo." a todo
 // assunto sexual, até nos servidores liberados para +18. Agora, servidor de
-// `&servidores adulto` + canal NSFW = a Judy conversa sobre conteúdo adulto.
+// Servidor da casa (SERVIDOR) + canal NSFW = a Judy conversa sobre conteúdo adulto.
 // Dois limites ficam em qualquer canal: menores e pessoas reais.
 SUITES["chat-adulto-15out"] = async () => {
 const __m0 = await import("node:assert"); const assert = __m0.default;
 const __m1 = await import("node:fs"); const fs = __m1.default;
 process.env.DB_PATH = "/tmp/cha15.db"; process.env.CONFIG_PATH = "/tmp/cha15.json";
-process.env.LLM_URL = "http://llm.teste:1"; process.env.CHAT_SERVIDORES = "*"; process.env.BUSCA_ATIVA = "false";
+process.env.LLM_URL = "http://llm.teste:1"; process.env.CHAT_SERVIDORES = "SRV_ADULTO"; process.env.BUSCA_ATIVA = "false";
 delete process.env.IA_SERVICO_URL;
 for (const f of ["/tmp/cha15.db", "/tmp/cha15.db-wal", "/tmp/cha15.db-shm", "/tmp/cha15.json"]) fs.rmSync(f, { force: true });
 const store = await import("./modulos/core/config-store.js");
@@ -13934,7 +13950,6 @@ await t("★ menor + sexual é reconhecido; adulto falando de sexo, não", () =>
 });
 
 console.log("\n── no canal +18 liberado ──");
-adulta.definirServidores([SRV]);
 await t("★ investida sexual vai ao modelo (antes: \"Não.\"/\"Passo.\" sem nem chamar o modelo)", async () => {
   respostaDoModelo = "Claro, vamos lá.";
   assert.equal(des.ehInvestida("vamos transar? me manda nude"), true, "a frase do teste é das que a trava pegava");
@@ -13963,7 +13978,7 @@ await t("★ mesmo servidor, canal comum (não-NSFW): a trava continua", async (
   const r = await conversar("vamos transar? me manda nude", { canal: COMUM });
   assert.equal(r.chamouModelo, false);
 });
-await t("★ servidor fora da lista, mesmo em canal NSFW: a trava continua", async () => {
+await t("★ outro servidor (fora de SERVIDOR), mesmo em canal NSFW: nada de conversa", async () => {
   const r = await conversar("vamos transar? me manda nude", { servidor: "SRV_OUTRO" });
   assert.equal(r.chamouModelo, false);
 });
@@ -14087,7 +14102,6 @@ const adulta = await import("./modulos/ai/imagem-adulta.js");
 await t("★ canal NSFW do servidor da casa (SERVIDOR pelo id) já é liberado — sem &servidores adulto", () => {
   adulta.lembrarCanal({ id: "NSFW1", nsfw: true });
   adulta.lembrarCanal({ id: "COMUM1", nsfw: false });
-  assert.equal(adulta.servidoresLiberados().length, 0);
   assert.equal(adulta.liberadaAqui("CASA", "NSFW1"), true);
   assert.equal(adulta.liberadaAqui("CASA", "COMUM1"), false, "canal comum da casa continua limpo");
   assert.equal(adulta.liberadaAqui("OUTRO", "NSFW1"), false, "canal NSFW de outro servidor: só com &servidores adulto");
@@ -14164,6 +14178,27 @@ await t("★ MODELO_MODERACAO (online) vira o juiz da moderação — o chat seg
   finally { globalThis.fetch = fetchAntes; }
   assert.ok(pedidos.includes("pequeno/juiz"), JSON.stringify(pedidos));
   assert.ok(!pedidos.includes("grande/conversa"), JSON.stringify(pedidos));
+});
+await t("★ o modelo pequeno julga os OUTROS servidores; o da casa segue com o modelo da conversa", async () => {
+  const pedidos = [];
+  const fetchAntes = globalThis.fetch;
+  globalThis.fetch = async (url, op) => {
+    try { pedidos.push(JSON.parse(op?.body ?? "{}").model); } catch {}
+    return new Response(JSON.stringify({ choices: [{ message: { content: "{\"viola\":false}" }, finish_reason: "stop" }] }), { status: 200, headers: { "Content-Type": "application/json" } });
+  };
+  try {
+    await chat.avaliarModeracao([{ role: "user", content: "a" }], { serverId: "OUTRO" });
+    await chat.avaliarModeracao([{ role: "user", content: "b" }], { serverId: "CASA" });
+  } finally { globalThis.fetch = fetchAntes; }
+  assert.deepEqual(pedidos, ["pequeno/juiz", "grande/conversa"]);
+});
+await t("★ temas proibidos e &modia passam o servidor ao juiz", () => {
+  const as = fs.readFileSync("modulos/moderacao/assuntos.js", "utf8");
+  assert.match(as, /etiqueta: `assunto:\$\{tema\}`, serverId \}/);
+  assert.match(as, /serverId: ctx\?\.serverId \?\? null \}\);/);
+  const mi = fs.readFileSync("modulos/moderacao/moderacao-ia.js", "utf8");
+  assert.match(mi, /\], \{ serverId \}\);/);
+  assert.match(mi, /avaliar\(cfg, texto, ctx\?\.serverId \?\? null\)/);
 });
 const { montarConfigSwap } = await import("./modulos/core/llama-swap-config.js");
 await t("★ llama-swap: \"moderacao\" num grupo sem troca, não exclusivo e persistente (fica junto da conversa)", () => {
@@ -14242,6 +14277,140 @@ await t("outro servidor: o `&tutorial ia` vira só a moderação por IA", async 
 });
 
 console.log(`\nIA SÓ NA CASA (16 out): ${ok} ok, ${falhou} falha(s)`);
+process.exit(falhou ? 1 : 0);
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+// imagem-casa-16out (16 out 2026) — "a IA ainda se recusa a criar a imagem,
+// mesmo com o meu server no .env e o &servidores adulto add aqui"; "tirar a
+// necessidade desse comando"; e o Qwen-Image morrendo em "segment 26/34
+// failed during weight preparation".
+// ════════════════════════════════════════════════════════════════════════════
+SUITES["imagem-casa-16out"] = async () => {
+const __m0 = await import("node:assert"); const assert = __m0.default;
+const __m1 = await import("node:fs"); const fs = __m1.default;
+process.env.LLM_URL = "http://llm.teste:1"; process.env.LLM_MODEL_VISAO = "visao";
+delete process.env.LLM_MODEL_MODERACAO; delete process.env.IMAGEM_TE_GPU;
+const gi = await import("./ia-servico/ferramentas/gerar-imagem.js");
+const vi = await import("./ia-servico/ferramentas/ver-imagem.js");
+const vez = await import("./ia-servico/ferramentas/vez-da-gpu.js");
+
+let ok = 0, falhou = 0;
+const t = async (nome, fn) => {
+  const o = [console.log, console.info, console.warn, console.error]; console.log = console.info = console.warn = console.error = () => {};
+  try { await fn(); [console.log, console.info, console.warn, console.error] = o; console.log(`  ✅ ${nome}`); ok++; }
+  catch (e) { [console.log, console.info, console.warn, console.error] = o; console.log(`  ❌ ${nome}\n     ${e.message}`); falhou++; }
+};
+
+console.log("── o Qwen-Image que morria sem memória ──");
+const base = { difusao: "d", vae: "v", llm: "l", texto: "x", width: 512, height: 512, saida: "o" };
+await t("★ o codificador de texto (Qwen3-VL-8B, ~5 GB) vai para a CPU por padrão", () => {
+  assert.ok(gi.argsQwenImage({ ...base, env: {} }).includes("--clip-on-cpu"));
+  assert.ok(!gi.argsQwenImage({ ...base, env: { IMAGEM_TE_GPU: "1" } }).includes("--clip-on-cpu"), "IMAGEM_TE_GPU=1 devolve à GPU");
+  assert.ok(gi.argsQwenImage({ ...base, env: { IMAGEM_TE_GPU: "1" }, economico: true }).includes("--clip-on-cpu"), "o modo econômico sempre manda para a CPU");
+});
+await t("★ \"failed during weight preparation\" é falta de memória → 2ª tentativa no modo econômico", async () => {
+  assert.equal(gi.faltouMemoria("[ERROR ] ggml_runner.cpp:898 - qwen_image_2_1 segment 26/34 (qwen_image_2_1.transformer_blocks.24) failed during weight preparation"), true);
+  const chamadas = [];
+  const png = await gi.gerarComFolga({ texto: "x" }, {
+    liberar: async () => {},
+    gerar: async (p) => { chamadas.push(!!p.economico); if (!p.economico) throw new Error("sd.cpp saiu com 1: segment 26/34 failed during weight preparation"); return Buffer.from("png"); },
+  });
+  assert.deepEqual(chamadas, [false, true]);
+  assert.equal(String(png), "png");
+});
+await t("★ a visão espera o desenho acabar (imagem de outro servidor no meio do desenho derrubava o sd.cpp)", async () => {
+  const ordem = [];
+  const antes = globalThis.fetch;
+  globalThis.fetch = async () => { ordem.push("visao"); return new Response(JSON.stringify({ choices: [{ message: { content: "Uma paisagem.\nRISCO: não" } }] }), { status: 200 }); };
+  try {
+    const desenho = vez.desenhando(async () => { await new Promise((r) => setTimeout(r, 80)); ordem.push("fim do desenho"); });
+    await new Promise((r) => setTimeout(r, 5));
+    const r = await vi.perguntarSobre(Buffer.from("jpeg"), { pergunta: "descreva" });
+    await desenho;
+    assert.match(r.descricao, /Uma paisagem/);
+  } finally { globalThis.fetch = antes; }
+  assert.deepEqual(ordem, ["fim do desenho", "visao"]);
+});
+await t("★ o prompt de moderação chega inteiro ao modelo (o corte em 500 comia o \"RISCO: sim/não\")", async () => {
+  let texto = "";
+  const antes = globalThis.fetch;
+  globalThis.fetch = async (_u, op) => { texto = JSON.parse(op.body).messages[0].content[0].text; return new Response(JSON.stringify({ choices: [{ message: { content: "ok" } }] }), { status: 200 }); };
+  try {
+    const src = fs.readFileSync("ia-servico/ferramentas/ver-imagem.js", "utf8");
+    const prompt = eval("[" + src.match(/const PROMPT_MODERACAO = \[([\s\S]*?)\]\.join/)[1] + "]").join(" ");
+    assert.ok(prompt.length > 500, "o prompt passa de 500 caracteres");
+    await vi.perguntarSobre(Buffer.from("x"), { pergunta: prompt });
+  } finally { globalThis.fetch = antes; }
+  assert.match(texto, /RISCO: sim ou RISCO: não\.$/);
+});
+await t("sem desenho em curso, a visão não espera", async () => {
+  assert.equal(vez.desenhoEmCurso(), false);
+  assert.equal(await vez.esperarDesenho(10), true);
+});
+
+console.log("\n── a conferência da imagem +18 ──");
+await t("★ \"garota\"/\"girl\" numa mulher adulta não descarta mais — o modelo afirma IDADE: adulto", () => {
+  assert.equal(gi.julgarSaida("Uma garota nua deitada na cama.", { adulto: true, idade: "adulto" }), null);
+  assert.equal(gi.julgarSaida("A naked girl on a beach.", { adulto: true, idade: "adulto" }), null);
+});
+await t("★ o limite continua: menor/incerto descarta, termo forte descarta mesmo com \"adulto\", sem veredito o ambíguo conta", () => {
+  assert.ok(gi.julgarSaida("Uma mulher nua.", { adulto: true, idade: "menor" }));
+  assert.ok(gi.julgarSaida("Uma mulher nua.", { adulto: true, idade: "incerto" }));
+  assert.ok(gi.julgarSaida("A naked teen girl.", { adulto: true, idade: "adulto" }));
+  assert.ok(gi.julgarSaida("Uma garota nua de uniforme escolar.", { adulto: true, idade: "adulto" }));
+  assert.ok(gi.julgarSaida("Uma garota nua.", { adulto: true, idade: null }));
+});
+await t("★ no canal +18 a visão recebe a pergunta da idade, e o veredito chega ao julgamento", async () => {
+  let opcoes = null;
+  const r = await gi.conferirSaida(Buffer.from("x"), { adulto: true, temVisao: () => true,
+    moderar: async (_j, op) => { opcoes = op; return { descricao: "Uma garota nua.", idade: "adulto" }; } });
+  assert.deepEqual(opcoes, { adulta: true });
+  assert.equal(r, null);
+  const src = fs.readFileSync("ia-servico/ferramentas/ver-imagem.js", "utf8");
+  assert.match(src, /IDADE: adulto/); assert.match(src, /IDADE: menor/); assert.match(src, /IDADE: incerto/);
+});
+
+console.log("\n── pessoa real × obra de ficção ──");
+await t("★ \"no estilo de Final Fantasy\" / \"personagem de Street Fighter\" não é pessoa real", () => {
+  assert.equal(gi.prompProibido("mulher nua no estilo de Final Fantasy", { adulto: true }), null);
+  assert.equal(gi.prompProibido("personagem nua de Street Fighter", { adulto: true }), null);
+});
+await t("★ nome de pessoa continua recusado — e a recusa diz o trecho", () => {
+  const r = gi.prompProibido("foto nua da Maria Souza", { adulto: true });
+  assert.match(r, /deepfake/); assert.match(r, /da Maria Souza/);
+  assert.ok(gi.prompProibido("celebridade nua", { adulto: true }));
+});
+
+console.log("\n── o canal +18 na casa, sem comando ──");
+const adulta = await import("./modulos/ai/imagem-adulta.js");
+await t("★ cache dizendo \"não NSFW\" é conferido na API (1×/min por canal)", async () => {
+  let chamadas = 0;
+  const cli = { api: { get: async () => { chamadas++; return { nsfw: true }; } } };
+  adulta.lembrarCanal({ id: "CX", nsfw: false });
+  assert.equal(await adulta.confirmarNsfw(cli, "CX", { agora: 1_000_000 }), true);
+  adulta.lembrarCanal({ id: "CY", nsfw: false });
+  const cli2 = { api: { get: async () => { chamadas++; return { nsfw: false }; } } };
+  await adulta.confirmarNsfw(cli2, "CY", { agora: 1_000_000 });
+  await adulta.confirmarNsfw(cli2, "CY", { agora: 1_030_000 });
+  assert.equal(chamadas, 2, "a 2ª conferência do CY dentro do minuto não vai à API");
+});
+await t("★ o chat confere na API antes de decidir, e a resposta seca registra o porquê", () => {
+  const src = fs.readFileSync("modulos/ai/chat.js", "utf8");
+  assert.match(src, /imagemAdulta\.servidorDaCasa\(serverId\) && !imagemAdulta\.canalNsfw\(message\.channelId\)[\s\S]{0,160}await imagemAdulta\.confirmarNsfw\(/);
+  assert.match(src, /imagemAdulta\.registrarRecusa\(message\.channelId, porque\)/);
+  assert.match(src, /imagemAdulta\.registrarRecusa\(canalId, `imagem: \$\{responder\._erroImagem\}`\)/);
+});
+
+console.log("\n── o juiz pequeno não reserva 32k de contexto ──");
+const { montarConfigSwap } = await import("./modulos/core/llama-swap-config.js");
+await t("★ \"moderacao\" usa o contexto próprio (LLAMA_CTX_MODERACAO, 4096)", () => {
+  const y = montarConfigSwap({ conversa: "G", visao: "G", moderacao: "S", comando: (m, c = "32768") => `L ${m} -c ${c}`, ctxModeracao: "4096" });
+  assert.match(y, /cmd: L G -c 32768/); assert.match(y, /cmd: L S -c 4096/);
+  assert.match(fs.readFileSync("iniciar.js", "utf8"), /ctxModeracao: process\.env\.LLAMA_CTX_MODERACAO \|\| "4096"/);
+});
+
+console.log(`\nIMAGEM NA CASA (16 out): ${ok} ok, ${falhou} falha(s)`);
 process.exit(falhou ? 1 : 0);
 };
 

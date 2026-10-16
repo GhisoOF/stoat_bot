@@ -46,8 +46,8 @@ As variáveis que importam:
 |---|---|
 | `BOT_TOKEN` | token do bot na plataforma |
 | `DONO` | ID do **seu perfil** — ganha os comandos administrativos do bot |
-| `SERVIDOR` | ID do servidor onde a **IA** funciona (`*` = em todos; vazio = IA em lugar nenhum). Fora dele fica **só a moderação por IA** (temas proibidos, visão de imagens e fotos de perfil, `&modia`); chat, geração de imagem e resumo do RSS ficam só nele. Posto **pelo ID**, é o servidor da casa: os canais NSFW dele saem das travas sem `&servidores adulto` (ver abaixo). *Chat AI only here; elsewhere, AI moderation only.* |
-| `MODELO_MODERACAO` | modelo **pequeno** só para o juiz da moderação (temas proibidos, `&modia`), ex.: `ggml-org/gemma-3-1b-it-GGUF:Q4_K_M` (~0,8 GB). No modo local fica carregado junto do de conversa (grupo sem troca no llama-swap). *Small model for the moderation judge, kept loaded next to the chat model.* |
+| `SERVIDOR` | ID do servidor onde a **IA** funciona (`*` = em todos; vazio = IA em lugar nenhum). Fora dele fica **só a moderação por IA** (temas proibidos, visão de imagens e fotos de perfil, `&modia`); chat, geração de imagem e resumo do RSS ficam só nele. Posto **pelo ID**, é o servidor da casa: os canais NSFW dele saem das travas (ver abaixo). *Chat AI only here; elsewhere, AI moderation only.* |
+| `MODELO_MODERACAO` | modelo **pequeno** só para o juiz da moderação (temas proibidos, `&modia`) dos **outros** servidores — o de `SERVIDOR` continua com o modelo da conversa. Ex.: `ggml-org/gemma-3-1b-it-GGUF:Q4_K_M` (~0,8 GB). No modo local fica carregado junto do de conversa (grupo sem troca no llama-swap). *Small model for the moderation judge on the other servers; yours keeps the chat model.* |
 | `IA` | `0` desliga todos os módulos de IA — o bot de moderação segue completo |
 | `CONVERSA` | `0` = **modo enxuto**: a IA fica só para moderação (temas proibidos, visão de imagens e fotos de perfil), o relatório horário e o RSS. Sem chat, `&modia`, memória, comentários e geração de imagem; o modelo usa contexto 4096 e sai da memória após 5 min parado (`IA_TTL`). Com `BUSCA_WEB=0`, o SearXNG nem sobe. *Lean mode: AI only for moderation, the log report and RSS.* |
 | `IA_MODO` | `local` roda um modelo na sua máquina (o **MODELO** é baixado do Hugging Face no primeiro arranque e guardado no volume); `online` usa uma plataforma via `TOKEN_IA` (padrão: OpenRouter) |
@@ -160,28 +160,24 @@ diz exatamente o que clicar.
   Liga sozinho nos servidores que já existiam; servidor novo começa desligado.
   *Profile pictures: checked on join and on change by the vision model; default
   action is a 24 h timeout plus a staff alert.*
-- **Imagem +18 por servidor** (`&servidores adulto`, só o dono do bot): a
-  geração de imagem vem com +18 **bloqueado** em todo servidor.
-  `&servidores adulto add <id|aqui>` libera um servidor, e mesmo nele a imagem
-  +18 só sai em canal marcado como **NSFW** no Stoat; `remove` bloqueia de novo.
-  Em lugar nenhum saem menores em cena sexual nem pessoa real (deepfake), e
-  toda imagem pronta passa pelo modelo de visão antes de ir para o canal — no
-  servidor liberado, sem visão configurada (`LLM_MODEL_VISAO`) o +18 não sai.
-  No mesmo canal (servidor liberado + canal NSFW), o **chat** também sai da
-  trava do assunto sexual: a Judy conversa sobre conteúdo adulto em vez do
-  "Não."/"Passo." — com os mesmos dois limites fixos (menores, pessoas reais),
-  conferidos na pergunta e na resposta.
-  **Sem amarras no servidor da casa:** o servidor posto pelo ID em `SERVIDOR`
-  já conta como liberado (sem `&servidores adulto`), e nos canais NSFW dele —
-  ou em todos, se o servidor inteiro estiver marcado como NSFW no Stoat — a
-  Judy também larga o "sem roleplay" e o deboche de "tentativa de quebrar", e
-  a geração de imagem larga as travas de gore e de símbolos. Ficam só os
-  limites fixos: nada sexual com menores e nada sexual (nem violência
-  explícita) com pessoa real identificável.
-  *+18 images are off everywhere; the bot owner unlocks servers one by one
-  (`&servidores adulto add`), and only NSFW channels there get them. The
-  server listed by ID in `SERVIDOR` is unlocked by default, and its NSFW
-  channels drop every restraint except the fixed limits (minors, real people).*
+- **+18 só no servidor da casa, sem amarras:** a geração de imagem vem com
+  +18 **bloqueado**, e só os canais marcados como **NSFW** no Stoat do
+  servidor posto pelo ID em `SERVIDOR` o liberam (ou todos, se o servidor
+  inteiro estiver marcado como NSFW) — sem comando para liberar. Nesses canais
+  a Judy conversa sobre conteúdo adulto, faz roleplay, não dá sermão, e a
+  imagem perde as travas de gore e de símbolos. Os canais comuns continuam
+  limpos. Ficam só os limites fixos: nada sexual com menores e nada sexual (nem
+  violência explícita) com pessoa real identificável — conferidos na pergunta,
+  na resposta e na imagem pronta, que passa pelo modelo de visão (que diz a
+  idade aparente: `IDADE: adulto/menor/incerto`; menor ou incerto descarta).
+  Personagem ou estilo de obra ("personagem de…", "estilo de…") não conta como
+  pessoa real. Se o cache da plataforma não souber que o canal virou NSFW, a
+  Judy confere na API. `&servidores adulto` (dono do bot) é o **diagnóstico do
+  canal**: servidor da casa, canal NSFW, visão, gerador — e as últimas recusas
+  com o motivo.
+  *+18 only on the home server (`SERVIDOR`), in NSFW channels, with no other
+  restraint than the fixed limits (minors, real people). `&servidores adulto`
+  shows why a channel is or isn't unlocked, and the last refusals.*
 - **Painel do dono do bot** (`&servidores`, só `SUPER_ADMINS`, fora do `&help`):
   onde o bot está, com membros e ritmo de mensagens. E o **relatório horário**
   (`&servidores relatorio canal #canal`): a cada hora cheia, banimentos,
@@ -519,7 +515,8 @@ qualquer servidor) exigem estar em `DONO`/`SUPER_ADMINS`.
   `&modia`. O RSS sai como lista, sem o resumo da Judy. `IA=0` desliga tudo
   globalmente. *Outside `SERVIDOR`, only AI moderation runs.*
 - **Modelo de moderação:** `MODELO_MODERACAO` põe um modelo pequeno só para o
-  juiz (temas proibidos, `&modia`). No modo local ele entra no llama-swap como
+  juiz (temas proibidos, `&modia`) dos outros servidores; o servidor de
+  `SERVIDOR` continua julgado pelo modelo da conversa. No modo local ele entra no llama-swap como
   `moderacao`, num grupo `swap: false · exclusive: false · persistent: true` —
   fica na memória ao lado da conversa, sem uma derrubar a outra.
 - **Arquitetura:** o bot conversa com um serviço de ferramentas embutido

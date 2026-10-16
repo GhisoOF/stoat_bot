@@ -212,12 +212,12 @@ if (!iaLigada()) {
 
     const cfg = `/data/llama-swap.yaml`;
     const flagsExtra = (process.env.LLAMA_FLAGS || "").trim();  // ex.: "--temp 1.0 --top-p 0.95 --top-k 64" (Gemma) — cada família tem o seu
-    const comando = (m) => `${LLAMA_BIN} -hf ${m} --host 127.0.0.1 --port \${PORT} -c ${ctx} -ngl ${ngl} --jinja${flagsExtra ? " " + flagsExtra : ""}`;
+    const comando = (m, c = ctx) => `${LLAMA_BIN} -hf ${m} --host 127.0.0.1 --port \${PORT} -c ${c} -ngl ${ngl} --jinja${flagsExtra ? " " + flagsExtra : ""}`;
     // mesmo modelo nos dois papéis → uma entrada só, "visao" é apelido dela
     // IA_TTL: quanto tempo o modelo fica na memória sem uso (s). Padrão 1 h; no
     // modo enxuto (CONVERSA=0) 5 min — a RAM/GPU volta para o resto da máquina.
     const ttl = Number(process.env.IA_TTL) > 0 ? Number(process.env.IA_TTL) : 3600;
-    writeFileSync(cfg, montarConfigSwap({ conversa, visao, moderacao, comando, ttlConversa: ttl, ttlVisao: Math.min(600, ttl) }));
+    writeFileSync(cfg, montarConfigSwap({ conversa, visao, moderacao, comando, ttlConversa: ttl, ttlVisao: Math.min(600, ttl), ctxModeracao: process.env.LLAMA_CTX_MODERACAO || "4096" }));
     console.info(`[INICIAR] IA local (llama-swap): conversa=${conversa} · visão=${!visao ? "nenhuma" : visao === conversa ? "o mesmo modelo (apelido, sem 2ª cópia)" : visao}${moderacao ? ` · moderação=${moderacao === conversa ? "o mesmo modelo" : `${moderacao} (fica carregado junto)`}` : ""}`);
     subirBin("llama-swap", SWAP_BIN,
       ["-config", cfg, "-listen", `127.0.0.1:${process.env.LLAMA_PORTA || "8082"}`],

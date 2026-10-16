@@ -13,6 +13,7 @@ import { spawn as spawnProc, spawnSync } from "node:child_process";
 import { basename, join } from "node:path";
 import { tmpdir } from "node:os";
 import { moderarBuffer, visaoDisponivel } from "./ver-imagem.js";
+import { desenhando } from "./vez-da-gpu.js";
 import { tipoDoModelo, urlsDoModelo, ehTurbo, modeloSemFiltro, tempoDeGeracaoMs, ladoMaximo, SIGMAS_QWEN_TURBO } from "../../modulos/core/imagem-modelo.js";
 const LADO_MAX     = ladoMaximo();
 const PASSOS_MAX   = Number(process.env.IMAGEM_PASSOS_MAX || 30);
@@ -31,6 +32,21 @@ async function sharp() {
 const MENOR   = /\b(crian[çc]as?|menor(?:es)?|adolescentes?|teens?|teenagers?|loli|shota|infantil|kids?|child(?:ren)?|underage|preteens?|toddlers?|bab(?:y|ies)|beb[êe]s?|schoolgirls?|schoolboys?|colegiais?|garotinh[ao]s?|menininh[ao]s?|novinh[ao]s?|ninfetas?|young\s+(?:girl|boy)s?|little\s+(?:girl|boy)s?|(?:[1-9]|1[0-7])\s*(anos|years?|yo|y\/o)\b)/i;
 const SEXUAL  = /\b(nu[aá]?s?|nude?s?|nudez|nudity|naked|pelad[ao]s?|sem\s+roupa|topless|nsfw|sexo|sex|sexy|sexual\w*|er[óo]tic\w*|sensual\w*|lingerie|fetiche|fetish|hentai|porn\w*|explicit\w*|seminu\w*|seios|boobs?|nipples?|mamilos?|genit\w*|p[êe]nis|vagina|bunda|butt|ass|orgasm\w*|transa\w*|bdsm|bondage)\b/i;
 const PESSOA_REAL = /\b(da|do|de)\s+[A-ZÀ-Ú][a-zà-ú]+\s+[A-ZÀ-Ú][a-zà-ú]+|celebridade|celebrity|famos[ao]/;
+// Nome próprio logo depois de "estilo/personagem/anime…" é obra de ficção
+// (16 out 2026: "no estilo de Final Fantasy" virava "pessoa real").
+const OBRA_ANTES = /\b(estilo|style|personagem|personagens|character|characters|universo|universe|anime|mang[áa]|jogo|game|s[ée]rie|series|filme|movie|desenho|cartoon|franquia|franchise|fanart|cosplay)\b/i;
+export function pessoaReal(p) {
+  const t = String(p ?? "");
+  const termo = t.match(/\b(celebridades?|celebrit(?:y|ies)|famos[ao]s?)\b/i);
+  if (termo) return termo[0];
+  const re = new RegExp(PESSOA_REAL.source, "g");
+  for (const m of t.matchAll(re)) {
+    if (!/^(da|do|de)\s/i.test(m[0])) return m[0];
+    // obra citada nas 3 palavras antes do nome ("personagem nua de Street Fighter")
+    if (!OBRA_ANTES.test(t.slice(0, m.index).trim().split(/\s+/).slice(-3).join(" "))) return m[0];
+  }
+  return null;
+}
 const GORE    = /\b(gore|decapita\w+|desmembr\w+|mutila\w+|v[íi]sceras|entranhas|tortura(?:ndo|r)?\b.*\b(real|pessoa)|corpo\s+esquartejado)\b/i;
 const ODIO    = /\b(su[áa]stica|swastika|nazi\w*|kkk\b|supremac\w+)\b/i;
 
@@ -42,10 +58,10 @@ export function prompProibido(prompt, { adulto = false } = {}) {
   if (MENOR.test(p) && SEXUAL.test(p)) {
     return "esse pedido combina menores com conteúdo sexualizado — recusado, sem exceção, e fica registrado no log.";
   }
-  if (SEXUAL.test(p) && PESSOA_REAL.test(p)) {
-    return "nudez ou conteúdo sexual de pessoa real identificável é deepfake — recusado.";
+  if (SEXUAL.test(p) && pessoaReal(p)) {
+    return `nudez ou conteúdo sexual de pessoa real identificável é deepfake — recusado (trecho: "${pessoaReal(p)}"). Se for personagem ou estilo de uma obra, diga "personagem de…" ou "estilo de…".`;
   }
-  if (GORE.test(p) && PESSOA_REAL.test(p)) {
+  if (GORE.test(p) && pessoaReal(p)) {
     return "violência explícita com pessoa real identificável — recusado.";
   }
   if (SEXUAL.test(p) && !adulto) {
@@ -74,11 +90,20 @@ const afirmado = (descricao) => String(descricao ?? "")
   .replace(/\bsem\s+(nenhuma\s+)?roupas?\b|\bdespid[ao]s?\b/gi, "nua")
   .replace(/\b(without|no)\s+(any\s+)?cloth(es|ing)\b|\bunclothed\b|\bundressed\b/gi, "naked")
   .split(/[.;!?\n,]|\s+(?:mas|porém|but)\s+/i).filter((c) => !NEGA.test(c)).join(". ");
+// Termos que, sozinhos, já indicam criança/adolescente — e os ambíguos
+// ("girl", "garota", "menino"), que o modelo de visão usa também para
+// adultos: esses só contam quando ele NÃO afirmou "IDADE: adulto".
+const MENOR_FORTE = /\b(crian[çc]as?|garotinh[ao]s?|menininh[ao]s?|adolescentes?|infantil|beb[êe]s?|child(?:ren)?|kids?|toddlers?|bab(?:y|ies)|teen(?:ager)?s?|preteens?|minors?|menor(?:es)?\s+de\s+idade|underage|schoolgirls?|schoolboys?|colegiais?|uniforme\s+escolar|school\s+uniform|loli|shota|little\s+(?:girl|boy)s?)\b/i;
+const MENOR_AMBIGUO = /\b(menin[ao]s?|garot[ao]s?|boys?|girls?|young)\b/i;
 const SEXUAL_DESC = /\b(nu[ao]?s?|nudez|nudity|nude|naked|pelad[ao]s?|topless|seios?|breasts?|mamilos?|nipples?|genit\w*|p[êe]nis|vagina|ato\s+sexual|sexual\w*|sexo|sex|er[óo]tic\w*|pornogr\w*|lingerie|roupa\s+[íi]ntima|underwear)\b/i;
 const MENOR_DESC  = /\b(crian[çc]as?|menin[ao]s?|garot[ao]s?|garotinh[ao]s?|adolescentes?|infantil|beb[êe]s?|child(?:ren)?|kids?|toddlers?|bab(?:y|ies)|teen(?:ager)?s?|minors?|boys?|girls?|schoolgirls?|uniforme\s+escolar|school\s+uniform)\b/i;
-export function julgarSaida(descricao, { adulto = false } = {}) {
+export function julgarSaida(descricao, { adulto = false, idade = null } = {}) {
   const d = afirmado(descricao);
-  const sexual = SEXUAL_DESC.test(d), menor = MENOR_DESC.test(d);
+  const sexual = SEXUAL_DESC.test(d);
+  // com o veredito de idade do modelo (canal +18): "menor"/"incerto" descarta,
+  // termo forte descarta, e o ambíguo só conta sem "IDADE: adulto"
+  const menor = idade === "menor" || idade === "incerto" || MENOR_FORTE.test(d)
+    || (idade === "adulto" ? false : (MENOR_AMBIGUO.test(d) || MENOR_DESC.test(d)));
   if (sexual && menor) return "a imagem saiu com alguém que aparenta ser menor numa cena com nudez — descartada";
   if (sexual && !adulto) return "a imagem saiu com nudez — +18 não está liberado aqui, então ela foi descartada";
   return null;
@@ -91,13 +116,13 @@ export function julgarSaida(descricao, { adulto = false } = {}) {
 export async function conferirSaida(jpeg, { adulto = false, exigir = adulto, moderar = moderarBuffer, temVisao = visaoDisponivel } = {}) {
   if (!temVisao()) return adulto ? "sem modelo de visão para conferir a imagem — +18 fica desligado"
     : exigir ? "sem modelo de visão para conferir a imagem — com este modelo, nada sai sem conferência" : null;
-  const r = await moderar(jpeg);
+  const r = await moderar(jpeg, { adulta: adulto });
   if (r?.erro) {
     console.warn(`[IA][gerar_imagem] conferência da saída falhou: ${r.erro}`);
     return adulto ? "não consegui conferir a imagem antes de enviar — +18 não sai sem conferência"
       : exigir ? "não consegui conferir a imagem antes de enviar" : null;
   }
-  const veredito = julgarSaida(r.descricao, { adulto });
+  const veredito = julgarSaida(r.descricao, { adulto, idade: r.idade ?? null });
   if (veredito) console.warn(`[IA][gerar_imagem] SAÍDA DESCARTADA (${adulto ? "+18" : "normal"}): ${String(r.descricao).replace(/\s+/g, " ").slice(0, 300)}`);
   return veredito;
 }
@@ -166,7 +191,7 @@ const semente = () => Math.floor(Math.random() * 2_147_483_647);
 // descarregado (ele volta sozinho na próxima mensagem, em segundos); se mesmo
 // assim faltar memória, uma 2ª tentativa no modo econômico (o LLM do prompt
 // na CPU e o VAE em blocos).
-const RE_FALTA_MEMORIA = /capacity check|workspace (?:preparation|allocation)|allocated capacity|ALLOC_FAILED|out of (?:device )?memory|OutOfDeviceMemory|failed to allocate|cannot allocate|not enough memory/i;
+const RE_FALTA_MEMORIA = /capacity check|failed during weight preparation|workspace (?:preparation|allocation)|allocated capacity|ALLOC_FAILED|out of (?:device )?memory|OutOfDeviceMemory|failed to allocate|cannot allocate|not enough memory/i;
 export const faltouMemoria = (txt) => RE_FALTA_MEMORIA.test(String(txt ?? ""));
 
 const LLM_LOCAL = () => {
@@ -219,7 +244,13 @@ export function argsQwenImage({ difusao, vae, llm, texto, width, height, economi
   if (turbo) a.push("--sigmas", SIGMAS_QWEN_TURBO);   // destilado: cfg 1, sem prompt negativo
   else a.push("-n", negativo);                          // base: com cfg, o negativo vale
   if ((env.IMAGEM_OFFLOAD ?? "1").trim() !== "0") a.push("--offload-to-cpu");
-  if (economico) a.push("--clip-on-cpu", "--vae-tiling");
+  // O codificador de texto do Qwen-Image é o Qwen3-VL-8B (~5 GB): com a
+  // difusão Q8 (7,6 GB) e o VAE, a iGPU (~14,5 GB) não fechava a conta e o
+  // sd.cpp morria em "failed during weight preparation" (16 out 2026). Ele só
+  // lê o prompt uma vez: vai para a CPU por padrão (IMAGEM_TE_GPU=1 devolve).
+  const teNaGpu = (env.IMAGEM_TE_GPU ?? "0").trim() === "1";
+  if (economico || !teNaGpu) a.push("--clip-on-cpu");
+  if (economico) a.push("--vae-tiling");
   return a;
 }
 
@@ -335,7 +366,9 @@ export async function executar({ prompt, largura, altura }, contexto = {}) {
 
   if (!SD_URL) {
     try {
-      const png = await gerarComFolga({ texto, width: corpo.width, height: corpo.height, negativo: corpo.negative_prompt });
+      // a GPU é do desenho até ele acabar: a visão (moderação de outros
+      // servidores) espera — e a conferência abaixo vem depois, já com a vez
+      const png = await desenhando(() => gerarComFolga({ texto, width: corpo.width, height: corpo.height, negativo: corpo.negative_prompt }));
       const s2 = await sharp();
       const limpa = await s2(png, { limitInputPixels: MAX_PIXELS })
         .jpeg({ quality: 90, mozjpeg: true })

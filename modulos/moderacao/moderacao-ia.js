@@ -28,14 +28,14 @@ Responda SÓ um JSON: {"viola": true|false, "motivo": "curto, qual critério e p
 - Não invente critérios que não estão na lista. Seja conservador: é melhor deixar passar do que apagar à toa.`;
 
 // Avalia uma mensagem. Retorna {viola, motivo} ou null (não avaliou/erro).
-async function avaliar(cfg, texto) {
+async function avaliar(cfg, texto, serverId = null) {
   if (!avaliarLLM) return null;
   const criterios = cfg.moderacaoIA.criterios.trim();
   try {
     const raw = await avaliarLLM([
       { role: "system", content: PROMPT(criterios) },
       { role: "user", content: texto.slice(0, 800) },
-    ]);
+    ], { serverId });
     const obj = JSON.parse(String(raw).replace(/```json|```/g, "").trim());
     return { viola: !!obj.viola, motivo: String(obj.motivo || "").slice(0, 200) };
   } catch (e) {
@@ -62,7 +62,7 @@ export async function moderar(message, ctx) {
   const texto = (message.content || "").trim();
   if (texto.length < MIN_CHARS) return false;
 
-  const veredito = await avaliar(cfg, texto);
+  const veredito = await avaliar(cfg, texto, ctx?.serverId ?? null);
   if (!veredito || !veredito.viola) return false;
 
   // ── APAGA ──

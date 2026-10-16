@@ -18,7 +18,9 @@
 // `groups:` do topo (o formato antigo, que todas as versões do llama-swap
 // leem); o bloco `routing.router` novo não pode aparecer junto.
 // Sem visão (só conversa + moderação): nenhuma entrada "visao".
-export function montarConfigSwap({ conversa, visao, moderacao = null, comando, ttlConversa = 3600, ttlVisao = 600, ttlModeracao = ttlConversa }) {
+// `ctxModeracao`: contexto próprio do juiz (as mensagens a julgar são curtas;
+// com o LLAMA_CTX da conversa, 32k, ele reservava ~1 GB de KV à toa).
+export function montarConfigSwap({ conversa, visao, moderacao = null, comando, ttlConversa = 3600, ttlVisao = 600, ttlModeracao = ttlConversa, ctxModeracao = null }) {
   const linhas = [
     // 10min de tolerância para o servidor ficar de pé: o padrão de 2min do
     // llama-swap matava cargas lentas (e qualquer download residual) no meio.
@@ -41,7 +43,7 @@ export function montarConfigSwap({ conversa, visao, moderacao = null, comando, t
     linhas.push("  visao:", `    cmd: ${comando(visao)}`, `    ttl: ${ttlVisao}`);
   }
   if (moderacao && moderacao !== conversa) {
-    linhas.push("  moderacao:", `    cmd: ${comando(moderacao)}`, `    ttl: ${ttlModeracao}`);
+    linhas.push("  moderacao:", `    cmd: ${ctxModeracao ? comando(moderacao, ctxModeracao) : comando(moderacao)}`, `    ttl: ${ttlModeracao}`);
     linhas.push("groups:", "  moderacao:", "    swap: false", "    exclusive: false", "    persistent: true",
       "    members:", "      - moderacao");
   }

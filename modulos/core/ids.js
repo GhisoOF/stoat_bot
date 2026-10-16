@@ -26,13 +26,16 @@ export function idValido(entrada) {
 }
 
 // Explica o que veio errado — mensagens de erro que ajudam de verdade.
-export function descreverProblemaDeId(entrada, tipo = "cargo") {
+// `lang` (16 out 2026): a linha em inglês recebia o motivo em português.
+const TIPO_EN = { cargo: "role", canal: "channel", mensagem: "message", pessoa: "user", servidor: "server" };
+export function descreverProblemaDeId(entrada, tipo = "cargo", lang = "pt") {
+  const en = lang === "en";
   const bruto = String(entrada ?? "").trim();
-  if (!bruto) return `faltou o ID do ${tipo}`;
+  if (!bruto) return en ? `the ${TIPO_EN[tipo] ?? tipo} ID is missing` : `faltou o ID do ${tipo}`;
   const limpo = limparId(bruto);
-  if (!limpo) return `não consegui ler um ID em \`${bruto}\``;
-  if (limpo.length !== 26) return `\`${limpo}\` tem ${limpo.length} caracteres (um ID tem 26)`;
-  return `\`${limpo}\` não parece um ID válido`;
+  if (!limpo) return en ? `I couldn't read an ID in \`${bruto}\`` : `não consegui ler um ID em \`${bruto}\``;
+  if (limpo.length !== 26) return en ? `\`${limpo}\` has ${limpo.length} characters (an ID has 26)` : `\`${limpo}\` tem ${limpo.length} caracteres (um ID tem 26)`;
+  return en ? `\`${limpo}\` doesn't look like a valid ID` : `\`${limpo}\` não parece um ID válido`;
 }
 
 // Extrai as partes de um link do Stoat. Devolve {} se não for link.

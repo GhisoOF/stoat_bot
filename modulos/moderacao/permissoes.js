@@ -133,32 +133,34 @@ export function podeNoCanal(canal, client, nome, server, botMember) {
 const nomeCanal = (c) => c?.name ?? c?.id ?? "?";
 const ehTexto = (c) => (c?.type ?? "").includes("Text") || c?.type === "TextChannel";
 
-export function rastrearPermissoes(server, canal, member, client = null) {
+export function rastrearPermissoes(server, canal, member, client = null, lang = "pt") {
   const L = [];
+  const T = (pt, en) => (lang === "en" ? en : pt);
   const bits = (v) => (typeof v === "number"
     ? ESSENCIAIS.map((n) => `${temBit(v, BITS[n]) ? "✅" : "❌"}${n}`).join(" ") + ` (raw=${v})`
     : String(v));
 
   // o que a LIB acha (é o que a fachada usa primeiro, quando > 0)
-  let libPerm = null; try { libPerm = canal?.permission; } catch (e) { libPerm = `erro: ${e?.message}`; }
-  L.push(`lib.permission: ${typeof libPerm === "number" ? bits(libPerm) : (libPerm ?? "ausente")}`);
+  let libPerm = null; try { libPerm = canal?.permission; } catch (e) { libPerm = `${T("erro", "error")}: ${e?.message}`; }
+  L.push(`lib.permission: ${typeof libPerm === "number" ? bits(libPerm) : (libPerm ?? T("ausente", "missing"))}`);
 
-  if (!server) { L.push("server: AUSENTE"); return L; }
-  if (!member) { L.push("membro do bot: AUSENTE — sem cargos, sem conta"); return L; }
+  if (!server) { L.push(T("server: AUSENTE", "server: MISSING")); return L; }
+  if (!member) { L.push(T("membro do bot: AUSENTE — sem cargos, sem conta", "bot member: MISSING — no roles, no math")); return L; }
 
   const idsBrutos = member?.roles ?? [];
   const cargos = cargosOrdenados(server, member);
-  L.push(`cargos do bot: ${idsBrutos.length} no membro, ${cargos.length} resolvidos no servidor` +
-         (idsBrutos.length !== cargos.length ? " ⚠️ (diferença = cargo não hidratado)" : ""));
+  L.push(T(`cargos do bot: ${idsBrutos.length} no membro, ${cargos.length} resolvidos no servidor`,
+           `bot roles: ${idsBrutos.length} on the member, ${cargos.length} resolved on the server`) +
+         (idsBrutos.length !== cargos.length ? T(" ⚠️ (diferença = cargo não hidratado)", " ⚠️ (difference = role not hydrated)") : ""));
 
   const padraoSrv = server.default_permissions ?? server.defaultPermissions;
   let perm = paraAD(padraoSrv).a || num(padraoSrv);
-  L.push(`servidor padrão: ${bits(perm)}`);
+  L.push(`${T("servidor padrão", "server default")}: ${bits(perm)}`);
 
   for (const { id, role } of cargos) {
     const ad = paraAD(role.permissions);
     perm = aplicar(perm, ad);
-    L.push(`cargo "${role.name ?? id}" (rank ${role.rank ?? "?"}) a=${ad.a} d=${ad.d} → ${bits(perm)}`);
+    L.push(`${T("cargo", "role")} "${role.name ?? id}" (rank ${role.rank ?? "?"}) a=${ad.a} d=${ad.d} → ${bits(perm)}`);
   }
 
   if (canal) {
@@ -166,25 +168,25 @@ export function rastrearPermissoes(server, canal, member, client = null) {
     if (padraoCanal != null) {
       const ad = paraAD(padraoCanal);
       perm = aplicar(perm, ad);
-      L.push(`canal padrão: a=${ad.a} d=${ad.d} → ${bits(perm)}`);
-    } else L.push("canal padrão: (sem sobrescrita)");
+      L.push(`${T("canal padrão", "channel default")}: a=${ad.a} d=${ad.d} → ${bits(perm)}`);
+    } else L.push(T("canal padrão: (sem sobrescrita)", "channel default: (no override)"));
 
     const sobre = canal.role_permissions ?? canal.rolePermissions;
     const chaves = sobre ? Object.keys(sobre) : [];
-    L.push(`sobrescritas de cargo no canal: ${chaves.length}` +
-           (chaves.length ? ` (cargos: ${chaves.map((k) => server?.roles?.get?.(k)?.name ?? (server?.roles?.[k]?.name) ?? k).join(", ")})` : ""));
+    L.push(`${T("sobrescritas de cargo no canal", "role overrides on the channel")}: ${chaves.length}` +
+           (chaves.length ? ` (${T("cargos", "roles")}: ${chaves.map((k) => server?.roles?.get?.(k)?.name ?? (server?.roles?.[k]?.name) ?? k).join(", ")})` : ""));
     if (sobre) for (const { id, role } of cargos) {
       const ov = sobre[id];
       if (ov != null) {
         const ad = paraAD(ov);
         perm = aplicar(perm, ad);
-        L.push(`  ↳ aplica a do bot "${role.name ?? id}": a=${ad.a} d=${ad.d} → ${bits(perm)}`);
+        L.push(`  ↳ ${T("aplica a do bot", "applies the bot's")} "${role.name ?? id}": a=${ad.a} d=${ad.d} → ${bits(perm)}`);
       }
     }
   }
-  L.push(`FINAL (cálculo próprio): ${bits(perm)}`);
+  L.push(`FINAL (${T("cálculo próprio", "own math")}): ${bits(perm)}`);
   const fachada = permissoesDoBotNoCanal(canal, client, server, member);
-  L.push(`o relatório usa: via=${fachada.via ?? fachada.motivo} → ${bits(fachada.valor)}`);
+  L.push(`${T("o relatório usa", "the report uses")}: via=${fachada.via ?? fachada.motivo} → ${bits(fachada.valor)}`);
   return L;
 }
 

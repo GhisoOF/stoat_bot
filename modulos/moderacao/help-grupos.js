@@ -233,7 +233,7 @@ function gruposEN(P) {
       resumo: "spam, scams, links, raids and punishments",
       linhas: [
         "**Automatic** *(ManagePermissions)*",
-        `\`${P}automod\` — the 4 groups: antispam, antiruido, antilink, sentinela`,
+        `\`${P}automod\` — the 4 groups: antispam, antinoise, antilink, sentinel`,
         `\`${P}automod antispam off\` · \`${P}automod off\` — one group · everything _(starts off)_`,
         `\`${P}automod sentinela\` — what **judges** content (scams, NSFW, hate, images, topics, avatars)`,
         `\`${P}automod punicao modo <avisar|apagar|confirmar|acumular|banir>\` — what happens to offenders`,
@@ -341,7 +341,7 @@ function gruposEN(P) {
         "**The game's market and currencies**",
         `\`${P}game carteira\` · \`${P}game comprar [item]\` · \`${P}game vender <item>\``,
         `\`${P}game mercado\` — player bazaar · \`${P}game trocar\` — bartering`,
-        `\`${P}game cambio <qty> <currency> [para <currency>]\` — exchange with the bank`,
+        `\`${P}game cambio <qty> <currency> [to <currency>]\` — exchange with the bank`,
         "",
         `_The RPG is one world, the same on every server — the wiki: \`${P}tutorial game\`. Not to be confused with \`${P}xp\`._`,
       ],

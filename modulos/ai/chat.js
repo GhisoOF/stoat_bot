@@ -185,8 +185,10 @@ export function observarParaComentario(message, ctx) {
 // está pelo id em SERVIDOR) segue com o modelo da conversa (16 out 2026,
 // Ghieh: "a moderação [pequena] eu quero para os outros servers; para o meu,
 // tudo incluso").
+// No modo enxuto (CONVERSA=0) não há "tudo incluso": a casa também usa o
+// modelo pequeno — o grande nem precisa subir para moderar.
 export function modeloDoJuiz(serverId = null) {
-  return imagemAdulta.servidorDaCasa(serverId) ? LLM_MODEL_DECISAO : LLM_MODEL_JUIZ;
+  return imagemAdulta.servidorDaCasa(serverId) && conversaLigada() ? LLM_MODEL_DECISAO : LLM_MODEL_JUIZ;
 }
 export function avaliarModeracao(messages, { etiqueta = "moderacao-ia", serverId = null } = {}) {
   return llmChat(messages, { json: true, modelo: modeloDoJuiz(serverId), etiqueta });
@@ -343,8 +345,14 @@ export function servidorPermitido(serverId) {
 // Ghieh: "nos outros servidores, só moderação de IA"). O &modia é moderação:
 // vale em todo servidor enquanto a IA de conversa existe (CONVERSA=0 o tira,
 // porque ele lê TODA mensagem). O &chat continua só nos da lista.
+//
+// 16 out 2026, noite (Ghieh: "desliga essa parte de IA e deixe apenas para
+// moderação, vou querer liberar isso para todos os servidores"): com um juiz
+// DEDICADO (MODELO_MODERACAO, pequeno e sempre carregado), o &modia vale
+// também no modo enxuto — ler toda mensagem deixa de pesar no modelo grande.
+const juizDedicado = () => !!process.env.LLM_MODEL_JUIZ;
 export function modIAPermitida() {
-  return iaLigada() && conversaLigada();
+  return iaLigada() && (conversaLigada() || juizDedicado());
 }
 export function comandoIAPermitido(nome, serverId) {
   return nome === "modia" ? modIAPermitida(serverId) : servidorPermitido(serverId);

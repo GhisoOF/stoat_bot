@@ -157,7 +157,7 @@ export const SUB = {
     exempted: "isentos",
     undo: "desfazer", revert: "desfazer", confirm: "confirmar",
     forget: "esquecer", history: "historico", bots: "bots",
-    server: "servidor", remove: "remover",
+    server: "servidor", remove: "remover", people: "pessoas", contribution: "contribuicao",
     forget: "esquecer", history: "historico",
     warn: "avisar", ban: "banir", off: "off",
     instant: "imediato", consensus: "consenso",   // os dois modos de ban automático (15 out 2026)
@@ -212,6 +212,7 @@ export const SUB = {
   economia: {
     shop: "loja", buy: "comprar", mine: "minerar", balance: "saldo", pay: "pagar", give: "dar", take: "tirar",
     reset: "zerar", interval: "intervalo", remove: "remover", confirm: "confirmar",
+    name: "nome", symbol: "simbolo", gain: "ganho",
   },
   servidores: {
     report: "relatorio", channel: "canal", now: "agora", subjects: "assuntos", topics: "assuntos", empty: "vazias", here: "aqui",
@@ -232,7 +233,7 @@ export const SUB = {
   },
   rss: {
     add: "add", remove: "remove", list: "list",
-    channel: "canal", now: "agora", test: "testar", off: "off",
+    channel: "canal", now: "agora", test: "testar", off: "off", category: "categoria",
   },
   staff: {
     add: "add", remove: "remove", list: "lista", clear: "limpar",
@@ -266,7 +267,7 @@ export const SUB = {
     add: "add", remove: "remove", list: "lista", clear: "limpar",
     search: "buscar", find: "buscar", now: "ver", time: "ver", check: "ver",
     label: "apelido", name: "apelido", alias: "apelido",
-    main: "principal", reference: "principal", format: "formato",
+    main: "principal", reference: "principal", format: "formato", cities: "cidades",
   },
   log: {
     here: "here", off: "off", channel: "canal",
@@ -312,6 +313,14 @@ export const SUB = {
     list: "list", manage: "gerenciar",
   },
   autorole: { set: "set", off: "off", disable: "desativar", remove: "remover" },
+  // áreas do &tutorial (16 out 2026): a entrada já aceita os nomes em inglês
+  // (APELIDOS do tutorial.js); isto é para a TELA em inglês não mostrar
+  // `&tutorial permissoes`
+  tutorial: {
+    permissions: "permissoes", channels: "canais", moderation: "moderacao", roles: "cargos",
+    ai: "ia", news: "noticias", messages: "mensagens", economy: "economia",
+    adventure: "aventura", settings: "ajustes",
+  },
   idioma: {
     portuguese: "portugues", english: "english", status: "status",
   },
@@ -442,6 +451,15 @@ const PLACEHOLDER_EN = {
   "opção": "option", opcao: "option", motivo: "reason", dias: "days",
   nota: "note", termo: "term", tema: "topic", parte: "part", grupo: "group", modo: "mode", tempo: "time",
   "ação": "action", acao: "action", "descrição": "description", descricao: "description",
+  // (16 out 2026, "deixar global o bot") os moldes que ainda saíam em português
+  pergunta: "question", coisa: "thing", bicho: "critter", pensa: "think", cidade: "city",
+  categoria: "category", comando: "command", atributo: "attribute", alvo: "target", quantia: "amount",
+  evento: "event", pedido: "request", "domínio": "domain", dominio: "domain", "título": "title", titulo: "title",
+  contrato: "contract", "área": "area", area: "area", "módulo": "module", modulo: "module",
+  "código": "code", codigo: "code", vaga: "slot", frase: "phrase", "expressão": "expression", expressao: "expression",
+  convite: "invite", algo: "something", vezes: "times", palavra: "word", filtro: "filter", cor: "color", cores: "colors",
+  classe: "class", tipo: "type", rolagem: "roll", pergaminho: "scroll", "máquina": "machine", maquina: "machine",
+  "id-do-canal": "channel-id", "id-do-cargo": "role-id", "url-do-feed": "feed-url", quem: "who", onde: "where",
 };
 
 function traduzirLista(dentro, rev) {
@@ -548,10 +566,33 @@ export function exibir(texto, lang, prefixo = "&", CANONICO = {}, dica = null) {
   // código solto: primeiro o comando da linha/acima; o que faltar, os outros do texto
   const revSolto = (ctx) => Object.assign({}, ...porFrequencia.slice().reverse().map(revDoContexto), revDoContexto(ctx));
 
+  // Fora das crases (16 out 2026): o título "Help — &entretenimento › briga"
+  // e o "&acesso" solto na prosa saíam em português. Um comando conhecido
+  // (com nome em inglês) é traduzido, com a trilha de subcomandos junto.
+  const esc = prefixo.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const reSolto = new RegExp(`(^|[\\s(—*_])${esc}([a-zçãéíóú]+)((?: › [a-zçãéíóú0-9-]+)*)`, "gi");
+  const marcadores = (trecho) => trecho
+    .replace(/\{(usuario|usuário)\}/gi, "{user}").replace(/\{nome\}/gi, "{name}")
+    .replace(/\{servidor\}/gi, "{server}").replace(/\{(membros|contagem)\}/gi, "{members}");
+  const foraDasCrases = (trecho) => trecho
+    .replace(reSolto, (todo, antes, cmd, trilha) => {
+      const canonico = canonicoDe(cmd, CANONICO);
+      if (!COMANDO_EN[canonico] && !trilha) return todo;
+      const passos = trilha ? trilha.split(" › ").filter(Boolean) : [];
+      const r = traduzirTrecho([prefixo + cmd, ...passos].join(" "), prefixo, CANONICO);
+      const [c0, ...resto] = r.texto.split(" ");
+      return antes + [c0, ...resto].join(" › ");
+    })
+    // marcadores das boas-vindas: o texto em inglês ensina os nomes em inglês
+    .replace(/\{(usuario|usuário)\}/gi, "{user}").replace(/\{nome\}/gi, "{name}")
+    .replace(/\{servidor\}/gi, "{server}").replace(/\{(membros|contagem)\}/gi, "{members}");
+
   return linhas.map((linha) => {
     if (linha.trim().startsWith("```")) { dentroDeBloco = !dentroDeBloco; return linha; }
     if (dentroDeBloco) return linha;
-    return linha.replace(/`([^`\n]+)`/g, (todo, dentro) => {
+    return linha.split(/(`[^`\n]+`)/).map((pedaco, i) => (i % 2 ? marcadores(pedaco) : foraDasCrases(pedaco))).join("")
+      .replace(/`([^`\n]+)`/g, (todo, dentro) => {
+      if (/^\{[a-zçãéíóú]+\}$/i.test(dentro)) return "`" + foraDasCrases(dentro) + "`";
       if (dentro.includes(prefixo)) {
         const r = traduzirTrecho(dentro, prefixo, CANONICO);
         if (r.comando) contexto = r.comando;

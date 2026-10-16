@@ -96,4 +96,4 @@ export function temComandoVisivel(linhas, visao) {
 }
 
 // Tutorial: para quem é cada área
-export const AREAS_DO_MEMBRO = new Set(["rpg", "aventura", "economia"]);
+export const AREAS_DO_MEMBRO = new Set(["rpg", "aventura", "economia", "ids"]);

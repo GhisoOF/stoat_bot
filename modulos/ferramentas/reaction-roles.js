@@ -559,7 +559,7 @@ export async function cmdReactionRole(message, args, ctx) {
       }
       if (!emoji) problemas.push(en ? "• the **emoji** is missing" : "• faltou o **emoji**");
       if (!role) problemas.push(en
-        ? `• the **role**: ${descreverProblemaDeId(args[3], "cargo")} — mention the role or paste its ID (Settings → Roles → *Copy role ID*)`
+        ? `• the **role**: ${descreverProblemaDeId(args[3], "cargo", "en")} — mention the role or paste its ID (Settings → Roles → *Copy role ID*)`
         : `• o **cargo**: ${descreverProblemaDeId(args[3], "cargo")} — mencione o cargo ou cole o ID (Configurações → Cargos → *Copy role ID*)`);
 
       return sendEmbed(message.channel, en ? {

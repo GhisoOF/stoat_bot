@@ -27,6 +27,19 @@ const EMOJI_PRESET = {
   gelo: "🧊", trans: "🏳️‍⚧️",
 };
 
+// Os nomes em inglês (16 out 2026, o bot ficou global): a entrada aceita os
+// dois, e a tela em inglês mostra o inglês. A chave interna segue em
+// português (os cargos antigos se chamam assim).
+const PRESET_EN = {
+  rainbow: "arco-iris", fire: "fogo", ocean: "oceano", neon: "neon", vaporwave: "vaporwave",
+  sunset: "poente", forest: "floresta", gold: "ouro", cyberpunk: "cyberpunk", blood: "sangue",
+  ice: "gelo", trans: "trans",
+};
+const EN_DO_PRESET = Object.fromEntries(Object.entries(PRESET_EN).map(([en, pt]) => [pt, en]));
+export const presetDe = (t) => { const k = String(t ?? "").toLowerCase(); return PRESETS[k] ? k : PRESET_EN[k] ?? null; };
+export const nomePreset = (k, en) => (en ? EN_DO_PRESET[k] ?? k : k);
+const listaPresets = (en) => Object.keys(PRESETS).map((k) => `\`${nomePreset(k, en)}\``).join(", ");
+
 function montarGradiente(cores, angulo = 90) {
   const paradas = cores.map((c, i) => {
     const pct = cores.length === 1 ? 0 : Math.round((i / (cores.length - 1)) * 100);
@@ -35,14 +48,16 @@ function montarGradiente(cores, angulo = 90) {
   return `linear-gradient(${angulo}deg, ${paradas.join(", ")})`;
 }
 
-function validarCss(txt) {
+function validarCss(txt, en = false) {
   const t = txt.trim();
   // erro clássico: `gradient(...)` sem o `linear-`
   if (/^\s*gradient\s*\(/i.test(t)) {
-    return { erro: "Faltou o `linear-` no começo: use `linear-gradient(...)`, não `gradient(...)`. É o motivo mais comum de erro 400." };
+    return { erro: en
+      ? "The `linear-` prefix is missing: use `linear-gradient(...)`, not `gradient(...)`. It's the most common cause of a 400 error."
+      : "Faltou o `linear-` no começo: use `linear-gradient(...)`, não `gradient(...)`. É o motivo mais comum de erro 400." };
   }
   if (/^(linear|radial|conic|repeating-linear|repeating-radial)-gradient\s*\(/i.test(t)) {
-    if (!t.includes(")")) return { erro: "O gradiente está incompleto — faltou fechar o parêntese." };
+    if (!t.includes(")")) return { erro: en ? "The gradient is incomplete — the closing parenthesis is missing." : "O gradiente está incompleto — faltou fechar o parêntese." };
     return { valor: t };
   }
   const solida = corSolida(t);
@@ -67,8 +82,8 @@ function acharCargo(server, alvo) {
   return exato ?? parcial ?? null;
 }
 
-async function aplicarCor(serverId, roleId, colour) {
-  if (!process.env.BOT_TOKEN) return { ok: false, erro: "BOT_TOKEN não está definido no ambiente do bot." };
+async function aplicarCor(serverId, roleId, colour, en = false) {
+  if (!process.env.BOT_TOKEN) return { ok: false, erro: en ? "BOT_TOKEN isn't set in the bot's environment." : "BOT_TOKEN não está definido no ambiente do bot." };
 
   const r = await chamarApi(`/servers/${serverId}/roles/${roleId}`, {
     metodo: "PATCH",
@@ -76,13 +91,18 @@ async function aplicarCor(serverId, roleId, colour) {
     ms: 15_000,
   });
   if (r.ok) return { ok: true };
-  if (r.erro) return { ok: false, erro: `Não consegui falar com a API: ${r.erro}` };
+  if (r.erro) return { ok: false, erro: en ? `I couldn't reach the API: ${r.erro}` : `Não consegui falar com a API: ${r.erro}` };
 
-  const dica = r.status === 403 ? " — o cargo do bot precisa de **ManageRole** e estar **acima** do cargo que está editando."
-    : r.status === 400 ? " — o Stoat recusou o valor da cor."
-    : r.status === 404 ? " — cargo ou servidor não encontrado."
-    : "";
-  return { ok: false, erro: `API respondeu ${r.status}${dica}${r.texto ? `\n\`\`\`\n${r.texto.slice(0, 300)}\n\`\`\`` : ""}` };
+  const dica = en
+    ? (r.status === 403 ? " — the bot's role needs **ManageRole** and must sit **above** the role it's editing."
+      : r.status === 400 ? " — Stoat rejected the color value."
+      : r.status === 404 ? " — role or server not found."
+      : "")
+    : (r.status === 403 ? " — o cargo do bot precisa de **ManageRole** e estar **acima** do cargo que está editando."
+      : r.status === 400 ? " — o Stoat recusou o valor da cor."
+      : r.status === 404 ? " — cargo ou servidor não encontrado."
+      : "");
+  return { ok: false, erro: `${en ? "The API answered" : "API respondeu"} ${r.status}${dica}${r.texto ? `\n\`\`\`\n${r.texto.slice(0, 300)}\n\`\`\`` : ""}` };
 }
 
 export async function cmdCor(message, args, ctx) {
@@ -105,20 +125,20 @@ export async function cmdCor(message, args, ctx) {
       title: "🎨 Role colors",
       description: [
         "**Solid color**",
-        `\`${P}cor <role> #FF00AA\` · \`${P}cor <role> roxo\``,
+        `\`${P}cor <role> #FF00AA\` · \`${P}cor <role> purple\``,
         "",
         "**Gradient** (2 or more colors)",
         `\`${P}cor <role> gradiente #FF0000 #00FF00 #0000FF\``,
-        `\`${P}cor <role> gradiente 45 vermelho azul\` — the leading number is the angle`,
+        `\`${P}cor <role> gradiente 45 red blue\` — the leading number is the angle`,
         "",
         "**Automatic — does everything for you**",
         `\`${P}cor painel aqui\` — creates the roles, posts the picker message, reacts and wires the reaction roles`,
         `\`${P}cor painel <channel-id>\` — posts the panel in another channel`,
         `\`${P}cor criar\` — only creates/paints the roles, posts nothing`,
-        `\`${P}cor painel aqui fogo gelo neon\` — only the chosen colors`,
+        `\`${P}cor painel aqui fire ice neon\` — only the chosen colors`,
         "",
         "**Presets**",
-        `\`${P}cor <role> preset <name>\` — ${Object.keys(PRESETS).map((k) => `\`${k}\``).join(", ")}`,
+        `\`${P}cor <role> preset <name>\` — ${listaPresets(true)}`,
         "",
         "**Raw CSS** (any valid gradient)",
         `\`${P}cor <role> linear-gradient(90deg, #f00 0%, #00f 100%)\``,
@@ -148,7 +168,7 @@ export async function cmdCor(message, args, ctx) {
         `\`${P}cor painel aqui fogo gelo neon\` — só as cores escolhidas`,
         "",
         "**Prontos**",
-        `\`${P}cor <cargo> preset <nome>\` — ${Object.keys(PRESETS).map((k) => `\`${k}\``).join(", ")}`,
+        `\`${P}cor <cargo> preset <nome>\` — ${listaPresets(false)}`,
         "",
         "**CSS na mão** (qualquer gradiente válido)",
         `\`${P}cor <cargo> linear-gradient(90deg, #f00 0%, #00f 100%)\``,
@@ -169,7 +189,7 @@ export async function cmdCor(message, args, ctx) {
     return sendEmbed(message.channel, {
       title: en ? "🎨 Ready-made gradients" : "🎨 Gradientes prontos",
       description: Object.entries(PRESETS).map(([k, v]) =>
-        `**${k}**\n\`${v.slice(0, 90)}${v.length > 90 ? "…" : ""}\``).join("\n\n").slice(0, 1900),
+        `**${nomePreset(k, en)}**\n\`${v.slice(0, 90)}${v.length > 90 ? "…" : ""}\``).join("\n\n").slice(0, 1900),
       colour: COR.info,
     });
   }
@@ -209,17 +229,17 @@ export async function cmdCor(message, args, ctx) {
       if (["aqui", "here"].includes(t)) { canalAlvoId = message.channelId; continue; }
       const id = limparId(a);
       if (ULID.test(id)) { canalAlvoId = id; continue; }
-      if (t !== "todos") pedidos.push(t);
+      if (!["todos", "all"].includes(t)) pedidos.push(presetDe(t) ?? t);
     }
     const invalidos = pedidos.filter((p) => !PRESETS[p]);
     if (invalidos.length) {
       return sendEmbed(message.channel, tr(ctx, {
         title: "❌ Preset desconhecido",
-        description: `Não conheço: ${invalidos.map((i) => `\`${i}\``).join(", ")}.\n\nDisponíveis: ${Object.keys(PRESETS).map((k) => `\`${k}\``).join(", ")}`,
+        description: `Não conheço: ${invalidos.map((i) => `\`${i}\``).join(", ")}.\n\nDisponíveis: ${listaPresets(false)}`,
         colour: COR.erro,
       }, {
         title: "❌ Unknown preset",
-        description: `I don't know: ${invalidos.map((i) => `\`${i}\``).join(", ")}.\n\nAvailable: ${Object.keys(PRESETS).map((k) => `\`${k}\``).join(", ")}`,
+        description: `I don't know: ${invalidos.map((i) => `\`${i}\``).join(", ")}.\n\nAvailable: ${listaPresets(true)}`,
         colour: COR.erro,
       }));
     }
@@ -251,16 +271,17 @@ export async function cmdCor(message, args, ctx) {
     const prontos = [], falhas = [];
     let novosCargos = 0;
     for (const nome of alvos) {
-      const jaExiste = existentes.get(nome);
+      // o cargo já existe com o nome em português OU em inglês; o novo nasce no idioma do servidor
+      const jaExiste = existentes.get(nome) ?? existentes.get(nomePreset(nome, true));
       let roleId = jaExiste ?? null;
       if (!roleId) {
         try {
-          const r = await server.createRole(nome);
+          const r = await server.createRole(nomePreset(nome, en));
           roleId = r?.id ?? r?._id ?? r;
           novosCargos++;
         } catch (e) { falhas.push({ nome, erro: en ? `couldn't create (${e?.message ?? e})` : `não consegui criar (${e?.message ?? e})` }); continue; }
       }
-      const r = await aplicarCor(serverId, roleId, PRESETS[nome]);
+      const r = await aplicarCor(serverId, roleId, PRESETS[nome], en);
       if (!r.ok) { falhas.push({ nome, erro: r.erro.split("\n")[0] }); continue; }
       prontos.push({ nome, roleId });
       await new Promise((s) => setTimeout(s, 350));   // limite de taxa
@@ -269,7 +290,7 @@ export async function cmdCor(message, args, ctx) {
     if (!prontos.length) {
       return sendEmbed(message.channel, {
         title: en ? "❌ Couldn't prepare the roles" : "❌ Não consegui preparar os cargos",
-        description: falhas.slice(0, 8).map((f) => `• \`${f.nome}\` — ${f.erro}`).join("\n")
+        description: falhas.slice(0, 8).map((f) => `• \`${nomePreset(f.nome, en)}\` — ${f.erro}`).join("\n")
           + (en
             ? "\n\n_The bot's role needs **ManageRole** and must sit **above** the roles it creates._"
             : "\n\n_O cargo do bot precisa de **ManageRole** e estar **acima** dos cargos que cria._"),
@@ -283,7 +304,7 @@ export async function cmdCor(message, args, ctx) {
         description: [
           `**${novosCargos}** created, **${prontos.length - novosCargos}** already existed and got painted.`,
           prontos.map((c) => `${EMOJI_PRESET[c.nome] ?? "•"} <%${c.roleId}>`).join("  "),
-          falhas.length ? `\n**Failed:** ${falhas.map((f) => f.nome).join(", ")}` : "",
+          falhas.length ? `\n**Failed:** ${falhas.map((f) => nomePreset(f.nome, true)).join(", ")}` : "",
           "",
           `_To publish the picker panel automatically:_ \`${P}cor painel aqui\``,
         ].filter(Boolean).join("\n").slice(0, 1900),
@@ -362,7 +383,7 @@ export async function cmdCor(message, args, ctx) {
         await painelMsg.react(encodeURIComponent(emoji));
         ligados++;
       } catch (e) {
-        semReacao.push(`${c.nome} (${e?.message ?? e})`);
+        semReacao.push(`${nomePreset(c.nome, en)} (${e?.message ?? e})`);
       }
       await new Promise((s) => setTimeout(s, 300));   // limite de taxa das reações
     }
@@ -374,7 +395,7 @@ export async function cmdCor(message, args, ctx) {
         `Panel in <#${destinoId}> with **${ligados}** color(s) ready to pick.`,
         `**${novosCargos}** role(s) created, **${prontos.length - novosCargos}** reused.`,
         "🎯 **Exclusive** mode on: picking a color swaps the previous one.",
-        falhas.length ? `\n⚠️ **Left out:** ${falhas.map((f) => f.nome).join(", ")}` : "",
+        falhas.length ? `\n⚠️ **Left out:** ${falhas.map((f) => nomePreset(f.nome, true)).join(", ")}` : "",
         semReacao.length ? `\n⚠️ **No reaction:** ${semReacao.slice(0, 4).join(", ")}` : "",
         semReacao.length ? "_The bot needs **React** in that channel._" : "",
       ].filter(Boolean).join("\n").slice(0, 1900),
@@ -422,7 +443,7 @@ export async function cmdCor(message, args, ctx) {
       colour: COR.erro,
     }, {
       title: "❌ Missing the color",
-      description: `\`${P}cor ${args[0]} <color|gradiente ...|preset <name>|remover>\`\nSee the options with \`${P}cor\`.`,
+      description: `\`${P}cor ${args[0]} <color|gradient ...|preset <name>|remove>\`\nSee the options with \`${P}cor\`.`,
       colour: COR.erro,
     }));
   }
@@ -432,7 +453,7 @@ export async function cmdCor(message, args, ctx) {
 
   // ── remover ──
   if (["remover", "remove", "limpar", "padrao", "padrão"].includes(acao)) {
-    const r = await aplicarCor(serverId, cargo.id, null);
+    const r = await aplicarCor(serverId, cargo.id, null, en);
     if (!r.ok) return sendEmbed(message.channel, tr(ctx,
       { title: "❌ Não consegui remover", description: r.erro, colour: COR.erro },
       { title: "❌ Couldn't remove it", description: r.erro, colour: COR.erro }));
@@ -443,16 +464,16 @@ export async function cmdCor(message, args, ctx) {
 
   // ── preset ──
   if (["preset", "pronto"].includes(acao)) {
-    const nome = resto[1]?.toLowerCase();
+    const nome = presetDe(resto[1]);
     if (!nome || !PRESETS[nome]) {
       return sendEmbed(message.channel, tr(ctx,
         { title: "❌ Preset desconhecido",
-          description: `Escolha um: ${Object.keys(PRESETS).map((k) => `\`${k}\``).join(", ")}`, colour: COR.erro },
+          description: `Escolha um: ${listaPresets(false)}`, colour: COR.erro },
         { title: "❌ Unknown preset",
-          description: `Pick one: ${Object.keys(PRESETS).map((k) => `\`${k}\``).join(", ")}`, colour: COR.erro }));
+          description: `Pick one: ${listaPresets(true)}`, colour: COR.erro }));
     }
     colour = PRESETS[nome];
-    descricao = en ? `the **${nome}** preset` : `preset **${nome}**`;
+    descricao = en ? `the **${nomePreset(nome, true)}** preset` : `preset **${nome}**`;
   }
 
   // ── gradiente montado ──
@@ -489,7 +510,7 @@ export async function cmdCor(message, args, ctx) {
   // ── CSS/cor colada direto ──
   else {
     const bruto = resto.join(" ");
-    const v = validarCss(bruto);
+    const v = validarCss(bruto, en);
     if (!v) {
       return sendEmbed(message.channel, tr(ctx, {
         title: "❌ Não entendi a cor",
@@ -497,16 +518,14 @@ export async function cmdCor(message, args, ctx) {
         colour: COR.erro,
       }, {
         title: "❌ I didn't understand the color",
-        description: `\`${bruto.slice(0, 100)}\` isn't a color I recognize.\n\nUse hex (\`#FF00AA\`), a name (\`roxo\`), \`gradiente <colors>\`, \`preset <name>\` or a full \`linear-gradient(...)\`.`,
+        description: `\`${bruto.slice(0, 100)}\` isn't a color I recognize.\n\nUse hex (\`#FF00AA\`), a name (\`purple\`), \`gradient <colors>\`, \`preset <name>\` or a full \`linear-gradient(...)\`.`,
         colour: COR.erro,
       }));
     }
     if (v.erro) {
       return sendEmbed(message.channel, {
         title: en ? "❌ Malformed gradient" : "❌ Gradiente malformado",
-        description: en && /Faltou o/.test(v.erro)
-          ? "The `linear-` prefix is missing: use `linear-gradient(...)`, not `gradient(...)`. It's the most common cause of a 400 error."
-          : v.erro,
+        description: v.erro,
         colour: COR.erro });
     }
     colour = v.valor;
@@ -515,7 +534,7 @@ export async function cmdCor(message, args, ctx) {
       : (en ? `the color \`${colour}\`` : `cor \`${colour}\``);
   }
 
-  const r = await aplicarCor(serverId, cargo.id, colour);
+  const r = await aplicarCor(serverId, cargo.id, colour, en);
   if (!r.ok) {
     return sendEmbed(message.channel, tr(ctx,
       { title: "❌ Não consegui aplicar", description: r.erro, colour: COR.erro },

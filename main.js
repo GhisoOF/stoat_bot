@@ -590,8 +590,10 @@ client.on("ready", async () => {
   if (conversaLigada()) {
     chat.iniciarMemoria();          // liga o agente de memória (extração em background)
     chat.iniciarComentario(client); // liga o comentário espontâneo
-    modIA.configurar({ avaliar: chat.avaliarModeracao });   // moderação por IA usa o modelo pequeno
   }
+  // &modia: com a conversa ligada, ou no modo enxuto com o juiz dedicado
+  // (MODELO_MODERACAO) — ver chat.modIAPermitida
+  if (chat.modIAPermitida()) modIA.configurar({ avaliar: chat.avaliarModeracao });
   // temas proibidos: o mesmo juiz (JSON, sem raciocínio, fila da conversa)
   if (iaLigada()) assuntos.configurar({ avaliar: chat.avaliarModeracao });
   rss.configurarResumo(chat.resumirRSS);   // RSS agendado passa a resumir com o tom da Judy

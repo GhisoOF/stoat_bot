@@ -19,7 +19,8 @@ const rngPadrao = (lados) => 1 + Math.floor(Math.random() * lados);
 // ── Motor (puro; rng injetável para testes determinísticos) ─────────────────
 export function rolarExpressao(entrada, rng = rngPadrao) {
   let texto = String(entrada ?? "").trim();
-  if (!texto) return { erro: "me diga o que rolar — ex.: `2d20kh1+5`" };
+  // (16 out 2026) cada erro também em inglês: `erroEn`
+  if (!texto) return { erro: "me diga o que rolar — ex.: `2d20kh1+5`", erroEn: "tell me what to roll — e.g. `2d20kh1+5`" };
 
   // rótulo: "expressão # nome"
   let rotulo = null;
@@ -43,7 +44,7 @@ export function rolarExpressao(entrada, rng = rngPadrao) {
   const repeticoes = [];
   for (let r = 0; r < repete; r++) {
     const res = rolarUma(texto, rng);
-    if (res.erro) return { erro: res.erro };
+    if (res.erro) return { erro: res.erro, erroEn: res.erroEn };
     repeticoes.push(res);
   }
   return { rotulo, repeticoes };
@@ -52,8 +53,8 @@ export function rolarExpressao(entrada, rng = rngPadrao) {
 function rolarUma(texto, rng) {
   // separa termos por +/-, preservando o sinal
   const pedacos = texto.replace(/\s+/g, "").match(/[+-]?[^+-]+/g) ?? [];
-  if (!pedacos.length) return { erro: "expressão vazia." };
-  if (pedacos.length > MAX_TERMOS) return { erro: `no máximo ${MAX_TERMOS} termos por rolagem.` };
+  if (!pedacos.length) return { erro: "expressão vazia.", erroEn: "empty expression." };
+  if (pedacos.length > MAX_TERMOS) return { erro: `no máximo ${MAX_TERMOS} termos por rolagem.`, erroEn: `at most ${MAX_TERMOS} terms per roll.` };
 
   let total = 0;
   const partes = [];
@@ -73,13 +74,14 @@ function rolarUma(texto, rng) {
 
     // dado: [N]d(M|%|F) [!] [khX|klX] [>=X|<=X]
     const m = corpo.match(/^(\d*)d(\d+|%|f)(!{1,2})?(?:(kh|kl)(\d+))?(?:(>=|<=)(\d+))?$/i);
-    if (!m) return { erro: `não entendi \`${pedaco}\` — ex.: \`2d6\`, \`4d6kh3\`, \`3d6!\`, \`8d10>=7\`, \`d%\`, \`4dF\`.` };
+    if (!m) return { erro: `não entendi \`${pedaco}\` — ex.: \`2d6\`, \`4d6kh3\`, \`3d6!\`, \`8d10>=7\`, \`d%\`, \`4dF\`.`,
+      erroEn: `I didn't understand \`${pedaco}\` — e.g. \`2d6\`, \`4d6kh3\`, \`3d6!\`, \`8d10>=7\`, \`d%\`, \`4dF\`.` };
 
     const qtd = Math.min(Number(m[1] || 1), MAX_DADOS);
-    if (qtd < 1) return { erro: "quantidade de dados tem que ser ≥ 1." };
+    if (qtd < 1) return { erro: "quantidade de dados tem que ser ≥ 1.", erroEn: "the number of dice must be ≥ 1." };
     const fate = /f/i.test(m[2]);
     const lados = fate ? 3 : (m[2] === "%" ? 100 : Number(m[2]));
-    if (!fate && (lados < 2 || lados > MAX_LADOS)) return { erro: `lados entre 2 e ${MAX_LADOS}.` };
+    if (!fate && (lados < 2 || lados > MAX_LADOS)) return { erro: `lados entre 2 e ${MAX_LADOS}.`, erroEn: `sides between 2 and ${MAX_LADOS}.` };
     const explode = !!m[3] && !fate && lados > 1;
     const manter = m[4] ? { modo: m[4].toLowerCase(), n: Math.min(Number(m[5]), qtd) } : null;
     const alvo = m[6] ? { op: m[6], n: Number(m[7]) } : null;
@@ -130,7 +132,7 @@ function rolarUma(texto, rng) {
 }
 
 export function formatarResultado(res, en = false) {
-  if (res.erro) return `⚠️ ${res.erro}`;
+  if (res.erro) return `⚠️ ${en ? res.erroEn ?? res.erro : res.erro}`;
   const linhas = [];
   for (const r of res.repeticoes) {
     if (res.moeda) { linhas.push(r.texto); continue; }
@@ -214,7 +216,7 @@ export async function cmdIniciativa(message, args, ctx) {
     if (/^\d+$/.test(expr)) valor = Number(expr);
     else {
       const r = rolarExpressao(expr);
-      if (r.erro) return ctx.sendEmbed(message.channel, { title: "⚔️", description: `⚠️ ${r.erro}`, colour: ctx.COR.aviso });
+      if (r.erro) return ctx.sendEmbed(message.channel, { title: "⚔️", description: `⚠️ ${en ? r.erroEn ?? r.erro : r.erro}`, colour: ctx.COR.aviso });
       valor = r.repeticoes[0].total;
     }
     st.ordem.push({ nome: nome.slice(0, 40), valor });

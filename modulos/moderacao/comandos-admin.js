@@ -40,7 +40,7 @@ export async function cmdComando(message, args, ctx) {
         `\`${PREFIXO}comando disable <name>\` — disables`,
         `\`${PREFIXO}comando enable <name>\` — re-enables`,
         "",
-        "_`help` and `comando` can't be disabled (so you can't lock yourself out)._",
+        "_`help` and `command` can't be disabled (so you can't lock yourself out)._",
       ].join("\n"),
       colour: COR.mod,
     } : {

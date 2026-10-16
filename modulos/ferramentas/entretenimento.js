@@ -474,7 +474,7 @@ export async function cmdEntretenimento(message, args, ctx, { rng = rngPadrao, a
   // ── briga ──
   if (sub === "briga") {
     const partes = separarDois(resto);
-    if (!partes.length) return uso(T("briga @pessoa [@outra]  ·  briga Goku x Superman", "briga @user [@other]  ·  briga Goku x Superman"));
+    if (!partes.length) return uso(T("briga @pessoa [@outra]  ·  briga Goku x Superman", "fight @user [@other]  ·  fight Goku x Superman"));
     const itens = await Promise.all(partes.map((p) => item(p, { ctx, server })));
     if (itens.length === 1) itens.unshift(await autorComoItem(message, { ctx, server }));
     const [a, b] = itens;
@@ -523,7 +523,7 @@ export async function cmdEntretenimento(message, args, ctx, { rng = rngPadrao, a
 
   // ── bola8 ──
   if (sub === "bola8") {
-    if (!resto) return uso(T("bola8 <pergunta>", "bola8 <question>"));
+    if (!resto) return uso(T("bola8 <pergunta>", "8ball <question>"));
     const r = sortear(RESPOSTAS_BOLA8, rng);
     const pergunta = (await trocarMencoes(resto, { ctx, server })).replace(/`/g, "ˋ").slice(0, 200);
     return enviar("🎱", `> ${pergunta}\n\n**${en ? r.en : r.pt}**`,
@@ -533,7 +533,7 @@ export async function cmdEntretenimento(message, args, ctx, { rng = rngPadrao, a
   // ── escolher ──
   if (sub === "escolher") {
     const opcoes = separarOpcoes(await trocarMencoes(resto, { ctx, server }));
-    if (opcoes.length < 2) return uso(T("escolher pizza | hambúrguer | sushi  ·  escolher pizza ou sushi", "escolher pizza | burger | sushi  ·  escolher pizza or sushi"));
+    if (opcoes.length < 2) return uso(T("escolher pizza | hambúrguer | sushi  ·  escolher pizza ou sushi", "choose pizza | burger | sushi  ·  choose pizza or sushi"));
     const escolhida = sortear(opcoes, rng);
     return enviar("🤔", T(
       `Entre ${opcoes.length} opções, eu fico com: **${nomeSeguro(escolhida)}**`,
@@ -542,7 +542,7 @@ export async function cmdEntretenimento(message, args, ctx, { rng = rngPadrao, a
 
   // ── nota ──
   if (sub === "nota") {
-    if (!resto) return uso(T("nota <coisa ou @pessoa>", "nota <thing or @user>"));
+    if (!resto) return uso(T("nota <coisa ou @pessoa>", "rate <thing or @user>"));
     const it = await item(resto, { ctx, server });
     const n = notaDe(it.chave);
     return enviar(`📝 ${it.nome}`, `**${n}/10** ${barra(n, 10, "⭐", "▫️")}\n\n${comentarioNota(n, en)}`,

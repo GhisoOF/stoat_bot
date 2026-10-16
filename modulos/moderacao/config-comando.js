@@ -211,7 +211,7 @@ export async function cmdConfig(message, args, ctx) {
       `Debug: ${simL(cfgGlobal.debug !== false)} · ${T("Listas anti-link:", "Anti-link lists:")} ${cfgGlobal.linkBlocklistSources.length} ${T("fonte(s)", "source(s)")}, ${cfgGlobal.linkBlocklistManual.length} ${T("domínio(s) manual(is)", "manual domain(s)")}`,
       "",
       T(`💡 Ajuste com \`${PREFIXO}automod\` (que reúne blocklist, whitelist, sentinela e punicao) e \`${PREFIXO}log\` — \`${PREFIXO}tutorial\` mostra o caminho, \`${PREFIXO}assistente\` percorre com você.`,
-        `💡 Adjust with \`${PREFIXO}automod\` (holds blocklist, whitelist, sentinela and punicao) and \`${PREFIXO}log\` — \`${PREFIXO}tutorial\` shows the path, \`${PREFIXO}assistente\` walks it with you.`),
+        `💡 Adjust with \`${PREFIXO}automod\` (holds blocklist, whitelist, sentinel and punishment) and \`${PREFIXO}log\` — \`${PREFIXO}tutorial\` shows the path, \`${PREFIXO}assistente\` walks it with you.`),
     ].join("\n"),
     colour: COR.info,
   });

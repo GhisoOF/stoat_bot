@@ -387,7 +387,8 @@ export async function cmdAutomod(message, args, ctx) {
         ? `\n**Sentinel panel:** \`${PREFIXO}automod sentinela config\` · \`sensitivity\` · \`antiguidade\` · \`alerta\` · \`test <text>\` — details in \`${PREFIXO}help automod sentinela\``
         : `\n**Painel do sentinela:** \`${PREFIXO}automod sentinela config\` · \`sensitivity\` · \`antiguidade\` · \`alerta\` · \`test <texto>\` — detalhes em \`${PREFIXO}help automod sentinela\``) : null,
     );
-    return sendEmbed(message.channel, { title: `🛡 ${sub}`,
+    const subEn = nomeGrupo(sub, "en") !== sub ? nomeGrupo(sub, "en") : nomeParte(sub, "en");
+    return sendEmbed(message.channel, { title: `🛡 ${lang === "en" ? subEn : sub}`,
       description: linhas.filter((l) => l !== null).join("\n"), colour: COR.mod });
   }
 

@@ -78,6 +78,11 @@ export function pDaMoeda(serverId, moeda) {
 }
 
 // Banco → jogador (a recompra do NPC).
+// O nome DIGITÁVEL da moeda na tela (16 out 2026): o id é português
+// ("ouro"); em inglês o jogo aceita "gold" (traducao.argsParaPortugues).
+const MOEDA_EN = { ouro: "gold", cristal: "crystal" };
+const idDigitavel = (m, en) => (en ? MOEDA_EN[m?.id] ?? m?.id : m?.id);
+
 function pagarAoJogador(serverId, userId, moeda, qtd) {
   const disponivel = Math.min(qtd, Math.floor(moeda.mercado ?? 0));
   if (disponivel <= 0) return 0;
@@ -295,7 +300,7 @@ export async function cmdGame(message, args, ctx) {
         "",
         montarFicha(p, P, serverId, eu, lang),
         "",
-        `Start by picking a class: \`${P}game classe\` — or spend points by hand: \`${P}game pontos forca 1\``,
+        `Start by picking a class: \`${P}game classe\` — or spend points by hand: \`${P}game pontos strength 1\``,
       ].join("\n"), colour: COR.sucesso,
     } : {
       title: "🎉 Personagem criado",
@@ -1261,7 +1266,7 @@ export async function cmdGame(message, args, ctx) {
         ? `_Each currency has its own P — \`${P}game admin moeda\`._`
         : `_Cada moeda tem seu próprio P — \`${P}game admin moeda\`._`);
       linhas.push(en
-        ? `_Exchange with the bank: \`${P}game cambio <qty|tudo> <currency> para <currency>\` · rates: \`${P}game cambio taxas\`_`
+        ? `_Exchange with the bank: \`${P}game cambio <qty|all> <currency> to <currency>\` · rates: \`${P}game cambio taxas\`_`
         : `_Trocar com o banco: \`${P}game cambio <qtd|tudo> <moeda> para <moeda>\` · taxas: \`${P}game cambio taxas\`_`);
     }
 
@@ -1374,9 +1379,9 @@ export async function cmdGame(message, args, ctx) {
           "Nobody is selling anything right now.",
           "",
           `\`${P}game mercado vender <item> <price>\` — list yours`,
-          `\`${P}game cambio <qty> <currency> para <currency>\` — exchange with the bank`,
-          `\`${P}game cambio <qty> <currency> por <qty> <currency>\` — offer to another player`,
-          `\`${P}game trocar @person <your item> por <their item>\` — barter`,
+          `\`${P}game cambio <qty> <currency> to <currency>\` — exchange with the bank`,
+          `\`${P}game cambio <qty> <currency> for <qty> <currency>\` — offer to another player`,
+          `\`${P}game trocar @person <your item> for <their item>\` — barter`,
         ] : [
           "Ninguém está vendendo nada agora.",
           "",
@@ -1423,7 +1428,7 @@ export async function cmdGame(message, args, ctx) {
       for (const de of moedas) {
         const partes = moedas.filter((x) => x.id !== de.id).map((para) => {
           const r = MERC.converter(100, de, para);
-          return `${para.simbolo}${fmt(r.recebe)} ${para.id}`;
+          return `${para.simbolo}${fmt(r.recebe)} ${idDigitavel(para, en)}`;
         });
         linhas.push(`${de.simbolo} **100 ${de.nome}** → ${partes.join(" · ")}`);
       }
@@ -1463,7 +1468,7 @@ export async function cmdGame(message, args, ctx) {
           ? `_Already with the ${(MERC.CFG.spread * 100).toFixed(0)}% spread discounted — it's what you'd actually receive._`
           : `_Já com o spread de ${(MERC.CFG.spread * 100).toFixed(0)}% descontado — é o que você receberia de fato._`);
         linhas.push(en
-          ? `_You have ${de.simbolo}${fmt(seu)} · to trade: \`${P}game cambio ${qtd} ${de.id} para <currency>\`_`
+          ? `_You have ${de.simbolo}${fmt(seu)} · to trade: \`${P}game cambio ${qtd} ${idDigitavel(de, true)} to <currency>\`_`
           : `_Você tem ${de.simbolo}${fmt(seu)} · para trocar: \`${P}game cambio ${qtd} ${de.id} para <moeda>\`_`);
         return enviarLista(sendEmbed, message.channel, {
           titulo: en
@@ -1557,14 +1562,14 @@ export async function cmdGame(message, args, ctx) {
         ]).filter((x) => x !== null).join("\n"), colour: COR.sucesso });
     }
 
-    const m = texto.match(/^([\d.,]+)\s+(\S+)\s+por\s+([\d.,]+)\s+(\S+)$/i);
+    const m = texto.match(/^([\d.,]+)\s+(\S+)\s+(?:por|for)\s+([\d.,]+)\s+(\S+)$/i);
     if (!m) {
       const linhas = en ? [
         "**Two ways to exchange**",
-        `\`${P}game cambio <qty> <currency> para <currency>\` — **with the bank**, instantly`,
-        `   e.g. \`${P}game cambio 200 ouro para cristal\` · everything: \`${P}game cambio tudo ouro para cristal\``,
-        `\`${P}game cambio <qty> <currency> por <qty> <currency>\` — offer to **another player**`,
-        `   e.g. \`${P}game cambio 100 ouro por 2 cristal\``,
+        `\`${P}game cambio <qty> <currency> to <currency>\` — **with the bank**, instantly`,
+        `   e.g. \`${P}game cambio 200 gold to crystal\` · everything: \`${P}game cambio all gold to crystal\``,
+        `\`${P}game cambio <qty> <currency> for <qty> <currency>\` — offer to **another player**`,
+        `   e.g. \`${P}game cambio 100 gold for 2 crystal\``,
         "_Whole units only: the bank uses just what the whole units cost — the rest stays with you._",
         "",
         "**World currencies:**",
@@ -1669,7 +1674,7 @@ export async function cmdGame(message, args, ctx) {
     }
 
     const texto = args.slice(1).join(" ");
-    const mm = texto.match(/^(.*?)\s+por\s+(.*)$/i);
+    const mm = texto.match(/^(.*?)\s+(?:por|for)\s+(.*)$/i);
     if (!mm) {
       const minhas = db.listarOfertas(serverId, { tipo: "troca" })
         .filter((o) => o.autorId === eu || !o.alvoId || o.alvoId === eu);
@@ -1682,7 +1687,7 @@ export async function cmdGame(message, args, ctx) {
           ? `\`#${o.id}\` ${quem}: **${ofe?.nome}** for **${ped?.nome}**`
           : `\`#${o.id}\` ${quem}: **${ofe?.nome}** por **${ped?.nome}**`;
       }) : [en ? "_No open proposals._" : "_Nenhuma proposta aberta._"];
-      linhas.push("", en ? `\`${P}game trocar [@person] <your item> por <their item>\`` : `\`${P}game trocar [@pessoa] <seu item> por <item dela>\``,
+      linhas.push("", en ? `\`${P}game trocar [@person] <your item> for <their item>\`` : `\`${P}game trocar [@pessoa] <seu item> por <item dela>\``,
         en ? `\`${P}game trocar aceitar <#>\` — closes the trade` : `\`${P}game trocar aceitar <#>\` — fecha a troca`);
       return enviarLista(sendEmbed, message.channel, {
         titulo: en ? "🔄 Barter" : "🔄 Escambo", linhas, colour: COR.info });
@@ -1752,7 +1757,7 @@ export async function cmdGame(message, args, ctx) {
     const emCadaMoeda = db.listarMoedas(serverId).map((m) => {
       const c = MERC.custoEm(preco, moeda, m);
       const seu = db.getSaldo(serverId, eu, m.id);
-      return `${m.simbolo} ${fmt(c)} ${m.id}${seu >= c ? " ✅" : ""}`;
+      return `${m.simbolo} ${fmt(c)} ${idDigitavel(m, en)}${seu >= c ? " ✅" : ""}`;
     });
 
     const naoVende = item.especial || ["contrato", "pergaminho"].includes(item.slot);
@@ -1889,7 +1894,7 @@ export async function cmdGame(message, args, ctx) {
         const preco = MAG.precoComCarisma(magia.preco, attr.carisma);
         const emCada = db.listarMoedas(serverId).map((m) => {
           const c = MERC.custoEm(preco, moedaPadrao, m);
-          return `${m.simbolo} ${fmt(c)} ${m.id}${db.getSaldo(serverId, eu, m.id) >= c ? " ✅" : ""}`;
+          return `${m.simbolo} ${fmt(c)} ${idDigitavel(m, en)}${db.getSaldo(serverId, eu, m.id) >= c ? " ✅" : ""}`;
         });
         const linhas = en ? [
           `${esc.emoji ?? "✦"} **${magia.nome}** — ${esc.rotuloEN ?? magia.tipo}`,

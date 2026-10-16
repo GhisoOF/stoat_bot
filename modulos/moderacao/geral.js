@@ -360,7 +360,7 @@ function detalhesEN(P) {
   return {
     cor: {
       uso: `${P}cor <role> <color|gradient|preset>`,
-      desc: "Customizes role colors — including **gradients**, which the Stoat client doesn't offer in its UI.\n\n**Solid:** `&cor VIP #FF00AA` or `&cor VIP roxo`\n**Gradient:** `&cor VIP gradiente #FF0000 #0000FF` (2+ colors; a leading number sets the angle)\n**Preset:** `&cor VIP preset vaporwave` — see them all with `&cor presets`\n**Automatic:** `&cor painel aqui` — creates the roles, posts the picker message (mentioning the roles), adds the emoji reactions, wires up reaction roles and enables exclusive mode. All in one command.\n**Roles only:** `&cor criar` — creates/paints without posting anything\n**Raw CSS:** `&cor VIP linear-gradient(90deg, #f00 0%, #00f 100%)`\n**Clear:** `&cor VIP remover` · **View:** `&cor lista`\n\nThe role can be given by name (even partial) or by ID. The bot's role needs **ManageRole** and must sit **above** the edited role.",
+      desc: "Customizes role colors — including **gradients**, which the Stoat client doesn't offer in its UI.\n\n**Solid:** `&cor VIP #FF00AA` or `&cor VIP purple`\n**Gradient:** `&cor VIP gradiente #FF0000 #0000FF` (2+ colors; a leading number sets the angle)\n**Preset:** `&cor VIP preset vaporwave` — see them all with `&cor presets`\n**Automatic:** `&cor painel aqui` — creates the roles, posts the picker message (mentioning the roles), adds the emoji reactions, wires up reaction roles and enables exclusive mode. All in one command.\n**Roles only:** `&cor criar` — creates/paints without posting anything\n**Raw CSS:** `&cor VIP linear-gradient(90deg, #f00 0%, #00f 100%)`\n**Clear:** `&cor VIP remover` · **View:** `&cor lista`\n\nThe role can be given by name (even partial) or by ID. The bot's role needs **ManageRole** and must sit **above** the edited role.",
       perm: "ManageRole",
       ex: `${P}cor VIP gradiente #FF71CE #01CDFE #05FFA1`,
     },
@@ -610,7 +610,7 @@ function detalhesEN(P) {
     },
     comando: {
       uso: `${P}comando [disable|enable <name>]`,
-      desc: "Enables or disables bot commands on this server. `&comando` alone lists each one's state. E.g.: `&comando disable ban`. The `help` and `comando` commands can't be disabled.",
+      desc: "Enables or disables bot commands on this server. `&comando` alone lists each one's state. E.g.: `&comando disable ban`. The `help` and `command` commands can't be disabled.",
       perm: "ManagePermissions", ex: `${P}comando disable repete`,
     },
     embed: {

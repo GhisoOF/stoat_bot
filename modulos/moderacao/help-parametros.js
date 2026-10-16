@@ -262,7 +262,7 @@ function parametrosEN(P) {
     { nome: "on | off", desc: "toggles without losing the configuration" },
     { nome: "titulo", valor: "<text>", desc: "the embed's top line. Accepts the markers below" },
     { nome: "texto", valor: "<description>", desc: "the embed body (can span lines). Accepts the markers" },
-    { nome: "cor", valor: "<#hex|name>", desc: "sidebar color: `#FF71CE`, `roxo`, `azul`… (`&cor presets` lists the names)" },
+    { nome: "cor", valor: "<#hex|name>", desc: "sidebar color: `#FF71CE`, `purple`, `blue`… (`&cor presets` lists the gradients)" },
     { nome: "imagem", valor: "<url|limpar>", desc: "cover. A Stoat attachment becomes the embed cover; an external URL shows as a preview below" },
     { nome: "imagem", valor: "visivel | oculto", desc: "whether the external URL is shown in text or hidden (default: hidden)" },
     { nome: "testar", desc: "posts it now using you as the example — no need to wait for someone to join" },
@@ -352,7 +352,7 @@ function parametrosEN(P) {
     ],
 
     cor: [
-      { nome: "<role> <color>", desc: "solid color: `#FF00AA` or a name (`roxo`, `azul`…)" },
+      { nome: "<role> <color>", desc: "solid color: `#FF00AA` or a name (`purple`, `blue`…)" },
       { nome: "<role> gradiente", valor: "<color> <color> [...]", desc: "two or more colors; a leading number becomes the angle" },
       { nome: "<role> preset", valor: "<name>", desc: "ready-made palette (`&cor presets` lists them)" },
       { nome: "<role> remover", desc: "removes the color" },
@@ -399,7 +399,7 @@ function parametrosEN(P) {
     comando: [
       { nome: "<name> on|off", desc: "toggles a command on this server (all its aliases together)" },
       { nome: "list", desc: "what's off" },
-      { nome: "Essentials", desc: "`help`, `comando`, `debug` and `idioma` never turn off — otherwise the admin locks themselves out" },
+      { nome: "Essentials", desc: "`help`, `command`, `debug` and `language` never turn off — otherwise the admin locks themselves out" },
     ],
 
     autorole: [
@@ -431,7 +431,7 @@ function parametrosEN(P) {
 
     rss: [
       { nome: "add", valor: "<url> [category]", desc: "follows a feed. The category groups the digests: each topic gets its own block instead of everything squeezed into one" },
-      { nome: "categoria", valor: "<id|url> <name|off>", desc: "sets or clears the category of an existing feed (`&rss list` shows the ids). Without one, the feed digests under **Geral**" },
+      { nome: "category", valor: "<id|url> <name|off>", desc: "sets or clears the category of an existing feed (`&rss list` shows the ids). Without one, the feed digests under **General**" },
       { nome: "remove", valor: "<url|number>", desc: "stops following" },
       { nome: "list", desc: "followed feeds" },
       { nome: "canal", valor: "<#channel|aqui>", desc: "where to post" },

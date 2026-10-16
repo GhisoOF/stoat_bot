@@ -49,7 +49,7 @@ As variáveis que importam:
 | `SERVIDOR` | ID do servidor onde a **IA** funciona (`*` = em todos; vazio = IA em lugar nenhum). Fora dele fica **só a moderação por IA** (temas proibidos, visão de imagens e fotos de perfil, `&modia`); chat, geração de imagem e resumo do RSS ficam só nele. Posto **pelo ID**, é o servidor da casa: os canais NSFW dele saem das travas (ver abaixo). *Chat AI only here; elsewhere, AI moderation only.* |
 | `MODELO_MODERACAO` | modelo **pequeno** só para o juiz da moderação (temas proibidos, `&modia`) dos **outros** servidores — o de `SERVIDOR` continua com o modelo da conversa. Ex.: `ggml-org/gemma-3-1b-it-GGUF:Q4_K_M` (~0,8 GB). No modo local fica carregado junto do de conversa (grupo sem troca no llama-swap). *Small model for the moderation judge on the other servers; yours keeps the chat model.* |
 | `IA` | `0` desliga todos os módulos de IA — o bot de moderação segue completo |
-| `CONVERSA` | `0` = **modo enxuto**: a IA fica só para moderação (temas proibidos, visão de imagens e fotos de perfil), o relatório horário e o RSS. Sem chat, `&modia`, memória, comentários e geração de imagem; o modelo usa contexto 4096 e sai da memória após 5 min parado (`IA_TTL`). Com `BUSCA_WEB=0`, o SearXNG nem sobe. *Lean mode: AI only for moderation, the log report and RSS.* |
+| `CONVERSA` | `0` = **modo enxuto**: a IA fica só para moderação (temas proibidos, visão de imagens e fotos de perfil), o relatório horário e o RSS. Sem chat, memória, comentários e geração de imagem; o `&modia` fica **só com `MODELO_MODERACAO`** (o juiz pequeno, que aguenta ler toda mensagem), em todo servidor — e no modo enxuto a casa também é julgada por ele; o modelo usa contexto 4096 e sai da memória após 5 min parado (`IA_TTL`). Com `BUSCA_WEB=0`, o SearXNG nem sobe. *Lean mode: AI only for moderation, the log report and RSS; `&modia` on every server when a dedicated `MODELO_MODERACAO` exists.* |
 | `IA_MODO` | `local` roda um modelo na sua máquina (o **MODELO** é baixado do Hugging Face no primeiro arranque e guardado no volume); `online` usa uma plataforma via `TOKEN_IA` (padrão: OpenRouter) |
 | `MODELO` | local: `repo:quantização` GGUF do HF · online: nome do modelo na plataforma |
 | `TOKEN_IA` | token da plataforma, só no modo `online` |
@@ -76,6 +76,7 @@ Acabou de adicionar o bot? Três comandos resolvem quase tudo:
 | `&assistente rapido` | ⭐ **configuração guiada**: o bot pergunta (idioma, staff, log, proteção, boas-vindas), você responde em texto normal, ele mostra o resumo e aplica |
 | `&reset` | volta a Judy à **configuração de fábrica** neste servidor (automod desligado, sem log/staff, idioma inglês) — os dados (XP, avisos, saldos, RPG) ficam; só o **dono do servidor** ou o dono do bot; confirma com código e `&reset undo` desfaz por 24 h |
 | `&tutorial` | guia **em páginas** (reaja ◀ ▶): permissões → canais → proteção → boas-vindas e cargos → XP e RPG → checklist |
+| `&tutorial ids` | **menções e IDs**: como apontar pessoa, cargo e canal (menção, nome ou ID), o que é um ID e como copiá-lo no Stoat (*Configurações → Avançado → Show 'copy ID' in context menus*; cargo: *Copy role ID*) — *mentions and IDs, and how to copy them* |
 | `&help` | índice **por intenção** (começar · proteger · personalizar · diversão · rpg · diagnóstico); `&help <comando>` explica **cada parâmetro** |
 
 ### A regra de ouro dos canais
@@ -357,7 +358,7 @@ diz exatamente o que clicar.
 - **Anti-SSRF**: URLs de imagem configuradas (boas-vindas etc.) são validadas —
   endereços de rede interna e esquemas `javascript:`/`data:` são recusados, e o
   bot **nunca baixa** a imagem, só repassa o link.
-- **Dois idiomas**: comandos, help e tutorial em inglês e pt-BR (`&idioma`). O **idioma oficial é o inglês** (13 out 2026): servidor novo e `&reset` começam nele; servidores que já existiam continuam no idioma que tinham. `IDIOMA_PADRAO=pt` no `.env` volta o padrão ao português. *The official language is English; existing servers keep theirs.*
+- **Dois idiomas**: comandos, help e tutorial em inglês e pt-BR (`&idioma`). O **idioma oficial é o inglês** (13 out 2026): servidor novo e `&reset` começam nele; servidores que já existiam continuam no idioma que tinham. `IDIOMA_PADRAO=pt` no `.env` volta o padrão ao português. Em inglês, até o que está **fora** das crases sai traduzido (título da ajuda, marcadores `{user}`/`{members}`, moldes `‹question›`, nomes de cor e de preset `purple`/`fire`, áreas do tutorial) — a suíte `traducao-en-13out` confere ~380 telas. Só as ferramentas do dono do bot (`&game admin`, `&servidores`) ficam em português. *The official language is English; existing servers keep theirs. Every screen is checked in English, including titles, markers, placeholders and color/preset names.*
 
 ---
 

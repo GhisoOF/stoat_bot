@@ -3383,7 +3383,8 @@ m = await say("&help protect");
 ok(titulo(m).includes("Protect"), "&help protect (alias EN) → Protect");
 m = await say("&help welcome");
 for (let i = 0; i < 3; i++) await reagir(m, "▶");
-ok(todasPgs(m).includes("Parameters") && todasPgs(m).includes("{membros}"), "&help welcome em EN tem Parameters com marcadores");
+// (16 out 2026) em inglês os marcadores saem em inglês ({members}; o {membros} continua aceito)
+ok(todasPgs(m).includes("Parameters") && todasPgs(m).includes("{members}") && !todasPgs(m).includes("{membros}"), "&help welcome em EN tem Parameters com marcadores (em inglês)");
 m = await say("&tutorial");
 ok(titulo(m).includes("Getting started"), "&tutorial em EN");
 m = await say("&tutorial channels");
@@ -12655,7 +12656,24 @@ for (const t of ["velocidade", "rajada", "repeticao", "midia", "mencoes", "carac
   "checar", "liberar", "vigiar", "sensibilidade", "antiguidade", "alerta", "rapido", "completo", "protecao", "canais", "lista", "limpar",
   "texto", "titulo", "cor", "imagem", "testar", "canal", "cargo", "modo", "escada", "tirar", "entrar", "sair", "estado", "filtro",
   "destravar", "resgatar", "nomes", "dicionario", "efeito", "tom", "ligar", "desligar", "ativar", "desativar", "remover", "adicionar"]) PT_TOKENS.add(t);
-for (const ok_ of ["status", "config", "set", "debug", "on", "off", "add", "remove", "list", "test", "ban", "top", "admin", "xp", "game", "log", "staff", "tutorial", "avatar", "emoji", "caps", "rpg", "media", "auto", "url", "zalgo", "emojis"]) PT_TOKENS.delete(ok_);
+// (16 out 2026, "deixar global o bot") palavras de MOLDE (‹pergunta›, [bicho]),
+// nomes de cor e de preset, áreas do tutorial — escapavam do detector
+for (const t of ["pergunta", "coisa", "bicho", "pensa", "figuras", "figura", "nome", "cidade", "moeda", "motivo", "grupo", "mensagem",
+  "qtd", "quantidade", "raridade", "tipo", "tema", "valor", "classe", "termo", "quantos", "preço", "comando", "atributo", "alvo",
+  "número", "quantia", "parte", "segundos", "parâmetro", "evento", "campo", "pedido", "domínio", "descrição", "título", "pessoa",
+  "contrato", "área", "módulo", "código", "vaga", "usuário", "frase", "expressão", "convite", "algo", "vezes", "categoria", "ação",
+  "palavra", "pergaminho", "rolagem", "missão", "máquina", "gradiente", "painel", "criar", "prontos", "pronto", "remover",
+  "arco-iris", "fogo", "oceano", "poente", "floresta", "ouro", "sangue", "gelo", "roxo", "vermelho", "azul", "verde", "amarelo",
+  "laranja", "rosa", "branco", "preto", "cinza", "dourado", "prata", "vinho", "lavanda", "marrom",
+  "permissoes", "canais", "moderacao", "noticias", "ajustes", "aventura", "economia", "id-do-canal", "id-do-cargo", "url-do-feed",
+  "iddocanal", "usuario", "nota", "sorte", "briga", "escolher", "zoeira", "inverter", "bola8",
+  "forca", "força", "destreza", "resistencia", "agilidade", "saude", "inteligencia", "carisma", "ouro", "cristal", "para", "por", "tudo",
+  "dificuldade", "nivel", "nível", "obra", "cidades", "pessoas", "contribuicao"]) PT_TOKENS.add(t);
+for (const ok_ of ["status", "config", "set", "debug", "on", "off", "add", "remove", "list", "test", "ban", "top", "admin", "xp", "game", "log", "staff", "tutorial", "avatar", "emoji", "caps", "rpg", "media", "auto", "url", "zalgo", "emojis", "neon", "vaporwave", "cyberpunk", "trans", "coral", "magenta", "indigo", "lima", "ciano", "turquesa", "esmeralda"]) PT_TOKENS.delete(ok_);
+// nome de comando em português FORA das crases (títulos: "Help — &entretenimento › briga")
+const CMD_PT = new Set(Object.entries((await import("./modulos/core/aliases.js")).COMANDO_EN).filter(([pt, en]) => pt !== en).map(([pt]) => pt));
+// marcadores de texto em português ({usuario}, {membros}…) numa tela em inglês
+const MARCADOR_PT = /\{(usuario|usuário|nome|servidor|membros|cargo|canal|nivel|nível|pessoa|quantia|moeda)\}/i;
 const PROSA_PT = /\b(não|você|está|também|então|já|só|até|após|porque|quando|ainda|aqui|agora|depois|isso|esse|essa|nenhum|nenhuma|todos|cada|outro|outra|pelo|pela|para|com|sem|uma|dos|das|seu|sua|quem|qual|onde|como|muito|mais|menos|tudo|nada|sempre|nunca|pode|precisa|tem|foi|ser|canal|canais|servidor|cargo|cargos|mensagem|mensagens|pessoa|usuário|comando|comandos|ajuda|configuração|permissão|aviso|erro|motivo|nível|exemplo|página|ligado|desligado|ligada|desligada|ativado|desativado|parte|partes|grupo|nota|limiar|sinais|punição)\b/gi;
 
 function achar(txt) {
@@ -12667,6 +12685,12 @@ function achar(txt) {
       if (PT_TOKENS.has(t)) r.push(`\`${m[1]}\`→${t}`);
     }
   }
+  for (const m of semLinks.matchAll(/(?:^|[\s(—])&([a-zçãéíóú]+)/gi)) if (CMD_PT.has(m[1].toLowerCase())) r.push(`&${m[1]} (fora de crase)`);
+  // nomes de grupo do automod na PROSA ("each group: antiruido, sentinela")
+  const gp = semLinks.replace(/`[^`\n]*`/g, " ").match(/\b(antiruido|sentinela|punicao|punição)\b/i);
+  if (gp) r.push(`prosa: ${gp[0]}`);
+  const mk = semLinks.match(MARCADOR_PT);
+  if (mk) r.push(`marcador ${mk[0]}`);
   const prosa = semLinks.replace(/`[^`\n]*`/g, " ");
   for (const l of prosa.split("\n")) {
     const ws = new Set((l.match(PROSA_PT) ?? []).map((x) => x.toLowerCase()));
@@ -12701,17 +12725,21 @@ const AJUDA = ["&help", ...Object.keys(grupos("en", "&")).map((g) => `&help ${g}
 const desce = (no, cam) => { for (const k of Object.keys(no ?? {})) { if (k === "titulo" || k === "texto" || typeof no[k] !== "object") continue; AJUDA.push(`&help ${[...cam, k].join(" ")}`); desce(no[k], [...cam, k]); } };
 desce(arvoreSubtopicos("&", "en"), []);
 const PAINEIS = '&config;&info;&debug;&debug channels;&debug permissions;&automod;&automod status;&automod antispam;&automod antinoise;&automod antilink;&automod sentinel;&automod sentinel config;&automod sentinel topics;&automod sentinel topics test the election was stolen you idiots;&automod sentinel topics sensitivity high;&automod sentinel topics ai off;&automod sentinel topics politics alert;&automod sentinel topics politics punish;&automod sentinel topics politics explode;&automod sentinel avatar;&automod sentinel avatar action kick;&automod sentinel avatar time 2h;&automod sentinel avatar action explode;&automod sentinel images;&automod sentinel hate;&automod sentinel hate list;&automod sentinel content;&automod sentinel sensitivity high;&automod sentinel tenure on;&automod sentinel alerts on;&automod sentinel test free nitro click here;&automod antispam speed;&automod antispam speed off;&automod antispam set messages 6;&automod antinoise caps off;&automod antinoise set size 20;&automod antilink domains on;&automod antilink invites on;&automod sentinel punishment stack;&automod sentinel xyz;&automod antispam xyz;&automod xyz;&automod on;&automod off;&automod <group> off;&automod punishment;&automod punishment mode stack;&automod punishment mode xyz;&automod punishment ladder;&automod punishment ladder warn,10m,1h,ban;&automod punishment ladder xx;&automod punishment warns 4;&automod punishment test;&automod whitelist;&automod blocklist;&automod blocklist list;&wizard;&wizard quick;cancel;&wizard full;skip;back;cancel;&wizard channels;cancel;&wizard protection;cancel;&tutorial;&tutorial moderation;&tutorial channels;&tutorial roles;&tutorial levels;&tutorial ai;&tutorial logging;&staff;&staff list;&server;&server rules;&server roles;&server channels;&server faq;&log;&log status;&log punishments off;&log here;&access;&access status;&access role;&access channel;&globalban;&globalban list;&globalban warn;&globalban off;&warn;&warn list;&warn clear;&silence;&mute;&tts;&tts status;&tts filter;&tts voice;&tts effect;&tts dictionary;&music;&music queue;&join;&leave;&welcome;&welcome status;&goodbye;&goodbye status;&xp;&xp setup;&xp config;&xp roles;&color;&color presets;&color list;&rss;&rss list;&timezone;&timezone list;&modia;&entertainment;&language;&chat;&chat comment;&ticket;&ticket list;&economy;&economy shop;&economy balance;&reactionrole;&embed;&autorole;&command;&command list;&purge;&ping;&userinfo;&about;&roll;&initiative;&webhook;&webhook list'.split(";");
-const COMANDOS = process.env.AUD_CMDS ? process.env.AUD_CMDS.split(";") : [...AJUDA, ...PAINEIS];
+// (16 out 2026) além dos painéis: as telas de USO (resultados, erros, moldes)
+const USO = '&entertainment ship @a @b;&entertainment fight a x b;&entertainment cowsay hi;&entertainment cowsay figures;&entertainment 8ball will it rain?;&entertainment choose a | b;&entertainment rate pizza;&entertainment fortune;&entertainment mock hello;&entertainment reverse hello;&entertainment xyz;&entertainment ship;&entertainment fight;&color presets;&color VIP;&color VIP purple;&color VIP preset fire;&color VIP preset xyz;&color VIP gradient red;&color VIP gradient red blue;&color VIP xyz;&color VIP gradient(1,2);&color VIP remove;&color nobodyrole purple;&color panel here xyz;&color create fire;&color panel here fire;&game;&game create;&game wallet;&game exchange rates;&game exchange 10 gold to crystal;&game exchange 10 gold;&game market;&game class;&game points;&game items;&game spells;&game dungeons;&game missions;&game catalog;&game followers;&game party;&game sheet;&game help;&game xyz;&economy balance;&economy shop;&economy top;&economy daily;&economy work;&xp top;&xp rank;&warn;&warn @x;&kick;&ban;&silence;&purge;&purge xyz;&embed;&embed title: Hi | description: there | color: pink;&reactionrole add;&reactionrole add x y z;&autorole set xyz;&log xyz;&rss add;&rss add xyz;&ticket;&ticket panel;&staff add;&timezone add;&timezone add xyz;&welcome text;&welcome test;&goodbye test;&server rules;&userinfo;&roll 2d6;&roll xyz;&initiative;&command disable xyz;&command disable ping;&command enable ping;&webhook;&webhook create;&access role add xyz;&globalban check xyz;&language;&about;&info;&debug @x;&debug #general;&modia;&tutorial ids;&tutorial mentions;&tutorial xyz;&help xyz'.split(";");
+const COMANDOS = process.env.AUD_CMDS ? process.env.AUD_CMDS.split(";") : [...AJUDA, ...PAINEIS, ...USO];
 const ruins = [];
 for (const cmd of COMANDOS) {
   env.length = 0;
   await say(cmd);
   const t = texto();
   const a = [...new Set(achar(t))];
+  // as ferramentas do DONO do bot (&game admin, as moedas do mundo) ficam em português
+  const soDono = /^&help game (admin|moeda)\b/.test(cmd);
   if (!env.length) ruins.push(`${cmd}: (mudo)`);
-  else if (a.length) ruins.push(`${cmd}: ${a.slice(0, 12).join(" ; ")}`);
+  else if (a.length && !soDono) ruins.push(`${cmd}: ${a.slice(0, 12).join(" ; ")}`);
 }
-for (const r of ruins.slice(0, 15)) console.log("   ✗ " + r);
+for (const r of ruins.slice(0, process.env.AUD_TODOS ? 9999 : 15)) console.log("   ✗ " + r);
 ok(!ruins.length, `★ ${COMANDOS.length} telas em inglês (toda a ajuda + painéis) sem português — nem entre crases`);
 if (process.env.AUD_CMDS) process.exit(fail ? 1 : 0);
 
@@ -14411,6 +14439,109 @@ await t("★ \"moderacao\" usa o contexto próprio (LLAMA_CTX_MODERACAO, 4096)",
 });
 
 console.log(`\nIMAGEM NA CASA (16 out): ${ok} ok, ${falhou} falha(s)`);
+process.exit(falhou ? 1 : 0);
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+// global-16out (16 out 2026) — "desliga essa parte de IA e deixe apenas para
+// moderação, liberar para todos os servidores"; "as pessoas não sabem muito
+// bem sobre ID: tutorial de menção de cargo/membro e ID"; "traduções no
+// entretenimento e cor… deixar global o bot, a tradução de tudo".
+// ════════════════════════════════════════════════════════════════════════════
+SUITES["global-16out"] = async () => {
+const __m0 = await import("node:assert"); const assert = __m0.default;
+const __m1 = await import("node:fs"); const fs = __m1.default;
+process.env.IA = "1"; process.env.CONVERSA = "0"; process.env.LLM_MODEL_JUIZ = "moderacao";
+process.env.SERVIDOR = "CASA"; delete process.env.CHAT_SERVIDORES;
+process.env.BOT_TOKEN = "tok";
+process.env.DB_PATH = "/tmp/glo16.db"; process.env.CONFIG_PATH = "/tmp/glo16.json";
+for (const f of ["/tmp/glo16.db", "/tmp/glo16.db-wal", "/tmp/glo16.db-shm", "/tmp/glo16.json"]) fs.rmSync(f, { force: true });
+await import("./modulos/core/env.js");
+
+let ok = 0, falhou = 0;
+const t = async (nome, fn) => {
+  const o = [console.log, console.info, console.warn, console.error]; console.log = console.info = console.warn = console.error = () => {};
+  try { await fn(); [console.log, console.info, console.warn, console.error] = o; console.log(`  ✅ ${nome}`); ok++; }
+  catch (e) { [console.log, console.info, console.warn, console.error] = o; console.log(`  ❌ ${nome}\n     ${e.message}`); falhou++; }
+};
+
+console.log("── IA só para moderação, em todo servidor ──");
+const chat = await import("./modulos/ai/chat.js");
+await t("★ CONVERSA=0 + juiz dedicado (MODELO_MODERACAO): o &modia vale em todo servidor; o &chat em nenhum", () => {
+  assert.equal(chat.comandoIAPermitido("modia", "QUALQUER"), true);
+  assert.equal(chat.comandoIAPermitido("chat", "CASA"), false);
+  assert.equal(chat.servidorPermitido("CASA"), false);
+});
+await t("★ no modo enxuto a casa também é julgada pelo modelo pequeno", () => {
+  assert.equal(chat.modeloDoJuiz("CASA"), "moderacao");
+  assert.equal(chat.modeloDoJuiz("OUTRO"), "moderacao");
+});
+await t("★ o boot liga o juiz do &modia pela regra nova (não só com a conversa ligada)", () => {
+  const src = fs.readFileSync("main.js", "utf8");
+  assert.match(src, /if \(chat\.modIAPermitida\(\)\) modIA\.configurar\(\{ avaliar: chat\.avaliarModeracao \}\)/);
+});
+
+console.log("\n── &tutorial ids ──");
+const tut = fs.readFileSync("modulos/moderacao/tutorial.js", "utf8");
+await t("★ a área existe em PT e EN, com os três jeitos e o caminho do \"copiar ID\" no Stoat", () => {
+  for (const x of ["🆔 IDs e menções", "🆔 IDs and mentions", "Show 'copy ID' in context menus", "Copy role ID", "`<%ID>` cargo", "`<%ID>` role", "26 caracteres", "26-character"])
+    assert.ok(tut.includes(x), x);
+  assert.match(tut, /mention: "ids", mentions: "ids"/);
+  const visao = fs.readFileSync("modulos/moderacao/visao.js", "utf8");
+  assert.match(visao, /AREAS_DO_MEMBRO = new Set\(\[[^\]]*"ids"/, "membro também vê");
+});
+
+console.log("\n── a tela em inglês ──");
+const aliases = await import("./modulos/core/aliases.js");
+const ex = (t) => aliases.exibir(t, "en", "&", {});
+await t("★ título da ajuda: \"&entretenimento › briga\" → \"&entertainment › fight\"", () => {
+  assert.equal(ex("📖 Ajuda — &entretenimento › briga"), "📖 Ajuda — &entertainment › fight");
+  assert.equal(ex("veja &acesso"), "veja &access");
+});
+await t("★ marcadores das boas-vindas e moldes saem em inglês", () => {
+  assert.equal(ex("`{usuario}` `{nome}` `{servidor}` `{membros}`"), "`{user}` `{name}` `{server}` `{members}`");
+  assert.equal(ex("`&welcome text Hi, {usuario}!`"), "`&welcome text Hi, {user}!`");
+  assert.equal(ex("`&entretenimento cowsay [bicho] [pensa] ‹pergunta›`"), "`&entertainment cowsay [critter] [think] ‹question›`");
+});
+await t("★ áreas do tutorial com o nome em inglês", () => {
+  assert.equal(ex("`&tutorial permissoes` · `&tutorial canais`"), "`&tutorial permissions` · `&tutorial channels`");
+});
+await t("o português não muda", () => {
+  assert.equal(aliases.exibir("📖 Ajuda — &entretenimento › briga `{usuario}`", "pt", "&", {}), "📖 Ajuda — &entretenimento › briga `{usuario}`");
+});
+const cor = await import("./modulos/moderacao/cor-cargo.js");
+await t("★ &color: presets em inglês na entrada e na tela", () => {
+  assert.equal(cor.presetDe("fire"), "fogo"); assert.equal(cor.presetDe("rainbow"), "arco-iris"); assert.equal(cor.presetDe("fogo"), "fogo");
+  assert.equal(cor.nomePreset("poente", true), "sunset"); assert.equal(cor.nomePreset("poente", false), "poente");
+  const src = fs.readFileSync("modulos/moderacao/cor-cargo.js", "utf8");
+  assert.match(src, /createRole\(nomePreset\(nome, en\)\)/, "o cargo novo nasce no idioma do servidor");
+  assert.match(src, /cor <role> #FF00AA\\` · \\`\$\{P\}cor <role> purple/);
+});
+await t("★ &game: \"for\" vale na oferta e o id da moeda sai em inglês", () => {
+  const src = fs.readFileSync("modulos/game/game.js", "utf8");
+  assert.match(src, /\\s\+\(\?:por\|for\)\\s\+\(\[\\d\.,\]\+\)/);
+  assert.match(src, /const MOEDA_EN = \{ ouro: "gold", cristal: "crystal" \}/);
+});
+const dados = await import("./modulos/ferramentas/dados-rpg.js");
+await t("★ &roll com erro responde em inglês", () => {
+  const r = dados.rolarExpressao("xyz");
+  assert.match(dados.formatarResultado(r, true), /I didn't understand/);
+  assert.match(dados.formatarResultado(r, false), /não entendi/);
+});
+const ids = await import("./modulos/core/ids.js");
+await t("★ o motivo de ID errado sai no idioma da tela", () => {
+  assert.match(ids.descreverProblemaDeId("01ABC", "cargo", "en"), /has 5 characters \(an ID has 26\)/);
+  assert.match(ids.descreverProblemaDeId("01ABC", "cargo"), /tem 5 caracteres/);
+});
+const perms = await import("./modulos/moderacao/permissoes.js");
+await t("★ o rastro de permissões do &debug #canal em inglês", () => {
+  const server = { roles: new Map(), defaultPermissions: 0 };
+  const L = perms.rastrearPermissoes(server, { defaultPermissions: null }, { roles: [] }, null, "en").join("\n");
+  assert.match(L, /bot roles: 0 on the member/); assert.match(L, /channel default: \(no override\)/);
+  assert.doesNotMatch(L, /cargos do bot|canal padrão/);
+});
+
+console.log(`\nGLOBAL (16 out): ${ok} ok, ${falhou} falha(s)`);
 process.exit(falhou ? 1 : 0);
 };
 

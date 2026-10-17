@@ -1,7 +1,8 @@
 import { servidorPermitido as temIA, comandoIAPermitido } from "../ai/chat.js";
 import * as visaoMod from "./visao.js";
 import { arvoreSubtopicos, SUBTOPICOS_SO_IA, ligarFamilias, mesclarNos, MODIA_TAG } from "./help-arvore.js";
-import { nomeExibido } from "../core/aliases.js";
+import { nomeExibido, normalizarArgs, SUB } from "../core/aliases.js";
+import { REGISTRO } from "../comandos/index.js";
 import { grupos as gruposHelp, ALIAS_GRUPO, ORDEM as ORDEM_GRUPOS } from "./help-grupos.js";
 import { secaoParametros } from "./help-parametros.js";
 import { enviarPaginado, paginarLinhas } from "../core/paginas.js";
@@ -1092,6 +1093,31 @@ export async function cmdHelp(message, args, ctx) {
     return enviarPaginado(ctx, message.channel, {
       paginas, autorId: message.authorId, comandoPagina: null,
     });
+  }
+  // Parte do &automod pedida sozinha (`&help punishment`, `&help blocklist add`,
+  // `&help topics`): é a página dela dentro do &automod (17 out 2026: "não encontrado").
+  if (alvo && alvo !== "automod" && SUBTOPICOS.automod) {
+    const pedido = normalizarArgs("help", ["automod", ...args]);   // inglês → nome interno, pelo caminho
+    const procurar = (no, chave, caminho = []) => {
+      for (const k of Object.keys(no ?? {})) {
+        if (k === "titulo" || k === "texto" || typeof no[k] !== "object") continue;
+        if (k === chave) return [...caminho, k];
+        const fundo = procurar(no[k], chave, [...caminho, k]);
+        if (fundo) return fundo;
+      }
+      return null;
+    };
+    // a palavra pode ser de um nível mais fundo (`topics` → `assuntos`, dentro do sentinela)
+    const deQualquerNivel = Object.assign({}, ...Object.entries(SUB).filter(([k]) => k.startsWith("automod.")).map(([, m]) => m));
+    const palavra = String(pedido[1]).toLowerCase();
+    // só as partes que têm nome próprio no registro (não `canal`, `set`, `testar`, que são de dentro delas)
+    const automodReg = REGISTRO.find((c) => c.id === "automod");
+    const partes = new Set([...Object.keys(automodReg?.familias ?? {}), ...Object.keys(automodReg?.partes ?? {})]);
+    const interno = partes.has(palavra) ? palavra : partes.has(deQualquerNivel[palavra]) ? deQualquerNivel[palavra] : null;
+    const caminho = interno ? procurar(SUBTOPICOS.automod, interno) : null;
+    if (caminho) return cmdHelp(message, ["automod", ...caminho, ...pedido.slice(2)], ctx);
+    // um dos quatro grupos (`&help antispam`): a página do &automod, que explica os grupos
+    if (interno && ["antispam", "antiruido", "antilink"].includes(interno)) return cmdHelp(message, ["automod"], ctx);
   }
   if (alvo) {
     const lista = chavesGrupos.filter((k) => k !== "dono").join(", ");

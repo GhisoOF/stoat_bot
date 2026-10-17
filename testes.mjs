@@ -15100,6 +15100,18 @@ await t("&ping mede pelo relógio do Stoat (antes: 64973 ms com a máquina adian
   assert.ok(!/relógio da máquina/.test(editado[0]), "o aviso do relógio é só para o dono do bot");
 });
 
+await t("`&help punishment` (parte do &automod pedida sozinha) abre a página dela, nos dois idiomas", async () => {
+  const pt = await servidorNovo("pt"), en = await servidorNovo("en");
+  assert.match((await say("&help punicao", pt)).texto, /^📖 Ajuda — &automod › punicao/);
+  assert.match((await say("&help punishment ladder", pt)).texto, /^📖 Ajuda — &automod › punicao › escada/);
+  assert.match((await say("&help topics", pt)).texto, /^📖 Ajuda — &automod › sentinela › assuntos/);
+  assert.match((await say("&help punishment", en)).texto, /^📖 Help — &automod › punishment/);
+  assert.match((await say("&help blocklist", en)).texto, /^📖 Help — &automod › blocklist/);
+  assert.match((await say("&help antispam", en)).texto, /^📖 Help — &automod\n/);
+  // o que é de dentro de uma parte (`canal`) não vira página do automod por engano
+  assert.match((await say("&help canal", pt)).texto, /^❓ Não encontrado/);
+});
+
 // ── O inventário legível ──
 if (ATUALIZAR) {
   const porCanonico = {};

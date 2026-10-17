@@ -724,11 +724,11 @@ function ehCanalDeVoz(message) {
   if (marcador) {
     return sendEmbed(message.channel, tr(ctx, {
       title: "✏️ Troque o ‹…› por um valor",
-      description: `\`${marcador}\` na ajuda é um **espaço para preencher** — não é para digitar com os sinais.\n\nEx.: em \`${PREFIXO}warn <@pessoa>\`, mencione a pessoa: \`${PREFIXO}warn @Ana\`.\nOs valores que \`${PREFIXO}${canonico}\` aceita: \`${PREFIXO}help ${canonico}\``,
+      description: `\`${marcador}\` na ajuda é um **espaço para preencher** — não é para digitar com os sinais.\n\nEx.: em \`${aliases.citar("warn", "pt", PREFIXO)} <@pessoa>\`, mencione a pessoa: \`${aliases.citar("warn", "pt", PREFIXO)} @Ana\`.\nOs valores que \`${PREFIXO}${canonico}\` aceita: \`${PREFIXO}help ${canonico}\``,
       colour: COR.aviso,
     }, {
       title: "✏️ Replace the ‹…› with a value",
-      description: `\`${marcador}\` in the help is a **blank to fill in** — not something to type with the brackets.\n\nE.g.: in \`${PREFIXO}warn <@user>\`, mention the person: \`${PREFIXO}warn @Ana\`.\nThe values \`${PREFIXO}${canonico}\` accepts: \`${PREFIXO}help ${canonico}\``,
+      description: `\`${marcador}\` in the help is a **blank to fill in** — not something to type with the brackets.\n\nE.g.: in \`${aliases.citar("warn", "en", PREFIXO)} <@user>\`, mention the person: \`${aliases.citar("warn", "en", PREFIXO)} @Ana\`.\nThe values \`${PREFIXO}${canonico}\` accepts: \`${PREFIXO}help ${canonico}\``,
       colour: COR.aviso,
     }));
   }

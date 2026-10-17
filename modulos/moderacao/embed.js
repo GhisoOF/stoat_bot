@@ -1,4 +1,5 @@
 import { CORES as CORES_NOMEADAS, normalizarCor, nomesDeCor } from "../core/cores.js";
+import { citar } from "../core/aliases.js";
 import { ULID } from "../core/ids.js";
 import { validarUrlImagem, comoExibir, formatarLinkConteudo } from "../core/midia.js";
 
@@ -28,13 +29,13 @@ export async function cmdEmbed(message, args, ctx) {
 
   if (!corpo) {
     return sendEmbed(message.channel, lang === "en" ? {
-      title: "📝 How to use &embed",
+      title: `📝 How to use ${citar("embed", "en", PREFIXO)}`,
       description: [
         "Each field on its own **line**, in the `field: value` format. **No parentheses and no trailing commas.**",
         "",
         "**Example — copy and edit:**",
         "```",
-        `${PREFIXO}embed`,
+        `${citar("embed", "en", PREFIXO)}`,
         "title: Age",
         "description: Are you over or under 18?",
         "cor: #FF00FF",
@@ -45,17 +46,17 @@ export async function cmdEmbed(message, args, ctx) {
         "",
         "**Colors:** hex `#RRGGBB` or names: " + nomesDeCor(0, "en").map((c) => `\`${c}\``).join(", "),
         "",
-        `_I also accept everything on one line separated by \`|\`:_ \`${PREFIXO}embed title: Age | description: 18+ or under? | color: pink\``,
+        `_I also accept everything on one line separated by \`|\`:_ \`${citar("embed", "en", PREFIXO)} title: Age | description: 18+ or under? | color: pink\``,
       ].join("\n"),
       colour: COR.info,
     } : {
-      title: "📝 Como usar o &embed",
+      title: `📝 Como usar o ${citar("embed", "pt", PREFIXO)}`,
       description: [
         "Cada campo numa **linha**, no formato `campo: valor`. **Sem parênteses e sem vírgulas no fim.**",
         "",
         "**Exemplo — copie e edite:**",
         "```",
-        `${PREFIXO}embed`,
+        `${citar("embed", "pt", PREFIXO)}`,
         "titulo: Idade",
         "descricao: Você tem +18 ou -18 anos?",
         "cor: #FF00FF",
@@ -66,7 +67,7 @@ export async function cmdEmbed(message, args, ctx) {
         "",
         "**Cores:** hex `#RRGGBB` ou nomes: " + Object.keys(CORES_NOMEADAS).map((c) => `\`${c}\``).join(", "),
         "",
-        `_Também aceito tudo numa linha separando com \`|\`:_ \`${PREFIXO}embed titulo: Idade | descricao: +18 ou -18? | cor: rosa\``,
+        `_Também aceito tudo numa linha separando com \`|\`:_ \`${citar("embed", "pt", PREFIXO)} titulo: Idade | descricao: +18 ou -18? | cor: rosa\``,
       ].join("\n"),
       colour: COR.info,
     });
@@ -189,11 +190,11 @@ export async function cmdEmbed(message, args, ctx) {
     if (avisos.length) {
       await sendEmbed(message.channel, tr(ctx, {
         title: "⚠️ Enviei, mas repare nisto",
-        description: avisos.map((a) => `• ${a}`).join("\n") + `\n\nVeja a sintaxe com \`${PREFIXO}embed\` (sem argumentos).`,
+        description: avisos.map((a) => `• ${a}`).join("\n") + `\n\nVeja a sintaxe com \`${citar("embed", "pt", PREFIXO)}\` (sem argumentos).`,
         colour: COR.aviso,
       }, {
         title: "⚠️ Sent, but note this",
-        description: avisos.map((a) => `• ${a}`).join("\n") + `\n\nSee the syntax with \`${PREFIXO}embed\` (no arguments).`,
+        description: avisos.map((a) => `• ${a}`).join("\n") + `\n\nSee the syntax with \`${citar("embed", "en", PREFIXO)}\` (no arguments).`,
         colour: COR.aviso,
       }));
     }

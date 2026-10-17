@@ -1,4 +1,5 @@
 import { servidorPermitido as temIA, comandoIAPermitido } from "../ai/chat.js";
+import { citar } from "../core/aliases.js";
 
 import * as db from "../core/db.js";
 import { EVENTOS } from "../core/log.js";
@@ -135,7 +136,7 @@ export async function cmdConfig(message, args, ctx) {
   const nGanchos = (() => { try { return db.listarGanchos(serverId).length; } catch { return 0; } })();
 
   const recursos = [
-    `${T("**Idioma:**", "**Language:**")} ${en ? "English" : "Português"} — \`${PREFIXO}idioma\``,
+    `${T("**Idioma:**", "**Language:**")} ${en ? "English" : "Português"} — \`${citar("idioma", lang, PREFIXO)}\``,
     `${on(config.xp?.enabled)} ${T("**Níveis (XP)**", "**Levels (XP)**")} — ${nCargosNivel} ${T("cargo(s) de nível", "level role(s)")}${config.xp?.canalAnuncio ? ` · ${T("anúncio em", "announced in")} <#${config.xp.canalAnuncio}>` : ""}`,
     `${on(config.autorole?.roleId)} ${T("**Cargo automático**", "**Auto role**")} — ${config.autorole?.roleId ? `<%${config.autorole.roleId}>` : T("_(nenhum)_", "_(none)_")}`,
     `${on(nReacoes)} ${T("**Cargos por reação**", "**Reaction roles**")} — ${nReacoes} ${T("regra(s)", "rule(s)")}`,
@@ -150,7 +151,7 @@ export async function cmdConfig(message, args, ctx) {
   ];
   const tickVoz = [
     `${T("**Tickets:**", "**Tickets:**")} ${config.tickets?.painel?.canalId ? `${T("painel", "panel")} <#${config.tickets.painel.canalId}> · ` : ""}${config.tickets?.logCanal ? `log <#${config.tickets.logCanal}> · ${nTickets} ${T("aberto(s)", "open")}${config.tickets?.cargoEquipe ? ` · ${T("equipe", "team")} <%${config.tickets.cargoEquipe}>` : ""}` : T(`_(não configurado — \`${PREFIXO}ticket log #canal\`)_`, `_(not set up — \`${PREFIXO}ticket log #channel\`)_`)}`,
-    `**Webhooks:** ${nGanchos} ${T("gancho(s)", "hook(s)")} — \`${PREFIXO}webhook lista\``,
+    `**Webhooks:** ${nGanchos} ${T("gancho(s)", "hook(s)")} — \`${citar("webhook.lista", lang, PREFIXO)}\``,
     `${T("**Voz e música:**", "**Voice and music:**")} ${!vozAqui
       ? T("_indisponível neste servidor (o dono do bot libera em `TTS_SERVIDORES`)_", "_not available on this server (the bot owner enables it in `TTS_SERVIDORES`)_")
       : config.tts?.ativo && config.tts?.canalVoz ? `🟢 <#${config.tts.canalVoz}>` : T(`🔴 fora da call — \`${PREFIXO}entrar\``, `🔴 not in a call — \`${PREFIXO}entrar\``)}`,
@@ -210,8 +211,8 @@ export async function cmdConfig(message, args, ctx) {
       T("**🌐 Global** *(compartilhado entre servidores)*", "**🌐 Global** *(shared across servers)*"),
       `Debug: ${simL(cfgGlobal.debug !== false)} · ${T("Listas anti-link:", "Anti-link lists:")} ${cfgGlobal.linkBlocklistSources.length} ${T("fonte(s)", "source(s)")}, ${cfgGlobal.linkBlocklistManual.length} ${T("domínio(s) manual(is)", "manual domain(s)")}`,
       "",
-      T(`💡 Ajuste com \`${PREFIXO}automod\` (que reúne blocklist, whitelist, sentinela e punicao) e \`${PREFIXO}log\` — \`${PREFIXO}tutorial\` mostra o caminho, \`${PREFIXO}assistente\` percorre com você.`,
-        `💡 Adjust with \`${PREFIXO}automod\` (holds blocklist, whitelist, sentinel and punishment) and \`${PREFIXO}log\` — \`${PREFIXO}tutorial\` shows the path, \`${PREFIXO}assistente\` walks it with you.`),
+      T(`💡 Ajuste com \`${PREFIXO}automod\` (que reúne blocklist, whitelist, sentinela e punicao) e \`${citar("log", "pt", PREFIXO)}\` — \`${PREFIXO}tutorial\` mostra o caminho, \`${PREFIXO}assistente\` percorre com você.`,
+        `💡 Adjust with \`${PREFIXO}automod\` (holds blocklist, whitelist, sentinel and punishment) and \`${citar("log", "en", PREFIXO)}\` — \`${PREFIXO}tutorial\` shows the path, \`${PREFIXO}assistente\` walks it with you.`),
     ].join("\n"),
     colour: COR.info,
   });

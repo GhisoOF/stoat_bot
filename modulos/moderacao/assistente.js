@@ -1,5 +1,6 @@
 
 import { lingua } from "../core/i18n.js";
+import { citar } from "../core/aliases.js";
 import { resolverCanal, resolverCargo } from "../core/ids.js";
 import { temCargoStaff } from "./acesso.js";
 import { podeNoCanal } from "./permissoes.js";
@@ -441,8 +442,8 @@ async function aplicar(message, ctx, s) {
   const okN = resultado.filter((r) => r.ok).length;
   const linhas = resultado.map((r) => `${!r.ok ? "❌" : r.pendente ? "⚠️" : "✅"} \`${P}${r.args.join(" ")}\`${!r.ok || r.pendente ? ` — ${r.msg}` : ""}`);
   linhas.push("", T(s.lang,
-    `${okN}/${resultado.length} aplicado(s). \`${P}config\` mostra como ficou; \`${P}debug\` confere se o bot consegue agir em cada canal.`,
-    `${okN}/${resultado.length} applied. \`${P}config\` shows the result; \`${P}debug\` checks whether the bot can act in each channel.`));
+    `${okN}/${resultado.length} aplicado(s). \`${citar("config", "pt", P)}\` mostra como ficou; \`${P}debug\` confere se o bot consegue agir em cada canal.`,
+    `${okN}/${resultado.length} applied. \`${citar("config", "en", P)}\` shows the result; \`${P}debug\` checks whether the bot can act in each channel.`));
   // O silêncio (mute da escada, modo confirmar, &silenciar) é o timeout
   // nativo: sem TimeoutMembers, toda punição de silêncio vira quarentena.
   try {

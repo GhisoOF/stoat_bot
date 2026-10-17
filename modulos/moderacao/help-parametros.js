@@ -1,4 +1,5 @@
 import { parametrosDoRegistro } from "../core/ajuda-registro.js";
+import { citar } from "../core/aliases.js";
 
 export function parametros(P, lang = "pt") {
   // os comandos já migrados (fase 3) têm os parâmetros no registro, e eles vencem
@@ -21,7 +22,6 @@ function parametrosPT(P) {
   ];
   return {
     boasvindas: entradaSaida("boasvindas"),
-    adeus: entradaSaida("adeus"),
 
     // 17 out 2026: a sintaxe antiga (`anticaps set limiar`, `&punicao`, `<filtro> punicao`)
     // saiu daqui — os filtros viraram quatro grupos com partes.
@@ -38,10 +38,10 @@ function parametrosPT(P) {
     punicao: [
       { nome: "modo", valor: "avisar | apagar | confirmar | acumular | banir", desc: "`avisar` só avisa · `apagar` remove a mensagem · `confirmar` silencia e chama um moderador · `acumular` sobe uma escada a cada reincidência · `banir` bane na hora" },
       { nome: "escada", valor: "[aviso,10m,2h,ban]", desc: "os degraus do modo `acumular`. Sem valor, mostra a atual. Padrão: aviso → mute 5 min → mute 1 h → ban" },
-      { nome: "warns", valor: "<n>", desc: "quantos avisos até o ban — ajusta a escada (o ban é sempre o último degrau). Vale para o automod e para o `&warn`" },
+      { nome: "warns", valor: "<n>", desc: `quantos avisos até o ban — ajusta a escada (o ban é sempre o último degrau). Vale para o automod e para o \`${citar("warn", "pt", P)}\`` },
       { nome: "validade", valor: "<dias|0>", desc: "os avisos zeram depois de tantos dias sem um novo (padrão 30; 0 = nunca). Sem valor, mostra a atual" },
       { nome: "status", desc: "a configuração atual" },
-      { nome: "Não existe aqui", desc: "`testar`/`simular` são do `&automod sentinela` (é ele que lê o texto); avisos são com `&warn`, `&warn lista` e `&warn limpar`. O `&automod punicao` só decide **o que acontece** depois" },
+      { nome: "Não existe aqui", desc: `\`testar\`/\`simular\` são do \`&automod sentinela\` (é ele que lê o texto); avisos são com \`${citar("warn", "pt", P)}\`, \`${citar("warn.lista", "pt", P)}\` e \`${citar("warn.limpar", "pt", P)}\`. O \`&automod punicao\` só decide **o que acontece** depois` },
     ],
 
     sentinela: [
@@ -55,12 +55,6 @@ function parametrosPT(P) {
       { nome: "banir | liberar", valor: "<@pessoa|id>", desc: "decide um caso pendente do modo `confirmar`" },
       { nome: "assuntos", valor: "<tema> <off|alertar|apagar|punir>", desc: "temas proibidos pela regra (`politica`, `religiao`, `drogas`, `sexual`): nota de 0 a 10 por peso (termos, debate, ataque, contexto; \"kkkk\" e emoji amenizam) e a IA confirma. Também `testar <texto>`, `sensibilidade`, `ia on|off`" },
       { nome: "avatar", valor: "acao <alertar|silenciar|expulsar|banir>", desc: "foto de perfil de quem entra ou troca, pelo modelo de visão (padrão: silencia 24 h e avisa a staff)" },
-    ],
-
-    log: [
-      { nome: "canal", valor: "<#canal|aqui|id>", desc: "onde o bot escreve o que aconteceu (um canal que só a staff vê)" },
-      { nome: "off", desc: "desliga o registro" },
-      { nome: "<evento> on|off", desc: "`punicoes` · `membros` (entrou/saiu) · `mensagens` (apagadas/editadas) · `cargos` · `comandos` (barulhento, começa desligado)" },
     ],
 
     acesso: [
@@ -112,16 +106,6 @@ function parametrosPT(P) {
       { nome: "lista | presets", desc: "o que existe" },
     ],
 
-    embed: [
-      { nome: "titulo:", valor: "<texto>", desc: "a linha de cima" },
-      { nome: "descricao:", valor: "<texto>", desc: "o corpo (pode ter várias linhas; tudo até o próximo campo)" },
-      { nome: "cor:", valor: "<#hex|nome>", desc: "cor da barra" },
-      { nome: "rodape:", valor: "<texto>", desc: "linha pequena no fim" },
-      { nome: "imagem:", valor: "<url>", desc: "capa (anexo do Stoat) ou pré-visualização (URL de fora)" },
-      { nome: "canal:", valor: "<#canal>", desc: "publica em outro canal" },
-      { nome: "Formato", desc: "campos separados por `|` numa linha só, ou um por linha. Ex.: `&embed titulo: Regras | descricao: Seja legal | cor: azul`" },
-    ],
-
     xp: [
       { nome: "(nada) | rank", valor: "[@pessoa]", desc: "nível, XP e progresso" },
       { nome: "top", desc: "ranking do servidor" },
@@ -135,22 +119,6 @@ function parametrosPT(P) {
       { nome: "criarcargos", desc: "cria os cargos de nível sozinho" },
       { nome: "sincronizar", valor: "[@pessoa|todos]", desc: "devolve os cargos que o nível já garante — para quem saiu e voltou, ou quando os cargos foram criados depois *(ManagePermissions)*" },
       { nome: "reset", valor: "confirmar", desc: "zera o XP de **todos** do servidor" },
-    ],
-
-    warn: [
-      { nome: "<@pessoa|id|nome>", desc: "quem recebe o aviso" },
-      { nome: "[motivo]", desc: "fica no histórico e no log" },
-    ],
-
-    comando: [
-      { nome: "<nome> on|off", desc: "liga/desliga um comando neste servidor (todos os apelidos dele juntos)" },
-      { nome: "list", desc: "o que está desligado" },
-      { nome: "Essenciais", desc: "`help`, `comando`, `debug` e `idioma` nunca desligam — senão o admin se tranca fora" },
-    ],
-
-    idioma: [
-      { nome: "pt | en", desc: "idioma das respostas e dos nomes de comando exibidos neste servidor" },
-      { nome: "status", desc: "o idioma atual" },
     ],
 
     staff: [
@@ -190,18 +158,6 @@ function parametrosPT(P) {
       { nome: "loop", valor: "faixa | fila | nao", desc: "repete a faixa atual, a fila inteira, ou desliga" },
       { nome: "Entrar e sair", desc: "`&entrar` e `&sair` — a mesma call serve TTS e música; quando o TTS fala, a música **abaixa sozinha** e volta depois" },
       { nome: "Spotify", desc: "faixa avulsa sem chave; playlist/álbum pede `SPOTIFY_ID`/`SPOTIFY_SECRET` no `.env` de quem hospeda" },
-    ],
-
-    webhook: [
-      { nome: "criar", valor: "<nome> [#canal]", desc: "novo gancho; a URL secreta aparece uma vez (padrão: publica no canal do comando)" },
-      { nome: "lista", desc: "os ganchos do servidor, com canal, filtro e usos" },
-      { nome: "canal", valor: "<nome> <#canal>", desc: "muda para onde o gancho publica" },
-      { nome: "eventos", valor: "<nome> <lista|todos>", desc: "filtra: `push,issues,workflow_run`… (nomes dos eventos do GitHub; `discord` e `generico` para as outras fontes)" },
-      { nome: "url", valor: "<nome>", desc: "mostra a URL secreta de novo" },
-      { nome: "testar", valor: "<nome>", desc: "publica um embed de teste no canal do gancho" },
-      { nome: "remover", valor: "<nome>", desc: "apaga o gancho — a URL morre na hora" },
-      { nome: "Crafty/Minecraft", desc: "na config do servidor no Crafty: Webhooks → provider **Discord** → cole a URL do gancho" },
-      { nome: "GitHub", desc: "Settings → Webhooks → Add webhook → content type `application/json` → cole a URL" },
     ],
 
     tts: [
@@ -261,7 +217,6 @@ function parametrosEN(P) {
   ];
   return {
     boasvindas: joinLeave(),
-    adeus: joinLeave(),
 
     automod: [
       { nome: "off | on", desc: "turns the whole automod off or on at once (a new server starts off)" },
@@ -276,10 +231,10 @@ function parametrosEN(P) {
     punicao: [
       { nome: "mode", valor: "warn | delete | confirm | stack | ban", desc: "`warn` only warns · `delete` removes the message · `confirm` silences and calls a moderator · `stack` climbs a ladder on repeat · `ban` bans on the spot" },
       { nome: "ladder", valor: "[warn,10m,2h,ban]", desc: "the steps of `stack` mode. Without a value, shows the current one. Default: warning → 5 min mute → 1 h mute → ban" },
-      { nome: "warns", valor: "<n>", desc: "how many warnings until a ban — adjusts the ladder (the ban is always the last step). Applies to the automod and to `&warn`" },
+      { nome: "warns", valor: "<n>", desc: `how many warnings until a ban — adjusts the ladder (the ban is always the last step). Applies to the automod and to \`${citar("warn", "en", P)}\`` },
       { nome: "expiry", valor: "<days|0>", desc: "warnings reset after that many days without a new one (default 30; 0 = never). Without a value, shows the current one" },
       { nome: "status", desc: "the current setup" },
-      { nome: "Not here", desc: "`test`/`simulate` belong to `&automod sentinel` (it's the one that reads the text); warnings are `&warn`, `&warn list` and `&warn clear`. `&automod punishment` only decides **what happens** afterwards" },
+      { nome: "Not here", desc: `\`test\`/\`simulate\` belong to \`&automod sentinel\` (it's the one that reads the text); warnings are \`${citar("warn", "en", P)}\`, \`${citar("warn.lista", "en", P)}\` and \`${citar("warn.limpar", "en", P)}\`. \`&automod punishment\` only decides **what happens** afterwards` },
     ],
 
     sentinela: [
@@ -293,12 +248,6 @@ function parametrosEN(P) {
       { nome: "ban | dismiss", valor: "<@user|id>", desc: "decides a pending case from `confirm` mode" },
       { nome: "topics", valor: "<topic> <off|alert|delete|punish>", desc: "topics the rules forbid (`politics`, `religion`, `drugs`, `sexual`): a weighted 0–10 score (terms, debate, attacks, context; laughter and emoji soften it) and the AI confirms. Also `test <text>`, `sensitivity`, `ai on|off`" },
       { nome: "avatar", valor: "action <alert|silence|kick|ban>", desc: "profile picture of whoever joins or changes it, through the vision model (default: 24 h silence + staff alert)" },
-    ],
-
-    log: [
-      { nome: "canal", valor: "<#channel|here|id>", desc: "where the bot writes down what happened (a staff-only channel)" },
-      { nome: "off", desc: "turns logging off" },
-      { nome: "<event> on|off", desc: "`punicoes` · `membros` (joined/left) · `mensagens` (deleted/edited) · `cargos` · `comandos` (noisy, starts off)" },
     ],
 
     acesso: [
@@ -350,16 +299,6 @@ function parametrosEN(P) {
       { nome: "lista | presets", desc: "what exists" },
     ],
 
-    embed: [
-      { nome: "title:", valor: "<text>", desc: "the top line" },
-      { nome: "description:", valor: "<text>", desc: "the body (can span lines; everything until the next field)" },
-      { nome: "color:", valor: "<#hex|name>", desc: "bar color" },
-      { nome: "footer:", valor: "<text>", desc: "small line at the end" },
-      { nome: "image:", valor: "<url>", desc: "cover (Stoat attachment) or preview (external URL)" },
-      { nome: "channel:", valor: "<#channel>", desc: "posts in another channel" },
-      { nome: "Format", desc: "fields separated by `|` on one line, or one per line. E.g. `&embed title: Rules | description: Be kind | color: blue`" },
-    ],
-
     xp: [
       { nome: "(nothing) | rank", valor: "[@user]", desc: "level, XP and progress" },
       { nome: "top", desc: "server ranking" },
@@ -373,22 +312,6 @@ function parametrosEN(P) {
       { nome: "criarcargos", desc: "creates the level roles by itself" },
       { nome: "sincronizar", valor: "[@user|all]", desc: "hands back the roles the current level already grants — for people who left and came back, or when the roles were created later *(ManagePermissions)*" },
       { nome: "reset", valor: "confirm", desc: "wipes **everyone's** XP on the server" },
-    ],
-
-    warn: [
-      { nome: "<@user|id|name>", desc: "who gets the warning" },
-      { nome: "[reason]", desc: "kept in the history and the log" },
-    ],
-
-    comando: [
-      { nome: "<name> on|off", desc: "toggles a command on this server (all its aliases together)" },
-      { nome: "list", desc: "what's off" },
-      { nome: "Essentials", desc: "`help`, `command`, `debug` and `language` never turn off — otherwise the admin locks themselves out" },
-    ],
-
-    idioma: [
-      { nome: "pt | en", desc: "language of the replies and of the command names shown on this server" },
-      { nome: "status", desc: "the current language" },
     ],
 
     staff: [
@@ -428,18 +351,6 @@ function parametrosEN(P) {
       { nome: "loop", valor: "faixa | fila | nao", desc: "repeats the current track, the whole queue, or turns it off" },
       { nome: "Joining and leaving", desc: "`&entrar` and `&sair` — the same call serves TTS and music; while TTS speaks, the music **ducks by itself** and comes back after" },
       { nome: "Spotify", desc: "single tracks keyless; playlists/albums need `SPOTIFY_ID`/`SPOTIFY_SECRET` in the host's `.env`" },
-    ],
-
-    webhook: [
-      { nome: "criar", valor: "<name> [#channel]", desc: "new hook; the secret URL shows once (default: posts to the command's channel)" },
-      { nome: "lista", desc: "the server's hooks, with channel, filter and usage count" },
-      { nome: "canal", valor: "<name> <#channel>", desc: "changes where the hook posts" },
-      { nome: "eventos", valor: "<name> <list|all>", desc: "filters: `push,issues,workflow_run`… (GitHub event names; `discord` and `generico` for the other sources)" },
-      { nome: "url", valor: "<name>", desc: "shows the secret URL again" },
-      { nome: "testar", valor: "<name>", desc: "posts a test embed to the hook's channel" },
-      { nome: "remover", valor: "<name>", desc: "deletes the hook — the URL dies instantly" },
-      { nome: "Crafty/Minecraft", desc: "in the server config on Crafty: Webhooks → provider **Discord** → paste the hook URL" },
-      { nome: "GitHub", desc: "Settings → Webhooks → Add webhook → content type `application/json` → paste the URL" },
     ],
 
     tts: [

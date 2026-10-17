@@ -37,8 +37,8 @@ export async function cmdWarnings(message, args, ctx) {
   const alvo = await alvoDosAvisos(message, args, ctx, server);
   if (!alvo.vazio && !alvo.id) {
     return sendEmbed(message.channel, tr(ctx,
-      { title: "❌ Não achei essa pessoa", description: `Não encontrei \`${alvo.texto.slice(0, 60)}\` no servidor.\n\`${PREFIXO}warn lista <@pessoa|id|nome>\``, colour: COR.erro },
-      { title: "❌ Couldn't find that person", description: `I couldn't find \`${alvo.texto.slice(0, 60)}\` in the server.\n\`${PREFIXO}warn lista <@user|id|name>\``, colour: COR.erro }));
+      { title: "❌ Não achei essa pessoa", description: `Não encontrei \`${alvo.texto.slice(0, 60)}\` no servidor.\n\`${citar("warn.lista", "pt", PREFIXO)} <@pessoa|id|nome>\``, colour: COR.erro },
+      { title: "❌ Couldn't find that person", description: `I couldn't find \`${alvo.texto.slice(0, 60)}\` in the server.\n\`${citar("warn.lista", "en", PREFIXO)} <@user|id|name>\``, colour: COR.erro }));
   }
   const targetId = alvo.id ?? message.authorId;
   const pol = config.automod.punicao ?? {};
@@ -76,9 +76,9 @@ export async function cmdClearwarnings(message, args, ctx) {
   if (!alvo.id)
     return sendEmbed(message.channel, tr(ctx,
       { title: alvo.vazio ? "❌ De quem?" : "❌ Não achei essa pessoa",
-        description: `${alvo.vazio ? "" : `Não encontrei \`${alvo.texto.slice(0, 60)}\` no servidor.\n`}\`${PREFIXO}warn limpar <@pessoa|id|nome>\``, colour: COR.erro },
+        description: `${alvo.vazio ? "" : `Não encontrei \`${alvo.texto.slice(0, 60)}\` no servidor.\n`}\`${citar("warn.limpar", "pt", PREFIXO)} <@pessoa|id|nome>\``, colour: COR.erro },
       { title: alvo.vazio ? "❌ Whose?" : "❌ Couldn't find that person",
-        description: `${alvo.vazio ? "" : `I couldn't find \`${alvo.texto.slice(0, 60)}\` in the server.\n`}\`${PREFIXO}warn limpar <@user|id|name>\``, colour: COR.erro }));
+        description: `${alvo.vazio ? "" : `I couldn't find \`${alvo.texto.slice(0, 60)}\` in the server.\n`}\`${citar("warn.limpar", "en", PREFIXO)} <@user|id|name>\``, colour: COR.erro }));
   const targetId = alvo.id;
 
   const tinha = db.zerarAvisos(ctx.serverId, targetId);

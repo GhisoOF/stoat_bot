@@ -92,12 +92,6 @@ function detalhesPT(P) {
       perm: "ManagePermissions",
       ex: `${P}assistente rapido`,
     },
-    warn: {
-      uso: `${P}warn <@pessoa|id|nome> [motivo]`,
-      desc: "Dá um aviso manual a alguém. Usa o **mesmo contador e a mesma escada** do automod: no modo `acumular`, o aviso manual sobe um degrau (aviso → silêncio → … → ban) — e o bot diz qual é o próximo. Os avisos zeram depois de 30 dias sem um novo (`&automod punicao validade`).\n\nA pessoa pode ser **menção, ID ou nome**.\nVer os avisos: `&warn lista [@pessoa]` · Zerar: `&warn limpar @pessoa` _(ManagePermissions)_",
-      perm: "ManageMessages",
-      ex: `${P}warn @Fulano flood no chat de arte`,
-    },
     servidores: {
       uso: `${P}servidores [relatorio …]`,
       desc: "**Só o dono do bot** (fora do índice). Duas coisas:\n\n"
@@ -206,11 +200,6 @@ function detalhesPT(P) {
       perm: "reagir/abrir: todo mundo · resto: staff", ex: `${P}ticket painel #suporte`,
     },
 
-    webhook: {
-      uso: `${P}webhook [criar <nome> [#canal]|lista|canal|eventos|url|testar|remover]`,
-      desc: "Receptor **universal** de webhooks: serviços externos publicam num canal seu.\n\n**Funciona com:** GitHub (push, issues, PR, releases, Actions, star, fork…), Crafty/Minecraft, e **qualquer ferramenta que fale o formato Discord** (Uptime Kuma, Grafana…) — é só colar a URL do gancho onde iria a URL do Discord.\n\n**O modelo:** cada *gancho* tem nome, canal próprio e filtro de eventos. Separar por chats é criar um gancho por assunto:\n`&webhook criar issues #issues` + `&webhook eventos issues issues,issue_comment`\n`&webhook criar ci #ci` + `&webhook eventos ci workflow_run`\n`&webhook criar mine #minecraft` ← aponte o Crafty (provider Discord) para ele\n\n**Segurança:** a URL é o segredo (token de 128 bits); `remover` mata a URL na hora; teto de 30 publicações/min por gancho contra flood; até 10 ganchos por servidor; o canal tem de ser **deste servidor**.\n\n**Qual endereço usar:** serviço da INTERNET (GitHub…) exige base pública https — `sudo tailscale funnel --bg 8095` e `WEBHOOK_URL_BASE=https://<máquina>.ts.net` no `.env`; container da MESMA máquina (Crafty…) usa a ponte do Docker `http://172.17.0.1:8095/...` — a URL interna colada num serviço da internet dá \"failed to connect\" sem explicação.",
-      perm: "ManageMessages (ou staff); `lista` é livre", ex: `${P}webhook criar github #avisos`,
-    },
     musica: {
       uso: `${P}musica <link ou nome> | [pausar|play|skip|fila|parar|volume <0-200>|loop <faixa|fila|nao>]`,
       desc: "Música nas calls — **YouTube, SoundCloud e Spotify**, com fila por canal.\n\n_A máquina toca até `MUSICA_MAX_SIMULTANEAS` músicas ao mesmo tempo (padrão 3); no limite, o servidor do dono do bot tem a vez._\n\n**O básico:**\n`&entrar` — de qualquer canal, estando numa call: ela vai até você (ou `&entrar call 1`). O `&musica` funciona de qualquer canal e, se ela não estiver em call, entra na sua\n`&musica <link ou nome>` — toca; com som rolando, entra na fila\n`&musica pausar` · `&musica play` — pausa e retoma\n`&musica skip` — próxima · `&musica fila` — a lista atual\n`&musica parar` — para e limpa a fila · `&sair` — ela sai da call\n\n**Ajustes:** `&musica volume 80` (0 a 200%) · `&musica loop faixa|fila|nao`\n\n**Fontes:** link ou playlist do YouTube/SoundCloud, busca por texto, e faixa do Spotify (sem chave). Playlist/álbum do Spotify pede `SPOTIFY_ID`/`SPOTIFY_SECRET` no `.env` de quem hospeda o bot.\n\n**Quando um vídeo não toca** (restrição de idade, indisponível, bloqueado na região): ela procura **outra versão** da mesma música (outro upload no YouTube, depois o SoundCloud) e diz qual tocou; se nenhuma der, diz o motivo — e `&musica fila` mostra a última que falhou.\n\n**Com o TTS na mesma call:** a música **abaixa sozinha** enquanto a fala sai e volta ao volume normal depois (ducking).\n\n_Aliases: `&m` · `&play` · `&tocar`._",
@@ -241,21 +230,6 @@ function detalhesPT(P) {
       desc: "Embed publicado quando alguém **entra** no servidor.\n\n`&boasvindas canal aqui` — define onde publicar (já liga)\n`&boasvindas titulo <texto>` · `&boasvindas texto <descrição>`\n`&boasvindas cor <cor>` · `&boasvindas imagem <url|limpar>`\n`&boasvindas testar` — publica usando você de exemplo\n`&boasvindas padrao` — volta ao texto de fábrica\n\n**Marcadores:** `{usuario}` `{nome}` `{servidor}` `{membros}`",
       perm: "ManageMessages", ex: `${P}boasvindas canal aqui`,
     },
-    adeus: {
-      uso: `${P}adeus [canal|titulo|texto|cor|imagem|testar|padrao|on|off]`,
-      desc: "Embed publicado quando alguém **sai** do servidor (saída, expulsão ou ban). Mesmas opções do `&boasvindas`.\n\n_Nas despedidas o `{usuario}` vira o **nome** em vez de menção: quem saiu não está mais no servidor, e a menção apareceria como um ID cru._",
-      perm: "ManageMessages", ex: `${P}adeus canal aqui`,
-    },
-    idioma: {
-      uso: `${P}idioma [pt|en]`,
-      desc: "Define o idioma em que o bot responde **neste servidor**: Português ou Inglês. Sem argumento, mostra o idioma atual. Também responde por `&language` e `&lang`. O idioma oficial do bot é o **inglês**: servidor novo começa nele.",
-      perm: "ManagePermissions (para mudar)", ex: `${P}idioma pt`,
-    },
-    reset: {
-      uso: `${P}reset · ${P}reset confirm <código> · ${P}reset undo`,
-      desc: "Volta a Judy à **configuração de fábrica** neste servidor: automod (tudo desligado), punição, canal de log, boas-vindas/adeus, cargo automático, staff e acesso, comandos desativados, ajustes de XP/TTS/tickets/IA, regras e FAQ, e o idioma (inglês).\n\n**Fica:** níveis de XP, avisos, saldos, personagens do RPG, cargos por reação, webhooks, feeds RSS, tickets abertos e a lista global de bans.\n\nEm três passos: `&reset` mostra o que muda e dá um código; `&reset confirm <código>` (em até 2 min, a mesma pessoa) aplica; `&reset undo` desfaz por 24 h.",
-      perm: "dono do servidor (ou o dono do bot)", ex: `${P}reset`,
-    },
     chat: {
       uso: `${P}chat <mensagem>`,
       desc: "Conversa com a IA local (a Judy). Quando você pergunta algo do mundo, ela pesquisa na internet antes de responder (os links só aparecem quando você pede a busca: \"pesquisa…\", \"procura na internet…\"), faz contas exatas, lê o próprio código, monta um perfil de quem conversa com ela e adapta o tom a cada pessoa. Também vê imagens que você anexar.\n\n**Subcomandos:**\n`&chat status` — se o serviço de IA está no ar\n`&chat perfil [@user]` — o que a Judy sabe sobre alguém\n`&chat mapear [@user]` — captura bio/status do cartão\n`&chat cuidado [@user] on|off` — trata a pessoa com gentileza extra (opt-in)\n`&chat esquecer` — apaga tudo que a Judy sabe de você\n`&chat esquecer tudo` — zera a memória do servidor *(ManageServer)*\n`&chat livre on|off|modo` — a Judy participa sozinha do canal *(ManagePermissions)*\n`&chat comentar aqui|off|pordia <n>` — comentários por iniciativa *(ManagePermissions)*\n\nQuando responde alguém, mantém o papo fluido por um tempo. Se ela já estiver respondendo outra pessoa, você entra na **fila** (vê a posição) e é atendido na ordem. Conta escrita na mensagem (`263857 * 3`) vai sempre para a calculadora, nunca de cabeça.",
@@ -272,31 +246,11 @@ function detalhesPT(P) {
       perm: "ManagePermissions",
       ex: `${P}debug`,
     },
-    comando: {
-      uso: `${P}comando [disable|enable <nome>]`,
-      desc: "Ativa ou desativa comandos do bot neste servidor. `&comando` sozinho lista o estado de cada um. Ex.: `&comando desativar ban`. Os comandos `help` e `comando` não podem ser desativados.\n\n_Aceita as duas línguas: `desativar`/`disable`, `ativar`/`enable`._",
-      perm: "ManagePermissions", ex: `${P}comando desativar repete`,
-    },
-    embed: {
-      uso: `${P}embed` + " → depois `campo: valor`, um por linha",
-      desc: "Publica uma mensagem embed customizável.\n\n**Escreva assim** (sem parênteses, sem vírgula no fim):\n```\n&embed\ntitulo: Idade\ndescricao: Você tem +18 ou -18 anos?\ncor: #FF00FF\n```\n**Campos:** `titulo:` `descricao:` `cor:` `rodape:` `imagem:` (URL) `canal:` (ID p/ publicar em outro canal).\nCor por hex (`#5865F2`) ou nome (azul, verde, rosa…).\nTambém aceita tudo numa linha separando com `|`.",
-      perm: "ManageMessages", ex: `${P}embed titulo: Idade | descricao: +18 ou -18? | cor: rosa`,
-    },
     reactionrole: {
       uso: `${P}reactionrole <add|remove|list>`,
       desc: "Cargos por reação: quem reagir com o emoji ganha o cargo; quem tirar a reação perde.\n\n`&reactionrole add <mensagem> <emoji> <idCargo>`\n`&reactionrole remove <mensagem>` — remove as regras daquela mensagem\n`&reactionrole exclusivo <mensagem> on|off` — **on**: escolher um emoji troca o cargo anterior (ex.: cor); **off**: acumula (ex.: interesses)\n`&reactionrole recarregar` — se os cargos pararem de ser entregues após um restart\n`&reactionrole list` — regras deste servidor\n\n**A mensagem** pode ser o **ID** ou o **link** dela (menu `...` → *Copiar link*) — os dois funcionam.\n**O cargo** pode ser **mencionado** (`<%Cargo>`) ou o ID (Configurações → Cargos → *Copy role ID*).\n\nO bot precisa de `React`, `ViewChannel`, `ReadMessageHistory` e **AssignRoles**, e o cargo dele deve estar acima do cargo entregue.",
       perm: "ManageRole",
       ex: `${P}reactionrole add https://stoat.chat/server/.../01ABC... 🎮 01XYZ...`,
-    },
-    config: {
-      uso: `${P}config`,
-      desc: "Mostra TODAS as configurações atuais do servidor num só lugar: módulos do automod, política de punição, chat de logs, convites permitidos e punições ativas.",
-      perm: "ManagePermissions", ex: `${P}config`,
-    },
-    log: {
-      uso: `${P}log [here | <idDoCanal> | off | <evento> <on|off>]`,
-      desc: "Chat de logs do servidor. `here` usa o canal atual; `<idDoCanal>` define por ID; `off` desativa. Eventos: `punicoes`, `membros`, `mensagens`, `cargos`, `comandos` — cada um pode ser ligado/desligado. O log sai no idioma do servidor (`&idioma`).",
-      perm: "ManagePermissions", ex: `${P}log here`,
     },
   };
 }
@@ -320,12 +274,6 @@ function detalhesEN(P) {
       desc: "**Guided** setup: the bot asks one question at a time, you answer in plain text, and at the end it shows a summary and applies everything — using the same commands you would type by hand (and shows which ones, so you learn them).\n\n`&assistente` — menu\n`&assistente rapido` — language, staff, log, protection, welcome (~2 min)\n`&assistente completo` — quick + punishment ladder, global list, XP, autorole\n`&assistente canais` — sorts your channels into the 3 types and tells you what to click in Stoat\n`&assistente protecao` — only automod, sentinel and punishment\n\nDuring the questions: `skip` skips, `back` goes back, `cancel` quits. Each person has their own; it expires after 10 min without an answer.",
       perm: "ManagePermissions",
       ex: `${P}assistente rapido`,
-    },
-    warn: {
-      uso: `${P}warn <@user|id|name> [reason]`,
-      desc: "Gives someone a manual warning. It uses the **same counter and the same ladder** as the automod: in `acumular` (accumulate) mode a manual warning climbs one step (warning → silence → … → ban) — and the bot tells you the next one. Warnings reset after 30 days without a new one (`&automod punicao validade`).\n\nThe person can be a **mention, ID or name**.\nSee warnings: `&warn lista [@user]` · Reset: `&warn limpar @user` _(ManagePermissions)_",
-      perm: "ManageMessages",
-      ex: `${P}warn @Someone flooding the art channel`,
     },
     servidores: {
       uso: `${P}servidores [report …]`,
@@ -435,11 +383,6 @@ function detalhesEN(P) {
       perm: "react/open: everyone · rest: staff", ex: `${P}ticket painel #support`,
     },
 
-    webhook: {
-      uso: `${P}webhook [create <name> [#channel]|list|channel|events|url|test|remove]`,
-      desc: "**Universal** webhook receiver: external services post into your channels.\n\n**Works with:** GitHub (push, issues, PRs, releases, Actions, star, fork…), Crafty/Minecraft, and **anything that speaks the Discord format** (Uptime Kuma, Grafana…) — just paste the hook URL where the Discord URL would go.\n\n**The model:** each *hook* has a name, its own channel and an event filter. Per-chat separation is one hook per subject:\n`&webhook criar issues #issues` + `&webhook eventos issues issues,issue_comment`\n`&webhook criar ci #ci` + `&webhook eventos ci workflow_run`\n`&webhook criar mine #minecraft` ← point Crafty (Discord provider) at it\n\n**Security:** the URL is the secret (128-bit token); `remover` kills the URL instantly; 30 posts/min cap per hook against floods; up to 10 hooks per server; the channel must be **on this server**.\n\n**Which address to use:** INTERNET services (GitHub…) need a public https base — `sudo tailscale funnel --bg 8095` and `WEBHOOK_URL_BASE=https://<machine>.ts.net` in `.env`; SAME-machine containers (Crafty…) use the Docker bridge `http://172.17.0.1:8095/...` — an internal URL pasted into an internet service fails with an unexplained \"failed to connect\".",
-      perm: "ManageMessages (or staff); `lista` is open", ex: `${P}webhook criar github #alerts`,
-    },
     musica: {
       uso: `${P}musica <link or name> | [pausar|play|skip|fila|parar|volume <0-200>|loop <faixa|fila|nao>]`,
       desc: "Music in calls — **YouTube, SoundCloud and Spotify**, with a per-channel queue.\n\n_The machine plays up to `MUSICA_MAX_SIMULTANEAS` songs at once (default 3); at the limit, the bot owner's server goes first._\n\n**The basics:**\n`&entrar` — from any channel, while you're in a call: she comes to you (or `&entrar call 1`). `&musica` works from any channel and, if she isn't in a call, joins yours\n`&musica <link or name>` — plays; if something is on, it queues\n`&musica pausar` · `&musica play` — pause and resume\n`&musica skip` — next · `&musica fila` — current queue\n`&musica parar` — stop and clear · `&sair` — she leaves the call\n\n**Tuning:** `&musica volume 80` (0 to 200%) · `&musica loop faixa|fila|nao`\n\n**Sources:** YouTube/SoundCloud link or playlist, free-text search, and Spotify tracks (keyless). Spotify playlists/albums need `SPOTIFY_ID`/`SPOTIFY_SECRET` in the host's `.env`.\n\n**When a video won't play** (age-restricted, unavailable, region-blocked): she looks for **another version** of the same song (another YouTube upload, then SoundCloud) and says which one played; if none works, she says why — and `&musica fila` shows the last one that failed.\n\n**With TTS in the same call:** the music **ducks automatically** while speech plays and comes back after.\n\n_Aliases: `&m` · `&play` · `&tocar`._",
@@ -470,21 +413,6 @@ function detalhesEN(P) {
       desc: "Embed posted when someone **joins** the server.\n\n`&welcome channel here` — where to post (turns it on)\n`&welcome title <text>` · `&welcome text <description>`\n`&welcome colour <colour>` · `&welcome image <url|clear>`\n`&welcome test` — posts using you as the example\n`&welcome default` — back to the factory text\n\n**Markers:** `{usuario}` `{nome}` `{servidor}` `{membros}`",
       perm: "ManageMessages", ex: `${P}welcome channel here`,
     },
-    adeus: {
-      uso: `${P}goodbye [channel|title|text|colour|image|test|default|on|off]`,
-      desc: "Embed posted when someone **leaves** the server (leave, kick or ban). Same options as `&welcome`.\n\n_In farewells `{usuario}` becomes the **name** rather than a mention: whoever left isn't on the server anymore, and the mention would show up as a raw ID._",
-      perm: "ManageMessages", ex: `${P}goodbye channel here`,
-    },
-    idioma: {
-      uso: `${P}language [pt|en]`,
-      desc: "Sets the language the bot replies in **on this server**: Portuguese or English. Without an argument, shows the current language. Also answers to `&idioma` and `&lang`. The bot's official language is **English**: new servers start in it.",
-      perm: "ManagePermissions (to change)", ex: `${P}language pt`,
-    },
-    reset: {
-      uso: `${P}reset · ${P}reset confirm <code> · ${P}reset undo`,
-      desc: "Puts Judy back to **factory settings** on this server: automod (all off), punishment, log channel, welcome/goodbye, autorole, staff and access, disabled commands, XP/TTS/ticket/AI settings, rules and FAQ, and the language (English).\n\n**Stays:** members' XP levels, warnings, balances, RPG characters, reaction roles, webhooks, RSS feeds, open tickets and the global ban list.\n\nThree steps: `&reset` shows what changes and gives a code; `&reset confirm <code>` (within 2 min, same person) applies it; `&reset undo` reverts it for 24 h.",
-      perm: "server owner (or the bot owner)", ex: `${P}reset`,
-    },
     chat: {
       uso: `${P}chat <message>`,
       desc: "Talk to the local AI (Judy). When you ask about the world, she searches the web before answering (links only show up when you ask for the search: \"search…\", \"look it up online…\"), does exact math, reads her own code, builds a profile of whoever talks to her and adapts her tone to each person. She can also see images you attach.\n\n**Subcommands:**\n`&chat status` — whether the AI service is up\n`&chat perfil [@user]` — what Judy knows about someone\n`&chat mapear [@user]` — captures the profile card bio/status\n`&chat cuidado [@user] on|off` — treats the person with extra kindness (opt-in)\n`&chat esquecer` — erases everything Judy knows about you\n`&chat esquecer tudo` — wipes the server's memory *(ManageServer)*\n`&chat livre on|off|modo` — Judy joins the channel on her own *(ManagePermissions)*\n`&chat comentar aqui|off|pordia <n>` — comments on her own initiative *(ManagePermissions)*\n\nWhen she replies to someone, she keeps the conversation flowing for a while. If she's already answering someone else you join the **queue** (you'll see your position) and get served in order. Arithmetic written in the message (`263857 * 3`) always goes to the calculator, never done in her head.",
@@ -501,31 +429,11 @@ function detalhesEN(P) {
       perm: "ManagePermissions",
       ex: `${P}debug`,
     },
-    comando: {
-      uso: `${P}comando [disable|enable <name>]`,
-      desc: "Enables or disables bot commands on this server. `&comando` alone lists each one's state. E.g.: `&comando disable ban`. The `help` and `command` commands can't be disabled.",
-      perm: "ManagePermissions", ex: `${P}comando disable repete`,
-    },
-    embed: {
-      uso: `${P}embed` + " → then `field: value`, one per line",
-      desc: "Posts a customizable embed message.\n\n**Write it like this** (no parentheses, no trailing comma):\n```\n&embed\ntitle: Age\ndescription: Are you over or under 18?\ncolor: #FF00FF\n```\n**Fields:** `title:` `description:` `color:` `footer:` `image:` (URL) `channel:` (ID to post in another channel) — the Portuguese names work too.\nColor by hex (`#5865F2`) or name (blue, green, pink…).\nAlso accepts everything on one line separated by `|`.",
-      perm: "ManageMessages", ex: `${P}embed title: Age | description: 18+ or under? | color: pink`,
-    },
     reactionrole: {
       uso: `${P}reactionrole <add|remove|list>`,
       desc: "Reaction roles: whoever reacts with the emoji gets the role; removing the reaction removes the role.\n\n`&reactionrole add <message> <emoji> <roleId>`\n`&reactionrole remove <message>` — removes that message's rules\n`&reactionrole exclusivo <message> on|off` — **on**: picking one emoji swaps out the previous role (e.g. colors); **off**: they stack (e.g. interests)\n`&reactionrole recarregar` — if roles stop being handed out after a restart\n`&reactionrole list` — this server's rules\n\n**The message** can be its **ID** or its **link** (`...` menu → *Copy link*) — both work.\n**The role** can be **mentioned** (`<%Role>`) or given by ID (Settings → Roles → *Copy role ID*).\n\nThe bot needs `React`, `ViewChannel`, `ReadMessageHistory` and **AssignRoles**, and its role must be above the role being handed out.",
       perm: "ManageRole",
       ex: `${P}reactionrole add https://stoat.chat/server/.../01ABC... 🎮 01XYZ...`,
-    },
-    config: {
-      uso: `${P}config`,
-      desc: "Shows ALL of the server's current settings in one place: automod modules, punishment policy, log channel, allowed invites and active punishments.",
-      perm: "ManagePermissions", ex: `${P}config`,
-    },
-    log: {
-      uso: `${P}log [here | <channelId> | off | <event> <on|off>]`,
-      desc: "The server's log channel. `here` uses the current channel; `<channelId>` sets it by ID; `off` disables it. Events: `punicoes`, `membros`, `mensagens`, `cargos`, `comandos` — each can be toggled. The log follows the server's language (`&language`).",
-      perm: "ManagePermissions", ex: `${P}log here`,
     },
   };
 }
@@ -899,7 +807,7 @@ export async function cmdHelp(message, args, ctx) {
         : (lang === "en"
           ? `🔍 \`${P}help <command> <part>\` — one part of it (\`${P}help game admin\`, \`${P}help xp setup\`)`
           : `🔍 \`${P}help <comando> <parte>\` — uma parte dele (\`${P}help game admin\`, \`${P}help xp setup\`)`),
-      visao.nivel === "membro" ? null : (lang === "en" ? `🌐 \`${P}idioma pt|en\` — server language` : `🌐 \`${P}idioma pt|en\` — idioma do servidor`),
+      visao.nivel === "membro" ? null : (lang === "en" ? `🌐 \`${citar("idioma", "en", P)} pt|en\` — server language` : `🌐 \`${citar("idioma", "pt", P)} pt|en\` — idioma do servidor`),
       "",
       ({ membro: lang === "en" ? "_👤 You're seeing the commands you can use. Staff sees the setup ones too._" : "_👤 Você está vendo os comandos que pode usar. A staff vê também os de configuração._",
          staff: lang === "en" ? "_🛡️ Staff view: everything this server has._" : "_🛡️ Visão da staff: tudo o que este servidor tem._",

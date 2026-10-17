@@ -893,7 +893,7 @@ function arvorePT(P) {
       eventos: {
         titulo: "log <evento>",
         texto: [
-          "Cada categoria liga e desliga sozinha: `&log <evento> <on|off>`.",
+          `Cada categoria liga e desliga sozinha: \`${citar("log", "pt", P)} <evento> <on|off>\`.`,
           "",
           "`punicoes` — avisos, silêncios e bans (automod e manuais)",
           "`membros` — entradas e saídas do servidor",
@@ -902,9 +902,9 @@ function arvorePT(P) {
           "`comandos` — tentativas de uso de comandos do bot",
           "",
           "**Exemplo**",
-          `\`${P}log mensagens off\` — para de registrar edição/exclusão`,
+          `\`${citar("log.mensagens.off", "pt", P)}\` — para de registrar edição/exclusão`,
           "",
-          `_Todas começam ligadas. O canal se define com \`${P}log canal aqui\` (ou menção, link, ID, nome)._`,
+          `_Todas começam ligadas. O canal se define com \`${citar("log.canal.aqui", "pt", P)}\` (ou menção, link, ID, nome)._`,
           "_Os registros no canal de log saem sempre em português._",
         ].join("\n"),
       },
@@ -1042,9 +1042,9 @@ function arvorePT(P) {
         texto: [
           "O **prompt de personalidade** da IA, configurável por servidor.",
           "",
-          `\`${P}personalidade\` — mostra a atual (personalizada ou padrão)`,
-          `\`${P}personalidade definir <texto>\` — define o prompt deste servidor`,
-          `\`${P}personalidade resetar\` — volta ao padrão embutido`,
+          `\`${citar("personalidade", "pt", P)}\` — mostra a atual (personalizada ou padrão)`,
+          `\`${citar("personalidade", "pt", P)} definir <texto>\` — define o prompt deste servidor`,
+          `\`${citar("personalidade", "pt", P)} resetar\` — volta ao padrão embutido`,
           "",
           "_Exige ManageServer. O texto substitui só a PERSONALIDADE; as regras de_",
           "_segurança, formato e idioma continuam valendo. Máx. 2000 caracteres._",
@@ -1137,7 +1137,7 @@ function arvorePT(P) {
         titulo: "boasvindas / adeus",
         texto: [
           `Embeds publicados quando alguém **entra** (\`${P}boasvindas\`) ou **sai**`,
-          `(\`${P}adeus\`) do servidor. Os dois têm exatamente as mesmas opções.`,
+          `(\`${citar("adeus", "pt", P)}\`) do servidor. Os dois têm exatamente as mesmas opções.`,
           "",
           "**Configurar**",
           `\`${P}boasvindas canal aqui\` — onde publicar _(já liga)_`,
@@ -1210,9 +1210,9 @@ function arvorePT(P) {
       gerenciar: {
         titulo: "comando desativar/ativar",
         texto: [
-          `\`${P}comando\` — lista os comandos e o estado de cada um`,
-          `\`${P}comando desativar <nome>\` — desliga neste servidor`,
-          `\`${P}comando ativar <nome>\` — religa`,
+          `\`${citar("comando", "pt", P)}\` — lista os comandos e o estado de cada um`,
+          `\`${citar("comando.desativar", "pt", P)} <nome>\` — desliga neste servidor`,
+          `\`${citar("comando.ativar", "pt", P)} <nome>\` — religa`,
           "",
           "**A trava de segurança**",
           "`help` e `comando` **não podem** ser desativados — senão você se trancaria",
@@ -2198,7 +2198,7 @@ function arvoreEN(P) {
       eventos: {
         titulo: "log <event>",
         texto: [
-          "Each category toggles on its own: `&log <event> <on|off>`.",
+          `Each category toggles on its own: \`${citar("log", "en", P)} <event> <on|off>\`.`,
           "",
           "`punicoes` — warnings, silences and bans (automod and manual)",
           "`membros` — server joins and leaves",
@@ -2207,9 +2207,9 @@ function arvoreEN(P) {
           "`comandos` — command usage attempts",
           "",
           "**Example**",
-          `\`${P}log mensagens off\` — stops logging edits/deletions`,
+          `\`${citar("log.mensagens.off", "en", P)}\` — stops logging edits/deletions`,
           "",
-          `_All start enabled. Set the channel with \`${P}log channel here\` (or a mention, link, ID, name)._`,
+          `_All start enabled. Set the channel with \`${citar("log.canal.here", "en", P)}\` (or a mention, link, ID, name)._`,
           "_Entries in the log channel are always written in Portuguese._",
         ].join("\n"),
       },
@@ -2347,9 +2347,9 @@ function arvoreEN(P) {
         texto: [
           "The AI **personality prompt**, configurable per server.",
           "",
-          `\`${P}personality\` — shows the current one (custom or default)`,
-          `\`${P}personality set <text>\` — sets this server's prompt`,
-          `\`${P}personality reset\` — back to the built-in default`,
+          `\`${citar("personalidade", "en", P)}\` — shows the current one (custom or default)`,
+          `\`${citar("personalidade", "en", P)} set <text>\` — sets this server's prompt`,
+          `\`${citar("personalidade", "en", P)} reset\` — back to the built-in default`,
           "",
           "_Requires ManageServer. The text replaces only the PERSONALITY; safety,_",
           "_format and language rules still apply. Max 2000 characters._",
@@ -2442,7 +2442,7 @@ function arvoreEN(P) {
         titulo: "welcome / goodbye",
         texto: [
           `Embeds posted when someone **joins** (\`${P}welcome\`) or **leaves**`,
-          `(\`${P}goodbye\`) the server. Both have exactly the same options.`,
+          `(\`${citar("adeus", "en", P)}\`) the server. Both have exactly the same options.`,
           "",
           "**Configure**",
           `\`${P}welcome channel here\` — where to post _(turns it on)_`,
@@ -2515,9 +2515,9 @@ function arvoreEN(P) {
       gerenciar: {
         titulo: "comando disable/enable",
         texto: [
-          `\`${P}comando\` — lists the commands and each one's state`,
-          `\`${P}comando disable <name>\` — turns it off on this server`,
-          `\`${P}comando enable <name>\` — turns it back on`,
+          `\`${citar("comando", "en", P)}\` — lists the commands and each one's state`,
+          `\`${citar("comando.desativar", "en", P)} <name>\` — turns it off on this server`,
+          `\`${citar("comando.ativar", "en", P)} <name>\` — turns it back on`,
           "",
           "**The safety latch**",
           "`help` and `command` **can't** be disabled — otherwise you'd lock yourself out,",

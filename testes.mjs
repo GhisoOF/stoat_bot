@@ -15474,6 +15474,16 @@ await t("lote 3b em inglês: `&silence remove|off`, `&initiative remove|clear` (
   assert.match((await say("&repeat", en)).texto, /What should I repeat\? `&repeat ‹text›`/);
   assert.match((await say("&help rolar", pt)).texto, /^📖 Ajuda — &rolar\n/);
 });
+await t("lote 3c: a ajuda cita os apelidos de verdade (antes da correção: `&idioma` e `&idioma`), e `&log channel here`, `&warn list`, `&webhook test` em inglês", async () => {
+  const [pt, en] = await nos2("&help idioma", "&help language");
+  assert.match(pt, /Também responde por `language` e `lang`/);
+  assert.match(en, /Also answers to `idioma` and `lang`/);
+  const sid = await servidorNovo("en");
+  assert.match((await say("&log channel here", sid)).texto, /^📜 Log channel set/);
+  assert.match((await say("&warn list", sid)).texto, /^📋 Warnings\n/);
+  await say("&webhook create gancho1", sid);
+  assert.match((await say("&webhook test gancho1", sid)).texto, /^🧪 Webhook test\n/);
+});
 await t("comandos migrados não são citados à mão em lugar nenhum (`${P}autorole …` → citar(\"autorole.set\", …))", () => {
   const ler = (d) => fs.readdirSync(d, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? (e.name === "comandos" ? [] : ler(`${d}/${e.name}`)) : e.name.endsWith(".js") ? [`${d}/${e.name}`] : []));
   const nomes = MIGRADOS.flatMap((id) => [id, ...(REG.find((x) => x.id === id).apelidos ?? [])]);
@@ -15483,7 +15493,7 @@ await t("comandos migrados não são citados à mão em lugar nenhum (`${P}autor
   for (const arq of [...ler("modulos"), "main.js"]) {
     fs.readFileSync(arq, "utf8").split("\n").forEach((l, i) => {
       if (/^\s*\/\//.test(l)) return;   // comentário pode citar à mão
-      if (re.test(l)) achados.push(`${arq}:${i + 1}: ${l.trim().slice(0, 90)}`);
+      if (re.test(l.replace(/\s\/\/\s.*$/, ""))) achados.push(`${arq}:${i + 1}: ${l.trim().slice(0, 90)}`);   // …também no fim da linha
     });
   }
   assert.deepEqual(achados, []);

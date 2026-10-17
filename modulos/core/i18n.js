@@ -1,4 +1,5 @@
 
+import { citar } from "../core/aliases.js";
 // Idioma efetivo do servidor deste ctx. Sem idioma definido → o padrão do bot
 // (inglês desde 13 out 2026; IDIOMA_PADRAO=pt no .env volta ao português).
 const padrao = () => ((process.env.IDIOMA_PADRAO || "en").trim().toLowerCase() === "pt" ? "pt" : "en");
@@ -31,10 +32,10 @@ export async function cmdIdioma(message, args, ctx) {
       colour: COR.info,
       description: [
         `**🇧🇷 Idioma atual:** ${atual === "en" ? "Inglês" : "Português"}`,
-        `Para mudar (staff): \`${P}idioma pt\` ou \`${P}idioma en\``,
+        `Para mudar (staff): \`${citar("idioma", "pt", P)} pt\` ou \`${citar("idioma", "pt", P)} en\``,
         "",
         `**🇺🇸 Current language:** ${atual === "en" ? "English" : "Portuguese"}`,
-        `To change it (staff): \`${P}language en\` or \`${P}language pt\``,
+        `To change it (staff): \`${citar("idioma", "en", P)} en\` or \`${citar("idioma", "en", P)} pt\``,
       ].join("\n"),
     });
   }
@@ -62,7 +63,7 @@ export async function cmdIdioma(message, args, ctx) {
     colour: COR.sucesso,
     description: [
       "From now on I will reply in **English** on this server.",
-      `Change it back anytime with \`${P}language pt\`.`,
+      `Change it back anytime with \`${citar("idioma", "en", P)} pt\`.`,
       "",
       `Start here: \`${P}help\` · \`${P}tutorial\``,
     ].join("\n"),
@@ -71,7 +72,7 @@ export async function cmdIdioma(message, args, ctx) {
     colour: COR.sucesso,
     description: [
       "A partir de agora respondo em **Português** neste servidor.",
-      `Para trocar: \`${P}idioma en\`.`,
+      `Para trocar: \`${citar("idioma", "pt", P)} en\`.`,
       "",
       `Comece por: \`${P}help\` · \`${P}tutorial\``,
     ].join("\n"),
@@ -89,9 +90,9 @@ export async function talvezSugerirIdioma(message, ctx) {
   // inglês primeiro: é o idioma oficial do bot (13 out 2026)
   const en = lingua(ctx) === "en";
   const blocoEN = ["🇺🇸 **English** — this server hasn't picked a language yet. Anyone with",
-    `**ManagePermissions** can set it with: \`${P}language en\``];
+    `**ManagePermissions** can set it with: \`${citar("idioma", "en", P)} en\``];
   const blocoPT = ["🇧🇷 **Português** — este servidor ainda não escolheu um idioma. Quem tem",
-    `**ManagePermissions** define com: \`${P}idioma pt\``];
+    `**ManagePermissions** define com: \`${citar("idioma", "pt", P)} pt\``];
   await sendEmbed(message.channel, {
     title: en ? "🌐 Choose the language / Escolha o idioma" : "🌐 Escolha o idioma / Choose the language",
     colour: COR.info,

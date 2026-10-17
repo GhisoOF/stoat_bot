@@ -1,7 +1,7 @@
 
 import * as log from "../core/log.js";
 import { tr, lingua } from "../core/i18n.js";
-import { nomeExibido, corrigirSubcomando } from "../core/aliases.js";
+import { nomeExibido, corrigirSubcomando, citar } from "../core/aliases.js";
 import { maisParecido } from "../core/parecido.js";
 
 export const GRANT_ALL_SAFE = 0x000fffffffffffffn;
@@ -38,8 +38,8 @@ export async function cmdComando(message, args, ctx) {
         linhas.join("  "),
         "",
         "**Usage:**",
-        `\`${PREFIXO}comando disable <name>\` — disables`,
-        `\`${PREFIXO}comando enable <name>\` — re-enables`,
+        `\`${citar("comando.desativar", "en", PREFIXO)} <name>\` — disables`,
+        `\`${citar("comando.ativar", "en", PREFIXO)} <name>\` — re-enables`,
         "",
         "_`help` and `command` can't be disabled (so you can't lock yourself out)._",
       ].join("\n"),
@@ -52,8 +52,8 @@ export async function cmdComando(message, args, ctx) {
         linhas.join("  "),
         "",
         "**Uso:**",
-        `\`${PREFIXO}comando desativar <nome>\` — desativa`,
-        `\`${PREFIXO}comando ativar <nome>\` — reativa`,
+        `\`${citar("comando.desativar", "pt", PREFIXO)} <nome>\` — desativa`,
+        `\`${citar("comando.ativar", "pt", PREFIXO)} <nome>\` — reativa`,
         "",
         "_`help` e `comando` não podem ser desativados (para você não se trancar para fora)._",
       ].join("\n"),
@@ -66,25 +66,25 @@ export async function cmdComando(message, args, ctx) {
   if (!DESLIGA.has(sub) && !LIGA.has(sub)) {
     // `destivar` → "você quis dizer `desativar`?" (17 out 2026: só mostrava o uso)
     const certo = corrigirSubcomando("comando", sub);
-    const pronto = certo ? `${PREFIXO}comando ${certo}${args.length > 1 ? " " + args.slice(1).join(" ") : ""}` : null;
+    const pronto = certo ? `${citar("comando", lingua(ctx), PREFIXO)} ${certo}${args.length > 1 ? " " + args.slice(1).join(" ") : ""}` : null;
     return sendEmbed(message.channel, tr(ctx,
-      { title: "❌ Uso incorreto", description: [pronto ? `Você quis dizer \`${pronto}\`?\n` : null, `\`${PREFIXO}comando <desativar|ativar> <nome>\``].filter(Boolean).join("\n"), colour: COR.erro },
-      { title: "❌ Wrong usage", description: [pronto ? `Did you mean \`${pronto}\`?\n` : null, `\`${PREFIXO}comando <disable|enable> <name>\``].filter(Boolean).join("\n"), colour: COR.erro }));
+      { title: "❌ Uso incorreto", description: [pronto ? `Você quis dizer \`${pronto}\`?\n` : null, `\`${citar("comando", "pt", PREFIXO)} <desativar|ativar> <nome>\``].filter(Boolean).join("\n"), colour: COR.erro },
+      { title: "❌ Wrong usage", description: [pronto ? `Did you mean \`${pronto}\`?\n` : null, `\`${citar("comando", "en", PREFIXO)} <disable|enable> <name>\``].filter(Boolean).join("\n"), colour: COR.erro }));
   }
 
   const alvo = canon(args[1]?.toLowerCase());
   if (!alvo)
     return sendEmbed(message.channel, tr(ctx,
       { title: "❌ Falta o comando",
-        description: `Diga qual comando. Ex.: \`${PREFIXO}comando desativar ban\``, colour: COR.erro },
+        description: `Diga qual comando. Ex.: \`${citar("comando.desativar", "pt", PREFIXO)} ban\``, colour: COR.erro },
       { title: "❌ Missing the command",
-        description: `Tell me which command. E.g.: \`${PREFIXO}comando disable ban\``, colour: COR.erro }));
+        description: `Tell me which command. E.g.: \`${citar("comando.desativar", "en", PREFIXO)} ban\``, colour: COR.erro }));
 
   if (!geren.includes(alvo)) {
     // `pnig` → `ping` (o nome do comando ou o apelido, nos dois idiomas)
     const nomesGeren = Object.keys(estado.CANONICO ?? {}).filter((n) => geren.includes(canon(n))).concat(geren, geren.map((c) => nomeExibido(c, "en")));
     const perto = maisParecido(alvo, nomesGeren);
-    const pronto = perto ? `${PREFIXO}comando ${args[0]} ${perto}` : null;
+    const pronto = perto ? `${citar("comando", lingua(ctx), PREFIXO)} ${args[0]} ${perto}` : null;
     return sendEmbed(message.channel, tr(ctx, {
       title: "❌ Comando inválido",
       description: `${pronto ? `Você quis dizer \`${pronto}\`?\n\n` : ""}\`${alvo}\` não pode ser gerenciado.\nGerenciáveis: ${geren.map((c) => `\`${c}\``).join(", ")}`,

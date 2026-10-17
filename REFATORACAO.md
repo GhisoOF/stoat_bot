@@ -897,6 +897,51 @@ Só a tela em inglês muda — 17 citações nas telas do teste; nenhuma tela em
 mudou. O inventário passou a ter 150 nomes. Um teste confere as três páginas
 `&help` em inglês, o `&repeat` sozinho e que o `&help rolar` em português continua.
 
+## 6o. Fase 3c: mais dez (18 out 2026)
+
+O Ghieh escolheu terminar a fase 3 antes do espanhol (a etapa 4 do plano): o
+espanhol precisa de uma terceira versão de ~2.000 pares de texto PT/EN, e fica mais
+barato com a ajuda já toda no registro.
+
+Página no registro: `&warn`, `&log`, `&idioma`, `&comando`, `&embed`, `&adeus`,
+`&reset`, `&config` e `&webhook` (20 comandos migrados ao todo). Citações por
+referência: esses nove e o `&personalidade` (que não tem página `&help`; ficou só a
+citação), 224, em 21 arquivos.
+
+**O que o script ganhou:**
+- o idioma de cada linha pela função em volta (`detalhesPT`, `arvoreEN`…), e não só
+  pelas palavras;
+- nos parâmetros, `nome: "canal"` vira `{ pt: "canal", en: "channel" }` quando a
+  palavra é subcomando;
+- apelido citado de propósito ("também responde por `&lang`") não vira mais o nome do
+  comando — o script avisa e eu escrevo à mão. **Era um erro meu nesta rodada:** a
+  página do `&idioma` saía "também responde por `&idioma` e `&idioma`". Corrigido e
+  com teste.
+
+**Nos textos em inglês, o inglês escrito direto** (antes dependiam da tradução da
+tela): `punishments`/`members`/… no `&log`, `stack` no `&warn`, `list`/`remove` no
+`&webhook`, `{user}`/`{name}`… no `&adeus`, e o `&log canal aqui` que o `&debug`
+ensinava em inglês.
+
+**Handlers só com o nome interno:** o `&warn` não aceita mais `list` e `clear` por
+conta própria, o `&log` não aceita `channel`, o `&webhook` não aceita `list`,
+`remove` e `test` — chegam traduzidos. O assistente chama `["log", "canal", …]`,
+que já é o nome interno.
+
+**Mudou na tela, de propósito:**
+- `&help embed`: o uso tinha crases dentro de crases e saía quebrado
+  (`` `&embed → then`field: value`, one per line` ``);
+- `&help idioma` em inglês dizia "also answers to `&language` and `&language`";
+- `&help warn` em inglês: `` `stack` (accumulate) `` virou `` `stack` ``.
+
+O resto das 334 telas é igual; nas 987 respostas, só relógio, sorteio e IDs.
+
+**Provas:** 1 teste novo (57 no total: as páginas, os apelidos citados, `&log channel
+here`, `&warn list` e `&webhook test` em inglês). Mutações: tirar o `list` do `&warn`,
+o `channel` do `&log` ou o `test` do `&webhook` do registro derruba a suíte (as
+citações por referência quebram, e o teste novo reprova); a página do `&idioma` com o
+erro de volta também.
+
 ---
 
 ## 7. O que NÃO fiz, e por quê

@@ -1,5 +1,6 @@
 
 import * as store from "../core/config-store.js";
+import { citar } from "../core/aliases.js";
 import { tr, lingua } from "../core/i18n.js";
 
 const MAX_TAMANHO = Number(process.env.PERSONA_MAX_CHARS || 2000);
@@ -65,16 +66,16 @@ export async function cmdPersonalidade(message, args, ctx) {
         description: [
           atual ? `**Atual (personalizada):**\n${atual.slice(0, 1500)}` : "**Atual:** padrão embutido (Judy).",
           "",
-          `\`${P}personalidade definir <texto>\` — define o prompt de personalidade deste servidor`,
-          `\`${P}personalidade resetar\` — volta ao padrão`,
+          `\`${citar("personalidade", "pt", P)} definir <texto>\` — define o prompt de personalidade deste servidor`,
+          `\`${citar("personalidade", "pt", P)} resetar\` — volta ao padrão`,
           "_Precisa da permissão Gerenciar Servidor. O texto substitui apenas a PERSONALIDADE; as regras de segurança e formato continuam valendo._",
         ].join("\n"), colour: COR.info },
       { title: "🎭 AI personality",
         description: [
           atual ? `**Current (custom):**\n${atual.slice(0, 1500)}` : "**Current:** built-in default (Judy).",
           "",
-          `\`${P}personality set <text>\` — sets this server's personality prompt`,
-          `\`${P}personality reset\` — back to the default`,
+          `\`${citar("personalidade", "en", P)} set <text>\` — sets this server's personality prompt`,
+          `\`${citar("personalidade", "en", P)} reset\` — back to the default`,
           "_Requires Manage Server. The text replaces only the PERSONALITY; safety and format rules still apply._",
         ].join("\n"), colour: COR.info }));
   }
@@ -90,8 +91,8 @@ export async function cmdPersonalidade(message, args, ctx) {
     const texto = args.slice(1).join(" ").trim();
     if (!texto) {
       return sendEmbed(message.channel, tr(ctx,
-        { title: "❓ Faltou o texto", description: `Uso: \`${P}personalidade definir <texto do prompt>\``, colour: COR.aviso },
-        { title: "❓ Missing text", description: `Usage: \`${P}personality set <prompt text>\``, colour: COR.aviso }));
+        { title: "❓ Faltou o texto", description: `Uso: \`${citar("personalidade", "pt", P)} definir <texto do prompt>\``, colour: COR.aviso },
+        { title: "❓ Missing text", description: `Usage: \`${citar("personalidade", "en", P)} set <prompt text>\``, colour: COR.aviso }));
     }
     if (texto.length > MAX_TAMANHO) {
       return sendEmbed(message.channel, tr(ctx,
@@ -114,8 +115,8 @@ export async function cmdPersonalidade(message, args, ctx) {
   }
 
   return sendEmbed(message.channel, tr(ctx,
-    { title: "❓ Subcomando desconhecido", description: `Use \`${P}personalidade ver\`, \`definir <texto>\` ou \`resetar\`.`, colour: COR.aviso },
-    { title: "❓ Unknown subcommand", description: `Use \`${P}personality view\`, \`set <text>\` or \`reset\`.`, colour: COR.aviso }));
+    { title: "❓ Subcomando desconhecido", description: `Use \`${citar("personalidade", "pt", P)} ver\`, \`definir <texto>\` ou \`resetar\`.`, colour: COR.aviso },
+    { title: "❓ Unknown subcommand", description: `Use \`${citar("personalidade", "en", P)} view\`, \`set <text>\` or \`reset\`.`, colour: COR.aviso }));
 }
 
 // ─── Quem criou a Judy ───────────────────────────────────────────────────────

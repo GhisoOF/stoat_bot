@@ -1,5 +1,6 @@
 
 import * as rajada from "./rajada.js";
+import { citar } from "../core/aliases.js";
 import { analisarConteudo, normalizarParaAnalise } from "./scorecard.js";
 import * as db  from "../core/db.js";
 import { descreverErro, tipoDoErro } from "../core/erros.js";
@@ -538,7 +539,7 @@ async function alertarAdministracao(ctx, { server, canal, userId, sinal, faixa, 
     sinal.sinais.length ? `**Signals:** ${sinal.sinais.join(", ")}` : null,
     "",
     "Nothing was punished — the score stayed below the threshold. This is a **pattern**, and patterns are worth a human look.",
-    `\`${PREFIXO}automod sentinel ban ${userId}\` · \`${PREFIXO}automod sentinel dismiss ${userId}\` · \`${PREFIXO}warn list ${userId}\``,
+    `\`${PREFIXO}automod sentinel ban ${userId}\` · \`${PREFIXO}automod sentinel dismiss ${userId}\` · \`${citar("warn.lista", "en", PREFIXO)} ${userId}\``,
   ] : [
     mencao,
     `**Possível ameaça** — <@${userId}> acionou o sentinela **${sinal.vezes}×** em ${sinal.janelaMin} min.`,
@@ -546,7 +547,7 @@ async function alertarAdministracao(ctx, { server, canal, userId, sinal, faixa, 
     sinal.sinais.length ? `**Sinais:** ${sinal.sinais.join(", ")}` : null,
     "",
     "Nada foi punido — a nota ficou abaixo do limiar. Isto é um **padrão**, e padrão merece olho humano.",
-    `\`${PREFIXO}automod sentinela banir ${userId}\` · \`${PREFIXO}automod sentinela liberar ${userId}\` · \`${PREFIXO}warn lista ${userId}\``,
+    `\`${PREFIXO}automod sentinela banir ${userId}\` · \`${PREFIXO}automod sentinela liberar ${userId}\` · \`${citar("warn.lista", "pt", PREFIXO)} ${userId}\``,
   ];
 
   try {

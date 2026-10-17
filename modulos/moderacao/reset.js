@@ -18,6 +18,7 @@
 // apagar isso não tem volta, e cada um tem o próprio comando.
 
 import * as store from "../core/config-store.js";
+import { citar } from "../core/aliases.js";
 import * as db from "../core/db.js";
 import * as log from "../core/log.js";
 import { lingua } from "../core/i18n.js";
@@ -43,8 +44,8 @@ export async function cmdReset(message, args, ctx) {
   if (!sid) return sendEmbed(message.channel, { title: "❌", description: T("Isto só funciona dentro de um servidor.", "This only works inside a server."), colour: COR.erro });
   if (!podeResetar(message, server, ctx)) {
     return sendEmbed(message.channel, { title: T("🔒 Só o dono do servidor", "🔒 Server owner only"), colour: COR.erro,
-      description: T("O `&reset` apaga toda a configuração da Judy neste servidor — só o **dono do servidor** (ou o dono do bot) pode usar.",
-        "`&reset` wipes all of Judy's settings on this server — only the **server owner** (or the bot owner) can use it.") });
+      description: T(`O \`${citar("reset", "pt", P)}\` apaga toda a configuração da Judy neste servidor — só o **dono do servidor** (ou o dono do bot) pode usar.`,
+        `\`${citar("reset", "en", P)}\` wipes all of Judy's settings on this server — only the **server owner** (or the bot owner) can use it.`) });
   }
 
   const sub = String(args[0] ?? "").toLowerCase();
@@ -75,11 +76,11 @@ export async function cmdReset(message, args, ctx) {
     if (!p || Date.now() > p.ate) {
       pedidos.delete(chave);
       return sendEmbed(message.channel, { title: T("⌛ Pedido vencido", "⌛ Request expired"), colour: COR.aviso,
-        description: T(`Comece de novo com \`${P}reset\` (o código vale 2 min).`, `Start again with \`${P}reset\` (the code is valid for 2 min).`) });
+        description: T(`Comece de novo com \`${citar("reset", "pt", P)}\` (o código vale 2 min).`, `Start again with \`${citar("reset", "en", P)}\` (the code is valid for 2 min).`) });
     }
     if (codigo !== p.codigo) {
       return sendEmbed(message.channel, { title: T("❌ Código errado", "❌ Wrong code"), colour: COR.erro,
-        description: T(`Use \`${P}reset confirm ${p.codigo}\`.`, `Use \`${P}reset confirm ${p.codigo}\`.`) });
+        description: T(`Use \`${citar("reset", "pt", P)} confirm ${p.codigo}\`.`, `Use \`${citar("reset", "en", P)} confirm ${p.codigo}\`.`) });
     }
     pedidos.delete(chave);
     const antes = structuredClone(store.configDoServidor(sid));
@@ -90,18 +91,18 @@ export async function cmdReset(message, args, ctx) {
     console.log(`[RESET] servidor ${sid} voltou à configuração de fábrica (por ${message.authorId})`);
     // o log de antes ainda recebe o aviso (o canal de log também foi zerado)
     await log.registrar({ ...ctx, config: antes }, "comandos", {
-      titulo: "🏭 Configuração de fábrica", descricao: `<@${message.authorId}> resetou a Judy neste servidor. \`${P}reset undo\` desfaz por 24 h.`,
-      en: { titulo: "🏭 Factory settings", descricao: `<@${message.authorId}> reset Judy on this server. \`${P}reset undo\` undoes it for 24 h.` } });
+      titulo: "🏭 Configuração de fábrica", descricao: `<@${message.authorId}> resetou a Judy neste servidor. \`${citar("reset", "pt", P)} undo\` desfaz por 24 h.`,
+      en: { titulo: "🏭 Factory settings", descricao: `<@${message.authorId}> reset Judy on this server. \`${citar("reset", "en", P)} undo\` undoes it for 24 h.` } });
     const enDepois = depois.language === "en";
     return sendEmbed(message.channel, { title: enDepois ? "🏭 Factory settings restored" : "🏭 Configuração de fábrica", colour: COR.sucesso,
       description: (enDepois ? [
         "Judy is back to factory settings on this server: automod off, no log channel, no staff roles, default language (English).",
         "",
-        `Set it up again: \`${P}wizard\` · Changed your mind? \`${P}reset undo\` (within 24 h).`,
+        `Set it up again: \`${P}wizard\` · Changed your mind? \`${citar("reset", "en", P)} undo\` (within 24 h).`,
       ] : [
         "A Judy voltou à configuração de fábrica neste servidor: automod desligado, sem canal de log, sem cargos de staff, idioma padrão (inglês).",
         "",
-        `Configurar de novo: \`${P}assistente\` · Arrependeu? \`${P}reset undo\` (em até 24 h).`,
+        `Configurar de novo: \`${P}assistente\` · Arrependeu? \`${citar("reset", "pt", P)} undo\` (em até 24 h).`,
       ]).join("\n") });
   }
 
@@ -117,8 +118,8 @@ export async function cmdReset(message, args, ctx) {
       "**Stays:** members' XP levels, warnings, balances, RPG characters, reaction roles, webhooks,",
       "RSS feeds, open tickets and the global ban list.",
       "",
-      `To confirm, within 2 min: \`${P}reset confirm ${codigo}\``,
-      `_You can undo it for 24 h with \`${P}reset undo\`._`,
+      `To confirm, within 2 min: \`${citar("reset", "en", P)} confirm ${codigo}\``,
+      `_You can undo it for 24 h with \`${citar("reset", "en", P)} undo\`._`,
     ] : [
       "**Volta ao padrão:** toda a configuração da Judy neste servidor —",
       "automod (tudo desligado), punição, canal de log, boas-vindas/adeus, cargo automático, staff e acesso,",
@@ -127,8 +128,8 @@ export async function cmdReset(message, args, ctx) {
       "**Fica:** níveis de XP, avisos, saldos, personagens do RPG, cargos por reação, webhooks,",
       "feeds RSS, tickets abertos e a lista global de bans.",
       "",
-      `Para confirmar, em até 2 min: \`${P}reset confirm ${codigo}\``,
-      `_Dá para desfazer por 24 h com \`${P}reset undo\`._`,
+      `Para confirmar, em até 2 min: \`${citar("reset", "pt", P)} confirm ${codigo}\``,
+      `_Dá para desfazer por 24 h com \`${citar("reset", "pt", P)} undo\`._`,
     ]).join("\n") });
 }
 

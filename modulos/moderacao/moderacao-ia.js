@@ -87,7 +87,7 @@ export async function moderar(message, ctx) {
     "",
     "**O que você pode fazer** (copie o comando):",
     "• Ignorar — não faça nada.",
-    `• Avisar — \`&warn ${autorId} <motivo>\``,
+    `• Avisar — \`${citar("warn", "pt")} ${autorId} <motivo>\``,
     `• Silenciar — \`${citar("silenciar", "pt")} ${autorId} <tempo>\``,
     `• Banir — \`${citar("ban", "pt")} ${autorId} <motivo>\``,
   ].join("\n");
@@ -104,7 +104,7 @@ export async function moderar(message, ctx) {
     "",
     "**What you can do** (copy the command):",
     "• Ignore — do nothing.",
-    `• Warn — \`&warn ${autorId} <reason>\``,
+    `• Warn — \`${citar("warn", "en")} ${autorId} <reason>\``,
     `• Silence — \`${citar("silenciar", "en")} ${autorId} <time>\``,
     `• Ban — \`${citar("ban", "en")} ${autorId} <reason>\``,
   ].join("\n");

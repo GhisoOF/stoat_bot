@@ -181,7 +181,7 @@ function secaoModeracao(d, T) {
   const resumo = grupos.map((x) => `${x.g} ${x.ligadas}/${x.total}`).join(" · ");
   const resumoEn = grupos.map((x) => `${nomeGrupo(x.g, "en")} ${x.ligadas}/${x.total}`).join(" · ");
   itens.push({ nivel: "info", texto: T(`automod: ${resumo} · punição \`${d.pol.modo ?? "avisar"}\``, `automod: ${resumoEn} · punishment \`${nomeModo(d.pol.modo ?? "avisar", "en")}\``) });
-  if (!d.config?.log?.canalId) itens.push({ nivel: "aviso", texto: T("sem canal de log — punições e alertas não ficam registrados", "no log channel — punishments and alerts aren't recorded"), dica: T("`&log canal aqui` num canal só-staff", "`&log canal aqui` in a staff-only channel") });
+  if (!d.config?.log?.canalId) itens.push({ nivel: "aviso", texto: T("sem canal de log — punições e alertas não ficam registrados", "no log channel — punishments and alerts aren't recorded"), dica: T(`\`${citar("log.canal.aqui", "pt")}\` num canal só-staff`, `\`${citar("log.canal.aqui", "en")}\` in a staff-only channel`) });
   const off = d.config?.comandosDesativados ?? [];
   if (off.length) itens.push({ nivel: "info", texto: `${T("comandos desativados", "disabled commands")}: ${off.map((c) => `\`${c}\``).join(", ")}` });
   if ((d.config?.acesso?.canais?.modo ?? "todos") !== "todos") {

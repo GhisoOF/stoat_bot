@@ -1,5 +1,6 @@
 
 import * as db from "../core/db.js";
+import { citar } from "../core/aliases.js";
 import * as log from "../core/log.js";
 import { tr, lingua } from "../core/i18n.js";
 import { resolverUsuario } from "../core/ids.js";
@@ -13,10 +14,11 @@ export async function cmdWarn(message, args, ctx) {
   // ── A família dos avisos mora aqui dentro ──
   // `&warn lista` = `&warnings`; `&warn limpar` = `&clearwarnings`.
   const subAviso = args[0]?.toLowerCase();
-  if (["lista", "list", "ver", "avisos"].includes(subAviso)) {
+  // `list` e `clear` chegam traduzidos pelo registro (fase 3)
+  if (["lista", "ver", "avisos"].includes(subAviso)) {
     return automodCmd.cmdWarnings(message, args.slice(1), ctx);
   }
-  if (["limpar", "clear", "zerar", "apagar"].includes(subAviso)) {
+  if (["limpar", "zerar", "apagar"].includes(subAviso)) {
     return automodCmd.cmdClearwarnings(message, args.slice(1), ctx);
   }
 
@@ -45,21 +47,21 @@ export async function cmdWarn(message, args, ctx) {
     return sendEmbed(message.channel, tr(ctx,
       { title: "❌ Quem devo avisar?",
         description: [
-          `\`${P}warn <@pessoa|id|nome> [motivo]\``,
+          `\`${citar("warn", "pt", P)} <@pessoa|id|nome> [motivo]\``,
           "",
-          `Ex.: \`${P}warn @Fulano spam no chat de arte\``,
+          `Ex.: \`${citar("warn", "pt", P)} @Fulano spam no chat de arte\``,
           "",
-          `Para ver os avisos de alguém: \`${P}warn lista @pessoa\``,
-          `Para zerar: \`${P}warn limpar @pessoa\``,
+          `Para ver os avisos de alguém: \`${citar("warn.lista", "pt", P)} @pessoa\``,
+          `Para zerar: \`${citar("warn.limpar", "pt", P)} @pessoa\``,
         ].join("\n"), colour: COR.erro },
       { title: "❌ Who should I warn?",
         description: [
-          `\`${P}warn <@user|id|name> [reason]\``,
+          `\`${citar("warn", "en", P)} <@user|id|name> [reason]\``,
           "",
-          `E.g.: \`${P}warn @Someone spamming the art channel\``,
+          `E.g.: \`${citar("warn", "en", P)} @Someone spamming the art channel\``,
           "",
-          `To see someone's warnings: \`${P}warn lista @user\``,
-          `To reset them: \`${P}warn limpar @user\``,
+          `To see someone's warnings: \`${citar("warn.lista", "en", P)} @user\``,
+          `To reset them: \`${citar("warn.limpar", "en", P)} @user\``,
         ].join("\n"), colour: COR.erro }));
     }
 

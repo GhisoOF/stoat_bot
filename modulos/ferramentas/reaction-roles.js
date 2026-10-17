@@ -1,5 +1,6 @@
 
 import * as db  from "../core/db.js";
+import { citar } from "../core/aliases.js";
 import * as log from "../core/log.js";
 import { idValido, descreverProblemaDeId, resolverMensagem } from "../core/ids.js";
 import { editarCargos, cargoDe, podeUsarCargo } from "../core/hierarquia.js";
@@ -672,7 +673,7 @@ export async function cmdReactionRole(message, args, ctx) {
       `\`${PREFIXO}reactionrole remove <idMensagem>\``,
       `\`${PREFIXO}reactionrole list\``,
       "",
-      "💡 _Dica: crie a mensagem-painel com_ `&embed` _e depois vincule os emojis a ela._",
+      `💡 _Dica: crie a mensagem-painel com_ \`${citar("embed", "pt", PREFIXO)}\` _e depois vincule os emojis a ela._`,
     ].join("\n"),
     colour: COR.info,
   }, {
@@ -682,7 +683,7 @@ export async function cmdReactionRole(message, args, ctx) {
       `\`${PREFIXO}reactionrole remove <messageId>\``,
       `\`${PREFIXO}reactionrole list\``,
       "",
-      "💡 _Tip: create the panel message with_ `&embed` _and then link the emojis to it._",
+      `💡 _Tip: create the panel message with_ \`${citar("embed", "en", PREFIXO)}\` _and then link the emojis to it._`,
     ].join("\n"),
     colour: COR.info,
   }));

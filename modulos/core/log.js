@@ -1,5 +1,6 @@
 
 import { tr, lingua } from "./i18n.js";
+import { citar } from "../core/aliases.js";
 import { resolverCanal } from "./ids.js";
 import { subExibido } from "./aliases.js";
 import * as relatorioHora from "../ferramentas/relatorio.js";
@@ -133,10 +134,10 @@ export async function cmdLog(message, args, ctx) {
         ...linhas,
         "",
         "**Commands:**",
-        `\`${PREFIXO}log here\` — use this channel`,
-        `\`${PREFIXO}log <channelId>\` — set by ID`,
-        `\`${PREFIXO}log off\` — disable`,
-        `\`${PREFIXO}log <event> <on|off>\` — toggle an event`,
+        `\`${citar("log.here", "en", PREFIXO)}\` — use this channel`,
+        `\`${citar("log", "en", PREFIXO)} <channelId>\` — set by ID`,
+        `\`${citar("log.off", "en", PREFIXO)}\` — disable`,
+        `\`${citar("log", "en", PREFIXO)} <event> <on|off>\` — toggle an event`,
       ].join("\n"),
       colour: COR.mod,
     } : {
@@ -147,10 +148,10 @@ export async function cmdLog(message, args, ctx) {
         ...linhas,
         "",
         "**Comandos:**",
-        `\`${PREFIXO}log here\` — usar este canal`,
-        `\`${PREFIXO}log <idDoCanal>\` — definir por ID`,
-        `\`${PREFIXO}log off\` — desativar`,
-        `\`${PREFIXO}log <evento> <on|off>\` — ligar/desligar um evento`,
+        `\`${citar("log.here", "pt", PREFIXO)}\` — usar este canal`,
+        `\`${citar("log", "pt", PREFIXO)} <idDoCanal>\` — definir por ID`,
+        `\`${citar("log.off", "pt", PREFIXO)}\` — desativar`,
+        `\`${citar("log", "pt", PREFIXO)} <evento> <on|off>\` — ligar/desligar um evento`,
       ].join("\n"),
       colour: COR.mod,
     });
@@ -192,11 +193,11 @@ export async function cmdLog(message, args, ctx) {
     if (v !== "on" && v !== "off") {
       return sendEmbed(message.channel, tr(ctx, {
         title: "❌ Uso incorreto",
-        description: `\`${PREFIXO}log ${sub} <on|off>\``,
+        description: `\`${citar("log", "pt", PREFIXO)} ${sub} <on|off>\``,
         colour: COR.erro,
       }, {
         title: "❌ Wrong usage",
-        description: `\`${PREFIXO}log ${sub} <on|off>\``,
+        description: `\`${citar("log", "en", PREFIXO)} ${nomeEvento(sub)} <on|off>\``,
         colour: COR.erro,
       }));
     }
@@ -212,7 +213,7 @@ export async function cmdLog(message, args, ctx) {
   }
 
   let alvoBruto = args[0];
-  if (sub === "canal" || sub === "channel") alvoBruto = args[1] ?? "here";
+  if (sub === "canal") alvoBruto = args[1] ?? "here";   // `channel` chega traduzido pelo registro
 
   const srv = await ctx.getServer?.(message).catch(() => null);
   const id = resolverCanal(alvoBruto, { message, server: srv });
@@ -223,7 +224,7 @@ export async function cmdLog(message, args, ctx) {
         `Não consegui identificar um canal em \`${alvoBruto}\`.`,
         "",
         `Aceito: **menção** (\`#canal\`), **link** do canal, **ID** ou o **nome**.`,
-        `Ou use \`${PREFIXO}log here\` para usar o canal atual.`,
+        `Ou use \`${citar("log.here", "pt", PREFIXO)}\` para usar o canal atual.`,
         `Eventos disponíveis: ${Object.keys(EVENTOS).map((e) => `\`${e}\``).join(", ")}`,
       ].join("\n"),
       colour: COR.erro,
@@ -233,7 +234,7 @@ export async function cmdLog(message, args, ctx) {
         `I couldn't identify a channel in \`${alvoBruto}\`.`,
         "",
         `I accept: a **mention** (\`#channel\`), the channel's **link**, its **ID** or its **name**.`,
-        `Or use \`${PREFIXO}log here\` to use the current channel.`,
+        `Or use \`${citar("log.here", "en", PREFIXO)}\` to use the current channel.`,
         `Available events: ${Object.keys(EVENTOS).map((e) => `\`${nomeEvento(e)}\``).join(", ")}`,
       ].join("\n"),
       colour: COR.erro,

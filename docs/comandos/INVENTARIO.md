@@ -216,8 +216,8 @@ inglês) não aparece aqui.
 - [pt] `&log ‹evento› ‹on|off›` → ❌ Canal inválido
 - [pt] `&staff add` → ❓ Qual cargo?
 - [pt] `&boasvindas on|off` → ❌ Falta o canal
-- [pt] `&comando disable ‹nome›` → ❌ Comando inválido
-- [pt] `&comando enable ‹nome›` → ❌ Comando inválido
+- [pt] `&comando desativar ‹nome›` → ❌ Comando inválido
+- [pt] `&comando ativar ‹nome›` → ❌ Comando inválido
 - [pt] `&rss remove ‹id|url›` → ❓ Não encontrado
 - [pt] `&rss agora` → ❌ Sem canal
 - [pt] `&automod sentinela canal <#canal|aqui|off>` → ❌ Canal não encontrado

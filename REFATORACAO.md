@@ -726,6 +726,71 @@ sozinho, o painel responde todo em inglês. A comparação por dump pode enganar
 `&help comecar`). A seção de parâmetros do `&xp` nunca aparece (corrigi o texto dela
 mesmo assim). Já era assim na `53849fa`.
 
+## 6l. Um teste de regressão para cada correção (17 out 2026)
+
+Antes da fase 3, que vai mexer em toda a ajuda e na tradução das telas, cada
+correção desde a fase 0 precisava de um teste que reprovasse sem ela. Em vez de
+listar os erros de memória, **desfiz cada correção, uma por vez, e rodei a suíte
+inteira** (97 suítes, cada mutação com `/tmp` e rede próprios, 4 de cada vez).
+
+- **O que foi desfeito:** os 103 trechos de código (sem contar os que só mexem em
+  comentário) dos commits `47cad9f` (fase 0, 62), `90dc1c1` (ping e "você quis dizer",
+  10), `fc4ac9b` (`&help punishment`, 2) e da conferência (29). 7 já não se aplicavam
+  porque o conteúdo foi para o registro; no lugar deles, 10 mutações no próprio
+  registro (tirar o `music` do `&musica`, os `naTela` de 6 comandos, o vocabulário
+  do sentinela, o `subcomandosDe`, um apelido em dois comandos).
+- **Resultado da primeira passada:** 40 das 106 mutações não derrubavam nenhum teste
+  (ou só o retrato do inventário, que se regrava de propósito — não protege na fase 3).
+
+Os testes novos (20 na `comandos-17out`, 49 no total):
+
+- **Duas checagens gerais, pelo registro** (seção 3). Toda tela, nos dois idiomas:
+  cada `&cmd a b c` entre crases é conferido palavra por palavra contra as tabelas
+  do comando. Em inglês, nenhum nome interno que tenha nome em inglês; em português,
+  nenhuma palavra em inglês que vire outra coisa na entrada. Substituem a lista de
+  palavras escrita à mão, que não via `&musica` nem `sentinela sensitivity`.
+- **17 testes pontuais** (seção 6), um por erro que só aparece executando o
+  caminho: `&game rest confirm`, `&reactionrole order <msg>`, `&rss now` com o canal
+  sumido, `&music loop track`, `&game equip … hand2`, `&game admin give`, `&game
+  respec points`, `&game companion photos`, o "subcomando desconhecido" do `&access` e
+  do `&modia`, o uso do `&automod sentinela banir|liberar|testar|simular`, o painel do
+  sentinela, os três avisos do sentinela à staff, o `&globalban forget` sozinho, as
+  páginas `&help automod sentinela sensibilidade|testar|canal`, a sintaxe na ajuda do
+  sentinela, os parâmetros em português e o `&music` nas telas em inglês. Mais um
+  para o próprio bot de mentira: o primeiro gerador de IDs dava 1.684 IDs diferentes
+  em 50.000.
+
+**Segunda passada:** das 40, 33 agora derrubam um teste. As 7 restantes não mudam
+nada que se veja, conferido comparando as 334 telas e 987 respostas com e sem elas:
+
+| Mutação | Por que não aparece |
+|---|---|
+| `conf-007` (`Available events` do `&log`) | a tradução da tela já trocava as palavras entre crases |
+| `f0-008` (ajuda do `&music`), `f0-029` (dica do `simulate`), `f0-042` (`por` → `for` no `&game`), `f0-058` (tutorial do sentinela) | idem: o texto em inglês tinha a palavra em português, e a tradução da tela a trocava |
+| `naTela` do `&musica` | o texto em inglês do `&music` já é escrito em inglês |
+| `f0-040` | só a cor do embed |
+
+As cinco primeiras dependem da tradução da tela. Se a fase 3 tirar essa tradução, as
+duas checagens gerais passam a pegá-las.
+
+Para rodar só uma parte do teste dos avisos do sentinela, o `automod-engine.js` exporta
+mais duas funções "só para testes", como o `_aplicarPunicao` que já existia. O
+mapeamento do `&music loop` virou a função `modoDoLoop()` para poder ser testado sem
+o serviço de voz.
+
+**Erros novos que apareceram escrevendo os testes, corrigidos (cada teste reprova
+sem a correção):**
+- painel e teste do sentinela em inglês: `**Sensitivity:** media` e `current mode:
+  **avisar**` → `medium`, `warn`;
+- `&help comando gerenciar` em português ensinava `&comando disable|enable` →
+  `desativar|ativar`;
+- `&automod sentinela testar` em português ensinava o nome antigo
+  `&automod antiscam on` → `sentinela on`.
+
+Também traduzi o `Sensitivity:` da mensagem de liga/desliga dentro do `cmdScam`, mas
+esse trecho não é alcançável por comando: o `&automod sentinel on` é respondido antes,
+pelo liga/desliga da família.
+
 ---
 
 ## 7. O que NÃO fiz, e por quê

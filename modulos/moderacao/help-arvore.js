@@ -1206,11 +1206,11 @@ function arvorePT(P) {
 
     comando: {
       gerenciar: {
-        titulo: "comando disable/enable",
+        titulo: "comando desativar/ativar",
         texto: [
           `\`${P}comando\` — lista os comandos e o estado de cada um`,
-          `\`${P}comando disable <nome>\` — desliga neste servidor`,
-          `\`${P}comando enable <nome>\` — religa`,
+          `\`${P}comando desativar <nome>\` — desliga neste servidor`,
+          `\`${P}comando ativar <nome>\` — religa`,
           "",
           "**A trava de segurança**",
           "`help` e `comando` **não podem** ser desativados — senão você se trancaria",

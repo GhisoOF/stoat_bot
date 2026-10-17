@@ -1212,3 +1212,6 @@ let ultimaVerificacaoDeAssunto = null;
 export const _ultimaVerificacaoDeAssunto = () => ultimaVerificacaoDeAssunto;
 // Só para testes: a punição inteira, sem passar pelo detector.
 export const _aplicarPunicao = aplicarPunicao;
+// Só para testes: os dois avisos à staff do sentinela (padrão de dano e possível ameaça).
+export const _alertarPadraoDano = alertarPadraoDano;
+export const _alertarAdministracao = alertarAdministracao;

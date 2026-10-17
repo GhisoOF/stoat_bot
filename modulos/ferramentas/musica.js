@@ -45,6 +45,13 @@ const APELIDOS = {
   ajuda: "ajuda", help: "ajuda",
 };
 
+// O modo do `&musica loop`: o serviço de voz entende faixa|fila|nao; a tela em
+// inglês ensina track|queue|off (17 out 2026: o `track` chegava cru e o serviço
+// respondia "modos: nao, faixa ou fila").
+export function modoDoLoop(texto) {
+  return { track: "faixa", song: "faixa", queue: "fila", off: "nao", no: "nao", none: "nao", não: "nao" }[String(texto ?? "").toLowerCase()] ?? (texto || "nao");
+}
+
 export async function cmdMusica(msg, args, ctx) {
   const lang = lingua(ctx);
   const en = lang === "en";
@@ -115,9 +122,7 @@ export async function cmdMusica(msg, args, ctx) {
     const v = Number(String(resto).replace("%", ""));
     r = await pedirVoz("/musica/volume", { canal, valor: Number.isFinite(v) ? v / 100 : NaN });
   } else if (sub === "loop") {
-    // o serviço de voz entende faixa|fila|nao; a tela em inglês ensina track|queue|off
-    const modo = { track: "faixa", song: "faixa", queue: "fila", off: "nao", no: "nao", none: "nao", não: "nao" }[String(resto).toLowerCase()] ?? (resto || "nao");
-    r = await pedirVoz("/musica/loop", { canal, modo });
+    r = await pedirVoz("/musica/loop", { canal, modo: modoDoLoop(resto) });
   } else {
     r = await pedirVoz(`/musica/${sub}`, { canal });
   }

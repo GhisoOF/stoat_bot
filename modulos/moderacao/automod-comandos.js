@@ -946,11 +946,11 @@ export async function cmdScam(message, args, ctx) {
         "**judges**, so it adapts to who is writing.",
         "",
         `**Enabled:** ${cfg.enabled ? "🟢 yes" : "🔴 no"}  (enable with \`${PREFIXO}automod sentinela on\`)`,
-        `**Sensitivity:** ${cfg.sensitivity}  (base threshold: ${limiarDe(cfg.sensitivity)}/10)`,
+        `**Sensitivity:** ${nomeSens(cfg.sensitivity, "en")}  (base threshold: ${limiarDe(cfg.sensitivity)}/10)`,
         `**Stricter with newcomers:** ${cfg.porAntiguidade !== false ? "🟢 on" : "🔴 off"} — threshold moves with the member's level`,
         `**Alert the staff:** ${cfg.alertarAdmin !== false ? "🟢 on" : "🔴 off"} — pings staff on a suspicious *pattern*, before punishing`,
         `**Alert channel:** ${cfg.alertChannelId ? `\`${cfg.alertChannelId}\`` : "_(uses the message's channel)_"}`,
-        `**Punishment:** set with \`${PREFIXO}automod punicao\` (current mode: **${pol.modo}**) — applies to all automods`,
+        `**Punishment:** set with \`${PREFIXO}automod punicao\` (current mode: **${nomeModo(pol.modo, "en")}**) — applies to all automods`,
         "",
         "**Commands:**",
         `\`${PREFIXO}automod sentinel sensitivity <low|medium|high>\``,
@@ -990,7 +990,7 @@ export async function cmdScam(message, args, ctx) {
     salvarConfig?.();
     return sendEmbed(message.channel, tr(ctx,
       { title: "🛡 Sentinela", description: `O Sentinela foi **${ligar ? "ativado 🟢" : "desativado 🔴"}**.${ligar ? `\n\nSensibilidade: \`${cfg.sensitivity ?? "media"}\` · punição: a do \`${PREFIXO}automod punicao\`.` : ""}`, colour: COR.mod },
-      { title: "🛡 Sentinel", description: `The Sentinel was **${ligar ? "enabled 🟢" : "disabled 🔴"}**.${ligar ? `\n\nSensitivity: \`${cfg.sensitivity ?? "media"}\` · punishment: the one from \`${PREFIXO}automod punicao\`.` : ""}`, colour: COR.mod }));
+      { title: "🛡 Sentinel", description: `The Sentinel was **${ligar ? "enabled 🟢" : "disabled 🔴"}**.${ligar ? `\n\nSensitivity: \`${nomeSens(cfg.sensitivity ?? "media", "en")}\` · punishment: the one from \`${PREFIXO}automod punicao\`.` : ""}`, colour: COR.mod }));
   }
 
   if (["antiguidade", "tenure", "novatos"].includes(sub)) {
@@ -1134,15 +1134,15 @@ export async function cmdScam(message, args, ctx) {
     const acaoTxt = lang === "en"
       ? (!cfg.enabled
         ? `module **DISABLED** (enable with \`${PREFIXO}automod sentinela on\`)`
-        : `it would apply the global policy **${pol.modo}** (see \`${PREFIXO}automod punicao\`)`)
+        : `it would apply the global policy **${nomeModo(pol.modo, "en")}** (see \`${PREFIXO}automod punicao\`)`)
       : (!cfg.enabled
-        ? `módulo **DESATIVADO** (ative com \`${PREFIXO}automod antiscam on\`)`
+        ? `módulo **DESATIVADO** (ative com \`${PREFIXO}automod sentinela on\`)`
         : `aplicaria a política global **${pol.modo}** (veja \`${PREFIXO}automod punicao\`)`);
 
     return sendEmbed(message.channel, lang === "en" ? {
       title: flag ? `🛑 WOULD be flagged (score ${r.nota.toFixed(1)}/10)` : `✅ Would NOT be flagged (score ${r.nota.toFixed(1)}/10)`,
       description: [
-        `**Module:** ${cfg.enabled ? "🟢 enabled" : "🔴 disabled"}  •  **Sensitivity:** ${cfg.sensitivity} (threshold ${limiar})`,
+        `**Module:** ${cfg.enabled ? "🟢 enabled" : "🔴 disabled"}  •  **Sensitivity:** ${nomeSens(cfg.sensitivity, "en")} (threshold ${limiar})`,
         `**Score:** ${r.nota.toFixed(1)} / 10`,
         `**Serious?** ${r.grave ? "yes ⚠️" : "no"}`,
         `**Signals:** ${r.sinais.join(", ") || "none"}`,

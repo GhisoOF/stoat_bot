@@ -15049,6 +15049,43 @@ await t("nenhuma tela ou resposta em inglês mostra comando em português", () =
   assert.deepEqual([...achados], []);
 });
 
+// As duas checagens abaixo leem o vocabulário do REGISTRO (não uma lista à mão):
+// cada comando citado entre crases, `&cmd a b c`, é conferido palavra por palavra
+// contra as tabelas daquele comando (no &automod, as famílias e partes juntas).
+const { REGISTRO: REG } = await import("./modulos/comandos/index.js");
+const TAB = aliasesMod.tabelasDeTraducao();
+const canonDe = (w) => (REG.some((x) => x.id === w) ? w : aliasesMod.COMANDO_EXTRA[w] ?? null);
+const PARTES_AUTOMOD = REG.find((x) => x.id === "automod").partes ?? {};
+const tabelasDo = (cmd, t) => Object.entries(t).filter(([k]) => k === cmd || k.startsWith(cmd + ".") || (cmd === "automod" && PARTES_AUTOMOD[k])).map(([, m]) => m);
+const CMD_ENTRE_CRASES = /&([a-zçãéíóú]+)((?: [^\s`‹›<>\[\]|]+)*)/gi;
+function vocabularioTrocado(lang) {
+  const achados = new Set();
+  const conferir = (x, onde) => {
+    for (const m of x.texto.matchAll(/`([^`\n]+)`/g)) for (const k of m[1].matchAll(CMD_ENTRE_CRASES)) {
+      const w = k[1].toLowerCase(), cmd = canonDe(w);
+      if (!cmd) continue;
+      if (lang === "en" && w === cmd && aliasesMod.COMANDO_EN[cmd] && aliasesMod.COMANDO_EN[cmd] !== cmd) achados.add(`${onde}: comando \`&${w}\``);
+      const tela = tabelasDo(cmd, TAB.tela), entrada = tabelasDo(cmd, TAB.sub);
+      for (const t of k[2].trim().split(/\s+/).filter(Boolean).map((s) => s.toLowerCase())) {
+        if (cmd === "help" && canonDe(t)) continue;   // `&help game`: o nome de um comando, não um subcomando
+        const ptComNomeEn = tela.some((mp) => mp[t] && mp[t] !== t), enQueViraPt = entrada.some((mp) => mp[t] && mp[t] !== t);
+        if (lang === "en" && ptComNomeEn && !entrada.some((mp) => mp[t])) achados.add(`${onde}: \`${t}\` em \`${m[1].slice(0, 60)}\``);
+        if (lang === "pt" && enQueViraPt && !tela.some((mp) => mp[t])) achados.add(`${onde}: \`${t}\` em \`${m[1].slice(0, 60)}\``);
+      }
+    }
+  };
+  for (const x of telas) if (x.lang === lang && !PULAR_EN.test(x.pagina)) conferir(x, x.pagina);
+  // a resposta do `&language pt` já sai no outro idioma
+  for (const x of execucoes) if (x.lang === lang && !/^&(servers|servidores|game admin|language|idioma|lang)\b/.test(x.cmd)) conferir(x, `resposta de ${x.cmd.slice(0, 50)}`);
+  return [...achados];
+}
+await t("tela em inglês: nenhum comando nem subcomando com o nome em português, pelo registro (antes: `&musica pausar`, `sentinela sensitivity <baixa|media|alta>`)", () => {
+  assert.deepEqual(vocabularioTrocado("en"), []);
+});
+await t("tela em português: nenhum subcomando com o nome em inglês, pelo registro (antes: `&automod sentinela test`, `dismiss`, `&comando disable`)", () => {
+  assert.deepEqual(vocabularioTrocado("pt"), []);
+});
+
 // ── 4. Os casos que esta rodada corrigiu (cada um falhava antes) ──
 console.log("\n── 4. o legado corrigido ──");
 const comando = async (lang, txt) => { const sid = await servidorNovo(lang); const { canal } = servidor(sid); return (await say(txt.replace("{C}", canal.id), sid)).texto; };
@@ -15177,6 +15214,183 @@ await t("`confirm` em inglês confirma (antes: `&game delete confirm` e `&xp res
   // e a ajuda não promete o reset de uma pessoa só, que não existe
   assert.ok(!parametros("&", "pt").xp.some((p) => p.nome === "reset" && /@/.test(p.valor)));
   assert.ok(!parametros("&", "en").xp.some((p) => p.nome === "reset" && /@/.test(p.valor)));
+});
+
+// ── 6. Regressões: cada erro de 17 out que ainda não tinha teste próprio ──
+// (achados desfazendo cada correção, uma por vez, e vendo se algum teste reprovava)
+console.log("\n── 6. regressões sem teste próprio ──");
+const dbMod = await import("./modulos/core/db.js");
+const { MUNDO } = await import("./modulos/game/mundo.js");   // o RPG é um mundo só, de todos os servidores
+await t("`&game rest confirm` em inglês paga o descanso (antes: pedia a confirmação de novo)", async () => {
+  const en = await servidorNovo("en");
+  await say("&game create", en);
+  const cat = dbMod.listarFollowersCatalogo()[0];
+  assert.ok(cat, "o catálogo de companheiros tem alguém");
+  dbMod.recrutarFollower(MUNDO, U1, cat.id, 1);
+  for (const f of dbMod.listarFollowersDe(MUNDO, U1)) dbMod.salvarFollower(f.id, { energia: 0, energiaEm: Date.now() });
+  assert.match((await say("&game rest", en)).texto, /^🛏️ Rest paid[\s\S]*`&game rest confirm`/);
+  const r = (await say("&game rest confirm", en)).texto;
+  assert.ok(!/^🛏️ Rest paid/.test(r), r);
+  assert.match(r, /^(🛏️ They rested|💸 Not enough balance)/);
+});
+await t("`&reactionrole order <msg>` em inglês pede `order … confirm` (antes: `ordem … confirmar`)", async () => {
+  for (const [lang, cmd, re] of [["en", "&reactionrole order", /Confirm\? `&reactionrole order (\w+) confirm`/], ["pt", "&reactionrole ordem", /Confirma\? `&reactionrole ordem (\w+) confirmar`/]]) {
+    const sid = await servidorNovo(lang);
+    const { canal } = servidor(sid);
+    const mid = ulid("painel-rr-" + lang);
+    dbMod.addReactionRole(sid, mid, "🔥", ROLE_VIP, canal.id);
+    const r = (await say(`${cmd} ${mid}`, sid)).texto;
+    assert.match(r, re, r);
+  }
+});
+await t("os IDs do bot de mentira não se repetem (o primeiro gerador, um LCG, dava 1.684 IDs diferentes em 50.000)", () => {
+  const n = 50_000, vistos = new Set();
+  for (let i = 0; i < n; i++) vistos.add(ulid("S" + i));
+  assert.equal(vistos.size, n);
+});
+await t("`&rss now` em inglês explica a falha em inglês (antes: \"canal inacessível\")", async () => {
+  const en = await servidorNovo("en");
+  const { canal } = servidor(en);
+  await say("&rss channel here", en);
+  c.channels.delete(canal.id);   // o canal sumiu (apagado, ou o bot perdeu o acesso)
+  try {
+    const r = (await say("&rss now", en)).texto;
+    assert.match(r, /\n❌ Failed\nthe channel can't be reached/, r);
+  } finally { c.channels.set(canal.id, canal); }
+});
+
+// — os da fase 0 (o legado corrigido em 17 out) —
+const nos2 = async (txtPt, txtEn) => [await comando("pt", txtPt), await comando("en", txtEn)];
+await t("`&musica loop` em inglês: `track` vira `faixa` para o serviço de voz (antes: chegava cru e o serviço recusava)", async () => {
+  const { modoDoLoop } = await import("./modulos/ferramentas/musica.js");
+  assert.deepEqual(["track", "queue", "off", "", "faixa", "fila", "nao"].map(modoDoLoop), ["faixa", "fila", "nao", "nao", "faixa", "fila", "nao"]);
+});
+await t("`&game equip <item> hand2` e `&game unequip hand1` (antes: `hand1`/`hand2` viravam parte do nome do item)", async () => {
+  const en = await servidorNovo("en");
+  await say("&game delete confirm", en);
+  await say("&game create", en);   // personagem novo: a espada inicial na mão principal
+  assert.match((await say("&game unequip hand1", en)).texto, /^🎒 Unequipped\n\*\*Iron Sword\*\*/);
+  assert.match((await say("&game equip Iron Sword hand2", en)).texto, /^⚔️ Equipped\n🗡️ \*\*Off hand\*\*: Iron Sword/);
+  assert.match((await say("&game unequip hand2", en)).texto, /^🎒 Unequipped/);
+  assert.match((await say("&game equip Iron Sword hand1", en)).texto, /\*\*Main hand\*\*: Iron Sword/);
+});
+await t("`&game admin give` sem valor ensina o próprio comando (antes: `&game admin moeda 1000`)", async () => {
+  const [pt, en] = await nos2("&game admin dar", "&game admin give");
+  assert.match(pt, /^❌ Quanto\?\n`&game admin dar 1000 \[@pessoa\]`/);
+  assert.match(en, /^❌ How much\?\n`&game admin give 1000 \[@person\]`/);
+});
+await t("`&game respec points` em inglês ensina `respec points confirm` (antes: `resetar pontos confirmar`)", async () => {
+  for (const [lang, cmds, re] of [
+    ["en", ["&game admin points 3", "&game points strength 2", "&game respec points"], /`&game respec points confirm`/],
+    ["pt", ["&game admin pontos 3", "&game pontos forca 2", "&game resetar pontos"], /`&game resetar pontos confirmar`/]]) {
+    const sid = await servidorNovo(lang);
+    await say(lang === "en" ? "&game delete confirm" : "&game apagar confirmar", sid);
+    await say(lang === "en" ? "&game create" : "&game criar", sid);
+    let r = "";
+    for (const x of cmds) r = (await say(x, sid)).texto;
+    assert.match(r, re, r);
+  }
+});
+await t("`&game companion photos` sem nome ensina `photos` (antes: `foto`)", async () => {
+  const [pt, en] = await nos2("&game follower fotos", "&game companion photos");
+  assert.match(pt, /`&game follower fotos ‹nome›`/);
+  assert.match(en, /`&game companion photos ‹name›`/);
+});
+await t("subcomando desconhecido do `&access` e do `&modia` lista as palavras do idioma (antes: `cargo`, `canal`, `criterios` em inglês)", async () => {
+  const [pt, en] = await nos2("&acesso xyz", "&access xyz");
+  assert.match(pt, /Use: `cargo`, `canal`, `staffignora` ou `status`\./);
+  assert.match(en, /Use: `role`, `channel`, `staffbypass` or `status`\./);
+  const [pt2, en2] = await nos2("&modia xyz", "&modia xyz");
+  assert.match(pt2, /Use: `on`, `off`, `criterios`, `canal`, `limpar` ou `status`\./);
+  assert.match(en2, /Use: `on`, `off`, `criteria`, `channel`, `clear` or `status`\./);
+});
+await t("uso do `&automod sentinela banir|liberar|testar|simular` com a sintaxe certa (antes: `ban <userId>`, `dismiss`, `test` na tela em português)", async () => {
+  for (const [pt, en, usoPt, usoEn] of [
+    ["banir", "ban", "banir <@pessoa|id>", "ban <@user|id>"], ["liberar", "dismiss", "liberar <@pessoa|id>", "dismiss <@user|id>"],
+    ["testar", "test", "testar ‹texto›", "test ‹text›"], ["simular", "simulate", "simular ‹texto›", "simulate ‹text›"]]) {
+    const [rPt, rEn] = await nos2(`&automod sentinela ${pt}`, `&automod sentinel ${en}`);
+    assert.ok(rPt.includes(`\`&automod sentinela ${usoPt}\``), rPt);
+    assert.ok(rEn.includes(`\`&automod sentinel ${usoEn}\``), rEn);
+  }
+  const [tPt, tEn] = await nos2("&automod sentinela testar oi tudo bem", "&automod sentinel test hi there");
+  assert.match(tPt, /Fluxo real no canal de avisos: `&automod sentinela simular ‹texto›`/);
+  assert.match(tEn, /Real flow in the alert channel: `&automod sentinel simulate ‹text›`/);
+});
+await t("painel do sentinela em inglês sem valor em português (antes: `<baixa|media|alta>`, **Sensitivity:** media, o modo `avisar`)", async () => {
+  const PT_VALOR = /\b(baixa|media|média|alta|acumular|avisar|apagar|confirmar|banir)\b/;
+  const [pt, en] = await nos2("&automod sentinela config", "&automod sentinel config");
+  assert.match(pt, /`&automod sentinela sensibilidade ‹baixa\|media\|alta›`/);
+  assert.match(pt, /`&automod sentinela canal <#canal\|aqui>`/);
+  assert.match(en, /`&automod sentinel sensitivity ‹low\|medium\|high›`/);
+  assert.match(en, /`&automod sentinel channel <#channel\|here>`/);
+  assert.match(en, /\*\*Sensitivity:\*\* medium/);
+  assert.ok(!PT_VALOR.test(en), en.match(PT_VALOR)?.[0]);
+  const teste = await comando("en", "&automod sentinel test hi there");
+  assert.ok(!PT_VALOR.test(teste), teste.match(PT_VALOR)?.[0]);
+  // um texto que o filtro marcaria, com o módulo desligado: a resposta ensina a ligar
+  const golpe = "Vamos gerar lucro com as contas de IA que você não está usando. Trabalhe comigo, dividimos os ganhos 50/50. Já ganho mais de R$ 10.000 por mês. Se tiver interesse me chama na DM";
+  assert.match(await comando("pt", `&automod sentinela testar ${golpe}`), /ative com `&automod sentinela on`/);
+});
+await t("avisos do sentinela à staff ensinam `sentinel ban|dismiss` / `sentinela banir|liberar` (antes: `sentinela ban`, `dismiss`, `warn lista` em inglês)", async () => {
+  const engine = await import("./modulos/moderacao/automod-engine.js");
+  const ctxDe = (lang, enviados) => ({ serverId: "SX", PREFIXO: "&", COR: { erro: 1, aviso: 2, mod: 3, sucesso: 4, info: 5 },
+    config: { language: lang, automod: { antiScam: {}, punicao: { modo: "confirmar" } }, log: {} },
+    client: { channels: { fetch: async () => null } }, sendEmbed: async (_c, e) => { enviados.push(e.description); return { id: "m" }; } });
+  for (const lang of ["pt", "en"]) {
+    const env2 = [];
+    const ctx = ctxDe(lang, env2);
+    const membro = { id: { server: "SX", user: "U9" }, roles: [], edit: async () => {} };
+    await quieto(() => engine._aplicarPunicao(ctx, { server: { id: "SX", roles: new Map(), fetchMember: async () => membro, channels: [] }, channel: {}, message: null, userId: "U9", motivo: "golpe", apagar: false }));
+    await quieto(() => engine._alertarPadraoDano(ctx, { canal: {}, userId: "U9", p: { soma: 5, mensagens: 2, horas: 1, categorias: ["x"], trechos: ["a"] } }));
+    await quieto(() => engine._alertarAdministracao(ctx, { server: {}, canal: {}, userId: "U9", sinal: { vezes: 3, janelaMin: 10, sinais: [] }, faixa: null, nivel: null, nota: 4 }));
+    const [punicao, dano, ameaca] = env2;
+    if (lang === "pt") {
+      assert.match(punicao, /`&automod sentinela banir U9` ou libere com `&automod sentinela liberar U9`/);
+      assert.match(dano, /`&automod sentinela banir U9` · `&automod sentinela liberar U9`/);
+      assert.match(ameaca, /`&automod sentinela banir U9` · `&automod sentinela liberar U9` · `&warn lista U9`/);
+    } else {
+      assert.match(punicao, /`&automod sentinel ban U9` or release with `&automod sentinel dismiss U9`/);
+      assert.match(dano, /`&automod sentinel ban U9` · `&automod sentinel dismiss U9`/);
+      assert.match(ameaca, /`&automod sentinel ban U9` · `&automod sentinel dismiss U9` · `&warn list U9`/);
+    }
+  }
+});
+await t("`&globalban forget` sem ninguém pergunta quem (antes: \"não achei essa pessoa\" sem ter procurado ninguém)", async () => {
+  const [pt, en] = await nos2("&banglobal esquecer", "&globalban forget");
+  assert.match(pt, /^❓ Quem\?\n/);
+  assert.match(en, /^❓ Who\?\n/);
+  assert.match(await comando("en", "&globalban forget NinguemComEsseNome"), /^❌ Couldn't find that person/);
+});
+await t("páginas de ajuda do sentinela com o nome do idioma (antes: `&help automod sentinela sensitivity`, `test`, `channel` em português)", async () => {
+  for (const [pt, en] of [["sensibilidade", "sensitivity"], ["testar", "test"], ["canal", "channel"]]) {
+    const [rPt, rEn] = await nos2(`&help automod sentinela ${pt}`, `&help automod sentinel ${en}`);
+    assert.match(rPt, new RegExp(`^📖 Ajuda — &automod › sentinela › ${pt}\\n`), rPt.split("\n")[0]);
+    assert.match(rEn, new RegExp(`^📖 Help — &automod › sentinel › ${en}\\n`), rEn.split("\n")[0]);
+  }
+});
+await t("ajuda do sentinela ensina `channel <#channel|here>` e `dismiss <@user|id>` (antes: `‹id|here›`, `‹id›`)", async () => {
+  const [alertaPt, alertaEn] = await nos2("&help automod sentinela alerta", "&help automod sentinel alert");
+  assert.ok(alertaPt.includes("`&automod sentinela canal <#canal|aqui>`"), alertaPt);
+  assert.ok(alertaEn.includes("`&automod sentinel channel <#channel|here>`"), alertaEn);
+  const [avPt, avEn] = await nos2("&help automod sentinela avatar", "&help automod sentinel avatar");
+  assert.ok(avPt.includes("`&automod sentinela liberar <@pessoa|id>`"), avPt);
+  assert.ok(avEn.includes("`&automod sentinel dismiss <@user|id>`"), avEn);
+});
+await t("parâmetros em português: nenhum nome em inglês, pelo registro (antes: `sensitivity`, `test`/`simulate` no &automod sentinela)", () => {
+  const achados = [];
+  for (const [cmd, lista] of Object.entries(parametros("&", "pt"))) {
+    const entrada = tabelasDo(cmd, TAB.sub), tela = tabelasDo(cmd, TAB.tela);
+    for (const p of lista) for (const t of `${p.nome} ${p.desc}`.match(/`[a-z]+`|^[a-z]+/g) ?? []) {
+      const w = t.replace(/`/g, "");
+      if (entrada.some((mp) => mp[w] && mp[w] !== w) && !tela.some((mp) => mp[w])) achados.push(`${cmd}: ${w} (em "${p.nome}")`);
+    }
+  }
+  assert.deepEqual(achados, []);
+});
+await t("a tela em inglês cita `&music`, nunca `&musica` (o nome em inglês vem do registro)", () => {
+  const en = telas.filter((x) => x.lang === "en").map((x) => x.texto).join("\n");
+  assert.ok(/`&music\b/.test(en), "alguma tela em inglês cita o &music");
+  assert.ok(!/&musica\b/.test(en), en.match(/.{0,60}&musica\b.{0,20}/)?.[0]);
 });
 
 // ── O inventário legível ──

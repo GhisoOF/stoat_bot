@@ -493,7 +493,7 @@ export async function cmdGame(message, args, ctx) {
         { title: "🎭 You don't have a character",
           description: `Create one with \`${P}game criar\`.`, colour: COR.aviso }));
     }
-    const VAGAS = { mao1: "mao1", principal: "mao1", main: "mao1", mao2: "mao2", "mão2": "mao2", secundaria: "mao2", "secundária": "mao2", off: "mao2" };
+    const VAGAS = { mao1: "mao1", "mão1": "mao1", principal: "mao1", main: "mao1", hand1: "mao1", mao2: "mao2", "mão2": "mao2", secundaria: "mao2", "secundária": "mao2", off: "mao2", hand2: "mao2" };
     const pedidoTxt = args.slice(1).map((a) => a.toLowerCase()).find((a) => VAGAS[a] || /^(acessorio|bio|ciber)[123]$/.test(a));
     const slotPedido = pedidoTxt ? (VAGAS[pedidoTxt] ?? pedidoTxt) : null;
     const busca = args.slice(1).filter((a) => a.toLowerCase() !== pedidoTxt).join(" ").trim();
@@ -582,7 +582,7 @@ export async function cmdGame(message, args, ctx) {
   // ── desequipar ──
   if (["desequipar", "tirar", "remover"].includes(sub)) {
     const alvo = (args[1] ?? "").toLowerCase();
-    const ALIAS = { arma: "mao1", mao: "mao1", "mão": "mao1", principal: "mao1", secundaria: "mao2", "secundária": "mao2", escudo: "mao2", cabeca: "capacete", "cabeça": "capacete", elmo: "capacete", corpo: "armadura" };
+    const ALIAS = { arma: "mao1", mao: "mao1", "mão": "mao1", principal: "mao1", hand1: "mao1", main: "mao1", secundaria: "mao2", "secundária": "mao2", escudo: "mao2", hand2: "mao2", cabeca: "capacete", "cabeça": "capacete", elmo: "capacete", corpo: "armadura" };
     const eq = db.getEquipado(serverId, eu);
     let slot = db.SLOTS.includes(alvo) ? alvo : (args.length === 2 ? ALIAS[alvo] : null) ?? null;
     if (!slot && alvo) {
@@ -730,7 +730,7 @@ export async function cmdGame(message, args, ctx) {
     if (acao === "dar" || (acao === "moeda" && /^\d+$/.test(resto[0] ?? ""))) {
       const qtd = parseInt(resto[0], 10);
       if (!Number.isFinite(qtd)) return sendEmbed(message.channel, { title: en ? "❌ How much?" : "❌ Quanto?",
-        description: `\`${P}game admin moeda 1000\``, colour: COR.erro });
+        description: `\`${P}game admin dar 1000 [@pessoa]\``, colour: COR.erro });
       const m = garantirMoeda(serverId);
       db.creditar(serverId, alvoId, m.id, qtd);
       return sendEmbed(message.channel, { title: en ? "🔧 Currency credited" : "🔧 Moeda creditada",
@@ -1958,7 +1958,7 @@ export async function cmdGame(message, args, ctx) {
       ? "_✅ active · 💤 known but doesn't fit in your mana · 🔒 needs more Intelligence (no level minimum)_"
       : "_✅ ativa · 💤 conhecida mas não cabe na mana · 🔒 pede mais Inteligência (sem nível mínimo)_");
     linhas.push(en
-      ? `\`${P}game magia <name>\` — details · \`${P}game aprender <name> [com <currency>]\``
+      ? `\`${P}game magia <name>\` — details · \`${P}game aprender <name> [with <currency>]\``
       : `\`${P}game magia <nome>\` — detalhes · \`${P}game aprender <nome> [com <moeda>]\``);
     if (estado.magiasDoGrimorio === 0) {
       linhas.push(en
@@ -2141,7 +2141,7 @@ export async function cmdGame(message, args, ctx) {
         en ? `**Price:** ${moeda.simbolo} ${fmt(preco)} ${moeda.nome} · you have ${fmt(db.getSaldo(serverId, eu, moeda.id))}`
           : `**Preço:** ${moeda.simbolo} ${fmt(preco)} ${moeda.nome} · você tem ${fmt(db.getSaldo(serverId, eu, moeda.id))}`,
         "",
-        `\`${P}game resetar pontos confirmar\``,
+        en ? `\`${P}game respec points confirm\`` : `\`${P}game resetar pontos confirmar\``,
       ].join("\n") });
     }
     if (db.getSaldo(serverId, eu, moeda.id) < preco) {
@@ -2417,7 +2417,7 @@ export async function cmdGame(message, args, ctx) {
       const cat = db.acharFollowerCatalogo(resto);
       if (!cat) {
         return sendEmbed(message.channel, { title: en ? "❌ Who?" : "❌ Quem?",
-          description: en ? `\`${P}game follower foto <name>\`` : `\`${P}game follower foto <nome>\``, colour: COR.erro });
+          description: en ? `\`${P}game follower photos <name>\`` : `\`${P}game follower fotos <nome>\``, colour: COR.erro });
       }
       const img = IMG.imagemDe(cat.id) ?? cat.fotos?.[0] ?? null;
       return sendEmbed(message.channel, { title: `📷 ${cat.nome}`, colour: COR.info,

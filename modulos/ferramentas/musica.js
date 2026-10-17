@@ -61,7 +61,7 @@ export async function cmdMusica(msg, args, ctx) {
     return ctx.sendEmbed(msg.channel, {
       title: en ? "🎵 Music" : "🎵 Música",
       description: en
-        ? "`&musica <link or name>` — play (YouTube, SoundCloud, Spotify; playlists too)\n`&musica pausar` · `&musica play` — pause / resume\n`&musica skip` — next track\n`&musica fila` — current queue\n`&musica parar` — stop and clear\n`&musica volume 80` — 0 to 200%\n`&musica loop faixa|fila|nao`\n\nThe bot must be in a call (`&entrar`). When TTS speaks, the music ducks automatically."
+        ? "`&music <link or name>` — play (YouTube, SoundCloud, Spotify; playlists too)\n`&music pause` · `&music play` — pause / resume\n`&music skip` — next track\n`&music queue` — current queue\n`&music stop` — stop and clear\n`&music volume 80` — 0 to 200%\n`&music loop track|queue|off`\n\nThe bot must be in a call (`&join`). When TTS speaks, the music ducks automatically."
         : "`&musica <link ou nome>` — tocar (YouTube, SoundCloud, Spotify; playlists também)\n`&musica pausar` · `&musica play` — pausar / retomar\n`&musica skip` — próxima faixa\n`&musica fila` — lista de reprodução atual\n`&musica parar` — parar e limpar\n`&musica volume 80` — 0 a 200%\n`&musica loop faixa|fila|nao`\n\nO bot precisa estar numa call (`&entrar`). Quando o TTS fala, a música abaixa sozinha.",
       colour: ctx.COR.info,
     });
@@ -115,7 +115,9 @@ export async function cmdMusica(msg, args, ctx) {
     const v = Number(String(resto).replace("%", ""));
     r = await pedirVoz("/musica/volume", { canal, valor: Number.isFinite(v) ? v / 100 : NaN });
   } else if (sub === "loop") {
-    r = await pedirVoz("/musica/loop", { canal, modo: resto || "nao" });
+    // o serviço de voz entende faixa|fila|nao; a tela em inglês ensina track|queue|off
+    const modo = { track: "faixa", song: "faixa", queue: "fila", off: "nao", no: "nao", none: "nao", não: "nao" }[String(resto).toLowerCase()] ?? (resto || "nao");
+    r = await pedirVoz("/musica/loop", { canal, modo });
   } else {
     r = await pedirVoz(`/musica/${sub}`, { canal });
   }

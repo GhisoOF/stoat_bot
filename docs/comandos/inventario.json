@@ -1,0 +1,1403 @@
+{
+ "_leia": "Gerado por `INVENTARIO=1 node testes.mjs comandos-17out`. A suíte comandos-17out falha se um nome daqui sumir ou mudar de destino. Não edite à mão.",
+ "nomes": {
+  "about": {
+   "canonico": "about",
+   "rota": "sobre",
+   "funcao": "cmdSobre"
+  },
+  "access": {
+   "canonico": "acesso",
+   "rota": "acesso",
+   "funcao": "cmdAcesso"
+  },
+  "acesso": {
+   "canonico": "acesso",
+   "rota": "acesso",
+   "funcao": "cmdAcesso"
+  },
+  "adeus": {
+   "canonico": "adeus",
+   "rota": "adeus",
+   "funcao": "cmd"
+  },
+  "assistant": {
+   "canonico": "assistente",
+   "rota": "assistente",
+   "funcao": "cmdAssistente"
+  },
+  "assistente": {
+   "canonico": "assistente",
+   "rota": "assistente",
+   "funcao": "cmdAssistente"
+  },
+  "automod": {
+   "canonico": "automod",
+   "rota": "automod",
+   "funcao": "cmdAutomod"
+  },
+  "autorole": {
+   "canonico": "autorole",
+   "rota": "autorole",
+   "funcao": "cmdAutorole"
+  },
+  "avisar": {
+   "canonico": "warn",
+   "rota": "warn",
+   "funcao": "cmdWarn"
+  },
+  "ban": {
+   "canonico": "ban",
+   "rota": "ban",
+   "funcao": "cmdBan"
+  },
+  "banglobal": {
+   "canonico": "banglobal",
+   "rota": "banglobal",
+   "funcao": "cmdBanGlobal"
+  },
+  "bemvindo": {
+   "canonico": "boasvindas",
+   "rota": "boasvindas",
+   "funcao": "cmd"
+  },
+  "boas-vindas": {
+   "canonico": "boasvindas",
+   "rota": "boasvindas",
+   "funcao": "cmd"
+  },
+  "boasvindas": {
+   "canonico": "boasvindas",
+   "rota": "boasvindas",
+   "funcao": "cmd"
+  },
+  "call": {
+   "canonico": "entrar",
+   "rota": "entrar",
+   "funcao": "entrar"
+  },
+  "cargocor": {
+   "canonico": "cor",
+   "rota": "cor",
+   "funcao": "cmdCor"
+  },
+  "cargomudo": {
+   "canonico": "cargomudo",
+   "rota": "cargomudo",
+   "funcao": "cmdCargoMudo"
+  },
+  "character": {
+   "canonico": "game",
+   "rota": "game",
+   "funcao": "cmdGame"
+  },
+  "chat": {
+   "canonico": "chat",
+   "rota": "chat",
+   "funcao": "cmdChat"
+  },
+  "clear": {
+   "canonico": "limpar",
+   "rota": "limpar",
+   "funcao": "cmdLimpar"
+  },
+  "clock": {
+   "canonico": "fuso",
+   "rota": "fuso",
+   "funcao": "cmdFuso"
+  },
+  "color": {
+   "canonico": "cor",
+   "rota": "cor",
+   "funcao": "cmdCor"
+  },
+  "colour": {
+   "canonico": "cor",
+   "rota": "cor",
+   "funcao": "cmdCor"
+  },
+  "comando": {
+   "canonico": "comando",
+   "rota": "comando",
+   "funcao": "cmdComando"
+  },
+  "comandos": {
+   "canonico": "comandos",
+   "rota": "comando",
+   "funcao": "cmdComando"
+  },
+  "comecar": {
+   "canonico": "tutorial",
+   "rota": "tutorial",
+   "funcao": "cmdTutorial"
+  },
+  "command": {
+   "canonico": "comando",
+   "rota": "comando",
+   "funcao": "cmdComando"
+  },
+  "config": {
+   "canonico": "config",
+   "rota": "config",
+   "funcao": "cmdConfig"
+  },
+  "configuracoes": {
+   "canonico": "config",
+   "rota": "config",
+   "funcao": "cmdConfig"
+  },
+  "configurações": {
+   "canonico": "config",
+   "rota": "config",
+   "funcao": "cmdConfig"
+  },
+  "configurar": {
+   "canonico": "assistente",
+   "rota": "assistente",
+   "funcao": "cmdAssistente"
+  },
+  "configure": {
+   "canonico": "assistente",
+   "rota": "assistente",
+   "funcao": "cmdAssistente"
+  },
+  "cor": {
+   "canonico": "cor",
+   "rota": "cor",
+   "funcao": "cmdCor"
+  },
+  "cores": {
+   "canonico": "cor",
+   "rota": "cor",
+   "funcao": "cmdCor"
+  },
+  "criarcargomudo": {
+   "canonico": "criarcargomudo",
+   "rota": "cargomudo",
+   "funcao": "cmdCargoMudo"
+  },
+  "dado": {
+   "canonico": "rolar",
+   "rota": "rolar",
+   "funcao": "cmdRolar"
+  },
+  "dados": {
+   "canonico": "rolar",
+   "rota": "rolar",
+   "funcao": "cmdRolar"
+  },
+  "debug": {
+   "canonico": "debug",
+   "rota": "debug",
+   "funcao": "cmdDebug"
+  },
+  "despedida": {
+   "canonico": "adeus",
+   "rota": "adeus",
+   "funcao": "cmd"
+  },
+  "diagnostico": {
+   "canonico": "debug",
+   "rota": "debug",
+   "funcao": "cmdDebug"
+  },
+  "diagnóstico": {
+   "canonico": "debug",
+   "rota": "debug",
+   "funcao": "cmdDebug"
+  },
+  "eco": {
+   "canonico": "economia",
+   "rota": "economia",
+   "funcao": "cmdEconomia"
+  },
+  "economia": {
+   "canonico": "economia",
+   "rota": "economia",
+   "funcao": "cmdEconomia"
+  },
+  "economy": {
+   "canonico": "economia",
+   "rota": "economia",
+   "funcao": "cmdEconomia"
+  },
+  "embed": {
+   "canonico": "embed",
+   "rota": "embed",
+   "funcao": "cmdEmbed"
+  },
+  "ent": {
+   "canonico": "entretenimento",
+   "rota": "entretenimento",
+   "funcao": "cmdEntretenimento"
+  },
+  "entertainment": {
+   "canonico": "entretenimento",
+   "rota": "entretenimento",
+   "funcao": "cmdEntretenimento"
+  },
+  "entrar": {
+   "canonico": "entrar",
+   "rota": "entrar",
+   "funcao": "entrar"
+  },
+  "entretenimento": {
+   "canonico": "entretenimento",
+   "rota": "entretenimento",
+   "funcao": "cmdEntretenimento"
+  },
+  "entreterimento": {
+   "canonico": "entretenimento",
+   "rota": "entretenimento",
+   "funcao": "cmdEntretenimento"
+  },
+  "equipe": {
+   "canonico": "staff",
+   "rota": "staff",
+   "funcao": "cmdStaff"
+  },
+  "fabrica": {
+   "canonico": "reset",
+   "rota": "reset",
+   "funcao": "cmdReset"
+  },
+  "factoryreset": {
+   "canonico": "reset",
+   "rota": "reset",
+   "funcao": "cmdReset"
+  },
+  "falar": {
+   "canonico": "tts",
+   "rota": "tts",
+   "funcao": "cmdTts"
+  },
+  "farewell": {
+   "canonico": "adeus",
+   "rota": "adeus",
+   "funcao": "cmd"
+  },
+  "feed": {
+   "canonico": "rss",
+   "rota": "rss",
+   "funcao": "cmdRss"
+  },
+  "fun": {
+   "canonico": "entretenimento",
+   "rota": "entretenimento",
+   "funcao": "cmdEntretenimento"
+  },
+  "fuso": {
+   "canonico": "fuso",
+   "rota": "fuso",
+   "funcao": "cmdFuso"
+  },
+  "fusos": {
+   "canonico": "fuso",
+   "rota": "fuso",
+   "funcao": "cmdFuso"
+  },
+  "game": {
+   "canonico": "game",
+   "rota": "game",
+   "funcao": "cmdGame"
+  },
+  "gancho": {
+   "canonico": "webhook",
+   "rota": "webhook",
+   "funcao": "cmdWebhook"
+  },
+  "globalban": {
+   "canonico": "banglobal",
+   "rota": "banglobal",
+   "funcao": "cmdBanGlobal"
+  },
+  "goodbye": {
+   "canonico": "adeus",
+   "rota": "adeus",
+   "funcao": "cmd"
+  },
+  "greeting": {
+   "canonico": "boasvindas",
+   "rota": "boasvindas",
+   "funcao": "cmd"
+  },
+  "guia": {
+   "canonico": "tutorial",
+   "rota": "tutorial",
+   "funcao": "cmdTutorial"
+  },
+  "guide": {
+   "canonico": "tutorial",
+   "rota": "tutorial",
+   "funcao": "cmdTutorial"
+  },
+  "help": {
+   "canonico": "help",
+   "rota": "help",
+   "funcao": "cmdHelp"
+  },
+  "hora": {
+   "canonico": "fuso",
+   "rota": "fuso",
+   "funcao": "cmdFuso"
+  },
+  "ia": {
+   "canonico": "chat",
+   "rota": "chat",
+   "funcao": "cmdChat"
+  },
+  "idioma": {
+   "canonico": "idioma",
+   "rota": "idioma",
+   "funcao": "cmdIdioma"
+  },
+  "info": {
+   "canonico": "info",
+   "rota": "sobre",
+   "funcao": "cmdSobre"
+  },
+  "iniciativa": {
+   "canonico": "iniciativa",
+   "rota": "iniciativa",
+   "funcao": "cmdIniciativa"
+  },
+  "inicio": {
+   "canonico": "tutorial",
+   "rota": "tutorial",
+   "funcao": "cmdTutorial"
+  },
+  "init": {
+   "canonico": "iniciativa",
+   "rota": "iniciativa",
+   "funcao": "cmdIniciativa"
+  },
+  "initiative": {
+   "canonico": "iniciativa",
+   "rota": "iniciativa",
+   "funcao": "cmdIniciativa"
+  },
+  "join": {
+   "canonico": "entrar",
+   "rota": "entrar",
+   "funcao": "entrar"
+  },
+  "kick": {
+   "canonico": "kick",
+   "rota": "kick",
+   "funcao": "cmdKick"
+  },
+  "lang": {
+   "canonico": "idioma",
+   "rota": "idioma",
+   "funcao": "cmdIdioma"
+  },
+  "language": {
+   "canonico": "idioma",
+   "rota": "idioma",
+   "funcao": "cmdIdioma"
+  },
+  "leave": {
+   "canonico": "sair",
+   "rota": "sair",
+   "funcao": "sair"
+  },
+  "level": {
+   "canonico": "xp",
+   "rota": "xp",
+   "funcao": "cmdXp"
+  },
+  "levels": {
+   "canonico": "xp",
+   "rota": "xp",
+   "funcao": "cmdXp"
+  },
+  "limpar": {
+   "canonico": "limpar",
+   "rota": "limpar",
+   "funcao": "cmdLimpar"
+  },
+  "limpiar": {
+   "canonico": "limpar",
+   "rota": "limpar",
+   "funcao": "cmdLimpar"
+  },
+  "log": {
+   "canonico": "log",
+   "rota": "log",
+   "funcao": "cmdLog"
+  },
+  "logs": {
+   "canonico": "log",
+   "rota": "log",
+   "funcao": "cmdLog"
+  },
+  "m": {
+   "canonico": "musica",
+   "rota": "musica",
+   "funcao": "cmdMusica"
+  },
+  "moderacaoia": {
+   "canonico": "modia",
+   "rota": "modia",
+   "funcao": "cmdModIA"
+  },
+  "modia": {
+   "canonico": "modia",
+   "rota": "modia",
+   "funcao": "cmdModIA"
+  },
+  "music": {
+   "canonico": "musica",
+   "rota": "musica",
+   "funcao": "cmdMusica"
+  },
+  "musica": {
+   "canonico": "musica",
+   "rota": "musica",
+   "funcao": "cmdMusica"
+  },
+  "mute": {
+   "canonico": "silenciar",
+   "rota": "silenciar",
+   "funcao": "cmdSilenciar"
+  },
+  "mutedrole": {
+   "canonico": "cargomudo",
+   "rota": "cargomudo",
+   "funcao": "cmdCargoMudo"
+  },
+  "muterole": {
+   "canonico": "cargomudo",
+   "rota": "cargomudo",
+   "funcao": "cmdCargoMudo"
+  },
+  "nivel": {
+   "canonico": "xp",
+   "rota": "xp",
+   "funcao": "cmdXp"
+  },
+  "personagem": {
+   "canonico": "game",
+   "rota": "game",
+   "funcao": "cmdGame"
+  },
+  "personalidade": {
+   "canonico": "personalidade",
+   "rota": "personalidade",
+   "funcao": "cmdPersonalidade"
+  },
+  "personality": {
+   "canonico": "personality",
+   "rota": "personalidade",
+   "funcao": "cmdPersonalidade"
+  },
+  "ping": {
+   "canonico": "ping",
+   "rota": "ping",
+   "funcao": "cmdPing"
+  },
+  "play": {
+   "canonico": "musica",
+   "rota": "musica",
+   "funcao": "cmdMusica"
+  },
+  "purge": {
+   "canonico": "limpar",
+   "rota": "limpar",
+   "funcao": "cmdLimpar"
+  },
+  "r": {
+   "canonico": "rolar",
+   "rota": "rolar",
+   "funcao": "cmdRolar"
+  },
+  "reactionrole": {
+   "canonico": "reactionrole",
+   "rota": "reactionrole",
+   "funcao": "cmdReactionRole"
+  },
+  "reactionroles": {
+   "canonico": "reactionrole",
+   "rota": "reactionrole",
+   "funcao": "cmdReactionRole"
+  },
+  "redefinir": {
+   "canonico": "reset",
+   "rota": "reset",
+   "funcao": "cmdReset"
+  },
+  "repete": {
+   "canonico": "repete",
+   "rota": "repete",
+   "funcao": "cmdRepete"
+  },
+  "reset": {
+   "canonico": "reset",
+   "rota": "reset",
+   "funcao": "cmdReset"
+  },
+  "resetar": {
+   "canonico": "reset",
+   "rota": "reset",
+   "funcao": "cmdReset"
+  },
+  "rolar": {
+   "canonico": "rolar",
+   "rota": "rolar",
+   "funcao": "cmdRolar"
+  },
+  "roll": {
+   "canonico": "rolar",
+   "rota": "rolar",
+   "funcao": "cmdRolar"
+  },
+  "rpg": {
+   "canonico": "game",
+   "rota": "game",
+   "funcao": "cmdGame"
+  },
+  "rr": {
+   "canonico": "reactionrole",
+   "rota": "reactionrole",
+   "funcao": "cmdReactionRole"
+  },
+  "rss": {
+   "canonico": "rss",
+   "rota": "rss",
+   "funcao": "cmdRss"
+  },
+  "sair": {
+   "canonico": "sair",
+   "rota": "sair",
+   "funcao": "sair"
+  },
+  "sairdacall": {
+   "canonico": "sair",
+   "rota": "sair",
+   "funcao": "sair"
+  },
+  "server": {
+   "canonico": "servidor",
+   "rota": "servidor",
+   "funcao": "cmdServidor"
+  },
+  "serverinfo": {
+   "canonico": "servidor",
+   "rota": "servidor",
+   "funcao": "cmdServidor"
+  },
+  "servers": {
+   "canonico": "servers",
+   "rota": "servidores",
+   "funcao": "cmdServidores"
+  },
+  "servidor": {
+   "canonico": "servidor",
+   "rota": "servidor",
+   "funcao": "cmdServidor"
+  },
+  "servidores": {
+   "canonico": "servidores",
+   "rota": "servidores",
+   "funcao": "cmdServidores"
+  },
+  "servidorinfo": {
+   "canonico": "servidor",
+   "rota": "servidor",
+   "funcao": "cmdServidor"
+  },
+  "setup": {
+   "canonico": "assistente",
+   "rota": "assistente",
+   "funcao": "cmdAssistente"
+  },
+  "silence": {
+   "canonico": "silenciar",
+   "rota": "silenciar",
+   "funcao": "cmdSilenciar"
+  },
+  "silenciar": {
+   "canonico": "silenciar",
+   "rota": "silenciar",
+   "funcao": "cmdSilenciar"
+  },
+  "silencio": {
+   "canonico": "silenciar",
+   "rota": "silenciar",
+   "funcao": "cmdSilenciar"
+  },
+  "sobre": {
+   "canonico": "sobre",
+   "rota": "sobre",
+   "funcao": "cmdSobre"
+  },
+  "speak": {
+   "canonico": "tts",
+   "rota": "tts",
+   "funcao": "cmdTts"
+  },
+  "staff": {
+   "canonico": "staff",
+   "rota": "staff",
+   "funcao": "cmdStaff"
+  },
+  "start": {
+   "canonico": "tutorial",
+   "rota": "tutorial",
+   "funcao": "cmdTutorial"
+  },
+  "suporte": {
+   "canonico": "ticket",
+   "rota": "ticket",
+   "funcao": "cmdTicket"
+  },
+  "team": {
+   "canonico": "staff",
+   "rota": "staff",
+   "funcao": "cmdStaff"
+  },
+  "ticket": {
+   "canonico": "ticket",
+   "rota": "ticket",
+   "funcao": "cmdTicket"
+  },
+  "tickets": {
+   "canonico": "ticket",
+   "rota": "ticket",
+   "funcao": "cmdTicket"
+  },
+  "timeout": {
+   "canonico": "silenciar",
+   "rota": "silenciar",
+   "funcao": "cmdSilenciar"
+  },
+  "timezone": {
+   "canonico": "fuso",
+   "rota": "fuso",
+   "funcao": "cmdFuso"
+  },
+  "timezones": {
+   "canonico": "fuso",
+   "rota": "fuso",
+   "funcao": "cmdFuso"
+  },
+  "tocar": {
+   "canonico": "musica",
+   "rota": "musica",
+   "funcao": "cmdMusica"
+  },
+  "tts": {
+   "canonico": "tts",
+   "rota": "tts",
+   "funcao": "cmdTts"
+  },
+  "tutorial": {
+   "canonico": "tutorial",
+   "rota": "tutorial",
+   "funcao": "cmdTutorial"
+  },
+  "tz": {
+   "canonico": "fuso",
+   "rota": "fuso",
+   "funcao": "cmdFuso"
+  },
+  "userinfo": {
+   "canonico": "userinfo",
+   "rota": "userinfo",
+   "funcao": "cmdUserinfo"
+  },
+  "voz": {
+   "canonico": "tts",
+   "rota": "tts",
+   "funcao": "cmdTts"
+  },
+  "warn": {
+   "canonico": "warn",
+   "rota": "warn",
+   "funcao": "cmdWarn"
+  },
+  "webhook": {
+   "canonico": "webhook",
+   "rota": "webhook",
+   "funcao": "cmdWebhook"
+  },
+  "webhooks": {
+   "canonico": "webhook",
+   "rota": "webhook",
+   "funcao": "cmdWebhook"
+  },
+  "welcome": {
+   "canonico": "boasvindas",
+   "rota": "boasvindas",
+   "funcao": "cmd"
+  },
+  "wh": {
+   "canonico": "webhook",
+   "rota": "webhook",
+   "funcao": "cmdWebhook"
+  },
+  "wizard": {
+   "canonico": "assistente",
+   "rota": "assistente",
+   "funcao": "cmdAssistente"
+  },
+  "xp": {
+   "canonico": "xp",
+   "rota": "xp",
+   "funcao": "cmdXp"
+  }
+ },
+ "sub": {
+  "acesso": {
+   "add": "add",
+   "all": "todos",
+   "channel": "canal",
+   "channels": "canais",
+   "clear": "limpar",
+   "except": "exceto",
+   "only": "somente",
+   "remove": "remove",
+   "role": "cargo",
+   "roles": "cargos",
+   "staff": "staff",
+   "staffbypass": "staffignora",
+   "staffignores": "staffignora",
+   "status": "status"
+  },
+  "adeus": {
+   "channel": "canal",
+   "clear": "limpar",
+   "color": "cor",
+   "colour": "cor",
+   "default": "padrao",
+   "here": "aqui",
+   "hidden": "oculto",
+   "hide": "oculto",
+   "image": "imagem",
+   "message": "texto",
+   "show": "visivel",
+   "status": "status",
+   "test": "testar",
+   "text": "texto",
+   "title": "titulo",
+   "visible": "visivel"
+  },
+  "assistente": {
+   "cancel": "cancelar",
+   "channels": "canais",
+   "complete": "completo",
+   "fast": "rapido",
+   "full": "completo",
+   "protect": "protecao",
+   "protection": "protecao",
+   "quick": "rapido",
+   "stop": "cancelar"
+  },
+  "automod": {
+   "antinoise": "antiruido",
+   "ban": "banir",
+   "confirm": "confirmar",
+   "debug": "debug",
+   "delete": "apagar",
+   "global": "global",
+   "ignore": "ignorar",
+   "inherit": "herdar",
+   "mentions": "mencoes",
+   "messages": "mensagens",
+   "noise": "antiruido",
+   "punishment": "punicao",
+   "repetition": "repeticao",
+   "sentinel": "sentinela",
+   "set": "set",
+   "size": "tamanho",
+   "stack": "acumular",
+   "status": "status",
+   "threshold": "limiar",
+   "time": "tempo",
+   "warn": "avisar"
+  },
+  "automod.antilink": {
+   "domains": "dominios",
+   "invites": "convites"
+  },
+  "automod.antiruido": {
+   "characters": "caracteres",
+   "ignore": "ignorar",
+   "letters": "letras",
+   "repetition": "repeticao",
+   "size": "tamanho",
+   "threshold": "limiar"
+  },
+  "automod.antispam": {
+   "burst": "rajada",
+   "media": "midia",
+   "mentions": "mencoes",
+   "messages": "mensagens",
+   "minute": "minuto",
+   "newcomer": "novato",
+   "newcomers": "novato",
+   "repeat": "repeticao",
+   "speed": "velocidade",
+   "time": "tempo",
+   "times": "vezes"
+  },
+  "automod.assuntos": {
+   "add": "add",
+   "ai": "ia",
+   "alert": "alertar",
+   "allow": "liberar",
+   "delete": "apagar",
+   "drugs": "drogas",
+   "high": "alta",
+   "low": "baixa",
+   "medium": "media",
+   "politics": "politica",
+   "punish": "punir",
+   "religion": "religiao",
+   "remove": "remover",
+   "sensitivity": "sensibilidade",
+   "test": "test",
+   "watch": "vigiar"
+  },
+  "automod.avatar": {
+   "action": "acao",
+   "alert": "alertar",
+   "ban": "banir",
+   "check": "checar",
+   "kick": "expulsar",
+   "mute": "silenciar",
+   "silence": "silenciar",
+   "time": "tempo",
+   "timeout": "silenciar"
+  },
+  "automod.odio": {
+   "add": "add",
+   "list": "lista",
+   "remove": "remover"
+  },
+  "automod.sentinela": {
+   "alert": "alerta",
+   "alerts": "alerta",
+   "avatar": "avatar",
+   "ban": "banir",
+   "channel": "canal",
+   "config": "config",
+   "content": "conteudo",
+   "dismiss": "liberar",
+   "hate": "odio",
+   "high": "alta",
+   "images": "imagens",
+   "low": "baixa",
+   "medium": "media",
+   "pfp": "avatar",
+   "sensitivity": "sensibilidade",
+   "simulate": "simular",
+   "status": "status",
+   "subjects": "assuntos",
+   "tenure": "antiguidade",
+   "test": "testar",
+   "topics": "assuntos"
+  },
+  "autorole": {
+   "disable": "desativar",
+   "off": "off",
+   "remove": "remover",
+   "set": "set"
+  },
+  "banglobal": {
+   "accept": "isentar",
+   "all": "lista",
+   "allow": "isentar",
+   "auto": "auto",
+   "autoimport": "auto",
+   "automatic": "auto",
+   "ban": "banir",
+   "banned": "lista",
+   "bots": "bots",
+   "bypass": "isentar",
+   "confirm": "confirmar",
+   "consensus": "consenso",
+   "contribution": "contribuicao",
+   "exempt": "isentar",
+   "exempted": "isentos",
+   "forget": "esquecer",
+   "history": "historico",
+   "import": "importar",
+   "instant": "imediato",
+   "list": "lista",
+   "off": "off",
+   "people": "pessoas",
+   "remove": "remover",
+   "revert": "desfazer",
+   "review": "revisar",
+   "scan": "varrer",
+   "server": "servidor",
+   "sweep": "varrer",
+   "undo": "desfazer",
+   "view": "ver",
+   "warn": "avisar"
+  },
+  "blocklist": {
+   "add": "add",
+   "adddomain": "adddomain",
+   "clear": "clear",
+   "domains": "dominios",
+   "list": "list",
+   "reload": "reload",
+   "remove": "remove",
+   "removedomain": "removedomain"
+  },
+  "boasvindas": {
+   "channel": "canal",
+   "clear": "limpar",
+   "color": "cor",
+   "colour": "cor",
+   "default": "padrao",
+   "here": "aqui",
+   "hidden": "oculto",
+   "hide": "oculto",
+   "image": "imagem",
+   "message": "texto",
+   "messages": "mensagens",
+   "show": "visivel",
+   "status": "status",
+   "test": "testar",
+   "text": "texto",
+   "title": "titulo",
+   "visible": "visivel"
+  },
+  "chat": {
+   "all": "tudo",
+   "care": "cuidado",
+   "comment": "comentar",
+   "every": "todas",
+   "forget": "esquecer",
+   "free": "livre",
+   "gentle": "gentil",
+   "here": "aqui",
+   "map": "mapear",
+   "mode": "modo",
+   "perday": "pordia",
+   "profile": "perfil",
+   "relevant": "relevante",
+   "status": "status"
+  },
+  "comando": {
+   "disable": "desativar",
+   "enable": "ativar",
+   "list": "list",
+   "manage": "gerenciar",
+   "off": "desativar",
+   "on": "ativar"
+  },
+  "cor": {
+   "clear": "limpar",
+   "create": "criar",
+   "default": "padrao",
+   "generate": "gerar",
+   "gradient": "gradiente",
+   "help": "ajuda",
+   "here": "aqui",
+   "list": "lista",
+   "panel": "painel",
+   "preset": "preset",
+   "presets": "presets",
+   "remove": "remover",
+   "roles": "cargos"
+  },
+  "debug": {
+   "channels": "canais",
+   "mute": "mudo",
+   "permissions": "permissoes",
+   "raw": "cru",
+   "read": "ler",
+   "silence": "silence"
+  },
+  "economia": {
+   "balance": "saldo",
+   "buy": "comprar",
+   "confirm": "confirmar",
+   "gain": "ganho",
+   "give": "dar",
+   "interval": "intervalo",
+   "mine": "minerar",
+   "name": "nome",
+   "pay": "pagar",
+   "remove": "remover",
+   "reset": "zerar",
+   "shop": "loja",
+   "symbol": "simbolo",
+   "take": "tirar"
+  },
+  "embed": {
+   "colors": "cores",
+   "fields": "campos"
+  },
+  "entretenimento": {
+   "8ball": "bola8",
+   "choose": "escolher",
+   "fight": "briga",
+   "fortune": "sorte",
+   "mock": "zoeira",
+   "pick": "escolher",
+   "rate": "nota",
+   "reverse": "inverter"
+  },
+  "fuso": {
+   "add": "add",
+   "alias": "apelido",
+   "check": "ver",
+   "cities": "cidades",
+   "clear": "limpar",
+   "find": "buscar",
+   "format": "formato",
+   "label": "apelido",
+   "list": "lista",
+   "main": "principal",
+   "name": "apelido",
+   "now": "ver",
+   "reference": "principal",
+   "remove": "remove",
+   "search": "buscar",
+   "time": "ver"
+  },
+  "game": {
+   "accept": "aceitar",
+   "add": "adicionar",
+   "admin": "admin",
+   "album": "album",
+   "all": "tudo",
+   "announce": "anunciar",
+   "bag": "mochila",
+   "balance": "saldo",
+   "bank": "banco",
+   "barter": "escambo",
+   "boss": "chefe",
+   "bosses": "chefes",
+   "buy": "comprar",
+   "cancel": "cancelar",
+   "catalog": "catalogo",
+   "class": "classe",
+   "coin": "moeda",
+   "commands": "comandos",
+   "companion": "follower",
+   "companions": "followers",
+   "confirm": "confirmar",
+   "contract": "contrato",
+   "contracts": "contratos",
+   "create": "criar",
+   "currency": "moeda",
+   "default": "padrao",
+   "delete": "apagar",
+   "dismiss": "dispensar",
+   "drop": "tirar",
+   "dungeon": "dungeon",
+   "dungeons": "dungeons",
+   "eco": "eco",
+   "energy": "energia",
+   "equip": "equipar",
+   "erase": "apagar",
+   "evolve": "evoluir",
+   "exchange": "cambio",
+   "fantasy": "fantasia",
+   "give": "dar",
+   "grimoire": "grimorio",
+   "help": "ajuda",
+   "hire": "contratar",
+   "image": "imagem",
+   "info": "detalhe",
+   "inventory": "inventario",
+   "item": "item",
+   "items": "itens",
+   "job": "bico",
+   "jobs": "bicos",
+   "join": "entrar",
+   "learn": "aprender",
+   "leave": "sair",
+   "level": "nivel",
+   "magic": "magia",
+   "main": "padrao",
+   "market": "mercado",
+   "mercenaries": "mercenarios",
+   "mission": "missao",
+   "missions": "missoes",
+   "model": "modelo",
+   "new": "novo",
+   "party": "party",
+   "photos": "fotos",
+   "picture": "imagem",
+   "points": "pontos",
+   "preview": "prever",
+   "profile": "perfil",
+   "quest": "quest",
+   "ranking": "ranking",
+   "rates": "taxas",
+   "recruit": "recrutar",
+   "recruits": "recrutas",
+   "redo": "refazer",
+   "remove": "remover",
+   "rescue": "resgatar",
+   "reset": "reset",
+   "rest": "descansar",
+   "retrieve": "pegar",
+   "sell": "vender",
+   "server": "servidor",
+   "sheet": "ficha",
+   "shop": "loja",
+   "simple": "simples",
+   "simulate": "simular",
+   "special": "especial",
+   "specials": "especiais",
+   "spell": "magia",
+   "spells": "magias",
+   "spend": "pontos",
+   "status": "status",
+   "story": "historia",
+   "take": "levar",
+   "test": "teste",
+   "top": "top",
+   "trade": "trocar",
+   "unequip": "desequipar",
+   "use": "usar",
+   "view": "ver",
+   "wallet": "carteira",
+   "wear": "vestir",
+   "world": "mundo"
+  },
+  "help": {
+   "character": "game",
+   "configuration": "config",
+   "customise": "personalizar",
+   "customize": "personalizar",
+   "diagnostics": "diagnostico",
+   "fun": "diversao",
+   "general": "geral",
+   "levels": "xp",
+   "moderation": "moderacao",
+   "owner": "dono",
+   "protect": "proteger",
+   "protection": "proteger",
+   "settings": "config",
+   "start": "comecar",
+   "tools": "ferramentas",
+   "troubleshooting": "diagnostico"
+  },
+  "idioma": {
+   "english": "english",
+   "portuguese": "portugues",
+   "status": "status"
+  },
+  "iniciativa": {
+   "clear": "limpar",
+   "list": "lista",
+   "remove": "remover"
+  },
+  "limpar": {
+   "all": "tudo",
+   "everything": "tudo"
+  },
+  "log": {
+   "channel": "canal",
+   "commands": "comandos",
+   "events": "eventos",
+   "here": "here",
+   "members": "membros",
+   "messages": "mensagens",
+   "off": "off",
+   "punishments": "punicoes",
+   "roles": "cargos"
+  },
+  "modia": {
+   "add": "add",
+   "channel": "canal",
+   "clear": "limpar",
+   "criteria": "criterios",
+   "remove": "remove",
+   "status": "status"
+  },
+  "punicao": {
+   "ban": "banir",
+   "config": "config",
+   "confirm": "confirmar",
+   "delete": "apagar",
+   "ladder": "escada",
+   "mode": "modo",
+   "role": "cargo",
+   "stack": "acumular",
+   "status": "status",
+   "steps": "escada",
+   "warn": "avisar",
+   "warns": "warns"
+  },
+  "reactionrole": {
+   "add": "add",
+   "exclusive": "exclusivo",
+   "list": "list",
+   "reload": "recarregar",
+   "remove": "remove",
+   "repair": "reparar",
+   "unique": "unico"
+  },
+  "rolar": {
+   "coin": "moeda"
+  },
+  "rss": {
+   "add": "add",
+   "category": "categoria",
+   "channel": "canal",
+   "list": "list",
+   "now": "agora",
+   "off": "off",
+   "remove": "remove",
+   "test": "testar"
+  },
+  "scam": {
+   "ban": "banir",
+   "channel": "canal",
+   "config": "config",
+   "dismiss": "liberar",
+   "high": "alta",
+   "low": "baixa",
+   "medium": "media",
+   "sensitivity": "sensibilidade",
+   "simulate": "simular",
+   "status": "status",
+   "test": "testar"
+  },
+  "sentinela": {
+   "ban": "banir",
+   "channel": "canal",
+   "config": "config",
+   "dismiss": "liberar",
+   "high": "alta",
+   "low": "baixa",
+   "medium": "media",
+   "sensitivity": "sensibilidade",
+   "simulate": "simular",
+   "status": "status",
+   "tenure": "antiguidade",
+   "test": "testar"
+  },
+  "servidor": {
+   "about": "info",
+   "channels": "canais",
+   "roles": "cargos",
+   "rules": "regras"
+  },
+  "servidores": {
+   "channel": "canal",
+   "empty": "vazias",
+   "here": "aqui",
+   "now": "agora",
+   "report": "relatorio",
+   "subjects": "assuntos",
+   "topics": "assuntos"
+  },
+  "silenciar": {
+   "lift": "tirar",
+   "off": "tirar",
+   "remove": "tirar",
+   "undo": "tirar"
+  },
+  "staff": {
+   "add": "add",
+   "clear": "limpar",
+   "label": "titulo",
+   "list": "lista",
+   "remove": "remove",
+   "team": "equipe",
+   "title": "titulo"
+  },
+  "ticket": {
+   "categories": "categorias",
+   "delete": "apagar",
+   "list": "lista",
+   "panel": "painel",
+   "team": "equipe"
+  },
+  "tts": {
+   "broadcast": "transmitir",
+   "cap": "porminuto",
+   "channel": "canal",
+   "cooldown": "cooldown",
+   "diagnose": "diagnostico",
+   "diagnostics": "diagnostico",
+   "dictionary": "dicionario",
+   "effect": "efeito",
+   "filter": "filtro",
+   "health": "estado",
+   "here": "aqui",
+   "join": "entrar",
+   "leave": "sair",
+   "names": "nomes",
+   "perminute": "porminuto",
+   "pitch": "tom",
+   "read": "ler",
+   "rescue": "resgatar",
+   "resgate": "resgatar",
+   "restart": "reiniciar",
+   "sieve": "filtro",
+   "start": "entrar",
+   "status": "estado",
+   "stop": "sair",
+   "test": "teste",
+   "tone": "tom",
+   "unlock": "destravar",
+   "unstick": "destravar",
+   "voice": "voz"
+  },
+  "tutorial": {
+   "adventure": "aventura",
+   "ai": "ia",
+   "channels": "canais",
+   "economy": "economia",
+   "messages": "mensagens",
+   "moderation": "moderacao",
+   "news": "noticias",
+   "permissions": "permissoes",
+   "roles": "cargos",
+   "settings": "ajustes"
+  },
+  "warn": {
+   "clear": "limpar",
+   "list": "lista"
+  },
+  "webhook": {
+   "channel": "canal",
+   "create": "criar",
+   "events": "eventos",
+   "list": "lista",
+   "remove": "remover",
+   "test": "testar"
+  },
+  "whitelist": {
+   "add": "add",
+   "list": "list",
+   "remove": "remove"
+  },
+  "xp": {
+   "all": "todos",
+   "announce": "anuncio",
+   "announcement": "anuncio",
+   "channel": "canal",
+   "config": "config",
+   "configure": "configurar",
+   "create": "criar",
+   "createroles": "criarcargos",
+   "interval": "intervalo",
+   "leaderboard": "leaderboard",
+   "maxlevel": "nivelmaximo",
+   "multiplier": "multiplicador",
+   "rank": "rank",
+   "ranking": "ranking",
+   "reset": "reset",
+   "restore": "sincronizar",
+   "resync": "sincronizar",
+   "roles": "cargos",
+   "setup": "setup",
+   "sync": "sincronizar",
+   "top": "top",
+   "wipe": "zerar"
+  }
+ }
+}

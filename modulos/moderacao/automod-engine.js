@@ -378,8 +378,8 @@ async function aplicarPunicao(ctx, opts) {
       description: [`<@${userId}> — ${motivo}${linhaNota}`,
         `**${lang === "en" ? "Action" : "Ação"}:** ${acao}`,
         lang === "en"
-          ? `Confirm the ban with \`${PREFIXO}automod sentinela ban ${userId}\` or release with \`${PREFIXO}automod sentinela dismiss ${userId}\`.`
-          : `Confirme o ban com \`${PREFIXO}automod sentinela ban ${userId}\` ou libere com \`${PREFIXO}automod sentinela dismiss ${userId}\`.`,
+          ? `Confirm the ban with \`${PREFIXO}automod sentinel ban ${userId}\` or release with \`${PREFIXO}automod sentinel dismiss ${userId}\`.`
+          : `Confirme o ban com \`${PREFIXO}automod sentinela banir ${userId}\` ou libere com \`${PREFIXO}automod sentinela liberar ${userId}\`.`,
         ...blocoGrave].join("\n"),
       colour: COR.mod,
     });
@@ -503,7 +503,8 @@ async function alertarPadraoDano(ctx, { canal, userId, p }) {
         en
           ? "No single message crossed the line, so nothing was punished. The **pattern** — challenges, humiliation, exposing people — is what's worth a human look."
           : "Nenhuma mensagem sozinha passou do limite, então nada foi punido. É o **padrão** — desafios, humilhação, expor gente — que merece olho humano.",
-        `\`${PREFIXO}automod sentinela ban ${userId}\` · \`${PREFIXO}automod sentinela dismiss ${userId}\``,
+        en ? `\`${PREFIXO}automod sentinel ban ${userId}\` · \`${PREFIXO}automod sentinel dismiss ${userId}\``
+          : `\`${PREFIXO}automod sentinela banir ${userId}\` · \`${PREFIXO}automod sentinela liberar ${userId}\``,
       ].filter((l) => l !== null && l !== undefined).join("\n"),
       colour: COR.erro,
     });
@@ -537,7 +538,7 @@ async function alertarAdministracao(ctx, { server, canal, userId, sinal, faixa, 
     sinal.sinais.length ? `**Signals:** ${sinal.sinais.join(", ")}` : null,
     "",
     "Nothing was punished — the score stayed below the threshold. This is a **pattern**, and patterns are worth a human look.",
-    `\`${PREFIXO}automod sentinela ban ${userId}\` · \`${PREFIXO}automod sentinela dismiss ${userId}\` · \`${PREFIXO}warn lista ${userId}\``,
+    `\`${PREFIXO}automod sentinel ban ${userId}\` · \`${PREFIXO}automod sentinel dismiss ${userId}\` · \`${PREFIXO}warn list ${userId}\``,
   ] : [
     mencao,
     `**Possível ameaça** — <@${userId}> acionou o sentinela **${sinal.vezes}×** em ${sinal.janelaMin} min.`,
@@ -545,7 +546,7 @@ async function alertarAdministracao(ctx, { server, canal, userId, sinal, faixa, 
     sinal.sinais.length ? `**Sinais:** ${sinal.sinais.join(", ")}` : null,
     "",
     "Nada foi punido — a nota ficou abaixo do limiar. Isto é um **padrão**, e padrão merece olho humano.",
-    `\`${PREFIXO}automod sentinela ban ${userId}\` · \`${PREFIXO}automod sentinela dismiss ${userId}\` · \`${PREFIXO}warn lista ${userId}\``,
+    `\`${PREFIXO}automod sentinela banir ${userId}\` · \`${PREFIXO}automod sentinela liberar ${userId}\` · \`${PREFIXO}warn lista ${userId}\``,
   ];
 
   try {

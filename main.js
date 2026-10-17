@@ -481,31 +481,33 @@ const CANONICO = {
   cores: "cor",
   cargocor: "cor",
   guia: "tutorial",
-  wizard: "assistente", setup: "assistente", configurar: "assistente",
+  configurar: "assistente",
   comecar: "tutorial",
   inicio: "tutorial",
   logs: "log",
   equipe: "staff",
-  fusos: "fuso", hora: "fuso", timezone: "fuso", timezones: "fuso", tz: "fuso",
+  fusos: "fuso", hora: "fuso",
   voz: "tts", falar: "tts", speak: "tts",
   m: "musica", music: "musica", play: "musica", tocar: "musica",
   join: "entrar", call: "entrar", leave: "sair", sairdacall: "sair",
   webhooks: "webhook", gancho: "webhook", wh: "webhook",
   r: "rolar", roll: "rolar", dado: "rolar", dados: "rolar",
-  eco: "economia", economy: "economia",
+  eco: "economia",
   // "entreterimento": o jeito que o nome sai digitado rápido (variação de digitação)
   ent: "entretenimento", entreterimento: "entretenimento",
-  server: "servidor", serverinfo: "servidor", servidorinfo: "servidor",
+  serverinfo: "servidor", servidorinfo: "servidor",
   init: "iniciativa", initiative: "iniciativa",
   tickets: "ticket", suporte: "ticket",
-  "boas-vindas": "boasvindas", welcome: "boasvindas", bemvindo: "boasvindas",
-  goodbye: "adeus", despedida: "adeus", farewell: "adeus",
-  clear: "limpar", purge: "limpar", limpiar: "limpar",
+  "boas-vindas": "boasvindas", bemvindo: "boasvindas",
+  despedida: "adeus",
+  clear: "limpar", limpiar: "limpar",
   globalban: "banglobal",
   resetar: "reset", redefinir: "reset", factoryreset: "reset", fabrica: "reset",
   configuracoes: "config", configurações: "config",
   diagnostico: "debug", "diagnóstico": "debug",
   language: "idioma", lang: "idioma",
+  // Os apelidos em inglês moram no aliases.js (COMANDO_EXTRA) — não repetir aqui
+  // (17 out 2026: 11 deles estavam nos dois lugares).
   ...aliases.COMANDO_EXTRA,
 };
 
@@ -542,6 +544,13 @@ for (const [alias, canonico] of Object.entries(CANONICO)) {
 }
 estado.rotas = rotas;
 estado.CANONICO_COMPLETO = CANONICO;
+
+// A tabela de comandos como o bot a montou (17 out 2026). Quem lê é o
+// inventário de comandos (`node testes.mjs comandos-17out`), que confere que
+// nenhum nome sumiu nem mudou de destino entre uma versão e outra.
+export function tabelaDeComandos() {
+  return { rotas, CANONICO, COMANDOS_GERENCIAVEIS, COMANDOS_SO_IA };
+}
 
 let jaInicializou = false;
 client.on("ready", async () => {

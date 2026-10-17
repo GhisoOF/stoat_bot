@@ -170,8 +170,10 @@ function embedAlvoNaoResolvido(ctx, r, entrada, uso) {
       colour: COR.aviso,
     });
   }
+  // Sem ninguém no comando (`&banglobal esquecer` sozinho) é pergunta, não "não achei" (17 out 2026)
+  const vazio = !String(entrada ?? "").trim();
   return tr(ctx, {
-    title: "❌ Não achei essa pessoa",
+    title: vazio ? "❓ Quem?" : "❌ Não achei essa pessoa",
     description: [
       `\`${uso}\``,
       "",
@@ -179,9 +181,9 @@ function embedAlvoNaoResolvido(ctx, r, entrada, uso) {
       "Aceito **menção**, **ID**, **link do perfil**, o **nome** ou `Nome#0000`.",
       "",
       `_Se a pessoa não está em nenhum servidor em comum, só o **ID** funciona — ele aparece em \`${PREFIXO}banglobal lista\`._`,
-    ].filter(Boolean).join("\n"), colour: COR.erro,
+    ].filter(Boolean).join("\n"), colour: vazio ? COR.aviso : COR.erro,
   }, {
-    title: "❌ Couldn't find that person",
+    title: vazio ? "❓ Who?" : "❌ Couldn't find that person",
     description: [
       `\`${uso}\``,
       "",
@@ -189,7 +191,7 @@ function embedAlvoNaoResolvido(ctx, r, entrada, uso) {
       "I accept a **mention**, an **ID**, a **profile link**, the **name** or `Name#0000`.",
       "",
       `_If they're not in any shared server, only the **ID** works — it shows in \`${PREFIXO}banglobal lista\`._`,
-    ].filter(Boolean).join("\n"), colour: COR.erro,
+    ].filter(Boolean).join("\n"), colour: vazio ? COR.aviso : COR.erro,
   });
 }
 

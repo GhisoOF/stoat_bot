@@ -31,6 +31,8 @@ export const COMANDO_EN = {
   sair: "leave",
   silenciar: "silence",
   economia: "economy",
+  // 17 out 2026: `&musica` aparecia assim na tela em inglês (o `&music` já funcionava)
+  musica: "music",
 };
 
 export const COMANDO_EXTRA = {
@@ -195,7 +197,8 @@ export const SUB = {
   "automod.antilink": { domains: "dominios", invites: "convites" },
   "automod.sentinela": {
     content: "conteudo", hate: "odio", images: "imagens", topics: "assuntos", subjects: "assuntos", avatar: "avatar", pfp: "avatar",
-    sensitivity: "sensitivity", channel: "channel", test: "test", simulate: "simulate", ban: "ban", dismiss: "dismiss",
+    // 17 out 2026: o painel do sentinela passou a falar português; o inglês vira o nome PT
+    sensitivity: "sensibilidade", channel: "canal", test: "testar", simulate: "simular", ban: "banir", dismiss: "liberar",
     config: "config", status: "status", tenure: "antiguidade", alerts: "alerta", alert: "alerta",
     low: "baixa", medium: "media", high: "alta",
   },
@@ -296,14 +299,14 @@ export const SUB = {
   embed: { fields: "campos", colors: "cores" },
   whitelist: { add: "add", remove: "remove", list: "list" },
   sentinela: {
-    sensitivity: "sensitivity", channel: "channel", test: "test",
-    simulate: "simulate", ban: "ban", dismiss: "dismiss",
+    sensitivity: "sensibilidade", channel: "canal", test: "testar",
+    simulate: "simular", ban: "banir", dismiss: "liberar",
     config: "config", status: "status", tenure: "antiguidade",
     low: "baixa", medium: "media", high: "alta",
   },
   scam: {
-    sensitivity: "sensitivity", channel: "channel", test: "test",
-    simulate: "simulate", ban: "ban", dismiss: "dismiss",
+    sensitivity: "sensibilidade", channel: "canal", test: "testar",
+    simulate: "simular", ban: "banir", dismiss: "liberar",
     config: "config", status: "status",
     low: "baixa", medium: "media", high: "alta",
   },
@@ -349,10 +352,18 @@ const ANINHADOS = {
 // Só para a TELA: palavras que o comando aceita nos dois idiomas, mas que a
 // ajuda escreve em português (`&log channel aqui`).
 const SO_EXIBIR = {
-  automod: { aviso: "warn" }, punicao: { aviso: "warn" }, "automod.punicao": { aviso: "warn" },
+  automod: { aviso: "warn" },
   warn: { acumular: "stack" }, xp: { aqui: "here" }, tts: { aqui: "here", padrao: "default" },
   log: { aqui: "here" }, rss: { aqui: "here" }, chat: { aqui: "here" },
   "automod.sentinela": { assuntos: "topics", aqui: "here" }, "automod.antispam": { repeticao: "repeat" },
+  // 17 out 2026 (inventário de comandos): palavras que o comando já aceitava em
+  // inglês, mas a tela em inglês mostrava em português
+  "automod.punicao": { aviso: "warn", validade: "expiry" }, punicao: { aviso: "warn", validade: "expiry" },
+  game: { abrir: "open", partir: "go", com: "with", por: "for", mao1: "hand1", mao2: "hand2" },
+  ticket: { abrir: "open", fechar: "close" },
+  banglobal: { ignorados: "ignored", lembrar: "remember" },
+  limpar: { confirmar: "confirm" },
+  musica: { pausar: "pause", retomar: "resume", fila: "queue", parar: "stop", faixa: "track", nao: "off" },
 };
 const SUB_REVERSO = {};
 for (const [cmd, mapa] of Object.entries(SUB)) {
@@ -466,6 +477,9 @@ function traduzirLista(dentro, rev) {
   return dentro.split("|").map((parte) => {
     const t = parte.trim().toLowerCase();
     if (t.includes(",")) return parte.split(",").map((x) => rev[x.trim().toLowerCase()] ?? x).join(",");
+    // `<@pessoa|id|nome>`: o @/# da menção fica, o miolo é traduzido (17 out 2026)
+    const sig = t.match(/^([@#%]+)(.+)$/);
+    if (sig && !rev[t] && PLACEHOLDER_EN[sig[2]]) return sig[1] + PLACEHOLDER_EN[sig[2]];
     return rev[t] ?? PLACEHOLDER_EN[t] ?? parte;
   }).join("|");
 }

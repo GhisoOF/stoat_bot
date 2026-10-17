@@ -621,7 +621,8 @@ async function setupGame(message, args, ctx) {
   ctx.salvarConfig();
   return sendEmbed(message.channel, tr(ctx,
     { title: "✅ Configuração salva", description: `\`${param}\` atualizado.`, colour: COR.sucesso },
-    { title: "✅ Configuration saved", description: `\`${param}\` updated.`, colour: COR.sucesso }));
+    // o nome do ajuste na tela em inglês (17 out 2026: saía "`canal` updated.")
+    { title: "✅ Configuration saved", description: `\`${({ canal: "channel", anuncio: "announce", intervalo: "interval", multiplicador: "multiplier", nivelmaximo: "maxlevel" })[param] ?? param}\` updated.`, colour: COR.sucesso }));
 }
 
 function erro(ctx, message, texto) {

@@ -9576,7 +9576,7 @@ for (const lang of ["pt", "en"]) {
   const semExplicacao = ATRIB.filter((a) => !new RegExp(`\\*\\*${a}\\*\\*[^\\n]* — .{25,}`).test(w));
   ok(!semExplicacao.length, `★ [${lang}] a wiki explica o que cada um dos 9 atributos faz`, semExplicacao.join(", "));
   const SECOES = lang === "pt" ? ["Personagem", "atributos", "Missões", "Co-op", "resetar pontos", "Magias", "Itens", "Companheiros", "Moedas", "Dungeon"]
-    : ["Character", "attributes", "Missions", "co-op", "resetar pontos", "Spells", "Items", "Companions", "Currencies", "Dungeon"];
+    : ["Character", "attributes", "Missions", "co-op", "respec points", "Spells", "Items", "Companions", "Currencies", "Dungeon"];   // 17 out: era "resetar pontos" na tela em inglês
   ok(SECOES.every((x) => w.includes(x)), `[${lang}] tem as seções de uma wiki (personagem, atributos, missões, magias, itens, companheiros, moedas, dungeon)`);
   ok(/Página \*\*1\/|Page \*\*1\//.test(w) || (w.match(/🎲/g) ?? []).length >= 2, `[${lang}] e vem em páginas`);
 }
@@ -12474,7 +12474,7 @@ let res = await av.aoEntrar(membro, ctxAv(cfgAv()));
 ok(res[0]?.apitou && editados.some((x) => x.u === "NOVO" && x.d.timeout), "★ entrou com a foto imprópria: silenciado (timeout nativo) — o padrão");
 ok(db.lerPunicao("S", "NOVO")?.silencioAte > Date.now() + 23 * 3600e3, "  → por 24 h, gravado (sair e voltar reaplica)");
 const alerta = enviados.find((e) => e.canal === "ALERTA");
-ok(alerta && /<%R_STAFF>/.test(alerta.description) && /acabou de entrar/.test(alerta.description) && /dismiss NOVO/.test(alerta.description), "★ a staff é chamada, com como liberar");
+ok(alerta && /<%R_STAFF>/.test(alerta.description) && /acabou de entrar/.test(alerta.description) && /liberar NOVO/.test(alerta.description), "★ a staff é chamada, com como liberar");   // 17 out: o painel do sentinela fala português (era `dismiss`)
 ok(alerta && !alerta.imagem && !alerta.anexos && /NÃO é repostada/.test(alerta.description), "  → e a foto nunca vai no alerta");
 ok(analises[0] === "https://cdn.stoatusercontent.com/avatars/FOTO1", "  → o modelo viu a foto do CDN");
 
@@ -14729,6 +14729,353 @@ await t("os presets e o `gradient(` sem `linear-` passam na regra do Stoat", () 
 });
 
 console.log(`\nCOR SINTAXE (16 out): ${ok} ok, ${falhou} falha(s)`);
+process.exit(falhou ? 1 : 0);
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+// comandos-17out — inventário de comandos (fase 0 da reestruturação)
+// ════════════════════════════════════════════════════════════════════════════
+// Antes de mover a declaração dos comandos para um registro central, isto
+// trava o que existe hoje, para a mudança não perder nada:
+//
+//   1. TODO nome de comando (149) resolve para o mesmo comando e a mesma
+//      função que está em docs/comandos/inventario.json; e todo subcomando em
+//      inglês continua virando o mesmo nome interno. Nome que some ou muda de
+//      destino falha. Nome NOVO também falha até ser registrado:
+//        INVENTARIO=1 node testes.mjs comandos-17out
+//      regrava o inventário (o .json e o INVENTARIO.md legível).
+//   2. Cada exemplo de comando que a ajuda e o tutorial mostram (≈1.200, PT e
+//      EN) é EXECUTADO no bot de mentira, num servidor novo cada um. Nenhum
+//      pode responder "subcomando desconhecido"; os exemplos prontos para
+//      copiar (sem ‹…›) não podem responder erro.
+//   3. Nenhuma tela em inglês mostra palavra de comando em português.
+//
+// Por que executar em vez de procurar a palavra no código-fonte: o help-
+// comandos achava a palavra `set` no código e dava o `anticaps set limiar`
+// como certo — o filtro nem existe mais com esse nome.
+SUITES["comandos-17out"] = async () => {
+const fs = (await import("node:fs")).default;
+const { createHash } = await import("node:crypto");
+const ARQ_JSON = "docs/comandos/inventario.json", ARQ_MD = "docs/comandos/INVENTARIO.md";
+const ATUALIZAR = process.env.INVENTARIO === "1";
+
+// ── o bot de mentira, com um servidor novo por exemplo ──
+const DB = "/tmp/cmd17.db";
+for (const f of [DB, DB + "-wal", DB + "-shm", "/tmp/cmd17.json"]) fs.rmSync(f, { force: true });
+// IDs no formato do Stoat (26 caracteres): vários comandos conferem o formato
+const ulid = (semente) => { const A = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"; const b = createHash("sha256").update(String(semente)).digest(); let o = "01K"; for (let i = 0; i < 23; i++) o += A[b[i] % 32]; return o; };
+const U1 = ulid("dono"), U2 = ulid("alvo"), U3 = ulid("ana"), ROLE_BOT = ulid("cargo-bot"), ROLE_VIP = ulid("cargo-vip");
+Object.assign(process.env, { BOT_TOKEN: "tok", DB_PATH: DB, CONFIG_PATH: "/tmp/cmd17.json", SUPER_ADMINS: U1 });
+// a API do Stoat responde OK; o resto da internet (feeds, voz) está fora do ar
+globalThis.fetch = async (url) => /stoat\.chat|stoatusercontent|\/servers\/|\/channels\/|\/users\//.test(String(url))
+  ? { ok: true, status: 200, text: async () => "{}", json: async () => ({}), headers: new Map() }
+  : { ok: false, status: 503, text: async () => "", json: async () => ({}), headers: new Map() };
+const quieto = async (fn) => { const o = [console.log, console.info, console.warn, console.error]; console.log = console.info = console.warn = console.error = () => {}; try { return await fn(); } finally { [console.log, console.info, console.warn, console.error] = o; } };
+const main = await quieto(() => import("./main.js"));
+const paginas = await import("./modulos/core/paginas.js");
+const aliasesMod = await import("./modulos/core/aliases.js");
+const geral = await import("./modulos/moderacao/geral.js");
+const { grupos } = await import("./modulos/moderacao/help-grupos.js");
+const { parametros } = await import("./modulos/moderacao/help-parametros.js");
+const c = globalThis.__client;
+await quieto(() => c.emitAll("ready"));
+const env = [];
+let nMsg = 0;
+const fazMsg = (p) => { const id = "M" + (++nMsg); env.push(p); return { id, react: async () => {}, delete: async () => {}, edit: async (q) => { env.push(q); } }; };
+const novoCanal = (sid, nome, id = ulid(sid + "#" + nome)) => ({ id, serverId: sid, name: nome, type: "TextChannel", nsfw: false, sendMessage: async (p) => fazMsg(p), fetchMessages: async () => [], deleteMessages: async () => {} });
+const servidores = new Map();
+function servidor(sid) {
+  if (servidores.has(sid)) return servidores.get(sid);
+  const canal = novoCanal(sid, "geral", ulid("C" + sid));
+  const extras = ["logs", "debate", "regras", "rules", "boas-vindas", "welcome"].map((n) => novoCanal(sid, n));
+  const pessoa = (uid, nome, staff) => ({ id: { server: sid, user: uid }, roles: [], hasPermission: () => staff, user: { id: uid, username: nome }, nickname: nome, joinedAt: new Date(0), edit: async () => {}, kick: async () => {} });
+  const dono = pessoa(U1, "Dono", true), fulano = pessoa(U2, "Fulano", false), ana = pessoa(U3, "Ana", false);
+  const cargo = (n, rank) => ({ name: n, rank, permissions: { a: 0, d: 0 } });
+  const roles = new Map([[ROLE_BOT, cargo("Judy", 1)], [ROLE_VIP, cargo("VIP", 9)],
+    ...["Moderador", "Moderator", "Membro", "Member", "Le Gooby", "Jogos", "Games", "Staff"].map((n, i) => [ulid("cargo-" + n), cargo(n, 10 + i)])]);
+  const server = { id: sid, ownerId: U1, name: "Teste", roles, channels: [canal, ...extras], channelIds: new Set([canal.id, ...extras.map((x) => x.id)]),
+    member: { roles: [ROLE_BOT] }, havePermission: () => true,
+    kickUser: async () => {}, banUser: async () => {}, unbanUser: async () => {}, setRoleOrdering: async () => {}, createRole: async (n) => ({ id: ROLE_VIP, name: n }),
+    fetchMember: async (u) => ({ [U2]: fulano, [U3]: ana }[String(u?.id ?? u?.user ?? u)] ?? dono),
+    fetchMembers: async () => ({ members: [dono, fulano, ana], users: [] }), fetchBans: async () => [] };
+  c.servers.set(sid, server);
+  for (const x of [canal, ...extras]) c.channels.set(x.id, x);
+  const r = { server, canal, dono };
+  servidores.set(sid, r);
+  return r;
+}
+c.users.set(U1, { id: U1, username: "Dono", bot: false }); c.users.set(U2, { id: U2, username: "Fulano", bot: false }); c.users.set(U3, { id: U3, username: "Ana", bot: false });
+const textoDe = (p) => { const e = p?.embeds?.[0] ?? p; return `${e?.title ?? ""}\n${e?.description ?? ""}\n${(e?.fields ?? []).map((f) => `${f.name}\n${f.value}`).join("\n")}${typeof p?.content === "string" ? "\n" + p.content : ""}`; };
+// manda a mensagem e devolve o texto de TODAS as páginas da resposta (vira com ▶)
+async function say(conteudo, sid, { limiteMs = 3000 } = {}) {
+  const { server, canal, dono } = servidor(sid);
+  env.length = 0;
+  const primeira = nMsg + 1;
+  const ev = { id: "X" + nMsg, authorId: U1, content: conteudo, serverId: sid, server, channel: canal, channelId: canal.id,
+    mentionIds: [...conteudo.matchAll(/<@(\w+)>/g)].map((m) => m[1]), createdAt: new Date(), author: { id: U1, username: "Dono", bot: false }, member: dono, replyIds: [], attachments: [] };
+  let estourou = false;
+  await quieto(() => Promise.race([c.emitAll("messageCreate", ev), new Promise((r) => setTimeout(() => { estourou = true; r(); }, limiteMs))]));
+  const saidas = env.slice();
+  for (let id = primeira; id <= nMsg; id++) {
+    for (let k = 0; k < 12; k++) {
+      env.length = 0;
+      const virou = await quieto(() => paginas.aoReagir("M" + id, U1, "▶"));
+      if (!virou || !env.length || /(Página|Page) \*\*1\//.test(textoDe(env[0]))) break;
+      saidas.push(env[0]);
+    }
+  }
+  return { texto: saidas.map(textoDe).join("\n"), estourou };
+}
+let nSid = 0;
+async function servidorNovo(lang) { const sid = ulid("S" + (++nSid)); await say(lang === "en" ? "&language en" : "&idioma pt", sid); return sid; }
+
+let ok = 0, falhou = 0;
+const t = async (nome, fn) => { try { await fn(); console.log(`  ✅ ${nome}`); ok++; } catch (e) { console.log(`  ❌ ${nome}\n     ${String(e.message).split("\n").join("\n     ")}`); falhou++; } };
+const assert = (await import("node:assert")).default;
+
+// ── 1. A tabela de comandos ──
+const { rotas, CANONICO, COMANDOS_GERENCIAVEIS, COMANDOS_SO_IA } = main.tabelaDeComandos();
+const atual = { nomes: {}, sub: {} };
+// `rota`: o primeiro nome (na ordem do main.js) que leva à MESMA função — duas
+// funções com o mesmo nome (`cmd` das boas-vindas e do adeus) não se confundem
+const primeiraRota = new Map();
+for (const [n, fn] of Object.entries(rotas)) if (!primeiraRota.has(fn)) primeiraRota.set(fn, n);
+for (const [n, fn] of Object.entries(rotas).sort(([a], [b]) => a.localeCompare(b))) atual.nomes[n] = { canonico: CANONICO[n] ?? n, rota: primeiraRota.get(fn), funcao: fn.name };
+for (const [cmd, m] of Object.entries(aliasesMod.SUB).sort(([a], [b]) => a.localeCompare(b))) atual.sub[cmd] = Object.fromEntries(Object.entries(m).sort(([a], [b]) => a.localeCompare(b)));
+const salvo = fs.existsSync(ARQ_JSON) ? JSON.parse(fs.readFileSync(ARQ_JSON, "utf8")) : null;
+
+console.log("── 1. nenhum nome de comando perdido ──");
+await t(`os ${Object.keys(atual.nomes).length} nomes resolvem como no inventário (mesmo comando, mesma função)`, () => {
+  if (ATUALIZAR) return;
+  assert.ok(salvo, `${ARQ_JSON} não existe — rode com INVENTARIO=1 para criá-lo`);
+  const perdidos = Object.keys(salvo.nomes).filter((n) => !atual.nomes[n]);
+  const mudaram = Object.keys(salvo.nomes).filter((n) => atual.nomes[n] && JSON.stringify(atual.nomes[n]) !== JSON.stringify(salvo.nomes[n]))
+    .map((n) => `${n}: ${JSON.stringify(salvo.nomes[n])} → ${JSON.stringify(atual.nomes[n])}`);
+  const novos = Object.keys(atual.nomes).filter((n) => !salvo.nomes[n]);
+  assert.deepEqual({ perdidos, mudaram }, { perdidos: [], mudaram: [] }, "nome sumiu ou mudou de destino");
+  assert.deepEqual(novos, [], "nome novo fora do inventário — confira e rode com INVENTARIO=1");
+});
+await t("todo subcomando em inglês continua virando o mesmo nome interno", () => {
+  if (ATUALIZAR) return;
+  const problemas = [];
+  for (const [cmd, m] of Object.entries(salvo.sub)) for (const [en, pt] of Object.entries(m)) {
+    if (atual.sub[cmd]?.[en] !== pt) problemas.push(`${cmd} ${en}: ${pt} → ${atual.sub[cmd]?.[en] ?? "(sumiu)"}`);
+  }
+  const novos = Object.entries(atual.sub).flatMap(([cmd, m]) => Object.keys(m).filter((en) => salvo.sub[cmd]?.[en] === undefined).map((en) => `${cmd} ${en}`));
+  assert.deepEqual(problemas, [], "subcomando em inglês sumiu ou mudou");
+  assert.deepEqual(novos, [], "subcomando em inglês novo fora do inventário — rode com INVENTARIO=1");
+});
+await t("comando gerenciável e comando só de IA têm rota", () => {
+  for (const cmd of [...COMANDOS_GERENCIAVEIS, ...COMANDOS_SO_IA]) assert.ok(rotas[cmd], cmd);
+});
+await t("nenhum apelido declarado em dois lugares (main.js × aliases.js)", () => {
+  const src = fs.readFileSync("main.js", "utf8");
+  const i = src.indexOf("const CANONICO = {"), bloco = src.slice(i, src.indexOf("\n};", i));
+  const doMain = [...bloco.matchAll(/["']?([\wçãéó-]+)["']?:\s*"/g)].map((m) => m[1]);
+  assert.deepEqual(doMain.filter((n) => aliasesMod.COMANDO_EXTRA[n]), []);
+});
+
+// ── 2. Os exemplos da ajuda, executados ──
+const PULAR_EN = /^&help (game (admin|moeda)|servidores)\b/;   // telas só do dono do bot (ficam em PT)
+const telas = [];
+for (const lang of ["pt", "en"]) {
+  const sid = await servidorNovo(lang);
+  const caminhos = [[]];
+  for (const g of Object.keys(grupos("&", lang) ?? {})) caminhos.push([g]);
+  for (const cmd of Object.keys(geral.construirDetalhes("&", lang))) caminhos.push([cmd]);
+  const descer = (no, cam) => { for (const k of Object.keys(no ?? {})) { if (k === "titulo" || k === "texto" || typeof no[k] !== "object") continue; caminhos.push([...cam, k]); descer(no[k], [...cam, k]); } };
+  descer(geral.arvoreDaAjuda("&", lang), []);
+  const pedidos = caminhos.map((cam) => ["&help", ...cam].join(" "));
+  for (let n = 1; n <= 30; n++) pedidos.push(`&tutorial ${n}`);
+  for (const m of (await say("&tutorial __nenhuma__", sid)).texto.matchAll(/`&?tutorial ([a-z]+)`|`([a-z]+)`/g)) {
+    const area = m[1] ?? m[2];
+    if (area && area !== "tutorial") pedidos.push(`&tutorial ${area}`);
+  }
+  for (const p of [...new Set(pedidos)]) telas.push({ lang, pagina: p, texto: (await say(p, sid)).texto });
+}
+const exemplos = new Map();   // "lang\texemplo" → páginas onde aparece
+for (const tela of telas) for (const m of tela.texto.matchAll(/`(&[^`\n]+)`/g)) {
+  const k = `${tela.lang}\t${m[1].trim()}`;
+  if (!exemplos.has(k)) exemplos.set(k, new Set());
+  exemplos.get(k).add(tela.pagina);
+}
+
+// Preenche os ‹moldes› com um valor do tipo certo
+function valor(ph) {
+  const p = ph.toLowerCase().trim();
+  if (/\|/.test(p)) {
+    // lista de opções (`cargo|canal|staffignora|status`): a primeira, literal; dois tipos (`id|url`): um valor do primeiro
+    const alts = p.split("|").map((x) => x.trim()), a = alts[0];
+    const palavra = /^[a-z0-9çãéíóú-]+$/.test(a);
+    return palavra && (alts.length >= 3 || !/^(canal|channel|cargo|role|pessoa|person|user|id|nome|name|n|url|link|texto|text|item|slot|contrato|contract|vaga|cor|color|hex|modo|mode)$/.test(a)) ? a : valor(a);
+  }
+  if (/^\d+$/.test(p)) return p;
+  if (/cidade|city|termo|term|fuso|zone/.test(p)) return "Tokyo";
+  if (/mensagem|message|msg/.test(p)) return "https://stoat.chat/server/S/channel/C/MSG";
+  if (/pre[cç]o|price|custo|cost/.test(p)) return "3";
+  if (/canal|channel/.test(p)) return "<#CS>";
+  if (/cargo|role/.test(p)) return `<%${ROLE_VIP}>`;
+  if (/pessoa|person|user|membro|member|usu[aá]rio|alvo|target|@/.test(p)) return `<@${U2}>`;
+  if (/link|url/.test(p)) return "https://example.com";
+  if (/\bid\b|id do|idd?o?canal|channelid/.test(p)) return ulid("um-id");
+  if (/hex|cor\b|colou?r/.test(p)) return "#FF00AA";
+  if (/tempo|dura|time|minut/.test(p)) return "10m";
+  if (/\d+-\d+/.test(p)) return p.match(/\d+/)[0];
+  if (/^n$|n[uú]mero|number|qtd|quant|amount|valor|value|dias|days|n[ií]vel|level|segundos|seconds|limite|limit|pontos|points|%/.test(p)) return "3";
+  if (/emoji/.test(p)) return "🔥";
+  return "teste";
+}
+function instanciar(ex, sid) {
+  let s = ex.replace(/\s*…/g, "").replace(/\[[^\]]*\]/g, "");
+  s = s.replace(/<@(cargo|role|membro|member)>/gi, "@cargo");
+  s = s.replace(/‹([^›]*)›/g, (_, ph) => valor(ph)).replace(/<([^>@#%:]+)>/g, (_, ph) => valor(ph));
+  s = s.split(/\s+/).map((tk) => (/^[a-z0-9-]+(\|[a-z0-9-]+)+$/i.test(tk) ? tk.split("|")[0] : tk)).join(" ");
+  s = s.replace(/(^|\s)@(pessoa|person|user|usuario|usuário|alguem|alguém|someone|x|fulano)\b/gi, `$1<@${U2}>`)
+    .replace(/(^|\s)#(canal|channel)\b/gi, "$1<#CS>")
+    .replace(/(^|\s)@(cargo|role|vip|moderador|moderator)\b/gi, `$1<%${ROLE_VIP}>`);
+  return s.replace(/<#CS>/g, `<#${ulid("C" + sid)}>`).replace(/\s+/g, " ").trim();
+}
+// ‹comando›, ‹grupo›… são o molde da própria sintaxe, não um valor
+const META = /‹(comando|command|grupo|group|parte|part|filtro|filter|subcomando|subcommand|m[oó]dulo|module|op[cç][aã]o|option)›/i;
+const DESCONHECIDO = /desconhecid|Unknown (subcommand|part|command)|Parte desconhecida|Não conheço esse|don.t know that one|quis dizer|Did you mean/i;
+// o ambiente do teste, não a sintaxe: sem internet, sem voz, sem IA, sem canal configurado ainda
+const AMBIENTE = /Feed inacessível|Unreachable feed|Indisponível aqui|Unavailable here|Não existe aqui|Not a command here|Falta o canal|No channel yet|Sem canal|No channel/;
+const execucoes = [];
+for (const [k, onde] of exemplos) {
+  const [lang, ex] = k.split("\t");
+  if (/^&(help|tutorial)\b/.test(ex)) continue;
+  const sid = await servidorNovo(lang);
+  const cmd = instanciar(ex, sid);
+  const r = await say(cmd, sid);
+  execucoes.push({ lang, ex, cmd, onde: [...onde], titulo: r.texto.split("\n")[0], texto: r.texto, estourou: r.estourou });
+}
+const erroDe = (x) => /^(❌|❓|🚫)/.test(x.titulo);
+const literal = (x) => !/[‹›<>\[\]|…]/.test(x.ex);
+
+console.log(`\n── 2. ${telas.length} telas de ajuda, ${execucoes.length} exemplos executados ──`);
+await t("toda tela de ajuda e de tutorial responde alguma coisa", () => {
+  assert.deepEqual(telas.filter((x) => !x.texto.trim()).map((x) => `[${x.lang}] ${x.pagina}`), []);
+});
+await t("nenhum exemplo da ajuda responde \"subcomando desconhecido\"", () => {
+  const ruins = execucoes.filter((x) => !META.test(x.ex) && (DESCONHECIDO.test(x.titulo) || /^(Você quis dizer|Did you mean)/.test(x.texto.split("\n")[1] ?? "")))
+    // valor de mentira que o jogo não conhece (item "teste") não é sintaxe errada
+    .filter((x) => !/^❌ (Item|Magia|Moeda|Follower|Missão|Contrato|Dungeon) desconhecid|^❌ Unknown (item|spell|currency|follower|mission|contract|dungeon)/.test(x.titulo))
+    .filter((x) => !/^❓ (Qual\?|Which one\?)/.test(x.titulo));
+  assert.deepEqual(ruins.map((x) => `[${x.lang}] ${x.ex}  →  ${x.cmd}  ←  ${x.titulo}`), []);
+});
+await t("exemplo pronto para copiar (sem ‹…›, 3+ palavras) não responde erro", () => {
+  const ruins = execucoes.filter((x) => literal(x) && x.ex.split(/\s+/).length >= 3 && erroDe(x) && !AMBIENTE.test(x.titulo) && !x.ex.includes("..."));
+  assert.deepEqual(ruins.map((x) => `[${x.lang}] ${x.ex}  ←  ${x.titulo}`), []);
+});
+
+// ── 3. Português na tela em inglês ──
+// Palavras de comando em português que têm nome em inglês. Só dentro de `…`
+// (é o que a pessoa copia); `.com` de domínio não conta.
+const PT = /(?<![.\w])(abrir|resetar|validade|ignorados|lembrar|fechar|mao1|mao2|staffignora|pausar|fila|parar|faixa|criterios|critérios|herdar|sensibilidade|testar|simular|partir|acumular|confirmar|com|por|canal|cargo|pessoa|titulo|descricao)(?![\w])/i;
+await t("nenhuma tela ou resposta em inglês mostra comando em português", () => {
+  const achados = new Set();
+  const varrer = (texto, onde) => { for (const m of texto.matchAll(/`([^`\n]+)`/g)) if (PT.test(m[1])) achados.add(`${onde}: \`${m[1].slice(0, 90)}\``); };
+  for (const x of telas) if (x.lang === "en" && !PULAR_EN.test(x.pagina)) varrer(x.texto, x.pagina);
+  for (const x of execucoes) if (x.lang === "en" && !/^&(servers|servidores|game admin)\b/.test(x.cmd)) varrer(x.texto, `resposta de ${x.cmd.slice(0, 50)}`);
+  assert.deepEqual([...achados], []);
+});
+
+// ── 4. Os casos que esta rodada corrigiu (cada um falhava antes) ──
+console.log("\n── 4. o legado corrigido ──");
+const comando = async (lang, txt) => { const sid = await servidorNovo(lang); const { canal } = servidor(sid); return (await say(txt.replace("{C}", canal.id), sid)).texto; };
+await t("`&automod sentinela assuntos liberar <#canal>` e `#nome` (antes: \"canal de outro servidor\" sempre)", async () => {
+  assert.match(await comando("pt", "&automod sentinela assuntos liberar <#{C}>"), /liberado/);
+  assert.match(await comando("pt", "&automod sentinela assuntos liberar #debate"), /liberado/);
+  assert.match(await comando("pt", "&automod sentinela assuntos liberar #naoexiste"), /Canal não encontrado/);
+});
+await t("painel do sentinela em português: `sensibilidade`, `canal` (antes: \"subcomando desconhecido\")", async () => {
+  assert.match(await comando("pt", "&automod sentinela sensibilidade alta"), /Sensibilidade: \*\*alta\*\*/);
+  assert.match(await comando("pt", "&automod sentinela canal aqui"), /Canal de aviso/);
+  assert.match(await comando("pt", "&automod sentinela canal off"), /Sem canal próprio/);
+  assert.match(await comando("en", "&automod sentinel sensitivity high"), /Sensitivity: \*\*high\*\*/);
+  assert.match(await comando("en", "&automod sentinel channel here"), /Alert channel/);
+});
+await t("`&automod punicao validade` sem valor mostra a atual; `expiry` em inglês", async () => {
+  assert.match(await comando("pt", "&automod punicao validade"), /⏳ Validade dos avisos[\s\S]*30/);
+  assert.match(await comando("en", "&automod punishment expiry 10"), /reset after \*\*10\*\*/);
+});
+await t("`&automod blocklist` sozinho é informação, não \"uso incorreto\"", async () => {
+  assert.match(await comando("pt", "&automod blocklist"), /^🧱 Lista de bloqueio/);
+});
+await t("`&staff add` com nome de cargo com espaço; sozinho, pergunta qual", async () => {
+  assert.match(await comando("pt", "&staff add Le Gooby"), /Le Gooby/);
+  assert.match(await comando("pt", "&staff add"), /^❓ Qual cargo\?/);
+  assert.match(await comando("pt", "&banglobal esquecer"), /^❓ Quem\?/);
+});
+await t("a tabela de parâmetros não ensina mais a sintaxe antiga", () => {
+  const txt = JSON.stringify([parametros("&", "pt"), parametros("&", "en")]);
+  for (const velho of ["anticaps set", "&punicao", "<filtro> punicao", "<filter> punicao", "herdar` goes"]) assert.ok(!txt.includes(velho), velho);
+});
+
+// ── O inventário legível ──
+if (ATUALIZAR) {
+  const porCanonico = {};
+  for (const [n, v] of Object.entries(atual.nomes)) (porCanonico[v.canonico] ??= { nomes: [], funcao: v.funcao === "cmd" || !v.funcao ? `${v.rota} (${v.funcao || "anônima"})` : v.funcao }).nomes.push(n);
+  const contar = (cmd) => [...exemplos.keys()].filter((k) => new RegExp(`^\\w+\\t&(${porCanonico[cmd].nomes.join("|")})\\b`).test(k)).length;
+  const json = {
+    _leia: "Gerado por `INVENTARIO=1 node testes.mjs comandos-17out`. A suíte comandos-17out falha se um nome daqui sumir ou mudar de destino. Não edite à mão.",
+    nomes: atual.nomes, sub: atual.sub,
+  };
+  fs.mkdirSync("docs/comandos", { recursive: true });
+  fs.writeFileSync(ARQ_JSON, JSON.stringify(json, null, 1) + "\n");
+  const linhas = [
+    "# Inventário de comandos",
+    "",
+    "Gerado por `INVENTARIO=1 node testes.mjs comandos-17out` — **não edite à mão**. É a foto do que existe antes da",
+    "reestruturação dos comandos num registro central (fase 0). A suíte `comandos-17out` compara o bot com o",
+    "`inventario.json` desta pasta: nome que some ou muda de destino faz o teste falhar.",
+    "",
+    `**${Object.keys(porCanonico).length} comandos · ${Object.keys(atual.nomes).length} nomes · ${Object.values(atual.sub).reduce((a, m) => a + Object.keys(m).length, 0)} subcomandos em inglês · ${telas.length} telas de ajuda · ${execucoes.length} exemplos executados**`,
+    "",
+    "## Comandos",
+    "",
+    "| Comando | Nome na tela em inglês | Todos os nomes que levam a ele | Função | Liga/desliga | Exemplos na ajuda |",
+    "|---|---|---|---|---|---|",
+    ...Object.entries(porCanonico).sort(([a], [b]) => a.localeCompare(b)).map(([cmd, v]) =>
+      `| \`${cmd}\` | ${aliasesMod.COMANDO_EN[cmd] ? `\`${aliasesMod.COMANDO_EN[cmd]}\`` : "—"} | ${v.nomes.filter((n) => n !== cmd).map((n) => `\`${n}\``).join(" ") || "—"} | \`${v.funcao}\` | ${COMANDOS_SO_IA.has(cmd) ? "só IA" : COMANDOS_GERENCIAVEIS.includes(cmd) ? "sim" : "—"} | ${contar(cmd)} |`),
+    "",
+    "_Comando_ é o nome interno (o que o `&comando desativar` e o banco guardam). `sobre`, `info` e `about` levam à",
+    "mesma função mas são três comandos para o bot — desativar um não desativa os outros. A fase 1 resolve isso.",
+    "",
+    "## Onde cada comando está declarado hoje",
+    "",
+    "Um comando, hoje, mora em vários lugares — é o que a fase 1 vai juntar num registro só:",
+    "",
+    "| Lugar | O que guarda |",
+    "|---|---|",
+    "| `main.js` → `rotas` | o nome e a função; vários apelidos também estão aqui |",
+    "| `main.js` → `CANONICO` | apelido → nome interno |",
+    "| `modulos/core/aliases.js` → `COMANDO_EXTRA`, `COMANDO_EN` | apelidos em inglês e o nome mostrado na tela em inglês |",
+    "| `modulos/core/aliases.js` → `SUB`, `ANINHADOS`, `SO_EXIBIR`, `PLACEHOLDER_EN` | subcomandos inglês → português, para entrada e para a tela |",
+    "| `modulos/core/nomes-automod.js` | grupos, partes, modos e temas do automod nos dois idiomas |",
+    "| cada handler (`if (sub === … )`) | o parse de novo, muitas vezes já aceitando os dois idiomas |",
+    "| `help-arvore.js`, `geral.js` (`construirSubtopicos`, `construirDetalhes`) | as páginas de ajuda, PT e EN escritas em cópias separadas |",
+    "| `help-grupos.js`, `help-parametros.js`, `tutorial.js`, `assistente.js` | índice, parâmetros, tutorial e os comandos que o assistente gera |",
+    "| `main.js` → `COMANDOS_GERENCIAVEIS`, `COMANDOS_SO_IA`, `COMANDOS_DE_VOZ`, `ESSENCIAIS` | listas soltas de comportamento |",
+    "",
+    "## Subcomandos em inglês (entrada)",
+    "",
+    ...Object.entries(atual.sub).map(([cmd, m]) => `- \`${cmd}\`: ${Object.entries(m).filter(([en, pt]) => en !== pt).map(([en, pt]) => `${en}→${pt}`).join(", ") || "—"}`),
+    "",
+    "## Exemplos da ajuda que respondem erro (pendências para as próximas fases)",
+    "",
+    "Executados com valores de mentira no lugar dos `‹moldes›`, então parte disto é o valor (um item que não existe),",
+    "não a sintaxe. O que a suíte já trava (subcomando desconhecido, exemplo pronto com erro, português na tela em",
+    "inglês) não aparece aqui.",
+    "",
+    ...execucoes.filter((x) => erroDe(x) || x.estourou).map((x) => `- [${x.lang}] \`${x.ex}\` → ${x.estourou ? "⏱️ não respondeu em 3 s" : x.titulo.replace(/\|/g, "\\|")}`),
+    "",
+  ];
+  fs.writeFileSync(ARQ_MD, linhas.join("\n"));
+  console.log(`\n📝 inventário regravado: ${ARQ_JSON} e ${ARQ_MD}`);
+}
+
+console.log(`\nCOMANDOS (17 out): ${ok} ok, ${falhou} falha(s)`);
 process.exit(falhou ? 1 : 0);
 };
 

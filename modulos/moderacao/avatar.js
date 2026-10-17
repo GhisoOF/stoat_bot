@@ -207,7 +207,7 @@ async function alertar(ctx, { server, userId, origem, r, feito, acao, en }) {
       `> ${r.descricao.replace(/\n+/g, " ").slice(0, 400)}`,
       "",
       en ? "**The picture is NOT reposted here.** It's a model's description — check the profile." : "**A foto NÃO é repostada aqui.** É a descrição de um modelo — confira o perfil.",
-      acao !== "banir" ? `\`${P}automod sentinela dismiss ${userId}\` · \`${P}automod sentinela ban ${userId}\`` : null,
+      acao !== "banir" ? (en ? `\`${P}automod sentinel dismiss ${userId}\` · \`${P}automod sentinel ban ${userId}\`` : `\`${P}automod sentinela liberar ${userId}\` · \`${P}automod sentinela banir ${userId}\``) : null,
     ].filter((x) => x !== null).join("\n"),
     colour: r.grave ? ctx.COR?.erro : ctx.COR?.aviso,
   });

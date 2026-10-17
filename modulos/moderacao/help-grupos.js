@@ -329,7 +329,7 @@ function gruposEN(P) {
         "**Adventure**",
         `\`${P}game missao\` — missions and your odds · \`${P}game missao <name>\` — set off`,
         `\`${P}game coop abrir <mission>\` — calls up to 4 people to the dungeon · \`${P}game coop entrar\``,
-        `\`${P}game resetar pontos\` — gives back the spent points to redistribute (costs Gold)`,
+        `\`${P}game respec points\` — gives back the spent points to redistribute (costs Gold)`,
         `\`${P}game followers\` · \`${P}game recrutas\` · \`${P}game contratar [name]\` — companions`,
         `\`${P}game follower levar|tirar <name>\` — builds the party · \`${P}game follower ficha <name>\``,
         `\`${P}game dungeon\` — who's captured · \`${P}game descansar\` — energy`,

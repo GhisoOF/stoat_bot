@@ -124,7 +124,7 @@ export async function cmdEmbed(message, args, ctx) {
       { title: "❌ Embed vazio",
         description: "Informe pelo menos um `titulo` ou uma `descricao`.", colour: COR.erro },
       { title: "❌ Empty embed",
-        description: "Provide at least a `titulo` or a `descricao`.", colour: COR.erro }));
+        description: "Provide at least a `title` or a `description`.", colour: COR.erro }));
   }
 
   // Resolve o canal de destino

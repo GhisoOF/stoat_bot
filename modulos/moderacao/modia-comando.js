@@ -152,5 +152,5 @@ export async function cmdModIA(message, args, ctx) {
     { title: "❓ Subcomando desconhecido",
       description: `Use: \`on\`, \`off\`, \`criterios\`, \`canal\`, \`limpar\` ou \`status\`.`, colour: COR.erro },
     { title: "❓ Unknown subcommand",
-      description: `Use: \`on\`, \`off\`, \`criterios\`, \`canal\`, \`limpar\` or \`status\`.`, colour: COR.erro }));
+      description: `Use: \`on\`, \`off\`, \`criteria\`, \`channel\`, \`clear\` or \`status\`.`, colour: COR.erro }));
 }

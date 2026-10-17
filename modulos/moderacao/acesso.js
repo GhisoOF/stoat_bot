@@ -256,5 +256,5 @@ export async function cmdAcesso(message, args, ctx) {
     { title: "❓ Subcomando desconhecido",
       description: `Use: \`cargo\`, \`canal\`, \`staffignora\` ou \`status\`.`, colour: COR.erro },
     { title: "❓ Unknown subcommand",
-      description: `Use: \`cargo\`, \`canal\`, \`staffignora\` or \`status\`.`, colour: COR.erro }));
+      description: `Use: \`role\`, \`channel\`, \`staffbypass\` or \`status\`.`, colour: COR.erro }));
 }

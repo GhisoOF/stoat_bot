@@ -131,20 +131,22 @@ export async function cmdStaff(message, args, ctx) {
   // ── &staff add / remove <@cargo> ──
   if (["add", "adicionar", "remove", "remover", "rem", "del"].includes(sub)) {
     const removendo = ["remove", "remover", "rem", "del"].includes(sub);
-    const alvo = resolverCargo(args[1], server);
+    // o nome inteiro (17 out 2026: "Le Gooby" virava "Le"); sem nada, pergunta em vez de acusar erro
+    const pedido = args.slice(1).join(" ").trim();
+    const alvo = pedido ? resolverCargo(pedido, server) : null;
     if (!alvo) {
       return sendEmbed(message.channel, tr(ctx,
-        { title: "❌ Cargo não encontrado",
+        { title: pedido ? "❌ Cargo não encontrado" : "❓ Qual cargo?",
           description: [
-            `Não identifiquei um cargo em \`${args[1] ?? ""}\`.`,
+            pedido ? `Não identifiquei um cargo em \`${pedido}\`.` : `\`${PREFIXO}staff ${removendo ? "remove" : "add"} <@cargo|id|nome>\``,
             "",
             `Aceito **menção**, **ID** ou o **nome** do cargo.`,
             `Ex.: \`${PREFIXO}staff ${removendo ? "remove" : "add"} Moderador\``,
           ].join("\n"),
           colour: COR.erro },
-        { title: "❌ Role not found",
+        { title: pedido ? "❌ Role not found" : "❓ Which role?",
           description: [
-            `I couldn't identify a role in \`${args[1] ?? ""}\`.`,
+            pedido ? `I couldn't identify a role in \`${pedido}\`.` : `\`${PREFIXO}staff ${removendo ? "remove" : "add"} <@role|id|name>\``,
             "",
             `I accept a **mention**, an **ID** or the role's **name**.`,
             `E.g.: \`${PREFIXO}staff ${removendo ? "remove" : "add"} Moderator\``,

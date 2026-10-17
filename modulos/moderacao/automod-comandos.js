@@ -8,7 +8,7 @@ import * as log from "../core/log.js";
 import { analisarConteudo } from "./scorecard.js";
 import { tr, lingua } from "../core/i18n.js";
 import { hostDe } from "../core/config-store.js";
-import { resolverUsuario } from "../core/ids.js";
+import { resolverUsuario, resolverCanal } from "../core/ids.js";
 import { banir } from "../core/banir.js";
 import { descreverErro as descreverErroBan } from "../core/erros.js";
 import * as assuntos from "./assuntos.js";
@@ -464,8 +464,8 @@ export async function cmdAutomod(message, args, ctx) {
         colour: COR.erro,
       }, {
         title: "❌ Invalid mode",
-        description: `Modes: ${MODOS_PUN.map((m) => `\`${m}\``).join(", ")}, or \`herdar\` (inherit).\n\n`
-          + "• `avisar` — warn only, no punishment (fixed-rule filters still delete; the sentinel doesn't)\n• `apagar` — remove the message only\n• `confirmar` — silence and wait for a mod\n• `acumular` — stack warnings until a ban\n• `banir` — instant ban",
+        description: `Modes: ${MODOS_PUN.map((m) => `\`${nomeModo(m, "en")}\``).join(", ")}, or \`inherit\`.\n\n`
+          + "• `warn` — warn only, no punishment (fixed-rule filters still delete; the sentinel doesn't)\n• `delete` — remove the message only\n• `confirm` — silence and wait for a mod\n• `stack` — stack warnings until a ban\n• `ban` — instant ban",
         colour: COR.erro,
       }));
     mod.punicao = { ...(mod.punicao ?? {}), modo };
@@ -571,8 +571,12 @@ export async function cmdAutomod(message, args, ctx) {
       ].join("\n") });
     }
     if (["liberar", "allow", "vigiar", "watch"].includes(op)) {
-      const bruto = String(a[1] ?? "").toLowerCase();
-      const canal = (bruto === "aqui" || bruto === "here" || !bruto) ? message.channelId : bruto.replace(/[<#>]/g, "");
+      // 17 out 2026: o ID ia para minúsculas antes de conferir — `<#canal>` de
+      // verdade dava "canal de outro servidor"; e `#nome` nem era procurado.
+      const bruto = String(a[1] ?? "");
+      const canal = resolverCanal(bruto, { message, server });
+      if (!canal) return sendEmbed(message.channel, { title: T("❌ Canal não encontrado", "❌ Channel not found"), colour: COR.erro,
+        description: T(`Não achei o canal \`${bruto}\` neste servidor. Use \`#canal\`, o ID ou \`aqui\`.`, `I couldn't find the \`${bruto}\` channel on this server. Use \`#channel\`, the ID or \`here\`.`) });
       const dele = server?.channelIds ? (server.channelIds.has?.(canal) ?? true) : true;
       if (!dele) return sendEmbed(message.channel, { title: T("❌ Canal de outro servidor", "❌ Channel from another server"), colour: COR.erro, description: `\`${canal}\`` });
       const liberar = op === "liberar" || op === "allow";
@@ -880,26 +884,30 @@ export async function cmdBlocklist(message, args, ctx) {
         description: `Total blocked domains: **${estado.blockedDomains.size}**.`, colour: COR.sucesso }));
   }
 
+  // Só `&automod blocklist` (a ajuda o mostra assim) é uma pergunta, não um erro (17 out 2026).
+  const so = !sub;
   return sendEmbed(message.channel, tr(ctx, {
-    title: "❌ Uso incorreto",
+    title: so ? "🧱 Lista de bloqueio" : "❌ Uso incorreto",
     description: [
+      so ? `**${estado.blockedDomains.size}** domínio(s) carregado(s), compartilhados por todos os servidores.\n` : null,
       `\`${PREFIXO}automod blocklist add <url>\` — adiciona lista Pi-hole`,
       `\`${PREFIXO}automod blocklist adddomain <domínio>\` — bloqueia 1 domínio`,
       `\`${PREFIXO}automod blocklist removedomain <domínio>\``,
       `\`${PREFIXO}automod blocklist remove <url>\``,
       `\`${PREFIXO}automod blocklist list | clear | reload\``,
-    ].join("\n"),
-    colour: COR.erro,
+    ].filter((x) => x !== null).join("\n"),
+    colour: so ? COR.info : COR.erro,
   }, {
-    title: "❌ Wrong usage",
+    title: so ? "🧱 Blocklist" : "❌ Wrong usage",
     description: [
+      so ? `**${estado.blockedDomains.size}** domain(s) loaded, shared by every server.\n` : null,
       `\`${PREFIXO}automod blocklist add <url>\` — adds a Pi-hole list`,
       `\`${PREFIXO}automod blocklist adddomain <domain>\` — blocks 1 domain`,
       `\`${PREFIXO}automod blocklist removedomain <domain>\``,
       `\`${PREFIXO}automod blocklist remove <url>\``,
       `\`${PREFIXO}automod blocklist list | clear | reload\``,
-    ].join("\n"),
-    colour: COR.erro,
+    ].filter((x) => x !== null).join("\n"),
+    colour: so ? COR.info : COR.erro,
   }));
 }
 
@@ -912,7 +920,19 @@ export async function cmdScam(message, args, ctx) {
 
   const cfg = config.automod.antiScam;
   const pol = config.automod.punicao;
-  const sub = args[0]?.toLowerCase();
+  // Os nomes do painel eram só em inglês: `&automod sentinela sensibilidade
+  // alta` e `canal aqui` davam "Subcomando desconhecido" (17 out 2026). Os
+  // dois idiomas valem; o nome interno continua o de antes.
+  const PAINEL = {
+    sensibilidade: "sensitivity", sensitivity: "sensitivity", sens: "sensitivity",
+    canal: "channel", channel: "channel",
+    banir: "ban", ban: "ban",
+    liberar: "dismiss", dismiss: "dismiss",
+    testar: "test", teste: "test", test: "test",
+    simular: "simulate", simulate: "simulate",
+  };
+  const bruto0 = args[0]?.toLowerCase();
+  const sub = PAINEL[bruto0] ?? bruto0;
   const val = args[1];
   const limiarDe = (sens) => engine.limiarBase(sens);
 
@@ -933,13 +953,11 @@ export async function cmdScam(message, args, ctx) {
         `**Punishment:** set with \`${PREFIXO}automod punicao\` (current mode: **${pol.modo}**) — applies to all automods`,
         "",
         "**Commands:**",
-        `\`${PREFIXO}automod sentinela sensitivity <baixa|media|alta>\``,
-        `\`${PREFIXO}automod sentinela antiguidade on|off\` · \`${PREFIXO}automod sentinela alerta on|off\``,
-        `\`${PREFIXO}automod sentinela channel <id|aqui>\``,
-        `\`${PREFIXO}automod sentinela test <text>\` · \`${PREFIXO}automod sentinela simulate <text>\``,
-        `\`${PREFIXO}automod sentinela ban <userId>\` · \`${PREFIXO}automod sentinela dismiss <userId>\``,
-        "",
-        `_\`${PREFIXO}automod sentinela\` still works — it's the old name._`,
+        `\`${PREFIXO}automod sentinel sensitivity <low|medium|high>\``,
+        `\`${PREFIXO}automod sentinel tenure on|off\` · \`${PREFIXO}automod sentinel alert on|off\``,
+        `\`${PREFIXO}automod sentinel channel <#channel|here>\``,
+        `\`${PREFIXO}automod sentinel test <text>\` · \`${PREFIXO}automod sentinel simulate <text>\``,
+        `\`${PREFIXO}automod sentinel ban <@user|id>\` · \`${PREFIXO}automod sentinel dismiss <@user|id>\``,
       ].join("\n"),
     } : {
       title: "🛡 Sentinela — moderação por julgamento",
@@ -957,13 +975,11 @@ export async function cmdScam(message, args, ctx) {
         `**Punição:** definida em \`${PREFIXO}automod punicao\` (modo atual: **${pol.modo}**) — vale para todos os automods`,
         "",
         "**Comandos:**",
-        `\`${PREFIXO}automod sentinela sensitivity <baixa|media|alta>\``,
+        `\`${PREFIXO}automod sentinela sensibilidade <baixa|media|alta>\``,
         `\`${PREFIXO}automod sentinela antiguidade on|off\` · \`${PREFIXO}automod sentinela alerta on|off\``,
-        `\`${PREFIXO}automod sentinela channel <id|aqui>\``,
-        `\`${PREFIXO}automod sentinela test <texto>\` · \`${PREFIXO}automod sentinela simulate <texto>\``,
-        `\`${PREFIXO}automod sentinela ban <userId>\` · \`${PREFIXO}automod sentinela dismiss <userId>\``,
-        "",
-        `_\`${PREFIXO}automod sentinela\` continua funcionando — é o nome antigo._`,
+        `\`${PREFIXO}automod sentinela canal <#canal|aqui>\``,
+        `\`${PREFIXO}automod sentinela testar <texto>\` · \`${PREFIXO}automod sentinela simular <texto>\``,
+        `\`${PREFIXO}automod sentinela banir <@pessoa|id>\` · \`${PREFIXO}automod sentinela liberar <@pessoa|id>\``,
       ].join("\n"),
     });
   }
@@ -1027,22 +1043,35 @@ export async function cmdScam(message, args, ctx) {
 
   if (sub === "sensitivity") {
     const opc = ["baixa", "media", "alta"];
-    if (!opc.includes(val))
+    const v = { low: "baixa", medium: "media", média: "media", high: "alta" }[String(val ?? "").toLowerCase()] ?? String(val ?? "").toLowerCase();
+    if (!opc.includes(v))
       return sendEmbed(message.channel, tr(ctx,
-        { title: "❌ Uso", description: `\`${PREFIXO}automod sentinela sensitivity <${opc.join("|")}>\``, colour: COR.erro },
-        { title: "❌ Usage", description: `\`${PREFIXO}automod sentinela sensitivity <${opc.join("|")}>\``, colour: COR.erro }));
-    cfg.sensitivity = val; salvarConfig();
+        { title: "❌ Uso", description: `\`${PREFIXO}automod sentinela sensibilidade <${opc.join("|")}>\``, colour: COR.erro },
+        { title: "❌ Usage", description: `\`${PREFIXO}automod sentinel sensitivity <low|medium|high>\``, colour: COR.erro }));
+    cfg.sensitivity = v; salvarConfig();
     return sendEmbed(message.channel, tr(ctx,
-      { title: "✅ Sensibilidade", description: `Sensibilidade: **${val}** (limiar ${limiarDe(val)}/10).`, colour: COR.sucesso },
-      { title: "✅ Sensitivity", description: `Sensitivity: **${val}** (threshold ${limiarDe(val)}/10).`, colour: COR.sucesso }));
+      { title: "✅ Sensibilidade", description: `Sensibilidade: **${v}** (limiar ${limiarDe(v)}/10).`, colour: COR.sucesso },
+      { title: "✅ Sensitivity", description: `Sensitivity: **${nomeSens(v, "en")}** (threshold ${limiarDe(v)}/10).`, colour: COR.sucesso }));
   }
 
   if (sub === "channel") {
     if (!val) return sendEmbed(message.channel, tr(ctx,
-      { title: "❌ Uso", description: `\`${PREFIXO}automod sentinela channel <id|aqui>\``, colour: COR.erro },
-      { title: "❌ Usage", description: `\`${PREFIXO}automod sentinela channel <id|here>\``, colour: COR.erro }));
-    cfg.alertChannelId = (val.toLowerCase() === "aqui" || val.toLowerCase() === "here")
-      ? message.channelId : val.replace(/[<#>]/g, "");
+      { title: "❌ Uso", description: `\`${PREFIXO}automod sentinela canal <#canal|aqui>\``, colour: COR.erro },
+      { title: "❌ Usage", description: `\`${PREFIXO}automod sentinel channel <#channel|here>\``, colour: COR.erro }));
+    // 17 out 2026: aceitava qualquer texto (até ID de canal de outro servidor) e não achava `#nome`;
+    // e o `off` que a ajuda ensinava virava o "ID" do canal.
+    if (["off", "nenhum", "none", "limpar", "clear"].includes(val.toLowerCase())) {
+      cfg.alertChannelId = null; salvarConfig();
+      return sendEmbed(message.channel, tr(ctx,
+        { title: "✅ Canal de aviso", description: "Sem canal próprio: os avisos vão para o canal de logs (ou o da mensagem).", colour: COR.sucesso },
+        { title: "✅ Alert channel", description: "No channel of its own: alerts go to the log channel (or the message's channel).", colour: COR.sucesso }));
+    }
+    const alvo = resolverCanal(val, { message, server });
+    const deOutro = alvo && server?.channelIds?.size && !server.channelIds.has(alvo);
+    if (!alvo || deOutro) return sendEmbed(message.channel, tr(ctx,
+      { title: "❌ Canal não encontrado", description: `Não achei \`${val}\` neste servidor. Use \`#canal\`, o ID ou \`aqui\`.`, colour: COR.erro },
+      { title: "❌ Channel not found", description: `I couldn't find \`${val}\` on this server. Use \`#channel\`, the ID or \`here\`.`, colour: COR.erro }));
+    cfg.alertChannelId = alvo;
     salvarConfig();
     return sendEmbed(message.channel, tr(ctx,
       { title: "✅ Canal de aviso", description: `Avisos irão para \`${cfg.alertChannelId}\`.`, colour: COR.sucesso },
@@ -1052,8 +1081,8 @@ export async function cmdScam(message, args, ctx) {
   if (sub === "ban") {
     const uid = (val ?? "").replace(/[<@>]/g, "") || message.mentionIds?.[0];
     if (!uid) return sendEmbed(message.channel, tr(ctx,
-      { title: "❌ Uso", description: `\`${PREFIXO}automod sentinela ban <userId>\``, colour: COR.erro },
-      { title: "❌ Usage", description: `\`${PREFIXO}automod sentinela ban <userId>\``, colour: COR.erro }));
+      { title: "❌ Uso", description: `\`${PREFIXO}automod sentinela banir <@pessoa|id>\``, colour: COR.erro },
+      { title: "❌ Usage", description: `\`${PREFIXO}automod sentinel ban <@user|id>\``, colour: COR.erro }));
     try {
       await banir(server, uid, { reason: "[AutoMod] Confirmado por moderador" });
       return sendEmbed(message.channel, tr(ctx,
@@ -1069,8 +1098,8 @@ export async function cmdScam(message, args, ctx) {
   if (sub === "dismiss") {
     const uid = (val ?? "").replace(/[<@>]/g, "") || message.mentionIds?.[0];
     if (!uid) return sendEmbed(message.channel, tr(ctx,
-      { title: "❌ Uso", description: `\`${PREFIXO}automod sentinela dismiss <userId>\``, colour: COR.erro },
-      { title: "❌ Usage", description: `\`${PREFIXO}automod sentinela dismiss <userId>\``, colour: COR.erro }));
+      { title: "❌ Uso", description: `\`${PREFIXO}automod sentinela liberar <@pessoa|id>\``, colour: COR.erro },
+      { title: "❌ Usage", description: `\`${PREFIXO}automod sentinel dismiss <@user|id>\``, colour: COR.erro }));
     try {
       await tirarTimeout(server, uid);
       // quem foi silenciado ainda com o cargo antigo
@@ -1094,8 +1123,8 @@ export async function cmdScam(message, args, ctx) {
   if (sub === "test") {
     const texto = args.slice(1).join(" ");
     if (!texto) return sendEmbed(message.channel, tr(ctx,
-      { title: "❌ Uso", description: `\`${PREFIXO}automod sentinela test <texto>\``, colour: COR.erro },
-      { title: "❌ Usage", description: `\`${PREFIXO}automod sentinela test <text>\``, colour: COR.erro }));
+      { title: "❌ Uso", description: `\`${PREFIXO}automod sentinela testar <texto>\``, colour: COR.erro },
+      { title: "❌ Usage", description: `\`${PREFIXO}automod sentinel test <text>\``, colour: COR.erro }));
     const r = analisarConteudo(texto, { rate: 1 });
     const limiar = limiarDe(cfg.sensitivity);
     const flag = r.nota >= limiar;
@@ -1119,7 +1148,7 @@ export async function cmdScam(message, args, ctx) {
         `**Signals:** ${r.sinais.join(", ") || "none"}`,
         flag ? `**What it would do:** ${acaoTxt}` : null,
         "",
-        `💡 Real flow in the alert channel: \`${PREFIXO}automod sentinela simulate <text>\``,
+        `💡 Real flow in the alert channel: \`${PREFIXO}automod sentinel simulate <text>\``,
       ].filter(Boolean).join("\n"),
       colour: flag ? COR.erro : COR.sucesso,
     } : {
@@ -1131,7 +1160,7 @@ export async function cmdScam(message, args, ctx) {
         `**Sinais:** ${r.sinais.join(", ") || "nenhum"}`,
         flag ? `**O que faria:** ${acaoTxt}` : null,
         "",
-        `💡 Fluxo real no canal de avisos: \`${PREFIXO}automod sentinela simulate <texto>\``,
+        `💡 Fluxo real no canal de avisos: \`${PREFIXO}automod sentinela simular <texto>\``,
       ].filter(Boolean).join("\n"),
       colour: flag ? COR.erro : COR.sucesso,
     });
@@ -1140,8 +1169,8 @@ export async function cmdScam(message, args, ctx) {
   if (sub === "simulate" || sub === "simular") {
     const texto = args.slice(1).join(" ");
     if (!texto) return sendEmbed(message.channel, tr(ctx,
-      { title: "❌ Uso", description: `\`${PREFIXO}automod sentinela simulate <texto>\``, colour: COR.erro },
-      { title: "❌ Usage", description: `\`${PREFIXO}automod sentinela simulate <text>\``, colour: COR.erro }));
+      { title: "❌ Uso", description: `\`${PREFIXO}automod sentinela simular <texto>\``, colour: COR.erro },
+      { title: "❌ Usage", description: `\`${PREFIXO}automod sentinel simulate <text>\``, colour: COR.erro }));
     await simularDeteccao(texto, ctx, message.channel);
     return sendEmbed(message.channel, tr(ctx, {
       title: "🧪 Simulação enviada",
@@ -1325,11 +1354,22 @@ export async function cmdPunicao(message, args, ctx) {
   }
 
   if (["validade", "vencimento", "expira", "expiry", "expire"].includes(sub)) {
+    // Sem valor mostra a atual, como a `escada` (17 out 2026: dava "❌ Uso").
+    if (val === undefined || val === "") {
+      const atual = Number(pol.validadeDias ?? engine.VALIDADE_PADRAO_DIAS ?? 30);
+      return sendEmbed(message.channel, tr(ctx,
+        { title: "⏳ Validade dos avisos", colour: COR.info, description: [
+          atual ? `Os avisos zeram depois de **${atual}** dia(s) sem um novo.` : "Os avisos **nunca** zeram sozinhos.",
+          `\`${PREFIXO}automod punicao validade <0-365>\` — muda (0 = nunca zeram)`].join("\n") },
+        { title: "⏳ Warning expiry", colour: COR.info, description: [
+          atual ? `Warnings reset after **${atual}** day(s) without a new one.` : "Warnings **never** reset on their own.",
+          `\`${PREFIXO}automod punishment expiry <0-365>\` — changes it (0 = never)`].join("\n") }));
+    }
     const d = parseInt(val, 10);
     if (!Number.isInteger(d) || d < 0 || d > 365)
       return sendEmbed(message.channel, tr(ctx,
         { title: "❌ Uso", description: `\`${PREFIXO}automod punicao validade <0-365>\` — dias sem aviso novo até zerar (0 = nunca zeram)`, colour: COR.erro },
-        { title: "❌ Usage", description: `\`${PREFIXO}automod punicao validade <0-365>\` — days without a new warning until they reset (0 = never)`, colour: COR.erro }));
+        { title: "❌ Usage", description: `\`${PREFIXO}automod punishment expiry <0-365>\` — days without a new warning until they reset (0 = never)`, colour: COR.erro }));
     pol.validadeDias = d; salvarConfig();
     return sendEmbed(message.channel, tr(ctx,
       { title: "✅ Validade dos avisos", description: d ? `Os avisos zeram depois de **${d}** dia(s) sem um novo.` : "Os avisos **nunca** zeram sozinhos.", colour: COR.sucesso },

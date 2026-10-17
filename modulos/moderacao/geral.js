@@ -450,7 +450,7 @@ function detalhesEN(P) {
     },
     game: {
       uso: `${P}game [criar|ficha|pontos|top|apagar]`,
-      desc: "RPG — one world, the same on every server: 10 difficulties × 10 levels (Human to Hyperversal), weapons with damage and scaling, bioware and cyberware, companions, contracts, dungeons and bosses.\n\n`&game criar [name]` — creates your character (with a starter kit and two companions)\n`&game` — your sheet · `&game ficha @user` — someone else's\n`&game pontos <attribute> [amount]` — spends points (abbreviations work: for, int, sor…)\n`&game classe` · `&game evoluir` — pick a class and the bot spends the points and equips for you\n\n`&game contratos` — the guild board (paid by the bank) · `&game contrato <name>` — sets off\n`&game dungeons` · `&game dungeon <name> [chefe]` — open world (paid by its treasury)\n`&game chefes` · `&game especiais` — unique rewards, once per person\n`&game coop abrir <…>` — together, up to 4 · `&game historia` — your last story\n\n`&game itens [type]` · `&game equipar <item> [mao1|mao2]` · `&game usar <contract|scroll>` · `&game desequipar <slot>`\n`&game catalogo [rarity] [type]` · `&game item <name>` · `&game comprar [rarity] [type]` · `&game vender <item>`\n`&game magias` · `&game aprender <name>` — the grimoire (needs Intelligence)\n`&game followers` · `&game follower ficha <name>` · `&game follower levar <name>` · `&game recrutas` · `&game contratar [name]` · `&game descansar`\n`&game carteira` · `&game mercado` · `&game cambio` · `&game trocar @user <item> por <item>`\n`&game top` — world ranking · `&game apagar confirmar` — starts over from scratch\n\n_Bot owner: `&game admin` has the testing tools._\n\n**Attributes:** Strength, Dexterity, Resistance, Agility, Health, Mana, Intelligence, Luck, Charisma.\n\n_A mission pays its strength, the same for everyone: a win at your level is worth 80% of a level; a failure pays nothing._\n\n⚠️ Not to be confused with `&xp`, the per-message leveling system.",
+      desc: "RPG — one world, the same on every server: 10 difficulties × 10 levels (Human to Hyperversal), weapons with damage and scaling, bioware and cyberware, companions, contracts, dungeons and bosses.\n\n`&game criar [name]` — creates your character (with a starter kit and two companions)\n`&game` — your sheet · `&game ficha @user` — someone else's\n`&game pontos <attribute> [amount]` — spends points (abbreviations work: for, int, sor…)\n`&game classe` · `&game evoluir` — pick a class and the bot spends the points and equips for you\n\n`&game contratos` — the guild board (paid by the bank) · `&game contrato <name>` — sets off\n`&game dungeons` · `&game dungeon <name> [chefe]` — open world (paid by its treasury)\n`&game chefes` · `&game especiais` — unique rewards, once per person\n`&game coop abrir <…>` — together, up to 4 · `&game historia` — your last story\n\n`&game itens [type]` · `&game equipar <item> [mao1|mao2]` · `&game usar <contract|scroll>` · `&game desequipar <slot>`\n`&game catalogo [rarity] [type]` · `&game item <name>` · `&game comprar [rarity] [type]` · `&game vender <item>`\n`&game magias` · `&game aprender <name>` — the grimoire (needs Intelligence)\n`&game followers` · `&game follower ficha <name>` · `&game follower levar <name>` · `&game recrutas` · `&game contratar [name]` · `&game descansar`\n`&game carteira` · `&game mercado` · `&game cambio` · `&game trocar @user <item> for <item>`\n`&game top` — world ranking · `&game apagar confirmar` — starts over from scratch\n\n_Bot owner: `&game admin` has the testing tools._\n\n**Attributes:** Strength, Dexterity, Resistance, Agility, Health, Mana, Intelligence, Luck, Charisma.\n\n_A mission pays its strength, the same for everyone: a win at your level is worth 80% of a level; a failure pays nothing._\n\n⚠️ Not to be confused with `&xp`, the per-message leveling system.",
       perm: null,
       ex: `${P}game criar Kael`,
     },
@@ -655,31 +655,31 @@ const podeIA = (cmd, sid) => { try { return comandoIAPermitido(cmd, sid); } catc
 function construirSubtopicos(P, lang) {
   if (lang === "en") return {
     sentinela: {
-      sensitivity: {
-        titulo: "sentinela sensitivity",
+      sensibilidade: {
+        titulo: "sentinel sensitivity",
         texto: [
-          `**Usage:** \`${P}automod sentinela sensitivity <baixa|media|alta>\``,
+          `**Usage:** \`${P}automod sentinel sensitivity <low|medium|high>\``,
           "",
           "Sets from which **score (0–10)** the bot acts on suspicious content:",
-          "• 🟢 **baixa** (low, threshold 7.5) — only near-certain cases; fewer false positives.",
-          "• 🟡 **media** (medium, threshold 6.5) — recommended balance.",
-          "• 🔴 **alta** (high, threshold 5.5) — catches faint signs; protects more, errs more.",
+          "• 🟢 **low** (threshold 7.5) — only near-certain cases; fewer false positives.",
+          "• 🟡 **medium** (threshold 6.5) — recommended balance.",
+          "• 🔴 **high** (threshold 5.5) — catches faint signs; protects more, errs more.",
         ].join("\n"),
       },
-      test: {
-        titulo: "sentinela test",
+      testar: {
+        titulo: "sentinel test",
         texto: [
-          `**Usage:** \`${P}automod sentinela test <text>\``,
+          `**Usage:** \`${P}automod sentinel test <text>\``,
           "",
           "Simulates analyzing a text and shows the score (0–10) and detected signals, without punishing anyone. Useful for calibrating the sensitivity.",
         ].join("\n"),
       },
-      channel: {
-        titulo: "sentinela channel",
+      canal: {
+        titulo: "sentinel channel",
         texto: [
-          `**Usage:** \`${P}automod sentinela channel <aqui|id|off>\``,
+          `**Usage:** \`${P}automod sentinel channel <#channel|here|off>\``,
           "",
-          "Sets which channel receives the suspicious-content alerts. `off` goes back to alerting in the message's own channel.",
+          "Sets which channel receives the suspicious-content alerts. `off` goes back to the log channel (or the message's own channel).",
         ].join("\n"),
       },
     },
@@ -738,10 +738,10 @@ function construirSubtopicos(P, lang) {
   // pt
   return {
     sentinela: {
-      sensitivity: {
-        titulo: "sentinela sensitivity",
+      sensibilidade: {
+        titulo: "sentinela sensibilidade",
         texto: [
-          `**Uso:** \`${P}automod sentinela sensitivity <baixa|media|alta>\``,
+          `**Uso:** \`${P}automod sentinela sensibilidade <baixa|media|alta>\``,
           "",
           "Define a partir de qual **nota (0–10)** o bot age sobre conteúdo suspeito:",
           "• 🟢 **baixa** (limiar 7,5) — só o que é quase certo; menos falsos positivos.",
@@ -749,20 +749,20 @@ function construirSubtopicos(P, lang) {
           "• 🔴 **alta** (limiar 5,5) — pega indícios leves; protege mais, erra mais.",
         ].join("\n"),
       },
-      test: {
-        titulo: "sentinela test",
+      testar: {
+        titulo: "sentinela testar",
         texto: [
-          `**Uso:** \`${P}automod sentinela test <texto>\``,
+          `**Uso:** \`${P}automod sentinela testar <texto>\``,
           "",
           "Simula a análise de um texto e mostra a nota (0–10) e os sinais detectados, sem punir ninguém. Útil para calibrar a sensibilidade.",
         ].join("\n"),
       },
-      channel: {
-        titulo: "sentinela channel",
+      canal: {
+        titulo: "sentinela canal",
         texto: [
-          `**Uso:** \`${P}automod sentinela channel <aqui|id|off>\``,
+          `**Uso:** \`${P}automod sentinela canal <#canal|aqui|off>\``,
           "",
-          "Define para qual canal vão os alertas de conteúdo suspeito. `off` volta a alertar no próprio canal da mensagem.",
+          "Define para qual canal vão os alertas de conteúdo suspeito. `off` volta a avisar no canal de logs (ou no próprio canal da mensagem).",
         ].join("\n"),
       },
     },
@@ -817,6 +817,16 @@ function construirSubtopicos(P, lang) {
       },
     },
   };
+}
+
+// A árvore INTEIRA da ajuda (as duas fontes fundidas, sem o filtro de IA), para
+// o inventário de comandos percorrer todas as páginas (17 out 2026: as
+// páginas que só existem em construirSubtopicos ficavam fora dos testes).
+export function arvoreDaAjuda(P, lang = "pt") {
+  const base = construirSubtopicos(P, lang);
+  const fundido = { ...arvoreSubtopicos(P, lang) };
+  for (const [cmd, subs] of Object.entries(base)) fundido[cmd] = mesclarNos(fundido[cmd], subs);
+  return ligarFamilias(fundido);
 }
 
 export async function cmdHelp(message, args, ctx) {

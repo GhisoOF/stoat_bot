@@ -469,6 +469,53 @@ só servem fora do Docker.
 `teste-compatibilidade.mjs` (agora 31) trava as duas coisas, e foi provado que
 ele falha com o compose antigo.
 
+## 6g. Comandos num registro central — fase 0: o inventário (17 out 2026)
+
+O plano (decidido com o Ghieh): cada comando passa a ser declarado **uma vez só**,
+numa pasta `comandos/` com um arquivo JS por família (nome nos idiomas, apelidos,
+subcomandos, sintaxe, textos curtos, permissão), e o resto — rota, tradução do que
+se digita, linha de sintaxe da ajuda, lista de gerenciáveis, "você quis dizer",
+comandos do assistente — passa a ser **gerado** a partir dele. Hoje um comando mora
+em até nove lugares (tabela em `docs/comandos/INVENTARIO.md`), e a tela em inglês é
+traduzida **depois de pronta**, por regex sobre o texto: o que foge do padrão vaza
+em português. Fases:
+
+0. **inventário + trava** (esta rodada) · 1. motor e registro, sem mudar
+   comportamento (o `main.js` monta `rotas`/`CANONICO` do registro, com as tabelas
+   antigas de reserva) · 2. migrar uma família por vez (pequenas primeiro; `automod`
+   e `game` por último) · 3. ajuda, tutorial e assistente gerados do registro,
+   citação de comando por referência (`{cmd:automod.sentinela.assuntos}`) no lugar
+   do `${P}…` escrito à mão · 4. espanhol · 5. apagar as tabelas antigas.
+
+O que a fase 0 entrega:
+
+- **`docs/comandos/inventario.json`** — a foto da tabela de comandos: os 149 nomes,
+  cada um com o comando interno e a função de destino, e os 557 subcomandos em
+  inglês → nome interno. **`INVENTARIO.md`** — a mesma coisa legível, mais a lista
+  dos exemplos da ajuda que ainda respondem erro (pendências das próximas fases).
+  Os dois são gerados: `INVENTARIO=1 node testes.mjs comandos-17out`.
+- **Suíte `comandos-17out`** — falha se um nome some ou muda de destino, se um
+  subcomando em inglês muda, e se aparece nome novo fora do inventário. Também
+  **executa** cada exemplo que a ajuda e o tutorial mostram (334 telas, ~990
+  exemplos, PT e EN, um servidor novo para cada) e falha com "subcomando
+  desconhecido", com exemplo pronto para copiar que responde erro, e com palavra
+  de comando em português na tela em inglês.
+  Por que executar: o `help-comandos` procurava a palavra no código-fonte e deu
+  `anticaps set limiar` como certo porque `set` existe em algum lugar.
+- **Provas:** a versão anterior (`53849fa`) passa na checagem dos 149 nomes contra
+  o inventário novo — nenhum nome perdido. E a suíte falha nela em 10 de 14 itens
+  (os legados desta rodada); com um exemplo quebrado de propósito na ajuda, a
+  checagem de "subcomando desconhecido" falha.
+- `main.js` exporta `tabelaDeComandos()`; `geral.js` exporta `arvoreDaAjuda()` —
+  as páginas que só existiam em `construirSubtopicos` (12 delas) não eram
+  percorridas por teste nenhum.
+- 11 apelidos estavam no `CANONICO` do `main.js` **e** no `COMANDO_EXTRA` do
+  `aliases.js`; ficaram só no segundo (o inventário prova que nada mudou).
+
+A trava tem um limite conhecido: valores de mentira no lugar dos `‹moldes›` (um item
+"teste" que não existe) dão erro que não é de sintaxe — esses ficam listados no
+`INVENTARIO.md`, não reprovam.
+
 ---
 
 ## 7. O que NÃO fiz, e por quê

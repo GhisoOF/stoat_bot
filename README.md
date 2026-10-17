@@ -596,6 +596,7 @@ versões antigas continuam funcionando.
 ├── voz-servico/                # voz nas calls: LiveKit + Piper (opcional, VOZ_ATIVA=1)
 ├── scripts/verificar-build.js  # sanidade do repositório (roda no CI e no build da imagem)
 ├── testes.mjs                  # todas as suítes de teste (cada uma roda no seu processo)
+├── docs/comandos/              # inventário de todos os comandos (gerado; `INVENTARIO=1 node testes.mjs comandos-17out`)
 ├── .env.example                # modelo de configuração comentado
 ├── Dockerfile · docker-compose.yml   # bot (tudo dentro) + SearXNG para a busca
 └── .github/workflows/build.yml # build multi-arch (x86-64 e ARM64)

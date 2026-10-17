@@ -15046,6 +15046,28 @@ await t("a tabela de parâmetros não ensina mais a sintaxe antiga", () => {
   for (const velho of ["anticaps set", "&punicao", "<filtro> punicao", "<filter> punicao", "herdar` goes"]) assert.ok(!txt.includes(velho), velho);
 });
 
+await t("\"você quis dizer\" corrige o subcomando também (antes: `&comando destivar ping`, com o erro)", async () => {
+  const sid = await servidorNovo("pt");
+  assert.match((await say("&comado destivar ping", sid)).texto, /quis dizer `&comando desativar ping`/);
+  assert.match((await say("&comando destivar ping", sid)).texto, /quis dizer `&comando desativar ping`/);
+  assert.match((await say("&comando desativar pnig", sid)).texto, /quis dizer `&comando desativar ping`/);
+  // texto livre não é "corrigido": `&musca despacito` sugere `&musica despacito`
+  assert.match((await say("&musca despacito", sid)).texto, /quis dizer `&musica despacito`/);
+});
+await t("&ping mede pelo relógio do Stoat (antes: 64973 ms com a máquina adiantada)", async () => {
+  // a máquina 65 s adiantada: o comando "nasceu" 65 s antes do Date.now() daqui
+  const nasceu = Date.now() - 65_000, editado = [];
+  const canalPing = { id: "CP", sendMessage: async () => ({ id: "R", createdAt: new Date(nasceu + 150), edit: async (p) => { editado.push(p.embeds[0].description); } }) };
+  const ctxPing = (dono) => ({ config: { language: "pt" }, COR: { sucesso: 1 }, ehSuperAdmin: () => dono,
+    sendEmbed: (c, e) => c.sendMessage({ embeds: [e] }) });
+  await geral.cmdPing({ channel: canalPing, authorId: U1, createdAt: new Date(nasceu) }, [], ctxPing(true));
+  assert.match(editado[0], /Resposta: \*\*150 ms\*\*/);
+  assert.match(editado[0], /relógio da máquina do bot está \*\*65 s adiantado\*\*/);
+  editado.length = 0;
+  await geral.cmdPing({ channel: canalPing, authorId: U2, createdAt: new Date(nasceu) }, [], ctxPing(false));
+  assert.ok(!/relógio da máquina/.test(editado[0]), "o aviso do relógio é só para o dono do bot");
+});
+
 // ── O inventário legível ──
 if (ATUALIZAR) {
   const porCanonico = {};

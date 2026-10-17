@@ -1120,25 +1120,32 @@ export async function cmdHelp(message, args, ctx) {
 // %ping — mede a latência entre o envio da mensagem e o processamento
 export async function cmdPing(message, args, ctx) {
   const { sendEmbed, COR } = ctx;
-  let latencia = null;
-  try {
-    const enviado = new Date(message.createdAt).getTime();
-    if (!Number.isNaN(enviado)) latencia = Date.now() - enviado;
-  } catch {}
-
-  await sendEmbed(message.channel, tr(ctx, {
-    title: "🏓 Pong!",
-    description: latencia != null
-      ? `Latência da mensagem: **${latencia}ms**`
-      : "Bot online e respondendo.",
-    colour: COR.sucesso,
-  }, {
-    title: "🏓 Pong!",
-    description: latencia != null
-      ? `Message latency: **${latencia}ms**`
-      : "Bot online and responding.",
-    colour: COR.sucesso,
-  }));
+  // 17 out 2026: era `Date.now() - message.createdAt` — o relógio DESTA máquina
+  // contra o do Stoat (o createdAt sai do ID da mensagem). Com o relógio da
+  // máquina adiantado, o ping marcava 64973 ms com a resposta no mesmo minuto.
+  // Agora as duas pontas vêm do Stoat: o ID do comando e o ID da resposta.
+  const tempo = (m) => { const t = new Date(m?.createdAt ?? NaN).getTime(); return Number.isFinite(t) ? t : null; };
+  const t0 = Date.now();
+  const resposta = await sendEmbed(message.channel, { title: "🏓 Pong!", description: tr(ctx, "Medindo…", "Measuring…"), colour: COR.sucesso });
+  const api = Date.now() - t0;
+  const doComando = tempo(message), daResposta = tempo(resposta);
+  if (typeof resposta?.edit !== "function") return resposta;
+  const ida = doComando != null && daResposta != null ? Math.max(0, daResposta - doComando) : null;
+  // quanto o relógio da máquina difere do Stoat: o meio do envio ≈ a hora da resposta lá
+  const desvio = daResposta != null ? Math.round(t0 + api / 2 - daResposta) : 0;
+  const verDesvio = Math.abs(desvio) >= 2000 && ctx.ehSuperAdmin?.(message.authorId);
+  const s = (ms) => (Math.abs(ms) >= 10000 ? `${Math.round(ms / 1000)} s` : `${ms} ms`);
+  const description = tr(ctx, [
+    ida != null ? `Resposta: **${s(ida)}** _(do seu comando até esta mensagem, pelo relógio do Stoat)_` : null,
+    `Envio à API: **${s(api)}**`,
+    verDesvio ? `\n⚠️ O relógio da máquina do bot está **${s(Math.abs(desvio))} ${desvio > 0 ? "adiantado" : "atrasado"}** em relação ao Stoat. Prazos e a idade das contas usam esse relógio — ligue a sincronização de hora (NTP) na máquina.` : null,
+  ], [
+    ida != null ? `Reply: **${s(ida)}** _(from your command to this message, by the Stoat's clock)_` : null,
+    `API send: **${s(api)}**`,
+    verDesvio ? `\n⚠️ The bot machine's clock is **${s(Math.abs(desvio))} ${desvio > 0 ? "ahead of" : "behind"}** the Stoat's. Timers and account age use that clock — turn on time sync (NTP) on the machine.` : null,
+  ]).filter(Boolean).join("\n");
+  await resposta.edit({ embeds: [{ title: "🏓 Pong!", description, colour: COR.sucesso }] }).catch(() => {});
+  return resposta;
 }
 
 // %sobre — informações resumidas do bot

@@ -51,6 +51,7 @@ import * as nivel     from "./modulos/ferramentas/nivel.js";
 import * as i18n      from "./modulos/core/i18n.js";
 import * as aliases   from "./modulos/core/aliases.js";
 import * as registroComandos from "./modulos/comandos/index.js";
+import { maisParecido } from "./modulos/core/parecido.js";
 import { canalDeOutroServidor } from "./modulos/moderacao/pertence.js";
 import * as paginas   from "./modulos/core/paginas.js";
 import * as assistente from "./modulos/moderacao/assistente.js";
@@ -325,32 +326,9 @@ function criarContexto(serverId = null) {
   };
 }
 
-// Distância de edição (com troca de duas letras vizinhas) para o "você quis dizer"
+// "Você quis dizer": no empate, o nome do comando vence o apelido (ver core/parecido.js)
 function comandoParecido(digitado, nomes) {
-  const d = (a, b) => {
-    const m = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
-    for (let j = 1; j <= b.length; j++) m[0][j] = j;
-    for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++) {
-      m[i][j] = Math.min(m[i - 1][j] + 1, m[i][j - 1] + 1, m[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
-      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) m[i][j] = Math.min(m[i][j], m[i - 2][j - 2] + 1);
-    }
-    return m[a.length][b.length];
-  };
-  // Empate na distância: o nome do comando antes do apelido, depois a ordem
-  // alfabética (17 out 2026). Antes o empate ia para quem vinha primeiro na
-  // tabela — e a ordem da tabela agora vem do registro, que muda sem ninguém
-  // pensar no "você quis dizer".
-  const t = String(digitado);
-  const chave = (n, x) => [x, CANONICO[n] ? 1 : 0, n];
-  const antes = (a, b) => { for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return a[i] < b[i]; return false; };
-  let melhor = null, melhorChave = null;
-  for (const n of nomes) {
-    const x = d(t, n);
-    if (x >= 3 || x > Math.max(1, Math.floor(n.length / 3))) continue;
-    const k = chave(n, x);
-    if (!melhorChave || antes(k, melhorChave)) { melhor = n; melhorChave = k; }
-  }
-  return melhor;
+  return maisParecido(digitado, nomes, { secundario: (n) => !!CANONICO[n] });
 }
 
 // Os comandos vêm do registro (modulos/comandos/, 17 out 2026): cada um é
@@ -623,7 +601,15 @@ async function tratarMensagem(message) {
     const daFamilia = entretenimento.subcomandoDe(command) ? `entretenimento ${command}`
       : servidorInfo.subcomandoDe(command) ? `servidor ${command}` : null;
     const parecido = daFamilia ?? comandoParecido(command, Object.keys(rotas));
-    const sugestao = parecido ? `${PREFIXO}${parecido}${message.content.slice(PREFIXO.length + command.length)}` : null;
+    // o resto também: `&comado destivar ping` sugeria `&comando destivar ping`,
+    // com o erro do subcomando intacto (17 out 2026)
+    let resto = message.content.slice(PREFIXO.length + command.length);
+    if (parecido && !daFamilia && !TEXTO_LIVRE.has(CANONICO[parecido] ?? parecido)) {
+      const [, espaco, primeiro, depois] = resto.match(/^(\s+)(\S+)([\s\S]*)$/) ?? [];
+      const certo = primeiro && aliases.corrigirSubcomando(CANONICO[parecido] ?? parecido, primeiro);
+      if (certo) resto = `${espaco}${certo}${depois}`;
+    }
+    const sugestao = parecido ? `${PREFIXO}${parecido}${resto}` : null;
     await sendEmbed(message.channel, tr(ctx, {
       title: "❓ Comando desconhecido",
       description: (sugestao ? `Você quis dizer \`${sugestao.trim().slice(0, 120)}\`?\n\n` : "") + `Use \`${PREFIXO}help\` para ver os comandos disponíveis.`,

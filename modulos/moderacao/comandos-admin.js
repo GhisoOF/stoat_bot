@@ -1,7 +1,8 @@
 
 import * as log from "../core/log.js";
 import { tr, lingua } from "../core/i18n.js";
-import { nomeExibido } from "../core/aliases.js";
+import { nomeExibido, corrigirSubcomando } from "../core/aliases.js";
+import { maisParecido } from "../core/parecido.js";
 
 export const GRANT_ALL_SAFE = 0x000fffffffffffffn;
 
@@ -63,9 +64,12 @@ export async function cmdComando(message, args, ctx) {
   const DESLIGA = new Set(["disable", "off", "desativar", "desligar", "desabilitar"]);
   const LIGA    = new Set(["enable", "on", "ativar", "ligar", "habilitar", "reativar"]);
   if (!DESLIGA.has(sub) && !LIGA.has(sub)) {
+    // `destivar` → "você quis dizer `desativar`?" (17 out 2026: só mostrava o uso)
+    const certo = corrigirSubcomando("comando", sub);
+    const pronto = certo ? `${PREFIXO}comando ${certo}${args.length > 1 ? " " + args.slice(1).join(" ") : ""}` : null;
     return sendEmbed(message.channel, tr(ctx,
-      { title: "❌ Uso incorreto", description: `\`${PREFIXO}comando <desativar|ativar> <nome>\``, colour: COR.erro },
-      { title: "❌ Wrong usage", description: `\`${PREFIXO}comando <disable|enable> <name>\``, colour: COR.erro }));
+      { title: "❌ Uso incorreto", description: [pronto ? `Você quis dizer \`${pronto}\`?\n` : null, `\`${PREFIXO}comando <desativar|ativar> <nome>\``].filter(Boolean).join("\n"), colour: COR.erro },
+      { title: "❌ Wrong usage", description: [pronto ? `Did you mean \`${pronto}\`?\n` : null, `\`${PREFIXO}comando <disable|enable> <name>\``].filter(Boolean).join("\n"), colour: COR.erro }));
   }
 
   const alvo = canon(args[1]?.toLowerCase());
@@ -77,13 +81,17 @@ export async function cmdComando(message, args, ctx) {
         description: `Tell me which command. E.g.: \`${PREFIXO}comando disable ban\``, colour: COR.erro }));
 
   if (!geren.includes(alvo)) {
+    // `pnig` → `ping` (o nome do comando ou o apelido, nos dois idiomas)
+    const nomesGeren = Object.keys(estado.CANONICO ?? {}).filter((n) => geren.includes(canon(n))).concat(geren, geren.map((c) => nomeExibido(c, "en")));
+    const perto = maisParecido(alvo, nomesGeren);
+    const pronto = perto ? `${PREFIXO}comando ${args[0]} ${perto}` : null;
     return sendEmbed(message.channel, tr(ctx, {
       title: "❌ Comando inválido",
-      description: `\`${alvo}\` não pode ser gerenciado.\nGerenciáveis: ${geren.map((c) => `\`${c}\``).join(", ")}`,
+      description: `${pronto ? `Você quis dizer \`${pronto}\`?\n\n` : ""}\`${alvo}\` não pode ser gerenciado.\nGerenciáveis: ${geren.map((c) => `\`${c}\``).join(", ")}`,
       colour: COR.erro,
     }, {
       title: "❌ Invalid command",
-      description: `\`${alvo}\` can't be managed.\nManageable: ${geren.map((c) => `\`${nomeExibido(c, "en")}\``).join(", ")}`,
+      description: `${pronto ? `Did you mean \`${pronto}\`?\n\n` : ""}\`${alvo}\` can't be managed.\nManageable: ${geren.map((c) => `\`${nomeExibido(c, "en")}\``).join(", ")}`,
       colour: COR.erro,
     }));
   }

@@ -1,5 +1,6 @@
 import { ORDEM as ORDEM_GRUPOS } from "../moderacao/help-grupos.js";   // os grupos que o índice do &help promete
 import { EN_PARA_PT } from "./nomes-automod.js";
+import { maisParecido } from "./parecido.js";
 
 // O nome de cada comando na tela em inglês e os apelidos vêm do registro de
 // comandos (modulos/comandos/) desde 17 out 2026 — não declarar aqui.
@@ -565,4 +566,26 @@ export function exibir(texto, lang, prefixo = "&", CANONICO = {}, dica = null) {
 export function nomeExibido(canonico, lang) {
   if (lang !== "en") return canonico;
   return COMANDO_EN[canonico] ?? canonico;
+}
+
+// Os subcomandos que um comando conhece (nos dois idiomas), pelas tabelas desta
+// página. Serve ao "você quis dizer" — não é a lista completa do que o handler
+// aceita (isso a fase 2 do registro de comandos traz).
+export function subcomandosDe(canonico) {
+  const c = String(canonico ?? "");
+  return new Set([
+    ...Object.keys(SUB[c] ?? {}), ...Object.values(SUB[c] ?? {}),
+    ...(ANINHADOS[c] ?? []), ...Object.keys(SO_EXIBIR[c] ?? {}), ...Object.values(SO_EXIBIR[c] ?? {}),
+  ].map((x) => String(x).toLowerCase()));
+}
+
+// `destivar` → `desativar`: o subcomando conhecido mais perto, ou null se a
+// palavra já é conhecida, não parece subcomando (número, menção, link) ou não
+// há nenhum perto o bastante (17 out 2026).
+export function corrigirSubcomando(canonico, token) {
+  const t = String(token ?? "").toLowerCase();
+  if (!/^[a-zçãáéíóúâêôõ]{3,}$/.test(t)) return null;
+  const conhecidos = subcomandosDe(canonico);
+  if (!conhecidos.size || conhecidos.has(t)) return null;
+  return maisParecido(t, conhecidos);
 }

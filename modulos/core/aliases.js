@@ -1,5 +1,4 @@
 import { ORDEM as ORDEM_GRUPOS } from "../moderacao/help-grupos.js";   // os grupos que o índice do &help promete
-import { EN_PARA_PT } from "./nomes-automod.js";
 import { maisParecido } from "./parecido.js";
 
 // O nome de cada comando na tela em inglês, os apelidos e (fase 2) os
@@ -8,108 +7,6 @@ import { maisParecido } from "./parecido.js";
 import { COMANDO_EN, COMANDO_EXTRA, REGISTRO } from "../comandos/index.js";
 export { COMANDO_EN, COMANDO_EXTRA };
 
-// Subcomandos inglês → nome interno. Desde a fase 2 do registro (17 out 2026),
-// cada família declara os seus em modulos/comandos/<família>.js (`subcomandos`);
-// aqui ficam só os que ainda não migraram: o &automod (e as famílias dele) e o &game.
-const SUB_LEGADO = {
-  game: {
-    create: "criar", new: "novo", delete: "apagar", erase: "apagar",
-    points: "pontos", spend: "pontos",
-    items: "itens", inventory: "inventario", bag: "mochila",
-    item: "item", spell: "magia", spells: "magias", learn: "aprender",
-    grimoire: "grimorio", magic: "magia",
-    equip: "equipar", unequip: "desequipar", wear: "vestir",
-    catalog: "catalogo", shop: "loja",
-    wallet: "carteira", balance: "saldo",
-    market: "mercado", exchange: "cambio", trade: "trocar", barter: "escambo", rates: "taxas", bank: "banco",
-    buy: "comprar", sell: "vender", hire: "contratar", recruit: "recrutar",
-    rest: "descansar",
-    companion: "follower", companions: "followers", party: "party",
-    recruits: "recrutas", mercenaries: "mercenarios",
-    mission: "missao", missions: "missoes", quest: "quest",
-    contract: "contrato", contracts: "contratos", job: "bico", jobs: "bicos",
-    special: "especial", specials: "especiais", boss: "chefe", bosses: "chefes",
-    dungeon: "dungeon", dungeons: "dungeons", rescue: "resgatar",
-    class: "classe", evolve: "evoluir", use: "usar", story: "historia", preview: "prever", redo: "refazer",
-    top: "top", ranking: "ranking",
-    sheet: "ficha", profile: "perfil",
-    help: "ajuda", commands: "comandos", join: "entrar", leave: "sair",
-    // dentro de `game admin` e `game follower`
-    give: "dar", item: "item", level: "nivel", energy: "energia",
-    admin: "admin", eco: "eco", status: "status", top: "top",
-    currency: "moeda", coin: "moeda", test: "teste", simulate: "simular",
-    eco: "eco", reset: "reset", server: "servidor", all: "tudo",
-    confirm: "confirmar", model: "modelo", view: "ver", info: "detalhe",
-    remove: "remover", default: "padrao", main: "padrao",
-    world: "mundo", fantasy: "fantasia", simple: "simples",
-    take: "levar", add: "adicionar", drop: "tirar", dismiss: "dispensar",
-    sheet: "ficha", status: "status", give: "dar", retrieve: "pegar",
-    bag: "mochila", inventory: "inventario",
-    photos: "fotos", album: "album", image: "imagem", picture: "imagem",
-    cancel: "cancelar", accept: "aceitar", announce: "anunciar",
-  },
-  punicao: {
-    mode: "modo", ladder: "escada", steps: "escada", warns: "warns", role: "cargo",
-    status: "status", config: "config",
-    warn: "avisar", delete: "apagar", confirm: "confirmar",
-    stack: "acumular", ban: "banir",
-  },
-  automod: {
-    // os grupos em inglês (13 out 2026) — as partes ficam na família de cada um
-    ...EN_PARA_PT.grupos, antinoise: "antiruido",
-    punishment: "punicao", inherit: "herdar", global: "global",
-    set: "set", status: "status", debug: "debug",
-    warn: "avisar", delete: "apagar", confirm: "confirmar",
-    stack: "acumular", ban: "banir",
-    messages: "mensagens", time: "tempo", mentions: "mencoes",
-    size: "tamanho", threshold: "limiar", ignore: "ignorar",
-    repetition: "repeticao",
-  },
-  // ── Famílias dentro do &automod (13 out 2026): `&automod sentinel topics
-  // politics delete` vira `&automod sentinela assuntos politica apagar`. Cada
-  // nível usa o vocabulário do nível de cima (ver traduzirCaminho).
-  "automod.antispam": {
-    speed: "velocidade", burst: "rajada", repeat: "repeticao", media: "midia", mentions: "mencoes",
-    messages: "mensagens", time: "tempo", minute: "minuto", newcomer: "novato", newcomers: "novato", times: "vezes",
-  },
-  "automod.antiruido": {
-    characters: "caracteres", letters: "letras",
-    size: "tamanho", threshold: "limiar", repetition: "repeticao", ignore: "ignorar",
-  },
-  "automod.antilink": { domains: "dominios", invites: "convites" },
-  "automod.sentinela": {
-    content: "conteudo", hate: "odio", images: "imagens", topics: "assuntos", subjects: "assuntos", avatar: "avatar", pfp: "avatar",
-    // 17 out 2026: o painel do sentinela passou a falar português; o inglês vira o nome PT
-    sensitivity: "sensibilidade", channel: "canal", test: "testar", simulate: "simular", ban: "banir", dismiss: "liberar",
-    config: "config", status: "status", tenure: "antiguidade", alerts: "alerta", alert: "alerta",
-    low: "baixa", medium: "media", high: "alta",
-  },
-  "automod.odio": { add: "add", remove: "remover", list: "lista" },
-  "automod.assuntos": {
-    ...EN_PARA_PT.temas, ...EN_PARA_PT.acoesTema, ...EN_PARA_PT.sens,
-    sensitivity: "sensibilidade", allow: "liberar", watch: "vigiar", ai: "ia", test: "test",
-    add: "add", remove: "remover",
-  },
-  "automod.avatar": { action: "acao", time: "tempo", check: "checar", ...EN_PARA_PT.acoesAvatar },
-  blocklist: {
-    add: "add", remove: "remove", list: "list", clear: "clear",
-    reload: "reload", adddomain: "adddomain", removedomain: "removedomain",
-    domains: "dominios",
-  },
-  whitelist: { add: "add", remove: "remove", list: "list" },
-  sentinela: {
-    sensitivity: "sensibilidade", channel: "canal", test: "testar",
-    simulate: "simular", ban: "banir", dismiss: "liberar",
-    config: "config", status: "status", tenure: "antiguidade",
-    low: "baixa", medium: "media", high: "alta",
-  },
-  scam: {
-    sensitivity: "sensibilidade", channel: "canal", test: "testar",
-    simulate: "simular", ban: "banir", dismiss: "liberar",
-    config: "config", status: "status",
-    low: "baixa", medium: "media", high: "alta",
-  },
-};
 
 // O que vem do registro: `subcomandos` (nome interno → inglês) vira a tabela de
 // entrada (inglês → interno); `aninhados` e `naTela` como estão.
@@ -122,30 +19,26 @@ for (const c of REGISTRO) {
   }
   if (c.aninhados?.length) DO_REGISTRO.aninhados[c.id] = new Set(c.aninhados);
   if (c.naTela) DO_REGISTRO.naTela[c.id] = c.naTela;
+  // os níveis dentro do comando (`automod.sentinela`) e as partes citadas sozinhas (`punicao`)
+  for (const [nome, f] of [...Object.entries(c.familias ?? {}).map(([n, f]) => [`${c.id}.${n}`, f]), ...Object.entries(c.partes ?? {})]) {
+    if (f.subcomandos) {
+      const m = {};
+      for (const [pt, en] of Object.entries(f.subcomandos)) for (const e of [].concat(en)) m[e] = pt;
+      DO_REGISTRO.sub[nome] = m;
+    }
+    if (f.aninhados?.length) DO_REGISTRO.aninhados[nome] = new Set(f.aninhados);
+    if (f.naTela) DO_REGISTRO.naTela[nome] = f.naTela;
+  }
 }
-export const SUB = { ...SUB_LEGADO, ...DO_REGISTRO.sub };
+// Subcomandos inglês → nome interno, de todas as famílias (o registro é a única fonte
+// desde 17 out 2026 — fase 2).
+export const SUB = DO_REGISTRO.sub;
 
-const ANINHADOS = {
-  ...DO_REGISTRO.aninhados,
-  game: new Set(["admin", "moeda", "mercado", "follower", "followers", "coop",
-    "trocar", "escambo", "party", "equipe", "reset"]),
-  automod: new Set([...Object.keys(SUB_LEGADO.automod), "antispam", "antimassspam",
-    "antiinvite", "antimassmention", "anticaps", "antilink", "antiscam", "sentinela",
-    "anticaracteres", "antirepeticao"]),
-  punicao: new Set(["modo", "mode"]),
-};
+const ANINHADOS = DO_REGISTRO.aninhados;
 
 // Só para a TELA: palavras que o comando aceita nos dois idiomas, mas que a
 // ajuda escreve em português (`&log channel aqui`).
-const SO_EXIBIR = {
-  ...DO_REGISTRO.naTela,
-  automod: { aviso: "warn" },
-  "automod.sentinela": { assuntos: "topics", aqui: "here" }, "automod.antispam": { repeticao: "repeat" },
-  // 17 out 2026 (inventário de comandos): palavras que o comando já aceitava em
-  // inglês, mas a tela em inglês mostrava em português
-  "automod.punicao": { aviso: "warn", validade: "expiry" }, punicao: { aviso: "warn", validade: "expiry" },
-  game: { abrir: "open", partir: "go", com: "with", por: "for", mao1: "hand1", mao2: "hand2" },
-};
+const SO_EXIBIR = DO_REGISTRO.naTela;
 const SUB_REVERSO = {};
 for (const [cmd, mapa] of Object.entries(SUB)) {
   SUB_REVERSO[cmd] = { ...(SO_EXIBIR[cmd] ?? {}) };

@@ -2,9 +2,10 @@
 //
 // Num servidor grande em inglês, a tela mostrava `velocidade`, `rajada`,
 // `conteudo`, `confirmar`… e só os nomes em português funcionavam ao digitar.
-// Aqui fica o par PT ⇄ EN de cada grupo, parte, modo e opção — UMA tabela, que
-// serve para as duas pontas: o aliases.js traduz o que se digita em inglês
-// para o nome interno, e os painéis mostram o nome em inglês.
+// Aqui fica o par PT ⇄ EN de cada grupo, parte, modo e opção, que os painéis
+// usam para mostrar o nome em inglês. A tradução do que se digita mora no registro
+// de comandos (modulos/comandos/automod.js) desde 17 out 2026; um teste da suíte
+// comandos-17out garante que as duas listas não se afastam.
 
 export const GRUPO_EN = { antispam: "antispam", antiruido: "antinoise", antilink: "antilink", sentinela: "sentinel" };
 
@@ -31,15 +32,3 @@ export const nomeTema = de(TEMA_EN);
 export const nomeAcaoTema = de(ACAO_TEMA_EN);
 export const nomeAcaoAvatar = de(ACAO_AVATAR_EN);
 export const nomeEventoLog = de(EVENTO_LOG_EN);
-
-// inglês → português, para o aliases.js
-const inverter = (mapa) => Object.fromEntries(Object.entries(mapa).filter(([pt, en]) => pt !== en).map(([pt, en]) => [en, pt]));
-export const EN_PARA_PT = {
-  grupos: { ...inverter(GRUPO_EN), noise: "antiruido" },
-  partes: inverter(PARTE_EN),
-  modos: inverter(MODO_EN),
-  temas: inverter(TEMA_EN),
-  acoesTema: inverter(ACAO_TEMA_EN),
-  acoesAvatar: { ...inverter(ACAO_AVATAR_EN), mute: "silenciar", timeout: "silenciar" },
-  sens: inverter(SENS_EN),
-};

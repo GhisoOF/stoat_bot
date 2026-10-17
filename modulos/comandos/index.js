@@ -19,6 +19,8 @@
 //     },
 //     aninhados: ["setup"],        // subcomandos que têm mais um nível traduzido (`&xp setup canal`)
 //     naTela: { aqui: "here" },    // só a tela: o handler já aceita as duas palavras
+//     familias: { sentinela: { subcomandos, naTela } },  // níveis dentro do comando (vira "automod.sentinela")
+//     partes: { punicao: { en: "punishment", subcomandos } }, // partes citadas sozinhas (`&help punicao`)
 //     gerenciavel: true,           // o admin pode desligar com `&comando desativar`
 //     soIA: true,                  // só existe onde a IA roda (&chat, &modia)
 //     voz: true,                   // vale dentro da call, mesmo fora dos canais liberados
@@ -34,9 +36,10 @@
 //
 // Um arquivo pode exportar uma lista de entradas (o voz.js tem &tts, &entrar e &sair).
 //
-// Ainda NÃO estão aqui: os subcomandos do &automod (e das famílias dele) e do
-// &game, que seguem no aliases.js até migrar (fase 2); a sintaxe e os textos da
-// ajuda (fase 3).
+// Desde a fase 2 todos os subcomandos também moram aqui. O &automod tem ainda
+// `familias` (os níveis dentro dele: `&automod sentinela assuntos …`) e `partes`
+// (as que aparecem sozinhas: `&help punicao`). Ainda NÃO estão aqui: a sintaxe e
+// os textos da ajuda (fase 3).
 //
 // Arquivo novo nesta pasta tem de entrar na lista abaixo — a suíte comandos-17out
 // falha se sobrar arquivo fora dela.

@@ -603,6 +603,37 @@ handlers são chamados por dentro (assistente, lote) sem passar por ela. Tirar o
 inglês do handler hoje quebraria esses caminhos em silêncio. Isso fica para a fase 3,
 quando o registro declarar a sintaxe e o motor garantir argumentos já normalizados.
 
+## 6j. Fase 2, fim: o &automod e o &game (17 out 2026)
+
+As duas famílias grandes foram para o registro, e o `aliases.js` (agora com 334 linhas)
+não tem mais nenhuma tabela própria de subcomandos. `SUB`, `ANINHADOS` e a tela em
+inglês são montados só a partir de `modulos/comandos/`.
+
+- `game.js`: os 101 subcomandos, os 11 aninhados e o que só muda na tela (`abrir` →
+  `open`, `mao1` → `hand1`…).
+- `automod.js`: o vocabulário do próprio `&automod`, mais dois campos novos no
+  formato:
+  - `familias`: os níveis dentro dele (`antispam`, `antiruido`, `antilink`, `sentinela`,
+    `odio`, `assuntos`, `avatar`, `punicao`), que viram as tabelas `automod.<x>`;
+  - `partes`: as que também aparecem sozinhas (`punicao`, `sentinela`, `blocklist`,
+    `whitelist`, `scam`), com o nome em inglês e o vocabulário. É o que vale em
+    `&help punicao` ou `&help blocklist add`, e dentro do `&automod` soma-se ao da
+    família de mesmo nome.
+
+**Provas:**
+- As três tabelas montadas saíram idênticas byte a byte, e o `inventario.json` não
+  mudou uma linha.
+- Rodei as 334 telas de ajuda e os 987 exemplos na versão anterior e nesta e comparei
+  os textos inteiros. As telas saíram **todas iguais**. Das respostas, 38 diferem, e
+  todas por sorteio ou relógio: dados, códigos de confirmação, tokens de webhook,
+  uptime, memória e contagem de linhas. A suíte ganhou `DUMP_TELAS=arquivo` para
+  repetir essa comparação quando quiser.
+
+**Duas fontes para as palavras do automod.** O `nomes-automod.js` continua com os
+nomes em inglês que os painéis mostram (`nomeTema`, `nomeModo`…). O `EN_PARA_PT`, que
+servia à entrada, saiu. Um teste novo confere que cada par de lá existe no registro, e
+provei que ele falha quando um par diverge. Juntar as duas fontes fica para a fase 3.
+
 ---
 
 ## 7. O que NÃO fiz, e por quê

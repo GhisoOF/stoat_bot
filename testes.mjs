@@ -14892,13 +14892,27 @@ await t("o registro está íntegro (nenhum nome em dois comandos) e todo arquivo
   const fora = fs.readdirSync("modulos/comandos").filter((f) => f.endsWith(".js") && f !== "index.js" && !indice.includes(`from "./${f}"`));
   assert.deepEqual(fora, []);
 });
-await t("família migrada não está mais nas tabelas antigas do aliases.js", () => {
+await t("os subcomandos de TODAS as famílias vêm do registro (o aliases.js não tem mais tabela própria)", () => {
   const al = fs.readFileSync("modulos/core/aliases.js", "utf8");
-  const chavesDe = (ini) => { const i = al.indexOf(ini); const bloco = al.slice(i, al.indexOf("\n};", i)); return [...bloco.matchAll(/\n  "?([\w.]+)"?: /g)].map((m) => m[1]); };
-  const antigas = new Set([...chavesDe("const SUB_LEGADO = {"), ...chavesDe("const ANINHADOS = {"), ...chavesDe("const SO_EXIBIR = {")]);
-  const migradas = registro.REGISTRO.filter((c) => c.subcomandos || c.aninhados || c.naTela).map((c) => c.id);
-  assert.deepEqual(migradas.filter((id) => antigas.has(id)), []);
-  assert.ok(migradas.length >= 30, `só ${migradas.length} famílias no registro`);
+  for (const velho of ["SUB_LEGADO", "const ANINHADOS = {", "const SO_EXIBIR = {"]) assert.ok(!al.includes(velho), velho);
+  // as famílias grandes, que foram por último (fase 2): o vocabulário delas está no arquivo delas
+  const automod = registro.REGISTRO.find((c) => c.id === "automod"), game = registro.REGISTRO.find((c) => c.id === "game");
+  assert.ok(automod.subcomandos && Object.keys(automod.familias ?? {}).length >= 8 && automod.partes?.punicao?.subcomandos);
+  assert.ok(Object.keys(game.subcomandos ?? {}).length >= 90 && game.aninhados?.length);
+});
+await t("o vocabulário do &automod no registro bate com o nomes-automod.js (o que os painéis mostram)", async () => {
+  // dois lugares com as mesmas palavras até a fase 3 unir: aqui se garante que não se afastam
+  const n = await import("./modulos/core/nomes-automod.js");
+  const a = registro.REGISTRO.find((c) => c.id === "automod");
+  const tem = (tab, pt, en) => [].concat(tab?.[pt] ?? []).includes(en);
+  const faltas = [];
+  const conferir = (nome, mapa, tabelas) => { for (const [pt, en] of Object.entries(mapa)) if (pt !== en && !tabelas.some((t) => tem(t, pt, en))) faltas.push(`${nome}: ${pt} → ${en}`); };
+  conferir("grupos", n.GRUPO_EN, [a.subcomandos]);
+  conferir("modos", n.MODO_EN, [a.subcomandos]);
+  conferir("partes", n.PARTE_EN, Object.values(a.familias).map((f) => f.subcomandos));
+  for (const m of [n.TEMA_EN, n.ACAO_TEMA_EN, n.SENS_EN]) conferir("assuntos", m, [a.familias.assuntos.subcomandos]);
+  conferir("avatar", n.ACAO_AVATAR_EN, [a.familias.avatar.subcomandos]);
+  assert.deepEqual(faltas, []);
 });
 await t("o main.js e o aliases.js não declaram comando à mão", () => {
   const src = fs.readFileSync("main.js", "utf8");
@@ -14999,6 +15013,8 @@ for (const [k, onde] of exemplos) {
   const r = await say(cmd, sid);
   execucoes.push({ lang, ex, cmd, onde: [...onde], titulo: r.texto.split("\n")[0], texto: r.texto, estourou: r.estourou });
 }
+// `DUMP_TELAS=arquivo`: grava todas as telas e respostas (para comparar duas versões do bot)
+if (process.env.DUMP_TELAS) fs.writeFileSync(process.env.DUMP_TELAS, JSON.stringify({ telas, execucoes: execucoes.map(({ lang, ex, cmd, texto }) => ({ lang, ex, cmd, texto })) }, null, 1));
 const erroDe = (x) => /^(❌|❓|🚫)/.test(x.titulo);
 const literal = (x) => !/[‹›<>\[\]|…]/.test(x.ex);
 
@@ -15117,14 +15133,13 @@ if (ATUALIZAR) {
     "",
     "O nome, os apelidos, o nome em inglês e as marcas de cada comando (gerenciável, só IA, voz, essencial,",
     "qualquer canal, texto livre) moram **só** no registro, `modulos/comandos/` — um arquivo por família (fase 1).",
-    "Os subcomandos também, com o nome em inglês de cada um (fase 2), menos as duas famílias grandes.",
+    "Os subcomandos também, com o nome em inglês de cada um, de todas as famílias (fase 2).",
     "O que ainda está espalhado:",
     "",
     "| Lugar | O que guarda |",
     "|---|---|",
-    "| `modulos/core/aliases.js` → `SUB_LEGADO`, `ANINHADOS`, `SO_EXIBIR` | os subcomandos do `&automod` (e das famílias dele) e do `&game` — os próximos a migrar |",
+    "| `modulos/core/nomes-automod.js` | as mesmas palavras do `&automod` que o registro tem, para os painéis — um teste garante que não se afastam |",
     "| `modulos/core/aliases.js` → `PLACEHOLDER_EN` | os moldes da ajuda (`‹nome›` → `‹name›`), comuns a todos os comandos |",
-    "| `modulos/core/nomes-automod.js` | grupos, partes, modos e temas do automod nos dois idiomas |",
     "| cada handler (`if (sub === … )`) | o parse dos subcomandos, muitas vezes já aceitando os dois idiomas |",
     "| `help-arvore.js`, `geral.js` (`construirSubtopicos`, `construirDetalhes`) | as páginas de ajuda, PT e EN escritas em cópias separadas |",
     "| `help-grupos.js`, `help-parametros.js`, `tutorial.js`, `assistente.js` | índice, parâmetros, tutorial e os comandos que o assistente gera |",

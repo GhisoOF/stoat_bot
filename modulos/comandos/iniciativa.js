@@ -1,9 +1,10 @@
 // &iniciativa — ordem de combate de RPG de mesa
-import * as dadosRpg from "../ferramentas/dados-rpg.js";
 
 export default {
   id: "iniciativa",
-  funcao: () => dadosRpg.cmdIniciativa,
+  modulo: "../ferramentas/dados-rpg.js",
+  funcao: "cmdIniciativa",
   apelidos: ["init", "initiative"],
+  subcomandos: { lista: "list", remover: "remove", limpar: "clear" },
   gerenciavel: true,
 };

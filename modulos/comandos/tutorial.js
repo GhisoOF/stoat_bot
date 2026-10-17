@@ -1,11 +1,16 @@
 // &tutorial — guia em páginas (permissões, canais, proteção…)
-import * as tutorial from "../moderacao/tutorial.js";
 
 export default {
   id: "tutorial",
-  funcao: () => tutorial.cmdTutorial,
+  modulo: "../moderacao/tutorial.js",
+  funcao: "cmdTutorial",
   nomes: { en: "tutorial" },
   apelidos: ["guia", "comecar", "inicio", "guide", "start"],
+  subcomandos: {
+    permissoes: "permissions", canais: "channels", moderacao: "moderation", cargos: "roles",
+    ia: "ai", noticias: "news", mensagens: "messages", economia: "economy",
+    aventura: "adventure", ajustes: "settings",
+  },
   gerenciavel: true,
   qualquerCanal: true,
 };

@@ -539,7 +539,7 @@ await tAsync("&automod blocklist add X == &blocklist add X", async () => {
 
 await tAsync("o que virou opção de família NÃO existe mais solto no topo", async () => {
   // as rotas vêm do registro de comandos desde 17 out 2026 (a tabela real, não o texto do main.js)
-  const { rotas } = (await import("./modulos/comandos/index.js")).montarTabela();
+  const { rotas } = await (await import("./modulos/comandos/index.js")).montarTabela();
   for (const morta of ["blocklist", "whitelist", "sentinela", "punicao", "warnings", "clearwarnings"]) {
     assert.ok(!rotas[morta], `${morta} ainda é rota de topo — devia existir só dentro da família`);
   }
@@ -588,16 +588,16 @@ await tAsync("&tts entrar/sair não existem: sem aviso e sem entrar na call", as
 await tAsync("&entrar e &sair continuam funcionando (a porta única)", async () => {
   // desde 17 out 2026 os dois moram no registro de comandos (modulos/comandos/voz.js)
   const voz = await import("node:fs").then((fs) => fs.readFileSync("./modulos/comandos/voz.js", "utf8"));
-  assert.match(voz, /function entrar\(msg, args, ctx\) \{ return tts\.cmdTts\(msg, \["entrar", \.\.\.args\], \{ \.\.\.ctx, viaAtalhoVoz: true \}\); \}/);
-  assert.match(voz, /function sair\(msg, args, ctx\) \{ return tts\.cmdTts\(msg, \["sair", \.\.\.args\], \{ \.\.\.ctx, viaAtalhoVoz: true \}\); \}/);
+  assert.match(voz, /async function entrar\(msg, args, ctx\) \{\s*const tts = await import\("\.\.\/ferramentas\/tts\.js"\);\s*return tts\.cmdTts\(msg, \["entrar", \.\.\.args\], \{ \.\.\.ctx, viaAtalhoVoz: true \}\);/);
+  assert.match(voz, /async function sair\(msg, args, ctx\) \{\s*const tts = await import\("\.\.\/ferramentas\/tts\.js"\);\s*return tts\.cmdTts\(msg, \["sair", \.\.\.args\], \{ \.\.\.ctx, viaAtalhoVoz: true \}\);/);
   const { REGISTRO } = await import("./modulos/comandos/index.js");
-  assert.deepEqual(REGISTRO.filter((c) => ["entrar", "sair"].includes(c.id)).map((c) => c.funcao().name), ["entrar", "sair"]);
+  assert.deepEqual(REGISTRO.filter((c) => ["entrar", "sair"].includes(c.id)).map((c) => c.funcao.name), ["entrar", "sair"]);
 });
 
 console.log("\n── &help <grupo> não vira &help <comando> pelo apelido ──");
 {
   const aliases = await import("./modulos/core/aliases.js");
-  const { CANONICO } = (await import("./modulos/comandos/index.js")).montarTabela();   // a tabela real (registro de comandos)
+  const { CANONICO } = await (await import("./modulos/comandos/index.js")).montarTabela();   // a tabela real (registro de comandos)
   const { ORDEM } = await import("./modulos/moderacao/help-grupos.js");
   for (const grupo of ORDEM) {
     t(`&help ${grupo} abre o grupo (a tabela real diz ${grupo} → ${CANONICO[grupo] ?? "—"})`, () =>
@@ -2930,15 +2930,9 @@ const aliasesMod = await import("./modulos/core/aliases.js");
 const { REGISTRO } = await import("./modulos/comandos/index.js");
 const main = fs.readFileSync("main.js", "utf8");
 const rotas = {}, canonico = {};
-// id → o arquivo do handler, lido do texto do registro (`funcao: () => modulo.cmdX`)
-const fonteDoId = {};
-for (const arq of fs.readdirSync("modulos/comandos").filter((f) => f.endsWith(".js") && f !== "index.js")) {
-  const src = fs.readFileSync(`modulos/comandos/${arq}`, "utf8");
-  const imps = Object.fromEntries([...src.matchAll(/import \* as (\w+)\s+from "\.\.\/([^"]+)"/g)].map((m) => [m[1], `modulos/${m[2]}`]));
-  for (const m of src.matchAll(/id: "([^"]+)",\s*\n\s*funcao: \(\) => (\w+)/g)) fonteDoId[m[1]] = imps[m[2]] ?? Object.values(imps)[0] ?? null;   // função local (o &entrar) → o módulo que ela chama
-}
+// id → o arquivo do handler (`modulo` da entrada; a função local do &entrar chama o tts.js)
 for (const c of REGISTRO) {
-  rotas[c.id] = fonteDoId[c.id];
+  rotas[c.id] = c.modulo ? `modulos/${c.modulo.replace(/^\.\.\//, "")}` : "modulos/ferramentas/tts.js";
   for (const a of c.apelidos ?? []) canonico[a] = c.id;
 }
 const en = { ...aliasesMod.COMANDO_EXTRA, ...Object.fromEntries(Object.entries(aliasesMod.COMANDO_EN).map(([pt, e]) => [e, pt])) };
@@ -14846,6 +14840,9 @@ const primeiraRota = new Map();
 for (const [n, fn] of Object.entries(rotas)) if (!primeiraRota.has(fn)) primeiraRota.set(fn, n);
 for (const [n, fn] of Object.entries(rotas).sort(([a], [b]) => a.localeCompare(b))) atual.nomes[n] = { canonico: CANONICO[n] ?? n, rota: primeiraRota.get(fn), funcao: fn.name };
 for (const [cmd, m] of Object.entries(aliasesMod.SUB).sort(([a], [b]) => a.localeCompare(b))) atual.sub[cmd] = Object.fromEntries(Object.entries(m).sort(([a], [b]) => a.localeCompare(b)));
+// a tela em inglês de cada palavra e os níveis aninhados (fase 2: as famílias levam as
+// tabelas para o registro — o resultado montado tem de sair igual)
+{ const tr = aliasesMod.tabelasDeTraducao(); atual.tela = tr.tela; atual.aninhados = tr.aninhados; }
 const salvo = fs.existsSync(ARQ_JSON) ? JSON.parse(fs.readFileSync(ARQ_JSON, "utf8")) : null;
 
 console.log("── 1. nenhum nome de comando perdido ──");
@@ -14869,20 +14866,39 @@ await t("todo subcomando em inglês continua virando o mesmo nome interno", () =
   assert.ok(!problemas.length, `subcomando em inglês sumiu ou mudou:\n${problemas.join("\n")}`);
   assert.ok(!novos.length, `subcomando em inglês novo fora do inventário — rode com INVENTARIO=1:\n${novos.join(" ")}`);
 });
+await t("a tela em inglês de cada subcomando e os níveis aninhados são os do inventário", () => {
+  if (ATUALIZAR) return;
+  assert.ok(salvo.tela && salvo.aninhados, "o inventário é anterior à fase 2 — rode com INVENTARIO=1");
+  const dif = [];
+  for (const [cmd, m] of Object.entries({ ...salvo.tela, ...atual.tela })) for (const pt of new Set([...Object.keys(salvo.tela[cmd] ?? {}), ...Object.keys(m)])) {
+    if (salvo.tela[cmd]?.[pt] !== atual.tela[cmd]?.[pt]) dif.push(`tela ${cmd} ${pt}: ${salvo.tela[cmd]?.[pt] ?? "—"} → ${atual.tela[cmd]?.[pt] ?? "—"}`);
+  }
+  for (const cmd of new Set([...Object.keys(salvo.aninhados), ...Object.keys(atual.aninhados)]))
+    if (JSON.stringify(salvo.aninhados[cmd] ?? []) !== JSON.stringify(atual.aninhados[cmd] ?? [])) dif.push(`aninhados ${cmd}: ${salvo.aninhados[cmd] ?? "—"} → ${atual.aninhados[cmd] ?? "—"}`);
+  assert.ok(!dif.length, `mudou (se foi de propósito, rode com INVENTARIO=1):\n${dif.join("\n")}`);
+});
 await t("comando gerenciável e comando só de IA têm rota", () => {
   for (const cmd of [...COMANDOS_GERENCIAVEIS, ...COMANDOS_SO_IA]) assert.ok(rotas[cmd], cmd);
 });
 // ── Fase 1: o registro (modulos/comandos/) é a única fonte ──
 const registro = await import("./modulos/comandos/index.js");
-await t("o registro está íntegro (nenhum nome em dois comandos) e todo arquivo da pasta está no index.js", () => {
+await t("o registro está íntegro (nenhum nome em dois comandos) e todo arquivo da pasta está no index.js", async () => {
   assert.deepEqual(registro.problemasDoRegistro(), []);
   // e a checagem pega o que deve: um nome em dois comandos para o boot
-  const duplicado = [...registro.REGISTRO, { id: "novo", funcao: () => () => 1, apelidos: ["avisar"] }];
+  const duplicado = [...registro.REGISTRO, { id: "novo", funcao: () => 1, apelidos: ["avisar"] }];
   assert.match(registro.problemasDoRegistro(duplicado).join(), /"avisar" está em warn e em novo/);
-  assert.throws(() => registro.montarTabela(duplicado), /registro de comandos inválido/);
+  await assert.rejects(() => registro.montarTabela(duplicado), /registro de comandos inválido/);
   const indice = fs.readFileSync("modulos/comandos/index.js", "utf8");
   const fora = fs.readdirSync("modulos/comandos").filter((f) => f.endsWith(".js") && f !== "index.js" && !indice.includes(`from "./${f}"`));
   assert.deepEqual(fora, []);
+});
+await t("família migrada não está mais nas tabelas antigas do aliases.js", () => {
+  const al = fs.readFileSync("modulos/core/aliases.js", "utf8");
+  const chavesDe = (ini) => { const i = al.indexOf(ini); const bloco = al.slice(i, al.indexOf("\n};", i)); return [...bloco.matchAll(/\n  "?([\w.]+)"?: /g)].map((m) => m[1]); };
+  const antigas = new Set([...chavesDe("const SUB_LEGADO = {"), ...chavesDe("const ANINHADOS = {"), ...chavesDe("const SO_EXIBIR = {")]);
+  const migradas = registro.REGISTRO.filter((c) => c.subcomandos || c.aninhados || c.naTela).map((c) => c.id);
+  assert.deepEqual(migradas.filter((id) => antigas.has(id)), []);
+  assert.ok(migradas.length >= 30, `só ${migradas.length} famílias no registro`);
 });
 await t("o main.js e o aliases.js não declaram comando à mão", () => {
   const src = fs.readFileSync("main.js", "utf8");
@@ -14890,9 +14906,9 @@ await t("o main.js e o aliases.js não declaram comando à mão", () => {
   const al = fs.readFileSync("modulos/core/aliases.js", "utf8");
   for (const velho of ["export const COMANDO_EN = {", "export const COMANDO_EXTRA = {"]) assert.ok(!al.includes(velho), velho);
 });
-await t("as listas que viraram marcas no registro são as mesmas de antes", () => {
+await t("as listas que viraram marcas no registro são as mesmas de antes", async () => {
   // as listas como estavam no main.js em 17 out 2026 (fase 0); mudar uma delas é mudar comportamento
-  const tab = registro.montarTabela();
+  const tab = await registro.montarTabela();
   assert.deepEqual(tab.COMANDOS_GERENCIAVEIS, ["ping", "repete", "userinfo", "kick", "ban", "silenciar", "limpar", "warn", "acesso", "automod", "tutorial", "assistente", "cor", "log", "banglobal", "embed", "reactionrole", "chat", "rss", "xp", "game", "autorole", "staff", "boasvindas", "adeus", "fuso", "tts", "musica", "webhook", "rolar", "iniciativa", "ticket", "economia", "entretenimento", "servidor"]);
   const ordenado = (x) => [...x].sort();
   assert.deepEqual(ordenado(tab.COMANDOS_SO_IA), ["chat", "modia"]);
@@ -15075,7 +15091,7 @@ if (ATUALIZAR) {
   const contar = (cmd) => [...exemplos.keys()].filter((k) => new RegExp(`^\\w+\\t&(${porCanonico[cmd].nomes.join("|")})\\b`).test(k)).length;
   const json = {
     _leia: "Gerado por `INVENTARIO=1 node testes.mjs comandos-17out`. A suíte comandos-17out falha se um nome daqui sumir ou mudar de destino. Não edite à mão.",
-    nomes: atual.nomes, sub: atual.sub,
+    nomes: atual.nomes, sub: atual.sub, tela: atual.tela, aninhados: atual.aninhados,
   };
   fs.mkdirSync("docs/comandos", { recursive: true });
   fs.writeFileSync(ARQ_JSON, JSON.stringify(json, null, 1) + "\n");
@@ -15099,13 +15115,15 @@ if (ATUALIZAR) {
     "",
     "## Onde cada comando está declarado",
     "",
-    "Desde a fase 1, o nome, os apelidos, o nome em inglês e as marcas de cada comando (gerenciável, só IA, voz,",
-    "essencial, qualquer canal, texto livre) moram **só** no registro, `modulos/comandos/` — um arquivo por família.",
-    "O que ainda está espalhado (fases 2 e 3, uma família por vez):",
+    "O nome, os apelidos, o nome em inglês e as marcas de cada comando (gerenciável, só IA, voz, essencial,",
+    "qualquer canal, texto livre) moram **só** no registro, `modulos/comandos/` — um arquivo por família (fase 1).",
+    "Os subcomandos também, com o nome em inglês de cada um (fase 2), menos as duas famílias grandes.",
+    "O que ainda está espalhado:",
     "",
     "| Lugar | O que guarda |",
     "|---|---|",
-    "| `modulos/core/aliases.js` → `SUB`, `ANINHADOS`, `SO_EXIBIR`, `PLACEHOLDER_EN` | subcomandos inglês → português, para entrada e para a tela |",
+    "| `modulos/core/aliases.js` → `SUB_LEGADO`, `ANINHADOS`, `SO_EXIBIR` | os subcomandos do `&automod` (e das famílias dele) e do `&game` — os próximos a migrar |",
+    "| `modulos/core/aliases.js` → `PLACEHOLDER_EN` | os moldes da ajuda (`‹nome›` → `‹name›`), comuns a todos os comandos |",
     "| `modulos/core/nomes-automod.js` | grupos, partes, modos e temas do automod nos dois idiomas |",
     "| cada handler (`if (sub === … )`) | o parse dos subcomandos, muitas vezes já aceitando os dois idiomas |",
     "| `help-arvore.js`, `geral.js` (`construirSubtopicos`, `construirDetalhes`) | as páginas de ajuda, PT e EN escritas em cópias separadas |",

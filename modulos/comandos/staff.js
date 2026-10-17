@@ -1,10 +1,14 @@
 // &staff — a equipe do servidor (mesma lista de cargos do &acesso)
-import * as staff from "../moderacao/staff.js";
 
 export default {
   id: "staff",
-  funcao: () => staff.cmdStaff,
+  modulo: "../moderacao/staff.js",
+  funcao: "cmdStaff",
   nomes: { en: "staff" },
   apelidos: ["equipe", "team"],
+  subcomandos: {
+    add: "add", remove: "remove", lista: "list", limpar: "clear", titulo: ["title", "label"],
+    equipe: "team",
+  },
   gerenciavel: true,
 };

@@ -1,10 +1,12 @@
 // &limpar — apaga mensagens em lote
-import * as limpar from "../moderacao/limpar.js";
 
 export default {
   id: "limpar",
-  funcao: () => limpar.cmdLimpar,
+  modulo: "../moderacao/limpar.js",
+  funcao: "cmdLimpar",
   nomes: { en: "purge" },
   apelidos: ["clear", "purge", "limpiar"],
+  subcomandos: { tudo: ["all", "everything"] },
+  naTela: { confirmar: "confirm" },
   gerenciavel: true,
 };

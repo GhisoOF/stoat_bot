@@ -1,10 +1,15 @@
 // &modia — moderação por IA
-import * as modiaCmd from "../moderacao/modia-comando.js";
 
 export default {
   id: "modia",
-  funcao: () => modiaCmd.cmdModIA,
+  modulo: "../moderacao/modia-comando.js",
+  funcao: "cmdModIA",
   apelidos: ["moderacaoia"],
+  subcomandos: {
+    criterios: "criteria", canal: "channel", limpar: "clear", status: "status", add: "add",
+    remove: "remove",
+  },
+  aninhados: ["canal", "criterios"],
   soIA: true,
   textoLivre: true,
 };

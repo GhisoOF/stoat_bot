@@ -1,10 +1,15 @@
 // &log — canal e eventos do registro de moderação
-import * as log from "../core/log.js";
 
 export default {
   id: "log",
-  funcao: () => log.cmdLog,
+  modulo: "../core/log.js",
+  funcao: "cmdLog",
   nomes: { en: "log" },
   apelidos: ["logs"],
+  subcomandos: {
+    here: "here", off: "off", canal: "channel", punicoes: "punishments", membros: "members",
+    mensagens: "messages", cargos: "roles", comandos: "commands", eventos: "events",
+  },
+  naTela: { aqui: "here" },
   gerenciavel: true,
 };

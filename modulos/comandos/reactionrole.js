@@ -1,9 +1,14 @@
 // &reactionrole — cargos por reação
-import * as reactionRoles from "../ferramentas/reaction-roles.js";
 
 export default {
   id: "reactionrole",
-  funcao: () => reactionRoles.cmdReactionRole,
+  modulo: "../ferramentas/reaction-roles.js",
+  funcao: "cmdReactionRole",
   apelidos: ["rr", "reactionroles"],
+  subcomandos: {
+    exclusivo: "exclusive", unico: "unique", add: "add", remove: "remove", list: "list",
+    recarregar: "reload", reparar: "repair",
+  },
+  aninhados: ["exclusivo", "unico"],
   gerenciavel: true,
 };

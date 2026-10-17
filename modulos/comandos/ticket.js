@@ -1,9 +1,13 @@
 // &ticket — tickets de suporte
-import * as tickets from "../ferramentas/tickets.js";
 
 export default {
   id: "ticket",
-  funcao: () => tickets.cmdTicket,
+  modulo: "../ferramentas/tickets.js",
+  funcao: "cmdTicket",
   apelidos: ["tickets", "suporte"],
+  subcomandos: {
+    painel: "panel", lista: "list", apagar: "delete", categorias: "categories", equipe: "team",
+  },
+  naTela: { abrir: "open", fechar: "close" },
   gerenciavel: true,
 };

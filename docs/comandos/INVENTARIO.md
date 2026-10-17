@@ -63,13 +63,15 @@ _Comando_ é o nome interno (o que o `&comando desativar` e o banco guardam).
 
 ## Onde cada comando está declarado
 
-Desde a fase 1, o nome, os apelidos, o nome em inglês e as marcas de cada comando (gerenciável, só IA, voz,
-essencial, qualquer canal, texto livre) moram **só** no registro, `modulos/comandos/` — um arquivo por família.
-O que ainda está espalhado (fases 2 e 3, uma família por vez):
+O nome, os apelidos, o nome em inglês e as marcas de cada comando (gerenciável, só IA, voz, essencial,
+qualquer canal, texto livre) moram **só** no registro, `modulos/comandos/` — um arquivo por família (fase 1).
+Os subcomandos também, com o nome em inglês de cada um (fase 2), menos as duas famílias grandes.
+O que ainda está espalhado:
 
 | Lugar | O que guarda |
 |---|---|
-| `modulos/core/aliases.js` → `SUB`, `ANINHADOS`, `SO_EXIBIR`, `PLACEHOLDER_EN` | subcomandos inglês → português, para entrada e para a tela |
+| `modulos/core/aliases.js` → `SUB_LEGADO`, `ANINHADOS`, `SO_EXIBIR` | os subcomandos do `&automod` (e das famílias dele) e do `&game` — os próximos a migrar |
+| `modulos/core/aliases.js` → `PLACEHOLDER_EN` | os moldes da ajuda (`‹nome›` → `‹name›`), comuns a todos os comandos |
 | `modulos/core/nomes-automod.js` | grupos, partes, modos e temas do automod nos dois idiomas |
 | cada handler (`if (sub === … )`) | o parse dos subcomandos, muitas vezes já aceitando os dois idiomas |
 | `help-arvore.js`, `geral.js` (`construirSubtopicos`, `construirDetalhes`) | as páginas de ajuda, PT e EN escritas em cópias separadas |

@@ -1,11 +1,12 @@
 // &servidor — regras, cargos, canais e FAQ do servidor
-import * as servidorInfo from "../ferramentas/servidor-info.js";
 
 export default {
   id: "servidor",
-  funcao: () => servidorInfo.cmdServidor,
+  modulo: "../ferramentas/servidor-info.js",
+  funcao: "cmdServidor",
   nomes: { en: "server" },
   apelidos: ["server", "serverinfo", "servidorinfo"],
+  subcomandos: { regras: "rules", cargos: "roles", canais: "channels", info: "about" },
   gerenciavel: true,
   textoLivre: true,
 };

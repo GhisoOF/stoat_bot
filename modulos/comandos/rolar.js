@@ -1,10 +1,11 @@
 // &rolar — dados de RPG de mesa
-import * as dadosRpg from "../ferramentas/dados-rpg.js";
 
 export default {
   id: "rolar",
-  funcao: () => dadosRpg.cmdRolar,
+  modulo: "../ferramentas/dados-rpg.js",
+  funcao: "cmdRolar",
   apelidos: ["r", "roll", "dado", "dados"],
+  subcomandos: { moeda: "coin" },
   gerenciavel: true,
   textoLivre: true,
 };

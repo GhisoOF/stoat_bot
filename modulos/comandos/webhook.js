@@ -1,10 +1,14 @@
 // &webhook — ganchos que publicam GitHub, Crafty, Discord-like… num canal
-import * as webhooks from "../ferramentas/webhooks.js";
 
 export default {
   id: "webhook",
-  funcao: () => webhooks.cmdWebhook,
+  modulo: "../ferramentas/webhooks.js",
+  funcao: "cmdWebhook",
   apelidos: ["webhooks", "gancho", "wh"],
+  subcomandos: {
+    criar: "create", lista: "list", remover: "remove", testar: "test", eventos: "events",
+    canal: "channel",
+  },
   gerenciavel: true,
   textoLivre: true,
 };

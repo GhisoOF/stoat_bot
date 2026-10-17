@@ -1,8 +1,8 @@
 // &kick — expulsa alguém
-import * as geral from "../moderacao/geral.js";
 
 export default {
   id: "kick",
-  funcao: () => geral.cmdKick,
+  modulo: "../moderacao/geral.js",
+  funcao: "cmdKick",
   gerenciavel: true,
 };

@@ -1,10 +1,13 @@
 // &comando — liga e desliga comandos neste servidor
-import * as admin from "../moderacao/comandos-admin.js";
 
 export default {
   id: "comando",
-  funcao: () => admin.cmdComando,
+  modulo: "../moderacao/comandos-admin.js",
+  funcao: "cmdComando",
   nomes: { en: "command" },
   apelidos: ["command", "comandos"],
+  subcomandos: {
+    desativar: ["disable", "off"], ativar: ["enable", "on"], list: "list", gerenciar: "manage",
+  },
   essencial: true,
 };

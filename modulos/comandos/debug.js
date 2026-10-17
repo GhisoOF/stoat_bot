@@ -1,10 +1,15 @@
 // &debug — diagnóstico de permissões, canais e voz
-import * as debugCmd from "../moderacao/debug-comando.js";
 
 export default {
   id: "debug",
-  funcao: () => debugCmd.cmdDebug,
+  modulo: "../moderacao/debug-comando.js",
+  funcao: "cmdDebug",
   apelidos: ["diagnostico", "diagnóstico"],
+  subcomandos: {
+    canais: "channels", permissoes: "permissions", cru: "raw", silence: "silence", mudo: "mute",
+    ler: "read",
+  },
+  aninhados: ["canais", "permissoes", "silence", "mudo"],
   essencial: true,
   qualquerCanal: true,
 };

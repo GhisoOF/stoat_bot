@@ -1,8 +1,8 @@
 // &ping — latência do bot
-import * as geral from "../moderacao/geral.js";
 
 export default {
   id: "ping",
-  funcao: () => geral.cmdPing,
+  modulo: "../moderacao/geral.js",
+  funcao: "cmdPing",
   gerenciavel: true,
 };

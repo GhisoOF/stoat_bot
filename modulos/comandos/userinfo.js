@@ -1,8 +1,8 @@
 // &userinfo — ID, entrada e cargos de alguém
-import * as geral from "../moderacao/geral.js";
 
 export default {
   id: "userinfo",
-  funcao: () => geral.cmdUserinfo,
+  modulo: "../moderacao/geral.js",
+  funcao: "cmdUserinfo",
   gerenciavel: true,
 };

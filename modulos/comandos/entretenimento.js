@@ -1,11 +1,15 @@
 // &entretenimento — ship, briga, cowsay, bola8…
-import * as entretenimento from "../ferramentas/entretenimento.js";
 
 export default {
   id: "entretenimento",
-  funcao: () => entretenimento.cmdEntretenimento,
+  modulo: "../ferramentas/entretenimento.js",
+  funcao: "cmdEntretenimento",
   nomes: { en: "entertainment" },
   apelidos: ["entertainment", "fun", "ent", "entreterimento"],
+  subcomandos: {
+    briga: "fight", escolher: ["choose", "pick"], nota: "rate", sorte: "fortune", zoeira: "mock",
+    inverter: "reverse", bola8: "8ball",
+  },
   gerenciavel: true,
   textoLivre: true,
 };

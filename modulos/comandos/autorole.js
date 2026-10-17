@@ -1,8 +1,9 @@
 // &autorole — cargo automático na entrada
-import * as autorole from "../ferramentas/autorole.js";
 
 export default {
   id: "autorole",
-  funcao: () => autorole.cmdAutorole,
+  modulo: "../ferramentas/autorole.js",
+  funcao: "cmdAutorole",
+  subcomandos: { set: "set", off: "off", desativar: "disable", remover: "remove" },
   gerenciavel: true,
 };

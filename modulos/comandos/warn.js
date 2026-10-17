@@ -1,10 +1,12 @@
 // &warn — avisos manuais (lista, limpar)
-import * as warnMod from "../moderacao/warn.js";
 
 export default {
   id: "warn",
-  funcao: () => warnMod.cmdWarn,
+  modulo: "../moderacao/warn.js",
+  funcao: "cmdWarn",
   nomes: { en: "warn" },
   apelidos: ["avisar"],
+  subcomandos: { lista: "list", limpar: "clear" },
+  naTela: { acumular: "stack" },
   gerenciavel: true,
 };

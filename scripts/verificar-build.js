@@ -61,9 +61,9 @@ if (!existsSync(modulosDir)) {
   console.log(`  ✓ ${arquivos.length} módulos verificados`);
 }
 
-// 3) o registro de comandos: cada `funcao: () => modulo.handler` aponta para um
-//    import do próprio arquivo e para um export que existe nele; e todo arquivo
-//    da pasta está no index.js (17 out 2026 — antes era a tabela `rotas` do main.js)
+// 3) o registro de comandos: cada entrada aponta (`modulo` + `funcao`) para um
+//    arquivo que existe e um export que existe nele, e todo arquivo da pasta está
+//    no index.js (17 out 2026 — antes era a tabela `rotas` do main.js)
 {
   const dir = join(RAIZ, "modulos", "comandos");
   if (!existsSync(join(dir, "index.js"))) falha("modulos/comandos/index.js não existe");
@@ -74,16 +74,18 @@ if (!existsSync(modulosDir)) {
     for (const arq of readdirSync(dir).filter((f) => f.endsWith(".js") && f !== "index.js")) {
       if (!indice.includes(`from "./${arq}"`)) ruins.push(`${arq} não está no index.js (o comando não existiria)`);
       const src = readFileSync(join(dir, arq), "utf8");
-      const imports = {};
-      for (const m of src.matchAll(/import\s+\*\s+as\s+(\w+)\s+from\s+["'](\.\.?\/[^"']+)["']/g)) imports[m[1]] = resolve(dir, m[2]);
       const locais = new Set([...src.matchAll(/function\s+(\w+)/g)].map((m) => m[1]));
-      for (const m of src.matchAll(/funcao:\s*\(\)\s*=>\s*([\w$]+)(?:\.([\w$]+))?/g)) {
+      for (const m of src.matchAll(/modulo:\s*"([^"]+)",\s*\n\s*funcao:\s*"([\w$]+)"/g)) {
         n++;
         const [, mod, exp] = m;
-        if (!exp) { if (!locais.has(mod)) ruins.push(`${arq}: funcao aponta para "${mod}", que não existe no arquivo`); continue; }
-        if (!imports[mod]) { ruins.push(`${arq}: funcao usa "${mod}", que não é importado`); continue; }
-        const alvo = readFileSync(imports[mod], "utf8");
-        if (!new RegExp(`export\\s+(?:async\\s+)?(?:function|const|let)\\s+${exp}\\b`).test(alvo)) ruins.push(`${arq}: "${mod}.${exp}" não é exportado por ${imports[mod].slice(RAIZ.length + 1)}`);
+        const alvo = resolve(dir, mod);
+        if (!existsSync(alvo)) { ruins.push(`${arq}: "${mod}" não existe`); continue; }
+        if (!new RegExp(`export\\s+(?:async\\s+)?(?:function|const|let)\\s+${exp}\\b`).test(readFileSync(alvo, "utf8")))
+          ruins.push(`${arq}: "${exp}" não é exportado por ${alvo.slice(RAIZ.length + 1)}`);
+      }
+      for (const m of src.matchAll(/funcao:\s*([A-Za-z_$][\w$]*),/g)) {
+        n++;
+        if (!locais.has(m[1])) ruins.push(`${arq}: funcao aponta para "${m[1]}", que não existe no arquivo`);
       }
     }
     for (const r of ruins) falha(`registro de comandos: ${r}`);

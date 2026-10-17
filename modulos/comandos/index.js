@@ -10,11 +10,15 @@
 //   export default {
 //     id: "warn",                  // o nome interno — o que o banco e o `&comando desativar` guardam.
 //                                  // NUNCA renomear: servidores antigos têm esse nome salvo.
-//     funcao: () => warnMod.cmdWarn,  // o handler. É uma função que DEVOLVE o handler (e não o
-//                                  // handler direto) porque os módulos se importam em ciclo:
-//                                  // o aliases.js lê este registro, e os handlers leem o aliases.js.
+//     modulo: "../moderacao/warn.js", funcao: "cmdWarn",   // onde está o handler
 //     nomes: { en: "warn" },       // o nome na tela de cada idioma (sem a chave, o id)
 //     apelidos: ["avisar"],        // outros nomes que levam ao MESMO comando
+//     subcomandos: {               // nome interno do subcomando → nome(s) em inglês. O inglês
+//       lista: "list",             //   digitado vira o nome interno antes do handler, e a tela em
+//       limpar: ["clear", "wipe"], //   inglês mostra o primeiro. ["status"] = mesmo nome nos dois.
+//     },
+//     aninhados: ["setup"],        // subcomandos que têm mais um nível traduzido (`&xp setup canal`)
+//     naTela: { aqui: "here" },    // só a tela: o handler já aceita as duas palavras
 //     gerenciavel: true,           // o admin pode desligar com `&comando desativar`
 //     soIA: true,                  // só existe onde a IA roda (&chat, &modia)
 //     voz: true,                   // vale dentro da call, mesmo fora dos canais liberados
@@ -23,10 +27,16 @@
 //     textoLivre: true,            // os argumentos são texto livre: `<div>` ou `‹algo›` não é molde da ajuda
 //   };
 //
+// O handler vem por caminho + nome (e não por import) de propósito: assim este
+// registro não carrega módulo nenhum, e o aliases.js pode lê-lo no carregamento
+// sem ciclo. O `montarTabela()` importa os handlers no boot; o
+// `scripts/verificar-build.js` confere no build que cada caminho e cada export existem.
+//
 // Um arquivo pode exportar uma lista de entradas (o voz.js tem &tts, &entrar e &sair).
 //
-// Ainda NÃO estão aqui (fase 2, uma família por vez): os subcomandos e suas
-// traduções (aliases.js → SUB), a sintaxe e os textos da ajuda.
+// Ainda NÃO estão aqui: os subcomandos do &automod (e das famílias dele) e do
+// &game, que seguem no aliases.js até migrar (fase 2); a sintaxe e os textos da
+// ajuda (fase 3).
 //
 // Arquivo novo nesta pasta tem de entrar na lista abaixo — a suíte comandos-17out
 // falha se sobrar arquivo fora dela.
@@ -105,7 +115,7 @@ export function problemasDoRegistro(registro = REGISTRO) {
   const dono = new Map();
   for (const c of registro) {
     if (!c || typeof c.id !== "string" || !c.id) { problemas.push(`entrada sem id: ${JSON.stringify(c)?.slice(0, 80)}`); continue; }
-    if (typeof c.funcao !== "function") problemas.push(`${c.id}: sem funcao`);
+    if (typeof c.funcao !== "function" && !(typeof c.modulo === "string" && typeof c.funcao === "string")) problemas.push(`${c.id}: precisa de modulo + funcao (ou funcao local)`);
     for (const nome of [c.id, ...(c.apelidos ?? [])]) {
       if (nome !== nome.toLowerCase() || /\s/.test(nome)) problemas.push(`${c.id}: o nome "${nome}" precisa ser minúsculo e sem espaço`);
       if (dono.has(nome)) problemas.push(`"${nome}" está em ${dono.get(nome)} e em ${c.id}`);
@@ -115,15 +125,14 @@ export function problemasDoRegistro(registro = REGISTRO) {
   return problemas;
 }
 
-// A tabela que o main.js usa. Só aqui os handlers são resolvidos — quando todos
-// os módulos já carregaram.
-export function montarTabela(registro = REGISTRO) {
+// A tabela que o main.js usa. Só aqui os handlers são carregados (no boot).
+export async function montarTabela(registro = REGISTRO) {
   const problemas = problemasDoRegistro(registro);
   if (problemas.length) throw new Error(`registro de comandos inválido:\n  ${problemas.join("\n  ")}`);
   const rotas = {}, CANONICO = {};
   for (const c of registro) {
-    const fn = c.funcao();
-    if (typeof fn !== "function") throw new Error(`registro de comandos: ${c.id}.funcao() não devolveu uma função`);
+    const fn = typeof c.funcao === "function" ? c.funcao : (await import(new URL(c.modulo, import.meta.url)))[c.funcao];
+    if (typeof fn !== "function") throw new Error(`registro de comandos: ${c.id} — ${c.modulo} não exporta a função ${c.funcao}`);
     rotas[c.id] = fn;
     for (const a of c.apelidos ?? []) { rotas[a] = fn; CANONICO[a] = c.id; }
   }

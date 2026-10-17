@@ -1,10 +1,11 @@
 // &silenciar — silêncio manual (timeout nativo do Stoat)
-import * as silenciarMod from "../moderacao/silenciar.js";
 
 export default {
   id: "silenciar",
-  funcao: () => silenciarMod.cmdSilenciar,
+  modulo: "../moderacao/silenciar.js",
+  funcao: "cmdSilenciar",
   nomes: { en: "silence" },
   apelidos: ["silence", "mute", "timeout", "silencio"],
+  subcomandos: { tirar: ["remove", "undo", "lift", "off"] },
   gerenciavel: true,
 };

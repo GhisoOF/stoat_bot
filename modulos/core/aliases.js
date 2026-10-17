@@ -2,45 +2,16 @@ import { ORDEM as ORDEM_GRUPOS } from "../moderacao/help-grupos.js";   // os gru
 import { EN_PARA_PT } from "./nomes-automod.js";
 import { maisParecido } from "./parecido.js";
 
-// O nome de cada comando na tela em inglês e os apelidos vêm do registro de
-// comandos (modulos/comandos/) desde 17 out 2026 — não declarar aqui.
-// Só usados dentro de funções: o registro importa os handlers, e os handlers
-// importam este arquivo (ciclo que o ESM resolve, desde que ninguém leia estas
-// tabelas no carregamento).
-import { COMANDO_EN, COMANDO_EXTRA } from "../comandos/index.js";
+// O nome de cada comando na tela em inglês, os apelidos e (fase 2) os
+// subcomandos vêm do registro de comandos (modulos/comandos/) — não declarar
+// aqui. O registro não importa handler nenhum, então lê-lo no carregamento é seguro.
+import { COMANDO_EN, COMANDO_EXTRA, REGISTRO } from "../comandos/index.js";
 export { COMANDO_EN, COMANDO_EXTRA };
 
-export const SUB = {
-  servidor: {
-    rules: "regras", roles: "cargos", channels: "canais", about: "info",
-  },
-  entretenimento: {
-    fight: "briga", choose: "escolher", pick: "escolher", rate: "nota",
-    fortune: "sorte", mock: "zoeira", reverse: "inverter", "8ball": "bola8",
-  },
-  help: {
-    moderation: "moderacao", settings: "config", configuration: "config",
-    tools: "ferramentas", general: "geral", levels: "xp", character: "game",
-    // grupos novos
-    start: "comecar", protect: "proteger", protection: "proteger",
-    customize: "personalizar", customise: "personalizar", fun: "diversao",
-    diagnostics: "diagnostico", troubleshooting: "diagnostico", owner: "dono",
-  },
-  silenciar: {
-    remove: "tirar", undo: "tirar", lift: "tirar", off: "tirar",
-  },
-  assistente: {
-    quick: "rapido", fast: "rapido", full: "completo", complete: "completo",
-    channels: "canais", protection: "protecao", protect: "protecao",
-    cancel: "cancelar", stop: "cancelar",
-  },
-  tutorial: {
-    moderation: "moderacao", roles: "cargos", levels: "xp",
-    character: "rpg", adventure: "aventura", market: "rpg", economy: "economia",
-    game: "rpg", wiki: "rpg", permissions: "permissoes", logging: "logs",
-    news: "noticias", messages: "mensagens", settings: "ajustes",
-    ai: "ia", channels: "canais",
-  },
+// Subcomandos inglês → nome interno. Desde a fase 2 do registro (17 out 2026),
+// cada família declara os seus em modulos/comandos/<família>.js (`subcomandos`);
+// aqui ficam só os que ainda não migraram: o &automod (e as famílias dele) e o &game.
+const SUB_LEGADO = {
   game: {
     create: "criar", new: "novo", delete: "apagar", erase: "apagar",
     points: "pontos", spend: "pontos",
@@ -76,37 +47,6 @@ export const SUB = {
     bag: "mochila", inventory: "inventario",
     photos: "fotos", album: "album", image: "imagem", picture: "imagem",
     cancel: "cancelar", accept: "aceitar", announce: "anunciar",
-  },
-  xp: {
-    setup: "setup", config: "config", configure: "configurar",
-    roles: "cargos", createroles: "criarcargos", create: "criar",
-    reset: "reset", wipe: "zerar", top: "top", ranking: "ranking",
-    rank: "rank", leaderboard: "leaderboard",
-    multiplier: "multiplicador", maxlevel: "nivelmaximo", interval: "intervalo",
-    channel: "canal", announce: "anuncio", announcement: "anuncio",
-    sync: "sincronizar", resync: "sincronizar", restore: "sincronizar", all: "todos",
-  },
-  acesso: {
-    role: "cargo", roles: "cargos", staff: "staff",
-    channel: "canal", channels: "canais",
-    all: "todos", only: "somente", except: "exceto",
-    add: "add", remove: "remove", clear: "limpar",
-    staffignores: "staffignora", staffbypass: "staffignora",
-    status: "status",
-  },
-  banglobal: {
-    sweep: "varrer", scan: "varrer", review: "revisar", view: "ver",
-    list: "lista", banned: "lista", all: "lista",
-    exempt: "isentar", allow: "isentar", accept: "isentar", bypass: "isentar",
-    exempted: "isentos",
-    undo: "desfazer", revert: "desfazer", confirm: "confirmar",
-    forget: "esquecer", history: "historico", bots: "bots",
-    server: "servidor", remove: "remover", people: "pessoas", contribution: "contribuicao",
-    forget: "esquecer", history: "historico",
-    warn: "avisar", ban: "banir", off: "off",
-    instant: "imediato", consensus: "consenso",   // os dois modos de ban automático (15 out 2026)
-    import: "importar", auto: "auto", automatic: "auto", autoimport: "auto",
-    contribution: "contribuicao",
   },
   punicao: {
     mode: "modo", ladder: "escada", steps: "escada", warns: "warns", role: "cargo",
@@ -151,94 +91,11 @@ export const SUB = {
     add: "add", remove: "remover",
   },
   "automod.avatar": { action: "acao", time: "tempo", check: "checar", ...EN_PARA_PT.acoesAvatar },
-  warn: { list: "lista", clear: "limpar" },
-  ticket: { panel: "painel", list: "lista", delete: "apagar", categories: "categorias", team: "equipe" },
-  webhook: { create: "criar", list: "lista", remove: "remover", test: "testar", events: "eventos", channel: "canal" },
-  economia: {
-    shop: "loja", buy: "comprar", mine: "minerar", balance: "saldo", pay: "pagar", give: "dar", take: "tirar",
-    reset: "zerar", interval: "intervalo", remove: "remover", confirm: "confirmar",
-    name: "nome", symbol: "simbolo", gain: "ganho",
-  },
-  servidores: {
-    report: "relatorio", channel: "canal", now: "agora", subjects: "assuntos", topics: "assuntos", empty: "vazias", here: "aqui",
-  },
-  rolar: { coin: "moeda" },
-  iniciativa: { list: "lista", remove: "remover", clear: "limpar" },
-  limpar: { all: "tudo", everything: "tudo" },
-  cor: {
-    panel: "painel", create: "criar", generate: "gerar",
-    gradient: "gradiente", preset: "preset", presets: "presets",
-    list: "lista", roles: "cargos", remove: "remover", clear: "limpar",
-    default: "padrao", here: "aqui", help: "ajuda",
-  },
-  reactionrole: {
-    exclusive: "exclusivo", unique: "unico",
-    add: "add", remove: "remove", list: "list",
-    reload: "recarregar", repair: "reparar",
-  },
-  rss: {
-    add: "add", remove: "remove", list: "list",
-    channel: "canal", now: "agora", test: "testar", off: "off", category: "categoria",
-  },
-  staff: {
-    add: "add", remove: "remove", list: "lista", clear: "limpar",
-    title: "titulo", label: "titulo", team: "equipe",
-  },
-  boasvindas: {
-    channel: "canal", title: "titulo", text: "texto", message: "texto",
-    colour: "cor", color: "cor", image: "imagem", test: "testar",
-    default: "padrao", status: "status", clear: "limpar", here: "aqui",
-    hidden: "oculto", hide: "oculto", visible: "visivel", show: "visivel", messages: "mensagens",
-  },
-  adeus: {
-    channel: "canal", title: "titulo", text: "texto", message: "texto",
-    colour: "cor", color: "cor", image: "imagem", test: "testar",
-    default: "padrao", status: "status", clear: "limpar", here: "aqui",
-    hidden: "oculto", hide: "oculto", visible: "visivel", show: "visivel",
-  },
-  tts: {
-    channel: "canal", here: "aqui", broadcast: "transmitir",
-    filter: "filtro", sieve: "filtro", restart: "reiniciar", test: "teste",
-    diagnose: "diagnostico", diagnostics: "diagnostico", health: "estado",
-    join: "entrar", read: "ler", start: "entrar", stop: "sair",
-    unstick: "destravar", unlock: "destravar",
-    rescue: "resgatar", resgate: "resgatar",
-    perminute: "porminuto", cap: "porminuto",
-    join: "entrar", leave: "sair", voice: "voz", status: "estado",
-    names: "nomes", cooldown: "cooldown",
-    effect: "efeito", pitch: "tom", tone: "tom", dictionary: "dicionario",
-  },
-  fuso: {
-    add: "add", remove: "remove", list: "lista", clear: "limpar",
-    search: "buscar", find: "buscar", now: "ver", time: "ver", check: "ver",
-    label: "apelido", name: "apelido", alias: "apelido",
-    main: "principal", reference: "principal", format: "formato", cities: "cidades",
-  },
-  log: {
-    here: "here", off: "off", channel: "canal",
-    punishments: "punicoes", members: "membros", messages: "mensagens",
-    roles: "cargos", commands: "comandos", events: "eventos",
-  },
-  chat: {
-    free: "livre", forget: "esquecer", all: "tudo",
-    profile: "perfil", map: "mapear", care: "cuidado", gentle: "gentil",
-    comment: "comentar", perday: "pordia", status: "status", here: "aqui",
-    mode: "modo", relevant: "relevante", every: "todas",
-  },
-  modia: {
-    criteria: "criterios", channel: "canal", clear: "limpar",
-    status: "status", add: "add", remove: "remove",
-  },
-  debug: {
-    channels: "canais", permissions: "permissoes", raw: "cru",
-    silence: "silence", mute: "mudo", read: "ler",
-  },
   blocklist: {
     add: "add", remove: "remove", list: "list", clear: "clear",
     reload: "reload", adddomain: "adddomain", removedomain: "removedomain",
     domains: "dominios",
   },
-  embed: { fields: "campos", colors: "cores" },
   whitelist: { add: "add", remove: "remove", list: "list" },
   sentinela: {
     sensitivity: "sensibilidade", channel: "canal", test: "testar",
@@ -252,60 +109,42 @@ export const SUB = {
     config: "config", status: "status",
     low: "baixa", medium: "media", high: "alta",
   },
-  comando: {
-    disable: "desativar", off: "desativar",
-    enable: "ativar", on: "ativar",
-    list: "list", manage: "gerenciar",
-  },
-  autorole: { set: "set", off: "off", disable: "desativar", remove: "remover" },
-  // áreas do &tutorial (16 out 2026): a entrada já aceita os nomes em inglês
-  // (APELIDOS do tutorial.js); isto é para a TELA em inglês não mostrar
-  // `&tutorial permissoes`
-  tutorial: {
-    permissions: "permissoes", channels: "canais", moderation: "moderacao", roles: "cargos",
-    ai: "ia", news: "noticias", messages: "mensagens", economy: "economia",
-    adventure: "aventura", settings: "ajustes",
-  },
-  idioma: {
-    portuguese: "portugues", english: "english", status: "status",
-  },
 };
 
+// O que vem do registro: `subcomandos` (nome interno → inglês) vira a tabela de
+// entrada (inglês → interno); `aninhados` e `naTela` como estão.
+const DO_REGISTRO = { sub: {}, aninhados: {}, naTela: {} };
+for (const c of REGISTRO) {
+  if (c.subcomandos) {
+    const m = {};
+    for (const [pt, en] of Object.entries(c.subcomandos)) for (const e of [].concat(en)) m[e] = pt;
+    DO_REGISTRO.sub[c.id] = m;
+  }
+  if (c.aninhados?.length) DO_REGISTRO.aninhados[c.id] = new Set(c.aninhados);
+  if (c.naTela) DO_REGISTRO.naTela[c.id] = c.naTela;
+}
+export const SUB = { ...SUB_LEGADO, ...DO_REGISTRO.sub };
+
 const ANINHADOS = {
+  ...DO_REGISTRO.aninhados,
   game: new Set(["admin", "moeda", "mercado", "follower", "followers", "coop",
     "trocar", "escambo", "party", "equipe", "reset"]),
-  acesso: new Set(["cargo", "cargos", "staff", "canal", "canais"]),
-  xp: new Set(["setup", "config", "configurar", "sincronizar"]),
-  automod: new Set([...Object.keys(SUB.automod), "antispam", "antimassspam",
+  automod: new Set([...Object.keys(SUB_LEGADO.automod), "antispam", "antimassspam",
     "antiinvite", "antimassmention", "anticaps", "antilink", "antiscam", "sentinela",
     "anticaracteres", "antirepeticao"]),
-  banglobal: new Set(["varrer", "revisar", "scan", "isentar", "lista", "desfazer", "bots"]),
-  cor: new Set(["painel", "criar", "gerar"]),
-  reactionrole: new Set(["exclusivo", "unico"]),
-  chat: new Set(["livre", "comentar", "esquecer", "cuidado", "gentil"]),
-  modia: new Set(["canal", "criterios"]),
-  debug: new Set(["canais", "permissoes", "silence", "mudo"]),
   punicao: new Set(["modo", "mode"]),
-  economia: new Set(["zerar", "loja", "config"]),
-  servidores: new Set(["relatorio"]),
-  log: new Set([]),
 };
 
 // Só para a TELA: palavras que o comando aceita nos dois idiomas, mas que a
 // ajuda escreve em português (`&log channel aqui`).
 const SO_EXIBIR = {
+  ...DO_REGISTRO.naTela,
   automod: { aviso: "warn" },
-  warn: { acumular: "stack" }, xp: { aqui: "here" }, tts: { aqui: "here", padrao: "default" },
-  log: { aqui: "here" }, rss: { aqui: "here" }, chat: { aqui: "here" },
   "automod.sentinela": { assuntos: "topics", aqui: "here" }, "automod.antispam": { repeticao: "repeat" },
   // 17 out 2026 (inventário de comandos): palavras que o comando já aceitava em
   // inglês, mas a tela em inglês mostrava em português
   "automod.punicao": { aviso: "warn", validade: "expiry" }, punicao: { aviso: "warn", validade: "expiry" },
   game: { abrir: "open", partir: "go", com: "with", por: "for", mao1: "hand1", mao2: "hand2" },
-  ticket: { abrir: "open", fechar: "close" },
-  banglobal: { ignorados: "ignored", lembrar: "remember" },
-  limpar: { confirmar: "confirm" },
-  musica: { pausar: "pause", retomar: "resume", fila: "queue", parar: "stop", faixa: "track", nao: "off" },
 };
 const SUB_REVERSO = {};
 for (const [cmd, mapa] of Object.entries(SUB)) {
@@ -588,4 +427,15 @@ export function corrigirSubcomando(canonico, token) {
   const conhecidos = subcomandosDe(canonico);
   if (!conhecidos.size || conhecidos.has(t)) return null;
   return maisParecido(t, conhecidos);
+}
+
+// As tabelas de tradução como ficaram montadas (para o inventário de comandos:
+// a tela em inglês de cada palavra e os níveis aninhados não podem mudar sem querer).
+export function tabelasDeTraducao() {
+  const ord = (o) => Object.fromEntries(Object.entries(o).sort(([a], [b]) => a.localeCompare(b)));
+  return {
+    sub: ord(Object.fromEntries(Object.entries(SUB).map(([c, m]) => [c, ord(m)]))),
+    tela: ord(Object.fromEntries(Object.entries(SUB_REVERSO).map(([c, m]) => [c, ord(m)]))),
+    aninhados: ord(Object.fromEntries(Object.entries(ANINHADOS).filter(([, s]) => s.size).map(([c, s]) => [c, [...s].sort()]))),
+  };
 }

@@ -1,8 +1,8 @@
 // &config — panorama de tudo que está configurado
-import * as cfgCmd from "../moderacao/config-comando.js";
 
 export default {
   id: "config",
-  funcao: () => cfgCmd.cmdConfig,
+  modulo: "../moderacao/config-comando.js",
+  funcao: "cmdConfig",
   apelidos: ["configuracoes", "configurações"],
 };

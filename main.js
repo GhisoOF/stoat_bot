@@ -336,7 +336,7 @@ function comandoParecido(digitado, nomes) {
 // registro tiver um nome em dois comandos.
 const {
   rotas, CANONICO, COMANDOS_GERENCIAVEIS, COMANDOS_SO_IA, COMANDOS_DE_VOZ, ESSENCIAIS, SEMPRE_LIBERADOS, TEXTO_LIVRE,
-} = registroComandos.montarTabela();
+} = await registroComandos.montarTabela();
 estado.COMANDOS_SO_IA = COMANDOS_SO_IA;
 // exportado via ctx para o comando &comando consultar
 estado.CANONICO = CANONICO;

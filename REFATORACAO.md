@@ -561,6 +561,48 @@ nomes. 131 (0,25%) recebem outra sugestão, todas à mesma distância (`rr` → 
 - `assistente`, `arvore-comandos` e `help-comandos` liam a tabela como **texto** do
   `main.js`. Agora leem o registro.
 
+## 6i. Fase 2: os subcomandos vão para o registro (17 out 2026)
+
+34 famílias levaram os subcomandos para o próprio arquivo do registro, com o nome em
+inglês de cada um:
+
+```js
+subcomandos: { lista: "list", limpar: ["clear", "wipe"] },   // interno → inglês (o 1º é o da tela)
+aninhados: ["setup"],                                          // mais um nível traduzido
+naTela: { aqui: "here" },                                      // só a tela: o handler aceita as duas
+```
+
+As famílias são: servidor, entretenimento, help, silenciar, assistente, tutorial, xp,
+acesso, banglobal, warn, ticket, webhook, economia, servidores, rolar, iniciativa,
+limpar, cor, reactionrole, rss, staff, boasvindas, adeus, tts, fuso, log, chat, modia,
+debug, embed, comando, autorole, idioma e musica.
+
+No `aliases.js` (de 591 para 441 linhas) ficaram, em `SUB_LEGADO`, só as duas
+famílias grandes: o `&automod` (com punicao, sentinela, blocklist, whitelist e as
+partes) e o `&game`. As tabelas que o resto do bot usa (`SUB`, `ANINHADOS`, a tela em
+inglês) são montadas juntando o registro com o legado.
+
+A tabela `tutorial` estava **declarada duas vezes** no objeto antigo. Valia a segunda,
+e a primeira era código morto. Foi para o registro a que valia.
+
+**O handler não é mais importado pelo registro.** A entrada diz
+`modulo: "../moderacao/warn.js", funcao: "cmdWarn"`, e o `montarTabela()` (agora
+`async`, com `await` no `main.js`) importa no boot. Com isso o registro virou só dados,
+e o `aliases.js` pode lê-lo no carregamento sem ciclo de imports. O
+`verificar-build.js` confere caminho e export de cada entrada.
+
+**Provas.** Gerei as três tabelas montadas antes da mudança e depois (entrada inglês →
+interno, tela interno → inglês, níveis aninhados) e comparei: **idênticas byte a
+byte**. O `inventario.json` passou a guardar também a tela e os aninhados, e a
+`comandos-17out` reprova qualquer diferença. Ela também reprova família que esteja
+no registro e nas tabelas antigas ao mesmo tempo.
+
+**O que NÃO fiz nesta fase:** limpar dos handlers os `if (sub === "painel" ||
+sub === "panel")`. A tradução de entrada só vale nas três primeiras posições, e alguns
+handlers são chamados por dentro (assistente, lote) sem passar por ela. Tirar o
+inglês do handler hoje quebraria esses caminhos em silêncio. Isso fica para a fase 3,
+quando o registro declarar a sintaxe e o motor garantir argumentos já normalizados.
+
 ---
 
 ## 7. O que NÃO fiz, e por quê

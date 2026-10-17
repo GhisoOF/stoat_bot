@@ -147,9 +147,9 @@ export async function cmdAutomod(message, args, ctx) {
   let sub = args[0]?.toLowerCase();
 
   // ── A família do automod mora aqui dentro ──────────────────────────────
-  // `&automod blocklist ...` e `&blocklist ...` são a MESMA coisa: a árvore é
-  // a forma canônica (uma só para lembrar, e o &help desce por ela), e os
-  // nomes soltos continuam valendo como atalho para quem já tem o costume.
+  // As partes do automod moram aqui dentro: `&automod blocklist ...`. Os nomes
+  // soltos (`&blocklist`, `&punicao`) não são comandos — respondem "comando
+  // desconhecido" (conferido em 17 out 2026).
   const FILHOS = {
     blocklist: cmdBlocklist, bloqueio: cmdBlocklist,
     whitelist: cmdWhitelist, permitidos: cmdWhitelist,
@@ -522,7 +522,7 @@ export async function cmdAutomod(message, args, ctx) {
         "Each message gets a **0–10 score** per topic: weighted terms, debate and attack signals, and the channel's **context** raise it; \"lol\", laughing emoji and \"joking\" soften it. Above the threshold, the AI confirms whether it's a **real discussion** or banter."),
       "",
       `**${T("Chave geral", "Master switch")}:** ${mod.enabled ? T("🟢 ligada", "🟢 on") : T("🔴 desligada", "🔴 off")}`,
-      `**${T("Sensibilidade", "Sensitivity")}:** ${SENS_ROT[sensAtual]} (${T("limiar", "threshold")} ${assuntos.limiarDoAssunto(mod)}/10) · **IA:** ${mod.ia === false ? T("🔴 desligada — a nota decide sozinha", "🔴 off — the score decides alone") : T("🟢 confirma", "🟢 confirms")}`,
+      `**${T("Sensibilidade", "Sensitivity")}:** ${SENS_ROT[sensAtual]} (${T("limiar", "threshold")} ${assuntos.limiarDoAssunto(mod)}/10) · **${T("IA", "AI")}:** ${mod.ia === false ? T("🔴 desligada — a nota decide sozinha", "🔴 off — the score decides alone") : T("🟢 confirma", "🟢 confirms")}`,
       ...assuntos.NOMES_TEMAS.map((t) => {
         const ac = assuntos.acaoDoTema(mod, t), d = assuntos.TEMAS[t];
         const extras = (mod.termos[t] ?? []).length;

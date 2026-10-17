@@ -139,9 +139,14 @@ inglês) não aparece aqui.
 - [pt] `&comando desativar|ativar ‹nome›` → ❌ Comando inválido
 - [pt] `&game pontos ‹atributo› [quantos]` → ❌ Qual atributo?
 - [pt] `&game aprender ‹nome›` → ❌ Magia desconhecida
+- [pt] `&game missao ‹nome›` → ❌ Contrato desconhecido
 - [pt] `&game coop abrir ‹missão›` → ❓ Qual?
+- [pt] `&game follower levar|tirar ‹nome›` → ❌ Levar quem?
+- [pt] `&game follower ficha ‹nome›` → ❌ Não é um dos seus
 - [pt] `&game item ‹nome›` → ❌ Item desconhecido
+- [pt] `&game equipar ‹item›` → ❌ Item desconhecido
 - [pt] `&game desequipar ‹slot|item›` → ❌ Tirar o quê?
+- [pt] `&game vender ‹item›` → ❌ Você não tem isso
 - [pt] `&cor ‹cargo› ‹cor|gradiente|preset›` → ❌ Não entendi a cor
 - [pt] `&cor criar` → ⏱️ não respondeu em 3 s
 - [pt] `&warn <@pessoa|id|nome> [motivo]` → ❌ Quem devo avisar?
@@ -168,12 +173,32 @@ inglês) não aparece aqui.
 - [pt] `&limpar` → ❌ Uso incorreto
 - [pt] `&game admin item ‹nome› [@pessoa]` → ❌ Item desconhecido
 - [pt] `&game admin follower ‹nome› [nível] [@pessoa]` → ❌ Follower desconhecido
-- [pt] `&game admin pontos ‹n› [@pessoa]` → ❌ Sem personagem
-- [pt] `&game admin nivel ‹n› [@pessoa]` → ❌ Sem personagem
 - [pt] `&game admin simular ‹contrato|chefe› [n]` → ❌ Missão desconhecida
 - [pt] `&game admin moeda ver ‹id›` → ❌ Moeda desconhecida
 - [pt] `&game admin moeda set ‹id› ‹campo› ‹valor›` → ❌ Qual moeda?
+- [pt] `&game mercado vender ‹item› ‹preço›` → ❌ Você não tem isso
+- [pt] `&game mercado comprar <#>` → ❌ Oferta indisponível
+- [pt] `&game mercado cancelar <#>` → ❌ Não dá para cancelar
+- [pt] `&game trocar [@pessoa] ‹seu item› por ‹item dela›` → ❌ Item desconhecido
+- [pt] `&game trocar aceitar <#>` → ❌ Proposta indisponível
+- [pt] `&game vender` → ❌ Vender o quê?
+- [pt] `&game magia ‹nome›` → ❌ Magia desconhecida
+- [pt] `&game aprender ‹nome› [com ‹moeda›]` → ❌ Magia desconhecida
+- [pt] `&game cambio ‹qtd› ‹moeda› para ‹moeda›` → ❌ Moedas inválidas
+- [pt] `&game cambio ‹qtd› ‹moeda› por ‹qtd› ‹moeda›` → ❌ Moedas inválidas
+- [pt] `&game contrato ‹nome›` → ❌ Contrato desconhecido
+- [pt] `&game bico ‹nome›` → ❌ Contrato desconhecido
 - [pt] `&game coop abrir ‹contrato›` → ❓ Qual?
+- [pt] `&game follower levar ‹nome›` → ❌ Levar quem?
+- [pt] `&game follower tirar ‹nome›` → ❌ Tirar quem?
+- [pt] `&game follower dispensar ‹nome›` → ❌ Dispensar quem?
+- [pt] `&game follower fotos ‹nome›` → ❌ Quem?
+- [pt] `&game contratar ‹nome›` → ❌ Não conheço
+- [pt] `&game usar ‹contrato›` → ❌ Item desconhecido
+- [pt] `&game dungeon ‹nome›` → ❌ Dungeon desconhecida
+- [pt] `&game dungeon ‹nome› chefe` → ❌ Dungeon desconhecida
+- [pt] `&game equipar ‹item› [mao1|mao2]` → ❌ Item desconhecido
+- [pt] `&game usar ‹contrato|pergaminho›` → ❌ Item desconhecido
 - [pt] `&game desequipar ‹vaga ou item›` → ❌ Tirar o quê?
 - [pt] `&xp setup multiplicador ‹1–5›` → ❌ Valor inválido
 - [pt] `&xp setup nivelmaximo ‹5–1000›` → ❌ Valor inválido

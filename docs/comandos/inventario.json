@@ -1862,6 +1862,7 @@
    "add": "add",
    "exclusivo": "exclusive",
    "list": "list",
+   "ordem": "order",
    "recarregar": "reload",
    "remove": "remove",
    "reparar": "repair",

@@ -487,6 +487,10 @@ em português. Fases:
    citação de comando por referência (`{cmd:automod.sentinela.assuntos}`) no lugar
    do `${P}…` escrito à mão · 4. espanhol · 5. apagar as tabelas antigas.
 
+_Como ficou (conferido depois, 6k):_ as fases 1 e 2 tiraram as tabelas antigas na
+hora, **sem** reserva — a garantia foi o inventário e a comparação byte a byte. A
+fase 5 não sobra.
+
 O que a fase 0 entrega:
 
 - **`docs/comandos/inventario.json`** — a foto da tabela de comandos: os 149 nomes,
@@ -504,7 +508,8 @@ O que a fase 0 entrega:
   `anticaps set limiar` como certo porque `set` existe em algum lugar.
 - **Provas:** a versão anterior (`53849fa`) passa na checagem dos 149 nomes contra
   o inventário novo — nenhum nome perdido. E a suíte falha nela em 10 de 14 itens
-  (os legados desta rodada); com um exemplo quebrado de propósito na ajuda, a
+  (os legados desta rodada). Para rodar nela, enxertei os dois exports novos
+  (`tabelaDeComandos` e `arvoreDaAjuda`) — sem eles a suíte nem carrega; com um exemplo quebrado de propósito na ajuda, a
   checagem de "subcomando desconhecido" falha.
 - `main.js` exporta `tabelaDeComandos()`; `geral.js` exporta `arvoreDaAjuda()` —
   as páginas que só existiam em `construirSubtopicos` (12 delas) não eram
@@ -525,30 +530,34 @@ está comentado no topo do `index.js`. Saíram de onde estavam:
 
 | Antes | Agora |
 |---|---|
-| `main.js`: `rotas` (90 linhas), `CANONICO`, o laço que adivinhava o canônico pela função, os laços que copiavam apelidos | `montarTabela()` |
+| `main.js`: `rotas` (90 nomes em 109 linhas), `CANONICO`, o laço que adivinhava o canônico pela função, os laços que copiavam apelidos | `montarTabela()` |
 | `main.js`: `COMANDOS_GERENCIAVEIS`, `COMANDOS_SO_IA`, e as listas locais `ESSENCIAIS`, `COMANDOS_DE_VOZ`, `SEMPRE_LIBERADOS`, `TEXTO_LIVRE` | marcas `gerenciavel`, `soIA`, `essencial`, `voz`, `qualquerCanal`, `textoLivre` |
 | `aliases.js`: `COMANDO_EN`, `COMANDO_EXTRA` | derivados do registro (o aliases.js os reexporta) |
 | `main.js`: 20 imports que só serviam às rotas | saíram |
 
 **O ciclo de imports.** O `aliases.js` lê o registro, e o registro importa os
 handlers, que importam o `aliases.js`. O ESM resolve isso desde que ninguém leia as
-tabelas no carregamento. Por isso o handler é declarado como `funcao: () =>
-modulo.cmdX` e só é resolvido no `montarTabela()`, quando tudo já carregou. Conferi o
+tabelas no carregamento. Por isso o handler era declarado como `funcao: () =>
+modulo.cmdX` e só resolvido no `montarTabela()`, quando tudo já carregou (na fase 2
+virou caminho + nome, e o ciclo sumiu — 6i). Conferi o
 boot real (`node main.js` até o login) e o carregamento começando por cada um dos
 lados do ciclo.
 
 **O que mudou de propósito.** Seis nomes deixaram de ser comandos à parte e viraram
 apelidos: `info` e `about` (de `&sobre`), `personality`, `servers`, `comandos` e
-`criarcargomudo`. Todos levam à mesma função de antes. Nenhum era gerenciável nem
-essencial por conta própria, então o liga/desliga não muda. O que muda é bom: os
+`criarcargomudo`. Todos levam à mesma função de antes. Nenhum era gerenciável.
+O `comandos` estava na lista de essenciais por conta própria; agora é apelido do
+`comando`, que é essencial, então continua sem poder ser desligado. O liga/desliga
+não muda. O que muda é bom: os
 subcomandos em inglês passam a valer neles (`&servers report` não era traduzido) e
 `&personality` ganha a isenção de texto livre que `&personalidade` já tinha. O
 `inventario.json` registra exatamente essas 6 linhas.
 
 **O "você quis dizer".** No empate de distância, ganhava quem vinha primeiro na
 tabela, e a ordem agora vem do registro. A regra virou fixa: o nome do comando antes
-do apelido, depois a ordem alfabética. Testei 53.327 erros de digitação dos 149
-nomes. 131 (0,25%) recebem outra sugestão, todas à mesma distância (`rr` → `r`,
+do apelido, depois a ordem alfabética. Testei 53.178 erros de digitação dos 149
+nomes (uma letra a menos, a mais ou trocada; das 53.327 variações, as que já são um
+nome ficam de fora). 131 (0,25%) recebem outra sugestão, todas à mesma distância (`rr` → `r`,
 `servers` → `server`). Com o registro em ordem invertida, a sugestão é a mesma.
 
 **Travas novas.**
@@ -598,9 +607,11 @@ byte**. O `inventario.json` passou a guardar também a tela e os aninhados, e a
 no registro e nas tabelas antigas ao mesmo tempo.
 
 **O que NÃO fiz nesta fase:** limpar dos handlers os `if (sub === "painel" ||
-sub === "panel")`. A tradução de entrada só vale nas três primeiras posições, e alguns
-handlers são chamados por dentro (assistente, lote) sem passar por ela. Tirar o
-inglês do handler hoje quebraria esses caminhos em silêncio. Isso fica para a fase 3,
+sub === "panel")`. A tradução de entrada só alcança a 1ª palavra depois do comando;
+a 2ª e a 3ª, só quando a 1ª é um subcomando `aninhado` (no `&automod`, até 4 palavras
+pelo caminho das famílias). E o assistente chama os handlers por dentro
+(`rotas[nome]`), sem passar por ela. Tirar o inglês do handler hoje quebraria esses
+caminhos em silêncio. (O lote não: cada linha passa pelo `tratarMensagem` inteiro.) Isso fica para a fase 3,
 quando o registro declarar a sintaxe e o motor garantir argumentos já normalizados.
 
 ## 6j. Fase 2, fim: o &automod e o &game (17 out 2026)
@@ -609,16 +620,20 @@ As duas famílias grandes foram para o registro, e o `aliases.js` (agora com 334
 não tem mais nenhuma tabela própria de subcomandos. `SUB`, `ANINHADOS` e a tela em
 inglês são montados só a partir de `modulos/comandos/`.
 
-- `game.js`: os 101 subcomandos, os 11 aninhados e o que só muda na tela (`abrir` →
+- `game.js`: os 95 subcomandos (101 palavras em inglês), os 11 aninhados e o que só muda na tela (`abrir` →
   `open`, `mao1` → `hand1`…).
 - `automod.js`: o vocabulário do próprio `&automod`, mais dois campos novos no
   formato:
   - `familias`: os níveis dentro dele (`antispam`, `antiruido`, `antilink`, `sentinela`,
     `odio`, `assuntos`, `avatar`, `punicao`), que viram as tabelas `automod.<x>`;
-  - `partes`: as que também aparecem sozinhas (`punicao`, `sentinela`, `blocklist`,
-    `whitelist`, `scam`), com o nome em inglês e o vocabulário. É o que vale em
-    `&help punicao` ou `&help blocklist add`, e dentro do `&automod` soma-se ao da
-    família de mesmo nome.
+  - `partes`: as que também têm tabela própria (`punicao`, `sentinela`, `blocklist`,
+    `whitelist`, `scam`), com o vocabulário e, nas duas primeiras, o nome em inglês
+    (`punishment`, `sentinel`). Valem no 2º termo de `&help <parte> …`
+    (`&help punishment ladder`) e, dentro do `&automod`, somadas à da família de mesmo
+    nome. **Estava errado aqui** (6k): eu tinha escrito que valiam em `&help punicao`
+    e `&help blocklist add` sem testar. `&help punicao` sozinho respondia "Não
+    encontrado" até o `fc4ac9b`; `&help blocklist add` responde "subtópico
+    desconhecido" — a blocklist não tem página `add`.
 
 **Provas:**
 - As três tabelas montadas saíram idênticas byte a byte, e o `inventario.json` não
@@ -633,6 +648,83 @@ inglês são montados só a partir de `modulos/comandos/`.
 nomes em inglês que os painéis mostram (`nomeTema`, `nomeModo`…). O `EN_PARA_PT`, que
 servia à entrada, saiu. Um teste novo confere que cada par de lá existe no registro, e
 provei que ele falha quando um par diverge. Juntar as duas fontes fica para a fase 3.
+
+## 6k. Conferência: o que eu tinha escrito sem conferir (17 out 2026)
+
+O Ghieh pegou `&help punishment` respondendo "Não encontrado" depois de eu ter
+escrito que funcionava. Refiz a conta de cada número e de cada frase de 6g–6j contra
+o código, o histórico e o bot de mentira. O que estava errado já está corrigido no
+próprio texto acima:
+
+| Onde | Estava | É |
+|---|---|---|
+| 6g, plano | fase 1 "com as tabelas antigas de reserva" | saíram sem reserva; a fase 5 não sobra |
+| 6g, provas | a suíte roda na `53849fa` | só com os dois exports da fase 0 enxertados |
+| 6h | `rotas` (90 linhas) | 90 nomes em 109 linhas |
+| 6h | nenhum dos 6 era essencial | o `comandos` era; continua, como apelido do `comando` |
+| 6h | 53.327 erros de digitação testados | 53.178 (das 53.327 variações, as que já são nome ficam de fora) |
+| 6i | a tradução vale nas 3 primeiras posições; o lote não passa por ela | a 1ª sempre, a 2ª e a 3ª só depois de um `aninhado` (4 no `&automod`); o lote passa, só o assistente não |
+| 6j | 101 subcomandos do `&game` | 95 subcomandos, 101 palavras em inglês |
+| 6j | as partes valem em `&help punicao` e `&help blocklist add` | o primeiro só desde o `fc4ac9b`; o segundo nunca existiu |
+
+Também estavam errados três comentários no código: o das `partes` no
+`modulos/comandos/automod.js` (o mesmo `&help blocklist add`), o do `subcomandosDe`
+no `aliases.js` ("isso a fase 2 traz") e o do `automod-comandos.js`, que dizia que
+`&blocklist` sozinho ainda funcionava (responde "comando desconhecido").
+
+Conferido e certo: 149 nomes, 557 subcomandos, 10 de 14 falhas na `53849fa`, 20 imports
+tirados do `main.js`, `aliases.js` com 591 → 441 → 334 linhas, 34 famílias na fase 2,
+334 telas iguais e 38 respostas diferentes só por sorteio ou relógio, 131 sugestões à
+mesma distância, as 9 linhas da tabela "onde cada comando mora".
+
+**Português na tela em inglês que a trava não via.** A `comandos-17out` só olhava
+dentro de `` `…` `` e com uma lista curta de palavras. Varrendo a tela inteira:
+
+| Tela em inglês | Mostrava | Agora |
+|---|---|---|
+| parâmetros de `&access`, `&globalban`, `&rss`, `&welcome`, `&log`, `&webhook`, `&reactionrole` | `todos \| somente \| exceto`, `[servidor]`, `aqui`, `limpar`, `visivel \| oculto`, `confirmar`, `todos`, `ordem` | `all \| only \| except`, `[server]`, `here`… — cada palavra executada antes no bot de mentira, para ver que o handler aceita |
+| `&log` | `**mensagens** — deleted and edited messages` | `**messages**` (novo `subExibido()` no `aliases.js`, lendo o registro) |
+| `&automod sentinel topics` | `**IA:** 🟢 confirms` | `**AI:**` |
+| `&reactionrole order` sem mensagem | `` `&reactionrole ordem ‹message› confirmar` `` | `order … confirm` |
+| `&rss add` com feed fora do ar | `**Error:** bloqueado: o domínio não resolve` | `blocked: the domain doesn't resolve` (`erroEmIngles()` no `seguranca.js`); e os 4 motivos do `&rss now` |
+
+**`confirm` que não confirmava.** A tela em inglês ensina `&game delete confirm`
+(a tradução da tela troca `confirmar`), mas o handler só aceitava `confirmar` — e o
+`confirm` não é traduzido na entrada naquela posição. Resultado: pedia a confirmação
+de novo, para sempre. Igual em `&game rest confirm`, `&game admin reset … confirm` e
+`&xp reset confirm` (este ainda escrevia `confirmar` na tela em inglês). Os quatro
+aceitam as duas palavras agora. Achei pelo laço: a resposta sugerindo exatamente o
+comando que acabou de ser digitado. O `&game rest confirm` corrigi pelo código (o
+mesmo `if`); não montei companheiros cansados para executá-lo.
+
+Efeito na própria trava: o personagem do RPG é da pessoa, não do servidor. Com o
+`confirm` funcionando, o exemplo `&game delete confirm` (e o `&game admin reset …
+confirm`) passou a apagar o personagem no meio da execução, e todos os exemplos do
+`&game` depois dele respondiam "sem personagem" — sem erro, então sem teste de
+verdade. Em português isso já acontecia desde sempre (lá o `confirmar` funcionava).
+O executor agora recria o personagem depois desses exemplos; o `INVENTARIO.md`
+mostra 27 linhas novas de exemplos do `&game` em português que estavam escondidos (e saíram 2 que respondiam "Sem personagem").
+
+E a ajuda do `&xp reset` prometia `[@pessoa] confirmar` — "zera o XP de alguém (ou de
+todos)". Não existe reset de uma pessoa: o handler só zera o servidor inteiro. A
+linha agora diz isso.
+
+Seis testes novos na `comandos-17out` (seção 5); os seis falham no `fc4ac9b`. O de
+laço (nenhum exemplo de confirmação da ajuda responde pedindo ele mesmo) pega o
+`&game delete confirm` e o `&game admin reset … confirm` num dump feito com o
+`game.js` de antes desta correção. O
+`ordem → order` entrou como `naTela` do `&reactionrole` (o handler já aceitava
+`order`), e o `inventario.json` ganhou essa linha.
+
+**Falso alarme, conferido:** o dump mostrava a resposta em inglês do `&color panel
+here` terminando em português. Era a mensagem atrasada do `&cor painel` em
+português de antes (o mesmo ID de canal), caída na janela do exemplo seguinte —
+sozinho, o painel responde todo em inglês. A comparação por dump pode enganar assim.
+
+**Achado e NÃO corrigido (decisão do Ghieh):** `&help xp` abre a página do grupo
+"Diversão", não a do comando — o nome do grupo vence o do comando (a regra feita para
+`&help comecar`). A seção de parâmetros do `&xp` nunca aparece (corrigi o texto dela
+mesmo assim). Já era assim na `53849fa`.
 
 ---
 

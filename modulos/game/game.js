@@ -324,7 +324,7 @@ export async function cmdGame(message, args, ctx) {
         { title: "🎭 You don't have a character",
           description: `Create one with \`${P}game criar\`.`, colour: COR.aviso }));
     }
-    if (args[1]?.toLowerCase() !== "confirmar") {
+    if (!["confirmar", "confirm"].includes(args[1]?.toLowerCase())) {
       return sendEmbed(message.channel, tr(ctx, {
         title: "⚠️ Isso apaga tudo",
         description: [
@@ -1090,7 +1090,7 @@ export async function cmdGame(message, args, ctx) {
 
     if (["zerar", "reset", "resetar"].includes(acao)) {
       const escopo = ({ servidor: "mundo", server: "mundo" })[(resto[0] ?? "mundo").toLowerCase()] ?? (resto[0] ?? "mundo").toLowerCase();
-      const confirmou = resto.includes("confirmar");
+      const confirmou = resto.includes("confirmar") || resto.includes("confirm");
       const escopos = { mundo: 1, catalogo: 1, "catálogo": 1, tudo: 1 };
       if (!escopos[escopo]) {
         return sendEmbed(message.channel, { title: en ? "❓ Reset what?" : "❓ Resetar o quê?",
@@ -2240,7 +2240,7 @@ export async function cmdGame(message, args, ctx) {
     const custo = Math.max(1, Math.round(faltando * 25 * MERC.mult(pSuave)));
     const saldo = db.getSaldo(serverId, eu, moeda.id);
 
-    if (args[1]?.toLowerCase() !== "confirmar") {
+    if (!["confirmar", "confirm"].includes(args[1]?.toLowerCase())) {
       return sendEmbed(message.channel, { title: en ? "🛏️ Rest paid" : "🛏️ Descanso pago",
         description: (en ? [
           `Restore **${faltando}** energy point(s) for **${cansados.length}** companion(s).`,

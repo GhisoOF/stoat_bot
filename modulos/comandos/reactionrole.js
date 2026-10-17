@@ -10,5 +10,6 @@ export default {
     recarregar: "reload", reparar: "repair",
   },
   aninhados: ["exclusivo", "unico"],
+  naTela: { ordem: "order" },   // o handler já aceita `order` e `reordenar`
   gerenciavel: true,
 };

@@ -1,6 +1,7 @@
 
 import { tr, lingua } from "./i18n.js";
 import { resolverCanal } from "./ids.js";
+import { subExibido } from "./aliases.js";
 import * as relatorioHora from "../ferramentas/relatorio.js";
 import { canalDeOutroServidor } from "../moderacao/pertence.js";
 
@@ -96,6 +97,7 @@ export async function cmdLog(message, args, ctx) {
   const { config, sendEmbed, COR, getServer, membroTemPermissao, salvarConfig, PREFIXO } = ctx;
   const lang = lingua(ctx);
   const ROTULOS = lang === "en" ? EVENTOS_EN : EVENTOS;
+  const nomeEvento = (k) => subExibido("log", k, lang);   // `mensagens` → `messages` em inglês
 
   const server = await getServer(message);
   if (!membroTemPermissao(message, server, "ManagePermissions")) {
@@ -121,7 +123,7 @@ export async function cmdLog(message, args, ctx) {
     const canal = config.log.canalId ? `<#${config.log.canalId}>` : (lang === "en" ? "_(none)_" : "_(nenhum)_");
     const linhas = Object.entries(ROTULOS).map(([chave, desc]) => {
       const on = config.log.eventos[chave] !== false; // padrão: ligado
-      return `${on ? "🟢" : "🔴"} **${chave}** — ${desc}`;
+      return `${on ? "🟢" : "🔴"} **${nomeEvento(chave)}** — ${desc}`;
     });
     return sendEmbed(message.channel, lang === "en" ? {
       title: "📜 Log channel",
@@ -203,7 +205,7 @@ export async function cmdLog(message, args, ctx) {
     return sendEmbed(message.channel, {
       title: lang === "en" ? "📜 Log updated" : "📜 Log atualizado",
       description: lang === "en"
-        ? `**${sub}** — ${ROTULOS[sub]}: **${v === "on" ? "enabled 🟢" : "disabled 🔴"}**.`
+        ? `**${nomeEvento(sub)}** — ${ROTULOS[sub]}: **${v === "on" ? "enabled 🟢" : "disabled 🔴"}**.`
         : `**${sub}** — ${ROTULOS[sub]}: **${v === "on" ? "ativado 🟢" : "desativado 🔴"}**.`,
       colour: COR.mod,
     });
@@ -232,7 +234,7 @@ export async function cmdLog(message, args, ctx) {
         "",
         `I accept: a **mention** (\`#channel\`), the channel's **link**, its **ID** or its **name**.`,
         `Or use \`${PREFIXO}log here\` to use the current channel.`,
-        `Available events: ${Object.keys(EVENTOS).map((e) => `\`${e}\``).join(", ")}`,
+        `Available events: ${Object.keys(EVENTOS).map((e) => `\`${nomeEvento(e)}\``).join(", ")}`,
       ].join("\n"),
       colour: COR.erro,
     }));

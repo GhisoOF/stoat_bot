@@ -389,7 +389,7 @@ export async function cmdReactionRole(message, args, ctx) {
         { title: "❌ Mensagem sem cargos por reação",
           description: `\`${PREFIXO}reactionrole ordem <mensagem> confirmar\`\n\nAceito o **ID** ou o **link**. \`${PREFIXO}reactionrole list\` mostra as configuradas.`, colour: COR.erro },
         { title: "❌ No reaction roles on that message",
-          description: `\`${PREFIXO}reactionrole ordem <message> confirmar\`\n\nI accept the **ID** or the **link**. \`${PREFIXO}reactionrole list\` shows the configured ones.`, colour: COR.erro }));
+          description: `\`${PREFIXO}reactionrole order <message> confirm\`\n\nI accept the **ID** or the **link**. \`${PREFIXO}reactionrole list\` shows the configured ones.`, colour: COR.erro }));
     }
     const ordem = regras.map((r) => r.emoji);
     if (!["confirmar", "confirm", "sim", "yes"].includes((args[2] ?? "").toLowerCase())) {
@@ -417,7 +417,7 @@ export async function cmdReactionRole(message, args, ctx) {
           "",
           `If you just want a vanished emoji back, \`${PREFIXO}reactionrole recarregar\` does that without wiping anything (it goes to the end of the row).`,
           "",
-          `Confirm? \`${PREFIXO}reactionrole ordem ${mid} confirmar\``,
+          `Confirm? \`${PREFIXO}reactionrole order ${mid} confirm\``,
         ].join("\n"), colour: COR.aviso,
       }));
     }

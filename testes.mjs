@@ -15012,6 +15012,9 @@ for (const [k, onde] of exemplos) {
   const cmd = instanciar(ex, sid);
   const r = await say(cmd, sid);
   execucoes.push({ lang, ex, cmd, onde: [...onde], titulo: r.texto.split("\n")[0], texto: r.texto, estourou: r.estourou });
+  // o personagem do RPG é da pessoa, não do servidor: o exemplo que apaga o personagem
+  // (ou zera o mundo) deixava os exemplos seguintes do &game respondendo "sem personagem"
+  if (/^&game (apagar|delete|erase|admin reset \S+) (confirmar|confirm)\b/i.test(cmd)) await say(lang === "en" ? "&game create" : "&game criar", sid);
 }
 // `DUMP_TELAS=arquivo`: grava todas as telas e respostas (para comparar duas versões do bot)
 if (process.env.DUMP_TELAS) fs.writeFileSync(process.env.DUMP_TELAS, JSON.stringify({ telas, execucoes: execucoes.map(({ lang, ex, cmd, texto }) => ({ lang, ex, cmd, texto })) }, null, 1));
@@ -15110,6 +15113,70 @@ await t("`&help punishment` (parte do &automod pedida sozinha) abre a página de
   assert.match((await say("&help antispam", en)).texto, /^📖 Help — &automod\n/);
   // o que é de dentro de uma parte (`canal`) não vira página do automod por engano
   assert.match((await say("&help canal", pt)).texto, /^❓ Não encontrado/);
+});
+
+// ── 5. Português que a varredura de `…` não via (achados na conferência de 17 out) ──
+console.log("\n── 5. português fora dos `…` na tela em inglês ──");
+await t("linha de parâmetro em inglês sem palavra em português (antes: `list` [servidor], `channel` todos | somente | exceto, <#channel|aqui>…)", () => {
+  const PT_PARAM = /(?<![\p{L}])(todos|somente|exceto|servidor|confirmar|aqui|limpar|visivel|oculto|ordem)(?![\p{L}])/iu;
+  const achados = new Set();
+  for (const x of telas) if (x.lang === "en" && !PULAR_EN.test(x.pagina))
+    for (const l of x.texto.split("\n")) if (l.startsWith("• ") && PT_PARAM.test(l.split(" — ")[0])) achados.add(`${x.pagina}: ${l.split(" — ")[0]}`);
+  assert.deepEqual([...achados], []);
+});
+await t("`&log` em inglês mostra o nome do evento em inglês (antes: **mensagens**, **punicoes**…)", async () => {
+  const lista = await comando("en", "&log");
+  assert.match(lista, /\*\*messages\*\* — deleted and edited messages/);
+  assert.ok(!/\*\*(punicoes|membros|mensagens|cargos|comandos)\*\*/.test(lista), lista);
+  assert.match(await comando("en", "&log messages off"), /^📜 Log updated\n\*\*messages\*\* — /);
+  assert.match(await comando("en", "&log teste on"), /Available events: `punishments`, `members`, `messages`, `roles`, `commands`/);
+  assert.match(await comando("pt", "&log"), /\*\*mensagens\*\* — mensagens apagadas/);
+});
+await t("painel dos assuntos em inglês: **AI:** (antes: **IA:**)", async () => {
+  const p = await comando("en", "&automod sentinel topics");
+  assert.match(p, /· \*\*AI:\*\* 🟢 confirms/);
+  assert.match(await comando("pt", "&automod sentinela assuntos"), /· \*\*IA:\*\* 🟢 confirma/);
+});
+await t("`&reactionrole order` em inglês ensina `order … confirm` (antes: `ordem … confirmar`)", async () => {
+  const r = await comando("en", "&reactionrole order 01K000000000000000000000AA");
+  assert.match(r, /`&reactionrole order ‹message› confirm`/);
+  assert.match(await comando("pt", "&reactionrole ordem 01K000000000000000000000AA"), /`&reactionrole ordem ‹mensagem› confirmar`/);
+});
+await t("erro de rede do RSS em inglês (antes: **Error:** bloqueado: o domínio não resolve)", async () => {
+  const { erroEmIngles } = await import("./modulos/core/seguranca.js");
+  assert.equal(erroEmIngles("bloqueado: o domínio não resolve (https://x.com/feed)"), "blocked: the domain doesn't resolve (https://x.com/feed)");
+  assert.equal(erroEmIngles("bloqueado: o domínio aponta para um endereço interno (http://a)"), "blocked: the domain points to an internal address (http://a)");
+  assert.equal(erroEmIngles("HTTP 503"), "HTTP 503");
+  // o feed de mentira não carrega (sem DNS: "não resolve"; com DNS: HTTP 503) — em inglês, nenhum dos dois em português
+  const add = await comando("en", "&rss add https://example.com/feed.xml");
+  assert.match(add, /^❌ Unreachable feed\n/);
+  assert.ok(!/bloqueado|domínio|não /.test(add), add);
+  // cada motivo do rodarCiclo (o `&rss now`) tem a versão em inglês
+  const src = fs.readFileSync("modulos/ferramentas/rss.js", "utf8");
+  const bloco = src.slice(src.indexOf("const MOTIVO_EN = {"), src.indexOf("};", src.indexOf("const MOTIVO_EN = {")));
+  const motivos = [...src.matchAll(/ok: false, motivo: "([^"]+)"/g)].map((m) => m[1]);
+  assert.ok(motivos.length >= 4, "achei os motivos");
+  assert.deepEqual(motivos.filter((m) => !bloco.includes(`"${m}":`)), []);
+});
+await t("`confirm` em inglês confirma (antes: `&game delete confirm` e `&xp reset confirm` só pediam de novo)", async () => {
+  const en = await servidorNovo("en");
+  await say("&game create", en);
+  const pede = (await say("&game delete", en)).texto;
+  assert.match(pede, /`&game delete confirm`/);
+  assert.ok(!/`&game delete confirm`/.test((await say("&game delete confirm", en)).texto), "o confirm apagou");
+  assert.match((await say("&game delete", en)).texto, /You don't have a character/);
+  await say("&xp on", en);
+  assert.match((await say("&xp reset", en)).texto, /To confirm: `&xp reset confirm`/);
+  assert.match((await say("&xp reset confirm", en)).texto, /^🧹 XP reset/);
+  const pt = await servidorNovo("pt");
+  await say("&xp on", pt);
+  assert.match((await say("&xp reset confirmar", pt)).texto, /^🧹 XP zerado/);
+  // e nenhum exemplo de confirmação da ajuda responde pedindo ele mesmo de novo
+  const lacos = execucoes.filter((x) => /\b(confirm|confirmar)\b/i.test(x.cmd) && x.texto.includes("`" + x.cmd.trim() + "`"));
+  assert.deepEqual(lacos.map((x) => `[${x.lang}] ${x.cmd} ← ${x.titulo}`), []);
+  // e a ajuda não promete o reset de uma pessoa só, que não existe
+  assert.ok(!parametros("&", "pt").xp.some((p) => p.nome === "reset" && /@/.test(p.valor)));
+  assert.ok(!parametros("&", "en").xp.some((p) => p.nome === "reset" && /@/.test(p.valor)));
 });
 
 // ── O inventário legível ──

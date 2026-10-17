@@ -106,6 +106,26 @@ export function lookupPublico(resolver = (h) => dns.lookup(h, { all: true }), eh
   };
 }
 
+// Os erros acima são escritos em português e chegam à tela (o `&rss add` mostra
+// "**Error:** …"). Na tela em inglês, as mesmas frases traduzidas; o que não
+// for daqui (HTTP 503, erro do Node) passa como está.
+const ERROS_EN = [
+  [/^bloqueado: /, "blocked: "],
+  [/o domínio aponta para um endereço interno/, "the domain points to an internal address"],
+  [/o domínio não resolve/, "the domain doesn't resolve"],
+  [/endereço inválido/, "invalid address"],
+  [/protocolo (\S+) não é permitido/, "protocol $1 isn't allowed"],
+  [/endereço interno/, "internal address"],
+  [/resposta grande demais \(mais de (\d+) MB\)/, "response too large (over $1 MB)"],
+  [/tempo esgotado/, "timed out"],
+  [/redirects demais/, "too many redirects"],
+];
+export function erroEmIngles(texto) {
+  let t = String(texto ?? "");
+  for (const [re, en] of ERROS_EN) t = t.replace(re, en);
+  return t;
+}
+
 export const MAX_RESPOSTA = Number(process.env.REDE_MAX_BYTES || 5 * 1024 * 1024);
 
 // GET mínimo, com cara de fetch (status, ok, headers.get, text, body) — só o

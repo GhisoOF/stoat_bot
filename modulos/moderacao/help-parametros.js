@@ -132,7 +132,7 @@ function parametrosPT(P) {
       { nome: "cargos", desc: "lista os cargos por nível" },
       { nome: "criarcargos", desc: "cria os cargos de nível sozinho" },
       { nome: "sincronizar", valor: "[@pessoa|todos]", desc: "devolve os cargos que o nível já garante — para quem saiu e voltou, ou quando os cargos foram criados depois *(ManagePermissions)*" },
-      { nome: "reset", valor: "[@pessoa] confirmar", desc: "zera o XP de alguém (ou de todos)" },
+      { nome: "reset", valor: "confirmar", desc: "zera o XP de **todos** do servidor" },
     ],
 
     limpar: [
@@ -260,13 +260,13 @@ function parametrosPT(P) {
 
 function parametrosEN(P) {
   const joinLeave = () => [
-    { nome: "canal", valor: "<#channel|aqui|id>", desc: "where to post. `aqui` = this channel. Setting the channel also **turns it on**" },
+    { nome: "canal", valor: "<#channel|here|id>", desc: "where to post. `here` = this channel. Setting the channel also **turns it on**" },
     { nome: "on | off", desc: "toggles without losing the configuration" },
     { nome: "titulo", valor: "<text>", desc: "the embed's top line. Accepts the markers below" },
     { nome: "texto", valor: "<description>", desc: "the embed body (can span lines). Accepts the markers" },
     { nome: "cor", valor: "<#hex|name>", desc: "sidebar color: `#FF71CE`, `purple`, `blue`… (`&cor presets` lists the gradients)" },
-    { nome: "imagem", valor: "<url|limpar>", desc: "cover. A Stoat attachment becomes the embed cover; an external URL shows as a preview below" },
-    { nome: "imagem", valor: "visivel | oculto", desc: "whether the external URL is shown in text or hidden (default: hidden)" },
+    { nome: "imagem", valor: "<url|clear>", desc: "cover. A Stoat attachment becomes the embed cover; an external URL shows as a preview below" },
+    { nome: "imagem", valor: "visible | hidden", desc: "whether the external URL is shown in text or hidden (default: hidden)" },
     { nome: "testar", desc: "posts it now using you as the example — no need to wait for someone to join" },
     { nome: "padrao", desc: "resets title and text to factory (keeps the channel)" },
     { nome: "status", desc: "shows the current setup and a preview" },
@@ -309,7 +309,7 @@ function parametrosEN(P) {
     ],
 
     log: [
-      { nome: "canal", valor: "<#channel|aqui|id>", desc: "where the bot writes down what happened (a staff-only channel)" },
+      { nome: "canal", valor: "<#channel|here|id>", desc: "where the bot writes down what happened (a staff-only channel)" },
       { nome: "off", desc: "turns logging off" },
       { nome: "<event> on|off", desc: "`punicoes` · `membros` (joined/left) · `mensagens` (deleted/edited) · `cargos` · `comandos` (noisy, starts off)" },
     ],
@@ -317,7 +317,7 @@ function parametrosEN(P) {
     acesso: [
       { nome: "cargo add | remove", valor: "<@role|name|id>", desc: "roles with access to moderation commands (same list as `&staff`)" },
       { nome: "cargo limpar", desc: "empties the list" },
-      { nome: "canal", valor: "todos | somente | exceto", desc: "mode: commands everywhere, only in listed channels, or everywhere except listed" },
+      { nome: "canal", valor: "all | only | except", desc: "mode: commands everywhere, only in listed channels, or everywhere except listed" },
       { nome: "canal add | remove", valor: "<#channel>", desc: "builds the channel list for the chosen mode" },
       { nome: "staffignora", valor: "on | off", desc: "whether staff can use commands outside the allowed channels" },
       { nome: "status", desc: "the current setup" },
@@ -328,7 +328,7 @@ function parametrosEN(P) {
       { nome: "avisar", desc: "when someone banned elsewhere joins, logs a warning and does nothing" },
       { nome: "imediato", desc: "bans **on join** anyone banned on **any** other server (1 ban is enough) — `banir`, the old name, works the same" },
       { nome: "consenso", desc: "bans **on join** only people banned on **3+ different servers**; with fewer, alerts the staff in the log" },
-      { nome: "lista", valor: "[servidor]", desc: "everyone on the global list; with `servidor`, only those banned by this server" },
+      { nome: "lista", valor: "[server]", desc: "everyone on the global list; with `server`, only those banned by this server" },
       { nome: "historico", valor: "<@user|id>", desc: "which servers banned that person, and why" },
       { nome: "revisar", desc: "checks who's already here against the list — **shows only, never bans**" },
       { nome: "varrer", desc: "shows who would be banned and **waits for confirmation**; only acts in `imediato` and `consenso` modes" },
@@ -340,7 +340,7 @@ function parametrosEN(P) {
       { nome: "esquecer", valor: "<@user|id> [note]", desc: "deletes that person's records **for every server** and keeps them out: future bans and the 6-hourly import skip them — much stronger than `isentar`" },
       { nome: "ignorados", desc: "who is marked to stay off the list, and why" },
       { nome: "lembrar", valor: "<@user|id>", desc: "undoes `esquecer`: they can enter the list again on their next ban (old records stay deleted)" },
-      { nome: "bots", valor: "[confirmar|<@user>]", desc: "finds bots already on the list and removes them **for good**. With a user, says **which signal** identified them (or why none did)" },
+      { nome: "bots", valor: "[confirm|<@user>]", desc: "finds bots already on the list and removes them **for good**. With a user, says **which signal** identified them (or why none did)" },
       { nome: "How to point at someone", desc: "mention · **ID** · profile link · **name** · `Name#0000` · server nickname. If the name matches more than one person, I show the candidates instead of picking" },
     ],
 
@@ -350,7 +350,7 @@ function parametrosEN(P) {
       { nome: "list", desc: "everything wired on this server" },
       { nome: "exclusivo", valor: "<message> on|off", desc: "only one role at a time on that message (color, team): picking one swaps the previous" },
       { nome: "recarregar", desc: "if roles stopped being handed out after a restart. It also **puts back** emojis that vanished from the panel (they go to the end of the row)" },
-      { nome: "ordem", valor: "<message> confirmar", desc: "rebuilds the panel in the configured order. Clears everyone's reactions and reacts again one by one — roles stay, only the ✓ goes. A big panel takes ~1s per emoji: Stoat only accepts 15 requests per window" },
+      { nome: "ordem", valor: "<message> confirm", desc: "rebuilds the panel in the configured order. Clears everyone's reactions and reacts again one by one — roles stay, only the ✓ goes. A big panel takes ~1s per emoji: Stoat only accepts 15 requests per window" },
     ],
 
     cor: [
@@ -381,11 +381,11 @@ function parametrosEN(P) {
       { nome: "setup multiplicador", valor: "<n>", desc: "XP per message × n" },
       { nome: "setup intervalo", valor: "<seconds>", desc: "minimum time between two XP-giving messages (anti-farm)" },
       { nome: "setup nivelmaximo", valor: "<n>", desc: "level cap" },
-      { nome: "setup anuncio", valor: "<#channel|aqui|off>", desc: "where to announce level-ups" },
+      { nome: "setup anuncio", valor: "<#channel|here|off>", desc: "where to announce level-ups" },
       { nome: "cargos", desc: "lists the level roles" },
       { nome: "criarcargos", desc: "creates the level roles by itself" },
-      { nome: "sincronizar", valor: "[@user|todos]", desc: "hands back the roles the current level already grants — for people who left and came back, or when the roles were created later *(ManagePermissions)*" },
-      { nome: "reset", valor: "[@user] confirmar", desc: "wipes someone's XP (or everyone's)" },
+      { nome: "sincronizar", valor: "[@user|all]", desc: "hands back the roles the current level already grants — for people who left and came back, or when the roles were created later *(ManagePermissions)*" },
+      { nome: "reset", valor: "confirm", desc: "wipes **everyone's** XP on the server" },
     ],
 
     limpar: [
@@ -436,7 +436,7 @@ function parametrosEN(P) {
       { nome: "category", valor: "<id|url> <name|off>", desc: "sets or clears the category of an existing feed (`&rss list` shows the ids). Without one, the feed digests under **General**" },
       { nome: "remove", valor: "<url|number>", desc: "stops following" },
       { nome: "list", desc: "followed feeds" },
-      { nome: "canal", valor: "<#channel|aqui>", desc: "where to post" },
+      { nome: "canal", valor: "<#channel|here>", desc: "where to post" },
       { nome: "agora", desc: "fetches and posts now (test)" },
       { nome: "off", desc: "turns it off" },
     ],
@@ -457,7 +457,7 @@ function parametrosEN(P) {
       { nome: "criar", valor: "<name> [#channel]", desc: "new hook; the secret URL shows once (default: posts to the command's channel)" },
       { nome: "lista", desc: "the server's hooks, with channel, filter and usage count" },
       { nome: "canal", valor: "<name> <#channel>", desc: "changes where the hook posts" },
-      { nome: "eventos", valor: "<name> <list|todos>", desc: "filters: `push,issues,workflow_run`… (GitHub event names; `discord` and `generico` for the other sources)" },
+      { nome: "eventos", valor: "<name> <list|all>", desc: "filters: `push,issues,workflow_run`… (GitHub event names; `discord` and `generico` for the other sources)" },
       { nome: "url", valor: "<name>", desc: "shows the secret URL again" },
       { nome: "testar", valor: "<name>", desc: "posts a test embed to the hook's channel" },
       { nome: "remover", valor: "<name>", desc: "deletes the hook — the URL dies instantly" },

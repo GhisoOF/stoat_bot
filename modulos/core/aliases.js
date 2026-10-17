@@ -50,7 +50,7 @@ for (const [cmd, mapa] of Object.entries(SUB)) {
 for (const [cmd, mapa] of Object.entries(SO_EXIBIR)) SUB_REVERSO[cmd] ??= { ...mapa };
 // A família de um token dentro de um comando: `automod` + `sentinela` →
 // "automod.sentinela"; sem família própria, o mapa com o nome do token
-// (`punicao` dentro do automod usa o do &punicao).
+// (`punicao` dentro do automod soma a tabela da parte `punicao` à da família).
 const familia = (tabela, canonico, token) => {
   const a = tabela[token], b = tabela[`${canonico}.${token}`];
   return a || b ? { ...(a ?? {}), ...(b ?? {}) } : null;
@@ -300,9 +300,17 @@ export function nomeExibido(canonico, lang) {
   return COMANDO_EN[canonico] ?? canonico;
 }
 
-// Os subcomandos que um comando conhece (nos dois idiomas), pelas tabelas desta
-// página. Serve ao "você quis dizer" — não é a lista completa do que o handler
-// aceita (isso a fase 2 do registro de comandos traz).
+// O nome de um subcomando na tela (`log` + `mensagens` → `messages` em inglês).
+// Para o handler que monta a tela com o nome interno fora de `&comando …`, onde
+// a tradução da tela não alcança (o `&log` listava `mensagens` em inglês).
+export function subExibido(canonico, interno, lang) {
+  if (lang !== "en") return interno;
+  return SUB_REVERSO[canonico]?.[interno] ?? interno;
+}
+
+// Os subcomandos que um comando conhece (nos dois idiomas), pelas tabelas do
+// registro. Serve ao "você quis dizer" — não é a lista completa do que o handler
+// aceita: o parse ainda mora em cada handler, e há palavras que só ele conhece.
 export function subcomandosDe(canonico) {
   const c = String(canonico ?? "");
   return new Set([

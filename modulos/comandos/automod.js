@@ -73,9 +73,11 @@ export default {
     },
   },
   gerenciavel: true,
-  // as partes que também aparecem sozinhas — `&help punicao`, `&help blocklist add`,
-  // texto antigo com `&punicao` — com o vocabulário que vale quando citadas assim.
-  // Dentro do &automod, o vocabulário da parte se soma ao da família de mesmo nome.
+  // as partes que também têm tabela própria, com o vocabulário de cada uma. Valem em
+  // dois lugares: dentro do &automod, somadas à família de mesmo nome (`familia()` no
+  // aliases.js); e no 2º termo de `&help <parte> …` (`&help punishment ladder`).
+  // `&help punishment` sozinho abre a página da parte (o cmdHelp redireciona).
+  // Não são comandos: `&punicao` e `&blocklist` respondem "comando desconhecido".
   partes: {
     punicao: {
       en: "punishment",

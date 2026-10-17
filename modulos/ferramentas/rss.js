@@ -1,5 +1,5 @@
 
-import { buscarSeguro, lerTexto } from "../core/seguranca.js";
+import { buscarSeguro, lerTexto, erroEmIngles } from "../core/seguranca.js";
 import * as db from "../core/db.js";
 import { ULID } from "../core/ids.js";
 import { canalDeOutroServidor } from "../moderacao/pertence.js";
@@ -115,6 +115,14 @@ async function coletarNovos(serverId) {
   }
   return novos;
 }
+
+// Os motivos do rodarCiclo, para a tela em inglês do `&rss now`
+const MOTIVO_EN = {
+  "servidor não permitido": "server not allowed",
+  "canal não configurado": "no channel set",
+  "canal inacessível": "the channel can't be reached",
+  "canal de outro servidor": "the channel belongs to another server",
+};
 
 export async function rodarCiclo(serverId, ctx, { forcado = false } = {}) {
   if (!servidorPermitido(serverId)) return { ok: false, motivo: "servidor não permitido" };
@@ -294,7 +302,7 @@ export async function cmdRss(message, args, ctx) {
         { title: "❌ Feed inacessível",
           description: `Não consegui ler esse RSS.\n**Erro:** ${err.message}`, colour: COR.erro },
         { title: "❌ Unreachable feed",
-          description: `I couldn't read that RSS.\n**Error:** ${err.message}`, colour: COR.erro }));
+          description: `I couldn't read that RSS.\n**Error:** ${erroEmIngles(err.message)}`, colour: COR.erro }));
     }
     const novo = db.addFeed(serverId, url, titulo, categoria);
     // já marca os itens atuais como vistos (só resume o que vier DEPOIS)
@@ -422,14 +430,14 @@ export async function cmdRss(message, args, ctx) {
       if (!r.ok)
         return sendEmbed(message.channel, tr(ctx,
           { title: "❌ Falhou", description: r.motivo, colour: COR.erro },
-          { title: "❌ Failed", description: r.motivo, colour: COR.erro }));
+          { title: "❌ Failed", description: MOTIVO_EN[r.motivo] ?? r.motivo, colour: COR.erro }));
     } catch (err) {
       console.error("[RSS] erro no ciclo forçado:", err);
       return sendEmbed(message.channel, tr(ctx,
         { title: "❌ Erro na curadoria",
           description: `O resumo pode ter sido postado, mas algo falhou depois.\n**Erro:** ${err.message}`, colour: COR.erro },
         { title: "❌ Error in the curation",
-          description: `The digest may have been posted, but something failed afterwards.\n**Error:** ${err.message}`, colour: COR.erro }));
+          description: `The digest may have been posted, but something failed afterwards.\n**Error:** ${erroEmIngles(err.message)}`, colour: COR.erro }));
     }
     return; // o próprio ciclo já postou
   }

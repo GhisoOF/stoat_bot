@@ -472,12 +472,12 @@ export async function cmdXp(message, args, ctx) {
   // ── reset ──
   if (sub === "reset" || sub === "zerar") {
     if (!(await podeConfigurar(message, ctx))) return;
-    if (args[1] !== "confirmar")
+    if (!["confirmar", "confirm"].includes(args[1]?.toLowerCase()))
       return sendEmbed(message.channel, tr(ctx,
         { title: "⚠️ Confirmar reset",
           description: `Isso apaga TODO o XP do servidor. Para confirmar: \`${PREFIXO}xp reset confirmar\``, colour: COR.aviso },
         { title: "⚠️ Confirm reset",
-          description: `This erases ALL the server's XP. To confirm: \`${PREFIXO}xp reset confirmar\``, colour: COR.aviso }));
+          description: `This erases ALL the server's XP. To confirm: \`${PREFIXO}xp reset confirm\``, colour: COR.aviso }));
     const n = db.resetXp(serverId);
     return sendEmbed(message.channel, tr(ctx,
       { title: "🧹 XP zerado", description: `Removido o XP de ${n} usuário(s).`, colour: COR.sucesso },

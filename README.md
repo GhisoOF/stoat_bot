@@ -585,9 +585,10 @@ versões antigas continuam funcionando.
 ```
 .
 ├── iniciar.js                  # sobe tudo num container: bot + IA (+ voz opcional)
-├── main.js                     # bootstrap: cliente, rotas, eventos, auto-recuperação
+├── main.js                     # bootstrap: cliente, eventos, despacho dos comandos, auto-recuperação
 ├── modulos/
 │   ├── core/                   # base: db (SQLite), config, i18n, ids, log, páginas…
+│   ├── comandos/               # o registro de comandos: um arquivo por família (nome, apelidos, nome em inglês, marcas)
 │   ├── moderacao/              # automod, punições, ban global, help, tutorial, assistente…
 │   ├── ai/                     # chat, persona, memória, comentário espontâneo, verificador
 │   ├── ferramentas/            # xp, reaction roles, autorole, boas-vindas, tts, rss, fuso

@@ -516,6 +516,51 @@ A trava tem um limite conhecido: valores de mentira no lugar dos `‹moldes›` 
 "teste" que não existe) dão erro que não é de sintaxe — esses ficam listados no
 `INVENTARIO.md`, não reprovam.
 
+## 6h. Fase 1: o registro e o motor (17 out 2026)
+
+`modulos/comandos/` — 46 arquivos, um por família (o `voz.js` tem `&tts`, `&entrar` e
+`&sair`), e o `index.js`, que é o motor. Cada entrada declara o `id` (o nome interno
+que o banco guarda), o handler, o nome em inglês, os apelidos e as marcas. O formato
+está comentado no topo do `index.js`. Saíram de onde estavam:
+
+| Antes | Agora |
+|---|---|
+| `main.js`: `rotas` (90 linhas), `CANONICO`, o laço que adivinhava o canônico pela função, os laços que copiavam apelidos | `montarTabela()` |
+| `main.js`: `COMANDOS_GERENCIAVEIS`, `COMANDOS_SO_IA`, e as listas locais `ESSENCIAIS`, `COMANDOS_DE_VOZ`, `SEMPRE_LIBERADOS`, `TEXTO_LIVRE` | marcas `gerenciavel`, `soIA`, `essencial`, `voz`, `qualquerCanal`, `textoLivre` |
+| `aliases.js`: `COMANDO_EN`, `COMANDO_EXTRA` | derivados do registro (o aliases.js os reexporta) |
+| `main.js`: 20 imports que só serviam às rotas | saíram |
+
+**O ciclo de imports.** O `aliases.js` lê o registro, e o registro importa os
+handlers, que importam o `aliases.js`. O ESM resolve isso desde que ninguém leia as
+tabelas no carregamento. Por isso o handler é declarado como `funcao: () =>
+modulo.cmdX` e só é resolvido no `montarTabela()`, quando tudo já carregou. Conferi o
+boot real (`node main.js` até o login) e o carregamento começando por cada um dos
+lados do ciclo.
+
+**O que mudou de propósito.** Seis nomes deixaram de ser comandos à parte e viraram
+apelidos: `info` e `about` (de `&sobre`), `personality`, `servers`, `comandos` e
+`criarcargomudo`. Todos levam à mesma função de antes. Nenhum era gerenciável nem
+essencial por conta própria, então o liga/desliga não muda. O que muda é bom: os
+subcomandos em inglês passam a valer neles (`&servers report` não era traduzido) e
+`&personality` ganha a isenção de texto livre que `&personalidade` já tinha. O
+`inventario.json` registra exatamente essas 6 linhas.
+
+**O "você quis dizer".** No empate de distância, ganhava quem vinha primeiro na
+tabela, e a ordem agora vem do registro. A regra virou fixa: o nome do comando antes
+do apelido, depois a ordem alfabética. Testei 53.327 erros de digitação dos 149
+nomes. 131 (0,25%) recebem outra sugestão, todas à mesma distância (`rr` → `r`,
+`servers` → `server`). Com o registro em ordem invertida, a sugestão é a mesma.
+
+**Travas novas.**
+- O boot para se um nome estiver em dois comandos.
+- O `verificar-build.js` confere que cada `funcao` aponta para um import do arquivo e
+  para um export que existe, e que todo arquivo da pasta está no `index.js`. Provei
+  com um handler renomeado e com um arquivo órfão.
+- A `comandos-17out` confere que o `main.js` e o `aliases.js` não voltam a declarar
+  comandos à mão, e que as seis listas antigas saem iguais das marcas.
+- `assistente`, `arvore-comandos` e `help-comandos` liam a tabela como **texto** do
+  `main.js`. Agora leem o registro.
+
 ---
 
 ## 7. O que NÃO fiz, e por quê

@@ -1,72 +1,13 @@
 import { ORDEM as ORDEM_GRUPOS } from "../moderacao/help-grupos.js";   // os grupos que o índice do &help promete
 import { EN_PARA_PT } from "./nomes-automod.js";
 
-export const COMANDO_EN = {
-  acesso: "access",
-  banglobal: "globalban",
-  cargomudo: "muterole",
-  comando: "command",
-  cor: "color",
-  sentinela: "sentinel",
-  idioma: "language",
-  limpar: "purge",
-  log: "log",
-  punicao: "punishment",
-  servidores: "servers",
-  sobre: "about",
-  tutorial: "tutorial",
-  assistente: "wizard",
-  warn: "warn",
-  xp: "xp",
-  game: "game",
-  staff: "staff",
-  fuso: "timezone",
-  boasvindas: "welcome",
-  adeus: "goodbye",
-  // "fun" não: `&help fun` já é o grupo Diversão da ajuda
-  entretenimento: "entertainment",
-  servidor: "server",
-  // (13 out 2026) a tela em inglês ainda mostrava estes em português
-  entrar: "join",
-  sair: "leave",
-  silenciar: "silence",
-  economia: "economy",
-  // 17 out 2026: `&musica` aparecia assim na tela em inglês (o `&music` já funcionava)
-  musica: "music",
-};
-
-export const COMANDO_EXTRA = {
-  access: "acesso",
-  color: "cor",
-  colour: "cor",
-  muterole: "cargomudo",
-  mutedrole: "cargomudo",
-  command: "comando",
-  reactionroles: "reactionrole",
-  levels: "xp",
-  character: "game",
-  guide: "tutorial",
-  start: "tutorial",
-  wizard: "assistente",
-  assistant: "assistente",
-  setup: "assistente",
-  configure: "assistente",
-  team: "staff",
-  timezone: "fuso",
-  timezones: "fuso",
-  tz: "fuso",
-  clock: "fuso",
-  welcome: "boasvindas",
-  greeting: "boasvindas",
-  goodbye: "adeus",
-  farewell: "adeus",
-  entertainment: "entretenimento",
-  fun: "entretenimento",
-  server: "servidor",
-  silence: "silenciar",
-  economy: "economia",
-  purge: "limpar",
-};
+// O nome de cada comando na tela em inglês e os apelidos vêm do registro de
+// comandos (modulos/comandos/) desde 17 out 2026 — não declarar aqui.
+// Só usados dentro de funções: o registro importa os handlers, e os handlers
+// importam este arquivo (ciclo que o ESM resolve, desde que ninguém leia estas
+// tabelas no carregamento).
+import { COMANDO_EN, COMANDO_EXTRA } from "../comandos/index.js";
+export { COMANDO_EN, COMANDO_EXTRA };
 
 export const SUB = {
   servidor: {

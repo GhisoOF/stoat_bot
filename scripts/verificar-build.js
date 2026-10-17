@@ -61,26 +61,33 @@ if (!existsSync(modulosDir)) {
   console.log(`  ✓ ${arquivos.length} módulos verificados`);
 }
 
+// 3) o registro de comandos: cada `funcao: () => modulo.handler` aponta para um
+//    import do próprio arquivo e para um export que existe nele; e todo arquivo
+//    da pasta está no index.js (17 out 2026 — antes era a tabela `rotas` do main.js)
 {
-  const src = readFileSync(resolve(RAIZ, "main.js"), "utf8");
-  const conhecidos = new Set();
-  for (const m of src.matchAll(/import\s+\*\s+as\s+(\w+)\s+from/g)) conhecidos.add(m[1]);
-  for (const m of src.matchAll(/import\s+\{([^}]+)\}\s+from/g))
-    m[1].split(",").forEach((x) => conhecidos.add(x.trim().split(/\s+as\s+/).pop()));
-  for (const m of src.matchAll(/import\s+(\w+)\s+from/g)) conhecidos.add(m[1]);
-  for (const m of src.matchAll(/(?:async\s+)?function\s+(\w+)/g)) conhecidos.add(m[1]);
-  for (const m of src.matchAll(/(?:const|let|var)\s+(\w+)\s*=/g)) conhecidos.add(m[1]);
-
-  const ini = src.indexOf("const rotas");
-  const fim = src.indexOf("// Aliases");
-  if (ini !== -1 && fim > ini) {
-    const bloco = src.slice(ini, fim);
-    const ruins = new Set();
-    for (const m of bloco.matchAll(/^\s*[\wáéíóúâêôãõç]+:\s*([A-Za-z_$][\w$]*)(?:\.\w+)?\s*,/gm)) {
-      if (!conhecidos.has(m[1])) ruins.add(m[1]);
+  const dir = join(RAIZ, "modulos", "comandos");
+  if (!existsSync(join(dir, "index.js"))) falha("modulos/comandos/index.js não existe");
+  else {
+    const indice = readFileSync(join(dir, "index.js"), "utf8");
+    const ruins = [];
+    let n = 0;
+    for (const arq of readdirSync(dir).filter((f) => f.endsWith(".js") && f !== "index.js")) {
+      if (!indice.includes(`from "./${arq}"`)) ruins.push(`${arq} não está no index.js (o comando não existiria)`);
+      const src = readFileSync(join(dir, arq), "utf8");
+      const imports = {};
+      for (const m of src.matchAll(/import\s+\*\s+as\s+(\w+)\s+from\s+["'](\.\.?\/[^"']+)["']/g)) imports[m[1]] = resolve(dir, m[2]);
+      const locais = new Set([...src.matchAll(/function\s+(\w+)/g)].map((m) => m[1]));
+      for (const m of src.matchAll(/funcao:\s*\(\)\s*=>\s*([\w$]+)(?:\.([\w$]+))?/g)) {
+        n++;
+        const [, mod, exp] = m;
+        if (!exp) { if (!locais.has(mod)) ruins.push(`${arq}: funcao aponta para "${mod}", que não existe no arquivo`); continue; }
+        if (!imports[mod]) { ruins.push(`${arq}: funcao usa "${mod}", que não é importado`); continue; }
+        const alvo = readFileSync(imports[mod], "utf8");
+        if (!new RegExp(`export\\s+(?:async\\s+)?(?:function|const|let)\\s+${exp}\\b`).test(alvo)) ruins.push(`${arq}: "${mod}.${exp}" não é exportado por ${imports[mod].slice(RAIZ.length + 1)}`);
+      }
     }
-    for (const r of ruins) falha(`main.js: rota aponta para "${r}", que não existe (import removido?)`);
-    if (!ruins.size) console.log("  ✓ rotas de comandos consistentes");
+    for (const r of ruins) falha(`registro de comandos: ${r}`);
+    if (!ruins.length) console.log(`  ✓ registro de comandos consistente (${n} handlers)`);
   }
 }
 

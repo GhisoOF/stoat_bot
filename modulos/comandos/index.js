@@ -1,0 +1,140 @@
+// O registro de comandos (fase 1, 17 out 2026).
+//
+// Cada comando é declarado UMA vez, num arquivo desta pasta (um por família).
+// Tudo o que antes era escrito à mão em vários lugares sai daqui: as rotas e os
+// apelidos do main.js, o nome mostrado na tela em inglês e os apelidos do
+// aliases.js, e as listas soltas (gerenciáveis, só de IA, de voz, essenciais).
+//
+// O formato de uma entrada:
+//
+//   export default {
+//     id: "warn",                  // o nome interno — o que o banco e o `&comando desativar` guardam.
+//                                  // NUNCA renomear: servidores antigos têm esse nome salvo.
+//     funcao: () => warnMod.cmdWarn,  // o handler. É uma função que DEVOLVE o handler (e não o
+//                                  // handler direto) porque os módulos se importam em ciclo:
+//                                  // o aliases.js lê este registro, e os handlers leem o aliases.js.
+//     nomes: { en: "warn" },       // o nome na tela de cada idioma (sem a chave, o id)
+//     apelidos: ["avisar"],        // outros nomes que levam ao MESMO comando
+//     gerenciavel: true,           // o admin pode desligar com `&comando desativar`
+//     soIA: true,                  // só existe onde a IA roda (&chat, &modia)
+//     voz: true,                   // vale dentro da call, mesmo fora dos canais liberados
+//     essencial: true,             // nunca é desligado (a ajuda, o próprio &comando…)
+//     qualquerCanal: true,         // vale até nos canais onde o &acesso restringe os comandos
+//     textoLivre: true,            // os argumentos são texto livre: `<div>` ou `‹algo›` não é molde da ajuda
+//   };
+//
+// Um arquivo pode exportar uma lista de entradas (o voz.js tem &tts, &entrar e &sair).
+//
+// Ainda NÃO estão aqui (fase 2, uma família por vez): os subcomandos e suas
+// traduções (aliases.js → SUB), a sintaxe e os textos da ajuda.
+//
+// Arquivo novo nesta pasta tem de entrar na lista abaixo — a suíte comandos-17out
+// falha se sobrar arquivo fora dela.
+
+import ping from "./ping.js";
+import repete from "./repete.js";
+import userinfo from "./userinfo.js";
+import kick from "./kick.js";
+import ban from "./ban.js";
+import silenciar from "./silenciar.js";
+import limpar from "./limpar.js";
+import warn from "./warn.js";
+import acesso from "./acesso.js";
+import automod from "./automod.js";
+import tutorial from "./tutorial.js";
+import assistente from "./assistente.js";
+import cor from "./cor.js";
+import log from "./log.js";
+import banglobal from "./banglobal.js";
+import embed from "./embed.js";
+import reactionrole from "./reactionrole.js";
+import chat from "./chat.js";
+import rss from "./rss.js";
+import xp from "./xp.js";
+import game from "./game.js";
+import autorole from "./autorole.js";
+import staff from "./staff.js";
+import boasvindas from "./boasvindas.js";
+import adeus from "./adeus.js";
+import fuso from "./fuso.js";
+import voz from "./voz.js";
+import musica from "./musica.js";
+import webhook from "./webhook.js";
+import rolar from "./rolar.js";
+import iniciativa from "./iniciativa.js";
+import ticket from "./ticket.js";
+import economia from "./economia.js";
+import entretenimento from "./entretenimento.js";
+import servidor from "./servidor.js";
+import help from "./help.js";
+import sobre from "./sobre.js";
+import personalidade from "./personalidade.js";
+import config from "./config.js";
+import servidores from "./servidores.js";
+import comando from "./comando.js";
+import cargomudo from "./cargomudo.js";
+import debug from "./debug.js";
+import modia from "./modia.js";
+import reset from "./reset.js";
+import idioma from "./idioma.js";
+
+// A ordem desta lista é a ordem das rotas e da lista de gerenciáveis do `&comando`.
+export const REGISTRO = [
+  ping, repete, userinfo, kick, ban, silenciar, limpar, warn, acesso, automod,
+  tutorial, assistente, cor, log, banglobal, embed, reactionrole, chat, rss, xp,
+  game, autorole, staff, boasvindas, adeus, fuso, voz, musica, webhook, rolar,
+  iniciativa, ticket, economia, entretenimento, servidor, help, sobre, personalidade,
+  config, servidores, comando, cargomudo, debug, modia, reset, idioma,
+].flat();
+
+// ── O que só depende dos nomes (o aliases.js usa; não toca nos handlers) ──
+
+// id → nome na tela em inglês (inclui as partes que o texto antigo cita sozinhas)
+export const COMANDO_EN = Object.fromEntries(REGISTRO.flatMap((c) => [
+  ...(c.nomes?.en ? [[c.id, c.nomes.en]] : []),
+  ...Object.entries(c.partes ?? {}).filter(([, n]) => n.en).map(([id, n]) => [id, n.en]),
+]));
+
+// apelido → id (todos os apelidos, de todos os comandos)
+export const COMANDO_EXTRA = Object.fromEntries(REGISTRO.flatMap((c) => (c.apelidos ?? []).map((a) => [a, c.id])));
+
+// Os problemas do registro (vazio = íntegro). O boot para se houver algum: um
+// nome em dois comandos faria um deles sumir em silêncio.
+export function problemasDoRegistro(registro = REGISTRO) {
+  const problemas = [];
+  const dono = new Map();
+  for (const c of registro) {
+    if (!c || typeof c.id !== "string" || !c.id) { problemas.push(`entrada sem id: ${JSON.stringify(c)?.slice(0, 80)}`); continue; }
+    if (typeof c.funcao !== "function") problemas.push(`${c.id}: sem funcao`);
+    for (const nome of [c.id, ...(c.apelidos ?? [])]) {
+      if (nome !== nome.toLowerCase() || /\s/.test(nome)) problemas.push(`${c.id}: o nome "${nome}" precisa ser minúsculo e sem espaço`);
+      if (dono.has(nome)) problemas.push(`"${nome}" está em ${dono.get(nome)} e em ${c.id}`);
+      else dono.set(nome, c.id);
+    }
+  }
+  return problemas;
+}
+
+// A tabela que o main.js usa. Só aqui os handlers são resolvidos — quando todos
+// os módulos já carregaram.
+export function montarTabela(registro = REGISTRO) {
+  const problemas = problemasDoRegistro(registro);
+  if (problemas.length) throw new Error(`registro de comandos inválido:\n  ${problemas.join("\n  ")}`);
+  const rotas = {}, CANONICO = {};
+  for (const c of registro) {
+    const fn = c.funcao();
+    if (typeof fn !== "function") throw new Error(`registro de comandos: ${c.id}.funcao() não devolveu uma função`);
+    rotas[c.id] = fn;
+    for (const a of c.apelidos ?? []) { rotas[a] = fn; CANONICO[a] = c.id; }
+  }
+  const comFlag = (f) => registro.filter((c) => c[f]).map((c) => c.id);
+  return {
+    rotas, CANONICO,
+    COMANDOS_GERENCIAVEIS: comFlag("gerenciavel"),
+    COMANDOS_SO_IA: new Set(comFlag("soIA")),
+    COMANDOS_DE_VOZ: new Set(comFlag("voz")),
+    ESSENCIAIS: new Set(comFlag("essencial")),
+    SEMPRE_LIBERADOS: new Set(comFlag("qualquerCanal")),
+    TEXTO_LIVRE: new Set(comFlag("textoLivre")),
+  };
+}

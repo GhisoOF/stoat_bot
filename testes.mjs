@@ -538,14 +538,13 @@ await tAsync("&automod blocklist add X == &blocklist add X", async () => {
 });
 
 await tAsync("o que virou opção de família NÃO existe mais solto no topo", async () => {
-  const fs = await import("node:fs");
-  const main = fs.readFileSync("./main.js", "utf8");
+  // as rotas vêm do registro de comandos desde 17 out 2026 (a tabela real, não o texto do main.js)
+  const { rotas } = (await import("./modulos/comandos/index.js")).montarTabela();
   for (const morta of ["blocklist", "whitelist", "sentinela", "punicao", "warnings", "clearwarnings"]) {
-    assert.doesNotMatch(main, new RegExp(`\\n\\s+"?${morta}"?\\s*:\\s*(automodCmd|\\()`),
-      `${morta} ainda é rota de topo — devia existir só dentro da família`);
+    assert.ok(!rotas[morta], `${morta} ainda é rota de topo — devia existir só dentro da família`);
   }
   for (const viva of ["automod", "warn", "entrar", "sair", "tts"]) {
-    assert.match(main, new RegExp(`\\n\\s+"?${viva}"?\\s*:`), `a rota ${viva} sumiu do main.js`);
+    assert.ok(rotas[viva], `a rota ${viva} sumiu`);
   }
 });
 
@@ -587,17 +586,18 @@ await tAsync("&tts entrar/sair não existem: sem aviso e sem entrar na call", as
 });
 
 await tAsync("&entrar e &sair continuam funcionando (a porta única)", async () => {
-  const main = await import("node:fs").then((fs) => fs.readFileSync("./main.js", "utf8"));
-  assert.match(main, /entrar:\s*\(msg, args, ctx\) => ttsVoz\.cmdTts\(msg, \["entrar", \.\.\.args\], \{ \.\.\.ctx, viaAtalhoVoz: true \}\)/);
-  assert.match(main, /sair:\s*\(msg, args, ctx\) => ttsVoz\.cmdTts\(msg, \["sair", \.\.\.args\], \{ \.\.\.ctx, viaAtalhoVoz: true \}\)/);
+  // desde 17 out 2026 os dois moram no registro de comandos (modulos/comandos/voz.js)
+  const voz = await import("node:fs").then((fs) => fs.readFileSync("./modulos/comandos/voz.js", "utf8"));
+  assert.match(voz, /function entrar\(msg, args, ctx\) \{ return tts\.cmdTts\(msg, \["entrar", \.\.\.args\], \{ \.\.\.ctx, viaAtalhoVoz: true \}\); \}/);
+  assert.match(voz, /function sair\(msg, args, ctx\) \{ return tts\.cmdTts\(msg, \["sair", \.\.\.args\], \{ \.\.\.ctx, viaAtalhoVoz: true \}\); \}/);
+  const { REGISTRO } = await import("./modulos/comandos/index.js");
+  assert.deepEqual(REGISTRO.filter((c) => ["entrar", "sair"].includes(c.id)).map((c) => c.funcao().name), ["entrar", "sair"]);
 });
 
 console.log("\n── &help <grupo> não vira &help <comando> pelo apelido ──");
 {
   const aliases = await import("./modulos/core/aliases.js");
-  const main = fs.readFileSync("./main.js", "utf8");
-  const CANONICO = Object.fromEntries([...main.match(/const CANONICO = \{([\s\S]*?)\n\};/)[1]
-    .matchAll(/^\s*"?([\wá-ú-]+)"?\s*:\s*"([^"]+)"/gm)].map((x) => [x[1], x[2]]));
+  const { CANONICO } = (await import("./modulos/comandos/index.js")).montarTabela();   // a tabela real (registro de comandos)
   const { ORDEM } = await import("./modulos/moderacao/help-grupos.js");
   for (const grupo of ORDEM) {
     t(`&help ${grupo} abre o grupo (a tabela real diz ${grupo} → ${CANONICO[grupo] ?? "—"})`, () =>
@@ -633,9 +633,9 @@ const t = (nome, fn) => {
   catch (e) { console.log(`  ❌ ${nome}\n     ${e.message}`); falhou++; }
 };
 
-const main = fs.readFileSync("./main.js", "utf8");
-const bloco = main.match(/const rotas\s*=\s*\{([\s\S]*?)\n\};/)[1];
-const ROTAS = new Set([...bloco.matchAll(/^\s*"?([\wá-ú-]+)"?\s*:/gm)].map((m) => m[1]));
+// todo nome que leva a um comando, do registro de comandos (modulos/comandos/)
+const { REGISTRO } = await import("./modulos/comandos/index.js");
+const ROTAS = new Set(REGISTRO.flatMap((c) => [c.id, ...(c.apelidos ?? [])]));
 // Os filtros vêm da lista única do automod (a mesma do &automod, &config e &info).
 const { MODULOS_AUTOMOD } = await import("./modulos/moderacao/automod-engine.js");
 const MODULOS = new Set(Object.keys(MODULOS_AUTOMOD));
@@ -2926,25 +2926,29 @@ const { grupos } = await import("./modulos/moderacao/help-grupos.js");
 const tutorial = await import("./modulos/moderacao/tutorial.js");
 const aliasesMod = await import("./modulos/core/aliases.js");
 
-// ── O que existe: rotas, apelidos e nomes em inglês ──
+// ── O que existe: o registro de comandos (modulos/comandos/, desde 17 out 2026) ──
+const { REGISTRO } = await import("./modulos/comandos/index.js");
 const main = fs.readFileSync("main.js", "utf8");
-const fatia = (ini) => { const i = main.indexOf(ini); return main.slice(i, main.indexOf("\n};", i)); };
-const blocoRotas = fatia("const rotas = {");
-const rotas = {};
-for (const l of blocoRotas.split("\n")) { const m = l.match(/^\s*["']?([\wçãé]+)["']?:\s*(.+?),?\s*$/); if (m) rotas[m[1]] = m[2]; }
-const canonico = {};
-for (const m of fatia("const CANONICO = {").matchAll(/["']?([\wçãé]+)["']?:\s*"(\w+)"/g)) canonico[m[1]] = m[2];
+const rotas = {}, canonico = {};
+// id → o arquivo do handler, lido do texto do registro (`funcao: () => modulo.cmdX`)
+const fonteDoId = {};
+for (const arq of fs.readdirSync("modulos/comandos").filter((f) => f.endsWith(".js") && f !== "index.js")) {
+  const src = fs.readFileSync(`modulos/comandos/${arq}`, "utf8");
+  const imps = Object.fromEntries([...src.matchAll(/import \* as (\w+)\s+from "\.\.\/([^"]+)"/g)].map((m) => [m[1], `modulos/${m[2]}`]));
+  for (const m of src.matchAll(/id: "([^"]+)",\s*\n\s*funcao: \(\) => (\w+)/g)) fonteDoId[m[1]] = imps[m[2]] ?? Object.values(imps)[0] ?? null;   // função local (o &entrar) → o módulo que ela chama
+}
+for (const c of REGISTRO) {
+  rotas[c.id] = fonteDoId[c.id];
+  for (const a of c.apelidos ?? []) canonico[a] = c.id;
+}
 const en = { ...aliasesMod.COMANDO_EXTRA, ...Object.fromEntries(Object.entries(aliasesMod.COMANDO_EN).map(([pt, e]) => [e, pt])) };
-const resolver = (c) => (rotas[c] ? c : rotas[canonico[c]] ? canonico[c] : rotas[en[c]] ? en[c] : null);
+const resolver = (c) => (c in rotas ? c : canonico[c] in rotas ? canonico[c] : en[c] in rotas ? en[c] : null);
 
 // ── O código de cada comando (para conferir o subcomando) ──
-const imports = {};
-for (const m of main.matchAll(/import \* as (\w+)\s+from "\.\/(modulos\/[^"]+)"/g)) imports[m[1]] = m[2];
 const cacheFonte = {};
 function fonte(cmd) {
   if (cacheFonte[cmd]) return cacheFonte[cmd];
-  const mod = (rotas[cmd].match(/(\w+)\.cmd\w*/) ?? [])[1];
-  const arq = imports[mod];
+  const arq = rotas[cmd];
   let src = arq ? fs.readFileSync(arq, "utf8") : "";
   // comandos divididos em vários arquivos da mesma pasta
   for (const m of src.matchAll(/from "\.\/([\w-]+\.js)"/g)) { try { src += fs.readFileSync(arq.replace(/[^/]+$/, m[1]), "utf8"); } catch {} }
@@ -14852,8 +14856,8 @@ await t(`os ${Object.keys(atual.nomes).length} nomes resolvem como no inventári
   const mudaram = Object.keys(salvo.nomes).filter((n) => atual.nomes[n] && JSON.stringify(atual.nomes[n]) !== JSON.stringify(salvo.nomes[n]))
     .map((n) => `${n}: ${JSON.stringify(salvo.nomes[n])} → ${JSON.stringify(atual.nomes[n])}`);
   const novos = Object.keys(atual.nomes).filter((n) => !salvo.nomes[n]);
-  assert.deepEqual({ perdidos, mudaram }, { perdidos: [], mudaram: [] }, "nome sumiu ou mudou de destino");
-  assert.deepEqual(novos, [], "nome novo fora do inventário — confira e rode com INVENTARIO=1");
+  assert.ok(!perdidos.length && !mudaram.length, `nome sumiu ou mudou de destino:\n${[...perdidos.map((n) => `${n}: sumiu`), ...mudaram].join("\n")}`);
+  assert.ok(!novos.length, `nome novo fora do inventário — confira e rode com INVENTARIO=1:\n${novos.join(" ")}`);
 });
 await t("todo subcomando em inglês continua virando o mesmo nome interno", () => {
   if (ATUALIZAR) return;
@@ -14862,17 +14866,47 @@ await t("todo subcomando em inglês continua virando o mesmo nome interno", () =
     if (atual.sub[cmd]?.[en] !== pt) problemas.push(`${cmd} ${en}: ${pt} → ${atual.sub[cmd]?.[en] ?? "(sumiu)"}`);
   }
   const novos = Object.entries(atual.sub).flatMap(([cmd, m]) => Object.keys(m).filter((en) => salvo.sub[cmd]?.[en] === undefined).map((en) => `${cmd} ${en}`));
-  assert.deepEqual(problemas, [], "subcomando em inglês sumiu ou mudou");
-  assert.deepEqual(novos, [], "subcomando em inglês novo fora do inventário — rode com INVENTARIO=1");
+  assert.ok(!problemas.length, `subcomando em inglês sumiu ou mudou:\n${problemas.join("\n")}`);
+  assert.ok(!novos.length, `subcomando em inglês novo fora do inventário — rode com INVENTARIO=1:\n${novos.join(" ")}`);
 });
 await t("comando gerenciável e comando só de IA têm rota", () => {
   for (const cmd of [...COMANDOS_GERENCIAVEIS, ...COMANDOS_SO_IA]) assert.ok(rotas[cmd], cmd);
 });
-await t("nenhum apelido declarado em dois lugares (main.js × aliases.js)", () => {
+// ── Fase 1: o registro (modulos/comandos/) é a única fonte ──
+const registro = await import("./modulos/comandos/index.js");
+await t("o registro está íntegro (nenhum nome em dois comandos) e todo arquivo da pasta está no index.js", () => {
+  assert.deepEqual(registro.problemasDoRegistro(), []);
+  // e a checagem pega o que deve: um nome em dois comandos para o boot
+  const duplicado = [...registro.REGISTRO, { id: "novo", funcao: () => () => 1, apelidos: ["avisar"] }];
+  assert.match(registro.problemasDoRegistro(duplicado).join(), /"avisar" está em warn e em novo/);
+  assert.throws(() => registro.montarTabela(duplicado), /registro de comandos inválido/);
+  const indice = fs.readFileSync("modulos/comandos/index.js", "utf8");
+  const fora = fs.readdirSync("modulos/comandos").filter((f) => f.endsWith(".js") && f !== "index.js" && !indice.includes(`from "./${f}"`));
+  assert.deepEqual(fora, []);
+});
+await t("o main.js e o aliases.js não declaram comando à mão", () => {
   const src = fs.readFileSync("main.js", "utf8");
-  const i = src.indexOf("const CANONICO = {"), bloco = src.slice(i, src.indexOf("\n};", i));
-  const doMain = [...bloco.matchAll(/["']?([\wçãéó-]+)["']?:\s*"/g)].map((m) => m[1]);
-  assert.deepEqual(doMain.filter((n) => aliasesMod.COMANDO_EXTRA[n]), []);
+  for (const velho of ["const rotas = {", "const CANONICO = {", "const COMANDOS_GERENCIAVEIS = [", "const COMANDOS_SO_IA = new Set", "const ESSENCIAIS = new Set", "const COMANDOS_DE_VOZ = new Set", "const SEMPRE_LIBERADOS = new Set", "const TEXTO_LIVRE = new Set"]) assert.ok(!src.includes(velho), velho);
+  const al = fs.readFileSync("modulos/core/aliases.js", "utf8");
+  for (const velho of ["export const COMANDO_EN = {", "export const COMANDO_EXTRA = {"]) assert.ok(!al.includes(velho), velho);
+});
+await t("as listas que viraram marcas no registro são as mesmas de antes", () => {
+  // as listas como estavam no main.js em 17 out 2026 (fase 0); mudar uma delas é mudar comportamento
+  const tab = registro.montarTabela();
+  assert.deepEqual(tab.COMANDOS_GERENCIAVEIS, ["ping", "repete", "userinfo", "kick", "ban", "silenciar", "limpar", "warn", "acesso", "automod", "tutorial", "assistente", "cor", "log", "banglobal", "embed", "reactionrole", "chat", "rss", "xp", "game", "autorole", "staff", "boasvindas", "adeus", "fuso", "tts", "musica", "webhook", "rolar", "iniciativa", "ticket", "economia", "entretenimento", "servidor"]);
+  const ordenado = (x) => [...x].sort();
+  assert.deepEqual(ordenado(tab.COMANDOS_SO_IA), ["chat", "modia"]);
+  assert.deepEqual(ordenado(tab.COMANDOS_DE_VOZ), ["entrar", "musica", "sair", "tts"]);
+  // antes também "comandos", "command", "diagnostico": hoje são apelidos de comando/debug (o que conta é o nome interno)
+  assert.deepEqual(ordenado(tab.ESSENCIAIS), ["comando", "debug", "help", "idioma"]);
+  assert.deepEqual(ordenado(tab.SEMPRE_LIBERADOS), ["acesso", "assistente", "debug", "help", "idioma", "tutorial"]);
+  assert.deepEqual(ordenado(tab.TEXTO_LIVRE), ordenado(["chat", "tts", "repete", "embed", "entretenimento", "servidor", "personalidade", "modia", "boasvindas", "adeus", "rolar", "musica", "webhook", "rss", "automod"]));
+});
+await t("\"você quis dizer\": no empate, o nome do comando vence o apelido (não depende da ordem do registro)", async () => {
+  const sid = ulid("parecido");
+  await say("&idioma pt", sid);
+  assert.match((await say("&silencir", sid)).texto, /quis dizer `&silenciar`/);
+  assert.match((await say("&limpaar 5", sid)).texto, /quis dizer `&limpar 5`/);   // `limpiar` (apelido) empata
 });
 
 // ── 2. Os exemplos da ajuda, executados ──
@@ -15039,24 +15073,21 @@ if (ATUALIZAR) {
     ...Object.entries(porCanonico).sort(([a], [b]) => a.localeCompare(b)).map(([cmd, v]) =>
       `| \`${cmd}\` | ${aliasesMod.COMANDO_EN[cmd] ? `\`${aliasesMod.COMANDO_EN[cmd]}\`` : "—"} | ${v.nomes.filter((n) => n !== cmd).map((n) => `\`${n}\``).join(" ") || "—"} | \`${v.funcao}\` | ${COMANDOS_SO_IA.has(cmd) ? "só IA" : COMANDOS_GERENCIAVEIS.includes(cmd) ? "sim" : "—"} | ${contar(cmd)} |`),
     "",
-    "_Comando_ é o nome interno (o que o `&comando desativar` e o banco guardam). `sobre`, `info` e `about` levam à",
-    "mesma função mas são três comandos para o bot — desativar um não desativa os outros. A fase 1 resolve isso.",
+    "_Comando_ é o nome interno (o que o `&comando desativar` e o banco guardam).",
     "",
-    "## Onde cada comando está declarado hoje",
+    "## Onde cada comando está declarado",
     "",
-    "Um comando, hoje, mora em vários lugares — é o que a fase 1 vai juntar num registro só:",
+    "Desde a fase 1, o nome, os apelidos, o nome em inglês e as marcas de cada comando (gerenciável, só IA, voz,",
+    "essencial, qualquer canal, texto livre) moram **só** no registro, `modulos/comandos/` — um arquivo por família.",
+    "O que ainda está espalhado (fases 2 e 3, uma família por vez):",
     "",
     "| Lugar | O que guarda |",
     "|---|---|",
-    "| `main.js` → `rotas` | o nome e a função; vários apelidos também estão aqui |",
-    "| `main.js` → `CANONICO` | apelido → nome interno |",
-    "| `modulos/core/aliases.js` → `COMANDO_EXTRA`, `COMANDO_EN` | apelidos em inglês e o nome mostrado na tela em inglês |",
     "| `modulos/core/aliases.js` → `SUB`, `ANINHADOS`, `SO_EXIBIR`, `PLACEHOLDER_EN` | subcomandos inglês → português, para entrada e para a tela |",
     "| `modulos/core/nomes-automod.js` | grupos, partes, modos e temas do automod nos dois idiomas |",
-    "| cada handler (`if (sub === … )`) | o parse de novo, muitas vezes já aceitando os dois idiomas |",
+    "| cada handler (`if (sub === … )`) | o parse dos subcomandos, muitas vezes já aceitando os dois idiomas |",
     "| `help-arvore.js`, `geral.js` (`construirSubtopicos`, `construirDetalhes`) | as páginas de ajuda, PT e EN escritas em cópias separadas |",
     "| `help-grupos.js`, `help-parametros.js`, `tutorial.js`, `assistente.js` | índice, parâmetros, tutorial e os comandos que o assistente gera |",
-    "| `main.js` → `COMANDOS_GERENCIAVEIS`, `COMANDOS_SO_IA`, `COMANDOS_DE_VOZ`, `ESSENCIAIS` | listas soltas de comportamento |",
     "",
     "## Subcomandos em inglês (entrada)",
     "",

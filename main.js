@@ -24,44 +24,25 @@ for (const canal of ["debug", "log"]) {
 import { Client, Permission, Channel } from "stoat.js";
 
 import * as engine   from "./modulos/moderacao/automod-engine.js";
-import * as automodCmd from "./modulos/moderacao/automod-comandos.js";
-import * as geral   from "./modulos/moderacao/geral.js";
 import * as store    from "./modulos/core/config-store.js";
 import * as log      from "./modulos/core/log.js";
-import * as cfgCmd   from "./modulos/moderacao/config-comando.js";
 import * as banGlobal from "./modulos/moderacao/ban-global.js";
-import * as limpar    from "./modulos/moderacao/limpar.js";
-import * as admin     from "./modulos/moderacao/comandos-admin.js";
-import * as embedCmd  from "./modulos/moderacao/embed.js";
 import * as reactionRoles from "./modulos/ferramentas/reaction-roles.js";
 import * as midia     from "./modulos/core/midia.js";
 import * as autorole  from "./modulos/ferramentas/autorole.js";
 import * as bemvindo  from "./modulos/ferramentas/boas-vindas.js";
-import * as fuso      from "./modulos/ferramentas/fuso.js";
 import * as ttsVoz    from "./modulos/ferramentas/tts.js";
-import * as musicaCmd from "./modulos/ferramentas/musica.js";
 import * as webhooks  from "./modulos/ferramentas/webhooks.js";
-import * as dadosRpg  from "./modulos/ferramentas/dados-rpg.js";
 import * as tickets   from "./modulos/ferramentas/tickets.js";
-import * as staff     from "./modulos/moderacao/staff.js";
-import * as tutorial   from "./modulos/moderacao/tutorial.js";
-import * as corCargo   from "./modulos/moderacao/cor-cargo.js";
 import * as acessoMod  from "./modulos/moderacao/acesso.js";
-import * as warnMod    from "./modulos/moderacao/warn.js";
-import * as silenciarMod from "./modulos/moderacao/silenciar.js";
-import * as economiaMod from "./modulos/ferramentas/economia.js";
 import * as entretenimento from "./modulos/ferramentas/entretenimento.js";
 import * as servidorInfo from "./modulos/ferramentas/servidor-info.js";
 import * as srvStats   from "./modulos/core/metricas.js";
 import * as rpg        from "./modulos/game/game.js";
 import * as modIA      from "./modulos/moderacao/moderacao-ia.js";
 import * as assuntos   from "./modulos/moderacao/assuntos.js";
-import * as resetMod  from "./modulos/moderacao/reset.js";
 import { iaLigada, conversaLigada } from "./modulos/core/env.js";
 import * as avatarMod from "./modulos/moderacao/avatar.js";
-import * as modiaCmd   from "./modulos/moderacao/modia-comando.js";
-import * as persona    from "./modulos/ai/persona.js";
-import * as debugCmd  from "./modulos/moderacao/debug-comando.js";
 import { dirigidoAoBot } from "./modulos/ai/destinatario.js";
 import { protegerMarcadores } from "./modulos/core/marcadores.js";
 import * as chat      from "./modulos/ai/chat.js";
@@ -69,6 +50,7 @@ import * as rss       from "./modulos/ferramentas/rss.js";
 import * as nivel     from "./modulos/ferramentas/nivel.js";
 import * as i18n      from "./modulos/core/i18n.js";
 import * as aliases   from "./modulos/core/aliases.js";
+import * as registroComandos from "./modulos/comandos/index.js";
 import { canalDeOutroServidor } from "./modulos/moderacao/pertence.js";
 import * as paginas   from "./modulos/core/paginas.js";
 import * as assistente from "./modulos/moderacao/assistente.js";
@@ -85,7 +67,6 @@ slowmode.instalar(Channel, {
 import { vigiarConexao } from "./modulos/core/vida.js";
 import { comandosPorLinha, mensagemDaLinha } from "./modulos/core/lote.js";
 import * as relatorioHora from "./modulos/ferramentas/relatorio.js";
-import * as servidoresCmd from "./modulos/moderacao/servidores.js";
 import { descreverErro } from "./modulos/core/erros.js";
 import * as confianca from "./modulos/moderacao/confianca.js";
 import { semPingEmMassa } from "./modulos/core/seguranca.js";
@@ -355,179 +336,30 @@ function comandoParecido(digitado, nomes) {
     }
     return m[a.length][b.length];
   };
-  let melhor = null, menor = 3;
-  for (const n of nomes) { const x = d(String(digitado), n); if (x < menor && x <= Math.max(1, Math.floor(n.length / 3))) { menor = x; melhor = n; } }
+  // Empate na distância: o nome do comando antes do apelido, depois a ordem
+  // alfabética (17 out 2026). Antes o empate ia para quem vinha primeiro na
+  // tabela — e a ordem da tabela agora vem do registro, que muda sem ninguém
+  // pensar no "você quis dizer".
+  const t = String(digitado);
+  const chave = (n, x) => [x, CANONICO[n] ? 1 : 0, n];
+  const antes = (a, b) => { for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return a[i] < b[i]; return false; };
+  let melhor = null, melhorChave = null;
+  for (const n of nomes) {
+    const x = d(t, n);
+    if (x >= 3 || x > Math.max(1, Math.floor(n.length / 3))) continue;
+    const k = chave(n, x);
+    if (!melhorChave || antes(k, melhorChave)) { melhor = n; melhorChave = k; }
+  }
   return melhor;
 }
 
-const rotas = {
-  // Gerais
-  help:          geral.cmdHelp,
-  ping:          geral.cmdPing,
-  sobre:         geral.cmdSobre,
-  info:          geral.cmdSobre,
-  about:         geral.cmdSobre,
-  repete:        geral.cmdRepete,
-  userinfo:      geral.cmdUserinfo,
-  kick:          geral.cmdKick,
-  ban:           geral.cmdBan,
-  silenciar:     silenciarMod.cmdSilenciar,
-  limpar:        limpar.cmdLimpar,
-  clear:         limpar.cmdLimpar,
-  purge:         limpar.cmdLimpar,
-  limpiar:       limpar.cmdLimpar,
-  // AutoMod
-  warn:          warnMod.cmdWarn,
-  avisar:        warnMod.cmdWarn,
-  acesso:        acessoMod.cmdAcesso,
-  personalidade: persona.cmdPersonalidade,
-  personality:   persona.cmdPersonalidade,
-  automod:       automodCmd.cmdAutomod,
-  tutorial:      tutorial.cmdTutorial,
-  assistente:    assistente.cmdAssistente,
-  wizard:        assistente.cmdAssistente,
-  guia:          tutorial.cmdTutorial,
-  comecar:       tutorial.cmdTutorial,
-  inicio:        tutorial.cmdTutorial,
-  // Logs
-  log:           log.cmdLog,
-  logs:          log.cmdLog,
-  // Panorama de configurações
-  config:        cfgCmd.cmdConfig,
-  banglobal:     banGlobal.cmdBanGlobal,
-  servidores:    servidoresCmd.cmdServidores,   // só SUPER_ADMINS; fora do &help
-  servers:       servidoresCmd.cmdServidores,
-  globalban:     banGlobal.cmdBanGlobal,
-  configuracoes: cfgCmd.cmdConfig,
-  configurações: cfgCmd.cmdConfig,
-  // Administração de comandos (o &cargomudo só avisa que foi aposentado)
-  comando:       admin.cmdComando,
-  comandos:      admin.cmdComando,
-  cargomudo:     admin.cmdCargoMudo,
-  cor:           corCargo.cmdCor,
-  cores:         corCargo.cmdCor,
-  cargocor:      corCargo.cmdCor,
-  criarcargomudo: admin.cmdCargoMudo,
-  // Embed customizável e cargos por reação
-  embed:         embedCmd.cmdEmbed,
-  reactionrole:  reactionRoles.cmdReactionRole,
-  rr:            reactionRoles.cmdReactionRole,
-  // Diagnóstico
-  debug:         debugCmd.cmdDebug,
-  diagnostico:   debugCmd.cmdDebug,
-  diagnóstico:   debugCmd.cmdDebug,
-  // Conversa com IA local
-  chat:          chat.cmdChat,
-  ia:            chat.cmdChat,
-  modia:         modiaCmd.cmdModIA,
-  moderacaoia:   modiaCmd.cmdModIA,
-  rss:           rss.cmdRss,
-  feed:          rss.cmdRss,
-  autorole:      autorole.cmdAutorole,
-  // Equipe do servidor (mesma lista de cargos do &acesso)
-  staff:         staff.cmdStaff,
-  equipe:        staff.cmdStaff,
-  // Voz nas calls (TTS)
-  tts:           ttsVoz.cmdTts,
-  musica:        musicaCmd.cmdMusica,
-  webhook:       webhooks.cmdWebhook,
-  rolar:         dadosRpg.cmdRolar,
-  iniciativa:    dadosRpg.cmdIniciativa,
-  ticket:        tickets.cmdTicket,
-  economia:      economiaMod.cmdEconomia,
-  entretenimento: entretenimento.cmdEntretenimento,
-  // O servidor em que se está: regras, cargos, canais, FAQ (a equipe é o &staff)
-  servidor:      servidorInfo.cmdServidor,
-  // `&entrar`/`&sair` são a forma canônica. O cmdTts ainda faz o trabalho, mas
-  // só aceita "entrar"/"sair" vindos daqui — `&tts entrar` deixou de existir.
-  entrar:        (msg, args, ctx) => ttsVoz.cmdTts(msg, ["entrar", ...args], { ...ctx, viaAtalhoVoz: true }),
-  sair:          (msg, args, ctx) => ttsVoz.cmdTts(msg, ["sair", ...args], { ...ctx, viaAtalhoVoz: true }),
-  voz:           ttsVoz.cmdTts,
-  falar:         ttsVoz.cmdTts,
-  // Relógio com vários fusos
-  fuso:          fuso.cmdFuso,
-  fusos:         fuso.cmdFuso,
-  hora:          fuso.cmdFuso,
-  timezone:      fuso.cmdFuso,
-  // Mensagens de entrada e saída
-  boasvindas:    bemvindo.cmdBoasVindas,
-  "boas-vindas": bemvindo.cmdBoasVindas,
-  welcome:       bemvindo.cmdBoasVindas,
-  adeus:         bemvindo.cmdAdeus,
-  goodbye:       bemvindo.cmdAdeus,
-  despedida:     bemvindo.cmdAdeus,
-  game:          rpg.cmdGame,
-  rpg:           rpg.cmdGame,
-  personagem:    rpg.cmdGame,
-  xp:            nivel.cmdXp,
-  nivel:         nivel.cmdXp,
-  level:         nivel.cmdXp,
-  // Configuração de fábrica (só o dono do servidor e o dono do bot)
-  reset:         resetMod.cmdReset,
-  // Idioma do servidor (pt | en)
-  idioma:        i18n.cmdIdioma,
-  language:      i18n.cmdIdioma,
-  lang:          i18n.cmdIdioma,
-};
-
-// Aliases → nome canônico (para desativar um comando desativa todos os apelidos).
-const CANONICO = {
-  nivel: "xp",
-  level: "xp",
-  avisar: "warn",
-  mute: "silenciar", timeout: "silenciar", silencio: "silenciar",
-  rpg: "game",
-  personagem: "game",
-  cores: "cor",
-  cargocor: "cor",
-  guia: "tutorial",
-  configurar: "assistente",
-  comecar: "tutorial",
-  inicio: "tutorial",
-  logs: "log",
-  equipe: "staff",
-  fusos: "fuso", hora: "fuso",
-  voz: "tts", falar: "tts", speak: "tts",
-  m: "musica", music: "musica", play: "musica", tocar: "musica",
-  join: "entrar", call: "entrar", leave: "sair", sairdacall: "sair",
-  webhooks: "webhook", gancho: "webhook", wh: "webhook",
-  r: "rolar", roll: "rolar", dado: "rolar", dados: "rolar",
-  eco: "economia",
-  // "entreterimento": o jeito que o nome sai digitado rápido (variação de digitação)
-  ent: "entretenimento", entreterimento: "entretenimento",
-  serverinfo: "servidor", servidorinfo: "servidor",
-  init: "iniciativa", initiative: "iniciativa",
-  tickets: "ticket", suporte: "ticket",
-  "boas-vindas": "boasvindas", bemvindo: "boasvindas",
-  despedida: "adeus",
-  clear: "limpar", limpiar: "limpar",
-  globalban: "banglobal",
-  resetar: "reset", redefinir: "reset", factoryreset: "reset", fabrica: "reset",
-  configuracoes: "config", configurações: "config",
-  diagnostico: "debug", "diagnóstico": "debug",
-  language: "idioma", lang: "idioma",
-  // Os apelidos em inglês moram no aliases.js (COMANDO_EXTRA) — não repetir aqui
-  // (17 out 2026: 11 deles estavam nos dois lugares).
-  ...aliases.COMANDO_EXTRA,
-};
-
-const COMANDOS_SO_IA = new Set(["chat", "modia"]);
+// Os comandos vêm do registro (modulos/comandos/, 17 out 2026): cada um é
+// declarado lá, uma vez, com nome, apelidos e o que ele é. O boot para se o
+// registro tiver um nome em dois comandos.
+const {
+  rotas, CANONICO, COMANDOS_GERENCIAVEIS, COMANDOS_SO_IA, COMANDOS_DE_VOZ, ESSENCIAIS, SEMPRE_LIBERADOS, TEXTO_LIVRE,
+} = registroComandos.montarTabela();
 estado.COMANDOS_SO_IA = COMANDOS_SO_IA;
-
-// Comandos que o admin pode ligar/desligar (nomes canônicos, sem os essenciais).
-const COMANDOS_GERENCIAVEIS = [
-  "ping", "repete", "userinfo", "kick", "ban", "silenciar", "limpar",
-  "warn", "acesso", "automod", "tutorial", "assistente", "cor", "log", "banglobal", "embed", "reactionrole", "chat", "rss", "xp", "game", "autorole",
-  "staff", "boasvindas", "adeus", "fuso", "tts", "musica", "webhook", "rolar", "iniciativa", "ticket", "economia", "entretenimento", "servidor",
-];
-// Todo apelido que aponta para a MESMA função de um comando gerenciável vira
-// esse comando (15 out 2026: `&rr`, `&feed`, `&ia` e `&moderacaoia` passavam
-// por cima do "comando desativado" e, os dois últimos, do "só com IA").
-for (const [nome, fn] of Object.entries(rotas)) {
-  if (CANONICO[nome] || COMANDOS_GERENCIAVEIS.includes(nome) || COMANDOS_SO_IA.has(nome)) continue;
-  const dono = [...COMANDOS_GERENCIAVEIS, ...COMANDOS_SO_IA].find((c) => rotas[c] === fn);
-  if (dono) CANONICO[nome] = dono;
-}
 // exportado via ctx para o comando &comando consultar
 estado.CANONICO = CANONICO;
 estado.COMANDOS_GERENCIAVEIS = COMANDOS_GERENCIAVEIS;
@@ -536,12 +368,6 @@ estado.comandosGerenciaveisDe = (sid) => {
   const pode = (c) => { try { return chat.comandoIAPermitido(c, sid); } catch { return false; } };
   return COMANDOS_GERENCIAVEIS.filter((c) => !COMANDOS_SO_IA.has(c) || pode(c));
 };
-for (const [alias, canonico] of Object.entries(aliases.COMANDO_EXTRA)) {
-  if (!rotas[alias] && rotas[canonico]) rotas[alias] = rotas[canonico];
-}
-for (const [alias, canonico] of Object.entries(CANONICO)) {
-  if (!rotas[alias] && rotas[canonico]) rotas[alias] = rotas[canonico];
-}
 estado.rotas = rotas;
 estado.CANONICO_COMPLETO = CANONICO;
 
@@ -815,7 +641,6 @@ async function tratarMensagem(message) {
 
   if (cfgGlobal.debug !== false) console.log(`[CMD] Executando "${command}" (args: ${JSON.stringify(args)})`);
 
-  const ESSENCIAIS = new Set(["help", "comando", "comandos", "command", "debug", "diagnostico", "diagnóstico", "idioma"]);
   const canonico = CANONICO[command] ?? command;
 
   // &chat só nos servidores da conversa; &modia (moderação) em todos
@@ -848,7 +673,6 @@ async function tratarMensagem(message) {
     }));
   }
 
-  const SEMPRE_LIBERADOS = new Set(["acesso", "debug", "help", "tutorial", "assistente", "idioma"]);
 
 // O canal da mensagem é um canal de voz/call? (para liberar comandos de voz ali)
 function ehCanalDeVoz(message) {
@@ -864,7 +688,6 @@ function ehCanalDeVoz(message) {
   // natural — mandar a pessoa ir ao #comandos para pausar uma música que
   // está tocando ali é o tipo de burocracia que este bot não faz.
   const cfgTts = ctx.config?.tts;
-  const COMANDOS_DE_VOZ = new Set(["tts", "musica", "entrar", "sair"]);
   const naVoz = COMANDOS_DE_VOZ.has(canonico) && (
     (cfgTts?.ativo && (message.channelId === cfgTts.canalVoz || message.channelId === cfgTts.canalTexto))
     || ehCanalDeVoz(message)
@@ -910,7 +733,6 @@ function ehCanalDeVoz(message) {
   // 2026: "as pessoas não estão sabendo usar o bot"). Comando de texto livre
   // fica de fora (falar de <div> no &chat é legítimo); o &automod tem a cola
   // dele, com os grupos.
-  const TEXTO_LIVRE = new Set(["chat", "tts", "repete", "embed", "entretenimento", "servidor", "personalidade", "modia", "boasvindas", "adeus", "rolar", "musica", "webhook", "rss", "automod"]);
   const marcador = TEXTO_LIVRE.has(canonico) ? null
     : args.find((a) => /^[<‹][^<>‹›@#%:]{1,30}[>›]$/.test(a) && !/^<[@#%]/.test(a));
   if (marcador) {

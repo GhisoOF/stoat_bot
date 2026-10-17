@@ -4,13 +4,12 @@ Gerado por `INVENTARIO=1 node testes.mjs comandos-17out` — **não edite à mã
 reestruturação dos comandos num registro central (fase 0). A suíte `comandos-17out` compara o bot com o
 `inventario.json` desta pasta: nome que some ou muda de destino faz o teste falhar.
 
-**54 comandos · 149 nomes · 557 subcomandos em inglês · 334 telas de ajuda · 987 exemplos executados**
+**48 comandos · 149 nomes · 557 subcomandos em inglês · 334 telas de ajuda · 987 exemplos executados**
 
 ## Comandos
 
 | Comando | Nome na tela em inglês | Todos os nomes que levam a ele | Função | Liga/desliga | Exemplos na ajuda |
 |---|---|---|---|---|---|
-| `about` | — | — | `cmdSobre` | — | 1 |
 | `acesso` | `access` | `access` | `cmdAcesso` | sim | 40 |
 | `adeus` | `goodbye` | `despedida` `farewell` `goodbye` | `adeus (cmd)` | sim | 6 |
 | `assistente` | `wizard` | `assistant` `configurar` `configure` `setup` `wizard` | `cmdAssistente` | sim | 12 |
@@ -19,13 +18,11 @@ reestruturação dos comandos num registro central (fase 0). A suíte `comandos-
 | `ban` | — | — | `cmdBan` | sim | 7 |
 | `banglobal` | `globalban` | `globalban` | `cmdBanGlobal` | sim | 50 |
 | `boasvindas` | `welcome` | `bemvindo` `boas-vindas` `greeting` `welcome` | `boasvindas (cmd)` | sim | 26 |
-| `cargomudo` | `muterole` | `mutedrole` `muterole` | `cmdCargoMudo` | — | 0 |
+| `cargomudo` | `muterole` | `criarcargomudo` `mutedrole` `muterole` | `cmdCargoMudo` | — | 0 |
 | `chat` | — | `ia` | `cmdChat` | só IA | 2 |
-| `comando` | `command` | `command` | `cmdComando` | — | 14 |
-| `comandos` | — | — | `cmdComando` | — | 0 |
+| `comando` | `command` | `comandos` `command` | `cmdComando` | — | 14 |
 | `config` | — | `configuracoes` `configurações` | `cmdConfig` | — | 2 |
 | `cor` | `color` | `cargocor` `color` `colour` `cores` | `cmdCor` | sim | 48 |
-| `criarcargomudo` | — | — | `cmdCargoMudo` | — | 0 |
 | `debug` | — | `diagnostico` `diagnóstico` | `cmdDebug` | — | 8 |
 | `economia` | `economy` | `eco` `economy` | `cmdEconomia` | sim | 34 |
 | `embed` | — | — | `cmdEmbed` | sim | 12 |
@@ -35,15 +32,13 @@ reestruturação dos comandos num registro central (fase 0). A suíte `comandos-
 | `game` | `game` | `character` `personagem` `rpg` | `cmdGame` | sim | 201 |
 | `help` | — | — | `cmdHelp` | — | 156 |
 | `idioma` | `language` | `lang` `language` | `cmdIdioma` | — | 10 |
-| `info` | — | — | `cmdSobre` | — | 0 |
 | `iniciativa` | — | `init` `initiative` | `cmdIniciativa` | sim | 6 |
 | `kick` | — | — | `cmdKick` | sim | 7 |
 | `limpar` | `purge` | `clear` `limpiar` `purge` | `cmdLimpar` | sim | 10 |
 | `log` | `log` | `logs` | `cmdLog` | sim | 17 |
 | `modia` | — | `moderacaoia` | `cmdModIA` | só IA | 18 |
 | `musica` | `music` | `m` `music` `play` `tocar` | `cmdMusica` | sim | 4 |
-| `personalidade` | — | — | `cmdPersonalidade` | — | 2 |
-| `personality` | — | — | `cmdPersonalidade` | — | 0 |
+| `personalidade` | — | `personality` | `cmdPersonalidade` | — | 2 |
 | `ping` | — | — | `cmdPing` | sim | 2 |
 | `reactionrole` | — | `reactionroles` `rr` | `cmdReactionRole` | sim | 28 |
 | `repete` | — | — | `cmdRepete` | sim | 4 |
@@ -51,11 +46,10 @@ reestruturação dos comandos num registro central (fase 0). A suíte `comandos-
 | `rolar` | — | `dado` `dados` `r` `roll` | `cmdRolar` | sim | 6 |
 | `rss` | — | `feed` | `cmdRss` | sim | 20 |
 | `sair` | `leave` | `leave` `sairdacall` | `sair` | — | 2 |
-| `servers` | — | — | `cmdServidores` | — | 11 |
 | `servidor` | `server` | `server` `serverinfo` `servidorinfo` | `cmdServidor` | sim | 24 |
-| `servidores` | `servers` | — | `cmdServidores` | — | 11 |
+| `servidores` | `servers` | `servers` | `cmdServidores` | — | 22 |
 | `silenciar` | `silence` | `mute` `silence` `silencio` `timeout` | `cmdSilenciar` | sim | 9 |
-| `sobre` | `about` | — | `cmdSobre` | — | 1 |
+| `sobre` | `about` | `about` `info` | `cmdSobre` | — | 2 |
 | `staff` | `staff` | `equipe` `team` | `cmdStaff` | sim | 16 |
 | `ticket` | — | `suporte` `tickets` | `cmdTicket` | sim | 6 |
 | `tts` | — | `falar` `speak` `voz` | `cmdTts` | sim | 2 |
@@ -65,24 +59,21 @@ reestruturação dos comandos num registro central (fase 0). A suíte `comandos-
 | `webhook` | — | `gancho` `webhooks` `wh` | `cmdWebhook` | sim | 20 |
 | `xp` | `xp` | `level` `levels` `nivel` | `cmdXp` | sim | 35 |
 
-_Comando_ é o nome interno (o que o `&comando desativar` e o banco guardam). `sobre`, `info` e `about` levam à
-mesma função mas são três comandos para o bot — desativar um não desativa os outros. A fase 1 resolve isso.
+_Comando_ é o nome interno (o que o `&comando desativar` e o banco guardam).
 
-## Onde cada comando está declarado hoje
+## Onde cada comando está declarado
 
-Um comando, hoje, mora em vários lugares — é o que a fase 1 vai juntar num registro só:
+Desde a fase 1, o nome, os apelidos, o nome em inglês e as marcas de cada comando (gerenciável, só IA, voz,
+essencial, qualquer canal, texto livre) moram **só** no registro, `modulos/comandos/` — um arquivo por família.
+O que ainda está espalhado (fases 2 e 3, uma família por vez):
 
 | Lugar | O que guarda |
 |---|---|
-| `main.js` → `rotas` | o nome e a função; vários apelidos também estão aqui |
-| `main.js` → `CANONICO` | apelido → nome interno |
-| `modulos/core/aliases.js` → `COMANDO_EXTRA`, `COMANDO_EN` | apelidos em inglês e o nome mostrado na tela em inglês |
 | `modulos/core/aliases.js` → `SUB`, `ANINHADOS`, `SO_EXIBIR`, `PLACEHOLDER_EN` | subcomandos inglês → português, para entrada e para a tela |
 | `modulos/core/nomes-automod.js` | grupos, partes, modos e temas do automod nos dois idiomas |
-| cada handler (`if (sub === … )`) | o parse de novo, muitas vezes já aceitando os dois idiomas |
+| cada handler (`if (sub === … )`) | o parse dos subcomandos, muitas vezes já aceitando os dois idiomas |
 | `help-arvore.js`, `geral.js` (`construirSubtopicos`, `construirDetalhes`) | as páginas de ajuda, PT e EN escritas em cópias separadas |
 | `help-grupos.js`, `help-parametros.js`, `tutorial.js`, `assistente.js` | índice, parâmetros, tutorial e os comandos que o assistente gera |
-| `main.js` → `COMANDOS_GERENCIAVEIS`, `COMANDOS_SO_IA`, `COMANDOS_DE_VOZ`, `ESSENCIAIS` | listas soltas de comportamento |
 
 ## Subcomandos em inglês (entrada)
 

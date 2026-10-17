@@ -1,5 +1,6 @@
 
 import * as log from "../core/log.js";
+import { citar } from "../core/aliases.js";
 
 const CRIADOR_ID = process.env.SUPER_ADMINS?.split(",")[0]?.trim() || "";
 const MIN_CHARS  = Number(process.env.MODIA_MIN_CHARS || 3);
@@ -87,8 +88,8 @@ export async function moderar(message, ctx) {
     "**O que você pode fazer** (copie o comando):",
     "• Ignorar — não faça nada.",
     `• Avisar — \`&warn ${autorId} <motivo>\``,
-    `• Silenciar — \`&silence ${autorId} <tempo>\``,
-    `• Banir — \`&ban ${autorId} <motivo>\``,
+    `• Silenciar — \`${citar("silenciar", "pt")} ${autorId} <tempo>\``,
+    `• Banir — \`${citar("ban", "pt")} ${autorId} <motivo>\``,
   ].join("\n");
   const descricaoEn = [
     `<@${CRIADOR_ID}> — Judy flagged a message on moderation grounds.`,
@@ -104,8 +105,8 @@ export async function moderar(message, ctx) {
     "**What you can do** (copy the command):",
     "• Ignore — do nothing.",
     `• Warn — \`&warn ${autorId} <reason>\``,
-    `• Silence — \`&silence ${autorId} <time>\``,
-    `• Ban — \`&ban ${autorId} <reason>\``,
+    `• Silence — \`${citar("silenciar", "en")} ${autorId} <time>\``,
+    `• Ban — \`${citar("ban", "en")} ${autorId} <reason>\``,
   ].join("\n");
 
   try {

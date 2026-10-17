@@ -19,8 +19,10 @@ export default {
     },
     ex: "{&limpar} 10",
     parametros: [
-      { nome: "<n>", desc: { pt: "quantas mensagens apagar (as últimas)", en: "how many messages to delete (the latest)" } },
-      { nome: { pt: "[@pessoa]", en: "[@user]" }, desc: { pt: "só as mensagens dessa pessoa, dentro das últimas n", en: "only that person's messages, within the latest n" } },
+      { nome: "<n>",
+        desc: { pt: "quantas mensagens apagar (as últimas)", en: "how many messages to delete (the latest)" } },
+      { nome: { pt: "[@pessoa]", en: "[@user]" },
+        desc: { pt: "só as mensagens dessa pessoa, dentro das últimas n", en: "only that person's messages, within the latest n" } },
     ],
   },
 };

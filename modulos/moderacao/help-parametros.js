@@ -227,11 +227,6 @@ function parametrosPT(P) {
       { nome: "@pessoa", desc: "o que o bot consegue fazer com essa pessoa" },
       { nome: "#canal", desc: "a conta de permissão do bot nesse canal (aceita o nome)" },
     ],
-    silenciar: [
-      { nome: "@pessoa <tempo> [motivo]", desc: "silencia com o timeout nativo do Stoat: `30s`, `10m`, `2h`, `1d`, `1w` ou combinados (`1h30m`); número sozinho = minutos; máximo 28 dias" },
-      { nome: "tirar @pessoa", desc: "devolve a voz antes da hora" },
-    ],
-
     tutorial: [
       { nome: "(nada)", desc: "o guia em páginas, na ordem: permissões → canais → proteção → boas-vindas e cargos → XP e RPG → checklist" },
       { nome: "<número>", desc: "abre direto aquela página (para celular ou quando não dá para reagir)" },
@@ -470,11 +465,6 @@ function parametrosEN(P) {
       { nome: "@user", desc: "what the bot can do with that person" },
       { nome: "#channel", desc: "the bot's permission math in that channel (the name works too)" },
     ],
-    silenciar: [
-      { nome: "@user <time> [reason]", desc: "times someone out with the Stoat's native timeout: `30s`, `10m`, `2h`, `1d`, `1w` or combined (`1h30m`); a bare number = minutes; up to 28 days" },
-      { nome: "tirar @user", desc: "lifts it early" },
-    ],
-
     tutorial: [
       { nome: "(nothing)", desc: "the paged guide, in order: permissions → channels → protection → welcome and roles → XP and RPG → checklist" },
       { nome: "<number>", desc: "opens that page directly (for mobile or when you can't react)" },

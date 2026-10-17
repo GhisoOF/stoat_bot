@@ -21,7 +21,7 @@ export function detalhesDoRegistro(P = "&", lang = "pt") {
   return Object.fromEntries(REGISTRO.filter((c) => c.ajuda).map((c) => {
     const a = c.ajuda;
     const d = { uso: texto(a.uso, lang, P), desc: texto(a.desc, lang, P) };
-    if (a.perm !== undefined) d.perm = a.perm;
+    if (a.perm !== undefined) d.perm = doIdioma(a.perm, lang);   // "ManageRole", null ou { pt: "todo mundo", en: "everyone" }
     if (a.ex) d.ex = texto(a.ex, lang, P);
     return [c.id, d];
   }));

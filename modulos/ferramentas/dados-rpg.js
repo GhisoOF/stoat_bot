@@ -11,6 +11,7 @@
 // E &iniciativa — rastreador de ordem de combate por canal.
 
 import { lingua } from "../core/i18n.js";
+import { citar, citarNoTexto } from "../core/aliases.js";
 
 const MAX_DADOS = 100, MAX_LADOS = 10_000, MAX_TERMOS = 20, MAX_REPETE = 20, MAX_EXPLODE = 50;
 
@@ -135,7 +136,8 @@ export function formatarResultado(res, en = false) {
   if (res.erro) return `⚠️ ${en ? res.erroEn ?? res.erro : res.erro}`;
   const linhas = [];
   for (const r of res.repeticoes) {
-    if (res.moeda) { linhas.push(r.texto); continue; }
+    // a moeda: o total diz o lado (1 = cara); o texto pronto era só em português (17 out 2026)
+    if (res.moeda) { linhas.push(en ? `🪙 **${r.total ? "heads" : "tails"}**` : r.texto); continue; }
     const alvo = r.sucessos ? (en ? "successes" : "sucessos") : "";
     linhas.push(`🎲 ${r.detalhe} ⇒ **${r.total}**${alvo ? ` ${alvo}` : ""}`);
   }
@@ -153,7 +155,7 @@ export function iniciativaDe(canalId) {
 export function limparIniciativa(canalId) { iniciativas.delete(canalId); }
 
 function listaIniciativa(st, en) {
-  if (!st.ordem.length) return en ? "_empty — `&iniciativa add <name> <roll>`_" : "_vazia — `&iniciativa add <nome> <rolagem>`_";
+  if (!st.ordem.length) return en ? `_empty — \`${citar("iniciativa", "en")} add <name> <roll>\`_` : `_vazia — \`${citar("iniciativa", "pt")} add <nome> <rolagem>\`_`;
   return st.ordem.map((p, i) => `${i === st.vez ? "▶️" : "▫️"} \`${String(p.valor).padStart(2)}\` ${p.nome}`).join("\n");
 }
 
@@ -168,9 +170,10 @@ export async function cmdRolar(message, args, ctx) {
   if (!resto || ["ajuda", "help"].includes(resto.toLowerCase())) {
     return ctx.sendEmbed(message.channel, {
       title: "🎲 " + (en ? "Dice" : "Dados"),
-      description: en
-        ? "`&rolar 2d20kh1+5` — keep highest · `4d6kh3` drop lowest die\n`&rolar adv` / `&rolar des` — advantage / disadvantage (d20)\n`&rolar 3d6!` — exploding · `8d10>=7` — count successes\n`&rolar d%` · `4dF` (Fate) · `moeda` (coin)\n`&rolar 6x(4d6kh3)` — repeat · `1d20+7 # Perception` — label\n`&rolar gm 1d20` — secret roll (result only for you)"
-        : "`&rolar 2d20kh1+5` — mantém o maior · `4d6kh3` descarta o menor dado\n`&rolar adv` / `&rolar des` — vantagem / desvantagem (d20)\n`&rolar 3d6!` — explosão · `8d10>=7` — conta sucessos\n`&rolar d%` · `4dF` (Fate) · `moeda`\n`&rolar 6x(4d6kh3)` — repete · `1d20+7 # Percepção` — rótulo\n`&rolar gm 1d20` — rolagem secreta (resultado só para você)",
+      // as marcas {&rolar} viram o nome do comando no idioma (fase 3)
+      description: citarNoTexto(en
+        ? "`{&rolar} 2d20kh1+5` — keep highest · `4d6kh3` drop lowest die\n`{&rolar} adv` / `{&rolar} des` — advantage / disadvantage (d20)\n`{&rolar} 3d6!` — exploding · `8d10>=7` — count successes\n`{&rolar} d%` · `4dF` (Fate) · `moeda` (coin)\n`{&rolar} 6x(4d6kh3)` — repeat · `1d20+7 # Perception` — label\n`{&rolar} gm 1d20` — secret roll (result only for you)"
+        : "`{&rolar} 2d20kh1+5` — mantém o maior · `4d6kh3` descarta o menor dado\n`{&rolar} adv` / `{&rolar} des` — vantagem / desvantagem (d20)\n`{&rolar} 3d6!` — explosão · `8d10>=7` — conta sucessos\n`{&rolar} d%` · `4dF` (Fate) · `moeda`\n`{&rolar} 6x(4d6kh3)` — repete · `1d20+7 # Percepção` — rótulo\n`{&rolar} gm 1d20` — rolagem secreta (resultado só para você)", en ? "en" : "pt"),
       colour: ctx.COR.info,
     });
   }
@@ -207,7 +210,7 @@ export async function cmdIniciativa(message, args, ctx) {
 
   if (["add", "adicionar"].includes(sub)) {
     const resto = args.slice(1);
-    if (!resto.length) return ctx.sendEmbed(message.channel, { title: "⚔️", description: en ? "`&iniciativa add <name> [roll or number]` — default `1d20`" : "`&iniciativa add <nome> [rolagem ou número]` — padrão `1d20`", colour: ctx.COR.aviso });
+    if (!resto.length) return ctx.sendEmbed(message.channel, { title: "⚔️", description: en ? `\`${citar("iniciativa", "en")} add <name> [roll or number]\` — default \`1d20\`` : `\`${citar("iniciativa", "pt")} add <nome> [rolagem ou número]\` — padrão \`1d20\``, colour: ctx.COR.aviso });
     // último pedaço é expressão/número? senão rola 1d20
     let expr = "1d20", nome = resto.join(" ");
     const cauda = resto[resto.length - 1];
@@ -235,7 +238,8 @@ export async function cmdIniciativa(message, args, ctx) {
     });
   }
 
-  if (["remover", "remove", "rm"].includes(sub)) {
+  // os nomes em inglês (`remove`, `clear`) chegam traduzidos pelo registro (fase 3)
+  if (["remover", "rm"].includes(sub)) {
     const nome = args.slice(1).join(" ").toLowerCase();
     const i = st.ordem.findIndex((p) => p.nome.toLowerCase() === nome);
     if (i < 0) return ctx.sendEmbed(message.channel, { title: "⚔️", description: en ? `**${nome}** isn't on the list.` : `**${nome}** não está na lista.`, colour: ctx.COR.aviso });
@@ -244,7 +248,7 @@ export async function cmdIniciativa(message, args, ctx) {
     return ctx.sendEmbed(message.channel, { title: en ? "⚔️ Initiative" : "⚔️ Iniciativa", description: listaIniciativa(st, en), colour: ctx.COR.info });
   }
 
-  if (["limpar", "clear", "fim", "end"].includes(sub)) {
+  if (["limpar", "fim", "end"].includes(sub)) {
     limparIniciativa(message.channelId);
     return ctx.sendEmbed(message.channel, { title: "⚔️", description: en ? "Initiative cleared — combat over." : "Iniciativa limpa — combate encerrado.", colour: ctx.COR.sucesso });
   }

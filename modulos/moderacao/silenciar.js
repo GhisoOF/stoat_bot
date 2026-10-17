@@ -13,6 +13,7 @@
 //   • tirar o timeout = remove: ["Timeout"]
 
 import * as log from "../core/log.js";
+import { citar } from "../core/aliases.js";
 import { tr } from "../core/i18n.js";
 import { descreverErro, tipoDoErro } from "../core/erros.js";
 import { resolverUsuario } from "../core/ids.js";
@@ -22,15 +23,16 @@ import * as db from "../core/db.js";
 import { liberarQuarentena } from "./confianca.js";
 import { podeAgirSobre } from "../core/hierarquia.js";
 
-const TIRAR = new Set(["tirar", "remover", "desfazer", "off", "remove", "undo", "fim", "liberar"]);
+// `remove`, `undo`, `lift` e `off` chegam já traduzidos para `tirar` pelo registro (fase 3)
+const TIRAR = new Set(["tirar", "remover", "desfazer", "fim", "liberar"]);
 
 function ajuda(ctx) {
   const { PREFIXO: P, COR } = ctx;
   return tr(ctx, {
     title: "🔇 Silenciar",
     description: [
-      `\`${P}silenciar @pessoa <tempo> [motivo]\` — silencia por um tempo (ex.: \`10m\`, \`2h\`, \`1d\`; máximo 28 dias).`,
-      `\`${P}silenciar tirar @pessoa\` — devolve a voz antes da hora.`,
+      `\`${citar("silenciar", "pt", P)} @pessoa <tempo> [motivo]\` — silencia por um tempo (ex.: \`10m\`, \`2h\`, \`1d\`; máximo 28 dias).`,
+      `\`${citar("silenciar.tirar", "pt", P)} @pessoa\` — devolve a voz antes da hora.`,
       "",
       "Usa o **silêncio nativo do Stoat**: a pessoa só consegue ver o servidor até o tempo acabar — não depende de cargo.",
       "_O bot precisa de **TimeoutMembers** e estar acima da pessoa. Quem tem TimeoutMembers não pode ser silenciado._",
@@ -39,8 +41,8 @@ function ajuda(ctx) {
   }, {
     title: "🔇 Silence",
     description: [
-      `\`${P}silenciar @user <time> [reason]\` — times someone out (e.g. \`10m\`, \`2h\`, \`1d\`; up to 28 days).`,
-      `\`${P}silenciar tirar @user\` — lifts it early.`,
+      `\`${citar("silenciar", "en", P)} @user <time> [reason]\` — times someone out (e.g. \`10m\`, \`2h\`, \`1d\`; up to 28 days).`,
+      `\`${citar("silenciar.tirar", "en", P)} @user\` — lifts it early.`,
       "",
       "Uses the **Stoat's native timeout**: the person can only view the server until it ends — no role involved.",
       "_The bot needs **TimeoutMembers** and must sit above the person. Whoever has TimeoutMembers can't be timed out._",

@@ -1,7 +1,7 @@
 import { servidorPermitido as temIA, comandoIAPermitido } from "../ai/chat.js";
 import * as visaoMod from "./visao.js";
 import { arvoreSubtopicos, SUBTOPICOS_SO_IA, ligarFamilias, mesclarNos, MODIA_TAG } from "./help-arvore.js";
-import { nomeExibido, normalizarArgs, SUB } from "../core/aliases.js";
+import { nomeExibido, normalizarArgs, SUB, citar } from "../core/aliases.js";
 import { REGISTRO } from "../comandos/index.js";
 import { grupos as gruposHelp, ALIAS_GRUPO, ORDEM as ORDEM_GRUPOS } from "./help-grupos.js";
 import { secaoParametros } from "./help-parametros.js";
@@ -91,38 +91,6 @@ function detalhesPT(P) {
       desc: "Configuração **guiada**: o bot faz uma pergunta de cada vez, você responde em texto normal, e no fim ele mostra o resumo e aplica tudo — usando os mesmos comandos que você usaria na mão (e mostra quais foram, para você aprender).\n\n`&assistente` — menu\n`&assistente rapido` — idioma, staff, log, proteção, boas-vindas (~2 min)\n`&assistente completo` — o rápido + escada de punição, lista global, XP, cargo automático\n`&assistente canais` — classifica seus canais nos 3 tipos e diz o que clicar no Stoat\n`&assistente protecao` — só automod, sentinela e punição\n\nDurante as perguntas: `pular` pula, `voltar` volta, `cancelar` desiste. Cada pessoa tem o seu; ele expira em 10 min sem resposta.",
       perm: "ManagePermissions",
       ex: `${P}assistente rapido`,
-    },
-    ping: {
-      uso: `${P}ping`,
-      desc: "Mostra a latência entre o envio da mensagem e o processamento do bot.",
-    },
-    repete: {
-      uso: `${P}repete <texto>`,
-      desc: "O bot repete exatamente o texto informado. Útil para anúncios.",
-      perm: "ManageMessages", ex: `${P}repete Bem-vindos ao servidor!`,
-    },
-    userinfo: {
-      uso: `${P}userinfo [@usuário]`,
-      desc: "Mostra ID, data de criação da conta, entrada no servidor e cargos. Sem menção, mostra você.",
-      ex: `${P}userinfo @fulano`,
-    },
-    kick: {
-      uso: `${P}kick @usuário [motivo]`,
-      desc: "Expulsa o usuário mencionado. Ele pode voltar com um novo convite.\n\n_Só vale sobre quem tem cargo **abaixo** do seu (o dono do servidor passa sempre)._",
-      perm: "KickMembers", ex: `${P}kick @fulano spam`,
-    },
-    ban: {
-      uso: `${P}ban @usuário [motivo]`,
-      desc: "Bane permanentemente o usuário mencionado.\n\n_Só vale sobre quem tem cargo **abaixo** do seu (o dono do servidor passa sempre)._",
-      perm: "BanMembers", ex: `${P}ban @fulano divulgação`,
-    },
-    silenciar: {
-      uso: `${P}silenciar @usuário <tempo> [motivo]`,
-      desc: "Silencia alguém por um tempo com o **silêncio nativo do Stoat**: a pessoa só consegue ver o servidor até o tempo acabar — não depende de cargo nem de permissão de canal.\n\n"
-        + "Tempo: `30s`, `10m`, `2h`, `1d`, `1w` ou combinados (`1h30m`); número sozinho = minutos; máximo 28 dias.\n"
-        + "Tirar antes da hora: `&silenciar tirar @usuário`.\n\n"
-        + "_O bot precisa de **TimeoutMembers** e estar acima da pessoa. Quem tem TimeoutMembers não pode ser silenciado (regra do Stoat)._",
-      perm: "TimeoutMembers", ex: `${P}silenciar @fulano 30m flood`,
     },
     warn: {
       uso: `${P}warn <@pessoa|id|nome> [motivo]`,
@@ -225,16 +193,6 @@ function detalhesPT(P) {
         + "_Ninguém é mencionado nas respostas: os nomes saem em texto, sem notificar._",
       perm: "todo mundo", ex: `${P}entretenimento ship @Ana @Bia`,
     },
-    rolar: {
-      uso: `${P}rolar <expressão> | adv | des | moeda | gm <expressão>`,
-      desc: "Dados de RPG de mesa, com tudo:\n`2d20kh1+5` mantém o maior · `4d6kh3` descarta o menor dado\n`adv`/`des` — vantagem/desvantagem · `3d6!` — explosão\n`8d10>=7` — conta sucessos · `d%` · `4dF` (Fate) · `moeda`\n`6x(4d6kh3)` — repete (seis atributos de uma vez)\n`1d20+7 # Percepção` — rótulo na rolagem\n`gm 1d20` — **secreta**: o resultado vai por DM e o pedido some do canal.\n20 natural ganha 🎯, 1 natural ganha 💀.",
-      perm: "todo mundo", ex: `${P}rolar 2d20kh1+5 # Ataque`,
-    },
-    iniciativa: {
-      uso: `${P}iniciativa [add <nome> [rolagem]|next|lista|remover <nome>|limpar]`,
-      desc: "Rastreador de ordem de combate, um por canal:\n`add Goblin 1d20+2` rola e insere já ordenado (sem rolagem, rola `1d20`; número fixo também vale)\n`next` avança a vez (e avisa a rodada nova) · `lista` mostra a ordem com ▶️ em quem age\n`remover <nome>` tira um caído · `limpar` encerra o combate.",
-      perm: "todo mundo", ex: `${P}iniciativa add Elfa 1d20+3`,
-    },
     ticket: {
       uso: `${P}ticket [painel <#canal>|categorias|log <#canal>|lista|equipe]`,
       desc: "Suporte com canal privado por pedido, **por reação**:\n\n"
@@ -287,11 +245,6 @@ function detalhesPT(P) {
       uso: `${P}adeus [canal|titulo|texto|cor|imagem|testar|padrao|on|off]`,
       desc: "Embed publicado quando alguém **sai** do servidor (saída, expulsão ou ban). Mesmas opções do `&boasvindas`.\n\n_Nas despedidas o `{usuario}` vira o **nome** em vez de menção: quem saiu não está mais no servidor, e a menção apareceria como um ID cru._",
       perm: "ManageMessages", ex: `${P}adeus canal aqui`,
-    },
-    sobre: {
-      uso: `${P}sobre`,
-      desc: "Mostra informações resumidas do bot: recursos, número de comandos e há quanto tempo está no ar.",
-      perm: null, ex: `${P}sobre`,
     },
     idioma: {
       uso: `${P}idioma [pt|en]`,
@@ -367,38 +320,6 @@ function detalhesEN(P) {
       desc: "**Guided** setup: the bot asks one question at a time, you answer in plain text, and at the end it shows a summary and applies everything — using the same commands you would type by hand (and shows which ones, so you learn them).\n\n`&assistente` — menu\n`&assistente rapido` — language, staff, log, protection, welcome (~2 min)\n`&assistente completo` — quick + punishment ladder, global list, XP, autorole\n`&assistente canais` — sorts your channels into the 3 types and tells you what to click in Stoat\n`&assistente protecao` — only automod, sentinel and punishment\n\nDuring the questions: `skip` skips, `back` goes back, `cancel` quits. Each person has their own; it expires after 10 min without an answer.",
       perm: "ManagePermissions",
       ex: `${P}assistente rapido`,
-    },
-    ping: {
-      uso: `${P}ping`,
-      desc: "Shows the latency between the message being sent and the bot processing it.",
-    },
-    repete: {
-      uso: `${P}repete <text>`,
-      desc: "The bot repeats the given text verbatim. Useful for announcements.",
-      perm: "ManageMessages", ex: `${P}repete Welcome to the server!`,
-    },
-    userinfo: {
-      uso: `${P}userinfo [@user]`,
-      desc: "Shows ID, account creation date, server join date and roles. Without a mention, shows you.",
-      ex: `${P}userinfo @someone`,
-    },
-    kick: {
-      uso: `${P}kick @user [reason]`,
-      desc: "Kicks the mentioned user. They can come back with a new invite.\n\n_Only works on people whose roles are **below** yours (the server owner always can)._",
-      perm: "KickMembers", ex: `${P}kick @someone spam`,
-    },
-    ban: {
-      uso: `${P}ban @user [reason]`,
-      desc: "Permanently bans the mentioned user.\n\n_Only works on people whose roles are **below** yours (the server owner always can)._",
-      perm: "BanMembers", ex: `${P}ban @someone advertising`,
-    },
-    silenciar: {
-      uso: `${P}silenciar @user <time> [reason]`,
-      desc: "Times someone out with the **Stoat's native timeout**: they can only view the server until it ends — no role or channel permission involved.\n\n"
-        + "Time: `30s`, `10m`, `2h`, `1d`, `1w` or combined (`1h30m`); a bare number = minutes; up to 28 days.\n"
-        + "Lift it early: `&silenciar tirar @user`.\n\n"
-        + "_The bot needs **TimeoutMembers** and must sit above the person. Whoever has TimeoutMembers can't be timed out (Stoat rule)._",
-      perm: "TimeoutMembers", ex: `${P}silenciar @someone 30m flood`,
     },
     warn: {
       uso: `${P}warn <@user|id|name> [reason]`,
@@ -501,16 +422,6 @@ function detalhesEN(P) {
         + "_Nobody gets pinged by the answers: names come out as plain text._",
       perm: "everyone", ex: `${P}entretenimento ship @Ana @Bia`,
     },
-    rolar: {
-      uso: `${P}rolar <expression> | adv | des | coin | gm <expression>`,
-      desc: "Tabletop RPG dice, fully loaded:\n`2d20kh1+5` keep highest · `4d6kh3` drop the lowest die\n`adv`/`des` — advantage/disadvantage · `3d6!` — exploding\n`8d10>=7` — count successes · `d%` · `4dF` (Fate) · `moeda` (coin)\n`6x(4d6kh3)` — repeat (six ability scores at once)\n`1d20+7 # Perception` — label the roll\n`gm 1d20` — **secret**: result goes by DM and the request vanishes from the channel.\nNatural 20 gets 🎯, natural 1 gets 💀.",
-      perm: "everyone", ex: `${P}rolar 2d20kh1+5 # Attack`,
-    },
-    iniciativa: {
-      uso: `${P}iniciativa [add <name> [roll]|next|lista|remover <name>|limpar]`,
-      desc: "Combat order tracker, one per channel:\n`add Goblin 1d20+2` rolls and inserts already sorted (no roll = `1d20`; fixed numbers work too)\n`next` advances the turn (announcing new rounds) · `lista` shows the order with ▶️ on whoever acts\n`remover <name>` drops the fallen · `limpar` ends the combat.",
-      perm: "everyone", ex: `${P}iniciativa add Elf 1d20+3`,
-    },
     ticket: {
       uso: `${P}ticket [panel <#channel>|categories|log <#channel>|list|team]`,
       desc: "Support with a private channel per request, **by reaction**:\n\n"
@@ -563,11 +474,6 @@ function detalhesEN(P) {
       uso: `${P}goodbye [channel|title|text|colour|image|test|default|on|off]`,
       desc: "Embed posted when someone **leaves** the server (leave, kick or ban). Same options as `&welcome`.\n\n_In farewells `{usuario}` becomes the **name** rather than a mention: whoever left isn't on the server anymore, and the mention would show up as a raw ID._",
       perm: "ManageMessages", ex: `${P}goodbye channel here`,
-    },
-    sobre: {
-      uso: `${P}sobre`,
-      desc: "Shows a summary of the bot: features, number of commands and how long it has been up.",
-      perm: null, ex: `${P}sobre`,
     },
     idioma: {
       uso: `${P}language [pt|en]`,
@@ -933,20 +839,20 @@ export async function cmdHelp(message, args, ctx) {
   GRUPOS.voce = lang === "en" ? {
     emoji: "📌", titulo: "For you", resumo: "the basics: who's staff, server clock, info, tickets",
     linhas: [
-      `\`${P}userinfo [@user]\` — ID, join date and roles`,
+      `\`${citar("userinfo", "en", P)} [@user]\` — ID, join date and roles`,
       `\`${P}staff\` — who the staff is`,
       `\`${P}fuso\` — the server clock (several cities at once)`,
-      `\`${P}sobre\` · \`${P}ping\` — about the bot and its latency`,
+      `\`${citar("sobre", "en", P)}\` · \`${citar("ping", "en", P)}\` — about the bot and its latency`,
       `\`${P}tutorial\` — the guide for players and members`,
       "Need the staff? React on the server's **ticket panel** — a private channel opens.",
     ],
   } : {
     emoji: "📌", titulo: "Para você", resumo: "o básico: quem é a staff, relógio do servidor, informações, tickets",
     linhas: [
-      `\`${P}userinfo [@pessoa]\` — ID, data de entrada e cargos`,
+      `\`${citar("userinfo", "pt", P)} [@pessoa]\` — ID, data de entrada e cargos`,
       `\`${P}staff\` — quem é a equipe`,
       `\`${P}fuso\` — o relógio do servidor (várias cidades de uma vez)`,
-      `\`${P}sobre\` · \`${P}ping\` — sobre o bot e a latência`,
+      `\`${citar("sobre", "pt", P)}\` · \`${citar("ping", "pt", P)}\` — sobre o bot e a latência`,
       `\`${P}tutorial\` — o guia de quem joga e usa`,
       "Precisa da staff? Reaja no **painel de tickets** do servidor — abre um canal privado.",
     ],
@@ -1285,11 +1191,11 @@ export async function cmdRepete(message, args, ctx) {
   // num cartão com a cara dela — prato cheio para golpe ("@staff mandou…").
   const server = await getServer?.(message).catch(() => null);
   if (membroTemPermissao && !membroTemPermissao(message, server, "ManageMessages")) {
-    return sendEmbed(message.channel, { description: lingua(ctx) === "en" ? "🔒 `&repete` is for staff (ManageMessages)." : "🔒 O `&repete` é da staff (ManageMessages).", colour: COR.aviso });
+    return sendEmbed(message.channel, { description: lingua(ctx) === "en" ? `🔒 \`${citar("repete", "en", ctx.PREFIXO)}\` is for staff (ManageMessages).` : `🔒 O \`${citar("repete", "pt", ctx.PREFIXO)}\` é da staff (ManageMessages).`, colour: COR.aviso });
   }
   const txt = args.join(" ");
   // sem texto, respondia nada — parecia que o comando nem existia
-  if (!txt) return sendEmbed(message.channel, { description: lingua(ctx) === "en" ? "What should I repeat? `&repete <text>`" : "Repetir o quê? `&repete <texto>`", colour: COR.aviso });
+  if (!txt) return sendEmbed(message.channel, { description: lingua(ctx) === "en" ? `What should I repeat? \`${citar("repete", "en", ctx.PREFIXO)} <text>\`` : `Repetir o quê? \`${citar("repete", "pt", ctx.PREFIXO)} <texto>\``, colour: COR.aviso });
   await sendEmbed(message.channel, { description: txt, colour: COR.info });
 }
 
@@ -1390,10 +1296,10 @@ export async function cmdKick(message, args, ctx) {
   if (!targetId)
     return sendEmbed(message.channel, tr(ctx, {
       title: "❌ Uso incorreto",
-      description: `\`${PREFIXO}kick @usuário [motivo]\`\nVocê pode usar a menção ou o ID do usuário.`, colour: COR.erro,
+      description: `\`${citar("kick", "pt", PREFIXO)} @usuário [motivo]\`\nVocê pode usar a menção ou o ID do usuário.`, colour: COR.erro,
     }, {
       title: "❌ Wrong usage",
-      description: `\`${PREFIXO}kick @user [reason]\`\nYou can use the mention or the user's ID.`, colour: COR.erro,
+      description: `\`${citar("kick", "en", PREFIXO)} @user [reason]\`\nYou can use the mention or the user's ID.`, colour: COR.erro,
     }));
   if (targetId === client.user.id)
     return sendEmbed(message.channel, tr(ctx,
@@ -1460,10 +1366,10 @@ export async function cmdBan(message, args, ctx) {
   if (!targetId)
     return sendEmbed(message.channel, tr(ctx, {
       title: "❌ Uso incorreto",
-      description: `\`${PREFIXO}ban @usuário [motivo]\`\nVocê pode usar a menção ou o ID do usuário.`, colour: COR.erro,
+      description: `\`${citar("ban", "pt", PREFIXO)} @usuário [motivo]\`\nVocê pode usar a menção ou o ID do usuário.`, colour: COR.erro,
     }, {
       title: "❌ Wrong usage",
-      description: `\`${PREFIXO}ban @user [reason]\`\nYou can use the mention or the user's ID.`, colour: COR.erro,
+      description: `\`${citar("ban", "en", PREFIXO)} @user [reason]\`\nYou can use the mention or the user's ID.`, colour: COR.erro,
     }));
   if (targetId === client.user.id)
     return sendEmbed(message.channel, tr(ctx,

@@ -1,3 +1,5 @@
+import { citar } from "../core/aliases.js";   // só dentro das funções: o aliases.js também importa daqui (ciclo)
+
 
 // Precisa bater com a constante do geral.js (marca invisível).
 export const IA_TAG = "\u200b[ia]";
@@ -621,7 +623,7 @@ function arvorePT(P) {
           "Não há comando para ligar, desligar ou importar à mão.",
           "",
           "**O que entra sozinho**",
-          "• Bans **novos** — no instante em que acontecem (automod ou `&ban`).",
+          `• Bans **novos** — no instante em que acontecem (automod ou \`${citar("ban", "pt", P)}\`).`,
           "• Bans **antigos** — sincronizados ~1 min após o bot subir e a cada 6h.",
           "• Servidor **novo** — o histórico entra assim que o bot é adicionado.",
           "",
@@ -1927,7 +1929,7 @@ function arvoreEN(P) {
           "There's no command to enable, disable or import by hand.",
           "",
           "**What goes in on its own**",
-          "• **New** bans — the moment they happen (automod or `&ban`).",
+          `• **New** bans — the moment they happen (automod or \`${citar("ban", "en", P)}\`).`,
           "• **Old** bans — synced ~1 min after the bot boots and every 6h.",
           "• A **new** server — its history goes in as soon as the bot is added.",
           "",

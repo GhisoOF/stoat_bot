@@ -848,6 +848,52 @@ handlers, o tutorial, o índice da ajuda, o `&debug` e o diagnóstico de permiss
 
 O inventário ganhou uma linha (`limpar`: `confirm` → `confirmar`).
 
+## 6n. Fase 3b: nove comandos pequenos (17 out 2026)
+
+`&ping`, `&repete`, `&userinfo`, `&sobre`, `&kick`, `&ban`, `&silenciar`, `&rolar` e
+`&iniciativa` passaram a ter a página de ajuda no registro, e todas as citações deles
+viraram `citar` (81, em 10 arquivos). Com o `&autorole` e o `&limpar`, são 11
+comandos migrados.
+
+**A migração das páginas agora é por script** (fora do repositório): ele monta a
+página atual de cada comando com um prefixo marcado, troca cada citação pela
+referência (`§P§silenciar tirar` → `{&silenciar.tirar}`), escreve a `ajuda` no
+arquivo do registro e tira as cópias do geral.js e do help-parametros.js. Nos
+textos em inglês que tinham palavra em português e dependiam da tradução da tela
+(`|lista|remover|limpar` no `&iniciativa`, `tirar @user` no `&silenciar`), escrevi o
+inglês direto.
+
+**O handler só conhece o nome interno**, como no `&limpar`: o `&silenciar` não
+aceita mais `remove`, `undo` e `off` por conta própria, e o `&iniciativa` não aceita
+mais `remove` e `clear` — todos chegam traduzidos pelo registro. Ficaram os apelidos
+que não são tradução (`rm`, `fim`, `end`). Nenhum dos dois handlers é chamado por
+dentro sem passar pela tradução.
+
+**Erros achados no caminho, corrigidos com teste:**
+- `**Permission:** [object Object]` no `&help rolar` e `&help iniciativa`: a
+  permissão `{ pt: "todo mundo", en: "everyone" }` ia inteira para a tela. Os testes
+  da 3a não olhavam a permissão; agora olham, e um teste novo reprova qualquer tela
+  com `[object Object]`.
+- `&roll coin` em inglês respondia `🪙 **coroa**`. Agora `heads`/`tails`.
+- O aviso da moderação por IA ao dono, em português, ensinava `&silence` e `&ban`
+  com o nome em inglês. Agora `&silenciar`. Esse aviso não é executado pelos testes
+  (precisa da IA); o que o protege é o teste de citação à mão e o `verificar-build.js`.
+- No `&help rolar` em inglês, `` `coin` (coin) `` virou `` `coin` ``.
+
+**Provas:**
+- Comparação das 334 telas e 987 respostas, com os IDs e as contagens de servidor
+  normalizados (mudam com a ordem dos exemplos): o que muda é só o `coin` e as
+  permissões, de propósito; o resto é relógio e sorteio.
+- 2 testes novos (56 no total), e as checagens da 3a passaram a valer para os 9
+  sozinhas.
+- Cinco mutações, cada uma derruba pelo menos um teste: a permissão sem o idioma, a
+  moeda em português, o `remove` fora do registro do `&silenciar`, o `clear` fora do
+  do `&iniciativa`, um `${P}kick` à mão no índice da ajuda.
+
+**Em aberto (decisão do Ghieh):** `&rolar`, `&iniciativa` e `&repete` não têm nome em
+inglês no registro, então a tela em inglês os mostra assim (`&rolar`), embora `&roll`
+e `&initiative` já funcionem como apelido (o `&repete` não tem nenhum em inglês).
+
 ---
 
 ## 7. O que NÃO fiz, e por quê

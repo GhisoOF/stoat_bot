@@ -1,4 +1,5 @@
 import { TERMOS_ODIO } from "./rajada.js";
+import { citar } from "../core/aliases.js";
 import { descreverFiltro } from "./config-comando.js";
 import { rebuildBlocklist, DOMINIO_VALIDO, simularDeteccao, removerCargoSilence, MODULOS_AUTOMOD, GRUPOS_AUTOMOD, ROTULO_PARTE, estadoDoGrupo } from "./automod-engine.js";
 import { tirarTimeout } from "./timeout.js";
@@ -83,8 +84,8 @@ export async function cmdClearwarnings(message, args, ctx) {
   const tinha = db.zerarAvisos(ctx.serverId, targetId);
   liberarQuarentena(ctx.serverId, targetId);
   const silenciado = db.estaSilenciado(ctx.serverId, targetId);
-  const extraPt = silenciado ? `\n🔇 O silêncio em curso continua — para tirar: \`${PREFIXO}silenciar tirar <@${targetId}>\`` : "";
-  const extraEn = silenciado ? `\n🔇 The current silence stays — to lift it: \`${PREFIXO}silenciar tirar <@${targetId}>\`` : "";
+  const extraPt = silenciado ? `\n🔇 O silêncio em curso continua — para tirar: \`${citar("silenciar.tirar", "pt", PREFIXO)} <@${targetId}>\`` : "";
+  const extraEn = silenciado ? `\n🔇 The current silence stays — to lift it: \`${citar("silenciar.tirar", "en", PREFIXO)} <@${targetId}>\`` : "";
   await sendEmbed(message.channel, tr(ctx,
     { title: "✅ Avisos limpos", description: (tinha
         ? (tinha === 1 ? `O aviso de <@${targetId}> foi zerado.` : `Os **${tinha}** avisos de <@${targetId}> foram zerados.`) : `<@${targetId}> não tinha avisos — nada a zerar.`) + extraPt, colour: COR.sucesso },

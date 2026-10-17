@@ -1,5 +1,6 @@
 
 import * as db  from "../core/db.js";
+import { citar } from "../core/aliases.js";
 import { descreverErro, tipoDoErro } from "../core/erros.js";
 import { banir } from "../core/banir.js";
 import * as log from "../core/log.js";
@@ -1127,12 +1128,12 @@ export async function cmdBanGlobal(message, args, ctx) {
     if (!ctx.ehSuperAdmin?.(message.authorId)) return sendEmbed(message.channel, tr(ctx, {
       title: "🔒 Só o dono do bot",
       description: "A lista global é **compartilhada** por todos os servidores da Judy — pôr alguém nela vale para todos.\n\n"
-        + `Para tirar alguém **deste servidor**, use o ban normal: \`${PREFIXO}ban <@pessoa|id> [motivo]\` — ele alimenta a lista sozinho.`,
+        + `Para tirar alguém **deste servidor**, use o ban normal: \`${citar("ban", "pt", PREFIXO)} <@pessoa|id> [motivo]\` — ele alimenta a lista sozinho.`,
       colour: COR.aviso,
     }, {
       title: "🔒 Bot owner only",
       description: "The global list is **shared** by every server Judy is in — putting someone on it applies to all of them.\n\n"
-        + `To remove someone from **this server**, use the normal ban: \`${PREFIXO}ban <@user|id> [reason]\` — it feeds the list by itself.`,
+        + `To remove someone from **this server**, use the normal ban: \`${citar("ban", "en", PREFIXO)} <@user|id> [reason]\` — it feeds the list by itself.`,
       colour: COR.aviso,
     }));
     const { ids, motivo, descartados } = separarIdsEMotivo(args.slice(1));

@@ -16,7 +16,8 @@ export default {
     },
     ex: { pt: "{&autorole.set} <@Membro>", en: "{&autorole.set} <@Member>" },
     parametros: [
-      { nome: { pt: "<cargo>", en: "<role>" }, desc: { pt: "cargo entregue a quem entra (nome, menção ou ID)", en: "role handed to whoever joins (name, mention or ID)" } },
+      { nome: { pt: "<cargo>", en: "<role>" },
+        desc: { pt: "cargo entregue a quem entra (nome, menção ou ID)", en: "role handed to whoever joins (name, mention or ID)" } },
       { nome: "off", desc: { pt: "desliga", en: "turns it off" } },
     ],
   },

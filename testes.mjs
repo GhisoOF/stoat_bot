@@ -15406,6 +15406,10 @@ await t("citar(): o nome em cada idioma vem do registro, também dentro das fam�
   assert.equal(citar("automod.punicao.validade", "en"), "&automod punishment expiry");
   assert.equal(citarNoTexto("veja {&warn.lista} e {&autorole}", "en"), "veja &warn list e &autorole");
 });
+await t("nenhuma tela mostra `[object Object]` (um campo { pt, en } que chegou inteiro à tela)", () => {
+  const ruins = [...telas, ...execucoes].filter((x) => x.texto.includes("[object Object]")).map((x) => `[${x.lang}] ${x.pagina ?? x.cmd}`);
+  assert.deepEqual(ruins, []);
+});
 await t("citar(): referência que não existe é erro, não texto torto na tela", () => {
   assert.throws(() => citar("autorole.sett"), /"sett" não é subcomando de autorole/);
   assert.throws(() => citar("autorol.set"), /o comando "autorol" não existe/);
@@ -15428,6 +15432,8 @@ await t(`comandos migrados (${MIGRADOS.join(", ")}): a página \`&help\` e os pa
       const semMolde = (x) => x.replace(/[<>‹›]/g, "");
       assert.ok(semMolde(tela).includes(semMolde(`\`${d.uso}\``)), `[${lang}] a página mostra o uso do registro: ${d.uso}`);
       for (const p of ajudaReg.parametrosDoRegistro("&", lang)[id] ?? []) assert.ok(tela.includes(p.desc), `[${lang}] parâmetro: ${p.desc}`);
+      if (d.perm) assert.ok(tela.includes(d.perm), `[${lang}] a permissão do registro: ${d.perm}`);
+      assert.ok(!/\[object Object\]/.test(tela), `[${lang}] campo do registro sem o idioma escolhido`);
     }
   }
 });
@@ -15443,6 +15449,24 @@ await t("`&purge all` → `&purge confirm <código>` em inglês: o motor traduz 
   // e o handler não aceita mais o inglês por conta própria: quem traduz é o motor
   const src = fs.readFileSync("modulos/moderacao/limpar.js", "utf8");
   assert.ok(!/"(all|everything|confirm)"/.test(src), "limpar.js ainda tem palavra em inglês no parse");
+});
+await t("lote 3b em inglês: `&silence remove|off`, `&initiative remove|clear` (traduzidos pelo registro) e `&roll coin`", async () => {
+  const en = await servidorNovo("en");
+  for (const tirar of ["remove", "off"]) {
+    assert.match((await say("&silence @Fulano 10m", en)).texto, /TIMEOUT/);
+    assert.match((await say(`&silence ${tirar} @Fulano`, en)).texto, /^🔊 Timeout lifted/);
+  }
+  await say("&initiative add Goblin 5", en);
+  assert.match((await say("&initiative remove Goblin", en)).texto, /_empty — `&iniciativa add ‹name› ‹roll›`_/);
+  await say("&initiative add Orc 3", en);
+  assert.match((await say("&initiative clear", en)).texto, /Initiative cleared/);
+  for (let i = 0; i < 6; i++) {
+    const r = (await say("&roll coin", en)).texto;
+    assert.match(r, /🪙 \*\*(heads|tails)\*\*/, r);
+    assert.ok(!/cara|coroa/.test(r), r);
+  }
+  const pt = await servidorNovo("pt");
+  assert.match((await say("&rolar moeda", pt)).texto, /🪙 \*\*(cara|coroa)\*\*/);
 });
 await t("comandos migrados não são citados à mão em lugar nenhum (`${P}autorole …` → citar(\"autorole.set\", …))", () => {
   const ler = (d) => fs.readdirSync(d, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? (e.name === "comandos" ? [] : ler(`${d}/${e.name}`)) : e.name.endsWith(".js") ? [`${d}/${e.name}`] : []));

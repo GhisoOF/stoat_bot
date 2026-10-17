@@ -6,7 +6,7 @@ import { chamarApi } from "../core/stoat-api.js";
 import { canalDeOutroServidor } from "./pertence.js";
 
 // Gradientes prontos — o atalho para o efeito bonito sem montar nada.
-const PRESETS = {
+export const PRESETS = {
   "arco-iris":  "linear-gradient(90deg, #FF0018 0%, #FFA52C 17%, #FFFF41 33%, #008018 50%, #0000F9 67%, #86007D 100%)",
   fogo:         "linear-gradient(90deg, #FF0000 0%, #FF7A00 50%, #FFD600 100%)",
   oceano:       "linear-gradient(90deg, #0EA5E9 0%, #2563EB 50%, #1E1B4B 100%)",
@@ -48,38 +48,109 @@ function montarGradiente(cores, angulo = 90) {
   return `linear-gradient(${angulo}deg, ${paradas.join(", ")})`;
 }
 
+// ── O que o Stoat aceita como cor de cargo (16 out 2026) ────────────────────
+// Cópia do RE_COLOUR do stoatchat (crates/core/models/src/v0/server_members.rs):
+// cor = nome, var(--x), rgb()/rgba() ou hex; gradiente = linear/radial/conic
+// (ou repeating-) colado no "(", ângulo SÓ como `224deg`, paradas SÓ em %
+// inteiro (ou 0), até 128 caracteres. Fora disso a API devolve 400
+// "FailedValidation" — o caso de 16 out: `linear-gradient (224 deg, …)`.
+const V_COR = String.raw`(?:[a-z ]+|var\(--[a-z\d-]+\)|rgba?\([\d, ]+\)|#[a-f0-9]+)`;
+const PARADA = String.raw`(?:[ ]+(?:\d{1,3}%|0))?`;
+const RE_COR_STOAT = new RegExp(String.raw`^(?:${V_COR}|(?:repeating-)?(?:linear|conic|radial)-gradient\((?:${V_COR}|\d+deg)(?:[ ]+in[ ]+[a-z-]+(?:[ ]+(?:shorter|longer|increasing|decreasing)[ ]+hue)?)?${PARADA}(?:,[ ]*${V_COR}${PARADA})+\))$`, "i");
+export const corAceitaPeloStoat = (v) => typeof v === "string" && v.length >= 1 && v.length <= 128 && RE_COR_STOAT.test(v);
+
+// Conserta a escrita "quase certa" antes de mandar: espaço antes do "(",
+// "224 deg", "45°", espaço antes da vírgula, % com casa decimal, a declaração
+// CSS inteira colada (`background: …;`) e o `gradient(` sem o `linear-`.
+export function arrumarCss(txt) {
+  let t = String(txt ?? "").trim().replace(/\s+/g, " ")
+    .replace(/^background(?:-image)?\s*:\s*/i, "").replace(/\s*;\s*$/, "");
+  t = t.replace(/^gradient\s*\(/i, "linear-gradient(");
+  t = t.replace(/((?:repeating-)?(?:linear|radial|conic)-gradient)\s+\(/gi, "$1(");
+  t = t.replace(/\(\s+/g, "(").replace(/\s+\)/g, ")");
+  t = t.replace(/(\d+(?:\.\d+)?)\s*(?:deg\b|°|graus?\b|degrees?\b)/gi, (m, n) => `${Math.round(Number(n))}deg`);
+  t = t.replace(/(\d+\.\d+)\s*%/g, (m, n) => `${Math.round(Number(n))}%`).replace(/(\d+)\s+%/g, "$1%");
+  t = t.replace(/\s+,/g, ",").replace(/,(?=\S)/g, ", ");
+  return t;
+}
+
+// O que está errado num gradiente que nem arrumado o Stoat aceita.
+function motivoDoGradiente(t, en) {
+  const M = [];
+  if (t.length > 128) M.push(en ? `it has ${t.length} characters — Stoat takes at most **128**` : `tem ${t.length} caracteres — o Stoat aceita no máximo **128**`);
+  if (/hsla?\(|oklch\(|lab\(|hwb\(/i.test(t)) M.push(en ? "`hsl()`/`oklch()` colors aren't accepted — use hex (`#73E696`) or `rgb()`" : "cores `hsl()`/`oklch()` não são aceitas — use hex (`#73E696`) ou `rgb()`");
+  if (/\d+(?:px|em|rem|turn|rad|grad)\b/i.test(t)) M.push(en ? "stops and angles only in `%` and `deg`" : "paradas e ângulos só em `%` e `deg`");
+  if (!t.includes(")")) M.push(en ? "the closing `)` is missing" : "faltou fechar o `)`");
+  if ((t.match(/,/g) ?? []).length < 1) M.push(en ? "a gradient needs at least two colors" : "um gradiente precisa de pelo menos duas cores");
+  return M;
+}
+
 function validarCss(txt, en = false) {
-  const t = txt.trim();
-  // erro clássico: `gradient(...)` sem o `linear-`
-  if (/^\s*gradient\s*\(/i.test(t)) {
-    return { erro: en
-      ? "The `linear-` prefix is missing: use `linear-gradient(...)`, not `gradient(...)`. It's the most common cause of a 400 error."
-      : "Faltou o `linear-` no começo: use `linear-gradient(...)`, não `gradient(...)`. É o motivo mais comum de erro 400." };
-  }
-  if (/^(linear|radial|conic|repeating-linear|repeating-radial)-gradient\s*\(/i.test(t)) {
-    if (!t.includes(")")) return { erro: en ? "The gradient is incomplete — the closing parenthesis is missing." : "O gradiente está incompleto — faltou fechar o parêntese." };
-    return { valor: t };
+  const t = arrumarCss(txt);
+  if (/^(?:repeating-)?(?:linear|radial|conic)-gradient\s*\(/i.test(t)) {
+    if (corAceitaPeloStoat(t)) return { valor: t, arrumado: t !== String(txt ?? "").trim() };
+    const motivos = motivoDoGradiente(t, en);
+    const ex = "linear-gradient(224deg, #73E696 50%, #F7EEB2 50%)";
+    return { erro: [
+      en ? "Stoat won't accept this gradient as written." : "O Stoat não aceita esse gradiente como está escrito.",
+      ...motivos.map((m) => `• ${m}`),
+      "",
+      en ? "**What it accepts:** colors in hex/`rgb()`/name, angle as `224deg`, stops as whole `%`, nothing between `gradient` and `(`. E.g.:"
+         : "**O que ele aceita:** cores em hex/`rgb()`/nome, ângulo como `224deg`, paradas em `%` inteiro, nada entre `gradient` e `(`. Ex.:",
+      "`" + ex + "`",
+    ].join("\n") };
   }
   const solida = corSolida(t);
   if (solida) return { valor: solida };
   return null;   // não reconhecido: quem chamou decide o que fazer
 }
 
-function acharCargo(server, alvo) {
-  const limpo = limparId(alvo);
-  if (ULID.test(limpo)) {
+// ── Qual cargo? (16 out 2026) ──────────────────────────────────────────────
+// Antes era SÓ a primeira palavra, com busca parcial: "&color Le Gooby …"
+// achava "Le" e mandava "Gooby linear-gradient…" como cor; "&color role …"
+// (a palavra do exemplo) caía num cargo qualquer que contivesse "role".
+// Agora o cargo é tudo até a primeira palavra que COMEÇA uma cor (#, rgb,
+// gradient, preset, remove, nome de cor/preset); vale menção, ID ou o nome
+// exato — e a busca parcial só quando há UM cargo que serve.
+const INICIO_DA_COR = /^(?:#|rgba?\(|var\(|(?:repeating-)?(?:linear|radial|conic)-gradient|gradient\(|background|gradiente$|gradient$|grad$|preset$|pronto$|remover$|remove$|limpar$|padr[aã]o$|reset$)/i;
+const ehInicioDaCor = (tok) => INICIO_DA_COR.test(tok) || !!corSolida(tok) || !!presetDe(tok);
+const PALAVRA_DO_EXEMPLO = /^[<‹\[]?(?:role|cargo|rolename|role-name|nome|name|nome-do-cargo)[>›\]]?$/i;
+
+function cargosDe(server) {
+  return server.roles ? [...server.roles.entries()].map(([id, r]) => ({ id, nome: r?.name ?? id })) : [];
+}
+function cargoExato(server, alvo) {
+  const t = String(alvo ?? "").trim();
+  if (!t) return null;
+  const limpo = limparId(t);
+  if (ULID.test(limpo) && (/^<%|^<@&/.test(t) || /^[0-9A-Z]{26}$/i.test(t))) {
     const r = server.roles?.get?.(limpo);
-    return r ? { id: limpo, nome: r.name ?? limpo } : { id: limpo, nome: limpo };
+    return { id: limpo, nome: r?.name ?? limpo };
   }
-  const busca = limpo.toLowerCase();
-  const lista = server.roles ? [...server.roles.entries()] : [];
-  let exato = null, parcial = null;
-  for (const [id, role] of lista) {
-    const nome = (role?.name ?? "").toLowerCase();
-    if (nome === busca) { exato = { id, nome: role.name }; break; }
-    if (!parcial && nome.includes(busca)) parcial = { id, nome: role.name };
+  const busca = t.replace(/^@/, "").toLowerCase();
+  return cargosDe(server).find((c) => c.nome.toLowerCase() === busca) ?? null;
+}
+function cargoParcial(server, alvo) {
+  const busca = String(alvo ?? "").trim().replace(/^@/, "").toLowerCase();
+  if (busca.length < 3) return { lista: [] };
+  return { lista: cargosDe(server).filter((c) => c.nome.toLowerCase().includes(busca)) };
+}
+export function separarCargoECor(server, args) {
+  const pontos = [];
+  for (let i = 1; i < args.length; i++) if (ehInicioDaCor(args[i])) pontos.push(i);
+  if (!pontos.length) pontos.push(Math.min(1, args.length));
+  for (const i of pontos) {
+    const c = cargoExato(server, args.slice(0, i).join(" "));
+    if (c) return { cargo: c, resto: args.slice(i), alvo: args.slice(0, i).join(" ") };
   }
-  return exato ?? parcial ?? null;
+  const alvo = args.slice(0, pontos[0]).join(" ");
+  if (PALAVRA_DO_EXEMPLO.test(alvo)) return { cargo: null, exemplo: true, alvo, resto: args.slice(pontos[0]) };
+  for (const i of pontos) {
+    const { lista } = cargoParcial(server, args.slice(0, i).join(" "));
+    if (lista.length === 1) return { cargo: lista[0], resto: args.slice(i), alvo: args.slice(0, i).join(" ") };
+    if (lista.length > 1) return { cargo: null, ambiguos: lista.slice(0, 8), alvo: args.slice(0, i).join(" "), resto: args.slice(i) };
+  }
+  return { cargo: null, alvo, resto: args.slice(pontos[0]) };
 }
 
 async function aplicarCor(serverId, roleId, colour, en = false) {
@@ -95,11 +166,11 @@ async function aplicarCor(serverId, roleId, colour, en = false) {
 
   const dica = en
     ? (r.status === 403 ? " — the bot's role needs **ManageRole** and must sit **above** the role it's editing."
-      : r.status === 400 ? " — Stoat rejected the color value."
+      : r.status === 400 ? " — Stoat rejected the color value (accepted: hex/`rgb()`/name, or `linear-gradient(224deg, #73E696 50%, #F7EEB2 50%)` — angle in `deg`, whole `%`, up to 128 characters)."
       : r.status === 404 ? " — role or server not found."
       : "")
     : (r.status === 403 ? " — o cargo do bot precisa de **ManageRole** e estar **acima** do cargo que está editando."
-      : r.status === 400 ? " — o Stoat recusou o valor da cor."
+      : r.status === 400 ? " — o Stoat recusou o valor da cor (aceita: hex/`rgb()`/nome, ou `linear-gradient(224deg, #73E696 50%, #F7EEB2 50%)` — ângulo em `deg`, `%` inteiro, até 128 caracteres)."
       : r.status === 404 ? " — cargo ou servidor não encontrado."
       : "");
   return { ok: false, erro: `${en ? "The API answered" : "API respondeu"} ${r.status}${dica}${r.texto ? `\n\`\`\`\n${r.texto.slice(0, 300)}\n\`\`\`` : ""}` };
@@ -140,15 +211,16 @@ export async function cmdCor(message, args, ctx) {
         "**Presets**",
         `\`${P}cor <role> preset <name>\` — ${listaPresets(true)}`,
         "",
-        "**Raw CSS** (any valid gradient)",
-        `\`${P}cor <role> linear-gradient(90deg, #f00 0%, #00f 100%)\``,
+        "**Raw CSS**",
+        `\`${P}cor <role> linear-gradient(224deg, #73E696 50%, #F7EEB2 50%)\``,
+        "_Stoat's rules: angle as `224deg`, stops as whole `%`, colors in hex/`rgb()`, up to 128 characters. I fix spaces like `linear-gradient (224 deg, …)` myself._",
         "",
         "**Others**",
         `\`${P}cor <role> remover\` — back to the default color`,
         `\`${P}cor lista\` — roles and their current colors`,
         `\`${P}cor presets\` — see the ready-made gradients`,
         "",
-        "_The role can be given by **name** or by ID._",
+        "_The role: a **mention** (`@Role`), its **exact name** — spaces are fine: `&color Le Gooby #FF00AA` — or its ID (`&tutorial ids`)._",
       ].join("\n"),
       colour: COR.info,
     } : {
@@ -170,15 +242,16 @@ export async function cmdCor(message, args, ctx) {
         "**Prontos**",
         `\`${P}cor <cargo> preset <nome>\` — ${listaPresets(false)}`,
         "",
-        "**CSS na mão** (qualquer gradiente válido)",
-        `\`${P}cor <cargo> linear-gradient(90deg, #f00 0%, #00f 100%)\``,
+        "**CSS na mão**",
+        `\`${P}cor <cargo> linear-gradient(224deg, #73E696 50%, #F7EEB2 50%)\``,
+        "_Regras do Stoat: ângulo como `224deg`, paradas em `%` inteiro, cores em hex/`rgb()`, até 128 caracteres. Espaços como `linear-gradient (224 deg, …)` eu conserto sozinha._",
         "",
         "**Outros**",
         `\`${P}cor <cargo> remover\` — volta à cor padrão`,
         `\`${P}cor lista\` — cargos e suas cores atuais`,
         `\`${P}cor presets\` — vê os gradientes prontos`,
         "",
-        "_O cargo pode ser pelo **nome** ou pelo ID._",
+        "_O cargo: **menção** (`@Cargo`), o **nome exato** — pode ter espaço: `&cor Le Gooby #FF00AA` — ou o ID (`&tutorial ids`)._",
       ].join("\n"),
       colour: COR.info,
     });
@@ -422,28 +495,33 @@ export async function cmdCor(message, args, ctx) {
         description: "You need **ManageRole** to change role colors.", colour: COR.erro }));
   }
 
-  const cargo = acharCargo(server, args[0]);
+  const achado = separarCargoECor(server, args);
+  const cargo = achado.cargo;
   if (!cargo) {
-    return sendEmbed(message.channel, tr(ctx, {
-      title: "❌ Cargo não encontrado",
-      description: `Não achei o cargo **${args[0]}**. Veja os nomes com \`${P}cor lista\` — ou passe o ID.`,
-      colour: COR.erro,
-    }, {
-      title: "❌ Role not found",
-      description: `I couldn't find the **${args[0]}** role. See the names with \`${P}cor lista\` — or pass the ID.`,
-      colour: COR.erro,
-    }));
+    const comoApontar = en
+      ? "Mention the role (`@Role` — pick it from the list), use its **exact name** (spaces are fine: `Le Gooby`) or its ID (*Server settings → Roles → Copy role ID*). `&tutorial ids` explains."
+      : "Mencione o cargo (`@Cargo` — escolha na lista), use o **nome exato** (pode ter espaço: `Le Gooby`) ou o ID (*Configurações do servidor → Cargos → Copy role ID*). `&tutorial ids` explica.";
+    const title = achado.exemplo ? (en ? "❌ Which role?" : "❌ Qual cargo?")
+      : achado.ambiguos ? (en ? "❌ More than one role matches" : "❌ Mais de um cargo serve")
+      : (en ? "❌ Role not found" : "❌ Cargo não encontrado");
+    const corpo = achado.exemplo
+      ? (en ? `\`${achado.alvo}\` is the placeholder from the example — put **your** role there.` : `\`${achado.alvo}\` é a palavra do exemplo — no lugar dela vai o **seu** cargo.`)
+      : achado.ambiguos
+        ? (en ? `**${achado.alvo}** matches: ${achado.ambiguos.map((c) => `**${c.nome}**`).join(", ")}.` : `**${achado.alvo}** serve para: ${achado.ambiguos.map((c) => `**${c.nome}**`).join(", ")}.`)
+        : (en ? `I couldn't find the role **${achado.alvo || args[0]}**. \`${P}cor lista\` shows the names.` : `Não achei o cargo **${achado.alvo || args[0]}**. \`${P}cor lista\` mostra os nomes.`);
+    return sendEmbed(message.channel, { title, description: [corpo, "", comoApontar,
+      "", `\`${P}cor @VIP #FF00AA\` · \`${P}cor Le Gooby linear-gradient(224deg, #73E696 50%, #F7EEB2 50%)\``].join("\n"), colour: COR.erro });
   }
 
-  const resto = args.slice(1);
+  const resto = achado.resto;
   if (!resto.length) {
     return sendEmbed(message.channel, tr(ctx, {
       title: "❌ Faltou a cor",
-      description: `\`${P}cor ${args[0]} <cor|gradiente ...|preset <nome>|remover>\`\nVeja as opções com \`${P}cor\`.`,
+      description: `\`${P}cor ${achado.alvo} <cor|gradiente ...|preset <nome>|remover>\`\nVeja as opções com \`${P}cor\`.`,
       colour: COR.erro,
     }, {
       title: "❌ Missing the color",
-      description: `\`${P}cor ${args[0]} <color|gradient ...|preset <name>|remove>\`\nSee the options with \`${P}cor\`.`,
+      description: `\`${P}cor ${achado.alvo} <color|gradient ...|preset <name>|remove>\`\nSee the options with \`${P}cor\`.`,
       colour: COR.erro,
     }));
   }
@@ -462,9 +540,10 @@ export async function cmdCor(message, args, ctx) {
       { title: "🎨 Color removed", description: `**${cargo.nome}** is back to the default color.`, colour: COR.sucesso }));
   }
 
-  // ── preset ──
-  if (["preset", "pronto"].includes(acao)) {
-    const nome = presetDe(resto[1]);
+  // ── preset ── (também sem a palavra: `&cor VIP fire`)
+  const presetDireto = resto.length === 1 && !corSolida(acao) ? presetDe(acao) : null;
+  if (["preset", "pronto"].includes(acao) || presetDireto) {
+    const nome = presetDireto ?? presetDe(resto[1]);
     if (!nome || !PRESETS[nome]) {
       return sendEmbed(message.channel, tr(ctx,
         { title: "❌ Preset desconhecido",
@@ -479,7 +558,8 @@ export async function cmdCor(message, args, ctx) {
   // ── gradiente montado ──
   else if (["gradiente", "gradient", "grad"].includes(acao)) {
     let idx = 1, angulo = 90;
-    if (/^\d{1,3}$/.test(resto[1] ?? "")) { angulo = Number(resto[1]); idx = 2; }
+    const ang = String(resto[1] ?? "").match(/^(\d{1,3})(?:deg|°)?$/i);
+    if (ang) { angulo = Number(ang[1]); idx = 2; }
     const cores = [];
     for (const bruto of resto.slice(idx)) {
       const c = corSolida(bruto);
@@ -499,9 +579,9 @@ export async function cmdCor(message, args, ctx) {
     if (cores.length < 2) {
       return sendEmbed(message.channel, tr(ctx,
         { title: "❌ Gradiente precisa de 2+ cores",
-          description: `\`${P}cor ${args[0]} gradiente #FF0000 #0000FF\``, colour: COR.erro },
+          description: `\`${P}cor ${achado.alvo} gradiente #FF0000 #0000FF\``, colour: COR.erro },
         { title: "❌ A gradient needs 2+ colors",
-          description: `\`${P}cor ${args[0]} gradiente #FF0000 #0000FF\``, colour: COR.erro }));
+          description: `\`${P}cor ${achado.alvo} gradiente #FF0000 #0000FF\``, colour: COR.erro }));
     }
     colour = montarGradiente(cores, angulo);
     descricao = en ? `a ${cores.length}-color gradient (${angulo}°)` : `gradiente de ${cores.length} cores (${angulo}°)`;
@@ -532,8 +612,16 @@ export async function cmdCor(message, args, ctx) {
     descricao = /gradient/i.test(colour)
       ? (en ? "a custom gradient" : "gradiente personalizado")
       : (en ? `the color \`${colour}\`` : `cor \`${colour}\``);
+    if (v.arrumado) descricao += en ? " _(I fixed the spacing to Stoat's format)_" : " _(ajustei a escrita para o formato do Stoat)_";
   }
 
+  // a regra do Stoat, conferida ANTES da API (o gradiente montado também
+  // passa por aqui: muitas cores estouram os 128 caracteres)
+  if (/gradient/i.test(colour) && !corAceitaPeloStoat(colour)) {
+    const motivos = motivoDoGradiente(colour, en);
+    return sendEmbed(message.channel, { title: en ? "❌ Stoat won't accept this gradient" : "❌ O Stoat não aceita esse gradiente",
+      description: [...motivos.map((m) => `• ${m}`), "", `\`${colour.slice(0, 200)}\``].join("\n"), colour: COR.erro });
+  }
   const r = await aplicarCor(serverId, cargo.id, colour, en);
   if (!r.ok) {
     return sendEmbed(message.channel, tr(ctx,

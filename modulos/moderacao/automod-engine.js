@@ -1,6 +1,6 @@
 
 import * as rajada from "./rajada.js";
-import { analisarConteudo } from "./scorecard.js";
+import { analisarConteudo, normalizarParaAnalise } from "./scorecard.js";
 import * as db  from "../core/db.js";
 import { descreverErro, tipoDoErro } from "../core/erros.js";
 import { banir } from "../core/banir.js";
@@ -21,7 +21,32 @@ import {
 
 export { criarIndiceVazio };   // usado pelo main (estado inicial) e pelo &automod blocklist clear
 
-const INVITE_REGEX = /https?:\/\/stt\.gg\/([A-Za-z0-9]+)/gi;
+// Convite do Stoat, com ou sem https:// (o Stoat torna "stt.gg/abc" clicável
+// do mesmo jeito) e também no formato stoat.chat/invite/abc. Antes só o com
+// https:// era pego: na bateria de 17 out 2026, a divulgação escrita
+// "stt.gg/código" passou quase toda, e "stt . gg / código" passou toda.
+// "sttgg/abc" (sem o ponto) não vira link, mas qualquer um digita o convite
+// de volta: na 3ª bateria (17 out 2026) foi o disfarce mais comum que passou
+const INVITE_REGEX = /(?<![\w.@/-])(?:https?:\/\/)?(?:www\.)?(?:stt\.?gg|(?:app\.)?stoat\.chat\/invite)\/([A-Za-z0-9]+)/gi;
+// os códigos do texto como está E do texto sem disfarce (stt[.]gg, stt . gg / x)
+const CONVITE_COLADO = /(?:stt\.?gg|stoat\.chat\/invite)\/([A-Za-z0-9]+)/gi;   // sem fronteira: o texto junto não tem espaços
+export function codigosDeConvite(texto) {
+  const codigos = new Set();
+  const normal = normalizarParaAnalise(texto);
+  for (const t of [texto, normal]) {
+    INVITE_REGEX.lastIndex = 0;
+    for (const m of t.matchAll(INVITE_REGEX)) codigos.add(m[1]);
+  }
+  // Letra por letra ("s t t . g g / a b c"): sem nada achado, junta tudo e
+  // procura de novo. O código pode sair com letras a mais (o resto da frase
+  // grudado) — para punir basta saber que há convite. (bateria de 17 out 2026)
+  // (só quando o domínio NÃO aparece inteiro: "gostt.gg/x" não é convite)
+  if (!codigos.size && !/stt\.?gg|stoat\.chat/i.test(String(texto ?? ""))) {
+    const junto = String(texto ?? "").normalize("NFKC").replace(/[\s\u200B-\u200F\u2060\uFEFF]+/g, "").replace(/\[\.\]|\(\.\)/g, ".");
+    for (const m of junto.matchAll(CONVITE_COLADO)) codigos.add(m[1]);
+  }
+  return [...codigos];
+}
 
 function dbg(ctx, ...args) {
   const ligado = process.env.AUTOMOD_DEBUG === "1" || ctx?.cfgGlobal?.debug === true;
@@ -864,8 +889,7 @@ export async function runAutomod(message, ctx, opts = {}) {
 
   // ── Anti-invite (respeita a whitelist de códigos) ──
   if (am.antiInvite.enabled) {
-    INVITE_REGEX.lastIndex = 0;
-    const codigos = [...content.matchAll(INVITE_REGEX)].map((m) => m[1]);
+    const codigos = codigosDeConvite(content);
     dbg(ctx, `  [anti-invite] ON → convites encontrados: [${codigos.join(", ") || "nenhum"}]`);
     if (codigos.length > 0) {
       const naoPermitidos = codigos.filter((c) => !config.inviteWhitelist.includes(c.toLowerCase()));

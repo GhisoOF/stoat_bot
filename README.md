@@ -112,6 +112,15 @@ diz exatamente o que clicar.
   de IA", "trabalhe comigo, dividimos 50/50", "ganho $2.000 por mês", "me chama
   na DM") — por conjunção, para que "dividimos a conta 50/50" ou "procuro
   parceiro pro projeto" passem.
+  O golpe é lido em **português, inglês e espanhol** (brinde de Nitro/Robux,
+  dinheiro que "dobra em uma semana", pedido da conta/cartão/e-mail da vítima),
+  e as letras esticadas (`griiiátis`) também deixaram de esconder o texto. O
+  anti-invite acha o convite sem `https://`, com espaços (`stt . gg / x`) e sem
+  o ponto (`sttgg/x`).
+- **Vocabulário extra** (`modulos/moderacao/lexico-extra.js`): listas de termos
+  (golpe, contato, alerta, gore, grupos + insultos, ameaça…) que entram no
+  sentinela sem mexer na lógica — cada lista soma como o sinal de mesmo nome, e
+  grupo/insulto só condenam juntos.
 - **Comandos e edições também passam**: uma mensagem que começa com um comando
   (`&ping <convite>`) e uma mensagem **editada** passam pelos filtros de
   conteúdo (ódio, convite, link, sentinela, menções, caps…); os de ritmo (spam,

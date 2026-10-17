@@ -1,3 +1,4 @@
+import LEXICO_EXTRA from "./lexico-extra.js";
 
 const LEX_SCAM = [
   /\bfree\s*(nitro|robux|vbucks|gift|steam|skins?)\b/i,
@@ -16,6 +17,34 @@ const LEX_SCAM = [
   /\bmonetiz\w+|\bmonetiza[çc][ãa]o\b|\bmonetizar\b/i,
   /\b(passive\s+income|renda\s+passiva|side\s+income|financial\s+freedom|liberdade\s+financeira)\b/i,
   /\b(i'?m|i\s+am|eu)\s+(already\s+|j[áa]\s+)?(earning|making|ganho|ganhando|faturo|faturando|lucro|lucrando)\b/i,
+  // 17 out 2026 (bateria): golpe em espanhol não tinha vocabulário nenhum, e o
+  // "dobra seu pix" / "double your crypto" escapava da forma escrita acima
+  /\bdobr\w+\s+(o\s+|a\s+|seu\s+|sua\s+|teu\s+|tua\s+|tudo\s+)?(pix|grana|dinheiro|investimento|valor|saldo|cripto)\b/i,
+  /\b(double|triple)s?\s+(up\s+)?(your|ur|my|the)?\s*(money|crypto|coins|cash|investment|btc|bitcoin|balance|robux)\b/i,
+  /\b(duplic|triplic)\w*\s+(tu\s+|la\s+|el\s+|tus\s+)?(dinero|pasta|inversi[óo]n|bizum|cripto|saldo|euros)\b/i,
+  /\b(guaranteed|garantid\w+|garantizad\w+)\s+(profit|returns?|income|money|gains?|win|lucro|retorno|renda|ganancias?|ingresos?|beneficios?|rentabilidad)\b/i,
+  /\b(profit|returns?|income|gains?|ganancias?|ingresos?|beneficios?|rentabilidad|inversi[óo]n)\s+(is\s+|are\s+)?(guaranteed|garantizad\w+)\b/i,
+  /\b(easy\s+money|dinero\s+f[áa]cil|pasta\s+f[áa]cil|ganar\s+dinero|gana\s+dinero|ganar\s+pasta)\b/i,
+  /\b(invest|invierte|invertir|inviertes|investe|invista|aplica)\s+(here|now|in\s+this|aqu[íi]|ya|ahora|agora|nisso|aqui)(?![a-z0-9_])/i,   // \b não funciona depois de "í"
+  /\b(no\s+risk|risk[\s-]free|sin\s+riesgo|sem\s+risco)\b/i,
+  /\b(regalo|tarjetas?\s+regalo)\s+(gratis|de\s+\d+)\b/i,
+  // o brinde com o "grátis" mais longe: "o nitro é grátis", "robux de graça", "nitro is free"
+  /\b(nitro|robux|vbucks|skins?|gift\s*cards?)\b[^.!?\n]{0,15}\b(gr[áa]tis|free|de\s+gra[çc]a|regalad\w+)/i,
+  /\b(te\s+doy|te\s+dou|i'?ll\s+give\s+you)\s+(el\s+|o\s+)?(doble|dobro|double|triple|triplo)\b/i,
+  // 2ª rodada da bateria (17 out 2026): o brinde oferecido em espanhol
+  /\b(te|os|les)\s+(regalo|regalamos|doy|damos|mando|mandamos|paso|pasamos)\s+(\S+\s+){0,3}(nitro|robux|vbucks|skins?|euros|pasta|dinero|tarjetas?\s+regalo)\b/i,
+  /\b(premio|regalo|sorteo)\s+(de\s+)?(\S+\s+){0,2}(nitro|robux|vbucks|skins?|tarjeta\s+regalo)\b/i,
+  /\b(ganar|gana|ganas|ganar[áa]s|ganamos)\s+(miles\s+de\s+|un\s+mont[óo]n\s+de\s+|\d+[\d.,]*\s*)(euros|€|pasta|dinero|pavos)\b/i,
+  /\b(te|os)\s+garantiz\w+/i,
+  // 3ª rodada da bateria (17 out 2026): a moeda de jogo prometida em
+  // quantidade ("ganhar mil robux", "500 robux", "robux milhão") e o dinheiro
+  // que "dobra em uma semana" / "duplica en 10 minutos" / "doubles by tomorrow"
+  /\b(robux|v-?bucks|nitro|gems)\s+(milh[ãa]o|infinit\w+|ilimitad\w+|unlimited|f[áa]cil|easy|na\s+hora|al\s+instante|for\s+life|pra\s+vida\s+(toda|inteira)|de\s+por\s+vida|para\s+siempre)\b/i,
+  /\b(ganh\w+|ganar|gana|ganas|get|win|claim|recibe|reciba|receba|receber|regal\w+|dando|giving|give\s+away|giveaway|te\s+dan|te\s+d[ãa]o)\s+(\S+\s+){0,2}(robux|v-?bucks|nitro|gems)\b/i,
+  /\b(dobr\w+|duplic\w+|doubl\w+|tripl\w+|\d+x)\s+(\S+\s+){0,3}(em|en|in|by|within|at[ée]|hasta|overnight|da\s+noite\s+pro\s+dia)\s+(\S+\s+){0,2}(minut\w+|hora\w*|hours?|hrs?|\d+\s*h|d[íi]as?|days?|semana\w*|weeks?|tomorrow|amanh[ãa]|ma[ñn]ana|friday|sexta|viernes|fin\s+de\s+semana|fim\s+de\s+semana|weekend)\b/i,
+  /\b(\d+x|10x|100x)\s+(by|in|em|en|at[ée])\b/i,
+  /\b(easy|quick|fast)\s+(cash|money|profit|bucks)\b|\bguaranteed\s+(\S+\s+){0,2}(return|profit|payout)s?\b/i,
+  /\b(get|receive|claim|receber|recibir|ganhar|ganar)\s+(that\s+|your\s+|the\s+|tu\s+|o\s+|el\s+|seu\s+|sua\s+)?(big\s+|grande\s+)?(reward|prize|premio|pr[êe]mio|recompensa|payout)\b/i,
 ];
 
 // CTA / contato fora da plataforma / pagamento / phishing
@@ -38,6 +67,34 @@ const LEX_CTA = [
   /\b(message|text|contact|reach|hit\s+up)\s+me\b/i,
   /\b(if|whoever)\s+(you\s+are|you'?re|is|are)\s+interest(ed)?\b/i,
   /\b(se\s+(tiver|tem|estiver)\s+interess\w+|quem\s+(tiver\s+)?interess\w+|interessad[oa]s?\s+(me\s+)?(chama|chamem|mand\w+))/i,
+  // 17 out 2026 (bateria): espanhol e o "link na bio"
+  /\b(haz\s+clic|hacer\s+clic|haced\s+clic|hac[ée]is\s+clic|pincha|pinchad|pulsa)\s+(aqu[íi]|en\s+el\s+enlace|el\s+enlace)(?![a-z0-9_])/i,
+  /\b(escr[íi]beme|h[áa]blame|mand[áa]me\s+un\s+mensaje)\b|\bpor\s+(md|privado|dm)\b/i,
+  /\b(click|hit|tap|open)\s+(on\s+)?(this|the|my)\s+link\b/i,
+  /\blink\s+(in|na|en\s+la)\s+(bio|descri[çc][ãa]o)\b/i,
+  // 3ª rodada (17 out 2026): "clicar nesse link", "só clica e ganha", "si haces clic"
+  /\b(clica|clicar|clicka|clicke|clique)\s+(aqui|n?esse\s+link|n?este\s+link|no\s+link|e\s+(ganha|pega|resgata))\b/i,
+  /\b(si\s+)?(haces|hagas|hac[ée]is)\s+clic\b|\bsi\s+clicas\b/i,
+];
+
+// Pedido de dados de pagamento/conta da vítima — "me manda sua conta pra
+// receber", "send your bank info", "dame tus datos" (17 out 2026, bateria).
+// Sozinho é um sinal de contato; junto de brinde ou promessa de dinheiro,
+// é o golpe inteiro (conj_golpe_dados).
+const LEX_PEDIDO_DADOS = [
+  /\b(send|give|share|drop|need|dm)\s+(me\s+)?(your|ur)\s+(bank|banking|card|credit\s+card|paypal|wallet|email|password|login|account|seed\s+phrase|cashapp|venmo)\b/i,
+  /\b(me\s+)?(manda|mande|passa|passe|envia|envie|d[áa])\s+(a\s+|o\s+|sua\s+|seu\s+|tua\s+|teu\s+)?(conta|pix|chave\s+pix|senha|cart[ãa]o|cpf|e-?mail|dados)\b/i,
+  /\b(dame|p[áa]same|env[íi]ame|m[áa]ndame|danos|pasadme)\s+(tu\s+|tus\s+|la\s+|el\s+|los\s+)?(cuenta|datos|contrase[ñn]a|tarjeta|bizum|correo|clave|iban)\b/i,
+  // "tem que mandar sua conta", "tienes que dar tu email", "you just need to enter your card"
+  /\b(tem\s+que|tens\s+que|precisa|s[óo]\s+precisa)\s+(mandar|passar|dar|colocar|informar|enviar)\s+(a\s+|o\s+|sua\s+|seu\s+)?(conta|pix|senha|e-?mail|dados|cart[ãa]o|cpf)\b/i,
+  /\b(tienes\s+que|ten[ée]is\s+que|solo\s+tienes\s+que|necesito|hay\s+que)\s+(dar|meter|poner|pasar|mandar|enviar)\s+(tu\s+|tus\s+|el\s+|la\s+|la\s+tuya)?\s*(cuenta|e-?mail|correo|datos|clave|tarjeta|bizum|contrase[ñn]a)\b/i,
+  /\b(si\s+me\s+pasas|me\s+das\s+el\s+bizum|p[áa]same\s+un\s+bizum)\b/i,
+  // "si (me|le|nos) das tu email", "dale tu tarjeta", "si das tu cuenta del banco"
+  /\b(si\s+)?(me\s+|le\s+|nos\s+)?(das|dais|dan|dale|dadle|d[ée]jame)\s+(tu|tus|vuestra|vuestro|la|el)\s+(cuenta|e-?mail|correo|datos|clave|tarjeta|bizum|contrase[ñn]a|paypal|iban|n[úu]mero)\b/i,
+  /\b(if\s+you|just)\s+(give|send|drop|share|enter)\s+(me\s+|us\s+)?(your|ur)\s+(e-?mail|bank|card|password|paypal|account|wallet|details|info|login)\b/i,
+  /\b(se\s+(voc[êe]|vc|tu)?\s*)(me\s+)?(passar|mandar|der|enviar|informar)\s+(a\s+|o\s+|sua\s+|seu\s+|teu\s+|tua\s+)?(conta|pix|chave|senha|e-?mail|dados|cart[ãa]o|cpf)\b/i,
+  /\b(you\s+(have|need)\s+to|just\s+need\s+to|gotta|you\s+must)\s+(enter|give|send|drop|put\s+in|share)\s+(your|ur)\s+(e-?mail|bank|card|password|paypal|account|wallet|details|info)\b/i,
+  /\b(confirma|confirmar|pon|poner|introduce|introducir|enter|confirm)\s+(tu\s+|la\s+|your\s+)?(cuenta|clave|contrase[ñn]a|tarjeta|direcci[óo]n\s+de\s+banco|datos\s+bancarios|email|password|bank\s+details?)\b/i,
 ];
 
 // Urgência
@@ -53,6 +110,8 @@ const LEX_NEGACAO = [
   /\b(cuidado|cuidem|denunci\w+|report\w*|alerta|aviso|be\s+careful|warning|suspeit\w+)\b/i,
   /\b(n[ãa]o\s+ca[íi]a|n[ãa]o\s+caiam|fui\s+v[íi]tima|quase\s+ca[íi]|tentaram\s+me|me\s+enganaram)\b/i,
   /\b(n[ãa]o\s+(comprem|cliquem|acessem|enviem)|evitem?|fujam?)\b/i,
+  // 17 out 2026: quem AVISA em espanhol/inglês também não pode ser punido
+  /\b(estafa|estafas|timo|trampa|engaño|enga[ñn]ar|fraudulent\w*|scammers?|beware|watch\s+out|ojo\s+con|no\s+(piqu[ée]is|caig[áa]is|hag[áa]is\s+clic)|don'?t\s+(click|fall\s+for|send))\b/i,
 ];
 
 // +18 (pornografia)
@@ -154,7 +213,7 @@ const LINK_FILEHOST   = /\b(mega(\.nz)?|anonfiles|gofile|pixeldrain|mediafire|\w
 // (discord-gift.xyz, dlscord.app, steamcommunlty.com) — pesa como o de arquivo
 const LINK_IMITACAO   = /\b(?:(?:disc[o0]rd|dlscord|d1scord|discrod|stoat)[\w-]*\.(?!com\b|gg\b|chat\b|app\b)[a-z]{2,}|steamcommun[l1]ty\.\w+|steamcomunity\.\w+|stearncommunity\.\w+|[\w-]*(?:nitro|gift)[\w-]*\.(?:xyz|ru|top|click|link|site|online|shop|live|gift|icu|cyou))\b/i;
 const LINK_ENCURTADOR = /\b(bit\.ly|tinyurl|cutt\.ly|is\.gd|rb\.gy|t\.me|wa\.me|encurta|grabify|iplogger)\b/i;
-const LINK_CONVITE    = /https?:\/\/stt\.gg\/[A-Za-z0-9]+/i;
+const LINK_CONVITE    = /(?<![\w.@/-])(?:https?:\/\/)?(?:www\.)?(?:stt\.?gg|(?:app\.)?stoat\.chat\/invite)\/[A-Za-z0-9]+/i;
 const LINK_SIMPLES    = /\bhttps?:\/\/|\bwww\./i;
 
 // Afirmação/imperativo (verbo de oferta/ação) — sobe a nota
@@ -174,25 +233,31 @@ const PERGUNTA  = /\?/;
 // grupo junto de um insulto, um "bando de <grupo>", "estuprar e matar", sim.
 
 // Grupos alvo de ódio (a palavra sozinha é neutra).
-const GRUPO = String.raw`(negr[oa]s?|negrinh[oa]s?|negr[aã]o|pret[oa]s?|pretinh[oa]s?|macac[oa]s?|cigan[oa]s?|ciganinh[oa]s?|calon|calom|judeus?|judias?|nordestin[oa]s?|para[ií]bas?|baian[oa]s?|ind[ií]gen[ao]s?|[ií]ndi[oa]s?|viad[oa]s?|viadinh[oa]s?|bichas?|bichinhas?|sap[aã]t[aã]o|sapat[oõ]es|travecos?|trans|gays?|l[ée]sbicas?)`;
+let GRUPO = String.raw`(negr[oa]s?|negrinh[oa]s?|negr[aã]o|pret[oa]s?|pretinh[oa]s?|macac[oa]s?|cigan[oa]s?|ciganinh[oa]s?|calon|calom|judeus?|judias?|nordestin[oa]s?|para[ií]bas?|baian[oa]s?|ind[ií]gen[ao]s?|[ií]ndi[oa]s?|viad[oa]s?|viadinh[oa]s?|bichas?|bichinhas?|sap[aã]t[aã]o|sapat[oõ]es|travecos?|trans|gays?|l[ée]sbicas?)`;
 // Palavras que só existem como ofensa (não precisam de contexto).
 const LEX_INJURIA = [/\bnegr[oó]ides?\b/i, /\bviadinh[oa]s?\b/i, /\btravecos?\b/i, /\bciganinh[oa]s?\b/i];
 // Insulto ou desprezo que, colado a um grupo, vira ódio.
-const INSULTO = String.raw`(de\s+merda|filh[oa]s?\s+da\s+puta|imund[oa]s?|suj[oa]s?|nojent[oa]s?|lixos?|podres?|inferior(es)?|vsf|vai\s+se\s+fuder|vai\s+tomar\s+no\s+cu|tem\s+(que|q)\s+morrer|devia[m]?\s+morrer)`;
-const LEX_ODIO_CONJ = [
+let INSULTO = String.raw`(de\s+merda|filh[oa]s?\s+da\s+puta|imund[oa]s?|suj[oa]s?|nojent[oa]s?|lixos?|podres?|inferior(es)?|vsf|vai\s+se\s+fuder|vai\s+tomar\s+no\s+cu|tem\s+(que|q)\s+morrer|devia[m]?\s+morrer)`;
+const odioConj = () => [
   new RegExp(String.raw`\b${GRUPO}\b[^.!?\n]{0,20}\b${INSULTO}`, "i"),   // "ciganos de merda"
   new RegExp(String.raw`\b${INSULTO}\b[^.!?\n]{0,20}\b${GRUPO}\b`, "i"),  // "vsf negros"
   new RegExp(String.raw`\bbando\s+de\s+${GRUPO}\b`, "i"),                 // desumaniza o grupo inteiro
+];
+const LEX_ODIO_CONJ = [
+  ...odioConj(),
   /\bvolt(ar|a|em)\s+(pra|para\s+a)\s+senzala\b/i,
   /\bra[çc]a\s+(inferior|imunda|podre|de\s+merda)\b/i,
 ];
 // Símbolos de ódio. 卍 também é símbolo budista; o peso vem da REPETIÇÃO.
 const RE_SIMBOLO_ODIO = /[卐卍]|\bsieg\s*heil\b|\bheil\s*hitler\b|\b14\s*\/?\s*88\b|\bwhite\s+power\b/gi;
 // Ameaça violenta: dois verbos de violência juntos, ou ameaça dirigida.
-const VIOLENTO = String.raw`(estuprar|estrupar|matar|esfaquear|espancar|degolar|queimar|enforcar)`;
-const LEX_AMEACA = [
+let VIOLENTO = String.raw`(estuprar|estrupar|matar|esfaquear|espancar|degolar|queimar|enforcar)`;
+const ameacaConj = () => [
   new RegExp(String.raw`\b${VIOLENTO}\s+(e|pra|para|depois)\s+${VIOLENTO}\b`, "i"),   // "estuprar e matar"
   new RegExp(String.raw`\bvou\s+(te\s+)?${VIOLENTO}\s+(voc[êe]|vc|tu|sua\s+fam[ií]lia|seus?\s+filh)`, "i"),
+];
+const LEX_AMEACA = [
+  ...ameacaConj(),
   new RegExp(String.raw`\bsei\s+onde\s+(voc[êe]|vc|tu)\s+mora\b`, "i"),
 ];
 
@@ -242,6 +307,44 @@ const LEX_COERCAO = [
 ];
 // Desprezo por gente vulnerável: não pesa na nota, só no padrão acumulado.
 const LEX_DESPREZO = [/\bdoentes?\s+menta(l|is)\b/i, /\bretardad[oa]s?\b/i];
+
+// ─── Vocabulário extra (lexico-extra.js) ────────────────────────────────────
+// Texto vira frase literal, palavra inteira, sem diferenciar maiúsculas;
+// RegExp vale como está. Grupos/insultos/violentos entram nas alternâncias das
+// conjunções de ódio e ameaça (sozinhos continuam sem pesar).
+const escapar = (x) => String(x).trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+");
+const comoRegex = (x) => x instanceof RegExp ? x
+  : new RegExp(String.raw`(?<![\p{L}\p{N}])${escapar(x)}(?![\p{L}\p{N}])`, "iu");
+const LISTAS_EXTRA = {
+  golpe: LEX_SCAM, contato: LEX_CTA, pedidoDados: LEX_PEDIDO_DADOS, alerta: LEX_NEGACAO,
+  gore: LEX_GORE, dadosPessoais: LEX_DADOS_PESSOAIS, vazar: LEX_VAZAR, coercao: LEX_COERCAO,
+};
+const alternancia = (base, extras) => {
+  const novos = (extras ?? []).filter((x) => typeof x === "string" && x.trim()).map(escapar);
+  return novos.length ? base.replace(/\)$/, `|${novos.join("|")})`) : base;
+};
+// Devolve quantos termos entraram. Chamada no carregamento com lexico-extra.js;
+// os testes chamam com termos inventados.
+export function aplicarLexicoExtra(extra = {}) {
+  let n = 0;
+  for (const [nome, lista] of Object.entries(LISTAS_EXTRA)) {
+    for (const x of extra[nome] ?? []) {
+      if (!(x instanceof RegExp) && !String(x ?? "").trim()) continue;
+      lista.push(comoRegex(x)); n++;
+    }
+  }
+  const g = (extra.grupos ?? []).length, i = (extra.insultos ?? []).length, v = (extra.violentos ?? []).length;
+  if (g || i) {
+    GRUPO = alternancia(GRUPO, extra.grupos); INSULTO = alternancia(INSULTO, extra.insultos);
+    LEX_ODIO_CONJ.splice(0, 3, ...odioConj());
+  }
+  if (v) {
+    VIOLENTO = alternancia(VIOLENTO, extra.violentos);
+    LEX_AMEACA.splice(0, 2, ...ameacaConj());
+  }
+  return n + g + i + v;
+}
+aplicarLexicoExtra(LEXICO_EXTRA);
 
 // Quanto cada sinal soma no PADRÃO de uma pessoa (confianca.js acumula).
 // Autolesão sozinha pesa, mas não conta como "lado de quem agride".
@@ -321,6 +424,8 @@ export const PESOS = {
   conj_mula_ganho:     3,  // o dinheiro passa por você E é dividido
   conj_recrutamento_lucro: 3,  // "trabalhe comigo" + "dividimos o lucro" (15 out 2026)
   conj_ganho_recrutamento: 2,  // promessa de dinheiro + "trabalhe comigo"/"te ajudo a ganhar"
+  pedido_dados:    1.5,   // "manda sua conta", "send your bank info" (17 out 2026)
+  conj_golpe_dados: 3,    // brinde/promessa de dinheiro + pedido dos dados da vítima
 };
 
 const contar = (txt, lista, cap = 99) => {
@@ -354,7 +459,7 @@ const HOMOGLIFOS = {
   "ɡ": "g", "ı": "i", "ʟ": "l", "ɴ": "n", "ʀ": "r", "ꜱ": "s",
 };
 const RE_HOMOGLIFO = new RegExp(`[${Object.keys(HOMOGLIFOS).join("")}]`, "g");
-const LEET = { "4": "a", "@": "a", "3": "e", "1": "i", "!": "i", "0": "o", "5": "s", "$": "s", "7": "t", "8": "b" };
+const LEET = { "4": "a", "@": "a", "3": "e", "1": "i", "!": "i", "0": "o", "5": "s", "$": "s", "7": "t", "8": "b", "9": "g" };
 
 export function normalizarParaAnalise(texto) {
   let t = String(texto ?? "");
@@ -385,16 +490,26 @@ export function normalizarParaAnalise(texto) {
   t = t.replace(/\S+/g, (tok) => {
     if (/[/:]/.test(tok)) return tok;
     if (/^(r\$|\$|€|£)/i.test(tok)) return tok;
+    // quantidade com unidade: "100k", "24h", "10x", "5min" — é número, não leet
+    if (/^\d+([.,]\d+)?(k|m|x|h|hrs?|min|mins|d|s)$/i.test(tok)) return tok;
     if (!/\p{L}/u.test(tok) || !/[0-9@$!]/.test(tok)) return tok;
-    return tok.replace(/[4@3105$78!]/g, (c) => LEET[c] ?? c);
+    return tok.replace(/[4@31059$78!]/g, (c) => LEET[c] ?? c);
   });
 
   return t;
 }
 
+// Letras esticadas ("griiiátis", "cliiiique") não casam com nenhum padrão. A
+// bateria de 17 out 2026 mostrou o disfarce passando em 99% dos casos. Juntar
+// toda repetição numa letra só estraga palavra com letra dobrada de verdade
+// ("free", "carro"), por isso analisarConteudo avalia as duas versões do texto
+// e fica com a de nota maior.
+const RE_ESTICADA = /(\p{L})\1{2,}/gu;
+
 function extrairFeatures(texto, opts = {}) {
   const cru = texto ?? "";
-  const t = normalizarParaAnalise(cru);
+  let t = normalizarParaAnalise(cru);
+  if (opts.colapsar) t = t.replace(RE_ESTICADA, "$1");
   const f = {};
 
   // Link ofuscado: bit[.]ly, bit (ponto) ly, bit . ly — ninguém escreve
@@ -421,6 +536,7 @@ function extrairFeatures(texto, opts = {}) {
   f.divisao_lucro  = contar(t, LEX_DIVISAO_LUCRO, 2);
   f.mula           = contar(t, LEX_MULA, 2);
   f.pretexto_conta = contar(t, LEX_PRETEXTO_CONTA, 2);
+  f.pedido_dados   = contar(t, LEX_PEDIDO_DADOS, 1);
 
   f.autolesao      = contar(t, LEX_AUTOLESAO, 2);
   f.desafio        = contar(t, LEX_DESAFIO, 1);
@@ -481,6 +597,7 @@ function extrairFeatures(texto, opts = {}) {
   // com o lucro dito com todas as letras (×2) ou com promessa de dinheiro
   if (f.recrutamento > 0 && (f.divisao_lucro >= 2 || (f.divisao_lucro > 0 && f.scam > 0))) f.conj_recrutamento_lucro = 1;
   if (f.recrutamento > 0 && f.scam > 0) f.conj_ganho_recrutamento = 1;
+  if (f.pedido_dados > 0 && f.scam > 0) f.conj_golpe_dados = 1;
 
   // Dano a pessoas: o "E" que transforma conversa em ameaça
   const ordemSobreOutro = contar(t, LEX_ORDEM_OUTRO, 1) > 0;
@@ -492,6 +609,14 @@ function extrairFeatures(texto, opts = {}) {
   if ((f.scam > 0 || f.adulto > 0 || f.gore > 0)
       && (f.link_encurtador || f.link_filehost || f.link_mascarado || f.link_ofuscado)) f.conj_topico_link = 1;
 
+  // Isca em forma de pergunta ("quer nitro grátis? clica aqui") não é dúvida:
+  // com tema de golpe/+18/gore E algo que chama para agir (contato, oferta,
+  // link, imperativo) e sem tom de alerta, a interrogação não desconta. Na
+  // bateria de 17 out 2026 o "?" era o sinal mais comum nos golpes que passaram.
+  const isca = (f.scam > 0 || f.adulto > 0 || f.gore > 0)
+    && (f.cta > 0 || f.oferta > 0 || f.afirmacao > 0 || f.pedido_dados > 0 || f.link_encurtador || f.link_filehost || f.link_convite || f.link_simples || f.link_mascarado || f.link_ofuscado)
+    && !f.negacao;
+  if (isca) f.pergunta = 0;
   // A interrogação suaviza golpe ("isso é golpe?"), mas não suaviza ódio:
   // "vc é um ciganinho né?" continua sendo uma injúria.
   if (f.injuria || f.odio || f.simbolo_odio || f.ameaca) f.pergunta = 0;
@@ -505,8 +630,14 @@ export function pontuar(features, pesos = PESOS) {
 }
 
 export function analisarConteudo(texto, opts = {}) {
-  const f = extrairFeatures(texto, opts);
-  const nota = pontuar(f);
+  let f = extrairFeatures(texto, opts);
+  let nota = pontuar(f);
+  RE_ESTICADA.lastIndex = 0;
+  if (RE_ESTICADA.test(normalizarParaAnalise(texto ?? ""))) {
+    const f2 = extrairFeatures(texto, { ...opts, colapsar: true });
+    const nota2 = pontuar(f2);
+    if (nota2 > nota) { f = f2; nota = nota2; }
+  }
   const grave = (f.conj_grave_oferta > 0) || (f.conj_grave_contexto > 0);
   const sinais = Object.entries(f)
     .filter(([, v]) => v)

@@ -6817,6 +6817,91 @@ process.exit(falhou ? 1 : 0);
 };
 
 // ════════════════════════════════════════════════════════════════════════════
+// sentinela-bateria-17out — o que a bateria do automod (judy-bateria) mostrou
+// ════════════════════════════════════════════════════════════════════════════
+// 1ª/2ª bateria (16–17 out 2026, ~8 mil mensagens em pt-BR/en-US/es-ES):
+//   • convite "stt.gg/código" SEM https:// passava pelo anti-invite (a regex
+//     exigia o https), e "stt . gg / código" passava sempre;
+//   • letras esticadas ("griiiátis") passavam em 99% dos casos;
+//   • leet com 9 no lugar de g não era desfeito;
+//   • golpe em espanhol não tinha vocabulário, e "manda sua conta pra receber
+//     o brinde" (pedido dos dados da vítima) não era sinal de nada;
+//   • a pergunta descontava 3 pontos até de isca ("quer nitro grátis? clica");
+//   • não havia lugar para acrescentar vocabulário sem mexer na lógica.
+// 3ª bateria (17 out 2026, 6,4 mil mensagens): "sttgg/código" (sem o ponto)
+// passava; "ganhar mil robux", "dobra em uma semana", "easy cash" e o
+// "clica nesse link" em pt/es não eram vistos; "100k" virava leet.
+SUITES["sentinela-bateria-17out"] = async () => {
+const engine = await import("./modulos/moderacao/automod-engine.js");
+const sc = await import("./modulos/moderacao/scorecard.js");
+let pass = 0, fail = 0;
+const ok = (cond, msg) => { cond ? pass++ : fail++; console.log(`${cond ? "✅" : "❌"} ${msg}`); };
+const nota = (t) => sc.analisarConteudo(t).nota;
+const sinais = (t) => sc.analisarConteudo(t).sinais;
+
+console.log("\n── convite do Stoat ──");
+ok(engine.codigosDeConvite("entra lá stt.gg/AbC123").join() === "AbC123", "★ convite sem https:// é achado");
+ok(engine.codigosDeConvite("entra lá https://stt.gg/AbC123").join() === "AbC123", "  → com https:// continua");
+ok(engine.codigosDeConvite("entra lá stt . gg / AbC123").join() === "AbC123", "★ convite com espaços (stt . gg / x) é achado");
+ok(engine.codigosDeConvite("entra lá stt[.]gg/AbC123").join() === "AbC123", "  → e com [.]");
+ok(engine.codigosDeConvite("https://stoat.chat/invite/XyZ9").join() === "XyZ9", "  → e no formato stoat.chat/invite/");
+ok(engine.codigosDeConvite("vem s t t . g g / a b c").join() === "abc", "★ convite letra por letra é achado (bateria de 17 out: 2ª rodada)");
+ok(engine.codigosDeConvite("o site gostt.gg/abc e o email a@stt.gg/x").length === 0, "  → sem achar convite colado em outra palavra");
+ok(engine.codigosDeConvite("bom dia pessoal, vamos jogar?").length === 0, "  → texto sem convite: nada");
+ok(sinais("vem pro servidor stt.gg/abc123").includes("link_convite"), "  → o sentinela também vê o convite sem https");
+
+console.log("\n── disfarces que passavam ──");
+const base = "free nitro aqui, clique aqui https://bit.ly/nitro-free";
+ok(nota("freeee niiitro aqui, cliiique aqui https://bit.ly/nitro-free") >= nota(base) - 0.01, "★ letras esticadas não derrubam a nota");
+ok(nota("free nitro aqui, clique aqui https://bit.ly/nitro-free") === nota(base), "  → e o texto normal (com 'free', letra dobrada) segue igual");
+ok(nota("kkkkkkkk bom diaaaa pessoal") === 0, "  → conversa esticada continua 0");
+ok(sc.normalizarParaAnalise("9r4n4").includes("grana"), "★ leet com 9 vira g");
+
+console.log("\n── golpe em três idiomas ──");
+ok(nota("nitro gratis, dame tus datos") >= 6, "★ es: brinde + pedido dos dados pesa (conj_golpe_dados)");
+ok(nota("send your bank info for free robux") >= 6, "★ en: o mesmo em inglês");
+ok(nota("me manda sua conta pra receber o brinde de nitro grátis") >= 6, "★ pt: o mesmo em português");
+ok(sinais("invierte aquí y te duplicamos la pasta").some((x) => x.startsWith("scam")), "★ es: promessa de dinheiro é vista");
+ok(sinais("this crypto is gonna double your money, guaranteed profit").some((x) => x.startsWith("scam")), "  → en: idem");
+ok(nota("ojo con esto, es una estafa, no piquéis: te piden los datos del bizum") === 0, "★ es: quem AVISA não é punido");
+ok(nota("watch out, that free robux link is a scam, don't click") === 0, "  → en: idem");
+ok(nota("necesito pasar por casa antes del partido") === 0, "  → 'necesito pasar' sem pedir dado nenhum: 0");
+ok(nota("hay que poner la mesa") === 0, "  → 'hay que poner' idem");
+
+console.log("\n── pergunta × isca ──");
+ok(nota("quer nitro grátis? clica aqui bit.ly/x") > nota("alguém sabe se nitro grátis existe?"), "★ isca em forma de pergunta não ganha o desconto da dúvida");
+ok(nota("alguém joga hoje à noite?") === 0 && nota("quem viu o jogo ontem?") === 0, "  → pergunta comum segue 0");
+
+console.log("\n── 3ª rodada (17 out 2026) ──");
+ok(engine.codigosDeConvite("bora pro novo servidor sttgg/xyz123").join() === "xyz123", "★ convite sem o ponto (sttgg/código) é achado");
+ok(engine.codigosDeConvite("gosttgg/abc e sttgg sozinho").length === 0, "  → colado em outra palavra ou sem código: nada");
+ok(sinais("vem pro servidor sttgg/abc123").includes("link_convite"), "  → o sentinela também vê");
+ok(nota("mano clica nesse link pra ganhar mil robux agora é real") >= 6, "★ pt: moeda de jogo prometida + clique");
+ok(nota("te regalan 500 robux si haces clic antes de que se acaben") >= 6, "★ es: idem com 'si haces clic'");
+ok(sinais("this crypto is gonna double by tomorrow").some((x) => x.startsWith("scam")), "★ en: 'dobra até amanhã' é promessa de dinheiro");
+ok(sinais("mola un poco de cripto que duplica en 10 minutos").some((x) => x.startsWith("scam")), "  → es: idem");
+ok(nota("Wanna make easy cash? Send your bank details now for a guaranteed $500 return!") >= 6, "★ en: isca com pergunta + pedido dos dados não ganha desconto");
+ok(nota("Me manda sua conta pra ganhar 100k") >= 6, "★ '100k' continua número (não vira leet)");
+ok(nota("comprei 800 robux ontem com meu dinheiro") === 0 && nota("consegui 1000 gems no evento") === 0, "  → falar da própria compra/evento: 0");
+ok(nota("clica no ícone de engrenagem pra abrir as config") === 0, "  → 'clica no ícone' (ajuda) não é chamada de golpe");
+ok(nota("o preço da gasolina dobrou em dois anos") === 0, "  → 'dobrou em dois anos' (notícia): 0");
+
+console.log("\n── vocabulário extra (lexico-extra.js) ──");
+// termos inventados: o teste mede o mecanismo, não o conteúdo
+ok(nota("os zorblaxianos chegaram") === 0 && nota("zorblaxianos fedorentos") === 0, "antes: nada");
+const n = sc.aplicarLexicoExtra({ grupos: ["zorblaxianos"], insultos: ["fedorentos"], golpe: ["moedas lunares grátis"], alerta: ["isso é zorblux"] });
+ok(n === 4, "★ os termos do arquivo entram (4)");
+ok(sinais("zorblaxianos fedorentos").includes("odio"), "★ grupo + insulto do arquivo vira a conjunção de ódio");
+ok(nota("os zorblaxianos chegaram") === 0, "  → o grupo sozinho continua neutro");
+ok(sinais("Moedas  Lunares Grátis aqui").includes("scam"), "  → frase de golpe casa sem diferenciar maiúsculas/espaços");
+ok(!sinais("supermoedas lunares grátisx").includes("scam"), "  → e só palavra inteira");
+ok(sinais("isso é zorblux, cuidado").includes("negacao"), "  → alerta extra desconta");
+
+console.log(`\nBATERIA 17 OUT: ${pass} ok, ${fail} falha(s)`);
+process.exit(fail ? 1 : 0);
+};
+
+// ════════════════════════════════════════════════════════════════════════════
 // staff-boasvindas  (era teste-staff-boasvindas.mjs)
 // ════════════════════════════════════════════════════════════════════════════
 SUITES["staff-boasvindas"] = async () => {
@@ -14542,6 +14627,108 @@ await t("★ o rastro de permissões do &debug #canal em inglês", () => {
 });
 
 console.log(`\nGLOBAL (16 out): ${ok} ok, ${falhou} falha(s)`);
+process.exit(falhou ? 1 : 0);
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+// cor-sintaxe-16out (16 out 2026) — print de Ghieh: "&color role linear-gradient
+// (224 deg, #73E696 50%, #F7EEB2 50%)" → API 400 FailedValidation; com a
+// menção, o mesmo 400; "&color Le Gooby linear-gradient(…)" → "Gooby
+// linear-gradient… isn't a color". "As pessoas estão tendo problema com essa
+// sintaxe: ajeitar e averiguar como melhorar."
+// ════════════════════════════════════════════════════════════════════════════
+SUITES["cor-sintaxe-16out"] = async () => {
+const fs = (await import("node:fs")).default;
+const assert = (await import("node:assert")).default;
+process.env.BOT_TOKEN = "tok"; process.env.DB_PATH = "/tmp/cor16.db"; process.env.CONFIG_PATH = "/tmp/cor16.json";
+for (const f of ["/tmp/cor16.db", "/tmp/cor16.db-wal", "/tmp/cor16.db-shm", "/tmp/cor16.json"]) fs.rmSync(f, { force: true });
+const chamadas = [];
+globalThis.fetch = async (url, op) => {
+  if (String(url).includes("/roles/")) {
+    const corpo = JSON.parse(op?.body ?? "{}");
+    chamadas.push(corpo);
+    // a API de verdade: o RE_COLOUR do stoatchat (o teste copia a regra)
+    const ok = corpo.remove || cor.corAceitaPeloStoat(corpo.colour);
+    return { ok, status: ok ? 200 : 400, text: async () => (ok ? "{}" : '{"type":"FailedValidation"}'), json: async () => ({}) };
+  }
+  return { ok: false, status: 503, text: async () => "", json: async () => ({}) };
+};
+const cor = await import("./modulos/moderacao/cor-cargo.js");
+let ok = 0, falhou = 0;
+const t = async (nome, fn) => {
+  const o = [console.log, console.info, console.warn, console.error]; console.log = console.info = console.warn = console.error = () => {};
+  try { await fn(); [console.log, console.info, console.warn, console.error] = o; console.log(`  ✅ ${nome}`); ok++; }
+  catch (e) { [console.log, console.info, console.warn, console.error] = o; console.log(`  ❌ ${nome}\n     ${e.message}`); falhou++; }
+};
+
+const GOOBY = "01KH9SJYWVD7XAHJ28TP0YP4Q1";
+const roles = new Map([[GOOBY, { name: "Le Gooby", rank: 9 }], ["01KH9SJYWVD7XAHJ28TP0YP4Q2", { name: "Controle", rank: 9 }],
+  ["01KH9SJYWVD7XAHJ28TP0YP4Q3", { name: "VIP", rank: 9 }], ["01KH9SJYWVD7XAHJ28TP0YP4Q4", { name: "VIP Gold", rank: 9 }], ["RBOT", { name: "Judy", rank: 1 }]]);
+const env = [];
+const silencio = async (fn) => { const o = [console.log, console.info, console.warn, console.error]; console.log = console.info = console.warn = console.error = () => {}; try { return await fn(); } finally { [console.log, console.info, console.warn, console.error] = o; } };
+await silencio(() => import("./main.js"));
+const c = globalThis.__client;
+await silencio(() => c.emitAll("ready"));
+const canal = { id: "C1", serverId: "S1", name: "general", type: "TextChannel", sendMessage: async (p) => { env.push(p); return { id: "M" + env.length, react: async () => {}, edit: async () => {}, delete: async () => {} }; } };
+const membro = { id: { server: "S1", user: "U1" }, roles: [], hasPermission: () => true };
+const server = { id: "S1", ownerId: "U1", name: "T", roles, channels: [canal], channelIds: new Set(["C1"]), member: { roles: ["RBOT"] }, havePermission: () => true,
+  fetchMember: async () => membro, fetchMembers: async () => ({ members: [membro] }), fetchBans: async () => [] };
+c.servers.set("S1", server); c.channels.set("C1", canal);
+const say = async (txt) => {
+  env.length = 0; chamadas.length = 0;
+  await silencio(() => c.emitAll("messageCreate", { id: "X" + Math.random(), authorId: "U1", content: txt, serverId: "S1", server, channel: canal, channelId: "C1", mentionIds: [], createdAt: new Date(), author: { username: "Owner" }, member: membro, replyIds: [] }));
+  return env.map((p) => `${p?.embeds?.[0]?.title ?? ""}\n${p?.embeds?.[0]?.description ?? ""}`).join("\n");
+};
+await say("&language en");
+
+console.log("── os três casos do print ──");
+await t("★ \"linear-gradient (224 deg, …)\" é arrumado e o Stoat aceita (antes: 400)", async () => {
+  const r = await say(`&color <%${GOOBY}> linear-gradient (224 deg, #73E696 50%, #F7EEB2 50%)`);
+  assert.equal(chamadas.length, 1, r);
+  assert.equal(chamadas[0].colour, "linear-gradient(224deg, #73E696 50%, #F7EEB2 50%)");
+  assert.match(r, /Color applied/); assert.match(r, /fixed the spacing/);
+});
+await t("★ nome com espaço sem menção: \"&color Le Gooby linear-gradient(…)\" acha o cargo inteiro", async () => {
+  const r = await say("&color Le Gooby linear-gradient (224 deg, #73E696 50%, #F7EEB2 50%)");
+  assert.equal(chamadas.length, 1, r);
+  assert.match(r, /\*\*Le Gooby\*\* now uses/);
+});
+await t("★ \"&color role …\" (a palavra do exemplo) não cai num cargo qualquer — explica", async () => {
+  const r = await say("&color role linear-gradient(224deg, #73E696 50%, #F7EEB2 50%)");
+  assert.equal(chamadas.length, 0, "nada vai à API");
+  assert.match(r, /Which role\?/); assert.match(r, /placeholder from the example/); assert.match(r, /tutorial ids/);
+});
+
+console.log("\n── e o que mais confundia ──");
+await t("★ o que nem arrumado o Stoat aceita é explicado ANTES da API (hsl, >128 caracteres)", async () => {
+  let r = await say("&color VIP linear-gradient(90deg, hsl(10, 50%, 50%) 0%, #fff 100%)");
+  assert.equal(chamadas.length, 0); assert.match(r, /hsl\(\)/);
+  r = await say("&color VIP gradient " + Array(14).fill("#123456").join(" "));
+  assert.equal(chamadas.length, 0); assert.match(r, /at most \*\*128\*\*/);
+});
+await t("★ nome parcial só quando um cargo serve; dois servem → lista", async () => {
+  let r = await say("&color Gooby #FF00AA");
+  assert.equal(chamadas.length, 1); assert.match(r, /Le Gooby/);
+  r = await say("&color VI #FF00AA");
+  assert.equal(chamadas.length, 0); assert.match(r, /Which role|not found/);
+  r = await say("&color VIP #FF00AA");
+  assert.match(r, /\*\*VIP\*\* now uses/, "o nome exato vence o parcial (VIP × VIP Gold)");
+  r = await say("&color Gol #FF00AA");
+  assert.match(r, /VIP Gold/);
+});
+await t("★ preset sem a palavra \"preset\" e ângulo com \"deg\" no montador", async () => {
+  await say("&color VIP fire");
+  assert.match(chamadas[0]?.colour ?? "", /^linear-gradient\(90deg, #FF0000 0%/);
+  await say("&color VIP gradient 224deg #73E696 #F7EEB2");
+  assert.equal(chamadas[0]?.colour, "linear-gradient(224deg, #73E696 0%, #F7EEB2 100%)");
+});
+await t("os presets e o `gradient(` sem `linear-` passam na regra do Stoat", () => {
+  for (const [k, v] of Object.entries(cor.PRESETS)) assert.ok(cor.corAceitaPeloStoat(v), k);
+  assert.equal(cor.arrumarCss("gradient(90deg,#f00 0%,#00f 100%)"), "linear-gradient(90deg, #f00 0%, #00f 100%)");
+  assert.equal(cor.arrumarCss("background: linear-gradient(45°, red 10.5%, blue 90%);"), "linear-gradient(45deg, red 11%, blue 90%)");
+});
+
+console.log(`\nCOR SINTAXE (16 out): ${ok} ok, ${falhou} falha(s)`);
 process.exit(falhou ? 1 : 0);
 };
 

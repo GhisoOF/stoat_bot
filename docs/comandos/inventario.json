@@ -526,6 +526,11 @@
    "rota": "reset",
    "funcao": "cmdReset"
   },
+  "repeat": {
+   "canonico": "repete",
+   "rota": "repete",
+   "funcao": "cmdRepete"
+  },
   "repete": {
    "canonico": "repete",
    "rota": "repete",

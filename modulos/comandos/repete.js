@@ -4,6 +4,8 @@ export default {
   id: "repete",
   modulo: "../moderacao/geral.js",
   funcao: "cmdRepete",
+  nomes: { en: "repeat" },
+  apelidos: ["repeat"],
   gerenciavel: true,
   textoLivre: true,
   ajuda: {

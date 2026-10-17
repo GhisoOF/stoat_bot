@@ -890,9 +890,12 @@ dentro sem passar pela tradução.
   moeda em português, o `remove` fora do registro do `&silenciar`, o `clear` fora do
   do `&iniciativa`, um `${P}kick` à mão no índice da ajuda.
 
-**Em aberto (decisão do Ghieh):** `&rolar`, `&iniciativa` e `&repete` não têm nome em
-inglês no registro, então a tela em inglês os mostra assim (`&rolar`), embora `&roll`
-e `&initiative` já funcionem como apelido (o `&repete` não tem nenhum em inglês).
+**Decidido depois (18 out, Ghieh):** `&rolar`, `&iniciativa` e `&repete` não tinham
+nome em inglês, e a tela em inglês os mostrava assim. Agora são `&roll`,
+`&initiative` e `&repeat` (este também ganhou o apelido `repeat`, que não existia).
+Só a tela em inglês muda — 17 citações nas telas do teste; nenhuma tela em português
+mudou. O inventário passou a ter 150 nomes. Um teste confere as três páginas
+`&help` em inglês, o `&repeat` sozinho e que o `&help rolar` em português continua.
 
 ---
 

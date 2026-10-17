@@ -4,6 +4,7 @@ export default {
   id: "iniciativa",
   modulo: "../ferramentas/dados-rpg.js",
   funcao: "cmdIniciativa",
+  nomes: { en: "initiative" },
   apelidos: ["init", "initiative"],
   subcomandos: { lista: "list", remover: "remove", limpar: "clear" },
   gerenciavel: true,

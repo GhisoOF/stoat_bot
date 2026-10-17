@@ -15457,7 +15457,7 @@ await t("lote 3b em inglês: `&silence remove|off`, `&initiative remove|clear` (
     assert.match((await say(`&silence ${tirar} @Fulano`, en)).texto, /^🔊 Timeout lifted/);
   }
   await say("&initiative add Goblin 5", en);
-  assert.match((await say("&initiative remove Goblin", en)).texto, /_empty — `&iniciativa add ‹name› ‹roll›`_/);
+  assert.match((await say("&initiative remove Goblin", en)).texto, /_empty — `&initiative add ‹name› ‹roll›`_/);
   await say("&initiative add Orc 3", en);
   assert.match((await say("&initiative clear", en)).texto, /Initiative cleared/);
   for (let i = 0; i < 6; i++) {
@@ -15467,6 +15467,12 @@ await t("lote 3b em inglês: `&silence remove|off`, `&initiative remove|clear` (
   }
   const pt = await servidorNovo("pt");
   assert.match((await say("&rolar moeda", pt)).texto, /🪙 \*\*(cara|coroa)\*\*/);
+  // os três com nome em inglês na tela (18 out 2026: antes a tela em inglês dizia &rolar, &iniciativa, &repete)
+  assert.match((await say("&help roll", en)).texto, /^📖 Help — &roll\n\*\*Usage:\*\* `&roll /);
+  assert.match((await say("&help initiative", en)).texto, /^📖 Help — &initiative\n/);
+  assert.match((await say("&help repeat", en)).texto, /^📖 Help — &repeat\n\*\*Usage:\*\* `&repeat /);
+  assert.match((await say("&repeat", en)).texto, /What should I repeat\? `&repeat ‹text›`/);
+  assert.match((await say("&help rolar", pt)).texto, /^📖 Ajuda — &rolar\n/);
 });
 await t("comandos migrados não são citados à mão em lugar nenhum (`${P}autorole …` → citar(\"autorole.set\", …))", () => {
   const ler = (d) => fs.readdirSync(d, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? (e.name === "comandos" ? [] : ler(`${d}/${e.name}`)) : e.name.endsWith(".js") ? [`${d}/${e.name}`] : []));

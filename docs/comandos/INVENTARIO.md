@@ -4,7 +4,7 @@ Gerado por `INVENTARIO=1 node testes.mjs comandos-17out` — **não edite à mã
 reestruturação dos comandos num registro central (fase 0). A suíte `comandos-17out` compara o bot com o
 `inventario.json` desta pasta: nome que some ou muda de destino faz o teste falhar.
 
-**48 comandos · 149 nomes · 558 subcomandos em inglês · 334 telas de ajuda · 987 exemplos executados**
+**48 comandos · 150 nomes · 558 subcomandos em inglês · 334 telas de ajuda · 987 exemplos executados**
 
 ## Comandos
 
@@ -32,7 +32,7 @@ reestruturação dos comandos num registro central (fase 0). A suíte `comandos-
 | `game` | `game` | `character` `personagem` `rpg` | `cmdGame` | sim | 201 |
 | `help` | — | — | `cmdHelp` | — | 156 |
 | `idioma` | `language` | `lang` `language` | `cmdIdioma` | — | 10 |
-| `iniciativa` | — | `init` `initiative` | `cmdIniciativa` | sim | 6 |
+| `iniciativa` | `initiative` | `init` `initiative` | `cmdIniciativa` | sim | 6 |
 | `kick` | — | — | `cmdKick` | sim | 7 |
 | `limpar` | `purge` | `clear` `limpiar` `purge` | `cmdLimpar` | sim | 10 |
 | `log` | `log` | `logs` | `cmdLog` | sim | 17 |
@@ -41,9 +41,9 @@ reestruturação dos comandos num registro central (fase 0). A suíte `comandos-
 | `personalidade` | — | `personality` | `cmdPersonalidade` | — | 2 |
 | `ping` | — | — | `cmdPing` | sim | 2 |
 | `reactionrole` | — | `reactionroles` `rr` | `cmdReactionRole` | sim | 28 |
-| `repete` | — | — | `cmdRepete` | sim | 4 |
+| `repete` | `repeat` | `repeat` | `cmdRepete` | sim | 4 |
 | `reset` | — | `fabrica` `factoryreset` `redefinir` `resetar` | `cmdReset` | — | 8 |
-| `rolar` | — | `dado` `dados` `r` `roll` | `cmdRolar` | sim | 6 |
+| `rolar` | `roll` | `dado` `dados` `r` `roll` | `cmdRolar` | sim | 6 |
 | `rss` | — | `feed` | `cmdRss` | sim | 20 |
 | `sair` | `leave` | `leave` `sairdacall` | `sair` | — | 2 |
 | `servidor` | `server` | `server` `serverinfo` `servidorinfo` | `cmdServidor` | sim | 24 |

@@ -1,6 +1,7 @@
 import { ULID, resolverCargo } from "../core/ids.js";
 import { editarCargos, podeUsarCargo } from "../core/hierarquia.js";
 import { tr } from "../core/i18n.js";
+import { citar } from "../core/aliases.js";
 
 // Extrai um ID de cargo de "<@&ID>", "<%ID>" ou ID cru.
 function extrairRoleId(txt) {
@@ -19,14 +20,14 @@ export async function cmdAutorole(message, args, ctx) {
     return sendEmbed(message.channel, tr(ctx, {
       title: "🎭 Autorole",
       description: atual
-        ? `Novos membros recebem automaticamente o cargo <@&${atual}>.\n\nPara trocar: \`${PREFIXO}autorole set <@cargo>\` · desativar: \`${PREFIXO}autorole off\``
-        : `Nenhum cargo automático definido.\n\nPara ativar: \`${PREFIXO}autorole set <@cargo>\``,
+        ? `Novos membros recebem automaticamente o cargo <@&${atual}>.\n\nPara trocar: \`${citar("autorole.set", "pt", PREFIXO)} <@cargo>\` · desativar: \`${citar("autorole.off", "pt", PREFIXO)}\``
+        : `Nenhum cargo automático definido.\n\nPara ativar: \`${citar("autorole.set", "pt", PREFIXO)} <@cargo>\``,
       colour: COR.mod,
     }, {
       title: "🎭 Autorole",
       description: atual
-        ? `New members automatically receive the <@&${atual}> role.\n\nTo change it: \`${PREFIXO}autorole set <@role>\` · disable: \`${PREFIXO}autorole off\``
-        : `No automatic role set.\n\nTo enable it: \`${PREFIXO}autorole set <@role>\``,
+        ? `New members automatically receive the <@&${atual}> role.\n\nTo change it: \`${citar("autorole.set", "en", PREFIXO)} <@role>\` · disable: \`${citar("autorole.off", "en", PREFIXO)}\``
+        : `No automatic role set.\n\nTo enable it: \`${citar("autorole.set", "en", PREFIXO)} <@role>\``,
       colour: COR.mod,
     }));
   }
@@ -60,9 +61,9 @@ export async function cmdAutorole(message, args, ctx) {
     if (!roleId)
       return sendEmbed(message.channel, tr(ctx,
         { title: "❌ Cargo inválido",
-          description: `Informe um cargo. Ex.: \`${PREFIXO}autorole set <@cargo>\` ou o ID do cargo.`, colour: COR.erro },
+          description: `Informe um cargo. Ex.: \`${citar("autorole.set", "pt", PREFIXO)} <@cargo>\` ou o ID do cargo.`, colour: COR.erro },
         { title: "❌ Invalid role",
-          description: `Give me a role. E.g.: \`${PREFIXO}autorole set <@role>\` or the role's ID.`, colour: COR.erro }));
+          description: `Give me a role. E.g.: \`${citar("autorole.set", "en", PREFIXO)} <@role>\` or the role's ID.`, colour: COR.erro }));
 
     // confirma que o cargo existe no servidor
     const existe = server.roles?.get?.(roleId);
@@ -91,9 +92,9 @@ export async function cmdAutorole(message, args, ctx) {
 
   return sendEmbed(message.channel, tr(ctx,
     { title: "🎭 Autorole",
-      description: `Uso: \`${PREFIXO}autorole set <@cargo>\` · \`${PREFIXO}autorole off\``, colour: COR.info },
+      description: `Uso: \`${citar("autorole.set", "pt", PREFIXO)} <@cargo>\` · \`${citar("autorole.off", "pt", PREFIXO)}\``, colour: COR.info },
     { title: "🎭 Autorole",
-      description: `Usage: \`${PREFIXO}autorole set <@role>\` · \`${PREFIXO}autorole off\``, colour: COR.info }));
+      description: `Usage: \`${citar("autorole.set", "en", PREFIXO)} <@role>\` · \`${citar("autorole.off", "en", PREFIXO)}\``, colour: COR.info }));
 }
 
 export async function aoEntrar(member, ctx) {

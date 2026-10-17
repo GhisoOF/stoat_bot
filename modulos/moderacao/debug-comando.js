@@ -19,6 +19,7 @@ import { idsDeCargos, cargoDe, rankDoCargo, rankDoMembro } from "../core/hierarq
 import { servidorNaLista } from "../core/env.js";
 import * as db from "../core/db.js";
 import { lingua } from "../core/i18n.js";
+import { citar } from "../core/aliases.js";
 import { descreverErro } from "../core/erros.js";
 import { MODULOS_AUTOMOD, moduloLigado, escadaDePunicao, GRUPOS_AUTOMOD, estadoDoGrupo, validadeDosAvisos } from "./automod-engine.js";
 import { servidorPermitido as temIA } from "../ai/chat.js";
@@ -74,7 +75,7 @@ function secaoPermissoes(d, T) {
     ["SendMessage", "responder", "reply", true],
     ["SendEmbeds", "enviar os cartões de resposta", "send reply cards", true],
     ["React", "reagir — cargos por reação e as setas ◀ ▶", "react — reaction roles and the ◀ ▶ arrows"],
-    ["ManageMessages", "apagar mensagens — automod e &limpar", "delete messages — automod and &limpar"],
+    ["ManageMessages", `apagar mensagens — automod e ${citar("limpar", "pt")}`, `delete messages — automod and ${citar("limpar", "en")}`],
     ["KickMembers", "expulsar — &kick", "kick — &kick"],
     ["BanMembers", "banir — &ban, automod, lista global", "ban — &ban, automod, global list"],
     ["TimeoutMembers", "silenciar — &silenciar e a escada de punição", "time out — &silenciar and the punishment ladder"],

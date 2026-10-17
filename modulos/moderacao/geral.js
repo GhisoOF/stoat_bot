@@ -5,6 +5,7 @@ import { nomeExibido, normalizarArgs, SUB } from "../core/aliases.js";
 import { REGISTRO } from "../comandos/index.js";
 import { grupos as gruposHelp, ALIAS_GRUPO, ORDEM as ORDEM_GRUPOS } from "./help-grupos.js";
 import { secaoParametros } from "./help-parametros.js";
+import { detalhesDoRegistro } from "../core/ajuda-registro.js";
 import { enviarPaginado, paginarLinhas } from "../core/paginas.js";
 import { escadaDePunicao, rotuloDegrau, GRUPOS_AUTOMOD, estadoDoGrupo, validadeDosAvisos } from "./automod-engine.js";
 import { MUNDO } from "../game/mundo.js";
@@ -67,8 +68,8 @@ function extrairAlvo(message, args) {
 }
 
 export function construirDetalhes(P, lang = "pt") {
-  if (lang === "en") return detalhesEN(P);
-  return detalhesPT(P);
+  // os comandos já migrados (fase 3) têm a página no registro, e ela vence
+  return { ...(lang === "en" ? detalhesEN(P) : detalhesPT(P)), ...detalhesDoRegistro(P, lang) };
 }
 
 function detalhesPT(P) {
@@ -287,11 +288,6 @@ function detalhesPT(P) {
       desc: "Embed publicado quando alguém **sai** do servidor (saída, expulsão ou ban). Mesmas opções do `&boasvindas`.\n\n_Nas despedidas o `{usuario}` vira o **nome** em vez de menção: quem saiu não está mais no servidor, e a menção apareceria como um ID cru._",
       perm: "ManageMessages", ex: `${P}adeus canal aqui`,
     },
-    autorole: {
-      uso: `${P}autorole [set <@cargo>|off]`,
-      desc: "Dá um cargo automaticamente a todo novo membro que entra no servidor. `set` define o cargo, `off` desativa. Útil para dar um cargo de 'Membro' a todos automaticamente.",
-      perm: "ManageRole", ex: `${P}autorole set <@Membro>`,
-    },
     sobre: {
       uso: `${P}sobre`,
       desc: "Mostra informações resumidas do bot: recursos, número de comandos e há quanto tempo está no ar.",
@@ -338,11 +334,6 @@ function detalhesPT(P) {
       desc: "Cargos por reação: quem reagir com o emoji ganha o cargo; quem tirar a reação perde.\n\n`&reactionrole add <mensagem> <emoji> <idCargo>`\n`&reactionrole remove <mensagem>` — remove as regras daquela mensagem\n`&reactionrole exclusivo <mensagem> on|off` — **on**: escolher um emoji troca o cargo anterior (ex.: cor); **off**: acumula (ex.: interesses)\n`&reactionrole recarregar` — se os cargos pararem de ser entregues após um restart\n`&reactionrole list` — regras deste servidor\n\n**A mensagem** pode ser o **ID** ou o **link** dela (menu `...` → *Copiar link*) — os dois funcionam.\n**O cargo** pode ser **mencionado** (`<%Cargo>`) ou o ID (Configurações → Cargos → *Copy role ID*).\n\nO bot precisa de `React`, `ViewChannel`, `ReadMessageHistory` e **AssignRoles**, e o cargo dele deve estar acima do cargo entregue.",
       perm: "ManageRole",
       ex: `${P}reactionrole add https://stoat.chat/server/.../01ABC... 🎮 01XYZ...`,
-    },
-    limpar: {
-      uso: `${P}limpar <quantidade> [@usuário] | tudo`,
-      desc: "Apaga as últimas mensagens do canal (1–100). Com um usuário, apaga só as mensagens dele. Também responde a `clear` e `purge`. A confirmação some sozinha após alguns segundos.\n\n`&limpar tudo` — esvazia o canal INTEIRO. Só o **dono do servidor**, e com confirmação por código de 4 caracteres que expira em 60s. Não há como desfazer.",
-      perm: "ManageMessages", ex: `${P}limpar 10`,
     },
     config: {
       uso: `${P}config`,
@@ -573,11 +564,6 @@ function detalhesEN(P) {
       desc: "Embed posted when someone **leaves** the server (leave, kick or ban). Same options as `&welcome`.\n\n_In farewells `{usuario}` becomes the **name** rather than a mention: whoever left isn't on the server anymore, and the mention would show up as a raw ID._",
       perm: "ManageMessages", ex: `${P}goodbye channel here`,
     },
-    autorole: {
-      uso: `${P}autorole [set <@role>|off]`,
-      desc: "Automatically gives a role to every new member who joins the server. `set` defines the role, `off` disables it. Useful for handing everyone a 'Member' role automatically.",
-      perm: "ManageRole", ex: `${P}autorole set <@Member>`,
-    },
     sobre: {
       uso: `${P}sobre`,
       desc: "Shows a summary of the bot: features, number of commands and how long it has been up.",
@@ -624,11 +610,6 @@ function detalhesEN(P) {
       desc: "Reaction roles: whoever reacts with the emoji gets the role; removing the reaction removes the role.\n\n`&reactionrole add <message> <emoji> <roleId>`\n`&reactionrole remove <message>` — removes that message's rules\n`&reactionrole exclusivo <message> on|off` — **on**: picking one emoji swaps out the previous role (e.g. colors); **off**: they stack (e.g. interests)\n`&reactionrole recarregar` — if roles stop being handed out after a restart\n`&reactionrole list` — this server's rules\n\n**The message** can be its **ID** or its **link** (`...` menu → *Copy link*) — both work.\n**The role** can be **mentioned** (`<%Role>`) or given by ID (Settings → Roles → *Copy role ID*).\n\nThe bot needs `React`, `ViewChannel`, `ReadMessageHistory` and **AssignRoles**, and its role must be above the role being handed out.",
       perm: "ManageRole",
       ex: `${P}reactionrole add https://stoat.chat/server/.../01ABC... 🎮 01XYZ...`,
-    },
-    limpar: {
-      uso: `${P}limpar <amount> [@user] | tudo`,
-      desc: "Deletes the channel's latest messages (1–100). With a user, deletes only theirs. Also answers to `clear` and `purge`. The confirmation deletes itself after a few seconds.\n\n`&limpar tudo` — empties the WHOLE channel. **Server owner only**, with a 4-character confirmation code that expires in 60s. There is no undo.",
-      perm: "ManageMessages", ex: `${P}limpar 10`,
     },
     config: {
       uso: `${P}config`,

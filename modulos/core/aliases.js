@@ -300,6 +300,33 @@ export function nomeExibido(canonico, lang) {
   return COMANDO_EN[canonico] ?? canonico;
 }
 
+// Citação por referência (fase 3): `citar("autorole.set", "en")` → `&autorole set`.
+// O texto não escreve mais o nome do comando à mão: o nome em cada idioma vem do
+// registro. Referência que não existe (comando ou subcomando) é ERRO na hora — o
+// texto quebrado não chega à tela em silêncio, como o `${P}…` escrito à mão chegava.
+export function citar(ref, lang = "pt", prefixo = "&") {
+  const [cmd, ...subs] = String(ref ?? "").split(".");
+  const entrada = REGISTRO.find((c) => c.id === cmd);
+  if (!entrada) throw new Error(`citar: o comando "${cmd}" não existe no registro (${ref})`);
+  const partes = [lang === "en" ? (COMANDO_EN[cmd] ?? cmd) : cmd];
+  let tabela = cmd;
+  for (const s of subs) {
+    const conhecidos = new Set([...Object.values(SUB[tabela] ?? {}), ...Object.keys(SUB_REVERSO[tabela] ?? {})]);
+    if (!conhecidos.has(s)) throw new Error(`citar: "${s}" não é subcomando de ${tabela} no registro (${ref})`);
+    partes.push(lang === "en" ? (SUB_REVERSO[tabela]?.[s] ?? s) : s);
+    // o nível seguinte: a família (`automod.sentinela`) ou a parte com tabela própria
+    if (SUB[`${cmd}.${s}`] || SUB_REVERSO[`${cmd}.${s}`]) tabela = `${cmd}.${s}`;
+    else if (SUB[s] && cmd === "automod") tabela = s;
+  }
+  return prefixo + partes.join(" ");
+}
+
+// Troca as marcas `{&autorole.set}` de um texto pela citação no idioma (os textos
+// que moram no registro não podem chamar função: o registro é só dados).
+export function citarNoTexto(texto, lang = "pt", prefixo = "&") {
+  return String(texto ?? "").replace(/\{&([a-z0-9.]+)\}/g, (_, ref) => citar(ref, lang, prefixo));
+}
+
 // O nome de um subcomando na tela (`log` + `mensagens` → `messages` em inglês).
 // Para o handler que monta a tela com o nome interno fora de `&comando …`, onde
 // a tradução da tela não alcança (o `&log` listava `mensagens` em inglês).

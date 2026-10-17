@@ -2,6 +2,7 @@
 import { idEscrito, resolverUsuario } from "../core/ids.js";
 import * as log from "../core/log.js";
 import { tr, lingua } from "../core/i18n.js";
+import { citar } from "../core/aliases.js";
 
 const MAX = 100;
 
@@ -56,18 +57,20 @@ export async function cmdLimpar(message, args, ctx) {
   }
 
   // ── &limpar tudo / &limpar confirmar <código> ──
+  // Os nomes já chegam traduzidos (`all`, `confirm` → `tudo`, `confirmar`): o motor
+  // traduz pelo registro (fase 3); o handler só conhece o nome interno.
   const sub = (args[0] ?? "").toLowerCase();
 
-  if (["confirmar", "confirm"].includes(sub)) {
+  if (sub === "confirmar") {
     const p = pendentes.get(message.channelId);
     if (!p || Date.now() > p.expira) {
       pendentes.delete(message.channelId);
       return sendEmbed(message.channel, tr(ctx,
         { title: "⌛ Nada a confirmar",
-          description: `Nenhum pedido pendente neste canal (ou já expirou).\n\nComece com \`${PREFIXO}limpar tudo\`.`,
+          description: `Nenhum pedido pendente neste canal (ou já expirou).\n\nComece com \`${citar("limpar.tudo", "pt", PREFIXO)}\`.`,
           colour: COR.aviso },
         { title: "⌛ Nothing to confirm",
-          description: `No pending request in this channel (or it expired).\n\nStart with \`${PREFIXO}limpar tudo\`.`,
+          description: `No pending request in this channel (or it expired).\n\nStart with \`${citar("limpar.tudo", "en", PREFIXO)}\`.`,
           colour: COR.aviso }));
     }
     if (message.authorId !== p.autorId) {
@@ -80,9 +83,9 @@ export async function cmdLimpar(message, args, ctx) {
     if ((args[1] ?? "").toUpperCase() !== p.codigo) {
       return sendEmbed(message.channel, tr(ctx,
         { title: "❌ Código errado",
-          description: `Digite \`${PREFIXO}limpar confirmar ${p.codigo}\` exatamente como está.`, colour: COR.erro },
+          description: `Digite \`${citar("limpar.confirmar", "pt", PREFIXO)} ${p.codigo}\` exatamente como está.`, colour: COR.erro },
         { title: "❌ Wrong code",
-          description: `Type \`${PREFIXO}limpar confirmar ${p.codigo}\` exactly as shown.`, colour: COR.erro }));
+          description: `Type \`${citar("limpar.confirmar", "en", PREFIXO)} ${p.codigo}\` exactly as shown.`, colour: COR.erro }));
     }
 
     pendentes.delete(message.channelId);
@@ -119,16 +122,16 @@ export async function cmdLimpar(message, args, ctx) {
     return;
   }
 
-  if (["tudo", "all", "everything"].includes(sub)) {
+  if (sub === "tudo") {
     const ehDono = (server?.ownerId ?? server?.owner) === message.authorId
       || ctx.ehSuperAdmin?.(message.authorId);
     if (!ehDono) {
       return sendEmbed(message.channel, tr(ctx,
         { title: "🚫 Só o dono do servidor",
-          description: `Esvaziar um canal inteiro é irreversível, então só o **dono** pode.\n\nPara apagar em quantidade: \`${PREFIXO}limpar 100\`.`,
+          description: `Esvaziar um canal inteiro é irreversível, então só o **dono** pode.\n\nPara apagar em quantidade: \`${citar("limpar", "pt", PREFIXO)} 100\`.`,
           colour: COR.erro },
         { title: "🚫 Server owner only",
-          description: `Emptying a whole channel is irreversible, so only the **owner** can do it.\n\nTo delete in bulk: \`${PREFIXO}limpar 100\`.`,
+          description: `Emptying a whole channel is irreversible, so only the **owner** can do it.\n\nTo delete in bulk: \`${citar("limpar", "en", PREFIXO)} 100\`.`,
           colour: COR.erro }));
     }
 
@@ -144,7 +147,7 @@ export async function cmdLimpar(message, args, ctx) {
         "**Não há como desfazer.**",
         "",
         `Para confirmar, digite:`,
-        `\`${PREFIXO}limpar confirmar ${codigo}\``,
+        `\`${citar("limpar.confirmar", "pt", PREFIXO)} ${codigo}\``,
         "",
         "_O pedido expira em 60 segundos. Ignore esta mensagem para cancelar._",
       ].join("\n"),
@@ -156,7 +159,7 @@ export async function cmdLimpar(message, args, ctx) {
         "**There is no undo.**",
         "",
         `To confirm, type:`,
-        `\`${PREFIXO}limpar confirmar ${codigo}\``,
+        `\`${citar("limpar.confirmar", "en", PREFIXO)} ${codigo}\``,
         "",
         "_The request expires in 60 seconds. Ignore this message to cancel._",
       ].join("\n"),
@@ -170,16 +173,17 @@ export async function cmdLimpar(message, args, ctx) {
     return sendEmbed(message.channel, tr(ctx, {
       title: "❌ Uso incorreto",
       description: [
-        `\`${PREFIXO}limpar <quantidade>\` — apaga as últimas mensagens (1–${MAX})`,
-        `\`${PREFIXO}limpar <quantidade> @usuário\` — apaga só as desse usuário`,
-        `\`${PREFIXO}limpar tudo\` — esvazia o canal inteiro _(só o dono, com confirmação)_`,
+        `\`${citar("limpar", "pt", PREFIXO)} <quantidade>\` — apaga as últimas mensagens (1–${MAX})`,
+        `\`${citar("limpar", "pt", PREFIXO)} <quantidade> @usuário\` — apaga só as desse usuário`,
+        `\`${citar("limpar.tudo", "pt", PREFIXO)}\` — esvazia o canal inteiro _(só o dono, com confirmação)_`,
       ].join("\n"),
       colour: COR.erro,
     }, {
       title: "❌ Wrong usage",
       description: [
-        `\`${PREFIXO}limpar <amount>\` — deletes the latest messages (1–${MAX})`,
-        `\`${PREFIXO}limpar <amount> @user\` — deletes only that user's`,
+        `\`${citar("limpar", "en", PREFIXO)} <amount>\` — deletes the latest messages (1–${MAX})`,
+        `\`${citar("limpar", "en", PREFIXO)} <amount> @user\` — deletes only that user's`,
+        `\`${citar("limpar.tudo", "en", PREFIXO)}\` — empties the whole channel _(owner only, with confirmation)_`,
       ].join("\n"),
       colour: COR.erro,
     }));
@@ -207,8 +211,8 @@ export async function cmdLimpar(message, args, ctx) {
       ?? await resolverUsuario(textoAlvo, { message, server, client: ctx.client }).catch(() => null);
     // Pediu para filtrar e não achou a pessoa: NÃO apaga as de todo mundo.
     if (!alvo) return sendEmbed(message.channel, tr(ctx,
-      { title: "❌ Não achei essa pessoa", description: `Não encontrei \`${textoAlvo.slice(0, 60)}\` — nada foi apagado.\n\`${PREFIXO}limpar <quantidade> <@pessoa|id|nome>\``, colour: COR.erro },
-      { title: "❌ Couldn't find that person", description: `I couldn't find \`${textoAlvo.slice(0, 60)}\` — nothing was deleted.\n\`${PREFIXO}limpar <amount> <@user|id|name>\``, colour: COR.erro }));
+      { title: "❌ Não achei essa pessoa", description: `Não encontrei \`${textoAlvo.slice(0, 60)}\` — nada foi apagado.\n\`${citar("limpar", "pt", PREFIXO)} <quantidade> <@pessoa|id|nome>\``, colour: COR.erro },
+      { title: "❌ Couldn't find that person", description: `I couldn't find \`${textoAlvo.slice(0, 60)}\` — nothing was deleted.\n\`${citar("limpar", "en", PREFIXO)} <amount> <@user|id|name>\``, colour: COR.erro }));
   }
 
   try {

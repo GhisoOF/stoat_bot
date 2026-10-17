@@ -1194,6 +1194,7 @@
   },
   "limpar": {
    "all": "tudo",
+   "confirm": "confirmar",
    "everything": "tudo"
   },
   "log": {

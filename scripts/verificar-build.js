@@ -93,6 +93,29 @@ if (!existsSync(modulosDir)) {
   }
 }
 
+// 4) as citações por referência (fase 3): todo `citar("cmd.sub")` do código e todo
+//    `{&cmd.sub}` dos textos do registro apontam para um comando e um subcomando
+//    que existem — referência quebrada para o build, não sai torta na tela
+{
+  const { citar } = await import(join(RAIZ, "modulos", "core", "aliases.js"));
+  const { detalhesDoRegistro, parametrosDoRegistro } = await import(join(RAIZ, "modulos", "core", "ajuda-registro.js"));
+  const ruins = [];
+  let n = 0;
+  const lerJs = (d) => readdirSync(d, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? lerJs(join(d, e.name)) : e.name.endsWith(".js") ? [join(d, e.name)] : []));
+  for (const arq of [...lerJs(join(RAIZ, "modulos")), join(RAIZ, "main.js")]) {
+    // `citar("cmd.sub", …)` e as marcas `{&cmd.sub}` que passam por citarNoTexto
+    for (const m of readFileSync(arq, "utf8").matchAll(/\bcitar\(\s*"([^"]+)"|\{&([a-z0-9.]+)\}/g)) {
+      n++;
+      try { citar(m[1] ?? m[2]); } catch (e) { ruins.push(`${arq.slice(RAIZ.length + 1)}: ${e.message}`); }
+    }
+  }
+  for (const lang of ["pt", "en"]) {
+    try { detalhesDoRegistro("&", lang); parametrosDoRegistro("&", lang); } catch (e) { ruins.push(`ajuda do registro (${lang}): ${e.message}`); }
+  }
+  for (const r of ruins) falha(`citação: ${r}`);
+  if (!ruins.length) console.log(`  ✓ citações por referência resolvem (${n} no código, mais as da ajuda do registro)`);
+}
+
 if (erros) {
   console.error(`\nBUILD ABORTADO: ${erros} problema(s) de integridade. O repositório está incompleto ou inconsistente.`);
   process.exit(1);

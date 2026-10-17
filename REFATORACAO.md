@@ -791,6 +791,63 @@ Também traduzi o `Sensitivity:` da mensagem de liga/desliga dentro do `cmdScam`
 esse trecho não é alcançável por comando: o `&automod sentinel on` é respondido antes,
 pelo liga/desliga da família.
 
+## 6m. Fase 3a: a ajuda e as citações saem do registro (17 out 2026)
+
+A fase 3 é uma família por pacote. Esta traz o mecanismo e as duas primeiras:
+`&autorole` e `&limpar`.
+
+**Citação por referência.** Em vez de escrever `${P}limpar tudo` à mão, o texto pede
+o comando ao registro:
+
+```js
+citar("limpar.tudo", "en", P)                  // no código → "&purge all"
+"`{&limpar.tudo}` — esvazia o canal INTEIRO"   // nos textos do registro (só dados)
+```
+
+O nome em cada idioma vem do registro, também dentro das famílias
+(`automod.sentinela.assuntos` → `&automod sentinel topics`). Referência que não
+existe é **erro**: `citar` lança na hora, e o `verificar-build.js` confere todas as
+do código e do registro (62 hoje), então uma referência quebrada derruba o build da
+imagem. Antes, um `${P}…` errado só aparecia torto na tela.
+
+**A página de ajuda no registro.** O comando migrado declara `ajuda: { perm, uso,
+desc, ex, parametros }` nos dois idiomas, no próprio arquivo de `modulos/comandos/`.
+O `construirDetalhes` (geral.js) e o `parametros` (help-parametros.js) juntam o que
+vem de `modulos/core/ajuda-registro.js`, e as cópias à mão dos dois comandos saíram.
+
+**O handler só conhece o nome interno.** No `&limpar`, o `confirmar` era só da
+tela, então o handler aceitava `confirm` e `confirmar`, `all`, `everything` e
+`tudo`. Agora o `confirm` é traduzido na entrada, como os outros, e o handler
+testa só `tudo` e `confirmar`. Conferi antes quem chama os dois handlers por dentro
+sem passar pela tradução: só o assistente, com `["autorole", "set", …]`, que já é o
+nome interno.
+
+**Todas as citações dos dois** foram para `citar` (46, em 6 arquivos: os dois
+handlers, o tutorial, o índice da ajuda, o `&debug` e o diagnóstico de permissões).
+
+**Provas:**
+- As 334 telas e as 987 respostas antes e depois: as telas são todas iguais. Das
+  respostas, a única diferença que não é de relógio ou memória é de propósito: o
+  "uso incorreto" do `&purge` em inglês não tinha a linha do `&purge all`, que o
+  português tinha. Agora tem.
+- 6 testes novos (seção 7 da `comandos-17out`, 54 no total):
+  - o `citar` nos dois idiomas e nas famílias;
+  - o `citar` falhando com referência errada;
+  - a página `&help` e os parâmetros de cada comando migrado vindos do registro, e
+    nenhuma cópia sobrando no geral.js ou no help-parametros.js;
+  - nenhum comando migrado citado à mão em lugar nenhum do código;
+  - o `&purge all` → `&purge confirm <código>` de ponta a ponta em inglês;
+  - o handler sem palavra em inglês no parse.
+
+  A lista de migrados sai do próprio registro (quem tem `ajuda`), então cada família
+  nova entra nesses testes sozinha.
+- Mutações, cada uma derruba pelo menos um teste: uma citação à mão de volta no
+  tutorial, uma cópia velha da página no geral.js, o `confirmar` fora do registro,
+  uma citação à mão no índice da ajuda. O `verificar-build.js` com um
+  `citar("autorole.sett")` aborta o build.
+
+O inventário ganhou uma linha (`limpar`: `confirm` → `confirmar`).
+
 ---
 
 ## 7. O que NÃO fiz, e por quê

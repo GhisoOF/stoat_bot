@@ -588,7 +588,7 @@ versões antigas continuam funcionando.
 ├── main.js                     # bootstrap: cliente, eventos, despacho dos comandos, auto-recuperação
 ├── modulos/
 │   ├── core/                   # base: db (SQLite), config, i18n, ids, log, páginas…
-│   ├── comandos/               # o registro de comandos: um arquivo por família (nome, apelidos, nome em inglês, marcas)
+│   ├── comandos/               # o registro de comandos: um arquivo por família (nomes, subcomandos, marcas e, aos poucos, a página de ajuda)
 │   ├── moderacao/              # automod, punições, ban global, help, tutorial, assistente…
 │   ├── ai/                     # chat, persona, memória, comentário espontâneo, verificador
 │   ├── ferramentas/            # xp, reaction roles, autorole, boas-vindas, tts, rss, fuso
@@ -607,7 +607,7 @@ versões antigas continuam funcionando.
 
 ```bash
 npm install
-node scripts/verificar-build.js   # imports, rotas e consistência
+node scripts/verificar-build.js   # imports, rotas, registro e citações de comando
 node testes.mjs                   # todas as suítes · `node testes.mjs ia tickets` roda só essas · `--lista`
 ```
 

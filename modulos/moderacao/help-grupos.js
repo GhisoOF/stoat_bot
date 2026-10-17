@@ -1,5 +1,6 @@
 
 import { IA_TAG, MODIA_TAG } from "./help-arvore.js";
+import { citar } from "../core/aliases.js";
 
 // nome digitado → chave do grupo (aceita PT e EN, novos e antigos)
 export const ALIAS_GRUPO = {
@@ -70,7 +71,7 @@ function gruposPT(P) {
         `\`${P}warn lista [@pessoa]\` · \`${P}warn limpar @pessoa\` — ver e zerar avisos`,
         `\`${P}silenciar @pessoa <tempo> [motivo]\` — silêncio nativo do Stoat *(TimeoutMembers)*`,
         `\`${P}kick @pessoa [motivo]\` · \`${P}ban @pessoa [motivo]\``,
-        `\`${P}limpar <n> [@pessoa]\` — apaga mensagens *(ManageMessages)*`,
+        `\`${citar("limpar", "pt", P)} <n> [@pessoa]\` — apaga mensagens *(ManageMessages)*`,
         "",
         "**Quem modera e onde**",
         `\`${P}acesso cargo add @cargo\` — dá acesso aos comandos de moderação`,
@@ -85,7 +86,7 @@ function gruposPT(P) {
         "**Entrada e saída** *(ManageMessages)*",
         `\`${P}boasvindas canal aqui\` — embed quando alguém entra (\`${P}help boasvindas\` explica cada parâmetro)`,
         `\`${P}adeus canal aqui\` — embed quando alguém sai`,
-        `\`${P}autorole <cargo>\` — cargo automático a quem entra *(ManageRole)*`,
+        `\`${citar("autorole", "pt", P)} <cargo>\` — cargo automático a quem entra *(ManageRole)*`,
         "",
         "**Cargos** *(ManageRole)*",
         `\`${P}reactionrole add <mensagem> <emoji> <cargo>\` — cargo por reação`,
@@ -247,7 +248,7 @@ function gruposEN(P) {
         `\`${P}warn lista [@user]\` · \`${P}warn limpar @user\` — see and clear warnings`,
         `\`${P}silenciar @user <time> [reason]\` — Stoat's native timeout *(TimeoutMembers)*`,
         `\`${P}kick @user [reason]\` · \`${P}ban @user [reason]\``,
-        `\`${P}limpar <n> [@user]\` — deletes messages *(ManageMessages)*`,
+        `\`${citar("limpar", "en", P)} <n> [@user]\` — deletes messages *(ManageMessages)*`,
         "",
         "**Who moderates and where**",
         `\`${P}acesso cargo add @role\` — grants access to moderation commands`,
@@ -262,7 +263,7 @@ function gruposEN(P) {
         "**Join and leave** *(ManageMessages)*",
         `\`${P}boasvindas canal aqui\` — embed when someone joins (\`${P}help boasvindas\` explains every parameter)`,
         `\`${P}adeus canal aqui\` — embed when someone leaves`,
-        `\`${P}autorole <role>\` — automatic role on join *(ManageRole)*`,
+        `\`${citar("autorole", "en", P)} <role>\` — automatic role on join *(ManageRole)*`,
         "",
         "**Roles** *(ManageRole)*",
         `\`${P}reactionrole add <message> <emoji> <role>\` — reaction roles`,

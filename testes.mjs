@@ -15393,6 +15393,72 @@ await t("a tela em inglês cita `&music`, nunca `&musica` (o nome em inglês vem
   assert.ok(!/&musica\b/.test(en), en.match(/.{0,60}&musica\b.{0,20}/)?.[0]);
 });
 
+// ── 7. Fase 3: a ajuda e as citações vêm do registro ──
+console.log("\n── 7. fase 3: ajuda e citações pelo registro ──");
+const { citar, citarNoTexto } = aliasesMod;
+const ajudaReg = await import("./modulos/core/ajuda-registro.js");
+await t("citar(): o nome em cada idioma vem do registro, também dentro das famílias", () => {
+  assert.equal(citar("autorole.set", "en"), "&autorole set");
+  assert.equal(citar("log.mensagens", "en", "!"), "!log messages");
+  assert.equal(citar("warn.lista", "pt"), "&warn lista");
+  assert.equal(citar("warn.lista", "en"), "&warn list");
+  assert.equal(citar("automod.sentinela.assuntos", "en"), "&automod sentinel topics");
+  assert.equal(citar("automod.punicao.validade", "en"), "&automod punishment expiry");
+  assert.equal(citarNoTexto("veja {&warn.lista} e {&autorole}", "en"), "veja &warn list e &autorole");
+});
+await t("citar(): referência que não existe é erro, não texto torto na tela", () => {
+  assert.throws(() => citar("autorole.sett"), /"sett" não é subcomando de autorole/);
+  assert.throws(() => citar("autorol.set"), /o comando "autorol" não existe/);
+  assert.throws(() => citarNoTexto("{&warn.listaa}", "pt"), /"listaa" não é subcomando de warn/);
+});
+// Os comandos já migrados: a página de ajuda mora no registro (`ajuda`). A cada
+// família migrada, esta lista cresce sozinha.
+const MIGRADOS = ajudaReg.COMANDOS_COM_AJUDA;
+await t(`comandos migrados (${MIGRADOS.join(", ")}): a página \`&help\` e os parâmetros vêm do registro, nos dois idiomas`, async () => {
+  assert.ok(MIGRADOS.includes("autorole"));
+  const geralSrc = fs.readFileSync("modulos/moderacao/geral.js", "utf8"), paramSrc = fs.readFileSync("modulos/moderacao/help-parametros.js", "utf8");
+  for (const id of MIGRADOS) {
+    // nenhuma cópia à mão sobrando (ela venceria em silêncio se a ordem do merge mudasse)
+    assert.ok(!new RegExp(`^\\s{4}${id}: [{\\[]`, "m").test(geralSrc), `${id} ainda tem página escrita no geral.js`);
+    assert.ok(!new RegExp(`^\\s{4}${id}: \\[`, "m").test(paramSrc), `${id} ainda tem parâmetros escritos no help-parametros.js`);
+    for (const lang of ["pt", "en"]) {
+      const d = ajudaReg.detalhesDoRegistro("&", lang)[id];
+      const tela = await comando(lang, `&help ${aliasesMod.nomeExibido(id, lang)}`);
+      // a tela troca `<x>` por `‹x›` nos moldes de uma palavra; a comparação ignora isso
+      const semMolde = (x) => x.replace(/[<>‹›]/g, "");
+      assert.ok(semMolde(tela).includes(semMolde(`\`${d.uso}\``)), `[${lang}] a página mostra o uso do registro: ${d.uso}`);
+      for (const p of ajudaReg.parametrosDoRegistro("&", lang)[id] ?? []) assert.ok(tela.includes(p.desc), `[${lang}] parâmetro: ${p.desc}`);
+    }
+  }
+});
+await t("`&purge all` → `&purge confirm <código>` em inglês: o motor traduz e o handler só conhece `tudo`/`confirmar`", async () => {
+  const en = await servidorNovo("en");
+  const pede = (await say("&purge all", en)).texto;
+  const codigo = pede.match(/`&purge confirm (\w{4})`/)?.[1];
+  assert.ok(codigo, pede);
+  assert.ok(!/confirmar|tudo/.test(pede), pede);
+  const r = (await say(`&purge confirm ${codigo}`, en)).texto;
+  assert.ok(!/^(⌛|❌)/.test(r), r);
+  assert.match((await say("&purge", en)).texto, /`&purge all` — empties the whole channel/);
+  // e o handler não aceita mais o inglês por conta própria: quem traduz é o motor
+  const src = fs.readFileSync("modulos/moderacao/limpar.js", "utf8");
+  assert.ok(!/"(all|everything|confirm)"/.test(src), "limpar.js ainda tem palavra em inglês no parse");
+});
+await t("comandos migrados não são citados à mão em lugar nenhum (`${P}autorole …` → citar(\"autorole.set\", …))", () => {
+  const ler = (d) => fs.readdirSync(d, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? (e.name === "comandos" ? [] : ler(`${d}/${e.name}`)) : e.name.endsWith(".js") ? [`${d}/${e.name}`] : []));
+  const nomes = MIGRADOS.flatMap((id) => [id, ...(REG.find((x) => x.id === id).apelidos ?? [])]);
+  // `{&limpar}` é a marca de citação por referência — não conta
+  const re = new RegExp(`(\\$\\{(?:P|PREFIXO|prefixo)\\}|(?<![\\w&{])&)(${nomes.join("|")})\\b`);
+  const achados = [];
+  for (const arq of [...ler("modulos"), "main.js"]) {
+    fs.readFileSync(arq, "utf8").split("\n").forEach((l, i) => {
+      if (/^\s*\/\//.test(l)) return;   // comentário pode citar à mão
+      if (re.test(l)) achados.push(`${arq}:${i + 1}: ${l.trim().slice(0, 90)}`);
+    });
+  }
+  assert.deepEqual(achados, []);
+});
+
 // ── O inventário legível ──
 if (ATUALIZAR) {
   const porCanonico = {};

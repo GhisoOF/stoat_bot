@@ -1,5 +1,6 @@
 import * as visaoMod from "./visao.js";
 import { servidorPermitido as temIA, comandoIAPermitido } from "../ai/chat.js";
+import { citar } from "../core/aliases.js";
 import { lingua } from "../core/i18n.js";
 import { enviarPaginado, paginarLinhas } from "../core/paginas.js";
 
@@ -19,7 +20,7 @@ function AREAS(P, lang = "pt", comIA = false) {
         "• `BypassSlowmode` — answer right away in slowmode channels (without it she waits her turn)",
         "",
         "**To moderate**",
-        "• `ManageMessages` — delete messages (automod, `&limpar`)",
+        `• \`ManageMessages\` — delete messages (automod, \`${citar("limpar", "en", P)}\`)`,
         "• `KickMembers`, `BanMembers` — `&kick`, `&ban`, global bans",
         "• `TimeoutMembers` — timed silences (`&silenciar`)",
         "",
@@ -62,7 +63,7 @@ function AREAS(P, lang = "pt", comIA = false) {
         "",
         "**Examples**",
         `\`${P}warn @Ana flood\` · \`${P}warn 01KH9SJYWVD7XAHJ28TP0YP4Q0 flood\``,
-        `\`${P}autorole set @Member\` · \`${P}autorole set Member\``,
+        `\`${citar("autorole.set", "en", P)} @Member\` · \`${citar("autorole.set", "en", P)} Member\``,
         `\`${P}log here\` · \`${P}log #logs\``,
         "",
         "💡 When an ID comes in wrong, the bot says what's off (e.g. “it has 25 characters, an ID has 26”).",
@@ -159,7 +160,7 @@ function AREAS(P, lang = "pt", comIA = false) {
       ordem: 3,
       resumo: "Role on join and reaction roles.",
       corpo: [
-        `**Automatic role on join:** \`${P}autorole set @Role\``,
+        `**Automatic role on join:** \`${citar("autorole.set", "en", P)} @Role\``,
         "The role can be mentioned, named or given by ID (Settings → Roles → *Copy role ID*).",
         "",
         `**Reaction roles** (react and get the role):`,
@@ -434,7 +435,7 @@ function AREAS(P, lang = "pt", comIA = false) {
         "• `BypassSlowmode` (Ignorar modo lento) — responder na hora em canal com modo lento (sem ela, espera a vez)",
         "",
         "**Para moderar**",
-        "• `ManageMessages` — apagar mensagens (automod, `&limpar`)",
+        `• \`ManageMessages\` — apagar mensagens (automod, \`${citar("limpar", "pt", P)}\`)`,
         "• `KickMembers`, `BanMembers` — `&kick`, `&ban`, ban global",
         "• `TimeoutMembers` — silenciar por tempo (`&silenciar`)",
         "",
@@ -477,7 +478,7 @@ function AREAS(P, lang = "pt", comIA = false) {
         "",
         "**Exemplos**",
         `\`${P}warn @Ana flood\` · \`${P}warn 01KH9SJYWVD7XAHJ28TP0YP4Q0 flood\``,
-        `\`${P}autorole set @Membro\` · \`${P}autorole set Membro\``,
+        `\`${citar("autorole.set", "pt", P)} @Membro\` · \`${citar("autorole.set", "pt", P)} Membro\``,
         `\`${P}log aqui\` · \`${P}log #logs\``,
         "",
         "💡 Quando um ID vem errado, o bot diz o que está faltando (ex.: “tem 25 caracteres, um ID tem 26”).",
@@ -574,7 +575,7 @@ function AREAS(P, lang = "pt", comIA = false) {
       ordem: 3,
       resumo: "Cargo ao entrar e cargos por reação.",
       corpo: [
-        `**Cargo automático para quem entra:** \`${P}autorole set @Cargo\``,
+        `**Cargo automático para quem entra:** \`${citar("autorole.set", "pt", P)} @Cargo\``,
         "O cargo pode ser mencionado, pelo nome ou pelo ID (Configurações → Cargos → *Copy role ID*).",
         "",
         `**Cargos por reação** (a pessoa reage e ganha o cargo):`,
@@ -924,7 +925,7 @@ function GUIA(P, lang = "pt", comIA = false) {
         `Markers: \`{usuario}\` mention · \`{nome}\` name · \`{servidor}\` · \`{membros}\`. \`${P}help boasvindas\` explains every parameter.`,
         `**Goodbye:** same thing with \`${P}adeus\`.`,
         "",
-        `**Role on join:** \`${P}autorole set @Member\``,
+        `**Role on join:** \`${citar("autorole.set", "en", P)} @Member\``,
         "",
         "**Reaction roles:**",
         `1. \`${P}embed title: Pick your roles | description: 🎮 Games · 📢 News\``,
@@ -1033,7 +1034,7 @@ function GUIA(P, lang = "pt", comIA = false) {
         `Marcadores: \`{usuario}\` menção · \`{nome}\` nome · \`{servidor}\` · \`{membros}\`. \`${P}help boasvindas\` explica cada parâmetro.`,
         `**Despedida:** a mesma coisa com \`${P}adeus\`.`,
         "",
-        `**Cargo a quem entra:** \`${P}autorole set @Membro\``,
+        `**Cargo a quem entra:** \`${citar("autorole.set", "pt", P)} @Membro\``,
         "",
         "**Cargos por reação:**",
         `1. \`${P}embed titulo: Escolha seus cargos | descricao: 🎮 Jogos · 📢 Avisos\``,

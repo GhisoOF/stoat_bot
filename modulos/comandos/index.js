@@ -27,7 +27,18 @@
 //     essencial: true,             // nunca é desligado (a ajuda, o próprio &comando…)
 //     qualquerCanal: true,         // vale até nos canais onde o &acesso restringe os comandos
 //     textoLivre: true,            // os argumentos são texto livre: `<div>` ou `‹algo›` não é molde da ajuda
+//     ajuda: {                     // a página `&help warn` (fase 3) — sai daqui, não do geral.js
+//       perm: "ManageMessages",
+//       uso: { pt: "{&warn} <@pessoa> [motivo]", en: "{&warn} <@user> [reason]" },
+//       desc: { pt: "…", en: "…" }, ex: { pt: "…", en: "…" },   // texto solto vale para os dois
+//       parametros: [{ nome: { pt: "[motivo]", en: "[reason]" }, desc: { pt: "…", en: "…" } }],
+//     },
 //   };
+//
+// Citação por referência (fase 3): nos textos do registro, `{&warn.lista}` vira
+// `&warn lista` / `&warn list`; no código, `citar("warn.lista", lang, P)` (aliases.js).
+// Referência a comando ou subcomando que não existe é erro — o verificar-build.js
+// confere todas.
 //
 // O handler vem por caminho + nome (e não por import) de propósito: assim este
 // registro não carrega módulo nenhum, e o aliases.js pode lê-lo no carregamento
@@ -38,8 +49,9 @@
 //
 // Desde a fase 2 todos os subcomandos também moram aqui. O &automod tem ainda
 // `familias` (os níveis dentro dele: `&automod sentinela assuntos …`) e `partes`
-// (as que aparecem sozinhas: `&help punicao`). Ainda NÃO estão aqui: a sintaxe e
-// os textos da ajuda (fase 3).
+// (as que têm tabela própria: `&help punishment ladder`). A fase 3 traz para cá a
+// página de ajuda (`ajuda`), uma família por vez: o que já tem `ajuda` não tem
+// mais cópia no geral.js nem no help-parametros.js.
 //
 // Arquivo novo nesta pasta tem de entrar na lista abaixo — a suíte comandos-17out
 // falha se sobrar arquivo fora dela.

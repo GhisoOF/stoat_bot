@@ -1,6 +1,8 @@
+import { parametrosDoRegistro } from "../core/ajuda-registro.js";
 
 export function parametros(P, lang = "pt") {
-  return lang === "en" ? parametrosEN(P) : parametrosPT(P);
+  // os comandos já migrados (fase 3) têm os parâmetros no registro, e eles vencem
+  return { ...(lang === "en" ? parametrosEN(P) : parametrosPT(P)), ...parametrosDoRegistro(P, lang) };
 }
 
 function parametrosPT(P) {
@@ -135,11 +137,6 @@ function parametrosPT(P) {
       { nome: "reset", valor: "confirmar", desc: "zera o XP de **todos** do servidor" },
     ],
 
-    limpar: [
-      { nome: "<n>", desc: "quantas mensagens apagar (as últimas)" },
-      { nome: "[@pessoa]", desc: "só as mensagens dessa pessoa, dentro das últimas n" },
-    ],
-
     warn: [
       { nome: "<@pessoa|id|nome>", desc: "quem recebe o aviso" },
       { nome: "[motivo]", desc: "fica no histórico e no log" },
@@ -149,11 +146,6 @@ function parametrosPT(P) {
       { nome: "<nome> on|off", desc: "liga/desliga um comando neste servidor (todos os apelidos dele juntos)" },
       { nome: "list", desc: "o que está desligado" },
       { nome: "Essenciais", desc: "`help`, `comando`, `debug` e `idioma` nunca desligam — senão o admin se tranca fora" },
-    ],
-
-    autorole: [
-      { nome: "<cargo>", desc: "cargo entregue a quem entra (nome, menção ou ID)" },
-      { nome: "off", desc: "desliga" },
     ],
 
     idioma: [
@@ -388,11 +380,6 @@ function parametrosEN(P) {
       { nome: "reset", valor: "confirm", desc: "wipes **everyone's** XP on the server" },
     ],
 
-    limpar: [
-      { nome: "<n>", desc: "how many messages to delete (the latest)" },
-      { nome: "[@user]", desc: "only that person's messages, within the latest n" },
-    ],
-
     warn: [
       { nome: "<@user|id|name>", desc: "who gets the warning" },
       { nome: "[reason]", desc: "kept in the history and the log" },
@@ -402,11 +389,6 @@ function parametrosEN(P) {
       { nome: "<name> on|off", desc: "toggles a command on this server (all its aliases together)" },
       { nome: "list", desc: "what's off" },
       { nome: "Essentials", desc: "`help`, `command`, `debug` and `language` never turn off — otherwise the admin locks themselves out" },
-    ],
-
-    autorole: [
-      { nome: "<role>", desc: "role handed to whoever joins (name, mention or ID)" },
-      { nome: "off", desc: "turns it off" },
     ],
 
     idioma: [

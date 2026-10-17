@@ -4,7 +4,7 @@ Gerado por `INVENTARIO=1 node testes.mjs comandos-17out` — **não edite à mã
 reestruturação dos comandos num registro central (fase 0). A suíte `comandos-17out` compara o bot com o
 `inventario.json` desta pasta: nome que some ou muda de destino faz o teste falhar.
 
-**48 comandos · 149 nomes · 557 subcomandos em inglês · 334 telas de ajuda · 987 exemplos executados**
+**48 comandos · 149 nomes · 558 subcomandos em inglês · 334 telas de ajuda · 987 exemplos executados**
 
 ## Comandos
 
@@ -105,7 +105,7 @@ O que ainda está espalhado:
 - `help`: character→game, configuration→config, customise→personalizar, customize→personalizar, diagnostics→diagnostico, fun→diversao, general→geral, levels→xp, moderation→moderacao, owner→dono, protect→proteger, protection→proteger, settings→config, start→comecar, tools→ferramentas, troubleshooting→diagnostico
 - `idioma`: portuguese→portugues
 - `iniciativa`: clear→limpar, list→lista, remove→remover
-- `limpar`: all→tudo, everything→tudo
+- `limpar`: all→tudo, confirm→confirmar, everything→tudo
 - `log`: channel→canal, commands→comandos, events→eventos, members→membros, messages→mensagens, punishments→punicoes, roles→cargos
 - `modia`: channel→canal, clear→limpar, criteria→criterios
 - `punicao`: ban→banir, confirm→confirmar, delete→apagar, ladder→escada, mode→modo, role→cargo, stack→acumular, steps→escada, warn→avisar

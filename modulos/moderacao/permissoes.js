@@ -1,3 +1,4 @@
+import { citarNoTexto } from "../core/aliases.js";
 
 // Bits de permissão do Stoat/Revolt (os que importam para o bot).
 export const BITS = {
@@ -34,7 +35,7 @@ const PARA_QUE = {
   SendMessage: "responder",
   SendEmbeds: "enviar os cartões de resposta",
   React: "reagir (cargos por reação, 👀)",
-  ManageMessages: "apagar mensagens (automod, &limpar, &modia)",
+  ManageMessages: "apagar mensagens (automod, {&limpar}, {&modia})",
   ManageChannel: "editar o canal",
 };
 const PARA_QUE_EN = {
@@ -43,7 +44,7 @@ const PARA_QUE_EN = {
   SendMessage: "reply",
   SendEmbeds: "send the reply cards",
   React: "react (reaction roles, 👀)",
-  ManageMessages: "delete messages (automod, &limpar, &modia)",
+  ManageMessages: "delete messages (automod, {&limpar}, {&modia})",
   ManageChannel: "edit the channel",
 };
 
@@ -193,7 +194,8 @@ export function rastrearPermissoes(server, canal, member, client = null, lang = 
 // ── 1 e 2: o que o bot enxerga e o que consegue fazer em cada canal ──
 export function diagnosticarCanais(server, client, botMember = null, lang = "pt") {
   const en = lang === "en";
-  const ROTULO = en ? PARA_QUE_EN : PARA_QUE;
+  // as marcas `{&limpar}` viram o nome do comando no idioma (fase 3)
+  const ROTULO = Object.fromEntries(Object.entries(en ? PARA_QUE_EN : PARA_QUE).map(([k, v]) => [k, citarNoTexto(v, lang)]));
   const canais = (server?.channels ?? []).filter(Boolean);
   const grupos = { ok: [], parcial: [], mudo: [], cego: [], desconhecido: [] };
   const problemas = [];

@@ -14,7 +14,7 @@
 // AssignRoles, ManagePermissions — e ManageMessages para limpar as reações.
 
 import * as db from "../core/db.js";
-import { tr, lingua } from "../core/i18n.js";
+import { tr, lingua, textoDoIdioma } from "../core/i18n.js";
 import { descreverErro } from "../core/erros.js";
 import { subirAnexo } from "../core/anexos.js";
 import { chamarApi } from "../core/stoat-api.js";
@@ -65,7 +65,7 @@ function garantirCfg(config) {
   c.contador ??= 0;
   c.logCanal ??= null;
   // os assuntos padrão no idioma do servidor (e trocam junto se ninguém mexeu neles)
-  const en = config.language === "en";
+  const en = textoDoIdioma(config.language) === "en";
   const padrao = (en ? CATEGORIAS_PADRAO_EN : CATEGORIAS_PADRAO).map((x) => ({ ...x }));
   const ehPadrao = (lista) => JSON.stringify(lista) === JSON.stringify(CATEGORIAS_PADRAO) || JSON.stringify(lista) === JSON.stringify(CATEGORIAS_PADRAO_EN);
   if (!c.categorias || ehPadrao(c.categorias)) c.categorias = padrao;

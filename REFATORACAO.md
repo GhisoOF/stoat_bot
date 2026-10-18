@@ -942,6 +942,72 @@ o `channel` do `&log` ou o `test` do `&webhook` do registro derruba a suíte (as
 citações por referência quebram, e o teste novo reprova); a página do `&idioma` com o
 erro de volta também.
 
+## 6p. Etapa 4a: o espanhol (18 out 2026)
+
+`&idioma es` (também `español`, `espanol`, `espanhol`, `spanish`, `castellano`).
+O que já sai em espanhol: **os nomes dos comandos e dos subcomandos** em toda tela,
+e **as 20 páginas de ajuda que moram no registro**, escritas em espanhol. O resto das
+respostas sai em inglês — os ~2.000 pares de texto ficam para as próximas etapas.
+
+**Registro:** `es: { nome, subcomandos }` nos 48 comandos (`&ayuda`, `&limpiar`,
+`&advertir`, `&expulsar`, `&dados`, `&acerca`, `&bienvenida`, `&despedida`…). O nome
+em espanhol vale ao digitar em qualquer servidor, como um apelido: 15 rotas novas. A
+tabela de entrada ganhou 34 palavras (`borrar`, `quitar`, `crear`, `sanciones`…) —
+nenhuma muda o destino de uma que já existia (conferido contra o inventário, e um
+teste garante que a tela e a entrada concordam).
+
+**Tela:** em espanhol, o `exibir` faz a tela em inglês e depois o `paraEspanhol`
+troca nomes de comando, subcomandos e moldes (`‹cantidad›`, `[@usuario]`). A página
+do registro em espanhol **sai pronta**: uma marca invisível (`JA_TRADUZIDO`) faz o
+`exibir` só tirá-la — a tradução da tela tratava o espanhol como inglês (`aqui` →
+`here`, `{usuario}` → `{user}`, `[motivo]` → `[reason]`, `acumular` → `stack`).
+Rótulos da página (`Uso`, `Permiso`, `Ejemplo`, `Parámetros de`, `Subtemas`) e o
+rodapé das páginas (`reacciona ◀ ▶ para pasar`) também.
+
+**i18n:** `idiomaDe` aceita `es`; `lingua`/`textoDoIdioma` dão `en` para o texto;
+`idiomaDaTela` (novo) para os rótulos que já existem nos três. Treze lugares liam
+`config.language === "en"` direto (reset, assuntos, avatar, imagem, economia, tickets,
+rss, paginas, main) — no espanhol cairiam no **português**. Passaram ao
+`textoDoIdioma`, e um teste impede voltar.
+
+**Palavras que o próprio handler conhece:** `&embed` (`descripcion`, `pie`,
+`imagen`), as cores (`rojo`, `morado`, `negro`…), os marcadores (`{nombre}`,
+`{miembros}`), `&dados ventaja|desventaja`, `&iniciativa agregar|siguiente`,
+`&despedida imagen borrar`.
+
+**Achados no caminho (valem para pt e en também):**
+- `&comando list`: a ajuda prometia e caía no "uso errado". Agora lista.
+- "Comando desativado" e "não existe aqui" mostravam o nome interno (`&repete` no
+  inglês). Agora, o da tela.
+- O nível de quem vê a ajuda era procurado pelo nome **escrito na tela**: no inglês,
+  `&about` sumia para o membro (o mapa só conhece `sobre`) e `&staff title`,
+  `&xp roles`… apareciam para ele (as palavras em inglês das partes de staff). Agora
+  o nome vai para o interno antes (`idDoNome` + `normalizarArgs`). Conferido com a
+  ajuda inteira vista por um membro, pt e en, antes e depois: 8 telas mudam, todas por
+  isso.
+- `&help tutorial` em inglês: "Also answers to `&tutorial` and `&tutorial`".
+- `&help comando` em português: o uso era `[disable|enable <nome>]`.
+- Em espanhol, `&help fun` virava `&ayuda entretenimiento` (o apelido `fun`): o grupo
+  vence o apelido, como na entrada. Os grupos ganharam `diversion` e `empezar`.
+
+**Mudou na tela pt/en, de propósito:** `pt|en` → `pt|en|es` (uso do `&idioma`,
+grupos, tutorial, status); o aviso do primeiro comando oferece o espanhol; o
+`&help idioma` descreve o espanhol. E o `&log aqui` em português agora passa pelo
+caminho do `&log here` (o efeito é o mesmo; a confirmação diz "neste canal" em vez da
+menção). O resto das 334 telas e das 985 respostas é igual (só relógio, sorteio, IDs e
+contagem de linhas).
+
+**Pendente, anotado:** `&help config` abre o grupo Personalizar — `config` também é
+nome de grupo da ajuda, e o grupo vence. A página do `&config` não é alcançável, em
+idioma nenhum, desde antes desta etapa. Não mexi: é escolher qual dos dois o `config`
+abre.
+
+**Provas:** 16 testes novos (seção 8 da comandos-17out, 73 no total), e o inventário
+guarda também a tela em espanhol. 40 mutações, cada uma derruba ao menos um teste. A
+`traducao-en-13out` aprendeu que `aqui → here` é espanhol, não "o português de
+here" — o vocabulário que ela procura ficou idêntico (253 palavras). 97/97, build e
+boot até o login.
+
 ---
 
 ## 7. O que NÃO fiz, e por quê

@@ -9,8 +9,9 @@
 import { REGISTRO } from "../comandos/index.js";
 import { citarNoTexto } from "./aliases.js";
 
-// `{ pt, en }` → o do idioma; texto solto vale para os dois
-const doIdioma = (v, lang) => (v && typeof v === "object" ? (v[lang] ?? v.pt) : v);
+// `{ pt, en, es }` → o do idioma; texto solto vale para todos. Sem `es`, o
+// espanhol usa o inglês (etapa 4: o texto é traduzido aos poucos).
+const doIdioma = (v, lang) => (v && typeof v === "object" ? (v[lang] ?? (lang === "es" ? v.en : undefined) ?? v.pt) : v);
 const texto = (v, lang, P) => (v == null ? v : citarNoTexto(doIdioma(v, lang), lang, P));
 
 // Os comandos cuja página de ajuda vem do registro

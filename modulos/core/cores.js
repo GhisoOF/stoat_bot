@@ -19,6 +19,13 @@ export const CORES_EN = {
   cyan: "ciano", indigo: "indigo", magenta: "magenta", gold: "dourado", golden: "dourado", silver: "prata",
   turquoise: "turquesa", wine: "vinho", burgundy: "vinho", lime: "lima", lavender: "lavanda", coral: "coral", brown: "marrom",
 };
+// Os nomes em espanhol (etapa 4, 18 out 2026) — só os que diferem do português
+// (verde, azul, rosa, magenta, turquesa, lima, lavanda, coral e esmeralda são iguais).
+export const CORES_ES = {
+  rojo: "vermelho", naranja: "laranja", amarillo: "amarelo", morado: "roxo", violeta: "roxo",
+  blanco: "branco", negro: "preto", gris: "cinza", cian: "ciano", "índigo": "indigo",
+  dorado: "dourado", plateado: "prata", plata: "prata", vino: "vinho", "marrón": "marrom", marron: "marrom",
+};
 const NOME_EN = Object.fromEntries(Object.entries(CORES_EN).reverse().map(([en, pt]) => [pt, en]));
 
 export function normalizarCor(v) {
@@ -29,6 +36,7 @@ export function normalizarCor(v) {
     .trim();
   if (CORES[t]) return CORES[t];
   if (CORES[CORES_EN[t]]) return CORES[CORES_EN[t]];
+  if (CORES[CORES_ES[t]]) return CORES[CORES_ES[t]];
   if (/^#?[0-9a-f]{6}$/i.test(t)) return (t.startsWith("#") ? t : `#${t}`).toUpperCase();
   if (/^#?[0-9a-f]{3}$/i.test(t)) {                 // #f0f → #FF00FF
     const h = t.replace("#", "");

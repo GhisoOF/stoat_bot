@@ -10,6 +10,7 @@
 // algo grave (menor + conteúdo sexual), repostar seria distribuir.
 
 import { analisarConteudo } from "./scorecard.js";
+import { textoDoIdioma } from "../core/i18n.js";
 import * as confianca from "./confianca.js";
 import * as relatorioHora from "../ferramentas/relatorio.js";
 
@@ -174,7 +175,7 @@ async function analisarUma({ ctx, userId, canalId, messageId, url }) {
   }
   const embed = montarAlerta({
     userId, canalId, messageId, descricao: j.descricao, r,
-    staff: ctx.config?.acesso?.cargosStaff ?? [], lang: ctx.config?.language === "en" ? "en" : "pt",
+    staff: ctx.config?.acesso?.cargosStaff ?? [], lang: textoDoIdioma(ctx.config?.language),
   });
   await ctx.sendEmbed(destino, { ...embed, colour: r.grave ? ctx.COR?.erro : ctx.COR?.aviso });
 }

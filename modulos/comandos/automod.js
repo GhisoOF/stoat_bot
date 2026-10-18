@@ -4,6 +4,7 @@ export default {
   id: "automod",
   modulo: "../moderacao/automod-comandos.js",
   funcao: "cmdAutomod",
+  es: { nome: "automod" },   // espanhol (etapa 4)
   subcomandos: {
     antiruido: ["antinoise", "noise"], sentinela: "sentinel", punicao: "punishment",
     herdar: "inherit", global: "global", set: "set", status: "status", debug: "debug",

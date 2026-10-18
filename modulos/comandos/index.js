@@ -13,6 +13,9 @@
 //     modulo: "../moderacao/warn.js", funcao: "cmdWarn",   // onde está o handler
 //     nomes: { en: "warn" },       // o nome na tela de cada idioma (sem a chave, o id)
 //     apelidos: ["avisar"],        // outros nomes que levam ao MESMO comando
+//     es: { nome: "advertir", subcomandos: { lista: "lista", limpar: "borrar" } },
+//                                  // espanhol (etapa 4): o nome e as palavras na tela de um servidor
+//                                  //   em espanhol; também valem ao digitar, em qualquer servidor
 //     subcomandos: {               // nome interno do subcomando → nome(s) em inglês. O inglês
 //       lista: "list",             //   digitado vira o nome interno antes do handler, e a tela em
 //       limpar: ["clear", "wipe"], //   inglês mostra o primeiro. ["status"] = mesmo nome nos dois.
@@ -30,7 +33,7 @@
 //     ajuda: {                     // a página `&help warn` (fase 3) — sai daqui, não do geral.js
 //       perm: "ManageMessages",
 //       uso: { pt: "{&warn} <@pessoa> [motivo]", en: "{&warn} <@user> [reason]" },
-//       desc: { pt: "…", en: "…" }, ex: { pt: "…", en: "…" },   // texto solto vale para os dois
+//       desc: { pt: "…", en: "…", es: "…" }, ex: { pt: "…", en: "…", es: "…" },   // texto solto vale para todos
 //       parametros: [{ nome: { pt: "[motivo]", en: "[reason]" }, desc: { pt: "…", en: "…" } }],
 //     },
 //   };
@@ -114,14 +117,21 @@ export const REGISTRO = [
 
 // ── O que só depende dos nomes (o aliases.js usa; não toca nos handlers) ──
 
+// Os nomes em espanhol (etapa 4, 18 out 2026): `es: { nome, subcomandos }`. O nome
+// em espanhol também é digitável em qualquer servidor, como os apelidos.
+const nomesEs = (c) => [c.es?.nome, ...(c.es?.apelidos ?? [])].filter((n) => n && n !== c.id && !(c.apelidos ?? []).includes(n));
+
 // id → nome na tela em inglês (inclui as partes que o texto antigo cita sozinhas)
 export const COMANDO_EN = Object.fromEntries(REGISTRO.flatMap((c) => [
   ...(c.nomes?.en ? [[c.id, c.nomes.en]] : []),
   ...Object.entries(c.partes ?? {}).filter(([, n]) => n.en).map(([id, n]) => [id, n.en]),
 ]));
 
-// apelido → id (todos os apelidos, de todos os comandos)
-export const COMANDO_EXTRA = Object.fromEntries(REGISTRO.flatMap((c) => (c.apelidos ?? []).map((a) => [a, c.id])));
+// id → nome na tela em espanhol (sem nome próprio, a tela usa o inglês)
+export const COMANDO_ES = Object.fromEntries(REGISTRO.filter((c) => c.es?.nome).map((c) => [c.id, c.es.nome]));
+
+// apelido → id (todos os apelidos, de todos os comandos, e os nomes em espanhol)
+export const COMANDO_EXTRA = Object.fromEntries(REGISTRO.flatMap((c) => [...(c.apelidos ?? []), ...nomesEs(c)].map((a) => [a, c.id])));
 
 // Os problemas do registro (vazio = íntegro). O boot para se houver algum: um
 // nome em dois comandos faria um deles sumir em silêncio.
@@ -131,7 +141,7 @@ export function problemasDoRegistro(registro = REGISTRO) {
   for (const c of registro) {
     if (!c || typeof c.id !== "string" || !c.id) { problemas.push(`entrada sem id: ${JSON.stringify(c)?.slice(0, 80)}`); continue; }
     if (typeof c.funcao !== "function" && !(typeof c.modulo === "string" && typeof c.funcao === "string")) problemas.push(`${c.id}: precisa de modulo + funcao (ou funcao local)`);
-    for (const nome of [c.id, ...(c.apelidos ?? [])]) {
+    for (const nome of [c.id, ...(c.apelidos ?? []), ...nomesEs(c)]) {
       if (nome !== nome.toLowerCase() || /\s/.test(nome)) problemas.push(`${c.id}: o nome "${nome}" precisa ser minúsculo e sem espaço`);
       if (dono.has(nome)) problemas.push(`"${nome}" está em ${dono.get(nome)} e em ${c.id}`);
       else dono.set(nome, c.id);
@@ -149,7 +159,7 @@ export async function montarTabela(registro = REGISTRO) {
     const fn = typeof c.funcao === "function" ? c.funcao : (await import(new URL(c.modulo, import.meta.url)))[c.funcao];
     if (typeof fn !== "function") throw new Error(`registro de comandos: ${c.id} — ${c.modulo} não exporta a função ${c.funcao}`);
     rotas[c.id] = fn;
-    for (const a of c.apelidos ?? []) { rotas[a] = fn; CANONICO[a] = c.id; }
+    for (const a of [...(c.apelidos ?? []), ...nomesEs(c)]) { rotas[a] = fn; CANONICO[a] = c.id; }
   }
   const comFlag = (f) => registro.filter((c) => c[f]).map((c) => c.id);
   return {

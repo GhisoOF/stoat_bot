@@ -6,6 +6,7 @@ export default {
   funcao: "cmdBanGlobal",
   nomes: { en: "globalban" },
   apelidos: ["globalban"],
+  es: { nome: "banglobal" },   // espanhol (etapa 4)
   subcomandos: {
     varrer: ["sweep", "scan"], revisar: "review", ver: "view", lista: ["list", "banned", "all"],
     isentar: ["exempt", "allow", "accept", "bypass"], isentos: "exempted",

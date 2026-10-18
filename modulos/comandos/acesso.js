@@ -6,6 +6,7 @@ export default {
   funcao: "cmdAcesso",
   nomes: { en: "access" },
   apelidos: ["access"],
+  es: { nome: "acceso" },   // espanhol (etapa 4)
   subcomandos: {
     cargo: "role", cargos: "roles", staff: "staff", canal: "channel", canais: "channels",
     todos: "all", somente: "only", exceto: "except", add: "add", remove: "remove",

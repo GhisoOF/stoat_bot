@@ -20,6 +20,7 @@
 // punição. Staff, como no resto do automod, não é moderada.
 
 import * as log from "../core/log.js";
+import { textoDoIdioma } from "../core/i18n.js";
 import { normalizarParaAnalise } from "./scorecard.js";
 
 export const ACOES = ["off", "alertar", "apagar", "punir"];
@@ -407,7 +408,7 @@ export async function verificar({ ctx, server, canal, message, userId, aplicarPu
   const { tema, nota, sinais, limiar } = passaram.sort((a, b) =>
     (PESO_ACAO[acaoDoTema(cfg, b.tema)] - PESO_ACAO[acaoDoTema(cfg, a.tema)]) || (b.nota - a.nota))[0];
   const acao = acaoDoTema(cfg, tema);
-  const lang = ctx.config?.language === "en" ? "en" : "pt";
+  const lang = textoDoIdioma(ctx.config?.language);
   const nome = message.author?.username ?? message.member?.nickname ?? userId;
   // `ia off`: a nota decide sozinha
   const v = cfg.ia === false

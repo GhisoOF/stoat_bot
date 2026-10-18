@@ -6,6 +6,7 @@ export default {
   funcao: "cmdGame",
   nomes: { en: "game" },
   apelidos: ["rpg", "personagem", "character"],
+  es: { nome: "juego" },   // espanhol (etapa 4)
   subcomandos: {
     criar: "create", novo: "new", apagar: ["delete", "erase"], pontos: ["points", "spend"],
     itens: "items", inventario: "inventory", mochila: "bag", item: "item",

@@ -5,5 +5,6 @@ export default {
   modulo: "../ai/persona.js",
   funcao: "cmdPersonalidade",
   apelidos: ["personality"],
+  es: { nome: "personalidad" },   // espanhol (etapa 4)
   textoLivre: true,
 };

@@ -6,6 +6,7 @@ export default {
   funcao: "cmdTutorial",
   nomes: { en: "tutorial" },
   apelidos: ["guia", "comecar", "inicio", "guide", "start"],
+  es: { nome: "tutorial" },   // espanhol (etapa 4)
   subcomandos: {
     permissoes: "permissions", canais: "channels", moderacao: "moderation", cargos: "roles",
     ia: "ai", noticias: "news", mensagens: "messages", economia: "economy",

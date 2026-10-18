@@ -4,18 +4,30 @@ import { maisParecido } from "./parecido.js";
 // O nome de cada comando na tela em inglês, os apelidos e (fase 2) os
 // subcomandos vêm do registro de comandos (modulos/comandos/) — não declarar
 // aqui. O registro não importa handler nenhum, então lê-lo no carregamento é seguro.
-import { COMANDO_EN, COMANDO_EXTRA, REGISTRO } from "../comandos/index.js";
-export { COMANDO_EN, COMANDO_EXTRA };
+import { COMANDO_EN, COMANDO_ES, COMANDO_EXTRA, REGISTRO } from "../comandos/index.js";
+export { COMANDO_EN, COMANDO_ES, COMANDO_EXTRA };
 
 
 // O que vem do registro: `subcomandos` (nome interno → inglês) vira a tabela de
 // entrada (inglês → interno); `aninhados` e `naTela` como estão.
 const DO_REGISTRO = { sub: {}, aninhados: {}, naTela: {} };
+// nome interno → nome na tela em espanhol, por comando (sem nome em espanhol, vale o inglês)
+const SUB_ES_REVERSO = {};
 for (const c of REGISTRO) {
   if (c.subcomandos) {
     const m = {};
     for (const [pt, en] of Object.entries(c.subcomandos)) for (const e of [].concat(en)) m[e] = pt;
     DO_REGISTRO.sub[c.id] = m;
+  }
+  // espanhol (etapa 4): a palavra em espanhol também é digitável, em qualquer servidor.
+  // Palavra que já é de OUTRO subcomando não entra (o teste da comandos-17out reprova).
+  if (c.es?.subcomandos) {
+    const m = (DO_REGISTRO.sub[c.id] ??= {});
+    SUB_ES_REVERSO[c.id] = {};
+    for (const [interno, es] of Object.entries(c.es.subcomandos)) {
+      for (const e of [].concat(es)) if (e !== interno && !(e in m)) m[e] = interno;
+      SUB_ES_REVERSO[c.id][interno] = [].concat(es)[0];
+    }
   }
   if (c.aninhados?.length) DO_REGISTRO.aninhados[c.id] = new Set(c.aninhados);
   if (c.naTela) DO_REGISTRO.naTela[c.id] = c.naTela;
@@ -234,9 +246,110 @@ function revDoContexto(contexto) {
   return revCache.get(contexto);
 }
 
+// ── Espanhol (etapa 4, 18 out 2026) ──
+// Enquanto os textos não têm versão em espanhol, o servidor em espanhol recebe o texto
+// em inglês, e esta passada troca o que é nome: o comando (`&purge` → `&limpiar`), os
+// subcomandos que têm nome em espanhol e as palavras dos moldes (`‹user›` → `‹usuario›`).
+const MOLDE_ES = {
+  name: "nombre", names: "nombres", user: "usuario", person: "persona", reason: "motivo", time: "tiempo",
+  channel: "canal", channels: "canales", role: "rol", roles: "roles", text: "texto", amount: "cantidad",
+  message: "mensaje", event: "evento", roll: "tirada", number: "número", value: "valor", title: "título",
+  description: "descripción", days: "días", word: "palabra", city: "ciudad", command: "comando",
+  expression: "expresión", term: "término", topic: "tema", mode: "modo", seconds: "segundos", field: "campo",
+  color: "color", colors: "colores", question: "pregunta", category: "categoría", option: "opción", who: "quién",
+  part: "parte", group: "grupo",
+};
+function moldeEs(tok) {
+  const m = tok.match(/^([<[(‹])(.+)([>\])›])$/);
+  if (!m) return tok;
+  const miolo = m[2].split("|").map((p) => { const s = p.match(/^([@#%]*)(.*)$/); return s[1] + (MOLDE_ES[s[2].toLowerCase()] ?? s[2]); }).join("|");
+  return m[1] + miolo + m[3];
+}
+function trechoEs(dentro, prefixo, CANONICO) {
+  const partes = dentro.trim().split(/\s+/);
+  const nome = partes[0].slice(prefixo.length).toLowerCase();
+  const cmd = canonicoDe(nome, CANONICO);
+  if (!REGISTRO.some((c) => c.id === cmd)) return dentro;
+  const saida = [prefixo + (COMANDO_ES[cmd] ?? partes[0].slice(prefixo.length))];
+  let tabela = cmd, nosSubcomandos = true;
+  // `&help purge`: depois do &help vem o nome de um comando — ou de um GRUPO, que
+  // vence o apelido como no normalizarArgs (`&help fun` é o grupo diversao, não o
+  // apelido `fun` do &entretenimento; virava `&ayuda entretenimiento`)
+  if (cmd === "help" && partes[1]) {
+    const bruto = partes[1].toLowerCase();
+    const grupo = SUB.help?.[bruto] ?? (new Set([...ORDEM_GRUPOS, ...Object.values(SUB.help ?? {})]).has(bruto) ? bruto : null);
+    const alvo = grupo ? null : canonicoDe(bruto, CANONICO);
+    if (grupo) { saida.push(SUB_ES_REVERSO.help?.[grupo] ?? partes[1]); partes.splice(1, 1); nosSubcomandos = false; }
+    else if (COMANDO_ES[alvo]) { saida.push(COMANDO_ES[alvo]); partes.splice(1, 1); tabela = alvo; }
+  }
+  const umaPalavra = (tok) => {
+    const baixo = tok.toLowerCase();
+    const interno = SUB[tabela]?.[baixo] ?? (SUB_REVERSO[tabela]?.[baixo] !== undefined ? baixo : null);
+    return interno ? { interno, es: SUB_ES_REVERSO[tabela]?.[interno] ?? tok } : null;
+  };
+  for (const tok of partes.slice(1)) {
+    if (/^[<[(‹]/.test(tok)) { saida.push(moldeEs(tok)); continue; }
+    if (/^[@#]/.test(tok)) { saida.push(tok[0] + (MOLDE_ES[tok.slice(1).toLowerCase()] ?? tok.slice(1))); continue; }
+    if (tok === "|" || tok === "·") { saida.push(tok); continue; }
+    if (!nosSubcomandos) { saida.push(tok); continue; }
+    if (tok.includes("|")) { saida.push(tok.split("|").map((p) => umaPalavra(p)?.es ?? p).join("|")); continue; }
+    const w = umaPalavra(tok);
+    if (!w) { nosSubcomandos = false; saida.push(tok); continue; }
+    saida.push(w.es);
+    if (SUB[`${cmd}.${w.interno}`] || SUB_REVERSO[`${cmd}.${w.interno}`]) tabela = `${cmd}.${w.interno}`;
+  }
+  return saida.join(" ");
+}
+function paraEspanhol(texto, prefixo = "&", CANONICO = {}) {
+  if (typeof texto !== "string") return texto;
+  const esc = prefixo.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const reSolto = new RegExp(`(^|[\\s(—*_])${esc}([a-zçãéíóú]+)\\b`, "gi");
+  let dentroDeBloco = false;
+  return texto.split("\n").map((linha) => {
+    if (linha.trim().startsWith("```")) { dentroDeBloco = !dentroDeBloco; return linha; }
+    if (dentroDeBloco) return linha;
+    return linha.split(/(`[^`\n]+`)/).map((pedaco, i) => {
+      if (i % 2) {
+        const dentro = pedaco.slice(1, -1);
+        return dentro.startsWith(prefixo) ? "`" + trechoEs(dentro, prefixo, CANONICO) + "`" : pedaco;
+      }
+      return pedaco.replace(reSolto, (todo, antes, nome) => {
+        const cmd = canonicoDe(nome.toLowerCase(), CANONICO);
+        return COMANDO_ES[cmd] ? antes + prefixo + COMANDO_ES[cmd] : todo;
+      });
+    }).join("");
+  }).join("\n");
+}
+
+// Texto que já sai pronto no idioma da tela (etapa 4): a página `&ayuda` que vem
+// do registro em espanhol. A tradução da tela não passa por ele — ela trata o
+// texto como inglês, e o `aqui` / `comandos` / `[motivo]` escritos em espanhol
+// viravam `here` / `commands` / `[reason]`. A marca é um caractere invisível no
+// início, e o exibir a tira (em qualquer idioma, para nunca chegar à tela).
+export const JA_TRADUZIDO = "\u2063";
+export const marcarTraduzido = (t) => (t == null || String(t).startsWith(JA_TRADUZIDO) ? t : JA_TRADUZIDO + t);
+
+// O id de um comando pelo nome que aparece na tela, em qualquer idioma
+// (`roll`, `dados`, `advertir` → rolar, rolar, warn). O id vence: um nome em
+// inglês nunca toma o lugar do id de outro comando.
+const NOME_PARA_ID = (() => {
+  const m = {};
+  for (const c of REGISTRO) m[c.id] = c.id;
+  for (const c of REGISTRO) {
+    for (const n of [...Object.values(c.nomes ?? {}), ...(c.apelidos ?? []), c.es?.nome, ...(c.es?.apelidos ?? [])]) {
+      if (n && !(n in m)) m[n] = c.id;
+    }
+  }
+  return m;
+})();
+export const idDoNome = (nome) => { const n = String(nome ?? "").toLowerCase(); return NOME_PARA_ID[n] ?? COMANDO_EXTRA[n] ?? n; };
+
 // `dica`: um texto maior de onde tirar o comando de contexto (as outras
 // páginas de uma ajuda paginada).
 export function exibir(texto, lang, prefixo = "&", CANONICO = {}, dica = null) {
+  if (typeof texto === "string" && texto.startsWith(JA_TRADUZIDO)) return texto.slice(JA_TRADUZIDO.length);
+  // espanhol (etapa 4): o texto ainda sai em inglês; os nomes de comando, em espanhol
+  if (lang === "es") return paraEspanhol(exibir(texto, "en", prefixo, CANONICO, dica), prefixo, CANONICO);
   if (lang !== "en" || typeof texto !== "string") return texto;
 
   const linhas = texto.split("\n");
@@ -296,6 +409,7 @@ export function exibir(texto, lang, prefixo = "&", CANONICO = {}, dica = null) {
 
 // Nome de exibição de um comando isolado (sem prefixo, sem argumentos).
 export function nomeExibido(canonico, lang) {
+  if (lang === "es") return COMANDO_ES[canonico] ?? COMANDO_EN[canonico] ?? canonico;
   if (lang !== "en") return canonico;
   return COMANDO_EN[canonico] ?? canonico;
 }
@@ -308,12 +422,14 @@ export function citar(ref, lang = "pt", prefixo = "&") {
   const [cmd, ...subs] = String(ref ?? "").split(".");
   const entrada = REGISTRO.find((c) => c.id === cmd);
   if (!entrada) throw new Error(`citar: o comando "${cmd}" não existe no registro (${ref})`);
-  const partes = [lang === "en" ? (COMANDO_EN[cmd] ?? cmd) : cmd];
+  const nomeDoComando = lang === "en" ? (COMANDO_EN[cmd] ?? cmd) : lang === "es" ? (COMANDO_ES[cmd] ?? COMANDO_EN[cmd] ?? cmd) : cmd;
+  const partes = [nomeDoComando];
   let tabela = cmd;
   for (const s of subs) {
     const conhecidos = new Set([...Object.values(SUB[tabela] ?? {}), ...Object.keys(SUB_REVERSO[tabela] ?? {})]);
     if (!conhecidos.has(s)) throw new Error(`citar: "${s}" não é subcomando de ${tabela} no registro (${ref})`);
-    partes.push(lang === "en" ? (SUB_REVERSO[tabela]?.[s] ?? s) : s);
+    partes.push(lang === "en" ? (SUB_REVERSO[tabela]?.[s] ?? s)
+      : lang === "es" ? (SUB_ES_REVERSO[tabela]?.[s] ?? SUB_REVERSO[tabela]?.[s] ?? s) : s);
     // o nível seguinte: a família (`automod.sentinela`) ou a parte com tabela própria
     if (SUB[`${cmd}.${s}`] || SUB_REVERSO[`${cmd}.${s}`]) tabela = `${cmd}.${s}`;
     else if (SUB[s] && cmd === "automod") tabela = s;
@@ -331,6 +447,7 @@ export function citarNoTexto(texto, lang = "pt", prefixo = "&") {
 // Para o handler que monta a tela com o nome interno fora de `&comando …`, onde
 // a tradução da tela não alcança (o `&log` listava `mensagens` em inglês).
 export function subExibido(canonico, interno, lang) {
+  if (lang === "es") return SUB_ES_REVERSO[canonico]?.[interno] ?? SUB_REVERSO[canonico]?.[interno] ?? interno;
   if (lang !== "en") return interno;
   return SUB_REVERSO[canonico]?.[interno] ?? interno;
 }
@@ -364,6 +481,7 @@ export function tabelasDeTraducao() {
   return {
     sub: ord(Object.fromEntries(Object.entries(SUB).map(([c, m]) => [c, ord(m)]))),
     tela: ord(Object.fromEntries(Object.entries(SUB_REVERSO).map(([c, m]) => [c, ord(m)]))),
+    telaEs: ord(Object.fromEntries(Object.entries(SUB_ES_REVERSO).map(([c, m]) => [c, ord(m)]))),
     aninhados: ord(Object.fromEntries(Object.entries(ANINHADOS).filter(([, s]) => s.size).map(([c, s]) => [c, [...s].sort()]))),
   };
 }

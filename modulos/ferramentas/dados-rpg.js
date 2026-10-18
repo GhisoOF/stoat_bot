@@ -35,8 +35,8 @@ export function rolarExpressao(entrada, rng = rngPadrao) {
 
   // açúcares
   const t = texto.toLowerCase();
-  if (["adv", "vantagem", "advantage"].includes(t)) texto = "2d20kh1";
-  else if (["des", "dis", "desvantagem", "disadvantage"].includes(t)) texto = "2d20kl1";
+  if (["adv", "vantagem", "advantage", "ventaja"].includes(t)) texto = "2d20kh1";
+  else if (["des", "dis", "desvantagem", "disadvantage", "desventaja"].includes(t)) texto = "2d20kl1";
   else if (["moeda", "coin", "cara ou coroa"].includes(t)) {
     const caras = Array.from({ length: repete }, () => rng(2) === 2);
     return { rotulo, repeticoes: caras.map((c) => ({ total: c ? 1 : 0, texto: c ? "🪙 **cara**" : "🪙 **coroa**" })), moeda: true };
@@ -208,7 +208,7 @@ export async function cmdIniciativa(message, args, ctx) {
   const st = iniciativaDe(message.channelId);
   const sub = String(args[0] ?? "lista").toLowerCase();
 
-  if (["add", "adicionar"].includes(sub)) {
+  if (["add", "adicionar", "agregar", "añadir", "anadir"].includes(sub)) {
     const resto = args.slice(1);
     if (!resto.length) return ctx.sendEmbed(message.channel, { title: "⚔️", description: en ? `\`${citar("iniciativa", "en")} add <name> [roll or number]\` — default \`1d20\`` : `\`${citar("iniciativa", "pt")} add <nome> [rolagem ou número]\` — padrão \`1d20\``, colour: ctx.COR.aviso });
     // último pedaço é expressão/número? senão rola 1d20
@@ -227,7 +227,7 @@ export async function cmdIniciativa(message, args, ctx) {
     return ctx.sendEmbed(message.channel, { title: en ? "⚔️ Initiative" : "⚔️ Iniciativa", description: `**${nome}** → \`${valor}\`\n\n${listaIniciativa(st, en)}`, colour: ctx.COR.info });
   }
 
-  if (["next", "proximo", "próximo", "prox"].includes(sub)) {
+  if (["next", "proximo", "próximo", "prox", "siguiente"].includes(sub)) {
     if (!st.ordem.length) return ctx.sendEmbed(message.channel, { title: "⚔️", description: listaIniciativa(st, en), colour: ctx.COR.aviso });
     st.vez = (st.vez + 1) % st.ordem.length;
     const rodadaNova = st.vez === 0;

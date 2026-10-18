@@ -109,7 +109,7 @@ if (!existsSync(modulosDir)) {
       try { citar(m[1] ?? m[2]); } catch (e) { ruins.push(`${arq.slice(RAIZ.length + 1)}: ${e.message}`); }
     }
   }
-  for (const lang of ["pt", "en"]) {
+  for (const lang of ["pt", "en", "es"]) {
     try { detalhesDoRegistro("&", lang); parametrosDoRegistro("&", lang); } catch (e) { ruins.push(`ajuda do registro (${lang}): ${e.message}`); }
   }
   for (const r of ruins) falha(`citação: ${r}`);

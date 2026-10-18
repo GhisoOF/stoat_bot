@@ -166,7 +166,7 @@ let cfgGlobal = store.getGlobal();  // atualizado após inicializar()
 async function sendEmbed(channel, embed) {
   if (paginas.precisaPaginar(embed)) {
     let lang = "pt";
-    try { lang = store.configDoServidor(channel?.serverId)?.language === "en" ? "en" : "pt"; } catch {}
+    try { lang = i18n.idiomaDaTela(store.configDoServidor(channel?.serverId)?.language); } catch {}
     return paginas.enviarEmPaginas(enviarEmbedUnico, channel, { colour: COR.info, ...embed }, { lang, COR });
   }
   return enviarEmbedUnico(channel, embed);
@@ -633,11 +633,15 @@ async function tratarMensagem(message) {
   if (COMANDOS_SO_IA.has(canonico) && !chat.comandoIAPermitido(canonico, serverId)) {
     return sendEmbed(message.channel, tr(ctx, {
       title: "🚫 Não existe aqui",
-      description: `\`${PREFIXO}${canonico}\` não existe neste servidor.\n\nVeja o que existe por aqui com \`${PREFIXO}help\`.`,
+      description: `\`${aliases.citar(canonico, "pt", PREFIXO)}\` não existe neste servidor.\n\nVeja o que existe por aqui com \`${aliases.citar("help", "pt", PREFIXO)}\`.`,
       colour: COR.aviso,
     }, {
       title: "🚫 Not a command here",
-      description: `\`${PREFIXO}${canonico}\` doesn't exist on this server.\n\nSee what's available here with \`${PREFIXO}help\`.`,
+      description: `\`${aliases.citar(canonico, "en", PREFIXO)}\` doesn't exist on this server.\n\nSee what's available here with \`${aliases.citar("help", "en", PREFIXO)}\`.`,
+      colour: COR.aviso,
+    }, {
+      title: "🚫 No existe aquí",
+      description: `\`${aliases.citar(canonico, "es", PREFIXO)}\` no existe en este servidor.\n\nMira lo que hay por aquí con \`${aliases.citar("help", "es", PREFIXO)}\`.`,
       colour: COR.aviso,
     }));
   }
@@ -650,11 +654,15 @@ async function tratarMensagem(message) {
     });
     return sendEmbed(message.channel, tr(ctx, {
       title: "🚫 Comando desativado",
-      description: `O comando \`${PREFIXO}${canonico}\` está desativado neste servidor.`,
+      description: `O comando \`${aliases.citar(canonico, "pt", PREFIXO)}\` está desativado neste servidor.`,
       colour: COR.aviso,
     }, {
       title: "🚫 Command disabled",
-      description: `The \`${PREFIXO}${canonico}\` command is disabled on this server.`,
+      description: `The \`${aliases.citar(canonico, "en", PREFIXO)}\` command is disabled on this server.`,
+      colour: COR.aviso,
+    }, {
+      title: "🚫 Comando desactivado",
+      description: `El comando \`${aliases.citar(canonico, "es", PREFIXO)}\` está desactivado en este servidor.`,
       colour: COR.aviso,
     }));
   }
@@ -880,7 +888,7 @@ client.on("serverMemberJoin", async (member) => {
     if (onda.iniciou) {
       console.log(`[ANTIRAID] ${serverId}: ${onda.contas.length} contas novas em pouco tempo — proteção por ${onda.minutos} min`);
       relatorioHora.evento(serverId, "raid", `Possível raid: ${onda.contas.length} contas novas em 15 min`);
-      const en = ctx.config?.language === "en";
+      const en = i18n.textoDoIdioma(ctx.config?.language) === "en";
       const destinoId = ctx.config?.automod?.antiScam?.alertChannelId || ctx.config?.log?.canalId;
       const achado = destinoId ? await client.channels.fetch(destinoId).catch(() => null) : null;
       // canal de outro servidor (herdado do molde antigo) nunca recebe o alerta

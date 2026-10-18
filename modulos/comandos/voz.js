@@ -18,6 +18,7 @@ export default [
     modulo: "../ferramentas/tts.js",
     funcao: "cmdTts",
     apelidos: ["voz", "falar", "speak"],
+    es: { nome: "tts" },   // espanhol (etapa 4)
     subcomandos: {
       canal: "channel", aqui: "here", transmitir: "broadcast", filtro: ["filter", "sieve"],
       reiniciar: "restart", teste: "test", diagnostico: ["diagnose", "diagnostics"],
@@ -36,6 +37,7 @@ export default [
     funcao: entrar,
     nomes: { en: "join" },
     apelidos: ["join", "call"],
+    es: { nome: "entrar" },
     voz: true,
   },
   {
@@ -43,6 +45,7 @@ export default [
     funcao: sair,
     nomes: { en: "leave" },
     apelidos: ["leave", "sairdacall"],
+    es: { nome: "salir" },
     voz: true,
   },
 ];

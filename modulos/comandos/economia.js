@@ -6,6 +6,7 @@ export default {
   funcao: "cmdEconomia",
   nomes: { en: "economy" },
   apelidos: ["economy", "eco"],
+  es: { nome: "economia" },   // espanhol (etapa 4)
   subcomandos: {
     loja: "shop", comprar: "buy", minerar: "mine", saldo: "balance", pagar: "pay", dar: "give",
     tirar: "take", zerar: "reset", intervalo: "interval", remover: "remove",

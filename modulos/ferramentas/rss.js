@@ -4,7 +4,7 @@ import * as db from "../core/db.js";
 import { ULID } from "../core/ids.js";
 import { canalDeOutroServidor } from "../moderacao/pertence.js";
 import * as log from "../core/log.js";
-import { tr, lingua } from "../core/i18n.js";
+import { tr, lingua, textoDoIdioma } from "../core/i18n.js";
 import { servidorNaLista } from "../core/env.js";
 
 let resumirIA = null;
@@ -140,7 +140,7 @@ export async function rodarCiclo(serverId, ctx, { forcado = false } = {}) {
   let novos = await coletarNovos(serverId);
   if (!novos.length) {
     if (forcado) {
-      const rlang = config?.language === "en" ? "en" : "pt";
+      const rlang = textoDoIdioma(config?.language);
       await canal.sendMessage({ embeds: [{ title: "📰 RSS",
         description: rlang === "en" ? "No new stories since the last cycle." : "Nenhuma notícia nova desde o último ciclo.", colour: "#5865F2" }] });
     }
@@ -151,7 +151,7 @@ export async function rodarCiclo(serverId, ctx, { forcado = false } = {}) {
   let cortados = 0;
   if (novos.length > MAX_ITENS) { cortados = novos.length - MAX_ITENS; novos = novos.slice(0, MAX_ITENS); }
 
-  const cicloEn = config?.language === "en";
+  const cicloEn = textoDoIdioma(config?.language) === "en";
   const agora = new Date().toLocaleString(cicloEn ? "en-US" : "pt-BR", { timeZone: process.env.TZ || "UTC" });
 
   // A parte de IA do RSS (o relatório e o comentário da Judy) só nos servidores

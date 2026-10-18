@@ -6,4 +6,5 @@ export default {
   funcao: "cmdCargoMudo",
   nomes: { en: "muterole" },
   apelidos: ["muterole", "mutedrole", "criarcargomudo"],
+  es: { nome: "rolsilencio" },   // espanhol (etapa 4)
 };

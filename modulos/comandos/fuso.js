@@ -6,6 +6,7 @@ export default {
   funcao: "cmdFuso",
   nomes: { en: "timezone" },
   apelidos: ["fusos", "hora", "timezone", "timezones", "tz", "clock"],
+  es: { nome: "huso" },   // espanhol (etapa 4)
   subcomandos: {
     add: "add", remove: "remove", lista: "list", limpar: "clear", buscar: ["search", "find"],
     ver: ["now", "time", "check"], apelido: ["label", "name", "alias"],

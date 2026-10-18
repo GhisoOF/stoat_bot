@@ -6,6 +6,7 @@ export default {
   funcao: "cmdBoasVindas",
   nomes: { en: "welcome" },
   apelidos: ["boas-vindas", "welcome", "greeting", "bemvindo"],
+  es: { nome: "bienvenida", subcomandos: { canal: "canal", titulo: "titulo", texto: "texto", cor: "color", imagem: "imagen", testar: "probar", padrao: "predeterminado", status: "estado", limpar: "borrar", aqui: "aqui", oculto: "oculto", visivel: "visible", mensagens: "mensajes" } },   // espanhol (etapa 4)
   subcomandos: {
     canal: "channel", titulo: "title", texto: ["text", "message"], cor: ["colour", "color"],
     imagem: "image", testar: "test", padrao: "default", status: "status", limpar: "clear",

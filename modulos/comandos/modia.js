@@ -5,6 +5,7 @@ export default {
   modulo: "../moderacao/modia-comando.js",
   funcao: "cmdModIA",
   apelidos: ["moderacaoia"],
+  es: { nome: "modia" },   // espanhol (etapa 4)
   subcomandos: {
     criterios: "criteria", canal: "channel", limpar: "clear", status: "status", add: "add",
     remove: "remove",

@@ -4,6 +4,7 @@ export default {
   id: "help",
   modulo: "../moderacao/geral.js",
   funcao: "cmdHelp",
+  es: { nome: "ayuda", subcomandos: { diversao: "diversion", comecar: "empezar" } },   // espanhol (etapa 4)
   subcomandos: {
     moderacao: "moderation", config: ["settings", "configuration"], ferramentas: "tools",
     geral: "general", xp: "levels", game: "character", comecar: "start",

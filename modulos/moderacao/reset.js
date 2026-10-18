@@ -21,7 +21,7 @@ import * as store from "../core/config-store.js";
 import { citar } from "../core/aliases.js";
 import * as db from "../core/db.js";
 import * as log from "../core/log.js";
-import { lingua } from "../core/i18n.js";
+import { lingua, textoDoIdioma } from "../core/i18n.js";
 
 const CONFIRMAR_MS = 2 * 60_000;
 const DESFAZER_MS = 24 * 3600_000;
@@ -64,7 +64,7 @@ export async function cmdReset(message, args, ctx) {
     await log.registrar({ ...ctx, config: store.configDoServidor(sid) }, "comandos", {
       titulo: "↩️ Reset desfeito", descricao: `<@${message.authorId}> desfez o reset — a configuração anterior voltou.`,
       en: { titulo: "↩️ Reset undone", descricao: `<@${message.authorId}> undid the reset — the previous configuration is back.` } });
-    const enDepois = store.configDoServidor(sid).language === "en";
+    const enDepois = textoDoIdioma(store.configDoServidor(sid).language) === "en";
     return sendEmbed(message.channel, { title: enDepois ? "↩️ Reset undone" : "↩️ Reset desfeito", colour: COR.sucesso,
       description: enDepois ? "The previous configuration is back, exactly as it was." : "A configuração anterior voltou, exatamente como estava." });
   }
@@ -93,7 +93,7 @@ export async function cmdReset(message, args, ctx) {
     await log.registrar({ ...ctx, config: antes }, "comandos", {
       titulo: "🏭 Configuração de fábrica", descricao: `<@${message.authorId}> resetou a Judy neste servidor. \`${citar("reset", "pt", P)} undo\` desfaz por 24 h.`,
       en: { titulo: "🏭 Factory settings", descricao: `<@${message.authorId}> reset Judy on this server. \`${citar("reset", "en", P)} undo\` undoes it for 24 h.` } });
-    const enDepois = depois.language === "en";
+    const enDepois = textoDoIdioma(depois.language) === "en";
     return sendEmbed(message.channel, { title: enDepois ? "🏭 Factory settings restored" : "🏭 Configuração de fábrica", colour: COR.sucesso,
       description: (enDepois ? [
         "Judy is back to factory settings on this server: automod off, no log channel, no staff roles, default language (English).",

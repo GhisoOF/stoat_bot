@@ -16,6 +16,7 @@
 // é sempre avisada — e o alerta nunca republica a foto.
 
 import * as log from "../core/log.js";
+import { textoDoIdioma } from "../core/i18n.js";
 import * as db from "../core/db.js";
 import { banir } from "../core/banir.js";
 import { lerDuracao, duracaoTexto } from "../core/duracao.js";
@@ -143,7 +144,7 @@ export async function verificar({ ctx, server, userId, avatar, origem = "entrada
   const cfg = ctx.config.automod.antiAvatar ?? {};
   // suspeita (termo sem o voto do modelo): avisa a staff, não pune
   const acao = r.apitou ? acaoDoAvatar(cfg) : "alertar";
-  const en = ctx.config?.language === "en";
+  const en = textoDoIdioma(ctx.config?.language) === "en";
   const motivo = en ? `profile picture flagged (${r.motivos.map((m) => MOTIVO_EN[m] ?? m).join(", ")})` : `foto de perfil imprópria (${r.motivos.join(", ")})`;
   let feito = r.apitou ? (en ? "nothing — alert only" : "nada — só alerta")
     : (en ? "nothing — the model didn't confirm the risk; check the profile" : "nada — o modelo não confirmou o risco; confira o perfil");

@@ -5,6 +5,7 @@ export default {
   modulo: "../ferramentas/tickets.js",
   funcao: "cmdTicket",
   apelidos: ["tickets", "suporte"],
+  es: { nome: "ticket" },   // espanhol (etapa 4)
   subcomandos: {
     painel: "panel", lista: "list", apagar: "delete", categorias: "categories", equipe: "team",
   },

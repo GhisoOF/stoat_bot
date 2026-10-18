@@ -1,6 +1,6 @@
 
 import * as log from "../core/log.js";
-import { tr, lingua } from "../core/i18n.js";
+import { tr, lingua, idiomaDe } from "../core/i18n.js";
 import { nomeExibido, corrigirSubcomando, citar } from "../core/aliases.js";
 import { maisParecido } from "../core/parecido.js";
 
@@ -9,6 +9,7 @@ export const GRANT_ALL_SAFE = 0x000fffffffffffffn;
 export async function cmdComando(message, args, ctx) {
   const { config, estado, sendEmbed, COR, getServer, membroTemPermissao, salvarConfig, PREFIXO } = ctx;
   const lang = lingua(ctx);
+  const telaEn = idiomaDe(ctx) === "es" ? "es" : "en";   // o nome solto na tela (sem &): em espanhol, o espanhol
 
   const server = await getServer(message);
   if (!membroTemPermissao(message, server, "ManagePermissions"))
@@ -24,11 +25,12 @@ export async function cmdComando(message, args, ctx) {
 
   const sub = args[0]?.toLowerCase();
 
-  // ── &comando → status ──
-  if (!sub) {
+  // ── &comando → status ── (`list` também: a ajuda sempre prometeu `&comando list`,
+  // e ele caía no "uso errado" — 18 out 2026)
+  if (!sub || sub === "list") {
     const linhas = geren.map((c) => {
       const off = config.comandosDesativados.includes(c);
-      return `${off ? "🔴" : "🟢"} \`${nomeExibido(c, lang)}\``;
+      return `${off ? "🔴" : "🟢"} \`${nomeExibido(c, lang === "en" ? telaEn : lang)}\``;
     });
     return sendEmbed(message.channel, lang === "en" ? {
       title: "🎛 Server commands",
@@ -82,7 +84,7 @@ export async function cmdComando(message, args, ctx) {
 
   if (!geren.includes(alvo)) {
     // `pnig` → `ping` (o nome do comando ou o apelido, nos dois idiomas)
-    const nomesGeren = Object.keys(estado.CANONICO ?? {}).filter((n) => geren.includes(canon(n))).concat(geren, geren.map((c) => nomeExibido(c, "en")));
+    const nomesGeren = Object.keys(estado.CANONICO ?? {}).filter((n) => geren.includes(canon(n))).concat(geren, geren.map((c) => nomeExibido(c, "en")), geren.map((c) => nomeExibido(c, "es")));
     const perto = maisParecido(alvo, nomesGeren);
     const pronto = perto ? `${citar("comando", lingua(ctx), PREFIXO)} ${args[0]} ${perto}` : null;
     return sendEmbed(message.channel, tr(ctx, {
@@ -91,7 +93,7 @@ export async function cmdComando(message, args, ctx) {
       colour: COR.erro,
     }, {
       title: "❌ Invalid command",
-      description: `${pronto ? `Did you mean \`${pronto}\`?\n\n` : ""}\`${alvo}\` can't be managed.\nManageable: ${geren.map((c) => `\`${nomeExibido(c, "en")}\``).join(", ")}`,
+      description: `${pronto ? `Did you mean \`${pronto}\`?\n\n` : ""}\`${alvo}\` can't be managed.\nManageable: ${geren.map((c) => `\`${nomeExibido(c, telaEn)}\``).join(", ")}`,
       colour: COR.erro,
     }));
   }

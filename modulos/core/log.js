@@ -1,5 +1,5 @@
 
-import { tr, lingua } from "./i18n.js";
+import { tr, lingua, idiomaDe } from "./i18n.js";
 import { citar } from "../core/aliases.js";
 import { resolverCanal } from "./ids.js";
 import { subExibido } from "./aliases.js";
@@ -98,7 +98,7 @@ export async function cmdLog(message, args, ctx) {
   const { config, sendEmbed, COR, getServer, membroTemPermissao, salvarConfig, PREFIXO } = ctx;
   const lang = lingua(ctx);
   const ROTULOS = lang === "en" ? EVENTOS_EN : EVENTOS;
-  const nomeEvento = (k) => subExibido("log", k, lang);   // `mensagens` → `messages` em inglês
+  const nomeEvento = (k) => subExibido("log", k, idiomaDe(ctx));   // `mensagens` → `messages` em inglês, `mensajes` em espanhol
 
   const server = await getServer(message);
   if (!membroTemPermissao(message, server, "ManagePermissions")) {

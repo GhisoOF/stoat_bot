@@ -5,6 +5,7 @@ export default {
   modulo: "../ai/chat.js",
   funcao: "cmdChat",
   apelidos: ["ia"],
+  es: { nome: "chat" },   // espanhol (etapa 4)
   subcomandos: {
     livre: "free", esquecer: "forget", tudo: "all", perfil: "profile", mapear: "map",
     cuidado: "care", gentil: "gentle", comentar: "comment", pordia: "perday", status: "status",

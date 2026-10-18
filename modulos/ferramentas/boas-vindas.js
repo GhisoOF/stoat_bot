@@ -58,10 +58,12 @@ export function renderizar(texto, { userId, nome, servidor, membros, mencionar =
     .replaceAll("{user}",     quem)
     .replaceAll("{nome}",     nomeLimpo || userId || "?")
     .replaceAll("{name}",     nomeLimpo || userId || "?")
+    .replaceAll("{nombre}",   nomeLimpo || userId || "?")
     .replaceAll("{servidor}", servidorLimpo || "?")
     .replaceAll("{server}",   servidorLimpo || "?")
     .replaceAll("{membros}",  membros ?? "?")
     .replaceAll("{members}",  membros ?? "?")
+    .replaceAll("{miembros}", membros ?? "?")
     .replaceAll("{contagem}", membros ?? "?")
     .replaceAll("{count}",    membros ?? "?");
 }
@@ -297,7 +299,7 @@ function criarComando(tipoId) {
 
     // ── imagem ──
     if (["imagem", "image", "img"].includes(sub)) {
-      if (!resto || ["limpar", "clear", "off", "remover", "remove"].includes(resto.toLowerCase())) {
+      if (!resto || ["limpar", "clear", "off", "remover", "remove", "borrar", "quitar", "eliminar"].includes(resto.toLowerCase())) {
         c.imagem = null; salvarConfig?.();
         return sendEmbed(message.channel, tr(ctx,
           { title: "✅ Imagem removida", description: "O embed volta a ser só texto.", colour: COR.sucesso },

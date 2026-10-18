@@ -13,7 +13,7 @@
 
 import * as db from "../core/db.js";
 import * as log from "../core/log.js";
-import { lingua } from "../core/i18n.js";
+import { lingua, textoDoIdioma } from "../core/i18n.js";
 import { resolverUsuario, resolverCargo } from "../core/ids.js";
 import { descreverErro } from "../core/erros.js";
 import { planejarCargos } from "./nivel.js";
@@ -91,7 +91,7 @@ export function minerar(sid, uid, cfg, { agora = Date.now(), aleatorio = Math.ra
 
 export function configDe(config) {
   // o nome padrão no idioma do servidor ("Coin" em inglês), até a staff escolher um
-  const nomePadrao = config.language === "en" ? "Coin" : PADRAO.nome;
+  const nomePadrao = textoDoIdioma(config.language) === "en" ? "Coin" : PADRAO.nome;
   const atual = config.economia ?? {};
   config.economia = { ...PADRAO, nome: nomePadrao, ...atual };
   if (!atual.nomeEscolhido && (atual.nome === "Moeda" || atual.nome === "Coin")) config.economia.nome = nomePadrao;

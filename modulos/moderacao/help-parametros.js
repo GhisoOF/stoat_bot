@@ -1,9 +1,10 @@
 import { parametrosDoRegistro } from "../core/ajuda-registro.js";
-import { citar } from "../core/aliases.js";
+import { citar, nomeExibido } from "../core/aliases.js";
 
-export function parametros(P, lang = "pt") {
+export function parametros(P, lang = "pt", idioma = lang) {
   // os comandos já migrados (fase 3) têm os parâmetros no registro, e eles vencem
-  return { ...(lang === "en" ? parametrosEN(P) : parametrosPT(P)), ...parametrosDoRegistro(P, lang) };
+  // (e só eles já têm espanhol: `idioma` "es")
+  return { ...(lang === "en" ? parametrosEN(P) : parametrosPT(P)), ...parametrosDoRegistro(P, idioma) };
 }
 
 function parametrosPT(P) {
@@ -395,10 +396,10 @@ function parametrosEN(P) {
 }
 
 // Renderiza a seção **Parâmetros** de um comando (ou "" se não houver).
-export function secaoParametros(P, lang, comando) {
-  const lista = parametros(P, lang)[comando];
+export function secaoParametros(P, lang, comando, idioma = lang) {
+  const lista = parametros(P, lang, idioma)[comando];
   if (!lista?.length) return "";
-  const titulo = lang === "en" ? `Parameters of \`${P}${comando}\`` : `Parâmetros de \`${P}${comando}\``;
+  const titulo = idioma === "es" ? `Parámetros de \`${P}${nomeExibido(comando, "es")}\`` : lang === "en" ? `Parameters of \`${P}${comando}\`` : `Parâmetros de \`${P}${comando}\``;
   const linhas = lista.map((p) => {
     const cab = p.valor ? `\`${p.nome}\` ${p.valor}` : `\`${p.nome}\``;
     return `• ${cab} — ${p.desc}`;

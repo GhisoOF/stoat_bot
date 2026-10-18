@@ -6,6 +6,7 @@ export default {
   funcao: "cmdXp",
   nomes: { en: "xp" },
   apelidos: ["nivel", "level", "levels"],
+  es: { nome: "xp" },   // espanhol (etapa 4)
   subcomandos: {
     setup: "setup", config: "config", configurar: "configure", cargos: "roles",
     criarcargos: "createroles", criar: "create", reset: "reset", zerar: "wipe", top: "top",

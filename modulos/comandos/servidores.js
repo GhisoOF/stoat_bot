@@ -6,6 +6,7 @@ export default {
   funcao: "cmdServidores",
   nomes: { en: "servers" },
   apelidos: ["servers"],
+  es: { nome: "servidores" },   // espanhol (etapa 4)
   subcomandos: {
     relatorio: "report", canal: "channel", agora: "now", assuntos: ["subjects", "topics"],
     vazias: "empty", aqui: "here",

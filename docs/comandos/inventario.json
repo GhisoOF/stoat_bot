@@ -6,10 +6,20 @@
    "rota": "sobre",
    "funcao": "cmdSobre"
   },
+  "acceso": {
+   "canonico": "acesso",
+   "rota": "acesso",
+   "funcao": "cmdAcesso"
+  },
   "access": {
    "canonico": "acesso",
    "rota": "acesso",
    "funcao": "cmdAcesso"
+  },
+  "acerca": {
+   "canonico": "sobre",
+   "rota": "sobre",
+   "funcao": "cmdSobre"
   },
   "acesso": {
    "canonico": "acesso",
@@ -20,6 +30,16 @@
    "canonico": "adeus",
    "rota": "adeus",
    "funcao": "cmd"
+  },
+  "advertir": {
+   "canonico": "warn",
+   "rota": "warn",
+   "funcao": "cmdWarn"
+  },
+  "asistente": {
+   "canonico": "assistente",
+   "rota": "assistente",
+   "funcao": "cmdAssistente"
   },
   "assistant": {
    "canonico": "assistente",
@@ -36,6 +56,11 @@
    "rota": "automod",
    "funcao": "cmdAutomod"
   },
+  "autorol": {
+   "canonico": "autorole",
+   "rota": "autorole",
+   "funcao": "cmdAutorole"
+  },
   "autorole": {
    "canonico": "autorole",
    "rota": "autorole",
@@ -45,6 +70,11 @@
    "canonico": "warn",
    "rota": "warn",
    "funcao": "cmdWarn"
+  },
+  "ayuda": {
+   "canonico": "help",
+   "rota": "help",
+   "funcao": "cmdHelp"
   },
   "ban": {
    "canonico": "ban",
@@ -57,6 +87,11 @@
    "funcao": "cmdBanGlobal"
   },
   "bemvindo": {
+   "canonico": "boasvindas",
+   "rota": "boasvindas",
+   "funcao": "cmd"
+  },
+  "bienvenida": {
    "canonico": "boasvindas",
    "rota": "boasvindas",
    "funcao": "cmd"
@@ -246,6 +281,11 @@
    "rota": "entretenimento",
    "funcao": "cmdEntretenimento"
   },
+  "entretenimiento": {
+   "canonico": "entretenimento",
+   "rota": "entretenimento",
+   "funcao": "cmdEntretenimento"
+  },
   "entreterimento": {
    "canonico": "entretenimento",
    "rota": "entretenimento",
@@ -255,6 +295,11 @@
    "canonico": "staff",
    "rota": "staff",
    "funcao": "cmdStaff"
+  },
+  "expulsar": {
+   "canonico": "kick",
+   "rota": "kick",
+   "funcao": "cmdKick"
   },
   "fabrica": {
    "canonico": "reset",
@@ -341,6 +386,11 @@
    "rota": "fuso",
    "funcao": "cmdFuso"
   },
+  "huso": {
+   "canonico": "fuso",
+   "rota": "fuso",
+   "funcao": "cmdFuso"
+  },
   "ia": {
    "canonico": "chat",
    "rota": "chat",
@@ -380,6 +430,11 @@
    "canonico": "entrar",
    "rota": "entrar",
    "funcao": "entrar"
+  },
+  "juego": {
+   "canonico": "game",
+   "rota": "game",
+   "funcao": "cmdGame"
   },
   "kick": {
    "canonico": "kick",
@@ -481,6 +536,11 @@
    "rota": "game",
    "funcao": "cmdGame"
   },
+  "personalidad": {
+   "canonico": "personalidade",
+   "rota": "personalidade",
+   "funcao": "cmdPersonalidade"
+  },
   "personalidade": {
    "canonico": "personalidade",
    "rota": "personalidade",
@@ -536,6 +596,11 @@
    "rota": "repete",
    "funcao": "cmdRepete"
   },
+  "repetir": {
+   "canonico": "repete",
+   "rota": "repete",
+   "funcao": "cmdRepete"
+  },
   "reset": {
    "canonico": "reset",
    "rota": "reset",
@@ -555,6 +620,11 @@
    "canonico": "rolar",
    "rota": "rolar",
    "funcao": "cmdRolar"
+  },
+  "rolsilencio": {
+   "canonico": "cargomudo",
+   "rota": "cargomudo",
+   "funcao": "cmdCargoMudo"
   },
   "rpg": {
    "canonico": "game",
@@ -577,6 +647,11 @@
    "funcao": "sair"
   },
   "sairdacall": {
+   "canonico": "sair",
+   "rota": "sair",
+   "funcao": "sair"
+  },
+  "salir": {
    "canonico": "sair",
    "rota": "sair",
    "funcao": "sair"
@@ -770,16 +845,21 @@
    "status": "status"
   },
   "adeus": {
+   "borrar": "limpar",
    "channel": "canal",
    "clear": "limpar",
    "color": "cor",
    "colour": "cor",
    "default": "padrao",
+   "estado": "status",
    "here": "aqui",
    "hidden": "oculto",
    "hide": "oculto",
    "image": "imagem",
+   "imagen": "imagem",
    "message": "texto",
+   "predeterminado": "padrao",
+   "probar": "testar",
    "show": "visivel",
    "status": "status",
    "test": "testar",
@@ -904,8 +984,11 @@
    "topics": "assuntos"
   },
   "autorole": {
+   "definir": "set",
+   "desactivar": "desativar",
    "disable": "desativar",
    "off": "off",
+   "quitar": "remover",
    "remove": "remover",
    "set": "set"
   },
@@ -953,17 +1036,23 @@
    "removedomain": "removedomain"
   },
   "boasvindas": {
+   "borrar": "limpar",
    "channel": "canal",
    "clear": "limpar",
    "color": "cor",
    "colour": "cor",
    "default": "padrao",
+   "estado": "status",
    "here": "aqui",
    "hidden": "oculto",
    "hide": "oculto",
    "image": "imagem",
+   "imagen": "imagem",
+   "mensajes": "mensagens",
    "message": "texto",
    "messages": "mensagens",
+   "predeterminado": "padrao",
+   "probar": "testar",
    "show": "visivel",
    "status": "status",
    "test": "testar",
@@ -988,9 +1077,13 @@
    "status": "status"
   },
   "comando": {
+   "activar": "ativar",
+   "desactivar": "desativar",
    "disable": "desativar",
    "enable": "ativar",
+   "gestionar": "gerenciar",
    "list": "list",
+   "lista": "list",
    "manage": "gerenciar",
    "off": "desativar",
    "on": "ativar"
@@ -1035,6 +1128,7 @@
    "take": "tirar"
   },
   "embed": {
+   "colores": "cores",
    "colors": "cores",
    "fields": "campos"
   },
@@ -1175,6 +1269,8 @@
    "customise": "personalizar",
    "customize": "personalizar",
    "diagnostics": "diagnostico",
+   "diversion": "diversao",
+   "empezar": "comecar",
    "fun": "diversao",
    "general": "geral",
    "levels": "xp",
@@ -1189,29 +1285,38 @@
   },
   "idioma": {
    "english": "english",
+   "estado": "status",
+   "ingles": "english",
    "portuguese": "portugues",
    "status": "status"
   },
   "iniciativa": {
+   "borrar": "limpar",
    "clear": "limpar",
    "list": "lista",
+   "quitar": "remover",
    "remove": "remover"
   },
   "limpar": {
    "all": "tudo",
    "confirm": "confirmar",
-   "everything": "tudo"
+   "everything": "tudo",
+   "todo": "tudo"
   },
   "log": {
+   "aqui": "here",
    "channel": "canal",
    "commands": "comandos",
    "events": "eventos",
    "here": "here",
    "members": "membros",
+   "mensajes": "mensagens",
    "messages": "mensagens",
+   "miembros": "membros",
    "off": "off",
    "punishments": "punicoes",
-   "roles": "cargos"
+   "roles": "cargos",
+   "sanciones": "punicoes"
   },
   "modia": {
    "add": "add",
@@ -1245,7 +1350,8 @@
    "unique": "unico"
   },
   "rolar": {
-   "coin": "moeda"
+   "coin": "moeda",
+   "moneda": "moeda"
   },
   "rss": {
    "add": "add",
@@ -1302,6 +1408,7 @@
   "silenciar": {
    "lift": "tirar",
    "off": "tirar",
+   "quitar": "tirar",
    "remove": "tirar",
    "undo": "tirar"
   },
@@ -1365,14 +1472,18 @@
    "settings": "ajustes"
   },
   "warn": {
+   "borrar": "limpar",
    "clear": "limpar",
    "list": "lista"
   },
   "webhook": {
    "channel": "canal",
+   "crear": "criar",
    "create": "criar",
+   "eliminar": "remover",
    "events": "eventos",
    "list": "lista",
+   "probar": "testar",
    "remove": "remover",
    "test": "testar"
   },
@@ -2132,5 +2243,99 @@
    "setup",
    "sincronizar"
   ]
+ },
+ "telaEs": {
+  "adeus": {
+   "aqui": "aqui",
+   "canal": "canal",
+   "cor": "color",
+   "imagem": "imagen",
+   "limpar": "borrar",
+   "oculto": "oculto",
+   "padrao": "predeterminado",
+   "status": "estado",
+   "testar": "probar",
+   "texto": "texto",
+   "titulo": "titulo",
+   "visivel": "visible"
+  },
+  "autorole": {
+   "desativar": "desactivar",
+   "off": "off",
+   "remover": "quitar",
+   "set": "definir"
+  },
+  "boasvindas": {
+   "aqui": "aqui",
+   "canal": "canal",
+   "cor": "color",
+   "imagem": "imagen",
+   "limpar": "borrar",
+   "mensagens": "mensajes",
+   "oculto": "oculto",
+   "padrao": "predeterminado",
+   "status": "estado",
+   "testar": "probar",
+   "texto": "texto",
+   "titulo": "titulo",
+   "visivel": "visible"
+  },
+  "comando": {
+   "ativar": "activar",
+   "desativar": "desactivar",
+   "gerenciar": "gestionar",
+   "list": "lista"
+  },
+  "embed": {
+   "campos": "campos",
+   "cores": "colores"
+  },
+  "help": {
+   "comecar": "empezar",
+   "diversao": "diversion"
+  },
+  "idioma": {
+   "english": "ingles",
+   "portugues": "portugues",
+   "status": "estado"
+  },
+  "iniciativa": {
+   "limpar": "borrar",
+   "lista": "lista",
+   "remover": "quitar"
+  },
+  "limpar": {
+   "confirmar": "confirmar",
+   "tudo": "todo"
+  },
+  "log": {
+   "canal": "canal",
+   "cargos": "roles",
+   "comandos": "comandos",
+   "eventos": "eventos",
+   "here": "aqui",
+   "membros": "miembros",
+   "mensagens": "mensajes",
+   "off": "off",
+   "punicoes": "sanciones"
+  },
+  "rolar": {
+   "moeda": "moneda"
+  },
+  "silenciar": {
+   "tirar": "quitar"
+  },
+  "warn": {
+   "limpar": "borrar",
+   "lista": "lista"
+  },
+  "webhook": {
+   "canal": "canal",
+   "criar": "crear",
+   "eventos": "eventos",
+   "lista": "lista",
+   "remover": "eliminar",
+   "testar": "probar"
+  }
  }
 }

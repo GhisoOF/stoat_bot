@@ -1,11 +1,11 @@
 import { servidorPermitido as temIA, comandoIAPermitido } from "../ai/chat.js";
 import * as visaoMod from "./visao.js";
 import { arvoreSubtopicos, SUBTOPICOS_SO_IA, ligarFamilias, mesclarNos, MODIA_TAG } from "./help-arvore.js";
-import { nomeExibido, normalizarArgs, SUB, citar } from "../core/aliases.js";
+import { nomeExibido, normalizarArgs, SUB, citar, subExibido, marcarTraduzido, idDoNome } from "../core/aliases.js";
 import { REGISTRO } from "../comandos/index.js";
 import { grupos as gruposHelp, ALIAS_GRUPO, ORDEM as ORDEM_GRUPOS } from "./help-grupos.js";
 import { secaoParametros } from "./help-parametros.js";
-import { detalhesDoRegistro } from "../core/ajuda-registro.js";
+import { detalhesDoRegistro, COMANDOS_COM_AJUDA } from "../core/ajuda-registro.js";
 import { enviarPaginado, paginarLinhas } from "../core/paginas.js";
 import { escadaDePunicao, rotuloDegrau, GRUPOS_AUTOMOD, estadoDoGrupo, validadeDosAvisos } from "./automod-engine.js";
 import { MUNDO } from "../game/mundo.js";
@@ -17,7 +17,7 @@ const COMANDOS_SO_IA = new Set(["chat", "modia"]);
 
 import * as log from "../core/log.js";
 import * as db  from "../core/db.js";
-import { tr, lingua } from "../core/i18n.js";
+import { tr, lingua, idiomaDe } from "../core/i18n.js";
 import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
@@ -67,9 +67,10 @@ function extrairAlvo(message, args) {
   return { id, motivo: resto.join(" ").trim() };
 }
 
-export function construirDetalhes(P, lang = "pt") {
-  // os comandos já migrados (fase 3) têm a página no registro, e ela vence
-  return { ...(lang === "en" ? detalhesEN(P) : detalhesPT(P)), ...detalhesDoRegistro(P, lang) };
+export function construirDetalhes(P, lang = "pt", idioma = lang) {
+  // os comandos já migrados (fase 3) têm a página no registro, e ela vence —
+  // e só ela já tem espanhol (`idioma` "es"; as outras saem em inglês)
+  return { ...(lang === "en" ? detalhesEN(P) : detalhesPT(P)), ...detalhesDoRegistro(P, idioma) };
 }
 
 function detalhesPT(P) {
@@ -265,7 +266,7 @@ function detalhesEN(P) {
     },
     tutorial: {
       uso: `${P}tutorial [page|area]`,
-      desc: "First-steps guide **in pages** — react ◀ ▶ to turn. It changes nothing by itself: it shows the path and the exact command for each step.\n\n`&tutorial` — the guide (6 pages): permissions → channels → protection → welcome and roles → XP and RPG → checklist\n`&tutorial 2` — opens page 2 directly\n`&tutorial <area>` — goes deeper on one subject (e.g. `&tutorial canais`, `&tutorial game`)\n\nWould you rather have the bot ask and configure for you? `&assistente`.\n\nAlso answers to `&guide` and `&start`.",
+      desc: "First-steps guide **in pages** — react ◀ ▶ to turn. It changes nothing by itself: it shows the path and the exact command for each step.\n\n`&tutorial` — the guide (6 pages): permissions → channels → protection → welcome and roles → XP and RPG → checklist\n`&tutorial 2` — opens page 2 directly\n`&tutorial <area>` — goes deeper on one subject (e.g. `&tutorial canais`, `&tutorial game`)\n\nWould you rather have the bot ask and configure for you? `&assistente`.\n\nAlso answers to **guide** and **start**.",
       perm: null,
       ex: `${P}tutorial canais`,
     },
@@ -629,11 +630,13 @@ export async function cmdHelp(message, args, ctx) {
   const { sendEmbed, COR, PREFIXO } = ctx;
   const P = PREFIXO;
   const lang = lingua(ctx);
+  const idioma = idiomaDe(ctx);   // "es" além dos dois: a página do registro e os rótulos já saem em espanhol
+  const rot = (pt, en, es) => (idioma === "es" ? es : lang === "en" ? en : pt);
   const comIA = (() => { try { return temIA(ctx.serverId); } catch { return false; } })();
   const comModIA = podeIA("modia", ctx.serverId);
 
   // Ajuda detalhada por comando: &help <comando>
-  const DETALHES  = construirDetalhes(P, lang);
+  const DETALHES  = construirDetalhes(P, lang, idioma);
   const SUBTOPICOS = (() => {
     const base = construirSubtopicos(P, lang);
     const extra = arvoreSubtopicos(P, lang);
@@ -807,7 +810,7 @@ export async function cmdHelp(message, args, ctx) {
         : (lang === "en"
           ? `🔍 \`${P}help <command> <part>\` — one part of it (\`${P}help game admin\`, \`${P}help xp setup\`)`
           : `🔍 \`${P}help <comando> <parte>\` — uma parte dele (\`${P}help game admin\`, \`${P}help xp setup\`)`),
-      visao.nivel === "membro" ? null : (lang === "en" ? `🌐 \`${citar("idioma", "en", P)} pt|en\` — server language` : `🌐 \`${citar("idioma", "pt", P)} pt|en\` — idioma do servidor`),
+      visao.nivel === "membro" ? null : (lang === "en" ? `🌐 \`${citar("idioma", "en", P)} pt|en|es\` — server language` : `🌐 \`${citar("idioma", "pt", P)} pt|en|es\` — idioma do servidor`),
       "",
       ({ membro: lang === "en" ? "_👤 You're seeing the commands you can use. Staff sees the setup ones too._" : "_👤 Você está vendo os comandos que pode usar. A staff vê também os de configuração._",
          staff: lang === "en" ? "_🛡️ Staff view: everything this server has._" : "_🛡️ Visão da staff: tudo o que este servidor tem._",
@@ -861,29 +864,35 @@ export async function cmdHelp(message, args, ctx) {
     // a descrição também perde as partes que quem vê não usa (o membro vê o `&xp top`, não o `&xp setup`)
     const d = { ...d0, desc: visaoMod.filtrarLinhas(String(d0.desc ?? "").split("\n"), visao).join("\n") };
     const filhosReais = filhosDe(SUBTOPICOS[alvo]).filter((k) => visaoMod.podeVer(visao, alvo, k));
+    // Página do registro em espanhol (etapa 4): sai pronta, com os nomes já em
+    // espanhol, e a tradução da tela não passa por ela (marcarTraduzido, aliases.js).
+    const pronta = idioma === "es" && COMANDOS_COM_AJUDA.includes(alvo);
+    const linkSub = (k) => (pronta ? `${citar("help", "es", P)} ${nomeExibido(alvo, "es")} ${subExibido(alvo, k, "es")}` : `${P}help ${alvo} ${k}`);
     const temSub = filhosReais.length
-      ? `\n\n**${lang === "en" ? "Subtopics" : "Subtópicos"}** ${lang === "en" ? "_(details on each part)_" : "_(o detalhe de cada parte)_"}\n`
-        + filhosReais.map((k) => `\`${P}help ${alvo} ${k}\``).join(" · ")
+      ? `\n\n**${rot("Subtópicos", "Subtopics", "Subtemas")}** ${rot("_(o detalhe de cada parte)_", "_(details on each part)_", "_(el detalle de cada parte)_")}\n`
+        + filhosReais.map((k) => `\`${linkSub(k)}\``).join(" · ")
       : "";
     // parâmetros que são subcomandos de outro nível (o `setup` do &xp para um membro) saem
-    const params = secaoParametros(P, lang, alvo).split("\n").filter((l) => {
+    const params = secaoParametros(P, lang, alvo, idioma).split("\n").filter((l) => {
       const m = l.match(/^• `([a-zçãéí]+)/i);
       return !m || visaoMod.podeVer(visao, alvo, m[1].toLowerCase());
     }).join("\n");
     const cabecalho = [
-      `**${lang === "en" ? "Usage" : "Uso"}:** \`${d.uso}\``,
-      d.perm ? `**${lang === "en" ? "Permission" : "Permissão"}:** ${d.perm}` : null,
+      `**${rot("Uso", "Usage", "Uso")}:** \`${d.uso}\``,
+      d.perm ? `**${rot("Permissão", "Permission", "Permiso")}:** ${d.perm}` : null,
       "",
       d.desc,
-      d.ex ? `\n**${lang === "en" ? "Example" : "Exemplo"}:** \`${d.ex}\`` : null,
+      d.ex ? `\n**${rot("Exemplo", "Example", "Ejemplo")}:** \`${d.ex}\`` : null,
     ].filter(Boolean).join("\n");
-    const titulo = `📖 ${lang === "en" ? "Help" : "Ajuda"} — ${P}${nomeExibido(alvo, lang)}`;
+    const titulo = `📖 ${rot("Ajuda", "Help", "Ayuda")} — ${P}${nomeExibido(alvo, idioma)}`;
     // Páginas montadas por tamanho, quebrando entre linhas (o cabeçalho do
     // &help tts tinha 2.300 caracteres e era cortado no meio de "dicionario").
-    const paginas = paginarLinhas([cabecalho, params.trim(), temSub.trim()].filter(Boolean).join("\n\n").split("\n"), { titulo });
+    const marca = pronta ? marcarTraduzido : (t) => t;
+    const paginas = paginarLinhas([cabecalho, params.trim(), temSub.trim()].filter(Boolean).join("\n\n").split("\n"), { titulo })
+      .map((p) => ({ ...p, title: marca(p.title), description: marca(p.description) }));
     if (paginas.length === 1) {
-      return sendEmbed(message.channel, { title: titulo, colour: COR.info,
-        description: cabecalho + params + temSub });
+      return sendEmbed(message.channel, { title: marca(titulo), colour: COR.info,
+        description: marca(cabecalho + params + temSub) });
     }
     return enviarPaginado(ctx, message.channel, {
       paginas, autorId: message.authorId, comandoPagina: null,
@@ -923,9 +932,9 @@ export async function cmdHelp(message, args, ctx) {
     const nomes = Object.keys(DETALHES ?? {});
     const perto = (a, b) => { if (Math.abs(a.length - b.length) > 2) return 9; const d = Array.from({ length: b.length + 1 }, (_, j) => j);
       for (let i = 1; i <= a.length; i++) { let ant = d[0]; d[0] = i; for (let j = 1; j <= b.length; j++) { const t = d[j]; d[j] = Math.min(d[j] + 1, d[j - 1] + 1, ant + (a[i - 1] === b[j - 1] ? 0 : 1)); ant = t; } } return d[b.length]; };
-    const candidatos = [...nomes, ...nomes.map((k) => nomeExibido(k, "en"))];
+    const candidatos = [...nomes, ...nomes.map((k) => nomeExibido(k, "en")), ...nomes.map((k) => nomeExibido(k, "es"))];
     const sugestao = candidatos.map((k) => [k, perto(String(alvo).toLowerCase(), k)]).filter(([, d]) => d <= 2).sort((a, b) => a[1] - b[1])[0]?.[0];
-    const sug = sugestao ? (lang === "en" ? nomeExibido(sugestao, "en") : sugestao) : null;
+    const sug = sugestao ? (lang === "en" ? nomeExibido(idDoNome(sugestao), idioma) : sugestao) : null;
     return sendEmbed(message.channel, tr(ctx, {
       title: "❓ Não encontrado",
       description: `${sug ? `Você quis dizer \`${P}help ${sug}\`?\n\n` : ""}Não há ajuda para \`${alvo}\`. Use \`${P}help\` para o índice, ou \`${P}help <grupo>\` (${lista}).`,

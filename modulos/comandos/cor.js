@@ -6,6 +6,7 @@ export default {
   funcao: "cmdCor",
   nomes: { en: "color" },
   apelidos: ["cores", "cargocor", "color", "colour"],
+  es: { nome: "color" },   // espanhol (etapa 4)
   subcomandos: {
     painel: "panel", criar: "create", gerar: "generate", gradiente: "gradient", preset: "preset",
     presets: "presets", lista: "list", cargos: "roles", remover: "remove", limpar: "clear",

@@ -5,6 +5,7 @@ export default {
   modulo: "../moderacao/debug-comando.js",
   funcao: "cmdDebug",
   apelidos: ["diagnostico", "diagnóstico"],
+  es: { nome: "debug" },   // espanhol (etapa 4)
   subcomandos: {
     canais: "channels", permissoes: "permissions", cru: "raw", silence: "silence", mudo: "mute",
     ler: "read",

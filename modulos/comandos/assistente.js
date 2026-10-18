@@ -6,6 +6,7 @@ export default {
   funcao: "cmdAssistente",
   nomes: { en: "wizard" },
   apelidos: ["wizard", "assistant", "setup", "configure", "configurar"],
+  es: { nome: "asistente" },   // espanhol (etapa 4)
   subcomandos: {
     rapido: ["quick", "fast"], completo: ["full", "complete"], canais: "channels",
     protecao: ["protection", "protect"], cancelar: ["cancel", "stop"],

@@ -12731,7 +12731,11 @@ const { SUB } = await import("./modulos/core/aliases.js");
 
 // Tokens PORTUGUESES que têm (ou deveriam ter) um nome em inglês na tela
 const PT_TOKENS = new Set();
-for (const mapa of Object.values(SUB)) for (const [en, pt] of Object.entries(mapa)) if (en !== pt && /^[a-zçãéíóú]+$/.test(pt)) PT_TOKENS.add(pt);
+// (etapa 4, 18 out 2026) a tabela de entrada também tem o espanhol (`aqui` → `here`):
+// o nome interno de uma palavra SÓ espanhola não é "o português" de nada
+const { REGISTRO: REG_ES } = await import("./modulos/comandos/index.js");
+const SO_ES = new Set(REG_ES.flatMap((c) => { const en = new Set(Object.values(c.subcomandos ?? {}).flat()); return Object.values(c.es?.subcomandos ?? {}).flat().filter((e) => !en.has(e)).map((e) => `${c.id} ${e}`); }));
+for (const [cmdT, mapa] of Object.entries(SUB)) for (const [en, pt] of Object.entries(mapa)) if (en !== pt && !SO_ES.has(`${cmdT} ${en}`) && /^[a-zçãéíóú]+$/.test(pt)) PT_TOKENS.add(pt);
 for (const t of ["velocidade", "rajada", "repeticao", "midia", "mencoes", "caracteres", "letras", "dominios", "convites", "conteudo", "odio",
   "imagens", "assuntos", "antiruido", "sentinela", "pular", "voltar", "cancelar", "aqui", "padrao", "aviso", "avisar", "apagar", "confirmar",
   "acumular", "banir", "herdar", "punicoes", "membros", "mensagens", "cargos", "comandos", "comecar", "proteger", "personalizar", "diversao",
@@ -14825,7 +14829,7 @@ async function say(conteudo, sid, { limiteMs = 3000 } = {}) {
   return { texto: saidas.map(textoDe).join("\n"), estourou };
 }
 let nSid = 0;
-async function servidorNovo(lang) { const sid = ulid("S" + (++nSid)); await say(lang === "en" ? "&language en" : "&idioma pt", sid); return sid; }
+async function servidorNovo(lang) { const sid = ulid("S" + (++nSid)); await say(lang === "en" ? "&language en" : lang === "es" ? "&idioma es" : "&idioma pt", sid); return sid; }
 
 let ok = 0, falhou = 0;
 const t = async (nome, fn) => { try { await fn(); console.log(`  ✅ ${nome}`); ok++; } catch (e) { console.log(`  ❌ ${nome}\n     ${String(e.message).split("\n").join("\n     ")}`); falhou++; } };
@@ -14842,7 +14846,7 @@ for (const [n, fn] of Object.entries(rotas).sort(([a], [b]) => a.localeCompare(b
 for (const [cmd, m] of Object.entries(aliasesMod.SUB).sort(([a], [b]) => a.localeCompare(b))) atual.sub[cmd] = Object.fromEntries(Object.entries(m).sort(([a], [b]) => a.localeCompare(b)));
 // a tela em inglês de cada palavra e os níveis aninhados (fase 2: as famílias levam as
 // tabelas para o registro — o resultado montado tem de sair igual)
-{ const tr = aliasesMod.tabelasDeTraducao(); atual.tela = tr.tela; atual.aninhados = tr.aninhados; }
+{ const tr = aliasesMod.tabelasDeTraducao(); atual.tela = tr.tela; atual.aninhados = tr.aninhados; atual.telaEs = tr.telaEs; }
 const salvo = fs.existsSync(ARQ_JSON) ? JSON.parse(fs.readFileSync(ARQ_JSON, "utf8")) : null;
 
 console.log("── 1. nenhum nome de comando perdido ──");
@@ -14875,6 +14879,11 @@ await t("a tela em inglês de cada subcomando e os níveis aninhados são os do 
   }
   for (const cmd of new Set([...Object.keys(salvo.aninhados), ...Object.keys(atual.aninhados)]))
     if (JSON.stringify(salvo.aninhados[cmd] ?? []) !== JSON.stringify(atual.aninhados[cmd] ?? [])) dif.push(`aninhados ${cmd}: ${salvo.aninhados[cmd] ?? "—"} → ${atual.aninhados[cmd] ?? "—"}`);
+  // (etapa 4) a tela em espanhol de cada subcomando também
+  assert.ok(salvo.telaEs, "o inventário é anterior à etapa 4 — rode com INVENTARIO=1");
+  for (const [cmd, m] of Object.entries({ ...salvo.telaEs, ...atual.telaEs })) for (const pt of new Set([...Object.keys(salvo.telaEs[cmd] ?? {}), ...Object.keys(m)])) {
+    if (salvo.telaEs[cmd]?.[pt] !== atual.telaEs[cmd]?.[pt]) dif.push(`telaEs ${cmd} ${pt}: ${salvo.telaEs[cmd]?.[pt] ?? "—"} → ${atual.telaEs[cmd]?.[pt] ?? "—"}`);
+  }
   assert.ok(!dif.length, `mudou (se foi de propósito, rode com INVENTARIO=1):\n${dif.join("\n")}`);
 });
 await t("comando gerenciável e comando só de IA têm rota", () => {
@@ -15506,7 +15515,7 @@ if (ATUALIZAR) {
   const contar = (cmd) => [...exemplos.keys()].filter((k) => new RegExp(`^\\w+\\t&(${porCanonico[cmd].nomes.join("|")})\\b`).test(k)).length;
   const json = {
     _leia: "Gerado por `INVENTARIO=1 node testes.mjs comandos-17out`. A suíte comandos-17out falha se um nome daqui sumir ou mudar de destino. Não edite à mão.",
-    nomes: atual.nomes, sub: atual.sub, tela: atual.tela, aninhados: atual.aninhados,
+    nomes: atual.nomes, sub: atual.sub, tela: atual.tela, aninhados: atual.aninhados, telaEs: atual.telaEs,
   };
   fs.mkdirSync("docs/comandos", { recursive: true });
   fs.writeFileSync(ARQ_JSON, JSON.stringify(json, null, 1) + "\n");
@@ -15521,10 +15530,10 @@ if (ATUALIZAR) {
     "",
     "## Comandos",
     "",
-    "| Comando | Nome na tela em inglês | Todos os nomes que levam a ele | Função | Liga/desliga | Exemplos na ajuda |",
-    "|---|---|---|---|---|---|",
+    "| Comando | Nome na tela em inglês | Nome na tela em espanhol | Todos os nomes que levam a ele | Função | Liga/desliga | Exemplos na ajuda |",
+    "|---|---|---|---|---|---|---|",
     ...Object.entries(porCanonico).sort(([a], [b]) => a.localeCompare(b)).map(([cmd, v]) =>
-      `| \`${cmd}\` | ${aliasesMod.COMANDO_EN[cmd] ? `\`${aliasesMod.COMANDO_EN[cmd]}\`` : "—"} | ${v.nomes.filter((n) => n !== cmd).map((n) => `\`${n}\``).join(" ") || "—"} | \`${v.funcao}\` | ${COMANDOS_SO_IA.has(cmd) ? "só IA" : COMANDOS_GERENCIAVEIS.includes(cmd) ? "sim" : "—"} | ${contar(cmd)} |`),
+      `| \`${cmd}\` | ${aliasesMod.COMANDO_EN[cmd] ? `\`${aliasesMod.COMANDO_EN[cmd]}\`` : "—"} | ${aliasesMod.COMANDO_ES[cmd] ? `\`${aliasesMod.COMANDO_ES[cmd]}\`` : "—"} | ${v.nomes.filter((n) => n !== cmd).map((n) => `\`${n}\``).join(" ") || "—"} | \`${v.funcao}\` | ${COMANDOS_SO_IA.has(cmd) ? "só IA" : COMANDOS_GERENCIAVEIS.includes(cmd) ? "sim" : "—"} | ${contar(cmd)} |`),
     "",
     "_Comando_ é o nome interno (o que o `&comando desativar` e o banco guardam).",
     "",
@@ -15559,6 +15568,189 @@ if (ATUALIZAR) {
   fs.writeFileSync(ARQ_MD, linhas.join("\n"));
   console.log(`\n📝 inventário regravado: ${ARQ_JSON} e ${ARQ_MD}`);
 }
+
+// ── 8. Etapa 4: espanhol ──
+// O servidor em espanhol (`&idioma es`) vê os nomes dos comandos e dos subcomandos em
+// espanhol, e as palavras em espanhol valem como entrada em qualquer servidor. O
+// texto das respostas ainda é o inglês, menos as páginas de ajuda do registro, que já
+// têm o espanhol e saem prontas (sem a tradução da tela por cima).
+console.log("\n── 8. etapa 4: espanhol ──");
+const storeMod = await import("./modulos/core/config-store.js");
+const visaoMod = await import("./modulos/moderacao/visao.js");
+const { COMANDO_ES } = registro;
+const nomeEs = (id) => COMANDO_ES[id] ?? aliasesMod.COMANDO_EN[id] ?? id;
+await t("`&idioma es` põe o servidor em espanhol — e `español`, `espanol` e `spanish` também valem", async () => {
+  const sid = ulid("es-idioma");
+  const r = (await say("&idioma es", sid)).texto;
+  assert.equal(storeMod.configDoServidor(sid).language, "es");
+  assert.match(r, /Idioma: Español 🇪🇸/);
+  // o aviso do servidor que ainda não escolheu (1º comando) oferece o espanhol também
+  assert.match(r, /🇪🇸 \*\*Español\*\* — [\s\S]*`&idioma es`/);
+  assert.match((await say("&idioma", sid)).texto, /\*\*🇪🇸 Idioma actual:\*\* Español/);
+  for (const [i, palavra] of ["español", "espanol", "spanish"].entries()) {
+    const outro = ulid("es-idioma-" + i);
+    await say("&idioma pt", outro);
+    await say(`&idioma ${palavra}`, outro);
+    assert.equal(storeMod.configDoServidor(outro).language, "es", palavra);
+  }
+});
+await t("nome de comando em espanhol: leva ao mesmo comando em qualquer servidor, e a tela em espanhol o mostra", () => {
+  const ruins = [];
+  for (const c of registro.REGISTRO) {
+    const es = c.es?.nome;
+    if (!es) { ruins.push(`${c.id}: sem es.nome`); continue; }
+    if (rotas[es] !== rotas[c.id]) ruins.push(`${c.id}: &${es} não leva ao mesmo handler`);
+    if (citar(c.id, "es") !== "&" + es) ruins.push(`${c.id}: citar es = ${citar(c.id, "es")}`);
+    if (aliasesMod.nomeExibido(c.id, "es") !== es) ruins.push(`${c.id}: nomeExibido es`);
+  }
+  assert.deepEqual(ruins, []);
+});
+await t("palavra de subcomando em espanhol não toma o lugar de outra: o que a tela mostra é o que a entrada entende", () => {
+  const ruins = [];
+  for (const c of registro.REGISTRO) for (const [interno, es] of Object.entries(c.es?.subcomandos ?? {})) for (const e of [es].flat()) {
+    const vai = aliasesMod.SUB[c.id]?.[e] ?? e;
+    if (vai !== interno) ruins.push(`${c.id} ${e}: a tela diz ${interno}, a entrada entende ${vai}`);
+    if (aliasesMod.subExibido(c.id, interno, "es") !== [es].flat()[0]) ruins.push(`${c.id} ${interno}: subExibido es`);
+  }
+  assert.deepEqual(ruins, []);
+});
+const reg = (id) => registro.REGISTRO.find((c) => c.id === id);
+const { protegerMarcadores } = await import("./modulos/core/marcadores.js");
+await t("toda página de ajuda do registro tem o espanhol (cada `{ pt, en }` tem o `es`)", () => {
+  const faltam = [];
+  const andar = (v, onde) => {
+    if (Array.isArray(v)) return v.forEach((x, i) => andar(x, `${onde}.${i}`));
+    if (!v || typeof v !== "object") return;
+    if ("pt" in v || "en" in v) { if (typeof v.es !== "string") faltam.push(onde); return; }
+    for (const [k, x] of Object.entries(v)) andar(x, `${onde}.${k}`);
+  };
+  for (const id of ajudaReg.COMANDOS_COM_AJUDA) andar(reg(id).ajuda, id);
+  assert.deepEqual(faltam, []);
+});
+const esSid = await servidorNovo("es");
+const paginaEs = {};
+// `&help config` abre o grupo Personalizar (o `config` é nome de grupo da ajuda e o
+// grupo vence) — em pt e en também, desde antes da etapa 4; anotado no REFATORACAO
+const SEM_PAGINA = new Set(["config"]);
+for (const id of ajudaReg.COMANDOS_COM_AJUDA) if (!SEM_PAGINA.has(id)) paginaEs[id] = (await say(`&ayuda ${nomeEs(id)}`, esSid)).texto;
+await t(`servidor em espanhol: as ${ajudaReg.COMANDOS_COM_AJUDA.length - SEM_PAGINA.size} páginas do registro saem em espanhol, com os nomes em espanhol`, () => {
+  const ruins = [];
+  for (const [id, txt] of Object.entries(paginaEs)) {
+    const ponha = (m) => ruins.push(`${id}: ${m}`);
+    if (!txt.startsWith(`📖 Ayuda — &${nomeEs(id)}\n`)) ponha(`título: ${txt.split("\n")[0]}`);
+    if (!/\*\*Uso:\*\* `/.test(txt)) ponha("sem **Uso:**");
+    if (/\*\*(Usage|Permission|Example|Parameters of)\b|\*\*Subtopics\*\*/.test(txt)) ponha("rótulo em inglês");
+    if (txt.includes("⁣") || txt.includes("[object Object]")) ponha("marca ou objeto na tela");
+    // todo `&nome` citado é o nome em espanhol do comando (não o interno nem o inglês)
+    for (const m of txt.matchAll(/&([a-zçãéíóúñ]+)/gi)) {
+      const id2 = aliasesMod.idDoNome(m[1]);
+      if (COMANDO_ES[id2] && m[1].toLowerCase() !== COMANDO_ES[id2]) ponha(`&${m[1]} (devia ser &${COMANDO_ES[id2]})`);
+    }
+    // o texto em espanhol chega inteiro: a tradução da tela não passa por cima
+    // (o `aqui` do &log virava `here`, o `{usuario}` do &adeus virava `{user}`)
+    // (o `<x>` vira `‹x›` na saída de toda mensagem: marcadores.js)
+    const d = ajudaReg.detalhesDoRegistro("&", "es")[id];
+    for (const l of [d.uso, ...String(d.desc).split("\n")].filter((x) => x && x.trim()))
+      if (!txt.includes(protegerMarcadores(l))) ponha(`linha alterada: ${l.slice(0, 70)}`);
+  }
+  assert.deepEqual(ruins, []);
+  // e é mesmo espanhol (não o inglês com os nomes trocados)
+  assert.match(paginaEs.log, /`aqui` usa el canal actual/);
+  assert.match(paginaEs.adeus, /`\{usuario\}` se convierte en el \*\*nombre\*\*/);
+  assert.match(paginaEs.warn, /en el modo `acumular`/);
+  assert.match(paginaEs.limpar, /\*\*Uso:\*\* `&limpiar ‹cantidad› \[@usuario\] \| todo`\n\*\*Permiso:\*\* ManageMessages/);
+  assert.match(paginaEs.limpar, /\*\*Parámetros de `&limpiar`\*\*\n• `‹n›` — cuántos mensajes borrar/);
+  assert.match(paginaEs.log, /\*\*Subtemas\*\* _\(el detalle de cada parte\)_\n`&ayuda log eventos`/);
+});
+await t("a marca de \"texto pronto\" nunca chega à tela, em idioma nenhum", () => {
+  for (const l of ["pt", "en", "es"]) assert.equal(aliasesMod.exibir(aliasesMod.marcarTraduzido("`&limpar tudo` aqui"), l), "`&limpar tudo` aqui", l);
+  const ruins = [...telas, ...execucoes].filter((x) => x.texto.includes("⁣")).map((x) => `[${x.lang}] ${x.pagina ?? x.cmd}`);
+  assert.deepEqual(ruins, []);
+});
+await t("página longa em espanhol: o rodapé também (`reacciona ◀ ▶ para pasar`)", () => {
+  assert.match(paginaEs.adeus, /📖 Página \*\*1\/2\*\* · reacciona ◀ ▶ para pasar/);
+  assert.ok(!/react ◀ ▶ to turn|reaja ◀ ▶ para virar/.test(paginaEs.adeus));
+});
+await t("entrada em espanhol funciona: &limpiar todo, &advertir lista, &log sanciones off, &webhook crear, &comando lista", async () => {
+  const sid = await servidorNovo("es");
+  assert.match((await say("&limpiar todo", sid)).texto, /`&limpiar confirmar [A-Z0-9]{4}`/);
+  assert.match((await say("&advertir lista", sid)).texto, /\*\*0\/\d+\*\* warning/);
+  await say("&log sanciones off", sid);
+  assert.equal(storeMod.configDoServidor(sid).log?.eventos?.punicoes, false);
+  assert.match((await say("&webhook crear prueba", sid)).texto, /\/gancho\/[^\s/]+\/[^\s`]+/);
+  // `&comando list` caía no "uso errado" (a ajuda sempre prometeu); em espanhol, `lista`
+  assert.match((await say("&comando lista", sid)).texto, /^🎛 Server commands[\s\S]*🟢 `repetir`/);
+  const pt = await servidorNovo("pt");
+  assert.match((await say("&comando list", pt)).texto, /^🎛 Comandos do servidor/);
+});
+await t("entrada em espanhol no próprio handler: imagen borrar, agregar/siguiente, ventaja, campos e cores do embed, marcadores", async () => {
+  const sid = await servidorNovo("es");
+  assert.match((await say("&despedida imagen borrar", sid)).texto, /Image removed/);
+  assert.match((await say("&iniciativa agregar Elfa 12", sid)).texto, /\*\*Elfa\*\* → `12`/);
+  assert.match((await say("&iniciativa siguiente", sid)).texto, /▶️ \*\*Elfa\*\*/);
+  assert.match((await say("&dados ventaja", sid)).texto, /\[(~~\d+~~, \d+|\d+, ~~\d+~~)\]/);
+  env.length = 0;
+  await say("&embed titulo: Hola | descripcion: mundo | pie: fin | color: rojo", sid);
+  const publicado = (await say("&embed titulo: Hola | descripcion: mundo | pie: fin | color: rojo", sid)).texto;
+  assert.match(publicado, /Hola\nmundo\n\n_fin_/);
+  const cores = await import("./modulos/core/cores.js");
+  assert.equal(cores.normalizarCor("rojo"), cores.CORES.vermelho);
+  assert.equal(cores.normalizarCor("morado"), cores.CORES.roxo);
+  const bv = await import("./modulos/ferramentas/boas-vindas.js");
+  assert.equal(bv.renderizar("{nombre} · {miembros}", { userId: U3, nome: "Ana", servidor: "X", membros: 5 }), "Ana · 5");
+});
+await t("o nível de quem vê vale para o nome da tela, em qualquer idioma (`&roll` e `&dados` são do membro; `&xp roles`, da staff)", () => {
+  const membro = { nivel: "membro", ia: true, voz: true, modIA: true };
+  const linhas = ["`&roll 2d6`", "`&dados 2d6`", "`&about`", "`&acerca`", "`&xp top`", "`&xp roles`", "`&xp cargos`", "`&staff title @x y`", "`&advertir borrar @x`"];
+  assert.deepEqual(visaoMod.filtrarLinhas(linhas, membro), ["`&roll 2d6`", "`&dados 2d6`", "`&about`", "`&acerca`", "`&xp top`"]);
+});
+await t("`&ayuda` em espanhol: o grupo vence o apelido (`&help fun` não vira `&ayuda entretenimiento`)", async () => {
+  const idx = (await say("&ayuda", esSid)).texto;
+  assert.match(idx, /`&ayuda diversion` — XP levels/);
+  assert.ok(!idx.includes("&ayuda entretenimiento"), idx);
+  assert.match((await say("&ayuda diversion", esSid)).texto, /^🎮 Fun/);
+});
+await t("comando desativado: o nome que aparece é o da tela do idioma (antes: `&repete` no inglês)", async () => {
+  const en = await servidorNovo("en");
+  await say("&command disable repeat", en);
+  assert.match((await say("&repeat hi", en)).texto, /The `&repeat` command is disabled/);
+  const es = await servidorNovo("es");
+  await say("&comando desactivar repetir", es);
+  assert.match((await say("&repetir hola", es)).texto, /El comando `&repetir` está desactivado en este servidor/);
+});
+await t("nomes soltos na tela em espanhol: a lista do &comando, o \"quisiste decir\" do &ayuda, os eventos do &log", async () => {
+  const sid = await servidorNovo("es");
+  assert.match((await say("&comando", sid)).texto, /🟢 `expulsar`  🟢 `ban`  🟢 `silenciar`  🟢 `limpiar`  🟢 `advertir`/);
+  assert.match((await say("&ayuda advertr", sid)).texto, /`&ayuda advertir`/);
+  assert.match((await say("&log", sid)).texto, /🟢 \*\*sanciones\*\*[\s\S]*🟢 \*\*miembros\*\*[\s\S]*🟢 \*\*mensajes\*\*/);
+});
+await t("servidor em espanhol: o que ainda não tem espanhol sai em inglês, não em português (&economia, &ticket, &reset undo)", async () => {
+  const sid = await servidorNovo("es");
+  assert.match((await say("&economia", sid)).texto, /🪙 \*\*0\*\* Coin/);
+  assert.match((await say("&ticket categories", sid)).texto, /Support/);
+  const pedido = (await say("&reset", sid)).texto;
+  const codigo = pedido.match(/&reset confirm ([A-Z0-9]{4})/)?.[1];
+  assert.ok(codigo, pedido);
+  await say(`&reset confirm ${codigo}`, sid);
+  const desfeito = (await say("&reset undo", sid)).texto;
+  assert.match(desfeito, /↩️ Reset undone\nThe previous configuration is back/);
+  assert.ok(!desfeito.includes("Reset desfeito"), desfeito);
+  assert.equal(storeMod.configDoServidor(sid).language, "es");
+});
+await t("ninguém lê `config.language === \"en\"` direto (o espanhol cairia no português): é o textoDoIdioma/idiomaDe", () => {
+  const lerJs = (d) => fs.readdirSync(d, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? lerJs(`${d}/${e.name}`) : e.name.endsWith(".js") ? [`${d}/${e.name}`] : []));
+  const ruins = [];
+  for (const arq of [...lerJs("modulos"), "main.js"]) {
+    if (arq === "modulos/core/i18n.js") continue;
+    fs.readFileSync(arq, "utf8").split("\n").forEach((l, i) => { if (/\blanguage\s*[!=]==?\s*["'`]/.test(l)) ruins.push(`${arq}:${i + 1}`); });
+  }
+  assert.deepEqual(ruins, []);
+});
+await t("`&help tutorial` em inglês: os apelidos com o nome deles (antes: \"`&tutorial` and `&tutorial`\")", async () => {
+  const r = (await say("&help tutorial", await servidorNovo("en"))).texto;
+  assert.match(r, /Also answers to \*\*guide\*\* and \*\*start\*\*/);
+  assert.ok(!r.includes("`&tutorial` and `&tutorial`"));
+});
 
 console.log(`\nCOMANDOS (17 out): ${ok} ok, ${falhou} falha(s)`);
 process.exit(falhou ? 1 : 0);

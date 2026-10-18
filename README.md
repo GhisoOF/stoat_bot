@@ -1,6 +1,6 @@
 # Stoat Bot — moderação e IA para Stoat/Revolt
 
-![Licença](https://img.shields.io/badge/licen%C3%A7a-WTFPL-green) ![Node](https://img.shields.io/badge/node-%E2%89%A522-brightgreen) ![Docker](https://img.shields.io/badge/docker-multi--arch-blue) ![Idiomas](https://img.shields.io/badge/bot-pt--BR%20%C2%B7%20en-orange)
+![Licença](https://img.shields.io/badge/licen%C3%A7a-WTFPL-green) ![Node](https://img.shields.io/badge/node-%E2%89%A522-brightgreen) ![Docker](https://img.shields.io/badge/docker-multi--arch-blue) ![Idiomas](https://img.shields.io/badge/bot-pt--BR%20%C2%B7%20en%20%C2%B7%20es-orange)
 
 > 🇬🇧 *The bot's official language is **English** (new servers start in it); it is fully bilingual (`&language pt` switches to pt-BR). This documentation is in Portuguese.*
 
@@ -395,6 +395,15 @@ PT ⇄ EN do automod fica em `modulos/core/nomes-automod.js`; a suíte
 `traducao-en-13out` lê toda a ajuda e ~150 telas em inglês procurando
 português, inclusive dentro do código. *In English servers, every name on
 screen is English and works when typed; Portuguese names keep working.*
+
+**Espanhol, começando** (18 out 2026): `&idioma es` põe os nomes dos comandos e
+dos subcomandos em espanhol na tela (`&ayuda`, `&limpiar todo`, `&advertir
+lista`, `&silenciar quitar`) e as 20 páginas de ajuda que moram no registro já
+estão escritas em espanhol; o resto das respostas sai em inglês enquanto é
+traduzido. As palavras em espanhol valem ao digitar em qualquer servidor. O nome
+em espanhol de cada comando fica no arquivo dele em `modulos/comandos/` (`es:`).
+*Spanish (`&idioma es`): command names and the registry help pages are Spanish;
+other replies are English while they're translated.*
 
 Prefixo `&`. A lista completa, com **cada parâmetro explicado**, vive no
 próprio bot: `&help <comando>`. Um resumo:

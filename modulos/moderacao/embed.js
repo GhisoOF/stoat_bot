@@ -87,10 +87,11 @@ export async function cmdEmbed(message, args, ctx) {
   const MAPA = {
     titulo: "titulo", "título": "titulo", title: "titulo",
     descricao: "descricao", "descrição": "descricao", desc: "descricao", description: "descricao",
+    descripcion: "descricao", "descripción": "descricao",   // espanhol (etapa 4)
     cor: "cor", color: "cor", colour: "cor",
-    rodape: "rodape", "rodapé": "rodape", footer: "rodape",
+    rodape: "rodape", "rodapé": "rodape", footer: "rodape", pie: "rodape",
     canal: "canal", channel: "canal",
-    imagem: "imagem", image: "imagem", img: "imagem",
+    imagem: "imagem", image: "imagem", img: "imagem", imagen: "imagem",
   };
   let emDescricao = false;
   const avisos = [];

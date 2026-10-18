@@ -1,3 +1,4 @@
+import { idiomaDaTela } from "./i18n.js";
 import * as db from "./db.js";
 
 import { protegerMarcadores } from "./marcadores.js";
@@ -56,7 +57,9 @@ function montar(sessao, i) {
     const direto = comandoPagina ? ` · \`${comandoPagina} ${i + 1}\`` : "";
     const rodape = lang === "en"
       ? `\n\n📖 Page **${i + 1}/${total}** · react ${EMOJI_ANTERIOR} ${EMOJI_PROXIMA} to turn${direto}`
-      : `\n\n📖 Página **${i + 1}/${total}** · reaja ${EMOJI_ANTERIOR} ${EMOJI_PROXIMA} para virar${direto}`;
+      : lang === "es"
+        ? `\n\n📖 Página **${i + 1}/${total}** · reacciona ${EMOJI_ANTERIOR} ${EMOJI_PROXIMA} para pasar${direto}`
+        : `\n\n📖 Página **${i + 1}/${total}** · reaja ${EMOJI_ANTERIOR} ${EMOJI_PROXIMA} para virar${direto}`;
     // O limite conta o embed todo: garante espaço para o rodapé.
     const max = 1480 - rodape.length;
     if (desc.length > max) desc = desc.slice(0, max - 1) + "…";
@@ -77,7 +80,7 @@ export async function enviarPaginado(ctx, canal, {
     ? paginarLinhas(String(p.description).split("\n"), { titulo: p.title }).map((x) => ({ ...p, description: x.description }))
     : [p]);
   varrer();
-  const lang = ctx?.config?.language === "en" ? "en" : "pt";
+  const lang = idiomaDaTela(ctx?.config?.language);
   const idx = Math.min(Math.max(0, paginaInicial | 0), paginas.length - 1);
   // dica: o texto de TODAS as páginas — na tradução para o inglês, a página 2
   // (só com `politica`, `apagar`…) sabe de que comando é (13 out 2026)

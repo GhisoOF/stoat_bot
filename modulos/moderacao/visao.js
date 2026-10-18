@@ -8,6 +8,7 @@
 
 import { servidorPermitido as temIA, comandoIAPermitido } from "../ai/chat.js";
 import { servidorPermitido as temVoz } from "../ferramentas/tts.js";
+import { idDoNome, normalizarArgs } from "../core/aliases.js";
 
 export const NIVEIS = { membro: 0, staff: 1, dono: 2 };
 
@@ -58,7 +59,12 @@ export function nivelDoComando(cmd, sub = "", sub2 = "") {
 export function recursoDoComando(cmd) {
   return SO_IA.has(cmd) ? "ia" : SO_VOZ.has(cmd) ? "voz" : null;
 }
+// `cmd` e as partes podem vir como aparecem na tela (`&roll`, `&advertir borrar`):
+// o nível é do nome interno (18 out 2026: no inglês, o `&roll` do membro sumia da
+// ajuda — o mapa só conhece `rolar` — e no espanhol seria quase tudo).
 export function podeVer(visao, cmd, sub = "", sub2 = "") {
+  cmd = idDoNome(cmd);
+  if (sub && MAPA[cmd]?.subs) [sub = "", sub2 = ""] = normalizarArgs(cmd, [sub, sub2].filter(Boolean)).map((s) => String(s).toLowerCase());
   const r = recursoDoComando(cmd);
   if (r === "ia" && !(cmd === "modia" ? (visao.modIA ?? visao.ia) : visao.ia)) return false;
   if (r === "voz" && !visao.voz) return false;

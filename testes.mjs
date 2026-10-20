@@ -299,16 +299,18 @@ await t("link solto na resposta vira <link>; código e link já protegido ficam 
 // ─── Relatório só no servidor do dono ────────────────────────────────────────
 console.log("\n── relatório só no servidor do dono ──");
 const rel = await import("./modulos/ferramentas/relatorio.js");
-await t("RELATORIO_SERVIDOR: ele sempre tem assuntos; os outros só se LISTADOS (13 out 2026: o add era ignorado)", () => {
+await t("RELATORIO_SERVIDOR: ele sempre tem assuntos; os outros do dono só se LISTADOS (13 out 2026: o add era ignorado) — e servidor alheio nunca (20 out, privacidade P4)", () => {
   process.env.RELATORIO_SERVIDOR = "MEU";
-  const cfg = { assuntos: ["OUTRO"] };
+  const cfg = { assuntos: ["OUTRO", "OUTRO_MEU"] };
   assert.equal(rel.temAssunto({ id: "MEU" }, cfg), true);
   assert.equal(rel.temAssunto({ id: "MEU" }, {}), true, "o fixo entra mesmo sem lista");
-  assert.equal(rel.temAssunto({ id: "OUTRO" }, cfg), true, "★ listado com `assuntos add` entra");
-  assert.equal(rel.temAssunto({ id: "TERCEIRO" }, cfg), false, "não listado: só números");
+  assert.equal(rel.temAssunto({ id: "OUTRO_MEU", ownerId: "EU" }, cfg, ["EU"]), true, "★ servidor do dono listado com `assuntos add` entra");
+  assert.equal(rel.temAssunto({ id: "OUTRO", ownerId: "ALGUEM" }, cfg, ["EU"]), false, "★ servidor ALHEIO listado não entra (P4)");
+  assert.equal(rel.temAssunto({ id: "TERCEIRO", ownerId: "EU" }, cfg, ["EU"]), false, "do dono, mas não listado: só números");
   assert.equal(rel.temAssunto({ id: "DO_DONO", ownerId: "EU" }, {}, ["EU"]), false, "servidor do dono não entra sozinho com a variável");
   delete process.env.RELATORIO_SERVIDOR;
-  assert.equal(rel.temAssunto({ id: "OUTRO" }, cfg), true, "sem a variável, vale a lista como antes");
+  assert.equal(rel.temAssunto({ id: "OUTRO_MEU", ownerId: "EU" }, cfg, ["EU"]), true, "sem a variável, vale a lista como antes (entre os do dono)");
+  assert.equal(rel.temAssunto({ id: "OUTRO", ownerId: "ALGUEM" }, cfg, ["EU"]), false);
 });
 await t("&servidores fora do servidor do dono não abre o painel — e NO servidor do dono abre", async () => {
   process.env.RELATORIO_SERVIDOR = "MEU";
@@ -322,27 +324,29 @@ await t("&servidores fora do servidor do dono não abre o painel — e NO servid
   assert.doesNotMatch(e.title, /Aqui não/, "no servidor do dono o painel tem de abrir (1 out: dizia \"Aqui não\")");
   delete process.env.RELATORIO_SERVIDOR;
 });
-await t("&servidores relatorio assuntos add <vários ids> com RELATORIO_SERVIDOR: entram e aparecem na lista", async () => {
+await t("&servidores relatorio assuntos add <vários ids> com RELATORIO_SERVIDOR: os do dono entram e aparecem na lista; os alheios ficam fora (P4)", async () => {
   process.env.RELATORIO_SERVIDOR = "MEU";
+  const superAntes = process.env.SUPER_ADMINS; process.env.SUPER_ADMINS = "EU";
   const store = await import("./modulos/core/config-store.js");
   const { cmdServidores } = await import("./modulos/moderacao/servidores.js");
   store.getGlobal().relatorio = { canalId: null, ativo: true, pularVazias: false, assuntos: [] };
   let e = null;
   const ctx = { serverId: "MEU", COR: { erro: 1, info: 2, aviso: 3, sucesso: 4 }, ehSuperAdmin: () => true,
-    client: { servers: new Map([["MEU", { name: "Vapor Nexus" }], ["A1", { name: "Servidor A" }], ["B2", { name: "Servidor B" }]]) },
+    client: { servers: new Map([["MEU", { id: "MEU", name: "Vapor Nexus" }], ["A1", { id: "A1", name: "Servidor A", ownerId: "EU" }],
+      ["A2", { id: "A2", name: "Servidor A2", ownerId: "EU" }], ["B2", { id: "B2", name: "Servidor B", ownerId: "ALGUEM" }]]) },
     sendEmbed: async (_c, x) => { e = x; } };
-  await cmdServidores({ authorId: "EU", channel: {} }, ["relatorio", "assuntos", "add", "A1", "B2", "MEU", "C3"], ctx);
-  assert.deepEqual(store.getGlobal().relatorio.assuntos, ["A1", "B2", "C3"], "o fixo não precisa ir para a lista");
+  await cmdServidores({ authorId: "EU", channel: {} }, ["relatorio", "assuntos", "add", "A1", "A2", "B2", "MEU", "C3"], ctx);
+  assert.deepEqual(store.getGlobal().relatorio.assuntos, ["A1", "A2"], "o fixo não precisa ir para a lista; alheio e desconhecido ficam fora");
   assert.match(e.description, /Vapor Nexus.*sempre/);
-  assert.match(e.description, /Servidor A/); assert.match(e.description, /Servidor B/);
-  assert.match(e.description, /Entraram/);
-  assert.match(e.description, /não está em: `C3`/);
+  assert.match(e.description, /Servidor A\*\*/); assert.match(e.description, /Entraram: \*\*Servidor A\*\*, \*\*Servidor A2\*\*/);
+  assert.match(e.description, /🔒 Fora: \*\*Servidor B\*\*, `C3` — não é seu/);
   assert.doesNotMatch(e.description, /ignorada/);
-  await cmdServidores({ authorId: "EU", channel: {} }, ["relatorio", "assuntos", "remove", "B2"], ctx);
-  assert.deepEqual(store.getGlobal().relatorio.assuntos, ["A1", "C3"]);
-  assert.equal(rel.temAssunto({ id: "A1" }, store.getGlobal().relatorio), true);
-  assert.equal(rel.temAssunto({ id: "B2" }, store.getGlobal().relatorio), false);
+  await cmdServidores({ authorId: "EU", channel: {} }, ["relatorio", "assuntos", "remove", "A2"], ctx);
+  assert.deepEqual(store.getGlobal().relatorio.assuntos, ["A1"]);
+  assert.equal(rel.temAssunto({ id: "A1", ownerId: "EU" }, store.getGlobal().relatorio), true);
+  assert.equal(rel.temAssunto({ id: "B2", ownerId: "ALGUEM" }, store.getGlobal().relatorio), false);
   delete process.env.RELATORIO_SERVIDOR;
+  if (superAntes === undefined) delete process.env.SUPER_ADMINS; else process.env.SUPER_ADMINS = superAntes;
 });
 
 // ─── Criador ─────────────────────────────────────────────────────────────────
@@ -3217,7 +3221,11 @@ ok(titulo(m).includes("Proteger"), "&help 3 abre direto a página 3 (texto puro,
 m = await say("&help moderacao");
 ok(titulo(m).includes("Proteger"), "nome antigo `moderacao` leva ao grupo Proteger");
 m = await say("&help config");
-ok(titulo(m).includes("Personalizar"), "nome antigo `config` leva ao grupo Personalizar");
+// (20 out 2026, decisão do Ghieh) o `config` abre a página do &config — todas as
+// configurações do servidor —, não mais o grupo Personalizar (que a escondia)
+ok(titulo(m).includes("&config") && desc(m).includes("Mostra TODAS as configurações"), "`config` abre a página do &config (não mais o grupo Personalizar)");
+m = await say("&help personalizar");
+ok(titulo(m).includes("Personalizar"), "  → o grupo continua em `&help personalizar`");
 m = await say("&help proteger");
 ok(desc(m).includes("&automod sentinela") && !desc(m).includes("automod antiscam"), "Proteger fala em `&automod sentinela` (não mais em antiscam)");
 // (o Stoat esconde "<palavra>"; o bot manda ‹palavra›)
@@ -4110,7 +4118,7 @@ console.log("\n── histórico: por canal, com prazo, e apagável ──");
     "★ `esquecer tudo` apaga o histórico — ele existia e nenhum dos dois comandos o limpava");
 
   const fonte = fs.readFileSync("./modulos/ai/chat.js", "utf8");
-  ok(/db\.getHistorico\(userId, 6, \{ canalId, minutos:/.test(fonte), "  → e o chat lê com escopo de canal e prazo");
+  ok(/db\.getHistorico\(userId, 6, \{ canalId, global,\s+minutos: global \? db\.HISTORICO_HORAS \* 60 : /.test(fonte), "  → e o chat lê com escopo de canal e prazo (ou o fio global de quem escolheu, até 24 h)");
   ok(/resposta interrompida no limite de tamanho/.test(fonte),
     "★ resposta cortada é guardada MARCADA: um turno assistant terminando em código pela metade convida o modelo a completá-lo");
   const dbFonte = fs.readFileSync("./modulos/core/db.js", "utf8");
@@ -6122,6 +6130,10 @@ const ate = Math.floor(Date.now() / HORA) * HORA + HORA;   // fim da hora atual
 const MEU = { id: "01KH9SJYWVD7XAHJ28TP0YP4Q0", name: "Vapor Nexus", ownerId: "01K9JKP85D5EP2ZTEHS8DT797A" };
 const ALHEIO = { id: "01KQ55ZPRP8C5THN5B28DN6AB2", name: "Servidor de outra pessoa", ownerId: "01OUTRODONO0000000000000000" };
 const client = { servers: { values: () => [MEU, ALHEIO].values() } };
+// (P4) quem entra: o servidor do dono, completo; o alheio ADERIU (`&log relatorio on`),
+// anônimo; os demais, nada — a mesma regra que o main.js liga no boot
+const ADERIRAM = new Set([ALHEIO.id]);
+rel.configurarAdesao((sid) => (sid === MEU.id ? "completo" : ADERIRAM.has(sid) ? "anonimo" : null));
 
 console.log("\n── coleta ──");
 await t("o log.registrar alimenta o relatório MESMO sem canal de log", async () => {
@@ -6149,8 +6161,48 @@ await t("mensagens: conta ritmo; amostra só onde tem assunto; ignora bot e coma
   const a = rel.copiaAtividade();
   assert.equal(a.get(MEU.id).msgs, 2, "bot não conta");
   assert.deepEqual(a.get(MEU.id).amostras, ["alguém viu o jogo ontem? foi incrível"], "comando não vira assunto");
-  assert.equal(a.get(ALHEIO.id).msgs, 1);
-  assert.deepEqual(a.get(ALHEIO.id).amostras, [], "servidor alheio: só conta, não guarda texto");
+  // (revisão do P4, 20 out 2026) servidor alheio que aderiu: nem o ritmo — a política
+  // promete que do anônimo só vão os ataques (antes: "· 1 msg de 1 pessoa(s)" no relatório)
+  assert.equal(a.get(ALHEIO.id), undefined, "servidor alheio: nada da conversa, nem a contagem");
+});
+
+console.log("\n── quem entra (privacidade P4) ──");
+const NINGUEM = "01KZZZZZZZZZZZZZZZZZZZZZZ1";   // nem é do dono, nem aderiu
+await t("servidor que não aderiu (nem é do dono): o evento nem é gravado, e as mensagens nem são contadas", async () => {
+  await log.registrar({ serverId: NINGUEM, config: {} }, "punicoes", { titulo: "🔨 Membro banido", descricao: "x" });
+  rel.evento(NINGUEM, "raid", "Possível raid: 9 contas novas");
+  assert.equal(db.eventosRelatorio(ate - HORA, ate).filter((e) => e.serverId === NINGUEM).length, 0);
+  rel.mensagem(NINGUEM, "oi gente tudo bem por aqui", { autorId: "Z", comAssunto: true });
+  assert.equal(rel.copiaAtividade().get(NINGUEM), undefined);
+});
+await t("servidor que aderiu: só eventos de ataque, sem menção nem ID; nada da conversa", () => {
+  rel.evento(ALHEIO.id, "imagem", "Imagem suspeita (nudez) — <@01KAAAAAAAAAAAAAAAAAAAAAA1> em <#01KAAAAAAAAAAAAAAAAAAAAAA2> (msg 01KAAAAAAAAAAAAAAAAAAAAAA3)");
+  rel.evento(ALHEIO.id, "membros", "Membro entrou");
+  const ev = db.eventosRelatorio(ate - HORA, ate).filter((e) => e.serverId === ALHEIO.id);
+  assert.ok(ev.some((e) => e.titulo === "Imagem suspeita (nudez)"), JSON.stringify(ev));
+  assert.ok(!ev.some((e) => /Membro entrou|01KAAAA|<@/.test(e.titulo)), JSON.stringify(ev));
+  rel.mensagem(ALHEIO.id, "conversa da comunidade que não vai", { autorId: "C", comAssunto: true });
+  assert.deepEqual(rel.copiaAtividade().get(ALHEIO.id)?.amostras ?? [], []);
+});
+await t("o que foi gravado ANTES da regra também passa por ela no relatório (anonimizado ou fora)", async () => {
+  db.registrarEventoRelatorio(ate - HORA / 3, NINGUEM, "punicoes", "Membro banido de quem não aderiu");
+  db.registrarEventoRelatorio(ate - HORA / 3, ALHEIO.id, "imagem", "Imagem grave — <@01KAAAAAAAAAAAAAAAAAAAAAA1> em <#01KAAAAAAAAAAAAAAAAAAAAAA2>");
+  const r = await rel.gerar({ client, cfg: {}, ate, fetcher: async () => { throw new Error("offline"); }, esvaziar: false });
+  assert.doesNotMatch(r.description, /de quem não aderiu|01KAAAA|<@/);
+  assert.match(r.description, /• Imagem grave/);
+});
+await t("★ (revisão do P4) servidor que aderiu e a Judy SAIU nesta hora: o relatório usa o pseudônimo, nunca o ID", async () => {
+  const SAIU = "01KQ55ZPRP8C5THN5B28DN6AB9";   // aderiu, mas já não está na lista do client
+  ADERIRAM.add(SAIU);
+  db.registrarEventoRelatorio(ate - HORA / 4, SAIU, "raid", "Possível raid: 12 contas novas");
+  const r = await rel.gerar({ client, cfg: {}, ate, fetcher: async () => { throw new Error("offline"); }, esvaziar: false });
+  assert.ok(!r.description.includes(SAIU), "o ID real apareceu");
+  assert.match(r.description, new RegExp(`\\*\\*${rel.nomeAnonimo(SAIU)}\\*\\*`));
+  ADERIRAM.delete(SAIU);
+});
+await t("anonimizarTitulo: tira menções, IDs e o \"— quem em onde\"", () => {
+  assert.equal(rel.anonimizarTitulo("Imagem suspeita (x) — <@01KAAAAAAAAAAAAAAAAAAAAAA1> em <#C> (msg 9)"), "Imagem suspeita (x)");
+  assert.equal(rel.anonimizarTitulo("Membro banido"), "Membro banido");
 });
 
 console.log("\n── quem tem assunto ──");
@@ -6158,9 +6210,10 @@ await t("sem lista: só os servidores de que um dono do bot é dono", () => {
   assert.equal(rel.temAssunto(MEU, {}), true);
   assert.equal(rel.temAssunto(ALHEIO, {}), false);
 });
-await t("com lista: vale a lista", () => {
-  assert.equal(rel.temAssunto(ALHEIO, { assuntos: [ALHEIO.id] }), true);
+await t("com lista: vale a lista — entre os servidores do dono (P4: o alheio listado não ganha assunto)", () => {
+  assert.equal(rel.temAssunto(ALHEIO, { assuntos: [ALHEIO.id] }), false);
   assert.equal(rel.temAssunto(MEU, { assuntos: [ALHEIO.id] }), false);
+  assert.equal(rel.temAssunto(MEU, { assuntos: [MEU.id] }), true);
 });
 
 console.log("\n── a hora inteira ──");
@@ -6173,7 +6226,9 @@ await t("relatório completo: prosa do modelo + números do código", async () =
   rel.evento(null, "boot", "bot iniciou", ate - HORA / 2);
   const r = await rel.gerar({ client, cfg: {}, ate, fetcher: llmBom, esvaziar: false });
   assert.match(r.description, /\*\*Destaques\*\*/);
-  assert.match(r.description, /Servidor de outra pessoa/);
+  // (P4) o servidor alheio que aderiu aparece com um código, não com o nome
+  assert.doesNotMatch(r.description, /Servidor de outra pessoa/);
+  assert.ok(r.description.includes(`**${rel.nomeAnonimo(ALHEIO.id)}**`), r.description);
   assert.match(r.description, /Membro banido/);
   assert.match(r.description, /reiniciou 1×/);
   assert.doesNotMatch(r.description, /<think>|pensando/, "o raciocínio do modelo não pode vazar");
@@ -6203,7 +6258,7 @@ await t("hora tranquila: marcada como vazia, sem chamar o modelo", async () => {
   assert.match(r.description, /Hora tranquila/);
 });
 await t("poda: o banco guarda só 48h", async () => {
-  rel.evento("X", "punicoes", "velho", ate - 72 * HORA);
+  rel.evento(MEU.id, "punicoes", "velho", ate - 72 * HORA);
   await rel.gerar({ client, cfg: {}, ate, fetcher: llmBom });
   assert.equal(db.eventosRelatorio(ate - 100 * HORA, ate - 49 * HORA).length, 0);
 });
@@ -11348,6 +11403,7 @@ globalThis.fetch = async (url, op = {}) => {
 
 const db = await import("./modulos/core/db.js");
 db.abrirBanco(process.env.DB_PATH);
+db.setConsentimento("u1", { respondido: true });   // (privacidade, 20 out 2026) já respondeu à pergunta da memória: a resposta é a última saída
 const chat = await import("./modulos/ai/chat.js");
 const busca = await import("./modulos/ai/busca.js");
 
@@ -11736,6 +11792,7 @@ globalThis.fetch = async (url, op = {}) => {
 };
 const db = await import("./modulos/core/db.js");
 db.abrirBanco(process.env.DB_PATH);
+db.setConsentimento("U_ANA", { respondido: true });   // (privacidade, 20 out 2026) já respondeu à pergunta da memória: a resposta é a última saída
 const chat = await import("./modulos/ai/chat.js");
 const saidas = [];
 const canal = { id: "CH_GERAL", sendMessage: async (t) => { saidas.push(typeof t === "string" ? t : (t.content ?? t.embeds?.[0]?.description ?? "")); return { edit: async (x) => { saidas.push(typeof x === "string" ? x : (x.content ?? x.embeds?.[0]?.description ?? "")); } }; } };
@@ -14601,7 +14658,9 @@ await t("★ &color: presets em inglês na entrada e na tela", () => {
   assert.equal(cor.presetDe("fire"), "fogo"); assert.equal(cor.presetDe("rainbow"), "arco-iris"); assert.equal(cor.presetDe("fogo"), "fogo");
   assert.equal(cor.nomePreset("poente", true), "sunset"); assert.equal(cor.nomePreset("poente", false), "poente");
   const src = fs.readFileSync("modulos/moderacao/cor-cargo.js", "utf8");
-  assert.match(src, /createRole\(nomePreset\(nome, en\)\)/, "o cargo novo nasce no idioma do servidor");
+  // (P6, 20 out 2026) o painel passou a ter sólidas: o nome vem do nomeDoItem, que usa o nomePreset nos gradientes
+  assert.match(src, /createRole\(nomeDoItem\(it, en\)\)/, "o cargo novo nasce no idioma do servidor");
+  assert.match(src, /it\.tipo === "s" \? nomeSolida\(it\.nome, en\) : nomePreset\(it\.nome, en\)/);
   assert.match(src, /cor <role> #FF00AA\\` · \\`\$\{P\}cor <role> purple/);
 });
 await t("★ &game: \"for\" vale na oferta e o id da moeda sai em inglês", () => {
@@ -14731,6 +14790,747 @@ await t("os presets e o `gradient(` sem `linear-` passam na regra do Stoat", () 
 });
 
 console.log(`\nCOR SINTAXE (16 out): ${ok} ok, ${falhou} falha(s)`);
+process.exit(falhou ? 1 : 0);
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+// cores-20out — o painel de cores com sólidas e mais gradientes (P6, 20 out 2026)
+// ════════════════════════════════════════════════════════════════════════════
+// Pedido do Ghieh: cores estáticas e mais gradientes no painel. O Stoat aceita
+// 20 reações por mensagem (message_reactions = 20 no Revolt.toml), e o painel
+// passa de 20 cores: sai em duas mensagens, e o modo exclusivo tem de valer
+// para as duas — senão a pessoa fica com uma sólida E um gradiente.
+SUITES["cores-20out"] = async () => {
+const fs = (await import("node:fs")).default;
+const assert = (await import("node:assert")).default;
+process.env.BOT_TOKEN = "tok"; process.env.DB_PATH = "/tmp/cores20.db"; process.env.CONFIG_PATH = "/tmp/cores20.json";
+for (const f of ["/tmp/cores20.db", "/tmp/cores20.db-wal", "/tmp/cores20.db-shm", "/tmp/cores20.json"]) fs.rmSync(f, { force: true });
+// as pausas de taxa do painel (350 ms por cargo, 300 ms por reação) não importam aqui
+const st = globalThis.setTimeout;
+globalThis.setTimeout = (f, ms, ...a) => st(f, ms === 300 || ms === 350 ? 0 : ms, ...a);
+const pintados = new Map();   // roleId → cor que foi à API
+globalThis.fetch = async (url, op) => {
+  const m = String(url).match(/\/roles\/([^/?]+)/);
+  if (m) {
+    const corpo = JSON.parse(op?.body ?? "{}");
+    if (corpo.colour) pintados.set(m[1], corpo.colour);
+    return { ok: true, status: 200, text: async () => "{}", json: async () => ({}) };
+  }
+  return { ok: false, status: 503, text: async () => "", json: async () => ({}) };
+};
+const silencio = async (fn) => { const o = [console.log, console.info, console.warn, console.error]; console.log = console.info = console.warn = console.error = () => {}; try { return await fn(); } finally { [console.log, console.info, console.warn, console.error] = o; } };
+await silencio(() => import("./main.js"));
+const cor = await import("./modulos/moderacao/cor-cargo.js");
+const cores = await import("./modulos/core/cores.js");
+const db = await import("./modulos/core/db.js");
+const c = globalThis.__client;
+await silencio(() => c.emitAll("ready"));
+const tirados = [];   // reações que a Judy tirou: "canal/mensagem/emoji/quem"
+c.api.delete = async (rota, corpo) => { tirados.push(`${decodeURIComponent(rota)}|${corpo?.user_id}`); return {}; };
+
+let ok = 0, falhou = 0;
+const t = async (nome, fn) => {
+  try { await fn(); console.log(`  ✅ ${nome}`); ok++; }
+  catch (e) { console.log(`  ❌ ${nome}\n     ${String(e.message).split("\n").join("\n     ")}`); falhou++; }
+};
+
+let seqR = 0, seqM = 0;
+function montar(sid, roles = new Map()) {
+  const msgs = [];   // { id, payload, reacoes }
+  const canal = { id: "C" + sid, serverId: sid, name: "cores", type: "TextChannel",
+    sendMessage: async (p) => { const mm = { id: `M${++seqM}`, payload: p, reacoes: [], react: async (e) => { mm.reacoes.push(decodeURIComponent(e)); }, edit: async () => {}, delete: async () => {} }; msgs.push(mm); return mm; } };
+  const membros = {};
+  const membro = (u) => (membros[u] ??= { id: { server: sid, user: u }, roles: [], hasPermission: () => u === "DONO",
+    edit: async ({ roles: r }) => { membros[u].roles = r; } });
+  const criados = [];
+  const server = { id: sid, ownerId: "DONO", name: "T", roles, channels: [canal], channelIds: new Set([canal.id]), member: { roles: [] }, havePermission: () => true,
+    createRole: async (nome) => { const id = `01KCOR${String(++seqR).padStart(20, "0")}`; roles.set(id, { name: nome, rank: 50, permissions: { a: 0n, d: 0n } }); criados.push(nome); return { id }; },
+    fetchMember: async (u) => membro(String(u?.user ?? u)), fetchMembers: async () => ({ members: [] }), fetchBans: async () => [] };
+  c.servers.set(sid, server); c.channels.set(canal.id, canal);
+  const say = async (txt, autor = "DONO") => {
+    const antes = msgs.length;
+    await silencio(() => c.emitAll("messageCreate", { id: "X" + Math.random(), authorId: autor, content: txt, serverId: sid, server, channel: canal, channelId: canal.id,
+      mentionIds: [], createdAt: new Date(), author: { username: autor }, member: membro(autor), replyIds: [] }));
+    return msgs.slice(antes);
+  };
+  const reagir = (m, emoji, u) => silencio(() => c.emitAll("messageReactionAdd", { id: m.id, channelId: canal.id }, u, encodeURIComponent(emoji)));
+  return { server, canal, msgs, say, reagir, membro, criados, roles };
+}
+const tituloDe = (m) => m?.payload?.embeds?.[0]?.title ?? "";
+const descDe = (m) => m?.payload?.embeds?.[0]?.description ?? "";
+const paineis = (saida) => saida.filter((m) => m.reacoes.length);
+const idDoCargo = (roles, nome) => [...roles.entries()].find(([, r]) => r.name === nome)?.[0];
+
+console.log("── o painel completo ──");
+const A = montar("01KCORSRVA0000000000000000");
+await A.say("&idioma pt");
+const saidaA = await A.say("&cor painel aqui");
+const [solidasA, gradA] = paineis(saidaA);
+await t("`&cor painel aqui`: 10 sólidas numa mensagem e 20 gradientes na outra (antes: 12 gradientes numa só)", () => {
+  assert.equal(paineis(saidaA).length, 2, saidaA.map(tituloDe).join(" | "));
+  assert.match(tituloDe(solidasA), /sólidas/); assert.match(tituloDe(gradA), /Gradientes/);
+  assert.equal(solidasA.reacoes.length, 10); assert.equal(gradA.reacoes.length, 20);
+  assert.equal(A.criados.length, 30);
+  assert.ok(A.criados.includes("vermelho") && A.criados.includes("branco") && A.criados.includes("aurora") && A.criados.includes("algodao-doce"));
+  assert.match(descDe(saidaA.at(-1)), /30\*\* cor\(es\).*\(2 mensagens\)/);
+});
+await t("cada mensagem fica no limite de reações do Stoat, e nenhum emoji se repete", () => {
+  for (const m of paineis(saidaA)) assert.ok(m.reacoes.length <= cor.MAX_REACOES);
+  const todos = paineis(saidaA).flatMap((m) => m.reacoes);
+  assert.equal(new Set(todos).size, todos.length);
+  assert.equal(cor.MAX_REACOES, 20);
+});
+await t("a sólida tem o mesmo tom do `&cor <cargo> vermelho`; o gradiente novo passa na regra do Stoat", () => {
+  assert.equal(pintados.get(idDoCargo(A.roles, "vermelho")), cores.CORES.vermelho);
+  assert.equal(pintados.get(idDoCargo(A.roles, "branco")), cores.CORES.branco);
+  const aurora = pintados.get(idDoCargo(A.roles, "aurora"));
+  assert.equal(aurora, cor.PRESETS.aurora); assert.ok(cor.corAceitaPeloStoat(aurora));
+});
+await t("as duas mensagens estão no modo exclusivo e no mesmo grupo", () => {
+  assert.ok(db.isReactionRoleExclusivo(solidasA.id) && db.isReactionRoleExclusivo(gradA.id));
+  const g = db.regrasDoGrupo(gradA.id);
+  assert.equal(g.length, 30);
+  assert.deepEqual([...new Set(g.map((r) => r.messageId))].sort(), [solidasA.id, gradA.id].sort());
+  assert.ok(g.every((r) => r.channelId === A.canal.id));
+  // refazer uma regra (`&reactionrole add` no mesmo emoji) não tira a mensagem do grupo
+  db.addReactionRole(A.server.id, gradA.id, "🔥", idDoCargo(A.roles, "fogo"), A.canal.id);
+  assert.equal(db.regrasDoGrupo(solidasA.id).length, 30);
+});
+
+console.log("\n── o exclusivo vale para as duas mensagens ──");
+await t("★ quem tinha uma sólida e escolhe um gradiente perde a sólida, e a reação antiga sai da OUTRA mensagem", async () => {
+  const vermelho = idDoCargo(A.roles, "vermelho"), fogo = idDoCargo(A.roles, "fogo");
+  await A.reagir(solidasA, "🔴", "ANA");
+  assert.deepEqual(A.membro("ANA").roles, [vermelho]);
+  tirados.length = 0;
+  await A.reagir(gradA, "🔥", "ANA");
+  assert.deepEqual(A.membro("ANA").roles, [fogo], "ficou só com o gradiente");
+  assert.deepEqual(tirados, [`/channels/${A.canal.id}/messages/${solidasA.id}/reactions/🔴|ANA`]);
+});
+await t("e o caminho de volta: do gradiente para a sólida", async () => {
+  const azul = idDoCargo(A.roles, "azul");
+  tirados.length = 0;
+  await A.reagir(solidasA, "🔵", "ANA");
+  assert.deepEqual(A.membro("ANA").roles, [azul]);
+  assert.deepEqual(tirados, [`/channels/${A.canal.id}/messages/${gradA.id}/reactions/🔥|ANA`]);
+});
+await t("cargo que não é de cor fica com a pessoa", async () => {
+  A.roles.set("01KCORVIP00000000000000000", { name: "VIP", rank: 40 });
+  A.membro("BIA").roles = ["01KCORVIP00000000000000000"];
+  await A.reagir(gradA, "🌸", "BIA");
+  await A.reagir(solidasA, "🟢", "BIA");
+  assert.deepEqual(A.membro("BIA").roles, ["01KCORVIP00000000000000000", idDoCargo(A.roles, "verde")]);
+});
+await t("mensagem sem grupo (reaction role antigo) segue exclusiva só nela mesma", async () => {
+  const R1 = "01KCORR1000000000000000000", R2 = "01KCORR2000000000000000000";
+  A.roles.set(R1, { name: "time1", rank: 60 }); A.roles.set(R2, { name: "time2", rank: 60 });
+  db.addReactionRole(A.server.id, "MSOLTA", "🅰", R1, A.canal.id);
+  db.addReactionRole(A.server.id, "MSOLTA", "🅱", R2, A.canal.id);
+  db.setReactionRoleExclusivo("MSOLTA", true);
+  assert.equal(db.regrasDoGrupo("MSOLTA").length, 2);
+  A.membro("CAIO").roles = [idDoCargo(A.roles, "roxo")];
+  await silencio(() => c.emitAll("messageReactionAdd", { id: "MSOLTA", channelId: A.canal.id }, "CAIO", "🅰"));
+  await silencio(() => c.emitAll("messageReactionAdd", { id: "MSOLTA", channelId: A.canal.id }, "CAIO", "🅱"));
+  assert.deepEqual(A.membro("CAIO").roles, [idDoCargo(A.roles, "roxo"), R2], "a cor de outro painel fica");
+});
+
+console.log("\n── escolher o que entra ──");
+await t("`solidas` / `gradientes`: um grupo só, numa mensagem só, sem grupo", async () => {
+  const B = montar("01KCORSRVB0000000000000000");
+  await B.say("&idioma pt");
+  let p = paineis(await B.say("&cor painel aqui solidas"));
+  assert.equal(p.length, 1); assert.equal(p[0].reacoes.length, 10); assert.match(tituloDe(p[0]), /Escolha sua cor/);
+  assert.deepEqual(p[0].reacoes, ["🔴", "🟠", "🟡", "🟢", "🔵", "🟣", "💗", "🟤", "⚫", "⚪"]);
+  assert.equal(db.regrasDoGrupo(p[0].id).length, 10);
+  p = paineis(await B.say("&cor painel aqui gradientes"));
+  assert.equal(p.length, 1); assert.equal(p[0].reacoes.length, 20);
+});
+await t("cores pelo nome, sólida e gradiente misturadas: duas mensagens, sólida primeiro", async () => {
+  const B2 = montar("01KCORSRVB2000000000000000");
+  await B2.say("&idioma pt");
+  const p = paineis(await B2.say("&cor painel aqui fogo verde"));
+  assert.deepEqual(p.map((m) => m.reacoes), [["🟢"], ["🔥"]]);
+  assert.deepEqual(B2.criados, ["verde", "fogo"]);
+});
+await t("em inglês: a entrada aceita os nomes em inglês e o cargo nasce em inglês", async () => {
+  const E = montar("01KCORSRVE0000000000000000");
+  await E.say("&language en");
+  const saida = await E.say("&color panel here green twilight solid");
+  const p = paineis(saida);
+  assert.equal(p.length, 2);
+  assert.equal(p[0].reacoes.length, 10, "`solid` trouxe as dez");
+  assert.deepEqual(p[1].reacoes, ["🌙"]);
+  assert.ok(E.criados.includes("green") && E.criados.includes("twilight") && E.criados.includes("white"));
+  assert.match(tituloDe(p[0]), /Solid colors/);
+  const so = paineis(await E.say("&color panel here solid"));
+  assert.equal(so.length, 1); assert.match(tituloDe(so[0]), /Pick your color/); assert.match(descDe(so[0]), /React with the emoji/);
+});
+await t("cor desconhecida: recusa antes de criar cargo e lista sólidas e gradientes", async () => {
+  const D = montar("01KCORSRVD0000000000000000");
+  await D.say("&idioma pt");
+  const r = (await D.say("&cor painel aqui fogo xyz")).map(descDe).join("\n");
+  assert.equal(D.criados.length, 0);
+  assert.match(r, /`xyz`/); assert.match(r, /Sólidas:\*\* `vermelho`/); assert.match(r, /`algodao-doce`/);
+});
+
+console.log("\n── cargo que já existe ──");
+await t("★ cargo com o nome da cor que TEM permissões fica de fora; sem permissões é reaproveitado", async () => {
+  const VERDE = "01KCORVERDE000000000000000", AZUL = "01KCORAZUL0000000000000000";
+  const F = montar("01KCORSRVF0000000000000000", new Map([
+    [VERDE, { name: "Verde", rank: 30, permissions: { a: 8n, d: 0n } }],
+    [AZUL, { name: "azul", rank: 60, permissions: { a: 0n, d: 0n } }]]));
+  await F.say("&idioma pt");
+  const saida = await F.say("&cor painel aqui verde azul vermelho");
+  const p = paineis(saida);
+  assert.deepEqual(p.map((m) => m.reacoes), [["🔵", "🔴"]], "o verde não entrou");
+  assert.deepEqual(F.criados, ["vermelho"], "o azul foi reaproveitado, o verde não foi recriado");
+  assert.equal(pintados.get(VERDE), undefined, "o cargo com permissões nem foi pintado");
+  assert.equal(pintados.get(AZUL), cores.CORES.azul);
+  assert.match(descDe(saida.at(-1)), /Não entraram:\*\* verde \(.*permiss/);
+  assert.equal(db.getReactionRole(p[0].id, "🟢"), null);
+});
+
+console.log(`\nCORES (20 out): ${ok} ok, ${falhou} falha(s)`);
+process.exit(falhou ? 1 : 0);
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+// jogos-20out — campo minado, jogo da velha e `&acesso livre` (P7, 20 out 2026)
+// ════════════════════════════════════════════════════════════════════════════
+// Pedido do Ghieh: jogos no &entretenimento, e que o admin possa liberar o uso
+// fora dos canais designados.
+SUITES["jogos-20out"] = async () => {
+const fs = (await import("node:fs")).default;
+const assert = (await import("node:assert")).default;
+const DB = "/tmp/jogos20.db";
+for (const f of [DB, DB + "-wal", DB + "-shm", "/tmp/jogos20.json"]) fs.rmSync(f, { force: true });
+Object.assign(process.env, { BOT_TOKEN: "tok", DB_PATH: DB, CONFIG_PATH: "/tmp/jogos20.json" });
+globalThis.fetch = async () => ({ ok: false, status: 503, text: async () => "", json: async () => ({}), headers: new Map() });
+const quieto = async (fn) => { const o = [console.log, console.info, console.warn, console.error]; console.log = console.info = console.warn = console.error = () => {}; try { return await fn(); } finally { [console.log, console.info, console.warn, console.error] = o; } };
+await quieto(() => import("./main.js"));
+const jogos = await import("./modulos/ferramentas/jogos.js");
+const c = globalThis.__client;
+c.user.id = "01KJGJ0DY00000000000000000";   // um ID de verdade (dá para marcar a Judy)
+await quieto(() => c.emitAll("ready"));
+// IDs no alfabeto do ULID (sem I, L, O, U) e com 26 caracteres: a menção só vale assim
+const id26 = (x) => ("01KJG" + x).padEnd(26, "0");
+const SID = id26("SRV1"), CA = id26("CAN1"), CB = id26("CAN2");
+const ANA = id26("ANA"), BIA = id26("B1A"), DONO = id26("D0N0");
+const msgs = [];   // { id, canal, conteudo, titulo, desc, reacoes, edicoes }
+const textoDe = (p) => typeof p === "string" ? { conteudo: p } : { titulo: p?.embeds?.[0]?.title ?? "", desc: p?.embeds?.[0]?.description ?? "", conteudo: typeof p?.content === "string" ? p.content : "" };
+const canal = (id) => ({ id, serverId: SID, name: id === CA ? "comandos" : "geral", type: "TextChannel",
+  sendMessage: async (p) => { const m = { id: `01KJOGOMSG${String(msgs.length + 1).padStart(16, "0")}`, canal: id, ...textoDe(p), reacoes: [], edicoes: [],
+    react: async (e) => { m.reacoes.push(decodeURIComponent(e)); }, edit: async (q) => { m.edicoes.push(textoDe(q)); }, delete: async () => {} }; msgs.push(m); return m; } });
+const canais = { [CA]: canal(CA), [CB]: canal(CB) };
+const pessoa = (uid, staff) => ({ id: { server: SID, user: uid }, roles: [], hasPermission: () => staff, user: { id: uid, username: uid }, nickname: uid, displayName: uid === ANA ? "Ana" : uid === BIA ? "Bia" : "Dono" });
+const membros = { [DONO]: pessoa(DONO, true), [ANA]: pessoa(ANA, false), [BIA]: pessoa(BIA, false) };
+const server = { id: SID, ownerId: DONO, name: "Teste", roles: new Map(), channels: Object.values(canais), channelIds: new Set([CA, CB]), member: { roles: [] }, havePermission: () => true,
+  fetchMember: async (u) => membros[String(u?.user ?? u)] ?? membros[DONO], fetchMembers: async () => ({ members: Object.values(membros), users: [] }), fetchBans: async () => [] };
+c.servers.set(SID, server); for (const x of Object.values(canais)) c.channels.set(x.id, x);
+for (const u of Object.keys(membros)) c.users.set(u, { id: u, username: membros[u].displayName, displayName: membros[u].displayName, bot: false });
+let n = 0;
+async function diz(autor, conteudo, canalId = CA) {
+  const antes = msgs.length;
+  const ev = { id: "X" + (++n), authorId: autor, content: conteudo, serverId: SID, server, channel: canais[canalId], channelId: canalId,
+    mentionIds: [...conteudo.matchAll(/<@(\w+)>/g)].map((m) => m[1]), createdAt: new Date(), author: { id: autor, username: membros[autor].displayName, bot: false },
+    member: membros[autor], replyIds: [], attachments: [] };
+  await quieto(() => c.emitAll("messageCreate", ev));
+  return msgs.slice(antes);
+}
+const reagir = (m, emoji, quem) => quieto(() => c.emitAll("messageReactionAdd", { id: m.id, channelId: m.canal }, quem, encodeURIComponent(emoji)));
+const tela = (m) => (m.edicoes.at(-1) ?? m);
+const tudo = (saida) => saida.map((m) => `${m.titulo ?? ""}\n${m.desc ?? ""}\n${m.conteudo ?? ""}`).join("\n");
+await diz(DONO, "&idioma pt");
+
+let ok = 0, falhou = 0;
+const t = async (nome, fn) => { try { await fn(); console.log(`  ✅ ${nome}`); ok++; } catch (e) { console.log(`  ❌ ${nome}\n     ${String(e.message).split("\n").join("\n     ")}`); falhou++; } };
+// rng que repete uma sequência (o tabuleiro sai igual a cada execução)
+const rngDe = (semente) => { let s = semente >>> 0; return () => ((s = (Math.imul(s, 1664525) + 1013904223) >>> 0) / 2 ** 32); };
+
+console.log("── campo minado ──");
+await t("o campo tem as minas pedidas, os números certos, e a casa aberta não é mina", () => {
+  for (const [nome, nivel] of Object.entries(jogos.NIVEIS)) for (let semente = 1; semente <= 30; semente++) {
+    const { grade, inicio } = jogos.gerarCampo(nivel, rngDe(semente));
+    assert.equal(grade.length, nivel.linhas); assert.ok(grade.every((l) => l.length === nivel.colunas));
+    assert.equal(grade.flat().filter((v) => v < 0).length, nivel.minas, `${nome}/${semente}`);
+    for (let l = 0; l < nivel.linhas; l++) for (let col = 0; col < nivel.colunas; col++) {
+      if (grade[l][col] < 0) continue;
+      let conta = 0;
+      for (let a = l - 1; a <= l + 1; a++) for (let b = col - 1; b <= col + 1; b++) if ((a !== l || b !== col) && grade[a]?.[b] < 0) conta++;
+      assert.equal(grade[l][col], conta, `${nome}/${semente} (${l},${col})`);
+    }
+    assert.ok(grade[inicio[0]][inicio[1]] >= 0, "o começo não é mina");
+    const menor = Math.min(...grade.flat().filter((v) => v >= 0));
+    assert.equal(grade[inicio[0]][inicio[1]], menor, "o começo é a casa mais segura (vazia, se houver)");
+  }
+});
+await t("o texto: tudo em spoiler menos a casa do começo, e cabe numa mensagem do Stoat", () => {
+  const campo = jogos.gerarCampo(jogos.NIVEIS.dificil, rngDe(7));
+  const txt = jogos.textoCampo(campo);
+  assert.equal((txt.match(/!![^!]+!!/g) ?? []).length, 99);
+  assert.equal(txt.split("\n").length, 10);
+  assert.ok(txt.length < 1900, `${txt.length} caracteres`);
+  // a linha do começo, sem os spoilers, sobra só a casa aberta — e ela não é mina
+  const aberta = txt.split("\n")[campo.inicio[0]].replace(/!![^!]+!!/g, "");
+  assert.equal(aberta, ["0️⃣", "1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣"][campo.grade[campo.inicio[0]][campo.inicio[1]]]);
+  assert.equal((txt.match(/!!💣!!/g) ?? []).length, 18);
+});
+await t("`&entretenimento campominado facil`: vai como TEXTO (o spoiler é do texto), 6×6 com 5 minas", async () => {
+  const [m] = await diz(ANA, "&entretenimento campominado facil");
+  assert.ok(!m.titulo, "não é embed");
+  assert.match(m.conteudo, /Campo minado\*\* \(fácil\) — 6×6, \*\*5\*\* minas/);
+  assert.equal((m.conteudo.match(/!!💣!!/g) ?? []).length, 5);
+  assert.equal((m.conteudo.match(/!![^!]+!!/g) ?? []).length, 35);
+});
+await t("sem nível é o médio; nível desconhecido ensina o uso; em inglês, `hard`", async () => {
+  let [m] = await diz(ANA, "&entretenimento campominado");
+  assert.match(m.conteudo, /\(médio\) — 8×8, \*\*10\*\* minas/);
+  [m] = await diz(ANA, "&entretenimento campominado xyz");
+  assert.match(m.desc, /campominado \[facil\|medio\|dificil\]/);
+  [m] = await diz(ANA, "&fun minesweeper hard");
+  assert.match(m.conteudo, /\(difícil\) — 10×10, \*\*18\*\* minas/);
+});
+
+console.log("\n── jogo da velha ──");
+await t("a Judy fecha a linha dela, senão fecha a sua, senão pega o meio", () => {
+  const X = 0, O = 1, _ = null;
+  assert.equal(jogos.jogadaDaJudy([O, O, _, X, X, _, _, _, _], O), 2, "ganha");
+  assert.equal(jogos.jogadaDaJudy([X, X, _, _, O, _, _, _, _], O), 2, "bloqueia");
+  assert.equal(jogos.jogadaDaJudy([X, _, _, _, _, _, _, _, _], O), 4, "meio");
+  assert.equal(jogos.resultado([X, X, X, O, O, _, _, _, _]), X);
+  assert.equal(jogos.resultado([X, O, X, X, O, O, O, X, X]), "empate");
+  assert.equal(jogos.resultado([X, O, _, _, _, _, _, _, _]), null);
+});
+const linhasDoTab = (m) => tela(m).desc.split("\n\n")[1];
+await t("contra alguém: o tabuleiro sai com as nove casas para reagir; só joga quem é da vez", async () => {
+  const [m] = await diz(ANA, `&entretenimento velha <@${BIA}>`);
+  assert.match(m.titulo, /Jogo da velha/);
+  assert.match(m.desc, /\*\*Ana\*\* ❌ × ⭕ \*\*Bia\*\*/);
+  assert.deepEqual(m.reacoes, jogos.CASAS);
+  assert.match(m.desc, /Vez de \*\*Ana\*\* \(❌\)/);
+  await reagir(m, "5️⃣", BIA);
+  assert.equal(m.edicoes.length, 0, "não era a vez da Bia");
+  await reagir(m, "5️⃣", DONO);
+  assert.equal(m.edicoes.length, 0, "quem não joga não mexe");
+  await reagir(m, "5️⃣", ANA);
+  assert.equal(linhasDoTab(m), "1️⃣2️⃣3️⃣\n4️⃣❌6️⃣\n7️⃣8️⃣9️⃣");
+  assert.match(tela(m).desc, /Vez de \*\*Bia\*\* \(⭕\)/);
+  await reagir(m, "5️⃣", BIA);
+  assert.equal(m.edicoes.length, 1, "casa ocupada");
+  for (const [e, quem] of [["1️⃣", BIA], ["9️⃣", ANA], ["3️⃣", BIA], ["2️⃣", ANA], ["8️⃣", BIA], ["7️⃣", ANA], ["4️⃣", BIA], ["6️⃣", ANA]]) await reagir(m, e, quem);
+  assert.match(tela(m).desc, /Deu velha/);
+  const fim = m.edicoes.length;
+  await reagir(m, "1️⃣", BIA);
+  assert.equal(m.edicoes.length, fim, "acabou: ninguém mexe mais");
+});
+await t("a vitória aparece no tabuleiro", async () => {
+  const [m] = await diz(ANA, `&entretenimento velha <@${BIA}>`);
+  for (const [e, quem] of [["1️⃣", ANA], ["4️⃣", BIA], ["2️⃣", ANA], ["5️⃣", BIA], ["3️⃣", ANA]]) await reagir(m, e, quem);
+  assert.match(tela(m).desc, /🏆 \*\*Ana\*\* \(❌\) venceu!/);
+  const fim = m.edicoes.length;
+  await reagir(m, "6️⃣", ANA); await reagir(m, "6️⃣", BIA);
+  assert.equal(m.edicoes.length, fim, "depois da vitória, casa livre também não vale");
+});
+await t("contra a Judy (sem ninguém): ela responde na hora, e bloqueia", async () => {
+  const [m] = await diz(ANA, "&entretenimento velha");
+  assert.match(m.desc, /\*\*Ana\*\* ❌ × ⭕ \*\*Judy\*\*/);
+  await reagir(m, "1️⃣", ANA);
+  assert.equal(linhasDoTab(m), "❌2️⃣3️⃣\n4️⃣⭕6️⃣\n7️⃣8️⃣9️⃣", "a Judy pegou o meio");
+  assert.match(tela(m).desc, /Vez de \*\*Ana\*\*/);
+  await reagir(m, "2️⃣", ANA);
+  assert.equal(linhasDoTab(m), "❌❌⭕\n4️⃣⭕6️⃣\n7️⃣8️⃣9️⃣", "bloqueou o 3");
+});
+await t("marcar a Judy também é jogar contra ela; contra si mesmo, não", async () => {
+  let [m] = await diz(ANA, `&entretenimento velha <@${c.user.id}>`);
+  assert.match(m.desc, /× ⭕ \*\*Judy\*\*/);
+  [m] = await diz(ANA, `&entretenimento velha <@${ANA}>`);
+  assert.match(m.desc, /Contra você mesmo não dá/);
+  assert.equal(m.reacoes.length, 0);
+});
+await t("em inglês e em espanhol: `tictactoe`, `tateti`, `buscaminas`; e `&velha` solto aponta para o lugar certo", async () => {
+  let [m] = await diz(ANA, `&fun tictactoe <@${BIA}>`);
+  assert.match(m.titulo, /Jogo da velha/);
+  [m] = await diz(ANA, "&entretenimiento tateti");
+  assert.match(m.desc, /× ⭕ \*\*Judy\*\*/);
+  [m] = await diz(ANA, "&entretenimiento buscaminas facil");
+  assert.match(m.conteudo, /6×6/);
+  const r = tudo(await diz(ANA, "&campominado"));
+  assert.match(r, /&entretenimento campominado/);
+});
+
+console.log("\n── fora dos canais designados: `&acesso livre` ──");
+await diz(DONO, "&acesso canal somente");
+await diz(DONO, `&acesso canal add <#${CA}>`);
+await t("com a restrição, o jogo fora do canal de comandos é recusado (como antes)", async () => {
+  const r = tudo(await diz(ANA, "&entretenimento campominado", CB));
+  assert.match(r, /Aqui não/);
+  assert.ok(!/!!/.test(r));
+});
+await t("★ `&acesso livre entretenimento on`: o jogo vale em qualquer canal — e só ele", async () => {
+  const r = tudo(await diz(DONO, "&acesso livre entretenimento on"));
+  assert.match(r, /Livre em qualquer canal/); assert.match(r, /`entretenimento` agora vale em \*\*qualquer canal\*\*/);
+  const [m] = await diz(ANA, "&entretenimento campominado", CB);
+  assert.match(m.conteudo, /Campo minado/);
+  assert.match(tudo(await diz(ANA, "&servidor", CB)), /Aqui não/, "os outros seguem a regra");
+  assert.match(tudo(await diz(DONO, "&acesso")), /Valem em qualquer canal:\*\* `entretenimento`/);
+});
+await t("`off` devolve à regra; nome em inglês e comando desconhecido", async () => {
+  await diz(DONO, "&acesso livre entretenimento off");
+  assert.match(tudo(await diz(ANA, "&entretenimento sorte", CB)), /Aqui não/);
+  await diz(DONO, "&access free fun on");
+  assert.ok(!/Aqui não/.test(tudo(await diz(ANA, "&entretenimento sorte", CB))));
+  assert.match(tudo(await diz(DONO, "&acesso livre xyz on")), /Não conheço o comando `xyz`/);
+});
+await t("só quem gere o acesso libera", async () => {
+  const r = tudo(await diz(ANA, "&acesso livre servidor on"));
+  assert.match(r, /Permissão insuficiente/);
+  assert.match(tudo(await diz(ANA, "&servidor", CB)), /Aqui não/);
+});
+await t("no modo `todos`, liberar avisa que ainda não faz diferença", async () => {
+  await diz(DONO, "&acesso canal todos");
+  assert.match(tudo(await diz(DONO, "&acesso livre servidor on")), /já valem em qualquer canal \(modo `todos`\)/);
+});
+
+console.log(`\nJOGOS (20 out): ${ok} ok, ${falhou} falha(s)`);
+process.exit(falhou ? 1 : 0);
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+// regressao-p1p7 — os erros que apareceram entre o P1 e o P7 (20 out 2026)
+// ════════════════════════════════════════════════════════════════════════════
+// Cada bloco trava um erro que aconteceu (ou quase) ao fazer a privacidade, as
+// novidades, as cores e os jogos — para não voltar num pacote futuro:
+//   1. o banco que já existe: as migrações só apagam a memória antiga da IA, uma vez
+//   2. a limpeza de servidor que saiu nunca apaga um servidor em que a Judy está
+//   3. config salva antes do P1 (sem os campos novos): tudo desligado, nada quebra
+//   4. o exclusivo das cores tira a reação antiga mesmo quando o evento não traz o canal
+//   5. as telas novas em inglês e espanhol sem palavra em português
+//   6. jogo não parece erro; novidade não cita comando à mão
+SUITES["regressao-p1p7"] = async () => {
+const fs = (await import("node:fs")).default;
+const assert = (await import("node:assert")).default;
+const { spawnSync } = await import("node:child_process");
+const DB = "/tmp/regr20.db";
+for (const f of [DB, DB + "-wal", DB + "-shm", "/tmp/regr20.json"]) fs.rmSync(f, { force: true });
+Object.assign(process.env, { BOT_TOKEN: "tok", DB_PATH: DB, CONFIG_PATH: "/tmp/regr20.json" });
+// as pausas de taxa do painel de cores não importam aqui
+const st = globalThis.setTimeout;
+globalThis.setTimeout = (f, ms, ...a) => st(f, ms === 300 || ms === 350 ? 0 : ms, ...a);
+globalThis.fetch = async (url) => (/\/roles\//.test(String(url))
+  ? { ok: true, status: 200, text: async () => "{}", json: async () => ({}), headers: new Map() }
+  : { ok: false, status: 503, text: async () => "", json: async () => ({}), headers: new Map() });
+const quieto = async (fn) => { const o = [console.log, console.info, console.warn, console.error]; console.log = console.info = console.warn = console.error = () => {}; try { return await fn(); } finally { [console.log, console.info, console.warn, console.error] = o; } };
+await quieto(() => import("./main.js"));
+const db = await import("./modulos/core/db.js");
+const store = await import("./modulos/core/config-store.js");
+const reten = await import("./modulos/core/retencao.js");
+const nov = await import("./modulos/ferramentas/novidades.js");
+const relatorio = await import("./modulos/ferramentas/relatorio.js");
+const c = globalThis.__client;
+c.user.id = "01KRGJ0DY00000000000000000";
+await quieto(() => c.emitAll("ready"));
+
+let ok = 0, falhou = 0;
+const t = async (nome, fn) => { try { await fn(); console.log(`  ✅ ${nome}`); ok++; } catch (e) { console.log(`  ❌ ${nome}\n     ${String(e.message).split("\n").join("\n     ")}`); falhou++; } };
+
+// ── um banco preenchido: uma linha em CADA tabela (genérico — tabela nova entra sozinha) ──
+const IA = ["ia_fatos_pessoa", "ia_fatos_servidor", "ia_perfil", "ia_memoria", "ia_historico"];
+const NOVAS = ["ia_consentimento", "xp_fora", "servidores_saida", "migracoes"];   // tabelas que o P1–P7 criou
+const PREENCHER = `
+  // (servidores_saida e migracoes são marcas, não dados: uma linha nelas mudaria o que se testa)
+  export function preencher(d, serverId, sufixo = "") {
+    const tabelas = d.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").all().map((x) => x.name)
+      .filter((t) => !["servidores_saida", "migracoes"].includes(t));
+    const feitas = [], puladas = [];
+    d.exec("PRAGMA foreign_keys = OFF");
+    for (const t of tabelas) {
+      const cols = d.prepare("PRAGMA table_info(" + t + ")").all();
+      const valores = cols.map((c) => {
+        if (c.name === "serverId") return serverId;
+        const tipo = String(c.type).toUpperCase();
+        if (/INT/.test(tipo)) return Date.now() + Math.floor(Math.random() * 1e6);
+        if (/REAL|FLOA|DOUB/.test(tipo)) return 1.5;
+        if (/^(criadoEm|em|atualizadoEm|saiuEm|data|quando)$/i.test(c.name)) return new Date().toISOString();
+        return c.name + "-" + serverId + sufixo + "-" + Math.random().toString(36).slice(2, 8);
+      });
+      try { d.prepare("INSERT INTO " + t + " (" + cols.map((c) => '"' + c.name + '"').join(",") + ") VALUES (" + cols.map(() => "?").join(",") + ")").run(...valores); feitas.push(t); }
+      catch (e) { puladas.push(t + ": " + e.message); }
+    }
+    return { feitas, puladas };
+  }
+  export const contar = (d) => Object.fromEntries(d.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").all()
+    .map(({ name }) => [name, d.prepare("SELECT COUNT(*) AS n FROM " + name).get().n]));
+`;
+fs.writeFileSync("/tmp/regr20-ajuda.mjs", PREENCHER);
+const ajuda = await import("/tmp/regr20-ajuda.mjs");
+// roda o db.js de verdade num processo à parte (como a subida do container)
+const RAIZ = process.cwd();
+function noFilho(arq, codigo) {
+  const r = spawnSync(process.execPath, ["--no-warnings", "--input-type=module", "-e", `
+    import * as db from ${JSON.stringify(RAIZ + "/modulos/core/db.js")};
+    import * as ajuda from "/tmp/regr20-ajuda.mjs";
+    const o = [console.log, console.info]; console.log = console.info = () => {};
+    db.abrirBanco(${JSON.stringify(arq)});
+    [console.log, console.info] = o;
+    const d = db.getDb();
+    ${codigo}
+  `], { encoding: "utf8", env: { ...process.env, DB_PATH: arq } });
+  if (r.status !== 0) throw new Error(`filho falhou: ${r.stderr.slice(0, 600)}`);
+  return JSON.parse(r.stdout.trim().split("\n").at(-1));
+}
+
+console.log("── 1. o banco que já existe ──");
+const VELHO = "/tmp/regr20-velho.db";
+await t("★ banco de antes do P1 (sem as tabelas e colunas novas): a subida só apaga a memória antiga da IA — nenhuma outra linha some", () => {
+  for (const f of [VELHO, VELHO + "-wal", VELHO + "-shm"]) fs.rmSync(f, { force: true });
+  // monta o banco "de antes": o esquema de hoje, cheio, sem o que o P1–P7 acrescentou
+  const antes = noFilho(VELHO, `
+    const r = ajuda.preencher(d, "01KRGSRVANT1G0000000000000");
+    ajuda.preencher(d, "01KRGSRVANT2G0000000000000");
+    for (const t of ${JSON.stringify(NOVAS)}) d.exec("DROP TABLE IF EXISTS " + t);
+    d.exec("ALTER TABLE reaction_roles DROP COLUMN grupo");
+    console.log(JSON.stringify({ ...r, contagem: ajuda.contar(d) }));`);
+  assert.deepEqual(antes.puladas, [], "toda tabela recebeu uma linha");
+  for (const t of IA) assert.ok(antes.contagem[t] > 0, `${t} tinha memória`);
+  assert.equal(antes.contagem.reaction_roles, 2);
+  // a subida com o código novo
+  const depois = noFilho(VELHO, `
+    const cols = d.prepare("PRAGMA table_info(reaction_roles)").all().map((c) => c.name);
+    console.log(JSON.stringify({ contagem: ajuda.contar(d), grupo: cols.includes("grupo") }));`);
+  assert.ok(depois.grupo, "a coluna nova entrou");
+  for (const [tab, n] of Object.entries(antes.contagem)) {
+    if (IA.includes(tab)) assert.equal(depois.contagem[tab], 0, `${tab}: a memória sem consentimento sai`);
+    else assert.equal(depois.contagem[tab], n, `${tab}: ${n} → ${depois.contagem[tab]}`);
+  }
+  for (const t of NOVAS) assert.ok(t in depois.contagem, `${t} criada`);
+});
+await t("★ e só uma vez: a memória de quem aceitou, gravada depois, sobrevive às próximas subidas", () => {
+  noFilho(VELHO, `ajuda.preencher(d, "01KRGSRVANT1G0000000000000", "-nova"); console.log("{}");`);
+  const a = noFilho(VELHO, `console.log(JSON.stringify(ajuda.contar(d)));`);
+  const b = noFilho(VELHO, `console.log(JSON.stringify(ajuda.contar(d)));`);
+  for (const t of IA) { assert.ok(a[t] > 0, `${t} vazia na 2ª subida`); assert.equal(b[t], a[t], `${t} mudou na 3ª subida`); }
+});
+
+console.log("\n── 2. servidor que saiu ──");
+const SAIU = "01KRGSRVSA1V00000000000000", VOLTOU = "01KRGSRVV0TA00000000000000", FICA = "01KRGSRVF1CA00000000000000";
+await t("★ a limpeza de 30 dias apaga só o servidor que saiu — o marcado em que a Judy ESTÁ não perde nada, e a marca sai", () => {
+  const d = db.getDb();
+  for (const s of [SAIU, VOLTOU, FICA]) ajuda.preencher(d, s);
+  const antes = ajuda.contar(d);
+  const velho = new Date(Date.now() - 31 * 86_400_000);
+  reten.marcarSaida(SAIU, velho); reten.marcarSaida(VOLTOU, velho);
+  const r = reten.limparServidoresQueSairam(Date.now(), 30, [VOLTOU, FICA]);
+  assert.deepEqual(r.map((x) => x.serverId), [SAIU]);
+  const depois = ajuda.contar(d);
+  const doServidor = (s) => d.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").all()
+    .filter(({ name }) => d.prepare(`PRAGMA table_info(${name})`).all().some((c) => c.name === "serverId") && name !== "servidores_saida")
+    .reduce((n, { name }) => n + d.prepare(`SELECT COUNT(*) AS n FROM ${name} WHERE serverId = ?`).get(s).n, 0);
+  assert.equal(doServidor(SAIU), 0);
+  assert.ok(doServidor(VOLTOU) > 10 && doServidor(FICA) > 10);
+  assert.equal(reten.saidaDe(VOLTOU), null, "a marca do servidor presente saiu");
+  // tabela sem serverId não é tocada
+  for (const [tab, n] of Object.entries(antes)) {
+    if (!d.prepare(`PRAGMA table_info(${tab})`).all().some((x) => x.name === "serverId") && !["servidores_saida", "rss_vistos"].includes(tab)) assert.equal(depois[tab], n, tab);
+  }
+});
+await t("e a subida passa ao limpador os servidores em que a Judy está", () => {
+  const src = fs.readFileSync("main.js", "utf8");
+  assert.match(src, /limparServidoresQueSairam\(Date\.now\(\), retencao\.DIAS_APOS_SAIDA, presentes\)/);
+  assert.match(src, /const presentes = client\.servers\?\.size \? \[\.\.\.client\.servers\.keys\(\)\] : null;/);
+});
+
+
+// ── um servidor de mentira para os comandos ──
+const id26 = (x) => ("01KRG" + x).padEnd(26, "0");
+const SID = id26("SRVA"), CA = id26("CANA"), CB = id26("CANB");
+const ANA = id26("ANA"), DONO = id26("D0N0");
+const msgs = [];
+const textoDe = (p) => typeof p === "string" ? { conteudo: p } : { titulo: p?.embeds?.[0]?.title ?? "", desc: p?.embeds?.[0]?.description ?? "", conteudo: typeof p?.content === "string" ? p.content : "" };
+const canal = (id) => ({ id, serverId: SID, name: "geral", type: "TextChannel",
+  sendMessage: async (p) => { const m = { id: id26("M" + String(msgs.length + 1).padStart(5, "0")), canal: id, ...textoDe(p), reacoes: [], edicoes: [],
+    react: async (e) => { m.reacoes.push(decodeURIComponent(e)); }, edit: async (q) => { m.edicoes.push(textoDe(q)); }, delete: async () => {} }; msgs.push(m); return m; } });
+const canais = { [CA]: canal(CA), [CB]: canal(CB) };
+const roles = new Map();
+const membros = {};
+const pessoa = (uid, staff) => (membros[uid] ??= { id: { server: SID, user: uid }, roles: [], hasPermission: () => staff, user: { id: uid, username: uid }, nickname: uid, displayName: uid === ANA ? "Ana" : "Dono",
+  edit: async ({ roles: r }) => { membros[uid].roles = r; } });
+pessoa(DONO, true); pessoa(ANA, false);
+let seqR = 0;
+const server = { id: SID, ownerId: DONO, name: "Teste", roles, channels: Object.values(canais), channelIds: new Set([CA, CB]), member: { roles: [] }, havePermission: () => true,
+  createRole: async (nome) => { const id = id26("R" + String(++seqR).padStart(4, "0")); roles.set(id, { name: nome, rank: 50, permissions: { a: 0n, d: 0n } }); return { id }; },
+  fetchMember: async (u) => membros[String(u?.user ?? u)] ?? membros[DONO], fetchMembers: async () => ({ members: Object.values(membros), users: [] }), fetchBans: async () => [] };
+c.servers.set(SID, server); for (const x of Object.values(canais)) c.channels.set(x.id, x);
+for (const u of [ANA, DONO]) c.users.set(u, { id: u, username: membros[u].displayName, bot: false });
+let nMsg = 0;
+async function diz(autor, conteudo, canalId = CA) {
+  const antes = msgs.length;
+  await quieto(() => c.emitAll("messageCreate", { id: "X" + (++nMsg), authorId: autor, content: conteudo, serverId: SID, server, channel: canais[canalId], channelId: canalId,
+    mentionIds: [...conteudo.matchAll(/<@(\w+)>/g)].map((m) => m[1]), createdAt: new Date(), author: { id: autor, username: membros[autor].displayName, bot: false },
+    member: membros[autor], replyIds: [], attachments: [] }));
+  return msgs.slice(antes);
+}
+const tudo = (saida) => saida.map((m) => [m.titulo, m.desc, m.conteudo].filter(Boolean).join("\n")).join("\n");
+
+console.log("\n── 3. config salva antes do P1 (sem os campos novos) ──");
+// o servidor de antes: log ligado num canal, comandos só no CA, XP ligado — e nenhum
+// campo que o P1–P7 criou (relatorioDono, log.eventos.atualizacoes, acesso.livres)
+db.gravarConfig(SID, { language: "pt",
+  log: { canalId: CA, eventos: { punicoes: true, membros: true, mensagens: true, cargos: true, comandos: false } },
+  acesso: { cargosStaff: [], canais: { modo: "somente", lista: [CA] }, staffIgnoraCanais: true }, xp: { ativo: true } });
+store.recarregarServidor(SID);
+await t("★ nada novo liga sozinho: relatório, anúncio de novidades e comandos livres ficam desligados", async () => {
+  const cfg = store.configDoServidor(SID);
+  assert.notEqual(cfg.relatorioDono, true);
+  assert.notEqual(cfg.log?.eventos?.atualizacoes, true);
+  assert.deepEqual(cfg.acesso?.livres ?? [], []);
+  assert.equal(relatorio.modoDe(SID), null, "fora do relatório");
+  const enviados = [];
+  const r = await nov.anunciar({ client: c, global: { novidadesAnunciadas: "velha" }, salvarGlobal: () => {}, configDoServidor: store.configDoServidor,
+    enviar: async (canal) => { enviados.push(canal.id); }, lista: [{ id: "nova", data: "2026-10-21", pt: "x", en: "x", es: "x" }, { id: "velha", data: "2026-10-20", pt: "y", en: "y", es: "y" }] });
+  assert.deepEqual(enviados, [], "o log dele não recebe o anúncio"); assert.equal(r.novas, 1);
+  // pelo store o campo vem do padrão; o anúncio, sozinho, também trata "não existe" como desligado
+  const cru = db.lerConfig(SID);
+  assert.equal(cru.log.eventos.atualizacoes, undefined, "a config salva é mesmo a de antes");
+  await nov.anunciar({ client: c, global: { novidadesAnunciadas: "velha" }, salvarGlobal: () => {}, configDoServidor: (id) => (id === SID ? cru : null),
+    enviar: async (canal) => { enviados.push(canal.id); }, lista: [{ id: "nova", data: "2026-10-21", pt: "x", en: "x", es: "x" }, { id: "velha", data: "2026-10-20", pt: "y", en: "y", es: "y" }] });
+  assert.deepEqual(enviados, []);
+});
+await t("e as telas novas abrem nele sem erro", async () => {
+  let r = tudo(await diz(DONO, "&acesso"));
+  assert.match(r, /Valem em qualquer canal:\*\* _nenhum_/); assert.match(r, /\*\*só\*\* em/);
+  r = tudo(await diz(DONO, "&log"));
+  assert.match(r, /🔴 \*\*atualizacoes\*\*/); assert.match(r, /🔴 \*\*relatorio\*\*/);
+  assert.match(tudo(await diz(ANA, "&xp sair")), /XP/);
+  assert.match(tudo(await diz(ANA, "&privacidade")), /Memória da conversa/);
+});
+await t("e o `&acesso livre` funciona nele (a lista nasce na hora)", async () => {
+  assert.match(tudo(await diz(ANA, "&entretenimento sorte", CB)), /Aqui não/);
+  await diz(DONO, "&acesso livre entretenimento on");
+  assert.deepEqual(store.configDoServidor(SID).acesso.livres, ["entretenimento"]);
+  assert.match(tudo(await diz(ANA, "&entretenimento sorte", CB)), /sorte de Ana/);
+  await diz(DONO, "&acesso livre entretenimento off");
+  await diz(DONO, "&acesso canal todos");
+});
+
+console.log("\n── 4. o exclusivo das cores e o evento sem canal ──");
+const tirados = [];
+c.api.delete = async (rota, corpo) => { tirados.push(`${decodeURIComponent(rota)}|${corpo?.user_id}`); return {}; };
+const R1 = id26("CR1"), R2 = id26("CR2"), R3 = id26("CR3");
+for (const r of [R1, R2, R3]) roles.set(r, { name: r, rank: 60 });
+await t("★ painel em duas mensagens: a reação antiga sai da OUTRA mensagem mesmo quando o evento traz só o id", async () => {
+  const M1 = id26("PM1"), M2 = id26("PM2");
+  db.addReactionRole(SID, M1, "🔴", R1, CA); db.addReactionRole(SID, M2, "🔥", R2, CB);
+  db.setReactionRoleExclusivo(M1, true); db.setReactionRoleExclusivo(M2, true); db.setReactionRoleGrupo([M1, M2], M1);
+  membros[ANA].roles = [R1]; tirados.length = 0;
+  await quieto(() => c.emitAll("messageReactionAdd", { id: M2 }, ANA, encodeURIComponent("🔥")));
+  assert.deepEqual(membros[ANA].roles, [R2]);
+  assert.deepEqual(tirados, [`/channels/${CA}/messages/${M1}/reactions/🔴|${ANA}`]);
+});
+await t("★ mensagem só: o evento sem o canal também tira a reação antiga (antes do P6 ela ficava, e a pessoa via duas marcadas)", async () => {
+  const M3 = id26("PM3");
+  db.addReactionRole(SID, M3, "🅰", R1, CB); db.addReactionRole(SID, M3, "🅱", R3, CB); db.setReactionRoleExclusivo(M3, true);
+  membros[ANA].roles = [R1]; tirados.length = 0;
+  await quieto(() => c.emitAll("messageReactionAdd", { id: M3 }, ANA, "🅱"));
+  assert.deepEqual(membros[ANA].roles, [R3]);
+  assert.deepEqual(tirados, [`/channels/${CB}/messages/${M3}/reactions/🅰|${ANA}`]);
+});
+await t("as palavras em espanhol do painel: `aquí`, `sólidos`, `degradados`", async () => {
+  let saida = await diz(DONO, "&cor painel aquí sólidos");
+  assert.equal(saida.filter((m) => m.reacoes.length).map((m) => m.reacoes.length).join(), "10");
+  saida = await diz(DONO, "&cor criar degradados");
+  assert.match(tudo(saida), /20\*\* cargo\(s\)/);
+});
+
+console.log("\n── 5. telas novas sem português em inglês e espanhol ──");
+const TELAS = ["&privacidade", "&privacidade apagar", "&xp sair", "&xp entrar", "&log", "&log relatorio", "&cor", "&cor painel aqui xyz",
+  "&entretenimento", "&entretenimento campominado xyz", "&entretenimento velha xyz", "&entretenimento velha", "&acesso", "&acesso livre",
+  "&acesso livre xyz on", "&acesso livre entretenimento on", "&acesso livre entretenimento off", "&servidores pseudonimo",
+  "&help privacidade", "&help entretenimento campominado", "&help entretenimento velha", "&help acesso", "&help acesso canal", "&help cor painel"];
+// palavras de comando e de tela do P1–P7 que só existem em português
+const SO_PT = /\b(facil|fácil|médio|dificil|difícil|sólidas|solidas|gradientes|livre|velha|campominado|privacidade|atualizacoes|relatorio|entretenimento|nenhum|qualquer|restrito|só o dono)\b/i;
+const semLinks = (x) => x.replace(/<?https?:\/\/[^\s>)]+>?/g, "");
+await t("★ inglês: nenhuma tela nova com palavra em português (antes: `&access free entretenimento on`, `[facil|medio|dificil]`, \"Comando restrito\")", async () => {
+  await diz(DONO, "&language en");
+  const ruins = [];
+  for (const cmd of TELAS) { const r = semLinks(tudo(await diz(DONO, cmd))); const m = r.match(SO_PT); if (m) ruins.push(`${cmd} → "${m[0]}"`); }
+  assert.deepEqual(ruins, []);
+});
+await t("espanhol: os nomes de comando saem em espanhol (`entretenimiento`, `privacidad`, `acceso libre`), nunca o português", async () => {
+  await diz(DONO, "&idioma es");
+  const ruins = [];
+  for (const cmd of TELAS) {
+    const r = semLinks(tudo(await diz(DONO, cmd)));
+    const m = r.match(/`&(privacidade|entretenimento|acesso|servidores)\b|\b(campominado|velha|livre|atualizacoes|relatorio|restrito|só o dono)\b|acceso libre entretenimento\b/i);
+    if (m) ruins.push(`${cmd} → "${m[0]}"`);
+  }
+  assert.deepEqual(ruins, []);
+  assert.match(tudo(await diz(DONO, "&acesso")), /`&acceso libre ‹comando› on\|off` — .*`&acceso libre entretenimiento on`/);
+  await diz(DONO, "&idioma pt");
+});
+
+console.log("\n── 6. jogo não parece erro; novidade não cita comando à mão ──");
+await t("★ o tabuleiro e o campo minado não começam com marca de erro (antes: \"❌⭕ Jogo da velha\" caía na lista de exemplos com erro)", async () => {
+  const [velha] = await diz(ANA, "&entretenimento velha");
+  const [campo] = await diz(ANA, "&entretenimento campominado");
+  for (const linha of [velha.titulo, campo.conteudo.split("\n")[0]]) assert.doesNotMatch(linha, /^(❌|❓|🚫)/, linha);
+});
+await t("★ toda novidade cita comando por `{&…}` e sai sem marcador cru nos três idiomas (antes: `&privacidade` escrito à mão saía em português na tela inglesa)", () => {
+  for (const n of nov.NOVIDADES) for (const l of ["pt", "en", "es"]) {
+    assert.doesNotMatch(n[l], /`&[a-z]/i, `${n.id}/${l}: comando escrito à mão`);
+    const d = nov.embedNovidades([n], l, "&", {}).description;
+    assert.doesNotMatch(d, /\{&/, `${n.id}/${l}: marcador cru`);
+    assert.match(d, /`&[a-z]/, `${n.id}/${l}: cita algum comando`);
+  }
+});
+
+console.log("\n── 7. o que a revisão independente achou ──");
+await t("★ `&privacidade apagar` não destrói o que é de OUTRO jogador: a proposta que fizeram a ela é cancelada e o item volta ao autor; o companheiro que ela trocou fica com o dono", () => {
+  const d = db.getDb();
+  const A = id26("APAGA"), B = id26("B0B");
+  // B propõe a A uma troca: a espada de B fica em custódia na proposta
+  db.darItem(SID, B, "espada"); db.tirarItem(SID, B, "espada");
+  const deB = db.criarOferta({ serverId: SID, tipo: "troca", autorId: B, alvoId: A, itemOferecido: "espada", itemPedido: "escudo" });
+  // e uma proposta antiga, já fechada, também com A
+  const fechada = db.criarOferta({ serverId: SID, tipo: "troca", autorId: B, alvoId: A, itemOferecido: "arco", itemPedido: "escudo" });
+  db.fecharOferta(fechada.id, "fechada", 40);
+  // A também tem as suas coisas
+  const deA = db.criarOferta({ serverId: SID, tipo: "venda", autorId: A, itemOferecido: "pocao", moedaPedida: "ouro", qtdPedida: 5 });
+  const ins = d.prepare("INSERT INTO rpg_followers (serverId, donoId, catalogoId, donoOriginal) VALUES (?, ?, 'lobo', ?)");
+  const trocado = ins.run(SID, B, A).lastInsertRowid;   // era de A, foi para B
+  const naDungeon = ins.run(SID, null, A).lastInsertRowid;   // de A, capturado — outros podem resgatar
+  const meu = ins.run(SID, A, A).lastInsertRowid;
+  const tela = reten.dadosDaPessoa(A).find((g) => g.id === "rpg").n;
+  reten.dadosDaPessoa(A, { apagar: true });
+  const of = db.getOferta(deB.id);
+  assert.ok(of, "a proposta de B continua existindo");
+  assert.equal(of.estado, "cancelada"); assert.equal(of.alvoId, null);
+  assert.ok(db.temItem(SID, B, "espada"), "a espada voltou para B");
+  assert.equal(db.getOferta(fechada.id).valorFinal, 40, "o histórico do mercado (volume) fica"); assert.equal(db.getOferta(fechada.id).alvoId, null);
+  assert.equal(db.getOferta(deA.id), null, "a oferta de A sai");
+  const f = (id) => d.prepare("SELECT donoId, donoOriginal FROM rpg_followers WHERE id = ?").get(id);
+  assert.deepEqual({ ...f(trocado) }, { donoId: B, donoOriginal: null }, "o companheiro de B fica, sem A");
+  assert.deepEqual({ ...f(naDungeon) }, { donoId: null, donoOriginal: null });
+  assert.equal(f(meu), undefined, "o companheiro de A sai");
+  assert.equal(tela, 6, "a tela de confirmação conta o que muda: 2 propostas e 2 companheiros de outros, 1 oferta e 1 companheiro dela");
+});
+await t("★ a limpeza do servidor que saiu leva também a cópia do `&reset` (`__reset__:<id>`) — e não toca nas marcas globais", () => {
+  const S = id26("SRVRESET");
+  db.gravarConfig(S, { language: "pt" }); db.gravarConfig(`__reset__:${S}`, { language: "pt" });
+  const outro = id26("SRVOUTRO"); db.gravarConfig(`__reset__:${outro}`, { language: "pt" });
+  reten.apagarDadosDoServidor(S);
+  assert.equal(db.lerConfig(`__reset__:${S}`), null);
+  assert.ok(db.lerConfig(`__reset__:${outro}`), "a cópia de outro servidor fica");
+  assert.ok(db.lerConfig("__global__") && db.lerConfig("__default__"));
+});
+
+console.log("\n── 8. o build do Docker ──");
+await t("★ `scripts/verificar-build.js` (o RUN do Dockerfile) passa — do P5 ao P7 um comentário com uma marca de citação de exemplo abortava o build", () => {
+  const r = spawnSync(process.execPath, ["scripts/verificar-build.js"], { encoding: "utf8" });
+  assert.equal(r.status, 0, (r.stdout + r.stderr).split("\n").filter((l) => /✗|ABORTADO/.test(l)).join("\n"));
+  assert.match(fs.readFileSync("Dockerfile", "utf8"), /RUN node scripts\/verificar-build\.js/, "o Dockerfile ainda roda o verificador");
+});
+
+console.log(`\nREGRESSÃO P1–P7 (20 out): ${ok} ok, ${falhou} falha(s)`);
 process.exit(falhou ? 1 : 0);
 };
 
@@ -14937,8 +15737,9 @@ await t("as listas que viraram marcas no registro são as mesmas de antes", asyn
   assert.deepEqual(ordenado(tab.COMANDOS_SO_IA), ["chat", "modia"]);
   assert.deepEqual(ordenado(tab.COMANDOS_DE_VOZ), ["entrar", "musica", "sair", "tts"]);
   // antes também "comandos", "command", "diagnostico": hoje são apelidos de comando/debug (o que conta é o nome interno)
-  assert.deepEqual(ordenado(tab.ESSENCIAIS), ["comando", "debug", "help", "idioma"]);
-  assert.deepEqual(ordenado(tab.SEMPRE_LIBERADOS), ["acesso", "assistente", "debug", "help", "idioma", "tutorial"]);
+  // (20 out 2026) + privacidade: ninguém desliga o direito de ver e apagar os próprios dados
+  assert.deepEqual(ordenado(tab.ESSENCIAIS), ["comando", "debug", "help", "idioma", "privacidade"]);
+  assert.deepEqual(ordenado(tab.SEMPRE_LIBERADOS), ["acesso", "assistente", "debug", "help", "idioma", "privacidade", "tutorial"]);
   assert.deepEqual(ordenado(tab.TEXTO_LIVRE), ordenado(["chat", "tts", "repete", "embed", "entretenimento", "servidor", "personalidade", "modia", "boasvindas", "adeus", "rolar", "musica", "webhook", "rss", "automod"]));
 });
 await t("\"você quis dizer\": no empate, o nome do comando vence o apelido (não depende da ordem do registro)", async () => {
@@ -15307,8 +16108,9 @@ await t("`&game companion photos` sem nome ensina `photos` (antes: `foto`)", asy
 });
 await t("subcomando desconhecido do `&access` e do `&modia` lista as palavras do idioma (antes: `cargo`, `canal`, `criterios` em inglês)", async () => {
   const [pt, en] = await nos2("&acesso xyz", "&access xyz");
-  assert.match(pt, /Use: `cargo`, `canal`, `staffignora` ou `status`\./);
-  assert.match(en, /Use: `role`, `channel`, `staffbypass` or `status`\./);
+  // (P7, 20 out 2026) + `livre` / `free`
+  assert.match(pt, /Use: `cargo`, `canal`, `staffignora`, `livre` ou `status`\./);
+  assert.match(en, /Use: `role`, `channel`, `staffbypass`, `free` or `status`\./);
   const [pt2, en2] = await nos2("&modia xyz", "&modia xyz");
   assert.match(pt2, /Use: `on`, `off`, `criterios`, `canal`, `limpar` ou `status`\./);
   assert.match(en2, /Use: `on`, `off`, `criteria`, `channel`, `clear` or `status`\./);
@@ -15629,11 +16431,8 @@ await t("toda página de ajuda do registro tem o espanhol (cada `{ pt, en }` tem
 });
 const esSid = await servidorNovo("es");
 const paginaEs = {};
-// `&help config` abre o grupo Personalizar (o `config` é nome de grupo da ajuda e o
-// grupo vence) — em pt e en também, desde antes da etapa 4; anotado no REFATORACAO
-const SEM_PAGINA = new Set(["config"]);
-for (const id of ajudaReg.COMANDOS_COM_AJUDA) if (!SEM_PAGINA.has(id)) paginaEs[id] = (await say(`&ayuda ${nomeEs(id)}`, esSid)).texto;
-await t(`servidor em espanhol: as ${ajudaReg.COMANDOS_COM_AJUDA.length - SEM_PAGINA.size} páginas do registro saem em espanhol, com os nomes em espanhol`, () => {
+for (const id of ajudaReg.COMANDOS_COM_AJUDA) paginaEs[id] = (await say(`&ayuda ${nomeEs(id)}`, esSid)).texto;
+await t(`servidor em espanhol: as ${ajudaReg.COMANDOS_COM_AJUDA.length} páginas do registro saem em espanhol, com os nomes em espanhol`, () => {
   const ruins = [];
   for (const [id, txt] of Object.entries(paginaEs)) {
     const ponha = (m) => ruins.push(`${id}: ${m}`);
@@ -15746,6 +16545,17 @@ await t("ninguém lê `config.language === \"en\"` direto (o espanhol cairia no 
   }
   assert.deepEqual(ruins, []);
 });
+await t("`&help config` abre a página do &config (todas as configurações do servidor), em pt, en e es — antes abria o grupo Personalizar", async () => {
+  const casos = [["pt", ["config", "configuração", "configuracao"], /^📖 Ajuda — &config\n\*\*Uso:\*\* `&config`[\s\S]*Mostra TODAS as configurações/],
+    ["en", ["config", "settings", "configuration"], /^📖 Help — &config\n\*\*Usage:\*\* `&config`[\s\S]*Shows ALL of the server's current settings/],
+    ["es", ["config", "configuración", "configuracion"], /^📖 Ayuda — &config\n\*\*Uso:\*\* `&config`[\s\S]*Muestra TODAS las configuraciones/]];
+  for (const [lang, palavras, esperado] of casos) {
+    const sid = await servidorNovo(lang);
+    for (const p of palavras) assert.match((await say(`&help ${p}`, sid)).texto, esperado, `${lang} &help ${p}`);
+  }
+  // o grupo continua com o nome dele
+  assert.match((await say("&help personalizar", await servidorNovo("pt"))).texto, /^🎨 Personalizar/);
+});
 await t("`&help tutorial` em inglês: os apelidos com o nome deles (antes: \"`&tutorial` and `&tutorial`\")", async () => {
   const r = (await say("&help tutorial", await servidorNovo("en"))).texto;
   assert.match(r, /Also answers to \*\*guide\*\* and \*\*start\*\*/);
@@ -15754,6 +16564,494 @@ await t("`&help tutorial` em inglês: os apelidos com o nome deles (antes: \"`&t
 
 console.log(`\nCOMANDOS (17 out): ${ok} ok, ${falhou} falha(s)`);
 process.exit(falhou ? 1 : 0);
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+// privacidade-20out — a memória da IA com consentimento (P1, 20 out 2026)
+// ════════════════════════════════════════════════════════════════════════════
+// As regras do Stoat proíbem juntar dado pessoal sem consentimento, e as
+// políticas novas para bots pedem opt-in. A Judy observava TODA mensagem e
+// guardava fatos de todo mundo; qualquer um mapeava e lia o perfil de outra
+// pessoa. Cada bloco falha com o código de antes.
+SUITES["privacidade-20out"] = async () => {
+const fs = (await import("node:fs")).default;
+const assert = (await import("node:assert")).default;
+const DB = "/tmp/priv20.db";
+for (const f of [DB, DB + "-wal", DB + "-shm", "/tmp/priv20.json"]) fs.rmSync(f, { force: true });
+Object.assign(process.env, { BOT_TOKEN: "tok", DB_PATH: DB, CONFIG_PATH: "/tmp/priv20.json", SUPER_ADMINS: "DONO",
+  LLM_URL: "http://localhost:8097", CHAT_SERVIDORES: "*", BUSCA_ATIVA: "false", MEMORIA_DEBOUNCE_MS: "20" });
+delete process.env.IA_SERVICO_URL;
+// o LLM de mentira: o extrator de fatos recebe um fato com a evidência literal;
+// a conversa recebe uma resposta curta; o resto (decisões em JSON) um JSON neutro
+const pedidosLLM = [];
+globalThis.fetch = async (url, op) => {
+  if (/8097/.test(String(url))) {
+    if (!op?.body) return { ok: true, status: 200, json: async () => ({ data: [{ id: "teste" }] }), text: async () => "{}" };   // /v1/models: no ar
+    const corpo = JSON.parse(op.body); pedidosLLM.push(corpo);
+    const sys = String(corpo.messages?.[0]?.content ?? "");
+    let content = corpo.response_format ? '{"buscar":false,"consultas":[]}' : "Oi! Tudo certo por aqui.";
+    if (/extrai fatos/.test(sys)) content = '{"personalidade":[],"gosto":[{"fato":"adora gatos de rua","evidencia":"adoro gatos de rua"}],"info":[],"servidor":[]}';
+    return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content }, finish_reason: "stop" }], usage: {} }) };
+  }
+  return /stoat\.chat|stoatusercontent|\/servers\/|\/channels\/|\/users\//.test(String(url))
+    ? { ok: true, status: 200, text: async () => "{}", json: async () => ({}), headers: new Map() }
+    : { ok: false, status: 503, text: async () => "", json: async () => ({}), headers: new Map() };
+};
+const quieto = async (fn) => { const o = [console.log, console.info, console.warn, console.error]; console.log = console.info = console.warn = console.error = () => {}; try { return await fn(); } finally { [console.log, console.info, console.warn, console.error] = o; } };
+await quieto(() => import("./main.js"));
+const db = await import("./modulos/core/db.js");
+const consent = await import("./modulos/ai/consentimento.js");
+const c = globalThis.__client;
+await quieto(() => c.emitAll("ready"));
+const BOT = c.user.id;
+const SID = "01KPRIV000000000000000SRV1", CA = "01KPRIV000000000000000CAN1", CB = "01KPRIV000000000000000CAN2";
+const saidas = [];
+const textoDe = (p) => typeof p === "string" ? p : `${p?.embeds?.[0]?.title ?? ""}\n${p?.embeds?.[0]?.description ?? ""}${typeof p?.content === "string" ? "\n" + p.content : ""}`;
+const canal = (id) => ({ id, serverId: SID, name: "geral", type: "TextChannel", nsfw: false,
+  sendMessage: async (p) => { saidas.push(textoDe(p)); return { id: "M" + saidas.length, edit: async (q) => { saidas.push(textoDe(q)); }, react: async () => {}, delete: async () => {} }; },
+  fetchMessages: async () => [], deleteMessages: async () => {} });
+const canais = { [CA]: canal(CA), [CB]: canal(CB) };
+const pessoa = (uid, staff) => ({ id: { server: SID, user: uid }, roles: [], hasPermission: () => staff, user: { id: uid, username: uid }, nickname: uid, joinedAt: new Date(0) });
+const membros = { DONO: pessoa("DONO", true), ANA: pessoa("ANA", false), BIA: pessoa("BIA", false), CAIO: pessoa("CAIO", false) };
+const server = { id: SID, ownerId: "DONO", name: "Teste", roles: new Map(), channels: Object.values(canais), channelIds: new Set([CA, CB]), member: { roles: [] }, havePermission: () => true,
+  fetchMember: async (u) => membros[String(u?.id ?? u?.user ?? u)] ?? membros.DONO, fetchMembers: async () => ({ members: Object.values(membros), users: [] }), fetchBans: async () => [] };
+c.servers.set(SID, server); for (const x of Object.values(canais)) c.channels.set(x.id, x);
+for (const u of Object.keys(membros)) c.users.set(u, { id: u, username: u, bot: false });
+let n = 0;
+async function diz(autor, conteudo, canalId = CA) {
+  saidas.length = 0;
+  const ev = { id: "X" + (++n), authorId: autor, content: conteudo, serverId: SID, server, channel: canais[canalId], channelId: canalId,
+    mentionIds: [...conteudo.matchAll(/<@(\w+)>/g)].map((m) => m[1]), createdAt: new Date(), author: { id: autor, username: autor, bot: false },
+    member: membros[autor], replyIds: [], attachments: [] };
+  await quieto(() => Promise.race([c.emitAll("messageCreate", ev), new Promise((r) => setTimeout(r, 6000))]));
+  return saidas.join("\n");
+}
+const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
+// uma conexão à parte, para mexer no banco como o tempo mexeria (datas, marcas)
+const { DatabaseSync } = await import("node:sqlite");
+const bruto = (arq) => new DatabaseSync(arq);
+await diz("DONO", "&idioma pt");
+
+let ok = 0, falhou = 0;
+const t = async (nome, fn) => { try { await fn(); console.log(`  ✅ ${nome}`); ok++; } catch (e) { console.log(`  ❌ ${nome}\n     ${String(e.message).split("\n").join("\n     ")}`); falhou++; } };
+const fatos = (u) => db.resumoIADaPessoa(u, SID).fatosTotal;
+
+console.log("── a memória passiva só de quem aceitou ──");
+await t("mensagem comum de quem NÃO aceitou não vira fato (antes: toda mensagem de todo mundo ia ao extrator)", async () => {
+  pedidosLLM.length = 0;
+  await diz("ANA", "eu adoro gatos de rua, tenho três em casa");
+  await esperar(300);
+  assert.equal(fatos("ANA"), 0);
+  assert.equal(pedidosLLM.filter((p) => /extrai fatos/.test(String(p.messages?.[0]?.content))).length, 0, "nem chegou ao extrator");
+});
+await t("de quem aceitou (`&privacidade memoria on`), vira", async () => {
+  await diz("BIA", "&privacidade memoria on");
+  await diz("BIA", "eu adoro gatos de rua, tenho três em casa");
+  await esperar(300);
+  assert.ok(fatos("BIA") > 0, "o fato da Bia entrou");
+});
+await t("desligar (`&privacidade memoria off`) apaga o que a Judy sabia, em todos os servidores — a marca de gentileza fica", async () => {
+  db.addFatoPessoa("OUTRO-SERVIDOR", "BIA", "mora em Madri", 0.5, "info");
+  db.setCuidado(SID, "BIA", true);
+  const r = await diz("BIA", "&privacidade memoria off");
+  assert.match(r, /Memória desligada[\s\S]*apaguei \d+ registro/);
+  assert.equal(fatos("BIA"), 0);
+  assert.equal(db.getPerfil(SID, "BIA")?.cuidado, 1);
+  assert.equal(db.temMemoriaConsentida("BIA"), false);
+});
+
+console.log("\n── a Judy pergunta, como uma usuária ──");
+await t("primeira conversa com ela: responde e PERGUNTA se pode lembrar; um \"sim\" comum no mesmo canal liga a memória", async () => {
+  const r = await diz("CAIO", `<@${BOT}> oi, tudo bem?`);
+  assert.match(r, /Oi! Tudo certo por aqui\./);
+  assert.match(r, /posso guardar o que você me conta pra lembrar de você nas próximas conversas\?[\s\S]*\*\*sim\*\* ou \*\*não\*\*/);
+  assert.equal(db.getConsentimento("CAIO")?.memoria, 0);
+  const s = await diz("CAIO", "sim!");
+  assert.match(s, /Combinado! Vou lembrar de você/);
+  assert.equal(db.temMemoriaConsentida("CAIO"), true);
+});
+await t("quem já respondeu não é perguntado de novo; quem não respondeu, só depois de uma semana", async () => {
+  assert.doesNotMatch(await diz("CAIO", `<@${BOT}> e aí?`), /posso guardar/);
+  const r1 = await diz("ANA", `<@${BOT}> oi`);
+  assert.match(r1, /posso guardar/);
+  assert.doesNotMatch(await diz("ANA", `<@${BOT}> oi de novo`), /posso guardar/, "sem resposta, não insiste na mesma semana");
+  assert.equal(consent.precisaPerguntar("ANA", Date.now() + 8 * 86_400_000), true, "depois de 7 dias pergunta outra vez");
+});
+await t("\"não\" desliga e apaga; \"sim\" de outra pessoa, de outro canal ou fora do prazo não vale", async () => {
+  // a Ana foi perguntada no canal A (bloco anterior)
+  assert.equal(await consent.tratarResposta({ authorId: "BIA", channelId: CA, content: "sim", channel: canais[CA] }, { PREFIXO: "&", config: { language: "pt" } }), false, "outra pessoa");
+  assert.equal(await consent.tratarResposta({ authorId: "ANA", channelId: CB, content: "sim", channel: canais[CB] }, { PREFIXO: "&", config: { language: "pt" } }), false, "outro canal");
+  assert.equal(await consent.tratarResposta({ authorId: "ANA", channelId: CA, content: "sim", channel: canais[CA] }, { PREFIXO: "&", config: { language: "pt" } }, Date.now() + 31 * 60_000), false, "fora do prazo");
+  db.addFatoPessoa(SID, "DONO", "x", 0.5);
+  await diz("DONO", `<@${BOT}> oi`);
+  const r = await diz("DONO", "não");
+  assert.match(r, /Tudo bem, não guardo nada/);
+  assert.equal(db.getConsentimento("DONO")?.memoria, 0);
+  assert.ok(db.getConsentimento("DONO")?.respondidoEm);
+  assert.equal(fatos("DONO"), 0);
+});
+await t("a pergunta e a confirmação saem no idioma do servidor (en e es)", () => {
+  assert.match(consent.textoPergunta("en"), /can I keep what you tell me[\s\S]*`&privacy`/);
+  assert.match(consent.textoPergunta("es"), /¿puedo guardar lo que me cuentas[\s\S]*`&privacidad`/);
+  assert.match(consent.textoConfirmacao("es", true), /¡Hecho![\s\S]*`&privacidad memoria off`/);
+  for (const [x, v] of [["Sim!", true], ["claro 🙂", true], ["yes", true], ["sí", true], ["não", false], ["nope", false], ["no gracias", false], ["sim, mas me conta uma coisa", null], ["talvez", null]])
+    assert.equal(consent.lerResposta(x), v, x);
+});
+await t("sem consentimento, a conversa não grava \"perguntou sobre…\" na memória global", async () => {
+  await diz("ANA", `<@${BOT}> me fala de gatos`);
+  assert.equal(db.getMemoria("ANA").fatos.length, 0);
+  await diz("CAIO", `<@${BOT}> me fala de gatos`);
+  assert.ok(db.getMemoria("CAIO").fatos.some((f) => /gatos/.test(f)), "com consentimento, grava");
+});
+await t("sem consentimento, o que ficou no banco não chega ao modelo (memória global e fatos)", async () => {
+  db.setMemoria("ANA", { nome: "ANA", fatos: ["segredo-xyz-global"] });
+  db.addFatoPessoa(SID, "ANA", "segredo-xyz-fato", 0.9, "info");
+  pedidosLLM.length = 0;
+  await diz("ANA", `<@${BOT}> o que você sabe de mim?`);
+  const tudo = JSON.stringify(pedidosLLM);
+  assert.ok(pedidosLLM.length > 0);
+  assert.ok(!tudo.includes("segredo-xyz-global") && !tudo.includes("segredo-xyz-fato"), "vazou para o prompt");
+  db.limparMemoria("ANA"); db.apagarMemoriaDaPessoaGlobal("ANA");
+});
+
+console.log("\n── perfil: só o seu ──");
+await t("`&chat mapear @outra` e `&chat perfil @outra` são recusados (era o scraping de perfil que a regra do Stoat proíbe)", async () => {
+  for (const sub of ["mapear", "perfil"]) {
+    const r = await diz("BIA", `&chat ${sub} <@ANA>`);
+    assert.match(r, /🔒 Só o seu/, sub);
+  }
+  assert.equal(db.getPerfil(SID, "ANA"), null, "nada foi capturado");
+  assert.doesNotMatch(await diz("BIA", "&chat perfil"), /Só o seu/, "o próprio continua valendo");
+});
+
+console.log("\n── histórico: 24 h, e o fio global de quem escolheu ──");
+await t("o histórico de conversa com mais de 24 h é apagado (antes: ficava para sempre)", () => {
+  db.addHistorico("ANA", "user", "recente", { serverId: SID, canalId: CA });
+  db.addHistorico("ANA", "user", "antigo", { serverId: SID, canalId: CA });
+  const velho = new Date(Date.now() - 25 * 3600_000).toISOString();
+  bruto(DB).prepare("UPDATE ia_historico SET momento = ? WHERE conteudo = 'antigo'").run(velho);
+  assert.ok(db.podarHistoricoIA() >= 1);
+  const resto = db.getHistorico("ANA", 50, { canalId: CA, minutos: 48 * 60 }).map((h) => h.conteudo);
+  assert.ok(resto.includes("recente") && !resto.includes("antigo"), resto.join(","));
+});
+await t("`&privacidade fio global`: a conversa continua em outro canal; sem isso, cada canal tem a sua", async () => {
+  // a Ana não ligou a memória: o que passa de um canal a outro é só o fio
+  await diz("ANA", `<@${BOT}> meu número da sorte é 4271`, CA);
+  pedidosLLM.length = 0;
+  await diz("ANA", `<@${BOT}> qual é o meu número?`, CB);
+  const viu = () => pedidosLLM.some((p) => JSON.stringify(p.messages ?? []).includes("4271"));
+  assert.equal(viu(), false, "por canal: o canal B não vê a conversa do A");
+  await diz("ANA", "&privacidade fio global");
+  pedidosLLM.length = 0;
+  await diz("ANA", `<@${BOT}> qual é o meu número?`, CB);
+  assert.equal(viu(), true, "global: vê");
+});
+
+console.log("\n── P2: apagar tudo o que é seu ──");
+const reten = await import("./modulos/core/retencao.js");
+await t("`&privacidade apagar` pede código; com o código certo apaga IA, XP, saldo e RPG — e mantém avisos, punições e bans", async () => {
+  const B = bruto(DB);
+  const eco = await import("./modulos/ferramentas/economia.js");
+  await diz("ANA", "&economia");   // cria as tabelas da economia
+  B.prepare("INSERT OR REPLACE INTO eco_saldos (serverId, userId, saldo) VALUES (?, 'ANA', 50)").run(SID);
+  B.prepare("INSERT OR REPLACE INTO xp_usuarios (serverId, userId, xp, nivel) VALUES (?, 'ANA', 300, 2)").run(SID);
+  B.prepare("INSERT INTO rpg_personagem (serverId, userId, nome, criadoEm) VALUES ('MUNDO-X', 'ANA', 'Ana', '2026-10-20')").run();
+  db.addFatoPessoa(SID, "ANA", "gosta de chá", 0.9);
+  db.gravarPunicao(SID, "ANA", { avisos: 2, motivo: "flood" });
+  B.prepare("INSERT INTO bans_globais (userId, serverId, motivo, origem, criadoEm) VALUES ('ANA', ?, 'raid', 'manual', 1)").run(SID);
+  const pedido = await diz("ANA", "&privacidade apagar");
+  assert.match(pedido, /Apagar tudo o que é seu\?[\s\S]*XP e nível: \*\*1\*\*[\s\S]*saldo da economia: \*\*1\*\*[\s\S]*Fica: avisos, punições/);
+  const codigo = pedido.match(/apagar confirmar ([0-9A-F]{4})/)?.[1];
+  assert.ok(codigo, pedido);
+  assert.match(await diz("ANA", "&privacidade apagar confirmar 0000"), /Código errado/);
+  // o código vale 2 minutos
+  const agoraReal = Date.now; Date.now = () => agoraReal() + 3 * 60_000;
+  try { assert.match(await diz("ANA", `&privacidade apagar confirmar ${codigo}`), /Código errado ou vencido/); } finally { Date.now = agoraReal; }
+  const p2 = await diz("ANA", "&privacidade apagar");
+  const c2 = p2.match(/apagar confirmar ([0-9A-F]{4})/)?.[1];
+  assert.match(await diz("ANA", `&privacidade apagar confirmar ${c2}`), /Apaguei \*\*\d+\*\* registro/);
+  const n = (sql) => B.prepare(sql).get()?.n;
+  assert.equal(n("SELECT COUNT(*) n FROM eco_saldos WHERE userId = 'ANA'"), 0);
+  assert.equal(n("SELECT COUNT(*) n FROM xp_usuarios WHERE userId = 'ANA'"), 0);
+  assert.equal(n("SELECT COUNT(*) n FROM rpg_personagem WHERE userId = 'ANA'"), 0);
+  assert.equal(n("SELECT COUNT(*) n FROM ia_fatos_pessoa WHERE userId = 'ANA'"), 0);
+  assert.equal(n("SELECT COUNT(*) n FROM punicoes WHERE userId = 'ANA'"), 1, "punição fica");
+  assert.equal(n("SELECT COUNT(*) n FROM bans_globais WHERE userId = 'ANA'"), 1, "ban fica");
+  assert.ok(db.getConsentimento("ANA")?.respondidoEm && db.getConsentimento("ANA").memoria === 0, "a escolha fica: não pergunta de novo");
+  void eco;
+});
+
+console.log("\n── P2: o servidor de onde a Judy saiu ──");
+await t("saiu (serverLeave): conta 30 dias; voltou (serverCreate) antes: nada é apagado", async () => {
+  const OUT = "01KPRIV000000000000000OUT1";
+  db.gravarConfig(OUT, { language: "pt" });
+  await quieto(() => c.emitAll("serverLeave", { id: OUT }));
+  assert.ok(reten.saidaDe(OUT), "marcado");
+  await quieto(() => c.emitAll("serverCreate", { id: OUT, members: [] }));
+  assert.equal(reten.saidaDe(OUT), null, "desmarcado");
+  await quieto(() => c.emitAll("serverDelete", { id: OUT }));
+  assert.ok(reten.saidaDe(OUT), "serverDelete também marca");
+});
+await t("depois de 30 dias, TUDO do servidor some (config, XP, punições, tickets, feeds…) — e nada dos outros", () => {
+  const OUT = "01KPRIV000000000000000OUT2", FICA = "01KPRIV000000000000000FICA";
+  const B = bruto(DB);
+  for (const sid of [OUT, FICA]) {
+    db.gravarConfig(sid, { language: "pt" });
+    B.prepare("INSERT OR REPLACE INTO xp_usuarios (serverId, userId, xp, nivel) VALUES (?, 'U', 1, 0)").run(sid);
+    db.gravarPunicao(sid, "U", { avisos: 1 });
+    B.prepare("INSERT INTO rss_feeds (serverId, url, titulo, criadoEm) VALUES (?, ?, 't', 1)").run(sid, "https://" + sid + ".example/feed");
+  }
+  const feedOut = B.prepare("SELECT id FROM rss_feeds WHERE serverId = ?").get(OUT).id;
+  B.prepare("INSERT INTO rss_vistos (feedId, guid, vistoEm) VALUES (?, 'g', 1)").run(feedOut);
+  reten.marcarSaida(OUT, new Date(Date.now() - 29 * 86_400_000));
+  assert.deepEqual(reten.limparServidoresQueSairam(), [], "29 dias: ainda não");
+  B.prepare("UPDATE servidores_saida SET saiuEm = ? WHERE serverId = ?").run(new Date(Date.now() - 31 * 86_400_000).toISOString(), OUT);
+  const r = reten.limparServidoresQueSairam();
+  assert.equal(r.length, 1); assert.equal(r[0].serverId, OUT);
+  const n = (t, sid) => B.prepare(`SELECT COUNT(*) n FROM ${t} WHERE serverId = ?`).get(sid).n;
+  for (const tb of ["config", "xp_usuarios", "punicoes", "rss_feeds"]) { assert.equal(n(tb, OUT), 0, `${tb} de quem saiu`); assert.equal(n(tb, FICA), 1, `${tb} do outro`); }
+  assert.equal(B.prepare("SELECT COUNT(*) n FROM rss_vistos WHERE feedId = ?").get(feedOut).n, 0, "as notícias vistas do feed apagado");
+  assert.equal(reten.saidaDe(OUT), null);
+});
+await t("na subida: servidor com config onde a Judy não está entra na contagem; o que está, sai dela", () => {
+  const LONGE = "01KPRIV000000000000000LONG";
+  db.gravarConfig(LONGE, { language: "pt" });
+  reten.marcarSaida(SID);
+  const r = reten.conferirSaidas([SID]);
+  assert.ok(reten.saidaDe(LONGE), "o ausente foi marcado");
+  assert.equal(reten.saidaDe(SID), null, "o presente foi desmarcado");
+  assert.ok(r.saiu >= 1 && r.voltou === 1);
+  assert.equal(reten.saidaDe("__global__"), null, "as configs internas não são servidor");
+});
+
+console.log("\n── P2: o log com pseudônimos ──");
+await t("o ID do Stoat sai no log como pseudônimo estável (o conteúdo fica) — e o dono calcula o de um ID", async () => {
+  const pseudo = await import("./modulos/core/pseudonimo.js");
+  // IDs do Stoat são ULID (Crockford: sem I, L, O, U)
+  const ID1 = "01KAAAAAAAAAAAAAAAAAAAAAA1", ID2 = "01KAAAAAAAAAAAAAAAAAAAAAA2";
+  assert.equal(pseudo.pseudonimo(ID1), pseudo.pseudonimo(ID1));
+  assert.notEqual(pseudo.pseudonimo(ID1), pseudo.pseudonimo(ID2));
+  // o main.js instala antes de tudo (a 2ª linha de import, logo depois do .env)…
+  const linhasMain = fs.readFileSync("main.js", "utf8").split("\n").filter((l) => /^import /.test(l));
+  assert.equal(linhasMain[1], "import './modulos/core/log-anonimo.js';   // privacidade: IDs do Stoat viram pseudônimo no log");
+  // …e o console embrulhado troca o ID (aqui numa cópia nova do módulo: o `quieto` desta
+  // suíte devolve o console de antes ao importar o main.js)
+  const copia = await import("./modulos/core/pseudonimo.js?console");
+  const consoleAntes = { log: console.log, info: console.info, warn: console.warn, error: console.error };
+  const escrito = [];
+  const w = process.stdout.write.bind(process.stdout);
+  copia.instalarNoConsole();
+  process.stdout.write = (x, ...r) => { escrito.push(String(x)); return true; };
+  try { console.info(`[MSG] ${ID1} no canal ${ID2}: "oi gente"`); } finally { process.stdout.write = w; Object.assign(console, consoleAntes); }
+  const linha = escrito.join("");
+  assert.ok(!linha.includes(ID1) && !linha.includes(ID2), linha);
+  assert.ok(linha.includes(pseudo.pseudonimo(ID1)) && linha.includes("oi gente"), linha);
+  assert.ok(fs.existsSync("/tmp/log-segredo.key") || process.env.LOG_SEGREDO, "o segredo fica ao lado do banco");
+  const r = await diz("DONO", `&servidores pseudonimo ${ID1}`);
+  assert.ok(r.includes(pseudo.pseudonimo(ID1)), r);
+  assert.match(await diz("ANA", `&servidores pseudonimo ${ID1}`), /Só o dono do bot/);
+});
+await t("o log do container tem teto, e os backups somem com 30 dias (o recém-feito fica; restaurar não poda)", () => {
+  const comp = fs.readFileSync("docker-compose.yml", "utf8");
+  assert.match(comp, /logging:\s*\n\s*driver: json-file\s*\n\s*options:\s*\n\s*max-size: "\$\{LOG_MAX_TAMANHO:-10m\}"\s*\n\s*max-file: "\$\{LOG_MAX_ARQUIVOS:-5\}"/);
+  const sh = fs.readFileSync("scripts/atualizar-minipc.sh", "utf8");
+  assert.match(sh, /DIAS_BACKUP="\$\{DIAS_BACKUP:-30\}"/);
+  assert.match(sh, /find "\$BACKUPS" -maxdepth 1 -name 'stoat-data-\*\.tgz' -mtime \+"\$\(\(DIAS_BACKUP - 1\)\)" ! -path "\$arq" -print -delete/);
+  assert.match(sh, /MANTER=100000 DIAS_BACKUP=100000 fazer_backup/);
+});
+await t("a política de privacidade existe nos três idiomas e o `&privacidade` e o `&sobre` levam a ela", async () => {
+  const pol = fs.readFileSync("PRIVACIDADE.md", "utf8");
+  for (const sec of ["## Português", "## English", "## Español"]) assert.ok(pol.includes(sec), sec);
+  assert.match(await diz("ANA", "&privacidade"), /\[Política de privacidade\]\(<https:\/\/github\.com\/GhisoOF\/stoat_bot\/blob\/main\/PRIVACIDADE\.md>\)/);
+  assert.match(await diz("ANA", "&sobre"), /\[privacidade\]\(<https:\/\/github\.com\/GhisoOF\/stoat_bot\/blob\/main\/PRIVACIDADE\.md>\)/);
+});
+
+console.log("\n── P3: XP com aviso, e cada membro escolhe ──");
+await t("ligar o XP avisa os membros (como sair, e o &privacidade) — uma vez, não a cada `on`", async () => {
+  const r = await diz("DONO", "&xp on");
+  assert.match(r, /Sistema \*\*ativado 🟢\*\*[\s\S]*🎮 O XP foi ligado neste servidor[\s\S]*`&xp sair` — o seu XP é apagado e deixa de contar[\s\S]*`&privacidade` mostra tudo/);
+  assert.doesNotMatch(await diz("DONO", "&xp on"), /O XP foi ligado neste servidor/, "já estava ligado");
+  const niv = await import("./modulos/ferramentas/nivel.js");
+  assert.match(niv.avisoXpLigado("en", "&").description, /`&xp leave`[\s\S]*`&privacy`/);
+  assert.match(niv.avisoXpLigado("es", "&").description, /`&xp salir`[\s\S]*`&privacidad`/);
+});
+await t("`&xp sair` apaga o XP da pessoa e ele para de contar; `&xp entrar` volta, do zero", async () => {
+  await diz("CAIO", "uma mensagem qualquer que conta xp");
+  assert.ok(db.getXp(SID, "CAIO").xp > 0, "contou antes");
+  assert.match(await diz("CAIO", "&xp sair"), /🚪 Fora do XP[\s\S]*foi apagado/);
+  assert.equal(db.getXp(SID, "CAIO").xp, 0);
+  await diz("CAIO", "outra mensagem que não deve contar");
+  assert.equal(db.getXp(SID, "CAIO").xp, 0, "fora, não conta");
+  assert.match(await diz("CAIO", "&privacidade"), /XP neste servidor: \*\*fora\*\* \(não conta\) — `&xp entrar`/);
+  assert.match(await diz("CAIO", "&xp entrar"), /🎮 De volta ao XP/);
+  await diz("CAIO", "e esta volta a contar");
+  assert.ok(db.getXp(SID, "CAIO").xp > 0, "voltou a contar");
+});
+
+console.log("\n── P4: o relatório de ataques ao dono, por adesão ──");
+await t("`&log relatorio on|off`: começa desligado; ligado, o servidor entra no relatório do dono ANÔNIMO; o do dono, completo", async () => {
+  const relat = await import("./modulos/ferramentas/relatorio.js");
+  const storeP = await import("./modulos/core/config-store.js");
+  assert.match(await diz("DONO", "&log"), /🔴 \*\*relatorio\*\* — relatório anônimo de ataques/);
+  assert.equal(relat.modoDe(SID), "completo", "o servidor do próprio dono (ownerId é SUPER_ADMIN)");
+  const ALHEIO = "01KAAAAAAAAAAAAAAAAAAAAAB1";
+  c.servers.set(ALHEIO, { id: ALHEIO, ownerId: "OUTRA", name: "Alheio" });
+  assert.equal(storeP.configDoServidor(ALHEIO).relatorioDono, false, "começa desligado");
+  // e um servidor que já existia (config salva de antes, sem o campo) também fica de fora
+  const VELHO = "01KAAAAAAAAAAAAAAAAAAAAAB2";
+  db.gravarConfig(VELHO, { language: "pt", automod: {} }); storeP.recarregarServidor(VELHO);
+  assert.equal(storeP.configDoServidor(VELHO).relatorioDono, false, "servidor antigo: sem adesão");
+  assert.equal(relat.modoDe(ALHEIO), null, "sem adesão: fora");
+  storeP.configDoServidor(ALHEIO).relatorioDono = true;
+  assert.equal(relat.modoDe(ALHEIO), "anonimo");
+  c.servers.delete(ALHEIO);
+  const r = await diz("DONO", "&log relatorio on");
+  assert.match(r, /Relatório de ataques ligado 🟢[\s\S]*anônimos[\s\S]*`&log relatorio off`/);
+  assert.equal(storeP.configDoServidor(SID).relatorioDono, true);
+  assert.match(await diz("DONO", "&log relatorio off"), /desligado 🔴/);
+  assert.equal(storeP.configDoServidor(SID).relatorioDono, false);
+});
+
+console.log("\n── P5: as novidades da Judy no canal de log ──");
+await t("a lista de novidades: ids únicos, a mais nova primeiro, cada uma nos três idiomas", async () => {
+  const nov = await import("./modulos/ferramentas/novidades.js");
+  const ids = nov.NOVIDADES.map((n) => n.id);
+  assert.equal(new Set(ids).size, ids.length);
+  for (const n of nov.NOVIDADES) for (const l of ["pt", "en", "es"]) assert.ok(String(n[l] ?? "").trim(), `${n.id} sem ${l}`);
+  const datas = nov.NOVIDADES.map((n) => n.data);
+  assert.deepEqual(datas, [...datas].sort().reverse());
+  // os comandos no texto viram o nome no idioma do servidor (nada de `{&…}` cru)
+  const emb = (l) => nov.embedNovidades(nov.NOVIDADES.filter((n) => n.id === "2026-10-20-privacidade"), l, "&", {}).description;
+  for (const l of ["pt", "en", "es"]) assert.ok(!emb(l).includes("{&"), `${l}: marcador cru`);
+  assert.ok(emb("pt").includes("`&privacidade apagar`") && emb("pt").includes("`&log relatorio on`"));
+  assert.ok(emb("en").includes("`&privacy delete`") && emb("en").includes("`&xp leave`"));
+  assert.ok(emb("es").includes("`&privacidad borrar`") && emb("es").includes("`&log actualizaciones on`"));
+  // e o main.js chama na subida: nesta (a primeira deste banco) só gravou a marca
+  const storeP = await import("./modulos/core/config-store.js");
+  assert.equal(storeP.getGlobal().novidadesAnunciadas, nov.NOVIDADES[0].id);
+});
+await t("na subida: a 1ª vez só grava a marca; depois, anuncia o que é novo SÓ onde ligaram `&log atualizacoes on`, no idioma do servidor, uma vez", async () => {
+  const nov = await import("./modulos/ferramentas/novidades.js");
+  const lista = [{ id: "n3", data: "2026-10-22", pt: "terceira pt", en: "third en", es: "tercera es" },
+    { id: "n2", data: "2026-10-21", pt: "segunda pt", en: "second en", es: "segunda es" },
+    { id: "n1", data: "2026-10-20", pt: "primeira pt", en: "first en", es: "primera es" }];
+  const cfgs = {
+    A: { language: "es", log: { canalId: "CA", eventos: { atualizacoes: true } } },
+    B: { language: "pt", log: { canalId: "CB", eventos: { atualizacoes: false } } },
+    C: { language: "pt", log: { canalId: "CC", eventos: { atualizacoes: true } } },   // o canal é de OUTRO servidor
+  };
+  const canais = { CA: { id: "CA", serverId: "A" }, CB: { id: "CB", serverId: "B" }, CC: { id: "CC", serverId: "X" } };
+  const cliente = { servers: new Map(Object.keys(cfgs).map((k) => [k, { id: k }])), channels: { get: (id) => canais[id] } };
+  const enviados = [];
+  let salvou = 0;
+  const g = {};
+  const base = { client: cliente, global: g, salvarGlobal: () => salvou++, configDoServidor: (id) => cfgs[id], enviar: async (canal, e) => enviados.push([canal.id, e]), lista };
+  assert.deepEqual(await nov.anunciar(base), { enviados: 0, novas: 0, primeira: true });
+  assert.equal(g.novidadesAnunciadas, "n3"); assert.equal(enviados.length, 0);
+  g.novidadesAnunciadas = "n1";
+  const r = await nov.anunciar(base);
+  assert.deepEqual(r, { enviados: 1, novas: 2 });
+  assert.equal(enviados[0][0], "CA");
+  assert.match(enviados[0][1].title, /Novedades de Judy/);
+  assert.match(enviados[0][1].description, /tercera es[\s\S]*segunda es[\s\S]*`&log actualizaciones off`/);
+  assert.doesNotMatch(enviados[0][1].description, /primera/);
+  assert.equal(g.novidadesAnunciadas, "n3");
+  assert.deepEqual(await nov.anunciar(base), { enviados: 0, novas: 0 }, "não repete");
+  assert.equal(enviados.length, 1);
+});
+await t("`&log atualizacoes on|off`: começa desligado e liga como os outros eventos", async () => {
+  assert.match(await diz("DONO", "&log"), /🔴 \*\*atualizacoes\*\* — novidades da Judy a cada atualização/);
+  await diz("DONO", "&log atualizacoes on");
+  const storeP = await import("./modulos/core/config-store.js");
+  assert.equal(storeP.configDoServidor(SID).log.eventos.atualizacoes, true);
+  await diz("DONO", "&log atualizacoes off");
+  assert.equal(storeP.configDoServidor(SID).log.eventos.atualizacoes, false);
+});
+
+console.log("\n── P3: servidor novo com todos os módulos desligados ──");
+await t("mesmo com um molde antigo todo ligado no banco, o servidor novo (e o &reset) nasce com tudo desligado", async () => {
+  const store = await import("./modulos/core/config-store.js");
+  const M2 = "/tmp/priv20-molde.db";
+  for (const f of [M2, M2 + "-wal", M2 + "-shm"]) fs.rmSync(f, { force: true });
+  db.abrirBanco(M2);
+  const molde = structuredClone(store.padraoServidor);
+  for (const v of Object.values(molde.automod)) if (v && typeof v === "object" && "enabled" in v) v.enabled = true;
+  Object.assign(molde, { xp: { ...molde.xp, enabled: true }, moderacaoIA: { ...molde.moderacaoIA, ativa: true }, banGlobal: { ...molde.banGlobal, modo: "banir" },
+    chatLivre: { ...molde.chatLivre, canais: ["C"] }, comentarioEspontaneo: { ...molde.comentarioEspontaneo, canalId: "C" },
+    boasVindas: { ativo: true }, adeus: { ativo: true }, tts: { ativo: true }, relatorioDono: true });
+  db.gravarConfig("__global__", { debug: true });
+  db.gravarConfig("__default__", molde);
+  store.inicializar(null, M2);
+  for (const cfg of [store.configDoServidor("01KAAAAAAAAAAAAAAAAAAANOVO"), store.configDeFabrica()]) {
+    const ligados = Object.entries(cfg.automod).filter(([, v]) => v?.enabled).map(([k]) => k);
+    assert.deepEqual(ligados, []);
+    assert.equal(cfg.xp.enabled, false); assert.equal(cfg.moderacaoIA.ativa, false); assert.equal(cfg.banGlobal.modo, "off");
+    assert.deepEqual(cfg.chatLivre.canais, []); assert.equal(cfg.comentarioEspontaneo.canalId, null);
+    for (const k of ["boasVindas", "adeus", "tts"]) assert.ok(!cfg[k]?.ativo, k);
+    assert.equal(cfg.relatorioDono, false, "o relatório de ataques ao dono (P4)");
+  }
+  db.abrirBanco(DB);
+});
+
+console.log("\n── a memória antiga é apagada uma vez ──");
+await t("ao abrir o banco, a memória juntada sem consentimento some — uma vez só (o que vier depois fica)", () => {
+  const M = "/tmp/priv20-mig.db";
+  for (const f of [M, M + "-wal", M + "-shm"]) fs.rmSync(f, { force: true });
+  db.abrirBanco(M);
+  // simula o banco de antes: dados nas cinco tabelas e sem a marca da migração
+  db.addFatoPessoa("S", "U", "fato velho", 0.5); db.addFatoServidor("S", "piada velha");
+  db.setPerfil("S", "U", { bio: "bio velha" }); db.setMemoria("U", { nome: "U", fatos: ["a"] });
+  db.addHistorico("U", "user", "oi", { serverId: "S", canalId: "C" });
+  bruto(M).exec("DELETE FROM migracoes");
+  db.abrirBanco(M);
+  for (const tb of ["ia_fatos_pessoa", "ia_fatos_servidor", "ia_perfil", "ia_memoria", "ia_historico"])
+    assert.equal(bruto(M).prepare(`SELECT COUNT(*) n FROM ${tb}`).get()?.n, 0, tb);
+  db.addFatoPessoa("S", "U", "fato novo", 0.5);
+  db.abrirBanco(M);
+  assert.equal(bruto(M).prepare("SELECT COUNT(*) n FROM ia_fatos_pessoa").get()?.n, 1, "a segunda abertura não apaga de novo");
+  db.abrirBanco(DB);
+});
+
+console.log("\n── revisão do P1: o consentimento até a hora de gravar ──");
+const memAg = await import("./modulos/ai/memoria-agente.js");
+const fetchOriginal = globalThis.fetch;
+let aoExtrair = null;   // roda quando o extrator de fatos chama o modelo
+globalThis.fetch = async (url, op) => {
+  if (aoExtrair && /extrai fatos/.test(String(op?.body ?? ""))) { const f = aoExtrair; aoExtrair = null; f(); }
+  return fetchOriginal(url, op);
+};
+await t("★ desligou a memória enquanto a mensagem esperava o debounce: nenhum fato entra (antes: entrava depois do apagar)", async () => {
+  db.setConsentimento("CAIO", { memoria: true, fioGlobal: false, respondido: true });
+  const antes = fatos("CAIO");
+  pedidosLLM.length = 0;
+  memAg.observar({ serverId: SID, userId: "CAIO", nome: "CAIO", texto: "eu adoro gatos de rua, tenho três em casa", ehBot: false });
+  db.setConsentimento("CAIO", { memoria: false, fioGlobal: false, respondido: true });
+  await esperar(300);
+  assert.equal(fatos("CAIO"), antes);
+  assert.equal(pedidosLLM.filter((p) => /extrai fatos/.test(String(p.messages?.[0]?.content))).length, 0, "nem o texto foi ao modelo");
+});
+await t("★ desligou enquanto o modelo extraía: o que ele achou não é gravado", async () => {
+  db.setConsentimento("CAIO", { memoria: true, fioGlobal: false, respondido: true });
+  const antes = fatos("CAIO");
+  aoExtrair = () => db.setConsentimento("CAIO", { memoria: false, fioGlobal: false, respondido: true });
+  memAg.observar({ serverId: SID, userId: "CAIO", nome: "CAIO", texto: "eu adoro gatos de rua, tenho três em casa", ehBot: false });
+  await esperar(300);
+  assert.equal(aoExtrair, null, "o modelo foi chamado");
+  assert.equal(fatos("CAIO"), antes);
+});
+await t("★ quem não aceitou: nem o tom da conversa vem de fato guardado (antes: a personalidade ia ao prompt)", async () => {
+  assert.equal(db.temMemoriaConsentida("ANA"), false);
+  db.addFatoPessoa(SID, "ANA", "adora provocar todo mundo no servidor", 0.9, "personalidade");
+  pedidosLLM.length = 0;
+  await diz("ANA", `<@${BOT}> me conta uma piada`);
+  const prompts = pedidosLLM.map((p) => JSON.stringify(p.messages));
+  assert.ok(prompts.length, "a conversa chamou o modelo");
+  assert.ok(!prompts.some((x) => x.includes("adora provocar")), "o fato de quem não aceitou foi ao prompt");
+});
+globalThis.fetch = fetchOriginal;
+
+console.log(`\nPRIVACIDADE (20 out): ${ok} ok, ${falhou} falha(s)`);
+if (falhou) process.exitCode = 1;
 };
 
 // ── O executor ───────────────────────────────────────────────────────────────

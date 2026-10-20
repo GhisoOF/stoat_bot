@@ -6,6 +6,7 @@ import { REGISTRO } from "../comandos/index.js";
 import { grupos as gruposHelp, ALIAS_GRUPO, ORDEM as ORDEM_GRUPOS } from "./help-grupos.js";
 import { secaoParametros } from "./help-parametros.js";
 import { detalhesDoRegistro, COMANDOS_COM_AJUDA } from "../core/ajuda-registro.js";
+import { URL_POLITICA } from "../ferramentas/privacidade.js";
 import { enviarPaginado, paginarLinhas } from "../core/paginas.js";
 import { escadaDePunicao, rotuloDegrau, GRUPOS_AUTOMOD, estadoDoGrupo, validadeDosAvisos } from "./automod-engine.js";
 import { MUNDO } from "../game/mundo.js";
@@ -77,7 +78,7 @@ function detalhesPT(P) {
   return {
     cor: {
       uso: `${P}cor <cargo> <cor|gradiente|preset>`,
-      desc: "Customiza a cor dos cargos — inclusive com **gradiente**, que o cliente do Stoat não oferece na interface.\n\n**Sólida:** `&cor VIP #FF00AA` ou `&cor VIP roxo`\n**Gradiente:** `&cor VIP gradiente #FF0000 #0000FF` (aceita 2+ cores; um número no início vira o ângulo)\n**Pronto:** `&cor VIP preset vaporwave` — veja todos com `&cor presets`\n**Automático:** `&cor painel aqui` — cria os cargos, publica a mensagem de escolha (mencionando os cargos), reage com os emojis, liga os cargos por reação e ativa o modo exclusivo. Tudo num comando.\n**Só os cargos:** `&cor criar` — cria/pinta sem publicar nada\n**CSS na mão:** `&cor VIP linear-gradient(90deg, #f00 0%, #00f 100%)`\n**Limpar:** `&cor VIP remover` · **Ver:** `&cor lista`\n\nO cargo pode ser pelo nome (mesmo parcial) ou pelo ID. O cargo do bot precisa de **ManageRole** e estar **acima** do cargo editado.",
+      desc: "Customiza a cor dos cargos — inclusive com **gradiente**, que o cliente do Stoat não oferece na interface.\n\n**Sólida:** `&cor VIP #FF00AA` ou `&cor VIP roxo`\n**Gradiente:** `&cor VIP gradiente #FF0000 #0000FF` (aceita 2+ cores; um número no início vira o ângulo)\n**Pronto:** `&cor VIP preset vaporwave` — veja todos com `&cor presets`\n**Automático:** `&cor painel aqui` — cria os cargos, publica a mensagem de escolha (mencionando os cargos), reage com os emojis, liga os cargos por reação e ativa o modo exclusivo. Tudo num comando. Vêm 10 cores sólidas e 20 gradientes (`&cor painel aqui solidas` ou `gradientes` para só um grupo).\n**Só os cargos:** `&cor criar` — cria/pinta sem publicar nada\n**CSS na mão:** `&cor VIP linear-gradient(90deg, #f00 0%, #00f 100%)`\n**Limpar:** `&cor VIP remover` · **Ver:** `&cor lista`\n\nO cargo pode ser pelo nome (mesmo parcial) ou pelo ID. O cargo do bot precisa de **ManageRole** e estar **acima** do cargo editado.",
       perm: "ManageRole",
       ex: `${P}cor VIP gradiente #FF71CE #01CDFE #05FFA1`,
     },
@@ -103,8 +104,8 @@ function detalhesPT(P) {
       ex: `${P}servidores relatorio canal aqui`,
     },
     acesso: {
-      uso: `${P}acesso <cargo|canal|staffignora|status>`,
-      desc: "Define **quem** pode usar os comandos e **onde**.\n\n**Cargos de staff** — quem tiver um deles usa os comandos de moderação mesmo sem a permissão nativa do Stoat:\n`&acesso cargo add <@cargo>` · `&acesso cargo remove <@cargo>` · `&acesso cargo limpar`\n\n**Canais** — onde os comandos funcionam:\n`&acesso canal todos` — em qualquer canal\n`&acesso canal somente` — só nos da lista\n`&acesso canal exceto` — em todos, menos os da lista\n`&acesso canal add|remove [#canal]` — mexe na lista\n\n`&acesso staffignora on|off` — se o staff escapa da restrição de canal (padrão: sim)\n\n_`&acesso`, `&debug`, `&help` e `&tutorial` funcionam sempre, para você não se trancar fora._",
+      uso: `${P}acesso <cargo|canal|staffignora|livre|status>`,
+      desc: "Define **quem** pode usar os comandos e **onde**.\n\n**Cargos de staff** — quem tiver um deles usa os comandos de moderação mesmo sem a permissão nativa do Stoat:\n`&acesso cargo add <@cargo>` · `&acesso cargo remove <@cargo>` · `&acesso cargo limpar`\n\n**Canais** — onde os comandos funcionam:\n`&acesso canal todos` — em qualquer canal\n`&acesso canal somente` — só nos da lista\n`&acesso canal exceto` — em todos, menos os da lista\n`&acesso canal add|remove [#canal]` — mexe na lista\n\n`&acesso staffignora on|off` — se o staff escapa da restrição de canal (padrão: sim)\n`&acesso livre <comando> on|off` — o comando vale em qualquer canal (ex.: `&acesso livre entretenimento on` para os jogos)\n\n_`&acesso`, `&debug`, `&help` e `&tutorial` funcionam sempre, para você não se trancar fora._",
       perm: "ManagePermissions",
       ex: `${P}acesso canal somente`,
     },
@@ -134,8 +135,8 @@ function detalhesPT(P) {
       ex: `${P}game criar Kael`,
     },
     xp: {
-      uso: `${P}xp [rank|top|setup|cargos|criarcargos|sincronizar|on|off]`,
-      desc: "Sistema de níveis por XP de mensagens. Cada mensagem dá XP (com cooldown), e ao juntar XP você sobe de nível. A cada N níveis pode ganhar um cargo, e os anteriores continuam — eles se acumulam.\n\n`top` mostra o ranking · `setup` configura dificuldade, nível máximo e intervalo de cargos.\n\n**Quem sai perde os cargos, não o XP.** Cargo é do membro: quem sai deixa de ser membro e o Stoat os retira. O XP fica guardado. Quem **entra** recebe os cargos de volta sozinho; para quem já tinha voltado antes disso, `&xp sincronizar [@pessoa]` devolve tudo que o nível atual garante _(veja `&help xp sincronizar`)_.\n\n(XP por call não é suportado pelo Stoat.)",
+      uso: `${P}xp [rank|top|sair|entrar|setup|cargos|criarcargos|sincronizar|on|off]`,
+      desc: "Sistema de níveis por XP de mensagens. Cada mensagem dá XP (com cooldown), e ao juntar XP você sobe de nível. A cada N níveis pode ganhar um cargo, e os anteriores continuam — eles se acumulam.\n\n`top` mostra o ranking · `setup` configura dificuldade, nível máximo e intervalo de cargos.\n\n**Cada membro escolhe:** ao ligar o XP, a Judy avisa o servidor; `sair` apaga o seu XP e ele para de contar, `entrar` volta (do zero).\n\n**Quem sai perde os cargos, não o XP.** Cargo é do membro: quem sai deixa de ser membro e o Stoat os retira. O XP fica guardado. Quem **entra** recebe os cargos de volta sozinho; para quem já tinha voltado antes disso, `&xp sincronizar [@pessoa]` devolve tudo que o nível atual garante _(veja `&help xp sincronizar`)_.\n\n(XP por call não é suportado pelo Stoat.)",
       perm: "ManagePermissions (para configurar)", ex: `${P}xp top`,
     },
     rss: {
@@ -174,7 +175,7 @@ function detalhesPT(P) {
       ex: `${P}economia minerar`,
     },
     entretenimento: {
-      uso: `${P}entretenimento <ship|briga|cowsay|bola8|escolher|nota|sorte|zoeira|inverter>`,
+      uso: `${P}entretenimento <ship|briga|cowsay|bola8|escolher|nota|sorte|zoeira|inverter|campominado|velha>`,
       desc: "A família das **brincadeiras**. Cada uma mora aqui dentro:\n\n"
         + "`ship @a @b` — quantos % combinam (o mesmo par dá sempre o mesmo %), com o nome do casal\n"
         + "`briga @a @b` — quem ganha numa briga, rodada por rodada, com crítico e erro\n"
@@ -183,7 +184,9 @@ function detalhesPT(P) {
         + "`escolher a | b | c` — escolho uma (também vale `a, b ou c`)\n"
         + "`nota <coisa>` — nota de 0 a 10, fixa para a mesma coisa\n"
         + "`sorte` — a sua sorte do dia, com número da sorte\n"
-        + "`zoeira <texto>` · `inverter <texto>` — tExTo De ZoEiRa · texto ao contrário\n\n"
+        + "`zoeira <texto>` · `inverter <texto>` — tExTo De ZoEiRa · texto ao contrário\n"
+        + "`campominado [facil|medio|dificil]` — campo minado de spoilers\n"
+        + "`velha [@pessoa]` — jogo da velha por reação (sem ninguém, contra a Judy)\n\n"
         + "Com **uma** pessoa só, o outro lado é você. Coisas também valem: `ship pizza e abacaxi`, `briga Goku x Superman`.\n"
         + "_Ninguém é mencionado nas respostas: os nomes saem em texto, sem notificar._",
       perm: "todo mundo", ex: `${P}entretenimento ship @Ana @Bia`,
@@ -233,7 +236,7 @@ function detalhesPT(P) {
     },
     chat: {
       uso: `${P}chat <mensagem>`,
-      desc: "Conversa com a IA local (a Judy). Quando você pergunta algo do mundo, ela pesquisa na internet antes de responder (os links só aparecem quando você pede a busca: \"pesquisa…\", \"procura na internet…\"), faz contas exatas, lê o próprio código, monta um perfil de quem conversa com ela e adapta o tom a cada pessoa. Também vê imagens que você anexar.\n\n**Subcomandos:**\n`&chat status` — se o serviço de IA está no ar\n`&chat perfil [@user]` — o que a Judy sabe sobre alguém\n`&chat mapear [@user]` — captura bio/status do cartão\n`&chat cuidado [@user] on|off` — trata a pessoa com gentileza extra (opt-in)\n`&chat esquecer` — apaga tudo que a Judy sabe de você\n`&chat esquecer tudo` — zera a memória do servidor *(ManageServer)*\n`&chat livre on|off|modo` — a Judy participa sozinha do canal *(ManagePermissions)*\n`&chat comentar aqui|off|pordia <n>` — comentários por iniciativa *(ManagePermissions)*\n\nQuando responde alguém, mantém o papo fluido por um tempo. Se ela já estiver respondendo outra pessoa, você entra na **fila** (vê a posição) e é atendido na ordem. Conta escrita na mensagem (`263857 * 3`) vai sempre para a calculadora, nunca de cabeça.",
+      desc: "Conversa com a IA local (a Judy). Quando você pergunta algo do mundo, ela pesquisa na internet antes de responder (os links só aparecem quando você pede a busca: \"pesquisa…\", \"procura na internet…\"), faz contas exatas, lê o próprio código, lembra de quem **aceitou** que ela lembre (ela pergunta na primeira conversa; `" + citar("privacidade", "pt", P) + "`) e adapta o tom a cada pessoa. Também vê imagens que você anexar.\n\n**Subcomandos:**\n`&chat status` — se o serviço de IA está no ar\n`&chat perfil` — o que a Judy sabe sobre você\n`&chat mapear` — captura a bio/status do seu cartão\n`&chat cuidado [@user] on|off` — trata a pessoa com gentileza extra (opt-in)\n`&chat esquecer` — apaga tudo que a Judy sabe de você\n`&chat esquecer tudo` — zera a memória do servidor *(ManageServer)*\n`&chat livre on|off|modo` — a Judy participa sozinha do canal *(ManagePermissions)*\n`&chat comentar aqui|off|pordia <n>` — comentários por iniciativa *(ManagePermissions)*\n\nQuando responde alguém, mantém o papo fluido por um tempo. Se ela já estiver respondendo outra pessoa, você entra na **fila** (vê a posição) e é atendido na ordem. Conta escrita na mensagem (`263857 * 3`) vai sempre para a calculadora, nunca de cabeça.",
       perm: null, ex: `${P}chat status`,
     },
     modia: {
@@ -260,7 +263,7 @@ function detalhesEN(P) {
   return {
     cor: {
       uso: `${P}cor <role> <color|gradient|preset>`,
-      desc: "Customizes role colors — including **gradients**, which the Stoat client doesn't offer in its UI.\n\n**Solid:** `&cor VIP #FF00AA` or `&cor VIP purple`\n**Gradient:** `&cor VIP gradiente #FF0000 #0000FF` (2+ colors; a leading number sets the angle)\n**Preset:** `&cor VIP preset vaporwave` — see them all with `&cor presets`\n**Automatic:** `&cor painel aqui` — creates the roles, posts the picker message (mentioning the roles), adds the emoji reactions, wires up reaction roles and enables exclusive mode. All in one command.\n**Roles only:** `&cor criar` — creates/paints without posting anything\n**Raw CSS:** `&cor VIP linear-gradient(90deg, #f00 0%, #00f 100%)`\n**Clear:** `&cor VIP remover` · **View:** `&cor lista`\n\nThe role can be given by name (even partial) or by ID. The bot's role needs **ManageRole** and must sit **above** the edited role.",
+      desc: "Customizes role colors — including **gradients**, which the Stoat client doesn't offer in its UI.\n\n**Solid:** `&cor VIP #FF00AA` or `&cor VIP purple`\n**Gradient:** `&cor VIP gradiente #FF0000 #0000FF` (2+ colors; a leading number sets the angle)\n**Preset:** `&cor VIP preset vaporwave` — see them all with `&cor presets`\n**Automatic:** `&cor painel aqui` — creates the roles, posts the picker message (mentioning the roles), adds the emoji reactions, wires up reaction roles and enables exclusive mode. All in one command. It brings 10 solid colors and 20 gradients (`&cor painel aqui solid` or `gradients` for only one group).\n**Roles only:** `&cor criar` — creates/paints without posting anything\n**Raw CSS:** `&cor VIP linear-gradient(90deg, #f00 0%, #00f 100%)`\n**Clear:** `&cor VIP remover` · **View:** `&cor lista`\n\nThe role can be given by name (even partial) or by ID. The bot's role needs **ManageRole** and must sit **above** the edited role.",
       perm: "ManageRole",
       ex: `${P}cor VIP gradiente #FF71CE #01CDFE #05FFA1`,
     },
@@ -286,8 +289,8 @@ function detalhesEN(P) {
       ex: `${P}servidores relatorio canal aqui`,
     },
     acesso: {
-      uso: `${P}acesso <cargo|canal|staffignora|status>`,
-      desc: "Defines **who** can use the commands and **where**.\n\n**Staff roles** — anyone holding one can use the moderation commands even without the native Stoat permission:\n`&acesso cargo add <@role>` · `&acesso cargo remove <@role>` · `&acesso cargo limpar`\n\n**Channels** — where commands work:\n`&acesso canal todos` — in any channel\n`&acesso canal somente` — only in the listed ones\n`&acesso canal exceto` — everywhere except the listed ones\n`&acesso canal add|remove [#channel]` — edits the list\n\n`&acesso staffignora on|off` — whether staff bypasses the channel restriction (default: yes)\n\n_`&acesso`, `&debug`, `&help` and `&tutorial` always work, so you can't lock yourself out._",
+      uso: `${P}acesso <cargo|canal|staffignora|livre|status>`,
+      desc: "Defines **who** can use the commands and **where**.\n\n**Staff roles** — anyone holding one can use the moderation commands even without the native Stoat permission:\n`&acesso cargo add <@role>` · `&acesso cargo remove <@role>` · `&acesso cargo limpar`\n\n**Channels** — where commands work:\n`&acesso canal todos` — in any channel\n`&acesso canal somente` — only in the listed ones\n`&acesso canal exceto` — everywhere except the listed ones\n`&acesso canal add|remove [#channel]` — edits the list\n\n`&acesso staffignora on|off` — whether staff bypasses the channel restriction (default: yes)\n`&acesso livre <command> on|off` — the command works in any channel (e.g. `&acesso livre entertainment on` for the games)\n\n_`&acesso`, `&debug`, `&help` and `&tutorial` always work, so you can't lock yourself out._",
       perm: "ManagePermissions",
       ex: `${P}acesso canal somente`,
     },
@@ -317,8 +320,8 @@ function detalhesEN(P) {
       ex: `${P}game criar Kael`,
     },
     xp: {
-      uso: `${P}xp [rank|top|setup|cargos|criarcargos|sincronizar|on|off]`,
-      desc: "Message-XP leveling system. Each message grants XP (with a cooldown), and enough XP levels you up. Every N levels you can earn a role, and the earlier ones stay — they stack.\n\n`top` shows the ranking · `setup` configures difficulty, level cap and role interval.\n\n**Leaving costs the roles, not the XP.** A role belongs to the member: leaving means no longer being one, so Stoat removes them. The XP stays. Whoever **joins** gets the roles back automatically; for those who returned before that, `&xp sincronizar [@user]` hands back everything the current level grants _(see `&help xp sincronizar`)_.\n\n(Voice-call XP isn't supported by Stoat.)",
+      uso: `${P}xp [rank|top|sair|entrar|setup|cargos|criarcargos|sincronizar|on|off]`,
+      desc: "Message-XP leveling system. Each message grants XP (with a cooldown), and enough XP levels you up. Every N levels you can earn a role, and the earlier ones stay — they stack.\n\n`top` shows the ranking · `setup` configures difficulty, level cap and role interval.\n\n**Each member chooses:** when XP is turned on, Judy tells the server; `sair` erases your XP and it stops counting, `entrar` brings you back (from zero).\n\n**Leaving costs the roles, not the XP.** A role belongs to the member: leaving means no longer being one, so Stoat removes them. The XP stays. Whoever **joins** gets the roles back automatically; for those who returned before that, `&xp sincronizar [@user]` hands back everything the current level grants _(see `&help xp sincronizar`)_.\n\n(Voice-call XP isn't supported by Stoat.)",
       perm: "ManagePermissions (to configure)", ex: `${P}xp top`,
     },
     rss: {
@@ -357,7 +360,7 @@ function detalhesEN(P) {
       ex: `${P}economia minerar`,
     },
     entretenimento: {
-      uso: `${P}entretenimento <ship|fight|cowsay|8ball|choose|rate|fortune|mock|reverse>`,
+      uso: `${P}entretenimento <ship|fight|cowsay|8ball|choose|rate|fortune|mock|reverse|minesweeper|tictactoe>`,
       desc: "The **fun & games** family. Each one lives in here:\n\n"
         + "`ship @a @b` — how many % they match (the same pair always gets the same %), plus the ship name\n"
         + "`fight @a @b` — who wins a fight, round by round, with crits and misses\n"
@@ -366,7 +369,9 @@ function detalhesEN(P) {
         + "`choose a | b | c` — I pick one (`a, b or c` works too)\n"
         + "`rate <thing>` — a 0–10 rating, fixed for the same thing\n"
         + "`fortune` — your fortune for the day, with a lucky number\n"
-        + "`mock <text>` · `reverse <text>` — mOcKiNg TeXt · text backwards\n\n"
+        + "`mock <text>` · `reverse <text>` — mOcKiNg TeXt · text backwards\n"
+        + "`minesweeper [easy|medium|hard]` — a spoiler minesweeper\n"
+        + "`tictactoe [@user]` — tic-tac-toe by reaction (with nobody, against Judy)\n\n"
         + "With **one** person only, the other side is you. Things work too: `ship pizza and pineapple`, `fight Goku x Superman`.\n"
         + "_Nobody gets pinged by the answers: names come out as plain text._",
       perm: "everyone", ex: `${P}entretenimento ship @Ana @Bia`,
@@ -416,7 +421,7 @@ function detalhesEN(P) {
     },
     chat: {
       uso: `${P}chat <message>`,
-      desc: "Talk to the local AI (Judy). When you ask about the world, she searches the web before answering (links only show up when you ask for the search: \"search…\", \"look it up online…\"), does exact math, reads her own code, builds a profile of whoever talks to her and adapts her tone to each person. She can also see images you attach.\n\n**Subcommands:**\n`&chat status` — whether the AI service is up\n`&chat perfil [@user]` — what Judy knows about someone\n`&chat mapear [@user]` — captures the profile card bio/status\n`&chat cuidado [@user] on|off` — treats the person with extra kindness (opt-in)\n`&chat esquecer` — erases everything Judy knows about you\n`&chat esquecer tudo` — wipes the server's memory *(ManageServer)*\n`&chat livre on|off|modo` — Judy joins the channel on her own *(ManagePermissions)*\n`&chat comentar aqui|off|pordia <n>` — comments on her own initiative *(ManagePermissions)*\n\nWhen she replies to someone, she keeps the conversation flowing for a while. If she's already answering someone else you join the **queue** (you'll see your position) and get served in order. Arithmetic written in the message (`263857 * 3`) always goes to the calculator, never done in her head.",
+      desc: "Talk to the local AI (Judy). When you ask about the world, she searches the web before answering (links only show up when you ask for the search: \"search…\", \"look it up online…\"), does exact math, reads her own code, remembers people who **agreed** to it (she asks in your first conversation; `" + citar("privacidade", "en", P) + "`) and adapts her tone to each person. She can also see images you attach.\n\n**Subcommands:**\n`&chat status` — whether the AI service is up\n`&chat perfil` — what Judy knows about you\n`&chat mapear` — captures your profile card bio/status\n`&chat cuidado [@user] on|off` — treats the person with extra kindness (opt-in)\n`&chat esquecer` — erases everything Judy knows about you\n`&chat esquecer tudo` — wipes the server's memory *(ManageServer)*\n`&chat livre on|off|modo` — Judy joins the channel on her own *(ManagePermissions)*\n`&chat comentar aqui|off|pordia <n>` — comments on her own initiative *(ManagePermissions)*\n\nWhen she replies to someone, she keeps the conversation flowing for a while. If she's already answering someone else you join the **queue** (you'll see your position) and get served in order. Arithmetic written in the message (`263857 * 3`) always goes to the calculator, never done in her head.",
       perm: null, ex: `${P}chat status`,
     },
     modia: {
@@ -755,6 +760,7 @@ export async function cmdHelp(message, args, ctx) {
       `\`${P}fuso\` — the server clock (several cities at once)`,
       `\`${citar("sobre", "en", P)}\` · \`${citar("ping", "en", P)}\` — about the bot and its latency`,
       `\`${P}tutorial\` — the guide for players and members`,
+      `\`${citar("privacidade", "en", P)}\` — what Judy keeps about you, and your consent`,
       "Need the staff? React on the server's **ticket panel** — a private channel opens.",
     ],
   } : {
@@ -765,6 +771,7 @@ export async function cmdHelp(message, args, ctx) {
       `\`${P}fuso\` — o relógio do servidor (várias cidades de uma vez)`,
       `\`${citar("sobre", "pt", P)}\` · \`${citar("ping", "pt", P)}\` — sobre o bot e a latência`,
       `\`${P}tutorial\` — o guia de quem joga e usa`,
+      `\`${citar("privacidade", "pt", P)}\` — o que a Judy guarda sobre você, e o seu consentimento`,
       "Precisa da staff? Reaja no **painel de tickets** do servidor — abre um canal privado.",
     ],
   };
@@ -1055,8 +1062,8 @@ export async function cmdSobre(message, args, ctx) {
   ];
 
   // Links entre < >: continuam clicáveis, sem a prévia que o Stoat gera.
-  const creditos = `_${criador ? `Criada por **${criador}**. ` : ""}Software livre ([código](<https://github.com/GhisoOF/stoat_bot>)), feito com [stoat.js](<https://github.com/stoatchat/javascript-client-sdk>) — rode o seu! 🚀_`;
-  const creditosEN = `_${criador ? `Made by **${criador}**. ` : ""}Free software ([source](<https://github.com/GhisoOF/stoat_bot>)), built with [stoat.js](<https://github.com/stoatchat/javascript-client-sdk>) — run your own! 🚀_`;
+  const creditos = `_${criador ? `Criada por **${criador}**. ` : ""}Software livre ([código](<https://github.com/GhisoOF/stoat_bot>), [privacidade](<${URL_POLITICA}>)), feito com [stoat.js](<https://github.com/stoatchat/javascript-client-sdk>) — rode o seu! 🚀_`;
+  const creditosEN = `_${criador ? `Made by **${criador}**. ` : ""}Free software ([source](<https://github.com/GhisoOF/stoat_bot>), [privacy](<${URL_POLITICA}>)), built with [stoat.js](<https://github.com/stoatchat/javascript-client-sdk>) — run your own! 🚀_`;
 
   await sendEmbed(message.channel, en ? {
     title: `🤖 ${nomeBot}`,

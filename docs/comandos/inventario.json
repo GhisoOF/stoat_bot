@@ -561,6 +561,21 @@
    "rota": "musica",
    "funcao": "cmdMusica"
   },
+  "privacidad": {
+   "canonico": "privacidade",
+   "rota": "privacidade",
+   "funcao": "cmdPrivacidade"
+  },
+  "privacidade": {
+   "canonico": "privacidade",
+   "rota": "privacidade",
+   "funcao": "cmdPrivacidade"
+  },
+  "privacy": {
+   "canonico": "privacidade",
+   "rota": "privacidade",
+   "funcao": "cmdPrivacidade"
+  },
   "purge": {
    "canonico": "limpar",
    "rota": "limpar",
@@ -835,6 +850,8 @@
    "channels": "canais",
    "clear": "limpar",
    "except": "exceto",
+   "free": "livre",
+   "libre": "livre",
    "only": "somente",
    "remove": "remove",
    "role": "cargo",
@@ -1070,11 +1087,14 @@
    "gentle": "gentil",
    "here": "aqui",
    "map": "mapear",
+   "memory": "memoria",
    "mode": "modo",
+   "olvidar": "esquecer",
    "perday": "pordia",
    "profile": "perfil",
    "relevant": "relevante",
-   "status": "status"
+   "status": "status",
+   "todo": "tudo"
   },
   "comando": {
    "activar": "ativar",
@@ -1134,13 +1154,17 @@
   },
   "entretenimento": {
    "8ball": "bola8",
+   "buscaminas": "campominado",
    "choose": "escolher",
    "fight": "briga",
    "fortune": "sorte",
+   "minesweeper": "campominado",
    "mock": "zoeira",
    "pick": "escolher",
    "rate": "nota",
-   "reverse": "inverter"
+   "reverse": "inverter",
+   "tateti": "velha",
+   "tictactoe": "velha"
   },
   "fuso": {
    "add": "add",
@@ -1265,6 +1289,10 @@
   },
   "help": {
    "character": "game",
+   "configuracao": "config",
+   "configuração": "config",
+   "configuracion": "config",
+   "configuración": "config",
    "configuration": "config",
    "customise": "personalizar",
    "customize": "personalizar",
@@ -1304,19 +1332,23 @@
    "todo": "tudo"
   },
   "log": {
+   "actualizaciones": "atualizacoes",
    "aqui": "here",
    "channel": "canal",
    "commands": "comandos",
    "events": "eventos",
    "here": "here",
+   "informe": "relatorio",
    "members": "membros",
    "mensajes": "mensagens",
    "messages": "mensagens",
    "miembros": "membros",
    "off": "off",
    "punishments": "punicoes",
+   "report": "relatorio",
    "roles": "cargos",
-   "sanciones": "punicoes"
+   "sanciones": "punicoes",
+   "updates": "atualizacoes"
   },
   "modia": {
    "add": "add",
@@ -1325,6 +1357,17 @@
    "criteria": "criterios",
    "remove": "remove",
    "status": "status"
+  },
+  "privacidade": {
+   "borrar": "apagar",
+   "channel": "canal",
+   "confirm": "confirmar",
+   "delete": "apagar",
+   "estado": "status",
+   "hilo": "fio",
+   "memory": "memoria",
+   "status": "status",
+   "thread": "fio"
   },
   "punicao": {
    "ban": "banir",
@@ -1401,6 +1444,7 @@
    "empty": "vazias",
    "here": "aqui",
    "now": "agora",
+   "pseudonym": "pseudonimo",
    "report": "relatorio",
    "subjects": "assuntos",
    "topics": "assuntos"
@@ -1502,15 +1546,20 @@
    "create": "criar",
    "createroles": "criarcargos",
    "interval": "intervalo",
+   "join": "entrar",
    "leaderboard": "leaderboard",
+   "leave": "sair",
    "maxlevel": "nivelmaximo",
    "multiplier": "multiplicador",
+   "opt-out": "sair",
+   "optout": "sair",
    "rank": "rank",
    "ranking": "ranking",
    "reset": "reset",
    "restore": "sincronizar",
    "resync": "sincronizar",
    "roles": "cargos",
+   "salir": "sair",
    "setup": "setup",
    "sync": "sincronizar",
    "top": "top",
@@ -1526,6 +1575,7 @@
    "cargos": "roles",
    "exceto": "except",
    "limpar": "clear",
+   "livre": "free",
    "remove": "remove",
    "somente": "only",
    "staff": "staff",
@@ -1723,6 +1773,7 @@
    "gentil": "gentle",
    "livre": "free",
    "mapear": "map",
+   "memoria": "memory",
    "modo": "mode",
    "perfil": "profile",
    "pordia": "perday",
@@ -1783,10 +1834,12 @@
   "entretenimento": {
    "bola8": "8ball",
    "briga": "fight",
+   "campominado": "minesweeper",
    "escolher": "choose",
    "inverter": "reverse",
    "nota": "rate",
    "sorte": "fortune",
+   "velha": "tictactoe",
    "zoeira": "mock"
   },
   "fuso": {
@@ -1934,6 +1987,7 @@
   },
   "log": {
    "aqui": "here",
+   "atualizacoes": "updates",
    "canal": "channel",
    "cargos": "roles",
    "comandos": "commands",
@@ -1942,7 +1996,8 @@
    "membros": "members",
    "mensagens": "messages",
    "off": "off",
-   "punicoes": "punishments"
+   "punicoes": "punishments",
+   "relatorio": "report"
   },
   "modia": {
    "add": "add",
@@ -1959,6 +2014,14 @@
    "parar": "stop",
    "pausar": "pause",
    "retomar": "resume"
+  },
+  "privacidade": {
+   "apagar": "delete",
+   "canal": "channel",
+   "confirmar": "confirm",
+   "fio": "thread",
+   "memoria": "memory",
+   "status": "status"
   },
   "punicao": {
    "acumular": "stack",
@@ -2037,6 +2100,7 @@
    "aqui": "here",
    "assuntos": "subjects",
    "canal": "channel",
+   "pseudonimo": "pseudonym",
    "relatorio": "report",
    "vazias": "empty"
   },
@@ -2122,6 +2186,7 @@
    "configurar": "configure",
    "criar": "create",
    "criarcargos": "createroles",
+   "entrar": "join",
    "intervalo": "interval",
    "leaderboard": "leaderboard",
    "multiplicador": "multiplier",
@@ -2129,6 +2194,7 @@
    "rank": "rank",
    "ranking": "ranking",
    "reset": "reset",
+   "sair": "leave",
    "setup": "setup",
    "sincronizar": "sync",
    "todos": "all",
@@ -2226,6 +2292,10 @@
    "canal",
    "criterios"
   ],
+  "privacidade": [
+   "apagar",
+   "fio"
+  ],
   "punicao": [
    "mode",
    "modo"
@@ -2245,6 +2315,9 @@
   ]
  },
  "telaEs": {
+  "acesso": {
+   "livre": "libre"
+  },
   "adeus": {
    "aqui": "aqui",
    "canal": "canal",
@@ -2280,6 +2353,14 @@
    "titulo": "titulo",
    "visivel": "visible"
   },
+  "chat": {
+   "cuidado": "cuidado",
+   "esquecer": "olvidar",
+   "mapear": "mapear",
+   "memoria": "memoria",
+   "perfil": "perfil",
+   "tudo": "todo"
+  },
   "comando": {
    "ativar": "activar",
    "desativar": "desactivar",
@@ -2290,8 +2371,13 @@
    "campos": "campos",
    "cores": "colores"
   },
+  "entretenimento": {
+   "campominado": "buscaminas",
+   "velha": "tateti"
+  },
   "help": {
    "comecar": "empezar",
+   "config": "configuracion",
    "diversao": "diversion"
   },
   "idioma": {
@@ -2309,6 +2395,7 @@
    "tudo": "todo"
   },
   "log": {
+   "atualizacoes": "actualizaciones",
    "canal": "canal",
    "cargos": "roles",
    "comandos": "comandos",
@@ -2317,7 +2404,16 @@
    "membros": "miembros",
    "mensagens": "mensajes",
    "off": "off",
-   "punicoes": "sanciones"
+   "punicoes": "sanciones",
+   "relatorio": "informe"
+  },
+  "privacidade": {
+   "apagar": "borrar",
+   "canal": "canal",
+   "confirmar": "confirmar",
+   "fio": "hilo",
+   "memoria": "memoria",
+   "status": "estado"
   },
   "rolar": {
    "moeda": "moneda"
@@ -2336,6 +2432,10 @@
    "lista": "lista",
    "remover": "eliminar",
    "testar": "probar"
+  },
+  "xp": {
+   "entrar": "entrar",
+   "sair": "salir"
   }
  }
 }

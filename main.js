@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import './modulos/core/log-anonimo.js';   // privacidade: IDs do Stoat viram pseudônimo no log
 import './modulos/core/env.js';
 
 // A stoat.js emite "Skipping key X during hydration!" por console.DEBUG (uma
@@ -36,6 +37,7 @@ import * as webhooks  from "./modulos/ferramentas/webhooks.js";
 import * as tickets   from "./modulos/ferramentas/tickets.js";
 import * as acessoMod  from "./modulos/moderacao/acesso.js";
 import * as entretenimento from "./modulos/ferramentas/entretenimento.js";
+import * as jogos     from "./modulos/ferramentas/jogos.js";
 import * as servidorInfo from "./modulos/ferramentas/servidor-info.js";
 import * as srvStats   from "./modulos/core/metricas.js";
 import * as rpg        from "./modulos/game/game.js";
@@ -49,6 +51,10 @@ import * as chat      from "./modulos/ai/chat.js";
 import * as rss       from "./modulos/ferramentas/rss.js";
 import * as nivel     from "./modulos/ferramentas/nivel.js";
 import * as i18n      from "./modulos/core/i18n.js";
+import * as consentimento from "./modulos/ai/consentimento.js";
+import * as dbIA     from "./modulos/core/db.js";
+import * as retencao from "./modulos/core/retencao.js";
+import * as novidades from "./modulos/ferramentas/novidades.js";
 import * as aliases   from "./modulos/core/aliases.js";
 import * as registroComandos from "./modulos/comandos/index.js";
 import { maisParecido } from "./modulos/core/parecido.js";
@@ -143,6 +149,9 @@ setInterval(() => {
     reiniciar(`sem eventos do Stoat há ${Math.round(ocioso / 60000)}min (nem o heartbeat do Stoat respondeu — conexão morta de verdade)`);
   }
 }, 60000);
+
+// O histórico de conversa da IA vive 24 h (privacidade, 20 out 2026)
+setInterval(() => { try { dbIA.podarHistoricoIA(); } catch (e) { console.error("[DB] poda do histórico:", e.message); } }, 3600_000).unref?.();
 
 const HEARTBEAT_MS = Number(process.env.HEARTBEAT_MS || 300000); // 5 min
 setInterval(() => {
@@ -371,6 +380,28 @@ client.on("ready", async () => {
   store.inicializar(CONFIG_PATH); // abre o banco e migra o config antigo
   cfgGlobal = store.getGlobal();
 
+  // Privacidade (P2): servidores de onde a Judy saiu enquanto estava desligada
+  // entram na contagem de 30 dias; os que ela voltou saem dela. Os que passaram
+  // dos 30 dias são apagados (agora e a cada 6 h).
+  try {
+    if (client.servers?.size) {
+      const r = retencao.conferirSaidas(client.servers.keys());
+      if (r.saiu || r.voltou) console.info(`[PRIVACIDADE] saídas: ${r.saiu} servidor(es) novo(s) na contagem de ${retencao.DIAS_APOS_SAIDA} dias, ${r.voltou} voltaram`);
+    }
+  } catch (e) { console.error("[PRIVACIDADE] conferir saídas:", e?.message); }
+  const limparSaidas = () => {
+    try {
+      // os servidores em que ela está agora nunca são apagados, marcados ou não
+      const presentes = client.servers?.size ? [...client.servers.keys()] : null;
+      for (const x of retencao.limparServidoresQueSairam(Date.now(), retencao.DIAS_APOS_SAIDA, presentes)) {
+        store.recarregarServidor(x.serverId);
+        console.info(`[PRIVACIDADE] servidor ${x.serverId}: dados apagados (${x.linhas} registro(s)) — a Judy saiu há mais de ${retencao.DIAS_APOS_SAIDA} dias`);
+      }
+    } catch (e) { console.error("[PRIVACIDADE] limpeza de servidores:", e?.message); }
+  };
+  limparSaidas();
+  setInterval(limparSaidas, 6 * 3600_000).unref?.();
+
   definirStatus().catch((e) => console.error("[STATUS]", e?.message ?? e));
 
   reactionRoles.precarregarMensagens(client).catch((e) => console.error("[REACTIONROLE][boot]", e?.message));
@@ -378,6 +409,17 @@ client.on("ready", async () => {
   rpg.iniciarCatalogo();   // semeia os itens genéricos e prepara o mundo (idempotente)
 
   srvStats.marcarInicio();
+  // As novidades deste pacote, nos servidores que ligaram `&log atualizacoes on` (P5)
+  novidades.anunciar({ client, global: store.getGlobal(), salvarGlobal: store.salvarGlobal, configDoServidor: store.configDoServidor,
+    enviar: (canal, emb) => sendEmbed(canal, emb), P: PREFIXO, COR })
+    .then((r) => { if (r.enviados || r.primeira) console.info(`[NOVIDADES] ${r.primeira ? "marca inicial gravada" : `${r.novas} novidade(s) anunciada(s) em ${r.enviados} servidor(es)`}`); })
+    .catch((e) => console.error("[NOVIDADES]", e?.message ?? e));
+  // Quem entra no relatório do dono (privacidade P4): os servidores dele, completos;
+  // os outros só se aderiram (`&log relatorio on`), anônimos; o resto, nada.
+  relatorioHora.configurarAdesao((sid) => {
+    if (relatorioHora.ehDoDono(client.servers.get(sid) ?? { id: sid })) return "completo";
+    return store.configDoServidor(sid)?.relatorioDono ? "anonimo" : null;
+  });
   relatorioHora.evento(null, "boot", "bot iniciou");
   relatorioHora.agendar({
     client,
@@ -531,6 +573,12 @@ async function tratarMensagem(message) {
   }
 
   if (!command) {
+    // A resposta à pergunta da memória ("posso lembrar de você?"): um sim/não logo
+    // depois, no mesmo canal, com ou sem mencioná-la (privacidade, 20 out 2026)
+    if (chat.servidorPermitido(serverId)) {
+      try { if (await consentimento.tratarResposta(message, ctx)) return; }
+      catch (e) { console.error("[CONSENTIMENTO]", e.message); }
+    }
     const meuId = client.user?.id;
     // Responder a uma mensagem dela com @OutraPessoa no texto é falar com a
     // outra pessoa — o "ping" da resposta não conta (ver destinatario.js).
@@ -687,7 +735,10 @@ function ehCanalDeVoz(message) {
     || ehCanalDeVoz(message)
   );
 
-  if (!SEMPRE_LIBERADOS.has(canonico) && !naVoz) {
+  // `&acesso livre <comando> on` (P7, 20 out 2026): o admin solta um comando da
+  // restrição de canal — os jogos do &entretenimento em qualquer canal, por exemplo.
+  const livre = acessoMod.comandoLivre(ctx.config, canonico);
+  if (!SEMPRE_LIBERADOS.has(canonico) && !naVoz && !livre) {
     const ehStaff = acessoMod.temCargoStaff(message, ctx.config)
       || membroTemPermissao(message, await getServer(message).catch(() => null), "ManagePermissions");
     const permitido = acessoMod.canalPermitido(message, ctx.config, { ehStaff });
@@ -787,6 +838,8 @@ client.on("messageReactionAdd", async (...a) => {
 
     // Páginas (&help, &tutorial): ◀ ▶ numa mensagem paginada vira a página.
     if (await paginas.aoReagir(msgId, userId, emoji, a0)) return;
+    // Jogo da velha (&entretenimento velha): 1️⃣–9️⃣ no tabuleiro é a jogada.
+    if (await jogos.aoReagir(msgId, userId, emoji)) return;
 
     const msgObj = (a0 && typeof a0 === "object") ? a0 : { id: msgId };
     // Tickets: painel (🎫 abre), controle (🔒 fecha), fechado (🗑️ apaga).
@@ -958,7 +1011,16 @@ client.on("serverMemberLeave", async (member, extra) => {
   } catch (err) { console.error("[EVENTO][LEAVE]", err?.message); }
 });
 
+// A Judy saiu de um servidor (expulsa, ou ele acabou): os dados dele somem em 30 dias
+for (const evento of ["serverLeave", "serverDelete"]) {
+  client.on(evento, (server) => {
+    try { retencao.marcarSaida(server?.id); console.info(`[PRIVACIDADE] saí do servidor ${server?.id} — dados apagados em ${retencao.DIAS_APOS_SAIDA} dias, se eu não voltar`); }
+    catch (e) { console.error("[PRIVACIDADE] saída:", e?.message); }
+  });
+}
+
 client.on("serverCreate", async (server) => {
+  try { if (retencao.desmarcarSaida(server?.id)) console.info(`[PRIVACIDADE] voltei ao servidor ${server?.id} — nada será apagado`); } catch {}
   try {
     await banGlobal.sincronizarServidor(server, criarContexto);
   } catch (err) { console.error("[EVENTO][SERVER_CREATE]", err?.message); }

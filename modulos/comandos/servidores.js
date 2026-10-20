@@ -9,7 +9,7 @@ export default {
   es: { nome: "servidores" },   // espanhol (etapa 4)
   subcomandos: {
     relatorio: "report", canal: "channel", agora: "now", assuntos: ["subjects", "topics"],
-    vazias: "empty", aqui: "here",
+    vazias: "empty", aqui: "here", pseudonimo: "pseudonym",
   },
   aninhados: ["relatorio"],
 };

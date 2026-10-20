@@ -6,11 +6,12 @@ export default {
   funcao: "cmdAcesso",
   nomes: { en: "access" },
   apelidos: ["access"],
-  es: { nome: "acceso" },   // espanhol (etapa 4)
+  es: { nome: "acceso", subcomandos: { livre: "libre" } },   // espanhol (etapa 4)
   subcomandos: {
     cargo: "role", cargos: "roles", staff: "staff", canal: "channel", canais: "channels",
     todos: "all", somente: "only", exceto: "except", add: "add", remove: "remove",
     limpar: "clear", staffignora: ["staffignores", "staffbypass"], status: "status",
+    livre: "free",   // um comando que vale fora dos canais designados (P7, 20 out 2026)
   },
   aninhados: ["cargo", "cargos", "staff", "canal", "canais"],
   gerenciavel: true,

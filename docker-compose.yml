@@ -49,6 +49,14 @@ services:
       - "${WEBHOOK_BIND:-0.0.0.0}:${WEBHOOK_PORTA:-8095}:${WEBHOOK_PORTA:-8095}"
     volumes:
       - stoat_data:/data
+    # Privacidade (20 out 2026): o log tem o conteúdo das mensagens (os IDs saem
+    # como pseudônimo). Sem limite, o Docker guardava tudo para sempre. Aqui fica
+    # no máximo LOG_MAX_TAMANHO × LOG_MAX_ARQUIVOS (50 MB) — o mais antigo sai antes.
+    logging:
+      driver: json-file
+      options:
+        max-size: "${LOG_MAX_TAMANHO:-10m}"
+        max-file: "${LOG_MAX_ARQUIVOS:-5}"
 
   # ── Busca na web da IA ──────────────────────────────────
   # Sobe junto por padrão: `docker compose up -d` traz tudo.

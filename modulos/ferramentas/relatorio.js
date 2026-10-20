@@ -10,11 +10,39 @@
 // assuntos (a partir de amostras) e uma leitura dos erros. Se o modelo falhar,
 // o relatório sai assim mesmo, só com a parte do código.
 //
-// Assuntos: só dos servidores que o dono do bot é dono (ou os que ele listar).
-// Os outros servidores entram com números, não com o que as pessoas falam —
-// essas comunidades não combinaram de ter a conversa resumida para terceiros.
+// Quem entra (privacidade P4, 20 out 2026, decisão do Ghieh):
+//   • os servidores do PRÓPRIO dono do bot (RELATORIO_SERVIDOR, ou de que um
+//     SUPER_ADMIN é dono): completos, como antes — números, eventos e assuntos;
+//   • os outros, SÓ se o servidor aderiu (`&log relatorio on`): anônimos — o
+//     servidor vira um pseudônimo, e só os eventos de ataque (punições, raids,
+//     imagens suspeitas), sem nomes, menções nem IDs;
+//   • os que não aderiram: nada (nem números).
 
 import * as db from "../core/db.js";
+import { pseudonimo } from "../core/pseudonimo.js";
+
+// "completo" | "anonimo" | null — o main.js liga a regra de verdade no boot
+// (precisa do dono de cada servidor e da config). Sem ela, ninguém entra.
+let regraDeAdesao = () => null;
+export function configurarAdesao(fn) { regraDeAdesao = fn; }
+export function modoDe(serverId) {
+  if (!serverId) return "completo";   // eventos do bot (boot, erros) não são de servidor
+  try { return regraDeAdesao(serverId) ?? null; } catch { return null; }
+}
+const TIPOS_DE_ATAQUE = new Set(["punicoes", "raid", "imagem"]);
+// "Imagem suspeita (x) — <@u> em <#c> (msg m)" → "Imagem suspeita (x)"
+export function anonimizarTitulo(t) {
+  return String(t ?? "").replace(/<[@#%][^>]*>/g, " ").replace(/[0-9A-HJKMNP-TV-Z]{26}/g, " ")
+    .split(/\s+—\s+/)[0].replace(/\(msg[^)]*\)/g, "").replace(/\s+/g, " ").trim();
+}
+export const nomeAnonimo = (serverId) => `Servidor ${pseudonimo(serverId)}`;
+// Um evento como ele pode entrar no relatório (ou null, se não entra)
+export function filtrarEvento(e) {
+  const modo = modoDe(e.serverId);
+  if (!modo) return null;
+  if (modo === "anonimo") return TIPOS_DE_ATAQUE.has(e.tipo) ? { ...e, titulo: anonimizarTitulo(e.titulo) } : null;
+  return e;
+}
 
 const HORA = 3600_000;
 const AMOSTRAS_MAX = 120;          // mensagens guardadas por servidor, por hora
@@ -24,7 +52,10 @@ const MODELO = () => process.env.LLM_MODEL_RELATORIO || process.env.LLM_MODEL ||
 
 // ─── Coleta ─────────────────────────────────────────────────────────────────
 export function evento(serverId, tipo, titulo, t = Date.now()) {
-  try { db.registrarEventoRelatorio(t, serverId, tipo, limparTitulo(titulo)); } catch { /* relatório nunca derruba nada */ }
+  // servidor que não aderiu nem é do dono: nem é gravado
+  const e = filtrarEvento({ serverId, tipo, titulo: limparTitulo(titulo) });
+  if (!e) return;
+  try { db.registrarEventoRelatorio(t, serverId, tipo, e.titulo); } catch { /* relatório nunca derruba nada */ }
 }
 
 // "📥 Membro entrou" → "Membro entrou": o emoji varia, o assunto não.
@@ -57,6 +88,11 @@ export function erro(texto, t = Date.now()) {
 const atividade = new Map();   // serverId → { msgs, autores:Set, amostras:[] }
 export function mensagem(serverId, texto, { autorId = null, ehBot = false, comAssunto = false } = {}) {
   if (!serverId || ehBot) return;
+  const modo = modoDe(serverId);
+  if (!modo) return;                       // não aderiu: nem o ritmo é contado
+  // anônimo: só os ataques entram (a política promete isso) — nem o ritmo de conversa
+  // (revisão do P4: o "· N msg de M pessoa(s)" do servidor anônimo ia ao relatório)
+  if (modo === "anonimo") return;
   const a = atividade.get(serverId) ?? { msgs: 0, autores: new Set(), amostras: [] };
   a.msgs++;
   if (autorId) a.autores.add(autorId);
@@ -200,10 +236,16 @@ export async function redigir(prompt, { fetcher = fetch } = {}) {
 export async function gerar({ client, cfg, ate = Date.now(), fetcher = fetch, esvaziar = true }) {
   const desde = ate - HORA;
   const nomes = new Map();
-  for (const s of client?.servers?.values?.() ?? []) nomes.set(s.id, s.name ?? s.id);
-  const grupos = agrupar(db.eventosRelatorio(desde - 30 * 60_000, ate), { desde });
+  for (const s of client?.servers?.values?.() ?? []) nomes.set(s.id, modoDe(s.id) === "anonimo" ? nomeAnonimo(s.id) : (s.name ?? s.id));
+  // o que foi gravado antes de a regra mudar passa pelo mesmo filtro
+  const grupos = agrupar(db.eventosRelatorio(desde - 30 * 60_000, ate).map(filtrarEvento).filter(Boolean), { desde });
   grupos.persistencia = persistenciaDosErros(db.eventosRelatorio(ate - 24 * HORA, ate), ate);
   const ativ = esvaziar ? esvaziarAtividade() : copiaAtividade();
+  // servidor que já não está na lista (a Judy saiu nesta hora): nunca o ID cru —
+  // só o do dono sai com o ID; os outros, com o pseudônimo (revisão do P4)
+  for (const id of [...grupos.porServidor.keys(), ...ativ.keys()]) {
+    if (id && !nomes.has(id)) nomes.set(id, modoDe(id) === "completo" ? id : nomeAnonimo(id));
+  }
   const numeros = montarNumeros({ grupos, atividade: ativ, nomes, desde, ate });
   const bruta = numeros.algo ? await redigir(montarPrompt({ numeros: numeros.texto, amostras: ativ, nomes }), { fetcher }) : null;
   const prosa = bruta ? limparAssuntos(bruta, ativ, nomes) : null;
@@ -231,12 +273,17 @@ export function listaSuperAdmins() {
 export function servidorDoRelatorio() {
   return (process.env.RELATORIO_SERVIDOR || "").trim() || null;
 }
+// (P4) Só dos servidores do próprio dono do bot: a lista escolhe ENTRE eles, mas
+// não põe a conversa de um servidor alheio no relatório.
+export const ehDoDono = (server, superAdmins = listaSuperAdmins()) =>
+  !!server?.id && (server.id === servidorDoRelatorio() || (!!server.ownerId && superAdmins.includes(server.ownerId)));
 export function temAssunto(server, cfg, superAdmins = listaSuperAdmins()) {
+  if (!ehDoDono(server, superAdmins)) return false;
   const fixo = servidorDoRelatorio();
   if (fixo) return server?.id === fixo || (cfg?.assuntos ?? []).includes(server?.id);
   const lista = cfg?.assuntos ?? [];
   if (lista.length) return lista.includes(server?.id);
-  return !!server?.ownerId && superAdmins.includes(server.ownerId);
+  return true;
 }
 
 let timer = null;

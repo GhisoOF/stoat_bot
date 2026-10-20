@@ -109,6 +109,11 @@ export function abrirBanco(caminho) {
       db.exec("ALTER TABLE reaction_roles ADD COLUMN ordem INTEGER");
       db.exec("UPDATE reaction_roles SET ordem = rowid WHERE ordem IS NULL");
     }
+    // (P6, 20 out 2026) mensagens que valem como UMA no modo exclusivo: o painel de
+    // cores tem mais de 20 cores (o limite de reações do Stoat) e sai em duas mensagens
+    if (!cols.includes("grupo")) {
+      db.exec("ALTER TABLE reaction_roles ADD COLUMN grupo TEXT");
+    }
   } catch (e) { console.error("[DB] migração reaction_roles:", e.message); }
 
   // (Curadoria RSS) feeds cadastrados por servidor
@@ -203,6 +208,9 @@ export function abrirBanco(caminho) {
     )
   `);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_xp_rank ON xp_usuarios (serverId, xp DESC)`);
+  // (Privacidade P3, 20 out 2026) Quem saiu do XP neste servidor (`&xp sair`):
+  // o XP dela é apagado e não volta a contar até `&xp entrar`.
+  db.exec(`CREATE TABLE IF NOT EXISTS xp_fora (serverId TEXT NOT NULL, userId TEXT NOT NULL, em TEXT NOT NULL, PRIMARY KEY (serverId, userId))`);
   // (IA) memória persistente por usuário (global — vale em qualquer servidor)
   db.exec(`
     CREATE TABLE IF NOT EXISTS ia_memoria (
@@ -271,6 +279,23 @@ export function abrirBanco(caminho) {
       PRIMARY KEY (serverId, userId)
     )
   `);
+  // (Privacidade, 20 out 2026) O consentimento de cada pessoa para a memória da IA.
+  // Vale em TODOS os servidores (a Judy é como uma usuária: a pessoa aceita uma vez).
+  // Sem linha = nunca respondeu; memoria 0 com respondidoEm = recusou.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS ia_consentimento (
+      userId       TEXT PRIMARY KEY,
+      memoria      INTEGER NOT NULL DEFAULT 0,   -- 1 = aceitou que a Judy lembre dela
+      fioGlobal    INTEGER NOT NULL DEFAULT 0,   -- 1 = a conversa continua entre servidores e canais
+      perguntadoEm TEXT,
+      respondidoEm TEXT
+    )
+  `);
+  // (Privacidade P2, 20 out 2026) Servidores de onde a Judy saiu: os dados deles
+  // somem 30 dias depois (se ela voltar antes, nada é apagado).
+  db.exec(`CREATE TABLE IF NOT EXISTS servidores_saida (serverId TEXT PRIMARY KEY, saiuEm TEXT NOT NULL)`);
+  // Migrações que rodam UMA vez por banco (o nome fica gravado aqui).
+  db.exec(`CREATE TABLE IF NOT EXISTS migracoes (nome TEXT PRIMARY KEY, em TEXT NOT NULL)`);
   // (Game) cargos de nível: qual cargo dar em qual nível
   db.exec(`
     CREATE TABLE IF NOT EXISTS xp_cargos (
@@ -523,8 +548,28 @@ export function abrirBanco(caminho) {
 
   migrarTabelasGame();   // XP: game_* → xp_* (preserva os dados)
 
+  // (Privacidade, 20 out 2026, decisão do Ghieh) A memória da IA sobre as pessoas
+  // foi juntada sem consentimento — a Judy observava toda mensagem. Apaga tudo uma
+  // vez e começa de novo: daqui em diante, só de quem aceitar (ia_consentimento).
+  rodarUmaVez("2026-10-20-memoria-ia-sem-consentimento", () => {
+    const n = {};
+    for (const t of ["ia_fatos_pessoa", "ia_fatos_servidor", "ia_perfil", "ia_memoria", "ia_historico"]) {
+      n[t] = prep(`DELETE FROM ${t}`).run().changes ?? 0;
+    }
+    console.info(`[DB] privacidade: memória antiga da IA apagada — ${Object.entries(n).map(([t, q]) => `${t} ${q}`).join(", ")}`);
+  });
+  podarHistoricoIA();
+
   console.info("[DB] Banco aberto em", DB_PATH);
   return db;
+}
+
+// Roda `fn` uma única vez neste banco (a marca fica na tabela migracoes).
+export function rodarUmaVez(nome, fn) {
+  if (prep("SELECT 1 FROM migracoes WHERE nome = ?").get(nome)) return false;
+  fn();
+  prep("INSERT INTO migracoes (nome, em) VALUES (?, ?)").run(nome, new Date().toISOString());
+  return true;
 }
 
 export function lerConfig(serverId) {
@@ -767,13 +812,13 @@ export function bansGlobaisDoServidor(serverId) {
 
 export function addReactionRole(serverId, messageId, emoji, roleId, channelId = null) {
   // herda o modo e o canal já definidos para esta mensagem
-  const atual = prep("SELECT exclusivo, channelId FROM reaction_roles WHERE messageId = ? LIMIT 1").get(messageId);
+  const atual = prep("SELECT exclusivo, channelId, grupo FROM reaction_roles WHERE messageId = ? LIMIT 1").get(messageId);
   const exclusivo = atual?.exclusivo ?? 0;
   const canal = channelId ?? atual?.channelId ?? null;
   const posicao = prep("SELECT ordem FROM reaction_roles WHERE messageId = ? AND emoji = ?").get(messageId, emoji)?.ordem
     ?? ((prep("SELECT MAX(ordem) AS m FROM reaction_roles WHERE messageId = ?").get(messageId)?.m ?? 0) + 1);
-  prep(`INSERT OR REPLACE INTO reaction_roles (serverId, messageId, emoji, roleId, exclusivo, channelId, ordem)
-              VALUES (?, ?, ?, ?, ?, ?, ?)`).run(serverId, messageId, emoji, roleId, exclusivo, canal, posicao);
+  prep(`INSERT OR REPLACE INTO reaction_roles (serverId, messageId, emoji, roleId, exclusivo, channelId, ordem, grupo)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(serverId, messageId, emoji, roleId, exclusivo, canal, posicao, atual?.grupo ?? null);
 }
 
 // Grava/atualiza o canal de uma mensagem já registrada.
@@ -792,6 +837,21 @@ export function setReactionRoleExclusivo(messageId, ligado) {
   const r = prep("UPDATE reaction_roles SET exclusivo = ? WHERE messageId = ?")
     .run(ligado ? 1 : 0, messageId);
   return r.changes ?? 0;
+}
+
+// Junta mensagens num grupo: no modo exclusivo, escolher numa tira o cargo das outras.
+export function setReactionRoleGrupo(messageIds, grupo) {
+  let n = 0;
+  for (const id of messageIds) n += prep("UPDATE reaction_roles SET grupo = ? WHERE messageId = ?").run(grupo ?? null, id).changes ?? 0;
+  return n;
+}
+
+// As regras que contam no modo exclusivo: as da mensagem e as das outras do grupo dela.
+export function regrasDoGrupo(messageId) {
+  const g = prep("SELECT grupo FROM reaction_roles WHERE messageId = ? LIMIT 1").get(messageId)?.grupo;
+  return g
+    ? prep("SELECT messageId, emoji, roleId, channelId FROM reaction_roles WHERE grupo = ? ORDER BY messageId, ordem, rowid").all(g)
+    : prep("SELECT messageId, emoji, roleId, channelId FROM reaction_roles WHERE messageId = ? ORDER BY ordem, rowid").all(messageId);
 }
 
 export function isReactionRoleExclusivo(messageId) {
@@ -897,6 +957,15 @@ export function posicaoXp(serverId, userId) {
   return r?.pos ?? null;
 }
 
+export const xpFora = (serverId, userId) => !!prep("SELECT 1 FROM xp_fora WHERE serverId = ? AND userId = ?").get(String(serverId), String(userId));
+// fora = true: sai (o XP é apagado); false: volta a contar do zero
+export function setXpFora(serverId, userId, fora) {
+  const s = String(serverId), u = String(userId);
+  if (!fora) return prep("DELETE FROM xp_fora WHERE serverId = ? AND userId = ?").run(s, u).changes ?? 0;
+  prep("INSERT OR IGNORE INTO xp_fora (serverId, userId, em) VALUES (?, ?, ?)").run(s, u, new Date().toISOString());
+  return prep("DELETE FROM xp_usuarios WHERE serverId = ? AND userId = ?").run(s, u).changes ?? 0;
+}
+
 export function resetXp(serverId) {
   return prep("DELETE FROM xp_usuarios WHERE serverId = ?").run(serverId).changes ?? 0;
 }
@@ -945,14 +1014,70 @@ export function addHistorico(userId, papel, conteudo, { serverId = null, canalId
   )`).run(userId, canalId, userId, canalId);
 }
 
-export function getHistorico(userId, limite = 6, { canalId = null, minutos = 30 } = {}) {
+// `global`: a pessoa escolheu que a conversa continue entre servidores e canais
+// (&privacidade fio global) — o fio é dela, não do canal.
+export function getHistorico(userId, limite = 6, { canalId = null, minutos = 30, global = false } = {}) {
   const desde = new Date(Date.now() - minutos * 60_000).toISOString();
-  const linhas = prep(
-    `SELECT papel, conteudo FROM ia_historico
+  const linhas = global
+    ? prep(`SELECT papel, conteudo FROM ia_historico
+      WHERE userId = ? AND momento >= ? ORDER BY momento DESC LIMIT ?`).all(userId, desde, limite * 2)
+    : prep(`SELECT papel, conteudo FROM ia_historico
       WHERE userId = ? AND canalId IS ? AND momento >= ?
-      ORDER BY momento DESC LIMIT ?`
-  ).all(userId, canalId, desde, limite * 2);
+      ORDER BY momento DESC LIMIT ?`).all(userId, canalId, desde, limite * 2);
   return linhas.reverse();   // cronológico (mais antigo primeiro)
+}
+
+// O histórico de conversa vive 24 h (privacidade, 20 out 2026): a conversa só usa
+// os últimos minutos, e o texto que alguém escreveu não fica guardado à toa.
+export const HISTORICO_HORAS = 24;
+export function podarHistoricoIA(horas = HISTORICO_HORAS) {
+  const limite = new Date(Date.now() - horas * 3600_000).toISOString();
+  return prep("DELETE FROM ia_historico WHERE momento < ?").run(limite).changes ?? 0;
+}
+
+// ── Consentimento (privacidade, 20 out 2026) ──
+export function getConsentimento(userId) {
+  return prep("SELECT memoria, fioGlobal, perguntadoEm, respondidoEm FROM ia_consentimento WHERE userId = ?").get(String(userId)) ?? null;
+}
+export const temMemoriaConsentida = (userId) => getConsentimento(userId)?.memoria === 1;
+export function setConsentimento(userId, { memoria, fioGlobal, perguntado = false, respondido = false } = {}) {
+  const a = getConsentimento(userId) ?? { memoria: 0, fioGlobal: 0, perguntadoEm: null, respondidoEm: null };
+  const agora = new Date().toISOString();
+  const n = {
+    memoria: memoria == null ? a.memoria : (memoria ? 1 : 0),
+    fioGlobal: fioGlobal == null ? a.fioGlobal : (fioGlobal ? 1 : 0),
+    perguntadoEm: perguntado ? agora : a.perguntadoEm,
+    respondidoEm: respondido ? agora : a.respondidoEm,
+  };
+  prep(`INSERT INTO ia_consentimento (userId, memoria, fioGlobal, perguntadoEm, respondidoEm) VALUES (?, ?, ?, ?, ?)
+    ON CONFLICT(userId) DO UPDATE SET memoria=excluded.memoria, fioGlobal=excluded.fioGlobal,
+      perguntadoEm=excluded.perguntadoEm, respondidoEm=excluded.respondidoEm`)
+    .run(String(userId), n.memoria, n.fioGlobal, n.perguntadoEm, n.respondidoEm);
+  return getConsentimento(userId);
+}
+
+// Quem desliga a memória perde tudo o que a IA sabia dela, em TODOS os servidores.
+// A marca de "tratar com gentileza" fica (é escolha à parte, não memória).
+export function apagarMemoriaDaPessoaGlobal(userId) {
+  const u = String(userId);
+  const fatos = prep("DELETE FROM ia_fatos_pessoa WHERE userId = ?").run(u).changes ?? 0;
+  const perfil = prep("DELETE FROM ia_perfil WHERE userId = ? AND cuidado = 0").run(u).changes ?? 0;
+  prep("UPDATE ia_perfil SET nome = NULL, bio = NULL, grupos = NULL, jogos = NULL, status = NULL, entrou = NULL WHERE userId = ?").run(u);
+  const memoria = prep("DELETE FROM ia_memoria WHERE userId = ?").run(u).changes ?? 0;
+  return { fatos, perfil, memoria };
+}
+
+// O que a IA guarda de alguém (o &privacidade mostra)
+export function resumoIADaPessoa(userId, serverId = null) {
+  const u = String(userId);
+  const um = (sql, ...p) => prep(sql).get(...p)?.n ?? 0;
+  return {
+    fatosAqui: serverId ? um("SELECT COUNT(*) n FROM ia_fatos_pessoa WHERE userId = ? AND serverId = ?", u, serverId) : 0,
+    fatosTotal: um("SELECT COUNT(*) n FROM ia_fatos_pessoa WHERE userId = ?", u),
+    perfis: um("SELECT COUNT(*) n FROM ia_perfil WHERE userId = ? AND (bio IS NOT NULL OR status IS NOT NULL)", u),
+    memoria: (() => { try { return JSON.parse(prep("SELECT fatos FROM ia_memoria WHERE userId = ?").get(u)?.fatos ?? "[]").length; } catch { return 0; } })(),
+    historico: um("SELECT COUNT(*) n FROM ia_historico WHERE userId = ?", u),
+  };
 }
 
 export function limparHistorico(userId, { serverId = null } = {}) {

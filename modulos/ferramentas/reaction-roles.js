@@ -149,10 +149,10 @@ export async function aoReagir(message, userId, emoji, ctx) {
 
     let removidos = [];
     let novos = atuais;
-    if (db.isReactionRoleExclusivo(messageId)) {
-      const daMensagem = db.listReactionRoles(messageId)
-        .map((r) => r.roleId)
-        .filter((id) => id !== alvo.roleId);
+    // exclusivo: vale a mensagem e as outras do mesmo grupo (o painel de cores em duas mensagens)
+    const doGrupo = db.isReactionRoleExclusivo(messageId) ? db.regrasDoGrupo(messageId) : [];
+    if (doGrupo.length) {
+      const daMensagem = doGrupo.map((r) => r.roleId).filter((id) => id !== alvo.roleId);
       removidos = atuais.filter((id) => daMensagem.includes(id));
       novos = atuais.filter((id) => !daMensagem.includes(id));
     }
@@ -167,11 +167,12 @@ export async function aoReagir(message, userId, emoji, ctx) {
 
     if (removidos.length) {
       try {
-        const paraTirar = db.listReactionRoles(messageId)
-          .filter((r) => removidos.includes(r.roleId))
-          .map((r) => r.emoji);
-        for (const e of paraTirar) {
-          await tirarReacaoDe(message, e, userId, ctx.client);
+        const paraTirar = doGrupo.filter((r) => removidos.includes(r.roleId));
+        for (const r of paraTirar) {
+          // a reação antiga pode estar em outra mensagem do grupo
+          const daqui = r.messageId === messageId ? (message?.channelId ?? message?.channel?.id ?? message?.channel?._id) : null;
+          const onde = { id: r.messageId, channelId: daqui ?? r.channelId };
+          await tirarReacaoDe(onde, r.emoji, userId, ctx.client);
         }
       } catch (e) { console.log("[REACTIONROLE] não consegui limpar as reações antigas:", e?.message); }
     }

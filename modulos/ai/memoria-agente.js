@@ -117,6 +117,10 @@ async function processar(k) {
   buffers.delete(k);
 
   const { serverId, userId, nome, msgs } = buf;
+  // (revisão do P1) a mensagem esperou o debounce: quem desligou a memória (ou apagou
+  // tudo) nesse meio-tempo não pode ganhar fato novo
+  const consente = () => { try { return db.temMemoriaConsentida(userId); } catch { return false; } };
+  if (!consente()) return;
   const conteudo = `Usuário: ${nome || userId}\nMensagens:\n${msgs.map((m) => `- ${m}`).join("\n")}`;
 
   let raw;
@@ -133,6 +137,7 @@ async function processar(k) {
     obj = JSON.parse(limpo);
   } catch { log("JSON inválido do extrator; ignorando"); return; }
 
+  if (!consente()) return;   // e de novo: o modelo pode ter levado segundos
   const aceitar = (item) => filtrarFato(item, { msgs, nome, aoDescartar: (m) => log(m) });
 
   const cats = { personalidade: "personalidade", gosto: "gosto", info: "info" };

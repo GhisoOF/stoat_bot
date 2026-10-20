@@ -8,6 +8,7 @@
 //   &servidores relatorio vazias on|off  → mandar (ou pular) as horas sem nada
 //   &servidores relatorio assuntos [add|remove <id> [id…]]
 //   &servidores adulto                    → o +18 vale neste canal? (e as últimas recusas)
+//   &servidores pseudonimo <id> [id…]     → como esse ID aparece no log (privacidade P2)
 //
 // Voltou depois de ter saído na versão pública: aqui ele só mostra números
 // sobre os servidores do próprio bot de quem roda a instância.
@@ -18,11 +19,18 @@ import { limparId } from "../core/ids.js";
 import * as relatorio from "../ferramentas/relatorio.js";
 import * as store from "../core/config-store.js";
 import * as imagemAdulta from "../ai/imagem-adulta.js";
+import { pseudonimo } from "../core/pseudonimo.js";
+import { citar } from "../core/aliases.js";
+import { tr } from "../core/i18n.js";
 
 export async function cmdServidores(message, args, ctx) {
   const { sendEmbed, COR, client, ehSuperAdmin } = ctx;
   if (!ehSuperAdmin?.(message.authorId)) {
-    return sendEmbed(message.channel, { title: "🚫 Comando restrito", description: "Só o dono do bot pode ver isso.", colour: COR.erro });
+    // (20 out 2026) a recusa saía só em português — quem tenta em inglês/espanhol lia "Comando restrito"
+    return sendEmbed(message.channel, tr(ctx,
+      { title: "🚫 Comando restrito", description: "Só o dono do bot pode ver isso.", colour: COR.erro },
+      { title: "🚫 Restricted command", description: "Only the bot owner can see this.", colour: COR.erro },
+      { title: "🚫 Comando restringido", description: "Solo el dueño del bot puede ver esto.", colour: COR.erro }));
   }
   // Com RELATORIO_SERVIDOR, o painel só abre no servidor do dono: nos outros
   // servidores da Judy ele não mostra (nem confirma) nada.
@@ -35,6 +43,14 @@ export async function cmdServidores(message, args, ctx) {
   }
   if (["relatorio", "relatório", "report"].includes(args[0]?.toLowerCase())) {
     return cmdRelatorio(message, args.slice(1), ctx);
+  }
+  // O log guarda os IDs como pseudônimo: para procurar alguém (um atacante que
+  // um servidor denunciou), o dono calcula como o ID dele aparece lá.
+  if (args[0]?.toLowerCase() === "pseudonimo") {
+    const ids = args.slice(1).map((a) => limparId(a)).filter(Boolean);
+    return sendEmbed(message.channel, { title: "🕶️ Pseudônimos no log", colour: COR.info,
+      description: ids.length ? ids.map((id) => `\`${id}\` → \`${pseudonimo(id)}\``).join("\n") + "\n\n_Procure com `docker logs stoat-bot 2>&1 | grep <pseudônimo>`._"
+        : `Uso: \`${ctx.PREFIXO ?? "&"}servidores pseudonimo <id> [id…]\`` });
   }
   if (["adulto", "+18", "18", "nsfw", "adult"].includes(args[0]?.toLowerCase())) {
     return cmdAdulto(message, args.slice(1), { ...ctx, aqui });
@@ -136,16 +152,20 @@ async function cmdRelatorio(message, args, ctx) {
     if ((acao === "add" || acao === "remove") && !ids.length) {
       avisos.push(`⚠️ Faltou o ID: \`&servidores relatorio assuntos ${acao} <id> [id…]\``);
     }
+    // (P4, privacidade) a conversa de um servidor ALHEIO não vai para o relatório:
+    // só os servidores de que um dono do bot é dono entram na lista
+    const alheios = acao === "add" ? ids.filter((id) => !relatorio.ehDoDono(client.servers.get(id) ?? { id })) : [];
+    if (alheios.length) avisos.push(`🔒 Fora: ${alheios.map((x) => nomeDe(x) ? `**${nomeDe(x)}**` : `\`${x}\``).join(", ")} — não é seu. Assunto só dos seus servidores; os outros entram no relatório só se aderirem (\`${citar("log.relatorio", "pt", ctx.PREFIXO ?? "&")} on\`), e anônimos.`);
     if ((acao === "add" || acao === "remove") && ids.length) {
       const antes = new Set(cfg.assuntos ?? []);
       cfg.assuntos = (cfg.assuntos ?? []).filter((x) => !ids.includes(x));
       // o servidor fixo já entra sempre: não precisa (nem sai) da lista
-      if (acao === "add") cfg.assuntos.push(...ids.filter((id) => id !== fixo));
+      if (acao === "add") cfg.assuntos.push(...ids.filter((id) => id !== fixo && !alheios.includes(id)));
       salvar();
-      const novos = acao === "add" ? ids.filter((id) => id !== fixo && !antes.has(id)) : ids.filter((id) => antes.has(id));
+      const novos = acao === "add" ? ids.filter((id) => id !== fixo && !antes.has(id) && !alheios.includes(id)) : ids.filter((id) => antes.has(id));
       if (novos.length) avisos.push(`${acao === "add" ? "✅ Entraram" : "✅ Saíram"}: ${novos.map((x) => nomeDe(x) ? `**${nomeDe(x)}**` : `\`${x}\``).join(", ")}`);
       if (acao === "remove" && fixo && ids.includes(fixo)) avisos.push(`ℹ️ \`${fixo}\` é o \`RELATORIO_SERVIDOR\`: entra sempre (para tirar, mude o \`.env\`).`);
-      const fora = ids.filter((id) => !nomeDe(id));
+      const fora = ids.filter((id) => !nomeDe(id) && !alheios.includes(id));
       if (acao === "add" && fora.length) avisos.push(`⚠️ A Judy não está em: ${fora.map((x) => `\`${x}\``).join(", ")} — ficam na lista, mas sem mensagens não há assunto.`);
     }
     const linha = (x, extra = "") => `• ${nomeDe(x) ? `**${nomeDe(x)}** ` : ""}\`${x}\`${extra}`;

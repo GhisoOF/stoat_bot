@@ -1,6 +1,7 @@
 
 import { limparId, ULID } from "../core/ids.js";
-import { tr, lingua } from "../core/i18n.js";
+import { tr, lingua, idiomaDe } from "../core/i18n.js";
+import { idDoNome, nomeExibido } from "../core/aliases.js";
 
 // Cargos do autor da mensagem, em IDs.
 function cargosDe(message) {
@@ -15,6 +16,10 @@ export function temCargoStaff(message, config) {
   const meus = cargosDe(message);
   return meus.some((id) => marcados.includes(id));
 }
+
+// `&acesso livre <comando> on` (P7, 20 out 2026): o comando vale em qualquer canal,
+// mesmo com a restrição de canais ligada — os jogos, por exemplo.
+export const comandoLivre = (config, canonico) => !!canonico && (config?.acesso?.livres ?? []).includes(canonico);
 
 export function canalPermitido(message, config, { ehStaff = false } = {}) {
   const a = config?.acesso?.canais ?? { modo: "todos", lista: [] };
@@ -58,6 +63,11 @@ export async function cmdAcesso(message, args, ctx) {
 
   const sub = args[0]?.toLowerCase();
 
+  a.livres ??= [];
+  const telaNome = lang === "en" ? (idiomaDe(ctx) === "es" ? "es" : "en") : "pt";
+  const nomeDe = (id) => `\`${telaNome === "pt" ? id : nomeExibido(id, telaNome)}\``;
+  const livresTxt = a.livres.length ? a.livres.map(nomeDe).join(" ") : (lang === "en" ? "_none_" : "_nenhum_");
+
   // ── painel ──
   if (!sub || sub === "status") {
     const cargos = a.cargosStaff.length
@@ -78,6 +88,7 @@ export async function cmdAcesso(message, args, ctx) {
         `**Staff roles:** ${cargos}`,
         `**Commands work in:** ${canais}`,
         `**Staff bypasses the channel restriction:** ${a.staffIgnoraCanais ? "yes" : "no"}`,
+        `**Work in any channel:** ${livresTxt}`,
         "",
         "**Staff roles**",
         `\`${P}acesso cargo add <@role|id>\` · \`${P}acesso cargo remove <@role|id>\``,
@@ -89,6 +100,7 @@ export async function cmdAcesso(message, args, ctx) {
         `\`${P}acesso canal exceto\` — everywhere except the listed ones`,
         `\`${P}acesso canal add|remove [#channel]\` — edits the list (no channel = this one)`,
         `\`${P}acesso staffignora on|off\` — whether staff bypasses the restriction`,
+        `\`${P}acesso livre <command> on|off\` — a command that works in any channel (e.g. the games: \`${P}acesso livre ${nomeExibido("entretenimento", telaNome)} on\`)`,
       ].join("\n"),
       colour: COR.info,
     } : {
@@ -97,6 +109,7 @@ export async function cmdAcesso(message, args, ctx) {
         `**Cargos de staff:** ${cargos}`,
         `**Comandos funcionam em:** ${canais}`,
         `**Staff ignora a restrição de canal:** ${a.staffIgnoraCanais ? "sim" : "não"}`,
+        `**Valem em qualquer canal:** ${livresTxt}`,
         "",
         "**Cargos de staff**",
         `\`${P}acesso cargo add <@cargo|id>\` · \`${P}acesso cargo remove <@cargo|id>\``,
@@ -108,6 +121,7 @@ export async function cmdAcesso(message, args, ctx) {
         `\`${P}acesso canal exceto\` — em todos, menos os da lista`,
         `\`${P}acesso canal add|remove [#canal]\` — mexe na lista (sem canal, usa este)`,
         `\`${P}acesso staffignora on|off\` — se o staff escapa da restrição`,
+        `\`${P}acesso livre <comando> on|off\` — um comando que vale em qualquer canal (ex.: os jogos: \`${P}acesso livre entretenimento on\`)`,
       ].join("\n"),
       colour: COR.info,
     });
@@ -235,6 +249,51 @@ export async function cmdAcesso(message, args, ctx) {
     }));
   }
 
+  // ── comando livre: vale em qualquer canal ──
+  if (sub === "livre") {
+    const nome = String(args[1] ?? "").toLowerCase().replace(/^&/, "");
+    const v = String(args[2] ?? "on").toLowerCase();
+    if (!nome) {
+      return sendEmbed(message.channel, tr(ctx, {
+        title: "🔓 Comandos livres",
+        description: `Valem em qualquer canal, mesmo com a restrição de canais: ${livresTxt}\n\n\`${P}acesso livre <comando> on|off\``,
+        colour: COR.info,
+      }, {
+        title: "🔓 Free commands",
+        description: `They work in any channel, even with the channel restriction on: ${livresTxt}\n\n\`${P}acesso livre <command> on|off\``,
+        colour: COR.info,
+      }));
+    }
+    const id = ctx.estado?.CANONICO?.[nome] ?? idDoNome(nome);
+    const conhecidos = new Set(Object.values(ctx.estado?.CANONICO ?? {}));
+    if (!conhecidos.has(id)) {
+      return sendEmbed(message.channel, tr(ctx,
+        { title: "❌ Comando desconhecido", description: `Não conheço o comando \`${nome.slice(0, 30)}\`.`, colour: COR.erro },
+        { title: "❌ Unknown command", description: `I don't know the command \`${nome.slice(0, 30)}\`.`, colour: COR.erro }));
+    }
+    const ligar = !["off", "nao", "não", "no", "0", "desligar", "remover", "remove"].includes(v);
+    if (ligar) { if (!a.livres.includes(id)) a.livres.push(id); }
+    else a.livres = a.livres.filter((c) => c !== id);
+    salvarConfig?.();
+    const aviso = ligar && a.canais.modo === "todos"
+      ? (lang === "en"
+        ? `\n\n_Commands already work in any channel here (mode \`todos\`); this counts once you restrict them with \`${P}acesso canal somente\` or \`exceto\`._`
+        : `\n\n_Aqui os comandos já valem em qualquer canal (modo \`todos\`); isto conta quando você restringir com \`${P}acesso canal somente\` ou \`exceto\`._`)
+      : "";
+    return sendEmbed(message.channel, lang === "en" ? {
+      title: ligar ? "🔓 Free in any channel" : "🔐 Back to the channel rule",
+      description: (ligar
+        ? `${nomeDe(id)} now works in **any channel**, even outside the command channels.`
+        : `${nomeDe(id)} follows the channel restriction again.`) + aviso,
+      colour: COR.sucesso,
+    } : {
+      title: ligar ? "🔓 Livre em qualquer canal" : "🔐 De volta à regra de canais",
+      description: (ligar
+        ? `${nomeDe(id)} agora vale em **qualquer canal**, mesmo fora dos canais de comandos.`
+        : `${nomeDe(id)} volta a seguir a restrição de canais.`) + aviso,
+      colour: COR.sucesso });
+  }
+
   // ── staff ignora canais ──
   if (["staffignora", "staffignoracanais"].includes(sub)) {
     const v = args[1]?.toLowerCase();
@@ -254,7 +313,7 @@ export async function cmdAcesso(message, args, ctx) {
 
   return sendEmbed(message.channel, tr(ctx,
     { title: "❓ Subcomando desconhecido",
-      description: `Use: \`cargo\`, \`canal\`, \`staffignora\` ou \`status\`.`, colour: COR.erro },
+      description: `Use: \`cargo\`, \`canal\`, \`staffignora\`, \`livre\` ou \`status\`.`, colour: COR.erro },
     { title: "❓ Unknown subcommand",
-      description: `Use: \`role\`, \`channel\`, \`staffbypass\` or \`status\`.`, colour: COR.erro }));
+      description: `Use: \`role\`, \`channel\`, \`staffbypass\`, \`free\` or \`status\`.`, colour: COR.erro }));
 }

@@ -11,6 +11,8 @@
 //   sorte     a sorte do dia — muda à meia-noite (UTC), igual o dia todo
 //   zoeira    tExTo De ZoEiRa
 //   inverter  o texto de trás para frente
+//   campominado  campo minado em spoilers (P7, 20 out 2026 — ver jogos.js)
+//   velha     jogo da velha por reação, contra alguém ou contra a Judy
 //
 // Os subcomandos só existem DENTRO da família (regra da árvore de comandos):
 // `&ship` responde "você quis dizer `&entretenimento ship`?".
@@ -18,6 +20,7 @@
 // menções dentro do texto viram @nome antes de qualquer transformação.
 
 import { lingua } from "../core/i18n.js";
+import * as jogos from "./jogos.js";
 
 // ── Utilidades puras ────────────────────────────────────────────────────────
 // FNV-1a de 32 bits: barato, estável entre versões do Node, bom o bastante
@@ -371,9 +374,11 @@ const SUB = {
   sorte: "sorte", fortune: "sorte", biscoito: "sorte",
   zoeira: "zoeira", mock: "zoeira",
   inverter: "inverter", reverse: "inverter", reverso: "inverter",
+  campominado: "campominado", minado: "campominado", minas: "campominado", minesweeper: "campominado", mines: "campominado", buscaminas: "campominado",
+  velha: "velha", jogodavelha: "velha", tictactoe: "velha", ttt: "velha", tateti: "velha", "tres-en-raya": "velha",
   ajuda: "menu", help: "menu", menu: "menu",
 };
-export const SUBCOMANDOS = ["ship", "briga", "cowsay", "bola8", "escolher", "nota", "sorte", "zoeira", "inverter"];
+export const SUBCOMANDOS = ["ship", "briga", "cowsay", "bola8", "escolher", "nota", "sorte", "zoeira", "inverter", "campominado", "velha"];
 // Para a dica do main.js: `&ship` não existe solto, mora aqui.
 export const subcomandoDe = (nome) => {
   const s = SUB[String(nome ?? "").toLowerCase()];
@@ -446,6 +451,8 @@ export async function cmdEntretenimento(message, args, ctx, { rng = rngPadrao, a
       `\`${raiz} nota <coisa>\` — ${T("nota de 0 a 10 para qualquer coisa", "a 0–10 rating for anything")}`,
       `\`${raiz} sorte\` — ${T("a sua sorte de hoje", "your fortune for today")}`,
       `\`${raiz} zoeira <texto>\` · \`${raiz} inverter <texto>\` — ${T("tExTo De ZoEiRa · texto ao contrário", "mOcKiNg TeXt · text backwards")}`,
+      `\`${raiz} campominado ${T("[facil|medio|dificil]", "[easy|medium|hard]")}\` — ${T("campo minado: clique nos quadrados", "minesweeper: click the squares")}`,
+      `\`${raiz} velha ${T("[@pessoa]", "[@user]")}\` — ${T("jogo da velha por reação — sem ninguém, contra mim", "tic-tac-toe by reaction — with nobody, against me")}`,
       "",
       T(`_Com uma pessoa só, o outro lado é você: \`${raiz} ship @alguém\`. \`${P}help entretenimento <sub>\` explica cada um._`,
         `_With just one person, the other side is you: \`${raiz} ship @someone\`. \`${P}help entretenimento <sub>\` explains each one._`),
@@ -563,6 +570,40 @@ export async function cmdEntretenimento(message, args, ctx, { rng = rngPadrao, a
     const texto = (await trocarMencoes(resto, { ctx, server })).slice(0, 500);
     const saida = sub === "zoeira" ? zoeira(texto) : inverter(texto);
     return enviar(sub === "zoeira" ? "🤪" : "🔁", saida.replace(/`/g, "ˋ"), COR.info);
+  }
+
+  // ── campo minado ──
+  if (sub === "campominado") {
+    const nome = jogos.nivelDe(args[1]) ?? (args[1] ? null : "medio");
+    if (!nome) return uso(T("campominado [facil|medio|dificil]", "minesweeper [easy|medium|hard]"));
+    const nivel = jogos.NIVEIS[nome];
+    const campo = jogos.gerarCampo(nivel, rng);
+    const NOME = { facil: T("fácil", "easy"), medio: T("médio", "medium"), dificil: T("difícil", "hard") }[nome];
+    const cabeca = T(
+      `💣 **Campo minado** (${NOME}) — ${nivel.linhas}×${nivel.colunas}, **${nivel.minas}** minas. Clique nos quadrados para abrir; a casa aberta é um começo seguro.`,
+      `💣 **Minesweeper** (${NOME}) — ${nivel.linhas}×${nivel.colunas}, **${nivel.minas}** mines. Click the squares to open them; the open one is a safe start.`);
+    // texto, não embed: o spoiler (`!!…!!`) é do texto da mensagem
+    try { return await message.channel.sendMessage(`${cabeca}\n\n${jogos.textoCampo(campo)}`); }
+    catch (e) { return enviar("💣", T(`Não consegui mandar o campo: ${e?.message ?? e}`, `I couldn't send the board: ${e?.message ?? e}`), COR.erro); }
+  }
+
+  // ── jogo da velha ──
+  if (sub === "velha") {
+    const autor = await autorComoItem(message, { ctx, server });
+    const botId = ctx.client?.user?.id;
+    let rival = null;
+    if (resto && !["judy", "bot", "voce", "você", "you"].includes(normalizar(resto))) {
+      const id = idDaMencao(resto);
+      if (!id) return uso(T("velha [@pessoa]  ·  velha (contra mim)", "tictactoe [@user]  ·  tictactoe (against me)"));
+      if (id !== botId) rival = await item(resto, { ctx, server });
+    }
+    if (rival && rival.id === autor.id) return enviar("🎮", T("Contra você mesmo não dá — chame alguém, ou jogue comigo: ", "You can't play yourself — call someone, or play me: ") + `\`${raiz} velha\``, COR.aviso);
+    const r = await jogos.iniciarVelha({
+      ctx, canal: message.channel, rng, lang: en ? "en" : "pt",
+      jogadores: [autor.id, rival?.id ?? jogos.JUDY],
+      nomes: [autor.nome, rival?.nome ?? "Judy"],
+    });
+    return r?.partida?.msg;
   }
 
   return enviar("🎪", `\`${raiz}\``, COR.aviso);

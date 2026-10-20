@@ -16,6 +16,8 @@
 #
 #  Variáveis: REPO (/home/void/judy-repo), CONTAINER (stoat-bot),
 #  BACKUPS (/home/void/backups-judy), MANTER (quantos backups guardar, 15),
+#  DIAS_BACKUP (backup mais velho que isso é apagado, 30 — privacidade: o
+#  backup tem dado pessoal; o recém-feito fica sempre),
 #  REALINHAR=1 (git reset --hard origin/main em vez de pull — descarta
 #  mudanças locais do checkout; o .env não é versionado e fica).
 #
@@ -30,6 +32,7 @@ REPO="${REPO:-/home/void/judy-repo}"
 CONTAINER="${CONTAINER:-stoat-bot}"
 BACKUPS="${BACKUPS:-/home/void/backups-judy}"
 MANTER="${MANTER:-15}"
+DIAS_BACKUP="${DIAS_BACKUP:-30}"
 ACAO="${1:-tudo}"
 
 erro() { printf '\n\033[31m✗ %s\033[0m\n' "$1" >&2; exit 1; }
@@ -63,8 +66,10 @@ fazer_backup() {
     || erro "o backup falhou — NADA foi atualizado (suba de novo com: docker compose up -d)"
   tar tzf "$arq" | grep -q 'stoat.db$' || erro "o backup não tem o stoat.db: $arq — NADA foi atualizado"
   okay "backup: $arq ($(du -h "$arq" | cut -f1))"
-  # guarda só os MANTER mais novos
+  # guarda só os MANTER mais novos, e nenhum mais velho que DIAS_BACKUP dias
   ls -1t "$BACKUPS"/stoat-data-*.tgz 2>/dev/null | tail -n +"$((MANTER + 1))" | xargs -r rm -f
+  find "$BACKUPS" -maxdepth 1 -name 'stoat-data-*.tgz' -mtime +"$((DIAS_BACKUP - 1))" ! -path "$arq" -print -delete \
+    | sed 's|^|  apagado (mais de '"$DIAS_BACKUP"' dias): |' || true
   ULTIMO_BACKUP="$arq"
 }
 
@@ -84,7 +89,7 @@ case "$ACAO" in
     tar tzf "$ARQ" | grep -q 'stoat.db$' || erro "$ARQ não tem stoat.db"
     printf '\033[33mO banco atual será SUBSTITUÍDO por %s (o atual vai para um backup antes). Continuar? [s/N] \033[0m' "$(basename "$ARQ")"
     read -r R; case "$R" in s|S|y|Y) ;; *) info "cancelado"; exit 0 ;; esac
-    MANTER=100000 fazer_backup   # o atual, por garantia (sem podar: o arquivo a restaurar pode ser antigo)
+    MANTER=100000 DIAS_BACKUP=100000 fazer_backup   # o atual, por garantia (sem podar: o arquivo a restaurar pode ser antigo)
     VOL="$(volume)"
     docker run --rm -v "$VOL":/data -v "$(cd "$(dirname "$ARQ")" && pwd)":/b alpine \
       sh -c "find /data -mindepth 1 -delete && tar xzf /b/$(basename "$ARQ") -C /data" \

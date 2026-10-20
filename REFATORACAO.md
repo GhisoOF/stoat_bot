@@ -1000,7 +1000,7 @@ contagem de linhas).
 **Pendente, anotado:** `&help config` abre o grupo Personalizar — `config` também é
 nome de grupo da ajuda, e o grupo vence. A página do `&config` não é alcançável, em
 idioma nenhum, desde antes desta etapa. Não mexi: é escolher qual dos dois o `config`
-abre.
+abre. *(Resolvido em 6q.)*
 
 **Provas:** 16 testes novos (seção 8 da comandos-17out, 73 no total), e o inventário
 guarda também a tela em espanhol. 40 mutações, cada uma derruba ao menos um teste. A
@@ -1008,7 +1008,283 @@ guarda também a tela em espanhol. 40 mutações, cada uma derruba ao menos um t
 here" — o vocabulário que ela procura ficou idêntico (253 palavras). 97/97, build e
 boot até o login.
 
+## 6q. `&help config` abre o &config (20 out 2026)
+
+Decisão do Ghieh: o `config` abre **todas as configurações do servidor**, ou seja, a
+página do `&config`. O `config`, o `settings`, o `configuration` e o `configuração`
+saíram da tabela de nomes antigos de grupo (`ALIAS_GRUPO`, help-grupos.js), onde
+apontavam para o grupo Personalizar e venciam a página do comando. `configuracao`,
+`configuração`, `configuracion` e `configuración` passaram a ser palavras da ajuda
+que levam ao `config` (antes, as duas primeiras iam para o grupo). O grupo continua
+em `&help personalizar` / `customize`.
+
+Na tela pt/en, só o `&help config` mudou (das 334 telas e 985 respostas, o resto é
+sorteio, dado e contagem de linhas). **Prova:** 1 teste novo (74 na comandos-17out),
+pt/en/es com três palavras cada; derrubado pelas três mutações (o `config` de volta
+ao grupo; sem `configuracao`; sem `configuración`). O teste antigo da `help-tutorial`
+que fixava "`config` leva ao grupo Personalizar" passou a conferir a decisão nova (e
+cai com o `config` de volta ao grupo).
+
+**Mesmo padrão, não mexi (é escolha):** `&help xp` (e `nivel`, `level`, `levels`)
+abre o grupo Diversão, e `&help game` (e `personagem`, `character`) o grupo RPG — as
+páginas do `&xp` e do `&game` não abrem pelo `&help`.
+
+## 6r. Privacidade P1: a memória da IA com consentimento (20 out 2026)
+
+As regras do Stoat (Community Guidelines, "Keeping It Fair") já proíbem juntar dado
+pessoal sem consentimento — inclusive "o scraping automatizado de mensagens, listas de
+membros e perfis de usuário" sem permissão de quem é dono do dado. As respostas do
+Trust & Safety ao dev do bronx (10 out 2026, de segunda mão) apontam para opt-in,
+30 dias para dado pessoal e política de privacidade obrigatória. A Judy observava
+**toda** mensagem dos servidores com chat e guardava fatos de todo mundo para sempre;
+qualquer um mapeava e lia o perfil de outra pessoa.
+
+**O que mudou (decisões do Ghieh):**
+- **A memória antiga foi apagada**, uma vez, na abertura do banco (`ia_fatos_pessoa`,
+  `ia_fatos_servidor`, `ia_perfil`, `ia_memoria`, `ia_historico`). A marca fica na
+  tabela nova `migracoes`: não roda de novo.
+- **Consentimento global** (`ia_consentimento`): a Judy, "como uma usuária", pergunta
+  na primeira conversa, depois de responder, se pode lembrar da pessoa. Um "sim" ou
+  "não" comum no mesmo canal, em até 30 min, com ou sem mencioná-la, é a resposta (pt,
+  en e es). Sem resposta, pergunta de novo só depois de uma semana. Vale em todos os
+  servidores. "Não" apaga o que houver.
+- **Sem consentimento, nada:** o extrator de fatos não recebe a mensagem, a conversa
+  não grava o "perguntou sobre…", e o que estiver no banco não chega ao modelo.
+- **`&chat mapear` e `&chat perfil` só da própria pessoa.**
+- **Histórico de conversa: 24 h**, para todos (poda na abertura e de hora em hora).
+  Quem quiser, `&privacidade fio global`: a conversa continua de um servidor e canal
+  para outro (lê as últimas 24 h, em vez dos 30 min do canal).
+- **`&privacidade`** (novo, essencial, vale em qualquer canal, membro vê): o que a Judy
+  guarda sobre você, `memoria on|off` (off apaga, em todos os servidores; a marca de
+  gentileza fica — é escolha à parte) e `fio global|canal`. No registro, com a página
+  de ajuda em pt/en/es desde o início.
+
+**Testes:** suíte nova `privacidade-20out` (13 testes, com o LLM de mentira) — a
+memória passiva só de quem aceitou, a pergunta e a resposta, o "sim" de outra pessoa /
+outro canal / fora do prazo, o perfil só seu, a poda de 24 h, o fio global e a
+migração única. 18 mutações, cada uma derruba ao menos um teste. Três testes antigos
+foram ajustados ao comportamento novo (o fio com `global`; nos testes de conversa, a
+pessoa "já respondeu" à pergunta, que senão vira a última saída). Nas telas pt/en,
+só as páginas novas do `&privacidade` e a contagem de comandos (45 → 46).
+
+## 6s. Privacidade P2: retenção e política (20 out 2026)
+
+- **`&privacidade apagar`** (en `delete`, es `borrar`): mostra quanto há de cada grupo
+  (memória da IA, XP, saldo, personagem do RPG) e dá um código; `apagar confirmar
+  <código>` em até 2 min apaga, em todos os servidores (`core/retencao.js`). Ficam os
+  registros de moderação — avisos, punições e a lista global de bans —, e a escolha
+  ("não lembrar") fica, para a Judy não perguntar de novo.
+- **Servidor de onde a Judy saiu:** `serverLeave`/`serverDelete` marcam a saída
+  (tabela `servidores_saida`); `serverCreate` desmarca. Na subida, servidor com config
+  onde ela não está entra na contagem (saiu com ela desligada). A cada 6 h, os que saíram
+  há mais de 30 dias (`DIAS_APOS_SAIDA`) perdem **tudo** o que tem `serverId` — config,
+  XP, punições, tickets, ganchos, feeds, IA, economia… — e as notícias vistas dos feeds
+  apagados.
+- **Log do container com pseudônimos:** todo ULID que o bot escreve no log vira
+  `~` + 10 hex (HMAC com o segredo de `/data/log-segredo.key`); o conteúdo fica. É
+  estável — dá para seguir um atacante —, e o dono calcula o de um ID com
+  `&servidores pseudonimo <id>`. `LOG_ANONIMO=0` desliga. O `docker-compose.yml` ganhou
+  teto de log (10 MB × 5 arquivos, `LOG_MAX_TAMANHO`/`LOG_MAX_ARQUIVOS`).
+- **Backups com 30 dias:** o `atualizar-minipc.sh` apaga os mais velhos que
+  `DIAS_BACKUP` (o recém-feito fica; o `restaurar` não poda). **O script mora fora do
+  repositório (`~/atualizar-minipc.sh`): recopie.**
+- **`PRIVACIDADE.md`** em pt/en/es: o que a Judy guarda, por quanto tempo, o que lê sem
+  guardar, para onde vai, e os comandos. O `&privacidade` e o `&sobre` levam a ela
+  (`POLITICA_PRIVACIDADE_URL` para quem roda a sua).
+
+**Testes:** +7 na `privacidade-20out` (20 no total) — o código do apagar (errado,
+vencido, certo), o que fica e o que sai, a saída e a volta, os 30 dias, a subida, o
+pseudônimo estável e o console embrulhado, o teto do log e dos backups, a política e os
+links. 19 mutações, cada uma derruba ao menos um teste. Nas telas pt/en: o link da
+política no `&sobre` e as telas do `&privacidade`.
+
+## 6t. Privacidade P3: XP com aviso e módulos desligados por padrão (20 out 2026)
+
+**XP, opção B (decisão do Ghieh — "sem isso não funciona bem"):** o XP continua sendo
+ligado pelo admin, mas ao ligar (`&xp on`, só na passagem de desligado para ligado) a
+Judy publica um aviso aos membros — no canal e no canal de anúncio de nível, se houver:
+o que é contado (só a contagem, não o texto), `&xp sair` para ficar de fora e
+`&privacidade`. `&xp sair` (en `leave`, es `salir`) apaga o XP da pessoa naquele
+servidor e ele para de contar (tabela `xp_fora`); `&xp entrar` volta, do zero. Vale com
+o XP ligado ou não. O `&privacidade` mostra a situação do XP. A política foi atualizada.
+
+**Servidor novo com todos os módulos desligados:** `desligarModulos()` (config-store)
+desliga, além do automod, XP, moderação por IA, lista global de bans, chat livre,
+comentário espontâneo, boas-vindas, despedida e voz — mesmo que o molde antigo salvo
+no banco (`__default__`) diga outra coisa. Os comandos continuam ligados (decisão do
+Ghieh: "só módulos"). O `&reset` usa a mesma função.
+
+**Testes:** +3 na `privacidade-20out` (23 no total). 10 mutações: 9 derrubam um teste; a
+do `&reset` (`desligarAutomod` no lugar de `desligarModulos`) é equivalente hoje — a
+fábrica vem do padrão do código, onde esses módulos já estão desligados.
+
+**Não fiz:** avisar os servidores que **já** tinham o XP ligado antes deste pacote (os
+membros deles não viram o aviso). `&xp sair` vale para eles também.
+
+## 6u. Privacidade P4: o relatório de ataques, por adesão e anônimo (20 out 2026)
+
+Antes, o relatório horário do dono juntava eventos de **todos** os servidores (com o
+nome deles; a imagem suspeita vinha com a menção de quem mandou) e o ritmo de conversa
+de todos; e o dono podia pôr a conversa de um servidor alheio nos "assuntos". Decisão do
+Ghieh: o servidor escolhe.
+
+- **`&log relatorio on|off`** (en `report`, es `informe`; começa desligado, inclusive nos
+  servidores que já existiam): o servidor manda ao dono da Judy os **ataques** —
+  punições, raids e imagens suspeitas —, **anônimos**: o servidor vira
+  `Servidor ~xxxxxxxxxx` (o mesmo pseudônimo do log), o título perde menções, IDs e o
+  "— quem em onde", e nada da conversa vai (nem amostra). O `&log` mostra o estado.
+- **Os servidores do próprio dono** (`RELATORIO_SERVIDOR`, ou de que um SUPER_ADMIN é
+  dono): completos, como antes.
+- **Os outros:** nada — nem o evento é gravado, nem as mensagens são contadas. O que foi
+  gravado antes da regra passa por ela na hora de montar o relatório.
+- **Assuntos só dos servidores do dono:** `&servidores relatorio assuntos add` recusa o
+  servidor alheio (e o desconhecido), e uma lista antiga com um alheio não vale mais.
+- A regra mora no `relatorio.js` (`modoDe`, `filtrarEvento`); o `main.js` a liga no boot.
+  `desligarModulos` zera a adesão em servidor novo e no `&reset`.
+
+**Testes:** +4 na `relatorio` (29), +1 na `privacidade-20out` (24); 4 testes antigos
+ajustados à regra nova (o servidor alheio listado não ganha assunto; aderido aparece
+com código, não com o nome). 13 mutações, cada uma derruba ao menos um teste — a do
+padrão `relatorioDono: true` só caiu depois de um teste com servidor **antigo** (config
+salva sem o campo), que foi acrescentado.
+
+## 6v. P5: as novidades da Judy no canal de log (20 out 2026)
+
+Pedido do Ghieh: um anúncio de atualização do bot a cada commit novo, no log. Fonte
+escolhida: **as novidades do pacote** (não a mensagem do commit, que é para quem programa).
+
+- **`modulos/ferramentas/novidades.js`:** a lista `NOVIDADES`, a mais nova primeiro, cada
+  entrada com `id` (fixo — é a marca), `data` e o texto em pt/en/es. Comando no texto vai
+  como `{&comando.sub}` e sai com o nome no idioma do servidor (`citarNoTexto`).
+- **Na subida** (`main.js`, no `ready`): a Judy compara a marca global
+  `novidadesAnunciadas` com o topo da lista e manda o que é novo, num embed, ao canal de
+  log dos servidores que ligaram **`&log atualizacoes on`** (en `updates`, es
+  `actualizaciones`; começa **desligado**), no idioma do servidor. A marca é gravada
+  **antes** do envio (um reinício no meio não repete). O canal tem de ser do próprio
+  servidor. A primeira subida com a lista só grava a marca (ninguém tinha como ter ligado
+  a opção, e o que já existia não é novidade). Marca desconhecida (entrada removida): nada.
+- **Regra daqui em diante:** cada pacote acrescenta **uma entrada no topo** de `NOVIDADES`,
+  nos três idiomas, escrita para quem usa o bot. Pacote sem entrada nova = nenhum anúncio.
+
+**Testes:** +3 na `privacidade-20out` (27): a lista (ids únicos, ordem, três idiomas, os
+comandos com o nome certo em cada idioma, e a marca gravada pela subida do `main.js`); o
+`anunciar` (1ª vez só marca; depois só os servidores que ligaram, no idioma deles, nunca
+num canal de outro servidor, sem repetir); o `&log atualizacoes` (desligado por padrão).
+8 mutações, cada uma derruba um teste — a do `citarNoTexto` (o `{&…}` cru na tela) só caiu
+depois de o teste da lista conferir os nomes, que foi acrescentado.
+
+## 6w. P6: cores sólidas e mais gradientes no painel (20 out 2026)
+
+Pedido do Ghieh: "Sólidas + mais gradientes" no `&cor painel`.
+
+- **10 sólidas** (`SOLIDAS`: vermelho, laranja, amarelo, verde, azul, roxo, rosa, marrom,
+  preto, branco), com o mesmo tom do `&cor <cargo> vermelho` (core/cores.js) e um emoji
+  cada (🔴🟠🟡🟢🔵🟣💗🟤⚫⚪). O cargo nasce com o nome da cor no idioma do servidor.
+- **8 gradientes novos:** aurora, galáxia, sakura, menta, pêssego, lava, crepúsculo e
+  algodão-doce (en galaxy, mint, peach, twilight, cotton-candy) — 20 no total, todos
+  conferidos contra a regra de cor do Stoat.
+- **Duas mensagens:** o Stoat aceita até **20 reações por mensagem**
+  (`message_reactions = 20`, `Revolt.toml` do stoatchat), e o painel passou de 20 cores.
+  As sólidas saem numa mensagem e os gradientes em outra (`MAX_REACOES`; um grupo maior
+  que 20 seria fatiado). Uma mensagem só, quando só um grupo entra.
+- **Exclusivo nas duas:** coluna nova `grupo` em `reaction_roles`
+  (`setReactionRoleGrupo`, `regrasDoGrupo`). No modo exclusivo, escolher numa mensagem
+  tira o cargo de cor das outras do grupo — e a reação antiga sai **da mensagem onde ela
+  está** (antes, só se olhava a mensagem reagida). Mensagem sem grupo: igual a antes. O
+  `addReactionRole` herda o grupo, como já herdava o modo e o canal.
+- **Escolha:** `&cor painel aqui solidas` / `gradientes` (en `solid`/`gradients`, es
+  `sólidos`/`degradados`) publica um grupo; os nomes das cores valem misturados
+  (`&cor painel aqui verde fogo`). Cor desconhecida é recusada antes de criar qualquer
+  cargo, listando as sólidas e os gradientes.
+- **Cargo que já existe com o nome da cor e TEM permissões fica de fora** (e não é
+  pintado): com as sólidas, um "Verde" de time ou um "Azul" de staff viraria cargo que
+  qualquer um pega reagindo. Vale também para os gradientes. Sem permissões, é
+  reaproveitado como antes.
+
+**Testes:** suíte nova `cores-20out` (13): o painel completo (10 + 20, o limite de
+reações, os tons, o grupo), o exclusivo entre as duas mensagens nos dois sentidos, o
+cargo que não é de cor, a mensagem antiga sem grupo, os grupos e os nomes em pt/en, a
+recusa e o cargo com permissões. Na suíte velha, todas falham. 16 mutações, cada uma
+derruba ao menos um teste. Um teste de código-fonte da `global-16out` foi ajustado ao
+nome novo da função que dá o nome ao cargo.
+
+**Não fiz:** tradução dos nomes das cores para o espanhol na tela (a tela em espanhol
+mostra os nomes em inglês, como o resto do `&cor` até a etapa 4b).
+
+## 6x. P7: campo minado, jogo da velha e `&acesso livre` (20 out 2026)
+
+Pedido do Ghieh: jogos no `&entretenimento`, que os membros possam usar fora dos canais
+designados se o admin liberar.
+
+- **`modulos/ferramentas/jogos.js`** (novo), chamado pelo `&entretenimento`:
+  - **`campominado [facil|medio|dificil]`** (en `minesweeper`, es `buscaminas`): 6×6/5,
+    8×8/10 (padrão) e 10×10/18 minas. Vai como **texto** — o spoiler do Stoat (`!!…!!`) é
+    do texto da mensagem — com cada casa num spoiler, menos uma: a mais segura (vazia, se
+    houver), para começar sem chute. O 10×10 fica bem abaixo dos 2000 caracteres.
+  - **`velha [@pessoa]`** (en `tictactoe`, es `tateti`): tabuleiro num embed, a Judy reage
+    com 1️⃣–9️⃣ e a jogada é a reação de quem é da vez (casa ocupada, pessoa de fora ou fora
+    da vez: ignorado). Sem ninguém (ou marcando a Judy), contra a Judy, que fecha a linha
+    dela, bloqueia a sua, pega o meio, depois um canto — dá para ganhar dela com duas
+    ameaças. A partida vive na memória e acaba depois de 10 min parada (ou num reinício).
+    O `main.js` passa a reação ao `jogos.aoReagir` logo depois das páginas.
+- **`&acesso livre <comando> on|off`** (en `free`, es `libre`): o comando vale em qualquer
+  canal mesmo com `&acesso canal somente|exceto` — `&acesso livre entretenimento on`
+  solta os jogos. Aceita o nome em qualquer idioma; precisa de ManagePermissions, como o
+  resto do `&acesso`; o `&acesso` mostra a lista. No modo `todos`, avisa que ainda não faz
+  diferença. A checagem fica no mesmo ponto do `main.js` que já liberava os comandos de
+  voz dentro da call. Comando desativado (`&comando desativar`) continua desativado.
+
+**Testes:** suíte nova `jogos-20out` (15): o campo (minas, números, casa aberta, tamanho),
+a mensagem em texto, os níveis e os nomes; a jogada da Judy; a partida contra alguém (vez,
+casa ocupada, empate, vitória, nada depois do fim), contra a Judy, marcar a Judy, contra si
+mesmo; os nomes em inglês e espanhol e a dica do `&campominado` solto; e o `&acesso livre`
+(recusa antes, libera só o comando pedido, `off`, nome em inglês, desconhecido, sem
+permissão, aviso no modo `todos`). No código de antes, 10 falham; os 5 que passam são as
+regras puras do jogo (que só existem no módulo novo) e as travas que já valiam (a
+restrição de canal, a permissão). 18 mutações, cada uma derruba ao menos um teste.
+
 ---
+
+## 6y. P1–P7 num pacote só: revisão independente e regressão (20 out 2026)
+
+Pedido do Ghieh: juntar P1–P7 num commit, pegar todos os erros que apareceram e
+travar cada um com teste. Um revisor que não escreveu o código leu o diff inteiro
+(`git diff` da f555413e) atrás de bug que os testes não pegavam. O que ele e a varredura
+acharam, já corrigido:
+
+| Erro | Pacote | Correção |
+|---|---|---|
+| `&privacidade apagar` apagava a proposta de troca que **outro** jogador fez à pessoa — e com ela o item em custódia do outro — e o companheiro que ela tinha **trocado** (já de outro dono) | P2 | só o que é dela sai; a proposta de outro é cancelada e o item (ou as moedas) volta ao autor; o companheiro trocado fica, sem ela em `donoOriginal`; o histórico do mercado fica sem ela |
+| quem desligava a memória com uma mensagem esperando o debounce (8 s) ganhava fato novo depois do apagar; e o texto ia ao modelo | P1 | `memoria-agente.processar` confere o consentimento antes de chamar o modelo e de novo antes de gravar |
+| o **tom** da conversa (`MODULAÇÃO`) lia os fatos de personalidade de quem não aceitou | P1 | só com consentimento |
+| relatório anônimo: servidor que aderiu e de onde a Judy saiu nesta hora aparecia com o **ID real** | P4 | sem nome na lista, só o do dono sai com ID; os outros, com o pseudônimo |
+| relatório anônimo: ia o "· N msg de M pessoa(s)" — a política promete só os ataques | P4 | servidor anônimo não tem a conversa contada |
+| a limpeza de 30 dias deixava a cópia do `&reset` (`__reset__:<id>`) | P2 | sai com o servidor |
+| a limpeza de 30 dias apagava um servidor marcado como "saiu" **sem ver se a Judy ainda está nele** (uma subida com a lista incompleta marcava um servidor ativo) | P2 | o servidor presente nunca é apagado — a marca sai |
+| tela em inglês/espanhol: `&access free entretenimento on` (o nome do comando em português) | P7 | o nome no idioma da tela |
+| `&servidores` recusava só em português ("Comando restrito") | antes do P1 | nos três idiomas |
+| **o build do Docker abortava**: o `verificar-build.js` (o `RUN` do Dockerfile) lê toda marca de citação do código, e um *comentário* do `novidades.js` trazia uma de exemplo, inventada. Os pacotes P5, P6 e P7 não teriam subido no MiniPC — a conferência deles rodou a suíte e a subida do bot, mas não o verificador | P5 | o comentário descreve a marca sem escrevê-la; a suíte de regressão roda o verificador |
+
+**Testes:** suíte nova `regressao-p1p7` (17), mais 1 na `relatorio` (30) e 3 na
+`privacidade-20out` (30); 1 teste antigo da `relatorio` mudou com a regra (o servidor
+anônimo não tem mais a conversa contada):
+- o banco de antes do P1 (o esquema de hoje sem as tabelas e a coluna novas, com uma
+  linha em **cada** tabela — tabela nova entra sozinha): a subida só zera as 5 tabelas da
+  memória da IA, uma vez; nenhuma outra linha some;
+- a limpeza de servidor que saiu: só o servidor que saiu, nunca o presente; tabela sem
+  `serverId` intacta; a cópia do `&reset` sai;
+- config salva antes do P1 (sem `relatorioDono`, `atualizacoes`, `livres`): nada novo
+  liga, as telas abrem, o `&acesso livre` funciona;
+- o exclusivo das cores com o evento de reação sem o canal (o bug antigo que o P6
+  corrigiu: no código de antes, a reação antiga ficava — conferido);
+- as telas novas sem português em inglês e com os nomes em espanhol;
+- jogo que não começa com marca de erro; novidade que não cita comando à mão;
+- os achados da revisão, um teste cada;
+- o verificador do build do Docker.
+25 mutações (16 que desfazem o que a suíte nova trava, 9 que desfazem as correções da
+revisão): todas derrubam um teste. Duas só caíram depois de um teste a mais: o anúncio com a config crua (pelo
+store o campo vem do padrão) e "nem o texto vai ao modelo" (a 2ª checagem sozinha
+impedia a gravação, mas não o envio).
 
 ## 7. O que NÃO fiz, e por quê
 

@@ -1,6 +1,6 @@
 import { limparId, ULID } from "../core/ids.js";
 import * as db from "../core/db.js";
-import { CORES as NOMES, normalizarCor as corSolida, nomesDeCor } from "../core/cores.js";
+import { CORES as NOMES, CORES_EN, CORES_ES, normalizarCor as corSolida, nomesDeCor } from "../core/cores.js";
 import { tr, lingua } from "../core/i18n.js";
 import { chamarApi } from "../core/stoat-api.js";
 import { canalDeOutroServidor } from "./pertence.js";
@@ -19,12 +19,23 @@ export const PRESETS = {
   sangue:       "linear-gradient(90deg, #7F0000 0%, #FF0000 60%, #FF6A6A 100%)",
   gelo:         "linear-gradient(90deg, #E0F7FF 0%, #7DD3FC 50%, #0369A1 100%)",
   trans:        "linear-gradient(90deg, #5BCEFA 0%, #F5A9B8 33%, #FFFFFF 50%, #F5A9B8 67%, #5BCEFA 100%)",
+  // (P6, 20 out 2026) mais oito — o painel de gradientes fica com 20, o limite de reações do Stoat
+  aurora:       "linear-gradient(90deg, #00F5A0 0%, #00D9F5 50%, #7B2FF7 100%)",
+  galaxia:      "linear-gradient(90deg, #0F0C29 0%, #302B63 50%, #B24592 100%)",
+  sakura:       "linear-gradient(90deg, #FFC0CB 0%, #FF8FAB 50%, #FB6F92 100%)",
+  menta:        "linear-gradient(90deg, #A8FF78 0%, #78FFD6 100%)",
+  pessego:      "linear-gradient(90deg, #FFB88C 0%, #DE6262 100%)",
+  lava:         "linear-gradient(90deg, #200122 0%, #6F0000 50%, #FF4E00 100%)",
+  crepusculo:   "linear-gradient(90deg, #0B486B 0%, #F56217 100%)",
+  "algodao-doce": "linear-gradient(90deg, #FFAFBD 0%, #C9FFFF 100%)",
 };
 
 const EMOJI_PRESET = {
   "arco-iris": "🏳️‍🌈", fogo: "🔥", oceano: "🌊", neon: "🚨", vaporwave: "🚬",
   poente: "🌅", floresta: "🌳", ouro: "🥇", cyberpunk: "🌆", sangue: "🩸",
   gelo: "🧊", trans: "🏳️‍⚧️",
+  aurora: "🌌", galaxia: "🪐", sakura: "🌸", menta: "🌿", pessego: "🍑", lava: "🌋",
+  crepusculo: "🌙", "algodao-doce": "🍬",
 };
 
 // Os nomes em inglês (16 out 2026, o bot ficou global): a entrada aceita os
@@ -34,11 +45,44 @@ const PRESET_EN = {
   rainbow: "arco-iris", fire: "fogo", ocean: "oceano", neon: "neon", vaporwave: "vaporwave",
   sunset: "poente", forest: "floresta", gold: "ouro", cyberpunk: "cyberpunk", blood: "sangue",
   ice: "gelo", trans: "trans",
+  aurora: "aurora", galaxy: "galaxia", sakura: "sakura", mint: "menta", peach: "pessego", lava: "lava",
+  twilight: "crepusculo", "cotton-candy": "algodao-doce",
 };
 const EN_DO_PRESET = Object.fromEntries(Object.entries(PRESET_EN).map(([en, pt]) => [pt, en]));
 export const presetDe = (t) => { const k = String(t ?? "").toLowerCase(); return PRESETS[k] ? k : PRESET_EN[k] ?? null; };
 export const nomePreset = (k, en) => (en ? EN_DO_PRESET[k] ?? k : k);
 const listaPresets = (en) => Object.keys(PRESETS).map((k) => `\`${nomePreset(k, en)}\``).join(", ");
+
+// ── Cores sólidas no painel (P6, 20 out 2026) ───────────────────────────────
+// As dez básicas, com o mesmo tom do `&cor <cargo> vermelho` (core/cores.js). Os
+// cargos se chamam como a cor, no idioma do servidor.
+export const SOLIDAS = ["vermelho", "laranja", "amarelo", "verde", "azul", "roxo", "rosa", "marrom", "preto", "branco"];
+const EMOJI_SOLIDA = {
+  vermelho: "🔴", laranja: "🟠", amarelo: "🟡", verde: "🟢", azul: "🔵",
+  roxo: "🟣", rosa: "💗", marrom: "🟤", preto: "⚫", branco: "⚪",
+};
+const EN_DA_SOLIDA = Object.fromEntries(Object.entries(CORES_EN).reverse().filter(([, pt]) => SOLIDAS.includes(pt)).map(([en, pt]) => [pt, en]));
+export const solidaDe = (t) => {
+  const k = String(t ?? "").toLowerCase();
+  const pt = SOLIDAS.includes(k) ? k : CORES_EN[k] ?? CORES_ES[k] ?? null;
+  return pt && SOLIDAS.includes(pt) ? pt : null;
+};
+const nomeSolida = (k, en) => (en ? EN_DA_SOLIDA[k] ?? k : k);
+const listaSolidas = (en) => SOLIDAS.map((k) => `\`${nomeSolida(k, en)}\``).join(", ");
+
+// Uma cor do painel: { tipo: "g" (gradiente) | "s" (sólida), nome }
+const valorDoItem = (it) => (it.tipo === "s" ? NOMES[it.nome] : PRESETS[it.nome]);
+const emojiDoItem = (it) => (it.tipo === "s" ? EMOJI_SOLIDA[it.nome] : EMOJI_PRESET[it.nome]);
+const nomeDoItem = (it, en) => (it.tipo === "s" ? nomeSolida(it.nome, en) : nomePreset(it.nome, en));
+const PALAVRAS_SOLIDAS = ["solidas", "sólidas", "solida", "sólida", "solid", "solids", "solidos", "sólidos"];
+const PALAVRAS_GRADIENTES = ["gradientes", "gradients", "gradiente", "gradient", "degradados", "presets", "prontos"];
+// Um painel por mensagem tem no máximo 20 reações (limite do Stoat: message_reactions = 20)
+export const MAX_REACOES = 20;
+// Um cargo com o nome da cor que JÁ tem permissões não vira cor de painel: qualquer
+// um poderia pegá-lo reagindo (um "Verde" de time, um "Ouro" de staff…).
+function temPermissoes(role) {
+  try { return BigInt(role?.permissions?.a ?? 0) !== 0n; } catch { return false; }
+}
 
 function montarGradiente(cores, angulo = 90) {
   const paradas = cores.map((c, i) => {
@@ -207,9 +251,11 @@ export async function cmdCor(message, args, ctx) {
         `\`${P}cor painel <channel-id>\` — posts the panel in another channel`,
         `\`${P}cor criar\` — only creates/paints the roles, posts nothing`,
         `\`${P}cor painel aqui fire ice neon\` — only the chosen colors`,
+        `\`${P}cor painel aqui solid\` · \`${P}cor painel aqui gradients\` — only one group`,
         "",
         "**Presets**",
         `\`${P}cor <role> preset <name>\` — ${listaPresets(true)}`,
+        `_In the panel, also the solid ones:_ ${listaSolidas(true)}`,
         "",
         "**Raw CSS**",
         `\`${P}cor <role> linear-gradient(224deg, #73E696 50%, #F7EEB2 50%)\``,
@@ -238,9 +284,11 @@ export async function cmdCor(message, args, ctx) {
         `\`${P}cor painel <id-do-canal>\` — publica o painel em outro canal`,
         `\`${P}cor criar\` — só cria/pinta os cargos, sem publicar nada`,
         `\`${P}cor painel aqui fogo gelo neon\` — só as cores escolhidas`,
+        `\`${P}cor painel aqui solidas\` · \`${P}cor painel aqui gradientes\` — só um grupo`,
         "",
         "**Prontos**",
         `\`${P}cor <cargo> preset <nome>\` — ${listaPresets(false)}`,
+        `_No painel, também as sólidas:_ ${listaSolidas(false)}`,
         "",
         "**CSS na mão**",
         `\`${P}cor <cargo> linear-gradient(224deg, #73E696 50%, #F7EEB2 50%)\``,
@@ -294,25 +342,33 @@ export async function cmdCor(message, args, ctx) {
           description: "You need **ManageRole** to create roles.", colour: COR.erro }));
     }
 
-    // Argumentos: um canal (menção/ID/"aqui") e/ou nomes de preset.
+    // Argumentos: um canal (menção/ID/"aqui"), nomes de cor (sólida ou gradiente)
+    // e/ou um grupo inteiro (`solidas`, `gradientes`). Sem cor nenhuma: todas.
     let canalAlvoId = null;
-    const pedidos = [];
+    const pedidos = [], invalidos = [];
+    const pedir = (it) => { if (!pedidos.some((p) => p.tipo === it.tipo && p.nome === it.nome)) pedidos.push(it); };
     for (const a of args.slice(1)) {
       const t = a.toLowerCase();
-      if (["aqui", "here"].includes(t)) { canalAlvoId = message.channelId; continue; }
+      if (["aqui", "here", "aquí", "acá", "aca"].includes(t)) { canalAlvoId = message.channelId; continue; }
       const id = limparId(a);
       if (ULID.test(id)) { canalAlvoId = id; continue; }
-      if (!["todos", "all"].includes(t)) pedidos.push(presetDe(t) ?? t);
+      if (["todos", "todas", "all"].includes(t)) continue;
+      if (PALAVRAS_SOLIDAS.includes(t)) { SOLIDAS.forEach((n) => pedir({ tipo: "s", nome: n })); continue; }
+      if (PALAVRAS_GRADIENTES.includes(t)) { Object.keys(PRESETS).forEach((n) => pedir({ tipo: "g", nome: n })); continue; }
+      const g = presetDe(t);
+      if (g) { pedir({ tipo: "g", nome: g }); continue; }
+      const so = solidaDe(t);
+      if (so) { pedir({ tipo: "s", nome: so }); continue; }
+      invalidos.push(t);
     }
-    const invalidos = pedidos.filter((p) => !PRESETS[p]);
     if (invalidos.length) {
       return sendEmbed(message.channel, tr(ctx, {
-        title: "❌ Preset desconhecido",
-        description: `Não conheço: ${invalidos.map((i) => `\`${i}\``).join(", ")}.\n\nDisponíveis: ${listaPresets(false)}`,
+        title: "❌ Cor desconhecida",
+        description: `Não conheço: ${invalidos.map((i) => `\`${i}\``).join(", ")}.\n\n**Sólidas:** ${listaSolidas(false)}\n**Gradientes:** ${listaPresets(false)}\n\n_Ou um grupo inteiro: \`solidas\`, \`gradientes\`._`,
         colour: COR.erro,
       }, {
-        title: "❌ Unknown preset",
-        description: `I don't know: ${invalidos.map((i) => `\`${i}\``).join(", ")}.\n\nAvailable: ${listaPresets(true)}`,
+        title: "❌ Unknown color",
+        description: `I don't know: ${invalidos.map((i) => `\`${i}\``).join(", ")}.\n\n**Solid:** ${listaSolidas(true)}\n**Gradients:** ${listaPresets(true)}\n\n_Or a whole group: \`solid\`, \`gradients\`._`,
         colour: COR.erro,
       }));
     }
@@ -325,12 +381,15 @@ export async function cmdCor(message, args, ctx) {
           { title: "❌ Invalid channel", description: `<#${canalAlvoId}> isn't a channel **on this server** I can write to. Use \`${P}cor painel aqui\`.`, colour: COR.erro }));
       }
     }
-    const alvos = pedidos.length ? pedidos : Object.keys(PRESETS);
+    // sólidas primeiro, depois os gradientes — cada grupo na sua mensagem
+    const alvos = pedidos.length
+      ? [...pedidos.filter((p) => p.tipo === "s"), ...pedidos.filter((p) => p.tipo === "g")]
+      : [...SOLIDAS.map((n) => ({ tipo: "s", nome: n })), ...Object.keys(PRESETS).map((n) => ({ tipo: "g", nome: n }))];
     const soCargos = !canalAlvoId && ["criar", "criarpresets", "criartodos", "gerar"].includes(sub);
 
     // ── 1. Cargos ──
     const existentes = new Map();
-    for (const [id, r] of (server.roles ?? [])) existentes.set((r?.name ?? "").toLowerCase(), id);
+    for (const [id, r] of (server.roles ?? [])) existentes.set((r?.name ?? "").toLowerCase(), { id, r });
 
     await sendEmbed(message.channel, en ? {
       title: "🎨 Getting ready…",
@@ -343,27 +402,32 @@ export async function cmdCor(message, args, ctx) {
 
     const prontos = [], falhas = [];
     let novosCargos = 0;
-    for (const nome of alvos) {
+    for (const it of alvos) {
       // o cargo já existe com o nome em português OU em inglês; o novo nasce no idioma do servidor
-      const jaExiste = existentes.get(nome) ?? existentes.get(nomePreset(nome, true));
-      let roleId = jaExiste ?? null;
+      const jaExiste = existentes.get(nomeDoItem(it, false)) ?? existentes.get(nomeDoItem(it, true));
+      if (jaExiste && temPermissoes(jaExiste.r)) {
+        falhas.push({ ...it, erro: en ? "a role with this name already exists and has permissions — rename it" : "já existe um cargo com esse nome, e ele tem permissões — renomeie-o" });
+        continue;
+      }
+      let roleId = jaExiste?.id ?? null;
       if (!roleId) {
         try {
-          const r = await server.createRole(nomePreset(nome, en));
+          const r = await server.createRole(nomeDoItem(it, en));
           roleId = r?.id ?? r?._id ?? r;
           novosCargos++;
-        } catch (e) { falhas.push({ nome, erro: en ? `couldn't create (${e?.message ?? e})` : `não consegui criar (${e?.message ?? e})` }); continue; }
+        } catch (e) { falhas.push({ ...it, erro: en ? `couldn't create (${e?.message ?? e})` : `não consegui criar (${e?.message ?? e})` }); continue; }
       }
-      const r = await aplicarCor(serverId, roleId, PRESETS[nome], en);
-      if (!r.ok) { falhas.push({ nome, erro: r.erro.split("\n")[0] }); continue; }
-      prontos.push({ nome, roleId });
+      const r = await aplicarCor(serverId, roleId, valorDoItem(it), en);
+      if (!r.ok) { falhas.push({ ...it, erro: r.erro.split("\n")[0] }); continue; }
+      prontos.push({ ...it, roleId });
       await new Promise((s) => setTimeout(s, 350));   // limite de taxa
     }
+    const listaFalhas = (emIngles) => falhas.map((f) => `${nomeDoItem(f, emIngles)}${/permiss/.test(f.erro) ? ` (${f.erro})` : ""}`).join(", ");
 
     if (!prontos.length) {
       return sendEmbed(message.channel, {
         title: en ? "❌ Couldn't prepare the roles" : "❌ Não consegui preparar os cargos",
-        description: falhas.slice(0, 8).map((f) => `• \`${nomePreset(f.nome, en)}\` — ${f.erro}`).join("\n")
+        description: falhas.slice(0, 8).map((f) => `• \`${nomeDoItem(f, en)}\` — ${f.erro}`).join("\n")
           + (en
             ? "\n\n_The bot's role needs **ManageRole** and must sit **above** the roles it creates._"
             : "\n\n_O cargo do bot precisa de **ManageRole** e estar **acima** dos cargos que cria._"),
@@ -376,8 +440,8 @@ export async function cmdCor(message, args, ctx) {
         title: falhas.length ? "🎨 Roles ready (with issues)" : "🎨 Roles ready",
         description: [
           `**${novosCargos}** created, **${prontos.length - novosCargos}** already existed and got painted.`,
-          prontos.map((c) => `${EMOJI_PRESET[c.nome] ?? "•"} <%${c.roleId}>`).join("  "),
-          falhas.length ? `\n**Failed:** ${falhas.map((f) => nomePreset(f.nome, true)).join(", ")}` : "",
+          prontos.map((c) => `${emojiDoItem(c) ?? "•"} <%${c.roleId}>`).join("  "),
+          falhas.length ? `\n**Failed:** ${listaFalhas(true)}` : "",
           "",
           `_To publish the picker panel automatically:_ \`${P}cor painel aqui\``,
         ].filter(Boolean).join("\n").slice(0, 1900),
@@ -386,8 +450,8 @@ export async function cmdCor(message, args, ctx) {
         title: falhas.length ? "🎨 Cargos prontos (com pendências)" : "🎨 Cargos prontos",
         description: [
           `**${novosCargos}** criado(s), **${prontos.length - novosCargos}** já existia(m) e foi(ram) pintado(s).`,
-          prontos.map((c) => `${EMOJI_PRESET[c.nome] ?? "•"} <%${c.roleId}>`).join("  "),
-          falhas.length ? `\n**Falharam:** ${falhas.map((f) => f.nome).join(", ")}` : "",
+          prontos.map((c) => `${emojiDoItem(c) ?? "•"} <%${c.roleId}>`).join("  "),
+          falhas.length ? `\n**Falharam:** ${listaFalhas(false)}` : "",
           "",
           `_Para publicar o painel de escolha automaticamente:_ \`${P}cor painel aqui\``,
         ].filter(Boolean).join("\n").slice(0, 1900),
@@ -414,61 +478,79 @@ export async function cmdCor(message, args, ctx) {
       }));
     }
 
-    // O embed lista os CARGOS mencionados (aparecem coloridos), não os nomes.
-    const linhasPainel = prontos.map((c) => `${EMOJI_PRESET[c.nome] ?? "•"}  <%${c.roleId}>`);
-    let painelMsg;
-    try {
-      painelMsg = await canal.sendMessage({ embeds: [en ? {
-        title: "🎨 Pick your color",
-        description: ["React with the emoji of the color you want.", "", ...linhasPainel,
-          "", "_Only one color at a time: picking another swaps the previous one._"].join("\n").slice(0, 1990),
-        colour: "#FF00FF",
-      } : {
-        title: "🎨 Escolha sua cor",
-        description: ["Reaja no emoji da cor que você quer.", "", ...linhasPainel,
-          "", "_Só uma cor por vez: escolher outra troca a anterior._"].join("\n").slice(0, 1990),
-        colour: "#FF00FF",
-      }] });
-    } catch (e) {
-      return sendEmbed(message.channel, tr(ctx,
-        { title: "❌ Não consegui publicar",
-          description: `Erro ao enviar no canal: ${e?.message ?? e}\n\n_Falta **SendMessage**/**SendEmbeds** ali?_`, colour: COR.erro },
-        { title: "❌ Couldn't publish",
-          description: `Error sending in the channel: ${e?.message ?? e}\n\n_Missing **SendMessage**/**SendEmbeds** there?_`, colour: COR.erro }));
+    // Uma mensagem para as sólidas e outra para os gradientes (cada uma com até 20
+    // reações). O embed lista os CARGOS mencionados (aparecem coloridos), não os nomes.
+    const partes = [];
+    for (const tipo of ["s", "g"]) {
+      const doTipo = prontos.filter((c) => c.tipo === tipo);
+      for (let i = 0; i < doTipo.length; i += MAX_REACOES) partes.push({ tipo, itens: doTipo.slice(i, i + MAX_REACOES) });
     }
-
-    const painelId = painelMsg?.id ?? painelMsg?._id;
-    if (!painelId) {
-      return sendEmbed(message.channel, tr(ctx,
-        { title: "⚠️ Publiquei, mas…",
-          description: "não consegui o ID da mensagem para ligar as reações. Ligue à mão com `&reactionrole add`.", colour: COR.aviso },
-        { title: "⚠️ Published, but…",
-          description: "I couldn't get the message ID to wire the reactions. Wire them manually with `&reactionrole add`.", colour: COR.aviso }));
-    }
-
-    // ── 4. Reage e registra cada cor ──
+    const varias = partes.length > 1;
+    const TITULO = { s: { pt: "🎨 Cores sólidas", en: "🎨 Solid colors" }, g: { pt: "🌈 Gradientes", en: "🌈 Gradients" } };
+    const publicadas = [];   // ids das mensagens do painel
     let ligados = 0; const semReacao = [];
-    for (const c of prontos) {
-      const emoji = EMOJI_PRESET[c.nome];
-      if (!emoji) continue;
+    for (const [n, parte] of partes.entries()) {
+      const linhasPainel = parte.itens.map((c) => `${emojiDoItem(c) ?? "•"}  <%${c.roleId}>`);
+      const titulo = varias ? TITULO[parte.tipo][en ? "en" : "pt"] : (en ? "🎨 Pick your color" : "🎨 Escolha sua cor");
+      const rodape = varias
+        ? (en ? "_Only one color at a time, counting every panel message: picking another swaps the previous one._"
+              : "_Só uma cor por vez, valendo todas as mensagens do painel: escolher outra troca a anterior._")
+        : (en ? "_Only one color at a time: picking another swaps the previous one._" : "_Só uma cor por vez: escolher outra troca a anterior._");
+      let painelMsg;
       try {
-        db.addReactionRole(serverId, painelId, emoji.replace(/\uFE0F/g, ""), c.roleId, destinoId);
-        await painelMsg.react(encodeURIComponent(emoji));
-        ligados++;
+        painelMsg = await canal.sendMessage({ embeds: [{
+          title: titulo,
+          description: [en ? "React with the emoji of the color you want." : "Reaja no emoji da cor que você quer.", "", ...linhasPainel,
+            "", rodape].join("\n").slice(0, 1990),
+          colour: "#FF00FF",
+        }] });
       } catch (e) {
-        semReacao.push(`${nomePreset(c.nome, en)} (${e?.message ?? e})`);
+        if (n === 0) {
+          return sendEmbed(message.channel, tr(ctx,
+            { title: "❌ Não consegui publicar",
+              description: `Erro ao enviar no canal: ${e?.message ?? e}\n\n_Falta **SendMessage**/**SendEmbeds** ali?_`, colour: COR.erro },
+            { title: "❌ Couldn't publish",
+              description: `Error sending in the channel: ${e?.message ?? e}\n\n_Missing **SendMessage**/**SendEmbeds** there?_`, colour: COR.erro }));
+        }
+        semReacao.push(`${TITULO[parte.tipo][en ? "en" : "pt"]} (${e?.message ?? e})`);
+        continue;
       }
-      await new Promise((s) => setTimeout(s, 300));   // limite de taxa das reações
+
+      const painelId = painelMsg?.id ?? painelMsg?._id;
+      if (!painelId) {
+        return sendEmbed(message.channel, tr(ctx,
+          { title: "⚠️ Publiquei, mas…",
+            description: "não consegui o ID da mensagem para ligar as reações. Ligue à mão com `&reactionrole add`.", colour: COR.aviso },
+          { title: "⚠️ Published, but…",
+            description: "I couldn't get the message ID to wire the reactions. Wire them manually with `&reactionrole add`.", colour: COR.aviso }));
+      }
+
+      // ── 4. Reage e registra cada cor ──
+      for (const c of parte.itens) {
+        const emoji = emojiDoItem(c);
+        if (!emoji) continue;
+        try {
+          db.addReactionRole(serverId, painelId, emoji.replace(/️/g, ""), c.roleId, destinoId);
+          await painelMsg.react(encodeURIComponent(emoji));
+          ligados++;
+        } catch (e) {
+          semReacao.push(`${nomeDoItem(c, en)} (${e?.message ?? e})`);
+        }
+        await new Promise((s) => setTimeout(s, 300));   // limite de taxa das reações
+      }
+      db.setReactionRoleExclusivo(painelId, true);
+      publicadas.push(painelId);
     }
-    db.setReactionRoleExclusivo(painelId, true);
+    // as mensagens do painel valem como uma só no modo exclusivo
+    if (publicadas.length > 1) db.setReactionRoleGrupo(publicadas, publicadas[0]);
 
     return sendEmbed(message.channel, en ? {
       title: "✅ Panel published",
       description: [
-        `Panel in <#${destinoId}> with **${ligados}** color(s) ready to pick.`,
+        `Panel in <#${destinoId}> with **${ligados}** color(s) ready to pick${publicadas.length > 1 ? ` (${publicadas.length} messages)` : ""}.`,
         `**${novosCargos}** role(s) created, **${prontos.length - novosCargos}** reused.`,
         "🎯 **Exclusive** mode on: picking a color swaps the previous one.",
-        falhas.length ? `\n⚠️ **Left out:** ${falhas.map((f) => nomePreset(f.nome, true)).join(", ")}` : "",
+        falhas.length ? `\n⚠️ **Left out:** ${listaFalhas(true)}` : "",
         semReacao.length ? `\n⚠️ **No reaction:** ${semReacao.slice(0, 4).join(", ")}` : "",
         semReacao.length ? "_The bot needs **React** in that channel._" : "",
       ].filter(Boolean).join("\n").slice(0, 1900),
@@ -476,10 +558,10 @@ export async function cmdCor(message, args, ctx) {
     } : {
       title: "✅ Painel publicado",
       description: [
-        `Painel em <#${destinoId}> com **${ligados}** cor(es) prontas para escolher.`,
+        `Painel em <#${destinoId}> com **${ligados}** cor(es) prontas para escolher${publicadas.length > 1 ? ` (${publicadas.length} mensagens)` : ""}.`,
         `**${novosCargos}** cargo(s) criado(s), **${prontos.length - novosCargos}** reaproveitado(s).`,
         "🎯 Modo **exclusivo** ligado: escolher uma cor troca a anterior.",
-        falhas.length ? `\n⚠️ **Não entraram:** ${falhas.map((f) => f.nome).join(", ")}` : "",
+        falhas.length ? `\n⚠️ **Não entraram:** ${listaFalhas(false)}` : "",
         semReacao.length ? `\n⚠️ **Sem reação:** ${semReacao.slice(0, 4).join(", ")}` : "",
         semReacao.length ? "_O bot precisa de **React** nesse canal._" : "",
       ].filter(Boolean).join("\n").slice(0, 1900),

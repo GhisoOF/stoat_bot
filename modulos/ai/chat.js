@@ -9,12 +9,13 @@ import * as imagemAdulta from "./imagem-adulta.js";
 import { tempoDeGeracaoMs } from "../core/imagem-modelo.js";
 import * as db from "../core/db.js";
 import * as memoria from "./memoria-agente.js";
+import * as consentimento from "./consentimento.js";
 import * as comentario from "./comentario-espontaneo.js";
 import * as cacheCanal from "./cache-canal.js";
 import * as ficha from "./ficha.js";
 import { construirDetalhes } from "../moderacao/geral.js";
 import { verificar } from "./verificar.js";
-import { SUB as SUBCOMANDOS_REAIS } from "../core/aliases.js";
+import { SUB as SUBCOMANDOS_REAIS, citar } from "../core/aliases.js";
 import * as desinteresse from "./desinteresse.js";
 import * as persona from "./persona.js";
 import { iaLigada, conversaLigada, modoIA } from "../core/env.js";
@@ -148,7 +149,8 @@ export function iniciarMemoria() {
 
 // Chamado pelo bot a cada mensagem do chat (não-comando) para alimentar a memória.
 export function observarMensagem(dados) {
-  try { memoria.observar(dados); } catch {}
+  // só de quem aceitou que a Judy lembre dela (privacidade, 20 out 2026)
+  try { if (db.temMemoriaConsentida(dados?.userId)) memoria.observar(dados); } catch {}
 }
 
 // Registra a mensagem no cache de conversa do canal (memória curta ao vivo).
@@ -908,7 +910,8 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
 
   // memória do usuário (global): o que a IA já sabe sobre ele
   let memoriaTxt = "";
-  if (userId) {
+  const consentiu = !!userId && db.temMemoriaConsentida(userId);   // sem consentimento, a Judy não lembra de nada
+  if (consentiu) {
     try {
       const mem = db.getMemoria(userId);
       if (mem.nome || mem.fatos?.length) {
@@ -935,7 +938,7 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
   // memória de LONGO PRAZO: fatos que o agente acumulou observando o chat
   let fatosTxt = "";
   try {
-    const bloco = memoria.contextoMemoria(serverId, userId);
+    const bloco = consentiu ? memoria.contextoMemoria(serverId, userId) : null;
     if (bloco) {
       let blocoLimpo = bloco;
       for (const alvo of [...apelidos, "Cobaia"].filter(Boolean)) {
@@ -963,7 +966,8 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
   let tomTxt = "";
   try {
     const perfil = db.getPerfil?.(serverId, userId);
-    const fatos = db.getFatosPessoa?.(serverId, userId, { limite: 8, minConf: 0.4 }) || [];
+    // (revisão do P1) sem consentimento, nem o tom vem dos fatos guardados
+    const fatos = consentiu ? (db.getFatosPessoa?.(serverId, userId, { limite: 8, minConf: 0.4 }) || []) : [];
     const perso = fatos.filter((f) => f.categoria === "personalidade").map((f) => f.fato);
     if (perfil?.cuidado) {
       tomTxt = "MODULAÇÃO: com ESTA pessoa, deixe a acidez de lado. Seja gentil, clara e paciente — o humor pode aparecer leve, mas sem ironia cortante nem provocação que possa magoar.";
@@ -1056,7 +1060,10 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
   const msgsDoHistorico = [];
   if (userId) {
     try {
-      const hist = db.getHistorico(userId, 6, { canalId, minutos: Number(process.env.CHAT_HISTORICO_MIN || 30) });
+      // a pessoa pode escolher que o fio continue entre servidores (&privacidade fio global)
+      const global = db.getConsentimento(userId)?.fioGlobal === 1;
+      const hist = db.getHistorico(userId, 6, { canalId, global,
+        minutos: global ? db.HISTORICO_HORAS * 60 : Number(process.env.CHAT_HISTORICO_MIN || 30) });
       for (const h of hist) {
         const m = { role: h.papel === "assistant" ? "assistant" : "user", content: h.conteudo };
         messages.push(m);
@@ -2218,7 +2225,7 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
     }
     dlog(`resposta após limpar: ${resposta.length} chars${responder._cortou ? " [CORTADA por limite de tokens]" : ""}`);
 
-    if (userId) {
+    if (userId && db.temMemoriaConsentida(userId)) {
       try {
         const mem = db.getMemoria(userId);
         const fatos = mem.fatos || [];
@@ -2466,6 +2473,8 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
       registrarNoCanal(canalId, { id: (mostrarEmbed._msg ?? statusMsg)?.id ?? null, nome: "Judy", userId: message.client?.user?.id, texto: resposta, ehJudy: true });
       lembrarUltimaResposta(canalId, { pergunta, texto: resposta, cortada: !!responder._cortou, modelo: responder._modelo });
     } catch {}
+    // Primeira conversa com alguém: a Judy pergunta se pode lembrar dela (opt-in)
+    try { await consentimento.talvezPerguntar(message, ctx); } catch (e) { dlog(`consentimento: ${e?.message ?? e}`); }
 
     const msgVerif = mostrarEmbed._msg;
     {
@@ -2531,6 +2540,13 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
 export { llmDisponivel };
 
 // Comando &chat
+// O perfil e o mapeamento são só da própria pessoa (privacidade, 20 out 2026).
+function soVoce(ctx) {
+  return tr(ctx,
+    { title: "🔒 Só o seu", description: `O perfil de cada pessoa é só dela: você pode ver e mapear **o seu**. \`${citar("privacidade", "pt", ctx.PREFIXO)}\` mostra tudo o que a Judy guarda sobre você.`, colour: ctx.COR.aviso },
+    { title: "🔒 Only yours", description: `Each person's profile belongs to them: you can see and map **your own**. \`${citar("privacidade", "en", ctx.PREFIXO)}\` shows everything Judy keeps about you.`, colour: ctx.COR.aviso },
+    { title: "🔒 Solo el tuyo", description: `El perfil de cada persona es solo suyo: puedes ver y mapear **el tuyo**. \`${citar("privacidade", "es", ctx.PREFIXO)}\` muestra todo lo que Judy guarda sobre ti.`, colour: ctx.COR.aviso });
+}
 // ── Conversa livre: a Judy decide se entra numa mensagem não-endereçada ──
 export function canalTemChatLivre(config, canalId) {
   return !!config?.chatLivre?.canais?.includes(canalId);
@@ -2924,9 +2940,12 @@ export async function cmdChat(message, args, ctx) {
     }
   }
 
-  // &chat mapear [@usuário] → captura o perfil (bio, status, etc.) do cartão
+  // &chat mapear → captura o SEU perfil (bio, status) do cartão. Só o seu: ler o
+  // perfil de outra pessoa sem a permissão dela é o scraping que as regras do
+  // Stoat proíbem (privacidade, 20 out 2026).
   if (["mapear", "map"].includes(args[0]?.toLowerCase())) {
     const alvoId = idEscrito(args.slice(1).join(" ")) || message.mentionIds?.[0] || message.mentions?.[0]?.id || message.authorId;
+    if (alvoId !== message.authorId) return sendEmbed(message.channel, soVoce(ctx));
     try {
       const server = await ctx.getServer?.(message);
       const member = (alvoId === message.authorId && message.member) ? message.member
@@ -2975,9 +2994,10 @@ export async function cmdChat(message, args, ctx) {
     }
   }
 
-  // &chat perfil [@usuário] → mostra o que a Judy sabe sobre alguém
+  // &chat perfil → mostra o que a Judy sabe sobre VOCÊ (o de outra pessoa é dela)
   if (["perfil", "profile"].includes(args[0]?.toLowerCase())) {
     const alvoId = idEscrito(args.slice(1).join(" ")) || message.mentionIds?.[0] || message.mentions?.[0]?.id || message.authorId;
+    if (alvoId !== message.authorId) return sendEmbed(message.channel, soVoce(ctx));
     const perfil = db.getPerfil?.(ctx.serverId, alvoId);
     const fatos = db.getFatosPessoa?.(ctx.serverId, alvoId, { limite: 20, minConf: 0.4 }) || [];
     if (!perfil && !fatos.length) {

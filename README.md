@@ -246,7 +246,9 @@ diz exatamente o que clicar.
   `&silenciar tirar @pessoa`, `&limpar`, `&warn`.
 - **Logs** (`&log`): punições, entradas/saídas, mensagens apagadas/editadas,
   cargos e comandos — cada categoria liga/desliga. Sai no idioma do servidor
-  (`&idioma`), e cargos aparecem pelo nome.
+  (`&idioma`), e cargos aparecem pelo nome. `&log atualizacoes on` traz as
+  novidades da Judy a cada atualização (lista em `modulos/ferramentas/novidades.js`:
+  cada pacote novo acrescenta uma entrada no topo, em pt/en/es).
 - **Acesso** (`&acesso` + `&staff`): cargos de staff moderam sem permissão
   nativa; comandos restritos a canais escolhidos.
 
@@ -356,7 +358,10 @@ diz exatamente o que clicar.
 - **Cargos por reação** (`&reactionrole`), **autorole**, **boas-vindas e
   despedida** (`&boasvindas`/`&adeus`, embeds com marcadores e `testar`),
   **embed customizável** (`&embed`), **cor de cargo com gradiente** (`&cor` —
-  o cliente só oferece cor sólida; o bot fala com a API), **fusos horários**
+  o cliente só oferece cor sólida; o bot fala com a API; `&cor painel aqui` publica
+  10 cores sólidas e 20 gradientes para escolher por reação), **jogos** (`&entretenimento
+  campominado` e `velha` — com os comandos restritos a alguns canais, `&acesso livre
+  entretenimento on` solta os jogos em todos), **fusos horários**
   (`&fuso`), **ativar/desativar comandos** por servidor (`&comando`).
 
 **Robustez**
@@ -404,6 +409,16 @@ traduzido. As palavras em espanhol valem ao digitar em qualquer servidor. O nome
 em espanhol de cada comando fica no arquivo dele em `modulos/comandos/` (`es:`).
 *Spanish (`&idioma es`): command names and the registry help pages are Spanish;
 other replies are English while they're translated.*
+
+**Privacidade** (20 out 2026): a memória da IA é **opt-in** — a Judy pergunta na
+primeira conversa se pode lembrar da pessoa, e só lembra de quem aceitou (vale em
+todos os servidores). O histórico de conversa some em 24 h. `&privacidade` mostra o
+que ela guarda sobre você e liga/desliga a memória; `&chat perfil` e `&chat mapear`
+valem só para a própria pessoa. `&privacidade apagar` apaga tudo o que é seu (menos os
+registros de moderação). Dados de um servidor somem 30 dias depois de a Judy sair dele;
+backups, com 30 dias; o log do container leva os IDs como pseudônimo. A política
+completa: [PRIVACIDADE.md](PRIVACIDADE.md). *Conversation memory is opt-in; `&privacy`
+shows what Judy keeps about you and `&privacy delete` erases it.*
 
 Prefixo `&`. A lista completa, com **cada parâmetro explicado**, vive no
 próprio bot: `&help <comando>`. Um resumo:
@@ -599,8 +614,8 @@ versões antigas continuam funcionando.
 │   ├── core/                   # base: db (SQLite), config, i18n, ids, log, páginas…
 │   ├── comandos/               # o registro de comandos: um arquivo por família (nomes, subcomandos, marcas e, aos poucos, a página de ajuda)
 │   ├── moderacao/              # automod, punições, ban global, help, tutorial, assistente…
-│   ├── ai/                     # chat, persona, memória, comentário espontâneo, verificador
-│   ├── ferramentas/            # xp, reaction roles, autorole, boas-vindas, tts, rss, fuso
+│   ├── ai/                     # chat, persona, memória (com consentimento), comentário espontâneo, verificador
+│   ├── ferramentas/            # xp, reaction roles, autorole, boas-vindas, tts, rss, fuso, privacidade
 │   └── game/                   # RPG
 ├── ia-servico/                 # serviço de IA (tool-calling: calcular, ler código, web, rss)
 ├── voz-servico/                # voz nas calls: LiveKit + Piper (opcional, VOZ_ATIVA=1)

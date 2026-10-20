@@ -70,6 +70,7 @@ export const padraoServidor = {
       mensagens: true,
       cargos:    true,
       comandos:  false,       // ruidoso: começa desligado
+      atualizacoes: false,    // as novidades da Judy a cada pacote novo (20 out 2026) — opção, começa desligada
     },
   },
   acesso: {
@@ -85,6 +86,8 @@ export const padraoServidor = {
   },
   // ── Comandos desativados neste servidor (nomes canônicos) ──
   comandosDesativados: [],
+  // ── O servidor manda ao dono da Judy um relatório ANÔNIMO de ataques? (P4) ──
+  relatorioDono: false,
   // ── Curadoria RSS ──
   rss: { canalId: null },
   autorole: { roleId: null },   // cargo dado automaticamente a quem entra
@@ -199,6 +202,24 @@ export function desligarAutomod(cfg) {
   return cfg;
 }
 
+// (Privacidade P3, 20 out 2026, pedido do Ghieh) Servidor novo nasce com TODOS os
+// módulos desligados — não só o automod —, mesmo que o molde salvo no banco
+// (`__default__`, de antes) diga outra coisa. Os comandos continuam ligados.
+export function desligarModulos(cfg) {
+  desligarAutomod(cfg);
+  if (cfg.xp) cfg.xp.enabled = false;
+  if (cfg.moderacaoIA) cfg.moderacaoIA.ativa = false;
+  if (cfg.banGlobal) cfg.banGlobal.modo = "off";
+  if (cfg.chatLivre) cfg.chatLivre.canais = [];
+  if (cfg.comentarioEspontaneo) cfg.comentarioEspontaneo.canalId = null;
+  if (cfg.log) cfg.log.canalId = null;
+  if (cfg.rss) cfg.rss.canalId = null;
+  if (cfg.autorole) cfg.autorole.roleId = null;
+  cfg.relatorioDono = false;
+  for (const k of ["boasVindas", "adeus", "tts"]) if (cfg[k] && typeof cfg[k] === "object") cfg[k].ativo = false;
+  return cfg;
+}
+
 // Config de um servidor (cache → banco → template)
 // A `&automod whitelist` guardava TUDO como código de convite. Um link comum
 // (`https://linksta.cc/@x`) ia parar ali e não servia para nada: quem bloqueia
@@ -231,7 +252,7 @@ export function configDoServidor(serverId) {
   let cfg = db.lerConfig(serverId);
   if (!cfg) {
     cfg = structuredClone(templateServidor);
-    desligarAutomod(cfg);
+    desligarModulos(cfg);
     cfg.language = idiomaPadrao();
     db.gravarConfig(serverId, cfg);
     console.info(`[CONFIG] Novo servidor ${serverId} — config criada do padrão.`);
@@ -249,7 +270,7 @@ export function configDoServidor(serverId) {
 // como um servidor novo — automod desligado, idioma padrão.
 export function configDeFabrica() {
   const cfg = structuredClone(padraoServidor);
-  desligarAutomod(cfg);
+  desligarModulos(cfg);
   cfg.language = idiomaPadrao();
   return cfg;
 }

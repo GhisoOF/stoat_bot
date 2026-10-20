@@ -2,6 +2,7 @@
 import * as db from "../core/db.js";
 import { limparId, ULID, resolverUsuario } from "../core/ids.js";
 import { tr, lingua } from "../core/i18n.js";
+import { citar } from "../core/aliases.js";
 import * as log from "../core/log.js";
 import { idsDeCargos, rankDoCargo, rankDoMembro, editarCargos } from "../core/hierarquia.js";
 import { descreverErro, tipoDoErro } from "../core/erros.js";
@@ -185,6 +186,7 @@ export async function aoMensagem(message, ctx) {
 
   const userId = message.authorId;
   if (!userId) { if (DBG) console.log("[XP] pulado: authorId nulo"); return; }
+  if (db.xpFora(serverId, userId)) { if (DBG) console.log(`[XP] pulado: ${userId} saiu do XP`); return; }   // &xp sair
 
   const agora = Date.now();
   const atual = db.getXp(serverId, userId);
@@ -271,11 +273,39 @@ export function explicarBloqueio(r, lang = "pt") {
   return L.join("\n");
 }
 
+// O aviso aos membros quando o servidor liga o XP (pt, en, es)
+export function avisoXpLigado(l, P, COR = {}) {
+  const sair = `\`${citar("xp.sair", l, P)}\``, priv = `\`${citar("privacidade", l, P)}\``;
+  const textos = {
+    pt: { title: "🎮 O XP foi ligado neste servidor", description: `A partir de agora, a Judy conta as mensagens de cada membro para dar XP e nível (só a contagem — o texto não é guardado).\n\nNão quer participar? ${sair} — o seu XP é apagado e deixa de contar. ${priv} mostra tudo o que a Judy guarda sobre você.` },
+    en: { title: "🎮 XP is now on for this server", description: `From now on, Judy counts each member's messages to award XP and levels (just the count — the text isn't kept).\n\nDon't want to take part? ${sair} — your XP is erased and stops counting. ${priv} shows everything Judy keeps about you.` },
+    es: { title: "🎮 El XP está activado en este servidor", description: `Desde ahora, Judy cuenta los mensajes de cada miembro para dar XP y nivel (solo el conteo — el texto no se guarda).\n\n¿No quieres participar? ${sair} — tu XP se borra y deja de contar. ${priv} muestra todo lo que Judy guarda sobre ti.` },
+  };
+  return { ...textos[l], colour: COR.info };
+}
+
 export async function cmdXp(message, args, ctx) {
   const { sendEmbed, COR, PREFIXO, config, serverId, getServer, membroTemPermissao } = ctx;
   const g = config.xp;
   const lang = lingua(ctx);
   const sub = args[0]?.toLowerCase();
+
+  // ── sair / entrar: cada membro escolhe se o XP dele conta (privacidade P3) ──
+  // Vale com o XP ligado ou não: dá para sair antes de o servidor ligar.
+  if (sub === "sair" || sub === "entrar") {
+    const sair = sub === "sair";
+    const apagados = db.setXpFora(serverId, message.authorId, sair);
+    const c = (l) => `\`${citar(sair ? "xp.entrar" : "xp.sair", l, PREFIXO)}\``;
+    return sendEmbed(message.channel, tr(ctx, sair
+      ? { title: "🚪 Fora do XP", description: `O seu XP deixou de contar neste servidor${apagados ? " e foi apagado" : ""}. Para voltar (do zero): ${c("pt")}.`, colour: COR.sucesso }
+      : { title: "🎮 De volta ao XP", description: `O seu XP volta a contar neste servidor, do zero. Para sair: ${c("pt")}.`, colour: COR.sucesso },
+    sair
+      ? { title: "🚪 Out of XP", description: `Your XP no longer counts on this server${apagados ? " and was erased" : ""}. To come back (from zero): ${c("en")}.`, colour: COR.sucesso }
+      : { title: "🎮 Back in XP", description: `Your XP counts again on this server, from zero. To leave: ${c("en")}.`, colour: COR.sucesso },
+    sair
+      ? { title: "🚪 Fuera del XP", description: `Tu XP dejó de contar en este servidor${apagados ? " y se borró" : ""}. Para volver (desde cero): ${c("es")}.`, colour: COR.sucesso }
+      : { title: "🎮 De vuelta al XP", description: `Tu XP vuelve a contar en este servidor, desde cero. Para salir: ${c("es")}.`, colour: COR.sucesso }));
+  }
 
   if (!g?.enabled && !["on", "setup", "config", "configurar", "criarcargos", "criar"].includes(sub)) {
     return sendEmbed(message.channel, tr(ctx, {
@@ -425,13 +455,24 @@ export async function cmdXp(message, args, ctx) {
   // ── on / off ──
   if (sub === "on" || sub === "off") {
     if (!(await podeConfigurar(message, ctx))) return;
+    const ligou = sub === "on" && !config.xp.enabled;
     config.xp.enabled = (sub === "on");
     ctx.salvarConfig();
-    return sendEmbed(message.channel, tr(ctx,
+    await sendEmbed(message.channel, tr(ctx,
       { title: "🎮 Sistema de níveis",
         description: `Sistema **${sub === "on" ? "ativado 🟢" : "desativado 🔴"}**.`, colour: COR.mod },
       { title: "🎮 Leveling system",
         description: `System **${sub === "on" ? "enabled 🟢" : "disabled 🔴"}**.`, colour: COR.mod }));
+    // Ao ligar, a Judy avisa os membros (privacidade P3, opção B): o XP é uma
+    // estatística de cada pessoa, e cada uma pode ficar de fora.
+    if (ligou) {
+      const aviso = tr(ctx, ...["pt", "en", "es"].map((l) => avisoXpLigado(l, PREFIXO, COR)));
+      await sendEmbed(message.channel, aviso);
+      const anuncio = g.canalAnuncio && g.canalAnuncio !== message.channelId
+        ? await ctx.client?.channels?.fetch?.(g.canalAnuncio).catch(() => null) : null;
+      if (anuncio?.sendMessage && anuncio.serverId === serverId) await sendEmbed(anuncio, aviso).catch(() => {});
+    }
+    return;
   }
 
   // ── cargos (lista) ──

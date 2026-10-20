@@ -33,7 +33,7 @@ export async function quemVe(message, ctx) {
 const MAPA = {
   help: { padrao: "membro" }, tutorial: { padrao: "membro" }, ping: { padrao: "membro" }, sobre: { padrao: "membro" },
   info: { padrao: "membro" }, userinfo: { padrao: "membro" }, rolar: { padrao: "membro" }, iniciativa: { padrao: "membro" },
-  nivel: { padrao: "membro" },
+  nivel: { padrao: "membro" }, privacidade: { padrao: "membro" },
   xp: { padrao: "membro", subs: { on: "staff", off: "staff", setup: "staff", criarcargos: "staff", cargo: "staff", cargos: "staff", sincronizar: "staff", canal: "staff", dar: "staff", tirar: "staff", reset: "staff", zerar: "staff", anunciar: "staff" } },
   economia: { padrao: "membro", subs: { config: "staff", dar: "staff", tirar: "staff", zerar: "staff", "loja add": "staff", "loja remover": "staff" } },
   game: { padrao: "membro", subs: { admin: "dono" } },

@@ -13,6 +13,7 @@ export const EVENTOS = {
   mensagens: "mensagens apagadas e editadas",
   cargos:    "cargos criados e atribuídos",
   comandos:  "tentativas de uso de comandos",
+  atualizacoes: "novidades da Judy a cada atualização",
 };
 export const EVENTOS_EN = {
   punicoes:  "punishments (warnings, silences, bans)",
@@ -20,6 +21,7 @@ export const EVENTOS_EN = {
   mensagens: "deleted and edited messages",
   cargos:    "roles created and assigned",
   comandos:  "command usage attempts",
+  atualizacoes: "Judy's news on every update",
 };
 
 // Cores por categoria (mantém o padrão de embeds do bot)
@@ -29,6 +31,7 @@ const CORES = {
   mensagens: "#f1c40f",
   cargos:    "#9b59b6",
   comandos:  "#3498db",
+  atualizacoes: "#5865F2",
 };
 
 const RESGATE_MAX_BYTES = Number(process.env.LOG_MIDIA_MAX_BYTES || 10 * 1024 * 1024);
@@ -126,6 +129,10 @@ export async function cmdLog(message, args, ctx) {
       const on = config.log.eventos[chave] !== false; // padrão: ligado
       return `${on ? "🟢" : "🔴"} **${nomeEvento(chave)}** — ${desc}`;
     });
+    // P4: o relatório anônimo de ataques ao dono da Judy (não é um evento do canal)
+    linhas.push("", `${config.relatorioDono ? "🟢" : "🔴"} **${nomeEvento("relatorio")}** — ${lang === "en"
+      ? "anonymous attack report to Judy's owner (no names or IDs)"
+      : "relatório anônimo de ataques ao dono da Judy (sem nomes nem IDs)"}`);
     return sendEmbed(message.channel, lang === "en" ? {
       title: "📜 Log channel",
       description: [
@@ -185,6 +192,29 @@ export async function cmdLog(message, args, ctx) {
       description: `Events will now be recorded **in this channel**.`,
       colour: COR.mod,
     }));
+  }
+
+  // ── &log relatorio on|off ── (privacidade P4) o servidor escolhe se o dono da
+  // Judy fica sabendo dos ataques daqui — anônimo: o servidor vira um código, e
+  // só entram bans, punições, raids e imagens suspeitas, sem nomes nem IDs.
+  if (sub === "relatorio") {
+    const v = args[1]?.toLowerCase();
+    if (v === "on" || v === "off") { config.relatorioDono = v === "on"; salvarConfig(); }
+    const on = !!config.relatorioDono;
+    const cmd = (l) => `\`${citar("log.relatorio", l, PREFIXO)} ${on ? "off" : "on"}\``;
+    return sendEmbed(message.channel, tr(ctx,
+      { title: `🛰️ Relatório de ataques ${on ? "ligado 🟢" : "desligado 🔴"}`, colour: COR.mod, description: [
+        on ? "Os ataques daqui vão, **anônimos**, para o relatório do dono da Judy: bans, punições, raids e imagens suspeitas — sem nomes, sem IDs, e o servidor aparece como um código. Nada da conversa vai."
+          : "Nada deste servidor vai para o relatório do dono da Judy.",
+        "", `${on ? "Para desligar" : "Para ligar"}: ${cmd("pt")}`].join("\n") },
+      { title: `🛰️ Attack report ${on ? "on 🟢" : "off 🔴"}`, colour: COR.mod, description: [
+        on ? "This server's attacks go, **anonymously**, into the report of Judy's owner: bans, punishments, raids and suspicious images — no names, no IDs, and the server shows up as a code. Nothing from the conversation goes."
+          : "Nothing from this server goes into the report of Judy's owner.",
+        "", `${on ? "To turn it off" : "To turn it on"}: ${cmd("en")}`].join("\n") },
+      { title: `🛰️ Informe de ataques ${on ? "activado 🟢" : "desactivado 🔴"}`, colour: COR.mod, description: [
+        on ? "Los ataques de aquí van, **anónimos**, al informe del dueño de Judy: bans, sanciones, raids e imágenes sospechosas — sin nombres, sin IDs, y el servidor aparece como un código. Nada de la conversación va."
+          : "Nada de este servidor va al informe del dueño de Judy.",
+        "", `${on ? "Para desactivarlo" : "Para activarlo"}: ${cmd("es")}`].join("\n") }));
   }
 
   // ── &log <evento> <on|off> ──

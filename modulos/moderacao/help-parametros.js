@@ -64,6 +64,7 @@ function parametrosPT(P) {
       { nome: "canal", valor: "todos | somente | exceto", desc: "modo: comandos em todo lugar, só nos canais listados, ou em todos menos os listados" },
       { nome: "canal add | remove", valor: "<#canal>", desc: "monta a lista de canais do modo escolhido" },
       { nome: "staffignora", valor: "on | off", desc: "se a staff pode usar comandos fora dos canais permitidos" },
+      { nome: "livre", valor: "<comando> on | off", desc: "o comando vale em qualquer canal, mesmo com a restrição (ex.: `entretenimento`, para os jogos)" },
       { nome: "status", desc: "a configuração atual" },
     ],
 
@@ -102,7 +103,7 @@ function parametrosPT(P) {
       { nome: "<cargo> gradiente", valor: "<cor> <cor> [...]", desc: "duas ou mais cores; um número no início vira o ângulo" },
       { nome: "<cargo> preset", valor: "<nome>", desc: "paleta pronta (`&cor presets` lista)" },
       { nome: "<cargo> remover", desc: "tira a cor" },
-      { nome: "painel aqui", desc: "cria os cargos de cor, publica o painel, reage e liga os cargos por reação — tudo de uma vez" },
+      { nome: "painel aqui", desc: "cria os cargos de cor (sólidas e gradientes), publica o painel, reage e liga os cargos por reação — tudo de uma vez. `solidas` ou `gradientes` no fim: só um grupo" },
       { nome: "criar", desc: "só cria/pinta os cargos, sem publicar nada" },
       { nome: "lista | presets", desc: "o que existe" },
     ],
@@ -257,6 +258,7 @@ function parametrosEN(P) {
       { nome: "canal", valor: "all | only | except", desc: "mode: commands everywhere, only in listed channels, or everywhere except listed" },
       { nome: "canal add | remove", valor: "<#channel>", desc: "builds the channel list for the chosen mode" },
       { nome: "staffignora", valor: "on | off", desc: "whether staff can use commands outside the allowed channels" },
+      { nome: "livre", valor: "<command> on | off", desc: "the command works in any channel, even with the restriction (e.g. `entertainment`, for the games)" },
       { nome: "status", desc: "the current setup" },
     ],
 
@@ -295,7 +297,7 @@ function parametrosEN(P) {
       { nome: "<role> gradiente", valor: "<color> <color> [...]", desc: "two or more colors; a leading number becomes the angle" },
       { nome: "<role> preset", valor: "<name>", desc: "ready-made palette (`&cor presets` lists them)" },
       { nome: "<role> remover", desc: "removes the color" },
-      { nome: "painel aqui", desc: "creates the color roles, posts the panel, reacts and wires the reaction roles — all at once" },
+      { nome: "painel aqui", desc: "creates the color roles (solid and gradients), posts the panel, reacts and wires the reaction roles — all at once. `solid` or `gradients` at the end: only one group" },
       { nome: "criar", desc: "only creates/paints the roles, posts nothing" },
       { nome: "lista | presets", desc: "what exists" },
     ],

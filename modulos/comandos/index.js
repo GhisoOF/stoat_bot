@@ -105,6 +105,7 @@ import debug from "./debug.js";
 import modia from "./modia.js";
 import reset from "./reset.js";
 import idioma from "./idioma.js";
+import privacidade from "./privacidade.js";
 
 // A ordem desta lista é a ordem das rotas e da lista de gerenciáveis do `&comando`.
 export const REGISTRO = [
@@ -112,7 +113,7 @@ export const REGISTRO = [
   tutorial, assistente, cor, log, banglobal, embed, reactionrole, chat, rss, xp,
   game, autorole, staff, boasvindas, adeus, fuso, voz, musica, webhook, rolar,
   iniciativa, ticket, economia, entretenimento, servidor, help, sobre, personalidade,
-  config, servidores, comando, cargomudo, debug, modia, reset, idioma,
+  config, servidores, comando, cargomudo, debug, modia, reset, idioma, privacidade,
 ].flat();
 
 // ── O que só depende dos nomes (o aliases.js usa; não toca nos handlers) ──

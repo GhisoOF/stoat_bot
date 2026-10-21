@@ -7,7 +7,6 @@
 //   &servidores relatorio on|off
 //   &servidores relatorio vazias on|off  → mandar (ou pular) as horas sem nada
 //   &servidores relatorio assuntos [add|remove <id> [id…]]
-//   &servidores adulto                    → o +18 vale neste canal? (e as últimas recusas)
 //   &servidores pseudonimo <id> [id…]     → como esse ID aparece no log (privacidade P2)
 //
 // Voltou depois de ter saído na versão pública: aqui ele só mostra números
@@ -18,7 +17,6 @@ import { contarMembros } from "../core/membros.js";
 import { limparId } from "../core/ids.js";
 import * as relatorio from "../ferramentas/relatorio.js";
 import * as store from "../core/config-store.js";
-import * as imagemAdulta from "../ai/imagem-adulta.js";
 import { pseudonimo } from "../core/pseudonimo.js";
 import { citar, citarInterno } from "../core/aliases.js";
 import { tr } from "../core/i18n.js";
@@ -53,7 +51,9 @@ export async function cmdServidores(message, args, ctx) {
         : `Uso: \`${ctx.PREFIXO ?? "&"}servidores pseudonimo <id> [id…]\`` });
   }
   if (["adulto", "+18", "18", "nsfw", "adult"].includes(args[0]?.toLowerCase())) {
-    return cmdAdulto(message, args.slice(1), { ...ctx, aqui });
+    // (22 out 2026) o modo +18 da IA saiu — o subcomando só avisa
+    return sendEmbed(message.channel, { title: "🔞 +18 da IA: removido", colour: COR.info,
+      description: "Desde 22 out 2026 a IA não tem modo adulto: chat e imagem recusam conteúdo sexual em qualquer servidor e canal, inclusive canais NSFW. A moderação do que os membros postam (+18 no automod e no Sentinela) continua igual." });
   }
 
   let lista = [];
@@ -80,39 +80,6 @@ export async function cmdServidores(message, args, ctx) {
       "_Ritmo = média dos últimos minutos, em memória (zera se o bot reiniciar)._"].join("\n"),
     colour: COR.info,
   });
-}
-
-// ── +18: o que vale NESTE canal (16 out 2026) ───────────────────────────────
-// A lista de servidores liberados saiu: o +18 vale só nos canais NSFW do
-// servidor da casa (SERVIDOR pelo id). O comando virou um diagnóstico do
-// canal onde é usado — e mostra as últimas recusas com o motivo.
-async function cmdAdulto(message, args, ctx) {
-  const { sendEmbed, COR, client, aqui } = ctx;
-  const canalId = message.channelId;
-  const acao = String(args[0] ?? "").toLowerCase();
-  const casa = imagemAdulta.servidorDaCasa(aqui);
-  const cache = imagemAdulta.canalNsfw(canalId);
-  imagemAdulta.lembrarCanal(message.channel);
-  const nsfw = imagemAdulta.canalNsfw(canalId) || await imagemAdulta.confirmarNsfw(client, canalId, { forcar: true });
-  const visao = !!(process.env.LLM_MODEL_VISAO || process.env.LLM_MODEL_MODERACAO);
-  const imagem = (process.env.IMAGEM ?? "1").trim() !== "0";
-  const sim = (b) => (b ? "✅" : "❌");
-  const recusas = imagemAdulta.ultimasRecusas(canalId).slice(0, 3);
-  const quando = (ms) => new Date(ms).toLocaleTimeString("pt-BR", { timeZone: process.env.TZ || "UTC", hour: "2-digit", minute: "2-digit" });
-  const liberado = casa && nsfw;
-  return sendEmbed(message.channel, { title: "🔞 +18 neste canal", colour: liberado ? COR.sucesso : COR.aviso, description: [
-    ["add", "remove", "adicionar", "remover", "liberar", "bloquear", "on", "off"].includes(acao)
-      ? "_Não precisa mais de `add`/`remove`: o +18 vale nos canais NSFW do servidor da casa (`SERVIDOR` no `.env`)._" : "",
-    `${sim(casa)} Servidor da casa (\`SERVIDOR\` = este servidor)${casa ? "" : ` — este é \`${aqui ?? "?"}\``}`,
-    `${sim(nsfw)} Canal marcado como **NSFW** no Stoat${!cache && nsfw ? " _(o cache estava velho; conferido na API)_" : ""}`,
-    `${sim(visao)} Modelo de visão para conferir a imagem pronta`,
-    `${sim(imagem)} Geração de imagem ligada (\`IMAGEM\`)`,
-    "",
-    liberado
-      ? "**Liberado aqui:** chat adulto, roleplay, temas pesados e imagem +18 — só os dois limites fixos valem (menores, pessoa real identificável)."
-      : "**Não liberado aqui** — o que tiver ❌ acima é o que falta.",
-    ...(recusas.length ? ["", "**Últimas recusas neste canal:**", ...recusas.map((r) => `• ${quando(r.quando)} — ${r.motivo}`)] : []),
-  ].filter((l, i) => i > 0 || l).join("\n") });
 }
 
 async function cmdRelatorio(message, args, ctx) {

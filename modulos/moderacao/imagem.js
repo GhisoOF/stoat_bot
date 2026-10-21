@@ -55,7 +55,7 @@ const LEX = {
 // print de jogo de tiro é comum. Só avisa a staff, então errar para avisar é aceitável.
 const PESO = { sexual: 4, gore: 4, arma: 1.5, odio: 4, riscoModelo: 2 };
 
-export function pontuarDescricao(descricao, { riscoModelo = false } = {}) {
+export function pontuarDescricao(descricao, { riscoModelo = false, recusou = false } = {}) {
   const texto = presentes(descricao);
   const cat = {};
   for (const [k, lista] of Object.entries(LEX)) cat[k] = lista.some((re) => re.test(texto));
@@ -71,7 +71,10 @@ export function pontuarDescricao(descricao, { riscoModelo = false } = {}) {
   const grave = !!(cat.sexual && cat.menor && riscoModelo);
   const categorias = Object.keys(cat).filter((k) => cat[k] && k !== "menor");
   if (grave) categorias.unshift("menor + sexual");
-  return { nota: Math.min(10, nota), grave, alertar: grave || nota >= ALERTA, categorias, sinaisTexto: escrito.sinais };
+  // (22 out 2026) modelo com trava que se RECUSA a descrever: costuma ser
+  // justo a imagem explícita. Não dá para saber o que é — a staff olha.
+  if (recusou) { categorias.push("o modelo se recusou a descrever"); nota = Math.max(nota, ALERTA); }
+  return { nota: Math.min(10, nota), grave, alertar: grave || recusou || nota >= ALERTA, categorias, sinaisTexto: escrito.sinais };
 }
 
 // Quem é analisado: conta nova (ou qualquer conta de < 7 dias durante uma
@@ -91,6 +94,7 @@ export function imagensDa(message) {
     .filter((a) => a.id);
 }
 
+const RECUSA_TXT = { "o modelo se recusou a descrever": { en: "the model refused to describe it", es: "el modelo se negó a describirla" } };
 // `lang`: "pt" | "en" | "es" (o espanhol sai pronto, como o do i18n.tr)
 export function montarAlerta({ userId, canalId, messageId, descricao, r, staff = [], lang = "pt" }) {
   const en = lang === "en";
@@ -100,7 +104,7 @@ export function montarAlerta({ userId, canalId, messageId, descricao, r, staff =
     description: trechoPronto([
       mencao,
       `<@${userId}> · <#${canalId}>${messageId ? ` · \`${messageId}\`` : ""}`,
-      `**Nota:** ${r.nota.toFixed(1)}/10 · **Señales:** ${r.categorias.concat(r.sinaisTexto).join(", ") || "—"}`,
+      `**Nota:** ${r.nota.toFixed(1)}/10 · **Señales:** ${r.categorias.map((c) => RECUSA_TXT[c]?.es ?? c).concat(r.sinaisTexto).join(", ") || "—"}`,
       "",
       `> ${String(descricao).replace(/\n+/g, " ").slice(0, 600)}`,
       "",
@@ -114,7 +118,7 @@ export function montarAlerta({ userId, canalId, messageId, descricao, r, staff =
     description: [
       mencao,
       `<@${userId}> · <#${canalId}>${messageId ? ` · \`${messageId}\`` : ""}`,
-      `**${en ? "Score" : "Nota"}:** ${r.nota.toFixed(1)}/10 · **${en ? "Signals" : "Sinais"}:** ${r.categorias.concat(r.sinaisTexto).join(", ") || "—"}`,
+      `**${en ? "Score" : "Nota"}:** ${r.nota.toFixed(1)}/10 · **${en ? "Signals" : "Sinais"}:** ${r.categorias.map((c) => (en ? RECUSA_TXT[c]?.en : null) ?? c).concat(r.sinaisTexto).join(", ") || "—"}`,
       "",
       `> ${String(descricao).replace(/\n+/g, " ").slice(0, 600)}`,
       "",
@@ -173,7 +177,7 @@ async function analisarUma({ ctx, userId, canalId, messageId, url }) {
   });
   const j = await resp.json().catch(() => ({}));
   if (j?.erro || !j?.descricao) { console.warn(`[IMAGEM] ${userId}: ${j?.erro ?? "sem descrição"}`); return; }
-  const r = pontuarDescricao(j.descricao, { riscoModelo: j.riscoModelo });
+  const r = pontuarDescricao(j.descricao, { riscoModelo: j.riscoModelo, recusou: j.recusou === true });
   console.log(`[IMAGEM] ${userId} nota ${r.nota.toFixed(1)} [${r.categorias.join(",")}] ${r.alertar ? "→ ALERTA" : ""}`);
   if (!r.alertar) return;
   // Aponta quem e onde: "Imagem grave" sem ponteiro não deixa ninguém agir.

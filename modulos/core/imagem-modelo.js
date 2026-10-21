@@ -16,8 +16,9 @@ export const URLS_PADRAO = {
     llm:     "https://huggingface.co/unsloth/Qwen3-4B-Instruct-2507-GGUF/resolve/main/Qwen3-4B-Instruct-2507-Q4_K_M.gguf",
   },
   "qwen-image": {
-    difusao: "https://huggingface.co/abenzerps/Qwen-Image-2.1-Uncensored-Quantized/resolve/main/qwen-image-2.1-UC-Q8_0.gguf",
-    vae:     "https://huggingface.co/abenzerps/Qwen-Image-2.1-Uncensored-Quantized/resolve/main/vae/qwen_image_2.1_vae_bf16.safetensors",
+    // (22 out 2026) os pesos oficiais — antes era o "Uncensored" (abenzerps)
+    difusao: "https://huggingface.co/unsloth/Qwen-Image-2.1-GGUF/resolve/main/qwen-image-2.1-Q8_0.gguf",
+    vae:     "https://huggingface.co/Comfy-Org/Qwen-Image-2.1/resolve/main/vae/qwen_image_2.1_vae_bf16.safetensors",
     llm:     "https://huggingface.co/Qwen/Qwen3-VL-8B-Instruct-GGUF/resolve/main/Qwen3VL-8B-Instruct-Q4_K_M.gguf",
   },
   sd: { modelo: "https://huggingface.co/stabilityai/sd-turbo/resolve/main/sd_turbo.safetensors" },
@@ -51,14 +52,6 @@ export function arquivosParaBaixar(env = process.env) {
 }
 
 export const ehTurbo = (env = process.env) => tipoDoModelo(env) !== "qwen-image" || /turbo/i.test(urlsDoModelo(env).difusao ?? "");
-
-// Modelo sem o filtro de segurança do fabricante ("uncensored", "-UC-"): toda
-// imagem passa pela visão antes de sair, em qualquer servidor.
-export function modeloSemFiltro(env = process.env) {
-  if (String(env.IMAGEM_SEM_FILTRO ?? "").trim() === "1") return true;
-  const u = urlsDoModelo(env);
-  return /uncensored|abliterat|[-_]uc[-_.]/i.test(u.difusao ?? u.modelo ?? "");
-}
 
 // Quanto o gerador pode levar. O Qwen-Image base (20 passos) numa iGPU leva
 // minutos: ~4 min a 512² no MiniPC (Radeon 780M), ~20 min a 1024².

@@ -1,4 +1,4 @@
-// &servidores — painel do dono do bot (relatório horário, servidores +18) — fora do &help
+// &servidores — painel do dono do bot (servidores, relatório horário) — fora do &help
 
 export default {
   id: "servidores",

@@ -7,7 +7,7 @@ import { canalDeOutroServidor } from "../moderacao/pertence.js";
 import * as log from "../core/log.js";
 import { tr, lingua, textoDoIdioma, idiomaDaTela } from "../core/i18n.js";
 import { servidorNaLista } from "../core/env.js";
-import { servidorDaCasa } from "../ai/imagem-adulta.js";
+import { servidorDaCasa } from "../core/casa.js";
 
 let resumirIA = null;
 export function configurarResumo(fn) { resumirIA = fn; }

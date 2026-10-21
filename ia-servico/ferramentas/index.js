@@ -43,7 +43,7 @@ export function definicoes() {
 export function nomes() { return [...registro.keys()]; }
 
 // Executa uma ferramenta pelo nome. Nunca lança: erro vira resultado.
-// `contexto` vem de QUEM CHAMA o serviço (o bot: ex. { imagemAdulta }), nunca
+// `contexto` vem de QUEM CHAMA o serviço (o bot: ex. { semImagem }), nunca
 // dos argumentos que o modelo escreveu — o modelo não consegue se liberar.
 export async function executar(nome, args, contexto = {}) {
   // (21 out 2026) o servidor desligou a imagem: se o modelo chamar mesmo assim (chamada

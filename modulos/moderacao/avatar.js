@@ -70,7 +70,10 @@ export function afirmado(descricao) {
 // Decide sobre a foto. Para AGIR (silenciar, expulsar, banir) é preciso o voto
 // de risco do modelo junto com o que a descrição afirma; termo explícito sem o
 // voto vira só `suspeita` — a staff é avisada, ninguém é punido.
-export function avaliarAvatar(descricao, { riscoModelo = false } = {}) {
+export function avaliarAvatar(descricao, { riscoModelo = false, recusou = false } = {}) {
+  // (22 out 2026) o modelo se recusou a descrever a foto: ninguém é punido
+  // por isso, mas a staff é avisada (é o que um modelo com trava faz com nudez)
+  if (recusou) return { apitou: false, suspeita: true, motivos: ["o modelo de visão se recusou a descrever a foto — confira"], grave: false };
   const ali = afirmado(descricao);
   const r = pontuarDescricao(ali, { riscoModelo });
   const explicito = EXPLICITO.test(ali);
@@ -112,7 +115,7 @@ export function analisarFoto(arquivo, agora = Date.now()) {
     try {
       const j = await analisar(arquivo.url);
       if (j?.erro || !j?.descricao) { console.warn(`[AVATAR] ${arquivo.id}: ${j?.erro ?? "sem descrição"}`); resultados.delete(arquivo.id); return null; }
-      return { descricao: String(j.descricao), ...avaliarAvatar(j.descricao, { riscoModelo: !!j.riscoModelo }) };
+      return { descricao: String(j.descricao), ...avaliarAvatar(j.descricao, { riscoModelo: !!j.riscoModelo, recusou: j.recusou === true }) };
     } catch (e) {
       console.warn(`[AVATAR] ${arquivo.id}: ${e?.message ?? e}`); resultados.delete(arquivo.id); return null;
     } finally { naFila--; }
@@ -158,7 +161,8 @@ export async function verificar({ ctx, server, userId, avatar, origem = "entrada
       const ms = tempoDoAvatar(cfg);
       await aplicarTimeout(server, userId, ms);
       db.silenciarAte(server.id, userId, Date.now() + ms, motivo);   // sair e voltar reaplica
-      feito = es ? `silenciado (timeout) durante ${duracaoTexto(ms, "es")}` : en ? `silenced (timeout) for ${duracaoTexto(ms, "es")}` : `silenciado (timeout) por ${duracaoTexto(ms, "pt")}`;
+      feito = es ? `silenciado (timeout) durante ${duracaoTexto(ms, "es")}`
+        : en ? `silenced (timeout) for ${duracaoTexto(ms, "en")}` : `silenciado (timeout) por ${duracaoTexto(ms, "pt")}`;
     } else if (acao === "expulsar") {
       await server.kickUser(userId);
       feito = es ? "expulsado" : en ? "kicked" : "expulso";
@@ -225,9 +229,11 @@ async function alertar(ctx, { server, userId, origem, r, feito, acao, en, es = f
   return destino.id ?? destinoId;
 }
 const MOTIVO_EN = { "sexual explícito": "explicit sexual", "menor + sexual": "minor + sexual", nudez: "nudity", "ódio": "hate", gore: "gore",
-  "possível conteúdo sexual (o modelo não confirmou o risco)": "possible sexual content (the model didn't confirm the risk)" };
+  "possível conteúdo sexual (o modelo não confirmou o risco)": "possible sexual content (the model didn't confirm the risk)",
+  "o modelo de visão se recusou a descrever a foto — confira": "the vision model refused to describe the picture — check it" };
 const MOTIVO_ES = { "sexual explícito": "sexual explícito", "menor + sexual": "menor + sexual", nudez: "desnudez", "ódio": "odio", gore: "gore",
-  "possível conteúdo sexual (o modelo não confirmou o risco)": "posible contenido sexual (el modelo no confirmó el riesgo)" };
+  "possível conteúdo sexual (o modelo não confirmou o risco)": "posible contenido sexual (el modelo no confirmó el riesgo)",
+  "o modelo de visão se recusou a descrever a foto — confira": "el modelo de visión se negó a describir la foto — revísala" };
 
 // ── Os eventos ──────────────────────────────────────────────────────────────
 // Entrou: a foto do perfil e, se tiver, a de servidor.

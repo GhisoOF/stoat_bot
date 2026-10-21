@@ -120,7 +120,8 @@ function chamadasEmTexto(texto) {
 
 // O contexto que o BOT manda junto (só campos conhecidos, só booleanos).
 function contextoDe(corpo) {
-  return { imagemAdulta: corpo?.contexto?.imagemAdulta === true, semImagem: corpo?.contexto?.semImagem === true };
+  // (22 out 2026) o `imagemAdulta` saiu com o modo +18 — se chegar, é ignorado
+  return { semImagem: corpo?.contexto?.semImagem === true };
 }
 
 async function conversarComFerramentas(messages, { modelo, usarFerramentas = true, idioma = "pt", contexto = {} } = {}) {

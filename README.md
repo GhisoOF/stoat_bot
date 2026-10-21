@@ -33,7 +33,7 @@ docker compose up -d --build
 | Busca na web (SearXNG) | sobe junto no compose, já configurado — a IA pesquisa de fábrica |
 | Leitura de código (GitHub) | dentro; repositórios públicos funcionam sem token |
 | Voz nas calls (Piper + ffmpeg) | dentro da imagem; `VOZ_ATIVA=1` e as vozes baixam sozinhas no primeiro arranque — `VOZES=` escolhe quais (qualquer idioma do catálogo do Piper) |
-| Geração de imagem (stable-diffusion.cpp, Vulkan + Z-Image-Turbo por padrão) | dentro da imagem; os modelos (~6,5 GB: difusão + VAE + LLM do prompt) baixam **no arranque**, antes do bot conectar — `IMAGEM=0` desliga, `SD_MODELO_TIPO=sd` volta ao SD-Turbo (1 arquivo, mais leve), `SD_MODELO_TIPO=qwen-image` usa o **Qwen-Image 2.1** (~13 GB; padrão: o Q8_0 "Uncensored" do abenzerps — modelo sem filtro, então toda imagem passa pela visão antes de sair; `SD_Q_DIFUSAO_URL` troca o arquivo, e um com "turbo" no nome roda em 8 passos), `SD_URL` troca por um A1111/Forge externo. Antes de desenhar, o LLM local é **descarregado da GPU** (volta sozinho na próxima mensagem) e, se ainda faltar memória, a 2ª tentativa vai no modo econômico (LLM do prompt na CPU, VAE em blocos) — `IMAGEM_LIBERAR_GPU=0` desliga |
+| Geração de imagem (stable-diffusion.cpp, Vulkan + Z-Image-Turbo por padrão) | dentro da imagem; os modelos (~6,5 GB: difusão + VAE + LLM do prompt) baixam **no arranque**, antes do bot conectar — `IMAGEM=0` desliga, `SD_MODELO_TIPO=sd` volta ao SD-Turbo (1 arquivo, mais leve), `SD_MODELO_TIPO=qwen-image` usa o **Qwen-Image 2.1** (~13 GB; padrão: os pesos oficiais, Q8_0 do unsloth + VAE da Comfy-Org; `SD_Q_DIFUSAO_URL` troca o arquivo, e um com "turbo" no nome roda em 8 passos), `SD_URL` troca por um A1111/Forge externo. Antes de desenhar, o LLM local é **descarregado da GPU** (volta sozinho na próxima mensagem) e, se ainda faltar memória, a 2ª tentativa vai no modo econômico (LLM do prompt na CPU, VAE em blocos) — `IMAGEM_LIBERAR_GPU=0` desliga |
 
 Visão (a IA **ler** imagens) depende só de o modelo escolhido enxergar —
 funciona de fábrica no modo `online` com um modelo multimodal, e no modo
@@ -46,7 +46,7 @@ As variáveis que importam:
 |---|---|
 | `BOT_TOKEN` | token do bot na plataforma |
 | `DONO` | ID do **seu perfil** — ganha os comandos administrativos do bot |
-| `SERVIDOR` | ID do servidor onde a **IA** funciona (`*` = em todos; vazio = IA em lugar nenhum). Fora dele fica **só a moderação por IA** (temas proibidos, visão de imagens e fotos de perfil, `&modia`); chat, geração de imagem e resumo do RSS ficam só nele. Posto **pelo ID**, é o servidor da casa: os canais NSFW dele saem das travas (ver abaixo). *Chat AI only here; elsewhere, AI moderation only.* |
+| `SERVIDOR` | ID do servidor onde a **IA** funciona (`*` = em todos; vazio = IA em lugar nenhum). Fora dele fica **só a moderação por IA** (temas proibidos, visão de imagens e fotos de perfil, `&modia`); chat, geração de imagem e resumo do RSS ficam só nele. Posto **pelo ID**, é o servidor da casa: lá o chat e a imagem começam ligados. *Chat AI only here; elsewhere, AI moderation only.* |
 | `MODELO_MODERACAO` | modelo **pequeno** só para o juiz da moderação (temas proibidos, `&modia`) dos **outros** servidores — o de `SERVIDOR` continua com o modelo da conversa. Ex.: `ggml-org/gemma-3-1b-it-GGUF:Q4_K_M` (~0,8 GB). No modo local fica carregado junto do de conversa (grupo sem troca no llama-swap). *Small model for the moderation judge on the other servers; yours keeps the chat model.* |
 | `IA` | `0` desliga todos os módulos de IA — o bot de moderação segue completo |
 | `CONVERSA` | `0` = **modo enxuto**: a IA fica só para moderação (temas proibidos, visão de imagens e fotos de perfil), o relatório horário e o RSS. Sem chat, memória, comentários e geração de imagem; o `&modia` fica **só com `MODELO_MODERACAO`** (o juiz pequeno, que aguenta ler toda mensagem), em todo servidor — e no modo enxuto a casa também é julgada por ele; o modelo usa contexto 4096 e sai da memória após 5 min parado (`IA_TTL`). Com `BUSCA_WEB=0`, o SearXNG nem sobe. *Lean mode: AI only for moderation, the log report and RSS; `&modia` on every server when a dedicated `MODELO_MODERACAO` exists.* |
@@ -170,24 +170,21 @@ diz exatamente o que clicar.
   Liga sozinho nos servidores que já existiam; servidor novo começa desligado.
   *Profile pictures: checked on join and on change by the vision model; default
   action is a 24 h timeout plus a staff alert.*
-- **+18 só no servidor da casa, sem amarras:** a geração de imagem vem com
-  +18 **bloqueado**, e só os canais marcados como **NSFW** no Stoat do
-  servidor posto pelo ID em `SERVIDOR` o liberam (ou todos, se o servidor
-  inteiro estiver marcado como NSFW) — sem comando para liberar. Nesses canais
-  a Judy conversa sobre conteúdo adulto, faz roleplay, não dá sermão, e a
-  imagem perde as travas de gore e de símbolos. Os canais comuns continuam
-  limpos. Ficam só os limites fixos: nada sexual com menores e nada sexual (nem
-  violência explícita) com pessoa real identificável — conferidos na pergunta,
-  na resposta e na imagem pronta, que passa pelo modelo de visão (que diz a
-  idade aparente: `IDADE: adulto/menor/incerto`; menor ou incerto descarta).
-  Personagem ou estilo de obra ("personagem de…", "estilo de…") não conta como
-  pessoa real. Se o cache da plataforma não souber que o canal virou NSFW, a
-  Judy confere na API. `&servidores adulto` (dono do bot) é o **diagnóstico do
-  canal**: servidor da casa, canal NSFW, visão, gerador — e as últimas recusas
-  com o motivo.
-  *+18 only on the home server (`SERVIDOR`), in NSFW channels, with no other
-  restraint than the fixed limits (minors, real people). `&servidores adulto`
-  shows why a channel is or isn't unlocked, and the last refusals.*
+- **Sem +18 na IA** (desde 22 out 2026): chat e imagem recusam conteúdo
+  sexual em **qualquer** servidor e canal — canal NSFW não libera nada, em
+  nenhuma língua. O recomendado são modelos **oficiais**, que já recusam isso
+  sozinhos (ex.: `unsloth/gemma-4-E2B-it-GGUF:Q4_K_M` no `MODELO` e no
+  `MODELO_VISAO`); se o `.env` apontar para um "uncensored"/"abliterated", o
+  boot avisa no log. **Toda imagem gerada passa pelo modelo de visão** antes de
+  sair — sem visão, não há geração. A conferência responde em linhas fixas
+  (`NUDEZ: sim/não`, `IDADE: adulto/menor/incerto`, `RISCO: sim/não`), então o
+  veredito não depende da língua da descrição; sem o veredito, com risco ou se
+  o modelo se recusar a descrever, a imagem é descartada. Nas imagens e fotos
+  de perfil que os **membros** postam, a recusa do modelo vira aviso à staff.
+  Nudez de pessoa real (deepfake) e menores continuam com a recusa própria.
+  *No 18+ mode: no sexual content anywhere, NSFW channels included; official
+  models recommended (the boot warns about uncensored ones); every generated
+  image is checked by the vision model with a structured verdict.*
 - **Painel do dono do bot** (`&servidores`, só `SUPER_ADMINS`, fora do `&help`):
   onde o bot está, com membros e ritmo de mensagens. E o **relatório horário**
   (`&servidores relatorio canal #canal`): a cada hora cheia, banimentos,

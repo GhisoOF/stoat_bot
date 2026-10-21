@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, readdirSync, renameSync, statSync, unlinkSync, w
 import { join } from "node:path";
 import { randomBytes } from "node:crypto";
 import { iaLigada, conversaLigada, modoIA, MODELO_LOCAL_PADRAO } from "./modulos/core/env.js";
+import { avisoSemTrava } from "./modulos/core/modelos-sem-trava.js";
 import { montarConfigSwap } from "./modulos/core/llama-swap-config.js";
 import { arquivosParaBaixar, tipoDoModelo } from "./modulos/core/imagem-modelo.js";
 
@@ -94,6 +95,8 @@ process.on("SIGINT", () => encerrar(0));
 if (iaLigada() && !conversaLigada()) {
   console.info(`[INICIAR] CONVERSA=0 — modo enxuto: IA só para moderação, relatório e RSS (sem chat, sem gerar imagem; contexto ${process.env.LLAMA_CTX}, modelo sai da memória após ${process.env.IA_TTL}s parado).`);
 }
+// (22 out 2026) sem modo +18: avisa se o .env aponta para um modelo sem trava
+if (iaLigada()) { const aviso = avisoSemTrava(); if (aviso) console.warn(aviso); }
 if (!iaLigada()) {
   console.info("[INICIAR] IA=0 — módulos de IA desligados (nem serviço, nem modelo).");
 } else if (modoIA() === "local" && (process.env.MODELO_VISAO || process.env.LLM_MODEL_VISAO || process.env.MODELO_MODERACAO)) {

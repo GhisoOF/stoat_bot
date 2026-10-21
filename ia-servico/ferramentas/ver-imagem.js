@@ -124,7 +124,7 @@ export async function verImagem({ url, pergunta, modelo = null, temperatura = nu
   return perguntarSobre(limpa, { pergunta, modelo, temperatura, maxTokens });
 }
 
-// Há modelo de visão para olhar uma imagem? (a geração +18 depende disso)
+// Há modelo de visão para olhar uma imagem? (toda imagem gerada depende disso)
 export const visaoDisponivel = () => !!(MODELO_MODERACAO || MODELO_VISAO);
 
 // A pergunta ao modelo, com a imagem já reescrita (JPEG limpo).
@@ -186,33 +186,52 @@ const PROMPT_MODERACAO = [
   "Na última linha, escreva exatamente RISCO: sim ou RISCO: não.",
 ].join(" ");
 
-// A mesma moderação, para uma imagem que já está na memória — a que a
-// própria Judy acabou de desenhar (15 out 2026: a saída do gerador passa por
-// aqui antes de ir para o canal).
-// `adulta`: a imagem vai para um canal +18 — a pergunta pede também a IDADE
-// APARENTE explícita (16 out 2026). Antes, "girl"/"garota" numa descrição de
-// mulher adulta descartava a imagem; agora o modelo diz se todos são adultos.
-const PROMPT_SAIDA_ADULTA = [
-  "Você confere uma imagem antes de ela ir para um canal adulto. Descreva em até 3 frases curtas o que aparece (pessoas, nudez, ato sexual).",
-  "Depois, numa linha própria, a IDADE APARENTE das pessoas: escreva exatamente IDADE: adulto (todas claramente adultas),",
-  "IDADE: menor (alguém aparenta ter menos de 18 anos) ou IDADE: incerto (não dá para ter certeza). Sem pessoas: IDADE: adulto.",
-  "Escreva só o que VÊ. Não recuse e não opine. Na última linha, escreva exatamente RISCO: sim ou RISCO: não.",
+// O modelo se recusou a descrever ("não posso ajudar com isso", "I can't…") —
+// num modelo com trava, é o que acontece justo com a imagem explícita. Só
+// conta como recusa quando a resposta não trouxe o veredito pedido.
+const RECUSA = /\b(?:i\s*(?:can(?:not|'t|’t)|am\s+unable|'m\s+unable|’m\s+unable|won(?:'t|’t)|am\s+not\s+able)|n[ãa]o\s+(?:posso|consigo|vou|[ée]\s+poss[íi]vel)|no\s+(?:puedo|me\s+es\s+posible|voy\s+a)|je\s+ne\s+(?:peux|vais)|non\s+(?:posso|riesco)|ich\s+kann\s+(?:[^.\n]{0,40}\s)?(?:nicht|keine?n?)|sorry|desculp\w*|lo\s+siento|d[ée]sol[ée]|mi\s+dispiace|tut\s+mir\s+leid)\b/i;
+export function pareceRecusa(texto) {
+  const t = String(texto ?? "");
+  if (/\b(?:RISCO|NUDEZ|IDADE):/i.test(t)) return false;
+  return RECUSA.test(t);
+}
+
+// A imagem que a PRÓPRIA Judy desenhou (15 out 2026) passa por aqui antes de
+// ir para o canal. (22 out 2026) Sem modo +18, toda imagem gerada leva a
+// mesma pergunta, com o veredito em LINHAS FIXAS — o bot decide por elas, e
+// não pelas palavras da descrição (que podem vir em qualquer língua).
+const PROMPT_SAIDA = [
+  "Você confere uma imagem gerada por IA antes de ela ir para um chat público. Descreva em até 3 frases curtas o que aparece.",
+  "Depois escreva exatamente estas três linhas, cada uma na sua:",
+  "NUDEZ: sim (há nudez, seios ou genitais à mostra, roupa íntima em pose sensual ou ato sexual) ou NUDEZ: não.",
+  "IDADE: adulto (todas as pessoas claramente adultas, ou não há pessoas), IDADE: menor (alguém aparenta ter menos de 18 anos) ou IDADE: incerto.",
+  "RISCO: sim (nudez, conteúdo sexual, sangue ou violência explícita, símbolo de ódio) ou RISCO: não.",
+  "Escreva só o que VÊ. Não recuse e não opine.",
 ].join(" ");
-export async function moderarBuffer(buffer, { adulta = false } = {}) {
+const sim = (v) => (v == null ? null : /^(sim|yes|s[íi]|oui|ja)$/i.test(v));
+export function lerVeredito(texto) {
+  const t = String(texto ?? "");
+  const nudez = sim(t.match(/(?:NUDEZ|NUDITY|DESNUDEZ):\s*\**\s*(sim|n[ãa]o|yes|no|s[íi]|oui|non|ja|nein)(?![A-Za-zÀ-ÿ])/i)?.[1] ?? null);
+  const idadeBruta = (t.match(/(?:IDADE|AGE|EDAD):\s*\**\s*(adulto|menor|incerto|adult|minor|uncertain|adulta|incierto)(?![A-Za-zÀ-ÿ])/i)?.[1] ?? "").toLowerCase();
+  const idade = !idadeBruta ? null : /^adult/.test(idadeBruta) ? "adulto" : /^(menor|minor)$/.test(idadeBruta) ? "menor" : "incerto";
+  const risco = sim(t.match(/(?:RISCO|RISK|RIESGO):\s*\**\s*(sim|n[ãa]o|yes|no|s[íi]|oui|non|ja|nein)(?![A-Za-zÀ-ÿ])/i)?.[1] ?? null);
+  return { nudez, idade, risco };
+}
+export async function moderarBuffer(buffer) {
   if (!visaoDisponivel()) return { erro: "visão desligada" };
   let limpa;
   try { limpa = await reescrever(buffer, LADO_VISAO); }
   catch (e) { return { erro: `não consegui tratar a imagem: ${e?.message ?? e}` }; }
-  const pergunta = adulta ? PROMPT_SAIDA_ADULTA : PROMPT_MODERACAO;
-  const perguntar = (maxTokens) => perguntarSobre(limpa, { pergunta, modelo: MODELO_MODERACAO || null, temperatura: 0, maxTokens });
+  const perguntar = (maxTokens) => perguntarSobre(limpa, { pergunta: PROMPT_SAIDA, modelo: MODELO_MODERACAO || null, temperatura: 0, maxTokens });
   let r = await perguntar(1200);
-  if (r.erro && /não respondeu nada/.test(r.erro)) r = await perguntar(2400);
+  // vazio (o raciocínio comeu os tokens) ou sem as linhas: mais uma vez, com folga
+  if ((r.erro && /não respondeu nada/.test(r.erro)) || (!r.erro && lerVeredito(r.descricao).nudez === null && !pareceRecusa(r.descricao))) r = await perguntar(2400);
   if (r.erro) return r;
   const texto = String(r.descricao);
-  const idade = (texto.match(/IDADE:\s*(adulto|menor|incerto)/i)?.[1] ?? "").toLowerCase() || null;
+  const v = lerVeredito(texto);
   return {
-    descricao: texto.replace(/\n?\s*RISCO:\s*(sim|n[ãa]o)\s*$/i, "").replace(/^.*IDADE:.*$/gim, "").trim(),
-    riscoModelo: /RISCO:\s*sim/i.test(texto), idade,
+    descricao: texto.replace(/^.*\b(?:NUDEZ|NUDITY|DESNUDEZ|IDADE|AGE|EDAD|RISCO|RISK|RIESGO):.*$/gim, "").trim(),
+    riscoModelo: v.risco === true, nudez: v.nudez, idade: v.idade, recusou: pareceRecusa(texto),
   };
 }
 
@@ -230,6 +249,9 @@ export async function moderarImagem({ url }) {
   }
   if (r.erro) return r;
   const texto = String(r.descricao);
+  // (22 out 2026) o modelo com trava pode se recusar a descrever justo a
+  // imagem explícita: a recusa vira risco (a staff é avisada), nunca "nada"
+  if (pareceRecusa(texto)) return { descricao: texto.trim(), riscoModelo: true, recusou: true };
   const risco = /RISCO:\s*sim/i.test(texto);
   const descricao = texto.replace(/\n?\s*RISCO:\s*(sim|n[ãa]o)\s*$/i, "").trim();
   return { descricao, riscoModelo: risco };

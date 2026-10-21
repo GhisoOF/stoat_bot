@@ -14,7 +14,7 @@ import { basename, join } from "node:path";
 import { tmpdir } from "node:os";
 import { moderarBuffer, visaoDisponivel } from "./ver-imagem.js";
 import { desenhando } from "./vez-da-gpu.js";
-import { tipoDoModelo, urlsDoModelo, ehTurbo, modeloSemFiltro, tempoDeGeracaoMs, ladoMaximo, SIGMAS_QWEN_TURBO } from "../../modulos/core/imagem-modelo.js";
+import { tipoDoModelo, urlsDoModelo, ehTurbo, tempoDeGeracaoMs, ladoMaximo, SIGMAS_QWEN_TURBO } from "../../modulos/core/imagem-modelo.js";
 const LADO_MAX     = ladoMaximo();
 const PASSOS_MAX   = Number(process.env.IMAGEM_PASSOS_MAX || 30);
 const TIMEOUT_MS   = tempoDeGeracaoMs();
@@ -29,8 +29,8 @@ async function sharp() {
   return sharpMod;
 }
 
-const MENOR   = /\b(crian[çc]as?|menor(?:es)?|adolescentes?|teens?|teenagers?|loli|shota|infantil|kids?|child(?:ren)?|underage|preteens?|toddlers?|bab(?:y|ies)|beb[êe]s?|schoolgirls?|schoolboys?|colegiais?|garotinh[ao]s?|menininh[ao]s?|novinh[ao]s?|ninfetas?|young\s+(?:girl|boy)s?|little\s+(?:girl|boy)s?|(?:[1-9]|1[0-7])\s*(anos|years?|yo|y\/o)\b)/i;
-const SEXUAL  = /\b(nu[aá]?s?|nude?s?|nudez|nudity|naked|pelad[ao]s?|sem\s+roupa|topless|nsfw|sexo|sex|sexy|sexual\w*|er[óo]tic\w*|sensual\w*|lingerie|fetiche|fetish|hentai|porn\w*|explicit\w*|seminu\w*|seios|boobs?|nipples?|mamilos?|genit\w*|p[êe]nis|vagina|bunda|butt|ass|orgasm\w*|transa\w*|bdsm|bondage)\b/i;
+const MENOR   = /\b(crian[çc]as?|menor(?:es)?|adolescentes?|teens?|teenagers?|loli|shota|infantil|kids?|child(?:ren)?|underage|preteens?|toddlers?|bab(?:y|ies)|beb[êe]s?|schoolgirls?|schoolboys?|colegiais?|garotinh[ao]s?|menininh[ao]s?|novinh[ao]s?|ninfetas?|young\s+(?:girl|boy)s?|little\s+(?:girl|boy)s?|(?:[1-9]|1[0-7])\s*(anos|años|ans|anni|jahre?|years?|yo|y\/o)\b|ni[ñn][ao]s?|enfants?|fillettes?|bambin[aoie]|ragazzin[aoie]|m[äa]dchen|jugendlich\w*|minderj[äa]hrig\w*)/i;
+const SEXUAL  = /\b(nu[aá]?s?|nude?s?|nudez|nudity|naked|pelad[ao]s?|sem\s+roupa|topless|nsfw|sexo|sex|sexy|sexual\w*|er[óo]tic\w*|sensual\w*|lingerie|fetiche|fetish|hentai|porn\w*|explicit\w*|seminu\w*|seios|boobs?|nipples?|mamilos?|genit\w*|p[êe]nis|vagina|bunda|butt|ass|orgasm\w*|transa\w*|bdsm|bondage|desnud\w*|nackt\w*|nue?s?|nud[ae]|sexe|sesso|[ée]rot\w*|lencer[íi]a|pechos|tetas|seins|brüste|culo)\b/i;
 const PESSOA_REAL = /\b(da|do|de)\s+[A-ZÀ-Ú][a-zà-ú]+\s+[A-ZÀ-Ú][a-zà-ú]+|celebridade|celebrity|famos[ao]/;
 // Nome próprio logo depois de "estilo/personagem/anime…" é obra de ficção
 // (16 out 2026: "no estilo de Final Fantasy" virava "pessoa real").
@@ -50,34 +50,30 @@ export function pessoaReal(p) {
 const GORE    = /\b(gore|decapita\w+|desmembr\w+|mutila\w+|v[íi]sceras|entranhas|tortura(?:ndo|r)?\b.*\b(real|pessoa)|corpo\s+esquartejado)\b/i;
 const ODIO    = /\b(su[áa]stica|swastika|nazi\w*|kkk\b|supremac\w+)\b/i;
 
-// `adulto`: o servidor (e o canal) liberaram +18 — quem decide é o bot, nunca
-// o modelo (o flag vem do contexto da chamada, não dos argumentos da ferramenta).
-// Menor + sexual e pessoa real + sexual continuam recusados EM QUALQUER servidor.
-export function prompProibido(prompt, { adulto = false } = {}) {
+// (22 out 2026) Sem modo +18: "vamos eliminar o NSFW e deixar modelos que
+// tenham bloqueio disso". Nudez e conteúdo sexual são recusados em qualquer
+// servidor e canal — canal NSFW não libera nada. A ordem só escolhe a
+// mensagem (a mais grave primeiro, e ela fica no log).
+export function prompProibido(prompt) {
   const p = String(prompt ?? "");
   if (MENOR.test(p) && SEXUAL.test(p)) {
     return "esse pedido combina menores com conteúdo sexualizado — recusado, sem exceção, e fica registrado no log.";
   }
   if (SEXUAL.test(p) && pessoaReal(p)) {
-    return `nudez ou conteúdo sexual de pessoa real identificável é deepfake — recusado (trecho: "${pessoaReal(p)}"). Se for personagem ou estilo de uma obra, diga "personagem de…" ou "estilo de…".`;
+    return `nudez ou conteúdo sexual de pessoa real identificável é deepfake — recusado (trecho: "${pessoaReal(p)}").`;
   }
   if (GORE.test(p) && pessoaReal(p)) {
     return "violência explícita com pessoa real identificável — recusado.";
   }
-  if (SEXUAL.test(p) && !adulto) {
-    return "conteúdo +18 não está liberado aqui — só em servidor liberado pelo dono do bot, e só em canal marcado como NSFW.";
+  if (SEXUAL.test(p)) {
+    return "nudez e conteúdo sexual não saem daqui — em nenhum servidor nem canal.";
   }
-  // canal +18 liberado (16 out 2026, "sem amarras"): gore e símbolos saem —
-  // ficção sombria é do canal. Os limites acima continuam valendo.
-  if (adulto) return null;
   if (GORE.test(p)) return "gore explícito não — posso fazer algo sombrio ou sinistro sem vísceras.";
   if (ODIO.test(p)) return "símbolos de ódio não saem daqui.";
   return null;
 }
 
-const NEGATIVO_FIXO = "nsfw, nude, naked, child, loli, underage, gore, dismemberment, watermark, text, low quality, deformed";
-// no servidor liberado: tira só o "sem nudez"; criança/menor continua proibido
-const NEGATIVO_ADULTO = "child, children, kid, loli, shota, underage, teen, young-looking, petite body, school uniform, watermark, text, low quality, deformed";
+const NEGATIVO_FIXO = "nsfw, nude, naked, nudity, cleavage, lingerie, sexual, child, loli, underage, gore, dismemberment, watermark, text, low quality, deformed";
 
 // ── A imagem pronta é conferida pelo modelo de visão (15 out 2026) ──────────
 // O prompt sozinho não basta: o Z-Image (o padrão) nem usa prompt negativo, e
@@ -90,40 +86,34 @@ const afirmado = (descricao) => String(descricao ?? "")
   .replace(/\bsem\s+(nenhuma\s+)?roupas?\b|\bdespid[ao]s?\b/gi, "nua")
   .replace(/\b(without|no)\s+(any\s+)?cloth(es|ing)\b|\bunclothed\b|\bundressed\b/gi, "naked")
   .split(/[.;!?\n,]|\s+(?:mas|porém|but)\s+/i).filter((c) => !NEGA.test(c)).join(". ");
-// Termos que, sozinhos, já indicam criança/adolescente — e os ambíguos
-// ("girl", "garota", "menino"), que o modelo de visão usa também para
-// adultos: esses só contam quando ele NÃO afirmou "IDADE: adulto".
-const MENOR_FORTE = /\b(crian[çc]as?|garotinh[ao]s?|menininh[ao]s?|adolescentes?|infantil|beb[êe]s?|child(?:ren)?|kids?|toddlers?|bab(?:y|ies)|teen(?:ager)?s?|preteens?|minors?|menor(?:es)?\s+de\s+idade|underage|schoolgirls?|schoolboys?|colegiais?|uniforme\s+escolar|school\s+uniform|loli|shota|little\s+(?:girl|boy)s?)\b/i;
-const MENOR_AMBIGUO = /\b(menin[ao]s?|garot[ao]s?|boys?|girls?|young)\b/i;
-const SEXUAL_DESC = /\b(nu[ao]?s?|nudez|nudity|nude|naked|pelad[ao]s?|topless|seios?|breasts?|mamilos?|nipples?|genit\w*|p[êe]nis|vagina|ato\s+sexual|sexual\w*|sexo|sex|er[óo]tic\w*|pornogr\w*|lingerie|roupa\s+[íi]ntima|underwear)\b/i;
-const MENOR_DESC  = /\b(crian[çc]as?|menin[ao]s?|garot[ao]s?|garotinh[ao]s?|adolescentes?|infantil|beb[êe]s?|child(?:ren)?|kids?|toddlers?|bab(?:y|ies)|teen(?:ager)?s?|minors?|boys?|girls?|schoolgirls?|uniforme\s+escolar|school\s+uniform)\b/i;
-export function julgarSaida(descricao, { adulto = false, idade = null } = {}) {
+const SEXUAL_DESC = /\b(nu[ao]?s?|nudez|nudity|nude|naked|pelad[ao]s?|topless|seios?|breasts?|mamilos?|nipples?|genit\w*|p[êe]nis|vagina|ato\s+sexual|sexual\w*|sexo|sex|er[óo]tic\w*|pornogr\w*|lingerie|roupa\s+[íi]ntima|underwear|desnud\w*|nackt\w*|nue|nuda|pechos|seins)\b/i;
+const MENOR_DESC  = /\b(crian[çc]as?|menin[ao]s?|garot[ao]s?|garotinh[ao]s?|adolescentes?|infantil|beb[êe]s?|child(?:ren)?|kids?|toddlers?|bab(?:y|ies)|teen(?:ager)?s?|minors?|boys?|girls?|schoolgirls?|uniforme\s+escolar|school\s+uniform|ni[ñn][ao]s?|enfants?)\b/i;
+// O veredito vem das LINHAS FIXAS da conferência (NUDEZ/IDADE/RISCO — ver
+// ver-imagem.js); as palavras da descrição são só uma segunda rede, porque a
+// descrição pode vir em qualquer língua. Sem o veredito, nada sai.
+export function julgarSaida(descricao, { nudez = null, idade = null, risco = false, recusou = false } = {}) {
+  if (recusou) return "o modelo de visão se recusou a descrever a imagem — descartada";
   const d = afirmado(descricao);
-  const sexual = SEXUAL_DESC.test(d);
-  // com o veredito de idade do modelo (canal +18): "menor"/"incerto" descarta,
-  // termo forte descarta, e o ambíguo só conta sem "IDADE: adulto"
-  const menor = idade === "menor" || idade === "incerto" || MENOR_FORTE.test(d)
-    || (idade === "adulto" ? false : (MENOR_AMBIGUO.test(d) || MENOR_DESC.test(d)));
+  const sexual = nudez === true || SEXUAL_DESC.test(d);
+  const menor = idade === "menor" || MENOR_DESC.test(d);
   if (sexual && menor) return "a imagem saiu com alguém que aparenta ser menor numa cena com nudez — descartada";
-  if (sexual && !adulto) return "a imagem saiu com nudez — +18 não está liberado aqui, então ela foi descartada";
+  if (sexual) return "a imagem saiu com nudez ou conteúdo sexual — descartada";
+  if (nudez === null) return "a conferência da imagem não trouxe o veredito (NUDEZ: sim/não) — descartada";
+  if (risco === true) return "a conferência marcou risco (violência explícita, ódio ou conteúdo sensível) — descartada";
   return null;
 }
 
-// A imagem pronta (JPEG) passa pela visão. No modo +18, sem visão ou com erro
-// dela, a imagem NÃO sai (fecha no erro); fora dele, o filtro do prompt já
-// barrou o pedido e a visão é uma segunda rede.
-// `exigir`: modelo sem filtro do fabricante — sem conferência, nada sai.
-export async function conferirSaida(jpeg, { adulto = false, exigir = adulto, moderar = moderarBuffer, temVisao = visaoDisponivel } = {}) {
-  if (!temVisao()) return adulto ? "sem modelo de visão para conferir a imagem — +18 fica desligado"
-    : exigir ? "sem modelo de visão para conferir a imagem — com este modelo, nada sai sem conferência" : null;
-  const r = await moderar(jpeg, { adulta: adulto });
+// TODA imagem gerada passa pela visão antes de sair (22 out 2026). Sem
+// visão, com erro dela, recusa ou sem veredito: a imagem NÃO sai.
+export async function conferirSaida(jpeg, { moderar = moderarBuffer, temVisao = visaoDisponivel } = {}) {
+  if (!temVisao()) return "sem modelo de visão para conferir a imagem — nada sai sem conferência";
+  const r = await moderar(jpeg);
   if (r?.erro) {
     console.warn(`[IA][gerar_imagem] conferência da saída falhou: ${r.erro}`);
-    return adulto ? "não consegui conferir a imagem antes de enviar — +18 não sai sem conferência"
-      : exigir ? "não consegui conferir a imagem antes de enviar" : null;
+    return "não consegui conferir a imagem antes de enviar";
   }
-  const veredito = julgarSaida(r.descricao, { adulto, idade: r.idade ?? null });
-  if (veredito) console.warn(`[IA][gerar_imagem] SAÍDA DESCARTADA (${adulto ? "+18" : "normal"}): ${String(r.descricao).replace(/\s+/g, " ").slice(0, 300)}`);
+  const veredito = julgarSaida(r.descricao, { nudez: r.nudez ?? null, idade: r.idade ?? null, risco: r.riscoModelo === true, recusou: r.recusou === true });
+  if (veredito) console.warn(`[IA][gerar_imagem] SAÍDA DESCARTADA (${veredito}): ${String(r.descricao).replace(/\s+/g, " ").slice(0, 300)}`);
   return veredito;
 }
 
@@ -334,21 +324,17 @@ function gerarEmbutido({ texto, width, height, economico = false, negativo = NEG
 }
 
 export async function executar({ prompt, largura, altura }, contexto = {}) {
-  const adulto = contexto?.imagemAdulta === true;
   const embutidoDisponivel = IMAGEM_LIGADA && existsSync(SD_BIN);
   if (!SD_URL && !embutidoDisponivel) {
     return { erro: "geração de imagem indisponível: o binário embutido (sd.cpp) não está nesta imagem e não há SD_URL apontando para um servidor A1111 (Forge/SD.Next) — ver ia-servico/README." };
   }
   const texto = String(prompt ?? "").trim();
   if (!texto) return { erro: "descreva o que desenhar." };
-  const exigir = adulto || modeloSemFiltro();
-  if (!adulto && exigir && !visaoDisponivel()) {
-    return { erro: "geração desligada: o modelo de imagem configurado não tem filtro de segurança, e sem o modelo de visão (LLM_MODEL_VISAO) para conferir cada imagem eu não desenho." };
+  // (22 out 2026) toda imagem é conferida pela visão: sem ela, nem começa
+  if (!visaoDisponivel()) {
+    return { erro: "geração desligada: toda imagem passa pelo modelo de visão antes de sair, e ele não está configurado (MODELO_VISAO / LLM_MODEL_VISAO)." };
   }
-  if (adulto && !visaoDisponivel()) {
-    return { erro: "recusado: +18 precisa do modelo de visão para conferir a imagem antes de enviar, e ele não está configurado (LLM_MODEL_VISAO)." };
-  }
-  const recusa = prompProibido(texto, { adulto });
+  const recusa = prompProibido(texto);
   if (recusa) {
     console.warn(`[IA][gerar_imagem] RECUSADO: ${texto.slice(0, 160)}`);
     return { erro: `recusado: ${recusa}` };
@@ -356,7 +342,7 @@ export async function executar({ prompt, largura, altura }, contexto = {}) {
 
   const corpo = {
     prompt: texto.slice(0, 1500),
-    negative_prompt: adulto ? NEGATIVO_ADULTO : NEGATIVO_FIXO,
+    negative_prompt: NEGATIVO_FIXO,
     width: multiploDe64(Number(largura) || LADO_MAX),
     height: multiploDe64(Number(altura) || LADO_MAX),
     steps: Math.min(PASSOS_MAX, Number(process.env.IMAGEM_PASSOS || 22)),
@@ -373,7 +359,7 @@ export async function executar({ prompt, largura, altura }, contexto = {}) {
       const limpa = await s2(png, { limitInputPixels: MAX_PIXELS })
         .jpeg({ quality: 90, mozjpeg: true })
         .toBuffer();
-      const barrada = await conferirSaida(limpa, { adulto, exigir });
+      const barrada = await conferirSaida(limpa);
       if (barrada) return { erro: `recusado: ${barrada}.` };
       return {
         ok: true,
@@ -404,7 +390,7 @@ export async function executar({ prompt, largura, altura }, contexto = {}) {
     const limpa = await s(Buffer.from(b64, "base64"), { limitInputPixels: MAX_PIXELS })
       .jpeg({ quality: 90, mozjpeg: true })
       .toBuffer();
-    const barrada = await conferirSaida(limpa, { adulto, exigir });
+    const barrada = await conferirSaida(limpa);
     if (barrada) return { erro: `recusado: ${barrada}.` };
 
     return {

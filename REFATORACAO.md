@@ -1462,7 +1462,7 @@ os comandos recusam), não do bot.
 
 **O que liga:** `.env` (operação) — `SERVIDOR=*,<ids da casa>` e `CONVERSA=1` (ou sem a
 linha). O `*` põe a IA em todos os servidores; os ids continuam marcando a casa (os
-canais NSFW dela e o padrão "ligado"). Sem os ids, nenhum servidor é da casa.
+canais NSFW dela — até 22 out, ver 6zd — e o padrão "ligado"). Sem os ids, nenhum servidor é da casa.
 
 **Cada servidor escolhe** (pedido do Ghieh, padrão desligado, como os módulos):
 `&chat on|off` e `&chat imagem on|off` (ManagePermissions; o cargo de staff vale).
@@ -1510,6 +1510,51 @@ resposta escapou para outra língua (o desvio do modelo que ela existia para cor
 
 **Testes:** suíte nova `ia-por-servidor-21out` (35) e 7 suítes ajustadas ao opt-in
 (`CHAT_PADRAO=on` nelas). 16 mutações, todas derrubam um teste.
+
+## 6zd. Sem +18 na IA: modelos com trava e toda imagem conferida (22 out 2026)
+
+Pedido do Ghieh: "vamos eliminar o NSFW e deixar modelos que tenham bloqueio
+disso; menos dor de cabeça". A análise anterior mostrou o problema do modo +18: os
+filtros do bot eram regex em pt/en, e espanhol, francês, italiano e alemão passavam
+por todas as camadas determinísticas — inclusive o limite de menores.
+
+**O que saiu:** o modo adulto inteiro — `modulos/ai/imagem-adulta.js` (canal NSFW da
+casa, conferência na API, registro de recusas), a `instrucaoAdulta` da persona, o
+`&servidores adulto` como diagnóstico (agora só avisa que saiu), o `contexto.imagemAdulta`
+no ia-servico (ignorado se chegar), o `NEGATIVO_ADULTO`, a pergunta `PROMPT_SAIDA_ADULTA` e
+a exceção `modeloSemFiltro`/`IMAGEM_SEM_FILTRO`. O servidor da casa ficou em
+`modulos/core/casa.js` (só serve para o padrão "ligado" e o juiz da moderação).
+
+**Como fica:**
+- chat: a resposta seca (sem chamar o modelo) vale em todo canal, NSFW incluído; a
+  persona diz que conteúdo sexual não se escreve em lugar nenhum, em língua nenhuma;
+  `SEM ROLEPLAY` e `TENTATIVAS DE TE QUEBRAR` voltaram a valer sempre. Termos básicos
+  de es/fr/it/de na investida e no menor + sexual (pergunta e resposta).
+- imagem, o pedido: nudez/sexual, gore e ódio recusados sempre, também em es/fr/it/de;
+  menor + sexual e deepfake mantêm a mensagem própria.
+- imagem, a saída: **toda** imagem passa pela visão (sem `MODELO_VISAO`, não há
+  geração). A pergunta pede linhas fixas `NUDEZ:`, `IDADE:` e `RISCO:`; o bot decide por
+  elas (em pt, en ou es, com ou sem negrito), e as palavras da descrição são a segunda
+  rede. Sem a linha NUDEZ a visão é perguntada de novo; sem veredito, com risco, com
+  nudez ou com recusa do modelo, a imagem é descartada.
+- imagem de membro e foto de perfil: o modelo de visão com trava pode se **recusar** a
+  descrever justo a imagem explícita. A recusa (sem veredito) vira alerta para a staff
+  na imagem e "suspeita" na foto de perfil — ninguém é punido só por isso.
+- modelos: o padrão do Qwen-Image virou o oficial (`unsloth/Qwen-Image-2.1-GGUF`
+  Q8_0 + VAE da `Comfy-Org/Qwen-Image-2.1`); o `.env.example` recomenda
+  `unsloth/gemma-4-E2B-it-GGUF:Q4_K_M` no `MODELO` e no `MODELO_VISAO`; o boot avisa no
+  log quando o `.env` aponta para um "uncensored"/"abliterated"/HauhauCS
+  (`modulos/core/modelos-sem-trava.js`). Nenhum modelo de imagem local recusa sozinho
+  (o Z-Image não tem filtro): quem barra é o pedido + a conferência.
+
+**Erro achado no caminho:** a foto de perfil punida num servidor em **inglês** dizia a
+duração em espanhol (`silenced (timeout) for 1 día`) — a troca de "en" por "es" da etapa
+4b pegou a linha do inglês, porque a guarda olhava a linha inteira. A linha foi
+partida, e uma guarda nova procura ramo em inglês chamando ajudante com "es".
+
+**Testes:** suíte nova `sem-nsfw-22out` (31) no lugar da `imagem-adulta-15out` e da
+`chat-adulto-15out`; `ia-so-casa-16out`, `imagem-casa-16out` e `imagem-qwen-15out`
+ajustadas. 26 mutações, todas derrubam um teste.
 
 ## 7. O que NÃO fiz, e por quê
 

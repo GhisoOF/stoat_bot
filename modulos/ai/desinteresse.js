@@ -10,6 +10,8 @@ const EXPLICITO = [
   /\b(?:namor[a4]\s+comigo|quer\s+namorar|te\s+am[o0]\b|casa\s+comigo|minha\s+waifu|meu\s+bem)\b/i,
   // termos em inglês que aparecem misturados
   /\b(?:horny|nsfw|sexy|hot\s+bot|be\s+my\s+girlfriend|marry\s+me)\b/i,
+  // (22 out 2026) o chat atende em qualquer língua: o básico em es/fr/it/de
+  /\b(?:desnud[ao]s?|follar|nackt\w*|ficken|sexe|sesso|porno\w*|hentai|send\s+nudes?)\b/i,
 ];
 
 const FALSO_POSITIVO = [
@@ -51,26 +53,17 @@ const RESPOSTAS_EN = [
 
 const ultimas = new Map();
 
-// ── Limite que nenhum servidor libera (15 out 2026) ──────────────────────────
-// Nos canais NSFW do servidor da casa (SERVIDOR pelo id) a
-// Judy conversa sobre conteúdo adulto. Mas menor + sexual é recusado em
-// qualquer lugar — na pergunta (antes do modelo) e na resposta (depois dele).
-const MENOR_TXT = /\b(crian[çc]as?|menor(?:es)?\s+de\s+idade|menores|adolescentes?|novinh[ao]s?|ninfetas?|garotinh[ao]s?|menininh[ao]s?|colegiais?|pr[ée][\s-]?adolescentes?|infantil|loli|shota|lolicon|shotacon|teens?|teenagers?|underage|preteens?|minors?|kids?|child(?:ren)?|schoolgirls?|schoolboys?|(?:[1-9]|1[0-7])\s*(?:anos|aninhos|years?\s*old|yo|y\/o)\b)/i;
-const SEXUAL_TXT = /\b(s[e3]xo|sexual\w*|transa\w*|f[o0]der|fud[e3]r|pel[a4]d[ao]s?|nu[ao]s?|nud[e3]s?|nudez|naked|nude|porn\w*|er[óo]tic\w*|tes[a4]o|gozar|punhet\w*|masturb\w*|orgasm\w*|p[e3]nis|piroca|bucet\w*|xot\w*|xereca|seios|peitos|boobs|sex|horny|lingerie|fetiche|fetish|hentai|estupr\w*|abus\w*\s+sexual)\b/i;
+// ── Menor + sexual (15 out 2026) ─────────────────────────────────────────────
+// Conferido na pergunta (antes do modelo) e na resposta (depois dele). Desde
+// 22 out 2026 não existe mais canal +18: qualquer investida já recebe a
+// resposta seca, e isto segue como a segunda rede — também na RESPOSTA, onde
+// a investida não é conferida. Termos básicos de es/fr/it/de entram porque o
+// chat responde em qualquer língua.
+const MENOR_TXT = /\b(crian[çc]as?|menor(?:es)?\s+de\s+idade|menores|adolescentes?|novinh[ao]s?|ninfetas?|garotinh[ao]s?|menininh[ao]s?|colegiais?|pr[ée][\s-]?adolescentes?|infantil|loli|shota|lolicon|shotacon|teens?|teenagers?|underage|preteens?|minors?|kids?|child(?:ren)?|schoolgirls?|schoolboys?|(?:[1-9]|1[0-7])\s*(?:anos|aninhos|años|ans|anni|jahre?|years?\s*old|yo|y\/o)\b|ni[ñn][ao]s?|menores\s+de\s+edad|enfants?|fillettes?|gamin[es]*|bambin[aoie]|ragazzin[aoie]|minorenni|m[äa]dchen|jugendlich\w*|minderj[äa]hrig\w*)/i;
+const SEXUAL_TXT = /\b(s[e3]xo|sexual\w*|transa\w*|f[o0]der|fud[e3]r|pel[a4]d[ao]s?|nu[ao]s?|nud[e3]s?|nudez|naked|nude|porn\w*|er[óo]tic\w*|tes[a4]o|gozar|punhet\w*|masturb\w*|orgasm\w*|p[e3]nis|piroca|bucet\w*|xot\w*|xereca|seios|peitos|boobs|sex|horny|lingerie|fetiche|fetish|hentai|estupr\w*|abus\w*\s+sexual|desnud[ao]s?|nackt\w*|nue?s?|nud[ae]|sexe|sesso|porno\w*|[ée]rot\w*|sexy)\b/i;
 export function envolveMenor(texto) {
   const t = String(texto ?? "");
   return MENOR_TXT.test(t) && SEXUAL_TXT.test(t);
-}
-
-// O que a persona diz no canal +18 liberado (no lugar de instrucaoPersona)
-export function instrucaoAdulta(lang = "pt") {
-  return lang === "en"
-    ? "THIS CHANNEL IS 18+ (unlocked by the bot owner, NSFW channel): adult and sexual content between adults is allowed here — you may flirt back, talk about sex and describe it if asked, in your own voice. "
-      + "No other restraints here: roleplay with actions (*like this*) is fine, dark, violent or crude themes in fiction are fine, and you don't refuse, lecture, add warnings or break character to moralise. "
-      + "Two limits that NEVER change, here or anywhere: nothing sexual involving minors or characters who are or look underage (refuse in one dry line); nothing sexual about real, identifiable people."
-    : "ESTE CANAL É +18 (liberado pelo dono do bot, canal NSFW): conteúdo adulto e sexual entre adultos é permitido aqui — pode flertar de volta, falar de sexo e descrever se pedirem, do seu jeito. "
-      + "Sem outras amarras aqui: roleplay com ações (*assim*) pode, temas sombrios, violentos ou pesados em ficção podem, e você não recusa, não dá sermão, não põe aviso e não sai do personagem para moralizar. "
-      + "Dois limites que NUNCA mudam, aqui ou em qualquer lugar: nada sexual envolvendo menores ou personagens que sejam ou pareçam menores de idade (recuse em uma frase seca); nada sexual sobre pessoas reais identificáveis.";
 }
 
 export function ehInvestida(texto) {
@@ -94,8 +87,10 @@ export function instrucaoPersona(lang = "pt") {
   return lang === "en"
     ? "SEXUAL/ROMANTIC ADVANCES ONLY (this rule does not apply to anything else): If anyone flirts, makes sexual jokes or advances at you: refuse in ONE short, dry, bored line. "
       + "No lectures, no explaining why, no moralising — a sermon is a big reaction, and a big reaction is exactly the reward they came for. "
-      + "Never play along, never describe anything sexual, never roleplay it. Boredom ends the subject; outrage feeds it."
+      + "Never play along, never describe anything sexual, never roleplay it. Boredom ends the subject; outrage feeds it. "
+      + "This holds in every server, every channel (NSFW ones included) and every language: you don't write sexual content at all."
     : "SÓ PARA INVESTIDA SEXUAL/ROMÂNTICA (esta regra não vale para mais nada): Se alguém flertar, fizer piada sexual ou dar em cima de você: recuse em UMA frase curta, seca e entediada. "
       + "Sem sermão, sem explicar o porquê, sem moralizar — discurso é uma reação enorme, e reação enorme é exatamente o prêmio que a pessoa veio buscar. "
-      + "Nunca entre na brincadeira, nunca descreva nada sexual, nunca interprete a cena. Tédio encerra o assunto; indignação alimenta.";
+      + "Nunca entre na brincadeira, nunca descreva nada sexual, nunca interprete a cena. Tédio encerra o assunto; indignação alimenta. "
+      + "Isso vale em todo servidor, todo canal (os NSFW também) e toda língua: conteúdo sexual você não escreve.";
 }

@@ -4,7 +4,7 @@ Gerado por `INVENTARIO=1 node testes.mjs comandos-17out` — **não edite à mã
 reestruturação dos comandos num registro central (fase 0). A suíte `comandos-17out` compara o bot com o
 `inventario.json` desta pasta: nome que some ou muda de destino faz o teste falhar.
 
-**49 comandos · 168 nomes · 632 subcomandos em inglês · 340 telas de ajuda · 1022 exemplos executados**
+**49 comandos · 168 nomes · 634 subcomandos em inglês · 340 telas de ajuda · 1024 exemplos executados**
 
 ## Comandos
 
@@ -12,7 +12,7 @@ reestruturação dos comandos num registro central (fase 0). A suíte `comandos-
 |---|---|---|---|---|---|---|
 | `acesso` | `access` | `acceso` | `acceso` `access` | `cmdAcesso` | sim | 48 |
 | `adeus` | `goodbye` | `despedida` | `despedida` `farewell` `goodbye` | `adeus (cmd)` | sim | 6 |
-| `assistente` | `wizard` | `asistente` | `asistente` `assistant` `configurar` `configure` `setup` `wizard` | `cmdAssistente` | sim | 12 |
+| `assistente` | `wizard` | `asistente` | `asistente` `assistant` `configurar` `configure` `setup` `wizard` | `cmdAssistente` | sim | 14 |
 | `automod` | — | `automod` | — | `cmdAutomod` | sim | 126 |
 | `autorole` | — | `autorol` | `autorol` | `cmdAutorole` | sim | 14 |
 | `ban` | — | `ban` | — | `cmdBan` | sim | 7 |
@@ -81,7 +81,7 @@ O que ainda está espalhado:
 
 - `acesso`: all→todos, channel→canal, channels→canais, clear→limpar, except→exceto, free→livre, libre→livre, only→somente, role→cargo, roles→cargos, staffbypass→staffignora, staffignores→staffignora
 - `adeus`: borrar→limpar, channel→canal, clear→limpar, color→cor, colour→cor, default→padrao, estado→status, here→aqui, hidden→oculto, hide→oculto, image→imagem, imagen→imagem, message→texto, predeterminado→padrao, probar→testar, show→visivel, test→testar, text→texto, title→titulo, visible→visivel
-- `assistente`: cancel→cancelar, channels→canais, complete→completo, fast→rapido, full→completo, protect→protecao, protection→protecao, quick→rapido, stop→cancelar
+- `assistente`: build→servidor, cancel→cancelar, channels→canais, complete→completo, fast→rapido, full→completo, protect→protecao, protection→protecao, quick→rapido, server→servidor, stop→cancelar
 - `automod`: antinoise→antiruido, ban→banir, confirm→confirmar, delete→apagar, ignore→ignorar, inherit→herdar, mentions→mencoes, messages→mensagens, noise→antiruido, punishment→punicao, repetition→repeticao, sentinel→sentinela, size→tamanho, stack→acumular, threshold→limiar, time→tempo, warn→avisar
 - `automod.antilink`: domains→dominios, invites→convites
 - `automod.antiruido`: characters→caracteres, ignore→ignorar, letters→letras, repetition→repeticao, size→tamanho, threshold→limiar

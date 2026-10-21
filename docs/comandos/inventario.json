@@ -885,6 +885,7 @@
    "visible": "visivel"
   },
   "assistente": {
+   "build": "servidor",
    "cancel": "cancelar",
    "channels": "canais",
    "complete": "completo",
@@ -893,6 +894,7 @@
    "protect": "protecao",
    "protection": "protecao",
    "quick": "rapido",
+   "server": "servidor",
    "stop": "cancelar"
   },
   "automod": {
@@ -1610,7 +1612,8 @@
    "cancelar": "cancel",
    "completo": "full",
    "protecao": "protection",
-   "rapido": "quick"
+   "rapido": "quick",
+   "servidor": "server"
   },
   "automod": {
    "acumular": "stack",
@@ -2345,6 +2348,9 @@
    "texto": "texto",
    "titulo": "titulo",
    "visivel": "visible"
+  },
+  "assistente": {
+   "servidor": "servidor"
   },
   "autorole": {
    "desativar": "desactivar",

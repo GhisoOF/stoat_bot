@@ -15,7 +15,7 @@ export const padraoServidor = {
   automod: {
     antiSpam:        { enabled: true,  maxMessages: 5,  windowMs: 4000, punicao: null },
     antiMassSpam:    { enabled: true,  maxMessages: 12, windowMs: 8000, punicao: null },
-    antiInvite:      { enabled: true,  punicao: null },
+    antiInvite:      { enabled: true,  punicao: null, canaisLiberados: [] },   // canaisLiberados: onde convites podem (divulgação)
     antiMassMention: { enabled: true,  maxMentions: 5, punicao: null },
     antiCaps:        { enabled: true,  minLength: 15, threshold: 0.70, punicao: null },
     antiLink:        { enabled: false, punicao: null },
@@ -171,7 +171,7 @@ function mesclarServidorBruto(salvo, tpl) {
       ...am, ...s,
       antiSpam:        { ...am.antiSpam,        ...(s.antiSpam ?? {}) },
       antiMassSpam:    { ...am.antiMassSpam,    ...(s.antiMassSpam ?? {}) },
-      antiInvite:      { ...am.antiInvite,      ...(s.antiInvite ?? {}) },
+      antiInvite:      { ...am.antiInvite,      ...(s.antiInvite ?? {}), canaisLiberados: [...(s.antiInvite?.canaisLiberados ?? [])] },
       antiMassMention: { ...am.antiMassMention, ...(s.antiMassMention ?? {}) },
       antiCaps:        { ...am.antiCaps,        ...(s.antiCaps ?? {}) },
       antiLink:        { ...am.antiLink,        ...(s.antiLink ?? {}) },

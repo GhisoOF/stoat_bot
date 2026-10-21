@@ -153,6 +153,8 @@ export async function cmdConfig(message, args, ctx) {
   const wlItens = [
     ...(config.dominiosPermitidos ?? []).map((d) => `\`${d}\``),
     ...(config.inviteWhitelist ?? []).map((cv) => `\`stt.gg/${cv}\``),
+    // (21 out 2026) os canais de divulgação: lá, convites podem
+    ...(config.automod?.antiInvite?.canaisLiberados ?? []).map((c) => `<#${c}> ${T("_(convites)_", "_(invites)_", "_(invitaciones)_")}`),
   ];
   const wl = wlItens.length ? wlItens.join(", ") : T("_(vazia)_", "_(empty)_", "_(vacía)_");
 

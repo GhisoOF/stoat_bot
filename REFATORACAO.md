@@ -1413,6 +1413,51 @@ passo do idioma. Nada disso muda pt ou en.
 `here`, `on`/`off` — as mesmas que a tela em espanhol sempre mostrou); o texto da IA nos
 resumos de RSS (o prompt decide).
 
+## 6zb. `&assistente servidor` e os canais de divulgação (21 out 2026)
+
+**Montar o servidor** (`&assistente servidor` · `&wizard server` · `&asistente servidor`):
+três perguntas (modelo, canais de voz, canal de divulgação), a prévia, e só depois do
+`confirmar` a Judy cria cargos, categorias e canais com as permissões feitas. No fim,
+emenda no `&assistente completo` sem perguntar o que os canais e cargos novos já
+respondem (staff, registro, boas-vindas, cargo automático): sobram 5 perguntas.
+
+| Modelo | Canais |
+|---|---|
+| Comunidade | 📌 regras, avisos, boas-vindas · 💬 geral, off-topic, mídia, divulgação · 🔊 2 salas · 🔒 staff-chat, registro |
+| Gaming | 📌 … · 🎮 geral, procurando-grupo, clipes, divulgação · 🔊 3 squads · 🔒 … |
+| Estudo | 📌 … · 📚 geral, dúvidas, materiais, divulgação · 🔊 sala de estudo, foco · 🔒 … |
+| Mínimo | 📌 regras, boas-vindas · 💬 geral, divulgação · 🔊 1 sala · 🔒 registro |
+
+Cargos: **Moderação** (expulsar, banir, silenciar, apagar mensagens, apelidos, voz — nunca
+ManageServer), **Ajudante** (apagar mensagens, silenciar), **Membro** (o cargo automático)
+e **Bots** (a Judy o recebe: é por ele que ela vê e escreve nos canais fechados — o Stoat
+não deixa pôr permissão no cargo da própria Judy). Nomes no idioma do servidor.
+
+As permissões: 📢 regras/avisos/boas-vindas — o Padrão não envia mensagem, staff e Bots
+enviam; 🔒 staff-chat/registro — o Padrão não vê, staff e Bots veem; o resto, sem mexer.
+
+**As regras do Ghieh:** só adiciona — canal ou cargo com o mesmo nome é reaproveitado sem
+mexer (nem permissão), a categoria de mesmo título ganha os canais novos e as outras ficam
+como estão; se falhar no meio, desfaz só o que esta rodada criou (canais, cargos e
+categorias) e não segue para o completo. Pede **ManageServer** (ou ser o dono): o
+`membroTemPermissao` aceita o cargo de staff do `&acesso` para qualquer permissão menos
+ManageServer — com ManageChannel/ManageRole, um cargo de staff sem permissão nenhuma no
+Stoat mandaria a Judy criar canais e cargos. O bot precisa de ManageChannel, ManageRole,
+ManagePermissions e AssignRoles (diz antes da 1ª pergunta); permissão que o bot não tem
+sai do cargo novo e a prévia avisa.
+
+**Canais de divulgação (anti-convite):** `&automod whitelist add #divulgacao` libera
+convites naquele canal (`remove`, `list`; o `&config` mostra). Só o anti-convite deixa
+passar: anti-link, Sentinela e antispam seguem valendo lá. Um nome sem `#` continua sendo
+código de convite, como antes. Fica em `automod.antiInvite.canaisLiberados` (o mesmo
+desenho dos canais liberados dos temas); o `curarIds` e o molde limpam IDs de outro
+servidor. O `&assistente servidor` já cria o `#divulgacao` liberado.
+
+**Testes:** suíte nova `montar-servidor-21out` (25), com um servidor de mentira que
+guarda cada chamada à API e falha de propósito no 5º canal. 13 mutações, todas derrubam
+um teste. A suíte achou dois erros dos próprios testes (IDs fora do formato ULID, que
+os comandos recusam), não do bot.
+
 ## 7. O que NÃO fiz, e por quê
 
 | Item | Por quê |

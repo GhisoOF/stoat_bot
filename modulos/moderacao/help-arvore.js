@@ -101,6 +101,9 @@ function comFamilias(arvore, P, lang) {
     en
       ? "• **a Stoat invite** (`stt.gg/abc`) → the invite is allowed in **anti-invite**"
       : "• **um convite do Stoat** (`stt.gg/abc`) → o convite fica liberado no **anti-invite**",
+    en
+      ? "• **a channel** (`#promo`) → **any** invite can be posted there — the advertising channel. Anti-link, Sentinel and antispam still apply"
+      : "• **um canal** (`#divulgacao`) → **qualquer** convite pode ser postado lá — o canal de divulgação. Anti-link, Sentinela e antispam continuam valendo",
     "",
     `\`${citarInterno("automod", P)} whitelist add <link>\` · \`${citarInterno("automod", P)} whitelist remove <link>\` · \`${citarInterno("automod", P)} whitelist\` — ` + (en ? "see both lists" : "vê as duas listas"),
     "",

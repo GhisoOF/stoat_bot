@@ -929,8 +929,10 @@ export async function runAutomod(message, ctx, opts = {}) {
     }
   }
 
-  // ── Anti-invite (respeita a whitelist de códigos) ──
-  if (am.antiInvite.enabled) {
+  // ── Anti-invite (respeita a whitelist de códigos e os canais de divulgação) ──
+  if (am.antiInvite.enabled && (am.antiInvite.canaisLiberados ?? []).includes(message.channelId)) {
+    dbg(ctx, "  [anti-invite] canal liberado para convites — não se aplica aqui");
+  } else if (am.antiInvite.enabled) {
     const codigos = codigosDeConvite(content);
     dbg(ctx, `  [anti-invite] ON → convites encontrados: [${codigos.join(", ") || "nenhum"}]`);
     if (codigos.length > 0) {

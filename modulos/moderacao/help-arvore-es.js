@@ -22,7 +22,7 @@ export const ARVORE_ES = {
     },
     "whitelist": {
       "titulo": "whitelist",
-      "texto": "Lo que siempre pasa, aunque un filtro lo bloquearía. Pega un enlace y el bot averigua en qué lista va:\n• **un sitio** (`https://linksta.cc/@tu`) → el dominio queda permitido en el **antienlaces**, subdominios incluidos\n• **una invitación de Stoat** (`stt.gg/abc`) → la invitación queda permitida en el **antiinvitaciones**\n\n`{&automod} whitelist add <enlace>` · `{&automod} whitelist remove <enlace>` · `{&automod} whitelist` — ver ambas listas\n\nEl staff (el dueño del servidor y los roles de `{&staff}`) **nunca** pasa por el automod: no hace falta permitir tus propios enlaces."
+      "texto": "Lo que siempre pasa, aunque un filtro lo bloquearía. Pega un enlace y el bot averigua en qué lista va:\n• **un sitio** (`https://linksta.cc/@tu`) → el dominio queda permitido en el **antienlaces**, subdominios incluidos\n• **una invitación de Stoat** (`stt.gg/abc`) → la invitación queda permitida en el **antiinvitaciones**\n• **un canal** (`#promocion`) → ahí se puede publicar **cualquier** invitación — el canal de promoción. El antienlaces, el Centinela y el antispam siguen aplicándose\n\n`{&automod} whitelist add <enlace>` · `{&automod} whitelist remove <enlace>` · `{&automod} whitelist` — ver ambas listas\n\nEl staff (el dueño del servidor y los roles de `{&staff}`) **nunca** pasa por el automod: no hace falta permitir tus propios enlaces."
     },
     "sentinela": {
       "sensibilidade": {
@@ -349,6 +349,7 @@ export const GRUPOS_ES = {
     "linhas": [
       "**Los tres primeros comandos**",
       "`{&assistente}` — ⭐ configuración **guiada**: el bot pregunta, tú respondes, listo",
+      "`{&assistente.servidor}` — 🏗️ ¿servidor nuevo? crea canales y roles con los permisos listos",
       "`{&tutorial}` — guía por páginas: permisos, canales, protección, bienvenida…",
       "`{&config}` — resumen de todo lo configurado en este servidor",
       "",

@@ -5,6 +5,7 @@ import { resolverCanal, resolverCargo } from "../core/ids.js";
 import { temCargoStaff } from "./acesso.js";
 import { podeNoCanal } from "./permissoes.js";
 import { curarIds } from "./pertence.js";
+import * as montar from "./montar-servidor.js";
 
 const TTL_MS = 10 * 60 * 1000;
 const sessoes = new Map();   // `${channelId}:${userId}` → sessão
@@ -213,7 +214,58 @@ export const PASSOS = {
     parse: (r, { message, server }) => resolverCanais(r, message, server),
     comandos: () => [],
   },
+
+  // ── roteiro "servidor" (21 out 2026): monta canais e cargos; o resultado é criado
+  // pelo montar-servidor.js, não por comandos ──
+  modelo: {
+    pergunta: (lang) => T(lang,
+      ["🏗️ **Modelo** — que tipo de servidor?",
+        "`1` **Comunidade** — informações, conversa, mídia, voz e staff",
+        "`2` **Gaming** — + procurando grupo, clipes e salas de squad",
+        "`3` **Estudo** — + dúvidas, materiais e salas de estudo",
+        "`4` **Mínimo** — regras, boas-vindas, geral e registro",
+        "", "_Nada que já existe é apagado ou mudado: canal ou cargo com o mesmo nome fica como está._"].join("\n"),
+      ["🏗️ **Template** — what kind of server?",
+        "`1` **Community** — information, chat, media, voice and staff",
+        "`2` **Gaming** — + looking for group, clips and squad rooms",
+        "`3` **Study** — + questions, resources and study rooms",
+        "`4` **Minimal** — rules, welcome, general and logs",
+        "", "_Nothing that already exists is deleted or changed: a channel or role with the same name is left as it is._"].join("\n"),
+      ["🏗️ **Modelo** — ¿qué tipo de servidor?",
+        "`1` **Comunidad** — información, charla, multimedia, voz y staff",
+        "`2` **Gaming** — + buscando grupo, clips y salas de squad",
+        "`3` **Estudio** — + dudas, materiales y salas de estudio",
+        "`4` **Mínimo** — reglas, bienvenida, general y registro",
+        "", "_No se borra ni se cambia nada de lo que ya existe: un canal o rol con el mismo nombre queda como está._"].join("\n")),
+    parse: (r, { lang }) => {
+      const v = montar.normalizar(r);
+      const m = /^(1|comun|commun)/.test(v) ? "comunidade" : /^(2|gam|jog|jueg)/.test(v) ? "gaming"
+        : /^(3|estud|study)/.test(v) ? "estudo" : /^(4|min)/.test(v) ? "minimo" : null;
+      return m ? { valor: m, rotulo: montar.NOME_MODELO(m, lang) } : { erro: true };
+    },
+    comandos: () => [],
+  },
+  voz: {
+    pergunta: (lang) => T(lang, "🔊 **Canais de voz** — crio salas de voz? `sim` / `nao`", "🔊 **Voice channels** — should I create voice rooms? `yes` / `no`", "🔊 **Canales de voz** — ¿creo salas de voz? `yes` / `no`"),
+    parse: (r, { lang }) => simNao(r, lang),
+    comandos: () => [],
+  },
+  divulgacao: {
+    pergunta: (lang) => T(lang,
+      "🔗 **Divulgação** — crio um canal onde convites de outros servidores são liberados? `sim` / `nao`\n_(O anti-convite deixa passar só lá; o resto do automod continua valendo.)_",
+      "🔗 **Promotion** — should I create a channel where invites to other servers are allowed? `yes` / `no`\n_(The anti-invite lets them through only there; the rest of the automod still applies.)_",
+      "🔗 **Promoción** — ¿creo un canal donde se permitan invitaciones a otros servidores? `yes` / `no`\n_(El anti-invitaciones las deja pasar solo ahí; el resto del automod sigue aplicándose.)_"),
+    parse: (r, { lang }) => simNao(r, lang),
+    comandos: () => [],
+  },
 };
+
+function simNao(r, lang) {
+  const v = montar.normalizar(r);
+  if (/^(s|y|1|on)/.test(v)) return { valor: true, rotulo: T(lang, "sim", "yes", "sí") };
+  if (/^(n|0|off)/.test(v)) return { valor: false, rotulo: T(lang, "não", "no", "no") };
+  return { erro: true };
+}
 
 function resolverCanais(r, message, server) {
   const nomes = listaDeNomes(r);
@@ -239,6 +291,7 @@ export const ROTEIROS = {
   completo: ["idioma", "staff", "log", "protecao", "escada", "banglobal", "boasvindas", "autorole", "xp"],
   protecao: ["protecao", "escada", "banglobal", "log"],
   canais:   ["canaisVer", "canaisEscrever"],
+  servidor: ["modelo", "voz", "divulgacao"],
 };
 
 const NOME_ROTEIRO = {
@@ -246,6 +299,7 @@ const NOME_ROTEIRO = {
   completo: { pt: "Completo", en: "Full",       es: "Completo" },
   protecao: { pt: "Proteção", en: "Protection", es: "Protección" },
   canais:   { pt: "Canais",   en: "Channels",   es: "Canales" },
+  servidor: { pt: "Montar o servidor", en: "Build the server", es: "Montar el servidor" },
 };
 
 export async function cmdAssistente(message, args, ctx) {
@@ -296,6 +350,7 @@ export async function cmdAssistente(message, args, ctx) {
         `🧰 \`${T(lang, citarInterno("assistente.completo", P), citarInterno("assistente.completo", P), citar("assistente.completo", "es", P))}\` — ${T(lang, "o rápido + escada, lista global, cargo automático, XP", "quick + ladder, global list, autorole, XP", "el rápido + escalera, lista global, rol automático, XP")}`,
         `🔀 \`${T(lang, citarInterno("assistente.canais", P), citarInterno("assistente.canais", P), citar("assistente.canais", "es", P))}\` — ${T(lang, "classifica seus canais nos 3 tipos e diz o que clicar", "sorts your channels into the 3 types and tells you what to click", "clasifica tus canales en los 3 tipos y te dice qué pulsar")}`,
         `🛡️ \`${T(lang, citarInterno("assistente.protecao", P), citarInterno("assistente.protecao", P), citar("assistente.protecao", "es", P))}\` — ${T(lang, "só automod, Sentinela e punição", "only automod, Sentinel and punishment", "solo automod, Centinela y sanciones")}`,
+        `🏗️ \`${T(lang, citarInterno("assistente.servidor", P), citarInterno("assistente.servidor", P), citar("assistente.servidor", "es", P))}\` — ${T(lang, "cria canais e cargos com as permissões prontas, e segue para o completo", "creates channels and roles with permissions set, then goes on to the full one", "crea canales y roles con los permisos listos, y sigue con el completo")}`,
         "",
         T(lang, "Durante as perguntas: `pular` pula · `voltar` volta · `cancelar` desiste.",
                 "During the questions: `skip` skips · `back` goes back · `cancel` quits.",
@@ -304,6 +359,33 @@ export async function cmdAssistente(message, args, ctx) {
       ].join("\n"),
       colour: COR.info,
     });
+  }
+
+  if (roteiro === "servidor") {
+    // criar canal e cargo é mais que configurar a Judy: pede ManageServer de verdade (ou
+    // ser o dono). Não ManageChannel/ManageRole: o membroTemPermissao aceita o cargo de
+    // staff do `&acesso` para qualquer permissão MENOS ManageServer — e um cargo de staff
+    // sem permissão nenhuma no Stoat poderia mandar a Judy criar canais e cargos.
+    const podeMontar = ctx.ehSuperAdmin?.(message.authorId) || ctx.membroTemPermissao(message, server, "ManageServer");
+    if (!podeMontar) {
+      return sendEmbed(message.channel, {
+        title: T(lang, "🚫 Permissão insuficiente", "🚫 Missing permission", "🚫 Permiso insuficiente"),
+        description: T(lang, "Montar o servidor cria canais e cargos: precisa de **ManageServer** (ou ser o dono). Um cargo de staff só não basta.",
+          "Building the server creates channels and roles: it needs **ManageServer** (or being the owner). A staff role alone isn't enough.",
+          "Montar el servidor crea canales y roles: necesita **ManageServer** (o ser el dueño). Un rol de staff solo no basta."),
+        colour: COR.erro,
+      });
+    }
+    const faltam = montar.faltamAoBot(server);
+    if (faltam.length) {
+      return sendEmbed(message.channel, {
+        title: T(lang, "⚠️ O bot não consegue montar ainda", "⚠️ The bot can't build yet", "⚠️ El bot todavía no puede montarlo"),
+        description: T(lang, `O cargo do bot precisa de: **${faltam.join("**, **")}**. Dê essas permissões ao cargo da Judy nas configurações do servidor e rode de novo.`,
+          `The bot's role needs: **${faltam.join("**, **")}**. Give those permissions to Judy's role in the server settings and run it again.`,
+          `El rol del bot necesita: **${faltam.join("**, **")}**. Dale esos permisos al rol de Judy en los ajustes del servidor y vuelve a ejecutarlo.`),
+        colour: COR.aviso,
+      });
+    }
   }
 
   sessoes.set(chave, {
@@ -324,10 +406,15 @@ export async function cmdAssistente(message, args, ctx) {
 async function perguntar(message, ctx, s) {
   const { sendEmbed, COR, PREFIXO: P } = ctx;
   const ids = ROTEIROS[s.roteiro];
+  // (21 out 2026) o que o montar-servidor já respondeu (registro, boas-vindas…) não é perguntado
+  while (s.passo < ids.length && s.prontas?.has(ids[s.passo])) s.passo++;
   if (s.passo >= ids.length) return resumir(message, ctx, s);
   const passo = PASSOS[ids[s.passo]];
+  // a conta é das perguntas que faltam de verdade (as já respondidas não entram)
+  const visiveis = ids.filter((k) => !s.prontas?.has(k));
+  const n = visiveis.indexOf(ids[s.passo]) + 1, total = visiveis.length;
   return sendEmbed(message.channel, {
-    title: T(s.lang, `❓ Pergunta ${s.passo + 1}/${ids.length}`, `❓ Question ${s.passo + 1}/${ids.length}`, `❓ Pregunta ${s.passo + 1}/${ids.length}`),
+    title: T(s.lang, `❓ Pergunta ${n}/${total}`, `❓ Question ${n}/${total}`, `❓ Pregunta ${n}/${total}`),
     description: passo.pergunta(s.lang, P),
     colour: COR.info,
   });
@@ -360,6 +447,7 @@ export async function aoResponder(message, ctx) {
     }
     if (["voltar", "back"].includes(v)) {
       s.fase = "perguntas"; s.passo = Math.max(0, ids.length - 1);
+      while (s.passo > 0 && s.prontas?.has(ids[s.passo])) s.passo--;
       await perguntar(message, ctx, s);
       return true;
     }
@@ -372,7 +460,10 @@ export async function aoResponder(message, ctx) {
 
   // ── Fase de perguntas ──
   if (["voltar", "back"].includes(v)) {
-    if (s.passo > 0) { s.passo--; delete s.respostas[ids[s.passo]]; }
+    // volta à pergunta anterior DE VERDADE (as já respondidas pelo montar-servidor ficam)
+    let alvo = s.passo - 1;
+    while (alvo >= 0 && s.prontas?.has(ids[alvo])) alvo--;
+    if (alvo >= 0) { s.passo = alvo; delete s.respostas[ids[s.passo]]; }
     await perguntar(message, ctx, s);
     return true;
   }
@@ -422,6 +513,7 @@ function comandosDe(s, ctx) {
 async function resumir(message, ctx, s) {
   const { sendEmbed, COR, PREFIXO: P } = ctx;
   if (s.roteiro === "canais") return guiaDeCanais(message, ctx, s);
+  if (s.roteiro === "servidor") return previaDoServidor(message, ctx, s);
 
   const linhas = [];
   for (const id of ROTEIROS[s.roteiro]) {
@@ -445,6 +537,7 @@ async function resumir(message, ctx, s) {
 
 async function aplicar(message, ctx, s) {
   const { sendEmbed, COR, PREFIXO: P } = ctx;
+  if (s.roteiro === "servidor") return montarServidor(message, ctx, s);
   const rotas = ctx.estado?.rotas ?? {};
   const cmds = comandosDe(s, ctx);
   const resultado = [];
@@ -547,4 +640,73 @@ async function guiaDeCanais(message, ctx, s) {
     title: T(s.lang, "🔀 Seus canais, tipo a tipo", "🔀 Your channels, type by type", "🔀 Tus canales, tipo por tipo"),
     description: linhas.join("\n"), colour: COR.info,
   });
+}
+
+// ── roteiro "servidor" (21 out 2026): a prévia, a montagem e a emenda no completo ──
+// Os textos do montar-servidor.js vêm sem a marca de pronto; o embed inteiro é marcado
+// aqui (no espanhol), para a tradução da tela não passar por ele.
+const pronta = (lang, texto) => (lang === "es" ? trechoPronto(texto) : texto);
+const X3 = (lang, pt, en, es) => (lang === "es" ? es : lang === "en" ? en : pt);
+
+async function previaDoServidor(message, ctx, s) {
+  const { sendEmbed, COR } = ctx;
+  const server = await ctx.getServer(message).catch(() => null);
+  const r = s.respostas;
+  // pulado = o padrão: Comunidade, com voz e com divulgação
+  s.plano = montar.planejar({ modelo: r.modelo?.valor ?? "comunidade", voz: r.voz?.valor !== false, divulgacao: r.divulgacao?.valor !== false, lang: s.lang, server });
+  const linhas = montar.textoPrevia(s.plano, s.lang);
+  linhas.push("",
+    X3(s.lang, "Depois disso sigo para o **assistente completo**, com o registro, as boas-vindas, a staff e o cargo automático já respondidos.",
+      "After that I go on to the **full wizard**, with the logging, welcome, staff and autorole already answered.",
+      "Después sigo con el **asistente completo**, con el registro, la bienvenida, el staff y el rol automático ya respondidos."),
+    X3(s.lang, "Responda `confirmar` para criar, `voltar` para mudar a última resposta, `cancelar` para desistir.",
+      "Answer `confirm` to create, `back` to change the last answer, `cancel` to quit.",
+      "Responde `confirm` para crear, `back` para cambiar la última respuesta, `cancel` para abandonar."));
+  s.fase = "confirmar";
+  return sendEmbed(message.channel, {
+    title: pronta(s.lang, X3(s.lang, `🏗️ Prévia — ${montar.NOME_MODELO(s.plano.modelo, s.lang)}`, `🏗️ Preview — ${montar.NOME_MODELO(s.plano.modelo, s.lang)}`, `🏗️ Vista previa — ${montar.NOME_MODELO(s.plano.modelo, s.lang)}`)),
+    description: pronta(s.lang, linhas.join("\n")),
+    colour: COR.aviso,
+  });
+}
+
+async function montarServidor(message, ctx, s) {
+  const { sendEmbed, COR } = ctx;
+  const server = await ctx.getServer(message).catch(() => null);
+  await sendEmbed(message.channel, {
+    title: pronta(s.lang, X3(s.lang, "🏗️ Montando…", "🏗️ Building…", "🏗️ Montando…")),
+    description: pronta(s.lang, X3(s.lang, "Criando os cargos e os canais. Leva alguns segundos.", "Creating the roles and channels. It takes a few seconds.", "Creando los roles y los canales. Tarda unos segundos.")),
+    colour: COR.info,
+  });
+  const res = await montar.executar(s.plano, { server, ctx });
+  if (res.ok) {
+    const config = ctx.configDoServidor?.(ctx.serverId) ?? ctx.config;
+    montar.aplicarNaConfig(config, s.plano, res);
+    ctx.salvarConfig?.();
+  }
+  await sendEmbed(message.channel, {
+    title: pronta(s.lang, res.ok ? X3(s.lang, "🏗️ Servidor montado", "🏗️ Server built", "🏗️ Servidor montado") : X3(s.lang, "❌ Não deu para montar", "❌ Couldn't build it", "❌ No se pudo montar")),
+    description: pronta(s.lang, montar.textoResultado(s.plano, res, s.lang).join("\n")),
+    colour: res.ok ? COR.sucesso : COR.erro,
+  });
+  if (!res.ok) return null;
+
+  // a emenda: o assistente completo, com o que os canais e cargos novos já respondem
+  const prontas = montar.respostasProntas(s.plano, res);
+  const nova = {
+    roteiro: "completo", passo: 0, respostas: { ...prontas }, prontas: new Set(Object.keys(prontas)),
+    expira: Date.now() + TTL_MS, serverId: ctx.serverId, lang: s.lang, fase: "perguntas",
+  };
+  sessoes.set(chaveDe(message), nova);
+  const faltam = ROTEIROS.completo.filter((k) => !nova.prontas.has(k)).length;
+  const ja = Object.values(prontas).map((r) => r.rotulo).join(" · ");
+  await sendEmbed(message.channel, {
+    title: T(s.lang, `🧙 Assistente — ${NOME_ROTEIRO.completo.pt}`, `🧙 Wizard — ${NOME_ROTEIRO.completo.en}`, `🧙 Asistente — ${NOME_ROTEIRO.completo.es}`),
+    description: T(s.lang,
+      `Agora a configuração da Judy: ${faltam} pergunta(s). Já respondido pelo que criei: ${ja}.\nResponda aqui mesmo, sem prefixo. \`pular\` · \`voltar\` · \`cancelar\`.`,
+      `Now Judy's setup: ${faltam} question(s). Already answered by what I created: ${ja}.\nAnswer right here, no prefix. \`skip\` · \`back\` · \`cancel\`.`,
+      `Ahora la configuración de Judy: ${faltam} pregunta(s). Ya respondido por lo que creé: ${ja}.\nResponde aquí mismo, sin prefijo. \`skip\` · \`back\` · \`cancel\`.`),
+    colour: COR.info,
+  });
+  return perguntar(message, ctx, nova);
 }

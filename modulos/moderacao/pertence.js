@@ -66,6 +66,11 @@ export function curarIds(config, server) {
     config.automod.antiAssuntos.canaisLiberados = config.automod.antiAssuntos.canaisLiberados.filter((id) => canalDoServidor(server, id));
     if (config.automod.antiAssuntos.canaisLiberados.length !== antes) mudou.push("canaisLiberados");
   }
+  if (Array.isArray(config.automod?.antiInvite?.canaisLiberados) && canaisOk) {
+    const antes = config.automod.antiInvite.canaisLiberados.length;
+    config.automod.antiInvite.canaisLiberados = config.automod.antiInvite.canaisLiberados.filter((id) => canalDoServidor(server, id));
+    if (config.automod.antiInvite.canaisLiberados.length !== antes) mudou.push("antiInvite.canaisLiberados");
+  }
   if (Array.isArray(config.acesso?.cargosStaff) && cargosOk) {
     const antes = config.acesso.cargosStaff.length;
     config.acesso.cargosStaff = config.acesso.cargosStaff.filter((id) => cargoDoServidor(server, id));

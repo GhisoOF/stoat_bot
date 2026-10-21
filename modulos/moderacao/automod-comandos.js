@@ -755,11 +755,36 @@ export async function cmdWhitelist(message, args, ctx) {
   const erroUso = () => sendEmbed(message.channel, {
     title: tr(ctx, "❌ Uso incorreto", "❌ Wrong usage", "❌ Uso incorrecto"),
     description: tr(ctx,
-      `\`${citarInterno("automod", PREFIXO)} whitelist add <link|domínio|convite>\` · \`remove\` · \`list\``,
-      `\`${citarInterno("automod", PREFIXO)} whitelist add <link|domain|invite>\` · \`remove\` · \`list\``,
-      `\`${citar("automod", "es", PREFIXO)} whitelist add <enlace|dominio|invitación>\` · \`remove\` · \`list\``),
+      `\`${citarInterno("automod", PREFIXO)} whitelist add <link|domínio|convite|#canal>\` · \`remove\` · \`list\``,
+      `\`${citarInterno("automod", PREFIXO)} whitelist add <link|domain|invite|#channel>\` · \`remove\` · \`list\``,
+      `\`${citar("automod", "es", PREFIXO)} whitelist add <enlace|dominio|invitación|#canal>\` · \`remove\` · \`list\``),
     colour: COR.erro,
   });
+
+  // (21 out 2026) `#canal` (menção, `#nome` ou `aqui`): um canal onde CONVITES podem —
+  // o canal de divulgação. Só o anti-invite deixa passar; anti-link, Sentinela e
+  // antispam seguem valendo lá. Um nome solto (`abc`) continua sendo código de convite.
+  const ehCanal = /^<#[^>]+>$|^#\S/.test(raw) || ["aqui", "here"].includes(raw.toLowerCase());
+  if ((sub === "add" || sub === "remove") && ehCanal) {
+    const canal = resolverCanal(raw, { message, server });
+    if (!canal) return sendEmbed(message.channel, { title: tr(ctx, "❌ Canal não encontrado", "❌ Channel not found", "❌ Canal no encontrado"), colour: COR.erro,
+      description: tr(ctx, `Não achei o canal \`${raw}\` neste servidor. Use \`#canal\`, o ID ou \`aqui\`.`, `I couldn't find the \`${raw}\` channel on this server. Use \`#channel\`, the ID or \`here\`.`,
+        `No encontré el canal \`${raw}\` en este servidor. Usa \`#canal\`, el ID o \`here\`.`) });
+    const dele = server?.channelIds ? (server.channelIds.has?.(canal) ?? true) : true;
+    if (!dele) return sendEmbed(message.channel, { title: tr(ctx, "❌ Canal de outro servidor", "❌ Channel from another server", "❌ Canal de otro servidor"), colour: COR.erro, description: `\`${canal}\`` });
+    const ai = config.automod.antiInvite;
+    ai.canaisLiberados = sub === "add" ? [...new Set([...(ai.canaisLiberados ?? []), canal])] : (ai.canaisLiberados ?? []).filter((c) => c !== canal);
+    salvarConfig();
+    return sendEmbed(message.channel, {
+      title: sub === "add" ? tr(ctx, "✅ Liberado", "✅ Allowed", "✅ Permitido") : tr(ctx, "✅ Removido", "✅ Removed", "✅ Quitado"),
+      description: sub === "add"
+        ? tr(ctx, `Convites de outros servidores podem ser postados em <#${canal}>. O resto do automod (links maliciosos, golpe, spam) continua valendo lá.`,
+          `Invites to other servers can be posted in <#${canal}>. The rest of the automod (malicious links, scams, spam) still applies there.`,
+          `Las invitaciones a otros servidores se pueden publicar en <#${canal}>. El resto del automod (enlaces maliciosos, estafas, spam) sigue aplicándose ahí.`)
+        : tr(ctx, `<#${canal}> voltou a bloquear convites.`, `<#${canal}> blocks invites again.`, `<#${canal}> vuelve a bloquear invitaciones.`),
+      colour: COR.sucesso,
+    });
+  }
 
   if (sub === "add" || sub === "remove") {
     if (!convite && !dominio) return erroUso();
@@ -790,12 +815,13 @@ export async function cmdWhitelist(message, args, ctx) {
   if (sub === "list" || !sub) {
     const doms = config.dominiosPermitidos.map((d) => `• \`${d}\``).join("\n") || tr(ctx, "_nenhum_", "_none_", "_ninguno_");
     const convs = config.inviteWhitelist.map((c) => `• \`${c}\``).join("\n") || tr(ctx, "_nenhum_", "_none_", "_ninguna_");
+    const canais = (config.automod?.antiInvite?.canaisLiberados ?? []).map((c) => `• <#${c}>`).join("\n") || tr(ctx, "_nenhum_", "_none_", "_ninguno_");
     return sendEmbed(message.channel, {
       title: tr(ctx, "📃 Lista de permitidos", "📃 Whitelist", "📃 Lista de permitidos"),
       description: tr(ctx,
-        `**Domínios** _(o anti-link nunca bloqueia)_\n${doms}\n\n**Convites do Stoat** _(anti-invite)_\n${convs}`,
-        `**Domains** _(anti-link never blocks these)_\n${doms}\n\n**Stoat invites** _(anti-invite)_\n${convs}`,
-        `**Dominios** _(el anti-link nunca los bloquea)_\n${doms}\n\n**Invitaciones de Stoat** _(anti-invite)_\n${convs}`),
+        `**Domínios** _(o anti-link nunca bloqueia)_\n${doms}\n\n**Convites do Stoat** _(anti-invite)_\n${convs}\n\n**Canais onde convites podem** _(divulgação)_\n${canais}`,
+        `**Domains** _(anti-link never blocks these)_\n${doms}\n\n**Stoat invites** _(anti-invite)_\n${convs}\n\n**Channels where invites are fine** _(advertising)_\n${canais}`,
+        `**Dominios** _(el anti-link nunca los bloquea)_\n${doms}\n\n**Invitaciones de Stoat** _(anti-invite)_\n${convs}\n\n**Canales donde se permiten invitaciones** _(promoción)_\n${canais}`),
       colour: COR.info,
     });
   }

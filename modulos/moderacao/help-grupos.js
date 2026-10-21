@@ -49,6 +49,7 @@ function gruposPT(P) {
       linhas: [
         "**Os três primeiros comandos**",
         `\`${citarInterno("assistente", P)}\` — ⭐ configuração **guiada**: o bot pergunta, você responde, pronto`,
+        `\`${citarInterno("assistente.servidor", P)}\` — 🏗️ servidor novo? cria canais e cargos com as permissões prontas`,
         `\`${citarInterno("tutorial", P)}\` — guia em páginas: permissões, canais, proteção, boas-vindas…`,
         `\`${citar("config", "pt", P)}\` — panorama de tudo que está configurado neste servidor`,
         "",
@@ -227,6 +228,7 @@ function gruposEN(P) {
       linhas: [
         "**The first three commands**",
         `\`${citarInterno("assistente", P)}\` — ⭐ **guided** setup: the bot asks, you answer, done`,
+        `\`${citarInterno("assistente.servidor", P)}\` — 🏗️ new server? creates channels and roles with permissions set`,
         `\`${citarInterno("tutorial", P)}\` — paged guide: permissions, channels, protection, welcome…`,
         `\`${citar("config", "en", P)}\` — overview of everything configured on this server`,
         "",

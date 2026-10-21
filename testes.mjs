@@ -17353,6 +17353,338 @@ console.log(`\nPRIVACIDADE (20 out): ${ok} ok, ${falhou} falha(s)`);
 if (falhou) process.exitCode = 1;
 };
 
+// ══════════════════════════════════════════════════════════════════════════════
+// montar-servidor-21out — `&assistente servidor` e os canais de divulgação
+// (21 out 2026). O servidor de mentira guarda cada chamada à API: o que foi criado,
+// cada permissão, as categorias — e pode falhar de propósito no meio.
+// ══════════════════════════════════════════════════════════════════════════════
+SUITES["montar-servidor-21out"] = async () => {
+const __m0 = await import("node:assert"); const assert = __m0.default;
+const __m1 = await import("node:fs"); const fs = __m1.default;
+process.env.BOT_TOKEN = "tok";
+process.env.DB_PATH = "/tmp/montar-teste.db"; process.env.CONFIG_PATH = "/tmp/montar-teste.json";
+for (const f of ["/tmp/montar-teste.db", "/tmp/montar-teste.db-wal", "/tmp/montar-teste.db-shm", "/tmp/montar-teste.json"]) fs.rmSync(f, { force: true });
+const silencio = async (fn) => { const o = [console.log, console.info, console.warn, console.error]; console.log = console.info = console.warn = console.error = () => {}; try { return await fn(); } finally { [console.log, console.info, console.warn, console.error] = o; } };
+await silencio(() => import("./main.js"));
+const c = globalThis.__client;
+await silencio(() => c.emitAll("ready"));
+const store = await import("./modulos/core/config-store.js");
+const montar = await import("./modulos/moderacao/montar-servidor.js");
+const assistente = await import("./modulos/moderacao/assistente.js");
+const engine = await import("./modulos/moderacao/automod-engine.js");
+const { Permission: PERM } = await import("stoat.js");
+const { curarIds } = await import("./modulos/moderacao/pertence.js");
+montar.ritmo.pausaMs = 0;
+
+let ok = 0, falhou = 0;
+const t = async (nome, fn) => {
+  try { await silencio(fn); console.log(`  ✅ ${nome}`); ok++; }
+  catch (e) { console.log(`  ❌ ${nome}\n     ${e.message}`); falhou++; }
+};
+
+// ── o servidor de mentira ──
+let seq = 0;
+const novoId = (p) => `${p}${String(++seq).padStart(4, "0")}`.padEnd(26, "0");
+function servidorFalso(sid, { cargos = [], canais = [], categorias = [], semPermissao = [], falharCanalNo = null, lang = "pt" } = {}) {
+  const chamadas = [];
+  const roles = new Map(cargos.map((r) => [r.id, { name: r.name, permissions: { a: 0, d: 0 } }]));
+  const enviados = [];
+  const fazerCanal = (id, name, tipo = "Text", description = null) => {
+    const ch = { id, name, type: tipo === "Voice" ? "VoiceChannel" : "TextChannel", description, perms: {}, apagado: false, serverId: sid,
+      setPermissions: async (alvo, p) => { chamadas.push(["perm-canal", name, alvo, p]); ch.perms[alvo] = p; },
+      delete: async () => { ch.apagado = true; chamadas.push(["apagou-canal", name]); srv.channels = srv.channels.filter((x) => x !== ch); },
+      sendMessage: async (p) => { const m = { id: novoId("M"), payload: p, react: async () => {}, edit: async () => {} }; enviados.push(m); return m; } };
+    c.channels.set(id, ch);
+    return ch;
+  };
+  let criados = 0;
+  const bot = { id: { server: sid, user: c.user?.id ?? "BOT" }, roles: [], edit: async ({ roles: r }) => { chamadas.push(["cargos-do-bot", [...r]]); bot.roles = r; } };
+  const srv = {
+    id: sid, ownerId: "DONO", name: "Teste", roles, channels: canais.map((x) => fazerCanal(x.id, x.name)), categories: structuredClone(categorias),
+    get member() { return bot; },
+    havePermission: (nome) => !semPermissao.includes(nome),
+    fetchMember: async (uid) => (uid === bot.id.user ? bot : null),
+    fetchMembers: async () => ({ members: [] }),
+    createRole: async (name) => { const id = novoId("R"); roles.set(id, { name, permissions: { a: 0, d: 0 } }); chamadas.push(["criou-cargo", name]); return { id, role: { name } }; },
+    editRole: async (id, d) => { chamadas.push(["editou-cargo", roles.get(id)?.name, d]); Object.assign(roles.get(id), d); },
+    setPermissions: async (id, p) => { chamadas.push(["perm-cargo", roles.get(id)?.name, p]); },
+    deleteRole: async (id) => { chamadas.push(["apagou-cargo", roles.get(id)?.name]); roles.delete(id); },
+    createChannel: async ({ type, name, description }) => {
+      criados++;
+      if (falharCanalNo && criados === falharCanalNo) throw JSON.stringify({ type: "MissingPermission", permission: "ManageChannel" });
+      const ch = fazerCanal(novoId("C"), name, type, description);
+      srv.channels.push(ch); chamadas.push(["criou-canal", name, type]); return ch;
+    },
+    edit: async (d) => { chamadas.push(["editou-servidor", structuredClone(d)]); if (d.categories) srv.categories = d.categories; },
+  };
+  c.servers.set(sid, srv);
+  const config = store.configDoServidor(sid);
+  config.language = lang;
+  const geral = srv.channels[0] ?? fazerCanal(novoId("C"), "chat");
+  if (!srv.channels.includes(geral)) srv.channels.push(geral);
+  const mk = (txt, autor = "DONO") => ({ id: novoId("M"), authorId: autor, content: txt, serverId: sid, server: srv, channel: geral, channelId: geral.id,
+    mentionIds: [], createdAt: new Date(), author: { username: "Ghieh" }, member: { roles: [] }, attachments: [] });
+  const say = async (txt, autor) => { await c.emitAll("messageCreate", mk(txt, autor)); const m = enviados.at(-1); return m; };
+  const ultimo = () => enviados.at(-1);
+  const desc = (m) => m?.payload?.embeds?.[0]?.description ?? "";
+  const titulo = (m) => m?.payload?.embeds?.[0]?.title ?? "";
+  const tudo = () => enviados.map((m) => `${titulo(m)}\n${desc(m)}`).join("\n----\n");
+  const canalPorNome = (n) => srv.channels.find((x) => x.name === n);
+  const cargoPorNome = (n) => [...roles.entries()].find(([, v]) => v.name === n)?.[0];
+  return { srv, chamadas, enviados, config, say, ultimo, desc, titulo, tudo, canalPorNome, cargoPorNome, bot };
+}
+
+console.log("── o plano ──");
+await t("os quatro modelos existem, e todo modelo tem registro, boas-vindas, regras e o cargo Bots", () => {
+  for (const m of ["comunidade", "gaming", "estudo", "minimo"]) {
+    const p = montar.planejar({ modelo: m, lang: "pt", server: { roles: new Map(), channels: [] } });
+    const chaves = p.categorias.flatMap((c) => c.canais.map((x) => x.chave));
+    for (const k of ["registro", "boasvindas", "regras"]) assert.ok(chaves.includes(k), `${m}: falta ${k}`);
+    assert.ok(p.cargos.some((c) => c.chave === "bots") && p.cargos.some((c) => c.chave === "staff"), m);
+  }
+});
+await t("sem voz e sem divulgação: nem a categoria de voz nem o canal de divulgação", () => {
+  const p = montar.planejar({ modelo: "comunidade", voz: false, divulgacao: false, lang: "pt", server: { roles: new Map(), channels: [] } });
+  assert.ok(!p.categorias.some((c) => c.chave === "voz"));
+  assert.ok(!p.categorias.flatMap((c) => c.canais).some((x) => x.chave === "divulgacao"));
+});
+await t("o bot sem uma permissão: o cargo novo sai sem ela (e a prévia diz)", () => {
+  const p = montar.planejar({ modelo: "comunidade", lang: "pt", server: { roles: new Map(), channels: [], havePermission: (n) => n !== "BanMembers" } });
+  const staff = p.cargos.find((c) => c.chave === "staff");
+  assert.equal(staff.perms & PERM.BanMembers, 0n);
+  assert.ok(staff.perms & PERM.KickMembers);
+  assert.match(montar.textoPrevia(p, "pt").join("\n"), /sem banir — o cargo do bot não tem/);
+});
+
+console.log("\n── de ponta a ponta, em português ──");
+const A = servidorFalso("SPT", {
+  cargos: [{ id: "01JMEMBR0VEH0000000000000A", name: "Membro" }],
+  canais: [{ id: "01JGERA1VEH00000000000000A", name: "geral" }],
+  categorias: [{ id: "CAT1", title: "Antiga", channels: ["01JGERA1VEH00000000000000A"] }],
+});
+await t("`&assistente servidor` pergunta o modelo", async () => {
+  const m = await A.say("&assistente servidor");
+  assert.match(A.desc(m), /Comunidade/);
+  assert.match(A.titulo(m), /1\/3/);
+});
+await t("modelo, voz e divulgação → a prévia, sem criar nada ainda", async () => {
+  await A.say("1"); await A.say("sim");
+  const m = await A.say("sim");
+  assert.match(A.titulo(m), /Prévia — Comunidade/);
+  const d = A.desc(m);
+  assert.match(d, /✨ \*\*Moderação\*\*/);
+  assert.match(d, /↪️ \*\*Membro\*\* — já existe/);
+  assert.match(d, /↪️ #geral — já existe: não mexo nele/);
+  assert.match(d, /✨ #registro — 🔒 só a staff vê/);
+  assert.match(d, /✨ #regras — 📢 só a staff escreve/);
+  assert.match(d, /✨ #divulgacao — 🔗 convites liberados/);
+  assert.match(d, /🔊 Bate-papo/);
+  assert.equal(A.chamadas.filter(([k]) => /^criou|^perm|^editou/.test(k)).length, 0, "a prévia não pode criar nada");
+});
+await t("`confirmar` cria cargos, canais e categorias — e reaproveita o que já existia sem mexer", async () => {
+  await A.say("confirmar");
+  const criadosCanais = A.chamadas.filter(([k]) => k === "criou-canal").map(([, n]) => n);
+  for (const n of ["regras", "avisos", "boas-vindas", "off-topic", "midia", "divulgacao", "staff-chat", "registro", "Bate-papo", "Sala 2"]) assert.ok(criadosCanais.includes(n), `faltou #${n}`);
+  assert.ok(!criadosCanais.includes("geral"), "o #geral já existia");
+  const criadosCargos = A.chamadas.filter(([k]) => k === "criou-cargo").map(([, n]) => n);
+  assert.deepEqual(criadosCargos, ["Moderação", "Ajudante", "Bots"]);
+  // nada que já existia foi tocado
+  assert.ok(!A.chamadas.some(([k, n]) => k === "perm-canal" && n === "geral"));
+  assert.ok(!A.chamadas.some(([k, n]) => (k === "perm-cargo" || k === "editou-cargo") && n === "Membro"));
+  assert.ok(!A.chamadas.some(([k]) => /^apagou/.test(k)), "nada pode ser apagado quando dá certo");
+  assert.match(A.tudo(), /Servidor montado/);
+});
+await t("as permissões: regras só a staff escreve; registro só a staff (e a Judy, pelo cargo Bots) vê", async () => {
+  const staff = A.cargoPorNome("Moderação"), bots = A.cargoPorNome("Bots");
+  const regras = A.canalPorNome("regras"), registro = A.canalPorNome("registro"), geral = A.canalPorNome("off-topic");
+  assert.equal(BigInt(regras.perms.default.deny), PERM.SendMessage);
+  assert.ok(BigInt(regras.perms[staff].allow) & PERM.SendMessage);
+  assert.ok(BigInt(regras.perms[bots].allow) & PERM.SendMessage);
+  assert.equal(BigInt(registro.perms.default.deny), PERM.ViewChannel);
+  assert.ok(BigInt(registro.perms[bots].allow) & PERM.ViewChannel);
+  assert.ok(BigInt(registro.perms[staff].allow) & PERM.ViewChannel);
+  assert.deepEqual(geral.perms, {}, "canal comum não ganha permissão nenhuma");
+  assert.ok(A.bot.roles.includes(bots), "a Judy ganhou o cargo Bots");
+});
+await t("o cargo da staff ganha as permissões de moderação no servidor", () => {
+  const p = A.chamadas.find(([k, n]) => k === "perm-cargo" && n === "Moderação")[2];
+  for (const k of ["KickMembers", "BanMembers", "TimeoutMembers", "ManageMessages"]) assert.ok(BigInt(p.allow) & PERM[k], k);
+  assert.equal(BigInt(p.allow) & PERM.ManageServer, 0n, "nunca ManageServer");
+});
+await t("as categorias: a antiga fica como estava, as novas entram com os canais novos", () => {
+  const cats = A.srv.categories;
+  assert.deepEqual(cats.find((x) => x.id === "CAT1").channels, ["01JGERA1VEH00000000000000A"]);
+  const info = cats.find((x) => x.title === "📌 Informações");
+  assert.deepEqual(info.channels.map((id) => A.srv.channels.find((x) => x.id === id)?.name), ["regras", "avisos", "boas-vindas"]);
+  assert.ok(cats.find((x) => x.title === "🔊 Voz"));
+});
+await t("a divulgação já sai com convites liberados, e as regras viram o canal do `&servidor regras`", () => {
+  assert.deepEqual(A.config.automod.antiInvite.canaisLiberados, [A.canalPorNome("divulgacao").id]);
+  assert.equal(A.config.servidorInfo.regrasCanal, A.canalPorNome("regras").id);
+});
+await t("★ segue para o assistente completo SEM perguntar staff, registro, boas-vindas nem cargo automático", async () => {
+  assert.equal(assistente.sessoesAtivas() >= 1, true);
+  const d = A.tudo();
+  assert.match(d, /Assistente — Completo/);
+  assert.match(d, /5 pergunta\(s\)/);
+  assert.match(A.titulo(A.ultimo()), /1\/5/);
+  assert.match(A.desc(A.ultimo()), /Idioma/);
+  let m = await A.say("1");
+  assert.match(A.desc(m), /Proteção/, "depois do idioma vem a proteção (staff e registro já respondidos)");
+  m = await A.say("voltar");
+  assert.match(A.desc(m), /Idioma/, "`voltar` volta ao idioma, pulando o que já estava respondido");
+  await A.say("1"); await A.say("2"); await A.say("padrao"); await A.say("2");
+  m = await A.say("sim");
+  assert.match(A.titulo(m), /Resumo/);
+  const r = A.desc(m);
+  assert.match(r, new RegExp(`&log canal ${A.canalPorNome("registro").id}`));
+  assert.match(r, new RegExp(`&boasvindas canal ${A.canalPorNome("boas-vindas").id}`));
+  assert.match(r, new RegExp(`&acesso cargo add ${A.cargoPorNome("Moderação")}`));
+  assert.match(r, new RegExp(`&autorole set ${A.cargoPorNome("Membro")}`), "o cargo automático é o Membro que já existia");
+  m = await A.say("confirmar");
+  assert.match(A.titulo(m), /Pronto/);
+  assert.doesNotMatch(A.desc(m), /❌/, A.desc(m));
+  assert.equal(store.configDoServidor("SPT").log.canalId, A.canalPorNome("registro").id);
+  assert.equal(store.configDoServidor("SPT").boasVindas.canalId, A.canalPorNome("boas-vindas").id);
+});
+
+console.log("\n── se der errado no meio ──");
+const B = servidorFalso("SFALHA", { canais: [{ id: "01JCHATX000000000000000000", name: "chat" }], categorias: [{ id: "K", title: "Velha", channels: ["01JCHATX000000000000000000"] }], falharCanalNo: 5 });
+await t("★ falhou no 5º canal: desfaz o que criou (canais e cargos), não toca no que existia, e não segue para o completo", async () => {
+  await B.say("&assistente servidor"); await B.say("2"); await B.say("nao"); await B.say("sim");
+  const sessoesAntes = assistente.sessoesAtivas();
+  await B.say("confirmar");
+  const criadosC = B.chamadas.filter(([k]) => k === "criou-canal").map(([, n]) => n);
+  const apagadosC = B.chamadas.filter(([k]) => k === "apagou-canal").map(([, n]) => n);
+  assert.equal(criadosC.length, 4);
+  assert.deepEqual([...apagadosC].sort(), [...criadosC].sort(), "todo canal criado foi apagado");
+  const criadosR = B.chamadas.filter(([k]) => k === "criou-cargo").map(([, n]) => n);
+  const apagadosR = B.chamadas.filter(([k]) => k === "apagou-cargo").map(([, n]) => n);
+  assert.deepEqual([...apagadosR].sort(), [...criadosR].sort(), "todo cargo criado foi apagado");
+  assert.ok(!B.chamadas.some(([k, n]) => k === "apagou-canal" && n === "chat"), "o canal que já existia ficou");
+  assert.deepEqual(B.srv.categories, [{ id: "K", title: "Velha", channels: ["01JCHATX000000000000000000"] }]);
+  assert.match(B.tudo(), /Não deu para montar[\s\S]*ManageChannel[\s\S]*Desfiz o que tinha criado: 4 canal\(is\), 4 cargo\(s\)/);
+  assert.equal(assistente.sessoesAtivas(), sessoesAntes - 1, "não abriu o assistente completo");
+  assert.deepEqual(B.config.automod.antiInvite.canaisLiberados ?? [], [], "a config não guardou canal apagado");
+});
+
+console.log("\n── quem pode, e o que o bot precisa ──");
+await t("membro sem ManageChannel/ManageRole não monta", async () => {
+  const C = servidorFalso("SSEM");
+  const m = await C.say("&assistente servidor", "QUALQUER");
+  assert.match(C.titulo(m) + C.desc(m), /Permiss|ManageChannel/);
+  assert.ok(!C.chamadas.some(([k]) => /^criou/.test(k)));
+});
+await t("★ cargo de staff do `&acesso` sem ManageServer no Stoat não monta (o atalho da staff vale para tudo, menos isto)", async () => {
+  const S = servidorFalso("SSTAFF", { cargos: [{ id: "01JSTAFF000000000000000000", name: "Equipe" }] });
+  S.config.acesso = { ...(S.config.acesso ?? {}), cargosStaff: ["01JSTAFF000000000000000000"] };
+  await c.emitAll("messageCreate", { id: "MST1", authorId: "MEMBROSTAFF", content: "&assistente servidor", serverId: "SSTAFF", server: S.srv,
+    channel: S.srv.channels[0], channelId: S.srv.channels[0].id, mentionIds: [], createdAt: new Date(), author: { username: "x" },
+    member: { roles: ["01JSTAFF000000000000000000"], hasPermission: () => false }, attachments: [] });
+  const m = S.ultimo();
+  assert.match(S.desc(m), /ManageServer/);
+  assert.doesNotMatch(S.desc(m), /Comunidade/, "não pode chegar à pergunta do modelo");
+});
+await t("o bot sem ManageRole: avisa antes de perguntar qualquer coisa", async () => {
+  const D = servidorFalso("SBOT", { semPermissao: ["ManageRole"] });
+  const m = await D.say("&assistente servidor");
+  assert.match(D.titulo(m), /O bot não consegue montar ainda/);
+  assert.match(D.desc(m), /ManageRole/);
+});
+
+console.log("\n── os outros idiomas ──");
+await t("em espanhol: nomes em espanhol, e nenhum caractere invisível vai para o Stoat", async () => {
+  const E = servidorFalso("SES", { lang: "es" });
+  await E.say("&asistente servidor"); await E.say("3"); await E.say("si"); await E.say("si");
+  const prev = E.ultimo();
+  assert.match(E.titulo(prev), /Vista previa — Estudio/);
+  await E.say("confirm");
+  const nomes = E.chamadas.filter(([k]) => /^criou/.test(k)).map(([, n]) => n);
+  for (const n of ["reglas", "bienvenida", "dudas", "materiales", "promocion", "registro", "Sala de estudio", "Moderación", "Ayudante"]) assert.ok(nomes.includes(n), n);
+  const api = JSON.stringify(E.chamadas) + JSON.stringify(E.srv.channels.map((x) => [x.name, x.description])) + JSON.stringify(E.srv.categories);
+  assert.doesNotMatch(api, /[⁣⁤]|\\u206[34]/i, "marca de texto pronto chegou à API");
+  assert.match(E.tudo(), /Servidor montado/);
+});
+await t("em inglês: nomes em inglês", async () => {
+  const F = servidorFalso("SEN", { lang: "en" });
+  await F.say("&wizard server"); await F.say("4"); await F.say("no"); await F.say("no");
+  assert.match(F.titulo(F.ultimo()), /Preview — Minimal/);
+  await F.say("confirm");
+  const nomes = F.chamadas.filter(([k]) => k === "criou-canal").map(([, n]) => n);
+  assert.deepEqual(nomes, ["rules", "welcome", "general", "logs"]);
+});
+
+console.log("\n── os canais de divulgação (anti-convite) ──");
+const cfgNova = () => { const x = structuredClone(store.padraoServidor); x.language = "pt"; return x; };
+const mkCtx = (config) => ({ config, serverId: "SDIV", cfgGlobal: { debug: false },
+  estado: { spamData: new Map(), ecoData: new Map(), blockedDomains: new Set(["golpe.example"]), midiaData: new Map() },
+  getServer: async () => ({ id: "SDIV", ownerId: "OWNER", channelIds: new Set(["CH_DIV", "CH_GERAL"]) }),
+  membroTemPermissao: () => false, sendEmbed: async () => ({ delete: async () => {} }),
+  COR: { aviso: 1, erro: 2, mod: 3, sucesso: 4, info: 5 }, PREFIXO: "&",
+  client: { channels: { get: () => null, fetch: async () => null } }, salvarConfig: () => {} });
+let nMsg = 0;
+const mkMsg = (content, channel) => {
+  const ev = { deletes: 0 };
+  const m = { id: "MD" + (++nMsg), authorId: "USERD" + nMsg, channelId: channel, content, attachments: [], mentionIds: [],
+    author: { id: "USERD" + nMsg, username: "u", bot: false }, member: { joinedAt: new Date(Date.now() - 365 * 86400e3) },
+    channel: { id: channel }, async delete() { ev.deletes++; } };
+  return { m, ev };
+};
+await t("★ convite no canal liberado passa; o mesmo convite em outro canal é barrado", async () => {
+  const cfg = cfgNova(); cfg.automod.antiInvite.enabled = true; cfg.automod.punicao.modo = "apagar";
+  cfg.automod.antiInvite.canaisLiberados = ["CH_DIV"];
+  const lib = mkMsg("entrem no meu servidor stt.gg/abc123", "CH_DIV");
+  assert.equal(await engine.runAutomod(lib.m, mkCtx(cfg)), false);
+  assert.equal(lib.ev.deletes, 0);
+  const fora = mkMsg("entrem no meu servidor stt.gg/abc123", "CH_GERAL");
+  assert.equal(await engine.runAutomod(fora.m, mkCtx(cfg)), true);
+  assert.equal(fora.ev.deletes, 1);
+});
+await t("★ no canal liberado só o convite passa: link de domínio bloqueado continua barrado", async () => {
+  const cfg = cfgNova(); cfg.automod.antiInvite.enabled = true; cfg.automod.antiLink.enabled = true; cfg.automod.punicao.modo = "apagar";
+  cfg.automod.antiInvite.canaisLiberados = ["CH_DIV"];
+  const r = mkMsg("olha https://golpe.example/premio", "CH_DIV");
+  assert.equal(await engine.runAutomod(r.m, mkCtx(cfg)), true);
+});
+const G = servidorFalso("SWL", { canais: [{ id: "01JD1VVGACA0000000000000AB", name: "divulgacao" }, { id: "01J0VTR00000000000000000AB", name: "outro" }] });
+await t("`&automod whitelist add #divulgacao` libera o canal; `list` mostra; `remove` tira", async () => {
+  await G.say("&automod whitelist add #divulgacao");
+  assert.deepEqual(G.config.automod.antiInvite.canaisLiberados, ["01JD1VVGACA0000000000000AB"]);
+  assert.match(G.desc(G.ultimo()), /podem ser postados em <#01JD1VVGACA/);
+  await G.say("&automod whitelist list");
+  assert.match(G.desc(G.ultimo()), /Canais onde convites podem[\s\S]*<#01JD1VVGACA/);
+  await G.say(`&automod whitelist remove <#${"01JD1VVGACA0000000000000AB"}>`);
+  assert.deepEqual(G.config.automod.antiInvite.canaisLiberados, []);
+});
+await t("nome solto (sem #) continua sendo código de convite, como antes", async () => {
+  await G.say("&automod whitelist add divulgacao");
+  assert.ok(G.config.inviteWhitelist.includes("divulgacao"));
+  assert.deepEqual(G.config.automod.antiInvite.canaisLiberados, []);
+});
+await t("canal que não existe: avisa e não grava", async () => {
+  await G.say("&automod whitelist add #naoexiste");
+  assert.match(G.titulo(G.ultimo()), /Canal não encontrado/);
+  assert.deepEqual(G.config.automod.antiInvite.canaisLiberados, []);
+});
+await t("o `&config` mostra o canal de divulgação", async () => {
+  await G.say("&automod whitelist add #divulgacao");
+  await G.say("&config");
+  assert.match(G.tudo(), /<#01JD1VVGACA0000000000000AB> _\(convites\)_/);
+});
+await t("canal de outro servidor (molde antigo) sai da lista sozinho", () => {
+  const cfg = cfgNova(); cfg.automod.antiInvite.canaisLiberados = ["CH_DE_OUTRO", "CH_DIV"];
+  curarIds(cfg, { id: "SDIV", roles: new Map(), channelIds: new Set(["CH_DIV"]), channels: [{ id: "CH_DIV" }] });
+  assert.deepEqual(cfg.automod.antiInvite.canaisLiberados, ["CH_DIV"]);
+});
+await t("servidor antigo (sem a lista) carrega com a lista vazia", () => {
+  const cfg = store.configDoServidor("SANTIGO");
+  assert.ok(Array.isArray(cfg.automod.antiInvite.canaisLiberados));
+});
+
+console.log(`\nMONTAR SERVIDOR (21 out): ${ok} ok, ${falhou} falha(s)`);
+if (falhou) process.exitCode = 1;
+};
+
 // ── O executor ───────────────────────────────────────────────────────────────
 const PRECISA_DO_BOT = (nome) => /import\("\.\/main\.js"\)/.test(String(SUITES[nome]));
 

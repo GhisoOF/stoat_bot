@@ -183,6 +183,9 @@ async function sendEmbed(channel, embed) {
 
 async function enviarEmbedUnico(channel, { title, description, colour = COR.info, imagem = null, anexos = null, ocultarLink = true }) {
   // "<parâmetro>" some no Stoat: vira ‹parâmetro› (ver core/marcadores.js)
+  // a marca de "texto pronto" (i18n.tr no espanhol) nunca chega ao Stoat
+  if (typeof title === "string") title = title.replace(/[\u2063\u2064]/g, "");
+  if (typeof description === "string") description = description.replace(/[\u2063\u2064]/g, "");
   title = protegerMarcadores(title);
   description = protegerMarcadores(description);
   if (!channel || typeof channel.sendMessage !== "function") {
@@ -666,6 +669,10 @@ async function tratarMensagem(message) {
       title: "❓ Unknown command",
       description: (sugestao ? `Did you mean \`${sugestao.trim().slice(0, 120)}\`?\n\n` : "") + `Use \`${PREFIXO}help\` to see the available commands.`,
       colour: COR.aviso,
+    }, {
+      title: "❓ Comando desconocido",
+      description: (sugestao ? `¿Quisiste decir \`${sugestao.trim().slice(0, 120)}\`?\n\n` : "") + `Usa \`${aliases.citar("help", "es", PREFIXO)}\` para ver los comandos disponibles.`,
+      colour: COR.aviso,
     }));
     return;
   }
@@ -699,6 +706,8 @@ async function tratarMensagem(message) {
       descricao: `<@${message.authorId}> tentou usar \`${PREFIXO}${command}\`, que está desativado neste servidor.`,
       en: { titulo: "🚫 Disabled command",
         descricao: `<@${message.authorId}> tried to use \`${PREFIXO}${command}\`, which is disabled on this server.` },
+      es: { titulo: "🚫 Comando desactivado",
+        descricao: `<@${message.authorId}> intentó usar \`${PREFIXO}${command}\`, que está desactivado en este servidor.` },
     });
     return sendEmbed(message.channel, tr(ctx, {
       title: "🚫 Comando desativado",
@@ -752,6 +761,10 @@ function ehCanalDeVoz(message) {
         title: "🔐 Not here",
         description: "Commands are restricted in this channel by the server's access settings.",
         colour: COR.aviso,
+      }, {
+        title: "🔐 Aquí no",
+        description: "Los comandos están restringidos en este canal por la configuración de acceso del servidor.",
+        colour: COR.aviso,
       }));
     }
   }
@@ -769,6 +782,12 @@ function ehCanalDeVoz(message) {
         `**User:** <@${message.authorId}>`,
         `**Channel:** <#${message.channelId}>`,
         `**Command:** \`${PREFIXO}${command}${args.length ? " " + args.join(" ") : ""}\``,
+      ].join("\n") },
+    es: { titulo: "⌨️ Comando usado",
+      descricao: [
+        `**Usuario:** <@${message.authorId}>`,
+        `**Canal:** <#${message.channelId}>`,
+        `**Comando:** \`${PREFIXO}${command}${args.length ? " " + args.join(" ") : ""}\``,
       ].join("\n") },
   });
 
@@ -789,6 +808,10 @@ function ehCanalDeVoz(message) {
       title: "✏️ Replace the ‹…› with a value",
       description: `\`${marcador}\` in the help is a **blank to fill in** — not something to type with the brackets.\n\nE.g.: in \`${aliases.citar("warn", "en", PREFIXO)} <@user>\`, mention the person: \`${aliases.citar("warn", "en", PREFIXO)} @Ana\`.\nThe values \`${PREFIXO}${canonico}\` accepts: \`${PREFIXO}help ${canonico}\``,
       colour: COR.aviso,
+    }, {
+      title: "✏️ Cambia el ‹…› por un valor",
+      description: `\`${marcador}\` en la ayuda es un **espacio para rellenar** — no hay que escribirlo con los signos.\n\nEj.: en \`${aliases.citar("warn", "es", PREFIXO)} <@usuario>\`, menciona a la persona: \`${aliases.citar("warn", "es", PREFIXO)} @Ana\`.\nLos valores que acepta \`${aliases.citar(canonico, "es", PREFIXO)}\`: \`${aliases.citar("help", "es", PREFIXO)} ${aliases.citar(canonico, "es", "")}\``,
+      colour: COR.aviso,
     }));
   }
 
@@ -808,6 +831,10 @@ function ehCanalDeVoz(message) {
     }, {
       title: "❌ Unexpected error",
       description: "Something went wrong while running the command.",
+      colour: COR.erro,
+    }, {
+      title: "❌ Error inesperado",
+      description: "Algo salió mal al ejecutar el comando.",
       colour: COR.erro,
     }));
   }
@@ -928,35 +955,54 @@ client.on("serverMemberJoin", async (member) => {
     // Idade da conta vem do próprio ID. No raid de 27/09, cada conta tinha
     // 2 a 7 min de vida ao entrar — isso agora aparece no log de entrada.
     const idade = confianca.idadeDaConta(userId);
-    const idadeTxt = (en) => idade == null ? "" : idade < 3600_000
-      ? (en ? ` ⚠️ **account created ${Math.max(1, Math.round(idade / 60_000))} min ago**` : ` ⚠️ **conta criada há ${Math.max(1, Math.round(idade / 60_000))} min**`)
-      : idade < 86_400_000 ? (en ? ` · account created ${Math.round(idade / 3600_000)}h ago` : ` · conta criada há ${Math.round(idade / 3600_000)}h`) : "";
+    const idadeTxt = (en, es = false) => idade == null ? "" : idade < 3600_000
+      ? (es ? ` ⚠️ **cuenta creada hace ${Math.max(1, Math.round(idade / 60_000))} min**` : en ? ` ⚠️ **account created ${Math.max(1, Math.round(idade / 60_000))} min ago**` : ` ⚠️ **conta criada há ${Math.max(1, Math.round(idade / 60_000))} min**`)
+      : idade < 86_400_000 ? (es ? ` · cuenta creada hace ${Math.round(idade / 3600_000)}h` : en ? ` · account created ${Math.round(idade / 3600_000)}h ago` : ` · conta criada há ${Math.round(idade / 3600_000)}h`) : "";
     await log.registrar(ctx, "membros", {
       titulo: "📥 Membro entrou",
       descricao: `<@${userId}> entrou no servidor.${idadeTxt(false)}`,
       en: { titulo: "📥 Member joined", descricao: `<@${userId}> joined the server.${idadeTxt(true)}` },
+      es: { titulo: "📥 Miembro entró", descricao: `<@${userId}> entró al servidor.${idadeTxt(true, true)}` },
     });
 
     const onda = confianca.registrarEntrada(serverId, userId);
     if (onda.iniciou) {
       console.log(`[ANTIRAID] ${serverId}: ${onda.contas.length} contas novas em pouco tempo — proteção por ${onda.minutos} min`);
       relatorioHora.evento(serverId, "raid", `Possível raid: ${onda.contas.length} contas novas em 15 min`);
-      const en = i18n.textoDoIdioma(ctx.config?.language) === "en";
       const destinoId = ctx.config?.automod?.antiScam?.alertChannelId || ctx.config?.log?.canalId;
       const achado = destinoId ? await client.channels.fetch(destinoId).catch(() => null) : null;
       // canal de outro servidor (herdado do molde antigo) nunca recebe o alerta
       const destino = achado && (achado.serverId ?? achado.server?.id) === serverId ? achado : null;
+      const mencoes = onda.contas.map((u) => `<@${u}>`).join(" · ");
       if (destino) await sendEmbed(destino, {
-        title: en ? "🛡️ Possible raid" : "🛡️ Possível raid",
-        description: [
-          en ? `**${onda.contas.length} accounts created less than 24h ago** joined in a short time:`
-             : `**${onda.contas.length} contas criadas há menos de 24h** entraram em pouco tempo:`,
-          onda.contas.map((u) => `<@${u}>`).join(" · "),
-          "",
-          en ? `For the next **${onda.minutos} min**, new accounts get the strictest automod: lower sentinel threshold and the same message only twice.`
-             : `Pelos próximos **${onda.minutos} min**, conta nova passa pelo automod mais rígido: limiar do sentinela mais baixo e a mesma mensagem só 2 vezes.`,
-          en ? "Nobody was punished for joining." : "Ninguém foi punido por entrar.",
-        ].join("\n"),
+        ...tr(ctx, {
+          title: "🛡️ Possível raid",
+          description: [
+            `**${onda.contas.length} contas criadas há menos de 24h** entraram em pouco tempo:`,
+            mencoes,
+            "",
+            `Pelos próximos **${onda.minutos} min**, conta nova passa pelo automod mais rígido: limiar do sentinela mais baixo e a mesma mensagem só 2 vezes.`,
+            "Ninguém foi punido por entrar.",
+          ].join("\n"),
+        }, {
+          title: "🛡️ Possible raid",
+          description: [
+            `**${onda.contas.length} accounts created less than 24h ago** joined in a short time:`,
+            mencoes,
+            "",
+            `For the next **${onda.minutos} min**, new accounts get the strictest automod: lower sentinel threshold and the same message only twice.`,
+            "Nobody was punished for joining.",
+          ].join("\n"),
+        }, {
+          title: "🛡️ Posible raid",
+          description: [
+            `**${onda.contas.length} cuentas creadas hace menos de 24h** entraron en poco tiempo:`,
+            mencoes,
+            "",
+            `Durante los próximos **${onda.minutos} min**, las cuentas nuevas pasan por el automod más estricto: umbral del centinela más bajo y el mismo mensaje solo 2 veces.`,
+            "Nadie fue sancionado por entrar.",
+          ].join("\n"),
+        }),
         colour: COR.aviso,
       });
     }
@@ -1005,6 +1051,7 @@ client.on("serverMemberLeave", async (member, extra) => {
       titulo: "📤 Membro saiu",
       descricao: `<@${userId}> saiu do servidor (saída, expulsão ou ban).`,
       en: { titulo: "📤 Member left", descricao: `<@${userId}> left the server (left, kicked or banned).` },
+      es: { titulo: "📤 Miembro salió", descricao: `<@${userId}> salió del servidor (salida, expulsión o ban).` },
     });
     const nome = member?.user?.username ?? member?.nickname ?? null;
     await bemvindo.aoSair(userId, serverId, ctx, nome);
@@ -1050,14 +1097,15 @@ client.on("serverMemberUpdate", async (member, anterior) => {
     const srv = member.server ?? client.servers.get?.(serverId);
     const ehDoTicket = (r) => cargosDeTicket.has(r) || /^ticket-\d+$/.test(nomeDoCargo(srv, r) ?? "");
     if ([...ganhou, ...perdeu].every(ehDoTicket)) return;
-    const partes = (en) => [
-      ganhou.length ? `**${en ? "Received" : "Recebeu"}:** ${ganhou.map((r) => cargoLegivel(srv, r, en)).join(", ")}` : null,
-      perdeu.length ? `**${en ? "Lost" : "Perdeu"}:** ${perdeu.map((r) => cargoLegivel(srv, r, en)).join(", ")}` : null,
+    const partes = (en, es = false) => [
+      ganhou.length ? `**${es ? "Recibió" : en ? "Received" : "Recebeu"}:** ${ganhou.map((r) => cargoLegivel(srv, r, en, es)).join(", ")}` : null,
+      perdeu.length ? `**${es ? "Perdió" : en ? "Lost" : "Perdeu"}:** ${perdeu.map((r) => cargoLegivel(srv, r, en, es)).join(", ")}` : null,
     ].filter(Boolean).join("\n");
     await log.registrar(ctx, "cargos", {
       titulo: "🏷 Cargos alterados",
       descricao: `<@${userId}>\n${partes(false)}`,
       en: { titulo: "🏷 Roles changed", descricao: `<@${userId}>\n${partes(true)}` },
+      es: { titulo: "🏷 Roles cambiados", descricao: `<@${userId}>\n${partes(true, true)}` },
     });
   } catch (err) { console.error("[EVENTO][MEMBER_UPDATE]", err?.message); }
 });
@@ -1105,12 +1153,20 @@ client.on("messageDelete", async (message) => {
       (midias.length ? `\n**Media:** ${midias.length} attachment(s) recovered below` : "") +
       (perdidas.length ? `\n**Media not recoverable:** ${perdidas.join(", ")}` : "") +
       (freio.segurados ? `\n**Media not re-sent:** ${freio.segurados} attachment(s) — repeated or a burst from the same author` : "");
+    const textoEs = (message?.content ?? "").slice(0, 500) || "_(sin texto)_";
+    const autorEs = message?.authorId ? `<@${message.authorId}>` : "_desconocido_";
+    const notaMidiaEs =
+      (midias.length ? `\n**Multimedia:** ${midias.length} adjunto(s) recuperado(s) abajo` : "") +
+      (perdidas.length ? `\n**Multimedia no recuperable:** ${perdidas.join(", ")}` : "") +
+      (freio.segurados ? `\n**Multimedia no reenviada:** ${freio.segurados} adjunto(s) — repetido(s) o ráfaga del mismo autor` : "");
 
     await log.registrar(ctx, "mensagens", {
       titulo: "🗑 Mensagem apagada",
       descricao: `**Autor:** ${autor}\n**Canal:** <#${message.channelId}>\n**Conteúdo:** ${texto}${notaMidia}`,
       en: { titulo: "🗑 Message deleted",
         descricao: `**Author:** ${autorEn}\n**Channel:** <#${message.channelId}>\n**Content:** ${textoEn}${notaMidiaEn}` },
+      es: { titulo: "🗑 Mensaje borrado",
+        descricao: `**Autor:** ${autorEs}\n**Canal:** <#${message.channelId}>\n**Contenido:** ${textoEs}${notaMidiaEs}` },
       anexos: midias.length ? midias : null,
     });
   } catch (err) { console.error("[EVENTO][MSG_DELETE]", err?.message); }
@@ -1153,6 +1209,13 @@ client.on("messageUpdate", async (message, anterior) => {
           `**Before:** ${antes || "_(empty)_"}`,
           `**After:** ${agora || "_(empty)_"}`,
         ].join("\n") },
+      es: { titulo: "✏️ Mensaje editado",
+        descricao: [
+          `**Autor:** ${autor ? `<@${autor}>` : "_desconocido_"}`,
+          `**Canal:** <#${canalId}>`,
+          `**Antes:** ${antes || "_(vacío)_"}`,
+          `**Después:** ${agora || "_(vacío)_"}`,
+        ].join("\n") },
     });
   } catch (err) { console.error("[EVENTO][MSG_UPDATE]", err?.message); }
 });
@@ -1168,6 +1231,7 @@ client.on("messageDeleteBulk", async (mensagens, canal) => {
       titulo: "🗑 Mensagens apagadas em massa",
       descricao: `**${mensagens?.length ?? 0}** mensagem(ns) removida(s) em <#${canalId}>.`,
       en: { titulo: "🗑 Messages bulk-deleted", descricao: `**${mensagens?.length ?? 0}** message(s) removed in <#${canalId}>.` },
+      es: { titulo: "🗑 Mensajes borrados en masa", descricao: `**${mensagens?.length ?? 0}** mensaje(s) eliminado(s) en <#${canalId}>.` },
     });
   } catch (err) { console.error("[EVENTO][MSG_BULK]", err?.message); }
 });
@@ -1180,9 +1244,9 @@ const cargosDeTicket = new Set();
 function nomeDoCargo(server, roleId) {
   try { return server?.roles?.get?.(roleId)?.name ?? server?.roles?.[roleId]?.name ?? null; } catch { return null; }
 }
-function cargoLegivel(server, roleId, en = false) {
+function cargoLegivel(server, roleId, en = false, es = false) {
   const nome = nomeDoCargo(server, roleId);
-  return nome ? `<%${roleId}> **${nome}**${/^ticket-\d+$/.test(nome) ? (en ? " _(ticket role)_" : " _(cargo do ticket)_") : ""}` : `\`${roleId}\``;
+  return nome ? `<%${roleId}> **${nome}**${/^ticket-\d+$/.test(nome) ? (es ? " _(rol del ticket)_" : en ? " _(ticket role)_" : " _(cargo do ticket)_") : ""}` : `\`${roleId}\``;
 }
 
 client.on("serverRoleUpdate", async (server, roleId, anterior) => {
@@ -1194,12 +1258,12 @@ client.on("serverRoleUpdate", async (server, roleId, anterior) => {
     // anterior COM nome quer dizer que o cargo já existia
     const jaExistia = !!anterior?.name;
     const atual = server?.roles?.get?.(roleId);
-    const mudou = [];   // [pt, en]
+    const mudou = [];   // [pt, en, es]
     if (jaExistia && atual) {
-      if (atual.name !== anterior.name) mudou.push([`nome: **${anterior.name}** → **${atual.name}**`, `name: **${anterior.name}** → **${atual.name}**`]);
-      if (String(atual.permissions?.a) !== String(anterior.permissions?.a) || String(atual.permissions?.d) !== String(anterior.permissions?.d)) mudou.push(["permissões", "permissions"]);
-      if (atual.rank !== anterior.rank) mudou.push(["posição na lista", "position in the list"]);
-      if ((atual.colour ?? null) !== (anterior.colour ?? null)) mudou.push(["cor", "colour"]);
+      if (atual.name !== anterior.name) mudou.push([`nome: **${anterior.name}** → **${atual.name}**`, `name: **${anterior.name}** → **${atual.name}**`, `nombre: **${anterior.name}** → **${atual.name}**`]);
+      if (String(atual.permissions?.a) !== String(anterior.permissions?.a) || String(atual.permissions?.d) !== String(anterior.permissions?.d)) mudou.push(["permissões", "permissions", "permisos"]);
+      if (atual.rank !== anterior.rank) mudou.push(["posição na lista", "position in the list", "posición en la lista"]);
+      if ((atual.colour ?? null) !== (anterior.colour ?? null)) mudou.push(["cor", "colour", "color"]);
     }
     const oQue = (i) => (mudou.length ? ` — ${mudou.map((m) => m[i]).join(", ")}.` : ".");
     const ctx = criarContexto(server?.id);
@@ -1208,6 +1272,8 @@ client.on("serverRoleUpdate", async (server, roleId, anterior) => {
       descricao: `${cargoLegivel(server, roleId)} ${jaExistia ? "foi modificado" + oQue(0) : "foi criado."}`,
       en: { titulo: jaExistia ? "🏷 Role updated" : "🏷 Role created",
         descricao: `${cargoLegivel(server, roleId, true)} ${jaExistia ? "was modified" + oQue(1) : "was created."}` },
+      es: { titulo: jaExistia ? "🏷 Rol actualizado" : "🏷 Rol creado",
+        descricao: `${cargoLegivel(server, roleId, true, true)} ${jaExistia ? "fue modificado" + oQue(2) : "fue creado."}` },
     });
   } catch (err) { console.error("[EVENTO][ROLE_UPDATE]", err?.message); }
 });
@@ -1221,6 +1287,7 @@ client.on("serverRoleDelete", async (server, roleId, cargo) => {
       titulo: "🗑 Cargo apagado",
       descricao: `${cargo?.name ? `**${cargo.name}**` : "Cargo"} \`${roleId}\` foi removido do servidor.`,
       en: { titulo: "🗑 Role deleted", descricao: `${cargo?.name ? `**${cargo.name}**` : "Role"} \`${roleId}\` was removed from the server.` },
+      es: { titulo: "🗑 Rol eliminado", descricao: `${cargo?.name ? `**${cargo.name}**` : "Rol"} \`${roleId}\` fue eliminado del servidor.` },
     });
   } catch (err) { console.error("[EVENTO][ROLE_DELETE]", err?.message); }
 });

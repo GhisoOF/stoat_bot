@@ -1,5 +1,6 @@
 
 import { resolverCargo } from "../core/ids.js";
+import { citar, citarInterno } from "../core/aliases.js";
 import { tr, lingua } from "../core/i18n.js";
 
 // Garante a estrutura em servidores configurados antes desta versão.
@@ -28,30 +29,30 @@ export async function cmdStaff(message, args, ctx) {
   // — o mesmo levantamento que a Judy usa quando perguntam "quem é da staff?".
   if (!sub || sub === "lista" || sub === "list") {
     const en = lang === "en";
-    const T = (pt, eng) => (en ? eng : pt);
+    const T = (pt, eng, es) => tr(ctx, pt, eng, es);
     const e = await equipe(server, config, { client: [ctx.client, message.client].find((c) => typeof c?.users?.get === "function") ?? null });
     const blocos = [];
-    if (e.donoId) blocos.push(`👑 **${T("Dono do servidor", "Server owner")}** — <@${e.donoId}>`);
+    if (e.donoId) blocos.push(`👑 **${T("Dono do servidor", "Server owner", "Dueño del servidor")}** — <@${e.donoId}>`);
     for (const b of e.blocos) {
-      const origem = b.origem === "permissao" ? T(" _(pode moderar)_", " _(can moderate)_")
-        : b.origem === "tickets" ? T(" _(equipe dos tickets)_", " _(ticket team)_") : "";
+      const origem = b.origem === "permissao" ? T(" _(pode moderar)_", " _(can moderate)_", " _(puede moderar)_")
+        : b.origem === "tickets" ? T(" _(equipe dos tickets)_", " _(ticket team)_", " _(equipo de tickets)_") : "";
       if (!b.pessoas) { blocos.push(`**${b.nome}**${origem} — <%${b.roleId}>`); continue; }
       const pessoas = b.pessoas.length
         ? b.pessoas.slice(0, 15).map((p) => `<@${p.id}>`).join(" · ") +
-          (b.pessoas.length > 15 ? T(` _+${b.pessoas.length - 15}_`, ` _+${b.pessoas.length - 15} more_`) : "")
-        : T("_ninguém com este cargo_", "_nobody with this role_");
+          (b.pessoas.length > 15 ? T(` _+${b.pessoas.length - 15}_`, ` _+${b.pessoas.length - 15} more_`, ` _+${b.pessoas.length - 15} más_`) : "")
+        : T("_ninguém com este cargo_", "_nobody with this role_", "_nadie con este rol_");
       blocos.push(`**${b.nome}** (${b.pessoas.length})${origem}\n${pessoas}`);
     }
     const semMarcados = !config.acesso.cargosStaff.length;
     const orientacao = semMarcados ? [
-      T("Nenhum cargo de staff foi marcado ainda.", "No staff role has been marked yet."),
-      T(`Quem tem **ManagePermissions** pode montar a lista com \`${PREFIXO}staff add <@cargo>\`.`, `Anyone with **ManagePermissions** can build the list with \`${PREFIXO}staff add <@role>\`.`),
-      T(`_Os mesmos cargos passam a valer para os comandos de moderação (\`${PREFIXO}acesso\`)._`, `_The same roles then count for the moderation commands (\`${PREFIXO}acesso\`)._`),
+      T("Nenhum cargo de staff foi marcado ainda.", "No staff role has been marked yet.", "Todavía no se ha marcado ningún rol de staff."),
+      T(`Quem tem **ManagePermissions** pode montar a lista com \`${citarInterno("staff.add", PREFIXO)} <@cargo>\`.`, `Anyone with **ManagePermissions** can build the list with \`${citarInterno("staff.add", PREFIXO)} <@role>\`.`, `Quien tenga **ManagePermissions** puede armar la lista con \`${citar("staff.add", "es", PREFIXO)} <@rol>\`.`),
+      T(`_Os mesmos cargos passam a valer para os comandos de moderação (\`${citarInterno("acesso", PREFIXO)}\`)._`, `_The same roles then count for the moderation commands (\`${citarInterno("acesso", PREFIXO)}\`)._`, `_Los mismos roles pasan a valer para los comandos de moderación (\`${citar("acesso", "es", PREFIXO)}\`)._`),
     ] : [];
     const rodape = e.membrosLidos ? null
-      : T("_Não consegui ler a lista de membros, então mostro só os cargos._", "_I couldn't read the member list, so I'm showing the roles only._");
+      : T("_Não consegui ler a lista de membros, então mostro só os cargos._", "_I couldn't read the member list, so I'm showing the roles only._", "_No pude leer la lista de miembros, así que muestro solo los roles._");
     return sendEmbed(message.channel, {
-      title: T("👥 Equipe", "👥 Staff"),
+      title: T("👥 Equipe", "👥 Staff", "👥 Staff"),
       description: [blocos.join("\n\n"), orientacao.length ? orientacao.join("\n") : null, rodape].filter(Boolean).join("\n\n"),
       colour: semMarcados && !e.blocos.length ? COR.info : COR.mod,
     });
@@ -63,7 +64,9 @@ export async function cmdStaff(message, args, ctx) {
       { title: "🚫 Permissão insuficiente",
         description: "Você precisa de **ManagePermissions** para mexer na equipe.", colour: COR.erro },
       { title: "🚫 Missing permission",
-        description: "You need **ManagePermissions** to change the staff list.", colour: COR.erro }));
+        description: "You need **ManagePermissions** to change the staff list.", colour: COR.erro },
+      { title: "🚫 Permiso insuficiente",
+        description: "Necesitas **ManagePermissions** para cambiar el staff.", colour: COR.erro }));
   }
 
   const a = config.acesso;
@@ -81,6 +84,10 @@ export async function cmdStaff(message, args, ctx) {
       title: "👥 Staff list cleared",
       description: `No role counts as staff anymore. Only Stoat's native permissions apply now.`,
       colour: COR.mod,
+    }, {
+      title: "👥 Staff vaciado",
+      description: `Ya ningún rol cuenta como staff. Ahora solo valen los permisos nativos de Stoat.`,
+      colour: COR.mod,
     }));
   }
 
@@ -90,19 +97,25 @@ export async function cmdStaff(message, args, ctx) {
     if (!alvo) {
       return sendEmbed(message.channel, tr(ctx,
         { title: "❌ Cargo não encontrado",
-          description: `Uso: \`${PREFIXO}staff titulo <@cargo> <texto>\`\nPara voltar ao nome do cargo: \`${PREFIXO}staff titulo <@cargo> limpar\``,
+          description: `Uso: \`${citarInterno("staff.titulo", PREFIXO)} <@cargo> <texto>\`\nPara voltar ao nome do cargo: \`${citarInterno("staff.titulo", PREFIXO)} <@cargo> limpar\``,
           colour: COR.erro },
         { title: "❌ Role not found",
-          description: `Usage: \`${PREFIXO}staff title <@role> <text>\`\nTo go back to the role's name: \`${PREFIXO}staff title <@role> clear\``,
+          description: `Usage: \`${citarInterno("staff.titulo", PREFIXO)} <@role> <text>\`\nTo go back to the role's name: \`${citarInterno("staff.titulo", PREFIXO)} <@role> clear\``,
+          colour: COR.erro },
+        { title: "❌ Rol no encontrado",
+          description: `Uso: \`${citar("staff.titulo", "es", PREFIXO)} <@rol> <texto>\`\nPara volver al nombre del rol: \`${citar("staff.titulo", "es", PREFIXO)} <@rol> clear\``,
           colour: COR.erro }));
     }
     if (!a.cargosStaff.includes(alvo.id)) {
       return sendEmbed(message.channel, tr(ctx,
         { title: "❌ Não é um cargo de staff",
-          description: `**${alvo.nome}** não está na equipe. Adicione primeiro: \`${PREFIXO}staff add <@cargo>\`.`,
+          description: `**${alvo.nome}** não está na equipe. Adicione primeiro: \`${citarInterno("staff.add", PREFIXO)} <@cargo>\`.`,
           colour: COR.erro },
         { title: "❌ Not a staff role",
-          description: `**${alvo.nome}** isn't on the staff list. Add it first: \`${PREFIXO}staff add <@role>\`.`,
+          description: `**${alvo.nome}** isn't on the staff list. Add it first: \`${citarInterno("staff.add", PREFIXO)} <@role>\`.`,
+          colour: COR.erro },
+        { title: "❌ No es un rol de staff",
+          description: `**${alvo.nome}** no está en el staff. Agrégalo primero: \`${citar("staff.add", "es", PREFIXO)} <@rol>\`.`,
           colour: COR.erro }));
     }
 
@@ -114,17 +127,22 @@ export async function cmdStaff(message, args, ctx) {
         { title: "👥 Título removido",
           description: `**${alvo.nome}** volta a aparecer com o nome do próprio cargo.`, colour: COR.mod },
         { title: "👥 Title removed",
-          description: `**${alvo.nome}** goes back to showing the role's own name.`, colour: COR.mod }));
+          description: `**${alvo.nome}** goes back to showing the role's own name.`, colour: COR.mod },
+        { title: "👥 Título eliminado",
+          description: `**${alvo.nome}** vuelve a mostrarse con el nombre del propio rol.`, colour: COR.mod }));
     }
 
     config.staff.titulos[alvo.id] = texto.slice(0, 60);
     salvarConfig?.();
     return sendEmbed(message.channel, tr(ctx,
       { title: "👥 Título definido",
-        description: `O cargo **${alvo.nome}** aparece como **${config.staff.titulos[alvo.id]}** em \`${PREFIXO}staff\`.`,
+        description: `O cargo **${alvo.nome}** aparece como **${config.staff.titulos[alvo.id]}** em \`${citarInterno("staff", PREFIXO)}\`.`,
         colour: COR.mod },
       { title: "👥 Title set",
-        description: `The **${alvo.nome}** role now shows as **${config.staff.titulos[alvo.id]}** in \`${PREFIXO}staff\`.`,
+        description: `The **${alvo.nome}** role now shows as **${config.staff.titulos[alvo.id]}** in \`${citarInterno("staff", PREFIXO)}\`.`,
+        colour: COR.mod },
+      { title: "👥 Título definido",
+        description: `El rol **${alvo.nome}** aparece como **${config.staff.titulos[alvo.id]}** en \`${citar("staff", "es", PREFIXO)}\`.`,
         colour: COR.mod }));
   }
 
@@ -138,18 +156,26 @@ export async function cmdStaff(message, args, ctx) {
       return sendEmbed(message.channel, tr(ctx,
         { title: pedido ? "❌ Cargo não encontrado" : "❓ Qual cargo?",
           description: [
-            pedido ? `Não identifiquei um cargo em \`${pedido}\`.` : `\`${PREFIXO}staff ${removendo ? "remove" : "add"} <@cargo|id|nome>\``,
+            pedido ? `Não identifiquei um cargo em \`${pedido}\`.` : `\`${citarInterno("staff", PREFIXO)} ${removendo ? "remove" : "add"} <@cargo|id|nome>\``,
             "",
             `Aceito **menção**, **ID** ou o **nome** do cargo.`,
-            `Ex.: \`${PREFIXO}staff ${removendo ? "remove" : "add"} Moderador\``,
+            `Ex.: \`${citarInterno("staff", PREFIXO)} ${removendo ? "remove" : "add"} Moderador\``,
           ].join("\n"),
           colour: COR.erro },
         { title: pedido ? "❌ Role not found" : "❓ Which role?",
           description: [
-            pedido ? `I couldn't identify a role in \`${pedido}\`.` : `\`${PREFIXO}staff ${removendo ? "remove" : "add"} <@role|id|name>\``,
+            pedido ? `I couldn't identify a role in \`${pedido}\`.` : `\`${citarInterno("staff", PREFIXO)} ${removendo ? "remove" : "add"} <@role|id|name>\``,
             "",
             `I accept a **mention**, an **ID** or the role's **name**.`,
-            `E.g.: \`${PREFIXO}staff ${removendo ? "remove" : "add"} Moderator\``,
+            `E.g.: \`${citarInterno("staff", PREFIXO)} ${removendo ? "remove" : "add"} Moderator\``,
+          ].join("\n"),
+          colour: COR.erro },
+        { title: pedido ? "❌ Rol no encontrado" : "❓ ¿Qué rol?",
+          description: [
+            pedido ? `No identifiqué un rol en \`${pedido}\`.` : `\`${citar("staff", "es", PREFIXO)} ${removendo ? "remove" : "add"} <@rol|id|nombre>\``,
+            "",
+            `Acepto **mención**, **ID** o el **nombre** del rol.`,
+            `Ej.: \`${citar("staff", "es", PREFIXO)} ${removendo ? "remove" : "add"} Moderador\``,
           ].join("\n"),
           colour: COR.erro }));
     }
@@ -172,6 +198,12 @@ export async function cmdStaff(message, args, ctx) {
           ? `**${alvo.nome}** no longer counts as staff — neither in the list nor in the moderation commands.`
           : `**${alvo.nome}** wasn't on the list already.`,
         colour: saiu ? COR.mod : COR.aviso,
+      }, {
+        title: saiu ? "👥 Rol quitado del staff" : "👥 Ese rol no estaba en el staff",
+        description: saiu
+          ? `**${alvo.nome}** ya no cuenta como staff — ni en la lista ni en los comandos de moderación.`
+          : `**${alvo.nome}** ya no figuraba en la lista.`,
+        colour: saiu ? COR.mod : COR.aviso,
       }));
     }
 
@@ -180,7 +212,9 @@ export async function cmdStaff(message, args, ctx) {
         { title: "👥 Já está na equipe",
           description: `**${alvo.nome}** já conta como staff.`, colour: COR.aviso },
         { title: "👥 Already on the staff list",
-          description: `**${alvo.nome}** already counts as staff.`, colour: COR.aviso }));
+          description: `**${alvo.nome}** already counts as staff.`, colour: COR.aviso },
+        { title: "👥 Ya está en el staff",
+          description: `**${alvo.nome}** ya cuenta como staff.`, colour: COR.aviso }));
     }
 
     a.cargosStaff.push(alvo.id);
@@ -188,17 +222,25 @@ export async function cmdStaff(message, args, ctx) {
     return sendEmbed(message.channel, tr(ctx, {
       title: "👥 Cargo adicionado à equipe",
       description: [
-        `**${alvo.nome}** agora aparece em \`${PREFIXO}staff\`.`,
+        `**${alvo.nome}** agora aparece em \`${citarInterno("staff", PREFIXO)}\`.`,
         "",
-        `⚠️ Isto **dá acesso aos comandos de moderação** a quem tiver o cargo, mesmo sem a permissão nativa do Stoat — é a mesma lista do \`${PREFIXO}acesso cargo\`.`,
+        `⚠️ Isto **dá acesso aos comandos de moderação** a quem tiver o cargo, mesmo sem a permissão nativa do Stoat — é a mesma lista do \`${citarInterno("acesso.cargo", PREFIXO)}\`.`,
       ].join("\n"),
       colour: COR.mod,
     }, {
       title: "👥 Role added to staff",
       description: [
-        `**${alvo.nome}** now shows up in \`${PREFIXO}staff\`.`,
+        `**${alvo.nome}** now shows up in \`${citarInterno("staff", PREFIXO)}\`.`,
         "",
-        `⚠️ This **grants access to the moderation commands** to anyone with that role, even without Stoat's native permission — it's the same list as \`${PREFIXO}acesso cargo\`.`,
+        `⚠️ This **grants access to the moderation commands** to anyone with that role, even without Stoat's native permission — it's the same list as \`${citarInterno("acesso.cargo", PREFIXO)}\`.`,
+      ].join("\n"),
+      colour: COR.mod,
+    }, {
+      title: "👥 Rol agregado al staff",
+      description: [
+        `**${alvo.nome}** ahora aparece en \`${citar("staff", "es", PREFIXO)}\`.`,
+        "",
+        `⚠️ Esto **da acceso a los comandos de moderación** a quien tenga el rol, aun sin el permiso nativo de Stoat — es la misma lista de \`${citar("acesso.cargo", "es", PREFIXO)}\`.`,
       ].join("\n"),
       colour: COR.mod,
     }));
@@ -208,25 +250,37 @@ export async function cmdStaff(message, args, ctx) {
   return sendEmbed(message.channel, tr(ctx, {
     title: "👥 Equipe",
     description: [
-      `\`${PREFIXO}staff\` — mostra a equipe`,
-      `\`${PREFIXO}staff add <@cargo>\` — marca um cargo como staff`,
-      `\`${PREFIXO}staff remove <@cargo>\` — desmarca`,
-      `\`${PREFIXO}staff titulo <@cargo> <texto>\` — rótulo exibido no lugar do nome`,
-      `\`${PREFIXO}staff limpar\` — esvazia a lista`,
+      `\`${citarInterno("staff", PREFIXO)}\` — mostra a equipe`,
+      `\`${citarInterno("staff.add", PREFIXO)} <@cargo>\` — marca um cargo como staff`,
+      `\`${citarInterno("staff.remove", PREFIXO)} <@cargo>\` — desmarca`,
+      `\`${citarInterno("staff.titulo", PREFIXO)} <@cargo> <texto>\` — rótulo exibido no lugar do nome`,
+      `\`${citarInterno("staff.limpar", PREFIXO)}\` — esvazia a lista`,
       "",
-      `_A ordem é a de adição. É a mesma lista do \`${PREFIXO}acesso cargo\`: quem entra aqui também passa a usar os comandos de moderação._`,
+      `_A ordem é a de adição. É a mesma lista do \`${citarInterno("acesso.cargo", PREFIXO)}\`: quem entra aqui também passa a usar os comandos de moderação._`,
     ].join("\n"),
     colour: COR.info,
   }, {
     title: "👥 Staff",
     description: [
-      `\`${PREFIXO}staff\` — show the team`,
-      `\`${PREFIXO}staff add <@role>\` — mark a role as staff`,
-      `\`${PREFIXO}staff remove <@role>\` — unmark it`,
-      `\`${PREFIXO}staff title <@role> <text>\` — label shown instead of the role name`,
-      `\`${PREFIXO}staff clear\` — empty the list`,
+      `\`${citarInterno("staff", PREFIXO)}\` — show the team`,
+      `\`${citarInterno("staff.add", PREFIXO)} <@role>\` — mark a role as staff`,
+      `\`${citarInterno("staff.remove", PREFIXO)} <@role>\` — unmark it`,
+      `\`${citarInterno("staff.titulo", PREFIXO)} <@role> <text>\` — label shown instead of the role name`,
+      `\`${citarInterno("staff.limpar", PREFIXO)}\` — empty the list`,
       "",
-      `_Order follows insertion. It's the same list as \`${PREFIXO}acesso cargo\`: whoever joins here also gets to use the moderation commands._`,
+      `_Order follows insertion. It's the same list as \`${citarInterno("acesso.cargo", PREFIXO)}\`: whoever joins here also gets to use the moderation commands._`,
+    ].join("\n"),
+    colour: COR.info,
+  }, {
+    title: "👥 Staff",
+    description: [
+      `\`${citar("staff", "es", PREFIXO)}\` — muestra el staff`,
+      `\`${citar("staff.add", "es", PREFIXO)} <@rol>\` — marca un rol como staff`,
+      `\`${citar("staff.remove", "es", PREFIXO)} <@rol>\` — lo desmarca`,
+      `\`${citar("staff.titulo", "es", PREFIXO)} <@rol> <texto>\` — etiqueta que se muestra en lugar del nombre`,
+      `\`${citar("staff.limpar", "es", PREFIXO)}\` — vacía la lista`,
+      "",
+      `_El orden es el de adición. Es la misma lista de \`${citar("acesso.cargo", "es", PREFIXO)}\`: quien entra aquí también pasa a usar los comandos de moderación._`,
     ].join("\n"),
     colour: COR.info,
   }));

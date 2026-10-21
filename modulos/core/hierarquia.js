@@ -41,33 +41,35 @@ export async function podeUsarCargo(server, message, roleId, ctx) {
   const lista = server?.roles;
   const conhecida = typeof lista?.get === "function" ? lista.size > 0 : (lista && Object.keys(lista).length > 0);
   if (conhecida && !cargoDe(server, roleId)) {
-    return { ok: false, pt: "esse cargo não existe neste servidor", en: "that role doesn't exist on this server" };
+    return { ok: false, pt: "esse cargo não existe neste servidor", en: "that role doesn't exist on this server", es: "ese rol no existe en este servidor" };
   }
   if (passaSempre(server, message, ctx)) return { ok: true };
   const rankCargo = rankDoCargo(server, roleId);
   if (rankCargo === null) return { ok: true };   // sem a lista de cargos: o Stoat decide
   const membro = await membroDeQuemPede(server, message);
-  if (!membro) return { ok: false, pt: "não consegui conferir os seus cargos — tente de novo", en: "I couldn't check your roles — try again" };
+  if (!membro) return { ok: false, pt: "não consegui conferir os seus cargos — tente de novo", en: "I couldn't check your roles — try again", es: "no pude comprobar tus roles — inténtalo de nuevo" };
   if (rankDoMembro(server, membro) < rankCargo) return { ok: true };
   return { ok: false,
     pt: `<%${roleId}> está **no mesmo nível ou acima** do seu cargo mais alto — você só pode usar cargos abaixo do seu`,
-    en: `<%${roleId}> is **at or above** your highest role — you can only use roles below yours` };
+    en: `<%${roleId}> is **at or above** your highest role — you can only use roles below yours`,
+    es: `<%${roleId}> está **al mismo nivel o por encima** de tu rol más alto — solo puedes usar roles por debajo del tuyo` };
 }
 
 // Pode agir (expulsar, banir, silenciar) sobre esta pessoa? → { ok } ou { ok:false, pt, en }
 export async function podeAgirSobre(server, message, alvoId, ctx) {
   if (alvoId && server?.ownerId === alvoId && message?.authorId !== alvoId) {
-    return { ok: false, pt: "ninguém age sobre o dono do servidor", en: "nobody can act on the server owner" };
+    return { ok: false, pt: "ninguém age sobre o dono do servidor", en: "nobody can act on the server owner", es: "nadie puede actuar sobre el dueño del servidor" };
   }
   if (passaSempre(server, message, ctx)) return { ok: true };
   const alvo = await server?.fetchMember?.(alvoId)?.catch?.(() => null) ?? null;
   if (!alvo) return { ok: true };   // não é membro (ban por ID de quem já saiu)
   const autor = await membroDeQuemPede(server, message);
-  if (!autor) return { ok: false, pt: "não consegui conferir os seus cargos — tente de novo", en: "I couldn't check your roles — try again" };
+  if (!autor) return { ok: false, pt: "não consegui conferir os seus cargos — tente de novo", en: "I couldn't check your roles — try again", es: "no pude comprobar tus roles — inténtalo de nuevo" };
   if (rankDoMembro(server, autor) < rankDoMembro(server, alvo)) return { ok: true };
   return { ok: false,
     pt: `<@${alvoId}> tem um cargo **no mesmo nível ou acima** do seu`,
-    en: `<@${alvoId}> has a role **at or above** yours` };
+    en: `<@${alvoId}> has a role **at or above** yours`,
+    es: `<@${alvoId}> tiene un rol **al mismo nivel o por encima** del tuyo` };
 }
 
 // ── Editar os cargos de alguém sem tropeçar em cargo apagado ─────────────────

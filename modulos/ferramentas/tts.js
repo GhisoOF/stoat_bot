@@ -1,5 +1,6 @@
 
 import { resolverCanal } from "../core/ids.js";
+import { citar, citarInterno } from "../core/aliases.js";
 import { servidorNaLista } from "../core/env.js";
 import { tr, lingua } from "../core/i18n.js";
 import { chamarApi } from "../core/stoat-api.js";
@@ -202,6 +203,10 @@ export async function aoMensagem(message, ctx) {
           title: "🤫 Too much at once",
           description: `I'll stop speaking for ${seg}s so the call can breathe.\n\n\`${ctx.PREFIXO}tts <text>\` still works normally.`,
           colour: ctx.COR.aviso,
+        }, {
+          title: "🤫 Demasiado a la vez",
+          description: `Voy a dejar de hablar ${seg}s para que la llamada respire.\n\n\`${citar("tts", "es", ctx.PREFIXO)} <texto>\` sigue funcionando con normalidad.`,
+          colour: ctx.COR.aviso,
         })).catch(() => {});
       }
       return false;
@@ -269,6 +274,10 @@ async function executarResgate({ presa, auxPreferida = null, message, ctx, c, se
       title: "🛟 Rescue in progress",
       description: `Stoat records me as already in <#${presa}>. I'll come in through another call and move myself here. Takes about 10–30s.`,
       colour: COR.info,
+    }, {
+      title: "🛟 Rescate en curso",
+      description: `Stoat me tiene registrada como si ya estuviera en <#${presa}>. Voy a entrar por otra llamada y moverme aquí. Tarda unos 10–30s.`,
+      colour: COR.info,
     })).catch(() => {});
   }
 
@@ -278,11 +287,11 @@ async function executarResgate({ presa, auxPreferida = null, message, ctx, c, se
     try {
       const r = await chamar("/entrar", { canalVoz: cand, serverId, servidores: servidoresConhecidos(ctx) });
       aux = cand;
-      ok(`${lang === "en" ? "joined helper call" : "entrei na call auxiliar"} <#${cand}>${r?.jaEstava ? (lang === "en" ? " (was already there)" : " (já estava)") : ""}`);
+      ok(`${tr(ctx, "entrei na call auxiliar", "joined helper call", "entré en la llamada auxiliar")} <#${cand}>${r?.jaEstava ? tr(ctx, " (já estava)", " (was already there)", " (ya estaba)") : ""}`);
       break;
     } catch (e) {
       const m = String(e.message ?? e).replace(/`/g, "");
-      passos.push(`⏭️ <#${cand}>: ${/AlreadyConnected/i.test(m) ? (lang === "en" ? "stuck too" : "presa também") : m.slice(0, 90)}`);
+      passos.push(`⏭️ <#${cand}>: ${/AlreadyConnected/i.test(m) ? tr(ctx, "presa também", "stuck too", "también atascada") : m.slice(0, 90)}`);
     }
   }
   if (!aux) return resultado(false, "auxiliares-presas");
@@ -295,8 +304,8 @@ async function executarResgate({ presa, auxPreferida = null, message, ctx, c, se
     if (!registrada) await new Promise((r) => setTimeout(r, 250));
   }
   passos.push(registrada
-    ? `✅ ${lang === "en" ? "Stoat registered me in the helper call" : "o Stoat me registrou na call auxiliar"}`
-    : `⚠️ ${lang === "en" ? "didn't see myself listed in the helper call after 10s — trying anyway" : "não me vi listada na call auxiliar em 10s — tentando assim mesmo"}`);
+    ? `✅ ${tr(ctx, "o Stoat me registrou na call auxiliar", "Stoat registered me in the helper call", "Stoat me registró en la llamada auxiliar")}`
+    : `⚠️ ${tr(ctx, "não me vi listada na call auxiliar em 10s — tentando assim mesmo", "didn't see myself listed in the helper call after 10s — trying anyway", "no me vi en la lista de la llamada auxiliar en 10s — lo intento igualmente")}`);
 
   // 3. ouvir o evento que traz o token, e pedir o mover
   let ouvir;
@@ -326,14 +335,14 @@ async function executarResgate({ presa, auxPreferida = null, message, ctx, c, se
   let ev;
   try { ev = await tokenDoMover; }
   catch (e) { falha(`token: \`${e.message}\``); return resultado(false, "sem-evento", { aux }); }
-  ok(`${lang === "en" ? "got the token for" : "recebi o token para"} <#${presa}> (node \`${ev.node ?? "?"}\`)`);
+  ok(`${tr(ctx, "recebi o token para", "got the token for", "recibí el token para")} <#${presa}> (node \`${ev.node ?? "?"}\`)`);
 
   // 4. o serviço entra com o token (sai da auxiliar no caminho)
   try {
     await chamar("/entrar-com-token", { canalVoz: presa, token: ev.token, node: ev.node ?? null, serverId });
-    ok(`${lang === "en" ? "connected for real in" : "conectei de verdade em"} <#${presa}>`);
+    ok(`${tr(ctx, "conectei de verdade em", "connected for real in", "me conecté de verdad en")} <#${presa}>`);
   } catch (e) {
-    falha(`${lang === "en" ? "join with token" : "entrada com token"}: \`${String(e.message ?? e).replace(/`/g, "")}\``);
+    falha(`${tr(ctx, "entrada com token", "join with token", "entrada con token")}: \`${String(e.message ?? e).replace(/`/g, "")}\``);
     return resultado(false, "token-join", { aux });
   }
   return resultado(true, null, { aux });
@@ -349,36 +358,42 @@ function relatarResgate(r, { presa, message, ctx, c, lang }) {
     salvarConfig?.();
     filtro.limpar(c.canalTexto ?? null);
     return sendEmbed(message.channel, {
-      title: lang === "en" ? "🔊 I'm in — and already reading" : "🔊 Entrei — e já estou lendo",
+      title: tr(ctx, "🔊 Entrei — e já estou lendo", "🔊 I'm in — and already reading", "🔊 Entré — y ya estoy leyendo"),
       description: [
         ...r.passos, "",
-        lang === "en"
-          ? `Stoat had me recorded as already in <#${presa}>, so I came in through <#${r.aux}> and moved myself here. Reading <#${c.canalTexto}>.\n\n⚠️ Applies to **everyone** who writes here · \`${P}sair\` to leave.`
-          : `O Stoat me registrava como já estando em <#${presa}>, então entrei por <#${r.aux}> e me movi para cá. Lendo <#${c.canalTexto}>.\n\n⚠️ Vale para **todo mundo** que escrever aqui · \`${P}sair\` para eu sair.`,
+        tr(ctx,
+          `O Stoat me registrava como já estando em <#${presa}>, então entrei por <#${r.aux}> e me movi para cá. Lendo <#${c.canalTexto}>.\n\n⚠️ Vale para **todo mundo** que escrever aqui · \`${citarInterno("sair", P)}\` para eu sair.`,
+          `Stoat had me recorded as already in <#${presa}>, so I came in through <#${r.aux}> and moved myself here. Reading <#${c.canalTexto}>.\n\n⚠️ Applies to **everyone** who writes here · \`${citarInterno("sair", P)}\` to leave.`,
+          `Stoat me tenía registrada como si ya estuviera en <#${presa}>, así que entré por <#${r.aux}> y me moví aquí. Leyendo <#${c.canalTexto}>.\n\n⚠️ Vale para **todos** los que escriban aquí · \`${citar("sair", "es", P)}\` para que me vaya.`),
       ].join("\n"), colour: COR.sucesso,
     });
   }
   const dicas = {
-    "sem-auxiliar": lang === "en"
-      ? `The rescue goes through **another call in this server** and I couldn't find one. Tell me which: \`${P}tts resgatar #helper-call\`.`
-      : `O resgate passa por **outra call do mesmo servidor** e não achei nenhuma. Diga qual: \`${P}tts resgatar #call-auxiliar\`.`,
-    "auxiliares-presas": lang === "en"
-      ? `Every helper call I tried is stuck too. Pick one I didn't try: \`${P}tts resgatar #other-call\`.`
-      : `Todas as calls auxiliares que tentei estão presas também. Indique uma que eu não tentei: \`${P}tts resgatar #outra-call\`.`,
-    "not-connected": lang === "en"
-      ? "`NotConnected`: Stoat never recorded my join in the helper call. That's the `participant_joined` webhook not being processed on their side — nothing I can fix from here; try again in a minute."
-      : "`NotConnected`: o Stoat não registrou minha entrada na call auxiliar. É o webhook `participant_joined` não sendo processado do lado deles — não tenho como consertar daqui; tente de novo em um minuto.",
-    "mover": lang === "en" ? `I'll stay in the helper call; \`${P}sair\` drops me.` : `Fico na call auxiliar; \`${P}sair\` me tira.`,
-    "sem-evento": lang === "en"
-      ? `Stoat accepted the move but never sent the \`UserMoveVoiceChannel\` event with the token. \`${P}sair\` and try again.`
-      : `O Stoat aceitou o mover mas não mandou o evento \`UserMoveVoiceChannel\` com o token. \`${P}sair\` e tente de novo.`,
-    "token-join": lang === "en"
-      ? `If the service answered "rota desconhecida", update \`voz-servico/\` on the machine (this needs API version ${VOZ_API_ESPERADA}).`
-      : `Se o serviço respondeu "rota desconhecida", atualize o \`voz-servico/\` na máquina (isto precisa da versão ${VOZ_API_ESPERADA} da API).`,
+    "sem-auxiliar": tr(ctx,
+      `O resgate passa por **outra call do mesmo servidor** e não achei nenhuma. Diga qual: \`${citarInterno("tts.resgatar", P)} #call-auxiliar\`.`,
+      `The rescue goes through **another call in this server** and I couldn't find one. Tell me which: \`${citarInterno("tts.resgatar", P)} #helper-call\`.`,
+      `El rescate pasa por **otra llamada del mismo servidor** y no encontré ninguna. Dime cuál: \`${citar("tts.resgatar", "es", P)} #llamada-auxiliar\`.`),
+    "auxiliares-presas": tr(ctx,
+      `Todas as calls auxiliares que tentei estão presas também. Indique uma que eu não tentei: \`${citarInterno("tts.resgatar", P)} #outra-call\`.`,
+      `Every helper call I tried is stuck too. Pick one I didn't try: \`${citarInterno("tts.resgatar", P)} #other-call\`.`,
+      `Todas las llamadas auxiliares que probé también están atascadas. Indica una que no haya probado: \`${citar("tts.resgatar", "es", P)} #otra-llamada\`.`),
+    "not-connected": tr(ctx,
+      "`NotConnected`: o Stoat não registrou minha entrada na call auxiliar. É o webhook `participant_joined` não sendo processado do lado deles — não tenho como consertar daqui; tente de novo em um minuto.",
+      "`NotConnected`: Stoat never recorded my join in the helper call. That's the `participant_joined` webhook not being processed on their side — nothing I can fix from here; try again in a minute.",
+      "`NotConnected`: Stoat no registró mi entrada en la llamada auxiliar. Es el webhook `participant_joined`, que no se procesa de su lado — no puedo arreglarlo desde aquí; inténtalo de nuevo en un minuto."),
+    "mover": tr(ctx, `Fico na call auxiliar; \`${citarInterno("sair", P)}\` me tira.`, `I'll stay in the helper call; \`${citarInterno("sair", P)}\` drops me.`, `Me quedo en la llamada auxiliar; \`${citar("sair", "es", P)}\` me saca.`),
+    "sem-evento": tr(ctx,
+      `O Stoat aceitou o mover mas não mandou o evento \`UserMoveVoiceChannel\` com o token. \`${citarInterno("sair", P)}\` e tente de novo.`,
+      `Stoat accepted the move but never sent the \`UserMoveVoiceChannel\` event with the token. \`${citarInterno("sair", P)}\` and try again.`,
+      `Stoat aceptó el movimiento pero no envió el evento \`UserMoveVoiceChannel\` con el token. \`${citar("sair", "es", P)}\` e inténtalo de nuevo.`),
+    "token-join": tr(ctx,
+      `Se o serviço respondeu "rota desconhecida", atualize o \`voz-servico/\` na máquina (isto precisa da versão ${VOZ_API_ESPERADA} da API).`,
+      `If the service answered "rota desconhecida", update \`voz-servico/\` on the machine (this needs API version ${VOZ_API_ESPERADA}).`,
+      `Si el servicio respondió "rota desconhecida", actualiza \`voz-servico/\` en la máquina (esto necesita la versión ${VOZ_API_ESPERADA} de la API).`),
     "config": r.dica ?? "",
   };
   return sendEmbed(message.channel, {
-    title: lang === "en" ? "⚠️ Couldn't get into the call" : "⚠️ Não consegui entrar na call",
+    title: tr(ctx, "⚠️ Não consegui entrar na call", "⚠️ Couldn't get into the call", "⚠️ No pude entrar en la llamada"),
     description: [...r.passos, "", dicas[r.motivo] ?? ""].join("\n"),
     colour: COR.aviso,
   });
@@ -396,7 +411,9 @@ export async function cmdTts(message, args, ctx) {
       { title: "🚫 Indisponível aqui",
         description: `A voz da Judy não está habilitada neste servidor.`, colour: COR.aviso },
       { title: "🚫 Unavailable here",
-        description: `Judy's voice isn't enabled on this server.`, colour: COR.aviso }));
+        description: `Judy's voice isn't enabled on this server.`, colour: COR.aviso },
+      { title: "🚫 No disponible aquí",
+        description: `La voz de Judy no está habilitada en este servidor.`, colour: COR.aviso }));
   }
 
   // ── estado (público) ──
@@ -405,42 +422,44 @@ export async function cmdTts(message, args, ctx) {
     try { saude = await chamar("/saude", null, "GET"); }
     catch (e) {
       erroSaude = !VOZ_URL
-        ? (lang === "en" ? "`VOZ_SERVICO_URL` isn't set in the bot's environment" : "`VOZ_SERVICO_URL` não configurada no ambiente do bot")
+        ? tr(ctx, "`VOZ_SERVICO_URL` não configurada no ambiente do bot", "`VOZ_SERVICO_URL` isn't set in the bot's environment", "`VOZ_SERVICO_URL` no está configurada en el entorno del bot")
         : (e?.message ?? String(e));
     }
 
     const linhas = [
-      `**${lang === "en" ? "Enabled" : "Ligado"}:** ${c.ativo ? "🟢" : "🔴"}`,
-      `**${lang === "en" ? "Voice channel" : "Canal de voz"}:** ${c.canalVoz ? `<#${c.canalVoz}>` : "_—_"}`,
-      `**${lang === "en" ? "Broadcast from" : "Transmite de"}:** ${c.canalTexto ? `<#${c.canalTexto}>` : "_—_"}`,
-      `**${lang === "en" ? "Sieve" : "Peneira"}:** ${c.filtro === false ? "🔴" : "🟢"} ${lang === "en"
-        ? `up to ${c.porMinuto ?? filtro.PADROES.porMinuto}/min` : `até ${c.porMinuto ?? filtro.PADROES.porMinuto}/min`}${(() => {
+      `**${tr(ctx, "Ligado", "Enabled", "Activado")}:** ${c.ativo ? "🟢" : "🔴"}`,
+      `**${tr(ctx, "Canal de voz", "Voice channel", "Canal de voz")}:** ${c.canalVoz ? `<#${c.canalVoz}>` : "_—_"}`,
+      `**${tr(ctx, "Transmite de", "Broadcast from", "Transmite desde")}:** ${c.canalTexto ? `<#${c.canalTexto}>` : "_—_"}`,
+      `**${tr(ctx, "Peneira", "Sieve", "Filtro")}:** ${c.filtro === false ? "🔴" : "🟢"} ${tr(ctx,
+        `até ${c.porMinuto ?? filtro.PADROES.porMinuto}/min`, `up to ${c.porMinuto ?? filtro.PADROES.porMinuto}/min`, `hasta ${c.porMinuto ?? filtro.PADROES.porMinuto}/min`)}${(() => {
           const e = c.canalTexto ? filtro.estadoDoCanal(c.canalTexto) : null;
           return e?.silenciado ? ` · 🤫 ${Math.ceil(e.faltamMs / 1000)}s` : "";
-        })()} _(\`${PREFIXO}tts filtro\`)_`,
+        })()} _(\`${tr(ctx, citarInterno("tts.filtro", PREFIXO), citarInterno("tts.filtro", PREFIXO), citar("tts.filtro", "es", PREFIXO))}\`)_`,
       "",
-      `**${lang === "en" ? "Voice service" : "Serviço de voz"}:** ${saude ? "🟢 ok" : `🔴 ${erroSaude}`}`,
+      `**${tr(ctx, "Serviço de voz", "Voice service", "Servicio de voz")}:** ${saude ? "🟢 ok" : `🔴 ${erroSaude}`}`,
     ];
     if (saude) {
       const v = Number(saude.versao ?? 1);
       linhas.push(v < VOZ_API_ESPERADA
-        ? `**${lang === "en" ? "Service version" : "Versão do serviço"}:** ⚠️ **${v}** ${lang === "en"
-            ? `— this bot expects **${VOZ_API_ESPERADA}**. Update \`voz-servico/\` on the machine and restart \`judy-voz\`; until then, commands the old version doesn't know will answer "rota desconhecida".`
-            : `— este bot espera a **${VOZ_API_ESPERADA}**. Atualize o \`voz-servico/\` na máquina e reinicie o \`judy-voz\`; até lá, comandos que a versão antiga não conhece respondem "rota desconhecida".`}`
-        : `**${lang === "en" ? "Service version" : "Versão do serviço"}:** 🟢 ${v}`);
+        ? `**${tr(ctx, "Versão do serviço", "Service version", "Versión del servicio")}:** ⚠️ **${v}** ${tr(ctx,
+            `— este bot espera a **${VOZ_API_ESPERADA}**. Atualize o \`voz-servico/\` na máquina e reinicie o \`judy-voz\`; até lá, comandos que a versão antiga não conhece respondem "rota desconhecida".`,
+            `— this bot expects **${VOZ_API_ESPERADA}**. Update \`voz-servico/\` on the machine and restart \`judy-voz\`; until then, commands the old version doesn't know will answer "rota desconhecida".`,
+            `— este bot espera la **${VOZ_API_ESPERADA}**. Actualiza \`voz-servico/\` en la máquina y reinicia \`judy-voz\`; hasta entonces, los comandos que la versión antigua no conoce responden "rota desconhecida".`)}`
+        : `**${tr(ctx, "Versão do serviço", "Service version", "Versión del servicio")}:** 🟢 ${v}`);
       linhas.push(`**Piper:** ${saude.piper?.ok ? `🟢 ${saude.piper.vozAtual}` : `🔴 ${saude.piper?.erro}`}`);
-      linhas.push(`**${lang === "en" ? "revoice (library)" : "revoice (biblioteca)"}:** ${saude.voz?.pronto
-        ? (lang === "en" ? "🟢 loaded" : "🟢 carregada") : `🔴 ${saude.voz?.erro}`}`);
+      linhas.push(`**${tr(ctx, "revoice (biblioteca)", "revoice (library)", "revoice (biblioteca)")}:** ${saude.voz?.pronto
+        ? tr(ctx, "🟢 carregada", "🟢 loaded", "🟢 cargada") : `🔴 ${saude.voz?.erro}`}`);
       const con = saude.voz?.conexoes ?? [];
-      linhas.push(`**${lang === "en" ? "In calls" : "Em calls"}:** ${con.length
-        ? con.map((x) => `<#${x.canalVoz}> (${x.falas} ${lang === "en" ? "utterances" : "falas"})`).join(", ")
+      linhas.push(`**${tr(ctx, "Em calls", "In calls", "En llamadas")}:** ${con.length
+        ? con.map((x) => `<#${x.canalVoz}> (${x.falas} ${tr(ctx, "falas", "utterances", "frases")})`).join(", ")
         : "_—_"}`);
     }
-    linhas.push("", lang === "en"
-      ? `_Can't join? \`${PREFIXO}tts diagnostico\` says at which step it jams._`
-      : `_Não consegue entrar? \`${PREFIXO}tts diagnostico\` diz em qual etapa trava._`);
+    linhas.push("", tr(ctx,
+      `_Não consegue entrar? \`${citarInterno("tts.diagnostico", PREFIXO)}\` diz em qual etapa trava._`,
+      `_Can't join? \`${citarInterno("tts.diagnostico", PREFIXO)}\` says at which step it jams._`,
+      `_¿No logras entrar? \`${citar("tts.diagnostico", "es", PREFIXO)}\` dice en qué paso se atasca._`));
     return sendEmbed(message.channel, {
-      title: lang === "en" ? "🔊 Voice status" : "🔊 Estado da voz",
+      title: tr(ctx, "🔊 Estado da voz", "🔊 Voice status", "🔊 Estado de la voz"),
       description: linhas.join("\n"),
       colour: saude?.piper?.ok && saude?.voz?.pronto ? COR.sucesso : COR.aviso,
     });
@@ -456,14 +475,18 @@ export async function cmdTts(message, args, ctx) {
         { title: "🚫 Permissão insuficiente",
           description: "Você precisa de **ManageMessages** para rodar o diagnóstico.", colour: COR.erro },
         { title: "🚫 Missing permission",
-          description: "You need **ManageMessages** to run the diagnostics.", colour: COR.erro }));
+          description: "You need **ManageMessages** to run the diagnostics.", colour: COR.erro },
+        { title: "🚫 Permiso insuficiente",
+          description: "Necesitas **ManageMessages** para ejecutar el diagnóstico.", colour: COR.erro }));
     }
     if (!c.canalVoz) {
       return sendEmbed(message.channel, tr(ctx,
         { title: "❌ Não sei em qual call olhar",
-          description: `Mande \`${PREFIXO}entrar\` primeiro (estando numa call) — o diagnóstico examina a call que eu estou usando.`, colour: COR.erro },
+          description: `Mande \`${citarInterno("entrar", PREFIXO)}\` primeiro (estando numa call) — o diagnóstico examina a call que eu estou usando.`, colour: COR.erro },
         { title: "❌ I don't know which call to look at",
-          description: `Send \`${PREFIXO}entrar\` first (while in a call) — the diagnostics examine the call I'm using.`, colour: COR.erro }));
+          description: `Send \`${citarInterno("entrar", PREFIXO)}\` first (while in a call) — the diagnostics examine the call I'm using.`, colour: COR.erro },
+        { title: "❌ No sé qué llamada mirar",
+          description: `Envía \`${citar("entrar", "es", PREFIXO)}\` primero (estando en una llamada) — el diagnóstico examina la llamada que estoy usando.`, colour: COR.erro }));
     }
     let d;
     try { d = await chamar("/diagnostico", { canalVoz: c.canalVoz }); }
@@ -484,7 +507,7 @@ export async function cmdTts(message, args, ctx) {
           "# e reinicie o serviço",
           "```",
           "",
-          `Depois, \`${PREFIXO}tts estado\` deve mostrar **versão ${VOZ_API_ESPERADA}**.`,
+          `Depois, \`${citarInterno("tts.estado", PREFIXO)}\` deve mostrar **versão ${VOZ_API_ESPERADA}**.`,
           "",
           "_Enquanto isso: as correções de entrar/sair também estão nessa pasta, então o timeout que você está vendo continua acontecendo até ela subir._",
         ].join("\n"),
@@ -503,16 +526,36 @@ export async function cmdTts(message, args, ctx) {
           "# then restart the service",
           "```",
           "",
-          `After that, \`${PREFIXO}tts estado\` should show **version ${VOZ_API_ESPERADA}**.`,
+          `After that, \`${citarInterno("tts.estado", PREFIXO)}\` should show **version ${VOZ_API_ESPERADA}**.`,
           "",
           "_Meanwhile: the join/leave fixes live in that same folder, so the timeout you're seeing keeps happening until it goes up._",
         ].join("\n"),
         colour: COR.aviso,
+      }, {
+        title: "⚠️ El servicio de voz está desactualizado",
+        description: [
+          `\`judy-voz\` respondió, pero no conoce \`/diagnostico\` — todavía ejecuta una versión anterior a la ${VOZ_API_ESPERADA}.`,
+          "",
+          "El bot se actualiza con el deploy del contenedor; el servicio de voz **no** — se ejecuta nativo en la máquina y hay que copiarlo y reiniciarlo a mano:",
+          "",
+          "```",
+          "# en la máquina de judy-voz",
+          "cd ~/Downloads/github/voz-servico   # donde viva",
+          "# sustituye los archivos por voz-servico/ del paquete nuevo",
+          "# y reinicia el servicio",
+          "```",
+          "",
+          `Después, \`${citar("tts.estado", "es", PREFIXO)}\` debería mostrar la **versión ${VOZ_API_ESPERADA}**.`,
+          "",
+          "_Mientras tanto: los arreglos de entrar/salir también están en esa carpeta, así que el timeout que ves seguirá ocurriendo hasta que se suba._",
+        ].join("\n"),
+        colour: COR.aviso,
       }) : {
-        title: lang === "en" ? "❌ The voice service didn't answer" : "❌ O serviço de voz não respondeu",
-        description: `\`${motivo}\`\n\n${lang === "en"
-          ? "The problem is before the call: `judy-voz` is down or unreachable. It needs a hand on the machine."
-          : "O problema é antes da call: o `judy-voz` está fora do ar ou inalcançável. Precisa de mão na máquina."}`,
+        title: tr(ctx, "❌ O serviço de voz não respondeu", "❌ The voice service didn't answer", "❌ El servicio de voz no respondió"),
+        description: `\`${motivo}\`\n\n${tr(ctx,
+          "O problema é antes da call: o `judy-voz` está fora do ar ou inalcançável. Precisa de mão na máquina.",
+          "The problem is before the call: `judy-voz` is down or unreachable. It needs a hand on the machine.",
+          "El problema está antes de la llamada: `judy-voz` está caído o inalcanzable. Hay que intervenir en la máquina.")}`,
         colour: COR.erro });
     }
 
@@ -522,7 +565,7 @@ export async function cmdTts(message, args, ctx) {
 
     const marcos = d.marcos ?? d.ultimaFalha?.marcos ?? [];
     const linhaMarcos = marcos.length
-      ? `\n**${lang === "en" ? "Last attempt, step by step" : "Última tentativa, passo a passo"}**\n`
+      ? `\n**${tr(ctx, "Última tentativa, passo a passo", "Last attempt, step by step", "Último intento, paso a paso")}**\n`
         + marcos.map((m) => `\`${String(m.ms).padStart(6)}ms\` ${m.nome}`).join("\n")
       : "";
 
@@ -532,57 +575,67 @@ export async function cmdTts(message, args, ctx) {
     if (d.flagNode !== "ok") {
       veredito = tr(ctx,
         "⚠️ **O serviço está sem a flag do Node.** Suba o `judy-voz` com `--no-experimental-global-navigator` — sem ela a entrada falha sempre.",
-        "⚠️ **The service is missing the Node flag.** Start `judy-voz` with `--no-experimental-global-navigator` — without it joining always fails.");
+        "⚠️ **The service is missing the Node flag.** Start `judy-voz` with `--no-experimental-global-navigator` — without it joining always fails.",
+        "⚠️ **Al servicio le falta la flag de Node.** Arranca `judy-voz` con `--no-experimental-global-navigator` — sin ella la entrada falla siempre.");
     } else if (api?.ok === false) {
       veredito = tr(ctx,
         "🔎 **Nem a autenticação passa.** Não é a call: é o token ou o alcance da API. Confira se o `BOT_TOKEN` no `.env` do `judy-voz` é o **mesmo** do bot, e se a máquina alcança a API do Stoat.",
-        "🔎 **Authentication itself fails.** It's not the call: it's the token or reaching the API. Check that `BOT_TOKEN` in `judy-voz`'s `.env` is the **same** as the bot's, and that the machine can reach Stoat's API.");
+        "🔎 **Authentication itself fails.** It's not the call: it's the token or reaching the API. Check that `BOT_TOKEN` in `judy-voz`'s `.env` is the **same** as the bot's, and that the machine can reach Stoat's API.",
+        "🔎 **Ni siquiera pasa la autenticación.** No es la llamada: es el token o el acceso a la API. Comprueba que el `BOT_TOKEN` del `.env` de `judy-voz` sea el **mismo** que el del bot, y que la máquina llegue a la API de Stoat.");
     } else if (canal?.ok === false) {
       veredito = tr(ctx,
-        `🔎 **Não consigo nem ler esse canal.** Ele pode ter sido apagado, ou o bot não o enxerga. Entre na call e mande \`${PREFIXO}entrar\` por lá — eu passo a usar esse canal.`,
-        `🔎 **I can't even read that channel.** It may have been deleted, or the bot can't see it. Join the call and send \`${PREFIXO}entrar\` there — I'll switch to that channel.`);
+        `🔎 **Não consigo nem ler esse canal.** Ele pode ter sido apagado, ou o bot não o enxerga. Entre na call e mande \`${citarInterno("entrar", PREFIXO)}\` por lá — eu passo a usar esse canal.`,
+        `🔎 **I can't even read that channel.** It may have been deleted, or the bot can't see it. Join the call and send \`${citarInterno("entrar", PREFIXO)}\` there — I'll switch to that channel.`,
+        `🔎 **Ni siquiera puedo leer ese canal.** Puede que lo hayan borrado, o que el bot no lo vea. Entra en la llamada y envía \`${citar("entrar", "es", PREFIXO)}\` desde allí — pasaré a usar ese canal.`);
     } else if (/UnknownNode/i.test(String(jc?.detalhe ?? ""))) {
       veredito = tr(ctx,
         "🔎 **`UnknownNode`: a call ainda não existe.** O Stoat só sabe em qual servidor de voz uma call está depois que alguém a inicia; antes disso, quem entra precisa **dizer** qual usar. Eu passei a informar isso sozinha ao abrir a sala — se este aviso apareceu, a API não me anunciou nenhum node de voz (veja a etapa `node` acima).\n\nContorno imediato: **entre na call primeiro** e me chame depois.",
-        "🔎 **`UnknownNode`: the call doesn't exist yet.** Stoat only knows which voice server a call lives on after someone starts it; before that, whoever joins has to **say** which one to use. I now provide that myself when opening the room — if you're seeing this, the API announced no voice node at all (see the `node` step above).\n\nImmediate workaround: **join the call first**, then call me.");
+        "🔎 **`UnknownNode`: the call doesn't exist yet.** Stoat only knows which voice server a call lives on after someone starts it; before that, whoever joins has to **say** which one to use. I now provide that myself when opening the room — if you're seeing this, the API announced no voice node at all (see the `node` step above).\n\nImmediate workaround: **join the call first**, then call me.",
+        "🔎 **`UnknownNode`: la llamada todavía no existe.** Stoat solo sabe en qué servidor de voz está una llamada después de que alguien la inicia; antes de eso, quien entra tiene que **decir** cuál usar. Ahora lo indico yo sola al abrir la sala — si ves este aviso, la API no me anunció ningún node de voz (mira el paso `node` arriba).\n\nSolución inmediata: **entra en la llamada primero** y llámame después.");
     } else if (/AlreadyConnected/i.test(String(jc?.detalhe ?? ""))) {
       veredito = tr(ctx,
-        `🔎 **\`AlreadyConnected\`: o Stoat me registra como já estando nesta call.** Não é permissão nem rede: é um registro preso no lado dele, sobra de uma entrada que travou no meio.\n\n\`${PREFIXO}entrar\` já resolve isso sozinho: entra por outra call e se move para esta — o mover emite um token sem conferir o registro preso. _(Remover pelo cliente ou kick passam pela mesma chave que o destravar, então não adiantam quando ele não adianta.)_`,
-        `🔎 **\`AlreadyConnected\`: Stoat records me as already in this call.** Not permission, not network: a stuck record on their side, left over from a join that jammed halfway.\n\n\`${PREFIXO}entrar\` already handles this by itself: it comes in through another call and moves me here — the move issues a token without checking the stuck record. _(Removing me in the client or kicking go through the same key as destravar, so they won't help when it doesn't.)_`);
+        `🔎 **\`AlreadyConnected\`: o Stoat me registra como já estando nesta call.** Não é permissão nem rede: é um registro preso no lado dele, sobra de uma entrada que travou no meio.\n\n\`${citarInterno("entrar", PREFIXO)}\` já resolve isso sozinho: entra por outra call e se move para esta — o mover emite um token sem conferir o registro preso. _(Remover pelo cliente ou kick passam pela mesma chave que o destravar, então não adiantam quando ele não adianta.)_`,
+        `🔎 **\`AlreadyConnected\`: Stoat records me as already in this call.** Not permission, not network: a stuck record on their side, left over from a join that jammed halfway.\n\n\`${citarInterno("entrar", PREFIXO)}\` already handles this by itself: it comes in through another call and moves me here — the move issues a token without checking the stuck record. _(Removing me in the client or kicking go through the same key as destravar, so they won't help when it doesn't.)_`,
+        `🔎 **\`AlreadyConnected\`: Stoat me tiene registrada como si ya estuviera en esta llamada.** No es permiso ni red: es un registro atascado de su lado, resto de una entrada que se trabó a mitad.\n\n\`${citar("entrar", "es", PREFIXO)}\` ya lo resuelve solo: entra por otra llamada y se mueve a esta — el movimiento emite un token sin revisar el registro atascado. _(Sacarme desde el cliente o con kick pasa por la misma clave que destravar, así que no sirve cuando eso no sirve.)_`);
     } else if (jc?.ok === false) {
       const html = /HTML/i.test(String(jc.detalhe ?? ""));
       veredito = html
         ? tr(ctx,
           "🔎 **A resposta do `join_call` veio em HTML, não JSON** — quem respondeu foi um proxy/CDN no caminho, não a API. Isso NÃO quer dizer que o Stoat recusou a entrada: quer dizer que a requisição não chegou até ele. Suspeite do endereço da API (`STOAT_API`) ou de algo interceptando a saída da máquina.",
-          "🔎 **`join_call` answered with HTML, not JSON** — a proxy/CDN on the way replied, not the API. This does NOT mean Stoat refused the join: it means the request never reached it. Suspect the API address (`STOAT_API`) or something intercepting the machine's outbound traffic.")
+          "🔎 **`join_call` answered with HTML, not JSON** — a proxy/CDN on the way replied, not the API. This does NOT mean Stoat refused the join: it means the request never reached it. Suspect the API address (`STOAT_API`) or something intercepting the machine's outbound traffic.",
+          "🔎 **La respuesta de `join_call` llegó en HTML, no en JSON** — respondió un proxy/CDN en el camino, no la API. Esto NO significa que Stoat rechazó la entrada: significa que la petición nunca le llegó. Sospecha de la dirección de la API (`STOAT_API`) o de algo que intercepta el tráfico de salida de la máquina.")
         : tr(ctx,
           "🔎 **O Stoat recusou o `join_call`.** Veja o HTTP e o tipo acima: `403` é falta de **Connect**/**Speak** para o cargo do bot no canal de voz, `404` é canal inexistente, `409`/`400` com JSON costuma ser o servidor achando que ainda estou na call.",
-          "🔎 **Stoat refused `join_call`.** Check the HTTP and type above: `403` is missing **Connect**/**Speak** for the bot's role on the voice channel, `404` is a non-existent channel, `409`/`400` with JSON usually means the server still thinks I'm in the call.");
+          "🔎 **Stoat refused `join_call`.** Check the HTTP and type above: `403` is missing **Connect**/**Speak** for the bot's role on the voice channel, `404` is a non-existent channel, `409`/`400` with JSON usually means the server still thinks I'm in the call.",
+          "🔎 **Stoat rechazó el `join_call`.** Mira el HTTP y el tipo arriba: `403` es que falta **Connect**/**Speak** para el rol del bot en el canal de voz, `404` es un canal inexistente, `409`/`400` con JSON suele ser el servidor creyendo que aún estoy en la llamada.");
     } else if (tcp?.ok === false) {
       veredito = tr(ctx,
         "🔎 **A API autoriza, mas não alcanço o LiveKit.** É rede da máquina do serviço: firewall, DNS ou rota de saída. Se nem o TCP abre, o UDP também não vai.",
-        "🔎 **The API authorises, but I can't reach LiveKit.** It's the service machine's network: firewall, DNS or outbound routing. If TCP won't even open, UDP won't either.");
+        "🔎 **The API authorises, but I can't reach LiveKit.** It's the service machine's network: firewall, DNS or outbound routing. If TCP won't even open, UDP won't either.",
+        "🔎 **La API autoriza, pero no llego a LiveKit.** Es la red de la máquina del servicio: firewall, DNS o ruta de salida. Si ni el TCP abre, el UDP tampoco.");
     } else if (jc?.ok && tcp?.ok) {
       veredito = tr(ctx,
-        `🔎 **Todas as etapas passam neste teste, mas entrar trava mesmo assim.** Então a trava está no que este teste não cobre: a mídia do LiveKit, que anda por **UDP**. Libere UDP de saída na máquina do \`judy-voz\` e confira a MTU da Tailscale.\n\nPara ver por dentro: suba o serviço com \`VOZ_DEBUG=1\`, tente \`${PREFIXO}entrar\` e olhe o log — com o debug ligado o LiveKit passa a contar o que faz durante os 20s.`,
-        `🔎 **Every step passes in this test, yet joining still jams.** So the jam is in what this test doesn't cover: LiveKit media, which rides on **UDP**. Allow outbound UDP on the \`judy-voz\` machine and check the Tailscale MTU.\n\nTo see inside: start the service with \`VOZ_DEBUG=1\`, try \`${PREFIXO}entrar\` and read the log — with debug on, LiveKit narrates what it does during those 20s.`);
+        `🔎 **Todas as etapas passam neste teste, mas entrar trava mesmo assim.** Então a trava está no que este teste não cobre: a mídia do LiveKit, que anda por **UDP**. Libere UDP de saída na máquina do \`judy-voz\` e confira a MTU da Tailscale.\n\nPara ver por dentro: suba o serviço com \`VOZ_DEBUG=1\`, tente \`${citarInterno("entrar", PREFIXO)}\` e olhe o log — com o debug ligado o LiveKit passa a contar o que faz durante os 20s.`,
+        `🔎 **Every step passes in this test, yet joining still jams.** So the jam is in what this test doesn't cover: LiveKit media, which rides on **UDP**. Allow outbound UDP on the \`judy-voz\` machine and check the Tailscale MTU.\n\nTo see inside: start the service with \`VOZ_DEBUG=1\`, try \`${citarInterno("entrar", PREFIXO)}\` and read the log — with debug on, LiveKit narrates what it does during those 20s.`,
+        `🔎 **Todos los pasos pasan en esta prueba, pero entrar se atasca igualmente.** Entonces el atasco está en lo que esta prueba no cubre: los medios de LiveKit, que van por **UDP**. Permite UDP de salida en la máquina de \`judy-voz\` y revisa la MTU de Tailscale.\n\nPara verlo por dentro: arranca el servicio con \`VOZ_DEBUG=1\`, prueba \`${citar("entrar", "es", PREFIXO)}\` y mira el log — con el debug activado, LiveKit cuenta lo que hace durante esos 20s.`);
     } else {
-      veredito = tr(ctx, "🔎 Resultado inconclusivo — veja as etapas acima.", "🔎 Inconclusive — see the steps above.");
+      veredito = tr(ctx, "🔎 Resultado inconclusivo — veja as etapas acima.", "🔎 Inconclusive — see the steps above.", "🔎 Resultado no concluyente — mira los pasos de arriba.");
     }
     if (!d.debug) {
       veredito += tr(ctx,
         "\n\n_Para o log contar mais: suba o `judy-voz` com `VOZ_DEBUG=1`._",
-        "\n\n_For a more talkative log: start `judy-voz` with `VOZ_DEBUG=1`._");
+        "\n\n_For a more talkative log: start `judy-voz` with `VOZ_DEBUG=1`._",
+        "\n\n_Para que el log cuente más: arranca `judy-voz` con `VOZ_DEBUG=1`._");
     }
 
     return sendEmbed(message.channel, {
-      title: lang === "en" ? "🩺 Voice diagnostics" : "🩺 Diagnóstico da voz",
+      title: tr(ctx, "🩺 Diagnóstico da voz", "🩺 Voice diagnostics", "🩺 Diagnóstico de la voz"),
       description: [
         ...linhas,
         linhaMarcos,
         "",
-        `${lang === "en" ? "**In the call now**" : "**Na call agora**"}: ${d.naCall ? "🟢" : "🔴"}`
-          + (d.entrandoAgora ? (lang === "en" ? " · entering right now" : " · entrando neste momento") : ""),
+        `${tr(ctx, "**Na call agora**", "**In the call now**", "**En la llamada ahora**")}: ${d.naCall ? "🟢" : "🔴"}`
+          + (d.entrandoAgora ? tr(ctx, " · entrando neste momento", " · entering right now", " · entrando en este momento") : ""),
         "",
         veredito,
       ].filter(Boolean).join("\n"),
@@ -595,14 +648,15 @@ export async function cmdTts(message, args, ctx) {
     if (!ehStaff) {
       return sendEmbed(message.channel, tr(ctx,
         { title: "🚫 Permissão insuficiente", description: "Você precisa de **ManageMessages**.", colour: COR.erro },
-        { title: "🚫 Missing permission", description: "You need **ManageMessages**.", colour: COR.erro }));
+        { title: "🚫 Missing permission", description: "You need **ManageMessages**.", colour: COR.erro },
+        { title: "🚫 Permiso insuficiente", description: "Necesitas **ManageMessages**.", colour: COR.erro }));
     }
     const alvo = c.canalVoz ?? message.channelId;
     let r;
     try { r = await chamar("/destravar", { canalVoz: alvo, serverId, servidores: servidoresConhecidos(ctx) }); }
     catch (e) {
       return sendEmbed(message.channel, {
-        title: lang === "en" ? "❌ The service didn't answer" : "❌ O serviço não respondeu",
+        title: tr(ctx, "❌ O serviço não respondeu", "❌ The service didn't answer", "❌ El servicio no respondió"),
         description: `\`${String(e.message ?? e).replace(/`/g, "")}\``, colour: COR.erro });
     }
     const linhas = (r?.passos ?? r?.resultados ?? []).map((t) =>
@@ -612,16 +666,16 @@ export async function cmdTts(message, args, ctx) {
       description: [
         ...linhas, "",
         r?.ok
-          ? `Pedi a desconexão e o Stoat aceitou. Agora \`${PREFIXO}entrar\` **estando na call** — a entrada é que diz se funcionou.`
+          ? `Pedi a desconexão e o Stoat aceitou. Agora \`${citarInterno("entrar", PREFIXO)}\` **estando na call** — a entrada é que diz se funcionou.`
           : [
             "O Stoat aceitou o pedido (HTTP 200) mas o registro **continua lá** — eu conferi tentando entrar de novo.",
             "",
             "Por quê: essa rota só manda o LiveKit me remover, e quem apaga o registro é o aviso que o LiveKit dispara depois. Se eu já não estava lá (queda de energia, processo morto), não há o que remover e aviso nenhum é disparado.",
             "",
             "**As saídas, da menos à mais drástica:**",
-            `1. Use **outra call** — o Stoat só me bloqueia neste canal; em outro eu entro normalmente. \`${PREFIXO}entrar\` lá.`,
+            `1. Use **outra call** — o Stoat só me bloqueia neste canal; em outro eu entro normalmente. \`${citarInterno("entrar", PREFIXO)}\` lá.`,
             "2. Espere: a sala pode expirar sozinha e liberar.",
-            `3. **\`${PREFIXO}tts resgatar\`** — entro numa call auxiliar, me movo para esta pelo PATCH do Stoat (que emite token sem conferir o registro preso) e conecto de verdade. _(Kick não resolve: \`member_remove\` lê a mesma chave que esta rota.)_`,
+            `3. **\`${citarInterno("tts.resgatar", PREFIXO)}\`** — entro numa call auxiliar, me movo para esta pelo PATCH do Stoat (que emite token sem conferir o registro preso) e conecto de verdade. _(Kick não resolve: \`member_remove\` lê a mesma chave que esta rota.)_`,
           ].join("\n"),
       ].join("\n"), colour: r?.ok ? COR.sucesso : COR.aviso,
     }, {
@@ -629,16 +683,33 @@ export async function cmdTts(message, args, ctx) {
       description: [
         ...linhas, "",
         r?.ok
-          ? `I asked to be disconnected and Stoat accepted. Now \`${PREFIXO}entrar\` **while in the call** — the join itself will tell.`
+          ? `I asked to be disconnected and Stoat accepted. Now \`${citarInterno("entrar", PREFIXO)}\` **while in the call** — the join itself will tell.`
           : [
             "Stoat accepted the request (HTTP 200) but the record **is still there** — I checked by trying to join again.",
             "",
             "Why: that route only tells LiveKit to remove me, and what deletes the record is the notice LiveKit fires afterwards. If I wasn't there anymore (power cut, dead process), there's nothing to remove and no notice is fired.",
             "",
             "**Ways out, least to most drastic:**",
-            `1. Use **another call** — Stoat only blocks me on this channel; elsewhere I join fine. \`${PREFIXO}entrar\` there.`,
+            `1. Use **another call** — Stoat only blocks me on this channel; elsewhere I join fine. \`${citarInterno("entrar", PREFIXO)}\` there.`,
             "2. Wait: the room may expire on its own and free it.",
-            `3. **\`${PREFIXO}tts resgatar\`** — I join a helper call, move myself here through Stoat's PATCH (which issues a token without checking the stuck record) and connect for real. _(Kicking doesn't help: \`member_remove\` reads the same key this route does.)_`,
+            `3. **\`${citarInterno("tts.resgatar", PREFIXO)}\`** — I join a helper call, move myself here through Stoat's PATCH (which issues a token without checking the stuck record) and connect for real. _(Kicking doesn't help: \`member_remove\` reads the same key this route does.)_`,
+          ].join("\n"),
+      ].join("\n"), colour: r?.ok ? COR.sucesso : COR.aviso,
+    }, {
+      title: r?.ok ? "🔓 Desconexión solicitada" : "⚠️ Sigue atascada",
+      description: [
+        ...linhas, "",
+        r?.ok
+          ? `Pedí la desconexión y Stoat la aceptó. Ahora \`${citar("entrar", "es", PREFIXO)}\` **estando en la llamada** — la entrada es la que dirá si funcionó.`
+          : [
+            "Stoat aceptó la petición (HTTP 200) pero el registro **sigue ahí** — lo comprobé intentando entrar de nuevo.",
+            "",
+            "Por qué: esa ruta solo le pide a LiveKit que me saque, y lo que borra el registro es el aviso que LiveKit dispara después. Si yo ya no estaba (corte de luz, proceso muerto), no hay nada que sacar y no se dispara ningún aviso.",
+            "",
+            "**Las salidas, de la menos a la más drástica:**",
+            `1. Usa **otra llamada** — Stoat solo me bloquea en este canal; en otro entro sin problema. \`${citar("entrar", "es", PREFIXO)}\` allí.`,
+            "2. Espera: la sala puede caducar sola y liberarse.",
+            `3. **\`${citar("tts.resgatar", "es", PREFIXO)}\`** — entro en una llamada auxiliar, me muevo a esta con el PATCH de Stoat (que emite un token sin revisar el registro atascado) y me conecto de verdad. _(El kick no lo resuelve: \`member_remove\` lee la misma clave que esta ruta.)_`,
           ].join("\n"),
       ].join("\n"), colour: r?.ok ? COR.sucesso : COR.aviso,
     }));
@@ -652,7 +723,8 @@ export async function cmdTts(message, args, ctx) {
     if (resto && !auxArg) {
       return sendEmbed(message.channel, tr(ctx,
         { title: "❓ Não achei essa call", description: `Não reconheci \`${resto}\` como um canal deste servidor.`, colour: COR.aviso },
-        { title: "❓ Couldn't find that call", description: `I didn't recognise \`${resto}\` as a channel in this server.`, colour: COR.aviso }));
+        { title: "❓ Couldn't find that call", description: `I didn't recognise \`${resto}\` as a channel in this server.`, colour: COR.aviso },
+        { title: "❓ No encontré esa llamada", description: `No reconocí \`${resto}\` como un canal de este servidor.`, colour: COR.aviso }));
     }
     const r = await executarResgate({ presa, auxPreferida: auxArg, message, ctx, c, server, lang, anunciar: true });
     return relatarResgate(r, { presa, message, ctx, c, lang });
@@ -664,7 +736,9 @@ export async function cmdTts(message, args, ctx) {
         { title: "🚫 Permissão insuficiente",
           description: "Você precisa de **ManageMessages** para reiniciar a voz.", colour: COR.erro },
         { title: "🚫 Missing permission",
-          description: "You need **ManageMessages** to restart the voice service.", colour: COR.erro }));
+          description: "You need **ManageMessages** to restart the voice service.", colour: COR.erro },
+        { title: "🚫 Permiso insuficiente",
+          description: "Necesitas **ManageMessages** para reiniciar la voz.", colour: COR.erro }));
     }
     filtro.limpar(c.canalTexto ?? null);
     try {
@@ -672,20 +746,26 @@ export async function cmdTts(message, args, ctx) {
       return sendEmbed(message.channel, tr(ctx,
         { title: r?.ok ? "✅ Voz reiniciada" : "⚠️ Reiniciei, mas com problema",
           description: r?.ok
-            ? `Saí de todas as calls e recriei a conexão.\n\nAgora: \`${PREFIXO}entrar\``
-            : `\`${r?.erro}\`\n\nVeja \`${PREFIXO}tts estado\`.`,
+            ? `Saí de todas as calls e recriei a conexão.\n\nAgora: \`${citarInterno("entrar", PREFIXO)}\``
+            : `\`${r?.erro}\`\n\nVeja \`${citarInterno("tts.estado", PREFIXO)}\`.`,
           colour: r?.ok ? COR.sucesso : COR.aviso },
         { title: r?.ok ? "✅ Voice restarted" : "⚠️ Restarted, but with a problem",
           description: r?.ok
-            ? `I left every call and rebuilt the connection.\n\nNow: \`${PREFIXO}entrar\``
-            : `\`${r?.erro}\`\n\nSee \`${PREFIXO}tts estado\`.`,
+            ? `I left every call and rebuilt the connection.\n\nNow: \`${citarInterno("entrar", PREFIXO)}\``
+            : `\`${r?.erro}\`\n\nSee \`${citarInterno("tts.estado", PREFIXO)}\`.`,
+          colour: r?.ok ? COR.sucesso : COR.aviso },
+        { title: r?.ok ? "✅ Voz reiniciada" : "⚠️ Reinicié, pero con un problema",
+          description: r?.ok
+            ? `Salí de todas las llamadas y recreé la conexión.\n\nAhora: \`${citar("entrar", "es", PREFIXO)}\``
+            : `\`${r?.erro}\`\n\nMira \`${citar("tts.estado", "es", PREFIXO)}\`.`,
           colour: r?.ok ? COR.sucesso : COR.aviso }));
     } catch (e) {
       return sendEmbed(message.channel, {
-        title: lang === "en" ? "❌ Couldn't restart" : "❌ Não consegui reiniciar",
-        description: `\`${e.message}\`\n\n${lang === "en"
-          ? "The voice service itself may be down — it needs a hand on the machine."
-          : "O serviço de voz pode estar fora do ar — aí precisa de mão na máquina."}`,
+        title: tr(ctx, "❌ Não consegui reiniciar", "❌ Couldn't restart", "❌ No pude reiniciar"),
+        description: `\`${e.message}\`\n\n${tr(ctx,
+          "O serviço de voz pode estar fora do ar — aí precisa de mão na máquina.",
+          "The voice service itself may be down — it needs a hand on the machine.",
+          "Puede que el servicio de voz esté caído — entonces hay que intervenir en la máquina.")}`,
         colour: COR.erro });
     }
   }
@@ -697,13 +777,14 @@ export async function cmdTts(message, args, ctx) {
       const alvo = args.slice(2).join(" ");
       if (!alvo) {
         return sendEmbed(message.channel, tr(ctx,
-          { title: "❌ Falta o texto", description: `Uso: \`${PREFIXO}tts filtro teste <texto>\``, colour: COR.erro },
-          { title: "❌ Missing text", description: `Usage: \`${PREFIXO}tts filtro teste <text>\``, colour: COR.erro }));
+          { title: "❌ Falta o texto", description: `Uso: \`${citarInterno("tts.filtro.teste", PREFIXO)} <texto>\``, colour: COR.erro },
+          { title: "❌ Missing text", description: `Usage: \`${citarInterno("tts.filtro.teste", PREFIXO)} <text>\``, colour: COR.erro },
+          { title: "❌ Falta el texto", description: `Uso: \`${citar("tts.filtro.teste", "es", PREFIXO)} <texto>\``, colour: COR.erro }));
       }
       const v = filtro.avaliar(alvo);
       return sendEmbed(message.channel, {
-        title: v.falar ? (lang === "en" ? "🔊 Would be spoken" : "🔊 Seria falado") : (lang === "en" ? "🔇 Would be ignored" : "🔇 Seria ignorado"),
-        description: `\`${alvo.slice(0, 200)}\`\n\n**${lang === "en" ? "Reason" : "Motivo"}:** \`${v.motivo}\``,
+        title: v.falar ? tr(ctx, "🔊 Seria falado", "🔊 Would be spoken", "🔊 Se diría en voz alta") : tr(ctx, "🔇 Seria ignorado", "🔇 Would be ignored", "🔇 Se ignoraría"),
+        description: `\`${alvo.slice(0, 200)}\`\n\n**${tr(ctx, "Motivo", "Reason", "Motivo")}:** \`${v.motivo}\``,
         colour: v.falar ? COR.sucesso : COR.aviso,
       });
     }
@@ -723,8 +804,8 @@ export async function cmdTts(message, args, ctx) {
           "",
           "_Risada (`kkkk`, `rsrs`, `hahaha`) passa de propósito._",
           "",
-          `\`${PREFIXO}tts filtro teste <texto>\` — ver o que aconteceria com uma frase`,
-          `\`${PREFIXO}tts filtro on|off\` · \`${PREFIXO}tts filtro porminuto <n>\` *(ManageMessages)*`,
+          `\`${citarInterno("tts.filtro.teste", PREFIXO)} <texto>\` — ver o que aconteceria com uma frase`,
+          `\`${citarInterno("tts.filtro", PREFIXO)} on|off\` · \`${citarInterno("tts.filtro.porminuto", PREFIXO)} <n>\` *(ManageMessages)*`,
         ].filter(Boolean).join("\n"),
         colour: COR.info,
       }, {
@@ -741,8 +822,26 @@ export async function cmdTts(message, args, ctx) {
           "",
           "_Laughter (`kkkk`, `rsrs`, `hahaha`) passes on purpose._",
           "",
-          `\`${PREFIXO}tts filtro teste <text>\` — see what would happen to a sentence`,
-          `\`${PREFIXO}tts filtro on|off\` · \`${PREFIXO}tts filtro porminuto <n>\` *(ManageMessages)*`,
+          `\`${citarInterno("tts.filtro.teste", PREFIXO)} <text>\` — see what would happen to a sentence`,
+          `\`${citarInterno("tts.filtro", PREFIXO)} on|off\` · \`${citarInterno("tts.filtro.porminuto", PREFIXO)} <n>\` *(ManageMessages)*`,
+        ].filter(Boolean).join("\n"),
+        colour: COR.info,
+      }, {
+        title: "🧹 Filtro de la transmisión",
+        description: [
+          `**Estado:** ${c.filtro === false ? "🔴 desactivado" : "🟢 activado"}`,
+          `**Tope por minuto en el canal:** ${c.porMinuto ?? filtro.PADROES.porMinuto}`,
+          est ? `**Ahora:** ${est.noMinuto} frase(s) en el último minuto${est.silenciado ? ` · 🤫 en silencio ${Math.ceil(est.faltamMs / 1000)}s más` : ""}` : null,
+          "",
+          "Ignoro los mensajes que son **ruido por su forma**, no por su contenido:",
+          "• letra repetida (`renaaaaaa…`) · bloque repetido (`lalalala`)",
+          "• poca variedad de caracteres (`9?99?999?`) · solo puntuación o emoji",
+          "• 1 carácter suelto · muro de texto (más de 600 caracteres)",
+          "",
+          "_La risa (`kkkk`, `rsrs`, `hahaha`) pasa a propósito._",
+          "",
+          `\`${citar("tts.filtro.teste", "es", PREFIXO)} <texto>\` — ver qué pasaría con una frase`,
+          `\`${citar("tts.filtro", "es", PREFIXO)} on|off\` · \`${citar("tts.filtro.porminuto", "es", PREFIXO)} <n>\` *(ManageMessages)*`,
         ].filter(Boolean).join("\n"),
         colour: COR.info,
       }));
@@ -752,7 +851,9 @@ export async function cmdTts(message, args, ctx) {
         { title: "🚫 Permissão insuficiente",
           description: "Você precisa de **ManageMessages** para mexer na peneira.", colour: COR.erro },
         { title: "🚫 Missing permission",
-          description: "You need **ManageMessages** to change the sieve.", colour: COR.erro }));
+          description: "You need **ManageMessages** to change the sieve.", colour: COR.erro },
+        { title: "🚫 Permiso insuficiente",
+          description: "Necesitas **ManageMessages** para cambiar el filtro.", colour: COR.erro }));
     }
     if (acao === "on" || acao === "off") {
       c.filtro = acao === "on"; salvarConfig?.();
@@ -764,24 +865,31 @@ export async function cmdTts(message, args, ctx) {
         { title: c.filtro ? "✅ Sieve on" : "🔴 Sieve off",
           description: c.filtro ? "I'll skip noise on the broadcast again."
             : "⚠️ I'll speak **everything** written in the broadcast channel, walls of repeated text included.",
+          colour: c.filtro ? COR.sucesso : COR.aviso },
+        { title: c.filtro ? "✅ Filtro activado" : "🔴 Filtro desactivado",
+          description: c.filtro ? "Vuelvo a ignorar el ruido en la transmisión."
+            : "⚠️ Voy a decir **todo** lo que se escriba en el canal de transmisión, incluidos los muros de texto repetido.",
           colour: c.filtro ? COR.sucesso : COR.aviso }));
     }
     if (["porminuto", "perminute", "teto", "cap"].includes(acao)) {
       const n = Number(args[2]);
       if (!Number.isFinite(n) || n < 1 || n > 60) {
         return sendEmbed(message.channel, tr(ctx,
-          { title: "❌ Valor inválido", description: `Uso: \`${PREFIXO}tts filtro porminuto <1 a 60>\``, colour: COR.erro },
-          { title: "❌ Invalid value", description: `Usage: \`${PREFIXO}tts filtro porminuto <1 to 60>\``, colour: COR.erro }));
+          { title: "❌ Valor inválido", description: `Uso: \`${citarInterno("tts.filtro.porminuto", PREFIXO)} <1 a 60>\``, colour: COR.erro },
+          { title: "❌ Invalid value", description: `Usage: \`${citarInterno("tts.filtro.porminuto", PREFIXO)} <1 to 60>\``, colour: COR.erro },
+          { title: "❌ Valor no válido", description: `Uso: \`${citar("tts.filtro.porminuto", "es", PREFIXO)} <1 a 60>\``, colour: COR.erro }));
       }
       c.porMinuto = Math.round(n); salvarConfig?.();
       filtro.limpar(c.canalTexto ?? null);
       return sendEmbed(message.channel, tr(ctx,
         { title: "✅ Teto ajustado", description: `Até **${c.porMinuto}** fala(s) por minuto vindas da transmissão.`, colour: COR.sucesso },
-        { title: "✅ Cap adjusted", description: `Up to **${c.porMinuto}** utterance(s) per minute from the broadcast.`, colour: COR.sucesso }));
+        { title: "✅ Cap adjusted", description: `Up to **${c.porMinuto}** utterance(s) per minute from the broadcast.`, colour: COR.sucesso },
+        { title: "✅ Tope ajustado", description: `Hasta **${c.porMinuto}** frase(s) por minuto desde la transmisión.`, colour: COR.sucesso }));
     }
     return sendEmbed(message.channel, tr(ctx,
-      { title: "❌ Não conheço essa opção", description: `\`${PREFIXO}tts filtro [status|on|off|porminuto <n>|teste <texto>]\``, colour: COR.erro },
-      { title: "❌ Unknown option", description: `\`${PREFIXO}tts filtro [status|on|off|porminuto <n>|teste <text>]\``, colour: COR.erro }));
+      { title: "❌ Não conheço essa opção", description: `\`${citarInterno("tts.filtro", PREFIXO)} [status|on|off|porminuto <n>|teste <texto>]\``, colour: COR.erro },
+      { title: "❌ Unknown option", description: `\`${citarInterno("tts.filtro", PREFIXO)} [status|on|off|porminuto <n>|teste <text>]\``, colour: COR.erro },
+      { title: "❌ No conozco esa opción", description: `\`${citar("tts.filtro", "es", PREFIXO)} [status|on|off|perminute <n>|test <texto>]\``, colour: COR.erro }));
   }
 
   // Entrar/sair na call é SÓ `&entrar`/`&sair` (que chegam aqui com
@@ -793,7 +901,8 @@ export async function cmdTts(message, args, ctx) {
     if (faltam > 0 && !ehStaff) {
       return sendEmbed(message.channel, tr(ctx,
         { title: "⏳ Calma lá", description: `Espere ${Math.ceil(faltam / 1000)}s.`, colour: COR.aviso },
-        { title: "⏳ Slow down", description: `Wait ${Math.ceil(faltam / 1000)}s.`, colour: COR.aviso }));
+        { title: "⏳ Slow down", description: `Wait ${Math.ceil(faltam / 1000)}s.`, colour: COR.aviso },
+        { title: "⏳ Con calma", description: `Espera ${Math.ceil(faltam / 1000)}s.`, colour: COR.aviso }));
     }
     ultimaFala.set(chaveAcao, Date.now());
 
@@ -808,6 +917,9 @@ export async function cmdTts(message, args, ctx) {
             colour: COR.aviso },
           { title: "🔒 Voice disabled on this server",
             description: `Voice reading only runs on servers listed in \`TTS_SERVIDORES\` in the bot's \`.env\`.\nTo enable it here, whoever runs the bot adds this id to the list:\n\`${serverId}\`\n(comma-separated ids; restart the bot afterwards)`,
+            colour: COR.aviso },
+          { title: "🔒 Voz desactivada en este servidor",
+            description: `La lectura por voz solo funciona en los servidores listados en \`TTS_SERVIDORES\` del \`.env\` del bot.\nPara habilitarla aquí, quien administra el bot añade este id a la lista:\n\`${serverId}\`\n(varios ids separados por comas; reinicia el bot después)`,
             colour: COR.aviso }));
       }
       const server = await getServer(message).catch(() => null);
@@ -815,7 +927,10 @@ export async function cmdTts(message, args, ctx) {
 
       if (!achado.id) {
         const opcoes = achado.opcoes?.length
-          ? "\n\n" + achado.opcoes.map((v) => `• <#${v.id ?? v._id}> — \`${PREFIXO}entrar ${v.name ?? v.id}\``).join("\n")
+          ? "\n\n" + achado.opcoes.map((v) => `• <#${v.id ?? v._id}> — \`${citarInterno("entrar", PREFIXO)} ${v.name ?? v.id}\``).join("\n")
+          : "";
+        const opcoesEs = achado.opcoes?.length
+          ? "\n\n" + achado.opcoes.map((v) => `• <#${v.id ?? v._id}> — \`${citar("entrar", "es", PREFIXO)} ${v.name ?? v.id}\``).join("\n")
           : "";
         return sendEmbed(message.channel, tr(ctx, {
           title: achado.naoAchou ? "❓ Não achei essa call" : "❓ Em qual call?",
@@ -827,16 +942,21 @@ export async function cmdTts(message, args, ctx) {
           description: `${achado.naoAchou ? `\`${achado.naoAchou}\` isn't a call on this server.` : "Join a call and type `" + PREFIXO + "entrar` from any channel — I'll come to you."}${
             opcoes ? `\n\nThe calls I found:${opcoes}` : ""}`,
           colour: COR.aviso,
+        }, {
+          title: achado.naoAchou ? "❓ No encontré esa llamada" : "❓ ¿En qué llamada?",
+          description: `${achado.naoAchou ? `\`${achado.naoAchou}\` no es una llamada de este servidor.` : "Entra en una llamada y escribe `" + citar("entrar", "es", PREFIXO) + "` desde cualquier canal — yo voy contigo."}${
+            opcoesEs ? `\n\nLas llamadas que encontré:${opcoesEs}` : ""}`,
+          colour: COR.aviso,
         }));
       }
 
       const vinhaDeOutra = !!c.canalVoz && c.canalVoz !== achado.id;
       const mudou = [];
       if (!c.ativo) c.ativo = true;
-      if (c.canalVoz !== achado.id) { c.canalVoz = achado.id; mudou.push(lang === "en" ? "the call" : "a call"); }
+      if (c.canalVoz !== achado.id) { c.canalVoz = achado.id; mudou.push(tr(ctx, "a call", "the call", "la llamada")); }
       if (c.canalTexto !== message.channelId) {
         c.canalTexto = message.channelId;
-        mudou.push(lang === "en" ? "the channel I read" : "o canal que eu leio");
+        mudou.push(tr(ctx, "o canal que eu leio", "the channel I read", "el canal que leo"));
       }
       salvarConfig?.();
 
@@ -850,10 +970,11 @@ export async function cmdTts(message, args, ctx) {
           return relatarResgate(r, { presa: c.canalVoz, message, ctx, c, lang });
         }
         return sendEmbed(message.channel, {
-          title: lang === "en" ? "❌ Couldn't join" : "❌ Não consegui entrar",
-          description: `\`${motivo}\`\n\n${lang === "en"
-            ? `**Make sure you're already in the call** before calling me — joining an empty call is where it usually jams.\n\nFind out where: \`${PREFIXO}tts diagnostico\``
-            : `**Entre na call antes de me chamar** — entrar numa call vazia é onde costuma travar.\n\nDescubra onde: \`${PREFIXO}tts diagnostico\``}`,
+          title: tr(ctx, "❌ Não consegui entrar", "❌ Couldn't join", "❌ No pude entrar"),
+          description: `\`${motivo}\`\n\n${tr(ctx,
+            `**Entre na call antes de me chamar** — entrar numa call vazia é onde costuma travar.\n\nDescubra onde: \`${citarInterno("tts.diagnostico", PREFIXO)}\``,
+            `**Make sure you're already in the call** before calling me — joining an empty call is where it usually jams.\n\nFind out where: \`${citarInterno("tts.diagnostico", PREFIXO)}\``,
+            `**Entra en la llamada antes de llamarme** — entrar en una llamada vacía es donde suele atascarse.\n\nAverigua dónde: \`${citar("tts.diagnostico", "es", PREFIXO)}\``)}`,
           colour: COR.erro });
       }
 
@@ -865,8 +986,8 @@ export async function cmdTts(message, args, ctx) {
           "",
           "⚠️ Vale para **todo mundo** que escrever aqui.",
           "",
-          `\`${PREFIXO}sair\` — saio e paro de ler`,
-          `\`${PREFIXO}tts filtro\` — o que eu ignoro (repetição, parede de texto…)`,
+          `\`${citarInterno("sair", PREFIXO)}\` — saio e paro de ler`,
+          `\`${citarInterno("tts.filtro", PREFIXO)}\` — o que eu ignoro (repetição, parede de texto…)`,
           mudou.length
             ? `\n_Escolhi sozinha: ${mudou.join(" · ")}._`
             : "",
@@ -880,10 +1001,25 @@ export async function cmdTts(message, args, ctx) {
           "",
           "⚠️ That applies to **everyone** writing here.",
           "",
-          `\`${PREFIXO}sair\` — I leave and stop reading`,
-          `\`${PREFIXO}tts filtro\` — what I skip (repetition, walls of text…)`,
+          `\`${citarInterno("sair", PREFIXO)}\` — I leave and stop reading`,
+          `\`${citarInterno("tts.filtro", PREFIXO)}\` — what I skip (repetition, walls of text…)`,
           mudou.length
             ? `\n_I picked on my own: ${mudou.join(" · ")}._`
+            : "",
+        ].filter(Boolean).join("\n"),
+        colour: COR.sucesso,
+      }, {
+        title: vinhaDeOutra ? "🔊 Me vine aquí y ya estoy leyendo" : "🔊 Entré y ya estoy leyendo",
+        description: [
+          vinhaDeOutra ? `Salí de la llamada anterior y vine a <#${c.canalVoz}>.` : null,
+          `Estoy en <#${c.canalVoz}> y **digo todo lo que se escriba** en <#${c.canalTexto}>.`,
+          "",
+          "⚠️ Vale para **todos** los que escriban aquí.",
+          "",
+          `\`${citar("sair", "es", PREFIXO)}\` — salgo y dejo de leer`,
+          `\`${citar("tts.filtro", "es", PREFIXO)}\` — lo que ignoro (repetición, muros de texto…)`,
+          mudou.length
+            ? `\n_Elegí yo sola: ${mudou.join(" · ")}._`
             : "",
         ].filter(Boolean).join("\n"),
         colour: COR.sucesso,
@@ -900,7 +1036,7 @@ export async function cmdTts(message, args, ctx) {
       description: [
         lia ? "Parei de ler as mensagens também." : "Até a próxima.",
         "",
-        `Para voltar: \`${PREFIXO}entrar\` estando numa call.`,
+        `Para voltar: \`${citarInterno("entrar", PREFIXO)}\` estando numa call.`,
       ].join("\n"),
       colour: COR.sucesso,
     }, {
@@ -908,7 +1044,15 @@ export async function cmdTts(message, args, ctx) {
       description: [
         lia ? "I stopped reading the messages as well." : "See you.",
         "",
-        `To come back: \`${PREFIXO}entrar\` while in a call.`,
+        `To come back: \`${citarInterno("entrar", PREFIXO)}\` while in a call.`,
+      ].join("\n"),
+      colour: COR.sucesso,
+    }, {
+      title: "👋 Salí de la llamada",
+      description: [
+        lia ? "También dejé de leer los mensajes." : "Hasta la próxima.",
+        "",
+        `Para volver: \`${citar("entrar", "es", PREFIXO)}\` estando en una llamada.`,
       ].join("\n"),
       colour: COR.sucesso,
     }));
@@ -923,24 +1067,35 @@ export async function cmdTts(message, args, ctx) {
       return sendEmbed(message.channel, tr(ctx, {
         title: "📖 Dicionário da fala",
         description: [
-          `**Embutidas:** ${c.expandir === false ? "🔴 desligadas" : `🟢 ${Object.keys(abrev.PADRAO).length}`} _(\`${PREFIXO}tts dicionario padrao on|off\`)_`,
+          `**Embutidas:** ${c.expandir === false ? "🔴 desligadas" : `🟢 ${Object.keys(abrev.PADRAO).length}`} _(\`${citarInterno("tts.dicionario.padrao", PREFIXO)} on|off\`)_`,
           `**Deste servidor:** ${entradas.length}`,
           entradas.length ? "\n" + entradas.map(([k, v]) => `\`${k}\` → ${v}`).join(" · ") : "",
           "",
-          `\`${PREFIXO}tts dicionario add <abrev> <texto>\` — adiciona`,
-          `\`${PREFIXO}tts dicionario remove <abrev>\` — tira`,
-          `\`${PREFIXO}tts dicionario teste <frase>\` — mostra como sairia falado`,
+          `\`${citarInterno("tts.dicionario", PREFIXO)} add <abrev> <texto>\` — adiciona`,
+          `\`${citarInterno("tts.dicionario", PREFIXO)} remove <abrev>\` — tira`,
+          `\`${citarInterno("tts.dicionario.teste", PREFIXO)} <frase>\` — mostra como sairia falado`,
         ].filter(Boolean).join("\n"), colour: COR.info,
       }, {
         title: "📖 Speech dictionary",
         description: [
-          `**Built-in:** ${c.expandir === false ? "🔴 off" : `🟢 ${Object.keys(abrev.PADRAO).length}`} _(\`${PREFIXO}tts dicionario padrao on|off\`)_`,
+          `**Built-in:** ${c.expandir === false ? "🔴 off" : `🟢 ${Object.keys(abrev.PADRAO).length}`} _(\`${citarInterno("tts.dicionario.padrao", PREFIXO)} on|off\`)_`,
           `**This server's:** ${entradas.length}`,
           entradas.length ? "\n" + entradas.map(([k, v]) => `\`${k}\` → ${v}`).join(" · ") : "",
           "",
-          `\`${PREFIXO}tts dicionario add <abbrev> <text>\` — add`,
-          `\`${PREFIXO}tts dicionario remove <abbrev>\` — remove`,
-          `\`${PREFIXO}tts dicionario teste <phrase>\` — show how it would be spoken`,
+          `\`${citarInterno("tts.dicionario", PREFIXO)} add <abbrev> <text>\` — add`,
+          `\`${citarInterno("tts.dicionario", PREFIXO)} remove <abbrev>\` — remove`,
+          `\`${citarInterno("tts.dicionario.teste", PREFIXO)} <phrase>\` — show how it would be spoken`,
+        ].filter(Boolean).join("\n"), colour: COR.info,
+      }, {
+        title: "📖 Diccionario del habla",
+        description: [
+          `**Integradas:** ${c.expandir === false ? "🔴 desactivadas" : `🟢 ${Object.keys(abrev.PADRAO).length}`} _(\`${citar("tts.dicionario.padrao", "es", PREFIXO)} on|off\`)_`,
+          `**De este servidor:** ${entradas.length}`,
+          entradas.length ? "\n" + entradas.map(([k, v]) => `\`${k}\` → ${v}`).join(" · ") : "",
+          "",
+          `\`${citar("tts.dicionario", "es", PREFIXO)} add <abrev> <texto>\` — añade`,
+          `\`${citar("tts.dicionario", "es", PREFIXO)} remove <abrev>\` — quita`,
+          `\`${citar("tts.dicionario.teste", "es", PREFIXO)} <frase>\` — muestra cómo se diría en voz alta`,
         ].filter(Boolean).join("\n"), colour: COR.info,
       }));
     };
@@ -950,39 +1105,42 @@ export async function cmdTts(message, args, ctx) {
       const frase = args.slice(2).join(" ").trim();
       if (!frase) {
         return sendEmbed(message.channel, tr(ctx,
-          { title: "❓ Testar o quê?", description: `\`${PREFIXO}tts dicionario teste vc n vem hj?\``, colour: COR.aviso },
-          { title: "❓ Test what?", description: `\`${PREFIXO}tts dicionario teste vc n vem hj?\``, colour: COR.aviso }));
+          { title: "❓ Testar o quê?", description: `\`${citarInterno("tts.dicionario.teste", PREFIXO)} vc n vem hj?\``, colour: COR.aviso },
+          { title: "❓ Test what?", description: `\`${citarInterno("tts.dicionario.teste", PREFIXO)} vc n vem hj?\``, colour: COR.aviso },
+          { title: "❓ ¿Probar qué?", description: `\`${citar("tts.dicionario.teste", "es", PREFIXO)} vc n vem hj?\``, colour: COR.aviso }));
       }
       const saida = abrev.expandir(frase, proprias, c.expandir !== false);
       return sendEmbed(message.channel, {
-        title: lang === "en" ? "🗣️ How it would be spoken" : "🗣️ Como sairia falado",
+        title: tr(ctx, "🗣️ Como sairia falado", "🗣️ How it would be spoken", "🗣️ Cómo se diría en voz alta"),
         description: `\`${frase.slice(0, 200)}\`\n↓\n**${saida.slice(0, 400)}**${
-          saida === frase ? `\n\n_${lang === "en" ? "nothing changed — no abbreviation matched" : "nada mudou — nenhuma abreviação bateu"}_` : ""}`,
+          saida === frase ? `\n\n_${tr(ctx, "nada mudou — nenhuma abreviação bateu", "nothing changed — no abbreviation matched", "nada cambió — ninguna abreviatura coincidió")}_` : ""}`,
         colour: COR.info });
     }
 
     if (!ehStaff) {
       return sendEmbed(message.channel, tr(ctx,
-        { title: "🚫 Permissão insuficiente", description: `Ver o dicionário é livre; mudar precisa de **ManageMessages**.\n\n\`${PREFIXO}tts dicionario\` mostra o que está valendo.`, colour: COR.erro },
-        { title: "🚫 Missing permission", description: `Viewing the dictionary is open; changing it needs **ManageMessages**.\n\n\`${PREFIXO}tts dicionario\` shows what's in effect.`, colour: COR.erro }));
+        { title: "🚫 Permissão insuficiente", description: `Ver o dicionário é livre; mudar precisa de **ManageMessages**.\n\n\`${citarInterno("tts.dicionario", PREFIXO)}\` mostra o que está valendo.`, colour: COR.erro },
+        { title: "🚫 Missing permission", description: `Viewing the dictionary is open; changing it needs **ManageMessages**.\n\n\`${citarInterno("tts.dicionario", PREFIXO)}\` shows what's in effect.`, colour: COR.erro },
+        { title: "🚫 Permiso insuficiente", description: `Ver el diccionario es libre; cambiarlo requiere **ManageMessages**.\n\n\`${citar("tts.dicionario", "es", PREFIXO)}\` muestra lo que está vigente.`, colour: COR.erro }));
     }
 
     if (["padrao", "padrão", "default", "embutidas", "builtin"].includes(acao)) {
       const v = (args[2] ?? "").toLowerCase();
       if (!["on", "off", "ligar", "desligar"].includes(v)) {
         return sendEmbed(message.channel, tr(ctx,
-          { title: "❓ Ligar ou desligar?", description: `\`${PREFIXO}tts dicionario padrao on\` ou \`off\` — vale para as ${Object.keys(abrev.PADRAO).length} abreviações embutidas. As deste servidor continuam valendo de qualquer jeito.`, colour: COR.aviso },
-          { title: "❓ On or off?", description: `\`${PREFIXO}tts dicionario padrao on\` or \`off\` — applies to the ${Object.keys(abrev.PADRAO).length} built-in abbreviations. This server's own entries keep working either way.`, colour: COR.aviso }));
+          { title: "❓ Ligar ou desligar?", description: `\`${citarInterno("tts.dicionario.padrao", PREFIXO)} on\` ou \`off\` — vale para as ${Object.keys(abrev.PADRAO).length} abreviações embutidas. As deste servidor continuam valendo de qualquer jeito.`, colour: COR.aviso },
+          { title: "❓ On or off?", description: `\`${citarInterno("tts.dicionario.padrao", PREFIXO)} on\` or \`off\` — applies to the ${Object.keys(abrev.PADRAO).length} built-in abbreviations. This server's own entries keep working either way.`, colour: COR.aviso },
+          { title: "❓ ¿Activar o desactivar?", description: `\`${citar("tts.dicionario.padrao", "es", PREFIXO)} on\` u \`off\` — vale para las ${Object.keys(abrev.PADRAO).length} abreviaturas integradas. Las de este servidor siguen valiendo de todos modos.`, colour: COR.aviso }));
       }
       c.expandir = ["on", "ligar"].includes(v);
       salvarConfig?.();
       return sendEmbed(message.channel, {
         title: c.expandir
-          ? (lang === "en" ? "🟢 Built-in abbreviations on" : "🟢 Abreviações embutidas ligadas")
-          : (lang === "en" ? "🔴 Built-in abbreviations off" : "🔴 Abreviações embutidas desligadas"),
+          ? tr(ctx, "🟢 Abreviações embutidas ligadas", "🟢 Built-in abbreviations on", "🟢 Abreviaturas integradas activadas")
+          : tr(ctx, "🔴 Abreviações embutidas desligadas", "🔴 Built-in abbreviations off", "🔴 Abreviaturas integradas desactivadas"),
         description: c.expandir
-          ? (lang === "en" ? `\`vc n vem hj\` → **você não vem hoje**` : `\`vc n vem hj\` → **você não vem hoje**`)
-          : (lang === "en" ? "Only this server's own entries apply now." : "Agora só valem as entradas deste servidor."),
+          ? tr(ctx, `\`vc n vem hj\` → **você não vem hoje**`, `\`vc n vem hj\` → **você não vem hoje**`, `\`vc n vem hj\` → **você não vem hoje**`)
+          : tr(ctx, "Agora só valem as entradas deste servidor.", "Only this server's own entries apply now.", "Ahora solo valen las entradas de este servidor."),
         colour: COR.sucesso });
     }
 
@@ -991,18 +1149,21 @@ export async function cmdTts(message, args, ctx) {
       const valor = args.slice(3).join(" ").trim();
       if (!chave || !valor) {
         return sendEmbed(message.channel, tr(ctx,
-          { title: "❓ Faltou o quê e por quê", description: `\`${PREFIXO}tts dicionario add vish vixi\` — a abreviação primeiro, o texto falado depois.`, colour: COR.aviso },
-          { title: "❓ Missing what and with what", description: `\`${PREFIXO}tts dicionario add vish vixi\` — abbreviation first, spoken text after.`, colour: COR.aviso }));
+          { title: "❓ Faltou o quê e por quê", description: `\`${citarInterno("tts.dicionario", PREFIXO)} add vish vixi\` — a abreviação primeiro, o texto falado depois.`, colour: COR.aviso },
+          { title: "❓ Missing what and with what", description: `\`${citarInterno("tts.dicionario", PREFIXO)} add vish vixi\` — abbreviation first, spoken text after.`, colour: COR.aviso },
+          { title: "❓ Falta qué y por qué", description: `\`${citar("tts.dicionario", "es", PREFIXO)} add vish vixi\` — primero la abreviatura, después el texto hablado.`, colour: COR.aviso }));
       }
       if (/\s/.test(chave)) {
         return sendEmbed(message.channel, tr(ctx,
           { title: "❌ A abreviação é uma palavra só", description: "Ela é trocada palavra por palavra, então `de boa` nunca casaria. Use uma palavra só do lado esquerdo — o direito pode ter quantas quiser.", colour: COR.erro },
-          { title: "❌ The abbreviation must be a single word", description: "It's replaced word by word, so `de boa` would never match. Use one word on the left — the right side can have as many as you like.", colour: COR.erro }));
+          { title: "❌ The abbreviation must be a single word", description: "It's replaced word by word, so `de boa` would never match. Use one word on the left — the right side can have as many as you like.", colour: COR.erro },
+          { title: "❌ La abreviatura es una sola palabra", description: "Se reemplaza palabra por palabra, así que `de boa` nunca coincidiría. Usa una sola palabra a la izquierda — la derecha puede tener las que quieras.", colour: COR.erro }));
       }
       if (Object.keys(proprias).length >= 200 && !(chave in proprias)) {
         return sendEmbed(message.channel, tr(ctx,
-          { title: "❌ Dicionário cheio", description: `São 200 entradas no máximo. \`${PREFIXO}tts dicionario remove <abrev>\` abre espaço.`, colour: COR.erro },
-          { title: "❌ Dictionary full", description: `200 entries max. \`${PREFIXO}tts dicionario remove <abbrev>\` frees a slot.`, colour: COR.erro }));
+          { title: "❌ Dicionário cheio", description: `São 200 entradas no máximo. \`${citarInterno("tts.dicionario", PREFIXO)} remove <abrev>\` abre espaço.`, colour: COR.erro },
+          { title: "❌ Dictionary full", description: `200 entries max. \`${citarInterno("tts.dicionario", PREFIXO)} remove <abbrev>\` frees a slot.`, colour: COR.erro },
+          { title: "❌ Diccionario lleno", description: `Son 200 entradas como máximo. \`${citar("tts.dicionario", "es", PREFIXO)} remove <abrev>\` libera espacio.`, colour: COR.erro }));
       }
       const antes = proprias[chave];
       proprias[chave] = valor.slice(0, 120);
@@ -1010,9 +1171,9 @@ export async function cmdTts(message, args, ctx) {
       salvarConfig?.();
       const exemplo = abrev.expandir(chave, proprias, c.expandir !== false);
       return sendEmbed(message.channel, {
-        title: lang === "en" ? "✅ Added to the dictionary" : "✅ Guardei no dicionário",
-        description: `\`${chave}\` → **${exemplo}**${antes ? `\n\n_${lang === "en" ? "was" : "antes era"}: ${antes}_` : ""}${
-          chave in abrev.PADRAO ? `\n\n_${lang === "en" ? "this overrides the built-in entry" : "isto sobrescreve a entrada embutida"}_` : ""}`,
+        title: tr(ctx, "✅ Guardei no dicionário", "✅ Added to the dictionary", "✅ Guardado en el diccionario"),
+        description: `\`${chave}\` → **${exemplo}**${antes ? `\n\n_${tr(ctx, "antes era", "was", "antes era")}: ${antes}_` : ""}${
+          chave in abrev.PADRAO ? `\n\n_${tr(ctx, "isto sobrescreve a entrada embutida", "this overrides the built-in entry", "esto sobrescribe la entrada integrada")}_` : ""}`,
         colour: COR.sucesso });
     }
 
@@ -1020,16 +1181,18 @@ export async function cmdTts(message, args, ctx) {
       const chave = (args[2] ?? "").toLowerCase();
       if (!chave || !(chave in proprias)) {
         return sendEmbed(message.channel, tr(ctx,
-          { title: "❓ Não achei essa entrada", description: `\`${PREFIXO}tts dicionario\` lista o que este servidor tem.${
-            chave in abrev.PADRAO ? `\n\n\`${chave}\` é embutida: para anular só ela, \`${PREFIXO}tts dicionario add ${chave} ${chave}\`.` : ""}`, colour: COR.aviso },
-          { title: "❓ No such entry", description: `\`${PREFIXO}tts dicionario\` lists this server's entries.${
-            chave in abrev.PADRAO ? `\n\n\`${chave}\` is built in: to cancel just that one, \`${PREFIXO}tts dicionario add ${chave} ${chave}\`.` : ""}`, colour: COR.aviso }));
+          { title: "❓ Não achei essa entrada", description: `\`${citarInterno("tts.dicionario", PREFIXO)}\` lista o que este servidor tem.${
+            chave in abrev.PADRAO ? `\n\n\`${chave}\` é embutida: para anular só ela, \`${citarInterno("tts.dicionario", PREFIXO)} add ${chave} ${chave}\`.` : ""}`, colour: COR.aviso },
+          { title: "❓ No such entry", description: `\`${citarInterno("tts.dicionario", PREFIXO)}\` lists this server's entries.${
+            chave in abrev.PADRAO ? `\n\n\`${chave}\` is built in: to cancel just that one, \`${citarInterno("tts.dicionario", PREFIXO)} add ${chave} ${chave}\`.` : ""}`, colour: COR.aviso },
+          { title: "❓ No encontré esa entrada", description: `\`${citar("tts.dicionario", "es", PREFIXO)}\` lista lo que tiene este servidor.${
+            chave in abrev.PADRAO ? `\n\n\`${chave}\` es integrada: para anular solo esa, \`${citar("tts.dicionario", "es", PREFIXO)} add ${chave} ${chave}\`.` : ""}`, colour: COR.aviso }));
       }
       delete proprias[chave];
       c.dicionario = proprias;
       salvarConfig?.();
       return sendEmbed(message.channel, {
-        title: lang === "en" ? "🗑️ Removed" : "🗑️ Tirei do dicionário",
+        title: tr(ctx, "🗑️ Tirei do dicionário", "🗑️ Removed", "🗑️ Quitado del diccionario"),
         description: `\`${chave}\``, colour: COR.sucesso });
     }
 
@@ -1042,23 +1205,27 @@ export async function cmdTts(message, args, ctx) {
     if (!["on", "off", "ligar", "desligar"].includes(v)) {
       return sendEmbed(message.channel, tr(ctx,
         { title: "🗣️ Anúncio de quem falou",
-          description: `Agora: ${c.anunciarNome === false ? "🔴 **off** — leio só a mensagem" : "🟢 **on** — leio \\\"Fulano disse: …\\\""}\n\n\`${PREFIXO}tts nomes on|off\``,
+          description: `Agora: ${c.anunciarNome === false ? "🔴 **off** — leio só a mensagem" : "🟢 **on** — leio \\\"Fulano disse: …\\\""}\n\n\`${citarInterno("tts.nomes", PREFIXO)} on|off\``,
           colour: COR.info },
         { title: "🗣️ Announcing who spoke",
-          description: `Currently: ${c.anunciarNome === false ? "🔴 **off** — I read the message only" : "🟢 **on** — I read \\\"So-and-so said: …\\\""}\n\n\`${PREFIXO}tts nomes on|off\``,
+          description: `Currently: ${c.anunciarNome === false ? "🔴 **off** — I read the message only" : "🟢 **on** — I read \\\"So-and-so said: …\\\""}\n\n\`${citarInterno("tts.nomes", PREFIXO)} on|off\``,
+          colour: COR.info },
+        { title: "🗣️ Anuncio de quién habló",
+          description: `Ahora: ${c.anunciarNome === false ? "🔴 **off** — leo solo el mensaje" : "🟢 **on** — leo \\\"Fulano disse: …\\\""}\n\n\`${citar("tts.nomes", "es", PREFIXO)} on|off\``,
           colour: COR.info }));
     }
     if (!ehStaff) {
       return sendEmbed(message.channel, tr(ctx,
         { title: "🚫 Permissão insuficiente", description: "Você precisa de **ManageMessages**.", colour: COR.erro },
-        { title: "🚫 Missing permission", description: "You need **ManageMessages**.", colour: COR.erro }));
+        { title: "🚫 Missing permission", description: "You need **ManageMessages**.", colour: COR.erro },
+        { title: "🚫 Permiso insuficiente", description: "Necesitas **ManageMessages**.", colour: COR.erro }));
     }
     c.anunciarNome = ["on", "ligar"].includes(v);
     salvarConfig?.();
     return sendEmbed(message.channel, {
       title: c.anunciarNome
-        ? (lang === "en" ? "🟢 I'll announce who spoke" : "🟢 Vou anunciar quem falou")
-        : (lang === "en" ? "🔴 I'll read the message only" : "🔴 Vou ler só a mensagem"),
+        ? tr(ctx, "🟢 Vou anunciar quem falou", "🟢 I'll announce who spoke", "🟢 Voy a anunciar quién habló")
+        : tr(ctx, "🔴 Vou ler só a mensagem", "🔴 I'll read the message only", "🔴 Voy a leer solo el mensaje"),
       colour: COR.sucesso });
   }
 
@@ -1067,30 +1234,35 @@ export async function cmdTts(message, args, ctx) {
     if (!resto) {
       return sendEmbed(message.channel, tr(ctx,
         { title: "⏳ Espera entre falas",
-          description: `Agora: **${Math.round((c.cooldown ?? COOLDOWN_MS) / 1000)}s** por pessoa.\n\n\`${PREFIXO}tts cooldown <segundos>\` — \`0\` desliga.\n_A equipe não passa por ele. O teto por minuto do canal é outro: \`${PREFIXO}tts filtro\`._`,
+          description: `Agora: **${Math.round((c.cooldown ?? COOLDOWN_MS) / 1000)}s** por pessoa.\n\n\`${citarInterno("tts.cooldown", PREFIXO)} <segundos>\` — \`0\` desliga.\n_A equipe não passa por ele. O teto por minuto do canal é outro: \`${citarInterno("tts.filtro", PREFIXO)}\`._`,
           colour: COR.info },
         { title: "⏳ Wait between messages",
-          description: `Currently: **${Math.round((c.cooldown ?? COOLDOWN_MS) / 1000)}s** per person.\n\n\`${PREFIXO}tts cooldown <seconds>\` — \`0\` turns it off.\n_Staff isn't subject to it. The per-minute channel cap is separate: \`${PREFIXO}tts filtro\`._`,
+          description: `Currently: **${Math.round((c.cooldown ?? COOLDOWN_MS) / 1000)}s** per person.\n\n\`${citarInterno("tts.cooldown", PREFIXO)} <seconds>\` — \`0\` turns it off.\n_Staff isn't subject to it. The per-minute channel cap is separate: \`${citarInterno("tts.filtro", PREFIXO)}\`._`,
+          colour: COR.info },
+        { title: "⏳ Espera entre frases",
+          description: `Ahora: **${Math.round((c.cooldown ?? COOLDOWN_MS) / 1000)}s** por persona.\n\n\`${citar("tts.cooldown", "es", PREFIXO)} <segundos>\` — \`0\` la desactiva.\n_El staff no pasa por ella. El tope por minuto del canal es otro: \`${citar("tts.filtro", "es", PREFIXO)}\`._`,
           colour: COR.info }));
     }
     if (!ehStaff) {
       return sendEmbed(message.channel, tr(ctx,
         { title: "🚫 Permissão insuficiente", description: "Você precisa de **ManageMessages**.", colour: COR.erro },
-        { title: "🚫 Missing permission", description: "You need **ManageMessages**.", colour: COR.erro }));
+        { title: "🚫 Missing permission", description: "You need **ManageMessages**.", colour: COR.erro },
+        { title: "🚫 Permiso insuficiente", description: "Necesitas **ManageMessages**.", colour: COR.erro }));
     }
     const n = Number(String(resto).replace(",", ".").replace(/s$/i, ""));
     if (!Number.isFinite(n) || n < 0 || n > 300) {
       return sendEmbed(message.channel, tr(ctx,
         { title: "❌ Valor inválido", description: "Um número de segundos entre 0 e 300.", colour: COR.erro },
-        { title: "❌ Invalid value", description: "A number of seconds between 0 and 300.", colour: COR.erro }));
+        { title: "❌ Invalid value", description: "A number of seconds between 0 and 300.", colour: COR.erro },
+        { title: "❌ Valor no válido", description: "Un número de segundos entre 0 y 300.", colour: COR.erro }));
     }
     c.cooldown = Math.round(n * 1000);
     salvarConfig?.();
     return sendEmbed(message.channel, {
-      title: lang === "en" ? "⏳ Wait updated" : "⏳ Espera atualizada",
+      title: tr(ctx, "⏳ Espera atualizada", "⏳ Wait updated", "⏳ Espera actualizada"),
       description: n === 0
-        ? (lang === "en" ? "No wait between messages from the same person." : "Sem espera entre falas da mesma pessoa.")
-        : (lang === "en" ? `**${n}s** per person.` : `**${n}s** por pessoa.`),
+        ? tr(ctx, "Sem espera entre falas da mesma pessoa.", "No wait between messages from the same person.", "Sin espera entre frases de la misma persona.")
+        : tr(ctx, `**${n}s** por pessoa.`, `**${n}s** per person.`, `**${n}s** por persona.`),
       colour: COR.sucesso });
   }
 
@@ -1102,8 +1274,8 @@ export async function cmdTts(message, args, ctx) {
       try { saude = await chamar("/saude", null, "GET"); }
       catch (e) {
         return sendEmbed(message.channel, {
-          title: lang === "en" ? "❌ The voice service didn't answer" : "❌ O serviço de voz não respondeu",
-          description: `\`${String(e.message ?? e).replace(/`/g, "")}\`\n\n\`${PREFIXO}tts estado\``, colour: COR.erro });
+          title: tr(ctx, "❌ O serviço de voz não respondeu", "❌ The voice service didn't answer", "❌ El servicio de voz no respondió"),
+          description: `\`${String(e.message ?? e).replace(/`/g, "")}\`\n\n\`${tr(ctx, citarInterno("tts.estado", PREFIXO), citarInterno("tts.estado", PREFIXO), citar("tts.estado", "es", PREFIXO))}\``, colour: COR.erro });
       }
     }
     const opcoes = ehVoz ? (saude?.piper?.vozes ?? []) : (saude?.efeitos ?? []);
@@ -1112,29 +1284,36 @@ export async function cmdTts(message, args, ctx) {
     if (ehTom && !resto) {
       return sendEmbed(message.channel, tr(ctx,
         { title: "🎚️ Tom da voz",
-          description: `Agora: **${c.tom ?? 1}** _(1.0 = original)_\n\n\`${PREFIXO}tts tom 1.05\` — sobe tom **e formantes** juntos, então uma voz masculina vira feminina de verdade. Se a base já é feminina, mexa pouco: acima de 1.05 soa infantil.\n\`${PREFIXO}tts tom 1\` volta ao original.`,
+          description: `Agora: **${c.tom ?? 1}** _(1.0 = original)_\n\n\`${citarInterno("tts.tom", PREFIXO)} 1.05\` — sobe tom **e formantes** juntos, então uma voz masculina vira feminina de verdade. Se a base já é feminina, mexa pouco: acima de 1.05 soa infantil.\n\`${citarInterno("tts.tom", PREFIXO)} 1\` volta ao original.`,
           colour: COR.info },
         { title: "🎚️ Voice pitch",
-          description: `Currently: **${c.tom ?? 1}** _(1.0 = original)_\n\n\`${PREFIXO}tts tom 1.05\` — raises pitch **and formants** together, so a male voice turns properly female. If the base voice is already female, go easy: above 1.05 it sounds childish.\n\`${PREFIXO}tts tom 1\` restores the original.`,
+          description: `Currently: **${c.tom ?? 1}** _(1.0 = original)_\n\n\`${citarInterno("tts.tom", PREFIXO)} 1.05\` — raises pitch **and formants** together, so a male voice turns properly female. If the base voice is already female, go easy: above 1.05 it sounds childish.\n\`${citarInterno("tts.tom", PREFIXO)} 1\` restores the original.`,
+          colour: COR.info },
+        { title: "🎚️ Tono de la voz",
+          description: `Ahora: **${c.tom ?? 1}** _(1.0 = original)_\n\n\`${citar("tts.tom", "es", PREFIXO)} 1.05\` — sube el tono **y los formantes** juntos, así que una voz masculina se vuelve femenina de verdad. Si la base ya es femenina, cámbialo poco: por encima de 1.05 suena infantil.\n\`${citar("tts.tom", "es", PREFIXO)} 1\` vuelve al original.`,
           colour: COR.info }));
     }
     if (!ehTom && !resto) {
       return sendEmbed(message.channel, {
-        title: ehVoz ? (lang === "en" ? "🎙️ Voices" : "🎙️ Vozes") : (lang === "en" ? "🎛️ Effects" : "🎛️ Efeitos"),
+        title: ehVoz ? tr(ctx, "🎙️ Vozes", "🎙️ Voices", "🎙️ Voces") : tr(ctx, "🎛️ Efeitos", "🎛️ Effects", "🎛️ Efectos"),
         description: [
-          `${lang === "en" ? "Currently" : "Agora"}: **${atual ?? (lang === "en" ? "none" : "nenhum")}**`,
+          `${tr(ctx, "Agora", "Currently", "Ahora")}: **${atual ?? tr(ctx, "nenhum", "none", "ninguno")}**`,
           "",
           opcoes.length ? opcoes.map((o) => (o === atual ? `**${o}**` : `\`${o}\``)).join(" · ")
-            : (lang === "en" ? "_the service listed none_" : "_o serviço não listou nenhum_"),
+            : tr(ctx, "_o serviço não listou nenhum_", "_the service listed none_", "_el servicio no listó ninguno_"),
           "",
-          ehVoz ? `\`${PREFIXO}tts voz <nome>\`` : `\`${PREFIXO}tts efeito <nome>\` · \`${PREFIXO}tts efeito nenhum\` tira`,
+          tr(ctx,
+            ehVoz ? `\`${citarInterno("tts.voz", PREFIXO)} <nome>\`` : `\`${citarInterno("tts.efeito", PREFIXO)} <nome>\` · \`${citarInterno("tts.efeito", PREFIXO)} nenhum\` tira`,
+            ehVoz ? `\`${citarInterno("tts.voz", PREFIXO)} <nome>\`` : `\`${citarInterno("tts.efeito", PREFIXO)} <nome>\` · \`${citarInterno("tts.efeito", PREFIXO)} nenhum\` tira`,
+            ehVoz ? `\`${citar("tts.voz", "es", PREFIXO)} <nombre>\`` : `\`${citar("tts.efeito", "es", PREFIXO)} <nombre>\` · \`${citar("tts.efeito", "es", PREFIXO)} none\` lo quita`),
         ].join("\n"), colour: COR.info });
     }
 
     if (!ehStaff) {
       return sendEmbed(message.channel, tr(ctx,
         { title: "🚫 Permissão insuficiente", description: "Você precisa de **ManageMessages**.", colour: COR.erro },
-        { title: "🚫 Missing permission", description: "You need **ManageMessages**.", colour: COR.erro }));
+        { title: "🚫 Missing permission", description: "You need **ManageMessages**.", colour: COR.erro },
+        { title: "🚫 Permiso insuficiente", description: "Necesitas **ManageMessages**.", colour: COR.erro }));
     }
 
     if (ehTom) {
@@ -1142,36 +1321,37 @@ export async function cmdTts(message, args, ctx) {
       if (!Number.isFinite(n) || n < 0.5 || n > 2) {
         return sendEmbed(message.channel, tr(ctx,
           { title: "❌ Valor inválido", description: "Um número entre 0.5 e 2 — `1` é o original.", colour: COR.erro },
-          { title: "❌ Invalid value", description: "A number between 0.5 and 2 — `1` is the original.", colour: COR.erro }));
+          { title: "❌ Invalid value", description: "A number between 0.5 and 2 — `1` is the original.", colour: COR.erro },
+          { title: "❌ Valor no válido", description: "Un número entre 0.5 y 2 — `1` es el original.", colour: COR.erro }));
       }
       c.tom = n;
       salvarConfig?.();
       return sendEmbed(message.channel, {
-        title: lang === "en" ? "🎚️ Pitch updated" : "🎚️ Tom atualizado",
-        description: `**${n}**\n\n${lang === "en" ? "Hear it:" : "Ouça:"} \`${PREFIXO}tts ${lang === "en" ? "testing one two three" : "testando um dois três"}\``,
+        title: tr(ctx, "🎚️ Tom atualizado", "🎚️ Pitch updated", "🎚️ Tono actualizado"),
+        description: `**${n}**\n\n${tr(ctx, "Ouça:", "Hear it:", "Escúchalo:")} \`${tr(ctx, citarInterno("tts", PREFIXO), citarInterno("tts", PREFIXO), citar("tts", "es", PREFIXO))} ${tr(ctx, "testando um dois três", "testing one two three", "probando uno dos tres")}\``,
         colour: COR.sucesso });
     }
 
     const escolha = resto.toLowerCase();
     if (!ehVoz && ["nenhum", "none", "off", "limpar", "clear"].includes(escolha)) {
       c.efeito = null; salvarConfig?.();
-      return sendEmbed(message.channel, { title: lang === "en" ? "🎛️ Effect removed" : "🎛️ Efeito removido", colour: COR.sucesso });
+      return sendEmbed(message.channel, { title: tr(ctx, "🎛️ Efeito removido", "🎛️ Effect removed", "🎛️ Efecto quitado"), colour: COR.sucesso });
     }
     const achado = opcoes.find((o) => String(o).toLowerCase() === escolha)
       ?? opcoes.find((o) => semAcento(String(o)) === semAcento(escolha));
     if (!achado) {
       return sendEmbed(message.channel, {
-        title: ehVoz ? (lang === "en" ? "❓ I don't have that voice" : "❓ Não tenho essa voz")
-                     : (lang === "en" ? "❓ I don't have that effect" : "❓ Não tenho esse efeito"),
+        title: ehVoz ? tr(ctx, "❓ Não tenho essa voz", "❓ I don't have that voice", "❓ No tengo esa voz")
+                     : tr(ctx, "❓ Não tenho esse efeito", "❓ I don't have that effect", "❓ No tengo ese efecto"),
         description: opcoes.length ? opcoes.map((o) => `\`${o}\``).join(" · ")
-          : (lang === "en" ? "_the service listed none_" : "_o serviço não listou nenhum_"),
+          : tr(ctx, "_o serviço não listou nenhum_", "_the service listed none_", "_el servicio no listó ninguno_"),
         colour: COR.aviso });
     }
     if (ehVoz) c.voz = achado; else c.efeito = achado;
     salvarConfig?.();
     return sendEmbed(message.channel, {
-      title: ehVoz ? (lang === "en" ? "🎙️ Voice changed" : "🎙️ Voz trocada") : (lang === "en" ? "🎛️ Effect applied" : "🎛️ Efeito aplicado"),
-      description: `**${achado}**\n\n${lang === "en" ? "Hear it:" : "Ouça:"} \`${PREFIXO}tts ${lang === "en" ? "testing one two three" : "testando um dois três"}\``,
+      title: ehVoz ? tr(ctx, "🎙️ Voz trocada", "🎙️ Voice changed", "🎙️ Voz cambiada") : tr(ctx, "🎛️ Efeito aplicado", "🎛️ Effect applied", "🎛️ Efecto aplicado"),
+      description: `**${achado}**\n\n${tr(ctx, "Ouça:", "Hear it:", "Escúchalo:")} \`${tr(ctx, citarInterno("tts", PREFIXO), citarInterno("tts", PREFIXO), citar("tts", "es", PREFIXO))} ${tr(ctx, "testando um dois três", "testing one two three", "probando uno dos tres")}\``,
       colour: COR.sucesso });
   }
 
@@ -1179,11 +1359,15 @@ export async function cmdTts(message, args, ctx) {
   if (talvez) {
     return sendEmbed(message.channel, tr(ctx, {
       title: "🤔 Você quis dizer um comando?",
-      description: `\`${PREFIXO}tts ${args[0]}\` não é um subcomando — o mais parecido é \`${PREFIXO}tts ${talvez}\`.\n\nSe era mesmo para eu **falar** essa palavra, mande \`${PREFIXO}tts falar ${args[0]}\`.`,
+      description: `\`${citarInterno("tts", PREFIXO)} ${args[0]}\` não é um subcomando — o mais parecido é \`${citarInterno("tts", PREFIXO)} ${talvez}\`.\n\nSe era mesmo para eu **falar** essa palavra, mande \`${citarInterno("tts", PREFIXO)} falar ${args[0]}\`.`,
       colour: COR.aviso,
     }, {
       title: "🤔 Did you mean a command?",
-      description: `\`${PREFIXO}tts ${args[0]}\` isn't a subcommand — the closest one is \`${PREFIXO}tts ${talvez}\`.\n\nIf you really wanted me to **say** that word, send \`${PREFIXO}tts falar ${args[0]}\`.`,
+      description: `\`${citarInterno("tts", PREFIXO)} ${args[0]}\` isn't a subcommand — the closest one is \`${citarInterno("tts", PREFIXO)} ${talvez}\`.\n\nIf you really wanted me to **say** that word, send \`${citarInterno("tts", PREFIXO)} falar ${args[0]}\`.`,
+      colour: COR.aviso,
+    }, {
+      title: "🤔 ¿Querías decir un comando?",
+      description: `\`${citar("tts", "es", PREFIXO)} ${args[0]}\` no es un subcomando — el más parecido es \`${citar("tts", "es", PREFIXO)} ${talvez}\`.\n\nSi de verdad querías que **dijera** esa palabra, envía \`${citar("tts", "es", PREFIXO)} say ${args[0]}\`.`,
       colour: COR.aviso,
     }));
   }
@@ -1197,40 +1381,59 @@ export async function cmdTts(message, args, ctx) {
     return sendEmbed(message.channel, tr(ctx, {
       title: "🔊 Voz da Judy",
       description: [
-        `**\`${PREFIXO}entrar\`** — de qualquer canal, estando numa call. Eu entro na sua call e passo a **falar tudo que for escrito no canal onde você digitou** (\`${PREFIXO}entrar call 1\` escolhe a call).`,
-        `**\`${PREFIXO}sair\`** — saio e paro de ler.`,
+        `**\`${citarInterno("entrar", PREFIXO)}\`** — de qualquer canal, estando numa call. Eu entro na sua call e passo a **falar tudo que for escrito no canal onde você digitou** (\`${citarInterno("entrar", PREFIXO)} call 1\` escolhe a call).`,
+        `**\`${citarInterno("sair", PREFIXO)}\`** — saio e paro de ler.`,
         "",
         "É só isso para o uso normal. O resto é ajuste fino:",
         "",
-        `\`${PREFIXO}tts <texto>\` — falo uma frase específica, mesmo fora da leitura`,
-        `\`${PREFIXO}tts voz [nome]\` — troca a voz · \`${PREFIXO}tts efeito <nome>\` · \`${PREFIXO}tts tom <n>\``,
-        `\`${PREFIXO}tts filtro\` — o que eu ignoro (repetição, parede de texto…)`,
-        `\`${PREFIXO}tts estado\` — está tudo de pé? · \`${PREFIXO}tts diagnostico\` — onde travou`,
+        `\`${citarInterno("tts", PREFIXO)} <texto>\` — falo uma frase específica, mesmo fora da leitura`,
+        `\`${citarInterno("tts.voz", PREFIXO)} [nome]\` — troca a voz · \`${citarInterno("tts.efeito", PREFIXO)} <nome>\` · \`${citarInterno("tts.tom", PREFIXO)} <n>\``,
+        `\`${citarInterno("tts.filtro", PREFIXO)}\` — o que eu ignoro (repetição, parede de texto…)`,
+        `\`${citarInterno("tts.estado", PREFIXO)}\` — está tudo de pé? · \`${citarInterno("tts.diagnostico", PREFIXO)}\` — onde travou`,
         "",
-        `\`${PREFIXO}tts dicionario\` — a escrita de chat vira fala (\`vc\` → \`você\`)`,
+        `\`${citarInterno("tts.dicionario", PREFIXO)}\` — a escrita de chat vira fala (\`vc\` → \`você\`)`,
         "",
         `**Ajustes** _(ManageMessages)_`,
-        `\`${PREFIXO}tts nomes on|off\` — anunciar quem falou · \`${PREFIXO}tts cooldown <s>\` — freio por pessoa`,
-        `\`${PREFIXO}tts reiniciar\` — quando o serviço de voz trava`,
+        `\`${citarInterno("tts.nomes", PREFIXO)} on|off\` — anunciar quem falou · \`${citarInterno("tts.cooldown", PREFIXO)} <s>\` — freio por pessoa`,
+        `\`${citarInterno("tts.reiniciar", PREFIXO)}\` — quando o serviço de voz trava`,
       ].join("\n"), colour: COR.info,
     }, {
       title: "🔊 Judy's voice",
       description: [
-        `**\`${PREFIXO}entrar\`** — from any channel, while you're in a call. I join your call and start **speaking everything written in the channel where you typed it** (\`${PREFIXO}entrar call 1\` picks the call).`,
-        `**\`${PREFIXO}sair\`** — I leave and stop reading.`,
+        `**\`${citarInterno("entrar", PREFIXO)}\`** — from any channel, while you're in a call. I join your call and start **speaking everything written in the channel where you typed it** (\`${citarInterno("entrar", PREFIXO)} call 1\` picks the call).`,
+        `**\`${citarInterno("sair", PREFIXO)}\`** — I leave and stop reading.`,
         "",
         "That's it for normal use. The rest is fine-tuning:",
         "",
-        `\`${PREFIXO}tts <text>\` — I say one specific line, even outside the reading`,
-        `\`${PREFIXO}tts voz [name]\` — change the voice · \`${PREFIXO}tts efeito <name>\` · \`${PREFIXO}tts tom <n>\``,
-        `\`${PREFIXO}tts filtro\` — what I skip (repetition, walls of text…)`,
-        `\`${PREFIXO}tts estado\` — is everything up? · \`${PREFIXO}tts diagnostico\` — where it jammed`,
+        `\`${citarInterno("tts", PREFIXO)} <text>\` — I say one specific line, even outside the reading`,
+        `\`${citarInterno("tts.voz", PREFIXO)} [name]\` — change the voice · \`${citarInterno("tts.efeito", PREFIXO)} <name>\` · \`${citarInterno("tts.tom", PREFIXO)} <n>\``,
+        `\`${citarInterno("tts.filtro", PREFIXO)}\` — what I skip (repetition, walls of text…)`,
+        `\`${citarInterno("tts.estado", PREFIXO)}\` — is everything up? · \`${citarInterno("tts.diagnostico", PREFIXO)}\` — where it jammed`,
         "",
-        `\`${PREFIXO}tts dicionario\` — chat shorthand becomes proper speech (\`vc\` → \`você\`)`,
+        `\`${citarInterno("tts.dicionario", PREFIXO)}\` — chat shorthand becomes proper speech (\`vc\` → \`você\`)`,
         "",
         `**Settings** _(ManageMessages)_`,
-        `\`${PREFIXO}tts nomes on|off\` — announce who spoke · \`${PREFIXO}tts cooldown <s>\` — per-person brake`,
-        `\`${PREFIXO}tts reiniciar\` — when the voice service jams`,
+        `\`${citarInterno("tts.nomes", PREFIXO)} on|off\` — announce who spoke · \`${citarInterno("tts.cooldown", PREFIXO)} <s>\` — per-person brake`,
+        `\`${citarInterno("tts.reiniciar", PREFIXO)}\` — when the voice service jams`,
+      ].join("\n"), colour: COR.info,
+    }, {
+      title: "🔊 Voz de Judy",
+      description: [
+        `**\`${citar("entrar", "es", PREFIXO)}\`** — desde cualquier canal, estando en una llamada. Entro en tu llamada y paso a **decir todo lo que se escriba en el canal donde lo escribiste** (\`${citar("entrar", "es", PREFIXO)} call 1\` elige la llamada).`,
+        `**\`${citar("sair", "es", PREFIXO)}\`** — salgo y dejo de leer.`,
+        "",
+        "Eso es todo para el uso normal. Lo demás es ajuste fino:",
+        "",
+        `\`${citar("tts", "es", PREFIXO)} <texto>\` — digo una frase concreta, incluso fuera de la lectura`,
+        `\`${citar("tts.voz", "es", PREFIXO)} [nombre]\` — cambia la voz · \`${citar("tts.efeito", "es", PREFIXO)} <nombre>\` · \`${citar("tts.tom", "es", PREFIXO)} <n>\``,
+        `\`${citar("tts.filtro", "es", PREFIXO)}\` — lo que ignoro (repetición, muros de texto…)`,
+        `\`${citar("tts.estado", "es", PREFIXO)}\` — ¿está todo en marcha? · \`${citar("tts.diagnostico", "es", PREFIXO)}\` — dónde se atascó`,
+        "",
+        `\`${citar("tts.dicionario", "es", PREFIXO)}\` — la escritura de chat se convierte en habla (\`vc\` → \`você\`)`,
+        "",
+        `**Ajustes** _(ManageMessages)_`,
+        `\`${citar("tts.nomes", "es", PREFIXO)} on|off\` — anunciar quién habló · \`${citar("tts.cooldown", "es", PREFIXO)} <s>\` — freno por persona`,
+        `\`${citar("tts.reiniciar", "es", PREFIXO)}\` — cuando el servicio de voz se atasca`,
       ].join("\n"), colour: COR.info,
     }));
   }
@@ -1238,10 +1441,13 @@ export async function cmdTts(message, args, ctx) {
   if (!c.ativo || !c.canalVoz) {
     return sendEmbed(message.channel, tr(ctx,
       { title: "🔇 Não estou em nenhuma call",
-        description: `Entre numa call e mande \`${PREFIXO}entrar\` por lá — eu configuro o resto sozinha.`,
+        description: `Entre numa call e mande \`${citarInterno("entrar", PREFIXO)}\` por lá — eu configuro o resto sozinha.`,
         colour: COR.aviso },
       { title: "🔇 I'm not in any call",
-        description: `Join a call and send \`${PREFIXO}entrar\` there — I'll set up the rest myself.`,
+        description: `Join a call and send \`${citarInterno("entrar", PREFIXO)}\` there — I'll set up the rest myself.`,
+        colour: COR.aviso },
+      { title: "🔇 No estoy en ninguna llamada",
+        description: `Entra en una llamada y envía \`${citar("entrar", "es", PREFIXO)}\` desde allí — yo configuro el resto sola.`,
         colour: COR.aviso }));
   }
 
@@ -1251,7 +1457,8 @@ export async function cmdTts(message, args, ctx) {
   if (espera > 0 && !ehStaff) {
     return sendEmbed(message.channel, tr(ctx,
       { title: "⏳ Calma lá", description: `Espere ${Math.ceil(espera / 1000)}s para falar de novo.`, colour: COR.aviso },
-      { title: "⏳ Slow down", description: `Wait ${Math.ceil(espera / 1000)}s before speaking again.`, colour: COR.aviso }));
+      { title: "⏳ Slow down", description: `Wait ${Math.ceil(espera / 1000)}s before speaking again.`, colour: COR.aviso },
+      { title: "⏳ Con calma", description: `Espera ${Math.ceil(espera / 1000)}s para hablar de nuevo.`, colour: COR.aviso }));
   }
   ultimaFala.set(chave, Date.now());
 
@@ -1259,15 +1466,15 @@ export async function cmdTts(message, args, ctx) {
   try {
     const r = await chamar("/falar", { canalVoz: c.canalVoz, texto: falado, voz: c.voz, efeito: c.efeito, tom: c.tom });
     return sendEmbed(message.channel, {
-      title: lang === "en" ? "🔊 Speaking" : "🔊 Falando",
+      title: tr(ctx, "🔊 Falando", "🔊 Speaking", "🔊 Hablando"),
       description: `${falado.length > 120 ? falado.slice(0, 120) + "…" : falado}${
-        r.naFila > 1 ? `\n\n_${lang === "en" ? "in queue" : "na fila"}: ${r.naFila}_` : ""}`,
+        r.naFila > 1 ? `\n\n_${tr(ctx, "na fila", "in queue", "en cola")}: ${r.naFila}_` : ""}`,
       colour: COR.sucesso });
   } catch (e) {
     const motivo = String(e.message ?? e).replace(/`/g, "");
     return sendEmbed(message.channel, {
-      title: lang === "en" ? "❌ Couldn't speak" : "❌ Não consegui falar",
-      description: `\`${motivo}\`\n\n${lang === "en" ? "Diagnose with" : "Diagnostique com"} \`${PREFIXO}tts diagnostico\``,
+      title: tr(ctx, "❌ Não consegui falar", "❌ Couldn't speak", "❌ No pude hablar"),
+      description: `\`${motivo}\`\n\n${tr(ctx, "Diagnostique com", "Diagnose with", "Diagnostica con")} \`${tr(ctx, citarInterno("tts.diagnostico", PREFIXO), citarInterno("tts.diagnostico", PREFIXO), citar("tts.diagnostico", "es", PREFIXO))}\``,
       colour: COR.erro });
   }
 }

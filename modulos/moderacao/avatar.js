@@ -16,7 +16,8 @@
 // é sempre avisada — e o alerta nunca republica a foto.
 
 import * as log from "../core/log.js";
-import { textoDoIdioma } from "../core/i18n.js";
+import { citar, citarInterno, trechoPronto } from "../core/aliases.js";
+import { textoDoIdioma, idiomaDe } from "../core/i18n.js";
 import * as db from "../core/db.js";
 import { banir } from "../core/banir.js";
 import { lerDuracao, duracaoTexto } from "../core/duracao.js";
@@ -145,22 +146,25 @@ export async function verificar({ ctx, server, userId, avatar, origem = "entrada
   // suspeita (termo sem o voto do modelo): avisa a staff, não pune
   const acao = r.apitou ? acaoDoAvatar(cfg) : "alertar";
   const en = textoDoIdioma(ctx.config?.language) === "en";
-  const motivo = en ? `profile picture flagged (${r.motivos.map((m) => MOTIVO_EN[m] ?? m).join(", ")})` : `foto de perfil imprópria (${r.motivos.join(", ")})`;
-  let feito = r.apitou ? (en ? "nothing — alert only" : "nada — só alerta")
-    : (en ? "nothing — the model didn't confirm the risk; check the profile" : "nada — o modelo não confirmou o risco; confira o perfil");
+  // espanhol (etapa 4b): `es` vem antes de `en` (num servidor em espanhol, `en` também é true)
+  const es = idiomaDe(ctx) === "es";
+  const motivo = es ? `foto de perfil inapropiada (${r.motivos.map((m) => MOTIVO_ES[m] ?? m).join(", ")})`
+    : en ? `profile picture flagged (${r.motivos.map((m) => MOTIVO_EN[m] ?? m).join(", ")})` : `foto de perfil imprópria (${r.motivos.join(", ")})`;
+  let feito = r.apitou ? (es ? "nada — solo alerta" : en ? "nothing — alert only" : "nada — só alerta")
+    : (es ? "nada — el modelo no confirmó el riesgo; revisa el perfil" : en ? "nothing — the model didn't confirm the risk; check the profile" : "nada — o modelo não confirmou o risco; confira o perfil");
 
   try {
     if (acao === "silenciar") {
       const ms = tempoDoAvatar(cfg);
       await aplicarTimeout(server, userId, ms);
       db.silenciarAte(server.id, userId, Date.now() + ms, motivo);   // sair e voltar reaplica
-      feito = en ? `silenced (timeout) for ${duracaoTexto(ms, "en")}` : `silenciado (timeout) por ${duracaoTexto(ms, "pt")}`;
+      feito = es ? `silenciado (timeout) durante ${duracaoTexto(ms, "es")}` : en ? `silenced (timeout) for ${duracaoTexto(ms, "es")}` : `silenciado (timeout) por ${duracaoTexto(ms, "pt")}`;
     } else if (acao === "expulsar") {
       await server.kickUser(userId);
-      feito = en ? "kicked" : "expulso";
+      feito = es ? "expulsado" : en ? "kicked" : "expulso";
     } else if (acao === "banir") {
       await banir(server, userId, { reason: `[AutoMod] ${motivo}` });
-      feito = en ? "banned" : "banido";
+      feito = es ? "baneado" : en ? "banned" : "banido";
     }
   } catch (e) {
     // o erro do Stoat chega como JSON cru ({"type":"MissingPermission",…}) — em
@@ -169,53 +173,61 @@ export async function verificar({ ctx, server, userId, avatar, origem = "entrada
     const det = descreverErro(e, lang);
     const P = ctx.PREFIXO ?? "&";
     const dica = tipoDoErro(e) === "MissingPermission"
-      ? (en ? `give Judy's role that permission, or change the action: \`${P}automod sentinel avatar action alert\``
-            : `dê essa permissão ao cargo da Judy, ou mude a ação: \`${P}automod sentinela avatar acao alertar\``)
+      ? (es ? `dale ese permiso al rol de Judy, o cambia la acción: \`${citar("automod.sentinela.avatar.acao.alertar", "es", P)}\``
+        : en ? `give Judy's role that permission, or change the action: \`${citarInterno("automod.sentinela.avatar.acao.alertar", P)}\``
+            : `dê essa permissão ao cargo da Judy, ou mude a ação: \`${citarInterno("automod.sentinela.avatar.acao.alertar", P)}\``)
       : tipoDoErro(e) === "NotElevated"
-        ? (en ? "move Judy's role above the member's roles" : "suba o cargo da Judy acima dos cargos da pessoa")
-        : (en ? "check the bot's role and permissions" : "confira o cargo e as permissões do bot");
-    const nomeAcao = en ? ({ silenciar: "silence", expulsar: "kick", banir: "ban" }[acao] ?? acao) : acao;
-    feito = en ? `couldn't ${nomeAcao} — ${det}. ${dica[0].toUpperCase()}${dica.slice(1)}.` : `não consegui ${nomeAcao} — ${det}. ${dica[0].toUpperCase()}${dica.slice(1)}.`;
+        ? (es ? "sube el rol de Judy por encima de los roles de la persona" : en ? "move Judy's role above the member's roles" : "suba o cargo da Judy acima dos cargos da pessoa")
+        : (es ? "revisa el rol y los permisos del bot" : en ? "check the bot's role and permissions" : "confira o cargo e as permissões do bot");
+    const nomeAcao = es ? ({ silenciar: "silenciar", expulsar: "expulsar", banir: "banear" }[acao] ?? acao)
+      : en ? ({ silenciar: "silence", expulsar: "kick", banir: "ban" }[acao] ?? acao) : acao;
+    feito = es ? `no pude ${nomeAcao} — ${det}. ${dica[0].toUpperCase()}${dica.slice(1)}.` : en ? `couldn't ${nomeAcao} — ${det}. ${dica[0].toUpperCase()}${dica.slice(1)}.` : `não consegui ${nomeAcao} — ${det}. ${dica[0].toUpperCase()}${dica.slice(1)}.`;
     console.warn(`[AVATAR] ${acao} de ${userId} em ${server.id}: ${det}`);
   }
 
-  const alertouEm = await alertar(ctx, { server, userId, origem, r, feito, acao, en });
+  const alertouEm = await alertar(ctx, { server, userId, origem, r, feito, acao, en, es });
   // o alerta já foi para o canal de log (sem canal do sentinela): não repete
   if (r.apitou && alertouEm !== ctx.config?.log?.canalId) await log.registrar(ctx, "punicoes", {
     titulo: en ? "🖼️ Profile picture flagged" : "🖼️ Foto de perfil imprópria",
     descricao: `<@${userId}> — ${motivo} (${origem === "troca" ? (en ? "changed picture" : "trocou a foto") : (en ? "on join" : "ao entrar")}).\n**${en ? "Action" : "Ação"}:** ${feito}`,
+    es: { titulo: "🖼️ Foto de perfil inapropiada",
+      descricao: `<@${userId}> — ${motivo} (${origem === "troca" ? "cambió la foto" : "al entrar"}).\n**Acción:** ${feito}` },
   });
   return { apitou: r.apitou, suspeita: !!r.suspeita, acao, feito, motivos: r.motivos };
 }
 
-async function alertar(ctx, { server, userId, origem, r, feito, acao, en }) {
+async function alertar(ctx, { server, userId, origem, r, feito, acao, en, es = false }) {
   const destinoId = ctx.config?.automod?.antiScam?.alertChannelId || ctx.config?.log?.canalId || null;
   const achado = destinoId ? await Promise.resolve(ctx.client?.channels?.get?.(destinoId) ?? ctx.client?.channels?.fetch?.(destinoId)).catch(() => null) : null;
   const destino = achado && (achado.serverId ?? achado.server?.id ?? server.id) === server.id ? achado : null;
   if (!destino) { console.warn(`[AVATAR] alerta NÃO entregue: servidor ${server.id} sem canal de alerta do sentinela nem de log`); return null; }
   const P = ctx.PREFIXO ?? "&";
   const staff = (ctx.config?.acesso?.cargosStaff ?? []).map((id) => `<%${id}>`).join(" ");
+  // o espanhol sai pronto (como o de um `tr`); no pt e no en, o texto fica igual
+  const pronto = (t) => (es ? trechoPronto(t) : t);
   await ctx.sendEmbed(destino, {
-    title: r.grave ? (en ? "🚨 Profile picture — possible abuse material" : "🚨 Foto de perfil — possível material de abuso")
-      : r.suspeita ? (en ? "🖼️ Profile picture to check" : "🖼️ Foto de perfil para conferir")
-      : (en ? "🖼️ Inappropriate profile picture" : "🖼️ Foto de perfil imprópria"),
-    description: [
+    title: pronto(r.grave ? (es ? "🚨 Foto de perfil — posible material de abuso" : en ? "🚨 Profile picture — possible abuse material" : "🚨 Foto de perfil — possível material de abuso")
+      : r.suspeita ? (es ? "🖼️ Foto de perfil para revisar" : en ? "🖼️ Profile picture to check" : "🖼️ Foto de perfil para conferir")
+      : (es ? "🖼️ Foto de perfil inapropiada" : en ? "🖼️ Inappropriate profile picture" : "🖼️ Foto de perfil imprópria")),
+    description: pronto([
       staff || null,
-      `<@${userId}> · ${origem === "troca" ? (en ? "changed their picture" : "trocou a foto") : (en ? "just joined" : "acabou de entrar")}`,
-      `**${en ? "Signals" : "Sinais"}:** ${r.motivos.map((m) => (en ? MOTIVO_EN[m] ?? m : m)).join(", ")}`,
-      `**${en ? "Action" : "Ação"}:** ${feito}`,
+      `<@${userId}> · ${origem === "troca" ? (es ? "cambió su foto" : en ? "changed their picture" : "trocou a foto") : (es ? "acaba de entrar" : en ? "just joined" : "acabou de entrar")}`,
+      `**${es ? "Señales" : en ? "Signals" : "Sinais"}:** ${r.motivos.map((m) => (es ? MOTIVO_ES[m] ?? m : en ? MOTIVO_EN[m] ?? m : m)).join(", ")}`,
+      `**${es ? "Acción" : en ? "Action" : "Ação"}:** ${feito}`,
       "",
       `> ${r.descricao.replace(/\n+/g, " ").slice(0, 400)}`,
       "",
-      en ? "**The picture is NOT reposted here.** It's a model's description — check the profile." : "**A foto NÃO é repostada aqui.** É a descrição de um modelo — confira o perfil.",
-      acao !== "banir" ? (en ? `\`${P}automod sentinel dismiss ${userId}\` · \`${P}automod sentinel ban ${userId}\`` : `\`${P}automod sentinela liberar ${userId}\` · \`${P}automod sentinela banir ${userId}\``) : null,
-    ].filter((x) => x !== null).join("\n"),
+      es ? "**La foto NO se vuelve a publicar aquí.** Es la descripción de un modelo — revisa el perfil." : en ? "**The picture is NOT reposted here.** It's a model's description — check the profile." : "**A foto NÃO é repostada aqui.** É a descrição de um modelo — confira o perfil.",
+      acao !== "banir" ? (es ? `\`${citar("automod.sentinela.liberar", "es", P)} ${userId}\` · \`${citar("automod.sentinela.banir", "es", P)} ${userId}\`` : en ? `\`${citarInterno("automod.sentinela.liberar", P)} ${userId}\` · \`${citarInterno("automod.sentinela.banir", P)} ${userId}\`` : `\`${citarInterno("automod.sentinela.liberar", P)} ${userId}\` · \`${citarInterno("automod.sentinela.banir", P)} ${userId}\``) : null,
+    ].filter((x) => x !== null).join("\n")),
     colour: r.grave ? ctx.COR?.erro : ctx.COR?.aviso,
   });
   return destino.id ?? destinoId;
 }
 const MOTIVO_EN = { "sexual explícito": "explicit sexual", "menor + sexual": "minor + sexual", nudez: "nudity", "ódio": "hate", gore: "gore",
   "possível conteúdo sexual (o modelo não confirmou o risco)": "possible sexual content (the model didn't confirm the risk)" };
+const MOTIVO_ES = { "sexual explícito": "sexual explícito", "menor + sexual": "menor + sexual", nudez: "desnudez", "ódio": "odio", gore: "gore",
+  "possível conteúdo sexual (o modelo não confirmou o risco)": "posible contenido sexual (el modelo no confirmó el riesgo)" };
 
 // ── Os eventos ──────────────────────────────────────────────────────────────
 // Entrou: a foto do perfil e, se tiver, a de servidor.

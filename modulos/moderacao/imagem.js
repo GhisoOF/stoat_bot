@@ -10,7 +10,8 @@
 // algo grave (menor + conteúdo sexual), repostar seria distribuir.
 
 import { analisarConteudo } from "./scorecard.js";
-import { textoDoIdioma } from "../core/i18n.js";
+import { idiomaDe } from "../core/i18n.js";
+import { trechoPronto } from "../core/aliases.js";
 import * as confianca from "./confianca.js";
 import * as relatorioHora from "../ferramentas/relatorio.js";
 
@@ -90,9 +91,24 @@ export function imagensDa(message) {
     .filter((a) => a.id);
 }
 
+// `lang`: "pt" | "en" | "es" (o espanhol sai pronto, como o do i18n.tr)
 export function montarAlerta({ userId, canalId, messageId, descricao, r, staff = [], lang = "pt" }) {
   const en = lang === "en";
   const mencao = staff.map((id) => `<%${id}>`).join(" ");
+  if (lang === "es") return {
+    title: trechoPronto(r.grave ? "🚨 Imagen — posible material de abuso" : "🖼️ Imagen sospechosa"),
+    description: trechoPronto([
+      mencao,
+      `<@${userId}> · <#${canalId}>${messageId ? ` · \`${messageId}\`` : ""}`,
+      `**Nota:** ${r.nota.toFixed(1)}/10 · **Señales:** ${r.categorias.concat(r.sinaisTexto).join(", ") || "—"}`,
+      "",
+      `> ${String(descricao).replace(/\n+/g, " ").slice(0, 600)}`,
+      "",
+      r.grave
+        ? "**La imagen NO se vuelve a publicar aquí.** Elimínala y denúnciala a la plataforma."
+        : "No se sancionó a nadie: es la descripción de un modelo — revisa la imagen.",
+    ].filter(Boolean).join("\n")),
+  };
   return {
     title: r.grave ? (en ? "🚨 Image — possible abuse material" : "🚨 Imagem — possível material de abuso") : (en ? "🖼️ Suspicious image" : "🖼️ Imagem suspeita"),
     description: [
@@ -175,7 +191,7 @@ async function analisarUma({ ctx, userId, canalId, messageId, url }) {
   }
   const embed = montarAlerta({
     userId, canalId, messageId, descricao: j.descricao, r,
-    staff: ctx.config?.acesso?.cargosStaff ?? [], lang: textoDoIdioma(ctx.config?.language),
+    staff: ctx.config?.acesso?.cargosStaff ?? [], lang: idiomaDe(ctx),
   });
   await ctx.sendEmbed(destino, { ...embed, colour: r.grave ? ctx.COR?.erro : ctx.COR?.aviso });
 }

@@ -1,8 +1,8 @@
 
 import * as db from "../core/db.js";
 import { limparId, ULID, resolverUsuario } from "../core/ids.js";
-import { tr, lingua } from "../core/i18n.js";
-import { citar } from "../core/aliases.js";
+import { tr, lingua, idiomaDe } from "../core/i18n.js";
+import { citar, citarInterno, trechoPronto } from "../core/aliases.js";
 import * as log from "../core/log.js";
 import { idsDeCargos, rankDoCargo, rankDoMembro, editarCargos } from "../core/hierarquia.js";
 import { descreverErro, tipoDoErro } from "../core/erros.js";
@@ -101,7 +101,7 @@ export async function sincronizarCargos(server, member, serverId, { nivel = null
     try { return !!(server.roles?.get?.(id) ?? server.roles?.[id]); } catch { return true; }
   };
   const apagados = marcos.map((c) => c.roleId).filter((id) => id && !existe(id));
-  if (apagados.length) avisarUmaVez(`apagado:${serverId}`, `[XP][sincronizar] servidor ${nomeServ(server)}: ${apagados.length} cargo(s) de nível foram apagados do servidor — recrie com &xp criarcargos`);
+  if (apagados.length) avisarUmaVez(`apagado:${serverId}`, `[XP][sincronizar] servidor ${nomeServ(server)}: ${apagados.length} cargo(s) de nível foram apagados do servidor — recrie com ${citarInterno("xp.criarcargos")}`);
   const faltando = marcos.map((c) => c.roleId).filter((id) => id && !atuais.has(id) && existe(id));
   if (!faltando.length) return { concedidos: [], nivel: nivelAtual, bloqueados: null };
 
@@ -109,7 +109,7 @@ export async function sincronizarCargos(server, member, serverId, { nivel = null
   const bloqueados = (plano.membroAcima || plano.acimaDoBot.length || plano.botSemCargo)
     ? { membroAcima: plano.membroAcima, acimaDoBot: plano.acimaDoBot, botSemCargo: plano.botSemCargo } : null;
   if (plano.botSemCargo) avisarUmaVez(`semcargo:${serverId}`, `[XP][sincronizar] servidor ${nomeServ(server)}: o bot não tem nenhum cargo — o Stoat não deixa ele dar cargos a ninguém; dê um cargo ao bot acima dos cargos de nível`);
-  if (plano.acimaDoBot.length) avisarUmaVez(`acima:${serverId}`, `[XP][sincronizar] servidor ${nomeServ(server)}: ${plano.acimaDoBot.length} cargo(s) de nível acima do cargo do bot — suba o cargo do bot (&xp cargos mostra quais)`);
+  if (plano.acimaDoBot.length) avisarUmaVez(`acima:${serverId}`, `[XP][sincronizar] servidor ${nomeServ(server)}: ${plano.acimaDoBot.length} cargo(s) de nível acima do cargo do bot — suba o cargo do bot (${citarInterno("xp.cargos")} mostra quais)`);
   if (plano.membroAcima) console.log(`[XP] ${userId} em ${serverId} está acima do bot na hierarquia — cargos de nível não podem ser dados`);
   if (!plano.dar.length) return { concedidos: [], nivel: nivelAtual, bloqueados };
 
@@ -168,6 +168,7 @@ export async function aoEntrar(member, ctx) {
         titulo: "🎖 Cargos de nível devolvidos",
         descricao: `<@${member?.id?.user}> voltou e recuperou **${r.concedidos.length}** cargo(s) de nível (nível ${r.nivel}).`,
         en: { titulo: "🎖 Level roles restored", descricao: `<@${member?.id?.user}> came back and got **${r.concedidos.length}** level role(s) back (level ${r.nivel}).` },
+        es: { titulo: "🎖 Roles de nivel devueltos", descricao: `<@${member?.id?.user}> volvió y recuperó **${r.concedidos.length}** rol(es) de nivel (nivel ${r.nivel}).` },
       });
     }
     return r;
@@ -215,7 +216,8 @@ export async function aoMensagem(message, ctx) {
           if (r?.concedidos?.length) {
             await log.registrar(ctx, "cargos", { titulo: "🎖 Cargos de nível acertados",
               descricao: `<@${userId}> (nível ${novoNivel}) recebeu **${r.concedidos.length}** cargo(s) de nível que estavam faltando.`,
-              en: { titulo: "🎖 Level roles fixed", descricao: `<@${userId}> (level ${novoNivel}) got **${r.concedidos.length}** missing level role(s).` } });
+              en: { titulo: "🎖 Level roles fixed", descricao: `<@${userId}> (level ${novoNivel}) got **${r.concedidos.length}** missing level role(s).` },
+              es: { titulo: "🎖 Roles de nivel corregidos", descricao: `<@${userId}> (nivel ${novoNivel}) recibió **${r.concedidos.length}** rol(es) de nivel que le faltaban.` } });
           }
         }
       }
@@ -242,12 +244,13 @@ export async function aoMensagem(message, ctx) {
         : message.channel;
       if (canalDeOutroServidor(canal, ctx.serverId)) canal = message.channel;   // canal de outro servidor: anuncia aqui
       const lvLang = lingua(ctx);
+      const lvES = idiomaDe(ctx) === "es";   // (o anúncio vai cru ao Stoat: o espanhol sai sem a marca do `tr`)
       const extra = ganhouCargo
-        ? (lvLang === "en" ? `\n🎖 You earned a new role!` : `\n🎖 Você ganhou um novo cargo!`) : "";
+        ? (lvES ? `\n🎖 ¡Ganaste un rol nuevo!` : lvLang === "en" ? `\n🎖 You earned a new role!` : `\n🎖 Você ganhou um novo cargo!`) : "";
       try {
         await canal.sendMessage({ embeds: [{
           title: "🎉 Level Up!",
-          description: lvLang === "en"
+          description: lvES ? `¡<@${userId}> llegó al **nivel ${novoNivel}**!${extra}` : lvLang === "en"
             ? `<@${userId}> reached **level ${novoNivel}**!${extra}`
             : `<@${userId}> subiu para o **nível ${novoNivel}**!${extra}`,
           colour: "#FFD700",
@@ -262,6 +265,13 @@ export function explicarBloqueio(r, lang = "pt") {
   if (!b) return "";
   const en = lang === "en";
   const L = [];
+  // (etapa 4b) o espanhol, pronto (a tradução da tela não passa por ele)
+  if (lang === "es") {
+    if (b.botSemCargo) L.push("⚠️ El bot **no tiene ningún rol** — el Stoat no le deja dar roles a nadie. Dale un rol por encima de los roles de nivel.");
+    if (b.acimaDoBot?.length) L.push(`⚠️ ${b.acimaDoBot.map((id) => `<@&${id}>`).join(" ")} ${b.acimaDoBot.length > 1 ? "están" : "está"} **por encima del rol del bot** — sube el rol del bot.`);
+    if (b.membroAcima) L.push(`ℹ️ ${r.membrosAcima ? `**${r.membrosAcima}** persona(s) tienen` : "Esta persona tiene"} un rol a la altura del bot o por encima (normalmente staff) — el Stoat no deja que el bot la(s) edite.`);
+    return L.length ? trechoPronto(L.join("\n")) : "";
+  }
   if (b.botSemCargo) L.push(en ? "⚠️ The bot has **no role** — the Stoat doesn't let it give roles to anyone. Give it a role above the level roles."
     : "⚠️ O bot **não tem nenhum cargo** — o Stoat não deixa ele dar cargos a ninguém. Dê a ele um cargo acima dos cargos de nível.");
   if (b.acimaDoBot?.length) L.push(en
@@ -310,11 +320,15 @@ export async function cmdXp(message, args, ctx) {
   if (!g?.enabled && !["on", "setup", "config", "configurar", "criarcargos", "criar"].includes(sub)) {
     return sendEmbed(message.channel, tr(ctx, {
       title: "💤 Sistema de níveis desligado",
-      description: `O sistema de XP está **desativado** neste servidor, por isso ninguém está ganhando XP.\n\nPara ativar: \`${PREFIXO}xp on\` *(precisa de ManagePermissions)*.\nDepois, configure com \`${PREFIXO}xp setup\` se quiser.`,
+      description: `O sistema de XP está **desativado** neste servidor, por isso ninguém está ganhando XP.\n\nPara ativar: \`${citarInterno("xp", PREFIXO)} on\` *(precisa de ManagePermissions)*.\nDepois, configure com \`${citarInterno("xp.setup", PREFIXO)}\` se quiser.`,
       colour: COR.aviso,
     }, {
       title: "💤 Leveling system off",
-      description: `The XP system is **disabled** on this server, so nobody is earning XP.\n\nTo enable it: \`${PREFIXO}xp on\` *(needs ManagePermissions)*.\nThen configure it with \`${PREFIXO}xp setup\` if you like.`,
+      description: `The XP system is **disabled** on this server, so nobody is earning XP.\n\nTo enable it: \`${citarInterno("xp", PREFIXO)} on\` *(needs ManagePermissions)*.\nThen configure it with \`${citarInterno("xp.setup", PREFIXO)}\` if you like.`,
+      colour: COR.aviso,
+    }, {
+      title: "💤 Sistema de niveles desactivado",
+      description: `El sistema de XP está **desactivado** en este servidor, así que nadie está ganando XP.\n\nPara activarlo: \`${citar("xp", "es", PREFIXO)} on\` *(necesita ManagePermissions)*.\nDespués, configúralo con \`${citar("xp.setup", "es", PREFIXO)}\` si quieres.`,
       colour: COR.aviso,
     }));
   }
@@ -325,19 +339,21 @@ export async function cmdXp(message, args, ctx) {
     if (!top.length)
       return sendEmbed(message.channel, tr(ctx,
         { title: "🏆 Ranking", description: "Ainda não há ninguém com XP.", colour: COR.mod },
-        { title: "🏆 Ranking", description: "Nobody has XP yet.", colour: COR.mod }));
+        { title: "🏆 Ranking", description: "Nobody has XP yet.", colour: COR.mod }, { title: "🏆 Ranking", description: "Todavía nadie tiene XP.", colour: COR.mod }));
     const linhas = top.map((e, i) => {
       const medalha = ["🥇", "🥈", "🥉"][i] ?? `**${i + 1}.**`;
-      return lang === "en"
-        ? `${medalha} <@${e.userId}> — level **${e.nivel}** · ${e.xp} XP`
-        : `${medalha} <@${e.userId}> — nível **${e.nivel}** · ${e.xp} XP`;
+      return tr(ctx,
+        `${medalha} <@${e.userId}> — nível **${e.nivel}** · ${e.xp} XP`,
+        `${medalha} <@${e.userId}> — level **${e.nivel}** · ${e.xp} XP`,
+        `${medalha} <@${e.userId}> — nivel **${e.nivel}** · ${e.xp} XP`);
     });
     // nota: só XP de texto (call não é suportado pela plataforma)
     return sendEmbed(message.channel, {
-      title: lang === "en" ? "🏆 Level ranking" : "🏆 Ranking de níveis",
-      description: linhas.join("\n") + (lang === "en"
-        ? "\n\n_XP is earned from messages (Stoat can't measure call time)._"
-        : "\n\n_XP é ganho por mensagens (o Stoat não permite medir tempo em call)._"),
+      title: tr(ctx, "🏆 Ranking de níveis", "🏆 Level ranking", "🏆 Ranking de niveles"),
+      description: linhas.join("\n") + tr(ctx,
+        "\n\n_XP é ganho por mensagens (o Stoat não permite medir tempo em call)._",
+        "\n\n_XP is earned from messages (Stoat can't measure call time)._",
+        "\n\n_El XP se gana con mensajes (el Stoat no permite medir el tiempo en llamada)._"),
       colour: COR.info,
     });
   }
@@ -352,23 +368,25 @@ export async function cmdXp(message, args, ctx) {
       const alvoId = await resolverUsuario(alvoTexto, { message, server, client: ctx.client });
       if (!alvoId) return sendEmbed(message.channel, tr(ctx,
         { title: "❌ Não achei essa pessoa",
-          description: `\`${PREFIXO}xp sincronizar [@pessoa|todos]\`\n\nAceito menção, ID ou nome.`, colour: COR.erro },
+          description: `\`${citarInterno("xp.sincronizar", PREFIXO)} [@pessoa|todos]\`\n\nAceito menção, ID ou nome.`, colour: COR.erro },
         { title: "❌ Couldn't find that person",
-          description: `\`${PREFIXO}xp sincronizar [@user|todos]\`\n\nI accept a mention, ID or name.`, colour: COR.erro }));
+          description: `\`${citarInterno("xp.sincronizar", PREFIXO)} [@user|todos]\`\n\nI accept a mention, ID or name.`, colour: COR.erro }, { title: "❌ No encontré a esa persona",
+          description: `\`${citar("xp.sincronizar", "es", PREFIXO)} [@usuario|all]\`\n\nAcepto mención, ID o nombre.`, colour: COR.erro }));
 
       const membro = await server.fetchMember(alvoId).catch(() => null);
       if (!membro) return sendEmbed(message.channel, tr(ctx,
         { title: "❌ Não está no servidor",
           description: `<@${alvoId}> precisa estar aqui para receber os cargos. O XP dela continua guardado — assim que voltar, eu devolvo sozinho.`, colour: COR.aviso },
         { title: "❌ Not in the server",
-          description: `<@${alvoId}> has to be here to receive the roles. Their XP is still stored — as soon as they return, I hand the roles back on my own.`, colour: COR.aviso }));
+          description: `<@${alvoId}> has to be here to receive the roles. Their XP is still stored — as soon as they return, I hand the roles back on my own.`, colour: COR.aviso }, { title: "❌ No está en el servidor",
+          description: `<@${alvoId}> tiene que estar aquí para recibir los roles. Su XP sigue guardado — en cuanto vuelva, le devuelvo los roles yo sola.`, colour: COR.aviso }));
 
       const r = await sincronizarCargos(server, membro, serverId);
       if (!r) return sendEmbed(message.channel, tr(ctx,
         { title: "🤷 Nada a fazer", description: `<@${alvoId}> ainda não alcançou nenhum cargo de nível.`, colour: COR.info },
-        { title: "🤷 Nothing to do", description: `<@${alvoId}> hasn't reached any level role yet.`, colour: COR.info }));
+        { title: "🤷 Nothing to do", description: `<@${alvoId}> hasn't reached any level role yet.`, colour: COR.info }, { title: "🤷 Nada que hacer", description: `<@${alvoId}> todavía no ha alcanzado ningún rol de nivel.`, colour: COR.info }));
 
-      const pend = explicarBloqueio(r, lang);
+      const pend = explicarBloqueio(r, idiomaDe(ctx));
       return sendEmbed(message.channel, tr(ctx, {
         title: r.concedidos.length ? "🎖 Cargos devolvidos" : (pend || r.erro ? "⚠️ Não consegui dar os cargos" : "✅ Já estava em dia"),
         description: (r.concedidos.length
@@ -383,18 +401,25 @@ export async function cmdXp(message, args, ctx) {
           : (pend || r.erro ? `<@${alvoId}> (level **${r.nivel}**) is missing level role(s).` : `<@${alvoId}> (level **${r.nivel}**) already had every role for their level.`))
           + (pend ? `\n\n${pend}` : "") + (r.erro ? `\n\n**Error:** ${r.erro}` : ""),
         colour: r.concedidos.length ? COR.sucesso : (pend || r.erro ? COR.aviso : COR.info),
+      }, {
+        title: r.concedidos.length ? "🎖 Roles devueltos" : (pend || r.erro ? "⚠️ No pude dar los roles" : "✅ Ya estaba al día"),
+        description: (r.concedidos.length
+          ? `<@${alvoId}> (nivel **${r.nivel}**) recibió **${r.concedidos.length}** rol(es):\n${r.concedidos.map((id) => `<@&${id}>`).join(" ")}`
+          : (pend || r.erro ? `<@${alvoId}> (nivel **${r.nivel}**) no tiene rol(es) de su nivel.` : `<@${alvoId}> (nivel **${r.nivel}**) ya tenía todos los roles de su nivel.`))
+          + (pend ? `\n\n${pend}` : "") + (r.erro ? `\n\n**Error:** ${r.erro}` : ""),
+        colour: r.concedidos.length ? COR.sucesso : (pend || r.erro ? COR.aviso : COR.info),
       }));
     }
 
     // O servidor inteiro
     if (!db.listarCargosNivel(serverId).length) {
       return sendEmbed(message.channel, tr(ctx,
-        { title: "❌ Não há cargos de nível", description: `Crie-os primeiro com \`${PREFIXO}xp criarcargos\`.`, colour: COR.erro },
-        { title: "❌ No level roles", description: `Create them first with \`${PREFIXO}xp criarcargos\`.`, colour: COR.erro }));
+        { title: "❌ Não há cargos de nível", description: `Crie-os primeiro com \`${citarInterno("xp.criarcargos", PREFIXO)}\`.`, colour: COR.erro },
+        { title: "❌ No level roles", description: `Create them first with \`${citarInterno("xp.criarcargos", PREFIXO)}\`.`, colour: COR.erro }, { title: "❌ No hay roles de nivel", description: `Créalos primero con \`${citar("xp.criarcargos", "es", PREFIXO)}\`.`, colour: COR.erro }));
     }
     await sendEmbed(message.channel, tr(ctx,
       { title: "⏳ Conferindo todo mundo…", description: "Vou devolver os cargos que cada pessoa já conquistou. Pode levar um instante.", colour: COR.info },
-      { title: "⏳ Checking everyone…", description: "I'll hand back the roles each person already earned. This may take a moment.", colour: COR.info }));
+      { title: "⏳ Checking everyone…", description: "I'll hand back the roles each person already earned. This may take a moment.", colour: COR.info }, { title: "⏳ Revisando a todos…", description: "Voy a devolver los roles que cada persona ya ha ganado. Puede tardar un momento.", colour: COR.info }));
 
     let membros = [];
     try {
@@ -403,7 +428,7 @@ export async function cmdXp(message, args, ctx) {
     } catch (e) {
       return sendEmbed(message.channel, tr(ctx,
         { title: "❌ Não consegui listar os membros", description: `${e?.message ?? e}`, colour: COR.erro },
-        { title: "❌ Couldn't list the members", description: `${e?.message ?? e}`, colour: COR.erro }));
+        { title: "❌ Couldn't list the members", description: `${e?.message ?? e}`, colour: COR.erro }, { title: "❌ No pude listar a los miembros", description: `${e?.message ?? e}`, colour: COR.erro }));
     }
 
     const arrumados = [];
@@ -421,10 +446,12 @@ export async function cmdXp(message, args, ctx) {
       if (r?.erro) { falhas++; erros.add(r.erro); }
       if (r?.concedidos?.length) arrumados.push({ uid, n: r.concedidos.length, nivel: r.nivel });
     }
-    const pendencias = explicarBloqueio({ bloqueados: { acimaDoBot: [...acimaDoBot], membroAcima: membrosAcima > 0, botSemCargo }, membrosAcima }, lang);
+    const pendencias = explicarBloqueio({ bloqueados: { acimaDoBot: [...acimaDoBot], membroAcima: membrosAcima > 0, botSemCargo }, membrosAcima }, idiomaDe(ctx));
 
     const lista = arrumados.slice(0, 20)
       .map((a) => `• <@${a.uid}> — nível ${a.nivel}, +${a.n} cargo(s)`).join("\n");
+    const listaES = arrumados.slice(0, 20)
+      .map((a) => `• <@${a.uid}> — nivel ${a.nivel}, +${a.n} rol(es)`).join("\n");
     return sendEmbed(message.channel, tr(ctx, {
       title: `🎖 ${arrumados.length} pessoa(s) atualizada(s)`,
       description: [
@@ -445,6 +472,16 @@ export async function cmdXp(message, args, ctx) {
         falhas ? `\n⚠️ **${falhas}** failure(s): ${[...erros].slice(0, 2).join(" · ")}` : "",
       ].filter(Boolean).join("\n").slice(0, 1900),
       colour: falhas || pendencias ? COR.aviso : COR.sucesso,
+    }, {
+      title: `🎖 ${arrumados.length} persona(s) actualizada(s)`,
+      description: [
+        `Revisé **${membros.length}** miembro(s).`,
+        arrumados.length ? "\n" + listaES : "\n_Todos ya tenían los roles correctos._",
+        arrumados.length > 20 ? `\n_… y ${arrumados.length - 20} más._` : "",
+        pendencias ? `\n${pendencias}` : "",
+        falhas ? `\n⚠️ **${falhas}** fallo(s): ${[...erros].slice(0, 2).join(" · ")}` : "",
+      ].filter(Boolean).join("\n").slice(0, 1900),
+      colour: falhas || pendencias ? COR.aviso : COR.sucesso,
     }));
   }
 
@@ -462,7 +499,8 @@ export async function cmdXp(message, args, ctx) {
       { title: "🎮 Sistema de níveis",
         description: `Sistema **${sub === "on" ? "ativado 🟢" : "desativado 🔴"}**.`, colour: COR.mod },
       { title: "🎮 Leveling system",
-        description: `System **${sub === "on" ? "enabled 🟢" : "disabled 🔴"}**.`, colour: COR.mod }));
+        description: `System **${sub === "on" ? "enabled 🟢" : "disabled 🔴"}**.`, colour: COR.mod }, { title: "🎮 Sistema de niveles",
+        description: `Sistema **${sub === "on" ? "activado 🟢" : "desactivado 🔴"}**.`, colour: COR.mod }));
     // Ao ligar, a Judy avisa os membros (privacidade P3, opção B): o XP é uma
     // estatística de cada pessoa, e cada uma pode ficar de fora.
     if (ligou) {
@@ -481,27 +519,29 @@ export async function cmdXp(message, args, ctx) {
     if (!cargos.length)
       return sendEmbed(message.channel, tr(ctx,
         { title: "🎖 Cargos de nível",
-          description: `Nenhum cargo configurado. Use \`${PREFIXO}xp criarcargos\` para criar automaticamente.`, colour: COR.mod },
+          description: `Nenhum cargo configurado. Use \`${citarInterno("xp.criarcargos", PREFIXO)}\` para criar automaticamente.`, colour: COR.mod },
         { title: "🎖 Level roles",
-          description: `No roles configured. Use \`${PREFIXO}xp criarcargos\` to create them automatically.`, colour: COR.mod }));
+          description: `No roles configured. Use \`${citarInterno("xp.criarcargos", PREFIXO)}\` to create them automatically.`, colour: COR.mod }, { title: "🎖 Roles de nivel",
+          description: `No hay roles configurados. Usa \`${citar("xp.criarcargos", "es", PREFIXO)}\` para crearlos automáticamente.`, colour: COR.mod }));
     const srv = await getServer(message).catch(() => null);
     const bot = botDoServidor(srv, null);
     const topo = bot ? rankDoMembro(srv, bot) : null;
     const marca = (id) => {
       if (!srv) return "";
       const existe = !!(srv.roles?.get?.(id) ?? srv.roles?.[id]);
-      if (!existe) return lang === "en" ? " ⚠️ _deleted from the server_" : " ⚠️ _apagado do servidor_";
+      if (!existe) return tr(ctx, " ⚠️ _apagado do servidor_", " ⚠️ _deleted from the server_", " ⚠️ _borrado del servidor_");
       const r = rankDoCargo(srv, id);
-      if (topo !== null && r !== null && r <= topo) return lang === "en" ? " ⚠️ _above the bot — it can't give this one_" : " ⚠️ _acima do bot — ele não consegue dar_";
+      if (topo !== null && r !== null && r <= topo) return tr(ctx, " ⚠️ _acima do bot — ele não consegue dar_", " ⚠️ _above the bot — it can't give this one_", " ⚠️ _por encima del bot — no puede darlo_");
       return "";
     };
-    const linhas = cargos.map((c) => (lang === "en" ? `Level **${c.nivel}** → <@&${c.roleId}>` : `Nível **${c.nivel}** → <@&${c.roleId}>`) + marca(c.roleId));
+    const linhas = cargos.map((c) => tr(ctx, `Nível **${c.nivel}** → <@&${c.roleId}>`, `Level **${c.nivel}** → <@&${c.roleId}>`, `Nivel **${c.nivel}** → <@&${c.roleId}>`) + marca(c.roleId));
     const algum = linhas.some((l) => l.includes("⚠️"));
     return sendEmbed(message.channel, {
-      title: lang === "en" ? "🎖 Level roles" : "🎖 Cargos de nível",
-      description: linhas.join("\n") + (algum ? (lang === "en"
-        ? "\n\n_Move the bot's role above the marked roles (or recreate the deleted ones with `&xp criarcargos`), then run `&xp sincronizar todos`._"
-        : "\n\n_Suba o cargo do bot acima dos marcados (ou recrie os apagados com `&xp criarcargos`) e rode `&xp sincronizar todos`._") : ""),
+      title: tr(ctx, "🎖 Cargos de nível", "🎖 Level roles", "🎖 Roles de nivel"),
+      description: linhas.join("\n") + (algum ? tr(ctx,
+        "\n\n_Suba o cargo do bot acima dos marcados (ou recrie os apagados com `" + citarInterno("xp.criarcargos") + "`) e rode `" + citarInterno("xp.sincronizar.todos") + "`._",
+        "\n\n_Move the bot's role above the marked roles (or recreate the deleted ones with `" + citarInterno("xp.criarcargos") + "`), then run `" + citarInterno("xp.sincronizar.todos") + "`._",
+        "\n\n_Sube el rol del bot por encima de los marcados (o vuelve a crear los borrados con `" + citar("xp.criarcargos", "es") + "`) y ejecuta `" + citar("xp.sincronizar.todos", "es") + "`._") : ""),
       colour: algum ? COR.aviso : COR.mod });
   }
 
@@ -516,13 +556,14 @@ export async function cmdXp(message, args, ctx) {
     if (!["confirmar", "confirm"].includes(args[1]?.toLowerCase()))
       return sendEmbed(message.channel, tr(ctx,
         { title: "⚠️ Confirmar reset",
-          description: `Isso apaga TODO o XP do servidor. Para confirmar: \`${PREFIXO}xp reset confirmar\``, colour: COR.aviso },
+          description: `Isso apaga TODO o XP do servidor. Para confirmar: \`${citarInterno("xp.reset", PREFIXO)} confirmar\``, colour: COR.aviso },
         { title: "⚠️ Confirm reset",
-          description: `This erases ALL the server's XP. To confirm: \`${PREFIXO}xp reset confirm\``, colour: COR.aviso }));
+          description: `This erases ALL the server's XP. To confirm: \`${citarInterno("xp.reset", PREFIXO)} confirm\``, colour: COR.aviso }, { title: "⚠️ Confirmar reinicio",
+          description: `Esto borra TODO el XP del servidor. Para confirmar: \`${citar("xp.reset", "es", PREFIXO)} confirm\``, colour: COR.aviso }));
     const n = db.resetXp(serverId);
     return sendEmbed(message.channel, tr(ctx,
       { title: "🧹 XP zerado", description: `Removido o XP de ${n} usuário(s).`, colour: COR.sucesso },
-      { title: "🧹 XP reset", description: `Removed the XP of ${n} user(s).`, colour: COR.sucesso }));
+      { title: "🧹 XP reset", description: `Removed the XP of ${n} user(s).`, colour: COR.sucesso }, { title: "🧹 XP reiniciado", description: `Se borró el XP de ${n} usuario(s).`, colour: COR.sucesso }));
   }
 
   // ── rank [@usuário] ou perfil próprio (padrão) ──
@@ -536,16 +577,8 @@ export async function cmdXp(message, args, ctx) {
   const pos = db.posicaoXp(serverId, alvoId);
   const p = progresso(dados.xp, dados.nivel, g.multiplicador);
   return sendEmbed(message.channel, {
-    title: lang === "en" ? "📊 Level profile" : "📊 Perfil de nível",
-    description: (lang === "en" ? [
-      `<@${alvoId}>`,
-      `**Level:** ${dados.nivel}${dados.nivel >= g.nivelMaximo ? " (max!)" : ""}`,
-      `**XP:** ${dados.xp}`,
-      pos ? `**Ranking:** #${pos}` : "",
-      "",
-      `${barra(p.pct)} ${p.pct}%`,
-      `${p.atual} / ${p.necessario} XP to the next level`,
-    ] : [
+    title: tr(ctx, "📊 Perfil de nível", "📊 Level profile", "📊 Perfil de nivel"),
+    description: tr(ctx, [
       `<@${alvoId}>`,
       `**Nível:** ${dados.nivel}${dados.nivel >= g.nivelMaximo ? " (máximo!)" : ""}`,
       `**XP:** ${dados.xp}`,
@@ -553,6 +586,22 @@ export async function cmdXp(message, args, ctx) {
       "",
       `${barra(p.pct)} ${p.pct}%`,
       `${p.atual} / ${p.necessario} XP para o próximo nível`,
+    ], [
+      `<@${alvoId}>`,
+      `**Level:** ${dados.nivel}${dados.nivel >= g.nivelMaximo ? " (max!)" : ""}`,
+      `**XP:** ${dados.xp}`,
+      pos ? `**Ranking:** #${pos}` : "",
+      "",
+      `${barra(p.pct)} ${p.pct}%`,
+      `${p.atual} / ${p.necessario} XP to the next level`,
+    ], [
+      `<@${alvoId}>`,
+      `**Nivel:** ${dados.nivel}${dados.nivel >= g.nivelMaximo ? " (¡máximo!)" : ""}`,
+      `**XP:** ${dados.xp}`,
+      pos ? `**Ranking:** #${pos}` : "",
+      "",
+      `${barra(p.pct)} ${p.pct}%`,
+      `${p.atual} / ${p.necessario} XP para el siguiente nivel`,
     ]).filter(Boolean).join("\n"),
     colour: COR.info,
   });
@@ -566,7 +615,8 @@ async function podeConfigurar(message, ctx) {
       { title: "🚫 Permissão insuficiente",
         description: "Você precisa de **ManagePermissions** para isso.", colour: COR.erro },
       { title: "🚫 Missing permission",
-        description: "You need **ManagePermissions** for that.", colour: COR.erro }));
+        description: "You need **ManagePermissions** for that.", colour: COR.erro }, { title: "🚫 Permiso insuficiente",
+        description: "Necesitas **ManagePermissions** para eso.", colour: COR.erro }));
     return false;
   }
   return true;
@@ -582,30 +632,7 @@ async function setupGame(message, args, ctx) {
   if (!param) {
     const g = config.xp;
     const sl = lingua(ctx);
-    return sendEmbed(message.channel, sl === "en" ? {
-      title: "🎮 Leveling system configuration",
-      description: [
-        `**Enabled:** ${g.enabled ? "🟢 yes" : "🔴 no"}`,
-        `**XP per message:** ${g.xpMin}–${g.xpMax}`,
-        `**Cooldown:** ${Math.round(g.cooldownMs / 1000)}s`,
-        `**Multiplier (difficulty):** ${g.multiplicador}`,
-        `**Level cap:** ${g.nivelMaximo}`,
-        `**Roles every:** ${g.intervaloCargos} levels`,
-        `**Level-up announcement:** ${g.anunciarLevelUp ? "yes" : "no"}${g.canalAnuncio ? ` (channel set)` : ""}`,
-        "",
-        "**Adjust:**",
-        `\`${PREFIXO}xp setup multiplicador <number>\` (e.g. 1.5)`,
-        `\`${PREFIXO}xp setup nivelmaximo <number>\``,
-        `\`${PREFIXO}xp setup intervalo <5|10>\``,
-        `\`${PREFIXO}xp setup xp <min> <max>\``,
-        `\`${PREFIXO}xp setup cooldown <seconds>\``,
-        `\`${PREFIXO}xp setup canal <aqui|off>\``,
-        `\`${PREFIXO}xp setup anuncio <on|off>\``,
-        "",
-        `Then: \`${PREFIXO}xp criarcargos\` and \`${PREFIXO}xp on\`.`,
-      ].join("\n"),
-      colour: COR.mod,
-    } : {
+    return sendEmbed(message.channel, tr(ctx, {
       title: "🎮 Configuração do sistema de níveis",
       description: [
         `**Ativo:** ${g.enabled ? "🟢 sim" : "🔴 não"}`,
@@ -617,38 +644,84 @@ async function setupGame(message, args, ctx) {
         `**Anúncio de level up:** ${g.anunciarLevelUp ? "sim" : "não"}${g.canalAnuncio ? ` (canal definido)` : ""}`,
         "",
         "**Ajustar:**",
-        `\`${PREFIXO}xp setup multiplicador <número>\` (ex.: 1.5)`,
-        `\`${PREFIXO}xp setup nivelmaximo <número>\``,
-        `\`${PREFIXO}xp setup intervalo <5|10>\``,
-        `\`${PREFIXO}xp setup xp <min> <max>\``,
-        `\`${PREFIXO}xp setup cooldown <segundos>\``,
-        `\`${PREFIXO}xp setup canal <aqui|off>\``,
-        `\`${PREFIXO}xp setup anuncio <on|off>\``,
+        `\`${citarInterno("xp.setup.multiplicador", PREFIXO)} <número>\` (ex.: 1.5)`,
+        `\`${citarInterno("xp.setup.nivelmaximo", PREFIXO)} <número>\``,
+        `\`${citarInterno("xp.setup.intervalo", PREFIXO)} <5|10>\``,
+        `\`${citarInterno("xp.setup", PREFIXO)} xp <min> <max>\``,
+        `\`${citarInterno("xp.setup", PREFIXO)} cooldown <segundos>\``,
+        `\`${citarInterno("xp.setup.canal", PREFIXO)} <aqui|off>\``,
+        `\`${citarInterno("xp.setup.anuncio", PREFIXO)} <on|off>\``,
         "",
-        `Depois: \`${PREFIXO}xp criarcargos\` e \`${PREFIXO}xp on\`.`,
+        `Depois: \`${citarInterno("xp.criarcargos", PREFIXO)}\` e \`${citarInterno("xp", PREFIXO)} on\`.`,
       ].join("\n"),
       colour: COR.mod,
-    });
+    }, {
+      title: "🎮 Leveling system configuration",
+      description: [
+        `**Enabled:** ${g.enabled ? "🟢 yes" : "🔴 no"}`,
+        `**XP per message:** ${g.xpMin}–${g.xpMax}`,
+        `**Cooldown:** ${Math.round(g.cooldownMs / 1000)}s`,
+        `**Multiplier (difficulty):** ${g.multiplicador}`,
+        `**Level cap:** ${g.nivelMaximo}`,
+        `**Roles every:** ${g.intervaloCargos} levels`,
+        `**Level-up announcement:** ${g.anunciarLevelUp ? "yes" : "no"}${g.canalAnuncio ? ` (channel set)` : ""}`,
+        "",
+        "**Adjust:**",
+        `\`${citarInterno("xp.setup.multiplicador", PREFIXO)} <number>\` (e.g. 1.5)`,
+        `\`${citarInterno("xp.setup.nivelmaximo", PREFIXO)} <number>\``,
+        `\`${citarInterno("xp.setup.intervalo", PREFIXO)} <5|10>\``,
+        `\`${citarInterno("xp.setup", PREFIXO)} xp <min> <max>\``,
+        `\`${citarInterno("xp.setup", PREFIXO)} cooldown <seconds>\``,
+        `\`${citarInterno("xp.setup.canal", PREFIXO)} <aqui|off>\``,
+        `\`${citarInterno("xp.setup.anuncio", PREFIXO)} <on|off>\``,
+        "",
+        `Then: \`${citarInterno("xp.criarcargos", PREFIXO)}\` and \`${citarInterno("xp", PREFIXO)} on\`.`,
+      ].join("\n"),
+      colour: COR.mod,
+    }, {
+      title: "🎮 Configuración del sistema de niveles",
+      description: [
+        `**Activo:** ${g.enabled ? "🟢 sí" : "🔴 no"}`,
+        `**XP por mensaje:** ${g.xpMin}–${g.xpMax}`,
+        `**Cooldown:** ${Math.round(g.cooldownMs / 1000)}s`,
+        `**Multiplicador (dificultad):** ${g.multiplicador}`,
+        `**Nivel máximo:** ${g.nivelMaximo}`,
+        `**Roles cada:** ${g.intervaloCargos} niveles`,
+        `**Anuncio de subida de nivel:** ${g.anunciarLevelUp ? "sí" : "no"}${g.canalAnuncio ? ` (canal definido)` : ""}`,
+        "",
+        "**Ajustar:**",
+        `\`${citar("xp.setup.multiplicador", "es", PREFIXO)} <número>\` (p. ej.: 1.5)`,
+        `\`${citar("xp.setup.nivelmaximo", "es", PREFIXO)} <número>\``,
+        `\`${citar("xp.setup.intervalo", "es", PREFIXO)} <5|10>\``,
+        `\`${citar("xp.setup", "es", PREFIXO)} xp <min> <max>\``,
+        `\`${citar("xp.setup", "es", PREFIXO)} cooldown <segundos>\``,
+        `\`${citar("xp.setup.canal", "es", PREFIXO)} <here|off>\``,
+        `\`${citar("xp.setup.anuncio", "es", PREFIXO)} <on|off>\``,
+        "",
+        `Después: \`${citar("xp.criarcargos", "es", PREFIXO)}\` y \`${citar("xp", "es", PREFIXO)} on\`.`,
+      ].join("\n"),
+      colour: COR.mod,
+    }));
   }
 
   const g = config.xp;
   const num = Number(valor);
   switch (param) {
     case "multiplicador": case "mult":
-      if (!(num >= 1 && num <= 5)) return erro(ctx, message, tr(ctx, "Multiplicador deve ser entre 1 e 5 (ex.: 1.5).", "The multiplier must be between 1 and 5 (e.g. 1.5)."));
+      if (!(num >= 1 && num <= 5)) return erro(ctx, message, tr(ctx, "Multiplicador deve ser entre 1 e 5 (ex.: 1.5).", "The multiplier must be between 1 and 5 (e.g. 1.5).", "El multiplicador debe estar entre 1 y 5 (p. ej.: 1.5)."));
       g.multiplicador = num; break;
     case "nivelmaximo": case "nivelmax": case "max":
-      if (!(num >= 5 && num <= 1000)) return erro(ctx, message, tr(ctx, "Nível máximo deve ser entre 5 e 1000.", "The level cap must be between 5 and 1000."));
+      if (!(num >= 5 && num <= 1000)) return erro(ctx, message, tr(ctx, "Nível máximo deve ser entre 5 e 1000.", "The level cap must be between 5 and 1000.", "El nivel máximo debe estar entre 5 y 1000."));
       g.nivelMaximo = Math.floor(num); break;
     case "intervalo":
-      if (num !== 5 && num !== 10) return erro(ctx, message, tr(ctx, "Intervalo deve ser 5 ou 10.", "The interval must be 5 or 10."));
+      if (num !== 5 && num !== 10) return erro(ctx, message, tr(ctx, "Intervalo deve ser 5 ou 10.", "The interval must be 5 or 10.", "El intervalo debe ser 5 o 10."));
       g.intervaloCargos = num; break;
     case "xp":
       { const mn = Number(args[1]), mx = Number(args[2]);
-        if (!(mn > 0 && mx >= mn)) return erro(ctx, message, tr(ctx, "Uso: `xp setup xp <min> <max>` (max ≥ min).", "Usage: `xp setup xp <min> <max>` (max ≥ min)."));
+        if (!(mn > 0 && mx >= mn)) return erro(ctx, message, tr(ctx, "Uso: `xp setup xp <min> <max>` (max ≥ min).", "Usage: `xp setup xp <min> <max>` (max ≥ min).", "Uso: `xp setup xp <min> <max>` (max ≥ min)."));
         g.xpMin = Math.floor(mn); g.xpMax = Math.floor(mx); } break;
     case "cooldown":
-      if (!(num >= 0)) return erro(ctx, message, tr(ctx, "Cooldown em segundos (número positivo).", "Cooldown in seconds (a positive number)."));
+      if (!(num >= 0)) return erro(ctx, message, tr(ctx, "Cooldown em segundos (número positivo).", "Cooldown in seconds (a positive number).", "Cooldown en segundos (un número positivo)."));
       g.cooldownMs = Math.floor(num * 1000); break;
     case "canal":
       if ((valor || "").toLowerCase() === "off") g.canalAnuncio = null;
@@ -657,18 +730,19 @@ async function setupGame(message, args, ctx) {
     case "anuncio": case "anúncio":
       g.anunciarLevelUp = (valor || "").toLowerCase() === "on"; break;
     default:
-      return erro(ctx, message, tr(ctx, `Parâmetro desconhecido: \`${param}\`.`, `Unknown parameter: \`${param}\`.`));
+      return erro(ctx, message, tr(ctx, `Parâmetro desconhecido: \`${param}\`.`, `Unknown parameter: \`${param}\`.`, `Parámetro desconocido: \`${param}\`.`));
   }
   ctx.salvarConfig();
   return sendEmbed(message.channel, tr(ctx,
     { title: "✅ Configuração salva", description: `\`${param}\` atualizado.`, colour: COR.sucesso },
     // o nome do ajuste na tela em inglês (17 out 2026: saía "`canal` updated.")
-    { title: "✅ Configuration saved", description: `\`${({ canal: "channel", anuncio: "announce", intervalo: "interval", multiplicador: "multiplier", nivelmaximo: "maxlevel" })[param] ?? param}\` updated.`, colour: COR.sucesso }));
+    { title: "✅ Configuration saved", description: `\`${({ canal: "channel", anuncio: "announce", intervalo: "interval", multiplicador: "multiplier", nivelmaximo: "maxlevel" })[param] ?? param}\` updated.`, colour: COR.sucesso },
+    { title: "✅ Configuración guardada", description: `\`${({ canal: "channel", anuncio: "announce", intervalo: "interval", multiplicador: "multiplier", nivelmaximo: "maxlevel" })[param] ?? param}\` actualizado.`, colour: COR.sucesso }));
 }
 
 function erro(ctx, message, texto) {
   return ctx.sendEmbed(message.channel, {
-    title: lingua(ctx) === "en" ? "❌ Invalid value" : "❌ Valor inválido",
+    title: tr(ctx, "❌ Valor inválido", "❌ Invalid value", "❌ Valor no válido"),
     description: texto, colour: ctx.COR.erro });
 }
 
@@ -685,20 +759,22 @@ export async function criarCargos(message, ctx) {
   if (!niveis.length)
     return sendEmbed(message.channel, tr(ctx,
       { title: "❌ Nada a criar", description: "Verifique o nível máximo e o intervalo.", colour: COR.erro },
-      { title: "❌ Nothing to create", description: "Check the level cap and the interval.", colour: COR.erro }));
+      { title: "❌ Nothing to create", description: "Check the level cap and the interval.", colour: COR.erro }, { title: "❌ Nada que crear", description: "Revisa el nivel máximo y el intervalo.", colour: COR.erro }));
 
   await sendEmbed(message.channel, tr(ctx,
     { title: "⏳ Criando cargos…",
       description: `Vou criar ${niveis.length} cargo(s), um a cada ${intervalo} níveis. Isso pode levar um instante.`, colour: COR.info },
     { title: "⏳ Creating roles…",
-      description: `I'll create ${niveis.length} role(s), one every ${intervalo} levels. This may take a moment.`, colour: COR.info }));
+      description: `I'll create ${niveis.length} role(s), one every ${intervalo} levels. This may take a moment.`, colour: COR.info }, { title: "⏳ Creando roles…",
+      description: `Voy a crear ${niveis.length} rol(es), uno cada ${intervalo} niveles. Puede tardar un momento.`, colour: COR.info }));
 
   const criados = [];
   for (const nivel of niveis) {
     // se já existe cargo para este nível, pula
     if (db.cargoDoNivel(serverId, nivel)) continue;
     try {
-      const { id } = await server.createRole(lingua(ctx) === "en" ? `Level ${nivel}` : `Nível ${nivel}`);
+      // (o nome do cargo é dado gravado no Stoat: sem a marca do `tr`)
+      const { id } = await server.createRole(idiomaDe(ctx) === "es" ? `Nivel ${nivel}` : lingua(ctx) === "en" ? `Level ${nivel}` : `Nível ${nivel}`);
       db.setCargoNivel(serverId, nivel, id);
       criados.push(id);
     } catch (e) { console.error("[GAME][criarCargo]", e.message); }
@@ -710,16 +786,21 @@ export async function criarCargos(message, ctx) {
   const notaMute = ccLang === "en"
     ? `\n\n_New roles are born at the bottom of the list, below the bot. Already-reached levels are handed out as people talk, or now with \`${ctx.PREFIXO ?? "&"}xp sincronizar todos\`._`
     : `\n\n_Cargos novos nascem no fim da lista, abaixo do bot. Os níveis já alcançados são entregues conforme as pessoas conversam, ou agora com \`${ctx.PREFIXO ?? "&"}xp sincronizar todos\`._`;
+  const notaES = `\n\n_Los roles nuevos nacen al final de la lista, por debajo del bot. Los niveles ya alcanzados se entregan a medida que la gente habla, o ahora con \`${citar("xp.sincronizar.todos", "es", ctx.PREFIXO ?? "&")}\`._`;
 
-  return sendEmbed(message.channel, ccLang === "en" ? {
-    title: "🎖 Level roles created",
-    description: `${criados.length} new role(s) created, one every ${intervalo} levels (up to level ${g.nivelMaximo}).${notaMute}`,
-    colour: COR.sucesso,
-  } : {
+  return sendEmbed(message.channel, tr(ctx, {
     title: "🎖 Cargos de nível criados",
     description: `${criados.length} novo(s) cargo(s) criado(s), a cada ${intervalo} níveis (até o nível ${g.nivelMaximo}).${notaMute}`,
     colour: COR.sucesso,
-  });
+  }, {
+    title: "🎖 Level roles created",
+    description: `${criados.length} new role(s) created, one every ${intervalo} levels (up to level ${g.nivelMaximo}).${notaMute}`,
+    colour: COR.sucesso,
+  }, {
+    title: "🎖 Roles de nivel creados",
+    description: `${criados.length} rol(es) nuevo(s) creado(s), uno cada ${intervalo} niveles (hasta el nivel ${g.nivelMaximo}).${notaES}`,
+    colour: COR.sucesso,
+  }));
 }
 
 // Exportado para testes

@@ -4,7 +4,7 @@ Gerado por `INVENTARIO=1 node testes.mjs comandos-17out` — **não edite à mã
 reestruturação dos comandos num registro central (fase 0). A suíte `comandos-17out` compara o bot com o
 `inventario.json` desta pasta: nome que some ou muda de destino faz o teste falhar.
 
-**49 comandos · 168 nomes · 626 subcomandos em inglês · 340 telas de ajuda · 1023 exemplos executados**
+**49 comandos · 168 nomes · 632 subcomandos em inglês · 340 telas de ajuda · 1022 exemplos executados**
 
 ## Comandos
 
@@ -30,7 +30,7 @@ reestruturação dos comandos num registro central (fase 0). A suíte `comandos-
 | `entretenimento` | `entertainment` | `entretenimiento` | `ent` `entertainment` `entretenimiento` `entreterimento` `fun` | `cmdEntretenimento` | sim | 58 |
 | `fuso` | `timezone` | `huso` | `clock` `fusos` `hora` `huso` `timezone` `timezones` `tz` | `cmdFuso` | sim | 30 |
 | `game` | `game` | `juego` | `character` `juego` `personagem` `rpg` | `cmdGame` | sim | 201 |
-| `help` | — | `ayuda` | `ayuda` | `cmdHelp` | — | 160 |
+| `help` | — | `ayuda` | `ayuda` | `cmdHelp` | — | 158 |
 | `idioma` | `language` | `idioma` | `lang` `language` | `cmdIdioma` | — | 8 |
 | `iniciativa` | `initiative` | `iniciativa` | `init` `initiative` | `cmdIniciativa` | sim | 6 |
 | `kick` | — | `expulsar` | `expulsar` | `cmdKick` | sim | 7 |
@@ -58,7 +58,7 @@ reestruturação dos comandos num registro central (fase 0). A suíte `comandos-
 | `userinfo` | — | `userinfo` | — | `cmdUserinfo` | sim | 5 |
 | `warn` | `warn` | `advertir` | `advertir` `avisar` | `cmdWarn` | sim | 20 |
 | `webhook` | — | `webhook` | `gancho` `webhooks` `wh` | `cmdWebhook` | sim | 20 |
-| `xp` | `xp` | `xp` | `level` `levels` `nivel` | `cmdXp` | sim | 37 |
+| `xp` | `xp` | `xp` | `level` `levels` `nivel` | `cmdXp` | sim | 36 |
 
 _Comando_ é o nome interno (o que o `&comando desativar` e o banco guardam).
 
@@ -109,6 +109,7 @@ O que ainda está espalhado:
 - `limpar`: all→tudo, confirm→confirmar, everything→tudo, todo→tudo
 - `log`: actualizaciones→atualizacoes, aqui→here, channel→canal, commands→comandos, events→eventos, informe→relatorio, members→membros, mensajes→mensagens, messages→mensagens, miembros→membros, punishments→punicoes, report→relatorio, roles→cargos, sanciones→punicoes, updates→atualizacoes
 - `modia`: channel→canal, clear→limpar, criteria→criterios
+- `personalidade`: default→padrao, reset→resetar, restablecer→resetar, set→definir, show→ver, view→ver
 - `privacidade`: borrar→apagar, channel→canal, confirm→confirmar, delete→apagar, estado→status, hilo→fio, memory→memoria, thread→fio
 - `punicao`: ban→banir, confirm→confirmar, delete→apagar, ladder→escada, mode→modo, role→cargo, stack→acumular, steps→escada, warn→avisar
 - `reactionrole`: exclusive→exclusivo, reload→recarregar, repair→reparar, unique→unico
@@ -149,32 +150,32 @@ inglês) não aparece aqui.
 - [pt] `&game equipar ‹item›` → ❌ Item desconhecido
 - [pt] `&game desequipar ‹slot|item›` → ❌ Tirar o quê?
 - [pt] `&game vender ‹item›` → ❌ Você não tem isso
-- [pt] `&cor ‹cargo› ‹cor|gradiente|preset›` → ❌ Não entendi a cor
-- [pt] `&cor painel aqui solidas` → ⏱️ não respondeu em 3 s
-- [pt] `&cor criar` → ⏱️ não respondeu em 3 s
+- [pt] `&limpar ‹quantidade› [@usuário] | tudo` → ❌ Não achei essa pessoa
+- [pt] `&limpar` → ❌ Uso incorreto
+- [pt] `&warn <@pessoa|id|nome> [motivo]` → ❌ Quem devo avisar?
+- [pt] `&warn` → ❌ Quem devo avisar?
 - [pt] `&acesso livre ‹comando› on|off` → ❌ Comando desconhecido
 - [pt] `&automod ‹grupo›` → ❌ Não conheço esse
 - [pt] `&automod ‹grupo› on|off` → ❌ Não conheço esse
 - [pt] `&automod ‹grupo› ‹parte› on|off` → ❌ Não conheço esse
-- [pt] `&rss add https://exemplo.com/feed.xml` → ❌ Feed inacessível
-- [pt] `&staff titulo <@cargo> ‹texto›` → ❌ Não é um cargo de staff
-- [pt] `&economia comprar ‹cargo›` → ❓ Qual cargo?
-- [pt] `&entrar` → 🚫 Indisponível aqui
-- [pt] `&sair` → 🚫 Indisponível aqui
-- [pt] `&tts` → 🚫 Indisponível aqui
-- [pt] `&fuso apelido ‹cidade› ‹texto›` → ❌ Cidade não está na lista
-- [pt] `&fuso principal ‹cidade›` → ❌ Precisa estar na lista
-- [pt] `&boasvindas testar` → ❌ Falta o canal
-- [pt] `&chat` → 🚫 Não existe aqui
+- [pt] `&cor ‹cargo› ‹cor|gradiente|preset›` → ❌ Não entendi a cor
+- [pt] `&cor painel aqui solidas` → ⏱️ não respondeu em 3 s
+- [pt] `&cor criar` → ⏱️ não respondeu em 3 s
 - [pt] `&reactionrole ‹add|remove|list›` → ❌ Uso incorreto
 - [pt] `&reactionrole add ‹mensagem› ‹emoji› ‹idCargo›` → ❌ Uso incorreto
 - [pt] `&reactionrole remove ‹mensagem›` → ❌ Uso incorreto
 - [pt] `&reactionrole exclusivo ‹mensagem› on|off` → ❌ Uso incorreto
 - [pt] `&reactionrole add https://stoat.chat/server/.../01ABC... 🎮 01XYZ...` → ❌ Uso incorreto
-- [pt] `&limpar ‹quantidade› [@usuário] | tudo` → ❌ Não achei essa pessoa
-- [pt] `&limpar` → ❌ Uso incorreto
-- [pt] `&warn <@pessoa|id|nome> [motivo]` → ❌ Quem devo avisar?
-- [pt] `&warn` → ❌ Quem devo avisar?
+- [pt] `&chat` → 🚫 Não existe aqui
+- [pt] `&rss add https://exemplo.com/feed.xml` → ❌ Feed inacessível
+- [pt] `&staff titulo <@cargo> ‹texto›` → ❌ Não é um cargo de staff
+- [pt] `&boasvindas testar` → ❌ Falta o canal
+- [pt] `&fuso apelido ‹cidade› ‹texto›` → ❌ Cidade não está na lista
+- [pt] `&fuso principal ‹cidade›` → ❌ Precisa estar na lista
+- [pt] `&tts` → 🚫 Indisponível aqui
+- [pt] `&entrar` → 🚫 Indisponível aqui
+- [pt] `&sair` → 🚫 Indisponível aqui
+- [pt] `&economia comprar ‹cargo›` → ❓ Qual cargo?
 - [pt] `&game admin item ‹nome› [@pessoa]` → ❌ Item desconhecido
 - [pt] `&game admin follower ‹nome› [nível] [@pessoa]` → ❌ Follower desconhecido
 - [pt] `&game admin simular ‹contrato|chefe› [n]` → ❌ Missão desconhecida
@@ -254,32 +255,32 @@ inglês) não aparece aqui.
 - [en] `&game equip ‹item›` → ❌ Unknown item
 - [en] `&game unequip ‹slot|item›` → ❌ Unequip what?
 - [en] `&game sell ‹item›` → ❌ You don't have that
-- [en] `&color ‹role› ‹color|gradient|preset›` → ❌ I didn't understand the color
-- [en] `&color panel here solid` → ⏱️ não respondeu em 3 s
-- [en] `&color create` → ⏱️ não respondeu em 3 s
+- [en] `&purge ‹amount› [@user] | all` → ❌ Couldn't find that person
+- [en] `&purge` → ❌ Wrong usage
+- [en] `&warn <@user|id|name> [reason]` → ❌ Who should I warn?
+- [en] `&warn` → ❌ Who should I warn?
 - [en] `&access free ‹command› on|off` → ❌ Unknown command
 - [en] `&automod ‹group›` → ❌ I don't know that one
 - [en] `&automod ‹group› on|off` → ❌ I don't know that one
 - [en] `&automod ‹group› ‹part› on|off` → ❌ I don't know that one
-- [en] `&rss add https://example.com/feed.xml` → ❌ Unreachable feed
-- [en] `&staff title <@role> ‹text›` → ❌ Not a staff role
-- [en] `&economy buy ‹role›` → ❓ Which role?
-- [en] `&join` → 🚫 Unavailable here
-- [en] `&leave` → 🚫 Unavailable here
-- [en] `&tts` → 🚫 Unavailable here
-- [en] `&timezone label ‹city› ‹text›` → ❌ City isn't on the list
-- [en] `&timezone main ‹city›` → ❌ Must be on the list
-- [en] `&welcome test` → ❌ No channel yet
-- [en] `&chat` → 🚫 Not a command here
+- [en] `&color ‹role› ‹color|gradient|preset›` → ❌ I didn't understand the color
+- [en] `&color panel here solid` → ⏱️ não respondeu em 3 s
+- [en] `&color create` → ⏱️ não respondeu em 3 s
 - [en] `&reactionrole ‹add|remove|list›` → ❌ Wrong usage
 - [en] `&reactionrole add ‹message› ‹emoji› ‹roleId›` → ❌ Wrong usage
 - [en] `&reactionrole remove ‹message›` → ❌ Wrong usage
 - [en] `&reactionrole exclusive ‹message› on|off` → ❌ Wrong usage
 - [en] `&reactionrole add https://stoat.chat/server/.../01ABC... 🎮 01XYZ...` → ❌ Wrong usage
-- [en] `&purge ‹amount› [@user] | all` → ❌ Couldn't find that person
-- [en] `&purge` → ❌ Wrong usage
-- [en] `&warn <@user|id|name> [reason]` → ❌ Who should I warn?
-- [en] `&warn` → ❌ Who should I warn?
+- [en] `&chat` → 🚫 Not a command here
+- [en] `&rss add https://example.com/feed.xml` → ❌ Unreachable feed
+- [en] `&staff title <@role> ‹text›` → ❌ Not a staff role
+- [en] `&welcome test` → ❌ No channel yet
+- [en] `&timezone label ‹city› ‹text›` → ❌ City isn't on the list
+- [en] `&timezone main ‹city›` → ❌ Must be on the list
+- [en] `&tts` → 🚫 Unavailable here
+- [en] `&join` → 🚫 Unavailable here
+- [en] `&leave` → 🚫 Unavailable here
+- [en] `&economy buy ‹role›` → ❓ Which role?
 - [en] `&game admin give ‹qty› [@person]` → ❌ How much?
 - [en] `&game admin item ‹name› [@person]` → ❌ Unknown item
 - [en] `&game admin companion ‹name› [level] [@person]` → ❌ Unknown follower

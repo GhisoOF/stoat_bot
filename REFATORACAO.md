@@ -1286,6 +1286,133 @@ revisão): todas derrubam um teste. Duas só caíram depois de um teste a mais: 
 store o campo vem do padrão) e "nem o texto vai ao modelo" (a 2ª checagem sozinha
 impedia a gravação, mas não o envio).
 
+## 6z. Fim da fase 3: toda página no registro, nenhuma citação à mão (21 out 2026)
+
+As páginas `&help` dos 26 comandos que faltavam foram para o registro, nos três idiomas:
+`&acesso`, `&assistente`, `&automod`, `&banglobal`, `&boasvindas`, `&chat`, `&cor`,
+`&debug`, `&economia`, `&entretenimento`, `&fuso`, `&game`, `&modia`, `&musica`,
+`&personalidade` (que nunca teve página), `&reactionrole`, `&rss`, `&servidor`,
+`&servidores`, `&staff`, `&ticket`, `&tutorial`, `&xp`, `&tts`, `&entrar`, `&sair`. Ficam
+de fora só o `&help` (é a própria ajuda) e o `&cargomudo` (aposentado).
+
+**As citações à mão acabaram:** cerca de 1.900, em 34 arquivos. O `${P}cor painel aqui`
+virou `${citarInterno("cor.painel.aqui", P)}` (`modulos/core/aliases.js`): devolve **na
+hora** o mesmo texto de antes — o nome interno, que a tradução da tela leva aos outros
+idiomas — e a referência é conferida no build (`verificar-build.js`, agora 3.655
+citações) e na hora. **As telas não mudaram:** das 340 páginas e 1.022 respostas, pt e
+en, as diferenças são as de propósito (abaixo), relógio e sorteio.
+
+**Por que não a marca `{&…}` no código** (a 1ª tentativa, desfeita): há código que lê o
+texto antes da tela — o `visao.js` decide o que o membro vê procurando `&economia` nas
+linhas; o tutorial acha o `&fuso add` no texto. Com a marca, ficaram cegos (9 testes
+caíram). A marca continua onde a tela a resolve: o registro e as novidades.
+
+**O inglês do registro é inglês** (a regra das fases 3b/3c): o texto em inglês das
+páginas migradas dependia da tradução da tela (`<cargo|canal>` em inglês, `sair` no
+lugar de `leave`). Um script gravou como inglês do registro o que a tela mostrava —
+94 campos — e conferiu que a tela ficou igual.
+
+**O espanhol:** cerca de 340 campos novos, traduzidos em quatro lotes paralelos e conferidos pelos
+testes (as marcas no lugar, as mesmas linhas, nenhum nome de comando escrito à mão).
+
+**Erros achados e corrigidos, cada um com teste:**
+
+| Erro | Teste |
+|---|---|
+| o script de migração apagou as subpáginas `automod set`, `automod punicao` e `automod antirepeticao` (pt e en): a chave delas é igual à da página que ia para o registro. O teste antigo ("nenhuma cópia da página no geral.js") olhava o arquivo inteiro e pedia justamente isso | a lista das páginas de ajuda foi para o inventário — página que some reprova; o teste antigo olha só as funções das páginas |
+| `&help personalidade` respondia "Não encontrado" (desde antes): o comando não tinha página, só a subpágina `prompt` | as páginas do inventário não podem responder "não encontrado" |
+| `&musica` em inglês e espanhol: "_Aliases: `&music` · `&music` · `&music`_" — a tradução da tela troca todo apelido citado com `&` pelo nome do comando (o mesmo erro do `&idioma` na 3c) | nenhuma página, em idioma nenhum, repete o apelido na linha de apelidos |
+| o `&personalidade` aceitava `set`/`view`/`reset` por conta própria; ganhou subcomandos no registro e o handler só conhece o nome interno | a lista dos handlers que ainda comparam com o inglês (138, de antes) foi para o inventário e só pode encolher |
+| `{&help.xp}` em inglês sai `&help levels` — o nome em inglês do tópico `xp` do `&help` é `levels`; só a tradução da tela consertava | o texto cita `{&help} xp sync` |
+| o comentário que descrevia a marca a escrevia — e o build abortava (o erro do P5 de novo) | **o teste de regressão do P5 pegou na hora** |
+| a 1ª tentativa (a marca no código) cegou o `visao.js` e o tutorial | nenhuma tela mostra a marca crua |
+
+**Mudou na tela, de propósito:** `&help personalidade` agora tem página (fora dos
+servidores com IA a ajuda diz "não existe aqui", como a subpágina); `&automod punicao` em
+português mostrava `sentinela test` (agora `testar`); o tutorial do XP cita `&xp` no lugar
+do apelido `&nivel` (o mesmo comando). E os testes que pedem a página pelo `&help` agora
+reconhecem os que abrem outra coisa: o `automod` (a árvore própria), o `xp` e o `game` (os
+grupos, decisão do Ghieh) e os que dependem de uma lista do `.env` (IA, voz).
+
+**Testes:** 4 novos na `comandos-17out` (78), 2 ajustados (a regra da página no geral.js e
+o código do `&cor`). 7 mutações: todas derrubam um teste.
+
+**Para decidir (não mexi):**
+- `&personalidade` fora dos servidores com IA: a ajuda já o esconde, mas o comando roda (e
+  a persona não tem efeito lá). Marcar `soIA` no registro faria ele responder "não existe
+  aqui" — muda comportamento, ficou para você.
+- Os 138 lugares em que o handler ainda compara com a palavra em inglês por conta própria
+  (inofensivos: o registro já traduz). Tirá-los exige conferir, comando a comando, quem
+  chama o handler por dentro sem passar pela tradução.
+
+## 6za. Etapa 4b: as respostas em espanhol (21 out 2026)
+
+Num servidor em `&idioma es`, os nomes dos comandos já saíam em espanhol (etapa 4a), mas
+as respostas saíam em inglês. Agora saem em espanhol.
+
+**A medida** (a suíte `comandos-17out` roda os mesmos exemplos da ajuda num servidor em
+espanhol e conta o que ainda sai em inglês):
+
+| | antes | agora |
+|---|---|---|
+| respostas dos exemplos da ajuda | 267 de 514 em espanhol | **507 de 514** |
+| páginas de ajuda e do tutorial | 45 de 170 | **170 de 170** |
+
+As 7 que restam: 4 do RPG (`&game chefes`, `especiais`, `recrutas`, `admin imagem`) porque
+os nomes e descrições do catálogo e das histórias só existem em pt/en; e 3 do painel de
+cores, que são do teste — o painel termina depois de o teste ler a resposta, e a tela
+seguinte recebe o final do painel do servidor anterior. No servidor de verdade o painel
+sai em espanhol. A lista das que ainda saem em inglês (`esEmIngles`, `telasEsEmIngles` no
+inventário) só pode encolher.
+
+**Como o espanhol entra** (o mecanismo foi feito antes dos lotes):
+- `tr(ctx, pt, en, es)` (`core/i18n.js`): no servidor em espanhol devolve o quarto
+  argumento **marcado como pronto** (`trechoPronto`: U+2063 no começo, U+2064 no fim).
+- `exibir` (a tradução da tela, `core/aliases.js`): guarda os trechos prontos, traduz o
+  resto para o inglês como sempre, e devolve os trechos intactos. Sem isso a tradução da
+  tela levava o espanhol ao inglês palavra por palavra (`aquí` → `here`).
+- `main.js` tira as marcas antes de enviar; o `log.registrar` aceita `es: {titulo, descricao}`.
+- A árvore da ajuda (`&help automod sentinela…`, 70 páginas) e os 7 grupos do índice:
+  `moderacao/help-arvore-es.js`, pelo mesmo caminho da árvore em inglês, com os comandos
+  citados pela marca do registro (resolvida em espanhol).
+- O RPG embrulha os embeds numa tradução própria (`traducao.js`) que trocava palavras
+  iguais em pt e es (`Vida` → `Health`, `Raro` → `Rare`). Em espanhol, agora só os nomes
+  do catálogo são trocados (`traduzirEmbedEs`).
+- A IA conversa em espanhol num servidor em espanhol (o prompt segue em inglês, e pede
+  a resposta em espanhol).
+
+**O trabalho**: ~2.300 textos em 60 arquivos, em 11 lotes paralelos, cada um num
+diretório próprio, juntados um a um. Depois de cada junção: a suíte inteira e a
+comparação das 340 telas e 1.022 respostas em pt e en com as de antes — **iguais**, fora
+relógio, sorteio, memória e a contagem de linhas do `&sobre`.
+
+**Erros achados, cada um com teste de regressão e um teste geral:**
+
+| Erro | Teste |
+|---|---|
+| a tela em inglês da ajuda do dono mostrava `server` no lugar da variável de ambiente `SERVIDOR` (a tradução das palavras entre crases não distinguia constante de palavra) — de antes | regressão; e o geral: todo nome em MAIÚSCULAS entre crases da tela pt aparece igual nas telas en e es da mesma página |
+| `nomeModo(x, "es")` e os outros nomes do automod devolviam o nome em **português** (só conheciam `"en"`) | os ajudantes de texto falam espanhol (erro, duração, modo, permissão, imagem) |
+| os lotes deixaram ~40 chamadas `descreverErro(e, "en")`, `duracaoTexto(ms, "en")`, `rotuloDegrau(d, "en")`… dentro do texto em espanhol (o ajudante era de outro arquivo) | nenhum texto em espanhol chama um ajudante pedindo inglês |
+| a tradução do embed do RPG levava o espanhol ao inglês (`Charisma +6`, `Health +11`) | o RPG mostra raridade, vaga e tipo em espanhol, e `Raro`/`Épico` não viram `Rare`/`Epic` |
+| a IA respondia em inglês num servidor em espanhol | a IA é instruída a responder em espanhol (e o inglês, em inglês) |
+| `&idioma es` dizia "las respuestas todavía salen en inglés" | o aviso não diz mais isso |
+| lotes leram `config.language === "es"` direto (rss, economia) | **o teste que já existia pegou** |
+| lotes deixaram import sem uso (rss, ban-global, boas-vindas) | **o teste de código morto pegou** |
+| a árvore em espanhol citava comandos à mão (`&staff`, `&color`, `&join`) | **o teste de citação à mão pegou**; viraram marcas |
+| — (prevenção) um texto de `tr` gravado no banco levaria o caractere invisível junto | a marca de texto pronto nunca é gravada no banco (varre todas as tabelas depois dos exemplos em espanhol) |
+| — (prevenção) uma página em espanhol com caminho errado nunca seria mostrada | a árvore em espanhol bate página a página com a inglesa (caminho, linhas, comandos citados) |
+
+**Mudou de propósito (só no espanhol):** as categorias padrão dos tickets num servidor em
+espanhol são Soporte/Denuncia/Sugerencia e o cargo criado é "Equipo de tickets"; a moeda
+padrão é "Moneda"; as mensagens padrão de boas-vindas e despedida são em espanhol; os
+cargos de nível se chamam "Nivel N"; o assistente (`&asistente`) oferece `3` Español no
+passo do idioma. Nada disso muda pt ou en.
+
+**Ficou em inglês no espanhol, e por quê:** as histórias e os nomes do catálogo do RPG
+(os dados só têm pt/en); as palavras que se digitam (subcomandos e modos como `stack`,
+`here`, `on`/`off` — as mesmas que a tela em espanhol sempre mostrou); o texto da IA nos
+resumos de RSS (o prompt decide).
+
 ## 7. O que NÃO fiz, e por quê
 
 | Item | Por quê |

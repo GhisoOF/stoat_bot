@@ -9,6 +9,8 @@
 //             na memória e vence depois de 10 min parado (um reinício também o
 //             encerra) — é uma brincadeira, não vale guardar no banco.
 
+import { trechoPronto } from "../core/aliases.js";
+
 // ── Campo minado ────────────────────────────────────────────────────────────
 export const NIVEIS = {
   facil:   { linhas: 6, colunas: 6, minas: 5 },
@@ -97,11 +99,13 @@ function varrer(agora = Date.now()) { for (const [id, p] of partidas) if (p.venc
 
 function textos(lang) {
   const en = lang !== "pt";
+  // espanhol: sai pronto (a tradução da tela não passa por ele)
+  const E = (es, outro) => (lang === "es" ? trechoPronto(es) : outro);
   return {
-    titulo: en ? "🎮 Tic-tac-toe" : "🎮 Jogo da velha",   // (❌ no começo do título parece erro)
-    vez: (n, s) => (en ? `**${n}**'s turn (${s}) — react with the square's number.` : `Vez de **${n}** (${s}) — reaja no número da casa.`),
-    venceu: (n, s) => (en ? `🏆 **${n}** (${s}) wins!` : `🏆 **${n}** (${s}) venceu!`),
-    empate: en ? "🤝 Draw — nobody wins." : "🤝 Deu velha — ninguém venceu.",
+    titulo: E("🎮 Tres en raya", en ? "🎮 Tic-tac-toe" : "🎮 Jogo da velha"),   // (❌ no começo do título parece erro)
+    vez: (n, s) => E(`Turno de **${n}** (${s}) — reacciona con el número de la casilla.`, en ? `**${n}**'s turn (${s}) — react with the square's number.` : `Vez de **${n}** (${s}) — reaja no número da casa.`),
+    venceu: (n, s) => E(`🏆 ¡**${n}** (${s}) gana!`, en ? `🏆 **${n}** (${s}) wins!` : `🏆 **${n}** (${s}) venceu!`),
+    empate: E("🤝 Empate — nadie gana.", en ? "🤝 Draw — nobody wins." : "🤝 Deu velha — ninguém venceu."),
   };
 }
 

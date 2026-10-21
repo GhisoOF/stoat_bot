@@ -1,10 +1,11 @@
 
 import { buscarSeguro, lerTexto, erroEmIngles } from "../core/seguranca.js";
+import { citar, citarInterno } from "../core/aliases.js";
 import * as db from "../core/db.js";
 import { ULID } from "../core/ids.js";
 import { canalDeOutroServidor } from "../moderacao/pertence.js";
 import * as log from "../core/log.js";
-import { tr, lingua, textoDoIdioma } from "../core/i18n.js";
+import { tr, lingua, textoDoIdioma, idiomaDaTela } from "../core/i18n.js";
 import { servidorNaLista } from "../core/env.js";
 
 let resumirIA = null;
@@ -123,6 +124,13 @@ const MOTIVO_EN = {
   "canal inacessível": "the channel can't be reached",
   "canal de outro servidor": "the channel belongs to another server",
 };
+// …e para a tela em espanhol (etapa 4b)
+const MOTIVO_ES = {
+  "servidor não permitido": "servidor no permitido",
+  "canal não configurado": "no hay canal configurado",
+  "canal inacessível": "no se puede acceder al canal",
+  "canal de outro servidor": "el canal es de otro servidor",
+};
 
 export async function rodarCiclo(serverId, ctx, { forcado = false } = {}) {
   if (!servidorPermitido(serverId)) return { ok: false, motivo: "servidor não permitido" };
@@ -141,8 +149,9 @@ export async function rodarCiclo(serverId, ctx, { forcado = false } = {}) {
   if (!novos.length) {
     if (forcado) {
       const rlang = textoDoIdioma(config?.language);
+      // (o envio é direto no canal, sem a tradução da tela: o espanhol vai sem marca)
       await canal.sendMessage({ embeds: [{ title: "📰 RSS",
-        description: rlang === "en" ? "No new stories since the last cycle." : "Nenhuma notícia nova desde o último ciclo.", colour: "#5865F2" }] });
+        description: idiomaDaTela(config?.language) === "es" ? "No hay noticias nuevas desde el último ciclo." : rlang === "en" ? "No new stories since the last cycle." : "Nenhuma notícia nova desde o último ciclo.", colour: "#5865F2" }] });
     }
     return { ok: true, quantidade: 0 };
   }
@@ -152,14 +161,16 @@ export async function rodarCiclo(serverId, ctx, { forcado = false } = {}) {
   if (novos.length > MAX_ITENS) { cortados = novos.length - MAX_ITENS; novos = novos.slice(0, MAX_ITENS); }
 
   const cicloEn = textoDoIdioma(config?.language) === "en";
-  const agora = new Date().toLocaleString(cicloEn ? "en-US" : "pt-BR", { timeZone: process.env.TZ || "UTC" });
+  // espanhol (etapa 4b): só os rótulos; o texto do modelo segue o `lang` de antes
+  const cicloEs = idiomaDaTela(config?.language) === "es";
+  const agora = new Date().toLocaleString(cicloEs ? "es-ES" : cicloEn ? "en-US" : "pt-BR", { timeZone: process.env.TZ || "UTC" });
 
   // A parte de IA do RSS (o relatório e o comentário da Judy) só nos servidores
   // da conversa (SERVIDOR/CHAT_SERVIDORES; 16 out 2026). Nos outros, a lista
   // de notícias sai do mesmo jeito, sem modelo.
   const iaNoRss = servidorNaLista("CHAT_SERVIDORES", serverId);
   if (relatorioIA && iaNoRss) {
-    try { await publicarRelatorio(canal, novos, { lang: cicloEn ? "en" : "pt", agora, serverId }); }
+    try { await publicarRelatorio(canal, novos, { lang: cicloEn ? "en" : "pt", agora, serverId, idioma: cicloEs ? "es" : null }); }
     catch (e) { console.error("[RSS] relatório falhou:", e.message); }
   } else if (resumirIA && iaNoRss) {
     const grupos = new Map();
@@ -184,7 +195,7 @@ export async function rodarCiclo(serverId, ctx, { forcado = false } = {}) {
         if (resumo && resumo.trim()) {
           const rotulo = cat === "Geral" ? "" : ` · ${cat}`;
           await canal.sendMessage({ embeds: [{
-            title: cicloEn ? `📰 Judy's digest${rotulo} — ${agora}` : `📰 O resumo da Judy${rotulo} — ${agora}`,
+            title: cicloEs ? `📰 El resumen de Judy${rotulo} — ${agora}` : cicloEn ? `📰 Judy's digest${rotulo} — ${agora}` : `📰 O resumo da Judy${rotulo} — ${agora}`,
             description: fecharResumo(resumo, itens),
             colour: "#a78bfa",
           }] });
@@ -196,7 +207,7 @@ export async function rodarCiclo(serverId, ctx, { forcado = false } = {}) {
   }
 
   const linhas = novos.map((it) => {
-    const quando = it.data ? new Date(it.data).toLocaleString(cicloEn ? "en-US" : "pt-BR", { timeZone: process.env.TZ || "UTC" }) : "—";
+    const quando = it.data ? new Date(it.data).toLocaleString(cicloEs ? "es-ES" : cicloEn ? "en-US" : "pt-BR", { timeZone: process.env.TZ || "UTC" }) : "—";
     return `**${it.titulo}**\n${it.feedTitulo} · ${quando}${it.link ? `\n${it.link}` : ""}`;
   });
 
@@ -210,11 +221,13 @@ export async function rodarCiclo(serverId, ctx, { forcado = false } = {}) {
   if (atual) blocos.push(atual);
 
   for (let i = 0; i < blocos.length; i++) {
-    const titulo = cicloEn
+    const titulo = cicloEs
+      ? (blocos.length > 1 ? `📰 Noticias (${i + 1}/${blocos.length}) — ${agora}` : `📰 Noticias — ${agora}`)
+      : cicloEn
       ? (blocos.length > 1 ? `📰 News (${i + 1}/${blocos.length}) — ${agora}` : `📰 News — ${agora}`)
       : (blocos.length > 1 ? `📰 Notícias (${i + 1}/${blocos.length}) — ${agora}` : `📰 Notícias — ${agora}`);
     const rodape = (i === blocos.length - 1 && cortados)
-      ? (cicloEn ? `\n\n_(+${cortados} beyond this cycle's limit)_` : `\n\n_(+${cortados} além do limite deste ciclo)_`) : "";
+      ? (cicloEs ? `\n\n_(+${cortados} más allá del límite de este ciclo)_` : cicloEn ? `\n\n_(+${cortados} beyond this cycle's limit)_` : `\n\n_(+${cortados} além do limite deste ciclo)_`) : "";
     try {
       await canal.sendMessage({ embeds: [{ title: titulo, description: (blocos[i] + rodape).slice(0, 1990), colour: "#5865F2" }] });
     } catch (e) {
@@ -227,6 +240,7 @@ export async function rodarCiclo(serverId, ctx, { forcado = false } = {}) {
       titulo: "📰 RSS publicado",
       descricao: `${novos.length} notícia(s) postada(s) em <#${canalId}>.`,
       en: { titulo: "📰 RSS posted", descricao: `${novos.length} news item(s) posted in <#${canalId}>.` },
+      es: { titulo: "📰 RSS publicado", descricao: `${novos.length} noticia(s) publicada(s) en <#${canalId}>.` },
     });
   } catch {}
 
@@ -265,7 +279,8 @@ export async function cmdRss(message, args, ctx) {
   if (!servidorPermitido(serverId)) {
     return sendEmbed(message.channel, tr(ctx,
       { title: "🚫 Indisponível aqui", description: "A curadoria RSS não está habilitada neste servidor.", colour: COR.aviso },
-      { title: "🚫 Unavailable here", description: "RSS curation isn't enabled on this server.", colour: COR.aviso }));
+      { title: "🚫 Unavailable here", description: "RSS curation isn't enabled on this server.", colour: COR.aviso },
+      { title: "🚫 No disponible aquí", description: "La curaduría RSS no está habilitada en este servidor.", colour: COR.aviso }));
   }
 
   const server = await getServer(message);
@@ -274,7 +289,9 @@ export async function cmdRss(message, args, ctx) {
       { title: "🚫 Permissão insuficiente",
         description: "Você precisa de **ManagePermissions** para configurar a curadoria RSS.", colour: COR.erro },
       { title: "🚫 Missing permission",
-        description: "You need **ManagePermissions** to configure RSS curation.", colour: COR.erro }));
+        description: "You need **ManagePermissions** to configure RSS curation.", colour: COR.erro },
+      { title: "🚫 Permiso insuficiente",
+        description: "Necesitas **ManagePermissions** para configurar la curaduría RSS.", colour: COR.erro }));
   }
 
   const sub = args[0]?.toLowerCase();
@@ -286,14 +303,17 @@ export async function cmdRss(message, args, ctx) {
     if (!url || !/^https?:\/\//i.test(url))
       return sendEmbed(message.channel, tr(ctx,
         { title: "❌ URL inválida",
-          description: `\`${PREFIXO}rss add <url> [categoria]\` — a URL precisa começar com http(s). A categoria agrupa os resumos: \`${PREFIXO}rss add https://... tecnologia\`.`, colour: COR.erro },
+          description: `\`${citarInterno("rss.add", PREFIXO)} <url> [categoria]\` — a URL precisa começar com http(s). A categoria agrupa os resumos: \`${citarInterno("rss.add", PREFIXO)} https://... tecnologia\`.`, colour: COR.erro },
         { title: "❌ Invalid URL",
-          description: `\`${PREFIXO}rss add <url> [category]\` — the URL must start with http(s). The category groups the digests: \`${PREFIXO}rss add https://... tech\`.`, colour: COR.erro }));
+          description: `\`${citarInterno("rss.add", PREFIXO)} <url> [category]\` — the URL must start with http(s). The category groups the digests: \`${citarInterno("rss.add", PREFIXO)} https://... tech\`.`, colour: COR.erro },
+        { title: "❌ URL no válida",
+          description: `\`${citar("rss.add", "es", PREFIXO)} <url> [categoría]\` — la URL tiene que empezar por http(s). La categoría agrupa los resúmenes: \`${citar("rss.add", "es", PREFIXO)} https://... tecnología\`.`, colour: COR.erro }));
     // teto por servidor: cada feed é uma busca por hora saindo da máquina do bot
     if (db.listarFeeds(serverId).length >= MAX_FEEDS_SERVIDOR && !db.listarFeeds(serverId).some((f) => f.url === url))
       return sendEmbed(message.channel, tr(ctx,
-        { title: "❌ Feeds demais", description: `Este servidor já tem **${MAX_FEEDS_SERVIDOR}** feeds — o máximo. Tire um com \`${PREFIXO}rss remove <id>\`.`, colour: COR.erro },
-        { title: "❌ Too many feeds", description: `This server already has **${MAX_FEEDS_SERVIDOR}** feeds — the maximum. Remove one with \`${PREFIXO}rss remove <id>\`.`, colour: COR.erro }));
+        { title: "❌ Feeds demais", description: `Este servidor já tem **${MAX_FEEDS_SERVIDOR}** feeds — o máximo. Tire um com \`${citarInterno("rss.remove", PREFIXO)} <id>\`.`, colour: COR.erro },
+        { title: "❌ Too many feeds", description: `This server already has **${MAX_FEEDS_SERVIDOR}** feeds — the maximum. Remove one with \`${citarInterno("rss.remove", PREFIXO)} <id>\`.`, colour: COR.erro },
+        { title: "❌ Demasiados feeds", description: `Este servidor ya tiene **${MAX_FEEDS_SERVIDOR}** feeds — el máximo. Quita uno con \`${citar("rss.remove", "es", PREFIXO)} <id>\`.`, colour: COR.erro }));
     // valida buscando o feed uma vez
     let titulo = null;
     try { titulo = (await parseFeed(url)).titulo; }
@@ -302,7 +322,9 @@ export async function cmdRss(message, args, ctx) {
         { title: "❌ Feed inacessível",
           description: `Não consegui ler esse RSS.\n**Erro:** ${err.message}`, colour: COR.erro },
         { title: "❌ Unreachable feed",
-          description: `I couldn't read that RSS.\n**Error:** ${erroEmIngles(err.message)}`, colour: COR.erro }));
+          description: `I couldn't read that RSS.\n**Error:** ${erroEmIngles(err.message)}`, colour: COR.erro },
+        { title: "❌ Feed inaccesible",
+          description: `No pude leer ese RSS.\n**Error:** ${erroEmIngles(err.message)}`, colour: COR.erro }));
     }
     const novo = db.addFeed(serverId, url, titulo, categoria);
     // já marca os itens atuais como vistos (só resume o que vier DEPOIS)
@@ -311,18 +333,24 @@ export async function cmdRss(message, args, ctx) {
       const f = feeds.find((x) => x.url === url);
       try { for (const it of (await parseFeed(url)).itens) if (it.guid) db.marcarVisto(f.id, it.guid); } catch {}
     }
-    return sendEmbed(message.channel, en ? {
+    return sendEmbed(message.channel, tr(ctx, {
+      title: novo ? "✅ Feed adicionado" : "ℹ️ Já cadastrado",
+      description: novo
+        ? `**${titulo || url}**\nO conteúdo atual foi marcado como visto; você receberá só as **próximas** notícias.`
+        : "Esse feed já estava na lista.",
+      colour: novo ? COR.sucesso : COR.mod }, {
       title: novo ? "✅ Feed added" : "ℹ️ Already registered",
       description: novo
         ? `**${titulo || url}**\nThe current content was marked as seen; you'll only get the **next** stories.`
         : "That feed was already on the list.",
       colour: novo ? COR.sucesso : COR.mod,
-    } : {
-      title: novo ? "✅ Feed adicionado" : "ℹ️ Já cadastrado",
+    }, {
+      title: novo ? "✅ Feed añadido" : "ℹ️ Ya registrado",
       description: novo
-        ? `**${titulo || url}**\nO conteúdo atual foi marcado como visto; você receberá só as **próximas** notícias.`
-        : "Esse feed já estava na lista.",
-      colour: novo ? COR.sucesso : COR.mod });
+        ? `**${titulo || url}**\nEl contenido actual se marcó como visto; solo recibirás las **próximas** noticias.`
+        : "Ese feed ya estaba en la lista.",
+      colour: novo ? COR.sucesso : COR.mod,
+    }));
   }
 
   // ── remove ──
@@ -331,16 +359,21 @@ export async function cmdRss(message, args, ctx) {
     if (!alvo)
       return sendEmbed(message.channel, tr(ctx,
         { title: "❌ Uso incorreto",
-          description: `\`${PREFIXO}rss remove <id|url>\` (veja os IDs em \`${PREFIXO}rss list\`)`, colour: COR.erro },
+          description: `\`${citarInterno("rss.remove", PREFIXO)} <id|url>\` (veja os IDs em \`${citarInterno("rss.list", PREFIXO)}\`)`, colour: COR.erro },
         { title: "❌ Wrong usage",
-          description: `\`${PREFIXO}rss remove <id|url>\` (see the IDs with \`${PREFIXO}rss list\`)`, colour: COR.erro }));
+          description: `\`${citarInterno("rss.remove", PREFIXO)} <id|url>\` (see the IDs with \`${citarInterno("rss.list", PREFIXO)}\`)`, colour: COR.erro },
+        { title: "❌ Uso incorrecto",
+          description: `\`${citar("rss.remove", "es", PREFIXO)} <id|url>\` (mira los IDs con \`${citar("rss.list", "es", PREFIXO)}\`)`, colour: COR.erro }));
     const n = db.removeFeed(serverId, alvo);
-    return sendEmbed(message.channel, en ? {
+    return sendEmbed(message.channel, tr(ctx, {
+      title: n ? "🗑 Feed removido" : "❓ Não encontrado",
+      description: n ? `Removido(s) ${n} feed(s).` : "Nenhum feed com esse id/url.", colour: n ? COR.sucesso : COR.aviso }, {
       title: n ? "🗑 Feed removed" : "❓ Not found",
       description: n ? `Removed ${n} feed(s).` : "No feed with that id/url.", colour: n ? COR.sucesso : COR.aviso,
-    } : {
-      title: n ? "🗑 Feed removido" : "❓ Não encontrado",
-      description: n ? `Removido(s) ${n} feed(s).` : "Nenhum feed com esse id/url.", colour: n ? COR.sucesso : COR.aviso });
+    }, {
+      title: n ? "🗑 Feed quitado" : "❓ No encontrado",
+      description: n ? `Se quitaron ${n} feed(s).` : "No hay ningún feed con ese id/url.", colour: n ? COR.sucesso : COR.aviso,
+    }));
   }
 
   // ── list ──
@@ -348,9 +381,10 @@ export async function cmdRss(message, args, ctx) {
     const feeds = db.listarFeeds(serverId);
     if (!feeds.length)
       return sendEmbed(message.channel, tr(ctx,
-        { title: "📰 Feeds RSS", description: `Nenhum feed. Adicione com \`${PREFIXO}rss add <url>\`.`, colour: COR.mod },
-        { title: "📰 RSS feeds", description: `No feeds. Add one with \`${PREFIXO}rss add <url>\`.`, colour: COR.mod }));
-    return sendEmbed(message.channel, { title: en ? "📰 RSS feeds" : "📰 Feeds RSS",
+        { title: "📰 Feeds RSS", description: `Nenhum feed. Adicione com \`${citarInterno("rss.add", PREFIXO)} <url>\`.`, colour: COR.mod },
+        { title: "📰 RSS feeds", description: `No feeds. Add one with \`${citarInterno("rss.add", PREFIXO)} <url>\`.`, colour: COR.mod },
+        { title: "📰 Feeds RSS", description: `No hay feeds. Añade uno con \`${citar("rss.add", "es", PREFIXO)} <url>\`.`, colour: COR.mod }));
+    return sendEmbed(message.channel, { title: tr(ctx, "📰 Feeds RSS", "📰 RSS feeds", "📰 Feeds RSS"),
       description: feeds.map((f) => `**${f.id}.** ${f.titulo || f.url}${f.categoria ? ` · 🏷️ ${f.categoria}` : ""}\n${f.url}`).join("\n\n"), colour: COR.mod });
   }
 
@@ -361,9 +395,11 @@ export async function cmdRss(message, args, ctx) {
     if (!alvo) {
       return sendEmbed(message.channel, tr(ctx,
         { title: "🏷️ Categoria de feed",
-          description: `\`${PREFIXO}rss categoria <id|url> <nome>\` — os resumos saem agrupados por categoria, um bloco por assunto.\n\`${PREFIXO}rss categoria <id|url> off\` tira a categoria (o feed volta para "Geral").\n\n\`${PREFIXO}rss list\` mostra os ids.`, colour: COR.info },
+          description: `\`${citarInterno("rss.categoria", PREFIXO)} <id|url> <nome>\` — os resumos saem agrupados por categoria, um bloco por assunto.\n\`${citarInterno("rss.categoria", PREFIXO)} <id|url> off\` tira a categoria (o feed volta para "Geral").\n\n\`${citarInterno("rss.list", PREFIXO)}\` mostra os ids.`, colour: COR.info },
         { title: "🏷️ Feed category",
-          description: `\`${PREFIXO}rss categoria <id|url> <name>\` — digests come out grouped by category, one block per topic.\n\`${PREFIXO}rss categoria <id|url> off\` clears it (the feed goes back to "Geral").\n\n\`${PREFIXO}rss list\` shows the ids.`, colour: COR.info }));
+          description: `\`${citarInterno("rss.categoria", PREFIXO)} <id|url> <name>\` — digests come out grouped by category, one block per topic.\n\`${citarInterno("rss.categoria", PREFIXO)} <id|url> off\` clears it (the feed goes back to "Geral").\n\n\`${citarInterno("rss.list", PREFIXO)}\` shows the ids.`, colour: COR.info },
+        { title: "🏷️ Categoría de feed",
+          description: `\`${citar("rss.categoria", "es", PREFIXO)} <id|url> <nombre>\` — los resúmenes salen agrupados por categoría, un bloque por tema.\n\`${citar("rss.categoria", "es", PREFIXO)} <id|url> off\` quita la categoría (el feed vuelve a "Geral").\n\n\`${citar("rss.list", "es", PREFIXO)}\` muestra los ids.`, colour: COR.info }));
     }
     const valor = /^(off|nenhuma|none)$/i.test(nome) ? null : (nome || null);
     const n = db.setCategoriaFeed(serverId, alvo, valor);
@@ -371,13 +407,19 @@ export async function cmdRss(message, args, ctx) {
       title: n ? "🏷️ Categoria atualizada" : "❌ Feed não encontrado",
       description: n
         ? (valor ? `O feed agora resume no bloco **${valor}**.` : `O feed voltou para o bloco **Geral**.`)
-        : `Não achei o feed \`${alvo}\` — \`${PREFIXO}rss list\` mostra os ids.`,
+        : `Não achei o feed \`${alvo}\` — \`${citarInterno("rss.list", PREFIXO)}\` mostra os ids.`,
       colour: n ? COR.sucesso : COR.erro,
     }, {
       title: n ? "🏷️ Category updated" : "❌ Feed not found",
       description: n
         ? (valor ? `The feed now digests under **${valor}**.` : `The feed is back under **Geral**.`)
-        : `I couldn't find feed \`${alvo}\` — \`${PREFIXO}rss list\` shows the ids.`,
+        : `I couldn't find feed \`${alvo}\` — \`${citarInterno("rss.list", PREFIXO)}\` shows the ids.`,
+      colour: n ? COR.sucesso : COR.erro,
+    }, {
+      title: n ? "🏷️ Categoría actualizada" : "❌ Feed no encontrado",
+      description: n
+        ? (valor ? `El feed ahora se resume en el bloque **${valor}**.` : `El feed volvió al bloque **Geral**.`)
+        : `No encontré el feed \`${alvo}\` — \`${citar("rss.list", "es", PREFIXO)}\` muestra los ids.`,
       colour: n ? COR.sucesso : COR.erro,
     }));
   }
@@ -391,53 +433,65 @@ export async function cmdRss(message, args, ctx) {
         { title: "📰 Canal desativado",
           description: "A curadoria não será mais postada até você definir um canal.", colour: COR.mod },
         { title: "📰 Channel disabled",
-          description: "The curation won't be posted until you set a channel again.", colour: COR.mod }));
+          description: "The curation won't be posted until you set a channel again.", colour: COR.mod },
+        { title: "📰 Canal desactivado",
+          description: "La curaduría no se publicará hasta que vuelvas a definir un canal.", colour: COR.mod }));
     }
     let canalId = null;
     if (!arg || arg === "aqui" || arg === "here") canalId = message.channelId;
     else if (ULID.test(args[1].replace(/[<#>]/g, ""))) canalId = args[1].replace(/[<#>]/g, "");
     else return sendEmbed(message.channel, tr(ctx,
       { title: "❌ Uso incorreto",
-        description: `\`${PREFIXO}rss canal aqui\` · \`${PREFIXO}rss canal <id>\` · \`${PREFIXO}rss canal off\``, colour: COR.erro },
+        description: `\`${citarInterno("rss.canal.aqui", PREFIXO)}\` · \`${citarInterno("rss.canal", PREFIXO)} <id>\` · \`${citarInterno("rss.canal.off", PREFIXO)}\``, colour: COR.erro },
       { title: "❌ Wrong usage",
-        description: `\`${PREFIXO}rss canal aqui\` · \`${PREFIXO}rss canal <id>\` · \`${PREFIXO}rss canal off\``, colour: COR.erro }));
+        description: `\`${citarInterno("rss.canal.aqui", PREFIXO)}\` · \`${citarInterno("rss.canal", PREFIXO)} <id>\` · \`${citarInterno("rss.canal.off", PREFIXO)}\``, colour: COR.erro },
+      { title: "❌ Uso incorrecto",
+        description: `\`${citar("rss.canal.aqui", "es", PREFIXO)}\` · \`${citar("rss.canal", "es", PREFIXO)} <id>\` · \`${citar("rss.canal.off", "es", PREFIXO)}\``, colour: COR.erro }));
     // o canal precisa ser DESTE servidor (15 out 2026: um ID de outro servidor
     // fazia a Judy postar o resumo lá)
     const canalAlvo = ctx.client?.channels?.get?.(canalId) ?? await ctx.client?.channels?.fetch?.(canalId)?.catch?.(() => null);
     if (canalDeOutroServidor(canalAlvo, ctx.serverId))
       return sendEmbed(message.channel, tr(ctx,
         { title: "🚫 Canal de outro servidor", description: "Esse canal é de outro servidor — escolha um canal daqui.", colour: COR.erro },
-        { title: "🚫 Channel from another server", description: "That channel belongs to another server — pick one from here.", colour: COR.erro }));
+        { title: "🚫 Channel from another server", description: "That channel belongs to another server — pick one from here.", colour: COR.erro },
+        { title: "🚫 Canal de otro servidor", description: "Ese canal es de otro servidor — elige un canal de aquí.", colour: COR.erro }));
     config.rss.canalId = canalId; salvarConfig();
     return sendEmbed(message.channel, tr(ctx,
       { title: "📰 Canal definido", description: `Os resumos serão postados em <#${canalId}>.`, colour: COR.sucesso },
-      { title: "📰 Channel set", description: `The digests will be posted in <#${canalId}>.`, colour: COR.sucesso }));
+      { title: "📰 Channel set", description: `The digests will be posted in <#${canalId}>.`, colour: COR.sucesso },
+      { title: "📰 Canal definido", description: `Los resúmenes se publicarán en <#${canalId}>.`, colour: COR.sucesso }));
   }
 
   // ── agora (forçar ciclo) ──
   if (sub === "agora" || sub === "now" || sub === "testar") {
     if (!getCanalId(config))
       return sendEmbed(message.channel, tr(ctx,
-        { title: "❌ Sem canal", description: `Defina primeiro com \`${PREFIXO}rss canal aqui\`.`, colour: COR.erro },
-        { title: "❌ No channel", description: `Set one first with \`${PREFIXO}rss canal aqui\`.`, colour: COR.erro }));
+        { title: "❌ Sem canal", description: `Defina primeiro com \`${citarInterno("rss.canal.aqui", PREFIXO)}\`.`, colour: COR.erro },
+        { title: "❌ No channel", description: `Set one first with \`${citarInterno("rss.canal.aqui", PREFIXO)}\`.`, colour: COR.erro },
+        { title: "❌ Sin canal", description: `Define uno primero con \`${citar("rss.canal.aqui", "es", PREFIXO)}\`.`, colour: COR.erro }));
     await sendEmbed(message.channel, tr(ctx,
       { title: "⏳ Rodando curadoria…",
         description: "Buscando e resumindo as novidades. Pode levar um tempo.", colour: COR.info },
       { title: "⏳ Running the curation…",
-        description: "Fetching and summarizing the news. This may take a while.", colour: COR.info }));
+        description: "Fetching and summarizing the news. This may take a while.", colour: COR.info },
+      { title: "⏳ Ejecutando la curaduría…",
+        description: "Buscando y resumiendo las novedades. Puede tardar un rato.", colour: COR.info }));
     try {
       const r = await rodarCiclo(serverId, ctx, { forcado: true });
       if (!r.ok)
         return sendEmbed(message.channel, tr(ctx,
           { title: "❌ Falhou", description: r.motivo, colour: COR.erro },
-          { title: "❌ Failed", description: MOTIVO_EN[r.motivo] ?? r.motivo, colour: COR.erro }));
+          { title: "❌ Failed", description: MOTIVO_EN[r.motivo] ?? r.motivo, colour: COR.erro },
+          { title: "❌ Falló", description: MOTIVO_ES[r.motivo] ?? MOTIVO_EN[r.motivo] ?? r.motivo, colour: COR.erro }));
     } catch (err) {
       console.error("[RSS] erro no ciclo forçado:", err);
       return sendEmbed(message.channel, tr(ctx,
         { title: "❌ Erro na curadoria",
           description: `O resumo pode ter sido postado, mas algo falhou depois.\n**Erro:** ${err.message}`, colour: COR.erro },
         { title: "❌ Error in the curation",
-          description: `The digest may have been posted, but something failed afterwards.\n**Error:** ${erroEmIngles(err.message)}`, colour: COR.erro }));
+          description: `The digest may have been posted, but something failed afterwards.\n**Error:** ${erroEmIngles(err.message)}`, colour: COR.erro },
+        { title: "❌ Error en la curaduría",
+          description: `Puede que el resumen se haya publicado, pero algo falló después.\n**Error:** ${erroEmIngles(err.message)}`, colour: COR.erro }));
     }
     return; // o próprio ciclo já postou
   }
@@ -445,19 +499,7 @@ export async function cmdRss(message, args, ctx) {
   // ── status (padrão) ──
   const feeds = db.listarFeeds(serverId);
   const canalId = getCanalId(config);
-  return sendEmbed(message.channel, en ? {
-    title: "📰 RSS curation",
-    description: [
-      `**Feeds:** ${feeds.length}`,
-      `**Channel:** ${canalId ? `<#${canalId}>` : "_(not set)_"}`,
-      `**Cycle:** every ${Math.round(INTERVALO_MS / 60000)} min · cap ${MAX_ITENS} items`,
-      "",
-      "**Commands**",
-      `\`${PREFIXO}rss add <url>\` · \`${PREFIXO}rss remove <id>\` · \`${PREFIXO}rss list\``,
-      `\`${PREFIXO}rss canal <aqui|id|off>\` · \`${PREFIXO}rss agora\``,
-    ].join("\n"),
-    colour: COR.mod,
-  } : {
+  return sendEmbed(message.channel, tr(ctx, {
     title: "📰 Curadoria RSS",
     description: [
       `**Feeds:** ${feeds.length}`,
@@ -465,11 +507,35 @@ export async function cmdRss(message, args, ctx) {
       `**Ciclo:** a cada ${Math.round(INTERVALO_MS / 60000)} min · teto ${MAX_ITENS} itens`,
       "",
       "**Comandos**",
-      `\`${PREFIXO}rss add <url>\` · \`${PREFIXO}rss remove <id>\` · \`${PREFIXO}rss list\``,
-      `\`${PREFIXO}rss canal <aqui|id|off>\` · \`${PREFIXO}rss agora\``,
+      `\`${citarInterno("rss.add", PREFIXO)} <url>\` · \`${citarInterno("rss.remove", PREFIXO)} <id>\` · \`${citarInterno("rss.list", PREFIXO)}\``,
+      `\`${citarInterno("rss.canal", PREFIXO)} <aqui|id|off>\` · \`${citarInterno("rss.agora", PREFIXO)}\``,
     ].join("\n"),
     colour: COR.mod,
-  });
+  }, {
+    title: "📰 RSS curation",
+    description: [
+      `**Feeds:** ${feeds.length}`,
+      `**Channel:** ${canalId ? `<#${canalId}>` : "_(not set)_"}`,
+      `**Cycle:** every ${Math.round(INTERVALO_MS / 60000)} min · cap ${MAX_ITENS} items`,
+      "",
+      "**Commands**",
+      `\`${citarInterno("rss.add", PREFIXO)} <url>\` · \`${citarInterno("rss.remove", PREFIXO)} <id>\` · \`${citarInterno("rss.list", PREFIXO)}\``,
+      `\`${citarInterno("rss.canal", PREFIXO)} <aqui|id|off>\` · \`${citarInterno("rss.agora", PREFIXO)}\``,
+    ].join("\n"),
+    colour: COR.mod,
+  }, {
+    title: "📰 Curaduría RSS",
+    description: [
+      `**Feeds:** ${feeds.length}`,
+      `**Canal:** ${canalId ? `<#${canalId}>` : "_(sin definir)_"}`,
+      `**Ciclo:** cada ${Math.round(INTERVALO_MS / 60000)} min · máximo ${MAX_ITENS} elementos`,
+      "",
+      "**Comandos**",
+      `\`${citar("rss.add", "es", PREFIXO)} <url>\` · \`${citar("rss.remove", "es", PREFIXO)} <id>\` · \`${citar("rss.list", "es", PREFIXO)}\``,
+      `\`${citar("rss.canal", "es", PREFIXO)} <here|id|off>\` · \`${citar("rss.agora", "es", PREFIXO)}\``,
+    ].join("\n"),
+    colour: COR.mod,
+  }));
 }
 
 // ─── Precisão do resumo ─────────────────────────────────────────────────────
@@ -655,8 +721,10 @@ export function blocosDe(texto, max = 1900) {
   return out;
 }
 
-export async function publicarRelatorio(canal, novos, { lang = "pt", agora = "", serverId = null } = {}) {
+// `idioma: "es"` (etapa 4b): os títulos em espanhol; o `lang` (do modelo) fica como está
+export async function publicarRelatorio(canal, novos, { lang = "pt", agora = "", serverId = null, idioma = null } = {}) {
   const en = lang === "en";
+  const es = idioma === "es";
   const grupos = new Map();
   for (const it of novos) {
     const cat = it.categoria || (en ? "General" : "Geral");
@@ -692,8 +760,8 @@ export async function publicarRelatorio(canal, novos, { lang = "pt", agora = "",
     }
     if (!en) texto = await portuguesNoBloco(texto, relatorioIA.traduzir);
     const titulo = cve
-      ? (en ? `📋 Vulnerability report` : `📋 Relatório de vulnerabilidades`)
-      : (en ? `📰 Summary · ${cat}` : `📰 Resumo · ${cat}`);
+      ? (es ? `📋 Informe de vulnerabilidades` : en ? `📋 Vulnerability report` : `📋 Relatório de vulnerabilidades`)
+      : (es ? `📰 Resumen · ${cat}` : en ? `📰 Summary · ${cat}` : `📰 Resumo · ${cat}`);
     const blocos = blocosDe(texto);
     for (let i = 0; i < blocos.length; i++) {
       await canal.sendMessage({ embeds: [{
@@ -709,7 +777,7 @@ export async function publicarRelatorio(canal, novos, { lang = "pt", agora = "",
     const comentario = cortarEmFrase(tirarNumerosInventados(String(bruto ?? "").trim(),
       novos.map((it) => ({ ...it, resumo: `${it.resumo ?? ""} ${pistaDoLink(it.link)}` }))), 700);
     if (comentario) {
-      await canal.sendMessage({ embeds: [{ title: en ? "💬 Judy's take" : "💬 A Judy comenta", description: comentario, colour: "#a78bfa" }] });
+      await canal.sendMessage({ embeds: [{ title: es ? "💬 Judy opina" : en ? "💬 Judy's take" : "💬 A Judy comenta", description: comentario, colour: "#a78bfa" }] });
     }
   } catch (e) { console.error("[RSS] comentário falhou:", e.message); }
 }

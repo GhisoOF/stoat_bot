@@ -1,6 +1,6 @@
 
 import * as rajada from "./rajada.js";
-import { citar } from "../core/aliases.js";
+import { citar, citarInterno } from "../core/aliases.js";
 import { analisarConteudo, normalizarParaAnalise } from "./scorecard.js";
 import * as db  from "../core/db.js";
 import { descreverErro, tipoDoErro } from "../core/erros.js";
@@ -15,7 +15,7 @@ import { editarCargos } from "../core/hierarquia.js";
 import * as imagemSentinela from "./imagem.js";
 import * as assuntos from "./assuntos.js";
 import { analisarCaracteres, analisarRepeticao, analisarDuplicata, digital, textoHumano, razaoDeCaixaAlta } from "./caracteres.js";
-import { lingua } from "../core/i18n.js";
+import { lingua, tr } from "../core/i18n.js";
 import {
   ConstrutorIndice, criarIndiceVazio, carregarCache, salvarCache,
 } from "./indice-dominios.js";
@@ -242,15 +242,15 @@ function modoEfetivo(config, pol) {
 }
 async function darToque(ctx, { server, channel, message, userId, motivo }) {
   const { sendEmbed, COR } = ctx;
-  const lang = lingua(ctx);
   if (message) { try { await message.delete(); } catch {} }
   let aviso = null;
   try {
     aviso = await sendEmbed(channel, {
-      title: lang === "en" ? "🙂 Just a heads-up" : "🙂 Só um toque",
-      description: lang === "en"
-        ? `<@${userId}> — ${motivo}.\n_Message removed, **no warning counted**. If it happens again in the next 10 min, it counts._`
-        : `<@${userId}> — ${motivo}.\n_A mensagem foi apagada, **sem contar aviso**. Se repetir nos próximos 10 min, aí conta._`,
+      title: tr(ctx, "🙂 Só um toque", "🙂 Just a heads-up", "🙂 Solo un toque de atención"),
+      description: tr(ctx,
+        `<@${userId}> — ${motivo}.\n_A mensagem foi apagada, **sem contar aviso**. Se repetir nos próximos 10 min, aí conta._`,
+        `<@${userId}> — ${motivo}.\n_Message removed, **no warning counted**. If it happens again in the next 10 min, it counts._`,
+        `<@${userId}> — ${motivo}.\n_Se borró el mensaje, **sin contar aviso**. Si se repite en los próximos 10 min, ahí sí cuenta._`),
       colour: COR.aviso,
     });
   } catch {}
@@ -258,7 +258,8 @@ async function darToque(ctx, { server, channel, message, userId, motivo }) {
   if (aviso?.delete) setTimeout(() => aviso.delete().catch?.(() => {}), 20_000).unref?.();
   await log.registrar(ctx, "punicoes", { titulo: "🙂 Toque do AutoMod (sem aviso)",
     descricao: `<@${userId}> — ${motivo}`,
-    en: { titulo: "🙂 AutoMod heads-up (no warning)", descricao: `<@${userId}> — ${motivo}` } });
+    en: { titulo: "🙂 AutoMod heads-up (no warning)", descricao: `<@${userId}> — ${motivo}` },
+    es: { titulo: "🙂 Toque de atención del AutoMod (sin aviso)", descricao: `<@${userId}> — ${motivo}` } });
 }
 
 async function aplicarPunicao(ctx, opts) {
@@ -278,12 +279,13 @@ async function aplicarPunicao(ctx, opts) {
   };
 
   const linhaNota = (nota != null)
-    ? `\n**${lang === "en" ? "Score" : "Nota"}:** ${nota.toFixed(1)}/10` : "";
+    ? `\n**${tr(ctx, "Nota", "Score", "Puntuación")}:** ${nota.toFixed(1)}/10` : "";
   const blocoGrave = grave ? [
     "",
-    lang === "en"
-      ? "🚨 **Serious content.** Preserve evidence (the user's ID) and report it to the platform/authorities — child abuse: report.cybertip.org."
-      : "🚨 **Conteúdo grave.** Preserve evidências (ID do usuário) e denuncie à plataforma/autoridades — no Brasil: SaferNet + Polícia Federal; abuso infantil: report.cybertip.org.",
+    tr(ctx,
+      "🚨 **Conteúdo grave.** Preserve evidências (ID do usuário) e denuncie à plataforma/autoridades — no Brasil: SaferNet + Polícia Federal; abuso infantil: report.cybertip.org.",
+      "🚨 **Serious content.** Preserve evidence (the user's ID) and report it to the platform/authorities — child abuse: report.cybertip.org.",
+      "🚨 **Contenido grave.** Conserva las pruebas (el ID del usuario) y denúncialo a la plataforma/autoridades — abuso infantil: report.cybertip.org."),
   ] : [];
 
   // ── avisar: só notifica, não pune ──
@@ -296,14 +298,16 @@ async function aplicarPunicao(ctx, opts) {
       && await Promise.resolve(message.delete()).then(() => true, (e) => { console.error("[PUNIÇÃO][DEL]", descreverErro(e)); return false; });
     await sendEmbed(channel, {
       title: grave
-        ? (lang === "en" ? "🚨 Detection (warning only)" : "🚨 Detecção (somente aviso)")
-        : (lang === "en" ? "👁 AutoMod notice" : "👁 Aviso do AutoMod"),
+        ? tr(ctx, "🚨 Detecção (somente aviso)", "🚨 Detection (warning only)", "🚨 Detección (solo aviso)")
+        : tr(ctx, "👁 Aviso do AutoMod", "👁 AutoMod notice", "👁 Aviso del AutoMod"),
       description: [`<@${userId}> — ${motivo}${linhaNota}`,
         apagou
-          ? (lang === "en" ? "_Warn-only mode: the message was removed, but nobody was punished._"
-                           : "_Modo apenas-aviso: a mensagem foi apagada, mas ninguém foi punido._")
-          : (lang === "en" ? "_Warn-only mode: nothing was removed or punished automatically._"
-                           : "_Modo apenas-aviso: nada foi removido ou punido automaticamente._"),
+          ? tr(ctx, "_Modo apenas-aviso: a mensagem foi apagada, mas ninguém foi punido._",
+                    "_Warn-only mode: the message was removed, but nobody was punished._",
+                    "_Modo solo aviso: se borró el mensaje, pero nadie fue castigado._")
+          : tr(ctx, "_Modo apenas-aviso: nada foi removido ou punido automaticamente._",
+                    "_Warn-only mode: nothing was removed or punished automatically._",
+                    "_Modo solo aviso: no se borró ni se castigó nada automáticamente._"),
         ...blocoGrave].join("\n"),
       colour: grave ? COR.erro : COR.aviso,
     });
@@ -316,77 +320,82 @@ async function aplicarPunicao(ctx, opts) {
   // ── apagar: só remove a mensagem, sem punir o usuário ──
   if (pol.modo === "apagar") {
     await sendEmbed(channel, {
-      title: lang === "en" ? "🧹 Message removed" : "🧹 Mensagem removida",
+      title: tr(ctx, "🧹 Mensagem removida", "🧹 Message removed", "🧹 Mensaje eliminado"),
       description: [`<@${userId}> — ${motivo}${linhaNota}`,
-        lang === "en"
-          ? "_The message was deleted. No punishment applied to the user._"
-          : "_A mensagem foi apagada. Nenhuma punição aplicada ao usuário._",
+        tr(ctx, "_A mensagem foi apagada. Nenhuma punição aplicada ao usuário._",
+                "_The message was deleted. No punishment applied to the user._",
+                "_Se borró el mensaje. No se aplicó ningún castigo al usuario._"),
         ...blocoGrave].join("\n"),
       colour: COR.mod,
     });
     await log.registrar(ctx, "punicoes", { titulo: "🧹 Mensagem removida (automod)",
       descricao: `<@${userId}> — ${motivo}`,
-      en: { titulo: "🧹 Message removed (automod)", descricao: `<@${userId}> — ${motivo}` } });
+      en: { titulo: "🧹 Message removed (automod)", descricao: `<@${userId}> — ${motivo}` },
+      es: { titulo: "🧹 Mensaje eliminado (automod)", descricao: `<@${userId}> — ${motivo}` } });
     return;
   }
 
   // ── banir: ban imediato ──
   if (pol.modo === "banir") {
-    let acao = lang === "en" ? "message removed" : "mensagem removida";
+    let acao = tr(ctx, "mensagem removida", "message removed", "mensaje eliminado");
     try {
       await banir(server, userId, { reason: `[AutoMod] ${motivo}` });
-      acao = lang === "en" ? "🔨 user BANNED" : "🔨 usuário BANIDO";
+      acao = tr(ctx, "🔨 usuário BANIDO", "🔨 user BANNED", "🔨 usuario BANEADO");
       await banGlobal.registrar(ctx, userId, motivo, "automod",
         { nome: message?.author?.username ?? null, membro: message?.member ?? message?.author ?? null });
     }
     catch (e) { console.error("[PUNIÇÃO][BAN]", descreverErro(e));
-      acao = lang === "en" ? `failed to ban (${descreverErro(e, "en")})` : `falha ao banir (${descreverErro(e)})`; }
-    await sendEmbed(channel, { title: lang === "en" ? "🔨 Instant ban" : "🔨 Banimento imediato",
+      acao = tr(ctx, `falha ao banir (${descreverErro(e)})`, `failed to ban (${descreverErro(e, "es")})`, `no se pudo banear (${descreverErro(e, "es")})`); }
+    await sendEmbed(channel, { title: tr(ctx, "🔨 Banimento imediato", "🔨 Instant ban", "🔨 Ban inmediato"),
       description: [`<@${userId}> — ${motivo}${linhaNota}`,
-        `**${lang === "en" ? "Action" : "Ação"}:** ${acao}`, ...blocoGrave].join("\n"),
+        `**${tr(ctx, "Ação", "Action", "Acción")}:** ${acao}`, ...blocoGrave].join("\n"),
       colour: COR.erro });
     await log.registrar(ctx, "punicoes", { titulo: "🔨 Banimento imediato",
       descricao: `<@${userId}> — ${acao}.\n**Motivo:** ${motivo}`,
-      en: { titulo: "🔨 Instant ban", descricao: `<@${userId}> — ${acao}.\n**Reason:** ${motivo}` } });
+      en: { titulo: "🔨 Instant ban", descricao: `<@${userId}> — ${acao}.\n**Reason:** ${motivo}` },
+      es: { titulo: "🔨 Ban inmediato", descricao: `<@${userId}> — ${acao}.\n**Motivo:** ${motivo}` } });
     return;
   }
 
   // ── confirmar: silencia (se houver cargo) e pede confirmação ──
   if (pol.modo === "confirmar") {
-    let acao = lang === "en" ? "message removed" : "mensagem removida";
+    let acao = tr(ctx, "mensagem removida", "message removed", "mensaje eliminado");
     // Silêncio = timeout nativo do Stoat (não mais o cargo de silêncio), até a
     // staff decidir — com teto de AUTOMOD_CONFIRMAR_HORAS (24 h por padrão).
     try {
       const ms = CONFIRMAR_MS();
       await aplicarTimeout(server, userId, ms);
       const horas = Math.round(ms / 3600e3);
-      acao = lang === "en" ? `user silenced (timeout) until the staff decides — at most ${horas} h` : `usuário silenciado (timeout) até a staff decidir — no máximo ${horas} h`;
+      acao = tr(ctx, `usuário silenciado (timeout) até a staff decidir — no máximo ${horas} h`, `user silenced (timeout) until the staff decides — at most ${horas} h`, `usuario silenciado (timeout) hasta que el staff decida — como máximo ${horas} h`);
       // Marca no banco: se sair e voltar, o timeout é REAPLICADO pelo tempo que falta.
       db.silenciarAte(ctx.serverId ?? server?.id, userId, Date.now() + ms, motivo);
     } catch (e) {
       const detalhe = descreverErro(e, lang);
       console.error("[PUNIÇÃO][SILENCE]", detalhe);
-      acao = lang === "en" ? `failed to silence — ${detalhe}` : `falha ao silenciar — ${detalhe}`;
+      acao = tr(ctx, `falha ao silenciar — ${detalhe}`, `failed to silence — ${detalhe}`, `no se pudo silenciar — ${detalhe}`);
       // Sem silêncio, a pessoa seguia postando (raid de 27/09: suásticas por
       // mais 1 min, e as mensagens só sumiram quando a staff acordou).
       confianca.quarentenar(ctx.serverId ?? server?.id, userId);
-      acao += lang === "en"
-        ? " — until then, **everything they post in the next 30 min is deleted**"
-        : " — enquanto isso, **tudo o que a pessoa mandar nos próximos 30 min é apagado**";
+      acao += tr(ctx,
+        " — enquanto isso, **tudo o que a pessoa mandar nos próximos 30 min é apagado**",
+        " — until then, **everything they post in the next 30 min is deleted**",
+        " — mientras tanto, **todo lo que publique en los próximos 30 min se borra**");
     }
     await sendEmbed(channel, {
-      title: lang === "en" ? "⚠️ Violation — confirmation needed" : "⚠️ Violação — confirmação necessária",
+      title: tr(ctx, "⚠️ Violação — confirmação necessária", "⚠️ Violation — confirmation needed", "⚠️ Infracción — se necesita confirmación"),
       description: [`<@${userId}> — ${motivo}${linhaNota}`,
-        `**${lang === "en" ? "Action" : "Ação"}:** ${acao}`,
-        lang === "en"
-          ? `Confirm the ban with \`${PREFIXO}automod sentinel ban ${userId}\` or release with \`${PREFIXO}automod sentinel dismiss ${userId}\`.`
-          : `Confirme o ban com \`${PREFIXO}automod sentinela banir ${userId}\` ou libere com \`${PREFIXO}automod sentinela liberar ${userId}\`.`,
+        `**${tr(ctx, "Ação", "Action", "Acción")}:** ${acao}`,
+        tr(ctx,
+          `Confirme o ban com \`${citarInterno("automod.sentinela.banir", PREFIXO)} ${userId}\` ou libere com \`${citarInterno("automod.sentinela.liberar", PREFIXO)} ${userId}\`.`,
+          `Confirm the ban with \`${citar("automod.sentinela.banir", "en", PREFIXO)} ${userId}\` or release with \`${citar("automod.sentinela.liberar", "en", PREFIXO)} ${userId}\`.`,
+          `Confirma el ban con \`${citar("automod.sentinela.banir", "es", PREFIXO)} ${userId}\` o libéralo con \`${citar("automod.sentinela.liberar", "es", PREFIXO)} ${userId}\`.`),
         ...blocoGrave].join("\n"),
       colour: COR.mod,
     });
     await log.registrar(ctx, "punicoes", { titulo: "⚠️ Violação — aguardando confirmação",
       descricao: `<@${userId}> — ${acao}.\n**Motivo:** ${motivo}`,
-      en: { titulo: "⚠️ Violation — awaiting confirmation", descricao: `<@${userId}> — ${acao}.\n**Reason:** ${motivo}` } });
+      en: { titulo: "⚠️ Violation — awaiting confirmation", descricao: `<@${userId}> — ${acao}.\n**Reason:** ${motivo}` },
+      es: { titulo: "⚠️ Infracción — esperando confirmación", descricao: `<@${userId}> — ${acao}.\n**Motivo:** ${motivo}` } });
     return;
   }
 
@@ -398,25 +407,28 @@ async function aplicarPunicao(ctx, opts) {
   console.log(`[AUTOMOD] ⚠️ Aviso #${count} para ${userId} → ${degrau.tipo} — ${motivo}`);
 
   if (degrau.tipo === "aviso") {
-    await sendEmbed(channel, { title: lang === "en" ? "⚠️ AutoMod warning" : "⚠️ Aviso do AutoMod",
+    await sendEmbed(channel, { title: tr(ctx, "⚠️ Aviso do AutoMod", "⚠️ AutoMod warning", "⚠️ Aviso del AutoMod"),
       description: [
-        lang === "en"
-          ? `<@${userId}> — ${motivo} *(warning ${count})*${linhaNota}`
-          : `<@${userId}> — ${motivo} *(aviso ${count})*${linhaNota}`,
-        lang === "en"
-          ? `_Next step: ${rotuloDegrau(degraus[count], "en")}._`
-          : `_Próximo passo: ${rotuloDegrau(degraus[count], "pt")}._`,
+        tr(ctx,
+          `<@${userId}> — ${motivo} *(aviso ${count})*${linhaNota}`,
+          `<@${userId}> — ${motivo} *(warning ${count})*${linhaNota}`,
+          `<@${userId}> — ${motivo} *(aviso ${count})*${linhaNota}`),
+        tr(ctx,
+          `_Próximo passo: ${rotuloDegrau(degraus[count], "pt")}._`,
+          `_Next step: ${rotuloDegrau(degraus[count], "en")}._`,
+          `_Siguiente paso: ${rotuloDegrau(degraus[count], "es")}._`),
         ...blocoGrave].join("\n"),
       colour: COR.aviso });
     await log.registrar(ctx, "punicoes", { titulo: "⚠️ Aviso aplicado",
       descricao: `<@${userId}> recebeu o aviso **${count}**.\n**Motivo:** ${motivo}`,
-      en: { titulo: "⚠️ Warning given", descricao: `<@${userId}> got warning **${count}**.\n**Reason:** ${motivo}` } });
+      en: { titulo: "⚠️ Warning given", descricao: `<@${userId}> got warning **${count}**.\n**Reason:** ${motivo}` },
+      es: { titulo: "⚠️ Aviso aplicado", descricao: `<@${userId}> recibió el aviso **${count}**.\n**Motivo:** ${motivo}` } });
     return;
   }
 
   if (degrau.tipo === "mute") {
     const ate = Date.now() + degrau.ms;
-    let acao = lang === "en" ? `silenced for ${degrau.rotulo}` : `silenciado por ${degrau.rotulo}`;
+    let acao = tr(ctx, `silenciado por ${degrau.rotulo}`, `silenced for ${degrau.rotulo}`, `silenciado por ${degrau.rotulo}`);
     // Timeout nativo: o próprio Stoat tira na hora certa (o vigia só limpa o registro).
     try {
       await aplicarTimeout(server, userId, degrau.ms);
@@ -424,7 +436,7 @@ async function aplicarPunicao(ctx, opts) {
     } catch (e) {
       const detalhe = descreverErro(e, lang);
       console.error("[PUNIÇÃO][MUTE]", detalhe);
-      acao = lang === "en" ? `failed to silence — ${detalhe}` : `falha ao silenciar — ${detalhe}`;
+      acao = tr(ctx, `falha ao silenciar — ${detalhe}`, `failed to silence — ${detalhe}`, `no se pudo silenciar — ${detalhe}`);
       // Sem silêncio, a pessoa seguia postando (raid de 27/09: suásticas por
       // mais 1 min, e as mensagens só sumiram quando a staff acordou).
       // Mas só para o que é grave ou para conta nova: quem já é do servidor e
@@ -432,46 +444,50 @@ async function aplicarPunicao(ctx, opts) {
       // porque o BOT não tinha a permissão (9 out 2026).
       if (!opts.ruido || confianca.contaNova(sid, userId) || confianca.emModoRaid(sid)) {
         confianca.quarentenar(ctx.serverId ?? server?.id, userId);
-        acao += lang === "en"
-          ? " — until then, **everything they post in the next 30 min is deleted**"
-          : " — enquanto isso, **tudo o que a pessoa mandar nos próximos 30 min é apagado**";
+        acao += tr(ctx,
+          " — enquanto isso, **tudo o que a pessoa mandar nos próximos 30 min é apagado**",
+          " — until then, **everything they post in the next 30 min is deleted**",
+          " — mientras tanto, **todo lo que publique en los próximos 30 min se borra**");
       }
     }
-    await sendEmbed(channel, { title: lang === "en" ? "🔇 Temporary silence" : "🔇 Silêncio temporário",
+    await sendEmbed(channel, { title: tr(ctx, "🔇 Silêncio temporário", "🔇 Temporary silence", "🔇 Silencio temporal"),
       description: [
-        `<@${userId}> — ${acao}. *(${lang === "en" ? "warning" : "aviso"} ${count})*`,
-        `**${lang === "en" ? "Reason" : "Motivo"}:** ${motivo}${linhaNota}`,
+        `<@${userId}> — ${acao}. *(${tr(ctx, "aviso", "warning", "aviso")} ${count})*`,
+        `**${tr(ctx, "Motivo", "Reason", "Motivo")}:** ${motivo}${linhaNota}`,
         degraus[count]
-          ? (lang === "en" ? `_Next step: ${rotuloDegrau(degraus[count], "en")}._`
-                           : `_Próximo passo: ${rotuloDegrau(degraus[count], "pt")}._`)
+          ? tr(ctx, `_Próximo passo: ${rotuloDegrau(degraus[count], "pt")}._`,
+                    `_Next step: ${rotuloDegrau(degraus[count], "en")}._`,
+                    `_Siguiente paso: ${rotuloDegrau(degraus[count], "es")}._`)
           : null,
         ...blocoGrave].filter(Boolean).join("\n"),
       colour: COR.mod });
     await log.registrar(ctx, "punicoes", { titulo: "🔇 Silêncio temporário",
       descricao: `<@${userId}> silenciado por **${degrau.rotulo}** (aviso ${count}).\n**Motivo:** ${motivo}`,
-      en: { titulo: "🔇 Temporary silence", descricao: `<@${userId}> silenced for **${degrau.rotulo}** (warning ${count}).\n**Reason:** ${motivo}` } });
+      en: { titulo: "🔇 Temporary silence", descricao: `<@${userId}> silenced for **${degrau.rotulo}** (warning ${count}).\n**Reason:** ${motivo}` },
+      es: { titulo: "🔇 Silencio temporal", descricao: `<@${userId}> silenciado por **${degrau.rotulo}** (aviso ${count}).\n**Motivo:** ${motivo}` } });
     return;
   }
 
   // ── último degrau: ban ──
-  let acao = lang === "en" ? "banned" : "banido";
+  let acao = tr(ctx, "banido", "banned", "baneado");
   try {
     await banir(server, userId, { reason: `[AutoMod] ${motivo} (${count} avisos)` });
     await banGlobal.registrar(ctx, userId, `${motivo} (${count} avisos)`, "automod",
       { nome: message?.author?.username ?? null, membro: message?.member ?? message?.author ?? null });
   } catch (e) {
     console.error("[PUNIÇÃO][BAN]", descreverErro(e));
-    acao = lang === "en" ? `failed to ban (${descreverErro(e, "en")})` : `falha ao banir (${descreverErro(e)})`;
+    acao = tr(ctx, `falha ao banir (${descreverErro(e)})`, `failed to ban (${descreverErro(e, "es")})`, `no se pudo banear (${descreverErro(e, "es")})`);
   }
   db.limparPunicao(sid, userId);
-  await sendEmbed(channel, { title: lang === "en" ? "🔨 User banned" : "🔨 Usuário banido",
+  await sendEmbed(channel, { title: tr(ctx, "🔨 Usuário banido", "🔨 User banned", "🔨 Usuario baneado"),
     description: [
-      lang === "en" ? `<@${userId}> ${acao} after ${count} warnings.` : `<@${userId}> ${acao} após ${count} avisos.`,
-      `**${lang === "en" ? "Reason" : "Motivo"}:** ${motivo}${linhaNota}`, ...blocoGrave].join("\n"),
+      tr(ctx, `<@${userId}> ${acao} após ${count} avisos.`, `<@${userId}> ${acao} after ${count} warnings.`, `<@${userId}> ${acao} tras ${count} avisos.`),
+      `**${tr(ctx, "Motivo", "Reason", "Motivo")}:** ${motivo}${linhaNota}`, ...blocoGrave].join("\n"),
     colour: COR.erro });
   await log.registrar(ctx, "punicoes", { titulo: "🔨 Ban automático",
     descricao: `<@${userId}> banido após **${count}** avisos.\n**Motivo:** ${motivo}`,
-    en: { titulo: "🔨 Automatic ban", descricao: `<@${userId}> banned after **${count}** warnings.\n**Reason:** ${motivo}` } });
+    en: { titulo: "🔨 Automatic ban", descricao: `<@${userId}> banned after **${count}** warnings.\n**Reason:** ${motivo}` },
+    es: { titulo: "🔨 Ban automático", descricao: `<@${userId}> baneado tras **${count}** avisos.\n**Motivo:** ${motivo}` } });
 }
 
 // Padrão de dano (desafios, humilhação, doxxing): nada foi punido, mas a
@@ -479,7 +495,6 @@ async function aplicarPunicao(ctx, opts) {
 // porque é a conversa inteira — não uma frase — que conta a história.
 async function alertarPadraoDano(ctx, { canal, userId, p }) {
   const { config, sendEmbed, COR, PREFIXO } = ctx;
-  const lang = lingua(ctx);
   const destinoId = config.automod?.antiScam?.alertChannelId || config.log?.canalId || null;
   let destino = canal;
   if (destinoId) {
@@ -488,24 +503,27 @@ async function alertarPadraoDano(ctx, { canal, userId, p }) {
   const cargos = config.acesso?.cargosStaff ?? [];
   const mencao = cargos.length ? cargos.map((id) => `<%${id}>`).join(" ") : "";
   const trechos = p.trechos.map((t) => `> ${t}`).join("\n");
-  const en = lang === "en";
   try {
     await sendEmbed(destino, {
-      title: en ? "🚩 Harmful pattern" : "🚩 Padrão de dano",
+      title: tr(ctx, "🚩 Padrão de dano", "🚩 Harmful pattern", "🚩 Patrón de daño"),
       description: [
         mencao,
-        en
-          ? `<@${userId}> adds up **${p.soma.toFixed(1)}** in harm signals across ${p.mensagens} message(s) in ~${p.horas}h.`
-          : `<@${userId}> soma **${p.soma.toFixed(1)}** em sinais de dano, em ${p.mensagens} mensagem(ns) nas últimas ~${p.horas}h.`,
-        `**${en ? "Categories" : "Categorias"}:** ${p.categorias.join(", ")}`,
+        tr(ctx,
+          `<@${userId}> soma **${p.soma.toFixed(1)}** em sinais de dano, em ${p.mensagens} mensagem(ns) nas últimas ~${p.horas}h.`,
+          `<@${userId}> adds up **${p.soma.toFixed(1)}** in harm signals across ${p.mensagens} message(s) in ~${p.horas}h.`,
+          `<@${userId}> suma **${p.soma.toFixed(1)}** en señales de daño, en ${p.mensagens} mensaje(s) en las últimas ~${p.horas}h.`),
+        `**${tr(ctx, "Categorias", "Categories", "Categorías")}:** ${p.categorias.join(", ")}`,
         "",
         trechos,
         "",
-        en
-          ? "No single message crossed the line, so nothing was punished. The **pattern** — challenges, humiliation, exposing people — is what's worth a human look."
-          : "Nenhuma mensagem sozinha passou do limite, então nada foi punido. É o **padrão** — desafios, humilhação, expor gente — que merece olho humano.",
-        en ? `\`${PREFIXO}automod sentinel ban ${userId}\` · \`${PREFIXO}automod sentinel dismiss ${userId}\``
-          : `\`${PREFIXO}automod sentinela banir ${userId}\` · \`${PREFIXO}automod sentinela liberar ${userId}\``,
+        tr(ctx,
+          "Nenhuma mensagem sozinha passou do limite, então nada foi punido. É o **padrão** — desafios, humilhação, expor gente — que merece olho humano.",
+          "No single message crossed the line, so nothing was punished. The **pattern** — challenges, humiliation, exposing people — is what's worth a human look.",
+          "Ningún mensaje por sí solo cruzó el límite, así que no se castigó nada. Es el **patrón** — retos, humillación, exponer a gente — lo que merece una mirada humana."),
+        tr(ctx,
+          `\`${citarInterno("automod.sentinela.banir", PREFIXO)} ${userId}\` · \`${citarInterno("automod.sentinela.liberar", PREFIXO)} ${userId}\``,
+          `\`${citar("automod.sentinela.banir", "en", PREFIXO)} ${userId}\` · \`${citar("automod.sentinela.liberar", "en", PREFIXO)} ${userId}\``,
+          `\`${citar("automod.sentinela.banir", "es", PREFIXO)} ${userId}\` · \`${citar("automod.sentinela.liberar", "es", PREFIXO)} ${userId}\``),
       ].filter((l) => l !== null && l !== undefined).join("\n"),
       colour: COR.erro,
     });
@@ -514,12 +532,15 @@ async function alertarPadraoDano(ctx, { canal, userId, p }) {
     titulo: "🚩 Padrão de dano",
     descricao: `<@${userId}> — ${p.soma.toFixed(1)} em ${p.mensagens} mensagem(ns): ${p.categorias.join(", ")}`,
     en: { titulo: "🚩 Harm pattern", descricao: `<@${userId}> — ${p.soma.toFixed(1)} across ${p.mensagens} message(s): ${p.categorias.join(", ")}` },
+    es: { titulo: "🚩 Patrón de daño", descricao: `<@${userId}> — ${p.soma.toFixed(1)} en ${p.mensagens} mensaje(s): ${p.categorias.join(", ")}` },
   });
 }
 
+// O perfil de confiança (confianca.js) em espanhol, pelo id da faixa
+const FAIXA_ES = { novato: "recién llegado", conhecido: "conocido", frequente: "habitual", estabelecido: "establecido", veterano: "veterano" };
+
 async function alertarAdministracao(ctx, { server, canal, userId, sinal, faixa, nivel, nota }) {
   const { config, sendEmbed, COR, PREFIXO } = ctx;
-  const lang = lingua(ctx);
   const am = config.automod ?? {};
 
   // Onde avisar: o canal do sentinela, senão o de logs, senão o próprio canal.
@@ -532,27 +553,35 @@ async function alertarAdministracao(ctx, { server, canal, userId, sinal, faixa, 
   const cargos = config.acesso?.cargosStaff ?? [];
   const mencao = cargos.length ? cargos.map((id) => `<%${id}>`).join(" ") : "";
 
-  const linhas = lang === "en" ? [
-    mencao,
-    `**Possible threat** — <@${userId}> tripped the sentinel **${sinal.vezes}×** in ${sinal.janelaMin} min.`,
-    `**Profile:** ${faixa ? faixa.rotuloEN : "unknown"}${nivel != null ? ` (level ${nivel})` : ""} · **highest score:** ${nota.toFixed(1)}/10`,
-    sinal.sinais.length ? `**Signals:** ${sinal.sinais.join(", ")}` : null,
-    "",
-    "Nothing was punished — the score stayed below the threshold. This is a **pattern**, and patterns are worth a human look.",
-    `\`${PREFIXO}automod sentinel ban ${userId}\` · \`${PREFIXO}automod sentinel dismiss ${userId}\` · \`${citar("warn.lista", "en", PREFIXO)} ${userId}\``,
-  ] : [
+  const linhas = tr(ctx, [
     mencao,
     `**Possível ameaça** — <@${userId}> acionou o sentinela **${sinal.vezes}×** em ${sinal.janelaMin} min.`,
     `**Perfil:** ${faixa ? faixa.rotulo : "desconhecido"}${nivel != null ? ` (nível ${nivel})` : ""} · **maior nota:** ${nota.toFixed(1)}/10`,
     sinal.sinais.length ? `**Sinais:** ${sinal.sinais.join(", ")}` : null,
     "",
     "Nada foi punido — a nota ficou abaixo do limiar. Isto é um **padrão**, e padrão merece olho humano.",
-    `\`${PREFIXO}automod sentinela banir ${userId}\` · \`${PREFIXO}automod sentinela liberar ${userId}\` · \`${citar("warn.lista", "pt", PREFIXO)} ${userId}\``,
-  ];
+    `\`${citarInterno("automod.sentinela.banir", PREFIXO)} ${userId}\` · \`${citarInterno("automod.sentinela.liberar", PREFIXO)} ${userId}\` · \`${citar("warn.lista", "pt", PREFIXO)} ${userId}\``,
+  ], [
+    mencao,
+    `**Possible threat** — <@${userId}> tripped the sentinel **${sinal.vezes}×** in ${sinal.janelaMin} min.`,
+    `**Profile:** ${faixa ? faixa.rotuloEN : "unknown"}${nivel != null ? ` (level ${nivel})` : ""} · **highest score:** ${nota.toFixed(1)}/10`,
+    sinal.sinais.length ? `**Signals:** ${sinal.sinais.join(", ")}` : null,
+    "",
+    "Nothing was punished — the score stayed below the threshold. This is a **pattern**, and patterns are worth a human look.",
+    `\`${citar("automod.sentinela.banir", "en", PREFIXO)} ${userId}\` · \`${citar("automod.sentinela.liberar", "en", PREFIXO)} ${userId}\` · \`${citar("warn.lista", "en", PREFIXO)} ${userId}\``,
+  ], [
+    mencao,
+    `**Posible amenaza** — <@${userId}> activó el centinela **${sinal.vezes}×** en ${sinal.janelaMin} min.`,
+    `**Perfil:** ${faixa ? (FAIXA_ES[faixa.id] ?? faixa.rotuloEN ?? faixa.rotulo) : "desconocido"}${nivel != null ? ` (nivel ${nivel})` : ""} · **nota más alta:** ${nota.toFixed(1)}/10`,
+    sinal.sinais.length ? `**Señales:** ${sinal.sinais.join(", ")}` : null,
+    "",
+    "No se castigó nada — la nota quedó por debajo del umbral. Esto es un **patrón**, y los patrones merecen una mirada humana.",
+    `\`${citar("automod.sentinela.banir", "es", PREFIXO)} ${userId}\` · \`${citar("automod.sentinela.liberar", "es", PREFIXO)} ${userId}\` · \`${citar("warn.lista", "es", PREFIXO)} ${userId}\``,
+  ]);
 
   try {
     await sendEmbed(destino, {
-      title: lang === "en" ? "🚨 Possible threat" : "🚨 Possível ameaça",
+      title: tr(ctx, "🚨 Possível ameaça", "🚨 Possible threat", "🚨 Posible amenaza"),
       description: linhas.filter(Boolean).join("\n"),
       colour: COR.erro,
     });
@@ -565,6 +594,9 @@ async function alertarAdministracao(ctx, { server, canal, userId, sinal, faixa, 
     en: { titulo: "🚨 Possible threat",
       descricao: `<@${userId}> tripped the sentinel **${sinal.vezes}×** in ${sinal.janelaMin} min`
         + ` (${faixa?.rotuloEN ?? faixa?.rotulo ?? "?"}, level ${nivel ?? "?"}). Signals: ${sinal.sinais.join(", ") || "—"}` },
+    es: { titulo: "🚨 Posible amenaza",
+      descricao: `<@${userId}> activó el centinela **${sinal.vezes}×** en ${sinal.janelaMin} min`
+        + ` (${(faixa && FAIXA_ES[faixa.id]) ?? faixa?.rotuloEN ?? faixa?.rotulo ?? "?"}, nivel ${nivel ?? "?"}). Señales: ${sinal.sinais.join(", ") || "—"}` },
   });
   console.log(`[SENTINELA] 🚨 Alerta: ${userId} — ${sinal.vezes}× em ${sinal.janelaMin}min`);
 }
@@ -615,34 +647,35 @@ export const MODULOS_AUTOMOD = {
 // de configuração antiga se perde.
 export const GRUPOS_AUTOMOD = {
   antispam: {
-    emoji: "🌊", pt: "enxurrada de mensagens", en: "message floods",
+    emoji: "🌊", pt: "enxurrada de mensagens", en: "message floods", es: "avalancha de mensajes",
     partes: { velocidade: "antispam", rajada: "antimassspam", repeticao: "antiduplicata", midia: "antimidia", mencoes: "antimassmention" },
   },
   antiruido: {
-    emoji: "🔊", pt: "texto poluído", en: "noisy text",
+    emoji: "🔊", pt: "texto poluído", en: "noisy text", es: "texto contaminado",
     partes: { caps: "anticaps", caracteres: "anticaracteres", letras: "antirepeticao", emoji: "antiemoji" },
   },
   antilink: {
-    emoji: "🔗", pt: "links e convites", en: "links and invites",
+    emoji: "🔗", pt: "links e convites", en: "links and invites", es: "enlaces e invitaciones",
     partes: { dominios: "antilink", convites: "antiinvite" },
   },
   sentinela: {
     emoji: "🛡️", pt: "conteúdo nocivo (golpe, +18, gore, ódio, imagens, temas proibidos, foto de perfil)", en: "harmful content (scams, NSFW, gore, hate, images, forbidden topics, profile pictures)",
+    es: "contenido dañino (estafas, +18, gore, odio, imágenes, temas prohibidos, foto de perfil)",
     partes: { conteudo: "sentinela", odio: "antiodio", imagens: "antiimagem", assuntos: "antiassuntos", avatar: "antiavatar" },
   },
 };
 // Rótulos das partes (o nome que se digita é a chave; este é o que se lê)
 export const ROTULO_PARTE = {
-  velocidade: ["mensagens rápidas demais", "messages too fast"], rajada: ["rajada longa", "long burst"],
-  repeticao: ["a mesma mensagem ou imagem várias vezes", "the same message or image over and over"],
-  midia: ["muitos anexos por minuto", "too many attachments per minute"], mencoes: ["mencionar muita gente", "mentioning a crowd"],
-  caps: ["CAIXA ALTA", "CAPS LOCK"], caracteres: ["zalgo e invisíveis", "zalgo and invisible characters"],
-  letras: ["letra arrastada (kkkkkk…)", "dragged-out letters"], emoji: ["enxurrada de emoji", "emoji floods"],
-  dominios: ["domínios da lista de bloqueio", "blocklisted domains"], convites: ["convites de outros servidores", "invites to other servers"],
-  conteudo: ["golpe, +18, gore, ilícito, abuso", "scams, NSFW, gore, illicit, abuse"], odio: ["ofensas raciais/homofóbicas", "racial/homophobic slurs"],
-  imagens: ["imagens de conta nova (modelo de visão)", "new accounts' images (vision model)"],
-  assuntos: ["temas proibidos pela regra (política, religião, drogas, sexual) — a IA separa discussão de zoeira", "topics the rules forbid (politics, religion, drugs, sexual) — the AI tells discussion from banter"],
-  avatar: ["foto de perfil de quem entra ou troca (modelo de visão)", "profile picture on join or change (vision model)"],
+  velocidade: ["mensagens rápidas demais", "messages too fast", "mensajes demasiado rápidos"], rajada: ["rajada longa", "long burst", "ráfaga larga"],
+  repeticao: ["a mesma mensagem ou imagem várias vezes", "the same message or image over and over", "el mismo mensaje o imagen una y otra vez"],
+  midia: ["muitos anexos por minuto", "too many attachments per minute", "demasiados adjuntos por minuto"], mencoes: ["mencionar muita gente", "mentioning a crowd", "mencionar a mucha gente"],
+  caps: ["CAIXA ALTA", "CAPS LOCK", "MAYÚSCULAS"], caracteres: ["zalgo e invisíveis", "zalgo and invisible characters", "zalgo y caracteres invisibles"],
+  letras: ["letra arrastada (kkkkkk…)", "dragged-out letters", "letras alargadas (jajajaja…)"], emoji: ["enxurrada de emoji", "emoji floods", "avalancha de emojis"],
+  dominios: ["domínios da lista de bloqueio", "blocklisted domains", "dominios de la lista de bloqueo"], convites: ["convites de outros servidores", "invites to other servers", "invitaciones a otros servidores"],
+  conteudo: ["golpe, +18, gore, ilícito, abuso", "scams, NSFW, gore, illicit, abuse", "estafas, +18, gore, ilícito, abuso"], odio: ["ofensas raciais/homofóbicas", "racial/homophobic slurs", "insultos racistas/homófobos"],
+  imagens: ["imagens de conta nova (modelo de visão)", "new accounts' images (vision model)", "imágenes de cuentas nuevas (modelo de visión)"],
+  assuntos: ["temas proibidos pela regra (política, religião, drogas, sexual) — a IA separa discussão de zoeira", "topics the rules forbid (politics, religion, drugs, sexual) — the AI tells discussion from banter", "temas que las reglas prohíben (política, religión, drogas, sexual) — la IA distingue la discusión de la broma"],
+  avatar: ["foto de perfil de quem entra ou troca (modelo de visão)", "profile picture on join or change (vision model)", "foto de perfil al entrar o al cambiarla (modelo de visión)"],
 };
 export function estadoDoGrupo(am, grupo) {
   const partes = Object.entries(GRUPOS_AUTOMOD[grupo]?.partes ?? {});
@@ -709,6 +742,7 @@ export async function liberarSilenciosVencidos(ctx) {
         titulo: "🔊 Silêncio expirado",
         descricao: `<@${userId}> voltou a falar — o prazo da punição terminou.\n**Motivo original:** ${motivo ?? "—"}`,
         en: { titulo: "🔊 Silence expired", descricao: `<@${userId}> can talk again — the punishment ran out.\n**Original reason:** ${motivo ?? "—"}` },
+        es: { titulo: "🔊 Silencio expirado", descricao: `<@${userId}> puede volver a hablar — terminó el plazo del castigo.\n**Motivo original:** ${motivo ?? "—"}` },
       });
     } catch (e) {
       console.error(`[PUNIÇÃO][vigia] ${userId} em ${serverId}: ${descreverErro(e)}`);
@@ -743,6 +777,12 @@ function interpretarDegrau(txt) {
 }
 
 export function rotuloDegrau(degrau, lang = "pt") {
+  if (lang === "es") {
+    if (!degrau) return "nada más";
+    if (degrau.tipo === "aviso") return "aviso";
+    if (degrau.tipo === "ban") return "ban";
+    return `silencio de ${degrau.rotulo}`;
+  }
   if (!degrau) return lang === "en" ? "nothing further" : "nada além disso";
   if (degrau.tipo === "aviso") return lang === "en" ? "warning" : "aviso";
   if (degrau.tipo === "ban") return lang === "en" ? "ban" : "ban";
@@ -955,7 +995,7 @@ export async function runAutomod(message, ctx, opts = {}) {
     dbg(ctx, `  [anti-link] domínios extraídos da mensagem: [${dominios.join(", ") || "nenhum"}]`);
 
     if (estado.blockedDomains.size === 0) {
-      dbg(ctx, "  [anti-link] ⚠️ lista VAZIA — adicione com &automod blocklist add <url> ou &automod blocklist adddomain <domínio>");
+      dbg(ctx, "  [anti-link] ⚠️ lista VAZIA — adicione com " + citarInterno("automod") + " blocklist add <url> ou " + citarInterno("automod") + " blocklist adddomain <domínio>");
     }
 
     const permitidos = new Set(config.dominiosPermitidos ?? []);
@@ -1135,6 +1175,7 @@ export async function reaplicarPunicao(member, ctx) {
       titulo: "↩ Punição reaplicada",
       descricao: `<@${userId}> saiu e voltou ao servidor — o silêncio foi **reaplicado**.\n**Motivo original:** ${motivo ?? "punição ativa"}`,
       en: { titulo: "↩ Punishment reapplied", descricao: `<@${userId}> left and rejoined — the silence was **reapplied**.\n**Original reason:** ${motivo ?? "active punishment"}` },
+      es: { titulo: "↩ Castigo reaplicado", descricao: `<@${userId}> salió y volvió al servidor — el silencio se **reaplicó**.\n**Motivo original:** ${motivo ?? "castigo activo"}` },
     });
     return true;
   } catch (err) {

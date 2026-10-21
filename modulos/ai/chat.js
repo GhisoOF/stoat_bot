@@ -15,12 +15,12 @@ import * as cacheCanal from "./cache-canal.js";
 import * as ficha from "./ficha.js";
 import { construirDetalhes } from "../moderacao/geral.js";
 import { verificar } from "./verificar.js";
-import { SUB as SUBCOMANDOS_REAIS, citar } from "../core/aliases.js";
+import { SUB as SUBCOMANDOS_REAIS, citar, citarInterno, trechoPronto } from "../core/aliases.js";
 import * as desinteresse from "./desinteresse.js";
 import * as persona from "./persona.js";
 import { iaLigada, conversaLigada, modoIA } from "../core/env.js";
 import { nivelDePrioridade } from "../core/prioridade.js";
-import { tr, lingua } from "../core/i18n.js";
+import { tr, lingua, idiomaDe, idiomaDaTela } from "../core/i18n.js";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
@@ -905,6 +905,11 @@ function hojeExtenso() {
   }
 }
 
+// o idioma da RESPOSTA da IA num servidor em espanhol (o prompt dela é o inglês)
+function respostaEmEspanhol(serverId) {
+  try { return !!serverId && idiomaDaTela(store.configDoServidor(serverId)?.language) === "es"; } catch { return false; }
+}
+
 async function responder(pergunta, resultados, autor, userId, citada, serverId, canalId, lang = "pt", modeloForcado = null, local = null, fichaTxt = "") {
   const hoje = hojeExtenso();
 
@@ -1022,7 +1027,8 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
       ? "DISAGREEING: you may be wrong, and often are — you cannot see the platform, only what reaches you. When someone corrects you about the real world (which server this is, who they are, what happened), treat it as INFORMATION, not as an attack. Say you may have got it wrong and ask what you're missing. NEVER call a person delusional, hallucinating, a liar, or say they are inventing things — that is an accusation, and you are the one without the means to check. NEVER declare the conversation over: that is the person's call, not yours. Repeating the same answer harder is not an argument; if you have already said it twice and they still disagree, you are probably the one who is wrong."
       : "AO DISCORDAR: você pode estar errada, e frequentemente está — você não enxerga a plataforma, só o que chega até você. Quando alguém te corrige sobre o mundo real (que servidor é este, quem ele é, o que aconteceu), trate como INFORMAÇÃO, não como ataque. Diga que pode ter entendido errado e pergunte o que está faltando. NUNCA chame a pessoa de delirante, alucinada, mentirosa, nem diga que ela está inventando coisas — isso é acusação, e quem não tem como verificar é VOCÊ. NUNCA declare a conversa encerrada: quem decide isso é a pessoa, não você. Repetir a mesma resposta com mais firmeza não é argumento; se você já disse duas vezes e a pessoa continua discordando, provavelmente a errada é você.",
     lang === "en"
-      ? "Speak in the first person, in the feminine, as Judy. Reply in English."
+      // (etapa 4b) servidor em espanhol: o prompt segue em inglês, a resposta sai em espanhol
+      ? (respostaEmEspanhol(serverId) ? "Speak in the first person, in the feminine, as Judy. Reply in Spanish (neutral Spanish, addressing people as tú)." : "Speak in the first person, in the feminine, as Judy. Reply in English.")
       : "Fale em primeira pessoa, no feminino, como a Judy. Responda em português do Brasil.",
     lang === "en"
       ? "MENTIONS: to tag someone from the conversation, write @ followed by their name exactly as it appears in the chat (e.g. @Ana). NEVER write IDs or the <@…> format — the system turns @Name into a real mention."
@@ -1870,6 +1876,10 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
   const adultoAqui = imagemAdulta.liberadaAqui(serverId, message.channelId);
   const lang = lingua(ctx);
   const en = lang === "en";
+  // Textos fixos que vão como mensagem comum (status, resposta, avisos): sem a tradução
+  // da tela, então o espanhol entra como texto puro. (Os prompts seguem o `lang`.)
+  const esTela = idiomaDe(ctx) === "es";
+  const X = (pt, eng, es) => (esTela ? es : en ? eng : pt);
 
   // Limitação: só funciona no(s) servidor(es) permitido(s)
   if (!servidorPermitido(serverId)) {
@@ -1882,6 +1892,10 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
       title: "🚫 Unavailable here",
       description: "The AI chat isn't enabled on this server.",
       colour: COR.aviso,
+    }, {
+      title: "🚫 No disponible aquí",
+      description: "El chat con IA no está habilitado en este servidor.",
+      colour: COR.aviso,
     }));
   }
 
@@ -1893,9 +1907,11 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
   if (!pergunta && !citada) {
     return sendEmbed(message.channel, tr(ctx,
       { title: "💬 Chat",
-        description: "Escreva algo depois do comando. Ex.: `&chat me explique o que é RAID`.", colour: COR.info },
+        description: "Escreva algo depois do comando. Ex.: `" + citarInterno("chat") + " me explique o que é RAID`.", colour: COR.info },
       { title: "💬 Chat",
-        description: "Write something after the command. E.g.: `&chat explain what RAID is`.", colour: COR.info }));
+        description: "Write something after the command. E.g.: `" + citarInterno("chat") + " explain what RAID is`.", colour: COR.info },
+      { title: "💬 Chat",
+        description: "Escribe algo después del comando. Ej.: `" + citar("chat", "es") + " explícame qué es RAID`.", colour: COR.info }));
   }
   // Só citou e mencionou, sem texto: comenta a mensagem citada.
   if (!pergunta && citada) pergunta = en ? "Comment on the quoted message above." : "Comente a mensagem citada acima.";
@@ -1948,6 +1964,10 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
       title: "🤔 I didn't get that",
       description: "Send a question or message with a bit more substance and I'll answer.",
       colour: COR.aviso,
+    }, {
+      title: "🤔 No entendí",
+      description: "Mándame una pregunta o mensaje con un poco más de contenido y te respondo.",
+      colour: COR.aviso,
     }));
   }
 
@@ -1973,13 +1993,15 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
         { title: "⏳ Fila cheia",
           description: `Já tem ${fila.length} conversa(s) esperando a vez. Tente de novo daqui a pouco.`, colour: COR.aviso },
         { title: "⏳ Queue is full",
-          description: `There are already ${fila.length} conversation(s) waiting. Try again in a bit.`, colour: COR.aviso }));
+          description: `There are already ${fila.length} conversation(s) waiting. Try again in a bit.`, colour: COR.aviso },
+        { title: "⏳ Cola llena",
+          description: `Ya hay ${fila.length} conversación(es) esperando su turno. Inténtalo de nuevo en un rato.`, colour: COR.aviso }));
     }
     const posicao = posicaoNaFila(prioridade);
     console.log(`[CHAT] fila: ${message.authorId ?? "?"} entrou na posição ${posicao}${prioridade ? ` (prioridade ${prioridade === 2 ? "do dono" : "do servidor do dono"})` : ""}`);
-    await editarStatus(en
-      ? `⏳ In line — position ${posicao}. I'll answer as soon as the current conversation is done.`
-      : `⏳ Na fila — posição ${posicao}. Respondo assim que terminar a conversa em andamento.`);
+    await editarStatus(X(`⏳ Na fila — posição ${posicao}. Respondo assim que terminar a conversa em andamento.`,
+      `⏳ In line — position ${posicao}. I'll answer as soon as the current conversation is done.`,
+      `⏳ En la cola — posición ${posicao}. Respondo en cuanto termine la conversación en curso.`));
     await pegarVez(prioridade);
     console.log(`[CHAT] fila: ${message.authorId ?? "?"} chegou a vez (${fila.length} atrás)`);
   } else {
@@ -2055,11 +2077,19 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
         ? `**${alvo}** is unreachable (${disp.motivo}). Check that the LLM server is running (\`IA_MODO\`/\`LLM_URL\` in the .env decide which one).`
         : `**${alvo}** está inalcançável (${disp.motivo}). Confira se o servidor de LLM está de pé (\`IA_MODO\`/\`LLM_URL\` no .env decidem qual é).`,
     };
+    const explicaEs = {
+      recusou: `Hay algo respondiendo en **${alvo}**, pero rechaza la conexión. Si es el modo local integrado, el modelo probablemente todavía se está cargando (el primer arranque lo descarga — mira el log del contenedor). Si es un servidor externo, puede que solo esté escuchando en localhost en su máquina.`,
+      "sem-rota": `No hay ruta hasta **${alvo}**. La máquina está apagada, en reposo, o se cayó la red/VPN entre las dos.`,
+      lento: `**${alvo}** no respondió a tiempo (${disp.motivo}). Suele ser la carga de un modelo o la máquina sobrecargada — que no es lo mismo que estar apagada.`,
+      http: `El servidor de IA respondió, pero ${disp.motivo}.`,
+      offline: `**${alvo}** es inalcanzable (${disp.motivo}). Comprueba que el servidor de LLM esté en marcha (\`IA_MODO\`/\`LLM_URL\` en el .env deciden cuál es).`,
+    };
     const msg = explica[disp.causa] ?? explica.offline;
     console.error(`[CHAT] LLM indisponível — causa=${disp.causa} codigo=${disp.codigo ?? "-"} url=${alvo}`);
-    return sendEmbed(message.channel, {
-      title: en ? "💤 AI unavailable" : "💤 IA indisponível",
-      description: msg, colour: COR.aviso });
+    return sendEmbed(message.channel, tr(ctx,
+      { title: "💤 IA indisponível", description: msg, colour: COR.aviso },
+      { title: "💤 AI unavailable", description: msg, colour: COR.aviso },
+      { title: "💤 IA no disponible", description: explicaEs[disp.causa] ?? explicaEs.offline, colour: COR.aviso }));
   }
 
   const LIMITE_RESPOSTA = 1500;
@@ -2103,7 +2133,7 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
     const pendente = pedeContinuacao(pergunta) ? continuacaoPendente(canalId) : null;
     if (pendente) {
       dlog(`"continue" → retomando a resposta cortada (${pendente.texto.length} chars já entregues)`);
-      await editarStatus(en ? "✍️ Picking up where I stopped…" : "✍️ Retomando de onde parei…");
+      await editarStatus(X("✍️ Retomando de onde parei…", "✍️ Picking up where I stopped…", "✍️ Retomando donde lo dejé…"));
       const bruto = await llmChat([
         { role: "system", content: en
           ? `You are Judy. Today is ${hojeExtenso()}. Reply in English.`
@@ -2121,11 +2151,11 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
       if (resto && desinteresse.envolveMenor(resto)) resto = desinteresse.respostaSeca(canalId, lang);
       const cortouDeNovo = !!llmChat._cortou;
       const textoFinal = busca.semPreviaDeLinks(resto)
-        || (en ? "_That reply was already complete — nothing left to add._" : "_Aquela resposta já estava inteira — não sobrou nada a acrescentar._");
+        || X("_Aquela resposta já estava inteira — não sobrou nada a acrescentar._", "_That reply was already complete — nothing left to add._", "_Esa respuesta ya estaba completa — no queda nada por añadir._");
       lembrarUltimaResposta(canalId, { pergunta: pendente.pergunta, texto: `${pendente.texto}\n${resto}`, cortada: cortouDeNovo, modelo: pendente.modelo });
       registrarNoCanal(canalId, { nome: "Judy", userId: message.client?.user?.id, texto: resto || textoFinal, ehJudy: true });
       // cada parte sai sem ping em massa (15 out 2026: só a 1ª passava pelo filtro)
-      const partes = fragmentar(textoFinal + (cortouDeNovo ? (en ? "\n\n_✂️ still more — say 'continue' again._" : "\n\n_✂️ ainda tem mais — peça 'continue' de novo._") : ""), 1500)
+      const partes = fragmentar(textoFinal + (cortouDeNovo ? X("\n\n_✂️ ainda tem mais — peça 'continue' de novo._", "\n\n_✂️ still more — say 'continue' again._", "\n\n_✂️ todavía hay más — vuelve a decir 'continue'._") : ""), 1500)
         .map((p) => semPingEmMassa(p));
       await mostrarEmbed({ description: partes[0], colour: COR.info });
       for (let i = 1; i < partes.length; i++) { try { await message.channel.sendMessage(partes[i]); } catch {} }
@@ -2133,7 +2163,7 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
       return;
     }
 
-    await editarStatus(en ? "💭 Analyzing your question…" : "💭 Analisando sua pergunta…");
+    await editarStatus(X("💭 Analisando sua pergunta…", "💭 Analyzing your question…", "💭 Analizando tu pregunta…"));
 
     const buscaLigada = process.env.BUSCA_ATIVA !== "false"
       && process.env.BUSCA_ATIVA !== "0"
@@ -2164,7 +2194,7 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
     let resultados = null;
     let consultasUsadas = [];
     if (decisao.buscar) {
-      await editarStatus(en ? "🔎 Searching…" : "🔎 Pesquisando…");
+      await editarStatus(X("🔎 Pesquisando…", "🔎 Searching…", "🔎 Buscando…"));
       try {
         // A consulta NÃO é mais a mensagem menos os gatilhos (o gatilho
         // `googl(e)` apagava a palavra "google"): o modelo reescreve o pedido
@@ -2198,10 +2228,12 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
     }
 
     const comFontes = !!(resultados?.length && decisao.links);
-    await editarStatus(en ? (comFontes ? "✍️ Writing the reply with the sources…" : "✍️ Writing the reply…") : (comFontes ? "✍️ Gerando resposta com as fontes…" : "✍️ Gerando resposta…"));
+    await editarStatus(esTela ? (comFontes ? "✍️ Generando la respuesta con las fuentes…" : "✍️ Generando la respuesta…")
+      : en ? (comFontes ? "✍️ Writing the reply with the sources…" : "✍️ Writing the reply…") : (comFontes ? "✍️ Gerando resposta com as fontes…" : "✍️ Gerando resposta…"));
 
     const inicio = Date.now();
-    const frames = ["✍️ Gerando resposta", "✍️ Gerando resposta.", "✍️ Gerando resposta..", "✍️ Gerando resposta..."];
+    const frames = esTela ? ["✍️ Generando la respuesta", "✍️ Generando la respuesta.", "✍️ Generando la respuesta..", "✍️ Generando la respuesta..."]
+      : ["✍️ Gerando resposta", "✍️ Gerando resposta.", "✍️ Gerando resposta..", "✍️ Gerando resposta..."];
     let fi = 0;
     const animacao = setInterval(() => {
       const seg = Math.round((Date.now() - inicio) / 1000);
@@ -2336,7 +2368,7 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
     if (resposta && vazaIdentidade(resposta)) {
       console.warn(`[CHAT] ⚠️ identidade vazou ("${resposta.slice(0, 120)}…") — refazendo com a regra reforçada`);
       dlog("identidade vazou → refazendo");
-      await editarStatus(en ? "✍️ Polishing the reply…" : "✍️ Refinando a resposta…");
+      await editarStatus(X("✍️ Refinando a resposta…", "✍️ Polishing the reply…", "✍️ Puliendo la respuesta…"));
       try {
         const refeita = await llmChat([
           { role: "user", content: pergunta.slice(0, 2000) },  // `messages` vive dentro do responder — aqui o refazer é autocontido: pergunta + resposta + ordem
@@ -2361,7 +2393,7 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
     if (!resposta) {
       console.log("[CHAT] resposta vazia após limpar — tentando resposta direta");
       dlog("resposta vazia → fallback de resposta direta");
-      await editarStatus(en ? "✍️ Polishing the reply…" : "✍️ Refinando a resposta…");
+      await editarStatus(X("✍️ Refinando a resposta…", "✍️ Polishing the reply…", "✍️ Puliendo la respuesta…"));
       const direto = await llmChat([
         { role: "system", content: en
           ? `Today is ${hojeExtenso()}. Reply in English, directly and objectively, WITHOUT explaining your reasoning.`
@@ -2395,9 +2427,9 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
       : "")
       + (materialGithub?.link ? `\n\n🔗 ${en ? "commit" : "commit"} [${materialGithub.link.split("/").pop().slice(0, 7)}](<${materialGithub.link}>)` : "");
     const avisoCorte = responder._cortou
-      ? (en
-        ? "\n\n_✂️ this one hit the length ceiling even after auto-continuing — ask 'continue' for the rest._"
-        : "\n\n_✂️ essa estourou o teto mesmo com a continuação automática — peça 'continue' para o resto._")
+      ? X("\n\n_✂️ essa estourou o teto mesmo com a continuação automática — peça 'continue' para o resto._",
+        "\n\n_✂️ this one hit the length ceiling even after auto-continuing — ask 'continue' for the rest._",
+        "\n\n_✂️ esta llegó al límite de tamaño incluso con la continuación automática — di 'continue' para el resto._")
       : "";
     // Anexos vindos do serviço + o da geração direta (quando houve).
     const anexosIA = chamarServicoIA._anexos ?? [];
@@ -2410,7 +2442,9 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
       const erroFerr = (chamarServicoIA._evidencia ?? "").match(/\[gerar_imagem[^\]]*\]\n\{"erro":"((?:[^"\\]|\\.)*)"/);
       const motivo = erroFerr ? erroFerr[1].replace(/\\"/g, '"').slice(0, 200) : (responder._erroImagem ?? null);
       console.warn(`[CHAT] ⚠️ pedido de imagem sem anexo — trocando a resposta pela admissão${motivo ? ` (${motivo})` : ""}`);
-      resposta = (lang === "en")
+      resposta = esTela
+        ? `No pude generar la imagen esta vez${motivo ? ` — el generador dijo: ${String(motivo).slice(0, 200)}` : " — el generador falló de mi lado"}. Inténtalo de nuevo en un momento.`
+        : (lang === "en")
         ? `I couldn't generate the image this time${motivo ? ` — the generator said: ${String(motivo).slice(0, 200)}` : " — the generator failed on my side"}. Try again in a moment.`
         : `Não consegui gerar a imagem desta vez${motivo ? ` — o gerador disse: ${String(motivo).slice(0, 200)}` : " — o gerador falhou do meu lado"}. Tenta de novo daqui a pouco.`;
     }
@@ -2419,7 +2453,7 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
     // O E2B às vezes "obedece" à legenda escrevendo literalmente "[Imagem
     // gerada]" — com anexo presente, isso vira uma legenda padrão de verdade.
     if (anexosIA.length && resposta && /^\[?\s*imagem\s+gerada\s*\]?\.?$/i.test(resposta.trim())) {
-      resposta = lang === "en" ? "🎨 Here it is!" : "🎨 Aqui está!";
+      resposta = esTela ? "🎨 ¡Aquí está!" : lang === "en" ? "🎨 Here it is!" : "🎨 Aqui está!";
     }
 
     // e na saída também: o modelo nunca entrega menor + sexual
@@ -2428,7 +2462,7 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
       resposta = desinteresse.respostaSeca(canalId, lang);
     }
     const textoFinal = busca.semPreviaDeLinks(resposta
-      || (en ? "_I couldn't put a reply together. Try rephrasing the question._" : "_Não consegui formular uma resposta. Tente reformular a pergunta._"))
+      || X("_Não consegui formular uma resposta. Tente reformular a pergunta._", "_I couldn't put a reply together. Try rephrasing the question._", "_No pude formular una respuesta. Intenta reformular la pregunta._"))
       + avisoCorte + rodape;
 
     // Salva a troca no histórico (para continuidade nas próximas mensagens).
@@ -2495,7 +2529,7 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
         if (v.ok) return;
         const editar = process.env.VERIF_EDITAR === "1" || process.env.VERIF_EDITAR === "true";
         if (!editar || !msgVerif?.edit) return;   // modo observação
-        const nota = (en ? "\n\n⚠️ _Auto-review found issues:_" : "\n\n⚠️ _Revisão automática encontrou problemas:_")
+        const nota = X("\n\n⚠️ _Revisão automática encontrou problemas:_", "\n\n⚠️ _Auto-review found issues:_", "\n\n⚠️ _La revisión automática encontró problemas:_")
           + v.problemas.map((p) => `\n• ${p}`).join("");
         const teto = 1900;
         const conteudo = (textoEntregue + nota).length > teto
@@ -2511,26 +2545,26 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
     dlog(`ERRO no fluxo: ${err.stack || err.message}`);
     let dica;
     if (/HTTP 404|not found|no such model|try pulling/i.test(err.message)) {
-      dica = en
-        ? `The configured model wasn't found on the LLM server. Check MODELO/LLM_MODEL in the .env against what the server actually has.`
-        : `O modelo configurado não foi encontrado no servidor de LLM. Confira MODELO/LLM_MODEL no .env contra o que o servidor realmente tem.`;
+      dica = X(`O modelo configurado não foi encontrado no servidor de LLM. Confira MODELO/LLM_MODEL no .env contra o que o servidor realmente tem.`,
+        `The configured model wasn't found on the LLM server. Check MODELO/LLM_MODEL in the .env against what the server actually has.`,
+        `El modelo configurado no se encontró en el servidor de LLM. Compara MODELO/LLM_MODEL del .env con lo que el servidor realmente tiene.`);
     } else if (/HTTP 429|Too many requests|concurrency_limit/i.test(err.message)) {
-      dica = en
-        ? "I'm overloaded right now — too many requests at once. Try again in a few seconds."
-        : "Estou sobrecarregada agora — pedidos demais ao mesmo tempo. Tenta de novo em alguns segundos.";
+      dica = X("Estou sobrecarregada agora — pedidos demais ao mesmo tempo. Tenta de novo em alguns segundos.",
+        "I'm overloaded right now — too many requests at once. Try again in a few seconds.",
+        "Estoy sobrecargada ahora mismo — demasiadas peticiones a la vez. Inténtalo de nuevo en unos segundos.");
     } else if (/aborted|The operation was aborted|timeout/i.test(err.message)) {
-      dica = en
-        ? "The AI took too long and timed out. The model may be too big for the machine, or the question asked for a very long reply. Try something shorter, or a smaller model."
-        : "A IA demorou demais e o tempo esgotou. O modelo pode ser grande demais para a máquina, ou a pergunta pediu uma resposta muito longa. Tente algo mais curto, ou um modelo menor.";
+      dica = X("A IA demorou demais e o tempo esgotou. O modelo pode ser grande demais para a máquina, ou a pergunta pediu uma resposta muito longa. Tente algo mais curto, ou um modelo menor.",
+        "The AI took too long and timed out. The model may be too big for the machine, or the question asked for a very long reply. Try something shorter, or a smaller model.",
+        "La IA tardó demasiado y se agotó el tiempo. Puede que el modelo sea demasiado grande para la máquina, o que la pregunta pidiera una respuesta muy larga. Prueba algo más corto, o un modelo más pequeño.");
     } else if (/fetch failed|ECONNREFUSED|HTTP 5/.test(err.message)) {
-      dica = en
-        ? "The LLM server didn't respond. The machine may be overloaded or the service crashed mid-generation."
-        : "O servidor de LLM não respondeu. A máquina pode estar sobrecarregada ou o serviço caiu no meio da geração.";
+      dica = X("O servidor de LLM não respondeu. A máquina pode estar sobrecarregada ou o serviço caiu no meio da geração.",
+        "The LLM server didn't respond. The machine may be overloaded or the service crashed mid-generation.",
+        "El servidor de LLM no respondió. Puede que la máquina esté sobrecargada o que el servicio se cayera en mitad de la generación.");
     } else {
-      dica = en ? `An error occurred while generating the reply: ${err.message}` : `Ocorreu um erro ao gerar a resposta: ${err.message}`;
+      dica = X(`Ocorreu um erro ao gerar a resposta: ${err.message}`, `An error occurred while generating the reply: ${err.message}`, `Ocurrió un error al generar la respuesta: ${err.message}`);
     }
     // SEMPRE mostra algo — nunca deixa o usuário sem retorno.
-    await mostrarEmbed({ title: en ? "❌ Chat failure" : "❌ Falha no chat", description: dica, colour: COR.erro });
+    await mostrarEmbed({ title: X("❌ Falha no chat", "❌ Chat failure", "❌ Fallo en el chat"), description: dica, colour: COR.erro });
   } finally {
     liberarVez();   // a GPU passa ao próximo da fila, ou fica livre
   }
@@ -2742,6 +2776,7 @@ export async function cmdChat(message, args, ctx) {
   const { sendEmbed, COR, serverId, PREFIXO } = ctx;
   const clang = lingua(ctx);
   const cen = clang === "en";
+  const ces = (ref) => citar(ref, "es", PREFIXO);   // a citação no espanhol
 
   if (["comentar", "comentario", "comentário", "espontaneo", "espontâneo"].includes(args[0]?.toLowerCase())) {
     const server = await ctx.getServer?.(message);
@@ -2750,24 +2785,16 @@ export async function cmdChat(message, args, ctx) {
         { title: "🚫 Permissão insuficiente",
           description: "Você precisa de **ManagePermissions** para configurar o comentário espontâneo.", colour: COR.erro },
         { title: "🚫 Missing permission",
-          description: "You need **ManagePermissions** to configure spontaneous comments.", colour: COR.erro }));
+          description: "You need **ManagePermissions** to configure spontaneous comments.", colour: COR.erro },
+        { title: "🚫 Permiso insuficiente",
+          description: "Necesitas **ManagePermissions** para configurar los comentarios espontáneos.", colour: COR.erro }));
     }
     ctx.config.comentarioEspontaneo ??= { canalId: null, porDia: 4, minParaFalar: 4 };
     const ce = ctx.config.comentarioEspontaneo;
     const acao = args[1]?.toLowerCase();
 
     if (!acao || acao === "status") {
-      return sendEmbed(message.channel, cen ? {
-        title: "💬 Spontaneous comments",
-        description: [
-          ce.canalId ? `🟢 Active in <#${ce.canalId}>` : "🔴 Off",
-          `**Max per day:** ${ce.porDia ?? 4}`,
-          "",
-          "Judy drops comments on her own about the ongoing conversation, only in this channel, with brakes so it doesn't turn into spam.",
-          "",
-          `\`${PREFIXO}chat comentar aqui\` (enables in this channel) · \`${PREFIXO}chat comentar off\` · \`${PREFIXO}chat comentar pordia <n>\``,
-        ].join("\n"), colour: COR.info,
-      } : {
+      return sendEmbed(message.channel, tr(ctx, {
         title: "💬 Comentário espontâneo",
         description: [
           ce.canalId ? `🟢 Ativo em <#${ce.canalId}>` : "🔴 Desligado",
@@ -2775,8 +2802,27 @@ export async function cmdChat(message, args, ctx) {
           "",
           "A Judy solta comentários por conta própria sobre a conversa em andamento, só neste canal, com freios contra virar spam.",
           "",
-          `\`${PREFIXO}chat comentar aqui\` (liga neste canal) · \`${PREFIXO}chat comentar off\` · \`${PREFIXO}chat comentar pordia <n>\``,
-        ].join("\n"), colour: COR.info });
+          `\`${citarInterno("chat.comentar.aqui", PREFIXO)}\` (liga neste canal) · \`${citarInterno("chat.comentar", PREFIXO)} off\` · \`${citarInterno("chat.comentar.pordia", PREFIXO)} <n>\``,
+        ].join("\n"), colour: COR.info }, {
+        title: "💬 Spontaneous comments",
+        description: [
+          ce.canalId ? `🟢 Active in <#${ce.canalId}>` : "🔴 Off",
+          `**Max per day:** ${ce.porDia ?? 4}`,
+          "",
+          "Judy drops comments on her own about the ongoing conversation, only in this channel, with brakes so it doesn't turn into spam.",
+          "",
+          `\`${citarInterno("chat.comentar.aqui", PREFIXO)}\` (enables in this channel) · \`${citarInterno("chat.comentar", PREFIXO)} off\` · \`${citarInterno("chat.comentar.pordia", PREFIXO)} <n>\``,
+        ].join("\n"), colour: COR.info,
+      }, {
+        title: "💬 Comentarios espontáneos",
+        description: [
+          ce.canalId ? `🟢 Activos en <#${ce.canalId}>` : "🔴 Desactivados",
+          `**Máximo por día:** ${ce.porDia ?? 4}`,
+          "",
+          "Judy suelta comentarios por su cuenta sobre la conversación en curso, solo en este canal, con frenos para que no se vuelva spam.",
+          "",
+          `\`${ces("chat.comentar.aqui")}\` (los activa en este canal) · \`${ces("chat.comentar")} off\` · \`${ces("chat.comentar.pordia")} <n>\``,
+        ].join("\n"), colour: COR.info }));
     }
     if (acao === "aqui" || acao === "on") {
       ce.canalId = message.channelId;
@@ -2787,6 +2833,9 @@ export async function cmdChat(message, args, ctx) {
       }, {
         title: "💬 Spontaneous comments on",
         description: `Judy will comment now and then in this channel (up to ${ce.porDia ?? 4}× a day, when there's conversation). She doesn't start topics out of nowhere — she only comments on what's already happening.`, colour: COR.sucesso,
+      }, {
+        title: "💬 Comentarios espontáneos activados",
+        description: `Judy va a comentar de vez en cuando en este canal (hasta ${ce.porDia ?? 4}× al día, cuando haya conversación). No saca temas de la nada — solo comenta lo que ya está pasando.`, colour: COR.sucesso,
       }));
     }
     if (acao === "off") {
@@ -2796,7 +2845,9 @@ export async function cmdChat(message, args, ctx) {
         { title: "💬 Comentário espontâneo desligado",
           description: "A Judy parou de comentar por iniciativa.", colour: COR.aviso },
         { title: "💬 Spontaneous comments off",
-          description: "Judy stopped commenting on her own initiative.", colour: COR.aviso }));
+          description: "Judy stopped commenting on her own initiative.", colour: COR.aviso },
+        { title: "💬 Comentarios espontáneos desactivados",
+          description: "Judy dejó de comentar por iniciativa propia.", colour: COR.aviso }));
     }
     if (acao === "pordia") {
       const n = Math.max(1, Math.min(20, parseInt(args[2], 10) || 4));
@@ -2806,11 +2857,14 @@ export async function cmdChat(message, args, ctx) {
         { title: "💬 Frequência ajustada",
           description: `Até **${n}** comentário(s) espontâneo(s) por dia.`, colour: COR.sucesso },
         { title: "💬 Frequency adjusted",
-          description: `Up to **${n}** spontaneous comment(s) per day.`, colour: COR.sucesso }));
+          description: `Up to **${n}** spontaneous comment(s) per day.`, colour: COR.sucesso },
+        { title: "💬 Frecuencia ajustada",
+          description: `Hasta **${n}** comentario(s) espontáneo(s) al día.`, colour: COR.sucesso }));
     }
     return sendEmbed(message.channel, tr(ctx,
-      { title: "Uso", description: `\`${PREFIXO}chat comentar aqui|off|pordia <n>|status\``, colour: COR.info },
-      { title: "Usage", description: `\`${PREFIXO}chat comentar aqui|off|pordia <n>|status\``, colour: COR.info }));
+      { title: "Uso", description: `\`${citarInterno("chat.comentar.aqui", PREFIXO)}|off|pordia <n>|status\``, colour: COR.info },
+      { title: "Usage", description: `\`${citarInterno("chat.comentar.aqui", PREFIXO)}|off|pordia <n>|status\``, colour: COR.info },
+      { title: "Uso", description: `\`${ces("chat.comentar.aqui")}|off|perday <n>|status\``, colour: COR.info }));
   }
 
   if (args[0]?.toLowerCase() === "livre") {
@@ -2820,7 +2874,9 @@ export async function cmdChat(message, args, ctx) {
         { title: "🚫 Permissão insuficiente",
           description: "Você precisa de **ManagePermissions** para mudar a conversa livre.", colour: COR.erro },
         { title: "🚫 Missing permission",
-          description: "You need **ManagePermissions** to change free chat.", colour: COR.erro }));
+          description: "You need **ManagePermissions** to change free chat.", colour: COR.erro },
+        { title: "🚫 Permiso insuficiente",
+          description: "Necesitas **ManagePermissions** para cambiar la conversación libre.", colour: COR.erro }));
     }
     const canalId = message.channelId;
     const cfg = ctx.config;
@@ -2834,10 +2890,13 @@ export async function cmdChat(message, args, ctx) {
       const modo = cfg.chatLivre.modo || "relevante";
       return sendEmbed(message.channel, tr(ctx, {
         title: "💬 Conversa livre ativada",
-        description: `Vou participar deste canal sem precisar de menção.\nModo atual: **${modo === "todas" ? "responder todas as mensagens" : "responder só o que eu julgar relevante"}**.\n\nTroque o modo com \`${PREFIXO}chat livre modo todas\` ou \`${PREFIXO}chat livre modo relevante\`. Desligar: \`${PREFIXO}chat livre off\`.`, colour: COR.sucesso,
+        description: `Vou participar deste canal sem precisar de menção.\nModo atual: **${modo === "todas" ? "responder todas as mensagens" : "responder só o que eu julgar relevante"}**.\n\nTroque o modo com \`${citarInterno("chat.livre.modo.todas", PREFIXO)}\` ou \`${citarInterno("chat.livre.modo.relevante", PREFIXO)}\`. Desligar: \`${citarInterno("chat.livre", PREFIXO)} off\`.`, colour: COR.sucesso,
       }, {
         title: "💬 Free chat enabled",
-        description: `I'll join this channel without needing a mention.\nCurrent mode: **${modo === "todas" ? "reply to every message" : "reply only to what I judge relevant"}**.\n\nChange the mode with \`${PREFIXO}chat livre modo todas\` or \`${PREFIXO}chat livre modo relevante\`. Disable: \`${PREFIXO}chat livre off\`.`, colour: COR.sucesso,
+        description: `I'll join this channel without needing a mention.\nCurrent mode: **${modo === "todas" ? "reply to every message" : "reply only to what I judge relevant"}**.\n\nChange the mode with \`${citarInterno("chat.livre.modo.todas", PREFIXO)}\` or \`${citarInterno("chat.livre.modo.relevante", PREFIXO)}\`. Disable: \`${citarInterno("chat.livre", PREFIXO)} off\`.`, colour: COR.sucesso,
+      }, {
+        title: "💬 Conversación libre activada",
+        description: `Voy a participar en este canal sin necesidad de mención.\nModo actual: **${modo === "todas" ? "responder todos los mensajes" : "responder solo lo que considere relevante"}**.\n\nCambia el modo con \`${ces("chat.livre.modo.todas")}\` o \`${ces("chat.livre.modo.relevante")}\`. Desactivar: \`${ces("chat.livre")} off\`.`, colour: COR.sucesso,
       }));
     }
     if (acao === "off" || acao === "desligar") {
@@ -2845,19 +2904,24 @@ export async function cmdChat(message, args, ctx) {
       ctx.salvarConfig?.();
       return sendEmbed(message.channel, tr(ctx,
         { title: "💬 Conversa livre desativada",
-          description: "Só respondo aqui se me mencionarem ou usarem `&chat`.", colour: COR.aviso },
+          description: "Só respondo aqui se me mencionarem ou usarem `" + citarInterno("chat") + "`.", colour: COR.aviso },
         { title: "💬 Free chat disabled",
-          description: "I only reply here if mentioned or via `&chat`.", colour: COR.aviso }));
+          description: "I only reply here if mentioned or via `" + citarInterno("chat") + "`.", colour: COR.aviso },
+        { title: "💬 Conversación libre desactivada",
+          description: "Aquí solo respondo si me mencionan o usan `" + citar("chat", "es") + "`.", colour: COR.aviso }));
     }
     if (acao === "modo") {
       const novo = args[2]?.toLowerCase();
       if (novo !== "todas" && novo !== "relevante") {
         return sendEmbed(message.channel, tr(ctx, {
           title: "💬 Modo da conversa livre",
-          description: `Modo atual: **${cfg.chatLivre.modo || "relevante"}**.\n\n\`${PREFIXO}chat livre modo todas\` — responde toda mensagem\n\`${PREFIXO}chat livre modo relevante\` — responde só o que julgar importante`, colour: COR.info,
+          description: `Modo atual: **${cfg.chatLivre.modo || "relevante"}**.\n\n\`${citarInterno("chat.livre.modo.todas", PREFIXO)}\` — responde toda mensagem\n\`${citarInterno("chat.livre.modo.relevante", PREFIXO)}\` — responde só o que julgar importante`, colour: COR.info,
         }, {
           title: "💬 Free chat mode",
-          description: `Current mode: **${cfg.chatLivre.modo || "relevante"}**.\n\n\`${PREFIXO}chat livre modo todas\` — replies to every message\n\`${PREFIXO}chat livre modo relevante\` — replies only to what it judges important`, colour: COR.info,
+          description: `Current mode: **${cfg.chatLivre.modo || "relevante"}**.\n\n\`${citarInterno("chat.livre.modo.todas", PREFIXO)}\` — replies to every message\n\`${citarInterno("chat.livre.modo.relevante", PREFIXO)}\` — replies only to what it judges important`, colour: COR.info,
+        }, {
+          title: "💬 Modo de la conversación libre",
+          description: `Modo actual: **${cfg.chatLivre.modo || "relevante"}**.\n\n\`${ces("chat.livre.modo.todas")}\` — responde todos los mensajes\n\`${ces("chat.livre.modo.relevante")}\` — responde solo lo que considere importante`, colour: COR.info,
         }));
       }
       cfg.chatLivre.modo = novo;
@@ -2872,15 +2936,23 @@ export async function cmdChat(message, args, ctx) {
         description: novo === "todas"
           ? "I now reply to **every** message in free-chat channels (one at a time)."
           : "I now reply **only to what I judge relevant** in free-chat channels.", colour: COR.sucesso,
+      }, {
+        title: "💬 Modo cambiado",
+        description: novo === "todas"
+          ? "Ahora respondo **todos** los mensajes de los canales con conversación libre (uno a la vez)."
+          : "Ahora respondo **solo lo que considere relevante** en los canales con conversación libre.", colour: COR.sucesso,
       }));
     }
     // sem on/off: mostra o estado
     return sendEmbed(message.channel, tr(ctx, {
       title: "💬 Conversa livre",
-      description: `Neste canal: **${jaTem ? "ativada" : "desativada"}**.\n\nUse \`${PREFIXO}chat livre on\` ou \`${PREFIXO}chat livre off\`.`, colour: COR.info,
+      description: `Neste canal: **${jaTem ? "ativada" : "desativada"}**.\n\nUse \`${citarInterno("chat.livre", PREFIXO)} on\` ou \`${citarInterno("chat.livre", PREFIXO)} off\`.`, colour: COR.info,
     }, {
       title: "💬 Free chat",
-      description: `In this channel: **${jaTem ? "enabled" : "disabled"}**.\n\nUse \`${PREFIXO}chat livre on\` or \`${PREFIXO}chat livre off\`.`, colour: COR.info,
+      description: `In this channel: **${jaTem ? "enabled" : "disabled"}**.\n\nUse \`${citarInterno("chat.livre", PREFIXO)} on\` or \`${citarInterno("chat.livre", PREFIXO)} off\`.`, colour: COR.info,
+    }, {
+      title: "💬 Conversación libre",
+      description: `En este canal: **${jaTem ? "activada" : "desactivada"}**.\n\nUsa \`${ces("chat.livre")} on\` o \`${ces("chat.livre")} off\`.`, colour: COR.info,
     }));
   }
 
@@ -2894,9 +2966,11 @@ export async function cmdChat(message, args, ctx) {
       if (ctx.membroTemPermissao && !ctx.membroTemPermissao(message, server, "ManageServer")) {
         return sendEmbed(message.channel, tr(ctx,
           { title: "🚫 Permissão insuficiente",
-            description: "Apagar TODA a memória exige **ManageServer**. Para apagar só a sua, use `&chat esquecer`.", colour: COR.erro },
+            description: "Apagar TODA a memória exige **ManageServer**. Para apagar só a sua, use `" + citarInterno("chat.esquecer") + "`.", colour: COR.erro },
           { title: "🚫 Missing permission",
-            description: "Erasing ALL the memory requires **ManageServer**. To erase only yours, use `&chat esquecer`.", colour: COR.erro }));
+            description: "Erasing ALL the memory requires **ManageServer**. To erase only yours, use `" + citarInterno("chat.esquecer") + "`.", colour: COR.erro },
+          { title: "🚫 Permiso insuficiente",
+            description: "Borrar TODA la memoria requiere **ManageServer**. Para borrar solo la tuya, usa `" + citar("chat.esquecer", "es") + "`.", colour: COR.erro }));
       }
       try {
         const r = db.apagarMemoriaServidor(ctx.serverId);
@@ -2908,11 +2982,15 @@ export async function cmdChat(message, args, ctx) {
         }, {
           title: "🧹 General memory erased",
           description: `I forgot everything on this server: ${r.fatosPessoa} fact(s) about people, ${r.fatosServidor} about the server, ${r.perfis} profile(s), ${r.historico} recent conversation message(s) and ${r.memoriaAntiga ?? 0} global memory record(s) — plus every channel's live thread and anything the agent was about to record. Starting from scratch.`, colour: COR.sucesso,
+        }, {
+          title: "🧹 Memoria general borrada",
+          description: `Olvidé todo en este servidor: ${r.fatosPessoa} dato(s) de personas, ${r.fatosServidor} del servidor, ${r.perfis} perfil(es), ${r.historico} mensaje(s) de conversación reciente y ${r.memoriaAntiga ?? 0} memoria(s) global(es) — además del hilo de todos los canales y de lo que el agente todavía iba a guardar. Empiezo de cero.`, colour: COR.sucesso,
         }));
       } catch {
         return sendEmbed(message.channel, tr(ctx,
           { title: "❌ Erro", description: "Não consegui apagar a memória geral agora.", colour: COR.erro },
-          { title: "❌ Error", description: "I couldn't erase the general memory right now.", colour: COR.erro }));
+          { title: "❌ Error", description: "I couldn't erase the general memory right now.", colour: COR.erro },
+          { title: "❌ Error", description: "No pude borrar la memoria general ahora.", colour: COR.erro }));
       }
     }
 
@@ -2932,11 +3010,15 @@ export async function cmdChat(message, args, ctx) {
       }, {
         title: "🧹 Memory erased",
         description: `I forgot what I knew about you (${r.fatos} fact(s) and your profile). Our next conversations start from scratch.`, colour: COR.sucesso,
+      }, {
+        title: "🧹 Memoria borrada",
+        description: `Olvidé lo que sabía de ti (${r.fatos} dato(s) y tu perfil). Nuestras próximas conversaciones empiezan de cero.`, colour: COR.sucesso,
       }));
     } catch {
       return sendEmbed(message.channel, tr(ctx,
         { title: "❌ Erro", description: "Não consegui apagar a memória agora.", colour: COR.erro },
-        { title: "❌ Error", description: "I couldn't erase the memory right now.", colour: COR.erro }));
+        { title: "❌ Error", description: "I couldn't erase the memory right now.", colour: COR.erro },
+        { title: "❌ Error", description: "No pude borrar la memoria ahora.", colour: COR.erro }));
     }
   }
 
@@ -2975,14 +3057,20 @@ export async function cmdChat(message, args, ctx) {
       return sendEmbed(message.channel, tr(ctx, {
         title: "👤 Perfil mapeado",
         description: achou.length
-          ? `Capturei de **${nome}**: ${achou.join(", ")}. Veja com \`${PREFIXO}chat perfil${alvoId === message.authorId ? "" : " @" + nome}\`.`
+          ? `Capturei de **${nome}**: ${achou.join(", ")}. Veja com \`${citarInterno("chat.perfil", PREFIXO)}${alvoId === message.authorId ? "" : " @" + nome}\`.`
           : `Consegui acessar **${nome}**, mas a API não me deu bio/status por aqui. Os fatos que aprendo conversando continuam valendo.`,
         colour: COR.sucesso,
       }, {
         title: "👤 Profile mapped",
         description: achou.length
-          ? `I captured from **${nome}**: ${achou.join(", ")}. See it with \`${PREFIXO}chat perfil${alvoId === message.authorId ? "" : " @" + nome}\`.`
+          ? `I captured from **${nome}**: ${achou.join(", ")}. See it with \`${citarInterno("chat.perfil", PREFIXO)}${alvoId === message.authorId ? "" : " @" + nome}\`.`
           : `I could access **${nome}**, but the API didn't give me a bio/status here. The facts I learn by chatting still count.`,
+        colour: COR.sucesso,
+      }, {
+        title: "👤 Perfil mapeado",
+        description: achou.length
+          ? `Capturé de **${nome}**: ${achou.map((x) => ({ status: "estado" })[x] ?? x).join(", ")}. Míralo con \`${ces("chat.perfil")}${alvoId === message.authorId ? "" : " @" + nome}\`.`
+          : `Pude acceder a **${nome}**, pero la API no me dio bio/estado aquí. Los datos que aprendo conversando siguen valiendo.`,
         colour: COR.sucesso,
       }));
     } catch (e) {
@@ -2990,7 +3078,9 @@ export async function cmdChat(message, args, ctx) {
         { title: "❌ Não consegui mapear",
           description: `Erro ao acessar o perfil: ${e?.message || "desconhecido"}.`, colour: COR.erro },
         { title: "❌ Couldn't map it",
-          description: `Error accessing the profile: ${e?.message || "unknown"}.`, colour: COR.erro }));
+          description: `Error accessing the profile: ${e?.message || "unknown"}.`, colour: COR.erro },
+        { title: "❌ No pude mapearlo",
+          description: `Error al acceder al perfil: ${e?.message || "desconocido"}.`, colour: COR.erro }));
     }
   }
 
@@ -3007,30 +3097,34 @@ export async function cmdChat(message, args, ctx) {
       }, {
         title: "👤 Empty profile",
         description: alvoId === message.authorId ? "I don't know anything about you yet. Chat with me and I'll get to know you." : "I don't know this person yet.", colour: COR.info,
+      }, {
+        title: "👤 Perfil vacío",
+        description: alvoId === message.authorId ? "Todavía no sé nada de ti. Conversa conmigo y te iré conociendo." : "Todavía no conozco a esta persona.", colour: COR.info,
       }));
     }
     const linhas = [];
-    if (perfil?.cuidado) linhas.push(cen ? "🌿 _Marked for gentle treatment (opt-in)._\n" : "🌿 _Marcado para tratamento gentil (opt-in)._\n");
+    if (perfil?.cuidado) linhas.push(tr(ctx, "🌿 _Marcado para tratamento gentil (opt-in)._\n", "🌿 _Marked for gentle treatment (opt-in)._\n", "🌿 _Marcado para trato amable (opt-in)._\n"));
     if (perfil?.bio) linhas.push(`**Bio:** ${perfil.bio}`);
-    if (perfil?.grupos) linhas.push(`**Grupos:** ${perfil.grupos}`);
-    if (perfil?.jogos) linhas.push(`**Jogos:** ${perfil.jogos}`);
+    if (perfil?.grupos) linhas.push(`${tr(ctx, "**Grupos:**", "**Grupos:**", "**Grupos:**")} ${perfil.grupos}`);
+    if (perfil?.jogos) linhas.push(`${tr(ctx, "**Jogos:**", "**Jogos:**", "**Juegos:**")} ${perfil.jogos}`);
     const porCat = { personalidade: [], gosto: [], info: [] };
     for (const f of fatos) (porCat[f.categoria] || (porCat.info)).push(f);
-    const rot = cen
-      ? { personalidade: "🧠 Personality", gosto: "❤️ Likes", info: "📌 Information" }
-      : { personalidade: "🧠 Personalidade", gosto: "❤️ Gostos", info: "📌 Informações" };
+    const rot = tr(ctx,
+      { personalidade: "🧠 Personalidade", gosto: "❤️ Gostos", info: "📌 Informações" },
+      { personalidade: "🧠 Personality", gosto: "❤️ Likes", info: "📌 Information" },
+      { personalidade: trechoPronto("🧠 Personalidad"), gosto: trechoPronto("❤️ Gustos"), info: trechoPronto("📌 Información") });
     for (const cat of ["personalidade", "gosto", "info"]) {
       if (porCat[cat]?.length) {
         linhas.push(`\n**${rot[cat]}:**`);
         for (const f of porCat[cat]) {
-          const d = (() => { try { return new Date(f.momento).toLocaleDateString(cen ? "en-US" : "pt-BR"); } catch { return ""; } })();
-          linhas.push(`• ${f.fato}${d ? (cen ? ` _(since ${d})_` : ` _(desde ${d})_`) : ""}`);
+          const d = (() => { try { return new Date(f.momento).toLocaleDateString({ pt: "pt-BR", en: "en-US", es: "es-ES" }[idiomaDe(ctx)]); } catch { return ""; } })();
+          linhas.push(`• ${f.fato}${d ? tr(ctx, ` _(desde ${d})_`, ` _(since ${d})_`, ` _(desde ${d})_`) : ""}`);
         }
       }
     }
     return sendEmbed(message.channel, {
-      title: cen ? "👤 Profile" : "👤 Perfil",
-      description: linhas.join("\n").slice(0, 1990) || (cen ? "_(no data)_" : "_(sem dados)_"), colour: COR.info });
+      title: tr(ctx, "👤 Perfil", "👤 Profile", "👤 Perfil"),
+      description: linhas.join("\n").slice(0, 1990) || tr(ctx, "_(sem dados)_", "_(no data)_", "_(sin datos)_"), colour: COR.info });
   }
 
   // &chat cuidado [@usuário] on|off → marca alguém para tratamento gentil (opt-in)
@@ -3044,7 +3138,9 @@ export async function cmdChat(message, args, ctx) {
         { title: "🚫 Permissão insuficiente",
           description: "Para marcar OUTRA pessoa você precisa de **ManagePermissions**. Você pode marcar a si mesmo livremente.", colour: COR.erro },
         { title: "🚫 Missing permission",
-          description: "To mark SOMEONE ELSE you need **ManagePermissions**. You can mark yourself freely.", colour: COR.erro }));
+          description: "To mark SOMEONE ELSE you need **ManagePermissions**. You can mark yourself freely.", colour: COR.erro },
+        { title: "🚫 Permiso insuficiente",
+          description: "Para marcar a OTRA persona necesitas **ManagePermissions**. A ti mismo puedes marcarte libremente.", colour: COR.erro }));
     }
     const estado = args.find((a) => ["on", "off"].includes(a?.toLowerCase()))?.toLowerCase();
     const ligar = estado !== "off";
@@ -3060,11 +3156,17 @@ export async function cmdChat(message, args, ctx) {
         description: ligar
           ? `Judy will treat ${alvoId === message.authorId ? "you" : "this person"} with extra kindness and patience, no acid irony.`
           : "Back to the normal tone (modulated by the profile).", colour: COR.sucesso,
+      }, {
+        title: ligar ? "🌿 Trato amable activado" : "Trato amable desactivado",
+        description: ligar
+          ? `${alvoId === message.authorId ? "Judy te va a tratar" : "Judy va a tratar a esta persona"} con amabilidad y paciencia extra, sin ironía ácida.`
+          : "Volvió al tono normal (modulado por el perfil).", colour: COR.sucesso,
       }));
     } catch {
       return sendEmbed(message.channel, tr(ctx,
         { title: "❌ Erro", description: "Não consegui ajustar agora.", colour: COR.erro },
-        { title: "❌ Error", description: "I couldn't adjust it right now.", colour: COR.erro }));
+        { title: "❌ Error", description: "I couldn't adjust it right now.", colour: COR.erro },
+        { title: "❌ Error", description: "No pude ajustarlo ahora.", colour: COR.erro }));
     }
   }
 
@@ -3075,29 +3177,14 @@ export async function cmdChat(message, args, ctx) {
         { title: "🚫 Indisponível aqui",
           description: "O chat com IA não está habilitado neste servidor.", colour: COR.aviso },
         { title: "🚫 Unavailable here",
-          description: "The AI chat isn't enabled on this server.", colour: COR.aviso }));
+          description: "The AI chat isn't enabled on this server.", colour: COR.aviso },
+        { title: "🚫 No disponible aquí",
+          description: "El chat con IA no está habilitado en este servidor.", colour: COR.aviso }));
     const disp = await llmDisponivel();
     const { modelos: modelosDoServidor = [] } = await listarModelos().catch(() => ({ modelos: [] }));
     const configurados = [...new Set([LLM_MODEL_PADRAO, LLM_MODEL_LEVE, LLM_MODEL_CODIGO, LLM_MODEL_LOGICA, LLM_MODEL_DECISAO, LLM_MODEL_JUIZ])].filter(Boolean);
     const faltando = modelosDoServidor.length ? configurados.filter((m) => !modelosDoServidor.includes(m)) : [];
-    return sendEmbed(message.channel, cen ? {
-      title: disp.ok ? "🟢 AI available" : "🔴 AI unavailable",
-      description: [
-        `**LLM:** ${LLM_URL || "—"}`,
-        `**Chat:** ${LLM_MODEL_LEVE} _(also memory and decisions)_`,
-        `**Code:** ${LLM_MODEL_CODIGO} · **Logic:** ${LLM_MODEL_LOGICA} · **Decision:** ${LLM_MODEL_DECISAO} · **Moderation:** ${LLM_MODEL_JUIZ}`,
-        `**Server:** ${LLM_URL}`,
-        `**Conversation:** ${LLM_MODEL_PADRAO}`,
-        `**Small talk, memory and decisions:** ${LLM_MODEL_LEVE}`,
-        `**Code:** ${LLM_MODEL_CODIGO} · **Logic:** ${LLM_MODEL_LOGICA} · **Decision:** ${LLM_MODEL_DECISAO}`,
-        modelosDoServidor.length ? `**On the server:** ${modelosDoServidor.map((m) => `\`${m}\``).join(" · ")}` : "",
-        faltando.length ? `⚠️ **Configured but missing on the server:** ${faltando.join(", ")}` : "",
-        `**SearXNG:** ${SEARXNG_URL}`,
-        "",
-        disp.ok ? "All set — you can chat." : `Status: ${disp.motivo === "offline" ? "**offline** (machine off?)" : disp.motivo}`,
-      ].filter(Boolean).join("\n"),
-      colour: disp.ok ? COR.sucesso : COR.aviso,
-    } : {
+    return sendEmbed(message.channel, tr(ctx, {
       title: disp.ok ? "🟢 IA disponível" : "🔴 IA indisponível",
       description: [
         `**Servidor:** ${LLM_URL}`,
@@ -3115,16 +3202,55 @@ export async function cmdChat(message, args, ctx) {
         disp.ok ? "Tudo pronto — pode conversar." : `Status: ${disp.motivo === "offline" ? "**offline** (máquina desligada?)" : disp.motivo}`,
       ].filter(Boolean).join("\n"),
       colour: disp.ok ? COR.sucesso : COR.aviso,
-    });
+    }, {
+      title: disp.ok ? "🟢 AI available" : "🔴 AI unavailable",
+      description: [
+        `**LLM:** ${LLM_URL || "—"}`,
+        `**Chat:** ${LLM_MODEL_LEVE} _(also memory and decisions)_`,
+        `**Code:** ${LLM_MODEL_CODIGO} · **Logic:** ${LLM_MODEL_LOGICA} · **Decision:** ${LLM_MODEL_DECISAO} · **Moderation:** ${LLM_MODEL_JUIZ}`,
+        `**Server:** ${LLM_URL}`,
+        `**Conversation:** ${LLM_MODEL_PADRAO}`,
+        `**Small talk, memory and decisions:** ${LLM_MODEL_LEVE}`,
+        `**Code:** ${LLM_MODEL_CODIGO} · **Logic:** ${LLM_MODEL_LOGICA} · **Decision:** ${LLM_MODEL_DECISAO}`,
+        modelosDoServidor.length ? `**On the server:** ${modelosDoServidor.map((m) => `\`${m}\``).join(" · ")}` : "",
+        faltando.length ? `⚠️ **Configured but missing on the server:** ${faltando.join(", ")}` : "",
+        `**SearXNG:** ${SEARXNG_URL}`,
+        "",
+        disp.ok ? "All set — you can chat." : `Status: ${disp.motivo === "offline" ? "**offline** (machine off?)" : disp.motivo}`,
+      ].filter(Boolean).join("\n"),
+      colour: disp.ok ? COR.sucesso : COR.aviso,
+      colour: disp.ok ? COR.sucesso : COR.aviso,
+    }, {
+      title: disp.ok ? "🟢 IA disponible" : "🔴 IA no disponible",
+      description: [
+        `**Servidor:** ${LLM_URL}`,
+        `**Conversación:** ${LLM_MODEL_PADRAO}`,
+        `**Charla corta, memoria y decisiones:** ${LLM_MODEL_LEVE}`,
+        `**Código:** ${LLM_MODEL_CODIGO} · **Lógica:** ${LLM_MODEL_LOGICA} · **Decisión:** ${LLM_MODEL_DECISAO} · **Moderación:** ${LLM_MODEL_JUIZ}`,
+        modelosDoServidor.length
+          ? `**En el servidor:** ${modelosDoServidor.map((m) => faltando.includes(m) ? m : `\`${m}\``).join(" · ")}`
+          : "",
+        faltando.length
+          ? `⚠️ **Configurado pero ausente en el servidor:** ${faltando.join(", ")} — revisa los nombres en el \`llama-swap.yaml\`.`
+          : "",
+        `**SearXNG:** ${SEARXNG_URL}`,
+        "",
+        disp.ok ? "Todo listo — puedes conversar." : `Estado: ${disp.motivo === "offline" ? "**offline** (¿máquina apagada?)" : disp.motivo}`,
+      ].filter(Boolean).join("\n"),
+      colour: disp.ok ? COR.sucesso : COR.aviso,
+    }));
   }
 
   if (["especial", "special", "grande", "pro"].includes(args[0]?.toLowerCase())) {
     return sendEmbed(message.channel, tr(ctx,
       { title: "🧠 Modelo especial aposentado",
-        description: `O modelo grande saiu de operação. O de sempre ficou **4,5× mais rápido** e responde melhor do que ele — use \`${PREFIXO}chat\` normalmente.`,
+        description: `O modelo grande saiu de operação. O de sempre ficou **4,5× mais rápido** e responde melhor do que ele — use \`${citarInterno("chat", PREFIXO)}\` normalmente.`,
         colour: COR.aviso },
       { title: "🧠 Special model retired",
-        description: `The large model is gone. The regular one is now **4.5× faster** and answers better than it did — just use \`${PREFIXO}chat\`.`,
+        description: `The large model is gone. The regular one is now **4.5× faster** and answers better than it did — just use \`${citarInterno("chat", PREFIXO)}\`.`,
+        colour: COR.aviso },
+      { title: "🧠 Modelo especial retirado",
+        description: `El modelo grande dejó de funcionar. El de siempre ahora es **4,5× más rápido** y responde mejor que él — usa \`${ces("chat")}\` normalmente.`,
         colour: COR.aviso }));
   }
 

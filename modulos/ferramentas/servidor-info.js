@@ -19,6 +19,7 @@
 // real no prompt quando a pergunta é sobre o servidor).
 
 import { Permission } from "stoat.js";
+import { citarInterno, citar, subExibido } from "../core/aliases.js";
 import { listarMembros, contarMembros } from "../core/membros.js";
 import { resolverCanal, ehBot } from "../core/ids.js";
 import { canalDoServidor } from "../moderacao/pertence.js";
@@ -259,8 +260,8 @@ export async function materialParaIA(pergunta, { server, config, client = null, 
     partes.push(`• ${en ? "Staff notices / FAQ" : "Avisos / FAQ da staff"}:\n${faq.slice(0, 10).map((f) => `- ${f.titulo}: ${String(f.texto).slice(0, 300)}`).join("\n")}`);
   }
   return (en
-    ? `REAL DATA about the server "${g.nome}" where you are (read now from Stoat and from what the staff set up — use ONLY this to talk about the server; what isn't here, you don't know: say so and point to \`&servidor\`):\n`
-    : `DADOS REAIS do servidor "${g.nome}" onde você está (lidos agora do Stoat e do que a staff cadastrou — use SÓ isto para falar do servidor; o que não estiver aqui você não sabe: diga isso e indique \`&servidor\`):\n`)
+    ? `REAL DATA about the server "${g.nome}" where you are (read now from Stoat and from what the staff set up — use ONLY this to talk about the server; what isn't here, you don't know: say so and point to \`${citarInterno("servidor")}\`):\n`
+    : `DADOS REAIS do servidor "${g.nome}" onde você está (lidos agora do Stoat e do que a staff cadastrou — use SÓ isto para falar do servidor; o que não estiver aqui você não sabe: diga isso e indique \`${citarInterno("servidor")}\`):\n`)
     + partes.join("\n");
 }
 
@@ -286,40 +287,40 @@ export async function cmdServidor(message, args, ctx) {
   const { sendEmbed, COR, PREFIXO: P = "&", config, salvarConfig, getServer, membroTemPermissao } = ctx;
   const lang = lingua(ctx);
   const en = lang === "en";
-  const T = (pt, eng) => (en ? eng : pt);
+  const T = (pt, eng, es) => tr(ctx, pt, eng, es);
   const server = await getServer(message).catch(() => null);
-  if (!server) return sendEmbed(message.channel, { title: "🏠", description: T("Este comando só funciona dentro de um servidor.", "This command only works inside a server."), colour: COR.aviso });
+  if (!server) return sendEmbed(message.channel, { title: "🏠", description: T("Este comando só funciona dentro de um servidor.", "This command only works inside a server.", "Este comando solo funciona dentro de un servidor."), colour: COR.aviso });
   const client = [ctx.client, message.client].find((c) => typeof c?.users?.get === "function") ?? null;
   const info = cfgInfo(config);
   const sub0 = String(args[0] ?? "").toLowerCase();
   const sub = SUB_EN[sub0] ?? sub0;
   const acao = String(args[1] ?? "").toLowerCase();
   const podeGerir = () => !membroTemPermissao || membroTemPermissao(message, server, "ManagePermissions");
-  const negar = () => sendEmbed(message.channel, { title: "🚫", description: T("Para mudar isto precisa de **ManagePermissions**.", "Changing this needs **ManagePermissions**."), colour: COR.erro });
+  const negar = () => sendEmbed(message.channel, { title: "🚫", description: T("Para mudar isto precisa de **ManagePermissions**.", "Changing this needs **ManagePermissions**.", "Para cambiar esto necesitas **ManagePermissions**."), colour: COR.erro });
 
   // ── &servidor / &servidor info ──
   if (!sub || sub === "info") {
     const g = await dadosGerais(server, { client });
     const linhas = [
       g.descricao ? `> ${g.descricao.slice(0, 500).replace(/\n/g, "\n> ")}\n` : null,
-      `👑 ${T("Dono", "Owner")}: ${g.donoId ? `<@${g.donoId}>` : "?"}`,
-      g.criado ? `📅 ${T("Criado em", "Created")} ${g.criado}` : null,
-      g.membros != null ? `👥 ${g.membros} ${T("membros", "members")}` : null,
-      `💬 ${g.nCanais} ${T("canais", "channels")} · 🏷️ ${g.nCargos} ${T("cargos", "roles")}`,
+      `👑 ${T("Dono", "Owner", "Dueño")}: ${g.donoId ? `<@${g.donoId}>` : "?"}`,
+      g.criado ? `📅 ${T("Criado em", "Created", "Creado el")} ${g.criado}` : null,
+      g.membros != null ? `👥 ${g.membros} ${T("membros", "members", "miembros")}` : null,
+      `💬 ${g.nCanais} ${T("canais", "channels", "canales")} · 🏷️ ${g.nCargos} ${T("cargos", "roles", "roles")}`,
       "",
-      `\`${P}servidor regras\` — ${T("as regras", "the rules")}`,
-      `\`${P}staff\` — ${T("quem é a equipe", "who the staff are")}`,
-      `\`${P}servidor cargos\` · \`${P}servidor canais\` — ${T("cargos e canais", "roles and channels")}`,
-      `\`${P}servidor faq\` — ${T("avisos e perguntas frequentes", "notices and FAQ")}`,
+      T(`\`${citarInterno("servidor.regras", P)}\` — as regras`, `\`${citarInterno("servidor.regras", P)}\` — the rules`, `\`${citar("servidor.regras", "es", P)}\` — las reglas`),
+      T(`\`${citarInterno("staff", P)}\` — quem é a equipe`, `\`${citarInterno("staff", P)}\` — who the staff are`, `\`${citar("staff", "es", P)}\` — quién es el staff`),
+      T(`\`${citarInterno("servidor.cargos", P)}\` · \`${citarInterno("servidor.canais", P)}\` — cargos e canais`, `\`${citarInterno("servidor.cargos", P)}\` · \`${citarInterno("servidor.canais", P)}\` — roles and channels`, `\`${citar("servidor.cargos", "es", P)}\` · \`${citar("servidor.canais", "es", P)}\` — roles y canales`),
+      T(`\`${citarInterno("servidor", P)} faq\` — avisos e perguntas frequentes`, `\`${citarInterno("servidor", P)} faq\` — notices and FAQ`, `\`${citar("servidor", "es", P)} faq\` — avisos y preguntas frecuentes`),
       "",
-      T("_Também dá para perguntar à Judy: \"quais são as regras?\", \"quem é da staff?\"._", "_You can also just ask Judy: \"what are the rules?\", \"who's on staff?\"._"),
+      T("_Também dá para perguntar à Judy: \"quais são as regras?\", \"quem é da staff?\"._", "_You can also just ask Judy: \"what are the rules?\", \"who's on staff?\"._", "_También puedes preguntarle a Judy: \"¿cuáles son las reglas?\", \"¿quién es del staff?\"._"),
     ].filter((x) => x !== null);
     return sendEmbed(message.channel, { title: `🏠 ${g.nome}`, description: linhas.join("\n"), colour: COR.info });
   }
 
   // ── a equipe mora no &staff (uma porta só) ──
   if (sub === "equipe") {
-    return sendEmbed(message.channel, { title: "👥", description: T(`A equipe fica em \`${P}staff\`.`, `The staff list lives in \`${P}staff\`.`), colour: COR.info });
+    return sendEmbed(message.channel, { title: "👥", description: T(`A equipe fica em \`${citarInterno("staff", P)}\`.`, `The staff list lives in \`${citarInterno("staff", P)}\`.`, `El staff está en \`${citar("staff", "es", P)}\`.`), colour: COR.info });
   }
 
   // ── &servidor regras [definir <texto> | canal <#canal|auto> | limpar] ──
@@ -327,10 +328,10 @@ export async function cmdServidor(message, args, ctx) {
     if (["definir", "set", "texto", "text"].includes(acao)) {
       if (!podeGerir()) return negar();
       const texto = restoDoTexto(message, "regras|rules", "definir|set|texto|text").slice(0, MAX_REGRAS);
-      if (!texto) return sendEmbed(message.channel, { title: "📜", description: T(`Uso: \`${P}servidor regras definir <texto>\` (pode ter várias linhas).`, `Usage: \`${P}servidor rules set <text>\` (multiple lines are fine).`), colour: COR.aviso });
+      if (!texto) return sendEmbed(message.channel, { title: "📜", description: T(`Uso: \`${citarInterno("servidor.regras", P)} definir <texto>\` (pode ter várias linhas).`, `Usage: \`${citarInterno("servidor.regras", P)} set <text>\` (multiple lines are fine).`, `Uso: \`${citar("servidor.regras", "es", P)} set <texto>\` (puede tener varias líneas).`), colour: COR.aviso });
       info.regrasTexto = texto;
       salvarConfig?.();
-      return sendEmbed(message.channel, { title: T("📜 Regras salvas", "📜 Rules saved"), description: T(`Agora \`${P}servidor regras\` e a Judy usam este texto (ele vence o canal de regras).`, `\`${P}servidor rules\` and Judy now use this text (it beats the rules channel).`), colour: COR.sucesso });
+      return sendEmbed(message.channel, { title: T("📜 Regras salvas", "📜 Rules saved", "📜 Reglas guardadas"), description: T(`Agora \`${citarInterno("servidor.regras", P)}\` e a Judy usam este texto (ele vence o canal de regras).`, `\`${citarInterno("servidor.regras", P)}\` and Judy now use this text (it beats the rules channel).`, `Ahora \`${citar("servidor.regras", "es", P)}\` y Judy usan este texto (tiene prioridad sobre el canal de reglas).`), colour: COR.sucesso });
     }
     if (["canal", "channel"].includes(acao)) {
       if (!podeGerir()) return negar();
@@ -338,40 +339,40 @@ export async function cmdServidor(message, args, ctx) {
       if (["auto", "automatico", "automático", "off"].includes(alvo)) {
         delete info.regrasCanal; salvarConfig?.(); _zerarCache();
         const achado = canalDeRegras(server, config);
-        return sendEmbed(message.channel, { title: "📜", description: T(`Canal de regras automático${achado ? `: <#${achado.id ?? achado._id}>` : " — nenhum canal chamado regras/rules por aqui"}.`, `Automatic rules channel${achado ? `: <#${achado.id ?? achado._id}>` : " — no channel named rules here"}.`), colour: COR.info });
+        return sendEmbed(message.channel, { title: "📜", description: T(`Canal de regras automático${achado ? `: <#${achado.id ?? achado._id}>` : " — nenhum canal chamado regras/rules por aqui"}.`, `Automatic rules channel${achado ? `: <#${achado.id ?? achado._id}>` : " — no channel named rules here"}.`, `Canal de reglas automático${achado ? `: <#${achado.id ?? achado._id}>` : " — no hay ningún canal llamado regras/rules por aquí"}.`), colour: COR.info });
       }
       const id = resolverCanal(args[2], { message, server });
-      if (!id || !canalDoServidor(server, id)) return sendEmbed(message.channel, { title: "📜", description: T(`Não achei esse canal **neste servidor**. Uso: \`${P}servidor regras canal #canal\` (ou \`auto\`).`, `I couldn't find that channel **on this server**. Usage: \`${P}servidor rules channel #channel\` (or \`auto\`).`), colour: COR.aviso });
+      if (!id || !canalDoServidor(server, id)) return sendEmbed(message.channel, { title: "📜", description: T(`Não achei esse canal **neste servidor**. Uso: \`${citarInterno("servidor.regras", P)} canal #canal\` (ou \`auto\`).`, `I couldn't find that channel **on this server**. Usage: \`${citarInterno("servidor.regras", P)} channel #channel\` (or \`auto\`).`, `No encontré ese canal **en este servidor**. Uso: \`${citar("servidor.regras", "es", P)} channel #canal\` (o \`auto\`).`), colour: COR.aviso });
       info.regrasCanal = id; salvarConfig?.(); _zerarCache();
-      return sendEmbed(message.channel, { title: "📜", description: T(`Regras lidas de <#${id}> (quando não houver texto definido).`, `Rules read from <#${id}> (when there's no text set).`), colour: COR.sucesso });
+      return sendEmbed(message.channel, { title: "📜", description: T(`Regras lidas de <#${id}> (quando não houver texto definido).`, `Rules read from <#${id}> (when there's no text set).`, `Reglas leídas de <#${id}> (cuando no hay texto definido).`), colour: COR.sucesso });
     }
     if (["limpar", "clear", "apagar"].includes(acao)) {
       if (!podeGerir()) return negar();
       delete info.regrasTexto; salvarConfig?.();
-      return sendEmbed(message.channel, { title: "📜", description: T("Texto das regras apagado — volto a ler o canal de regras.", "Rules text cleared — back to reading the rules channel."), colour: COR.info });
+      return sendEmbed(message.channel, { title: "📜", description: T("Texto das regras apagado — volto a ler o canal de regras.", "Rules text cleared — back to reading the rules channel.", "Texto de las reglas borrado — vuelvo a leer el canal de reglas."), colour: COR.info });
     }
     const r = await regras(server, config, { forcar: true });
     if (!r.fonte) {
-      const porque = r.motivo === "sem-acesso" ? T(`não consigo ler <#${r.canal.id}> (falta **ViewChannel**/**ReadMessageHistory** para a Judy)`, `I can't read <#${r.canal.id}> (Judy needs **ViewChannel**/**ReadMessageHistory**)`)
-        : r.motivo === "canal-vazio" ? T(`<#${r.canal.id}> está vazio`, `<#${r.canal.id}> is empty`)
-        : T("nenhum canal chamado regras/rules", "no channel named rules");
-      return sendEmbed(message.channel, { title: T("📜 Regras", "📜 Rules"), description: `${T("Ainda não há regras para mostrar", "There are no rules to show yet")}: ${porque}.\n\n${T(`A staff pode definir com \`${P}servidor regras definir <texto>\` ou apontar o canal com \`${P}servidor regras canal #canal\`.`, `Staff can set them with \`${P}servidor rules set <text>\` or point to the channel with \`${P}servidor rules channel #channel\`.`)}`, colour: COR.aviso });
+      const porque = r.motivo === "sem-acesso" ? T(`não consigo ler <#${r.canal.id}> (falta **ViewChannel**/**ReadMessageHistory** para a Judy)`, `I can't read <#${r.canal.id}> (Judy needs **ViewChannel**/**ReadMessageHistory**)`, `no puedo leer <#${r.canal.id}> (a Judy le falta **ViewChannel**/**ReadMessageHistory**)`)
+        : r.motivo === "canal-vazio" ? T(`<#${r.canal.id}> está vazio`, `<#${r.canal.id}> is empty`, `<#${r.canal.id}> está vacío`)
+        : T("nenhum canal chamado regras/rules", "no channel named rules", "ningún canal llamado regras/rules");
+      return sendEmbed(message.channel, { title: T("📜 Regras", "📜 Rules", "📜 Reglas"), description: `${T("Ainda não há regras para mostrar", "There are no rules to show yet", "Todavía no hay reglas que mostrar")}: ${porque}.\n\n${T(`A staff pode definir com \`${citarInterno("servidor.regras", P)} definir <texto>\` ou apontar o canal com \`${citarInterno("servidor.regras", P)} canal #canal\`.`, `Staff can set them with \`${citarInterno("servidor.regras", P)} set <text>\` or point to the channel with \`${citarInterno("servidor.regras", P)} channel #channel\`.`, `El staff puede definirlas con \`${citar("servidor.regras", "es", P)} set <texto>\` o indicar el canal con \`${citar("servidor.regras", "es", P)} channel #canal\`.`)}`, colour: COR.aviso });
     }
-    return sendEmbed(message.channel, { title: T("📜 Regras", "📜 Rules"), description: `${r.texto}\n\n_${r.fonte === "canal" ? T(`Lidas de <#${r.canal.id}>.`, `Read from <#${r.canal.id}>.`) : T("Definidas pela staff.", "Set by the staff.")}_`, colour: COR.info });
+    return sendEmbed(message.channel, { title: T("📜 Regras", "📜 Rules", "📜 Reglas"), description: `${r.texto}\n\n_${r.fonte === "canal" ? T(`Lidas de <#${r.canal.id}>.`, `Read from <#${r.canal.id}>.`, `Leídas de <#${r.canal.id}>.`) : T("Definidas pela staff.", "Set by the staff.", "Definidas por el staff.")}_`, colour: COR.info });
   }
 
   // ── &servidor cargos ──
   if (sub === "cargos") {
     const cs = await cargosComContagem(server);
     const linhas = cs.map((c) => `<%${c.id}>${c.n != null ? ` — ${c.n}` : ""}`);
-    return sendEmbed(message.channel, { title: T("🏷️ Cargos", "🏷️ Roles"), description: linhas.join("\n") || T("Nenhum cargo.", "No roles."), colour: COR.info });
+    return sendEmbed(message.channel, { title: T("🏷️ Cargos", "🏷️ Roles", "🏷️ Roles"), description: linhas.join("\n") || T("Nenhum cargo.", "No roles.", "Ningún rol."), colour: COR.info });
   }
 
   // ── &servidor canais ──
   if (sub === "canais") {
     const gs = canaisOrganizados(server);
     const linhas = gs.flatMap((g) => [g.titulo ? `**${g.titulo}**` : null, ...g.canais.map((c) => `${c.voz ? "🔊" : "#"} <#${c.id}>${c.descricao ? ` — ${c.descricao.slice(0, 120)}` : ""}`), ""]).filter((x) => x !== null);
-    return sendEmbed(message.channel, { title: T("💬 Canais", "💬 Channels"), description: linhas.join("\n").trim() || T("Nenhum canal.", "No channels."), colour: COR.info });
+    return sendEmbed(message.channel, { title: T("💬 Canais", "💬 Channels", "💬 Canales"), description: linhas.join("\n").trim() || T("Nenhum canal.", "No channels.", "Ningún canal."), colour: COR.info });
   }
 
   // ── &servidor faq [add <título> | <texto> · remover <n|título> · limpar · <n|título>] ──
@@ -380,11 +381,11 @@ export async function cmdServidor(message, args, ctx) {
       if (!podeGerir()) return negar();
       const resto = restoDoTexto(message, "faq|notices", "add|adicionar|novo");
       const [titulo, ...txt] = resto.split("|");
-      if (!titulo?.trim() || !txt.join("|").trim()) return sendEmbed(message.channel, { title: "📌", description: T(`Uso: \`${P}servidor faq add <título> | <texto>\``, `Usage: \`${P}servidor faq add <title> | <text>\``), colour: COR.aviso });
-      if (info.faq.length >= MAX_FAQ) return sendEmbed(message.channel, { title: "📌", description: T(`O FAQ já tem ${MAX_FAQ} itens — o máximo. Remova um antes.`, `The FAQ already has ${MAX_FAQ} items — the maximum. Remove one first.`), colour: COR.aviso });
+      if (!titulo?.trim() || !txt.join("|").trim()) return sendEmbed(message.channel, { title: "📌", description: T(`Uso: \`${citarInterno("servidor", P)} faq add <título> | <texto>\``, `Usage: \`${citarInterno("servidor", P)} faq add <title> | <text>\``, `Uso: \`${citar("servidor", "es", P)} faq add <título> | <texto>\``), colour: COR.aviso });
+      if (info.faq.length >= MAX_FAQ) return sendEmbed(message.channel, { title: "📌", description: T(`O FAQ já tem ${MAX_FAQ} itens — o máximo. Remova um antes.`, `The FAQ already has ${MAX_FAQ} items — the maximum. Remove one first.`, `El FAQ ya tiene ${MAX_FAQ} elementos — el máximo. Quita uno antes.`), colour: COR.aviso });
       info.faq.push({ titulo: titulo.trim().slice(0, 80), texto: txt.join("|").trim().slice(0, 1500) });
       salvarConfig?.();
-      return sendEmbed(message.channel, { title: T("📌 Adicionado ao FAQ", "📌 Added to the FAQ"), description: `**${info.faq.length}. ${info.faq.at(-1).titulo}**`, colour: COR.sucesso });
+      return sendEmbed(message.channel, { title: T("📌 Adicionado ao FAQ", "📌 Added to the FAQ", "📌 Añadido al FAQ"), description: `**${info.faq.length}. ${info.faq.at(-1).titulo}**`, colour: COR.sucesso });
     }
     const acharItem = (q) => {
       const n = Number(q);
@@ -395,24 +396,25 @@ export async function cmdServidor(message, args, ctx) {
     if (["remover", "remove", "apagar", "del"].includes(acao)) {
       if (!podeGerir()) return negar();
       const i = acharItem(args.slice(2).join(" "));
-      if (i < 0) return sendEmbed(message.channel, { title: "📌", description: T(`Não achei esse item. Veja os números em \`${P}servidor faq\`.`, `I couldn't find that item. See the numbers in \`${P}servidor faq\`.`), colour: COR.aviso });
+      if (i < 0) return sendEmbed(message.channel, { title: "📌", description: T(`Não achei esse item. Veja os números em \`${citarInterno("servidor", P)} faq\`.`, `I couldn't find that item. See the numbers in \`${citarInterno("servidor", P)} faq\`.`, `No encontré ese elemento. Mira los números en \`${citar("servidor", "es", P)} faq\`.`), colour: COR.aviso });
       const [fora] = info.faq.splice(i, 1); salvarConfig?.();
-      return sendEmbed(message.channel, { title: "📌", description: T(`Removido: **${fora.titulo}**`, `Removed: **${fora.titulo}**`), colour: COR.info });
+      return sendEmbed(message.channel, { title: "📌", description: T(`Removido: **${fora.titulo}**`, `Removed: **${fora.titulo}**`, `Quitado: **${fora.titulo}**`), colour: COR.info });
     }
     if (["limpar", "clear"].includes(acao)) {
       if (!podeGerir()) return negar();
       info.faq = []; salvarConfig?.();
-      return sendEmbed(message.channel, { title: "📌", description: T("FAQ esvaziado.", "FAQ cleared."), colour: COR.info });
+      return sendEmbed(message.channel, { title: "📌", description: T("FAQ esvaziado.", "FAQ cleared.", "FAQ vaciado."), colour: COR.info });
     }
     if (acao) {
       const i = acharItem(args.slice(1).join(" "));
       if (i >= 0) return sendEmbed(message.channel, { title: `📌 ${info.faq[i].titulo}`, description: info.faq[i].texto, colour: COR.info });
     }
-    if (!info.faq.length) return sendEmbed(message.channel, { title: "📌 FAQ", description: T(`Nada cadastrado ainda. A staff adiciona com \`${P}servidor faq add <título> | <texto>\`.`, `Nothing yet. Staff add items with \`${P}servidor faq add <title> | <text>\`.`), colour: COR.info });
-    return sendEmbed(message.channel, { title: "📌 FAQ", description: info.faq.map((f, i) => `**${i + 1}. ${f.titulo}**\n${f.texto.slice(0, 300)}${f.texto.length > 300 ? "…" : ""}`).join("\n\n") + `\n\n_${T(`Um item inteiro: \`${P}servidor faq <número>\``, `A full item: \`${P}servidor faq <number>\``)}_`, colour: COR.info });
+    if (!info.faq.length) return sendEmbed(message.channel, { title: "📌 FAQ", description: T(`Nada cadastrado ainda. A staff adiciona com \`${citarInterno("servidor", P)} faq add <título> | <texto>\`.`, `Nothing yet. Staff add items with \`${citarInterno("servidor", P)} faq add <title> | <text>\`.`, `Nada registrado todavía. El staff añade elementos con \`${citar("servidor", "es", P)} faq add <título> | <texto>\`.`), colour: COR.info });
+    return sendEmbed(message.channel, { title: "📌 FAQ", description: info.faq.map((f, i) => `**${i + 1}. ${f.titulo}**\n${f.texto.slice(0, 300)}${f.texto.length > 300 ? "…" : ""}`).join("\n\n") + `\n\n_${T(`Um item inteiro: \`${citarInterno("servidor", P)} faq <número>\``, `A full item: \`${citarInterno("servidor", P)} faq <number>\``, `Un elemento completo: \`${citar("servidor", "es", P)} faq <número>\``)}_`, colour: COR.info });
   }
 
   return sendEmbed(message.channel, tr(ctx,
-    { title: "🏠 Servidor", description: `Opções: \`regras\`, \`cargos\`, \`canais\`, \`faq\` — ex.: \`${P}servidor regras\`. A equipe fica em \`${P}staff\`.`, colour: COR.aviso },
-    { title: "🏠 Server", description: `Options: \`regras\`, \`cargos\`, \`canais\`, \`faq\` — e.g. \`${P}servidor regras\`. The staff list lives in \`${P}staff\`.`, colour: COR.aviso }));
+    { title: "🏠 Servidor", description: `Opções: \`regras\`, \`cargos\`, \`canais\`, \`faq\` — ex.: \`${citarInterno("servidor.regras", P)}\`. A equipe fica em \`${citarInterno("staff", P)}\`.`, colour: COR.aviso },
+    { title: "🏠 Server", description: `Options: \`regras\`, \`cargos\`, \`canais\`, \`faq\` — e.g. \`${citarInterno("servidor.regras", P)}\`. The staff list lives in \`${citarInterno("staff", P)}\`.`, colour: COR.aviso },
+    { title: "🏠 Servidor", description: `Opciones: ${["regras", "cargos", "canais"].map((k) => `\`${subExibido("servidor", k, "es")}\``).join(", ")}, \`faq\` — p. ej.: \`${citar("servidor.regras", "es", P)}\`. El staff está en \`${citar("staff", "es", P)}\`.`, colour: COR.aviso }));
 }

@@ -20,7 +20,8 @@
 // punição. Staff, como no resto do automod, não é moderada.
 
 import * as log from "../core/log.js";
-import { textoDoIdioma } from "../core/i18n.js";
+import { citar, citarInterno } from "../core/aliases.js";
+import { textoDoIdioma, idiomaDe, tr } from "../core/i18n.js";
 import { normalizarParaAnalise } from "./scorecard.js";
 
 export const ACOES = ["off", "alertar", "apagar", "punir"];
@@ -53,7 +54,7 @@ const W = { forte: 3, nomes: 2.5, ideias: 2, generico: 1 };
 
 export const TEMAS = {
   politica: {
-    emoji: "🏛️", pt: "política", en: "politics",
+    emoji: "🏛️", pt: "política", en: "politics", es: "política",
     forte: [
       "bolsonarist\\w*", "bolsominion\\w*", "lulist\\w*", "petist\\w*", "petralh\\w*", "esquerdopat\\w*", "esquerdalh\\w*",
       "direitopat\\w*", "comunist\\w*", "fascist\\w*", "golpist\\w*", "extrema[- ]?(direita|esquerda)", "ultradireita",
@@ -92,7 +93,7 @@ export const TEMAS = {
     discussao_en: "a debate or argument about politics, politicians, parties, elections or government; defending or attacking a side; campaigning or political propaganda; trying to convince someone how to vote",
   },
   religiao: {
-    emoji: "⛪", pt: "religião", en: "religion",
+    emoji: "⛪", pt: "religião", en: "religion", es: "religión",
     forte: [
       "ateis\\w*", "deus nao existe", "existe deus", "deus existe", "acredit\\w* em deus", "herege\\w*", "heresia",
       "blasfem\\w*", "convert\\w* (ao|a|para o) (cristianismo|islam\\w*|catolicismo|evangelho)", "evangeliz\\w*", "pregac\\w*", "pregar", "pregando", "aceita jesus", "aceite jesus",
@@ -128,7 +129,7 @@ export const TEMAS = {
     discussao_en: "a debate or argument about religion or belief; attacking or defending a religion; preaching or trying to convert someone",
   },
   drogas: {
-    emoji: "💊", pt: "drogas", en: "drugs",
+    emoji: "💊", pt: "drogas", en: "drugs", es: "drogas",
     forte: [
       "maconha", "cocaina", "crack", "heroina", "metanfetamina", "lsd", "ecstasy", "ecstasi", "mdma", "ketamina", "cetamina",
       "lanca[- ]perfume", "lolo", "haxixe", "skunk", "cogumelos? magicos?", "psilocibina", "traficante\\w*", "trafico",
@@ -150,7 +151,7 @@ export const TEMAS = {
     discussao_en: "offering, selling or asking for illegal drugs; teaching how to get, prepare or use them; encouraging their use",
   },
   sexual: {
-    emoji: "🔞", pt: "conteúdo sexual", en: "sexual content",
+    emoji: "🔞", pt: "conteúdo sexual", en: "sexual content", es: "contenido sexual",
     forte: [
       "putaria", "punhet\\w*", "boquete\\w*", "siririca", "xvideos", "pornhub", "onlyfans", "buceta\\w*", "xoxota",
       "transar com", "manda nudes?", "nudes", "porn\\w*", "sexo (oral|anal)", "vend\\w* (meu |minha )?(pack|nudes?|fotos? intimas?|conteudo)",
@@ -366,7 +367,7 @@ async function julgar({ tema, canalId, messageId, nome, texto, lang, serverId = 
   const v = vereditos.get(chave);
   if (v && agora - v.t < JULGAR_MS) return { ...v, cache: true };
   if (!avaliarLLM) {
-    if (agora - ultimoAvisoSemIA > 3600_000) { ultimoAvisoSemIA = agora; console.warn("[ASSUNTOS] nota passou do limiar, mas a IA não está ligada — sem o modelo para confirmar, nada é feito (`&automod sentinela assuntos ia off` deixa a nota decidir sozinha)"); }
+    if (agora - ultimoAvisoSemIA > 3600_000) { ultimoAvisoSemIA = agora; console.warn("[ASSUNTOS] nota passou do limiar, mas a IA não está ligada — sem o modelo para confirmar, nada é feito (`" + citarInterno("automod.sentinela.assuntos.ia") + " off` deixa a nota decidir sozinha)"); }
     return null;
   }
   const fio = fioDoCanal(canalId, { excluirId: messageId });
@@ -409,17 +410,18 @@ export async function verificar({ ctx, server, canal, message, userId, aplicarPu
     (PESO_ACAO[acaoDoTema(cfg, b.tema)] - PESO_ACAO[acaoDoTema(cfg, a.tema)]) || (b.nota - a.nota))[0];
   const acao = acaoDoTema(cfg, tema);
   const lang = textoDoIdioma(ctx.config?.language);
+  const es = idiomaDe(ctx) === "es";
   const nome = message.author?.username ?? message.member?.nickname ?? userId;
   // `ia off`: a nota decide sozinha
   const v = cfg.ia === false
-    ? { discussao: true, motivo: lang === "en" ? `score ${nota} ≥ ${limiar}` : `nota ${nota} ≥ ${limiar}`, semIA: true }
+    ? { discussao: true, motivo: es ? `nota ${nota} ≥ ${limiar}` : lang === "en" ? `score ${nota} ≥ ${limiar}` : `nota ${nota} ≥ ${limiar}`, semIA: true }
     : await julgar({ tema, canalId: message.channelId, messageId: message.id, nome, texto, lang, serverId: ctx?.serverId ?? null });
   const T = TEMAS[tema];
   console.log(`[ASSUNTOS] ${tema} nota ${nota}/${limiar} [${sinais.join(", ")}] em ${message.channelId} por ${userId} → ${v ? (v.discussao ? "DISCUSSÃO" : "brincadeira/menção") : "sem veredito"}${v?.cache ? " (veredito recente)" : ""}${v?.semIA ? " (sem IA: só a nota)" : ""}${v?.motivo ? ` — ${v.motivo}` : ""}`);
   if (!v?.discussao) return { tema, nota, acao: "nada", veredito: v };
 
-  const rotulo = lang === "en" ? T.en : T.pt;
-  const motivo = lang === "en" ? `${rotulo} isn't a topic for this server (server rule)` : `${rotulo} não é assunto deste servidor (regra do servidor)`;
+  const rotulo = es ? T.es : lang === "en" ? T.en : T.pt;
+  const motivo = es ? `${rotulo} no es tema de este servidor (regla del servidor)` : lang === "en" ? `${rotulo} isn't a topic for this server (server rule)` : `${rotulo} não é assunto deste servidor (regra do servidor)`;
 
   if (acao === "alertar") {
     await alertarStaff(ctx, { userId, canalId: message.channelId, messageId: message.id, tema, texto, motivoIA: v.motivo, nota, sinais, lang });
@@ -431,16 +433,24 @@ export async function verificar({ ctx, server, canal, message, userId, aplicarPu
     if (!(agora - (avisados.get(chave) ?? 0) < AVISO_MS)) {
       avisados.set(chave, agora);
       await ctx.sendEmbed?.(canal ?? message.channel, {
-        title: `${T.emoji} ${lang === "en" ? "Off-topic for this server" : "Assunto fora das regras"}`,
-        description: lang === "en"
-          ? `<@${userId}> — ${motivo}. The message was removed; nobody was punished.\n_Joking is fine — this is for real discussions._`
-          : `<@${userId}> — ${motivo}. A mensagem foi removida; ninguém foi punido.\n_Brincadeira pode — isto é para discussão de verdade._`,
+        ...tr(ctx, {
+          title: `${T.emoji} Assunto fora das regras`,
+          description: `<@${userId}> — ${motivo}. A mensagem foi removida; ninguém foi punido.\n_Brincadeira pode — isto é para discussão de verdade._`,
+        }, {
+          title: `${T.emoji} Off-topic for this server`,
+          description: `<@${userId}> — ${motivo}. The message was removed; nobody was punished.\n_Joking is fine — this is for real discussions._`,
+        }, {
+          title: `${T.emoji} Tema fuera de las reglas`,
+          description: `<@${userId}> — ${motivo}. El mensaje fue eliminado; nadie fue sancionado.\n_Bromear se puede — esto es para discusiones de verdad._`,
+        }),
         colour: ctx.COR?.mod,
       }).catch(() => {});
     }
     await log.registrar(ctx, "punicoes", {
       titulo: `🧹 ${lang === "en" ? "Message removed — topic" : "Mensagem removida — assunto"}: ${rotulo}`,
       descricao: `<@${userId}> ${lang === "en" ? "in" : "em"} <#${message.channelId}> · **${lang === "en" ? "Score" : "Nota"}:** ${nota}/10\n**${lang === "en" ? "Why" : "Por quê"}:** ${v.motivo || "—"}\n> ${texto.replace(/\n+/g, " ").slice(0, 300)}`,
+      es: { titulo: `🧹 Mensaje eliminado — tema: ${rotulo}`,
+        descricao: `<@${userId}> en <#${message.channelId}> · **Nota:** ${nota}/10\n**Por qué:** ${v.motivo || "—"}\n> ${texto.replace(/\n+/g, " ").slice(0, 300)}` },
     });
     return { tema, nota, acao, veredito: v };
   }
@@ -457,18 +467,35 @@ async function alertarStaff(ctx, { userId, canalId, messageId, tema, texto, moti
   const destino = destinoId ? await Promise.resolve(ctx.client?.channels?.get?.(destinoId) ?? ctx.client?.channels?.fetch?.(destinoId)).catch(() => null) : null;
   if (!destino) { console.warn(`[ASSUNTOS] alerta NÃO entregue: servidor ${ctx.serverId} sem canal de alerta do sentinela nem de log`); return; }
   const staff = (ctx.config?.acesso?.cargosStaff ?? []).map((id) => `<%${id}>`).join(" ");
-  await ctx.sendEmbed(destino, {
+  const cabeca = [
+    staff || null,
+    `<@${userId}> · <#${canalId}>${messageId ? ` · \`${messageId}\`` : ""}`,
+  ];
+  const trecho = `> ${String(texto).replace(/\n+/g, " ").slice(0, 400)}`;
+  const alerta = {   // pt ou en (pelo `lang`, como antes)
     title: `${T.emoji} ${en ? "Forbidden topic" : "Assunto proibido"}: ${en ? T.en : T.pt}`,
     description: [
-      staff || null,
-      `<@${userId}> · <#${canalId}>${messageId ? ` · \`${messageId}\`` : ""}`,
+      ...cabeca,
       `**${en ? "Score" : "Nota"}:** ${nota}/10 · **${en ? "Signals" : "Sinais"}:** ${(sinais ?? []).join(", ") || "—"}`,
       `**${en ? "Why" : "Por quê"}:** ${motivoIA || "—"}`,
-      `> ${String(texto).replace(/\n+/g, " ").slice(0, 400)}`,
+      trecho,
       "",
-      en ? "_Alert only: the message stayed. Change it with `&automod sentinela assuntos`._"
-         : "_Só alerta: a mensagem ficou. Mude com `&automod sentinela assuntos`._",
+      en ? "_Alert only: the message stayed. Change it with `" + citarInterno("automod.sentinela.assuntos") + "`._"
+         : "_Só alerta: a mensagem ficou. Mude com `" + citarInterno("automod.sentinela.assuntos") + "`._",
     ].filter((x) => x !== null).join("\n"),
+  };
+  await ctx.sendEmbed(destino, {
+    ...tr(ctx, alerta, alerta, {
+      title: `${T.emoji} Tema prohibido: ${T.es}`,
+      description: [
+        ...cabeca,
+        `**Nota:** ${nota}/10 · **Señales:** ${(sinais ?? []).join(", ") || "—"}`,
+        `**Por qué:** ${motivoIA || "—"}`,
+        trecho,
+        "",
+        "_Solo es una alerta: el mensaje se quedó. Cámbialo con `" + citar("automod.sentinela.assuntos", "es", ctx.PREFIXO ?? "&") + "`._",
+      ].filter((x) => x !== null).join("\n"),
+    }),
     colour: ctx.COR?.aviso,
   });
 }

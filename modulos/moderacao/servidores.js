@@ -20,7 +20,7 @@ import * as relatorio from "../ferramentas/relatorio.js";
 import * as store from "../core/config-store.js";
 import * as imagemAdulta from "../ai/imagem-adulta.js";
 import { pseudonimo } from "../core/pseudonimo.js";
-import { citar } from "../core/aliases.js";
+import { citar, citarInterno } from "../core/aliases.js";
 import { tr } from "../core/i18n.js";
 
 export async function cmdServidores(message, args, ctx) {
@@ -125,7 +125,7 @@ async function cmdRelatorio(message, args, ctx) {
 
   if (sub === "canal") {
     const alvo = ["aqui", "here"].includes(args[1]?.toLowerCase()) ? message.channel?.id : limparId(args[1] ?? "");
-    if (!alvo) return sendEmbed(message.channel, { title: "❌ Qual canal?", description: "`&servidores relatorio canal #canal` ou `&servidores relatorio canal aqui`", colour: COR.erro });
+    if (!alvo) return sendEmbed(message.channel, { title: "❌ Qual canal?", description: "`" + citarInterno("servidores.relatorio.canal") + " #canal` ou `" + citarInterno("servidores.relatorio.canal.aqui") + "`", colour: COR.erro });
     const fixo = relatorio.servidorDoRelatorio();
     if (fixo) {
       const canal = client.channels.get?.(alvo) ?? await client.channels.fetch?.(alvo).catch(() => null);
@@ -150,7 +150,7 @@ async function cmdRelatorio(message, args, ctx) {
     const fixo = relatorio.servidorDoRelatorio();
     const avisos = [];
     if ((acao === "add" || acao === "remove") && !ids.length) {
-      avisos.push(`⚠️ Faltou o ID: \`&servidores relatorio assuntos ${acao} <id> [id…]\``);
+      avisos.push(`⚠️ Faltou o ID: \`${citarInterno("servidores.relatorio.assuntos")} ${acao} <id> [id…]\``);
     }
     // (P4, privacidade) a conversa de um servidor ALHEIO não vai para o relatório:
     // só os servidores de que um dono do bot é dono entram na lista
@@ -177,7 +177,7 @@ async function cmdRelatorio(message, args, ctx) {
         : "_Nenhum listado: valem os servidores de que um dono do bot é dono._";
     return sendEmbed(message.channel, { title: "🗣️ Servidores com assuntos",
       description: [lista, ...avisos.map((x) => `\n${x}`),
-        fixo && !listados.length ? "\n_Os outros servidores entram só em números — para incluir: `&servidores relatorio assuntos add <id> [id…]`._" : null,
+        fixo && !listados.length ? "\n_Os outros servidores entram só em números — para incluir: `" + citarInterno("servidores.relatorio.assuntos") + " add <id> [id…]`._" : null,
       ].filter(Boolean).join("\n"), colour: COR.info });
   }
   if (sub === "agora" || sub === "now") {
@@ -201,7 +201,7 @@ async function cmdRelatorio(message, args, ctx) {
       `**Horas tranquilas:** ${cfg.pularVazias ? "puladas" : "enviadas"}`,
       `**Modelo:** \`${process.env.LLM_MODEL_RELATORIO || process.env.LLM_MODEL || "nenhum — só números"}\``,
       "",
-      "`&servidores relatorio canal <#canal|aqui>` · `agora` · `on|off` · `vazias on|off` · `assuntos [add|remove <id> [id…]]`",
+      "`" + citarInterno("servidores.relatorio.canal") + " <#canal|aqui>` · `agora` · `on|off` · `vazias on|off` · `assuntos [add|remove <id> [id…]]`",
     ].join("\n"),
     colour: COR.info,
   });

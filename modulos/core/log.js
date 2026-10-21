@@ -1,5 +1,6 @@
 
 import { tr, lingua, idiomaDe } from "./i18n.js";
+import { trechoPronto } from "./aliases.js";
 import { citar } from "../core/aliases.js";
 import { resolverCanal } from "./ids.js";
 import { subExibido } from "./aliases.js";
@@ -22,6 +23,14 @@ export const EVENTOS_EN = {
   cargos:    "roles created and assigned",
   comandos:  "command usage attempts",
   atualizacoes: "Judy's news on every update",
+};
+export const EVENTOS_ES = {
+  punicoes:  "sanciones (avisos, silencios, bans)",
+  membros:   "entradas y salidas de miembros",
+  mensagens: "mensajes borrados y editados",
+  cargos:    "roles creados y asignados",
+  comandos:  "intentos de uso de comandos",
+  atualizacoes: "novedades de Judy en cada actualización",
 };
 
 // Cores por categoria (mantém o padrão de embeds do bot)
@@ -65,11 +74,16 @@ export async function resgatarMidias(atts, { baixar = fetch, subir } = {}) {
 // está em inglês (14 out 2026: num servidor EN o log saía todo em português).
 // Toda chamada de `registrar` passa as duas línguas; o teste `log-en-14out`
 // confere isso no código-fonte.
-export async function registrar(ctx, categoria, { titulo, descricao, en = null, imagem = null, anexos = null }) {
+// `es: { titulo, descricao }` (etapa 4b, 21 out 2026): a versão em espanhol, que sai
+// pronta (como a do i18n.tr); sem ela, o servidor em espanhol recebe o inglês.
+export async function registrar(ctx, categoria, { titulo, descricao, en = null, es = null, imagem = null, anexos = null }) {
   // Todo evento conta para o relatório horário do dono do bot, inclusive nos
   // servidores sem canal de log (é justamente a visão de todos os servidores).
   relatorioHora.evento(ctx?.serverId, categoria, titulo);
-  if (en && lingua(ctx) === "en") {
+  if (es && idiomaDe(ctx) === "es") {
+    titulo = trechoPronto(es.titulo ?? en?.titulo ?? titulo);
+    descricao = trechoPronto(es.descricao ?? en?.descricao ?? descricao);
+  } else if (en && lingua(ctx) === "en") {
     titulo = en.titulo ?? titulo;
     descricao = en.descricao ?? descricao;
   }
@@ -100,7 +114,7 @@ export async function registrar(ctx, categoria, { titulo, descricao, en = null, 
 export async function cmdLog(message, args, ctx) {
   const { config, sendEmbed, COR, getServer, membroTemPermissao, salvarConfig, PREFIXO } = ctx;
   const lang = lingua(ctx);
-  const ROTULOS = lang === "en" ? EVENTOS_EN : EVENTOS;
+  const ROTULOS = idiomaDe(ctx) === "es" ? EVENTOS_ES : lang === "en" ? EVENTOS_EN : EVENTOS;
   const nomeEvento = (k) => subExibido("log", k, idiomaDe(ctx));   // `mensagens` → `messages` em inglês, `mensajes` em espanhol
 
   const server = await getServer(message);
@@ -113,6 +127,10 @@ export async function cmdLog(message, args, ctx) {
       title: "🚫 Missing permission",
       description: "You need the **ManagePermissions** permission to use this command.",
       colour: COR.erro,
+    }, {
+      title: "🚫 Permiso insuficiente",
+      description: "Necesitas el permiso **ManagePermissions** para usar este comando.",
+      colour: COR.erro,
     }));
   }
 
@@ -124,30 +142,17 @@ export async function cmdLog(message, args, ctx) {
 
   // ── &log  → status ──
   if (!sub) {
-    const canal = config.log.canalId ? `<#${config.log.canalId}>` : (lang === "en" ? "_(none)_" : "_(nenhum)_");
+    const canal = config.log.canalId ? `<#${config.log.canalId}>` : tr(ctx, "_(nenhum)_", "_(none)_", "_(ninguno)_");
     const linhas = Object.entries(ROTULOS).map(([chave, desc]) => {
       const on = config.log.eventos[chave] !== false; // padrão: ligado
       return `${on ? "🟢" : "🔴"} **${nomeEvento(chave)}** — ${desc}`;
     });
     // P4: o relatório anônimo de ataques ao dono da Judy (não é um evento do canal)
-    linhas.push("", `${config.relatorioDono ? "🟢" : "🔴"} **${nomeEvento("relatorio")}** — ${lang === "en"
-      ? "anonymous attack report to Judy's owner (no names or IDs)"
-      : "relatório anônimo de ataques ao dono da Judy (sem nomes nem IDs)"}`);
-    return sendEmbed(message.channel, lang === "en" ? {
-      title: "📜 Log channel",
-      description: [
-        `**Channel:** ${canal}`,
-        "",
-        ...linhas,
-        "",
-        "**Commands:**",
-        `\`${citar("log.here", "en", PREFIXO)}\` — use this channel`,
-        `\`${citar("log", "en", PREFIXO)} <channelId>\` — set by ID`,
-        `\`${citar("log.off", "en", PREFIXO)}\` — disable`,
-        `\`${citar("log", "en", PREFIXO)} <event> <on|off>\` — toggle an event`,
-      ].join("\n"),
-      colour: COR.mod,
-    } : {
+    linhas.push("", `${config.relatorioDono ? "🟢" : "🔴"} **${nomeEvento("relatorio")}** — ${tr(ctx,
+      "relatório anônimo de ataques ao dono da Judy (sem nomes nem IDs)",
+      "anonymous attack report to Judy's owner (no names or IDs)",
+      "informe anónimo de ataques al dueño de Judy (sin nombres ni IDs)")}`);
+    return sendEmbed(message.channel, tr(ctx, {
       title: "📜 Chat de logs",
       description: [
         `**Canal:** ${canal}`,
@@ -161,7 +166,35 @@ export async function cmdLog(message, args, ctx) {
         `\`${citar("log", "pt", PREFIXO)} <evento> <on|off>\` — ligar/desligar um evento`,
       ].join("\n"),
       colour: COR.mod,
-    });
+    }, {
+      title: "📜 Log channel",
+      description: [
+        `**Channel:** ${canal}`,
+        "",
+        ...linhas,
+        "",
+        "**Commands:**",
+        `\`${citar("log.here", "en", PREFIXO)}\` — use this channel`,
+        `\`${citar("log", "en", PREFIXO)} <channelId>\` — set by ID`,
+        `\`${citar("log.off", "en", PREFIXO)}\` — disable`,
+        `\`${citar("log", "en", PREFIXO)} <event> <on|off>\` — toggle an event`,
+      ].join("\n"),
+      colour: COR.mod,
+    }, {
+      title: "📜 Canal de registro",
+      description: [
+        `**Canal:** ${canal}`,
+        "",
+        ...linhas,
+        "",
+        "**Comandos:**",
+        `\`${citar("log.here", "es", PREFIXO)}\` — usar este canal`,
+        `\`${citar("log", "es", PREFIXO)} <idDelCanal>\` — definirlo por ID`,
+        `\`${citar("log.off", "es", PREFIXO)}\` — desactivar`,
+        `\`${citar("log", "es", PREFIXO)} <evento> <on|off>\` — activar/desactivar un evento`,
+      ].join("\n"),
+      colour: COR.mod,
+    }));
   }
 
   // ── &log off ──
@@ -175,6 +208,10 @@ export async function cmdLog(message, args, ctx) {
     }, {
       title: "📜 Log channel disabled",
       description: "No events will be recorded until you set a channel again.",
+      colour: COR.mod,
+    }, {
+      title: "📜 Canal de registro desactivado",
+      description: "No se registrará ningún evento hasta que vuelvas a definir un canal.",
       colour: COR.mod,
     }));
   }
@@ -190,6 +227,10 @@ export async function cmdLog(message, args, ctx) {
     }, {
       title: "📜 Log channel set",
       description: `Events will now be recorded **in this channel**.`,
+      colour: COR.mod,
+    }, {
+      title: "📜 Canal de registro definido",
+      description: `Desde ahora los eventos se registrarán **en este canal**.`,
       colour: COR.mod,
     }));
   }
@@ -229,15 +270,25 @@ export async function cmdLog(message, args, ctx) {
         title: "❌ Wrong usage",
         description: `\`${citar("log", "en", PREFIXO)} ${nomeEvento(sub)} <on|off>\``,
         colour: COR.erro,
+      }, {
+        title: "❌ Uso incorrecto",
+        description: `\`${citar("log", "es", PREFIXO)} ${nomeEvento(sub)} <on|off>\``,
+        colour: COR.erro,
       }));
     }
     config.log.eventos[sub] = (v === "on");
     salvarConfig();
     return sendEmbed(message.channel, {
-      title: lang === "en" ? "📜 Log updated" : "📜 Log atualizado",
-      description: lang === "en"
-        ? `**${nomeEvento(sub)}** — ${ROTULOS[sub]}: **${v === "on" ? "enabled 🟢" : "disabled 🔴"}**.`
-        : `**${sub}** — ${ROTULOS[sub]}: **${v === "on" ? "ativado 🟢" : "desativado 🔴"}**.`,
+      ...tr(ctx, {
+        title: "📜 Log atualizado",
+        description: `**${sub}** — ${ROTULOS[sub]}: **${v === "on" ? "ativado 🟢" : "desativado 🔴"}**.`,
+      }, {
+        title: "📜 Log updated",
+        description: `**${nomeEvento(sub)}** — ${ROTULOS[sub]}: **${v === "on" ? "enabled 🟢" : "disabled 🔴"}**.`,
+      }, {
+        title: "📜 Registro actualizado",
+        description: `**${nomeEvento(sub)}** — ${ROTULOS[sub]}: **${v === "on" ? "activado 🟢" : "desactivado 🔴"}**.`,
+      }),
       colour: COR.mod,
     });
   }
@@ -268,6 +319,16 @@ export async function cmdLog(message, args, ctx) {
         `Available events: ${Object.keys(EVENTOS).map((e) => `\`${nomeEvento(e)}\``).join(", ")}`,
       ].join("\n"),
       colour: COR.erro,
+    }, {
+      title: "❌ Canal inválido",
+      description: [
+        `No pude identificar un canal en \`${alvoBruto}\`.`,
+        "",
+        `Acepto: una **mención** (\`#canal\`), el **enlace** del canal, su **ID** o su **nombre**.`,
+        `O usa \`${citar("log.here", "es", PREFIXO)}\` para usar el canal actual.`,
+        `Eventos disponibles: ${Object.keys(EVENTOS).map((e) => `\`${nomeEvento(e)}\``).join(", ")}`,
+      ].join("\n"),
+      colour: COR.erro,
     }));
   }
 
@@ -282,13 +343,18 @@ export async function cmdLog(message, args, ctx) {
       title: "❌ Channel not found",
       description: `I couldn't access the \`${id}\` channel. Check the ID and the bot's permissions.`,
       colour: COR.erro,
+    }, {
+      title: "❌ Canal no encontrado",
+      description: `No pude acceder al canal \`${id}\`. Revisa el ID y los permisos del bot.`,
+      colour: COR.erro,
     }));
   }
 
   if (canalDeOutroServidor(canal, ctx.serverId)) {
     return sendEmbed(message.channel, tr(ctx,
       { title: "🚫 Canal de outro servidor", description: "Esse canal é de outro servidor — escolha um canal daqui.", colour: COR.erro },
-      { title: "🚫 Channel from another server", description: "That channel belongs to another server — pick one from here.", colour: COR.erro }));
+      { title: "🚫 Channel from another server", description: "That channel belongs to another server — pick one from here.", colour: COR.erro },
+      { title: "🚫 Canal de otro servidor", description: "Ese canal es de otro servidor — elige uno de aquí.", colour: COR.erro }));
   }
 
   config.log.canalId = id;
@@ -300,6 +366,10 @@ export async function cmdLog(message, args, ctx) {
   }, {
     title: "📜 Log channel set",
     description: `Events will be recorded in <#${id}>.`,
+    colour: COR.mod,
+  }, {
+    title: "📜 Canal de registro definido",
+    description: `Los eventos se registrarán en <#${id}>.`,
     colour: COR.mod,
   }));
 }

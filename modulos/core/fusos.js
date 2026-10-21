@@ -144,7 +144,7 @@ export function fusoValido(zona) {
  * @returns {{hora, data, diaSemana, offset, offsetMin}}
  */
 export function agoraEm(zona, { lang = "pt", formato24 = true, quando = new Date() } = {}) {
-  const locale = lang === "en" ? "en-US" : "pt-BR";
+  const locale = lang === "en" ? "en-US" : lang === "es" ? "es-ES" : "pt-BR";
   const hora = new Intl.DateTimeFormat(locale, {
     timeZone: zona, hour: "2-digit", minute: "2-digit", hour12: !formato24,
   }).format(quando);
@@ -172,10 +172,11 @@ export function diferenca(zonaA, zonaB, lang = "pt", quando = new Date()) {
   const a = agoraEm(zonaA, { quando }).offsetMin;
   const b = agoraEm(zonaB, { quando }).offsetMin;
   const d = a - b;
-  if (d === 0) return lang === "en" ? "same time" : "mesma hora";
+  if (d === 0) return lang === "en" ? "same time" : lang === "es" ? "misma hora" : "mesma hora";
   const h = Math.floor(Math.abs(d) / 60);
   const m = Math.abs(d) % 60;
   const dur = m ? `${h}h${String(m).padStart(2, "0")}` : `${h}h`;
   if (lang === "en") return d > 0 ? `${dur} ahead` : `${dur} behind`;
+  if (lang === "es") return d > 0 ? `${dur} adelante` : `${dur} atrás`;
   return d > 0 ? `${dur} à frente` : `${dur} atrás`;
 }

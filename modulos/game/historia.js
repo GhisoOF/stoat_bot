@@ -60,10 +60,11 @@ function heroi(ctx, r) {
 // ctx: { jogador, missao: { id, nome, historia: { generos, local, inimigo }, falas, tipo },
 //        desfecho, chances: { exito, sobrevivencia }, rolagens: { exito, sobrev },
 //        contribuicoes, magias, coop: bool, extras: { loot, companheiroNovo, capturados,
-//        resgatados, subiu, especial: { nome, jaTinha } }, lingua }
+//        resgatados, subiu, especial: { nome, jaTinha } }, lingua: "pt" | "en" | "es" }
 export function contarHistoria(ctx, { semente, recentes = [] } = {}) {
   const r = rng(semente ?? sementeDe(ctx.jogador, ctx.missao?.id, Date.now()));
-  const en = ctx.lingua === "en", L = (t) => (en ? t.en : t.pt);
+  // "es": os trechos ainda não têm espanhol (conteudo/historias.json) — sai o inglês
+  const es = ctx.lingua === "es", en = ctx.lingua === "en" || es, L = (t) => (es ? t.es ?? t.en : en ? t.en : t.pt);
   const h = ctx.missao?.historia ?? {};
   const generos = h.generos ?? [];
   const pick = (arr) => arr[Math.floor(r() * arr.length)];
@@ -76,7 +77,7 @@ export function contarHistoria(ctx, { semente, recentes = [] } = {}) {
   };
   const usados = [], frases = [];
   const usar = (t) => { if (!t) return; usados.push(t.id); frases.push(preencher(L(t), v)); };
-  const fixo = (chave) => { const f = ctx.missao?.falas?.[chave]; if (f) frases.push(`_“${en ? f.en : f.pt}”_`); return !!f; };
+  const fixo = (chave) => { const f = ctx.missao?.falas?.[chave]; if (f) frases.push(`_“${es ? f.es ?? f.en : en ? f.en : f.pt}”_`); return !!f; };
 
   // bico: sem luta
   if (ctx.missao?.tipo === "bico") {

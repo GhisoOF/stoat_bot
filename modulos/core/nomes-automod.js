@@ -23,7 +23,9 @@ export const ACAO_TEMA_EN = { off: "off", alertar: "alert", apagar: "delete", pu
 export const ACAO_AVATAR_EN = { alertar: "alert", silenciar: "silence", expulsar: "kick", banir: "ban" };
 export const EVENTO_LOG_EN = { punicoes: "punishments", membros: "members", mensagens: "messages", cargos: "roles", comandos: "commands" };
 
-const de = (mapa) => (pt, lang) => (lang === "en" ? mapa[pt] ?? pt : pt);
+// (etapa 4b) no espanhol, os nomes que se digitam são os do inglês (o mesmo que a tela
+// em espanhol sempre mostrou): `nomeModo("acumular", "es")` → `stack`, nunca `acumular`
+const de = (mapa) => (pt, lang) => (lang === "en" || lang === "es" ? mapa[pt] ?? pt : pt);
 export const nomeGrupo = de(GRUPO_EN);
 export const nomeParte = de(PARTE_EN);
 export const nomeModo = de(MODO_EN);

@@ -1,7 +1,7 @@
 
 import { limparId, ULID } from "../core/ids.js";
 import { tr, lingua, idiomaDe } from "../core/i18n.js";
-import { idDoNome, nomeExibido } from "../core/aliases.js";
+import { idDoNome, nomeExibido, citar, citarInterno, subExibido } from "../core/aliases.js";
 
 // Cargos do autor da mensagem, em IDs.
 function cargosDe(message) {
@@ -66,23 +66,27 @@ export async function cmdAcesso(message, args, ctx) {
   a.livres ??= [];
   const telaNome = lang === "en" ? (idiomaDe(ctx) === "es" ? "es" : "en") : "pt";
   const nomeDe = (id) => `\`${telaNome === "pt" ? id : nomeExibido(id, telaNome)}\``;
-  const livresTxt = a.livres.length ? a.livres.map(nomeDe).join(" ") : (lang === "en" ? "_none_" : "_nenhum_");
+  const livresTxt = a.livres.length ? a.livres.map(nomeDe).join(" ") : tr(ctx, "_nenhum_", "_none_", "_ninguno_");
 
   // ── painel ──
   if (!sub || sub === "status") {
     const cargos = a.cargosStaff.length
       ? a.cargosStaff.map((r) => `<%${r}>`).join(" ")
-      : (lang === "en" ? "_none — only Stoat's native permission counts_" : "_nenhum — vale só a permissão nativa do Stoat_");
-    const canais = lang === "en"
-      ? (a.canais.modo === "todos"
-        ? "any channel"
-        : `${a.canais.modo === "somente" ? "**only** in" : "everywhere **except**"} ${
-            a.canais.lista.length ? a.canais.lista.map((c) => `<#${c}>`).join(", ") : "_(empty list)_"}`)
-      : (a.canais.modo === "todos"
+      : tr(ctx, "_nenhum — vale só a permissão nativa do Stoat_", "_none — only Stoat's native permission counts_", "_ninguno — solo vale el permiso nativo de Stoat_");
+    const canais = tr(ctx,
+      (a.canais.modo === "todos"
         ? "qualquer canal"
         : `${a.canais.modo === "somente" ? "**só** em" : "em todos, **menos**"} ${
-            a.canais.lista.length ? a.canais.lista.map((c) => `<#${c}>`).join(", ") : "_(lista vazia)_"}`);
-    return sendEmbed(message.channel, lang === "en" ? {
+            a.canais.lista.length ? a.canais.lista.map((c) => `<#${c}>`).join(", ") : "_(lista vazia)_"}`),
+      (a.canais.modo === "todos"
+        ? "any channel"
+        : `${a.canais.modo === "somente" ? "**only** in" : "everywhere **except**"} ${
+            a.canais.lista.length ? a.canais.lista.map((c) => `<#${c}>`).join(", ") : "_(empty list)_"}`),
+      (a.canais.modo === "todos"
+        ? "cualquier canal"
+        : `${a.canais.modo === "somente" ? "**solo** en" : "en todos, **excepto**"} ${
+            a.canais.lista.length ? a.canais.lista.map((c) => `<#${c}>`).join(", ") : "_(lista vacía)_"}`));
+    const telaEn = {
       title: "🔐 Command access",
       description: [
         `**Staff roles:** ${cargos}`,
@@ -91,19 +95,20 @@ export async function cmdAcesso(message, args, ctx) {
         `**Work in any channel:** ${livresTxt}`,
         "",
         "**Staff roles**",
-        `\`${P}acesso cargo add <@role|id>\` · \`${P}acesso cargo remove <@role|id>\``,
+        `\`${citarInterno("acesso.cargo.add", P)} <@role|id>\` · \`${citarInterno("acesso.cargo.remove", P)} <@role|id>\``,
         "_Anyone with one of these roles can use the moderation commands even without the native permission._",
         "",
         "**Channels**",
-        `\`${P}acesso canal todos\` — commands in any channel`,
-        `\`${P}acesso canal somente\` — only in the listed channels`,
-        `\`${P}acesso canal exceto\` — everywhere except the listed ones`,
-        `\`${P}acesso canal add|remove [#channel]\` — edits the list (no channel = this one)`,
-        `\`${P}acesso staffignora on|off\` — whether staff bypasses the restriction`,
-        `\`${P}acesso livre <command> on|off\` — a command that works in any channel (e.g. the games: \`${P}acesso livre ${nomeExibido("entretenimento", telaNome)} on\`)`,
+        `\`${citarInterno("acesso.canal.todos", P)}\` — commands in any channel`,
+        `\`${citarInterno("acesso.canal.somente", P)}\` — only in the listed channels`,
+        `\`${citarInterno("acesso.canal.exceto", P)}\` — everywhere except the listed ones`,
+        `\`${citarInterno("acesso.canal.add", P)}|remove [#channel]\` — edits the list (no channel = this one)`,
+        `\`${citarInterno("acesso.staffignora", P)} on|off\` — whether staff bypasses the restriction`,
+        `\`${citarInterno("acesso.livre", P)} <command> on|off\` — a command that works in any channel (e.g. the games: \`${citarInterno("acesso.livre", P)} ${nomeExibido("entretenimento", telaNome)} on\`)`,
       ].join("\n"),
       colour: COR.info,
-    } : {
+    };
+    const telaPt = {
       title: "🔐 Acesso aos comandos",
       description: [
         `**Cargos de staff:** ${cargos}`,
@@ -112,19 +117,42 @@ export async function cmdAcesso(message, args, ctx) {
         `**Valem em qualquer canal:** ${livresTxt}`,
         "",
         "**Cargos de staff**",
-        `\`${P}acesso cargo add <@cargo|id>\` · \`${P}acesso cargo remove <@cargo|id>\``,
+        `\`${citarInterno("acesso.cargo.add", P)} <@cargo|id>\` · \`${citarInterno("acesso.cargo.remove", P)} <@cargo|id>\``,
         "_Quem tiver um desses cargos usa os comandos de moderação mesmo sem a permissão nativa._",
         "",
         "**Canais**",
-        `\`${P}acesso canal todos\` — comandos em qualquer canal`,
-        `\`${P}acesso canal somente\` — só nos canais da lista`,
-        `\`${P}acesso canal exceto\` — em todos, menos os da lista`,
-        `\`${P}acesso canal add|remove [#canal]\` — mexe na lista (sem canal, usa este)`,
-        `\`${P}acesso staffignora on|off\` — se o staff escapa da restrição`,
-        `\`${P}acesso livre <comando> on|off\` — um comando que vale em qualquer canal (ex.: os jogos: \`${P}acesso livre entretenimento on\`)`,
+        `\`${citarInterno("acesso.canal.todos", P)}\` — comandos em qualquer canal`,
+        `\`${citarInterno("acesso.canal.somente", P)}\` — só nos canais da lista`,
+        `\`${citarInterno("acesso.canal.exceto", P)}\` — em todos, menos os da lista`,
+        `\`${citarInterno("acesso.canal.add", P)}|remove [#canal]\` — mexe na lista (sem canal, usa este)`,
+        `\`${citarInterno("acesso.staffignora", P)} on|off\` — se o staff escapa da restrição`,
+        `\`${citarInterno("acesso.livre", P)} <comando> on|off\` — um comando que vale em qualquer canal (ex.: os jogos: \`${citarInterno("acesso.livre", P)} entretenimento on\`)`,
       ].join("\n"),
       colour: COR.info,
-    });
+    };
+    const telaEs = {
+      title: "🔐 Acceso a los comandos",
+      description: [
+        `**Roles de staff:** ${cargos}`,
+        `**Los comandos funcionan en:** ${canais}`,
+        `**El staff ignora la restricción de canal:** ${a.staffIgnoraCanais ? "sí" : "no"}`,
+        `**Valen en cualquier canal:** ${livresTxt}`,
+        "",
+        "**Roles de staff**",
+        `\`${citar("acesso.cargo.add", "es", P)} <@rol|id>\` · \`${citar("acesso.cargo.remove", "es", P)} <@rol|id>\``,
+        "_Quien tenga uno de estos roles usa los comandos de moderación aun sin el permiso nativo._",
+        "",
+        "**Canales**",
+        `\`${citar("acesso.canal.todos", "es", P)}\` — comandos en cualquier canal`,
+        `\`${citar("acesso.canal.somente", "es", P)}\` — solo en los canales de la lista`,
+        `\`${citar("acesso.canal.exceto", "es", P)}\` — en todos, excepto los de la lista`,
+        `\`${citar("acesso.canal.add", "es", P)}|remove [#canal]\` — edita la lista (sin canal, usa este)`,
+        `\`${citar("acesso.staffignora", "es", P)} on|off\` — si el staff escapa de la restricción`,
+        `\`${citar("acesso.livre", "es", P)} <comando> on|off\` — un comando que vale en cualquier canal (ej.: los juegos: \`${citar("acesso.livre", "es", P)} ${nomeExibido("entretenimento", "es")} on\`)`,
+      ].join("\n"),
+      colour: COR.info,
+    };
+    return sendEmbed(message.channel, tr(ctx, telaPt, telaEn, telaEs));
   }
 
   if (!podeGerir) {
@@ -132,7 +160,9 @@ export async function cmdAcesso(message, args, ctx) {
       { title: "🚫 Permissão insuficiente",
         description: "Você precisa de **ManagePermissions** para mexer no acesso aos comandos.", colour: COR.erro },
       { title: "🚫 Missing permission",
-        description: "You need **ManagePermissions** to change command access.", colour: COR.erro }));
+        description: "You need **ManagePermissions** to change command access.", colour: COR.erro },
+      { title: "🚫 Permiso insuficiente",
+        description: "Necesitas **ManagePermissions** para cambiar el acceso a los comandos.", colour: COR.erro }));
   }
 
   // ── cargos de staff ──
@@ -142,11 +172,15 @@ export async function cmdAcesso(message, args, ctx) {
     if (!["add", "remove", "adicionar", "remover", "limpar"].includes(acao)) {
       return sendEmbed(message.channel, tr(ctx, {
         title: "Uso",
-        description: `\`${P}acesso cargo add <@cargo|id>\`\n\`${P}acesso cargo remove <@cargo|id>\`\n\`${P}acesso cargo limpar\``,
+        description: `\`${citarInterno("acesso.cargo.add", P)} <@cargo|id>\`\n\`${citarInterno("acesso.cargo.remove", P)} <@cargo|id>\`\n\`${citarInterno("acesso.cargo.limpar", P)}\``,
         colour: COR.info,
       }, {
         title: "Usage",
-        description: `\`${P}acesso cargo add <@role|id>\`\n\`${P}acesso cargo remove <@role|id>\`\n\`${P}acesso cargo limpar\``,
+        description: `\`${citarInterno("acesso.cargo.add", P)} <@role|id>\`\n\`${citarInterno("acesso.cargo.remove", P)} <@role|id>\`\n\`${citarInterno("acesso.cargo.limpar", P)}\``,
+        colour: COR.info,
+      }, {
+        title: "Uso",
+        description: `\`${citar("acesso.cargo.add", "es", P)} <@rol|id>\`\n\`${citar("acesso.cargo.remove", "es", P)} <@rol|id>\`\n\`${citar("acesso.cargo.limpar", "es", P)}\``,
         colour: COR.info,
       }));
     }
@@ -156,14 +190,18 @@ export async function cmdAcesso(message, args, ctx) {
         { title: "🔐 Cargos de staff limpos",
           description: "Voltou a valer só a permissão nativa do Stoat.", colour: COR.sucesso },
         { title: "🔐 Staff roles cleared",
-          description: "Only Stoat's native permission counts again.", colour: COR.sucesso }));
+          description: "Only Stoat's native permission counts again.", colour: COR.sucesso },
+        { title: "🔐 Roles de staff borrados",
+          description: "Vuelve a valer solo el permiso nativo de Stoat.", colour: COR.sucesso }));
     }
     if (!ULID.test(alvo)) {
       return sendEmbed(message.channel, tr(ctx,
         { title: "❌ Cargo inválido",
-          description: `Mencione o cargo ou passe o ID.\nEx.: \`${P}acesso cargo add <%01ABC…>\``, colour: COR.erro },
+          description: `Mencione o cargo ou passe o ID.\nEx.: \`${citarInterno("acesso.cargo.add", P)} <%01ABC…>\``, colour: COR.erro },
         { title: "❌ Invalid role",
-          description: `Mention the role or pass its ID.\nE.g.: \`${P}acesso cargo add <%01ABC…>\``, colour: COR.erro }));
+          description: `Mention the role or pass its ID.\nE.g.: \`${citarInterno("acesso.cargo.add", P)} <%01ABC…>\``, colour: COR.erro },
+        { title: "❌ Rol inválido",
+          description: `Menciona el rol o pasa su ID.\nEj.: \`${citar("acesso.cargo.add", "es", P)} <%01ABC…>\``, colour: COR.erro }));
     }
     if (acao === "add" || acao === "adicionar") {
       if (!a.cargosStaff.includes(alvo)) a.cargosStaff.push(alvo);
@@ -172,7 +210,9 @@ export async function cmdAcesso(message, args, ctx) {
         { title: "🔐 Cargo de staff adicionado",
           description: `Quem tiver <%${alvo}> passa a usar os comandos de moderação.`, colour: COR.sucesso },
         { title: "🔐 Staff role added",
-          description: `Anyone with <%${alvo}> can now use the moderation commands.`, colour: COR.sucesso }));
+          description: `Anyone with <%${alvo}> can now use the moderation commands.`, colour: COR.sucesso },
+        { title: "🔐 Rol de staff agregado",
+          description: `Quien tenga <%${alvo}> pasa a usar los comandos de moderación.`, colour: COR.sucesso }));
     }
     a.cargosStaff = a.cargosStaff.filter((r) => r !== alvo);
     salvarConfig?.();
@@ -180,7 +220,9 @@ export async function cmdAcesso(message, args, ctx) {
       { title: "🔐 Cargo removido",
         description: `<%${alvo}> não vale mais como staff.`, colour: COR.aviso },
       { title: "🔐 Role removed",
-        description: `<%${alvo}> no longer counts as staff.`, colour: COR.aviso }));
+        description: `<%${alvo}> no longer counts as staff.`, colour: COR.aviso },
+      { title: "🔐 Rol quitado",
+        description: `<%${alvo}> ya no cuenta como staff.`, colour: COR.aviso }));
   }
 
   // ── canais ──
@@ -189,17 +231,21 @@ export async function cmdAcesso(message, args, ctx) {
 
     if (["todos", "somente", "exceto"].includes(acao)) {
       a.canais.modo = acao; salvarConfig?.();
-      const txt = (lang === "en" ? {
-        todos: "Commands work in **any channel**.",
-        somente: `Commands only work in the listed channels. Add with \`${P}acesso canal add\`.`,
-        exceto: `Commands work everywhere **except** the listed channels. Add with \`${P}acesso canal add\`.`,
-      } : {
+      const txt = tr(ctx, {
         todos: "Os comandos funcionam em **qualquer canal**.",
-        somente: `Os comandos só funcionam nos canais da lista. Adicione com \`${P}acesso canal add\`.`,
-        exceto: `Os comandos funcionam em todos, **menos** nos da lista. Adicione com \`${P}acesso canal add\`.`,
-      })[acao];
+        somente: `Os comandos só funcionam nos canais da lista. Adicione com \`${citarInterno("acesso.canal.add", P)}\`.`,
+        exceto: `Os comandos funcionam em todos, **menos** nos da lista. Adicione com \`${citarInterno("acesso.canal.add", P)}\`.`,
+      }[acao], {
+        todos: "Commands work in **any channel**.",
+        somente: `Commands only work in the listed channels. Add with \`${citarInterno("acesso.canal.add", P)}\`.`,
+        exceto: `Commands work everywhere **except** the listed channels. Add with \`${citarInterno("acesso.canal.add", P)}\`.`,
+      }[acao], {
+        todos: "Los comandos funcionan en **cualquier canal**.",
+        somente: `Los comandos solo funcionan en los canales de la lista. Agrega con \`${citar("acesso.canal.add", "es", P)}\`.`,
+        exceto: `Los comandos funcionan en todos, **excepto** en los de la lista. Agrega con \`${citar("acesso.canal.add", "es", P)}\`.`,
+      }[acao]);
       return sendEmbed(message.channel, {
-        title: lang === "en" ? "🔐 Mode changed" : "🔐 Modo alterado",
+        title: tr(ctx, "🔐 Modo alterado", "🔐 Mode changed", "🔐 Modo cambiado"),
         description: txt, colour: COR.sucesso });
     }
 
@@ -208,43 +254,54 @@ export async function cmdAcesso(message, args, ctx) {
       if (!ULID.test(bruto)) {
         return sendEmbed(message.channel, tr(ctx,
           { title: "❌ Canal inválido",
-            description: `Use \`${P}acesso canal ${acao}\` no canal desejado, ou passe o ID.`, colour: COR.erro },
+            description: `Use \`${citarInterno("acesso.canal", P)} ${acao}\` no canal desejado, ou passe o ID.`, colour: COR.erro },
           { title: "❌ Invalid channel",
-            description: `Run \`${P}acesso canal ${acao}\` in the desired channel, or pass its ID.`, colour: COR.erro }));
+            description: `Run \`${citarInterno("acesso.canal", P)} ${acao}\` in the desired channel, or pass its ID.`, colour: COR.erro },
+          { title: "❌ Canal inválido",
+            description: `Usa \`${citar("acesso.canal", "es", P)} ${acao}\` en el canal deseado, o pasa su ID.`, colour: COR.erro }));
       }
       const add = acao.startsWith("add") || acao === "adicionar";
       if (add) { if (!a.canais.lista.includes(bruto)) a.canais.lista.push(bruto); }
       else a.canais.lista = a.canais.lista.filter((c) => c !== bruto);
       salvarConfig?.();
       const aviso = a.canais.modo === "todos"
-        ? (lang === "en"
-          ? `\n\n⚠️ The mode is \`todos\`, so the list has no effect. Use \`${P}acesso canal somente\` or \`${P}acesso canal exceto\`.`
-          : `\n\n⚠️ O modo está \`todos\`, então a lista não tem efeito. Use \`${P}acesso canal somente\` ou \`${P}acesso canal exceto\`.`)
+        ? tr(ctx,
+          `\n\n⚠️ O modo está \`todos\`, então a lista não tem efeito. Use \`${citarInterno("acesso.canal.somente", P)}\` ou \`${citarInterno("acesso.canal.exceto", P)}\`.`,
+          `\n\n⚠️ The mode is \`todos\`, so the list has no effect. Use \`${citarInterno("acesso.canal.somente", P)}\` or \`${citarInterno("acesso.canal.exceto", P)}\`.`,
+          `\n\n⚠️ El modo está en \`all\`, así que la lista no tiene efecto. Usa \`${citar("acesso.canal.somente", "es", P)}\` o \`${citar("acesso.canal.exceto", "es", P)}\`.`)
         : "";
-      return sendEmbed(message.channel, lang === "en" ? {
+      return sendEmbed(message.channel, tr(ctx, {
+        title: add ? "🔐 Canal adicionado à lista" : "🔐 Canal removido da lista",
+        description: `<#${bruto}> ${add ? "entrou na" : "saiu da"} lista (**${a.canais.lista.length}** no total).${aviso}`,
+        colour: COR.sucesso }, {
         title: add ? "🔐 Channel added to the list" : "🔐 Channel removed from the list",
         description: `<#${bruto}> ${add ? "joined" : "left"} the list (**${a.canais.lista.length}** total).${aviso}`,
         colour: COR.sucesso,
-      } : {
-        title: add ? "🔐 Canal adicionado à lista" : "🔐 Canal removido da lista",
-        description: `<#${bruto}> ${add ? "entrou na" : "saiu da"} lista (**${a.canais.lista.length}** no total).${aviso}`,
-        colour: COR.sucesso });
+      }, {
+        title: add ? "🔐 Canal agregado a la lista" : "🔐 Canal quitado de la lista",
+        description: `<#${bruto}> ${add ? "entró en la" : "salió de la"} lista (**${a.canais.lista.length}** en total).${aviso}`,
+        colour: COR.sucesso }));
     }
 
     if (acao === "limpar") {
       a.canais.lista = []; salvarConfig?.();
       return sendEmbed(message.channel, tr(ctx,
         { title: "🔐 Lista de canais limpa", description: "A lista ficou vazia.", colour: COR.aviso },
-        { title: "🔐 Channel list cleared", description: "The list is now empty.", colour: COR.aviso }));
+        { title: "🔐 Channel list cleared", description: "The list is now empty.", colour: COR.aviso },
+        { title: "🔐 Lista de canales borrada", description: "La lista quedó vacía.", colour: COR.aviso }));
     }
 
     return sendEmbed(message.channel, tr(ctx, {
       title: "Uso",
-      description: `\`${P}acesso canal <todos|somente|exceto>\`\n\`${P}acesso canal add|remove [#canal]\`\n\`${P}acesso canal limpar\``,
+      description: `\`${citarInterno("acesso.canal", P)} <todos|somente|exceto>\`\n\`${citarInterno("acesso.canal.add", P)}|remove [#canal]\`\n\`${citarInterno("acesso.canal.limpar", P)}\``,
       colour: COR.info,
     }, {
       title: "Usage",
-      description: `\`${P}acesso canal <todos|somente|exceto>\`\n\`${P}acesso canal add|remove [#channel]\`\n\`${P}acesso canal limpar\``,
+      description: `\`${citarInterno("acesso.canal", P)} <todos|somente|exceto>\`\n\`${citarInterno("acesso.canal.add", P)}|remove [#channel]\`\n\`${citarInterno("acesso.canal.limpar", P)}\``,
+      colour: COR.info,
+    }, {
+      title: "Uso",
+      description: `\`${citar("acesso.canal", "es", P)} <all|only|except>\`\n\`${citar("acesso.canal.add", "es", P)}|remove [#canal]\`\n\`${citar("acesso.canal.limpar", "es", P)}\``,
       colour: COR.info,
     }));
   }
@@ -256,11 +313,15 @@ export async function cmdAcesso(message, args, ctx) {
     if (!nome) {
       return sendEmbed(message.channel, tr(ctx, {
         title: "🔓 Comandos livres",
-        description: `Valem em qualquer canal, mesmo com a restrição de canais: ${livresTxt}\n\n\`${P}acesso livre <comando> on|off\``,
+        description: `Valem em qualquer canal, mesmo com a restrição de canais: ${livresTxt}\n\n\`${citarInterno("acesso.livre", P)} <comando> on|off\``,
         colour: COR.info,
       }, {
         title: "🔓 Free commands",
-        description: `They work in any channel, even with the channel restriction on: ${livresTxt}\n\n\`${P}acesso livre <command> on|off\``,
+        description: `They work in any channel, even with the channel restriction on: ${livresTxt}\n\n\`${citarInterno("acesso.livre", P)} <command> on|off\``,
+        colour: COR.info,
+      }, {
+        title: "🔓 Comandos libres",
+        description: `Valen en cualquier canal, aun con la restricción de canales: ${livresTxt}\n\n\`${citar("acesso.livre", "es", P)} <comando> on|off\``,
         colour: COR.info,
       }));
     }
@@ -269,29 +330,36 @@ export async function cmdAcesso(message, args, ctx) {
     if (!conhecidos.has(id)) {
       return sendEmbed(message.channel, tr(ctx,
         { title: "❌ Comando desconhecido", description: `Não conheço o comando \`${nome.slice(0, 30)}\`.`, colour: COR.erro },
-        { title: "❌ Unknown command", description: `I don't know the command \`${nome.slice(0, 30)}\`.`, colour: COR.erro }));
+        { title: "❌ Unknown command", description: `I don't know the command \`${nome.slice(0, 30)}\`.`, colour: COR.erro },
+        { title: "❌ Comando desconocido", description: `No conozco el comando \`${nome.slice(0, 30)}\`.`, colour: COR.erro }));
     }
     const ligar = !["off", "nao", "não", "no", "0", "desligar", "remover", "remove"].includes(v);
     if (ligar) { if (!a.livres.includes(id)) a.livres.push(id); }
     else a.livres = a.livres.filter((c) => c !== id);
     salvarConfig?.();
     const aviso = ligar && a.canais.modo === "todos"
-      ? (lang === "en"
-        ? `\n\n_Commands already work in any channel here (mode \`todos\`); this counts once you restrict them with \`${P}acesso canal somente\` or \`exceto\`._`
-        : `\n\n_Aqui os comandos já valem em qualquer canal (modo \`todos\`); isto conta quando você restringir com \`${P}acesso canal somente\` ou \`exceto\`._`)
+      ? tr(ctx,
+        `\n\n_Aqui os comandos já valem em qualquer canal (modo \`todos\`); isto conta quando você restringir com \`${citarInterno("acesso.canal.somente", P)}\` ou \`exceto\`._`,
+        `\n\n_Commands already work in any channel here (mode \`todos\`); this counts once you restrict them with \`${citarInterno("acesso.canal.somente", P)}\` or \`exceto\`._`,
+        `\n\n_Aquí los comandos ya valen en cualquier canal (modo \`all\`); esto cuenta cuando los restrinjas con \`${citar("acesso.canal.somente", "es", P)}\` o \`except\`._`)
       : "";
-    return sendEmbed(message.channel, lang === "en" ? {
+    return sendEmbed(message.channel, tr(ctx, {
+      title: ligar ? "🔓 Livre em qualquer canal" : "🔐 De volta à regra de canais",
+      description: (ligar
+        ? `${nomeDe(id)} agora vale em **qualquer canal**, mesmo fora dos canais de comandos.`
+        : `${nomeDe(id)} volta a seguir a restrição de canais.`) + aviso,
+      colour: COR.sucesso }, {
       title: ligar ? "🔓 Free in any channel" : "🔐 Back to the channel rule",
       description: (ligar
         ? `${nomeDe(id)} now works in **any channel**, even outside the command channels.`
         : `${nomeDe(id)} follows the channel restriction again.`) + aviso,
       colour: COR.sucesso,
-    } : {
-      title: ligar ? "🔓 Livre em qualquer canal" : "🔐 De volta à regra de canais",
+    }, {
+      title: ligar ? "🔓 Libre en cualquier canal" : "🔐 De vuelta a la regla de canales",
       description: (ligar
-        ? `${nomeDe(id)} agora vale em **qualquer canal**, mesmo fora dos canais de comandos.`
-        : `${nomeDe(id)} volta a seguir a restrição de canais.`) + aviso,
-      colour: COR.sucesso });
+        ? `${nomeDe(id)} ahora vale en **cualquier canal**, aun fuera de los canales de comandos.`
+        : `${nomeDe(id)} vuelve a seguir la restricción de canales.`) + aviso,
+      colour: COR.sucesso }));
   }
 
   // ── staff ignora canais ──
@@ -300,14 +368,17 @@ export async function cmdAcesso(message, args, ctx) {
     a.staffIgnoraCanais = !["off", "nao", "não", "0"].includes(v);
     salvarConfig?.();
     return sendEmbed(message.channel, {
-      title: lang === "en" ? "🔐 Adjusted" : "🔐 Ajustado",
-      description: lang === "en"
-        ? (a.staffIgnoraCanais
-          ? "Staff can use commands in **any** channel, even with the restriction on."
-          : "Staff is also subject to the channel restriction.")
-        : (a.staffIgnoraCanais
+      title: tr(ctx, "🔐 Ajustado", "🔐 Adjusted", "🔐 Ajustado"),
+      description: tr(ctx,
+        (a.staffIgnoraCanais
           ? "O staff pode usar comandos em **qualquer** canal, mesmo com restrição ligada."
           : "O staff também fica sujeito à restrição de canais."),
+        (a.staffIgnoraCanais
+          ? "Staff can use commands in **any** channel, even with the restriction on."
+          : "Staff is also subject to the channel restriction."),
+        (a.staffIgnoraCanais
+          ? "El staff puede usar comandos en **cualquier** canal, aun con la restricción activada."
+          : "El staff también queda sujeto a la restricción de canales.")),
       colour: COR.sucesso });
   }
 
@@ -315,5 +386,7 @@ export async function cmdAcesso(message, args, ctx) {
     { title: "❓ Subcomando desconhecido",
       description: `Use: \`cargo\`, \`canal\`, \`staffignora\`, \`livre\` ou \`status\`.`, colour: COR.erro },
     { title: "❓ Unknown subcommand",
-      description: `Use: \`role\`, \`channel\`, \`staffbypass\`, \`free\` or \`status\`.`, colour: COR.erro }));
+      description: `Use: \`role\`, \`channel\`, \`staffbypass\`, \`free\` or \`status\`.`, colour: COR.erro },
+    { title: "❓ Subcomando desconocido",
+      description: `Usa: \`${subExibido("acesso", "cargo", "es")}\`, \`${subExibido("acesso", "canal", "es")}\`, \`${subExibido("acesso", "staffignora", "es")}\`, \`${subExibido("acesso", "livre", "es")}\` o \`status\`.`, colour: COR.erro }));
 }

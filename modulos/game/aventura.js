@@ -5,6 +5,8 @@
 // a recompensa única (especial e chefe com nome, uma vez por pessoa).
 
 import * as db from "../core/db.js";
+import { citarInterno, citar, trechoPronto } from "../core/aliases.js";
+import { tr, idiomaDe } from "../core/i18n.js";
 import * as R from "./regras.js";
 import * as CB from "./combate.js";
 import * as MISS from "./missoes.js";
@@ -23,6 +25,9 @@ export const COOP_MAX = 4;
 const COOP_VALIDADE_MS = 10 * MIN;
 const GRUPOS_COOP = new Map();
 const RECUPERACAO_MS = 30 * MIN;
+// Os auxiliares de texto abaixo recebem `en`: true/false, ou "es" (o espanhol sai pronto)
+const ES = (t) => trechoPronto(t);
+const TESOURO_ES = { full: "lleno", average: "en la media", "nearly empty": "casi vacío", empty: "vacío" };
 
 export function energiaAtual(f) {
   const base = f.energia ?? 0, desde = f.energiaEm ?? 0;
@@ -54,23 +59,25 @@ export function montarAlvo(missao, nivelGrupo) {
 // O que impede alguém de ir agora (null = pode)
 export function impedimento(uid, spec, en = false) {
   const p = db.getPersonagem(MUNDO, uid);
-  if (!p) return en ? "has no character" : "não tem personagem";
+  if (!p) return en === "es" ? ES("no tiene personaje") : en ? "has no character" : "não tem personagem";
   const agora = Date.now();
-  if ((p.recuperandoAte ?? 0) > agora) return en ? `is still recovering (~${Math.ceil((p.recuperandoAte - agora) / MIN)} min)` : `ainda está se recuperando (~${Math.ceil((p.recuperandoAte - agora) / MIN)} min)`;
+  if ((p.recuperandoAte ?? 0) > agora) return en === "es" ? ES(`todavía se está recuperando (~${Math.ceil((p.recuperandoAte - agora) / MIN)} min)`) : en ? `is still recovering (~${Math.ceil((p.recuperandoAte - agora) / MIN)} min)` : `ainda está se recuperando (~${Math.ceil((p.recuperandoAte - agora) / MIN)} min)`;
   const libera = (p.ultimaMissao ?? 0) + spec.esperaMin * MIN;
-  if (libera > agora) return en ? `is still resting (~${Math.ceil((libera - agora) / MIN)} min)` : `ainda está na espera (~${Math.ceil((libera - agora) / MIN)} min)`;
+  if (libera > agora) return en === "es" ? ES(`todavía está en espera (~${Math.ceil((libera - agora) / MIN)} min)`) : en ? `is still resting (~${Math.ceil((libera - agora) / MIN)} min)` : `ainda está na espera (~${Math.ceil((libera - agora) / MIN)} min)`;
   if (spec.chaveEspera) {
     const ate = db.esperaAte(uid, spec.chaveEspera);
     if (ate > agora) {
       const h = (ate - agora) / HORA;
+      if (en === "es") return ES(`ya lo intentó hace poco (~${h >= 1 ? `${Math.ceil(h)} h` : `${Math.ceil(h * 60)} min`})`);
       return en ? `already tried this one recently (~${h >= 1 ? `${Math.ceil(h)} h` : `${Math.ceil(h * 60)} min`})` : `já tentou esta há pouco (~${h >= 1 ? `${Math.ceil(h)} h` : `${Math.ceil(h * 60)} min`})`;
     }
   }
   if (spec.missao.requer && !db.temUnico(uid, `chefe:${spec.missao.requer}`) && !db.temUnico(uid, `especial:${spec.missao.requer}`)) {
     const req = MISS.CHEFES.get(spec.missao.requer) ?? MISS.ESPECIAIS.find((e) => e.id === spec.missao.requer);
+    if (en === "es") return ES(`primero tiene que vencer a **${req?.nomeEN ?? req?.nome ?? spec.missao.requer}**`);
     return en ? `must first beat **${req?.nomeEN ?? req?.nome ?? spec.missao.requer}**` : `precisa vencer antes **${req?.nome ?? spec.missao.requer}**`;
   }
-  if (spec.missao.tipo !== "bico" && db.getParty(MUNDO, uid).some((f) => energiaAtual(f) < 1)) return en ? "has a companion out of energy" : "tem companheiro sem energia";
+  if (spec.missao.tipo !== "bico" && db.getParty(MUNDO, uid).some((f) => energiaAtual(f) < 1)) return en === "es" ? ES("tiene un compañero sin energía") : en ? "has a companion out of energy" : "tem companheiro sem energia";
   return null;
 }
 
@@ -230,7 +237,9 @@ export function lutar(uids, missaoBase, { lingua = "pt", aleatorio = Math.random
 const nivelTxt = (x, en) => {
   if (!x.xp) return null;
   const ganho = (x.nivelDepois - x.nivelAntes) + (x.progressoDepois - x.progressoAntes);
+  if (x.subiu && en === "es") return ES(`🎉 **¡nivel ${x.nivelDepois}!** (+${Math.round(ganho * 100)}% de nivel · +${x.pontos.toFixed(2).replace(".", ",")} punto(s))`);
   if (x.subiu) return en ? `🎉 **level ${x.nivelDepois}!** (+${Math.round(ganho * 100)}% of a level · +${x.pontos.toFixed(2)} point(s))` : `🎉 **nível ${x.nivelDepois}!** (+${Math.round(ganho * 100)}% de nível · +${x.pontos.toFixed(2).replace(".", ",")} ponto(s))`;
+  if (en === "es") return ES(`✨ **+${Math.round(ganho * 100)}% de nivel** (${Math.round(x.progressoDepois * 100)}% para el nivel ${x.nivelDepois + 1})`);
   return en ? `✨ **+${Math.round(ganho * 100)}% of a level** (${Math.round(x.progressoDepois * 100)}% to level ${x.nivelDepois + 1})` : `✨ **+${Math.round(ganho * 100)}% de nível** (${Math.round(x.progressoDepois * 100)}% para o nível ${x.nivelDepois + 1})`;
 };
 function linhasDe(x, en, curto = false) {
@@ -242,15 +251,16 @@ function linhasDe(x, en, curto = false) {
   if (x.perdido.ouro) m.push(`🪙 −${fmt(x.perdido.ouro)}`);
   if (x.perdido.cristal) m.push(`💎 −${fmt(x.perdido.cristal)}`);
   if (m.length) L.push(m.join(" · "));
-  for (const it of x.unicos) L.push(`✦ **${it.nome}** — ${en ? "unique, once per person" : "único, uma vez por pessoa"}`);
+  for (const it of x.unicos) L.push(en === "es" ? ES(`✦ **${it.nome}** — único, una vez por persona`) : `✦ **${it.nome}** — ${en ? "unique, once per person" : "único, uma vez por pessoa"}`);
   for (const it of x.itens) L.push(`🎁 ${RARIDADE_INFO[it.raridade]?.emoji ?? ""} **${it.nome}**${curto ? "" : ` — ${descreverItem(it, en)}`}`);
-  if (x.companheiro) L.push(en ? `👥 **${x.companheiro.nome}** joined you` : `👥 **${x.companheiro.nome}** se juntou a você`);
+  if (x.companheiro) L.push(en === "es" ? ES(`👥 **${x.companheiro.nome}** se unió a ti`) : en ? `👥 **${x.companheiro.nome}** joined you` : `👥 **${x.companheiro.nome}** se juntou a você`);
   if (x.capturados.length) L.push(`⛓️ ${x.capturados.join(", ")}`);
   if (x.resgatados.length) L.push(`🔓 ${x.resgatados.map((y) => y.nome).join(", ")}`);
-  if (x.evoluiu?.trocas?.length || Object.keys(x.evoluiu?.gastos ?? {}).length) L.push(en ? "⚙️ _auto-evolve applied_" : "⚙️ _evoluir automático aplicado_");
+  if (x.evoluiu?.trocas?.length || Object.keys(x.evoluiu?.gastos ?? {}).length) L.push(en === "es" ? ES("⚙️ _evolución automática aplicada_") : en ? "⚙️ _auto-evolve applied_" : "⚙️ _evoluir automático aplicado_");
   return L;
 }
 export function embedResultado(res, { en, COR, P }) {
+  if (en === "es") return embedResultadoEs(res, { COR, P });
   const { spec, pv, r, resultados, historia } = res;
   const m = spec.missao, bico = m.tipo === "bico";
   const titulo = bico ? (en ? "🧺 Job done" : "🧺 Serviço feito")
@@ -269,12 +279,33 @@ export function embedResultado(res, { en, COR, P }) {
   if (r.desfecho === "falha") L.push("", en ? "_A failure is a failure: it pays nothing. Gear and level are never lost._" : "_Falha é falha: não paga nada. Nível e equipamento nunca se perdem._");
   if (r.desfecho === "caiu") L.push("", en ? `_~30 min recovering. Coins went to ${spec.fonte.tipo === "dungeon" ? "the dungeon's treasury" : "the bank"}; level and gear are never lost._`
     : `_~30 min se recuperando. A moeda foi para ${spec.fonte.tipo === "dungeon" ? "o tesouro da dungeon" : "o banco"}; nível e equipamento nunca se perdem._`);
-  if (resultados.some((x) => x.capturados.length)) L.push(en ? `_Captured companions stay in this dungeon — \`${P}game dungeon\` shows who; every return from it is a rescue attempt._`
-    : `_Os capturados ficam nesta dungeon — \`${P}game dungeon\` mostra quem; toda volta dela é uma tentativa de resgate._`);
+  if (resultados.some((x) => x.capturados.length)) L.push(en ? `_Captured companions stay in this dungeon — \`${citarInterno("game.dungeon", P)}\` shows who; every return from it is a rescue attempt._`
+    : `_Os capturados ficam nesta dungeon — \`${citarInterno("game.dungeon", P)}\` mostra quem; toda volta dela é uma tentativa de resgate._`);
   // a capa: o chefe ou a especial; senão, a dungeon onde foi; o único que saiu, por último
   const imagem = bico ? null : imagemDe(m.tipo === "chefe" || m.tipo === "especial" ? m.id : null, spec.fonte.tipo === "dungeon" ? spec.fonte.id : null,
     ...resultados.flatMap((x) => x.unicos.map((it) => it.id)));
   return { title: titulo, description: L.join("\n").slice(0, 3900), colour: { sucesso: COR.sucesso, falha: COR.aviso, caiu: COR.erro }[r.desfecho], ...(imagem ? { imagem } : {}) };
+}
+function embedResultadoEs(res, { COR, P }) {
+  const { spec, pv, r, resultados, historia } = res;
+  const m = spec.missao, bico = m.tipo === "bico";
+  const titulo = bico ? "🧺 Trabajo hecho" : { sucesso: "🏆 Victoria", falha: "😐 No salió bien", caiu: "💀 Caíste" }[r.desfecho];
+  const nomeM = m.nomeEN ?? m.nome;
+  const cab = bico ? `**${nomeM}**` : `**${nomeM}** · nivel ${spec.alvo.nivel} · dificultad ${R.faixaDoNivel(spec.alvo.nivel).n}`;
+  const L = [cab, ""];
+  if (historia?.texto) L.push(historia.texto, "");
+  if (!bico) L.push(`_${pct(pv.exito)} de ganar · ${pct(pv.sobrevivencia)} de sobrevivir${pv.sinergia?.bonus > 0.005 ? ` · sinergia +${pct(pv.sinergia.bonus)}` : ""}_`);
+  if (resultados.length === 1) {
+    L.push(...linhasDe(resultados[0], "es"));
+  } else {
+    for (const x of resultados) L.push(`<@${x.uid}> — ${linhasDe(x, "es", true).join(" · ") || "sin premio esta vez"}`);
+  }
+  if (r.desfecho === "falha") L.push("", "_Un fallo es un fallo: no paga. El nivel y el equipo nunca se pierden._");
+  if (r.desfecho === "caiu") L.push("", `_~30 min recuperándote. La moneda fue ${spec.fonte.tipo === "dungeon" ? "al tesoro de la mazmorra" : "al banco"}; el nivel y el equipo nunca se pierden._`);
+  if (resultados.some((x) => x.capturados.length)) L.push(`_Los capturados se quedan en esta mazmorra — \`${citar("game.dungeon", "es", P)}\` muestra quiénes; cada vuelta de ella es un intento de rescate._`);
+  const imagem = bico ? null : imagemDe(m.tipo === "chefe" || m.tipo === "especial" ? m.id : null, spec.fonte.tipo === "dungeon" ? spec.fonte.id : null,
+    ...resultados.flatMap((x) => x.unicos.map((it) => it.id)));
+  return { title: ES(titulo), description: ES(L.join("\n").slice(0, 3900)), colour: { sucesso: COR.sucesso, falha: COR.aviso, caiu: COR.erro }[r.desfecho], ...(imagem ? { imagem } : {}) };
 }
 
 // ── Listas ───────────────────────────────────────────────────────────────────
@@ -284,32 +315,34 @@ function chanceDe(uid, missao) {
   if (spec.missao.tipo === "bico") return { exito: 1, sobrevivencia: 1, spec, party };
   return { ...CB.prever([party], spec.alvo), spec, party };
 }
-const valeTxt = (xp, p, en) => { const v = MISS.valeNiveis(xp, p.nivel, p.progresso ?? 0); return en ? `+${Math.round(v * 100)}% lv` : `+${Math.round(v * 100)}% nv`; };
+const valeTxt = (xp, p, en) => { const v = MISS.valeNiveis(xp, p.nivel, p.progresso ?? 0); return en === "es" ? ES(`+${Math.round(v * 100)}% nv`) : en ? `+${Math.round(v * 100)}% lv` : `+${Math.round(v * 100)}% nv`; };
 
 export const SUBS = ["missao", "missão", "missoes", "missões", "quest", "contrato", "contratos", "bico", "bicos",
   "especial", "especiais", "dungeon", "dungeons", "resgate", "resgatar", "chefe", "chefes", "boss", "coop", "co-op", "grupo", "chamado", "group", "historia", "história", "story"];
 
 export async function cmdAventura(message, args, ctx, { sendEmbed, en }) {
   const { COR, PREFIXO: P } = ctx;
+  const lg = idiomaDe(ctx) === "es" ? "es" : en;   // o idioma para os auxiliares
+  const ce = (ref) => citar(ref, "es", P);         // o comando citado no espanhol
   const sub = String(args[0] ?? "").toLowerCase(), eu = message.authorId;
   const p = db.getPersonagem(MUNDO, eu);
-  const semPersonagem = () => sendEmbed(message.channel, { title: en ? "🎭 No character" : "🎭 Sem personagem", colour: COR.aviso,
-    description: en ? `Create one with \`${P}game criar\`.` : `Crie com \`${P}game criar\`.` });
+  const semPersonagem = () => sendEmbed(message.channel, { title: tr(ctx, "🎭 Sem personagem", "🎭 No character", "🎭 Sin personaje"), colour: COR.aviso,
+    description: tr(ctx, `Crie com \`${citarInterno("game.criar", P)}\`.`, `Create one with \`${citarInterno("game.criar", P)}\`.`, `Crea uno con \`${ce("game.criar")}\`.`) });
   const resto = args.slice(1).join(" ").trim();
   const partir = async (missao) => {
     const spec = montarAlvo(missao, p.nivel);
-    const imp = impedimento(eu, spec, en);
-    if (imp) return sendEmbed(message.channel, { title: en ? "⏳ Not now" : "⏳ Agora não", colour: COR.aviso, description: `<@${eu}> ${imp}.` });
+    const imp = impedimento(eu, spec, lg);
+    if (imp) return sendEmbed(message.channel, { title: tr(ctx, "⏳ Agora não", "⏳ Not now", "⏳ Ahora no"), colour: COR.aviso, description: `<@${eu}> ${imp}.` });
     const res = lutar([eu], missao, { lingua: en ? "en" : "pt" });
-    return sendEmbed(message.channel, embedResultado(res, { en, COR, P }));
+    return sendEmbed(message.channel, embedResultado(res, { en: lg, COR, P }));
   };
 
   // ── &game historia — reexibe a última ──
   if (["historia", "história", "story"].includes(sub)) {
     if (!p) return semPersonagem();
     let h = null; try { h = JSON.parse(p.historia ?? "null"); } catch {}
-    return sendEmbed(message.channel, { title: en ? "📖 Your last story" : "📖 Sua última história", colour: COR.info,
-      description: h?.texto ? `**${h.missao}**\n\n${h.texto}` : (en ? "_No story yet — go on a mission._" : "_Nenhuma história ainda — vá a uma missão._") });
+    return sendEmbed(message.channel, { title: tr(ctx, "📖 Sua última história", "📖 Your last story", "📖 Tu última historia"), colour: COR.info,
+      description: h?.texto ? `**${h.missao}**\n\n${h.texto}` : tr(ctx, "_Nenhuma história ainda — vá a uma missão._", "_No story yet — go on a mission._", "_Todavía no hay historia — ve a una misión._") });
   }
 
   // ── contratos (o quadro da guilda) e bicos ──
@@ -318,31 +351,38 @@ export async function cmdAventura(message, args, ctx, { sendEmbed, en }) {
     const difPedida = /^\d+$/.test(resto) ? Math.max(1, Math.min(10, parseInt(resto, 10))) : null;
     if (resto && !difPedida) {
       const m = MISS.acharContrato(resto);
-      if (!m) return sendEmbed(message.channel, { title: en ? "❌ Unknown contract" : "❌ Contrato desconhecido", colour: COR.erro,
-        description: en ? `I couldn't find **${resto}**. See the board with \`${P}game contratos\`.` : `Não achei **${resto}**. Veja o quadro com \`${P}game contratos\`.` });
+      if (!m) return sendEmbed(message.channel, { title: tr(ctx, "❌ Contrato desconhecido", "❌ Unknown contract", "❌ Contrato desconocido"), colour: COR.erro,
+        description: tr(ctx, `Não achei **${resto}**. Veja o quadro com \`${citarInterno("game.contratos", P)}\`.`, `I couldn't find **${resto}**. See the board with \`${citarInterno("game.contratos", P)}\`.`,
+          `No encontré **${resto}**. Mira el tablón con \`${ce("game.contratos")}\`.`) });
       return partir(m);
     }
     const dif = difPedida ?? R.faixaDoNivel(p.nivel).n;
     const difs = difPedida ? [dif] : [dif - 1, dif, dif + 1].filter((d) => d >= 1 && d <= 10);
     const L = [];
-    if ((p.recuperandoAte ?? 0) > Date.now()) L.push(en ? `🩹 **You're recovering** (~${Math.ceil((p.recuperandoAte - Date.now()) / MIN)} min).` : `🩹 **Você está se recuperando** (~${Math.ceil((p.recuperandoAte - Date.now()) / MIN)} min).`, "");
-    L.push(en ? "🧺 **Jobs** — no risk, small pay" : "🧺 **Bicos** — sem risco, pagam pouco");
+    if ((p.recuperandoAte ?? 0) > Date.now()) L.push(tr(ctx, `🩹 **Você está se recuperando** (~${Math.ceil((p.recuperandoAte - Date.now()) / MIN)} min).`, `🩹 **You're recovering** (~${Math.ceil((p.recuperandoAte - Date.now()) / MIN)} min).`,
+      `🩹 **Te estás recuperando** (~${Math.ceil((p.recuperandoAte - Date.now()) / MIN)} min).`), "");
+    L.push(tr(ctx, "🧺 **Bicos** — sem risco, pagam pouco", "🧺 **Jobs** — no risk, small pay", "🧺 **Trabajos** — sin riesgo, pagan poco"));
     for (const m of MISS.BICOS) L.push(`   • **${m.nome}**`);
     for (const d of difs) {
       const f = R.faixaDaDif(d);
-      L.push("", `${RARIDADE_INFO[f.raridade].emoji} **${en ? "Difficulty" : "Dificuldade"} ${d} — ${en ? f.nomeEN : f.nome}** _(${en ? "levels" : "níveis"} ${f.niveis[0]}–${f.niveis[1]})_`);
+      L.push("", tr(ctx, `${RARIDADE_INFO[f.raridade].emoji} **Dificuldade ${d} — ${f.nome}** _(níveis ${f.niveis[0]}–${f.niveis[1]})_`,
+        `${RARIDADE_INFO[f.raridade].emoji} **Difficulty ${d} — ${f.nomeEN}** _(levels ${f.niveis[0]}–${f.niveis[1]})_`,
+        `${RARIDADE_INFO[f.raridade].emoji} **Dificultad ${d} — ${f.nomeEN}** _(niveles ${f.niveis[0]}–${f.niveis[1]})_`));
       for (const m of MISS.CONTRATOS.filter((x) => R.faixaDoNivel(x.nivel).n === d)) {
         const c = chanceDe(eu, m), com = c.exito * c.sobrevivencia;
-        const perigo = m.perigo === "baixo" ? (en ? " · 🌿 low danger" : " · 🌿 perigo baixo") : "";
-        L.push(com >= 0.9995 ? `   • **${m.nome}** _(${en ? "lv" : "nv"} ${m.nivel})_ — ✅ ${en ? "guaranteed" : "garantida"} · ${valeTxt(MISS.xpDa(m, c.spec.alvo, p.nivel), p, en)}${perigo}`
-          : `   • **${m.nome}** _(${en ? "lv" : "nv"} ${m.nivel})_ — 🏆 **${pct(com)}** _(${pct(c.exito)} × ${pct(c.sobrevivencia)})_ · ${valeTxt(MISS.xpDa(m, c.spec.alvo, p.nivel), p, en)}${perigo}`);
+        const perigo = m.perigo === "baixo" ? tr(ctx, " · 🌿 perigo baixo", " · 🌿 low danger", " · 🌿 peligro bajo") : "";
+        const nv = tr(ctx, "nv", "lv", "nv"), vale = valeTxt(MISS.xpDa(m, c.spec.alvo, p.nivel), p, lg);
+        L.push(com >= 0.9995 ? `   • **${m.nome}** _(${nv} ${m.nivel})_ — ✅ ${tr(ctx, "garantida", "guaranteed", "garantizada")} · ${vale}${perigo}`
+          : `   • **${m.nome}** _(${nv} ${m.nivel})_ — 🏆 **${pct(com)}** _(${pct(c.exito)} × ${pct(c.sobrevivencia)})_ · ${vale}${perigo}`);
       }
     }
-    L.push("", en ? `_🏆 = win AND come back alive. "+% lv" = what one win is worth to you. The guild (the bank) pays. With 3× the strength a contract was made for, it's guaranteed — never by level._`
-      : `_🏆 = vencer E voltar vivo. "+% nv" = quanto um êxito vale para você. Quem paga é a guilda (o banco). Com 3× a força para a qual o contrato foi feito, é garantido — nunca pelo nível._`,
-      en ? `\`${P}game contrato <name>\` · \`${P}game contratos <1-10>\` — another difficulty · \`${P}game dungeons\` · \`${P}game especiais\``
-        : `\`${P}game contrato <nome>\` · \`${P}game contratos <1-10>\` — outra dificuldade · \`${P}game dungeons\` · \`${P}game especiais\``);
-    return enviarLista(sendEmbed, message.channel, { titulo: en ? "📜 Guild board — contracts" : "📜 Quadro da guilda — contratos", linhas: L, colour: COR.info });
+    L.push("", tr(ctx, `_🏆 = vencer E voltar vivo. "+% nv" = quanto um êxito vale para você. Quem paga é a guilda (o banco). Com 3× a força para a qual o contrato foi feito, é garantido — nunca pelo nível._`,
+      `_🏆 = win AND come back alive. "+% lv" = what one win is worth to you. The guild (the bank) pays. With 3× the strength a contract was made for, it's guaranteed — never by level._`,
+      `_🏆 = ganar Y volver con vida. "+% nv" = lo que vale para ti una victoria. Paga el gremio (el banco). Con 3× la fuerza para la que se hizo el contrato, está garantizado — nunca por nivel._`),
+      tr(ctx, `\`${citarInterno("game.contrato", P)} <nome>\` · \`${citarInterno("game.contratos", P)} <1-10>\` — outra dificuldade · \`${citarInterno("game.dungeons", P)}\` · \`${citarInterno("game.especiais", P)}\``,
+        `\`${citarInterno("game.contrato", P)} <name>\` · \`${citarInterno("game.contratos", P)} <1-10>\` — another difficulty · \`${citarInterno("game.dungeons", P)}\` · \`${citarInterno("game.especiais", P)}\``,
+        `\`${ce("game.contrato")} <nombre>\` · \`${ce("game.contratos")} <1-10>\` — otra dificultad · \`${ce("game.dungeons")}\` · \`${ce("game.especiais")}\``));
+    return enviarLista(sendEmbed, message.channel, { titulo: tr(ctx, "📜 Quadro da guilda — contratos", "📜 Guild board — contracts", "📜 Tablón del gremio — contratos"), linhas: L, colour: COR.info });
   }
 
   // ── missões especiais ──
@@ -350,18 +390,21 @@ export async function cmdAventura(message, args, ctx, { sendEmbed, en }) {
     if (!p) return semPersonagem();
     if (resto) {
       const m = MISS.acharEspecial(resto);
-      if (!m) return sendEmbed(message.channel, { title: en ? "❌ Unknown special mission" : "❌ Especial desconhecida", colour: COR.erro, description: `\`${P}game especiais\`` });
+      if (!m) return sendEmbed(message.channel, { title: tr(ctx, "❌ Especial desconhecida", "❌ Unknown special mission", "❌ Misión especial desconocida"), colour: COR.erro,
+        description: tr(ctx, `\`${citarInterno("game.especiais", P)}\``, `\`${citarInterno("game.especiais", P)}\``, `\`${ce("game.especiais")}\``) });
       return partir(m);
     }
-    const L = [en ? "One-of-a-kind reward — **once per person** (the first win). After that, it still pays like any contract." : "Recompensa que não existe em outro lugar — **uma vez por pessoa** (o primeiro êxito). Depois, paga como qualquer contrato.", ""];
+    const L = [tr(ctx, "Recompensa que não existe em outro lugar — **uma vez por pessoa** (o primeiro êxito). Depois, paga como qualquer contrato.", "One-of-a-kind reward — **once per person** (the first win). After that, it still pays like any contract.",
+      "Una recompensa que no existe en ningún otro sitio — **una vez por persona** (la primera victoria). Después, paga como cualquier contrato."), ""];
     for (const m of [...MISS.ESPECIAIS].sort((a, b) => a.nivel - b.nivel)) {
       const feita = db.temUnico(eu, `especial:${m.id}`), c = chanceDe(eu, m);
-      const rec = m.recompensa?.tipo === "companheiro" ? (en ? "companion" : "companheiro") : m.recompensa?.tipo === "magia" ? (en ? "spell" : "magia") : "item";
-      L.push(`${feita ? "✅" : "✦"} **${m.nome}** _(${en ? "lv" : "nv"} ${m.nivel})_ — ${rec}${feita ? (en ? " · already yours" : " · já é sua") : ""} · 🏆 ${pct(c.exito * c.sobrevivencia)}`);
-      L.push(`   _${en ? m.descricao.en : m.descricao.pt}_`);
+      const rec = m.recompensa?.tipo === "companheiro" ? tr(ctx, "companheiro", "companion", "compañero") : m.recompensa?.tipo === "magia" ? tr(ctx, "magia", "spell", "hechizo") : tr(ctx, "item", "item", "objeto");
+      L.push(`${feita ? "✅" : "✦"} **${m.nome}** _(${tr(ctx, "nv", "lv", "nv")} ${m.nivel})_ — ${rec}${feita ? tr(ctx, " · já é sua", " · already yours", " · ya es tuya") : ""} · 🏆 ${pct(c.exito * c.sobrevivencia)}`);
+      L.push(`   _${tr(ctx, m.descricao.pt, m.descricao.en, m.descricao.es ?? m.descricao.en)}_`);
     }
-    L.push("", en ? `_30% / 60% at their own level; 2 h between attempts until the first win. \`${P}game especial <name>\`_` : `_30% / 60% no próprio nível; 2 h entre tentativas até o primeiro êxito. \`${P}game especial <nome>\`_`);
-    return enviarLista(sendEmbed, message.channel, { titulo: en ? "✦ Special missions" : "✦ Missões especiais", linhas: L, colour: COR.info });
+    L.push("", tr(ctx, `_30% / 60% no próprio nível; 2 h entre tentativas até o primeiro êxito. \`${citarInterno("game.especial", P)} <nome>\`_`, `_30% / 60% at their own level; 2 h between attempts until the first win. \`${citarInterno("game.especial", P)} <name>\`_`,
+      `_30% / 60% en su propio nivel; 2 h entre intentos hasta la primera victoria. \`${ce("game.especial")} <nombre>\`_`));
+    return enviarLista(sendEmbed, message.channel, { titulo: tr(ctx, "✦ Missões especiais", "✦ Special missions", "✦ Misiones especiales"), linhas: L, colour: COR.info });
   }
 
   // ── chefes ──
@@ -369,18 +412,22 @@ export async function cmdAventura(message, args, ctx, { sendEmbed, en }) {
     if (!p) return semPersonagem();
     if (resto) {
       const c = MISS.acharChefe(resto);
-      if (!c) return sendEmbed(message.channel, { title: en ? "❌ Unknown boss" : "❌ Chefe desconhecido", colour: COR.erro, description: `\`${P}game chefes\`` });
+      if (!c) return sendEmbed(message.channel, { title: tr(ctx, "❌ Chefe desconhecido", "❌ Unknown boss", "❌ Jefe desconocido"), colour: COR.erro,
+        description: tr(ctx, `\`${citarInterno("game.chefes", P)}\``, `\`${citarInterno("game.chefes", P)}\``, `\`${ce("game.chefes")}\``) });
       return partir(c);
     }
-    const L = [en ? "A boss fights like a mission: 35% win / 60% survival for 4 players of its level (~8% alone). Wait: 24 h per person, per boss." : "Chefe luta como missão: 35% de vitória / 60% de sobrevivência com 4 jogadores do nível dele (~8% sozinho). Espera: 24 h por pessoa, por chefe.", ""];
+    const L = [tr(ctx, "Chefe luta como missão: 35% de vitória / 60% de sobrevivência com 4 jogadores do nível dele (~8% sozinho). Espera: 24 h por pessoa, por chefe.", "A boss fights like a mission: 35% win / 60% survival for 4 players of its level (~8% alone). Wait: 24 h per person, per boss.",
+      "Un jefe pelea como una misión: 35% de victoria / 60% de supervivencia con 4 jugadores de su nivel (~8% solo). Espera: 24 h por persona, por jefe."), ""];
     for (const c of [...MISS.CHEFES.values()].sort((a, b) => a.nivel - b.nivel)) {
       const ch = chanceDe(eu, c), venceu = db.temUnico(eu, `chefe:${c.id}`), espera = db.esperaAte(eu, `chefe:${c.id}`) > Date.now();
-      const onde = c.dungeon ? `🕳️ ${MISS.DUNGEONS.get(c.dungeon)?.nome ?? c.dungeon}` : (en ? "standalone" : "avulso");
-      const rec = c.recompensa ? (venceu ? (en ? " · ✦ already received" : " · ✦ já recebido") : (en ? " · ✦ unique reward" : " · ✦ recompensa única")) : "";
-      L.push(`${venceu ? "🏅" : "💀"} **${c.nome}** _(${en ? "lv" : "nv"} ${c.nivel})_ — ${onde} · 🏆 ${pct(ch.exito * ch.sobrevivencia)}${rec}${espera ? " · ⏳" : ""}${c.requer && !db.temUnico(eu, `chefe:${c.requer}`) ? " · 🔒" : ""}`);
+      const onde = c.dungeon ? `🕳️ ${MISS.DUNGEONS.get(c.dungeon)?.nome ?? c.dungeon}` : tr(ctx, "avulso", "standalone", "suelto");
+      const rec = c.recompensa ? (venceu ? tr(ctx, " · ✦ já recebido", " · ✦ already received", " · ✦ ya recibida") : tr(ctx, " · ✦ recompensa única", " · ✦ unique reward", " · ✦ recompensa única")) : "";
+      L.push(`${venceu ? "🏅" : "💀"} **${c.nome}** _(${tr(ctx, "nv", "lv", "nv")} ${c.nivel})_ — ${onde} · 🏆 ${pct(ch.exito * ch.sobrevivencia)}${rec}${espera ? " · ⏳" : ""}${c.requer && !db.temUnico(eu, `chefe:${c.requer}`) ? " · 🔒" : ""}`);
     }
-    L.push("", en ? `_\`${P}game chefe <name>\` alone · \`${P}game coop abrir chefe <name>\` in a group (up to ${COOP_MAX}) · 🔒 = beat the previous act first_` : `_\`${P}game chefe <nome>\` sozinho · \`${P}game coop abrir chefe <nome>\` em grupo (até ${COOP_MAX}) · 🔒 = vença o ato anterior antes_`);
-    return enviarLista(sendEmbed, message.channel, { titulo: en ? "💀 Bosses" : "💀 Chefes", linhas: L, colour: COR.info });
+    L.push("", tr(ctx, `_\`${citarInterno("game.chefe", P)} <nome>\` sozinho · \`${citarInterno("game", P)} coop abrir chefe <nome>\` em grupo (até ${COOP_MAX}) · 🔒 = vença o ato anterior antes_`,
+      `_\`${citarInterno("game.chefe", P)} <name>\` alone · \`${citarInterno("game", P)} coop abrir chefe <name>\` in a group (up to ${COOP_MAX}) · 🔒 = beat the previous act first_`,
+      `_\`${ce("game.chefe")} <nombre>\` solo · \`${ce("game")} coop open boss <nombre>\` en grupo (hasta ${COOP_MAX}) · 🔒 = vence antes el acto anterior_`));
+    return enviarLista(sendEmbed, message.channel, { titulo: tr(ctx, "💀 Chefes", "💀 Bosses", "💀 Jefes"), linhas: L, colour: COR.info });
   }
 
   // ── dungeons ──
@@ -390,28 +437,33 @@ export async function cmdAventura(message, args, ctx, { sendEmbed, en }) {
     const nomeD = resto.replace(/\s(chefe|boss)$/i, "").trim();
     if (nomeD && sub !== "dungeons") {
       const d = MISS.acharDungeon(nomeD);
-      if (!d) return sendEmbed(message.channel, { title: en ? "❌ Unknown dungeon" : "❌ Dungeon desconhecida", colour: COR.erro, description: `\`${P}game dungeons\`` });
+      if (!d) return sendEmbed(message.channel, { title: tr(ctx, "❌ Dungeon desconhecida", "❌ Unknown dungeon", "❌ Mazmorra desconocida"), colour: COR.erro,
+        description: tr(ctx, `\`${citarInterno("game.dungeons", P)}\``, `\`${citarInterno("game.dungeons", P)}\``, `\`${ce("game.dungeons")}\``) });
       if (chefe) { const c = MISS.CHEFES.get(d.chefe); if (c) return partir(c); }
       return partir({ id: d.id, tipo: "dungeon-encontro", dungeon: d.id, nome: d.nome });
     }
-    const L = [en ? "Open world: each one pays from **its own treasury**, which refills with the players who play there (the only new money in the game). 70% of the loot is themed; companions can be **captured** here (20% each if you fall)." : "Mundo aberto: cada uma paga do **tesouro dela**, que se renova com quem joga lá (a única moeda nova do jogo). 70% do loot é do tema; aqui os companheiros podem ser **capturados** (20% cada, se você cair).", ""];
+    const L = [tr(ctx, "Mundo aberto: cada uma paga do **tesouro dela**, que se renova com quem joga lá (a única moeda nova do jogo). 70% do loot é do tema; aqui os companheiros podem ser **capturados** (20% cada, se você cair).",
+      "Open world: each one pays from **its own treasury**, which refills with the players who play there (the only new money in the game). 70% of the loot is themed; companions can be **captured** here (20% each if you fall).",
+      "Mundo abierto: cada una paga de **su propio tesoro**, que se renueva con quien juega allí (la única moneda nueva del juego). El 70% del botín es del tema; aquí los compañeros pueden ser **capturados** (20% cada uno, si caes)."), ""];
     for (const d of [...MISS.DUNGEONS.values()].sort((a, b) => a.niveis[0] - b.niveis[0] || a.niveis[1] - b.niveis[1])) {
       const t = TS.estadoDoTesouro(d.id, MISS.nivelDoEncontro(d, p.nivel));
       const dentro = p.nivel >= d.niveis[0] && p.nivel <= d.niveis[1];
-      L.push(`${dentro ? "➡️" : "•"} **${d.nome}** _(${en ? "levels" : "níveis"} ${d.niveis[0]}–${d.niveis[1]})_ — 💰 ${en ? t.rotuloEN : t.rotulo}${d.obra ? ` · _${d.obra}_` : ""}`);
+      L.push(`${dentro ? "➡️" : "•"} **${d.nome}** _(${tr(ctx, "níveis", "levels", "niveles")} ${d.niveis[0]}–${d.niveis[1]})_ — 💰 ${tr(ctx, t.rotulo, t.rotuloEN, TESOURO_ES[t.rotuloEN] ?? t.rotuloEN)}${d.obra ? ` · _${d.obra}_` : ""}`);
     }
     const presos = db.listarCapturados(MUNDO);
     if (presos.length) {
-      L.push("", en ? `⛓️ **Captured (${presos.length})**` : `⛓️ **Capturados (${presos.length})**`);
+      L.push("", tr(ctx, `⛓️ **Capturados (${presos.length})**`, `⛓️ **Captured (${presos.length})**`, `⛓️ **Capturados (${presos.length})**`));
       for (const f of presos.slice(0, 15)) {
         const cat = db.getFollowerCatalogo(f.catalogoId), meu = f.donoOriginal === eu, h = (Date.now() - (f.capturadoEm ?? 0)) / HORA;
-        const onde = MISS.DUNGEONS.get(f.dungeonId)?.nome ?? (en ? "a dungeon" : "uma dungeon");
-        L.push(`   ${RARIDADE_INFO[cat?.raridade]?.emoji ?? ""} **${cat?.nome ?? "?"}** — ${onde}${meu ? (en ? " · 👤 yours" : " · 👤 seu") : h < JANELA_DONO_H ? (en ? ` · ⏳ owner's window (~${Math.ceil(JANELA_DONO_H - h)}h)` : ` · ⏳ janela do dono (~${Math.ceil(JANELA_DONO_H - h)}h)`) : (en ? " · 🔓 anyone can bring them back" : " · 🔓 qualquer um pode trazer")}`);
+        const onde = MISS.DUNGEONS.get(f.dungeonId)?.nome ?? tr(ctx, "uma dungeon", "a dungeon", "una mazmorra");
+        L.push(`   ${RARIDADE_INFO[cat?.raridade]?.emoji ?? ""} **${cat?.nome ?? "?"}** — ${onde}${meu ? tr(ctx, " · 👤 seu", " · 👤 yours", " · 👤 tuyo") : h < JANELA_DONO_H ? tr(ctx, ` · ⏳ janela do dono (~${Math.ceil(JANELA_DONO_H - h)}h)`, ` · ⏳ owner's window (~${Math.ceil(JANELA_DONO_H - h)}h)`, ` · ⏳ turno del dueño (~${Math.ceil(JANELA_DONO_H - h)}h)`) : tr(ctx, " · 🔓 qualquer um pode trazer", " · 🔓 anyone can bring them back", " · 🔓 cualquiera puede traerlo")}`);
       }
-      L.push(en ? "_The rescue is automatic: every return from that dungeon is one attempt (a win doubles it)._" : "_O resgate é automático: toda volta daquela dungeon é uma tentativa (vencer dobra a chance)._");
+      L.push(tr(ctx, "_O resgate é automático: toda volta daquela dungeon é uma tentativa (vencer dobra a chance)._", "_The rescue is automatic: every return from that dungeon is one attempt (a win doubles it)._",
+        "_El rescate es automático: cada vuelta de esa mazmorra es un intento (ganar duplica la probabilidad)._"));
     }
-    L.push("", en ? `\`${P}game dungeon <name>\` — one encounter at your level · \`${P}game dungeon <name> chefe\` — its boss` : `\`${P}game dungeon <nome>\` — um encontro no seu nível · \`${P}game dungeon <nome> chefe\` — o chefe dela`);
-    return enviarLista(sendEmbed, message.channel, { titulo: en ? "🕳️ Dungeons" : "🕳️ Dungeons", linhas: L, colour: COR.info });
+    L.push("", tr(ctx, `\`${citarInterno("game.dungeon", P)} <nome>\` — um encontro no seu nível · \`${citarInterno("game.dungeon", P)} <nome> chefe\` — o chefe dela`, `\`${citarInterno("game.dungeon", P)} <name>\` — one encounter at your level · \`${citarInterno("game.dungeon", P)} <name> chefe\` — its boss`,
+      `\`${ce("game.dungeon")} <nombre>\` — un encuentro en tu nivel · \`${ce("game.dungeon")} <nombre> boss\` — su jefe`));
+    return enviarLista(sendEmbed, message.channel, { titulo: tr(ctx, "🕳️ Dungeons", "🕳️ Dungeons", "🕳️ Mazmorras"), linhas: L, colour: COR.info });
   }
 
   // ── co-op (2 out 2026; v4: serve para contrato, especial, dungeon e chefe) ──
@@ -437,6 +489,8 @@ function acharAlvoCoop(txt) {
 
 async function coop(message, args, ctx, { sendEmbed, en }) {
   const { COR, PREFIXO: P } = ctx;
+  const lg = idiomaDe(ctx) === "es" ? "es" : en;   // o idioma para os auxiliares
+  const cg = citar("game", "es", P);                // o comando citado no espanhol
   const eu = message.authorId, acao = String(args[1] ?? "").toLowerCase();
   const canalId = message.channelId ?? message.channel?.id, agora = Date.now();
   const g0 = GRUPOS_COOP.get(canalId);
@@ -447,69 +501,98 @@ async function coop(message, args, ctx, { sendEmbed, en }) {
     const parties = g.membros.map((u) => CB.partyDe(MUNDO, u)).filter(Boolean);
     const nivel = Math.round(parties.reduce((s, x) => s + x.p.nivel, 0) / Math.max(1, parties.length));
     const spec = montarAlvo(g.missao, nivel), pv = CB.prever(parties, spec.alvo);
-    return { title: titulo ?? (en ? `⚔️ Group for ${nomeDe(g.missao)}` : `⚔️ Grupo para ${nomeDe(g.missao)}`), colour: COR.info, description: [
-      `${en ? "**Members**" : "**Membros**"} (${g.membros.length}/${COOP_MAX}): ${g.membros.map((u) => `<@${u}>`).join(" · ")}`,
-      en ? `**Together:** ${pct(pv.exito)} to win · ${pct(pv.sobrevivencia)} to survive${pv.sinergia?.bonus > 0.005 ? ` · synergy +${pct(pv.sinergia.bonus)}` : ""}`
-        : `**Juntos:** ${pct(pv.exito)} de vencer · ${pct(pv.sobrevivencia)} de sobreviver${pv.sinergia?.bonus > 0.005 ? ` · sinergia +${pct(pv.sinergia.bonus)}` : ""}`,
+    return { title: titulo ?? tr(ctx, `⚔️ Grupo para ${nomeDe(g.missao)}`, `⚔️ Group for ${nomeDe(g.missao)}`, `⚔️ Grupo para ${nomeDe(g.missao)}`), colour: COR.info, description: tr(ctx, [
+      `**Membros** (${g.membros.length}/${COOP_MAX}): ${g.membros.map((u) => `<@${u}>`).join(" · ")}`,
+      `**Juntos:** ${pct(pv.exito)} de vencer · ${pct(pv.sobrevivencia)} de sobreviver${pv.sinergia?.bonus > 0.005 ? ` · sinergia +${pct(pv.sinergia.bonus)}` : ""}`,
       "",
-      en ? `\`${P}game coop entrar\` — join · \`${P}game coop sair\` — leave` : `\`${P}game coop entrar\` — entra · \`${P}game coop sair\` — sai`,
-      en ? `_<@${g.lider}>: \`${P}game coop partir\` leaves now · \`${P}game coop cancelar\`. It leaves by itself at ${COOP_MAX}, and expires in 10 min._`
-        : `_<@${g.lider}>: \`${P}game coop partir\` parte agora · \`${P}game coop cancelar\`. Parte sozinho com ${COOP_MAX}, e expira em 10 min._`,
-    ].join("\n") };
+      `\`${citarInterno("game", P)} coop entrar\` — entra · \`${citarInterno("game", P)} coop sair\` — sai`,
+      `_<@${g.lider}>: \`${citarInterno("game", P)} coop partir\` parte agora · \`${citarInterno("game", P)} coop cancelar\`. Parte sozinho com ${COOP_MAX}, e expira em 10 min._`,
+    ].join("\n"), [
+      `**Members** (${g.membros.length}/${COOP_MAX}): ${g.membros.map((u) => `<@${u}>`).join(" · ")}`,
+      `**Together:** ${pct(pv.exito)} to win · ${pct(pv.sobrevivencia)} to survive${pv.sinergia?.bonus > 0.005 ? ` · synergy +${pct(pv.sinergia.bonus)}` : ""}`,
+      "",
+      `\`${citarInterno("game", P)} coop entrar\` — join · \`${citarInterno("game", P)} coop sair\` — leave`,
+      `_<@${g.lider}>: \`${citarInterno("game", P)} coop partir\` leaves now · \`${citarInterno("game", P)} coop cancelar\`. It leaves by itself at ${COOP_MAX}, and expires in 10 min._`,
+    ].join("\n"), [
+      `**Miembros** (${g.membros.length}/${COOP_MAX}): ${g.membros.map((u) => `<@${u}>`).join(" · ")}`,
+      `**Juntos:** ${pct(pv.exito)} de ganar · ${pct(pv.sobrevivencia)} de sobrevivir${pv.sinergia?.bonus > 0.005 ? ` · sinergia +${pct(pv.sinergia.bonus)}` : ""}`,
+      "",
+      `\`${cg} coop join\` — entra · \`${cg} coop leave\` — sale`,
+      `_<@${g.lider}>: \`${cg} coop go\` sale ahora · \`${cg} coop cancel\`. Sale solo al llegar a ${COOP_MAX}, y caduca en 10 min._`,
+    ].join("\n")) };
   };
   const specDe = (missao) => montarAlvo(missao, db.getPersonagem(MUNDO, eu)?.nivel ?? 1);
 
   if (!acao) {
-    return sendEmbed(message.channel, grupo ? painel(grupo) : { title: en ? "⚔️ Co-op" : "⚔️ Co-op", colour: COR.info, description: [
-      en ? "Up to 4 people (each with their companions) take on a contract, a special mission, a dungeon or a boss together." : "Até 4 pessoas (cada uma com seus companheiros) encaram juntas um contrato, uma missão especial, uma dungeon ou um chefe.",
-      en ? "One outcome for the group — everyone's attack and defense add up; the mission pays its strength to **each one** (XP, coins and loot of their own)."
-        : "Um desfecho para o grupo — o ataque e a defesa de todos somam; a missão paga a força dela a **cada um** (XP, moedas e loot de cada um).",
+    return sendEmbed(message.channel, grupo ? painel(grupo) : { title: tr(ctx, "⚔️ Co-op", "⚔️ Co-op", "⚔️ Co-op"), colour: COR.info, description: tr(ctx, [
+      "Até 4 pessoas (cada uma com seus companheiros) encaram juntas um contrato, uma missão especial, uma dungeon ou um chefe.",
+      "Um desfecho para o grupo — o ataque e a defesa de todos somam; a missão paga a força dela a **cada um** (XP, moedas e loot de cada um).",
       "",
-      `\`${P}game coop abrir <${en ? "contract" : "contrato"}>\` · \`${P}game coop abrir dungeon <${en ? "name" : "nome"}>\` · \`${P}game coop abrir chefe <${en ? "name" : "nome"}>\``,
-      `\`${P}game coop entrar\` · \`${P}game coop partir\``,
-    ].join("\n") });
+      `\`${citarInterno("game", P)} coop abrir <contrato>\` · \`${citarInterno("game", P)} coop abrir dungeon <nome>\` · \`${citarInterno("game", P)} coop abrir chefe <nome>\``,
+      `\`${citarInterno("game", P)} coop entrar\` · \`${citarInterno("game", P)} coop partir\``,
+    ].join("\n"), [
+      "Up to 4 people (each with their companions) take on a contract, a special mission, a dungeon or a boss together.",
+      "One outcome for the group — everyone's attack and defense add up; the mission pays its strength to **each one** (XP, coins and loot of their own).",
+      "",
+      `\`${citarInterno("game", P)} coop abrir <contract>\` · \`${citarInterno("game", P)} coop abrir dungeon <name>\` · \`${citarInterno("game", P)} coop abrir chefe <name>\``,
+      `\`${citarInterno("game", P)} coop entrar\` · \`${citarInterno("game", P)} coop partir\``,
+    ].join("\n"), [
+      "Hasta 4 personas (cada una con sus compañeros) se enfrentan juntas a un contrato, una misión especial, una mazmorra o un jefe.",
+      "Un solo desenlace para el grupo — el ataque y la defensa de todos se suman; la misión paga su fuerza a **cada uno** (XP, monedas y botín propios).",
+      "",
+      `\`${cg} coop open <contrato>\` · \`${cg} coop open dungeon <nombre>\` · \`${cg} coop open boss <nombre>\``,
+      `\`${cg} coop join\` · \`${cg} coop go\``,
+    ].join("\n")) });
   }
   if (["abrir", "open", "criar"].includes(acao)) {
-    if (grupo) return sendEmbed(message.channel, painel(grupo, en ? "⚔️ There's already an open group here" : "⚔️ Já tem um grupo aberto aqui"));
+    if (grupo) return sendEmbed(message.channel, painel(grupo, tr(ctx, "⚔️ Já tem um grupo aberto aqui", "⚔️ There's already an open group here", "⚔️ Ya hay un grupo abierto aquí")));
     const missao = acharAlvoCoop(args.slice(2).join(" "));
-    if (!missao) return sendEmbed(message.channel, { title: en ? "❓ Which one?" : "❓ Qual?", colour: COR.aviso, description: `\`${P}game contratos\` · \`${P}game dungeons\` · \`${P}game chefes\`` });
-    if (missao.tipo === "bico") return sendEmbed(message.channel, { title: "⚔️", colour: COR.aviso, description: en ? "Jobs are solo — co-op is for fights." : "Bico é solo — o co-op é para as lutas." });
-    const imp = impedimento(eu, specDe(missao), en);
+    if (!missao) return sendEmbed(message.channel, { title: tr(ctx, "❓ Qual?", "❓ Which one?", "❓ ¿Cuál?"), colour: COR.aviso,
+      description: tr(ctx, `\`${citarInterno("game.contratos", P)}\` · \`${citarInterno("game.dungeons", P)}\` · \`${citarInterno("game.chefes", P)}\``, `\`${citarInterno("game.contratos", P)}\` · \`${citarInterno("game.dungeons", P)}\` · \`${citarInterno("game.chefes", P)}\``,
+        `\`${citar("game.contratos", "es", P)}\` · \`${citar("game.dungeons", "es", P)}\` · \`${citar("game.chefes", "es", P)}\``) });
+    if (missao.tipo === "bico") return sendEmbed(message.channel, { title: "⚔️", colour: COR.aviso, description: tr(ctx, "Bico é solo — o co-op é para as lutas.", "Jobs are solo — co-op is for fights.", "Los trabajos son en solitario — el co-op es para las peleas.") });
+    const imp = impedimento(eu, specDe(missao), lg);
     if (imp) return sendEmbed(message.channel, { title: "⚔️", colour: COR.aviso, description: `<@${eu}> ${imp}.` });
     const novo = { lider: eu, missao, membros: [eu], criadoEm: agora, canalId };
     GRUPOS_COOP.set(canalId, novo);
     setTimeout(() => { if (GRUPOS_COOP.get(canalId) === novo) GRUPOS_COOP.delete(canalId); }, COOP_VALIDADE_MS).unref?.();
     return sendEmbed(message.channel, painel(novo));
   }
-  if (!grupo) return sendEmbed(message.channel, { title: "⚔️", colour: COR.aviso, description: en ? `No open group in this channel. \`${P}game coop abrir <mission>\`` : `Nenhum grupo aberto neste canal. \`${P}game coop abrir <missão>\`` });
+  if (!grupo) return sendEmbed(message.channel, { title: "⚔️", colour: COR.aviso, description: tr(ctx, `Nenhum grupo aberto neste canal. \`${citarInterno("game", P)} coop abrir <missão>\``, `No open group in this channel. \`${citarInterno("game", P)} coop abrir <mission>\``,
+    `No hay ningún grupo abierto en este canal. \`${cg} coop open <misión>\``) });
   if (["entrar", "join"].includes(acao)) {
     if (grupo.membros.includes(eu)) return sendEmbed(message.channel, painel(grupo));
-    if (grupo.membros.length >= COOP_MAX) return sendEmbed(message.channel, { title: "⚔️", colour: COR.aviso, description: en ? "The group is full." : "O grupo está cheio." });
-    const imp = impedimento(eu, specDe(grupo.missao), en);
+    if (grupo.membros.length >= COOP_MAX) return sendEmbed(message.channel, { title: "⚔️", colour: COR.aviso, description: tr(ctx, "O grupo está cheio.", "The group is full.", "El grupo está lleno.") });
+    const imp = impedimento(eu, specDe(grupo.missao), lg);
     if (imp) return sendEmbed(message.channel, { title: "⚔️", colour: COR.aviso, description: `<@${eu}> ${imp}.` });
     grupo.membros.push(eu);
     if (grupo.membros.length < COOP_MAX) return sendEmbed(message.channel, painel(grupo));
   } else if (["sair", "leave"].includes(acao)) {
-    if (eu === grupo.lider) { GRUPOS_COOP.delete(canalId); return sendEmbed(message.channel, { title: "⚔️", colour: COR.aviso, description: en ? "The leader left — the group was disbanded." : "Quem abriu saiu — o grupo foi desfeito." }); }
+    if (eu === grupo.lider) { GRUPOS_COOP.delete(canalId); return sendEmbed(message.channel, { title: "⚔️", colour: COR.aviso, description: tr(ctx, "Quem abriu saiu — o grupo foi desfeito.", "The leader left — the group was disbanded.", "Quien lo abrió se fue — el grupo se deshizo.") }); }
     grupo.membros = grupo.membros.filter((u) => u !== eu);
     return sendEmbed(message.channel, painel(grupo));
   } else if (["cancelar", "cancel", "fechar"].includes(acao)) {
-    if (eu !== grupo.lider) return sendEmbed(message.channel, { title: "⚔️", colour: COR.aviso, description: en ? "Only whoever opened it can cancel." : "Só quem abriu pode cancelar." });
+    if (eu !== grupo.lider) return sendEmbed(message.channel, { title: "⚔️", colour: COR.aviso, description: tr(ctx, "Só quem abriu pode cancelar.", "Only whoever opened it can cancel.", "Solo quien lo abrió puede cancelarlo.") });
     GRUPOS_COOP.delete(canalId);
-    return sendEmbed(message.channel, { title: "⚔️", colour: COR.info, description: en ? "Group cancelled." : "Grupo cancelado." });
+    return sendEmbed(message.channel, { title: "⚔️", colour: COR.info, description: tr(ctx, "Grupo cancelado.", "Group cancelled.", "Grupo cancelado.") });
   } else if (["partir", "ir", "go", "start"].includes(acao)) {
-    if (eu !== grupo.lider) return sendEmbed(message.channel, { title: "⚔️", colour: COR.aviso, description: en ? "Only whoever opened it decides when to leave." : "Só quem abriu decide a hora de partir." });
+    if (eu !== grupo.lider) return sendEmbed(message.channel, { title: "⚔️", colour: COR.aviso, description: tr(ctx, "Só quem abriu decide a hora de partir.", "Only whoever opened it decides when to leave.", "Solo quien lo abrió decide cuándo partir.") });
   } else return sendEmbed(message.channel, painel(grupo));
 
   GRUPOS_COOP.delete(canalId);
   const vao = [], ficaram = [];
   for (const uid of grupo.membros) {
-    const imp = impedimento(uid, montarAlvo(grupo.missao, db.getPersonagem(MUNDO, uid)?.nivel ?? 1), en);
+    const imp = impedimento(uid, montarAlvo(grupo.missao, db.getPersonagem(MUNDO, uid)?.nivel ?? 1), lg);
     if (imp) ficaram.push(`<@${uid}> ${imp}`); else vao.push(uid);
   }
   if (!vao.length) return sendEmbed(message.channel, { title: "⚔️", colour: COR.aviso, description: ficaram.join("\n") });
   const res = lutar(vao, grupo.missao, { lingua: en ? "en" : "pt" });
-  const e = embedResultado(res, { en, COR, P });
+  const e = embedResultado(res, { en: lg, COR, P });
+  if (lg === "es") {
+    if (ficaram.length) e.description = ES(`${e.description}\n\n**Se quedaron atrás:** ${ficaram.join(" · ")}`);
+    e.title = ES(`${e.title} — ${vao.length} aventurero(s)`);
+    return sendEmbed(message.channel, e);
+  }
   if (ficaram.length) e.description += `\n\n${en ? "**Stayed behind:** " : "**Ficaram para trás:** "}${ficaram.join(" · ")}`;
   e.title = `${e.title} — ${vao.length} ${en ? "adventurer(s)" : "aventureiro(s)"}`;
   return sendEmbed(message.channel, e);

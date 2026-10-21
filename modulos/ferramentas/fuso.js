@@ -1,5 +1,6 @@
 
 import { buscarFuso, agoraEm, diferenca, cidadeDoFuso } from "../core/fusos.js";
+import { citar, citarInterno } from "../core/aliases.js";
 import { tr, lingua } from "../core/i18n.js";
 
 const LIMITE = 12;   // além disso o embed vira parede de texto
@@ -24,14 +25,21 @@ function naoAchei(ctx, termo, candidatos) {
     title: "❌ Cidade não encontrada",
     description: [
       `Não identifiquei um fuso para \`${termo}\`.`,
-      candidatos.length ? "\nVocê quis dizer:" : `\nTente o nome da cidade em inglês (\`Tokyo\`) ou procure com \`${PREFIXO}fuso buscar <termo>\`.`,
+      candidatos.length ? "\nVocê quis dizer:" : `\nTente o nome da cidade em inglês (\`Tokyo\`) ou procure com \`${citarInterno("fuso.buscar", PREFIXO)} <termo>\`.`,
     ].join("") + sugestoes,
     colour: COR.erro,
   }, {
     title: "❌ City not found",
     description: [
       `I couldn't find a timezone for \`${termo}\`.`,
-      candidatos.length ? "\nDid you mean:" : `\nTry the city's English name (\`Tokyo\`) or search with \`${PREFIXO}fuso buscar <term>\`.`,
+      candidatos.length ? "\nDid you mean:" : `\nTry the city's English name (\`Tokyo\`) or search with \`${citarInterno("fuso.buscar", PREFIXO)} <term>\`.`,
+    ].join("") + sugestoes,
+    colour: COR.erro,
+  }, {
+    title: "❌ Ciudad no encontrada",
+    description: [
+      `No encontré un huso horario para \`${termo}\`.`,
+      candidatos.length ? "\n¿Quisiste decir:" : `\nPrueba con el nombre de la ciudad en inglés (\`Tokyo\`) o busca con \`${citar("fuso.buscar", "es", PREFIXO)} <término>\`.`,
     ].join("") + sugestoes,
     colour: COR.erro,
   }));
@@ -54,10 +62,10 @@ export async function cmdFuso(message, args, ctx) {
         description: [
           "Nenhuma cidade configurada ainda.",
           "",
-          `Quem tem **ManageMessages** monta a lista com \`${PREFIXO}fuso add <cidade>\`.`,
-          `Ex.: \`${PREFIXO}fuso add São Paulo\` · \`${PREFIXO}fuso add Madrid\``,
+          `Quem tem **ManageMessages** monta a lista com \`${citarInterno("fuso.add", PREFIXO)} <cidade>\`.`,
+          `Ex.: \`${citarInterno("fuso.add", PREFIXO)} São Paulo\` · \`${citarInterno("fuso.add", PREFIXO)} Madrid\``,
           "",
-          `_Para ver a hora de uma cidade sem configurar nada: \`${PREFIXO}fuso ver <cidade>\`._`,
+          `_Para ver a hora de uma cidade sem configurar nada: \`${citarInterno("fuso.ver", PREFIXO)} <cidade>\`._`,
         ].join("\n"),
         colour: COR.info,
       }, {
@@ -65,10 +73,21 @@ export async function cmdFuso(message, args, ctx) {
         description: [
           "No city configured yet.",
           "",
-          `Anyone with **ManageMessages** builds the list with \`${PREFIXO}fuso add <city>\`.`,
-          `E.g.: \`${PREFIXO}fuso add São Paulo\` · \`${PREFIXO}fuso add Madrid\``,
+          `Anyone with **ManageMessages** builds the list with \`${citarInterno("fuso.add", PREFIXO)} <city>\`.`,
+          `E.g.: \`${citarInterno("fuso.add", PREFIXO)} São Paulo\` · \`${citarInterno("fuso.add", PREFIXO)} Madrid\``,
           "",
-          `_To check a city's time without configuring anything: \`${PREFIXO}fuso ver <city>\`._`,
+          `_To check a city's time without configuring anything: \`${citarInterno("fuso.ver", PREFIXO)} <city>\`._`,
+        ].join("\n"),
+        colour: COR.info,
+      }, {
+        title: "🕐 Husos horarios",
+        description: [
+          "Todavía no hay ninguna ciudad configurada.",
+          "",
+          `Quien tenga **ManageMessages** arma la lista con \`${citar("fuso.add", "es", PREFIXO)} <ciudad>\`.`,
+          `Ej.: \`${citar("fuso.add", "es", PREFIXO)} São Paulo\` · \`${citar("fuso.add", "es", PREFIXO)} Madrid\``,
+          "",
+          `_Para ver la hora de una ciudad sin configurar nada: \`${citar("fuso.ver", "es", PREFIXO)} <ciudad>\`._`,
         ].join("\n"),
         colour: COR.info,
       }));
@@ -87,12 +106,12 @@ export async function cmdFuso(message, args, ctx) {
       const dif = principal && item.zona !== principal
         ? ` · _${diferenca(item.zona, principal, lang, quando)}_`
         : (principal && item.zona === principal
-          ? ` · _${lang === "en" ? "reference" : "referência"}_` : "");
+          ? ` · _${tr(ctx, "referência", "reference", "referencia")}_` : "");
       return `**${t.hora}** — ${rotulo(item)}\n${t.diaSemana} ${t.data} · ${t.offset}${dif}`;
     });
 
     return sendEmbed(message.channel, {
-      title: lang === "en" ? "🕐 Timezones" : "🕐 Fusos horários",
+      title: tr(ctx, "🕐 Fusos horários", "🕐 Timezones", "🕐 Husos horarios"),
       description: linhas.join("\n\n"),
       colour: COR.info,
     });
@@ -102,8 +121,9 @@ export async function cmdFuso(message, args, ctx) {
   if (["ver", "hora", "agora", "check", "now", "time"].includes(sub)) {
     if (!resto) {
       return sendEmbed(message.channel, tr(ctx,
-        { title: "❌ Faltou a cidade", description: `Uso: \`${PREFIXO}fuso ver <cidade>\``, colour: COR.erro },
-        { title: "❌ Missing city",    description: `Usage: \`${PREFIXO}fuso ver <city>\``, colour: COR.erro }));
+        { title: "❌ Faltou a cidade", description: `Uso: \`${citarInterno("fuso.ver", PREFIXO)} <cidade>\``, colour: COR.erro },
+        { title: "❌ Missing city",    description: `Usage: \`${citarInterno("fuso.ver", PREFIXO)} <city>\``, colour: COR.erro },
+        { title: "❌ Falta la ciudad", description: `Uso: \`${citar("fuso.ver", "es", PREFIXO)} <ciudad>\``, colour: COR.erro }));
     }
     const r = buscarFuso(resto);
     if (!r.exato) return naoAchei(ctx, resto, r.candidatos);
@@ -111,7 +131,7 @@ export async function cmdFuso(message, args, ctx) {
     const t = agoraEm(r.exato, { lang, formato24: cfg.formato24 });
     const principal = cfg.principal;
     const dif = principal && principal !== r.exato
-      ? `\n\n${lang === "en" ? "Compared to" : "Em relação a"} **${cidadeDoFuso(principal)}**: _${diferenca(r.exato, principal, lang)}_`
+      ? `\n\n${tr(ctx, "Em relação a", "Compared to", "Con respecto a")} **${cidadeDoFuso(principal)}**: _${diferenca(r.exato, principal, lang)}_`
       : "";
     return sendEmbed(message.channel, {
       title: `🕐 ${cidadeDoFuso(r.exato)}`,
@@ -124,15 +144,16 @@ export async function cmdFuso(message, args, ctx) {
   if (["buscar", "procurar", "search", "find"].includes(sub)) {
     if (!resto) {
       return sendEmbed(message.channel, tr(ctx,
-        { title: "❌ Faltou o termo", description: `Uso: \`${PREFIXO}fuso buscar <termo>\``, colour: COR.erro },
-        { title: "❌ Missing term",   description: `Usage: \`${PREFIXO}fuso buscar <term>\``, colour: COR.erro }));
+        { title: "❌ Faltou o termo", description: `Uso: \`${citarInterno("fuso.buscar", PREFIXO)} <termo>\``, colour: COR.erro },
+        { title: "❌ Missing term",   description: `Usage: \`${citarInterno("fuso.buscar", PREFIXO)} <term>\``, colour: COR.erro },
+        { title: "❌ Falta el término", description: `Uso: \`${citar("fuso.buscar", "es", PREFIXO)} <término>\``, colour: COR.erro }));
     }
     const r = buscarFuso(resto);
     const achados = r.exato ? [r.exato, ...r.candidatos] : r.candidatos;
     if (!achados.length) return naoAchei(ctx, resto, []);
 
     return sendEmbed(message.channel, {
-      title: lang === "en" ? `🔎 Results for "${resto}"` : `🔎 Resultados para "${resto}"`,
+      title: tr(ctx, `🔎 Resultados para "${resto}"`, `🔎 Results for "${resto}"`, `🔎 Resultados para "${resto}"`),
       description: achados.slice(0, 10).map((z) => {
         const t = agoraEm(z, { lang, formato24: cfg.formato24 });
         return `• **${cidadeDoFuso(z)}** — ${t.hora} (${t.offset})\n  \`${z}\``;
@@ -148,7 +169,9 @@ export async function cmdFuso(message, args, ctx) {
       { title: "🚫 Permissão insuficiente",
         description: "Você precisa de **ManageMessages** para mexer na lista de fusos.", colour: COR.erro },
       { title: "🚫 Missing permission",
-        description: "You need **ManageMessages** to change the timezone list.", colour: COR.erro }));
+        description: "You need **ManageMessages** to change the timezone list.", colour: COR.erro },
+      { title: "🚫 Permiso insuficiente",
+        description: "Necesitas **ManageMessages** para cambiar la lista de husos horarios.", colour: COR.erro }));
   }
 
   // ── &fuso add <cidade> ──
@@ -156,17 +179,22 @@ export async function cmdFuso(message, args, ctx) {
     if (!resto) {
       return sendEmbed(message.channel, tr(ctx,
         { title: "❌ Faltou a cidade",
-          description: `Uso: \`${PREFIXO}fuso add <cidade>\`\nEx.: \`${PREFIXO}fuso add São Paulo\``, colour: COR.erro },
+          description: `Uso: \`${citarInterno("fuso.add", PREFIXO)} <cidade>\`\nEx.: \`${citarInterno("fuso.add", PREFIXO)} São Paulo\``, colour: COR.erro },
         { title: "❌ Missing city",
-          description: `Usage: \`${PREFIXO}fuso add <city>\`\nE.g.: \`${PREFIXO}fuso add Madrid\``, colour: COR.erro }));
+          description: `Usage: \`${citarInterno("fuso.add", PREFIXO)} <city>\`\nE.g.: \`${citarInterno("fuso.add", PREFIXO)} Madrid\``, colour: COR.erro },
+        { title: "❌ Falta la ciudad",
+          description: `Uso: \`${citar("fuso.add", "es", PREFIXO)} <ciudad>\`\nEj.: \`${citar("fuso.add", "es", PREFIXO)} Madrid\``, colour: COR.erro }));
     }
     if (cfg.lista.length >= LIMITE) {
       return sendEmbed(message.channel, tr(ctx,
         { title: "❌ Lista cheia",
-          description: `O limite é de ${LIMITE} cidades — além disso a mensagem vira uma parede de texto. Remova alguma com \`${PREFIXO}fuso remove <cidade>\`.`,
+          description: `O limite é de ${LIMITE} cidades — além disso a mensagem vira uma parede de texto. Remova alguma com \`${citarInterno("fuso.remove", PREFIXO)} <cidade>\`.`,
           colour: COR.erro },
         { title: "❌ List is full",
-          description: `The limit is ${LIMITE} cities — beyond that the message becomes a wall of text. Remove one with \`${PREFIXO}fuso remove <city>\`.`,
+          description: `The limit is ${LIMITE} cities — beyond that the message becomes a wall of text. Remove one with \`${citarInterno("fuso.remove", PREFIXO)} <city>\`.`,
+          colour: COR.erro },
+        { title: "❌ Lista llena",
+          description: `El límite es de ${LIMITE} ciudades — más allá de eso el mensaje se vuelve un muro de texto. Quita alguna con \`${citar("fuso.remove", "es", PREFIXO)} <ciudad>\`.`,
           colour: COR.erro }));
     }
 
@@ -175,9 +203,11 @@ export async function cmdFuso(message, args, ctx) {
     if (cfg.lista.some((i) => i.zona === r.exato)) {
       return sendEmbed(message.channel, tr(ctx,
         { title: "🕐 Já está na lista",
-          description: `**${cidadeDoFuso(r.exato)}** já aparece em \`${PREFIXO}fuso\`.`, colour: COR.aviso },
+          description: `**${cidadeDoFuso(r.exato)}** já aparece em \`${citarInterno("fuso", PREFIXO)}\`.`, colour: COR.aviso },
         { title: "🕐 Already on the list",
-          description: `**${cidadeDoFuso(r.exato)}** is already shown in \`${PREFIXO}fuso\`.`, colour: COR.aviso }));
+          description: `**${cidadeDoFuso(r.exato)}** is already shown in \`${citarInterno("fuso", PREFIXO)}\`.`, colour: COR.aviso },
+        { title: "🕐 Ya está en la lista",
+          description: `**${cidadeDoFuso(r.exato)}** ya aparece en \`${citar("fuso", "es", PREFIXO)}\`.`, colour: COR.aviso }));
     }
 
     cfg.lista.push({ zona: r.exato, apelido: null });
@@ -187,11 +217,15 @@ export async function cmdFuso(message, args, ctx) {
     const t = agoraEm(r.exato, { lang, formato24: cfg.formato24 });
     return sendEmbed(message.channel, tr(ctx, {
       title: "🕐 Cidade adicionada",
-      description: `**${cidadeDoFuso(r.exato)}** — agora são **${t.hora}** lá (${t.offset}).\n_${r.exato}_\n\nVeja tudo com \`${PREFIXO}fuso\`.`,
+      description: `**${cidadeDoFuso(r.exato)}** — agora são **${t.hora}** lá (${t.offset}).\n_${r.exato}_\n\nVeja tudo com \`${citarInterno("fuso", PREFIXO)}\`.`,
       colour: COR.sucesso,
     }, {
       title: "🕐 City added",
-      description: `**${cidadeDoFuso(r.exato)}** — it's **${t.hora}** there right now (${t.offset}).\n_${r.exato}_\n\nSee them all with \`${PREFIXO}fuso\`.`,
+      description: `**${cidadeDoFuso(r.exato)}** — it's **${t.hora}** there right now (${t.offset}).\n_${r.exato}_\n\nSee them all with \`${citarInterno("fuso", PREFIXO)}\`.`,
+      colour: COR.sucesso,
+    }, {
+      title: "🕐 Ciudad añadida",
+      description: `**${cidadeDoFuso(r.exato)}** — ahora son las **${t.hora}** allí (${t.offset}).\n_${r.exato}_\n\nMíralas todas con \`${citar("fuso", "es", PREFIXO)}\`.`,
       colour: COR.sucesso,
     }));
   }
@@ -215,14 +249,20 @@ export async function cmdFuso(message, args, ctx) {
     return sendEmbed(message.channel, tr(ctx, {
       title: saiu ? "🕐 Cidade removida" : "🕐 Não estava na lista",
       description: saiu
-        ? `**${cidadeDoFuso(zona)}** não aparece mais em \`${PREFIXO}fuso\`.`
+        ? `**${cidadeDoFuso(zona)}** não aparece mais em \`${citarInterno("fuso", PREFIXO)}\`.`
         : `**${cidadeDoFuso(zona)}** já não constava.`,
       colour: saiu ? COR.sucesso : COR.aviso,
     }, {
       title: saiu ? "🕐 City removed" : "🕐 It wasn't on the list",
       description: saiu
-        ? `**${cidadeDoFuso(zona)}** no longer shows in \`${PREFIXO}fuso\`.`
+        ? `**${cidadeDoFuso(zona)}** no longer shows in \`${citarInterno("fuso", PREFIXO)}\`.`
         : `**${cidadeDoFuso(zona)}** wasn't there already.`,
+      colour: saiu ? COR.sucesso : COR.aviso,
+    }, {
+      title: saiu ? "🕐 Ciudad quitada" : "🕐 No estaba en la lista",
+      description: saiu
+        ? `**${cidadeDoFuso(zona)}** ya no aparece en \`${citar("fuso", "es", PREFIXO)}\`.`
+        : `**${cidadeDoFuso(zona)}** ya no figuraba.`,
       colour: saiu ? COR.sucesso : COR.aviso,
     }));
   }
@@ -239,10 +279,13 @@ export async function cmdFuso(message, args, ctx) {
     if (!alvo) {
       return sendEmbed(message.channel, tr(ctx,
         { title: "❌ Cidade não está na lista",
-          description: `Adicione primeiro: \`${PREFIXO}fuso add <cidade>\`.\nUso: \`${PREFIXO}fuso apelido <cidade> <texto>\``,
+          description: `Adicione primeiro: \`${citarInterno("fuso.add", PREFIXO)} <cidade>\`.\nUso: \`${citarInterno("fuso.apelido", PREFIXO)} <cidade> <texto>\``,
           colour: COR.erro },
         { title: "❌ City isn't on the list",
-          description: `Add it first: \`${PREFIXO}fuso add <city>\`.\nUsage: \`${PREFIXO}fuso apelido <city> <text>\``,
+          description: `Add it first: \`${citarInterno("fuso.add", PREFIXO)} <city>\`.\nUsage: \`${citarInterno("fuso.apelido", PREFIXO)} <city> <text>\``,
+          colour: COR.erro },
+        { title: "❌ La ciudad no está en la lista",
+          description: `Añádela primero: \`${citar("fuso.add", "es", PREFIXO)} <ciudad>\`.\nUso: \`${citar("fuso.apelido", "es", PREFIXO)} <ciudad> <texto>\``,
           colour: COR.erro }));
     }
 
@@ -252,7 +295,9 @@ export async function cmdFuso(message, args, ctx) {
         { title: "🕐 Apelido removido",
           description: `Volta a aparecer como **${cidadeDoFuso(alvo.zona)}**.`, colour: COR.sucesso },
         { title: "🕐 Label removed",
-          description: `It shows as **${cidadeDoFuso(alvo.zona)}** again.`, colour: COR.sucesso }));
+          description: `It shows as **${cidadeDoFuso(alvo.zona)}** again.`, colour: COR.sucesso },
+        { title: "🕐 Apodo quitado",
+          description: `Vuelve a aparecer como **${cidadeDoFuso(alvo.zona)}**.`, colour: COR.sucesso }));
     }
 
     alvo.apelido = texto.slice(0, 40);
@@ -265,6 +310,10 @@ export async function cmdFuso(message, args, ctx) {
       title: "🕐 Label set",
       description: `**${cidadeDoFuso(alvo.zona)}** shows as **${alvo.apelido}**.`,
       colour: COR.sucesso,
+    }, {
+      title: "🕐 Apodo definido",
+      description: `**${cidadeDoFuso(alvo.zona)}** aparece como **${alvo.apelido}**.`,
+      colour: COR.sucesso,
     }));
   }
 
@@ -274,9 +323,11 @@ export async function cmdFuso(message, args, ctx) {
     if (!r.exato || !cfg.lista.some((i) => i.zona === r.exato)) {
       return sendEmbed(message.channel, tr(ctx,
         { title: "❌ Precisa estar na lista",
-          description: `A referência tem de ser uma das cidades já adicionadas. Veja \`${PREFIXO}fuso\`.`, colour: COR.erro },
+          description: `A referência tem de ser uma das cidades já adicionadas. Veja \`${citarInterno("fuso", PREFIXO)}\`.`, colour: COR.erro },
         { title: "❌ Must be on the list",
-          description: `The reference must be one of the cities already added. See \`${PREFIXO}fuso\`.`, colour: COR.erro }));
+          description: `The reference must be one of the cities already added. See \`${citarInterno("fuso", PREFIXO)}\`.`, colour: COR.erro },
+        { title: "❌ Tiene que estar en la lista",
+          description: `La referencia tiene que ser una de las ciudades ya añadidas. Mira \`${citar("fuso", "es", PREFIXO)}\`.`, colour: COR.erro }));
     }
     cfg.principal = r.exato; salvarConfig?.();
     return sendEmbed(message.channel, tr(ctx, {
@@ -287,6 +338,10 @@ export async function cmdFuso(message, args, ctx) {
       title: "🕐 Reference set",
       description: `Differences are now counted from **${cidadeDoFuso(r.exato)}**.`,
       colour: COR.sucesso,
+    }, {
+      title: "🕐 Referencia definida",
+      description: `Las diferencias pasan a contarse a partir de **${cidadeDoFuso(r.exato)}**.`,
+      colour: COR.sucesso,
     }));
   }
 
@@ -296,14 +351,16 @@ export async function cmdFuso(message, args, ctx) {
     const querendo24 = /24/.test(resto) || sub === "hora24";
     if (!querendo12 && !querendo24) {
       return sendEmbed(message.channel, tr(ctx,
-        { title: "❌ Formato inválido", description: `Uso: \`${PREFIXO}fuso formato 12\` ou \`${PREFIXO}fuso formato 24\``, colour: COR.erro },
-        { title: "❌ Invalid format",   description: `Usage: \`${PREFIXO}fuso formato 12\` or \`${PREFIXO}fuso formato 24\``, colour: COR.erro }));
+        { title: "❌ Formato inválido", description: `Uso: \`${citarInterno("fuso.formato", PREFIXO)} 12\` ou \`${citarInterno("fuso.formato", PREFIXO)} 24\``, colour: COR.erro },
+        { title: "❌ Invalid format",   description: `Usage: \`${citarInterno("fuso.formato", PREFIXO)} 12\` or \`${citarInterno("fuso.formato", PREFIXO)} 24\``, colour: COR.erro },
+        { title: "❌ Formato no válido", description: `Uso: \`${citar("fuso.formato", "es", PREFIXO)} 12\` o \`${citar("fuso.formato", "es", PREFIXO)} 24\``, colour: COR.erro }));
     }
     cfg.formato24 = querendo24; salvarConfig?.();
     const exemplo = agoraEm(cfg.principal ?? "UTC", { lang, formato24: cfg.formato24 }).hora;
     return sendEmbed(message.channel, tr(ctx,
       { title: "🕐 Formato atualizado", description: `As horas aparecem assim: **${exemplo}**`, colour: COR.sucesso },
-      { title: "🕐 Format updated",     description: `Times now look like: **${exemplo}**`, colour: COR.sucesso }));
+      { title: "🕐 Format updated",     description: `Times now look like: **${exemplo}**`, colour: COR.sucesso },
+      { title: "🕐 Formato actualizado", description: `Las horas se ven así: **${exemplo}**`, colour: COR.sucesso }));
   }
 
   // ── &fuso limpar ──
@@ -311,7 +368,8 @@ export async function cmdFuso(message, args, ctx) {
     cfg.lista = []; cfg.principal = null; salvarConfig?.();
     return sendEmbed(message.channel, tr(ctx,
       { title: "🕐 Lista esvaziada", description: "Nenhuma cidade configurada.", colour: COR.sucesso },
-      { title: "🕐 List cleared",    description: "No city configured.", colour: COR.sucesso }));
+      { title: "🕐 List cleared",    description: "No city configured.", colour: COR.sucesso },
+      { title: "🕐 Lista vaciada",    description: "No hay ninguna ciudad configurada.", colour: COR.sucesso }));
   }
 
   const talvezCidade = buscarFuso(args.join(" "));
@@ -327,29 +385,43 @@ export async function cmdFuso(message, args, ctx) {
   return sendEmbed(message.channel, tr(ctx, {
     title: "🕐 Fusos horários",
     description: [
-      `\`${PREFIXO}fuso\` — a hora em cada cidade da lista`,
-      `\`${PREFIXO}fuso ver <cidade>\` — hora de qualquer cidade`,
-      `\`${PREFIXO}fuso buscar <termo>\` — procura cidades`,
+      `\`${citarInterno("fuso", PREFIXO)}\` — a hora em cada cidade da lista`,
+      `\`${citarInterno("fuso.ver", PREFIXO)} <cidade>\` — hora de qualquer cidade`,
+      `\`${citarInterno("fuso.buscar", PREFIXO)} <termo>\` — procura cidades`,
       "",
       `**Configuração** _(ManageMessages)_`,
-      `\`${PREFIXO}fuso add <cidade>\` · \`${PREFIXO}fuso remove <cidade>\``,
-      `\`${PREFIXO}fuso apelido <cidade> <texto>\` — rótulo personalizado`,
-      `\`${PREFIXO}fuso principal <cidade>\` — referência das diferenças`,
-      `\`${PREFIXO}fuso formato <12|24>\` · \`${PREFIXO}fuso limpar\``,
+      `\`${citarInterno("fuso.add", PREFIXO)} <cidade>\` · \`${citarInterno("fuso.remove", PREFIXO)} <cidade>\``,
+      `\`${citarInterno("fuso.apelido", PREFIXO)} <cidade> <texto>\` — rótulo personalizado`,
+      `\`${citarInterno("fuso.principal", PREFIXO)} <cidade>\` — referência das diferenças`,
+      `\`${citarInterno("fuso.formato", PREFIXO)} <12|24>\` · \`${citarInterno("fuso.limpar", PREFIXO)}\``,
     ].join("\n"),
     colour: COR.info,
   }, {
     title: "🕐 Timezones",
     description: [
-      `\`${PREFIXO}fuso\` — the time in each city on the list`,
-      `\`${PREFIXO}fuso ver <city>\` — any city's time`,
-      `\`${PREFIXO}fuso buscar <term>\` — search cities`,
+      `\`${citarInterno("fuso", PREFIXO)}\` — the time in each city on the list`,
+      `\`${citarInterno("fuso.ver", PREFIXO)} <city>\` — any city's time`,
+      `\`${citarInterno("fuso.buscar", PREFIXO)} <term>\` — search cities`,
       "",
       `**Configuration** _(ManageMessages)_`,
-      `\`${PREFIXO}fuso add <city>\` · \`${PREFIXO}fuso remove <city>\``,
-      `\`${PREFIXO}fuso apelido <city> <text>\` — custom label`,
-      `\`${PREFIXO}fuso principal <city>\` — reference for the differences`,
-      `\`${PREFIXO}fuso formato <12|24>\` · \`${PREFIXO}fuso limpar\``,
+      `\`${citarInterno("fuso.add", PREFIXO)} <city>\` · \`${citarInterno("fuso.remove", PREFIXO)} <city>\``,
+      `\`${citarInterno("fuso.apelido", PREFIXO)} <city> <text>\` — custom label`,
+      `\`${citarInterno("fuso.principal", PREFIXO)} <city>\` — reference for the differences`,
+      `\`${citarInterno("fuso.formato", PREFIXO)} <12|24>\` · \`${citarInterno("fuso.limpar", PREFIXO)}\``,
+    ].join("\n"),
+    colour: COR.info,
+  }, {
+    title: "🕐 Husos horarios",
+    description: [
+      `\`${citar("fuso", "es", PREFIXO)}\` — la hora en cada ciudad de la lista`,
+      `\`${citar("fuso.ver", "es", PREFIXO)} <ciudad>\` — la hora de cualquier ciudad`,
+      `\`${citar("fuso.buscar", "es", PREFIXO)} <término>\` — busca ciudades`,
+      "",
+      `**Configuración** _(ManageMessages)_`,
+      `\`${citar("fuso.add", "es", PREFIXO)} <ciudad>\` · \`${citar("fuso.remove", "es", PREFIXO)} <ciudad>\``,
+      `\`${citar("fuso.apelido", "es", PREFIXO)} <ciudad> <texto>\` — etiqueta personalizada`,
+      `\`${citar("fuso.principal", "es", PREFIXO)} <ciudad>\` — referencia de las diferencias`,
+      `\`${citar("fuso.formato", "es", PREFIXO)} <12|24>\` · \`${citar("fuso.limpar", "es", PREFIXO)}\``,
     ].join("\n"),
     colour: COR.info,
   }));

@@ -408,9 +408,9 @@ export function rodapeFontes(resposta, resultados, consultas, { lang = "pt", max
     return d ? `[${n}] [${d}](<${r.url}>)` : null;
   }).filter(Boolean);
   const q = (consultas ?? []).map((x) => `"${x}"`).join(" · ");
-  const cabec = lang === "en" ? `_🔎 I searched: ${q}_` : `_🔎 busquei: ${q}_`;
+  const cabec = lang === "es" ? `_🔎 busqué: ${q}_` : lang === "en" ? `_🔎 I searched: ${q}_` : `_🔎 busquei: ${q}_`;
   return fontes.length
-    ? `\n\n${cabec}\n${lang === "en" ? "**Sources:**" : "**Fontes:**"} ${fontes.join(" · ")}`
+    ? `\n\n${cabec}\n${lang === "es" ? "**Fuentes:**" : lang === "en" ? "**Sources:**" : "**Fontes:**"} ${fontes.join(" · ")}`
     : `\n\n${cabec}`;
 }
 

@@ -177,9 +177,13 @@ function traduzirToken(tok, rev) {
   if (m) return m[1] + traduzirLista(m[2], rev) + m[3];
   if (tok.includes("|")) return traduzirLista(tok, rev);
   // "aviso,5m,1h,ban" → "warn,5m,1h,ban"
-  if (tok.includes(",") && !/\s/.test(tok)) return tok.split(",").map((x) => rev[x.toLowerCase()] ?? x).join(",");
+  if (tok.includes(",") && !/\s/.test(tok)) return tok.split(",").map((x) => (ehConstante(x) ? x : rev[x.toLowerCase()] ?? x)).join(",");
+  // (21 out 2026) nome em MAIÚSCULAS é variável de ambiente (`SERVIDOR`, `DONO_ID`), não
+  // palavra: a tela em inglês mostrava `server` no lugar de `SERVIDOR` na ajuda do dono
+  if (ehConstante(tok)) return tok;
   return rev[tok.toLowerCase()] ?? tok;
 }
+function ehConstante(t) { return /^[A-Z][A-Z0-9_]+$/.test(t); }
 
 function traduzirTrecho(trecho, prefixo, CANONICO) {
   const partes = trecho.trim().split(/\s+/);
@@ -328,6 +332,10 @@ function paraEspanhol(texto, prefixo = "&", CANONICO = {}) {
 // início, e o exibir a tira (em qualquer idioma, para nunca chegar à tela).
 export const JA_TRADUZIDO = "\u2063";
 export const marcarTraduzido = (t) => (t == null || String(t).startsWith(JA_TRADUZIDO) ? t : JA_TRADUZIDO + t);
+// (etapa 4b) o trecho pronto, com começo e fim: pode ir no meio de outro texto
+export const FIM_PRONTO = "\u2064";
+const TRECHO_PRONTO = /\u2063([\s\S]*?)\u2064/g;
+export const trechoPronto = (t) => (t == null ? t : JA_TRADUZIDO + String(t).replaceAll(JA_TRADUZIDO, "").replaceAll(FIM_PRONTO, "") + FIM_PRONTO);
 
 // O id de um comando pelo nome que aparece na tela, em qualquer idioma
 // (`roll`, `dados`, `advertir` → rolar, rolar, warn). O id vence: um nome em
@@ -347,7 +355,16 @@ export const idDoNome = (nome) => { const n = String(nome ?? "").toLowerCase(); 
 // `dica`: um texto maior de onde tirar o comando de contexto (as outras
 // páginas de uma ajuda paginada).
 export function exibir(texto, lang, prefixo = "&", CANONICO = {}, dica = null) {
-  if (typeof texto === "string" && texto.startsWith(JA_TRADUZIDO)) return texto.slice(JA_TRADUZIDO.length);
+  // (etapa 4b) trechos prontos (o espanhol de um `tr`, entre as marcas de começo e
+  // fim): ficam de fora da tradução; o resto do texto passa por ela como sempre
+  if (typeof texto === "string" && texto.includes(FIM_PRONTO)) {
+    const guardados = [];
+    const resto = texto.replace(TRECHO_PRONTO, (_, t) => `\uE000${guardados.push(t.replaceAll(JA_TRADUZIDO, "")) - 1}\uE000`);
+    return exibir(resto.replaceAll(JA_TRADUZIDO, "").replaceAll(FIM_PRONTO, ""), lang, prefixo, CANONICO, dica)
+      .replace(/\uE000(\d+)\uE000/g, (_, i) => guardados[Number(i)]);
+  }
+  // a página inteira já pronta (a ajuda do registro em espanhol: só a marca de começo)
+  if (typeof texto === "string" && texto.startsWith(JA_TRADUZIDO)) return texto.slice(JA_TRADUZIDO.length).replaceAll(JA_TRADUZIDO, "");
   // espanhol (etapa 4): o texto ainda sai em inglês; os nomes de comando, em espanhol
   if (lang === "es") return paraEspanhol(exibir(texto, "en", prefixo, CANONICO, dica), prefixo, CANONICO);
   if (lang !== "en" || typeof texto !== "string") return texto;
@@ -436,6 +453,14 @@ export function citar(ref, lang = "pt", prefixo = "&") {
   }
   return prefixo + partes.join(" ");
 }
+
+// O código que cita um comando (21 out 2026, fim da fase 3): o nome INTERNO, exatamente
+// o que o `${P}cor painel aqui` escrito à mão dava — e que a tradução da tela leva ao
+// inglês e ao espanhol, como sempre. O que muda é que a referência é conferida: no
+// build (verificar-build.js) e na hora (lança, como o citar). Não é a marca de citação
+// do registro porque há código que LÊ o texto antes da tela (o visao.js filtra as
+// linhas da ajuda pelo comando citado; o tutorial acha o `&fuso add` no texto).
+export const citarInterno = (ref, prefixo = "&") => citar(ref, "pt", prefixo);
 
 // Troca as marcas `{&autorole.set}` de um texto pela citação no idioma (os textos
 // que moram no registro não podem chamar função: o registro é só dados).

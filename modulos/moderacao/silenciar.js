@@ -48,6 +48,16 @@ function ajuda(ctx) {
       "_The bot needs **TimeoutMembers** and must sit above the person. Whoever has TimeoutMembers can't be timed out._",
     ].join("\n"),
     colour: COR.info,
+  }, {
+    title: "🔇 Silenciar",
+    description: [
+      `\`${citar("silenciar", "es", P)} @usuario <tiempo> [motivo]\` — silencia durante un tiempo (ej.: \`10m\`, \`2h\`, \`1d\`; máximo 28 días).`,
+      `\`${citar("silenciar.tirar", "es", P)} @usuario\` — le devuelve la voz antes de tiempo.`,
+      "",
+      "Usa el **silencio nativo de Stoat**: la persona solo puede ver el servidor hasta que termine — no depende de roles.",
+      "_El bot necesita **TimeoutMembers** y estar por encima de la persona. Quien tiene TimeoutMembers no puede ser silenciado._",
+    ].join("\n"),
+    colour: COR.info,
   });
 }
 
@@ -57,7 +67,8 @@ export async function cmdSilenciar(message, args, ctx) {
   if (!membroTemPermissao(message, server, "TimeoutMembers")) {
     return sendEmbed(message.channel, tr(ctx,
       { title: "🚫 Permissão insuficiente", description: "Você precisa da permissão **TimeoutMembers** para usar este comando.", colour: COR.erro },
-      { title: "🚫 Missing permission", description: "You need the **TimeoutMembers** permission to use this command.", colour: COR.erro }));
+      { title: "🚫 Missing permission", description: "You need the **TimeoutMembers** permission to use this command.", colour: COR.erro },
+      { title: "🚫 Permiso insuficiente", description: "Necesitas el permiso **TimeoutMembers** para usar este comando.", colour: COR.erro }));
   }
   if (!args.length || ["ajuda", "help", "?"].includes(args[0]?.toLowerCase())) return sendEmbed(message.channel, ajuda(ctx));
 
@@ -73,21 +84,24 @@ export async function cmdSilenciar(message, args, ctx) {
   if (alvoId === client?.user?.id) {
     return sendEmbed(message.channel, tr(ctx,
       { description: "❌ Não posso silenciar a mim mesma!", colour: COR.erro },
-      { description: "❌ I can't time myself out!", colour: COR.erro }));
+      { description: "❌ I can't time myself out!", colour: COR.erro },
+      { description: "❌ ¡No puedo silenciarme a mí misma!", colour: COR.erro }));
   }
 
   const membro = await server.fetchMember(alvoId).catch(() => null);
   if (!membro) {
     return sendEmbed(message.channel, tr(ctx,
       { title: "❌ Não está no servidor", description: `<@${alvoId}> não é membro daqui — não há o que silenciar.`, colour: COR.erro },
-      { title: "❌ Not in the server", description: `<@${alvoId}> isn't a member here — nothing to time out.`, colour: COR.erro }));
+      { title: "❌ Not in the server", description: `<@${alvoId}> isn't a member here — nothing to time out.`, colour: COR.erro },
+      { title: "❌ No está en el servidor", description: `<@${alvoId}> no es miembro de aquí — no hay nada que silenciar.`, colour: COR.erro }));
   }
 
   // quem pede precisa estar ACIMA do alvo (15 out 2026)
   const pode = await podeAgirSobre(server, message, alvoId, ctx);
   if (!pode.ok) return sendEmbed(message.channel, tr(ctx,
     { title: "🚫 Acima de você", description: `${pode.pt}.`, colour: COR.erro },
-    { title: "🚫 Above you", description: `${pode.en}.`, colour: COR.erro }));
+    { title: "🚫 Above you", description: `${pode.en}.`, colour: COR.erro },
+    { title: "🚫 Por encima de ti", description: `${pode.es ?? pode.en}.`, colour: COR.erro }));
 
   if (tirar) {
     try {
@@ -96,15 +110,18 @@ export async function cmdSilenciar(message, args, ctx) {
       liberarQuarentena(ctx.serverId ?? server?.id, alvoId);
       await log.registrar(ctx, "punicoes", { titulo: "🔊 Silêncio retirado (manual)",
         descricao: `<@${alvoId}> teve o silêncio retirado por <@${message.authorId}>.`,
-        en: { titulo: "🔊 Silence lifted (manual)", descricao: `<@${alvoId}>'s silence was lifted by <@${message.authorId}>.` } });
+        en: { titulo: "🔊 Silence lifted (manual)", descricao: `<@${alvoId}>'s silence was lifted by <@${message.authorId}>.` },
+        es: { titulo: "🔊 Silencio retirado (manual)", descricao: `<@${message.authorId}> le retiró el silencio a <@${alvoId}>.` } });
       return sendEmbed(message.channel, tr(ctx,
         { title: "🔊 Silêncio retirado", description: `<@${alvoId}> pode falar de novo.`, colour: COR.sucesso },
-        { title: "🔊 Timeout lifted", description: `<@${alvoId}> can talk again.`, colour: COR.sucesso }));
+        { title: "🔊 Timeout lifted", description: `<@${alvoId}> can talk again.`, colour: COR.sucesso },
+        { title: "🔊 Silencio retirado", description: `<@${alvoId}> puede hablar de nuevo.`, colour: COR.sucesso }));
     } catch (e) {
       console.error("[SILENCIAR][tirar]", descreverErro(e));
       return sendEmbed(message.channel, tr(ctx,
         { title: "❌ Não consegui tirar o silêncio", description: `**Erro:** ${descreverErro(e)}`, colour: COR.erro },
-        { title: "❌ Couldn't lift the timeout", description: `**Error:** ${descreverErro(e, "en")}`, colour: COR.erro }));
+        { title: "❌ Couldn't lift the timeout", description: `**Error:** ${descreverErro(e, "en")}`, colour: COR.erro },
+        { title: "❌ No pude quitar el silencio", description: `**Error:** ${descreverErro(e, "es")}`, colour: COR.erro }));
     }
   }
 
@@ -122,17 +139,19 @@ export async function cmdSilenciar(message, args, ctx) {
     const tipo = tipoDoErro(e);
     console.error("[SILENCIAR]", descreverErro(e));
     const dica = tipo === "MissingPermission"
-      ? ["_Dê a permissão **TimeoutMembers** ao cargo do bot._", "_Give the bot's role the **TimeoutMembers** permission._"]
-      : ["_Confira se o cargo do bot está acima do cargo da pessoa._", "_Check that the bot's role sits above the person's._"];
+      ? ["_Dê a permissão **TimeoutMembers** ao cargo do bot._", "_Give the bot's role the **TimeoutMembers** permission._", "_Dale el permiso **TimeoutMembers** al rol del bot._"]
+      : ["_Confira se o cargo do bot está acima do cargo da pessoa._", "_Check that the bot's role sits above the person's._", "_Comprueba que el rol del bot esté por encima del de la persona._"];
     return sendEmbed(message.channel, tr(ctx,
       { title: "❌ Não consegui silenciar", description: `**Usuário:** <@${alvoId}>\n**Erro:** ${descreverErro(e)}\n\n${dica[0]}`, colour: COR.erro },
-      { title: "❌ Couldn't time out", description: `**User:** <@${alvoId}>\n**Error:** ${descreverErro(e, "en")}\n\n${dica[1]}`, colour: COR.erro }));
+      { title: "❌ Couldn't time out", description: `**User:** <@${alvoId}>\n**Error:** ${descreverErro(e, "en")}\n\n${dica[1]}`, colour: COR.erro },
+      { title: "❌ No pude silenciar", description: `**Usuario:** <@${alvoId}>\n**Error:** ${descreverErro(e, "es")}\n\n${dica[2]}`, colour: COR.erro }));
   }
 
-  const quando = (lang) => { try { return ate.toLocaleString(lang === "en" ? "en-GB" : "pt-BR", { timeZone: process.env.TZ || "UTC", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) + ` (${process.env.TZ || "UTC"})`; } catch { return ate.toISOString(); } };
+  const quando = (lang) => { try { return ate.toLocaleString(lang === "en" ? "en-GB" : lang === "es" ? "es-ES" : "pt-BR", { timeZone: process.env.TZ || "UTC", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) + ` (${process.env.TZ || "UTC"})`; } catch { return ate.toISOString(); } };
   await log.registrar(ctx, "punicoes", { titulo: "🔇 Silenciado (manual)",
     descricao: `<@${alvoId}> silenciado por <@${message.authorId}> por **${duracaoTexto(dur)}**.\n**Motivo:** ${motivo || "_(nenhum)_"}`,
-    en: { titulo: "🔇 Silenced (manual)", descricao: `<@${alvoId}> silenced by <@${message.authorId}> for **${duracaoTexto(dur, "en")}**.\n**Reason:** ${motivo || "_(none)_"}` } });
+    en: { titulo: "🔇 Silenced (manual)", descricao: `<@${alvoId}> silenced by <@${message.authorId}> for **${duracaoTexto(dur, "en")}**.\n**Reason:** ${motivo || "_(none)_"}` },
+    es: { titulo: "🔇 Silenciado (manual)", descricao: `<@${alvoId}> silenciado por <@${message.authorId}> durante **${duracaoTexto(dur, "es")}**.\n**Motivo:** ${motivo || "_(ninguno)_"}` } });
   console.log(`[SILENCIAR] ${message.authorId} -> ${alvoId} | ${duracaoTexto(dur)} | ${motivo}`);
   return sendEmbed(message.channel, tr(ctx, {
     title: "🔇 Ação executada: SILÊNCIO",
@@ -150,6 +169,15 @@ export async function cmdSilenciar(message, args, ctx) {
       `**Time:** ${duracaoTexto(dur, "en")}${ms > MAX_MS ? " _(the maximum)_" : ""} — until ${quando("en")}`,
       `**Reason:** ${motivo || "_(none given)_"}`,
       `**By:** <@${message.authorId}>`,
+    ].join("\n"),
+    colour: COR.mod,
+  }, {
+    title: "🔇 Acción ejecutada: SILENCIO",
+    description: [
+      `**Usuario:** <@${alvoId}> \`${alvoId}\``,
+      `**Tiempo:** ${duracaoTexto(dur, "es")}${ms > MAX_MS ? " _(el máximo)_" : ""} — hasta ${quando("es")}`,
+      `**Motivo:** ${motivo || "_(no se indicó ninguno)_"}`,
+      `**Por:** <@${message.authorId}>`,
     ].join("\n"),
     colour: COR.mod,
   }));

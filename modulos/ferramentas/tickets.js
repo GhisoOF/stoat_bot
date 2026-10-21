@@ -14,7 +14,8 @@
 // AssignRoles, ManagePermissions — e ManageMessages para limpar as reações.
 
 import * as db from "../core/db.js";
-import { tr, lingua, textoDoIdioma } from "../core/i18n.js";
+import { citar, citarInterno, trechoPronto } from "../core/aliases.js";
+import { tr, lingua, textoDoIdioma, idiomaDe, idiomaDaTela } from "../core/i18n.js";
 import { descreverErro } from "../core/erros.js";
 import { subirAnexo } from "../core/anexos.js";
 import { chamarApi } from "../core/stoat-api.js";
@@ -54,6 +55,11 @@ export const CATEGORIAS_PADRAO_EN = [
   { emoji: "🚨", nome: "Report" },
   { emoji: "💡", nome: "Suggestion" },
 ];
+export const CATEGORIAS_PADRAO_ES = [
+  { emoji: "🎫", nome: "Soporte" },
+  { emoji: "🚨", nome: "Denuncia" },
+  { emoji: "💡", nome: "Sugerencia" },
+];
 
 const semVS = (e) => { let v = String(e ?? ""); try { v = decodeURIComponent(v); } catch {} return v.replace(/\uFE0F/g, ""); };
 const mesmoEmoji = (a, b) => semVS(a) === semVS(b);
@@ -66,17 +72,19 @@ function garantirCfg(config) {
   c.logCanal ??= null;
   // os assuntos padrão no idioma do servidor (e trocam junto se ninguém mexeu neles)
   const en = textoDoIdioma(config.language) === "en";
-  const padrao = (en ? CATEGORIAS_PADRAO_EN : CATEGORIAS_PADRAO).map((x) => ({ ...x }));
-  const ehPadrao = (lista) => JSON.stringify(lista) === JSON.stringify(CATEGORIAS_PADRAO) || JSON.stringify(lista) === JSON.stringify(CATEGORIAS_PADRAO_EN);
+  const es = idiomaDaTela(config.language) === "es";
+  const padrao = (es ? CATEGORIAS_PADRAO_ES : en ? CATEGORIAS_PADRAO_EN : CATEGORIAS_PADRAO).map((x) => ({ ...x }));
+  const ehPadrao = (lista) => JSON.stringify(lista) === JSON.stringify(CATEGORIAS_PADRAO) || JSON.stringify(lista) === JSON.stringify(CATEGORIAS_PADRAO_EN) || JSON.stringify(lista) === JSON.stringify(CATEGORIAS_PADRAO_ES);
   if (!c.categorias || ehPadrao(c.categorias)) c.categorias = padrao;
   c.painel ??= null;   // { canalId, msgId }
   return c;
 }
 
 // ── Transcrição (puro, testável) ────────────────────────────────────────────
-export function formatarTranscricao(mensagens, { nomeCanal = "ticket", en = false, cabecalho = [] } = {}) {
+export function formatarTranscricao(mensagens, { nomeCanal = "ticket", en = false, l = null, cabecalho = [] } = {}) {
   // mensagens: [{autor, quando, texto, anexos, embeds}] em ordem cronológica
-  const linhas = [en ? `Transcript of #${nomeCanal}` : `Transcrição de #${nomeCanal}`, ...cabecalho, "─".repeat(40)];
+  const es = l === "es";   // o arquivo .txt não passa pela tela: o espanhol vai sem marca
+  const linhas = [es ? `Transcripción de #${nomeCanal}` : en ? `Transcript of #${nomeCanal}` : `Transcrição de #${nomeCanal}`, ...cabecalho, "─".repeat(40)];
   for (const m of mensagens) {
     const hora = m.quando ? new Date(m.quando).toISOString().replace("T", " ").slice(0, 19) : "??";
     const partes = [];
@@ -86,8 +94,8 @@ export function formatarTranscricao(mensagens, { nomeCanal = "ticket", en = fals
       const t = [e.title, e.description].filter(Boolean).join(" — ").replace(/\s+/g, " ").trim();
       if (t) partes.push(`[embed] ${t}`);
     }
-    if (m.anexos) partes.push(en ? `(${m.anexos} attachment(s))` : `(${m.anexos} anexo(s))`);
-    linhas.push(`[${hora}] ${m.autor}: ${partes.join(" ") || (en ? "(empty)" : "(vazio)")}`);
+    if (m.anexos) partes.push(es ? `(${m.anexos} adjunto(s))` : en ? `(${m.anexos} attachment(s))` : `(${m.anexos} anexo(s))`);
+    linhas.push(`[${hora}] ${m.autor}: ${partes.join(" ") || (es ? "(vacío)" : en ? "(empty)" : "(vazio)")}`);
   }
   return linhas.join("\n");
 }
@@ -203,18 +211,27 @@ export function cargoMaisAltoDoBot(server, botMembro) {
 // As três saídas para cargos acima da Judy, do melhor para o pior (13 out
 // 2026: o aviso só oferecia o `&ticket equipe`, que não resolve para quem tem
 // esses cargos — eles também estão acima dela, então ela não lhes dá cargo).
-export function saidasParaAcima({ acima, cargoBot = null, en = false, P = "&" }) {
+export function saidasParaAcima({ acima, cargoBot = null, en = false, l = null, P = "&" }) {
   const cargos = acima.map((id) => `<%${id}>`).join(" ");
+  if (l === "es") {
+    const meuEs = cargoBot ? `<%${cargoBot}>` : "el rol de Judy";
+    return [
+      `**1. Lo mejor:** en Configuración del servidor → Roles, arrastra ${meuEs} **por encima** de ${cargos}. Así cada ticket ya incluye esos roles solo.`,
+      `**2. O:** en los **permisos del servidor** de cada uno de esos roles, activa *Ver canal*, *Leer historial* y *Enviar mensajes* — pasan a ver todos los tickets sin que Judy los toque.`,
+      `**3. O:** \`${citar("ticket.equipe", "es", P)}\` crea el rol **Equipo de tickets** — pero quien tiene esos roles también está por encima de Judy, así que un admin tiene que dárselo a mano.`,
+      "_El dueño del servidor siempre ve todos los tickets._",
+    ].map(trechoPronto);
+  }
   const meu = cargoBot ? `<%${cargoBot}>` : (en ? "Judy's role" : "o cargo da Judy");
   return en ? [
     `**1. Best:** in Server settings → Roles, drag ${meu} **above** ${cargos}. Every ticket then includes them on its own.`,
     `**2. Or:** in each of those roles' **server permissions**, turn on *View channel*, *Read message history* and *Send messages* — they'll see every ticket without Judy touching them.`,
-    `**3. Or:** \`${P}ticket equipe\` creates a **Ticket team** role — but whoever holds those roles is above Judy too, so an admin has to give it to them by hand.`,
+    `**3. Or:** \`${citarInterno("ticket.equipe", P)}\` creates a **Ticket team** role — but whoever holds those roles is above Judy too, so an admin has to give it to them by hand.`,
     "_The server owner always sees every ticket._",
   ] : [
     `**1. Melhor:** em Configurações do servidor → Cargos, arraste ${meu} para **cima** de ${cargos}. Aí todo ticket já inclui esses cargos sozinho.`,
     `**2. Ou:** nas **permissões do servidor** de cada um desses cargos, ligue *Ver canal*, *Ler histórico* e *Enviar mensagens* — eles passam a ver todo ticket sem a Judy mexer neles.`,
-    `**3. Ou:** \`${P}ticket equipe\` cria o cargo **Equipe de tickets** — mas quem tem esses cargos também está acima da Judy, então um admin precisa dar o cargo à mão.`,
+    `**3. Ou:** \`${citarInterno("ticket.equipe", P)}\` cria o cargo **Equipe de tickets** — mas quem tem esses cargos também está acima da Judy, então um admin precisa dar o cargo à mão.`,
     "_O dono do servidor sempre vê todos os tickets._",
   ];
 }
@@ -222,25 +239,28 @@ export function saidasParaAcima({ acima, cargoBot = null, en = false, P = "&" })
 const ultimoAvisoEquipe = new Map();   // serverId → ms
 const AVISO_EQUIPE_MS = 6 * 3600_000;
 
-function linhasDoRelatorioStaff(cls, { equipe = null, deram = [], faltam = [], en = false, P = "&", cargoBot = null } = {}) {
+function linhasDoRelatorioStaff(cls, { equipe = null, deram = [], faltam = [], en = false, l = null, P = "&", cargoBot = null } = {}) {
   const cargos = (lista) => lista.map((id) => `<%${id}>`).join(" ");
+  // l === "es" → o espanhol, pronto (marcado); senão o en/pt de sempre
+  const X = (pt, eng, es) => (l === "es" ? trechoPronto(es) : en ? eng : pt);
   const L = [];
-  if (cls.entram.length) L.push(`✅ ${en ? "Enter every ticket:" : "Entram em todo ticket:"} ${cargos(cls.entram)}`);
-  if (cls.veemSozinhos.length) L.push(`✅ ${en ? "See it through their own server permissions:" : "Veem pela permissão própria no servidor:"} ${cargos(cls.veemSozinhos)}`);
-  if (equipe) L.push(`✅ ${en ? "Ticket team role:" : "Cargo da equipe de tickets:"} <%${equipe}>${deram.length ? ` — ${en ? "given to" : "dado a"} ${deram.map((u) => `<@${u}>`).join(" ")}` : ""}`);
+  if (cls.entram.length) L.push(`✅ ${X("Entram em todo ticket:", "Enter every ticket:", "Entran en todos los tickets:")} ${cargos(cls.entram)}`);
+  if (cls.veemSozinhos.length) L.push(`✅ ${X("Veem pela permissão própria no servidor:", "See it through their own server permissions:", "Lo ven por su propio permiso en el servidor:")} ${cargos(cls.veemSozinhos)}`);
+  if (equipe) L.push(`✅ ${X("Cargo da equipe de tickets:", "Ticket team role:", "Rol del equipo de tickets:")} <%${equipe}>${deram.length ? ` — ${X("dado a", "given to", "dado a")} ${deram.map((u) => `<@${u}>`).join(" ")}` : ""}`);
   if (cls.acima.length && !equipe) {
-    L.push(`⚠️ ${en ? "Above Judy — Stoat won't let her add them:" : "Acima da Judy — o Stoat não deixa ela pôr no ticket:"} ${cargos(cls.acima)}`);
-    L.push(...saidasParaAcima({ acima: cls.acima, cargoBot, en, P }));
+    L.push(`⚠️ ${X("Acima da Judy — o Stoat não deixa ela pôr no ticket:", "Above Judy — Stoat won't let her add them:", "Por encima de Judy — Stoat no la deja añadirlos al ticket:")} ${cargos(cls.acima)}`);
+    L.push(...saidasParaAcima({ acima: cls.acima, cargoBot, en, l, P }));
   }
   if (faltam.length) {
-    L.push(`⚠️ ${en ? "Above Judy, so she can't give them the role — an admin gives it by hand:" : "Estão acima da Judy, então ela não consegue dar o cargo — um admin dá à mão:"} ${faltam.map((u) => `<@${u}>`).join(" ")}`);
-    L.push(en ? `_Or move ${cargoBot ? `<%${cargoBot}>` : "Judy's role"} above their roles — then she does it herself._`
-              : `_Ou suba ${cargoBot ? `<%${cargoBot}>` : "o cargo da Judy"} acima dos cargos dessas pessoas — aí ela mesma dá._`);
+    L.push(`⚠️ ${X("Estão acima da Judy, então ela não consegue dar o cargo — um admin dá à mão:", "Above Judy, so she can't give them the role — an admin gives it by hand:", "Están por encima de Judy, así que no puede darles el rol — un admin se lo da a mano:")} ${faltam.map((u) => `<@${u}>`).join(" ")}`);
+    L.push(X(`_Ou suba ${cargoBot ? `<%${cargoBot}>` : "o cargo da Judy"} acima dos cargos dessas pessoas — aí ela mesma dá._`,
+      `_Or move ${cargoBot ? `<%${cargoBot}>` : "Judy's role"} above their roles — then she does it herself._`,
+      `_O sube ${cargoBot ? `<%${cargoBot}>` : "el rol de Judy"} por encima de los roles de esas personas — así lo da ella misma._`));
   }
   if (!cls.entram.length && !cls.veemSozinhos.length && !cls.acima.length && !equipe) {
-    L.push(en
-      ? `⚠️ No staff role found. Mark them with \`${P}acesso cargo add @role\` (or give a role **Manage channels**).`
-      : `⚠️ Nenhum cargo de staff encontrado. Marque com \`${P}acesso cargo add @cargo\` (ou dê **Gerenciar canais** a um cargo).`);
+    L.push(X(`⚠️ Nenhum cargo de staff encontrado. Marque com \`${citarInterno("acesso.cargo.add", P)} @cargo\` (ou dê **Gerenciar canais** a um cargo).`,
+      `⚠️ No staff role found. Mark them with \`${citarInterno("acesso.cargo.add", P)} @role\` (or give a role **Manage channels**).`,
+      `⚠️ No se encontró ningún rol de staff. Márcalos con \`${citar("acesso.cargo.add", "es", P)} @rol\` (o da **Gestionar canales** a un rol).`));
   }
   return L;
 }
@@ -250,6 +270,7 @@ function linhasDoRelatorioStaff(cls, { equipe = null, deram = [], faltam = [], e
 export async function prepararEquipe({ ctx, server, criar = true }) {
   const cfg = garantirCfg(ctx.config);
   const en = lingua(ctx) === "en";
+  const l = idiomaDe(ctx);
   const bot = await membroDoBot(server, ctx.client);
   let cls = classificarStaff(server, ctx.config, bot);
   if (cfg.cargoEquipe && entradasDeCargos(server).length && !cargoDe(server, cfg.cargoEquipe)) {
@@ -257,16 +278,16 @@ export async function prepararEquipe({ ctx, server, criar = true }) {
   }
   const precisa = cls.acima.length > 0;
   const cargoBot = cargoMaisAltoDoBot(server, bot);
-  if (!cfg.cargoEquipe && (!precisa || !criar)) return { cls, equipe: null, deram: [], faltam: [], linhas: linhasDoRelatorioStaff(cls, { en, P: ctx.PREFIXO, cargoBot }) };
+  if (!cfg.cargoEquipe && (!precisa || !criar)) return { cls, equipe: null, deram: [], faltam: [], linhas: linhasDoRelatorioStaff(cls, { en, l, P: ctx.PREFIXO, cargoBot }) };
 
   if (!cfg.cargoEquipe) {
     try {
-      const criado = await server.createRole(en ? "Ticket team" : "Equipe de tickets");
+      const criado = await server.createRole(l === "es" ? "Equipo de tickets" : en ? "Ticket team" : "Equipe de tickets");
       cfg.cargoEquipe = criado?.id ?? criado?.role?._id ?? criado?.role?.id ?? null;
       ctx.salvarConfig?.();
     } catch (e) {
-      const L = linhasDoRelatorioStaff(cls, { en, P: ctx.PREFIXO, cargoBot });
-      L.push(`❌ ${en ? "I couldn't create the role" : "Não consegui criar o cargo"}: ${descreverErro(e, en ? "en" : "pt")}`);
+      const L = linhasDoRelatorioStaff(cls, { en, l, P: ctx.PREFIXO, cargoBot });
+      L.push(`❌ ${tr(ctx, "Não consegui criar o cargo", "I couldn't create the role", "No pude crear el rol")}: ${descreverErro(e, en ? "en" : "pt")}`);
       return { cls, equipe: null, deram: [], faltam: [], linhas: L, erro: true };
     }
   }
@@ -296,7 +317,7 @@ export async function prepararEquipe({ ctx, server, criar = true }) {
     await canal?.setPermissions?.(equipe, { allow: perms, deny: 0 }).catch((e) => console.error(`[TICKET] equipe no #${t.numero}: ${descreverErro(e)}`));
   }
   cls = classificarStaff(server, ctx.config, bot);
-  return { cls, equipe, deram, faltam, linhas: linhasDoRelatorioStaff(cls, { equipe, deram, faltam, en, P: ctx.PREFIXO, cargoBot }) };
+  return { cls, equipe, deram, faltam, linhas: linhasDoRelatorioStaff(cls, { equipe, deram, faltam, en, l, P: ctx.PREFIXO, cargoBot }) };
 }
 
 // Põe a staff no canal recém-criado. Nunca derruba a abertura: o que não
@@ -333,7 +354,7 @@ async function avisarStaffDeFora({ ctx, fora, numero, cargoBot = null }) {
       "",
       ...saidasParaAcima({ acima: fora, cargoBot, en: false, P }),
       "",
-      `_Este aviso volta no máximo a cada 6 h. Conferir agora: \`${P}ticket equipe\`._`,
+      `_Este aviso volta no máximo a cada 6 h. Conferir agora: \`${citarInterno("ticket.equipe", P)}\`._`,
     ].join("\n"),
     colour: ctx.COR.aviso,
   }, {
@@ -343,7 +364,17 @@ async function avisarStaffDeFora({ ctx, fora, numero, cargoBot = null }) {
       "",
       ...saidasParaAcima({ acima: fora, cargoBot, en: true, P }),
       "",
-      `_This warning comes back at most every 6 h. Check now: \`${P}ticket equipe\`._`,
+      `_This warning comes back at most every 6 h. Check now: \`${citarInterno("ticket.equipe", P)}\`._`,
+    ].join("\n"),
+    colour: ctx.COR.aviso,
+  }, {
+    title: `⚠️ Ticket #${numero}: parte del staff quedó fuera`,
+    description: [
+      `Los roles ${fora.map((id) => `<%${id}>`).join(" ")} están **por encima de Judy**${cargoBot ? ` (su rol es <%${cargoBot}>)` : ""} — Stoat no la deja añadirlos al canal del ticket.`,
+      "",
+      ...saidasParaAcima({ acima: fora, cargoBot, en: true, l: "es", P }),
+      "",
+      `_Este aviso vuelve como máximo cada 6 h. Comprobar ahora: \`${citar("ticket.equipe", "es", P)}\`._`,
     ].join("\n"),
     colour: ctx.COR.aviso,
   })).catch(() => {});
@@ -361,6 +392,7 @@ async function tirarReacao(canalId, msgId, emoji, userId) {
 export async function publicarPainel({ ctx, canal }) {
   const cfg = garantirCfg(ctx.config);
   const en = lingua(ctx) === "en";
+  const l = idiomaDe(ctx);
   // o painel antigo deixa de valer
   if (cfg.painel?.msgId) {
     db.esquecerMsgTicket(cfg.painel.msgId);
@@ -368,17 +400,17 @@ export async function publicarPainel({ ctx, canal }) {
     await velho?.fetchMessage?.(cfg.painel.msgId).then((m) => m?.delete?.()).catch(() => {});
   }
   const msg = await ctx.sendEmbed(canal, {
-    title: en ? "🎫 Open a ticket" : "🎫 Abrir um ticket",
+    title: tr(ctx, "🎫 Abrir um ticket", "🎫 Open a ticket", "🎫 Abrir un ticket"),
     description: [
-      en ? "React with the topic and I'll open a **private channel** between you and the staff:" : "Reaja com o assunto e eu abro um **canal privado** entre você e a staff:",
+      tr(ctx, "Reaja com o assunto e eu abro um **canal privado** entre você e a staff:", "React with the topic and I'll open a **private channel** between you and the staff:", "Reacciona con el tema y abro un **canal privado** entre tú y el staff:"),
       "",
       ...cfg.categorias.map((c) => `${c.emoji} — **${c.nome}**`),
       "",
-      en ? "_One open ticket per person at a time._" : "_Um ticket aberto por pessoa de cada vez._",
+      tr(ctx, "_Um ticket aberto por pessoa de cada vez._", "_One open ticket per person at a time._", "_Un ticket abierto por persona a la vez._"),
     ].join("\n"),
     colour: ctx.COR.info,
   });
-  if (!msg?.id) throw new Error(en ? "I couldn't post in that channel" : "não consegui postar nesse canal");
+  if (!msg?.id) throw new Error(l === "es" ? "no pude publicar en ese canal" : en ? "I couldn't post in that channel" : "não consegui postar nesse canal");
   for (const c of cfg.categorias) await msg.react?.(encodeURIComponent(c.emoji)).catch(() => msg.react?.(c.emoji).catch(() => {}));
   db.registrarMsgTicket(msg.id, ctx.serverId, canal.id ?? canal._id, "painel");
   cfg.painel = { canalId: canal.id ?? canal._id, msgId: msg.id };
@@ -391,6 +423,9 @@ export async function abrirTicket({ ctx, server, userId, motivo = "", categoria 
   const cfg = garantirCfg(ctx.config);
   const en = lingua(ctx) === "en";
   const lang = en ? "en" : "pt";
+  // erros e nome/descrição do canal: texto puro (vão dentro de outro texto ou para o Stoat)
+  const es = idiomaDe(ctx) === "es";
+  const X = (pt, eng, esp) => (es ? esp : en ? eng : pt);
   const jaTem = db.listarTickets(ctx.serverId).find((t) => t.autorId === userId);
   if (jaTem) return { jaTem: jaTem.canalId };
   if (!cfg.logCanal) return { semLog: true };
@@ -402,10 +437,10 @@ export async function abrirTicket({ ctx, server, userId, motivo = "", categoria 
   try {
     const criado = await server.createRole(nome);
     roleId = criado?.id ?? criado?.role?._id ?? criado?.role?.id;
-    if (!roleId) throw new Error(en ? "the API didn't return the role id (missing ManageRole?)" : "a API não devolveu o id do cargo (falta ManageRole?)");
+    if (!roleId) throw new Error(X("a API não devolveu o id do cargo (falta ManageRole?)", "the API didn't return the role id (missing ManageRole?)", "la API no devolvió el id del rol (¿falta ManageRole?)"));
     // o cargo do ticket vai para quem abriu
     const membro = await server.fetchMember(userId).catch(() => null);
-    if (!membro) throw new Error(en ? "I couldn't find you on the server" : "não te achei no servidor");
+    if (!membro) throw new Error(X("não te achei no servidor", "I couldn't find you on the server", "no te encontré en el servidor"));
     await editarCargos(server, membro, (atuais) => [...atuais, roleId]).catch((e) => { throw new Error(descreverErro(e, lang)); });
     // e o bot entra no canal pelo cargo DELE (antes ele se dava o cargo do ticket —
     // mais uma edição de membro, mais uma chance de tropeçar num cargo velho)
@@ -415,9 +450,9 @@ export async function abrirTicket({ ctx, server, userId, motivo = "", categoria 
     // permissão no cargo do PRÓPRIO bot não dá: o Stoat recusa mexer no cargo de
     // quem está na mesma altura — NotElevated.)
     if (bot) await editarCargos(server, bot, (atuais) => [...atuais, roleId]).catch((e) => { throw new Error(descreverErro(e, lang)); });
-    const descricao = [categoria?.nome, motivo].filter(Boolean).join(" — ") || (en ? "Support ticket" : "Ticket de suporte");
+    const descricao = [categoria?.nome, motivo].filter(Boolean).join(" — ") || X("Ticket de suporte", "Support ticket", "Ticket de soporte");
     canal = await server.createChannel({ type: "Text", name: nome, description: descricao.slice(0, 1000) });
-    if (!canal?.id) throw new Error(en ? "the API didn't return the channel (missing ManageChannel?)" : "a API não devolveu o canal (falta ManageChannel?)");
+    if (!canal?.id) throw new Error(X("a API não devolveu o canal (falta ManageChannel?)", "the API didn't return the channel (missing ManageChannel?)", "la API no devolvió el canal (¿falta ManageChannel?)"));
     const permitidas = Number(permsQueOBotDa(server));
     // primeiro quem pode entrar, depois fecha para o resto
     await canal.setPermissions(roleId, { allow: permitidas, deny: 0 }).catch((e) => { throw new Error(descreverErro(e, lang)); });
@@ -438,7 +473,7 @@ export async function abrirTicket({ ctx, server, userId, motivo = "", categoria 
       "",
       "Só você e a staff enxergam este canal. Conte o que precisa.",
       "",
-      `${E_FECHAR} — **a staff fecha o ticket** (ou \`&ticket fechar\`): a conversa trava e o registro vai para o log.`,
+      `${E_FECHAR} — **a staff fecha o ticket** (ou \`${citarInterno("ticket.fechar")}\`): a conversa trava e o registro vai para o log.`,
     ].join("\n"),
     colour: ctx.COR.sucesso,
   }, {
@@ -448,7 +483,17 @@ export async function abrirTicket({ ctx, server, userId, motivo = "", categoria 
       "",
       "Only you and staff can see this channel. Tell us what you need.",
       "",
-      `${E_FECHAR} — **staff closes the ticket** (or \`&ticket fechar\`): the conversation locks and the record goes to the log.`,
+      `${E_FECHAR} — **staff closes the ticket** (or \`${citarInterno("ticket.fechar")}\`): the conversation locks and the record goes to the log.`,
+    ].join("\n"),
+    colour: ctx.COR.sucesso,
+  }, {
+    title: `${categoria?.emoji ?? "🎫"} Ticket #${numero}${categoria ? ` — ${categoria.nome}` : ""}`,
+    description: [
+      `Abierto por <@${userId}>${motivo ? `\n**Motivo:** ${motivo}` : ""}`,
+      "",
+      "Solo tú y el staff ven este canal. Cuenta lo que necesitas.",
+      "",
+      `${E_FECHAR} — **el staff cierra el ticket** (o \`${citar("ticket.fechar", "es")}\`): la conversación se bloquea y el registro va al log.`,
     ].join("\n"),
     colour: ctx.COR.sucesso,
   }));
@@ -464,17 +509,20 @@ export async function abrirTicket({ ctx, server, userId, motivo = "", categoria 
 export async function fecharTicket({ ctx, server, ticket, porId, nota = "" }) {
   const cfg = garantirCfg(ctx.config);
   const en = lingua(ctx) === "en";
+  const l = idiomaDe(ctx);
+  // o .txt não passa pela tela: o espanhol vai sem marca
+  const X = (pt, eng, es) => (l === "es" ? es : en ? eng : pt);
   const canal = await canalPorId(ctx.client, ticket.canalId);
   const nome = `ticket-${num4(ticket.numero)}`;
   const msgs = canal ? await coletarHistorico(canal) : [];
   const dur = ticket.abertoEm ? Math.round((Date.now() - new Date(ticket.abertoEm).getTime()) / 60000) : null;
   const agoraIso = new Date().toISOString().replace("T", " ").slice(0, 19);
-  const texto = formatarTranscricao(msgs, { nomeCanal: nome, en, cabecalho: [
-    `${en ? "Category" : "Categoria"}: ${ticket.categoria ?? "—"}`,
-    `${en ? "Opened by" : "Aberto por"}: ${ticket.autorId} · ${ticket.abertoEm?.replace("T", " ").slice(0, 19) ?? "?"} UTC`,
-    `${en ? "Closed by" : "Fechado por"}: ${porId} · ${agoraIso} UTC`,
-    ticket.motivo ? `${en ? "Reason" : "Motivo"}: ${ticket.motivo}` : null,
-    nota ? `${en ? "Closing note" : "Nota de fechamento"}: ${nota}` : null,
+  const texto = formatarTranscricao(msgs, { nomeCanal: nome, en, l, cabecalho: [
+    `${X("Categoria", "Category", "Categoría")}: ${ticket.categoria ?? "—"}`,
+    `${X("Aberto por", "Opened by", "Abierto por")}: ${ticket.autorId} · ${ticket.abertoEm?.replace("T", " ").slice(0, 19) ?? "?"} UTC`,
+    `${X("Fechado por", "Closed by", "Cerrado por")}: ${porId} · ${agoraIso} UTC`,
+    ticket.motivo ? `${X("Motivo", "Reason", "Motivo")}: ${ticket.motivo}` : null,
+    nota ? `${X("Nota de fechamento", "Closing note", "Nota de cierre")}: ${nota}` : null,
   ].filter(Boolean) });
 
   // 2) o registro vai para o log como .txt (e, se o upload falhar, em blocos de texto)
@@ -488,14 +536,14 @@ export async function fecharTicket({ ctx, server, ticket, porId, nota = "" }) {
       anexoId = await subirAnexo({ base64: Buffer.from(texto, "utf8").toString("base64"), mime: "text/plain", nome: `${nome}.txt` }, ctx.client);
     } catch (e) { console.error(`[TICKET] upload do .txt falhou: ${e?.message ?? e}`); }
     await ctx.sendEmbed(logCanal, {
-      title: `🗂️ Ticket #${ticket.numero} ${en ? "closed" : "fechado"}`,
+      title: `🗂️ Ticket #${ticket.numero} ${tr(ctx, "fechado", "closed", "cerrado")}`,
       description: [
-        `${en ? "Opened by" : "Aberto por"} <@${ticket.autorId}> · ${en ? "closed by" : "fechado por"} <@${porId}>`,
-        ticket.categoria ? `**${en ? "Category" : "Categoria"}:** ${ticket.categoria}` : null,
-        ticket.motivo ? `**${en ? "Reason" : "Motivo"}:** ${ticket.motivo}` : null,
-        nota ? `**${en ? "Closing note" : "Nota de fechamento"}:** ${nota}` : null,
-        `${msgs.length} ${en ? "message(s)" : "mensagem(ns)"}${dur != null ? ` · ${dur} min` : ""} · <#${ticket.canalId}>`,
-        anexoId ? (en ? "📎 Full record attached." : "📎 Registro completo no arquivo anexo.") : null,
+        `${tr(ctx, "Aberto por", "Opened by", "Abierto por")} <@${ticket.autorId}> · ${tr(ctx, "fechado por", "closed by", "cerrado por")} <@${porId}>`,
+        ticket.categoria ? `**${tr(ctx, "Categoria", "Category", "Categoría")}:** ${ticket.categoria}` : null,
+        ticket.motivo ? `**${tr(ctx, "Motivo", "Reason", "Motivo")}:** ${ticket.motivo}` : null,
+        nota ? `**${tr(ctx, "Nota de fechamento", "Closing note", "Nota de cierre")}:** ${nota}` : null,
+        `${msgs.length} ${tr(ctx, "mensagem(ns)", "message(s)", "mensaje(s)")}${dur != null ? ` · ${dur} min` : ""} · <#${ticket.canalId}>`,
+        anexoId ? tr(ctx, "📎 Registro completo no arquivo anexo.", "📎 Full record attached.", "📎 Registro completo en el archivo adjunto.") : null,
       ].filter(Boolean).join("\n"),
       colour: ctx.COR.mod ?? ctx.COR.info,
       anexos: anexoId ? [anexoId] : null,
@@ -531,6 +579,16 @@ export async function fecharTicket({ ctx, server, ticket, porId, nota = "" }) {
         `${E_APAGAR} — staff deletes this channel.`,
       ].join("\n"),
       colour: ctx.COR.aviso,
+    }, {
+      title: `${E_FECHAR} Ticket cerrado`,
+      description: [
+        `Cerrado por <@${porId}>.${nota ? `\n**Nota:** ${nota}` : ""}`,
+        "La conversación está bloqueada: se puede leer, no escribir.",
+        logCanal ? `El registro completo fue a <#${cfg.logCanal}>.` : "⚠️ No hay canal de log configurado — el registro no se guardó.",
+        "",
+        `${E_APAGAR} — el staff borra este canal.`,
+      ].join("\n"),
+      colour: ctx.COR.aviso,
     })).catch(() => null);
     if (aviso?.id) {
       await aviso.react?.(encodeURIComponent(E_APAGAR)).catch(() => {});
@@ -547,7 +605,7 @@ export async function fecharTicket({ ctx, server, ticket, porId, nota = "" }) {
     } catch (e) { console.error(`[TICKET] não travei ${nome}: ${descreverErro(e)}`); }
   }
 
-  if (!travou && canal) await canal.sendMessage?.({ content: en ? "⚠️ I couldn't lock this channel (missing ManagePermissions?)." : "⚠️ Não consegui travar este canal (falta ManagePermissions?)." }).catch(() => {});
+  if (!travou && canal) await canal.sendMessage?.({ content: X("⚠️ Não consegui travar este canal (falta ManagePermissions?).", "⚠️ I couldn't lock this channel (missing ManagePermissions?).", "⚠️ No pude bloquear este canal (¿falta ManagePermissions?).") }).catch(() => {});
   return { ok: true, travou, arquivo, mensagens: msgs.length };
 }
 
@@ -570,9 +628,9 @@ export async function aoReagir(msgObj, userId, emoji, { client, criarContexto })
   const ctx = { ...criarContexto(reg.serverId), client };
   const server = await client.servers.fetch(reg.serverId).catch(() => null);
   if (!server) return true;
-  const avisar = async (txtPt, txtEn) => {
+  const avisar = async (txtPt, txtEn, txtEs) => {
     const canal = await canalPorId(client, reg.canalId);
-    const m = await ctx.sendEmbed(canal, tr(ctx, { description: txtPt, colour: ctx.COR.aviso }, { description: txtEn, colour: ctx.COR.aviso })).catch(() => null);
+    const m = await ctx.sendEmbed(canal, tr(ctx, { description: txtPt, colour: ctx.COR.aviso }, { description: txtEn, colour: ctx.COR.aviso }, { description: txtEs, colour: ctx.COR.aviso })).catch(() => null);
     if (m?.delete) setTimeout(() => m.delete().catch(() => {}), 15_000);
   };
 
@@ -582,9 +640,9 @@ export async function aoReagir(msgObj, userId, emoji, { client, criarContexto })
     if (!categoria) return true;
     await tirarReacao(reg.canalId, msgId, emoji, userId);
     const r = await abrirTicket({ ctx, server, userId, categoria });
-    if (r.jaTem) await avisar(`<@${userId}>, você já tem um ticket aberto: <#${r.jaTem}>`, `<@${userId}>, you already have an open ticket: <#${r.jaTem}>`);
-    else if (r.semLog) await avisar("A staff ainda não definiu o canal de log dos tickets (`&ticket log #canal`).", "Staff hasn't set the tickets' log channel yet (`&ticket log #channel`).");
-    else if (r.erro) { console.error(`[TICKET] abrir falhou: ${r.erro}`); await avisar(`Não consegui abrir o ticket: ${r.erro}`, `I couldn't open the ticket: ${r.erro}`); }
+    if (r.jaTem) await avisar(`<@${userId}>, você já tem um ticket aberto: <#${r.jaTem}>`, `<@${userId}>, you already have an open ticket: <#${r.jaTem}>`, `<@${userId}>, ya tienes un ticket abierto: <#${r.jaTem}>`);
+    else if (r.semLog) await avisar("A staff ainda não definiu o canal de log dos tickets (`" + citarInterno("ticket") + " log #canal`).", "Staff hasn't set the tickets' log channel yet (`" + citarInterno("ticket") + " log #channel`).", "El staff todavía no definió el canal de log de los tickets (`" + citar("ticket", "es") + " log #canal`).");
+    else if (r.erro) { console.error(`[TICKET] abrir falhou: ${r.erro}`); await avisar(`Não consegui abrir o ticket: ${r.erro}`, `I couldn't open the ticket: ${r.erro}`, `No pude abrir el ticket: ${r.erro}`); }
     return true;
   }
 
@@ -594,7 +652,7 @@ export async function aoReagir(msgObj, userId, emoji, { client, criarContexto })
   if (reg.tipo === "controle" && mesmoEmoji(emoji, E_FECHAR)) {
     if (!(await ehStaff(server, userId, ctx.config, ctx))) {
       await tirarReacao(reg.canalId, msgId, emoji, userId);
-      await avisar(`<@${userId}>, só a staff fecha o ticket.`, `<@${userId}>, only staff can close the ticket.`);
+      await avisar(`<@${userId}>, só a staff fecha o ticket.`, `<@${userId}>, only staff can close the ticket.`, `<@${userId}>, solo el staff cierra el ticket.`);
       return true;
     }
     if (ticket.status === "aberto") await fecharTicket({ ctx, server, ticket, porId: userId });
@@ -618,43 +676,56 @@ export async function cmdTicket(message, args, ctx) {
   const staff = ctx.temCargoStaff?.(message, config) || membroTemPermissao(message, server, "ManageChannel")
     || (!!cfg.cargoEquipe && idsDeCargos(message.member).includes(cfg.cargoEquipe));
   const enviar = (title, description, colour = COR.info) => sendEmbed(message.channel, { title, description, colour });
-  const semPermissao = () => enviar(en ? "🔒 No permission" : "🔒 Sem permissão", en ? "Staff only." : "Só a staff.", COR.aviso);
+  const T = (pt, eng, es) => tr(ctx, pt, eng, es);
+  const semPermissao = () => enviar(T("🔒 Sem permissão", "🔒 No permission", "🔒 Sin permiso"), T("Só a staff.", "Staff only.", "Solo el staff."), COR.aviso);
 
   if (!sub || ["ajuda", "help"].includes(sub)) {
-    return enviar(en ? "🎫 Support tickets" : "🎫 Tickets de suporte", (en ? [
-      `\`${P}ticket painel #channel\` — posts the panel: people **react** with a topic to open a ticket (staff)`,
-      `\`${P}ticket categorias\` — the panel's topics · \`${P}ticket categorias 🎫 Support | 🚨 Report\` changes them (staff)`,
-      `\`${P}ticket log #channel\` — where the **.txt record** of each closed ticket goes (staff)`,
-      `\`${P}ticket lista\` — open tickets (staff)`,
-      `\`${P}ticket equipe\` — checks that the **staff gets into every ticket**; for roles above Judy it creates the **Ticket team** role (staff)`,
+    const ajudaEn = [
+      `\`${citarInterno("ticket.painel", P)} #channel\` — posts the panel: people **react** with a topic to open a ticket (staff)`,
+      `\`${citarInterno("ticket.categorias", P)}\` — the panel's topics · \`${citarInterno("ticket.categorias", P)} 🎫 Support | 🚨 Report\` changes them (staff)`,
+      `\`${citarInterno("ticket", P)} log #channel\` — where the **.txt record** of each closed ticket goes (staff)`,
+      `\`${citarInterno("ticket.lista", P)}\` — open tickets (staff)`,
+      `\`${citarInterno("ticket.equipe", P)}\` — checks that the **staff gets into every ticket**; for roles above Judy it creates the **Ticket team** role (staff)`,
       "",
       `Inside the ticket: ${E_FECHAR} closes it (staff) — the chat locks and the record goes to the log; then ${E_APAGAR} deletes the channel.`,
-      `_Typing works too: \`${P}ticket abrir [reason]\` · \`${P}ticket fechar [note]\` · \`${P}ticket apagar\`._`,
-    ] : [
-      `\`${P}ticket painel #canal\` — posta o painel: as pessoas **reagem** com o assunto para abrir um ticket (staff)`,
-      `\`${P}ticket categorias\` — os assuntos do painel · \`${P}ticket categorias 🎫 Suporte | 🚨 Denúncia\` troca (staff)`,
-      `\`${P}ticket log #canal\` — para onde vai o **registro .txt** de cada ticket fechado (staff)`,
-      `\`${P}ticket lista\` — tickets abertos (staff)`,
-      `\`${P}ticket equipe\` — confere se a **staff entra em todo ticket**; para cargos acima da Judy cria o cargo **Equipe de tickets** (staff)`,
+      `_Typing works too: \`${citarInterno("ticket.abrir", P)} [reason]\` · \`${citarInterno("ticket.fechar", P)} [note]\` · \`${citarInterno("ticket.apagar", P)}\`._`,
+    ];
+    const ajudaPt = [
+      `\`${citarInterno("ticket.painel", P)} #canal\` — posta o painel: as pessoas **reagem** com o assunto para abrir um ticket (staff)`,
+      `\`${citarInterno("ticket.categorias", P)}\` — os assuntos do painel · \`${citarInterno("ticket.categorias", P)} 🎫 Suporte | 🚨 Denúncia\` troca (staff)`,
+      `\`${citarInterno("ticket", P)} log #canal\` — para onde vai o **registro .txt** de cada ticket fechado (staff)`,
+      `\`${citarInterno("ticket.lista", P)}\` — tickets abertos (staff)`,
+      `\`${citarInterno("ticket.equipe", P)}\` — confere se a **staff entra em todo ticket**; para cargos acima da Judy cria o cargo **Equipe de tickets** (staff)`,
       "",
       `Dentro do ticket: ${E_FECHAR} fecha (staff) — o chat trava e o registro vai para o log; depois ${E_APAGAR} apaga o canal.`,
-      `_Também dá para digitar: \`${P}ticket abrir [motivo]\` · \`${P}ticket fechar [nota]\` · \`${P}ticket apagar\`._`,
-    ]).join("\n"));
+      `_Também dá para digitar: \`${citarInterno("ticket.abrir", P)} [motivo]\` · \`${citarInterno("ticket.fechar", P)} [nota]\` · \`${citarInterno("ticket.apagar", P)}\`._`,
+    ];
+    const ajudaEs = [
+      `\`${citar("ticket.painel", "es", P)} #canal\` — publica el panel: la gente **reacciona** con el tema para abrir un ticket (staff)`,
+      `\`${citar("ticket.categorias", "es", P)}\` — los temas del panel · \`${citar("ticket.categorias", "es", P)} 🎫 Soporte | 🚨 Denuncia\` los cambia (staff)`,
+      `\`${citar("ticket", "es", P)} log #canal\` — adónde va el **registro .txt** de cada ticket cerrado (staff)`,
+      `\`${citar("ticket.lista", "es", P)}\` — tickets abiertos (staff)`,
+      `\`${citar("ticket.equipe", "es", P)}\` — comprueba que el **staff entre en todos los tickets**; para roles por encima de Judy crea el rol **Equipo de tickets** (staff)`,
+      "",
+      `Dentro del ticket: ${E_FECHAR} lo cierra (staff) — el chat se bloquea y el registro va al log; después ${E_APAGAR} borra el canal.`,
+      `_También se puede escribir: \`${citar("ticket.abrir", "es", P)} [motivo]\` · \`${citar("ticket.fechar", "es", P)} [nota]\` · \`${citar("ticket.apagar", "es", P)}\`._`,
+    ];
+    return enviar(T("🎫 Tickets de suporte", "🎫 Support tickets", "🎫 Tickets de soporte"), T(ajudaPt, ajudaEn, ajudaEs).join("\n"));
   }
 
   if (sub === "painel" || sub === "panel") {
     if (!staff) return semPermissao();
     const id = String(args[1] ?? "").replace(/[<#>]/g, "") || message.channelId;
     const canal = await canalPorId(ctx.client, id);
-    if (!canal) return enviar("🎫", en ? "I couldn't find that channel." : "Não achei esse canal.", COR.aviso);
+    if (!canal) return enviar("🎫", T("Não achei esse canal.", "I couldn't find that channel.", "No encontré ese canal."), COR.aviso);
     try { await publicarPainel({ ctx, canal }); }
-    catch (e) { return enviar("🎫", `${en ? "I couldn't post the panel" : "Não consegui postar o painel"}: ${e?.message ?? descreverErro(e)}`, COR.aviso); }
-    const avisoLog = cfg.logCanal ? "" : (en ? `\n\n⚠️ Set the log first: \`${P}ticket log #channel\` — without it nobody can open a ticket.` : `\n\n⚠️ Defina o log antes: \`${P}ticket log #canal\` — sem ele ninguém consegue abrir ticket.`);
+    catch (e) { return enviar("🎫", `${T("Não consegui postar o painel", "I couldn't post the panel", "No pude publicar el panel")}: ${e?.message ?? descreverErro(e)}`, COR.aviso); }
+    const avisoLog = cfg.logCanal ? "" : T(`\n\n⚠️ Defina o log antes: \`${citarInterno("ticket", P)} log #canal\` — sem ele ninguém consegue abrir ticket.`, `\n\n⚠️ Set the log first: \`${citarInterno("ticket", P)} log #channel\` — without it nobody can open a ticket.`, `\n\n⚠️ Define el log antes: \`${citar("ticket", "es", P)} log #canal\` — sin él nadie puede abrir un ticket.`);
     // a staff é conferida aqui, na configuração — não na hora do primeiro ticket
     const eq = server ? await prepararEquipe({ ctx, server }).catch((e) => ({ linhas: [`❌ ${descreverErro(e)}`], erro: true })) : null;
     const pendente = !!eq && (eq.erro || eq.faltam?.length || (eq.cls?.acima?.length && !eq.equipe));
-    const blocoStaff = eq ? `\n\n**${en ? "Staff in the tickets" : "Staff nos tickets"}**\n${eq.linhas.join("\n")}` : "";
-    return enviar("🎫", (en ? `Panel posted in <#${canal.id}>.` : `Painel postado em <#${canal.id}>.`) + avisoLog + blocoStaff, avisoLog || pendente ? COR.aviso : COR.sucesso);
+    const blocoStaff = eq ? `\n\n**${T("Staff nos tickets", "Staff in the tickets", "Staff en los tickets")}**\n${eq.linhas.join("\n")}` : "";
+    return enviar("🎫", T(`Painel postado em <#${canal.id}>.`, `Panel posted in <#${canal.id}>.`, `Panel publicado en <#${canal.id}>.`) + avisoLog + blocoStaff, avisoLog || pendente ? COR.aviso : COR.sucesso);
   }
 
   if (["equipe", "team", "staff"].includes(sub)) {
@@ -662,7 +733,7 @@ export async function cmdTicket(message, args, ctx) {
     if (!server) return enviar("🎫", "⚠️", COR.aviso);
     const eq = await prepararEquipe({ ctx, server });
     const pendente = eq.erro || eq.faltam.length || (eq.cls.acima.length && !eq.equipe);
-    return enviar(en ? "🎫 Staff in the tickets" : "🎫 Staff nos tickets", eq.linhas.join("\n"), pendente ? COR.aviso : COR.sucesso);
+    return enviar(T("🎫 Staff nos tickets", "🎫 Staff in the tickets", "🎫 Staff en los tickets"), eq.linhas.join("\n"), pendente ? COR.aviso : COR.sucesso);
   }
 
   if (sub === "categorias" || sub === "categories") {
@@ -673,46 +744,47 @@ export async function cmdTicket(message, args, ctx) {
         const [emoji, ...nome] = x.split(/\s+/);
         return { emoji, nome: nome.join(" ").slice(0, 40) };
       }).filter((c) => c.emoji && c.nome);
-      if (!novas.length || novas.length > 10) return enviar("❌", en ? `\`${P}ticket categorias 🎫 Support | 🚨 Report\` (1 to 10)` : `\`${P}ticket categorias 🎫 Suporte | 🚨 Denúncia\` (de 1 a 10)`, COR.erro);
+      if (!novas.length || novas.length > 10) return enviar("❌", T(`\`${citarInterno("ticket.categorias", P)} 🎫 Suporte | 🚨 Denúncia\` (de 1 a 10)`, `\`${citarInterno("ticket.categorias", P)} 🎫 Support | 🚨 Report\` (1 to 10)`, `\`${citar("ticket.categorias", "es", P)} 🎫 Soporte | 🚨 Denuncia\` (de 1 a 10)`), COR.erro);
       cfg.categorias = novas;
       salvarConfig();
     }
-    return enviar(en ? "🎫 Panel topics" : "🎫 Assuntos do painel",
+    return enviar(T("🎫 Assuntos do painel", "🎫 Panel topics", "🎫 Temas del panel"),
       cfg.categorias.map((c) => `${c.emoji} — ${c.nome}`).join("\n")
-      + (resto ? (en ? `\n\n_Repost the panel to apply: \`${P}ticket painel #channel\`._` : `\n\n_Poste o painel de novo para valer: \`${P}ticket painel #canal\`._`) : ""), resto ? COR.sucesso : COR.info);
+      + (resto ? T(`\n\n_Poste o painel de novo para valer: \`${citarInterno("ticket.painel", P)} #canal\`._`, `\n\n_Repost the panel to apply: \`${citarInterno("ticket.painel", P)} #channel\`._`, `\n\n_Vuelve a publicar el panel para aplicarlo: \`${citar("ticket.painel", "es", P)} #canal\`._`) : ""), resto ? COR.sucesso : COR.info);
   }
 
   if (sub === "log") {
     if (!staff) return semPermissao();
     const canalId = ctx.limparId?.(args[1]) || String(args[1] ?? "").replace(/[<#>]/g, "");
-    if (!canalId) return enviar("🎫", en ? "Which channel?" : "Qual canal?", COR.aviso);
+    if (!canalId) return enviar("🎫", T("Qual canal?", "Which channel?", "¿Qué canal?"), COR.aviso);
     cfg.logCanal = canalId;
     salvarConfig();
-    return enviar("🎫", (en ? "The .txt record of each closed ticket goes to " : "O registro .txt de cada ticket fechado vai para ") + `<#${canalId}>.`, COR.sucesso);
+    return enviar("🎫", T("O registro .txt de cada ticket fechado vai para ", "The .txt record of each closed ticket goes to ", "El registro .txt de cada ticket cerrado va a ") + `<#${canalId}>.`, COR.sucesso);
   }
 
   if (sub === "lista" || sub === "list") {
     if (!staff) return semPermissao();
     const abertos = db.listarTickets(serverId);
-    return enviar(en ? "🎫 Open tickets" : "🎫 Tickets abertos", abertos.length
+    return enviar(T("🎫 Tickets abertos", "🎫 Open tickets", "🎫 Tickets abiertos"), abertos.length
       ? abertos.map((t) => `**#${t.numero}** <#${t.canalId}> — <@${t.autorId}>${t.categoria ? ` · ${t.categoria}` : ""}${t.motivo ? ` · _${t.motivo.slice(0, 60)}_` : ""}`).join("\n")
-      : (en ? "None." : "Nenhum."));
+      : T("Nenhum.", "None.", "Ninguno."));
   }
 
   if (["abrir", "open", "novo"].includes(sub)) {
     if (!server) return enviar("🎫", "⚠️", COR.aviso);
     const r = await abrirTicket({ ctx: { ...ctx, client: ctx.client }, server, userId: message.authorId, motivo: args.slice(1).join(" ").trim().slice(0, 200) });
-    if (r.jaTem) return enviar("🎫", (en ? "You already have an open ticket: " : "Você já tem um ticket aberto: ") + `<#${r.jaTem}>`, COR.aviso);
-    if (r.semLog) return enviar(en ? "🎫 Setup needed" : "🎫 Falta configurar", en ? `Staff must first set where records go: \`${P}ticket log #channel\`.` : `Antes do primeiro ticket, a staff define para onde vão os registros: \`${P}ticket log #canal\`.`, COR.aviso);
-    if (r.erro) return enviar("🎫", (en ? "I couldn't open the ticket: " : "Não consegui abrir o ticket: ") + r.erro + "\n" + (en
-      ? "The bot needs **ManageChannel, ManageRole, AssignRoles, ManagePermissions** — and its role must be ABOVE the roles it creates."
-      : "O bot precisa de **ManageChannel, ManageRole, AssignRoles, ManagePermissions** — e o cargo dele precisa estar ACIMA dos cargos que ele cria."), COR.aviso);
-    return enviar("🎫", (en ? "Ticket open: " : "Ticket aberto: ") + `<#${r.canal.id}>`, COR.sucesso);
+    if (r.jaTem) return enviar("🎫", T("Você já tem um ticket aberto: ", "You already have an open ticket: ", "Ya tienes un ticket abierto: ") + `<#${r.jaTem}>`, COR.aviso);
+    if (r.semLog) return enviar(T("🎫 Falta configurar", "🎫 Setup needed", "🎫 Falta configurar"), T(`Antes do primeiro ticket, a staff define para onde vão os registros: \`${citarInterno("ticket", P)} log #canal\`.`, `Staff must first set where records go: \`${citarInterno("ticket", P)} log #channel\`.`, `Antes del primer ticket, el staff define adónde van los registros: \`${citar("ticket", "es", P)} log #canal\`.`), COR.aviso);
+    if (r.erro) return enviar("🎫", T("Não consegui abrir o ticket: ", "I couldn't open the ticket: ", "No pude abrir el ticket: ") + r.erro + "\n" + T(
+      "O bot precisa de **ManageChannel, ManageRole, AssignRoles, ManagePermissions** — e o cargo dele precisa estar ACIMA dos cargos que ele cria.",
+      "The bot needs **ManageChannel, ManageRole, AssignRoles, ManagePermissions** — and its role must be ABOVE the roles it creates.",
+      "El bot necesita **ManageChannel, ManageRole, AssignRoles, ManagePermissions** — y su rol tiene que estar POR ENCIMA de los roles que crea."), COR.aviso);
+    return enviar("🎫", T("Ticket aberto: ", "Ticket open: ", "Ticket abierto: ") + `<#${r.canal.id}>`, COR.sucesso);
   }
 
   if (["fechar", "close", "encerrar"].includes(sub)) {
     const ticket = db.ticketPorCanal(message.channelId);
-    if (!ticket) return enviar("🎫", en ? "This isn't an open ticket channel." : "Este canal não é de um ticket aberto.", COR.aviso);
+    if (!ticket) return enviar("🎫", T("Este canal não é de um ticket aberto.", "This isn't an open ticket channel.", "Este canal no es de un ticket abierto."), COR.aviso);
     if (!staff) return semPermissao();
     await fecharTicket({ ctx, server, ticket, porId: message.authorId, nota: args.slice(1).join(" ").trim().slice(0, 200) });
     return;
@@ -720,15 +792,15 @@ export async function cmdTicket(message, args, ctx) {
 
   if (["apagar", "delete", "excluir"].includes(sub)) {
     const ticket = db.ticketDoCanal(message.channelId);
-    if (!ticket || ticket.status === "apagado") return enviar("🎫", en ? "This isn't a ticket channel." : "Este canal não é de um ticket.", COR.aviso);
+    if (!ticket || ticket.status === "apagado") return enviar("🎫", T("Este canal não é de um ticket.", "This isn't a ticket channel.", "Este canal no es de un ticket."), COR.aviso);
     if (!staff) return semPermissao();
-    if (ticket.status === "aberto") return enviar("🎫", en ? `Close it first (${E_FECHAR} or \`${P}ticket fechar\`) — that's what saves the record.` : `Feche antes (${E_FECHAR} ou \`${P}ticket fechar\`) — é o fechar que guarda o registro.`, COR.aviso);
+    if (ticket.status === "aberto") return enviar("🎫", T(`Feche antes (${E_FECHAR} ou \`${citarInterno("ticket.fechar", P)}\`) — é o fechar que guarda o registro.`, `Close it first (${E_FECHAR} or \`${citarInterno("ticket.fechar", P)}\`) — that's what saves the record.`, `Ciérralo antes (${E_FECHAR} o \`${citar("ticket.fechar", "es", P)}\`) — es el cierre lo que guarda el registro.`), COR.aviso);
     const r = await apagarTicket({ ctx, server, ticket });
-    if (r.erro) return enviar("🎫", (en ? "I couldn't delete the channel: " : "Não consegui apagar o canal: ") + r.erro, COR.aviso);
+    if (r.erro) return enviar("🎫", T("Não consegui apagar o canal: ", "I couldn't delete the channel: ", "No pude borrar el canal: ") + r.erro, COR.aviso);
     return;
   }
 
-  return enviar("🎫", en ? `Unknown subcommand — \`${P}ticket\`.` : `Subcomando desconhecido — \`${P}ticket\`.`, COR.aviso);
+  return enviar("🎫", T(`Subcomando desconhecido — \`${citarInterno("ticket", P)}\`.`, `Unknown subcommand — \`${citarInterno("ticket", P)}\`.`, `Subcomando desconocido — \`${citar("ticket", "es", P)}\`.`), COR.aviso);
 }
 
 // ── Vigia das reações (2 out 2026) ───────────────────────────────────────────

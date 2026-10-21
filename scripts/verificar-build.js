@@ -104,7 +104,7 @@ if (!existsSync(modulosDir)) {
   const lerJs = (d) => readdirSync(d, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? lerJs(join(d, e.name)) : e.name.endsWith(".js") ? [join(d, e.name)] : []));
   for (const arq of [...lerJs(join(RAIZ, "modulos")), join(RAIZ, "main.js")]) {
     // `citar("cmd.sub", …)` e as marcas `{&cmd.sub}` que passam por citarNoTexto
-    for (const m of readFileSync(arq, "utf8").matchAll(/\bcitar\(\s*"([^"]+)"|\{&([a-z0-9.]+)\}/g)) {
+    for (const m of readFileSync(arq, "utf8").matchAll(/\bcitar(?:Interno)?\(\s*"([^"]+)"|\{&([a-z0-9.]+)\}/g)) {
       n++;
       try { citar(m[1] ?? m[2]); } catch (e) { ruins.push(`${arq.slice(RAIZ.length + 1)}: ${e.message}`); }
     }

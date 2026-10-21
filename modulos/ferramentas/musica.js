@@ -3,7 +3,8 @@
 // a fala ser ouvida e volta ao normal depois. O áudio roda no serviço de voz
 // (voz-servico/musica.js); aqui é só o comando conversando com as rotas.
 
-import { lingua } from "../core/i18n.js";
+import { lingua, tr } from "../core/i18n.js";
+import { citar, citarInterno } from "../core/aliases.js";
 import { callParaMusica } from "./tts.js";
 import { nivelDePrioridade } from "../core/prioridade.js";
 
@@ -66,10 +67,11 @@ export async function cmdMusica(msg, args, ctx) {
 
   if (sub === "ajuda") {
     return ctx.sendEmbed(msg.channel, {
-      title: en ? "🎵 Music" : "🎵 Música",
-      description: en
-        ? "`&music <link or name>` — play (YouTube, SoundCloud, Spotify; playlists too)\n`&music pause` · `&music play` — pause / resume\n`&music skip` — next track\n`&music queue` — current queue\n`&music stop` — stop and clear\n`&music volume 80` — 0 to 200%\n`&music loop track|queue|off`\n\nThe bot must be in a call (`&join`). When TTS speaks, the music ducks automatically."
-        : "`&musica <link ou nome>` — tocar (YouTube, SoundCloud, Spotify; playlists também)\n`&musica pausar` · `&musica play` — pausar / retomar\n`&musica skip` — próxima faixa\n`&musica fila` — lista de reprodução atual\n`&musica parar` — parar e limpar\n`&musica volume 80` — 0 a 200%\n`&musica loop faixa|fila|nao`\n\nO bot precisa estar numa call (`&entrar`). Quando o TTS fala, a música abaixa sozinha.",
+      title: tr(ctx, "🎵 Música", "🎵 Music", "🎵 Música"),
+      description: tr(ctx,
+        "`" + citarInterno("musica") + " <link ou nome>` — tocar (YouTube, SoundCloud, Spotify; playlists também)\n`" + citarInterno("musica.pausar") + "` · `" + citarInterno("musica") + " play` — pausar / retomar\n`" + citarInterno("musica") + " skip` — próxima faixa\n`" + citarInterno("musica.fila") + "` — lista de reprodução atual\n`" + citarInterno("musica.parar") + "` — parar e limpar\n`" + citarInterno("musica") + " volume 80` — 0 a 200%\n`" + citarInterno("musica") + " loop faixa|fila|nao`\n\nO bot precisa estar numa call (`" + citarInterno("entrar") + "`). Quando o TTS fala, a música abaixa sozinha.",
+        "`" + citarInterno("musica") + " <link or name>` — play (YouTube, SoundCloud, Spotify; playlists too)\n`" + citarInterno("musica") + " pause` · `" + citarInterno("musica") + " play` — pause / resume\n`" + citarInterno("musica") + " skip` — next track\n`" + citarInterno("musica") + " queue` — current queue\n`" + citarInterno("musica") + " stop` — stop and clear\n`" + citarInterno("musica") + " volume 80` — 0 to 200%\n`" + citarInterno("musica") + " loop track|queue|off`\n\nThe bot must be in a call (`" + citarInterno("entrar") + "`). When TTS speaks, the music ducks automatically.",
+        "`" + citar("musica", "es") + " <link o nombre>` — reproducir (YouTube, SoundCloud, Spotify; también playlists)\n`" + citar("musica.pausar", "es") + "` · `" + citar("musica", "es") + " play` — pausar / reanudar\n`" + citar("musica", "es") + " skip` — siguiente pista\n`" + citar("musica.fila", "es") + "` — cola actual\n`" + citar("musica.parar", "es") + "` — detener y vaciar\n`" + citar("musica", "es") + " volume 80` — de 0 a 200%\n`" + citar("musica", "es") + " loop track|queue|off`\n\nEl bot tiene que estar en una llamada (`" + citar("entrar", "es") + "`). Cuando el TTS habla, la música baja sola."),
       colour: ctx.COR.info,
     });
   }
@@ -78,32 +80,32 @@ export async function cmdMusica(msg, args, ctx) {
   const alvo = await callParaMusica(msg, ctx);
   if (alvo.erro) {
     const txt = {
-      fora: en ? "Music isn't enabled on this server (`TTS_SERVIDORES`)." : "A música não está liberada neste servidor (`TTS_SERVIDORES`).",
-      "sem-call": en ? "I'm not in a call on this server. Join a call and use `&musica` (or `&entrar`) from any channel — I'll come to you." : "Não estou em nenhuma call deste servidor. Entre numa call e use `&musica` (ou `&entrar`) de qualquer canal — eu vou até você.",
-      entrar: en ? `I couldn't join your call: \`${alvo.detalhe}\`` : `Não consegui entrar na sua call: \`${alvo.detalhe}\``,
+      fora: tr(ctx, "A música não está liberada neste servidor (`TTS_SERVIDORES`).", "Music isn't enabled on this server (`TTS_SERVIDORES`).", "La música no está habilitada en este servidor (`TTS_SERVIDORES`)."),
+      "sem-call": tr(ctx, "Não estou em nenhuma call deste servidor. Entre numa call e use `" + citarInterno("musica") + "` (ou `" + citarInterno("entrar") + "`) de qualquer canal — eu vou até você.", "I'm not in a call on this server. Join a call and use `" + citarInterno("musica") + "` (or `" + citarInterno("entrar") + "`) from any channel — I'll come to you.", "No estoy en ninguna llamada de este servidor. Entra en una llamada y usa `" + citar("musica", "es") + "` (o `" + citar("entrar", "es") + "`) desde cualquier canal — yo voy contigo."),
+      entrar: tr(ctx, `Não consegui entrar na sua call: \`${alvo.detalhe}\``, `I couldn't join your call: \`${alvo.detalhe}\``, `No pude entrar en tu llamada: \`${alvo.detalhe}\``),
     }[alvo.erro];
     return ctx.sendEmbed(msg.channel, { title: "🎵", description: `⚠️ ${txt}`, colour: ctx.COR.aviso });
   }
   const canal = alvo.canal;
-  const aviso = alvo.entrou ? (en ? `_Joined <#${canal}>._\n` : `_Entrei em <#${canal}>._\n`) : "";
+  const aviso = alvo.entrou ? tr(ctx, `_Entrei em <#${canal}>._\n`, `_Joined <#${canal}>._\n`, `_Entré en <#${canal}>._\n`) : "";
 
   if (sub === "fila") {
     const r = await pedirVoz(`/musica/fila?canal=${encodeURIComponent(canal)}`);
     if (r.erro) return ctx.sendEmbed(msg.channel, { title: "🎵", description: `⚠️ ${r.erro}`, colour: ctx.COR.aviso });
     if (!r.atual && !r.total && !r.ultimoAviso) {
       return ctx.sendEmbed(msg.channel, {
-        title: en ? "🎵 Queue" : "🎵 Fila",
-        description: en ? "Nothing playing. `&musica <link or name>` to start." : "Nada tocando. `&musica <link ou nome>` para começar.",
+        title: tr(ctx, "🎵 Fila", "🎵 Queue", "🎵 Cola"),
+        description: tr(ctx, "Nada tocando. `" + citarInterno("musica") + " <link ou nome>` para começar.", "Nothing playing. `" + citarInterno("musica") + " <link or name>` to start.", "No suena nada. `" + citar("musica", "es") + " <link o nombre>` para empezar."),
         colour: ctx.COR.info,
       });
     }
     const linhas = [];
-    if (r.atual) linhas.push((en ? "**Now:** " : "**Agora:** ") + `**${r.atual.titulo}**${duracaoTxt(r.atual.duracao)}`);
+    if (r.atual) linhas.push(tr(ctx, "**Agora:** ", "**Now:** ", "**Ahora:** ") + `**${r.atual.titulo}**${duracaoTxt(r.atual.duracao)}`);
     for (const i of r.fila ?? []) linhas.push(`\`${i.n}.\` ${i.titulo}${duracaoTxt(i.duracao)}`);
-    if (r.total > (r.fila?.length ?? 0)) linhas.push(en ? `…and ${r.total - r.fila.length} more` : `…e mais ${r.total - r.fila.length}`);
+    if (r.total > (r.fila?.length ?? 0)) linhas.push(tr(ctx, `…e mais ${r.total - r.fila.length}`, `…and ${r.total - r.fila.length} more`, `…y ${r.total - r.fila.length} más`));
     if (r.loop && r.loop !== "nao") linhas.push(`🔁 loop: ${r.loop}`);
-    if (r.ultimoAviso) linhas.push(en ? `⚠️ Didn't play: **${r.ultimoAviso.titulo}** — ${r.ultimoAviso.motivo}` : `⚠️ Não tocou: **${r.ultimoAviso.titulo}** — ${r.ultimoAviso.motivo}`);
-    return ctx.sendEmbed(msg.channel, { title: en ? "🎵 Queue" : "🎵 Fila", description: linhas.join("\n"), colour: ctx.COR.info });
+    if (r.ultimoAviso) linhas.push(tr(ctx, `⚠️ Não tocou: **${r.ultimoAviso.titulo}** — ${r.ultimoAviso.motivo}`, `⚠️ Didn't play: **${r.ultimoAviso.titulo}** — ${r.ultimoAviso.motivo}`, `⚠️ No se reprodujo: **${r.ultimoAviso.titulo}** — ${r.ultimoAviso.motivo}`));
+    return ctx.sendEmbed(msg.channel, { title: tr(ctx, "🎵 Fila", "🎵 Queue", "🎵 Cola"), description: linhas.join("\n"), colour: ctx.COR.info });
   }
 
   let r;
@@ -111,7 +113,7 @@ export async function cmdMusica(msg, args, ctx) {
     if (!resto) {
       return ctx.sendEmbed(msg.channel, {
         title: "🎵",
-        description: en ? "Tell me what to play: `&musica <link or name>`." : "Me diga o que tocar: `&musica <link ou nome>`.",
+        description: tr(ctx, "Me diga o que tocar: `" + citarInterno("musica") + " <link ou nome>`.", "Tell me what to play: `" + citarInterno("musica") + " <link or name>`.", "Dime qué reproducir: `" + citar("musica", "es") + " <link o nombre>`."),
         colour: ctx.COR.aviso,
       });
     }

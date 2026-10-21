@@ -16,10 +16,10 @@
 //   constante) + teto de 30 publicações/min por gancho contra flood.
 
 import { createServer } from "node:http";
-import { citar } from "../core/aliases.js";
+import { citar, trechoPronto } from "../core/aliases.js";
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import * as db from "../core/db.js";
-import { tr, lingua } from "../core/i18n.js";
+import { tr, lingua, idiomaDe } from "../core/i18n.js";
 import { canalDeOutroServidor, canalDoServidor } from "../moderacao/pertence.js";
 
 const PORTA = Number(process.env.WEBHOOK_PORTA || 8095);
@@ -259,8 +259,16 @@ function urlDoGancho(g) {
 // linha no Stoat e cortava a URL — só dava para copiar pela sorte), com as
 // dicas de qual endereço usar em cada caso — a armadilha clássica é colar a
 // URL interna num serviço da internet e ganhar um "failed to connect" mudo.
-function blocoDeUrl(g, en) {
+// `l` (etapa 4b): o idioma do servidor ("pt" | "en" | "es"); no espanhol o texto sai pronto
+function blocoDeUrl(g, en, l = null) {
   const rota = `/gancho/${g.id}/${g.token}`;
+  if (l === "es") {
+    const linhasEs = ["**La URL secreta** (selecciona y copia la línea entera):", "", urlDoGancho(g), ""];
+    linhasEs.push("🌐 **Servicio de internet** (GitHub…): la base tiene que ser PÚBLICA por https — ej.: `sudo tailscale funnel --bg " + PORTA + "` y `WEBHOOK_URL_BASE=https://<máquina>.<tailnet>.ts.net` en el `.env`.");
+    linhasEs.push("🏠 **Contenedor en la misma máquina** (Crafty…): usa el puente de Docker: `http://172.17.0.1:" + PORTA + rota + "`");
+    if (!URL_BASE) linhasEs.push("⚠️ `WEBHOOK_URL_BASE` no está definido — cambia el marcador de arriba por la dirección de tu máquina.");
+    return trechoPronto(linhasEs.join("\n"));
+  }
   const linhas = [en ? "**The secret URL** (select and copy the whole line):" : "**A URL secreta** (seleciona e copia a linha inteira):", "", urlDoGancho(g), ""];
   if (en) {
     linhas.push("🌐 **Internet service** (GitHub…): the base must be PUBLIC over https — e.g. `sudo tailscale funnel --bg " + PORTA + "` and set `WEBHOOK_URL_BASE=https://<machine>.<tailnet>.ts.net` in `.env`.");
@@ -313,6 +321,21 @@ export async function cmdWebhook(message, args, ctx) {
         "_Per-chat separation = one hook per subject: `issues` → #issues, `workflow_run` → #ci, Crafty → #minecraft._",
       ].join("\n"),
       colour: COR.info,
+    }, {
+      title: "🪝 Webhooks",
+      description: [
+        "Los servicios externos publican aquí: **GitHub** (push, issues, PR, releases, Actions…), **Crafty/Minecraft** y cualquier herramienta que hable el formato de Discord (Uptime Kuma, Grafana…).",
+        "",
+        `\`${citar("webhook.criar", "es", P)} <nombre> [#canal]\` — nuevo gancho (la URL secreta aparece una sola vez)`,
+        `\`${citar("webhook.lista", "es", P)}\` — los ganchos de este servidor`,
+        `\`${citar("webhook.canal", "es", P)} <nombre> <#canal>\` — cambia el destino`,
+        `\`${citar("webhook.eventos", "es", P)} <nombre> <push,issues,…|all>\` — filtra lo que publica este gancho`,
+        `\`${citar("webhook", "es", P)} url <nombre>\` — muestra la URL de nuevo · \`${citar("webhook.testar", "es", P)} <nombre>\` — publica una prueba`,
+        `\`${citar("webhook.remover", "es", P)} <nombre>\` — lo borra (la URL deja de funcionar al instante)`,
+        "",
+        "_Separar por chats = un gancho por tema: `issues` → #issues, `workflow_run` → #ci, Crafty → #minecraft._",
+      ].join("\n"),
+      colour: COR.info,
     }));
   }
 
@@ -320,10 +343,13 @@ export async function cmdWebhook(message, args, ctx) {
   if (sub === "lista") {
     const ganchos = db.listarGanchos(serverId);
     return sendEmbed(message.channel, {
-      title: en ? "🪝 Hooks on this server" : "🪝 Ganchos deste servidor",
+      title: tr(ctx, "🪝 Ganchos deste servidor", "🪝 Hooks on this server", "🪝 Ganchos de este servidor"),
       description: ganchos.length
-        ? ganchos.map((g) => `**${g.nome}** → <#${g.canalId}> · ${en ? "events" : "eventos"}: ${g.eventos || (en ? "all" : "todos")} · ${g.usos} ${en ? "use(s)" : "uso(s)"}`).join("\n")
-        : (en ? `None yet. \`${citar("webhook.criar", "en", P)} <name>\`` : `Nenhum ainda. \`${citar("webhook.criar", "pt", P)} <nome>\``),
+        ? tr(ctx,
+          ganchos.map((g) => `**${g.nome}** → <#${g.canalId}> · eventos: ${g.eventos || "todos"} · ${g.usos} uso(s)`).join("\n"),
+          ganchos.map((g) => `**${g.nome}** → <#${g.canalId}> · events: ${g.eventos || "all"} · ${g.usos} use(s)`).join("\n"),
+          ganchos.map((g) => `**${g.nome}** → <#${g.canalId}> · eventos: ${g.eventos || "todos"} · ${g.usos} uso(s)`).join("\n"))
+        : tr(ctx, `Nenhum ainda. \`${citar("webhook.criar", "pt", P)} <nome>\``, `None yet. \`${citar("webhook.criar", "en", P)} <name>\``, `Ninguno todavía. \`${citar("webhook.criar", "es", P)} <nombre>\``),
       colour: COR.info,
     });
   }
@@ -331,7 +357,8 @@ export async function cmdWebhook(message, args, ctx) {
   if (!podeGerir) {
     return sendEmbed(message.channel, tr(ctx,
       { title: "🔒 Sem permissão", description: "Gerir webhooks pede **ManageMessages** (ou cargo de staff).", colour: COR.aviso },
-      { title: "🔒 No permission", description: "Managing webhooks requires **ManageMessages** (or a staff role).", colour: COR.aviso }));
+      { title: "🔒 No permission", description: "Managing webhooks requires **ManageMessages** (or a staff role).", colour: COR.aviso },
+      { title: "🔒 Sin permiso", description: "Gestionar webhooks requiere **ManageMessages** (o un rol de staff).", colour: COR.aviso }));
   }
 
   const nome = String(args[1] ?? "").toLowerCase().replace(/[^a-z0-9_-]/g, "").slice(0, 32);
@@ -348,20 +375,23 @@ export async function cmdWebhook(message, args, ctx) {
   };
   const canalDeOutro = () => sendEmbed(message.channel, tr(ctx,
     { title: "🪝", description: "Esse canal não é **deste servidor** — um gancho só publica nos canais daqui.", colour: COR.aviso },
-    { title: "🪝", description: "That channel isn't **on this server** — a hook can only post to channels here.", colour: COR.aviso }));
+    { title: "🪝", description: "That channel isn't **on this server** — a hook can only post to channels here.", colour: COR.aviso },
+    { title: "🪝", description: "Ese canal no es **de este servidor** — un gancho solo publica en los canales de aquí.", colour: COR.aviso }));
 
   if (sub === "criar" || sub === "novo" || sub === "add") {
-    if (!nome) return sendEmbed(message.channel, { title: "🪝", description: en ? `Give it a name: \`${citar("webhook.criar", "en", P)} github\`` : `Dê um nome: \`${citar("webhook.criar", "pt", P)} github\``, colour: COR.aviso });
-    if (acharGancho()) return sendEmbed(message.channel, { title: "🪝", description: en ? `**${nome}** already exists — \`${citar("webhook", "pt", P)} url ${nome}\`.` : `**${nome}** já existe — \`${citar("webhook", "pt", P)} url ${nome}\`.`, colour: COR.aviso });
+    if (!nome) return sendEmbed(message.channel, { title: "🪝", description: tr(ctx, `Dê um nome: \`${citar("webhook.criar", "pt", P)} github\``, `Give it a name: \`${citar("webhook.criar", "en", P)} github\``, `Ponle un nombre: \`${citar("webhook.criar", "es", P)} github\``), colour: COR.aviso });
+    if (acharGancho()) return sendEmbed(message.channel, { title: "🪝", description: tr(ctx, `**${nome}** já existe — \`${citar("webhook", "pt", P)} url ${nome}\`.`, `**${nome}** already exists — \`${citar("webhook", "pt", P)} url ${nome}\`.`, `**${nome}** ya existe — \`${citar("webhook", "es", P)} url ${nome}\`.`), colour: COR.aviso });
     if (!servidorPodeTerWebhook(serverId)) {
       return sendEmbed(message.channel, tr(ctx,
         { title: "🪝", description: "Webhooks não estão liberados neste servidor (`WEBHOOK_SERVIDORES`).", colour: COR.aviso },
-        { title: "🪝", description: "Webhooks aren't enabled on this server (`WEBHOOK_SERVIDORES`).", colour: COR.aviso }));
+        { title: "🪝", description: "Webhooks aren't enabled on this server (`WEBHOOK_SERVIDORES`).", colour: COR.aviso },
+        { title: "🪝", description: "Los webhooks no están habilitados en este servidor (`WEBHOOK_SERVIDORES`).", colour: COR.aviso }));
     }
     if (db.listarGanchos(serverId).length >= MAX_GANCHOS_SERVIDOR) {
       return sendEmbed(message.channel, tr(ctx,
         { title: "🪝", description: `Este servidor já tem **${MAX_GANCHOS_SERVIDOR}** ganchos — o máximo. Apague um com \`${citar("webhook.remover", "pt", P)} <nome>\`.`, colour: COR.aviso },
-        { title: "🪝", description: `This server already has **${MAX_GANCHOS_SERVIDOR}** hooks — the maximum. Delete one with \`${citar("webhook.remover", "en", P)} <name>\`.`, colour: COR.aviso }));
+        { title: "🪝", description: `This server already has **${MAX_GANCHOS_SERVIDOR}** hooks — the maximum. Delete one with \`${citar("webhook.remover", "en", P)} <name>\`.`, colour: COR.aviso },
+        { title: "🪝", description: `Este servidor ya tiene **${MAX_GANCHOS_SERVIDOR}** ganchos — el máximo. Borra uno con \`${citar("webhook.remover", "es", P)} <nombre>\`.`, colour: COR.aviso }));
     }
     const canalId = ctx.limparId?.(args[2]) || args[2]?.replace(/[<#>]/g, "") || message.channelId;
     if (canalId !== message.channelId && !(await canalValido(canalId))) return canalDeOutro();
@@ -375,42 +405,46 @@ export async function cmdWebhook(message, args, ctx) {
       title: `🪝 Hook "${nome}" created`,
       description: `Posts to <#${canalId}>. Whoever holds the URL can post — treat it like a password.\n\n${blocoDeUrl(g, true)}\n\nGitHub: Settings → Webhooks → Add, content type \`application/json\`.\nCrafty: server config → Webhooks → provider **Discord**, paste the URL.`,
       colour: COR.sucesso,
+    }, {
+      title: `🪝 Gancho "${nome}" creado`,
+      description: `Publica en <#${canalId}>. Quien tenga la URL puede publicar en el canal — trátala como una contraseña.\n\n${blocoDeUrl(g, true, "es")}\n\nGitHub: Settings → Webhooks → Add, content type \`application/json\`.\nCrafty: configuración del servidor → Webhooks → provider **Discord**, pega la URL.`,
+      colour: COR.sucesso,
     }));
   }
 
   const g = acharGancho();
-  if (!g) return sendEmbed(message.channel, { title: "🪝", description: en ? `I don't know **${nome || "?"}** — \`${citar("webhook.lista", "pt", P)}\`.` : `Não conheço **${nome || "?"}** — \`${citar("webhook.lista", "pt", P)}\`.`, colour: COR.aviso });
+  if (!g) return sendEmbed(message.channel, { title: "🪝", description: tr(ctx, `Não conheço **${nome || "?"}** — \`${citar("webhook.lista", "pt", P)}\`.`, `I don't know **${nome || "?"}** — \`${citar("webhook.lista", "pt", P)}\`.`, `No conozco **${nome || "?"}** — \`${citar("webhook.lista", "es", P)}\`.`), colour: COR.aviso });
 
   if (sub === "url") {
-    return sendEmbed(message.channel, { title: `🪝 ${g.nome}`, description: blocoDeUrl(g, en), colour: COR.info });
+    return sendEmbed(message.channel, { title: `🪝 ${g.nome}`, description: blocoDeUrl(g, en, idiomaDe(ctx)), colour: COR.info });
   }
   if (sub === "canal") {
     const canalId = ctx.limparId?.(args[2]) || args[2]?.replace(/[<#>]/g, "");
-    if (!canalId) return sendEmbed(message.channel, { title: "🪝", description: en ? "Which channel?" : "Qual canal?", colour: COR.aviso });
+    if (!canalId) return sendEmbed(message.channel, { title: "🪝", description: tr(ctx, "Qual canal?", "Which channel?", "¿Qué canal?"), colour: COR.aviso });
     if (canalId !== message.channelId && !(await canalValido(canalId))) return canalDeOutro();
     db.atualizarGancho(g.id, { canalId });
-    return sendEmbed(message.channel, { title: "🪝", description: (en ? `**${g.nome}** now posts to ` : `**${g.nome}** agora publica em `) + `<#${canalId}>.`, colour: COR.sucesso });
+    return sendEmbed(message.channel, { title: "🪝", description: tr(ctx, `**${g.nome}** agora publica em <#${canalId}>.`, `**${g.nome}** now posts to <#${canalId}>.`, `**${g.nome}** ahora publica en <#${canalId}>.`), colour: COR.sucesso });
   }
   if (sub === "eventos" || sub === "filtro") {
     const lista = String(args.slice(2).join(",") ?? "").toLowerCase().replace(/\s+/g, "");
     const eventos = ["todos", "all", ""].includes(lista) ? "" : lista;
     db.atualizarGancho(g.id, { eventos });
-    return sendEmbed(message.channel, { title: "🪝", description: eventos ? (en ? `**${g.nome}** only posts: \`${eventos}\`` : `**${g.nome}** só publica: \`${eventos}\``) : (en ? `**${g.nome}** posts every event.` : `**${g.nome}** publica todos os eventos.`), colour: COR.sucesso });
+    return sendEmbed(message.channel, { title: "🪝", description: eventos ? tr(ctx, `**${g.nome}** só publica: \`${eventos}\``, `**${g.nome}** only posts: \`${eventos}\``, `**${g.nome}** solo publica: \`${eventos}\``) : tr(ctx, `**${g.nome}** publica todos os eventos.`, `**${g.nome}** posts every event.`, `**${g.nome}** publica todos los eventos.`), colour: COR.sucesso });
   }
   if (sub === "remover" || sub === "apagar") {
     db.removerGancho(g.id);
-    return sendEmbed(message.channel, { title: "🪝", description: en ? `**${g.nome}** deleted — its URL is dead.` : `**${g.nome}** apagado — a URL dele morreu.`, colour: COR.sucesso });
+    return sendEmbed(message.channel, { title: "🪝", description: tr(ctx, `**${g.nome}** apagado — a URL dele morreu.`, `**${g.nome}** deleted — its URL is dead.`, `**${g.nome}** borrado — su URL ya no funciona.`), colour: COR.sucesso });
   }
   if (sub === "testar" || sub === "teste") {
     const canal = await canalPorId(ctx, g.canalId);
-    if (!canal) return sendEmbed(message.channel, { title: "🪝", description: en ? `I can't reach <#${g.canalId}> — does it still exist?` : `Não alcancei <#${g.canalId}> — ele ainda existe?`, colour: COR.aviso });
+    if (!canal) return sendEmbed(message.channel, { title: "🪝", description: tr(ctx, `Não alcancei <#${g.canalId}> — ele ainda existe?`, `I can't reach <#${g.canalId}> — does it still exist?`, `No llego a <#${g.canalId}> — ¿todavía existe?`), colour: COR.aviso });
     await ctx.sendEmbed(canal, {
-      title: en ? "🧪 Webhook test" : "🧪 Teste de webhook",
-      description: (en ? `Hook **${g.nome}** working — this is where its events land.` : `Gancho **${g.nome}** funcionando — é aqui que os eventos dele chegam.`),
+      title: tr(ctx, "🧪 Teste de webhook", "🧪 Webhook test", "🧪 Prueba de webhook"),
+      description: tr(ctx, `Gancho **${g.nome}** funcionando — é aqui que os eventos dele chegam.`, `Hook **${g.nome}** working — this is where its events land.`, `Gancho **${g.nome}** funcionando — aquí es donde llegan sus eventos.`),
       colour: COR.sucesso,
     });
-    return sendEmbed(message.channel, { title: "🪝", description: en ? `Test sent to <#${g.canalId}>.` : `Teste enviado para <#${g.canalId}>.`, colour: COR.sucesso });
+    return sendEmbed(message.channel, { title: "🪝", description: tr(ctx, `Teste enviado para <#${g.canalId}>.`, `Test sent to <#${g.canalId}>.`, `Prueba enviada a <#${g.canalId}>.`), colour: COR.sucesso });
   }
 
-  return sendEmbed(message.channel, { title: "🪝", description: en ? `Unknown subcommand — \`${citar("webhook", "en", P)}\` shows the list.` : `Subcomando desconhecido — \`${citar("webhook", "pt", P)}\` mostra a lista.`, colour: COR.aviso });
+  return sendEmbed(message.channel, { title: "🪝", description: tr(ctx, `Subcomando desconhecido — \`${citar("webhook", "pt", P)}\` mostra a lista.`, `Unknown subcommand — \`${citar("webhook", "en", P)}\` shows the list.`, `Subcomando desconocido — \`${citar("webhook", "es", P)}\` muestra la lista.`), colour: COR.aviso });
 }

@@ -59,7 +59,7 @@ export async function cmdPersonalidade(message, args, ctx) {
   const lang = lingua(ctx);
   const sub = (args[0] || "").toLowerCase();
 
-  if (["ver", "show", "view"].includes(sub) || !sub) {
+  if (sub === "ver" || !sub) {   // `view`/`show` chegam traduzidos pelo registro
     const atual = personaConfigurada(serverId);
     return sendEmbed(message.channel, tr(ctx,
       { title: "🎭 Personalidade da IA",
@@ -77,6 +77,14 @@ export async function cmdPersonalidade(message, args, ctx) {
           `\`${citar("personalidade", "en", P)} set <text>\` — sets this server's personality prompt`,
           `\`${citar("personalidade", "en", P)} reset\` — back to the default`,
           "_Requires Manage Server. The text replaces only the PERSONALITY; safety and format rules still apply._",
+        ].join("\n"), colour: COR.info },
+      { title: "🎭 Personalidad de la IA",
+        description: [
+          atual ? `**Actual (personalizada):**\n${atual.slice(0, 1500)}` : "**Actual:** la predeterminada (Judy).",
+          "",
+          `\`${citar("personalidade.definir", "es", P)} <texto>\` — define el prompt de personalidad de este servidor`,
+          `\`${citar("personalidade.resetar", "es", P)}\` — vuelve a la predeterminada`,
+          "_Requiere el permiso Gestionar servidor. El texto reemplaza solo la PERSONALIDAD; las reglas de seguridad y formato siguen valiendo._",
         ].join("\n"), colour: COR.info }));
   }
 
@@ -84,39 +92,45 @@ export async function cmdPersonalidade(message, args, ctx) {
   if (!membroTemPermissao(message, server, "ManageServer")) {
     return sendEmbed(message.channel, tr(ctx,
       { title: "🚫 Sem permissão", description: "Precisa de **Gerenciar Servidor** para mudar a personalidade.", colour: COR.erro },
-      { title: "🚫 No permission", description: "You need **Manage Server** to change the personality.", colour: COR.erro }));
+      { title: "🚫 No permission", description: "You need **Manage Server** to change the personality.", colour: COR.erro },
+      { title: "🚫 Sin permiso", description: "Necesitas **Gestionar servidor** para cambiar la personalidad.", colour: COR.erro }));
   }
 
-  if (["definir", "set"].includes(sub)) {
+  if (sub === "definir") {
     const texto = args.slice(1).join(" ").trim();
     if (!texto) {
       return sendEmbed(message.channel, tr(ctx,
         { title: "❓ Faltou o texto", description: `Uso: \`${citar("personalidade", "pt", P)} definir <texto do prompt>\``, colour: COR.aviso },
-        { title: "❓ Missing text", description: `Usage: \`${citar("personalidade", "en", P)} set <prompt text>\``, colour: COR.aviso }));
+        { title: "❓ Missing text", description: `Usage: \`${citar("personalidade", "en", P)} set <prompt text>\``, colour: COR.aviso },
+        { title: "❓ Falta el texto", description: `Uso: \`${citar("personalidade.definir", "es", P)} <texto del prompt>\``, colour: COR.aviso }));
     }
     if (texto.length > MAX_TAMANHO) {
       return sendEmbed(message.channel, tr(ctx,
         { title: "📏 Grande demais", description: `Máximo de ${MAX_TAMANHO} caracteres (recebi ${texto.length}).`, colour: COR.aviso },
-        { title: "📏 Too long", description: `Maximum of ${MAX_TAMANHO} characters (got ${texto.length}).`, colour: COR.aviso }));
+        { title: "📏 Too long", description: `Maximum of ${MAX_TAMANHO} characters (got ${texto.length}).`, colour: COR.aviso },
+        { title: "📏 Demasiado largo", description: `Máximo de ${MAX_TAMANHO} caracteres (recibí ${texto.length}).`, colour: COR.aviso }));
     }
     config.persona = texto;
     salvarConfig();
     return sendEmbed(message.channel, tr(ctx,
       { title: "🎭 Personalidade definida", description: `A IA deste servidor agora usa:\n\n${texto.slice(0, 1500)}`, colour: COR.ok },
-      { title: "🎭 Personality set", description: `This server's AI now uses:\n\n${texto.slice(0, 1500)}`, colour: COR.ok }));
+      { title: "🎭 Personality set", description: `This server's AI now uses:\n\n${texto.slice(0, 1500)}`, colour: COR.ok },
+      { title: "🎭 Personalidad definida", description: `La IA de este servidor ahora usa:\n\n${texto.slice(0, 1500)}`, colour: COR.ok }));
   }
 
-  if (["resetar", "reset", "padrao", "default"].includes(sub)) {
+  if (sub === "resetar" || sub === "padrao") {
     delete config.persona;
     salvarConfig();
     return sendEmbed(message.channel, tr(ctx,
       { title: "🎭 Personalidade resetada", description: "De volta ao padrão embutido.", colour: COR.ok },
-      { title: "🎭 Personality reset", description: "Back to the built-in default.", colour: COR.ok }));
+      { title: "🎭 Personality reset", description: "Back to the built-in default.", colour: COR.ok },
+      { title: "🎭 Personalidad restablecida", description: "De vuelta a la predeterminada.", colour: COR.ok }));
   }
 
   return sendEmbed(message.channel, tr(ctx,
     { title: "❓ Subcomando desconhecido", description: `Use \`${citar("personalidade", "pt", P)} ver\`, \`definir <texto>\` ou \`resetar\`.`, colour: COR.aviso },
-    { title: "❓ Unknown subcommand", description: `Use \`${citar("personalidade", "en", P)} view\`, \`set <text>\` or \`reset\`.`, colour: COR.aviso }));
+    { title: "❓ Unknown subcommand", description: `Use \`${citar("personalidade", "en", P)} view\`, \`set <text>\` or \`reset\`.`, colour: COR.aviso },
+    { title: "❓ Subcomando desconocido", description: `Usa \`${citar("personalidade.ver", "es", P)}\`, \`${citar("personalidade.definir", "es", P)} <texto>\` o \`${citar("personalidade.resetar", "es", P)}\`.`, colour: COR.aviso }));
 }
 
 // ─── Quem criou a Judy ───────────────────────────────────────────────────────

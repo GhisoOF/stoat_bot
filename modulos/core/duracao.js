@@ -15,10 +15,10 @@ export function lerDuracao(txt) {
 }
 
 export function duracaoTexto(ms, lang = "pt") {
-  const en = lang === "en";
+  const en = lang === "en", es = lang === "es";
   const d = Math.floor(ms / 86400e3), h = Math.floor((ms % 86400e3) / 3600e3), m = Math.floor((ms % 3600e3) / 60e3), s = Math.floor((ms % 60e3) / 1e3);
   const p = [];
-  if (d) p.push(`${d} ${en ? (d > 1 ? "days" : "day") : (d > 1 ? "dias" : "dia")}`);
+  if (d) p.push(`${d} ${en ? (d > 1 ? "days" : "day") : es ? (d > 1 ? "días" : "día") : (d > 1 ? "dias" : "dia")}`);
   if (h) p.push(`${h} h`);
   if (m) p.push(`${m} min`);
   if (s && !d && !h) p.push(`${s} s`);

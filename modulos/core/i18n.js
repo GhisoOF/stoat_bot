@@ -1,5 +1,5 @@
 
-import { citar } from "../core/aliases.js";
+import { citar, citarInterno, trechoPronto } from "./aliases.js";
 // Idioma efetivo do servidor deste ctx. Sem idioma definido → o padrão do bot
 // (inglês desde 13 out 2026; IDIOMA_PADRAO=pt no .env volta ao português).
 const padrao = () => ((process.env.IDIOMA_PADRAO || "en").trim().toLowerCase() === "pt" ? "pt" : "en");
@@ -23,11 +23,27 @@ export const idiomaDaTela = (l) => (l === "es" ? "es" : textoDoIdioma(l));
 
 // Escolhe entre dois valores (strings, objetos de embed, arrays…). O terceiro, o
 // espanhol, é opcional: sem ele, o servidor em espanhol recebe o inglês.
+//
+// Etapa 4b (21 out 2026): o espanhol que vem daqui sai PRONTO — a tradução da tela
+// (feita para o inglês) não passa por ele: ela trocava `aqui` por `here` e `{usuario}`
+// por `{user}`. Por isso o texto em espanhol cita comando com `citar(ref, "es", P)`.
 export function tr(ctx, pt, en, es) {
   const l = idiomaDe(ctx);
-  if (l === "es" && es !== undefined) return es;
+  if (l === "es" && es !== undefined) return pronto(es);
   return l === "pt" ? pt : en;
 }
+// O texto (ou o embed, ou a lista de linhas) em espanhol, marcado como pronto
+function pronto(v) {
+  if (typeof v === "string") return trechoPronto(v);
+  if (Array.isArray(v)) return v.map((x) => (typeof x === "string" ? trechoPronto(x) : x));
+  if (v && typeof v === "object") {
+    const o = { ...v };
+    for (const k of ["title", "description", "titulo", "descricao"]) if (typeof o[k] === "string") o[k] = trechoPronto(o[k]);
+    return o;
+  }
+  return v;
+}
+
 
 // ── &idioma / &language — o admin define o idioma do servidor ──
 export async function cmdIdioma(message, args, ctx) {
@@ -83,8 +99,8 @@ export async function cmdIdioma(message, args, ctx) {
     title: "🌐 Idioma: Español 🇪🇸",
     colour: COR.sucesso,
     description: [
-      "Desde ahora los nombres de los comandos salen en **español** en este servidor.",
-      "_Las respuestas todavía salen en inglés mientras se traducen._",
+      "Desde ahora respondo en **español** en este servidor — los nombres de los comandos también.",
+      "_Algunas partes todavía salen en inglés (las historias del RPG y los nombres del catálogo)._",
       `Para volver: \`${citar("idioma", "es", P)} pt\` · \`${citar("idioma", "es", P)} en\``,
       "",
       `Empieza por: \`${citar("help", "es", P)}\` · \`${citar("tutorial", "es", P)}\``,
@@ -97,7 +113,7 @@ export async function cmdIdioma(message, args, ctx) {
       "From now on I will reply in **English** on this server.",
       `Change it back anytime with \`${citar("idioma", "en", P)} pt\`.`,
       "",
-      `Start here: \`${P}help\` · \`${P}tutorial\``,
+      `Start here: \`${P}help\` · \`${citarInterno("tutorial", P)}\``,
     ].join("\n"),
   } : {
     title: "🌐 Idioma definido: Português 🇧🇷",
@@ -106,7 +122,7 @@ export async function cmdIdioma(message, args, ctx) {
       "A partir de agora respondo em **Português** neste servidor.",
       `Para trocar: \`${citar("idioma", "pt", P)} en\`.`,
       "",
-      `Comece por: \`${P}help\` · \`${P}tutorial\``,
+      `Comece por: \`${P}help\` · \`${citarInterno("tutorial", P)}\``,
     ].join("\n"),
   });
 }
@@ -125,8 +141,8 @@ export async function talvezSugerirIdioma(message, ctx) {
     `**ManagePermissions** can set it with: \`${citar("idioma", "en", P)} en\``];
   const blocoPT = ["🇧🇷 **Português** — este servidor ainda não escolheu um idioma. Quem tem",
     `**ManagePermissions** define com: \`${citar("idioma", "pt", P)} pt\``];
-  const blocoES = ["🇪🇸 **Español** — los nombres de los comandos también salen en español:",
-    `\`${citar("idioma", "es", P)} es\` _(las respuestas siguen en inglés mientras se traducen)_`];
+  const blocoES = ["🇪🇸 **Español** — este servidor aún no eligió un idioma. Quien tenga",
+    `**ManagePermissions** lo elige con: \`${citar("idioma", "es", P)} es\``];
   await sendEmbed(message.channel, {
     title: en ? "🌐 Choose the language / Escolha o idioma" : "🌐 Escolha o idioma / Choose the language",
     colour: COR.info,

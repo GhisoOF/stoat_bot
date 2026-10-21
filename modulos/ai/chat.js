@@ -21,6 +21,8 @@ import * as persona from "./persona.js";
 import { iaLigada, conversaLigada, modoIA } from "../core/env.js";
 import { nivelDePrioridade } from "../core/prioridade.js";
 import { tr, lingua, idiomaDe, idiomaDaTela } from "../core/i18n.js";
+import * as antiAbuso from "./anti-abuso.js";
+import * as confianca from "../moderacao/confianca.js";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
@@ -336,11 +338,42 @@ const TIMEOUT      = Number(process.env.CHAT_TIMEOUT  || 300000);
 const SERVIDORES_PERMITIDOS = (process.env.CHAT_SERVIDORES || "")
   .split(",").map((s) => s.trim()).filter(Boolean);
 
-export function servidorPermitido(serverId) {
+// O .env deixa a IA de conversa rodar AQUI? (o que era o servidorPermitido até 21 out)
+export function iaDisponivel(serverId) {
   if (!iaLigada()) return false;
   if (!conversaLigada()) return false;   // CONVERSA=0: sem chat (e sem &modia) em lugar nenhum
   if (SERVIDORES_PERMITIDOS.includes("*")) return true;
   return !!serverId && SERVIDORES_PERMITIDOS.includes(serverId);
+}
+
+// (21 out 2026, Ghieh: a IA volta em todos os servidores, e cada um escolhe se quer
+// o chat e a geração de imagem.) A escolha fica em `config.ia.chat`/`config.ia.imagem`
+// (`&chat on|off`, `&chat imagem on|off`). Sem escolha: DESLIGADO (opt-in, como os
+// módulos e a memória) — menos nos servidores que estão pelo ID em `SERVIDOR`, que
+// já tinham a IA e seguem ligados.
+function escolhaDoServidor(serverId, chave, config) {
+  let cfg = config;
+  if (!cfg && serverId) { try { cfg = store.configDoServidor(serverId); } catch { cfg = null; } }
+  const v = cfg?.ia?.[chave];
+  return typeof v === "boolean" ? v : null;
+}
+// CHAT_PADRAO=on (o .env de quem hospeda): sem escolha, começa LIGADO — o jeito antigo
+const padraoLigado = () => ["on", "1", "sim", "true", "ligado"].includes((process.env.CHAT_PADRAO ?? "").trim().toLowerCase());
+export function chatLigadoAqui(serverId, config = null) {
+  return escolhaDoServidor(serverId, "chat", config) ?? (padraoLigado() || imagemAdulta.servidorDaCasa(serverId));
+}
+export const imagemNoBot = () => (process.env.IMAGEM ?? "1").trim() !== "0";
+export function imagemLigadaAqui(serverId, config = null) {
+  if (!imagemNoBot()) return false;
+  return escolhaDoServidor(serverId, "imagem", config) ?? (padraoLigado() || imagemAdulta.servidorDaCasa(serverId));
+}
+// a IA conversa neste servidor: o .env deixa E o servidor quer
+export function servidorPermitido(serverId) {
+  return iaDisponivel(serverId) && chatLigadoAqui(serverId);
+}
+// quem disse "não fale comigo" (`&chat sair`): vale em todo servidor
+export function naoFalarCom(userId) {
+  try { return !!userId && db.iaSilenciada(userId); } catch { return false; }
 }
 
 // Fora dos servidores da conversa fica SÓ a moderação por IA (16 out 2026,
@@ -356,8 +389,10 @@ const juizDedicado = () => !!process.env.LLM_MODEL_JUIZ;
 export function modIAPermitida() {
   return iaLigada() && (conversaLigada() || juizDedicado());
 }
+// O COMANDO existe aqui? O &chat existe onde a IA está disponível, mesmo com o chat
+// desligado no servidor — é por ele que a staff liga (`&chat on`).
 export function comandoIAPermitido(nome, serverId) {
-  return nome === "modia" ? modIAPermitida(serverId) : servidorPermitido(serverId);
+  return nome === "modia" ? modIAPermitida(serverId) : iaDisponivel(serverId);
 }
 
 let ocupado = false;
@@ -367,6 +402,7 @@ let ocupado = false;
 // cheia; entre iguais, quem chegou antes.
 const fila = [];
 const FILA_MAX = Number(process.env.CHAT_FILA_MAX || 3);
+const MAX_PARTES = 4;   // mensagens por resposta
 export function estaOcupado() { return ocupado; }
 export function tamanhoFila() { return fila.length; }
 
@@ -519,7 +555,7 @@ async function chamarServicoIA(messages, { modelo = null, idioma = "pt" } = {}, 
       method: "POST",
       headers,
       body: JSON.stringify({ messages, modelo: modelo || undefined, idioma, ferramentas: opcoes?.ferramentas !== false,
-        contexto: { imagemAdulta: opcoes?.imagemAdulta === true } }),
+        contexto: { imagemAdulta: opcoes?.imagemAdulta === true, semImagem: opcoes?.semImagem === true } }),
       signal: ctrl.signal,
     });
     if (!r.ok) {
@@ -910,6 +946,25 @@ function respostaEmEspanhol(serverId) {
   try { return !!serverId && idiomaDaTela(store.configDoServidor(serverId)?.language) === "es"; } catch { return false; }
 }
 
+// (21 out 2026, Ghieh: "liberar para qualquer língua") a Judy responde na língua em que
+// a pessoa escreveu; só quando não dá para saber, na língua do servidor. A instrução vai
+// no idioma do prompt (`promptLang`: o prompt é pt ou en).
+export function instrucaoDeIdioma(promptLang, serverId) {
+  const padrao = respostaEmEspanhol(serverId) ? "es" : promptLang;
+  const nomes = { pt: ["português do Brasil", "Brazilian Portuguese"], en: ["inglês", "English"], es: ["espanhol", "Spanish"] };
+  return promptLang === "en"
+    ? `Reply in the SAME language the person wrote their message in (any language). If you can't tell, reply in ${nomes[padrao][1]}.`
+    : `Responda na MESMA língua em que a pessoa escreveu a mensagem (qualquer língua). Se não der para saber, responda em ${nomes[padrao][0]}.`;
+}
+
+// A pergunta está em português? (sinais que só o português tem — o espanhol divide
+// muitas palavras e os acentos agudos com ele)
+export function parecePortugues(texto) {
+  const t = String(texto ?? "").replace(/`[^`]*`/g, " ").replace(/https?:\/\/\S+/g, " ");
+  if (pareceEspanhol(t)) return false;
+  return /[ãõ]|ç[aãoõu]|\b(n[aã]o|voc[eê]s?|est[aá]|tamb[eé]m|ent[aã]o|isso|isto|muito|obrigad[oa]|tudo|meu|minha|vou|t[oô]|n[eé]|pra|uma|um|s[aã]o|mas|eu|ele|ela|fala|fazer|tem|quem|qual|onde|quando|sim)\b/i.test(t);
+}
+
 async function responder(pergunta, resultados, autor, userId, citada, serverId, canalId, lang = "pt", modeloForcado = null, local = null, fichaTxt = "") {
   const hoje = hojeExtenso();
 
@@ -1028,8 +1083,8 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
       : "AO DISCORDAR: você pode estar errada, e frequentemente está — você não enxerga a plataforma, só o que chega até você. Quando alguém te corrige sobre o mundo real (que servidor é este, quem ele é, o que aconteceu), trate como INFORMAÇÃO, não como ataque. Diga que pode ter entendido errado e pergunte o que está faltando. NUNCA chame a pessoa de delirante, alucinada, mentirosa, nem diga que ela está inventando coisas — isso é acusação, e quem não tem como verificar é VOCÊ. NUNCA declare a conversa encerrada: quem decide isso é a pessoa, não você. Repetir a mesma resposta com mais firmeza não é argumento; se você já disse duas vezes e a pessoa continua discordando, provavelmente a errada é você.",
     lang === "en"
       // (etapa 4b) servidor em espanhol: o prompt segue em inglês, a resposta sai em espanhol
-      ? (respostaEmEspanhol(serverId) ? "Speak in the first person, in the feminine, as Judy. Reply in Spanish (neutral Spanish, addressing people as tú)." : "Speak in the first person, in the feminine, as Judy. Reply in English.")
-      : "Fale em primeira pessoa, no feminino, como a Judy. Responda em português do Brasil.",
+      ? `Speak in the first person, in the feminine, as Judy. ${instrucaoDeIdioma("en", serverId)}`
+      : `Fale em primeira pessoa, no feminino, como a Judy. ${instrucaoDeIdioma("pt", serverId)}`,
     lang === "en"
       ? "MENTIONS: to tag someone from the conversation, write @ followed by their name exactly as it appears in the chat (e.g. @Ana). NEVER write IDs or the <@…> format — the system turns @Name into a real mention."
       : "MENÇÕES: para marcar alguém da conversa, escreva @ e o nome exatamente como aparece no chat (ex.: @Ana). NUNCA escreva IDs nem o formato <@…> — o sistema transforma @Nome em menção de verdade.",
@@ -1290,7 +1345,15 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
   // modelo abrir a boca (deixado ao E2B, ele ora chama a ferramenta, ora
   // "desenha" com ASCII, ora inventa "[Imagem gerada]"). O modelo só recebe
   // o fato consumado e escreve a legenda.
-  if (tipo === "ferramenta" && pedeImagemGerada(pergunta)) {
+  // (21 out 2026) o servidor desligou a geração de imagem: nada de gerador; o modelo
+  // só diz, na língua da pessoa, que aqui não desenha
+  if (tipo === "ferramenta" && pedeImagemGerada(pergunta) && !imagemLigadaAqui(serverId)) {
+    dlog("pedido de imagem → desligada neste servidor");
+    responder._semFerramentas = true;
+    messages.push({ role: "system", content: lang === "en"
+      ? "Image generation is TURNED OFF on this server (the staff's choice). Tell the person in ONE short sentence that you can't make images here. Do not draw with text or pretend an image exists."
+      : "A geração de imagem está DESLIGADA neste servidor (escolha da staff). Diga em UMA frase curta que aqui você não faz imagens. Não desenhe com texto nem finja que existe uma imagem." });
+  } else if (tipo === "ferramenta" && pedeImagemGerada(pergunta)) {
     dlog("pedido de imagem → geração direta");
     pausarFundo();   // o gerador descarrega o LLM: nada de fundo o recarrega no meio
     let r;
@@ -1355,7 +1418,7 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
   if (IA_SERVICO_URL && precisaDoServico) {
     try {
       const r = await chamarServicoIA(messages, { modelo: modeloEscolhido, idioma: lang },
-        { ferramentas: !responder._semFerramentas, imagemAdulta: imagemAdulta.liberadaAqui(serverId, canalId) });
+        { ferramentas: !responder._semFerramentas, imagemAdulta: imagemAdulta.liberadaAqui(serverId, canalId), semImagem: !imagemLigadaAqui(serverId) });
       responder._semFerramentas = false;
       // O serviço faz a própria continuação; o que volta é inteiro.
       if (r) {
@@ -1860,7 +1923,48 @@ async function lerMensagemCitada(message) {
   } catch { return null; }
 }
 
+// A porta da conversa (21 out 2026): o servidor quer o chat? a pessoa quer falar com a
+// Judy? passou no anti-abuso? Só então a conversa de verdade (conversarDeVez). Uma
+// conversa por pessoa de cada vez — a marca sai no `finally`, aconteça o que acontecer.
+const avisoNaoFalar = new Map();   // userId → t do último aviso do "você pediu silêncio"
 export async function conversar(message, pergunta, ctx, opcoes = {}) {
+  const { serverId, sendEmbed, COR } = ctx;
+  if (!servidorPermitido(serverId)) return conversarDeVez(message, pergunta, ctx, opcoes);   // ela explica por quê
+  const userId = message.authorId;
+  if (naoFalarCom(userId)) {
+    // só quem a chamou pelo comando ouve o porquê (e uma vez por minuto); o resto, silêncio
+    if (!opcoes.livre && Date.now() - (avisoNaoFalar.get(userId) ?? 0) > 60_000) {
+      avisoNaoFalar.set(userId, Date.now());
+      await sendEmbed(message.channel, tr(ctx,
+        { description: `Você pediu para eu não conversar com você. Para voltar: \`${citarInterno("chat.voltar", ctx.PREFIXO)}\`.`, colour: COR.info },
+        { description: `You asked me not to chat with you. To undo it: \`${citarInterno("chat.voltar", ctx.PREFIXO)}\`.`, colour: COR.info },
+        { description: `Me pediste que no conversara contigo. Para volver: \`${citar("chat.voltar", "es", ctx.PREFIXO)}\`.`, colour: COR.info }));
+    }
+    return;
+  }
+  const texto = String(pergunta ?? "").trim();
+  const server = await Promise.resolve(ctx.getServer?.(message)).catch(() => null);
+  const prioridade = nivelDePrioridade({ userId, serverId, server });
+  const porta = antiAbuso.avaliar({ userId, canalId: message.channelId, serverId, texto, prioridade,
+    idadeContaMs: confianca.idadeDaConta(userId), quarentena: confianca.emQuarentena(serverId, userId) });
+  if (!porta.ok) {
+    console.log(`[CHAT] anti-abuso barrou (${porta.motivo}) — ${userId}: ${JSON.stringify(texto).slice(0, 60)}`);
+    const aviso = porta.avisar && !opcoes.livre ? antiAbuso.textoDoAviso(porta.motivo, "pt") : null;
+    if (aviso) {
+      await sendEmbed(message.channel, tr(ctx,
+        { description: aviso, colour: COR.aviso },
+        { description: antiAbuso.textoDoAviso(porta.motivo, "en"), colour: COR.aviso },
+        { description: antiAbuso.textoDoAviso(porta.motivo, "es"), colour: COR.aviso }));
+    }
+    return;
+  }
+  antiAbuso.registrar({ userId, canalId: message.channelId, serverId, texto });
+  antiAbuso.comecou(userId);
+  try { return await conversarDeVez(message, pergunta, ctx, opcoes); }
+  finally { antiAbuso.terminou(userId); }
+}
+
+async function conversarDeVez(message, pergunta, ctx, opcoes = {}) {
   const { modeloForcado = null, avisoEspera = null } = opcoes;
   const { sendEmbed, COR, serverId } = ctx;
   imagemAdulta.lembrarCanal(message.channel);   // canal NSFW? (a imagem +18 depende disso)
@@ -1881,6 +1985,22 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
   const esTela = idiomaDe(ctx) === "es";
   const X = (pt, eng, es) => (esTela ? es : en ? eng : pt);
 
+  // O servidor escolheu deixar o chat desligado (o padrão): diz como ligar
+  if (iaDisponivel(serverId) && !chatLigadoAqui(serverId)) {
+    return sendEmbed(message.channel, tr(ctx, {
+      title: "💤 Chat desligado aqui",
+      description: `O chat com a Judy está desligado neste servidor. Quem tem **ManagePermissions** liga com \`${citarInterno("chat.on", ctx.PREFIXO)}\`.`,
+      colour: COR.info,
+    }, {
+      title: "💤 Chat off here",
+      description: `Chat with Judy is off on this server. Anyone with **ManagePermissions** can turn it on with \`${citarInterno("chat.on", ctx.PREFIXO)}\`.`,
+      colour: COR.info,
+    }, {
+      title: "💤 Chat desactivado aquí",
+      description: `El chat con Judy está desactivado en este servidor. Quien tenga **ManagePermissions** lo activa con \`${citar("chat.on", "es", ctx.PREFIXO)}\`.`,
+      colour: COR.info,
+    }));
+  }
   // Limitação: só funciona no(s) servidor(es) permitido(s)
   if (!servidorPermitido(serverId)) {
     console.log(`[CHAT] bloqueado no servidor ${serverId ?? "?"} (não permitido)`);
@@ -2136,8 +2256,8 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
       await editarStatus(X("✍️ Retomando de onde parei…", "✍️ Picking up where I stopped…", "✍️ Retomando donde lo dejé…"));
       const bruto = await llmChat([
         { role: "system", content: en
-          ? `You are Judy. Today is ${hojeExtenso()}. Reply in English.`
-          : `Você é a Judy. Hoje é ${hojeExtenso()}. Responda em português do Brasil.` },
+          ? `You are Judy. Today is ${hojeExtenso()}. ${instrucaoDeIdioma("en", serverId)}`
+          : `Você é a Judy. Hoje é ${hojeExtenso()}. ${instrucaoDeIdioma("pt", serverId)}` },
         { role: "user", content: pendente.pergunta },
         { role: "assistant", content: pendente.texto },
         { role: "user", content: en
@@ -2327,7 +2447,10 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
       } catch (e) { dlog(`refazer repetição falhou (${e?.message ?? e})`); }
     }
 
-    if (resposta && lang !== "es" && !en && pareceEspanhol(resposta)) {
+    // (21 out 2026) a Judy fala qualquer língua: a reescrita para o português só vale
+    // quando a PERGUNTA foi em português e a resposta escapou para outra língua
+    const perguntaEmPt = parecePortugues(pergunta);
+    if (resposta && perguntaEmPt && pareceEspanhol(resposta)) {
       console.warn(`[CHAT] ⚠️ resposta veio em espanhol — refazendo: "${resposta.slice(0, 80)}…"`);
       dlog("idioma errado (espanhol) → refazendo");
       try {
@@ -2342,7 +2465,7 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
 
     // Mesmo desvio, outra língua: resposta INTEIRA em inglês num pedido em
     // português (foi como as recusas de arquivo/imagem escaparam no teste).
-    if (resposta && lang !== "en" && !en && pareceIngles(resposta)) {
+    if (resposta && perguntaEmPt && pareceIngles(resposta)) {
       console.warn(`[CHAT] ⚠️ resposta veio em inglês — refazendo: "${resposta.slice(0, 80)}…"`);
       dlog("idioma errado (inglês) → refazendo");
       try {
@@ -2396,8 +2519,8 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
       await editarStatus(X("✍️ Refinando a resposta…", "✍️ Polishing the reply…", "✍️ Puliendo la respuesta…"));
       const direto = await llmChat([
         { role: "system", content: en
-          ? `Today is ${hojeExtenso()}. Reply in English, directly and objectively, WITHOUT explaining your reasoning.`
-          : `Hoje é ${hojeExtenso()}. Responda em português do Brasil, de forma direta e objetiva, SEM explicar seu raciocínio.` },
+          ? `Today is ${hojeExtenso()}. ${instrucaoDeIdioma("en", serverId)} Answer directly and objectively, WITHOUT explaining your reasoning.`
+          : `Hoje é ${hojeExtenso()}. ${instrucaoDeIdioma("pt", serverId)} Responda de forma direta e objetiva, SEM explicar seu raciocínio.` },
         { role: "user", content: pergunta },
       ], { maxTokens: MAX_TOKENS, modelo: LLM_MODEL_LEVE });
       resposta = limpar(direto);
@@ -2477,7 +2600,15 @@ export async function conversar(message, pergunta, ctx, opcoes = {}) {
 
     // cada parte sai sem ping em massa (15 out 2026: as partes 2..N iam como
     // mensagem comum sem filtro — "@everyone" no meio de uma resposta longa pingava)
-    const partes = fragmentar(textoFinal, 1500).map((p) => semPingEmMassa(p));
+    // no máximo MAX_PARTES mensagens (21 out 2026): um pedido de texto gigante não vira
+    // enxurrada no canal — o resto fica para o "continue"
+    let partes = fragmentar(textoFinal, 1500).map((p) => semPingEmMassa(p));
+    if (partes.length > MAX_PARTES) {
+      partes = partes.slice(0, MAX_PARTES);
+      partes[MAX_PARTES - 1] += X("\n\n_✂️ cortei aqui para não lotar o canal — peça 'continue' se quiser o resto._",
+        "\n\n_✂️ cut here so the channel doesn't flood — say 'continue' for the rest._",
+        "\n\n_✂️ lo corté aquí para no llenar el canal — pide 'continúa' si quieres el resto._");
+    }
     dlog(`entregando resposta em ${partes.length} parte(s) | total ${textoFinal.length} chars | tempo total ${((Date.now() - tInicio) / 1000).toFixed(1)}s`);
 
     const marcar = (texto, i) => partes.length > 1
@@ -2738,6 +2869,8 @@ export async function talvezResponderLivre(message, ctx) {
 
     const texto = (message.content || "").trim();
     if (!texto) return false;
+    // (21 out 2026) antes do juiz, que custa modelo: quem pediu silêncio e conteúdo de spam
+    if (naoFalarCom(message.authorId) || antiAbuso.avaliarConteudo(texto)) return false;
 
     const modo = config?.chatLivre?.modo || "relevante";
     const userId = message.authorId;
@@ -2764,7 +2897,7 @@ export async function talvezResponderLivre(message, ctx) {
 
     if (!engajado) { try { await message.react?.(encodeURIComponent("👀")); } catch {} }
 
-    await conversar(message, texto, ctx);
+    await conversar(message, texto, ctx, { livre: true });
     return true;
   } catch (e) {
     console.error("[CHAT-LIVRE]", e.message);
@@ -2777,6 +2910,68 @@ export async function cmdChat(message, args, ctx) {
   const clang = lingua(ctx);
   const cen = clang === "en";
   const ces = (ref) => citar(ref, "es", PREFIXO);   // a citação no espanhol
+  const sub = String(args[0] ?? "").toLowerCase();
+  const so = (n) => args.length === n;   // subcomando "puro": `&chat on`, não `&chat on the other hand…`
+
+  // ── (21 out 2026) O servidor escolhe: chat e geração de imagem ──
+  const podeMexer = async () => {
+    const server = await ctx.getServer?.(message);
+    if (!ctx.membroTemPermissao || ctx.membroTemPermissao(message, server, "ManagePermissions")) return true;
+    await sendEmbed(message.channel, tr(ctx,
+      { title: "🚫 Permissão insuficiente", description: "Ligar ou desligar a IA do servidor pede **ManagePermissions**.", colour: COR.erro },
+      { title: "🚫 Missing permission", description: "Turning the server's AI on or off needs **ManagePermissions**.", colour: COR.erro },
+      { title: "🚫 Permiso insuficiente", description: "Activar o desactivar la IA del servidor requiere **ManagePermissions**.", colour: COR.erro }));
+    return false;
+  };
+  if ((sub === "on" || sub === "off") && so(1)) {
+    if (!(await podeMexer())) return;
+    ctx.config.ia = { ...(ctx.config.ia ?? {}), chat: sub === "on" };
+    ctx.salvarConfig?.();
+    return sendEmbed(message.channel, sub === "on" ? tr(ctx,
+      { title: "💬 Chat ligado", description: `A Judy conversa neste servidor: mencione-a ou use \`${citarInterno("chat", PREFIXO)}\`. Cada pessoa pode pedir silêncio com \`${citarInterno("chat.sair", PREFIXO)}\`.\nGeração de imagem: ${imagemLigadaAqui(serverId, ctx.config) ? "ligada" : `desligada (\`${citarInterno("chat.imagem", PREFIXO)} on\`)`}.`, colour: COR.sucesso },
+      { title: "💬 Chat on", description: `Judy chats on this server: mention her or use \`${citarInterno("chat", PREFIXO)}\`. Anyone can ask her to leave them alone with \`${citarInterno("chat.sair", PREFIXO)}\`.\nImage generation: ${imagemLigadaAqui(serverId, ctx.config) ? "on" : `off (\`${citarInterno("chat.imagem", PREFIXO)} on\`)`}.`, colour: COR.sucesso },
+      { title: "💬 Chat activado", description: `Judy conversa en este servidor: menciónala o usa \`${ces("chat")}\`. Cada persona puede pedir silencio con \`${ces("chat.sair")}\`.\nGeneración de imágenes: ${imagemLigadaAqui(serverId, ctx.config) ? "activada" : `desactivada (\`${ces("chat.imagem")} on\`)`}.`, colour: COR.sucesso })
+      : tr(ctx,
+      { title: "💤 Chat desligado", description: `A Judy não conversa mais neste servidor (a moderação continua). Para voltar: \`${citarInterno("chat.on", PREFIXO)}\`.`, colour: COR.aviso },
+      { title: "💤 Chat off", description: `Judy no longer chats on this server (moderation keeps working). To bring it back: \`${citarInterno("chat.on", PREFIXO)}\`.`, colour: COR.aviso },
+      { title: "💤 Chat desactivado", description: `Judy ya no conversa en este servidor (la moderación sigue). Para volver: \`${ces("chat.on")}\`.`, colour: COR.aviso }));
+  }
+  if (sub === "imagem" && (so(1) || (so(2) && ["on", "off"].includes(String(args[1]).toLowerCase())))) {
+    const acao = String(args[1] ?? "").toLowerCase();
+    if (acao) {
+      if (!(await podeMexer())) return;
+      ctx.config.ia = { ...(ctx.config.ia ?? {}), imagem: acao === "on" };
+      ctx.salvarConfig?.();
+    }
+    const ligada = imagemLigadaAqui(serverId, ctx.config);
+    const semNoBot = !imagemNoBot();
+    return sendEmbed(message.channel, tr(ctx,
+      { title: ligada ? "🎨 Geração de imagem ligada" : "🎨 Geração de imagem desligada",
+        description: semNoBot ? "A geração de imagem está desligada no bot inteiro (`IMAGEM=0` no `.env` de quem hospeda)."
+          : ligada ? `Peça à Judy para desenhar (\`${citarInterno("chat", PREFIXO)} desenhe um gato astronauta\`). Desligar: \`${citarInterno("chat.imagem", PREFIXO)} off\`.`
+          : `A Judy não gera imagens neste servidor. Ligar: \`${citarInterno("chat.imagem", PREFIXO)} on\`.`, colour: ligada ? COR.sucesso : COR.aviso },
+      { title: ligada ? "🎨 Image generation on" : "🎨 Image generation off",
+        description: semNoBot ? "Image generation is off for the whole bot (`IMAGEM=0` in the host's `.env`)."
+          : ligada ? `Ask Judy to draw (\`${citarInterno("chat", PREFIXO)} draw an astronaut cat\`). Turn off: \`${citarInterno("chat.imagem", PREFIXO)} off\`.`
+          : `Judy doesn't generate images on this server. Turn on: \`${citarInterno("chat.imagem", PREFIXO)} on\`.`, colour: ligada ? COR.sucesso : COR.aviso },
+      { title: ligada ? "🎨 Generación de imágenes activada" : "🎨 Generación de imágenes desactivada",
+        description: semNoBot ? "La generación de imágenes está desactivada en todo el bot (`IMAGEM=0` en el `.env` de quien lo aloja)."
+          : ligada ? `Pídele a Judy que dibuje (\`${ces("chat")} dibuja un gato astronauta\`). Desactivar: \`${ces("chat.imagem")} off\`.`
+          : `Judy no genera imágenes en este servidor. Activar: \`${ces("chat.imagem")} on\`.`, colour: ligada ? COR.sucesso : COR.aviso }));
+  }
+  // ── e cada pessoa: "não fale comigo" ──
+  if ((sub === "sair" || sub === "voltar") && so(1)) {
+    const quer = sub === "sair";
+    db.setIaSilenciada(message.authorId, quer);
+    return sendEmbed(message.channel, quer ? tr(ctx,
+      { title: "🤐 Combinado", description: `A Judy não conversa mais com você, em nenhum servidor, e o que você escreve não vai para a IA. Para voltar: \`${citarInterno("chat.voltar", PREFIXO)}\`.`, colour: COR.info },
+      { title: "🤐 Got it", description: `Judy won't chat with you anymore, on any server, and what you write doesn't go to the AI. To undo: \`${citarInterno("chat.voltar", PREFIXO)}\`.`, colour: COR.info },
+      { title: "🤐 Entendido", description: `Judy ya no conversará contigo, en ningún servidor, y lo que escribas no irá a la IA. Para volver: \`${ces("chat.voltar")}\`.`, colour: COR.info })
+      : tr(ctx,
+      { title: "💬 De volta", description: "A Judy volta a conversar com você.", colour: COR.sucesso },
+      { title: "💬 Back", description: "Judy will chat with you again.", colour: COR.sucesso },
+      { title: "💬 De vuelta", description: "Judy vuelve a conversar contigo.", colour: COR.sucesso }));
+  }
 
   if (["comentar", "comentario", "comentário", "espontaneo", "espontâneo"].includes(args[0]?.toLowerCase())) {
     const server = await ctx.getServer?.(message);
@@ -3170,9 +3365,9 @@ export async function cmdChat(message, args, ctx) {
     }
   }
 
-  // &chat status → testa a conexão com o servidor de IA
+  // &chat status → testa a conexão com o servidor de IA (e diz o que este servidor escolheu)
   if (args[0]?.toLowerCase() === "status") {
-    if (!servidorPermitido(serverId))
+    if (!iaDisponivel(serverId))
       return sendEmbed(message.channel, tr(ctx,
         { title: "🚫 Indisponível aqui",
           description: "O chat com IA não está habilitado neste servidor.", colour: COR.aviso },
@@ -3187,6 +3382,7 @@ export async function cmdChat(message, args, ctx) {
     return sendEmbed(message.channel, tr(ctx, {
       title: disp.ok ? "🟢 IA disponível" : "🔴 IA indisponível",
       description: [
+        `**Neste servidor:** chat ${chatLigadoAqui(serverId) ? "🟢" : "🔴"} · imagem ${imagemLigadaAqui(serverId) ? "🟢" : "🔴"} · ${naoFalarCom(message.authorId) ? `você pediu silêncio (\`${citarInterno("chat.voltar", PREFIXO)}\`)` : "você conversa normalmente"}`,
         `**Servidor:** ${LLM_URL}`,
         `**Conversa:** ${LLM_MODEL_PADRAO}`,
         `**Papo curto, memória e decisões:** ${LLM_MODEL_LEVE}`,
@@ -3208,6 +3404,7 @@ export async function cmdChat(message, args, ctx) {
         `**LLM:** ${LLM_URL || "—"}`,
         `**Chat:** ${LLM_MODEL_LEVE} _(also memory and decisions)_`,
         `**Code:** ${LLM_MODEL_CODIGO} · **Logic:** ${LLM_MODEL_LOGICA} · **Decision:** ${LLM_MODEL_DECISAO} · **Moderation:** ${LLM_MODEL_JUIZ}`,
+        `**On this server:** chat ${chatLigadoAqui(serverId) ? "🟢" : "🔴"} · images ${imagemLigadaAqui(serverId) ? "🟢" : "🔴"} · ${naoFalarCom(message.authorId) ? `you asked for silence (\`${citarInterno("chat.voltar", PREFIXO)}\`)` : "you chat normally"}`,
         `**Server:** ${LLM_URL}`,
         `**Conversation:** ${LLM_MODEL_PADRAO}`,
         `**Small talk, memory and decisions:** ${LLM_MODEL_LEVE}`,
@@ -3223,6 +3420,7 @@ export async function cmdChat(message, args, ctx) {
     }, {
       title: disp.ok ? "🟢 IA disponible" : "🔴 IA no disponible",
       description: [
+        `**En este servidor:** chat ${chatLigadoAqui(serverId) ? "🟢" : "🔴"} · imágenes ${imagemLigadaAqui(serverId) ? "🟢" : "🔴"} · ${naoFalarCom(message.authorId) ? `pediste silencio (\`${ces("chat.voltar")}\`)` : "conversas normalmente"}`,
         `**Servidor:** ${LLM_URL}`,
         `**Conversación:** ${LLM_MODEL_PADRAO}`,
         `**Charla corta, memoria y decisiones:** ${LLM_MODEL_LEVE}`,
@@ -3254,5 +3452,15 @@ export async function cmdChat(message, args, ctx) {
         colour: COR.aviso }));
   }
 
-  return conversar(message, args.join(" "), ctx);
+  return conversar(message, textoOriginalDoComando(message, args), ctx);
+}
+
+// O texto do `&chat <pergunta>` como a pessoa escreveu. Os argumentos chegam com a 1ª
+// palavra "traduzida" quando ela coincide com um subcomando em inglês (o normalizador
+// não sabe que é texto livre): `&chat all good?` virava "tudo good?" (21 out 2026).
+export function textoOriginalDoComando(message, args = []) {
+  const bruto = String(message?.content ?? "");
+  const m = bruto.match(/^\S+\s+([\s\S]*)$/);   // tira o "&chat" (ou o apelido)
+  const original = m ? m[1].trim() : "";
+  return original || args.join(" ");
 }

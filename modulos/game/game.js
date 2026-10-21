@@ -106,7 +106,7 @@ function catalogoNoEspanhol(texto) {
 }
 function traduzirTextoEs(texto) {
   if (typeof texto !== "string" || !texto) return texto;
-  return texto.split(/(⁣[\s\S]*?⁤)/).map((p, i) => (i % 2 ? catalogoNoEspanhol(p) : traduzirTexto(p))).join("");
+  return texto.split(/(\u2063[\s\S]*?\u2064)/).map((p, i) => (i % 2 ? catalogoNoEspanhol(p) : traduzirTexto(p))).join("");
 }
 function traduzirEmbedEs(e) {
   if (!e || typeof e !== "object") return e;

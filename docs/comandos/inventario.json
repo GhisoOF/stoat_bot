@@ -1088,15 +1088,25 @@
    "free": "livre",
    "gentle": "gentil",
    "here": "aqui",
+   "image": "imagem",
+   "imagen": "imagem",
+   "leave": "sair",
    "map": "mapear",
    "memory": "memoria",
    "mode": "modo",
+   "off": "off",
    "olvidar": "esquecer",
+   "on": "on",
+   "optin": "voltar",
+   "optout": "sair",
    "perday": "pordia",
    "profile": "perfil",
+   "rejoin": "voltar",
    "relevant": "relevante",
+   "salir": "sair",
    "status": "status",
-   "todo": "tudo"
+   "todo": "tudo",
+   "volver": "voltar"
   },
   "comando": {
    "activar": "ativar",
@@ -1782,16 +1792,21 @@
    "cuidado": "care",
    "esquecer": "forget",
    "gentil": "gentle",
+   "imagem": "image",
    "livre": "free",
    "mapear": "map",
    "memoria": "memory",
    "modo": "mode",
+   "off": "off",
+   "on": "on",
    "perfil": "profile",
    "pordia": "perday",
    "relevante": "relevant",
+   "sair": "leave",
    "status": "status",
    "todas": "every",
-   "tudo": "all"
+   "tudo": "all",
+   "voltar": "rejoin"
   },
   "comando": {
    "ativar": "enable",
@@ -2376,10 +2391,13 @@
   "chat": {
    "cuidado": "cuidado",
    "esquecer": "olvidar",
+   "imagem": "imagen",
    "mapear": "mapear",
    "memoria": "memoria",
    "perfil": "perfil",
-   "tudo": "todo"
+   "sair": "salir",
+   "tudo": "todo",
+   "voltar": "volver"
   },
   "comando": {
    "ativar": "activar",

@@ -7,6 +7,7 @@ import { canalDeOutroServidor } from "../moderacao/pertence.js";
 import * as log from "../core/log.js";
 import { tr, lingua, textoDoIdioma, idiomaDaTela } from "../core/i18n.js";
 import { servidorNaLista } from "../core/env.js";
+import { servidorDaCasa } from "../ai/imagem-adulta.js";
 
 let resumirIA = null;
 export function configurarResumo(fn) { resumirIA = fn; }
@@ -19,6 +20,15 @@ const RSS_SERVIDORES = (process.env.RSS_SERVIDORES || "")
 function servidorPermitido(serverId) {
   if (!RSS_SERVIDORES.length) return true;   // sem allowlist = liberado
   return RSS_SERVIDORES.includes(serverId);
+}
+
+// O resumo da Judy no RSS: só onde a IA de conversa roda (SERVIDOR/CHAT_SERVIDORES) E o
+// servidor quer a IA (`&chat on`; sem escolha, só os da casa — ou todos com CHAT_PADRAO=on).
+// Nos outros, a lista de notícias sai do mesmo jeito, sem modelo. (21 out 2026)
+export function iaNoRssAqui(serverId, config) {
+  if (!servidorNaLista("CHAT_SERVIDORES", serverId)) return false;
+  if (typeof config?.ia?.chat === "boolean") return config.ia.chat;
+  return ["on", "1", "sim", "true", "ligado"].includes((process.env.CHAT_PADRAO ?? "").trim().toLowerCase()) || servidorDaCasa(serverId);
 }
 
 const MAX_ITENS   = Number(process.env.RSS_MAX_ITENS || 50);
@@ -168,7 +178,7 @@ export async function rodarCiclo(serverId, ctx, { forcado = false } = {}) {
   // A parte de IA do RSS (o relatório e o comentário da Judy) só nos servidores
   // da conversa (SERVIDOR/CHAT_SERVIDORES; 16 out 2026). Nos outros, a lista
   // de notícias sai do mesmo jeito, sem modelo.
-  const iaNoRss = servidorNaLista("CHAT_SERVIDORES", serverId);
+  const iaNoRss = iaNoRssAqui(serverId, config);
   if (relatorioIA && iaNoRss) {
     try { await publicarRelatorio(canal, novos, { lang: cicloEn ? "en" : "pt", agora, serverId, idioma: cicloEs ? "es" : null }); }
     catch (e) { console.error("[RSS] relatório falhou:", e.message); }

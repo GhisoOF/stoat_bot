@@ -120,7 +120,7 @@ export const MODELOS = {
 export const NOME_MODELO = (modelo, lang) => N.modelo[modelo]?.[I(lang)] ?? modelo;
 
 // nome comparável: sem acento, sem emoji, minúsculas, só letras e números
-export const normalizar = (t) => String(t ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "");
+export const normalizar = (t) => String(t ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "");
 
 const lista = (x) => (Array.isArray(x) ? x : x && typeof x.values === "function" ? [...x.values()] : x && typeof x === "object" ? Object.entries(x).map(([id, v]) => ({ id, ...v })) : []);
 const cargosDe = (server) => {

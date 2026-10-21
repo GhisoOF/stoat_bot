@@ -4,7 +4,7 @@ Gerado por `INVENTARIO=1 node testes.mjs comandos-17out` — **não edite à mã
 reestruturação dos comandos num registro central (fase 0). A suíte `comandos-17out` compara o bot com o
 `inventario.json` desta pasta: nome que some ou muda de destino faz o teste falhar.
 
-**49 comandos · 168 nomes · 634 subcomandos em inglês · 340 telas de ajuda · 1024 exemplos executados**
+**49 comandos · 168 nomes · 644 subcomandos em inglês · 340 telas de ajuda · 1024 exemplos executados**
 
 ## Comandos
 
@@ -94,7 +94,7 @@ O que ainda está espalhado:
 - `banglobal`: accept→isentar, all→lista, allow→isentar, autoimport→auto, automatic→auto, ban→banir, banned→lista, bypass→isentar, confirm→confirmar, consensus→consenso, contribution→contribuicao, exempt→isentar, exempted→isentos, forget→esquecer, history→historico, import→importar, instant→imediato, list→lista, people→pessoas, remove→remover, revert→desfazer, review→revisar, scan→varrer, server→servidor, sweep→varrer, undo→desfazer, view→ver, warn→avisar
 - `blocklist`: domains→dominios
 - `boasvindas`: borrar→limpar, channel→canal, clear→limpar, color→cor, colour→cor, default→padrao, estado→status, here→aqui, hidden→oculto, hide→oculto, image→imagem, imagen→imagem, mensajes→mensagens, message→texto, messages→mensagens, predeterminado→padrao, probar→testar, show→visivel, test→testar, text→texto, title→titulo, visible→visivel
-- `chat`: all→tudo, care→cuidado, comment→comentar, every→todas, forget→esquecer, free→livre, gentle→gentil, here→aqui, map→mapear, memory→memoria, mode→modo, olvidar→esquecer, perday→pordia, profile→perfil, relevant→relevante, todo→tudo
+- `chat`: all→tudo, care→cuidado, comment→comentar, every→todas, forget→esquecer, free→livre, gentle→gentil, here→aqui, image→imagem, imagen→imagem, leave→sair, map→mapear, memory→memoria, mode→modo, olvidar→esquecer, optin→voltar, optout→sair, perday→pordia, profile→perfil, rejoin→voltar, relevant→relevante, salir→sair, todo→tudo, volver→voltar
 - `comando`: activar→ativar, desactivar→desativar, disable→desativar, enable→ativar, gestionar→gerenciar, lista→list, manage→gerenciar, off→desativar, on→ativar
 - `cor`: clear→limpar, create→criar, default→padrao, generate→gerar, gradient→gradiente, help→ajuda, here→aqui, list→lista, panel→painel, remove→remover, roles→cargos
 - `debug`: channels→canais, mute→mudo, permissions→permissoes, raw→cru, read→ler

@@ -1458,6 +1458,59 @@ guarda cada chamada à API e falha de propósito no 5º canal. 13 mutações, to
 um teste. A suíte achou dois erros dos próprios testes (IDs fora do formato ULID, que
 os comandos recusam), não do bot.
 
+## 6zc. A IA de volta, em todos os servidores, com escolha (21 out 2026)
+
+**O que liga:** `.env` (operação) — `SERVIDOR=*,<ids da casa>` e `CONVERSA=1` (ou sem a
+linha). O `*` põe a IA em todos os servidores; os ids continuam marcando a casa (os
+canais NSFW dela e o padrão "ligado"). Sem os ids, nenhum servidor é da casa.
+
+**Cada servidor escolhe** (pedido do Ghieh, padrão desligado, como os módulos):
+`&chat on|off` e `&chat imagem on|off` (ManagePermissions; o cargo de staff vale).
+Guardado em `config.ia.chat`/`config.ia.imagem`. Sem escolha: desligado — menos nos
+servidores postos pelo id em `SERVIDOR`, que já tinham a IA e seguem ligados.
+`CHAT_PADRAO=on` (opcional) volta ao jeito antigo para quem hospeda. O `&chat` existe
+onde a IA está disponível mesmo com o chat desligado (é por ele que se liga); a menção,
+o chat livre, os comentários, a memória e o fio do canal só com o chat ligado. O resumo
+da Judy no RSS segue a mesma escolha (`iaNoRssAqui`). Imagem desligada: o gerador não é
+chamado, o modelo nem vê a ferramenta (`contexto.semImagem` no ia-servico) e o serviço
+recusa se ela for chamada mesmo assim.
+
+**Cada pessoa:** `&chat sair` (`optout`, `salir`) — a Judy não conversa com ela em
+nenhum servidor e o que ela escreve não vai para a IA (memória, fio do canal, chat
+livre); `&chat voltar` desfaz. Tabela `ia_silencio`. Está na política de privacidade.
+
+**A porta anti-abuso** (`modulos/ai/anti-abuso.js`, antes do modelo, sem custo):
+- ritmo — 6 conversas/min e 40/h por pessoa (conta com menos de 24 h: 1/min), 10/min por
+  canal, 20/min por servidor, 60/min no total; uma conversa por pessoa de cada vez; o
+  servidor da casa com o dobro; o dono do bot passa;
+- repetição — a mesma pergunta da mesma pessoa em 1 min; a mesma de 3+ contas no mesmo
+  servidor em 2 min (ataque com contas);
+- conteúdo — mais de 2.000 caracteres, 5+ menções, 4+ links, 30 caracteres iguais
+  seguidos, texto repetitivo, zalgo, caracteres invisíveis, blocos base64/hex, os moldes de
+  jailbreak (pt/en/es: "ignore as instruções anteriores", "modo desenvolvedor", DAN,
+  marcas de sistema) e os pedidos de spam ("repita 500 vezes", "marque todo mundo");
+- quem está na quarentena do automod não fala com a IA;
+- o aviso é curto e no máximo um por minuto (responder a cada spam seria fazer o spam);
+- a resposta tem no máximo 4 mensagens (o resto fica para o "continue");
+- o chat livre filtra conteúdo e silêncio ANTES do juiz (que custa modelo).
+`CHAT_ANTI_ABUSO=0` desliga só o ritmo e a repetição (os filtros de conteúdo nunca) — a
+suíte usa isso, e a `ia-por-servidor-21out` testa o ritmo ligado.
+
+**Qualquer língua:** a Judy responde na língua de quem escreveu (sem saber, na do
+servidor). A reescrita para o português só vale quando a PERGUNTA foi em português e a
+resposta escapou para outra língua (o desvio do modelo que ela existia para corrigir).
+
+**Erros achados no caminho, cada um com teste:**
+
+| Erro | Teste |
+|---|---|
+| `&chat all good?` chegava ao modelo como "tudo good?": o normalizador traduz a 1ª palavra que coincide com um subcomando em inglês, e o `&chat` é texto livre | a pergunta sai do texto original da mensagem |
+| caracteres invisíveis LITERAIS no código (a ferramenta de escrita trocou ` ` pelo caractere e quebrou a regex; o `game.js` já tinha U+2063/U+2064 literais) | nenhum arquivo do bot tem invisível ou separador de linha literal |
+| o RSS decidia a IA sem a escolha do servidor — e nenhum teste pegava isso (só o formato do código) | a decisão virou `iaNoRssAqui`, com teste de comportamento |
+
+**Testes:** suíte nova `ia-por-servidor-21out` (35) e 7 suítes ajustadas ao opt-in
+(`CHAT_PADRAO=on` nelas). 16 mutações, todas derrubam um teste.
+
 ## 7. O que NÃO fiz, e por quê
 
 | Item | Por quê |

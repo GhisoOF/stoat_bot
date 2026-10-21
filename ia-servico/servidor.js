@@ -38,7 +38,7 @@ function umSystemNaFrente(messages) {
   return juntos ? [{ role: "system", content: juntos }, ...resto] : resto;
 }
 
-async function llm(messages, { modelo, comFerramentas = true, maxTokens = MAX_TOKENS } = {}) {
+async function llm(messages, { modelo, comFerramentas = true, maxTokens = MAX_TOKENS, contexto = {} } = {}) {
   const corpo = {
     model: modelo || MODELO_PADRAO,
     messages: umSystemNaFrente(messages),
@@ -46,7 +46,8 @@ async function llm(messages, { modelo, comFerramentas = true, maxTokens = MAX_TO
     max_tokens: maxTokens,
     temperature: 0.6,
   };
-  if (comFerramentas) corpo.tools = ferramentas.definicoes();
+  // (21 out 2026) o servidor que desligou a geração de imagem: o modelo nem vê a ferramenta
+  if (comFerramentas) corpo.tools = ferramentas.definicoes().filter((d) => !(contexto.semImagem && d?.function?.name === "gerar_imagem"));
 
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
@@ -68,10 +69,12 @@ async function llm(messages, { modelo, comFerramentas = true, maxTokens = MAX_TO
   } finally { clearTimeout(t); }
 }
 
+// (21 out 2026) a Judy fala qualquer língua: a resposta sai na língua da PESSOA, nunca
+// na dos resultados das ferramentas (a busca volta em inglês para pergunta em português)
 function lembreteDeIdioma(idioma) {
   return idioma === "en"
-    ? "Answer in English, regardless of the language of the tool results."
-    : "Responda em português do Brasil, independentemente do idioma dos resultados das ferramentas.";
+    ? "Answer in the same language as the person's message (any language), regardless of the language of the tool results."
+    : "Responda na mesma língua da mensagem da pessoa (qualquer língua), independentemente do idioma dos resultados das ferramentas.";
 }
 
 function chamadasEmTexto(texto) {
@@ -117,7 +120,7 @@ function chamadasEmTexto(texto) {
 
 // O contexto que o BOT manda junto (só campos conhecidos, só booleanos).
 function contextoDe(corpo) {
-  return { imagemAdulta: corpo?.contexto?.imagemAdulta === true };
+  return { imagemAdulta: corpo?.contexto?.imagemAdulta === true, semImagem: corpo?.contexto?.semImagem === true };
 }
 
 async function conversarComFerramentas(messages, { modelo, usarFerramentas = true, idioma = "pt", contexto = {} } = {}) {
@@ -135,7 +138,7 @@ async function conversarComFerramentas(messages, { modelo, usarFerramentas = tru
   let buscaTrouxeMapa = false; // a busca já veio com o mapa do melhor candidato?
 
   for (let volta = 0; volta < MAX_VOLTAS; volta++) {
-    const data = await llm(hist, { modelo, comFerramentas: usarFerramentas });
+    const data = await llm(hist, { modelo, comFerramentas: usarFerramentas, contexto });
     const msg = data?.message ?? {};
     let chamadas = msg.tool_calls || [];
 

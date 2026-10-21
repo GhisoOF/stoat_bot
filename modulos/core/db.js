@@ -291,6 +291,9 @@ export function abrirBanco(caminho) {
       respondidoEm TEXT
     )
   `);
+  // (21 out 2026) Quem pediu "não fale comigo" (`&chat sair`): a Judy não conversa com
+  // a pessoa nem leva o que ela escreve ao modelo, em nenhum servidor.
+  db.exec(`CREATE TABLE IF NOT EXISTS ia_silencio (userId TEXT PRIMARY KEY, desde TEXT NOT NULL)`);
   // (Privacidade P2, 20 out 2026) Servidores de onde a Judy saiu: os dados deles
   // somem 30 dias depois (se ela voltar antes, nada é apagado).
   db.exec(`CREATE TABLE IF NOT EXISTS servidores_saida (serverId TEXT PRIMARY KEY, saiuEm TEXT NOT NULL)`);
@@ -1054,6 +1057,16 @@ export function setConsentimento(userId, { memoria, fioGlobal, perguntado = fals
       perguntadoEm=excluded.perguntadoEm, respondidoEm=excluded.respondidoEm`)
     .run(String(userId), n.memoria, n.fioGlobal, n.perguntadoEm, n.respondidoEm);
   return getConsentimento(userId);
+}
+
+// ── "Não fale comigo" (21 out 2026) ──
+export function iaSilenciada(userId) {
+  return !!prep("SELECT 1 FROM ia_silencio WHERE userId = ?").get(String(userId));
+}
+export function setIaSilenciada(userId, sim) {
+  if (sim) prep("INSERT INTO ia_silencio (userId, desde) VALUES (?, ?) ON CONFLICT(userId) DO NOTHING").run(String(userId), new Date().toISOString());
+  else prep("DELETE FROM ia_silencio WHERE userId = ?").run(String(userId));
+  return iaSilenciada(userId);
 }
 
 // Quem desliga a memória perde tudo o que a IA sabia dela, em TODOS os servidores.

@@ -19,6 +19,7 @@ própria Judy é responsável pela própria instância e deve publicar a sua pol
 | O quê | Quando | Por quanto tempo |
 |---|---|---|
 | **Memória da IA** (fatos que aprendeu conversando, memória geral) | só se **você aceitou** — ela pergunta na primeira conversa | até você desligar (`&privacidade memoria off`) ou apagar |
+| Pedido de silêncio (`&chat sair`): só a sua conta e a data | quando **você** pede | até você desfazer (`&chat voltar`) |
 | Perfil (bio/status do seu cartão) | só quando **você mesmo** usa `&chat mapear` | até você apagar |
 | Histórico da conversa com a IA | quando você fala com ela (para não perder o fio) | **24 horas** |
 | Avisos e punições | quando a moderação de um servidor age | enquanto forem relevantes (os avisos zeram depois de 30 dias sem um novo) |
@@ -39,6 +40,8 @@ própria Judy é responsável pela própria instância e deve publicar a sua pol
 - **Imagens e fotos de perfil**, quando um servidor liga os filtros de imagem ou de
   avatar: um modelo de visão descreve a imagem; nada é guardado.
 - **Voz nas calls**: o texto lido em voz alta (TTS) não é guardado.
+- Para frear spam, a Judy conta por alguns minutos quantas vezes cada pessoa falou com
+  ela e guarda um resumo do texto da última pergunta (só na memória do processo).
 
 ### Para onde os dados vão
 
@@ -54,6 +57,9 @@ própria Judy é responsável pela própria instância e deve publicar a sua pol
 
 - `&privacidade` — o que a Judy guarda sobre você, e o link desta política.
 - `&privacidade memoria on|off` — liga ou desliga a memória; desligar apaga o que ela sabia.
+- `&chat sair` — a Judy não conversa com você em nenhum servidor, e o que você escreve não
+  vai para a IA (`&chat voltar` desfaz). O chat de cada servidor também começa desligado:
+  é a staff que o liga (`&chat on`).
 - `&privacidade apagar` — apaga **tudo** o que é seu (memória da IA, XP, saldo, RPG), em
   todos os servidores. Ficam só os registros de moderação dos servidores; para esses,
   fale com a staff do servidor ou com o operador. O que é de **outro** jogador fica com
@@ -75,6 +81,7 @@ is responsible for that instance and should publish their own policy.
 | What | When | For how long |
 |---|---|---|
 | **AI memory** (facts learned in conversation, general memory) | only if **you agreed** — she asks in your first conversation | until you turn it off (`&privacy memory off`) or delete it |
+| Silence request (`&chat optout`): only your account and the date | when **you** ask | until you undo it (`&chat optin`) |
 | Profile (bio/status from your card) | only when **you** use `&chat mapear` on yourself | until you delete it |
 | AI conversation history | when you talk to her (so she keeps the thread) | **24 hours** |
 | Warnings and punishments | when a server's moderation acts | while relevant (warnings reset after 30 days without a new one) |
@@ -95,6 +102,8 @@ is responsible for that instance and should publish their own policy.
 - **Images and profile pictures**, when a server enables the image or avatar filters: a
   vision model describes the image; nothing is kept.
 - **Voice in calls**: text read aloud (TTS) isn't kept.
+- To curb spam, Judy counts for a few minutes how many times each person talked to her
+  and keeps a digest of the last question's text (only in the process memory).
 
 ### Where data goes
 
@@ -109,6 +118,9 @@ is responsible for that instance and should publish their own policy.
 
 - `&privacy` — what Judy keeps about you, and a link to this policy.
 - `&privacy memory on|off` — turns the memory on or off; off erases what she knew.
+- `&chat optout` — Judy won't chat with you on any server, and what you write doesn't go
+  to the AI (`&chat optin` undoes it). Each server's chat also starts off: the staff
+  turns it on (`&chat on`).
 - `&privacy delete` — erases **everything** that's yours (AI memory, XP, balance, RPG) on
   every server. Only the servers' moderation records stay; for those, talk to the
   server's staff or to the operator. What belongs to **another** player stays with them,
@@ -130,6 +142,7 @@ propia Judy es responsable de esa instancia y debe publicar su propia política.
 | Qué | Cuándo | Por cuánto tiempo |
 |---|---|---|
 | **Memoria de la IA** (datos aprendidos conversando, memoria general) | solo si **aceptaste** — lo pregunta en la primera conversación | hasta que la desactives (`&privacidad memoria off`) o la borres |
+| Petición de silencio (`&chat salir`): solo tu cuenta y la fecha | cuando **tú** lo pides | hasta que lo deshagas (`&chat volver`) |
 | Perfil (bio/estado de tu tarjeta) | solo cuando **tú mismo** usas `&chat mapear` | hasta que lo borres |
 | Historial de la conversación con la IA | cuando hablas con ella (para no perder el hilo) | **24 horas** |
 | Advertencias y sanciones | cuando la moderación de un servidor actúa | mientras sean relevantes (las advertencias se reinician tras 30 días sin una nueva) |
@@ -150,6 +163,8 @@ propia Judy es responsable de esa instancia y debe publicar su propia política.
 - **Imágenes y fotos de perfil**, cuando un servidor activa los filtros de imagen o de
   avatar: un modelo de visión describe la imagen; no se guarda nada.
 - **Voz en las llamadas**: el texto leído en voz alta (TTS) no se guarda.
+- Para frenar el spam, Judy cuenta durante unos minutos cuántas veces habló cada persona
+  con ella y guarda un resumen del texto de la última pregunta (solo en la memoria del proceso).
 
 ### A dónde van los datos
 
@@ -165,6 +180,9 @@ propia Judy es responsable de esa instancia y debe publicar su propia política.
 
 - `&privacidad` — lo que Judy guarda sobre ti, y el enlace a esta política.
 - `&privacidad memoria on|off` — activa o desactiva la memoria; desactivarla borra lo que sabía.
+- `&chat salir` — Judy no conversará contigo en ningún servidor, y lo que escribas no irá
+  a la IA (`&chat volver` lo deshace). El chat de cada servidor también empieza
+  desactivado: lo activa el staff (`&chat on`).
 - `&privacidad borrar` — borra **todo** lo tuyo (memoria de la IA, XP, saldo, RPG) en
   todos los servidores. Solo quedan los registros de moderación de los servidores; para
   esos, habla con el staff del servidor o con el operador. Lo que es de **otro** jugador

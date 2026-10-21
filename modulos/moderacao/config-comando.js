@@ -1,4 +1,4 @@
-import { servidorPermitido as temIA, comandoIAPermitido } from "../ai/chat.js";
+import { iaDisponivel as temIA, comandoIAPermitido, chatLigadoAqui, imagemLigadaAqui } from "../ai/chat.js";
 import { citar, citarInterno, trechoPronto } from "../core/aliases.js";
 
 import * as db from "../core/db.js";
@@ -230,6 +230,9 @@ export async function cmdConfig(message, args, ctx) {
       "",
       ...(temIA(serverId) ? [
         T("**🤖 IA (Judy)**", "**🤖 AI (Judy)**", "**🤖 IA (Judy)**"),
+        // (21 out 2026) o servidor escolhe: começam desligados
+        `${T("Chat:", "Chat:", "Chat:")} ${chatLigadoAqui(serverId, config) ? T("🟢 ligado", "🟢 on", "🟢 activado") : `${T("🔴 desligado", "🔴 off", "🔴 desactivado")} — \`${T(citarInterno("chat.on", PREFIXO), citarInterno("chat.on", PREFIXO), citar("chat.on", "es", PREFIXO))}\``}`,
+        `${T("Geração de imagem:", "Image generation:", "Generación de imágenes:")} ${imagemLigadaAqui(serverId, config) ? T("🟢 ligada", "🟢 on", "🟢 activada") : `${T("🔴 desligada", "🔴 off", "🔴 desactivada")} — \`${T(citarInterno("chat.imagem", PREFIXO), citarInterno("chat.imagem", PREFIXO), citar("chat.imagem", "es", PREFIXO))} on\``}`,
         `${T("Conversa livre:", "Free chat:", "Conversación libre:")} ${config.chatLivre?.canais?.length ? config.chatLivre.canais.map((c) => `<#${c}>`).join(", ") + ` (${T("modo", "mode", "modo")} \`${config.chatLivre.modo ?? "relevante"}\`)` : T("_(desligada)_", "_(off)_", "_(desactivada)_")}`,
         `${T("Comentários espontâneos:", "Spontaneous comments:", "Comentarios espontáneos:")} ${config.comentarioEspontaneo?.canalId ? `<#${config.comentarioEspontaneo.canalId}> (${T("até", "up to", "hasta")} ${config.comentarioEspontaneo.porDia ?? 4}/${T("dia", "day", "día")})` : T("_(desligados)_", "_(off)_", "_(desactivados)_")}`,
         `${T("Moderação por IA:", "AI moderation:", "Moderación por IA:")} ${config.moderacaoIA?.ativa ? T("🟢 ativa", "🟢 active", "🟢 activa") : T("🔴 desligada", "🔴 off", "🔴 desactivada")}${config.moderacaoIA?.criterios ? "" : T(" _(sem critérios)_", " _(no criteria)_", " _(sin criterios)_")}`,

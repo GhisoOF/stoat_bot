@@ -586,7 +586,8 @@ async function tratarMensagem(message) {
     // Responder a uma mensagem dela com @OutraPessoa no texto é falar com a
     // outra pessoa — o "ping" da resposta não conta (ver destinatario.js).
     const mencionado = dirigidoAoBot({ conteudo: message.content, mentionIds: message.mentionIds, botId: meuId });
-    if (mencionado && chat.servidorPermitido(serverId) && !(ctx.config.comandosDesativados ?? []).includes("chat")) {
+    // (21 out 2026) quem pediu "não fale comigo" (`&chat sair`) é ignorado pela IA em silêncio
+    if (mencionado && chat.servidorPermitido(serverId) && !chat.naoFalarCom(message.authorId) && !(ctx.config.comandosDesativados ?? []).includes("chat")) {
       // O AUTOMOD VEM ANTES DA IA. Antes, mencionar a Judy pulava a moderação
       // inteira — o ataque de 2 out 2026 colava "@Judy" em cada mensagem de
       // emoji + ofensa racial, e nenhum filtro rodava (e ainda ganhava XP).
@@ -621,7 +622,8 @@ async function tratarMensagem(message) {
     try { await ttsVoz.aoMensagem(message, ctx); }
     catch (e) { console.error("[TTS]", e.message); }
 
-    if (chat.servidorPermitido(serverId)) {
+    // o que quem pediu silêncio escreve não vai para a IA (nem memória, nem o fio do canal)
+    if (chat.servidorPermitido(serverId) && !chat.naoFalarCom(message.authorId)) {
       const nome = message.author?.username ?? message.member?.nickname ?? message.authorId;
       chat.observarMensagem({
         serverId, userId: message.authorId, nome,

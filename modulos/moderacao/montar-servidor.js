@@ -18,6 +18,7 @@
 //   • no fim, segue para o `&assistente completo` com o registro, as boas-vindas, a staff
 //     e o cargo automático já respondidos (pelos canais e cargos daqui).
 import { Permission } from "stoat.js";
+import { segundosPara } from "../core/ritmo-api.js";
 import { editarCargos } from "../core/hierarquia.js";
 import { descreverErro } from "../core/erros.js";
 
@@ -305,6 +306,17 @@ const ROTULO_ACESSO = {
 };
 
 // a prévia, linha a linha (o chamador marca como pronta e envia)
+// (22 out 2026) quantos pedidos ao grupo /servers do Stoat (5 a cada 10 s) o plano faz:
+// criar cargo, dar permissão e pintar; criar canal; dar o cargo à Judy; as categorias.
+// As permissões de canal são de outro grupo (15 a cada 10 s) e não pesam.
+export function pedidosDoPlano(plano) {
+  let n = 0;
+  for (const c of plano.cargos) if (!c.existeId) n += 1 + (c.perms ? 1 : 0) + (c.cor || c.hoist ? 1 : 0);
+  if (plano.cargos.some((c) => c.chave === "bots")) n += 1;
+  const canaisNovos = plano.categorias.flatMap((cat) => cat.canais).filter((c) => !c.existeId).length;
+  return n + canaisNovos + (canaisNovos ? 1 : 0);
+}
+
 export function textoPrevia(plano, lang) {
   const L = [];
   const novo = "✨", existe = "↪️";
@@ -327,6 +339,13 @@ export function textoPrevia(plano, lang) {
         c.papel === "boasvindas" ? T3(lang, "as boas-vindas", "the welcome messages", "la bienvenida") : null].filter(Boolean);
       L.push(`${novo} ${nome}${extras.length ? ` — ${extras.join(" · ")}` : ""}`);
     }
+  }
+  const seg = segundosPara(pedidosDoPlano(plano));
+  if (seg >= 20) {
+    const min = Math.ceil(seg / 60);
+    L.push("", T3(lang, `⏱️ Leva uns **${min} min**: o Stoat aceita 5 mudanças no servidor a cada 10 s, e eu espero a vez.`,
+      `⏱️ Takes about **${min} min**: Stoat accepts 5 server changes every 10 s, and I wait my turn.`,
+      `⏱️ Tarda unos **${min} min**: Stoat acepta 5 cambios en el servidor cada 10 s, y espero mi turno.`));
   }
   return L;
 }

@@ -14845,8 +14845,17 @@ for (const f of ["/tmp/cores20.db", "/tmp/cores20.db-wal", "/tmp/cores20.db-shm"
 const st = globalThis.setTimeout;
 globalThis.setTimeout = (f, ms, ...a) => st(f, ms === 300 || ms === 350 ? 0 : ms, ...a);
 const pintados = new Map();   // roleId → cor que foi à API
+// (22 out 2026) o Stoat com limite: `limite429` responde 429 ao 1º PATCH de cada cargo;
+// `falhar403` recusa os próximos N PATCH
+let limite429 = false, falhar403 = 0, pedidos429 = 0;
+const jaLimitados = new Set();
 globalThis.fetch = async (url, op) => {
   const m = String(url).match(/\/roles\/([^/?]+)/);
+  if (m && limite429 && !jaLimitados.has(m[1])) {
+    jaLimitados.add(m[1]); pedidos429++;
+    return new Response(JSON.stringify({ retry_after: 40 }), { status: 429, headers: { "X-RateLimit-Reset-After": "40", "X-RateLimit-Remaining": "0" } });
+  }
+  if (m && falhar403 > 0) { falhar403--; return new Response("{\"type\":\"MissingPermission\"}", { status: 403 }); }
   if (m) {
     const corpo = JSON.parse(op?.body ?? "{}");
     if (corpo.colour) pintados.set(m[1], corpo.colour);
@@ -15022,8 +15031,52 @@ await t("★ cargo com o nome da cor que TEM permissões fica de fora; sem permi
   assert.deepEqual(F.criados, ["vermelho"], "o azul foi reaproveitado, o verde não foi recriado");
   assert.equal(pintados.get(VERDE), undefined, "o cargo com permissões nem foi pintado");
   assert.equal(pintados.get(AZUL), cores.CORES.azul);
-  assert.match(descDe(saida.at(-1)), /Não entraram:\*\* verde \(.*permiss/);
+  assert.match(descDe(saida.at(-1)), /Não entraram:\*\* verde (\(|— ).*permiss/);
   assert.equal(db.getReactionRole(p[0].id, "🟢"), null);
+});
+
+console.log("\n── o limite do Stoat (22 out 2026) ──");
+// Ghieh: o painel criava 1 ou 2 cores e "não entraram" as outras 28 — o 6º pedido a
+// /servers em 10 s voltava 429 e nada esperava.
+await t("★ 429 no meio: o bot espera a vez e TODAS as cores entram", async () => {
+  limite429 = true; pedidos429 = 0;
+  try {
+    const G = montar("01KCORSRVG0000000000000000");
+    await G.say("&idioma pt");
+    const saida = await G.say("&cor painel aqui vermelho laranja amarelo verde azul");
+    assert.equal(pedidos429, 5, "cada cargo levou um 429");
+    assert.deepEqual(paineis(saida).map((m) => m.reacoes), [["🔴", "🟠", "🟡", "🟢", "🔵"]]);
+    const fim = descDe(saida.at(-1));
+    assert.doesNotMatch(fim, /Não entraram/);
+    assert.match(fim, /\*\*5\*\* cargo\(s\) criado\(s\), \*\*0\*\* reaproveitado\(s\)/);
+  } finally { limite429 = false; }
+});
+await t("★ cargo criado e não pintado: a conta não fica negativa, e o motivo aparece", async () => {
+  falhar403 = 1;
+  const H = montar("01KCORSRVH0000000000000000");
+  await H.say("&idioma pt");
+  const fim = descDe((await H.say("&cor painel aqui vermelho laranja")).at(-1));
+  assert.match(fim, /\*\*1\*\* cargo\(s\) criado\(s\), \*\*0\*\* reaproveitado\(s\)/);
+  assert.doesNotMatch(fim, /\*\*-\d/);
+  assert.match(fim, /Não entraram:\*\* vermelho — API respondeu 403/);
+});
+await t("★ o \"Preparando…\" diz quanto leva (30 cores novas ≈ 2 min); repintar o que já tem a cor não gasta pedido", async () => {
+  const I = montar("01KCORSRVI0000000000000000");
+  await I.say("&idioma pt");
+  const antes = I.msgs.length;
+  await I.say("&cor painel aqui");
+  const prep = I.msgs.slice(antes).map(descDe).find((d) => /Criando\/pintando/.test(d)) ?? "";
+  assert.match(prep, /Leva uns \*\*2 min\*\* — o Stoat aceita 5 mudanças no servidor a cada 10 s/);
+  const existentes = new Map([["vermelho", { id: "R1", r: { colour: cores.CORES.vermelho } }], ["laranja", { id: "R2", r: { colour: "#000000" } }]]);
+  const alvos = [{ tipo: "s", nome: "vermelho" }, { tipo: "s", nome: "laranja" }];
+  const nome = (it) => it.nome, valor = (it) => cores.CORES[it.nome];
+  assert.equal(cor.mesmaCor(cores.CORES.vermelho, cores.CORES.vermelho.toUpperCase()), true);
+  assert.equal(cor.tempoDoLote(alvos, existentes, nome, valor), 0, "1 pedido só (o laranja)");
+  const pintadosAntes = pintados.size;
+  const J = montar("01KCORSRVJ0000000000000000", new Map([["01KCORJAPINTADO00000000000", { name: "vermelho", rank: 60, colour: cores.CORES.vermelho, permissions: { a: 0n, d: 0n } }]]));
+  await J.say("&idioma pt");
+  await J.say("&cor painel aqui vermelho");
+  assert.equal(pintados.size, pintadosAntes, "o vermelho já era vermelho: nenhum PATCH");
 });
 
 console.log(`\nCORES (20 out): ${ok} ok, ${falhou} falha(s)`);
@@ -18197,6 +18250,79 @@ if (falhou) process.exitCode = 1;
 };
 
 // ── O executor ───────────────────────────────────────────────────────────────
+// ════════════════════════════════════════════════════════════════════════════
+// ritmo-api-22out — o limite de pedidos do Stoat (5 a cada 10 s em /servers)
+// ════════════════════════════════════════════════════════════════════════════
+SUITES["ritmo-api-22out"] = async () => {
+const assert = (await import("node:assert")).default;
+const fs = (await import("node:fs")).default;
+const ritmo = await import("./modulos/core/ritmo-api.js");
+const montar = await import("./modulos/moderacao/montar-servidor.js");
+let ok = 0, falhou = 0;
+const t = async (nome, fn) => {
+  const o = [console.warn]; console.warn = () => {};
+  ritmo._zerar();
+  try { await fn(); [console.warn] = o; console.log(`  ✅ ${nome}`); ok++; }
+  catch (e) { [console.warn] = o; console.log(`  ❌ ${nome}\n     ${e.message}`); falhou++; }
+};
+const resp = (status, { corpo = "{}", h = {} } = {}) => new Response(corpo, { status, headers: h });
+await t("o grupo de rotas, nos dois endereços da API", () => {
+  assert.equal(ritmo.grupoDaRota("https://stoat.chat/api/servers/S/roles"), "servers");
+  assert.equal(ritmo.grupoDaRota("https://api.stoat.chat/servers/S/roles/R"), "servers");
+  assert.equal(ritmo.grupoDaRota("https://stoat.chat/api/channels/C/messages"), "channels/messages");
+  assert.equal(ritmo.grupoDaRota("https://stoat.chat/api/channels/C/permissions/default"), "channels");
+});
+await t("★ 429: espera o retry_after e tenta de novo — a chamada dá certo", async () => {
+  const quando = [];
+  const f = ritmo.comRitmo(async () => { quando.push(Date.now()); return quando.length === 1 ? resp(429, { corpo: '{"retry_after":60}' }) : resp(200); });
+  const r = await f("https://stoat.chat/api/servers/S/roles", { method: "POST", body: "{}" });
+  assert.equal(r.status, 200); assert.equal(quando.length, 2);
+  assert.ok(quando[1] - quando[0] >= 60, `esperou ${quando[1] - quando[0]} ms`);
+});
+await t("★ o cabeçalho X-RateLimit-Reset-After vale; e a janela esgotada (Remaining: 0) faz o PRÓXIMO esperar — só no mesmo grupo", async () => {
+  const quando = [];
+  const f = ritmo.comRitmo(async (url) => { quando.push([String(url), Date.now()]); return quando.length === 1 ? resp(200, { h: { "X-RateLimit-Remaining": "0", "X-RateLimit-Reset-After": "80" } }) : resp(200); });
+  const t0 = Date.now();
+  await f("https://api.stoat.chat/servers/S/roles/R", { method: "PATCH", body: "{}" });
+  await f("https://api.stoat.chat/users/@me");
+  const t1 = Date.now();
+  await f("https://stoat.chat/api/servers/S/members/U");
+  assert.ok(t1 - t0 < 70, "outro grupo não espera");
+  assert.ok(Date.now() - t0 >= 80, "o mesmo grupo espera a janela");
+});
+await t("desiste: depois de 4 tentativas, ou com espera maior que 20 s, devolve o 429", async () => {
+  let n = 0;
+  const f = ritmo.comRitmo(async () => { n++; return resp(429, { corpo: '{"retry_after":5}' }); });
+  assert.equal((await f("https://stoat.chat/api/servers/S")).status, 429); assert.equal(n, 4);
+  n = 0;
+  const g = ritmo.comRitmo(async () => { n++; return resp(429, { corpo: '{"retry_after":60000}' }); });
+  assert.equal((await g("https://stoat.chat/api/servers/S")).status, 429); assert.equal(n, 1);
+});
+await t("fora da API (CDN, LLM, webhooks) passa direto, sem esperar nem repetir", async () => {
+  let n = 0;
+  const f = ritmo.comRitmo(async () => { n++; return resp(429); });
+  assert.equal((await f("https://cdn.stoatusercontent.com/attachments/x")).status, 429);
+  assert.equal((await f("http://llm.local:8080/v1/chat/completions")).status, 429);
+  assert.equal(n, 2);
+  assert.equal(ritmo.comRitmo(f), f, "não embrulha duas vezes");
+});
+await t("★ o main.js instala o ritmo antes de tudo, e a stoat.js usa o fetch global", () => {
+  assert.match(fs.readFileSync("main.js", "utf8"), /import \{ instalar as instalarRitmoDaApi \} from '\.\/modulos\/core\/ritmo-api\.js';\n[^\n]*\ninstalarRitmoDaApi\(\);/);
+  assert.match(fs.readFileSync("node_modules/stoat-api/lib/index.js", "utf8"), /await fetch\(/);
+});
+await t("★ o wizard de servidor avisa quanto leva (e não avisa quando é pouco)", () => {
+  const vazio = montar.planejar({ modelo: "comunidade", lang: "pt", server: { roles: new Map(), channels: [] } });
+  assert.ok(montar.pedidosDoPlano(vazio) > 10, String(montar.pedidosDoPlano(vazio)));
+  assert.match(montar.textoPrevia(vazio, "pt").join("\n"), /⏱️ Leva uns \*\*\d+ min\*\*: o Stoat aceita 5 mudanças/);
+  assert.match(montar.textoPrevia(vazio, "es").join("\n"), /⏱️ Tarda unos \*\*\d+ min\*\*/);
+  const tudo = { ...vazio, cargos: vazio.cargos.map((c) => ({ ...c, existeId: "X" })), categorias: vazio.categorias.map((cat) => ({ ...cat, canais: cat.canais.map((c) => ({ ...c, existeId: "X" })) })) };
+  assert.doesNotMatch(montar.textoPrevia(tudo, "pt").join("\n"), /⏱️/);
+  assert.equal(ritmo.segundosPara(5), 0); assert.equal(ritmo.segundosPara(60), 110);
+});
+console.log(`\nRITMO DA API (22 out): ${ok} ok, ${falhou} falha(s)`);
+process.exit(falhou ? 1 : 0);
+};
+
 const PRECISA_DO_BOT = (nome) => /import\("\.\/main\.js"\)/.test(String(SUITES[nome]));
 
 if (process.env.__SUITE) {

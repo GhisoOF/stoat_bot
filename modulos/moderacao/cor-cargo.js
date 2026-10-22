@@ -5,6 +5,7 @@ import { CORES as NOMES, CORES_EN, CORES_ES, normalizarCor as corSolida, nomesDe
 import { tr, lingua, idiomaDe } from "../core/i18n.js";
 import { chamarApi } from "../core/stoat-api.js";
 import { canalDeOutroServidor } from "./pertence.js";
+import { segundosPara } from "../core/ritmo-api.js";
 
 // Gradientes prontos — o atalho para o efeito bonito sem montar nada.
 export const PRESETS = {
@@ -81,6 +82,22 @@ const PALAVRAS_GRADIENTES = ["gradientes", "gradients", "gradiente", "gradient",
 export const MAX_REACOES = 20;
 // Um cargo com o nome da cor que JÁ tem permissões não vira cor de painel: qualquer
 // um poderia pegá-lo reagindo (um "Verde" de time, um "Ouro" de staff…).
+// a cor que o cargo já tem é a pedida? (não gasta pedido à toa: o Stoat aceita 5 a cada 10 s)
+export function mesmaCor(atual, nova) {
+  const n = (x) => String(x ?? "").toLowerCase().replace(/\s+/g, "");
+  return !!atual && n(atual) === n(nova);
+}
+
+// quanto tempo o lote leva: cargo novo = criar + pintar; existente = pintar (ou nada)
+export function tempoDoLote(alvos, existentes, nomeDe, valorDe) {
+  let pedidos = 0;
+  for (const it of alvos) {
+    const ja = existentes.get(nomeDe(it, false)) ?? existentes.get(nomeDe(it, true));
+    pedidos += !ja ? 2 : mesmaCor(ja.r?.colour, valorDe(it)) ? 0 : 1;
+  }
+  return segundosPara(pedidos);
+}
+
 function temPermissoes(role) {
   try { return BigInt(role?.permissions?.a ?? 0) !== 0n; } catch { return false; }
 }
@@ -446,20 +463,27 @@ export async function cmdCor(message, args, ctx) {
     const existentes = new Map();
     for (const [id, r] of (server.roles ?? [])) existentes.set((r?.name ?? "").toLowerCase(), { id, r });
 
+    // (22 out 2026) o Stoat aceita 5 mudanças no servidor a cada 10 s: 30 cores novas
+    // são 60 pedidos, ~2 min. O bot espera a vez (core/ritmo-api.js) — e avisa quanto.
+    const seg = tempoDoLote(alvos, existentes, nomeDoItem, valorDoItem);
+    const quanto = (l) => seg < 20 ? X3(l, "Pode levar alguns segundos.", "This may take a few seconds.", "Puede tardar unos segundos.")
+      : X3(l, `Leva uns **${Math.ceil(seg / 60)} min** — o Stoat aceita 5 mudanças no servidor a cada 10 s, e eu espero a vez.`,
+        `Takes about **${Math.ceil(seg / 60)} min** — Stoat accepts 5 server changes every 10 s, and I wait my turn.`,
+        `Tarda unos **${Math.ceil(seg / 60)} min** — Stoat acepta 5 cambios en el servidor cada 10 s, y espero mi turno.`);
     await sendEmbed(message.channel, tr(ctx, {
       title: "🎨 Preparando…",
-      description: `Criando/pintando **${alvos.length}** cargo(s)${soCargos ? "" : " e montando o painel"}. Pode levar alguns segundos.`,
+      description: `Criando/pintando **${alvos.length}** cargo(s)${soCargos ? "" : " e montando o painel"}. ${quanto(false)}`,
       colour: COR.info }, {
       title: "🎨 Getting ready…",
-      description: `Creating/painting **${alvos.length}** role(s)${soCargos ? "" : " and assembling the panel"}. This may take a few seconds.`,
+      description: `Creating/painting **${alvos.length}** role(s)${soCargos ? "" : " and assembling the panel"}. ${quanto(true)}`,
       colour: COR.info,
     }, {
       title: "🎨 Preparando…",
-      description: `Creando/pintando **${alvos.length}** rol(es)${soCargos ? "" : " y montando el panel"}. Puede tardar unos segundos.`,
+      description: `Creando/pintando **${alvos.length}** rol(es)${soCargos ? "" : " y montando el panel"}. ${quanto("es")}`,
       colour: COR.info }));
 
     const prontos = [], falhas = [];
-    let novosCargos = 0;
+    let novosCargos = 0, reaproveitados = 0;   // (o "-1 reaproveitado(s)": criado e não pintado contava como criado e saía da conta)
     for (const it of alvos) {
       // o cargo já existe com o nome em português OU em inglês; o novo nasce no idioma do servidor
       const jaExiste = existentes.get(nomeDoItem(it, false)) ?? existentes.get(nomeDoItem(it, true));
@@ -468,19 +492,26 @@ export async function cmdCor(message, args, ctx) {
         continue;
       }
       let roleId = jaExiste?.id ?? null;
+      let criado = false;
       if (!roleId) {
         try {
           const r = await server.createRole(nomeDoItem(it, en));
           roleId = r?.id ?? r?._id ?? r;
-          novosCargos++;
+          criado = true;
         } catch (e) { falhas.push({ ...it, erro: X(`não consegui criar (${e?.message ?? e})`, `couldn't create (${e?.message ?? e})`, `no pude crearlo (${e?.message ?? e})`) }); continue; }
       }
-      const r = await aplicarCor(serverId, roleId, valorDoItem(it), L);
+      const r = jaExiste && mesmaCor(jaExiste.r?.colour, valorDoItem(it)) ? { ok: true } : await aplicarCor(serverId, roleId, valorDoItem(it), L);
       if (!r.ok) { falhas.push({ ...it, erro: r.erro.split("\n")[0] }); continue; }
+      if (criado) novosCargos++; else reaproveitados++;
       prontos.push({ ...it, roleId });
       await new Promise((s) => setTimeout(s, 350));   // limite de taxa
     }
-    const listaFalhas = (emIngles) => falhas.map((f) => `${nomeDoItem(f, emIngles)}${/permis/.test(f.erro) ? ` (${f.erro})` : ""}`).join(", ");
+    // (22 out 2026) o motivo aparece sempre — curto, e uma vez só quando é o mesmo para todas
+    const listaFalhas = (emIngles) => {
+      const motivos = [...new Set(falhas.map((f) => String(f.erro).slice(0, 120)))];
+      if (motivos.length === 1) return `${falhas.map((f) => nomeDoItem(f, emIngles)).join(", ")} — ${motivos[0]}`;
+      return falhas.map((f) => `${nomeDoItem(f, emIngles)} (${String(f.erro).slice(0, 80)})`).join(", ");
+    };
 
     if (!prontos.length) {
       const itensFalhos = falhas.slice(0, 8).map((f) => `• \`${nomeDoItem(f, en)}\` — ${f.erro}`).join("\n");
@@ -501,7 +532,7 @@ export async function cmdCor(message, args, ctx) {
       return sendEmbed(message.channel, tr(ctx, {
         title: falhas.length ? "🎨 Cargos prontos (com pendências)" : "🎨 Cargos prontos",
         description: [
-          `**${novosCargos}** criado(s), **${prontos.length - novosCargos}** já existia(m) e foi(ram) pintado(s).`,
+          `**${novosCargos}** criado(s), **${reaproveitados}** já existia(m) e foi(ram) pintado(s).`,
           prontos.map((c) => `${emojiDoItem(c) ?? "•"} <%${c.roleId}>`).join("  "),
           falhas.length ? `\n**Falharam:** ${listaFalhas(false)}` : "",
           "",
@@ -510,7 +541,7 @@ export async function cmdCor(message, args, ctx) {
         colour: falhas.length ? COR.aviso : COR.sucesso }, {
         title: falhas.length ? "🎨 Roles ready (with issues)" : "🎨 Roles ready",
         description: [
-          `**${novosCargos}** created, **${prontos.length - novosCargos}** already existed and got painted.`,
+          `**${novosCargos}** created, **${reaproveitados}** already existed and got painted.`,
           prontos.map((c) => `${emojiDoItem(c) ?? "•"} <%${c.roleId}>`).join("  "),
           falhas.length ? `\n**Failed:** ${listaFalhas(true)}` : "",
           "",
@@ -520,7 +551,7 @@ export async function cmdCor(message, args, ctx) {
       }, {
         title: falhas.length ? "🎨 Roles listos (con pendientes)" : "🎨 Roles listos",
         description: [
-          `**${novosCargos}** creado(s), **${prontos.length - novosCargos}** ya existía(n) y se pintó/pintaron.`,
+          `**${novosCargos}** creado(s), **${reaproveitados}** ya existía(n) y se pintó/pintaron.`,
           prontos.map((c) => `${emojiDoItem(c) ?? "•"} <%${c.roleId}>`).join("  "),
           falhas.length ? `\n**Fallaron:** ${listaFalhas(true)}` : "",
           "",
@@ -631,7 +662,7 @@ export async function cmdCor(message, args, ctx) {
       title: "✅ Painel publicado",
       description: [
         `Painel em <#${destinoId}> com **${ligados}** cor(es) prontas para escolher${publicadas.length > 1 ? ` (${publicadas.length} mensagens)` : ""}.`,
-        `**${novosCargos}** cargo(s) criado(s), **${prontos.length - novosCargos}** reaproveitado(s).`,
+        `**${novosCargos}** cargo(s) criado(s), **${reaproveitados}** reaproveitado(s).`,
         "🎯 Modo **exclusivo** ligado: escolher uma cor troca a anterior.",
         falhas.length ? `\n⚠️ **Não entraram:** ${listaFalhas(false)}` : "",
         semReacao.length ? `\n⚠️ **Sem reação:** ${semReacao.slice(0, 4).join(", ")}` : "",
@@ -641,7 +672,7 @@ export async function cmdCor(message, args, ctx) {
       title: "✅ Panel published",
       description: [
         `Panel in <#${destinoId}> with **${ligados}** color(s) ready to pick${publicadas.length > 1 ? ` (${publicadas.length} messages)` : ""}.`,
-        `**${novosCargos}** role(s) created, **${prontos.length - novosCargos}** reused.`,
+        `**${novosCargos}** role(s) created, **${reaproveitados}** reused.`,
         "🎯 **Exclusive** mode on: picking a color swaps the previous one.",
         falhas.length ? `\n⚠️ **Left out:** ${listaFalhas(true)}` : "",
         semReacao.length ? `\n⚠️ **No reaction:** ${semReacao.slice(0, 4).join(", ")}` : "",
@@ -652,7 +683,7 @@ export async function cmdCor(message, args, ctx) {
       title: "✅ Panel publicado",
       description: [
         `Panel en <#${destinoId}> con **${ligados}** color(es) listos para elegir${publicadas.length > 1 ? ` (${publicadas.length} mensajes)` : ""}.`,
-        `**${novosCargos}** rol(es) creado(s), **${prontos.length - novosCargos}** reutilizado(s).`,
+        `**${novosCargos}** rol(es) creado(s), **${reaproveitados}** reutilizado(s).`,
         "🎯 Modo **exclusivo** activado: elegir un color cambia el anterior.",
         falhas.length ? `\n⚠️ **No entraron:** ${listaFalhas(true)}` : "",
         semReacao.length ? `\n⚠️ **Sin reacción:** ${semReacao.slice(0, 4).join(", ")}` : "",

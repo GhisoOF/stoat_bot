@@ -1,6 +1,9 @@
 import 'dotenv/config';
 import './modulos/core/log-anonimo.js';   // privacidade: IDs do Stoat viram pseudônimo no log
 import './modulos/core/env.js';
+import { instalar as instalarRitmoDaApi } from './modulos/core/ritmo-api.js';
+// (22 out 2026) o limite de pedidos do Stoat (5 a cada 10 s em /servers): espera em vez de falhar
+instalarRitmoDaApi();
 
 // A stoat.js emite "Skipping key X during hydration!" por console.DEBUG (uma
 // linha por campo desconhecido de cada objeto: chega a 70% do log). O filtro

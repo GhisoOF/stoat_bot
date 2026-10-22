@@ -1598,6 +1598,35 @@ mutações, todas pegas.
 `chat-adulto-15out`; `ia-so-casa-16out`, `imagem-casa-16out` e `imagem-qwen-15out`
 ajustadas. 26 mutações, todas derrubam um teste.
 
+## 6ze. O limite de pedidos do Stoat: o `&cor painel` que parava na 3ª cor (22 out 2026)
+
+Ghieh testou o `&cor painel aqui`: a 1ª vez saíram 2 cores ("**-1** reaproveitado(s)"),
+a 2ª vez 4, e as outras ~26 "não entraram" — sem motivo na mensagem.
+
+**A causa:** o Stoat limita cada grupo de rotas por janela de 10 s, e `/servers` (criar e
+pintar cargo, criar canal, permissões de cargo, dar cargo, kick, ban) aceita só **5**. Cada
+cor nova são 2 pedidos (criar + pintar): o 6º pedido voltava **429** com `retry_after`, e
+nada no bot esperava. Os motivos sumiam porque a lista de falhas só mostrava os de
+permissão. O `&assistente servidor` e o `&xp criarcargos` batiam no mesmo teto.
+Tabela oficial: https://developers.stoat.chat/developers/api/ratelimits
+
+**A correção** — `modulos/core/ritmo-api.js`, instalado no começo do `main.js` sobre o
+`fetch` global (a stoat.js e o `chamarApi` usam o mesmo), só para os endereços da API
+(`https://stoat.chat/api` da stoat.js e o `STOAT_API` do `chamarApi`):
+- 429 → espera o `X-RateLimit-Reset-After`/`retry_after` e repete (até 4 vezes; espera
+  acima de 20 s volta como está);
+- resposta com `X-RateLimit-Remaining: 0` → o próximo pedido ao mesmo grupo espera a
+  janela reabrir (sem gastar um 429).
+
+**No painel de cores:** o "Preparando…" diz quanto leva (30 cores novas ≈ 2 min); cargo que
+já tem a cor pedida não é repintado (não gasta pedido); a conta separa criados de
+reaproveitados (o "-1" era um cargo criado que falhou ao pintar); toda falha mostra o
+motivo (uma vez só quando é o mesmo para todas). **No wizard:** a prévia diz quanto leva
+quando passa de ~20 s.
+
+**Testes:** suíte nova `ritmo-api-22out` (7) e 3 testes na `cores-20out` (429 no meio de
+5 cores, conta e motivo, tempo e repintura). 12 mutações, todas pegas.
+
 ## 7. O que NÃO fiz, e por quê
 
 | Item | Por quê |

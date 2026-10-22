@@ -1627,6 +1627,23 @@ quando passa de ~20 s.
 **Testes:** suíte nova `ritmo-api-22out` (7) e 3 testes na `cores-20out` (429 no meio de
 5 cores, conta e motivo, tempo e repintura). 12 mutações, todas pegas.
 
+## 6zf. Dependências com aviso de segurança (23 out 2026)
+
+Dependabot #48 e #49 (alta): `follow-redirects` 1.16.0 no `voz-servico` (vem do `axios`
+do revoice.js) — o `sensitiveHeaders` com regex mal escapado e os cabeçalhos em forma de
+lista passavam credenciais para outro domínio num redirecionamento. Corrigido na 1.16.1:
+override `"follow-redirects": "^1.16.1"` no `voz-servico/package.json` (o lockfile só
+troca esse pacote).
+
+O `npm audit` achou mais dois, que o Dependabot ainda não tinha aberto:
+- `seroval` ≤ 1.6.2 (crítico, via stoat.js → solid-js): override `seroval`/`seroval-plugins`
+  em **1.6.8** (a mais nova com 3+ semanas; a 1.6.12 tinha 2 dias) e `solid-js` 1.9.17;
+- `sharp` < 0.35.5 no `ia-servico` (alta, o librsvg embutido): `^0.35.5`.
+
+Os três lockfiles: `npm audit` → 0. A voz instala e carrega o revoice.js; a suíte inteira
+roda com as versões novas. Teste novo na `dependencias`: nenhum lockfile volta a uma versão
+abaixo da corrigida (3 mutações, todas pegas).
+
 ## 7. O que NÃO fiz, e por quê
 
 | Item | Por quê |

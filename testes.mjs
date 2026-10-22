@@ -2434,6 +2434,27 @@ t("o Dockerfile copia o vazio ANTES do npm install", () => {
   assert.ok(copia < instala, "o vazio tem de ser copiado antes do npm install — senão a imagem sobe sem voz");
 });
 
+// (23 out 2026) Dependabot #48 e #49 (follow-redirects, via axios do revoice.js) e o
+// npm audit (seroval via stoat.js → solid-js; sharp no ia-servico): o lockfile não
+// pode voltar a uma versão com aviso publicado.
+t("★ nenhum lockfile volta a uma versão com aviso de segurança publicado", () => {
+  const versao = (v) => String(v ?? "0").split(/[.-]/).slice(0, 3).map(Number);
+  const menor = (a, b) => { const [x, y] = [versao(a), versao(b)]; for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] < y[i]; return false; };
+  const minimo = [
+    ["./voz-servico/package-lock.json", "follow-redirects", "1.16.1"],   // GHSA-8r9p-f939-6h3c e o dos cabeçalhos em lista
+    ["./package-lock.json", "seroval", "1.6.3"], ["./package-lock.json", "seroval-plugins", "1.6.3"],
+    ["./package-lock.json", "solid-js", "1.9.16"],
+    ["./ia-servico/package-lock.json", "sharp", "0.35.5"],
+  ];
+  for (const [arq, nome, min] of minimo) {
+    const pacotes = JSON.parse(fs.readFileSync(arq, "utf8")).packages;
+    const achados = Object.entries(pacotes).filter(([k]) => k === `node_modules/${nome}` || k.endsWith(`/node_modules/${nome}`));
+    assert.ok(achados.length, `${nome} sumiu de ${arq}`);
+    for (const [k, v] of achados) assert.ok(!menor(v.version, min), `${arq}: ${k} ${v.version} < ${min}`);
+  }
+  assert.equal(pkg.overrides["follow-redirects"], "^1.16.1", "o override do voz-servico");
+});
+
 console.log(`\nDEPENDÊNCIAS: ${ok} ok, ${falhou} falha(s)`);
 process.exit(falhou ? 1 : 0);
 };

@@ -54,7 +54,7 @@ export async function cmdWarnings(message, args, ctx) {
     `<@${targetId}> tiene **${count}/${limite}** aviso(s).`)];
   if (count && motivo) linhas.push(tr(ctx, `**Último motivo:** ${motivo}`, `**Last reason:** ${motivo}`, `**Último motivo:** ${motivo}`));
   if (pol.modo === "acumular" && degraus[count]) linhas.push(tr(ctx,
-    `_O próximo: ${engine.rotuloDegrau(degraus[count], "pt")}._`, `_Next one: ${engine.rotuloDegrau(degraus[count], "es")}._`, `_El siguiente: ${engine.rotuloDegrau(degraus[count], "es")}._`));
+    `_O próximo: ${engine.rotuloDegrau(degraus[count], "pt")}._`, `_Next one: ${engine.rotuloDegrau(degraus[count], "en")}._`, `_El siguiente: ${engine.rotuloDegrau(degraus[count], "es")}._`));
   const dias = Math.round(engine.validadeDosAvisos(pol) / 86_400_000);
   if (count && dias) linhas.push(tr(ctx, `_Zeram depois de ${dias} dias sem um novo._`, `_They reset after ${dias} days without a new one._`, `_Se reinician tras ${dias} días sin uno nuevo._`));
   if (silenciado) linhas.push(tr(ctx,
@@ -504,7 +504,7 @@ export async function cmdAutomod(message, args, ctx) {
         colour: COR.erro,
       }, {
         title: "❌ Invalid mode",
-        description: `Modes: ${MODOS_PUN.map((m) => `\`${nomeModo(m, "es")}\``).join(", ")}, or \`inherit\`.\n\n`
+        description: `Modes: ${MODOS_PUN.map((m) => `\`${nomeModo(m, "en")}\``).join(", ")}, or \`inherit\`.\n\n`
           + "• `warn` — warn only, no punishment (fixed-rule filters still delete; the sentinel doesn't)\n• `delete` — remove the message only\n• `confirm` — silence and wait for a mod\n• `stack` — stack warnings until a ban\n• `ban` — instant ban",
         colour: COR.erro,
       }, {
@@ -1452,7 +1452,7 @@ export async function cmdPunicao(message, args, ctx) {
       title: "⚖️ Punishment policy — applies to ALL automods",
       colour: COR.mod,
       description: [
-        `**Mode:** \`${nomeModo(pol.modo, "es")}\` — ${rotulo(pol.modo)}`,
+        `**Mode:** \`${nomeModo(pol.modo, "en")}\` — ${rotulo(pol.modo)}`,
         `**Ladder (\`stack\` mode):** ${engine.escadaDePunicao(pol).map((d) => engine.rotuloDegrau(d, "en")).join(" → ")} — ban at warning **${engine.limiteDeAvisos(pol)}**`,
         `**Warnings expire:** ${engine.validadeDosAvisos(pol) ? `after ${Math.round(engine.validadeDosAvisos(pol) / 86_400_000)} days without a new one` : "never"}`,
         "**Noise filters** (repeat, caps, emoji, speed…): the 1st time in 10 min is just a heads-up, without a warning (except new accounts and during a raid)",

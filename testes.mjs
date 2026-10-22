@@ -18026,6 +18026,172 @@ await t("nenhum arquivo do bot tem caractere invisível ou separador de linha LI
   assert.deepEqual(ruins, []);
 });
 
+console.log("\n── a ajuda num servidor que ainda não ligou o chat (22 out 2026) ──");
+// Ghieh testou num servidor qualquer: `&help chat` → "🚫 Não existe aqui". A ajuda
+// decidia pelo `servidorPermitido` (IA disponível E chat LIGADO); desde o opt-in o
+// chat começa desligado, e o `&chat` — o comando que liga — sumia da ajuda.
+await t("★ chat desligado: `&help chat` mostra a página (com o `&chat on`), não \"Não existe aqui\"", async () => {
+  const H = montarServidor("01KSRVH000000000000000SRVH");
+  assert.equal(chat.chatLigadoAqui(H.sid), false, "o servidor ainda não escolheu");
+  for (const autor of ["DONO", "ANA"]) {
+    const r = await H.diz(autor, "&help chat");
+    assert.doesNotMatch(r, /Não existe aqui|não está disponível/, autor);
+    assert.match(r, /chat/i, autor);
+  }
+  assert.match(await H.diz("DONO", "&help chat"), /chat on/);
+});
+await t("★ chat desligado: o índice do `&help` lista o `&chat` para a staff, e o `&sobre` diz que a IA está aqui", async () => {
+  const H = montarServidor("01KSRVI000000000000000SRVI");
+  assert.match(await H.diz("DONO", "&help"), /conversa com a Judy/, "o resumo do grupo cita a Judy");
+  await H.diz("DONO", "&help diversao");
+  assert.match(todasAsPaginas(), /`&chat <mensagem>`/);
+  const sobre = await H.diz("DONO", "&sobre");
+  assert.match(sobre, /IA \(Judy\)\*\* — disponível, mas desligada neste servidor: a staff liga com `&chat on`/);
+  assert.doesNotMatch(sobre, /habilitada aqui/);
+  // e a linha do `&chat on` só para a staff
+  const n0 = idsEnviados.length;
+  const direto = await H.diz("ANA", "&help diversao");
+  const daAna = idsEnviados.slice(n0).map((id) => db.carregarSessaoPaginas(id)?.paginas ?? []).flat().map((e) => `${e.title ?? ""}\n${e.description ?? ""}`).join("\n") + direto;
+  assert.match(daAna, /`&chat <mensagem>`/, "o membro vê o &chat");
+  assert.doesNotMatch(daAna, /`&chat on\|off`/, "mas não o liga/desliga");
+  const n1 = idsEnviados.length;
+  const doDono = (await H.diz("DONO", "&help diversao")) + idsEnviados.slice(n1).map((id) => db.carregarSessaoPaginas(id)?.paginas ?? []).flat().map((e) => e.description ?? "").join("\n");
+  assert.match(doDono, /`&chat on\|off` · `&chat imagem on\|off`/);
+  const n2 = idsEnviados.length;
+  const tut = (await H.diz("DONO", "&tutorial ia")) + idsEnviados.slice(n2).map((id) => db.carregarSessaoPaginas(id)?.paginas ?? []).flat().map((e) => e.description ?? "").join("\n");
+  assert.match(tut, /\*\*Ligar:\*\* `&chat on`/, "o tutorial da IA aparece e ensina a ligar");
+});
+await t("e onde a IA de conversa não existe (CONVERSA=0) continua \"Não existe aqui\"", async () => {
+  // (a lista do SERVIDOR é lida no arranque; CONVERSA=0 é lido na hora e tira a IA de conversa de todo lugar)
+  const antes = process.env.CONVERSA;
+  process.env.CONVERSA = "0";
+  try {
+    const H = montarServidor("01KSRVJ000000000000000SRVJ");
+    assert.equal(chat.iaDisponivel(H.sid), false);
+    assert.match(await H.diz("DONO", "&help chat"), /Não existe aqui/);
+  } finally { if (antes === undefined) delete process.env.CONVERSA; else process.env.CONVERSA = antes; }
+});
+
+console.log("\n── pente fino (22 out 2026): a ajuda, o tutorial, o &debug e o &sobre mostram o que é novo ──");
+// Ghieh: "passa um pente fino verificando os comandos de debug, info, config, help e
+// tutorial, adicionando tudo de novo, inclusive o wizard e o chat".
+const paginasDesde = (n0) => idsEnviados.slice(n0).map((id) => db.carregarSessaoPaginas(id)?.paginas ?? []).flat().map((e) => `${e.title ?? ""}\n${e.description ?? ""}`).join("\n");
+const ver = async (S, autor, cmd) => { const n0 = idsEnviados.length; const r = await S.diz(autor, cmd); return `${r}\n${paginasDesde(n0)}`; };
+const PT = montarServidor("01KSRVPF00000000000000SRVP");
+const EN = montarServidor("01KSRVPG00000000000000SRVG", "en");
+const ESS = montarServidor("01KSRVPH00000000000000SRVH", "es");
+await t("★ &help: a privacidade no começo; o whitelist cita os canais; `&chat sair` para todos, `&chat on` e `comentar` só para a staff", async () => {
+  const pt = await ver(PT, "DONO", "&help");
+  assert.match(pt, /`&privacidade` — o que o bot guarda sobre você/);
+  assert.match(pt, /`&automod whitelist` · `&automod blocklist` — convites e canais liberados/);
+  assert.match(await ver(EN, "DONO", "&help"), /`&privacy` — what the bot keeps about you/);
+  assert.match(await ver(ESS, "DONO", "&help"), /`&privacidad` — lo que el bot guarda sobre ti/);
+  for (const [S, sair, on, comentar] of [[PT, /`&chat sair` · `&chat voltar`/, /`&chat on\|off`/, /`&chat comentar/], [ESS, /`&chat salir` · `&chat volver`/, /`&chat on\|off`/, /`&chat comment/]]) {
+    const membro = await ver(S, "ANA", "&help diversao"), staff = await ver(S, "DONO", "&help diversao");
+    assert.match(membro, sair); assert.match(staff, sair);
+    assert.doesNotMatch(membro, on); assert.match(staff, on);
+    assert.doesNotMatch(membro, comentar); assert.match(staff, comentar);
+  }
+});
+await t("★ &help: sem voz liberada, o cabeçalho \"Voz\" não fica sozinho (pt e es)", async () => {
+  for (const S of [PT, ESS]) {
+    const r = await ver(S, "DONO", "&help diversao");
+    assert.doesNotMatch(r, /\*\*Voz\*\*[\u2064]?\n\s*\n/, S.sid);
+    assert.doesNotMatch(r, /`&(entrar|musica)/);
+  }
+});
+await t("★ &tutorial: o wizard, o canal de divulgação e o `&chat on` nas páginas; o `&chat sair`, o ManagePermissions e o wizard nas áreas", async () => {
+  const guia = await ver(PT, "DONO", "&tutorial");
+  assert.match(guia, /Servidor novo, sem canais\? `&assistente servidor`/);
+  assert.match(guia, /Do zero: `&assistente servidor`/);
+  assert.match(guia, /\*\*Canal de divulgação:\*\* `&automod whitelist add #canal`/);
+  assert.match(guia, /\*\*Judy \(IA\):\*\* `&chat on` liga neste servidor/);
+  assert.match(await ver(PT, "DONO", "&tutorial ia"), /`&chat sair` — a Judy para de falar com você[\s\S]*`&privacidade`/);
+  assert.match(await ver(PT, "DONO", "&tutorial permissoes"), /`ManagePermissions` — mexer nas permissões de canais e cargos \(`&assistente servidor`\)/);
+  assert.match(await ver(PT, "DONO", "&tutorial canais"), /Servidor novo\? `&assistente servidor` cria cargos e canais já nos 3 tipos/);
+  assert.match(await ver(PT, "DONO", "&tutorial moderacao"), /\*\*Canal de divulgação:\*\* `&automod whitelist add #canal`/);
+  assert.match(await ver(PT, "DONO", "&tutorial ajustes"), /`&assistente servidor` — cria cargos e canais prontos/);
+  const en = await ver(EN, "DONO", "&tutorial");
+  assert.match(en, /Brand-new server, no channels yet\? `&assistant server`|Brand-new server, no channels yet\? `&[a-z]+ server`/);
+  assert.match(en, /\*\*Judy \(AI\):\*\* `&chat on` turns her on/);
+  const es = await ver(ESS, "DONO", "&tutorial");
+  assert.match(es, /¿Servidor nuevo, sin canales\? `&asistente servidor`/);
+  assert.match(es, /\*\*Canal de promoción:\*\* `&automod whitelist add #canal`/);
+  assert.match(await ver(ESS, "DONO", "&tutorial ia"), /`&chat salir` — Judy deja de hablarte/);
+});
+await t("★ &debug: o chat e a imagem do servidor, a imagem sem visão, o ManagePermissions e o canal de divulgação", async () => {
+  const antes = process.env.LLM_MODEL_VISAO; delete process.env.LLM_MODEL_VISAO; delete process.env.LLM_MODEL_MODERACAO;
+  try {
+    const desligado = await ver(PT, "DONO", "&debug");
+    assert.match(desligado, /chat desligado neste servidor — `&chat on` liga/);
+    assert.match(desligado, /geração de imagem desligada neste servidor — `&chat imagem on` liga/);
+    assert.match(desligado, /🔑 Permissões do bot\*\*\n🟢 [^\n]*`ManagePermissions`/, "a permissão do wizard está na conta");
+    await PT.diz("DONO", "&chat on"); await PT.diz("DONO", "&chat imagem on");
+    await PT.diz("DONO", "&automod whitelist add #geral");
+    const ligado = await ver(PT, "DONO", "&debug");
+    assert.match(ligado, /chat ligado neste servidor/);
+    assert.match(ligado, /geração de imagem ligada, mas sem modelo de visão/);
+    assert.match(ligado, /Divulgação \(convites liberados\): <#/);
+    process.env.LLM_MODEL_VISAO = "visao";
+    assert.match(await ver(PT, "DONO", "&debug"), /geração de imagem ligada \(cada imagem conferida pela visão\)/);
+    assert.match(await ver(ESS, "DONO", "&debug"), /chat desactivado en este servidor — `&chat on` lo activa/);
+  } finally { if (antes === undefined) delete process.env.LLM_MODEL_VISAO; else process.env.LLM_MODEL_VISAO = antes; }
+});
+await t("★ &sobre (o &info): IA disponível × ligada, e a imagem é a do servidor", async () => {
+  assert.match(await ver(EN, "DONO", "&info"), /AI \(Judy\)\*\* — available, but off on this server/);
+  assert.match(await ver(ESS, "DONO", "&sobre"), /IA \(Judy\)\*\* — disponible, pero desactivada en este servidor/);
+  const ligado = await ver(PT, "DONO", "&sobre");   // (o PT ligou o chat e a imagem no teste anterior)
+  assert.match(ligado, /IA \(Judy\)\*\* — habilitada aqui: .*e \*\*geração de imagens\*\*/);
+  await PT.diz("DONO", "&chat imagem off");
+  assert.doesNotMatch(await ver(PT, "DONO", "&sobre"), /geração de imagens/);
+});
+await t("★ guarda: nenhum texto em inglês de um tr/T(pt, en, es) chama ajudante pedindo \"es\"", async () => {
+  // a troca de "en" por "es" da etapa 4b pegou também o 2º argumento de alguns tr(...):
+  // "failed to ban (No se pudo…)", "Next one: silencio de 1 h"
+  const H = /\b(descreverErro|duracaoTexto|rotuloDegrau|descreverFiltro|descreverProblemaDeId|nomeModo|nomeGrupo|nomeParte)\(/g;
+  const argumentos = (s, abre) => {   // os argumentos de uma chamada (índice do "(")
+    const spans = []; let prof = 0, a = abre + 1, q = null;
+    for (let i = abre; i < s.length; i++) {
+      const ch = s[i];
+      if (q) {
+        if (ch === "\\") { i++; continue; }
+        if (q === "`" && ch === "$" && s[i + 1] === "{") {
+          let d = 1; i += 2;
+          for (; i < s.length && d; i++) {
+            if (s[i] === "{") d++; else if (s[i] === "}") d--;
+            else if (`"'\``.includes(s[i])) { const qq = s[i++]; while (i < s.length && s[i] !== qq) { if (s[i] === "\\") i++; i++; } }
+          }
+          i--; continue;
+        }
+        if (ch === q) q = null;
+        continue;
+      }
+      if (`"'\``.includes(ch)) q = ch;
+      else if ("([{".includes(ch)) prof++;
+      else if (")]}".includes(ch)) { prof--; if (prof === 0) { spans.push([a, i]); return spans; } }
+      else if (ch === "," && prof === 1) { spans.push([a, i]); a = i + 1; }
+    }
+    return spans;
+  };
+  const ler = (d) => fs.readdirSync(d, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? ler(`${d}/${e.name}`) : e.name.endsWith(".js") ? [`${d}/${e.name}`] : []));
+  const ruins = [];
+  for (const arq of [...ler("modulos"), "main.js"]) {
+    const s = fs.readFileSync(arq, "utf8");
+    for (const m of s.matchAll(/\b(T|tr|X|rot)\(/g)) {
+      const sp = argumentos(s, m.index + m[0].length - 1);
+      const off = m[1] === "tr" && sp.length >= 4 ? 1 : 0;
+      if (sp.length < 3 + off) continue;
+      const [a, b] = sp[off + 1];   // o texto em inglês
+      const seg = s.slice(a, b);
+      for (const h of seg.matchAll(H)) {
+        const cs = argumentos(seg, h.index + h[0].length - 1);
+        if (cs.length && seg.slice(...cs.at(-1)).trim() === '"es"') ruins.push(`${arq}:${s.slice(0, a + h.index).split("\n").length} ${h[1]}`);
+      }
+    }
+  }
+  assert.deepEqual(ruins, []);
+});
+
 console.log(`\nIA POR SERVIDOR (21 out): ${ok} ok, ${falhou} falha(s)`);
 if (falhou) process.exitCode = 1;
 };

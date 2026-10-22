@@ -345,7 +345,7 @@ async function aplicarPunicao(ctx, opts) {
         { nome: message?.author?.username ?? null, membro: message?.member ?? message?.author ?? null });
     }
     catch (e) { console.error("[PUNIÇÃO][BAN]", descreverErro(e));
-      acao = tr(ctx, `falha ao banir (${descreverErro(e)})`, `failed to ban (${descreverErro(e, "es")})`, `no se pudo banear (${descreverErro(e, "es")})`); }
+      acao = tr(ctx, `falha ao banir (${descreverErro(e)})`, `failed to ban (${descreverErro(e, "en")})`, `no se pudo banear (${descreverErro(e, "es")})`); }
     await sendEmbed(channel, { title: tr(ctx, "🔨 Banimento imediato", "🔨 Instant ban", "🔨 Ban inmediato"),
       description: [`<@${userId}> — ${motivo}${linhaNota}`,
         `**${tr(ctx, "Ação", "Action", "Acción")}:** ${acao}`, ...blocoGrave].join("\n"),
@@ -476,7 +476,7 @@ async function aplicarPunicao(ctx, opts) {
       { nome: message?.author?.username ?? null, membro: message?.member ?? message?.author ?? null });
   } catch (e) {
     console.error("[PUNIÇÃO][BAN]", descreverErro(e));
-    acao = tr(ctx, `falha ao banir (${descreverErro(e)})`, `failed to ban (${descreverErro(e, "es")})`, `no se pudo banear (${descreverErro(e, "es")})`);
+    acao = tr(ctx, `falha ao banir (${descreverErro(e)})`, `failed to ban (${descreverErro(e, "en")})`, `no se pudo banear (${descreverErro(e, "es")})`);
   }
   db.limparPunicao(sid, userId);
   await sendEmbed(channel, { title: tr(ctx, "🔨 Usuário banido", "🔨 User banned", "🔨 Usuario baneado"),

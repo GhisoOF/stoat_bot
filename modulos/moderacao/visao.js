@@ -6,7 +6,9 @@
 // MEMBRO, STAFF e DONO (do bot) — e cada uma só vê os recursos que o servidor
 // tem liberados (IA, voz e música).
 
-import { servidorPermitido as temIA, comandoIAPermitido } from "../ai/chat.js";
+// (22 out 2026) IA visível onde ela EXISTE, com o chat ligado ou não: desde o opt-in
+// (21 out) o chat começa desligado, e o `&chat` — que o liga — sumia da ajuda
+import { iaDisponivel as temIA, comandoIAPermitido } from "../ai/chat.js";
 import { servidorPermitido as temVoz } from "../ferramentas/tts.js";
 import { idDoNome, normalizarArgs } from "../core/aliases.js";
 
@@ -42,7 +44,7 @@ const MAPA = {
   fuso: { padrao: "membro", subs: { add: "staff", remover: "staff", remove: "staff", principal: "staff", limpar: "staff" } },
   tts: { padrao: "membro", subs: { filtro: "staff", cooldown: "staff", nomes: "staff", dicionario: "staff", "dicionário": "staff", reiniciar: "staff", destravar: "staff", resgatar: "staff", diagnostico: "staff", "diagnóstico": "staff" } },
   entrar: { padrao: "membro" }, sair: { padrao: "membro" }, musica: { padrao: "membro" },
-  chat: { padrao: "membro", subs: { livre: "staff", esquecer: "staff", projeto: "staff", espontaneo: "staff", "espontâneo": "staff" } },
+  chat: { padrao: "membro", subs: { on: "staff", off: "staff", imagem: "staff", comentar: "staff", livre: "staff", esquecer: "staff", projeto: "staff", espontaneo: "staff", "espontâneo": "staff" } },
   servidores: { padrao: "dono" },
   banglobal: { padrao: "staff", subs: { esquecer: "dono", lembrar: "dono", add: "dono" } },
   entretenimento: { padrao: "membro" },
@@ -77,7 +79,9 @@ const RE_CMD = /`&([a-zçãéí]+)(?:\s+([a-zçãéí]+))?(?:\s+([a-zçãéí]+)
 export function filtrarLinhas(linhas, visao) {
   const marcadas = linhas.map((l) => {
     const m = String(l).match(RE_CMD);
-    if (!m) return { l, tipo: /^\*\*[^*]+\*\*\s*$/.test(String(l).trim()) ? "cabecalho" : "texto" };
+    // (22 out 2026) a linha em espanhol vem "pronta" (entre U+2063 e U+2064): sem tirar as
+    // marcas, o "**Voz**" não era reconhecido como cabeçalho e ficava sozinho
+    if (!m) return { l, tipo: /^\*\*[^*]+\*\*\s*$/.test(String(l).replace(/[\u2063\u2064]/g, "").trim()) ? "cabecalho" : "texto" };
     return { l, tipo: "comando", ok: podeVer(visao, m[1].toLowerCase(), (m[2] ?? "").toLowerCase(), (m[3] ?? "").toLowerCase()) };
   });
   const saida = [];
@@ -87,7 +91,10 @@ export function filtrarLinhas(linhas, visao) {
     if (x.tipo === "cabecalho") {
       // some só se a seção era de comandos e TODOS saíram (seção de texto fica)
       let comandos = 0, visiveis = 0;
-      for (let j = i + 1; j < marcadas.length && marcadas[j].tipo !== "cabecalho"; j++) {
+      // a seção acaba no próximo cabeçalho OU na linha em branco (22 out 2026: a nota
+      // "_O RPG… `&help rpg`_" depois da Voz contava como comando da Voz, e o
+      // "**Voz**" ficava sozinho onde a voz não está liberada)
+      for (let j = i + 1; j < marcadas.length && marcadas[j].tipo !== "cabecalho" && String(marcadas[j].l).trim() !== ""; j++) {
         if (marcadas[j].tipo === "comando") { comandos++; if (marcadas[j].ok) visiveis++; }
       }
       if (comandos > 0 && visiveis === 0) continue;

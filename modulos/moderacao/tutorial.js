@@ -1,5 +1,7 @@
 import * as visaoMod from "./visao.js";
-import { servidorPermitido as temIA, comandoIAPermitido } from "../ai/chat.js";
+// (22 out 2026) a ajuda mostra a IA onde ela EXISTE (`iaDisponivel`), e não só onde o
+// chat já está ligado — o `&chat on` é justamente o que liga
+import { iaDisponivel as temIA, comandoIAPermitido } from "../ai/chat.js";
 import { citar, citarInterno, subExibido, trechoPronto } from "../core/aliases.js";
 import { idiomaDe, lingua, tr } from "../core/i18n.js";
 import { enviarPaginado, paginarLinhas } from "../core/paginas.js";
@@ -28,7 +30,8 @@ function AREAS(P, lang = "pt", comIA = false) {
         "**Para gestionar roles y canales**",
         "• `ManageRole` — **crear** roles (roles de nivel)",
         "• `AssignRoles` — **dar** roles a alguien (autorol, niveles, reacciones)",
-        "• `ManageChannel` — crear/editar canales",
+        `• \`ManageChannel\` — crear/editar canales (tickets, \`${citar("assistente.servidor", "es", P)}\`)`,
+        `• \`ManagePermissions\` — ajustar los permisos de canales y roles (\`${citar("assistente.servidor", "es", P)}\`)`,
         "",
         "⚠️ `ManageRole` y `AssignRoles` son cosas **distintas**: uno crea el rol y el otro se lo da a la persona. Si falta el segundo, el bot crea los roles y falla al aplicarlos.",
         "",
@@ -95,6 +98,7 @@ function AREAS(P, lang = "pt", comIA = false) {
         "**¿Y el bot?** Dale a su rol *Ver canal* + *Enviar mensajes* también en los dos primeros tipos, o no podrá registrar logs, alertar ni publicar paneles. " + "`" + citar("debug", "es", P) + "` lo revisa por ti, canal por canal.",
         "",
         `💡 \`${citar("assistente.canais", "es", P)}\` pregunta qué canales son de cada tipo y te dice exactamente qué pulsar.`,
+        `🏗️ ¿Servidor nuevo? \`${citar("assistente.servidor", "es", P)}\` crea roles y canales ya en los 3 tipos, con los permisos puestos.`,
       ],
     },
 
@@ -131,7 +135,8 @@ function AREAS(P, lang = "pt", comIA = false) {
         "  una cuenta recién creada se mira de cerca y quien lleva semanas hablando aquí gana margen",
         "• **avisa al staff** ante un *patrón* repetido, antes de sancionar nada",
         `\`${citar("automod.sentinela", "es", P)} on\` · \`${citar("automod.sentinela.sensibilidade", "es", P)} <low|medium|high>\` · \`${citar("automod.sentinela.antiguidade", "es", P)} on|off\``,
-        `**Enlaces permitidos:** \`${citar("automod", "es", P)} whitelist add <dominio>\`.`,
+        `**Enlaces permitidos:** \`${citar("automod", "es", P)} whitelist add <dominio>\` (o un enlace de invitación).`,
+        `**Canal de promoción:** \`${citar("automod", "es", P)} whitelist add #canal\` — allí se puede publicar **cualquier** invitación; el resto del automod sigue valiendo.`,
         "",
         `**Aviso manual:** \`${citar("warn", "es", P)} @usuario <motivo>\` — sube la misma escalera que el automod. \`${citar("warn.lista", "es", P)} @usuario\` · \`${citar("warn.limpar", "es", P)} @usuario\`.`,
         `**Quién puede moderar:** \`${citar("acesso.cargo.add", "es", P)} <@rol>\` da poder de moderación a un rol, sin tocar los permisos de Stoat.`,
@@ -215,6 +220,7 @@ function AREAS(P, lang = "pt", comIA = false) {
       soComIA: true,
       resumo: "Charla, memoria, participación y moderación por IA.",
       corpo: [
+        `**Activar:** \`${citar("chat.on", "es", P)}\` (y \`${citar("chat.imagem", "es", P)} on\` para generar imágenes) — empiezan desactivados en cada servidor *(ManagePermissions)*.`,
         `**Probar:** \`${citar("chat.status", "es", P)}\` muestra si el servicio de IA está en marcha.`,
         "Después basta con mencionar al bot o usar `" + citar("chat", "es", P) + " <mensaje>`.",
         "También **ve imágenes**: adjunta una y pregunta (\"¿qué sale aquí?\").",
@@ -228,6 +234,7 @@ function AREAS(P, lang = "pt", comIA = false) {
         `**Perfil y memoria:** \`${citar("chat.perfil", "es", P)}\` muestra lo que sabe de ti.`,
         `\`${citar("chat.cuidado", "es", P)} @usuario on\` — trata a alguien con amabilidad extra.`,
         `\`${citar("chat.esquecer", "es", P)}\` borra lo tuyo; \`${citar("chat.esquecer.tudo", "es", P)}\` borra lo de todo el servidor.`,
+        `\`${citar("chat.sair", "es", P)}\` — Judy deja de hablarte (en todos los servidores); \`${citar("chat.voltar", "es", P)}\` lo deshace. \`${citar("privacidade", "es", P)}\` muestra lo que guarda.`,
         "",
         `**Moderación por IA:** \`${citar("modia.criterios", "es", P)} <qué moderar, en texto libre>\` y después \`${citar("modia", "es", P)} on\`.`,
         "Borra lo que los incumpla y etiqueta al dueño en el log — nunca banea sola.",
@@ -403,6 +410,7 @@ function AREAS(P, lang = "pt", comIA = false) {
       resumo: "Panorama, comandos desactivados y lista global.",
       corpo: [
         `\`${citar("config", "es", P)}\` — panorama de todo lo configurado en este servidor`,
+        `\`${citar("assistente", "es", P)}\` — configuración guiada · \`${citar("assistente.servidor", "es", P)}\` — crea roles y canales listos`,
         `\`${citar("comando.desativar", "es", P)} <nombre>\` · \`${citar("comando.ativar", "es", P)} <nombre>\` — desactiva/activa un comando aquí`,
         `\`${citar("banglobal", "es", P)} <off|warn|instant|consensus>\` — qué hacer cuando entra alguien baneado en otro servidor`,
         `\`${citar("idioma", "es", P)} pt|en|es\` — en qué idioma respondo en este servidor`,
@@ -436,7 +444,8 @@ function AREAS(P, lang = "pt", comIA = false) {
         "**To manage roles and channels**",
         "• `ManageRole` — **create** roles (level roles)",
         "• `AssignRoles` — **give** roles to someone (autorole, levels, reactions)",
-        "• `ManageChannel` — create/edit channels",
+        `• \`ManageChannel\` — create/edit channels (tickets, \`${citarInterno("assistente.servidor", P)}\`)`,
+        `• \`ManagePermissions\` — set channel and role permissions (\`${citarInterno("assistente.servidor", P)}\`)`,
         "",
         "⚠️ `ManageRole` and `AssignRoles` are **different** things: one creates the role, the other hands it to the person. Missing the second, the bot creates the roles and then fails to apply them.",
         "",
@@ -503,6 +512,7 @@ function AREAS(P, lang = "pt", comIA = false) {
         "**And the bot?** Give its role *View channel* + *Send messages* in the first two types too, or it can't log, alert, or post panels. " + "`" + citarInterno("debug") + "` checks that for you, channel by channel.",
         "",
         `💡 \`${citarInterno("assistente.canais", P)}\` asks which channels are which type and lists exactly what to click.`,
+        `🏗️ New server? \`${citarInterno("assistente.servidor", P)}\` creates roles and channels already in the 3 types, permissions included.`,
       ],
     },
 
@@ -539,7 +549,8 @@ function AREAS(P, lang = "pt", comIA = false) {
         "  gets a closer look than someone who's been talking here for weeks",
         "• **alerts the staff** on a repeated *pattern*, before punishing anything",
         `\`${citarInterno("automod.sentinela", P)} on\` · \`${citarInterno("automod.sentinela.sensibilidade", P)} <low|medium|high>\` · \`${citarInterno("automod.sentinela.antiguidade", P)} on|off\``,
-        `**Allowed links:** \`${citarInterno("automod", P)} whitelist add <domain>\`.`,
+        `**Allowed links:** \`${citarInterno("automod", P)} whitelist add <domain>\` (or an invite link).`,
+        `**Promotion channel:** \`${citarInterno("automod", P)} whitelist add #channel\` — **any** invite can be posted there; the rest of automod still applies.`,
         "",
         `**Manual warning:** \`${citar("warn", "en", P)} @user <reason>\` — climbs the same ladder as the automod. \`${citar("warn.lista", "en", P)} @user\` · \`${citar("warn.limpar", "en", P)} @user\`.`,
         `**Who can moderate:** \`${citarInterno("acesso.cargo.add", P)} <@role>\` gives moderation power to a role without touching Stoat's permissions.`,
@@ -623,6 +634,7 @@ function AREAS(P, lang = "pt", comIA = false) {
       soComIA: true,
       resumo: "Chat, memory, participation and AI moderation.",
       corpo: [
+        `**Turn it on:** \`${citarInterno("chat.on", P)}\` (and \`${citarInterno("chat.imagem", P)} on\` for image generation) — both start off on each server *(ManagePermissions)*.`,
         `**Test it:** \`${citarInterno("chat.status", P)}\` shows whether the AI service is up.`,
         "Then just mention the bot or use `" + citarInterno("chat") + " <message>`.",
         "She can also **see images**: attach one and ask (\"what's in this?\").",
@@ -636,6 +648,7 @@ function AREAS(P, lang = "pt", comIA = false) {
         `**Profile and memory:** \`${citarInterno("chat.perfil", P)}\` shows what she knows about you.`,
         `\`${citarInterno("chat.cuidado", P)} @user on\` — treats someone with extra kindness.`,
         `\`${citarInterno("chat.esquecer", P)}\` erases yours; \`${citarInterno("chat.esquecer.tudo", P)}\` wipes the server's.`,
+        `\`${citarInterno("chat.sair", P)}\` — Judy stops talking to you (on every server); \`${citarInterno("chat.voltar", P)}\` undoes it. \`${citar("privacidade", "en", P)}\` shows what she keeps.`,
         "",
         `**AI moderation:** \`${citarInterno("modia.criterios", P)} <what to moderate, in free text>\` then \`${citarInterno("modia", P)} on\`.`,
         "She deletes whatever violates them and pings the owner in the log — she never bans on her own.",
@@ -817,6 +830,7 @@ function AREAS(P, lang = "pt", comIA = false) {
       resumo: "Overview, disabled commands and the global list.",
       corpo: [
         `\`${citar("config", "en", P)}\` — overview of everything configured on this server`,
+        `\`${citarInterno("assistente", P)}\` — guided setup · \`${citarInterno("assistente.servidor", P)}\` — creates ready-made roles and channels`,
         `\`${citar("comando.desativar", "en", P)}|enable <name>\` — toggles a command here`,
         `\`${citarInterno("banglobal", P)} <off|avisar|imediato|consenso>\` — what to do when someone banned elsewhere joins`,
         `\`${citar("idioma", "en", P)} pt|en|es\` — the language I reply in on this server`,
@@ -851,7 +865,8 @@ function AREAS(P, lang = "pt", comIA = false) {
         "**Para gerir cargos e canais**",
         "• `ManageRole` — **criar** cargos (cargos de nível)",
         "• `AssignRoles` — **dar** cargos a alguém (autorole, nível, reação)",
-        "• `ManageChannel` — criar/editar canais",
+        `• \`ManageChannel\` — criar/editar canais (tickets, \`${citarInterno("assistente.servidor", P)}\`)`,
+        `• \`ManagePermissions\` — mexer nas permissões de canais e cargos (\`${citarInterno("assistente.servidor", P)}\`)`,
         "",
         "⚠️ `ManageRole` e `AssignRoles` são coisas **diferentes**: uma cria o cargo, a outra entrega para a pessoa. Faltando a segunda, o bot cria os cargos e falha na hora de aplicar.",
         "",
@@ -918,6 +933,7 @@ function AREAS(P, lang = "pt", comIA = false) {
         "**E o bot?** Dê ao cargo dele *Ver canal* + *Enviar mensagens* também nos dois primeiros tipos, senão ele não consegue registrar log, alertar nem publicar painel. " + "`" + citarInterno("debug") + "` confere isso por você, canal a canal.",
         "",
         `💡 \`${citarInterno("assistente.canais", P)}\` pergunta quais canais são de cada tipo e lista exatamente o que clicar.`,
+        `🏗️ Servidor novo? \`${citarInterno("assistente.servidor", P)}\` cria cargos e canais já nos 3 tipos, com as permissões prontas.`,
       ],
     },
 
@@ -954,7 +970,8 @@ function AREAS(P, lang = "pt", comIA = false) {
         "  uma conta recém-criada é olhada de perto e quem conversa aqui há semanas ganha margem",
         "• **avisa a staff** diante de um *padrão* repetido, antes de punir qualquer coisa",
         `\`${citarInterno("automod.sentinela", P)} on\` · \`${citarInterno("automod.sentinela.sensibilidade", P)} <baixa|media|alta>\` · \`${citarInterno("automod.sentinela.antiguidade", P)} on|off\``,
-        `**Links permitidos:** \`${citarInterno("automod", P)} whitelist add <domínio>\`.`,
+        `**Links permitidos:** \`${citarInterno("automod", P)} whitelist add <domínio>\` (ou um link de convite).`,
+        `**Canal de divulgação:** \`${citarInterno("automod", P)} whitelist add #canal\` — lá **qualquer** convite pode ser postado; o resto do automod continua valendo.`,
         "",
         `**Aviso manual:** \`${citar("warn", "pt", P)} @pessoa <motivo>\` — sobe a mesma escada do automod. \`${citar("warn.lista", "pt", P)} @pessoa\` · \`${citar("warn.limpar", "pt", P)} @pessoa\`.`,
         `**Quem pode moderar:** \`${citarInterno("acesso.cargo.add", P)} <@cargo>\` dá poder de moderação a um cargo, sem precisar mexer nas permissões do Stoat.`,
@@ -1038,6 +1055,7 @@ function AREAS(P, lang = "pt", comIA = false) {
       soComIA: true,
       resumo: "Conversa, memória, participação e moderação por IA.",
       corpo: [
+        `**Ligar:** \`${citarInterno("chat.on", P)}\` (e \`${citarInterno("chat.imagem", P)} on\` para gerar imagens) — começam desligados em cada servidor *(ManagePermissions)*.`,
         `**Testar:** \`${citarInterno("chat.status", P)}\` mostra se o serviço de IA está no ar.`,
         "Depois é só mencionar o bot ou usar `" + citarInterno("chat") + " <mensagem>`.",
         "Ela também **vê imagens**: anexa uma e pergunta (\"o que aparece aqui?\").",
@@ -1051,6 +1069,7 @@ function AREAS(P, lang = "pt", comIA = false) {
         `**Perfil e memória:** \`${citarInterno("chat.perfil", P)}\` mostra o que ela sabe de você.`,
         `\`${citarInterno("chat.cuidado", P)} @pessoa on\` — trata alguém com gentileza extra.`,
         `\`${citarInterno("chat.esquecer", P)}\` apaga o seu; \`${citarInterno("chat.esquecer.tudo", P)}\` zera o servidor.`,
+        `\`${citarInterno("chat.sair", P)}\` — a Judy para de falar com você (em todo servidor); \`${citarInterno("chat.voltar", P)}\` desfaz. \`${citar("privacidade", "pt", P)}\` mostra o que ela guarda.`,
         "",
         `**Moderação por IA:** \`${citarInterno("modia.criterios", P)} <o que moderar, em texto livre>\` e depois \`${citarInterno("modia", P)} on\`.`,
         "Ela apaga o que violar e marca o dono no log — nunca bane sozinha.",
@@ -1232,6 +1251,7 @@ function AREAS(P, lang = "pt", comIA = false) {
       resumo: "Panorama, comandos desativados e lista global.",
       corpo: [
         `\`${citar("config", "pt", P)}\` — panorama de tudo que está configurado neste servidor`,
+        `\`${citarInterno("assistente", P)}\` — configuração guiada · \`${citarInterno("assistente.servidor", P)}\` — cria cargos e canais prontos`,
         `\`${citar("comando.desativar", "pt", P)}|ativar <nome>\` — liga/desliga um comando aqui`,
         `\`${citarInterno("banglobal", P)} <off|avisar|imediato|consenso>\` — o que fazer quando entra alguém banido em outro servidor`,
         `\`${citar("idioma", "pt", P)} pt|en|es\` — em que idioma eu respondo neste servidor`,
@@ -1278,6 +1298,7 @@ function GUIA(P, lang = "pt", comIA = false) {
       description: [
         "Esta guía tiene **6 páginas**: reacciona ◀ ▶ para pasar, o escribe `" + citar("tutorial", "es", P) + " <número>`.",
         `🧙 **La forma más rápida:** \`${citar("assistente", "es", P)}\` — yo pregunto y lo configuro por ti (\`${citar("assistente.rapido", "es", P)}\` son 5 preguntas). Esta guía es para quien prefiere ver cada paso.`,
+        `🏗️ ¿Servidor nuevo, sin canales? \`${citar("assistente.servidor", "es", P)}\` crea roles y canales con los permisos puestos y sigue con la configuración guiada.`,
         "",
         "**Primero: los permisos del bot** (Ajustes del servidor → Roles → rol del bot)",
         "• `ViewChannel`, `ReadMessageHistory`, `SendMessage`, `SendEmbeds`, `React` — lo básico",
@@ -1305,7 +1326,7 @@ function GUIA(P, lang = "pt", comIA = false) {
         "",
         `Quién es staff para el bot: \`${citar("acesso.cargo.add", "es", P)} @Rol\` (o \`${citar("staff.add", "es", P)}\`).`,
         "",
-        `Comprobar: \`${citar("debug", "es", P)}\` · Guiado: \`${citar("assistente.canais", "es", P)}\` · Profundizar: \`${citar("tutorial.canais", "es", P)}\``,
+        `Comprobar: \`${citar("debug", "es", P)}\` · Guiado: \`${citar("assistente.canais", "es", P)}\` · Desde cero: \`${citar("assistente.servidor", "es", P)}\` · Profundizar: \`${citar("tutorial.canais", "es", P)}\``,
       ].join("\n") },
 
     { title: "🛡️ Por dónde empezar — Protección",
@@ -1322,6 +1343,7 @@ function GUIA(P, lang = "pt", comIA = false) {
         `**Sanción:** \`${citar("automod.punicao", "es", P)} mode stack\` — aviso → silencio 5 min → silencio 1 h → ban (cámbiala con \`${citar("automod.punicao", "es", P)} ladder\`). El silencio usa el timeout nativo (**TimeoutMembers**).`,
         "",
         `**Registro:** crea un canal 🔒 que solo vea el staff y, dentro de él, \`${citar("log.canal.aqui", "es", P)}\`.`,
+        `**Canal de promoción:** \`${citar("automod", "es", P)} whitelist add #canal\` — ahí se puede publicar cualquier invitación.`,
         `**Lista global:** \`${citar("banglobal.avisar", "es", P)}\` avisa cuando entra alguien baneado en otro servidor.`,
         "",
         `Guiado: \`${citar("assistente.protecao", "es", P)}\` · Profundizar: \`${citar("tutorial.moderacao", "es", P)}\``,
@@ -1353,7 +1375,7 @@ function GUIA(P, lang = "pt", comIA = false) {
         `**RPG (personaje, misiones, mercado):** un sistema aparte. \`${citar("tutorial", "es", P)} rpg\` es la wiki de quien juega; después los jugadores usan \`${citar("game.criar", "es", P)}\`.`,
         "",
         ...(comIA ? [
-          `**Judy (IA):** menciona al bot o \`${citar("chat", "es", P)} <mensaje>\`. \`${citar("chat.livre", "es", P)} on\` deja que entre en la charla de un canal; \`${citar("modia", "es", P)}\` modera con criterios en texto libre.`,
+          `**Judy (IA):** \`${citar("chat.on", "es", P)}\` la activa en este servidor (y \`${citar("chat.imagem", "es", P)} on\` las imágenes); después menciona al bot o \`${citar("chat", "es", P)} <mensaje>\`. \`${citar("chat.livre", "es", P)} on\` deja que entre en la charla de un canal; \`${citar("modia", "es", P)}\` modera con criterios en texto libre.`,
           "",
         ] : []),
         `**Reloj:** \`${citar("fuso.add", "es", P)} Madrid\` · **Noticias:** \`${citar("rss.add", "es", P)} <url>\` · **Voz:** \`${citar("entrar", "es", P)}\` estando en una llamada (desde cualquier canal) — entra y lee el chat; \`${citar("musica", "es", P)} <enlace>\` pone música (baja sola cuando habla el TTS) y \`${citar("sair", "es", P)}\` sale`,
@@ -1387,6 +1409,7 @@ function GUIA(P, lang = "pt", comIA = false) {
       description: [
         "This guide has **6 pages**: react ◀ ▶ to turn, or type `" + citarInterno("tutorial") + " <number>`.",
         `🧙 **Fastest way:** \`${citarInterno("assistente", P)}\` — I ask and set it up for you (\`${citarInterno("assistente.rapido", P)}\` is 5 questions). This guide is for those who'd rather see each step.`,
+        `🏗️ Brand-new server, no channels yet? \`${citarInterno("assistente.servidor", P)}\` creates roles and channels with the permissions set, then continues with the guided setup.`,
         "",
         "**First: the bot's permissions** (Server settings → Roles → the bot's role)",
         "• `ViewChannel`, `ReadMessageHistory`, `SendMessage`, `SendEmbeds`, `React` — the basics",
@@ -1414,7 +1437,7 @@ function GUIA(P, lang = "pt", comIA = false) {
         "",
         `Who's staff for the bot: \`${citarInterno("acesso.cargo.add", P)} @Role\` (or \`${citarInterno("staff.add", P)}\`).`,
         "",
-        `Check it: \`${citarInterno("debug", P)}\` · Guided: \`${citarInterno("assistente.canais", P)}\` · Deep dive: \`${citarInterno("tutorial.canais", P)}\``,
+        `Check it: \`${citarInterno("debug", P)}\` · Guided: \`${citarInterno("assistente.canais", P)}\` · From scratch: \`${citarInterno("assistente.servidor", P)}\` · Deep dive: \`${citarInterno("tutorial.canais", P)}\``,
       ].join("\n") },
 
     { title: "🛡️ Getting started — Protection",
@@ -1431,6 +1454,7 @@ function GUIA(P, lang = "pt", comIA = false) {
         `**Punishment:** \`${citarInterno("automod.punicao", P)} modo acumular\` — warning → 5 min mute → 1 h mute → ban (change it with \`${citarInterno("automod.punicao", P)} escada\`). Mutes use the native timeout (**TimeoutMembers**).`,
         "",
         `**Logging:** create a 🔒 staff-only channel and, inside it, \`${citar("log.canal.aqui", "en", P)}\`.`,
+        `**Promotion channel:** \`${citarInterno("automod", P)} whitelist add #channel\` — any invite can be posted there.`,
         `**Global list:** \`${citarInterno("banglobal.avisar", P)}\` warns when someone banned elsewhere joins.`,
         "",
         `Guided: \`${citarInterno("assistente.protecao", P)}\` · Deep dive: \`${citarInterno("tutorial.moderacao", P)}\``,
@@ -1462,7 +1486,7 @@ function GUIA(P, lang = "pt", comIA = false) {
         `**RPG (character, missions, market):** a separate system. \`${citarInterno("tutorial", P)} rpg\` is the players' wiki; players then use \`${citarInterno("game.criar", P)}\`.`,
         "",
         ...(comIA ? [
-          `**Judy (AI):** mention the bot or \`${citarInterno("chat", P)} <message>\`. \`${citarInterno("chat.livre", P)} on\` lets her join a channel's conversation; \`${citarInterno("modia", P)}\` moderates with free-text criteria.`,
+          `**Judy (AI):** \`${citarInterno("chat.on", P)}\` turns her on for this server (and \`${citarInterno("chat.imagem", P)} on\` images); then mention the bot or \`${citarInterno("chat", P)} <message>\`. \`${citarInterno("chat.livre", P)} on\` lets her join a channel's conversation; \`${citarInterno("modia", P)}\` moderates with free-text criteria.`,
           "",
         ] : []),
         `**Clock:** \`${citarInterno("fuso.add", P)} London\` · **News:** \`${citarInterno("rss.add", P)} <url>\` · **Voice:** \`${citarInterno("entrar", P)}\` while in a call (from any channel) — she joins and reads the chat; \`${citarInterno("musica", P)} <link>\` plays music (auto-ducks under TTS) and \`${citarInterno("sair", P)}\` leaves`,
@@ -1496,6 +1520,7 @@ function GUIA(P, lang = "pt", comIA = false) {
       description: [
         "Este guia tem **6 páginas**: reaja ◀ ▶ para virar, ou digite `" + citarInterno("tutorial") + " <número>`.",
         `🧙 **Jeito mais rápido:** \`${citarInterno("assistente", P)}\` — eu pergunto e configuro por você (o \`${citarInterno("assistente.rapido", P)}\` são 5 perguntas). Este guia é para quem prefere ver cada passo.`,
+        `🏗️ Servidor novo, sem canais? \`${citarInterno("assistente.servidor", P)}\` cria cargos e canais com as permissões prontas e segue para a configuração guiada.`,
         "",
         "**Primeiro: as permissões do bot** (Configurações do servidor → Cargos → cargo do bot)",
         "• `ViewChannel`, `ReadMessageHistory`, `SendMessage`, `SendEmbeds`, `React` — o básico",
@@ -1523,7 +1548,7 @@ function GUIA(P, lang = "pt", comIA = false) {
         "",
         `Quem é staff para o bot: \`${citarInterno("acesso.cargo.add", P)} @Cargo\` (ou \`${citarInterno("staff.add", P)}\`).`,
         "",
-        `Conferir: \`${citarInterno("debug", P)}\` · Guiado: \`${citarInterno("assistente.canais", P)}\` · Aprofundar: \`${citarInterno("tutorial.canais", P)}\``,
+        `Conferir: \`${citarInterno("debug", P)}\` · Guiado: \`${citarInterno("assistente.canais", P)}\` · Do zero: \`${citarInterno("assistente.servidor", P)}\` · Aprofundar: \`${citarInterno("tutorial.canais", P)}\``,
       ].join("\n") },
 
     { title: "🛡️ Por onde começar — Proteção",
@@ -1540,6 +1565,7 @@ function GUIA(P, lang = "pt", comIA = false) {
         `**Punição:** \`${citarInterno("automod.punicao", P)} modo acumular\` — aviso → mute 5 min → mute 1 h → ban (mude com \`${citarInterno("automod.punicao", P)} escada\`). O mute usa o timeout nativo (**TimeoutMembers**).`,
         "",
         `**Registro:** crie um canal 🔒 só-staff-vê e, dentro dele, \`${citar("log.canal.aqui", "pt", P)}\`.`,
+        `**Canal de divulgação:** \`${citarInterno("automod", P)} whitelist add #canal\` — lá qualquer convite pode ser postado.`,
         `**Lista global:** \`${citarInterno("banglobal.avisar", P)}\` avisa quando entra alguém banido em outro servidor.`,
         "",
         `Guiado: \`${citarInterno("assistente.protecao", P)}\` · Aprofundar: \`${citarInterno("tutorial.moderacao", P)}\``,
@@ -1571,7 +1597,7 @@ function GUIA(P, lang = "pt", comIA = false) {
         `**RPG (personagem, missões, mercado):** um sistema à parte. \`${citarInterno("tutorial", P)} rpg\` é a wiki de quem joga; os jogadores então usam \`${citarInterno("game.criar", P)}\`.`,
         "",
         ...(comIA ? [
-          `**Judy (IA):** mencione o bot ou \`${citarInterno("chat", P)} <mensagem>\`. \`${citarInterno("chat.livre", P)} on\` deixa ela entrar na conversa de um canal; \`${citarInterno("modia", P)}\` modera com critérios em texto livre.`,
+          `**Judy (IA):** \`${citarInterno("chat.on", P)}\` liga neste servidor (e \`${citarInterno("chat.imagem", P)} on\` as imagens); depois mencione o bot ou \`${citarInterno("chat", P)} <mensagem>\`. \`${citarInterno("chat.livre", P)} on\` deixa ela entrar na conversa de um canal; \`${citarInterno("modia", P)}\` modera com critérios em texto livre.`,
           "",
         ] : []),
         `**Relógio:** \`${citarInterno("fuso.add", P)} Lisboa\` · **Notícias:** \`${citarInterno("rss.add", P)} <url>\` · **Voz:** \`${citarInterno("entrar", P)}\` estando numa call (de qualquer canal) — ela entra e lê o chat; \`${citarInterno("musica", P)} <link>\` toca música (abaixa sozinha quando o TTS fala) e \`${citarInterno("sair", P)}\` sai`,

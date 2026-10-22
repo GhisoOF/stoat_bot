@@ -22,7 +22,8 @@ import { lingua, idiomaDe, tr } from "../core/i18n.js";
 import { citar, citarInterno, trechoPronto } from "../core/aliases.js";
 import { descreverErro } from "../core/erros.js";
 import { MODULOS_AUTOMOD, moduloLigado, escadaDePunicao, GRUPOS_AUTOMOD, estadoDoGrupo, validadeDosAvisos } from "./automod-engine.js";
-import { servidorPermitido as temIA } from "../ai/chat.js";
+// (22 out 2026) `iaExiste` = a IA está disponível aqui; `iaAqui` = e o chat está ligado
+import { servidorPermitido as temIA, iaDisponivel, imagemLigadaAqui } from "../ai/chat.js";
 import { loja as lojaEconomia } from "../ferramentas/economia.js";
 import { nomeModo, nomeGrupo } from "../core/nomes-automod.js";
 
@@ -47,11 +48,13 @@ export async function coletar({ server, client, config, serverId, botMember, ehD
   const reacoes = (() => { try { return db.listReactionRolesServidor(serverId); } catch { return []; } })();
   const vozAqui = servidorNaLista("TTS_SERVIDORES", serverId);
   const iaAqui = (() => { try { return temIA(serverId); } catch { return false; } })();
+  const iaExiste = (() => { try { return iaDisponivel(serverId); } catch { return false; } })();
   const imagem = (process.env.IMAGEM ?? "1").trim() !== "0";
+  const imagemAqui = (() => { try { return imagemLigadaAqui(serverId); } catch { return false; } })();
 
   return {
     server, client, config, serverId, botMember, ehDono, fetcher,
-    am, pol, usaMute, usaBan, filtrosLigados, cargosNivel, reacoes, vozAqui, iaAqui, imagem,
+    am, pol, usaMute, usaBan, filtrosLigados, cargosNivel, reacoes, vozAqui, iaAqui, iaExiste, imagem, imagemAqui,
     tickets: !!config?.tickets?.logCanal,
   };
 }
@@ -67,7 +70,7 @@ function secaoPermissoes(d, T) {
     AssignRoles: !!d.config?.autorole?.roleId || d.cargosNivel.length > 0 || d.reacoes.length > 0 || (() => { try { return lojaEconomia(d.serverId).length > 0; } catch { return false; } })(),
     ManageChannel: d.tickets || !!d.config?.tickets?.painel,
     Connect: d.vozAqui, Speak: d.vozAqui,
-    UploadFiles: d.iaAqui && d.imagem,
+    UploadFiles: d.iaAqui && d.imagemAqui,
   };
   const TABELA = [
     ["ViewChannel", "ver os canais", "see channels", "ver los canales", true],
@@ -81,7 +84,8 @@ function secaoPermissoes(d, T) {
     ["TimeoutMembers", `silenciar — ${citar("silenciar", "pt")} e a escada de punição`, `time out — ${citar("silenciar", "en")} and the punishment ladder`, `silenciar — ${citar("silenciar", "es")} y la escalera de castigos`],
     ["ManageRole", "criar cargos — " + citarInterno("xp.criarcargos") + ", " + citarInterno("cor") + "", "create roles — " + citarInterno("xp.criarcargos") + ", " + citarInterno("cor") + "", "crear roles — " + citar("xp.criarcargos", "es") + ", " + citar("cor", "es")],
     ["AssignRoles", "dar cargos — cargo automático, níveis, reação", "give roles — auto role, levels, reactions", "dar roles — rol automático, niveles, reacciones"],
-    ["ManageChannel", "criar canais — tickets", "create channels — tickets", "crear canales — tickets"],
+    ["ManageChannel", `criar canais — tickets, ${citar("assistente.servidor", "pt")}`, `create channels — tickets, ${citar("assistente.servidor", "en")}`, `crear canales — tickets, ${citar("assistente.servidor", "es")}`],
+    ["ManagePermissions", `permissões de canais e cargos — ${citar("assistente.servidor", "pt")}`, `channel and role permissions — ${citar("assistente.servidor", "en")}`, `permisos de canales y roles — ${citar("assistente.servidor", "es")}`],
     ["Connect", "entrar em calls — voz e música", "join calls — voice and music", "entrar en llamadas — voz y música"],
     ["Speak", "falar nas calls — voz e música", "speak in calls — voice and music", "hablar en llamadas — voz y música"],
     ["UploadFiles", "enviar arquivos — imagens geradas", "upload files — generated images", "subir archivos — imágenes generadas"],
@@ -144,16 +148,19 @@ function secaoCanaisConfigurados(d, T) {
     [T("Painel de tickets", "Ticket panel", "Panel de tickets"), c.tickets?.painel?.canalId],
     [T("Comentários espontâneos", "Spontaneous comments", "Comentarios espontáneos"), d.iaAqui ? c.comentarioEspontaneo?.canalId : null],
     ...((d.iaAqui ? c.chatLivre?.canais ?? [] : []).map((id) => [T("Conversa livre", "Free chat", "Conversación libre"), id])),
+    // (22 out 2026) canais de divulgação: lá o anti-invite não age, mas o resto do
+    // automod sim — o bot só precisa VER o canal
+    ...((c.automod?.antiInvite?.canaisLiberados ?? []).map((id) => [T("Divulgação (convites liberados)", "Promotion (invites allowed)", "Promoción (invitaciones permitidas)"), id, ["ViewChannel"]])),
   ].filter(([, id]) => id);
   const itens = [];
   const doServidor = new Set((d.server?.channels ?? []).map((x) => (typeof x === "string" ? x : x?.id)).filter(Boolean));
-  for (const [rotulo, id] of pares) {
+  for (const [rotulo, id, precisa = ["ViewChannel", "SendMessage", "SendEmbeds"]] of pares) {
     const canal = d.client?.channels?.get?.(id) ?? (d.server?.channels ?? []).find((x) => x?.id === id) ?? null;
     if (!canal || (doServidor.size && !doServidor.has(id))) {
       itens.push({ nivel: "erro", texto: `${rotulo}: ${T("o canal não existe mais", "the channel no longer exists", "el canal ya no existe")} (\`${id}\`)`, dica: T("escolha outro canal para esse recurso", "pick another channel for that feature", "elige otro canal para esa función") });
       continue;
     }
-    const falta = ["ViewChannel", "SendMessage", "SendEmbeds"].filter((p) => perms.podeNoCanal(canal, d.client, p, d.server, d.botMember) === false);
+    const falta = precisa.filter((p) => perms.podeNoCanal(canal, d.client, p, d.server, d.botMember) === false);
     if (falta.length) itens.push({ nivel: "erro", texto: `${rotulo}: <#${id}> — ${T("o bot não tem", "the bot lacks", "al bot le falta")} ${falta.join(", ")}`, dica: T(`libere ${falta.join(", ")} para o cargo do bot nesse canal`, `allow ${falta.join(", ")} for the bot's role in that channel`, `permite ${falta.join(", ")} al rol del bot en ese canal`) });
     else itens.push({ nivel: "ok", texto: `${rotulo}: <#${id}>` });
   }
@@ -180,7 +187,7 @@ function secaoModeracao(d, T) {
   const grupos = Object.keys(GRUPOS_AUTOMOD).map((g) => ({ g, ...estadoDoGrupo(d.am, g) }));
   const resumo = grupos.map((x) => `${x.g} ${x.ligadas}/${x.total}`).join(" · ");
   const resumoEn = grupos.map((x) => `${nomeGrupo(x.g, "en")} ${x.ligadas}/${x.total}`).join(" · ");
-  itens.push({ nivel: "info", texto: T(`automod: ${resumo} · punição \`${d.pol.modo ?? "avisar"}\``, `automod: ${resumoEn} · punishment \`${nomeModo(d.pol.modo ?? "avisar", "es")}\``, `automod: ${resumoEn} · castigo \`${nomeModo(d.pol.modo ?? "avisar", "es")}\``) });
+  itens.push({ nivel: "info", texto: T(`automod: ${resumo} · punição \`${d.pol.modo ?? "avisar"}\``, `automod: ${resumoEn} · punishment \`${nomeModo(d.pol.modo ?? "avisar", "en")}\``, `automod: ${resumoEn} · castigo \`${nomeModo(d.pol.modo ?? "avisar", "es")}\``) });
   if (!d.config?.log?.canalId) itens.push({ nivel: "aviso", texto: T("sem canal de log — punições e alertas não ficam registrados", "no log channel — punishments and alerts aren't recorded", "sin canal de registro — los castigos y las alertas no quedan registrados"), dica: T(`\`${citar("log.canal.aqui", "pt")}\` num canal só-staff`, `\`${citar("log.canal.aqui", "en")}\` in a staff-only channel`, `\`${citar("log.canal.aqui", "es")}\` en un canal solo para staff`) });
   const off = d.config?.comandosDesativados ?? [];
   if (off.length) itens.push({ nivel: "info", texto: `${T("comandos desativados", "disabled commands", "comandos desactivados")}: ${off.map((c) => `\`${c}\``).join(", ")}` });
@@ -225,10 +232,22 @@ async function secaoVoz(d, T) {
 
 async function secaoIA(d, T) {
   const itens = [];
-  if (!d.iaAqui) {
-    itens.push({ nivel: "info", texto: T("a IA não está liberada neste servidor", "AI isn't enabled on this server", "la IA no está habilitada en este servidor") });
+  if (!d.iaExiste) {
+    itens.push({ nivel: "info", texto: T("a IA de conversa não está liberada neste servidor (o dono do bot escolhe em `SERVIDOR`)",
+      "the chat AI isn't enabled on this server (the bot owner picks in `SERVIDOR`)", "la IA de conversación no está habilitada en este servidor (el dueño del bot elige en `SERVIDOR`)") });
     return { titulo: T("🤖 IA", "🤖 AI", "🤖 IA"), itens };
   }
+  // (22 out 2026) o chat e a imagem são escolha do servidor (começam desligados)
+  itens.push(d.iaAqui
+    ? { nivel: "ok", texto: T("chat ligado neste servidor", "chat on for this server", "chat activado en este servidor") }
+    : { nivel: "info", texto: T(`chat desligado neste servidor — \`${citarInterno("chat.on")}\` liga`, `chat off for this server — \`${citarInterno("chat.on")}\` turns it on`, `chat desactivado en este servidor — \`${citar("chat.on", "es")}\` lo activa`) });
+  const visao = !!(process.env.LLM_MODEL_VISAO || process.env.LLM_MODEL_MODERACAO);
+  if (!d.imagem) itens.push({ nivel: "info", texto: T("geração de imagem desligada no bot (`IMAGEM=0`)", "image generation off in the bot (`IMAGEM=0`)", "generación de imágenes desactivada en el bot (`IMAGEM=0`)") });
+  else if (!d.imagemAqui) itens.push({ nivel: "info", texto: T(`geração de imagem desligada neste servidor — \`${citarInterno("chat.imagem")} on\` liga`, `image generation off for this server — \`${citarInterno("chat.imagem")} on\` turns it on`, `generación de imágenes desactivada en este servidor — \`${citar("chat.imagem", "es")} on\` la activa`) });
+  else if (!visao) itens.push({ nivel: "aviso", texto: T("geração de imagem ligada, mas sem modelo de visão: toda imagem é conferida antes de sair, então nenhuma sai",
+      "image generation on, but no vision model: every image is checked before it goes out, so none will", "generación de imágenes activada, pero sin modelo de visión: toda imagen se revisa antes de salir, así que no saldrá ninguna"),
+    dica: T("defina `MODELO_VISAO` no `.env`", "set `MODELO_VISAO` in `.env`", "define `MODELO_VISAO` en el `.env`") });
+  else itens.push({ nivel: "ok", texto: T("geração de imagem ligada (cada imagem conferida pela visão)", "image generation on (each image checked by the vision model)", "generación de imágenes activada (cada imagen revisada por la visión)") });
   const servico = (process.env.IA_SERVICO_URL || "").replace(/\/$/, "");
   if (!servico) itens.push({ nivel: "aviso", texto: T("`IA_SERVICO_URL` não definida — sem ferramentas (busca, código, imagem)", "`IA_SERVICO_URL` isn't set — no tools (search, code, images)", "`IA_SERVICO_URL` no está definida — sin herramientas (búsqueda, código, imágenes)") });
   else {
@@ -244,7 +263,6 @@ async function secaoIA(d, T) {
     }
   }
   itens.push({ nivel: process.env.SEARXNG_URL ? "ok" : "info", texto: process.env.SEARXNG_URL ? T("busca na web ligada", "web search on", "búsqueda web activada") : T("busca na web desligada (sem `SEARXNG_URL`)", "web search off (no `SEARXNG_URL`)", "búsqueda web desactivada (sin `SEARXNG_URL`)") });
-  itens.push({ nivel: "info", texto: d.imagem ? T("geração de imagem ligada", "image generation on", "generación de imágenes activada") : T("geração de imagem desligada (`IMAGEM=0`)", "image generation off (`IMAGEM=0`)", "generación de imágenes desactivada (`IMAGEM=0`)") });
   return { titulo: T("🤖 IA", "🤖 AI", "🤖 IA"), itens };
 }
 

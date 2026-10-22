@@ -1552,6 +1552,48 @@ duração em espanhol (`silenced (timeout) for 1 día`) — a troca de "en" por 
 4b pegou a linha do inglês, porque a guarda olhava a linha inteira. A linha foi
 partida, e uma guarda nova procura ramo em inglês chamando ajudante com "es".
 
+**O `&chat` sumia da ajuda num servidor novo** (achado do Ghieh ao testar, 22 out):
+`&help chat` respondia "🚫 Não existe aqui". A ajuda, o tutorial e o `&sobre` decidiam
+pelo `servidorPermitido` — que desde o opt-in (6zc) é "IA disponível **e chat ligado**" —
+e o chat começa desligado: o comando que o liga ficava invisível. Agora olham o
+`iaDisponivel`; o grupo Diversão e o tutorial da IA ganharam a linha do `&chat on` /
+`&chat imagem on` (só a staff vê), e o `&sobre` diz "disponível, mas desligada neste
+servidor". 4 testes novos na `ia-por-servidor-21out`; 6 mutações, todas pegas.
+
+**O `&chat` sumia da ajuda num servidor novo** (achado do Ghieh ao testar, 22 out):
+`&help chat` respondia "🚫 Não existe aqui". A ajuda, o tutorial e o `&sobre` decidiam
+pelo `servidorPermitido` — que desde o opt-in (6zc) é "IA disponível **e chat ligado**" —
+e o chat começa desligado: o comando que o liga ficava invisível. Agora olham o
+`iaDisponivel`.
+
+**Pente fino nos comandos de informação** (pedido do Ghieh, 22 out: "debug, info, config,
+help e tutorial, adicionando tudo de novo, inclusive o wizard e o chat"):
+- `&help`: `&privacidade` no Começar; o whitelist diz que libera canais; no grupo
+  Diversão, `&chat on|off` · `&chat imagem on|off` (só a staff vê) e `&chat sair` ·
+  `&chat voltar` (todos); o `&chat comentar` passou a ser da staff na visão do membro.
+- `&tutorial`: o `&assistente servidor` na 1ª página, na dos canais, na área de canais
+  e em ajustes; o canal de divulgação na página e na área de proteção; o `&chat on` na
+  página da Judy e na área da IA (com `&chat sair` e `&privacidade`); `ManagePermissions`
+  e `ManageChannel` ligados ao wizard na área de permissões.
+- `&debug`: a seção da IA diz se o chat e a imagem estão ligados neste servidor (e como
+  ligar), avisa quando a imagem está ligada sem modelo de visão (nenhuma sairia), conta
+  o `ManagePermissions` (o wizard) e confere os canais de divulgação (só `ViewChannel`).
+- `&sobre`/`&info`: "disponível, mas desligada neste servidor" e a imagem segue a
+  escolha do servidor (`&chat imagem`), não só o `IMAGEM` do `.env`.
+- `&config` já mostrava o chat, a imagem e os canais liberados — conferido.
+
+**Erros achados no pente fino, cada um com teste:**
+
+| Erro | Teste |
+|---|---|
+| "**Voz**" sozinho no `&help diversao` onde a voz não está liberada: a nota do RPG (com `&help rpg`) contava como comando da seção | a seção acaba na linha em branco |
+| o mesmo em espanhol: a linha "pronta" (U+2063…U+2064) não era reconhecida como cabeçalho | as marcas saem antes do teste |
+| inglês com texto espanhol: "failed to ban (No se pudo…)" no ban do automod e "Next one: silencio…" no `&warn`/automod (o `"es"` da etapa 4b caiu no 2º argumento de alguns `tr`) | guarda que lê os argumentos de cada `tr`/`T` e acusa ajudante com `"es"` no texto em inglês |
+| o membro via `&chat comentar aqui|off`, que é da staff | visão do membro × da staff |
+
+**Testes:** `ia-por-servidor-21out` ganhou 9 (o `&chat` na ajuda e o pente fino); 19
+mutações, todas pegas.
+
 **Testes:** suíte nova `sem-nsfw-22out` (31) no lugar da `imagem-adulta-15out` e da
 `chat-adulto-15out`; `ia-so-casa-16out`, `imagem-casa-16out` e `imagem-qwen-15out`
 ajustadas. 26 mutações, todas derrubam um teste.

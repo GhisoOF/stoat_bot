@@ -1,4 +1,6 @@
-import { servidorPermitido as temIA, comandoIAPermitido } from "../ai/chat.js";
+// (22 out 2026) a ajuda e o &sobre olham onde a IA EXISTE (`iaDisponivel`); o
+// `servidorPermitido` (IA + chat ligado) escondia o `&chat on` de quem ia ligá-lo
+import { iaDisponivel as temIA, servidorPermitido as chatAqui, imagemLigadaAqui, comandoIAPermitido } from "../ai/chat.js";
 import * as visaoMod from "./visao.js";
 import { arvoreSubtopicos, SUBTOPICOS_SO_IA, ligarFamilias, mesclarNos, MODIA_TAG } from "./help-arvore.js";
 import { nomeExibido, normalizarArgs, SUB, citar, subExibido, marcarTraduzido, idDoNome, citarInterno, trechoPronto } from "../core/aliases.js";
@@ -700,6 +702,7 @@ export async function cmdSobre(message, args, ctx) {
   const lang = lingua(ctx);
   const en = lang === "en";
   const comIA = (() => { try { return temIA(serverId); } catch { return false; } })();
+  const chatLigado = (() => { try { return chatAqui(serverId); } catch { return false; } })();
 
   // conta comandos, linhas e uptime de forma resiliente
   // Um comando por função (os apelidos apontam para a mesma), sem os que não
@@ -726,7 +729,8 @@ export async function cmdSobre(message, args, ctx) {
   const modulosOn = gruposAm.filter((x) => x.ligadas > 0).length;
   const nModulos = gruposAm.length;
   const vozAqui = servidorNaLista("TTS_SERVIDORES", serverId);
-  const geraImagem = (process.env.IMAGEM ?? "1").trim() !== "0";
+  // (22 out 2026) a imagem é escolha de cada servidor (`&chat imagem on`)
+  const geraImagem = (() => { try { return imagemLigadaAqui(serverId); } catch { return false; } })();
   const nomeBot = ctx.client?.user?.displayName || "Judy";   // o nome de exibição; a conta (username) pode chamar outra coisa, como "Cobaia"
   const criador = (process.env.CRIADOR || "").trim();
   const xpOn = !!config?.xp?.enabled;
@@ -748,13 +752,14 @@ export async function cmdSobre(message, args, ctx) {
   const sim = (v) => v ? "🟢" : "🔴";
   const estadoEN = () => [
     `${sim(modulosOn)} **AutoMod** — ${modulosOn}/${nModulos} groups on${am.antiScam?.enabled ? ` · sentinel ${am.antiScam.porAntiguidade !== false ? "(stricter with newcomers)" : "on"}` : ""}`,
-    `⚖️ **Punishment** — \`${nomeModo(config?.automod?.punicao?.modo ?? "avisar", "es")}\`${(config?.automod?.punicao?.modo === "acumular") ? ` · ${escadaDePunicao(config.automod.punicao).map((d) => rotuloDegrau(d, "es")).join(" → ")}` : ""}`,
+    `⚖️ **Punishment** — \`${nomeModo(config?.automod?.punicao?.modo ?? "avisar", "en")}\`${(config?.automod?.punicao?.modo === "acumular") ? ` · ${escadaDePunicao(config.automod.punicao).map((d) => rotuloDegrau(d, "es")).join(" → ")}` : ""}`,
     `${sim(xpOn)} **Leveling (XP)** — ${xpOn ? "on" : "off"}`,
     `${sim(logOn)} **Log channel** — ${logOn ? `<#${config.log.canalId}>` : "not set"}`,
     `${sim(rssN)} **RSS** — ${rssN} feed(s)`,
     `${sim(banGlobalModo !== "off")} **Global ban list** — mode \`${banGlobalModo}\``,
     `🎲 **RPG** _(one world for every server)_ — ${nPersonagens} character(s) · ${moedas.length} currenc${moedas.length === 1 ? "y" : "ies"}${moedas.length > 1 ? " · exchange on" : ""}${nMagias ? ` · ${nMagias} spell(s) learned` : ""}${nCapturados ? ` · ${nCapturados} companion(s) in the dungeon` : ""}`,
-    comIA ? `🤖 **AI (Judy)** — enabled here: chat, code, web search, exact math, image reading${geraImagem ? " and **image generation**" : ""}`
+    comIA && !chatLigado ? `🤖 **AI (Judy)** — available, but off on this server: staff turns it on with \`${citarInterno("chat.on", PREFIXO)}\` (images: \`${citarInterno("chat.imagem", PREFIXO)} on\`)`
+    : comIA ? `🤖 **AI (Judy)** — enabled here: chat, code, web search, exact math, image reading${geraImagem ? " and **image generation**" : ""}`
           : `🤖 **AI (Judy)** — runs only on the servers enabled by the bot owner: chat, code, web search, exact math and image reading`,
     `🎫🪝🔊 **Tickets · Webhooks · Voice** — ${db.listarTickets(serverId).length} open ticket(s) · ${db.listarGanchos(serverId).length} webhook(s) · ${!vozAqui ? "voice and music not available here" : config?.tts?.ativo && config?.tts?.canalVoz ? `voice and music in <#${config.tts.canalVoz}>` : `voice and music: \`${citarInterno("entrar", PREFIXO)}\` from any channel, while in a call`}`,
   ];
@@ -766,7 +771,8 @@ export async function cmdSobre(message, args, ctx) {
     `${sim(rssN)} **RSS** — ${rssN} feed(s)`,
     `${sim(banGlobalModo !== "off")} **Lista global de bans** — modo \`${banGlobalModo}\``,
     `🎲 **RPG** _(um mundo só, em todos os servidores)_ — ${nPersonagens} personagem(ns) · ${moedas.length} moeda(s)${moedas.length > 1 ? " · câmbio ativo" : ""}${nMagias ? ` · ${nMagias} magia(s) aprendida(s)` : ""}${nCapturados ? ` · ${nCapturados} companheiro(s) na dungeon` : ""}`,
-    comIA ? `🤖 **IA (Judy)** — habilitada aqui: conversa, código, busca na web, contas exatas, leitura de imagens${geraImagem ? " e **geração de imagens**" : ""}`
+    comIA && !chatLigado ? `🤖 **IA (Judy)** — disponível, mas desligada neste servidor: a staff liga com \`${citarInterno("chat.on", PREFIXO)}\` (imagens: \`${citarInterno("chat.imagem", PREFIXO)} on\`)`
+    : comIA ? `🤖 **IA (Judy)** — habilitada aqui: conversa, código, busca na web, contas exatas, leitura de imagens${geraImagem ? " e **geração de imagens**" : ""}`
           : `🤖 **IA (Judy)** — funciona apenas nos servidores habilitados pelo dono do bot: conversa, código, busca na web, contas exatas e leitura de imagens`,
     `🎫🪝🔊 **Tickets · Webhooks · Voz** — ${db.listarTickets(serverId).length} ticket(s) aberto(s) · ${db.listarGanchos(serverId).length} webhook(s) · ${!vozAqui ? "voz e música indisponíveis aqui" : config?.tts?.ativo && config?.tts?.canalVoz ? `voz e música em <#${config.tts.canalVoz}>` : `voz e música: \`${citarInterno("entrar", PREFIXO)}\` de qualquer canal, estando numa call`}`,
   ];
@@ -778,7 +784,8 @@ export async function cmdSobre(message, args, ctx) {
     `${sim(rssN)} **RSS** — ${rssN} feed(s)`,
     `${sim(banGlobalModo !== "off")} **Lista global de bans** — modo \`${banGlobalModo}\``,
     `🎲 **RPG** _(un solo mundo para todos los servidores)_ — ${nPersonagens} personaje(s) · ${moedas.length} moneda(s)${moedas.length > 1 ? " · cambio activo" : ""}${nMagias ? ` · ${nMagias} hechizo(s) aprendido(s)` : ""}${nCapturados ? ` · ${nCapturados} compañero(s) en la mazmorra` : ""}`,
-    comIA ? `🤖 **IA (Judy)** — habilitada aquí: conversación, código, búsqueda web, cálculos exactos, lectura de imágenes${geraImagem ? " y **generación de imágenes**" : ""}`
+    comIA && !chatLigado ? `🤖 **IA (Judy)** — disponible, pero desactivada en este servidor: el staff la activa con \`${citar("chat.on", "es", PREFIXO)}\` (imágenes: \`${citar("chat.imagem", "es", PREFIXO)} on\`)`
+    : comIA ? `🤖 **IA (Judy)** — habilitada aquí: conversación, código, búsqueda web, cálculos exactos, lectura de imágenes${geraImagem ? " y **generación de imágenes**" : ""}`
           : `🤖 **IA (Judy)** — solo funciona en los servidores habilitados por el dueño del bot: conversación, código, búsqueda web, cálculos exactos y lectura de imágenes`,
     `🎫🪝🔊 **Tickets · Webhooks · Voz** — ${db.listarTickets(serverId).length} ticket(s) abierto(s) · ${db.listarGanchos(serverId).length} webhook(s) · ${!vozAqui ? "voz y música no disponibles aquí" : config?.tts?.ativo && config?.tts?.canalVoz ? `voz y música en <#${config.tts.canalVoz}>` : `voz y música: \`${citar("entrar", "es", PREFIXO)}\` desde cualquier canal, estando en una llamada`}`,
   ];

@@ -11,9 +11,17 @@ const VOZ_URL   = (process.env.VOZ_SERVICO_URL || "").replace(/\/$/, "");
 const VOZ_CHAVE = process.env.VOZ_CHAVE || "";
 const VOZ_API_ESPERADA = 11;
 
-const COOLDOWN_MS = Number(process.env.TTS_COOLDOWN_MS || 8000);
+// (24 out 2026) sem espera por pessoa por padrão — "está atrapalhando". `&tts cooldown <s>`
+// ou TTS_COOLDOWN_MS liga de novo, se um servidor quiser.
+const COOLDOWN_MS = Number(process.env.TTS_COOLDOWN_MS || 0);
 const MAX_CHARS   = Number(process.env.TTS_MAX_CHARS || 400);
 
+// o teto por minuto do canal, em texto (0 = desligado, o padrão desde 24 out 2026)
+function tetoTxt(c, l) {
+  const n = c?.porMinuto ?? filtro.PADROES.porMinuto;
+  if (n > 0) return l === "es" ? `hasta ${n}/min` : l === "en" ? `up to ${n}/min` : `até ${n}/min`;
+  return l === "es" ? "sin tope" : l === "en" ? "no cap" : "sem teto";
+}
 const ultimaFala = new Map();   // `${serverId}:${userId}` → timestamp
 // erro → quando foi logado pela última vez (anti-enxurrada no log)
 const ultimoErro = new Map();
@@ -431,7 +439,7 @@ export async function cmdTts(message, args, ctx) {
       `**${tr(ctx, "Canal de voz", "Voice channel", "Canal de voz")}:** ${c.canalVoz ? `<#${c.canalVoz}>` : "_—_"}`,
       `**${tr(ctx, "Transmite de", "Broadcast from", "Transmite desde")}:** ${c.canalTexto ? `<#${c.canalTexto}>` : "_—_"}`,
       `**${tr(ctx, "Peneira", "Sieve", "Filtro")}:** ${c.filtro === false ? "🔴" : "🟢"} ${tr(ctx,
-        `até ${c.porMinuto ?? filtro.PADROES.porMinuto}/min`, `up to ${c.porMinuto ?? filtro.PADROES.porMinuto}/min`, `hasta ${c.porMinuto ?? filtro.PADROES.porMinuto}/min`)}${(() => {
+        tetoTxt(c, "pt"), tetoTxt(c, "en"), tetoTxt(c, "es"))}${(() => {
           const e = c.canalTexto ? filtro.estadoDoCanal(c.canalTexto) : null;
           return e?.silenciado ? ` · 🤫 ${Math.ceil(e.faltamMs / 1000)}s` : "";
         })()} _(\`${tr(ctx, citarInterno("tts.filtro", PREFIXO), citarInterno("tts.filtro", PREFIXO), citar("tts.filtro", "es", PREFIXO))}\`)_`,
@@ -794,7 +802,7 @@ export async function cmdTts(message, args, ctx) {
         title: "🧹 Peneira da transmissão",
         description: [
           `**Estado:** ${c.filtro === false ? "🔴 desligada" : "🟢 ligada"}`,
-          `**Teto por minuto no canal:** ${c.porMinuto ?? filtro.PADROES.porMinuto}`,
+          `**Teto por minuto no canal:** ${tetoTxt(c, "pt")}`,
           est ? `**Agora:** ${est.noMinuto} fala(s) no último minuto${est.silenciado ? ` · 🤫 em silêncio por mais ${Math.ceil(est.faltamMs / 1000)}s` : ""}` : null,
           "",
           "Ignoro mensagens que são **forma de barulho**, não conteúdo:",
@@ -812,7 +820,7 @@ export async function cmdTts(message, args, ctx) {
         title: "🧹 Broadcast sieve",
         description: [
           `**State:** ${c.filtro === false ? "🔴 off" : "🟢 on"}`,
-          `**Per-minute cap on the channel:** ${c.porMinuto ?? filtro.PADROES.porMinuto}`,
+          `**Per-minute cap on the channel:** ${tetoTxt(c, "en")}`,
           est ? `**Right now:** ${est.noMinuto} utterance(s) in the last minute${est.silenciado ? ` · 🤫 quiet for ${Math.ceil(est.faltamMs / 1000)}s more` : ""}` : null,
           "",
           "I skip messages that are **noise by shape**, not by content:",
@@ -830,7 +838,7 @@ export async function cmdTts(message, args, ctx) {
         title: "🧹 Filtro de la transmisión",
         description: [
           `**Estado:** ${c.filtro === false ? "🔴 desactivado" : "🟢 activado"}`,
-          `**Tope por minuto en el canal:** ${c.porMinuto ?? filtro.PADROES.porMinuto}`,
+          `**Tope por minuto en el canal:** ${tetoTxt(c, "es")}`,
           est ? `**Ahora:** ${est.noMinuto} frase(s) en el último minuto${est.silenciado ? ` · 🤫 en silencio ${Math.ceil(est.faltamMs / 1000)}s más` : ""}` : null,
           "",
           "Ignoro los mensajes que son **ruido por su forma**, no por su contenido:",
@@ -873,18 +881,18 @@ export async function cmdTts(message, args, ctx) {
     }
     if (["porminuto", "perminute", "teto", "cap"].includes(acao)) {
       const n = Number(args[2]);
-      if (!Number.isFinite(n) || n < 1 || n > 60) {
+      if (!Number.isFinite(n) || n < 0 || n > 60) {
         return sendEmbed(message.channel, tr(ctx,
-          { title: "❌ Valor inválido", description: `Uso: \`${citarInterno("tts.filtro.porminuto", PREFIXO)} <1 a 60>\``, colour: COR.erro },
-          { title: "❌ Invalid value", description: `Usage: \`${citarInterno("tts.filtro.porminuto", PREFIXO)} <1 to 60>\``, colour: COR.erro },
-          { title: "❌ Valor no válido", description: `Uso: \`${citar("tts.filtro.porminuto", "es", PREFIXO)} <1 a 60>\``, colour: COR.erro }));
+          { title: "❌ Valor inválido", description: `Uso: \`${citarInterno("tts.filtro.porminuto", PREFIXO)} <0 a 60>\` — \`0\` = sem teto`, colour: COR.erro },
+          { title: "❌ Invalid value", description: `Usage: \`${citarInterno("tts.filtro.porminuto", PREFIXO)} <0 to 60>\` — \`0\` = no cap`, colour: COR.erro },
+          { title: "❌ Valor no válido", description: `Uso: \`${citar("tts.filtro.porminuto", "es", PREFIXO)} <0 a 60>\` — \`0\` = sin tope`, colour: COR.erro }));
       }
       c.porMinuto = Math.round(n); salvarConfig?.();
       filtro.limpar(c.canalTexto ?? null);
       return sendEmbed(message.channel, tr(ctx,
-        { title: "✅ Teto ajustado", description: `Até **${c.porMinuto}** fala(s) por minuto vindas da transmissão.`, colour: COR.sucesso },
-        { title: "✅ Cap adjusted", description: `Up to **${c.porMinuto}** utterance(s) per minute from the broadcast.`, colour: COR.sucesso },
-        { title: "✅ Tope ajustado", description: `Hasta **${c.porMinuto}** frase(s) por minuto desde la transmisión.`, colour: COR.sucesso }));
+        { title: "✅ Teto ajustado", description: c.porMinuto ? `Até **${c.porMinuto}** fala(s) por minuto vindas da transmissão.` : "Sem teto: a transmissão lê tudo o que passar pela peneira.", colour: COR.sucesso },
+        { title: "✅ Cap adjusted", description: c.porMinuto ? `Up to **${c.porMinuto}** utterance(s) per minute from the broadcast.` : "No cap: the broadcast reads everything that gets through the sieve.", colour: COR.sucesso },
+        { title: "✅ Tope ajustado", description: c.porMinuto ? `Hasta **${c.porMinuto}** frase(s) por minuto desde la transmisión.` : "Sin tope: la transmisión lee todo lo que pasa la criba.", colour: COR.sucesso }));
     }
     return sendEmbed(message.channel, tr(ctx,
       { title: "❌ Não conheço essa opção", description: `\`${citarInterno("tts.filtro", PREFIXO)} [status|on|off|porminuto <n>|teste <texto>]\``, colour: COR.erro },

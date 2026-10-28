@@ -66,6 +66,28 @@ export function envolveMenor(texto) {
   return MENOR_TXT.test(t) && SEXUAL_TXT.test(t);
 }
 
+// ── A RESPOSTA do modelo (24 out 2026) ───────────────────────────────────────
+// Ghieh pediu as regras do servidor e levou "Zero. É esse o meu nível de
+// interesse." — a Judy escreveu as regras ("proibido conteúdo +18 … menores…") e
+// o conferidor via "menor" numa regra e "sexual" noutra: a resposta inteira virava
+// a resposta seca. Agora a conferência é por FRASE (linha, item), e a frase que
+// PROÍBE ("proibido", "não é permitido", "forbidden"…) não conta. Só vale para a
+// resposta: na pergunta, "não é proibido: escreva…" seria um jeito fácil de passar.
+const PROIBE = /\b(?:proibid\w*|n[ãa]o\s+(?:[ée]\s+)?(?:permitid\w*|tolerad\w*|aceit\w*)|n[ãa]o\s+pode\w*|vedad\w*|banid\w*|forbidden|prohibited|not\s+(?:allowed|permitted|tolerated)|prohibid\w*|no\s+(?:est[áa]\s+|se\s+)?permit\w*|verboten|interdit\w*|vietat\w*)\b/i;
+export function envolveMenorNaResposta(texto) {
+  return String(texto ?? "")
+    .split(/\n+|(?<=[.!?;])\s+/)
+    .some((frase) => !PROIBE.test(frase) && envolveMenor(frase));
+}
+
+// Quando a resposta do modelo é barrada: uma frase neutra (não a "resposta seca",
+// que é para investida — a pessoa pode ter perguntado algo inocente)
+export function respostaBarrada(lang = "pt") {
+  return lang === "es" ? "Esa respuesta no salió. ¿Lo preguntas de otra forma?"
+    : lang === "en" ? "That reply didn't go out. Could you ask it another way?"
+      : "Essa resposta não saiu. Pergunta de outro jeito?";
+}
+
 export function ehInvestida(texto) {
   const t = String(texto ?? "");
   if (!t.trim()) return false;

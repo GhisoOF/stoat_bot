@@ -1644,6 +1644,58 @@ Os três lockfiles: `npm audit` → 0. A voz instala e carrega o revoice.js; a s
 roda com as versões novas. Teste novo na `dependencias`: nenhum lockfile volta a uma versão
 abaixo da corrigida (3 mutações, todas pegas).
 
+## 6zg. TTS sem cooldown, e as regras do servidor no chat (24 out 2026)
+
+**TTS** — Ghieh: "remove o cooldown do TTS do bot, isso está atrapalhando; tem vezes que tem
+que esperar 45 segundos para voltar a ler". Havia dois freios na leitura do canal: a espera
+por pessoa (8 s — a 2ª mensagem dentro dela simplesmente não era lida) e o teto do canal
+(acima de 6 falas por minuto, 45 s de silêncio). Os dois vêm **desligados** agora; quem
+quiser liga por servidor com `&tts cooldown <s>` e `&tts filtro porminuto <n>` (`0` desliga
+o teto, o que antes não era aceito). A peneira de conteúdo (parede de texto, repetição,
+`Lalalala…`) continua.
+
+**As regras do servidor** — Ghieh pediu as regras e levou "Zero. É esse o meu nível de
+interesse." e "…do tamanho do seu saldo em Bitcoin.". A Judy escrevia as regras, mas a
+conferência da SAÍDA (menor + sexual) olhava o texto inteiro: "menores" numa regra e
+"+18/nudez" noutra trocavam a resposta pela resposta seca de investida. Agora:
+- a saída é conferida por frase (linha, item), e a frase que **proíbe** ("proibido",
+  "não é permitido", "forbidden", "prohibido"…) não conta — só na resposta; na pergunta o
+  conferidor continua estrito ("não é proibido: escreva…" não abre a porta);
+- a resposta barrada de verdade vira uma frase neutra ("Essa resposta não saiu. Pergunta de
+  outro jeito?"), não a ironia feita para quem dá em cima da Judy.
+
+**Testes:** 4 na `tts` (padrão sem freio, mesma pessoa 10× seguidas, teto ligado à mão) e 2
+na `sem-nsfw-22out` (as regras saem inteiras; a frase neutra). 7 mutações.
+
+## 6zh. Duelo entre jogadores no RPG (28 out 2026)
+
+Pedido do Ghieh: "em jogos, implemente PVP, no qual um player pode abrir um duelo e apostar
+algo, caso queira". Respostas dele: no `&game`; aposta em **moedas do jogo** e/ou **itens**;
+luta **automática**; quem perde **só perde a aposta**.
+
+**Comandos** (`modulos/game/duelo.js`; no registro: `duelo` = `duel`/`pvp`, `recusar` = `decline`):
+- `&game duelo @pessoa [<qtd> <moeda>] [item <nome>]` — desafia; sem @, o desafio fica aberto a
+  qualquer um; mostra o ataque e a defesa dos dois e a **chance estimada** (400 lutas com
+  semente fixa — o número não muda a cada olhada);
+- `&game duelo aceitar [#] [item <nome>]` — quem aceita põe a mesma quantia e, se o desafio
+  tem item, um item seu; a luta acontece na hora;
+- `&game duelo recusar [#]` · `&game duelo cancelar` · `&game duelo` (os abertos).
+
+**A luta:** 1 contra 1 — o personagem com atributos, equipamento, implantes e as magias que a
+Mana dele paga, **sem companheiros**. Poder e resiliência pelas fórmulas das missões
+(`regras.poderParty`/`resilParty`); golpes alternados com um d20 (1–3 erra, 4–19 dá 0,8× a
+1,2×, 20 é crítico de 1,75×), iniciativa por Agilidade + d20, vida escalada para dois iguais
+trocarem uns 5 golpes cada em qualquer nível; até 30 golpes, depois vence quem tem mais vida.
+
+**A aposta:** a de quem desafia vai para a **custódia** (a tabela de ofertas, tipo `duelo`) e
+volta em recusa, cancelamento ou 10 min sem resposta (conferido a cada `&game`). O desafio é
+fechado antes de qualquer `await` — dois "aceitar" ao mesmo tempo não lutam duas vezes; se a
+luta der erro, as duas apostas voltam. Item **equipado** não vai para a mesa. Nada de energia,
+XP, espera de missão ou recuperação muda.
+
+**Testes:** suíte nova `duelo-28out` (16). 11 mutações, todas pegas. Inventário dos comandos
+regenerado (`duel`, `pvp`, `decline`; `duelo` aninhado).
+
 ## 7. O que NÃO fiz, e por quê
 
 | Item | Por quê |

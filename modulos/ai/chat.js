@@ -2249,7 +2249,7 @@ async function conversarDeVez(message, pergunta, ctx, opcoes = {}) {
       // Se a "continuação" repetiu o começo, sobra só o que é novo.
       const costurado = costurar(pendente.texto, resto);
       resto = costurado === null ? "" : costurado.slice(pendente.texto.length).trim();
-      if (resto && desinteresse.envolveMenor(resto)) resto = desinteresse.respostaSeca(canalId, lang);
+      if (resto && desinteresse.envolveMenorNaResposta(resto)) resto = desinteresse.respostaBarrada(esTela ? "es" : lang);
       const cortouDeNovo = !!llmChat._cortou;
       const textoFinal = busca.semPreviaDeLinks(resto)
         || X("_Aquela resposta já estava inteira — não sobrou nada a acrescentar._", "_That reply was already complete — nothing left to add._", "_Esa respuesta ya estaba completa — no queda nada por añadir._");
@@ -2561,9 +2561,9 @@ async function conversarDeVez(message, pergunta, ctx, opcoes = {}) {
     }
 
     // e na saída também: o modelo nunca entrega menor + sexual
-    if (resposta && desinteresse.envolveMenor(resposta)) {
+    if (resposta && desinteresse.envolveMenorNaResposta(resposta)) {
       console.warn(`[CHAT] resposta barrada (menor + sexual) no canal ${canalId}`);
-      resposta = desinteresse.respostaSeca(canalId, lang);
+      resposta = desinteresse.respostaBarrada(esTela ? "es" : lang);
     }
     const textoFinal = busca.semPreviaDeLinks(resposta
       || X("_Não consegui formular uma resposta. Tente reformular a pergunta._", "_I couldn't put a reply together. Try rephrasing the question._", "_No pude formular una respuesta. Intenta reformular la pregunta._"))

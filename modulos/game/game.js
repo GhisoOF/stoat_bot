@@ -13,6 +13,7 @@ import * as MERC from "./mercado.js";
 import * as TS from "./tesouro.js";
 import * as EV from "./evolucionador.js";
 import * as AV from "./aventura.js";
+import * as DU from "./duelo.js";
 import { migrarParaV4 } from "./migracao.js";
 import * as IMG from "./imagens.js";
 import { validarUrlImagem } from "../core/midia.js";
@@ -321,6 +322,11 @@ export async function cmdGame(message, args, ctx) {
 
   const sub = args[0]?.toLowerCase();
   const eu = message.authorId;
+
+  // (28 out 2026) duelo entre jogadores, com aposta (duelo.js); os desafios
+  // vencidos devolvem a aposta a cada &game
+  try { DU.expirar(); } catch (e) { console.error("[DUELO] expirar:", e?.message ?? e); }
+  if (DU.SUBS.includes(sub)) return DU.cmdDuelo(message, args, ctx, { sendEmbed, en });
 
   // contratos, bicos, especiais, dungeons, chefes, co-op e história (aventura.js)
   if (AV.SUBS.includes(sub)) {

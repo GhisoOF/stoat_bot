@@ -29,7 +29,10 @@ export const PADROES = {
   distintosMin: 4,    // menos caracteres distintos que isto (em texto longo) = spam
   blocoVezes: 5,      // um bloco repetido tantas vezes seguidas = spam
   blocoCobertura: 0.5, // ou repetido menos, mas ocupando metade da mensagem
-  porMinuto: 6,       // teto de falas por minuto NO CANAL
+  // (24 out 2026, Ghieh: "remove o cooldown do TTS, está atrapalhando — tem vezes que
+  // tem que esperar 45 segundos") o teto por canal vem DESLIGADO (0). Quem quiser o
+  // freio liga com `&tts filtro porminuto <n>`.
+  porMinuto: 0,       // teto de falas por minuto NO CANAL (0 = sem teto)
   silencioMs: 45_000, // quanto tempo o canal fica em silêncio depois de estourar
 };
 
@@ -87,7 +90,7 @@ export function registrarFala(canalId, agora = Date.now(), opcoes = {}) {
   j.marcas.push(agora);
   janelas.set(canalId, j);
 
-  if (j.marcas.length > P.porMinuto) {
+  if (P.porMinuto > 0 && j.marcas.length > P.porMinuto) {
     const estreando = j.silencioAte <= agora;
     if (estreando) j.silencioAte = agora + P.silencioMs;
     return { permitido: false, estreando, ate: j.silencioAte };

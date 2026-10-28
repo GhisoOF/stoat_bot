@@ -4,7 +4,7 @@ Gerado por `INVENTARIO=1 node testes.mjs comandos-17out` — **não edite à mã
 reestruturação dos comandos num registro central (fase 0). A suíte `comandos-17out` compara o bot com o
 `inventario.json` desta pasta: nome que some ou muda de destino faz o teste falhar.
 
-**49 comandos · 168 nomes · 644 subcomandos em inglês · 340 telas de ajuda · 1024 exemplos executados**
+**49 comandos · 168 nomes · 647 subcomandos em inglês · 342 telas de ajuda · 1046 exemplos executados**
 
 ## Comandos
 
@@ -13,7 +13,7 @@ reestruturação dos comandos num registro central (fase 0). A suíte `comandos-
 | `acesso` | `access` | `acceso` | `acceso` `access` | `cmdAcesso` | sim | 48 |
 | `adeus` | `goodbye` | `despedida` | `despedida` `farewell` `goodbye` | `adeus (cmd)` | sim | 6 |
 | `assistente` | `wizard` | `asistente` | `asistente` `assistant` `configurar` `configure` `setup` `wizard` | `cmdAssistente` | sim | 14 |
-| `automod` | — | `automod` | — | `cmdAutomod` | sim | 126 |
+| `automod` | — | `automod` | — | `cmdAutomod` | sim | 128 |
 | `autorole` | — | `autorol` | `autorol` | `cmdAutorole` | sim | 14 |
 | `ban` | — | `ban` | — | `cmdBan` | sim | 7 |
 | `banglobal` | `globalban` | `banglobal` | `globalban` | `cmdBanGlobal` | sim | 50 |
@@ -29,8 +29,8 @@ reestruturação dos comandos num registro central (fase 0). A suíte `comandos-
 | `entrar` | `join` | `entrar` | `call` `join` | `entrar` | — | 2 |
 | `entretenimento` | `entertainment` | `entretenimiento` | `ent` `entertainment` `entretenimiento` `entreterimento` `fun` | `cmdEntretenimento` | sim | 58 |
 | `fuso` | `timezone` | `huso` | `clock` `fusos` `hora` `huso` `timezone` `timezones` `tz` | `cmdFuso` | sim | 30 |
-| `game` | `game` | `juego` | `character` `juego` `personagem` `rpg` | `cmdGame` | sim | 201 |
-| `help` | — | `ayuda` | `ayuda` | `cmdHelp` | — | 158 |
+| `game` | `game` | `juego` | `character` `juego` `personagem` `rpg` | `cmdGame` | sim | 221 |
+| `help` | — | `ayuda` | `ayuda` | `cmdHelp` | — | 160 |
 | `idioma` | `language` | `idioma` | `lang` `language` | `cmdIdioma` | — | 8 |
 | `iniciativa` | `initiative` | `iniciativa` | `init` `initiative` | `cmdIniciativa` | sim | 6 |
 | `kick` | — | `expulsar` | `expulsar` | `cmdKick` | sim | 7 |
@@ -102,7 +102,7 @@ O que ainda está espalhado:
 - `embed`: colores→cores, colors→cores, fields→campos
 - `entretenimento`: 8ball→bola8, buscaminas→campominado, choose→escolher, fight→briga, fortune→sorte, minesweeper→campominado, mock→zoeira, pick→escolher, rate→nota, reverse→inverter, tateti→velha, tictactoe→velha
 - `fuso`: alias→apelido, check→ver, cities→cidades, clear→limpar, find→buscar, format→formato, label→apelido, list→lista, main→principal, name→apelido, now→ver, reference→principal, search→buscar, time→ver
-- `game`: accept→aceitar, add→adicionar, all→tudo, announce→anunciar, bag→mochila, balance→saldo, bank→banco, barter→escambo, boss→chefe, bosses→chefes, buy→comprar, cancel→cancelar, catalog→catalogo, class→classe, coin→moeda, commands→comandos, companion→follower, companions→followers, confirm→confirmar, contract→contrato, contracts→contratos, create→criar, currency→moeda, default→padrao, delete→apagar, dismiss→dispensar, drop→tirar, energy→energia, equip→equipar, erase→apagar, evolve→evoluir, exchange→cambio, fantasy→fantasia, give→dar, grimoire→grimorio, help→ajuda, hire→contratar, image→imagem, info→detalhe, inventory→inventario, items→itens, job→bico, jobs→bicos, join→entrar, learn→aprender, leave→sair, level→nivel, magic→magia, main→padrao, market→mercado, mercenaries→mercenarios, mission→missao, missions→missoes, model→modelo, new→novo, photos→fotos, picture→imagem, points→pontos, preview→prever, profile→perfil, rates→taxas, recruit→recrutar, recruits→recrutas, redo→refazer, remove→remover, rescue→resgatar, rest→descansar, retrieve→pegar, sell→vender, server→servidor, sheet→ficha, shop→loja, simple→simples, simulate→simular, special→especial, specials→especiais, spell→magia, spells→magias, spend→pontos, story→historia, take→levar, test→teste, trade→trocar, unequip→desequipar, use→usar, view→ver, wallet→carteira, wear→vestir, world→mundo
+- `game`: accept→aceitar, add→adicionar, all→tudo, announce→anunciar, bag→mochila, balance→saldo, bank→banco, barter→escambo, boss→chefe, bosses→chefes, buy→comprar, cancel→cancelar, catalog→catalogo, class→classe, coin→moeda, commands→comandos, companion→follower, companions→followers, confirm→confirmar, contract→contrato, contracts→contratos, create→criar, currency→moeda, decline→recusar, default→padrao, delete→apagar, dismiss→dispensar, drop→tirar, duel→duelo, energy→energia, equip→equipar, erase→apagar, evolve→evoluir, exchange→cambio, fantasy→fantasia, give→dar, grimoire→grimorio, help→ajuda, hire→contratar, image→imagem, info→detalhe, inventory→inventario, items→itens, job→bico, jobs→bicos, join→entrar, learn→aprender, leave→sair, level→nivel, magic→magia, main→padrao, market→mercado, mercenaries→mercenarios, mission→missao, missions→missoes, model→modelo, new→novo, photos→fotos, picture→imagem, points→pontos, preview→prever, profile→perfil, pvp→duelo, rates→taxas, recruit→recrutar, recruits→recrutas, redo→refazer, remove→remover, rescue→resgatar, rest→descansar, retrieve→pegar, sell→vender, server→servidor, sheet→ficha, shop→loja, simple→simples, simulate→simular, special→especial, specials→especiais, spell→magia, spells→magias, spend→pontos, story→historia, take→levar, test→teste, trade→trocar, unequip→desequipar, use→usar, view→ver, wallet→carteira, wear→vestir, world→mundo
 - `help`: character→game, configuracao→config, configuração→config, configuracion→config, configuración→config, configuration→config, customise→personalizar, customize→personalizar, diagnostics→diagnostico, diversion→diversao, empezar→comecar, fun→diversao, general→geral, levels→xp, moderation→moderacao, owner→dono, protect→proteger, protection→proteger, settings→config, start→comecar, tools→ferramentas, troubleshooting→diagnostico
 - `idioma`: estado→status, ingles→english, portuguese→portugues
 - `iniciativa`: borrar→limpar, clear→limpar, list→lista, quitar→remover, remove→remover
@@ -150,6 +150,7 @@ inglês) não aparece aqui.
 - [pt] `&game equipar ‹item›` → ❌ Item desconhecido
 - [pt] `&game desequipar ‹slot|item›` → ❌ Tirar o quê?
 - [pt] `&game vender ‹item›` → ❌ Você não tem isso
+- [pt] `&game duelo @‹pessoa› [aposta]` → ❌ Sem personagem
 - [pt] `&limpar ‹quantidade› [@usuário] | tudo` → ❌ Não achei essa pessoa
 - [pt] `&limpar` → ❌ Uso incorreto
 - [pt] `&warn <@pessoa|id|nome> [motivo]` → ❌ Quem devo avisar?
@@ -187,6 +188,12 @@ inglês) não aparece aqui.
 - [pt] `&game trocar [@pessoa] ‹seu item› por ‹item dela›` → ❌ Item desconhecido
 - [pt] `&game trocar aceitar <#>` → ❌ Proposta indisponível
 - [pt] `&game vender` → ❌ Vender o quê?
+- [pt] `&game duelo @‹pessoa›` → ❌ Sem personagem
+- [pt] `&game duelo @‹pessoa› 100 ouro` → ❌ Sem personagem
+- [pt] `&game duelo @‹pessoa› item ‹seu item›` → ❌ Sem personagem
+- [pt] `&game duelo ‹qtd› ouro` → ❌ Saldo insuficiente
+- [pt] `&game duelo aceitar [#] [item ‹seu item›]` → ❌ Qual desafio?
+- [pt] `&game duelo recusar [#]` → ❌ Qual desafio?
 - [pt] `&game magia ‹nome›` → ❌ Magia desconhecida
 - [pt] `&game aprender ‹nome› [com ‹moeda›]` → ❌ Magia desconhecida
 - [pt] `&game cambio ‹qtd› ‹moeda› para ‹moeda›` → ❌ Moedas inválidas
@@ -240,6 +247,7 @@ inglês) não aparece aqui.
 - [pt] `&rss add https://g1.globo.com/rss/g1/` → ❌ Feed inacessível
 - [pt] `&game coop abrir ‹contrato | dungeon X | chefe X›` → ❓ Qual?
 - [pt] `&game trocar @pessoa ‹seu item› por ‹item dela›` → ❌ Item desconhecido
+- [pt] `&game duelo @‹pessoa› [100 ouro] [item ‹nome›]` → ❌ Sem personagem
 - [en] `&reactionrole add ‹message› ‹emoji› ‹role›` → ❌ Wrong usage
 - [en] `&color panel here` → ⏱️ não respondeu em 3 s
 - [en] `&embed title: … | description: …` → ❌ Empty embed
@@ -255,6 +263,7 @@ inglês) não aparece aqui.
 - [en] `&game equip ‹item›` → ❌ Unknown item
 - [en] `&game unequip ‹slot|item›` → ❌ Unequip what?
 - [en] `&game sell ‹item›` → ❌ You don't have that
+- [en] `&game duel @‹person› [bet]` → ❌ No character
 - [en] `&purge ‹amount› [@user] | all` → ❌ Couldn't find that person
 - [en] `&purge` → ❌ Wrong usage
 - [en] `&warn <@user|id|name> [reason]` → ❌ Who should I warn?
@@ -293,6 +302,11 @@ inglês) não aparece aqui.
 - [en] `&game trade [@person] ‹your item› for ‹their item›` → ❌ Unknown item
 - [en] `&game trade accept <#>` → ❌ Proposal unavailable
 - [en] `&game sell` → ❌ Sell what?
+- [en] `&game duel @‹person›` → ❌ No character
+- [en] `&game duel @‹person› 100 gold` → ❌ No character
+- [en] `&game duel @‹person› item ‹your item›` → ❌ No character
+- [en] `&game duel accept [#] [item ‹your item›]` → ❌ Which challenge?
+- [en] `&game duel decline [#]` → ❌ Which challenge?
 - [en] `&game spell ‹name›` → ❌ Unknown spell
 - [en] `&game learn ‹name› [with ‹currency›]` → ❌ Unknown spell
 - [en] `&game contract ‹name›` → ❌ Unknown contract
@@ -345,3 +359,4 @@ inglês) não aparece aqui.
 - [en] `&rss add https://g1.globo.com/rss/g1/` → ❌ Unreachable feed
 - [en] `&game coop open ‹contract | dungeon X | chefe X›` → ❓ Which one?
 - [en] `&game trade @user ‹your item› for ‹their item›` → ❌ Unknown item
+- [en] `&game duel @‹user› [100 gold] [item ‹name›]` → ❌ No character

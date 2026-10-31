@@ -24,6 +24,8 @@ própria Judy é responsável pela própria instância e deve publicar a sua pol
 | Histórico da conversa com a IA | quando você fala com ela (para não perder o fio) | **24 horas** |
 | Fio do canal e respostas lembradas (só na memória do processo) | quando a IA está ligada no servidor | **30 minutos** |
 | Avisos e punições | quando a moderação de um servidor age | enquanto forem relevantes (os avisos zeram depois de 30 dias sem um novo) |
+| Silêncio por causa do perfil: o servidor, a conta, **quais partes** do perfil apitaram (ex. "bio") e o motivo — nunca o conteúdo | quando o filtro de perfil silencia alguém | até a pessoa trocar o que apitou (no máximo 28 dias) |
+| **Fila de revisão do dono do bot**: o servidor, a pessoa, o canal e a mensagem, a categoria, a nota do detector, o que o bot fez, um trecho de até 300 caracteres e, se for imagem, o link de origem dela no Stoat e um hash perceptual | quando a moderação automática fica em dúvida (certeza média ou baixa), quando dois detectores discordam, quando a staff pune manualmente (só como sinal — nunca pune nada) e numa **amostra aleatória pequena de todos os servidores**, com decisões punidas e não punidas (no máximo 3 por servidor por dia). O resto do que foi punido com certeza alta **não é guardado** | trecho e link: **7 dias** — com 7 dias, a mensagem do caso na DM do dono é editada para tirar o trecho e o link. Caso não julgado: **14 dias**. Amostra não escolhida para a revisão do dia: apagada na mesma noite. Caso julgado: depois de 7 dias fica só a impressão/hash (uma assinatura que não permite reconstruir o texto nem a imagem), a categoria, a nota e o veredito — sem pessoa nem servidor (nem o código/pseudônimo dele). Caso herdado de um julgado parecido (só a impressão e o veredito): **30 dias** |
 | Lista global de bans (ID, nome, motivo, servidor de origem) | quando alguém é banido em **qualquer** servidor que tenha a Judy. Os outros servidores veem só "banido em N servidores" e a data — nunca o motivo nem de qual servidor; ban automático do automod só gera alerta | enquanto for relevante; sai quando o servidor de origem remove a Judy |
 | XP e nível (a contagem de mensagens, não o texto) | só nos servidores que **ligaram** o XP — a Judy avisa ao ligar, e `&privacidade xp sair` deixa você de fora | até você sair, apagar, ou o servidor zerar |
 | Saldo da economia, personagem do RPG | quando **você** usa esses comandos | até você apagar (`&game apagar` apaga o personagem atual; `&privacidade apagar`, os de todas as eras) |
@@ -42,9 +44,20 @@ própria Judy é responsável pela própria instância e deve publicar a sua pol
 - **Mensagens**, para o automod e a moderação por IA dos servidores que as ligaram, e
   para entender a conversa quando você fala com ela (os últimos minutos do canal, só na
   memória do processo).
-- **Imagens e fotos de perfil**, quando um servidor liga os filtros de imagem ou de
-  avatar: um modelo de visão descreve a imagem; nada é guardado (só o resultado de cada
-  foto de perfil, por 6 horas, para não analisar a mesma foto de novo).
+- **Imagens**, quando um servidor liga o filtro de imagens: um modelo de visão (na
+  máquina do operador) descreve a imagem; nada é guardado.
+- **O perfil de quem entra ou troca o perfil**, nos servidores com o filtro de perfil
+  ligado (`&automod sentinela avatar`): a foto (a do perfil e a do servidor), o banner,
+  a bio, o nome de exibição, o apelido e o status. O texto passa pelo mesmo filtro das
+  mensagens e por uma checagem de desenho feito de caracteres (braille, blocos); a foto
+  e o banner, pelo modelo de visão e por uma impressão da imagem (um número de 64 bits
+  que não permite reconstruí-la). Nome, status e fotos vêm do que o Stoat já manda à
+  Judy; a bio e o banner, do aviso de troca do Stoat e, quando alguém entra, de **uma**
+  consulta ao perfil. Nada disso vai para o banco, exceto o que entra na fila de revisão
+  (ver a linha da fila, acima); o resto fica só na memória do processo, para não
+  analisar de novo — a bio e o banner por 6 horas, o resultado de cada imagem por 6
+  horas, a impressão da imagem por 24 horas. A Judy nunca republica a imagem nem o texto
+  do perfil: a staff recebe só o que apitou e a descrição do modelo.
 - **Voz nas calls**: o texto lido em voz alta (TTS) não é guardado.
 - Para frear spam, a Judy conta por alguns minutos quantas vezes cada pessoa falou com
   ela e guarda um resumo do texto da última pergunta (só na memória do processo).
@@ -66,6 +79,18 @@ própria Judy é responsável pela própria instância e deve publicar a sua pol
   canal escolhido pela staff, sem menções em massa nem links disfarçados.
 - O que a Judy escreve nos canais (inclusive o canal de log de um servidor) fica no
   próprio Stoat.
+- A **fila de revisão** chega só ao dono do bot, por mensagem privada com a Judy — nunca
+  num canal. O servidor aparece como um código (pseudônimo); a imagem nunca é copiada
+  nem reenviada: ele a abre pelo link de origem no Stoat. Até 10 casos por dia. O que
+  ele julga ajusta a moderação de todos os servidores, sem modelo novo. O arquivo que
+  ele pode exportar não tem nome, ID de pessoa nem de servidor (imagem só como hash). O
+  `&caso` (o comando do dono) só funciona na DM com a Judy. O caso fica pelo prazo
+  acima; com `&privacidade apagar`, sai dele a sua conta, o canal, a mensagem, o trecho,
+  o link e o código do servidor, e a mensagem do caso na DM do dono é editada para tirar
+  o trecho e o link. Quando a staff aplica `&warn`, `&timeout`, `&kick` ou `&ban`, o
+  caso leva só o motivo escrito (sem menções) — nunca quem da staff agiu; isso nunca
+  pune ninguém. Num desenho feito de caracteres no perfil, o trecho é só um resumo em
+  números e o idioma do texto ao lado, **nunca o desenho** nem o texto.
 - Nada é vendido nem usado para anúncios.
 
 ### Seus direitos
@@ -78,10 +103,10 @@ própria Judy é responsável pela própria instância e deve publicar a sua pol
 - `&privacidade xp sair` — o seu XP neste servidor é apagado e para de contar.
 - `&privacidade esquecer` — a Judy esquece o que sabe de você **neste** servidor.
 - `&privacidade apagar` — apaga **tudo** o que é seu (memória da IA, XP, saldo, RPG), em
-  todos os servidores, inclusive os personagens do RPG de todas as eras. Ficam só os
-  registros de moderação dos servidores; para esses, fale com a staff do servidor ou com
-  o operador. Os desafios de duelo ligados a você são cancelados; quem desafiou você
-  recebe a aposta de volta.
+  todos os servidores, inclusive os personagens do RPG de todas as eras, e tira você dos
+  casos da fila de revisão do dono do bot. Ficam só os registros de moderação dos
+  servidores; para esses, fale com a staff do servidor ou com o operador. Os desafios de
+  duelo ligados a você são cancelados; quem desafiou você recebe a aposta de volta.
 - `&privacidade esquecer tudo` — a staff apaga a memória da IA **deste** servidor; a de
   outros servidores fica.
 - A personalidade da Judy é uma só, definida pelo operador: nenhum texto escrito num
@@ -107,6 +132,8 @@ is responsible for that instance and should publish their own policy.
 | AI conversation history | when you talk to her (so she keeps the thread) | **24 hours** |
 | Channel thread and remembered replies (process memory only) | when the AI is on for the server | **30 minutes** |
 | Warnings and punishments | when a server's moderation acts | while relevant (warnings reset after 30 days without a new one) |
+| Timeout because of the profile: the server, the account, **which parts** of the profile were flagged (e.g. "bio") and the reason — never the content | when the profile filter silences someone | until the person changes what was flagged (28 days at most) |
+| **Bot owner's review queue**: the server, the person, the channel and the message, the category, the detector's score, what the bot did, an excerpt of up to 300 characters and, for images, the image's original Stoat link and a perceptual hash | when automatic moderation is unsure (medium or low certainty), when two detectors disagree, when staff punish manually (only as a signal — it never punishes anything) and in a **small random sample from every server**, with both punished and unpunished decisions (at most 3 per server per day). The rest of what was punished with high certainty **isn't kept** | excerpt and link: **7 days** — at 7 days, the case's message in the owner's DM is edited to remove the excerpt and the link. Unjudged case: **14 days**. Sample not picked for the day's review: deleted that same night. Judged case: after 7 days only the fingerprint/hash (a signature that can't rebuild the text or the image), the category, the score and the verdict remain — no person, no server (not even its code/pseudonym). Case inherited from a similar judged one (only the fingerprint and the verdict): **30 days** |
 | Global ban list (ID, name, reason, origin server) | when someone is banned on **any** server that has Judy. Other servers only see "banned on N servers" and the date — never the reason or which server; an automod automatic ban only raises an alert | while relevant; removed when the origin server removes Judy |
 | XP and level (the message count, not the text) | only on servers that **turned XP on** — Judy announces it, and `&privacy xp leave` keeps you out | until you leave, delete it, or the server resets it |
 | Economy balance, RPG character | when **you** use those commands | until you delete it (`&game delete` erases the current character; `&privacy delete`, those from every era) |
@@ -125,9 +152,21 @@ is responsible for that instance and should publish their own policy.
 - **Messages**, for the automod and AI moderation on servers that enabled them, and to
   follow the conversation when you talk to her (the channel's last few minutes, in the
   process memory only).
-- **Images and profile pictures**, when a server enables the image or avatar filters: a
-  vision model describes the image; nothing is kept (only each profile picture's result,
-  for 6 hours, so the same picture isn't analyzed again).
+- **Images**, when a server enables the image filter: a vision model (on the operator's
+  machine) describes the image; nothing is kept.
+- **The profile of whoever joins or changes their profile**, on servers with the profile
+  filter on (`&automod sentinel avatar`): the picture (profile and server picture), the
+  banner, the bio, the display name, the nickname and the status. The text goes through
+  the same filter as messages and a check for drawings made of characters (braille,
+  blocks); the picture and the banner through the vision model and an image fingerprint
+  (a 64-bit number that can't rebuild the image). Name, status and pictures come from
+  what Stoat already sends Judy; the bio and the banner from Stoat's change notice and,
+  when someone joins, from **one** profile lookup. None of it goes to the database,
+  except what enters the review queue (see the queue row above); the rest stays only in
+  the process memory, so it isn't analysed twice — the bio and banner for 6 hours, each
+  image's result for 6 hours, the image fingerprint for 24 hours. Judy never reposts the
+  image or the profile text: the staff only gets what was flagged and the model's
+  description.
 - **Voice in calls**: text read aloud (TTS) isn't kept.
 - To curb spam, Judy counts for a few minutes how many times each person talked to her
   and keeps a digest of the last question's text (only in the process memory).
@@ -149,6 +188,19 @@ is responsible for that instance and should publish their own policy.
 - Webhooks: what an outside service (GitHub, Crafty…) sends to the hook is posted in the
   channel the staff chose, without mass mentions or disguised links.
 - What Judy writes in channels (including a server's log channel) stays on Stoat.
+- The **review queue** only reaches the bot owner, by direct message with Judy — never
+  in a channel. The server shows up as a code (pseudonym); images are never copied or
+  re-sent: the owner opens them through their original Stoat link. Up to 10 cases a day.
+  What the owner judges tunes moderation for every server, with no new model. The file
+  the owner can export has no names, no user IDs and no server IDs (images only as a
+  hash). `&caso` (the owner's command) only works in the DM with Judy. A case stays for
+  the period above; with `&privacy delete`, your account, the channel, the message, the
+  excerpt, the link and the server's code are removed from it, and the case's message in
+  the owner's DM is edited to remove the excerpt and the link. When staff use `&warn`,
+  `&timeout`, `&kick` or `&ban`, the case carries only the written reason (without
+  mentions) — never which staff member acted; it never punishes anyone. For a drawing
+  made of characters in a profile, the excerpt is only a summary in numbers and the
+  language of the text next to it, **never the drawing** or the text.
 - Nothing is sold or used for ads.
 
 ### Your rights
@@ -160,10 +212,11 @@ is responsible for that instance and should publish their own policy.
   off: the staff turns it on (`&config ia`).
 - `&privacy xp leave` — your XP on this server is erased and stops counting.
 - `&privacy forget` — Judy forgets what she knows about you on **this** server.
-- `&privacy delete` — erases **everything** that's yours (AI memory, XP, balance, RPG) on
-  every server, including RPG characters from every era. Only the servers' moderation
-  records stay; for those, talk to the server's staff or to the operator. Duel
-  challenges involving you are cancelled; whoever challenged you gets the bet back.
+- `&privacy delete` — erases **everything** that's yours (AI memory, XP, balance, RPG)
+  on every server, including RPG characters from every era, and removes you from the
+  cases in the bot owner's review queue. Only the servers' moderation records stay; for
+  those, talk to the server's staff or to the operator. Duel challenges involving you
+  are cancelled; whoever challenged you gets the bet back.
 - `&privacy forget all` — the staff erases the AI memory of **this** server; other
   servers' memory stays.
 - Judy has a single personality, set by the operator: no text written on a server goes
@@ -189,6 +242,8 @@ propia Judy es responsable de esa instancia y debe publicar su propia política.
 | Historial de la conversación con la IA | cuando hablas con ella (para no perder el hilo) | **24 horas** |
 | Hilo del canal y respuestas recordadas (solo en la memoria del proceso) | cuando la IA está activada en el servidor | **30 minutos** |
 | Advertencias y sanciones | cuando la moderación de un servidor actúa | mientras sean relevantes (las advertencias se reinician tras 30 días sin una nueva) |
+| Silencio por el perfil: el servidor, la cuenta, **qué partes** del perfil se detectaron (p. ej. "bio") y el motivo — nunca el contenido | cuando el filtro de perfil silencia a alguien | hasta que la persona cambie lo detectado (28 días como máximo) |
+| **Cola de revisión del dueño del bot**: el servidor, la persona, el canal y el mensaje, la categoría, la nota del detector, lo que hizo el bot, un fragmento de hasta 300 caracteres y, si es una imagen, su enlace de origen en Stoat y un hash perceptual | cuando la moderación automática duda (certeza media o baja), cuando dos detectores no coinciden, cuando el staff castiga a mano (solo como señal — nunca castiga nada) y en una **muestra aleatoria pequeña de todos los servidores**, con decisiones castigadas y no castigadas (como máximo 3 por servidor al día). El resto de lo que se castigó con certeza alta **no se guarda** | fragmento y enlace: **7 días** — a los 7 días, el mensaje del caso en el DM del dueño se edita para quitar el fragmento y el enlace. Caso sin juzgar: **14 días**. Muestra no elegida para la revisión del día: se borra esa misma noche. Caso juzgado: después de 7 días solo quedan la huella/hash (una firma que no permite reconstruir el texto ni la imagen), la categoría, la nota y el veredicto — sin persona ni servidor (ni su código/seudónimo). Caso heredado de uno juzgado parecido (solo la huella y el veredicto): **30 días** |
 | Lista global de bans (ID, nombre, motivo, servidor de origen) | cuando alguien es baneado en **cualquier** servidor que tenga a Judy. Los demás servidores solo ven "baneado en N servidores" y la fecha — nunca el motivo ni de qué servidor; el ban automático del automod solo genera una alerta | mientras sea relevante; sale cuando el servidor de origen quita a Judy |
 | XP y nivel (el conteo de mensajes, no el texto) | solo en los servidores que **activaron** el XP — Judy lo anuncia, y `&privacidad xp salir` te deja fuera | hasta que salgas, lo borres, o el servidor lo reinicie |
 | Saldo de la economía, personaje del RPG | cuando **tú** usas esos comandos | hasta que lo borres (`&game borrar` borra el personaje actual; `&privacidad borrar`, los de todas las eras) |
@@ -207,9 +262,22 @@ propia Judy es responsable de esa instancia y debe publicar su propia política.
 - **Mensajes**, para el automod y la moderación por IA de los servidores que los
   activaron, y para seguir la conversación cuando hablas con ella (los últimos minutos
   del canal, solo en la memoria del proceso).
-- **Imágenes y fotos de perfil**, cuando un servidor activa los filtros de imagen o de
-  avatar: un modelo de visión describe la imagen; no se guarda nada (solo el resultado de
-  cada foto de perfil, durante 6 horas, para no analizar otra vez la misma foto).
+- **Imágenes**, cuando un servidor activa el filtro de imágenes: un modelo de visión (en
+  la máquina del operador) describe la imagen; no se guarda nada.
+- **El perfil de quien entra o cambia su perfil**, en los servidores con el filtro de
+  perfil activado (`&automod sentinela avatar`): la foto (la del perfil y la del
+  servidor), el banner, la bio, el nombre visible, el apodo y el estado. El texto pasa
+  por el mismo filtro que los mensajes y por una revisión de dibujos hechos con
+  caracteres (braille, bloques); la foto y el banner, por el modelo de visión y por una
+  huella de la imagen (un número de 64 bits que no permite reconstruirla). El nombre, el
+  estado y las fotos vienen de lo que Stoat ya le envía a Judy; la bio y el banner, del
+  aviso de cambio de Stoat y, cuando alguien entra, de **una** consulta al perfil. Nada
+  de esto va a la base de datos, salvo lo que entra en la cola de revisión (ver la fila
+  de la cola, arriba); el resto queda solo en la memoria del proceso, para no analizarlo
+  otra vez — la bio y el banner durante 6 horas, el resultado de cada imagen durante 6
+  horas, la huella de la imagen durante 24 horas. Judy nunca vuelve a publicar la imagen
+  ni el texto del perfil: el staff recibe solo lo que se detectó y la descripción del
+  modelo.
 - **Voz en las llamadas**: el texto leído en voz alta (TTS) no se guarda.
 - Para frenar el spam, Judy cuenta durante unos minutos cuántas veces habló cada persona
   con ella y guarda un resumen del texto de la última pregunta (solo en la memoria del proceso).
@@ -232,6 +300,19 @@ propia Judy es responsable de esa instancia y debe publicar su propia política.
   canal que eligió el staff, sin menciones masivas ni enlaces disfrazados.
 - Lo que Judy escribe en los canales (incluido el canal de log de un servidor) queda en
   el propio Stoat.
+- La **cola de revisión** solo le llega al dueño del bot, por mensaje privado con Judy —
+  nunca en un canal. El servidor aparece como un código (seudónimo); la imagen nunca se
+  copia ni se reenvía: él la abre por su enlace de origen en Stoat. Hasta 10 casos al
+  día. Lo que juzga ajusta la moderación de todos los servidores, sin modelo nuevo. El
+  archivo que puede exportar no tiene nombres, ni IDs de personas ni de servidores
+  (imágenes solo como hash). El `&caso` (el comando del dueño) solo funciona por DM con
+  Judy. El caso se queda por el plazo de arriba; con `&privacidad borrar`, salen de él
+  tu cuenta, el canal, el mensaje, el fragmento, el enlace y el código del servidor, y
+  el mensaje del caso en el DM del dueño se edita para quitar el fragmento y el enlace.
+  Cuando el staff usa `&warn`, `&timeout`, `&kick` o `&ban`, el caso lleva solo el
+  motivo escrito (sin menciones) — nunca quién del staff actuó; eso nunca castiga a
+  nadie. En un dibujo hecho con caracteres en el perfil, el fragmento es solo un resumen
+  en números y el idioma del texto de al lado, **nunca el dibujo** ni el texto.
 - Nada se vende ni se usa para anuncios.
 
 ### Tus derechos
@@ -244,10 +325,11 @@ propia Judy es responsable de esa instancia y debe publicar su propia política.
 - `&privacidad xp salir` — tu XP en este servidor se borra y deja de contar.
 - `&privacidad olvidar` — Judy olvida lo que sabe de ti en **este** servidor.
 - `&privacidad borrar` — borra **todo** lo tuyo (memoria de la IA, XP, saldo, RPG) en
-  todos los servidores, incluidos los personajes del RPG de todas las eras. Solo quedan
-  los registros de moderación de los servidores; para esos, habla con el staff del
-  servidor o con el operador. Los desafíos de duelo en los que estás se cancelan; quien
-  te desafió recibe la apuesta de vuelta.
+  todos los servidores, incluidos los personajes del RPG de todas las eras, y te saca de
+  los casos de la cola de revisión del dueño del bot. Solo quedan los registros de
+  moderación de los servidores; para esos, habla con el staff del servidor o con el
+  operador. Los desafíos de duelo en los que estás se cancelan; quien te desafió recibe
+  la apuesta de vuelta.
 - `&privacidad olvidar todo` — el staff borra la memoria de la IA de **este** servidor;
   la de otros servidores se queda.
 - Judy tiene una sola personalidad, definida por el operador: ningún texto escrito en un

@@ -22,7 +22,7 @@ import { lerDuracao, duracaoTexto } from "../core/duracao.js";
 import { carimbo } from "../core/tempo.js";
 import { MAX_TIMEOUT_MS, aplicarTimeout, tirarTimeout } from "./timeout.js";
 import { liberarQuarentena } from "./confianca.js";
-import { escadaDePunicao, validadeDosAvisos } from "./automod-engine.js";
+import { escadaDePunicao, validadeDosAvisos, sinalDaStaff } from "./automod-engine.js";
 import * as banGlobal from "./ban-global.js";
 
 // ── Textos curtos, nos três idiomas ──────────────────────────────────────────
@@ -148,7 +148,13 @@ async function punir(tipo, message, args, ctx) {
   const motivo = resto.join(" ").trim().slice(0, 300);
   const motivoLog = motivo || X3(idioma(ctx), "sem motivo", "no reason", "sin motivo");
   const sufixo = motivo ? ` — ${motivo}` : "";
-  const ctxAcao = { ctx, server, message, alvoId, motivo, motivoLog, sufixo, membro };
+  // (31 out 2026, P3a) a decisão da staff vira um SINAL na fila do dono do bot (nunca pune nada por si).
+  // (revisão P3a) só depois que a punição deu certo: cada ação chama `sinal()` no ponto de sucesso.
+  const sinal = () => {
+    sinalDaStaff(ctx, { tipo, alvoId, canalId: message.channelId ?? null, msgId: alvo.porResposta ? (message.replyIds?.[0] ?? null) : null, motivo })
+      .catch((e) => registrarErro("PUNIR:sinal", e));
+  };
+  const ctxAcao = { ctx, server, message, alvoId, motivo, motivoLog, sufixo, membro, sinal };
 
   if (tipo === "warn") return avisar(ctxAcao);
   if (tipo === "timeout") return silenciar(ctxAcao, ms);
@@ -166,19 +172,21 @@ async function registrarNoLog(ctx, titulo, descricao) {
     en: { titulo: titulo[1], descricao: descricao[1] }, es: { titulo: titulo[2], descricao: descricao[2] } });
 }
 
-async function expulsar({ ctx, server, message, alvoId, motivoLog, sufixo }) {
+async function expulsar({ ctx, server, message, alvoId, motivoLog, sufixo, sinal }) {
   try { await server.kickUser(alvoId); }
   catch (e) { return falhou(ctx, message.channel, e, "Não consegui expulsar", "Couldn't kick", "No pude expulsar"); }
+  sinal?.();
   await registrarNoLog(ctx, ["👢 Expulso (manual)", "👢 Kicked (manual)", "👢 Expulsado (manual)"], [
     `<@${alvoId}> por <@${message.authorId}> — ${motivoLog}`, `<@${alvoId}> by <@${message.authorId}> — ${motivoLog}`, `<@${alvoId}> por <@${message.authorId}> — ${motivoLog}`]);
   console.log(`[KICK] ${message.authorId} -> ${alvoId}`);
   return linha(ctx, message.channel, ctx.COR.sucesso, `👢 <@${alvoId}> expulso${sufixo}`, `👢 <@${alvoId}> kicked${sufixo}`, `👢 <@${alvoId}> expulsado${sufixo}`);
 }
 
-async function banirManual({ ctx, server, message, alvoId, motivoLog, sufixo }) {
+async function banirManual({ ctx, server, message, alvoId, motivoLog, sufixo, sinal }) {
   let jaEstava = false;
   try { ({ jaEstava } = await banir(server, alvoId, { reason: motivoLog })); }
   catch (e) { return falhou(ctx, message.channel, e, "Não consegui banir", "Couldn't ban", "No pude banear"); }
+  sinal?.();
   // alimenta a lista global (origem "manual": decisão humana, mesmo que o motivo diga "[AutoMod]")
   await banGlobal.registrar(ctx, alvoId, motivoLog, "manual", { nome: ctx.client?.users?.get?.(alvoId)?.username ?? null });
   if (jaEstava) return linha(ctx, message.channel, ctx.COR.info, `🔨 <@${alvoId}> já estava banido.`, `🔨 <@${alvoId}> was already banned.`, `🔨 <@${alvoId}> ya estaba baneado.`);
@@ -190,7 +198,7 @@ async function banirManual({ ctx, server, message, alvoId, motivoLog, sufixo }) 
   return msg;
 }
 
-async function silenciar({ ctx, server, message, alvoId, motivoLog, sufixo }, ms) {
+async function silenciar({ ctx, server, message, alvoId, motivoLog, sufixo, sinal }, ms) {
   const dur = Math.min(ms, MAX_TIMEOUT_MS);
   let ate;
   try { ate = await aplicarTimeout(server, alvoId, dur); }
@@ -198,6 +206,7 @@ async function silenciar({ ctx, server, message, alvoId, motivoLog, sufixo }, ms
     if (tipoDoErro(e) === "IsElevated") return linha(ctx, message.channel, ctx.COR.erro, `❌ ${descreverErro(e, "pt")}.`, `❌ ${descreverErro(e, "en")}.`, `❌ ${descreverErro(e, "es")}.`);
     return falhou(ctx, message.channel, e, "Não consegui silenciar", "Couldn't time out", "No pude silenciar");
   }
+  sinal?.();
   // registra para reaplicar se a pessoa sair e voltar; sem o registro, a resposta diz
   let semRegistro = false;
   try { db.silenciarAte(ctx.serverId ?? server.id, alvoId, ate.getTime(), motivoLog); }
@@ -216,11 +225,12 @@ async function silenciar({ ctx, server, message, alvoId, motivoLog, sufixo }, ms
 // O aviso segue a MESMA escada do automod (`&automod punicao`). O degrau só roda
 // se quem pediu pode fazer aquilo por conta própria (ban com BanMembers, silêncio
 // com TimeoutMembers); senão o aviso fica registrado e a resposta diz que não rodou.
-async function avisar({ ctx, server, message, alvoId, motivoLog, sufixo }) {
+async function avisar({ ctx, server, message, alvoId, motivoLog, sufixo, sinal }) {
   const l = idioma(ctx);
   const serverId = ctx.serverId ?? server.id;
   const pol = ctx.config?.automod?.punicao ?? { modo: "avisar" };
   const total = db.somarAviso(serverId, alvoId, motivoLog, { validadeMs: validadeDosAvisos(pol) });
+  sinal?.();   // o aviso ficou registrado (o degrau da escada é outra coisa)
   const degraus = escadaDePunicao(pol);
   const acumular = pol.modo === "acumular";
   const degrau = acumular ? degraus[Math.min(total, degraus.length) - 1] : { tipo: "aviso" };

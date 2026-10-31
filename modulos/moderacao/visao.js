@@ -43,7 +43,7 @@ const MAPA = {
   tts: { padrao: "membro", subs: { filtro: "staff", cooldown: "staff", nomes: "staff", dicionario: "staff", "dicionário": "staff", reiniciar: "staff", destravar: "staff", resgatar: "staff", diagnostico: "staff", "diagnóstico": "staff" } },
   entrar: { padrao: "membro" }, sair: { padrao: "membro" }, musica: { padrao: "membro" },
   chat: { padrao: "membro", subs: { on: "staff", off: "staff", imagem: "staff", comentar: "staff", livre: "staff", esquecer: "staff", projeto: "staff", espontaneo: "staff", "espontâneo": "staff" } },
-  servidores: { padrao: "dono" },
+  servidores: { padrao: "dono" }, caso: { padrao: "dono" },   // (31 out 2026, P3a) a fila de revisão é só do dono do bot
   // (P2) a staff vê o modo, isenta e consulta o histórico; o resto é do dono do bot
   banglobal: { padrao: "staff", subs: Object.fromEntries(["off", "avisar", "imediato", "consenso", "lista", "varrer", "revisar", "desfazer", "add", "esquecer", "lembrar", "ignorados", "bots"].map((s) => [s, "dono"])) },
   entretenimento: { padrao: "membro" },

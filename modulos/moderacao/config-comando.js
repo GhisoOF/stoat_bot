@@ -131,6 +131,7 @@ export function telaDoConfig(config, { lang = "pt", serverId = null, P = "&" } =
       const c = [...cam, k];
       cobertos.add(c.join("."));
       if (BANDEIRAS.includes(k)) continue;   // o 🟢/🔴 do começo da linha
+      if (cam[1] === "antiAvatar" && k === "tempo") continue;   // (P3a) o silêncio do perfil é "até trocar"
       const v = atual?.[k];
       if (ehObj(p) && Object.keys(p).length && k !== "punicao") {
         // um objeto com chaves conhecidas (os eventos do log, as ações dos assuntos): cada uma
@@ -149,7 +150,8 @@ export function telaDoConfig(config, { lang = "pt", serverId = null, P = "&" } =
 
   // as partes que não funcionam sem o modelo de visão: nem ✓ nem 🟢 (estavam "ligadas" mortas)
   const semVisao = !visaoNoEnv();
-  const morto = (cam) => semVisao && (cam === "automod.antiImagem" || cam === "automod.antiAvatar");
+  // (31 out 2026, P3a) o perfil não está morto sem visão: o texto (bio, nome, status) continua sendo visto
+  const morto = (cam) => semVisao && cam === "automod.antiImagem";
 
   // as chaves cujo padrão depende do idioma do servidor (o módulo preenche): um resumo próprio
   const resumoProprio = {
@@ -200,7 +202,8 @@ export function telaDoConfig(config, { lang = "pt", serverId = null, P = "&" } =
       if (!(ehObj(p2) && BANDEIRAS.some((b) => b in p2))) { resto[k2] = p2; continue; }
       cobertos.add(c);
       const st = morto(c) ? "⚫" : bandeira(p2, v?.[k2]);
-      const extra = morto(c) ? ` ${T("_(sem o modelo de visão)_", "_(no vision model)_", "_(sin el modelo de visión)_")}` : "";
+      const extra = morto(c) ? ` ${T("_(sem o modelo de visão)_", "_(no vision model)_", "_(sin el modelo de visión)_")}`
+        : semVisao && c === "automod.antiAvatar" ? ` ${T("_(só o texto)_", "_(text only)_", "_(solo el texto)_")}` : "";   // (P3a) o perfil sem visão
       linhas.push(`${st} **${rotulo([k, k2], lang)}**${extra} — ${folhas([k, k2], p2, v?.[k2])}`);
     }
     if (Object.keys(resto).length) {
@@ -241,7 +244,7 @@ export function descreverFiltro(am, chave, lang = "pt", estado = {}) {
       const ativos = Object.entries(am.antiAssuntos?.acoes ?? {}).filter(([, a]) => a && a !== "off");
       return ativos.length ? ativos.map(([t, a]) => `${t} → ${a}`).join(", ") : T("nenhum tema ligado", "no topic on", "ningún tema activado");
     },
-    antiAvatar:      () => T(`ao entrar e ao trocar → ${am.antiAvatar?.acao ?? "silenciar"}`, `on join and on change → ${am.antiAvatar?.acao ?? "silenciar"}`, `al entrar y al cambiarla → ${am.antiAvatar?.acao ?? "silenciar"}`),
+    antiAvatar:      () => T(`ao entrar e ao trocar → ${am.antiAvatar?.acao ?? "silenciar"}${semVisao ? " (só o texto)" : ""}`, `on join and on change → ${am.antiAvatar?.acao ?? "silenciar"}${semVisao ? " (text only)" : ""}`, `al entrar y al cambiarlo → ${am.antiAvatar?.acao ?? "silenciar"}${semVisao ? " (solo el texto)" : ""}`),
     antiInvite:      () => T("bloqueia convites", "blocks invites", "bloquea invitaciones"),
     antiMassMention: () => T(`máx. ${am.antiMassMention.maxMentions} menções`, `max ${am.antiMassMention.maxMentions} mentions`, `máx. ${am.antiMassMention.maxMentions} menciones`),
     antiCaps:        () => T(`≥${am.antiCaps.minLength} caracteres e ${Math.round(am.antiCaps.threshold * 100)}% maiúsculas`, `≥${am.antiCaps.minLength} chars and ${Math.round(am.antiCaps.threshold * 100)}% uppercase`, `≥${am.antiCaps.minLength} caracteres y ${Math.round(am.antiCaps.threshold * 100)}% mayúsculas`),

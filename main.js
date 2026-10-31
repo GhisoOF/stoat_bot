@@ -55,6 +55,7 @@ import * as rpg        from "./modulos/game/game.js";
 import * as assuntos   from "./modulos/moderacao/assuntos.js";
 import { iaLigada, conversaLigada } from "./modulos/core/env.js";
 import * as avatarMod from "./modulos/moderacao/avatar.js";
+import * as perfilMod from "./modulos/moderacao/perfil.js";   // (31 out 2026, P3a) o perfil inteiro
 import { dirigidoAoBot } from "./modulos/ai/destinatario.js";
 import { protegerMarcadores } from "./modulos/core/marcadores.js";
 import * as chat      from "./modulos/ai/chat.js";
@@ -89,6 +90,7 @@ import * as relatorioHora from "./modulos/ferramentas/relatorio.js";
 import { descreverErro } from "./modulos/core/erros.js";
 import { problemasDoEnv, avisosDoEnv, numero } from "./modulos/core/env.js";
 import * as confianca from "./modulos/moderacao/confianca.js";
+import * as revisao from "./modulos/moderacao/revisao.js";   // (31 out 2026, P3a) a fila de revisão do dono do bot
 import { semPingEmMassa } from "./modulos/core/seguranca.js";
 
 const PREFIXO     = "&";
@@ -422,12 +424,23 @@ client.on("ready", async () => {
     try {
       const v = retencao.limparVencidos(Date.now());
       if (v.palavras) console.info(`[PRIVACIDADE] ${v.palavras} palavra(s) tentada(s) com mais de 30 dias apagada(s)`);
+      if (v.perfilSilencio) console.info(`[PRIVACIDADE] ${v.perfilSilencio} registro(s) de silêncio do perfil com mais de 28 dias apagado(s)`);
     } catch (e) { console.error("[PRIVACIDADE] vencidos:", e?.message); }
   };
   limparSaidas();
   setInterval(limparSaidas, 6 * 3600_000).unref?.();
 
   definirStatus().catch((e) => console.error("[STATUS]", e?.message ?? e));
+
+  // (31 out 2026, P3a) a fila de revisão: casos por DM ao dono do bot. Aplica a retenção
+  // e liga o timer da rodada diária só se houver caso esperando (revisao.js). `REVISAO_*`
+  // inválido: a fila fica DESLIGADA (nenhum caso novo é gravado), mas a retenção do que já
+  // está no banco — e a edição das DMs que perderam o trecho — roda do mesmo jeito.
+  try { revisao.configurar({ client, enviar: (canal, emb) => sendEmbed(canal, emb) }); }
+  catch (e) { console.error("[REVISAO] configurar (fila desligada; a retenção do boot rodou):", e?.message ?? e); }
+  // (31 out 2026, P3a) o perfil inteiro: a bio e o banner só chegam no evento cru (a stoat.js
+  // descarta o `profile` do UserUpdate); e o ✅/❌ do dono num caso de perfil revê o perfil atual
+  perfilMod.ligar({ client, criarContexto }).catch((e) => console.error("[PERFIL] ligar:", descreverErro(e)));
 
   reactionRoles.precarregarMensagens(client).catch((e) => console.error("[REACTIONROLE][boot]", e?.message));
 
@@ -931,6 +944,8 @@ client.on("messageReactionAdd", async (...a) => {
     if (await rpg.aoReagir(msgId, userId, emoji)) return;
     // (P2) ✅ do dono do bot na prévia do `&servidores aviso`: publica no log de cada servidor
     if (await servidoresPainel.aoReagirAviso(msgId, userId, emoji, { client, criarContexto })) return;
+    // (P3a) ✅/❌ do dono do bot num caso da fila de revisão (só na DM em que o caso foi)
+    if (await revisao.aoReagir(msgId, userId, emoji, { canalId: a0?.channelId ?? a0?.channel?.id ?? null })) return;
 
     const msgObj = (a0 && typeof a0 === "object") ? a0 : { id: msgId };
     // Tickets: painel (🎫 abre), controle (🔒 fecha), fechado (🗑️ apaga).
@@ -956,6 +971,7 @@ client.events.on("event", async (ev) => {
       edit: (data) => client.api.patch(`/channels/${ev.channel_id}/messages/${ev.id}`, data) };
     if (ev.type === "MessageReact" && await tickets.aoReagir({ id: ev.id }, ev.user_id, ev.emoji_id, { client, criarContexto })) return;
     if (ev.type === "MessageReact" && await rpg.aoReagir(ev.id, ev.user_id, ev.emoji_id)) return;
+    if (ev.type === "MessageReact" && await revisao.aoReagir(ev.id, ev.user_id, ev.emoji_id, { canalId: ev.channel_id ?? null })) return;   // (P3a)
     await paginas.aoReagir(ev.id, ev.user_id, ev.emoji_id, editor);
   } catch (err) {
     console.error("[REAÇÃO][fora do cache]", err?.message ?? err);

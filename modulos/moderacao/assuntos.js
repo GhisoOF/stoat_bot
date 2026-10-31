@@ -18,8 +18,22 @@
 //
 // Roda em segundo plano: a mensagem não espera. Erro do modelo nunca vira
 // punição. Staff, como no resto do automod, não é moderada.
+//
+// (31 out 2026, P3a) QUATRO categorias, decididas pelo dono (ele relatou que a
+// zoeira era lida como séria — zoar o Estado, "eu sou bolsotron"):
+//   • fora do tema → nada · • zoeira → NUNCA pune
+//   • discussão → só onde a staff ligou aquele tema (a ação dele)
+//   • ataque (ofender alguém por causa do tema) → SEMPRE conta (punir), em
+//     qualquer um dos 4 temas, desde que o módulo esteja ligado no servidor.
+// A nota continua na frente (determinístico primeiro, R11): só passa ao modelo
+// o que passou do portão (a sensibilidade); tema que a staff NÃO ligou só vai
+// ao modelo com sinal de ataque. Cada decisão vai para a fila do dono
+// (`revisao.js`, área fila): certeza ALTA age; MÉDIA e BAIXA vão para a fila
+// sem punir. A faixa alta é do dono (limiar calibrado pelos casos julgados),
+// nunca da staff; um caso parecido já julgado pelo dono (`herdado`) decide.
 
 import * as log from "../core/log.js";
+import { registrarErro } from "../core/erros.js";
 import { citar, citarInterno } from "../core/aliases.js";
 import { textoDoIdioma, idiomaDe, tr } from "../core/i18n.js";
 import { normalizarParaAnalise } from "./scorecard.js";
@@ -337,37 +351,132 @@ export function fioDoCanal(canalId, { excluirId = null, limite = 8, autor = null
 let avaliarLLM = null;
 export function configurar({ avaliar }) { avaliarLLM = avaliar; }
 
+// (31 out 2026, P3a) o modelo CLASSIFICA em quatro categorias (antes: só
+// "discussão sim/não"). Os exemplos de zoeira são os casos que o dono relatou.
+export const CATEGORIAS = ["fora", "zoeira", "discussao", "ataque"];
 export function promptDoTema(tema, lang = "pt") {
   const T = TEMAS[tema];
   if (lang === "en") return [
     `You moderate a laid-back chat server. Its rules forbid discussing ${T.en}. But people joke a lot, and joking is ALLOWED.`,
-    "Read the conversation and decide whether the MESSAGE BEING JUDGED is part of a real discussion of that topic.",
-    `It IS when it is: ${T.discussao_en}.`,
-    "It is NOT: a joke, banter, meme, irony, comic exaggeration, playful swearing, a passing mention, an everyday expression, a neutral curious question, a news item quoted without debate.",
-    "When in doubt, it is a joke.",
-    'Reply ONLY with JSON: {"discussao": true|false, "motivo": "one short sentence"}',
+    "Read the conversation and put the MESSAGE BEING JUDGED in ONE category:",
+    `- "fora": it isn't about ${T.en} (or only uses a word of the topic in another sense).`,
+    `- "zoeira": a joke, banter, meme, irony, comic exaggeration, playful swearing, mocking the government, the State, taxes or politicians in general, jokingly declaring a side ("I'm a bolsotron"), a passing mention, an everyday expression, a neutral curious question, a news item quoted without debate.`,
+    `- "discussao": ${T.discussao_en}.`,
+    `- "ataque": insulting, humiliating or threatening a person or a group because of ${T.en} (e.g. calling people who vote for someone stupid, cursing at the followers of a religion).`,
+    "When in doubt, it is a joke (between a joke and a discussion, a joke). It is an attack only when someone is really being insulted.",
+    'Reply ONLY with JSON: {"categoria": "fora"|"zoeira"|"discussao"|"ataque", "motivo": "one short sentence"}',
   ].join("\n");
   return [
     `Você modera um servidor de conversa descontraído. A regra do servidor proíbe discutir ${T.pt}. Mas o pessoal brinca muito, e brincadeira é PERMITIDA.`,
-    "Leia a conversa e decida se a MENSAGEM AVALIADA faz parte de uma discussão de verdade sobre esse tema.",
-    `É discussão quando é: ${T.discussao_pt}.`,
-    "NÃO é: piada, zoeira, meme, ironia, exagero cômico, xingamento de brincadeira, menção de passagem, expressão do dia a dia, pergunta curiosa e neutra, notícia citada sem debate.",
-    "Na dúvida, é brincadeira.",
-    'Responda SÓ um JSON: {"discussao": true|false, "motivo": "uma frase curta"}',
+    "Leia a conversa e classifique a MENSAGEM AVALIADA em UMA categoria:",
+    `- "fora": não fala de ${T.pt} (ou só usa uma palavra do tema em outro sentido).`,
+    `- "zoeira": piada, meme, ironia, exagero cômico, xingamento de brincadeira, zoar o governo, o Estado, os impostos ou os políticos em geral, se declarar de um lado de brincadeira ("eu sou bolsotron"), menção de passagem, expressão do dia a dia, pergunta curiosa e neutra, notícia citada sem debate.`,
+    `- "discussao": ${T.discussao_pt}.`,
+    `- "ataque": ofender, humilhar ou ameaçar uma pessoa ou um grupo por causa de ${T.pt} (ex.: chamar de burro quem vota em alguém, xingar quem segue uma religião).`,
+    "Na dúvida, é brincadeira (entre zoeira e discussão, zoeira). Ataque é só quando alguém é ofendido de verdade.",
+    'Responda SÓ um JSON: {"categoria": "fora"|"zoeira"|"discussao"|"ataque", "motivo": "uma frase curta"}',
   ].join("\n");
 }
 
+// A categoria em pt/en/es (o modelo pequeno às vezes responde no idioma da conversa)
+const CATEGORIA_SIN = {
+  fora: "fora", "fora do tema": "fora", "off-topic": "fora", off_topic: "fora", offtopic: "fora", "off topic": "fora", none: "fora", nada: "fora",
+  zoeira: "zoeira", piada: "zoeira", brincadeira: "zoeira", joke: "zoeira", banter: "zoeira", broma: "zoeira", humor: "zoeira",
+  discussao: "discussao", discussion: "discussao", debate: "discussao", discusion: "discussao",
+  ataque: "ataque", attack: "ataque", insulto: "ataque", insult: "ataque", ofensa: "ataque", agresion: "ataque",
+};
+// → { categoria, discussao (a categoria é séria: discussão ou ataque), motivo } | null
+// Ainda aceita o formato antigo {"discussao": true|false} (true → discussão; false → zoeira).
 export function lerVeredito(raw) {
   const txt = String(raw ?? "").replace(/```json|```/g, "");
   const m = txt.match(/\{[\s\S]*\}/);
   if (!m) return null;
-  try {
-    const o = JSON.parse(m[0]);
+  let o;
+  try { o = JSON.parse(m[0]); } catch { return null; }
+  if (!o || typeof o !== "object") return null;
+  let categoria = null;
+  const bruto = o.categoria ?? o.category ?? o.classe ?? null;
+  if (bruto !== null && bruto !== undefined) categoria = CATEGORIA_SIN[semAcento(bruto).trim()] ?? null;
+  if (!categoria) {
     const d = o.discussao ?? o.discussion ?? o.viola;
     if (typeof d !== "boolean" && !/^(true|false|sim|n[ãa]o)$/i.test(String(d))) return null;
-    return { discussao: d === true || /^(true|sim)$/i.test(String(d)), motivo: String(o.motivo ?? o.reason ?? "").slice(0, 200) };
-  } catch { return null; }
+    categoria = d === true || /^(true|sim)$/i.test(String(d)) ? "discussao" : "zoeira";
+  }
+  return { categoria, discussao: categoria === "discussao" || categoria === "ataque", motivo: String(o.motivo ?? o.reason ?? "").slice(0, 200) };
 }
+
+// ── A fila do dono (área fila: revisao.js) ──────────────────────────────────
+// Carregada sob demanda, na primeira decisão (R11). Sem a fila (ainda não
+// instalada, ou quebrada): o limiar é o padrão, nada é herdado e nenhum caso é
+// registrado — a moderação segue igual. `usarFila(dublê)` é para os testes.
+let fila = null, filaPronta = false;
+export function usarFila(f) { fila = f ?? null; filaPronta = true; }
+export async function filaDeRevisao() {
+  if (filaPronta) return fila;
+  filaPronta = true;
+  try { fila = await import("./revisao.js"); }
+  catch (e) { fila = null; registrarErro("ASSUNTOS:fila", e); }
+  return fila;
+}
+// Cada chamada à fila é protegida: erro dela nunca muda nem trava a moderação.
+export const registrarNaFila = (caso) => naFila("registrarCaso", null, caso);
+async function naFila(nome, padrao, ...args) {
+  const F = await filaDeRevisao();
+  if (typeof F?.[nome] !== "function") return padrao;
+  try { return (await F[nome](...args)) ?? padrao; }
+  catch (e) { registrarErro(`ASSUNTOS:fila:${nome}`, e); return padrao; }
+}
+
+// A faixa "certeza alta" é GLOBAL e do dono (decisão de 31 out: nada depende da
+// staff): o padrão é o limiar da sensibilidade média, e não o que a staff
+// escolheu; a sensibilidade da staff só decide o que vai ao modelo (o portão).
+export const LIMIAR_ALTA_PADRAO = LIMIAR_ASSUNTO.media / 10;   // nota de 0 a 1
+// Sem o modelo (`ia off`) é um detector só: a certeza alta pede 2 pontos a mais
+export const MARGEM_SEM_IA = 2;
+// Os casos julgados se dividem pelo que o bot AFIRMOU: "assunto:<tema>" = era
+// sério (discussão/ataque); "assunto:<tema>:zoeira" = não era. Assim o ✅/❌ do
+// dono num caso parecido tem um sentido só.
+export const categoriaDoCaso = (tema, seria) => `assunto:${tema}${seria ? "" : ":zoeira"}`;
+// O que o dono já disse de um caso muito parecido → "seria" | "nao" | null.
+// Na fila, "certo" = o que o bot alegou naquela categoria se confirmou: em
+// "assunto:<tema>" é sério; em "assunto:<tema>:zoeira" é zoeira.
+export async function heranca(tema, texto) {
+  const q = (seria) => naFila("vereditoParecido", null, { tipo: "assunto", categoria: categoriaDoCaso(tema, seria), texto });
+  const s = await q(true);
+  if (s === "certo") return "seria";
+  if (s === "errou") return "nao";
+  const z = await q(false);
+  if (z === "certo") return "nao";
+  if (z === "errou") return "seria";
+  return null;
+}
+
+// Sinais de que o próprio texto (ou o canal) está brincando
+const SINAIS_ZOEIRA = /^−(risada|emoji de riso|zoeira|canal rindo)/;
+export const temZoeira = (sinais) => (sinais ?? []).some((s) => SINAIS_ZOEIRA.test(s));
+export const temAtaque = (sinais) => (sinais ?? []).some((s) => /^ataque:/.test(s));
+
+// A certeza de uma decisão (pura — os testes a exercitam direto).
+//   categoria: a do juiz · nota: 0–10 · limiarAlta: 0–1 (o da fila) ·
+//   semIA: a nota decidiu sozinha · zoeira: o texto/canal está rindo ·
+//   herdado: "seria" | "nao" | null
+// → { certeza: "alta"|"media"|"baixa", origem: "detector"|"discordancia" }
+export function certezaDe({ categoria, nota, limiarAlta = LIMIAR_ALTA_PADRAO, semIA = false, zoeira = false, herdado = null }) {
+  const seria = categoria === "discussao" || categoria === "ataque";
+  const corte = 10 * limiarAlta + (semIA ? MARGEM_SEM_IA : 0);
+  if (herdado === "seria" && seria) return { certeza: "alta", origem: "detector" };
+  if (herdado === "nao" && !seria) return { certeza: "alta", origem: "detector" };
+  if (herdado) return { certeza: "baixa", origem: "discordancia" };   // o dono já disse o contrário de um parecido
+  if (!seria) {
+    // o juiz disse que não é sério; a nota alta diz que é: os detectores discordam
+    return nota >= corte + MARGEM_SEM_IA && !zoeira ? { certeza: "baixa", origem: "discordancia" } : { certeza: "alta", origem: "detector" };
+  }
+  if (zoeira) return { certeza: "baixa", origem: "discordancia" };   // o juiz diz sério, o texto está rindo
+  return { certeza: nota >= corte ? "alta" : "media", origem: "detector" };
+}
+
+// O trecho que vai para a fila do dono: sem menção a ninguém (R9), até 300 car.
+export const trechoDoCaso = (texto) => String(texto ?? "").replace(/<[@%#]!?[0-9A-Za-z]{1,40}>/g, "@…").replace(/\s+/g, " ").trim().slice(0, 300);
 
 // O veredito vale por MENSAGEM (31 out 2026, R9): antes valia por canal e tema
 // por 20 s, e a mensagem de OUTRA pessoa era apagada/punida pelo veredito da
@@ -409,38 +518,85 @@ const AVISO_MS = 2 * 60_000;
 const avisados = new Map();
 
 const PESO_ACAO = { alertar: 1, apagar: 2, punir: 3 };
+const ACAO_DO_CASO = { alertar: "alertado", apagar: "punido", punir: "punido" };
+const ROTULO_CATEGORIA = {
+  fora: ["fora do tema", "off-topic", "fuera de tema"], zoeira: ["zoeira", "joke", "broma"],
+  discussao: ["discussão", "discussion", "discusión"], ataque: ["ataque", "attack", "ataque"],
+};
+export const rotuloCategoria = (c, i = 0) => (ROTULO_CATEGORIA[c] ?? ["—", "—", "—"])[i];
 
 // Chamado pelo automod a cada mensagem (sem esperar). Devolve o que fez — os
 // testes esperam por isso; o automod não.
+//   → null (nada passou do portão) | { tema, nota, acao: "nada"|"alertar"|"apagar"|"punir",
+//        veredito, categoria, certeza, origem, herdado, codigo }
 export async function verificar({ ctx, server, canal, message, userId, aplicarPunicao }) {
   const am = ctx?.config?.automod ?? {};
   const cfg = am.antiAssuntos;
   if (!temasAtivos(cfg).length) return null;
   if ((cfg.canaisLiberados ?? []).includes(message.channelId)) return null;
   const texto = String(message.content ?? "");
-  const notas = analisarAssuntos(texto, cfg, { canalId: message.channelId, excluirId: message.id, autor: userId });
-  const passaram = notas.filter((n) => n.passou);
+  // os 4 temas: discussão só nos que a staff ligou; ataque em qualquer um
+  const notas = analisarAssuntos(texto, cfg, { canalId: message.channelId, excluirId: message.id, autor: userId, todos: true })
+    .map((n) => ({ ...n, ligado: acaoDoTema(cfg, n.tema) !== "off" }));
+  // (sem o modelo, `ia off`, só os temas ligados: o ataque em tema desligado
+  // precisa do juiz — a palavra "burro" sozinha não diz quem foi ofendido)
+  const semIA = cfg.ia === false;
+  const passaram = notas.filter((n) => n.passou && (n.ligado || (!semIA && temAtaque(n.sinais))));
   if (!passaram.length) return null;
-  // o tema de ação mais forte decide (uma mensagem pode tocar dois); empate: a maior nota
-  const { tema, nota, sinais, limiar } = passaram.sort((a, b) =>
-    (PESO_ACAO[acaoDoTema(cfg, b.tema)] - PESO_ACAO[acaoDoTema(cfg, a.tema)]) || (b.nota - a.nota))[0];
-  const acao = acaoDoTema(cfg, tema);
+  // o tema que a staff ligou vem antes; entre eles, o de ação mais forte (uma
+  // mensagem pode tocar dois); empate: a maior nota
+  const peso = (n) => (n.ligado ? PESO_ACAO[acaoDoTema(cfg, n.tema)] : 0);
+  const { tema, nota, sinais, limiar, ligado } = passaram.sort((a, b) => (peso(b) - peso(a)) || (b.nota - a.nota))[0];
   const lang = textoDoIdioma(ctx.config?.language);
   const es = idiomaDe(ctx) === "es";
-  // `ia off`: a nota decide sozinha
-  const v = cfg.ia === false
-    ? { discussao: true, motivo: es ? `nota ${nota} ≥ ${limiar}` : lang === "en" ? `score ${nota} ≥ ${limiar}` : `nota ${nota} ≥ ${limiar}`, semIA: true }
+  // `ia off`: a nota decide sozinha (a ação do tema, como antes; o texto rindo é zoeira)
+  const v = semIA
+    ? { categoria: temZoeira(sinais) ? "zoeira" : "discussao",
+        motivo: es ? `nota ${nota} ≥ ${limiar}` : lang === "en" ? `score ${nota} ≥ ${limiar}` : `nota ${nota} ≥ ${limiar}`, semIA: true }
     : await julgar({ tema, canalId: message.channelId, messageId: message.id, autor: userId, texto, lang, serverId: ctx?.serverId ?? null });
   const T = TEMAS[tema];
-  console.log(`[ASSUNTOS] ${tema} nota ${nota}/${limiar} [${sinais.join(", ")}] em ${message.channelId} por ${userId} → ${v ? (v.discussao ? "DISCUSSÃO" : "brincadeira/menção") : "sem veredito"}${v?.cache ? " (veredito recente)" : ""}${v?.semIA ? " (sem IA: só a nota)" : ""}${v?.motivo ? ` — ${v.motivo}` : ""}`);
-  if (!v?.discussao) return { tema, nota, acao: "nada", veredito: v };
+  if (!v) {   // erro ou modelo fora: nada (erro nunca vira punição) e nenhum caso
+    console.log(`[ASSUNTOS] ${tema} nota ${nota}/${limiar} [${sinais.join(", ")}] em ${message.channelId} por ${userId} → sem veredito`);
+    return { tema, nota, acao: "nada", veredito: null };
+  }
+  const categoria = v.categoria ?? (v.discussao ? "discussao" : "zoeira");
+  const seria = categoria === "ataque" || (categoria === "discussao" && ligado);
+
+  // a fila do dono: o limiar calibrado (no lugar do fixo) e o que ele já julgou
+  const limiarAlta = Number(await naFila("limiar", LIMIAR_ALTA_PADRAO, categoriaDoCaso(tema, true), LIMIAR_ALTA_PADRAO));
+  const herdado = await heranca(tema, texto);
+  const { certeza, origem } = certezaDe({ categoria: seria ? categoria : (categoria === "discussao" ? "fora" : categoria),
+    nota, limiarAlta: Number.isFinite(limiarAlta) ? limiarAlta : LIMIAR_ALTA_PADRAO, semIA, zoeira: temZoeira(sinais), herdado });
+  // zoeira nunca pune; fora do tema não faz nada; discussão de tema desligado não
+  // faz nada; o que o dono já disse que é engano não pune; média/baixa → só a fila
+  const acao = seria && herdado !== "nao" && certeza === "alta" ? (categoria === "ataque" ? "punir" : acaoDoTema(cfg, tema)) : "nada";
+
+  console.log(`[ASSUNTOS] ${tema} nota ${nota}/${limiar} [${sinais.join(", ")}] em ${message.channelId} por ${userId} → ${categoria.toUpperCase()}${ligado ? "" : " (tema desligado)"} · certeza ${certeza}${herdado ? ` · herdado: ${herdado}` : ""} → ${acao}${v.cache ? " (veredito recente)" : ""}${v.semIA ? " (sem IA: só a nota)" : ""}${v.motivo ? ` — ${v.motivo}` : ""}`);
+
+  // discussão de um tema que a staff não ligou não é decisão nenhuma (não vai à fila)
+  let codigo = null;
+  if (seria || categoria === "zoeira" || categoria === "fora") {
+    const caso = await naFila("registrarCaso", null, {
+      tipo: "assunto", categoria: categoriaDoCaso(tema, seria), serverId: ctx?.serverId ?? null, userId,
+      canalId: message.channelId, msgId: message.id ?? null, origem, certeza, nota: Math.round(nota * 10) / 100,
+      // (31 out 2026, P3a, revisão) o texto inteiro vai só para a impressão (não é guardado):
+      // a gravação e a consulta da herança (`heranca(tema, texto)`) usam o MESMO texto
+      acao: ACAO_DO_CASO[acao] ?? "nenhuma", evidencia: { trecho: trechoDoCaso(texto), texto },
+      detector: `assuntos:${categoria}${semIA ? ":sem-ia" : ""}`,
+    });
+    codigo = caso?.codigo ?? null;
+  }
+  const res = { tema, nota, acao, veredito: v, categoria, certeza, origem, herdado, codigo };
+  if (acao === "nada") return res;
 
   const rotulo = es ? T.es : lang === "en" ? T.en : T.pt;
-  const motivo = es ? `${rotulo} no es tema de este servidor (regla del servidor)` : lang === "en" ? `${rotulo} isn't a topic for this server (server rule)` : `${rotulo} não é assunto deste servidor (regra do servidor)`;
+  const motivo = categoria === "ataque"
+    ? (es ? `atacar a alguien por ${rotulo} (regla del servidor)` : lang === "en" ? `attacking someone over ${rotulo} (server rule)` : `atacar alguém por causa de ${rotulo} (regra do servidor)`)
+    : (es ? `${rotulo} no es tema de este servidor (regla del servidor)` : lang === "en" ? `${rotulo} isn't a topic for this server (server rule)` : `${rotulo} não é assunto deste servidor (regra do servidor)`);
 
   if (acao === "alertar") {
-    await alertarStaff(ctx, { userId, canalId: message.channelId, messageId: message.id, tema, texto, motivoIA: v.motivo, nota, sinais, lang });
-    return { tema, nota, acao, veredito: v };
+    await alertarStaff(ctx, { userId, canalId: message.channelId, messageId: message.id, tema, texto, motivoIA: v.motivo, nota, sinais, lang, categoria });
+    return res;
   }
   if (acao === "apagar") {
     try { await message.delete(); } catch (e) { console.warn(`[ASSUNTOS] não consegui apagar: ${e?.message ?? e}`); }
@@ -463,19 +619,19 @@ export async function verificar({ ctx, server, canal, message, userId, aplicarPu
     }
     await log.registrar(ctx, "punicoes", {
       titulo: `🧹 ${lang === "en" ? "Message removed — topic" : "Mensagem removida — assunto"}: ${rotulo}`,
-      descricao: `<@${userId}> ${lang === "en" ? "in" : "em"} <#${message.channelId}> · **${lang === "en" ? "Score" : "Nota"}:** ${nota}/10\n**${lang === "en" ? "Why" : "Por quê"}:** ${v.motivo || "—"}\n> ${texto.replace(/\n+/g, " ").slice(0, 300)}`,
+      descricao: `<@${userId}> ${lang === "en" ? "in" : "em"} <#${message.channelId}> · **${lang === "en" ? "Score" : "Nota"}:** ${nota}/10 · ${rotuloCategoria(categoria, lang === "en" ? 1 : 0)}\n**${lang === "en" ? "Why" : "Por quê"}:** ${v.motivo || "—"}\n> ${texto.replace(/\n+/g, " ").slice(0, 300)}`,
       es: { titulo: `🧹 Mensaje eliminado — tema: ${rotulo}`,
-        descricao: `<@${userId}> en <#${message.channelId}> · **Nota:** ${nota}/10\n**Por qué:** ${v.motivo || "—"}\n> ${texto.replace(/\n+/g, " ").slice(0, 300)}` },
+        descricao: `<@${userId}> en <#${message.channelId}> · **Nota:** ${nota}/10 · ${rotuloCategoria(categoria, 2)}\n**Por qué:** ${v.motivo || "—"}\n> ${texto.replace(/\n+/g, " ").slice(0, 300)}` },
     });
-    return { tema, nota, acao, veredito: v };
+    return res;
   }
   // punir: apaga e aplica a punição do módulo (padrão: a escada do `acumular`)
   const pol = cfg.punicao?.modo ? cfg.punicao : { modo: "acumular" };
   await aplicarPunicao?.({ server, channel: canal ?? message.channel, message, userId, pol, motivo, nota });
-  return { tema, nota, acao, veredito: v };
+  return res;
 }
 
-async function alertarStaff(ctx, { userId, canalId, messageId, tema, texto, motivoIA, nota, sinais, lang }) {
+async function alertarStaff(ctx, { userId, canalId, messageId, tema, texto, motivoIA, nota, sinais, lang, categoria = "discussao" }) {
   const T = TEMAS[tema];
   const en = lang === "en";
   const destino = await canalDaStaff(ctx);   // só canal da staff DESTE servidor
@@ -490,7 +646,7 @@ async function alertarStaff(ctx, { userId, canalId, messageId, tema, texto, moti
     title: `${T.emoji} ${en ? "Forbidden topic" : "Assunto proibido"}: ${en ? T.en : T.pt}`,
     description: [
       ...cabeca,
-      `**${en ? "Score" : "Nota"}:** ${nota}/10 · **${en ? "Signals" : "Sinais"}:** ${(sinais ?? []).join(", ") || "—"}`,
+      `**${en ? "Score" : "Nota"}:** ${nota}/10 · ${rotuloCategoria(categoria, en ? 1 : 0)} · **${en ? "Signals" : "Sinais"}:** ${(sinais ?? []).join(", ") || "—"}`,
       `**${en ? "Why" : "Por quê"}:** ${motivoIA || "—"}`,
       trecho,
       "",
@@ -503,7 +659,7 @@ async function alertarStaff(ctx, { userId, canalId, messageId, tema, texto, moti
       title: `${T.emoji} Tema prohibido: ${T.es}`,
       description: [
         ...cabeca,
-        `**Nota:** ${nota}/10 · **Señales:** ${(sinais ?? []).join(", ") || "—"}`,
+        `**Nota:** ${nota}/10 · ${rotuloCategoria(categoria, 2)} · **Señales:** ${(sinais ?? []).join(", ") || "—"}`,
         `**Por qué:** ${motivoIA || "—"}`,
         trecho,
         "",
@@ -516,3 +672,5 @@ async function alertarStaff(ctx, { userId, canalId, messageId, tema, texto, moti
 
 // Só para testes
 export function _zerar() { fios.clear(); vereditos.clear(); avisados.clear(); }
+// Só para testes: volta a carregar a fila de verdade (revisao.js) na próxima decisão
+export function _filaReal() { fila = null; filaPronta = false; }

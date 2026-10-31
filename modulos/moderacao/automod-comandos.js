@@ -461,7 +461,9 @@ export async function cmdAutomod(message, args, ctx) {
       const texto = a.slice(1).join(" ").trim();
       if (!texto) return erroUso("Testar o quê?", "Test what?", "¿Probar qué?");
       const notas = assuntos.analisarAssuntos(texto, mod, { canalId: message.channelId, autor: message.authorId, todos: true });
-      return linha(COR.mod, ...[0, 1, 2].map((i) => notas.map((n) => `${assuntos.TEMAS[n.tema].emoji} \`${nomeTema(n.tema, ["pt", "en", "es"][i])}\` — **${n.nota}/10**${n.passou ? " ⚠️" : ""}${n.sinais?.length ? ` · ${n.sinais.slice(0, 6).join(", ")}` : ""}`).join("\n")));
+      // (31 out 2026, P3a) ⚠️ = iria ao juiz: o tema ligado aqui, ou qualquer tema com sinal de ataque (com a IA ligada)
+      const vaiAoJuiz = (n) => n.passou && (assuntos.acaoDoTema(mod, n.tema) !== "off" || (mod.ia !== false && assuntos.temAtaque(n.sinais)));
+      return linha(COR.mod, ...[0, 1, 2].map((i) => notas.map((n) => `${assuntos.TEMAS[n.tema].emoji} \`${nomeTema(n.tema, ["pt", "en", "es"][i])}\` — **${n.nota}/10**${vaiAoJuiz(n) ? " ⚠️" : ""}${n.sinais?.length ? ` · ${n.sinais.slice(0, 6).join(", ")}` : ""}`).join("\n")));
     }
     if (["liberar", "allow", "vigiar", "watch"].includes(op)) {
       const bruto = String(a[1] ?? "");
@@ -499,22 +501,23 @@ export async function cmdAutomod(message, args, ctx) {
     if (!op || op === "status" || op === "config") {
       const acao = avatar.acaoDoAvatar(mod);
       return linha(COR.mod,
-        `🖼️ Foto de perfil ${mod.enabled !== false ? "🟢" : "🔴"} · \`${nomeAcaoAvatar(acao, "pt")}\`${acao === "silenciar" ? ` ${duracaoTexto(avatar.tempoDoAvatar(mod), "pt")}` : ""}${process.env.IA_SERVICO_URL ? "" : " · ⚠️ sem visão"}`,
-        `🖼️ Profile picture ${mod.enabled !== false ? "🟢" : "🔴"} · \`${nomeAcaoAvatar(acao, "en")}\`${acao === "silenciar" ? ` ${duracaoTexto(avatar.tempoDoAvatar(mod), "en")}` : ""}${process.env.IA_SERVICO_URL ? "" : " · ⚠️ no vision"}`,
-        `🖼️ Foto de perfil ${mod.enabled !== false ? "🟢" : "🔴"} · \`${nomeAcaoAvatar(acao, "es")}\`${acao === "silenciar" ? ` ${duracaoTexto(avatar.tempoDoAvatar(mod), "es")}` : ""}${process.env.IA_SERVICO_URL ? "" : " · ⚠️ sin visión"}`);
+        `🖼️ Perfil ${mod.enabled !== false ? "🟢" : "🔴"} · \`${nomeAcaoAvatar(acao, "pt")}\`${acao === "silenciar" ? " até trocar" : ""}${process.env.IA_SERVICO_URL ? "" : " · ⚠️ sem visão (só o texto)"}`,
+        `🖼️ Profile ${mod.enabled !== false ? "🟢" : "🔴"} · \`${nomeAcaoAvatar(acao, "en")}\`${acao === "silenciar" ? " until changed" : ""}${process.env.IA_SERVICO_URL ? "" : " · ⚠️ no vision (text only)"}`,
+        `🖼️ Perfil ${mod.enabled !== false ? "🟢" : "🔴"} · \`${nomeAcaoAvatar(acao, "es")}\`${acao === "silenciar" ? " hasta que cambie" : ""}${process.env.IA_SERVICO_URL ? "" : " · ⚠️ sin visión (solo el texto)"}`);
     }
-    if (op === "on" || op === "off") { mod.enabled = op === "on"; salvarConfig(); return onOff(op === "on", ["foto de perfil", "profile picture", "foto de perfil"]); }
+    if (op === "on" || op === "off") { mod.enabled = op === "on"; salvarConfig(); return onOff(op === "on", ["perfil", "profile", "perfil"]); }
     if (op === "acao" || op === "ação" || op === "action") {
       const nova = avatar.acaoAvatarValida(a[1]);
       if (!nova) return erroUso("Ação: alertar, silenciar, expulsar ou banir", "Action: alert, silence, kick or ban", "Acción: alert, silence, kick o ban");
       mod.acao = nova; salvarConfig();
       return linha(COR.sucesso, `🖼️ → \`${nomeAcaoAvatar(nova, "pt")}\``, `🖼️ → \`${nomeAcaoAvatar(nova, "en")}\``, `🖼️ → \`${nomeAcaoAvatar(nova, "es")}\``);
     }
-    if (op === "tempo" || op === "time") {
-      const ms = lerDuracao(a[1]);
-      if (!ms) return erroUso("Tempo: `24h`, `2d`, `30m`…", "Time: `24h`, `2d`, `30m`…", "Tiempo: `24h`, `2d`, `30m`…");
-      mod.tempo = String(a[1]).toLowerCase(); salvarConfig();
-      return linha(COR.sucesso, `🖼️ ${duracaoTexto(avatar.tempoDoAvatar(mod), "pt")}`, `🖼️ ${duracaoTexto(avatar.tempoDoAvatar(mod), "en")}`, `🖼️ ${duracaoTexto(avatar.tempoDoAvatar(mod), "es")}`);
+    // (31 out 2026, P3a) o silêncio do perfil dura até a pessoa trocar o que apitou: o `tempo`
+    // não manda mais nele. Fica como apelido que explica isso (o valor salvo não é mexido).
+    if (op === "tempo" || op === "time" || op === "tiempo") {
+      return linha(COR.mod, "🖼️ O silêncio do perfil dura **até a pessoa trocar** o que apitou (no máximo 28 dias).",
+        "🖼️ The profile timeout lasts **until the person changes** what was flagged (28 days at most).",
+        "🖼️ El silencio del perfil dura **hasta que la persona cambie** lo detectado (28 días como máximo).");
     }
     if (op === "checar" || op === "check" || op === "testar" || op === "test") {
       const uid = await resolverUsuario(a.slice(1).join(" "), { server, client: ctx.client }).catch(() => null);

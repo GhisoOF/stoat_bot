@@ -111,6 +111,7 @@ Gerado do registro de comandos (`modulos/comandos/`); `&help <comando>` explica 
 |---|---|
 | `&personalidade` | a personalidade da Judy (a mesma em todo servidor) |
 | `&servidores` | onde o bot está, o relatório por hora, avisos a todos os servidores |
+| `&caso` | a fila de revisão da moderação (por DM) |
 <!-- /gerado:comandos -->
 
 ## Variáveis de ambiente
@@ -188,6 +189,9 @@ Geradas do `.env.example` (onde cada uma é explicada por inteiro).
 | `COMENTARIO_MAX_TOKENS` | `1200` | Tokens do comentário espontâneo (modelos que raciocinam precisam de ≥1200). |
 | `AUTOMOD_CONFIRMAR_HORAS` | `24` | O silêncio é o timeout nativo do Stoat (o bot precisa de TimeoutMembers). |
 | `PAGINAS_DIAS` | `7` | Botões ◀ ▶ das mensagens paginadas continuam valendo por estes dias, mesmo depois de o bot reiniciar. |
+| `REVISAO_POR_DIA` | `10` | Casos de moderação que chegam por DM ao dono do bot (o primeiro dos SUPER_ADMINS) por dia. |
+| `REVISAO_HORA` | `21` | A hora (UTC, 0–23) da rodada diária: resumo, limiares recalculados e os casos do dia. |
+| `REVISAO_AMOSTRA` | `0.002` | A fração do que os detectores não puniram que vira amostra para a fila (0–0.1). |
 | `CHAT_DEBUG` | `1` | — |
 | `RELATORIO_SERVIDOR` | — | O servidor do dono do bot. |
 | `WEBHOOK_BIND` | `127.0.0.1` | Em que endereço da máquina o receptor de webhooks fica: 127.0.0.1 (padrão, só a máquina; o Tailscale Funnel segue funcionando) · 172.17.0.1 (só os containers, e |

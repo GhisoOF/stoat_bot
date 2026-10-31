@@ -24,12 +24,16 @@ export async function aplicarTimeout(server, userId, ms) {
 }
 
 // { saiu } se a pessoa não está mais no servidor; { removido } no mais.
-export async function tirarTimeout(server, userId) {
+// `soSeAte` (31 out 2026, P3a, revisão): só tira o timeout que acaba a ±`folga` dessa hora
+// (o que quem chama aplicou); outro — a staff silenciou depois — fica: { outro }.
+export const FOLGA_TIMEOUT_MS = 5 * 60e3;
+export async function tirarTimeout(server, userId, { soSeAte = null, folga = FOLGA_TIMEOUT_MS } = {}) {
   let member = null;
   try { member = await server.fetchMember(userId); } catch { member = null; }
   if (!member) return { saiu: true };
   const t = member.timeout ? new Date(member.timeout).getTime() : 0;
   if (t && t <= Date.now()) return { jaVencido: true };
+  if (soSeAte != null && Number.isFinite(Number(soSeAte)) && t && Math.abs(t - Number(soSeAte)) > folga) return { outro: true };
   await member.edit({ remove: ["Timeout"] });
   return { removido: true };
 }

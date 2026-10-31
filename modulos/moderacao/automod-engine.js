@@ -677,7 +677,7 @@ export const MODULOS_AUTOMOD = {
   antiimagem:      "antiImagem",
   antirepeticao:   "antiRepeticao",
   antiassuntos:    "antiAssuntos",   // temas proibidos (13 out 2026)
-  antiavatar:      "antiAvatar",     // foto de perfil (13 out 2026)
+  antiavatar:      "antiAvatar",     // foto de perfil (13 out 2026); o perfil inteiro (31 out 2026, P3a)
 };
 // ── Os quatro grupos (pedido de Ghieh, 2 out 2026) ──────────────────────────
 // Eram 14 filtros soltos, vários fazendo quase a mesma coisa com outra régua
@@ -705,8 +705,8 @@ export const GRUPOS_AUTOMOD = {
     partes: { dominios: "antilink", convites: "antiinvite" },
   },
   sentinela: {
-    emoji: "🛡️", pt: "conteúdo nocivo (golpe, +18, gore, ódio, imagens, temas proibidos, foto de perfil)", en: "harmful content (scams, NSFW, gore, hate, images, forbidden topics, profile pictures)",
-    es: "contenido dañino (estafas, +18, gore, odio, imágenes, temas prohibidos, foto de perfil)",
+    emoji: "🛡️", pt: "conteúdo nocivo (golpe, +18, gore, ódio, imagens, temas proibidos, perfil)", en: "harmful content (scams, NSFW, gore, hate, images, forbidden topics, profiles)",
+    es: "contenido dañino (estafas, +18, gore, odio, imágenes, temas prohibidos, perfil)",
     partes: { conteudo: "sentinela", odio: "antiodio", imagens: "antiimagem", assuntos: "antiassuntos", avatar: "antiavatar" },
   },
 };
@@ -1260,6 +1260,23 @@ export async function removerCargoSilence(server, userId, roleId, ctx) {
   }
   return { removido: true };
 }
+// ── Sinal da staff para a fila do dono (31 out 2026, P3a) ─────────────────
+// Cada warn/timeout/kick/ban manual (punir.js) vira um SINAL na fila de revisão
+// do dono do bot: a staff achou que alguém passou do limite — o dono compara
+// com o que os detectores fizeram. Nunca pune nada por si (acao "nenhuma") e
+// guarda só o necessário: o tipo, o servidor, o alvo, o canal, a mensagem
+// respondida (se a punição foi por resposta) e o motivo curto, sem menções.
+// Quem da staff agiu NÃO vai. Erro da fila nunca atrapalha a punição.
+export const TIPOS_SINAL_STAFF = ["warn", "timeout", "kick", "ban"];
+export async function sinalDaStaff(ctx, { tipo, alvoId, canalId = null, msgId = null, motivo = "" } = {}) {
+  if (!TIPOS_SINAL_STAFF.includes(tipo) || !alvoId || !ctx?.serverId) return null;
+  const trecho = assuntos.trechoDoCaso(motivo);
+  return assuntos.registrarNaFila({
+    tipo: "staff", categoria: `staff:${tipo}`, serverId: ctx.serverId, userId: alvoId, canalId, msgId,
+    origem: "staff", certeza: "media", nota: null, acao: "nenhuma", evidencia: trecho ? { trecho } : {}, detector: "staff",
+  });
+}
+
 // Só para testes: a checagem de tema da última mensagem (roda em segundo plano).
 let ultimaVerificacaoDeAssunto = null;
 export const _ultimaVerificacaoDeAssunto = () => ultimaVerificacaoDeAssunto;

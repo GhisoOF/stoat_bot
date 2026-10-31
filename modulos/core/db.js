@@ -1947,3 +1947,272 @@ export function usoDeComandos() {
   prepararPalavras();
   return Object.fromEntries(prep("SELECT comando, vezes FROM uso_comandos").all().map((r) => [r.comando, r.vezes]));
 }
+
+// ── P3a fila ──
+// (31 out 2026, P3a) A fila de revisão do dono do bot (modulos/moderacao/revisao.js).
+// Um caso por linha. Os campos que identificam alguém (userId, canalId, msgId,
+// serverId), o trecho e o link existem só enquanto o caso está vivo: o trecho e o
+// link somem em 7 dias; caso julgado fica só com hash/impressão + veredito — sem o
+// pseudônimo do servidor (revisão P3a); caso não julgado some em 14 dias; caso
+// herdado (só impressão + veredito) some em 30 dias (FILA_* abaixo).
+export const FILA_DIAS_TRECHO = 7;
+export const FILA_DIAS_PENDENTE = 14;
+export const FILA_DIAS_HERDADO = 30;
+let _filaDb = null;
+function prepararFila() {
+  if (_filaDb === db) return;
+  db.exec(`CREATE TABLE IF NOT EXISTS revisao_casos (
+    codigo     TEXT PRIMARY KEY,
+    criadoEm   INTEGER NOT NULL,
+    tipo       TEXT NOT NULL,
+    categoria  TEXT NOT NULL,
+    origem     TEXT NOT NULL,
+    certeza    TEXT,
+    nota       REAL,
+    acao       TEXT,
+    detector   TEXT,
+    serverId   TEXT,
+    servidor   TEXT,          -- pseudônimo do servidor (pseudonimo.js), o que a DM mostra
+    userId     TEXT,
+    canalId    TEXT,
+    msgId      TEXT,
+    link       TEXT,
+    trecho     TEXT,
+    hash       TEXT,
+    impressao  TEXT,
+    estado     TEXT NOT NULL, -- candidato | amostra | registro | enviado | julgado | herdado
+    enviadoEm  INTEGER,
+    dmCanalId  TEXT,
+    dmMsgId    TEXT,
+    veredito   TEXT,          -- certo | errou
+    violacao   INTEGER,       -- 1 = o dono disse que é violação
+    julgadoEm  INTEGER,
+    limpoEm    INTEGER,       -- quando os campos de identificação foram apagados
+    dmLimpar   INTEGER        -- 1 = a mensagem na DM ainda mostra o que a pessoa pediu para apagar
+  )`);
+  // (revisão P3a) coluna nova num banco que já tinha a tabela: acrescenta, sem perder linhas
+  if (!db.prepare("PRAGMA table_info(revisao_casos)").all().some((c) => c.name === "dmLimpar")) db.exec("ALTER TABLE revisao_casos ADD COLUMN dmLimpar INTEGER");
+  db.exec("CREATE INDEX IF NOT EXISTS idx_revisao_estado ON revisao_casos (estado, criadoEm)");
+  db.exec("CREATE INDEX IF NOT EXISTS idx_revisao_dm ON revisao_casos (dmMsgId)");
+  db.exec("CREATE INDEX IF NOT EXISTS idx_revisao_julgados ON revisao_casos (categoria, julgadoEm)");
+  // (revisão P3a) as consultas da rodada e dos tetos sem varrer a tabela
+  db.exec("CREATE INDEX IF NOT EXISTS idx_revisao_origem ON revisao_casos (origem, criadoEm)");
+  db.exec("CREATE INDEX IF NOT EXISTS idx_revisao_enviado ON revisao_casos (enviadoEm)");
+  db.exec("CREATE INDEX IF NOT EXISTS idx_revisao_limpo ON revisao_casos (limpoEm)");
+  db.exec(`CREATE TABLE IF NOT EXISTS revisao_limiares (
+    categoria TEXT PRIMARY KEY, limiar REAL NOT NULL, padrao REAL, casos INTEGER NOT NULL DEFAULT 0,
+    precisao REAL, calculadoEm INTEGER NOT NULL)`);
+  db.exec(`CREATE TABLE IF NOT EXISTS revisao_servidores (
+    serverId TEXT PRIMARY KEY, modo TEXT NOT NULL, definidoEm INTEGER NOT NULL)`);
+  db.exec(`CREATE TABLE IF NOT EXISTS revisao_estado (chave TEXT PRIMARY KEY, valor TEXT)`);
+  _filaDb = db;
+}
+const FILA_COLUNAS = new Set(["criadoEm", "tipo", "categoria", "origem", "certeza", "nota", "acao", "detector", "serverId", "servidor",
+  "userId", "canalId", "msgId", "link", "trecho", "hash", "impressao", "estado", "enviadoEm", "dmCanalId", "dmMsgId",
+  "veredito", "violacao", "julgadoEm", "limpoEm", "dmLimpar"]);
+export function filaExiste(codigo) {
+  prepararFila();
+  return !!prep("SELECT 1 FROM revisao_casos WHERE codigo = ?").get(String(codigo));
+}
+export function filaInserir(caso) {
+  prepararFila();
+  const cols = ["codigo", ...Object.keys(caso).filter((k) => FILA_COLUNAS.has(k))];
+  const vals = cols.map((k) => (k === "codigo" ? caso.codigo : caso[k] ?? null));
+  prep(`INSERT INTO revisao_casos (${cols.join(", ")}) VALUES (${cols.map(() => "?").join(", ")})`).run(...vals);
+}
+export function filaAtualizar(codigo, campos) {
+  prepararFila();
+  const ks = Object.keys(campos).filter((k) => FILA_COLUNAS.has(k));
+  if (!ks.length) return 0;
+  return prep(`UPDATE revisao_casos SET ${ks.map((k) => `${k} = ?`).join(", ")} WHERE codigo = ?`).run(...ks.map((k) => campos[k] ?? null), String(codigo)).changes ?? 0;
+}
+export function filaCaso(codigo) {
+  prepararFila();
+  return prep("SELECT * FROM revisao_casos WHERE codigo = ?").get(String(codigo).toUpperCase()) ?? null;
+}
+export function filaCasoPorDm(msgId) {
+  prepararFila();
+  return msgId ? prep("SELECT * FROM revisao_casos WHERE dmMsgId = ?").get(String(msgId)) ?? null : null;
+}
+// Os casos em certos estados criados desde `desde` (mais antigos primeiro)
+export function filaPorEstado(estados, desde = 0) {
+  prepararFila();
+  const lista = [].concat(estados).map(String);
+  return prep(`SELECT * FROM revisao_casos WHERE estado IN (${lista.map(() => "?").join(", ")}) AND criadoEm >= ? ORDER BY criadoEm`).all(...lista, desde);
+}
+export function filaContar(estados, desde = 0) {
+  prepararFila();
+  const lista = [].concat(estados).map(String);
+  return prep(`SELECT COUNT(*) AS n FROM revisao_casos WHERE estado IN (${lista.map(() => "?").join(", ")}) AND criadoEm >= ?`).get(...lista, desde)?.n ?? 0;
+}
+export function filaEnviadosDesde(desde, { origem = null } = {}) {
+  prepararFila();
+  return origem
+    ? prep("SELECT COUNT(*) AS n FROM revisao_casos WHERE enviadoEm >= ? AND origem = ?").get(desde, String(origem))?.n ?? 0
+    : prep("SELECT COUNT(*) AS n FROM revisao_casos WHERE enviadoEm >= ?").get(desde)?.n ?? 0;
+}
+// A amostra guardada desde `desde`: a de `origem: "amostra"` e a reserva da certeza alta do
+// detector (revisão P3a: as duas dividem os mesmos tetos); o herdado não conta (não tem ninguém).
+const FILA_AMOSTRA = "(origem = 'amostra' OR (origem = 'detector' AND certeza = 'alta')) AND estado <> 'herdado'";
+export function filaAmostrasDesde(desde, serverId = null) {
+  prepararFila();
+  return serverId
+    ? prep(`SELECT COUNT(*) AS n FROM revisao_casos WHERE ${FILA_AMOSTRA} AND criadoEm >= ? AND serverId = ?`).get(desde, String(serverId))?.n ?? 0
+    : prep(`SELECT COUNT(*) AS n FROM revisao_casos WHERE ${FILA_AMOSTRA} AND criadoEm >= ?`).get(desde)?.n ?? 0;
+}
+// Julgados pelo dono (não os herdados), os mais recentes primeiro
+export function filaJulgados({ categoria = null, desde = 0, limite = 5000 } = {}) {
+  prepararFila();
+  return categoria
+    ? prep("SELECT * FROM revisao_casos WHERE estado = 'julgado' AND categoria = ? AND julgadoEm >= ? ORDER BY julgadoEm DESC LIMIT ?").all(String(categoria), desde, limite)
+    : prep("SELECT * FROM revisao_casos WHERE estado = 'julgado' AND julgadoEm >= ? ORDER BY julgadoEm DESC LIMIT ?").all(desde, limite);
+}
+// Para a herança: os julgados com hash ou impressão (da categoria, e os apontados pelo dono)
+export function filaReferencias(categoria, limite = 3000) {
+  prepararFila();
+  return prep(`SELECT codigo, categoria, origem, hash, impressao, violacao, julgadoEm FROM revisao_casos
+    WHERE estado = 'julgado' AND (categoria = ? OR origem = 'dono') AND (hash IS NOT NULL OR impressao IS NOT NULL)
+    ORDER BY julgadoEm DESC LIMIT ?`).all(String(categoria), limite);
+}
+// Há caso ainda com identificação (trecho, link ou IDs), mensagem da DM por editar, ou caso
+// herdado (some em 30 dias)? Enquanto houver, a retenção tem trabalho.
+export function filaTemVivos() {
+  prepararFila();
+  return !!(prep("SELECT 1 FROM revisao_casos WHERE limpoEm IS NULL LIMIT 1").get()
+    || prep("SELECT 1 FROM revisao_casos WHERE dmMsgId IS NOT NULL LIMIT 1").get()
+    || prep("SELECT 1 FROM revisao_casos WHERE estado = 'herdado' LIMIT 1").get());
+}
+// Há alguma linha? (a retenção do boot só roda se houver)
+export function filaTemLinhas() {
+  prepararFila();
+  return !!prep("SELECT 1 FROM revisao_casos LIMIT 1").get();
+}
+// As mensagens da DM que ainda mostram o que já foi apagado: caso com mais de 7 dias
+// (`ate` = agora − 7 dias) ou marcado pelo `&privacidade apagar` (dmLimpar)
+export function filaDmsParaLimpar(ate, limite = 500) {
+  prepararFila();
+  return prep(`SELECT codigo, categoria, veredito, dmCanalId, dmMsgId FROM revisao_casos
+    WHERE dmMsgId IS NOT NULL AND (criadoEm < ? OR dmLimpar = 1) LIMIT ?`).all(ate, limite);
+}
+export function filaContarHerdados(desde) {
+  prepararFila();
+  return prep("SELECT COUNT(*) AS n FROM revisao_casos WHERE estado = 'herdado' AND criadoEm >= ?").get(desde)?.n ?? 0;
+}
+// Retenção. Devolve quantos casos perderam o trecho/os IDs e quantos foram apagados.
+//  - trecho e link: 7 dias depois de criado (qualquer estado)
+//  - julgado/herdado: com 7 dias, ficam só hash/impressão + veredito (sem IDs nem o pseudônimo)
+//  - não julgado (candidato, enviado sem resposta, amostra, registro): apagado com 14 dias
+//  - herdado (só impressão + veredito): apagado com 30 dias
+// A linha que ainda aponta para uma mensagem na DM do dono só sai depois que a mensagem foi
+// editada (revisao.limparDms zera os IDs; a próxima passada apaga) — senão a DM ficaria com o trecho.
+export function filaReter(agora = Date.now()) {
+  prepararFila();
+  const dia = 86400e3;
+  const trecho = prep("UPDATE revisao_casos SET trecho = NULL, link = NULL WHERE criadoEm < ? AND (trecho IS NOT NULL OR link IS NOT NULL)").run(agora - FILA_DIAS_TRECHO * dia).changes ?? 0;
+  const limpos = prep(`UPDATE revisao_casos SET serverId = NULL, servidor = NULL, userId = NULL, canalId = NULL, msgId = NULL, trecho = NULL, link = NULL, limpoEm = ?
+    WHERE estado IN ('julgado', 'herdado') AND limpoEm IS NULL AND criadoEm < ?`).run(agora, agora - FILA_DIAS_TRECHO * dia).changes ?? 0;
+  // o herdado já nasce sem pseudônimo; o antigo (de antes da revisão) perde agora
+  prep("UPDATE revisao_casos SET servidor = NULL WHERE estado IN ('julgado', 'herdado') AND limpoEm IS NOT NULL AND servidor IS NOT NULL").run();
+  const apagados = (prep("DELETE FROM revisao_casos WHERE estado NOT IN ('julgado', 'herdado') AND criadoEm < ? AND dmMsgId IS NULL").run(agora - FILA_DIAS_PENDENTE * dia).changes ?? 0)
+    + (prep("DELETE FROM revisao_casos WHERE estado = 'herdado' AND criadoEm < ?").run(agora - FILA_DIAS_HERDADO * dia).changes ?? 0);
+  return { trecho, limpos, apagados };
+}
+// A amostra e o registro (certeza alta) que a escolha do dia não pegou: apagados logo (privacidade)
+export function filaDescartarNaoEscolhidos(ate) {
+  prepararFila();
+  return prep("DELETE FROM revisao_casos WHERE estado IN ('amostra', 'registro') AND criadoEm < ?").run(ate).changes ?? 0;
+}
+// `&privacidade` / pedido de apagar: a pessoa some dos casos (o caso fica, sem ela nem o
+// pseudônimo do servidor); a mensagem na DM do dono, se houver, é editada na próxima rodada (dmLimpar)
+export function filaEsquecerUsuario(userId) {
+  prepararFila();
+  return prep(`UPDATE revisao_casos SET userId = NULL, canalId = NULL, msgId = NULL, trecho = NULL, link = NULL, servidor = NULL,
+    dmLimpar = CASE WHEN dmMsgId IS NOT NULL THEN 1 ELSE dmLimpar END WHERE userId = ?`).run(String(userId)).changes ?? 0;
+}
+export function filaLimiar(categoria) {
+  prepararFila();
+  return prep("SELECT * FROM revisao_limiares WHERE categoria = ?").get(String(categoria)) ?? null;
+}
+export function filaLimiares() {
+  prepararFila();
+  return prep("SELECT * FROM revisao_limiares ORDER BY categoria").all();
+}
+export function filaSalvarLimiar(categoria, { limiar, padrao = null, casos = 0, precisao = null, calculadoEm = Date.now() }) {
+  prepararFila();
+  prep(`INSERT INTO revisao_limiares (categoria, limiar, padrao, casos, precisao, calculadoEm) VALUES (?, ?, ?, ?, ?, ?)
+    ON CONFLICT(categoria) DO UPDATE SET limiar = excluded.limiar, padrao = COALESCE(excluded.padrao, padrao), casos = excluded.casos,
+    precisao = excluded.precisao, calculadoEm = excluded.calculadoEm`).run(String(categoria), limiar, padrao, casos, precisao, calculadoEm);
+}
+export function filaModoServidor(serverId) {
+  prepararFila();
+  return prep("SELECT modo FROM revisao_servidores WHERE serverId = ?").get(String(serverId))?.modo ?? "padrao";
+}
+export function filaDefinirModoServidor(serverId, modo, agora = Date.now()) {
+  prepararFila();
+  if (modo === "padrao") return prep("DELETE FROM revisao_servidores WHERE serverId = ?").run(String(serverId)).changes ?? 0;
+  return prep(`INSERT INTO revisao_servidores (serverId, modo, definidoEm) VALUES (?, ?, ?)
+    ON CONFLICT(serverId) DO UPDATE SET modo = excluded.modo, definidoEm = excluded.definidoEm`).run(String(serverId), modo, agora).changes ?? 0;
+}
+export function filaServidoresRigidos() {
+  prepararFila();
+  return prep("SELECT serverId FROM revisao_servidores WHERE modo = 'rigido'").all().map((r) => r.serverId);
+}
+export function filaEstado(chave) {
+  prepararFila();
+  return prep("SELECT valor FROM revisao_estado WHERE chave = ?").get(String(chave))?.valor ?? null;
+}
+export function filaDefinirEstado(chave, valor) {
+  prepararFila();
+  prep("INSERT INTO revisao_estado (chave, valor) VALUES (?, ?) ON CONFLICT(chave) DO UPDATE SET valor = excluded.valor").run(String(chave), valor == null ? null : String(valor));
+}
+
+// ── P3a perfil ──
+// (31 out 2026, P3a) Quem a moderação do perfil silenciou ATÉ TROCAR, e por quais
+// partes do perfil (`campos`: "bio", "avatar", "banner"…). Quando a pessoa troca a
+// parte que apitou e ela passa limpa, o silêncio acaba e a linha sai (uma por vez,
+// como o `limparPunicao`). Só os nomes das partes e o motivo — nada do conteúdo.
+// (revisão P3a) `fimAplicado`: quando acaba o timeout que o PERFIL aplicou — a voz só é
+// devolvida se o timeout atual do membro ainda é esse (a staff pode ter silenciado depois).
+const _perfilPronto = new WeakSet();
+function prepararPerfil() {
+  if (_perfilPronto.has(db)) return;
+  db.exec(`CREATE TABLE IF NOT EXISTS perfil_silencio (
+    serverId TEXT NOT NULL, userId TEXT NOT NULL, campos TEXT NOT NULL,
+    motivo TEXT, criadoEm INTEGER NOT NULL, fimAplicado INTEGER,
+    PRIMARY KEY (serverId, userId))`);
+  // coluna nova num banco que já tinha a tabela: acrescenta, sem perder linhas
+  if (!db.prepare("PRAGMA table_info(perfil_silencio)").all().some((c) => c.name === "fimAplicado")) db.exec("ALTER TABLE perfil_silencio ADD COLUMN fimAplicado INTEGER");
+  db.exec("CREATE INDEX IF NOT EXISTS idx_perfil_silencio_criado ON perfil_silencio (criadoEm)");
+  _perfilPronto.add(db);
+}
+const CAMPO_PERFIL = /^[a-zA-Z]{1,20}$/;
+// `fim`: o fim do timeout aplicado agora (null = o mesmo de antes, numa troca parcial)
+export function perfilSilencioGravar(serverId, userId, campos, motivo = null, agora = Date.now(), fim = null) {
+  prepararPerfil();
+  const lista = [...new Set((campos ?? []).map(String).filter((c) => CAMPO_PERFIL.test(c)))];
+  if (!serverId || !userId || !lista.length) return false;
+  const f = Number.isFinite(Number(fim)) && fim !== null ? Math.round(Number(fim)) : null;
+  prep(`INSERT INTO perfil_silencio (serverId, userId, campos, motivo, criadoEm, fimAplicado) VALUES (?, ?, ?, ?, ?, ?)
+    ON CONFLICT(serverId, userId) DO UPDATE SET campos = excluded.campos, motivo = COALESCE(excluded.motivo, motivo), criadoEm = excluded.criadoEm,
+    fimAplicado = COALESCE(excluded.fimAplicado, fimAplicado)`)
+    .run(String(serverId), String(userId), lista.join(","), motivo == null ? null : String(motivo).slice(0, 300), agora, f);
+  return true;
+}
+// O silêncio do perfil dura no máximo o teto do timeout do Stoat (28 dias): passou
+// disso sem a pessoa trocar nada, o registro venceu e sai na leitura — e na limpeza
+// periódica (`perfilSilencioLimparVencidos`, a cada 6 h e no boot: retencao.limparVencidos).
+export const PERFIL_SILENCIO_MAX_MS = 28 * 86400e3;
+export function perfilSilencioLer(serverId, userId, agora = Date.now()) {
+  prepararPerfil();
+  const r = prep("SELECT campos, motivo, criadoEm, fimAplicado FROM perfil_silencio WHERE serverId = ? AND userId = ?").get(String(serverId), String(userId));
+  if (r && agora - r.criadoEm > PERFIL_SILENCIO_MAX_MS) { perfilSilencioTirar(serverId, userId); return null; }
+  return r ? { campos: String(r.campos).split(",").filter(Boolean), motivo: r.motivo ?? null, criadoEm: r.criadoEm, fimAplicado: r.fimAplicado ?? null } : null;
+}
+export function perfilSilencioLimparVencidos(agora = Date.now()) {
+  prepararPerfil();
+  return prep("DELETE FROM perfil_silencio WHERE criadoEm < ?").run(agora - PERFIL_SILENCIO_MAX_MS).changes ?? 0;
+}
+export function perfilSilencioTirar(serverId, userId) {
+  prepararPerfil();
+  return prep("DELETE FROM perfil_silencio WHERE serverId = ? AND userId = ?").run(String(serverId), String(userId)).changes ?? 0;
+}

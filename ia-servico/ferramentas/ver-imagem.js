@@ -4,7 +4,7 @@ import { pedirLLM } from "../llm.js";
 const MODELO_VISAO = process.env.LLM_MODEL_VISAO || "";        // vazio = visão desligada
 const SD_URL       = (process.env.SD_URL || "").replace(/\/$/, "");  // vazio = geração desligada
 const MAX_BYTES    = Number(process.env.IMAGEM_MAX_BYTES || 8 * 1024 * 1024);
-const MAX_PIXELS   = Number(process.env.IMAGEM_MAX_PIXELS || 32_000_000);   // ~32MP decodificados
+export const MAX_PIXELS = Number(process.env.IMAGEM_MAX_PIXELS || 32_000_000);   // ~32MP decodificados
 const LADO_VISAO   = Number(process.env.IMAGEM_LADO_VISAO || 1280);
 const TIMEOUT_MS   = Number(process.env.IMAGEM_TIMEOUT_MS || 120_000);
 
@@ -23,7 +23,7 @@ const HOSTS_PERMITIDOS = [...new Set([
 ].filter(Boolean))];
 
 let sharpMod = null;
-async function sharp() {
+export async function sharp() {
   if (sharpMod) return sharpMod;
   try { sharpMod = (await import("sharp")).default; return sharpMod; }
   catch {
@@ -31,7 +31,7 @@ async function sharp() {
   }
 }
 
-function hostPermitido(url) {
+export function hostPermitido(url) {
   let u;
   try { u = new URL(url); } catch { return { ok: false, motivo: "não é um link válido" }; }
   if (u.protocol !== "https:") return { ok: false, motivo: "só aceito links https" };
@@ -43,7 +43,7 @@ function hostPermitido(url) {
   return { ok: true };
 }
 
-async function baixarLimitado(url) {
+export async function baixarLimitado(url) {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), 30_000);
   try {
@@ -74,7 +74,7 @@ async function baixarLimitado(url) {
 
 // Só formato de foto: SVG/PDF/TIFF passam por bibliotecas maiores (librsvg,
 // poppler) que não têm por que rodar com arquivo de estranho (12 out 2026).
-const FORMATOS = new Set(["jpeg", "png", "webp", "gif", "avif", "heif"]);
+export const FORMATOS = new Set(["jpeg", "png", "webp", "gif", "avif", "heif"]);
 async function reescrever(buffer, ladoMax) {
   const s = await sharp();
   const meta = await s(buffer, { limitInputPixels: MAX_PIXELS }).metadata().catch(() => null);

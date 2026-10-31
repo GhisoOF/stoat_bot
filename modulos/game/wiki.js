@@ -62,6 +62,10 @@ export function paginasWikiRpg(lang = "pt", P = "&") {
       T(l, `No seu nível, com o kit da referência: **${p100(b.normal.exito)}** de vencer e **${p100(b.normal.sobrev)}** de sobreviver. Um êxito no seu nível vale **${p100(R.MISSAO.exitoVale)}** de um nível (no máximo ${MISS.NIVEIS_POR_LUTA} níveis por luta); falhar não paga nada.`,
         `At your level, with the reference kit: **${p100(b.normal.exito)}** to win and **${p100(b.normal.sobrev)}** to survive. A win at your level is worth **${p100(R.MISSAO.exitoVale)}** of a level (at most ${MISS.NIVEIS_POR_LUTA} levels per fight); a failure pays nothing.`,
         `En tu nivel, con el kit de referencia: **${p100(b.normal.exito)}** de ganar y **${p100(b.normal.sobrev)}** de sobrevivir. Una victoria en tu nivel vale **${p100(R.MISSAO.exitoVale)}** de un nivel (como mucho ${MISS.NIVEIS_POR_LUTA} niveles por pelea); fallar no paga nada.`),
+      // (31 out 2026, P3a) o começo viável: nos primeiros níveis ninguém cai
+      T(l, `**Começo:** até o nível ${R.INICIO.cheio} ninguém cai (${p100(1)} de sobreviver); do ${R.INICIO.cheio + 1} ao ${R.INICIO.ate}, o risco de cair volta aos poucos.`,
+        `**Starting out:** up to level ${R.INICIO.cheio} nobody falls (${p100(1)} to survive); from ${R.INICIO.cheio + 1} to ${R.INICIO.ate}, the risk of falling comes back little by little.`,
+        `**Al empezar:** hasta el nivel ${R.INICIO.cheio} nadie cae (${p100(1)} de sobrevivir); del ${R.INICIO.cheio + 1} al ${R.INICIO.ate}, el riesgo de caer vuelve poco a poco.`),
       T(l, `Com ${R.FOLGA.garantida}× a força para a qual a missão foi feita, é garantida — nunca pelo nível.`,
         `With ${R.FOLGA.garantida}× the strength the mission was made for, it's guaranteed — never by level.`,
         `Con ${R.FOLGA.garantida}× la fuerza para la que se hizo la misión, está garantizada — nunca por nivel.`),

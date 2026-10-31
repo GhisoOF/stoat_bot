@@ -116,6 +116,16 @@
    "rota": "silenciar",
    "funcao": "cmdTimeout"
   },
+  "case": {
+   "canonico": "caso",
+   "rota": "caso",
+   "funcao": "cmdCaso"
+  },
+  "caso": {
+   "canonico": "caso",
+   "rota": "caso",
+   "funcao": "cmdCaso"
+  },
   "character": {
    "canonico": "game",
    "rota": "game",
@@ -1168,6 +1178,21 @@
    "title": "titulo",
    "visible": "visivel"
   },
+  "caso": {
+   "acierto": "certo",
+   "correct": "certo",
+   "default": "padrao",
+   "estricto": "rigido",
+   "export": "exportar",
+   "fallo": "errou",
+   "missed": "perdeu",
+   "perdio": "perdeu",
+   "predeterminado": "padrao",
+   "right": "certo",
+   "server": "servidor",
+   "strict": "rigido",
+   "wrong": "errou"
+  },
   "config": {
    "acceso": "acesso",
    "access": "acesso",
@@ -2046,6 +2071,15 @@
    "titulo": "title",
    "visivel": "visible"
   },
+  "caso": {
+   "certo": "right",
+   "errou": "wrong",
+   "exportar": "export",
+   "padrao": "default",
+   "perdeu": "missed",
+   "rigido": "strict",
+   "servidor": "server"
+  },
   "config": {
    "acesso": "access",
    "comando": "command",
@@ -2548,6 +2582,9 @@
    "lista",
    "varrer"
   ],
+  "caso": [
+   "servidor"
+  ],
   "config.acesso": [
    "canais",
    "canal",
@@ -2784,6 +2821,15 @@
    "texto": "texto",
    "titulo": "titulo",
    "visivel": "visible"
+  },
+  "caso": {
+   "certo": "acierto",
+   "errou": "fallo",
+   "exportar": "exportar",
+   "padrao": "predeterminado",
+   "perdeu": "perdio",
+   "rigido": "estricto",
+   "servidor": "servidor"
   },
   "config": {
    "acesso": "acceso",
@@ -3251,6 +3297,7 @@
   "pt\t&help debug",
   "pt\t&help reset",
   "pt\t&help privacidade",
+  "pt\t&help caso",
   "pt\t&help automod filtro",
   "pt\t&help automod sentinela",
   "pt\t&help automod sentinela sensibilidade",
@@ -3398,6 +3445,7 @@
   "en\t&help debug",
   "en\t&help reset",
   "en\t&help privacidade",
+  "en\t&help caso",
   "en\t&help automod filtro",
   "en\t&help automod sentinela",
   "en\t&help automod sentinela sensibilidade",

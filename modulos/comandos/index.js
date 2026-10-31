@@ -99,6 +99,7 @@ import servidores from "./servidores.js";
 import debug from "./debug.js";
 import reset from "./reset.js";
 import privacidade from "./privacidade.js";
+import caso from "./caso.js";   // (31 out 2026, P3a) a fila de revisão do dono
 
 // A ordem desta lista é a ordem das rotas e da lista de gerenciáveis do `&comando`.
 export const REGISTRO = [
@@ -107,6 +108,7 @@ export const REGISTRO = [
   game, autorole, staff, boasvindas, adeus, fuso, voz, musica, webhook, rolar,
   ticket, economia, entretenimento, servidor, help, sobre, personalidade,
   config, servidores, debug, reset, privacidade,
+  caso,
 ].flat();
 
 // ── O que só depende dos nomes (o aliases.js usa; não toca nos handlers) ──

@@ -11872,8 +11872,18 @@ editados.length = 0; enviados.length = 0;
 res = await av.verificar({ ctx: ctxAv(cfgAv()), server: servidor("S8"), userId: "NOVO", avatar: { id: "FOTO_TERNO" } });
 ok(res?.apitou === false && !editados.length && !enviados.length, "  → e pela checagem inteira: ninguém silenciado, nenhum alerta");
 descricao = "Close de genitália masculina."; risco = false; editados.length = 0; enviados.length = 0;
+// (31 out 2026, P3a) certeza média → a fila do dono (DM), sem punir e sem chamar a staff (decisão do dono:
+// nada depende da staff); sem a fila no pacote, o caminho antigo ("para conferir") continua
+const casosAv = [], czAv = await import("./modulos/moderacao/certeza.js");
+const filaAntesAv = czAv._trocarFila({ registrarCaso: (c) => { casosAv.push(c); return { codigo: "C1", herdado: null }; }, vereditoParecido: () => null, limiar: (_c, p) => p, amostrar: () => false });
 res = await av.verificar({ ctx: ctxAv(cfgAv()), server: servidor("S8"), userId: "NOVO", avatar: { id: "FOTO_SEM_VOTO" } });
-ok(res?.suspeita && !editados.length && enviados.some((e) => /para conferir/.test(e.title) && /não confirmou/.test(e.description)), "★ termo explícito sem o voto do modelo: só avisa a staff (\"para conferir\"), não silencia");
+ok(res?.suspeita && !editados.length && !enviados.length && casosAv.length === 1 && casosAv[0].certeza === "media" && casosAv[0].acao === "nenhuma"
+  && casosAv[0].tipo === "perfil-imagem" && casosAv[0].categoria === "sexual" && casosAv[0].evidencia.link === "https://cdn.stoatusercontent.com/avatars/FOTO_SEM_VOTO",
+  "★ termo explícito sem o voto do modelo: certeza média → fila do dono (com o link na origem); ninguém silenciado, staff não chamada");
+czAv._trocarFila(null);
+res = await av.verificar({ ctx: ctxAv(cfgAv()), server: servidor("S8"), userId: "NOVO", avatar: { id: "FOTO_SEM_VOTO_2" } });
+ok(res?.suspeita && !editados.length && enviados.some((e) => /para conferir/.test(e.title) && /confira o perfil/.test(e.description)), "  → sem a fila: só avisa a staff (\"para conferir\"), não silencia");
+czAv._trocarFila(filaAntesAv);
 // sem permissão: o erro do Stoat em texto de gente, e um alerta só (o canal de alerta É o de log)
 risco = true; enviados.length = 0;
 const semPerm = { ...servidor("S9"), fetchMember: async (u) => ({ id: { server: "S9", user: u }, edit: async () => { throw JSON.stringify({ type: "MissingPermission", permission: "TimeoutMembers", location: "crates/core/permissions/src/models/mod.rs:80:17" }); } }) };
@@ -11887,11 +11897,18 @@ analises.length = 0;
 ok((await av.aoTrocarPerfil({ id: "NOVO", avatar: { id: "FOTO2" } }, { avatar: { _id: "FOTO2" } }, { client: { servers: new Map() }, criarContexto: () => ctxAv(cfgAv()) })).length === 0
   && !analises.length, "★ presença (online/offline) chega como userUpdate — sem foto nova, nada");
 descricao = "Foto pornográfica.";
-const SA = servidor("SA", { membros: ["TROCOU"] }), SB = servidor("SB", { membros: [] });
+// (31 out 2026, P3a) onde a pessoa está vem SÓ do cache de membros — nada de fetchMember por evento:
+// SB também a tem como membro na API, mas fora do cache ela não é checada (nem consultada) ali
+const buscadosAv = [];
+const comContaAv = (sv) => ({ ...sv, fetchMember: async (u) => { buscadosAv.push(sv.id); return sv.fetchMember(u); } });
+const SA = comContaAv(servidor("SA", { membros: ["TROCOU"] })), SB = comContaAv(servidor("SB", { membros: ["TROCOU"] }));
+const cacheAv = { getByKey: ({ server, user }) => (server === "SA" && user === "TROCOU" ? { id: { server, user }, roles: [] } : undefined) };
 editados.length = 0;
 res = await av.aoTrocarPerfil({ id: "TROCOU", avatar: { id: "FOTO3", tag: "avatars" } }, { avatar: { _id: "FOTO_VELHA" } },
-  { client: { servers: new Map([["SA", SA], ["SB", SB]]) }, criarContexto: () => ctxAv(cfgAv()) });
-ok(res.length === 1 && editados.some((x) => x.id === "SA" && x.u === "TROCOU") && !editados.some((x) => x.id === "SB"), "★ trocou a foto do perfil: checa nos servidores onde a pessoa está");
+  { client: { servers: new Map([["SA", SA], ["SB", SB]]), serverMembers: cacheAv }, criarContexto: () => ctxAv(cfgAv()) });
+ok(res.length === 1 && editados.some((x) => x.id === "SA" && x.u === "TROCOU") && !editados.some((x) => x.id === "SB")
+  && !buscadosAv.includes("SB") && buscadosAv.filter((x) => x === "SA").length === 1,
+  "★ trocou a foto do perfil: checa nos servidores onde a pessoa está, pelo cache de membros (o único fetchMember é o do timeout em SA)");
 ok(enviados.some((e) => /trocou a foto/.test(e.description ?? "")), "  → e o alerta diz que foi troca");
 ok(await av.aoTrocarNoServidor({ id: { server: "SA", user: "TROCOU" }, server: SA, avatar: { id: "X" } }, { avatar: { _id: "X" } }, ctxAv(cfgAv())) === null, "  → foto de servidor igual à de antes: nada");
 editados.length = 0;
@@ -11948,8 +11965,10 @@ ok(config.automod.antiAssuntos.acoes.politica === "off", "  → `off` desliga o 
 await am$("sentinela avatar on");
 await am$("sentinela avatar acao banir");
 ok(config.automod.antiAvatar.acao === "banir" && config.automod.antiAvatar.enabled === true, "★ &automod sentinela avatar acao banir");
-await am$("sentinela avatar tempo 2h");
-ok(config.automod.antiAvatar.tempo === "2h" && av.tempoDoAvatar(config.automod.antiAvatar) === 2 * 3600e3, "  → tempo do silêncio");
+// (31 out 2026, P3a) antes: `tempo 2h` mudava o silêncio. Agora o silêncio do perfil dura até a pessoa
+// trocar o que apitou: o `tempo` explica isso e não mexe no valor salvo (mais exigente: a resposta e o valor)
+t = await am$("sentinela avatar tempo 2h");
+ok(/até a pessoa trocar/.test(t) && config.automod.antiAvatar.tempo === "24h" && av.tempoDoAvatar(config.automod.antiAvatar) === 24 * 3600e3, "  → tempo do silêncio: \"até trocar\", sem mudar o salvo");
 t = await am$("sentinela avatar acao explodir");
 ok(/\n❌ Ação: alertar, silenciar, expulsar ou banir · `&help automod`$/.test(t) && config.automod.antiAvatar.acao === "banir", "  → ação inválida não muda nada");   // (31 out 2026, P2) uma linha + &help
 await am$("sentinela avatar off");
@@ -12241,8 +12260,9 @@ await faz("&automod sentinel topics sensitivity high");
 await faz("&automod sentinel topics ai off");
 ok(cfg().automod.antiAssuntos.sensibilidade === "alta" && cfg().automod.antiAssuntos.ia === false, "  → topics sensitivity high · ai off");
 await faz("&automod sentinel avatar action kick");
-await faz("&automod sentinel avatar time 2h");
-ok(cfg().automod.antiAvatar.acao === "expulsar" && cfg().automod.antiAvatar.tempo === "2h", "★ &automod sentinel avatar action kick · time 2h");
+// (31 out 2026, P3a) `time` responde em inglês que o silêncio é "até trocar" e não muda o salvo
+const tempoEn = await faz("&automod sentinel avatar time 2h");
+ok(cfg().automod.antiAvatar.acao === "expulsar" && cfg().automod.antiAvatar.tempo !== "2h" && /until the person changes/.test(tempoEn), "★ &automod sentinel avatar action kick · time → \"until changed\"");
 let t = await faz("&automod sentinel punishment stack");
 ok(["antiScam", "antiOdio", "antiImagem", "antiAssuntos", "antiAvatar"].every((k) => cfg().automod[k].punicao?.modo === "acumular") && /`stack`/.test(t), "★ &automod sentinel punishment stack (e a resposta diz `stack`)");
 await faz("&automod punishment mode confirm");
@@ -20761,11 +20781,15 @@ await t("★ toda chave do padraoServidor tem rótulo pt/en/es e aparece na tela
     assert.doesNotMatch(txt, /undefined|\[object Object\]/);
   }
 });
-await t("★ regressão: ✓/🟢 em imagens e foto de perfil sem o modelo de visão; o alerta do sentinela vai ao LOG", () => {
+await t("★ regressão: ✓/🟢 em imagens sem o modelo de visão (o perfil segue vivo, só o texto); o alerta do sentinela vai ao LOG", () => {
   const cfg = structuredClone(store.padraoServidor);
   cfg.log.canalId = U(9);
   const txt = telaDoConfig(cfg, { lang: "pt" }).linhas.join("\n");
-  assert.match(txt, /⚫ \*\*Imagens\*\*/); assert.match(txt, /⚫ \*\*Foto de perfil\*\*/);
+  // (31 out 2026, P3a) antes: "⚫ **Foto de perfil**" sem visão. Agora o perfil inteiro tem texto
+  // (bio, nome, status), que não precisa do modelo de visão: segue 🟢 e diz "(só o texto)" — e o
+  // silêncio é "até trocar", então o `tempo` antigo não aparece na tela.
+  assert.match(txt, /⚫ \*\*Imagens\*\*/); assert.match(txt, /🟢 \*\*Perfil\*\*[^\n]*\(só o texto\)/);
+  assert.doesNotMatch(txt, /Foto de perfil|silêncio `24h`/);
   assert.match(txt, /alertas em \(o log\)/);
   assert.doesNotMatch(txt, /canal da mensagem/);
   process.env.LLM_MODEL_VISAO = "x";
@@ -22989,6 +23013,2066 @@ if (principal) {
 }
 
 console.log(`\nP2 MODERAÇÃO: ${ok} ok, ${falhou} falha(s)`);
+process.exit(falhou ? 1 : 0);
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+// p3a-fila — P3a (31 out 2026): a fila de revisão do dono do bot (revisao.js),
+// o &caso, o treino (herança por dHash/trigrama, limiar recalculado à noite),
+// o resumo diário, o export e a retenção. Unidade num banco próprio; depois o
+// bot inteiro (Stoat de mentira): DM ao dono, ✅/❌ só dele e só na DM.
+// ════════════════════════════════════════════════════════════════════════════
+SUITES["p3a-fila"] = async () => {
+const fs = (await import("node:fs")).default;
+const assert = (await import("node:assert")).default;
+const { DatabaseSync } = await import("node:sqlite");
+const DB_UNI = "/tmp/p3a-fila-uni.db", DB = "/tmp/p3a-fila.db";
+for (const f of [DB_UNI, DB, "/tmp/p3a-fila.json"].flatMap((x) => [x, x + "-wal", x + "-shm"])) fs.rmSync(f, { force: true });
+const U = (n) => `01KNXC${String(n).padStart(20, "0")}`;
+const DONO = U(1), OUTRO = U(2), MOD = U(3), ANA = U(4), BIA = U(5);
+const SID = U(100), SID2 = U(200), SID3 = U(300);
+Object.assign(process.env, { BOT_TOKEN: "tok", DB_PATH: DB, CONFIG_PATH: "/tmp/p3a-fila.json", SUPER_ADMINS: DONO, LOG_SEGREDO: "segredo-de-teste" });
+for (const v of ["IA_MODO", "IA", "CHAT_SERVIDORES", "IA_SERVICO_URL", "LLM_URL", "REVISAO_POR_DIA", "REVISAO_HORA", "REVISAO_AMOSTRA", "RELATORIO_SERVIDOR"]) delete process.env[v];
+globalThis.fetch = async () => ({ ok: false, status: 503, text: async () => "", json: async () => ({}), headers: new Map() });
+
+let ok = 0, falhou = 0;
+const t = async (nome, fn) => { try { await fn(); console.log(`  ✅ ${nome}`); ok++; } catch (e) { console.log(`  ❌ ${nome}\n     ${String(e?.stack ?? e).split("\n").slice(0, 6).join("\n     ")}`); falhou++; } };
+const quieto = async (fn) => { const o = [console.log, console.info, console.warn, console.error]; console.log = console.info = console.warn = console.error = () => {}; try { return await fn(); } finally { [console.log, console.info, console.warn, console.error] = o; } };
+const capturar = async (fn) => { const linhas = []; const o = [console.log, console.info, console.warn, console.error]; console.log = console.info = console.warn = console.error = (...a) => linhas.push(a.map(String).join(" ")); try { await fn(); } finally { [console.log, console.info, console.warn, console.error] = o; } return linhas.join("\n"); };
+const comEnv = async (vars, fn) => { const antes = {}; for (const k of Object.keys(vars)) { antes[k] = process.env[k]; if (vars[k] === undefined) delete process.env[k]; else process.env[k] = vars[k]; }
+  try { return await fn(); } finally { for (const [k, v] of Object.entries(antes)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; } } };
+
+const db = await import("./modulos/core/db.js");
+await quieto(() => db.abrirBanco(DB_UNI));
+const rev = await import("./modulos/moderacao/revisao.js");
+const cru = new DatabaseSync(DB_UNI);
+// (31 out 2026, P3a) a fila desligada (sem `configurar`) não grava nada: os testes de unidade ligam a fila sem cliente e sem timer
+const limpar = () => { db.filaPorEstado("candidato"); for (const tb of ["revisao_casos", "revisao_limiares", "revisao_servidores", "revisao_estado"]) cru.exec(`DELETE FROM ${tb}`); rev._zerar(); rev._ligarParaTestes(); };
+const DIA = 86400e3, AGORA = Date.UTC(2026, 9, 31, 12, 0, 0);
+const caso = (x = {}) => ({ tipo: "perfil-imagem", categoria: "sexual", serverId: SID, userId: ANA, origem: "detector", certeza: "media", nota: 0.7, acao: "nenhuma", evidencia: {}, detector: "teste", ...x });
+const reg = (x = {}, agora = AGORA) => rev.registrarCaso(caso(x), { agora });
+const linha = (codigo) => db.filaCaso(codigo);
+
+console.log("── 1. registrar ──");
+await t("★ registrarCaso devolve um código curto (sem dado pessoal) e guarda o caso", () => {
+  limpar();
+  const r = reg({ evidencia: { link: "https://cdn.stoatusercontent.com/avatars/" + U(999), hash: "C37379279F3D6633" } });
+  assert.match(r.codigo, rev.CODIGO);
+  assert.equal(r.herdado, null);
+  assert.ok(!/[AEIOU]/.test(r.codigo) && /\d/.test(r.codigo), r.codigo);
+  const l = linha(r.codigo);
+  assert.equal(l.tipo, "perfil-imagem"); assert.equal(l.categoria, "sexual"); assert.equal(l.userId, ANA); assert.equal(l.serverId, SID);
+  assert.equal(l.hash, "c37379279f3d6633");
+  assert.match(l.servidor, /^~[0-9a-f]{10}$/);
+  assert.ok(!l.servidor.includes(SID));
+  assert.equal(l.link, "https://cdn.stoatusercontent.com/avatars/" + U(999));
+  const outro = reg(); assert.notEqual(outro.codigo, r.codigo);
+});
+await t("★ o trecho passa pelo textoDeFora (≤ 300, sem @everyone) e o link que não é do Stoat é descartado", () => {
+  limpar();
+  const r = reg({ evidencia: { trecho: "@everyone " + "x".repeat(900), link: "https://golpe.example/a.png" } });
+  const l = linha(r.codigo);
+  assert.ok(l.trecho.length <= 300, String(l.trecho.length));
+  assert.doesNotMatch(l.trecho, /(^|\s)@everyone\b/);
+  assert.equal(l.link, null);
+  for (const ruim of ["http://cdn.stoatusercontent.com/x", "https://user:senha@cdn.stoatusercontent.com/x", "javascript:alert(1)", "https://stoatusercontent.com.golpe.io/x"]) assert.equal(rev.linkDeOrigem(ruim), null, ruim);
+  assert.ok(rev.linkDeOrigem("https://autumn.stoat.chat/attachments/" + U(9)));
+});
+await t("★ entrada inválida (tipo, origem, certeza, ação, categoria) → código null e linha no log; ID que não é ID não é guardado", async () => {
+  limpar();
+  for (const ruim of [{ tipo: "video" }, { origem: "usuario" }, { certeza: "total" }, { acao: "banido" }, { categoria: "Sexual Explícito!" }]) {
+    let r;
+    const log = await capturar(() => { r = reg(ruim); });
+    assert.deepEqual(r, { codigo: null, herdado: null }, JSON.stringify(ruim));
+    assert.match(log, /\[REVISAO\] caso recusado/);
+  }
+  const r = reg({ userId: "não é id", canalId: "<#x>", serverId: "../../etc" });
+  const l = linha(r.codigo);
+  assert.equal(l.userId, null); assert.equal(l.canalId, null); assert.equal(l.serverId, null); assert.equal(l.servidor, null);
+});
+await t("★ nada de exceção para quem chama: banco fechado/erro vira log e { codigo: null }", async () => {
+  limpar();
+  let r;
+  const log = await capturar(() => { r = rev.registrarCaso(null); });
+  assert.deepEqual(r, { codigo: null, herdado: null });
+  assert.match(log, /^\[REVISAO:registrar\]/);
+});
+
+console.log("── 2. quem entra na fila ──");
+await t("★ média/baixa, staff e discordância → fila; certeza alta → só registro (amostra); amostra → amostra", () => {
+  limpar();
+  const est = (x) => linha(reg(x).codigo).estado;
+  assert.equal(est({ certeza: "media" }), "candidato");
+  assert.equal(est({ certeza: "baixa", nota: 0.4 }), "candidato");
+  assert.equal(est({ origem: "staff", tipo: "staff", certeza: null, nota: null, acao: "punido" }), "candidato");
+  assert.equal(est({ origem: "discordancia", certeza: "media" }), "candidato");
+  // (31 out 2026, P3a) antes: certeza alta do detector sempre virava "registro". agora: só a que o sorteio
+  // da amostra pega vira "registro"; a não sorteada não é guardada (código null) — o herdado ainda vem
+  assert.equal(linha(rev.registrarCaso(caso({ certeza: "alta", nota: 0.95, acao: "punido" }), { agora: AGORA, sorteio: () => 0 }).codigo).estado, "registro");
+  assert.deepEqual(rev.registrarCaso(caso({ certeza: "alta", nota: 0.95, acao: "punido" }), { agora: AGORA, sorteio: () => 0.5 }), { codigo: null, herdado: null });
+  assert.equal(est({ origem: "amostra", certeza: null, nota: 0.1 }), "amostra");
+});
+await t("★ a ação da staff é só sinal: a fila não pune (nenhum gancho roda ao registrar)", async () => {
+  limpar();
+  let chamou = 0; rev.quandoJulgado(() => { chamou++; });
+  reg({ origem: "staff", tipo: "staff", acao: "punido" });
+  assert.equal(chamou, 0);
+});
+
+console.log("── 3. a amostra ──");
+await t("★ amostrar: fração pequena (REVISAO_AMOSTRA), teto por servidor e por dia, sem servidor → false", async () => {
+  limpar();
+  assert.equal(rev.amostrar({ serverId: SID }, { agora: AGORA, sorteio: () => 0.5 }), false);   // 0,5 ≥ 0,002
+  assert.equal(rev.amostrar({ serverId: SID }, { agora: AGORA, sorteio: () => 0 }), true);
+  assert.equal(rev.amostrar({}, { agora: AGORA, sorteio: () => 0 }), false);
+  for (let i = 0; i < rev.AMOSTRA_TETO_SERVIDOR; i++) assert.ok(reg({ origem: "amostra" }).codigo);
+  assert.equal(rev.amostrar({ serverId: SID }, { agora: AGORA, sorteio: () => 0 }), false, "teto do servidor");
+  assert.deepEqual(reg({ origem: "amostra" }), { codigo: null, herdado: null }, "registrarCaso respeita o teto também");
+  assert.equal(rev.amostrar({ serverId: SID2 }, { agora: AGORA, sorteio: () => 0 }), true, "outro servidor tem o seu");
+  assert.equal(rev.amostrar({ serverId: SID }, { agora: AGORA + DIA, sorteio: () => 0 }), true, "no dia seguinte zera");
+  await comEnv({ REVISAO_AMOSTRA: "0" }, () => assert.equal(rev.amostrar({ serverId: SID3 }, { agora: AGORA, sorteio: () => 0 }), false));
+  // fração inválida (> 0,1): o detector nunca quebra — false e a linha no log
+  const log = await capturar(() => comEnv({ REVISAO_AMOSTRA: "0.5" }, () => assert.equal(rev.amostrar({ serverId: SID3 }, { agora: AGORA, sorteio: () => 0 }), false)));
+  assert.match(log, /\[REVISAO:amostrar\].*REVISAO_AMOSTRA/);
+});
+await t("★ teto diário das amostras somando todos os servidores", () => {
+  limpar();
+  let n = 0;
+  for (let s = 0; s < 30; s++) for (let i = 0; i < 3; i++) if (reg({ origem: "amostra", serverId: U(5000 + s) }).codigo) n++;
+  assert.equal(n, rev.AMOSTRA_TETO_DIA);
+});
+
+console.log("── 4. a escolha do dia ──");
+await t("★ teto diário (REVISAO_POR_DIA): no máximo N por dia, contando os já enviados hoje", async () => {
+  limpar();
+  for (let i = 0; i < 15; i++) reg({ nota: 0.5 + i / 100 });
+  assert.equal(rev.escolherDoDia({ agora: AGORA }).length, 10);
+  await comEnv({ REVISAO_POR_DIA: "3" }, () => {
+    assert.equal(rev.escolherDoDia({ agora: AGORA }).length, 3);
+    const [a] = db.filaPorEstado("candidato");
+    db.filaAtualizar(a.codigo, { estado: "enviado", enviadoEm: AGORA - 1000 });
+    assert.equal(rev.escolherDoDia({ agora: AGORA }).length, 2, "um já foi hoje");
+    assert.equal(rev.escolherDoDia({ agora: AGORA + DIA }).length, 3, "amanhã o teto volta");
+  });
+  await comEnv({ REVISAO_POR_DIA: "0" }, () => assert.throws(() => rev.porDia(), /REVISAO_POR_DIA/));
+  await comEnv({ REVISAO_POR_DIA: "dez" }, () => assert.throws(() => rev.porDia(), /REVISAO_POR_DIA/));
+});
+await t("★ ordem por dúvida: nota mais perto do limiar primeiro; staff/discordância sem nota no topo; amostra com vaga reservada", async () => {
+  limpar();
+  rev.limiar("sexual", 0.8);   // o detector anotou o padrão dele
+  const longe = reg({ nota: 0.3 }).codigo, perto = reg({ nota: 0.78 }).codigo, meio = reg({ nota: 0.6 }).codigo;
+  const staff = reg({ origem: "staff", tipo: "staff", nota: null, certeza: null, acao: "punido" }).codigo;
+  const amostra = reg({ origem: "amostra", certeza: null, nota: 0.1, serverId: SID2 }).codigo;
+  await comEnv({ REVISAO_POR_DIA: "5" }, () => {
+    const e = rev.escolherDoDia({ agora: AGORA, sorteio: () => 0 }).map((c) => c.codigo);
+    assert.deepEqual(e, [staff, perto, meio, longe, amostra]);
+  });
+  await comEnv({ REVISAO_POR_DIA: "3" }, () => {
+    const e = rev.escolherDoDia({ agora: AGORA, sorteio: () => 0 }).map((c) => c.codigo);
+    assert.deepEqual(e, [staff, perto, amostra], "a amostra entra mesmo com a fila cheia de dúvida");
+  });
+});
+await t("★ a amostra pega no máximo um caso por servidor no dia, e inclui os de certeza alta (mede a faixa alta)", async () => {
+  limpar();
+  const a1 = reg({ origem: "amostra", certeza: null, serverId: SID }).codigo;
+  reg({ origem: "amostra", certeza: null, serverId: SID });
+  // (31 out 2026, P3a) a certeza alta só é guardada quando o sorteio da amostra a pega: aqui, sorteada
+  const alta = rev.registrarCaso(caso({ certeza: "alta", nota: 0.97, acao: "punido", serverId: SID2 }), { agora: AGORA, sorteio: () => 0 }).codigo;
+  await comEnv({ REVISAO_POR_DIA: "10" }, () => {
+    const e = rev.escolherDoDia({ agora: AGORA, sorteio: () => 0.99 }).map((c) => c.codigo);
+    assert.equal(e.length, 2, e.join());
+    assert.ok(e.includes(alta));
+    assert.equal(e.filter((c) => linha(c).serverId === SID).length, 1);
+    assert.ok(e.includes(a1) || e.length === 2);
+  });
+});
+await t("caso com mais de 14 dias não é escolhido", () => {
+  limpar();
+  reg({}, AGORA - 15 * DIA);
+  assert.equal(rev.escolherDoDia({ agora: AGORA }).length, 0);
+});
+
+console.log("── 5. a herança ──");
+const julgarJa = async (x, veredito) => { const r = reg(x); await rev.julgar(r.codigo, veredito, { agora: AGORA }); return r.codigo; };
+await t("★ dHash: distância de Hamming ≤ 6 herda o veredito; 7+ não; outra categoria não", async () => {
+  limpar();
+  await julgarJa({ evidencia: { hash: "c37379279f3d6633" } }, "certo");
+  assert.equal(rev.distanciaHash("c37379279f3d6633", "c37379279f3d6630"), 2);
+  assert.equal(rev.vereditoParecido({ categoria: "sexual", hash: "c37379279f3d6630" }), "certo");
+  assert.equal(rev.vereditoParecido({ categoria: "sexual", hash: "c37379279f3d66cc" }), null, "8 bits");
+  assert.equal(rev.distanciaHash("c37379279f3d6633", "c37379279f3d664c"), 7);
+  assert.equal(rev.vereditoParecido({ categoria: "sexual", hash: "c37379279f3d664c" }), null, "7 bits");
+  assert.equal(rev.vereditoParecido({ categoria: "odio", hash: "c37379279f3d6633" }), null);
+  const r = reg({ certeza: "baixa", evidencia: { hash: "c37379279f3d6631" } });
+  assert.equal(r.herdado, "certo");
+  const l = linha(r.codigo);
+  assert.equal(l.estado, "herdado");
+  assert.equal(l.userId, null, "o herdado não guarda quem");
+  assert.equal(l.trecho, null);
+});
+await t("★ sha256 (e outro formato de hash) só casa igual", async () => {
+  limpar();
+  const sha = "a2213b462b39303f3aba0c4fbcd9beca06c10aaf6e3a75e335cce1bd9083ccdc";
+  await julgarJa({ tipo: "perfil-texto", categoria: "arte-texto", evidencia: { hash: sha } }, "certo");
+  assert.equal(rev.vereditoParecido({ categoria: "arte-texto", hash: sha }), "certo");
+  assert.equal(rev.vereditoParecido({ categoria: "arte-texto", hash: sha.replace(/c$/, "d") }), null);
+});
+await t("★ texto: trigramas parecidos (MinHash) herdam; texto diferente não; a impressão não contém o texto", async () => {
+  limpar();
+  const base = "vocês são todos uns lixos e eu vou acabar com esse servidor hoje à noite";
+  await julgarJa({ tipo: "assunto", categoria: "ataque", evidencia: { trecho: base } }, "certo");
+  assert.equal(rev.vereditoParecido({ categoria: "ataque", texto: "Vocês são todos uns lixos e eu vou acabar com esse servidor hoje a noite!!" }), "certo");
+  assert.equal(rev.vereditoParecido({ categoria: "ataque", texto: "alguém sabe que horas começa o evento de hoje?" }), null);
+  const imp = rev.impressaoDeTexto(base);
+  assert.match(imp, /^m1:[0-9a-f]{512}$/);
+  assert.ok(!imp.includes("lixo"));
+  assert.ok(rev.semelhancaTexto(imp, rev.impressaoDeTexto(base)) === 1);
+  assert.ok(rev.semelhancaTexto(imp, rev.impressaoDeTexto("outra frase sem nada a ver com a primeira")) < 0.3);
+  assert.equal(rev.impressaoDeTexto("oi"), null);
+  // o texto inteiro (`evidencia.texto`) só serve para a impressão: não é guardado
+  const r = reg({ tipo: "assunto", categoria: "zoeira", evidencia: { texto: "um texto inteiro que não pode ser guardado" } });
+  const l = linha(r.codigo);
+  assert.equal(l.trecho, null);
+  assert.ok(!JSON.stringify(l).includes("não pode ser guardado"));
+  assert.match(l.impressao, /^m1:/);
+});
+await t("★ \"errou\" também é herdado (o detector não pune o que o dono disse que é engano); o veredito mais novo vence", async () => {
+  limpar();
+  const c = await julgarJa({ evidencia: { hash: "0000000000000000" } }, "errou");
+  assert.equal(rev.vereditoParecido({ categoria: "sexual", hash: "0000000000000001" }), "errou");
+  await rev.julgar(c, "certo", { agora: AGORA + 10 });
+  assert.equal(rev.vereditoParecido({ categoria: "sexual", hash: "0000000000000001" }), "certo", "o dono mudou de ideia");
+  const c2 = await julgarJa({ evidencia: { hash: "0000000000000003" } }, "errou");
+  assert.ok(c2);
+  assert.equal(rev.vereditoParecido({ categoria: "sexual", hash: "0000000000000003" }), "errou", "o mais parecido (distância 0) vence");
+});
+await t("★ violação = (dono disse certo) === (o bot alegou): amostra do que o bot não puniu, com ✅, NÃO é violação", async () => {
+  limpar();
+  const a = reg({ origem: "amostra", certeza: null, acao: "nenhuma", evidencia: { hash: "ffff000000000000" } }).codigo;
+  const j = await rev.julgar(a, "certo", { agora: AGORA });
+  assert.equal(j.violacao, 0);
+  assert.equal(rev.vereditoParecido({ categoria: "sexual", hash: "ffff000000000000" }), "errou");
+  const b = reg({ origem: "amostra", certeza: null, acao: "nenhuma", evidencia: { hash: "00ff000000000000" } }).codigo;
+  assert.equal((await rev.julgar(b, "errou", { agora: AGORA })).violacao, 1, "o bot deixou passar");
+  const c = reg({ certeza: "media", evidencia: {} }).codigo;
+  assert.equal((await rev.julgar(c, "certo", { agora: AGORA })).violacao, 1);
+  assert.equal(await rev.julgar(c, "talvez"), null);
+  assert.equal(await rev.julgar("B2CD3", "certo"), null);
+});
+await t("★ quandoJulgado: o detector recebe o veredito com os IDs (ex.: punir no ✅ o perfil de certeza média)", async () => {
+  limpar();
+  const recebidos = [];
+  rev.quandoJulgado((x) => { recebidos.push(x); });
+  rev.quandoJulgado(() => { throw new Error("gancho quebrado"); });
+  const r = reg({ evidencia: { link: "https://cdn.stoatusercontent.com/avatars/" + U(7), hash: "1234123412341234" } });
+  await quieto(() => rev.julgar(r.codigo, "certo", { agora: AGORA }));
+  assert.equal(recebidos.length, 1);
+  assert.equal(recebidos[0].userId, ANA); assert.equal(recebidos[0].serverId, SID);
+  assert.equal(recebidos[0].veredito, "certo"); assert.equal(recebidos[0].violacao, true);
+  assert.equal(recebidos[0].evidencia.hash, "1234123412341234");
+});
+
+console.log("── 6. o limiar da noite ──");
+const sinteticos = (n, f) => Array.from({ length: n }, (_, i) => f(i, n));
+await t("★ calcularLimiar: o menor t com precisão ≥ 95% na faixa (com ≥ 10 casos) — conta pura", () => {
+  // notas 0,00..0,99; violação a partir de 0,70, com um engano em 0,75
+  const casos = sinteticos(100, (i) => ({ nota: i / 100, violacao: i >= 70 && i !== 75 }));
+  const r = rev.calcularLimiar(casos);
+  assert.equal(r.alvo, 0.7);
+  assert.ok(r.precisao >= rev.PRECISAO_ALVO, String(r.precisao));
+  assert.ok(rev.precisaoNaFaixa(casos, r.alvo - 0.01) < rev.PRECISAO_ALVO || r.alvo === rev.LIMIAR_MIN);
+});
+await t("★ menos de 20 julgados → nada muda (null); limites seguros [0,5; 0,98]; passo máximo 0,05 por noite", () => {
+  assert.equal(rev.calcularLimiar(sinteticos(19, (i) => ({ nota: i / 19, violacao: true }))), null);
+  const tudoViolacao = sinteticos(50, (i) => ({ nota: i / 50, violacao: true }));
+  assert.equal(rev.calcularLimiar(tudoViolacao).alvo, rev.LIMIAR_MIN, "nunca abaixo de 0,5");
+  const nadaViolacao = sinteticos(50, (i) => ({ nota: i / 50, violacao: false }));
+  assert.equal(rev.calcularLimiar(nadaViolacao).alvo, rev.LIMIAR_MAX, "sem faixa que sirva: o máximo");
+  assert.equal(rev.calcularLimiar(nadaViolacao, { anterior: 0.8 }).limiar, 0.85, "anda 0,05 por noite");
+  assert.equal(rev.calcularLimiar(tudoViolacao, { padrao: 0.9 }).limiar, 0.85);
+  // empate de notas: a faixa inclui todos os iguais (não corta no meio de um empate)
+  const empate = [...sinteticos(10, () => ({ nota: 0.9, violacao: true })), ...sinteticos(10, () => ({ nota: 0.8, violacao: false })), { nota: 0.8, violacao: true }];
+  assert.equal(rev.calcularLimiar(empate).alvo, 0.9);
+});
+await t("★ limiar(): o padrão até 20 julgados; depois o calibrado; servidor rígido desce 0,1 (nunca abaixo de 0,5)", async () => {
+  limpar();
+  assert.equal(rev.limiar("odio", 0.8), 0.8);
+  for (let i = 0; i < 40; i++) { const r = reg({ tipo: "assunto", categoria: "odio", nota: i / 40 }); await rev.julgar(r.codigo, i >= 30 ? "certo" : "errou", { agora: AGORA }); }
+  assert.equal(rev.limiar("odio", 0.8), 0.8, "antes da noite, o padrão");
+  const mud = rev.recalcularLimiares(AGORA);
+  assert.deepEqual(mud.map((m) => m.categoria), ["odio"]);
+  assert.equal(rev.limiar("odio", 0.8), 0.75, "alvo 0,75, a 0,05 do padrão");
+  assert.equal(rev.limiar("outra", 0.6), 0.6);
+  rev.definirModoServidor(SID, "rigido");
+  assert.equal(rev.limiar("odio", 0.8, { serverId: SID }), 0.65);
+  assert.equal(rev.limiar("odio", 0.8, { serverId: SID2 }), 0.75);
+  assert.equal(rev.limiar("x", 0.55, { serverId: SID }), 0.5);
+  rev.definirModoServidor(SID, "padrao");
+  assert.equal(rev.limiar("odio", 0.8, { serverId: SID }), 0.75);
+  assert.equal(rev.definirModoServidor(SID, "frouxo"), false);
+  // casos que a precisão da faixa alta mede: com 95%, a faixa acima do limiar calibrado
+  const l = db.filaLimiar("odio");
+  assert.ok(l.precisao >= rev.PRECISAO_ALVO, String(l.precisao));
+  assert.equal(l.casos, 40);
+});
+await t("★ herdados e os apontados pelo dono (`perdeu`) não entram na conta do limiar", async () => {
+  limpar();
+  for (let i = 0; i < 25; i++) { const r = reg({ tipo: "assunto", categoria: "c1", nota: 0.9, evidencia: { hash: "abcdabcdabcdabcd" } }); if (i === 0) await rev.julgar(r.codigo, "certo", { agora: AGORA }); }
+  assert.equal(db.filaJulgados({ categoria: "c1" }).length, 1, "só o primeiro foi julgado; os outros herdaram");
+  assert.deepEqual(rev.recalcularLimiares(AGORA), []);
+});
+
+console.log("── 7. retenção ──");
+await t("★ trecho e link somem em 7 dias; julgado fica só com hash/impressão + veredito; não julgado some em 14 dias", async () => {
+  limpar();
+  const velho = AGORA - 8 * DIA, muito = AGORA - 15 * DIA;
+  // cada um com o seu hash e o seu texto (senão o segundo herdaria o veredito do primeiro)
+  const FRASES = { 1: "um trecho qualquer", 2: "outra frase bem diferente", 3: "terceira mensagem sem relação", 4: "quarto texto inventado agora", 5: "por fim, a quinta linha" };
+  const ev = (h) => ({ trecho: FRASES[h], link: "https://cdn.stoatusercontent.com/attachments/" + U(8), hash: h.repeat(16) });
+  const pend8 = reg({ evidencia: ev("1") }, velho).codigo;
+  const julg8 = reg({ evidencia: ev("2") }, velho).codigo; await rev.julgar(julg8, "certo", { agora: velho + 1000 });
+  const pend15 = reg({ evidencia: ev("3") }, muito).codigo;
+  const julg15 = reg({ evidencia: ev("4") }, muito).codigo; await rev.julgar(julg15, "errou", { agora: muito + 1000 });
+  const novo = reg({ evidencia: ev("5") }, AGORA).codigo;
+  const r = rev.reter(AGORA);
+  assert.deepEqual(r, { trecho: 4, limpos: 2, apagados: 1 });
+  assert.equal(linha(pend8).trecho, null); assert.equal(linha(pend8).link, null); assert.equal(linha(pend8).userId, ANA, "pendente ainda pode ser julgado");
+  for (const c of [julg8, julg15]) {
+    const l = linha(c);
+    assert.equal(l.trecho, null); assert.equal(l.link, null); assert.equal(l.userId, null); assert.equal(l.serverId, null); assert.equal(l.msgId, null);
+    assert.ok(l.hash && l.veredito && l.limpoEm);
+  }
+  assert.equal(linha(pend15), null);
+  assert.equal(linha(novo).trecho, "por fim, a quinta linha");
+  assert.deepEqual(rev.reter(AGORA), { trecho: 0, limpos: 0, apagados: 0 }, "idempotente");
+});
+await t("★ a amostra que a escolha do dia não pegou é apagada na rodada; a pessoa some dos casos quando pede", async () => {
+  limpar();
+  // (31 out 2026, P3a) a certeza alta sorteada para a amostra (a não sorteada nem é guardada)
+  const a = reg({ origem: "amostra", certeza: null }).codigo, alta = rev.registrarCaso(caso({ certeza: "alta", nota: 0.99, acao: "punido", serverId: SID2 }), { agora: AGORA, sorteio: () => 0 }).codigo;
+  const cand = reg({}).codigo;
+  assert.equal(db.filaDescartarNaoEscolhidos(AGORA + 1), 2);
+  assert.equal(linha(a), null); assert.equal(linha(alta), null); assert.ok(linha(cand));
+  assert.equal(db.filaEsquecerUsuario(ANA), 1);
+  assert.equal(linha(cand).userId, null);
+});
+
+console.log("── 8. export ──");
+await t("★ regressão: impressão com ID do Stoat (`arquivo:<id>`, a do perfil sem hash) não é guardada crua — vira resumo, e ainda casa igual", async () => {
+  limpar();
+  const imp = "arquivo:" + U(77);
+  const c = reg({ evidencia: { impressao: imp } }).codigo;
+  assert.match(linha(c).impressao, /^h1:[0-9a-f]{32}$/);
+  assert.ok(!JSON.stringify(linha(c)).includes(U(77)));
+  await rev.julgar(c, "errou", { agora: AGORA });
+  assert.equal(rev.vereditoParecido({ categoria: "sexual", impressao: imp }), "errou");
+  assert.equal(rev.vereditoParecido({ categoria: "sexual", impressao: "arquivo:" + U(78) }), null);
+  assert.equal(linha(reg({ evidencia: { impressao: "dhash:c37379279f3d6633" } }).codigo).impressao, "dhash:c37379279f3d6633", "sem ID: como veio");
+});
+await t("★ exportar: sem nome, sem ID de pessoa nem de servidor (nem pseudônimo), sem trecho nem link; imagem só como hash", async () => {
+  limpar();
+  const c1 = reg({ evidencia: { hash: "c37379279f3d6633", link: "https://cdn.stoatusercontent.com/avatars/" + U(9), trecho: "Ana Souza falou isso" }, canalId: U(50), msgId: U(51) }).codigo;
+  await rev.julgar(c1, "certo", { agora: AGORA });
+  const c2 = reg({ tipo: "assunto", categoria: "ataque", evidencia: { trecho: "texto do servidor da Ana Souza aqui" } }).codigo;
+  await rev.julgar(c2, "errou", { agora: AGORA });
+  reg({});   // não julgado: fora do export
+  const x = rev.exportar(AGORA);
+  const txt = JSON.stringify(x);
+  assert.equal(x.casos.length, 2);
+  for (const id of [ANA, SID, U(50), U(51), U(9)]) assert.ok(!txt.includes(id), "ID do Stoat");
+  assert.doesNotMatch(txt, /01KNXC/);
+  assert.doesNotMatch(txt, /~[0-9a-f]{10}/, "pseudônimo");
+  assert.doesNotMatch(txt, /Ana|Souza|stoatusercontent|trecho|userId|serverId|servidor|codigo/);
+  assert.equal(x.casos.find((c) => c.categoria === "sexual").hash, "c37379279f3d6633");
+  assert.match(x.casos.find((c) => c.categoria === "ataque").impressao, /^m1:/);
+});
+
+console.log("── 9. o timer e a rodada ──");
+await t("★ proximaRodada: na hora de REVISAO_HORA (UTC); perdeu a de hoje → logo; já rodou → amanhã", () => {
+  const h21 = Date.UTC(2026, 9, 31, 21, 0, 0);
+  assert.equal(rev.proximaRodada(AGORA, h21 - DIA, 21), h21);
+  assert.equal(rev.proximaRodada(h21 + 3600e3, h21 - DIA, 21), h21 + 3600e3 + 60e3, "a das 21 h não rodou (bot desligado)");
+  assert.equal(rev.proximaRodada(h21 + 3600e3, h21 + 5, 21), h21 + DIA);
+  assert.equal(rev.proximaRodada(AGORA, h21 - 3 * DIA, 21), AGORA + 60e3, "ontem também não rodou");
+});
+await t("★ o timer só liga com caso esperando (e nunca sem configurar)", async () => {
+  limpar();
+  assert.equal(rev.armar(AGORA), false, "sem configurar");
+  rev.configurar({ client: null, enviar: async () => null });
+  assert.equal(rev.timerLigado(), false, "fila vazia: nada ligado");
+  reg({});
+  assert.equal(rev.timerLigado(), true);
+  rev.desligar();
+  assert.equal(rev.timerLigado(), false);
+  reg({ origem: "amostra", certeza: null });
+  assert.equal(rev.timerLigado(), false, "desligado não religa sozinho");
+});
+await t("★ o timer fica ligado enquanto algum caso ainda tem identificação (a retenção de 7 dias precisa rodar); limpo, desliga", async () => {
+  limpar();
+  const ag = Date.now();   // o configurar() aplica a retenção pelo relógio de verdade
+  rev.configurar({ client: null, enviar: async () => null });
+  const c = reg({ evidencia: { trecho: "algo" } }, ag - 2 * DIA).codigo;
+  await rev.julgar(c, "certo", { agora: ag - 2 * DIA });
+  db.filaDefinirEstado("ultimaRodada", ag - DIA);
+  rev.desligar(); rev.configurar({ client: null, enviar: async () => null });
+  assert.equal(rev.timerLigado(), true, "julgado há 2 dias: ainda com IDs e trecho");
+  rev.desligar();
+  db.filaAtualizar(c, { criadoEm: ag - 8 * DIA });
+  rev.configurar({ client: null, enviar: async () => null });   // a retenção do boot limpa
+  assert.equal(linha(c).userId, null);
+  assert.equal(rev.timerLigado(), false, "nada vivo, nenhum veredito novo: sem timer");
+  rev.desligar();
+});
+await t("★ rodadaDiaria: retenção, limiares, resumo com o acerto medido e os casos na DM do dono (com ✅ e ❌), um por mensagem", async () => {
+  limpar();
+  const dm = { id: U(700), type: "DirectMessage", enviados: [], reacoes: [] };
+  dm.sendMessage = async (p) => { dm.enviados.push(p); const id = U(800 + dm.enviados.length); return { id, react: async (e) => { dm.reacoes.push([id, decodeURIComponent(e)]); } }; };
+  const client = { users: new Map([[DONO, { id: DONO, openDM: async () => dm }]]) };
+  rev.configurar({ client, enviar: (canal, emb) => canal.sendMessage({ embeds: [emb] }) });
+  for (let i = 0; i < 25; i++) { const r = reg({ categoria: "odio", tipo: "assunto", nota: 0.5 + i / 50 }, AGORA - 2 * DIA); await rev.julgar(r.codigo, i >= 10 ? "certo" : "errou", { agora: AGORA - DIA }); }
+  for (let i = 0; i < 12; i++) reg({ nota: 0.4 + i / 30, evidencia: { trecho: `caso ${i}` } });
+  reg({ origem: "amostra", certeza: null, serverId: SID3 });
+  const r = await rev.rodadaDiaria({ agora: AGORA });
+  rev.desligar();
+  assert.equal(r.enviados.length, 10);
+  const textos = dm.enviados.map((p) => `${p.embeds[0].title}\n${p.embeds[0].description}`);
+  assert.match(textos[0], /Fila de revisão|Review queue/);
+  assert.match(textos[0], /odio.*60%.*\(15\/25\)/s, textos[0]);
+  assert.equal(textos.length, 11, "resumo + 10 casos");
+  for (const x of textos.slice(1)) {
+    assert.match(x, /^🔎 [B-Z0-9]{5} · /);
+    assert.doesNotMatch(x, /01KNXC/, "nenhum ID na DM");
+  }
+  assert.equal(dm.reacoes.length, 20);
+  assert.deepEqual([...new Set(dm.reacoes.map((x) => x[1]))].sort(), ["✅", "❌"]);
+  assert.equal(db.filaEnviadosDesde(rev.inicioDoDia(AGORA)), 10);
+  assert.equal(db.filaContar(["amostra", "registro"]), 0, "nada de amostra sobrando depois da rodada");
+  assert.equal(Number(db.filaEstado("ultimaRodada")), AGORA);
+  const s = rev.situacao(AGORA);
+  assert.equal(s.hoje, 10); assert.equal(s.teto, 10); assert.ok(s.esperando >= 10);
+});
+await t("★ embedDoCaso: servidor por pseudônimo, link de origem (sem reenviar a imagem), trecho citado, ✅/❌ explicados, nos 3 idiomas", () => {
+  limpar();
+  const c = linha(reg({ evidencia: { link: "https://cdn.stoatusercontent.com/avatars/" + U(9), trecho: "linha 1\nlinha 2 @everyone" } }).codigo);
+  for (const [lang, re] of [["pt", /o bot acertou/], ["en", /the bot was right/], ["es", /el bot acertó/]]) {
+    const e0 = rev.embedDoCaso(c, { config: { language: lang } });
+    const e = { ...e0, description: e0.description.replace(/[\u2063\u2064]/g, "") };
+    assert.match(e.description, re, lang);
+    assert.match(e.description, /\[(abrir|open)\]\(https:\/\/cdn\.stoatusercontent\.com\/avatars\//);
+    assert.ok(!("imagem" in e) && !("media" in e), "nada de mídia anexada");
+    assert.match(e.description, /> linha 1\n> linha 2/);
+    assert.doesNotMatch(e.description, /(^|\s)@everyone\b/);
+    assert.match(e.description, /`~[0-9a-f]{10}`/);
+    assert.doesNotMatch(e.description, new RegExp(SID));
+  }
+});
+
+console.log("── 10. reações ──");
+await t("★ aoReagir: só ✅/❌, só do dono, só no canal da DM do caso; outra mensagem → false", async () => {
+  limpar();
+  const c = reg({}).codigo;
+  db.filaAtualizar(c, { estado: "enviado", dmMsgId: "MSGDM", dmCanalId: "CANALDM" });
+  assert.equal(await rev.aoReagir("OUTRA", DONO, "✅"), false);
+  assert.equal(await rev.aoReagir("MSGDM", OUTRO, "✅"), true);
+  assert.equal(linha(c).veredito, null, "outra pessoa não julga");
+  assert.equal(await rev.aoReagir("MSGDM", DONO, "✅", { canalId: "OUTROCANAL" }), true);
+  assert.equal(linha(c).veredito, null, "outro canal não julga");
+  assert.equal(await rev.aoReagir("MSGDM", DONO, "🔥"), true);
+  assert.equal(linha(c).veredito, null);
+  assert.equal(await rev.aoReagir("MSGDM", DONO, encodeURIComponent("✅"), { canalId: "CANALDM" }), true);
+  assert.equal(linha(c).veredito, "certo");
+  assert.equal(await rev.aoReagir("MSGDM", DONO, "❌️"), true);
+  assert.equal(linha(c).veredito, "errou", "a última reação vale");
+});
+await t("★ registrarPerdido (`&caso perdeu`): caso julgado do dono, vale para a herança em qualquer categoria; sem evidência → null", async () => {
+  limpar();
+  let gancho = null; rev.quandoJulgado((x) => { gancho = x; });
+  const p = await rev.registrarPerdido({ tipo: "perfil-imagem", userId: ANA, evidencia: { hash: "5555666677778888" } }, { agora: AGORA });
+  assert.equal(p.origem, "dono"); assert.equal(p.veredito, "certo"); assert.equal(p.violacao, 1);
+  assert.equal(gancho.origem, "dono"); assert.equal(gancho.userId, ANA);
+  assert.equal(rev.vereditoParecido({ categoria: "sexual", hash: "5555666677778889" }), "certo");
+  assert.equal(rev.vereditoParecido({ categoria: "qualquer", hash: "5555666677778888" }), "certo");
+  assert.equal(await rev.registrarPerdido({ tipo: "perfil-imagem", evidencia: {} }), null);
+});
+
+console.log("── 12. revisão do P3a (31 out 2026) ──");
+await t("★ certeza alta do detector: não sorteada → nada gravado (o herdado ainda vem); sorteada → reserva da amostra, com os mesmos tetos", async () => {
+  limpar();
+  const HJ = "a1b2c3d4e5f60718";
+  const j = reg({ evidencia: { hash: HJ } }).codigo; await rev.julgar(j, "certo", { agora: AGORA });
+  const n0 = cru.prepare("SELECT COUNT(*) n FROM revisao_casos").get().n;
+  const alta = (x = {}, sorteio = () => 0.5) => rev.registrarCaso(caso({ certeza: "alta", nota: 0.97, acao: "punido", ...x }), { agora: AGORA, sorteio });
+  assert.deepEqual(alta({ evidencia: { hash: HJ } }), { codigo: null, herdado: "certo" }, "o herdado é calculado mesmo sem gravar");
+  assert.deepEqual(alta({ evidencia: { hash: "0f0f0f0f0f0f0f0f" } }), { codigo: null, herdado: null });
+  assert.equal(cru.prepare("SELECT COUNT(*) n FROM revisao_casos").get().n, n0, "nada foi gravado");
+  // sorteada: até 3 por servidor por dia, somando com a amostra comum
+  assert.ok(reg({ origem: "amostra", certeza: null, serverId: SID3 }).codigo);
+  assert.ok(alta({ serverId: SID3, evidencia: { hash: "1111000011110000" } }, () => 0).codigo);
+  assert.ok(alta({ serverId: SID3, evidencia: { hash: "2222000022220000" } }, () => 0).codigo);
+  assert.deepEqual(alta({ serverId: SID3, evidencia: { hash: "3333000033330000" } }, () => 0), { codigo: null, herdado: null }, "teto do servidor");
+  assert.equal(rev.amostrar({ serverId: SID3 }, { agora: AGORA, sorteio: () => 0 }), false, "a amostra comum vê o mesmo teto");
+  assert.deepEqual(alta({ serverId: null }, () => 0), { codigo: null, herdado: null }, "sem servidor não há amostra");
+});
+await t("★ fila desligada (sem configurar, ou REVISAO_* inválido): nada gravado, amostrar false; a retenção do boot roda mesmo assim", async () => {
+  limpar();
+  const velho = AGORA - 9 * DIA;
+  const c = reg({ evidencia: { trecho: "trecho antigo" } }, velho).codigo;
+  db.filaAtualizar(c, { estado: "enviado", enviadoEm: velho, dmCanalId: "CANALDM", dmMsgId: "MSGVELHA" });
+  rev.desligar();
+  assert.deepEqual(reg({}), { codigo: null, herdado: null }, "sem configurar");
+  assert.equal(rev.amostrar({ serverId: SID }, { agora: AGORA, sorteio: () => 0 }), false);
+  assert.equal(await rev.registrarPerdido({ tipo: "perfil-imagem", userId: ANA, evidencia: { hash: "5555666677778888" } }), null);
+  const editadas = [];
+  let erro = null;
+  await comEnv({ REVISAO_POR_DIA: "0" }, async () => {
+    try { await quieto(() => rev.configurar({ client: null, enviar: async () => null, editar: async (canal, msg, emb) => { editadas.push([canal, msg, emb.description]); } })); }
+    catch (e) { erro = e; }
+  });
+  assert.match(String(erro?.message), /REVISAO_POR_DIA/, "o configurar lança (o main.js registra)");
+  await new Promise((r) => setTimeout(r, 20));
+  assert.equal(linha(c).trecho, null, "a retenção rodou no boot");
+  assert.deepEqual(editadas.map((x) => x.slice(0, 2)), [["CANALDM", "MSGVELHA"]], "e editou a DM");
+  assert.equal(linha(c).dmMsgId, null);
+  assert.deepEqual(reg({}), { codigo: null, herdado: null }, "a fila continua desligada");
+  assert.equal(rev.timerLigado(), false);
+  // o herdado ainda vem com a fila desligada
+  rev._ligarParaTestes(); const j = reg({ evidencia: { hash: "7777777777777777" } }).codigo; await rev.julgar(j, "errou", { agora: AGORA }); rev.desligar();
+  assert.deepEqual(reg({ evidencia: { hash: "7777777777777777" } }), { codigo: null, herdado: "errou" });
+});
+await t("★ retenção: julgado com 7 dias perde também o pseudônimo do servidor; herdado some em 30 dias; o que ainda aponta para a DM espera a edição", async () => {
+  limpar();
+  const j = reg({ evidencia: { hash: "1212343456567878", trecho: "x1" } }, AGORA - 8 * DIA).codigo;
+  await rev.julgar(j, "certo", { agora: AGORA - 8 * DIA });
+  assert.match(linha(j).servidor, /^~/);
+  const h31 = reg({ evidencia: { hash: "1212343456567879" } }, AGORA - 31 * DIA), h29 = reg({ evidencia: { hash: "1212343456567879" } }, AGORA - 29 * DIA);
+  assert.equal(h31.herdado, "certo");
+  assert.equal(linha(h29.codigo).servidor, null, "o herdado nasce sem o pseudônimo");
+  const pend = reg({ evidencia: { trecho: "pendente velho" } }, AGORA - 15 * DIA).codigo;
+  db.filaAtualizar(pend, { estado: "enviado", dmCanalId: "C", dmMsgId: "MPEND" });
+  rev.reter(AGORA);
+  assert.equal(linha(j).servidor, null); assert.equal(linha(j).serverId, null);
+  assert.equal(linha(h31.codigo), null, "herdado com 31 dias: apagado");
+  assert.ok(linha(h29.codigo), "herdado com 29 dias: fica");
+  assert.ok(linha(pend), "a mensagem da DM ainda não foi editada: a linha espera");
+  const ed = [];
+  rev._ligarParaTestes({ editar: async (cn, m, e) => { ed.push(e.description); } });
+  await quieto(() => rev.limparDms({ agora: AGORA }));
+  rev.reter(AGORA);
+  assert.equal(linha(pend), null, "editada a DM, o pendente de 15 dias sai");
+  assert.ok(ed.some((d) => d.includes(pend) && !/pendente velho/.test(d)));
+});
+await t("★ a DM perde o trecho e o link: com 7 dias, ou no `&privacidade apagar`; falha ao editar zera os IDs mesmo assim; a reação depois não casa", async () => {
+  limpar();
+  const ed = [];
+  let quebrar = false;
+  rev._ligarParaTestes({ editar: async (canal, msg, emb) => { if (quebrar) throw Object.assign(new Error(`mensagem ${msg} sumiu em https://x/${ANA}`), { type: "NotFound" }); ed.push({ canal, msg, emb }); } });
+  const LINK = "https://cdn.stoatusercontent.com/attachments/" + U(66);
+  const velho = reg({ evidencia: { trecho: "trecho velho secreto", link: LINK } }, AGORA - 8 * DIA).codigo;
+  db.filaAtualizar(velho, { estado: "enviado", enviadoEm: AGORA - 8 * DIA, dmCanalId: "CDM", dmMsgId: "M1" });
+  await rev.julgar(velho, "certo", { agora: AGORA - 7.5 * DIA });
+  const novo = reg({ evidencia: { trecho: "trecho novo", link: LINK } }).codigo;
+  db.filaAtualizar(novo, { estado: "enviado", enviadoEm: AGORA, dmCanalId: "CDM", dmMsgId: "M2" });
+  const daAna = reg({ userId: BIA, evidencia: { trecho: "trecho da bia", link: LINK } }).codigo;
+  db.filaAtualizar(daAna, { estado: "enviado", enviadoEm: AGORA, dmCanalId: "CDM", dmMsgId: "M3" });
+  rev.reter(AGORA);
+  await quieto(() => rev.limparDms({ agora: AGORA }));
+  assert.deepEqual(ed.map((x) => x.msg), ["M1"], "só o de 7 dias (o novo continua com o trecho até o prazo)");
+  for (const [lang, re] of [["pt", /trecho apagado/], ["en", /excerpt deleted/], ["es", /fragmento borrado/]]) assert.match(rev.embedCurto(linha(velho), { config: { language: lang } }).description, re, lang);
+  const d = ed[0].emb.description;
+  assert.equal(d, `🔒 ${velho} · sexual · ✅ — ${rev.embedCurto({ codigo: "", categoria: "", veredito: "certo" }).description.split(" — ")[1]}`);
+  assert.doesNotMatch(JSON.stringify(ed[0].emb), /trecho velho|stoatusercontent|~[0-9a-f]{10}/);
+  assert.deepEqual([linha(velho).dmMsgId, linha(velho).dmCanalId], [null, null]);
+  assert.equal(await rev.aoReagir("M1", DONO, "❌"), false, "a reação na mensagem editada não casa");
+  assert.equal(linha(velho).veredito, "certo");
+  // &privacidade apagar: a pessoa sai (e o pseudônimo), e a DM é marcada e editada na rodada
+  assert.equal(db.filaEsquecerUsuario(BIA), 1);
+  assert.equal(linha(daAna).servidor, null);
+  assert.equal(linha(daAna).dmLimpar, 1);
+  ed.length = 0;
+  await quieto(() => rev.limparDms({ agora: AGORA }));
+  assert.deepEqual(ed.map((x) => x.msg), ["M3"]);
+  assert.match(ed[0].emb.description, /sem resposta|no answer/);
+  assert.equal(linha(daAna).dmMsgId, null);
+  // falha ao editar: os IDs saem mesmo assim, e o log não leva dado pessoal
+  db.filaAtualizar(novo, { dmLimpar: 1 });
+  quebrar = true;
+  const log = await capturar(() => rev.limparDms({ agora: AGORA }));
+  assert.equal(linha(novo).dmMsgId, null);
+  assert.match(log, new RegExp(`${novo}.*NotFound`));
+  assert.doesNotMatch(log, new RegExp(`${ANA}|${BIA}|trecho novo|trecho velho|trecho da bia|https?:|sumiu`));
+});
+await t("★ escolha do dia: no máximo 3 sinais da staff por dia (contando os já enviados); o resto espera", async () => {
+  limpar();
+  const staff = Array.from({ length: 5 }, () => reg({ origem: "staff", tipo: "staff", categoria: "staff:kick", nota: null, certeza: "media", acao: "nenhuma" }).codigo);
+  const outros = Array.from({ length: 4 }, (_, i) => reg({ nota: 0.6 + i / 100 }).codigo);
+  const e = rev.escolherDoDia({ agora: AGORA }).map((c) => c.codigo);
+  assert.equal(e.filter((c) => staff.includes(c)).length, rev.STAFF_POR_DIA);
+  assert.equal(e.filter((c) => outros.includes(c)).length, 4);
+  db.filaAtualizar(staff[0], { estado: "enviado", enviadoEm: AGORA - 1000 });
+  assert.equal(rev.escolherDoDia({ agora: AGORA }).filter((c) => c.origem === "staff").length, 2, "um já foi hoje");
+  assert.equal(rev.escolherDoDia({ agora: AGORA + DIA }).filter((c) => c.origem === "staff").length, 3, "amanhã volta");
+  assert.equal(db.filaContar(["candidato"]), 8, "os que não foram esperam");
+});
+await t("★ servidor rígido nunca fica mais permissivo que o normal: limiar = max(0,5; normal − 0,1), e o certeza.js aceita [0,5; 0,98]", async () => {
+  limpar();
+  const cz = await import("./modulos/moderacao/certeza.js");
+  const antes = cz._trocarFila(rev);
+  try {
+    rev.definirModoServidor(SID, "rigido");
+    for (const [normal, rigido] of [[0.6, 0.5], [0.5, 0.5], [0.8, 0.7]]) {
+      const cat = `r${String(normal).replace(".", "")}`;
+      db.filaSalvarLimiar(cat, { limiar: normal, padrao: 0.9, casos: 25, precisao: 1 });
+      rev._zerar(); rev._ligarParaTestes();
+      assert.equal(rev.limiar(cat, 0.9, { serverId: SID }), rigido, cat);
+      assert.equal(await cz.limiarAlta(cat, 0.9, SID), rigido, `certeza.js ${cat} (antes: 0,5 caía no padrão 0,9)`);
+      assert.equal(await cz.limiarAlta(cat, 0.9, SID2), normal, `normal ${cat}`);
+      assert.ok(await cz.limiarAlta(cat, 0.9, SID) <= await cz.limiarAlta(cat, 0.9, SID2), "rígido ≤ normal");
+      assert.equal(cz.certezaDe(rigido, await cz.limiarAlta(cat, 0.9, SID)), "alta");
+    }
+    assert.equal(rev.limiar("abaixo", 0.45, { serverId: SID }), 0.45, "padrão abaixo de 0,5: o rígido não sobe");
+    // fora do intervalo da fila: o padrão do detector
+    cz._trocarFila({ limiar: () => 0.49 }); assert.equal(await cz.limiarAlta("x", 0.9), 0.9);
+    cz._trocarFila({ limiar: () => 0.99 }); assert.equal(await cz.limiarAlta("x", 0.9), 0.9);
+    cz._trocarFila({ limiar: () => 0.98 }); assert.equal(await cz.limiarAlta("x", 0.9), 0.98);
+  } finally { cz._trocarFila(antes); rev.definirModoServidor(SID, "padrao"); }
+});
+await t("★ regressão: toda impressão `arquivo:<id>` vira `h1:` (sha256), mesmo com um ID de 42 caracteres estilo nanoid", async () => {
+  limpar();
+  const NANO = "aB3_dE5-gH7_".repeat(4).slice(0, 42);
+  assert.equal(NANO.length, 42);
+  assert.ok(!/[0-9A-HJKMNP-TV-Z]{26}/i.test(NANO), "não parece ULID (o código antigo guardava cru)");
+  const imp = "arquivo:" + NANO;
+  const c = reg({ evidencia: { impressao: imp } }).codigo;
+  assert.match(linha(c).impressao, /^h1:[0-9a-f]{32}$/);
+  assert.ok(!JSON.stringify(linha(c)).includes(NANO));
+  await rev.julgar(c, "certo", { agora: AGORA });
+  assert.ok(!JSON.stringify(rev.exportar(AGORA)).includes(NANO));
+  assert.equal(rev.vereditoParecido({ categoria: "sexual", impressao: imp }), "certo", "ainda casa igual");
+  assert.equal(rev.vereditoParecido({ categoria: "sexual", impressao: "arquivo:" + NANO.replace("a", "b") }), null);
+  for (const raro of ["qualquer:coisa", "m1:abc", "dhash:xyz"]) assert.match(linha(reg({ evidencia: { impressao: raro } }).codigo).impressao, /^h1:/, raro);
+});
+await t("★ impressão de texto: a gravação (trecho já sem menções) e a consulta (texto cru, outra menção) normalizam igual", async () => {
+  limpar();
+  const as = await import("./modulos/moderacao/assuntos.js");
+  const cruTexto = `vocês <@${ANA}> são todos uns lixos e eu vou acabar com esse servidor hoje à noite`;
+  const j = reg({ tipo: "assunto", categoria: "assunto:politica", evidencia: { trecho: as.trechoDoCaso(cruTexto) } }).codigo;
+  await rev.julgar(j, "certo", { agora: AGORA });
+  assert.equal(rev.impressaoDeTexto(cruTexto), rev.impressaoDeTexto(as.trechoDoCaso(cruTexto)));
+  assert.equal(rev.impressaoDeTexto(`oi <@${ANA}> tudo bem com você`), rev.impressaoDeTexto(`oi <@${BIA}> tudo bem com você`));
+  assert.equal(rev.vereditoParecido({ categoria: "assunto:politica", texto: cruTexto.replace(ANA, BIA) }), "certo");
+  // e o texto inteiro, quando vem, é o que vale para a impressão (não o trecho cortado)
+  const longo = "palavra ".repeat(80) + "fim diferente aqui";
+  const r = reg({ tipo: "assunto", categoria: "assunto:religiao", evidencia: { trecho: longo.slice(0, 50), texto: longo } }).codigo;
+  assert.equal(linha(r).impressao, rev.impressaoDeTexto(longo));
+});
+await t("★ índices para a rodada (origem, enviadoEm, limpoEm); `registrarPerdido` liga o timer como o `registrarCaso`", async () => {
+  limpar();
+  const idx = cru.prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'revisao_casos'").all().map((x) => x.name);
+  for (const n of ["idx_revisao_origem", "idx_revisao_enviado", "idx_revisao_limpo"]) assert.ok(idx.includes(n), n);
+  const plano = (sql) => JSON.stringify(cru.prepare(`EXPLAIN QUERY PLAN ${sql}`).all());
+  assert.match(plano("SELECT COUNT(*) n FROM revisao_casos WHERE enviadoEm >= 0"), /idx_revisao_enviado/);
+  assert.match(plano("SELECT 1 FROM revisao_casos WHERE limpoEm IS NULL LIMIT 1"), /idx_revisao_limpo/);
+  rev.desligar();
+  rev.configurar({ client: null, enviar: async () => null });
+  assert.equal(rev.timerLigado(), false);
+  const p = await rev.registrarPerdido({ tipo: "perfil-imagem", userId: ANA, evidencia: { hash: "5555666677778888", link: "https://cdn.stoatusercontent.com/avatars/" + U(3) } });
+  assert.ok(p?.codigo);
+  assert.equal(rev.timerLigado(), true, "o caso tem IDs: a retenção precisa do timer");
+  rev.desligar();
+});
+
+await quieto(() => rev.desligar());
+cru.close();
+
+// ════ o bot inteiro, com o Stoat de mentira ════
+console.log("── 11. integração (main.js) ──");
+const mudo = async (fn) => { const o = [process.stdout.write, process.stderr.write]; process.stdout.write = process.stderr.write = () => true; try { return await fn(); } finally { [process.stdout.write, process.stderr.write] = o; } };
+await mudo(() => import("./main.js"));
+const store = await import("./modulos/core/config-store.js");
+const c = globalThis.__client;
+const saidas = [];
+const textoDe = (p) => typeof p === "string" ? p : `${p?.embeds?.[0]?.title ?? ""}\n${p?.embeds?.[0]?.description ?? ""}${typeof p?.content === "string" ? "\n" + p.content : ""}`;
+let nMsg = 0;
+const reacoes = [];
+const novaMsg = (canalId) => { const id = U(90000 + ++nMsg); return { id, channelId: canalId, edit: async () => {}, delete: async () => {}, react: async (e) => { reacoes.push([id, decodeURIComponent(e)]); } }; };
+const canal = (id, serverId, tipo = "TextChannel") => ({ id, serverId, name: id, type: tipo, nsfw: false, enviados: [],
+  sendMessage: async function (p) { this.enviados.push(p); saidas.push(textoDe(p)); return novaMsg(id); }, fetchMessages: async () => [], deleteMessages: async () => {} });
+const CG = U(101), CG2 = U(201), DMID = U(700), DMOUTRO = U(701);
+const geral = canal(CG, SID), geral2 = canal(CG2, SID2);
+const dm = canal(DMID, undefined, "DirectMessage"), dmOutro = canal(DMOUTRO, undefined, "DirectMessage");
+// MOD é da staff (tem as permissões de moderar); os outros, membros comuns
+const pessoa = (sid, uid) => ({ id: { server: sid, user: uid }, roles: [], hasPermission: () => uid === MOD, user: { id: uid, username: uid }, nickname: uid, joinedAt: new Date(0) });
+const servidor = (sid, dono, ch) => ({ id: sid, ownerId: dono, name: "S" + sid.slice(-3), roles: new Map(), channels: [ch], channelIds: new Set([ch.id]), member: { roles: [] }, havePermission: () => true,
+  fetchMember: async (u) => pessoa(sid, String(u?.id ?? u?.user ?? u)), fetchMembers: async () => ({ members: [], users: [] }), fetchBans: async () => [] });
+const srv1 = servidor(SID, DONO, geral), srv2 = servidor(SID2, OUTRO, geral2);
+await quieto(() => c.emitAll("ready"));
+c.servers.set(SID, srv1); c.servers.set(SID2, srv2);
+for (const x of [geral, geral2, dm, dmOutro]) c.channels.set(x.id, x);
+const AVATAR = U(950);
+c.users.set(DONO, { id: DONO, username: "dono", bot: false, openDM: async () => dm });
+c.users.set(OUTRO, { id: OUTRO, username: "outro", bot: false, openDM: async () => dmOutro });
+c.users.set(ANA, { id: ANA, username: "ana", bot: false, avatar: { id: AVATAR, tag: "avatars" }, fetchProfile: async () => ({ content: "minha bio com um desenho que não devia estar aqui e mais texto para a impressão", background: { id: U(951), tag: "backgrounds" } }) });
+let nEv = 0;
+async function diz(autor, conteudo, onde = "dm") {
+  saidas.length = 0;
+  const ch = onde === "dm" ? (autor === DONO ? dm : dmOutro) : onde === "srv2" ? geral2 : geral;
+  const sid = ch.serverId ?? null;
+  const ev = { id: U(20000 + ++nEv), authorId: autor, content: conteudo, serverId: sid, server: sid ? c.servers.get(sid) : undefined, channel: ch, channelId: ch.id,
+    mentionIds: [...conteudo.matchAll(/<@(\w+)>/g)].map((m) => m[1]), createdAt: new Date(), author: { id: autor, username: autor, bot: false }, member: sid ? pessoa(sid, autor) : undefined, replyIds: [], attachments: [] };
+  await quieto(() => Promise.race([c.emitAll("messageCreate", ev), new Promise((r) => setTimeout(r, 6000))]));
+  return saidas.join("\n");
+}
+
+await t("★ no boot: a fila configurada, sem timer com o banco vazio", () => {
+  assert.equal(rev.timerLigado(), false);
+});
+await t("★ caso novo liga o timer; `&caso` na DM do dono manda os casos com ✅ e ❌", async () => {
+  const r = rev.registrarCaso(caso({ evidencia: { trecho: "um trecho para o dono ver", hash: "aaaa0000aaaa0000" } }));
+  assert.ok(r.codigo);
+  assert.equal(rev.timerLigado(), true);
+  reacoes.length = 0;
+  const out = await diz(DONO, "&caso");
+  assert.match(out, new RegExp(`🔎 ${r.codigo} · `));
+  assert.match(out, /> um trecho para o dono ver/);
+  assert.equal(dm.enviados.length >= 1, true);
+  assert.deepEqual(reacoes.map((x) => x[1]), ["✅", "❌"]);
+  assert.equal(linha(r.codigo).estado, "enviado");
+  assert.equal(linha(r.codigo).dmCanalId, DMID);
+});
+await t("★ reação ✅ de outra pessoa não julga; a do dono, na DM, julga (evento normal e evento cru fora do cache)", async () => {
+  const r = rev.registrarCaso(caso({ evidencia: { hash: "bbbb0000bbbb0000" } }));
+  reacoes.length = 0;
+  await diz(DONO, "&caso");
+  const msgId = reacoes.find((x) => x[1] === "✅")?.[0];
+  assert.ok(msgId, "a mensagem do caso");
+  await quieto(() => c.emitAll("messageReactionAdd", { id: msgId, channelId: DMID }, OUTRO, "✅"));
+  assert.equal(linha(r.codigo).veredito, null);
+  await quieto(() => c.emitAll("messageReactionAdd", { id: msgId, channelId: DMID }, DONO, "✅"));
+  assert.equal(linha(r.codigo).veredito, "certo");
+  // o bot reiniciou: a mensagem saiu do cache e só chega o evento cru
+  for (const h of c.events.listeners("event")) await quieto(() => h({ type: "MessageReact", id: msgId, channel_id: DMID, user_id: DONO, emoji_id: "❌" }));
+  assert.equal(linha(r.codigo).veredito, "errou");
+  for (const h of c.events.listeners("event")) await quieto(() => h({ type: "MessageReact", id: msgId, channel_id: DMID, user_id: OUTRO, emoji_id: "✅" }));
+  assert.equal(linha(r.codigo).veredito, "errou", "evento cru de outra pessoa");
+});
+await t("★ `&caso <código> certo|errou` (e em inglês/espanhol: right/wrong, acierto/fallo)", async () => {
+  const a = rev.registrarCaso(caso({})).codigo, b = rev.registrarCaso(caso({})).codigo, d = rev.registrarCaso(caso({})).codigo;
+  assert.match(await diz(DONO, `&caso ${a} certo`), new RegExp(`\`${a}\` ✅`));
+  assert.equal(linha(a).veredito, "certo");
+  await diz(DONO, `&case ${b.toLowerCase()} wrong`);
+  assert.equal(linha(b).veredito, "errou");
+  await diz(DONO, `&caso ${d} acierto`);
+  assert.equal(linha(d).veredito, "certo");
+  assert.match(await diz(DONO, `&caso ${d} talvez`), /help caso|help case/);
+  assert.match(await diz(DONO, "&caso B2CD3 certo"), /Não há caso|There's no case/);
+  assert.match(await diz(DONO, "&caso blabla"), /help caso|help case/);
+});
+await t("★ `&caso <código>` mostra o caso de novo na DM (reação passa a valer na mensagem nova); no servidor, não", async () => {
+  const a = rev.registrarCaso(caso({ evidencia: { trecho: "trecho secreto de outro servidor" } })).codigo;
+  reacoes.length = 0;
+  assert.match(await diz(DONO, `&caso ${a}`), /trecho secreto/);
+  const msgId = reacoes[0]?.[0];
+  await quieto(() => c.emitAll("messageReactionAdd", { id: msgId, channelId: DMID }, DONO, "❌"));
+  assert.equal(linha(a).veredito, "errou");
+  const out = await diz(DONO, `&caso ${a}`, "srv1");
+  assert.doesNotMatch(out, /trecho secreto/);
+  // (31 out 2026, P3a) antes: /só aparece na DM|only show in DMs/. agora: só a linha que pede a DM — nem o código volta
+  assert.match(out, /^🔒 (Use na DM com a Judy|Use it in your DM with Judy)\.$/m);
+  assert.doesNotMatch(out, new RegExp(a));
+});
+await t("★ só o dono do bot: outra pessoa (mesmo na DM ou no próprio servidor) recebe só a recusa", async () => {
+  for (const onde of ["dm", "srv2"]) {
+    const out = await diz(OUTRO, "&caso exportar", onde);
+    assert.match(out, /Só o dono do bot|Bot owner only/, onde);
+  }
+  const a = rev.registrarCaso(caso({})).codigo;
+  await diz(OUTRO, `&caso ${a} certo`);
+  assert.equal(linha(a).veredito, null);
+});
+await t("★ o dono, num servidor que não é dele: recusa (o caso é de outros servidores)", async () => {
+  const out = await diz(DONO, "&caso", "srv2");
+  // (31 out 2026, P3a) antes: /Só na DM ou no seu servidor|Only in DMs or on your server/. agora: em qualquer servidor, só a linha que pede a DM
+  assert.match(out, /^🔒 (Use na DM com a Judy|Use it in your DM with Judy)\.$/m);
+  assert.doesNotMatch(out, /🔎|Esperando|Waiting/);
+});
+await t("★ `&caso` no servidor do dono: nada da fila (nem a situação) — só a linha que pede a DM", async () => {
+  const antes = dm.enviados.length;
+  const out = await diz(DONO, "&caso", "srv1");
+  // (31 out 2026, P3a) antes: mostrava a situação (/Esperando **n** · enviados hoje **n/10**/). agora: nem a contagem sai no servidor
+  assert.match(out, /^🔒 (Use na DM com a Judy|Use it in your DM with Judy)\.$/m);
+  assert.doesNotMatch(out, /🔎|Esperando|Waiting|enviados hoje|sent today/);
+  assert.equal(dm.enviados.length, antes);
+  // exportar e servidor também não: nada sobe nem muda
+  dm.enviados.length = 0;
+  for (const cmd of ["&caso exportar", `&caso servidor ${SID2} rigido`, "&caso B2CD3 certo"]) {
+    const o = await diz(DONO, cmd, "srv1");
+    assert.match(o, /^🔒 (Use na DM com a Judy|Use it in your DM with Judy)\.$/m, cmd);
+    assert.doesNotMatch(o, /📦|~[0-9a-f]{10}|Não há caso|There's no case/, cmd);
+  }
+  assert.equal(rev.modoDoServidor(SID2), "padrao");
+  assert.equal(dm.enviados.length, 0);
+});
+await t("★ `&caso servidor <id> rigido|padrao` (e strict/default): o limiar daquele servidor desce; ID de fora recusado", async () => {
+  assert.match(await diz(DONO, `&caso servidor ${SID2} rigido`), /✅ `~[0-9a-f]{10}` · (rígido|strict)/);
+  assert.equal(rev.limiar("teste-srv", 0.8, { serverId: SID2 }), 0.7);
+  assert.match(await diz(DONO, `&caso servidor ${SID2}`), /(rígido|strict)/);
+  await diz(DONO, `&case server ${SID2} default`);
+  assert.equal(rev.limiar("teste-srv", 0.8, { serverId: SID2 }), 0.8);
+  assert.match(await diz(DONO, `&caso servidor ${U(4444)} rigido`), /não está nesse servidor|isn't on that server/);
+  assert.match(await diz(DONO, `&caso servidor ${SID2} frouxo`), /help caso|help case/);
+  assert.match(await diz(DONO, "&caso servidor"), /help caso|help case/);
+  assert.doesNotMatch(await diz(DONO, `&caso servidor ${SID2}`), new RegExp(SID2), "o ID não volta na tela");
+});
+await t("★ `&caso perdeu @pessoa avatar|bio` e `perdeu <link>`: caso do dono; a bio vira impressão e passa a ser herdada", async () => {
+  const out = await diz(DONO, `&caso perdeu <@${ANA}> avatar`);
+  const cod = out.match(/🎯 `([A-Z0-9]{5})`/)?.[1];
+  assert.ok(cod, out);
+  assert.equal(linha(cod).link, `https://cdn.stoatusercontent.com/avatars/${AVATAR}`);
+  assert.equal(linha(cod).origem, "dono");
+  const out2 = await diz(DONO, `&caso perdeu <@${ANA}> bio`);
+  const cod2 = out2.match(/🎯 `([A-Z0-9]{5})`/)?.[1];
+  assert.ok(cod2, out2);
+  assert.match(linha(cod2).impressao, /^m1:/);
+  assert.equal(rev.vereditoParecido({ categoria: "arte-texto", texto: "minha bio com um desenho que não devia estar aqui e mais texto para a impressão" }), "certo");
+  assert.match(await diz(DONO, `&caso perdeu <@${ANA}> unhas`), /help caso|help case/);
+  assert.match(await diz(DONO, `&caso perdeu <@${U(4321)}> avatar`), /Não achei|couldn't find/);
+  const out3 = await diz(DONO, `&caso perdeu https://cdn.stoatusercontent.com/attachments/${U(952)}`);
+  assert.match(out3, /🎯/);
+  assert.match(await diz(DONO, "&caso perdeu https://golpe.example/x.png"), /help caso|help case/);
+  // o gancho da área perfil (hash) entra quando registrado
+  rev.configurarPerfil({ evidenciaDoPerfil: async ({ userId, parte }) => (userId === ANA && parte === "banner" ? { link: "https://cdn.stoatusercontent.com/backgrounds/x", hash: "1212121212121212" } : null) });
+  const out4 = await diz(DONO, `&caso perdeu <@${ANA}> banner`);
+  const cod4 = out4.match(/🎯 `([A-Z0-9]{5})`/)?.[1];
+  assert.equal(linha(cod4).hash, "1212121212121212");
+  rev.configurarPerfil({});
+});
+await t("★ `&caso exportar`: um arquivo .json pelo CDN, sem ID nem nome, na DM", async () => {
+  let corpo = "";
+  const f = globalThis.fetch;
+  globalThis.fetch = async (url, o) => { if (/attachments$/.test(String(url))) { corpo = Buffer.from(o.body).toString("utf8"); return { ok: true, status: 200, json: async () => ({ id: "ANEXO1" }), text: async () => "" }; } return f(url, o); };
+  try {
+    dm.enviados.length = 0;
+    const out = await diz(DONO, "&caso exportar");
+    assert.match(out, /📦 \d+/);
+    assert.deepEqual(dm.enviados.at(-1).attachments, ["ANEXO1"]);
+    const json = corpo.slice(corpo.indexOf("{"), corpo.lastIndexOf("}") + 1);
+    const dados = JSON.parse(json);
+    assert.ok(dados.casos.length >= 5);
+    assert.doesNotMatch(json, /01KNXC|~[0-9a-f]{10}|stoatusercontent|ana\b/i);
+  } finally { globalThis.fetch = f; }
+  assert.match(await diz(DONO, "&caso exportar"), /Não consegui subir|couldn't upload/);
+});
+await t("★ a ajuda do &caso: o dono vê nos 3 idiomas; nem o membro comum nem a staff veem", async () => {
+  const pt = await diz(DONO, "&help caso", "srv1");
+  assert.match(pt, /REVISAO_POR_DIA/);
+  assert.match(pt, /perdeu/);
+  store.configDoServidor(SID).language = "en"; store.salvarConfigServidor(SID);
+  const en = await diz(DONO, "&help case", "srv1");
+  assert.match(en, /REVISAO_POR_DIA[\s\S]*missed/);
+  store.configDoServidor(SID).language = "es"; store.salvarConfigServidor(SID);
+  const es = await diz(DONO, "&help caso", "srv1");
+  assert.match(es, /REVISAO_POR_DIA[\s\S]*perdio/);
+  store.configDoServidor(SID).language = "pt"; store.salvarConfigServidor(SID);
+  const membro = await diz(ANA, "&help caso", "srv1");
+  assert.doesNotMatch(membro, /REVISAO_POR_DIA/);
+  const indice = await diz(ANA, "&help", "srv1");
+  assert.doesNotMatch(indice, /&caso/);
+  // nem a staff: a página é do dono (visao.js: `caso: { padrao: "dono" }`)
+  const staff = await diz(MOD, "&help caso", "srv1");
+  assert.ok(staff.trim(), "responde alguma coisa");
+  assert.doesNotMatch(staff, /REVISAO_POR_DIA|perdeu/);
+  assert.doesNotMatch(await diz(MOD, "&help", "srv1"), /&caso/);
+});
+await t("★ o main.js passa as reações à fila antes do reaction-role e no evento cru (fora do cache)", () => {
+  const src = fs.readFileSync("main.js", "utf8");
+  assert.match(src, /revisao\.aoReagir\(msgId, userId, emoji/);
+  assert.match(src, /revisao\.aoReagir\(ev\.id, ev\.user_id, ev\.emoji_id/);
+  assert.ok(src.indexOf("revisao.aoReagir(msgId") < src.indexOf("reactionRoles.aoReagir("));
+  assert.match(src, /revisao\.configurar\(\{ client, enviar/);
+});
+
+rev.desligar();
+console.log(`\nP3A FILA: ${ok} ok, ${falhou} falha(s)`);
+process.exit(falhou ? 1 : 0);
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+// p3a-assuntos — P3a (31 out 2026), área assuntos: os temas em quatro categorias
+// (fora do tema / zoeira / discussão / ataque), a ida para a fila do dono (com
+// um dublê da `revisao.js`: certeza, `herdado`, `limiar`), o sinal da staff nas
+// punições manuais, o começo viável do RPG e as checagens estáticas do script de
+// medição dos classificadores (P3b).
+// ════════════════════════════════════════════════════════════════════════════
+SUITES["p3a-assuntos"] = async () => {
+const fs = (await import("node:fs")).default;
+const path = (await import("node:path")).default;
+const assert = (await import("node:assert")).default;
+const { execFileSync } = await import("node:child_process");
+const DB = "/tmp/p3a-assuntos.db";
+for (const f of [DB, DB + "-wal", DB + "-shm", "/tmp/p3a-assuntos.json"]) fs.rmSync(f, { force: true });
+const U = (n) => `01KP3A${String(n).padStart(20, "0")}`;
+const SUPER = U(9), DONO = U(1), MOD = U(2), FULANO = U(4), ANA = U(5), NOVO = U(6), VET = U(7), BOT = U(8);
+const SRV = U(100), C1 = U(110);
+Object.assign(process.env, { BOT_TOKEN: "tok", DB_PATH: DB, CONFIG_PATH: "/tmp/p3a-assuntos.json", SUPER_ADMINS: SUPER });
+for (const v of ["IA_MODO", "IA", "CHAT_SERVIDORES", "IA_SERVICO_URL", "LLM_URL"]) delete process.env[v];
+
+let ok = 0, falhou = 0;
+const t = async (nome, fn) => { try { await fn(); console.log(`  ✅ ${nome}`); ok++; } catch (e) { console.log(`  ❌ ${nome}\n     ${String(e?.message ?? e).split("\n").join("\n     ")}`); falhou++; } };
+const quieto = async (fn) => { const o = [console.log, console.info, console.warn, console.error]; console.log = console.info = console.warn = console.error = () => {}; try { return await fn(); } finally { [console.log, console.info, console.warn, console.error] = o; } };
+const perto = (a, b, tol) => Math.abs(a - b) <= tol;
+const sempre = (x) => () => x;
+
+const db = await import("./modulos/core/db.js");
+await quieto(() => db.abrirBanco(DB));
+const as = await import("./modulos/moderacao/assuntos.js");
+const engine = await import("./modulos/moderacao/automod-engine.js");
+const punir = await import("./modulos/moderacao/punir.js");
+
+// ── o dublê da fila do dono (a interface do BRIEF-P3a: registrarCaso, vereditoParecido, limiar) ──
+const fila = { casos: [], consultas: [], limiares: [], parecido: {}, limiarValor: null, quebrar: false,
+  registrarCaso(c) { if (this.quebrar) throw new Error("fila fora"); this.casos.push(c); return { codigo: `K${this.casos.length}`, herdado: null }; },
+  vereditoParecido(q) { this.consultas.push(q); return this.parecido[q.categoria] ?? null; },
+  limiar(categoria, padrao) { this.limiares.push([categoria, padrao]); return this.limiarValor ?? padrao; },
+  zerar() { this.casos = []; this.consultas = []; this.limiares = []; this.parecido = {}; this.limiarValor = null; this.quebrar = false; } };
+as.usarFila(fila);
+
+// ── o juiz de mentira: devolve a categoria pedida e guarda o que leu ──
+let resposta = '{"categoria": "zoeira", "motivo": "x"}';
+const pedidos = [];
+as.configurar({ avaliar: async (msgs) => { pedidos.push(msgs); if (resposta instanceof Error) throw resposta; return resposta; } });
+const juiz = (categoria) => { resposta = JSON.stringify({ categoria, motivo: `é ${categoria}` }); };
+
+const cfgT = (acoes, extra = {}) => ({ enabled: true, acoes, termos: {}, canaisLiberados: [], punicao: null, sensibilidade: "media", ia: true, ...extra });
+const enviados = [], punicoes = [];
+function ctxCom(antiAssuntos) {
+  return { config: { language: "pt", automod: { antiAssuntos, antiScam: { alertChannelId: "ALERTA" } }, log: { canalId: null }, acesso: { cargosStaff: [] } },
+    serverId: SRV, COR: { mod: 1, aviso: 2, erro: 3 }, PREFIXO: "&",
+    sendEmbed: async (canal, e) => { enviados.push({ canal: canal?.id, ...e }); return {}; },
+    client: { channels: { get: (id) => (id === "ALERTA" ? { id, serverId: SRV } : null), fetch: async (id) => (id === "ALERTA" ? { id, serverId: SRV } : null) } } };
+}
+let seq = 0;
+function msg(texto, { canal = C1, autor = ANA } = {}) {
+  const m = { id: `M${++seq}`, content: texto, channelId: canal, authorId: autor, channel: { id: canal }, apagada: false };
+  m.delete = async () => { m.apagada = true; };
+  return m;
+}
+async function checar(cfg, texto, op = {}) {
+  const m = msg(texto, op);
+  as.anotar(m.channelId, { id: m.id, autor: m.authorId, texto: m.content });
+  const r = await quieto(() => as.verificar({ ctx: ctxCom(cfg), server: { id: SRV }, canal: m.channel, message: m, userId: m.authorId,
+    aplicarPunicao: async (o) => { punicoes.push(o); } }));
+  return { r, m };
+}
+const novo = () => { as._zerar(); fila.zerar(); pedidos.length = 0; punicoes.length = 0; enviados.length = 0; };
+const POL_PUNIR = cfgT({ politica: "punir" }), POL_APAGAR = cfgT({ politica: "apagar" });
+const SO_RELIGIAO = cfgT({ religiao: "apagar" });
+
+console.log("── o juiz classifica em 4 categorias ──");
+await t("★ lerVeredito: fora / zoeira / discussão / ataque (pt, en, es), e o formato antigo continua valendo", () => {
+  for (const [raw, c] of [['{"categoria":"fora"}', "fora"], ['{"categoria":"zoeira"}', "zoeira"], ['{"categoria":"discussão"}', "discussao"], ['{"categoria":"ataque"}', "ataque"],
+    ['{"category":"joke"}', "zoeira"], ['{"category":"attack"}', "ataque"], ['{"categoria":"broma"}', "zoeira"], ['{"categoria":"off-topic"}', "fora"],
+    ['{"discussao": true}', "discussao"], ['{"discussao": false}', "zoeira"], ['```json\n{"categoria":"ATAQUE","motivo":"ofensa"}\n```', "ataque"]]) {
+    assert.equal(as.lerVeredito(raw)?.categoria, c, raw);
+  }
+  assert.equal(as.lerVeredito('{"categoria":"ataque"}').discussao, true, "ataque é sério");
+  assert.equal(as.lerVeredito('{"categoria":"zoeira"}').discussao, false);
+  for (const ruim of ["sei lá", '{"categoria":"talvez"}', "{x", '{"motivo":"só isso"}']) assert.equal(as.lerVeredito(ruim), null, ruim);
+});
+await t("★ o prompt pede as 4 categorias e traz os exemplos de zoeira do dono (zoar o Estado, \"eu sou bolsotron\")", () => {
+  for (const l of ["pt", "en"]) {
+    const p = as.promptDoTema("politica", l);
+    for (const c of as.CATEGORIAS) assert.match(p, new RegExp(`"${c}"`), `${l}: ${c}`);
+    assert.match(p, /bolsotron/); assert.match(p, l === "pt" ? /o Estado/ : /the State/);
+  }
+  assert.match(as.promptDoTema("religiao"), /Na dúvida, é brincadeira/);
+});
+
+console.log("\n── a certeza (pura) ──");
+await t("★ certezaDe: alta só com a nota acima do limiar do dono; abaixo é média; o texto rindo é baixa", () => {
+  const L = as.LIMIAR_ALTA_PADRAO;
+  assert.deepEqual(as.certezaDe({ categoria: "discussao", nota: 10 * L, limiarAlta: L }), { certeza: "alta", origem: "detector" });
+  assert.equal(as.certezaDe({ categoria: "ataque", nota: 10 * L - 0.1, limiarAlta: L }).certeza, "media");
+  assert.deepEqual(as.certezaDe({ categoria: "ataque", nota: 9, limiarAlta: L, zoeira: true }), { certeza: "baixa", origem: "discordancia" });
+  assert.equal(as.certezaDe({ categoria: "discussao", nota: 10 * L + 1, limiarAlta: L, semIA: true }).certeza, "media", "sem o modelo pede +2");
+  assert.equal(as.certezaDe({ categoria: "discussao", nota: 10 * L + as.MARGEM_SEM_IA, limiarAlta: L, semIA: true }).certeza, "alta");
+  assert.deepEqual(as.certezaDe({ categoria: "zoeira", nota: 10 * L + as.MARGEM_SEM_IA, limiarAlta: L }), { certeza: "baixa", origem: "discordancia" }, "o juiz diz zoeira, a nota alta discorda");
+  assert.equal(as.certezaDe({ categoria: "zoeira", nota: 10 * L, limiarAlta: L }).certeza, "alta");
+  assert.equal(as.certezaDe({ categoria: "discussao", nota: 1, limiarAlta: L, herdado: "seria" }).certeza, "alta", "o dono confirmou um parecido");
+  assert.deepEqual(as.certezaDe({ categoria: "ataque", nota: 9, limiarAlta: L, herdado: "nao" }), { certeza: "baixa", origem: "discordancia" });
+});
+await t("o trecho que vai à fila: sem menção a ninguém e com até 300 caracteres", () => {
+  assert.equal(as.trechoDoCaso(`oi <@${FULANO}> e <#${C1}>`), "oi @… e @…");
+  assert.equal(as.trechoDoCaso("x".repeat(900)).length, 300);
+});
+
+console.log("\n── zoeira nunca pune ──");
+await t("★ os exemplos do dono nem chegam ao juiz (a nota fica abaixo do portão)", async () => {
+  novo();
+  for (const x of ["eu sou bolsotron 🤖", "eu sou bolsonarista kkkk", "o Estado é ladrão, imposto é roubo kkkk", "kkkkk o governo roubou até meu lanche",
+    "FORA LULA kkkkk", "sou comunista, me dá teu PS5 kkkk", "o Estado me roubou de novo 😭 imposto é roubo"]) {
+    const { r, m } = await checar(POL_PUNIR, x);
+    assert.equal(r, null, x); assert.ok(!m.apagada, x);
+  }
+  assert.equal(pedidos.length, 0); assert.equal(punicoes.length, 0);
+});
+await t("★ o juiz diz zoeira: nada, mesmo com o tema em `punir` e a nota alta — e o caso vai à fila como \"não era sério\"", async () => {
+  novo(); juiz("zoeira");
+  const { r, m } = await checar(POL_PUNIR, "quem vota no Bolsonaro é burro, a eleição foi roubada");
+  assert.equal(r.acao, "nada"); assert.ok(!m.apagada); assert.equal(punicoes.length, 0);
+  assert.equal(fila.casos.length, 1);
+  assert.equal(fila.casos[0].categoria, "assunto:politica:zoeira"); assert.equal(fila.casos[0].acao, "nenhuma");
+  assert.equal(fila.casos[0].origem, "discordancia", "a nota 8 discorda do juiz: vai para a fila");
+});
+await t("★ o texto rindo: mesmo com o juiz dizendo ataque/discussão, não pune (certeza baixa, só a fila)", async () => {
+  for (const c of ["ataque", "discussao"]) {
+    novo(); juiz(c);
+    const { r, m } = await checar(POL_PUNIR, "o lula é o pior presidente da história, vocês não sabem de nada, olha os fatos kkkkkk");
+    assert.equal(pedidos.length, 1, "passou do portão: o juiz foi chamado");
+    assert.equal(r.acao, "nada", c); assert.equal(r.certeza, "baixa"); assert.equal(fila.casos.at(-1)?.certeza, "baixa"); assert.equal(fila.casos.at(-1)?.origem, "discordancia");
+    assert.ok(!m.apagada && !punicoes.length, c);
+  }
+});
+
+console.log("\n── fora do tema ──");
+await t("★ fora do tema: nada acontece", async () => {
+  novo(); juiz("fora");
+  const { r, m } = await checar(POL_APAGAR, "quem vota no Bolsonaro é burro, a eleição foi roubada");
+  assert.equal(r.acao, "nada"); assert.equal(r.categoria, "fora"); assert.ok(!m.apagada && !punicoes.length);
+});
+
+console.log("\n── ataque sempre conta ──");
+await t("★ ataque num tema ligado em `alertar`: conta mesmo assim (punir, na escada)", async () => {
+  novo(); juiz("ataque");
+  const { r } = await checar(cfgT({ religiao: "alertar" }), "crente é tudo burro e otário, religião é lavagem cerebral");
+  assert.equal(r.acao, "punir"); assert.equal(punicoes.length, 1); assert.equal(punicoes[0].pol.modo, "acumular");
+  assert.match(punicoes[0].motivo, /atacar alguém por causa de religião/);
+  assert.equal(fila.casos[0].categoria, "assunto:religiao"); assert.equal(fila.casos[0].acao, "punido"); assert.equal(fila.casos[0].certeza, "alta");
+});
+await t("★ ataque num tema que a staff NÃO ligou também conta (o juiz é chamado só com sinal de ataque)", async () => {
+  novo(); juiz("ataque");
+  const { r } = await checar(SO_RELIGIAO, "quem vota no Bolsonaro é burro, a eleição foi roubada");
+  assert.equal(r.tema, "politica"); assert.equal(r.acao, "punir"); assert.equal(punicoes.length, 1);
+  novo(); juiz("ataque");
+  const sem = await checar(SO_RELIGIAO, "o lula é o pior presidente da história, vocês não sabem de nada, olha os fatos");
+  assert.equal(sem.r, null, "sem sinal de ataque, o tema desligado nem vai ao juiz"); assert.equal(pedidos.length, 0);
+});
+
+console.log("\n── discussão só onde a staff ligou ──");
+await t("★ discussão com o tema ligado: a ação do tema (apagar)", async () => {
+  novo(); juiz("discussao");
+  const { r, m } = await checar(POL_APAGAR, "o lula é o pior presidente da história, vocês não sabem de nada, olha os fatos");
+  assert.equal(r.acao, "apagar"); assert.ok(m.apagada); assert.equal(punicoes.length, 0);
+  assert.equal(fila.casos[0].acao, "punido"); assert.equal(fila.casos[0].categoria, "assunto:politica");
+});
+await t("★ discussão num tema desligado: nada, e não vira caso", async () => {
+  novo(); juiz("discussao");
+  const { r, m } = await checar(SO_RELIGIAO, "quem vota no Bolsonaro é burro, a eleição foi roubada");
+  assert.equal(r.acao, "nada"); assert.ok(!m.apagada && !punicoes.length); assert.equal(fila.casos.length, 0);
+});
+
+console.log("\n── a fila do dono: certeza, limiar e herdado ──");
+await t("★ o limiar vem da fila (no lugar do fixo): calibrado acima da nota → certeza média → só a fila, sem punir", async () => {
+  novo(); juiz("ataque"); fila.limiarValor = 0.95;
+  const { r, m } = await checar(POL_PUNIR, "quem vota no Bolsonaro é burro, a eleição foi roubada");
+  assert.deepEqual(fila.limiares[0], ["assunto:politica", as.LIMIAR_ALTA_PADRAO]);
+  assert.equal(r.certeza, "media"); assert.equal(r.acao, "nada"); assert.ok(!m.apagada && !punicoes.length);
+  const c = fila.casos[0];
+  assert.equal(c.tipo, "assunto"); assert.equal(c.certeza, "media"); assert.equal(c.acao, "nenhuma"); assert.equal(c.origem, "detector");
+  assert.equal(c.serverId, SRV); assert.equal(c.userId, ANA); assert.equal(c.canalId, C1); assert.equal(c.msgId, m.id);
+  assert.ok(c.nota > 0 && c.nota <= 1, `nota de 0 a 1: ${c.nota}`); assert.equal(c.detector, "assuntos:ataque");
+  assert.match(c.evidencia.trecho, /Bolsonaro/); assert.equal(r.codigo, "K1");
+  novo(); juiz("ataque"); fila.limiarValor = 0.3;
+  assert.equal((await checar(POL_PUNIR, "quem vota no Bolsonaro é burro, a eleição foi roubada")).r.acao, "punir", "calibrado abaixo: alta, pune");
+});
+await t("★ a sensibilidade da staff não mexe na faixa alta: portão baixo (alta) examina mais, mas a nota abaixo do limiar do dono só vai à fila", async () => {
+  novo(); juiz("discussao");
+  const x = "o Lula vai ganhar a eleição de novo";
+  const n = as.analisarAssuntos(x, cfgT({ politica: "apagar" }, { sensibilidade: "alta" }))[0].nota;
+  assert.ok(n >= as.LIMIAR_ASSUNTO.alta && n < 10 * as.LIMIAR_ALTA_PADRAO, `nota ${n}`);
+  const { r, m } = await checar(cfgT({ politica: "apagar" }, { sensibilidade: "alta" }), x);
+  assert.equal(r.certeza, "media"); assert.equal(r.acao, "nada"); assert.ok(!m.apagada);
+});
+await t("★ herdado: o dono disse ❌ num parecido → não pune; disse ✅ → pune mesmo com o limiar alto", async () => {
+  const X = "quem vota no Bolsonaro é burro, a eleição foi roubada";
+  novo(); juiz("ataque"); fila.parecido["assunto:politica"] = "errou";
+  let { r } = await checar(POL_PUNIR, X);
+  assert.equal(r.herdado, "nao"); assert.equal(r.acao, "nada"); assert.equal(punicoes.length, 0);
+  assert.equal(fila.consultas[0].categoria, "assunto:politica"); assert.equal(fila.consultas[0].tipo, "assunto"); assert.equal(fila.consultas[0].texto, X);
+  novo(); juiz("ataque"); fila.parecido["assunto:politica:zoeira"] = "certo";   // "era zoeira", confirmado
+  ({ r } = await checar(POL_PUNIR, X));
+  assert.equal(r.herdado, "nao"); assert.equal(punicoes.length, 0);
+  novo(); juiz("ataque"); fila.parecido["assunto:politica"] = "certo"; fila.limiarValor = 0.95;
+  ({ r } = await checar(POL_PUNIR, X));
+  assert.equal(r.herdado, "seria"); assert.equal(r.certeza, "alta"); assert.equal(r.acao, "punir"); assert.equal(punicoes.length, 1);
+  novo(); juiz("zoeira"); fila.parecido["assunto:politica"] = "certo";
+  ({ r } = await checar(POL_PUNIR, X));
+  assert.equal(r.acao, "nada", "zoeira nunca pune, nem com herança"); assert.equal(r.certeza, "baixa");
+});
+await t("★ a fila quebrada ou ausente nunca muda a moderação (o limiar volta ao padrão)", async () => {
+  novo(); juiz("ataque"); fila.quebrar = true;
+  let { r } = await checar(POL_PUNIR, "quem vota no Bolsonaro é burro, a eleição foi roubada");
+  assert.equal(r.acao, "punir"); assert.equal(r.codigo, null);
+  as.usarFila(null); novo(); juiz("ataque");
+  ({ r } = await checar(POL_PUNIR, "quem vota no Bolsonaro é burro, a eleição foi roubada"));
+  assert.equal(r.acao, "punir");
+  as.usarFila(fila);
+});
+await t("★ o modelo com erro: nada, e nenhum caso (erro nunca vira punição)", async () => {
+  novo(); resposta = new Error("fora do ar");
+  const { r, m } = await checar(POL_PUNIR, "quem vota no Bolsonaro é burro, a eleição foi roubada");
+  assert.equal(r.acao, "nada"); assert.ok(!m.apagada && !punicoes.length); assert.equal(fila.casos.length, 0);
+});
+await t("`ia off`: só os temas ligados; a nota decide com 2 pontos a mais para a certeza alta", async () => {
+  novo();
+  let { r } = await checar(cfgT({ religiao: "apagar" }, { ia: false }), "quem vota no Bolsonaro é burro, a eleição foi roubada");
+  assert.equal(r, null, "ataque em tema desligado precisa do juiz"); assert.equal(pedidos.length, 0);
+  novo();
+  ({ r } = await checar(cfgT({ politica: "apagar" }, { ia: false }), "o Lula é o melhor presidente"));
+  assert.equal(r.certeza, "media"); assert.equal(r.acao, "nada");
+  assert.equal(fila.casos[0].detector, "assuntos:discussao:sem-ia");
+});
+
+await t("★ a impressão do caso de assunto sai do texto inteiro — o mesmo que a consulta da herança usa —, não do trecho cortado", async () => {
+  novo(); juiz("ataque");
+  const X = `quem vota no Bolsonaro é burro <@${ANA}>, a eleição foi roubada ` + "e mais um monte de coisa ".repeat(20);
+  await checar(POL_PUNIR, X);
+  const c = fila.casos[0];
+  assert.equal(c.evidencia.texto, X);
+  assert.ok(c.evidencia.trecho.length <= 300 && !c.evidencia.trecho.includes(ANA));
+  assert.ok(fila.consultas.length && fila.consultas.every((q) => q.texto === X));
+});
+console.log("\n── o sinal da staff ──");
+await t("★ sinalDaStaff: um caso de origem \"staff\", sem punir nada e só com o necessário", async () => {
+  fila.zerar();
+  const ctx = { serverId: SRV };
+  const r = await engine.sinalDaStaff(ctx, { tipo: "warn", alvoId: FULANO, canalId: C1, msgId: "MSGX", motivo: `xingou <@${ANA}> de novo` });
+  assert.equal(r.codigo, "K1");
+  assert.deepEqual(fila.casos[0], { tipo: "staff", categoria: "staff:warn", serverId: SRV, userId: FULANO, canalId: C1, msgId: "MSGX",
+    origem: "staff", certeza: "media", nota: null, acao: "nenhuma", evidencia: { trecho: "xingou @… de novo" }, detector: "staff" });
+  assert.equal(await engine.sinalDaStaff(ctx, { tipo: "purge", alvoId: FULANO }), null);
+  assert.equal(await engine.sinalDaStaff({}, { tipo: "ban", alvoId: FULANO }), null, "fora de um servidor: nada");
+  assert.equal(fila.casos.length, 1);
+});
+// o servidor de mentira para as punições manuais
+const acoes = [];
+const pessoa = (id, roles) => ({ id: { server: SRV, user: id }, roles, user: { id, username: id.slice(-4) }, edit: async (o) => { acoes.push(["edit", id, o]); } });
+const MEMBROS = new Map([[DONO, pessoa(DONO, [])], [MOD, pessoa(MOD, ["R_MOD"])], [FULANO, pessoa(FULANO, ["R_MEMBRO"])]]);
+const server = { id: SRV, ownerId: DONO, roles: new Map([["R_MOD", { name: "Mod", rank: 5 }], ["R_MEMBRO", { name: "Membro", rank: 10 }]]),
+  fetchMember: async (u) => MEMBROS.get(String(u?.user ?? u)) ?? null, kickUser: async (id) => { acoes.push(["kick", id]); },
+  banUser: async (id) => { acoes.push(["ban", id]); }, fetchBans: async () => [], havePermission: () => true };
+const ctxP = { serverId: SRV, config: { language: "pt", log: {} }, PREFIXO: "&", COR: { erro: 1, aviso: 2, sucesso: 3, info: 4, mod: 5 },
+  client: { user: { id: BOT }, users: new Map(), messages: new Map() }, sendEmbed: async () => ({ id: "E", react: async () => {} }),
+  getServer: async () => server, membroTemPermissao: () => true, ehSuperAdmin: (id) => id === SUPER };
+const pedidoStaff = (texto, extra = {}) => ({ id: "MS" + (++seq), authorId: MOD, content: texto, serverId: SRV, channelId: C1, channel: { id: C1 }, mentionIds: [], replyIds: [], member: MEMBROS.get(MOD), author: { id: MOD }, ...extra });
+await t("★ &kick manual: a punição acontece e vira sinal na fila (o alvo, nunca quem da staff agiu)", async () => {
+  fila.zerar(); acoes.length = 0;
+  await quieto(() => punir.cmdKick(pedidoStaff(`&kick <@${FULANO}> spam`), [`<@${FULANO}>`, "spam"], ctxP));
+  await new Promise((r) => setTimeout(r, 10));
+  assert.deepEqual(acoes.find((a) => a[0] === "kick"), ["kick", FULANO]);
+  assert.equal(fila.casos.length, 1);
+  const c = fila.casos[0];
+  assert.equal(c.origem, "staff"); assert.equal(c.tipo, "staff"); assert.equal(c.categoria, "staff:kick"); assert.equal(c.userId, FULANO); assert.equal(c.acao, "nenhuma");
+  assert.ok(!JSON.stringify(c).includes(MOD), "quem agiu não vai para a fila");
+});
+await t("★ a fila fora do ar não atrapalha a punição manual", async () => {
+  fila.zerar(); fila.quebrar = true; acoes.length = 0;
+  await quieto(async () => { await punir.cmdKick(pedidoStaff(`&kick <@${FULANO}>`), [`<@${FULANO}>`], ctxP); await new Promise((r) => setTimeout(r, 10)); });
+  assert.deepEqual(acoes.find((a) => a[0] === "kick"), ["kick", FULANO]);
+  fila.quebrar = false;
+});
+await t("★ o sinal da staff só depois que a punição deu certo: kick, timeout e ban que falham não viram sinal", async () => {
+  const erroStoat = () => Object.assign(new Error("sem permissão"), { type: "MissingPermission" });
+  const falha = { ...server, kickUser: async () => { throw erroStoat(); }, banUser: async () => { throw erroStoat(); },
+    fetchMember: async (u) => { const m = MEMBROS.get(String(u?.user ?? u)); return m ? { ...m, edit: async () => { throw erroStoat(); } } : null; } };
+  const ctxF = { ...ctxP, getServer: async () => falha };
+  fila.zerar(); acoes.length = 0;
+  await quieto(async () => {
+    await punir.cmdKick(pedidoStaff(`&kick <@${FULANO}> spam`), [`<@${FULANO}>`, "spam"], ctxF);
+    await punir.cmdTimeout(pedidoStaff(`&timeout <@${FULANO}> 10m`), [`<@${FULANO}>`, "10m"], ctxF);
+    await punir.cmdBan(pedidoStaff(`&ban <@${FULANO}>`), [`<@${FULANO}>`], ctxF);
+    await new Promise((r) => setTimeout(r, 10));
+  });
+  assert.equal(fila.casos.length, 0, "nada deu certo: nenhum sinal");
+  await quieto(async () => { await punir.cmdTimeout(pedidoStaff(`&timeout <@${FULANO}> 10m`), [`<@${FULANO}>`, "10m"], ctxP); await new Promise((r) => setTimeout(r, 10)); });
+  assert.deepEqual(fila.casos.map((c) => c.categoria), ["staff:timeout"], "deu certo: um sinal");
+});
+await t("no punir.js, uma chamada só do sinal (antes do despacho das quatro punições)", () => {
+  const src = fs.readFileSync("modulos/moderacao/punir.js", "utf8");
+  assert.equal((src.match(/sinalDaStaff\(/g) ?? []).length, 1);
+});
+
+console.log("\n── integração com a fila de verdade (revisao.js) ──");
+await t("★ decisão de assunto → caso na fila real; depois do ❌ do dono, a mesma mensagem herda e não pune", async () => {
+  as._filaReal(); novo(); juiz("ataque");
+  const rev = await import("./modulos/moderacao/revisao.js");
+  // (31 out 2026, P3a) a fila só grava ligada; e a certeza alta só é guardada quando o sorteio da amostra a pega
+  rev._ligarParaTestes(); rev._trocarSorteio(() => 0);
+  const X = "quem vota no Bolsonaro é burro, a eleição foi roubada";
+  let { r } = await checar(POL_PUNIR, X);
+  assert.equal(r.acao, "punir"); assert.ok(r.codigo, "a fila deu um código");
+  const caso = db.filaCaso(r.codigo);
+  assert.equal(caso.categoria, "assunto:politica"); assert.equal(caso.tipo, "assunto"); assert.equal(caso.acao, "punido"); assert.equal(caso.origem, "detector");
+  await quieto(() => rev.julgar(r.codigo, "errou"));
+  punicoes.length = 0;
+  ({ r } = await checar(POL_PUNIR, X));
+  assert.equal(r.herdado, "nao"); assert.equal(r.acao, "nada"); assert.equal(punicoes.length, 0);
+});
+await t("★ sinal da staff → caso de origem staff na fila real, sem quem agiu", async () => {
+  const r = await quieto(() => engine.sinalDaStaff({ serverId: SRV }, { tipo: "ban", alvoId: FULANO, canalId: C1, motivo: "raid" }));
+  const caso = db.filaCaso(r.codigo);
+  assert.equal(caso.origem, "staff"); assert.equal(caso.tipo, "staff"); assert.equal(caso.categoria, "staff:ban"); assert.equal(caso.acao, "nenhuma");
+  assert.equal(caso.userId, FULANO); assert.ok(!JSON.stringify(caso).includes(MOD));
+  as.usarFila(fila);
+});
+
+console.log("\n── RPG: o começo viável ──");
+const game = await import("./modulos/game/game.js");
+const R = await import("./modulos/game/regras.js");
+const CB = await import("./modulos/game/combate.js");
+const L = await import("./modulos/game/lutas.js");
+const J = await import("./modulos/game/jogador.js");
+const { ERA } = await import("./modulos/game/era.js");
+await quieto(() => game.iniciarCatalogo());
+const COR = { erro: 1, aviso: 2, sucesso: 3, info: 4, mod: 5 };
+const criar = (uid, nome) => quieto(() => J.criar({ args: ["criar", nome], eu: uid, l: "pt", P: "&", COR, responder: (x) => x, erro: (x) => x }));
+await criar(NOVO, "Novato");
+const missao1 = { ...R.missao(1), base: R.BASE.normal };
+await t("★ por que era ~24%: duas rolagens (êxito × sobrevivência) — sem a ajuda, o recém-criado vence ~25%", () => {
+  const party = CB.partyDe(ERA, NOVO);
+  const cru = R.preverLuta(party.membros, CB.juntar([party]).magias, missao1);
+  assert.ok(cru.exito > 0.35 && cru.exito < 0.45, `êxito ${cru.exito}`);
+  assert.ok(cru.exito * cru.sobrevivencia < 0.3, `vitória sem a ajuda ${cru.exito * cru.sobrevivencia}`);
+});
+await t("★ personagem recém-criado: ~40% de vencer a missão do nível 1 (entre 35% e 45%)", () => {
+  const pv = CB.prever([CB.partyDe(ERA, NOVO)], missao1);
+  const vence = pv.exito * pv.sobrevivencia;
+  assert.ok(vence >= 0.35 && vence <= 0.45, `vence ${vence}`);
+  assert.equal(pv.sobrevivencia, 1, "no nível 1 ninguém cai");
+  assert.match(J.ficha(db.getPersonagem(ERA, NOVO), "pt", COR).description, /🏆 (3[5-9]|4[0-5])%/);
+});
+await t("★ a party de referência continua em 40% (a calibração não mudou) e, depois do começo, nada muda", () => {
+  for (const n of [1, 5, 10, 20, 50, 100]) {
+    const p = R.ref(n), pv = R.preverLuta(p.membros, p.magias, { ...R.missao(n), base: R.BASE.normal });
+    assert.ok(perto(pv.exito, 0.4, 0.03) && perto(pv.sobrevivencia, 0.7, 0.03), `n${n}: ${pv.exito} / ${pv.sobrevivencia}`);
+    if (n >= R.INICIO.ate) assert.strictEqual(R.comInicio(pv, n), pv, `n${n}: sem ajuda`);
+  }
+});
+await t("a ajuda pelo nível: cheia até o 5, cai em linha reta, some no 10", () => {
+  assert.equal(R.protecaoDeInicio(1), 1); assert.equal(R.protecaoDeInicio(R.INICIO.cheio), 1);
+  assert.equal(R.protecaoDeInicio(R.INICIO.ate), 0); assert.equal(R.protecaoDeInicio(60), 0); assert.equal(R.protecaoDeInicio(NaN), 0);
+  for (let n = R.INICIO.cheio; n < R.INICIO.ate; n++) assert.ok(R.protecaoDeInicio(n + 1) < R.protecaoDeInicio(n), `${n}`);
+  const pv = { exito: 0.4, sobrevivencia: 0.6 };
+  assert.ok(perto(R.comInicio(pv, 8).sobrevivencia, 0.6 + 0.4 * R.protecaoDeInicio(8), 1e-12)); assert.equal(R.comInicio(pv, 8).exito, 0.4);
+});
+await t("★ na luta: no nível 1 a rolagem ruim é falha (não cai, não perde ouro); no nível 20, a mesma rolagem derruba", () => {
+  db.salvarPersonagem(ERA, NOVO, { ultimaMissao: 0, recuperandoAte: 0 });
+  const contrato = L.sortearMissao(NOVO, 1, 1, sempre(0.99));
+  let res = L.lutar([NOVO], { ...contrato, tipo: contrato.tipo === "dungeon-encontro" ? contrato.tipo : "contrato" }, { aleatorio: sempre(0.999) });
+  assert.equal(res.r.desfecho, "falha"); assert.ok(!res.resultados[0].recuperandoAte && !res.resultados[0].perdido);
+  db.salvarPersonagem(ERA, NOVO, { nivel: 20, ultimaMissao: 0, recuperandoAte: 0 });
+  res = L.lutar([NOVO], { ...contrato, tipo: contrato.tipo === "dungeon-encontro" ? contrato.tipo : "contrato" }, { aleatorio: sempre(0.999) });
+  assert.equal(res.r.desfecho, "caiu");
+});
+await t("a wiki do jogo conta a regra do começo (pt/en/es), com os números do código", async () => {
+  const W = await import("./modulos/game/wiki.js");
+  for (const [l, re] of [["pt", /ninguém cai/], ["en", /nobody falls/], ["es", /nadie cae/]]) {
+    const w = W.paginasWikiRpg(l).map((x) => x.texto).join("\n");
+    assert.match(w, re, l); assert.ok(w.includes(`${R.INICIO.cheio}`) && w.includes(`${R.INICIO.ate}`), l);
+  }
+});
+
+console.log("\n── o script de medição dos classificadores (P3b) ──");
+const SH = "scripts/medir-classificadores.sh", MJS = "scripts/medir-classificadores.mjs";
+const sh = fs.readFileSync(SH, "utf8"), mjsSrc = fs.readFileSync(MJS, "utf8");
+await t("★ bash -n: a sintaxe do script", () => { execFileSync("bash", ["-n", SH], { stdio: "pipe" }); });
+await t("★ sem `| grep -q` nem `| head` cortando o pipe; com `set -euo pipefail`", () => {
+  const codigo = sh.split("\n").filter((l) => !/^\s*#/.test(l)).join("\n");
+  assert.doesNotMatch(codigo, /\|\s*(grep\s+(-\w*q|--quiet)|head)\b/);
+  assert.match(sh, /^set -euo pipefail$/m);
+});
+await t("★ a imagem fixada por digest: a do bot (ARG NODE_IMAGE do Dockerfile), e o script recusa sem digest", () => {
+  const arg = fs.readFileSync("Dockerfile", "utf8").match(/^ARG NODE_IMAGE=(.+)$/m)?.[1];
+  assert.match(arg, /^node:22[0-9.]*-bookworm-slim@sha256:[0-9a-f]{64}$/);
+  assert.match(sh, /sed -n 's\/\^ARG NODE_IMAGE=\/\/p'/);
+  assert.ok(sh.includes("^node:22[0-9.]*-bookworm-slim@sha256:[0-9a-f]{64}$"), "a checagem do digest");
+  const rodar = (img) => { const dir = fs.mkdtempSync("/tmp/p3a-sh-"); fs.mkdirSync(path.join(dir, "scripts"));
+    fs.copyFileSync(SH, path.join(dir, "scripts", "x.sh")); fs.copyFileSync(MJS, path.join(dir, "scripts", "medir-classificadores.mjs"));
+    fs.writeFileSync(path.join(dir, "Dockerfile"), `ARG NODE_IMAGE=${img}\n`);
+    const bin = path.join(dir, "bin"); fs.mkdirSync(bin); fs.writeFileSync(path.join(bin, "docker"), "#!/bin/sh\necho DOCKER \"$@\"\n"); fs.chmodSync(path.join(bin, "docker"), 0o755);
+    try { return { saida: execFileSync("bash", [path.join(dir, "scripts", "x.sh")], { env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, CACHE: path.join(dir, "cache") }, stdio: "pipe" }).toString(), codigo: 0 }; }
+    catch (e) { return { saida: String(e.stdout) + String(e.stderr), codigo: e.status }; }
+    finally { fs.rmSync(dir, { recursive: true, force: true }); } };
+  const sem = rodar("node:22-bookworm-slim");
+  assert.notEqual(sem.codigo, 0); assert.match(sem.saida, /digest/); assert.doesNotMatch(sem.saida, /DOCKER/);
+  const com = rodar(arg);
+  assert.equal(com.codigo, 0, com.saida);
+  const runs = com.saida.split("\n").filter((l) => l.startsWith("DOCKER run"));
+  assert.equal(runs.length, 2, com.saida);
+  for (const r of runs) { assert.match(r, /--rm/); assert.ok(r.includes(arg)); assert.match(r, /--read-only/); assert.match(r, /--cap-drop ALL/); assert.doesNotMatch(r, /stoat_data|:\/data\b/, "o volume do bot nunca"); }
+  assert.match(runs[1], /--network none/); assert.match(runs[1], /\/dados:ro/); assert.doesNotMatch(runs[0], /--network none/);
+});
+const M = await import("./" + MJS);
+await t("★ versões fixas e SHA256 conferido: cada modelo com commit, SHA256 e licença; o runtime com o SHA512 do npm", async () => {
+  assert.ok(M.CANDIDATOS.length >= 1 && M.CANDIDATOS.length <= 2);
+  for (const c of M.CANDIDATOS) {
+    assert.match(c.rev, /^[0-9a-f]{40}$/); assert.match(c.sha256, /^[0-9a-f]{64}$/); assert.ok(c.licenca && c.tamanho > 1e6, c.id);
+    assert.ok(M.urlDoModelo(c).includes(`/resolve/${c.rev}/`), "pelo commit, nunca pelo main");
+  }
+  for (const p of M.RUNTIME) { assert.match(p.versao, /^\d+\.\d+\.\d+$/); assert.match(p.integridade, /^sha512-[A-Za-z0-9+/]{86}==$/); }
+  const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
+  assert.ok(!JSON.stringify(pkg).includes("onnxruntime"), "nenhuma dependência nova no bot");
+  // o conferir: hash certo passa, errado não; o formato do npm também
+  const f = "/tmp/p3a-conferir.bin"; fs.writeFileSync(f, "judy");
+  const { createHash } = await import("node:crypto");
+  assert.equal(await M.conferir(f, createHash("sha256").update("judy").digest("hex")), true);
+  assert.equal(await M.conferir(f, "0".repeat(64)), false);
+  assert.equal(await M.conferir(f, `sha512-${createHash("sha512").update("judy").digest("base64")}`), true);
+  assert.equal(await M.conferir("/tmp/p3a-nao-existe.bin", "0".repeat(64)), false);
+  await assert.rejects(M.conferir(f, "md5-qualquer"));
+});
+await t("★ o download só fica se o hash conferir (o errado é descartado)", async () => {
+  const http = await import("node:http");
+  const srv = http.createServer((_q, r) => { r.end("modelo-de-mentira"); });
+  await new Promise((r) => srv.listen(0, "127.0.0.1", r));
+  const url = `http://127.0.0.1:${srv.address().port}/m.onnx`, destino = "/tmp/p3a-dl/m.onnx";
+  fs.rmSync("/tmp/p3a-dl", { recursive: true, force: true });
+  const { createHash } = await import("node:crypto");
+  try {
+    await assert.rejects(M.baixarConferido(url, destino, "0".repeat(64)), /HASH NÃO CONFERE/);
+    assert.ok(!fs.existsSync(destino) && !fs.existsSync(destino + ".parcial"));
+    const certo = createHash("sha256").update("modelo-de-mentira").digest("hex");
+    assert.equal(await M.baixarConferido(url, destino, certo), "baixado");
+    assert.equal(await M.baixarConferido(url, destino, certo), "já estava");
+  } finally { srv.close(); }
+});
+await t("imagens só sintéticas: determinísticas, no tamanho pedido, e normalizadas para o modelo", () => {
+  const a = M.imagemSintetica(3, 64, 48), b = M.imagemSintetica(3, 64, 48);
+  assert.equal(a.dados.length, 64 * 48 * 3); assert.deepEqual(a.dados, b.dados);
+  assert.equal(M.TIPOS_SINTETICOS.length, 5);
+  const c = M.CANDIDATOS[0], x = M.preparar(a, c);
+  assert.equal(x.length, 3 * c.lado * c.lado);
+  const lo = Math.min(...[0, 1, 2].map((k) => (0 - c.media[k]) / c.desvio[k])), hi = Math.max(...[0, 1, 2].map((k) => (1 - c.media[k]) / c.desvio[k]));
+  assert.ok(x.every((v) => v >= lo - 1e-6 && v <= hi + 1e-6));
+  assert.doesNotMatch(mjsSrc, /readFileSync\([^)]*\.(png|jpe?g|webp|gif)/i, "nenhuma imagem real");
+});
+await t("a tabela curta e os números (mediana, p95)", () => {
+  assert.equal(M.mediana([5, 1, 3]), 3); assert.equal(M.percentil([1, 2, 3, 4, 5, 6, 7, 8, 9, 10], 0.95), 10);
+  const tab = M.tabela([{ id: "nsfw-vit", threads: 1, cargaMs: 812.3, rssAntesMB: 45, rssCarregadoMB: 210, rssPicoMB: 260, preMs: 3.2, infMs: 48.4, infP95Ms: 60, imgPorSeg: 19.4, saida: "1×2" },
+    { id: "clip-b32", threads: 4, erro: "modelo ausente" }]);
+  const linhas = tab.split("\n");
+  assert.equal(linhas.length, 4); assert.match(linhas[0], /modelo .*RAM MB.*inferência/); assert.match(linhas[2], /812 .*45→210→260.*48\.4 \/ 60/); assert.match(linhas[3], /ERRO/);
+});
+
+console.log(`\nP3a ASSUNTOS: ${ok} ok, ${falhou} falha(s)`);
+process.exit(falhou ? 1 : 0);
+};
+
+SUITES["p3a-perfil"] = async () => {
+// (31 out 2026, P3a) A moderação do perfil inteiro: arte em texto (braille → bitmap → dHash),
+// dHash das imagens, conhecidos, certeza alta/média/baixa, herança pela fila do dono, e
+// bio/nome/status/foto/banner na entrada e na troca usando só o cache de membros.
+// A arte do caso 1 NUNCA aparece aqui (o repositório é público): as artes são geradas
+// (círculos e losangos) no mesmo formato, e o caso 1 entra só pelas impressões.
+const fs = (await import("node:fs")).default;
+const assert = (await import("node:assert")).default;
+const { EventEmitter } = await import("node:events");
+const DB = "/tmp/p3a-perfil.db";
+for (const f of [DB, DB + "-wal", DB + "-shm", "/tmp/p3a-perfil.json"]) fs.rmSync(f, { force: true });
+const U = (n) => `01KP3A${String(n).padStart(20, "0")}`;
+Object.assign(process.env, { DB_PATH: DB, CONFIG_PATH: "/tmp/p3a-perfil.json", SUPER_ADMINS: U(999), IA_SERVICO_URL: "http://ia.teste", CDN_URL: "https://cdn.stoatusercontent.com" });
+globalThis.fetch = async () => { throw new Error("sem rede no teste"); };
+
+let ok = 0, falhou = 0;
+const t = async (nome, fn) => { try { await fn(); console.log(`  ✅ ${nome}`); ok++; } catch (e) { console.log(`  ❌ ${nome}\n     ${String(e?.stack ?? e?.message ?? e).split("\n").slice(0, 6).join("\n     ")}`); falhou++; } };
+const quieto = async (fn) => { const o = [console.log, console.info, console.warn, console.error]; console.log = console.info = console.warn = console.error = () => {}; try { return await fn(); } finally { [console.log, console.info, console.warn, console.error] = o; } };
+
+const db = await import("./modulos/core/db.js"); db.abrirBanco(DB);
+const hash = await import("./modulos/moderacao/hash.js");
+const arte = await import("./modulos/moderacao/arte-texto.js");
+const { CONHECIDOS } = await import("./modulos/moderacao/conhecidos.js");
+const cz = await import("./modulos/moderacao/certeza.js");
+const av = await import("./modulos/moderacao/avatar.js");
+const perfil = await import("./modulos/moderacao/perfil.js");
+const revisao = await import("./modulos/moderacao/revisao.js");
+
+// ── a arte sintética, inofensiva, no formato do caso 1 ──
+const BIT = [[0, 0, 0], [0, 1, 1], [0, 2, 2], [1, 0, 3], [1, 1, 4], [1, 2, 5], [0, 3, 6], [1, 3, 7]];
+function desenho(W, L, dentro) {
+  const out = [];
+  for (let y = 0; y < L; y++) {
+    let s = "";
+    for (let x = 0; x < W; x++) { let b = 0; for (const [dx, dy, bit] of BIT) if (dentro(x * 2 + dx, y * 4 + dy)) b |= 1 << bit; s += String.fromCodePoint(0x2800 + b); }
+    out.push(s);
+  }
+  return out;
+}
+const circulo = (cx, cy, r) => (x, y) => Math.hypot(x - cx, y - cy) < r;
+const D1 = desenho(30, 27, circulo(30, 54, 40)), D2 = desenho(26, 23, (x, y) => Math.abs(x - 26) + Math.abs(y - 46) < 30);
+const BIO = ["pt,en", ...D1, ...D2].join("\n");
+const BRAILLE = /[\u2800-\u28ff]/;
+
+console.log("── hash.js ──");
+await t("dHash: degradê para a direita = todos os bits 1; para a esquerda = 0; um bit só", () => {
+  const g = Array.from({ length: 72 }, (_, i) => (i % 9) * 10);
+  assert.equal(hash.dhash(g), "ffffffffffffffff");
+  assert.equal(hash.dhash(g.map((v) => 255 - v)), "0000000000000000");
+  const um = new Array(72).fill(0); um[1] = 9;
+  assert.equal(hash.dhash(um), "8000000000000000");
+  assert.throws(() => hash.dhash([1, 2, 3]));
+});
+await t("reduzir: média de área (qualquer tamanho)", () => {
+  assert.equal(hash.reduzir([0, 255, 255, 0], 2, 2, 1, 1)[0], 127.5);
+  assert.deepEqual([...hash.reduzir([10, 20, 30, 40], 4, 1, 2, 1)], [15, 35]);
+  assert.deepEqual([...hash.reduzir([8], 1, 1, 2, 1)], [8, 8]);
+});
+await t("distância de Hamming, hash degenerado, parecido e sha256", () => {
+  assert.equal(hash.distancia("ffffffffffffffff", "fffffffffffffffe"), 1);
+  assert.equal(hash.distancia("zz", "ffffffffffffffff"), Infinity);
+  assert.ok(!hash.hashUtil("0000000000000000") && !hash.hashUtil("ffffffffffffffff") && hash.hashUtil("c37379279f3d6633"));
+  assert.ok(hash.parecido("c37379279f3d6633", "c37379279f3d6630") && !hash.parecido("0000000000000000", "0000000000000001"));
+  assert.equal(hash.sha256("abc"), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+});
+
+console.log("── arte em texto ──");
+await t("linha de arte: ≥ 70% braille/bloco/símbolo, com 4+ caracteres; emoji e texto não", () => {
+  assert.ok(arte.linhaDeArte(D1[5]));
+  assert.ok(arte.linhaDeArte("\u2800".repeat(10)));   // o braille vazio é o preenchimento da arte
+  assert.ok(arte.linhaDeArte("█▀▄▌▐░▒▓ ab"));
+  assert.ok(!arte.linhaDeArte("pt,en") && !arte.linhaDeArte("\u28ff\u28ff\u28ff") && !arte.linhaDeArte("😀😀😀😀😀") && !arte.linhaDeArte("\u28ff\u28ff\u28ff abcdef"));
+});
+await t("bitmap do braille: 2×4 pontos por caractere (U+2800 = vazio)", () => {
+  const { px, w, h } = arte.bitmapDe(["\u28ff\u2801\u2800"]);
+  assert.deepEqual([w, h], [6, 4]);
+  assert.equal([...px].filter(Boolean).length, 9);
+  assert.deepEqual([px[2], px[3], px[2 + 6]], [255, 0, 0]);
+});
+await t("★ a arte sintética no formato do caso 1: 50 linhas, 2 desenhos (27 + 23), bitmap 60×200, o texto solto à parte", () => {
+  const r = arte.detectarArte(BIO);
+  assert.equal(r.linhasArte, 50);
+  assert.deepEqual(r.desenhos.map((d) => [d.linhas, d.w, d.h]), [[27, 60, 108], [23, 52, 92]]);
+  assert.deepEqual([r.conjunto.w, r.conjunto.h, r.braille], [60, 200, 27 * 30 + 23 * 26]);
+  assert.equal(r.textoSolto, "pt,en");
+  assert.ok(r.desenhos.every((d) => hash.hashUtil(d.dhash)) && hash.hashUtil(r.conjunto.dhash));
+});
+await t("separação por desenho: linha vazia separa; largura que oscila não corta; < 4 linhas e emoji não são arte", () => {
+  const mesmaLargura = [...desenho(20, 6, circulo(20, 12, 10)), "", ...desenho(20, 6, circulo(10, 12, 8))].join("\n");
+  assert.deepEqual(arte.separarDesenhos(mesmaLargura).map((d) => d.length), [6, 6]);
+  const oscila = desenho(24, 12, circulo(24, 24, 20)).map((l, i) => (i % 2 ? l : l.slice(0, 22))).join("\n");
+  assert.deepEqual(arte.separarDesenhos(oscila).map((d) => d.length), [12]);
+  assert.equal(arte.detectarArte(desenho(20, 3, circulo(20, 6, 8)).join("\n")), null);
+  assert.equal(arte.detectarArte("oi\ntudo bem?\n😀😀😀😀\n♥ amor ♥"), null);
+});
+await t("★ dHash por desenho: a mesma arte com pequenas edições fica perto; outro desenho fica longe; um desenho sozinho casa com ele dentro do conjunto", () => {
+  const a = arte.detectarArte(BIO);
+  const editada = BIO.split("\n").map((l, i) => (i === 10 ? l.slice(0, 5) + "\u28ff" + l.slice(6) : i === 40 ? l.slice(0, 3) + "\u2800" + l.slice(4) : l)).join("\n");
+  const b = arte.detectarArte(editada);
+  b.desenhos.forEach((d, i) => assert.ok(hash.distancia(d.dhash, a.desenhos[i].dhash) <= hash.PARECIDO, `desenho ${i}`));
+  assert.ok(hash.distancia(a.desenhos[0].dhash, a.desenhos[1].dhash) > hash.PARECIDO);
+  assert.ok(hash.distancia(arte.detectarArte(D2.join("\n")).desenhos[0].dhash, a.desenhos[1].dhash) <= hash.PARECIDO);
+});
+await t("★ normalização e sha256: U+2800 vira espaço, sem espaço no fim, CRLF vira LF; o texto inteiro, só a arte e cada desenho", () => {
+  assert.equal(arte.normalizarLinha("\u2801\u2800 \u2800"), "\u2801");
+  assert.equal(arte.normalizar(["", "\u2800\u2801\u2800", "", "x  ", ""]), " \u2801\n\nx");
+  const imp = arte.impressoesDoTexto(BIO);
+  const variante = BIO.split("\n").map((l) => l + "\u2800\u2800 ").join("\r\n") + "\r\n\r\n";
+  assert.deepEqual(arte.impressoesDoTexto(variante), imp);
+  assert.ok(imp.includes(hash.sha256(arte.normalizar(BIO.split("\n")))));
+  assert.ok(imp.includes(hash.sha256(arte.normalizar([...D1, ...D2]))));
+  assert.ok(imp.includes(hash.sha256(arte.normalizar(D2))));
+});
+await t("★ o caso 1 está na lista de conhecidos (só impressões: sha256 e dHash); a arte sintética não casa com ele", () => {
+  const c1 = CONHECIDOS.find((c) => c.id === "caso-1");
+  assert.ok(c1 && c1.sha256.includes("a2213b462b39303f3aba0c4fbcd9beca06c10aaf6e3a75e335cce1bd9083ccdc") && c1.dhash.includes("c37379279f3d6633"));
+  assert.deepEqual([c1.tipo, c1.categoria, c1.dhashExterno], ["perfil-texto", "sexual", true]);
+  assert.ok(Object.isFrozen(CONHECIDOS) && Object.isFrozen(c1));
+  assert.equal(arte.conhecido(arte.detectarArte(BIO)), null);
+});
+await t("★ conhecido: pelo sha256 (a mesma arte) e pelo dHash (a arte editada; a referência externa vale também no negativo)", () => {
+  const a = arte.detectarArte(BIO);
+  const lista = [{ id: "t-sha", categoria: "sexual", sha256: [a.impressoes[0]] }];
+  assert.equal(arte.conhecido(a, lista)?.por, "sha256");
+  const editada = arte.detectarArte(BIO.replace("pt,en", "pt,en,es").split("\n").map((l, i) => (i === 12 ? "\u28ff" + l.slice(1) : l)).join("\n"));
+  assert.equal(arte.conhecido(editada, lista), null);   // o sha256 não pega edição; o dHash pega
+  assert.equal(arte.conhecido(editada, [{ id: "t-dh", categoria: "sexual", dhash: [a.desenhos[0].dhash] }])?.por, "dhash");
+  const neg = (BigInt("0x" + a.desenhos[1].dhash) ^ 0xffffffffffffffffn).toString(16).padStart(16, "0");
+  assert.equal(arte.conhecido(editada, [{ id: "t-ext", categoria: "sexual", dhash: [neg], dhashExterno: true }])?.por, "dhash");
+  assert.equal(arte.conhecido(editada, [{ id: "t-int", categoria: "sexual", dhash: [neg] }]), null);
+});
+await t("★ guarda: nenhuma arte em braille no repositório (ele é público)", () => {
+  const ler = (d) => fs.readdirSync(d, { withFileTypes: true }).flatMap((e) => (e.name === "node_modules" || e.name.startsWith(".") ? [] : e.isDirectory() ? ler(`${d}/${e.name}`) : /\.(js|mjs|md|json)$/.test(e.name) ? [`${d}/${e.name}`] : []));
+  const arquivos = [...ler("modulos"), ...ler("docs"), ...ler("scripts"), ...ler("ia-servico"), "testes.mjs", ...fs.readdirSync(".").filter((f) => f.endsWith(".md"))];
+  const ruins = arquivos.filter((f) => /[\u2800-\u28ff]{12,}/.test(fs.readFileSync(f, "utf8")));
+  assert.deepEqual(ruins, []);
+});
+
+console.log("── certeza ──");
+await t("certezaDe: alta/média/baixa/nada", () => {
+  assert.deepEqual([0.95, 0.9, 0.6, 0.5, 0.35, 0.29, NaN].map((n) => cz.certezaDe(n)), ["alta", "alta", "media", "media", "baixa", null, null]);
+  assert.equal(cz.certezaDe(0.75, 0.7), "alta");
+});
+await t("★ decidir: o veredito do dono vale antes da nota", () => {
+  assert.equal(cz.decidir({ certeza: "alta", herdado: "errou" }), "nada");
+  assert.equal(cz.decidir({ certeza: null, herdado: "certo", punivel: false }), "punir");
+  assert.equal(cz.decidir({ certeza: "alta" }), "punir");
+  assert.equal(cz.decidir({ certeza: "alta", punivel: false }), "fila");
+  assert.deepEqual(["media", "baixa", null].map((c) => cz.decidir({ certeza: c })), ["fila", "fila", "nada"]);
+});
+await t("limiarAlta: o calibrado pela fila, por servidor; um limiar torto volta ao padrão", async () => {
+  const pedidos = [];
+  const antes = cz._trocarFila({ limiar: (c, p, o) => { pedidos.push([c, p, o?.serverId]); return c === "torta" ? 0.2 : o?.serverId === "R" ? 0.7 : p; } });
+  try {
+    assert.equal(await cz.limiarAlta("sexual", 0.9, "R"), 0.7);
+    assert.equal(await cz.limiarAlta("sexual"), 0.9);
+    assert.equal(await cz.limiarAlta("torta"), 0.9);
+    assert.deepEqual(pedidos[0], ["sexual", 0.9, "R"]);
+  } finally { cz._trocarFila(antes); }
+});
+await t("sem a fila (ou com ela quebrada): nada estoura, o detector segue", async () => {
+  const antes = cz._trocarFila(null);
+  try {
+    assert.deepEqual([await cz.registrar({}), await cz.vereditoParecido({}), await cz.amostrar({}), await cz.limiarAlta("x")], [null, null, false, 0.9]);
+    cz._trocarFila({ registrarCaso: () => { throw new Error("quebrou"); }, vereditoParecido: () => "talvez", amostrar: () => "sim" });
+    assert.equal(await quieto(() => cz.registrar({})), null);
+    assert.deepEqual([await cz.vereditoParecido({}), await cz.amostrar({})], [null, false]);   // fora do vocabulário: nada
+  } finally { cz._trocarFila(antes); }
+});
+
+console.log("── a nota da imagem (os erros que o dono relatou, em descrições sintéticas) ──");
+await t("★ anime muito vermelho / preto e branco: no desenho, sangue e nudez sem genitália ficam em certeza média (fila, sem punir)", () => {
+  const vermelho = av.notaDaFoto("Ilustração em estilo anime de uma garota de cabelo vermelho sobre fundo vermelho intenso, com respingos que parecem sangue.", { riscoModelo: true });
+  assert.deepEqual([vermelho.categoria, cz.certezaDe(vermelho.nota)], ["gore", "media"]);
+  const pb = av.notaDaFoto("Desenho em preto e branco, estilo mangá, de uma personagem nua de costas, com sombras fortes.", { riscoModelo: true });
+  assert.deepEqual([pb.categoria, cz.certezaDe(pb.nota)], ["sexual", "media"]);
+  assert.equal(cz.certezaDe(av.notaDaFoto("Fotografia de uma mulher nua deitada na cama.", { riscoModelo: true }).nota), "alta");   // foto de verdade continua alta
+});
+await t("★ genitália passando: \"partes íntimas\", \"órgão sexual\" contam; sem o voto do modelo vão à fila (antes passavam)", () => {
+  const sem = av.notaDaFoto("Fotografia de uma pessoa com as partes íntimas expostas.");
+  assert.deepEqual([sem.categoria, cz.certezaDe(sem.nota)], ["sexual", "media"]);
+  assert.equal(cz.certezaDe(av.notaDaFoto("Fotografia de uma pessoa com as partes íntimas expostas.", { riscoModelo: true }).nota), "alta");
+  assert.equal(cz.certezaDe(av.notaDaFoto("Ilustração de anime com o órgão sexual à mostra.", { riscoModelo: true }).nota), "alta");   // desenho explícito continua alto
+  assert.equal(av.notaDaFoto("Banner com uma foto de genitália masculina.").categoria, "sexual");
+});
+await t("★ apoio a regimes da 2ª Guerra passando: o símbolo e as palavras vão à fila sem o voto; o símbolo com o voto pune", () => {
+  const susp = av.notaDaFoto("Bandeira vermelha com um círculo branco e um símbolo preto no centro, ao lado de uma águia imperial.");
+  assert.deepEqual([susp.categoria, cz.certezaDe(susp.nota)], ["odio", "baixa"]);
+  assert.equal(cz.certezaDe(av.notaDaFoto("Bandeira vermelha com um círculo branco e um símbolo preto no centro.", { riscoModelo: true }).nota), "media");
+  assert.equal(cz.certezaDe(av.notaDaFoto("Uma suástica preta sobre fundo vermelho.").nota), "media");
+  assert.equal(cz.certezaDe(av.notaDaFoto("Uma suástica preta sobre fundo vermelho.", { riscoModelo: true }).nota), "alta");
+  assert.equal(cz.certezaDe(av.notaDaFoto("Foto em preto e branco de Hitler discursando.").nota), "media");
+});
+await t("o comum não apita nem com o voto do modelo: torso nu na praia, gato, paisagem; recusa = média", () => {
+  for (const d of ["Homem de torso nu na praia, sorrindo.", "Um gato laranja dormindo.", "Paisagem de montanha ao pôr do sol."]) assert.equal(av.notaDaFoto(d, { riscoModelo: true }).categoria, null, d);
+  assert.equal(cz.certezaDe(av.notaDaFoto("Sorry, I can't.", { recusou: true }).nota), "media");
+});
+await t("nota do texto do perfil: o sentinela das mensagens, por categoria", () => {
+  const n = perfil.notaDoTexto("vendo pack +18 de novinha chama no pv");
+  assert.deepEqual([n.categoria, n.nota], ["sexual", 1]);
+  assert.equal(perfil.notaDoTexto("bando de macaco").categoria, "odio");
+  assert.equal(perfil.notaDoTexto("oi, gosto de jogos e anime").categoria, null);
+});
+
+console.log("── o perfil inteiro, de ponta a ponta ──");
+const DONO = U(999), PESSOA = U(1), OUTRA = U(2), MOD = U(3), DONA_SRV = U(4);
+const S1 = U(100), S2 = U(101), S3 = U(102), CANAL = U(110);
+const editados = [], buscados = [], enviados = [], casos = [], analises = [], hashesPedidos = [];
+function servidor(id) {
+  return {
+    id, ownerId: DONA_SRV,
+    fetchMember: async (u) => { buscados.push([id, u]); return { id: { server: id, user: u }, timeout: null, edit: async (d) => { editados.push({ id, u, d }); } }; },
+    kickUser: async () => {}, banUser: async () => {},
+  };
+}
+const cfg = (extra = {}) => ({ language: "pt", automod: { antiAvatar: { enabled: true, acao: "silenciar", tempo: "24h" }, antiScam: { alertChannelId: CANAL } }, log: { canalId: null }, acesso: { cargosStaff: [] }, ...extra });
+const ctxDe = (serverId, config = cfg()) => ({
+  config, serverId, COR: { aviso: 2, erro: 3 }, PREFIXO: "&",
+  sendEmbed: async (canal, e) => { enviados.push({ canal: canal?.id, serverId, ...e }); return {}; },
+  client: { channels: { get: (id) => (id === CANAL ? { id, serverId } : null) } },
+  membroTemPermissao: (m) => m?.authorId === MOD, ehSuperAdmin: (u) => u === DONO,
+});
+const url = (tag, id) => `https://cdn.stoatusercontent.com/${tag}/${id}`;
+const DESCR = new Map(), HASH = new Map();
+av._trocarAnalise(async (u) => { analises.push(u); return DESCR.get(u) ?? { descricao: "Um gato laranja dormindo.", riscoModelo: false }; });
+av._trocarHash(async (u) => { hashesPedidos.push(u); return HASH.has(u) ? { dhash: HASH.get(u) } : { erro: "sem hash" }; });
+let veredito = () => null;
+const filaDuble = { registrarCaso: (c) => { casos.push(c); return { codigo: `K${casos.length}`, herdado: null }; }, vereditoParecido: (q) => veredito(q), limiar: (_c, p) => p, amostrar: () => false };
+cz._trocarFila(filaDuble);
+const zerar = () => { for (const l of [editados, buscados, enviados, casos, analises, hashesPedidos]) l.length = 0; av._zerar(); veredito = () => null; cz._trocarFila(filaDuble); };
+const PACK = "vendo pack +18 de novinha chama no pv";
+const cacheDe = (mapa) => ({ getByKey: ({ server, user }) => (mapa[server]?.includes(user) ? { id: { server, user }, roles: [] } : undefined) });
+
+await t("★ perfil inteiro na entrada: bio (arte → fila, sem punir), banner (sexual alta → silencia até trocar), nome, status e foto; bio e banner com UMA busca", async () => {
+  zerar();
+  DESCR.set(url("backgrounds", "BAN1"), { descricao: "Desenho com genitais expostos.", riscoModelo: true });
+  let buscas = 0;
+  const user = { id: PESSOA, displayName: "Fulano", status: { text: "jogando" }, avatar: { id: "AV1", tag: "avatars" },
+    fetchProfile: async () => { buscas++; return { content: BIO, banner: { id: "BAN1", tag: "backgrounds" } }; } };
+  const r = await quieto(() => av.aoEntrar({ id: { server: S1, user: PESSOA }, server: servidor(S1), user, avatar: null, nickname: "fu" }, ctxDe(S1)));
+  assert.equal(buscas, 1);
+  assert.ok(r[0].apitou && editados.some((x) => x.id === S1 && x.u === PESSOA && x.d.timeout));
+  assert.deepEqual(db.perfilSilencioLer(S1, PESSOA).campos, ["banner"]);
+  assert.ok(db.lerPunicao(S1, PESSOA).silencioAte > Date.now() + 27 * 86400e3, "até trocar (o teto do Stoat)");
+  const alerta = enviados.find((e) => e.canal === CANAL);
+  assert.match(alerta.title, /Perfil impróprio/);
+  assert.match(alerta.description, /banner: sexual explícito/);
+  assert.match(alerta.description, /até trocar o perfil/);
+  const cb = casos.find((c) => c.detector === "perfil:banner"), cbio = casos.find((c) => c.detector === "perfil:bio");
+  assert.deepEqual([cb.tipo, cb.categoria, cb.certeza, cb.acao, cb.evidencia.link, cb.userId, cb.serverId], ["perfil-imagem", "sexual", "alta", "punido", url("backgrounds", "BAN1"), PESSOA, S1]);
+  // (31 out 2026, P3a) antes: categoria "arte-texto" e o trecho com "· texto: pt,en" (o texto solto). agora: a categoria
+  // do texto do perfil tem prefixo (um limiar por detector) e o resumo leva só números e o idioma
+  assert.deepEqual([cbio.tipo, cbio.categoria, cbio.certeza, cbio.acao, cbio.origem], ["perfil-texto", "perfil-texto:arte-texto", "media", "nenhuma", "detector"]);
+  assert.equal(cbio.evidencia.trecho, "arte em texto: 50 linhas, 2 desenho(s), 60×200 pontos · idioma: pt,en");
+  assert.ok(hash.hashUtil(cbio.evidencia.hash));
+  assert.ok(analises.includes(url("avatars", "AV1")) && analises.includes(url("backgrounds", "BAN1")));
+  assert.ok(!BRAILLE.test(JSON.stringify(enviados)) && !BRAILLE.test(cbio.evidencia.trecho), "a arte nunca sai (nem no alerta, nem no trecho)");
+});
+await t("★ arte conhecida (o mesmo texto, pelo sha256) → certeza alta, silencia; bio igual de novo: nada; trocou a bio (evento cru) → a voz volta", async () => {
+  zerar();
+  const a = arte.detectarArte(BIO);
+  const antes = perfil._trocarConhecidos([{ id: "teste", tipo: "perfil-texto", categoria: "sexual", sha256: [a.impressoes[0]] }]);
+  try {
+    const client = { servers: new Map([[S2, servidor(S2)], [S3, servidor(S3)]]), serverMembers: cacheDe({ [S2]: [OUTRA] }), users: { get: () => null } };
+    const deps = { client, criarContexto: (sid) => ctxDe(sid) };
+    let r = await quieto(() => perfil.aoEventoCru({ type: "UserUpdate", id: OUTRA, data: { profile: { content: BIO } } }, deps));
+    assert.ok(r.length === 1 && r[0].apitou && editados.some((x) => x.id === S2 && x.d.timeout));
+    assert.deepEqual(buscados.map((b) => b[0]), [S2], "só o fetchMember do timeout, e só no servidor do cache");
+    // (31 out 2026, P3a) antes: categoria "sexual". agora: "perfil-texto:sexual" (o texto não divide o limiar com a imagem)
+    assert.deepEqual([casos[0].certeza, casos[0].categoria, casos[0].acao], ["alta", "perfil-texto:sexual", "punido"]);
+    assert.match(enviados[0].description, /bio: arte em texto conhecida/);
+    editados.length = 0;
+    r = await quieto(() => perfil.aoEventoCru({ type: "UserUpdate", id: OUTRA, data: { profile: { content: BIO } } }, deps));
+    assert.deepEqual([r.length, editados.length], [0, 0]);
+    r = await quieto(() => perfil.aoEventoCru({ type: "UserUpdate", id: OUTRA, data: { profile: { content: "oi! gosto de desenhar" } } }, deps));
+    assert.ok(r[0].devolveu && editados.some((x) => x.id === S2 && x.d.remove?.includes("Timeout")));
+    assert.deepEqual([db.perfilSilencioLer(S2, OUTRA), db.estaSilenciado(S2, OUTRA)], [null, false]);
+  } finally { perfil._trocarConhecidos(antes); }
+});
+await t("★ apagar a bio (clear ProfileContent) também é trocar; banner pelo evento cru (`profile.background`)", async () => {
+  zerar();
+  const client = { servers: new Map([[S2, servidor(S2)]]), serverMembers: cacheDe({ [S2]: [OUTRA] }) };
+  const deps = { client, criarContexto: (sid) => ctxDe(sid) };
+  let r = await quieto(() => perfil.aoEventoCru({ type: "UserUpdate", id: OUTRA, data: { profile: { content: PACK } } }, deps));
+  assert.ok(r[0].apitou && db.perfilSilencioLer(S2, OUTRA)?.campos.includes("bio"));
+  r = await quieto(() => perfil.aoEventoCru({ type: "UserUpdate", id: OUTRA, data: {}, clear: ["ProfileContent"] }, deps));
+  assert.ok(r[0].devolveu && db.perfilSilencioLer(S2, OUTRA) === null);
+  DESCR.set(url("backgrounds", "BAN2"), { descricao: "Uma suástica preta sobre fundo vermelho.", riscoModelo: true });
+  r = await quieto(() => perfil.aoEventoCru({ type: "UserUpdate", id: OUTRA, data: { profile: { background: { _id: "BAN2", tag: "backgrounds" } } } }, deps));
+  assert.ok(r[0].apitou && analises.includes(url("backgrounds", "BAN2")));
+  assert.deepEqual(await perfil.aoEventoCru({ type: "UserUpdate", id: OUTRA, data: { online: true } }, deps), []);   // presença: nada
+});
+await t("banco: o registro do silêncio do perfil (partes, sem conteúdo) vence em 28 dias e sai quando a staff libera", async () => {
+  zerar();
+  assert.equal(db.perfilSilencioGravar(S1, U(40), ["bio", "bio", "x y", "avatar"], "perfil impróprio"), true);
+  assert.deepEqual(db.perfilSilencioLer(S1, U(40)).campos, ["bio", "avatar"]);
+  assert.equal(db.perfilSilencioGravar(S1, U(40), ["!!"]), false);
+  assert.equal(db.perfilSilencioLer(S1, U(40), Date.now() + 29 * 86400e3), null);
+  assert.equal(db.perfilSilencioLer(S1, U(40)), null, "vencido sai do banco");
+  // silenciado pelo perfil e liberado pela staff: na próxima troca o registro sai sem tocar no timeout
+  db.perfilSilencioGravar(S1, U(41), ["bio"]);
+  db.silenciarAte(S1, U(41), 0); db.definirSilenciado(S1, U(41), false);
+  const r = await quieto(() => perfil.verificarPerfil({ ctx: ctxDe(S1), server: servidor(S1), userId: U(41), valores: { bio: "oi" }, origem: "troca" }));
+  assert.ok(!r.devolveu && db.perfilSilencioLer(S1, U(41)) === null && !editados.length);
+});
+await t("★ nome e status pelo userUpdate (cache de usuários), em todo servidor do cache, sem fetchMember; um caso só na fila", async () => {
+  zerar();
+  const client = { servers: new Map([[S1, servidor(S1)], [S2, servidor(S2)], [S3, servidor(S3)]]), serverMembers: cacheDe({ [S1]: [PESSOA], [S2]: [PESSOA] }) };
+  const r = await quieto(() => av.aoTrocarPerfil({ id: PESSOA, displayName: "卐卐卐 heil hitler", status: { text: "jogando" } }, { displayName: "Fulano", status: { text: "jogando" } }, { client, criarContexto: (sid) => ctxDe(sid) }));
+  assert.equal(r.length, 2);
+  assert.ok(r.every((x) => !x.apitou && x.suspeita), "ódio em texto, nota 0,75: média → fila, ninguém punido");
+  assert.deepEqual([buscados.length, editados.length, enviados.length], [0, 0, 0]);
+  assert.equal(casos.length, 1);
+  // (31 out 2026, P3a) antes: categoria "odio". agora: "perfil-texto:odio"
+  assert.deepEqual([casos[0].tipo, casos[0].categoria, casos[0].certeza, casos[0].detector], ["perfil-texto", "perfil-texto:odio", "media", "perfil:nome"]);
+  assert.deepEqual(await av.aoTrocarPerfil({ id: PESSOA, displayName: "x" }, { displayName: "x" }, { client, criarContexto: ctxDe }), []);
+});
+await t("apelido e foto deste servidor (serverMemberUpdate); mudança só de cargo: nada", async () => {
+  zerar();
+  const srv = servidor(S1);
+  assert.equal(await av.aoTrocarNoServidor({ id: { server: S1, user: PESSOA }, server: srv, nickname: "a", roles: ["x"] }, { nickname: "a", roles: [] }, ctxDe(S1)), null);
+  const r = await quieto(() => av.aoTrocarNoServidor({ id: { server: S1, user: PESSOA }, server: srv, nickname: PACK }, { nickname: "a" }, ctxDe(S1)));
+  assert.ok(r.apitou && casos[0].detector === "perfil:apelido");
+});
+await t("★ herança pela fila (dublê): o ❌ do dono impede punir (e o modelo nem roda); o ✅ pune sem o modelo", async () => {
+  zerar();
+  const HX = "c3a3e1f0e1c3870f", HY = "0f87c3e1f0e1a3c3";
+  HASH.set(url("avatars", "AVX"), HX); HASH.set(url("avatars", "AVY"), HY);
+  DESCR.set(url("avatars", "AVX"), { descricao: "Close de genitália masculina.", riscoModelo: true });
+  veredito = (q) => (q.hash && hash.distancia(q.hash, HX) <= 6 ? "errou" : q.hash && hash.distancia(q.hash, HY) <= 6 && q.categoria === "sexual" ? "certo" : null);
+  let r = await quieto(() => av.verificar({ ctx: ctxDe(S1), server: servidor(S1), userId: PESSOA, avatar: { id: "AVX" } }));
+  assert.ok(!r.apitou && !editados.length && !analises.length && !casos.length);
+  r = await quieto(() => av.verificar({ ctx: ctxDe(S1), server: servidor(S1), userId: PESSOA, avatar: { id: "AVY" } }));
+  assert.ok(r.apitou && editados.length === 1 && !analises.length);
+  assert.deepEqual([casos[0].certeza, casos[0].evidencia.hash, casos[0].evidencia.impressao], ["alta", HY, `dhash:${HY}`]);
+  assert.match(enviados[0].description, /confirmado pelo dono do bot/);
+  // texto: o ❌ numa bio de nota alta impede a punição
+  veredito = (q) => (q.texto === PACK ? "errou" : null);
+  r = await quieto(() => perfil.verificarPerfil({ ctx: ctxDe(S1), server: servidor(S1), userId: OUTRA, valores: { bio: PACK } }));
+  assert.ok(!r.apitou && editados.length === 1);
+});
+await t("★ herança pela fila de verdade (revisao.js): o ✅ numa arte vale para a mesma arte editada; o ❌ tira a arte da fila", async () => {
+  zerar(); revisao._zerar(); revisao._ligarParaTestes(); revisao._trocarSorteio(() => 1);   // (31 out 2026, P3a) a fila ligada; a certeza alta não sorteada
+  const codigos = [];
+  cz._trocarFila({ ...revisao, registrarCaso: (c) => { const r = revisao.registrarCaso(c); codigos.push(r.codigo); return r; } });
+  const ctx = ctxDe(S1);
+  let r = await quieto(() => perfil.verificarPerfil({ ctx, server: servidor(S1), userId: PESSOA, valores: { bio: BIO }, origem: "entrada" }));
+  assert.ok(!r.apitou && r.suspeita && !editados.length && codigos[0]);
+  await revisao.julgar(codigos[0], "certo");
+  const editada = BIO.replace("pt,en", "oi").split("\n").map((l, i) => (i === 15 ? "\u28ff" + l.slice(1) : l)).join("\n");
+  r = await quieto(() => perfil.verificarPerfil({ ctx, server: servidor(S1), userId: OUTRA, valores: { bio: editada }, origem: "entrada" }));
+  assert.ok(r.apitou && editados.some((x) => x.u === OUTRA && x.d.timeout), "herdou o ✅");
+  const listras = desenho(28, 8, (x, y) => (x + y) % 7 < 3).join("\n");
+  r = await quieto(() => perfil.verificarPerfil({ ctx, server: servidor(S1), userId: U(7), valores: { bio: listras } }));
+  const n = codigos.length;
+  await revisao.julgar(codigos[n - 1], "errou");
+  r = await quieto(() => perfil.verificarPerfil({ ctx, server: servidor(S1), userId: U(8), valores: { bio: listras } }));
+  assert.ok(!r.apitou && !r.achados.length && codigos.length === n, "o ❌ vale: nem vai à fila de novo");
+});
+await t("★ ligar: assina o evento cru (a bio que a stoat.js descarta) e os ganchos da fila; o ✅ do dono revê o perfil ATUAL", async () => {
+  zerar(); revisao._zerar(); revisao._ligarParaTestes(); revisao._trocarSorteio(() => 0);   // (31 out 2026, P3a) a fila ligada; a punição (certeza alta) sorteada para a amostra
+  const codigos = [];
+  cz._trocarFila({ ...revisao, registrarCaso: (c) => { const r = revisao.registrarCaso(c); codigos.push(r.codigo); return r; } });
+  const A = U(11), B = U(12);
+  // uma arte que ninguém julgou ainda (o banco desta suíte já tem a BIO julgada ✅)
+  const XADREZ = desenho(24, 12, (x, y) => ((x >> 3) + (y >> 3)) % 2 === 0).join("\n");
+  const bios = { [A]: XADREZ, [B]: XADREZ, [U(13)]: PACK };
+  const usuario = (id) => ({ id, displayName: "x", fetchProfile: async () => ({ content: bios[id], banner: null }) });
+  const client = { events: new EventEmitter(), servers: new Map([[S1, servidor(S1)]]), serverMembers: cacheDe({ [S1]: [A, B, U(13)] }), users: { get: (id) => usuario(id) } };
+  assert.equal(await perfil.ligar({ client, criarContexto: (sid) => ctxDe(sid) }), true);
+  assert.equal(typeof revisao.ganchosDoPerfil().evidenciaDoPerfil, "function");
+  // as duas entram com a arte (média → fila); B troca a bio antes de o dono julgar
+  for (const id of [A, B]) await quieto(() => perfil.verificarPerfil({ ctx: ctxDe(S1), server: servidor(S1), userId: id, valores: { bio: XADREZ } }));
+  assert.ok(!editados.length && codigos.length === 2);
+  bios[B] = "mudei a bio";
+  await quieto(() => revisao.julgar(codigos[1], "certo"));
+  assert.ok(!editados.some((x) => x.u === B), "B já trocou: não é punida");
+  await quieto(() => revisao.julgar(codigos[0], "certo"));
+  assert.ok(editados.some((x) => x.u === A && x.d.timeout), "A continua com a arte: punida no ✅");
+  // o evento cru chega pelo `client.events`
+  await quieto(async () => {
+    client.events.emit("event", { type: "UserUpdate", id: U(13), data: { profile: { content: PACK } } });
+    await new Promise((ok) => setTimeout(ok, 50));
+  });
+  assert.ok(editados.some((x) => x.u === U(13) && x.d.timeout));
+  // o dono diz ❌ na punição (o bot errou): a bio, igual, herda o "errou" e a voz volta
+  await quieto(() => revisao.julgar(codigos.at(-1), "errou"));
+  assert.ok(editados.some((x) => x.u === U(13) && x.d.remove?.includes("Timeout")) && db.perfilSilencioLer(S1, U(13)) === null, "❌ num punido devolve a voz");
+  assert.equal(await perfil.ligar({ client, criarContexto: ctxDe }), false, "uma vez só");
+});
+await t("★ servidor rígido (`&caso servidor <id> rigido`): o limiar menor vale só ali", async () => {
+  zerar();
+  cz._trocarFila({ ...filaDuble, limiar: (_c, p, o) => (o?.serverId === S3 ? 0.7 : p) });
+  const client = { servers: new Map([[S1, servidor(S1)], [S3, servidor(S3)]]), serverMembers: cacheDe({ [S1]: [PESSOA], [S3]: [PESSOA] }) };
+  const r = await quieto(() => av.aoTrocarPerfil({ id: PESSOA, displayName: "卐卐卐 heil hitler" }, { displayName: "x" }, { client, criarContexto: (sid) => ctxDe(sid) }));
+  assert.deepEqual(r.map((x) => x.apitou), [false, true]);
+  assert.deepEqual(editados.map((x) => x.id), [S3]);
+});
+await t("isentos: staff, dono do servidor, dono do bot e bots; módulo desligado: nada", async () => {
+  zerar();
+  const v = { bio: PACK };
+  for (const quem of [MOD, DONA_SRV, DONO]) assert.equal(await perfil.verificarPerfil({ ctx: ctxDe(S1), server: servidor(S1), userId: quem, valores: v }), null, quem);
+  assert.equal(await perfil.verificarPerfil({ ctx: ctxDe(S1), server: servidor(S1), userId: PESSOA, user: { bot: { owner: "x" } }, valores: v }), null);
+  assert.equal(await perfil.verificarPerfil({ ctx: ctxDe(S1, cfg({ automod: { antiAvatar: { enabled: false } } })), server: servidor(S1), userId: PESSOA, valores: v }), null);
+  assert.equal(casos.length + editados.length, 0);
+});
+await t("sem o modelo de visão: o texto do perfil é visto, as imagens não", async () => {
+  zerar();
+  const antes = process.env.IA_SERVICO_URL; delete process.env.IA_SERVICO_URL;
+  try {
+    const r = await quieto(() => perfil.verificarPerfil({ ctx: ctxDe(S1), server: servidor(S1), userId: PESSOA, valores: { avatar: { id: "AV9" }, bio: PACK } }));
+    assert.ok(r.apitou);
+    assert.equal(analises.length + hashesPedidos.length, 0);
+  } finally { process.env.IA_SERVICO_URL = antes; }
+});
+await t("sem a fila: a arte (média) vai à staff como \"para conferir\", sem a arte e sem punir", async () => {
+  zerar(); cz._trocarFila(null);
+  const r = await quieto(() => perfil.verificarPerfil({ ctx: ctxDe(S1), server: servidor(S1), userId: PESSOA, valores: { bio: BIO } }));
+  assert.ok(!r.apitou && !editados.length);
+  assert.ok(enviados.length === 1 && /Perfil para conferir/.test(enviados[0].title) && /bio: arte em texto/.test(enviados[0].description) && !BRAILLE.test(JSON.stringify(enviados)));
+});
+await t("a amostra aleatória: só do que não apitou nada, com `origem: amostra`", async () => {
+  zerar();
+  cz._trocarFila({ ...filaDuble, amostrar: () => true });
+  await quieto(() => perfil.verificarPerfil({ ctx: ctxDe(S1), server: servidor(S1), userId: PESSOA, valores: { bio: "oi, gosto de jogos" } }));
+  assert.deepEqual([casos.length, casos[0]?.origem, casos[0]?.acao, casos[0]?.certeza], [1, "amostra", "nenhuma", "baixa"]);
+  casos.length = 0;
+  await quieto(() => perfil.verificarPerfil({ ctx: ctxDe(S1), server: servidor(S1), userId: OUTRA, valores: { bio: PACK } }));
+  assert.ok(casos.length === 1 && casos[0].origem === "detector");
+});
+await t("buscarPerfil: uma busca por pessoa (guardada); teto de 20 por minuto", async () => {
+  zerar();
+  let n = 0;
+  const u = (id) => ({ id, fetchProfile: async () => { n++; return { content: "oi" }; } });
+  await perfil.buscarPerfil(u(U(20))); await perfil.buscarPerfil(u(U(20)));
+  assert.equal(n, 1);
+  for (let i = 0; i < 30; i++) await quieto(() => perfil.buscarPerfil(u(U(30 + i))));
+  assert.equal(n, 20);
+});
+await t("★ sem fetchMember por evento: o código do perfil nem tem a chamada", () => {
+  assert.doesNotMatch(fs.readFileSync("modulos/moderacao/perfil.js", "utf8"), /fetchMember\s*\(/);
+  assert.doesNotMatch(fs.readFileSync("modulos/moderacao/avatar.js", "utf8"), /fetchMember\s*\(/);
+});
+await t("evidência para o `&caso perdeu`: avatar e banner com o hash; bio de arte sem a arte", async () => {
+  zerar();
+  HASH.set(url("avatars", "AVE"), "c3a3e1f0e1c3870f");
+  const client = { users: { get: () => ({ id: PESSOA, avatar: { id: "AVE", tag: "avatars" }, fetchProfile: async () => ({ content: BIO, banner: { id: "BNE", tag: "backgrounds" } }) }) } };
+  assert.deepEqual(await perfil.evidenciaDoPerfil({ client, userId: PESSOA, parte: "avatar" }), { link: url("avatars", "AVE"), hash: "c3a3e1f0e1c3870f", impressao: "dhash:c3a3e1f0e1c3870f" });
+  const bio = await perfil.evidenciaDoPerfil({ client, userId: PESSOA, parte: "bio" });
+  assert.ok(!BRAILLE.test(bio.trecho) && bio.texto === BIO && hash.hashUtil(bio.hash));
+  const ban = await perfil.evidenciaDoPerfil({ client, userId: PESSOA, parte: "banner" });
+  assert.deepEqual([ban.link, ban.hash, ban.impressao], [url("backgrounds", "BNE"), null, "arquivo:BNE"]);
+});
+
+console.log("── revisão do P3a (31 out 2026) ──");
+await t("★ falha da análise não devolve a voz: silenciado pelo avatar, troca a foto com o ia-servico falhando → continua silenciado", async () => {
+  zerar();
+  const P = U(60);
+  const ver = (id, server = servidor(S1)) => quieto(() => perfil.verificarPerfil({ ctx: ctxDe(S1), server, userId: P, valores: { avatar: { id, tag: "avatars" } }, origem: "troca" }));
+  DESCR.set(url("avatars", "AVP1"), { descricao: "Fotografia de uma mulher nua deitada na cama.", riscoModelo: true });
+  let r = await ver("AVP1");
+  assert.ok(r.apitou); assert.deepEqual(db.perfilSilencioLer(S1, P).campos, ["avatar"]);
+  const antes = av._trocarAnalise(async () => { throw new Error("ia-servico fora do ar"); });
+  try {
+    editados.length = 0;
+    r = await ver("AVP2");
+    assert.ok(!r.devolveu, "o modelo caiu: não sei");
+    assert.deepEqual(db.perfilSilencioLer(S1, P)?.campos, ["avatar"]);
+    av._trocarAnalise(async () => ({ erro: "fila cheia" }));
+    r = await ver("AVP3");
+    assert.ok(!r.devolveu, "o modelo respondeu erro: não sei");
+    assert.ok(!editados.some((x) => x.d.remove?.includes("Timeout")));
+  } finally { av._trocarAnalise(antes); }
+  const ia = process.env.IA_SERVICO_URL; delete process.env.IA_SERVICO_URL;
+  try {
+    r = await ver("AVP4");
+    assert.ok(!r.devolveu && db.perfilSilencioLer(S1, P)?.campos.includes("avatar"), "sem visão: não sei");
+  } finally { process.env.IA_SERVICO_URL = ia; }
+  // a troca analisada de verdade e limpa: a voz volta
+  r = await ver("AVP5");
+  assert.ok(r.devolveu && db.perfilSilencioLer(S1, P) === null);
+  assert.ok(editados.some((x) => x.u === P && x.d.remove?.includes("Timeout")));
+});
+await t("★ a voz só volta se o timeout ainda é o do perfil (±5 min): o timeout manual da staff aplicado depois fica", async () => {
+  zerar();
+  const P = U(61), Q = U(62);
+  const comTimeout = (t) => ({ ...servidor(S1), fetchMember: async (u) => { buscados.push([S1, u]); return { id: { server: S1, user: u }, timeout: new Date(t), edit: async (d) => { editados.push({ id: S1, u, d }); } }; } });
+  let r = await quieto(() => perfil.verificarPerfil({ ctx: ctxDe(S1), server: servidor(S1), userId: P, valores: { bio: PACK } }));
+  assert.ok(r.apitou);
+  const fim = db.perfilSilencioLer(S1, P).fimAplicado;
+  assert.ok(fim > Date.now() + 27 * 86400e3, "o fim do timeout do perfil fica guardado");
+  const fimStaff = Date.now() + 86400e3;
+  db.silenciarAte(S1, P, fimStaff, "staff");   // a staff silenciou depois, por 1 dia
+  editados.length = 0;
+  r = await quieto(() => perfil.verificarPerfil({ ctx: ctxDe(S1), server: comTimeout(fimStaff), userId: P, valores: { bio: "oi, gosto de jogos" }, origem: "troca" }));
+  assert.ok(!r.devolveu);
+  assert.ok(!editados.some((x) => x.d.remove?.includes("Timeout")), "o timeout da staff fica");
+  assert.equal(db.perfilSilencioLer(S1, P), null, "o registro do perfil sai");
+  assert.equal(db.lerPunicao(S1, P).silencioAte, fimStaff, "o registro da staff (sair e voltar reaplica) fica");
+  // o timeout do próprio perfil (a 1 min do aplicado): sai
+  await quieto(() => perfil.verificarPerfil({ ctx: ctxDe(S1), server: servidor(S1), userId: Q, valores: { bio: PACK } }));
+  const fimQ = db.perfilSilencioLer(S1, Q).fimAplicado;
+  editados.length = 0;
+  r = await quieto(() => perfil.verificarPerfil({ ctx: ctxDe(S1), server: comTimeout(fimQ + 60e3), userId: Q, valores: { bio: "oi, gosto de jogos" }, origem: "troca" }));
+  assert.ok(r.devolveu && editados.some((x) => x.u === Q && x.d.remove?.includes("Timeout")));
+  // a coluna nova num banco antigo: acrescentada sem perder linhas
+  assert.ok(db.getDb().prepare("PRAGMA table_info(perfil_silencio)").all().some((c) => c.name === "fimAplicado"));
+});
+await t("★ um limiar por detector: o texto do perfil usa `perfil-texto:<categoria>`, a imagem a categoria pura (herança e limiar idem); o `perdeu` vale para todas", async () => {
+  zerar();
+  const lim = [], cons = [];
+  cz._trocarFila({ ...filaDuble, limiar: (c, p) => { lim.push(c); return p; }, vereditoParecido: (q) => { cons.push(q.categoria); return null; } });
+  DESCR.set(url("avatars", "AVC"), { descricao: "Fotografia de uma mulher nua deitada na cama.", riscoModelo: true });
+  await quieto(() => perfil.verificarPerfil({ ctx: ctxDe(S1), server: servidor(S1), userId: U(63), valores: { bio: PACK, nome: "bando de macaco", avatar: { id: "AVC", tag: "avatars" } } }));
+  for (const c of ["perfil-texto:sexual", "perfil-texto:odio", "sexual"]) assert.ok(lim.includes(c), `limiar ${c}: ${lim.join()}`);
+  for (const c of ["perfil-texto:sexual", "perfil-texto:odio"]) assert.ok(cons.includes(c), `herança ${c}: ${cons.join()}`);
+  assert.ok(!cons.some((c) => c === "sexual" || c === "odio"), "o texto não consulta a categoria da imagem");
+  const cat = Object.fromEntries(casos.map((c) => [c.detector, c.categoria]));
+  assert.deepEqual([cat["perfil:bio"], cat["perfil:nome"], cat["perfil:avatar"]], ["perfil-texto:sexual", "perfil-texto:odio", "sexual"]);
+  for (const c of ["perfil-texto:sexual", "perfil-texto:odio", "perfil-texto:golpe", "perfil-texto:arte-texto"]) assert.match(c, /^[a-z0-9][a-z0-9:_-]{0,39}$/);
+  // a fila de verdade: o `perdeu` do dono vale para o texto, qualquer que seja a categoria
+  revisao._zerar(); revisao._ligarParaTestes(); cz._trocarFila(revisao);
+  const T = "compre seguidores baratos no meu site agora mesmo e ganhe brinde";
+  assert.ok((await revisao.registrarPerdido({ tipo: "perfil-texto", userId: U(64), evidencia: { texto: T, trecho: T } }))?.codigo);
+  assert.equal((await perfil.avaliarTexto("bio", T)).achado?.herdado, "certo");
+  revisao._zerar();
+});
+await t("★ o resumo da arte leva só números e o idioma — nunca o texto solto da bio", async () => {
+  const comTexto = BIO.replace("pt,en", "me chama no zap 11 99999-8888 seu lindo");
+  const a = arte.detectarArte(comTexto);
+  assert.ok(a.textoSolto.includes("zap"));
+  const r = perfil.resumoArte(a);
+  assert.doesNotMatch(r, /zap|chama|9999|lindo/);
+  assert.match(r, /^arte em texto: \d+ linhas, \d+ desenho\(s\), \d+×\d+ pontos( · idioma: [a-z]{2}(,[a-z]{2})*)?$/);
+  assert.equal(perfil.resumoArte(arte.detectarArte(BIO)), "arte em texto: 50 linhas, 2 desenho(s), 60×200 pontos · idioma: pt,en");
+  assert.equal(arte.idiomaDoTexto("hello i am new here and this is my bio"), "en");
+  assert.equal(arte.idiomaDoTexto("11 99999-8888"), null);
+  zerar();
+  await quieto(() => perfil.verificarPerfil({ ctx: ctxDe(S1), server: servidor(S1), userId: U(65), valores: { bio: comTexto } }));
+  const c = casos.find((x) => x.detector === "perfil:bio");
+  assert.ok(c && !/zap|chama|9999|lindo/.test(c.evidencia.trecho), c?.evidencia?.trecho);
+});
+await t("★ o registro do silêncio do perfil vencido (28 dias) sai na limpeza periódica, não só na leitura", async () => {
+  const reten = await import("./modulos/core/retencao.js");
+  const agora = Date.now();
+  db.perfilSilencioGravar(S1, U(70), ["bio"], null, agora - 29 * 86400e3);
+  db.perfilSilencioGravar(S1, U(71), ["bio"], null, agora - 86400e3);
+  const conta = (u) => db.getDb().prepare("SELECT COUNT(*) n FROM perfil_silencio WHERE userId = ?").get(u).n;
+  assert.equal(conta(U(70)), 1);
+  const r = reten.limparVencidos(agora);
+  assert.ok(r.perfilSilencio >= 1, JSON.stringify(r));
+  assert.deepEqual([conta(U(70)), conta(U(71))], [0, 1]);
+  assert.match(fs.readFileSync("main.js", "utf8"), /v\.perfilSilencio/, "o main.js registra no ciclo de 6 h");
+});
+
+await t("★ o dono julga o caso de perfil de quem ainda está silenciado: ❌ na foto nova (média, na fila) devolve a voz; ✅ mantém o silêncio", async () => {
+  for (const [veredito, volta, P] of [["errou", true, U(80)], ["certo", false, U(81)]]) {
+    zerar(); revisao._zerar(); revisao._ligarParaTestes(); revisao._trocarSorteio(() => 1);
+    const codigos = [];
+    cz._trocarFila({ ...revisao, registrarCaso: (c) => { const r = revisao.registrarCaso(c); codigos.push(r.codigo); return r; } });
+    const A1 = `AJ1${veredito}`, A2 = `AJ2${veredito}`;
+    DESCR.set(url("avatars", A1), { descricao: "Fotografia de uma mulher nua deitada na cama.", riscoModelo: true });
+    DESCR.set(url("avatars", A2), { descricao: "Desenho em preto e branco, estilo mangá, de uma personagem nua de costas, com sombras fortes.", riscoModelo: true });
+    const usuario = { id: P, displayName: "x", avatar: { id: A1, tag: "avatars" }, fetchProfile: async () => ({ content: null, banner: null }) };
+    const client = { events: new EventEmitter(), servers: new Map([[S1, servidor(S1)]]), serverMembers: cacheDe({ [S1]: [P] }), users: { get: (id) => (id === P ? usuario : null) } };
+    assert.equal(await perfil.ligar({ client, criarContexto: (sid) => ctxDe(sid) }), true);
+    let r = await quieto(() => perfil.verificarPerfil({ ctx: ctxDe(S1), server: servidor(S1), userId: P, valores: { avatar: usuario.avatar }, origem: "entrada" }));
+    assert.ok(r.apitou, "silenciado pelo avatar");
+    usuario.avatar = { id: A2, tag: "avatars" };
+    r = await quieto(() => perfil.verificarPerfil({ ctx: ctxDe(S1), server: servidor(S1), userId: P, valores: { avatar: usuario.avatar }, origem: "troca" }));
+    assert.ok(!r.apitou && !r.devolveu && r.suspeita, "a foto nova é média: fila, e continua silenciado");
+    assert.deepEqual(db.perfilSilencioLer(S1, P)?.campos, ["avatar"]);
+    const cod = codigos.filter(Boolean).at(-1);
+    assert.deepEqual([db.filaCaso(cod).certeza, db.filaCaso(cod).acao], ["media", "nenhuma"]);
+    editados.length = 0;
+    await quieto(() => revisao.julgar(cod, veredito));
+    if (volta) {
+      assert.ok(editados.some((x) => x.u === P && x.d.remove?.includes("Timeout")), "❌: a voz volta");
+      assert.equal(db.perfilSilencioLer(S1, P), null);
+    } else {
+      assert.ok(!editados.some((x) => x.d.remove?.includes("Timeout")), "✅: continua silenciado");
+      assert.deepEqual(db.perfilSilencioLer(S1, P)?.campos, ["avatar"]);
+    }
+  }
+  revisao._zerar();
+});
+
+console.log("── ia-servico: o dHash com o sharp ──");
+await t("★ /hash-imagem: a mesma conta do bot; a mesma imagem reencodada fica perto, outra fica longe; só foto e só o CDN", async () => {
+  const { hashDoBuffer, hashImagem } = await import("./ia-servico/ferramentas/hash-imagem.js");
+  const sharp = (await import("node:module")).createRequire(process.cwd() + "/ia-servico/x.js")("sharp");
+  const img = (fn, w = 64, h = 48) => { const px = Buffer.alloc(w * h * 3); for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const v = fn(x, y); px.set([v, v, v], (y * w + x) * 3); } return sharp(px, { raw: { width: w, height: h, channels: 3 } }); };
+  assert.equal((await hashDoBuffer(await img((x) => Math.round(x / 63 * 255)).png().toBuffer())).dhash, "ffffffffffffffff");
+  const bola = (x, y) => (Math.hypot(x - 30, y - 22) < 15 ? 230 : 30);
+  const a1 = (await hashDoBuffer(await img(bola).png().toBuffer())).dhash;
+  const a2 = (await hashDoBuffer(await img(bola).resize(200, 150).jpeg({ quality: 50 }).toBuffer())).dhash;
+  const b = (await hashDoBuffer(await img((x, y) => (Math.abs(x - 40) + Math.abs(y - 10) < 12 ? 230 : 30)).png().toBuffer())).dhash;
+  assert.ok(hash.distancia(a1, a2) <= hash.PARECIDO, `${a1} ${a2}`);
+  assert.ok(hash.distancia(a1, b) > hash.PARECIDO, `${a1} ${b}`);
+  assert.match((await hashDoBuffer(Buffer.from("não é imagem"))).erro, /formato/);
+  assert.match((await hashImagem({ url: "https://exemplo.com/x.png" })).erro, /só baixo imagens do CDN/);
+  const srv = fs.readFileSync("ia-servico/servidor.js", "utf8");
+  assert.ok(srv.indexOf('req.url === "/hash-imagem"') > srv.indexOf('req.headers["x-chave"] !== CHAVE'), "a rota passa pela chave");
+});
+
+console.log(`\nP3a PERFIL: ${ok} ok, ${falhou} falha(s)`);
+process.exit(falhou ? 1 : 0);
+};
+
+// (31 out 2026, P3a) a integração das três áreas: o &privacidade apagar tira a pessoa da fila,
+// o perfil sem visão segue vivo (só o texto), a ajuda/painel do avatar falam do perfil inteiro,
+// a PRIVACIDADE cobre a fila e o perfil nos 3 idiomas, e as NOVIDADES do topo são do P3a.
+SUITES["p3a-integracao"] = async () => {
+const fs = (await import("node:fs")).default;
+const assert = (await import("node:assert")).default;
+const DB = "/tmp/p3a-integracao.db";
+for (const f of [DB, DB + "-wal", DB + "-shm", "/tmp/p3a-integracao.json"]) fs.rmSync(f, { force: true });
+const U = (n) => `01KP3K${String(n).padStart(20, "0")}`;
+const DONO = U(1), ANA = U(4), BIA = U(5), SID = U(100);
+Object.assign(process.env, { BOT_TOKEN: "tok", DB_PATH: DB, CONFIG_PATH: "/tmp/p3a-integracao.json", SUPER_ADMINS: DONO, LOG_SEGREDO: "segredo-de-teste" });
+for (const v of ["IA_MODO", "IA", "CHAT_SERVIDORES", "IA_SERVICO_URL", "LLM_URL", "LLM_MODEL_VISAO", "REVISAO_POR_DIA", "REVISAO_HORA", "REVISAO_AMOSTRA"]) delete process.env[v];
+let ok = 0, falhou = 0;
+const t = async (nome, fn) => { try { await fn(); console.log(`  ✅ ${nome}`); ok++; } catch (e) { console.log(`  ❌ ${nome}\n     ${String(e?.stack ?? e).split("\n").slice(0, 6).join("\n     ")}`); falhou++; } };
+const quieto = async (fn) => { const o = [console.log, console.info, console.warn, console.error]; console.log = console.info = console.warn = console.error = () => {}; try { return await fn(); } finally { [console.log, console.info, console.warn, console.error] = o; } };
+const db = await import("./modulos/core/db.js");
+await quieto(() => db.abrirBanco(DB));
+const rev = await import("./modulos/moderacao/revisao.js");
+rev._ligarParaTestes();   // (31 out 2026, P3a) a fila desligada não grava nada
+const reten = await import("./modulos/core/retencao.js");
+
+await t("★ &privacidade apagar: a pessoa sai dos casos da fila (o caso fica, sem conta, canal, mensagem, trecho nem link)", async () => {
+  const caso = (userId) => ({ tipo: "staff", categoria: "staff:kick", serverId: SID, userId, canalId: U(110), msgId: U(111), origem: "staff", certeza: "media", nota: null, acao: "nenhuma", evidencia: { trecho: "um trecho", link: "https://cdn.stoatusercontent.com/attachments/x" }, detector: "staff" });
+  const a = await quieto(() => rev.registrarCaso(caso(ANA)));
+  const b = await quieto(() => rev.registrarCaso(caso(BIA)));
+  assert.ok(a.codigo && b.codigo);
+  const tela = reten.dadosDaPessoa(ANA).find((g) => g.id === "revisao");
+  assert.equal(tela?.n, 1, "a tela de confirmação conta o caso");
+  for (const l of ["pt", "en", "es"]) assert.ok(tela.rotulo[l], l);
+  reten.dadosDaPessoa(ANA, { apagar: true });
+  const ca = db.filaCaso(a.codigo), cb = db.filaCaso(b.codigo);
+  assert.ok(ca, "o caso dela fica (ensina a moderação)");
+  // (31 out 2026, P3a) antes: userId, canalId, msgId, trecho, link. agora: também o pseudônimo do servidor; e a DM fica marcada para editar
+  for (const k of ["userId", "canalId", "msgId", "trecho", "link", "servidor"]) assert.equal(ca[k] ?? null, null, k);
+  assert.equal(cb.userId, BIA, "o caso de outra pessoa não muda");
+  assert.equal(reten.dadosDaPessoa(ANA).find((g) => g.id === "revisao").n, 0);
+});
+
+await t("★ o perfil sem o modelo de visão segue vivo na tela do &config (só o texto); imagens ficam ⚫", async () => {
+  const store = await import("./modulos/core/config-store.js");
+  const { telaDoConfig } = await import("./modulos/moderacao/config-comando.js");
+  const cfg = structuredClone(store.padraoServidor);
+  for (const [l, re] of [["pt", /🟢 \*\*Perfil\*\* _\(só o texto\)_/], ["en", /🟢 \*\*Profile\*\* _\(text only\)_/], ["es", /🟢 \*\*Perfil\*\* _\(solo el texto\)_/]]) {
+    const txt = telaDoConfig(cfg, { lang: l }).linhas.join("\n");
+    assert.match(txt, re, l); assert.match(txt, /⚫/, l);
+  }
+  process.env.LLM_MODEL_VISAO = "x";
+  try { assert.doesNotMatch(telaDoConfig(cfg, { lang: "pt" }).linhas.join("\n"), /só o texto/); } finally { delete process.env.LLM_MODEL_VISAO; }
+});
+
+await t("a ajuda do `sentinela avatar` fala do perfil inteiro e do silêncio até trocar, sem o `tempo`, nos 3 idiomas", async () => {
+  const reg = (await import("./modulos/comandos/automod.js")).default ?? (await import("./modulos/comandos/automod.js"));
+  const src = fs.readFileSync("modulos/comandos/automod.js", "utf8");
+  const i = src.indexOf("          avatar: {\n            titulo:");
+  const bloco = src.slice(i, src.indexOf("\n          },", i));
+  for (const re of [/perfil inteiro/, /whole profile/, /perfil entero/, /até a pessoa trocar/, /until the person changes/, /hasta que la persona cambie/]) assert.match(bloco, re);
+  assert.doesNotMatch(bloco, /avatar\.tempo\}/);
+  assert.ok(reg);
+});
+
+await t("PRIVACIDADE.md: a fila, o perfil inteiro e o silêncio do perfil nos 3 idiomas; nenhuma linha diz que o apagar não tira da fila", () => {
+  const p = fs.readFileSync("PRIVACIDADE.md", "utf8");
+  for (const re of [/Fila de revisão do dono do bot/, /Bot owner's review queue/, /Cola de revisión del dueño del bot/,
+    /O perfil de quem entra/, /The profile of whoever joins/, /El perfil de quien entra/,
+    /Silêncio por causa do perfil/, /Timeout because of the profile/, /Silencio por el perfil/,
+    /tira você dos\s+casos da fila/, /removes you from the\s+cases/, /te saca de\s+los casos/]) assert.match(p, re);
+  assert.doesNotMatch(p, /mesmo com `&privacidade apagar`|even with `&privacidade apagar`|incluso con `&privacidade apagar`/);
+});
+
+await t("★ PRIVACIDADE.md (revisão P3a): a amostra inclui punidas e não punidas e o resto da certeza alta não é guardado; julgado sem servidor nem pseudônimo, DM editada; herdado em 30 dias; o perfil só vai ao banco pela fila; `&caso` só na DM — nos 3 idiomas", () => {
+  const p = fs.readFileSync("PRIVACIDADE.md", "utf8");
+  const uma = p.replace(/\n  /g, " ");
+  const linha = (re) => p.split("\n").find((l) => re.test(l)) ?? "";
+  const fila = { pt: linha(/^\| \*\*Fila de revisão do dono do bot\*\*/), en: linha(/^\| \*\*Bot owner's review queue\*\*/), es: linha(/^\| \*\*Cola de revisión del dueño del bot\*\*/) };
+  for (const [l, res] of Object.entries({
+    pt: [/decisões punidas e não punidas/, /certeza alta \*\*não é guardado\*\*/, /sem pessoa nem servidor \(nem o código\/pseudônimo dele\)/, /DM do dono é editada para tirar o trecho e o link/, /herdado[^|]*\*\*30 dias\*\*/],
+    en: [/both punished and unpunished decisions/, /high certainty \*\*isn't kept\*\*/, /no person, no server \(not even its code\/pseudonym\)/, /owner's DM is edited to remove the excerpt and the link/, /inherited[^|]*\*\*30 days\*\*/],
+    es: [/decisiones castigadas y no castigadas/, /certeza alta \*\*no se guarda\*\*/, /sin persona ni servidor \(ni su código\/seudónimo\)/, /DM del dueño se edita para quitar el fragmento y el enlace/, /heredado[^|]*\*\*30 días\*\*/],
+  })) for (const re of res) assert.match(fila[l], re, `${l}: ${re}`);
+  for (const re of [/Nada disso vai para o banco, exceto o que entra na fila de revisão/, /None of it goes to the database, except what enters the review queue/, /Nada de esto va a la base de datos, salvo lo que entra en la cola de revisión/,
+    /O `&caso` \(o comando do dono\) só funciona na DM com a Judy/, /`&caso` \(the owner's command\) only works in the DM with Judy/, /El `&caso` \(el comando del dueño\) solo funciona por DM con Judy/,
+    /o link e o código do servidor, e a mensagem do caso na DM do dono é editada/, /the link and the server's code are removed from it, and the case's message in the owner's DM is edited/, /el enlace y el código del servidor, y el mensaje del caso en el DM del dueño se edita/,
+    /resumo em números e o idioma do texto ao lado, \*\*nunca o desenho\*\* nem o texto/, /summary in numbers and the language of the text next to it, \*\*never the drawing\*\* or the text/, /resumen en números y el idioma del texto de al lado, \*\*nunca el dibujo\*\* ni el texto/]) assert.match(uma, re);
+  assert.doesNotMatch(uma, /Nada disso vai para o banco:|None of it goes to the database:|Nada de esto va a la base de datos:/);
+  // os itens quebrados em ~88 colunas
+  for (const l of p.split("\n")) if (/^(- |  )/.test(l) && /fila de revisão|review queue|cola de revisión|perfil de quien|profile of whoever|perfil de quem/.test(l)) assert.ok([...l].length <= 90, l);
+});
+await t("NOVIDADES: o topo é do pacote P3a, nos 3 idiomas, e o docs/pacote.json concorda", async () => {
+  const { NOVIDADES, problemaDaTrava } = await import("./modulos/ferramentas/novidades.js");
+  const pac = JSON.parse(fs.readFileSync("docs/pacote.json", "utf8"));
+  assert.equal(pac.pacote, "P3a");
+  assert.equal(NOVIDADES[0].pacote, "P3a");
+  assert.equal(problemaDaTrava(NOVIDADES, pac), null);
+  for (const l of ["pt", "en", "es"]) assert.match(NOVIDADES[0][l], /40%/, l);
+});
+
+console.log(`\nP3a INTEGRAÇÃO: ${ok} ok, ${falhou} falha(s)`);
 process.exit(falhou ? 1 : 0);
 };
 

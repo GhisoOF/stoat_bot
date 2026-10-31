@@ -3,6 +3,7 @@ import { createServer } from "node:http";
 import { garantirDNS, estaInstalado, servidoresUsados } from "./dns-fallback.js";
 import * as ferramentas from "./ferramentas/index.js";
 import { moderarImagem } from "./ferramentas/ver-imagem.js";
+import { hashImagem } from "./ferramentas/hash-imagem.js";   // (31 out 2026, P3a) o dHash do perfil
 import { LLM_URL, pedirLLM, modelosDoLLM } from "./llm.js";
 import { chaveServicoIA } from "../modulos/ai/servicos.js";
 
@@ -340,6 +341,13 @@ const servidor = createServer(async (req, res) => {
       const { url } = (await lerCorpo(req)) ?? {};
       if (!url) return json(res, 400, { erro: "informe { url }" });
       return json(res, 200, await moderarImagem({ url }));
+    }
+
+    // (31 out 2026, P3a) o dHash de uma imagem do CDN, sem modelo (a moderação do perfil)
+    if (req.method === "POST" && req.url === "/hash-imagem") {
+      const { url } = (await lerCorpo(req)) ?? {};
+      if (!url) return json(res, 400, { erro: "informe { url }" });
+      return json(res, 200, await hashImagem({ url }));
     }
 
     if (req.method === "GET" && req.url === "/ferramentas") {

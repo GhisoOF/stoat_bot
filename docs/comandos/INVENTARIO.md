@@ -4,7 +4,7 @@ Gerado por `INVENTARIO=1 node testes.mjs comandos-17out` — **não edite à mã
 reestruturação dos comandos num registro central (fase 0). A suíte `comandos-17out` compara o bot com o
 `inventario.json` desta pasta: nome que some ou muda de destino faz o teste falhar.
 
-**42 comandos · 165 nomes · 923 subcomandos em inglês · 294 telas de ajuda · 721 exemplos executados**
+**43 comandos · 167 nomes · 936 subcomandos em inglês · 296 telas de ajuda · 735 exemplos executados**
 
 ## Comandos
 
@@ -12,11 +12,12 @@ reestruturação dos comandos num registro central (fase 0). A suíte `comandos-
 |---|---|---|---|---|---|---|
 | `adeus` | `goodbye` | `despedida` | `despedida` `farewell` `goodbye` | `adeus (cmd)` | sim | 6 |
 | `assistente` | `setup` | `asistente` | `asistente` `assistant` `configurar` `configure` `setup` `wizard` | `cmdAssistente` | sim | 18 |
-| `automod` | — | `automod` | — | `cmdAutomod` | sim | 110 |
+| `automod` | — | `automod` | — | `cmdAutomod` | sim | 108 |
 | `autorole` | — | `autorol` | `autorol` | `cmdAutorole` | sim | 10 |
 | `ban` | — | `ban` | — | `cmdBan` | sim | 6 |
 | `banglobal` | `globalban` | `banglobal` | `globalban` | `cmdBanGlobal` | sim | 60 |
 | `boasvindas` | `welcome` | `bienvenida` | `bemvindo` `bienvenida` `boas-vindas` `greeting` `welcome` | `boasvindas (cmd)` | sim | 22 |
+| `caso` | `case` | `caso` | `case` | `cmdCaso` | — | 16 |
 | `config` | `config` | `config` | `ajustes` `configuracion` `configuración` `configuracoes` `configurações` `settings` | `cmdConfig` | — | 60 |
 | `cor` | `color` | `color` | `cargocor` `color` `colour` `cores` | `cmdCor` | sim | 32 |
 | `debug` | — | `debug` | `diagnostico` `diagnóstico` | `cmdDebug` | — | 8 |
@@ -88,6 +89,7 @@ O que ainda está espalhado:
 - `banglobal`: accept→isentar, aceitar→isentar, adicionar→add, alert→avisar, alertar→avisar, all→lista, allow→isentar, aqui→servidor, autoimport→auto, automatic→auto, automatico→auto, ban→imediato, banidos→lista, banir→imediato, banned→lista, barrer→varrer, bypass→isentar, cautela→consenso, cautious→consenso, cego→imediato, checar→revisar, colocar→add, conferir→revisar, confirm→confirmar, consensus→consenso, contribucion→contribuicao, contribution→contribuicao, daqui→servidor, deshacer→desfazer, excecoes→ignorados, exempt→isentar, exempted→isentos, exentos→isentos, eximir→isentar, foradalista→ignorados, forget→esquecer, here→servidor, historial→historico, history→historico, ignorar→off, ignore→off, ignored→ignorados, immediate→imediato, import→importar, incluir→add, inmediato→imediato, instant→imediato, isento→isentos, list→lista, olvidar→esquecer, people→pessoas, permitir→isentar, personas→pessoas, porque→historico, quitar→remover, recordar→lembrar, reincluir→lembrar, remember→lembrar, remove→remover, revert→desfazer, reverter→desfazer, review→revisar, scan→varrer, server→servidor, sim→confirmar, sweep→varrer, tirar→remover, todos→lista, undo→desfazer, unforget→lembrar, varredura→varrer, ver→historico, view→historico, warn→avisar, yes→confirmar
 - `blocklist`: domains→dominios
 - `boasvindas`: borrar→limpar, channel→canal, clear→limpar, color→cor, colour→cor, default→padrao, estado→status, here→aqui, hidden→oculto, hide→oculto, image→imagem, imagen→imagem, mensajes→mensagens, message→texto, messages→mensagens, predeterminado→padrao, probar→testar, show→visivel, test→testar, text→texto, title→titulo, visible→visivel
+- `caso`: acierto→certo, correct→certo, default→padrao, estricto→rigido, export→exportar, fallo→errou, missed→perdeu, perdio→perdeu, predeterminado→padrao, right→certo, server→servidor, strict→rigido, wrong→errou
 - `config`: acceso→acesso, access→acesso, ai→ia, command→comando, commands→comando, lang→idioma, language→idioma
 - `config.acesso`: all→todos, canales→canais, channel→canal, channels→canais, clear→limpar, estado→status, except→exceto, excepto→exceto, free→livre, libre→livre, limpiar→limpar, only→somente, rol→cargo, role→cargo, roles→cargos, solo→somente, staffbypass→staffignora, staffignores→staffignora
 - `config.comando`: activar→ativar, desactivar→desativar, disable→desativar, enable→ativar, gestionar→gerenciar, lista→list, manage→gerenciar

@@ -37,6 +37,11 @@ const DA_PESSOA = [
       ["rpg_espera", "userId = ?"], ["rpg_dungeon_ativos", "userId = ?"],
     ] },
 ];
+const REVISAO_ROTULO = {
+  pt: "casos na revisão do dono do bot (o caso fica, sem você)",
+  en: "cases in the bot owner's review (the case stays, without you)",
+  es: "casos en la revisión del dueño del bot (el caso queda, sin ti)",
+};
 // O que fica, e por quê (o &privacidade apagar diz à pessoa)
 export const FICA_DA_PESSOA = {
   pt: "avisos, punições e a lista global de bans — são registros de moderação dos servidores",
@@ -82,6 +87,12 @@ export function dadosDaPessoa(userId, { apagar = false } = {}) {
     }
     r.push({ id: g.id, rotulo: g.rotulo, n });
   }
+  // (31 out 2026, P3a) os casos dela na fila de revisão do dono do bot: o caso fica (é o que
+  // ensina a moderação), sem ela — sem conta, canal, mensagem, trecho nem link.
+  if (existe("revisao_casos")) {
+    const n = apagar ? db.filaEsquecerUsuario(u) : contar("SELECT COUNT(*) n FROM revisao_casos WHERE userId = ?", u);
+    r.push({ id: "revisao", rotulo: REVISAO_ROTULO, n });
+  }
   if (apagar) db.setConsentimento(u, { memoria: false, fioGlobal: false, respondido: true });   // a escolha dela fica: não perguntar de novo
   return r;
 }
@@ -120,8 +131,10 @@ export const DIAS_APOS_SAIDA = Number(process.env.DIAS_APOS_SAIDA || 30);
 // O que vence sozinho, no mesmo ciclo da limpeza dos servidores (a cada 6 h e na subida).
 // (revisão P2) as palavras tentadas como comando: 30 dias — antes só se limpavam quando
 // alguém digitava outra palavra desconhecida, e num servidor quieto ficavam para sempre.
+// (31 out 2026, P3a, revisão) o registro do silêncio do perfil vencido (28 dias, o teto do
+// timeout do Stoat): antes só saía quando alguém o lia.
 export function limparVencidos(agora = Date.now()) {
-  return { palavras: db.limparPalavrasVencidas(agora, { forcar: true }) };
+  return { palavras: db.limparPalavrasVencidas(agora, { forcar: true }), perfilSilencio: db.perfilSilencioLimparVencidos(agora) };
 }
 
 // No `ready`: o servidor que tem config mas a Judy não está nele saiu enquanto

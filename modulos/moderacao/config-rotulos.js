@@ -52,7 +52,7 @@ export const POR_CAMINHO = {
   "automod.antiDuplicata": r("Mensagem repetida", "Duplicate messages", "Mensajes repetidos"),
   "automod.antiImagem": r("Imagens", "Images", "Imágenes"),
   "automod.antiAssuntos": r("Assuntos proibidos", "Banned topics", "Temas prohibidos"),
-  "automod.antiAvatar": r("Foto de perfil", "Profile picture", "Foto de perfil"),
+  "automod.antiAvatar": r("Perfil", "Profile", "Perfil"),
   "automod.antiScam": r("Sentinela", "Sentinel", "Centinela"),
   "automod.punicao": r("Punição", "Punishment", "Castigo"),
   "automod.antiAssuntos.ia": r("a IA confirma", "AI confirms", "la IA confirma"),

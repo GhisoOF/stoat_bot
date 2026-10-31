@@ -112,7 +112,10 @@ export function juntar(parties) {
   const { usadas, manaGasta, manaLivre } = R.magiasAtivas(todas, mana);
   return { membros, magias: usadas, todas, mana, manaGasta, manaLivre };
 }
+// (31 out 2026, P3a) com a ajuda do começo pelo nível do grupo (a média, como
+// em lutas.lutar): nos primeiros níveis ninguém cai — regras.comInicio
 export function prever(parties, alvo) {
   const j = juntar(parties);
-  return { ...R.preverLuta(j.membros, j.magias, alvo), ...j };
+  const nivel = Math.round(parties.reduce((s, x) => s + (x?.p?.nivel ?? 1), 0) / Math.max(1, parties.length));
+  return { ...R.comInicio(R.preverLuta(j.membros, j.magias, alvo), nivel), ...j };
 }

@@ -461,6 +461,35 @@ export function chefeDungeon(nivel) {
   return out;
 }
 
+// ── Começo viável (31 out 2026, P3a — aprovado pelo Ghieh) ──────────────────
+// Medido (31 out, P3a; notas em _notas/assuntos.md, "RPG"): um personagem
+// recém-criado VENCE só ~25% das missões do nível 1 — o 🏆 da ficha. A luta tem
+// DUAS rolagens independentes, êxito (39%) e sobrevivência (65%), e o prêmio
+// pede as duas; nem a party de referência passa de 40% × 70% = 28%. O kit
+// inicial chega perto da referência no poder (96%), mas não na resiliência
+// (81%: a referência tem 6 implantes e o kit nenhum), e do nível 3 ao 10 o
+// poder fica em 84–91% dela.
+// A ajuda: nos primeiros níveis ninguém cai — a sobrevivência vai a 100% até o
+// nível `cheio` e volta à calibração normal, em linha reta, até o nível `ate`.
+// Critério: o NÍVEL do grupo (não o poder da party: com o poder, quem passasse
+// da referência perderia a ajuda e venceria MENOS que quem ficou abaixo). Assim
+// a chance de vencer de quem começa ≈ o êxito (~40%), e a calibração em si (o
+// êxito de 40% da referência, regras.missao) não muda.
+export const INICIO = { cheio: 5, ate: 10 };
+export function protecaoDeInicio(nivel) {
+  const n = Number(nivel);
+  if (!Number.isFinite(n)) return 0;
+  if (n <= INICIO.cheio) return 1;
+  if (n >= INICIO.ate) return 0;
+  return (INICIO.ate - n) / (INICIO.ate - INICIO.cheio);
+}
+// A previsão com a ajuda do começo (o mesmo objeto, com a sobrevivência subida)
+export function comInicio(prev, nivel) {
+  const k = protecaoDeInicio(nivel);
+  if (!k || !prev) return prev;
+  return { ...prev, sobrevivencia: prev.sobrevivencia + (1 - prev.sobrevivencia) * k, inicio: k };
+}
+
 // ── Folga pela força (D26) e perigo ───────────────────────────────────────────
 // Toda missão é feita para uma força: o poder e o risco dela dão a chance-base
 // para quem tem exatamente essa força. q = a SUA força ÷ essa força; acima de

@@ -1,5 +1,5 @@
 {
-  "pacote": "P2",
+  "pacote": "P3a",
   "data": "2026-10-31",
   "nota": "O pacote em produção (ou a caminho). O verificar-build exige que a entrada do topo de NOVIDADES (modulos/ferramentas/novidades.js) tenha este `pacote` e uma `data` igual ou mais nova. Pacote novo: troque os dois campos aqui e escreva a entrada nova lá."
 }

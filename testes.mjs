@@ -18021,7 +18021,9 @@ console.log("\n── .gitignore / .dockerignore / deploy ──");
 await t("★ banco e dados locais fora do Git e da imagem", () => {
   for (const a of [".gitignore", ".dockerignore"]) {
     const linhas = ler(a).split("\n").map((l) => l.trim());
-    for (const p of ["*.db", "*.db-wal", "*.db-shm", "dados/"]) assert.ok(linhas.includes(p), `${a} sem ${p}`);
+    // (31 out 2026, P2.1) `/dados/` (a pasta da raiz onde fica o banco fora do Docker): `dados/` sem a barra
+    // tirava do Git a pasta modulos/game/dados (o RPG) e o CI quebrou
+    for (const p of ["*.db", "*.db-wal", "*.db-shm", "/dados/"]) assert.ok(linhas.includes(p), `${a} sem ${p}`);
   }
 });
 await t("★ deploy-stoat.sh: cópias do .env com 600 e nenhum host do tailnet no código", () => {
@@ -18057,6 +18059,22 @@ await t("★ atualizar-minipc: o backup leva só o banco e a config, e restaurar
   assert.doesNotMatch(sh, /tar czf "\/b\/\$\(basename "\$arq"\)" -C \/data \./, "o volume inteiro");
   assert.doesNotMatch(sh, /find \/data -mindepth 1 -delete/, "restaurar apagava os modelos junto");
   assert.match(sh, /rm -f \/data\/stoat\.db \/data\/stoat\.db-wal \/data\/stoat\.db-shm \/data\/automod-config\.json && tar xzf/);
+});
+await t("★ nenhum arquivo do código fica de fora do git (o .gitignore pegou modulos/game/dados/ e o CI quebrou — P2)", () => {
+  const fora = spawnSync("git", ["ls-files", "--others", "--ignored", "--exclude-standard", "--", "modulos", "ia-servico", "voz-servico", "scripts", "docs", "main.js", "iniciar.js"], { encoding: "utf8" }).stdout
+    .split("\n").filter((f) => f && !f.includes("node_modules/") && !/\.(db|db-wal|db-shm)$/.test(f));
+  assert.deepEqual(fora, []);
+  for (const ign of [ler(".gitignore"), ler(".dockerignore")]) assert.doesNotMatch(ign, /^dados\/$/m, "`dados/` sem a barra no começo pega qualquer pasta dados/ do código");
+});
+await t("★ scripts com pipefail não cortam o pipe do git (SIGPIPE matava o deploy calado — P2.1)", () => {
+  for (const f of ["scripts/deploy-stoat.sh", "scripts/atualizar-minipc.sh"]) {
+    const sh = ler(f);
+    assert.match(sh, /set -euo pipefail/, f);
+    assert.doesNotMatch(sh, /git log[^\n|]*\|[^\n]*\b(head|awk[^\n]*exit)\b/, `${f}: git log | head/awk…exit`);
+  }
+  // o mesmo jeito de falhar, de verdade: com pipefail, sair cedo do pipe derruba; ler tudo não
+  assert.equal(spawnSync("bash", ["-c", "set -euo pipefail; X=\"$(seq 1 2000000 | awk '{ print; exit }')\"; echo ok"]).status, 141);
+  assert.equal(spawnSync("bash", ["-c", "set -euo pipefail; X=\"$(seq 1 2000000 | awk '!a { print; a = 1 }')\"; echo ok"]).status, 0);
 });
 await t("★ nenhum nome de máquina do tailnet (máquina.tail…​.ts.net) em arquivo do repositório", () => {
   const arquivos = spawnSync("git", ["ls-files", "--cached", "--others", "--exclude-standard"], { encoding: "utf8" }).stdout.split("\n").filter((f) => f && !f.startsWith("_notas/") && fs.existsSync(f) && fs.statSync(f).isFile() && fs.statSync(f).size < 5_000_000);

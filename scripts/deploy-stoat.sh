@@ -90,7 +90,10 @@ ARVORE="$(printf '%s' "$COMENTARIO" | grep -oE 'arvore=[0-9a-f]{40}' | head -1 |
 # o commit mais novo do main com o mesmo conteúdo da base; senão, o próprio
 # commit da base — se ele estiver no histórico do main
 BASEC=""
-[ -n "$ARVORE" ] && BASEC="$(git log --format='%H %T' HEAD | awk -v t="$ARVORE" '$2 == t { print $1; exit }')"
+# (31 out 2026) o awk lê o histórico INTEIRO (sem `exit`): sair cedo fechava o pipe, o
+# git log levava SIGPIPE e, com `pipefail` + `set -e`, o script morria calado (código 141)
+# assim que o histórico passou do buffer do pipe
+[ -n "$ARVORE" ] && BASEC="$(git log --format='%H %T' HEAD | awk -v t="$ARVORE" '$2 == t && !achou { print $1; achou = 1 }')"
 if [ -z "$BASEC" ] && [ -n "$BASE" ] && git cat-file -e "$BASE^{commit}" 2>/dev/null \
    && git merge-base --is-ancestor "$BASE" HEAD 2>/dev/null; then
   BASEC="$(git rev-parse "$BASE")"
@@ -99,7 +102,7 @@ if [ -n "$BASEC" ]; then
   DEPOIS="$(git rev-list --count "$BASEC"..HEAD)"
   if [ "$DEPOIS" -gt 0 ]; then
     printf '\n\033[31m✗ o zip foi feito sobre %s, mas o main tem %s commit(s) depois dele:\033[0m\n' "$(git rev-parse --short "$BASEC")" "$DEPOIS"
-    git log --oneline "$BASEC"..HEAD | head -20
+    git log --oneline -20 "$BASEC"..HEAD
     if [ "${FORCAR:-0}" != "1" ]; then
       printf '\nSubir este zip DESFARIA esses commits. Peça um zip novo (sobre o main de agora)\nou rode com FORCAR=1 se tem certeza.\n'
       exit 1

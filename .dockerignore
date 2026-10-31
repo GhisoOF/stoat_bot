@@ -27,4 +27,4 @@ blocklist-cache.bin
 *.db
 *.db-wal
 *.db-shm
-dados/
+/dados/

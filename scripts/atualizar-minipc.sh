@@ -110,7 +110,7 @@ case "$ACAO" in
       sh -c "rm -f /data/stoat.db /data/stoat.db-wal /data/stoat.db-shm /data/automod-config.json && tar xzf /b/$(basename "$ARQ") -C /data" \
       || erro "a restauração falhou — o banco de antes está em $ULTIMO_BACKUP"
     okay "banco restaurado de $(basename "$ARQ")"
-    avis "se o código também tem de voltar: git log --oneline | head  →  git reset --hard <commit>  (e depois docker compose up -d --build)"
+    avis "se o código também tem de voltar: git log --oneline -10  →  git reset --hard <commit>  (e depois docker compose up -d --build)"
     docker compose up -d >/dev/null && okay "container de volta"
     exit 0 ;;
 
@@ -126,7 +126,7 @@ if [ "$NOVOS" = "0" ]; then
   avis "nada novo no origin/main ($(git rev-parse --short HEAD)) — reconstruindo mesmo assim"
 else
   info "$NOVOS commit(s) novo(s):"
-  git log --oneline HEAD..origin/main | head -20
+  git log --oneline -20 HEAD..origin/main
 fi
 if [ "${REALINHAR:-0}" != "1" ] && [ -n "$(git status --porcelain --untracked-files=no)" ]; then
   git status --short --untracked-files=no

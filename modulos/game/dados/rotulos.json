@@ -1,0 +1,64 @@
+{
+  "_leia": "Os rótulos que o motor do &game mostra, em pt/en/es (P2, 31 out 2026). Dados, não código: telas.js e a wiki (paginasWikiRpg) leem daqui. Nenhum número aqui — os números saem de regras.js.",
+  "atributos": {
+    "forca":        { "emoji": "💪", "nome": { "pt": "Força", "en": "Strength", "es": "Fuerza" },
+      "efeito": { "pt": "o dano corpo a corpo e o requisito das armas pesadas", "en": "melee damage and the requirement of heavy weapons", "es": "el daño cuerpo a cuerpo y el requisito de las armas pesadas" } },
+    "destreza":     { "emoji": "🎯", "nome": { "pt": "Destreza", "en": "Dexterity", "es": "Destreza" },
+      "efeito": { "pt": "a precisão de todo ataque e o dano das armas de fogo e leves", "en": "the accuracy of every attack and the damage of firearms and light weapons", "es": "la precisión de todo ataque y el daño de las armas de fuego y ligeras" } },
+    "resistencia":  { "emoji": "🛡️", "nome": { "pt": "Resistência", "en": "Resistance", "es": "Resistencia" },
+      "efeito": { "pt": "quanto do golpe passa; também é o requisito do cyberware", "en": "how much of a blow gets through; also the cyberware requirement", "es": "cuánto del golpe pasa; también es el requisito del cyberware" } },
+    "agilidade":    { "emoji": "💨", "nome": { "pt": "Agilidade", "en": "Agility", "es": "Agilidad" },
+      "efeito": { "pt": "a chance de escapar do golpe inteiro e quem começa no duelo", "en": "the chance to dodge a whole blow and who starts in a duel", "es": "la probabilidad de esquivar el golpe entero y quién empieza en el duelo" } },
+    "vida":         { "emoji": "❤️", "nome": { "pt": "Vida", "en": "Health", "es": "Vida" },
+      "efeito": { "pt": "quanto dano aguenta somado; também é o requisito do bioware", "en": "how much damage it takes in total; also the bioware requirement", "es": "cuánto daño aguanta en total; también es el requisito del bioware" } },
+    "mana":         { "emoji": "🔷", "nome": { "pt": "Mana", "en": "Mana", "es": "Maná" },
+      "efeito": { "pt": "quantas magias cabem numa luta, da mais forte para a mais fraca", "en": "how many spells fit in a fight, strongest first", "es": "cuántos hechizos caben en una pelea, del más fuerte al más débil" } },
+    "inteligencia": { "emoji": "🧠", "nome": { "pt": "Inteligência", "en": "Intelligence", "es": "Inteligencia" },
+      "efeito": { "pt": "o dano mágico, as magias que se aprende e mais pontos por nível", "en": "magic damage, which spells can be learned and more points per level", "es": "el daño mágico, los hechizos que se aprenden y más puntos por nivel" } },
+    "sorte":        { "emoji": "🍀", "nome": { "pt": "Sorte", "en": "Luck", "es": "Suerte" },
+      "efeito": { "pt": "todo sorteio: itens, aliados e missões especiais; também dá pontos e um pouco de sobrevivência", "en": "every draw: items, allies and special missions; also gives points and a little survival", "es": "todo sorteo: objetos, aliados y misiones especiales; también da puntos y algo de supervivencia" } },
+    "carisma":      { "emoji": "✨", "nome": { "pt": "Carisma", "en": "Charisma", "es": "Carisma" },
+      "efeito": { "pt": "os aliados rendem mais com você", "en": "your allies perform better with you", "es": "tus aliados rinden más contigo" } }
+  },
+  "raridades": {
+    "comum":      { "emoji": "⚪", "nome": { "pt": "Comum", "en": "Common", "es": "Común" } },
+    "incomum":    { "emoji": "🟢", "nome": { "pt": "Incomum", "en": "Uncommon", "es": "Poco común" } },
+    "raro":       { "emoji": "🔵", "nome": { "pt": "Raro", "en": "Rare", "es": "Raro" } },
+    "epico":      { "emoji": "🟣", "nome": { "pt": "Épico", "en": "Epic", "es": "Épico" } },
+    "lendario":   { "emoji": "🟠", "nome": { "pt": "Lendário", "en": "Legendary", "es": "Legendario" } },
+    "mitico":     { "emoji": "🔴", "nome": { "pt": "Mítico", "en": "Mythic", "es": "Mítico" } },
+    "celestial":  { "emoji": "🌟", "nome": { "pt": "Celestial", "en": "Celestial", "es": "Celestial" } },
+    "divino":     { "emoji": "💠", "nome": { "pt": "Divino", "en": "Divine", "es": "Divino" } },
+    "primordial": { "emoji": "🌌", "nome": { "pt": "Primordial", "en": "Primordial", "es": "Primordial" } },
+    "supremo":    { "emoji": "👑", "nome": { "pt": "Supremo", "en": "Supreme", "es": "Supremo" } }
+  },
+  "faixas": {
+    "1": { "pt": "Humano", "en": "Human", "es": "Humano" },
+    "2": { "pt": "Sobre-humano", "en": "Superhuman", "es": "Sobrehumano" },
+    "3": { "pt": "Urbano", "en": "Urban", "es": "Urbano" },
+    "4": { "pt": "Nuclear", "en": "Nuclear", "es": "Nuclear" },
+    "5": { "pt": "Tectônico", "en": "Tectonic", "es": "Tectónico" },
+    "6": { "pt": "Planetário", "en": "Planetary", "es": "Planetario" },
+    "7": { "pt": "Estelar", "en": "Stellar", "es": "Estelar" },
+    "8": { "pt": "Cósmico", "en": "Cosmic", "es": "Cósmico" },
+    "9": { "pt": "Multiversal", "en": "Multiversal", "es": "Multiversal" },
+    "10": { "pt": "Hiperversal", "en": "Hyperversal", "es": "Hiperversal" }
+  },
+  "classesAliado": {
+    "combatente": { "emoji": "⚔️", "nome": { "pt": "Combatente", "en": "Fighter", "es": "Combatiente" }, "efeito": { "pt": "dano físico", "en": "physical damage", "es": "daño físico" } },
+    "tank":       { "emoji": "🛡️", "nome": { "pt": "Tanque", "en": "Tank", "es": "Tanque" }, "efeito": { "pt": "aguenta golpes", "en": "takes hits", "es": "aguanta golpes" } },
+    "mago":       { "emoji": "🔮", "nome": { "pt": "Mago", "en": "Mage", "es": "Mago" }, "efeito": { "pt": "dano mágico", "en": "magic damage", "es": "daño mágico" } },
+    "suporte":    { "emoji": "✨", "nome": { "pt": "Suporte", "en": "Support", "es": "Apoyo" }, "efeito": { "pt": "sorte e carisma", "en": "luck and charisma", "es": "suerte y carisma" } }
+  },
+  "missoes": {
+    "contrato":         { "emoji": "📜", "nome": { "pt": "contrato", "en": "contract", "es": "contrato" } },
+    "dungeon":          { "emoji": "🕳️", "nome": { "pt": "dungeon", "en": "dungeon", "es": "mazmorra" } },
+    "especial":         { "emoji": "✦", "nome": { "pt": "missão especial", "en": "special mission", "es": "misión especial" } },
+    "chefe":            { "emoji": "💀", "nome": { "pt": "chefe", "en": "boss", "es": "jefe" } }
+  },
+  "desfechos": {
+    "sucesso": { "emoji": "🏆", "nome": { "pt": "Vitória", "en": "Victory", "es": "Victoria" } },
+    "falha":   { "emoji": "😐", "nome": { "pt": "Não deu certo", "en": "Didn't work out", "es": "No salió bien" } },
+    "caiu":    { "emoji": "💀", "nome": { "pt": "Você caiu", "en": "You fell", "es": "Caíste" } }
+  }
+}

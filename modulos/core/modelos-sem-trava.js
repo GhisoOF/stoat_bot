@@ -6,7 +6,7 @@
 // "abliterated" ou parecida, o boot avisa no log — a Judy continua
 // funcionando (as recusas do bot e a conferência de toda imagem pela visão
 // seguem valendo), mas a primeira linha de defesa, o próprio modelo, some.
-import { urlsDoModelo } from "./imagem-modelo.js";
+import { urlsDoModelo, imagemPedida } from "./imagem-modelo.js";
 
 // nomes comuns de versões com a trava removida
 export const SEM_TRAVA = /uncensored|abliterat|hauhau|heretic|unfiltered|dolphin|lewd|nsfw|[-_.]uc[-_.]/i;
@@ -22,7 +22,7 @@ export function modelosSemTrava(env = process.env) {
     // o mesmo modelo em dois papéis (MODELO e o LLM_MODEL que o boot deriva dele) aparece uma vez só
     if (valor && SEM_TRAVA.test(valor) && !achados.some((a) => a.valor === valor)) achados.push({ chave, valor });
   }
-  if (String(env.IMAGEM ?? "1").trim() !== "0" && !String(env.SD_URL ?? "").trim()) {
+  if (imagemPedida(env) && !String(env.SD_URL ?? "").trim()) {
     for (const [papel, url] of Object.entries(urlsDoModelo(env))) {
       if (url && SEM_TRAVA.test(url)) achados.push({ chave: `imagem (${papel})`, valor: url });
     }

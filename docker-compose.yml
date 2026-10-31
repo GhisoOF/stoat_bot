@@ -25,7 +25,7 @@ services:
       - CONFIG_PATH=/data/automod-config.json
       - TZ=${TZ:-America/Sao_Paulo}
       - IA=${IA:-1}                     # 0 desliga todos os módulos de IA
-      - IMAGEM=${IMAGEM:-1}             # 0 desliga a geração de imagem embutida
+      - IMAGEM=${IMAGEM:-0}             # (P2) 1 liga a geração de imagem embutida; sem ela, nada é baixado
       - VOZ_ATIVA=${VOZ_ATIVA:-0}       # 1 liga a voz nas calls (Piper na imagem)
       - SEARXNG_URL=${SEARXNG_URL:-http://searxng:8080}   # o serviço que sobe no compose
       - WEBHOOK_PORTA=${WEBHOOK_PORTA:-8095}

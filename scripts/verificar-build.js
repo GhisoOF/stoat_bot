@@ -114,7 +114,7 @@ if (!existsSync(modulosDir)) {
 //    que existem — referência quebrada para o build, não sai torta na tela
 {
   const { citar } = await import(join(RAIZ, "modulos", "core", "aliases.js"));
-  const { detalhesDoRegistro, parametrosDoRegistro } = await import(join(RAIZ, "modulos", "core", "ajuda-registro.js"));
+  const { pagina, todasAsPaginas } = await import(join(RAIZ, "modulos", "core", "ajuda-registro.js"));
   const ruins = [];
   let n = 0;
   const lerJs = (d) => readdirSync(d, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? lerJs(join(d, e.name)) : e.name.endsWith(".js") ? [join(d, e.name)] : []));
@@ -125,8 +125,12 @@ if (!existsSync(modulosDir)) {
       try { citar(m[1] ?? m[2]); } catch (e) { ruins.push(`${arq.slice(RAIZ.length + 1)}: ${e.message}`); }
     }
   }
+  // (P2) toda página da ajuda (a de cada comando e cada `paginas` de dentro), nos três idiomas
   for (const lang of ["pt", "en", "es"]) {
-    try { detalhesDoRegistro("&", lang); parametrosDoRegistro("&", lang); } catch (e) { ruins.push(`ajuda do registro (${lang}): ${e.message}`); }
+    for (const [id, ...cam] of todasAsPaginas()) {
+      try { if (!pagina(id, cam, lang, "&")) ruins.push(`ajuda ${[id, ...cam].join(" ")} (${lang}): não monta`); }
+      catch (e) { ruins.push(`ajuda ${[id, ...cam].join(" ")} (${lang}): ${e.message}`); }
+    }
   }
   for (const r of ruins) falha(`citação: ${r}`);
   if (!ruins.length) console.log(`  ✓ citações por referência resolvem (${n} no código, mais as da ajuda do registro)`);
@@ -158,6 +162,30 @@ if (!existsSync(modulosDir)) {
     writeFileSync(LISTA, JSON.stringify(ordenado, null, 2) + "\n");
   }
   if (!piores.length) console.log(`  ✓ catch vazio: ${Object.values(agora).reduce((x, y) => x + y, 0)} no total, nenhum arquivo acima do teto`);
+}
+
+// 6) (P2, 31 out 2026, Regra da Geração) as tabelas dos READMEs (comandos e variáveis)
+//    saem do registro e do .env.example: tabela velha derruba o build
+//    (`node scripts/gerar-readme.js` regera)
+{
+  const { conferir } = await import(join(RAIZ, "scripts", "gerar-readme.js"));
+  const problemas = await conferir(RAIZ).catch((e) => [`gerar-readme: ${e.message}`]);
+  for (const p of problemas) falha(`README: ${p}`);
+  if (!problemas.length) console.log("  ✓ READMEs: tabelas de comandos e variáveis em dia");
+}
+
+// 7) (P2) a trava das NOVIDADES: a entrada do topo é do pacote atual (docs/pacote.json)
+//    e não é mais velha que ele — pacote com mudança visível não sobe sem o anúncio
+{
+  const PACOTE = join(RAIZ, "docs", "pacote.json");
+  if (!existsSync(PACOTE)) falha("docs/pacote.json não existe (o pacote atual, para a trava das NOVIDADES)");
+  else {
+    const pac = JSON.parse(readFileSync(PACOTE, "utf8"));
+    const { NOVIDADES, problemaDaTrava } = await import(join(RAIZ, "modulos", "ferramentas", "novidades.js"));
+    const p = problemaDaTrava(NOVIDADES, pac);
+    if (p) falha(`NOVIDADES: ${p}`);
+    else console.log(`  ✓ NOVIDADES: o topo é do pacote ${pac.pacote}`);
+  }
 }
 
 if (erros) {

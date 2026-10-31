@@ -155,10 +155,8 @@ export function agoraEm(zona, { lang = "pt", formato24 = true, quando = new Date
     timeZone: zona, weekday: "short",
   }).format(quando).replace(/\.$/, "");
 
-  // Offset em minutos: compara o mesmo instante lido no fuso e em UTC.
-  const emZona = new Date(quando.toLocaleString("en-US", { timeZone: zona }));
-  const emUtc  = new Date(quando.toLocaleString("en-US", { timeZone: "UTC" }));
-  const offsetMin = Math.round((emZona - emUtc) / 60000);
+  // Offset em minutos, pelas partes do Intl (P2: sem reler texto do toLocaleString)
+  const offsetMin = deslocamento(zona, quando);
 
   const sinal = offsetMin < 0 ? "-" : "+";
   const abs = Math.abs(offsetMin);
@@ -179,4 +177,63 @@ export function diferenca(zonaA, zonaB, lang = "pt", quando = new Date()) {
   if (lang === "en") return d > 0 ? `${dur} ahead` : `${dur} behind`;
   if (lang === "es") return d > 0 ? `${dur} adelante` : `${dur} atrás`;
   return d > 0 ? `${dur} à frente` : `${dur} atrás`;
+}
+
+// ── P2 (31 out 2026): o fuso do servidor e a conversão de horário ────────────
+
+// O fuso padrão de cada idioma do servidor (o `&fuso 21:30` sem cidade e o horário
+// do telejornal do `&rss`). Português → Brasília (onde está a maior parte de quem
+// fala português no Stoat); espanhol → Madrid (o dono do bot mora lá, e é o fuso
+// da Espanha peninsular); inglês → UTC (não há um fuso "do inglês").
+export const FUSO_DO_IDIOMA = { pt: "America/Sao_Paulo", es: "Europe/Madrid", en: "UTC" };
+
+// O fuso do servidor: a cidade de referência do `&fuso` (se a staff montou a lista),
+// senão o do idioma. `lang` é o idioma efetivo (idiomaDe) — quem chama sabe qual é.
+export function fusoDoServidor(config, lang = "en") {
+  const ref = config?.fusos?.principal;
+  if (ref && fusoValido(ref)) return ref;
+  return FUSO_DO_IDIOMA[lang] ?? "UTC";
+}
+
+// "21:30", "21h", "21h30", "9pm", "9:30 pm", "21.30" → { h, m }; o resto → null.
+// Número solto ("21") não vale: seria confundido com outro argumento.
+export function lerHorario(texto) {
+  const s = String(texto ?? "").trim().toLowerCase().replace(/\s+/g, "");
+  const m = s.match(/^(\d{1,2})(?:(?:[:.h](\d{2}))|h)?(am|pm)?$/);
+  if (!m || (!m[2] && !m[3] && !s.includes("h"))) return null;
+  let h = Number(m[1]);
+  const min = m[2] ? Number(m[2]) : 0;
+  if (m[3]) { if (h < 1 || h > 12) return null; h = (h % 12) + (m[3] === "pm" ? 12 : 0); }
+  if (h > 23 || min > 59) return null;
+  return { h, m: min };
+}
+
+// O deslocamento (minutos) de um fuso num instante, pelas partes do Intl (sem
+// reler texto formatado, que muda de runtime para runtime).
+export function deslocamento(zona, quando = new Date()) {
+  const p = Object.fromEntries(new Intl.DateTimeFormat("en-US", {
+    timeZone: zona, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit",
+  }).formatToParts(quando).filter((x) => x.type !== "literal").map((x) => [x.type, Number(x.value)]));
+  const comoUtc = Date.UTC(p.year, p.month - 1, p.day, p.hour % 24, p.minute, p.second);
+  return Math.round((comoUtc - Math.floor(quando.getTime() / 1000) * 1000) / 60000);
+}
+
+// O dia (AAAA-MM-DD) de um instante num fuso — "o telejornal de hoje já saiu?"
+export function diaEm(zona, quando = new Date()) {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: zona, year: "numeric", month: "2-digit", day: "2-digit" }).format(quando);
+}
+
+// O instante (ms) em que é `h:m` no fuso, no dia que `base` tem nesse fuso.
+export function instanteEm({ h, m }, zona, base = new Date()) {
+  const [a, mes, d] = diaEm(zona, base).split("-").map(Number);
+  const local = Date.UTC(a, mes - 1, d, h, m);
+  let t = local - deslocamento(zona, new Date(local)) * 60000;
+  t = local - deslocamento(zona, new Date(t)) * 60000;   // segunda volta: acerta a virada do horário de verão
+  return t;
+}
+
+// A próxima vez (estritamente depois de `agora`) em que é `h:m` no fuso.
+export function proximoInstante(hm, zona, agora = Date.now()) {
+  const t = instanteEm(hm, zona, new Date(agora));
+  return t > agora ? t : instanteEm(hm, zona, new Date(agora + 24 * 3600_000));
 }

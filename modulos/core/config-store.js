@@ -52,13 +52,10 @@ export const padraoServidor = {
       modo: "avisar", warnsParaBan: 3, silenceRoleId: null,
       escada: "aviso,5m,1h,ban",
     },
+    isentarStaff: true,       // (P2: já era lido como `!== false`) a staff passa pelos filtros sem punição
   },
-  // ── Moderação por IA na conversa (a Judy avalia por critérios) ──
-  moderacaoIA: {
-    ativa:     false,          // liga/desliga (&modia on|off)
-    criterios: "",             // texto livre: o que a Judy deve moderar
-    canais:    [],             // canais onde vigia ([] = todos os permitidos)
-  },
+  // (P2, 31 out 2026) `moderacaoIA` saiu do padrão com o &modia (temas por IA: `automod.antiAssuntos`).
+  // A chave que já está gravada nos servidores fica no banco (nunca se apaga dado); ninguém a lê.
   inviteWhitelist:      [],   // códigos de convite do Stoat (anti-invite)
   dominiosPermitidos:   [],   // domínios que o anti-link nunca bloqueia
   // ── Chat de logs (configurável com &log) ──
@@ -70,7 +67,8 @@ export const padraoServidor = {
       mensagens: true,
       cargos:    true,
       comandos:  false,       // ruidoso: começa desligado
-      atualizacoes: false,    // as novidades da Judy a cada pacote novo (20 out 2026) — opção, começa desligada
+      // (P2) `atualizacoes` saiu: as novidades da Judy vão SEMPRE ao canal de log
+      // (o valor antigo, se gravado, fica no banco e não é lido)
     },
   },
   acesso: {
@@ -78,6 +76,7 @@ export const padraoServidor = {
     canais: { modo: "todos", lista: [] },
     // Staff escapa da restrição de canal (para moderar de qualquer lugar).
     staffIgnoraCanais: true,
+    livres: [],               // comandos que valem em qualquer canal (`&config acesso livre <cmd> on`)
   },
   // ── Lista global de banimentos (&banglobal) ──
   banGlobal: {
@@ -89,7 +88,7 @@ export const padraoServidor = {
   // ── O servidor manda ao dono da Judy um relatório ANÔNIMO de ataques? (P4) ──
   relatorioDono: false,
   // ── Curadoria RSS ──
-  rss: { canalId: null },
+  rss: { canalId: null, horario: "21:00", urgentes: [] },   // (P2, ferramentas) o telejornal: hora local e os termos urgentes
   autorole: { roleId: null },   // cargo dado automaticamente a quem entra
   chatLivre: { canais: [], modo: "relevante" },    // "relevante" = só o que julgar importante; "todas" = toda mensagem
   comentarioEspontaneo: {
@@ -97,6 +96,24 @@ export const padraoServidor = {
     porDia:     4,        // teto de comentários espontâneos por dia
     minParaFalar: 4,      // quantas mensagens de conversa antes de considerar comentar
   },
+  // ── (P2, 31 out 2026) o que os módulos já gravavam e o padrão não declarava ──
+  // Declarado aqui para a tela do &config sair inteira deste molde (nenhuma chave fora).
+  // Os valores são os mesmos que cada módulo já assumia quando faltava a chave.
+  ia: { chat: null, imagem: null },   // a escolha do servidor (null = o padrão do .env); `&assistente ia|imagem`
+  tts: {
+    ativo: false, canalVoz: null, canalTexto: null, voz: null, cooldown: null, anunciarNome: true,
+    dicionario: {}, expandir: true, efeito: null, tom: null, filtro: true, porMinuto: null,
+  },
+  servidorInfo: { regrasCanal: null, regrasTexto: null, faq: [] },
+  staff: { titulos: {} },              // roleId → rótulo no &staff
+  corPainel: { cargos: [] },           // cargos criados pelo painel de cores
+  fusos: { lista: [], principal: null, formato24: true },
+  tickets: { painel: null, logCanal: null, cargoEquipe: null, categorias: null, contador: 0 },
+  // boas-vindas, despedida e economia: o padrão depende do idioma do servidor (o módulo
+  // preenche na primeira vez); aqui só a chave, para a tela
+  boasVindas: {},
+  adeus: {},
+  economia: {},
   // ── Game (sistema de níveis por XP de mensagem) ──
   xp: {
     enabled: false,

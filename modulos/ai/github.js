@@ -10,9 +10,9 @@
 // GITHUB_REPO (padrão GhisoOF/stoat_bot) diz de qual repositório; GITHUB_TOKEN
 // é opcional (público funciona sem; com token o limite da API sobe).
 
-import { buscarSeguro, lerTexto } from "../core/seguranca.js";
+import { buscarSeguro } from "../core/seguranca.js";
+import { pedirGithub } from "./github-api.js";
 
-const API = "https://api.github.com";
 const CACHE_MS = 10 * 60_000;
 const cache = new Map();   // url → { quando, dados }
 
@@ -65,19 +65,12 @@ export function diasDoPeriodo(texto) {
 
 // ─── API ─────────────────────────────────────────────────────────────────────
 
+// (P2) o pedido em si é o do github-api.js (o mesmo do ler_codigo); aqui, o cache
 async function pedirApi(caminho) {
-  const url = `${API}${caminho}`;
-  const c = cache.get(url);
+  const c = cache.get(caminho);
   if (c && Date.now() - c.quando < CACHE_MS) return c.dados;
-  const headers = { accept: "application/vnd.github+json", "user-agent": "JudyBot (stoat)", "x-github-api-version": "2022-11-28" };
-  if (process.env.GITHUB_TOKEN) headers.authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
-  const r = await buscar(url, { headers, signal: AbortSignal.timeout(Number(process.env.GITHUB_TIMEOUT_MS || 8000)) });
-  if (r.status === 404 || r.status === 422) { const e = new Error("não existe nesse repositório"); e.naoAchou = true; throw e; }
-  if (r.status === 401) throw new Error("GITHUB_TOKEN inválido ou vencido (repositório público funciona sem ele)");
-  if (r.status === 403 || r.status === 429) throw new Error("limite da API do GitHub atingido (GITHUB_TOKEN aumenta o limite)");
-  if (!r.ok) throw new Error(`GitHub respondeu HTTP ${r.status}`);
-  const dados = JSON.parse(await lerTexto(r, 3 * 1024 * 1024));   // com teto: resposta da internet
-  cache.set(url, { quando: Date.now(), dados });
+  const dados = await pedirGithub(caminho, { buscar });
+  cache.set(caminho, { quando: Date.now(), dados });
   return dados;
 }
 

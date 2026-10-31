@@ -1,5 +1,5 @@
-import { ORDEM as ORDEM_GRUPOS } from "../moderacao/help-grupos.js";   // os grupos que o índice do &help promete
 import { maisParecido } from "./parecido.js";
+import { grupoDoNome, nomeDoGrupo } from "../moderacao/help-grupos.js";   // só dados (sem ciclo)
 
 // O nome de cada comando na tela em inglês, os apelidos e (fase 2) os
 // subcomandos vêm do registro de comandos (modulos/comandos/) — não declarar
@@ -40,11 +40,55 @@ for (const c of REGISTRO) {
     }
     if (f.aninhados?.length) DO_REGISTRO.aninhados[nome] = new Set(f.aninhados);
     if (f.naTela) DO_REGISTRO.naTela[nome] = f.naTela;
+    // (P2) o espanhol dos níveis de dentro (`&config log sanciones off`), como no comando
+    if (f.es?.subcomandos) {
+      const m = (DO_REGISTRO.sub[nome] ??= {});
+      SUB_ES_REVERSO[nome] = {};
+      for (const [interno, es] of Object.entries(f.es.subcomandos)) {
+        for (const e of [].concat(es)) if (e !== interno && !(e in m)) m[e] = interno;
+        SUB_ES_REVERSO[nome][interno] = [].concat(es)[0];
+      }
+    }
   }
 }
+// id e nomes de tela (inglês e espanhol) → id; sem os apelidos (o &help resolve nesta ordem)
+export const NOME_PARA_ID_TELA = (() => {
+  const m = {};
+  for (const c of REGISTRO) m[c.id] = c.id;
+  for (const c of REGISTRO) for (const n of [c.nomes?.en, c.es?.nome]) if (n && !(n in m)) m[n] = c.id;
+  return m;
+})();
+
 // Subcomandos inglês → nome interno, de todas as famílias (o registro é a única fonte
 // desde 17 out 2026 — fase 2).
 export const SUB = DO_REGISTRO.sub;
+
+// ── Atalhos (P2, 31 out 2026): apelido que aponta para DENTRO de outra família ──
+// Declarados no comando de destino (`atalhos: { "chat sair|leave": "privacidade chat sair" }`):
+// cada posição da chave aceita alternativas com `|`; o valor é o id + subcomandos internos.
+// Vence a chave mais longa. Ver `_notas/registro-ajuda.md` (Formato de redirecionamento).
+export const ATALHOS = REGISTRO.flatMap((c) => Object.entries(c.atalhos ?? {}).map(([chave, destino]) => ({
+  chave, dono: c.id,
+  posicoes: chave.trim().split(/\s+/).map((p) => new Set(p.split("|").map((x) => x.trim().toLowerCase()).filter(Boolean))),
+  destino: String(destino).trim().split(/\s+/),
+}))).sort((a, b) => b.posicoes.length - a.posicoes.length);
+
+// As palavras digitadas (`["chat", "sair", "agora"]`) → o caminho de destino com o resto
+// (`{ comando: "privacidade", args: ["chat", "sair", "agora"], atalho }`), ou null.
+export function resolverAtalho(palavras) {
+  const ps = (palavras ?? []).map((p) => String(p ?? "").toLowerCase());
+  if (!ps.length || !ps[0]) return null;
+  for (const a of ATALHOS) {
+    if (ps.length < a.posicoes.length) continue;
+    if (a.posicoes.every((alts, i) => alts.has(ps[i]))) {
+      const [comando, ...subs] = a.destino;
+      return { comando, args: [...subs, ...(palavras ?? []).slice(a.posicoes.length)], atalho: a };
+    }
+  }
+  return null;
+}
+// O primeiro nome de cada atalho (os que levam a algum lugar sozinhos ou com mais palavras)
+export const NOMES_DE_ATALHO = new Set(ATALHOS.flatMap((a) => [...a.posicoes[0]]));
 
 const ANINHADOS = DO_REGISTRO.aninhados;
 
@@ -64,7 +108,9 @@ for (const [cmd, mapa] of Object.entries(SO_EXIBIR)) SUB_REVERSO[cmd] ??= { ...m
 // "automod.sentinela"; sem família própria, o mapa com o nome do token
 // (`punicao` dentro do automod soma a tabela da parte `punicao` à da família).
 const familia = (tabela, canonico, token) => {
-  const a = tabela[token], b = tabela[`${canonico}.${token}`];
+  // a tabela solta com o nome do token (as `partes`, como `punicao`) só existe no &automod;
+  // nas outras famílias (`config.log`) um token com nome de comando (`staff`) não pega a tabela dele
+  const a = canonico === "automod" ? tabela[token] : undefined, b = tabela[`${canonico}.${token}`];
   return a || b ? { ...(a ?? {}), ...(b ?? {}) } : null;
 };
 
@@ -81,30 +127,17 @@ function traduzirCaminho(canonico, args, inicio = 0, max = 4) {
   }
   return saida;
 }
-const FAMILIAS_EM_CAMINHO = new Set(["automod"]);
+// os comandos com níveis dentro (`familias` no registro): o &automod e o &config (P2)
+const FAMILIAS_EM_CAMINHO = new Set(REGISTRO.filter((c) => c.familias && Object.keys(c.familias).length).map((c) => c.id));
 
 export function normalizarArgs(canonico, args, CANONICO = {}) {
   if (!Array.isArray(args) || !args.length) return args;
 
   if (canonico === "tutorial") return args;
 
-  if (canonico === "help") {
-    const saida = [...args];
-    const bruto = String(saida[0] ?? "").toLowerCase();
-    // categoria/área (moderation → moderacao) ou nome de comando (color → cor)
-    // Nome de GRUPO da ajuda vence apelido de comando: "comecar" é o grupo
-    // "Começar" do índice e também apelido do &tutorial — o índice promete o
-    // grupo, então `&help comecar` abria a ajuda do &tutorial por engano.
-    const grupos = new Set([...ORDEM_GRUPOS, ...Object.values(SUB.help ?? {})]);
-    saida[0] = SUB[canonico]?.[bruto] ?? (grupos.has(bruto) ? bruto : null) ?? CANONICO[bruto] ?? COMANDO_EXTRA[bruto] ?? bruto;
-    if (FAMILIAS_EM_CAMINHO.has(saida[0])) return traduzirCaminho(saida[0], saida, 1, 3);
-    const doAlvo = SUB[saida[0]];
-    if (doAlvo && saida[1]) {
-      const t = String(saida[1]).toLowerCase();
-      if (doAlvo[t]) saida[1] = doAlvo[t];
-    }
-    return saida;
-  }
+  // (P2) o &help resolve o caminho sozinho, pelo registro (ajuda-registro.js): comando,
+  // atalho, grupo — com as palavras como a pessoa digitou
+  if (canonico === "help") return args;
 
   if (FAMILIAS_EM_CAMINHO.has(canonico)) return traduzirCaminho(canonico, args);
   const mapa = SUB[canonico];
@@ -186,8 +219,12 @@ function traduzirToken(tok, rev) {
 function ehConstante(t) { return /^[A-Z][A-Z0-9_]+$/.test(t); }
 
 function traduzirTrecho(trecho, prefixo, CANONICO) {
-  const partes = trecho.trim().split(/\s+/);
+  let partes = trecho.trim().split(/\s+/);
   if (!partes.length || !partes[0].startsWith(prefixo)) return { texto: trecho, comando: null };
+  // (P2) `&log canal aqui` escrito à mão: o atalho leva ao caminho novo (`&config log channel here`)
+  // (o nome antigo sozinho, `&log`, também: a tela mostra só o caminho principal)
+  const at = resolverAtalho([partes[0].slice(prefixo.length), ...partes.slice(1)]);
+  if (at) partes = [prefixo + at.comando, ...at.args];
 
   const nomeBruto = partes[0].slice(prefixo.length).toLowerCase();
   const canonico = canonicoDe(nomeBruto, CANONICO);
@@ -270,7 +307,8 @@ function moldeEs(tok) {
   return m[1] + miolo + m[3];
 }
 function trechoEs(dentro, prefixo, CANONICO) {
-  const partes = dentro.trim().split(/\s+/);
+  let partes = dentro.trim().split(/\s+/);
+  { const at = resolverAtalho([partes[0].slice(prefixo.length), ...partes.slice(1)]); if (at) partes = [prefixo + at.comando, ...at.args]; }
   const nome = partes[0].slice(prefixo.length).toLowerCase();
   const cmd = canonicoDe(nome, CANONICO);
   if (!REGISTRO.some((c) => c.id === cmd)) return dentro;
@@ -280,10 +318,12 @@ function trechoEs(dentro, prefixo, CANONICO) {
   // vence o apelido como no normalizarArgs (`&help fun` é o grupo diversao, não o
   // apelido `fun` do &entretenimento; virava `&ayuda entretenimiento`)
   if (cmd === "help" && partes[1]) {
+    // (P2) a mesma ordem do &help: id ou nome de tela de comando, depois grupo, depois apelido
     const bruto = partes[1].toLowerCase();
-    const grupo = SUB.help?.[bruto] ?? (new Set([...ORDEM_GRUPOS, ...Object.values(SUB.help ?? {})]).has(bruto) ? bruto : null);
-    const alvo = grupo ? null : canonicoDe(bruto, CANONICO);
-    if (grupo) { saida.push(SUB_ES_REVERSO.help?.[grupo] ?? partes[1]); partes.splice(1, 1); nosSubcomandos = false; }
+    const direto = NOME_PARA_ID_TELA[bruto];
+    const grupo = direto ? null : grupoDoNome(bruto);
+    const alvo = direto ?? (grupo ? null : canonicoDe(bruto, CANONICO));
+    if (grupo) { saida.push(nomeDoGrupo(grupo, "es")); partes.splice(1, 1); nosSubcomandos = false; }
     else if (COMANDO_ES[alvo]) { saida.push(COMANDO_ES[alvo]); partes.splice(1, 1); tabela = alvo; }
   }
   const umaPalavra = (tok) => {
@@ -318,6 +358,8 @@ function paraEspanhol(texto, prefixo = "&", CANONICO = {}) {
         return dentro.startsWith(prefixo) ? "`" + trechoEs(dentro, prefixo, CANONICO) + "`" : pedaco;
       }
       return pedaco.replace(reSolto, (todo, antes, nome) => {
+        const atS = !CANONICO[nome.toLowerCase()] && !COMANDO_EXTRA[nome.toLowerCase()] ? resolverAtalho([nome]) : null;
+        if (atS) { try { return antes + citar([atS.comando, ...atS.args].join("."), "es", prefixo); } catch (e) { void e; return todo; } }
         const cmd = canonicoDe(nome.toLowerCase(), CANONICO);
         return COMANDO_ES[cmd] ? antes + prefixo + COMANDO_ES[cmd] : todo;
       });
@@ -394,6 +436,9 @@ export function exibir(texto, lang, prefixo = "&", CANONICO = {}, dica = null) {
     .replace(/\{servidor\}/gi, "{server}").replace(/\{(membros|contagem)\}/gi, "{members}");
   const foraDasCrases = (trecho) => trecho
     .replace(reSolto, (todo, antes, cmd, trilha) => {
+      // (P2) o nome antigo que virou atalho (`&acesso`): o caminho principal (`&config access`)
+      const atS = !trilha && !CANONICO[cmd.toLowerCase()] && !COMANDO_EXTRA[cmd.toLowerCase()] ? resolverAtalho([cmd]) : null;
+      if (atS) { try { return antes + citar([atS.comando, ...atS.args].join("."), "en", prefixo); } catch (e) { void e; return todo; } }
       const canonico = canonicoDe(cmd, CANONICO);
       if (!COMANDO_EN[canonico] && !trilha) return todo;
       const passos = trilha ? trilha.split(" › ").filter(Boolean) : [];
@@ -436,6 +481,18 @@ export function nomeExibido(canonico, lang) {
 // registro. Referência que não existe (comando ou subcomando) é ERRO na hora — o
 // texto quebrado não chega à tela em silêncio, como o `${P}…` escrito à mão chegava.
 export function citar(ref, lang = "pt", prefixo = "&") {
+  // (P2) caminho que virou atalho (`log.canal` → `config.log.canal`, `chat.sair` →
+  // `privacidade.chat.sair`): o texto antigo continua valendo e mostra o caminho novo
+  const at = resolverAtalho(String(ref ?? "").split("."));
+  if (at) {
+    // o destino pode trazer um valor (`chat.on` → `assistente ia on`): o que não é
+    // subcomando vai no fim, como está
+    const cam = [at.comando, ...at.args];
+    for (let n = cam.length; n >= 1; n--) {
+      try { return [citar(cam.slice(0, n).join("."), lang, prefixo), ...cam.slice(n)].join(" "); }
+      catch (e) { if (n === 1) throw e; }
+    }
+  }
   const [cmd, ...subs] = String(ref ?? "").split(".");
   const entrada = REGISTRO.find((c) => c.id === cmd);
   if (!entrada) throw new Error(`citar: o comando "${cmd}" não existe no registro (${ref})`);
@@ -510,3 +567,29 @@ export function tabelasDeTraducao() {
     aninhados: ord(Object.fromEntries(Object.entries(ANINHADOS).filter(([, s]) => s.size).map(([c, s]) => [c, [...s].sort()]))),
   };
 }
+
+// ── Comandos desativados salvos com nome antigo (revisão P2, 31 out 2026) ──
+// `comandosDesativados` guarda o nome que valia quando a staff desativou (`repete`, `iniciativa`…).
+// O nome antigo vale pelo destino de hoje, sem regravar o banco: o id do registro, o apelido
+// (`repete` → `embed`) ou o atalho de uma palavra (`iniciativa` → `rolar init`, só a parte).
+// Nome que não leva a lugar nenhum (`modia`, `cargomudo`) não desativa nada; o `chat` é lido
+// pelo gating da IA.
+export function caminhoDoDesativado(nome) {
+  const n = String(nome ?? "").toLowerCase();
+  if (REGISTRO.some((c) => c.id === n)) return [n];
+  if (COMANDO_EXTRA[n]) return [COMANDO_EXTRA[n]];
+  const at = resolverAtalho([n]);
+  if (at && at.atalho.posicoes.length === 1) return [at.comando, ...at.args];
+  return null;
+}
+// O comando (com os args já no nome interno) cai num dos desativados?
+export function estaDesativado(lista, canonico, argsInternos = []) {
+  const a = (argsInternos ?? []).map((x) => String(x ?? "").toLowerCase());
+  return (lista ?? []).some((nome) => {
+    const cam = caminhoDoDesativado(nome);
+    return !!cam && cam[0] === canonico && cam.slice(1).every((w, i) => a[i] === w);
+  });
+}
+// O comando inteiro está desativado (para a lista do `&config comando`)?
+export const comandoInteiroDesativado = (lista, canonico) =>
+  (lista ?? []).some((nome) => { const cam = caminhoDoDesativado(nome); return cam?.length === 1 && cam[0] === canonico; });

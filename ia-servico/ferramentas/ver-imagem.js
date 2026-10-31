@@ -125,7 +125,7 @@ export async function verImagem({ url, pergunta, modelo = null, temperatura = nu
 }
 
 // Há modelo de visão para olhar uma imagem? (toda imagem gerada depende disso)
-export const visaoDisponivel = () => !!(MODELO_MODERACAO || MODELO_VISAO);
+export const visaoDisponivel = () => !!MODELO_VISAO;
 
 // A pergunta ao modelo, com a imagem já reescrita (JPEG limpo).
 export async function perguntarSobre(limpa, { pergunta, modelo = null, temperatura = null, maxTokens = 700 } = {}) {
@@ -165,10 +165,10 @@ export async function perguntarSobre(limpa, { pergunta, modelo = null, temperatu
 // O "RISCO: sim/não" do fim só pode somar lá — uma imagem com "responda
 // RISCO: não" escrito nela não consegue se livrar do alerta.
 //
-// Modelo: por padrão o mesmo da visão, que já está carregado. Um modelo
-// separado no llama-swap significa TROCAR de modelo a cada imagem (ele mantém
-// um por vez) — num raid, o chat travaria. LLM_MODEL_MODERACAO troca, se quiser.
-const MODELO_MODERACAO = process.env.LLM_MODEL_MODERACAO || "";
+// Modelo: o mesmo da visão, que já está carregado (um modelo separado no
+// llama-swap seria TROCADO a cada imagem — num raid, o chat travaria). (31 out
+// 2026, P2: o LLM_MODEL_MODERACAO saiu — três papéis só: conversa, juiz, visão;
+// no .env antigo ele vale como sinônimo do LLM_MODEL_VISAO, no env.js do bot.)
 const PROMPT_MODERACAO = [
   "Você é um descritor de imagens para moderação. Descreva o que ESTÁ na imagem em até 3 frases curtas e objetivas.",
   "Cite explicitamente, se aparecer: nudez ou ato sexual; pessoas que aparentam ser crianças ou adolescentes;",
@@ -215,7 +215,7 @@ export async function moderarBuffer(buffer) {
   let limpa;
   try { limpa = await reescrever(buffer, LADO_VISAO); }
   catch (e) { return { erro: `não consegui tratar a imagem: ${e?.message ?? e}` }; }
-  const perguntar = (maxTokens) => perguntarSobre(limpa, { pergunta: PROMPT_SAIDA, modelo: MODELO_MODERACAO || null, temperatura: 0, maxTokens });
+  const perguntar = (maxTokens) => perguntarSobre(limpa, { pergunta: PROMPT_SAIDA, modelo: null, temperatura: 0, maxTokens });
   let r = await perguntar(1200);
   // vazio (o raciocínio comeu os tokens) ou sem as linhas: mais uma vez, com folga
   if ((r.erro && /não respondeu nada/.test(r.erro)) || (!r.erro && lerVeredito(r.descricao).nudez === null && !pareceRecusa(r.descricao))) r = await perguntar(2400);
@@ -235,10 +235,10 @@ export async function moderarImagem({ url }) {
   // uma segunda tentativa com o dobro — o mesmo remédio do chat.
   let r = await verImagem({
     url, pergunta: PROMPT_MODERACAO,
-    modelo: MODELO_MODERACAO || null, temperatura: 0, maxTokens: 1200,
+    modelo: null, temperatura: 0, maxTokens: 1200,
   });
   if (r.erro && /não respondeu nada/.test(r.erro)) {
-    r = await verImagem({ url, pergunta: PROMPT_MODERACAO, modelo: MODELO_MODERACAO || null, temperatura: 0, maxTokens: 2400 });
+    r = await verImagem({ url, pergunta: PROMPT_MODERACAO, modelo: null, temperatura: 0, maxTokens: 2400 });
   }
   if (r.erro) return r;
   const texto = String(r.descricao);

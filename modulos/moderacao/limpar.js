@@ -1,9 +1,9 @@
 
-import { idEscrito, resolverUsuario } from "../core/ids.js";
 import * as log from "../core/log.js";
-import { descreverErro } from "../core/erros.js";
-import { tr, lingua } from "../core/i18n.js";
+import { descreverErro, registrarErro } from "../core/erros.js";
+import { tr, idiomaDe } from "../core/i18n.js";
 import { citar, JA_TRADUZIDO, FIM_PRONTO } from "../core/aliases.js";
+import { erroDeUso, semPermissao, resolverAlvo, responderAlvoRuim } from "./punir.js";
 
 const MAX = 100;
 
@@ -40,85 +40,36 @@ async function apagarTudo(canal, idComando, aoProgredir) {
   return total;
 }
 
+// &purge (id `limpar`): `&purge 50`, `&purge @pessoa 50` (ou `&purge 50 @pessoa`),
+// `&purge tudo` (só o DONO do servidor — o dono do bot só nos servidores dele, R9).
 export async function cmdLimpar(message, args, ctx) {
-  const { sendEmbed, COR, getServer, membroTemPermissao, PREFIXO, client } = ctx;
-  const lang = lingua(ctx);
+  const { sendEmbed, COR, getServer, membroTemPermissao, PREFIXO } = ctx;
+  const canal = message.channel;
+  const linha = (cor, pt, en, es) => sendEmbed(canal, { description: tr(ctx, pt, en, es), colour: cor });
 
-  const server = await getServer(message);
-  if (!membroTemPermissao(message, server, "ManageMessages")) {
-    return sendEmbed(message.channel, tr(ctx, {
-      title: "🚫 Permissão insuficiente",
-      description: "Você precisa da permissão **ManageMessages** para limpar o chat.",
-      colour: COR.erro,
-    }, {
-      title: "🚫 Missing permission",
-      description: "You need the **ManageMessages** permission to purge the chat.",
-      colour: COR.erro,
-    }, {
-      title: "🚫 Permiso insuficiente",
-      description: "Necesitas el permiso **ManageMessages** para limpiar el chat.",
-      colour: COR.erro,
-    }));
-  }
+  const server = await getServer(message).catch(() => null);
+  if (!server) return linha(COR.erro, "❌ Só dentro de um servidor.", "❌ Only inside a server.", "❌ Solo dentro de un servidor.");
+  if (!membroTemPermissao(message, server, "ManageMessages")) return semPermissao(ctx, canal, "ManageMessages");
 
-  // ── &limpar tudo / &limpar confirmar <código> ──
-  // Os nomes já chegam traduzidos (`all`, `confirm` → `tudo`, `confirmar`): o motor
-  // traduz pelo registro (fase 3); o handler só conhece o nome interno.
+  // Os nomes já chegam traduzidos (`all`, `confirm` → `tudo`, `confirmar`) pelo registro.
   const sub = (args[0] ?? "").toLowerCase();
 
   if (sub === "confirmar") {
     const p = pendentes.get(message.channelId);
     if (!p || Date.now() > p.expira) {
       pendentes.delete(message.channelId);
-      return sendEmbed(message.channel, tr(ctx,
-        { title: "⌛ Nada a confirmar",
-          description: `Nenhum pedido pendente neste canal (ou já expirou).\n\nComece com \`${citar("limpar.tudo", "pt", PREFIXO)}\`.`,
-          colour: COR.aviso },
-        { title: "⌛ Nothing to confirm",
-          description: `No pending request in this channel (or it expired).\n\nStart with \`${citar("limpar.tudo", "en", PREFIXO)}\`.`,
-          colour: COR.aviso },
-        { title: "⌛ Nada que confirmar",
-          description: `No hay ninguna solicitud pendiente en este canal (o ya expiró).\n\nEmpieza con \`${citar("limpar.tudo", "es", PREFIXO)}\`.`,
-          colour: COR.aviso }));
+      return linha(COR.aviso, "⌛ Nada a confirmar neste canal.", "⌛ Nothing to confirm in this channel.", "⌛ Nada que confirmar en este canal.");
     }
-    if (message.authorId !== p.autorId) {
-      return sendEmbed(message.channel, tr(ctx,
-        { title: "🚫 Não é seu pedido",
-          description: "Só quem pediu a limpeza pode confirmá-la.", colour: COR.erro },
-        { title: "🚫 Not your request",
-          description: "Only whoever requested the purge can confirm it.", colour: COR.erro },
-        { title: "🚫 No es tu solicitud",
-          description: "Solo quien pidió la limpieza puede confirmarla.", colour: COR.erro }));
-    }
-    if ((args[1] ?? "").toUpperCase() !== p.codigo) {
-      return sendEmbed(message.channel, tr(ctx,
-        { title: "❌ Código errado",
-          description: `Digite \`${citar("limpar.confirmar", "pt", PREFIXO)} ${p.codigo}\` exatamente como está.`, colour: COR.erro },
-        { title: "❌ Wrong code",
-          description: `Type \`${citar("limpar.confirmar", "en", PREFIXO)} ${p.codigo}\` exactly as shown.`, colour: COR.erro },
-        { title: "❌ Código incorrecto",
-          description: `Escribe \`${citar("limpar.confirmar", "es", PREFIXO)} ${p.codigo}\` exactamente como aparece.`, colour: COR.erro }));
-    }
+    if (message.authorId !== p.autorId) return linha(COR.erro, "🚫 Só quem pediu confirma.", "🚫 Only whoever asked can confirm.", "🚫 Solo quien lo pidió puede confirmar.");
+    // (31 out 2026, achado de 30/10) o código errado NÃO mostra o certo: quem não viu
+    // o pedido (ou digitou às cegas) não ganha o código de presente.
+    if ((args[1] ?? "").toUpperCase() !== p.codigo) return linha(COR.erro, "❌ Código errado.", "❌ Wrong code.", "❌ Código incorrecto.");
 
     pendentes.delete(message.channelId);
-    const aviso = await sendEmbedRetornando(ctx, message.channel, tr(ctx,
-      { title: "🧹 Esvaziando o canal…", description: "Isso pode levar alguns instantes.", colour: COR.mod },
-      { title: "🧹 Emptying the channel…", description: "This may take a moment.", colour: COR.mod },
-      { title: "🧹 Vaciando el canal…", description: "Esto puede tardar unos instantes.", colour: COR.mod }));
-
+    const aviso = await sendEmbedRetornando(ctx, canal, { description: tr(ctx, "🧹 Esvaziando o canal…", "🧹 Emptying the channel…", "🧹 Vaciando el canal…"), colour: COR.mod });
     try {
-      const total = await apagarTudo(message.channel, message.id);
-      await sendEmbed(message.channel, tr(ctx,
-        { title: "🧹 Canal esvaziado",
-          description: `**${total}** mensagem(ns) apagada(s) em <#${message.channelId}>.\n**Por:** <@${message.authorId}>`,
-          colour: COR.sucesso },
-        { title: "🧹 Channel emptied",
-          description: `**${total}** message(s) deleted in <#${message.channelId}>.\n**By:** <@${message.authorId}>`,
-          colour: COR.sucesso },
-        { title: "🧹 Canal vaciado",
-          description: `**${total}** mensaje(s) borrado(s) en <#${message.channelId}>.\n**Por:** <@${message.authorId}>`,
-          colour: COR.sucesso }));
-
+      const total = await apagarTudo(canal, message.id);
+      await linha(COR.sucesso, `🧹 ${total} mensagem(ns) apagada(s).`, `🧹 ${total} message(s) deleted.`, `🧹 ${total} mensaje(s) borrado(s).`);
       await log.registrar(ctx, "mensagens", {
         titulo: "🧹 LIMPEZA TOTAL do canal",
         descricao: `<@${message.authorId}> esvaziou <#${message.channelId}> — **${total}** mensagem(ns) apagada(s).`,
@@ -127,229 +78,69 @@ export async function cmdLimpar(message, args, ctx) {
       });
       console.log(`[LIMPAR][TUDO] ${message.authorId} esvaziou ${message.channelId}: ${total} msg`);
     } catch (err) {
-      await sendEmbed(message.channel, tr(ctx,
-        { title: "❌ A limpeza parou no meio",
-          description: `${descreverErro(err, "pt")}\n\nParte das mensagens pode ter sido apagada.`, colour: COR.erro },
-        { title: "❌ The purge stopped midway",
-          description: `${descreverErro(err, "en")}\n\nSome messages may already be gone.`, colour: COR.erro },
-        { title: "❌ La limpieza se detuvo a medias",
-          description: `${descreverErro(err, "es")}\n\nEs posible que parte de los mensajes ya se haya borrado.`, colour: COR.erro }));
+      registrarErro("LIMPAR:tudo", err);
+      await linha(COR.erro, `❌ Parou no meio: ${descreverErro(err, "pt")}`, `❌ Stopped midway: ${descreverErro(err, "en")}`, `❌ Se detuvo a medias: ${descreverErro(err, "es")}`);
     } finally {
-      try { await aviso?.delete?.(); } catch {}
+      try { await aviso?.delete?.(); } catch (e) { registrarErro("LIMPAR:aviso", e); }
     }
     return;
   }
 
   if (sub === "tudo") {
-    const ehDono = (server?.ownerId ?? server?.owner) === message.authorId
-      || ctx.ehSuperAdmin?.(message.authorId);
-    if (!ehDono) {
-      return sendEmbed(message.channel, tr(ctx,
-        { title: "🚫 Só o dono do servidor",
-          description: `Esvaziar um canal inteiro é irreversível, então só o **dono** pode.\n\nPara apagar em quantidade: \`${citar("limpar", "pt", PREFIXO)} 100\`.`,
-          colour: COR.erro },
-        { title: "🚫 Server owner only",
-          description: `Emptying a whole channel is irreversible, so only the **owner** can do it.\n\nTo delete in bulk: \`${citar("limpar", "en", PREFIXO)} 100\`.`,
-          colour: COR.erro },
-        { title: "🚫 Solo el dueño del servidor",
-          description: `Vaciar un canal entero es irreversible, así que solo el **dueño** puede hacerlo.\n\nPara borrar en cantidad: \`${citar("limpar", "es", PREFIXO)} 100\`.`,
-          colour: COR.erro }));
+    if ((server?.ownerId ?? server?.owner) !== message.authorId) {
+      return linha(COR.erro, "🚫 Só o dono do servidor.", "🚫 Server owner only.", "🚫 Solo el dueño del servidor.");
     }
-
     const codigo = novoCodigo();
-    pendentes.set(message.channelId, {
-      codigo, autorId: message.authorId, expira: Date.now() + VALIDADE_MS,
-    });
-
-    return sendEmbed(message.channel, tr(ctx, {
-      title: "⚠️ Apagar TUDO deste canal?",
-      description: [
-        `Isto apaga **todas** as mensagens de <#${message.channelId}>.`,
-        "**Não há como desfazer.**",
-        "",
-        `Para confirmar, digite:`,
-        `\`${citar("limpar.confirmar", "pt", PREFIXO)} ${codigo}\``,
-        "",
-        "_O pedido expira em 60 segundos. Ignore esta mensagem para cancelar._",
-      ].join("\n"),
-      colour: COR.erro,
-    }, {
-      title: "⚠️ Delete EVERYTHING in this channel?",
-      description: [
-        `This deletes **all** messages in <#${message.channelId}>.`,
-        "**There is no undo.**",
-        "",
-        `To confirm, type:`,
-        `\`${citar("limpar.confirmar", "en", PREFIXO)} ${codigo}\``,
-        "",
-        "_The request expires in 60 seconds. Ignore this message to cancel._",
-      ].join("\n"),
-      colour: COR.erro,
-    }, {
-      title: "⚠️ ¿Borrar TODO en este canal?",
-      description: [
-        `Esto borra **todos** los mensajes de <#${message.channelId}>.`,
-        "**No se puede deshacer.**",
-        "",
-        `Para confirmar, escribe:`,
-        `\`${citar("limpar.confirmar", "es", PREFIXO)} ${codigo}\``,
-        "",
-        "_La solicitud expira en 60 segundos. Ignora este mensaje para cancelar._",
-      ].join("\n"),
-      colour: COR.erro,
-    }));
+    pendentes.set(message.channelId, { codigo, autorId: message.authorId, expira: Date.now() + VALIDADE_MS });
+    const l = idiomaDe(ctx);
+    const conf = `\`${citar("limpar.confirmar", l, PREFIXO)} ${codigo}\``;
+    return linha(COR.erro,
+      `⚠️ Apagar **tudo** de <#${message.channelId}>? Não há volta. Para confirmar em 60 s: ${conf}`,
+      `⚠️ Delete **everything** in <#${message.channelId}>? There's no undo. To confirm within 60 s: ${conf}`,
+      `⚠️ ¿Borrar **todo** en <#${message.channelId}>? No se puede deshacer. Para confirmar en 60 s: ${conf}`);
   }
 
-  // Quantidade
-  const n = parseInt(args[0], 10);
-  if (!Number.isInteger(n) || n < 1) {
-    return sendEmbed(message.channel, tr(ctx, {
-      title: "❌ Uso incorreto",
-      description: [
-        `\`${citar("limpar", "pt", PREFIXO)} <quantidade>\` — apaga as últimas mensagens (1–${MAX})`,
-        `\`${citar("limpar", "pt", PREFIXO)} <quantidade> @usuário\` — apaga só as desse usuário`,
-        `\`${citar("limpar.tudo", "pt", PREFIXO)}\` — esvazia o canal inteiro _(só o dono, com confirmação)_`,
-      ].join("\n"),
-      colour: COR.erro,
-    }, {
-      title: "❌ Wrong usage",
-      description: [
-        `\`${citar("limpar", "en", PREFIXO)} <amount>\` — deletes the latest messages (1–${MAX})`,
-        `\`${citar("limpar", "en", PREFIXO)} <amount> @user\` — deletes only that user's`,
-        `\`${citar("limpar.tudo", "en", PREFIXO)}\` — empties the whole channel _(owner only, with confirmation)_`,
-      ].join("\n"),
-      colour: COR.erro,
-    }, {
-      title: "❌ Uso incorrecto",
-      description: [
-        `\`${citar("limpar", "es", PREFIXO)} <cantidad>\` — borra los últimos mensajes (1–${MAX})`,
-        `\`${citar("limpar", "es", PREFIXO)} <cantidad> @usuario\` — borra solo los de ese usuario`,
-        `\`${citar("limpar.tudo", "es", PREFIXO)}\` — vacía el canal entero _(solo el dueño, con confirmación)_`,
-      ].join("\n"),
-      colour: COR.erro,
-    }));
-  }
-  if (n > MAX) {
-    return sendEmbed(message.channel, tr(ctx, {
-      title: "❌ Limite excedido",
-      description: `O máximo é **${MAX}** mensagens por vez (por segurança e limite da plataforma).`,
-      colour: COR.erro,
-    }, {
-      title: "❌ Limit exceeded",
-      description: `The maximum is **${MAX}** messages at a time (for safety and platform limits).`,
-      colour: COR.erro,
-    }, {
-      title: "❌ Límite superado",
-      description: `El máximo es **${MAX}** mensajes a la vez (por seguridad y por el límite de la plataforma).`,
-      colour: COR.erro,
-    }));
-  }
+  // Quantidade e (opcional) a pessoa, em qualquer ordem: `50`, `@pessoa 50`, `50 @pessoa`
+  const iNum = args.findIndex((a) => /^\d+$/.test(String(a)));
+  const n = iNum >= 0 ? parseInt(args[iNum], 10) : NaN;
+  if (!Number.isInteger(n) || n < 1) return erroDeUso(ctx, canal, "limpar", "Quantas mensagens? (1–100)", "How many messages? (1–100)", "¿Cuántos mensajes? (1–100)");
+  if (n > MAX) return erroDeUso(ctx, canal, "limpar", `O máximo é ${MAX}`, `The maximum is ${MAX}`, `El máximo es ${MAX}`);
 
-  // Filtro opcional por usuário (menção ou ID)
-  // (o ID escrito vem antes do mentionIds: numa resposta, ele traz o autor
-  // da mensagem respondida — e "&limpar 50" respondendo filtrava por ele)
-  const textoAlvo = args.slice(1).join(" ").trim();
+  // A pessoa: o que sobra além do número. Não achou → NÃO apaga as de todo mundo.
+  const resto = args.filter((_, i) => i !== iNum);
   let alvo = null;
-  if (textoAlvo) {
-    const server = await ctx.getServer?.(message).catch?.(() => null);
-    alvo = idEscrito(textoAlvo)
-      ?? await resolverUsuario(textoAlvo, { message, server, client: ctx.client }).catch(() => null);
-    // Pediu para filtrar e não achou a pessoa: NÃO apaga as de todo mundo.
-    if (!alvo) return sendEmbed(message.channel, tr(ctx,
-      { title: "❌ Não achei essa pessoa", description: `Não encontrei \`${textoAlvo.slice(0, 60)}\` — nada foi apagado.\n\`${citar("limpar", "pt", PREFIXO)} <quantidade> <@pessoa|id|nome>\``, colour: COR.erro },
-      { title: "❌ Couldn't find that person", description: `I couldn't find \`${textoAlvo.slice(0, 60)}\` — nothing was deleted.\n\`${citar("limpar", "en", PREFIXO)} <amount> <@user|id|name>\``, colour: COR.erro },
-      { title: "❌ No encontré a esa persona", description: `No encontré \`${textoAlvo.slice(0, 60)}\` — no se borró nada.\n\`${citar("limpar", "es", PREFIXO)} <cantidad> <@usuario|id|nombre>\``, colour: COR.erro }));
+  if (resto.length) {
+    const r = await resolverAlvo(message, resto, server, ctx);
+    if (!r.id) return responderAlvoRuim(ctx, canal, "limpar", r);
+    alvo = r.id;
   }
 
   try {
-    // Busca um pouco mais que n para conseguir filtrar por usuário
-    const buscar = alvo ? Math.min(MAX, n * 4) : n;
-    const mensagens = await message.channel.fetchMessages({ limit: buscar });
-
-    // Não apaga o próprio comando duas vezes nem mensagens do sistema
-    let candidatas = mensagens.filter((m) => (m.id ?? m._id) !== message.id);
+    // busca um pouco mais que n para conseguir filtrar por pessoa
+    const mensagens = await canal.fetchMessages({ limit: alvo ? Math.min(MAX, n * 4) : n });
+    let candidatas = (mensagens ?? []).filter((m) => (m.id ?? m._id) !== message.id);
     if (alvo) candidatas = candidatas.filter((m) => (m.authorId ?? m.author?.id) === alvo);
     const ids = candidatas.slice(0, n).map((m) => m.id ?? m._id).filter(Boolean);
+    if (!ids.length) return linha(COR.mod, "🧹 Nada para apagar.", "🧹 Nothing to delete.", "🧹 Nada que borrar.");
 
-    if (!ids.length) {
-      return sendEmbed(message.channel, tr(ctx, {
-        title: "🧹 Nada para apagar",
-        description: alvo ? `Não encontrei mensagens recentes de <@${alvo}>.` : "Não encontrei mensagens para apagar.",
-        colour: COR.mod,
-      }, {
-        title: "🧹 Nothing to delete",
-        description: alvo ? `I couldn't find recent messages from <@${alvo}>.` : "I couldn't find messages to delete.",
-        colour: COR.mod,
-      }, {
-        title: "🧹 Nada que borrar",
-        description: alvo ? `No encontré mensajes recientes de <@${alvo}>.` : "No encontré mensajes para borrar.",
-        colour: COR.mod,
-      }));
-    }
-
-    // Apaga em massa (deleteMessages aceita vários IDs de uma vez)
-    await message.channel.deleteMessages(ids);
-
-    // Descrição EXATA da ação
-    const conf = await sendEmbedRetornando(ctx, message.channel, tr(ctx, {
-      title: "🧹 Ação executada: LIMPEZA",
-      description: [
-        `**Apagadas:** ${ids.length} mensagem(ns)`,
-        alvo ? `**Filtro:** apenas de <@${alvo}>` : `**Filtro:** nenhum (todas as recentes)`,
-        `**Canal:** <#${message.channelId}>`,
-        `**Por:** <@${message.authorId}>`,
-      ].join("\n"),
-      colour: COR.sucesso,
-    }, {
-      title: "🧹 Action executed: PURGE",
-      description: [
-        `**Deleted:** ${ids.length} message(s)`,
-        alvo ? `**Filter:** only from <@${alvo}>` : `**Filter:** none (all recent)`,
-        `**Channel:** <#${message.channelId}>`,
-        `**By:** <@${message.authorId}>`,
-      ].join("\n"),
-      colour: COR.sucesso,
-    }, {
-      title: "🧹 Acción ejecutada: LIMPIEZA",
-      description: [
-        `**Borrados:** ${ids.length} mensaje(s)`,
-        alvo ? `**Filtro:** solo de <@${alvo}>` : `**Filtro:** ninguno (todos los recientes)`,
-        `**Canal:** <#${message.channelId}>`,
-        `**Por:** <@${message.authorId}>`,
-      ].join("\n"),
-      colour: COR.sucesso,
-    }));
+    await canal.deleteMessages(ids);
+    const conf = await sendEmbedRetornando(ctx, canal, { description: tr(ctx,
+      `🧹 ${ids.length} mensagem(ns) apagada(s)${alvo ? ` de <@${alvo}>` : ""}.`,
+      `🧹 ${ids.length} message(s) deleted${alvo ? ` from <@${alvo}>` : ""}.`,
+      `🧹 ${ids.length} mensaje(s) borrado(s)${alvo ? ` de <@${alvo}>` : ""}.`), colour: COR.sucesso });
 
     await log.registrar(ctx, "mensagens", {
       titulo: "🧹 Limpeza de chat",
-      descricao: `<@${message.authorId}> apagou **${ids.length}** mensagem(ns) em <#${message.channelId}>`
-               + (alvo ? ` (só de <@${alvo}>).` : "."),
-      en: { titulo: "🧹 Chat cleanup", descricao: `<@${message.authorId}> deleted **${ids.length}** message(s) in <#${message.channelId}>`
-               + (alvo ? ` (only from <@${alvo}>).` : ".") },
-      es: { titulo: "🧹 Limpieza de chat", descricao: `<@${message.authorId}> borró **${ids.length}** mensaje(s) en <#${message.channelId}>`
-               + (alvo ? ` (solo de <@${alvo}>).` : ".") },
+      descricao: `<@${message.authorId}> apagou **${ids.length}** mensagem(ns) em <#${message.channelId}>` + (alvo ? ` (só de <@${alvo}>).` : "."),
+      en: { titulo: "🧹 Chat cleanup", descricao: `<@${message.authorId}> deleted **${ids.length}** message(s) in <#${message.channelId}>` + (alvo ? ` (only from <@${alvo}>).` : ".") },
+      es: { titulo: "🧹 Limpieza de chat", descricao: `<@${message.authorId}> borró **${ids.length}** mensaje(s) en <#${message.channelId}>` + (alvo ? ` (solo de <@${alvo}>).` : ".") },
     });
-
     console.log(`[LIMPAR] ${message.authorId} apagou ${ids.length} msg em ${message.channelId}${alvo ? ` (alvo ${alvo})` : ""}`);
-
-    // A confirmação some sozinha depois de 6s (não deixa lixo no chat)
-    if (conf) {
-      setTimeout(() => { conf.delete?.().catch(() => {}); }, 6000);
-    }
+    // a confirmação some sozinha (não deixa lixo no chat)
+    if (conf) setTimeout(() => { conf.delete?.().catch((e) => registrarErro("LIMPAR:conf", e)); }, 6000).unref?.();
   } catch (err) {
-    await sendEmbed(message.channel, tr(ctx, {
-      title: "❌ Não foi possível limpar",
-      description: `**Erro:** ${descreverErro(err, "pt")}\n\n_Verifique se o bot tem **ManageMessages** neste canal._`,
-      colour: COR.erro,
-    }, {
-      title: "❌ Couldn't purge",
-      description: `**Error:** ${descreverErro(err, "en")}\n\n_Check that the bot has **ManageMessages** in this channel._`,
-      colour: COR.erro,
-    }, {
-      title: "❌ No se pudo limpiar",
-      description: `**Error:** ${descreverErro(err, "es")}\n\n_Comprueba que el bot tenga **ManageMessages** en este canal._`,
-      colour: COR.erro,
-    }));
+    registrarErro("LIMPAR", err);
+    await linha(COR.erro, `❌ Não consegui apagar: ${descreverErro(err, "pt")}`, `❌ Couldn't delete: ${descreverErro(err, "en")}`, `❌ No pude borrar: ${descreverErro(err, "es")}`);
   }
 }
 
@@ -361,12 +152,13 @@ async function sendEmbedRetornando(ctx, channel, embed) {
   try {
     return await channel.sendMessage({
       embeds: [{
-        title: semMarcas(embed.title),
+        ...(embed.title ? { title: semMarcas(embed.title) } : {}),
         description: semMarcas(embed.description),
         colour: embed.colour,
       }],
     });
-  } catch {
+  } catch (e) {
+    registrarErro("LIMPAR:enviar", e);
     // fallback: usa o helper padrão (não retorna a msg, mas não quebra)
     await ctx.sendEmbed(channel, embed);
     return null;

@@ -21,9 +21,12 @@
 #  REALINHAR=1 (git reset --hard origin/main em vez de pull — descarta
 #  mudanças locais do checkout; o .env não é versionado e fica).
 #
-#  O backup é do volume /data inteiro (stoat.db + automod-config.json),
-#  com o container PARADO — SQLite copiado com o bot escrevendo pode sair
-#  corrompido. NUNCA apaga o banco: restaurar guarda o atual antes.
+#  O backup é só do banco, da config e da chave dos pseudônimos do log
+#  (stoat.db*, automod-config.json, log-segredo.key), com o
+#  container PARADO — SQLite copiado com o bot escrevendo pode sair corrompido.
+#  Os modelos de IA, as vozes e os caches que moram no mesmo volume (dezenas de
+#  GB) ficam de fora: baixam de novo sozinhos. NUNCA apaga o banco: restaurar
+#  guarda o atual antes e só troca esses arquivos.
 # ══════════════════════════════════════════════════════════
 
 set -euo pipefail
@@ -72,8 +75,9 @@ fazer_backup() {
   info "parando o container para copiar o banco com segurança"
   docker compose stop >/dev/null
   info "copiando o volume $vol"
+  # (31 out 2026) só o banco e a config: o volume inteiro tem os modelos (dezenas de GB)
   docker run --rm -v "$vol":/data:ro -v "$BACKUPS":/b alpine \
-    tar czf "/b/$(basename "$arq")" -C /data . \
+    sh -c "cd /data && tar czf '/b/$(basename "$arq")' \$(ls -d stoat.db* automod-config.json log-segredo.key 2>/dev/null)" \
     || erro "o backup falhou — NADA foi atualizado (suba de novo com: docker compose up -d)"
   tar tzf "$arq" | grep -q 'stoat.db$' || erro "o backup não tem o stoat.db: $arq — NADA foi atualizado"
   okay "backup: $arq ($(du -h "$arq" | cut -f1))"
@@ -103,7 +107,7 @@ case "$ACAO" in
     MANTER=100000 DIAS_BACKUP=100000 fazer_backup   # o atual, por garantia (sem podar: o arquivo a restaurar pode ser antigo)
     VOL="$(volume)"
     docker run --rm -v "$VOL":/data -v "$(cd "$(dirname "$ARQ")" && pwd)":/b alpine \
-      sh -c "find /data -mindepth 1 -delete && tar xzf /b/$(basename "$ARQ") -C /data" \
+      sh -c "rm -f /data/stoat.db /data/stoat.db-wal /data/stoat.db-shm /data/automod-config.json && tar xzf /b/$(basename "$ARQ") -C /data" \
       || erro "a restauração falhou — o banco de antes está em $ULTIMO_BACKUP"
     okay "banco restaurado de $(basename "$ARQ")"
     avis "se o código também tem de voltar: git log --oneline | head  →  git reset --hard <commit>  (e depois docker compose up -d --build)"

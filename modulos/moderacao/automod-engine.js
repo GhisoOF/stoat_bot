@@ -686,10 +686,15 @@ export const MODULOS_AUTOMOD = {
 // partes que dá para ajustar ou desligar uma a uma. Por baixo, as partes
 // continuam sendo os filtros de antes (a mesma config, a mesma lógica): nada
 // de configuração antiga se perde.
+// (P2) filtros que andam juntos com outro: ligar, desligar ou punir a `velocidade`
+// (antispam) vale também para a rajada (antimassspam) — a mesma conta em outra régua.
+export const FILTROS_JUNTOS = { antispam: ["antimassspam"] };
 export const GRUPOS_AUTOMOD = {
   antispam: {
     emoji: "🌊", pt: "enxurrada de mensagens", en: "message floods", es: "avalancha de mensajes",
-    partes: { velocidade: "antispam", rajada: "antimassspam", repeticao: "antiduplicata", midia: "antimidia", mencoes: "antimassmention" },
+    // (P2) a `rajada` (antimassspam) é a mesma conta da `velocidade` em outra régua: uma
+    // parte só, que liga, desliga e pune as duas (FILTROS_JUNTOS, acima)
+    partes: { velocidade: "antispam", repeticao: "antiduplicata", midia: "antimidia", mencoes: "antimassmention" },
   },
   antiruido: {
     emoji: "🔊", pt: "texto poluído", en: "noisy text", es: "texto contaminado",
@@ -706,18 +711,6 @@ export const GRUPOS_AUTOMOD = {
   },
 };
 // Rótulos das partes (o nome que se digita é a chave; este é o que se lê)
-export const ROTULO_PARTE = {
-  velocidade: ["mensagens rápidas demais", "messages too fast", "mensajes demasiado rápidos"], rajada: ["rajada longa", "long burst", "ráfaga larga"],
-  repeticao: ["a mesma mensagem ou imagem várias vezes", "the same message or image over and over", "el mismo mensaje o imagen una y otra vez"],
-  midia: ["muitos anexos por minuto", "too many attachments per minute", "demasiados adjuntos por minuto"], mencoes: ["mencionar muita gente", "mentioning a crowd", "mencionar a mucha gente"],
-  caps: ["CAIXA ALTA", "CAPS LOCK", "MAYÚSCULAS"], caracteres: ["zalgo e invisíveis", "zalgo and invisible characters", "zalgo y caracteres invisibles"],
-  letras: ["letra arrastada (kkkkkk…)", "dragged-out letters", "letras alargadas (jajajaja…)"], emoji: ["enxurrada de emoji", "emoji floods", "avalancha de emojis"],
-  dominios: ["domínios da lista de bloqueio", "blocklisted domains", "dominios de la lista de bloqueo"], convites: ["convites de outros servidores", "invites to other servers", "invitaciones a otros servidores"],
-  conteudo: ["golpe, +18, gore, ilícito, abuso", "scams, NSFW, gore, illicit, abuse", "estafas, +18, gore, ilícito, abuso"], odio: ["ofensas raciais/homofóbicas", "racial/homophobic slurs", "insultos racistas/homófobos"],
-  imagens: ["imagens de conta nova (modelo de visão)", "new accounts' images (vision model)", "imágenes de cuentas nuevas (modelo de visión)"],
-  assuntos: ["temas proibidos pela regra (política, religião, drogas, sexual) — a IA separa discussão de zoeira", "topics the rules forbid (politics, religion, drugs, sexual) — the AI tells discussion from banter", "temas que las reglas prohíben (política, religión, drogas, sexual) — la IA distingue la discusión de la broma"],
-  avatar: ["foto de perfil de quem entra ou troca (modelo de visão)", "profile picture on join or change (vision model)", "foto de perfil al entrar o al cambiarla (modelo de visión)"],
-};
 export function estadoDoGrupo(am, grupo) {
   const partes = Object.entries(GRUPOS_AUTOMOD[grupo]?.partes ?? {});
   const ligadas = partes.filter(([, f]) => moduloLigado(am, MODULOS_AUTOMOD[f]));
@@ -998,7 +991,8 @@ async function analisarMensagem(message, ctx, opts = {}) {
       const naoPermitidos = codigos.filter((c) => !config.inviteWhitelist.includes(c.toLowerCase()));
       dbg(ctx, `  [anti-invite] ${naoPermitidos.length} fora da lista de permitidos`);
       if (naoPermitidos.length > 0) {
-        return punirRuido(am.antiInvite.punicao, "não é permitido enviar convites neste servidor", "anti-invite");
+        // (P2) convite e link bloqueado seguem a MESMA rota de punição (regra fixa)
+        return barrar(am.antiInvite.punicao, "não é permitido enviar convites neste servidor", "anti-invite");
       }
     }
   } else {
@@ -1064,10 +1058,7 @@ async function analisarMensagem(message, ctx, opts = {}) {
     const bloqueado = dominios.find((d) =>
       !nuncaBloquear(d) && !dominioBloqueado(d, permitidos) && dominioBloqueado(d, estado.blockedDomains));
     if (bloqueado) {
-      dbg(ctx, "  ✗ BLOQUEADA por anti-link");
-      await aplicarPunicao(ctx, { server, channel: canal, message, userId, regraFixa: true,
-        pol: am.antiLink.punicao, motivo: "este link está em uma lista de bloqueio do servidor" });
-      return true;
+      return barrar(am.antiLink.punicao, "este link está em uma lista de bloqueio do servidor", "anti-link");
     } else if (dominios.length > 0) {
       dbg(ctx, "  [anti-link] nenhum domínio da mensagem está na lista");
     }
@@ -1268,33 +1259,6 @@ export async function removerCargoSilence(server, userId, roleId, ctx) {
     if (/continua/.test(e?.message ?? "")) throw e;   // erro real; o resto é falha ao reconferir
   }
   return { removido: true };
-}
-
-export async function simularDeteccao(texto, ctx, canalAtual) {
-  const { sendEmbed, COR, config } = ctx;
-  const t = texto ?? "";
-  const r = analisarConteudo(t, { rate: 1 });
-  const limiar = limiarBase(config.automod.antiScam.sensitivity);
-  const flag = r.nota >= limiar;
-  const canalAviso = (await canalDaStaff(ctx)) ?? canalAtual;   // a simulação foi pedida pela staff, no canal dela
-  const resumoSeguro = r.grave ? "[conteúdo não exibido por segurança]"
-                              : (t.length > 200 ? t.slice(0, 200) + "…" : t);
-
-  console.log(`[SIMULATE] nota=${r.nota.toFixed(1)}/${limiar} flag=${flag} grave=${r.grave} sinais=[${r.sinais.join(", ") || "nenhum"}]`);
-
-  await sendEmbed(canalAviso, {
-    title: flag ? `🧪 [SIMULAÇÃO] SERIA sinalizado (nota ${r.nota.toFixed(1)})` : `🧪 [SIMULAÇÃO] não seria sinalizado (nota ${r.nota.toFixed(1)})`,
-    description: [
-      `**Nota:** ${r.nota.toFixed(1)} / limiar ${limiar}`,
-      `**Grave?** ${r.grave ? "sim" : "não"}`,
-      `**Sinais:** ${r.sinais.join(", ") || "nenhum"}`,
-      `**Mensagem:** ${resumoSeguro}`,
-      "",
-      "_Simulação: nada foi apagado ou punido. Se você está vendo isto, o canal de avisos está funcionando._",
-    ].join("\n"),
-    colour: flag ? COR.erro : COR.sucesso,
-  });
-  return r;
 }
 // Só para testes: a checagem de tema da última mensagem (roda em segundo plano).
 let ultimaVerificacaoDeAssunto = null;

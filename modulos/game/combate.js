@@ -18,28 +18,6 @@ export const ehArma = (item) => item?.dados?.tipo === "arma";
 export const ehEscudo = (item) => item?.dados?.tipo === "escudo";
 export const multDe = (item) => item?.dados?.mult ?? 1;
 
-// Estatística de um item para mostrar (dano, defesa, bônus, efeito).
-export function statsItem(item) {
-  const d = item?.dados ?? {}, rar = item?.raridade;
-  if (d.tipo === "arma") return { tipo: "arma", ...R.statsArma(armaDoItem(item), rar), esc: d.arma.esc ?? {}, porte: d.arma.porte, tipoDano: d.arma.tipo, foco: !!d.foco };
-  if (d.tipo === "escudo") return { tipo: "escudo", defesa: R.defesaItem("escudo", rar, d.mult ?? 1), reforco: R.ESCUDO.reforco };
-  if (d.tipo === "defesa") return { tipo: "defesa", defesa: R.defesaItem(d.peso, rar, d.mult ?? 1) };
-  if (d.tipo === "implante") {
-    const base = R.IMPLANTES[d.base], b = R.difDaRaridade(rar), orc = R.RARIDADES[rar].item * (d.mult ?? 1);
-    const req = R.IMPL.req * b, bio = base.fam === "bio", k0 = bio ? R.IMPL.bio : 1, k1 = bio ? R.IMPL.bio * (1 + R.IMPL.escBio) : 1;
-    const out = { tipo: "implante", familia: base.fam, papel: base.papel, regiao: base.regiao ?? null, cor: base.cor ?? null,
-      alvo: bio ? R.COR_BIO[base.cor].tipo : base.alvo ?? null, req, reqAtr: bio ? "vida" : "resistencia", bio };
-    if (base.papel === "ofensivo" || base.papel === "defensivo") Object.assign(out, { valor: [R.IMPL.potencia * orc * k0, R.IMPL.potencia * orc * k1] });
-    else if (base.papel === "reforco") Object.assign(out, { pct: [R.IMPL.reforco(b) * (d.mult ?? 1) * k0, R.IMPL.reforco(b) * (d.mult ?? 1) * k1] });
-    else Object.assign(out, { atributos: base.atr ?? R.ATR_DA_COR[base.cor], pontos: [R.IMPL.atributo * orc * k0, R.IMPL.atributo * orc * k1] });
-    return out;
-  }
-  if (d.tipo === "acessorio") return { tipo: "acessorio", bonus: item.bonus ?? {} };
-  if (d.tipo === "contrato") return { tipo: "contrato", companheiro: d.companheiro };
-  if (d.tipo === "pergaminho") return { tipo: "pergaminho", magia: d.magia };
-  return { tipo: "?", bonus: item?.bonus ?? {} };
-}
-
 // ── Jogador ───────────────────────────────────────────────────────────────────
 // Atributos do personagem + o que os acessórios dão (armas e armaduras não dão
 // mais atributo — v4). Implantes de atributo entram por attrEf (regras.js).
@@ -137,15 +115,4 @@ export function juntar(parties) {
 export function prever(parties, alvo) {
   const j = juntar(parties);
   return { ...R.preverLuta(j.membros, j.magias, alvo), ...j };
-}
-
-// Peso de cada um no resultado, para a história ("quem brilhou").
-export function contribuicoes(parties) {
-  const out = [];
-  for (const x of parties) {
-    const pm = (m) => R.poderMembro(m) + R.defesaMembro(m) * 0.5;
-    out.push({ tipo: "jogador", uid: x.uid, nome: x.p.nome, peso: pm(x.jogador) });
-    for (const c of x.companheiros) out.push({ tipo: c.cat.classe, nome: c.cat.nome, peso: pm(c.membro) });
-  }
-  return out;
 }

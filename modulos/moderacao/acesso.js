@@ -94,18 +94,8 @@ export async function cmdAcesso(message, args, ctx) {
         `**Commands work in:** ${canais}`,
         `**Staff bypasses the channel restriction:** ${a.staffIgnoraCanais ? "yes" : "no"}`,
         `**Work in any channel:** ${livresTxt}`,
-        "",
-        "**Staff roles**",
-        `\`${citarInterno("acesso.cargo.add", P)} <@role|id>\` · \`${citarInterno("acesso.cargo.remove", P)} <@role|id>\``,
-        "_Anyone with one of these roles can use the moderation commands even without the native permission._",
-        "",
-        "**Channels**",
-        `\`${citarInterno("acesso.canal.todos", P)}\` — commands in any channel`,
-        `\`${citarInterno("acesso.canal.somente", P)}\` — only in the listed channels`,
-        `\`${citarInterno("acesso.canal.exceto", P)}\` — everywhere except the listed ones`,
-        `\`${citarInterno("acesso.canal.add", P)}|remove [#channel]\` — edits the list (no channel = this one)`,
-        `\`${citarInterno("acesso.staffignora", P)} on|off\` — whether staff bypasses the restriction`,
-        `\`${citarInterno("acesso.livre", P)} <command> on|off\` — a command that works in any channel (e.g. the games: \`${citarInterno("acesso.livre", P)} ${nomeExibido("entretenimento", telaNome)} on\`)`,
+        // (revisão P2, R1) a tela de estado mostra só o estado; o "como usar" mora na ajuda
+        `\`${citarInterno("help", P)} ${citarInterno("config.acesso", P).slice(P.length)}\``,
       ].join("\n"),
       colour: COR.info,
     };
@@ -116,18 +106,8 @@ export async function cmdAcesso(message, args, ctx) {
         `**Comandos funcionam em:** ${canais}`,
         `**Staff ignora a restrição de canal:** ${a.staffIgnoraCanais ? "sim" : "não"}`,
         `**Valem em qualquer canal:** ${livresTxt}`,
-        "",
-        "**Cargos de staff**",
-        `\`${citarInterno("acesso.cargo.add", P)} <@cargo|id>\` · \`${citarInterno("acesso.cargo.remove", P)} <@cargo|id>\``,
-        "_Quem tiver um desses cargos usa os comandos de moderação mesmo sem a permissão nativa._",
-        "",
-        "**Canais**",
-        `\`${citarInterno("acesso.canal.todos", P)}\` — comandos em qualquer canal`,
-        `\`${citarInterno("acesso.canal.somente", P)}\` — só nos canais da lista`,
-        `\`${citarInterno("acesso.canal.exceto", P)}\` — em todos, menos os da lista`,
-        `\`${citarInterno("acesso.canal.add", P)}|remove [#canal]\` — mexe na lista (sem canal, usa este)`,
-        `\`${citarInterno("acesso.staffignora", P)} on|off\` — se o staff escapa da restrição`,
-        `\`${citarInterno("acesso.livre", P)} <comando> on|off\` — um comando que vale em qualquer canal (ex.: os jogos: \`${citarInterno("acesso.livre", P)} entretenimento on\`)`,
+        // (revisão P2, R1) a tela de estado mostra só o estado; o "como usar" mora na ajuda
+        `\`${citarInterno("help", P)} ${citarInterno("config.acesso", P).slice(P.length)}\``,
       ].join("\n"),
       colour: COR.info,
     };
@@ -138,18 +118,8 @@ export async function cmdAcesso(message, args, ctx) {
         `**Los comandos funcionan en:** ${canais}`,
         `**El staff ignora la restricción de canal:** ${a.staffIgnoraCanais ? "sí" : "no"}`,
         `**Valen en cualquier canal:** ${livresTxt}`,
-        "",
-        "**Roles de staff**",
-        `\`${citar("acesso.cargo.add", "es", P)} <@rol|id>\` · \`${citar("acesso.cargo.remove", "es", P)} <@rol|id>\``,
-        "_Quien tenga uno de estos roles usa los comandos de moderación aun sin el permiso nativo._",
-        "",
-        "**Canales**",
-        `\`${citar("acesso.canal.todos", "es", P)}\` — comandos en cualquier canal`,
-        `\`${citar("acesso.canal.somente", "es", P)}\` — solo en los canales de la lista`,
-        `\`${citar("acesso.canal.exceto", "es", P)}\` — en todos, excepto los de la lista`,
-        `\`${citar("acesso.canal.add", "es", P)}|remove [#canal]\` — edita la lista (sin canal, usa este)`,
-        `\`${citar("acesso.staffignora", "es", P)} on|off\` — si el staff escapa de la restricción`,
-        `\`${citar("acesso.livre", "es", P)} <comando> on|off\` — un comando que vale en cualquier canal (ej.: los juegos: \`${citar("acesso.livre", "es", P)} ${nomeExibido("entretenimento", "es")} on\`)`,
+        // (revisão P2, R1) a tela de estado mostra só o estado; o "como usar" mora na ajuda
+        `\`${citar("help", "es", P)} ${citar("config.acesso", "es", P).slice(P.length)}\``,
       ].join("\n"),
       colour: COR.info,
     };
@@ -345,11 +315,12 @@ export async function cmdAcesso(message, args, ctx) {
     if (ligar) { if (!a.livres.includes(id)) a.livres.push(id); }
     else a.livres = a.livres.filter((c) => c !== id);
     salvarConfig?.();
+    // é parte do resultado: no modo `todos`, liberar ainda não muda nada
     const aviso = ligar && a.canais.modo === "todos"
       ? tr(ctx,
-        `\n\n_Aqui os comandos já valem em qualquer canal (modo \`todos\`); isto conta quando você restringir com \`${citarInterno("acesso.canal.somente", P)}\` ou \`exceto\`._`,
-        `\n\n_Commands already work in any channel here (mode \`todos\`); this counts once you restrict them with \`${citarInterno("acesso.canal.somente", P)}\` or \`exceto\`._`,
-        `\n\n_Aquí los comandos ya valen en cualquier canal (modo \`all\`); esto cuenta cuando los restrinjas con \`${citar("acesso.canal.somente", "es", P)}\` o \`except\`._`)
+        `\n\n_Aqui os comandos já valem em qualquer canal (modo \`todos\`); isto conta quando você restringir com \`${citarInterno("acesso.canal.somente", P)}\`._`,
+        `\n\n_Commands already work in any channel here (mode \`todos\`); this counts once you restrict them with \`${citarInterno("acesso.canal.somente", P)}\`._`,
+        `\n\n_Aquí los comandos ya valen en cualquier canal (modo \`all\`); esto cuenta cuando los restrinjas con \`${citar("acesso.canal.somente", "es", P)}\`._`)
       : "";
     return sendEmbed(message.channel, tr(ctx, {
       title: ligar ? "🔓 Livre em qualquer canal" : "🔐 De volta à regra de canais",
@@ -396,5 +367,5 @@ export async function cmdAcesso(message, args, ctx) {
     { title: "❓ Unknown subcommand",
       description: `Use: \`role\`, \`channel\`, \`staffbypass\`, \`free\` or \`status\`.`, colour: COR.erro },
     { title: "❓ Subcomando desconocido",
-      description: `Usa: \`${subExibido("acesso", "cargo", "es")}\`, \`${subExibido("acesso", "canal", "es")}\`, \`${subExibido("acesso", "staffignora", "es")}\`, \`${subExibido("acesso", "livre", "es")}\` o \`status\`.`, colour: COR.erro }));
+      description: `Usa: \`${subExibido("config.acesso", "cargo", "es")}\`, \`${subExibido("config.acesso", "canal", "es")}\`, \`${subExibido("config.acesso", "staffignora", "es")}\`, \`${subExibido("config.acesso", "livre", "es")}\` o \`status\`.`, colour: COR.erro }));
 }

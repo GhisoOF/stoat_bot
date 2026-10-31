@@ -9,6 +9,7 @@ import * as gerarImagem from "./gerar-imagem.js";
 const MODULOS = [lerCodigo, calcular, rss, buscarWeb, verImagem, gerarImagem];
 
 import { existsSync } from "node:fs";
+import { imagemPedida } from "../../modulos/core/imagem-modelo.js";
 
 if (!process.env.LLM_MODEL_VISAO) MODULOS.splice(MODULOS.indexOf(verImagem), 1);
 
@@ -16,7 +17,7 @@ if (!process.env.LLM_MODEL_VISAO) MODULOS.splice(MODULOS.indexOf(verImagem), 1);
 // externo) OU o sd-cpp embutido que a imagem Docker já traz — o gate antigo
 // só conhecia o externo e removia a ferramenta em silêncio no modo padrão.
 const sdBin = process.env.SD_BIN || "/usr/local/bin/sd-cpp";
-const imagemLigada = (process.env.IMAGEM ?? "1").trim() !== "0";
+const imagemLigada = imagemPedida();   // (P2) só com IMAGEM=1
 const temGerador = !!process.env.SD_URL || existsSync(sdBin);
 if (!imagemLigada || !temGerador) {
   MODULOS.splice(MODULOS.indexOf(gerarImagem), 1);

@@ -8,6 +8,18 @@ import { idsDeCargos, rankDoCargo, rankDoMembro, editarCargos } from "../core/hi
 import { descreverErro, tipoDoErro, registrarErro } from "../core/erros.js";
 import { canalDeOutroServidor } from "../moderacao/pertence.js";
 import { numero } from "../core/env.js";
+import { canalDesteServidor, cargoDoServidor } from "../moderacao/pertence.js";
+import { resolverCargo } from "../core/ids.js";
+import { podeUsarCargo } from "../core/hierarquia.js";
+import { erroDeUso } from "../core/saida.js";
+
+// Cada membro escolhe se o XP dele conta (privacidade P3). `participar: false` apaga o
+// XP dele neste servidor e para de contar; `true` volta (do zero). É a função que o
+// `&privacidade xp sair|voltar` chama (P2, 31 out 2026) — e o apelido `&xp sair|entrar`.
+export function participarDoXp(serverId, userId, participar) {
+  const n = db.setXpFora(serverId, userId, !participar);
+  return { apagados: participar ? 0 : n };   // ao voltar, o que sai é só a marca de "fora"
+}
 
 const _tabelasXp = new Map();   // `${base}|${mult}` → number[] (acumulado por nível)
 function tabelaXp(base, mult, ateNivel) {
@@ -304,37 +316,20 @@ export async function cmdXp(message, args, ctx) {
   const lang = lingua(ctx);
   const sub = args[0]?.toLowerCase();
 
-  // ── sair / entrar: cada membro escolhe se o XP dele conta (privacidade P3) ──
-  // Vale com o XP ligado ou não: dá para sair antes de o servidor ligar.
-  if (sub === "sair" || sub === "entrar") {
+  // ── sair / entrar (voltar): cada membro escolhe se o XP dele conta (privacidade P3) ──
+  // Vale com o XP ligado ou não. A tela de verdade mora no `&privacidade xp …` (P2);
+  // aqui fica o apelido, com a mesma função.
+  if (sub === "sair" || sub === "entrar" || sub === "voltar") {
     const sair = sub === "sair";
-    const apagados = db.setXpFora(serverId, message.authorId, sair);
-    const c = (l) => `\`${citar(sair ? "xp.entrar" : "xp.sair", l, PREFIXO)}\``;
-    return sendEmbed(message.channel, tr(ctx, sair
-      ? { title: "🚪 Fora do XP", description: `O seu XP deixou de contar neste servidor${apagados ? " e foi apagado" : ""}. Para voltar (do zero): ${c("pt")}.`, colour: COR.sucesso }
-      : { title: "🎮 De volta ao XP", description: `O seu XP volta a contar neste servidor, do zero. Para sair: ${c("pt")}.`, colour: COR.sucesso },
-    sair
-      ? { title: "🚪 Out of XP", description: `Your XP no longer counts on this server${apagados ? " and was erased" : ""}. To come back (from zero): ${c("en")}.`, colour: COR.sucesso }
-      : { title: "🎮 Back in XP", description: `Your XP counts again on this server, from zero. To leave: ${c("en")}.`, colour: COR.sucesso },
-    sair
-      ? { title: "🚪 Fuera del XP", description: `Tu XP dejó de contar en este servidor${apagados ? " y se borró" : ""}. Para volver (desde cero): ${c("es")}.`, colour: COR.sucesso }
-      : { title: "🎮 De vuelta al XP", description: `Tu XP vuelve a contar en este servidor, desde cero. Para salir: ${c("es")}.`, colour: COR.sucesso }));
+    const { apagados } = participarDoXp(serverId, message.authorId, !sair);
+    return sendEmbed(message.channel, { description: tr(ctx,
+      sair ? `🚪 Fora do XP${apagados ? " — o seu XP foi apagado" : ""}.` : "🎮 De volta ao XP (do zero).",
+      sair ? `🚪 Out of XP${apagados ? " — your XP was erased" : ""}.` : "🎮 Back in XP (from zero).",
+      sair ? `🚪 Fuera del XP${apagados ? " — tu XP se borró" : ""}.` : "🎮 De vuelta al XP (desde cero)."), colour: COR.sucesso });
   }
 
-  if (!g?.enabled && !["on", "setup", "config", "configurar", "criarcargos", "criar"].includes(sub)) {
-    return sendEmbed(message.channel, tr(ctx, {
-      title: "💤 Sistema de níveis desligado",
-      description: `O sistema de XP está **desativado** neste servidor, por isso ninguém está ganhando XP.\n\nPara ativar: \`${citarInterno("xp", PREFIXO)} on\` *(precisa de ManagePermissions)*.\nDepois, configure com \`${citarInterno("xp.setup", PREFIXO)}\` se quiser.`,
-      colour: COR.aviso,
-    }, {
-      title: "💤 Leveling system off",
-      description: `The XP system is **disabled** on this server, so nobody is earning XP.\n\nTo enable it: \`${citarInterno("xp", PREFIXO)} on\` *(needs ManagePermissions)*.\nThen configure it with \`${citarInterno("xp.setup", PREFIXO)}\` if you like.`,
-      colour: COR.aviso,
-    }, {
-      title: "💤 Sistema de niveles desactivado",
-      description: `El sistema de XP está **desactivado** en este servidor, así que nadie está ganando XP.\n\nPara activarlo: \`${citar("xp", "es", PREFIXO)} on\` *(necesita ManagePermissions)*.\nDespués, configúralo con \`${citar("xp.setup", "es", PREFIXO)}\` si quieres.`,
-      colour: COR.aviso,
-    }));
+  if (!g?.enabled && !["on", "setup", "config", "configurar", "criarcargos", "criar", "cargo", "canal"].includes(sub)) {
+    return erroDeUso(ctx, message.channel, "xp", "O XP está desligado neste servidor.", "XP is off on this server.", "El XP está desactivado en este servidor.");
   }
 
   // ── top / leaderboard ──
@@ -354,10 +349,7 @@ export async function cmdXp(message, args, ctx) {
     // nota: só XP de texto (call não é suportado pela plataforma)
     return sendEmbed(message.channel, {
       title: tr(ctx, "🏆 Ranking de níveis", "🏆 Level ranking", "🏆 Ranking de niveles"),
-      description: linhas.join("\n") + tr(ctx,
-        "\n\n_XP é ganho por mensagens (o Stoat não permite medir tempo em call)._",
-        "\n\n_XP is earned from messages (Stoat can't measure call time)._",
-        "\n\n_El XP se gana con mensajes (el Stoat no permite medir el tiempo en llamada)._"),
+      description: linhas.join("\n"),
       colour: COR.info,
     });
   }
@@ -499,12 +491,10 @@ export async function cmdXp(message, args, ctx) {
     const ligou = sub === "on" && !config.xp.enabled;
     config.xp.enabled = (sub === "on");
     ctx.salvarConfig();
-    await sendEmbed(message.channel, tr(ctx,
-      { title: "🎮 Sistema de níveis",
-        description: `Sistema **${sub === "on" ? "ativado 🟢" : "desativado 🔴"}**.`, colour: COR.mod },
-      { title: "🎮 Leveling system",
-        description: `System **${sub === "on" ? "enabled 🟢" : "disabled 🔴"}**.`, colour: COR.mod }, { title: "🎮 Sistema de niveles",
-        description: `Sistema **${sub === "on" ? "activado 🟢" : "desactivado 🔴"}**.`, colour: COR.mod }));
+    await sendEmbed(message.channel, { description: tr(ctx,
+      `🎮 XP ${sub === "on" ? "ligado 🟢" : "desligado 🔴"}.`,
+      `🎮 XP ${sub === "on" ? "on 🟢" : "off 🔴"}.`,
+      `🎮 XP ${sub === "on" ? "activado 🟢" : "desactivado 🔴"}.`), colour: COR.mod });
     // Ao ligar, a Judy avisa os membros (privacidade P3, opção B): o XP é uma
     // estatística de cada pessoa, e cada uma pode ficar de fora.
     if (ligou) {
@@ -517,8 +507,43 @@ export async function cmdXp(message, args, ctx) {
     return;
   }
 
-  // ── cargos (lista) ──
-  if (sub === "cargos") {
+  // ── cargo <nível> @cargo|off (staff) ──
+  if (sub === "cargo" && args[1]) {
+    if (!(await podeConfigurar(message, ctx))) return;
+    const nivel = Number(args[1]);
+    if (!Number.isInteger(nivel) || nivel < 1 || nivel > (g?.nivelMaximo ?? 100))
+      return erroDeUso(ctx, message.channel, "xp", `Nível de 1 a ${g?.nivelMaximo ?? 100}.`, `Level from 1 to ${g?.nivelMaximo ?? 100}.`, `Nivel de 1 a ${g?.nivelMaximo ?? 100}.`);
+    if (/^(off|remover|remove|nenhum|none)$/i.test(args[2] ?? "")) {
+      db.xpTirarCargoNivel(serverId, nivel);
+      return sendEmbed(message.channel, { description: tr(ctx, `🗑️ Nível **${nivel}** sem cargo.`, `🗑️ Level **${nivel}** has no role.`, `🗑️ Nivel **${nivel}** sin rol.`), colour: COR.sucesso });
+    }
+    const server = await getServer(message);
+    const roleId = resolverCargo(args.slice(2).join(" "), server)?.id;
+    if (!roleId || !cargoDoServidor(server, roleId))
+      return erroDeUso(ctx, message.channel, "xp", "Cargo não encontrado neste servidor.", "Role not found on this server.", "Rol no encontrado en este servidor.");
+    const pode = await podeUsarCargo(server, message, roleId, ctx);
+    if (!pode.ok) return sendEmbed(message.channel, { description: `🚫 ${tr(ctx, pode.pt, pode.en, pode.es)}`, colour: COR.erro });
+    db.setCargoNivel(serverId, nivel, roleId);
+    return sendEmbed(message.channel, { description: tr(ctx, `✅ Nível **${nivel}** → <%${roleId}>`, `✅ Level **${nivel}** → <%${roleId}>`, `✅ Nivel **${nivel}** → <%${roleId}>`), colour: COR.sucesso });
+  }
+
+  // ── canal <#canal|aqui|off> (staff): onde anunciar quem sobe de nível ──
+  if (sub === "canal") {
+    if (!(await podeConfigurar(message, ctx))) return;
+    const arg = (args[1] ?? "").toLowerCase();
+    if (/^(off|nenhum|none|desligar)$/.test(arg)) {
+      config.xp.canalAnuncio = null; ctx.salvarConfig();
+      return sendEmbed(message.channel, { description: tr(ctx, "📢 Anúncio no próprio canal da conversa.", "📢 Announced in the chat's own channel.", "📢 Anuncio en el propio canal de la conversación."), colour: COR.sucesso });
+    }
+    const server = await getServer(message);
+    const alvo = !arg || ["aqui", "here", "aquí"].includes(arg) ? message.channel : canalDesteServidor(server, args[1]);
+    if (!alvo) return erroDeUso(ctx, message.channel, "xp", "Canal deste servidor: #canal, aqui ou off.", "A channel on this server: #channel, here or off.", "Un canal de este servidor: #canal, aquí u off.");
+    config.xp.canalAnuncio = alvo.id; ctx.salvarConfig();
+    return sendEmbed(message.channel, { description: `📢 <#${alvo.id}>`, colour: COR.sucesso });
+  }
+
+  // ── cargos (lista; também `&xp cargo` sem nada) ──
+  if (sub === "cargos" || sub === "cargo") {
     const cargos = db.listarCargosNivel(serverId);
     if (!cargos.length)
       return sendEmbed(message.channel, tr(ctx,
@@ -572,9 +597,11 @@ export async function cmdXp(message, args, ctx) {
 
   // ── rank [@usuário] ou perfil próprio (padrão) ──
   let alvoId = message.authorId;
-  if (sub === "rank" && args[1]) {
-    const bruto = limparId(args[1]);
+  const quem = sub === "rank" ? args[1] : args[0];
+  if (quem) {
+    const bruto = limparId(quem);
     if (ULID.test(bruto)) alvoId = bruto;
+    else if (sub !== "rank") return erroDeUso(ctx, message.channel, "xp", "Subcomando desconhecido.", "Unknown subcommand.", "Subcomando desconocido.");
   }
 
   const dados = db.getXp(serverId, alvoId);

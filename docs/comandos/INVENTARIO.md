@@ -4,61 +4,54 @@ Gerado por `INVENTARIO=1 node testes.mjs comandos-17out` — **não edite à mã
 reestruturação dos comandos num registro central (fase 0). A suíte `comandos-17out` compara o bot com o
 `inventario.json` desta pasta: nome que some ou muda de destino faz o teste falhar.
 
-**49 comandos · 168 nomes · 647 subcomandos em inglês · 342 telas de ajuda · 1046 exemplos executados**
+**42 comandos · 165 nomes · 923 subcomandos em inglês · 294 telas de ajuda · 717 exemplos executados**
 
 ## Comandos
 
 | Comando | Nome na tela em inglês | Nome na tela em espanhol | Todos os nomes que levam a ele | Função | Liga/desliga | Exemplos na ajuda |
 |---|---|---|---|---|---|---|
-| `acesso` | `access` | `acceso` | `acceso` `access` | `cmdAcesso` | sim | 48 |
 | `adeus` | `goodbye` | `despedida` | `despedida` `farewell` `goodbye` | `adeus (cmd)` | sim | 6 |
-| `assistente` | `wizard` | `asistente` | `asistente` `assistant` `configurar` `configure` `setup` `wizard` | `cmdAssistente` | sim | 14 |
-| `automod` | — | `automod` | — | `cmdAutomod` | sim | 128 |
-| `autorole` | — | `autorol` | `autorol` | `cmdAutorole` | sim | 14 |
-| `ban` | — | `ban` | — | `cmdBan` | sim | 7 |
-| `banglobal` | `globalban` | `banglobal` | `globalban` | `cmdBanGlobal` | sim | 50 |
-| `boasvindas` | `welcome` | `bienvenida` | `bemvindo` `bienvenida` `boas-vindas` `greeting` `welcome` | `boasvindas (cmd)` | sim | 26 |
-| `cargomudo` | `muterole` | `rolsilencio` | `criarcargomudo` `mutedrole` `muterole` `rolsilencio` | `cmdCargoMudo` | — | 0 |
-| `chat` | — | `chat` | `ia` | `cmdChat` | só IA | 2 |
-| `comando` | `command` | `comando` | `comandos` `command` | `cmdComando` | — | 14 |
-| `config` | — | `config` | `configuracoes` `configurações` | `cmdConfig` | — | 2 |
-| `cor` | `color` | `color` | `cargocor` `color` `colour` `cores` | `cmdCor` | sim | 54 |
+| `assistente` | `setup` | `asistente` | `asistente` `assistant` `configurar` `configure` `setup` `wizard` | `cmdAssistente` | sim | 18 |
+| `automod` | — | `automod` | — | `cmdAutomod` | sim | 110 |
+| `autorole` | — | `autorol` | `autorol` | `cmdAutorole` | sim | 10 |
+| `ban` | — | `ban` | — | `cmdBan` | sim | 6 |
+| `banglobal` | `globalban` | `banglobal` | `globalban` | `cmdBanGlobal` | sim | 60 |
+| `boasvindas` | `welcome` | `bienvenida` | `bemvindo` `bienvenida` `boas-vindas` `greeting` `welcome` | `boasvindas (cmd)` | sim | 22 |
+| `config` | `config` | `config` | `ajustes` `configuracion` `configuración` `configuracoes` `configurações` `settings` | `cmdConfig` | — | 60 |
+| `cor` | `color` | `color` | `cargocor` `color` `colour` `cores` | `cmdCor` | sim | 32 |
 | `debug` | — | `debug` | `diagnostico` `diagnóstico` | `cmdDebug` | — | 8 |
-| `economia` | `economy` | `economia` | `eco` `economy` | `cmdEconomia` | sim | 34 |
-| `embed` | — | `embed` | — | `cmdEmbed` | sim | 12 |
+| `economia` | `economy` | `economia` | `eco` `economy` | `cmdEconomia` | sim | 20 |
+| `embed` | — | `embed` | `repeat` `repete` `repetir` | `cmdEmbed` | sim | 6 |
 | `entrar` | `join` | `entrar` | `call` `join` | `entrar` | — | 2 |
-| `entretenimento` | `entertainment` | `entretenimiento` | `ent` `entertainment` `entretenimiento` `entreterimento` `fun` | `cmdEntretenimento` | sim | 58 |
-| `fuso` | `timezone` | `huso` | `clock` `fusos` `hora` `huso` `timezone` `timezones` `tz` | `cmdFuso` | sim | 30 |
-| `game` | `game` | `juego` | `character` `juego` `personagem` `rpg` | `cmdGame` | sim | 221 |
-| `help` | — | `ayuda` | `ayuda` | `cmdHelp` | — | 160 |
-| `idioma` | `language` | `idioma` | `lang` `language` | `cmdIdioma` | — | 8 |
-| `iniciativa` | `initiative` | `iniciativa` | `init` `initiative` | `cmdIniciativa` | sim | 6 |
-| `kick` | — | `expulsar` | `expulsar` | `cmdKick` | sim | 7 |
-| `limpar` | `purge` | `limpiar` | `clear` `limpiar` `purge` | `cmdLimpar` | sim | 10 |
-| `log` | `log` | `log` | `logs` | `cmdLog` | sim | 19 |
-| `modia` | — | `modia` | `moderacaoia` | `cmdModIA` | só IA | 18 |
-| `musica` | `music` | `musica` | `m` `music` `play` `tocar` | `cmdMusica` | sim | 4 |
+| `entretenimento` | `entertainment` | `entretenimiento` | `ent` `entertainment` `entretenimiento` `entreterimento` `fun` | `cmdEntretenimento` | sim | 50 |
+| `fuso` | `timezone` | `huso` | `clock` `fusos` `hora` `huso` `timezone` `timezones` `tz` | `cmdFuso` | sim | 10 |
+| `game` | `game` | `juego` | `character` `juego` `personagem` `rpg` | `cmdGame` | sim | 48 |
+| `help` | `help` | `ayuda` | `ajuda` `ayuda` | `cmdHelp` | — | 140 |
+| `kick` | — | `expulsar` | `expulsar` | `cmdKick` | sim | 6 |
+| `limpar` | `purge` | `limpiar` | `clear` `limpiar` `purge` | `cmdLimpar` | sim | 8 |
+| `musica` | `music` | `musica` | `m` `music` `play` `tocar` | `cmdMusica` | sim | 2 |
 | `personalidade` | — | `personalidad` | `personalidad` `personality` | `cmdPersonalidade` | — | 2 |
 | `ping` | — | `ping` | — | `cmdPing` | sim | 2 |
-| `privacidade` | `privacy` | `privacidad` | `privacidad` `privacy` | `cmdPrivacidade` | — | 8 |
-| `reactionrole` | — | `reactionrole` | `reactionroles` `rr` | `cmdReactionRole` | sim | 28 |
-| `repete` | `repeat` | `repetir` | `repeat` `repetir` | `cmdRepete` | sim | 4 |
+| `privacidade` | `privacy` | `privacidad` | `privacidad` `privacy` | `cmdPrivacidade` | — | 32 |
+| `reactionrole` | — | `reactionrole` | `reactionroles` `rr` | `cmdReactionRole` | sim | 16 |
 | `reset` | — | `reset` | `fabrica` `factoryreset` `redefinir` `resetar` | `cmdReset` | — | 8 |
-| `rolar` | `roll` | `dados` | `dado` `dados` `r` `roll` | `cmdRolar` | sim | 6 |
-| `rss` | — | `rss` | `feed` | `cmdRss` | sim | 20 |
+| `rolar` | `roll` | `dados` | `dado` `dados` `r` `roll` | `cmdRolar` | sim | 16 |
+| `rss` | — | `rss` | `feed` | `cmdRss` | sim | 18 |
 | `sair` | `leave` | `salir` | `leave` `sairdacall` `salir` | `sair` | — | 2 |
-| `servidor` | `server` | `servidor` | `server` `serverinfo` `servidorinfo` | `cmdServidor` | sim | 24 |
-| `servidores` | `servers` | `servidores` | `servers` | `cmdServidores` | — | 22 |
-| `silenciar` | `silence` | `silenciar` | `mute` `silence` `silencio` `timeout` | `cmdSilenciar` | sim | 9 |
-| `sobre` | `about` | `acerca` | `about` `acerca` `info` | `cmdSobre` | — | 2 |
-| `staff` | `staff` | `staff` | `equipe` `team` | `cmdStaff` | sim | 16 |
-| `ticket` | — | `ticket` | `suporte` `tickets` | `cmdTicket` | sim | 6 |
+| `servidor` | `server` | `servidor` | `server` `serverinfo` `servidorinfo` | `cmdServidor` | sim | 18 |
+| `servidores` | `servers` | `servidores` | `servers` | `cmdServidores` | — | 26 |
+| `silenciar` | `timeout` | `silenciar` | `cargomudo` `criarcargomudo` `mute` `mutedrole` `muterole` `rolsilencio` `silence` `silencio` `timeout` | `cmdTimeout` | sim | 8 |
+| `sobre` | `info` | `info` | `about` `acerca` `info` `soporte` `suporte` `support` | `cmdInfo` | — | 2 |
+| `staff` | `staff` | `staff` | `equipe` `team` | `cmdStaff` | sim | 14 |
+| `ticket` | — | `ticket` | `tickets` | `cmdTicket` | sim | 10 |
 | `tts` | — | `tts` | `falar` `speak` `voz` | `cmdTts` | sim | 2 |
-| `tutorial` | `tutorial` | `tutorial` | `comecar` `guia` `guide` `inicio` `start` | `cmdTutorial` | sim | 52 |
-| `userinfo` | — | `userinfo` | — | `cmdUserinfo` | sim | 5 |
-| `warn` | `warn` | `advertir` | `advertir` `avisar` | `cmdWarn` | sim | 20 |
-| `webhook` | — | `webhook` | `gancho` `webhooks` `wh` | `cmdWebhook` | sim | 20 |
-| `xp` | `xp` | `xp` | `level` `levels` `nivel` | `cmdXp` | sim | 36 |
+| `tutorial` | `tutorial` | `tutorial` | `comecar` `guia` `guide` `inicio` `start` | `cmdTutorial` | sim | 26 |
+| `unban` | — | `desbanear` | `desbanear` `desbanir` `pardon` | `cmdUnban` | sim | 6 |
+| `untimeout` | — | `untimeout` | `dessilenciar` `unmute` `unsilence` | `cmdUntimeout` | sim | 8 |
+| `userinfo` | — | `userinfo` | — | `cmdUserinfo` | sim | 6 |
+| `warn` | `warn` | `advertir` | `advertir` `avisar` | `cmdWarn` | sim | 14 |
+| `webhook` | — | `webhook` | `gancho` `webhooks` `wh` | `cmdWebhook` | sim | 10 |
+| `xp` | `xp` | `xp` | `level` `levels` `nivel` | `cmdXp` | sim | 12 |
 
 _Comando_ é o nome interno (o que o `&comando desativar` e o banco guardam).
 
@@ -74,60 +67,62 @@ O que ainda está espalhado:
 | `modulos/core/nomes-automod.js` | as mesmas palavras do `&automod` que o registro tem, para os painéis — um teste garante que não se afastam |
 | `modulos/core/aliases.js` → `PLACEHOLDER_EN` | os moldes da ajuda (`‹nome›` → `‹name›`), comuns a todos os comandos |
 | cada handler (`if (sub === … )`) | o parse dos subcomandos, muitas vezes já aceitando os dois idiomas |
-| `help-arvore.js`, `geral.js` (`construirSubtopicos`, `construirDetalhes`) | as páginas de ajuda, PT e EN escritas em cópias separadas |
-| `help-grupos.js`, `help-parametros.js`, `tutorial.js`, `assistente.js` | índice, parâmetros, tutorial e os comandos que o assistente gera |
+| `modulos/moderacao/help-grupos.js` | os grupos do índice (nome, emoji, título) — o que entra em cada um vem do `ajuda.grupo` |
+| `tutorial.js`, `assistente.js` | o mini guia (conceitos) e os comandos que o assistente gera |
 
 ## Subcomandos em inglês (entrada)
 
-- `acesso`: all→todos, channel→canal, channels→canais, clear→limpar, except→exceto, free→livre, libre→livre, only→somente, role→cargo, roles→cargos, staffbypass→staffignora, staffignores→staffignora
 - `adeus`: borrar→limpar, channel→canal, clear→limpar, color→cor, colour→cor, default→padrao, estado→status, here→aqui, hidden→oculto, hide→oculto, image→imagem, imagen→imagem, message→texto, predeterminado→padrao, probar→testar, show→visivel, test→testar, text→texto, title→titulo, visible→visivel
-- `assistente`: build→servidor, cancel→cancelar, channels→canais, complete→completo, fast→rapido, full→completo, protect→protecao, protection→protecao, quick→rapido, server→servidor, stop→cancelar
-- `automod`: antinoise→antiruido, ban→banir, confirm→confirmar, delete→apagar, ignore→ignorar, inherit→herdar, mentions→mencoes, messages→mensagens, noise→antiruido, punishment→punicao, repetition→repeticao, sentinel→sentinela, size→tamanho, stack→acumular, threshold→limiar, time→tempo, warn→avisar
-- `automod.antilink`: domains→dominios, invites→convites
-- `automod.antiruido`: characters→caracteres, ignore→ignorar, letters→letras, repetition→repeticao, size→tamanho, threshold→limiar
-- `automod.antispam`: burst→rajada, media→midia, mentions→mencoes, messages→mensagens, minute→minuto, newcomer→novato, newcomers→novato, repeat→repeticao, speed→velocidade, time→tempo, times→vezes
-- `automod.assuntos`: ai→ia, alert→alertar, allow→liberar, delete→apagar, drugs→drogas, high→alta, low→baixa, medium→media, politics→politica, punish→punir, religion→religiao, remove→remover, sensitivity→sensibilidade, watch→vigiar
-- `automod.avatar`: action→acao, alert→alertar, ban→banir, check→checar, kick→expulsar, mute→silenciar, silence→silenciar, time→tempo, timeout→silenciar
-- `automod.odio`: list→lista, remove→remover
-- `automod.sentinela`: alert→alerta, alerts→alerta, ban→banir, channel→canal, content→conteudo, dismiss→liberar, hate→odio, high→alta, images→imagens, low→baixa, medium→media, pfp→avatar, sensitivity→sensibilidade, simulate→simular, subjects→assuntos, tenure→antiguidade, test→testar, topics→assuntos
+- `assistente`: ai→ia, build→servidor, canales→canais, cancel→cancelar, channels→canais, chat→ia, complete→completo, fast→rapido, full→completo, image→imagem, imagen→imagem, images→imagem, proteccion→protecao, protect→protecao, protection→protecao, quick→rapido, server→servidor, stop→cancelar
+- `automod`: advertencia→aviso, advertir→avisar, antinoise→antiruido, ban→banir, banear→banir, borrar→apagar, castigo→punicao, centinela→sentinela, confirm→confirmar, delete→apagar, filter→filtro, filters→filtro, heredar→herdar, ignore→ignorar, inherit→herdar, menciones→mencoes, mensajes→mensagens, mentions→mencoes, messages→mensagens, noise→antiruido, punishment→punicao, repeticion→repeticao, repetition→repeticao, sentinel→sentinela, size→tamanho, stack→acumular, tamaño→tamanho, termos→filtro, threshold→limiar, tiempo→tempo, time→tempo, umbral→limiar, warn→avisar, words→filtro
+- `automod.antilink`: domains→dominios, invitaciones→convites, invites→convites
+- `automod.antiruido`: characters→caracteres, ignore→ignorar, letters→letras, repeticion→repeticao, repetition→repeticao, size→tamanho, tamaño→tamanho, threshold→limiar, umbral→limiar
+- `automod.antispam`: burst→rajada, media→midia, menciones→mencoes, mensajes→mensagens, mentions→mencoes, messages→mensagens, minute→minuto, multimedia→midia, newcomer→novato, newcomers→novato, rafaga→rajada, repeat→repeticao, repeticion→repeticao, speed→velocidade, tiempo→tempo, time→tempo, times→vezes, veces→vezes, velocidad→velocidade
+- `automod.assuntos`: ai→ia, alert→alertar, allow→liberar, baja→baixa, borrar→apagar, castigar→punir, delete→apagar, drugs→drogas, high→alta, low→baixa, medium→media, permitir→liberar, politics→politica, punish→punir, quitar→remover, religion→religiao, remove→remover, sensibilidad→sensibilidade, sensitivity→sensibilidade, vigilar→vigiar, watch→vigiar
+- `automod.avatar`: accion→acao, action→acao, alert→alertar, ban→banir, banear→banir, check→checar, kick→expulsar, mute→silenciar, revisar→checar, silence→silenciar, tiempo→tempo, time→tempo, timeout→silenciar
+- `automod.filtro`: list→lista, quitar→remover, remove→remover, tirar→remover, ver→lista
+- `automod.odio`: list→lista, quitar→remover, remove→remover
+- `automod.punicao`: advertencia→aviso, escalera→escada, ladder→escada, mode→modo, steps→escada, validez→validade
+- `automod.sentinela`: alert→alerta, alertas→alerta, alerts→alerta, antiguedad→antiguidade, baja→baixa, ban→banir, banear→banir, channel→canal, contenido→conteudo, content→conteudo, dismiss→liberar, hate→odio, high→alta, imagenes→imagens, images→imagens, low→baixa, medium→media, pfp→avatar, probar→testar, sensibilidad→sensibilidade, sensitivity→sensibilidade, simular→testar, simulate→testar, subjects→assuntos, temas→assuntos, tenure→antiguidade, test→testar, topics→assuntos
 - `autorole`: definir→set, desactivar→desativar, disable→desativar, quitar→remover, remove→remover
-- `banglobal`: accept→isentar, all→lista, allow→isentar, autoimport→auto, automatic→auto, ban→banir, banned→lista, bypass→isentar, confirm→confirmar, consensus→consenso, contribution→contribuicao, exempt→isentar, exempted→isentos, forget→esquecer, history→historico, import→importar, instant→imediato, list→lista, people→pessoas, remove→remover, revert→desfazer, review→revisar, scan→varrer, server→servidor, sweep→varrer, undo→desfazer, view→ver, warn→avisar
+- `banglobal`: accept→isentar, aceitar→isentar, adicionar→add, alert→avisar, alertar→avisar, all→lista, allow→isentar, aqui→servidor, autoimport→auto, automatic→auto, automatico→auto, ban→imediato, banidos→lista, banir→imediato, banned→lista, barrer→varrer, bypass→isentar, cautela→consenso, cautious→consenso, cego→imediato, checar→revisar, colocar→add, conferir→revisar, confirm→confirmar, consensus→consenso, contribucion→contribuicao, contribution→contribuicao, daqui→servidor, deshacer→desfazer, excecoes→ignorados, exempt→isentar, exempted→isentos, exentos→isentos, eximir→isentar, foradalista→ignorados, forget→esquecer, here→servidor, historial→historico, history→historico, ignorar→off, ignore→off, ignored→ignorados, immediate→imediato, import→importar, incluir→add, inmediato→imediato, instant→imediato, isento→isentos, list→lista, olvidar→esquecer, people→pessoas, permitir→isentar, personas→pessoas, porque→historico, quitar→remover, recordar→lembrar, reincluir→lembrar, remember→lembrar, remove→remover, revert→desfazer, reverter→desfazer, review→revisar, scan→varrer, server→servidor, sim→confirmar, sweep→varrer, tirar→remover, todos→lista, undo→desfazer, unforget→lembrar, varredura→varrer, ver→historico, view→historico, warn→avisar, yes→confirmar
 - `blocklist`: domains→dominios
 - `boasvindas`: borrar→limpar, channel→canal, clear→limpar, color→cor, colour→cor, default→padrao, estado→status, here→aqui, hidden→oculto, hide→oculto, image→imagem, imagen→imagem, mensajes→mensagens, message→texto, messages→mensagens, predeterminado→padrao, probar→testar, show→visivel, test→testar, text→texto, title→titulo, visible→visivel
-- `chat`: all→tudo, care→cuidado, comment→comentar, every→todas, forget→esquecer, free→livre, gentle→gentil, here→aqui, image→imagem, imagen→imagem, leave→sair, map→mapear, memory→memoria, mode→modo, olvidar→esquecer, optin→voltar, optout→sair, perday→pordia, profile→perfil, rejoin→voltar, relevant→relevante, salir→sair, todo→tudo, volver→voltar
-- `comando`: activar→ativar, desactivar→desativar, disable→desativar, enable→ativar, gestionar→gerenciar, lista→list, manage→gerenciar, off→desativar, on→ativar
-- `cor`: clear→limpar, create→criar, default→padrao, generate→gerar, gradient→gradiente, help→ajuda, here→aqui, list→lista, panel→painel, remove→remover, roles→cargos
-- `debug`: channels→canais, mute→mudo, permissions→permissoes, raw→cru, read→ler
-- `economia`: balance→saldo, buy→comprar, confirm→confirmar, gain→ganho, give→dar, interval→intervalo, mine→minerar, name→nome, pay→pagar, remove→remover, reset→zerar, shop→loja, symbol→simbolo, take→tirar
+- `config`: acceso→acesso, access→acesso, ai→ia, command→comando, commands→comando, lang→idioma, language→idioma
+- `config.acesso`: all→todos, canales→canais, channel→canal, channels→canais, clear→limpar, estado→status, except→exceto, excepto→exceto, free→livre, libre→livre, limpiar→limpar, only→somente, rol→cargo, role→cargo, roles→cargos, solo→somente, staffbypass→staffignora, staffignores→staffignora
+- `config.comando`: activar→ativar, desactivar→desativar, disable→desativar, enable→ativar, gestionar→gerenciar, lista→list, manage→gerenciar
+- `config.ia`: all→todas, aquí→aqui, comment→comentar, estado→status, every→todas, free→livre, here→aqui, image→imagem, imagen→imagem, images→imagem, libre→livre, mode→modo, perday→pordia, pordía→pordia, relevant→relevante
+- `config.idioma`: estado→status, ingles→english, portuguese→portugues
+- `config.log`: actualizaciones→atualizacoes, aqui→here, channel→canal, commands→comandos, events→eventos, informe→relatorio, members→membros, mensajes→mensagens, messages→mensagens, miembros→membros, punishments→punicoes, report→relatorio, roles→cargos, sanciones→punicoes, updates→atualizacoes
+- `cor`: ayuda→ajuda, cargos→lista, clear→limpar, crear→criar, create→criar, default→padrao, degradado→gradiente, generar→gerar, generate→gerar, gradient→gradiente, help→ajuda, here→aqui, limpiar→limpar, list→lista, panel→painel, predeterminado→padrao, quitar→remover, remove→remover, roles→lista
+- `debug`: canales→canais, channels→canais, crudo→cru, leer→ler, mute→mudo, permisos→permissoes, permissions→permissoes, raw→cru, read→ler
+- `economia`: balance→saldo, buy→comprar, confirm→confirmar, eliminar→remover, gain→ganho, ganancia→ganho, give→dar, interval→intervalo, minar→minerar, mine→minerar, name→nome, nombre→nome, pay→pagar, quitar→tirar, reiniciar→zerar, remove→remover, reset→zerar, shop→loja, symbol→simbolo, take→tirar, tienda→loja
 - `embed`: colores→cores, colors→cores, fields→campos
-- `entretenimento`: 8ball→bola8, buscaminas→campominado, choose→escolher, fight→briga, fortune→sorte, minesweeper→campominado, mock→zoeira, pick→escolher, rate→nota, reverse→inverter, tateti→velha, tictactoe→velha
-- `fuso`: alias→apelido, check→ver, cities→cidades, clear→limpar, find→buscar, format→formato, label→apelido, list→lista, main→principal, name→apelido, now→ver, reference→principal, search→buscar, time→ver
-- `game`: accept→aceitar, add→adicionar, all→tudo, announce→anunciar, bag→mochila, balance→saldo, bank→banco, barter→escambo, boss→chefe, bosses→chefes, buy→comprar, cancel→cancelar, catalog→catalogo, class→classe, coin→moeda, commands→comandos, companion→follower, companions→followers, confirm→confirmar, contract→contrato, contracts→contratos, create→criar, currency→moeda, decline→recusar, default→padrao, delete→apagar, dismiss→dispensar, drop→tirar, duel→duelo, energy→energia, equip→equipar, erase→apagar, evolve→evoluir, exchange→cambio, fantasy→fantasia, give→dar, grimoire→grimorio, help→ajuda, hire→contratar, image→imagem, info→detalhe, inventory→inventario, items→itens, job→bico, jobs→bicos, join→entrar, learn→aprender, leave→sair, level→nivel, magic→magia, main→padrao, market→mercado, mercenaries→mercenarios, mission→missao, missions→missoes, model→modelo, new→novo, photos→fotos, picture→imagem, points→pontos, preview→prever, profile→perfil, pvp→duelo, rates→taxas, recruit→recrutar, recruits→recrutas, redo→refazer, remove→remover, rescue→resgatar, rest→descansar, retrieve→pegar, sell→vender, server→servidor, sheet→ficha, shop→loja, simple→simples, simulate→simular, special→especial, specials→especiais, spell→magia, spells→magias, spend→pontos, story→historia, take→levar, test→teste, trade→trocar, unequip→desequipar, use→usar, view→ver, wallet→carteira, wear→vestir, world→mundo
-- `help`: character→game, configuracao→config, configuração→config, configuracion→config, configuración→config, configuration→config, customise→personalizar, customize→personalizar, diagnostics→diagnostico, diversion→diversao, empezar→comecar, fun→diversao, general→geral, levels→xp, moderation→moderacao, owner→dono, protect→proteger, protection→proteger, settings→config, start→comecar, tools→ferramentas, troubleshooting→diagnostico
-- `idioma`: estado→status, ingles→english, portuguese→portugues
-- `iniciativa`: borrar→limpar, clear→limpar, list→lista, quitar→remover, remove→remover
+- `entretenimento`: 8ball→bola8, burla→zoeira, buscaminas→campominado, choose→escolher, elegir→escolher, fight→briga, fortune→sorte, invertir→inverter, minesweeper→campominado, mock→zoeira, pelea→briga, pick→escolher, rate→nota, reverse→inverter, suerte→sorte, tateti→velha, tictactoe→velha
+- `fuso`: alias→apelido, apodo→apelido, check→ver, cities→cidades, ciudades→cidades, clear→limpar, find→buscar, format→formato, label→apelido, limpiar→limpar, list→lista, main→principal, name→apelido, now→ver, reference→principal, search→buscar, time→ver
+- `game`: accept→aceitar, aceptar→aceitar, add→adicionar, agregar→adicionar, all→tudo, allies→aliado, ally→aliado, announce→anunciar, ayuda→ajuda, bag→mochila, balance→saldo, bank→banco, barter→escambo, borrar→apagar, boss→chefe, bosses→chefes, buy→comprar, cancel→cancelar, cartera→carteira, catalog→catalogo, clase→classe, class→classe, coin→moeda, commands→comandos, companion→follower, companions→followers, con→com, confirm→confirmar, contract→contrato, contracts→contratos, crear→criar, create→criar, currency→moeda, decline→recusar, default→padrao, delete→apagar, despedir→dispensar, detalle→detalhe, dismiss→dispensar, drop→tirar, duel→duelo, encargo→bico, encargos→bicos, energy→energia, equip→equipar, erase→apagar, especiales→especiais, evolucionar→evoluir, evolve→evoluir, exchange→cambio, fantasy→fantasia, give→dar, grimoire→grimorio, hechizo→magia, hechizos→magias, help→ajuda, hire→contratar, image→imagem, imagen→imagem, info→detalhe, intercambiar→trocar, inventory→inventario, items→itens, jefe→chefe, jefes→chefes, job→bico, jobs→bicos, join→entrar, learn→aprender, leave→sair, level→nivel, llevar→levar, magic→magia, main→padrao, mano1→mao1, mano2→mao2, market→mercado, mercenaries→mercenarios, mision→missao, misiones→missoes, mission→missao, missions→missoes, model→modelo, moneda→moeda, new→novo, nuevo→novo, objetos→itens, photos→fotos, picture→imagem, points→pontos, predeterminado→padrao, preview→prever, profile→perfil, prueba→teste, puntos→pontos, pvp→duelo, quitar→remover, rates→taxas, rechazar→recusar, reclutar→recrutar, reclutas→recrutas, recoger→pegar, recruit→recrutar, recruits→recrutas, redo→refazer, rehacer→refazer, remove→remover, rescatar→resgatar, rescue→resgatar, rest→descansar, retrieve→pegar, sacar→tirar, salir→sair, seguidor→follower, seguidores→followers, sell→vender, server→servidor, sheet→ficha, shop→loja, simple→simples, simulate→simular, special→especial, specials→especiais, spell→magia, spells→magias, spend→pontos, story→historia, take→levar, tasas→taxas, test→teste, tienda→loja, todo→tudo, trade→trocar, trueque→escambo, unequip→desequipar, use→usar, view→ver, wallet→carteira, wear→vestir, world→mundo
 - `limpar`: all→tudo, confirm→confirmar, everything→tudo, todo→tudo
-- `log`: actualizaciones→atualizacoes, aqui→here, channel→canal, commands→comandos, events→eventos, informe→relatorio, members→membros, mensajes→mensagens, messages→mensagens, miembros→membros, punishments→punicoes, report→relatorio, roles→cargos, sanciones→punicoes, updates→atualizacoes
-- `modia`: channel→canal, clear→limpar, criteria→criterios
-- `personalidade`: default→padrao, reset→resetar, restablecer→resetar, set→definir, show→ver, view→ver
-- `privacidade`: borrar→apagar, channel→canal, confirm→confirmar, delete→apagar, estado→status, hilo→fio, memory→memoria, thread→fio
-- `punicao`: ban→banir, confirm→confirmar, delete→apagar, ladder→escada, mode→modo, role→cargo, stack→acumular, steps→escada, warn→avisar
-- `reactionrole`: exclusive→exclusivo, reload→recarregar, repair→reparar, unique→unico
-- `rolar`: coin→moeda, moneda→moeda
-- `rss`: category→categoria, channel→canal, now→agora, test→testar
-- `scam`: ban→banir, channel→canal, dismiss→liberar, high→alta, low→baixa, medium→media, sensitivity→sensibilidade, simulate→simular, test→testar
-- `sentinela`: ban→banir, channel→canal, dismiss→liberar, high→alta, low→baixa, medium→media, sensitivity→sensibilidade, simulate→simular, tenure→antiguidade, test→testar
-- `servidor`: about→info, channels→canais, roles→cargos, rules→regras
-- `servidores`: channel→canal, empty→vazias, here→aqui, now→agora, pseudonym→pseudonimo, report→relatorio, subjects→assuntos, topics→assuntos
+- `musica`: cola→fila, no→nao, pista→faixa, reanudar→retomar
+- `personalidade`: default→padrao, predeterminado→padrao, reset→resetar, restablecer→resetar, set→definir, show→ver, view→ver
+- `privacidade`: all→tudo, back→voltar, borrar→apagar, care→cuidado, channel→canal, confirm→confirmar, delete→apagar, estado→status, forget→esquecer, gentle→cuidado, hilo→fio, join→voltar, leave→sair, map→mapear, memory→memoria, olvidar→esquecer, optin→voltar, optout→sair, profile→perfil, rejoin→voltar, salir→sair, thread→fio, todo→tudo, volver→voltar
+- `punicao`: advertencia→aviso, advertir→avisar, ban→banir, banear→banir, borrar→apagar, confirm→confirmar, delete→apagar, escalera→escada, ladder→escada, mode→modo, rol→cargo, role→cargo, stack→acumular, steps→escada, validez→validade, warn→avisar
+- `reactionrole`: adicionar→add, exclusive→exclusivo, lista→list, orden→ordem, order→ordem, quitar→remove, recargar→recarregar, reload→recarregar, remover→remove, reordenar→ordem, repair→recarregar, reparar→recarregar, unico→exclusivo, unique→exclusivo
+- `reset`: confirm→confirmar, deshacer→desfazer, restore→desfazer, revert→desfazer, undo→desfazer, yes→confirmar
+- `rolar`: borrar→limpar, clear→limpar, coin→moeda, iniciativa→init, initiative→init, list→lista, moneda→moeda, quitar→remover, remove→remover
+- `rss`: ahora→agora, category→categoria, channel→canal, now→agora, probar→testar, test→testar, time→horario, urgent→urgente
+- `scam`: baja→baixa, ban→banir, banear→banir, channel→canal, dismiss→liberar, high→alta, low→baixa, medium→media, probar→testar, sensibilidad→sensibilidade, sensitivity→sensibilidade, simular→testar, simulate→testar, test→testar
+- `sentinela`: antiguedad→antiguidade, baja→baixa, ban→banir, banear→banir, channel→canal, dismiss→liberar, high→alta, low→baixa, medium→media, probar→testar, sensibilidad→sensibilidade, sensitivity→sensibilidade, simular→testar, simulate→testar, tenure→antiguidade, test→testar
+- `servidor`: about→info, canales→canais, channels→canais, reglas→regras, roles→cargos, rules→regras
+- `servidores`: ahora→agora, announce→aviso, channel→canal, empty→vazias, here→aqui, informe→relatorio, notice→aviso, now→agora, palabras→palavras, pseudonym→pseudonimo, report→relatorio, seudonimo→pseudonimo, subjects→assuntos, temas→assuntos, topics→assuntos, unknown→palavras, vacias→vazias, words→palavras
 - `silenciar`: lift→tirar, off→tirar, quitar→tirar, remove→tirar, undo→tirar
-- `staff`: clear→limpar, label→titulo, list→lista, team→equipe, title→titulo
-- `ticket`: categories→categorias, delete→apagar, list→lista, panel→painel, team→equipe
-- `tts`: broadcast→transmitir, cap→porminuto, channel→canal, diagnose→diagnostico, diagnostics→diagnostico, dictionary→dicionario, effect→efeito, filter→filtro, health→estado, here→aqui, join→entrar, leave→sair, names→nomes, perminute→porminuto, pitch→tom, read→ler, rescue→resgatar, resgate→resgatar, restart→reiniciar, sieve→filtro, start→entrar, status→estado, stop→sair, test→teste, tone→tom, unlock→destravar, unstick→destravar, voice→voz
-- `tutorial`: adventure→aventura, ai→ia, channels→canais, economy→economia, messages→mensagens, moderation→moderacao, news→noticias, permissions→permissoes, roles→cargos, settings→ajustes
+- `staff`: clear→limpar, equipo→equipe, label→titulo, limpiar→limpar, list→lista, team→equipe, title→titulo
+- `ticket`: borrar→apagar, categories→categorias, cerrar→fechar, delete→apagar, equipo→equipe, list→lista, panel→painel, team→equipe
+- `tts`: broadcast→transmitir, cap→porminuto, channel→canal, destrabar→destravar, diagnose→diagnostico, diagnostics→diagnostico, diccionario→dicionario, dictionary→dicionario, efecto→efeito, effect→efeito, filter→filtro, health→estado, here→aqui, join→entrar, leave→sair, leer→ler, names→nomes, nombres→nomes, perminute→porminuto, pitch→tom, predeterminado→padrao, prueba→teste, read→ler, rescatar→resgatar, rescue→resgatar, resgate→resgatar, restart→reiniciar, salir→sair, sieve→filtro, start→entrar, status→estado, stop→sair, test→teste, tone→tom, tono→tom, unlock→destravar, unstick→destravar, voice→voz
+- `tutorial`: adventure→aventura, ai→ia, canales→canais, channels→canais, economy→economia, mensajes→mensagens, messages→mensagens, moderacion→moderacao, moderation→moderacao, news→noticias, permisos→permissoes, permissions→permissoes, proteccion→protecao, protect→protecao, protection→protecao, roles→cargos, settings→ajustes, wiki→rpg
 - `warn`: borrar→limpar, clear→limpar, list→lista
 - `webhook`: channel→canal, crear→criar, create→criar, eliminar→remover, events→eventos, list→lista, probar→testar, remove→remover, test→testar
 - `whitelist`: —
-- `xp`: all→todos, announce→anuncio, announcement→anuncio, channel→canal, configure→configurar, create→criar, createroles→criarcargos, interval→intervalo, join→entrar, leave→sair, maxlevel→nivelmaximo, multiplier→multiplicador, opt-out→sair, optout→sair, restore→sincronizar, resync→sincronizar, roles→cargos, salir→sair, sync→sincronizar, wipe→zerar
+- `xp`: all→todos, announce→anuncio, announcement→anuncio, back→voltar, channel→canal, configure→configurar, crear→criar, crearroles→criarcargos, create→criar, createroles→criarcargos, interval→intervalo, join→entrar, leave→sair, maxlevel→nivelmaximo, multiplier→multiplicador, opt-out→sair, optout→sair, reiniciar→zerar, restore→sincronizar, resync→sincronizar, rol→cargo, role→cargo, roles→cargos, salir→sair, sync→sincronizar, volver→voltar, wipe→zerar
 
 ## Exemplos da ajuda que respondem erro (pendências para as próximas fases)
 
@@ -135,228 +130,38 @@ Executados com valores de mentira no lugar dos `‹moldes›`, então parte dist
 não a sintaxe. O que a suíte já trava (subcomando desconhecido, exemplo pronto com erro, português na tela em
 inglês) não aparece aqui.
 
-- [pt] `&reactionrole add ‹mensagem› ‹emoji› ‹cargo›` → ❌ Uso incorreto
 - [pt] `&cor painel aqui` → ⏱️ não respondeu em 3 s
-- [pt] `&embed titulo: … | descricao: …` → ❌ Embed vazio
-- [pt] `&rss add ‹url›` → ❌ Feed inacessível
-- [pt] `&comando desativar|ativar ‹nome›` → ❌ Comando inválido
-- [pt] `&game pontos ‹atributo› [quantos]` → ❌ Qual atributo?
-- [pt] `&game aprender ‹nome›` → ❌ Magia desconhecida
-- [pt] `&game missao ‹nome›` → ❌ Contrato desconhecido
-- [pt] `&game coop abrir ‹missão›` → ❓ Qual?
-- [pt] `&game follower levar|tirar ‹nome›` → ❌ Levar quem?
-- [pt] `&game follower ficha ‹nome›` → ❌ Não é um dos seus
-- [pt] `&game item ‹nome›` → ❌ Item desconhecido
-- [pt] `&game equipar ‹item›` → ❌ Item desconhecido
-- [pt] `&game desequipar ‹slot|item›` → ❌ Tirar o quê?
-- [pt] `&game vender ‹item›` → ❌ Você não tem isso
-- [pt] `&game duelo @‹pessoa› [aposta]` → ❌ Sem personagem
-- [pt] `&limpar ‹quantidade› [@usuário] | tudo` → ❌ Não achei essa pessoa
-- [pt] `&limpar` → ❌ Uso incorreto
-- [pt] `&warn <@pessoa|id|nome> [motivo]` → ❌ Quem devo avisar?
-- [pt] `&warn` → ❌ Quem devo avisar?
-- [pt] `&acesso livre ‹comando› on|off` → ❌ Comando desconhecido
-- [pt] `&automod ‹grupo›` → ❌ Não conheço esse
-- [pt] `&automod ‹grupo› on|off` → ❌ Não conheço esse
-- [pt] `&automod ‹grupo› ‹parte› on|off` → ❌ Não conheço esse
-- [pt] `&cor ‹cargo› ‹cor|gradiente|preset›` → ❌ Não entendi a cor
-- [pt] `&cor painel aqui solidas` → ⏱️ não respondeu em 3 s
-- [pt] `&cor criar` → ⏱️ não respondeu em 3 s
-- [pt] `&reactionrole ‹add|remove|list›` → ❌ Uso incorreto
-- [pt] `&reactionrole add ‹mensagem› ‹emoji› ‹idCargo›` → ❌ Uso incorreto
-- [pt] `&reactionrole remove ‹mensagem›` → ❌ Uso incorreto
-- [pt] `&reactionrole exclusivo ‹mensagem› on|off` → ❌ Uso incorreto
-- [pt] `&reactionrole add https://stoat.chat/server/.../01ABC... 🎮 01XYZ...` → ❌ Uso incorreto
-- [pt] `&chat` → 🚫 Não existe aqui
-- [pt] `&rss add https://exemplo.com/feed.xml` → ❌ Feed inacessível
+- [pt] `&game chefe [@amigos]` → ❌
+- [pt] `&game duelo <@pessoa> [ouro]` → ❌
 - [pt] `&staff titulo <@cargo> ‹texto›` → ❌ Não é um cargo de staff
 - [pt] `&boasvindas testar` → ❌ Falta o canal
-- [pt] `&fuso apelido ‹cidade› ‹texto›` → ❌ Cidade não está na lista
-- [pt] `&fuso principal ‹cidade›` → ❌ Precisa estar na lista
-- [pt] `&tts` → 🚫 Indisponível aqui
-- [pt] `&entrar` → 🚫 Indisponível aqui
-- [pt] `&sair` → 🚫 Indisponível aqui
-- [pt] `&economia comprar ‹cargo›` → ❓ Qual cargo?
-- [pt] `&game admin item ‹nome› [@pessoa]` → ❌ Item desconhecido
-- [pt] `&game admin follower ‹nome› [nível] [@pessoa]` → ❌ Follower desconhecido
-- [pt] `&game admin simular ‹contrato|chefe› [n]` → ❌ Missão desconhecida
-- [pt] `&game admin moeda ver ‹id›` → ❌ Moeda desconhecida
-- [pt] `&game admin moeda set ‹id› ‹campo› ‹valor›` → ❌ Qual moeda?
-- [pt] `&game mercado vender ‹item› ‹preço›` → ❌ Você não tem isso
-- [pt] `&game mercado comprar <#>` → ❌ Oferta indisponível
-- [pt] `&game mercado cancelar <#>` → ❌ Não dá para cancelar
-- [pt] `&game trocar [@pessoa] ‹seu item› por ‹item dela›` → ❌ Item desconhecido
-- [pt] `&game trocar aceitar <#>` → ❌ Proposta indisponível
-- [pt] `&game vender` → ❌ Vender o quê?
-- [pt] `&game duelo @‹pessoa›` → ❌ Sem personagem
-- [pt] `&game duelo @‹pessoa› 100 ouro` → ❌ Sem personagem
-- [pt] `&game duelo @‹pessoa› item ‹seu item›` → ❌ Sem personagem
-- [pt] `&game duelo ‹qtd› ouro` → ❌ Saldo insuficiente
-- [pt] `&game duelo aceitar [#] [item ‹seu item›]` → ❌ Qual desafio?
-- [pt] `&game duelo recusar [#]` → ❌ Qual desafio?
-- [pt] `&game magia ‹nome›` → ❌ Magia desconhecida
-- [pt] `&game aprender ‹nome› [com ‹moeda›]` → ❌ Magia desconhecida
-- [pt] `&game cambio ‹qtd› ‹moeda› para ‹moeda›` → ❌ Moedas inválidas
-- [pt] `&game cambio ‹qtd› ‹moeda› por ‹qtd› ‹moeda›` → ❌ Moedas inválidas
-- [pt] `&game contrato ‹nome›` → ❌ Contrato desconhecido
-- [pt] `&game bico ‹nome›` → ❌ Contrato desconhecido
-- [pt] `&game coop abrir ‹contrato›` → ❓ Qual?
-- [pt] `&game follower levar ‹nome›` → ❌ Levar quem?
-- [pt] `&game follower tirar ‹nome›` → ❌ Tirar quem?
-- [pt] `&game follower dispensar ‹nome›` → ❌ Dispensar quem?
-- [pt] `&game follower fotos ‹nome›` → ❌ Quem?
-- [pt] `&game contratar ‹nome›` → ❌ Não conheço
-- [pt] `&game usar ‹contrato›` → ❌ Item desconhecido
-- [pt] `&game dungeon ‹nome›` → ❌ Dungeon desconhecida
-- [pt] `&game dungeon ‹nome› chefe` → ❌ Dungeon desconhecida
-- [pt] `&game equipar ‹item› [mao1|mao2]` → ❌ Item desconhecido
-- [pt] `&game usar ‹contrato|pergaminho›` → ❌ Item desconhecido
-- [pt] `&game desequipar ‹vaga ou item›` → ❌ Tirar o quê?
-- [pt] `&xp setup multiplicador ‹1–5›` → ❌ Valor inválido
-- [pt] `&xp setup nivelmaximo ‹5–1000›` → ❌ Valor inválido
-- [pt] `&xp setup xp ‹min› ‹max›` → ❌ Valor inválido
-- [pt] `&acesso cargo add <@cargo|id>` → ❌ Cargo inválido
-- [pt] `&acesso cargo remove <@cargo|id>` → ❌ Cargo inválido
-- [pt] `&banglobal isentar <@pessoa|id>` → ❌ Não achei essa pessoa
-- [pt] `&banglobal esquecer` → ❓ Quem?
-- [pt] `&ban` → ❌ Uso incorreto
-- [pt] `&banglobal esquecer <@usuário|id|nome> [nota]` → ❌ Não achei essa pessoa
-- [pt] `&banglobal historico <@usuário|id>` → ❌ Não achei essa pessoa
-- [pt] `&cor painel ‹id-do-canal›` → ⏱️ não respondeu em 3 s
-- [pt] `&cor painel aqui gradientes` → ⏱️ não respondeu em 3 s
-- [pt] `&reactionrole exclusivo ‹mensagem› on` → ❌ Uso incorreto
-- [pt] `&reactionrole exclusivo ‹mensagem› off` → ❌ Uso incorreto
-- [pt] `&log ‹evento› ‹on|off›` → ❌ Canal inválido
-- [pt] `&staff add` → ❓ Qual cargo?
-- [pt] `&boasvindas on|off` → ❌ Falta o canal
-- [pt] `&comando desativar ‹nome›` → ❌ Comando inválido
-- [pt] `&comando ativar ‹nome›` → ❌ Comando inválido
-- [pt] `&rss remove ‹id|url›` → ❓ Não encontrado
-- [pt] `&rss agora` → ❌ Sem canal
+- [pt] `&automod sentinela canal <#canal>` → ❌ Canal não encontrado
 - [pt] `&automod sentinela canal <#canal|aqui|off>` → ❌ Canal não encontrado
 - [pt] `&automod sentinela canal <#canal|aqui>` → ❌ Canal não encontrado
-- [pt] `&automod sentinela assuntos punicao ‹modo›` → ❌ Modo inválido
-- [pt] `&automod ‹módulo› punicao ‹modo|herdar›` → ❌ Não conheço esse
-- [pt] `&automod ‹grupo› set ‹parâmetro› ‹valor›` → ❌ Não conheço esse
-- [pt] `&reactionrole add ‹link da mensagem› 🎮 Jogos` → ❌ Uso incorreto
-- [pt] `&reactionrole exclusivo ‹link da mensagem› on` → ❌ Uso incorreto
-- [pt] `&kick` → ❌ Uso incorreto
-- [pt] `&automod punicao validade ‹dias|0›` → ❌ Uso
-- [pt] `&reactionrole add ‹mensagem› 🎮 ‹id-do-cargo›` → ❌ Uso incorreto
-- [pt] `&rss add ‹url-do-feed›` → ❌ Feed inacessível
-- [pt] `&rss add https://g1.globo.com/rss/g1/` → ❌ Feed inacessível
-- [pt] `&game coop abrir ‹contrato | dungeon X | chefe X›` → ❓ Qual?
-- [pt] `&game trocar @pessoa ‹seu item› por ‹item dela›` → ❌ Item desconhecido
-- [pt] `&game duelo @‹pessoa› [100 ouro] [item ‹nome›]` → ❌ Sem personagem
-- [en] `&reactionrole add ‹message› ‹emoji› ‹role›` → ❌ Wrong usage
+- [pt] `&cor criar` → ⏱️ não respondeu em 3 s
+- [pt] `&game missao` → ❌
+- [pt] `&game chefe` → ❌
+- [pt] `&game duelo @‹pessoa› 100` → ❌
+- [pt] `&boasvindas on|off` → ❌ Falta o canal
+- [pt] `&config acesso livre ‹comando› on|off` → ❌ Comando desconhecido
+- [pt] `&config comando desativar ‹nome›` → ❌ Comando inválido
+- [pt] `&config comando ativar ‹nome›` → ❌ Comando inválido
+- [pt] `&game duelo` → ❌
 - [en] `&color panel here` → ⏱️ não respondeu em 3 s
-- [en] `&embed title: … | description: …` → ❌ Empty embed
-- [en] `&rss add ‹url›` → ❌ Unreachable feed
-- [en] `&command disable|enable ‹name›` → ❌ Invalid command
-- [en] `&game points ‹attribute› [amount]` → ❌ Which attribute?
-- [en] `&game learn ‹name›` → ❌ Unknown spell
-- [en] `&game mission ‹name›` → ❌ Unknown contract
-- [en] `&game coop open ‹mission›` → ❓ Which one?
-- [en] `&game companion take|drop ‹name›` → ❌ Take who?
-- [en] `&game companion sheet ‹name›` → ❌ Not among yours
-- [en] `&game item ‹name›` → ❌ Unknown item
-- [en] `&game equip ‹item›` → ❌ Unknown item
-- [en] `&game unequip ‹slot|item›` → ❌ Unequip what?
-- [en] `&game sell ‹item›` → ❌ You don't have that
-- [en] `&game duel @‹person› [bet]` → ❌ No character
-- [en] `&purge ‹amount› [@user] | all` → ❌ Couldn't find that person
-- [en] `&purge` → ❌ Wrong usage
-- [en] `&warn <@user|id|name> [reason]` → ❌ Who should I warn?
-- [en] `&warn` → ❌ Who should I warn?
-- [en] `&access free ‹command› on|off` → ❌ Unknown command
-- [en] `&automod ‹group›` → ❌ I don't know that one
-- [en] `&automod ‹group› on|off` → ❌ I don't know that one
-- [en] `&automod ‹group› ‹part› on|off` → ❌ I don't know that one
-- [en] `&color ‹role› ‹color|gradient|preset›` → ❌ I didn't understand the color
-- [en] `&color panel here solid` → ⏱️ não respondeu em 3 s
-- [en] `&color create` → ⏱️ não respondeu em 3 s
-- [en] `&reactionrole ‹add|remove|list›` → ❌ Wrong usage
-- [en] `&reactionrole add ‹message› ‹emoji› ‹roleId›` → ❌ Wrong usage
-- [en] `&reactionrole remove ‹message›` → ❌ Wrong usage
-- [en] `&reactionrole exclusive ‹message› on|off` → ❌ Wrong usage
-- [en] `&reactionrole add https://stoat.chat/server/.../01ABC... 🎮 01XYZ...` → ❌ Wrong usage
-- [en] `&chat` → 🚫 Not a command here
-- [en] `&rss add https://example.com/feed.xml` → ❌ Unreachable feed
+- [en] `&game mission [@friends]` → ❌
+- [en] `&game boss [@friends]` → ❌
+- [en] `&game duel <@person> [gold]` → ❌
 - [en] `&staff title <@role> ‹text›` → ❌ Not a staff role
 - [en] `&welcome test` → ❌ No channel yet
-- [en] `&timezone label ‹city› ‹text›` → ❌ City isn't on the list
-- [en] `&timezone main ‹city›` → ❌ Must be on the list
-- [en] `&tts` → 🚫 Unavailable here
-- [en] `&join` → 🚫 Unavailable here
-- [en] `&leave` → 🚫 Unavailable here
-- [en] `&economy buy ‹role›` → ❓ Which role?
-- [en] `&game admin give ‹qty› [@person]` → ❌ How much?
-- [en] `&game admin item ‹name› [@person]` → ❌ Unknown item
-- [en] `&game admin companion ‹name› [level] [@person]` → ❌ Unknown follower
-- [en] `&game admin simulate ‹contract|boss› [n]` → ❌ Unknown mission
-- [en] `&game admin currency view ‹id›` → ❌ Unknown currency
-- [en] `&game admin currency set ‹id› ‹field› ‹value›` → ❌ Which currency?
-- [en] `&game market sell ‹item› ‹price›` → ❌ You don't have that
-- [en] `&game market buy <#>` → ❌ Offer unavailable
-- [en] `&game market cancel <#>` → ❌ Can't cancel
-- [en] `&game trade [@person] ‹your item› for ‹their item›` → ❌ Unknown item
-- [en] `&game trade accept <#>` → ❌ Proposal unavailable
-- [en] `&game sell` → ❌ Sell what?
-- [en] `&game duel @‹person›` → ❌ No character
-- [en] `&game duel @‹person› 100 gold` → ❌ No character
-- [en] `&game duel @‹person› item ‹your item›` → ❌ No character
-- [en] `&game duel accept [#] [item ‹your item›]` → ❌ Which challenge?
-- [en] `&game duel decline [#]` → ❌ Which challenge?
-- [en] `&game spell ‹name›` → ❌ Unknown spell
-- [en] `&game learn ‹name› [with ‹currency›]` → ❌ Unknown spell
-- [en] `&game contract ‹name›` → ❌ Unknown contract
-- [en] `&game job ‹name›` → ❌ Unknown contract
-- [en] `&game coop open ‹contract›` → ❓ Which one?
-- [en] `&game companion take ‹name›` → ❌ Take who?
-- [en] `&game companion drop ‹name›` → ❌ Remove who?
-- [en] `&game companion dismiss ‹name›` → ❌ Dismiss who?
-- [en] `&game companion photos ‹name›` → ❌ Who?
-- [en] `&game hire ‹name›` → ❌ I don't know that
-- [en] `&game use ‹contract›` → ❌ Unknown item
-- [en] `&game dungeon ‹name›` → ❌ Unknown dungeon
-- [en] `&game dungeon ‹name› boss` → ❌ Unknown dungeon
-- [en] `&game equip ‹item› [hand1|hand2]` → ❌ Unknown item
-- [en] `&game use ‹contract|scroll›` → ❌ Unknown item
-- [en] `&game unequip ‹slot or item›` → ❌ Unequip what?
-- [en] `&game points ‹attribute› [how many]` → ❌ Which attribute?
-- [en] `&xp setup multiplier ‹1–5›` → ❌ Invalid value
-- [en] `&xp setup maxlevel ‹5–1000›` → ❌ Invalid value
-- [en] `&xp setup xp ‹min› ‹max›` → ❌ Invalid value
-- [en] `&access role add <@role|id>` → ❌ Invalid role
-- [en] `&access role remove <@role|id>` → ❌ Invalid role
-- [en] `&globalban exempt <@user|id>` → ❌ Couldn't find that person
-- [en] `&globalban forget` → ❓ Who?
-- [en] `&ban` → ❌ Wrong usage
-- [en] `&globalban forget <@user|id|name> [note]` → ❌ Couldn't find that person
-- [en] `&globalban history <@user|id>` → ❌ Couldn't find that person
-- [en] `&color panel ‹channel-id›` → ⏱️ não respondeu em 3 s
-- [en] `&color panel here gradients` → ⏱️ não respondeu em 3 s
-- [en] `&reactionrole exclusive ‹message› on` → ❌ Wrong usage
-- [en] `&reactionrole exclusive ‹message› off` → ❌ Wrong usage
-- [en] `&log ‹event› ‹on|off›` → ❌ Invalid channel
-- [en] `&staff add` → ❓ Which role?
-- [en] `&welcome on|off` → ❌ No channel yet
-- [en] `&command disable ‹name›` → ❌ Invalid command
-- [en] `&command enable ‹name›` → ❌ Invalid command
-- [en] `&rss remove ‹id|url›` → ❓ Not found
-- [en] `&rss now` → ❌ No channel
+- [en] `&automod sentinel channel <#channel>` → ❌ Channel not found
 - [en] `&automod sentinel channel <#channel|here|off>` → ❌ Channel not found
 - [en] `&automod sentinel channel <#channel|here>` → ❌ Channel not found
-- [en] `&automod sentinel topics punishment ‹mode›` → ❌ Invalid mode
-- [en] `&automod ‹module› punishment ‹mode|inherit›` → ❌ I don't know that one
-- [en] `&automod ‹group› set ‹parameter› ‹value›` → ❌ I don't know that one
-- [en] `&reactionrole add ‹message link› 🎮 Games` → ❌ Wrong usage
-- [en] `&reactionrole exclusive ‹message link› on` → ❌ Wrong usage
-- [en] `&kick` → ❌ Wrong usage
-- [en] `&automod punishment expiry ‹days|0›` → ❌ Usage
-- [en] `&reactionrole add ‹message› 🎮 ‹role-id›` → ❌ Wrong usage
-- [en] `&rss add ‹feed-url›` → ❌ Unreachable feed
-- [en] `&rss add https://g1.globo.com/rss/g1/` → ❌ Unreachable feed
-- [en] `&game coop open ‹contract | dungeon X | chefe X›` → ❓ Which one?
-- [en] `&game trade @user ‹your item› for ‹their item›` → ❌ Unknown item
-- [en] `&game duel @‹user› [100 gold] [item ‹name›]` → ❌ No character
+- [en] `&color create` → ⏱️ não respondeu em 3 s
+- [en] `&game mission` → ❌
+- [en] `&game boss` → ❌
+- [en] `&game duel @‹person› 100` → ❌
+- [en] `&welcome on|off` → ❌ No channel yet
+- [en] `&config access free ‹command› on|off` → ❌ Unknown command
+- [en] `&config command disable ‹name›` → ❌ Invalid command
+- [en] `&config command enable ‹name›` → ❌ Invalid command
+- [en] `&game duel` → ❌

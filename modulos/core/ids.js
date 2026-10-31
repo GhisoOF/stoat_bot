@@ -59,7 +59,7 @@ export function partesDoLink(txt) {
 // Canal: <#id>, link, ID, "aqui" ou #nome
 export function resolverCanal(entrada, { message, server } = {}) {
   const bruto = String(entrada ?? "").trim();
-  if (!bruto || /^(aqui|here)$/i.test(bruto)) return message?.channelId ?? null;
+  if (!bruto || /^(aqui|aquí|here)$/i.test(bruto)) return message?.channelId ?? null;
 
   const doLink = partesDoLink(bruto).canalId;
   if (doLink) return doLink;

@@ -5,6 +5,7 @@ import { validarUrlImagem, comoExibir } from "../core/midia.js";
 import { normalizarCor, nomesDeCor } from "../core/cores.js";
 import { tr, lingua, idiomaDe } from "../core/i18n.js";
 import { citar } from "../core/aliases.js";
+import { semPermissao, erroDeUso } from "../core/saida.js";
 
 const PADRAO = {
   boasVindas: {
@@ -162,14 +163,6 @@ function criarComando(tipoId) {
           "**Vista previa**",
           `> **${tituloPrevia}**`,
           ...previa.split("\n").map((l) => `> ${l}`),
-          "",
-          "**Comandos**",
-          `\`${C("canal")} <canal|aqui>\``,
-          `\`${C("titulo")} <texto>\` · \`${C("texto")} <descripción>\``,
-          `\`${C("cor")} <color>\` · \`${C("imagem")} <url|borrar>\``,
-          `\`${C("testar")}\` · \`${C("padrao")}\` · \`${C()} on|off\``,
-          "",
-          "_Marcadores:_ `{usuario}` `{nombre}` `{servidor}` `{miembros}`",
         ].join("\n"),
         colour: c.cor,
       };
@@ -184,16 +177,6 @@ function criarComando(tipoId) {
           lang === "en" ? "**Preview**" : "**Prévia**",
           `> **${renderizar(c.titulo, { userId: message.authorId, nome: message.author?.username, servidor: srvPrevia?.name ?? "?", membros: nPrevia, mencionar: tipoId === "boasvindas" })}**`,
           ...previa.split("\n").map((l) => `> ${l}`),
-          "",
-          lang === "en" ? "**Commands**" : "**Comandos**",
-          `\`${PREFIXO}${CMD} ${lang === "en" ? "channel <target|here>" : "canal <alvo|aqui>"}\``,
-          `\`${PREFIXO}${CMD} ${lang === "en" ? "title <text>" : "titulo <texto>"}\` · \`${PREFIXO}${CMD} ${lang === "en" ? "text <description>" : "texto <descrição>"}\``,
-          `\`${PREFIXO}${CMD} ${lang === "en" ? "colour <colour>" : "cor <cor>"}\` · \`${PREFIXO}${CMD} ${lang === "en" ? "image <url|clear>" : "imagem <url|limpar>"}\``,
-          `\`${PREFIXO}${CMD} ${lang === "en" ? "test" : "testar"}\` · \`${PREFIXO}${CMD} ${lang === "en" ? "default" : "padrao"}\` · \`${PREFIXO}${CMD} on|off\``,
-          "",
-          lang === "en"
-            ? "_Markers:_ `{usuario}` `{nome}` `{servidor}` `{membros}`"
-            : "_Marcadores:_ `{usuario}` `{nome}` `{servidor}` `{membros}`",
         ].join("\n"),
         colour: c.cor,
       });
@@ -202,16 +185,7 @@ function criarComando(tipoId) {
     // ── daqui em diante exige permissão ──
     const server = await getServer(message).catch(() => null);
     if (!membroTemPermissao(message, server, "ManageMessages")) {
-      return sendEmbed(message.channel, tr(ctx,
-        { title: "🚫 Permissão insuficiente",
-          description: `Você precisa de **ManageMessages** para configurar as mensagens de ${NOME.toLowerCase()}.`,
-          colour: COR.erro },
-        { title: "🚫 Missing permission",
-          description: `You need **ManageMessages** to configure the ${NOME.toLowerCase()} message.`,
-          colour: COR.erro },
-        { title: "🚫 Permiso insuficiente",
-          description: `Necesitas **ManageMessages** para configurar los mensajes de ${NOME_ES.toLowerCase()}.`,
-          colour: COR.erro }));
+      return semPermissao(ctx, message.channel, "ManageMessages");
     }
 
     const resto = args.slice(1).join(" ").trim();
@@ -234,17 +208,17 @@ function criarComando(tipoId) {
         { title: ligando ? `✅ ${NOME} ligada` : `🔴 ${NOME} desligada`,
           description: ligando
             ? `As mensagens serão publicadas em <#${c.canalId}>.`
-            : `Nada será publicado até você ligar de novo com \`${PREFIXO}${CMD} on\`.`,
+            : "Nada será publicado.",
           colour: ligando ? COR.sucesso : COR.mod },
         { title: ligando ? `✅ ${NOME} enabled` : `🔴 ${NOME} disabled`,
           description: ligando
             ? `Messages will be posted in <#${c.canalId}>.`
-            : `Nothing will be posted until you turn it back on with \`${PREFIXO}${CMD} on\`.`,
+            : "Nothing will be posted.",
           colour: ligando ? COR.sucesso : COR.mod },
         { title: ligando ? `✅ ${NOME_ES} activada` : `🔴 ${NOME_ES} desactivada`,
           description: ligando
             ? `Los mensajes se publicarán en <#${c.canalId}>.`
-            : `No se publicará nada hasta que la vuelvas a activar con \`${C()} on\`.`,
+            : "No se publicará nada.",
           colour: ligando ? COR.sucesso : COR.mod }));
     }
 
@@ -268,13 +242,13 @@ function criarComando(tipoId) {
       salvarConfig?.();
       return sendEmbed(message.channel, tr(ctx,
         { title: `✅ ${NOME} configurada`,
-          description: `As mensagens serão publicadas em <#${id}>.\n\nVeja como ficou: \`${PREFIXO}${CMD} testar\``,
+          description: `As mensagens serão publicadas em <#${id}>.`,
           colour: COR.sucesso },
         { title: `✅ ${NOME} configured`,
-          description: `Messages will be posted in <#${id}>.\n\nSee how it looks: \`${PREFIXO}${CMD} test\``,
+          description: `Messages will be posted in <#${id}>.`,
           colour: COR.sucesso },
         { title: `✅ ${NOME_ES} configurada`,
-          description: `Los mensajes se publicarán en <#${id}>.\n\nMira cómo quedó: \`${C("testar")}\``,
+          description: `Los mensajes se publicarán en <#${id}>.`,
           colour: COR.sucesso }));
     }
 
@@ -369,13 +343,13 @@ function criarComando(tipoId) {
         c.imagemLinkOculto = true; salvarConfig?.();
         return sendEmbed(message.channel, tr(ctx,
           { title: "✅ Link oculto",
-            description: `A URL não aparece mais acima do embed.\n\nConfira: \`${PREFIXO}${CMD} testar\``,
+            description: "A URL não aparece mais acima do embed.",
             colour: COR.sucesso },
           { title: "✅ Link hidden",
-            description: `The URL no longer shows above the embed.\n\nCheck: \`${PREFIXO}${CMD} test\``,
+            description: "The URL no longer shows above the embed.",
             colour: COR.sucesso },
         { title: "✅ Enlace oculto",
-            description: `La URL ya no aparece encima del embed.\n\nCompruébalo: \`${C("testar")}\``,
+            description: "La URL ya no aparece encima del embed.",
             colour: COR.sucesso }));
       }
       if (["visivel", "visível", "visible", "show", "mostrar"].includes(resto.toLowerCase())) {
@@ -396,13 +370,13 @@ function criarComando(tipoId) {
       if (!v.ok) {
         return sendEmbed(message.channel, tr(ctx,
           { title: "❌ Link recusado",
-            description: `${v.motivo}\n\nUse \`${PREFIXO}${CMD} imagem limpar\` para remover a atual.`,
+            description: v.motivo,
             colour: COR.erro },
           { title: "❌ Link rejected",
-            description: `${v.motivoEn}\n\nUse \`${PREFIXO}${CMD} image clear\` to remove the current one.`,
+            description: v.motivoEn,
             colour: COR.erro },
         { title: "❌ Enlace rechazado",
-            description: `${v.motivoEs ?? v.motivoEn}\n\nUsa \`${C("imagem")} borrar\` para quitar la actual.`,
+            description: (v.motivoEs ?? v.motivoEn),
             colour: COR.erro }));
       }
 
@@ -515,24 +489,18 @@ function criarComando(tipoId) {
       });
       return sendEmbed(message.channel, tr(ctx,
         { title: "✅ Teste enviado",
-          description: `Publiquei em <#${c.canalId}> usando você como exemplo.${c.ativo ? "" : `\n\n⚠️ O envio automático está **desligado** — ligue com \`${PREFIXO}${CMD} on\`.`}`,
+          description: `Publiquei em <#${c.canalId}> usando você como exemplo.${c.ativo ? "" : "\n⚠️ O envio automático está **desligado**."}`,
           colour: COR.sucesso },
         { title: "✅ Test sent",
-          description: `Posted in <#${c.canalId}> using you as the example.${c.ativo ? "" : `\n\n⚠️ Automatic posting is **off** — turn it on with \`${PREFIXO}${CMD} on\`.`}`,
+          description: `Posted in <#${c.canalId}> using you as the example.${c.ativo ? "" : "\n⚠️ Automatic posting is **off**."}`,
           colour: COR.sucesso },
         { title: "✅ Prueba enviada",
-          description: `Publiqué en <#${c.canalId}> usándote como ejemplo.${c.ativo ? "" : `\n\n⚠️ La publicación automática está **desactivada** — actívala con \`${C()} on\`.`}`,
+          description: `Publiqué en <#${c.canalId}> usándote como ejemplo.${c.ativo ? "" : "\n⚠️ La publicación automática está **desactivada**."}`,
           colour: COR.sucesso }));
     }
 
     // ── desconhecido ──
-    return sendEmbed(message.channel, tr(ctx,
-      { title: "❌ Subcomando desconhecido",
-        description: `Use \`${PREFIXO}${CMD}\` para ver o estado e a lista de opções.`, colour: COR.erro },
-      { title: "❌ Unknown subcommand",
-        description: `Use \`${PREFIXO}${CMD}\` to see the status and the list of options.`, colour: COR.erro },
-        { title: "❌ Subcomando desconocido",
-        description: `Usa \`${C()}\` para ver el estado y la lista de opciones.`, colour: COR.erro }));
+    return erroDeUso(ctx, message.channel, tipoId, "Subcomando desconhecido.", "Unknown subcommand.", "Subcomando desconocido.");
   };
 }
 

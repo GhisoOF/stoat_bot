@@ -1,9 +1,20 @@
-// &privacidade — o que a Judy guarda sobre quem pergunta, e o consentimento (20 out 2026).
-// As telas saem prontas nos três idiomas (tr com o espanhol).
+// &privacidade — o centro de privacidade (20 out 2026; P2, 31 out 2026).
+//
+// O que a Judy guarda sobre quem pergunta, e tudo o que a pessoa faz com isso num
+// lugar só: a memória (opt-in), o fio da conversa, sair/voltar da conversa e do XP,
+// o perfil, o mapeamento do cartão, a gentileza extra, esquecer (a pessoa, ou o
+// servidor inteiro — staff) e apagar tudo, em todos os servidores e em todas as eras
+// do RPG. Antes isso estava espalhado pelo &chat e pelo &xp.
+//
+// Saída mínima (R1/R2): cada ação responde o resultado numa linha; a explicação mora
+// no `&help privacidade`. Telas em pt/en/es; datas com carimbo() (fuso de quem lê).
 
 import * as db from "../core/db.js";
 import { tr } from "../core/i18n.js";
 import { citar } from "../core/aliases.js";
+import { carimbo } from "../core/tempo.js";
+import { descreverErro, registrarErro } from "../core/erros.js";
+import { idEscrito } from "../core/ids.js";
 import { randomBytes } from "node:crypto";
 import * as retencao from "../core/retencao.js";
 
@@ -15,148 +26,272 @@ export const URL_POLITICA = process.env.POLITICA_PRIVACIDADE_URL || "https://git
 const PRAZO_APAGAR_MS = 2 * 60_000;
 const pedidosApagar = new Map();   // userId → { codigo, ate }
 
-const ON = new Set(["on", "sim", "yes", "si", "sí", "ligar", "ativar"]);
-const OFF = new Set(["off", "nao", "não", "no", "desligar", "desativar"]);
+const ON = new Set(["on", "sim", "yes", "si", "sí", "ligar", "ativar", "activar"]);
+const OFF = new Set(["off", "nao", "não", "no", "desligar", "desativar", "desactivar"]);
+
+// O chat.js (a IA) só carrega quando a ação precisa dele (esquecer)
+const ia = () => import("../ai/chat.js");
+
+// ── RPG: apagar o jogador em TODAS as eras ──
+// A área do RPG exporta a função (combinado em _notas/rpg.md). Enquanto ela não
+// existe, o `retencao.dadosDaPessoa` (as tabelas de hoje) é o que apaga.
+export const FUNCAO_RPG = "apagarJogadorTodasAsEras";
+async function apagarRpgTodasAsEras(userId) {
+  try {
+    const m = await import("../game/game.js");
+    if (typeof m[FUNCAO_RPG] === "function") return Number(await m[FUNCAO_RPG](userId)) || 0;
+  } catch (e) { registrarErro("PRIVACIDADE][rpg", e); }
+  return 0;
+}
+
+// uma linha (o resultado) com a cor
+const linha = (ctx, cor, pt, en, es) => tr(ctx, { description: pt, colour: cor }, { description: en, colour: cor }, { description: es, colour: cor });
 
 export async function cmdPrivacidade(message, args, ctx) {
-  const { sendEmbed, COR, PREFIXO: P } = ctx;
+  const { sendEmbed, COR, PREFIXO: P, serverId } = ctx;
   const uid = message.authorId;
-  const sub = args[0]?.toLowerCase();
+  const sub = String(args[0] ?? "").toLowerCase();
+  const arg = (i) => String(args[i] ?? "").toLowerCase();
   const c = (ref, l) => `\`${citar(ref, l, P)}\``;
+  const enviar = (pt, en, es, cor = COR.sucesso) => sendEmbed(message.channel, linha(ctx, cor, pt, en, es));
+  // erro de uso: uma linha + o &help
+  const ajuda = (l) => `\`${citar("help", l, P)} ${citar("privacidade", l, "")}\``;
+  const uso = () => enviar(`❓ ${ajuda("pt")}`, `❓ ${ajuda("en")}`, `❓ ${ajuda("es")}`, COR.aviso);
+  // perfil, mapear e cuidado são só da própria pessoa (privacidade, 20 out 2026)
+  const deOutro = () => {
+    const alvo = idEscrito(args.slice(1).filter((a) => !ON.has(String(a).toLowerCase()) && !OFF.has(String(a).toLowerCase())).join(" "))
+      || message.mentionIds?.[0] || message.mentions?.[0]?.id || uid;
+    return alvo !== uid;
+  };
+  const soOSeu = () => enviar("🔒 Só o seu.", "🔒 Only your own.", "🔒 Solo el tuyo.", COR.aviso);
 
   // ── memoria on|off ──
   if (sub === "memoria") {
-    const v = args[1]?.toLowerCase();
-    if (!ON.has(v) && !OFF.has(v)) {
-      return sendEmbed(message.channel, tr(ctx,
-        { title: "🔒 Privacidade", description: `${c("privacidade.memoria", "pt")} on · ${c("privacidade.memoria", "pt")} off`, colour: COR.aviso },
-        { title: "🔒 Privacy", description: `${c("privacidade.memoria", "en")} on · ${c("privacidade.memoria", "en")} off`, colour: COR.aviso },
-        { title: "🔒 Privacidad", description: `${c("privacidade.memoria", "es")} on · ${c("privacidade.memoria", "es")} off`, colour: COR.aviso }));
-    }
+    const v = arg(1);
+    if (!ON.has(v) && !OFF.has(v)) return uso();
     const ligar = ON.has(v);
     db.setConsentimento(uid, { memoria: ligar, respondido: true });
     const ap = ligar ? null : db.apagarMemoriaDaPessoaGlobal(uid);
     const n = ap ? ap.fatos + ap.perfil + ap.memoria : 0;
-    return sendEmbed(message.channel, tr(ctx, ligar
-      ? { title: "🧠 Memória ligada", description: "A Judy vai lembrar do que você conta nas conversas, em qualquer servidor.", colour: COR.sucesso }
-      : { title: "🧠 Memória desligada", description: `A Judy não guarda mais nada sobre você${n ? ` — apaguei ${n} registro(s)` : ""}.`, colour: COR.sucesso },
-    ligar
-      ? { title: "🧠 Memory on", description: "Judy will remember what you tell her in conversations, on any server.", colour: COR.sucesso }
-      : { title: "🧠 Memory off", description: `Judy no longer keeps anything about you${n ? ` — I erased ${n} record(s)` : ""}.`, colour: COR.sucesso },
-    ligar
-      ? { title: "🧠 Memoria activada", description: "Judy va a recordar lo que le cuentas en las conversaciones, en cualquier servidor.", colour: COR.sucesso }
-      : { title: "🧠 Memoria desactivada", description: `Judy ya no guarda nada sobre ti${n ? ` — borré ${n} registro(s)` : ""}.`, colour: COR.sucesso }));
-  }
-
-  // ── apagar [confirmar <código>] ──
-  if (sub === "apagar") {
-    const L = { pt: "pt", en: "en", es: "es" };
-    if (args[1]?.toLowerCase() === "confirmar") {
-      const p = pedidosApagar.get(uid);
-      const certo = p && p.ate >= Date.now() && String(args[2] ?? "").toUpperCase() === p.codigo;
-      if (!certo) {
-        return sendEmbed(message.channel, tr(ctx,
-          { title: "❌ Código errado ou vencido", description: `Peça outro com ${c("privacidade.apagar", "pt")}.`, colour: COR.erro },
-          { title: "❌ Wrong or expired code", description: `Ask for a new one with ${c("privacidade.apagar", "en")}.`, colour: COR.erro },
-          { title: "❌ Código incorrecto o vencido", description: `Pide otro con ${c("privacidade.apagar", "es")}.`, colour: COR.erro }));
-      }
-      pedidosApagar.delete(uid);
-      const r = retencao.dadosDaPessoa(uid, { apagar: true });
-      const total = r.reduce((t, x) => t + x.n, 0);
-      console.info(`[PRIVACIDADE] ${uid} apagou os próprios dados (${total} registro(s))`);
-      return sendEmbed(message.channel, tr(ctx,
-        { title: "🗑️ Pronto", description: `Apaguei **${total}** registro(s) seus. A Judy não vai perguntar de novo se pode lembrar de você — ${c("privacidade.memoria", "pt")} on, se mudar de ideia.`, colour: COR.sucesso },
-        { title: "🗑️ Done", description: `I erased **${total}** record(s) of yours. Judy won't ask again whether she can remember you — ${c("privacidade.memoria", "en")} on, if you change your mind.`, colour: COR.sucesso },
-        { title: "🗑️ Listo", description: `Borré **${total}** registro(s) tuyos. Judy no volverá a preguntar si puede recordarte — ${c("privacidade.memoria", "es")} on, si cambias de idea.`, colour: COR.sucesso }));
-    }
-    const r = retencao.dadosDaPessoa(uid);
-    const codigo = randomBytes(3).toString("hex").slice(0, 4).toUpperCase();
-    pedidosApagar.set(uid, { codigo, ate: Date.now() + PRAZO_APAGAR_MS });
-    const lista = (l) => r.map((x) => `• ${x.rotulo[l]}: **${x.n}**`).join("\n");
-    const tela = (l, titulo, intro, fica, confirma) => ({ title: titulo, colour: COR.aviso, description: [
-      intro, "", lista(l), "", `_${fica}: ${retencao.FICA_DA_PESSOA[l]}._`, "", confirma(`\`${citar("privacidade.apagar.confirmar", L[l], P)} ${codigo}\``)].join("\n") });
-    return sendEmbed(message.channel, tr(ctx,
-      tela("pt", "🗑️ Apagar tudo o que é seu?", "Isto apaga, em **todos os servidores** e sem volta:", "Fica", (x) => `Para confirmar, em até 2 min: ${x}`),
-      tela("en", "🗑️ Erase everything that's yours?", "This erases, on **every server** and for good:", "What stays", (x) => `To confirm, within 2 min: ${x}`),
-      tela("es", "🗑️ ¿Borrar todo lo tuyo?", "Esto borra, en **todos los servidores** y sin vuelta atrás:", "Lo que queda", (x) => `Para confirmar, en 2 min: ${x}`)));
+    return ligar
+      ? enviar("🧠 Memória ligada.", "🧠 Memory on.", "🧠 Memoria activada.")
+      : enviar(`🧠 Memória desligada${n ? ` — ${n} registro(s) apagado(s)` : ""}.`, `🧠 Memory off${n ? ` — ${n} record(s) erased` : ""}.`, `🧠 Memoria desactivada${n ? ` — ${n} registro(s) borrado(s)` : ""}.`);
   }
 
   // ── fio global|canal ──
   if (sub === "fio") {
-    const v = args[1]?.toLowerCase();
-    if (v !== "global" && v !== "canal") {
-      return sendEmbed(message.channel, tr(ctx,
-        { title: "🔒 Privacidade", description: `${c("privacidade.fio", "pt")} global · ${c("privacidade.fio.canal", "pt")}`, colour: COR.aviso },
-        { title: "🔒 Privacy", description: `${c("privacidade.fio", "en")} global · ${c("privacidade.fio.canal", "en")}`, colour: COR.aviso },
-        { title: "🔒 Privacidad", description: `${c("privacidade.fio", "es")} global · ${c("privacidade.fio.canal", "es")}`, colour: COR.aviso }));
-    }
-    const global = v === "global";
-    db.setConsentimento(uid, { fioGlobal: global });
-    return sendEmbed(message.channel, tr(ctx,
-      { title: "🧵 Fio da conversa", description: global ? "A conversa com a Judy agora continua de um servidor e canal para outro." : "Cada canal volta a ter a sua conversa com a Judy.", colour: COR.sucesso },
-      { title: "🧵 Conversation thread", description: global ? "Your conversation with Judy now carries over between servers and channels." : "Each channel has its own conversation with Judy again.", colour: COR.sucesso },
-      { title: "🧵 Hilo de la conversación", description: global ? "La conversación con Judy ahora sigue de un servidor y canal a otro." : "Cada canal vuelve a tener su propia conversación con Judy.", colour: COR.sucesso }));
+    const v = arg(1);
+    if (v !== "global" && v !== "canal") return uso();
+    db.setConsentimento(uid, { fioGlobal: v === "global" });
+    return v === "global"
+      ? enviar("🧵 Fio da conversa: global.", "🧵 Conversation thread: global.", "🧵 Hilo de la conversación: global.")
+      : enviar("🧵 Fio da conversa: por canal.", "🧵 Conversation thread: per channel.", "🧵 Hilo de la conversación: por canal.");
   }
 
-  // ── status (sem argumento) ──
+  // ── chat sair|voltar ── (era `&chat sair|voltar`)
+  if (sub === "chat") {
+    const v = arg(1);
+    if (v !== "sair" && v !== "voltar" && v !== "entrar") return uso();
+    const sair = v === "sair";
+    db.setIaSilenciada(uid, sair);
+    return sair
+      ? enviar("🤐 A Judy não conversa mais com você.", "🤐 Judy won't chat with you anymore.", "🤐 Judy ya no conversará contigo.", COR.info)
+      : enviar("💬 A Judy volta a conversar com você.", "💬 Judy will chat with you again.", "💬 Judy vuelve a conversar contigo.");
+  }
+
+  // ── xp sair|voltar ── (era `&xp sair|entrar`; o XP é de cada servidor). A regra é a
+// `participarDoXp` do nivel.js (área das ferramentas).
+  if (sub === "xp") {
+    const v = arg(1);
+    if (v !== "sair" && v !== "voltar" && v !== "entrar") return uso();
+    if (!serverId) return uso();
+    const sair = v === "sair";
+    // a função da área das ferramentas (a mesma do `&xp sair|entrar`); sem ela, o banco direto
+    const nivel = await import("./nivel.js").catch((e) => { registrarErro("PRIVACIDADE][xp", e); return {}; });
+    if (typeof nivel.participarDoXp === "function") await nivel.participarDoXp(serverId, uid, !sair);
+    else db.setXpFora(serverId, uid, sair);
+    return sair
+      ? enviar("🚪 Fora do XP neste servidor — o seu XP foi apagado.", "🚪 Out of XP on this server — your XP was erased.", "🚪 Fuera del XP en este servidor — tu XP se borró.", COR.info)
+      : enviar("🎮 De volta ao XP neste servidor (do zero).", "🎮 Back in XP on this server (from zero).", "🎮 De vuelta al XP en este servidor (desde cero).");
+  }
+
+  // ── cuidado on|off ── (era `&chat cuidado`; só para si: marcar OUTRA pessoa, mesmo
+  // sendo staff, é rotulá-la sem o consentimento dela)
+  if (sub === "cuidado") {
+    if (deOutro()) return soOSeu();
+    if (!serverId) return uso();
+    const ligar = !args.slice(1).some((a) => OFF.has(String(a).toLowerCase()));
+    try {
+      db.setCuidado(serverId, uid, ligar);
+      return ligar
+        ? enviar("🌿 Gentileza extra: ligada.", "🌿 Extra kindness: on.", "🌿 Amabilidad extra: activada.")
+        : enviar("🌿 Gentileza extra: desligada.", "🌿 Extra kindness: off.", "🌿 Amabilidad extra: desactivada.");
+    } catch (e) {
+      registrarErro("PRIVACIDADE][cuidado", e);
+      return enviar(`❌ ${descreverErro(e, "pt")}.`, `❌ ${descreverErro(e, "en")}.`, `❌ ${descreverErro(e, "es")}.`, COR.erro);
+    }
+  }
+
+  // ── perfil ── (era `&chat perfil`)
+  if (sub === "perfil") {
+    if (deOutro()) return soOSeu();
+    const perfil = serverId ? db.getPerfil?.(serverId, uid) : null;
+    const fatos = (serverId ? db.getFatosPessoa?.(serverId, uid, { limite: 20, minConf: 0.4 }) : null) || [];
+    if (!perfil && !fatos.length) return enviar("👤 Nada guardado sobre você aqui.", "👤 Nothing kept about you here.", "👤 Nada guardado sobre ti aquí.", COR.info);
+    const tela = (l) => {
+      const R = {
+        pt: { cuidado: "🌿 gentileza extra", personalidade: "🧠 Personalidade", gosto: "❤️ Gostos", info: "📌 Informações", jogos: "Jogos", grupos: "Grupos" },
+        en: { cuidado: "🌿 extra kindness", personalidade: "🧠 Personality", gosto: "❤️ Likes", info: "📌 Information", jogos: "Games", grupos: "Groups" },
+        es: { cuidado: "🌿 amabilidad extra", personalidade: "🧠 Personalidad", gosto: "❤️ Gustos", info: "📌 Información", jogos: "Juegos", grupos: "Grupos" },
+      }[l];
+      const linhas = [];
+      if (perfil?.cuidado) linhas.push(R.cuidado);
+      if (perfil?.bio) linhas.push(`**Bio:** ${perfil.bio}`);
+      if (perfil?.grupos) linhas.push(`**${R.grupos}:** ${perfil.grupos}`);
+      if (perfil?.jogos) linhas.push(`**${R.jogos}:** ${perfil.jogos}`);
+      const porCat = { personalidade: [], gosto: [], info: [] };
+      for (const f of fatos) (porCat[f.categoria] ?? porCat.info).push(f);
+      for (const cat of ["personalidade", "gosto", "info"]) {
+        if (!porCat[cat].length) continue;
+        linhas.push(`\n**${R[cat]}**`);
+        for (const f of porCat[cat]) {
+          const quando = f.momento ? carimbo(f.momento, "d") : "";
+          linhas.push(`• ${f.fato}${quando ? ` — ${quando}` : ""}`);
+        }
+      }
+      return { title: { pt: "👤 Seu perfil", en: "👤 Your profile", es: "👤 Tu perfil" }[l], description: linhas.join("\n").slice(0, 1990), colour: COR.info };
+    };
+    return sendEmbed(message.channel, tr(ctx, tela("pt"), tela("en"), tela("es")));
+  }
+
+  // ── mapear ── (era `&chat mapear`; só o seu: ler o perfil de outra pessoa sem a
+  // permissão dela é o scraping que as regras do Stoat proíbem)
+  if (sub === "mapear") {
+    if (deOutro()) return soOSeu();
+    if (!serverId) return uso();
+    try {
+      const member = message.member ?? null;
+      const user = message.author ?? member?.user ?? null;
+      const nome = user?.username ?? member?.nickname ?? uid;
+      let bio = null, status = null;
+      try { status = user?.status?.text ?? null; } catch (e) { registrarErro("PRIVACIDADE][mapear-status", e); }
+      try { const prof = await (user?.fetchProfile?.() ?? member?.fetchProfile?.()); bio = prof?.content ?? prof?.bio ?? null; }
+      catch (e) { registrarErro("PRIVACIDADE][mapear-bio", e); }
+      const entrou = member?.joinedAt ? new Date(member.joinedAt).toISOString() : null;
+      db.setPerfil(serverId, uid, {
+        nome,
+        bio: bio ? String(bio).slice(0, 500) : undefined,
+        status: typeof status === "string" && status ? status.slice(0, 200) : undefined,
+        entrou: entrou || undefined,
+      });
+      const achou = (l) => [bio && "bio", status && { pt: "status", en: "status", es: "estado" }[l], entrou && { pt: "entrada", en: "join date", es: "entrada" }[l]].filter(Boolean).join(", ");
+      return achou("pt")
+        ? enviar(`👤 Mapeado: ${achou("pt")}.`, `👤 Mapped: ${achou("en")}.`, `👤 Mapeado: ${achou("es")}.`)
+        : enviar("👤 A API não deu bio nem status.", "👤 The API gave no bio or status.", "👤 La API no dio bio ni estado.", COR.info);
+    } catch (e) {
+      registrarErro("PRIVACIDADE][mapear", e);
+      return enviar(`❌ ${descreverErro(e, "pt")}.`, `❌ ${descreverErro(e, "en")}.`, `❌ ${descreverErro(e, "es")}.`, COR.erro);
+    }
+  }
+
+  // ── esquecer [tudo] ── (era `&chat esquecer [tudo]`)
+  if (sub === "esquecer") {
+    if (!serverId) return uso();
+    const chat = await ia();
+    if (arg(1) === "tudo") {
+      const server = await Promise.resolve(ctx.getServer?.(message)).catch(() => null);
+      if (ctx.membroTemPermissao && !ctx.membroTemPermissao(message, server, "ManageServer")) {
+        return enviar("🚫 Pede **ManageServer**.", "🚫 Needs **ManageServer**.", "🚫 Requiere **ManageServer**.", COR.erro);
+      }
+      try {
+        const r = chat.esquecerServidor({ serverId, server, canalId: message.channelId });
+        const n = r.fatosPessoa + r.fatosServidor + r.perfis + r.historico + r.memoriaGeral;
+        return enviar(`🧹 Memória do servidor apagada (${n} registro(s)).`, `🧹 Server memory erased (${n} record(s)).`, `🧹 Memoria del servidor borrada (${n} registro(s)).`);
+      } catch (e) {
+        registrarErro("PRIVACIDADE][esquecer-tudo", e);
+        return enviar(`❌ ${descreverErro(e, "pt")}.`, `❌ ${descreverErro(e, "en")}.`, `❌ ${descreverErro(e, "es")}.`, COR.erro);
+      }
+    }
+    if (args.length > 1) return uso();
+    try {
+      const r = chat.esquecerPessoa({ serverId, userId: uid, canalId: message.channelId });
+      const n = r.fatos + r.memoriaGeral;
+      return enviar(`🧹 Esqueci o que sabia de você aqui (${n} registro(s)).`, `🧹 I forgot what I knew about you here (${n} record(s)).`, `🧹 Olvidé lo que sabía de ti aquí (${n} registro(s)).`);
+    } catch (e) {
+      registrarErro("PRIVACIDADE][esquecer", e);
+      return enviar(`❌ ${descreverErro(e, "pt")}.`, `❌ ${descreverErro(e, "en")}.`, `❌ ${descreverErro(e, "es")}.`, COR.erro);
+    }
+  }
+
+  // ── apagar [confirmar <código>] ── (tudo, em todos os servidores e todas as eras do RPG)
+  if (sub === "apagar") {
+    if (arg(1) === "confirmar") {
+      const p = pedidosApagar.get(uid);
+      const certo = p && p.ate >= Date.now() && String(args[2] ?? "").toUpperCase() === p.codigo;
+      if (!certo) return enviar(`❌ Código errado ou vencido — ${c("privacidade.apagar", "pt")}.`, `❌ Wrong or expired code — ${c("privacidade.apagar", "en")}.`, `❌ Código incorrecto o vencido — ${c("privacidade.apagar", "es")}.`, COR.erro);
+      pedidosApagar.delete(uid);
+      const r = retencao.dadosDaPessoa(uid, { apagar: true });
+      const total = r.reduce((t, x) => t + x.n, 0) + await apagarRpgTodasAsEras(uid);
+      console.info(`[PRIVACIDADE] ${uid} apagou os próprios dados (${total} registro(s))`);
+      return enviar(`🗑️ Apaguei **${total}** registro(s) seus.`, `🗑️ I erased **${total}** record(s) of yours.`, `🗑️ Borré **${total}** registro(s) tuyos.`);
+    }
+    if (args.length > 1) return uso();
+    const r = retencao.dadosDaPessoa(uid);
+    const codigo = randomBytes(3).toString("hex").slice(0, 4).toUpperCase();
+    pedidosApagar.set(uid, { codigo, ate: Date.now() + PRAZO_APAGAR_MS });
+    const lista = (l) => r.map((x) => `• ${x.rotulo[l]}: **${x.n}**`).join("\n");
+    const tela = (l, titulo, fica, confirma) => ({ title: titulo, colour: COR.aviso, description: [
+      lista(l), "", `_${fica}: ${retencao.FICA_DA_PESSOA[l]}._`, "", confirma(`\`${citar("privacidade.apagar.confirmar", l, P)} ${codigo}\``)].join("\n") });
+    return sendEmbed(message.channel, tr(ctx,
+      tela("pt", "🗑️ Apagar tudo o que é seu, em todos os servidores?", "Fica", (x) => `${x} — até ${carimbo(Date.now() + PRAZO_APAGAR_MS, "t")}`),
+      tela("en", "🗑️ Erase everything that's yours, on every server?", "What stays", (x) => `${x} — until ${carimbo(Date.now() + PRAZO_APAGAR_MS, "t")}`),
+      tela("es", "🗑️ ¿Borrar todo lo tuyo, en todos los servidores?", "Lo que queda", (x) => `${x} — hasta ${carimbo(Date.now() + PRAZO_APAGAR_MS, "t")}`)));
+  }
+
+  if (sub && sub !== "status") return uso();
+
+  // ── status (sem argumento): o que é guardado ──
   const cons = db.getConsentimento(uid);
-  const r = db.resumoIADaPessoa(uid, ctx.serverId);
-  const fora = ctx.serverId ? db.xpFora(ctx.serverId, uid) : false;
-  const xp = ctx.serverId ? db.getXp(ctx.serverId, uid).xp : 0;
-  const linhaXp = (l) => ({
-    pt: `• XP neste servidor: ${fora ? "**fora** (não conta)" : `**${xp}**`} — ${c(fora ? "xp.entrar" : "xp.sair", "pt")}`,
-    en: `• XP on this server: ${fora ? "**out** (doesn't count)" : `**${xp}**`} — ${c(fora ? "xp.entrar" : "xp.sair", "en")}`,
-    es: `• XP en este servidor: ${fora ? "**fuera** (no cuenta)" : `**${xp}**`} — ${c(fora ? "xp.entrar" : "xp.sair", "es")}`,
-  })[l];
-  const estado = (l) => {
-    const t = { pt: ["✅ ligada", "❌ desligada", "❔ você ainda não respondeu (desligada)"], en: ["✅ on", "❌ off", "❔ you haven't answered yet (off)"], es: ["✅ activada", "❌ desactivada", "❔ todavía no respondiste (desactivada)"] }[l];
-    return cons?.memoria === 1 ? t[0] : cons?.respondidoEm ? t[1] : t[2];
+  const r = db.resumoIADaPessoa(uid, serverId);
+  const fora = serverId ? db.xpFora(serverId, uid) : false;
+  const xp = serverId ? db.getXp(serverId, uid).xp : 0;
+  const silencio = db.iaSilenciada(uid);
+  const cuidado = serverId ? !!db.getPerfil?.(serverId, uid)?.cuidado : false;
+  const T = {
+    pt: { titulo: "🔒 Sua privacidade com a Judy", memoria: "Memória da conversa", fio: "Fio da conversa", conversa: "Conversa com a Judy", cuidado: "Gentileza extra (aqui)",
+      estados: ["✅ ligada", "❌ desligada", "❔ sem resposta (desligada)"], porCanal: "por canal", fala: "✅ sim", calada: "🤐 você pediu silêncio", sim: "✅", nao: "—",
+      guarda: "O que ela guarda sobre você", fatos: (a, t) => `fatos que aprendeu: **${a}** neste servidor · **${t}** em todos`, perfis: "perfil mapeado (bio/status)",
+      memGeral: "memória curta", historico: (n) => `histórico de conversa: **${n}** mensagem(ns) — apagado depois de ${db.HISTORICO_HORAS} h`,
+      xp: fora ? "XP neste servidor: **fora** (não conta)" : `XP neste servidor: **${xp}**`, politica: "Política de privacidade" },
+    en: { titulo: "🔒 Your privacy with Judy", memoria: "Conversation memory", fio: "Conversation thread", conversa: "Chatting with Judy", cuidado: "Extra kindness (here)",
+      estados: ["✅ on", "❌ off", "❔ not answered (off)"], porCanal: "per channel", fala: "✅ yes", calada: "🤐 you asked for silence", sim: "✅", nao: "—",
+      guarda: "What she keeps about you", fatos: (a, t) => `facts she learned: **${a}** on this server · **${t}** on all`, perfis: "mapped profile (bio/status)",
+      memGeral: "short memory", historico: (n) => `conversation history: **${n}** message(s) — deleted after ${db.HISTORICO_HORAS} h`,
+      xp: fora ? "XP on this server: **out** (doesn't count)" : `XP on this server: **${xp}**`, politica: "Privacy policy" },
+    es: { titulo: "🔒 Tu privacidad con Judy", memoria: "Memoria de la conversación", fio: "Hilo de la conversación", conversa: "Conversar con Judy", cuidado: "Amabilidad extra (aquí)",
+      estados: ["✅ activada", "❌ desactivada", "❔ sin respuesta (desactivada)"], porCanal: "por canal", fala: "✅ sí", calada: "🤐 pediste silencio", sim: "✅", nao: "—",
+      guarda: "Lo que guarda sobre ti", fatos: (a, t) => `datos que aprendió: **${a}** en este servidor · **${t}** en todos`, perfis: "perfil mapeado (bio/estado)",
+      memGeral: "memoria corta", historico: (n) => `historial de conversación: **${n}** mensaje(s) — se borra a las ${db.HISTORICO_HORAS} h`,
+      xp: fora ? "XP en este servidor: **fuera** (no cuenta)" : `XP en este servidor: **${xp}**`, politica: "Política de privacidad" },
   };
-  const fio = (l) => (cons?.fioGlobal ? "global" : { pt: "por canal", en: "per channel", es: "por canal" }[l]);
-  const tela = (l) => ({
-    pt: { title: "🔒 Sua privacidade com a Judy", linhas: [
-      `**Memória da conversa:** ${estado("pt")}`,
-      `**Fio da conversa:** ${fio("pt")}`,
+  const emb = (l) => {
+    const t = T[l];
+    const estado = cons?.memoria === 1 ? t.estados[0] : cons?.respondidoEm ? t.estados[1] : t.estados[2];
+    return { title: t.titulo, colour: COR.info, description: [
+      `**${t.memoria}:** ${estado}`,
+      `**${t.fio}:** ${cons?.fioGlobal ? "global" : t.porCanal}`,
+      `**${t.conversa}:** ${silencio ? t.calada : t.fala}`,
+      ...(serverId ? [`**${t.cuidado}:** ${cuidado ? t.sim : t.nao}`] : []),
       "",
-      "**O que ela guarda sobre você**",
-      `• fatos que aprendeu: **${r.fatosAqui}** neste servidor · **${r.fatosTotal}** em todos`,
-      `• perfil mapeado (bio/status): **${r.perfis}**`,
-      `• memória geral: **${r.memoria}** item(ns)`,
-      `• histórico de conversa: **${r.historico}** mensagem(ns) — apagado depois de ${db.HISTORICO_HORAS} h`,
-      linhaXp("pt"),
+      `**${t.guarda}**`,
+      `• ${t.fatos(r.fatosAqui, r.fatosTotal)}`,
+      `• ${t.perfis}: **${r.perfis}**`,
+      `• ${t.memGeral}: **${r.memoria}**`,
+      `• ${t.historico(r.historico)}`,
+      ...(serverId ? [`• ${t.xp}`] : []),
       "",
-      `${c("privacidade.memoria", "pt")} on|off · ${c("privacidade.fio", "pt")} global|canal · ${c("privacidade.apagar", "pt")}`,
-      `📄 [Política de privacidade](<${URL_POLITICA}>)`,
-    ] },
-    en: { title: "🔒 Your privacy with Judy", linhas: [
-      `**Conversation memory:** ${estado("en")}`,
-      `**Conversation thread:** ${fio("en")}`,
-      "",
-      "**What she keeps about you**",
-      `• facts she learned: **${r.fatosAqui}** on this server · **${r.fatosTotal}** on all`,
-      `• mapped profile (bio/status): **${r.perfis}**`,
-      `• general memory: **${r.memoria}** item(s)`,
-      `• conversation history: **${r.historico}** message(s) — deleted after ${db.HISTORICO_HORAS} h`,
-      linhaXp("en"),
-      "",
-      `${c("privacidade.memoria", "en")} on|off · ${c("privacidade.fio", "en")} global|channel · ${c("privacidade.apagar", "en")}`,
-      `📄 [Privacy policy](<${URL_POLITICA}>)`,
-    ] },
-    es: { title: "🔒 Tu privacidad con Judy", linhas: [
-      `**Memoria de la conversación:** ${estado("es")}`,
-      `**Hilo de la conversación:** ${fio("es")}`,
-      "",
-      "**Lo que guarda sobre ti**",
-      `• datos que aprendió: **${r.fatosAqui}** en este servidor · **${r.fatosTotal}** en todos`,
-      `• perfil mapeado (bio/estado): **${r.perfis}**`,
-      `• memoria general: **${r.memoria}** elemento(s)`,
-      `• historial de conversación: **${r.historico}** mensaje(s) — se borra a las ${db.HISTORICO_HORAS} h`,
-      linhaXp("es"),
-      "",
-      `${c("privacidade.memoria", "es")} on|off · ${c("privacidade.fio", "es")} global|canal · ${c("privacidade.apagar", "es")}`,
-      `📄 [Política de privacidad](<${URL_POLITICA}>)`,
-    ] },
-  })[l];
-  const emb = (l) => ({ title: tela(l).title, description: tela(l).linhas.join("\n"), colour: COR.info });
+      `📄 [${t.politica}](<${URL_POLITICA}>)`,
+    ].join("\n") };
+  };
   return sendEmbed(message.channel, tr(ctx, emb("pt"), emb("en"), emb("es")));
 }

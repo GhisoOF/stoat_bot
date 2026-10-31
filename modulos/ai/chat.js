@@ -13,16 +13,20 @@ import * as consentimento from "./consentimento.js";
 import * as comentario from "./comentario-espontaneo.js";
 import * as cacheCanal from "./cache-canal.js";
 import * as ficha from "./ficha.js";
-import { construirDetalhes } from "../moderacao/geral.js";
-import { verificar } from "./verificar.js";
-import { SUB as SUBCOMANDOS_REAIS, citar, citarInterno, trechoPronto } from "../core/aliases.js";
+import { detalhesDoRegistro } from "../core/ajuda-registro.js";
+import { citar } from "../core/aliases.js";
 import * as desinteresse from "./desinteresse.js";
 import * as persona from "./persona.js";
-import { iaLigada, conversaLigada } from "../core/env.js";
-import { nivelDePrioridade, donosDoBot } from "../core/prioridade.js";
+import { conversaLigada } from "../core/env.js";
+import { nivelDePrioridade } from "../core/prioridade.js";
 import { descreverErro, registrarErro } from "../core/erros.js";
 import { canalDoServidor } from "../moderacao/pertence.js";
-import { chaveServicoIA } from "./servicos.js";
+import * as gating from "./gating.js";
+import { llmChat, llmDisponivel, listarModelos, pedirServicoIA, executarFerramenta, pausarFundo, retomarFundo,
+  modeloConversa, modeloJuiz, llmUrl, iaServicoUrl, MAX_TOKENS, TIMEOUT, pareceRecomeco } from "./llm.js";
+// (P2) o cliente do modelo mudou para o llm.js; quem importava daqui continua achando
+export { limparRaciocinio, costurar, pareceRecomeco, normalizarMensagens, caberNoContexto, pausarFundo, retomarFundo,
+  estadoFilaLLM, llmChat, listarModelos } from "./llm.js";
 import { MapaCurto } from "./mapa-curto.js";
 import { tr, lingua, idiomaDe, idiomaDaTela } from "../core/i18n.js";
 import * as antiAbuso from "./anti-abuso.js";
@@ -30,7 +34,6 @@ import * as confianca from "../moderacao/confianca.js";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { idEscrito } from "../core/ids.js";
 
 let _refCache;
 // Verbete por comando, montado uma vez.
@@ -38,7 +41,7 @@ function verbetes() {
   if (_refCache !== undefined) return _refCache;
   try {
     const P = process.env.PREFIXO || "&";
-    const det = construirDetalhes(P);
+    const det = detalhesDoRegistro(P, "pt");   // (P2) a ajuda sai do registro (fonte única)
     _refCache = Object.entries(det).map(([nome, d]) => ({
       nome,
       curto: `${P}${nome} — ${(d.desc ?? "").replace(/\n+/g, " ").slice(0, 90)}`,
@@ -123,24 +126,6 @@ function contextoProjeto() {
   return _readmeCache;
 }
 
-// Modelos por papel. Vazio = o servidor usa o modelo que tem carregado
-// (llama-server local — o modo online foi removido em 31 out 2026).
-const LLM_MODEL_PADRAO  = process.env.LLM_MODEL || "";
-const LLM_MODEL_LEVE    = process.env.LLM_MODEL_LEVE    || LLM_MODEL_PADRAO;
-const LLM_MODEL_CODIGO  = process.env.LLM_MODEL_CODIGO  || LLM_MODEL_PADRAO;
-const LLM_MODEL_LOGICA  = process.env.LLM_MODEL_LOGICA  || LLM_MODEL_PADRAO;
-const LLM_MODEL_DECISAO = process.env.LLM_MODEL_DECISAO || LLM_MODEL_LEVE;
-// O juiz da moderação (temas proibidos e &modia): MODELO_MODERACAO no .env —
-// um modelo pequeno que fica carregado ao lado do de conversa (16 out 2026).
-// Sem ele, o mesmo das decisões.
-const LLM_MODEL_JUIZ    = process.env.LLM_MODEL_JUIZ    || LLM_MODEL_DECISAO;
-
-// URLs dos serviços de IA (fixas por env; troque o IP pelo Portainer).
-const LLM_URL = (process.env.LLM_URL || "").replace(/\/$/, "");
-const SEARXNG_URL = (process.env.SEARXNG_URL || "http://localhost:8080").replace(/\/$/, "");
-
-const IA_SERVICO_URL = (process.env.IA_SERVICO_URL || "").replace(/\/$/, "");
-const CONTINUAR_MAX = Number(process.env.CONTINUAR_MAX || 2);
 const FONTES_MAX = Number(process.env.CHAT_FONTES_MAX || 3);
 
 export function iniciarMemoria() {
@@ -148,7 +133,7 @@ export function iniciarMemoria() {
     chamarModelo: (messages) =>
       // a memória extrai vários fatos num JSON só; com o raciocínio do modelo,
       // 1200 tokens cortavam ("memoria: ainda cortada após emendas", 2 out)
-      llmChat(messages, { json: true, jsonTokens: Number(process.env.MEMORIA_MAX_TOKENS || 2400), modelo: LLM_MODEL_DECISAO, etiqueta: "memoria" }),
+      llmChat(messages, { json: true, jsonTokens: Number(process.env.MEMORIA_MAX_TOKENS || 2400), modelo: modeloConversa(), etiqueta: "memoria" }),
   });
 }
 
@@ -202,7 +187,7 @@ export function observarParaComentario(message, ctx) {
 // No modo enxuto (CONVERSA=0) não há "tudo incluso": a casa também usa o
 // modelo pequeno — o grande nem precisa subir para moderar.
 export function modeloDoJuiz(serverId = null) {
-  return servidorDaCasa(serverId) && conversaLigada() ? LLM_MODEL_DECISAO : LLM_MODEL_JUIZ;
+  return servidorDaCasa(serverId) && conversaLigada() ? modeloConversa() : modeloJuiz();
 }
 export function avaliarModeracao(messages, { etiqueta = "moderacao-ia", serverId = null } = {}) {
   return llmChat(messages, { json: true, modelo: modeloDoJuiz(serverId), etiqueta });
@@ -225,7 +210,7 @@ export async function resumirRSS(material, quantidade, { categoria = null, lang 
   try {
     return await llmChat(
       [{ role: "system", content: sys }, { role: "user", content: material.slice(0, 6000) }],
-      { modelo: LLM_MODEL_LEVE, maxTokens: 1400, etiqueta: categoria ? `resumo-rss:${categoria}` : "resumo-rss" },
+      { modelo: modeloConversa(), maxTokens: 1400, etiqueta: categoria ? `resumo-rss:${categoria}` : "resumo-rss" },
     );
   } catch (e) {
     dlog(`resumo RSS falhou: ${e.message}`);
@@ -247,7 +232,7 @@ export async function linhasRSS(material, { modo = "noticias", lang = "pt", quan
   const sys = (en ? "You write a neutral technical report. " : "Você escreve um relatório técnico neutro. ") + regras;
   return llmChat(
     [{ role: "system", content: sys }, { role: "user", content: material.slice(0, 9000) }],
-    { modelo: LLM_MODEL_LEVE, maxTokens: Math.min(4000, 900 + 110 * quantidade), etiqueta: `relatorio-rss:${modo}` },
+    { modelo: modeloConversa(), maxTokens: Math.min(4000, 900 + 110 * quantidade), etiqueta: `relatorio-rss:${modo}` },
   );
 }
 
@@ -258,7 +243,7 @@ export async function traduzirLinhasRSS(material, quantidade = 1) {
     + "Mantenha como estão: nomes próprios, nomes de produtos, empresas, jogos e sites, siglas, versões, números e datas. Traduza o sentido, sem acrescentar nada.";
   return llmChat(
     [{ role: "system", content: sys }, { role: "user", content: String(material).slice(0, 6000) }],
-    { modelo: LLM_MODEL_LEVE, maxTokens: Math.min(4000, 1200 + 80 * quantidade), etiqueta: "traducao-rss" },
+    { modelo: modeloConversa(), maxTokens: Math.min(4000, 1200 + 80 * quantidade), etiqueta: "traducao-rss" },
   );
 }
 
@@ -273,7 +258,7 @@ export async function comentarioRSS(material, { lang = "pt", serverId = null } =
   ].join(" ");
   return llmChat(
     [{ role: "system", content: sys }, { role: "user", content: material.slice(0, 6000) }],
-    { modelo: LLM_MODEL_LEVE, maxTokens: 900, etiqueta: "comentario-rss" },
+    { modelo: modeloConversa(), maxTokens: 900, etiqueta: "comentario-rss" },
   );
 }
 
@@ -290,7 +275,7 @@ export async function gerarComentarioEspontaneo(contextoCanal, serverId = null) 
   try {
     const r = await llmChat(
       [{ role: "system", content: sys }, { role: "user", content: contextoCanal.slice(0, 4000) }],
-      { modelo: LLM_MODEL_LEVE, maxTokens: Number(process.env.COMENTARIO_MAX_TOKENS || 1200), etiqueta: "comentario-espontaneo" },
+      { modelo: modeloConversa(), maxTokens: Number(process.env.COMENTARIO_MAX_TOKENS || 1200), etiqueta: "comentario-espontaneo" },
     );
     const limpo = (r || "").trim();
     // a Judy pode decidir que não vale comentar
@@ -303,10 +288,10 @@ export async function gerarComentarioEspontaneo(contextoCanal, serverId = null) 
 }
 export function resumoConfigIA() {
   const linhas = [];
-  const semLLM = !LLM_URL;
-  linhas.push(`[IA] LLM:     ${LLM_URL || "⚠️ NENHUM — defina IA_MODO=local ou LLM_URL"}`);
-  linhas.push(`[IA] Serviço: ${IA_SERVICO_URL || "(não configurado — sem ferramentas)"}`);
-  linhas.push(`[IA] Modelo:  ${LLM_MODEL_PADRAO || "(o carregado no servidor de LLM)"}`);
+  const semLLM = !llmUrl();
+  linhas.push(`[IA] LLM:     ${llmUrl() || "⚠️ NENHUM — defina IA_MODO=local ou LLM_URL"}`);
+  linhas.push(`[IA] Serviço: ${iaServicoUrl() || "(não configurado — sem ferramentas)"}`);
+  linhas.push(`[IA] Modelo:  ${modeloConversa() || "(o carregado no servidor de LLM)"}`);
   linhas.push(`[IA] Busca:   ${process.env.SEARXNG_URL ? `${process.env.SEARXNG_URL} — ${buscaSempre() ? "sempre (links só quando pedem a busca)" : "só quando pedem/precisa (BUSCA_SEMPRE=0)"}` : "desligada (sem SEARXNG_URL)"}`);
 
   if (semLLM) {
@@ -315,95 +300,24 @@ export function resumoConfigIA() {
   return linhas;
 }
 
-export async function listarModelos() {
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), 6000);
-  try {
-    const r = await fetch(`${LLM_URL}/v1/models`, { signal: ctrl.signal });
-    if (!r.ok) return { ok: false, motivo: `HTTP ${r.status}`, modelos: [] };
-    const data = await r.json().catch(() => ({}));
-    const modelos = (data.data ?? data.models ?? [])
-      .map((m) => m.id || m.name || m.model)
-      .filter(Boolean)
-      .sort();
-    return { ok: true, modelos };
-  } catch {
-    return { ok: false, motivo: "offline", modelos: [] };
-  } finally {
-    clearTimeout(t);
-  }
-}
 const LIMITE_ARQUIVO = Number(process.env.CHAT_MAX_ARQUIVO || 12000);
 const GITHUB_REPO_ROTULO = process.env.GITHUB_REPO || "do bot";
-// 1500, não 700: com o raciocínio (thinking) ligado, os tokens de pensamento
-// saem do MESMO orçamento — com 700, sobravam ~200 para a resposta e ela era
-// cortada no meio da palavra (e a emenda automática às vezes continuava do
-// assunto errado). Subir o teto resolve na raiz.
-const MAX_TOKENS   = Number(process.env.CHAT_MAX_TOKENS || 1500);
-// 600 cortava a extração de memória (fim=length 3× num quarto de hora, 27/09):
-// o raciocínio do Gemma come o orçamento antes do JSON.
-const DECISAO_TOKENS = Number(process.env.CHAT_DECISAO_TOKENS || 1200);   // piso das decisões json (ver llmChat)
-const TIMEOUT      = Number(process.env.CHAT_TIMEOUT  || 300000);
 
-const SERVIDORES_PERMITIDOS = (process.env.CHAT_SERVIDORES || "")
-  .split(",").map((s) => s.trim()).filter(Boolean);
-
-// O .env deixa a IA de conversa rodar AQUI? (o que era o servidorPermitido até 21 out)
-export function iaDisponivel(serverId) {
-  if (!iaLigada()) return false;
-  if (!conversaLigada()) return false;   // CONVERSA=0: sem chat (e sem &modia) em lugar nenhum
-  if (SERVIDORES_PERMITIDOS.includes("*")) return true;
-  return !!serverId && SERVIDORES_PERMITIDOS.includes(serverId);
-}
-
-// (21 out 2026, Ghieh: a IA volta em todos os servidores, e cada um escolhe se quer
-// o chat e a geração de imagem.) A escolha fica em `config.ia.chat`/`config.ia.imagem`
-// (`&chat on|off`, `&chat imagem on|off`). Sem escolha: DESLIGADO (opt-in, como os
-// módulos e a memória) — menos nos servidores que estão pelo ID em `SERVIDOR`, que
-// já tinham a IA e seguem ligados.
-function escolhaDoServidor(serverId, chave, config) {
-  let cfg = config;
-  if (!cfg && serverId) { try { cfg = store.configDoServidor(serverId); } catch { cfg = null; } }
-  const v = cfg?.ia?.[chave];
-  return typeof v === "boolean" ? v : null;
-}
-// CHAT_PADRAO=on (o .env de quem hospeda): sem escolha, começa LIGADO — o jeito antigo
-const padraoLigado = () => ["on", "1", "sim", "true", "ligado"].includes((process.env.CHAT_PADRAO ?? "").trim().toLowerCase());
-export function chatLigadoAqui(serverId, config = null) {
-  return escolhaDoServidor(serverId, "chat", config) ?? (padraoLigado() || servidorDaCasa(serverId));
-}
-export const imagemNoBot = () => (process.env.IMAGEM ?? "1").trim() !== "0";
-export function imagemLigadaAqui(serverId, config = null) {
-  if (!imagemNoBot()) return false;
-  return escolhaDoServidor(serverId, "imagem", config) ?? (padraoLigado() || servidorDaCasa(serverId));
-}
-// a IA conversa neste servidor: o .env deixa E o servidor quer
-export function servidorPermitido(serverId) {
-  return iaDisponivel(serverId) && chatLigadoAqui(serverId);
-}
-// quem disse "não fale comigo" (`&chat sair`): vale em todo servidor
-export function naoFalarCom(userId) {
-  try { return !!userId && db.iaSilenciada(userId); } catch { return false; }
-}
-
-// Fora dos servidores da conversa fica SÓ a moderação por IA (16 out 2026,
-// Ghieh: "nos outros servidores, só moderação de IA"). O &modia é moderação:
-// vale em todo servidor enquanto a IA de conversa existe (CONVERSA=0 o tira,
-// porque ele lê TODA mensagem). O &chat continua só nos da lista.
-//
-// 16 out 2026, noite (Ghieh: "desliga essa parte de IA e deixe apenas para
-// moderação, vou querer liberar isso para todos os servidores"): com um juiz
-// DEDICADO (MODELO_MODERACAO, pequeno e sempre carregado), o &modia vale
-// também no modo enxuto — ler toda mensagem deixa de pesar no modelo grande.
-const juizDedicado = () => !!process.env.LLM_MODEL_JUIZ;
-export function modIAPermitida() {
-  return iaLigada() && (conversaLigada() || juizDedicado());
-}
-// O COMANDO existe aqui? O &chat existe onde a IA está disponível, mesmo com o chat
-// desligado no servidor — é por ele que a staff liga (`&chat on`).
-export function comandoIAPermitido(nome, serverId) {
-  return nome === "modia" ? modIAPermitida(serverId) : iaDisponivel(serverId);
-}
+// (P2) Quando a Judy conversa: as três perguntas moram no gating.js. Os nomes
+// antigos ficam exportados daqui para quem ainda os importa (main.js, config,
+// debug, help, tutorial — pedido nas notas do P2 para trocarem pelos novos).
+export const iaDisponivel = (serverId) => gating.iaNoEnv(serverId);
+export const chatLigadoAqui = (serverId, config = null) => gating.conversaAqui(serverId, config);
+export const servidorPermitido = (serverId) => gating.conversaAqui(serverId);
+export const imagemNoBot = () => gating.imagemNoEnv();
+export const imagemLigadaAqui = (serverId, config = null) => gating.imagemAqui(serverId, config);
+export const naoFalarCom = (userId) => !gating.falaCom(userId);
+export const { canalTemChatLivre, destinoDaMensagem, decidirEntradaLivre } = gating;
+// (P2) o &modia saiu (área da moderação). Só a compatibilidade do main.js, até ele
+// largar o moderacao-ia.js: nada de moderação por IA com critério livre.
+export const modIAPermitida = () => false;
+// Um comando "só de IA" (soIA no registro) existe aqui? Onde o .env deixa a conversa.
+export const comandoIAPermitido = (_nome, serverId) => gating.iaNoEnv(serverId);
 
 let ocupado = false;
 // Conversas esperando a vez: { resolve, prioridade }. Prioridade (13 out 2026,
@@ -436,107 +350,6 @@ function liberarVez() {
   else ocupado = false;
 }
 
-export function limparRaciocinio(texto, { aparar = true } = {}) {
-  const limpo = String(texto ?? "")
-    .replace(/<think>[\s\S]*?<\/think>/gi, "")   // bloco completo, com ou sem conteúdo
-    .replace(/^[\s\S]*?<\/think>/i, "");         // abertura perdida no começo
-  return aparar ? limpo.trim() : limpo;
-}
-
-// 429 (llama-swap cheio: "concurrency_limit") é passageiro — espera e repete
-// em vez de mostrar o JSON do erro no chat (12 out 2026).
-const ESPERAS_429 = () => String(process.env.LLM_ESPERAS_429 ?? "2000,5000,10000").split(",").map(Number).filter((n) => n >= 0);
-async function pedir(url, body) {
-  const esperas = ESPERAS_429();
-  for (let tentativa = 0; ; tentativa++) {
-    try { return await pedirUmaVez(url, body); }
-    catch (e) {
-      if (!e?.lotado || tentativa >= esperas.length) throw e;
-      console.warn(`[CHAT][llm] servidor de IA lotado (429) — tentando de novo em ${esperas[tentativa] / 1000}s`);
-      await new Promise((ok) => setTimeout(ok, esperas[tentativa]));
-    }
-  }
-}
-async function pedirUmaVez(url, body) {
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), TIMEOUT);
-  try {
-    const r = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-      signal: ctrl.signal,
-    });
-    if (!r.ok) {
-      // O servidor costuma explicar o erro no corpo (ex.: modelo não encontrado)
-      const corpo = await r.text().catch(() => "");
-      const detalhe = corpo.replace(/\s+/g, " ").slice(0, 200);
-      if (r.status === 400 && /exceed_context_size|exceeds the available context/i.test(corpo)) {
-        const e = new Error(`contexto estourado`);
-        e.contextoEstourado = true;
-        e.nCtx = Number(corpo.match(/"n_ctx"\s*:\s*(\d+)/)?.[1]) || null;
-        throw e;
-      }
-      const e = new Error(`HTTP ${r.status}${detalhe ? ` — ${detalhe}` : ""}`);
-      if (r.status === 429) e.lotado = true;
-      throw e;
-    }
-    return await r.json();
-  } finally {
-    clearTimeout(t);
-  }
-}
-
-async function llmDisponivel() {
-  const ctrl = new AbortController();
-  const limite = Number(process.env.LLM_PING_MS || 8000);
-  const t = setTimeout(() => ctrl.abort(), limite);
-  const t0 = Date.now();
-  try {
-    const r = await fetch(`${LLM_URL}/v1/models`, { signal: ctrl.signal });
-    if (!r.ok) {
-      return { ok: false, causa: "http",
-        motivo: r.status === 404
-          ? `respondeu HTTP 404 — a URL aponta para algo que não serve /v1/models (llama-swap? porta certa?)`
-          : `respondeu HTTP ${r.status}` };
-    }
-    return { ok: true, ms: Date.now() - t0 };
-  } catch (e) {
-    const codigo = e?.cause?.code ?? e?.code ?? "";
-    const abortou = /abort/i.test(e?.name ?? "");
-    if (codigo === "ECONNREFUSED") {
-      return { ok: false, causa: "recusou", motivo: "conexão recusada", codigo };
-    }
-    if (codigo === "EHOSTUNREACH" || codigo === "ENETUNREACH") {
-      return { ok: false, causa: "sem-rota", motivo: "sem rota até o host", codigo };
-    }
-    if (abortou || codigo === "ETIMEDOUT" || codigo === "UND_ERR_CONNECT_TIMEOUT") {
-      return { ok: false, causa: "lento", motivo: `sem resposta em ${limite}ms`, codigo: codigo || "timeout" };
-    }
-    return { ok: false, causa: "offline", motivo: codigo || "inalcançável", codigo };
-  } finally {
-    clearTimeout(t);
-  }
-}
-
-// (31 out 2026, P1) Um cliente só do ia-servico no bot: POST com a chave (lida num
-// lugar só — IA_SERVICO_CHAVE ou IA_CHAVE) e o teto de tempo. Erro HTTP vira exceção.
-async function pedirServicoIA(rota, corpo, timeoutMs) {
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), timeoutMs);
-  try {
-    const r = await fetch(`${IA_SERVICO_URL}${rota}`, {
-      method: "POST", headers: { "Content-Type": "application/json", "x-chave": chaveServicoIA() },
-      body: JSON.stringify(corpo), signal: ctrl.signal,
-    });
-    if (!r.ok) {
-      const txt = await r.text().catch(() => "");
-      throw new Error(`serviço IA HTTP ${r.status} — ${txt.slice(0, 200)}`);
-    }
-    return await r.json();
-  } finally { clearTimeout(t); }
-}
-
 // O que o servidor da conversa manda junto ao serviço: os feeds que ele cadastrou
 // (o buscar_rss só lê esses) e o id dele (o teto diário de imagens).
 function contextoDoServidor(serverId) {
@@ -544,17 +357,6 @@ function contextoDoServidor(serverId) {
   try { feeds = serverId ? db.listarFeeds(serverId).map((f) => f.url).filter(Boolean) : []; }
   catch (e) { registrarErro("CHAT][feeds", e); }
   return { servidor: serverId ?? null, feeds };
-}
-
-async function executarFerramenta(nome, args, { timeoutMs = 20000, contexto = {} } = {}) {
-  if (!IA_SERVICO_URL) return null;
-  try {
-    const d = await pedirServicoIA("/ferramenta", { nome, args, contexto }, timeoutMs);
-    return d?.resultado ?? null;
-  } catch (e) {
-    dlog(`ferramenta direta falhou: ${e?.message ?? e}`);
-    return null;
-  }
 }
 
 // (pedeImagemGerada é usada também pelo roteador em decidirTipo/precisaFerramenta)
@@ -587,248 +389,6 @@ async function chamarServicoIA(messages, { modelo = null, idioma = "pt" } = {}, 
 export { subirAnexo } from "../core/anexos.js";
 import { subirAnexo } from "../core/anexos.js";
 
-// A "continuação" que na verdade é a resposta de novo, com outras palavras
-// (1 out 2026: "A beleza da dualidade reside…" seguido de "O conceito de
-// dualidade é fundamentalmente complexo…", dois começos na mesma mensagem).
-// Sinal: o texto já tinha terminado uma frase, o pedaço abre outra do zero, e
-// o começo dos dois fala das mesmas coisas.
-const PALAVRA_VAZIA = new Set("sobre entre pelas pelos porque quando onde como mais menos muito muita ainda apenas sempre nunca também essa esse isso esta este isto aquele aquela outra outro outras outros todos todas cada sendo seria serão estão estava tinha temos podem pode fazer feito their there which about would could should these those".split(" "));
-const radicais = (t) => new Set(String(t).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-  .split(/[^a-z]+/).filter((w) => w.length >= 5 && !PALAVRA_VAZIA.has(w)).map((w) => w.slice(0, 6)));
-export function pareceRecomeco(a, b) {
-  const A = String(a ?? "").trim(), B = String(b ?? "").trim();
-  if (A.length < 120 || B.length < 120) return false;
-  if (!/[.!?…]["')\]]?$/.test(A) || !/^[A-ZÁÉÍÓÚÂÊÔÃÕÇ]/.test(B)) return false;
-  const ra = radicais(A.slice(0, 300)), rb = radicais(B.slice(0, 300));
-  let comuns = 0;
-  for (const w of rb) if (ra.has(w)) comuns++;
-  return comuns >= 4 && comuns / Math.min(ra.size, rb.size) >= 0.25;
-}
-
-export function costurar(texto, pedaco) {
-  const a = String(texto ?? "");
-  let b = String(pedaco ?? "");
-  if (!b.trim()) return a;
-  if (pareceRecomeco(a, b)) return null;   // recomeçou a resposta: fica a primeira
-
-  // 1. Repetição em bloco: o começo do pedaço (80 chars) já aparece no texto?
-  const inicio = b.trim().slice(0, 80);
-  if (inicio.length >= 40 && a.includes(inicio)) {
-    // Descarta tudo até o fim do trecho repetido; o que sobrar é novo.
-    const pos = a.indexOf(inicio);
-    const jaDito = a.slice(pos);
-    const novo = b.trim().startsWith(jaDito.trim().slice(0, Math.min(jaDito.length, b.length)))
-      ? b.trim().slice(jaDito.trim().length).trim()
-      : "";
-    if (!novo) return null;
-    b = novo;
-  }
-
-  // 2. Sobreposição parcial: o maior sufixo de `a` que é prefixo de `b`.
-  const max = Math.min(300, a.length, b.length);
-  for (let n = max; n >= 12; n--) {
-    if (a.endsWith(b.slice(0, n))) { b = b.slice(n); break; }
-  }
-  if (!b.trim()) return null;
-
-  let base = a;
-  const ultimoPonto = Math.max(a.lastIndexOf(". "), a.lastIndexOf(".\n"), a.lastIndexOf("!"), a.lastIndexOf("?"), a.lastIndexOf(":\n"));
-  const pendurado = a.slice(ultimoPonto + 1);
-  if (ultimoPonto > 0 && pendurado.trim().length > 0 && pendurado.trim().length < 60
-      && !/[.!?:]\s*$/.test(a) && /^[A-ZÁÉÍÓÚÂÊÔÃÕÇ]/.test(b.trim())) {
-    base = a.slice(0, ultimoPonto + 1);
-    b = b.trim();
-  }
-
-  // 4. Separador: letra colada em letra vira "vocêMeu".
-  const fimA = base.slice(-1), comecoB = b[0];
-  const precisaEspaco = /[\p{L}\p{N},;:]/u.test(fimA) && /[\p{L}\p{N}]/u.test(comecoB);
-  const precisaQuebra = /[.!?]/.test(fimA) && /^[A-ZÁÉÍÓÚÂÊÔÃÕÇ]/.test(b) && !base.endsWith("\n");
-  return base + (precisaQuebra ? "\n\n" : precisaEspaco ? " " : "") + b;
-}
-
-export function normalizarMensagens(messages) {
-  const lista = Array.isArray(messages) ? messages : [];
-  const sistemas = [], resto = [];
-  for (const m of lista) {
-    if (m?.role === "system") sistemas.push(String(m.content ?? "").trim());
-    else resto.push(m);
-  }
-  const juntos = sistemas.filter(Boolean).join("\n\n");
-  return juntos ? [{ role: "system", content: juntos }, ...resto] : resto;
-}
-
-const CONTEXTO_MODELO = Number(process.env.LLM_CTX || 8192);
-const CHARS_POR_TOKEN = 3.5;   // português com acentos fica perto disso
-
-export function caberNoContexto(messages, { ctxTokens = CONTEXTO_MODELO, reservarSaida = 0 } = {}) {
-  const teto = Math.max(1000, (ctxTokens - reservarSaida - 200)) * CHARS_POR_TOKEN;
-  const tamanho = (ms) => ms.reduce((t, m) => t + String(m?.content ?? "").length + 8, 0);
-  if (tamanho(messages) <= teto) return messages;
-
-  const sistema = messages.filter((m) => m.role === "system");
-  const resto = messages.filter((m) => m.role !== "system");
-  const ultima = resto.length ? [resto[resto.length - 1]] : [];
-  let meio = resto.slice(0, -1);
-
-  // Descarta o histórico do mais antigo para o mais novo.
-  while (meio.length && tamanho([...sistema, ...meio, ...ultima]) > teto) meio.shift();
-  let saida = [...sistema, ...meio, ...ultima];
-
-  if (tamanho(saida) > teto && sistema.length) {
-    const sobra = teto - tamanho([...meio, ...ultima]);
-    const s0 = String(sistema[0].content ?? "");
-    if (sobra > 800 && s0.length > sobra) {
-      const metade = Math.floor((sobra - 60) / 2);
-      saida = [{ role: "system", content: `${s0.slice(0, metade)}\n[…]\n${s0.slice(-metade)}` }, ...meio, ...ultima];
-    }
-  }
-  console.warn(`[CHAT] prompt de ${Math.round(tamanho(messages) / CHARS_POR_TOKEN)} tokens não cabia em ${ctxTokens}; enviando ${Math.round(tamanho(saida) / CHARS_POR_TOKEN)}`);
-  return saida;
-}
-
-// ─── Ritmo da IA (12 out 2026) ──────────────────────────────────────────────
-// "Ela empaca": 40–80 s por resposta e "HTTP 429 concurrency_limit" do
-// llama-swap. Com a Judy em muitos servidores, cada pessoa que conversa
-// dispara a extração de memória (JSON, até 2400 tokens), a moderação por IA
-// avalia mensagens, o comentário espontâneo e o verificador rodam — tudo
-// COM raciocínio e tudo ao mesmo tempo. Os pedidos se empilhavam no
-// llama-server, a resposta do chat dividia a GPU com eles e, passando de 10
-// pedidos simultâneos, o llama-swap recusava com 429.
-//
-// Agora todo pedido do bot passa por uma fila só:
-//   • no máximo LLM_PARALELO (padrão 2) pedidos no llama-server de cada vez;
-//   • chat, moderação e RSS furam a fila; memória, comentário espontâneo,
-//     verificador e o "vale responder?" são "de fundo" e só rodam com o
-//     llama-server VAZIO;
-//   • fila de fundo cheia (LLM_FILA_FUNDO, padrão 6) → a tarefa é descartada
-//     (perder uma extração de memória é melhor que atrasar todas as respostas);
-//   • decisão em JSON e tarefa de fundo vão SEM raciocínio (PENSAR_DECISOES=1
-//     devolve); 429 que escapar é repetido com espera, não vira "Falha no chat".
-// (RSS fica fora: é pedido por comando ou tem hora marcada, e não pode ser descartado)
-const FUNDO = new Set(["memoria", "comentario-espontaneo", "verificador", "vale-responder"]);
-const LLM_PARALELO = () => Math.max(1, Number(process.env.LLM_PARALELO || 2));
-const LLM_FILA_FUNDO = () => Math.max(0, Number(process.env.LLM_FILA_FUNDO ?? 6));
-const fila429 = { emVoo: 0, chat: [], fundo: [], pausaFundo: 0 };
-// Enquanto uma imagem é desenhada, o LLM foi descarregado da GPU para dar
-// lugar ao sd.cpp: uma tarefa de fundo (memória, comentário) recarregaria o
-// modelo no meio do desenho e a memória faltaria de novo. Elas esperam.
-export function pausarFundo() { fila429.pausaFundo++; }
-export function retomarFundo() { fila429.pausaFundo = Math.max(0, fila429.pausaFundo - 1); proximaVaga(); }
-export function estadoFilaLLM() { return { emVoo: fila429.emVoo, chat: fila429.chat.length, fundo: fila429.fundo.length }; }
-function proximaVaga() {
-  while (fila429.emVoo < LLM_PARALELO() && fila429.chat.length) { fila429.emVoo++; fila429.chat.shift()(); }
-  // fundo só com o llama-server vazio: não divide a GPU com uma resposta
-  if (fila429.emVoo === 0 && !fila429.pausaFundo && !fila429.chat.length && fila429.fundo.length) { fila429.emVoo++; fila429.fundo.shift()(); }
-}
-async function pegarVaga(deFundo, etiqueta) {
-  if (!deFundo && fila429.emVoo < LLM_PARALELO() && !fila429.chat.length) { fila429.emVoo++; return; }
-  if (deFundo && fila429.emVoo === 0 && !fila429.pausaFundo && !fila429.chat.length && !fila429.fundo.length) { fila429.emVoo++; return; }
-  if (deFundo && fila429.fundo.length >= LLM_FILA_FUNDO()) {
-    const e = new Error(`fila da IA cheia — ${etiqueta} (tarefa de fundo) descartada`);
-    e.filaCheia = true;
-    throw e;
-  }
-  await new Promise((ok) => (deFundo ? fila429.fundo : fila429.chat).push(ok));
-}
-function soltarVaga() { fila429.emVoo = Math.max(0, fila429.emVoo - 1); proximaVaga(); }
-
-// `pensar`: true/false força; null decide — decisão em JSON e tarefa de fundo
-// vão sem raciocínio, o resto deixa o servidor decidir (ligado). O servidor é
-// sempre o llama.cpp local (aceita `chat_template_kwargs` por pedido).
-// `fundo`: força a prioridade (por padrão vem da etiqueta, ver FUNDO).
-export async function llmChat(messages, opcoes = {}) {
-  const etiqueta = opcoes.etiqueta ?? "resposta";
-  const deFundo = opcoes.fundo ?? FUNDO.has(etiqueta);
-  await pegarVaga(deFundo, etiqueta);
-  try {
-    return await llmChatDireto(messages, { ...opcoes, etiqueta, deFundo });
-  } finally {
-    soltarVaga();
-  }
-}
-
-async function llmChatDireto(messages, { json = false, maxTokens = MAX_TOKENS, jsonTokens = null, etiqueta = "resposta", modelo = null, ctx = null, manter = null, continuarMax = null, pensar = null, deFundo = false } = {}) {
-  messages = normalizarMensagens(messages);
-  if (pensar === null && (json || deFundo) && !/^(1|true|sim|on)$/i.test(process.env.PENSAR_DECISOES ?? "")) pensar = false;
-  const modeloUsado = modelo || LLM_MODEL_PADRAO;
-  const limiteTokens = json ? (jsonTokens ?? DECISAO_TOKENS) : maxTokens;
-
-  const body = {
-    model: modeloUsado,
-    messages,
-    stream: false,
-    max_tokens: limiteTokens,
-    temperature: json ? 0 : 0.6,   // decisão determinística; conversa criativa
-  };
-  if (json) body.response_format = { type: "json_object" };
-  if (pensar === false) body.chat_template_kwargs = { enable_thinking: false };
-
-  const entradaChars = messages.reduce((n, m) => n + (m.content?.length || 0), 0);
-  console.log(`[CHAT][llm] → ${etiqueta} | modelo=${modeloUsado} max_tokens=${limiteTokens} entrada≈${entradaChars} chars${json ? " (json)" : ""}${body.chat_template_kwargs ? " (sem raciocínio)" : ""}`);
-
-  const t0 = Date.now();
-  let data;
-  try {
-    data = await pedir(`${LLM_URL}/v1/chat/completions`, body);
-  } catch (e) {
-    if (!e?.contextoEstourado) throw e;
-    const teto = e.nCtx || Math.floor(CONTEXTO_MODELO / 2);
-    console.warn(`[CHAT] contexto real do modelo é ${teto} tokens — reenviando cortado`);
-    body.messages = caberNoContexto(messages, { ctxTokens: teto, reservarSaida: limiteTokens });
-    data = await pedir(`${LLM_URL}/v1/chat/completions`, body);
-  }
-  let escolha = data?.choices?.[0] ?? {};
-  let conteudo = limparRaciocinio(escolha?.message?.content ?? "", { aparar: false });
-  let motivo = escolha?.finish_reason ?? "?";
-  if (escolha?.message?.reasoning_content) {
-    dlog(`raciocínio (${escolha.message.reasoning_content.length} chars, não vai para o chat): ${escolha.message.reasoning_content.slice(0, 300)}`);
-  }
-
-  if (!conteudo.trim() && motivo === "length") {
-    console.warn(`[CHAT][llm] ⚠️ ${etiqueta}: o modelo consumiu ${limiteTokens} tokens raciocinando e não respondeu — refazendo com o dobro`);
-    data = await pedir(`${LLM_URL}/v1/chat/completions`, { ...body, max_tokens: limiteTokens * 2 });
-    escolha = data?.choices?.[0] ?? {};
-    conteudo = limparRaciocinio(escolha?.message?.content ?? "", { aparar: false });
-    motivo = escolha?.finish_reason ?? "?";
-  }
-
-  let emendas = 0;
-  const tetoEmendas = continuarMax ?? CONTINUAR_MAX;
-  while (!json && motivo === "length" && emendas < tetoEmendas) {
-    emendas++;
-    console.log(`[CHAT][llm] ✂️ cortada no limite — continuando sozinha (${emendas}/${CONTINUAR_MAX})`);
-    data = await pedir(`${LLM_URL}/v1/chat/completions`, {
-      ...body,
-      messages: [
-        ...messages,
-        { role: "assistant", content: conteudo },
-        { role: "user", content: "Continue EXATAMENTE de onde parou — a partir da última palavra, no mesmo idioma do texto acima. NÃO recomece a resposta, NÃO repita parágrafos já escritos, NÃO resuma, NÃO cumprimente, NÃO mude de idioma. / Continue EXACTLY from the last word, in the same language as the text above. Do NOT restart, repeat, summarise, greet or switch language." },
-      ],
-    });
-    escolha = data?.choices?.[0] ?? {};
-    const pedaco = limparRaciocinio(escolha?.message?.content ?? "", { aparar: false });
-    motivo = escolha?.finish_reason ?? "?";
-    const costurado = costurar(conteudo, pedaco);
-    if (costurado === null) {
-      console.log(`[CHAT][llm] emenda ${emendas} veio repetida — parando aqui`);
-      motivo = "stop";
-      break;
-    }
-    conteudo = costurado;
-  }
-
-  const dur = ((Date.now() - t0) / 1000).toFixed(1);
-  llmChat._cortou = motivo === "length";   // ainda cortada DEPOIS das emendas
-
-  const uso = data?.usage ?? {};
-  console.log(`[CHAT][llm] ← ${etiqueta} | fim=${motivo}${emendas ? ` (+${emendas} emenda(s))` : ""} tokens_prompt=${uso.prompt_tokens ?? "?"} tokens_gerados=${uso.completion_tokens ?? "?"} saída=${conteudo.length} chars tempo=${dur}s`);
-  if (llmChat._cortou)
-    console.warn(`[CHAT][llm] ${etiqueta}: ainda cortada após ${emendas} emenda(s) (max_tokens=${limiteTokens}) — aumente CHAT_MAX_TOKENS ou CONTINUAR_MAX.`);
-
-  return conteudo.trim();
-}
-
 export const PEDIDO_DE_BUSCA = new RegExp([
   // (a) verbo de busca + onde buscar: "pesquisa NA INTERNET", "olha no google"
   "(pesquis\\w*|busqu\\w*|busca\\w*|procur\\w*|d[áa] uma olhada|d[êe] uma olhada|olha\\w*|veja|consult\\w*)[^.?!]{0,20}\\b(na internet|na web|no google|online|no searx|na rede)\\b",
@@ -847,29 +407,6 @@ const PISTAS_BUSCA = /(?:\b(?:hoje|ontem|agora|atual|atualmente|recente|not[ií]
 
 export const PEDIDO_EXPLICITO = /\b(pesquis(a|ar|e|ue)|busca(r|e)?|procur(a|ar|e)|d[aá] uma olhada na (web|internet)|consult(a|ar|e) a (web|internet)|olha na (web|internet)|search|searx(ng)?|googl(a|e|ar)|(usa|use|utiliza|utilize|roda|rode)r?\s+(a\s+|o\s+)?(tool|ferramenta)(\s+de\s+busca)?)\b/i;
 
-let _comandosVerif = null;
-function comandosParaVerificar() {
-  if (_comandosVerif) return _comandosVerif;
-  const prefixo = process.env.PREFIXO || "&";
-  const bases = new Set();
-  try {
-    for (const k of Object.keys(construirDetalhes(prefixo, "pt") ?? {})) bases.add(k.toLowerCase());
-  } catch (e) { dlog(`comandosParaVerificar: help indisponível (${e?.message})`); }
-  const subs = {};
-  try {
-    for (const [cmd, mapa] of Object.entries(SUBCOMANDOS_REAIS ?? {})) {
-      if (!mapa || typeof mapa !== "object") continue;
-      bases.add(cmd.toLowerCase());
-      // chaves = apelidos EN, valores = canônicos PT; os dois são digitáveis.
-      subs[cmd.toLowerCase()] = new Set(
-        [...Object.keys(mapa), ...Object.values(mapa)].map((x) => String(x).toLowerCase()),
-      );
-    }
-  } catch (e) { dlog(`comandosParaVerificar: aliases indisponível (${e?.message})`); }
-  _comandosVerif = bases.size ? { bases, subs, prefixo } : null;
-  return _comandosVerif;
-}
-
 // Busca SEMPRE (12 out 2026, pedido de Ghieh): toda mensagem com assunto vai
 // ao buscador, em silêncio; os links só aparecem quando a pessoa PEDIU a busca
 // (as duas regex acima). `BUSCA_SEMPRE=0` volta ao jeito antigo (busca só com
@@ -877,10 +414,6 @@ function comandosParaVerificar() {
 // quando ninguém pediu.
 export function buscaSempre() {
   return !/^(0|false|nao|não|off|no)$/i.test(String(process.env.BUSCA_SEMPRE ?? "1").trim());
-}
-export function pediuBusca(texto) {
-  const t = String(texto ?? "");
-  return PEDIDO_EXPLICITO.test(t) || PEDIDO_DE_BUSCA.test(t);
 }
 
 // → { buscar, query, explicito?, links, fundo }
@@ -934,7 +467,7 @@ export async function decidirBusca(pergunta, { nomes = [] } = {}) {
   try {
     const raw = await llmChat(
       [{ role: "system", content: sys }, { role: "user", content: pergunta }],
-      { json: true, modelo: LLM_MODEL_DECISAO, etiqueta: "decidir-busca" },
+      { json: true, modelo: modeloConversa(), etiqueta: "decidir-busca" },
     );
     const obj = JSON.parse(raw);
     // o juiz decidiu buscar, mas ninguém PEDIU: busca silenciosa, sem links — e sem
@@ -985,19 +518,15 @@ export function parecePortugues(texto) {
 async function responder(pergunta, resultados, autor, userId, citada, serverId, canalId, lang = "pt", modeloForcado = null, local = null, fichaTxt = "") {
   const hoje = hojeExtenso();
 
-  // memória do usuário (global): o que a IA já sabe sobre ele
+  // memória curta do usuário: o que ele já perguntou NESTE servidor (31 out 2026, P2:
+  // era global — o "perguntou sobre: …" de um servidor aparecia no prompt de outro)
   let memoriaTxt = "";
   const consentiu = !!userId && db.temMemoriaConsentida(userId);   // sem consentimento, a Judy não lembra de nada
   if (consentiu) {
     try {
-      const mem = db.getMemoria(userId);
-      if (mem.nome || mem.fatos?.length) {
-        const partes = [];
-        if (mem.nome) partes.push(`nome: ${mem.nome}`);
-        if (mem.fatos?.length) partes.push(`fatos já conhecidos: ${mem.fatos.join("; ")}`);
-        memoriaTxt = ` Você já conversou com esta pessoa antes. Memória (${partes.join(" | ")}). Use isso naturalmente, sem repetir de forma robótica.`;
-      }
-    } catch {}
+      const fatos = db.memoriaDoServidor(userId, serverId);
+      if (fatos.length) memoriaTxt = ` Você já conversou com esta pessoa antes. Memória (fatos já conhecidos: ${fatos.join("; ")}). Use isso naturalmente, sem repetir de forma robótica.`;
+    } catch (e) { registrarErro("CHAT][memoria", e); }
   }
 
   const meuUsuario = local?.meuUsuario ?? null;
@@ -1178,13 +707,13 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
     dlog(`imagem anexada → forçando caminho com ferramentas (ver_imagem)`);
     tipo = "ferramenta";
     motivo = "imagem";
-    modeloEscolhido = LLM_MODEL_LOGICA;
+    modeloEscolhido = modeloConversa();
   }
   if (tipo !== "ferramenta" && seguimentoDeFerramenta(canalId, pergunta)) {
     dlog(`seguimento da conversa anterior (que usou ferramenta) → mantendo o caminho com ferramentas`);
     tipo = "ferramenta";
     motivo = "seguimento";
-    modeloEscolhido = LLM_MODEL_LOGICA;
+    modeloEscolhido = modeloConversa();
   }
   lembrarRoteamento(canalId, tipo);
   dlog(`roteamento: tipo=${tipo}${motivo ? `/${motivo}` : ""} → modelo=${modeloEscolhido}`);
@@ -1361,7 +890,7 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
   // o fato consumado e escreve a legenda.
   // (21 out 2026) o servidor desligou a geração de imagem: nada de gerador; o modelo
   // só diz, na língua da pessoa, que aqui não desenha
-  if (tipo === "ferramenta" && pedeImagemGerada(pergunta) && !imagemLigadaAqui(serverId)) {
+  if (tipo === "ferramenta" && pedeImagemGerada(pergunta) && !gating.imagemAqui(serverId)) {
     dlog("pedido de imagem → desligada neste servidor");
     responder._semFerramentas = true;
     messages.push({ role: "system", content: lang === "en"
@@ -1427,10 +956,10 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
   responder._modelo = modeloEscolhido;
   responder._evidencia = "";
   const precisaDoServico = tipo === "ferramenta";
-  if (IA_SERVICO_URL && precisaDoServico) {
+  if (iaServicoUrl() && precisaDoServico) {
     try {
       const r = await chamarServicoIA(messages, { modelo: modeloEscolhido, idioma: lang },
-        { ferramentas: !responder._semFerramentas, semImagem: !imagemLigadaAqui(serverId), serverId });
+        { ferramentas: !responder._semFerramentas, semImagem: !gating.imagemAqui(serverId), serverId });
       responder._semFerramentas = false;
       // O serviço faz a própria continuação; o que volta é inteiro.
       if (r) {
@@ -1442,7 +971,7 @@ async function responder(pergunta, resultados, autor, userId, citada, serverId, 
     } catch (e) {
       dlog(`serviço IA falhou (${e.message}) — caindo para o LLM direto`);
     }
-  } else if (IA_SERVICO_URL) {
+  } else if (iaServicoUrl()) {
     dlog(`sem ferramenta (tipo=${tipo}) → LLM direto, sem passar pelo serviço de IA`);
   }
   // Teto único: o especial era o que pedia um teto maior, e ele saiu.
@@ -1770,12 +1299,12 @@ export function precisaPensar({ tipo = "conversa", pergunta = "", citada = null 
 
 function escolherModelo(pergunta, citada) {
   const alvo = `${pergunta || ""} ${citada?.conteudo || ""}`;
-  if (ehAritmetica(pergunta)) return { modelo: LLM_MODEL_LOGICA, tipo: "ferramenta", motivo: "calculo" };
-  if (precisaFerramenta(alvo)) return { modelo: LLM_MODEL_LOGICA, tipo: "ferramenta", motivo: "codigo" };
-  if (ehProgramacao(alvo)) return { modelo: LLM_MODEL_CODIGO, tipo: "código" };
-  if (ehLogica(alvo))      return { modelo: LLM_MODEL_LOGICA, tipo: "lógica" };
-  if (ehConversaComplexa(alvo)) return { modelo: LLM_MODEL_LEVE, tipo: "conversa" };
-  return { modelo: LLM_MODEL_LEVE, tipo: "conversa" };
+  if (ehAritmetica(pergunta)) return { modelo: modeloConversa(), tipo: "ferramenta", motivo: "calculo" };
+  if (precisaFerramenta(alvo)) return { modelo: modeloConversa(), tipo: "ferramenta", motivo: "codigo" };
+  if (ehProgramacao(alvo)) return { modelo: modeloConversa(), tipo: "código" };
+  if (ehLogica(alvo))      return { modelo: modeloConversa(), tipo: "lógica" };
+  if (ehConversaComplexa(alvo)) return { modelo: modeloConversa(), tipo: "conversa" };
+  return { modelo: modeloConversa(), tipo: "conversa" };
 }
 
 export function ehAritmetica(texto) {
@@ -1937,22 +1466,39 @@ async function lerMensagemCitada(message) {
   } catch { return null; }
 }
 
+// Uma refeita (P2): a pergunta, a fala dela que deu errado (quando a ordem a cita) e a
+// ordem do que corrigir. Devolve o texto novo, já limpo, se `aceitar` aprovar; senão
+// null (e quem chamou fica com a resposta que tinha). `chamar`: o cliente do modelo.
+export async function refazer({ pergunta, anterior = null, ordem, aceitar = (t) => !!t, modelo = null, rotulo = "", chamar = llmChat } = {}) {
+  dlog(`refazendo (${rotulo})`);
+  try {
+    const msgs = [{ role: "user", content: String(pergunta ?? "").slice(0, 2000) }];
+    if (anterior) msgs.push({ role: "assistant", content: String(anterior) });
+    msgs.push({ role: "system", content: ordem });
+    const limpa = limpar(await chamar(msgs, { maxTokens: MAX_TOKENS, modelo: modelo ?? modeloConversa(), etiqueta: `refazer:${rotulo}` }));
+    return limpa && aceitar(limpa) ? limpa : null;
+  } catch (e) {
+    dlog(`refazer ${rotulo} falhou (${e?.message ?? e})`);
+    return null;
+  }
+}
+
 // A porta da conversa (21 out 2026): o servidor quer o chat? a pessoa quer falar com a
 // Judy? passou no anti-abuso? Só então a conversa de verdade (conversarDeVez). Uma
 // conversa por pessoa de cada vez — a marca sai no `finally`, aconteça o que acontecer.
 const avisoNaoFalar = new MapaCurto({ ttlMs: CACHE_MS, max: 5000 });   // userId → t do último aviso do "você pediu silêncio"
 export async function conversar(message, pergunta, ctx, opcoes = {}) {
   const { serverId, sendEmbed, COR } = ctx;
-  if (!servidorPermitido(serverId)) return conversarDeVez(message, pergunta, ctx, opcoes);   // ela explica por quê
+  if (!gating.conversaAqui(serverId, ctx.config)) return;   // quem chama já confere (menção, atalho, chat livre)
   const userId = message.authorId;
-  if (naoFalarCom(userId)) {
+  if (!gating.falaCom(userId)) {
     // só quem a chamou pelo comando ouve o porquê (e uma vez por minuto); o resto, silêncio
     if (!opcoes.livre && Date.now() - (avisoNaoFalar.get(userId) ?? 0) > 60_000) {
       avisoNaoFalar.set(userId, Date.now());
       await sendEmbed(message.channel, tr(ctx,
-        { description: `Você pediu para eu não conversar com você. Para voltar: \`${citarInterno("chat.voltar", ctx.PREFIXO)}\`.`, colour: COR.info },
-        { description: `You asked me not to chat with you. To undo it: \`${citarInterno("chat.voltar", ctx.PREFIXO)}\`.`, colour: COR.info },
-        { description: `Me pediste que no conversara contigo. Para volver: \`${citar("chat.voltar", "es", ctx.PREFIXO)}\`.`, colour: COR.info }));
+        { description: `🤐 Você pediu para eu não conversar com você (\`${citar("privacidade.chat.voltar", "pt", ctx.PREFIXO)}\`).`, colour: COR.info },
+        { description: `🤐 You asked me not to chat with you (\`${citar("privacidade.chat.voltar", "en", ctx.PREFIXO)}\`).`, colour: COR.info },
+        { description: `🤐 Me pediste que no conversara contigo (\`${citar("privacidade.chat.voltar", "es", ctx.PREFIXO)}\`).`, colour: COR.info }));
     }
     return;
   }
@@ -1993,54 +1539,15 @@ async function conversarDeVez(message, pergunta, ctx, opcoes = {}) {
   const esTela = idiomaDe(ctx) === "es";
   const X = (pt, eng, es) => (esTela ? es : en ? eng : pt);
 
-  // O servidor escolheu deixar o chat desligado (o padrão): diz como ligar
-  if (iaDisponivel(serverId) && !chatLigadoAqui(serverId)) {
-    return sendEmbed(message.channel, tr(ctx, {
-      title: "💤 Chat desligado aqui",
-      description: `O chat com a Judy está desligado neste servidor. Quem tem **ManagePermissions** liga com \`${citarInterno("chat.on", ctx.PREFIXO)}\`.`,
-      colour: COR.info,
-    }, {
-      title: "💤 Chat off here",
-      description: `Chat with Judy is off on this server. Anyone with **ManagePermissions** can turn it on with \`${citarInterno("chat.on", ctx.PREFIXO)}\`.`,
-      colour: COR.info,
-    }, {
-      title: "💤 Chat desactivado aquí",
-      description: `El chat con Judy está desactivado en este servidor. Quien tenga **ManagePermissions** lo activa con \`${citar("chat.on", "es", ctx.PREFIXO)}\`.`,
-      colour: COR.info,
-    }));
-  }
-  // Limitação: só funciona no(s) servidor(es) permitido(s)
-  if (!servidorPermitido(serverId)) {
-    console.log(`[CHAT] bloqueado no servidor ${serverId ?? "?"} (não permitido)`);
-    return sendEmbed(message.channel, tr(ctx, {
-      title: "🚫 Indisponível aqui",
-      description: "O chat com IA não está habilitado neste servidor.",
-      colour: COR.aviso,
-    }, {
-      title: "🚫 Unavailable here",
-      description: "The AI chat isn't enabled on this server.",
-      colour: COR.aviso,
-    }, {
-      title: "🚫 No disponible aquí",
-      description: "El chat con IA no está habilitado en este servidor.",
-      colour: COR.aviso,
-    }));
-  }
+  // A conversa desligada aqui: quem chama já confere; por garantia, silêncio (como a menção)
+  if (!gating.conversaAqui(serverId, ctx.config)) return;
 
   pergunta = (pergunta || "").trim();
 
   // Mensagem citada (reply): a Judy passa a "enxergar" o que foi respondido.
   const citada = await lerMensagemCitada(message);
 
-  if (!pergunta && !citada) {
-    return sendEmbed(message.channel, tr(ctx,
-      { title: "💬 Chat",
-        description: "Escreva algo depois do comando. Ex.: `" + citarInterno("chat") + " me explique o que é RAID`.", colour: COR.info },
-      { title: "💬 Chat",
-        description: "Write something after the command. E.g.: `" + citarInterno("chat") + " explain what RAID is`.", colour: COR.info },
-      { title: "💬 Chat",
-        description: "Escribe algo después del comando. Ej.: `" + citar("chat", "es") + " explícame qué es RAID`.", colour: COR.info }));
-  }
+  if (!pergunta && !citada) return;   // só a menção, sem texto nem citação: nada a responder
   // Só citou e mencionou, sem texto: comenta a mensagem citada.
   if (!pergunta && citada) pergunta = en ? "Comment on the quoted message above." : "Comente a mensagem citada acima.";
 
@@ -2190,7 +1697,7 @@ async function conversarDeVez(message, pergunta, ctx, opcoes = {}) {
     // (31 out 2026, P1, R10) Na tela, uma frase curta — o endereço do servidor de
     // modelos, a causa técnica e os nomes do .env vão só para o log (o dono os vê lá
     // e no `&chat status`).
-    console.error(`[CHAT] LLM indisponível — causa=${disp.causa} codigo=${disp.codigo ?? "-"} motivo=${disp.motivo} url=${LLM_URL}`);
+    console.error(`[CHAT] LLM indisponível — causa=${disp.causa} codigo=${disp.codigo ?? "-"} motivo=${disp.motivo} url=${llmUrl()}`);
     const carregando = disp.causa === "recusou" || disp.causa === "lento";
     return sendEmbed(message.channel, tr(ctx,
       { title: "💤 IA indisponível", description: carregando ? "A IA está carregando ou ocupada agora — tente de novo daqui a pouco." : "A IA está fora do ar agora — tente de novo mais tarde.", colour: COR.aviso },
@@ -2249,7 +1756,7 @@ async function conversarDeVez(message, pergunta, ctx, opcoes = {}) {
         { role: "user", content: en
           ? "Continue EXACTLY from the last word above. Do NOT restart, repeat or summarise what is already written; only the missing rest, in the same language."
           : "Continue EXATAMENTE a partir da última palavra acima. NÃO recomece, NÃO repita nem resuma o que já está escrito; só o resto que falta, no mesmo idioma." },
-      ], { maxTokens: MAX_TOKENS, modelo: pendente.modelo ?? LLM_MODEL_LEVE });
+      ], { maxTokens: MAX_TOKENS, modelo: pendente.modelo ?? modeloConversa() });
       let resto = limpar(bruto);
       // Se a "continuação" repetiu o começo, sobra só o que é novo.
       const costurado = costurar(pendente.texto, resto);
@@ -2317,7 +1824,7 @@ async function conversarDeVez(message, pergunta, ctx, opcoes = {}) {
           // consulta (a limpeza do código basta), sem ler páginas (os trechos
           // do buscador bastam para não errar fato) e com tempo curto — a busca
           // silenciosa não pode custar mais que uns 2 s.
-          chamarJson: decisao.fundo ? null : (msgs) => llmChat(msgs, { json: true, modelo: LLM_MODEL_DECISAO, etiqueta: "consultas-busca" }),
+          chamarJson: decisao.fundo ? null : (msgs) => llmChat(msgs, { json: true, modelo: modeloConversa(), etiqueta: "consultas-busca" }),
           hoje: hojeExtenso(), log: dlog,
           notaMinima: decisao.fundo ? 2 : 1,   // de fundo, só o que fala mesmo do assunto
           lerPaginas: decisao.fundo ? Number(process.env.BUSCA_FUNDO_LER_PAGINAS ?? 0) : undefined,
@@ -2335,7 +1842,7 @@ async function conversarDeVez(message, pergunta, ctx, opcoes = {}) {
       catch (e) {
         const msg = e?.message ?? String(e);
         const rede = /ENOTFOUND|ECONNREFUSED|EAI_AGAIN|abort|timeout|fetch failed/i.test(msg);
-        console.error("[CHAT][busca]", rede ? `SearXNG inalcançável em ${SEARXNG_URL}: ${msg}` : msg);
+        console.error("[CHAT][busca]", rede ? `SearXNG inalcançável em ${process.env.SEARXNG_URL || "?"}: ${msg}` : msg);
         dlog(`busca FALHOU: ${msg}${rede ? " (rede — confira SEARXNG_URL no stack do bot)" : ""}`);
       }
     }
@@ -2364,7 +1871,7 @@ async function conversarDeVez(message, pergunta, ctx, opcoes = {}) {
       // o costurar já corta; fora dela, só registra — cortar parágrafos sem
       // ver o caso real arrisca apagar resposta boa.
       { const ps = String(resposta ?? "").split(/\n{2,}/); for (let i = 1; i < ps.length; i++) if (pareceRecomeco(ps.slice(0, i).join("\n\n"), ps[i])) { console.warn(`[CHAT] resposta com dois começos (parágrafo ${i + 1}) — modelo ${responder._modelo ?? "?"}`); break; } }
-      var evidenciaVerif = String(responder._evidencia || "");
+      var evidencia = String(responder._evidencia || "");
     } finally {
       clearInterval(animacao);   // para a animação aconteça o que acontecer
     }
@@ -2372,12 +1879,10 @@ async function conversarDeVez(message, pergunta, ctx, opcoes = {}) {
 
     if (userId && db.temMemoriaConsentida(userId)) {
       try {
-        const mem = db.getMemoria(userId);
-        const fatos = mem.fatos || [];
-        // registra um fato leve: o tema da pergunta (primeiras palavras)
+        // registra um fato leve: o tema da pergunta (primeiras palavras), marcado
+        // com o servidor de origem (só ele o vê no prompt)
         const tema = pergunta.slice(0, 80).replace(/\n/g, " ");
-        fatos.push(`perguntou sobre: ${tema}`);
-        db.setMemoria(userId, { nome: autor || mem.nome, fatos });
+        db.lembrarNoServidor(userId, serverId, { nome: autor || null, fato: `perguntou sobre: ${tema}` });
       } catch (e) { dlog(`memória não atualizada: ${e.message}`); }
     }
 
@@ -2402,74 +1907,48 @@ async function conversarDeVez(message, pergunta, ctx, opcoes = {}) {
       if (convertido !== resposta) { dlog("LaTeX convertido para texto legível"); resposta = convertido; }
     }
 
-    // Pergunta pedia desenvolvimento e veio uma frase raquítica? Refaz uma vez.
+    // Os desvios que pedem UMA refeita (P2: eram 5 cópias do mesmo bloco; agora o
+    // `refazer` único). Cada um: a condição, a ordem e quando a refeita serve.
+    const modeloRefeita = responder._modelo ?? modeloConversa();
     const MIN_DESENVOLVIDA = Number(process.env.CHAT_MIN_DESENVOLVIDA || 140);
     if (resposta && resposta.length < MIN_DESENVOLVIDA && pedeDesenvolvimento(pergunta)) {
       console.warn(`[CHAT] ⚠️ pergunta pedia desenvolvimento, resposta veio com ${resposta.length} chars — refazendo`);
-      dlog("resposta raquítica p/ pergunta aberta → refazendo");
-      try {
-        const refeita = await llmChat([
-          { role: "user", content: pergunta.slice(0, 2000) },  // `messages` vive dentro do responder — aqui o refazer é autocontido: pergunta + resposta + ordem
-          { role: "assistant", content: resposta },
-          { role: "system", content: lang === "en"
-            ? "Your reply above is too thin for what was asked. Rewrite it with real substance: 4-8 sentences or a short list of CONCRETE items (names, numbers, steps). Do not restate the question and do not philosophise about it — deliver the content."
-            : "Sua resposta acima é rasa demais para o que foi pedido. Reescreva com substância de verdade: 4 a 8 frases ou uma lista curta de itens CONCRETOS (nomes, números, passos). Não repita a pergunta nem filosofe sobre ela — entregue o conteúdo." },
-        ], { maxTokens: MAX_TOKENS, modelo: responder._modelo ?? LLM_MODEL_LEVE });
-        const limpa = limpar(refeita);
-        if (limpa && limpa.length > resposta.length) resposta = limpa;
-        else dlog("a refeita não desenvolveu — entregando a original");
-      } catch (e) { dlog(`refazer raquítica falhou (${e?.message ?? e})`); }
+      const r = await refazer({ pergunta, anterior: resposta, modelo: modeloRefeita, rotulo: "raquítica",
+        ordem: lang === "en"
+          ? "Your reply above is too thin for what was asked. Rewrite it with real substance: 4-8 sentences or a short list of CONCRETE items (names, numbers, steps). Do not restate the question and do not philosophise about it — deliver the content."
+          : "Sua resposta acima é rasa demais para o que foi pedido. Reescreva com substância de verdade: 4 a 8 frases ou uma lista curta de itens CONCRETOS (nomes, números, passos). Não repita a pergunta nem filosofe sobre ela — entregue o conteúdo.",
+        aceitar: (t) => t.length > resposta.length });
+      if (r) resposta = r; else dlog("a refeita não desenvolveu — entregando a original");
     }
 
-    // Repetiu ALGUMA das últimas respostas deste canal? Refaz uma vez.
+    // Repetiu ALGUMA das últimas respostas deste canal?
     const anterior = resposta ? repetiuAlguma(canalId, resposta) : null;
     if (resposta && anterior) {
-      console.warn(`[CHAT] ⚠️ resposta idêntica à anterior — refazendo`);
-      dlog("resposta repetida → refazendo");
-      try {
-        const refeita = await llmChat([
-          { role: "user", content: pergunta.slice(0, 2000) },  // `messages` vive dentro do responder — aqui o refazer é autocontido: pergunta + resposta + ordem
-          { role: "assistant", content: anterior },
-          { role: "system", content: lang === "en"
-            ? "You already gave the reply above earlier in this conversation. Do NOT repeat it. Answer the person's LAST message specifically, with new wording and new content — if you have nothing to add, say so briefly instead of restating."
-            : "Você JÁ deu a resposta acima antes nesta conversa. NÃO a repita. Responda especificamente à ÚLTIMA mensagem da pessoa, com palavras e conteúdo novos — se não tem nada a acrescentar, diga isso em uma frase em vez de repetir." },
-        ], { maxTokens: MAX_TOKENS, modelo: responder._modelo ?? LLM_MODEL_LEVE });
-        const limpa = limpar(refeita);
-        if (limpa && !ehRepeticao(limpa, anterior)) resposta = limpa;
-        else dlog("a refeita também repetiu — entregando assim mesmo");
-      } catch (e) { dlog(`refazer repetição falhou (${e?.message ?? e})`); }
+      console.warn("[CHAT] ⚠️ resposta idêntica à anterior — refazendo");
+      const r = await refazer({ pergunta, anterior, modelo: modeloRefeita, rotulo: "repetição",
+        ordem: lang === "en"
+          ? "You already gave the reply above earlier in this conversation. Do NOT repeat it. Answer the person's LAST message specifically, with new wording and new content — if you have nothing to add, say so briefly instead of restating."
+          : "Você JÁ deu a resposta acima antes nesta conversa. NÃO a repita. Responda especificamente à ÚLTIMA mensagem da pessoa, com palavras e conteúdo novos — se não tem nada a acrescentar, diga isso em uma frase em vez de repetir.",
+        aceitar: (t) => !ehRepeticao(t, anterior) });
+      if (r) resposta = r; else dlog("a refeita também repetiu — entregando assim mesmo");
     }
 
     // (21 out 2026) a Judy fala qualquer língua: a reescrita para o português só vale
-    // quando a PERGUNTA foi em português e a resposta escapou para outra língua
+    // quando a PERGUNTA foi em português e a resposta escapou para o espanhol ou o inglês
     const perguntaEmPt = parecePortugues(pergunta);
     if (resposta && perguntaEmPt && pareceEspanhol(resposta)) {
       console.warn(`[CHAT] ⚠️ resposta veio em espanhol — refazendo: "${resposta.slice(0, 80)}…"`);
-      dlog("idioma errado (espanhol) → refazendo");
-      try {
-        const refeita = await llmChat([
-          { role: "user", content: pergunta.slice(0, 2000) },  // `messages` vive dentro do responder — aqui o refazer é autocontido: pergunta + resposta + ordem
-          { role: "system", content: "OBRIGATÓRIO: responda em PORTUGUÊS DO BRASIL. Não use espanhol em hipótese alguma. A pergunta foi feita em português. Reescreva sua resposta inteira em português do Brasil." },
-        ], { maxTokens: MAX_TOKENS, modelo: responder._modelo ?? LLM_MODEL_LEVE });
-        const limpa = limpar(refeita);
-        if (limpa && !pareceEspanhol(limpa)) resposta = limpa;
-      } catch (e) { dlog(`refazer idioma falhou (${e?.message ?? e})`); }
+      const r = await refazer({ pergunta, modelo: modeloRefeita, rotulo: "idioma (espanhol)",
+        ordem: "OBRIGATÓRIO: responda em PORTUGUÊS DO BRASIL. Não use espanhol em hipótese alguma. A pergunta foi feita em português. Reescreva sua resposta inteira em português do Brasil.",
+        aceitar: (t) => !pareceEspanhol(t) });
+      if (r) resposta = r;
     }
-
-    // Mesmo desvio, outra língua: resposta INTEIRA em inglês num pedido em
-    // português (foi como as recusas de arquivo/imagem escaparam no teste).
     if (resposta && perguntaEmPt && pareceIngles(resposta)) {
       console.warn(`[CHAT] ⚠️ resposta veio em inglês — refazendo: "${resposta.slice(0, 80)}…"`);
-      dlog("idioma errado (inglês) → refazendo");
-      try {
-        const refeita = await llmChat([
-          { role: "user", content: pergunta.slice(0, 2000) },  // `messages` vive dentro do responder — aqui o refazer é autocontido: pergunta + resposta + ordem
-          { role: "assistant", content: resposta },
-          { role: "system", content: "OBRIGATÓRIO: a pergunta foi feita em português e sua resposta acima saiu em inglês. Reescreva a resposta INTEIRA em português do Brasil, mantendo o mesmo conteúdo. Não responda em inglês em hipótese alguma." },
-        ], { maxTokens: MAX_TOKENS, modelo: responder._modelo ?? LLM_MODEL_LEVE });
-        const limpa = limpar(refeita);
-        if (limpa && !pareceIngles(limpa)) resposta = limpa;
-      } catch (e) { dlog(`refazer idioma (inglês) falhou (${e?.message ?? e})`); }
+      const r = await refazer({ pergunta, anterior: resposta, modelo: modeloRefeita, rotulo: "idioma (inglês)",
+        ordem: "OBRIGATÓRIO: a pergunta foi feita em português e sua resposta acima saiu em inglês. Reescreva a resposta INTEIRA em português do Brasil, mantendo o mesmo conteúdo. Não responda em inglês em hipótese alguma.",
+        aceitar: (t) => !pareceIngles(t) });
+      if (r) resposta = r;
     }
 
     if (resposta) {
@@ -2483,21 +1962,13 @@ async function conversarDeVez(message, pergunta, ctx, opcoes = {}) {
 
     if (resposta && vazaIdentidade(resposta)) {
       console.warn(`[CHAT] ⚠️ identidade vazou ("${resposta.slice(0, 120)}…") — refazendo com a regra reforçada`);
-      dlog("identidade vazou → refazendo");
       await editarStatus(X("✍️ Refinando a resposta…", "✍️ Polishing the reply…", "✍️ Puliendo la respuesta…"));
-      try {
-        const refeita = await llmChat([
-          { role: "user", content: pergunta.slice(0, 2000) },  // `messages` vive dentro do responder — aqui o refazer é autocontido: pergunta + resposta + ordem
-          { role: "system", content: lang === "en"
-            ? "MANDATORY: you are Judy, an open-source bot. You are NOT any AI model or company (not LFM, Liquid AI, Qwen, Llama, GPT, Claude or anything else). Never name a model as yourself, never describe 'your architecture'. If the person mentions swapping or updating the model/LLM, that's true and it's their business — acknowledge it, don't argue. Rewrite your reply obeying this."
-            : "OBRIGATÓRIO: você é a Judy, uma bot de código aberto. Você NÃO é nenhum modelo nem empresa de IA (nem LFM, nem Liquid AI, nem Qwen, Llama, GPT, Claude ou qualquer outro). Nunca se apresente com nome de modelo, nunca descreva 'sua arquitetura'. Se a pessoa falou em trocar ou atualizar o modelo/LLM, isso é verdade e é assunto dela — reconheça, não conteste. Reescreva sua resposta obedecendo a isto." },
-        ], { maxTokens: MAX_TOKENS, modelo: responder._modelo ?? LLM_MODEL_LEVE });
-        const limpa = limpar(refeita);
-        resposta = vazaIdentidade(limpa) ? podarIdentidade(limpa) : limpa;
-      } catch (e) {
-        dlog(`refazer falhou (${e?.message}) — podando`);
-        resposta = podarIdentidade(resposta);
-      }
+      const r = await refazer({ pergunta, modelo: modeloRefeita, rotulo: "identidade",
+        ordem: lang === "en"
+          ? "MANDATORY: you are Judy, an open-source bot. You are NOT any AI model or company (not LFM, Liquid AI, Qwen, Llama, GPT, Claude or anything else). Never name a model as yourself, never describe 'your architecture'. If the person mentions swapping or updating the model/LLM, that's true and it's their business — acknowledge it, don't argue. Rewrite your reply obeying this."
+          : "OBRIGATÓRIO: você é a Judy, uma bot de código aberto. Você NÃO é nenhum modelo nem empresa de IA (nem LFM, nem Liquid AI, nem Qwen, Llama, GPT, Claude ou qualquer outro). Nunca se apresente com nome de modelo, nunca descreva 'sua arquitetura'. Se a pessoa falou em trocar ou atualizar o modelo/LLM, isso é verdade e é assunto dela — reconheça, não conteste. Reescreva sua resposta obedecendo a isto.",
+        aceitar: () => true });
+      resposta = r ?? resposta;
       if (vazaIdentidade(resposta)) resposta = podarIdentidade(resposta);
     }
 
@@ -2515,28 +1986,17 @@ async function conversarDeVez(message, pergunta, ctx, opcoes = {}) {
           ? `Today is ${hojeExtenso()}. ${instrucaoDeIdioma("en", serverId)} Answer directly and objectively, WITHOUT explaining your reasoning.`
           : `Hoje é ${hojeExtenso()}. ${instrucaoDeIdioma("pt", serverId)} Responda de forma direta e objetiva, SEM explicar seu raciocínio.` },
         { role: "user", content: pergunta },
-      ], { maxTokens: MAX_TOKENS, modelo: LLM_MODEL_LEVE });
+      ], { maxTokens: MAX_TOKENS, modelo: modeloConversa() });
       resposta = limpar(direto);
       dlog(`fallback retornou ${resposta.length} chars`);
     }
 
-    // Só as fontes citadas, como [domínio](<url>): clicáveis e sem a prévia
-    // (embed) que o Stoat gerava para cada link.
-    // …e SÓ quando a pessoa pediu a busca. Sem pedido (busca de fundo, juiz ou
-    // a ferramenta buscar_web), a resposta sai sem [n] e sem os links que o
-    // modelo copiou dos resultados.
-    if (resposta && !decisao.links) {
-      const vistas = busca.urlsVistas(resultados ?? [], evidenciaVerif);
-      let base = resultados?.length || /"url"/.test(evidenciaVerif ?? "") ? busca.semCitacoes(resposta) : resposta;
-      if (resultados?.length) base = busca.semMencaoDaBusca(base);   // "os resultados de busca mostram…" sai
-      const semLinks = busca.semLinksDaBusca(base, vistas);
-      if (semLinks !== resposta) { dlog("sem pedido de busca → citações e links dos resultados tirados da resposta"); resposta = semLinks.trim() || resposta; }
-    }
-    // O modelo às vezes escreve a própria lista "Fontes: [1] gist.github.com…"
-    // além do rodapé — saía duplicado (print de 12/10). O rodapé é do código.
+    // As fontes: o rodapé é do código. Sem pedido de busca, a resposta sai sem [n] e
+    // sem os links copiados dos resultados; e a lista "Fontes: …" que o modelo escreve
+    // sai sempre (P2: um `limparFontes` no lugar dos 5 limpadores em sequência).
     if (resposta) {
-      const semLista = busca.semFontesDoModelo(resposta);
-      if (semLista !== resposta) { dlog("lista de fontes escrita pelo modelo removida (o rodapé é do código)"); resposta = semLista || resposta; }
+      const limpa = busca.limparFontes(resposta, { resultados, evidencia, comLinks: !!decisao.links });
+      if (limpa !== resposta) { dlog("fontes/citações tiradas da resposta (o rodapé é do código)"); resposta = limpa; }
     }
     const rodape = (resultados?.length && decisao.links
       ? busca.rodapeFontes(resposta, resultados, consultasUsadas.length ? consultasUsadas : [decisao.query], { lang: en ? "en" : "pt", max: FONTES_MAX })
@@ -2634,35 +2094,6 @@ async function conversarDeVez(message, pergunta, ctx, opcoes = {}) {
     // Primeira conversa com alguém: a Judy pergunta se pode lembrar dela (opt-in)
     try { await consentimento.talvezPerguntar(message, ctx); } catch (e) { dlog(`consentimento: ${e?.message ?? e}`); }
 
-    const msgVerif = mostrarEmbed._msg;
-    {
-      const textoEntregue = marcar(partes[0], 0);
-      verificar({
-        pergunta,
-        resposta,
-        evidencia: evidenciaVerif,
-        autor,
-        pediuBusca: PEDIDO_EXPLICITO.test(pergunta),
-        pediuCodigo: precisaFerramenta(pergunta) || !!caminhoCitado(pergunta),
-        pediuImagem: urlsDeImagemNaPergunta(pergunta).length > 0,
-        comandos: comandosParaVerificar(),
-        chamarModelo: (msgs, o) => llmChat(msgs, { json: true, maxTokens: o?.maxTokens, modelo: LLM_MODEL_LOGICA, etiqueta: "verificador" }),
-        dlog,
-      }).then(async (v) => {
-        dlog(`verificador: ok=${v.ok} camadas=${JSON.stringify(v.camadas)}${v.ok ? "" : " | " + v.problemas.join(" · ")}`);
-        if (v.ok) return;
-        const editar = process.env.VERIF_EDITAR === "1" || process.env.VERIF_EDITAR === "true";
-        if (!editar || !msgVerif?.edit) return;   // modo observação
-        const nota = X("\n\n⚠️ _Revisão automática encontrou problemas:_", "\n\n⚠️ _Auto-review found issues:_", "\n\n⚠️ _La revisión automática encontró problemas:_")
-          + v.problemas.map((p) => `\n• ${p}`).join("");
-        const teto = 1900;
-        const conteudo = (textoEntregue + nota).length > teto
-          ? textoEntregue + nota.slice(0, Math.max(0, teto - textoEntregue.length - 1)) + "…"
-          : textoEntregue + nota;
-        try { await msgVerif.edit({ content: semPingEmMassa(conteudo), embeds: [] }); }
-        catch (e) { dlog(`verificador: edição falhou (${e?.message ?? e})`); }
-      }).catch((e) => dlog(`verificador: erro externo (${e?.message ?? e})`));
-    }
     dlog(`══════ conversa concluída ══════`);
   } catch (err) {
     console.error("[CHAT]", err.message);
@@ -2701,19 +2132,6 @@ async function conversarDeVez(message, pergunta, ctx, opcoes = {}) {
 // Exportada para o RSS/diagnóstico saberem se a IA está no ar.
 export { llmDisponivel };
 
-// Comando &chat
-// O perfil e o mapeamento são só da própria pessoa (privacidade, 20 out 2026).
-function soVoce(ctx) {
-  return tr(ctx,
-    { title: "🔒 Só o seu", description: `O perfil de cada pessoa é só dela: você pode ver e mapear **o seu**. \`${citar("privacidade", "pt", ctx.PREFIXO)}\` mostra tudo o que a Judy guarda sobre você.`, colour: ctx.COR.aviso },
-    { title: "🔒 Only yours", description: `Each person's profile belongs to them: you can see and map **your own**. \`${citar("privacidade", "en", ctx.PREFIXO)}\` shows everything Judy keeps about you.`, colour: ctx.COR.aviso },
-    { title: "🔒 Solo el tuyo", description: `El perfil de cada persona es solo suyo: puedes ver y mapear **el tuyo**. \`${citar("privacidade", "es", ctx.PREFIXO)}\` muestra todo lo que Judy guarda sobre ti.`, colour: ctx.COR.aviso });
-}
-// ── Conversa livre: a Judy decide se entra numa mensagem não-endereçada ──
-export function canalTemChatLivre(config, canalId) {
-  return !!config?.chatLivre?.canais?.includes(canalId);
-}
-
 // 12 out 2026 — "ela está achando que é com ela": o juiz dizia "na dúvida,
 // prefira sim — você é participativa" e via só a mensagem solta, sem saber
 // que era a continuação de uma conversa entre duas outras pessoas. Agora ele
@@ -2731,85 +2149,13 @@ async function valeResponder(texto, fio = "") {
       + 'Responda só JSON: {"responder": true|false}.';
     const raw = await llmChat(
       [{ role: "system", content: sys }, { role: "user", content: `${fio ? `CONVERSA ATÉ AGORA:\n${fio.slice(-1200)}\n\n` : ""}MENSAGEM NOVA:\n${t.slice(0, 500)}` }],
-      { json: true, modelo: LLM_MODEL_DECISAO, etiqueta: "vale-responder" },
+      { json: true, modelo: modeloConversa(), etiqueta: "vale-responder" },
     );
     return !!JSON.parse(raw).responder;
   } catch { return false; }
 }
 
-// ─── Para quem é a mensagem? (12 out 2026) ───────────────────────────────────
-// Os prints: "@CabeçaComÇedilha" sozinho virou "você está me enviando o seu
-// próprio identificador?"; "Obrigado :) @CabeçaComÇedilha" virou "de nada";
-// "Que" (respondendo a outra pessoa) virou um parágrafo sobre Ctrl+F. Na
-// conversa livre, quem falava com ela há pouco (90 s de "engajamento") tinha
-// TODA mensagem respondida, sem filtro nenhum. Agora o código decide primeiro
-// para quem é a mensagem — e só o que é para ela, ou para o grupo, chega ao juiz.
-export function destinoDaMensagem(message, { botId = null, canalId = null } = {}) {
-  const conteudo = String(message?.content ?? "");
-  const mencoes = [...conteudo.matchAll(/<@!?([0-9A-Za-z]{20,32})>/g)].map((m) => m[1]);
-  if (botId && mencoes.includes(botId)) return "judy";
-  if (/(?<![\p{L}\p{N}])(judy|cobaia)(?![\p{L}\p{N}])/iu.test(conteudo)) return "judy";
-  const respondeu = message?.replyIds?.[0] ?? message?.reply_ids?.[0] ?? null;
-  if (respondeu) {
-    const alvo = cacheCanal.recentes(canalId).find((m) => m.id === respondeu);
-    return alvo && (alvo.ehJudy || (botId && alvo.userId === botId)) ? "judy" : "outra-pessoa";
-  }
-  if (mencoes.some((id) => id !== botId)) return "outra-pessoa";
-  // vocativo: "obrigado, Fulano", "Fulano, viu isso?", "... né Fulano"
-  const t = conteudo.toLowerCase().trim();
-  const nomes = [...cacheCanal.nomesDoCanal(canalId)]
-    .filter(([id, n]) => id !== botId && id !== message?.authorId && typeof n === "string" && n.trim().length >= 3 && !/^judy$/i.test(n.trim()))
-    .map(([, n]) => n.trim().toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
-  for (const n of nomes) {
-    if (new RegExp(`^@?${n}(?![\\p{L}\\p{N}])|(?<![\\p{L}\\p{N}])@?${n}[\\s!?.,:;)]*$`, "u").test(t)) return "outra-pessoa";
-  }
-  return "grupo";
-}
-
-const RE_PERGUNTA = /\?|(?<![\p{L}])(como|qual|quais|quem|quando|onde|porque|por que|quanto|algu[eé]m sabe|algu[eé]m tem|me ajuda|recomenda|indica|o que [eé])(?![\p{L}])/iu;
-const RE_SO_REACAO = /^(?:[kKhHaAsSrR]{3,}|ixi+|oxe+|eita+|vish+|que|q|kk+|lol|uai|af+|mds|pqp|ue|hm+|ah+|oh+|ok|blz|sim|n[aã]o|[.!?…]+)[\s!?.…]*$/i;
-
-const LIVRE_MIN_CHARS = () => Number(process.env.CHAT_LIVRE_MIN_CHARS || 12);
-const LIVRE_INTERVALO_MS = () => Number(process.env.CHAT_LIVRE_INTERVALO_MS || 5 * 60_000);   // entre entradas sem convite, por canal
-const LIVRE_POR_HORA = () => Number(process.env.CHAT_LIVRE_POR_HORA || 4);
-const _entradasLivres = new MapaCurto({ ttlMs: 60 * 60_000, max: 2000 });   // canalId → [timestamps] (a última hora)
-
-// → { entrar, avaliar, motivo }. `avaliar`: ainda passa pelo juiz (modelo).
-export function decidirEntradaLivre(message, { botId = null, canalId = null, modo = "relevante", engajado = false, agora = Date.now() } = {}) {
-  const destino = destinoDaMensagem(message, { botId, canalId });
-  if (destino === "judy") return { entrar: true, avaliar: false, motivo: "falou com ela" };
-  if (destino === "outra-pessoa") return { entrar: false, motivo: "fala com outra pessoa" };
-  const texto = String(message?.content ?? "").replace(/<@!?[0-9A-Za-z]{20,32}>/g, "").trim();
-  if (RE_SO_REACAO.test(texto) || texto.replace(/[^\p{L}\p{N}]/gu, "").length < 4) return { entrar: false, motivo: "só reação" };
-  const pergunta = RE_PERGUNTA.test(texto);
-  if (engajado) {
-    // continuação de uma conversa COM ela: pergunta ou frase com conteúdo
-    return pergunta || texto.length >= 20 ? { entrar: true, avaliar: false, motivo: "continua a conversa com ela" } : { entrar: false, motivo: "curta demais para continuar" };
-  }
-  if (modo === "todas") return texto.length >= LIVRE_MIN_CHARS() ? { entrar: true, avaliar: false, motivo: "modo todas" } : { entrar: false, motivo: "curta demais" };
-  // Mostrar algo ao grupo com foto ("peguei a case do fone com as lapiseiras
-  // kakaka" + foto) é deixa boa — e foi o acerto que Ghieh quer manter.
-  const mostrou = (message?.attachments?.length ?? 0) > 0;
-  if (!pergunta && !mostrou) return { entrar: false, motivo: "não é pergunta nem algo mostrado ao grupo" };
-  if (!mostrou && texto.length < LIVRE_MIN_CHARS()) return { entrar: false, motivo: "curta demais" };
-  const recentes = (_entradasLivres.get(canalId) ?? []).filter((t) => agora - t < 3_600_000);
-  if (recentes.length && agora - recentes.at(-1) < LIVRE_INTERVALO_MS()) return { entrar: false, motivo: "entrou sem convite há pouco" };
-  if (recentes.length >= LIVRE_POR_HORA()) return { entrar: false, motivo: "teto de entradas sem convite por hora" };
-  return { entrar: true, avaliar: true, motivo: mostrou && !pergunta ? "mostrou algo ao grupo (com foto)" : "pergunta ao grupo" };
-}
-function registrarEntradaLivre(canalId, agora = Date.now()) {
-  const l = (_entradasLivres.get(canalId) ?? []).filter((t) => agora - t < 3_600_000);
-  l.push(agora); _entradasLivres.set(canalId, l);
-}
-export function _zerarLivre() { _entradasLivres.clear(); _engajamento.clear(); _ultimaAvaliacaoLivre.clear(); }
-
-// Cooldown por canal para a conversa livre (evita avaliar toda mensagem).
-const _ultimaAvaliacaoLivre = new Map();   // canalId → timestamp
-const LIVRE_COOLDOWN_MS = Number(process.env.CHAT_LIVRE_COOLDOWN || 20000);
-
-const _engajamento = new Map();   // `${canalId}:${userId}` → expira em (timestamp)
-
-// `canalId`: um canal; `canais`: uma lista (o `&chat esquecer tudo` passa os canais DO
+// `canalId`: um canal; `canais`: uma lista (o `esquecer tudo` passa os canais DO
 // servidor dele, e `serverId` descarta só os buffers da memória dele); sem nada: tudo
 // (reinício/testes). (31 out 2026, P1, R9: antes o "esquecer tudo" de um servidor
 // limpava o fio e os pendentes de TODOS.)
@@ -2819,7 +2165,6 @@ export function limparEstadoEmMemoria({ canalId = null, canais = null, serverId 
     fio: canalId ? (cacheCanal.recentes(canalId)?.length ?? 0) : null,
     respostas: lista ? lista.filter((c) => ultimaResposta.has(c)).length : ultimaResposta.size,
     roteamentos: ultimoRoteamento.size,
-    engajamento: _engajamento.size,
   };
   if (lista) {
     for (const c of lista) {
@@ -2828,9 +2173,6 @@ export function limparEstadoEmMemoria({ canalId = null, canais = null, serverId 
       respostasRecentes.delete(c);
       ultimaFichaCanal.delete(c);
       ultimoRoteamento.delete(c);
-      _ultimaAvaliacaoLivre.delete(c);
-      _entradasLivres.delete(c);
-      for (const k of [..._engajamento.keys()]) if (String(k).startsWith(`${c}:`)) _engajamento.delete(k);
     }
   } else {
     cacheCanal.limpar(null);
@@ -2838,72 +2180,71 @@ export function limparEstadoEmMemoria({ canalId = null, canais = null, serverId 
     respostasRecentes.clear();
     ultimaFichaCanal.clear();
     ultimoRoteamento.clear();
-    _ultimaAvaliacaoLivre.clear();
-    _entradasLivres.clear();
-    _engajamento.clear();
   }
-  // o canal individual (`&chat esquecer`) não mexe nos buffers dos outros; o servidor
+  const { engajamento } = gating.limparLivre(lista);
+  // o canal individual (`esquecer`) não mexe nos buffers dos outros; o servidor
   // inteiro descarta só os dele
   const pendentes = canalId ? 0 : (memoria.descartarPendentes?.(lista ? serverId : null) ?? 0);
-  return { ...antes, pendentes };
+  return { ...antes, engajamento, pendentes };
 }
-const ENGAJAMENTO_MS = Number(process.env.CHAT_ENGAJAMENTO_MS || 90000);   // 90s
+export function _zerarLivre() { gating.limparLivre(null); }
 
-setInterval(() => {
-  const agora = Date.now();
-  for (const [k, exp] of _engajamento) if (agora > exp) _engajamento.delete(k);
-  const corte = agora - LIVRE_COOLDOWN_MS * 10;
-  for (const [k, t] of _ultimaAvaliacaoLivre) if (t < corte) _ultimaAvaliacaoLivre.delete(k);
-}, 10 * 60_000).unref?.();
-const chaveEng = (canalId, userId) => `${canalId}:${userId}`;
-
-function estaEngajado(canalId, userId) {
-  const exp = _engajamento.get(chaveEng(canalId, userId));
-  if (!exp) return false;
-  if (Date.now() > exp) { _engajamento.delete(chaveEng(canalId, userId)); return false; }
-  return true;
+// ── Esquecer (o `&privacidade esquecer [tudo]` chama; P2) ──
+// Uma pessoa, neste servidor: fatos, perfil, a memória da conversa dela e o histórico
+// daqui, mais o fio vivo do canal e o que o agente ainda ia gravar dela.
+export function esquecerPessoa({ serverId, userId, canalId = null }) {
+  const r = db.apagarTudoDaPessoa(serverId, userId);
+  const memoriaGeral = db.limparMemoria(userId);
+  db.limparHistorico(userId, { serverId });
+  if (canalId) limparEstadoEmMemoria({ canalId });
+  memoria.descartarPendentes?.(serverId, userId);
+  return { fatos: r.fatos ?? 0, memoriaGeral };
 }
-function marcarEngajado(canalId, userId) {
-  _engajamento.set(chaveEng(canalId, userId), Date.now() + ENGAJAMENTO_MS);
+// O servidor inteiro (a staff pede): o banco daqui, o fio dos canais daqui e o que a
+// memória global de cada pessoa aprendeu AQUI. O de outros servidores fica.
+export function esquecerServidor({ serverId, server = null, canalId = null }) {
+  const r = db.apagarMemoriaServidor(serverId);
+  const daqui = db.apagarMemoriaGlobalDoServidor(serverId);
+  const canais = cacheCanal.canais().filter((c) => c === canalId || canalDoServidor(server, c));
+  const mem = limparEstadoEmMemoria({ canais, serverId });
+  console.log(`[CHAT] esquecer tudo: banco (${r.fatosPessoa}+${r.fatosServidor}+${r.perfis}+${r.historico}+${daqui}) e memória (fio de ${canais.length} canal(is), ${mem.respostas} resposta(s), ${mem.pendentes} pendente(s))`);
+  return { ...r, memoriaGeral: daqui };
 }
 
 export async function talvezResponderLivre(message, ctx) {
   try {
     const { config, serverId } = ctx;
-    if (!servidorPermitido(serverId)) return false;
-    if (!canalTemChatLivre(config, message.channelId)) return false;
+    if (!gating.conversaAqui(serverId, config)) return false;
+    if (!gating.canalTemChatLivre(config, message.channelId)) return false;
 
     if (ocupado) return false;
 
     const texto = (message.content || "").trim();
     if (!texto) return false;
     // (21 out 2026) antes do juiz, que custa modelo: quem pediu silêncio e conteúdo de spam
-    if (naoFalarCom(message.authorId) || antiAbuso.avaliarConteudo(texto)) return false;
+    if (!gating.falaCom(message.authorId) || antiAbuso.avaliarConteudo(texto)) return false;
 
     const modo = config?.chatLivre?.modo || "relevante";
     const userId = message.authorId;
     const canalId = message.channelId;
     const botId = message.client?.user?.id ?? ctx.client?.user?.id ?? null;
 
-    const engajado = estaEngajado(canalId, userId);
-    const d = decidirEntradaLivre(message, { botId, canalId, modo, engajado });
+    const engajado = gating.estaEngajado(canalId, userId);
+    const d = gating.decidirEntradaLivre(message, { botId, canalId, modo, engajado });
     console.log(`[CHAT-LIVRE] ${d.entrar ? (d.avaliar ? "avaliar" : "entrar") : "fora"}: ${d.motivo} — "${texto.slice(0, 60)}"`);
     if (!d.entrar) return false;
 
     if (d.avaliar) {
-      const agora = Date.now();
-      const ultima = _ultimaAvaliacaoLivre.get(canalId) || 0;
-      if (agora - ultima < LIVRE_COOLDOWN_MS) return false;
-      _ultimaAvaliacaoLivre.set(canalId, agora);
+      if (!gating.podeAvaliarLivre(canalId)) return false;
       const fio = cacheCanal.contexto(canalId, { limite: 6, excluirId: message.id ?? null });
       if (!(await valeResponder((message.attachments?.length ? `${texto} [com foto anexada]` : texto), fio))) { console.log("[CHAT-LIVRE] fora: o juiz achou que não é com ela"); return false; }
       if (ocupado) return false;   // pode ter ficado ocupado durante a avaliação
-      registrarEntradaLivre(canalId);
+      gating.registrarEntradaLivre(canalId);
     }
 
-    marcarEngajado(canalId, userId);
+    gating.marcarEngajado(canalId, userId);
 
-    if (!engajado) { try { await message.react?.(encodeURIComponent("👀")); } catch {} }
+    if (!engajado) { try { await message.react?.(encodeURIComponent("👀")); } catch (e) { registrarErro("CHAT-LIVRE][reação", e); } }
 
     await conversar(message, texto, ctx, { livre: true });
     return true;
@@ -2913,568 +2254,28 @@ export async function talvezResponderLivre(message, ctx) {
   }
 }
 
-export async function cmdChat(message, args, ctx) {
-  const { sendEmbed, COR, serverId, PREFIXO } = ctx;
-  const clang = lingua(ctx);
-  const cen = clang === "en";
-  const ces = (ref) => citar(ref, "es", PREFIXO);   // a citação no espanhol
-  const sub = String(args[0] ?? "").toLowerCase();
-  const so = (n) => args.length === n;   // subcomando "puro": `&chat on`, não `&chat on the other hand…`
-
-  // ── (21 out 2026) O servidor escolhe: chat e geração de imagem ──
-  const podeMexer = async () => {
-    const server = await ctx.getServer?.(message);
-    if (!ctx.membroTemPermissao || ctx.membroTemPermissao(message, server, "ManagePermissions")) return true;
-    await sendEmbed(message.channel, tr(ctx,
-      { title: "🚫 Permissão insuficiente", description: "Ligar ou desligar a IA do servidor pede **ManagePermissions**.", colour: COR.erro },
-      { title: "🚫 Missing permission", description: "Turning the server's AI on or off needs **ManagePermissions**.", colour: COR.erro },
-      { title: "🚫 Permiso insuficiente", description: "Activar o desactivar la IA del servidor requiere **ManagePermissions**.", colour: COR.erro }));
-    return false;
-  };
-  if ((sub === "on" || sub === "off") && so(1)) {
-    if (!(await podeMexer())) return;
-    ctx.config.ia = { ...(ctx.config.ia ?? {}), chat: sub === "on" };
-    ctx.salvarConfig?.();
-    return sendEmbed(message.channel, sub === "on" ? tr(ctx,
-      { title: "💬 Chat ligado", description: `A Judy conversa neste servidor: mencione-a ou use \`${citarInterno("chat", PREFIXO)}\`. Cada pessoa pode pedir silêncio com \`${citarInterno("chat.sair", PREFIXO)}\`.\nGeração de imagem: ${imagemLigadaAqui(serverId, ctx.config) ? "ligada" : `desligada (\`${citarInterno("chat.imagem", PREFIXO)} on\`)`}.`, colour: COR.sucesso },
-      { title: "💬 Chat on", description: `Judy chats on this server: mention her or use \`${citarInterno("chat", PREFIXO)}\`. Anyone can ask her to leave them alone with \`${citarInterno("chat.sair", PREFIXO)}\`.\nImage generation: ${imagemLigadaAqui(serverId, ctx.config) ? "on" : `off (\`${citarInterno("chat.imagem", PREFIXO)} on\`)`}.`, colour: COR.sucesso },
-      { title: "💬 Chat activado", description: `Judy conversa en este servidor: menciónala o usa \`${ces("chat")}\`. Cada persona puede pedir silencio con \`${ces("chat.sair")}\`.\nGeneración de imágenes: ${imagemLigadaAqui(serverId, ctx.config) ? "activada" : `desactivada (\`${ces("chat.imagem")} on\`)`}.`, colour: COR.sucesso })
-      : tr(ctx,
-      { title: "💤 Chat desligado", description: `A Judy não conversa mais neste servidor (a moderação continua). Para voltar: \`${citarInterno("chat.on", PREFIXO)}\`.`, colour: COR.aviso },
-      { title: "💤 Chat off", description: `Judy no longer chats on this server (moderation keeps working). To bring it back: \`${citarInterno("chat.on", PREFIXO)}\`.`, colour: COR.aviso },
-      { title: "💤 Chat desactivado", description: `Judy ya no conversa en este servidor (la moderación sigue). Para volver: \`${ces("chat.on")}\`.`, colour: COR.aviso }));
+// ── `&chat <pergunta>` / `&ia <pergunta>` (P2) ──
+// O &chat saiu como comando: fala-se com a Judy pelo nome, menção ou resposta. Mas
+// quem digitava `&chat qual a capital da França?` continua sendo atendido: o main.js
+// chama isto antes do "comando desconhecido" (pedido nas notas do P2). Devolve true
+// quando tratou (conversou; ou disse, numa linha, que a conversa está desligada aqui;
+// ou a pessoa pediu silêncio). false = não era conversa (o main.js segue).
+export const PALAVRAS_DE_CONVERSA = new Set(["chat", "ia"]);
+export async function conversarPorAtalho(message, comando, ctx) {
+  if (!PALAVRAS_DE_CONVERSA.has(String(comando ?? "").toLowerCase())) return false;
+  const pergunta = textoOriginalDoComando(message, []);
+  if (!pergunta) return false;   // `&chat` sozinho: o main.js segue (o &help mostra o caminho novo)
+  if (!gating.iaNoEnv(ctx.serverId)) return false;   // sem IA de conversa aqui: o main.js diz "comando desconhecido"
+  if (!gating.conversaAqui(ctx.serverId, ctx.config)) {
+    const cor = ctx.COR?.info;
+    await ctx.sendEmbed(message.channel, tr(ctx,
+      { description: "💤 A conversa com a Judy está desligada neste servidor.", colour: cor },
+      { description: "💤 Chatting with Judy is off on this server.", colour: cor },
+      { description: "💤 La conversación con Judy está desactivada en este servidor.", colour: cor }));
+    return true;
   }
-  if (sub === "imagem" && (so(1) || (so(2) && ["on", "off"].includes(String(args[1]).toLowerCase())))) {
-    const acao = String(args[1] ?? "").toLowerCase();
-    if (acao) {
-      if (!(await podeMexer())) return;
-      ctx.config.ia = { ...(ctx.config.ia ?? {}), imagem: acao === "on" };
-      ctx.salvarConfig?.();
-    }
-    const ligada = imagemLigadaAqui(serverId, ctx.config);
-    const semNoBot = !imagemNoBot();
-    return sendEmbed(message.channel, tr(ctx,
-      { title: ligada ? "🎨 Geração de imagem ligada" : "🎨 Geração de imagem desligada",
-        description: semNoBot ? "A geração de imagem está desligada no bot inteiro (por quem o hospeda)."
-          : ligada ? `Peça à Judy para desenhar (\`${citarInterno("chat", PREFIXO)} desenhe um gato astronauta\`). Desligar: \`${citarInterno("chat.imagem", PREFIXO)} off\`.`
-          : `A Judy não gera imagens neste servidor. Ligar: \`${citarInterno("chat.imagem", PREFIXO)} on\`.`, colour: ligada ? COR.sucesso : COR.aviso },
-      { title: ligada ? "🎨 Image generation on" : "🎨 Image generation off",
-        description: semNoBot ? "Image generation is off for the whole bot (by whoever hosts it)."
-          : ligada ? `Ask Judy to draw (\`${citarInterno("chat", PREFIXO)} draw an astronaut cat\`). Turn off: \`${citarInterno("chat.imagem", PREFIXO)} off\`.`
-          : `Judy doesn't generate images on this server. Turn on: \`${citarInterno("chat.imagem", PREFIXO)} on\`.`, colour: ligada ? COR.sucesso : COR.aviso },
-      { title: ligada ? "🎨 Generación de imágenes activada" : "🎨 Generación de imágenes desactivada",
-        description: semNoBot ? "La generación de imágenes está desactivada en todo el bot (por quien lo aloja)."
-          : ligada ? `Pídele a Judy que dibuje (\`${ces("chat")} dibuja un gato astronauta\`). Desactivar: \`${ces("chat.imagem")} off\`.`
-          : `Judy no genera imágenes en este servidor. Activar: \`${ces("chat.imagem")} on\`.`, colour: ligada ? COR.sucesso : COR.aviso }));
-  }
-  // ── e cada pessoa: "não fale comigo" ──
-  if ((sub === "sair" || sub === "voltar") && so(1)) {
-    const quer = sub === "sair";
-    db.setIaSilenciada(message.authorId, quer);
-    return sendEmbed(message.channel, quer ? tr(ctx,
-      { title: "🤐 Combinado", description: `A Judy não conversa mais com você, em nenhum servidor, e o que você escreve não vai para a IA. Para voltar: \`${citarInterno("chat.voltar", PREFIXO)}\`.`, colour: COR.info },
-      { title: "🤐 Got it", description: `Judy won't chat with you anymore, on any server, and what you write doesn't go to the AI. To undo: \`${citarInterno("chat.voltar", PREFIXO)}\`.`, colour: COR.info },
-      { title: "🤐 Entendido", description: `Judy ya no conversará contigo, en ningún servidor, y lo que escribas no irá a la IA. Para volver: \`${ces("chat.voltar")}\`.`, colour: COR.info })
-      : tr(ctx,
-      { title: "💬 De volta", description: "A Judy volta a conversar com você.", colour: COR.sucesso },
-      { title: "💬 Back", description: "Judy will chat with you again.", colour: COR.sucesso },
-      { title: "💬 De vuelta", description: "Judy vuelve a conversar contigo.", colour: COR.sucesso }));
-  }
-
-  if (["comentar", "comentario", "comentário", "espontaneo", "espontâneo"].includes(args[0]?.toLowerCase())) {
-    const server = await ctx.getServer?.(message);
-    if (ctx.membroTemPermissao && !ctx.membroTemPermissao(message, server, "ManagePermissions")) {
-      return sendEmbed(message.channel, tr(ctx,
-        { title: "🚫 Permissão insuficiente",
-          description: "Você precisa de **ManagePermissions** para configurar o comentário espontâneo.", colour: COR.erro },
-        { title: "🚫 Missing permission",
-          description: "You need **ManagePermissions** to configure spontaneous comments.", colour: COR.erro },
-        { title: "🚫 Permiso insuficiente",
-          description: "Necesitas **ManagePermissions** para configurar los comentarios espontáneos.", colour: COR.erro }));
-    }
-    ctx.config.comentarioEspontaneo ??= { canalId: null, porDia: 4, minParaFalar: 4 };
-    const ce = ctx.config.comentarioEspontaneo;
-    const acao = args[1]?.toLowerCase();
-
-    if (!acao || acao === "status") {
-      return sendEmbed(message.channel, tr(ctx, {
-        title: "💬 Comentário espontâneo",
-        description: [
-          ce.canalId ? `🟢 Ativo em <#${ce.canalId}>` : "🔴 Desligado",
-          `**Máximo por dia:** ${ce.porDia ?? 4}`,
-          "",
-          "A Judy solta comentários por conta própria sobre a conversa em andamento, só neste canal, com freios contra virar spam.",
-          "",
-          `\`${citarInterno("chat.comentar.aqui", PREFIXO)}\` (liga neste canal) · \`${citarInterno("chat.comentar", PREFIXO)} off\` · \`${citarInterno("chat.comentar.pordia", PREFIXO)} <n>\``,
-        ].join("\n"), colour: COR.info }, {
-        title: "💬 Spontaneous comments",
-        description: [
-          ce.canalId ? `🟢 Active in <#${ce.canalId}>` : "🔴 Off",
-          `**Max per day:** ${ce.porDia ?? 4}`,
-          "",
-          "Judy drops comments on her own about the ongoing conversation, only in this channel, with brakes so it doesn't turn into spam.",
-          "",
-          `\`${citarInterno("chat.comentar.aqui", PREFIXO)}\` (enables in this channel) · \`${citarInterno("chat.comentar", PREFIXO)} off\` · \`${citarInterno("chat.comentar.pordia", PREFIXO)} <n>\``,
-        ].join("\n"), colour: COR.info,
-      }, {
-        title: "💬 Comentarios espontáneos",
-        description: [
-          ce.canalId ? `🟢 Activos en <#${ce.canalId}>` : "🔴 Desactivados",
-          `**Máximo por día:** ${ce.porDia ?? 4}`,
-          "",
-          "Judy suelta comentarios por su cuenta sobre la conversación en curso, solo en este canal, con frenos para que no se vuelva spam.",
-          "",
-          `\`${ces("chat.comentar.aqui")}\` (los activa en este canal) · \`${ces("chat.comentar")} off\` · \`${ces("chat.comentar.pordia")} <n>\``,
-        ].join("\n"), colour: COR.info }));
-    }
-    if (acao === "aqui" || acao === "on") {
-      ce.canalId = message.channelId;
-      ctx.salvarConfig?.();
-      return sendEmbed(message.channel, tr(ctx, {
-        title: "💬 Comentário espontâneo ligado",
-        description: `A Judy vai comentar de vez em quando neste canal (até ${ce.porDia ?? 4}× por dia, quando houver conversa). Ela não puxa assunto do nada — só comenta o que já rola.`, colour: COR.sucesso,
-      }, {
-        title: "💬 Spontaneous comments on",
-        description: `Judy will comment now and then in this channel (up to ${ce.porDia ?? 4}× a day, when there's conversation). She doesn't start topics out of nowhere — she only comments on what's already happening.`, colour: COR.sucesso,
-      }, {
-        title: "💬 Comentarios espontáneos activados",
-        description: `Judy va a comentar de vez en cuando en este canal (hasta ${ce.porDia ?? 4}× al día, cuando haya conversación). No saca temas de la nada — solo comenta lo que ya está pasando.`, colour: COR.sucesso,
-      }));
-    }
-    if (acao === "off") {
-      ce.canalId = null;
-      ctx.salvarConfig?.();
-      return sendEmbed(message.channel, tr(ctx,
-        { title: "💬 Comentário espontâneo desligado",
-          description: "A Judy parou de comentar por iniciativa.", colour: COR.aviso },
-        { title: "💬 Spontaneous comments off",
-          description: "Judy stopped commenting on her own initiative.", colour: COR.aviso },
-        { title: "💬 Comentarios espontáneos desactivados",
-          description: "Judy dejó de comentar por iniciativa propia.", colour: COR.aviso }));
-    }
-    if (acao === "pordia") {
-      const n = Math.max(1, Math.min(20, parseInt(args[2], 10) || 4));
-      ce.porDia = n;
-      ctx.salvarConfig?.();
-      return sendEmbed(message.channel, tr(ctx,
-        { title: "💬 Frequência ajustada",
-          description: `Até **${n}** comentário(s) espontâneo(s) por dia.`, colour: COR.sucesso },
-        { title: "💬 Frequency adjusted",
-          description: `Up to **${n}** spontaneous comment(s) per day.`, colour: COR.sucesso },
-        { title: "💬 Frecuencia ajustada",
-          description: `Hasta **${n}** comentario(s) espontáneo(s) al día.`, colour: COR.sucesso }));
-    }
-    return sendEmbed(message.channel, tr(ctx,
-      { title: "Uso", description: `\`${citarInterno("chat.comentar.aqui", PREFIXO)}|off|pordia <n>|status\``, colour: COR.info },
-      { title: "Usage", description: `\`${citarInterno("chat.comentar.aqui", PREFIXO)}|off|pordia <n>|status\``, colour: COR.info },
-      { title: "Uso", description: `\`${ces("chat.comentar.aqui")}|off|perday <n>|status\``, colour: COR.info }));
-  }
-
-  if (args[0]?.toLowerCase() === "livre") {
-    const server = await ctx.getServer?.(message);
-    if (ctx.membroTemPermissao && !ctx.membroTemPermissao(message, server, "ManagePermissions")) {
-      return sendEmbed(message.channel, tr(ctx,
-        { title: "🚫 Permissão insuficiente",
-          description: "Você precisa de **ManagePermissions** para mudar a conversa livre.", colour: COR.erro },
-        { title: "🚫 Missing permission",
-          description: "You need **ManagePermissions** to change free chat.", colour: COR.erro },
-        { title: "🚫 Permiso insuficiente",
-          description: "Necesitas **ManagePermissions** para cambiar la conversación libre.", colour: COR.erro }));
-    }
-    const canalId = message.channelId;
-    const cfg = ctx.config;
-    if (!cfg.chatLivre) cfg.chatLivre = { canais: [] };
-    const acao = args[1]?.toLowerCase();
-    const jaTem = cfg.chatLivre.canais.includes(canalId);
-
-    if (acao === "on" || acao === "ligar") {
-      if (!jaTem) cfg.chatLivre.canais.push(canalId);
-      ctx.salvarConfig?.();
-      const modo = cfg.chatLivre.modo || "relevante";
-      return sendEmbed(message.channel, tr(ctx, {
-        title: "💬 Conversa livre ativada",
-        description: `Vou participar deste canal sem precisar de menção.\nModo atual: **${modo === "todas" ? "responder todas as mensagens" : "responder só o que eu julgar relevante"}**.\n\nTroque o modo com \`${citarInterno("chat.livre.modo.todas", PREFIXO)}\` ou \`${citarInterno("chat.livre.modo.relevante", PREFIXO)}\`. Desligar: \`${citarInterno("chat.livre", PREFIXO)} off\`.`, colour: COR.sucesso,
-      }, {
-        title: "💬 Free chat enabled",
-        description: `I'll join this channel without needing a mention.\nCurrent mode: **${modo === "todas" ? "reply to every message" : "reply only to what I judge relevant"}**.\n\nChange the mode with \`${citarInterno("chat.livre.modo.todas", PREFIXO)}\` or \`${citarInterno("chat.livre.modo.relevante", PREFIXO)}\`. Disable: \`${citarInterno("chat.livre", PREFIXO)} off\`.`, colour: COR.sucesso,
-      }, {
-        title: "💬 Conversación libre activada",
-        description: `Voy a participar en este canal sin necesidad de mención.\nModo actual: **${modo === "todas" ? "responder todos los mensajes" : "responder solo lo que considere relevante"}**.\n\nCambia el modo con \`${ces("chat.livre.modo.todas")}\` o \`${ces("chat.livre.modo.relevante")}\`. Desactivar: \`${ces("chat.livre")} off\`.`, colour: COR.sucesso,
-      }));
-    }
-    if (acao === "off" || acao === "desligar") {
-      cfg.chatLivre.canais = cfg.chatLivre.canais.filter((c) => c !== canalId);
-      ctx.salvarConfig?.();
-      return sendEmbed(message.channel, tr(ctx,
-        { title: "💬 Conversa livre desativada",
-          description: "Só respondo aqui se me mencionarem ou usarem `" + citarInterno("chat") + "`.", colour: COR.aviso },
-        { title: "💬 Free chat disabled",
-          description: "I only reply here if mentioned or via `" + citarInterno("chat") + "`.", colour: COR.aviso },
-        { title: "💬 Conversación libre desactivada",
-          description: "Aquí solo respondo si me mencionan o usan `" + citar("chat", "es") + "`.", colour: COR.aviso }));
-    }
-    if (acao === "modo") {
-      const novo = args[2]?.toLowerCase();
-      if (novo !== "todas" && novo !== "relevante") {
-        return sendEmbed(message.channel, tr(ctx, {
-          title: "💬 Modo da conversa livre",
-          description: `Modo atual: **${cfg.chatLivre.modo || "relevante"}**.\n\n\`${citarInterno("chat.livre.modo.todas", PREFIXO)}\` — responde toda mensagem\n\`${citarInterno("chat.livre.modo.relevante", PREFIXO)}\` — responde só o que julgar importante`, colour: COR.info,
-        }, {
-          title: "💬 Free chat mode",
-          description: `Current mode: **${cfg.chatLivre.modo || "relevante"}**.\n\n\`${citarInterno("chat.livre.modo.todas", PREFIXO)}\` — replies to every message\n\`${citarInterno("chat.livre.modo.relevante", PREFIXO)}\` — replies only to what it judges important`, colour: COR.info,
-        }, {
-          title: "💬 Modo de la conversación libre",
-          description: `Modo actual: **${cfg.chatLivre.modo || "relevante"}**.\n\n\`${ces("chat.livre.modo.todas")}\` — responde todos los mensajes\n\`${ces("chat.livre.modo.relevante")}\` — responde solo lo que considere importante`, colour: COR.info,
-        }));
-      }
-      cfg.chatLivre.modo = novo;
-      ctx.salvarConfig?.();
-      return sendEmbed(message.channel, tr(ctx, {
-        title: "💬 Modo alterado",
-        description: novo === "todas"
-          ? "Agora respondo **todas** as mensagens dos canais com conversa livre (uma de cada vez)."
-          : "Agora respondo **só o que julgar relevante** nos canais com conversa livre.", colour: COR.sucesso,
-      }, {
-        title: "💬 Mode changed",
-        description: novo === "todas"
-          ? "I now reply to **every** message in free-chat channels (one at a time)."
-          : "I now reply **only to what I judge relevant** in free-chat channels.", colour: COR.sucesso,
-      }, {
-        title: "💬 Modo cambiado",
-        description: novo === "todas"
-          ? "Ahora respondo **todos** los mensajes de los canales con conversación libre (uno a la vez)."
-          : "Ahora respondo **solo lo que considere relevante** en los canales con conversación libre.", colour: COR.sucesso,
-      }));
-    }
-    // sem on/off: mostra o estado
-    return sendEmbed(message.channel, tr(ctx, {
-      title: "💬 Conversa livre",
-      description: `Neste canal: **${jaTem ? "ativada" : "desativada"}**.\n\nUse \`${citarInterno("chat.livre", PREFIXO)} on\` ou \`${citarInterno("chat.livre", PREFIXO)} off\`.`, colour: COR.info,
-    }, {
-      title: "💬 Free chat",
-      description: `In this channel: **${jaTem ? "enabled" : "disabled"}**.\n\nUse \`${citarInterno("chat.livre", PREFIXO)} on\` or \`${citarInterno("chat.livre", PREFIXO)} off\`.`, colour: COR.info,
-    }, {
-      title: "💬 Conversación libre",
-      description: `En este canal: **${jaTem ? "activada" : "desactivada"}**.\n\nUsa \`${ces("chat.livre")} on\` o \`${ces("chat.livre")} off\`.`, colour: COR.info,
-    }));
-  }
-
-  // &chat esquecer → limpa a memória que a IA guardou sobre você
-  if (args[0]?.toLowerCase() === "esquecer" || args[0]?.toLowerCase() === "forget") {
-    const alvo = args[1]?.toLowerCase();
-
-    // &chat esquecer tudo → apaga TODA a memória da IA no servidor (ManageServer)
-    if (alvo === "tudo" || alvo === "all") {
-      const server = await ctx.getServer?.(message);
-      if (ctx.membroTemPermissao && !ctx.membroTemPermissao(message, server, "ManageServer")) {
-        return sendEmbed(message.channel, tr(ctx,
-          { title: "🚫 Permissão insuficiente",
-            description: "Apagar TODA a memória exige **ManageServer**. Para apagar só a sua, use `" + citarInterno("chat.esquecer") + "`.", colour: COR.erro },
-          { title: "🚫 Missing permission",
-            description: "Erasing ALL the memory requires **ManageServer**. To erase only yours, use `" + citarInterno("chat.esquecer") + "`.", colour: COR.erro },
-          { title: "🚫 Permiso insuficiente",
-            description: "Borrar TODA la memoria requiere **ManageServer**. Para borrar solo la tuya, usa `" + citar("chat.esquecer", "es") + "`.", colour: COR.erro }));
-      }
-      try {
-        // (31 out 2026, P1, R9) só o que é DESTE servidor: o banco daqui e o fio dos
-        // canais daqui — a memória global de cada pessoa (ia_memoria) e o fio dos
-        // outros servidores ficam (antes iam junto, de todos)
-        const r = db.apagarMemoriaServidor(ctx.serverId);
-        const canaisDaqui = cacheCanal.canais().filter((c) => c === message.channelId || canalDoServidor(server, c));
-        const mem = limparEstadoEmMemoria({ canais: canaisDaqui, serverId: ctx.serverId });
-        console.log(`[CHAT] esquecer tudo: banco (${r.fatosPessoa}+${r.fatosServidor}+${r.perfis}+${r.historico}) e memória (fio de ${canaisDaqui.length} canal(is), ${mem.respostas} resposta(s), ${mem.pendentes} pendente(s))`);
-        return sendEmbed(message.channel, tr(ctx, {
-          title: "🧹 Memória do servidor apagada",
-          description: `Esqueci tudo deste servidor: ${r.fatosPessoa} fato(s) de pessoas, ${r.fatosServidor} do servidor, ${r.perfis} perfil(is) e ${r.historico} mensagem(ns) de conversa recente — além do fio dos canais daqui e do que o agente ainda ia gravar. Recomeço do zero.`, colour: COR.sucesso,
-        }, {
-          title: "🧹 Server memory erased",
-          description: `I forgot everything from this server: ${r.fatosPessoa} fact(s) about people, ${r.fatosServidor} about the server, ${r.perfis} profile(s) and ${r.historico} recent conversation message(s) — plus the live thread of the channels here and anything the agent was about to record. Starting from scratch.`, colour: COR.sucesso,
-        }, {
-          title: "🧹 Memoria del servidor borrada",
-          description: `Olvidé todo de este servidor: ${r.fatosPessoa} dato(s) de personas, ${r.fatosServidor} del servidor, ${r.perfis} perfil(es) y ${r.historico} mensaje(s) de conversación reciente — además del hilo de los canales de aquí y de lo que el agente todavía iba a guardar. Empiezo de cero.`, colour: COR.sucesso,
-        }));
-      } catch (e) {
-        registrarErro("CHAT][esquecer-tudo", e);
-        return sendEmbed(message.channel, tr(ctx,
-          { title: "❌ Erro", description: "Não consegui apagar a memória geral agora.", colour: COR.erro },
-          { title: "❌ Error", description: "I couldn't erase the general memory right now.", colour: COR.erro },
-          { title: "❌ Error", description: "No pude borrar la memoria general ahora.", colour: COR.erro }));
-      }
-    }
-
-    // &chat esquecer → apaga TUDO sobre você (fatos, perfil, histórico)
-    const userId = message.authorId;
-    try {
-      const r = db.apagarTudoDaPessoa(ctx.serverId, userId);
-      db.limparMemoria(userId);
-      // O histórico curto também — ele existia e nunca era limpo por nenhum
-      // dos dois comandos de esquecer.
-      db.limparHistorico(userId, { serverId: ctx.serverId });
-      // E o estado vivo deste canal, pelo mesmo motivo do `esquecer tudo`.
-      limparEstadoEmMemoria({ canalId: message.channelId });
-      memoria.descartarPendentes?.(ctx.serverId, userId);
-      return sendEmbed(message.channel, tr(ctx, {
-        title: "🧹 Memória apagada",
-        description: `Esqueci o que sabia sobre você (${r.fatos} fato(s) e seu perfil). Nossas próximas conversas começam do zero.`, colour: COR.sucesso,
-      }, {
-        title: "🧹 Memory erased",
-        description: `I forgot what I knew about you (${r.fatos} fact(s) and your profile). Our next conversations start from scratch.`, colour: COR.sucesso,
-      }, {
-        title: "🧹 Memoria borrada",
-        description: `Olvidé lo que sabía de ti (${r.fatos} dato(s) y tu perfil). Nuestras próximas conversaciones empiezan de cero.`, colour: COR.sucesso,
-      }));
-    } catch (e) {
-      registrarErro("CHAT][esquecer", e);
-      return sendEmbed(message.channel, tr(ctx,
-        { title: "❌ Erro", description: "Não consegui apagar a memória agora.", colour: COR.erro },
-        { title: "❌ Error", description: "I couldn't erase the memory right now.", colour: COR.erro },
-        { title: "❌ Error", description: "No pude borrar la memoria ahora.", colour: COR.erro }));
-    }
-  }
-
-  // &chat mapear → captura o SEU perfil (bio, status) do cartão. Só o seu: ler o
-  // perfil de outra pessoa sem a permissão dela é o scraping que as regras do
-  // Stoat proíbem (privacidade, 20 out 2026).
-  if (["mapear", "map"].includes(args[0]?.toLowerCase())) {
-    const alvoId = idEscrito(args.slice(1).join(" ")) || message.mentionIds?.[0] || message.mentions?.[0]?.id || message.authorId;
-    if (alvoId !== message.authorId) return sendEmbed(message.channel, soVoce(ctx));
-    try {
-      const server = await ctx.getServer?.(message);
-      const member = (alvoId === message.authorId && message.member) ? message.member
-        : await server?.fetchMember?.(alvoId);
-      const user = member?.user ?? member;
-      const nome = user?.username ?? member?.nickname ?? alvoId;
-
-      let bio = null, status = null;
-      try { status = user?.status?.text ?? user?.status ?? null; } catch {}
-      try {
-        const prof = await (user?.fetchProfile?.() ?? member?.fetchProfile?.());
-        bio = prof?.content ?? prof?.bio ?? null;
-      } catch {}
-      // fallbacks: alguns clientes expõem bio direto no user
-      if (!bio) { try { bio = user?.profile?.content ?? user?.bio ?? null; } catch {} }
-
-      const entrou = member?.joinedAt ? new Date(member.joinedAt).toISOString() : null;
-
-      db.setPerfil(ctx.serverId, alvoId, {
-        nome,
-        bio: bio ? String(bio).slice(0, 500) : undefined,
-        status: status ? String(status).slice(0, 200) : undefined,
-        entrou: entrou || undefined,
-      });
-
-      const achou = [bio && "bio", status && "status", entrou && "entrada"].filter(Boolean);
-      return sendEmbed(message.channel, tr(ctx, {
-        title: "👤 Perfil mapeado",
-        description: achou.length
-          ? `Capturei de **${nome}**: ${achou.join(", ")}. Veja com \`${citarInterno("chat.perfil", PREFIXO)}${alvoId === message.authorId ? "" : " @" + nome}\`.`
-          : `Consegui acessar **${nome}**, mas a API não me deu bio/status por aqui. Os fatos que aprendo conversando continuam valendo.`,
-        colour: COR.sucesso,
-      }, {
-        title: "👤 Profile mapped",
-        description: achou.length
-          ? `I captured from **${nome}**: ${achou.join(", ")}. See it with \`${citarInterno("chat.perfil", PREFIXO)}${alvoId === message.authorId ? "" : " @" + nome}\`.`
-          : `I could access **${nome}**, but the API didn't give me a bio/status here. The facts I learn by chatting still count.`,
-        colour: COR.sucesso,
-      }, {
-        title: "👤 Perfil mapeado",
-        description: achou.length
-          ? `Capturé de **${nome}**: ${achou.map((x) => ({ status: "estado" })[x] ?? x).join(", ")}. Míralo con \`${ces("chat.perfil")}${alvoId === message.authorId ? "" : " @" + nome}\`.`
-          : `Pude acceder a **${nome}**, pero la API no me dio bio/estado aquí. Los datos que aprendo conversando siguen valiendo.`,
-        colour: COR.sucesso,
-      }));
-    } catch (e) {
-      return sendEmbed(message.channel, tr(ctx,
-        { title: "❌ Não consegui mapear",
-          description: `Não consegui ler o seu perfil: ${descreverErro(e, "pt")}.`, colour: COR.erro },
-        { title: "❌ Couldn't map it",
-          description: `I couldn't read your profile: ${descreverErro(e, "en")}.`, colour: COR.erro },
-        { title: "❌ No pude mapearlo",
-          description: `No pude leer tu perfil: ${descreverErro(e, "es")}.`, colour: COR.erro }));
-    }
-  }
-
-  // &chat perfil → mostra o que a Judy sabe sobre VOCÊ (o de outra pessoa é dela)
-  if (["perfil", "profile"].includes(args[0]?.toLowerCase())) {
-    const alvoId = idEscrito(args.slice(1).join(" ")) || message.mentionIds?.[0] || message.mentions?.[0]?.id || message.authorId;
-    if (alvoId !== message.authorId) return sendEmbed(message.channel, soVoce(ctx));
-    const perfil = db.getPerfil?.(ctx.serverId, alvoId);
-    const fatos = db.getFatosPessoa?.(ctx.serverId, alvoId, { limite: 20, minConf: 0.4 }) || [];
-    if (!perfil && !fatos.length) {
-      return sendEmbed(message.channel, tr(ctx, {
-        title: "👤 Perfil vazio",
-        description: alvoId === message.authorId ? "Ainda não sei nada sobre você. Conversa comigo que eu vou te conhecendo." : "Ainda não conheço essa pessoa.", colour: COR.info,
-      }, {
-        title: "👤 Empty profile",
-        description: alvoId === message.authorId ? "I don't know anything about you yet. Chat with me and I'll get to know you." : "I don't know this person yet.", colour: COR.info,
-      }, {
-        title: "👤 Perfil vacío",
-        description: alvoId === message.authorId ? "Todavía no sé nada de ti. Conversa conmigo y te iré conociendo." : "Todavía no conozco a esta persona.", colour: COR.info,
-      }));
-    }
-    const linhas = [];
-    if (perfil?.cuidado) linhas.push(tr(ctx, "🌿 _Marcado para tratamento gentil (opt-in)._\n", "🌿 _Marked for gentle treatment (opt-in)._\n", "🌿 _Marcado para trato amable (opt-in)._\n"));
-    if (perfil?.bio) linhas.push(`**Bio:** ${perfil.bio}`);
-    if (perfil?.grupos) linhas.push(`${tr(ctx, "**Grupos:**", "**Grupos:**", "**Grupos:**")} ${perfil.grupos}`);
-    if (perfil?.jogos) linhas.push(`${tr(ctx, "**Jogos:**", "**Jogos:**", "**Juegos:**")} ${perfil.jogos}`);
-    const porCat = { personalidade: [], gosto: [], info: [] };
-    for (const f of fatos) (porCat[f.categoria] || (porCat.info)).push(f);
-    const rot = tr(ctx,
-      { personalidade: "🧠 Personalidade", gosto: "❤️ Gostos", info: "📌 Informações" },
-      { personalidade: "🧠 Personality", gosto: "❤️ Likes", info: "📌 Information" },
-      { personalidade: trechoPronto("🧠 Personalidad"), gosto: trechoPronto("❤️ Gustos"), info: trechoPronto("📌 Información") });
-    for (const cat of ["personalidade", "gosto", "info"]) {
-      if (porCat[cat]?.length) {
-        linhas.push(`\n**${rot[cat]}:**`);
-        for (const f of porCat[cat]) {
-          const d = (() => { try { return new Date(f.momento).toLocaleDateString({ pt: "pt-BR", en: "en-US", es: "es-ES" }[idiomaDe(ctx)]); } catch { return ""; } })();
-          linhas.push(`• ${f.fato}${d ? tr(ctx, ` _(desde ${d})_`, ` _(since ${d})_`, ` _(desde ${d})_`) : ""}`);
-        }
-      }
-    }
-    return sendEmbed(message.channel, {
-      title: tr(ctx, "👤 Perfil", "👤 Profile", "👤 Perfil"),
-      description: linhas.join("\n").slice(0, 1990) || tr(ctx, "_(sem dados)_", "_(no data)_", "_(sin datos)_"), colour: COR.info });
-  }
-
-  // &chat cuidado on|off → a PRÓPRIA pessoa pede tratamento gentil (opt-in)
-  // (31 out 2026, P1, R9) só para si: marcar OUTRA pessoa (`&chat cuidado <id>`),
-  // mesmo sendo staff, é rotular alguém sem o consentimento dela — recusado.
-  if (["cuidado", "gentil"].includes(args[0]?.toLowerCase())) {
-    const resto = args.slice(1).filter((a) => !["on", "off"].includes(String(a).toLowerCase())).join(" ");
-    const alvoId = idEscrito(resto) || message.mentionIds?.[0] || message.mentions?.[0]?.id || message.authorId;
-    if (alvoId !== message.authorId) {
-      return sendEmbed(message.channel, tr(ctx,
-        { title: "🔒 Só para você",
-          description: `O tratamento gentil é escolha de cada pessoa: cada um liga o seu com \`${citarInterno("chat.cuidado", PREFIXO)} on\`.`, colour: COR.aviso },
-        { title: "🔒 Only for yourself",
-          description: `Gentle treatment is each person's choice: everyone turns on their own with \`${citarInterno("chat.cuidado", PREFIXO)} on\`.`, colour: COR.aviso },
-        { title: "🔒 Solo para ti",
-          description: `El trato amable es elección de cada persona: cada uno activa el suyo con \`${ces("chat.cuidado")} on\`.`, colour: COR.aviso }));
-    }
-    const estado = args.find((a) => ["on", "off"].includes(a?.toLowerCase()))?.toLowerCase();
-    const ligar = estado !== "off";
-    try {
-      db.setCuidado(ctx.serverId, alvoId, ligar);
-      return sendEmbed(message.channel, tr(ctx, {
-        title: ligar ? "🌿 Tratamento gentil ativado" : "Tratamento gentil desativado",
-        description: ligar
-          ? `A Judy vai tratar ${alvoId === message.authorId ? "você" : "essa pessoa"} com gentileza e paciência extra, sem ironia ácida.`
-          : "Voltou ao tom normal (modulado pelo perfil).", colour: COR.sucesso,
-      }, {
-        title: ligar ? "🌿 Gentle treatment on" : "Gentle treatment off",
-        description: ligar
-          ? `Judy will treat ${alvoId === message.authorId ? "you" : "this person"} with extra kindness and patience, no acid irony.`
-          : "Back to the normal tone (modulated by the profile).", colour: COR.sucesso,
-      }, {
-        title: ligar ? "🌿 Trato amable activado" : "Trato amable desactivado",
-        description: ligar
-          ? `${alvoId === message.authorId ? "Judy te va a tratar" : "Judy va a tratar a esta persona"} con amabilidad y paciencia extra, sin ironía ácida.`
-          : "Volvió al tono normal (modulado por el perfil).", colour: COR.sucesso,
-      }));
-    } catch (e) {
-      registrarErro("CHAT][cuidado", e);
-      return sendEmbed(message.channel, tr(ctx,
-        { title: "❌ Erro", description: "Não consegui ajustar agora.", colour: COR.erro },
-        { title: "❌ Error", description: "I couldn't adjust it right now.", colour: COR.erro },
-        { title: "❌ Error", description: "No pude ajustarlo ahora.", colour: COR.erro }));
-    }
-  }
-
-  // &chat status → testa a conexão com o servidor de IA (e diz o que este servidor escolheu)
-  if (args[0]?.toLowerCase() === "status") {
-    if (!iaDisponivel(serverId))
-      return sendEmbed(message.channel, tr(ctx,
-        { title: "🚫 Indisponível aqui",
-          description: "O chat com IA não está habilitado neste servidor.", colour: COR.aviso },
-        { title: "🚫 Unavailable here",
-          description: "The AI chat isn't enabled on this server.", colour: COR.aviso },
-        { title: "🚫 No disponible aquí",
-          description: "El chat con IA no está habilitado en este servidor.", colour: COR.aviso }));
-    // (31 out 2026, P1, R6/R10) quem não é o dono do bot vê só 🟢/🔴 e o que vale
-    // NESTE servidor; endereços, modelos e o SearXNG são do dono (a máquina é dele)
-    const dono = donosDoBot().has(message.authorId);
-    const disp = await llmDisponivel();
-    const { modelos: modelosDoServidor = [] } = dono ? await listarModelos().catch(() => ({ modelos: [] })) : { modelos: [] };
-    const configurados = [...new Set([LLM_MODEL_PADRAO, LLM_MODEL_LEVE, LLM_MODEL_CODIGO, LLM_MODEL_LOGICA, LLM_MODEL_DECISAO, LLM_MODEL_JUIZ])].filter(Boolean);
-    const faltando = modelosDoServidor.length ? configurados.filter((m) => !modelosDoServidor.includes(m)) : [];
-    const so = (linhas) => (dono ? linhas : []);
-    return sendEmbed(message.channel, tr(ctx, {
-      title: disp.ok ? "🟢 IA disponível" : "🔴 IA indisponível",
-      description: [
-        `**Neste servidor:** chat ${chatLigadoAqui(serverId) ? "🟢" : "🔴"} · imagem ${imagemLigadaAqui(serverId) ? "🟢" : "🔴"} · ${naoFalarCom(message.authorId) ? `você pediu silêncio (\`${citarInterno("chat.voltar", PREFIXO)}\`)` : "você conversa normalmente"}`,
-        ...so([
-          `**Servidor:** ${LLM_URL}`,
-          `**Conversa:** ${LLM_MODEL_PADRAO}`,
-          `**Papo curto, memória e decisões:** ${LLM_MODEL_LEVE}`,
-          `**Código:** ${LLM_MODEL_CODIGO} · **Lógica:** ${LLM_MODEL_LOGICA} · **Decisão:** ${LLM_MODEL_DECISAO} · **Moderação:** ${LLM_MODEL_JUIZ}`,
-          modelosDoServidor.length
-            ? `**No servidor:** ${modelosDoServidor.map((m) => faltando.includes(m) ? m : `\`${m}\``).join(" · ")}`
-            : "",
-          faltando.length
-            ? `⚠️ **Configurado mas ausente no servidor:** ${faltando.join(", ")} — confira os nomes no \`llama-swap.yaml\`.`
-            : "",
-          `**SearXNG:** ${SEARXNG_URL}`,
-        ]),
-        "",
-        disp.ok ? "Tudo pronto — pode conversar." : dono ? `Status: ${disp.motivo}` : "A IA está fora do ar agora — tente de novo mais tarde.",
-      ].filter(Boolean).join("\n"),
-      colour: disp.ok ? COR.sucesso : COR.aviso,
-    }, {
-      title: disp.ok ? "🟢 AI available" : "🔴 AI unavailable",
-      description: [
-        `**On this server:** chat ${chatLigadoAqui(serverId) ? "🟢" : "🔴"} · images ${imagemLigadaAqui(serverId) ? "🟢" : "🔴"} · ${naoFalarCom(message.authorId) ? `you asked for silence (\`${citarInterno("chat.voltar", PREFIXO)}\`)` : "you chat normally"}`,
-        ...so([
-          `**Server:** ${LLM_URL}`,
-          `**Conversation:** ${LLM_MODEL_PADRAO}`,
-          `**Small talk, memory and decisions:** ${LLM_MODEL_LEVE}`,
-          `**Code:** ${LLM_MODEL_CODIGO} · **Logic:** ${LLM_MODEL_LOGICA} · **Decision:** ${LLM_MODEL_DECISAO} · **Moderation:** ${LLM_MODEL_JUIZ}`,
-          modelosDoServidor.length ? `**On the server:** ${modelosDoServidor.map((m) => `\`${m}\``).join(" · ")}` : "",
-          faltando.length ? `⚠️ **Configured but missing on the server:** ${faltando.join(", ")}` : "",
-          `**SearXNG:** ${SEARXNG_URL}`,
-        ]),
-        "",
-        disp.ok ? "All set — you can chat." : dono ? `Status: ${disp.motivo}` : "The AI is down right now — try again later.",
-      ].filter(Boolean).join("\n"),
-      colour: disp.ok ? COR.sucesso : COR.aviso,
-    }, {
-      title: disp.ok ? "🟢 IA disponible" : "🔴 IA no disponible",
-      description: [
-        `**En este servidor:** chat ${chatLigadoAqui(serverId) ? "🟢" : "🔴"} · imágenes ${imagemLigadaAqui(serverId) ? "🟢" : "🔴"} · ${naoFalarCom(message.authorId) ? `pediste silencio (\`${ces("chat.voltar")}\`)` : "conversas normalmente"}`,
-        ...so([
-          `**Servidor:** ${LLM_URL}`,
-          `**Conversación:** ${LLM_MODEL_PADRAO}`,
-          `**Charla corta, memoria y decisiones:** ${LLM_MODEL_LEVE}`,
-          `**Código:** ${LLM_MODEL_CODIGO} · **Lógica:** ${LLM_MODEL_LOGICA} · **Decisión:** ${LLM_MODEL_DECISAO} · **Moderación:** ${LLM_MODEL_JUIZ}`,
-          modelosDoServidor.length
-            ? `**En el servidor:** ${modelosDoServidor.map((m) => faltando.includes(m) ? m : `\`${m}\``).join(" · ")}`
-            : "",
-          faltando.length
-            ? `⚠️ **Configurado pero ausente en el servidor:** ${faltando.join(", ")} — revisa los nombres en el \`llama-swap.yaml\`.`
-            : "",
-          `**SearXNG:** ${SEARXNG_URL}`,
-        ]),
-        "",
-        disp.ok ? "Todo listo — puedes conversar." : dono ? `Estado: ${disp.motivo}` : "La IA está caída ahora — inténtalo de nuevo más tarde.",
-      ].filter(Boolean).join("\n"),
-      colour: disp.ok ? COR.sucesso : COR.aviso,
-    }));
-  }
-
-  if (["especial", "special", "grande", "pro"].includes(args[0]?.toLowerCase())) {
-    return sendEmbed(message.channel, tr(ctx,
-      { title: "🧠 Modelo especial aposentado",
-        description: `O modelo grande saiu de operação. O de sempre ficou **4,5× mais rápido** e responde melhor do que ele — use \`${citarInterno("chat", PREFIXO)}\` normalmente.`,
-        colour: COR.aviso },
-      { title: "🧠 Special model retired",
-        description: `The large model is gone. The regular one is now **4.5× faster** and answers better than it did — just use \`${citarInterno("chat", PREFIXO)}\`.`,
-        colour: COR.aviso },
-      { title: "🧠 Modelo especial retirado",
-        description: `El modelo grande dejó de funcionar. El de siempre ahora es **4,5× más rápido** y responde mejor que él — usa \`${ces("chat")}\` normalmente.`,
-        colour: COR.aviso }));
-  }
-
-  return conversar(message, textoOriginalDoComando(message, args), ctx);
+  await conversar(message, pergunta, ctx);   // quem pediu silêncio ouve o porquê lá (uma vez por minuto)
+  return true;
 }
 
 // O texto do `&chat <pergunta>` como a pessoa escreveu. Os argumentos chegam com a 1ª

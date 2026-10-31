@@ -55,17 +55,18 @@ Variável nova exige **recriar** o container (`docker compose up -d
 
 ## Ferramentas
 
-`calcular`, `buscar_web` (SearXNG), `buscar_rss`, `ler_codigo`, `ver_imagem` e
+`calcular`, `buscar_web` (SearXNG, pelo cliente único `modulos/ai/searxng.js`), `buscar_rss`, `ler_codigo`, `ver_imagem` e
 `gerar_imagem`. Nenhum `executar` lança: erro vira `{ erro }` e volta para o
 modelo, que explica em vez de travar.
 
 Quais aparecem depende do ambiente: `ver_imagem` exige `MODELO_VISAO`;
-`gerar_imagem` exige `IMAGEM≠0` e um backend (o sd.cpp embutido ou `SD_URL`);
+`gerar_imagem` exige `IMAGEM=1` (vazio = desligado, desde 31 out 2026) e um backend (o sd.cpp embutido ou `SD_URL`);
 `FERRAMENTAS_OFF=calcular,buscar_rss` desliga por nome.
 
 `buscar_rss` lê só os feeds cadastrados (`RSS_FEEDS` e os do `&rss` do servidor
 da conversa) — URL pedida na conversa nunca é buscada. `gerar_imagem` tem teto
-diário por servidor (`IMAGEM_POR_DIA`, padrão 20; 0 = sem teto), e o download
+diário por servidor (`IMAGEM_POR_DIA`, padrão 20; 0 = sem teto; a contagem do dia fica em
+`IMAGEM_TETO_ARQUIVO`, padrão `/data/imagem-teto.json`, e sobrevive ao reinício), e o download
 do modelo de imagem roda em segundo plano (enquanto baixa, o pedido ouve "ainda
 baixando"). Cada programa de fora (sd.cpp, curl) recebe só o ambiente mínimo.
 

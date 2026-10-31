@@ -52,7 +52,8 @@ export async function cmdReset(message, args, ctx) {
   const chave = `${sid}:${message.authorId}`;
 
   // ── desfazer ──
-  if (["undo", "desfazer", "voltar", "restore", "restaurar"].includes(sub)) {
+  // (P2) `undo`/`restore` e `confirm`/`yes` chegam traduzidos pelo registro (reset.js); o espanhol também
+  if (["desfazer", "voltar", "restaurar"].includes(sub)) {
     const b = db.lerConfig(chaveBackup(sid));
     if (!b?.config || b.usado || Date.now() - (b.quando ?? 0) > DESFAZER_MS) {
       return sendEmbed(message.channel, { title: T("↩️ Nada para desfazer", "↩️ Nothing to undo", "↩️ Nada que deshacer"), colour: COR.aviso,
@@ -71,7 +72,7 @@ export async function cmdReset(message, args, ctx) {
   }
 
   // ── confirmar ──
-  if (["confirm", "confirmar", "sim", "yes"].includes(sub)) {
+  if (["confirmar", "sim", "si", "sí"].includes(sub)) {
     const p = pedidos.get(chave);
     const codigo = String(args[1] ?? "").toUpperCase();
     if (!p || Date.now() > p.ate) {
@@ -82,7 +83,7 @@ export async function cmdReset(message, args, ctx) {
     }
     if (codigo !== p.codigo) {
       return sendEmbed(message.channel, { title: T("❌ Código errado", "❌ Wrong code", "❌ Código incorrecto"), colour: COR.erro,
-        description: T(`Use \`${citar("reset", "pt", P)} confirm ${p.codigo}\`.`, `Use \`${citar("reset", "en", P)} confirm ${p.codigo}\`.`, `Usa \`${citar("reset", "es", P)} confirm ${p.codigo}\`.`) });
+        description: T(`Use \`${citar("reset.confirmar", "pt", P)} ${p.codigo}\`.`, `Use \`${citar("reset.confirmar", "en", P)} ${p.codigo}\`.`, `Usa \`${citar("reset.confirmar", "es", P)} ${p.codigo}\`.`) });
     }
     pedidos.delete(chave);
     const antes = structuredClone(store.configDoServidor(sid));
@@ -93,23 +94,23 @@ export async function cmdReset(message, args, ctx) {
     console.log(`[RESET] servidor ${sid} voltou à configuração de fábrica (por ${message.authorId})`);
     // o log de antes ainda recebe o aviso (o canal de log também foi zerado)
     await log.registrar({ ...ctx, config: antes }, "comandos", {
-      titulo: "🏭 Configuração de fábrica", descricao: `<@${message.authorId}> resetou a Judy neste servidor. \`${citar("reset", "pt", P)} undo\` desfaz por 24 h.`,
-      en: { titulo: "🏭 Factory settings", descricao: `<@${message.authorId}> reset Judy on this server. \`${citar("reset", "en", P)} undo\` undoes it for 24 h.` },
-      es: { titulo: "🏭 Configuración de fábrica", descricao: `<@${message.authorId}> reseteó a Judy en este servidor. \`${citar("reset", "es", P)} undo\` lo deshace durante 24 h.` } });
+      titulo: "🏭 Configuração de fábrica", descricao: `<@${message.authorId}> resetou a Judy neste servidor. \`${citar("reset.desfazer", "pt", P)}\` desfaz por 24 h.`,
+      en: { titulo: "🏭 Factory settings", descricao: `<@${message.authorId}> reset Judy on this server. \`${citar("reset.desfazer", "en", P)}\` undoes it for 24 h.` },
+      es: { titulo: "🏭 Configuración de fábrica", descricao: `<@${message.authorId}> reseteó a Judy en este servidor. \`${citar("reset.desfazer", "es", P)}\` lo deshace durante 24 h.` } });
     const ctxDepois = { config: depois };
     return sendEmbed(message.channel, { title: tr(ctxDepois, "🏭 Configuração de fábrica", "🏭 Factory settings restored", "🏭 Configuración de fábrica restaurada"), colour: COR.sucesso,
       description: tr(ctxDepois, [
         "A Judy voltou à configuração de fábrica neste servidor: automod desligado, sem canal de log, sem cargos de staff, idioma padrão (inglês).",
         "",
-        `Configurar de novo: \`${citarInterno("assistente", P)}\` · Arrependeu? \`${citar("reset", "pt", P)} undo\` (em até 24 h).`,
+        `Configurar de novo: \`${citarInterno("assistente", P)}\` · Arrependeu? \`${citar("reset.desfazer", "pt", P)}\` (em até 24 h).`,
       ], [
         "Judy is back to factory settings on this server: automod off, no log channel, no staff roles, default language (English).",
         "",
-        `Set it up again: \`${citarInterno("assistente", P)}\` · Changed your mind? \`${citar("reset", "en", P)} undo\` (within 24 h).`,
+        `Set it up again: \`${citarInterno("assistente", P)}\` · Changed your mind? \`${citar("reset.desfazer", "en", P)}\` (within 24 h).`,
       ], [
         "Judy volvió a la configuración de fábrica en este servidor: automod desactivado, sin canal de registro, sin roles de staff, idioma predeterminado (inglés).",
         "",
-        `Configúrala de nuevo: \`${citar("assistente", "es", P)}\` · ¿Te arrepientes? \`${citar("reset", "es", P)} undo\` (en un plazo de 24 h).`,
+        `Configúrala de nuevo: \`${citar("assistente", "es", P)}\` · ¿Te arrepientes? \`${citar("reset.desfazer", "es", P)}\` (en un plazo de 24 h).`,
       ]).join("\n") });
   }
 
@@ -125,8 +126,8 @@ export async function cmdReset(message, args, ctx) {
       "**Fica:** níveis de XP, avisos, saldos, personagens do RPG, cargos por reação, webhooks,",
       "feeds RSS, tickets abertos e a lista global de bans.",
       "",
-      `Para confirmar, em até 2 min: \`${citar("reset", "pt", P)} confirm ${codigo}\``,
-      `_Dá para desfazer por 24 h com \`${citar("reset", "pt", P)} undo\`._`,
+      `Para confirmar, em até 2 min: \`${citar("reset.confirmar", "pt", P)} ${codigo}\``,
+      `_Dá para desfazer por 24 h com \`${citar("reset.desfazer", "pt", P)}\`._`,
     ], [
       "**Goes back to default:** every setting of Judy on this server —",
       "automod (all off), punishment, log channel, welcome/goodbye, autorole, staff roles and access,",
@@ -135,8 +136,8 @@ export async function cmdReset(message, args, ctx) {
       "**Stays:** members' XP levels, warnings, balances, RPG characters, reaction roles, webhooks,",
       "RSS feeds, open tickets and the global ban list.",
       "",
-      `To confirm, within 2 min: \`${citar("reset", "en", P)} confirm ${codigo}\``,
-      `_You can undo it for 24 h with \`${citar("reset", "en", P)} undo\`._`,
+      `To confirm, within 2 min: \`${citar("reset.confirmar", "en", P)} ${codigo}\``,
+      `_You can undo it for 24 h with \`${citar("reset.desfazer", "en", P)}\`._`,
     ], [
       "**Vuelve a lo predeterminado:** toda la configuración de Judy en este servidor —",
       "automod (todo desactivado), castigo, canal de registro, bienvenida/despedida, rol automático, staff y acceso,",
@@ -145,8 +146,8 @@ export async function cmdReset(message, args, ctx) {
       "**Se queda:** niveles de XP, avisos, saldos, personajes del RPG, roles por reacción, webhooks,",
       "feeds RSS, tickets abiertos y la lista global de bans.",
       "",
-      `Para confirmar, en un plazo de 2 min: \`${citar("reset", "es", P)} confirm ${codigo}\``,
-      `_Puedes deshacerlo durante 24 h con \`${citar("reset", "es", P)} undo\`._`,
+      `Para confirmar, en un plazo de 2 min: \`${citar("reset.confirmar", "es", P)} ${codigo}\``,
+      `_Puedes deshacerlo durante 24 h con \`${citar("reset.desfazer", "es", P)}\`._`,
     ]).join("\n") });
 }
 

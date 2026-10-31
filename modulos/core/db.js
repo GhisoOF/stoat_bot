@@ -1265,10 +1265,6 @@ export function salvarPersonagem(serverId, userId, campos = {}) {
   return getPersonagem(serverId, userId);
 }
 
-export function apagarPersonagem(serverId, userId) {
-  return prep("DELETE FROM rpg_personagem WHERE serverId = ? AND userId = ?")
-    .run(serverId, userId).changes ?? 0;
-}
 
 export function listarPersonagens(serverId, limite = 10) {
   return prep(`SELECT userId, nome, nivel, xp, progresso FROM rpg_personagem
@@ -1406,10 +1402,6 @@ export function getEquipado(serverId, userId) {
 }
 
 // Onde este item está equipado (se estiver)
-export function slotDoItem(serverId, userId, itemId) {
-  return prep("SELECT slot FROM rpg_equipado WHERE serverId=? AND userId=? AND itemId=?")
-    .get(serverId, userId, itemId)?.slot ?? null;
-}
 
 export function upsertFollowerCatalogo(f) {
   prep(`INSERT INTO rpg_followers_catalogo (id, nome, classe, raridade, preco, soDungeon, fotos, origem, ativo, dados)
@@ -1480,30 +1472,10 @@ export function salvarFollower(id, campos = {}) {
   return getFollower(id);
 }
 
-export function dispensarFollower(id) {
-  return prep("DELETE FROM rpg_followers WHERE id = ?").run(id).changes ?? 0;
-}
 
 // ── Dungeon: followers capturados ──
-export function capturarFollower(id, dungeonId = null) {
-  const f = getFollower(id);
-  if (!f) return null;
-  prep("UPDATE rpg_followers SET capturado=1, naParty=0, donoId=NULL, capturadoEm=?, dungeonId=? WHERE id=?")
-    .run(Date.now(), dungeonId, id);
-  return getFollower(id);
-}
 
-export function listarCapturados(serverId) {
-  return prep("SELECT * FROM rpg_followers WHERE serverId=? AND capturado=1 ORDER BY capturadoEm")
-    .all(serverId);
-}
 
-export function resgatarFollower(id, novoDono) {
-  // quem resgata vira o dono (também o "original", para a próxima captura)
-  prep("UPDATE rpg_followers SET capturado=0, donoId=?, donoOriginal=?, capturadoEm=0, energia=1, energiaEm=? WHERE id=?")
-    .run(novoDono, novoDono, Date.now(), id);
-  return getFollower(id);
-}
 
 export function upsertMoeda(serverId, m) {
   prep(`INSERT INTO rpg_moedas
@@ -1519,10 +1491,6 @@ export function upsertMoeda(serverId, m) {
   return getMoeda(serverId, m.id);
 }
 
-export function removerMoeda(serverId, id) {
-  prep("DELETE FROM rpg_carteira WHERE serverId=? AND moedaId=?").run(serverId, id);
-  return prep("DELETE FROM rpg_moedas WHERE serverId=? AND id=?").run(serverId, id).changes ?? 0;
-}
 
 export function getMoeda(serverId, id) {
   return prep("SELECT * FROM rpg_moedas WHERE serverId=? AND id=?").get(serverId, id) ?? null;
@@ -1532,21 +1500,7 @@ export function listarMoedas(serverId) {
   return prep("SELECT * FROM rpg_moedas WHERE serverId=? ORDER BY padrao DESC, nome").all(serverId);
 }
 
-export function moedaPadrao(serverId) {
-  return prep("SELECT * FROM rpg_moedas WHERE serverId=? ORDER BY padrao DESC LIMIT 1").get(serverId) ?? null;
-}
 
-export function acharMoeda(serverId, txt) {
-  const semAcento = (x) => String(x ?? "").trim().toLowerCase()
-    .normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-  const alvo = semAcento(txt);
-  if (!alvo) return moedaPadrao(serverId);
-  const todas = listarMoedas(serverId);
-  return todas.find((m) => semAcento(m.id) === alvo)
-      ?? todas.find((m) => semAcento(m.nome) === alvo)
-      ?? todas.find((m) => semAcento(m.nome).includes(alvo))
-      ?? null;
-}
 
 const CAMPOS_MOEDA = new Set(["mercado", "dungeon", "pSuave", "pEm", "nome", "simbolo",
   "finita", "padrao", "dificuldade", "suprimentoBase", "nivelMin"]);
@@ -1580,35 +1534,12 @@ export function debitar(serverId, userId, moedaId, qtd) {
   return tirar;
 }
 
-export function carteiraDe(serverId, userId) {
-  return prep("SELECT moedaId, quantidade FROM rpg_carteira WHERE serverId=? AND userId=? AND quantidade > 0")
-    .all(serverId, userId);
-}
 
 // Quanto TODOS os jogadores têm dessa moeda — numerador do P.
-export function totalNasCarteiras(serverId, moedaId) {
-  return prep("SELECT COALESCE(SUM(quantidade),0) AS t FROM rpg_carteira WHERE serverId=? AND moedaId=?")
-    .get(serverId, moedaId)?.t ?? 0;
-}
 
 // ── Estoque de itens no mercado ──
-export function getEstoque(serverId, itemId) {
-  return prep("SELECT * FROM rpg_estoque WHERE serverId=? AND itemId=?").get(serverId, itemId) ?? null;
-}
 
-export function setEstoque(serverId, itemId, quantidade, base = null) {
-  const atual = getEstoque(serverId, itemId);
-  prep(`INSERT INTO rpg_estoque (serverId, itemId, quantidade, base) VALUES (?, ?, ?, ?)
-    ON CONFLICT(serverId, itemId) DO UPDATE SET quantidade=excluded.quantidade, base=excluded.base`)
-    .run(serverId, itemId, Math.max(0, quantidade), base ?? atual?.base ?? 10);
-  return getEstoque(serverId, itemId);
-}
 
-export function ajustarEstoque(serverId, itemId, delta) {
-  const e = getEstoque(serverId, itemId);
-  const base = e?.base ?? 10;
-  return setEstoque(serverId, itemId, Math.max(0, (e?.quantidade ?? base) + delta), base);
-}
 
 export function criarOferta(o) {
   const r = prep(`INSERT INTO rpg_ofertas
@@ -1641,11 +1572,6 @@ export function fecharOferta(id, estado = "fechada", valorFinal = 0) {
 }
 
 // Volume negociado na última hora — alimenta a taxa dinâmica.
-export function volumeRecente(serverId, janelaMs = 3600_000) {
-  return prep(`SELECT COALESCE(SUM(valorFinal),0) AS v FROM rpg_ofertas
-    WHERE serverId=? AND estado='fechada' AND fechadoEm > ?`)
-    .get(serverId, Date.now() - janelaMs)?.v ?? 0;
-}
 
 export function getDb() {
   return db;
@@ -1663,9 +1589,6 @@ export function esperaAte(userId, chave) {
 }
 export function marcarEspera(userId, chave, ate) {
   prep("INSERT INTO rpg_espera (userId, chave, ate) VALUES (?, ?, ?) ON CONFLICT(userId, chave) DO UPDATE SET ate=excluded.ate").run(userId, chave, ate);
-}
-export function limparEsperas(userId) {
-  return prep("DELETE FROM rpg_espera WHERE userId=?").run(userId).changes ?? 0;
 }
 export function getDungeon(id) {
   return prep("SELECT * FROM rpg_dungeons WHERE id=?").get(id) ?? null;
@@ -1776,4 +1699,251 @@ export function podarSessoesPaginas(agora = Date.now()) {
 }
 export function podarRelatorio(antesDe) {
   return prep("DELETE FROM relatorio_eventos WHERE t < ?").run(antesDe).changes;
+}
+
+// ── P2 ferramentas ──
+// (31 out 2026) RSS: o último erro de cada feed (o `&rss list` mostra) e a fila do
+// telejornal (as notícias do dia esperam o horário do servidor). Tabelas novas,
+// criadas na primeira vez que a conexão aberta as usa; nada antigo muda.
+let _p2FerramentasDb = null;
+function prepararP2Ferramentas() {
+  if (_p2FerramentasDb === db) return;
+  db.exec(`CREATE TABLE IF NOT EXISTS rss_estado (
+    feedId INTEGER PRIMARY KEY,
+    erro   TEXT,
+    erroEm INTEGER
+  )`);
+  db.exec(`CREATE TABLE IF NOT EXISTS rss_pendentes (
+    id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    serverId TEXT NOT NULL,
+    feedId   INTEGER NOT NULL,
+    dados    TEXT NOT NULL,
+    criadoEm INTEGER NOT NULL
+  )`);
+  db.exec("CREATE INDEX IF NOT EXISTS idx_rss_pendentes_srv ON rss_pendentes (serverId, id)");
+  _p2FerramentasDb = db;
+}
+// o erro guardado é curto e sem endereço (quem chama passa o motivo já limpo)
+export function rssGuardarErro(feedId, erro, quando = Date.now()) {
+  prepararP2Ferramentas();
+  prep("INSERT INTO rss_estado (feedId, erro, erroEm) VALUES (?, ?, ?) ON CONFLICT(feedId) DO UPDATE SET erro = excluded.erro, erroEm = excluded.erroEm")
+    .run(Number(feedId), String(erro ?? "").slice(0, 120), quando);
+}
+export function rssLimparErro(feedId) {
+  prepararP2Ferramentas();
+  prep("UPDATE rss_estado SET erro = NULL, erroEm = NULL WHERE feedId = ?").run(Number(feedId));
+}
+// feedId → { erro, erroEm } dos feeds deste servidor que têm erro guardado
+export function rssErros(serverId) {
+  prepararP2Ferramentas();
+  const linhas = prep(`SELECT e.feedId, e.erro, e.erroEm FROM rss_estado e JOIN rss_feeds f ON f.id = e.feedId
+    WHERE f.serverId = ? AND e.erro IS NOT NULL`).all(serverId);
+  return new Map(linhas.map((l) => [l.feedId, { erro: l.erro, erroEm: l.erroEm }]));
+}
+// Fila do telejornal. `teto`: além disso o item novo não entra (devolve false).
+export function rssEnfileirar(serverId, feedId, item, teto = 200, quando = Date.now()) {
+  prepararP2Ferramentas();
+  const n = prep("SELECT COUNT(*) AS n FROM rss_pendentes WHERE serverId = ?").get(serverId).n;
+  if (n >= teto) return false;
+  prep("INSERT INTO rss_pendentes (serverId, feedId, dados, criadoEm) VALUES (?, ?, ?, ?)")
+    .run(serverId, Number(feedId), JSON.stringify(item), quando);
+  return true;
+}
+export function rssPendentes(serverId) {
+  prepararP2Ferramentas();
+  return prep("SELECT id, feedId, dados, criadoEm FROM rss_pendentes WHERE serverId = ? ORDER BY id").all(serverId)
+    .map((l) => { try { return { ...JSON.parse(l.dados), _id: l.id, feedId: l.feedId }; } catch { return null; } })
+    .filter(Boolean);
+}
+// tira da fila o que já foi publicado (só as linhas dadas, deste servidor)
+export function rssTirarPendentes(serverId, ids) {
+  prepararP2Ferramentas();
+  let n = 0;
+  for (const id of ids ?? []) n += prep("DELETE FROM rss_pendentes WHERE serverId = ? AND id = ?").run(serverId, Number(id)).changes;
+  return n;
+}
+// (31 out 2026) `&xp cargo <nível> off`: o nível deixa de dar cargo (só a regra desse
+// nível, deste servidor; o XP de ninguém muda)
+export function xpTirarCargoNivel(serverId, nivel) {
+  return prep("DELETE FROM xp_cargos WHERE serverId = ? AND nivel = ?").run(String(serverId), Number(nivel)).changes ?? 0;
+}
+
+// ── P2 rpg ──
+// (31 out 2026) O RPG recomeçou numa era nova (`mundo:v5`, ver modulos/game/era.js):
+// as linhas antigas continuam no banco, invisíveis ao jogo. Daqui saem só o que
+// apaga UMA pessoa (o `&game apagar` na era atual e o `&privacidade apagar` em
+// todas) e a contagem por era — nunca um DELETE em massa.
+const RPG_POR_ERA = [["rpg_personagem", "userId"], ["rpg_inventario", "userId"], ["rpg_equipado", "userId"],
+  ["rpg_magias", "userId"], ["rpg_carteira", "userId"], ["rpg_followers", "donoId"]];
+// Ofertas abertas (desafios de duelo, propostas antigas) FEITAS a esta pessoa: canceladas;
+// a custódia volta ao autor só se ele ainda tem personagem naquela era (senão o ouro iria
+// para uma carteira sem dono). As FEITAS por ela saem junto com a carteira dela.
+function rpgDesligarOfertas(u, era = null) {
+  let n = 0;
+  const filtro = era ? " AND serverId = ?" : "", p = era ? [u, u, era] : [u, u];
+  for (const of of prep(`SELECT * FROM rpg_ofertas WHERE alvoId = ? AND autorId <> ? AND estado = 'aberta'${filtro}`).all(...p)) {
+    if (getPersonagem(of.serverId, of.autorId)) {
+      if (of.itemOferecido) darItem(of.serverId, of.autorId, of.itemOferecido);
+      if (of.moedaOferecida && of.qtdOferecida > 0) creditar(of.serverId, of.autorId, of.moedaOferecida, of.qtdOferecida);
+    }
+    n += prep("UPDATE rpg_ofertas SET estado = 'cancelada', fechadoEm = ? WHERE id = ?").run(Date.now(), of.id).changes ?? 0;
+  }
+  n += prep(`UPDATE rpg_ofertas SET alvoId = NULL WHERE alvoId = ? AND autorId <> ?${filtro}`).run(...p).changes ?? 0;
+  n += prep(`UPDATE rpg_followers SET donoOriginal = NULL WHERE donoOriginal = ? AND (donoId IS NULL OR donoId <> ?)${filtro}`).run(...p).changes ?? 0;
+  return n;
+}
+// A pessoa numa era (o `&game apagar`): personagem, mochila, vagas, magias, ouro, aliados
+// (e os itens deles), os desafios/ofertas dela, e — pelo `prefixo` da era ("v5:%") — únicos,
+// esperas e as dungeons onde jogou. As outras eras ficam.
+export function rpgApagarDaEra(era, userId, prefixo) {
+  const u = String(userId);
+  let n = 0;
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    n += rpgDesligarOfertas(u, era);
+    n += prep("DELETE FROM rpg_ofertas WHERE serverId = ? AND autorId = ?").run(era, u).changes ?? 0;
+    n += prep("DELETE FROM rpg_follower_itens WHERE followerId IN (SELECT id FROM rpg_followers WHERE serverId = ? AND donoId = ?)").run(era, u).changes ?? 0;
+    for (const [t, col] of RPG_POR_ERA) n += prep(`DELETE FROM ${t} WHERE serverId = ? AND ${col} = ?`).run(era, u).changes ?? 0;
+    if (prefixo) {
+      for (const t of ["rpg_unicos", "rpg_espera"]) n += prep(`DELETE FROM ${t} WHERE userId = ? AND chave LIKE ?`).run(u, prefixo).changes ?? 0;
+      n += prep("DELETE FROM rpg_dungeon_ativos WHERE userId = ? AND dungeonId LIKE ?").run(u, prefixo).changes ?? 0;
+    }
+    db.exec("COMMIT");
+  } catch (e) { db.exec("ROLLBACK"); throw e; }
+  return n;
+}
+// A pessoa em TODAS as eras (o `&privacidade apagar`): o mesmo, sem filtro de era.
+export function rpgApagarJogador(userId) {
+  const u = String(userId);
+  let n = 0;
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    n += rpgDesligarOfertas(u);
+    n += prep("DELETE FROM rpg_follower_itens WHERE followerId IN (SELECT id FROM rpg_followers WHERE donoId = ?)").run(u).changes ?? 0;
+    for (const [t, col] of [...RPG_POR_ERA, ["rpg_ofertas", "autorId"], ["rpg_unicos", "userId"], ["rpg_espera", "userId"], ["rpg_dungeon_ativos", "userId"]]) {
+      n += prep(`DELETE FROM ${t} WHERE ${col} = ?`).run(u).changes ?? 0;
+    }
+    db.exec("COMMIT");
+  } catch (e) { db.exec("ROLLBACK"); throw e; }
+  return n;
+}
+// Quantos personagens há em cada era (o `&game admin` e o plano de purga)
+export function rpgPersonagensPorEra() {
+  return prep("SELECT serverId AS era, COUNT(*) AS n FROM rpg_personagem GROUP BY serverId ORDER BY serverId").all();
+}
+
+// ── P2 ia ──
+// (31 out 2026, P2) A `ia_memoria` (a memória curta de cada pessoa: "perguntou
+// sobre: …") era global e ia ao prompt em TODO servidor. Agora cada item novo leva
+// o servidor de origem na frente ("[s:<id>] …") e o prompt só vê os DESTE
+// servidor. Os itens antigos (sem a marca) ficam no banco, não vão mais ao prompt,
+// e saem quando a pessoa apaga (`&privacidade apagar`/`memoria off`).
+const MARCA_SRV = /^\[s:([0-9A-Za-z]{1,40})\] /;
+export function lembrarNoServidor(userId, serverId, { nome = null, fato }) {
+  const f = String(fato ?? "").replace(/\s+/g, " ").trim().slice(0, 200);
+  if (!userId || !serverId || !f) return;
+  const mem = getMemoria(userId);
+  setMemoria(userId, { nome, fatos: [...(mem.fatos ?? []), `[s:${serverId}] ${f}`] });
+}
+export function memoriaDoServidor(userId, serverId) {
+  if (!userId || !serverId) return [];
+  return (getMemoria(userId).fatos ?? [])
+    .map((x) => String(x).match(MARCA_SRV) ? { s: String(x).match(MARCA_SRV)[1], f: String(x).replace(MARCA_SRV, "") } : null)
+    .filter((x) => x && x.s === serverId).map((x) => x.f);
+}
+// O `esquecer tudo` de um servidor tira da memória de cada pessoa só o que veio dele.
+export function apagarMemoriaGlobalDoServidor(serverId) {
+  if (!serverId) return 0;
+  let n = 0;
+  for (const r of prep("SELECT userId, fatos FROM ia_memoria WHERE fatos LIKE ?").all(`%[s:${serverId}]%`)) {
+    let fatos = [];
+    try { fatos = JSON.parse(r.fatos || "[]"); } catch { continue; }
+    const fica = fatos.filter((x) => String(x).match(MARCA_SRV)?.[1] !== serverId);
+    if (fica.length === fatos.length) continue;
+    n += fatos.length - fica.length;
+    prep("UPDATE ia_memoria SET fatos = ?, atualizado = ? WHERE userId = ?").run(JSON.stringify(fica), new Date().toISOString(), r.userId);
+  }
+  return n;
+}
+
+// ── P2 moderacao ──
+// A origem gravada do registro (pessoa, servidor) na lista global, ou null. A
+// importação e a propagação não sobrescrevem uma origem automática (automod/avatar):
+// é ela que decide se o ban só alerta nos outros servidores (ban-global.js).
+export function origemDoBanGlobal(userId, serverId) {
+  return prep("SELECT origem FROM bans_globais WHERE userId = ? AND serverId = ?").get(userId, serverId)?.origem ?? null;
+}
+// Desliga UM emoji de uma mensagem de cargos por reação (`&rr remove <mensagem> <emoji>`).
+export function removerReactionRoleEmoji(messageId, emoji) {
+  return prep("DELETE FROM reaction_roles WHERE messageId = ? AND emoji = ?").run(messageId, emoji).changes ?? 0;
+}
+
+// ── P2 registro-ajuda ──
+// O bot cresce pelo uso (31 out 2026): as palavras que tentaram como comando e não
+// existem, por servidor e mês, e quantas vezes cada comando foi usado (para achar os
+// nunca usados). Só a palavra normalizada (sem o resto da mensagem, sem quem digitou),
+// no máximo PALAVRAS_TETO distintas por servidor e mês, e cada uma some 30 dias depois
+// da última vez (PRIVACIDADE.md). Visível só ao dono do bot (`&servidores palavras`).
+export const PALAVRAS_TETO = 200;
+export const PALAVRAS_DIAS = 30;
+const _palavrasProntas = new WeakSet();
+function prepararPalavras() {
+  if (_palavrasProntas.has(db)) return;
+  db.exec(`CREATE TABLE IF NOT EXISTS palavras_tentadas (
+    serverId TEXT NOT NULL, mes TEXT NOT NULL, palavra TEXT NOT NULL,
+    vezes INTEGER NOT NULL DEFAULT 1, ultima INTEGER NOT NULL,
+    PRIMARY KEY (serverId, mes, palavra))`);
+  db.exec("CREATE INDEX IF NOT EXISTS idx_palavras_ultima ON palavras_tentadas (ultima)");
+  db.exec(`CREATE TABLE IF NOT EXISTS uso_comandos (
+    comando TEXT PRIMARY KEY, vezes INTEGER NOT NULL DEFAULT 0, ultimo INTEGER NOT NULL)`);
+  _palavrasProntas.add(db);
+}
+// `Ban!` → `ban`, `Configuração` → `configuracao`. Número, ID, menção, link e palavra
+// comprida não entram (podem ser dado de alguém): só o que parece nome de comando.
+export function normalizarPalavra(palavra) {
+  if (/[:/.<>@#%]/.test(String(palavra ?? ""))) return null;   // link, menção, canal, domínio
+  const p = String(palavra ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9-]/g, "");
+  return /^[a-z][a-z-]{1,23}$/.test(p) ? p : null;
+}
+const mesDe = (agora) => new Date(agora).toISOString().slice(0, 7);
+let _ultimaLimpeza = 0;
+// Apaga o que passou do prazo (no máximo uma vez por hora)
+export function limparPalavrasVencidas(agora = Date.now(), { forcar = false } = {}) {
+  prepararPalavras();
+  if (!forcar && agora - _ultimaLimpeza < 3600e3) return 0;
+  _ultimaLimpeza = agora;
+  return prep("DELETE FROM palavras_tentadas WHERE ultima < ?").run(agora - PALAVRAS_DIAS * 86400e3).changes ?? 0;
+}
+// true se contou (palavra válida, servidor abaixo do teto ou palavra já contada)
+export function contarPalavraTentada(serverId, palavra, agora = Date.now()) {
+  if (!serverId) return false;
+  const p = normalizarPalavra(palavra);
+  if (!p) return false;
+  prepararPalavras();
+  limparPalavrasVencidas(agora);
+  const mes = mesDe(agora);
+  const ja = prep("UPDATE palavras_tentadas SET vezes = vezes + 1, ultima = ? WHERE serverId = ? AND mes = ? AND palavra = ?").run(agora, serverId, mes, p).changes ?? 0;
+  if (ja) return true;
+  const n = prep("SELECT COUNT(*) AS n FROM palavras_tentadas WHERE serverId = ? AND mes = ?").get(serverId, mes)?.n ?? 0;
+  if (n >= PALAVRAS_TETO) return false;
+  prep("INSERT INTO palavras_tentadas (serverId, mes, palavra, vezes, ultima) VALUES (?, ?, ?, 1, ?)").run(serverId, mes, p, agora);
+  return true;
+}
+// [{ serverId, mes, palavra, vezes }] dentro do prazo, as mais tentadas primeiro
+export function palavrasTentadas({ serverId = null, agora = Date.now(), limite = 50 } = {}) {
+  prepararPalavras();
+  const desde = agora - PALAVRAS_DIAS * 86400e3;
+  return serverId
+    ? prep("SELECT serverId, mes, palavra, vezes FROM palavras_tentadas WHERE serverId = ? AND ultima >= ? ORDER BY vezes DESC, palavra LIMIT ?").all(serverId, desde, limite)
+    : prep("SELECT palavra, SUM(vezes) AS vezes, COUNT(DISTINCT serverId) AS servidores FROM palavras_tentadas WHERE ultima >= ? GROUP BY palavra ORDER BY servidores DESC, vezes DESC, palavra LIMIT ?").all(desde, limite);
+}
+export function contarUsoComando(comando, agora = Date.now()) {
+  if (!comando) return;
+  prepararPalavras();
+  prep("INSERT INTO uso_comandos (comando, vezes, ultimo) VALUES (?, 1, ?) ON CONFLICT(comando) DO UPDATE SET vezes = vezes + 1, ultimo = excluded.ultimo").run(String(comando).slice(0, 40), agora);
+}
+// comando → vezes
+export function usoDeComandos() {
+  prepararPalavras();
+  return Object.fromEntries(prep("SELECT comando, vezes FROM uso_comandos").all().map((r) => [r.comando, r.vezes]));
 }

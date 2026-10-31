@@ -18,6 +18,7 @@
 //     imagens suspeitas), sem nomes, menções nem IDs;
 //   • os que não aderiram: nada (nem números).
 
+import { llmChat, llmUrl, modeloConversa } from "../ai/llm.js";
 import * as db from "../core/db.js";
 import { pseudonimo } from "../core/pseudonimo.js";
 import { registrarErro } from "../core/erros.js";
@@ -48,8 +49,6 @@ export function filtrarEvento(e) {
 const HORA = 3600_000;
 const AMOSTRAS_MAX = 120;          // mensagens guardadas por servidor, por hora
 const ERROS_MAX_HORA = 300;        // teto de linhas de erro gravadas por hora
-const LLM_URL = () => (process.env.LLM_URL || "").replace(/\/$/, "");
-const MODELO = () => process.env.LLM_MODEL_RELATORIO || process.env.LLM_MODEL || "";
 
 // ─── Coleta ─────────────────────────────────────────────────────────────────
 export function evento(serverId, tipo, titulo, t = Date.now()) {
@@ -224,19 +223,14 @@ export function montarPrompt({ numeros, amostras, nomes }) {
   ].join("\n");
 }
 
+// (31 out 2026, P2) pelo cliente único do modelo (ai/llm.js): a fila de prioridade, as
+// esperas do 429 e o corte do raciocínio são os mesmos da conversa. O modelo é o
+// LLM_MODEL (o antigo LLM_MODEL_RELATORIO ainda vale como sinônimo dele, no env.js).
 export async function redigir(prompt, { fetcher = fetch } = {}) {
-  if (!LLM_URL() || !MODELO()) return null;
+  if (!llmUrl() || !modeloConversa()) return null;
   try {
-    const r = await fetcher(`${LLM_URL()}/v1/chat/completions`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ model: MODELO(), stream: false, max_tokens: 1500, temperature: 0.3,
-        messages: [{ role: "user", content: prompt }] }),
-      signal: AbortSignal.timeout(240_000),
-    });
-    if (!r.ok) return null;
-    const j = await r.json();
-    const texto = String(j?.choices?.[0]?.message?.content ?? "")
-      .replace(/<think>[\s\S]*?<\/think>/g, "").replace(/^[\s\S]*<\/think>/, "").trim();
+    const texto = await llmChat([{ role: "user", content: prompt }],
+      { modelo: modeloConversa(), maxTokens: 1500, temperatura: 0.3, etiqueta: "relatorio", continuarMax: 0, fetcher });
     return texto || null;
   } catch (e) { registrarErro("RELATORIO", e); return null; }   // sem o modelo, o relatório sai só com os números
 }

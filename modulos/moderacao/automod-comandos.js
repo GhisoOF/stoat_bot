@@ -1,18 +1,18 @@
-import { TERMOS_ODIO, TERMOS_MAX, TERMO_MAX } from "./rajada.js";
+import { TERMOS_MAX, TERMO_MAX, termoDoFiltro } from "./rajada.js";
 import { citar, citarInterno } from "../core/aliases.js";
 import { descreverFiltro } from "./config-comando.js";
-import { rebuildBlocklist, fonteValida, nuncaBloquear, DOMINIO_VALIDO, simularDeteccao, removerCargoSilence, MODULOS_AUTOMOD, GRUPOS_AUTOMOD, ROTULO_PARTE, estadoDoGrupo } from "./automod-engine.js";
+import { rebuildBlocklist, fonteValida, nuncaBloquear, DOMINIO_VALIDO, removerCargoSilence, MODULOS_AUTOMOD, GRUPOS_AUTOMOD, estadoDoGrupo, moduloLigado } from "./automod-engine.js";
 import { tirarTimeout } from "./timeout.js";
 import * as engine from "./automod-engine.js";
 import * as db  from "../core/db.js";
 import * as log from "../core/log.js";
 import { analisarConteudo } from "./scorecard.js";
-import { tr, lingua } from "../core/i18n.js";
+import { tr, lingua, idiomaDe } from "../core/i18n.js";
+import { maisParecido } from "../core/parecido.js";
+import { erroDeUso, semPermissao } from "./punir.js";
 import { hostDe } from "../core/config-store.js";
-import { resolverUsuario, resolverCanal, idValido } from "../core/ids.js";
-import { podeAgirSobre } from "../core/hierarquia.js";
+import { resolverUsuario, resolverCanal } from "../core/ids.js";
 import { banir } from "../core/banir.js";
-import { descreverErro as descreverErroBan } from "../core/erros.js";
 import * as assuntos from "./assuntos.js";
 import { nomeGrupo, nomeParte, nomeModo, nomeTema, nomeAcaoTema, nomeAcaoAvatar, nomeSens } from "../core/nomes-automod.js";
 import * as avatar from "./avatar.js";
@@ -74,7 +74,7 @@ export async function cmdClearwarnings(message, args, ctx) {
   const { sendEmbed, COR, getServer, membroTemPermissao, PREFIXO } = ctx;
   const server = await getServer(message);
   if (!membroTemPermissao(message, server, "ManagePermissions"))
-    return negarPermissao(ctx, message.channel, "ManagePermissions");
+    return semPermissao(ctx, message.channel, "ManagePermissions");
 
   const alvo = await alvoDosAvisos(message, args, ctx, server);
   if (!alvo.id)
@@ -106,47 +106,31 @@ export async function cmdClearwarnings(message, args, ctx) {
     es: { titulo: "🧹 Avisos borrados", descricao: `<@${message.authorId}> reinició los avisos (${tinha}) de <@${targetId}>.` } });
 }
 
-// Os parâmetros em inglês, para a tela (o que se digita em inglês o aliases.js traduz)
+// Os parâmetros em inglês, para a tela (o que se digita em inglês o registro traduz)
 const PARAM_EN = { mensagens: "messages", tempo: "time", mencoes: "mentions", tamanho: "size", limiar: "threshold", repeticao: "repetition",
   ignorar: "ignore", minuto: "minute", novato: "newcomer", vezes: "times" };
-const nomeParam = (p, lang) => (lang === "en" ? PARAM_EN[p] ?? p : p);
+const nomeParam = (p, lang) => (lang === "en" || lang === "es" ? PARAM_EN[p] ?? p : p);
 
-// %automod status | %automod <módulo> <on|off> | %automod debug <on|off>   (ManagePermissions)
 const G_AUTOMOD = GRUPOS_AUTOMOD;
-
-// A cola dos quatro grupos, com exemplos que dá para copiar como estão.
-function guiaDosGrupos(lang, P, abertura, ctx) {
-  const T = (pt, eng, es) => tr(ctx, pt, eng, es);
-  return [
-    abertura, "",
-    ...Object.entries(G_AUTOMOD).map(([nome, d]) => `${d.emoji} \`${nomeGrupo(nome, lang)}\` — ${T(d.pt, d.en, d.es)}`),
-    "",
-    T("**Copie assim mesmo:**", "**Copy as is:**", "**Cópialo tal cual:**"),
-    `\`${citarInterno("automod", P)} antispam off\` — ${T("desliga um grupo", "turns one group off", "desactiva un grupo")}`,
-    `\`${citarInterno("automod", P)} ${nomeGrupo("antiruido", lang)} caps off\` — ${T("desliga só uma parte", "turns off just one part", "desactiva solo una parte")}`,
-    `\`${citarInterno("automod", P)} off\` · \`${citarInterno("automod", P)} on\` — ${T("tudo de uma vez", "everything at once", "todo a la vez")}`,
-    `\`${citarInterno("automod", P)}\` — ${T("o que está ligado agora", "what's on and off right now", "lo que está activado ahora")}`,
-  ].join("\n");
-}
-
-// Distância de edição curta (o "você quis dizer"): até 2 letras de diferença.
-function maisParecido(digitado, nomes) {
-  const a = String(digitado ?? "").toLowerCase();
-  if (!a) return null;
-  const d = (x, y) => {
-    const m = Array.from({ length: x.length + 1 }, (_, i) => [i, ...Array(y.length).fill(0)]);
-    for (let j = 1; j <= y.length; j++) m[0][j] = j;
-    for (let i = 1; i <= x.length; i++) for (let j = 1; j <= y.length; j++)
-      m[i][j] = Math.min(m[i - 1][j] + 1, m[i][j - 1] + 1, m[i - 1][j - 1] + (x[i - 1] === y[j - 1] ? 0 : 1));
-    return m[x.length][y.length];
-  };
-  let melhor = null, menor = 3;
-  for (const n of nomes) { const k = d(a, n); if (k < menor && k <= Math.max(1, Math.floor(n.length / 3))) { menor = k; melhor = n; } }
-  return melhor;
-}
-
 // Modos de punição: os nomes em inglês que a ajuda em inglês mostra também valem.
 const MODO_EN = { warn: "avisar", delete: "apagar", confirm: "confirmar", stack: "acumular", ban: "banir", inherit: "herdar" };
+const MODOS_PUN = ["avisar", "apagar", "confirmar", "acumular", "banir"];
+// (P2) `velocidade` e `rajada` contam a mesma lista de mensagens em duas réguas: uma
+// parte só (`velocidade`) liga, desliga e pune as duas (FILTROS_JUNTOS, no engine);
+// `rajada` virou apelido dela.
+const filtrosDaParte = (filtro) => [filtro, ...(engine.FILTROS_JUNTOS[filtro] ?? [])];
+// Os parâmetros ajustáveis de cada filtro (nome digitado → chave interna)
+const PARAMS = {
+  antispam:        { mensagens: "maxMessages", tempo: "windowMs" },
+  antimassspam:    { mensagens: "maxMessages", tempo: "windowMs" },
+  antimassmention: { mencoes: "maxMentions" },
+  anticaps:        { tamanho: "minLength", limiar: "threshold" },
+  anticaracteres:  { zalgo: "limiteZalgo" },
+  antirepeticao:   { repeticao: "maxRepeticao", ignorar: "ignorar" },
+  antiemoji:       { emojis: "maxEmojis" },
+  antimidia:       { minuto: "maxPorMinuto", novato: "maxNovato" },
+  antiduplicata:   { vezes: "maxRepetidas" },
+};
 
 // ── &automod … set: o tipo e a faixa de cada parâmetro (31 out 2026, R10) ──
 // Contagem = inteiro; `tempo` = duração legível ("8s", "1m"); limiar/zalgo =
@@ -189,596 +173,363 @@ export function valorDoParametro(chave, bruto) {
   return { ok: true, valor: n };
 }
 
+// ── &automod filter (P2): os termos próprios do servidor, num lugar só ──────
+// Eram o `&automod antiodio add|remover|lista` e o `sentinela odio add…`. O termo é
+// guardado limpo (só letras) e vira padrão LITERAL escapado, compilado uma vez
+// (rajada.js); no máximo TERMOS_MAX termos × TERMO_MAX caracteres (R10).
+export function mexerNoFiltro(mod, acao, bruto) {
+  mod.termos ??= [];
+  if (acao === "lista") return { ok: true, termos: mod.termos };
+  const termo = termoDoFiltro(bruto);
+  if (!termo) return { ok: false, erro: String(bruto ?? "").trim().length > TERMO_MAX ? "longo" : "termo" };
+  if (acao === "add") {
+    if (mod.termos.includes(termo)) return { ok: true, termos: mod.termos, termo, igual: true };
+    if (mod.termos.length >= TERMOS_MAX) return { ok: false, erro: "cheio" };
+    mod.termos.push(termo);
+    return { ok: true, termos: mod.termos, termo };
+  }
+  const antes = mod.termos.length;
+  mod.termos = mod.termos.filter((x) => x !== termo);
+  return { ok: true, termos: mod.termos, termo, removido: antes !== mod.termos.length };
+}
+
 export async function cmdAutomod(message, args, ctx) {
   const { config, cfgGlobal, sendEmbed, COR, getServer, membroTemPermissao, salvarConfig, salvarGlobal, PREFIXO } = ctx;
-  const lang = lingua(ctx);
-  const server = await getServer(message);
-  if (!membroTemPermissao(message, server, "ManagePermissions"))
-    return negarPermissao(ctx, message.channel, "ManagePermissions");
+  const lang = lingua(ctx), l = idiomaDe(ctx);
+  const canal = message.channel;
+  const linha = (cor, pt, en, es) => sendEmbed(canal, { description: tr(ctx, pt, en, es), colour: cor });
+  const erroUso = (pt, en, es) => erroDeUso(ctx, canal, "automod", pt, en, es);
+  const onOff = (on, nome) => linha(on ? COR.sucesso : COR.mod, `🛡 **${nome[0]}** ${on ? "🟢 ligado" : "🔴 desligado"}.`, `🛡 **${nome[1]}** ${on ? "🟢 on" : "🔴 off"}.`, `🛡 **${nome[2]}** ${on ? "🟢 activado" : "🔴 desactivado"}.`);
+  const server = await getServer(message).catch(() => null);
+  if (!membroTemPermissao(message, server, "ManagePermissions")) return semPermissao(ctx, canal, "ManagePermissions");
+  config.automod ??= {};
 
   let sub = args[0]?.toLowerCase();
-
-  // ── A família do automod mora aqui dentro ──────────────────────────────
-  // As partes do automod moram aqui dentro: `&automod blocklist ...`. Os nomes
-  // soltos (`&blocklist`, `&punicao`) não são comandos — respondem "comando
-  // desconhecido" (conferido em 17 out 2026).
-  const FILHOS = {
-    blocklist: cmdBlocklist, bloqueio: cmdBlocklist,
-    whitelist: cmdWhitelist, permitidos: cmdWhitelist,
-    punicao: cmdPunicao, "punição": cmdPunicao, castigo: cmdPunicao,
-  };
+  // As partes com tabela própria moram aqui dentro: `&automod blocklist …`
+  const FILHOS = { blocklist: cmdBlocklist, bloqueio: cmdBlocklist, whitelist: cmdWhitelist, permitidos: cmdWhitelist, punicao: cmdPunicao, "punição": cmdPunicao, castigo: cmdPunicao };
   if (FILHOS[sub]) return FILHOS[sub](message, args.slice(1), ctx);
   if (sub === "antiscam") sub = "sentinela";
-
-  // ── Quem copia a ajuda ao pé da letra (12 out 2026) ──────────────────
-  // `&automod <group> off` chegava assim mesmo, com os sinais, e a resposta
-  // era uma lista de nomes antigos que ninguém reconhecia.
-  const ehMarcador = (x) => /^[<‹\[].+[>›\]]$/.test(String(x ?? ""));
-  if (ehMarcador(sub) || (G_AUTOMOD[sub] && ehMarcador(args[1]))) {
-    return sendEmbed(message.channel, { title: tr(ctx, "✏️ Troque o ‹…› por um valor", "✏️ Replace the ‹…› with a value", "✏️ Cambia el ‹…› por un valor"), colour: COR.aviso,
-      description: guiaDosGrupos(lang, PREFIXO, ehMarcador(sub)
-        ? tr(ctx, `\`${sub}\` na ajuda é um **espaço para preencher**, não para digitar. Use um dos grupos abaixo:`,
-            `\`${sub}\` in the help is a **blank to fill in**, not something to type. Use one of the groups below:`,
-            `\`${sub}\` en la ayuda es un **espacio para rellenar**, no para escribir. Usa uno de los grupos de abajo:`)
-        : tr(ctx, `\`${args[1]}\` é um **espaço para preencher** — as partes de \`${sub}\` são: ${Object.keys(G_AUTOMOD[sub].partes).map((x) => `\`${x}\``).join(", ")}.`,
-            `\`${args[1]}\` is a **blank to fill in** — the parts of \`${sub}\` are: ${Object.keys(G_AUTOMOD[sub].partes).map((x) => `\`${x}\``).join(", ")}.`,
-            `\`${args[1]}\` es un **espacio para rellenar** — las partes de \`${nomeGrupo(sub, "en")}\` son: ${Object.keys(G_AUTOMOD[sub].partes).map((x) => `\`${nomeParte(x, "en")}\``).join(", ")}.`), ctx) });
+  // `&automod antiodio add …` e `&automod sentinela odio add …`: o nome antigo do filter
+  if ((sub === "antiodio" && ["add", "remover", "lista"].includes(args[1]?.toLowerCase()))
+    || (sub === "sentinela" && args[1]?.toLowerCase() === "odio" && ["add", "remover", "lista"].includes(args[2]?.toLowerCase()))) {
+    return cmdAutomod(message, ["filtro", ...args.slice(sub === "sentinela" ? 2 : 1)], ctx);
   }
 
-  // ── `&automod off` / `&automod on` — tudo de uma vez ─────────────────
+  // quem copia a ajuda ao pé da letra (`&automod <grupo> off`)
+  const ehMarcador = (x) => /^[<‹\[].+[>›\]]$/.test(String(x ?? ""));
+  const listaGrupos = (lg) => Object.keys(G_AUTOMOD).map((g) => `\`${nomeGrupo(g, lg)}\``).join(", ");
+  const listaPartes = (g, lg) => Object.keys(G_AUTOMOD[g].partes).map((x) => `\`${nomeParte(x, lg)}\``).join(", ");
+  if (ehMarcador(sub)) return erroUso(`\`${sub}\` é um espaço para preencher: ${listaGrupos("pt")}`, `\`${sub}\` is a blank to fill in: ${listaGrupos("en")}`, `\`${sub}\` es un espacio para rellenar: ${listaGrupos("es")}`);
+  if (G_AUTOMOD[sub] && ehMarcador(args[1])) return erroUso(`\`${args[1]}\` é um espaço para preencher: ${listaPartes(sub, "pt")}`, `\`${args[1]}\` is a blank to fill in: ${listaPartes(sub, "en")}`, `\`${args[1]}\` es un espacio para rellenar: ${listaPartes(sub, "es")}`);
+
+  // ── filter [add|remover <termo> | lista | on|off] ──
+  if (sub === "filtro") {
+    const mod = config.automod.antiOdio ??= { enabled: true, termos: [] };
+    const acao = String(args[1] ?? "lista").toLowerCase();
+    if (acao === "on" || acao === "off") { mod.enabled = acao === "on"; salvarConfig(); return onOff(acao === "on", ["filtro", "filter", "filter"]); }
+    if (!["add", "remover", "lista"].includes(acao)) return erroUso("Use `add`, `remover` ou `lista`", "Use `add`, `remove` or `list`", "Usa `add`, `quitar` o `lista`");
+    const r = mexerNoFiltro(mod, acao, args.slice(2).join(" "));
+    if (!r.ok && r.erro === "cheio") return linha(COR.erro, `❌ Já há ${TERMOS_MAX} termos (o máximo).`, `❌ There are already ${TERMOS_MAX} terms (the maximum).`, `❌ Ya hay ${TERMOS_MAX} términos (el máximo).`);
+    if (!r.ok && r.erro === "longo") return linha(COR.erro, `❌ Termo longo demais: no máximo ${TERMO_MAX} letras.`, `❌ Term too long: at most ${TERMO_MAX} letters.`, `❌ Término demasiado largo: como máximo ${TERMO_MAX} letras.`);
+    if (!r.ok) return erroUso(`Termo de 3 a ${TERMO_MAX} letras`, `A term of 3 to ${TERMO_MAX} letters`, `Un término de 3 a ${TERMO_MAX} letras`);
+    if (acao !== "lista") salvarConfig();
+    if (acao === "add") return linha(COR.sucesso, `🛡 \`${r.termo}\` no filtro (${r.termos.length}/${TERMOS_MAX}).`, `🛡 \`${r.termo}\` in the filter (${r.termos.length}/${TERMOS_MAX}).`, `🛡 \`${r.termo}\` en el filtro (${r.termos.length}/${TERMOS_MAX}).`);
+    if (acao === "remover") return r.removido
+      ? linha(COR.sucesso, `🛡 \`${r.termo}\` fora do filtro.`, `🛡 \`${r.termo}\` out of the filter.`, `🛡 \`${r.termo}\` fuera del filtro.`)
+      : linha(COR.aviso, `🤷 \`${r.termo}\` não estava no filtro.`, `🤷 \`${r.termo}\` wasn't in the filter.`, `🤷 \`${r.termo}\` no estaba en el filtro.`);
+    const lista = r.termos.length ? r.termos.map((x) => `\`${x}\``).join(", ") : "—";
+    return linha(COR.mod, `🛡 Filtro (${r.termos.length}/${TERMOS_MAX}): ${lista}`, `🛡 Filter (${r.termos.length}/${TERMOS_MAX}): ${lista}`, `🛡 Filtro (${r.termos.length}/${TERMOS_MAX}): ${lista}`);
+  }
+
+  // ── `&automod off` / `&automod on` — tudo de uma vez ──
   const TUDO = { on: true, ligar: true, ativar: true, enable: true, off: false, desligar: false, desativar: false, disable: false };
   if (sub in TUDO && !args[1]) {
     const on = TUDO[sub];
     for (const chave of Object.values(MODULOS_AUTOMOD)) config.automod[chave] = { ...(config.automod[chave] ?? {}), enabled: on };
     salvarConfig();
-    return sendEmbed(message.channel, { title: "🛡 AutoMod", colour: on ? COR.sucesso : COR.mod, description: tr(ctx,
-      (on ? `**Tudo ligado** 🟢 — os 4 grupos: \`antispam\`, \`antiruido\`, \`antilink\`, \`sentinela\`.\n\nPara desligar um: \`${citarInterno("automod.antiruido", PREFIXO)} off\` · ver cada um: \`${citarInterno("automod", PREFIXO)}\``
-          : `**Tudo desligado** 🔴 — nada é filtrado nem punido automaticamente agora.\n\nPara ligar só um: \`${citarInterno("automod", PREFIXO)} antispam on\` · tudo de volta: \`${citarInterno("automod", PREFIXO)} on\``),
-      (on ? `**Everything on** 🟢 — the 4 groups: \`antispam\`, \`antiruido\`, \`antilink\`, \`sentinela\`.\n\nTo turn one off: \`${citarInterno("automod.antiruido", PREFIXO)} off\` · see each one: \`${citarInterno("automod", PREFIXO)}\``
-          : `**Everything off** 🔴 — nothing is filtered or punished automatically now.\n\nTo turn just one on: \`${citarInterno("automod", PREFIXO)} antispam on\` · all back: \`${citarInterno("automod", PREFIXO)} on\``),
-      (on ? `**Todo activado** 🟢 — los 4 grupos: \`antispam\`, \`antinoise\`, \`antilink\`, \`sentinel\`.\n\nPara desactivar uno: \`${citar("automod.antiruido", "es", PREFIXO)} off\` · ver cada uno: \`${citar("automod", "es", PREFIXO)}\``
-          : `**Todo desactivado** 🔴 — ahora no se filtra ni se castiga nada automáticamente.\n\nPara activar solo uno: \`${citar("automod", "es", PREFIXO)} antispam on\` · todo de vuelta: \`${citar("automod", "es", PREFIXO)} on\``)) });
+    return onOff(on, ["AutoMod", "AutoMod", "AutoMod"]);
   }
 
-  // ── Os quatro grupos (2 out 2026) ──────────────────────────────────────
-  // antispam · antiruido · antilink · sentinela. `on|off` e `punicao` valem
-  // para o grupo inteiro; `&automod <grupo> <parte> …` ajusta uma parte (que
-  // por baixo é um dos filtros de antes — os nomes antigos continuam valendo).
-  const G = GRUPOS_AUTOMOD;
-  // o que é do FILTRO (liga/desliga/punição), não do painel do sentinela —
-  // antes `&automod sentinela conteudo punicao banir` caía no painel e dava
-  // "subcomando desconhecido" (15 out 2026)
+  // ── debug on|off (global: só o dono do bot) ──
+  if (sub === "debug") {
+    if (!ctx.ehSuperAdmin?.(message.authorId)) return linha(COR.erro, "🔒 Só o dono do bot.", "🔒 Bot owner only.", "🔒 Solo el dueño del bot.");
+    const v = args[1]?.toLowerCase();
+    if (v !== "on" && v !== "off") return erroUso("Use `on` ou `off`", "Use `on` or `off`", "Usa `on` u `off`");
+    cfgGlobal.debug = (v === "on");
+    salvarGlobal();
+    return onOff(cfgGlobal.debug, ["debug", "debug", "debug"]);
+  }
+
+  // ── a tela de estado: os quatro grupos ──
+  if (!sub || sub === "status") {
+    const linhas = Object.entries(G_AUTOMOD).map(([nome, def]) => {
+      const st = estadoDoGrupo(config.automod, nome);
+      const icone = st.ligadas === st.total ? "🟢" : st.ligadas ? "🟡" : "🔴";
+      return `${icone} **${nomeGrupo(nome, l)}** ${st.ligadas}/${st.total} — ${st.partes.map((x) => `${x.ligada ? "✓" : "✗"} ${nomeParte(x.parte, l)}`).join(" · ")}`;
+    });
+    linhas.push(tr(ctx, `🛡 Punição: \`${nomeModo(config.automod.punicao?.modo ?? "avisar", "pt")}\``, `🛡 Punishment: \`${nomeModo(config.automod.punicao?.modo ?? "avisar", "en")}\``, `🛡 Castigo: \`${nomeModo(config.automod.punicao?.modo ?? "avisar", "es")}\``));
+    return sendEmbed(canal, { title: "🛡 AutoMod", description: linhas.join("\n"), colour: COR.mod });
+  }
+
+  // ── Os quatro grupos: antispam · antiruido · antilink · sentinela ──
   const PARA_O_FILTRO = ["on", "off", "punicao", "punição", "punishment"];
-  if (G[sub]) {
-    const grupo = sub, def = G[grupo];
-    // `desligar`/`disable`/`ativar`… valem como off/on no grupo e na parte
-    // (15 out 2026: `&automod sentinel disable` desligava só o conteúdo, dizendo
-    // que tinha desligado o sentinela; `&automod antispam disable` dava erro)
+  if (G_AUTOMOD[sub]) {
+    const grupo = sub, def = G_AUTOMOD[grupo];
     if (args[1] && args[1].toLowerCase() in TUDO) args[1] = TUDO[args[1].toLowerCase()] ? "on" : "off";
-    if (args[2] && def.partes[args[1]?.toLowerCase()] && args[2].toLowerCase() in TUDO) args[2] = TUDO[args[2].toLowerCase()] ? "on" : "off";
-    const a1 = args[1]?.toLowerCase();
-    const T = (pt, eng, es) => tr(ctx, pt, eng, es);
+    if (args[2] && args[2].toLowerCase() in TUDO) args[2] = TUDO[args[2].toLowerCase()] ? "on" : "off";
+    let a1 = args[1]?.toLowerCase();
+    if (grupo === "antispam" && a1 === "rajada") a1 = "velocidade";   // (P2) rajada = velocidade
     const PARAM_PARTE = {
       antispam: { mensagens: "velocidade", tempo: "velocidade", mencoes: "mencoes", minuto: "midia", novato: "midia", vezes: "repeticao" },
       antiruido: { tamanho: "caps", limiar: "caps", zalgo: "caracteres", repeticao: "letras", ignorar: "letras", emojis: "emoji" },
     }[grupo] ?? {};
     if (a1 && def.partes[a1]) {
       // uma parte: vira o comando do filtro de antes
-      args = [def.partes[a1], ...args.slice(2)];
-      sub = args[0];
-      if (grupo === "sentinela" && a1 === "conteudo" && args[1] && !PARA_O_FILTRO.includes(args[1].toLowerCase())) {
-        return cmdScam(message, args.slice(1), ctx);
-      }
-      return executarFiltro(sub, args);
+      const filtro = def.partes[a1];
+      if (grupo === "sentinela" && a1 === "conteudo" && args[2] && !PARA_O_FILTRO.includes(args[2].toLowerCase())) return cmdScam(message, args.slice(2), ctx);
+      return executarFiltro(filtro, [filtro, ...args.slice(2)], [nomeParte(a1, "pt"), nomeParte(a1, "en"), nomeParte(a1, "es")]);
     }
-    if (!a1) {
-      const st = estadoDoGrupo(config.automod, grupo);
-      const pm = (f) => config.automod[MODULOS_AUTOMOD[f]]?.punicao?.modo;
-      return sendEmbed(message.channel, { title: `${def.emoji} ${nomeGrupo(grupo, lang)} — ${T(def.pt, def.en, def.es)}`, colour: COR.mod, description: [
-        `**${st.ligadas}/${st.total}** ${T("partes ligadas", "parts on", "partes activadas")}`,
-        "",
-        ...st.partes.map((x) => `${x.ligada ? "🟢" : "🔴"} \`${nomeParte(x.parte, lang)}\` — ${(ROTULO_PARTE[x.parte] ? tr(ctx, ...ROTULO_PARTE[x.parte]) : null) ?? x.parte}`
-          + `${descreverFiltro(config.automod, x.chave, lang, ctx.estado) ? ` _(${descreverFiltro(config.automod, x.chave, lang, ctx.estado)})_` : ""}`
-          + `${pm(x.filtro) ? ` · ${T("punição", "punishment", "castigo")} \`${nomeModo(pm(x.filtro), lang)}\`` : ""}`),
-        "",
-        `\`${citarInterno("automod", PREFIXO)} ${grupo} on|off\` — ${T("o grupo inteiro", "the whole group", "el grupo entero")}`,
-        `\`${citarInterno("automod", PREFIXO)} ${grupo} <${T("parte", "part", "parte")}> on|off\` — ${T("só uma parte", "one part only", "solo una parte")}`,
-        Object.keys(PARAM_PARTE).length ? `\`${citarInterno("automod", PREFIXO)} ${grupo} set <${Object.keys(PARAM_PARTE).join("|")}> <${T("valor", "value", "valor")}>\`` : null,
-        `\`${citarInterno("automod", PREFIXO)} ${grupo} punicao <avisar|apagar|confirmar|acumular|banir|herdar>\``,
-        grupo === "sentinela" ? T(`_Painel do sentinela: \`${citarInterno("automod.sentinela.config", PREFIXO)}\` · \`sensitivity\` · \`test <texto>\` · \`odio add <termo>\`_`, `_Sentinel panel: \`${citarInterno("automod.sentinela.config", PREFIXO)}\` · \`sensitivity\` · \`test <text>\` · \`odio add <term>\`_`,
-          `_Panel del centinela: \`${citar("automod.sentinela.config", "es", PREFIXO)}\` · \`sensitivity\` · \`test <texto>\` · \`hate add <término>\`_`) : null,
-      ].filter((x) => x !== null).join("\n") });
-    }
+    if (!a1 || a1 === "status" || a1 === "config") return grupo === "sentinela" ? telaSentinela() : telaDoGrupo(grupo);
+    const nomeG = [nomeGrupo(grupo, "pt"), nomeGrupo(grupo, "en"), nomeGrupo(grupo, "es")];
     if (a1 === "on" || a1 === "off") {
-      for (const f of Object.values(def.partes)) {
-        const ck = MODULOS_AUTOMOD[f];
+      for (const f of Object.values(def.partes)) for (const x of filtrosDaParte(f)) {
+        const ck = MODULOS_AUTOMOD[x];
         config.automod[ck] = { ...(config.automod[ck] ?? {}), enabled: a1 === "on" };
       }
       salvarConfig();
-      return sendEmbed(message.channel, { title: "🛡 AutoMod", colour: COR.mod, description: T(
-        `**${grupo}** ${a1 === "on" ? "ligado 🟢" : "desligado 🔴"} — ${Object.keys(def.partes).length} parte(s): ${Object.keys(def.partes).map((x) => `\`${x}\``).join(", ")}.`,
-        `**${nomeGrupo(grupo, "en")}** ${a1 === "on" ? "enabled 🟢" : "disabled 🔴"} — ${Object.keys(def.partes).length} part(s): ${Object.keys(def.partes).map((x) => `\`${nomeParte(x, "en")}\``).join(", ")}.`,
-        `**${nomeGrupo(grupo, "en")}** ${a1 === "on" ? "activado 🟢" : "desactivado 🔴"} — ${Object.keys(def.partes).length} parte(s): ${Object.keys(def.partes).map((x) => `\`${nomeParte(x, "en")}\``).join(", ")}.`) });
+      return onOff(a1 === "on", nomeG);
     }
     if (a1 === "punicao" || a1 === "punição" || a1 === "punishment") {
       const modo = MODO_EN[args[2]?.toLowerCase()] ?? args[2]?.toLowerCase();
-      const MODOS = ["avisar", "apagar", "confirmar", "acumular", "banir"];
       const herdar = ["herdar", "global", "null"].includes(modo);
-      if (!herdar && !MODOS.includes(modo)) {
-        return sendEmbed(message.channel, { title: T("❌ Modo inválido", "❌ Invalid mode", "❌ Modo no válido"), colour: COR.erro,
-          description: `\`${citarInterno("automod", PREFIXO)} ${grupo} punicao <${MODOS.join("|")}|herdar>\`` });
-      }
-      for (const f of Object.values(def.partes)) {
-        const mod = config.automod[MODULOS_AUTOMOD[f]] ??= {};
+      if (!herdar && !MODOS_PUN.includes(modo)) return erroUso("Modo: avisar, apagar, confirmar, acumular, banir ou herdar", "Mode: warn, delete, confirm, stack, ban or inherit", "Modo: warn, delete, confirm, stack, ban o inherit");
+      for (const f of Object.values(def.partes)) for (const x of filtrosDaParte(f)) {
+        const mod = config.automod[MODULOS_AUTOMOD[x]] ??= {};
         mod.punicao = herdar ? null : { ...(mod.punicao ?? {}), modo, ...(modo === "acumular" && !mod.punicao?.warnsParaBan ? { warnsParaBan: 3 } : {}) };
       }
       salvarConfig();
-      return sendEmbed(message.channel, { title: "🛡 AutoMod", colour: COR.sucesso, description: herdar
-        ? T(`**${grupo}** agora herda a punição global.`, `**${grupo}** now inherits the global punishment.`, `**${nomeGrupo(grupo, "es")}** ahora hereda el castigo global.`)
-        : T(`**${grupo}** agora usa a punição **\`${modo}\`** (todas as partes).`, `**${nomeGrupo(grupo, "en")}** now uses the **\`${nomeModo(modo, "en")}\`** punishment (all parts).`,
-            `**${nomeGrupo(grupo, "es")}** ahora usa el castigo **\`${nomeModo(modo, "es")}\`** (todas las partes).`) });
+      const m = herdar ? ["herdada", "inherited", "heredado"] : [nomeModo(modo, "pt"), nomeModo(modo, "en"), nomeModo(modo, "es")];
+      return linha(COR.sucesso, `🛡 **${nomeG[0]}** → punição \`${m[0]}\`.`, `🛡 **${nomeG[1]}** → punishment \`${m[1]}\`.`, `🛡 **${nomeG[2]}** → castigo \`${m[2]}\`.`);
     }
     if (a1 === "set" && PARAM_PARTE[args[2]?.toLowerCase()]) {
       const parte = PARAM_PARTE[args[2].toLowerCase()];
-      args = [def.partes[parte], "set", ...args.slice(2)];
-      sub = args[0];
-      return executarFiltro(sub, args);
+      const filtro = def.partes[parte];
+      return executarFiltro(filtro, [filtro, "set", ...args.slice(2)], [nomeParte(parte, "pt"), nomeParte(parte, "en"), nomeParte(parte, "es")]);
     }
-    if (grupo === "sentinela") return cmdScam(message, args.slice(1), ctx);   // o painel: config, sensitivity, test…
-    const parecidaInterna = maisParecido(a1, [...Object.keys(def.partes), ...Object.keys(def.partes).map((x) => nomeParte(x, "en")), "on", "off", "punicao", "punishment", "set"]);
-    const parecida = parecidaInterna && lang === "en" ? nomeParte(parecidaInterna, "en") : parecidaInterna;
-    return sendEmbed(message.channel, { title: T("❌ Parte desconhecida", "❌ Unknown part", "❌ Parte desconocida"), colour: COR.erro,
-      description: [
-        parecida ? T(`Você quis dizer \`${citarInterno("automod", PREFIXO)} ${grupo} ${parecida}\`?`, `Did you mean \`${citarInterno("automod", PREFIXO)} ${grupo} ${parecida}\`?`,
-          `¿Quisiste decir \`${citar("automod", "es", PREFIXO)} ${nomeGrupo(grupo, "en")} ${parecida}\`?`) + "\n" : null,
-        `${T("Partes", "Parts", "Partes")} ${T("de", "of", "de")} \`${nomeGrupo(grupo, lang)}\`: ${Object.keys(def.partes).map((x) => `\`${nomeParte(x, lang)}\``).join(", ")}`,
-        "",
-        `\`${citarInterno("automod", PREFIXO)} ${grupo} on|off\` — ${T("o grupo inteiro", "the whole group", "el grupo entero")}`,
-        `${T("Ex.:", "E.g.:", "Ej.:")} \`${citarInterno("automod", PREFIXO)} ${grupo} ${Object.keys(def.partes)[0]} off\` — ${T("só essa parte", "just that part", "solo esa parte")}`,
-      ].filter((x) => x !== null).join("\n") });
+    if (grupo === "sentinela") return cmdScam(message, args.slice(1), ctx);   // o painel: sensibilidade, canal, testar…
+    const parecida = maisParecido(a1, [...Object.keys(def.partes), "on", "off", "punicao", "set"]);
+    const x = String(a1).slice(0, 30).replace(/`/g, "");
+    if (parecida) return erroUso(`Você quis dizer \`${citar("automod", "pt", PREFIXO)} ${nomeG[0]} ${nomeParte(parecida, "pt")}\`?`, `Did you mean \`${citar("automod", "en", PREFIXO)} ${nomeG[1]} ${nomeParte(parecida, "en")}\`?`, `¿Quisiste decir \`${citar("automod", "es", PREFIXO)} ${nomeG[2]} ${nomeParte(parecida, "es")}\`?`);
+    return erroUso(`\`${x}\` não é parte de ${nomeG[0]}: ${listaPartes(grupo, "pt")}`, `\`${x}\` isn't a part of ${nomeG[1]}: ${listaPartes(grupo, "en")}`, `\`${x}\` no es parte de ${nomeG[2]}: ${listaPartes(grupo, "es")}`);
   }
-  return executarFiltro(sub, args);
-
-  // ── Um filtro só (o nome antigo, ou a parte de um grupo) ──
-  async function executarFiltro(sub, args) {
-
-  // `sentinela` é os dois: um módulo que liga/desliga (como anticaps) E um
-  // painel com ajustes próprios. `on|off` fica na lista de módulos abaixo;
-  // qualquer outra coisa é assunto do painel.
-  if ((sub === "sentinela" || sub === "antiscam")
-      && args[1] && !PARA_O_FILTRO.includes(args[1].toLowerCase())) {
-    return cmdScam(message, args.slice(1), ctx);
+  if (sub === "antimassspam") sub = "antispam";   // (P2) a rajada é a velocidade
+  if (MODULOS_AUTOMOD[sub]) return executarFiltro(sub, args, [sub, sub, sub]);
+  const parecido = maisParecido(sub, [...Object.keys(G_AUTOMOD), "on", "off", "status", "filtro", "blocklist", "whitelist", "punicao"]);
+  const resto = args.slice(1).join(" ");
+  if (parecido) {
+    const sug = (lg) => `\`${citar("automod", lg, PREFIXO)} ${G_AUTOMOD[parecido] ? nomeGrupo(parecido, lg) : parecido}${resto ? " " + resto : ""}\``;
+    return erroUso(`Você quis dizer ${sug("pt")}?`, `Did you mean ${sug("en")}?`, `¿Quisiste decir ${sug("es")}?`);
   }
+  const x = String(sub).slice(0, 30).replace(/`/g, "");
+  return erroUso(`\`${x}\` não é um grupo: ${listaGrupos("pt")}`, `\`${x}\` isn't a group: ${listaGrupos("en")}`, `\`${x}\` no es un grupo: ${listaGrupos("es")}`);
 
-  // %automod debug <on|off> — liga/desliga os logs (GLOBAL, todos os servidores)
-  if (sub === "debug") {
-    // vale para todos os servidores (e enche o log da máquina): só o dono do bot
-    if (!ctx.ehSuperAdmin?.(message.authorId))
-      return sendEmbed(message.channel, tr(ctx,
-        { title: "🔒 Só o dono do bot", description: "Os logs de depuração são **globais** — valem para todos os servidores da Judy.", colour: COR.aviso },
-        { title: "🔒 Bot owner only", description: "Debug logs are **global** — they apply to every server Judy is in.", colour: COR.aviso },
-        { title: "🔒 Solo el dueño del bot", description: "Los registros de depuración son **globales** — valen para todos los servidores de Judy.", colour: COR.aviso }));
-    const v = args[1]?.toLowerCase();
-    if (v !== "on" && v !== "off")
-      return sendEmbed(message.channel, tr(ctx,
-        { title: "❌ Uso incorreto", description: `\`${citarInterno("automod.debug", PREFIXO)} <on|off>\``, colour: COR.erro },
-        { title: "❌ Wrong usage", description: `\`${citarInterno("automod.debug", PREFIXO)} <on|off>\``, colour: COR.erro },
-        { title: "❌ Uso incorrecto", description: `\`${citar("automod.debug", "es", PREFIXO)} <on|off>\``, colour: COR.erro }));
-    cfgGlobal.debug = (v === "on");
-    salvarGlobal();
-    return sendEmbed(message.channel, { title: "🐛 Debug",
-      description: tr(ctx,
-        `Logs de depuração **${cfgGlobal.debug ? "ativados 🟢" : "desativados 🔴"}** (global).`,
-        `Debug logs **${cfgGlobal.debug ? "enabled 🟢" : "disabled 🔴"}** (global).`,
-        `Registros de depuración **${cfgGlobal.debug ? "activados 🟢" : "desactivados 🔴"}** (global).`),
-      colour: COR.mod });
-  }
-
-  const modulos = MODULOS_AUTOMOD;
-
-
-  if (!sub || sub === "status") {
-    const linhas = Object.entries(GRUPOS_AUTOMOD).flatMap(([nome, def]) => {
-      const st = estadoDoGrupo(config.automod, nome);
-      const icone = st.ligadas === st.total ? "🟢" : st.ligadas ? "🟡" : "🔴";
-      return [`${icone} **${nomeGrupo(nome, lang)}** — ${tr(ctx, def.pt, def.en, def.es)} · ${st.ligadas}/${st.total}`,
-        `   ${st.partes.map((x) => `${x.ligada ? "✓" : "✗"} ${nomeParte(x.parte, lang)}`).join(" · ")}`];
+  // ── A tela de um grupo: as partes, ligadas ou não, com os números ──
+  function telaDoGrupo(grupo) {
+    const def = G_AUTOMOD[grupo], st = estadoDoGrupo(config.automod, grupo);
+    const pm = (f) => config.automod[MODULOS_AUTOMOD[f]]?.punicao?.modo;
+    const linhas = st.partes.map((x) => {
+      const det = descreverFiltro(config.automod, x.chave, lang, ctx.estado);
+      return `${x.ligada ? "🟢" : "🔴"} \`${nomeParte(x.parte, l)}\`${det ? ` — ${det}` : ""}${pm(x.filtro) ? ` · \`${nomeModo(pm(x.filtro), l)}\`` : ""}`;
     });
-    linhas.push("", tr(ctx,
-      `_Detalhes de um grupo: \`${citarInterno("automod", PREFIXO)} antispam\` · desligar um: \`${citarInterno("automod", PREFIXO)} antispam off\` · tudo: \`${citarInterno("automod", PREFIXO)} off\`_`,
-      `_Details of one group: \`${citarInterno("automod", PREFIXO)} antispam\` · turn one off: \`${citarInterno("automod", PREFIXO)} antispam off\` · everything: \`${citarInterno("automod", PREFIXO)} off\`_`,
-      `_Detalles de un grupo: \`${citar("automod", "es", PREFIXO)} antispam\` · desactivar uno: \`${citar("automod", "es", PREFIXO)} antispam off\` · todo: \`${citar("automod", "es", PREFIXO)} off\`_`));
-    linhas.push(tr(ctx,
-      `${cfgGlobal.debug === true ? "🟢" : "🔴"} **debug (global)** — ${cfgGlobal.debug === true ? "ativado" : "desativado"}`,
-      `${cfgGlobal.debug === true ? "🟢" : "🔴"} **debug (global)** — ${cfgGlobal.debug === true ? "enabled" : "disabled"}`,
-      `${cfgGlobal.debug === true ? "🟢" : "🔴"} **debug (global)** — ${cfgGlobal.debug === true ? "activado" : "desactivado"}`));
-    return sendEmbed(message.channel, {
-      title: tr(ctx, "🛡 Status do AutoMod", "🛡 AutoMod status", "🛡 Estado del AutoMod"),
-      description: linhas.join("\n"), colour: COR.mod });
+    return sendEmbed(canal, { title: `${def.emoji} ${nomeGrupo(grupo, l)} ${st.ligadas}/${st.total}`, description: linhas.join("\n"), colour: COR.mod });
   }
 
-  const chave = modulos[sub];
-  if (!chave) {
-    // Os nomes antigos (antiodio, anticaps…) continuam valendo, mas não se
-    // ensinam mais: quem erra vê os QUATRO grupos, com exemplo pronto.
-    const parecidoInterno = maisParecido(sub, [...Object.keys(G_AUTOMOD), ...Object.keys(G_AUTOMOD).map((g) => nomeGrupo(g, "en")), ...Object.keys(modulos), "on", "off", "blocklist", "whitelist", "punicao", "punishment"]);
-    const parecido = parecidoInterno && lang === "en" ? nomeGrupo(parecidoInterno, "en") : parecidoInterno;
-    return sendEmbed(message.channel, { title: tr(ctx, "❌ Não conheço esse", "❌ I don't know that one", "❌ No conozco ese"), colour: COR.erro,
-      description: guiaDosGrupos(lang, PREFIXO, parecido
-        ? tr(ctx, `Você quis dizer \`${citarInterno("automod", PREFIXO)} ${parecido}\`?`, `Did you mean \`${citarInterno("automod", PREFIXO)} ${parecido}\`?`,
-            `¿Quisiste decir \`${citar("automod", "es", PREFIXO)} ${parecido}\`?`)
-        : tr(ctx, `\`${String(sub).slice(0, 30)}\` não é um grupo. O automod tem quatro:`, `\`${String(sub).slice(0, 30)}\` isn't a group. The automod has four:`,
-            `\`${String(sub).slice(0, 30)}\` no es un grupo. El automod tiene cuatro:`), ctx) });
-  }
-
-  const mod = config.automod[chave] ??= {};
-  const acao = args[1]?.toLowerCase();
-
-  // Os dois painéis novos do sentinela (13 out 2026). `punicao` segue o
-  // caminho comum lá embaixo (vale para o `punir` dos temas).
-  if (sub === "antiassuntos" && !["punicao", "punição"].includes(acao)) return painelAssuntos(mod, args.slice(1));
-  if (sub === "antiavatar" && !["punicao", "punição"].includes(acao)) return painelAvatar(mod, args.slice(1));
-
-  // Parâmetros configuráveis por módulo (nome do arg → chave interna + validação)
-  const PARAMS = {
-    antispam:        { mensagens: "maxMessages", tempo: "windowMs" },
-    antimassspam:    { mensagens: "maxMessages", tempo: "windowMs" },
-    antimassmention: { mencoes: "maxMentions" },
-    anticaps:        { tamanho: "minLength", limiar: "threshold" },
-    anticaracteres:  { zalgo: "limiteZalgo" },
-    antirepeticao:   { repeticao: "maxRepeticao", ignorar: "ignorar" },
-    antiemoji:       { emojis: "maxEmojis" },
-    antimidia:       { minuto: "maxPorMinuto", novato: "maxNovato" },
-    antiduplicata:   { vezes: "maxRepetidas" },
-  };
-  const MODOS_PUN = ["avisar", "apagar", "confirmar", "acumular", "banir"];
-
-  // ── &automod <módulo>  → detalhes do módulo ──
-  if (!acao) {
-    const params = PARAMS[sub];
-    const linhas = [tr(ctx,
-      `${mod.enabled ? "🟢 ativado" : "🔴 desativado"}`,
-      `${mod.enabled ? "🟢 enabled" : "🔴 disabled"}`,
-      `${mod.enabled ? "🟢 activado" : "🔴 desactivado"}`)];
-    if (params) {
-      linhas.push("", tr(ctx, "**Parâmetros:**", "**Parameters:**", "**Parámetros:**"));
-      for (const [nome, ck] of Object.entries(params)) linhas.push(`• \`${nomeParam(nome, lang)}\` = ${mod[ck]}`);
-    }
-    const pm = mod.punicao?.modo;
-    linhas.push("", tr(ctx,
-      `**Punição:** ${pm ? `\`${pm}\` (própria)` : "_herda a global_ (`" + (config.automod.punicao?.modo ?? "avisar") + "`)"}`,
-      `**Punishment:** ${pm ? `\`${pm}\` (its own)` : "_inherits the global one_ (`" + (config.automod.punicao?.modo ?? "avisar") + "`)"}`,
-      `**Castigo:** ${pm ? `\`${nomeModo(pm, "es")}\` (propio)` : "_hereda el global_ (`" + nomeModo(config.automod.punicao?.modo ?? "avisar", "es") + "`)"}`));
-    linhas.push("", tr(ctx, "**Como configurar:**", "**How to configure:**", "**Cómo configurarlo:**"),
-      `\`${citarInterno("automod", PREFIXO)} ${sub} <on|off>\``,
-      params ? `\`${citarInterno("automod", PREFIXO)} ${sub} set <${tr(ctx, "parâmetro", "parameter", "parámetro")}> <${tr(ctx, "valor", "value", "valor")}>\`` : null,
-      `\`${citarInterno("automod", PREFIXO)} ${sub} punicao <${MODOS_PUN.join("|")}|herdar>\``,
-      // O sentinela tem um painel próprio além do liga/desliga.
-      sub === "sentinela" ? tr(ctx,
-        `\n**Painel do sentinela:** \`${citarInterno("automod.sentinela.config", PREFIXO)}\` · \`sensitivity\` · \`antiguidade\` · \`alerta\` · \`test <texto>\` — detalhes em \`${PREFIXO}help automod sentinela\``,
-        `\n**Sentinel panel:** \`${citarInterno("automod.sentinela.config", PREFIXO)}\` · \`sensitivity\` · \`antiguidade\` · \`alerta\` · \`test <text>\` — details in \`${PREFIXO}help automod sentinela\``,
-        `\n**Panel del centinela:** \`${citar("automod.sentinela.config", "es", PREFIXO)}\` · \`sensitivity\` · \`tenure\` · \`alerts\` · \`test <texto>\` — detalles en \`${citar("help", "es", PREFIXO)} automod sentinel\``) : null,
-    );
-    const subEn = nomeGrupo(sub, "en") !== sub ? nomeGrupo(sub, "en") : nomeParte(sub, "en");
-    return sendEmbed(message.channel, { title: `🛡 ${lang === "en" ? subEn : sub}`,
-      description: linhas.filter((l) => l !== null).join("\n"), colour: COR.mod });
-  }
-
-  // ── &automod antiodio add|remover|lista <termo> — termos além dos de fábrica ──
-  if (sub === "antiodio" && ["add", "adicionar", "remover", "remove", "tirar", "lista", "list"].includes(acao)) {
-    mod.termos ??= [];
-    const termo = args.slice(2).join(" ").trim().toLowerCase();
-    // (31 out 2026, R10) teto: 20 termos × 40 caracteres — o termo vira padrão
-    // que roda em toda mensagem do servidor
-    if (["add", "adicionar"].includes(acao) && termo && !mod.termos.includes(termo)) {
-      if (termo.length > TERMO_MAX || mod.termos.length >= TERMOS_MAX) {
-        return sendEmbed(message.channel, { title: "🛡 antiodio", colour: COR.erro, description: termo.length > TERMO_MAX
-          ? tr(ctx, `❌ Termo longo demais: no máximo **${TERMO_MAX}** caracteres.`, `❌ Term too long: at most **${TERMO_MAX}** characters.`, `❌ Término demasiado largo: como máximo **${TERMO_MAX}** caracteres.`)
-          : tr(ctx, `❌ Já há **${TERMOS_MAX}** termos (o máximo). Tire um antes de pôr outro.`, `❌ There are already **${TERMOS_MAX}** terms (the maximum). Remove one first.`, `❌ Ya hay **${TERMOS_MAX}** términos (el máximo). Quita uno antes de añadir otro.`) });
-      }
-      mod.termos.push(termo);
-    }
-    if (["remover", "remove", "tirar"].includes(acao)) mod.termos = mod.termos.filter((x) => x !== termo);
-    if (!["lista", "list"].includes(acao)) salvarConfig();
-    return sendEmbed(message.channel, { title: "🛡 antiodio", colour: COR.mod, description: [
-      tr(ctx, `**Termos de fábrica:** ${TERMOS_ODIO.length} (ofensas inequívocas, PT e EN)`, `**Built-in terms:** ${TERMOS_ODIO.length} (unambiguous slurs, PT and EN)`,
-        `**Términos de fábrica:** ${TERMOS_ODIO.length} (insultos inequívocos, PT y EN)`),
-      `**${tr(ctx, "Acrescentados aqui", "Added here", "Añadidos aquí")}:** ${mod.termos.length ? mod.termos.map((x) => `\`${x}\``).join(", ") : "—"}`,
-      "",
-      tr(ctx, "_Os disfarces também são pegos: n.i.g.g.a, N1GG4, niiiigga._", "_Spelling tricks are caught too: n.i.g.g.a, N1GG4, niiiigga._",
-        "_Los disfraces también se detectan: n.i.g.g.a, N1GG4, niiiigga._"),
+  // ── A tela única do sentinela (P2): o grupo, o painel e os temas numa só ──
+  function telaSentinela() {
+    const cfg = config.automod.antiScam ?? {};
+    const st = estadoDoGrupo(config.automod, "sentinela");
+    const linhas = st.partes.map((x) => `${x.ligada ? "🟢" : "🔴"} \`${nomeParte(x.parte, l)}\``).join(" · ");
+    const sim = (v) => (v ? "🟢" : "🔴");
+    return sendEmbed(canal, { title: `🛡️ ${nomeGrupo("sentinela", l)} ${st.ligadas}/${st.total}`, colour: COR.mod, description: [
+      linhas,
+      tr(ctx,
+        `Sensibilidade \`${nomeSens(cfg.sensitivity ?? "media", "pt")}\` (${engine.limiarBase(cfg.sensitivity)}/10) · antiguidade ${sim(cfg.porAntiguidade !== false)} · alerta ${sim(cfg.alertarAdmin !== false)} · canal ${cfg.alertChannelId ? `<#${cfg.alertChannelId}>` : "—"}`,
+        `Sensitivity \`${nomeSens(cfg.sensitivity ?? "media", "en")}\` (${engine.limiarBase(cfg.sensitivity)}/10) · tenure ${sim(cfg.porAntiguidade !== false)} · alerts ${sim(cfg.alertarAdmin !== false)} · channel ${cfg.alertChannelId ? `<#${cfg.alertChannelId}>` : "—"}`,
+        `Sensibilidad \`${nomeSens(cfg.sensitivity ?? "media", "es")}\` (${engine.limiarBase(cfg.sensitivity)}/10) · antigüedad ${sim(cfg.porAntiguidade !== false)} · alertas ${sim(cfg.alertarAdmin !== false)} · canal ${cfg.alertChannelId ? `<#${cfg.alertChannelId}>` : "—"}`),
     ].join("\n") });
   }
 
-  // ── set <parâmetro> <valor> ──
-  if (acao === "set") {
-    const params = PARAMS[sub];
-    if (!params)
-      return sendEmbed(message.channel, tr(ctx,
-        { title: "❌ Sem parâmetros", description: `O módulo \`${sub}\` não tem parâmetros ajustáveis.`, colour: COR.erro },
-        { title: "❌ No parameters", description: `The \`${sub}\` module has no adjustable parameters.`, colour: COR.erro },
-        { title: "❌ Sin parámetros", description: `El módulo \`${sub}\` no tiene parámetros ajustables.`, colour: COR.erro }));
-    const nome = args[2]?.toLowerCase();
-    const bruto = args[3];
-    const ck = params[nome];
-    if (!ck || bruto === undefined)
-      return sendEmbed(message.channel, tr(ctx,
-        { title: "❌ Uso incorreto", description: `\`${citarInterno("automod", PREFIXO)} ${sub} set <${Object.keys(params).join("|")}> <valor>\``, colour: COR.erro },
-        { title: "❌ Wrong usage", description: `\`${citarInterno("automod", PREFIXO)} ${sub} set <${Object.keys(params).join("|")}> <value>\``, colour: COR.erro },
-        { title: "❌ Uso incorrecto", description: `\`${citar("automod", "es", PREFIXO)} ${nomeGrupo(sub, "en")} set <${Object.keys(params).map((p) => nomeParam(p, "en")).join("|")}> <valor>\``, colour: COR.erro }));
-    // 'ignorar' é texto (letras a ignorar, ex.: "k"); os demais são numéricos.
-    if (ck === "ignorar") {
-      mod[ck] = String(bruto).toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 10);
+  // ── Um filtro só (a parte de um grupo, ou o nome antigo) ──
+  async function executarFiltro(sub, args, nome) {
+    if (sub === "antimassspam") sub = "antispam";
+    // `sentinela` é também o painel: on|off e punição ficam aqui; o resto é do painel
+    if (sub === "sentinela" && args[1] && !PARA_O_FILTRO.includes(args[1].toLowerCase())) return cmdScam(message, args.slice(1), ctx);
+    const chave = MODULOS_AUTOMOD[sub];
+    const mod = config.automod[chave] ??= {};
+    const acao = args[1]?.toLowerCase();
+    if (sub === "antiassuntos" && !["punicao", "punição"].includes(acao)) return painelAssuntos(mod, args.slice(1));
+    if (sub === "antiavatar" && !["punicao", "punição"].includes(acao)) return painelAvatar(mod, args.slice(1));
+    if (sub === "antiodio" && ["add", "remover", "lista"].includes(acao)) return cmdAutomod(message, ["filtro", ...args.slice(1)], ctx);
+
+    // sem ação: a tela do grupo dessa parte
+    if (!acao) {
+      const grupo = Object.entries(G_AUTOMOD).find(([, d]) => Object.values(d.partes).includes(sub))?.[0];
+      return grupo === "sentinela" ? telaSentinela() : grupo ? telaDoGrupo(grupo) : onOff(moduloLigado(config.automod, chave), nome);
+    }
+
+    // ── set <parâmetro> <valor> ──
+    if (acao === "set") {
+      const params = PARAMS[sub];
+      if (!params) return erroUso("Essa parte não tem números", "That part has no numbers", "Esa parte no tiene números");
+      const p = args[2]?.toLowerCase(), bruto = args[3], ck = params?.[p];
+      if (!ck || bruto === undefined) return erroUso(`Parâmetro: ${Object.keys(params).map((x) => `\`${x}\``).join(", ")}`, `Parameter: ${Object.keys(params).map((x) => `\`${nomeParam(x, "en")}\``).join(", ")}`, `Parámetro: ${Object.keys(params).map((x) => `\`${nomeParam(x, "es")}\``).join(", ")}`);
+      let mostrado;
+      if (ck === "ignorar") {
+        mod[ck] = String(bruto).toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 10);
+        mostrado = `"${mod[ck]}"`;
+      } else {
+        const v = valorDoParametro(ck, bruto);
+        if (!v.ok) return linha(COR.erro, `❌ ${v.pt}`, `❌ ${v.en}`, `❌ ${v.es}`);
+        mod[ck] = v.valor;
+        // a rajada acompanha a velocidade nos mesmos números? Não: só a parte pedida.
+        mostrado = ck === "windowMs" ? duracaoTexto(v.valor, l) : (ck === "threshold" || ck === "limiteZalgo") ? `${Math.round(v.valor * 100)}%` : v.valor;
+      }
       salvarConfig();
-      return sendEmbed(message.channel, tr(ctx,
-        { title: "🛡 Parâmetro atualizado",
-          description: `\`${sub}.${nome}\` = **"${mod[ck]}"** (letras ignoradas na repetição)`, colour: COR.sucesso },
-        { title: "🛡 Parameter updated",
-          description: `\`${sub}.${nomeParam(nome, "en")}\` = **"${mod[ck]}"** (letters ignored in repetition)`, colour: COR.sucesso },
-        { title: "🛡 Parámetro actualizado",
-          description: `\`${sub}.${nomeParam(nome, "en")}\` = **"${mod[ck]}"** (letras ignoradas en la repetición)`, colour: COR.sucesso }));
+      return linha(COR.sucesso, `🛡 \`${nome[0]} ${nomeParam(p, "pt")}\` = **${mostrado}**`, `🛡 \`${nome[1]} ${nomeParam(p, "en")}\` = **${mostrado}**`, `🛡 \`${nome[2]} ${nomeParam(p, "es")}\` = **${mostrado}**`);
     }
-    // (31 out 2026, R10) cada parâmetro com tipo e faixa: `repeticao 1.5` virava
-    // regex inválida e derrubava TODA mensagem do servidor; `mensagens 0` punia tudo.
-    const v = valorDoParametro(ck, bruto);
-    if (!v.ok)
-      return sendEmbed(message.channel, { title: tr(ctx, "❌ Valor inválido", "❌ Invalid value", "❌ Valor no válido"), colour: COR.erro,
-        description: tr(ctx, v.pt, v.en, v.es) });
-    mod[ck] = v.valor;
-    salvarConfig();
-    const mostrado = ck === "windowMs" ? duracaoTexto(v.valor, lang) : (ck === "threshold" || ck === "limiteZalgo") ? `${Math.round(v.valor * 100)}%` : v.valor;
-    return sendEmbed(message.channel, tr(ctx,
-      { title: "🛡 Parâmetro atualizado", description: `\`${sub}.${nome}\` = **${mostrado}**`, colour: COR.sucesso },
-      { title: "🛡 Parameter updated", description: `\`${sub}.${nomeParam(nome, "en")}\` = **${mostrado}**`, colour: COR.sucesso },
-      { title: "🛡 Parámetro actualizado", description: `\`${sub}.${nomeParam(nome, "en")}\` = **${mostrado}**`, colour: COR.sucesso }));
-  }
 
-  // ── punicao <modo|herdar> ──
-  if (acao === "punicao" || acao === "punição") {
-    const modo = args[2]?.toLowerCase();
-    if (modo === "herdar" || modo === "global" || modo === "null") {
-      mod.punicao = null; salvarConfig();
-      return sendEmbed(message.channel, tr(ctx,
-        { title: "🛡 Punição do módulo",
-          description: `\`${sub}\` agora **herda a punição global** do servidor.`, colour: COR.sucesso },
-        { title: "🛡 Module punishment",
-          description: `\`${sub}\` now **inherits the server's global punishment**.`, colour: COR.sucesso },
-        { title: "🛡 Castigo del módulo",
-          description: `\`${sub}\` ahora **hereda el castigo global** del servidor.`, colour: COR.sucesso }));
+    // ── punicao <modo|herdar> ──
+    if (acao === "punicao" || acao === "punição") {
+      const modo = MODO_EN[args[2]?.toLowerCase()] ?? args[2]?.toLowerCase();
+      const herdar = ["herdar", "global", "null"].includes(modo);
+      if (!herdar && !MODOS_PUN.includes(modo)) return erroUso("Modo: avisar, apagar, confirmar, acumular, banir ou herdar", "Mode: warn, delete, confirm, stack, ban or inherit", "Modo: warn, delete, confirm, stack, ban o inherit");
+      for (const x of filtrosDaParte(sub)) {
+        const m = config.automod[MODULOS_AUTOMOD[x]] ??= {};
+        m.punicao = herdar ? null : { ...(m.punicao ?? {}), modo, ...(modo === "acumular" && !m.punicao?.warnsParaBan ? { warnsParaBan: 3 } : {}) };
+      }
+      salvarConfig();
+      const m = herdar ? ["herdada", "inherited", "heredado"] : [nomeModo(modo, "pt"), nomeModo(modo, "en"), nomeModo(modo, "es")];
+      return linha(COR.sucesso, `🛡 **${nome[0]}** → punição \`${m[0]}\`.`, `🛡 **${nome[1]}** → punishment \`${m[1]}\`.`, `🛡 **${nome[2]}** → castigo \`${m[2]}\`.`);
     }
-    if (!MODOS_PUN.includes(modo))
-      return sendEmbed(message.channel, tr(ctx, {
-        title: "❌ Modo inválido",
-        description: `Modos: ${MODOS_PUN.map((m) => `\`${m}\``).join(", ")}, ou \`herdar\`.\n\n`
-          + "• `avisar` — só avisa, não pune (filtro de regra fixa ainda apaga; o sentinela não)\n• `apagar` — só remove a mensagem\n• `confirmar` — silencia e espera mod\n• `acumular` — soma avisos até banir\n• `banir` — ban imediato",
-        colour: COR.erro,
-      }, {
-        title: "❌ Invalid mode",
-        description: `Modes: ${MODOS_PUN.map((m) => `\`${nomeModo(m, "en")}\``).join(", ")}, or \`inherit\`.\n\n`
-          + "• `warn` — warn only, no punishment (fixed-rule filters still delete; the sentinel doesn't)\n• `delete` — remove the message only\n• `confirm` — silence and wait for a mod\n• `stack` — stack warnings until a ban\n• `ban` — instant ban",
-        colour: COR.erro,
-      }, {
-        title: "❌ Modo no válido",
-        description: `Modos: ${MODOS_PUN.map((m) => `\`${nomeModo(m, "es")}\``).join(", ")}, o \`inherit\`.\n\n`
-          + "• `warn` — solo avisa, no castiga (los filtros de regla fija igual borran; el centinela no)\n• `delete` — solo borra el mensaje\n• `confirm` — silencia y espera a un mod\n• `stack` — acumula avisos hasta el ban\n• `ban` — ban inmediato",
-        colour: COR.erro,
-      }));
-    mod.punicao = { ...(mod.punicao ?? {}), modo };
-    if (modo === "acumular" && !mod.punicao.warnsParaBan) mod.punicao.warnsParaBan = 3;
+
+    // ── on | off ──
+    if (acao !== "on" && acao !== "off") return erroUso("Use `on`, `off`, `set` ou `punicao`", "Use `on`, `off`, `set` or `punishment`", "Usa `on`, `off`, `set` o `punishment`");
+    for (const x of filtrosDaParte(sub)) {
+      const ck = MODULOS_AUTOMOD[x];
+      config.automod[ck] = { ...(config.automod[ck] ?? {}), enabled: acao === "on" };
+    }
     salvarConfig();
-    return sendEmbed(message.channel, tr(ctx,
-      { title: "🛡 Punição do módulo",
-        description: `\`${sub}\` agora usa a punição **\`${modo}\`** (própria, independente da global).`,
-        colour: COR.sucesso },
-      { title: "🛡 Module punishment",
-        description: `\`${sub}\` now uses the **\`${modo}\`** punishment (its own, independent of the global one).`,
-        colour: COR.sucesso },
-      { title: "🛡 Castigo del módulo",
-        description: `\`${sub}\` ahora usa el castigo **\`${nomeModo(modo, "es")}\`** (propio, independiente del global).`,
-        colour: COR.sucesso }));
+    return onOff(acao === "on", nome);
   }
 
-  // ── on | off ──
-  const novoEstado = acao;
-  if (novoEstado !== "on" && novoEstado !== "off")
-    return sendEmbed(message.channel, tr(ctx, {
-      title: "❌ Uso incorreto",
-      description: [
-        `\`${citarInterno("automod", PREFIXO)} ${sub} <on|off>\``,
-        PARAMS[sub] ? `\`${citarInterno("automod", PREFIXO)} ${sub} set <parâmetro> <valor>\`` : null,
-        `\`${citarInterno("automod", PREFIXO)} ${sub} punicao <modo>\``,
-      ].filter(Boolean).join("\n"), colour: COR.erro,
-    }, {
-      title: "❌ Wrong usage",
-      description: [
-        `\`${citarInterno("automod", PREFIXO)} ${sub} <on|off>\``,
-        PARAMS[sub] ? `\`${citarInterno("automod", PREFIXO)} ${sub} set <parameter> <value>\`` : null,
-        `\`${citarInterno("automod", PREFIXO)} ${sub} punicao <mode>\``,
-      ].filter(Boolean).join("\n"), colour: COR.erro,
-    }, {
-      title: "❌ Uso incorrecto",
-      description: [
-        `\`${citar("automod", "es", PREFIXO)} ${nomeGrupo(sub, "en")} <on|off>\``,
-        PARAMS[sub] ? `\`${citar("automod", "es", PREFIXO)} ${nomeGrupo(sub, "en")} set <parámetro> <valor>\`` : null,
-        `\`${citar("automod", "es", PREFIXO)} ${nomeGrupo(sub, "en")} punishment <modo>\``,
-      ].filter(Boolean).join("\n"), colour: COR.erro,
-    }));
-
-  config.automod[chave].enabled = (novoEstado === "on");
-  salvarConfig();
-  return sendEmbed(message.channel, tr(ctx,
-    { title: "🛡 AutoMod atualizado",
-      description: `**${sub}** foi **${novoEstado === "on" ? "ativado 🟢" : "desativado 🔴"}**.`, colour: COR.mod },
-    { title: "🛡 AutoMod updated",
-      description: `**${sub}** was **${novoEstado === "on" ? "enabled 🟢" : "disabled 🔴"}**.`, colour: COR.mod },
-    { title: "🛡 AutoMod actualizado",
-      description: `**${sub}** fue **${novoEstado === "on" ? "activado 🟢" : "desactivado 🔴"}**.`, colour: COR.mod }));
-  }
-
-  // ── &automod sentinela assuntos … (temas proibidos pela regra) ──────────
+  // ── &automod sentinela assuntos … (temas proibidos pela regra) ──
+  // A tela mostra o estado; cada mudança responde uma linha (R1: antes o painel
+  // inteiro era reenviado a cada alteração).
   async function painelAssuntos(mod, a) {
     const T = (pt, eng, es) => tr(ctx, pt, eng, es);
-    const P = PREFIXO, base = `${citarInterno("automod.sentinela.assuntos", P)}`;
     mod.acoes ??= {}; mod.termos ??= {}; mod.canaisLiberados ??= [];
     const op = a[0]?.toLowerCase();
-    const ROT_ACAO = { off: T("desligado", "off", "desactivado"), alertar: T("só alerta a staff", "alerts staff only", "solo alerta al staff"), apagar: T("apaga a mensagem", "deletes the message", "borra el mensaje"), punir: T("apaga e pune (escada)", "deletes and punishes (ladder)", "borra y castiga (escalera)") };
-    const SENS_ROT = { baixa: T("baixa", "low", "baja"), media: T("média", "medium", "media"), alta: T("alta", "high", "alta") };
     const sensAtual = assuntos.sensibilidadeValida(mod.sensibilidade) ?? "media";
-    const painel = (titulo = null) => sendEmbed(message.channel, { title: titulo ?? `🛡️ ${T("Temas proibidos", "Forbidden topics", "Temas prohibidos")}`, colour: COR.mod, description: [
-      T("Cada mensagem ganha uma **nota de 0 a 10** por tema: termos com peso, sinais de debate e de ataque, e o **contexto** do canal sobem; \"kkkk\", emoji de riso e \"zoeira\" amenizam. Passou do limiar, a IA confirma se é **discussão de verdade** ou zoeira.",
-        "Each message gets a **0–10 score** per topic: weighted terms, debate and attack signals, and the channel's **context** raise it; \"lol\", laughing emoji and \"joking\" soften it. Above the threshold, the AI confirms whether it's a **real discussion** or banter.",
-        "Cada mensaje recibe una **nota de 0 a 10** por tema: los términos con peso, las señales de debate y de ataque, y el **contexto** del canal la suben; \"jajaja\", el emoji de risa y \"broma\" la suavizan. Si pasa del umbral, la IA confirma si es una **discusión de verdad** o una broma."),
-      "",
-      `**${T("Chave geral", "Master switch", "Interruptor general")}:** ${mod.enabled ? T("🟢 ligada", "🟢 on", "🟢 activado") : T("🔴 desligada", "🔴 off", "🔴 desactivado")}`,
-      `**${T("Sensibilidade", "Sensitivity", "Sensibilidad")}:** ${SENS_ROT[sensAtual]} (${T("limiar", "threshold", "umbral")} ${assuntos.limiarDoAssunto(mod)}/10) · **${T("IA", "AI", "IA")}:** ${mod.ia === false ? T("🔴 desligada — a nota decide sozinha", "🔴 off — the score decides alone", "🔴 desactivada — la nota decide sola") : T("🟢 confirma", "🟢 confirms", "🟢 confirma")}`,
-      ...assuntos.NOMES_TEMAS.map((t) => {
-        const ac = assuntos.acaoDoTema(mod, t), d = assuntos.TEMAS[t];
-        const extras = (mod.termos[t] ?? []).length;
-        return `${d.emoji} \`${nomeTema(t, lang)}\` — **${nomeAcaoTema(ac, lang)}** · ${ROT_ACAO[ac]}${extras ? T(` · +${extras} termo(s) daqui`, ` · +${extras} term(s) of yours`, ` · +${extras} término(s) tuyos`) : ""}`;
-      }),
-      `**${T("Canais liberados", "Allowed channels", "Canales permitidos")}:** ${mod.canaisLiberados.length ? mod.canaisLiberados.map((c) => `<#${c}>`).join(" ") : "—"}`,
-      `**${T("Punição do `punir`", "Punishment of `punish`", "Castigo de `punish`")}:** \`${nomeModo(mod.punicao?.modo ?? "acumular", lang)}\``,
-      "",
-      `\`${base} <${assuntos.NOMES_TEMAS.join("|")}> <off|alertar|apagar|punir>\``,   // a tela em inglês traduz (família automod.assuntos)
-      `\`${base} <${T("tema", "topic", "tema")}> add|remover <${T("termo", "term", "término")}>\` — ${T("palavras a mais (peso de nome: 2,5)", "extra words (name weight: 2.5)", "palabras de más (peso de nombre: 2,5)")}`,
-      `\`${base} liberar|vigiar <#${T("canal", "channel", "canal")}|aqui>\` — ${T("um canal onde o tema pode (ex.: #debate)", "a channel where the topic is fine (e.g. #debate)", "un canal donde el tema está permitido (ej.: #debate)")}`,
-      `\`${base} sensibilidade <baixa|media|alta>\` · \`${base} ia on|off\``,
-      `\`${base} test <${T("texto", "text", "texto")}>\` — ${T("a nota de cada tema, sem punir", "each topic's score, without punishing", "la nota de cada tema, sin castigar")}`,
-      `\`${base} on|off\` · \`${base} punicao <${T("modo", "mode", "modo")}>\``,
-      T("_Alertas vão para o canal do sentinela (ou o de log)._", "_Alerts go to the sentinel channel (or the log channel)._", "_Las alertas van al canal del centinela (o al de registro)._"),
-    ].join("\n") });
-
-    if (!op || op === "status" || op === "config") return painel();
+    const ok = (pt, en, es) => linha(COR.sucesso, `🛡️ ${pt}`, `🛡️ ${en}`, `🛡️ ${es}`);
+    if (!op || op === "status" || op === "config") {
+      return sendEmbed(canal, { title: `🛡️ ${T("Temas proibidos", "Forbidden topics", "Temas prohibidos")} ${mod.enabled ? "🟢" : "🔴"}`, colour: COR.mod, description: [
+        `${T("Sensibilidade", "Sensitivity", "Sensibilidad")} \`${nomeSens(sensAtual, l)}\` (${assuntos.limiarDoAssunto(mod)}/10) · ${T("IA", "AI", "IA")} ${mod.ia === false ? "🔴" : "🟢"}`,
+        ...assuntos.NOMES_TEMAS.map((t) => {
+          const ac = assuntos.acaoDoTema(mod, t), extras = (mod.termos[t] ?? []).length;
+          return `${assuntos.TEMAS[t].emoji} \`${nomeTema(t, l)}\` — \`${nomeAcaoTema(ac, l)}\`${extras ? ` · +${extras}` : ""}`;
+        }),
+        mod.canaisLiberados.length ? `${T("Liberados", "Allowed", "Permitidos")}: ${mod.canaisLiberados.map((c) => `<#${c}>`).join(" ")}` : null,
+      ].filter(Boolean).join("\n") });
+    }
     if (op === "on" || op === "off") {
       mod.enabled = op === "on"; salvarConfig();
-      const nenhum = op === "on" && !assuntos.temasAtivos(mod).length;
-      return painel(op === "on" ? (nenhum ? T("🟡 Ligado — falta escolher os temas", "🟡 On — now pick the topics", "🟡 Activado — ahora elige los temas") : T("🟢 Temas proibidos ligados", "🟢 Forbidden topics on", "🟢 Temas prohibidos activados")) : T("🔴 Temas proibidos desligados", "🔴 Forbidden topics off", "🔴 Temas prohibidos desactivados"));
+      return onOff(op === "on", ["temas proibidos", "forbidden topics", "temas prohibidos"]);
     }
     if (["sensibilidade", "sensitivity", "sens"].includes(op)) {
       const nova = assuntos.sensibilidadeValida(a[1]);
-      if (!nova) return sendEmbed(message.channel, { title: T("❌ Sensibilidade inválida", "❌ Invalid sensitivity", "❌ Sensibilidad no válida"), colour: COR.erro,
-        description: Object.entries(assuntos.LIMIAR_ASSUNTO).map(([k, v]) => `• \`${nomeSens(k, lang)}\` — ${T("age a partir de", "acts from", "actúa a partir de")} ${v}/10`).join("\n") });
+      if (!nova) return erroUso("Sensibilidade: baixa, media ou alta", "Sensitivity: low, medium or high", "Sensibilidad: low, medium o high");
       mod.sensibilidade = nova; salvarConfig();
-      return painel(`🛡️ ${T("Sensibilidade", "Sensitivity", "Sensibilidad")} → ${SENS_ROT[nova]} (${assuntos.LIMIAR_ASSUNTO[nova]}/10)`);
+      return ok(`Sensibilidade \`${nomeSens(nova, "pt")}\` (${assuntos.LIMIAR_ASSUNTO[nova]}/10).`, `Sensitivity \`${nomeSens(nova, "en")}\` (${assuntos.LIMIAR_ASSUNTO[nova]}/10).`, `Sensibilidad \`${nomeSens(nova, "es")}\` (${assuntos.LIMIAR_ASSUNTO[nova]}/10).`);
     }
     if (op === "ia" || op === "ai") {
       const v = a[1]?.toLowerCase();
-      if (v !== "on" && v !== "off") return sendEmbed(message.channel, { title: T("❌ Uso", "❌ Usage", "❌ Uso"), colour: COR.erro, description: `\`${base} ia on|off\`` });
+      if (v !== "on" && v !== "off") return erroUso("Use `on` ou `off`", "Use `on` or `off`", "Usa `on` u `off`");
       mod.ia = v === "on"; salvarConfig();
-      return painel(mod.ia ? T("🟢 A IA confirma antes de agir", "🟢 The AI confirms before acting", "🟢 La IA confirma antes de actuar") : T("🔴 Sem IA: a nota decide sozinha", "🔴 No AI: the score decides alone", "🔴 Sin IA: la nota decide sola"));
+      return onOff(mod.ia, ["IA dos temas", "topics AI", "IA de los temas"]);
     }
     if (op === "test" || op === "testar" || op === "teste") {
       const texto = a.slice(1).join(" ").trim();
-      if (!texto) return sendEmbed(message.channel, { title: T("❌ Uso", "❌ Usage", "❌ Uso"), colour: COR.erro, description: `\`${base} test <${T("texto", "text", "texto")}>\`` });
+      if (!texto) return erroUso("Testar o quê?", "Test what?", "¿Probar qué?");
       const notas = assuntos.analisarAssuntos(texto, mod, { canalId: message.channelId, autor: message.authorId, todos: true });
-      return sendEmbed(message.channel, { title: `🧪 ${T("Nota por tema", "Score per topic", "Nota por tema")}`, colour: COR.mod, description: [
-        ...notas.map((n) => `${assuntos.TEMAS[n.tema].emoji} \`${nomeTema(n.tema, lang)}\` — **${n.nota}/10** ${n.passou ? "⚠️" : "·"} ${assuntos.acaoDoTema(mod, n.tema) === "off" ? T("_(tema desligado)_", "_(topic off)_", "_(tema desactivado)_") : ""}${n.sinais.length ? `\n   ${n.sinais.join(", ")}` : ""}`),
-        "",
-        T(`_Limiar ${assuntos.limiarDoAssunto(mod)}/10; o contexto é o deste canal. ${mod.ia === false ? "Sem IA, passar do limiar já age." : "Passando do limiar, a IA ainda confirma."} Ninguém foi punido._`,
-          `_Threshold ${assuntos.limiarDoAssunto(mod)}/10; context is this channel's. ${mod.ia === false ? "Without AI, crossing it already acts." : "Crossing it, the AI still confirms."} Nobody was punished._`,
-          `_Umbral ${assuntos.limiarDoAssunto(mod)}/10; el contexto es el de este canal. ${mod.ia === false ? "Sin IA, pasar el umbral ya actúa." : "Si pasa el umbral, la IA aún confirma."} No se castigó a nadie._`),
-      ].join("\n") });
+      return linha(COR.mod, ...[0, 1, 2].map((i) => notas.map((n) => `${assuntos.TEMAS[n.tema].emoji} \`${nomeTema(n.tema, ["pt", "en", "es"][i])}\` — **${n.nota}/10**${n.passou ? " ⚠️" : ""}${n.sinais?.length ? ` · ${n.sinais.slice(0, 6).join(", ")}` : ""}`).join("\n")));
     }
     if (["liberar", "allow", "vigiar", "watch"].includes(op)) {
-      // 17 out 2026: o ID ia para minúsculas antes de conferir — `<#canal>` de
-      // verdade dava "canal de outro servidor"; e `#nome` nem era procurado.
       const bruto = String(a[1] ?? "");
-      const canal = resolverCanal(bruto, { message, server });
-      if (!canal) return sendEmbed(message.channel, { title: T("❌ Canal não encontrado", "❌ Channel not found", "❌ Canal no encontrado"), colour: COR.erro,
-        description: T(`Não achei o canal \`${bruto}\` neste servidor. Use \`#canal\`, o ID ou \`aqui\`.`, `I couldn't find the \`${bruto}\` channel on this server. Use \`#channel\`, the ID or \`here\`.`,
-          `No encontré el canal \`${bruto}\` en este servidor. Usa \`#canal\`, el ID o \`here\`.`) });
-      const dele = server?.channelIds ? (server.channelIds.has?.(canal) ?? true) : true;
-      if (!dele) return sendEmbed(message.channel, { title: T("❌ Canal de outro servidor", "❌ Channel from another server", "❌ Canal de otro servidor"), colour: COR.erro, description: `\`${canal}\`` });
+      const id = resolverCanal(bruto, { message, server });
+      const dele = id && server?.channelIds ? (server.channelIds.has?.(id) ?? true) : !!id;
+      if (!id || !dele) return erroUso("Canal não encontrado neste servidor", "Channel not found on this server", "Canal no encontrado en este servidor");
       const liberar = op === "liberar" || op === "allow";
-      mod.canaisLiberados = liberar ? [...new Set([...mod.canaisLiberados, canal])] : mod.canaisLiberados.filter((c) => c !== canal);
+      mod.canaisLiberados = liberar ? [...new Set([...mod.canaisLiberados, id])] : mod.canaisLiberados.filter((c) => c !== id);
       salvarConfig();
-      return painel(liberar ? T(`✅ <#${canal}> liberado: os temas podem lá`, `✅ <#${canal}> allowed: topics are fine there`, `✅ <#${canal}> permitido: ahí los temas están bien`) : T(`✅ <#${canal}> vigiado de novo`, `✅ <#${canal}> watched again`, `✅ <#${canal}> vigilado de nuevo`));
+      return liberar ? ok(`<#${id}> liberado.`, `<#${id}> allowed.`, `<#${id}> permitido.`) : ok(`<#${id}> vigiado.`, `<#${id}> watched.`, `<#${id}> vigilado.`);
     }
     const tema = assuntos.temaValido(op);
-    if (!tema) {
-      return sendEmbed(message.channel, { title: T("❌ Tema desconhecido", "❌ Unknown topic", "❌ Tema desconocido"), colour: COR.erro,
-        description: `${T("Temas", "Topics", "Temas")}: ${assuntos.NOMES_TEMAS.map((t) => `\`${t}\``).join(", ")}\n${T("Ex.:", "E.g.:", "Ej.:")} \`${base} politica apagar\`` });
-    }
+    if (!tema) return erroUso(`Tema: ${assuntos.NOMES_TEMAS.join(", ")}`, `Topic: ${assuntos.NOMES_TEMAS.map((t) => nomeTema(t, "en")).join(", ")}`, `Tema: ${assuntos.NOMES_TEMAS.map((t) => nomeTema(t, "es")).join(", ")}`);
     const op2 = a[1]?.toLowerCase();
     if (["add", "adicionar", "remover", "remove", "tirar"].includes(op2)) {
       const termo = a.slice(2).join(" ").trim().toLowerCase().slice(0, 60);
-      if (!termo) return sendEmbed(message.channel, { title: T("❌ Falta o termo", "❌ Missing term", "❌ Falta el término"), colour: COR.erro, description: `\`${base} ${tema} ${op2} <${T("termo", "term", "término")}>\`` });
+      if (!termo) return erroUso("Qual termo?", "Which term?", "¿Qué término?");
       const lista = mod.termos[tema] ?? [];
-      mod.termos[tema] = ["add", "adicionar"].includes(op2) ? [...new Set([...lista, termo])] : lista.filter((x) => x !== termo);
+      mod.termos[tema] = ["add", "adicionar"].includes(op2) ? [...new Set([...lista, termo])].slice(0, 50) : lista.filter((x) => x !== termo);
       salvarConfig();
-      return painel(T(`✅ ${tema}: ${mod.termos[tema].length} termo(s) daqui`, `✅ ${tema}: ${mod.termos[tema].length} term(s) of yours`, `✅ ${nomeTema(tema, "en")}: ${mod.termos[tema].length} término(s) tuyos`));
+      return ok(`\`${nomeTema(tema, "pt")}\`: ${mod.termos[tema].length} termo(s) daqui.`, `\`${nomeTema(tema, "en")}\`: ${mod.termos[tema].length} term(s) of yours.`, `\`${nomeTema(tema, "es")}\`: ${mod.termos[tema].length} término(s) tuyos.`);
     }
     const nova = assuntos.acaoValida(op2);
-    if (!nova) {
-      return sendEmbed(message.channel, { title: T("❌ Ação inválida", "❌ Invalid action", "❌ Acción no válida"), colour: COR.erro, description: [
-        `\`${base} ${tema} <off|alertar|apagar|punir>\``, "",
-        ...assuntos.ACOES.map((x) => `• \`${nomeAcaoTema(x, lang)}\` — ${ROT_ACAO[x]}`),
-      ].join("\n") });
-    }
+    if (!nova) return erroUso("Ação: off, alertar, apagar ou punir", "Action: off, alert, delete or punish", "Acción: off, alert, delete o punish");
     mod.acoes[tema] = nova;
     if (nova !== "off") mod.enabled = true;   // escolher um tema já liga a chave geral
     salvarConfig();
-    return painel(`${assuntos.TEMAS[tema].emoji} ${nomeTema(tema, lang)} → ${nomeAcaoTema(nova, lang)}`);
+    return ok(`\`${nomeTema(tema, "pt")}\` → \`${nomeAcaoTema(nova, "pt")}\`.`, `\`${nomeTema(tema, "en")}\` → \`${nomeAcaoTema(nova, "en")}\`.`, `\`${nomeTema(tema, "es")}\` → \`${nomeAcaoTema(nova, "es")}\`.`);
   }
 
-  // ── &automod sentinela avatar … (foto de perfil) ─────────────────────────
+  // ── &automod sentinela avatar … (foto de perfil) ──
   async function painelAvatar(mod, a) {
     const T = (pt, eng, es) => tr(ctx, pt, eng, es);
-    const P = PREFIXO, base = `${citarInterno("automod.sentinela.avatar", P)}`;
     const op = a[0]?.toLowerCase();
-    const ROT = { alertar: T("só alerta a staff", "alerts staff only", "solo alerta al staff"), silenciar: T("silencia (timeout) e alerta", "silences (timeout) and alerts", "silencia (timeout) y alerta"), expulsar: T("expulsa e alerta", "kicks and alerts", "expulsa y alerta"), banir: T("bane e alerta", "bans and alerts", "banea y alerta") };
-    const painel = (titulo = null) => sendEmbed(message.channel, { title: titulo ?? `🖼️ ${T("Foto de perfil", "Profile picture", "Foto de perfil")}`, colour: COR.mod, description: [
-      T("A foto de quem **entra** e de quem **troca** passa pelo modelo de visão. Apita com genitália, ato sexual ou pornografia descritos — ou nudez, gore e símbolo de ódio com o voto de risco do modelo.",
-        "The picture of whoever **joins** or **changes** it goes through the vision model. It flags genitals, sex acts or porn described — or nudity, gore and hate symbols with the model's risk vote.",
-        "La foto de quien **entra** y de quien la **cambia** pasa por el modelo de visión. Salta con genitales, actos sexuales o pornografía descritos — o con desnudez, gore y símbolos de odio con el voto de riesgo del modelo."),
-      "",
-      `**${T("Estado", "State", "Estado")}:** ${mod.enabled !== false ? T("🟢 ligado", "🟢 on", "🟢 activado") : T("🔴 desligado", "🔴 off", "🔴 desactivado")}${process.env.IA_SERVICO_URL ? "" : T(" · ⚠️ sem o serviço de visão: não analisa (avise quem hospeda o bot)", " · ⚠️ no vision service: nothing is analysed (tell whoever hosts the bot)", " · ⚠️ sin el servicio de visión: no se analiza nada (avisa a quien aloja el bot)")}`,
-      `**${T("Ação", "Action", "Acción")}:** \`${nomeAcaoAvatar(avatar.acaoDoAvatar(mod), lang)}\` — ${ROT[avatar.acaoDoAvatar(mod)]}`,
-      avatar.acaoDoAvatar(mod) === "silenciar" ? `**${T("Tempo", "Time", "Tiempo")}:** ${duracaoTexto(avatar.tempoDoAvatar(mod), lang)}` : null,
-      "",
-      `\`${base} on|off\``,
-      `\`${base} acao <alertar|silenciar|expulsar|banir>\``,
-      `\`${base} tempo <24h|2d|…>\` — ${T("quanto dura o silêncio", "how long the silence lasts", "cuánto dura el silencio")}`,
-      `\`${base} checar <@${T("pessoa", "person", "usuario")}>\` — ${T("analisa a foto agora, sem punir", "analyses the picture now, without punishing", "analiza la foto ahora, sin castigar")}`,
-      T("_Staff, dono e bots não passam pela checagem. A foto nunca é republicada no alerta._", "_Staff, owner and bots are skipped. The picture is never reposted in the alert._",
-        "_El staff, el dueño y los bots no pasan por la revisión. La foto nunca se vuelve a publicar en la alerta._"),
-    ].filter((x) => x !== null).join("\n") });
-
-    if (!op || op === "status" || op === "config") return painel();
-    if (op === "on" || op === "off") { mod.enabled = op === "on"; salvarConfig(); return painel(); }
+    if (!op || op === "status" || op === "config") {
+      const acao = avatar.acaoDoAvatar(mod);
+      return linha(COR.mod,
+        `🖼️ Foto de perfil ${mod.enabled !== false ? "🟢" : "🔴"} · \`${nomeAcaoAvatar(acao, "pt")}\`${acao === "silenciar" ? ` ${duracaoTexto(avatar.tempoDoAvatar(mod), "pt")}` : ""}${process.env.IA_SERVICO_URL ? "" : " · ⚠️ sem visão"}`,
+        `🖼️ Profile picture ${mod.enabled !== false ? "🟢" : "🔴"} · \`${nomeAcaoAvatar(acao, "en")}\`${acao === "silenciar" ? ` ${duracaoTexto(avatar.tempoDoAvatar(mod), "en")}` : ""}${process.env.IA_SERVICO_URL ? "" : " · ⚠️ no vision"}`,
+        `🖼️ Foto de perfil ${mod.enabled !== false ? "🟢" : "🔴"} · \`${nomeAcaoAvatar(acao, "es")}\`${acao === "silenciar" ? ` ${duracaoTexto(avatar.tempoDoAvatar(mod), "es")}` : ""}${process.env.IA_SERVICO_URL ? "" : " · ⚠️ sin visión"}`);
+    }
+    if (op === "on" || op === "off") { mod.enabled = op === "on"; salvarConfig(); return onOff(op === "on", ["foto de perfil", "profile picture", "foto de perfil"]); }
     if (op === "acao" || op === "ação" || op === "action") {
       const nova = avatar.acaoAvatarValida(a[1]);
-      if (!nova) return sendEmbed(message.channel, { title: T("❌ Ação inválida", "❌ Invalid action", "❌ Acción no válida"), colour: COR.erro,
-        description: [`\`${base} acao <alertar|silenciar|expulsar|banir>\``, "", ...avatar.ACOES_AVATAR.map((x) => `• \`${nomeAcaoAvatar(x, lang)}\` — ${ROT[x]}`)].join("\n") });
+      if (!nova) return erroUso("Ação: alertar, silenciar, expulsar ou banir", "Action: alert, silence, kick or ban", "Acción: alert, silence, kick o ban");
       mod.acao = nova; salvarConfig();
-      return painel(`🖼️ ${T("Ação", "Action", "Acción")} → ${nomeAcaoAvatar(nova, lang)}`);
+      return linha(COR.sucesso, `🖼️ → \`${nomeAcaoAvatar(nova, "pt")}\``, `🖼️ → \`${nomeAcaoAvatar(nova, "en")}\``, `🖼️ → \`${nomeAcaoAvatar(nova, "es")}\``);
     }
     if (op === "tempo" || op === "time") {
       const ms = lerDuracao(a[1]);
-      if (!ms) return sendEmbed(message.channel, { title: T("❌ Tempo inválido", "❌ Invalid time", "❌ Tiempo no válido"), colour: COR.erro, description: `\`${base} tempo 24h\` · \`2d\` · \`30m\`` });
+      if (!ms) return erroUso("Tempo: `24h`, `2d`, `30m`…", "Time: `24h`, `2d`, `30m`…", "Tiempo: `24h`, `2d`, `30m`…");
       mod.tempo = String(a[1]).toLowerCase(); salvarConfig();
-      return painel(`🖼️ ${T("Tempo", "Time", "Tiempo")} → ${duracaoTexto(avatar.tempoDoAvatar(mod), lang)}`);
+      return linha(COR.sucesso, `🖼️ ${duracaoTexto(avatar.tempoDoAvatar(mod), "pt")}`, `🖼️ ${duracaoTexto(avatar.tempoDoAvatar(mod), "en")}`, `🖼️ ${duracaoTexto(avatar.tempoDoAvatar(mod), "es")}`);
     }
     if (op === "checar" || op === "check" || op === "testar" || op === "test") {
-      const uid = await resolverUsuario(a.slice(1).join(" "), { message, server, client: ctx.client }).catch(() => null);
-      if (!uid) return sendEmbed(message.channel, { title: T("❌ De quem?", "❌ Whose?", "❌ ¿De quién?"), colour: COR.erro, description: `\`${base} checar @${T("pessoa", "person", "usuario")}\`` });
+      const uid = await resolverUsuario(a.slice(1).join(" "), { server, client: ctx.client }).catch(() => null);
+      if (!uid) return erroUso("De quem?", "Whose?", "¿De quién?");
       const membro = await server?.fetchMember?.(uid).catch(() => null);
       const user = membro?.user ?? await ctx.client?.users?.fetch?.(uid).catch(() => null);
       const arq = avatar.arquivoDe(membro?.avatar) ?? avatar.arquivoDe(user?.avatar);
-      if (!arq) return sendEmbed(message.channel, { title: T("🖼️ Sem foto", "🖼️ No picture", "🖼️ Sin foto"), colour: COR.mod, description: T(`<@${uid}> não tem foto de perfil.`, `<@${uid}> has no profile picture.`, `<@${uid}> no tiene foto de perfil.`) });
-      if (!process.env.IA_SERVICO_URL) return sendEmbed(message.channel, { title: T("⚠️ Sem modelo de visão", "⚠️ No vision model", "⚠️ Sin modelo de visión"), colour: COR.aviso, description: T("O serviço de visão não está configurado — avise quem hospeda o bot.", "The vision service isn't set up — tell whoever hosts the bot.", "El servicio de visión no está configurado — avisa a quien aloja el bot.") });
+      if (!arq) return linha(COR.mod, `🖼️ <@${uid}> não tem foto.`, `🖼️ <@${uid}> has no picture.`, `🖼️ <@${uid}> no tiene foto.`);
+      if (!process.env.IA_SERVICO_URL) return linha(COR.aviso, "⚠️ Sem o modelo de visão.", "⚠️ No vision model.", "⚠️ Sin modelo de visión.");
       const r = await avatar.analisarFoto(arq);
-      if (!r) return sendEmbed(message.channel, { title: T("⚠️ Não consegui analisar", "⚠️ Couldn't analyse it", "⚠️ No pude analizarla"), colour: COR.aviso, description: T("O modelo de visão não respondeu — tente de novo mais tarde.", "The vision model didn't answer — try again later.", "El modelo de visión no respondió — inténtalo más tarde.") });
-      return sendEmbed(message.channel, { title: r.apitou ? T("🖼️ Apitaria", "🖼️ Would flag", "🖼️ Saltaría") : T("🖼️ Passaria", "🖼️ Would pass", "🖼️ Pasaría"), colour: r.apitou ? COR.aviso : COR.sucesso, description: [
-        `<@${uid}>${r.apitou ? ` · **${T("Sinais", "Signals", "Señales")}:** ${r.motivos.join(", ")}` : ""}`,
-        `> ${r.descricao.replace(/\n+/g, " ").slice(0, 400)}`,
-        T("_Só checagem: ninguém foi punido._", "_Check only: nobody was punished._", "_Solo revisión: no se castigó a nadie._"),
-      ].join("\n") });
+      if (!r) return linha(COR.aviso, "⚠️ O modelo de visão não respondeu.", "⚠️ The vision model didn't answer.", "⚠️ El modelo de visión no respondió.");
+      const res = r.apitou ? T(`🖼️ Apitaria: ${r.motivos.join(", ")}`, `🖼️ Would flag: ${r.motivos.join(", ")}`, `🖼️ Saltaría: ${r.motivos.join(", ")}`) : T("🖼️ Passaria.", "🖼️ Would pass.", "🖼️ Pasaría.");
+      return sendEmbed(canal, { description: `<@${uid}> — ${res}\n> ${r.descricao.replace(/\n+/g, " ").slice(0, 400)}`, colour: r.apitou ? COR.aviso : COR.sucesso });
     }
-    const parecida = maisParecido(op, ["on", "off", "acao", "tempo", "checar"]);
-    return sendEmbed(message.channel, { title: T("❌ Não conheço esse", "❌ I don't know that one", "❌ No conozco ese"), colour: COR.erro,
-      description: `${parecida ? T(`Você quis dizer \`${base} ${parecida}\`?\n\n`, `Did you mean \`${base} ${parecida}\`?\n\n`,
-        `¿Quisiste decir \`${citar("automod.sentinela.avatar", "es", P)} ${{ acao: "action", tempo: "time", checar: "check" }[parecida] ?? parecida}\`?\n\n`) : ""}\`${base} on|off\` · \`acao\` · \`tempo\` · \`checar\`` });
+    return erroUso("Use `on`, `off`, `acao`, `tempo` ou `checar`", "Use `on`, `off`, `action`, `time` or `check`", "Usa `on`, `off`, `action`, `time` o `check`");
   }
 }
 
@@ -787,7 +538,7 @@ export async function cmdWhitelist(message, args, ctx) {
   const { config, sendEmbed, COR, getServer, membroTemPermissao, salvarConfig, PREFIXO } = ctx;
   const server = await getServer(message);
   if (!membroTemPermissao(message, server, "ManagePermissions"))
-    return negarPermissao(ctx, message.channel, "ManagePermissions");
+    return semPermissao(ctx, message.channel, "ManagePermissions");
 
   // Uma lista só para quem usa, dois destinos por dentro:
   //   • convite do Stoat (stt.gg/abc, ou só "abc")  → anti-invite
@@ -886,7 +637,7 @@ export async function cmdBlocklist(message, args, ctx) {
   const lang = lingua(ctx);
   const server = await getServer(message);
   if (!membroTemPermissao(message, server, "ManagePermissions"))
-    return negarPermissao(ctx, message.channel, "ManagePermissions");
+    return semPermissao(ctx, message.channel, "ManagePermissions");
 
   const sub = args[0]?.toLowerCase();
   const arg = args[1];
@@ -1114,7 +865,7 @@ export async function cmdScam(message, args, ctx) {
   const lang = lingua(ctx);
   const server = await getServer(message);
   if (!membroTemPermissao(message, server, "ManagePermissions"))
-    return negarPermissao(ctx, message.channel, "ManagePermissions");
+    return semPermissao(ctx, message.channel, "ManagePermissions");
 
   const cfg = config.automod.antiScam;
   const pol = config.automod.punicao;
@@ -1127,91 +878,21 @@ export async function cmdScam(message, args, ctx) {
     banir: "ban", ban: "ban",
     liberar: "dismiss", dismiss: "dismiss",
     testar: "test", teste: "test", test: "test",
-    simular: "simulate", simulate: "simulate",
+    simular: "test", simulate: "test",   // (P2) simular = testar
   };
   const bruto0 = args[0]?.toLowerCase();
   const sub = PAINEL[bruto0] ?? bruto0;
   const val = args[1];
   const limiarDe = (sens) => engine.limiarBase(sens);
 
-  if (!sub || sub === "config" || sub === "status") {
-    return sendEmbed(message.channel, tr(ctx, {
-      title: "🛡 Sentinela — moderação por julgamento",
-      colour: COR.mod,
-      description: [
-        "Pesa o *conteúdo* e dá uma nota de suspeita. Diferente dos outros",
-        "módulos — que medem coisas exatas, como caixa alta ou ritmo de mensagem —",
-        "este **julga**, e por isso se adapta a quem está escrevendo.",
-        "",
-        `**Ativado:** ${cfg.enabled ? "🟢 sim" : "🔴 não"}  (ligue com \`${citarInterno("automod.sentinela", PREFIXO)} on\`)`,
-        `**Sensibilidade:** ${cfg.sensitivity}  (limiar base: ${limiarDe(cfg.sensitivity)}/10)`,
-        `**Mais rígido com quem chegou agora:** ${cfg.porAntiguidade !== false ? "🟢 ligado" : "🔴 desligado"} — o limiar acompanha o nível do membro`,
-        `**Avisar a staff:** ${cfg.alertarAdmin !== false ? "🟢 ligado" : "🔴 desligado"} — marca a staff diante de um *padrão* suspeito, antes de punir`,
-        `**Canal de aviso:** ${cfg.alertChannelId ? `\`${cfg.alertChannelId}\`` : "_(nenhum: vai ao canal de logs; sem ele, os alertas não são enviados)_"}`,
-        `**Punição:** definida em \`${citarInterno("automod.punicao", PREFIXO)}\` (modo atual: **${pol.modo}**) — vale para todos os automods`,
-        "",
-        "**Comandos:**",
-        `\`${citarInterno("automod.sentinela.sensibilidade", PREFIXO)} <baixa|media|alta>\``,
-        `\`${citarInterno("automod.sentinela.antiguidade", PREFIXO)} on|off\` · \`${citarInterno("automod.sentinela.alerta", PREFIXO)} on|off\``,
-        `\`${citarInterno("automod.sentinela.canal", PREFIXO)} <#canal|aqui>\``,
-        `\`${citarInterno("automod.sentinela.testar", PREFIXO)} <texto>\` · \`${citarInterno("automod.sentinela.simular", PREFIXO)} <texto>\``,
-        `\`${citarInterno("automod.sentinela.banir", PREFIXO)} <@pessoa|id>\` · \`${citarInterno("automod.sentinela.liberar", PREFIXO)} <@pessoa|id>\``,
-      ].join("\n"),
-    }, {
-      title: "🛡 Sentinel — judgement-based moderation",
-      colour: COR.mod,
-      description: [
-        "Weighs the *content* and gives it a suspicion score. Unlike the other",
-        "modules — which measure exact things like caps or message rate — this one",
-        "**judges**, so it adapts to who is writing.",
-        "",
-        `**Enabled:** ${cfg.enabled ? "🟢 yes" : "🔴 no"}  (enable with \`${citarInterno("automod.sentinela", PREFIXO)} on\`)`,
-        `**Sensitivity:** ${nomeSens(cfg.sensitivity, "en")}  (base threshold: ${limiarDe(cfg.sensitivity)}/10)`,
-        `**Stricter with newcomers:** ${cfg.porAntiguidade !== false ? "🟢 on" : "🔴 off"} — threshold moves with the member's level`,
-        `**Alert the staff:** ${cfg.alertarAdmin !== false ? "🟢 on" : "🔴 off"} — pings staff on a suspicious *pattern*, before punishing`,
-        `**Alert channel:** ${cfg.alertChannelId ? `\`${cfg.alertChannelId}\`` : "_(none: goes to the log channel; without one, alerts aren't sent)_"}`,
-        `**Punishment:** set with \`${citarInterno("automod.punicao", PREFIXO)}\` (current mode: **${nomeModo(pol.modo, "en")}**) — applies to all automods`,
-        "",
-        "**Commands:**",
-        `\`${citarInterno("automod.sentinela.sensibilidade", PREFIXO)} <low|medium|high>\``,
-        `\`${citarInterno("automod.sentinela.antiguidade", PREFIXO)} on|off\` · \`${citarInterno("automod.sentinela.alerta", PREFIXO)} on|off\``,
-        `\`${citarInterno("automod.sentinela.canal", PREFIXO)} <#channel|here>\``,
-        `\`${citarInterno("automod.sentinela.testar", PREFIXO)} <text>\` · \`${citarInterno("automod.sentinela.simular", PREFIXO)} <text>\``,
-        `\`${citarInterno("automod.sentinela.banir", PREFIXO)} <@user|id>\` · \`${citarInterno("automod.sentinela.liberar", PREFIXO)} <@user|id>\``,
-      ].join("\n"),
-    }, {
-      title: "🛡 Centinela — moderación por criterio",
-      colour: COR.mod,
-      description: [
-        "Pesa el *contenido* y le da una nota de sospecha. A diferencia de los otros",
-        "módulos — que miden cosas exactas, como mayúsculas o ritmo de mensajes —",
-        "este **juzga**, y por eso se adapta a quien está escribiendo.",
-        "",
-        `**Activado:** ${cfg.enabled ? "🟢 sí" : "🔴 no"}  (actívalo con \`${citar("automod.sentinela", "es", PREFIXO)} on\`)`,
-        `**Sensibilidad:** ${nomeSens(cfg.sensitivity, "en")}  (umbral base: ${limiarDe(cfg.sensitivity)}/10)`,
-        `**Más estricto con los recién llegados:** ${cfg.porAntiguidade !== false ? "🟢 activado" : "🔴 desactivado"} — el umbral sigue el nivel del miembro`,
-        `**Avisar al staff:** ${cfg.alertarAdmin !== false ? "🟢 activado" : "🔴 desactivado"} — menciona al staff ante un *patrón* sospechoso, antes de castigar`,
-        `**Canal de aviso:** ${cfg.alertChannelId ? `\`${cfg.alertChannelId}\`` : "_(ninguno: va al canal de registro; sin él, las alertas no se envían)_"}`,
-        `**Castigo:** se define en \`${citar("automod.punicao", "es", PREFIXO)}\` (modo actual: **${nomeModo(pol.modo, "es")}**) — vale para todos los automods`,
-        "",
-        "**Comandos:**",
-        `\`${citar("automod.sentinela.sensibilidade", "es", PREFIXO)} <low|medium|high>\``,
-        `\`${citar("automod.sentinela.antiguidade", "es", PREFIXO)} on|off\` · \`${citar("automod.sentinela.alerta", "es", PREFIXO)} on|off\``,
-        `\`${citar("automod.sentinela.canal", "es", PREFIXO)} <#canal|here>\``,
-        `\`${citar("automod.sentinela.testar", "es", PREFIXO)} <texto>\` · \`${citar("automod.sentinela.simular", "es", PREFIXO)} <texto>\``,
-        `\`${citar("automod.sentinela.banir", "es", PREFIXO)} <@usuario|id>\` · \`${citar("automod.sentinela.liberar", "es", PREFIXO)} <@usuario|id>\``,
-      ].join("\n"),
-    }));
-  }
+  // (P2) uma tela só para o sentinela: a do `&automod sentinela`
+  if (!sub || sub === "config" || sub === "status") return cmdAutomod(message, ["sentinela"], ctx);
 
   if (["on", "off", "ligar", "desligar", "enable", "disable"].includes(sub)) {
     const ligar = ["on", "ligar", "enable"].includes(sub);
     cfg.enabled = ligar;
     salvarConfig?.();
-    return sendEmbed(message.channel, tr(ctx,
-      { title: "🛡 Sentinela", description: `O Sentinela foi **${ligar ? "ativado 🟢" : "desativado 🔴"}**.${ligar ? `\n\nSensibilidade: \`${cfg.sensitivity ?? "media"}\` · punição: a do \`${citarInterno("automod.punicao", PREFIXO)}\`.` : ""}`, colour: COR.mod },
-      { title: "🛡 Sentinel", description: `The Sentinel was **${ligar ? "enabled 🟢" : "disabled 🔴"}**.${ligar ? `\n\nSensitivity: \`${nomeSens(cfg.sensitivity ?? "media", "en")}\` · punishment: the one from \`${citarInterno("automod.punicao", PREFIXO)}\`.` : ""}`, colour: COR.mod },
-      { title: "🛡 Centinela", description: `El Centinela fue **${ligar ? "activado 🟢" : "desactivado 🔴"}**.${ligar ? `\n\nSensibilidad: \`${nomeSens(cfg.sensitivity ?? "media", "en")}\` · castigo: el de \`${citar("automod.punicao", "es", PREFIXO)}\`.` : ""}`, colour: COR.mod }));
+    return sendEmbed(message.channel, { description: tr(ctx, `🛡 **sentinela** ${ligar ? "🟢 ligado" : "🔴 desligado"}.`, `🛡 **sentinel** ${ligar ? "🟢 on" : "🔴 off"}.`, `🛡 **centinela** ${ligar ? "🟢 activado" : "🔴 desactivado"}.`), colour: ligar ? COR.sucesso : COR.mod });
   }
 
   if (["antiguidade", "tenure", "novatos"].includes(sub)) {
@@ -1319,40 +1000,12 @@ export async function cmdScam(message, args, ctx) {
       { title: "✅ Canal de aviso", description: `Los avisos irán a \`${cfg.alertChannelId}\`.`, colour: COR.sucesso }));
   }
 
-  if (sub === "ban") {
-    // (31 out 2026, R6/R9) banía com só ManagePermissions, sem hierarquia e sem
-    // validar o ID. Agora: BanMembers de quem pede + estar acima do alvo + ID
-    // escrito (responder a uma mensagem não troca o alvo).
-    if (!membroTemPermissao(message, server, "BanMembers")) return negarPermissao(ctx, message.channel, "BanMembers");
-    const uid = idValido(val ?? "");
-    if (uid) {
-      const pode = await podeAgirSobre(server, message, uid, ctx);
-      if (!pode.ok) return sendEmbed(message.channel, tr(ctx,
-        { title: "🚫 Acima de você", description: `${pode.pt}.`, colour: COR.erro },
-        { title: "🚫 Above you", description: `${pode.en}.`, colour: COR.erro },
-        { title: "🚫 Por encima de ti", description: `${pode.es ?? pode.en}.`, colour: COR.erro }));
-    }
-    if (!uid) return sendEmbed(message.channel, tr(ctx,
-      { title: "❌ Uso", description: `\`${citarInterno("automod.sentinela.banir", PREFIXO)} <@pessoa|id>\``, colour: COR.erro },
-      { title: "❌ Usage", description: `\`${citarInterno("automod.sentinela.banir", PREFIXO)} <@user|id>\``, colour: COR.erro },
-      { title: "❌ Uso", description: `\`${citar("automod.sentinela.banir", "es", PREFIXO)} <@usuario|id>\``, colour: COR.erro }));
-    try {
-      // decisão humana: não leva a marca "[AutoMod]" (essa só alerta na lista global)
-      await banir(server, uid, { reason: `[Sentinela] confirmado por moderador (${message.authorId})` });
-      return sendEmbed(message.channel, tr(ctx,
-        { title: "🔨 Banido", description: `<@${uid}> foi banido (confirmado).`, colour: COR.erro },
-        { title: "🔨 Banned", description: `<@${uid}> was banned (confirmed).`, colour: COR.erro },
-        { title: "🔨 Baneado", description: `<@${uid}> fue baneado (confirmado).`, colour: COR.erro }));
-    } catch (err) {
-      return sendEmbed(message.channel, tr(ctx,
-        { title: "❌ Erro", description: `Não foi possível banir: ${descreverErroBan(err)}`, colour: COR.erro },
-        { title: "❌ Error", description: `Couldn't ban: ${descreverErroBan(err, "en")}`, colour: COR.erro },
-        { title: "❌ Error", description: `No se pudo banear: ${descreverErroBan(err, "en")}`, colour: COR.erro }));
-    }
-  }
+  // `sentinela banir <@pessoa|id> [motivo]` (o comando pronto dos alertas): é o &ban,
+  // com as mesmas checagens (BanMembers, hierarquia, alvo escrito) — P2
+  if (sub === "ban") return (await import("./punir.js")).cmdBan(message, args.slice(1), ctx);
 
   if (sub === "dismiss") {
-    const uid = (val ?? "").replace(/[<@>]/g, "") || message.mentionIds?.[0];
+    const uid = String(val ?? "").replace(/[<@>]/g, "").trim() || null;   // o ID escrito (numa resposta, o mentionIds é outra pessoa)
     if (!uid) return sendEmbed(message.channel, tr(ctx,
       { title: "❌ Uso", description: `\`${citarInterno("automod.sentinela.liberar", PREFIXO)} <@pessoa|id>\``, colour: COR.erro },
       { title: "❌ Usage", description: `\`${citarInterno("automod.sentinela.liberar", PREFIXO)} <@user|id>\``, colour: COR.erro },
@@ -1380,94 +1033,21 @@ export async function cmdScam(message, args, ctx) {
     }
   }
 
+  // `testar` (e `simular`, o mesmo): a nota que o texto teria, sem punir ninguém
   if (sub === "test") {
     const texto = args.slice(1).join(" ");
-    if (!texto) return sendEmbed(message.channel, tr(ctx,
-      { title: "❌ Uso", description: `\`${citarInterno("automod.sentinela.testar", PREFIXO)} <texto>\``, colour: COR.erro },
-      { title: "❌ Usage", description: `\`${citarInterno("automod.sentinela.testar", PREFIXO)} <text>\``, colour: COR.erro },
-      { title: "❌ Uso", description: `\`${citar("automod.sentinela.testar", "es", PREFIXO)} <texto>\``, colour: COR.erro }));
+    if (!texto) return erroDeUso(ctx, message.channel, "automod", "Testar o quê?", "Test what?", "¿Probar qué?");
     const r = analisarConteudo(texto, { rate: 1 });
     const limiar = limiarDe(cfg.sensitivity);
     const flag = r.nota >= limiar;
-
-    console.log(`[SCAM TEST] nota=${r.nota.toFixed(1)}/${limiar} flag=${flag} grave=${r.grave} sinais=[${r.sinais.join(", ") || "nenhum"}]`);
-
-    const acaoTxt = tr(ctx,
-      (!cfg.enabled
-        ? `módulo **DESATIVADO** (ative com \`${citarInterno("automod.sentinela", PREFIXO)} on\`)`
-        : `aplicaria a política global **${pol.modo}** (veja \`${citarInterno("automod.punicao", PREFIXO)}\`)`),
-      (!cfg.enabled
-        ? `module **DISABLED** (enable with \`${citarInterno("automod.sentinela", PREFIXO)} on\`)`
-        : `it would apply the global policy **${nomeModo(pol.modo, "en")}** (see \`${citarInterno("automod.punicao", PREFIXO)}\`)`),
-      (!cfg.enabled
-        ? `módulo **DESACTIVADO** (actívalo con \`${citar("automod.sentinela", "es", PREFIXO)} on\`)`
-        : `aplicaría la política global **${nomeModo(pol.modo, "es")}** (mira \`${citar("automod.punicao", "es", PREFIXO)}\`)`));
-
-    return sendEmbed(message.channel, tr(ctx, {
-      title: flag ? `🛑 SERIA sinalizado (nota ${r.nota.toFixed(1)}/10)` : `✅ NÃO seria sinalizado (nota ${r.nota.toFixed(1)}/10)`,
-      description: [
-        `**Módulo:** ${cfg.enabled ? "🟢 ativado" : "🔴 desativado"}  •  **Sensibilidade:** ${cfg.sensitivity} (limiar ${limiar})`,
-        `**Nota:** ${r.nota.toFixed(1)} / 10`,
-        `**Grave?** ${r.grave ? "sim ⚠️" : "não"}`,
-        `**Sinais:** ${r.sinais.join(", ") || "nenhum"}`,
-        flag ? `**O que faria:** ${acaoTxt}` : null,
-        "",
-        `💡 Fluxo real no canal de avisos: \`${citarInterno("automod.sentinela.simular", PREFIXO)} <texto>\``,
-      ].filter(Boolean).join("\n"),
-      colour: flag ? COR.erro : COR.sucesso,
-    }, {
-      title: flag ? `🛑 WOULD be flagged (score ${r.nota.toFixed(1)}/10)` : `✅ Would NOT be flagged (score ${r.nota.toFixed(1)}/10)`,
-      description: [
-        `**Module:** ${cfg.enabled ? "🟢 enabled" : "🔴 disabled"}  •  **Sensitivity:** ${nomeSens(cfg.sensitivity, "en")} (threshold ${limiar})`,
-        `**Score:** ${r.nota.toFixed(1)} / 10`,
-        `**Serious?** ${r.grave ? "yes ⚠️" : "no"}`,
-        `**Signals:** ${r.sinais.join(", ") || "none"}`,
-        flag ? `**What it would do:** ${acaoTxt}` : null,
-        "",
-        `💡 Real flow in the alert channel: \`${citarInterno("automod.sentinela.simular", PREFIXO)} <text>\``,
-      ].filter(Boolean).join("\n"),
-      colour: flag ? COR.erro : COR.sucesso,
-    }, {
-      title: flag ? `🛑 SÍ se marcaría (nota ${r.nota.toFixed(1)}/10)` : `✅ NO se marcaría (nota ${r.nota.toFixed(1)}/10)`,
-      description: [
-        `**Módulo:** ${cfg.enabled ? "🟢 activado" : "🔴 desactivado"}  •  **Sensibilidad:** ${nomeSens(cfg.sensitivity, "en")} (umbral ${limiar})`,
-        `**Nota:** ${r.nota.toFixed(1)} / 10`,
-        `**¿Grave?** ${r.grave ? "sí ⚠️" : "no"}`,
-        `**Señales:** ${r.sinais.join(", ") || "ninguna"}`,
-        flag ? `**Qué haría:** ${acaoTxt}` : null,
-        "",
-        `💡 Flujo real en el canal de avisos: \`${citar("automod.sentinela.simular", "es", PREFIXO)} <texto>\``,
-      ].filter(Boolean).join("\n"),
-      colour: flag ? COR.erro : COR.sucesso,
-    }));
+    const sinais = r.sinais.join(", ") || "—";
+    return sendEmbed(message.channel, { colour: flag ? COR.erro : COR.sucesso, description: tr(ctx,
+      `${flag ? "🛑" : "✅"} **${r.nota.toFixed(1)}/10** (limiar ${limiar}${cfg.enabled ? "" : ", desligado"})${r.grave ? " · grave" : ""} · ${sinais}`,
+      `${flag ? "🛑" : "✅"} **${r.nota.toFixed(1)}/10** (threshold ${limiar}${cfg.enabled ? "" : ", off"})${r.grave ? " · serious" : ""} · ${sinais}`,
+      `${flag ? "🛑" : "✅"} **${r.nota.toFixed(1)}/10** (umbral ${limiar}${cfg.enabled ? "" : ", desactivado"})${r.grave ? " · grave" : ""} · ${sinais}`) });
   }
 
-  if (sub === "simulate" || sub === "simular") {
-    const texto = args.slice(1).join(" ");
-    if (!texto) return sendEmbed(message.channel, tr(ctx,
-      { title: "❌ Uso", description: `\`${citarInterno("automod.sentinela.simular", PREFIXO)} <texto>\``, colour: COR.erro },
-      { title: "❌ Usage", description: `\`${citarInterno("automod.sentinela.simular", PREFIXO)} <text>\``, colour: COR.erro },
-      { title: "❌ Uso", description: `\`${citar("automod.sentinela.simular", "es", PREFIXO)} <texto>\``, colour: COR.erro }));
-    await simularDeteccao(texto, ctx, message.channel);
-    return sendEmbed(message.channel, tr(ctx, {
-      title: "🧪 Simulação enviada",
-      description: `Resultado enviado ao canal de avisos${cfg.alertChannelId ? ` (\`${cfg.alertChannelId}\`)` : " (este canal)"}. Nada foi punido.`,
-      colour: COR.info,
-    }, {
-      title: "🧪 Simulation sent",
-      description: `Result sent to the alert channel${cfg.alertChannelId ? ` (\`${cfg.alertChannelId}\`)` : " (this channel)"}. Nothing was punished.`,
-      colour: COR.info,
-    }, {
-      title: "🧪 Simulación enviada",
-      description: `Resultado enviado al canal de avisos${cfg.alertChannelId ? ` (\`${cfg.alertChannelId}\`)` : " (este canal)"}. No se castigó nada.`,
-      colour: COR.info,
-    }));
-  }
-
-  return sendEmbed(message.channel, tr(ctx,
-    { title: "❌ Subcomando desconhecido", description: `Use \`${citarInterno("automod.sentinela.config", PREFIXO)}\` para ver as opções.`, colour: COR.erro },
-    { title: "❌ Unknown subcommand", description: `Use \`${citarInterno("automod.sentinela.config", PREFIXO)}\` to see the options.`, colour: COR.erro },
-    { title: "❌ Subcomando desconocido", description: `Usa \`${citar("automod.sentinela.config", "es", PREFIXO)}\` para ver las opciones.`, colour: COR.erro }));
+  return erroDeUso(ctx, message.channel, "automod", `\`${String(args[0]).slice(0, 30).replace(/`/g, "")}\` não existe no sentinela`, `\`${String(args[0]).slice(0, 30).replace(/`/g, "")}\` doesn't exist in the sentinel`, `\`${String(args[0]).slice(0, 30).replace(/`/g, "")}\` no existe en el centinela`);
 }
 
 export async function cmdPunicao(message, args, ctx) {
@@ -1475,7 +1055,7 @@ export async function cmdPunicao(message, args, ctx) {
   const lang = lingua(ctx);
   const server = await getServer(message);
   if (!membroTemPermissao(message, server, "ManagePermissions"))
-    return negarPermissao(ctx, message.channel, "ManagePermissions");
+    return semPermissao(ctx, message.channel, "ManagePermissions");
 
   const pol = config.automod.punicao;
   const sub = args[0]?.toLowerCase();
@@ -1805,18 +1385,3 @@ export async function cmdPunicao(message, args, ctx) {
   }));
 }
 
-function negarPermissao(ctx, channel, permName) {
-  return ctx.sendEmbed(channel, tr(ctx, {
-    title: "🚫 Permissão insuficiente",
-    description: `Você precisa da permissão **${permName}** para usar este comando.`,
-    colour: ctx.COR.erro,
-  }, {
-    title: "🚫 Missing permission",
-    description: `You need the **${permName}** permission to use this command.`,
-    colour: ctx.COR.erro,
-  }, {
-    title: "🚫 Permiso insuficiente",
-    description: `Necesitas el permiso **${permName}** para usar este comando.`,
-    colour: ctx.COR.erro,
-  }));
-}

@@ -4,10 +4,10 @@ import { existsSync, mkdirSync, readdirSync, renameSync, statSync, unlinkSync, w
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomBytes } from "node:crypto";
-import { iaLigada, conversaLigada, imagemLigada, modoIA, numero, problemasDoEnv, MODELO_LOCAL_PADRAO } from "./modulos/core/env.js";
+import { iaLigada, conversaLigada, imagemLigada, modoIA, numero, problemasDoEnv, avisosDoEnv, MODELO_LOCAL_PADRAO } from "./modulos/core/env.js";
 import { avisoSemTrava } from "./modulos/core/modelos-sem-trava.js";
 import { montarConfigSwap, flagsDoLlama, modeloValido } from "./modulos/core/llama-swap-config.js";
-import { arquivosParaBaixar, tipoDoModelo } from "./modulos/core/imagem-modelo.js";
+import { arquivosParaBaixar, tipoDoModelo, imagemPedida } from "./modulos/core/imagem-modelo.js";
 
 const LLAMA_BIN = process.env.LLAMA_BIN || "/usr/local/bin/llama-server";
 const SWAP_BIN = process.env.SWAP_BIN || "/usr/local/bin/llama-swap";
@@ -75,13 +75,183 @@ export function problemasDoBoot() {
     for (const [v, m] of Object.entries(modelos)) {
       if (m && !modeloValido(m)) p.push(`${v}: use usuario/repositorio:quantizacao do Hugging Face (ex.: ${MODELO_LOCAL_PADRAO})`);
     }
-    if (imagemLigada()) tentar(() => arquivosParaBaixar());
+    if (imagemLigada() && imagemPedida()) tentar(() => arquivosParaBaixar());
   }
   if (process.env.VOZ_ATIVA === "1") {
     const ruins = [...vozesPedidas(), ...(process.env.PIPER_VOZ ? [process.env.PIPER_VOZ] : [])].filter((n) => !urlDaVoz(n));
     if (ruins.length) p.push(`VOZES/PIPER_VOZ: "${ruins.join(", ").slice(0, 80)}" fora do padrão idioma_REGIAO-pessoa-qualidade (ex.: pt_BR-faber-medium)`);
   }
   return p;
+}
+
+// ── A IA local: o plano (31 out 2026, P2) ─────────────────────────────────
+// O que sobe e com que nomes. null = nada de IA local (IA=0, sem IA_MODO=local ou
+// IA_EMBUTIDA=0 com LLM_URL externo). Os nomes são o que o bot pede ao llama-swap
+// ("conversa", "visao", "moderacao"); com o llama-server direto (sem llama-swap na
+// imagem) só existe um modelo, e todo papel cai nele.
+export function planoDaIA(env = process.env, { swapBin = SWAP_BIN, existe = existsSync } = {}) {
+  if (!iaLigada() || modoIA() !== "local") return null;
+  const conversa = env.MODELO || MODELO_LOCAL_PADRAO;
+  const visao = env.MODELO_VISAO || env.LLM_MODEL_VISAO || null;
+  const moderacao = (env.MODELO_MODERACAO || "").trim() || null;
+  const temSwap = existe(swapBin);
+  const nomes = temSwap
+    ? { conversa: "conversa", visao: "visao", moderacao: "moderacao" }
+    : { conversa: env.LLM_MODEL || "conversa", visao: env.LLM_MODEL || "conversa", moderacao: env.LLM_MODEL || "conversa" };
+  return {
+    conversa, visao: temSwap ? visao : null, moderacao: temSwap ? moderacao : null, swap: temSwap, nomes,
+    cache: env.LLAMA_CACHE || "/data/modelos",
+    imagem: imagemLigada() && imagemPedida(env),
+    ttl: numero("IA_TTL", 3600),
+  };
+}
+
+// Soma os bytes já em disco de um diretório (recursivo) — é o medidor honesto do
+// download: o progresso do llama usa \r e o docker logs engole.
+function tamanhoDir(d) {
+  let total = 0;
+  try {
+    for (const f of readdirSync(d, { recursive: true, withFileTypes: true })) {
+      if (f.isFile()) { try { total += statSync(join(f.parentPath ?? f.path, f.name)).size; } catch { /* sumiu no meio da conta: não soma */ } }
+    }
+  } catch { /* o diretório ainda não existe: 0 */ }
+  return total;
+}
+
+// Baixa um modelo do Hugging Face com o próprio llama-server (-hf) numa porta só
+// dele, até o /health responder; um marcador no cache evita repetir nos boots seguintes.
+function baixarModelo(m, cache) {
+  return new Promise((res) => {
+    const marca = `${cache}/.pronto-${m.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+    if (existsSync(marca)) return res(true);
+    console.info(`[INICIAR] baixando modelo ${m} (o bot já está no ar; a IA responde quando terminar)…`);
+    const dirModelo = join(cache, `models--${m.split(":")[0].replaceAll("/", "--")}`);
+    let bytesAntes = tamanhoDir(dirModelo);
+    let quando = Date.now();
+    const progresso = setInterval(() => {
+      const agora = tamanhoDir(dirModelo);
+      const vel = Math.max(0, (agora - bytesAntes) / ((Date.now() - quando) / 1000));
+      console.info(`[INICIAR] download: ${(agora / 1e9).toFixed(2)} GB no disco (${(vel / 1e6).toFixed(1)} MB/s)`);
+      bytesAntes = agora; quando = Date.now();
+    }, 10_000);
+    progresso.unref?.();
+    const p = spawn(LLAMA_BIN,
+      ["-hf", m, "--host", "127.0.0.1", "--port", "8199", "-c", "256", "-ngl", "0"],
+      { env: envDoFilho(ENV_FILHO.llama, { LLAMA_CACHE: cache }), stdio: ["ignore", "inherit", "inherit"] });
+    filhos.add(p);
+    let vivo = true;
+    const fim = (ok) => { if (!vivo) return; vivo = false; clearInterval(progresso); clearInterval(espera); filhos.delete(p); res(ok); };
+    p.on("error", (e) => { console.error(`[INICIAR] download de ${m}: ${e.message}`); fim(false); });
+    p.on("exit", (c) => { if (vivo) console.error(`[INICIAR] download de ${m} falhou (saída ${c}) — o llama-swap tenta de novo sob demanda.`); fim(false); });
+    const espera = setInterval(async () => {
+      if (!vivo) return;
+      const r = await fetch("http://127.0.0.1:8199/health").catch(() => null);
+      if (r?.ok && vivo) {
+        try { writeFileSync(marca, new Date().toISOString()); } catch (e) { console.warn(`[INICIAR] marcador de ${m}: ${e.message}`); }
+        console.info(`[INICIAR] modelo pronto no disco: ${m}`);
+        fim(true);
+        try { p.kill("SIGTERM"); } catch { /* já saiu */ }
+      }
+    }, 3000);
+  });
+}
+
+// Os arquivos do gerador de imagem (só com IMAGEM=1): as URLs saem do mesmo lugar
+// que o gerador usa (modulos/core/imagem-modelo.js), já conferidas no problemasDoBoot.
+function baixarArquivoSD(rotulo, url, SD_DIR) {
+  return new Promise((res) => {
+    let nome; try { nome = url.split("/").pop().split("?")[0]; } catch { nome = "modelo"; }
+    const destino = join(SD_DIR, nome);
+    const marca = `${SD_DIR}/.pronto-${nome.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+    if (existsSync(destino) && existsSync(marca)) return res(true);
+    try { mkdirSync(SD_DIR, { recursive: true }); } catch { /* já existe; o curl acusa se não der */ }
+    console.info(`[INICIAR] baixando ${rotulo} (${nome})…`);
+    const tmp = `${destino}.baixando`;
+    // até 20 GiB e 6 h por arquivo (o maior hoje, a difusão Q8 do Qwen, tem 7,6 GB)
+    const p = spawn("curl", [...curlSeguro(6 * 3600, 20 * 1024 ** 3), url, "-o", tmp],
+      { stdio: ["ignore", "ignore", "inherit"], env: envDoFilho(ENV_FILHO.curl) });
+    filhos.add(p);
+    let bytesAntes = 0, quando = Date.now();
+    const progresso = setInterval(() => {
+      let agora = 0; try { agora = statSync(tmp).size; } catch { /* o curl ainda não criou o arquivo */ }
+      const vel = Math.max(0, (agora - bytesAntes) / ((Date.now() - quando) / 1000));
+      console.info(`[INICIAR] ${rotulo}: ${(agora / 1e9).toFixed(2)} GB no disco (${(vel / 1e6).toFixed(1)} MB/s)`);
+      bytesAntes = agora; quando = Date.now();
+    }, 10_000);
+    progresso.unref?.();
+    p.on("error", (e) => { clearInterval(progresso); filhos.delete(p); console.error(`[INICIAR] ${rotulo}: ${e.message}`); res(false); });
+    p.on("exit", (c) => {
+      clearInterval(progresso); filhos.delete(p);
+      if (c === 0) {
+        try { renameSync(tmp, destino); writeFileSync(marca, new Date().toISOString()); } catch (e) { console.warn(`[INICIAR] ${rotulo}: ${e.message}`); }
+        console.info(`[INICIAR] ${rotulo} pronto no disco.`);
+        res(true);
+      } else {
+        try { unlinkSync(tmp); } catch { /* não chegou a criar */ }
+        console.error(`[INICIAR] download de ${rotulo} falhou (saída ${c}) — a ferramenta gerar_imagem tentará de novo sob demanda.`);
+        res(false);
+      }
+    });
+  });
+}
+
+// Depois do bot: os downloads e o servidor de modelos.
+async function subirIA(plano) {
+  const ngl = String(numero("LLAMA_NGL", 999));
+  const ctx = String(numero("LLAMA_CTX", 8192));
+  const portaLlama = String(numero("LLAMA_PORTA", 8082));
+  const flagsExtra = flagsDoLlama(process.env.LLAMA_FLAGS);  // ex.: "--temp 1.0 --top-p 0.95 --top-k 64" (Gemma) — cada família tem o seu
+  if (!existsSync(LLAMA_BIN)) {
+    console.error(`[INICIAR] IA_MODO=local mas ${LLAMA_BIN} não existe nesta imagem — a IA vai falhar. Aponte LLM_URL para um servidor externo, ou use IA=0.`);
+    return;
+  }
+  const { cache } = plano;
+  try { mkdirSync(cache, { recursive: true }); } catch { /* já existe; o llama acusa se não der */ }
+
+  if (!plano.swap) {
+    // Sem llama-swap na imagem: o llama-server direto (baixa o modelo no primeiro
+    // arranque pelo -hf; fica carregado — sem TTL).
+    console.warn(`[INICIAR] ${SWAP_BIN} não existe nesta imagem — llama-server direto, um modelo só, sem TTL (sem visão nem modelo de moderação).`);
+    console.info(`[INICIAR] IA local: ${plano.conversa} (primeiro arranque baixa o modelo — pode demorar)`);
+    // -ngl: camadas na GPU. 999 = "tudo o que couber"; sem GPU, ele cai para CPU sozinho.
+    subirBin("llama", LLAMA_BIN,
+      ["-hf", plano.conversa, "--host", "127.0.0.1", "--port", portaLlama, "-c", ctx, "-ngl", ngl, "--jinja", ...flagsExtra],
+      envDoFilho(ENV_FILHO.llama, { LLAMA_CACHE: cache }));
+    return;
+  }
+
+  // ── Download dos modelos (o bot já está no ar) ──
+  // Antes, o download era refém do primeiro pedido: o llama-swap só ligava o
+  // servidor sob demanda, o pedido estourava o timeout, o swap matava o servidor
+  // e o download morria junto. Aqui cada modelo baixa até o fim, com progresso.
+  const { conversa, visao, moderacao } = plano;
+  for (const m of [...new Set([conversa, visao, moderacao].filter(Boolean))]) {
+    if (encerrando) return;
+    await baixarModelo(m, cache);
+  }
+
+  // ── O gerador de imagem: só com IMAGEM=1 ──
+  if (plano.imagem && !encerrando) {
+    const SD_DIR = process.env.SD_MODELOS_DIR || "/data/modelos-sd";
+    console.info(`[INICIAR] gerador de imagem: ${tipoDoModelo()}`);
+    for (const [rotulo, url] of arquivosParaBaixar()) {
+      if (encerrando) return;
+      await baixarArquivoSD(rotulo, url, SD_DIR);
+    }
+  }
+  if (encerrando) return;
+
+  // ── O llama-swap: um modelo ou três, sempre com o TTL de verdade ──
+  const cfg = process.env.LLAMA_SWAP_YAML || "/data/llama-swap.yaml";
+  const extra = flagsExtra.join(" ");
+  const comando = (m, c = ctx) => `${LLAMA_BIN} -hf ${m} --host 127.0.0.1 --port \${PORT} -c ${c} -ngl ${ngl} --jinja${extra ? " " + extra : ""}`;
+  // IA_TTL: quanto tempo o modelo fica na memória sem uso (s). Padrão 1 h; no modo
+  // enxuto (CONVERSA=0) 5 min — a RAM/GPU volta para o resto da máquina.
+  const ttl = plano.ttl;
+  writeFileSync(cfg, montarConfigSwap({ conversa, visao, moderacao, comando, ttlConversa: ttl, ttlVisao: Math.min(600, ttl), ctxModeracao: process.env.LLAMA_CTX_MODERACAO || "4096" }));
+  console.info(`[INICIAR] IA local (llama-swap, ttl ${ttl}s): conversa=${conversa} · visão=${!visao ? "nenhuma" : visao === conversa ? "o mesmo modelo (apelido, sem 2ª cópia)" : visao}${moderacao ? ` · moderação=${moderacao === conversa ? "o mesmo modelo" : `${moderacao} (fica carregado junto)`}` : ""}`);
+  subirBin("llama-swap", SWAP_BIN, ["-config", cfg, "-listen", `127.0.0.1:${portaLlama}`],
+    envDoFilho(ENV_FILHO.llama, { LLAMA_CACHE: cache }));
 }
 
 const filhos = new Set();
@@ -179,160 +349,35 @@ if (PRINCIPAL) {
   }
   // (22 out 2026) sem modo +18: avisa se o .env aponta para um modelo sem trava
   if (iaLigada()) { const aviso = avisoSemTrava(); if (aviso) console.warn(aviso); }
-  const ngl = String(numero("LLAMA_NGL", 999));
-  const ctx = String(numero("LLAMA_CTX", 8192));
-  const portaLlama = String(numero("LLAMA_PORTA", 8082));
-  const flagsExtra = flagsDoLlama(process.env.LLAMA_FLAGS);  // ex.: "--temp 1.0 --top-p 0.95 --top-k 64" (Gemma) — cada família tem o seu
-  if (!iaLigada()) {
-    console.info("[INICIAR] IA=0 — módulos de IA desligados (nem serviço, nem modelo).");
-  } else if (modoIA() === "local" && (process.env.MODELO_VISAO || process.env.LLM_MODEL_VISAO || process.env.MODELO_MODERACAO)) {
-    // Dois modelos (conversa + visão) → llama-swap: ele serve os dois na mesma
-    // API OpenAI, carregando cada um por demanda. O bot escolhe por papel
-    // (LLM_MODEL para conversa, LLM_MODEL_VISAO para imagens).
-    if (existsSync(SWAP_BIN)) {
-      const cache = process.env.LLAMA_CACHE || "/data/modelos";
-      try { mkdirSync(cache, { recursive: true }); } catch {}
-      const conversa = process.env.MODELO || MODELO_LOCAL_PADRAO;
-      const visao = process.env.MODELO_VISAO || process.env.LLM_MODEL_VISAO || null;
-      // modelo pequeno só para julgar a moderação (fica carregado junto da conversa)
-      const moderacao = (process.env.MODELO_MODERACAO || "").trim() || null;
-      // Nomes curtos e estáveis: é por eles que o bot pede cada modelo.
-      process.env.LLM_MODEL = process.env.LLM_MODEL || "conversa";
-      if (visao) process.env.LLM_MODEL_VISAO = "visao";
-      if (moderacao) process.env.LLM_MODEL_JUIZ = "moderacao";
+  // (P2) nomes de modelo que saíram: valem como sinônimo, com aviso
+  for (const a of avisosDoEnv()) console.warn(`[INICIAR] .env: ${a}`);
 
-      // ── Download dos modelos NO BOOT, antes de tudo ─────────────────────
-      // Antes, o download era refém do primeiro pedido: o llama-swap só ligava
-      // o servidor sob demanda, o pedido estourava o timeout, o swap matava o
-      // servidor e o download morria junto. Agora o boot baixa cada modelo até
-      // o fim (com progresso no docker logs) e o bot só conecta com tudo pronto.
-      // Um marcador em ${cache} evita repetir a checagem nos boots seguintes.
-      // Soma os bytes já em disco de um diretório (recursivo) — é o medidor
-      // honesto do download: o progresso do llama usa \r e o docker logs engole.
-      const tamanhoDir = (d) => {
-        let total = 0;
-        try {
-          for (const f of readdirSync(d, { recursive: true, withFileTypes: true })) {
-            if (f.isFile()) { try { total += statSync(join(f.parentPath ?? f.path, f.name)).size; } catch {} }
-          }
-        } catch {}
-        return total;
-      };
-      const baixarModelo = (m) => new Promise((res) => {
-        const marca = `${cache}/.pronto-${m.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
-        if (existsSync(marca)) return res(true);
-        console.info(`[INICIAR] baixando modelo ${m} — o bot só sobe quando terminar (progresso abaixo)…`);
-        const dirModelo = join(cache, `models--${m.split(":")[0].replaceAll("/", "--")}`);
-        let bytesAntes = tamanhoDir(dirModelo);
-        let quando = Date.now();
-        const progresso = setInterval(() => {
-          const agora = tamanhoDir(dirModelo);
-          const vel = Math.max(0, (agora - bytesAntes) / ((Date.now() - quando) / 1000));
-          console.info(`[INICIAR] download: ${(agora / 1e9).toFixed(2)} GB no disco (${(vel / 1e6).toFixed(1)} MB/s)`);
-          bytesAntes = agora; quando = Date.now();
-        }, 10_000);
-        progresso.unref?.();
-        const p = spawn(LLAMA_BIN,
-          ["-hf", m, "--host", "127.0.0.1", "--port", "8199", "-c", "256", "-ngl", "0"],
-          { env: envDoFilho(ENV_FILHO.llama, { LLAMA_CACHE: cache }), stdio: ["ignore", "inherit", "inherit"] });
-        let vivo = true;
-        p.on("exit", (c) => { if (vivo) { vivo = false; clearInterval(progresso); console.error(`[INICIAR] download de ${m} falhou (saída ${c}) — o llama-swap tenta de novo sob demanda.`); res(false); } });
-        const espera = setInterval(async () => {
-          if (!vivo) return clearInterval(espera);
-          try {
-            const r = await fetch("http://127.0.0.1:8199/health").catch(() => null);
-            if (r?.ok) {
-              clearInterval(espera); clearInterval(progresso); vivo = false;
-              try { writeFileSync(marca, new Date().toISOString()); } catch {}
-              console.info(`[INICIAR] modelo pronto no disco: ${m}`);
-              try { p.kill("SIGTERM"); } catch {}
-              res(true);
-            }
-          } catch {}
-        }, 3000);
-      });
-      for (const m of [...new Set([conversa, visao, moderacao].filter(Boolean))]) await baixarModelo(m);
-
-      // ── Pré-download dos modelos de GERAÇÃO DE IMAGEM (mesma lógica dos de
-      // conversa acima): sem isto, o download acontecia dentro do primeiro
-      // `&chat desenha...`, estourando o timeout do chat.
-      if ((process.env.IMAGEM ?? "1").trim() !== "0") {
-        const SD_DIR = process.env.SD_MODELOS_DIR || "/data/modelos-sd";
-        // as URLs saem do mesmo lugar que o gerador usa (modulos/core/imagem-modelo.js),
-        // já conferidas (só https://huggingface.co/…) no problemasDoBoot
-        const urlsSD = arquivosParaBaixar();
-        console.info(`[INICIAR] gerador de imagem: ${tipoDoModelo()}`);
-
-        const baixarArquivoSD = (rotulo, url) => new Promise((res) => {
-          let nome; try { nome = url.split("/").pop().split("?")[0]; } catch { nome = "modelo"; }
-          const destino = join(SD_DIR, nome);
-          const marca = `${SD_DIR}/.pronto-${nome.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
-          if (existsSync(destino) && existsSync(marca)) return res(true);
-          try { mkdirSync(SD_DIR, { recursive: true }); } catch {}
-          console.info(`[INICIAR] baixando ${rotulo} (${nome}) — o bot só sobe quando terminar…`);
-          const tmp = `${destino}.baixando`;
-          // até 20 GiB e 6 h por arquivo (o maior hoje, a difusão Q8 do Qwen, tem 7,6 GB)
-          const p = spawn("curl", [...curlSeguro(6 * 3600, 20 * 1024 ** 3), url, "-o", tmp],
-            { stdio: ["ignore", "ignore", "inherit"], env: envDoFilho(ENV_FILHO.curl) });
-          let bytesAntes = 0, quando = Date.now();
-          const progresso = setInterval(() => {
-            let agora = 0; try { agora = statSync(tmp).size; } catch {}
-            const vel = Math.max(0, (agora - bytesAntes) / ((Date.now() - quando) / 1000));
-            console.info(`[INICIAR] ${rotulo}: ${(agora / 1e9).toFixed(2)} GB no disco (${(vel / 1e6).toFixed(1)} MB/s)`);
-            bytesAntes = agora; quando = Date.now();
-          }, 10_000);
-          progresso.unref?.();
-          p.on("exit", (c) => {
-            clearInterval(progresso);
-            if (c === 0) {
-              try { renameSync(tmp, destino); writeFileSync(marca, new Date().toISOString()); } catch {}
-              console.info(`[INICIAR] ${rotulo} pronto no disco.`);
-              res(true);
-            } else {
-              try { unlinkSync(tmp); } catch {}
-              console.error(`[INICIAR] download de ${rotulo} falhou (saída ${c}) — a ferramenta gerar_imagem tentará de novo sob demanda.`);
-              res(false);
-            }
-          });
-        });
-        for (const [rotulo, url] of urlsSD) await baixarArquivoSD(rotulo, url);
-      }
-
-      const cfg = `/data/llama-swap.yaml`;
-      const extra = flagsExtra.join(" ");
-      const comando = (m, c = ctx) => `${LLAMA_BIN} -hf ${m} --host 127.0.0.1 --port \${PORT} -c ${c} -ngl ${ngl} --jinja${extra ? " " + extra : ""}`;
-      // mesmo modelo nos dois papéis → uma entrada só, "visao" é apelido dela
-      // IA_TTL: quanto tempo o modelo fica na memória sem uso (s). Padrão 1 h; no
-      // modo enxuto (CONVERSA=0) 5 min — a RAM/GPU volta para o resto da máquina.
-      const ttl = numero("IA_TTL", 3600);
-      writeFileSync(cfg, montarConfigSwap({ conversa, visao, moderacao, comando, ttlConversa: ttl, ttlVisao: Math.min(600, ttl), ctxModeracao: process.env.LLAMA_CTX_MODERACAO || "4096" }));
-      console.info(`[INICIAR] IA local (llama-swap): conversa=${conversa} · visão=${!visao ? "nenhuma" : visao === conversa ? "o mesmo modelo (apelido, sem 2ª cópia)" : visao}${moderacao ? ` · moderação=${moderacao === conversa ? "o mesmo modelo" : `${moderacao} (fica carregado junto)`}` : ""}`);
-      subirBin("llama-swap", SWAP_BIN, ["-config", cfg, "-listen", `127.0.0.1:${portaLlama}`],
-        envDoFilho(ENV_FILHO.llama, { LLAMA_CACHE: cache }));
-    } else {
-      console.error(`[INICIAR] MODELO_VISAO/MODELO_MODERACAO definido mas ${SWAP_BIN} não existe nesta imagem — seguindo com um modelo só (sem visão nem modelo de moderação).`);
-    }
-  } else if (modoIA() === "local") {
-    // Modo local: llama-server embutido baixa o modelo do Hugging Face no
-    // primeiro arranque (flag -hf) e guarda em /data/modelos — o download de
-    // gigabytes acontece uma vez, sobrevive a rebuilds e não incha a imagem.
-    if (existsSync(LLAMA_BIN)) {
-      const modelo = process.env.MODELO || MODELO_LOCAL_PADRAO;
-      const cache = process.env.LLAMA_CACHE || "/data/modelos";
-      try { mkdirSync(cache, { recursive: true }); } catch {}
-      console.info(`[INICIAR] IA local: ${modelo} (primeiro arranque baixa o modelo — pode demorar)`);
-      // -ngl: camadas na GPU. O build é Vulkan, mas sem esta flag o llama.cpp
-      // carrega tudo na CPU mesmo com adaptador disponível. 999 = "tudo o que
-      // couber"; sem GPU exposta ao container, ele cai para CPU sozinho.
-      subirBin("llama", LLAMA_BIN,
-        ["-hf", modelo, "--host", "127.0.0.1", "--port", portaLlama, "-c", ctx, "-ngl", ngl, "--jinja", ...flagsExtra],
-        envDoFilho(ENV_FILHO.llama, { LLAMA_CACHE: cache }));
-    } else {
-      console.error(`[INICIAR] IA_MODO=local mas ${LLAMA_BIN} não existe nesta imagem — a IA vai falhar. Aponte LLM_URL para um servidor externo, ou use IA=0.`);
-    }
+  // ── A IA local (31 out 2026, P2, R11) ────────────────────────────────────
+  // Antes: o bot só conectava ao Stoat depois de baixar TODOS os modelos — num
+  // volume novo, a moderação ficava horas fora do ar esperando gigabytes. E com
+  // um modelo só, o llama-server subia direto (sem llama-swap): carregado para
+  // sempre, o IA_TTL não valia. Agora:
+  //   1. os nomes que o bot usa (LLM_MODEL=conversa, visao, moderacao) são
+  //      decididos AQUI, antes de o bot subir;
+  //   2. o bot sobe e conecta;
+  //   3. os modelos baixam em seguida (o bot já está no ar; a IA responde
+  //      quando o llama-swap subir);
+  //   4. sempre o llama-swap (com o TTL de verdade), mesmo com um modelo só; o
+  //      llama-server direto só quando a imagem não tem o llama-swap;
+  //   5. o gerador de imagem só baixa com IMAGEM=1.
+  const plano = planoDaIA();
+  if (plano) {
+    process.env.LLM_MODEL = plano.nomes.conversa;
+    if (plano.visao) process.env.LLM_MODEL_VISAO = plano.nomes.visao;
+    if (plano.moderacao) process.env.LLM_MODEL_JUIZ = plano.nomes.moderacao;
   }
 
   if (IA_EMBUTIDA) subir("ia-servico", "./ia-servico", "servidor.js", { ambiente: ENV_FILHO.iaServico, env: { PORTA: process.env.IA_PORTA || "8090" } });
+  // O bot é o processo principal: se ele sair, tudo sai. Ele leva o ambiente
+  // inteiro (é quem usa o .env), com as chaves dos serviços que este boot gerou.
+  // Sobe ANTES dos downloads (P2): a moderação não espera os modelos.
+  subir("bot", ".", "main.js", { reiniciar: false });
+
   if (VOZ_ATIVA) {
     const vozesDir = process.env.PIPER_VOZES || "/data/vozes";
     try { mkdirSync(vozesDir, { recursive: true }); } catch {}
@@ -365,7 +410,6 @@ if (PRINCIPAL) {
     });
   }
 
-  // O bot é o processo principal: se ele sair, tudo sai. Ele leva o ambiente
-  // inteiro (é quem usa o .env), com as chaves dos serviços que este boot gerou.
-  subir("bot", ".", "main.js", { reiniciar: false });
+
+  if (plano) await subirIA(plano);
 }

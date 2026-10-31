@@ -12,6 +12,13 @@
 //   PROMPT     → personalidade padrão da IA (o &personalidade por servidor vence)
 //   CONVERSA   → 0 = modo enxuto: a IA fica SÓ para moderação, relatório do
 //                log e RSS (sem chat, sem gerar imagem, sem memória/comentários)
+//   IMAGEM     → 1 = o gerador de imagem existe (e o boot baixa os modelos dele).
+//                (31 out 2026, P2: só com IMAGEM=1 — vazio = desligado)
+//
+// Modelos por papel (P2): só LLM_MODEL (conversa e o resto), LLM_MODEL_JUIZ
+// (moderação) e LLM_MODEL_VISAO. Os antigos LLM_MODEL_LEVE/CODIGO/LOGICA/
+// DECISAO/RELATORIO valem como sinônimo do LLM_MODEL, e o LLM_MODEL_MODERACAO
+// (moderação de imagem) do LLM_MODEL_VISAO (o boot avisa no log; nada quebra).
 //
 // Os nomes internos continuam valendo e têm prioridade se definidos.
 
@@ -20,6 +27,21 @@ const DESLIGADO = new Set(["0", "false", "nao", "não", "off", "no"]);
 
 if (e.DONO && !e.SUPER_ADMINS) e.SUPER_ADMINS = e.DONO;
 if (e.SERVIDOR && !e.CHAT_SERVIDORES) e.CHAT_SERVIDORES = e.SERVIDOR;
+
+// Os nomes de modelo que saíram (P2) e para quem eles vão
+export const MODELOS_ANTIGOS = { LLM_MODEL_LEVE: "LLM_MODEL", LLM_MODEL_DECISAO: "LLM_MODEL", LLM_MODEL_LOGICA: "LLM_MODEL",
+  LLM_MODEL_CODIGO: "LLM_MODEL", LLM_MODEL_RELATORIO: "LLM_MODEL", LLM_MODEL_MODERACAO: "LLM_MODEL_VISAO" };
+// (o LLM_MODEL_MODERACAO era o modelo da moderação de IMAGEM — por padrão o da visão;
+// no modo local os nomes são os do llama-swap, que o iniciar.js define: ali não se copia)
+export function modelosAntigos(env = e) {
+  for (const [antigo, novo] of Object.entries(MODELOS_ANTIGOS)) {
+    const v = (env[antigo] ?? "").trim();
+    if (novo === "LLM_MODEL_VISAO" && String(env.IA_MODO ?? "").trim().toLowerCase() === "local") continue;
+    if (v && !(env[novo] ?? "").trim()) env[novo] = v;
+  }
+  return Object.keys(MODELOS_ANTIGOS).filter((k) => (env[k] ?? "").trim());
+}
+modelosAntigos();
 
 export function iaLigada() {
   return !DESLIGADO.has((e.IA ?? "1").trim().toLowerCase());
@@ -47,7 +69,9 @@ export function ligado(nome, padrao = true) {
   if (!v) return padrao;
   return !DESLIGADO.has(v);
 }
-export const imagemLigada = () => iaLigada() && conversaLigada() && ligado("IMAGEM", true);
+// (P2) o gerador de imagem só existe com IMAGEM=1 (vazio = desligado: nada de baixar
+// ~6–13 GB num volume novo sem ninguém ter pedido)
+export const imagemLigada = () => iaLigada() && conversaLigada() && ligado("IMAGEM", false);
 
 // Número do .env: vazio → padrão; inválido ou fora da faixa → erro (o boot para,
 // Regra do Reparo). Antes, `Number("30/min")` virava NaN e desligava tetos calado.
@@ -87,6 +111,7 @@ export function avisosDoEnv() {
     const ruins = itens.filter((x) => x !== "*" && !/^[0-9A-HJKMNP-TV-Z]{26}$/i.test(x));
     if (ruins.length) p.push(`${v}: ${ruins.length} item(ns) não é ID do Stoat (26 caracteres) nem "*" — ignorado(s)`);
   }
+  for (const k of modelosAntigos()) p.push(`${k} saiu (P2): vale como ${MODELOS_ANTIGOS[k]} — troque o nome no .env`);
   return p;
 }
 

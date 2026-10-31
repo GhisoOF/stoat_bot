@@ -6,15 +6,15 @@ const SD_DIR       = process.env.SD_MODELOS_DIR || "/data/modelos-sd";
 // Qual modelo (z-image · qwen-image · sd) e de onde vem: modulos/core/imagem-modelo.js
 const SD_TIPO = tipoDoModelo();
 const URLS = urlsDoModelo();
-const IMAGEM_LIGADA = (process.env.IMAGEM ?? "1").trim() !== "0";
+const IMAGEM_LIGADA = imagemPedida();   // (P2) só com IMAGEM=1
 
-import { existsSync, mkdirSync, readFileSync, unlinkSync, renameSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, unlinkSync, renameSync, writeFileSync } from "node:fs";
 import { spawn as spawnProc } from "node:child_process";
 import { basename, join } from "node:path";
 import { tmpdir } from "node:os";
 import { moderarBuffer, visaoDisponivel } from "./ver-imagem.js";
 import { desenhando } from "./vez-da-gpu.js";
-import { tipoDoModelo, urlsDoModelo, ehTurbo, tempoDeGeracaoMs, ladoMaximo, SIGMAS_QWEN_TURBO, urlDeModeloValida } from "../../modulos/core/imagem-modelo.js";
+import { imagemPedida, tipoDoModelo, urlsDoModelo, ehTurbo, tempoDeGeracaoMs, ladoMaximo, SIGMAS_QWEN_TURBO, urlDeModeloValida } from "../../modulos/core/imagem-modelo.js";
 import { ambienteMinimo } from "../../modulos/ai/servicos.js";
 const LADO_MAX     = ladoMaximo();
 const PASSOS_MAX   = Number(process.env.IMAGEM_PASSOS_MAX || 30);
@@ -340,21 +340,47 @@ function gerarEmbutido({ texto, width, height, economico = false, negativo = NEG
 // (31 out 2026, P1) Teto diário por servidor: cada desenho segura a GPU por minutos,
 // e sem teto um servidor só ocupava a máquina o dia inteiro. IMAGEM_POR_DIA (padrão
 // 20; 0 = sem teto). Conta o pedido que chega ao gerador, dê certo ou não.
+// (P2) A contagem do dia vive também num arquivo no volume (IMAGEM_TETO_ARQUIVO,
+// padrão /data/imagem-teto.json): reiniciar o serviço não zera mais o teto. Só o
+// dia, o servidor e o número — nada de quem pediu nem do que pediu. Sem o arquivo
+// (sem volume, sem permissão), segue só na memória, como antes, com aviso no log.
 const usoDoDia = new Map();   // "AAAA-MM-DD:servidor" → quantas
 const IMAGEM_POR_DIA = () => {
   const n = Number(process.env.IMAGEM_POR_DIA ?? 20);
   return Number.isInteger(n) && n >= 0 ? n : 20;
 };
-export function _zerarTetoDiario() { usoDoDia.clear(); }
+const arquivoDoTeto = () => process.env.IMAGEM_TETO_ARQUIVO ?? "/data/imagem-teto.json";
+let tetoCarregado = false, avisouTeto = false;
+function carregarTeto(dia) {
+  if (tetoCarregado) return;
+  tetoCarregado = true;
+  const arq = arquivoDoTeto();
+  if (!arq || !existsSync(arq)) return;
+  try {
+    const d = JSON.parse(readFileSync(arq, "utf8"));
+    for (const [k, n] of Object.entries(d ?? {})) {
+      if (typeof k === "string" && k.startsWith(`${dia}:`) && Number.isInteger(n) && n >= 0) usoDoDia.set(k, Math.min(n, 100_000));
+    }
+  } catch (e) { console.warn(`[IA][gerar_imagem] teto diário: não li ${arq} (${e?.message ?? e}) — segue do zero`); }
+}
+function gravarTeto() {
+  const arq = arquivoDoTeto();
+  if (!arq) return;
+  try { writeFileSync(arq, JSON.stringify(Object.fromEntries(usoDoDia))); }
+  catch (e) { if (!avisouTeto) { avisouTeto = true; console.warn(`[IA][gerar_imagem] teto diário só na memória: não gravei ${arq} (${e?.code ?? e?.message ?? e})`); } }
+}
+export function _zerarTetoDiario({ recarregar = false } = {}) { usoDoDia.clear(); tetoCarregado = !recarregar; avisouTeto = false; }
 export function consumirTetoDiario(servidor, agora = new Date()) {
   const teto = IMAGEM_POR_DIA();
   if (!teto) return true;
   const dia = agora.toISOString().slice(0, 10);
+  carregarTeto(dia);
   for (const k of usoDoDia.keys()) if (!k.startsWith(`${dia}:`)) usoDoDia.delete(k);   // ontem sai
   const chave = `${dia}:${servidor || "-"}`;
   const n = usoDoDia.get(chave) ?? 0;
   if (n >= teto) return false;
   usoDoDia.set(chave, n + 1);
+  gravarTeto();
   return true;
 }
 

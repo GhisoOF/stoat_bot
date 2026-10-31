@@ -7,6 +7,8 @@
 // de comandos (modulos/comandos/automod.js) desde 17 out 2026; um teste da suíte
 // comandos-17out garante que as duas listas não se afastam.
 
+import { REGISTRO } from "../comandos/index.js";
+
 export const GRUPO_EN = { antispam: "antispam", antiruido: "antinoise", antilink: "antilink", sentinela: "sentinel" };
 
 export const PARTE_EN = {
@@ -21,16 +23,26 @@ export const SENS_EN = { baixa: "low", media: "medium", alta: "high" };
 export const TEMA_EN = { politica: "politics", religiao: "religion", drogas: "drugs", sexual: "sexual" };
 export const ACAO_TEMA_EN = { off: "off", alertar: "alert", apagar: "delete", punir: "punish" };
 export const ACAO_AVATAR_EN = { alertar: "alert", silenciar: "silence", expulsar: "kick", banir: "ban" };
-export const EVENTO_LOG_EN = { punicoes: "punishments", membros: "members", mensagens: "messages", cargos: "roles", comandos: "commands" };
 
-// (etapa 4b) no espanhol, os nomes que se digitam são os do inglês (o mesmo que a tela
-// em espanhol sempre mostrou): `nomeModo("acumular", "es")` → `stack`, nunca `acumular`
-const de = (mapa) => (pt, lang) => (lang === "en" || lang === "es" ? mapa[pt] ?? pt : pt);
-export const nomeGrupo = de(GRUPO_EN);
-export const nomeParte = de(PARTE_EN);
-export const nomeModo = de(MODO_EN);
-export const nomeSens = de(SENS_EN);
-export const nomeTema = de(TEMA_EN);
-export const nomeAcaoTema = de(ACAO_TEMA_EN);
-export const nomeAcaoAvatar = de(ACAO_AVATAR_EN);
-export const nomeEventoLog = de(EVENTO_LOG_EN);
+// (P2, 31 out 2026) o espanhol vem do registro (`es.subcomandos` de cada nível do automod),
+// que também o torna digitável: `nomeModo("acumular", "es")` → `acumular`, `nomeSens("media",
+// "es")` → `media` (antes a tela espanhola mostrava o inglês: `stack`, `medium`, `content`).
+// Sem nome espanhol no registro, o interno (o teste p2-registro-ajuda exige o espanhol de
+// toda palavra que tem inglês diferente).
+const AUTOMOD = REGISTRO.find((c) => c.id === "automod") ?? {};
+const esDe = (...niveis) => Object.assign({}, ...niveis.map((n) => n?.es?.subcomandos ?? {}));
+const F = AUTOMOD.familias ?? {}, PT = AUTOMOD.partes ?? {};
+const GRUPO_ES = esDe(AUTOMOD);
+const PARTE_ES = esDe(F.antispam, F.antiruido, F.antilink, F.sentinela);
+const MODO_ES = esDe(AUTOMOD, PT.punicao);
+const SENS_ES = esDe(F.sentinela);
+const TEMA_ES = esDe(F.assuntos), ACAO_TEMA_ES = esDe(F.assuntos), ACAO_AVATAR_ES = esDe(F.avatar);
+
+const de = (mapa, es) => (pt, lang) => (lang === "en" ? mapa[pt] ?? pt : lang === "es" ? [].concat(es[pt] ?? pt)[0] : pt);
+export const nomeGrupo = de(GRUPO_EN, GRUPO_ES);
+export const nomeParte = de(PARTE_EN, PARTE_ES);
+export const nomeModo = de(MODO_EN, MODO_ES);
+export const nomeSens = de(SENS_EN, SENS_ES);
+export const nomeTema = de(TEMA_EN, TEMA_ES);
+export const nomeAcaoTema = de(ACAO_TEMA_EN, ACAO_TEMA_ES);
+export const nomeAcaoAvatar = de(ACAO_AVATAR_EN, ACAO_AVATAR_ES);

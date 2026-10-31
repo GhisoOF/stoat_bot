@@ -48,7 +48,6 @@ export async function cmdStaff(message, args, ctx) {
     const orientacao = semMarcados ? [
       T("Nenhum cargo de staff foi marcado ainda.", "No staff role has been marked yet.", "Todavía no se ha marcado ningún rol de staff."),
       T(`Quem tem **ManagePermissions** pode montar a lista com \`${citarInterno("staff.add", PREFIXO)} <@cargo>\`.`, `Anyone with **ManagePermissions** can build the list with \`${citarInterno("staff.add", PREFIXO)} <@role>\`.`, `Quien tenga **ManagePermissions** puede armar la lista con \`${citar("staff.add", "es", PREFIXO)} <@rol>\`.`),
-      T(`_Os mesmos cargos passam a valer para os comandos de moderação (\`${citarInterno("acesso", PREFIXO)}\`)._`, `_The same roles then count for the moderation commands (\`${citarInterno("acesso", PREFIXO)}\`)._`, `_Los mismos roles pasan a valer para los comandos de moderación (\`${citar("acesso", "es", PREFIXO)}\`)._`),
     ] : [];
     const rodape = e.membrosLidos ? null
       : T("_Não consegui ler a lista de membros, então mostro só os cargos._", "_I couldn't read the member list, so I'm showing the roles only._", "_No pude leer la lista de miembros, así que muestro solo los roles._");
@@ -229,25 +228,19 @@ export async function cmdStaff(message, args, ctx) {
     return sendEmbed(message.channel, tr(ctx, {
       title: "👥 Cargo adicionado à equipe",
       description: [
-        `**${alvo.nome}** agora aparece em \`${citarInterno("staff", PREFIXO)}\`.`,
-        "",
-        `⚠️ Isto **dá acesso aos comandos de moderação** a quem tiver o cargo, mesmo sem a permissão nativa do Stoat — é a mesma lista do \`${citarInterno("acesso.cargo", PREFIXO)}\`.`,
+        `**${alvo.nome}** agora é staff: usa os comandos de moderação.`,
       ].join("\n"),
       colour: COR.mod,
     }, {
       title: "👥 Role added to staff",
       description: [
-        `**${alvo.nome}** now shows up in \`${citarInterno("staff", PREFIXO)}\`.`,
-        "",
-        `⚠️ This **grants access to the moderation commands** to anyone with that role, even without Stoat's native permission — it's the same list as \`${citarInterno("acesso.cargo", PREFIXO)}\`.`,
+        `**${alvo.nome}** is now staff: it can use the moderation commands.`,
       ].join("\n"),
       colour: COR.mod,
     }, {
       title: "👥 Rol agregado al staff",
       description: [
-        `**${alvo.nome}** ahora aparece en \`${citar("staff", "es", PREFIXO)}\`.`,
-        "",
-        `⚠️ Esto **da acceso a los comandos de moderación** a quien tenga el rol, aun sin el permiso nativo de Stoat — es la misma lista de \`${citar("acesso.cargo", "es", PREFIXO)}\`.`,
+        `**${alvo.nome}** ahora es staff: usa los comandos de moderación.`,
       ].join("\n"),
       colour: COR.mod,
     }));
@@ -262,8 +255,6 @@ export async function cmdStaff(message, args, ctx) {
       `\`${citarInterno("staff.remove", PREFIXO)} <@cargo>\` — desmarca`,
       `\`${citarInterno("staff.titulo", PREFIXO)} <@cargo> <texto>\` — rótulo exibido no lugar do nome`,
       `\`${citarInterno("staff.limpar", PREFIXO)}\` — esvazia a lista`,
-      "",
-      `_A ordem é a de adição. É a mesma lista do \`${citarInterno("acesso.cargo", PREFIXO)}\`: quem entra aqui também passa a usar os comandos de moderação._`,
     ].join("\n"),
     colour: COR.info,
   }, {
@@ -274,8 +265,6 @@ export async function cmdStaff(message, args, ctx) {
       `\`${citarInterno("staff.remove", PREFIXO)} <@role>\` — unmark it`,
       `\`${citarInterno("staff.titulo", PREFIXO)} <@role> <text>\` — label shown instead of the role name`,
       `\`${citarInterno("staff.limpar", PREFIXO)}\` — empty the list`,
-      "",
-      `_Order follows insertion. It's the same list as \`${citarInterno("acesso.cargo", PREFIXO)}\`: whoever joins here also gets to use the moderation commands._`,
     ].join("\n"),
     colour: COR.info,
   }, {
@@ -286,8 +275,6 @@ export async function cmdStaff(message, args, ctx) {
       `\`${citar("staff.remove", "es", PREFIXO)} <@rol>\` — lo desmarca`,
       `\`${citar("staff.titulo", "es", PREFIXO)} <@rol> <texto>\` — etiqueta que se muestra en lugar del nombre`,
       `\`${citar("staff.limpar", "es", PREFIXO)}\` — vacía la lista`,
-      "",
-      `_El orden es el de adición. Es la misma lista de \`${citar("acesso.cargo", "es", PREFIXO)}\`: quien entra aquí también pasa a usar los comandos de moderación._`,
     ].join("\n"),
     colour: COR.info,
   }));

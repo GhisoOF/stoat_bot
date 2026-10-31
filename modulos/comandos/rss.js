@@ -1,31 +1,39 @@
-// &rss — notícias por RSS
+// &rss — notícias por RSS: o telejornal do servidor
+//
+// P2 (31 out 2026): um resumo por dia no horário do servidor (`horario`); urgência só por
+// regra (CVE crítica, termos do `urgente`, mesmo assunto em 3+ fontes), na hora. `agora`
+// virou apelido de `testar`; `canal`, `categoria` e `off` continuam, fora da ajuda.
 
 export default {
   id: "rss",
   modulo: "../ferramentas/rss.js",
   funcao: "cmdRss",
   apelidos: ["feed"],
-  es: { nome: "rss" },   // espanhol (etapa 4)
+  es: { nome: "rss", subcomandos: { horario: "horario", urgente: "urgente", testar: "probar", canal: "canal", agora: "ahora", categoria: "categoria", aqui: "aqui" } },   // espanhol (etapa 4)
   subcomandos: {
     add: "add", remove: "remove", list: "list", canal: "channel", agora: "now", testar: "test",
-    off: "off", categoria: "category",
+    off: "off", categoria: "category", horario: "time", urgente: "urgent",
   },
   naTela: { aqui: "here" },
   gerenciavel: true,
   textoLivre: true,
   ajuda: {
+    grupo: "personalizar",
     perm: "ManagePermissions",
-    uso: { pt: "{&rss} [add|remove|list|canal|agora]", en: "{&rss} [add|remove|list|channel|now]", es: "{&rss} [add|remove|list|channel|now]" },
-    desc: { pt: "Curadoria de notícias por RSS, com resumo da Judy. `add <url>` cadastra um feed, `canal aqui` define o destino, `list` mostra os feeds, `remove <url|n>` remove, `agora` força um ciclo (no máximo um a cada 5 min por servidor). A cada hora a Judy posta um resumo geral no tom dela e depois os itens novos (título, feed, horário, link).", en: "RSS news curation with Judy's summaries. `add <url>` registers a feed, `channel here` sets the destination, `list` shows the feeds, `remove <url|n>` removes one, `now` forces a cycle (at most once every 5 min per server). Every hour Judy posts an overall summary in her own voice, followed by the new items (title, feed, time, link).", es: "Curaduría de noticias por RSS, con resumen de Judy. `add <url>` registra un feed, `channel here` define el destino, `list` muestra los feeds, `remove <url|n>` elimina uno, `now` fuerza un ciclo (como máximo uno cada 5 min por servidor). Cada hora Judy publica un resumen general con su propio tono y después los elementos nuevos (título, feed, hora, enlace)." },
+    uso: { pt: "{&rss} add <url> [#canal] | remove <id> | list | testar | horario <hh:mm> | urgente [termo]", en: "{&rss} add <url> [#channel] | remove <id> | list | test | time <hh:mm> | urgent [term]", es: "{&rss} add <url> [#canal] | remove <id> | list | probar | horario <hh:mm> | urgente [término]" },
+    desc: {
+      pt: "O **telejornal** do servidor: as notícias dos feeds saem num resumo por dia, no horário do servidor. O que é urgente sai na hora — **CVE crítica**, um **termo** da sua lista, ou o **mesmo assunto em 3+ fontes**.\n\n`{&rss.add} <url> [#canal]` — acompanha um feed (sem canal: este)\n`{&rss.remove} <id>` · `{&rss.list}` — os feeds, com o último erro de cada um\n`{&rss.horario} 21:00` — a hora do resumo (no fuso do servidor; padrão 21:00)\n`{&rss.urgente} <termo>` — liga/desliga um termo urgente (sem termo, a lista)\n`{&rss.testar}` — lê os feeds e publica o resumo agora (no máximo um a cada 5 min)",
+      en: "The server's **news digest**: stories from the feeds come out in one summary a day, at the server's time. What's urgent comes out right away — a **critical CVE**, a **term** from your list, or the **same story in 3+ sources**.\n\n`{&rss.add} <url> [#channel]` — follows a feed (no channel: this one)\n`{&rss.remove} <id>` · `{&rss.list}` — the feeds, with each one's last error\n`{&rss.horario} 21:00` — the digest time (in the server's timezone; default 21:00)\n`{&rss.urgente} <term>` — toggles an urgent term (no term: the list)\n`{&rss.testar}` — reads the feeds and posts the digest now (at most once every 5 min)",
+      es: "El **telediario** del servidor: las noticias de los feeds salen en un resumen al día, a la hora del servidor. Lo urgente sale al momento — una **CVE crítica**, un **término** de tu lista o el **mismo tema en 3+ fuentes**.\n\n`{&rss.add} <url> [#canal]` — sigue un feed (sin canal: este)\n`{&rss.remove} <id>` · `{&rss.list}` — los feeds, con el último error de cada uno\n`{&rss.horario} 21:00` — la hora del resumen (en el huso del servidor; por defecto 21:00)\n`{&rss.urgente} <término>` — activa/desactiva un término urgente (sin término, la lista)\n`{&rss.testar}` — lee los feeds y publica el resumen ahora (como máximo uno cada 5 min)",
+    },
     ex: { pt: "{&rss.add} https://exemplo.com/feed.xml", en: "{&rss.add} https://example.com/feed.xml", es: "{&rss.add} https://example.com/feed.xml" },
     parametros: [
-      { nome: "add", valor: { pt: "<url> [categoria]", en: "<url> [category]", es: "<url> [categoría]" }, desc: { pt: "acompanha um feed. A categoria agrupa os resumos: cada assunto sai num bloco próprio, em vez de tudo espremido num apanhado só", en: "follows a feed. The category groups the digests: each topic gets its own block instead of everything squeezed into one", es: "sigue un feed. La categoría agrupa los resúmenes: cada tema sale en su propio bloque, en lugar de todo apretado en un solo resumen" } },
-      { nome: { pt: "categoria", en: "category", es: "category" }, valor: { pt: "<id|url> <nome|off>", en: "<id|url> <name|off>", es: "<id|url> <nombre|off>" }, desc: { pt: "define ou tira a categoria de um feed já cadastrado (`{&rss.list}` mostra os ids). Sem categoria, o feed resume no bloco **Geral**", en: "sets or clears the category of an existing feed (`{&rss.list}` shows the ids). Without one, the feed digests under **General**", es: "define o quita la categoría de un feed ya registrado (`{&rss.list}` muestra los ids). Sin categoría, el feed se resume en el bloque **General**" } },
-      { nome: "remove", valor: { pt: "<url|número>", en: "<url|number>", es: "<url|número>" }, desc: { pt: "para de acompanhar", en: "stops following", es: "deja de seguirlo" } },
-      { nome: "list", desc: { pt: "feeds acompanhados", en: "followed feeds", es: "feeds seguidos" } },
-      { nome: { pt: "canal", en: "channel", es: "channel" }, valor: { pt: "<#canal|aqui>", en: "<#channel|here>", es: "<#canal|here>" }, desc: { pt: "onde publicar", en: "where to post", es: "dónde publicar" } },
-      { nome: { pt: "agora", en: "now", es: "now" }, desc: { pt: "busca e publica agora (teste)", en: "fetches and posts now (test)", es: "busca y publica ahora (prueba)" } },
-      { nome: "off", desc: { pt: "desliga", en: "turns it off", es: "lo desactiva" } },
+      { nome: "add", valor: { pt: "<url> [#canal]", en: "<url> [#channel]", es: "<url> [#canal]" }, desc: { pt: "acompanha um feed; o canal é onde o RSS publica", en: "follows a feed; the channel is where RSS posts", es: "sigue un feed; el canal es donde publica el RSS" } },
+      { nome: "remove", valor: { pt: "<id|url>", en: "<id|url>", es: "<id|url>" }, desc: { pt: "para de acompanhar", en: "stops following", es: "deja de seguirlo" } },
+      { nome: "list", desc: { pt: "os feeds, com o último erro de cada um", en: "the feeds, with each one's last error", es: "los feeds, con el último error de cada uno" } },
+      { nome: { pt: "horario", en: "time", es: "horario" }, valor: "<hh:mm>", desc: { pt: "a hora do resumo do dia, no fuso do servidor", en: "the daily digest time, in the server's timezone", es: "la hora del resumen del día, en el huso del servidor" } },
+      { nome: { pt: "urgente", en: "urgent", es: "urgente" }, valor: { pt: "[termo]", en: "[term]", es: "[término]" }, desc: { pt: "termo literal (até 40 caracteres, 20 termos) que faz a notícia sair na hora", en: "literal term (up to 40 characters, 20 terms) that makes a story come out right away", es: "término literal (hasta 40 caracteres, 20 términos) que hace que la noticia salga al momento" } },
+      { nome: { pt: "testar", en: "test", es: "probar" }, desc: { pt: "publica o resumo agora", en: "posts the digest now", es: "publica el resumen ahora" } },
     ],
   },
 };

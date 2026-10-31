@@ -25,7 +25,7 @@
 //     familias: { sentinela: { subcomandos, naTela } },  // níveis dentro do comando (vira "automod.sentinela")
 //     partes: { punicao: { en: "punishment", subcomandos } }, // partes citadas sozinhas (`&help punicao`)
 //     gerenciavel: true,           // o admin pode desligar com `&comando desativar`
-//     soIA: true,                  // só existe onde a IA roda (&chat, &modia)
+//     soIA: true,                  // só existe onde a IA roda
 //     voz: true,                   // vale dentro da call, mesmo fora dos canais liberados
 //     essencial: true,             // nunca é desligado (a ajuda, o próprio &comando…)
 //     qualquerCanal: true,         // vale até nos canais onde o &acesso restringe os comandos
@@ -54,29 +54,27 @@
 // `familias` (os níveis dentro dele: `&automod sentinela assuntos …`) e `partes`
 // (as que têm tabela própria: `&help punishment ladder`). A fase 3 traz para cá a
 // página de ajuda (`ajuda`), uma família por vez: o que já tem `ajuda` não tem
-// mais cópia no geral.js nem no help-parametros.js.
+// mais cópia em lugar nenhum (P2: a árvore e os parâmetros à parte foram apagados).
 //
 // Arquivo novo nesta pasta tem de entrar na lista abaixo — a suíte comandos-17out
 // falha se sobrar arquivo fora dela.
 
 import ping from "./ping.js";
-import repete from "./repete.js";
 import userinfo from "./userinfo.js";
 import kick from "./kick.js";
 import ban from "./ban.js";
+import unban from "./unban.js";
+import untimeout from "./untimeout.js";
 import silenciar from "./silenciar.js";
 import limpar from "./limpar.js";
 import warn from "./warn.js";
-import acesso from "./acesso.js";
 import automod from "./automod.js";
 import tutorial from "./tutorial.js";
 import assistente from "./assistente.js";
 import cor from "./cor.js";
-import log from "./log.js";
 import banglobal from "./banglobal.js";
 import embed from "./embed.js";
 import reactionrole from "./reactionrole.js";
-import chat from "./chat.js";
 import rss from "./rss.js";
 import xp from "./xp.js";
 import game from "./game.js";
@@ -89,7 +87,6 @@ import voz from "./voz.js";
 import musica from "./musica.js";
 import webhook from "./webhook.js";
 import rolar from "./rolar.js";
-import iniciativa from "./iniciativa.js";
 import ticket from "./ticket.js";
 import economia from "./economia.js";
 import entretenimento from "./entretenimento.js";
@@ -99,21 +96,17 @@ import sobre from "./sobre.js";
 import personalidade from "./personalidade.js";
 import config from "./config.js";
 import servidores from "./servidores.js";
-import comando from "./comando.js";
-import cargomudo from "./cargomudo.js";
 import debug from "./debug.js";
-import modia from "./modia.js";
 import reset from "./reset.js";
-import idioma from "./idioma.js";
 import privacidade from "./privacidade.js";
 
 // A ordem desta lista é a ordem das rotas e da lista de gerenciáveis do `&comando`.
 export const REGISTRO = [
-  ping, repete, userinfo, kick, ban, silenciar, limpar, warn, acesso, automod,
-  tutorial, assistente, cor, log, banglobal, embed, reactionrole, chat, rss, xp,
+  ping, userinfo, kick, ban, unban, untimeout, silenciar, limpar, warn, automod,
+  tutorial, assistente, cor, banglobal, embed, reactionrole, rss, xp,
   game, autorole, staff, boasvindas, adeus, fuso, voz, musica, webhook, rolar,
-  iniciativa, ticket, economia, entretenimento, servidor, help, sobre, personalidade,
-  config, servidores, comando, cargomudo, debug, modia, reset, idioma, privacidade,
+  ticket, economia, entretenimento, servidor, help, sobre, personalidade,
+  config, servidores, debug, reset, privacidade,
 ].flat();
 
 // ── O que só depende dos nomes (o aliases.js usa; não toca nos handlers) ──
@@ -146,6 +139,22 @@ export function problemasDoRegistro(registro = REGISTRO) {
       if (nome !== nome.toLowerCase() || /\s/.test(nome)) problemas.push(`${c.id}: o nome "${nome}" precisa ser minúsculo e sem espaço`);
       if (dono.has(nome)) problemas.push(`"${nome}" está em ${dono.get(nome)} e em ${c.id}`);
       else dono.set(nome, c.id);
+    }
+  }
+  // (P2) atalhos: `atalhos: { "chat sair|leave": "privacidade chat sair" }` (ver aliases.js)
+  const ids = new Set(registro.map((c) => c?.id));
+  const atalhos = [];
+  for (const c of registro) {
+    for (const [chave, destino] of Object.entries(c?.atalhos ?? {})) {
+      const posicoes = chave.trim().split(/\s+/).map((p) => p.split("|"));
+      if (posicoes.flat().some((w) => !w || w !== w.toLowerCase())) problemas.push(`${c.id}: atalho "${chave}" precisa ser minúsculo, sem posição vazia`);
+      const [alvo] = String(destino).trim().split(/\s+/);
+      if (!ids.has(alvo)) problemas.push(`${c.id}: atalho "${chave}" leva a "${destino}", e "${alvo}" não é comando do registro`);
+      if (posicoes.length === 1) for (const w of posicoes[0]) if (dono.has(w)) problemas.push(`${c.id}: atalho de uma palavra "${w}" é nome de ${dono.get(w)} (use apelido, ou uma chave com mais palavras)`);
+      for (const o of atalhos) {
+        if (o.posicoes.length === posicoes.length && o.posicoes.every((alts, i) => alts.some((w) => posicoes[i].includes(w)))) problemas.push(`atalho "${chave}" (${c.id}) repete "${o.chave}" (${o.dono})`);
+      }
+      atalhos.push({ chave, dono: c.id, posicoes });
     }
   }
   return problemas;

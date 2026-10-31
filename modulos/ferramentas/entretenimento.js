@@ -22,6 +22,7 @@
 import { lingua, idiomaDe, tr } from "../core/i18n.js";
 import { citar, citarInterno, trechoPronto } from "../core/aliases.js";
 import * as jogos from "./jogos.js";
+import { erroDeUso } from "../core/saida.js";
 
 // ── Utilidades puras ────────────────────────────────────────────────────────
 // FNV-1a de 32 bits: barato, estável entre versões do Node, bom o bastante
@@ -450,32 +451,15 @@ export async function cmdEntretenimento(message, args, ctx, { rng = rngPadrao, a
   const raiz = `${citarInterno("entretenimento", P)}`;
   // espanhol: o nome do comando (e do subcomando, quando o registro tem) vem do citar
   const raizEs = citar("entretenimento", "es", P);
-  const subEs = (s) => (["ship", "cowsay"].includes(s) ? `${raizEs} ${s}` : citar(`entretenimento.${s}`, "es", P));
+  const subEs = (s) => citar(`entretenimento.${s}`, "es", P);   // ship e cowsay também estão no registro (P2)
   const uso = (linha, linhaEs) => enviar("🎪", T(`Uso: \`${raiz} ${linha.pt ?? linha}\``, `Usage: \`${raiz} ${linha.en ?? linha}\``, `Uso: \`${linhaEs}\``), COR.aviso);
   const U = (pt, eng) => ({ pt, en: eng });
 
+  // sem nada ou subcomando desconhecido: uma linha + `&help entretenimento` (a lista mora na ajuda)
   if (sub === "menu" || !sub) {
-    const desconhecido = !sub ? `${T("Não conheço", "I don't know", "No conozco")} \`${String(args[0]).slice(0, 30)}\`.\n\n` : "";
-    // cada linha: o código e a explicação; no espanhol, a linha inteira sai pronta
-    const linha = (cod, pt, eng, codEs, esp) => T(`\`${raiz} ${cod.pt ?? cod}\` — ${pt}`, `\`${raiz} ${cod.en ?? cod}\` — ${eng}`, `\`${codEs}\` — ${esp}`);
-    return enviar(T("🎪 Entretenimento", "🎪 Fun", "🎪 Entretenimiento"), desconhecido + [
-      linha("ship @a @b", "quantos % duas pessoas (ou coisas) combinam", "how many % two people (or things) match", `${subEs("ship")} @a @b`, "qué % combinan dos personas (o cosas)"),
-      linha("briga @a @b", "quem ganha numa briga, rodada por rodada", "who wins a fight, round by round", `${subEs("briga")} @a @b`, "quién gana una pelea, ronda a ronda"),
-      linha("cowsay [bicho] [pensa] <texto>", "um bicho em ASCII falando o seu texto", "an ASCII critter saying your text", `${subEs("cowsay")} [bicho] [think] <texto>`, "un bicho en ASCII diciendo tu texto"),
-      linha("bola8 <pergunta>", "a bola mágica responde", "the magic ball answers", `${subEs("bola8")} <pregunta>`, "la bola mágica responde"),
-      linha("escolher a | b | c", "eu escolho por você", "I pick for you", `${subEs("escolher")} a | b | c`, "yo elijo por ti"),
-      linha("nota <coisa>", "nota de 0 a 10 para qualquer coisa", "a 0–10 rating for anything", `${subEs("nota")} <cosa>`, "nota de 0 a 10 para cualquier cosa"),
-      linha("sorte", "a sua sorte de hoje", "your fortune for today", subEs("sorte"), "tu suerte de hoy"),
-      T(`\`${raiz} zoeira <texto>\` · \`${raiz} inverter <texto>\` — tExTo De ZoEiRa · texto ao contrário`,
-        `\`${raiz} zoeira <texto>\` · \`${raiz} inverter <texto>\` — mOcKiNg TeXt · text backwards`,
-        `\`${subEs("zoeira")} <texto>\` · \`${subEs("inverter")} <texto>\` — tExTo De BuRlA · texto al revés`),
-      linha(U("campominado [facil|medio|dificil]", "campominado [easy|medium|hard]"), "campo minado: clique nos quadrados", "minesweeper: click the squares", `${subEs("campominado")} [easy|medium|hard]`, "buscaminas: haz clic en las casillas"),
-      linha(U("velha [@pessoa]", "velha [@user]"), "jogo da velha por reação — sem ninguém, contra mim", "tic-tac-toe by reaction — with nobody, against me", `${subEs("velha")} [@usuario]`, "tres en raya por reacción — sin nadie, contra mí"),
-      "",
-      T(`_Com uma pessoa só, o outro lado é você: \`${raiz} ship @alguém\`. \`${P}help entretenimento <sub>\` explica cada um._`,
-        `_With just one person, the other side is you: \`${raiz} ship @someone\`. \`${P}help entretenimento <sub>\` explains each one._`,
-        `_Con una sola persona, el otro lado eres tú: \`${subEs("ship")} @alguien\`. \`${citar("help", "es", P)} ${citar("entretenimento", "es", "")} <sub>\` explica cada uno._`),
-    ].join("\n"), desconhecido ? COR.aviso : COR.info);
+    return sub === "menu"
+      ? erroDeUso(ctx, message.channel, "entretenimento", "Faltou a brincadeira.", "Missing the game.", "Falta el juego.")
+      : erroDeUso(ctx, message.channel, "entretenimento", `Não conheço \`${String(args[0]).slice(0, 30)}\`.`, `I don't know \`${String(args[0]).slice(0, 30)}\`.`, `No conozco \`${String(args[0]).slice(0, 30)}\`.`);
   }
 
   // ── ship ──

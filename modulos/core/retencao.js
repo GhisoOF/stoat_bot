@@ -117,6 +117,13 @@ export function apagarDadosDoServidor(serverId) {
 
 export const DIAS_APOS_SAIDA = Number(process.env.DIAS_APOS_SAIDA || 30);
 
+// O que vence sozinho, no mesmo ciclo da limpeza dos servidores (a cada 6 h e na subida).
+// (revisão P2) as palavras tentadas como comando: 30 dias — antes só se limpavam quando
+// alguém digitava outra palavra desconhecida, e num servidor quieto ficavam para sempre.
+export function limparVencidos(agora = Date.now()) {
+  return { palavras: db.limparPalavrasVencidas(agora, { forcar: true }) };
+}
+
 // No `ready`: o servidor que tem config mas a Judy não está nele saiu enquanto
 // ela estava desligada; o que está na lista e ela está nele, voltou.
 export function conferirSaidas(idsPresentes, agora = new Date()) {

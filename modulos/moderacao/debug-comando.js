@@ -20,7 +20,10 @@ import { servidorNaLista } from "../core/env.js";
 import * as db from "../core/db.js";
 import { lingua, idiomaDe, tr } from "../core/i18n.js";
 import { citar, citarInterno, trechoPronto } from "../core/aliases.js";
-import { descreverErro } from "../core/erros.js";
+import { descreverErro, registrarErro } from "../core/erros.js";
+import { carimbo } from "../core/tempo.js";
+import { imagemPedida } from "../core/imagem-modelo.js";
+import { erroDeUso, semPermissao } from "./punir.js";
 import { chaveServicoIA } from "../ai/servicos.js";
 import { MODULOS_AUTOMOD, moduloLigado, escadaDePunicao, GRUPOS_AUTOMOD, estadoDoGrupo, validadeDosAvisos } from "./automod-engine.js";
 // (22 out 2026) `iaExiste` = a IA está disponível aqui; `iaAqui` = e o chat está ligado
@@ -29,7 +32,7 @@ import { loja as lojaEconomia } from "../ferramentas/economia.js";
 import { nomeModo, nomeGrupo } from "../core/nomes-automod.js";
 
 const ICONE = { erro: "🔴", aviso: "🟡", ok: "🟢", info: "▫️" };
-const ANTIGOS = new Set(["canais", "voz", "tts", "voice", "silence", "silencio", "silêncio", "mudo", "timeout", "cru", "raw", "perms", "permissoes", "permissões", "tudo", "all", "completo"]);
+const ANTIGOS = new Set(["ler", "canais", "voz", "tts", "voice", "silence", "silencio", "silêncio", "mudo", "timeout", "cru", "raw", "perms", "permissoes", "permissões", "tudo", "all", "completo"]);
 
 function botTem(server, perm) {
   try { if (typeof server?.havePermission === "function") return !!server.havePermission(perm); } catch {}
@@ -50,14 +53,48 @@ export async function coletar({ server, client, config, serverId, botMember, ehD
   const vozAqui = servidorNaLista("TTS_SERVIDORES", serverId);
   const iaAqui = (() => { try { return temIA(serverId); } catch { return false; } })();
   const iaExiste = (() => { try { return iaDisponivel(serverId); } catch { return false; } })();
-  const imagem = (process.env.IMAGEM ?? "1").trim() !== "0";
+  const imagem = imagemPedida();   // (P2) `IMAGEM` vazio = desligado (a regra única do boot e do ia-servico)
   const imagemAqui = (() => { try { return imagemLigadaAqui(serverId); } catch { return false; } })();
 
   return {
     server, client, config, serverId, botMember, ehDono, fetcher,
     am, pol, usaMute, usaBan, filtrosLigados, cargosNivel, reacoes, vozAqui, iaAqui, iaExiste, imagem, imagemAqui,
     tickets: !!config?.tickets?.logCanal,
+    punicoes: punicoesPorModulo(config),
   };
+}
+
+// ── A punição de cada módulo (P2) ────────────────────────────────────────────
+// perm → [rótulo [pt, en, es] dos módulos que a usam]. Uma política (`{ modo, escada }`)
+// precisa de TimeoutMembers (silêncio: `confirmar` ou degrau de tempo) e/ou de
+// BanMembers (`banir` ou o ban no fim da escada). O &warn sobe a mesma escada.
+export function permsDaPolitica(pol) {
+  const modo = pol?.modo ?? "avisar";
+  const p = new Set();
+  if (modo === "confirmar") p.add("TimeoutMembers");
+  if (modo === "banir") p.add("BanMembers");
+  if (modo === "acumular") {
+    const escada = (() => { try { return escadaDePunicao(pol); } catch { return []; } })();
+    if (escada.some((x) => x?.tipo === "mute")) p.add("TimeoutMembers");
+    if (escada.some((x) => x?.tipo === "ban")) p.add("BanMembers");
+  }
+  return p;
+}
+export function punicoesPorModulo(config) {
+  const am = config?.automod ?? {};
+  const uso = { TimeoutMembers: [], KickMembers: [], BanMembers: [] };
+  const anotar = (perms, rotulo) => { for (const x of perms) uso[x]?.push(rotulo); };
+  const ligados = Object.entries(MODULOS_AUTOMOD).filter(([, k]) => moduloLigado(am, k));
+  // a punição geral vale para todo filtro ligado sem punição própria, e para o &warn
+  const comAutomod = ligados.some(([, k]) => !am[k]?.punicao?.modo);
+  anotar(permsDaPolitica(am.punicao), ["pt", "en", "es"].map((l) => citar("warn", l) + (comAutomod ? " + automod" : "")));
+  for (const [nome, k] of ligados) if (am[k]?.punicao?.modo) anotar(permsDaPolitica(am[k].punicao), [nome, nome, nome]);
+  if (moduloLigado(am, "antiAvatar")) {
+    const perm = { silenciar: "TimeoutMembers", expulsar: "KickMembers", banir: "BanMembers" }[am.antiAvatar?.acao ?? "silenciar"];
+    if (perm) uso[perm].push(["avatar", "avatar", "avatar"]);
+  }
+  if (["imediato", "consenso", "banir"].includes(config?.banGlobal?.modo)) uso.BanMembers.push(["banglobal", "banglobal", "banglobal"]);
+  return uso;
 }
 
 // ─── As áreas ────────────────────────────────────────────────────────────────
@@ -102,6 +139,48 @@ function secaoPermissoes(d, T) {
     else itens.push({ nivel: "info", texto: `\`${p}\` ${T("falta, mas o recurso não está em uso", "missing, but the feature isn't in use", "falta, pero la función no está en uso")} — ${T(pt, en, es)}` });
   }
   return { titulo: T("🔑 Permissões do bot", "🔑 Bot permissions", "🔑 Permisos del bot"), itens, compacto: true };
+}
+
+function secaoPunicoes(d, T) {
+  const itens = [];
+  for (const perm of ["TimeoutMembers", "KickMembers", "BanMembers"]) {
+    const quem = d.punicoes?.[perm] ?? [];
+    if (!quem.length) continue;
+    const lista = quem.map((r) => T(r[0], r[1], r[2])).join(", ");
+    const tem = botTem(d.server, perm);
+    if (tem === false) itens.push({ nivel: "erro", texto: `\`${perm}\` ${T("falta", "missing", "falta")} — ${lista}`, dica: T(`dê **${perm}** ao cargo do bot`, `give the bot's role **${perm}**`, `dale **${perm}** al rol del bot`) });
+    else if (tem === null) itens.push({ nivel: "aviso", texto: `\`${perm}\` — ${T("não consegui verificar", "couldn't check", "no pude comprobarlo")} — ${lista}` });
+    else itens.push({ nivel: "ok", texto: `\`${perm}\` — ${lista}` });
+  }
+  if (!itens.length) itens.push({ nivel: "info", texto: T("nenhuma punição que silencie, expulse ou bane", "no punishment that times out, kicks or bans", "ningún castigo que silencie, expulse o banee") });
+  return { titulo: T("⚖️ Punições de cada módulo", "⚖️ Each module's punishment", "⚖️ Castigos de cada módulo"), itens };
+}
+
+// Webhooks, RSS e RPG — só o que é deste servidor (P2)
+function secaoFerramentas(d, T) {
+  const itens = [];
+  const doServidor = new Set((d.server?.channels ?? []).map((x) => (typeof x === "string" ? x : x?.id)).filter(Boolean));
+  const ganchos = (() => { try { return db.listarGanchos(d.serverId); } catch (e) { registrarErro("DEBUG:webhooks", e); return []; } })();
+  if (ganchos.length) {
+    const orfaos = ganchos.filter((g) => doServidor.size && !doServidor.has(g.canalId));
+    const nomes = orfaos.map((g) => `\`${g.nome}\``).join(", ");
+    itens.push(orfaos.length
+      ? { nivel: "erro", texto: T(`webhooks: ${nomes} apontam para canal apagado`, `webhooks: ${nomes} point to a deleted channel`, `webhooks: ${nomes} apuntan a un canal borrado`),
+        dica: T("crie de novo num canal que existe", "create them again in a channel that exists", "créalos de nuevo en un canal que exista") }
+      : { nivel: "ok", texto: `webhooks: ${ganchos.length}` });
+  }
+  const feeds = (() => { try { return db.listarFeeds(d.serverId); } catch (e) { registrarErro("DEBUG:rss", e); return []; } })();
+  if (feeds.length) {
+    const erros = (() => { try { return db.rssErros?.(d.serverId) ?? new Map(); } catch (e) { registrarErro("DEBUG:rss", e); return new Map(); } })();
+    const comErro = feeds.filter((f) => erros.has(f.id));
+    for (const f of comErro.slice(0, 5)) itens.push({ nivel: "aviso", texto: `RSS: ${String(f.titulo ?? f.url).slice(0, 60)} — ${String(erros.get(f.id).erro).slice(0, 80)}` });
+    if (!comErro.length) itens.push({ nivel: "ok", texto: T(`RSS: ${feeds.length} feed(s), sem erro`, `RSS: ${feeds.length} feed(s), no errors`, `RSS: ${feeds.length} feed(s), sin errores`) });
+    if (!d.config?.rss?.canalId) itens.push({ nivel: "aviso", texto: T("RSS: sem canal para publicar", "RSS: no channel to post in", "RSS: sin canal para publicar") });
+  }
+  const fichas = (() => { try { return db.listarPersonagens(d.serverId, 1000)?.length ?? 0; } catch (e) { registrarErro("DEBUG:rpg", e); return 0; } })();
+  if (fichas) itens.push({ nivel: "info", texto: T(`RPG: ${fichas} personagem(ns) daqui`, `RPG: ${fichas} character(s) from here`, `RPG: ${fichas} personaje(s) de aquí`) });
+  if (!itens.length) itens.push({ nivel: "info", texto: T("sem webhooks, RSS nem RPG por aqui", "no webhooks, RSS or RPG here", "sin webhooks, RSS ni RPG por aquí") });
+  return { titulo: T("🧰 Webhooks, RSS e RPG", "🧰 Webhooks, RSS and RPG", "🧰 Webhooks, RSS y RPG"), itens };
 }
 
 function secaoHierarquia(d, T) {
@@ -233,7 +312,7 @@ async function secaoVoz(d, T) {
   }
   const c = d.config?.tts;
   itens.push({ nivel: "info", texto: c?.ativo && c?.canalVoz ? T(`na call <#${c.canalVoz}>`, `in the call <#${c.canalVoz}>`, `en la llamada <#${c.canalVoz}>`) : T("fora da call — `" + citarInterno("entrar") + "` dentro dela", "not in a call — `" + citarInterno("entrar") + "` inside one", "fuera de la llamada — `" + citar("entrar", "es") + "` dentro de ella") });
-  itens.push({ nivel: "info", texto: T("não entra na call? `" + citarInterno("tts.diagnostico") + "` testa a conexão em etapas", "can't join the call? `" + citarInterno("tts.diagnostico") + "` tests the connection step by step", "¿no entra en la llamada? `" + citar("tts.diagnostico", "es") + "` prueba la conexión paso a paso") });
+  itens.push({ nivel: "info", texto: T("o estado da voz: `" + citarInterno("tts.estado") + "`", "the voice state: `" + citarInterno("tts.estado") + "`", "el estado de la voz: `" + citar("tts.estado", "es") + "`") });
   return { titulo: T("🔊 Voz e música", "🔊 Voice and music", "🔊 Voz y música"), itens };
 }
 
@@ -268,7 +347,10 @@ async function secaoIA(d, T) {
       itens.push({ nivel: "erro", texto: T("serviço da IA inalcançável", "AI service unreachable", "servicio de la IA inalcanzable") + soDono(d, ` (${String(e?.message ?? e).slice(0, 200)})`) });
     }
   }
-  itens.push({ nivel: process.env.SEARXNG_URL ? "ok" : "info", texto: process.env.SEARXNG_URL ? T("busca na web ligada", "web search on", "búsqueda web activada") : T("busca na web desligada", "web search off", "búsqueda web desactivada") + soDono(d, " (`SEARXNG_URL`)") });
+  // (P2) a busca só existe com o SearXNG configurado E o chat ligado aqui (ela é ferramenta do chat)
+  const busca = !!process.env.SEARXNG_URL && d.iaAqui;
+  itens.push({ nivel: busca ? "ok" : "info", texto: busca ? T("busca na web ligada", "web search on", "búsqueda web activada")
+    : T("busca na web desligada", "web search off", "búsqueda web desactivada") + (process.env.SEARXNG_URL ? T(" (o chat está desligado aqui)", " (chat is off here)", " (el chat está desactivado aquí)") : soDono(d, " (`SEARXNG_URL`)")) });
   return { titulo: T("🤖 IA", "🤖 AI", "🤖 IA"), itens };
 }
 
@@ -308,6 +390,8 @@ export async function relatorioCompleto(d, lang = "pt", l = lang) {
     secaoCanaisConfigurados(d, T),
     secaoCanaisGerais(d, T, l),
     secaoModeracao(d, T),
+    secaoPunicoes(d, T),
+    secaoFerramentas(d, T),
     await secaoVoz(d, T),
     await secaoIA(d, T),
     secaoErros(d, T),
@@ -336,7 +420,6 @@ export async function relatorioCompleto(d, lang = "pt", l = lang) {
       for (const i of s.itens) linhas.push(`${ICONE[i.nivel]} ${i.texto}`);
     }
   }
-  linhas.push("", T("_Detalhes: `" + citarInterno("debug") + " @pessoa` · `" + citarInterno("debug") + " #canal`_", "_Details: `" + citarInterno("debug") + " @person` · `" + citarInterno("debug") + " #channel`_", "_Detalles: `" + citar("debug", "es") + " @usuario` · `" + citar("debug", "es") + " #canal`_"));
   return { titulo: T("🩺 Diagnóstico do servidor", "🩺 Server diagnostics", "🩺 Diagnóstico del servidor"), texto: linhas.join("\n"), erros: erros.length, avisos: avisos.length };
 }
 
@@ -363,7 +446,7 @@ export function relatorioPessoa(d, member, alvoId, lang = "pt", l = lang) {
     else if (!acima) L.push(T("🟢 silêncio: funciona com essa pessoa", "🟢 silence: works on this person", "🟢 silencio: funciona con esta persona"));
   }
   if (member.timeout && new Date(member.timeout).getTime() > Date.now())
-    L.push(T(`🔇 silenciada agora, até ${new Date(member.timeout).toISOString().slice(0, 16).replace("T", " ")} UTC`, `🔇 timed out now, until ${new Date(member.timeout).toISOString().slice(0, 16).replace("T", " ")} UTC`, `🔇 silenciado ahora, hasta ${new Date(member.timeout).toISOString().slice(0, 16).replace("T", " ")} UTC`));
+    L.push(T(`🔇 silenciada agora, até ${carimbo(member.timeout, "f")}`, `🔇 timed out now, until ${carimbo(member.timeout, "f")}`, `🔇 silenciado ahora, hasta ${carimbo(member.timeout, "f")}`));
 
   // punições
   const p = (() => { try { return db.lerPunicao(d.serverId, alvoId); } catch { return null; } })();
@@ -393,10 +476,7 @@ export async function cmdDebug(message, args, ctx) {
   const T = (pt, en, es) => tr(ctx, pt, en, es);
 
   const server = await getServer(message);
-  if (!membroTemPermissao(message, server, "ManagePermissions")) {
-    return sendEmbed(message.channel, { title: T("🚫 Permissão insuficiente", "🚫 Missing permission", "🚫 Permiso insuficiente"),
-      description: T("Você precisa de **ManagePermissions** para ver o diagnóstico.", "You need **ManagePermissions** to see the diagnostics.", "Necesitas **ManagePermissions** para ver el diagnóstico."), colour: COR.erro });
-  }
+  if (!membroTemPermissao(message, server, "ManagePermissions")) return semPermissao(ctx, message.channel, "ManagePermissions");
 
   const t0 = Date.now();
   const botId = client?.user?.id;
@@ -410,7 +490,8 @@ export async function cmdDebug(message, args, ctx) {
   const legado = ANTIGOS.has(arg.toLowerCase());
 
   // &debug @pessoa
-  const pessoaId = !legado && (message.mentionIds?.[0] ?? (/^<@!?([A-Z0-9]{26})>$/i.exec(arg)?.[1]));
+  // a menção ESCRITA (numa resposta, o mentionIds traz o autor respondido)
+  const pessoaId = !legado && arg && (/^<@!?([A-Z0-9]{26})>$/i.exec(arg)?.[1] ?? (arg.startsWith("<@") ? message.mentionIds?.[0] : null));
   if (pessoaId) {
     const member = await server?.fetchMember?.(pessoaId).catch(() => null);
     const r = relatorioPessoa(d, member, pessoaId, lang, l);
@@ -434,21 +515,13 @@ export async function cmdDebug(message, args, ctx) {
         return sendEmbed(message.channel, { title: T("🔒 Não vejo esse canal", "🔒 I can't see that channel", "🔒 No veo ese canal"), colour: COR.aviso,
           description: daApi
             ? T("Esse canal é de **outro servidor**.", "That channel belongs to **another server**.", "Ese canal es de **otro servidor**.")
-            : T(`O Stoat não me deixa abrir <#${id}>: falta **Ver canal** para o cargo da Judy nele (permissões do canal, ou da categoria acima dele).
-
-_Se você acabou de dar a permissão e eu continuo sem ver, me reinicie (\`docker compose restart\`)._`,
-                `Stoat won't let me open <#${id}>: Judy's role is missing **View channel** there (the channel's permissions, or the category above it).
-
-_If you just granted it and I still can't see it, restart me (\`docker compose restart\`)._`,
-                `Stoat no me deja abrir <#${id}>: al rol de Judy le falta **Ver canal** ahí (los permisos del canal, o de la categoría de arriba).
-
-_Si acabas de dar el permiso y sigo sin verlo, reiníciame (\`docker compose restart\`)._`) });
+            : T(`Falta **Ver canal** para o cargo da Judy em <#${id}>.`, `Judy's role is missing **View channel** in <#${id}>.`, `Al rol de Judy le falta **Ver canal** en <#${id}>.`)
+              + soDono(d, T(" Se já deu, reinicie o bot.", " If it's already granted, restart the bot.", " Si ya lo diste, reinicia el bot.")) });
       }
     }
     if (!canal) {
-      return sendEmbed(message.channel, { title: T("🔍 Não achei", "🔍 Not found", "🔍 No lo encontré"),
-        description: T(`Nenhuma pessoa ou canal com "${args.join(" ")}".\n\n\`${citarInterno("debug", PREFIXO)}\` · \`${citarInterno("debug", PREFIXO)} @pessoa\` · \`${citarInterno("debug", PREFIXO)} #canal\``,
-          `No person or channel matching "${args.join(" ")}".\n\n\`${citarInterno("debug", PREFIXO)}\` · \`${citarInterno("debug", PREFIXO)} @person\` · \`${citarInterno("debug", PREFIXO)} #channel\``, `Ningún usuario ni canal con "${args.join(" ")}".\n\n\`${citar("debug", "es", PREFIXO)}\` · \`${citar("debug", "es", PREFIXO)} @usuario\` · \`${citar("debug", "es", PREFIXO)} #canal\``), colour: COR.aviso });
+      const e = args.join(" ").slice(0, 40).replace(/`/g, "");
+      return erroDeUso(ctx, message.channel, "debug", `Não achei \`${e}\``, `Couldn't find \`${e}\``, `No encontré \`${e}\``);
     }
     const rastro = perms.rastrearPermissoes(server, canal, botMember, client, l);
     return sendEmbed(message.channel, {
@@ -463,6 +536,5 @@ _Si acabas de dar el permiso y sigo sin verlo, reiníciame (\`docker compose res
     console.error("[DEBUG]", descreverErro(e));
     return sendEmbed(message.channel, { title: T("❌ O diagnóstico falhou", "❌ Diagnostics failed", "❌ El diagnóstico falló"), description: descreverErro(e, lang), colour: COR.erro });
   }
-  const nota = legado ? T(`_\`${citarInterno("debug", PREFIXO)} ${arg}\` virou parte do diagnóstico completo._\n\n`, `_\`${citarInterno("debug", PREFIXO)} ${arg}\` is now part of the full diagnostics._\n\n`, `_\`${citar("debug", "es", PREFIXO)} ${arg}\` ahora es parte del diagnóstico completo._\n\n`) : "";
-  return sendEmbed(message.channel, { title: r.titulo, description: nota + r.texto, colour: r.erros ? COR.erro : r.avisos ? COR.aviso : COR.sucesso });
+  return sendEmbed(message.channel, { title: r.titulo, description: r.texto, colour: r.erros ? COR.erro : r.avisos ? COR.aviso : COR.sucesso });
 }

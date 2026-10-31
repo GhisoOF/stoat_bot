@@ -1,4 +1,5 @@
-// &tutorial — guia em páginas (permissões, canais, proteção…)
+// &tutorial — o mini guia: por onde começar, os conceitos que atravessam os comandos
+// e a wiki do RPG (gerada dos dados do jogo). P2, 31 out 2026.
 
 export default {
   id: "tutorial",
@@ -6,23 +7,25 @@ export default {
   funcao: "cmdTutorial",
   nomes: { en: "tutorial" },
   apelidos: ["guia", "comecar", "inicio", "guide", "start"],
-  es: { nome: "tutorial" },   // espanhol (etapa 4)
+  es: { nome: "tutorial", subcomandos: { permissoes: "permisos", canais: "canales", protecao: "proteccion", rpg: "rpg", moderacao: "moderacion", cargos: "roles", ia: "ia", noticias: "noticias", mensagens: "mensajes", economia: "economia", aventura: "aventura", ajustes: "ajustes" } },
   subcomandos: {
-    permissoes: "permissions", canais: "channels", moderacao: "moderation", cargos: "roles",
-    ia: "ai", noticias: "news", mensagens: "messages", economia: "economy",
-    aventura: "adventure", ajustes: "settings",
+    permissoes: "permissions", ids: "ids", canais: "channels", protecao: ["protection", "protect"], rpg: ["wiki"],
+    // as áreas antigas que só repetiam um comando: levam ao `&help` dele
+    moderacao: "moderation", cargos: "roles", ia: "ai", noticias: "news", mensagens: "messages",
+    economia: "economy", aventura: "adventure", ajustes: "settings",
   },
   gerenciavel: true,
   qualquerCanal: true,
   ajuda: {
+    grupo: "comecar",
     perm: null,
-    uso: { pt: "{&tutorial} [página|área]", en: "{&tutorial} [page|area]", es: "{&tutorial} [página|área]" },
-    desc: { pt: "Guia de primeiros passos **em páginas** — reaja ◀ ▶ para virar. Não altera nada sozinho: mostra o caminho e o comando exato de cada passo.\n\n`{&tutorial}` — o guia (6 páginas): permissões → canais → proteção → boas-vindas e cargos → XP e RPG → checklist\n`{&tutorial} 2` — abre direto a página 2\n`{&tutorial} <área>` — aprofunda um assunto (ex.: `{&tutorial.canais}`, `{&tutorial} game`)\n\nPrefere que o bot pergunte e configure por você? `{&assistente}`.\n\nTambém responde por `&guia` e `&comecar`.", en: "First-steps guide **in pages** — react ◀ ▶ to turn. It changes nothing by itself: it shows the path and the exact command for each step.\n\n`{&tutorial}` — the guide (6 pages): permissions → channels → protection → welcome and roles → XP and RPG → checklist\n`{&tutorial} 2` — opens page 2 directly\n`{&tutorial} <area>` — goes deeper on one subject (e.g. `{&tutorial.canais}`, `{&tutorial} game`)\n\nWould you rather have the bot ask and configure for you? `{&assistente}`.\n\nAlso answers to **guide** and **start**.", es: "Guía de primeros pasos **en páginas** — reacciona ◀ ▶ para pasar. No cambia nada por sí sola: muestra el camino y el comando exacto de cada paso.\n\n`{&tutorial}` — la guía (6 páginas): permisos → canales → protección → bienvenida y roles → XP y RPG → checklist\n`{&tutorial} 2` — abre directamente la página 2\n`{&tutorial} <área>` — profundiza en un tema (p. ej., `{&tutorial.canais}`, `{&tutorial} game`)\n\n¿Prefieres que el bot pregunte y lo configure por ti? `{&assistente}`.\n\nTambién responde a **guia** y **inicio**." },
+    uso: { pt: "{&tutorial} [página|conceito|rpg]", en: "{&tutorial} [page|concept|rpg]", es: "{&tutorial} [página|concepto|rpg]" },
+    resumo: { pt: "por onde começar, os conceitos e a wiki do RPG", en: "where to start, the concepts and the RPG wiki", es: "por dónde empezar, los conceptos y la wiki del RPG" },
+    desc: {
+      pt: "O mini guia: o que dá para fazer e por onde começar, em páginas (reaja ◀ ▶).\n\n`{&tutorial.permissoes}` · `{&tutorial.ids}` · `{&tutorial.canais}` · `{&tutorial.protecao}` — o que vale para vários comandos\n`{&tutorial.rpg}` — a wiki do RPG\n\nCada comando se explica no `{&help}`.",
+      en: "The mini guide: what you can do and where to start, in pages (react ◀ ▶).\n\n`{&tutorial.permissoes}` · `{&tutorial.ids}` · `{&tutorial.canais}` · `{&tutorial.protecao}` — what applies to many commands\n`{&tutorial.rpg}` — the RPG wiki\n\nEach command is explained in `{&help}`.",
+      es: "La miniguía: lo que puedes hacer y por dónde empezar, en páginas (reacciona ◀ ▶).\n\n`{&tutorial.permissoes}` · `{&tutorial.ids}` · `{&tutorial.canais}` · `{&tutorial.protecao}` — lo que vale para varios comandos\n`{&tutorial.rpg}` — la wiki del RPG\n\nCada comando se explica en `{&help}`.",
+    },
     ex: "{&tutorial.canais}",
-    parametros: [
-      { nome: { pt: "(nada)", en: "(nothing)", es: "(nada)" }, desc: { pt: "o guia em páginas, na ordem: permissões → canais → proteção → boas-vindas e cargos → XP e RPG → checklist", en: "the paged guide, in order: permissions → channels → protection → welcome and roles → XP and RPG → checklist", es: "la guía en páginas, en orden: permisos → canales → protección → bienvenida y roles → XP y RPG → checklist" } },
-      { nome: { pt: "<número>", en: "<number>", es: "<número>" }, desc: { pt: "abre direto aquela página (para celular ou quando não dá para reagir)", en: "opens that page directly (for mobile or when you can't react)", es: "abre directamente esa página (para el móvil o cuando no puedes reaccionar)" } },
-      { nome: { pt: "<área>", en: "<area>", es: "<área>" }, desc: { pt: "aprofunda um assunto: `canais`, `permissoes`, `moderacao`, `logs`, `cargos`, `xp`, `mensagens`, `noticias`, `rpg`, `aventura`, `economia`, `ajustes`", en: "goes deeper on one subject: `channels`, `permissions`, `moderation`, `logs`, `roles`, `xp`, `messages`, `news`, `rpg`, `adventure`, `economy`, `settings`", es: "profundiza en un tema: `channels`, `permissions`, `moderation`, `logs`, `roles`, `xp`, `messages`, `news`, `rpg`, `adventure`, `economy`, `settings`" } },
-    ],
   },
 };

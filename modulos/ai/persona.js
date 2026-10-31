@@ -1,11 +1,12 @@
 
 import * as store from "../core/config-store.js";
 import { citar } from "../core/aliases.js";
-import { tr, lingua } from "../core/i18n.js";
+import { tr } from "../core/i18n.js";
+import { donosDoBot } from "../core/prioridade.js";
 
 const MAX_TAMANHO = Number(process.env.PERSONA_MAX_CHARS || 2000);
 
-// Padrão (a Judy clássica). Trocável por servidor sem redeploy.
+// Padrão (a Judy clássica). O dono do bot troca sem redeploy (`&personalidade definir`).
 export const PADRAO = {
   pt: [
     "Você é a Judy — uma bot para a plataforma Stoat (feita com stoat.js) que faz moderação, automod, utilidades e conversa.",
@@ -27,116 +28,95 @@ export const RESUMO_PADRAO = {
   en: "You are Judy: sharp, ironic, dry humour, but warm underneath (a mix of GLaDOS and Tae Takemi).",
 };
 
-// Texto configurado no servidor, ou null se estiver no padrão.
-export function personaConfigurada(serverId) {
-  if (!serverId) return null;
-  const t = store.configDoServidor(serverId)?.persona;
+// (31 out 2026, P2, Ghieh: "mesma persona em todo lugar") A persona é UMA, do bot
+// inteiro, e só o dono do bot (SUPER_ADMINS) a troca. Mora na config global
+// (`persona`). A que um servidor tinha salvo (`config.persona`, do &personalidade
+// por servidor de antes) fica no banco, mas não vai mais ao prompt.
+export function personaGlobal() {
+  const t = store.getGlobal()?.persona;
   return typeof t === "string" && t.trim() ? t.trim() : null;
 }
+// (o nome antigo: o `serverId` não muda mais nada)
 
-// Linhas de persona para o prompt de sistema principal.
-// Personalidade padrão global via .env (PROMPT). O &personalidade por servidor vence.
+// Personalidade padrão via .env (PROMPT); a definida pelo dono do bot vence.
 const PROMPT_ENV = (process.env.PROMPT || "").trim();
 
-export function linhasPersona(serverId, lang = "pt") {
-  const custom = personaConfigurada(serverId);
+export function linhasPersona(_serverId, lang = "pt") {
+  const custom = personaGlobal();
   if (custom) return [custom];
   if (PROMPT_ENV) return [PROMPT_ENV];
   return PADRAO[lang === "en" ? "en" : "pt"];
 }
 
 // Uma linha só, para prompts leves.
-export function resumoPersona(serverId, lang = "pt") {
-  const custom = personaConfigurada(serverId);
+export function resumoPersona(_serverId, lang = "pt") {
+  const custom = personaGlobal();
   if (custom) return custom.slice(0, 400);
   if (PROMPT_ENV) return PROMPT_ENV.slice(0, 400);
   return RESUMO_PADRAO[lang === "en" ? "en" : "pt"];
 }
 
-// &personalidade [definir <texto> | ver | resetar]
+// &personalidade [ver | definir <texto> | resetar] — só o dono do bot
 export async function cmdPersonalidade(message, args, ctx) {
-  const { sendEmbed, COR, PREFIXO: P, config, salvarConfig, membroTemPermissao, getServer, serverId } = ctx;
-  const lang = lingua(ctx);
+  const { sendEmbed, COR, PREFIXO: P } = ctx;
   const sub = (args[0] || "").toLowerCase();
+  const h = (l) => `\`${citar("help", l, P)} ${citar("personalidade", l, "")}\``;
 
-  if (sub === "ver" || !sub) {   // `view`/`show` chegam traduzidos pelo registro
-    const atual = personaConfigurada(serverId);
+  if (!donosDoBot().has(message.authorId)) {
     return sendEmbed(message.channel, tr(ctx,
-      { title: "🎭 Personalidade da IA",
-        description: [
-          atual ? `**Atual (personalizada):**\n${atual.slice(0, 1500)}` : "**Atual:** padrão embutido (Judy).",
-          "",
-          `\`${citar("personalidade", "pt", P)} definir <texto>\` — define o prompt de personalidade deste servidor`,
-          `\`${citar("personalidade", "pt", P)} resetar\` — volta ao padrão`,
-          "_Precisa da permissão Gerenciar Servidor. O texto substitui apenas a PERSONALIDADE; as regras de segurança e formato continuam valendo._",
-        ].join("\n"), colour: COR.info },
-      { title: "🎭 AI personality",
-        description: [
-          atual ? `**Current (custom):**\n${atual.slice(0, 1500)}` : "**Current:** built-in default (Judy).",
-          "",
-          `\`${citar("personalidade", "en", P)} set <text>\` — sets this server's personality prompt`,
-          `\`${citar("personalidade", "en", P)} reset\` — back to the default`,
-          "_Requires Manage Server. The text replaces only the PERSONALITY; safety and format rules still apply._",
-        ].join("\n"), colour: COR.info },
-      { title: "🎭 Personalidad de la IA",
-        description: [
-          atual ? `**Actual (personalizada):**\n${atual.slice(0, 1500)}` : "**Actual:** la predeterminada (Judy).",
-          "",
-          `\`${citar("personalidade.definir", "es", P)} <texto>\` — define el prompt de personalidad de este servidor`,
-          `\`${citar("personalidade.resetar", "es", P)}\` — vuelve a la predeterminada`,
-          "_Requiere el permiso Gestionar servidor. El texto reemplaza solo la PERSONALIDAD; las reglas de seguridad y formato siguen valiendo._",
-        ].join("\n"), colour: COR.info }));
+      { description: "🚫 Só o dono do bot muda a personalidade da Judy.", colour: COR.erro },
+      { description: "🚫 Only the bot owner changes Judy's personality.", colour: COR.erro },
+      { description: "🚫 Solo el dueño del bot cambia la personalidad de Judy.", colour: COR.erro }));
   }
 
-  const server = await getServer(message).catch(() => null);
-  if (!membroTemPermissao(message, server, "ManageServer")) {
+  if (sub === "ver" || !sub) {   // `view`/`show` chegam traduzidos pelo registro
+    const atual = personaGlobal();
     return sendEmbed(message.channel, tr(ctx,
-      { title: "🚫 Sem permissão", description: "Precisa de **Gerenciar Servidor** para mudar a personalidade.", colour: COR.erro },
-      { title: "🚫 No permission", description: "You need **Manage Server** to change the personality.", colour: COR.erro },
-      { title: "🚫 Sin permiso", description: "Necesitas **Gestionar servidor** para cambiar la personalidad.", colour: COR.erro }));
+      { title: "🎭 Personalidade", description: atual ? atual.slice(0, 1900) : "_padrão (Judy)_", colour: COR.info },
+      { title: "🎭 Personality", description: atual ? atual.slice(0, 1900) : "_default (Judy)_", colour: COR.info },
+      { title: "🎭 Personalidad", description: atual ? atual.slice(0, 1900) : "_predeterminada (Judy)_", colour: COR.info }));
   }
 
   if (sub === "definir") {
     const texto = args.slice(1).join(" ").trim();
     if (!texto) {
       return sendEmbed(message.channel, tr(ctx,
-        { title: "❓ Faltou o texto", description: `Uso: \`${citar("personalidade", "pt", P)} definir <texto do prompt>\``, colour: COR.aviso },
-        { title: "❓ Missing text", description: `Usage: \`${citar("personalidade", "en", P)} set <prompt text>\``, colour: COR.aviso },
-        { title: "❓ Falta el texto", description: `Uso: \`${citar("personalidade.definir", "es", P)} <texto del prompt>\``, colour: COR.aviso }));
+        { description: `❓ Falta o texto — ${h("pt")}`, colour: COR.aviso },
+        { description: `❓ Missing the text — ${h("en")}`, colour: COR.aviso },
+        { description: `❓ Falta el texto — ${h("es")}`, colour: COR.aviso }));
     }
     if (texto.length > MAX_TAMANHO) {
       return sendEmbed(message.channel, tr(ctx,
-        { title: "📏 Grande demais", description: `Máximo de ${MAX_TAMANHO} caracteres (recebi ${texto.length}).`, colour: COR.aviso },
-        { title: "📏 Too long", description: `Maximum of ${MAX_TAMANHO} characters (got ${texto.length}).`, colour: COR.aviso },
-        { title: "📏 Demasiado largo", description: `Máximo de ${MAX_TAMANHO} caracteres (recibí ${texto.length}).`, colour: COR.aviso }));
+        { description: `📏 Máximo de ${MAX_TAMANHO} caracteres (recebi ${texto.length}).`, colour: COR.aviso },
+        { description: `📏 Maximum of ${MAX_TAMANHO} characters (got ${texto.length}).`, colour: COR.aviso },
+        { description: `📏 Máximo de ${MAX_TAMANHO} caracteres (recibí ${texto.length}).`, colour: COR.aviso }));
     }
-    config.persona = texto;
-    salvarConfig();
+    store.getGlobal().persona = texto;
+    store.salvarGlobal();
     return sendEmbed(message.channel, tr(ctx,
-      { title: "🎭 Personalidade definida", description: `A IA deste servidor agora usa:\n\n${texto.slice(0, 1500)}`, colour: COR.ok },
-      { title: "🎭 Personality set", description: `This server's AI now uses:\n\n${texto.slice(0, 1500)}`, colour: COR.ok },
-      { title: "🎭 Personalidad definida", description: `La IA de este servidor ahora usa:\n\n${texto.slice(0, 1500)}`, colour: COR.ok }));
+      { description: `🎭 Personalidade definida (${texto.length} caracteres).`, colour: COR.sucesso ?? COR.ok },
+      { description: `🎭 Personality set (${texto.length} characters).`, colour: COR.sucesso ?? COR.ok },
+      { description: `🎭 Personalidad definida (${texto.length} caracteres).`, colour: COR.sucesso ?? COR.ok }));
   }
 
   if (sub === "resetar" || sub === "padrao") {
-    delete config.persona;
-    salvarConfig();
+    delete store.getGlobal().persona;
+    store.salvarGlobal();
     return sendEmbed(message.channel, tr(ctx,
-      { title: "🎭 Personalidade resetada", description: "De volta ao padrão embutido.", colour: COR.ok },
-      { title: "🎭 Personality reset", description: "Back to the built-in default.", colour: COR.ok },
-      { title: "🎭 Personalidad restablecida", description: "De vuelta a la predeterminada.", colour: COR.ok }));
+      { description: "🎭 Personalidade de volta ao padrão.", colour: COR.sucesso ?? COR.ok },
+      { description: "🎭 Personality back to the default.", colour: COR.sucesso ?? COR.ok },
+      { description: "🎭 Personalidad de vuelta a la predeterminada.", colour: COR.sucesso ?? COR.ok }));
   }
 
   return sendEmbed(message.channel, tr(ctx,
-    { title: "❓ Subcomando desconhecido", description: `Use \`${citar("personalidade", "pt", P)} ver\`, \`definir <texto>\` ou \`resetar\`.`, colour: COR.aviso },
-    { title: "❓ Unknown subcommand", description: `Use \`${citar("personalidade", "en", P)} view\`, \`set <text>\` or \`reset\`.`, colour: COR.aviso },
-    { title: "❓ Subcomando desconocido", description: `Usa \`${citar("personalidade.ver", "es", P)}\`, \`${citar("personalidade.definir", "es", P)} <texto>\` o \`${citar("personalidade.resetar", "es", P)}\`.`, colour: COR.aviso }));
+    { description: `❓ Subcomando desconhecido — ${h("pt")}`, colour: COR.aviso },
+    { description: `❓ Unknown subcommand — ${h("en")}`, colour: COR.aviso },
+    { description: `❓ Subcomando desconocido — ${h("es")}`, colour: COR.aviso }));
 }
 
 // ─── Quem criou a Judy ───────────────────────────────────────────────────────
 // CRIADOR (apelido público) e SOBRE_CRIADOR (texto curto) no .env. Fica FORA
-// da personalidade — o &personalidade de um servidor troca o tom, não apaga
-// quem a fez. Só entra o que está escrito aqui: nada de dado pessoal deduzido.
+// da personalidade — o &personalidade troca o tom, não apaga quem a fez. Só entra o que está escrito aqui: nada de dado pessoal deduzido.
 // O criador é reconhecido pelo ID (DONO/SUPER_ADMINS), nunca por quem DIZ ser.
 export function blocoCriador(lang = "pt") {
   const nome = (process.env.CRIADOR || "").trim();

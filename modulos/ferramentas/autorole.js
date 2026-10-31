@@ -1,119 +1,47 @@
-import { ULID, resolverCargo } from "../core/ids.js";
-import { editarCargos, podeUsarCargo } from "../core/hierarquia.js";
+import { resolverCargo } from "../core/ids.js";
+import { editarCargos, podeUsarCargo, cargoDe } from "../core/hierarquia.js";
 import { tr } from "../core/i18n.js";
-import { citar } from "../core/aliases.js";
+import { erroDeUso, semPermissao } from "../moderacao/punir.js";
+import { registrarErro } from "../core/erros.js";
 
-// Extrai um ID de cargo de "<@&ID>", "<%ID>" ou ID cru.
-function extrairRoleId(txt) {
-  if (!txt) return null;
-  const limpo = txt.replace(/[<@&%>]/g, "").trim();
-  return ULID.test(limpo) ? limpo : null;
-}
-
+// &autorole @cargo | off (P2): o cargo que todo membro novo recebe ao entrar. Sem
+// nada, mostra o cargo de hoje. `set` (o nome antigo) continua valendo na frente.
 export async function cmdAutorole(message, args, ctx) {
-  const { sendEmbed, COR, PREFIXO, config, getServer, membroTemPermissao, salvarConfig } = ctx;
-  const sub = args[0]?.toLowerCase();
+  const { sendEmbed, COR, config, getServer, membroTemPermissao, salvarConfig } = ctx;
+  const canal = message.channel;
+  const linha = (cor, pt, en, es) => sendEmbed(canal, { description: tr(ctx, pt, en, es), colour: cor });
+  config.autorole ??= { roleId: null };
+  const sub = String(args[0] ?? "").toLowerCase();
 
-  // ver estado (não exige permissão)
+  // o estado (não exige permissão)
   if (!sub) {
-    const atual = config.autorole?.roleId;
-    return sendEmbed(message.channel, tr(ctx, {
-      title: "🎭 Autorole",
-      description: atual
-        ? `Novos membros recebem automaticamente o cargo <@&${atual}>.\n\nPara trocar: \`${citar("autorole.set", "pt", PREFIXO)} <@cargo>\` · desativar: \`${citar("autorole.off", "pt", PREFIXO)}\``
-        : `Nenhum cargo automático definido.\n\nPara ativar: \`${citar("autorole.set", "pt", PREFIXO)} <@cargo>\``,
-      colour: COR.mod,
-    }, {
-      title: "🎭 Autorole",
-      description: atual
-        ? `New members automatically receive the <@&${atual}> role.\n\nTo change it: \`${citar("autorole.set", "en", PREFIXO)} <@role>\` · disable: \`${citar("autorole.off", "en", PREFIXO)}\``
-        : `No automatic role set.\n\nTo enable it: \`${citar("autorole.set", "en", PREFIXO)} <@role>\``,
-      colour: COR.mod,
-    }, {
-      title: "🎭 Autorol",
-      description: atual
-        ? `Los miembros nuevos reciben automáticamente el rol <@&${atual}>.\n\nPara cambiarlo: \`${citar("autorole.set", "es", PREFIXO)} <@rol>\` · desactivar: \`${citar("autorole.off", "es", PREFIXO)}\``
-        : `No hay ningún rol automático definido.\n\nPara activarlo: \`${citar("autorole.set", "es", PREFIXO)} <@rol>\``,
-      colour: COR.mod,
-    }));
+    const atual = config.autorole.roleId;
+    return atual
+      ? linha(COR.mod, `🎭 Quem entra recebe <%${atual}>.`, `🎭 Newcomers get <%${atual}>.`, `🎭 Quien entra recibe <%${atual}>.`)
+      : linha(COR.mod, "🎭 Sem cargo automático.", "🎭 No automatic role.", "🎭 Sin rol automático.");
   }
 
-  // daqui em diante, exige permissão
-  const server = await getServer(message);
-  if (!membroTemPermissao(message, server, "ManageRole")) {
-    return sendEmbed(message.channel, tr(ctx,
-      { title: "🚫 Permissão insuficiente",
-        description: "Você precisa de **ManageRole** para configurar o autorole.", colour: COR.erro },
-      { title: "🚫 Missing permission",
-        description: "You need **ManageRole** to configure autorole.", colour: COR.erro },
-      { title: "🚫 Permiso insuficiente",
-        description: "Necesitas **ManageRole** para configurar el autorol.", colour: COR.erro }));
-  }
+  const server = await getServer(message).catch(() => null);
+  if (!membroTemPermissao(message, server, "ManageRole")) return semPermissao(ctx, canal, "ManageRole");
 
   if (sub === "off" || sub === "desativar" || sub === "remover") {
     config.autorole.roleId = null;
     salvarConfig();
-    return sendEmbed(message.channel, tr(ctx,
-      { title: "🎭 Autorole desativado",
-        description: "Novos membros não receberão cargo automático.", colour: COR.sucesso },
-      { title: "🎭 Autorole disabled",
-        description: "New members will no longer receive an automatic role.", colour: COR.sucesso },
-      { title: "🎭 Autorol desactivado",
-        description: "Los miembros nuevos ya no recibirán un rol automático.", colour: COR.sucesso }));
+    return linha(COR.sucesso, "🎭 Cargo automático desligado.", "🎭 Automatic role off.", "🎭 Rol automático desactivado.");
   }
 
-  // `&autorole set <cargo>` — e também `&autorole <cargo>` direto, como o
-  // tutorial ensinava (antes caía no "Uso:"). O cargo vale por menção, ID ou nome.
-  const direto = !["set", "definir"].includes(sub);
-  if (!direto || resolverCargo(args.join(" "), server)) {
-    const entrada = direto ? args.join(" ") : args.slice(1).join(" ");
-    const roleId = extrairRoleId(entrada) ?? resolverCargo(entrada, server)?.id ?? null;
-    if (!roleId)
-      return sendEmbed(message.channel, tr(ctx,
-        { title: "❌ Cargo inválido",
-          description: `Informe um cargo. Ex.: \`${citar("autorole.set", "pt", PREFIXO)} <@cargo>\` ou o ID do cargo.`, colour: COR.erro },
-        { title: "❌ Invalid role",
-          description: `Give me a role. E.g.: \`${citar("autorole.set", "en", PREFIXO)} <@role>\` or the role's ID.`, colour: COR.erro },
-        { title: "❌ Rol inválido",
-          description: `Indica un rol. Ej.: \`${citar("autorole.set", "es", PREFIXO)} <@rol>\` o el ID del rol.`, colour: COR.erro }));
-
-    // confirma que o cargo existe no servidor
-    const existe = server.roles?.get?.(roleId);
-    if (!existe)
-      return sendEmbed(message.channel, tr(ctx,
-        { title: "❌ Cargo não encontrado",
-          description: "Esse cargo não existe neste servidor.", colour: COR.erro },
-        { title: "❌ Role not found",
-          description: "That role doesn't exist on this server.", colour: COR.erro },
-        { title: "❌ Rol no encontrado",
-          description: "Ese rol no existe en este servidor.", colour: COR.erro }));
-
-    // quem configura precisa estar ACIMA do cargo (15 out 2026)
-    const pode = await podeUsarCargo(server, message, roleId, ctx);
-    if (!pode.ok)
-      return sendEmbed(message.channel, tr(ctx,
-        { title: "🚫 Cargo acima do seu", description: `${pode.pt}.`, colour: COR.erro },
-        { title: "🚫 Role above yours", description: `${pode.en}.`, colour: COR.erro },
-        { title: "🚫 Rol por encima del tuyo", description: `${pode.es ?? pode.en}.`, colour: COR.erro }));
-
-    config.autorole.roleId = roleId;
-    salvarConfig();
-    return sendEmbed(message.channel, tr(ctx,
-      { title: "🎭 Autorole definido",
-        description: `Novos membros agora recebem <@&${roleId}> automaticamente.`, colour: COR.sucesso },
-      { title: "🎭 Autorole set",
-        description: `New members now receive <@&${roleId}> automatically.`, colour: COR.sucesso },
-      { title: "🎭 Autorol definido",
-        description: `Desde ahora los miembros nuevos reciben <@&${roleId}> automáticamente.`, colour: COR.sucesso }));
+  const entrada = (sub === "set" ? args.slice(1) : args).join(" ");
+  const roleId = resolverCargo(entrada, server)?.id ?? null;
+  if (!roleId || !cargoDe(server, roleId)) {
+    const e = entrada.slice(0, 40).replace(/`/g, "");
+    return erroDeUso(ctx, canal, "autorole", e ? `Não achei o cargo \`${e}\`` : "Qual cargo?", e ? `Couldn't find the role \`${e}\`` : "Which role?", e ? `No encontré el rol \`${e}\`` : "¿Qué rol?");
   }
-
-  return sendEmbed(message.channel, tr(ctx,
-    { title: "🎭 Autorole",
-      description: `Uso: \`${citar("autorole.set", "pt", PREFIXO)} <@cargo>\` · \`${citar("autorole.off", "pt", PREFIXO)}\``, colour: COR.info },
-    { title: "🎭 Autorole",
-      description: `Usage: \`${citar("autorole.set", "en", PREFIXO)} <@role>\` · \`${citar("autorole.off", "en", PREFIXO)}\``, colour: COR.info },
-    { title: "🎭 Autorol",
-      description: `Uso: \`${citar("autorole.set", "es", PREFIXO)} <@rol>\` · \`${citar("autorole.off", "es", PREFIXO)}\``, colour: COR.info }));
+  // quem configura precisa estar ACIMA do cargo (15 out 2026)
+  const pode = await podeUsarCargo(server, message, roleId, ctx);
+  if (!pode.ok) return linha(COR.erro, `🚫 Acima de você: ${pode.pt}.`, `🚫 Above you: ${pode.en}.`, `🚫 Por encima de ti: ${pode.es ?? pode.en}.`);
+  config.autorole.roleId = roleId;
+  salvarConfig();
+  return linha(COR.sucesso, `🎭 Quem entra recebe <%${roleId}>.`, `🎭 Newcomers get <%${roleId}>.`, `🎭 Quien entra recibe <%${roleId}>.`);
 }
 
 export async function aoEntrar(member, ctx) {
@@ -128,6 +56,6 @@ export async function aoEntrar(member, ctx) {
     await editarCargos(server, alvo, (a) => [...a, roleId]);
     console.log(`[AUTOROLE] cargo ${roleId} dado a ${userId} em ${ctx.serverId}`);
   } catch (e) {
-    console.error("[AUTOROLE]", e.message);
+    registrarErro("AUTOROLE", e);
   }
 }

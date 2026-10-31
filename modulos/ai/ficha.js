@@ -46,11 +46,11 @@ export async function fichaTecnica(ctx, { serverIdAtual = null } = {}) {
 
   try { linhas.push(`De pé há: ${srv.tempoDePe()}.`); } catch {}
 
+  // (P2) três papéis: conversa (LLM_MODEL), moderação (JUIZ) e visão
   const modelos = {
-    principal: process.env.LLM_MODEL,
-    conversa: process.env.LLM_MODEL_LEVE,
-    código: process.env.LLM_MODEL_CODIGO,
-    ferramentas: process.env.LLM_MODEL_LOGICA,
+    conversa: process.env.LLM_MODEL,
+    moderação: process.env.LLM_MODEL_JUIZ,
+    visão: process.env.LLM_MODEL_VISAO,
   };
   const usados = Object.entries(modelos).filter(([, v]) => v);
   if (usados.length) {

@@ -18,10 +18,10 @@
 // [domínio](<url>) — o Stoat não gera prévia para link entre < >
 // (crates/core/database/src/tasks/process_embeds.rs, RE_IGNORED).
 
+import { buscarNoSearxng } from "./searxng.js";
 import { pareceOutroIdioma } from "../core/idioma.js";
 import { buscarSeguro, lerTexto } from "../core/seguranca.js";
 
-const SEARXNG_URL = () => (process.env.SEARXNG_URL || "").replace(/\/$/, "");
 const N_POR_CONSULTA = () => Number(process.env.BUSCA_RESULTADOS || 8);
 const LER_PAGINAS = () => Number(process.env.BUSCA_LER_PAGINAS ?? 3);
 const TIMEOUT = () => Number(process.env.BUSCA_TIMEOUT_MS || 8000);
@@ -141,19 +141,10 @@ export function pontuar(r, termos, subs = []) {
   return p;
 }
 
+// (P2) o pedido é o do cliente único (searxng.js, o mesmo da ferramenta buscar_web)
 export async function buscarSearx(consulta, { fetcher = fetch, n = N_POR_CONSULTA(), timeoutMs = TIMEOUT() } = {}) {
-  const base = SEARXNG_URL();
-  if (!base) throw new Error("SEARXNG_URL não configurado");
   const idioma = process.env.SEARXNG_IDIOMA || (pareceOutroIdioma(consulta) ? "en" : "pt-BR");
-  const url = `${base}/search?q=${encodeURIComponent(consulta)}&format=json&language=${encodeURIComponent(idioma)}`;
-  const r = await fetcher(url, { signal: AbortSignal.timeout(timeoutMs) });
-  if (!r.ok) throw new Error(`SearXNG HTTP ${r.status}`);
-  const data = await r.json();
-  return (data.results ?? []).slice(0, n).map((x) => ({
-    titulo: String(x.title ?? "").trim(), url: x.url,
-    trecho: String(x.content ?? "").replace(/\s+/g, " ").trim().slice(0, 400),
-    data: x.publishedDate ?? null,
-  })).filter((x) => x.url);
+  return buscarNoSearxng(consulta, { fetcher, n, timeoutMs, idioma });
 }
 
 // ─── Leitura da página ───────────────────────────────────────────────────────
@@ -438,6 +429,25 @@ export function semFontesDoModelo(texto) {
     saida.push(linhas[i]);
   }
   return saida.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+
+// A limpeza das fontes numa chamada só (31 out 2026, P2 — eram 5 limpadores chamados
+// em sequência no chat.js). `comLinks`: a pessoa PEDIU a busca, e o rodapé do código
+// mostra as fontes — então o [n] fica. Sem pedido, saem o [n] (se havia o que citar),
+// as frases que contam da busca, e os links que vieram dos resultados. A lista
+// "Fontes: …" que o modelo escreve sai sempre (o rodapé é do código). Se a limpeza
+// esvaziar o texto, fica o de antes.
+export function limparFontes(texto, { resultados = [], evidencia = "", comLinks = false } = {}) {
+  // a lista do modelo sai PRIMEIRO: depois do semCitacoes, "[1] site.com" já não parece
+  // item de lista e ficava ("Fontes:" sumia, o domínio solto não) — achado ao juntar (P2)
+  let t = semFontesDoModelo(texto) || String(texto ?? "");
+  if (!comLinks) {
+    const vistas = urlsVistas(resultados ?? [], evidencia);
+    let base = (resultados?.length || /"url"/.test(evidencia ?? "")) ? semCitacoes(t) : t;
+    if (resultados?.length) base = semMencaoDaBusca(base);
+    t = semLinksDaBusca(base, vistas).trim() || t;
+  }
+  return t;
 }
 
 // Só as fontes citadas na resposta (máx. `max`); sem citação, as 2 primeiras.

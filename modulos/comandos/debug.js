@@ -1,11 +1,12 @@
-// &debug — diagnóstico de permissões, canais e voz
+// &debug — diagnóstico do bot neste servidor
 
 export default {
   id: "debug",
   modulo: "../moderacao/debug-comando.js",
   funcao: "cmdDebug",
   apelidos: ["diagnostico", "diagnóstico"],
-  es: { nome: "debug" },   // espanhol (etapa 4)
+  es: { nome: "debug", subcomandos: { canais: "canales", permissoes: "permisos", cru: "crudo", mudo: "mudo", ler: "leer" } },
+  // os nomes antigos (canais, permissoes, silence…) caem no relatório completo
   subcomandos: {
     canais: "channels", permissoes: "permissions", cru: "raw", silence: "silence", mudo: "mute",
     ler: "read",
@@ -14,14 +15,24 @@ export default {
   essencial: true,
   qualquerCanal: true,
   ajuda: {
+    grupo: "diagnostico",
     perm: "ManagePermissions",
     uso: { pt: "{&debug} [@pessoa | #canal]", en: "{&debug} [@user | #channel]", es: "{&debug} [@usuario | #canal]" },
-    desc: { pt: "O diagnóstico do bot neste servidor, numa mensagem só.\n\n`{&debug}` — **o relatório completo**: primeiro o que está quebrado e como resolver; depois permissões do bot, hierarquia de cargos, canais configurados, todos os canais, moderação, voz e IA (e os erros recentes, para o dono do bot)\n`{&debug} @pessoa` — o que o bot consegue fazer com essa pessoa: punir, silenciar, dar os cargos de nível\n`{&debug} #canal` — a conta de permissão do bot nesse canal, cargo por cargo (aceita o nome do canal)\n\n`{&help} debug ler` explica os ícones.", en: "The bot's diagnostics on this server, in one message.\n\n`{&debug}` — **the full report**: first what's broken and how to fix it; then the bot's permissions, role hierarchy, configured channels, every channel, moderation, voice and AI (and recent errors, for the bot owner)\n`{&debug} @user` — what the bot can do with that person: punish, time out, give level roles\n`{&debug} #channel` — the bot's permission math in that channel, role by role (the channel name works too)\n\n`{&help} debug read` explains the icons.", es: "El diagnóstico del bot en este servidor, en un solo mensaje.\n\n`{&debug}` — **el informe completo**: primero lo que está roto y cómo arreglarlo; después los permisos del bot, la jerarquía de roles, los canales configurados, todos los canales, moderación, voz e IA (y los errores recientes, para el dueño del bot)\n`{&debug} @usuario` — lo que el bot puede hacer con esa persona: sancionar, silenciar, dar los roles de nivel\n`{&debug} #canal` — la cuenta de permisos del bot en ese canal, rol por rol (acepta el nombre del canal)\n\n`{&help} debug read` explica los íconos." },
+    desc: {
+      pt: "O diagnóstico do bot neste servidor.\n\n`{&debug}` — o relatório: primeiro o que está quebrado e como resolver; depois permissões, hierarquia, canais configurados, moderação, a punição de cada módulo (falta de TimeoutMembers/KickMembers/BanMembers), webhooks, RSS, RPG, voz e IA.\n`{&debug} @pessoa` — o que o bot consegue fazer com essa pessoa\n`{&debug} #canal` — a conta de permissão do bot nesse canal",
+      en: "The bot's diagnostics on this server.\n\n`{&debug}` — the report: first what's broken and how to fix it; then permissions, hierarchy, configured channels, moderation, each module's punishment (missing TimeoutMembers/KickMembers/BanMembers), webhooks, RSS, RPG, voice and AI.\n`{&debug} @user` — what the bot can do with that person\n`{&debug} #channel` — the bot's permission math in that channel",
+      es: "El diagnóstico del bot en este servidor.\n\n`{&debug}` — el informe: primero lo que está roto y cómo arreglarlo; después permisos, jerarquía, canales configurados, moderación, el castigo de cada módulo (falta de TimeoutMembers/KickMembers/BanMembers), webhooks, RSS, RPG, voz e IA.\n`{&debug} @usuario` — lo que el bot puede hacer con esa persona\n`{&debug} #canal` — la cuenta de permisos del bot en ese canal",
+    },
     ex: "{&debug}",
-    parametros: [
-      { nome: { pt: "(nada)", en: "(nothing)", es: "(nada)" }, desc: { pt: "o relatório completo: o que está quebrado primeiro, depois cada área", en: "the full report: what's broken first, then each area", es: "el informe completo: primero lo que está roto, después cada área" } },
-      { nome: { pt: "@pessoa", en: "@user", es: "@usuario" }, desc: { pt: "o que o bot consegue fazer com essa pessoa", en: "what the bot can do with that person", es: "lo que el bot puede hacer con esa persona" } },
-      { nome: { pt: "#canal", en: "#channel", es: "#canal" }, desc: { pt: "a conta de permissão do bot nesse canal (aceita o nome)", en: "the bot's permission math in that channel (the name works too)", es: "la cuenta de permisos del bot en ese canal (acepta el nombre)" } },
-    ],
+    paginas: {
+      ler: {
+        titulo: { pt: "debug ler", en: "debug read", es: "debug leer" },
+        texto: {
+          pt: "🔴 **problema** — algo em uso que não funciona; aparece no topo, com o que fazer\n🟡 **aviso** — funciona, mas vale olhar\n🟢 **ok** · ▫️ **informação**",
+          en: "🔴 **problem** — something in use that doesn't work; listed at the top, with what to do\n🟡 **warning** — works, but worth a look\n🟢 **ok** · ▫️ **info**",
+          es: "🔴 **problema** — algo en uso que no funciona; aparece arriba, con qué hacer\n🟡 **aviso** — funciona, pero vale la pena mirarlo\n🟢 **ok** · ▫️ **info**",
+        },
+      },
+    },
   },
 };

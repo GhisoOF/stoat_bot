@@ -1,8 +1,8 @@
 
 import { buscar, explicarErroDeRede } from "./rede.js";
+import { buscarNoSearxng, urlDoSearxng } from "../../modulos/ai/searxng.js";
 
-const SEARXNG_URL = (process.env.SEARXNG_URL || "http://localhost:8080").replace(/\/$/, "");
-const IDIOMA      = process.env.SEARXNG_IDIOMA || "pt-BR";
+// (P2) o pedido é o do cliente único (modulos/ai/searxng.js, o mesmo do bot)
 const MAX_RESULT  = Number(process.env.SEARXNG_MAX || 5);
 
 export const definicao = {
@@ -26,27 +26,19 @@ export async function executar({ consulta, maximo } = {}) {
   if (!q) return { erro: "Nenhuma consulta informada." };
 
   const n = Math.min(Number(maximo) || MAX_RESULT, 8);
-  const url = `${SEARXNG_URL}/search?q=${encodeURIComponent(q)}&format=json&language=${encodeURIComponent(IDIOMA)}`;
-
   try {
-    const r = await buscar(url, { signal: AbortSignal.timeout(20000) });
-    if (r.status === 403) return { erro: "SearXNG recusou (formato JSON pode estar desabilitado no settings.yml)." };
-    if (!r.ok) return { erro: `SearXNG HTTP ${r.status}` };
-    const data = await r.json();
-    const itens = (data.results ?? []).slice(0, n).map((x) => ({
-      titulo: x.title,
-      url: x.url,
-      trecho: (x.content || "").replace(/\s+/g, " ").slice(0, 300),
-    }));
+    const itens = (await buscarNoSearxng(q, { n, fetcher: buscar, tamanhoTrecho: 300 }))
+      .map(({ titulo, url, trecho }) => ({ titulo, url, trecho }));
     if (!itens.length) return { consulta: q, total: 0, nota: "Nenhum resultado encontrado." };
     return { consulta: q, total: itens.length, resultados: itens };
   } catch (e) {
+    if (e?.status) return { erro: e.message };
     // Erro de rede tem explicação específica; o resto vai cru mesmo.
     const codigo = e?.cause?.code ?? e?.code ?? "";
     if (codigo || /fetch failed/i.test(e?.message ?? "")) {
-      return { erro: explicarErroDeRede(e, `o SearXNG (${SEARXNG_URL})`) };
+      return { erro: explicarErroDeRede(e, `o SearXNG (${urlDoSearxng() || "sem SEARXNG_URL"})`) };
     }
     const msg = (e?.message ?? String(e)).slice(0, 200);
-    return { erro: `Busca falhou: ${msg}. Confira se o SearXNG está no ar em ${SEARXNG_URL}.` };
+    return { erro: `Busca falhou: ${msg}. Confira se o SearXNG está no ar em ${urlDoSearxng() || "(sem SEARXNG_URL)"}.` };
   }
 }

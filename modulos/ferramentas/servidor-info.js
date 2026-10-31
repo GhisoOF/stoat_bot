@@ -19,7 +19,9 @@
 // real no prompt quando a pergunta é sobre o servidor).
 
 import { Permission } from "stoat.js";
-import { citarInterno, citar, subExibido } from "../core/aliases.js";
+import { citarInterno, citar } from "../core/aliases.js";
+import { carimbo } from "../core/tempo.js";
+import { erroDeUso, semPermissao } from "../core/saida.js";
 import { listarMembros, contarMembros } from "../core/membros.js";
 import { resolverCanal, ehBot } from "../core/ids.js";
 import { canalDoServidor } from "../moderacao/pertence.js";
@@ -106,7 +108,8 @@ export async function dadosGerais(server, { client = null } = {}) {
     descricao: String(server?.description ?? "").trim(),
     donoId: server?.ownerId ?? null,
     dono: server?.ownerId ? nomeDe(server.ownerId, { client }) : null,
-    criado: dataBR(server?.createdAt instanceof Date ? server.createdAt : dataDoUlid(server?.id ?? server?._id)),
+    criado: dataBR(server?.createdAt instanceof Date ? server.createdAt : dataDoUlid(server?.id ?? server?._id)),   // texto, para o modelo
+    criadoEm: server?.createdAt instanceof Date ? server.createdAt : dataDoUlid(server?.id ?? server?._id),          // a data, para a tela (carimbo)
     membros,
     nCanais: canais.length,
     nCargos: rolesDe(server).size,
@@ -320,7 +323,7 @@ export async function cmdServidor(message, args, ctx) {
   const sub = SUB_EN[sub0] ?? sub0;
   const acao = String(args[1] ?? "").toLowerCase();
   const podeGerir = () => !membroTemPermissao || membroTemPermissao(message, server, "ManagePermissions");
-  const negar = () => sendEmbed(message.channel, { title: "🚫", description: T("Para mudar isto precisa de **ManagePermissions**.", "Changing this needs **ManagePermissions**.", "Para cambiar esto necesitas **ManagePermissions**."), colour: COR.erro });
+  const negar = () => semPermissao(ctx, message.channel, "ManagePermissions");
 
   // ── &servidor / &servidor info ──
   if (!sub || sub === "info") {
@@ -328,16 +331,9 @@ export async function cmdServidor(message, args, ctx) {
     const linhas = [
       g.descricao ? `> ${g.descricao.slice(0, 500).replace(/\n/g, "\n> ")}\n` : null,
       `👑 ${T("Dono", "Owner", "Dueño")}: ${g.donoId ? `<@${g.donoId}>` : "?"}`,
-      g.criado ? `📅 ${T("Criado em", "Created", "Creado el")} ${g.criado}` : null,
+      carimbo(g.criadoEm, "D") ? `📅 ${T("Criado em", "Created", "Creado el")} ${carimbo(g.criadoEm, "D")}` : null,
       g.membros != null ? `👥 ${g.membros} ${T("membros", "members", "miembros")}` : null,
       `💬 ${g.nCanais} ${T("canais", "channels", "canales")} · 🏷️ ${g.nCargos} ${T("cargos", "roles", "roles")}`,
-      "",
-      T(`\`${citarInterno("servidor.regras", P)}\` — as regras`, `\`${citarInterno("servidor.regras", P)}\` — the rules`, `\`${citar("servidor.regras", "es", P)}\` — las reglas`),
-      T(`\`${citarInterno("staff", P)}\` — quem é a equipe`, `\`${citarInterno("staff", P)}\` — who the staff are`, `\`${citar("staff", "es", P)}\` — quién es el staff`),
-      T(`\`${citarInterno("servidor.cargos", P)}\` · \`${citarInterno("servidor.canais", P)}\` — cargos e canais`, `\`${citarInterno("servidor.cargos", P)}\` · \`${citarInterno("servidor.canais", P)}\` — roles and channels`, `\`${citar("servidor.cargos", "es", P)}\` · \`${citar("servidor.canais", "es", P)}\` — roles y canales`),
-      T(`\`${citarInterno("servidor", P)} faq\` — avisos e perguntas frequentes`, `\`${citarInterno("servidor", P)} faq\` — notices and FAQ`, `\`${citar("servidor", "es", P)} faq\` — avisos y preguntas frecuentes`),
-      "",
-      T("_Também dá para perguntar à Judy: \"quais são as regras?\", \"quem é da staff?\"._", "_You can also just ask Judy: \"what are the rules?\", \"who's on staff?\"._", "_También puedes preguntarle a Judy: \"¿cuáles son las reglas?\", \"¿quién es del staff?\"._"),
     ].filter((x) => x !== null);
     return sendEmbed(message.channel, { title: `🏠 ${g.nome}`, description: linhas.join("\n"), colour: COR.info });
   }
@@ -380,7 +376,7 @@ export async function cmdServidor(message, args, ctx) {
       const porque = r.motivo === "sem-acesso" ? T(`não consigo ler <#${r.canal.id}> (falta **ViewChannel**/**ReadMessageHistory** para a Judy)`, `I can't read <#${r.canal.id}> (Judy needs **ViewChannel**/**ReadMessageHistory**)`, `no puedo leer <#${r.canal.id}> (a Judy le falta **ViewChannel**/**ReadMessageHistory**)`)
         : r.motivo === "canal-vazio" ? T(`<#${r.canal.id}> está vazio`, `<#${r.canal.id}> is empty`, `<#${r.canal.id}> está vacío`)
         : T("nenhum canal chamado regras/rules", "no channel named rules", "ningún canal llamado regras/rules");
-      return sendEmbed(message.channel, { title: T("📜 Regras", "📜 Rules", "📜 Reglas"), description: `${T("Ainda não há regras para mostrar", "There are no rules to show yet", "Todavía no hay reglas que mostrar")}: ${porque}.\n\n${T(`A staff pode definir com \`${citarInterno("servidor.regras", P)} definir <texto>\` ou apontar o canal com \`${citarInterno("servidor.regras", P)} canal #canal\`.`, `Staff can set them with \`${citarInterno("servidor.regras", P)} set <text>\` or point to the channel with \`${citarInterno("servidor.regras", P)} channel #channel\`.`, `El staff puede definirlas con \`${citar("servidor.regras", "es", P)} set <texto>\` o indicar el canal con \`${citar("servidor.regras", "es", P)} channel #canal\`.`)}`, colour: COR.aviso });
+      return sendEmbed(message.channel, { description: `📜 ${T("Ainda não há regras para mostrar", "There are no rules to show yet", "Todavía no hay reglas que mostrar")}: ${porque}.`, colour: COR.aviso });
     }
     return sendEmbed(message.channel, { title: T("📜 Regras", "📜 Rules", "📜 Reglas"), description: `${r.texto}\n\n_${r.fonte === "canal" ? T(`Lidas de <#${r.canal.id}>.`, `Read from <#${r.canal.id}>.`, `Leídas de <#${r.canal.id}>.`) : T("Definidas pela staff.", "Set by the staff.", "Definidas por el staff.")}_`, colour: COR.info });
   }
@@ -433,12 +429,9 @@ export async function cmdServidor(message, args, ctx) {
       const i = acharItem(args.slice(1).join(" "));
       if (i >= 0) return sendEmbed(message.channel, { title: `📌 ${info.faq[i].titulo}`, description: info.faq[i].texto, colour: COR.info });
     }
-    if (!info.faq.length) return sendEmbed(message.channel, { title: "📌 FAQ", description: T(`Nada cadastrado ainda. A staff adiciona com \`${citarInterno("servidor", P)} faq add <título> | <texto>\`.`, `Nothing yet. Staff add items with \`${citarInterno("servidor", P)} faq add <title> | <text>\`.`, `Nada registrado todavía. El staff añade elementos con \`${citar("servidor", "es", P)} faq add <título> | <texto>\`.`), colour: COR.info });
-    return sendEmbed(message.channel, { title: "📌 FAQ", description: info.faq.map((f, i) => `**${i + 1}. ${f.titulo}**\n${f.texto.slice(0, 300)}${f.texto.length > 300 ? "…" : ""}`).join("\n\n") + `\n\n_${T(`Um item inteiro: \`${citarInterno("servidor", P)} faq <número>\``, `A full item: \`${citarInterno("servidor", P)} faq <number>\``, `Un elemento completo: \`${citar("servidor", "es", P)} faq <número>\``)}_`, colour: COR.info });
+    if (!info.faq.length) return sendEmbed(message.channel, { title: "📌 FAQ", description: T("Nada cadastrado ainda.", "Nothing yet.", "Nada registrado todavía."), colour: COR.info });
+    return sendEmbed(message.channel, { title: "📌 FAQ", description: info.faq.map((f, i) => `**${i + 1}. ${f.titulo}**\n${f.texto.slice(0, 300)}${f.texto.length > 300 ? "…" : ""}`).join("\n\n"), colour: COR.info });
   }
 
-  return sendEmbed(message.channel, tr(ctx,
-    { title: "🏠 Servidor", description: `Opções: \`regras\`, \`cargos\`, \`canais\`, \`faq\` — ex.: \`${citarInterno("servidor.regras", P)}\`. A equipe fica em \`${citarInterno("staff", P)}\`.`, colour: COR.aviso },
-    { title: "🏠 Server", description: `Options: \`regras\`, \`cargos\`, \`canais\`, \`faq\` — e.g. \`${citarInterno("servidor.regras", P)}\`. The staff list lives in \`${citarInterno("staff", P)}\`.`, colour: COR.aviso },
-    { title: "🏠 Servidor", description: `Opciones: ${["regras", "cargos", "canais"].map((k) => `\`${subExibido("servidor", k, "es")}\``).join(", ")}, \`faq\` — p. ej.: \`${citar("servidor.regras", "es", P)}\`. El staff está en \`${citar("staff", "es", P)}\`.`, colour: COR.aviso }));
+  return erroDeUso(ctx, message.channel, "servidor", "Subcomando desconhecido.", "Unknown subcommand.", "Subcomando desconocido.");
 }

@@ -11,7 +11,8 @@
 // E &iniciativa — rastreador de ordem de combate por canal.
 
 import { lingua, idiomaDe, tr } from "../core/i18n.js";
-import { citar, citarNoTexto, trechoPronto } from "../core/aliases.js";
+import { trechoPronto } from "../core/aliases.js";
+import { erroDeUso, ajudaDe } from "../core/saida.js";
 
 const MAX_DADOS = 100, MAX_LADOS = 10_000, MAX_TERMOS = 20, MAX_REPETE = 20, MAX_EXPLODE = 50;
 
@@ -161,18 +162,32 @@ function formatarEs(res) {
 }
 
 // ── Iniciativa por canal ────────────────────────────────────────────────────
-const iniciativas = new Map();   // canalId → { ordem: [{nome, valor}], vez: number }
-
-export function iniciativaDe(canalId) {
-  if (!iniciativas.has(canalId)) iniciativas.set(canalId, { ordem: [], vez: -1 });
-  return iniciativas.get(canalId);
+const iniciativas = new Map();   // canalId → { ordem: [{nome, valor}], vez: number, tocadaEm }
+// (P2, 31 out 2026, R11) tetos e limpeza: no máximo MAX_INICIATIVAS canais e
+// MAX_COMBATENTES por canal; combate parado há INICIATIVA_TTL_MS some na próxima
+// vez que alguém mexe em qualquer iniciativa (sem timer).
+export const MAX_INICIATIVAS = 200, MAX_COMBATENTES = 50, INICIATIVA_TTL_MS = 12 * 3600_000;
+export function podarIniciativas(agora = Date.now()) {
+  for (const [id, st] of iniciativas) if (agora - (st.tocadaEm ?? 0) > INICIATIVA_TTL_MS) iniciativas.delete(id);
+  // ainda cheio: sai o parado há mais tempo
+  while (iniciativas.size >= MAX_INICIATIVAS) {
+    let velho = null;
+    for (const [id, st] of iniciativas) if (!velho || (st.tocadaEm ?? 0) < velho[1]) velho = [id, st.tocadaEm ?? 0];
+    iniciativas.delete(velho[0]);
+  }
 }
+export function iniciativaDe(canalId, agora = Date.now()) {
+  if (!iniciativas.has(canalId)) { podarIniciativas(agora); iniciativas.set(canalId, { ordem: [], vez: -1 }); }
+  const st = iniciativas.get(canalId);
+  st.tocadaEm = agora;
+  return st;
+}
+export const _quantasIniciativas = () => iniciativas.size;
 export function limparIniciativa(canalId) { iniciativas.delete(canalId); }
 
 // `en`: true/false, ou "es"
 function listaIniciativa(st, en) {
-  if (!st.ordem.length) return en === "es" ? trechoPronto(`_vacía — \`${citar("iniciativa", "es")} add <nombre> <tirada>\`_`)
-    : en ? `_empty — \`${citar("iniciativa", "en")} add <name> <roll>\`_` : `_vazia — \`${citar("iniciativa", "pt")} add <nome> <rolagem>\`_`;
+  if (!st.ordem.length) return en === "es" ? trechoPronto("_vacía_") : en ? "_empty_" : "_vazia_";
   return st.ordem.map((p, i) => `${i === st.vez ? "▶️" : "▫️"} \`${String(p.valor).padStart(2)}\` ${p.nome}`).join("\n");
 }
 
@@ -185,17 +200,11 @@ export async function cmdRolar(message, args, ctx) {
   const secreta = /^(gm|secreto|priv|secret)\b/i.test(resto);
   if (secreta) resto = resto.replace(/^(gm|secreto|priv|secret)\b/i, "").trim();
 
-  if (!resto || ["ajuda", "help"].includes(resto.toLowerCase())) {
-    return ctx.sendEmbed(message.channel, {
-      title: tr(ctx, "🎲 Dados", "🎲 Dice", "🎲 Dados"),
-      // as marcas {&rolar} viram o nome do comando no idioma (fase 3)
-      description: tr(ctx,
-        citarNoTexto("`{&rolar} 2d20kh1+5` — mantém o maior · `4d6kh3` descarta o menor dado\n`{&rolar} adv` / `{&rolar} des` — vantagem / desvantagem (d20)\n`{&rolar} 3d6!` — explosão · `8d10>=7` — conta sucessos\n`{&rolar} d%` · `4dF` (Fate) · `moeda`\n`{&rolar} 6x(4d6kh3)` — repete · `1d20+7 # Percepção` — rótulo\n`{&rolar} gm 1d20` — rolagem secreta (resultado só para você)", "pt"),
-        citarNoTexto("`{&rolar} 2d20kh1+5` — keep highest · `4d6kh3` drop lowest die\n`{&rolar} adv` / `{&rolar} des` — advantage / disadvantage (d20)\n`{&rolar} 3d6!` — exploding · `8d10>=7` — count successes\n`{&rolar} d%` · `4dF` (Fate) · `moeda` (coin)\n`{&rolar} 6x(4d6kh3)` — repeat · `1d20+7 # Perception` — label\n`{&rolar} gm 1d20` — secret roll (result only for you)", "en"),
-        citarNoTexto("`{&rolar} 2d20kh1+5` — se queda con el mayor · `4d6kh3` descarta el dado menor\n`{&rolar} adv` / `{&rolar} des` — ventaja / desventaja (d20)\n`{&rolar} 3d6!` — explosión · `8d10>=7` — cuenta éxitos\n`{&rolar} d%` · `4dF` (Fate) · `moeda` (moneda)\n`{&rolar} 6x(4d6kh3)` — repite · `1d20+7 # Percepción` — etiqueta\n`{&rolar} gm 1d20` — tirada secreta (resultado solo para ti)", "es")),
-      colour: ctx.COR.info,
-    });
-  }
+  // (P2) `&rolar init …` — a iniciativa (o antigo &iniciativa)
+  if (String(args[0] ?? "").toLowerCase() === "init") return cmdIniciativa(message, args.slice(1), ctx);
+
+  if (!resto) return erroDeUso(ctx, message.channel, "rolar", "Faltou a rolagem (ex.: `2d20+5`).", "Missing the roll (e.g. `2d20+5`).", "Falta la tirada (ej.: `2d20+5`).");
+  if (["ajuda", "help"].includes(resto.toLowerCase())) return ctx.sendEmbed(message.channel, { description: `ℹ️ ${ajudaDe(ctx, "rolar")}`, colour: ctx.COR.info });
 
   const res = rolarExpressao(resto);
   const corpo = formatarResultado(res, l);
@@ -231,8 +240,8 @@ export async function cmdIniciativa(message, args, ctx) {
 
   if (["add", "adicionar", "agregar", "añadir", "anadir"].includes(sub)) {
     const resto = args.slice(1);
-    if (!resto.length) return ctx.sendEmbed(message.channel, { title: "⚔️", description: tr(ctx, `\`${citar("iniciativa", "pt")} add <nome> [rolagem ou número]\` — padrão \`1d20\``, `\`${citar("iniciativa", "en")} add <name> [roll or number]\` — default \`1d20\``,
-      `\`${citar("iniciativa", "es")} add <nombre> [tirada o número]\` — por defecto \`1d20\``), colour: ctx.COR.aviso });
+    if (!resto.length) return erroDeUso(ctx, message.channel, "rolar", "Faltou o nome.", "Missing the name.", "Falta el nombre.");
+    if (st.ordem.length >= MAX_COMBATENTES) return ctx.sendEmbed(message.channel, { description: tr(ctx, `❌ Máximo de ${MAX_COMBATENTES} na ordem.`, `❌ Maximum of ${MAX_COMBATENTES} in the order.`, `❌ Máximo de ${MAX_COMBATENTES} en el orden.`), colour: ctx.COR.aviso });
     // último pedaço é expressão/número? senão rola 1d20
     let expr = "1d20", nome = resto.join(" ");
     const cauda = resto[resto.length - 1];

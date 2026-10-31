@@ -1,7 +1,7 @@
 
 import * as log from "../core/log.js";
 import { tr, lingua, idiomaDe } from "../core/i18n.js";
-import { nomeExibido, corrigirSubcomando, citar } from "../core/aliases.js";
+import { nomeExibido, corrigirSubcomando, citar, comandoInteiroDesativado } from "../core/aliases.js";
 import { maisParecido } from "../core/parecido.js";
 
 export const GRANT_ALL_SAFE = 0x000fffffffffffffn;
@@ -31,7 +31,7 @@ export async function cmdComando(message, args, ctx) {
   // e ele caía no "uso errado" — 18 out 2026)
   if (!sub || sub === "list") {
     const linhas = geren.map((c) => {
-      const off = config.comandosDesativados.includes(c);
+      const off = comandoInteiroDesativado(config.comandosDesativados, c);   // (P2) o nome salvo pode ser o antigo
       return `${off ? "🔴" : "🟢"} \`${nomeExibido(c, lang === "en" ? telaEn : lang)}\``;
     });
     return sendEmbed(message.channel, tr(ctx, {
@@ -40,12 +40,6 @@ export async function cmdComando(message, args, ctx) {
         "🟢 ativo · 🔴 desativado",
         "",
         linhas.join("  "),
-        "",
-        "**Uso:**",
-        `\`${citar("comando.desativar", "pt", PREFIXO)} <nome>\` — desativa`,
-        `\`${citar("comando.ativar", "pt", PREFIXO)} <nome>\` — reativa`,
-        "",
-        "_`help` e `comando` não podem ser desativados (para você não se trancar para fora)._",
       ].join("\n"),
       colour: COR.mod,
     }, {
@@ -54,12 +48,6 @@ export async function cmdComando(message, args, ctx) {
         "🟢 active · 🔴 disabled",
         "",
         linhas.join("  "),
-        "",
-        "**Usage:**",
-        `\`${citar("comando.desativar", "en", PREFIXO)} <name>\` — disables`,
-        `\`${citar("comando.ativar", "en", PREFIXO)} <name>\` — re-enables`,
-        "",
-        "_`help` and `command` can't be disabled (so you can't lock yourself out)._",
       ].join("\n"),
       colour: COR.mod,
     }, {
@@ -68,12 +56,6 @@ export async function cmdComando(message, args, ctx) {
         "🟢 activo · 🔴 desactivado",
         "",
         linhas.join("  "),
-        "",
-        "**Uso:**",
-        `\`${citar("comando.desativar", "es", PREFIXO)} <nombre>\` — lo desactiva`,
-        `\`${citar("comando.ativar", "es", PREFIXO)} <nombre>\` — lo reactiva`,
-        "",
-        `_\`${nomeExibido("help", "es")}\` y \`${nomeExibido("comando", "es")}\` no se pueden desactivar (para que no te quedes fuera)._`,
       ].join("\n"),
       colour: COR.mod,
     }));
@@ -83,7 +65,7 @@ export async function cmdComando(message, args, ctx) {
   const LIGA    = new Set(["enable", "on", "ativar", "ligar", "habilitar", "reativar"]);
   if (!DESLIGA.has(sub) && !LIGA.has(sub)) {
     // `destivar` → "você quis dizer `desativar`?" (17 out 2026: só mostrava o uso)
-    const certo = corrigirSubcomando("comando", sub);
+    const certo = corrigirSubcomando("config.comando", sub);
     const pronto = certo ? `${citar("comando", lingua(ctx), PREFIXO)} ${certo}${args.length > 1 ? " " + args.slice(1).join(" ") : ""}` : null;
     return sendEmbed(message.channel, tr(ctx,
       { title: "❌ Uso incorreto", description: [pronto ? `Você quis dizer \`${pronto}\`?\n` : null, `\`${citar("comando", "pt", PREFIXO)} <desativar|ativar> <nome>\``].filter(Boolean).join("\n"), colour: COR.erro },
@@ -122,11 +104,12 @@ export async function cmdComando(message, args, ctx) {
   }
 
   const desativar = DESLIGA.has(sub);
-  const jaDesativado = config.comandosDesativados.includes(alvo);
+  const jaDesativado = comandoInteiroDesativado(config.comandosDesativados, alvo);
 
   if (desativar && !jaDesativado) config.comandosDesativados.push(alvo);
+  // (P2) reativar tira também o nome antigo que leva ao mesmo comando (`repete` salvo → `&embed`)
   if (!desativar && jaDesativado)
-    config.comandosDesativados = config.comandosDesativados.filter((c) => c !== alvo);
+    config.comandosDesativados = config.comandosDesativados.filter((c) => c !== alvo && !comandoInteiroDesativado([c], alvo));
   salvarConfig();
 
   await log.registrar(ctx, "comandos", {

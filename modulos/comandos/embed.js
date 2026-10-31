@@ -1,45 +1,46 @@
-// &embed — publica um embed montado pela staff
+// &embed — publica um embed montado pela staff (absorveu o &repete: texto solto vira a descrição)
 
 export default {
   id: "embed",
   modulo: "../moderacao/embed.js",
   funcao: "cmdEmbed",
-  es: { nome: "embed", subcomandos: { campos: "campos", cores: "colores" } },   // espanhol (etapa 4)
+  // (P2) o &repete saiu: os nomes dele levam aqui (texto sem `campo:` é publicado como está)
+  apelidos: ["repete", "repeat", "repetir"],
+  es: { nome: "embed", subcomandos: { campos: "campos", cores: "colores" } },
   subcomandos: { campos: "fields", cores: "colors" },
   gerenciavel: true,
   textoLivre: true,
   ajuda: {
+    grupo: "personalizar",
     perm: "ManageMessages",
     uso: {
-      pt: "{&embed} → depois campo: valor, um por linha",
-      en: "{&embed} → then field: value, one per line",
-      es: "{&embed} → después campo: valor, uno por línea",
+      pt: "{&embed} <texto> | campo: valor, um por linha",
+      en: "{&embed} <text> | field: value, one per line",
+      es: "{&embed} <texto> | campo: valor, uno por línea",
     },
     desc: {
-      pt: "Publica uma mensagem embed customizável.\n\n**Escreva assim** (sem parênteses, sem vírgula no fim):\n```\n{&embed}\ntitulo: Idade\ndescricao: Você tem +18 ou -18 anos?\ncor: #FF00FF\n```\n**Campos:** `titulo:` `descricao:` `cor:` `rodape:` `imagem:` (URL) `canal:` (ID p/ publicar em outro canal).\nCor por hex (`#5865F2`) ou nome (azul, verde, rosa…).\nTambém aceita tudo numa linha separando com `|`.",
-      en: "Posts a customizable embed message.\n\n**Write it like this** (no parentheses, no trailing comma):\n```\n{&embed}\ntitle: Age\ndescription: Are you over or under 18?\ncolor: #FF00FF\n```\n**Fields:** `title:` `description:` `color:` `footer:` `image:` (URL) `channel:` (ID to post in another channel) — the Portuguese names work too.\nColor by hex (`#5865F2`) or name (blue, green, pink…).\nAlso accepts everything on one line separated by `|`.",
-      es: "Publica un mensaje embed personalizable.\n\n**Escríbelo así** (sin paréntesis, sin coma al final):\n```\n{&embed}\ntitulo: Edad\ndescripcion: ¿Tienes más o menos de 18 años?\ncolor: #FF00FF\n```\n**Campos:** `titulo:` `descripcion:` `color:` `pie:` `imagen:` (URL) `canal:` (ID para publicar en otro canal) — los nombres en portugués y en inglés también funcionan.\nColor en hex (`#5865F2`) o por nombre (azul, verde, rojo…).\nTambién acepta todo en una sola línea, separado con `|`.",
+      pt: "Publica uma mensagem embed. Texto solto vira a descrição, como está.\n\nCom campos, um por linha (ou separados por `|`):\n```\n{&embed}\ntitulo: Idade\ndescricao: Você tem +18 ou -18 anos?\ncor: #FF00FF\n```\n**Campos:** `titulo:` (até 100 caracteres) `descricao:` `cor:` `rodape:` `imagem:` (URL) `canal:` (outro canal deste servidor onde você escreve).",
+      en: "Posts an embed message. Plain text becomes the description, as is.\n\nWith fields, one per line (or separated by `|`):\n```\n{&embed}\ntitle: Age\ndescription: Are you over or under 18?\ncolor: #FF00FF\n```\n**Fields:** `title:` (up to 100 characters) `description:` `color:` `footer:` `image:` (URL) `channel:` (another channel of this server you can post in).",
+      es: "Publica un mensaje embed. El texto suelto se vuelve la descripción, tal cual.\n\nCon campos, uno por línea (o separados por `|`):\n```\n{&embed}\ntitulo: Edad\ndescripcion: ¿Tienes más o menos de 18 años?\ncolor: #FF00FF\n```\n**Campos:** `titulo:` (hasta 100 caracteres) `descripcion:` `color:` `pie:` `imagen:` (URL) `canal:` (otro canal de este servidor donde escribas).",
     },
     ex: {
       pt: "{&embed} titulo: Idade | descricao: +18 ou -18? | cor: rosa",
       en: "{&embed} title: Age | description: 18+ or under? | color: pink",
       es: "{&embed} titulo: Edad | descripcion: ¿+18 o -18? | color: rosa",
     },
-    parametros: [
-      { nome: { pt: "titulo:", en: "title:", es: "titulo:" }, valor: { pt: "<texto>", en: "<text>", es: "<texto>" },
-        desc: { pt: "a linha de cima", en: "the top line", es: "la línea de arriba" } },
-      { nome: { pt: "descricao:", en: "description:", es: "descripcion:" }, valor: { pt: "<texto>", en: "<text>", es: "<texto>" },
-        desc: { pt: "o corpo (pode ter várias linhas; tudo até o próximo campo)", en: "the body (can span lines; everything until the next field)", es: "el cuerpo (puede tener varias líneas; todo hasta el siguiente campo)" } },
-      { nome: { pt: "cor:", en: "color:", es: "color:" }, valor: { pt: "<#hex|nome>", en: "<#hex|name>", es: "<#hex|nombre>" },
-        desc: { pt: "cor da barra", en: "bar color", es: "el color de la barra" } },
-      { nome: { pt: "rodape:", en: "footer:", es: "pie:" }, valor: { pt: "<texto>", en: "<text>", es: "<texto>" },
-        desc: { pt: "linha pequena no fim", en: "small line at the end", es: "una línea pequeña al final" } },
-      { nome: { pt: "imagem:", en: "image:", es: "imagen:" }, valor: "<url>",
-        desc: { pt: "capa (anexo do Stoat) ou pré-visualização (URL de fora)", en: "cover (Stoat attachment) or preview (external URL)", es: "portada (adjunto de Stoat) o vista previa (URL externa)" } },
-      { nome: { pt: "canal:", en: "channel:", es: "canal:" }, valor: { pt: "<#canal>", en: "<#channel>", es: "<#canal>" },
-        desc: { pt: "publica em outro canal", en: "posts in another channel", es: "publica en otro canal" } },
-      { nome: { pt: "Formato", en: "Format", es: "Formato" },
-        desc: { pt: "campos separados por `|` numa linha só, ou um por linha. Ex.: `{&embed} titulo: Regras | descricao: Seja legal | cor: azul`", en: "fields separated by `|` on one line, or one per line. E.g. `{&embed} title: Rules | description: Be kind | color: blue`", es: "campos separados por `|` en una sola línea, o uno por línea. Ej.: `{&embed} titulo: Reglas | descripcion: Sé amable | color: azul`" } },
-    ],
+    paginas: {
+      campos: {
+        titulo: {
+          pt: "embed (campos)",
+          en: "embed (fields)",
+          es: "embed (campos)",
+        },
+        texto: {
+          pt: "Um campo por linha, no formato `campo: valor`. Sem parênteses em volta e\nsem vírgula no fim — os dois erros mais comuns (e eu tolero os dois).\n\n**Campos**\n`titulo:` — o título\n`descricao:` — o corpo; pode ocupar várias linhas\n`cor:` — hex `#RRGGBB` ou nome (`roxo`, `verde`…)\n`rodape:` — uma linha em itálico no fim\n`imagem:` — URL da imagem de capa\n`canal:` — ID, para publicar em **outro** canal\n\n**Aceito também**\n• chaves em inglês (`title`, `description`, `color`…)\n• tudo numa linha só, separando com `|`\n• `\\n` no meio de um valor, para quebrar linha\n\n_Se algo for ignorado, eu envio e aviso o que não entendi — em vez de falhar calado._",
+          en: "One field per line, in the `field: value` format. No parentheses around it and\nno trailing comma — the two most common mistakes (and I tolerate both).\n\n**Fields**\n`title:` — the title\n`description:` — the body; it can span several lines\n`color:` — hex `#RRGGBB` or a name (`purple`, `green`…)\n`footer:` — an italic line at the end\n`image:` — cover image URL\n`channel:` — an ID, to post in **another** channel\n\n**Also accepted**\n• the Portuguese keys too\n• everything on one line, separated by `|`\n• `\\n` inside a value, for a line break\n\n_If something is ignored, I send it and tell you what I didn't understand — instead of failing silently._",
+          es: "Un campo por línea, en el formato `campo: valor`. Sin paréntesis alrededor y\nsin coma al final — los dos errores más comunes (y tolero ambos).\n\n**Campos**\n`title:` — el título\n`description:` — el cuerpo; puede ocupar varias líneas\n`color:` — hex `#RRGGBB` o un nombre (`purple`, `green`…)\n`footer:` — una línea en cursiva al final\n`image:` — URL de la imagen de portada\n`channel:` — un ID, para publicar en **otro** canal\n\n**También acepto**\n• las claves en portugués\n• todo en una sola línea, separado con `|`\n• `\\n` dentro de un valor, para un salto de línea\n\n_Si algo se ignora, lo envío y te aviso de lo que no entendí — en vez de fallar en silencio._",
+        },
+      },
+    },
   },
 };

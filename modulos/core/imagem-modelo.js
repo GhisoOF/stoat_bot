@@ -9,6 +9,15 @@
 //                              sem "turbo" = o modelo base, ~20 passos.
 //   SD_MODELO_TIPO=sd          SD-Turbo clássico (um arquivo só)
 
+// O gerador de imagem só existe com IMAGEM=1 no .env (31 out 2026, P2): vazio é
+// desligado — nada de baixar ~6–13 GB num volume novo sem ninguém ter pedido. Um
+// lugar só para o boot (download), o ia-servico (a ferramenta) e o bot.
+const DESLIGADO = new Set(["0", "false", "nao", "não", "off", "no"]);
+export function imagemPedida(env = process.env) {
+  const v = String(env.IMAGEM ?? "").trim().toLowerCase();
+  return !!v && !DESLIGADO.has(v);
+}
+
 export const URLS_PADRAO = {
   "z-image": {
     difusao: "https://huggingface.co/leejet/Z-Image-Turbo-GGUF/resolve/main/z_image_turbo-Q4_K.gguf",

@@ -15,6 +15,7 @@ export default {
   gerenciavel: true,
   textoLivre: true,
   ajuda: {
+    grupo: "personalizar",
     perm: "ManageMessages",
     uso: {
       pt: "{&adeus} [canal|titulo|texto|cor|imagem|testar|padrao|on|off]",

@@ -2,11 +2,13 @@
 
 export default {
   id: "ping",
-  modulo: "../moderacao/geral.js",
+  modulo: "../moderacao/info.js",
   funcao: "cmdPing",
   es: { nome: "ping" },   // espanhol (etapa 4)
   gerenciavel: true,
   ajuda: {
+    grupo: "comecar",
+    perm: null,
     uso: "{&ping}",
     desc: {
       pt: "Mostra a latência entre o envio da mensagem e o processamento do bot.",

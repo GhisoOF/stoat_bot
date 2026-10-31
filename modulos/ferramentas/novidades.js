@@ -2,15 +2,19 @@
 //
 // Cada pacote novo traz UMA entrada no topo desta lista, escrita para quem usa o
 // bot (não para quem programa), nos três idiomas. Na subida, a Judy anuncia o que
-// ainda não anunciou nos servidores que ligaram `&log atualizacoes on` (começa
-// desligado) — uma vez só: a marca do último anunciado fica na config global, e é
-// gravada ANTES do envio (um reinício no meio não repete o anúncio).
+// ainda não anunciou no canal de log de CADA servidor (P2, 31 out 2026: sempre — saiu
+// o `&log atualizacoes on|off`; servidor sem canal de log não recebe) — uma vez só: a
+// marca do último anunciado fica na config global, e é gravada ANTES do envio (um
+// reinício no meio não repete o anúncio).
 //
-// A primeira subida com esta lista só grava a marca: ninguém tinha como ter ligado
-// a opção antes, e o que já existia não é novidade.
+// A primeira subida com esta lista só grava a marca: o que já existia não é novidade.
+//
+// Trava do build (P2): a entrada do TOPO tem `pacote` igual ao de `docs/pacote.json`, e a
+// `data` dela não é mais velha que a do pacote — o scripts/verificar-build.js falha se não.
+// Pacote novo = troque o docs/pacote.json E escreva a entrada nova aqui (nos três idiomas).
 
 import { idiomaDaTela } from "../core/i18n.js";
-import { citar, citarNoTexto } from "../core/aliases.js";
+import { citarNoTexto, marcarTraduzido } from "../core/aliases.js";
 
 // A mais nova primeiro. `id` nunca muda (é a marca); `data` é só para a tela.
 // Comandos no texto vão como a marca de citação (chave, &, comando.sub, chave — ex.:
@@ -19,7 +23,16 @@ import { citar, citarNoTexto } from "../core/aliases.js";
 // citação, e uma inventada aborta o build do Docker (aconteceu do P5 ao P7).
 export const NOVIDADES = [
   {
+    id: "2026-10-31-p2",
+    pacote: "P2",
+    data: "2026-10-31",
+    pt: "• **Comandos mais simples:** `{&help}` abre a página certa de cada comando; `{&config}` reúne log, idioma, acesso, comandos e IA (os nomes antigos continuam valendo). Novos: `{&unban}` e `{&untimeout}` (número da lista, menção, ID ou nome). As respostas ficaram curtas e saem inteiras em espanhol.\n• **Privacidade num lugar só:** `{&privacidade}` — o que é guardado, sair da conversa ou do XP, esquecer, apagar tudo. Para falar com a Judy, basta chamá-la pelo nome.\n• **Horários** aparecem na hora de quem lê; `{&fuso} 21:30 Madrid` converte. **RSS** virou telejornal: um resumo por dia (`{&rss.horario} 21:00`) e o urgente na hora.\n• **RPG recomeçou, bem mais simples:** `{&game.criar}` com um nome e uma build (`{&game.build}`, 18 delas); pontos, equipamento e magias são automáticos; uma moeda só. O personagem antigo fica guardado até 29 jan 2027.",
+    en: "• **Simpler commands:** `{&help}` opens the right page for each command; `{&config}` gathers log, language, access, commands and AI (the old names still work). New: `{&unban}` and `{&untimeout}` (list number, mention, ID or name). Replies are short and fully in Spanish on Spanish servers.\n• **Privacy in one place:** `{&privacidade}` — what is kept, leave the chat or XP, forget, erase everything. To talk to Judy, just call her by name.\n• **Times** show in the reader's own time; `{&fuso} 21:30 Madrid` converts. **RSS** became a newscast: one summary a day (`{&rss.horario} 21:00`) and urgent items right away.\n• **The RPG restarted, much simpler:** `{&game.criar}` with a name and a build (`{&game.build}`, 18 of them); points, gear and spells are automatic; one currency. Your old character is kept until 29 Jan 2027.",
+    es: "• **Comandos más simples:** `{&help}` abre la página correcta de cada comando; `{&config}` reúne log, idioma, acceso, comandos e IA (los nombres antiguos siguen valiendo). Nuevos: `{&unban}` y `{&untimeout}` (número de la lista, mención, ID o nombre). Las respuestas son cortas y salen enteras en español.\n• **Privacidad en un solo lugar:** `{&privacidade}` — lo que se guarda, salir de la conversación o del XP, olvidar, borrar todo. Para hablar con Judy, basta con llamarla por su nombre.\n• **Los horarios** aparecen en la hora de quien lee; `{&fuso} 21:30 Madrid` convierte. **El RSS** pasó a ser un noticiero: un resumen al día (`{&rss.horario} 21:00`) y lo urgente al momento.\n• **El RPG empezó de nuevo, mucho más simple:** `{&game.criar}` con un nombre y una build (`{&game.build}`, 18); puntos, equipo y hechizos son automáticos; una sola moneda. Tu personaje anterior se guarda hasta el 29 ene 2027.",
+  },
+  {
     id: "2026-10-31-seguranca",
+    pacote: "P1",   // (P2) a trava do build: o topo tem de ser o pacote de docs/pacote.json
     data: "2026-10-31",
     pt: "• **Privacidade:** a Judy só lembra do que você diz **a ela**, e a busca automática não pesquisa pessoas. `{&chat.esquecer.tudo}` apaga só a memória deste servidor; `{&chat.cuidado}` agora é só para você mesmo.\n• **Moderação:** alertas da staff vão só para o canal de log/sentinela deste servidor. `{&banglobal}` e `{&userinfo}` não mostram mais dados de outros servidores, e ban automático de outro servidor só alerta. O cargo de staff segue moderando, mas a configuração (`{&automod}`, `{&log}`, `{&acesso}`…) e os cargos passam a exigir a permissão do próprio Stoat.\n• **Webhooks:** a URL do gancho chega por DM. **Tickets:** até 20 abertos por servidor. **RSS:** `{&rss.agora}` a cada 5 min.\n• Mensagens de erro ficaram curtas, sem detalhe interno.",
     en: "• **Privacy:** Judy only remembers what you say **to her**, and the automatic search doesn't look people up. `{&chat.esquecer.tudo}` erases only this server's memory; `{&chat.cuidado}` is now only for yourself.\n• **Moderation:** staff alerts go only to this server's log/sentinel channel. `{&banglobal}` and `{&userinfo}` no longer show other servers' data, and another server's automatic ban only alerts. The staff role still moderates, but configuration (`{&automod}`, `{&log}`, `{&acesso}`…) and roles now need Stoat's own permission.\n• **Webhooks:** the hook URL arrives by DM. **Tickets:** up to 20 open per server. **RSS:** `{&rss.agora}` every 5 min.\n• Error messages are short, with no internal detail.",
@@ -48,6 +61,17 @@ export const NOVIDADES = [
   },
 ];
 
+// A trava do build (P2): o problema da lista diante do pacote atual (docs/pacote.json), ou null
+export function problemaDaTrava(lista, pacote) {
+  const topo = lista?.[0];
+  if (!topo) return "NOVIDADES vazia";
+  if (!pacote?.pacote) return "docs/pacote.json sem o campo `pacote`";
+  if (topo.pacote !== pacote.pacote) return `a entrada do topo (${topo.id}) é do pacote ${topo.pacote ?? "(nenhum)"}, e o pacote atual é ${pacote.pacote} — escreva a entrada do ${pacote.pacote} em modulos/ferramentas/novidades.js`;
+  if (String(topo.data) < String(pacote.data ?? "")) return `a entrada do topo (${topo.data}) é mais velha que o pacote ${pacote.pacote} (${pacote.data})`;
+  if (["pt", "en", "es"].some((l) => !String(topo[l] ?? "").trim())) return `a entrada do topo (${topo.id}) precisa de pt, en e es`;
+  return null;
+}
+
 // As entradas mais novas que `marca` (a mais nova primeiro). Marca desconhecida
 // (entrada removida da lista): nada — não dá para saber o que é novo.
 export function novasDesde(marca, lista = NOVIDADES) {
@@ -57,11 +81,31 @@ export function novasDesde(marca, lista = NOVIDADES) {
 
 export function embedNovidades(novas, lang, P = "&", COR = {}) {
   const t = { pt: "🆕 Novidades da Judy", en: "🆕 What's new in Judy", es: "🆕 Novedades de Judy" }[lang] ?? "🆕 What's new in Judy";
-  const desligar = `\`${citar("log.atualizacoes", lang, P)} off\``;
-  const rodape = { pt: `_Para não receber mais: ${desligar}_`, en: `_To stop receiving these: ${desligar}_`, es: `_Para no recibir más: ${desligar}_` }[lang];
   const corpo = novas.map((n) => `**${n.data}**\n${citarNoTexto(n[lang] ?? n.en, lang, P)}`).join("\n\n");
-  const max = 1900 - rodape.length;
-  return { title: t, description: `${corpo.length > max ? corpo.slice(0, max - 1) + "…" : corpo}\n\n${rodape}`, colour: COR.info };
+  const max = 1900;
+  return { title: t, description: corpo.length > max ? corpo.slice(0, max - 1) + "…" : corpo, colour: COR.info };
+}
+
+// Publica um embed no canal de LOG de cada servidor (as novidades, o `&servidores aviso`
+// do dono do bot). Servidor sem canal de log não recebe; canal de outro servidor nunca.
+// `embedPorIdioma`: (lang) => embed, ou { pt, en, es }. O texto já vem no idioma do
+// servidor (o espanhol sai pronto, sem a tradução da tela por cima).
+// `enviar(canal, embed, serverId)`: quem manda de fato (o main.js passa o sendEmbed).
+export async function anunciarNoLog(client, embedPorIdioma, { configDoServidor, enviar } = {}) {
+  let enviados = 0, semLog = 0, falhas = 0;
+  for (const s of client?.servers?.values?.() ?? []) {
+    const cfg = configDoServidor?.(s.id);
+    if (!cfg?.log?.canalId) { semLog++; continue; }
+    const canal = client.channels?.get?.(cfg.log.canalId) ?? await client.channels?.fetch?.(cfg.log.canalId).catch(() => null);
+    if (!canal || canal.serverId !== s.id) { semLog++; continue; }   // o canal tem de ser do próprio servidor
+    const lang = idiomaDaTela(cfg.language);
+    const e0 = typeof embedPorIdioma === "function" ? embedPorIdioma(lang) : (embedPorIdioma?.[lang] ?? embedPorIdioma?.en);
+    if (!e0) continue;
+    const e = lang === "es" ? { ...e0, title: marcarTraduzido(e0.title), description: marcarTraduzido(e0.description) } : e0;
+    try { await enviar(canal, e, s.id); enviados++; }
+    catch (err) { falhas++; console.warn(`[ANUNCIO] ${s.id}: ${err?.message ?? err}`); }
+  }
+  return { enviados, semLog, falhas };
 }
 
 // Na subida. Devolve o que fez (para o log e os testes).
@@ -77,14 +121,6 @@ export async function anunciar({ client, global, salvarGlobal, configDoServidor,
   }
   global.novidadesAnunciadas = topo;   // antes do envio: um reinício no meio não repete
   salvarGlobal();
-  let enviados = 0;
-  for (const s of client?.servers?.values?.() ?? []) {
-    const cfg = configDoServidor(s.id);
-    if (!cfg?.log?.canalId || cfg.log.eventos?.atualizacoes !== true) continue;
-    const canal = client.channels?.get?.(cfg.log.canalId) ?? await client.channels?.fetch?.(cfg.log.canalId).catch(() => null);
-    if (!canal || canal.serverId !== s.id) continue;   // o canal tem de ser do próprio servidor
-    try { await enviar(canal, embedNovidades(novas, idiomaDaTela(cfg.language), P, COR)); enviados++; }
-    catch (e) { console.warn(`[NOVIDADES] ${s.id}: ${e?.message ?? e}`); }
-  }
+  const { enviados } = await anunciarNoLog(client, (lang) => embedNovidades(novas, lang, P, COR), { configDoServidor, enviar });
   return { enviados, novas: novas.length };
 }

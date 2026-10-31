@@ -16,7 +16,6 @@ const W40K = ler("wh40k.json");
 const IMPL = ler("implantes.json");
 const ESP = ler("especiais.json");
 const OBRAS = ["skyrim.json", "tokyo-ghoul.json", "bomb-rush.json"].map(ler);
-export const HISTORIAS = ler("historias.json");
 
 const rarDaDif = (d) => R.faixaDaDif(d).raridade;
 const txt = (x) => (typeof x === "string" ? { pt: x, en: x } : x ?? { pt: "", en: "" });
@@ -172,19 +171,6 @@ export const IMAGENS_DO_CONTEUDO = new Map();
     for (const v of Object.values(x)) if (v && typeof v === "object") andar(v);
   };
   for (const j of [GEN, W40K, IMPL, ESP, ...OBRAS]) andar(j);
-}
-
-// ── Inglês (traducao.js) ─────────────────────────────────────────────────────
-export function dicionarioEN() {
-  const en = {};
-  const par = (pt, e) => { if (pt && e && pt !== e) en[pt] = e; };
-  for (const i of ITENS.values()) { par(i.nome, i.nomeEN); if (i.descricao) par(txt(i.descricao).pt, txt(i.descricao).en); }
-  for (const c of COMPANHEIROS.values()) { par(c.nome, c.dados.nomeEN); if (c.dados.magia) par(c.dados.magia.nome, c.dados.magia.nomeEN); if (c.dados.descricao) par(c.dados.descricao.pt, c.dados.descricao.en); }
-  for (const m of MAGIAS) par(m.nome, m.nomeEN);
-  for (const m of [...CONTRATOS, ...BICOS, ...ESPECIAIS, ...CHEFES.values()]) { par(m.nome, m.nomeEN); par(m.descricao?.pt, m.descricao?.en); }
-  for (const d of DUNGEONS.values()) { par(d.nome, d.nomeEN); par(d.descricao?.pt, d.descricao?.en); for (const a of d.areas) par(txt(a.nome).pt, txt(a.nome).en); }
-  for (const f of R.FAIXAS) par(f.nome, f.nomeEN);
-  return en;
 }
 
 // Semeia o catálogo no banco (idempotente; não sobrescreve o que o dono curou).

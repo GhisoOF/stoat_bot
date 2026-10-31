@@ -450,7 +450,9 @@ process.exit(fail ? 1 : 0);
 SUITES["arvore-comandos"] = async () => {
 const __m0 = await import("node:fs"); const fs = __m0.default;
 const __m1 = await import("node:assert"); const assert = __m1.default;
-const __m2 = await import("./modulos/moderacao/help-arvore.js"); const { arvoreSubtopicos } = __m2;
+// (31 out 2026, P2) a árvore escrita à mão (help-arvore.js) saiu: as páginas moram no registro
+// (`ajuda.paginas` de cada comando). As mesmas checagens, sobre a fonte nova.
+const aj = await import("./modulos/core/ajuda-registro.js");
 // Comandos em árvore: uma família, uma raiz, e a ajuda descendo por ela.
 //
 // O que isto protege:
@@ -474,60 +476,45 @@ const METADADOS = new Set(["titulo", "texto"]);
 const filhos = (no) => Object.keys(no ?? {})
   .filter((k) => !METADADOS.has(k) && no[k] && typeof no[k] === "object");
 
-console.log("\n── a árvore da ajuda ──");
-for (const lang of ["pt", "en"]) {
-  const a = arvoreSubtopicos("&", lang);
-
+console.log("\n── a árvore da ajuda (no registro) ──");
+for (const lang of ["pt", "en", "es"]) {
+  // (31 out 2026, P2) era arvoreSubtopicos("&", lang); agora as páginas do registro (e o espanhol também)
+  const pg = (id, cam = []) => aj.pagina(id, cam, lang, "&");
   t(`[${lang}] automod é uma família com os 4 assuntos`, () => {
     for (const filho of ["blocklist", "whitelist", "sentinela", "punicao"]) {
-      assert.ok(a.automod?.[filho], `faltou &help automod ${filho}`);
+      assert.ok(aj.noDaPagina("automod", [filho])?.texto, `faltou &help automod ${filho}`);
     }
   });
   t(`[${lang}] a ajuda desce 3 níveis (automod > sentinela > antiguidade)`, () => {
-    assert.ok(a.automod.sentinela.antiguidade?.texto, "o 3º nível não tem texto");
+    assert.ok(aj.noDaPagina("automod", ["sentinela", "antiguidade"])?.texto, "o 3º nível não tem texto");
   });
-  t(`[${lang}] o que é da família só existe DENTRO dela (não solto no topo)`, () => {
-    // `&help blocklist` não pode existir: o comando `&blocklist` não existe.
+  t(`[${lang}] o que é da família só existe DENTRO dela (não é comando solto)`, () => {
+    const { REGISTRO } = { REGISTRO: aj.todasAsPaginas().filter((x) => x.length === 1).map((x) => x[0]) };
     for (const filho of ["blocklist", "whitelist", "sentinela", "punicao"]) {
-      assert.equal(a[filho], undefined, `${filho} ainda está solto no topo da árvore`);
-      assert.ok(a.automod[filho], `${filho} sumiu de dentro do automod`);
+      assert.ok(!REGISTRO.includes(filho), `${filho} ainda é um comando solto`);
+      const r = aj.resolverPedido([filho]);
+      assert.equal(r.id, "automod", `&help ${filho} não leva para dentro do automod`);
     }
   });
-  await tAsync(`[${lang}] warn, entrar e sair têm página de comando própria`, async () => {
-    const { construirDetalhes } = await import("./modulos/moderacao/geral.js");
-    const d = construirDetalhes("&", lang);
-    for (const cmd of ["warn", "entrar", "sair"]) assert.ok(d[cmd]?.desc, `&help ${cmd} sem página`);
+  t(`[${lang}] warn, entrar e sair têm página de comando própria`, () => {
+    for (const cmd of ["warn", "entrar", "sair"]) assert.ok(pg(cmd)?.linhas?.join("").length > 20, `&help ${cmd} sem página`);
   });
-  t(`[${lang}] nenhum filho fantasma (chave sem nó)`, () => {
-    const varrer = (no, caminho) => {
-      for (const k of Object.keys(no)) {
-        if (METADADOS.has(k)) continue;
-        assert.ok(no[k] && typeof no[k] === "object", `${caminho} ${k} é uma chave vazia`);
-        varrer(no[k], `${caminho} ${k}`);
-      }
-    };
-    for (const raiz of Object.keys(a)) varrer(a[raiz], raiz);
+  t(`[${lang}] nenhum filho fantasma (página sem texto)`, () => {
+    for (const [id, ...cam] of aj.todasAsPaginas()) if (cam.length) assert.ok(aj.noDaPagina(id, cam)?.texto, `${id} ${cam.join(" ")} sem texto`);
   });
-  t(`[${lang}] todo nó da árvore diz O QUE É, não só a sintaxe`, () => {
-    // O pedido: a ajuda explica o que faz, além do que dá para fazer.
+  t(`[${lang}] toda página de dentro diz O QUE É, não só a sintaxe`, () => {
     const semExplicacao = [];
-    const varrer = (no, caminho) => {
-      if (no.texto) {
-        const linhas = String(no.texto).split("\n").filter(Boolean);
-        // Uma linha de prosa = não começa com crase (que é sintaxe de comando).
-        if (!linhas.some((l) => !l.trimStart().startsWith("`") && l.length > 40)) {
-          semExplicacao.push(caminho);
-        }
-      }
-      for (const k of filhos(no)) varrer(no[k], `${caminho} ${k}`);
-    };
-    varrer(a.automod, "automod");
+    for (const [id, ...cam] of aj.todasAsPaginas()) {
+      if (!cam.length) continue;
+      const linhas = pg(id, cam).linhas.filter(Boolean);
+      if (!linhas.some((l) => !l.trimStart().startsWith("`") && l.length > 40)) semExplicacao.push([id, ...cam].join(" "));
+    }
     assert.equal(semExplicacao.length, 0, `só listam sintaxe: ${semExplicacao.join(", ")}`);
   });
   t(`[${lang}] automod lista os 4 grupos (e a repetição, que era o antiduplicata, dentro do antispam)`, () => {
-    const txt = a.automod.texto;
-    for (const g of ["antispam", "antiruido", "antilink", "sentinela"]) assert.ok(txt.includes(`\`${g}\``), g);
-    assert.ok(txt.includes("`repeticao`"), "repeticao");
+    const txt = [pg("automod").linhas.join("\n"), ...Object.keys(aj.noDaPagina("automod")?.paginas ?? {}).map((k) => pg("automod", [k]).linhas.join("\n"))].join("\n");
+    for (const g of ["antispam", "antiruido", "antilink", "sentinela"]) assert.ok(new RegExp(`\`${g}\`|${g}`, "i").test(txt), g);
+    assert.ok(/repeti/i.test(txt), "repeticao");
   });
 }
 
@@ -606,13 +593,16 @@ console.log("\n── &help <grupo> não vira &help <comando> pelo apelido ─�
 {
   const aliases = await import("./modulos/core/aliases.js");
   const { CANONICO } = await (await import("./modulos/comandos/index.js")).montarTabela();   // a tabela real (registro de comandos)
+  // (31 out 2026, P2) o &help resolve o pedido pelo registro (ajuda-registro.resolverPedido), não mais
+  // pelo normalizarArgs — a mesma regra: o grupo vence o apelido; o apelido leva ao comando
   const { ORDEM } = await import("./modulos/moderacao/help-grupos.js");
+  void aliases;
   for (const grupo of ORDEM) {
     t(`&help ${grupo} abre o grupo (a tabela real diz ${grupo} → ${CANONICO[grupo] ?? "—"})`, () =>
-      assert.equal(aliases.normalizarArgs("help", [grupo], CANONICO)[0], grupo));
+      assert.deepEqual(aj.resolverPedido([grupo]), { tipo: "grupo", grupo }));
   }
   t("apelido de comando continua traduzido (&help cores → &help cor)", () =>
-    assert.equal(aliases.normalizarArgs("help", ["cores"], CANONICO)[0], CANONICO.cores ?? "cores"));
+    assert.equal(aj.resolverPedido(["cores"]).id, CANONICO.cores ?? "cor"));
 }
 
 console.log(`\nÁRVORE DE COMANDOS: ${ok} ok, ${falhou} falha(s)`);
@@ -853,24 +843,28 @@ const rodar = async (autor, ...args) => { const m = montar({ autor }); await bg.
 // MiguelRobes foi banido em OUTRO servidor (é assim que ele está na lista)
 db.registrarBanGlobal(MIGUEL, OUTRO, "raid", "manual", { nome: "MiguelRobes" });
 
+// (31 out 2026, P2) `desfazer <pessoa>` virou o `isentar <pessoa>` (decisão do dono: o legado sai);
+// as respostas são uma linha (sem título). As checagens abaixo são as de antes, no caminho novo:
+// a pessoa fica isenta AQUI, só ela é desbanida (e só se foi a lista que a baniu), e o caminho
+// do `esquecer` nunca é oferecido a quem não é dono.
+const txt = (e) => `${e?.title ?? ""}\n${e?.description ?? ""}`;
 console.log("\n── o caso da captura: desfazer <pessoa> que a lista não baniu aqui ──");
 await t("explica a diferença em vez de 'nada a desfazer'", async () => {
-  const { enviados, desbanidos } = await rodar(DONO, "desfazer", MIGUEL);
-  const e = enviados.at(-1);
-  assert.match(e.title, /não baniu essa pessoa aqui/);
-  assert.match(e.description, /está \*\*na lista global\*\* \(banido em 1 servidor/);
-  assert.match(e.description, /banglobal isentar 01KMBX/);
-  assert.match(e.description, /banglobal esquecer 01KMBX/, "o dono vê o caminho para tirar da lista");
-  assert.equal(desbanidos.length, 0);
+  const { enviados, desbanidos, config } = await rodar(DONO, "desfazer", MIGUEL);
+  assert.match(txt(enviados.at(-1)), /\*\*MiguelRobes\*\* `01KMBX.+` isento aqui\.$/);
+  assert.ok(config.banGlobal.isentos.includes(MIGUEL));
+  assert.equal(desbanidos.length, 0, "a lista não o baniu aqui: nada a desbanir");
 });
 await t("pelo NOME também (MiguelRobes)", async () => {
-  const { enviados } = await rodar(DONO, "desfazer", "MiguelRobes");
-  assert.match(enviados.at(-1).title, /não baniu essa pessoa aqui/);
+  const { enviados, config } = await rodar(DONO, "desfazer", "MiguelRobes");
+  assert.match(txt(enviados.at(-1)), /isento aqui/);
+  assert.ok(config.banGlobal.isentos.includes(MIGUEL));
 });
 await t("para quem não é dono, o caminho do esquecer não é oferecido", async () => {
   const { enviados } = await rodar(ADMIN, "desfazer", MIGUEL);
-  assert.doesNotMatch(enviados.at(-1).description, /banglobal esquecer/);
-  assert.match(enviados.at(-1).description, /só o dono do bot/);
+  assert.doesNotMatch(txt(enviados.at(-1)), /esquecer/);
+  assert.match(txt(enviados.at(-1)), /isento aqui/);
+  assert.ok(db.historicoBans(MIGUEL).length > 0, "a lista não foi mexida");
 });
 
 console.log("\n── desfazer <pessoa> quando a lista baniu aqui ──");
@@ -879,7 +873,7 @@ await t("desbane SÓ essa pessoa e a isenta aqui", async () => {
   db.registrarBanGlobal(MIGUEL, AQUI, "lista", "banglobal", { nome: "MiguelRobes" });
   db.registrarBanGlobal(OUTRA, AQUI, "lista", "banglobal", { nome: "Outra" });
   const { enviados, desbanidos, config } = await rodar(DONO, "desfazer", MIGUEL);
-  assert.match(enviados.at(-1).title, /Ban desfeito/);
+  assert.match(txt(enviados.at(-1)), /isento aqui — ban da lista desfeito/);
   assert.deepEqual(desbanidos, [MIGUEL], "só ela");
   assert.ok(config.banGlobal.isentos.includes(MIGUEL));
   assert.ok(db.bansGlobaisPorOrigem(AQUI, ["banglobal"]).some((b) => b.userId === OUTRA), "a outra continua");
@@ -888,14 +882,19 @@ await t("desbane SÓ essa pessoa e a isenta aqui", async () => {
 console.log("\n── esquecer: tira da lista de TODOS os servidores ──");
 await t("admin de servidor (BanMembers) NÃO pode — a lista é de todos", async () => {
   const { enviados } = await rodar(ADMIN, "esquecer", MIGUEL);
-  assert.match(enviados.at(-1).title, /Só o dono do bot/);
-  assert.match(enviados.at(-1).description, /banglobal isentar/, "e mostra o que ele pode fazer");
+  // (31 out 2026, P2) saída mínima: a recusa é uma linha (o `isentar` está na ajuda da staff)
+  assert.match(txt(enviados.at(-1)), /^\n🔒 Só o dono do bot\.$/);
   assert.ok(db.historicoBans(MIGUEL).length > 0, "a lista não foi mexida");
   assert.equal(db.estaIgnoradoGlobal(MIGUEL), false);
 });
+// (31 out 2026, P2) `remover` deixou de ser apelido do `esquecer` (é o `isentar remover`): o admin
+// que o digita não apaga nada — mais exigente: nem o dono apaga alguém da lista por essa palavra
 await t("o apelido 'remover' também é barrado para o admin", async () => {
-  const { enviados } = await rodar(ADMIN, "remover", MIGUEL);
-  assert.match(enviados.at(-1).title, /Só o dono do bot/);
+  for (const autor of [ADMIN, DONO]) {
+    const { enviados } = await rodar(autor, "remover", MIGUEL);
+    assert.match(txt(enviados.at(-1)), /^\n❌ `remover` não existe · `&help banglobal`$/);
+    assert.ok(db.historicoBans(MIGUEL).length > 0 && !db.estaIgnoradoGlobal(MIGUEL), "a lista não foi mexida");
+  }
 });
 await t("o dono do bot tira — e ele não volta", async () => {
   await rodar(DONO, "esquecer", MIGUEL);
@@ -904,7 +903,7 @@ await t("o dono do bot tira — e ele não volta", async () => {
 });
 await t("'lembrar' (desfazer o esquecer) também é só do dono", async () => {
   const { enviados } = await rodar(ADMIN, "lembrar", MIGUEL);
-  assert.match(enviados.at(-1).title, /Só o dono do bot/);
+  assert.match(txt(enviados.at(-1)), /Só o dono do bot/);
   assert.equal(db.estaIgnoradoGlobal(MIGUEL), true);
 });
 
@@ -1148,7 +1147,8 @@ await dizD("&idioma en");
 env.length = 0; await dizD("&globalban review");
 ok(ult().includes("Review") || ult().includes("review"), "EN: `&globalban review` só revisa");
 env.length = 0; await dizD("&globalban list");
-ok(ult().includes("global list") || ult().includes("Everyone"), "EN: `&globalban list`");
+// (31 out 2026, P2) a `lista` virou coisa do dono do bot: quem não é dono recebe a recusa — em inglês
+ok(/[Gg]lobal list/.test(ult()) || ult().includes("Everyone") || /🔒 Bot owner only\./.test(ult()), "EN: `&globalban list`");
 env.length = 0; await dizD("&globalban exempted");
 ok(ult().includes("Exempt") || ult().includes("exempt"), "EN: `&globalban exempted`");
 await dizD("&idioma pt");
@@ -1736,8 +1736,9 @@ for (const f of [process.env.DB_PATH, process.env.CONFIG_PATH]) { try { fs.unlin
 const store = await import("./modulos/core/config-store.js");
 store.inicializar(process.env.CONFIG_PATH, process.env.DB_PATH);
 const db = await import("./modulos/core/db.js");
-const { cmdConfig } = await import("./modulos/moderacao/config-comando.js");
-const geral = await import("./modulos/moderacao/geral.js");
+// (31 out 2026, P2) a tela do &config sai do padraoServidor (telaDoConfig) e o &info mora no info.js
+const { cmdConfig, telaDoConfig } = await import("./modulos/moderacao/config-comando.js");
+const geral = await import("./modulos/moderacao/info.js");
 const { MODULOS_AUTOMOD } = await import("./modulos/moderacao/automod-engine.js");
 
 let ok = 0, falhou = 0;
@@ -1757,8 +1758,10 @@ function novoServidor(lang = "pt") {
 async function config$(sid, config) {
   let e;
   await quieto(() => cmdConfig({ channel: {} }, [], { config, cfgGlobal: store.getGlobal(), estado: { blockedDomains: new Set() },
-    sendEmbed: async (_c, x) => { e = x; }, COR: {}, getServer: async () => ({}), membroTemPermissao: () => true, PREFIXO: "&", serverId: sid }));
-  return e.description;
+    sendEmbed: async (_c, x) => { e = x; return { id: "x", react: async () => {} }; }, COR: {}, getServer: async () => ({}), membroTemPermissao: () => true, PREFIXO: "&", serverId: sid }));
+  assert.ok(e?.description, "o &config respondeu");
+  // (P2) a tela é paginada: o texto inteiro (todas as páginas) vem da mesma função que o &config usa
+  return telaDoConfig(config, { lang: config.language, serverId: sid }).linhas.join("\n");
 }
 async function info$(sid, config, rotas = { help: () => 1, ping: () => 2, chat: () => 3, servidores: () => 4 }) {
   let e;
@@ -1768,17 +1771,14 @@ async function info$(sid, config, rotas = { help: () => 1, ping: () => 2, chat: 
 }
 
 console.log("\n── &config ──");
-await t("mostra os 4 grupos do &automod e TODAS as partes, nos dois idiomas", async () => {
-  const { GRUPOS_AUTOMOD } = await import("./modulos/moderacao/automod-engine.js");
-  // em inglês, com o nome em inglês (13 out 2026): `speed`, não `velocidade`
-  const { nomeGrupo, nomeParte } = await import("./modulos/core/nomes-automod.js");
-  for (const lang of ["pt", "en"]) {
+// (31 out 2026, P2) a tela mostra cada filtro do automod pela CHAVE do padraoServidor (todas, nos três
+// idiomas), em vez dos grupos montados à mão: o teste confere toda chave, não só as partes dos grupos
+await t("mostra TODOS os filtros do &automod (cada chave do padraoServidor), nos três idiomas", async () => {
+  const rot = await import("./modulos/moderacao/config-rotulos.js");
+  for (const lang of ["pt", "en", "es"]) {
     const { sid, config } = novoServidor(lang);
     const d = await config$(sid, config);
-    for (const [g, def] of Object.entries(GRUPOS_AUTOMOD)) {
-      assert.match(d, new RegExp(`\\*\\*${nomeGrupo(g, lang)}\\*\\*`), `${lang}: ${g}`);
-      for (const parte of Object.keys(def.partes)) assert.match(d, new RegExp("`" + nomeParte(parte, lang) + "`"), `${lang}: ${g}/${parte}`);
-    }
+    for (const k of Object.keys(store.padraoServidor.automod)) assert.ok(d.includes(`**${rot.rotulo(["automod", k], lang)}`), `${lang}: ${k}`);
   }
 });
 await t("todo modo de punição tem descrição (o `apagar` era \"?\")", async () => {
@@ -1800,7 +1800,7 @@ await t("XP, cargo automático, cargos por reação, RSS e fusos aparecem", asyn
   config.autorole = { roleId: "01KZMR4B94Q7Q2EH5CYHFW0AAA" };
   const d = await config$(sid, config);
   assert.match(d, /🟢 \*\*Níveis \(XP\)\*\*/);
-  assert.match(d, /Cargo automático\*\* — <%01KZMR4B94Q7Q2EH5CYHFW0AAA>/);
+  assert.match(d, /Cargo automático\*\* — cargo <%01KZMR4B94Q7Q2EH5CYHFW0AAA>/);
   for (const x of ["Cargos por reação", "RSS", "Fusos horários"]) assert.ok(d.includes(x), x);
 });
 await t("silêncio já cumprido e registro zerado não contam como punição ativa", async () => {
@@ -1817,6 +1817,7 @@ await t("voz: \"indisponível\" fora do TTS_SERVIDORES; com ele, mostra como ent
   assert.match(await config$(sid, config), /indisponível neste servidor/);
   process.env.TTS_SERVIDORES = `OUTRO,${sid}`;
   assert.match(await config$(sid, config), /fora da call — `&entrar`/);
+  assert.doesNotMatch(await config$(sid, config), /⚫ \*\*Voz \(TTS\)\*\*/);
   delete process.env.TTS_SERVIDORES;
 });
 
@@ -1838,6 +1839,8 @@ await t("comandos: sem os desativados, sem os só-IA fora da IA e sem o painel d
 });
 await t("geração de imagem só aparece se estiver ligada (IMAGEM)", async () => {
   const config = store.configDoServidor("SIA"); config.language = "pt";
+  // (31 out 2026, P2) o gerador de imagem só existe com IMAGEM=1 (a IA mudou o padrão para desligado)
+  process.env.IMAGEM = "1";
   assert.match((await info$("SIA", config)).description, /habilitada aqui.*geração de imagens/);
   process.env.IMAGEM = "0";
   assert.doesNotMatch((await info$("SIA", config)).description, /geração de imagens/);
@@ -2370,11 +2373,15 @@ await t("&debug #canal (pelo nome): a conta de permissão", async () => {
   const e = await debug(cenario(), ["geral"]);
   assert.match(e.title, /conta de permissão em geral/);
 });
+// (31 out 2026, P2) sem o aviso "virou parte do diagnóstico" (R2: texto sobrando): o nome antigo
+// dá o MESMO relatório que o `&debug` sozinho
 await t("os nomes antigos (canais, voz, silence…) caem no relatório completo, com aviso", async () => {
-  for (const velho of ["canais", "voz", "silence", "tts"]) {
+  const completo = await debug(cenario(), []);
+  for (const velho of ["canais", "voz", "silence", "tts", "ler"]) {
     const e = await debug(cenario(), [velho]);
     assert.match(e.title, /Diagnóstico do servidor/, velho);
-    assert.match(e.description, new RegExp(`&debug ${velho}\` virou parte`), velho);
+    assert.equal(e.description.replace(/\d+ ?ms|\d+min|\d+ MB/g, ""), completo.description.replace(/\d+ ?ms|\d+min|\d+ MB/g, ""), velho);
+    assert.doesNotMatch(e.description, /virou parte/);
   }
 });
 
@@ -2640,7 +2647,8 @@ await t("&economia minerar pelo comando credita e responde com o saldo", async (
   assert.match(saidas.at(-1).description, /Você minerou/);
   assert.ok(eco.saldo("S3", "B") >= 10);
   await eco.cmdEconomia(msg("B"), ["minerar"], ctx);
-  assert.match(saidas.at(-1).description, /Volte em/);
+  // (31 out 2026, P2) a espera virou timestamp relativo (cada pessoa lê no próprio fuso)
+  assert.match(saidas.at(-1).description, /Próxima mineração <t:\d+:R>\./);
 });
 await t("★ ranking: quem tem mais primeiro", async () => {
   const srv = servidor("S4"); const { ctx, saidas } = ctxDe(srv, {});
@@ -2667,7 +2675,9 @@ await t("só a staff põe cargo na loja; cargo acima do bot já avisa", async ()
   const srv = servidor("S6");
   const comum = ctxDe(srv, {});
   await eco.cmdEconomia(msg("Z"), ["loja", "add", "VIP", "100"], comum.ctx);
-  assert.match(comum.saidas.at(-1).title, /Permissão/);
+  // (31 out 2026, P2) saída mínima: uma linha com a permissão que falta (antes: o título "Permissão insuficiente")
+  assert.match(comum.saidas.at(-1).description, /^🚫 Permissão insuficiente: \*\*ManageServer\*\*\.$/);
+  assert.equal(eco.loja("S6").length, 0, "sem permissão, nada entra na loja");
   const staff = ctxDe(srv, {}, { staff: true });
   srv.membro("Z", ["RSTAFF"]);   // quem põe na loja está acima dos cargos (15 out 2026)
   await eco.cmdEconomia(msg("Z"), ["loja", "add", "VIP", "100"], staff.ctx);
@@ -2737,7 +2747,8 @@ await t("&tutorial economia é a moeda do SERVIDOR; o mercado do RPG é PARTE do
     config: { language: "pt" }, COR: {}, PREFIXO: "&", serverId: "s", estado: { CANONICO: {}, COMANDOS_SO_IA: new Set(), COMANDOS_GERENCIAVEIS: [] },
     sendEmbed: async (_c, e) => { out.push(e); return { id: "x", react: async () => {} }; }, membroTemPermissao: () => true }); return out.map((e) => `${e.title}\n${e.description}`).join("\n"); };
   const eco = await ler("economia");
-  assert.match(eco, /economia do servidor/i); assert.match(eco, /&economia minerar/); assert.doesNotMatch(eco, /&game/);
+  // (31 out 2026, P2) a área `economia` do &tutorial leva ao `&help economia` (o texto mora no registro)
+  assert.match(eco, /moeda deste servidor/i); assert.match(eco, /&economia minerar/); assert.doesNotMatch(eco, /&game/);
   // a área rpg é paginada: o mercado está numa das páginas (lidas da sessão de páginas)
   const lerTudo = async (area) => {
     const id = `T-${area}`;
@@ -2747,9 +2758,11 @@ await t("&tutorial economia é a moeda do SERVIDOR; o mercado do RPG é PARTE do
     return (db.carregarSessaoPaginas(id)?.paginas ?? []).map((p) => `${p.title}\n${p.description}`).join("\n");
   };
   const rpg = await lerTudo("rpg");
-  assert.match(rpg, /Moedas e mercado/); assert.match(rpg, /&game carteira/);
+  // (31 out 2026, P2) o RPG tem uma moeda só e a loja; o mercado e a carteira saíram (pedido da área do RPG)
+  assert.match(rpg, /Ouro e itens/); assert.match(rpg, /&game comprar/);
   assert.doesNotMatch(rpg, /econom/i, "o RPG não fala em economia");
-  assert.match(await ler("mercado"), /Wiki do RPG/, "\"mercado\" leva à wiki do RPG");
+  // (31 out 2026, P2) a wiki agora sai dos dados do jogo: a 1ª página é "RPG — como jogar"
+  assert.match(await ler("mercado"), /RPG — como jogar/, "\"mercado\" leva à wiki do RPG");
 });
 await t("&game economia não abre mais a carteira do jogo (o nome é da &economia)", async () => {
   const fonte = fs.readFileSync("./modulos/game/game.js", "utf8");
@@ -2845,7 +2858,8 @@ const say = async (t) => { await c.emitAll("messageCreate", mk(t)); };
 const ult = () => JSON.stringify(env[env.length - 1] ?? {});
 
 await say("&fuso");
-ok(ult().includes("Nenhuma cidade"), "&fuso vazio explica como começar");
+// (31 out 2026, P2) R1: sem lista, a hora no fuso do servidor (pt → São Paulo), numa linha, sem explicação
+ok(/\*\*\d\d:\d\d\*\* · [^"]* — Sao Paulo \(UTC-03:00\)/.test(ult()) && !ult().includes("Nenhuma cidade"), "&fuso vazio mostra a hora no fuso do servidor");
 
 await say("&fuso add São Paulo");
 ok(ult().includes("adicionada") && ult().includes("Sao Paulo"), "★ &fuso add São Paulo");
@@ -2863,7 +2877,7 @@ ok(lista.includes("referência"), "  → marca a cidade de referência");
 ok(lista.includes("à frente"), "  → mostra as diferenças");
 
 await say("&fuso add São Paulo");
-ok(ult().includes("Já está"), "não duplica cidade");
+ok(ult().includes("já está na lista"), "não duplica cidade");   // (31 out 2026, P2) frase numa linha só
 
 await say("&fuso apelido Madrid Europa");
 ok(ult().includes("Europa"), "★ &fuso apelido Madrid Europa");
@@ -2927,7 +2941,8 @@ process.env.DB_PATH = "/tmp/gating-ia.db";
 // as páginas (&tutorial, &help) ficam no banco: sem ele aberto, o tutorial quebrava
 { const fs = await import("node:fs"); for (const f of ["/tmp/gating-ia.db", "/tmp/gating-ia.db-wal", "/tmp/gating-ia.db-shm"]) fs.rmSync(f, { force: true });
   (await import("./modulos/core/db.js")).abrirBanco("/tmp/gating-ia.db"); }
-const geral = await import("./modulos/moderacao/geral.js");
+// (31 out 2026, P2) o &help e o &info saíram do geral.js (ajuda.js, info.js)
+const geral = { ...(await import("./modulos/moderacao/ajuda.js")), ...(await import("./modulos/moderacao/info.js")) };
 const tutorial = await import("./modulos/moderacao/tutorial.js");
 
 let passou = 0, falhou = 0;
@@ -2977,7 +2992,8 @@ for (const lang of ["pt", "en"]) {
 
   // help de comando de IA fora: neutro, sem citar IA
   r = await coletar(geral.cmdHelp, FORA, lang, ["chat"]);
-  caso(`help chat ${lang} fora: nega sem citar IA`, /não existe|doesn't exist/i.test(r.txt) && !/\bIA\b|\bAI\b/.test(r.txt));
+  // (P2) o &chat saiu como comando: a resposta é a de qualquer palavra sem ajuda — neutra, sem citar IA
+  caso(`help chat ${lang} fora: nega sem citar IA`, /não existe|doesn't exist|Não há ajuda|There's no help/i.test(r.txt) && !/\bIA\b|\bAI\b/.test(r.txt));
 }
 
 console.log(`\n${passou} passou, ${falhou} falhou`);
@@ -3005,9 +3021,11 @@ const __m0 = await import("node:fs"); const fs = __m0.default;
 process.env.DB_PATH = "/tmp/help-cmds.db"; process.env.CONFIG_PATH = "/tmp/help-cmds.json";
 for (const f of [process.env.DB_PATH, process.env.CONFIG_PATH]) { try { fs.unlinkSync(f); } catch {} }
 
-const geral = await import("./modulos/moderacao/geral.js");
-const { arvoreSubtopicos } = await import("./modulos/moderacao/help-arvore.js");
-const { grupos } = await import("./modulos/moderacao/help-grupos.js");
+// (31 out 2026, P2) a ajuda mora no registro: o &help é o ajuda.js, as páginas saem do
+// ajuda-registro.js (a árvore à mão e os grupos escritos à mão saíram)
+const geral = await import("./modulos/moderacao/ajuda.js");
+const aj = await import("./modulos/core/ajuda-registro.js");
+const { ORDEM: ORDEM_GRUPOS } = await import("./modulos/moderacao/help-grupos.js");
 const tutorial = await import("./modulos/moderacao/tutorial.js");
 const aliasesMod = await import("./modulos/core/aliases.js");
 
@@ -3021,7 +3039,8 @@ for (const c of REGISTRO) {
   for (const a of c.apelidos ?? []) canonico[a] = c.id;
 }
 const en = { ...aliasesMod.COMANDO_EXTRA, ...Object.fromEntries(Object.entries(aliasesMod.COMANDO_EN).map(([pt, e]) => [e, pt])) };
-const resolver = (c) => (c in rotas ? c : canonico[c] in rotas ? canonico[c] : en[c] in rotas ? en[c] : null);
+// (P2) o nome antigo que virou atalho (`&log`, `&idioma`, `&acesso`) também leva a um comando
+const resolver = (c) => (c in rotas ? c : canonico[c] in rotas ? canonico[c] : en[c] in rotas ? en[c] : aliasesMod.resolverAtalho([c])?.comando ?? null);
 
 // ── O código de cada comando (para conferir o subcomando) ──
 const cacheFonte = {};
@@ -3081,21 +3100,13 @@ function conferir(txt, onde) {
 const paginas = [];
 for (const lang of ["pt", "en"]) {
   paginas.push(["help", [], lang]);
-  for (const g of Object.keys(grupos(lang, "&") ?? {})) paginas.push(["help", [g], lang]);
-  const detalhes = geral.construirDetalhes("&", lang);
-  for (const c of Object.keys(detalhes)) {
-    paginas.push(["help", [c], lang]);
+  for (const g of ORDEM_GRUPOS) paginas.push(["help", [g], lang]);
+  // (P2) todas as páginas do registro: a de cada comando e cada `paginas` de dentro
+  for (const [c, ...cam] of aj.todasAsPaginas()) {
+    if (cam.some((k) => k.startsWith("_"))) anotar(`nó interno exposto: &help ${[c, ...cam].join(" ")}`, lang);
+    paginas.push(["help", [c, ...cam], lang]);
     if (!resolver(c)) anotar(`página &help ${c} para um comando que não existe`, lang);
   }
-  const descer = (no, cam) => {
-    for (const k of Object.keys(no ?? {})) {
-      if (k === "titulo" || k === "texto" || typeof no[k] !== "object") continue;
-      if (k.startsWith("_")) anotar(`nó interno exposto na árvore: &help ${[...cam, k].join(" ")}`, lang);
-      paginas.push(["help", [...cam, k], lang]);
-      descer(no[k], [...cam, k]);
-    }
-  };
-  descer(arvoreSubtopicos("&", lang), []);
   // tutorial: as páginas numeradas e cada área
   for (let n = 1; n <= 30; n++) paginas.push(["tutorial", [String(n)], lang]);
   const lista = await renderTutorial(["__nenhuma__"], lang);
@@ -3138,13 +3149,17 @@ const __m1 = await import("node:fs"); const fs = __m1.default;
 // aparecendo como se fossem subtópicos.
 
 
+// (31 out 2026, P2) com a IA no ar: as páginas marcadas `recurso: "ia"` (ex. `&help config ia`)
+// só existem onde a IA roda — aqui elas também são renderizadas e conferidas
+process.env.CHAT_SERVIDORES = "*"; process.env.LLM_URL = "http://127.0.0.1:9";
 process.env.DB_PATH = "/tmp/help-render.db";
 process.env.CONFIG_PATH = "/tmp/help-render.json";
 for (const f of [process.env.DB_PATH, process.env.CONFIG_PATH]) { try { fs.unlinkSync(f); } catch {} }
 
-const geral = await import("./modulos/moderacao/geral.js");
-const { arvoreSubtopicos } = await import("./modulos/moderacao/help-arvore.js");
-const { grupos } = await import("./modulos/moderacao/help-grupos.js");
+// (31 out 2026, P2) o &help e as páginas vêm do registro (ajuda.js, ajuda-registro.js)
+const geral = await import("./modulos/moderacao/ajuda.js");
+const aj = await import("./modulos/core/ajuda-registro.js");
+const { ORDEM: ORDEM_GRUPOS } = await import("./modulos/moderacao/help-grupos.js");
 
 const COR = { info: 1, aviso: 2, erro: 3, sucesso: 4 };
 async function render(args, lang) {
@@ -3185,7 +3200,7 @@ async function checar(args, lang, { deveExistir = true } = {}) {
   const onde = `[${lang}] &help ${args.join(" ")}`;
   const erros = [];
   if (!txt.trim()) erros.push("não enviou nada");
-  if (deveExistir && /Não encontrado|Not found|Subtópico desconhecido|Unknown subtopic/.test(txt)) erros.push("página não encontrada");
+  if (deveExistir && /Não encontrado|Not found|Subtópico desconhecido|Unknown subtopic|Não há ajuda|There's no help|não é parte de|isn't part of/.test(txt)) erros.push("página não encontrada");
   const mortos = comandosMortos(txt);
   if (mortos.length) erros.push(`cita comando removido: ${[...new Set(mortos)].join(", ")}`);
   if (/&help \S+ (titulo|texto)\b/.test(txt)) erros.push("lista `titulo`/`texto` como subtópico");
@@ -3195,17 +3210,13 @@ async function checar(args, lang, { deveExistir = true } = {}) {
 const METADADOS = new Set(["titulo", "texto"]);
 const filhos = (no) => Object.keys(no ?? {}).filter((k) => !METADADOS.has(k) && no[k] && typeof no[k] === "object");
 
-for (const lang of ["pt", "en"]) {
+// (P2) e o espanhol também
+for (const lang of ["pt", "en", "es"]) {
   await checar([], lang);                                     // o índice
-  for (const g of Object.keys(grupos(lang === "en" ? "en" : "pt", "&") ?? {})) await checar([g], lang);
-  const detalhes = geral.construirDetalhes?.("&", lang) ?? {};
-  for (const cmd of Object.keys(detalhes)) await checar([cmd], lang);
-  // cada caminho da árvore, em qualquer profundidade
-  const arvore = arvoreSubtopicos("&", lang);
-  const descer = async (no, caminho) => {
-    for (const k of filhos(no)) { await checar([...caminho, k], lang); await descer(no[k], [...caminho, k]); }
-  };
-  for (const raiz of Object.keys(arvore)) await descer(arvore[raiz], [raiz]);
+  for (const g of ORDEM_GRUPOS) await checar([g], lang);
+  // cada página do registro, em qualquer profundidade
+  for (const cam of aj.todasAsPaginas()) await checar(cam, lang);
+  void filhos;
 }
 
 // Todo comando que EXISTE tem de ter página própria.
@@ -3222,8 +3233,10 @@ process.exit(falhou ? 1 : 0);
 SUITES["help-tutorial"] = async () => {
 const __m0 = await import("node:fs"); const fs = __m0.default;
 const __m1 = await import("./modulos/core/paginas.js"); const paginas = __m1;
-const __m2 = await import("./modulos/moderacao/help-parametros.js"); const { parametros } = __m2;
-const __m3 = await import("./modulos/moderacao/help-grupos.js"); const { grupos, ORDEM } = __m3;
+// (31 out 2026, P2) a ajuda mora no registro (ajuda-registro.js); o índice é curto, por grupo,
+// e o &tutorial é o mini guia. As checagens abaixo foram reescritas para o desenho novo.
+const aj = await import("./modulos/core/ajuda-registro.js");
+const __m3 = await import("./modulos/moderacao/help-grupos.js"); const { GRUPOS, ORDEM } = __m3;
 const __m4 = await import("./modulos/moderacao/assistente.js"); const { sessoesAtivas } = __m4;
 
 process.env.BOT_TOKEN = "tok";
@@ -3276,109 +3289,90 @@ const titulo = (m) => (m?.edits.length ? m.edits[m.edits.length - 1] : m?.payloa
 const reagir = (m, e, quem = "U1") => c.emitAll("messageReactionAdd", { id: m.id }, quem, encodeURIComponent(e));
 const desreagir = (m, e, quem = "U1") => c.emitAll("messageReactionRemove", { id: m.id }, quem, encodeURIComponent(e));
 
-console.log("\n── &help (índice por intenção) ──");
+console.log("\n── &help (índice por grupo) ──");
 let m = await say("&help");
-ok(titulo(m).includes("Central de Ajuda"), "&help abre o índice");
+ok(titulo(m).includes("Ajuda"), "&help abre o índice");
 for (const g of ["comecar", "proteger", "personalizar", "diversao", "rpg", "diagnostico"])
-  ok(desc(m).includes(`&help ${g}`), `  → índice lista o grupo ${g}`);
-ok(!desc(m).includes("&help dono"), "  → grupo 'dono' não aparece para quem não é o dono do bot");
-ok(desc(m).includes("Página **1/"), "  → é paginado (rodapé 1/N)");
-ok(m.reacoes.includes("◀") && m.reacoes.includes("▶"), "  → o bot reagiu com ◀ ▶");
-ok(desc(m).includes("&assistente"), "  → aponta o assistente para servidor novo");
-
-await reagir(m, "▶");
-ok(m.edits.length === 1 && titulo(m).includes("Começar"), "▶ (adicionar reação) vira para a página 2 = Começar");
-await desreagir(m, "▶");
-ok(m.edits.length === 2 && titulo(m).includes("Proteger"), "▶ (tirar a reação) vira de novo = Proteger");
-await reagir(m, "◀");
-ok(titulo(m).includes("Começar"), "◀ volta uma página");
-await reagir(m, "▶", "OUTRA");
-ok(titulo(m).includes("Começar"), "reação de outra pessoa não vira a página");
-await reagir(m, "🎉");
-ok(titulo(m).includes("Começar"), "emoji sem função é ignorado");
-
+  ok(desc(m).includes(GRUPOS[g].titulo.pt), `  → índice lista o grupo ${g}`);
+ok(!desc(m).includes("&servidores"), "  → grupo 'dono' não aparece para quem não é o dono do bot");
+ok(desc(m).includes("`&warn`") && desc(m).includes("`&config`"), "  → cada grupo com os seus comandos");
+ok(desc(m).length <= 1500, "  → curto: cabe numa página");
+ok(desc(m).includes("&assistente"), "  → o assistente está no índice (grupo Começar)");
 m = await say("&help 3");
-ok(titulo(m).includes("Proteger"), "&help 3 abre direto a página 3 (texto puro, sem reação)");
+ok(titulo(m).includes("Ajuda"), "&help <número> é o índice (não há mais livro)");
 m = await say("&help moderacao");
 ok(titulo(m).includes("Proteger"), "nome antigo `moderacao` leva ao grupo Proteger");
 m = await say("&help config");
-// (20 out 2026, decisão do Ghieh) o `config` abre a página do &config — todas as
-// configurações do servidor —, não mais o grupo Personalizar (que a escondia)
-ok(titulo(m).includes("&config") && desc(m).includes("Mostra TODAS as configurações"), "`config` abre a página do &config (não mais o grupo Personalizar)");
+ok(titulo(m).includes("&config") && /TODAS|todas as configurações|mostra \*\*todas\*\*/i.test(desc(m)), "`config` abre a página do &config (não o grupo Personalizar)");
 m = await say("&help personalizar");
 ok(titulo(m).includes("Personalizar"), "  → o grupo continua em `&help personalizar`");
 m = await say("&help proteger");
-ok(desc(m).includes("&automod sentinela") && !desc(m).includes("automod antiscam"), "Proteger fala em `&automod sentinela` (não mais em antiscam)");
-// (o Stoat esconde "<palavra>"; o bot manda ‹palavra›)
-ok(/&help [<‹](comando|command)[>›]/.test(desc(m)), "  → página de grupo aponta o detalhe por comando");
-
-// limite do embed em TODAS as páginas/grupos/idiomas
-for (const lang of ["pt", "en"]) {
-  const G = grupos("&", lang);
-  ok(ORDEM.every((k) => G[k]), `grupos(${lang}): todos os grupos de ORDEM existem`);
-  ok(Object.keys(G).every((k) => G[k].linhas.join("\n").length < 2800), `grupos(${lang}): nenhum grupo maior que 2 páginas`);
+ok(desc(m).includes("`&automod`") && !desc(m).includes("antiscam"), "Proteger lista o &automod (não mais antiscam)");
+ok(desc(m).split("\n").every((l) => / — /.test(l)), "  → página de grupo: uma linha por comando, com o resumo");
+// limite do embed em todos os grupos, nos 3 idiomas
+for (const lang of ["pt", "en", "es"]) {
+  const pg = aj.comandosPorGrupo();
+  ok(ORDEM.every((k) => GRUPOS[k] && Array.isArray(pg[k])), `grupos(${lang}): todos os grupos de ORDEM existem`);
+  ok(ORDEM.every((k) => pg[k].map((id) => aj.resumoDe(aj.entrada(id), lang)).join("\n").length < 2800), `grupos(${lang}): nenhum grupo maior que 2 páginas`);
 }
 
 console.log("\n── &help <comando>: parâmetros explicados ──");
 m = await say("&help boasvindas");
 const todasPgs = (mm) => [mm.payload, ...mm.edits].map((p) => p?.embeds?.[0]?.description ?? "").join("\n");
-// pode estar paginado: vira as páginas para juntar tudo
 for (let i = 0; i < 3; i++) await reagir(m, "▶");
 const tudoBV = todasPgs(m);
 ok(tudoBV.includes("Parâmetros"), "&help boasvindas tem a seção Parâmetros");
 ok(tudoBV.includes("{membros}") && tudoBV.includes("{usuario}"), "  → explica os marcadores");
-ok(tudoBV.includes("`imagem`") && tudoBV.includes("visivel"), "  → explica imagem visível/oculta");
-ok(tudoBV.includes("`testar`"), "  → explica `testar`");
+ok(/imagem/i.test(tudoBV), "  → explica a imagem");
+ok(/testar/.test(tudoBV), "  → explica `testar`");
 m = await say("&help automod");
 for (let i = 0; i < 3; i++) await reagir(m, "▶");
 ok(todasPgs(m).includes("sentinela") && !todasPgs(m).includes("antilink, antiscam."), "&help automod lista `sentinela` em vez de antiscam");
 m = await say("&help assistente");
 ok(texto(m).includes("rapido") && texto(m).includes("canais"), "&help assistente existe e lista os roteiros");
 m = await say("&help tutorial");
-ok(texto(m).includes("canais"), "&help tutorial menciona a área `canais`");
-
-// paridade PT/EN da tabela de parâmetros
-const PT = parametros("&", "pt"), EN = parametros("&", "en");
-ok(Object.keys(PT).length === Object.keys(EN).length, `parametros: mesmos comandos em PT e EN (${Object.keys(PT).length})`);
-for (const k of Object.keys(PT)) {
-  ok(EN[k] && EN[k].length === PT[k].length, `  → ${k}: ${PT[k].length} parâmetro(s) nos dois idiomas`);
+ok(texto(m).includes("canais"), "&help tutorial menciona o conceito `canais`");
+// paridade dos parâmetros: todo parâmetro do registro tem pt, en e es
+for (const c of (await import("./modulos/comandos/index.js")).REGISTRO) {
+  const ps = c.ajuda?.parametros ?? [];
+  if (ps.length) ok(["pt", "en", "es"].every((l) => aj.secaoParametros(c, l).length === ps.length + 1), `  → ${c.id}: ${ps.length} parâmetro(s) nos três idiomas`);
 }
-ok(["boasvindas", "adeus", "automod", "punicao", "sentinela", "log", "acesso", "xp", "assistente", "tutorial"].every((k) => PT[k]),
-  "parametros cobre os comandos de configuração principais");
+ok(["boasvindas", "adeus", "automod", "staff", "xp", "assistente"].every((k) => (aj.entrada(k)?.ajuda?.parametros?.length ?? 0) > 0 || aj.noDaPagina(k)?.paginas),
+  "parâmetros (ou páginas) cobrem os comandos de configuração principais");
 
-console.log("\n── &tutorial em páginas ──");
+console.log("\n── &tutorial: o mini guia ──");
 m = await say("&tutorial");
-ok(titulo(m).includes("Antes de tudo"), "&tutorial abre a página 'Antes de tudo'");
-ok(desc(m).includes("Página **1/6**"), "  → 6 páginas");
+ok(titulo(m).includes("o que dá para fazer"), "&tutorial abre a página 'o que dá para fazer'");
+const nPaginas = Number(desc(m).match(/Página \*\*1\/(\d+)\*\*/)?.[1] ?? 0);
+ok(nPaginas >= 5, `  → ${nPaginas} páginas (abertura + 4 conceitos; um conceito longo vira duas)`);
 ok(m.reacoes.length === 2, "  → reagiu ◀ ▶");
+for (let i = 0; i < nPaginas && !titulo(m).includes("Canais"); i++) await reagir(m, "▶");
+ok(titulo(m).includes("Canais") && desc(m).includes("Só staff vê") && desc(m).includes("Só staff escreve"), "a página dos canais, com os 3 tipos");
+ok(desc(m).includes("passa por cima"), "  → enuncia a regra canal > cargo");
+for (let i = 0; i < nPaginas && !titulo(m).includes("proteção"); i++) await reagir(m, "▶");
+ok(titulo(m).includes("Como a proteção age"), "a última = Como a proteção age");
 await reagir(m, "▶");
-ok(titulo(m).includes("Canais") && desc(m).includes("Só staff vê") && desc(m).includes("Só staff escreve"), "página 2 = Canais, com os 3 tipos");
-ok(desc(m).includes("permissão do canal vence"), "  → enuncia a regra canal > cargo");
-for (let i = 0; i < 4; i++) await reagir(m, "▶");
-ok(titulo(m).includes("Checklist"), "página 6 = Checklist");
-await reagir(m, "▶");
-ok(titulo(m).includes("Antes de tudo"), "  → depois da última volta para a primeira (circular)");
-m = await say("&tutorial 3");
-ok(titulo(m).includes("Proteção") && desc(m).includes("&automod sentinela on"), "&tutorial 3 abre Proteção e ensina &automod sentinela on");
+ok(titulo(m).includes("o que dá para fazer"), "  → depois da última volta para a primeira (circular)");
+m = await say(`&tutorial ${nPaginas}`);
+ok(titulo(m).includes("proteção") && desc(m).includes("&automod"), "&tutorial <última> abre a proteção e aponta o &automod");
 m = await say("&tutorial canais");
-ok(titulo(m).includes("Canais: os 3 tipos"), "&tutorial canais: área de aprofundamento existe");
+ok(titulo(m).includes("Canais: os 3 tipos"), "&tutorial canais: o conceito existe");
 ok(desc(m).includes("Padrão") && desc(m).includes("Ver canal"), "  → diz o que clicar (Padrão → Ver canal)");
-m = await say("&tutorial tipos");
-ok(titulo(m).includes("Canais"), "apelido `tipos` leva à área canais");
+m = await say("&tutorial channels");
+ok(titulo(m).includes("Canais"), "o nome em inglês leva ao conceito");
 m = await say("&tutorial moderacao");
-ok(titulo(m).includes("Moderação automática"), "áreas antigas continuam (&tutorial moderacao)");
-ok(desc(m).length <= 1500, "  → área longa cabe no embed (paginada, não cortada)");
+ok(titulo(m).includes("&automod"), "área antiga que só repetia um comando abre o &help dele");
+ok(desc(m).length <= 1500, "  → cabe no embed");
 
-// todas as páginas do guia cabem no embed, nos dois idiomas
 const { cmdTutorial } = await import("./modulos/moderacao/tutorial.js");
 for (const lang of ["pt", "en"]) {
   const caps = [];
   const ctxFake = { sendEmbed: async (_c, e) => { caps.push(e); return { id: "x", react: async () => {}, edit: async (p) => caps.push(p.embeds[0]) }; },
     COR: { info: "#fff", aviso: "#fff" }, PREFIXO: "&", config: { language: lang }, serverId: "S1", exibir: (t) => t,
-    membroTemPermissao: () => true };   // o guia em páginas é o da staff (o membro vê outro índice)
+    membroTemPermissao: () => true };
   await cmdTutorial({ channel: {}, authorId: "U1" }, [], ctxFake);
   ok(caps[0]?.description?.length <= 1500, `guia(${lang}): página 1 ≤ 1500`);
-  ok((lang === "en") === caps[0]?.title?.includes("Getting started"), `guia(${lang}): no idioma certo`);
+  ok((lang === "en") === caps[0]?.title?.includes("what you can do"), `guia(${lang}): no idioma certo`);
 }
 
 console.log("\n── sentinela (antigo antiscam) ──");
@@ -3417,7 +3411,8 @@ m = await say("2");
 ok(titulo(m).includes("5/5") && desc(m).includes("Boas-vindas"), "'2' (médio) → pergunta 5: boas-vindas");
 m = await say("pular");
 ok(titulo(m).includes("Resumo"), "`pular` na última leva ao resumo");
-ok(desc(m).includes("&acesso cargo add") && desc(m).includes("&log canal") && desc(m).includes("&automod sentinela conteudo on") && desc(m).includes("&automod punicao modo acumular"),
+// (31 out 2026, P2) o assistente gera o caminho principal: `&staff add` e `&config log canal` (os nomes antigos viraram atalhos)
+ok(desc(m).includes("&staff add") && desc(m).includes("&config log canal") && desc(m).includes("&automod sentinela conteudo on") && desc(m).includes("&automod punicao modo acumular"),
   "  → resumo mostra os comandos equivalentes");
 ok(!desc(m).includes("&cargomudo"), "  → sem &cargomudo: o silêncio é o timeout nativo (1 out 2026)");
 ok(desc(m).includes("boasvindas** — _(pulado)_"), "  → marca o que foi pulado");
@@ -3427,14 +3422,15 @@ m = await say("confirmar");
 ok(sessoesAtivas() === 0, "`confirmar` fecha a sessão");
 ok(titulo(m).includes("Pronto"), "  → relatório final");
 const rel = desc(m);
-ok(rel.includes("✅ `&acesso cargo add"), "  → acesso aplicado");
-ok(rel.includes("✅ `&log canal"), "  → log aplicado");
+ok(rel.includes("✅ `&staff add"), "  → staff aplicado");
+ok(rel.includes("✅ `&config log canal"), "  → log aplicado");
 ok(rel.includes("✅ `&automod antispam on"), "  → automod aplicado");
 ok(rel.includes("✅ `&automod sentinela conteudo on"), "  → sentinela aplicado");
 ok(!rel.includes("`&automod sentinela on"), "  → e não o GRUPO inteiro (que ligaria a foto de perfil, que silencia na entrada)");
 ok(!rel.includes("❌"), "  → nada falhou: " + (rel.match(/❌.*/g) ?? []).join(" | "));
 m = await say("&config");
-ok(texto(m).includes(LOGC), "&config mostra o canal de log configurado pelo assistente");
+for (let i = 0; i < 4; i++) await reagir(m, "▶");   // (P2) a tela inteira é paginada
+ok([m.payload, ...m.edits].map((p) => JSON.stringify(p)).join("").includes(LOGC), "&config mostra o canal de log configurado pelo assistente");
 m = await say("&staff");
 ok(texto(m).includes("Admin"), "&staff lista o cargo que o assistente adicionou");
 
@@ -3465,7 +3461,7 @@ ok(sessoesAtivas() === 0, "  → sessão fechada (não há o que aplicar)");
 console.log("\n── EN ──");
 await say("&idioma en");
 m = await say("&help");
-ok(titulo(m).includes("Help Center") && desc(m).includes("Page **1/"), "&help em EN: índice e rodapé em inglês");
+ok(titulo(m).includes("Help") && /`&help [<‹]command[>›]`/.test(desc(m)), "&help em EN: índice em inglês");
 m = await say("&help protect");
 ok(titulo(m).includes("Protect"), "&help protect (alias EN) → Protect");
 m = await say("&help welcome");
@@ -3473,11 +3469,11 @@ for (let i = 0; i < 3; i++) await reagir(m, "▶");
 // (16 out 2026) em inglês os marcadores saem em inglês ({members}; o {membros} continua aceito)
 ok(todasPgs(m).includes("Parameters") && todasPgs(m).includes("{members}") && !todasPgs(m).includes("{membros}"), "&help welcome em EN tem Parameters com marcadores (em inglês)");
 m = await say("&tutorial");
-ok(titulo(m).includes("Getting started"), "&tutorial em EN");
+ok(titulo(m).includes("what you can do"), "&tutorial em EN");
 m = await say("&tutorial channels");
 ok(titulo(m).includes("Channels: the 3 types"), "&tutorial channels (EN) → área canais");
 m = await say("&wizard");
-ok(titulo(m).includes("Setup wizard"), "&wizard (EN) abre o menu do assistente em inglês");
+ok(titulo(m).includes("Setup wizard"), "&wizard (EN, agora apelido do &setup) abre o menu do assistente em inglês");
 await say("&wizard quick");
 m = enviados[enviados.length - 1];
 ok(desc(m).includes("Language"), "&wizard quick pergunta em inglês");
@@ -3585,13 +3581,21 @@ console.log("\n── saúde pelo /v1/models ──");
 }
 
 console.log("\n── o painel de status não pode mentir ──");
+// (31 out 2026, P2) o `&chat status` saiu da tela de usuário (o &debug mostra o estado);
+// os três modelos que sobraram (LLM_MODEL, JUIZ, VISAO) e o aviso de "configurado mas
+// ausente no servidor" saem do llm.js (modelosAusentes), conferidos de verdade aqui.
 {
+  const llm = await import("./modulos/ai/llm.js");
   const fonte = fs.readFileSync("./modulos/ai/chat.js", "utf8");
-  const painel = fonte.slice(fonte.indexOf("🟢 IA disponível"), fonte.indexOf("SearXNG:** ${SEARXNG_URL}", fonte.indexOf("🟢 IA disponível")));
-  ok(painel.includes("LLM_MODEL_PADRAO"), "★ o modelo principal aparece no painel");
-  ok(painel.includes("LLM_MODEL_LEVE"), "  → e o leve continua, com rótulo próprio");
-  ok(!/\*\*Conversa:\*\* \$\{LLM_MODEL_LEVE\}/.test(painel), "  → o leve não usurpa mais o rótulo 'Conversa'");
-  ok(painel.includes("faltando"), "  → e o painel avisa quando um modelo configurado não existe no servidor");
+  ok(!/🟢 IA disponível/.test(fonte) && typeof (await import("./modulos/ai/chat.js")).cmdChat === "undefined", "★ o painel do `&chat status` saiu da tela de usuário");
+  const antes = { m: process.env.LLM_MODEL, j: process.env.LLM_MODEL_JUIZ, v: process.env.LLM_MODEL_VISAO };
+  Object.assign(process.env, { LLM_MODEL: "conversa", LLM_MODEL_JUIZ: "moderacao", LLM_MODEL_VISAO: "visao" });
+  try {
+    ok(llm.modeloConversa() === "conversa" && llm.modeloJuiz() === "moderacao" && llm.modeloVisao() === "visao", "  → os três papéis vêm do .env, lidos na hora");
+    const faltam = await llm.modelosAusentes({ listar: async () => ({ ok: true, modelos: ["conversa", "visao"] }) });
+    ok(JSON.stringify(faltam) === '["moderacao"]', `  → e o modelo configurado que não existe no servidor é apontado (${JSON.stringify(faltam)})`);
+    ok((await llm.modelosAusentes({ listar: async () => ({ ok: false, modelos: [] }) })).length === 0, "  → servidor fora do ar: nada de alarme falso");
+  } finally { for (const [k, v] of [["LLM_MODEL", antes.m], ["LLM_MODEL_JUIZ", antes.j], ["LLM_MODEL_VISAO", antes.v]]) { if (v === undefined) delete process.env[k]; else process.env[k] = v; } }
 }
 
 console.log("\n── <think> não vaza para o chat ──");
@@ -3777,7 +3781,9 @@ console.log("\n── aritmética força o caminho com ferramentas ──");
   ok(sim.every((t) => chat.ehAritmetica(t)), "★ conta explícita é reconhecida (operador, extenso, raiz, porcentagem)");
   ok(nao.every((t) => !chat.ehAritmetica(t)), "  → data, horário, versão, resolução, telefone e intervalo NÃO viram conta");
   const fonte = fs.readFileSync("./modulos/ai/chat.js", "utf8");
-  ok(/ehAritmetica\(pergunta\)\) return \{ modelo: LLM_MODEL_LOGICA, tipo: "ferramenta", motivo: "calculo" \}/.test(fonte),
+  // (31 out 2026, P2) LLM_MODEL_LOGICA saiu (caía no LLM_MODEL): o modelo é o da conversa
+  ok(/ehAritmetica\(pergunta\)\) return \{ modelo: modeloConversa\(\), tipo: "ferramenta", motivo: "calculo" \}/.test(fonte)
+    && fonte.indexOf("if (ehAritmetica(pergunta)) return") < fonte.indexOf("if (precisaFerramenta(alvo)) return"),
     "  → e no roteamento ela vem ANTES de tudo, com tipo=ferramenta");
   ok(/motivo === "calculo"/.test(fonte) && /Use a ferramenta `calcular`/.test(fonte),
     "  → com instrução própria: use `calcular` antes de responder, nunca de cabeça");
@@ -4182,7 +4188,8 @@ console.log("\n── emendas costuradas, ✂️ honesto ──");
   ok(/const avisoCorte = responder\._cortou/.test(fonte) && /responder\._cortou = !!llmChat\._cortou;/.test(fonte),
     "★ o ✂️ lê um flag POR CAMINHO, lido na hora — o global aparecia em respostas inteiras de três linhas");
   ok(/if \(r\) \{\s*responder\._cortou = false;[\s\S]{0,300}?return r\.trim\(\);/.test(fonte), "  → e resposta do judy-ia nunca leva ✂️: o serviço faz a própria continuação");
-  ok(/NÃO mude de idioma/.test(fonte), "  → a instrução da emenda proíbe trocar de idioma ('Got it. Let me know…')");
+  // (31 out 2026, P2) a emenda mora no cliente único do modelo (llm.js)
+  ok(/NÃO mude de idioma/.test(fs.readFileSync("./modulos/ai/llm.js", "utf8")), "  → a instrução da emenda proíbe trocar de idioma ('Got it. Let me know…')");
 }
 
 console.log("\n── histórico: por canal, com prazo, e apagável ──");
@@ -4287,12 +4294,14 @@ console.log("\n── fumaça: os caminhos rodam de ponta a ponta ──");
     ok(!quebrou, `★ "${rotulo}" roda sem erro de escopo — inclusive os engolidos por try/catch`);
   }
 
+  // (31 out 2026, P2) o &chat saiu como comando: `&chat especial …` é conversa pelo
+  // atalho (conversarPorAtalho) — sem erro de escopo, sem o aviso velho e sem o modelo grande
   enviadas.length = 0; saidas.length = 0;
-  await chat.cmdChat({ ...msg, content: "&chat especial oi" }, ["especial", "quanto é a vida"], ctx);
-  ok(!saidas.some((x) => /not defined|Falha no chat/.test(String(x))),
-    "  → e `&chat especial` (aviso de aposentadoria) roda sem erro de escopo");
-  ok(saidas.some((x) => /modelo grande saiu|large model is gone/i.test(String(x))),
-    "★ e explica que o modelo grande saiu, em vez de virar pergunta comum");
+  const tratou = await chat.conversarPorAtalho({ ...msg, content: "&chat especial quanto é a vida" }, "chat", ctx);
+  ok(tratou === true && !saidas.some((x) => /not defined|Falha no chat/.test(String(x))),
+    "  → e `&chat especial …` (agora conversa, pelo atalho) roda sem erro de escopo");
+  ok(enviadas.length > 0 && !saidas.some((x) => /modelo grande saiu|large model is gone/i.test(String(x))),
+    "★ e vira conversa de verdade (o modelo é chamado), sem o aviso do modelo aposentado");
   ok(!enviadas.includes("qwen3.8-27b"),
     `  → e NÃO chama mais o modelo grande (pediu: ${enviadas.join(", ") || "nenhum"})`);
 
@@ -4324,8 +4333,9 @@ console.log("\n── mensagens: um system só, e na frente ──");
   ok(chat.normalizarMensagens([]).length === 0 && chat.normalizarMensagens(null).length === 0,
     "  → e lista vazia ou nula não quebra");
 
-  const fonte = fs.readFileSync("./modulos/ai/chat.js", "utf8");
-  ok(/messages = normalizarMensagens\(messages\);/.test(fonte),
+  // (31 out 2026, P2) o llmChat mudou para o llm.js (o cliente único)
+  const fonte = fs.readFileSync("./modulos/ai/llm.js", "utf8");
+  ok(/async function llmChatDireto\([^)]*\)[^{]*\{\s*messages = normalizarMensagens\(messages\);/.test(fonte),
     "★ aplicado dentro do llmChat — na SAÍDA, não em cada push");
   const srv = fs.readFileSync("./ia-servico/servidor.js", "utf8");
   ok(/messages: umSystemNaFrente\(messages\)/.test(srv),
@@ -4366,20 +4376,13 @@ console.log("\n── especial: aposentado, sem sobras ──");
     channel: { sendMessage: async () => ({ edit: async () => {} }) },
     client: { user: { id: "bot" } }, reply_ids: [] });
 
-  saidas.length = 0;
-  await chat.cmdChat(msg(), ["especial", "quanto é 2+2"], base);
-  ok(saidas.some((x) => /aposentado/i.test(x)), "★ avisa em PT que o modelo grande saiu");
-
-  saidas.length = 0;
-  await chat.cmdChat(msg(), ["special", "what is 2+2"], { ...base, lang: "en" });
-  ok(saidas.some((x) => /retired|aposentado/i.test(x)), "  → e o apelido em inglês (`special`) cai no mesmo aviso");
-
-  // Apelidos que a memória muscular pode tentar.
-  for (const alias of ["grande", "pro"]) {
-    saidas.length = 0;
-    await chat.cmdChat(msg(), [alias, "oi"], base);
-    ok(saidas.some((x) => /aposentado|retired/i.test(x)), `  → \`&chat ${alias}\` também`);
-  }
+  // (31 out 2026, P2) o comando &chat saiu (e com ele o aviso do modelo aposentado):
+  // nenhum handler responde mais "especial/special/grande/pro"; o registro não tem &chat
+  ok(typeof chat.cmdChat === "undefined", "★ o handler do &chat saiu (o aviso do modelo grande junto)");
+  const { REGISTRO } = await import("./modulos/comandos/index.js");
+  ok(!REGISTRO.some((c) => c.id === "chat" || (c.apelidos ?? []).includes("chat")), "  → e o registro não tem mais o &chat como comando");
+  ok(!/especial|special|grande|"pro"/.test(fs.readFileSync("./modulos/ai/chat.js", "utf8").split("export async function conversarPorAtalho")[1] ?? ""),
+    "  → e o atalho da conversa não trata palavra especial nenhuma: tudo é a pergunta");
 }
 
 console.log("\n── onde está, quem é quem, e sem acusar ──");
@@ -4447,9 +4450,11 @@ console.log("\n── de quem é a bio, e cabe no contexto ──");
   ok(chat.caberNoContexto([{ role: "system", content: "curto" }, { role: "user", content: "oi" }]).length === 2,
     "  → conversa pequena passa intacta");
 
-  ok(/e\.contextoEstourado = true/.test(fonte) && /"n_ctx"/.test(fonte),
+  // (31 out 2026, P2) o pedido ao modelo mudou para o llm.js (o cliente único)
+  const fonteLLM = fs.readFileSync("./modulos/ai/llm.js", "utf8");
+  ok(/e\.contextoEstourado = true/.test(fonteLLM) && /"n_ctx"/.test(fonteLLM),
     "★ e se o teto REAL do servidor for menor, o erro 400 vira retentativa enxuta");
-  ok(/reenviando cortado/.test(fonte) && !/exceed_context_size_error.*sendEmbed/.test(fonte),
+  ok(/reenviando cortado/.test(fonteLLM) && !/exceed_context_size_error.*sendEmbed/.test(fonteLLM + fonte),
     "  → em vez de mostrar o JSON do llama.cpp para quem perguntou");
 }
 
@@ -4483,10 +4488,15 @@ console.log("\n── esquecer de verdade, e blocos separados ──");
 
   const fonte = fs.readFileSync("./modulos/ai/chat.js", "utf8");
   // (31 out 2026, P1, R9) o `esquecer tudo` limpa só os canais DESTE servidor (antes: o fio de todos)
-  ok(/const mem = limparEstadoEmMemoria\(\{ canais: canaisDaqui, serverId: ctx\.serverId \}\);/.test(fonte)
-    && /cacheCanal\.canais\(\)\.filter\(\(c\) => c === message\.channelId \|\| canalDoServidor\(server, c\)\)/.test(fonte),
+  // (31 out 2026, P2) o `esquecer [tudo]` foi para o &privacidade; a limpeza mora em
+  // esquecerServidor/esquecerPessoa (chat.js), com o canal de quem pediu
+  const esqS = fonte.slice(fonte.indexOf("export function esquecerServidor"), fonte.indexOf("export async function talvezResponderLivre"));
+  ok(/const mem = limparEstadoEmMemoria\(\{ canais, serverId \}\);/.test(esqS)
+    && /cacheCanal\.canais\(\)\.filter\(\(c\) => c === canalId \|\| canalDoServidor\(server, c\)\)/.test(esqS),
     "  → chamado pelo `esquecer tudo`, só com os canais deste servidor");
-  ok(/limparEstadoEmMemoria\(\{ canalId: message\.channelId \}\)/.test(fonte), "  → e pelo `esquecer` individual");
+  const esqP = fonte.slice(fonte.indexOf("export function esquecerPessoa"), fonte.indexOf("export function esquecerServidor"));
+  ok(/if \(canalId\) limparEstadoEmMemoria\(\{ canalId \}\);/.test(esqP)
+    && /esquecerPessoa\(\{ serverId, userId: uid, canalId: message\.channelId \}\)/.test(fs.readFileSync("./modulos/ferramentas/privacidade.js", "utf8")), "  → e pelo `esquecer` individual");
 
   // Os quatro blocos com fronteira explícita.
   for (const [bloco, oque] of [
@@ -4526,7 +4536,10 @@ console.log("\n── a segunda memória (ia_memoria) ──");
   ok(!/ia_memoria/.test(funcao) && (funcao.match(/DELETE FROM ia_\w+ WHERE serverId = \?/g) ?? []).length === 4,
     "  → a função só tem DELETEs com o serverId (nenhum DELETE na ia_memoria)");
   const chat = fs.readFileSync("./modulos/ai/chat.js", "utf8");
-  ok(!/memória\(s\) global\(is\)/.test(chat) && /Esqueci tudo deste servidor/.test(chat), "  → o comando não diz mais que apagou a memória global — diz 'deste servidor'");
+  // (31 out 2026, P2) a tela do `esquecer tudo` mudou para o &privacidade (saída mínima)
+  const priv = fs.readFileSync("./modulos/ferramentas/privacidade.js", "utf8");
+  ok(!/memória\(s\) global\(is\)/.test(chat + priv) && /Memória do servidor apagada/.test(priv) && /Server memory erased/.test(priv) && /Memoria del servidor borrada/.test(priv),
+    "  → o comando não diz mais que apagou a memória global — diz 'do servidor' (pt/en/es)");
   ok(/db\.limparMemoria\(userId\);/.test(chat), "  → e o `esquecer` individual já limpava a dele");
 }
 
@@ -4540,8 +4553,11 @@ console.log("\n── ficha técnica: o que ela sabe de si ──");
     ["b", { _id: "b", name: "Queremos acordar tarde!", member_count: 2805 }],
     ["c", { _id: "c", name: "teste", member_count: 2 }],
   ]) };
-  process.env.LLM_MODEL_LEVE = "qwythos-9b-v2-rapido";
+  // (31 out 2026, P2) LLM_MODEL_LEVE saiu (era sinônimo do LLM_MODEL): o papel é o da conversa
+  const modeloAntes = process.env.LLM_MODEL;
+  process.env.LLM_MODEL = "qwythos-9b-v2-rapido";
   const txt = await f.fichaTecnica({ client }, { serverIdAtual: "a" });
+  if (modeloAntes === undefined) delete process.env.LLM_MODEL; else process.env.LLM_MODEL = modeloAntes;
 
   ok(/Servidores em que você está: 3 \(3023 membros/.test(txt),
     "★ a ficha conta os servidores e os membros — o dado que faltava para 'só neste aqui'");
@@ -6480,127 +6496,6 @@ process.exit(falhou ? 1 : 0);
 };
 
 // ════════════════════════════════════════════════════════════════════════════
-// rpg-mundo  (era teste-rpg-mundo.mjs)
-// ════════════════════════════════════════════════════════════════════════════
-SUITES["rpg-mundo"] = async () => {
-const __m0 = await import("node:assert"); const assert = __m0.default;
-const __m1 = await import("node:fs"); const fs = __m1.default;
-// O RPG como um mundo só, com duas moedas (pedido de Ghieh, 1 out 2026):
-// "reseta o game nos servidores, quero transformar ele em algo global agora
-// com apenas 2 tipos de moeda, uma infinita e outra finita".
-
-
-process.env.DB_PATH = "/tmp/teste-rpg-mundo.db"; process.env.CONFIG_PATH = "/tmp/teste-rpg-mundo.json";
-for (const f of [process.env.DB_PATH, process.env.CONFIG_PATH]) { try { fs.unlinkSync(f); } catch {} }
-const db = await import("./modulos/core/db.js");
-db.abrirBanco(process.env.DB_PATH);
-const mundo = await import("./modulos/game/mundo.js");
-
-let ok = 0, falhou = 0;
-const t = async (nome, fn) => {
-  try { await fn(); console.log(`  ✅ ${nome}`); ok++; }
-  catch (e) { console.log(`  ❌ ${nome}\n     ${e.message}`); falhou++; }
-};
-const quieto = async (fn) => { const o = [console.log, console.error]; console.log = console.error = () => {}; try { return await fn(); } finally { [console.log, console.error] = o; } };
-
-// O jogo antigo: cada servidor com o seu.
-db.criarPersonagem("SERV_A", "U1", "Antigo A");
-db.criarPersonagem("SERV_B", "U1", "Antigo B");
-db.upsertMoeda("SERV_A", { id: "brl", nome: "Real", simbolo: "🇧🇷", finita: false, mercado: 1000, padrao: true });
-db.creditar("SERV_A", "U1", "brl", 500);
-
-console.log("\n── o reset e o mundo ──");
-await t("★ na primeira subida, o jogo de TODOS os servidores é zerado", async () => {
-  await quieto(() => mundo.prepararMundo({ log: () => {} }));
-  const d = db.getDb();
-  for (const tb of ["rpg_personagem", "rpg_carteira"]) {
-    assert.equal(d.prepare(`SELECT COUNT(*) n FROM ${tb} WHERE serverId != ?`).get(mundo.MUNDO).n, 0, tb);
-  }
-  assert.equal(db.listarMoedas("SERV_A").length, 0);
-});
-await t("só uma vez: o progresso no mundo sobrevive aos próximos boots", async () => {
-  db.criarPersonagem(mundo.MUNDO, "U2", "Nova");
-  await quieto(() => mundo.prepararMundo({ log: () => {} }));
-  assert.ok(db.getPersonagem(mundo.MUNDO, "U2"));
-});
-await t("★ duas moedas: Ouro infinita (a principal) e Cristal finita", () => {
-  const ms = db.listarMoedas(mundo.MUNDO);
-  assert.deepEqual(ms.map((m) => m.id).sort(), ["cristal", "ouro"]);
-  const ouro = ms.find((m) => m.id === "ouro"), cristal = ms.find((m) => m.id === "cristal");
-  assert.equal(ouro.finita, 0); assert.equal(ouro.padrao, 1);
-  assert.equal(cristal.finita, 1); assert.equal(cristal.padrao, 0);
-});
-await t("moeda a mais some; nome trocado pelo dono fica; tipo trocado volta", () => {
-  db.upsertMoeda(mundo.MUNDO, { id: "btc", nome: "Bitcoin", finita: true, mercado: 21 });
-  db.salvarMoeda(mundo.MUNDO, "cristal", { nome: "Gema", finita: 0 });
-  mundo.garantirMoedasDoMundo();
-  assert.ok(!db.getMoeda(mundo.MUNDO, "btc"));
-  const c = db.getMoeda(mundo.MUNDO, "cristal");
-  assert.equal(c.nome, "Gema"); assert.equal(c.finita, 1);
-  db.salvarMoeda(mundo.MUNDO, "cristal", { nome: "Cristal" });
-});
-await t("câmbio do banco: 1 Cristal vale ~40 Ouro", async () => {
-  const ECO = await import("./modulos/game/mercado.js");
-  const ouro = db.getMoeda(mundo.MUNDO, "ouro"), cristal = db.getMoeda(mundo.MUNDO, "cristal");
-  const r = ECO.converter(1, cristal, ouro).recebe;
-  assert.ok(r > 30 && r < 45, String(r));
-});
-
-console.log("\n── o comando ──");
-const game = await import("./modulos/game/game.js");
-function ctxDe(serverId, saidas, { dono = false } = {}) {
-  return { serverId, PREFIXO: "&", COR: { erro: 1, aviso: 2, sucesso: 3, info: 4, mod: 5 }, config: { language: "pt" },
-    sendEmbed: async (_c, e) => { saidas.push(e); return { id: "m", react: async () => {} }; },
-    getServer: async () => ({ id: serverId, channels: [] }), ehSuperAdmin: () => dono, membroTemPermissao: () => true };
-}
-const msg = (autor, extra = {}) => ({ authorId: autor, author: { username: autor }, channel: {}, channelId: "c", mentionIds: [], ...extra });
-await t("★ o mesmo personagem em dois servidores", async () => {
-  const s = [];
-  await quieto(() => game.cmdGame(msg("U3"), ["criar", "Viajante"], ctxDe("SERV_A", s)));
-  s.length = 0;
-  await quieto(() => game.cmdGame(msg("U3"), [], ctxDe("SERV_B", s)));
-  assert.match(JSON.stringify(s), /Viajante/);
-  assert.ok(db.getPersonagem(mundo.MUNDO, "U3"));
-  assert.ok(!db.getPersonagem("SERV_A", "U3") && !db.getPersonagem("SERV_B", "U3"));
-});
-await t("criar moeda, perfis e modelos não existem mais; o tipo não se edita", async () => {
-  for (const op of [["criar", "prata", "Prata"], ["perfil", "btc"], ["modelo", "mundo"], ["remover", "cristal", "confirmar"]]) {
-    const s = [];
-    await quieto(() => game.cmdGame(msg("DONO"), ["admin", "moeda", ...op], ctxDe("SERV_A", s, { dono: true })));
-    assert.match(s.at(-1).title, /duas moedas/, op.join(" "));
-  }
-  assert.deepEqual(db.listarMoedas(mundo.MUNDO).map((m) => m.id).sort(), ["cristal", "ouro"]);
-  const s = [];
-  await quieto(() => game.cmdGame(msg("DONO"), ["admin", "moeda", "set", "cristal", "finita", "nao"], ctxDe("SERV_A", s, { dono: true })));
-  assert.equal(db.getMoeda(mundo.MUNDO, "cristal").finita, 1);
-  await quieto(() => game.cmdGame(msg("DONO"), ["admin", "moeda", "set", "cristal", "nome=Gema"], ctxDe("SERV_A", s, { dono: true })));
-  assert.equal(db.getMoeda(mundo.MUNDO, "cristal").nome, "Gema");
-});
-await t("reset do mundo apaga o progresso e as duas moedas voltam na hora", async () => {
-  const s = [];
-  await quieto(() => game.cmdGame(msg("DONO"), ["admin", "reset", "mundo", "confirmar"], ctxDe("SERV_B", s, { dono: true })));
-  assert.ok(!db.getPersonagem(mundo.MUNDO, "U3"));
-  assert.deepEqual(db.listarMoedas(mundo.MUNDO).map((m) => m.id).sort(), ["cristal", "ouro"]);
-  assert.equal(db.getMoeda(mundo.MUNDO, "cristal").mercado, 5000, "banco cheio de novo");
-});
-await t("só o dono do bot mexe nas moedas do mundo", async () => {
-  const s = [];
-  await quieto(() => game.cmdGame(msg("QUALQUER"), ["admin", "moeda"], ctxDe("SERV_A", s)));
-  assert.match(s.at(-1).title, /restrito/i);
-});
-
-await t("o RPG não tem nada chamado \"economia\" (o nome é da moeda do servidor, &economia)", () => {
-  // (v4: modulos/game/conteudo/ é uma pasta — entra o que tem dentro dela também)
-  const arquivos = [...fs.readdirSync("./modulos/game", { recursive: true }).map((f) => `./modulos/game/${f}`).filter((f) => fs.statSync(f).isFile()), "./DESIGN-rpg.md", "./GUIA-moedas.md"];
-  for (const a of arquivos) assert.doesNotMatch(fs.readFileSync(a, "utf8"), /econom/i, a);
-  assert.ok(!fs.existsSync("./modulos/game/economia.js") && !fs.existsSync("./DESIGN-rpg-economia.md"));
-});
-
-console.log(`\nRPG (mundo): ${ok} ok, ${falhou} falha(s)`);
-process.exit(falhou ? 1 : 0);
-};
-
-// ════════════════════════════════════════════════════════════════════════════
 // rss-precisao  (era teste-rss-precisao.mjs)
 // ════════════════════════════════════════════════════════════════════════════
 SUITES["rss-precisao"] = async () => {
@@ -7121,7 +7016,8 @@ ok(ult().includes("Nenhum cargo de staff"), "&staff sem cargos → explica como 
 
 await say("&staff add Administração");
 ok(ult().includes("adicionado"), "&staff add <nome do cargo>");
-ok(ult().includes("acesso aos comandos"), "  → avisa que isso concede acesso à moderação");
+// (31 out 2026, P2 revisão, R1) uma linha só, e ela ainda diz o que o cargo ganha
+ok(/"description":"\*\*Administração\*\* agora é staff: usa os comandos de moderação\."/.test(ult()), "  → avisa que isso concede acesso à moderação");
 await say(`&staff add <%${CARGO_MOD}>`);
 ok(ult().includes("adicionado"), "&staff add <@cargo> (menção)");
 
@@ -7401,7 +7297,8 @@ await t("★ &ticket painel #canal posta o embed no canal escolhido, com uma rea
   const ctx = { ...w.criarContexto(), getServer: async () => w.server, membroTemPermissao: () => true };
   // (31 out 2026, P1) o comando vem de OUTRO canal e aponta o painel: só vale canal deste servidor
   await tickets.cmdTicket({ channel: w.log, channelId: "C_LOG", authorId: "STAFF1" }, ["painel", "<#01KCOUTRO0SERVIDOR00000000>"], ctx);
-  assert.match(w.log.mensagens.at(-1)?.embed?.description ?? "", /não é \*\*deste servidor\*\*/);
+  // (31 out 2026, P2) saída mínima: uma linha (antes: "não é **deste servidor**" num embed com título)
+  assert.match(w.log.mensagens.at(-1)?.embed?.description ?? "", /^❌ Esse canal não é deste servidor\.$/);
   assert.ok(!w.geral.mensagens.length, "nada publicado");
   await tickets.cmdTicket({ channel: w.log, channelId: "C_LOG", authorId: "STAFF1" }, ["painel", `<#${w.geral.id}>`], ctx);
   painel = w.geral.mensagens.find((m) => m.embed?.title?.includes("Abrir um ticket"));
@@ -7779,13 +7676,14 @@ ok(!String(respostas.at(-1)?.title).includes("Não consegui falar"), "  → e n�
 // Um typo de verdade cai na sugestão, com o subcomando certo apontado.
 respostas.length = 0; chamou = 0;
 await tts.cmdTts(msgCmd, ["dicionari"], ctxCmd);
-ok(String(respostas.at(-1)?.title).includes("quis dizer"), "typo (`dicionari`) sugere o subcomando em vez de falar a palavra");
+// (31 out 2026, P2) saída mínima: "você quis dizer" numa linha só, com o subcomando certo (antes: título + explicação)
+ok(/^🤔 `&tts dicionario`\?$/.test(String(respostas.at(-1)?.description)), "typo (`dicionari`) sugere o subcomando em vez de falar a palavra");
 ok(chamou === 0, "  → e não gasta uma tentativa de entrar na call para isso");
 ok(String(respostas.at(-1)?.description).includes("dicionario"), "  → aponta o subcomando certo");
 
 respostas.length = 0; chamou = 0;
 await tts.cmdTts(msgCmd, ["reinicar"], ctxCmd);
-ok(String(respostas.at(-1)?.title).includes("quis dizer"), "pega erro de digitação com letra faltando (`reinicar`)");
+ok(/^🤔 `&tts reiniciar`\?$/.test(String(respostas.at(-1)?.description)), "pega erro de digitação com letra faltando (`reinicar`)");   // (31 out 2026, P2) uma linha
 
 respostas.length = 0; chamou = 0;
 await tts.cmdTts(msgCmd, ["falar", "diagnosticar"], ctxCmd);
@@ -8006,7 +7904,8 @@ console.log("\n── entrar → resgate automático ──");
   // Erro de digitação COM argumento não vira fala (foi "resgater #Call Resenha")
   respE.length = 0; chamadasE.length = 0;
   await tts.cmdTts(msgB, ["resgater", "<#" + livre.id + ">"], ctxE2);
-  ok(/quis dizer/i.test(String(respE.at(-1)?.title)) && !chamadasE.some((c) => c.u.endsWith("/falar")),
+  // (31 out 2026, P2) "você quis dizer" numa linha só, com o subcomando certo
+  ok(/^🤔 `&tts resgatar`\?$/.test(String(respE.at(-1)?.description)) && !chamadasE.some((c) => c.u.endsWith("/falar")),
     "★ `resgater #call` vira \"você quis dizer resgatar?\", não fala de 20s");
   respE.length = 0; chamadasE.length = 0;
   await tts.cmdTts(msgB, ["entrarr", "agora", "na", "call"], ctxE2);
@@ -8289,11 +8188,15 @@ async function paginasDe(args, lang) {
 }
 
 const todas = [];
+// (31 out 2026, P2) o &tutorial virou mini guia: as áreas que só repetiam um comando foram para o
+// `&help` dele. As checagens leem o tutorial E as páginas de ajuda do registro (onde o texto foi parar).
+const aj = await import("./modulos/core/ajuda-registro.js");
 for (const lang of ["pt", "en"]) {
   const lista = (await paginasDe(["__nenhuma__"], lang))[0].texto;
   const areas = [...lista.matchAll(/`([a-z]+)`/g)].map((m) => m[1]).filter((a) => a !== "tutorial");
   for (const a of areas) for (const p of await paginasDe([a], lang)) todas.push({ onde: `[${lang}] &tutorial ${a}`, ...p });
   for (let n = 1; n <= 6; n++) for (const p of await paginasDe([String(n)], lang)) todas.push({ onde: `[${lang}] &tutorial ${n}`, ...p });
+  for (const cam of aj.todasAsPaginas()) { const pg = aj.pagina(cam[0], cam.slice(1), lang, "&"); todas.push({ onde: `[${lang}] &help ${cam.join(" ")}`, titulo: pg.titulo, texto: pg.linhas.join("\n") }); }
 }
 
 console.log("\n── páginas ──");
@@ -8312,7 +8215,7 @@ await t("nada do cargo de silêncio aposentado", () => {
 });
 await t("limitar canais com &acesso avisa que vale para todos os comandos", () => {
   // (2 out 2026: a área "game" do tutorial saiu — o aviso continua onde o &acesso aparece)
-  const jogo = todas.filter((p) => /acesso canal somente/.test(p.texto));
+  const jogo = todas.filter((p) => /acesso canal somente|access channel only/.test(p.texto));
   assert.ok(jogo.length >= 2);
   for (const p of jogo) assert.match(p.texto, /todos|every/, p.onde);
   for (const p of todas) assert.doesNotMatch(p.texto, /continua funcionando nos outros canais|keeps working in the other channels/, p.onde);
@@ -8322,7 +8225,8 @@ console.log("\n── os exemplos funcionam de verdade ──");
 const { cmdAutorole } = await import("./modulos/ferramentas/autorole.js");
 await t("todo &autorole do tutorial define o cargo (antes: só `set <@cargo>`)", async () => {
   const exemplos = new Set();
-  for (const p of todas) for (const m of String(p.texto).matchAll(/&autorole ([^`\n]+)/g)) exemplos.add(m[1].trim());
+  // (P2) a ajuda do registro também entra: o molde de uso (`[@cargo | off]`, `‹cargo›`) não é exemplo
+  for (const p of todas) for (const m of String(p.texto).matchAll(/&autorole ([^`\n]+)/g)) if (!/[[\]<>‹›|]/.test(m[1]) && !/^off\b/.test(m[1].trim())) exemplos.add(m[1].trim());
   assert.ok(exemplos.size >= 1);
   const roles = new Map([["01KZMR4B94Q7Q2EH5CYHFW0AAA", { name: "Membro" }], ["01KZMR4B94Q7Q2EH5CYHFW0BBB", { name: "Member" }],
     ["01KZMR4B94Q7Q2EH5CYHFW0CCC", { name: "Cargo" }], ["01KZMR4B94Q7Q2EH5CYHFW0DDD", { name: "Role" }]]);
@@ -8333,10 +8237,12 @@ await t("todo &autorole do tutorial define o cargo (antes: só `set <@cargo>`)",
     assert.ok(config.autorole.roleId, `&autorole ${ex} não definiu o cargo`);
   }
 });
-await t("todo &fuso add do tutorial acha o fuso", async () => {
+// (31 out 2026, P2) o `&fuso add` saiu dos exemplos (o &fuso virou conversor): toda cidade citada
+// com o &fuso — `&fuso add <cidade>`, `&fuso <cidade>`, `&fuso 21:30 <cidade>` — tem de achar o fuso
+await t("toda cidade do &fuso que o tutorial e a ajuda citam acha o fuso", async () => {
   const { buscarFuso } = await import("./modulos/core/fusos.js");
   const exemplos = new Set();
-  for (const p of todas) for (const m of String(p.texto).matchAll(/&fuso add ([^`\n]+)/g)) exemplos.add(m[1].trim());
+  for (const p of todas) for (const m of String(p.texto).matchAll(/&(?:fuso|timezone|time) (?:add )?(?:\d{1,2}:\d{2} )?([A-Z][^`\n<\[|]+)/g)) exemplos.add(m[1].trim());
   assert.ok(exemplos.size >= 2);
   for (const ex of exemplos) assert.ok((await buscarFuso(ex))?.exato, `&fuso add ${ex}`);
 });
@@ -8356,268 +8262,8 @@ console.log(`\nTUTORIAL: ${ok} ok, ${falhou} falha(s)`);
 process.exit(falhou ? 1 : 0);
 };
 
-// ════════════════════════════════════════════════════════════════════════════
-// verificador  (era teste-verificador.mjs)
-// ════════════════════════════════════════════════════════════════════════════
-SUITES["verificador"] = async () => {
-const __m0 = await import("node:http"); const http = __m0.default;
-const __m1 = await import("./modulos/ai/verificar.js"); const { parseNumero, conferirContas, conferirNomes, conferirComandos, conferirDestinatario, conferirNegacaoDeCapacidade, verificarDeterministico, verificarComIA, verificar } = __m1;
-const __m2 = await import("node:fs"); const fs = __m2.default;
-
-
-let passou = 0, falhou = 0;
-function caso(nome, cond, detalhe = "") {
-  if (cond) { passou++; console.log(`  ✅ ${nome}`); }
-  else      { falhou++; console.log(`  ❌ ${nome}${detalhe ? ` — ${detalhe}` : ""}`); }
-}
-
-console.log("── parseNumero ──");
-caso("263.857 (milhar BR)", parseNumero("263.857") === 263857);
-caso("1.234,56 (BR completo)", parseNumero("1.234,56") === 1234.56);
-caso("3,5 (decimal BR)", parseNumero("3,5") === 3.5);
-caso("791571 (sem separador)", parseNumero("791571") === 791571);
-caso("2.5 (decimal US)", parseNumero("2.5") === 2.5);
-
-console.log("── camada 2a: contas ──");
-// o clássico que motivou tudo isso
-caso("pega 2+2=2", conferirContas("fácil: 2+2=2").length === 1);
-caso("aprova 2+2=4", conferirContas("fácil: 2+2=4").length === 0);
-caso("aprova 263857 × 3 = 791.571 (milhar BR no resultado)",
-  conferirContas("A conta dá 263857 × 3 = 791.571, tranquilo.").length === 0);
-caso("pega 263857 × 3 = 791570", conferirContas("263857 × 3 = 791570").length === 1);
-caso("aprova 10 / 4 = 2,5", conferirContas("então 10 / 4 = 2,5").length === 0);
-caso("aprova arredondamento 10 / 3 = 3,33", conferirContas("10 / 3 = 3,33").length === 0);
-caso("ignora divisão por zero", conferirContas("5 / 0 = 0").length === 0);
-caso("ignora texto sem '='", conferirContas("entre 2-3 pessoas no dia 27/08/2026 às 10:30").length === 0);
-
-console.log("── camada 2b: nomes na evidência ──");
-const EVID_TTS = `
-// voz-servico/tts.js (trecho real de exemplo)
-export async function sintetizar(texto, voz) { /* piper */ }
-export function listarVozes() { return fs.readdirSync(VOZES_DIR); }
-`;
-// a invenção real: resposta descreve lerFileSync, que não existe no lido
-caso("pega `lerFileSync` inventado",
-  conferirNomes("O TTS usa a função `lerFileSync` para carregar o modelo.", EVID_TTS).length === 1);
-caso("aprova `sintetizar` (existe no lido)",
-  conferirNomes("A função `sintetizar` recebe texto e voz.", EVID_TTS).length === 0);
-caso("aprova listarVozes() fora de crases",
-  conferirNomes("Já listarVozes() devolve as vozes do diretório.", EVID_TTS).length === 0);
-caso("pula token que veio da pergunta ('X não existe')",
-  conferirNomes("A função `gerarComentarioEspontaneo` não existe nesse arquivo.",
-    EVID_TTS, "o tts tem uma gerarComentarioEspontaneo?").length === 0);
-caso("não roda com evidência trivial",
-  conferirNomes("A `qualquerCoisa` faz tudo.", "oi").length === 0);
-caso("case-insensitive como fallback",
-  conferirNomes("Use `SINTETIZAR` ali.", EVID_TTS).length === 0);
-
-console.log("── camada 2c: comandos citados ──");
-// registro de mentira, no formato que o chat.js monta do help + aliases
-const CMDS = {
-  prefixo: "&",
-  bases: new Set(["assistente", "automod", "help", "chat", "mute"]),
-  subs: { assistente: new Set(["rapido", "completo", "canais", "protecao", "cancelar", "quick", "full"]) },
-};
-// o caso real: subcomando inventado pela Judy
-caso("pega `&assistente automod` (subcomando inventado)",
-  conferirComandos("Recomendo usar &assistente automod para configurar.", CMDS).length === 1);
-caso("aprova `&assistente protecao` (o certo)",
-  conferirComandos("Use &assistente protecao.", CMDS).length === 0);
-caso("pega `&assistencia` (base inventada)",
-  conferirComandos("O comando &assistencia resolve.", CMDS).length === 1);
-caso("aprova `&mute João` (argumento não é subcomando: mute não tem lista fechada)",
-  conferirComandos("É só usar &mute João por 10 minutos.", CMDS).length === 0);
-caso("aprova apelido EN de subcomando (&assistente quick)",
-  conferirComandos("Try &assistente quick.", CMDS).length === 0);
-caso("sem registro, não roda (fail-open)",
-  conferirComandos("Use &qualquercoisa aí.", null).length === 0);
-
-console.log("── camada 2d: destinatário ──");
-// o caso real: a Judy chamou a Mangetsuki de Ghiso a conversa inteira
-caso("pega vocativo para a pessoa errada",
-  conferirDestinatario("Com certeza, Ghiso. Se você está aprendendo...", "Mangetsuki").length === 1);
-caso("aprova vocativo para quem falou",
-  conferirDestinatario("Entendi, Mangetsuki. Vamos lá.", "Mangetsuki").length === 0);
-caso("aprova falar SOBRE alguém citado na pergunta",
-  conferirDestinatario("O Akita, sim — vale assistir.", "Balatro", "gostei do Akita, ele é direto").length === 0);
-caso("aprova texto sem vocativo nenhum",
-  conferirDestinatario("Boa. Segue o plano que combinamos.", "Ghiso").length === 0);
-caso("palavras capitalizadas comuns não disparam",
-  conferirDestinatario("Certo, então. Boa, vamos.", "Ghiso").length === 0);
-
-console.log("── camada 2e: negação de capacidade ──");
-caso("pega 'não tenho acesso à internet' com pedido explícito",
-  conferirNegacaoDeCapacidade("Não tenho acesso à internet para buscar isso.", { pediuBusca: true }).length === 1);
-caso("pega negação com busca JÁ na evidência",
-  conferirNegacaoDeCapacidade("Não consigo pesquisar em tempo real.", { evidencia: "[buscar_web]\n1. resultado..." }).length === 1);
-caso("aprova negação em papo comum sem pedido nem evidência",
-  conferirNegacaoDeCapacidade("Não tenho acesso à internet.", {}).length === 0);
-caso("aprova resposta normal com a palavra internet",
-  conferirNegacaoDeCapacidade("A internet de vocês está lenta hoje?", { pediuBusca: true }).length === 0);
-// ── os dois bugs do teste ao vivo de 10/09: recusas de arquivo e de imagem ──
-caso("pega 'I cannot access the main.js file' num pedido de código",
-  conferirNegacaoDeCapacidade("I cannot access the main.js file to determine its location or contents.", { pediuCodigo: true }).length === 1);
-caso("pega 'não consigo acessar o arquivo' com ler_codigo JÁ na evidência",
-  conferirNegacaoDeCapacidade("Não consigo acessar o arquivo main.js.", { evidencia: "[ler_codigo main.js]\nimport x from..." }).length === 1);
-caso("aprova a negação quando o ler_codigo FALHOU de verdade (evidência com erro)",
-  conferirNegacaoDeCapacidade("Não consegui acessar o arquivo agora.", { evidencia: '[ler_codigo]\n{"erro":"HTTP 404"}' }).length === 0);
-caso("pega 'não consigo acessar imagens do CDN' com anexo presente",
-  conferirNegacaoDeCapacidade("Desculpe, não consigo acessar imagens diretamente do CDN do Stoat.", { pediuImagem: true }).length === 1);
-caso("pega negação de imagem com ver_imagem JÁ na evidência",
-  conferirNegacaoDeCapacidade("Não consigo ver anexos.", { evidencia: "[ver_imagem https://cdn/x]\nUm guerreiro de armadura azul..." }).length === 1);
-caso("aprova papo comum sobre imagens sem anexo nem evidência",
-  conferirNegacaoDeCapacidade("Não consigo ver imagens, só texto — manda descrito.", {}).length === 0);
-caso("aprova frase que só CITA arquivo sem negar acesso",
-  conferirNegacaoDeCapacidade("O arquivo main.js liga os módulos no boot.", { pediuCodigo: true }).length === 0);
-
-console.log("── camada 2 integrada ──");
-{
-  const r = verificarDeterministico({
-    resposta: "O `lerFileSync` calcula 2+2=2. Depois rode &assistencia.",
-    evidencia: EVID_TTS,
-    pergunta: "como funciona o tts?",
-    comandos: CMDS,
-  });
-  caso("junta conta + nome + comando (3 problemas)", !r.ok && r.problemas.length === 3,
-    JSON.stringify(r.problemas));
-}
-
-const fake = http.createServer((req, res) => {
-  let corpo = "";
-  req.on("data", (c) => (corpo += c));
-  req.on("end", () => {
-    const j = JSON.parse(corpo);
-
-    // contrato do template Qwythos: exatamente 1 system, no índice 0
-    const systems = j.messages.filter((m) => m.role === "system").length;
-    const contratoOk = systems === 1 && j.messages[0].role === "system";
-    if (!contratoOk) {
-      res.writeHead(500).end(JSON.stringify({ error: "contrato de template violado" }));
-      return;
-    }
-
-    const user = j.messages.find((m) => m.role === "user")?.content || "";
-    let content = '{"ok": true}';
-    if (user.includes("[CASO:reprova]"))
-      content = '```json\n{"ok": false, "problemas": ["a resposta descreve uma função que a evidência não contém"]}\n```';
-    if (user.includes("[CASO:lixo]"))
-      content = "claro! aqui está sua análise: tudo certo 👍";
-    res.writeHead(200, { "content-type": "application/json" })
-       .end(JSON.stringify({ choices: [{ message: { content } }] }));
-  });
-});
-
-await new Promise((r) => fake.listen(0, "127.0.0.1", r));
-const porta = fake.address().port;
-
-// wrapper no formato que o chat.js injeta: mensagens → string da resposta
-async function chamarModeloFake(mensagens, { maxTokens } = {}) {
-  const resp = await fetch(`http://127.0.0.1:${porta}/v1/chat/completions`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ model: "fake", max_tokens: maxTokens, messages: mensagens }),
-  });
-  if (!resp.ok) throw new Error(`fake server ${resp.status}`);
-  const j = await resp.json();
-  return j.choices[0].message.content;
-}
-
-console.log("── camada 3: IA ancorada (servidor falso) ──");
-{
-  const r = await verificarComIA({
-    pergunta: "[CASO:aprova] como funciona o tts?",
-    resposta: "A função `sintetizar` recebe texto e voz.",
-    evidencia: EVID_TTS,
-    chamarModelo: chamarModeloFake,
-  });
-  caso("aprova quando modelo diz ok", r?.ok === true, JSON.stringify(r));
-}
-{
-  const r = await verificarComIA({
-    pergunta: "[CASO:reprova] como funciona o tts?",
-    resposta: "O TTS usa `lerFileSync` e um pool de threads.",
-    evidencia: EVID_TTS,
-    chamarModelo: chamarModeloFake,
-  });
-  caso("reprova com problemas (e limpa cerca ```json)",
-    r?.ok === false && r.problemas.length === 1, JSON.stringify(r));
-}
-{
-  const r = await verificarComIA({
-    pergunta: "[CASO:lixo] tanto faz",
-    resposta: "qualquer coisa",
-    evidencia: EVID_TTS,
-    chamarModelo: chamarModeloFake,
-  });
-  caso("fail-open com resposta sem JSON (devolve null)", r === null);
-}
-{
-  const r = await verificarComIA({
-    pergunta: "sem evidência",
-    resposta: "qualquer coisa",
-    evidencia: "",
-    chamarModelo: chamarModeloFake,
-  });
-  caso("recusa rodar sem evidência (null)", r === null);
-}
-{
-  const lenta = () => new Promise(() => {});           // nunca resolve
-  process.env.VERIF_TIMEOUT_MS_IGNORADO = "1";        // (timeout real é lido no import; testamos via race abaixo)
-  const r = await Promise.race([
-    verificarComIA({ pergunta: "p", resposta: "r", evidencia: EVID_TTS, chamarModelo: lenta }),
-    new Promise((res) => setTimeout(() => res("pendente"), 500)),
-  ]);
-  caso("chamada pendurada não trava o teste (timeout interno cobre produção)", r === "pendente" || r === null);
-}
-
-console.log("── orquestrador ──");
-{
-  const r = await verificar({
-    pergunta: "[CASO:aprova] como funciona o tts?",
-    resposta: "O `lerFileSync` cuida disso. Aliás 2+2=2.",
-    evidencia: EVID_TTS,
-    chamarModelo: chamarModeloFake,
-  });
-  caso("determinística pega mesmo com IA aprovando",
-    !r.ok && r.camadas.deterministica === 2 && r.camadas.ia === 0, JSON.stringify(r));
-}
-{
-  const r = await verificar({
-    pergunta: "oi, tudo bem?",
-    resposta: "tudo ótimo!",
-    evidencia: "",                       // conversa casual: sem evidência
-    chamarModelo: chamarModeloFake,
-  });
-  caso("conversa casual: aprova sem chamar IA (camadas.ia === null)",
-    r.ok && r.camadas.ia === null, JSON.stringify(r));
-}
-
-fake.close();
-
-console.log("── guard: imagem anexada força ferramenta ──");
-{
-  const fonte = await import("node:fs").then(m => m.readFileSync("./modulos/ai/chat.js", "utf8"));
-  const re = /if \(tipo !== "ferramenta" && \/\\\[\(imagem[\s\S]{0,200}?tipo = "ferramenta";/;
-  caso("o guard existe no chat.js", re.test(fonte));
-
-  // o marcador que o guard procura tem que ser o MESMO que o chat.js escreve
-  const guard = /\[\(imagem\\\(ns\\\) anexada\|attached image\)/.test(fonte);
-  caso("marcador do guard bate com o texto injetado (PT e EN)", guard);
-
-  // e o regex do guard, aplicado ao texto real, casa
-  const rx = /\[(imagem\(ns\) anexada|attached image)/;
-  caso("casa com o texto PT real",
-    rx.test("o que você vê nessa imagem?\n\n[imagem(ns) anexada(s), visíveis com a ferramenta ver_imagem: https://x]"));
-  caso("casa com o texto EN real",
-    rx.test("what do you see?\n\n[attached image(s), viewable with the ver_imagem tool: https://x]"));
-  caso("não casa com pergunta comum sobre imagem",
-    !rx.test("você consegue gerar uma imagem pra mim?"));
-}
-
-console.log(`\n${passou} passou, ${falhou} falhou`);
-process.exit(falhou ? 1 : 0);
-};
-
+// (31 out 2026, P2) a suíte `verificador` saiu com o verificador da IA (modulos/ai/verificar.js):
+// as 54 checagens eram todas dele (parseNumero, conferirContas, …) — ver _notas/ia.md.
 // ════════════════════════════════════════════════════════════════════════════
 // voz-canais  (era teste-voz-canais.mjs)
 // ════════════════════════════════════════════════════════════════════════════
@@ -9171,10 +8817,13 @@ await import("./main.js");
 const c = globalThis.__client;
 await c.emitAll("ready");
 const db = await import("./modulos/core/db.js");
-const geral = await import("./modulos/moderacao/geral.js");
+// (31 out 2026, P2) a ajuda mora só no registro: as páginas vêm do ajuda-registro.js, o &help do ajuda.js
+const ajRegP2 = await import("./modulos/core/ajuda-registro.js");
+const { ORDEM: ORDEM_P2 } = await import("./modulos/moderacao/help-grupos.js");
+const grupos = () => Object.fromEntries(ORDEM_P2.map((g) => [g, {}]));
+const arvoreSubtopicos = () => { const r = {}; for (const [id, ...cam] of ajRegP2.todasAsPaginas()) { if (!cam.length) continue; let no = (r[id] ??= {}); for (const k of cam) no = (no[k] ??= {}); } return r; };
+const geral = { ...(await import("./modulos/moderacao/geral.js")), ...(await import("./modulos/moderacao/ajuda.js")) };
 const tutorial = await import("./modulos/moderacao/tutorial.js");
-const { arvoreSubtopicos } = await import("./modulos/moderacao/help-arvore.js");
-const { grupos } = await import("./modulos/moderacao/help-grupos.js");
 
 // ── 1. Ajuda e tutorial, nos dois idiomas, página por página ──
 let seq = 0;
@@ -9194,7 +8843,8 @@ for (const lang of ["en", "pt"]) {
   const desce = (no, cam) => { for (const k of Object.keys(no ?? {})) { if (k === "titulo" || k === "texto" || typeof no[k] !== "object") continue; lista.push(["help", [...cam, k]]); desce(no[k], [...cam, k]); } };
   desce(arvoreSubtopicos("&", lang), []);
   for (let n = 1; n <= 6; n++) lista.push(["tutorial", [String(n)]]);
-  for (const a of ["permissoes", "canais", "moderacao", "logs", "cargos", "xp", "ia", "noticias", "mensagens", "economia", "game", "rpg", "aventura", "ajustes"]) lista.push(["tutorial", [a]]);
+  // (P2) os conceitos do mini guia e as áreas antigas (que abrem o &help do comando)
+  for (const a of ["permissoes", "ids", "canais", "protecao", "moderacao", "logs", "cargos", "xp", "ia", "noticias", "mensagens", "economia", "game", "rpg", "aventura", "ajustes"]) lista.push(["tutorial", [a]]);
   const ruins = [];
   for (const [qual, args] of lista) {
     const txt = await paginas(qual === "help" ? geral.cmdHelp : tutorial.cmdTutorial, args, lang);
@@ -9236,8 +8886,19 @@ for (const cmd of COMANDOS) {
 ok(!ruins.length, `${COMANDOS.length} comandos em inglês sem português (incluindo o catálogo do RPG)`, ruins.slice(0, 4).join(" | "));
 ok(!mudos.length, "todo comando responde alguma coisa (o &repete sem texto ficava mudo)", mudos.join(", "));
 
-env.length = 0; await say("&game contratos 3");
-ok(env.some((p) => /Descend the Bottomless Well/.test(p.embeds?.[0]?.description ?? "")), "★ missão traduzida: \"Descer ao Poço sem Fundo\" → \"Descend the Bottomless Well\" (v4: contrato da dificuldade 3)");
+// (31 out 2026, P2) o quadro de contratos saiu: a missão é sorteada. O nome dela sai em inglês
+// (o do catálogo, nunca o português) — a primeira missão do personagem, no título do resultado
+{
+  const C = await import("./modulos/game/conteudo.js"), TL = await import("./modulos/game/telas.js");
+  const nomes = (l) => new Set([...C.CONTRATOS, ...C.ESPECIAIS].map((m) => TL.nomeMissao(m, l)).concat([...C.DUNGEONS.values()].map((d) => TL.nomeDungeon(d, l))));
+  const en = nomes("en"), pt = nomes("pt");
+  const dbT = await import("./modulos/core/db.js"), { MUNDO } = await import("./modulos/game/mundo.js");
+  dbT.salvarPersonagem(MUNDO, "U1", { ultimaMissao: 0, recuperandoAte: 0 });   // a lista acima já foi a uma missão
+  env.length = 0; await say("&game missao");
+  const titulo = env.map((p) => p.embeds?.[0]?.title ?? "").find((x) => / — /.test(x)) ?? "";
+  const missao = titulo.split(" — ").slice(1).join(" — ");
+  ok(en.has(missao) && !pt.has(missao), "★ missão traduzida: o resultado traz o nome da missão em inglês (\"Descend the Bottomless Well\", não \"Descer ao Poço sem Fundo\")", titulo);
+}
 env.length = 0; await say("&game comprar Simple Dagger");
 ok(env.some((p) => /Simple Dagger/.test(p.embeds?.[0]?.description ?? "") && !/n[ãa]o (achei|existe)|unknown|not found/i.test(p.embeds?.[0]?.description ?? "")), "★ o nome em inglês funciona no comando (\"buy Simple Dagger\" acha a Adaga Simples)");
 
@@ -9308,8 +8969,11 @@ process.env.DB_PATH = "/tmp/visao.db"; process.env.CONFIG_PATH = "/tmp/visao.jso
 process.env.CHAT_SERVIDORES = "S_IA"; process.env.TTS_SERVIDORES = "S_IA";
 for (const f of ["/tmp/visao.db", "/tmp/visao.db-wal", "/tmp/visao.db-shm"]) fs.rmSync(f, { force: true });
 const db = await import("./modulos/core/db.js"); db.abrirBanco(process.env.DB_PATH);
-const geral = await import("./modulos/moderacao/geral.js");
+// (31 out 2026, P2) o &help é o ajuda.js (registro); o índice é curto, por grupo, sem rodapé (R2);
+// o &tutorial é o mini guia. Cada checagem abaixo tem a do desenho antigo como origem.
+const geral = await import("./modulos/moderacao/ajuda.js");
 const tutorial = await import("./modulos/moderacao/tutorial.js");
+const visaoMod = await import("./modulos/moderacao/visao.js");
 let pass = 0, fail = 0;
 const ok = (cond, msg) => { cond ? pass++ : fail++; console.log(`${cond ? "✅" : "❌"} ${msg}`); };
 let seq = 0;
@@ -9325,46 +8989,49 @@ async function ver(fn, args, { nivel = "membro", sid = "S_IA", lang = "pt" } = {
 }
 const help = (args, o) => ver(geral.cmdHelp, args, o);
 const tut = (args, o) => ver(tutorial.cmdTutorial, args, o);
+const citados = (t) => [...t.matchAll(/`&([a-zçãéíóú]+)/g)].map((m) => m[1]).filter((c) => c !== "help");
 
 console.log("\n── membro ──");
 let t = await help([], { nivel: "membro" });
-ok(!/`&ban\b|`&automod\b|`&kick\b|`&log\b/.test(t), "★ o &help do membro não mostra comandos de moderação");
-ok(/`&economia minerar`/.test(t) || /`&economia`/.test(t), "  → mas mostra o que ele usa (&economia, &game, &xp…)");
-ok(!/&help proteger|&help diagnostico|&help comecar|&help dono/.test(t), "  → e nem lista os grupos da staff");
-ok(/&help voce/.test(t) && !/assistente/.test(t), "  → tem o grupo \"Para você\" e não oferece o &assistente");
-ok(/é da staff/.test(await help(["repete"], { nivel: "membro" })) || /Comando da staff/.test(await help(["repete"], { nivel: "membro" })), "&repete agora é da staff (era aberto: qualquer um \"anunciava\" pela bot)");
-ok(/Você está vendo os comandos que pode usar/.test(t), "  → e diz que é a visão de membro");
-ok(/Comando da staff/.test(await help(["ban"], { nivel: "membro" })), "&help ban para o membro: \"comando da staff\" (sem o detalhe)");
-ok(/Não encontrado/.test(await help(["servidores"], { nivel: "membro" })), "&help servidores para o membro: como se não existisse");
+ok(!/`&ban\b|`&automod\b|`&kick\b|`&log\b|`&config\b/.test(t), "★ o &help do membro não mostra comandos de moderação nem de configuração");
+ok(/`&economia`/.test(t) && /`&game`/.test(t), "  → mas mostra o que ele usa (&economia, &game, &xp…)");
+ok(!/Proteger|Diagnóstico|Dono do bot/.test(t), "  → e nem lista os grupos que só têm comandos da staff");
+ok(!/assistente/.test(t), "  → e não oferece o &assistente");
+const membro = { nivel: "membro", ia: true, voz: true, modIA: true };
+ok(citados(t).every((c) => visaoMod.podeVer(membro, c)), "  → todo comando do índice do membro é um que ele pode usar");
+ok(/é da staff/.test(await help(["repete"], { nivel: "membro" })), "&repete (hoje &embed) é da staff");
+ok(/é da staff/.test(await help(["ban"], { nivel: "membro" })), "&help ban para o membro: \"é da staff\" (sem o detalhe)");
+ok(/Não há ajuda/.test(await help(["servidores"], { nivel: "membro" })), "&help servidores para o membro: como se não existisse");
 t = await help(["xp"], { nivel: "membro" });
-ok(/&xp top|&nivel/.test(t) && !/`&xp setup|`&xp criarcargos/.test(t), "&help xp do membro: o ranking sim, a configuração não");
-ok(/Comando da staff/.test(await help(["game", "admin"], { nivel: "membro" })) || /Não encontrado/.test(await help(["game", "admin"], { nivel: "membro" })), "&help game admin: fechado para o membro");
+ok(/&xp|&nivel/.test(t) && !/`&xp setup|`&xp criarcargos/.test(t), "&help xp do membro: o ranking sim, a configuração não");
+ok(/é da staff|Não há ajuda/.test(await help(["game", "admin"], { nivel: "membro" })), "&help game admin: fechado para o membro");
 
 console.log("\n── staff ──");
 t = await help([], { nivel: "staff" });
-ok(/&help proteger/.test(t) && !/&help dono/.test(t), "★ a staff vê os grupos de configuração, não o do dono");
+ok(/Proteger/.test(t) && !/Dono do bot/.test(t), "★ a staff vê os grupos de configuração, não o do dono");
 ok(/`&ban/.test(await help(["proteger"], { nivel: "staff" })), "  → e o &ban no grupo Proteger");
-ok(/Não encontrado/.test(await help(["servidores"], { nivel: "staff" })), "  → o &servidores segue invisível para a staff");
+ok(/Não há ajuda/.test(await help(["servidores"], { nivel: "staff" })), "  → o &servidores segue invisível para a staff");
 
 console.log("\n── dono ──");
 t = await help([], { nivel: "dono" });
-ok(/&help dono/.test(t) && /visão do dono/i.test(t), "★ o dono vê tudo, com o grupo dele");
-ok(!/Comando da staff|Não encontrado/.test(await help(["servidores"], { nivel: "dono" })), "  → e a ajuda do &servidores");
+ok(/Dono do bot/.test(t) && /`&servidores`/.test(t), "★ o dono vê tudo, com o grupo dele");
+ok(!/é da staff|Não há ajuda/.test(await help(["servidores"], { nivel: "dono" })), "  → e a ajuda do &servidores");
 
 console.log("\n── recursos do servidor ──");
 t = await help(["diversao"], { nivel: "staff", sid: "S_SEM" });
 ok(!/`&entrar|`&musica|`&tts/.test(t), "★ sem voz liberada, a ajuda não ensina &entrar/&musica/&tts");
-ok(/Não liberado neste servidor: IA, voz e música/.test(await help([], { nivel: "staff", sid: "S_SEM" })), "  → e o índice avisa o que não está liberado");
-ok(/Não existe aqui/.test(await help(["musica"], { nivel: "membro", sid: "S_SEM" })), "  → &help musica: não existe aqui");
+ok(!/`&entrar|`&musica|`&tts/.test(await help([], { nivel: "staff", sid: "S_SEM" })), "  → e o índice também não os lista");
+ok(/não está disponível neste servidor/.test(await help(["musica"], { nivel: "membro", sid: "S_SEM" })), "  → &help musica: não existe aqui");
 ok(/`&entrar/.test(await help(["diversao"], { nivel: "membro", sid: "S_IA" })), "com voz liberada, o membro vê o &entrar");
 
 console.log("\n── tutorial ──");
 t = await tut([], { nivel: "membro" });
-ok(/tutorial rpg/.test(t) && /tutorial economia/.test(t) && !/Getting started|Antes de tudo|tutorial permissoes/.test(t), "★ o membro recebe o índice de quem joga/usa, não o guia de configuração");
-ok(/guia de configuração da staff/.test(await tut(["moderacao"], { nivel: "membro" })), "  → área da staff: avisa e mostra as dele");
+ok(/tutorial rpg/.test(t) && !/`&debug`|`&assistente`|`&config`/.test(t), "★ o membro recebe o guia sem os comandos da staff");
+ok(/é da staff/.test(await tut(["moderacao"], { nivel: "membro" })), "  → área da staff (que virou &help automod): avisa");
 t = await tut(["economia"], { nivel: "membro" });
-ok(/economia minerar/.test(t) && !/loja add|config nome/.test(t), "  → na área da economia, só a parte de quem usa");
-ok(/permissoes|Antes de tudo|Before anything|Getting started/i.test(await tut([], { nivel: "staff" })), "a staff recebe o guia de configuração inteiro");
+// (o "loja add" solto na linha de permissão da página nova não é comando: confere os comandos citados)
+ok(/economia minerar/.test(t) && !/`&economia loja add|`&economia config nome/.test(t), "  → na área da economia, só a parte de quem usa");
+ok(/permissoes|Permissões/.test(await tut([], { nivel: "staff" })) && /`&assistente`/.test(await tut([], { nivel: "staff" })), "a staff recebe o guia inteiro");
 
 console.log(`\nVISÃO: ${pass} ok, ${fail} falha(s)`);
 process.exit(fail ? 1 : 0);
@@ -9443,7 +9110,9 @@ const estado = () => {
   const h = crypto.createHash("sha1");
   h.update(JSON.stringify(store.configDoServidor("S1"))); h.update(JSON.stringify(store.getGlobal()));
   for (const { name } of d.prepare("SELECT name FROM sqlite_master WHERE type='table'").all())
-    if (!/relatorio_eventos|paginas_sessoes|metricas|xp_|eco_saldos/.test(name)) h.update(name + JSON.stringify(d.prepare(`SELECT * FROM ${name}`).all()));
+    // (31 out 2026, P2) uso_comandos/palavras_tentadas são contagem de uso (quantas vezes
+    // um nome foi digitado), como as métricas — não é efeito do comando
+    if (!/relatorio_eventos|paginas_sessoes|metricas|xp_|eco_saldos|uso_comandos|palavras_tentadas/.test(name)) h.update(name + JSON.stringify(d.prepare(`SELECT * FROM ${name}`).all()));
   return h.digest("hex");
 };
 const STAFF = ["&ban <@U3> x", "&kick <@U3> x", "&silenciar <@U3> 10m x", "&warn <@U3> x", "&limpar 10", "&automod antispam off", "&automod punicao modo banir",
@@ -9698,7 +9367,10 @@ const ctx = { config, cfgGlobal: {}, COR: {}, PREFIXO: "&", serverId: "S", estad
   membroTemPermissao: () => true, salvarConfig() {}, salvarGlobal() {} };
 const am$ = async (txt) => { await cmdAutomod({ channel: {}, authorId: "u" }, txt.split(" ").filter(Boolean), ctx); return `${ult?.title}\n${ult?.description}`; };
 
-const todas = Object.values(GRUPOS_AUTOMOD).flatMap((g) => Object.values(g.partes));
+// (31 out 2026, P2) a rajada (antimassspam) anda junto com a velocidade (antispam): os filtros de uma
+// parte são os dela mais os FILTROS_JUNTOS — e continuam todos lá, cada um uma vez só
+const { FILTROS_JUNTOS } = await import("./modulos/moderacao/automod-engine.js");
+const todas = Object.values(GRUPOS_AUTOMOD).flatMap((g) => Object.values(g.partes)).flatMap((f) => [f, ...(FILTROS_JUNTOS[f] ?? [])]);
 ok(todas.length === Object.keys(MODULOS_AUTOMOD).length && new Set(todas).size === todas.length, "★ os 14 filtros estão nos 4 grupos, cada um uma vez só");
 let t = await am$("");
 ok(Object.keys(GRUPOS_AUTOMOD).every((g) => t.includes(`**${g}**`)) && /velocidade/.test(t), "&automod mostra os 4 grupos com as partes");
@@ -9725,271 +9397,6 @@ ok(am.antiInvite.enabled === false, "os nomes antigos continuam valendo (antiinv
 ok(estadoDoGrupo(am, "antilink").ligadas < 2, "  → e o grupo antilink mostra a parte desligada");
 
 console.log(`\nAUTOMOD (grupos): ${pass} ok, ${fail} falha(s)`);
-process.exit(fail ? 1 : 0);
-};
-
-// ════════════════════════════════════════════════════════════════════════════
-// wiki-rpg  (o &tutorial rpg como wiki do jogo — 2 out 2026)
-// ════════════════════════════════════════════════════════════════════════════
-SUITES["wiki-rpg"] = async () => {
-const fs = (await import("node:fs")).default;
-process.env.DB_PATH = "/tmp/wiki-rpg.db";
-for (const f of ["/tmp/wiki-rpg.db", "/tmp/wiki-rpg.db-wal", "/tmp/wiki-rpg.db-shm"]) fs.rmSync(f, { force: true });
-const db = await import("./modulos/core/db.js"); db.abrirBanco(process.env.DB_PATH);
-const tutorial = await import("./modulos/moderacao/tutorial.js");
-let pass = 0, fail = 0;
-const ok = (cond, msg, extra = "") => { cond ? pass++ : fail++; console.log(`${cond ? "✅" : "❌"} ${msg}${!cond && extra ? `\n     ${extra}` : ""}`); };
-let seq = 0;
-const ler = async (args, lang, nivel = "membro") => {
-  const id = `W${seq++}`;
-  await tutorial.cmdTutorial({ channel: {}, authorId: "u" }, args, { config: { language: lang }, COR: {}, PREFIXO: "&", serverId: "s",
-    sendEmbed: async () => ({ id, react: async () => {} }), membroTemPermissao: () => nivel !== "membro", ehSuperAdmin: () => false, getServer: async () => ({ id: "s" }) });
-  return (db.carregarSessaoPaginas(id)?.paginas ?? []).map((p) => `${p.title}\n${p.description}`).join("\n");
-};
-for (const lang of ["pt", "en"]) {
-  const w = await ler(["rpg"], lang);
-  const ATRIB = lang === "pt"
-    ? ["Força", "Destreza", "Inteligência", "Carisma", "Vida", "Resistência", "Agilidade", "Sorte", "Mana"]
-    : ["Strength", "Dexterity", "Intelligence", "Charisma", "Health", "Resistance", "Agility", "Luck", "Mana"];
-  // cada atributo aparece com uma explicação (o print mostrava só os nomes)
-  const semExplicacao = ATRIB.filter((a) => !new RegExp(`\\*\\*${a}\\*\\*[^\\n]* — .{25,}`).test(w));
-  ok(!semExplicacao.length, `★ [${lang}] a wiki explica o que cada um dos 9 atributos faz`, semExplicacao.join(", "));
-  const SECOES = lang === "pt" ? ["Personagem", "atributos", "Missões", "Co-op", "resetar pontos", "Magias", "Itens", "Companheiros", "Moedas", "Dungeon"]
-    : ["Character", "attributes", "Missions", "co-op", "respec points", "Spells", "Items", "Companions", "Currencies", "Dungeon"];   // 17 out: era "resetar pontos" na tela em inglês
-  ok(SECOES.every((x) => w.includes(x)), `[${lang}] tem as seções de uma wiki (personagem, atributos, missões, magias, itens, companheiros, moedas, dungeon)`);
-  ok(/Página \*\*1\/|Page \*\*1\//.test(w) || (w.match(/🎲/g) ?? []).length >= 2, `[${lang}] e vem em páginas`);
-}
-const indiceStaff = await ler(["game"], "pt", "staff");
-ok(!/RPG neste servidor/.test(indiceStaff), "a área de configuração do RPG saiu (o dono configura; onde se joga é o &acesso)");
-
-console.log(`\nWIKI DO RPG: ${pass} ok, ${fail} falha(s)`);
-process.exit(fail ? 1 : 0);
-};
-
-// ════════════════════════════════════════════════════════════════════════════
-// coop-respec  (co-op de dungeon e resetar pontos pagando — 2 out 2026)
-// ════════════════════════════════════════════════════════════════════════════
-SUITES["coop-respec"] = async () => {
-const fs = (await import("node:fs")).default;
-process.env.DB_PATH = "/tmp/coop.db"; process.env.CONFIG_PATH = "/tmp/coop.json";
-for (const f of ["/tmp/coop.db", "/tmp/coop.db-wal", "/tmp/coop.db-shm", "/tmp/coop.json"]) fs.rmSync(f, { force: true });
-const db = await import("./modulos/core/db.js"); db.abrirBanco(process.env.DB_PATH);
-const game = await import("./modulos/game/game.js");
-const { MUNDO } = await import("./modulos/game/mundo.js");
-const q = [console.log, console.info, console.warn]; console.log = console.info = console.warn = () => {};
-game.iniciarCatalogo();
-[console.log, console.info, console.warn] = q;
-let pass = 0, fail = 0;
-const ok = (cond, msg, extra = "") => { cond ? pass++ : fail++; console.log(`${cond ? "✅" : "❌"} ${msg}${!cond && extra ? `\n     ${extra}` : ""}`); };
-let ult = null;
-const jogar = async (uid, txt, canal = "C1") => {
-  const ctx = { serverId: "S", PREFIXO: "&", COR: { erro: 1, aviso: 2, sucesso: 3, info: 4, mod: 5 }, config: { language: "pt" },
-    sendEmbed: async (_c, e) => { ult = e; return { id: "m", react: async () => {} }; }, getServer: async () => ({ id: "S", channels: [] }), ehSuperAdmin: () => false, membroTemPermissao: () => true };
-  await game.cmdGame({ authorId: uid, author: { username: uid }, channel: { id: canal }, channelId: canal, mentionIds: [] }, txt.split(" "), ctx);
-  return `${ult?.title}\n${ult?.description}`;
-};
-
-console.log("\n── resetar pontos ──");
-await jogar("RUI", "criar Rui");
-db.salvarPersonagem(MUNDO, "RUI", { nivel: 5, forca: 9, destreza: 4, pontos: 0.5 });   // base do nível 5 = 3
-let t = await jogar("RUI", "resetar pontos");
-ok(/7\*\* ponto\(s\) voltam/.test(t) && /Preço/.test(t), "★ mostra quantos pontos voltam (6 da força + 1 da destreza) e o preço, sem cobrar ainda", t);
-t = await jogar("RUI", "resetar pontos confirmar");
-ok(/Não dá ainda/.test(t) && db.getPersonagem(MUNDO, "RUI").forca === 9, "sem Ouro suficiente, nada muda");
-db.creditar(MUNDO, "RUI", "ouro", 100000);
-t = await jogar("RUI", "resetar pontos confirmar");
-const rui = db.getPersonagem(MUNDO, "RUI");
-ok(rui.forca === 3 && rui.destreza === 3 && Math.abs(rui.pontos - 7.5) < 1e-9, "★ confirmado: atributos na base do nível e os 7 pontos de volta (7,5 com o que sobrava)", JSON.stringify({ f: rui.forca, d: rui.destreza, p: rui.pontos }));
-ok(db.getSaldo(MUNDO, "RUI", "ouro") < 100000, "  → e cobrou em Ouro");
-ok(/^🎭|Isso apaga/.test(await jogar("RUI", "resetar")) && !!db.getPersonagem(MUNDO, "RUI"), "`&game resetar` sozinho continua sendo o apagar (pede confirmação) — não confunde com o respec");
-
-console.log("\n── co-op de dungeon ──");
-for (const u of ["ANA", "BIA", "CAU", "DUD", "EVA"]) await jogar(u, `criar ${u}`);
-t = await jogar("ANA", "coop abrir entregar encomendas");
-ok(/solo/.test(t), "bico (sem risco) não vira co-op (é solo)");
-t = await jogar("ANA", "coop abrir cacar o lobo branco");
-ok(/Grupo para Caçar o Lobo Branco/.test(t) && /1\/4/.test(t), "★ abre o chamado (sem acento também acha a missão)");
-t = await jogar("BIA", "coop partir");
-ok(/Só quem abriu/.test(t), "só quem abriu decide partir");
-await jogar("BIA", "coop entrar"); await jogar("CAU", "coop entrar");
-const r0 = Math.random; Math.random = () => 0;   // tudo dá certo
-const antes = db.getPersonagem(MUNDO, "ANA");
-t = await jogar("DUD", "coop entrar");
-Math.random = r0;
-ok(/Vitória/.test(t) && /4 aventureiro/.test(t), "★ com 4, parte sozinho — um desfecho para o grupo", t);
-ok(["ANA", "BIA", "CAU", "DUD"].every((u) => t.includes(`<@${u}>`)), "  → e cada um aparece com o seu resultado");
-const depoisAna = db.getPersonagem(MUNDO, "ANA");
-ok(/de nível|nível \d+!/.test(t) && (depoisAna.nivel > antes.nivel || depoisAna.progresso > antes.progresso), "  → progresso para cada um (a força da missão, igual para todos — D6)");
-t = await jogar("EVA", "coop entrar");
-ok(/Nenhum grupo aberto/.test(t), "depois de partir, o chamado fecha");
-t = await jogar("EVA", "coop abrir cacar o lobo branco");
-await jogar("ANA", "coop entrar");
-ok(/na espera|espera desta missão|aventureiro|Grupo/.test(ult?.description ?? "") , "quem acabou de ir respeita a espera da missão");
-t = await jogar("EVA", "coop cancelar");
-ok(/cancelado/.test(t), "quem abriu pode cancelar");
-console.log(`\nCO-OP E RESPEC: ${pass} ok, ${fail} falha(s)`);
-process.exit(fail ? 1 : 0);
-};
-
-// ════════════════════════════════════════════════════════════════════════════
-// jogo-4out  (os 5 problemas vistos em jogo — 4 out 2026)
-// ════════════════════════════════════════════════════════════════════════════
-//  1. "&tutorial game" dava "Área desconhecida"
-//  2. o câmbio ensinava "100 real para dolar" (moedas que não existem mais)
-//  3. não dava para trocar TODO o Ouro por Cristal
-//  4. moeda com fração ("0,1849 Ouro", "4,02 Cristal")
-//  5. no nível 19, missão de nível 2 dava 91% — e a de nível 6, 24%
-// E dois achados do pente fino: "<parâmetro>" sumia no Stoat (a ajuda inteira
-// mostrava "&game pontos [quantos]"), e o pote da dungeon nunca pagava ninguém.
-SUITES["jogo-4out"] = async () => {
-const fs = (await import("node:fs")).default;
-process.env.DB_PATH = "/tmp/jogo4.db"; process.env.CONFIG_PATH = "/tmp/jogo4.json";
-for (const f of ["/tmp/jogo4.db", "/tmp/jogo4.db-wal", "/tmp/jogo4.db-shm", "/tmp/jogo4.json"]) fs.rmSync(f, { force: true });
-const db = await import("./modulos/core/db.js"); db.abrirBanco(process.env.DB_PATH);
-const game = await import("./modulos/game/game.js");
-const MERC = await import("./modulos/game/mercado.js");
-const MISS = await import("./modulos/game/missoes.js");
-const { MUNDO } = await import("./modulos/game/mundo.js");
-const tutorial = await import("./modulos/moderacao/tutorial.js");
-const { protegerMarcadores } = await import("./modulos/core/marcadores.js");
-const q = [console.log, console.info, console.warn]; console.log = console.info = console.warn = () => {};
-game.iniciarCatalogo();
-[console.log, console.info, console.warn] = q;
-let pass = 0, fail = 0;
-const ok = (cond, msg, extra = "") => { cond ? pass++ : fail++; console.log(`${cond ? "✅" : "❌"} ${msg}${!cond && extra ? `\n     ${extra}` : ""}`); };
-let ult = null;
-const jogar = async (uid, txt, { dono = false } = {}) => {
-  const ctx = { serverId: "S", PREFIXO: "&", COR: { erro: 1, aviso: 2, sucesso: 3, info: 4, mod: 5 }, config: { language: "pt" },
-    sendEmbed: async (_c, e) => { ult = e; return { id: "m", react: async () => {} }; }, getServer: async () => ({ id: "S", channels: [] }), ehSuperAdmin: () => dono, membroTemPermissao: () => true };
-  await game.cmdGame({ authorId: uid, author: { username: uid }, channel: { id: "C" }, channelId: "C", mentionIds: [] }, txt.split(" "), ctx);
-  return `${ult?.title}\n${ult?.description}`;
-};
-let seq = 0;
-const tut = async (args, lang = "pt") => {
-  const id = `T4${seq++}`;
-  await tutorial.cmdTutorial({ channel: {}, authorId: "u" }, args, { config: { language: lang }, COR: {}, PREFIXO: "&", serverId: "s",
-    sendEmbed: async (_c, e) => { ult = e; return { id, react: async () => {} }; }, membroTemPermissao: () => false, ehSuperAdmin: () => false, getServer: async () => ({ id: "s" }) });
-  return (db.carregarSessaoPaginas(id)?.paginas ?? [ult]).map((p) => `${p.title}\n${p.description}`).join("\n");
-};
-
-console.log("\n── 1. &tutorial game ──");
-for (const nome of ["game", "jogo", "wiki"]) ok(/Wiki do RPG/.test(await tut([nome])), `★ &tutorial ${nome} abre a wiki do jogo`);
-ok(/RPG wiki/.test(await tut(["game"], "en")), "  → em inglês também");
-
-console.log("\n── 2. exemplos do mundo de hoje ──");
-await jogar("ANA", "criar Ana");
-let t = await jogar("ANA", "cambio");
-ok(!/real|dolar|dólar/i.test(t) && /ouro para cristal/.test(t), "★ o balcão de câmbio ensina com Ouro e Cristal (não \"real para dolar\")", t.slice(0, 200));
-t = await jogar("ANA", "carteira");
-ok(!/admin moeda/.test(t), "a carteira do jogador não manda para o &game admin moeda (é do dono)");
-ok(/admin moeda/.test(await jogar("ANA", "carteira", { dono: true })), "  → o dono continua vendo");
-
-console.log("\n── 3 e 4. trocar tudo, em unidades inteiras ──");
-db.creditar(MUNDO, "ANA", "ouro", 166);
-t = await jogar("ANA", "cambio ouro para cristal");
-const ouro = db.getSaldo(MUNDO, "ANA", "ouro"), cristal = db.getSaldo(MUNDO, "ANA", "cristal");
-ok(/Trocado/.test(t) && cristal >= 1, "★ \"&game cambio ouro para cristal\" (sem quantidade) troca o saldo inteiro", t.slice(0, 160));
-ok(Number.isInteger(ouro) && Number.isInteger(cristal), "★ saldos inteiros depois da troca (antes: 0,1849 Ouro e 4,02 Cristal)", `${ouro} / ${cristal}`);
-const custo1 = MERC.converter(1e6, db.getMoeda(MUNDO, "ouro"), db.getMoeda(MUNDO, "cristal")).recebe > 0;
-ok(custo1 && MERC.converter(ouro, db.getMoeda(MUNDO, "ouro"), db.getMoeda(MUNDO, "cristal")).recebe === 0, "  → o que sobrou de Ouro não compraria nem mais 1 Cristal (usou tudo o que dava)");
-db.creditar(MUNDO, "ANA", "ouro", 500);
-await jogar("ANA", "cambio tudo ouro para cristal");
-ok(Number.isInteger(db.getSaldo(MUNDO, "ANA", "cristal")), "\"tudo\" também funciona");
-ok(/inteiras/.test(await jogar("ANA", "cambio 10,5 ouro para cristal")), "quantia com fração é recusada com explicação");
-const o = { id: "ouro", mercado: 200000 }, c = { id: "cristal", mercado: 5000 };
-const r = MERC.converter(1000, o, c);
-ok(Number.isInteger(r.recebe) && r.gasta <= 1000 && MERC.converter(r.gasta, o, c).recebe === r.recebe, "o banco usa só o que as unidades inteiras custam");
-ok(MERC.custoEm(21, o, c) === 1 && MERC.precoDeRecompra(21, 0) === Math.floor(MERC.precoDeRecompra(21, 0)), "preço em outra moeda arredonda para cima; venda ao mercado é inteira");
-
-console.log("\n── 5. missão bem abaixo da sua força é garantida (v4: pela FORÇA, nunca pelo nível — D26) ──");
-const R = await import("./modulos/game/regras.js");
-const forte = R.ref(20), fraca = R.missao(2);
-const pv = R.preverLuta(forte.membros, forte.magias, { ...fraca, base: R.BASE.normal });
-ok(pv.exito === 1 && pv.sobrevivencia === 1, "★ a party do nível 20 numa missão do nível 2: garantida (3× a força para a qual ela foi feita)");
-const justa = R.preverLuta(forte.membros, forte.magias, { ...R.missao(20), base: R.BASE.normal });
-ok(Math.abs(justa.exito - 0.40) < 0.06 && Math.abs(justa.sobrevivencia - 0.70) < 0.06, "  → e a do próprio nível continua 40% / 70% (sem a sinergia, que é por cima)", `${justa.exito} / ${justa.sobrevivencia}`);
-const semNada = R.preverLuta([{ attr: Object.fromEntries(R.ATR.map((a) => [a, 1])), nivel: 20 }], [], { ...fraca, base: R.BASE.normal });
-ok(semNada.exito < 0.5, "  → o nível sozinho não garante nada: um nível 20 sem força nenhuma não leva a do nível 2");
-db.salvarPersonagem(MUNDO, "ANA", { nivel: 19, ...Object.fromEntries(R.ATR.map((a) => [a, 400])) });
-t = await jogar("ANA", "contratos 1");
-ok(/garantida/.test(t), "a lista de contratos mostra \"garantida\" quando a força sobra");
-
-console.log("\n── o pente fino ──");
-ok(protegerMarcadores("`&game pontos <atributo> [quantos]`") === "`&game pontos ‹atributo› [quantos]`", "★ \"<parâmetro>\" vira ‹parâmetro› (o Stoat escondia — \"&game pontos [quantos]\")");
-ok(protegerMarcadores("<@01KHBPN31QT1THM1A0CEM8JA91> <#01KHBPN31QT1THM1A0CEM8JA91> [x](<https://a.com>) a < b > c") === "<@01KHBPN31QT1THM1A0CEM8JA91> <#01KHBPN31QT1THM1A0CEM8JA91> [x](<https://a.com>) a < b > c", "  → menções, links e comparações ficam como estão");
-// (v4, D8: o pote da dungeon virou o tesouro de cada dungeon — que paga quem vence lá)
-const dg = [...MISS.DUNGEONS.values()][0];
-db.salvarDungeon(dg.id, { ouro: 50000, cristal: 500, renovadoEm: Date.now() });
-db.salvarPersonagem(MUNDO, "ANA", { nivel: 30, ultimaMissao: 0, recuperandoAte: 0 });
-const antes = db.getSaldo(MUNDO, "ANA", "ouro");
-const r0 = Math.random; Math.random = () => 0.001;   // vence
-await jogar("ANA", `dungeon ${dg.nome}`);
-Math.random = r0;
-ok(db.getDungeon(dg.id).ouro < 50000 && db.getSaldo(MUNDO, "ANA", "ouro") > antes, "★ vencer na dungeon paga do tesouro dela (o pote de antes só enchia)");
-
-console.log(`\nJOGO 4/10: ${pass} ok, ${fail} falha(s)`);
-process.exit(fail ? 1 : 0);
-};
-
-// ════════════════════════════════════════════════════════════════════════════
-// follower-ficha  (5 out 2026: "&game follower ficha mercenario novato" não achava)
-// ════════════════════════════════════════════════════════════════════════════
-SUITES["follower-ficha"] = async () => {
-const fs = (await import("node:fs")).default;
-process.env.DB_PATH = "/tmp/fficha.db"; process.env.CONFIG_PATH = "/tmp/fficha.json";
-for (const f of ["/tmp/fficha.db", "/tmp/fficha.db-wal", "/tmp/fficha.db-shm", "/tmp/fficha.json"]) fs.rmSync(f, { force: true });
-const db = await import("./modulos/core/db.js"); db.abrirBanco(process.env.DB_PATH);
-const game = await import("./modulos/game/game.js");
-const { MUNDO } = await import("./modulos/game/mundo.js");
-const q = [console.log, console.info, console.warn]; console.log = console.info = console.warn = () => {};
-game.iniciarCatalogo();
-[console.log, console.info, console.warn] = q;
-let pass = 0, fail = 0;
-const ok = (cond, msg, extra = "") => { cond ? pass++ : fail++; console.log(`${cond ? "✅" : "❌"} ${msg}${!cond && extra ? `\n     ${extra}` : ""}`); };
-let ult = null;
-const jogar = async (txt) => {
-  const ctx = { serverId: "S", PREFIXO: "&", COR: { erro: 1, aviso: 2, sucesso: 3, info: 4, mod: 5 }, config: { language: "pt" },
-    sendEmbed: async (_c, e) => { ult = e; return { id: "m", react: async () => {} }; }, getServer: async () => ({ id: "S", channels: [] }), ehSuperAdmin: () => false, membroTemPermissao: () => true };
-  await game.cmdGame({ authorId: "GH", author: { username: "Ghiso" }, channel: { id: "C" }, channelId: "C", mentionIds: [] }, txt.split(" "), ctx);
-  return `${ult?.title}\n${ult?.description}`;
-};
-await jogar("criar Ghiso");
-// (v4: o kit inicial traz dois companheiros — aqui o teste quer começar com um só)
-for (const f of db.listarFollowersDe(MUNDO, "GH")) db.dispensarFollower(f.id);
-const merc = db.acharFollowerCatalogo("Mercenário Novato");
-db.recrutarFollower(MUNDO, "GH", merc.id, 1);
-const ehFicha = (t) => /Mercenário Novato/.test(t) && !/Não é um dos seus|Qual companheiro/.test(t);
-ok(ehFicha(await jogar("follower ficha mercenario novato")), "★ sem acento acha o \"Mercenário Novato\" (o print de 5 out)");
-ok(ehFicha(await jogar("follower ficha Mercenário Novato")), "com acento também");
-ok(ehFicha(await jogar("follower Mercenario Novato ficha")), "★ com a ação depois do nome (como você digitou primeiro)");
-ok(ehFicha(await jogar("follower ficha")), "★ com um companheiro só, `ficha` sem nome mostra ele");
-ok(ehFicha(await jogar("follower ficha merc")), "pedaço do nome basta");
-const outro = db.listarFollowersCatalogo().find((f) => f.id !== merc.id);
-db.recrutarFollower(MUNDO, "GH", outro.id, 1);
-let t = await jogar("follower ficha");
-ok(/Qual companheiro/.test(t) && t.includes("Mercenário Novato") && t.includes(outro.nome), "com vários, `ficha` sem nome lista os nomes prontos para copiar", t);
-ok(/Levou|party|Na party|entrou/i.test(await jogar("follower levar mercenario novato")), "levar também acha sem acento");
-ok(!!db.acharItemPorNome("lamina aurora") && !!db.acharFollowerCatalogo("curandeira errante"), "catálogo de itens e companheiros sem acento");
-
-console.log("\n── você quis dizer ──");
-process.env.BOT_TOKEN = "tok"; process.env.DB_PATH = "/tmp/fficha2.db"; process.env.CONFIG_PATH = "/tmp/fficha2.json";
-for (const f of ["/tmp/fficha2.db", "/tmp/fficha2.json", "/tmp/blocklist-cache.bin"]) fs.rmSync(f, { force: true });
-globalThis.fetch = async () => ({ ok: false, status: 503, text: async () => "", json: async () => ({}) });
-const qq = [console.log, console.info, console.warn, console.error]; console.log = console.info = console.warn = console.error = () => {};
-await import("./main.js");
-const c = globalThis.__client;
-await c.emitAll("ready");
-const env = [];
-const canal = { id: "C1", serverId: "S1", name: "comandos", sendMessage: async (p) => { env.push(p); return { id: "M", react: async () => {}, edit: async () => {} }; } };
-const server = { id: "S1", ownerId: "X", name: "T", roles: new Map(), channels: [canal], member: { roles: [] }, havePermission: () => true, fetchMember: async () => null };
-c.servers.set("S1", server); c.channels.set("C1", canal);
-const say = (t) => c.emitAll("messageCreate", { id: "Y" + Math.random(), authorId: "U1", content: t, serverId: "S1", server, channel: canal, channelId: "C1", mentionIds: [], createdAt: new Date(), author: { username: "u" }, member: { roles: [], hasPermission: () => false }, replyIds: [] });
-await say("oi");
-env.length = 0; await say("&gams follower ficha");
-[console.log, console.info, console.warn, console.error] = qq;
-ok(/Você quis dizer `&game follower ficha`/.test(env.at(-1)?.embeds?.[0]?.description ?? ""), "★ \"&gams follower ficha\" → \"você quis dizer `&game follower ficha`?\"", env.at(-1)?.embeds?.[0]?.description);
-
-console.log(`\nFOLLOWER (ficha): ${pass} ok, ${fail} falha(s)`);
 process.exit(fail ? 1 : 0);
 };
 
@@ -10119,13 +9526,18 @@ ok(/Não achei/.test(t), "nome que não existe: diz que não achou (não \"uso i
 t = await cmd(`&warn lista ${CYB}`);
 ok(/tem \*\*0\/4\*\*/.test(t), "`&warn lista <id>` mostra x/4 (a escada padrão)", t);
 t = await cmd("&warn Outra flood no chat");
-ok(/\*\*Motivo:\*\* flood no chat/.test(t) && !/Outra flood/.test(t), "★ `&warn Nome motivo`: o nome não vai parar no motivo", t);
+// (31 out 2026, P2) saída mínima: "avisado (n/4) — motivo" numa linha
+ok(/avisado \(1\/4\) — flood no chat$/.test(t) && !/Outra flood/.test(t), "★ `&warn Nome motivo`: o nome não vai parar no motivo", t);
 timeouts.length = 0;
 t = await cmd(`&warn <@${OUT}> de novo`, [OUT]);
-ok(/Silenciado por \*\*5 min\*\*/.test(t) && timeouts.includes(OUT), "★ o 2º aviso manual segue a escada (silêncio de 5 min), como o automod", t);
+// (31 out 2026, P2) a hora do fim pelo carimbo (<t:…:f>) no lugar do "por 5 min"; os 5 min conferidos na conta
+{ const fim = Number(t.match(/silenciado até <t:(\d+):f>/)?.[1]) * 1000;
+  ok(/avisado \(2\/4\) e silenciado até <t:\d+:f>/.test(t) && Math.abs(fim - Date.now() - 5 * 60_000) < 5000 && timeouts.includes(OUT), "★ o 2º aviso manual segue a escada (silêncio de 5 min), como o automod", t); }
 ok(!/banido/i.test(await cmd(`&warn <@${OUT}> terceiro`, [OUT])), "★ o 3º aviso NÃO bane mais (antes: warnsParaBan=3 no manual × ban no 4º no automod)");
+// (31 out 2026, P2) o alvo é só o que está ESCRITO (um "<@DONO>" que não é ID do Stoat não acha
+// ninguém — nunca cai no mentionIds); a recusa ao dono do servidor por ID está na p2-moderacao
 t = await cmd("&warn <@DONO> teste", ["DONO"]);
-ok(/não pode dar um aviso a si mesmo|dono do servidor/.test(t), "o dono não recebe aviso", t);
+ok(/^\n?(❌|🚫)/.test(t) && db.contarAvisos("S1", "DONO") === 0, "o dono não recebe aviso", t);
 
 console.log("\n── o alvo escrito vale mais que o mentionIds (respostas) ──");
 const ids = await import("./modulos/core/ids.js");
@@ -10149,283 +9561,6 @@ t = await cmd("&help warn");
 ok(/ManageMessages/.test(t) && /menção, ID ou nome/.test(t) && !/KickMembers/.test(t), "&help warn: permissão certa e o alvo por menção/ID/nome", t);
 
 console.log(`\nWARN JUSTO: ${pass} ok, ${fail} falha(s)`);
-process.exit(fail ? 1 : 0);
-};
-
-// ════════════════════════════════════════════════════════════════════════════
-// rpg-v4  (o RPG v4 — docs/rpg/PLANO-RPG-CONTEUDO.md, D1–D28)
-// ════════════════════════════════════════════════════════════════════════════
-// As fórmulas (regras.js) batem com o script de balanceamento; o jogo de verdade
-// (banco, comandos) segue as fórmulas: chance-base, progresso, migração, folga e
-// perigo, quem paga, arma única e escudo, implantes, evolucionador, especial e
-// chefe uma vez por pessoa, contrato e pergaminho, e a história.
-SUITES["rpg-v4"] = async () => {
-const fs = (await import("node:fs")).default;
-process.env.DB_PATH = "/tmp/rpgv4.db"; process.env.CONFIG_PATH = "/tmp/rpgv4.json";
-for (const f of ["/tmp/rpgv4.db", "/tmp/rpgv4.db-wal", "/tmp/rpgv4.db-shm", "/tmp/rpgv4.json"]) fs.rmSync(f, { force: true });
-const db = await import("./modulos/core/db.js"); db.abrirBanco(process.env.DB_PATH);
-const game = await import("./modulos/game/game.js");
-const R = await import("./modulos/game/regras.js");
-const CB = await import("./modulos/game/combate.js");
-const MISS = await import("./modulos/game/missoes.js");
-const AV = await import("./modulos/game/aventura.js");
-const TS = await import("./modulos/game/tesouro.js");
-const EV = await import("./modulos/game/evolucionador.js");
-const H = await import("./modulos/game/historia.js");
-const MIG = await import("./modulos/game/migracao.js");
-const { ITENS, HISTORIAS } = await import("./modulos/game/conteudo.js");
-const { MUNDO } = await import("./modulos/game/mundo.js");
-const q = [console.log, console.info, console.warn]; console.log = console.info = console.warn = () => {};
-game.iniciarCatalogo();
-[console.log, console.info, console.warn] = q;
-let pass = 0, fail = 0;
-const ok = (cond, msg, extra = "") => { cond ? pass++ : fail++; console.log(`${cond ? "✅" : "❌"} ${msg}${!cond && extra ? `\n     ${extra}` : ""}`); };
-const perto = (a, b, tol) => Math.abs(a - b) <= tol;
-let ult = null;
-const jogar = async (uid, txt, lang = "pt") => {
-  const ctx = { serverId: "S", PREFIXO: "&", COR: { erro: 1, aviso: 2, sucesso: 3, info: 4, mod: 5 }, config: { language: lang },
-    sendEmbed: async (_c, e) => { ult = e; return { id: "m", react: async () => {} }; }, getServer: async () => ({ id: "S", channels: [] }), ehSuperAdmin: () => false, membroTemPermissao: () => true };
-  await game.cmdGame({ authorId: uid, author: { username: uid }, channel: { id: "C" }, channelId: "C", mentionIds: [] }, txt.split(" "), ctx);
-  return `${ult?.title}\n${ult?.description}`;
-};
-const descansar = (uid) => {
-  db.salvarPersonagem(MUNDO, uid, { ultimaMissao: 0, recuperandoAte: 0 });
-  for (const f of db.listarFollowersDe(MUNDO, uid)) db.salvarFollower(f.id, { energia: 5, energiaEm: Date.now() });
-};
-const sempre = (x) => () => x;
-
-console.log("\n── 1. a party de referência tem a chance-base (D3) ──");
-for (const n of [1, 10, 37, 73, 100]) {
-  const p = R.ref(n), m = R.missao(n);
-  const pv = R.preverLuta(p.membros, p.magias, { ...m, base: R.BASE.normal });
-  ok(perto(pv.exito, 0.40, 0.06) && perto(pv.sobrevivencia, 0.70, 0.06), `nível ${n}: ~40% / 70%`, `${pv.exito.toFixed(3)} / ${pv.sobrevivencia.toFixed(3)}`);
-}
-const ne = 50, pe = R.ref(ne);
-const esp = R.preverLuta(pe.membros, pe.magias, { ...R.missao(ne, R.BASE.especial), base: R.BASE.especial });
-ok(perto(esp.exito, 0.30, 0.06) && perto(esp.sobrevivencia, 0.60, 0.06), "especial: ~30% / 60%", `${esp.exito.toFixed(3)} / ${esp.sobrevivencia.toFixed(3)}`);
-
-console.log("\n── 2. no banco: personagem novo, com o kit inicial ──");
-let t = await jogar("ANA", "criar Ana");
-const party0 = CB.partyDe(MUNDO, "ANA");
-ok(party0.companheiros.length === 2 && party0.jogador.maos.length === 1, "★ o kit inicial: arma, armaduras, acessórios e dois companheiros na party");
-ok(party0.jogador.maos[0].modo === "2m", "  → a arma sozinha vai nas duas mãos");
-const pv1 = CB.prever([party0], { ...R.missao(1), base: R.BASE.normal });
-ok(pv1.exito > 0.2 && pv1.exito < 0.6 && pv1.sobrevivencia > 0.5, "  → uma missão do nível 1 fica perto da chance-base (não 5%)", `${pv1.exito.toFixed(2)} / ${pv1.sobrevivencia.toFixed(2)}`);
-
-console.log("\n── 3. progresso: um êxito no próprio nível vale 80% de nível (D11) ──");
-for (const n of [1, 20, 60]) {
-  const s = R.subirForca(n, 0, R.missao(n).poder);
-  ok(s.nivel === n && perto(s.progresso, 0.8, 0.001), `nível ${n}: +80%`, JSON.stringify(s));
-}
-const dois = R.subirForca(5, 0.5, R.missao(5).poder);
-ok(dois.nivel === 6 && dois.progresso > 0 && dois.progresso < 0.5, "  → o que sobra passa para o nível seguinte");
-
-console.log("\n── 4. migração (D13) ──");
-const m22 = MIG.migrarPersonagem({ nivel: 22, xp: Math.round(100 * Math.pow(1.5, 21) / 2), pontos: 0, inteligencia: 30, sorte: 10, forca: 20 });
-ok(m22.nivel === 43 && perto(m22.progresso, 0.5, 0.01), "★ nível 22 com meia barra vira 43 com meia barra", JSON.stringify(m22).slice(0, 120));
-ok(m22.pontos > 0 && m22.forca > 20, "  → ganha os pontos dos níveis novos e a base sobe");
-db.criarPersonagem(MUNDO, "VELHO", "Velho");
-db.salvarPersonagem(MUNDO, "VELHO", { nivel: 5, xp: 0 });
-db.getDb().prepare("INSERT OR REPLACE INTO rpg_equipado (serverId, userId, slot, itemId) VALUES (?, ?, 'arma', 'g_espada_ferro')").run(MUNDO, "VELHO");
-db.gravarConfig("__rpg_v4__", { versao: 0 });
-const feito = MIG.migrarParaV4({ log: () => {} });
-ok(feito && db.getPersonagem(MUNDO, "VELHO").nivel === 9, "o personagem antigo (nível 5) vira nível 9");
-ok(db.getEquipado(MUNDO, "VELHO").mao1?.id === "g_espada_ferro", "  → a arma vai para a mão principal");
-ok(MIG.migrarParaV4({ log: () => {} }) === null, "  → roda uma vez só");
-ok(db.getPersonagem(MUNDO, "ANA").nivel === 2 - 1 || db.getPersonagem(MUNDO, "ANA").nivel === 1, "  → (nível 1 continua 1)");
-
-console.log("\n── 5. folga pela força e perigo (D26) ──");
-const r20 = R.ref(20);
-const pvN = R.preverLuta(r20.membros, r20.magias, { ...R.missao(20), base: R.BASE.normal, perigo: "normal" });
-const pvB = R.preverLuta(r20.membros, r20.magias, { ...R.missao(20), base: R.BASE.normal, perigo: "baixo" });
-const pvA = R.preverLuta(r20.membros, r20.magias, { ...R.missao(20), base: R.BASE.normal, perigo: "alto" });
-ok(pvB.sobrevivencia > pvN.sobrevivencia && pvN.sobrevivencia > pvA.sobrevivencia && pvB.exito === pvN.exito, "perigo mexe só na sobrevivência: baixo > normal > alto");
-ok(R.PERIGO.baixo.recompensa < 1 && R.PERIGO.alto.recompensa > 1, "  → e paga um pouco menos / mais");
-ok(R.chanceComFolga(3, 1, 0.5) === 1 && R.chanceComFolga(1, 1, 0.5) === 0.5, "com 3× a força, garantido; com a força exata, a base");
-
-console.log("\n── 6. quem paga (D8) ──");
-const ouro = db.getMoeda(MUNDO, "ouro");
-db.salvarMoeda(MUNDO, "ouro", { mercado: 1_000_000 });
-const s0 = db.getSaldo(MUNDO, "ANA", "ouro");
-const pago = TS.pagarDoBanco("ANA", 10, { cristal: false });
-ok(pago.ouro > 0 && db.getMoeda(MUNDO, "ouro").mercado === 1_000_000 - pago.ouro && db.getSaldo(MUNDO, "ANA", "ouro") === s0 + pago.ouro, "★ o contrato sai do banco: o que um ganha, o banco perde");
-db.salvarMoeda(MUNDO, "ouro", { mercado: 0 });
-ok(TS.pagarDoBanco("ANA", 10, { cristal: false }).ouro === 0, "  → banco vazio não paga (não cria moeda)");
-ok(TS.npcRecebe("ouro", 100) === 50 && db.getMoeda(MUNDO, "ouro").mercado === 50, "  → metade do que se gasta no NPC volta ao banco");
-const dg = [...MISS.DUNGEONS.values()][0];
-db.salvarDungeon(dg.id, { ouro: 50000, cristal: 500, renovadoEm: Date.now() });
-const pd = TS.pagarDaDungeon(dg.id, "ANA", 10);
-ok(pd.ouro > 0 && Math.abs(db.getDungeon(dg.id).ouro - (50000 - pd.ouro)) < 1e-6, "a dungeon paga do tesouro dela");
-db.creditar(MUNDO, "ANA", "ouro", 1000);
-const antesT = db.getDungeon(dg.id).ouro;
-const perdeu = TS.cair("ANA", 0.1, dg.id);
-ok(perdeu.ouro > 0 && Math.abs(db.getDungeon(dg.id).ouro - (antesT + perdeu.ouro)) < 1e-6, "  → quem cai lá deixa moeda no tesouro");
-db.salvarMoeda(MUNDO, "ouro", { mercado: ouro?.mercado ?? 0 });
-
-console.log("\n── 7. arma única e escudo (D14, D27) ──");
-const forte = { attr: Object.fromEntries(R.ATR.map((a) => [a, 30])), nivel: 30 };
-const espada = R.ARMAS.branca_pesada;
-const uma = R.poderMembro({ ...forte, maos: [{ arma: espada, raridade: "raro", modo: "1m" }] });
-const duas = R.poderMembro({ ...forte, maos: [{ arma: espada, raridade: "raro", modo: "1m" }, { arma: espada, raridade: "raro", modo: "1m" }] });
-const nada = R.poderMembro({ ...forte, maos: [] });
-ok(perto((uma - nada) * 2 / 1.8, duas - nada, (duas - nada) * 0.02), "★ uma arma só rende +80% (duas armas = 2 × a parte da arma)", `${uma.toFixed(1)} · ${duas.toFixed(1)} · ${nada.toFixed(1)}`);
-const semEsc = R.defesaMembro({ ...forte, defesa: [{ tipo: "armadura", raridade: "raro" }] });
-const comEsc = R.defesaMembro({ ...forte, defesa: [{ tipo: "armadura", raridade: "raro" }, { tipo: "escudo", raridade: "raro" }] });
-ok(comEsc > semEsc * 1.1, "escudo: a defesa dele e +10% por cima");
-const qm = ITENS.get("g_wh40k_quebra_mundos");
-ok(CB.statsItem(qm).dano > 0 && qm.dados.mult === 1.2 && qm.especial, "a arma única de obra tem ×1,2 e não se compra");
-
-console.log("\n── 8. implantes: uma peça de ciber por região ──");
-const bracos = [ITENS.get("i_c_lamina_1"), ITENS.get("i_c_lamina_2")];
-db.darItem(MUNDO, "ANA", bracos[0].id); db.darItem(MUNDO, "ANA", bracos[1].id);
-await jogar("ANA", `equipar ${bracos[0].id}`);
-await jogar("ANA", `equipar ${bracos[1].id}`);
-const eqI = db.getEquipado(MUNDO, "ANA");
-const ciber = ["ciber1", "ciber2", "ciber3"].map((s) => eqI[s]?.id).filter(Boolean);
-ok(ciber.length === 1 && ciber[0] === bracos[1].id, "★ o segundo implante dos braços troca o primeiro (não ocupa outra vaga)", JSON.stringify(ciber));
-const mb = CB.partyDe(MUNDO, "ANA").jogador;
-ok(mb.implantes.length === 1, "  → e entra na conta da luta");
-
-console.log("\n── 9. evolucionador (D24) ──");
-db.salvarPersonagem(MUNDO, "ANA", { pontos: 6 });
-t = await jogar("ANA", "classe guerreiro");
-ok(db.getPersonagem(MUNDO, "ANA").classe === "guerreiro", "escolher a classe");
-const antesEv = db.getPersonagem(MUNDO, "ANA");
-t = await jogar("ANA", "evoluir prever");
-const depoisPrev = db.getPersonagem(MUNDO, "ANA");
-ok(depoisPrev.forca === antesEv.forca && depoisPrev.pontos === antesEv.pontos, "★ a prévia não grava nada");
-t = await jogar("ANA", "evoluir pontos");
-const depoisEv = db.getPersonagem(MUNDO, "ANA");
-ok(depoisEv.pontos < 1 && depoisEv.forca > antesEv.forca, "evoluir pontos gasta os pontos, com Força primeiro (guerreiro)", `${antesEv.forca}→${depoisEv.forca}, pontos ${depoisEv.pontos}`);
-const dist = EV.distribuirPontos({ nivel: 30, pontos: 100, ...Object.fromEntries(R.ATR.map((a) => [a, 1 + R.baseDoNivel(30)])) }, "mago");
-ok(dist.gastos.inteligencia >= Math.max(...Object.entries(dist.gastos).filter(([k]) => k !== "inteligencia").map(([, v]) => v)), "  → o mago põe mais em Inteligência");
-
-console.log("\n── 10. especial: a recompensa é uma vez por pessoa ──");
-const espM = MISS.ESPECIAIS.find((e) => e.id === "e_relogio");
-db.salvarPersonagem(MUNDO, "ANA", { nivel: espM.nivel, ...Object.fromEntries(R.ATR.map((a) => [a, 2000])) });
-descansar("ANA");
-let res = AV.lutar(["ANA"], espM, { aleatorio: sempre(0.001) });
-ok(res.r.desfecho === "sucesso" && db.temItem(MUNDO, "ANA", "g_e_relogio_avo"), "★ o primeiro êxito dá o item único", res.r.desfecho);
-const qtd = db.getInventario(MUNDO, "ANA").find((x) => x.id === "g_e_relogio_avo")?.quantidade;
-descansar("ANA");
-res = AV.lutar(["ANA"], espM, { aleatorio: sempre(0.001) });
-ok(db.getInventario(MUNDO, "ANA").find((x) => x.id === "g_e_relogio_avo")?.quantidade === qtd && res.resultados[0].especial?.jaTinha, "  → o segundo não dá outro");
-
-console.log("\n── 11. chefe: espera de 24 h e recompensa única ──");
-const harkon = MISS.CHEFES.get("b_tes_harkon");
-db.salvarPersonagem(MUNDO, "ANA", { nivel: harkon.nivel });
-descansar("ANA");
-res = AV.lutar(["ANA"], harkon, { aleatorio: sempre(0.001) });
-ok(res.r.desfecho === "sucesso" && db.temItem(MUNDO, "ANA", "c_f_tes_serana"), "★ vencer Harkon dá o contrato da Serana", res.r.desfecho);
-descansar("ANA");
-const imp = AV.impedimento("ANA", AV.montarAlvo(harkon, harkon.nivel));
-ok(/já tentou/.test(imp ?? ""), "  → e o mesmo chefe só de novo amanhã", imp);
-
-console.log("\n── 12. contrato vira companheiro; pergaminho vira magia ──");
-t = await jogar("ANA", "usar c_f_tes_serana");
-ok(/Contrato assinado/.test(t) && db.listarFollowersDe(MUNDO, "ANA").some((f) => f.catalogoId === "f_tes_serana") && !db.temItem(MUNDO, "ANA", "c_f_tes_serana"), "★ o contrato sai da mochila e a Serana entra", t.slice(0, 120));
-db.darItem(MUNDO, "ANA", "c_f_tes_serana");
-t = await jogar("ANA", "usar c_f_tes_serana");
-ok(/Você já tem/.test(t) && db.temItem(MUNDO, "ANA", "c_f_tes_serana"), "  → um segundo contrato da mesma é recusado (um por jogador)");
-db.darItem(MUNDO, "ANA", "p_m_e_eco_radio");
-t = await jogar("ANA", "usar p_m_e_eco_radio");
-ok(/Magia aprendida/.test(t) && db.listarMagias(MUNDO, "ANA").some((m) => m.magiaId === "m_e_eco_radio"), "o pergaminho vira magia no grimório");
-
-console.log("\n── 13. a história ──");
-const ctxH = { jogador: "Ana", missao: MISS.acharContrato("d_ratos"), desfecho: "sucesso", lingua: "pt", chances: { exito: 0.4, sobrevivencia: 0.7 },
-  rolagens: { exito: 0.1, sobrev: 0.2 }, contribuicoes: [], magias: [], coop: false, extras: {} };
-const h1 = H.contarHistoria(ctxH, { semente: 42 }), h2 = H.contarHistoria(ctxH, { semente: 42 });
-ok(h1.texto === h2.texto && h1.texto.length > 40, "★ mesma semente, mesma história");
-const ids = H.todosOsIds();
-ok(new Set(ids).size === ids.length, "ids dos trechos são únicos", `${ids.length} ids`);
-let faltaEN = 0, vagas = 0;
-const andar = (x) => { if (Array.isArray(x)) for (const s of x) { if (s?.id && (!s.pt || !s.en)) faltaEN++; } else if (x && typeof x === "object") for (const v of Object.values(x)) andar(v); };
-andar(HISTORIAS);
-ok(!faltaEN, "todo trecho tem PT e EN", `${faltaEN} sem`);
-for (let s = 0; s < 300; s++) for (const lingua of ["pt", "en"]) for (const desfecho of ["sucesso", "falha", "caiu"]) {
-  const missao = [MISS.acharContrato("d_ratos"), MISS.CHEFES.get("b_tg_rize"), MISS.BICOS[0]][s % 3];
-  const h = H.contarHistoria({ ...ctxH, missao, lingua, desfecho, extras: { subiu: s % 2 === 0, capturados: s % 5 ? [] : ["Guarda", "Mercenário"] } }, { semente: s });
-  if (/[{}]|undefined|null/.test(h.texto)) { vagas++; if (vagas < 3) console.log("     ", h.texto.slice(0, 200)); }
-}
-ok(!vagas, "★ nenhuma vaga sem preencher ({...}, undefined) em 1800 histórias", `${vagas}`);
-t = await jogar("ANA", "historia");
-ok(t.length > 60 && !/undefined/.test(t), "&game historia mostra a última");
-
-console.log("\n── 14. o que a revisão achou ──");
-const nPartyAntes = db.getParty(MUNDO, "ANA").length, espadas = () => db.getInventario(MUNDO, "ANA").find((x) => x.id === "g_espada_ferro")?.quantidade ?? 0;
-const espadasAntes = espadas(), compAntes = db.listarFollowersDe(MUNDO, "ANA").length;
-await jogar("ANA", "apagar confirmar"); await jogar("ANA", "criar Ana");
-ok(espadas() === espadasAntes && db.listarFollowersDe(MUNDO, "ANA").length === compAntes && db.getParty(MUNDO, "ANA").length <= 2,
-  "★ apagar e criar de novo não dá outro kit (nem passa de 2 na party)", `${espadasAntes}→${espadas()}, ${compAntes}→${db.listarFollowersDe(MUNDO, "ANA").length}, party ${nPartyAntes}→${db.getParty(MUNDO, "ANA").length}`);
-ok(db.esperaAte("ANA", "chefe:b_tes_harkon") > Date.now(), "  → e não zera a espera de 24 h do chefe");
-db.criarPersonagem(MUNDO, "NOVATO", "Novato");
-db.salvarPersonagem(MUNDO, "NOVATO", Object.fromEntries(R.ATR.map((a) => [a, 5000])));
-const chefe60 = [...MISS.CHEFES.values()].find((c) => c.nivel === 60);
-res = AV.lutar(["NOVATO"], chefe60, { aleatorio: sempre(0.001) });
-ok(res.r.desfecho === "sucesso" && db.getPersonagem(MUNDO, "NOVATO").nivel === 1 + MISS.NIVEIS_POR_LUTA, "★ no máximo 2 níveis por vitória (nível 1 contra um chefe do nível 60)", `nível ${db.getPersonagem(MUNDO, "NOVATO").nivel}`);
-const bancoAntes = db.getMoeda(MUNDO, "ouro").mercado, tesouros = JSON.stringify([...MISS.DUNGEONS.keys()].map((id) => db.getDungeon(id)?.ouro ?? 0));
-const { rodarTesteGeral } = await import("./modulos/game/teste-geral.js");
-const G = { garantirMoeda: () => db.getMoeda(MUNDO, "ouro"), pDaMoeda: () => ({ pSuave: 0.5 }) };
-const rt = await rodarTesteGeral(MUNDO, "DONO", G);
-ok(!rt.falhas, "&game admin teste passa", rt.linhas.filter((l) => l.startsWith("❌")).join(" | "));
-ok(db.getMoeda(MUNDO, "ouro").mercado === bancoAntes && JSON.stringify([...MISS.DUNGEONS.keys()].map((id) => db.getDungeon(id)?.ouro ?? 0)) === tesouros,
-  "  → e não mexe no banco nem nos tesouros");
-
-console.log("\n── 15. imagens (fora do repositório: o link fica no banco) ──");
-const IMG = await import("./modulos/game/imagens.js");
-let ultI = null, todosI = [];
-const admin = async (txt, anexos = []) => {
-  todosI = [];
-  const ctx = { serverId: "S", PREFIXO: "&", COR: { erro: 1, aviso: 2, sucesso: 3, info: 4, mod: 5 }, config: { language: "pt" },
-    sendEmbed: async (_c, e) => { ultI = e; todosI.push(e); return { id: "m", react: async () => {} }; }, getServer: async () => ({ id: "S", channels: [] }), ehSuperAdmin: () => true, membroTemPermissao: () => true };
-  await game.cmdGame({ authorId: "DONO", author: { username: "dono" }, channel: { id: "C" }, channelId: "C", mentionIds: [], attachments: anexos }, txt.split(" "), ctx);
-  return ultI;
-};
-await admin("admin imagem");
-const listaI = todosI.map((x) => x.description).join("\n");
-let e;
-ok(/0 de \d+/.test(listaI) && /f_tes_serana/.test(listaI) && /b_tes_harkon/.test(listaI), "★ &game admin imagem lista o que falta (Serana, Harkon…)");
-const ANEXO = "01JABCDEFGHJKMNPQRSTVWXYZ0";
-e = await admin("admin imagem Serana", [{ _id: ANEXO, metadata: { type: "Image" } }]);
-ok(/Imagem salva/.test(e.title) && e.imagem?.endsWith(`/attachments/${ANEXO}`) && IMG.imagemDe("f_tes_serana") === e.imagem, "★ com a imagem anexada, liga pelo nome", e.title);
-e = await admin("admin imagem b_tes_harkon https://cdn.stoatusercontent.com/attachments/01JABCDEFGHJKMNPQRSTVWXYZ1");
-ok(/Imagem salva/.test(e.title) && IMG.imagemDe("b_tes_harkon"), "  → ou por id e link");
-e = await admin("admin imagem b_tes_harkon javascript:alert(1)");
-ok(IMG.imagemDe("b_tes_harkon")?.startsWith("https://"), "  → link que não é http(s) não entra");
-t = await jogar("ANA", "follower ficha Serana");
-ok(ult?.imagem === IMG.imagemDe("f_tes_serana"), "a ficha da Serana sai com a imagem dela");
-t = await jogar("ANA", "item c_f_tes_serana");
-ok(ult?.imagem === IMG.imagemDe("f_tes_serana"), "  → e o contrato dela também");
-const rH = AV.embedResultado({ ...AV.lutar(["NOVATO"], harkon, { aleatorio: sempre(0.001) }) }, { en: false, COR: { sucesso: 1, aviso: 2, erro: 3 }, P: "&" });
-ok(rH.imagem === IMG.imagemDe("b_tes_harkon"), "a luta contra Harkon sai com a imagem dele");
-e = await admin("admin imagem Harkon remover");
-ok(!IMG.imagemDe("b_tes_harkon") && /removida/.test(e.title), "remover tira");
-ok(!/imagem/.test(JSON.stringify(await import("./modulos/game/conteudo/skyrim.json", { with: { type: "json" } }))), "  → e nada disso vai para o JSON do repositório");
-
-console.log("\n── 16. listas separadas por tipo (catálogo, loja, mochila) ──");
-const UI = await import("./modulos/game/ui.js");
-ok(JSON.stringify(UI.lerFiltroDeItens("armas de fogo epico")) === JSON.stringify({ raridade: "epico", tipos: ["fogo"], resto: "" }), "★ \"armas de fogo epico\" = raridade + tipo, em qualquer ordem");
-ok(UI.lerFiltroDeItens("raro corpo").tipos[0] === "armadura" && UI.lerFiltroDeItens("raro corpo a corpo").tipos[0] === "melee", "  → \"corpo\" é armadura; \"corpo a corpo\" é arma");
-ok(UI.tipoDoItem(ITENS.get("i_c_lamina_1")) === "cyberware" && UI.tipoDoItem(ITENS.get("g_escudo_tabuas")) === "escudo", "  → implante e escudo têm tipo próprio");
-let pags = [];
-const cat = async (txt, lang = "pt") => { pags = []; const ctx = { serverId: "S", PREFIXO: "&", COR: { erro: 1, aviso: 2, sucesso: 3, info: 4, mod: 5 }, config: { language: lang },
-  sendEmbed: async (_c, e) => { pags.push(e); return { id: "m", react: async () => {} }; }, getServer: async () => ({ id: "S", channels: [] }), ehSuperAdmin: () => false, membroTemPermissao: () => true };
-  await game.cmdGame({ authorId: "ANA", author: { username: "ANA" }, channel: { id: "C" }, channelId: "C", mentionIds: [] }, txt.split(" "), ctx);
-  return pags.map((x) => `${x.title}\n${x.description}`).join("\n"); };
-t = await cat("catalogo epico");
-ok(/escolha um tipo/.test(t) && /Armas de fogo\*\* — \d+ · `&game catalogo epico fogo`/.test(t) && pags.length === 1, "★ a raridade grande mostra o resumo por tipo, numa página só");
-t = await cat("catalogo epico fogo");
-ok(/Armas de fogo/.test(t) && !/Bioware|Cabeça/.test(t), "  → e o tipo pedido lista só ele");
-t = await cat("catalogo warhammer fogo");
-ok(/escolha a raridade/.test(t) && /catalogo raro fogo warhammer/.test(t), "  → obra + tipo também (e sugere o comando com a obra)");
-t = await cat("catalogo epic firearms", "en");
-ok(/Firearms/.test(t) && !/Armas de fogo/.test(t), "  → em inglês, com as palavras em inglês");
-t = await cat("comprar raro escudo");
-ok(/Escudos/.test(t) && !/Armas de fogo/.test(t), "a loja filtra por raridade e tipo");
-t = await cat("itens implantes");
-ok(!/Armas corpo a corpo/.test(t), "a mochila filtra por tipo");
-
-console.log(`\nRPG v4: ${pass} ok, ${fail} falha(s)`);
 process.exit(fail ? 1 : 0);
 };
 
@@ -10608,7 +9743,8 @@ await t("servidor sem cargo de staff nenhum: o painel diz como marcar", async ()
   w3.config.acesso.cargosStaff = [];
   w3.cargos.get("RGER").permissions.a = 0;
   await quieto(() => tickets.cmdTicket({ channel: w3.geral, channelId: "C_GERAL", authorId: "MOD1" }, ["painel", "aqui"], w3.ctx));   // (31 out 2026, P1) idem
-  assert.match(w3.geral.mensagens.at(-1).embed.description, /acesso cargo add/);
+  // (31 out 2026, P2) marcar a staff é `&staff add` (o `&acesso cargo` virou atalho de lá)
+  assert.match(w3.geral.mensagens.at(-1).embed.description, /Nenhum cargo de staff encontrado\. Marque com `&staff add @cargo`/);
 });
 
 console.log(`\nTICKETS-STAFF: ${ok} ok, ${falhou} falha(s)`);
@@ -10802,8 +9938,10 @@ async function rodar(autor, ...args) {
 console.log("── quem pode ──");
 await t("★ admin de servidor (BanMembers) NÃO pode — a lista vale para todos os servidores", async () => {
   const e = await rodar(ADMIN, "add", FORA, "raid");
-  assert.match(e.title, /Só o dono do bot/);
-  assert.match(e.description, /&ban/, "mostra o caminho dele (o ban normal alimenta a lista)");
+  // (31 out 2026, P2) saída mínima: a recusa é uma linha; o &ban está na ajuda do &banglobal
+  assert.match(`${e.title ?? ""}\n${e.description}`, /^\n🔒 Só o dono do bot\.$/);
+  const { REGISTRO } = await import("./modulos/comandos/index.js");
+  assert.match(REGISTRO.find((c) => c.id === "banglobal").ajuda.desc.pt, /Todo ban daqui entra nela/, "a ajuda diz que o ban normal alimenta a lista");
   assert.equal(db.historicoBans(FORA).length, 0);
 });
 
@@ -10887,12 +10025,20 @@ await t("menção e link de perfil valem como ID; algo com cara de ID quebrado �
 await t("sem ID nenhum: mostra o uso, não mexe na lista", async () => {
   const antes = db.totalBansGlobais();
   const e = await rodar(DONO, "add", "raid");
-  assert.match(e.title, /Adicionar à lista global/);
+  // (31 out 2026, P2) erro de uso numa linha + a ajuda (R1)
+  assert.match(e.description, /^❌ Quais IDs\? · `&help banglobal`$/);
   assert.equal(db.totalBansGlobais(), antes);
 });
+// (31 out 2026, P2) quem ensina é a ajuda (R1: o status mostra só o estado) — e só para o dono do bot
 await t("o &banglobal (status) ensina o add", async () => {
   const e = await rodar(DONO);
-  assert.match(e.description, /banglobal add <id>/);
+  assert.doesNotMatch(e.description, /banglobal add/);
+  const { citarNoTexto } = await import("./modulos/core/aliases.js");
+  const { REGISTRO } = await import("./modulos/comandos/index.js");
+  assert.match(citarNoTexto(REGISTRO.find((c) => c.id === "banglobal").ajuda.desc.pt, "pt", "&"), /`&banglobal add <id…> \[motivo\]`/);
+  const visao = await import("./modulos/moderacao/visao.js");
+  assert.equal(visao.podeVer({ nivel: "staff", ia: false, voz: false }, "banglobal", "add"), false);
+  assert.equal(visao.podeVer({ nivel: "dono", ia: false, voz: false }, "banglobal", "add"), true);
 });
 
 console.log(`\nBANGLOBAL (add): ${ok} ok, ${falhou} falha(s)`);
@@ -10965,7 +10111,8 @@ ok(ligados(store.configDoServidor("S1")).length === Object.keys(engine.MODULOS_A
   && store.configDoServidor("S1").automod.antiAssuntos.enabled === true, "★ &automod on liga tudo");
 await say("&automod off");
 ok(ligados(store.configDoServidor("S1")).length === 0, "★ &automod off desliga tudo (o que o dono tentou)");
-ok(/Tudo desligado/.test(ult()) && /automod antispam on/.test(ult()), "  → e diz como ligar só um");
+// (31 out 2026, P2) saída mínima: o resultado numa linha (como ligar só um está na ajuda)
+ok(/🛡 \*\*AutoMod\*\* 🔴 desligado\./.test(ult()) && !/automod antispam on/.test(ult()), "  → e diz como ligar só um");
 
 console.log("\n── quem copia a ajuda ao pé da letra ──");
 await say("&automod <group> off");
@@ -10976,7 +10123,8 @@ ok(/espaço para preencher/.test(ult()), "  → ‹grupo› (como o Stoat mostra
 await say("&automod antiruido <parte> off");
 ok(/espaço para preencher/.test(ult()) && /caps/.test(ult()), "  → e <parte> mostra as partes do grupo");
 await say("&acesso cargo add <cargo>");
-ok(/espaço para preencher/.test(ult()) && /help acesso/.test(ult()), "★ fora do automod também: aponta o &help do comando");
+// (31 out 2026, P2) `&acesso cargo` virou atalho de `&staff`: a dica aponta o &help do comando de destino
+ok(/espaço para preencher/.test(ult()) && /`&help staff`/.test(ult()), "★ fora do automod também: aponta o &help do comando");
 await say("&chat o que é a tag <div>?");
 ok(!/espaço para preencher/.test(ult()), "  → mas não em comando de texto livre (&chat)");
 
@@ -10993,7 +10141,8 @@ ok(!engine.moduloLigado(store.configDoServidor("S1").automod, "antiSpam"), "os n
 console.log("\n── a ajuda em inglês, e o que ela mostra funciona ──");
 ok(aliases.exibir("`&automod punicao modo <avisar|banir>`", "en", "&", {}) === "`&automod punishment mode <warn|ban>`",
   "★ \"&automod punishment modo\" saía meio traduzido; agora sai tudo em inglês");
-ok(aliases.exibir("`&banglobal ‹off|avisar|banir›`", "en", "&", {}) === "`&globalban ‹off|warn|ban›`", "  → ‹…› também se traduz");
+// (31 out 2026, P2) `banir` virou apelido de `imediato` (o nome de hoje) no registro
+ok(aliases.exibir("`&banglobal ‹off|avisar|imediato›`", "en", "&", {}) === "`&globalban ‹off|warn|instant›`", "  → ‹…› também se traduz");
 await say("&automod punicao mode warn");
 ok(store.configDoServidor("S1").automod.punicao.modo === "avisar", "★ e \"mode warn\" (o que a ajuda em inglês mostra) é aceito");
 await say("&automod punicao modo banir");
@@ -11134,7 +10283,8 @@ const say = async (t) => { await c.emitAll("messageCreate", mk(t)); };
 const ult = () => JSON.stringify(env[env.length - 1] ?? {});
 
 await say("&entretenimento");
-ok(/ship/.test(ult()) && /briga/.test(ult()) && /cowsay/.test(ult()) && /bola8/.test(ult()), "★ &entretenimento mostra o menu da família");
+// (31 out 2026, P2) R1: a lista das brincadeiras mora no `&help entretenimento`; sozinho, uma linha que aponta para lá
+ok(/"description":"❌ Faltou a brincadeira\. · `&help entretenimento`"/.test(ult()) && !/bola8/.test(ult()), "★ &entretenimento sozinho: uma linha + `&help entretenimento` (antes: o menu inteiro)");
 await say(`&entretenimento ship <@${ANA}> <@${BIA}>`);
 const ship1 = ult();
 ok(/Ana × Bia/.test(ship1) && /%/.test(ship1) && /Nome do casal/.test(ship1), "★ ship com duas menções: nomes, %, nome do casal");
@@ -11162,7 +10312,7 @@ ok(/oI @aNa|oI @AnA/.test(ult()), "zoeira não quebra a menção (vira @nome ant
 await say("&entretenimento inverter abc");
 ok(/cba/.test(ult()), "inverter");
 await say("&entretenimento banana");
-ok(/Não conheço/.test(ult()) && /ship/.test(ult()), "subcomando desconhecido mostra o menu");
+ok(/"description":"❌ Não conheço `banana`\. · `&help entretenimento`"/.test(ult()), "subcomando desconhecido: uma linha que diz qual palavra e aponta a ajuda (antes: o menu)");   // (31 out 2026, P2)
 await say("&fun ship pizza and pineapple");
 ok(/pizza × pineapple/.test(ult()), "&fun é o mesmo comando (atalho em inglês)");
 await say("&entreterimento sorte");
@@ -11177,7 +10327,8 @@ ok(/entretenimento cowsay oi/.test(ult()), "  → &cowsay também");
 console.log("\n── em inglês ──");
 await say("&idioma en");
 await say("&entretenimento");
-ok(/entertainment fight/.test(ult()) && /entertainment 8ball/.test(ult()), "★ o menu em inglês mostra &entertainment fight / 8ball");
+// (31 out 2026, P2) sem menu: a linha em inglês aponta a ajuda em inglês
+ok(/"description":"❌ Missing the game\. · `&help entertainment`"/.test(ult()), "★ em inglês: `&help entertainment` (o menu com fight / 8ball mora na ajuda)");
 await say("&entertainment fight Ana x Bia");
 ok(/Ana × Bia/.test(ult()) && /wins/.test(ult()), "  → e 'fight' funciona (normalizado para briga)");
 await say("&entertainment choose tea or coffee");
@@ -11292,7 +10443,8 @@ const ult = () => JSON.stringify(enviados[C1ID].at(-1) ?? {});
 await diz("ADM", `&embed canal: ${C2ID} | titulo: Golpe | descricao: clique aqui`);
 ok(enviados[C2ID].length === 0 && /neste servidor/.test(ult()), "★ &embed canal: <canal de outro servidor> é recusado (antes publicava lá)");
 await diz("ADM", `&webhook criar ataque ${C2ID}`);
-ok(/não é \*\*deste servidor\*\*/.test(ult()), "★ &webhook criar com canal de outro servidor é recusado");
+// (31 out 2026, P2) saída mínima: a recusa virou uma linha (mesma exigência: o canal não é deste servidor, e nada é criado)
+ok(/Esse canal não é deste servidor/.test(ult()) && !(await import("./modulos/core/db.js")).listarGanchos("S1").some((g) => g.nome === "ataque"), "★ &webhook criar com canal de outro servidor é recusado");
 await diz("ADM", `&cor painel ${C2ID} fogo`);
 ok(enviados[C2ID].length === 0 && /deste servidor/.test(ult()), "★ &cor painel em canal de outro servidor é recusado (antes de criar cargo nenhum)");
 
@@ -11353,7 +10505,8 @@ ok(!wh0.receptorLigado() && !(await fetch(`${BASE}/gancho/1/x`, { method: "POST"
   wh._zerarTetos();
   for (let i = 0; i < 12; i++) db.criarGancho("S1", `g${i}`, C1ID, `token${i}abcdefghijkl`);
   await diz("ADM", "&webhook criar mais");
-  ok(/o máximo/.test(ult()), "★ ganchos por servidor têm teto (10)");
+  // (31 out 2026, P2) saída mínima: "Máximo de 10 ganchos." — e o 13º não é criado
+  ok(/Máximo de 10 ganchos/.test(ult()) && !db.listarGanchos("S1").some((g) => g.nome === "mais"), "★ ganchos por servidor têm teto (10)");
 }
 
 interno.close();
@@ -11785,7 +10938,8 @@ const S1 = { id: "S1", ownerId: "ADM", name: "S1", roles: new Map(), channels: [
 c.servers.set("S1", S1); c.channels.set("C1", C1);
 await c.emitAll("messageCreate", { authorId: "ADM", content: "&fuso", serverId: "S1", server: S1, channel: C1, channelId: "C1", mentionIds: [], createdAt: new Date(), author: { username: "ADM" }, member: { roles: [] } });
 await new Promise((r) => setTimeout(r, 50));
-ok(envios.length >= 1 && envios.every((p) => typeof p !== "string") && envios.some((p) => /Fusos horários/.test(JSON.stringify(p))), `★ InSlowmode além da espera: uma tentativa por mensagem, sem o "fallback de texto" que falhava igual (${envios.length} envio(s), ${envios.filter((p) => typeof p === "string").length} em texto)`);
+// (31 out 2026, P2) o &fuso sem lista virou uma linha com a hora do fuso do servidor (R1): mesma exigência sobre a resposta
+ok(envios.length >= 1 && envios.every((p) => typeof p !== "string") && envios.some((p) => /\*\*\d\d:\d\d\*\* · .* — Sao Paulo \(UTC-03:00\)/.test(JSON.stringify(p))), `★ InSlowmode além da espera: uma tentativa por mensagem, sem o "fallback de texto" que falhava igual (${envios.length} envio(s), ${envios.filter((p) => typeof p === "string").length} em texto)`);
 const fonte = fs.readFileSync("./main.js", "utf8");
 ok(/slowmode\.instalar\(Channel/.test(fonte), "  → o embrulho está instalado no Channel da stoat.js (vale para todo envio)");
 
@@ -11973,7 +11127,8 @@ const msg = (content) => ({ content, channel: canal, channelId: "CH_GERAL", auth
 const ultimo = () => `${env.at(-1)?.title ?? ""} ${env.at(-1)?.description ?? ""}`;
 si._zerarCache();
 await si.cmdServidor(msg("&servidor"), [], ctxCmd(false));
-ok(/Vapor Nexus/.test(ultimo()) && /<@U_DONO>/.test(ultimo()) && /5 membros/.test(ultimo()) && /&servidor regras/.test(ultimo()), "★ &servidor → dados gerais e o caminho para o resto");
+// (31 out 2026, P2) R1: o "caminho para o resto" mora no `&help servidor`; a data de criação virou timestamp
+ok(/Vapor Nexus/.test(ultimo()) && /<@U_DONO>/.test(ultimo()) && /5 membros/.test(ultimo()) && /Criado em <t:\d+:D>/.test(ultimo()) && !/&servidor regras|&staff/.test(ultimo()), "★ &servidor → dados gerais (criação em timestamp), sem a lista de comandos");
 await si.cmdServidor(msg("&servidor regras"), ["regras"], ctxCmd(false));
 ok(/1\. Respeite todo mundo/.test(ultimo()) && /Lidas de <#CH_REGRAS>/.test(ultimo()), "★ &servidor regras → do canal, dizendo de onde veio");
 await si.cmdServidor(msg("&servidor regras definir 1. Seja gentil.\n2. Sem spam."), ["regras", "definir", "1.", "Seja", "gentil.", "2.", "Sem", "spam."], ctxCmd(false));
@@ -12028,7 +11183,8 @@ ok(/Vapor Nexus/.test(await diz("&servidor")), "★ &servidor responde pelo bot 
 ok(/Respeito acima de tudo/.test(await diz("&servidor regras")), "★ &servidor regras lê o canal #regras sozinho");
 ok(/Respeito acima de tudo/.test(await diz("&server rules")), "  → em inglês: &server rules");
 ok(/servidor regras/.test(await diz("&regras")), "★ \"&regras\" (que não existe sozinho) sugere \"&servidor regras\"");
-ok(/servidor regras/.test(await diz("&help servidor")) && /faq/.test(JSON.stringify(env)), "★ &help servidor tem o verbete");
+// (31 out 2026, P2) o `faq` saiu da ajuda (continua funcionando); o verbete traz regras, cargos e canais
+ok(/servidor regras/.test(await diz("&help servidor")) && /servidor cargos/.test(JSON.stringify(env)) && /servidor canais/.test(JSON.stringify(env)), "★ &help servidor tem o verbete (regras, cargos, canais)");
 ok(/ViewChannel/.test(await diz("&help servidor regras")), "  → e &help servidor regras abre o nó da árvore");
 
 console.log(`\nSERVIDOR (bot): ${pass} ok, ${fail} falha(s)`);
@@ -12760,7 +11916,9 @@ const am$ = async (txt) => { await cmdAutomod({ channel: {}, channelId: "C_DEBAT
 let t = await am$("sentinela");
 ok(/`assuntos`/.test(t) && /`avatar`/.test(t), "★ &automod sentinela mostra as partes novas");
 t = await am$("sentinela assuntos");
-ok(/politica/.test(t) && /religiao/.test(t) && /drogas/.test(t) && /sexual/.test(t) && /zoeira/.test(t), "&automod sentinela assuntos: o painel com os 4 temas");
+// (31 out 2026, P2) a tela mostra só o estado (R1): os 4 temas com a ação e a sensibilidade; a explicação
+// ("zoeira ameniza…") mora na ajuda
+ok(/politica/.test(t) && /religiao/.test(t) && /drogas/.test(t) && /sexual/.test(t) && /Sensibilidade `media`/.test(t) && !/zoeira/.test(t), "&automod sentinela assuntos: o painel com os 4 temas");
 await am$("sentinela assuntos politica apagar");
 ok(config.automod.antiAssuntos.acoes.politica === "apagar" && config.automod.antiAssuntos.enabled === true, "★ `politica apagar`: o tema e a chave geral ligam juntos");
 await am$("sentinela assuntos religion alert");
@@ -12772,7 +11930,7 @@ ok(config.automod.antiAssuntos.canaisLiberados.includes("C_DEBATE"), "  → `lib
 await am$("sentinela assuntos vigiar aqui");
 ok(!config.automod.antiAssuntos.canaisLiberados.includes("C_DEBATE"), "  → `vigiar aqui`: volta a vigiar");
 t = await am$("sentinela assuntos politica explodir");
-ok(/Ação inválida/.test(t) && config.automod.antiAssuntos.acoes.politica === "apagar", "  → ação inválida não muda nada");
+ok(/\n❌ Ação: off, alertar, apagar ou punir · `&help automod`$/.test(t) && config.automod.antiAssuntos.acoes.politica === "apagar", "  → ação inválida não muda nada");   // (31 out 2026, P2) uma linha + &help
 await am$("sentinela assuntos punicao confirmar");
 ok(config.automod.antiAssuntos.punicao?.modo === "confirmar", "  → `punicao` do `punir`");
 await am$("sentinela assuntos sensibilidade alta");
@@ -12783,7 +11941,8 @@ await am$("sentinela assuntos ia off");
 ok(config.automod.antiAssuntos.ia === false, "★ `ia off`: a nota decide sozinha");
 await am$("sentinela assuntos ia on");
 t = await am$("sentinela assuntos test quem vota no Bolsonaro é burro, a eleição foi roubada");
-ok(/politica` — \*\*[\d.]+\/10\*\*/.test(t) && /nomes:bolsonaro/.test(t) && /Ninguém foi punido/.test(t), "★ `test <texto>`: a nota de cada tema, com os sinais");
+// (31 out 2026, P2) sem o rodapé "Ninguém foi punido" (R2); os 4 temas, a nota e os sinais continuam
+ok(/politica` — \*\*[\d.]+\/10\*\*/.test(t) && /nomes:bolsonaro/.test(t) && (t.match(/\/10\*\*/g) ?? []).length === 4 && !/punido/.test(t), "★ `test <texto>`: a nota de cada tema, com os sinais");
 await am$("sentinela assuntos politica off");
 ok(config.automod.antiAssuntos.acoes.politica === "off", "  → `off` desliga o tema");
 await am$("sentinela avatar on");
@@ -12792,7 +11951,7 @@ ok(config.automod.antiAvatar.acao === "banir" && config.automod.antiAvatar.enabl
 await am$("sentinela avatar tempo 2h");
 ok(config.automod.antiAvatar.tempo === "2h" && av.tempoDoAvatar(config.automod.antiAvatar) === 2 * 3600e3, "  → tempo do silêncio");
 t = await am$("sentinela avatar acao explodir");
-ok(/Ação inválida/.test(t) && config.automod.antiAvatar.acao === "banir", "  → ação inválida não muda nada");
+ok(/\n❌ Ação: alertar, silenciar, expulsar ou banir · `&help automod`$/.test(t) && config.automod.antiAvatar.acao === "banir", "  → ação inválida não muda nada");   // (31 out 2026, P2) uma linha + &help
 await am$("sentinela avatar off");
 ok(config.automod.antiAvatar.enabled === false, "  → off");
 
@@ -12942,6 +12101,8 @@ const PT_TOKENS = new Set();
 // o nome interno de uma palavra SÓ espanhola não é "o português" de nada
 const { REGISTRO: REG_ES } = await import("./modulos/comandos/index.js");
 const SO_ES = new Set(REG_ES.flatMap((c) => { const en = new Set(Object.values(c.subcomandos ?? {}).flat()); return Object.values(c.es?.subcomandos ?? {}).flat().filter((e) => !en.has(e)).map((e) => `${c.id} ${e}`); }));
+// (31 out 2026, P2) os níveis de dentro também têm espanhol (`&config log aqui`)
+for (const c of REG_ES) for (const [fam, f] of Object.entries(c.familias ?? {})) { const en = new Set(Object.values(f.subcomandos ?? {}).flat()); for (const e of Object.values(f.es?.subcomandos ?? {}).flat()) if (!en.has(e)) SO_ES.add(`${c.id}.${fam} ${e}`); }
 for (const [cmdT, mapa] of Object.entries(SUB)) for (const [en, pt] of Object.entries(mapa)) if (en !== pt && !SO_ES.has(`${cmdT} ${en}`) && /^[a-zçãéíóú]+$/.test(pt)) PT_TOKENS.add(pt);
 for (const t of ["velocidade", "rajada", "repeticao", "midia", "mencoes", "caracteres", "letras", "dominios", "convites", "conteudo", "odio",
   "imagens", "assuntos", "antiruido", "sentinela", "pular", "voltar", "cancelar", "aqui", "padrao", "aviso", "avisar", "apagar", "confirmar",
@@ -12964,6 +12125,8 @@ for (const t of ["pergunta", "coisa", "bicho", "pensa", "figuras", "figura", "no
   "forca", "força", "destreza", "resistencia", "agilidade", "saude", "inteligencia", "carisma", "ouro", "cristal", "para", "por", "tudo",
   "dificuldade", "nivel", "nível", "obra", "cidades", "pessoas", "contribuicao"]) PT_TOKENS.add(t);
 for (const ok_ of ["status", "config", "set", "debug", "on", "off", "add", "remove", "list", "test", "ban", "top", "admin", "xp", "game", "log", "staff", "tutorial", "avatar", "emoji", "caps", "rpg", "media", "auto", "url", "zalgo", "emojis", "neon", "vaporwave", "cyberpunk", "trans", "coral", "magenta", "indigo", "lima", "ciano", "turquesa", "esmeralda"]) PT_TOKENS.delete(ok_);
+// (31 out 2026, P2) o nome em inglês de um comando nunca é "o português" (`&info` é o nome em inglês do &sobre)
+for (const en of Object.values((await import("./modulos/core/aliases.js")).COMANDO_EN)) PT_TOKENS.delete(en);
 // nome de comando em português FORA das crases (títulos: "Help — &entretenimento › briga")
 const CMD_PT = new Set(Object.entries((await import("./modulos/core/aliases.js")).COMANDO_EN).filter(([pt, en]) => pt !== en).map(([pt]) => pt));
 // marcadores de texto em português ({usuario}, {membros}…) numa tela em inglês
@@ -13014,9 +12177,12 @@ const texto = () => env.flatMap((p) => {
   return ems.map((e) => `${e.title ?? ""}\n${e.description ?? ""}`).concat(typeof p.content === "string" ? [p.content] : []);
 }).join("\n");
 await say("&language en");
-const geral = await import("./modulos/moderacao/geral.js");
-const { arvoreSubtopicos } = await import("./modulos/moderacao/help-arvore.js");
-const { grupos } = await import("./modulos/moderacao/help-grupos.js");
+// (31 out 2026, P2) a ajuda mora só no registro: as páginas vêm do ajuda-registro.js, o &help do ajuda.js
+const ajRegP2 = await import("./modulos/core/ajuda-registro.js");
+const { ORDEM: ORDEM_P2 } = await import("./modulos/moderacao/help-grupos.js");
+const grupos = () => Object.fromEntries(ORDEM_P2.map((g) => [g, {}]));
+const arvoreSubtopicos = () => { const r = {}; for (const [id, ...cam] of ajRegP2.todasAsPaginas()) { if (!cam.length) continue; let no = (r[id] ??= {}); for (const k of cam) no = (no[k] ??= {}); } return r; };
+const geral = { ...(await import("./modulos/moderacao/geral.js")), ...(await import("./modulos/moderacao/ajuda.js")) };
 const AJUDA = ["&help", ...Object.keys(grupos("en", "&")).map((g) => `&help ${g}`), ...Object.keys(geral.construirDetalhes("&", "en")).map((k) => `&help ${k}`)];
 const desce = (no, cam) => { for (const k of Object.keys(no ?? {})) { if (k === "titulo" || k === "texto" || typeof no[k] !== "object") continue; AJUDA.push(`&help ${[...cam, k].join(" ")}`); desce(no[k], [...cam, k]); } };
 desce(arvoreSubtopicos("&", "en"), []);
@@ -13046,7 +12212,8 @@ const ultimo = () => { const p = env[env.length - 1]; const e = p?.embeds?.[0] ?
 const faz = async (cmd) => { env.length = 0; await say(cmd); return ultimo(); };
 await faz("&automod on");
 await faz("&automod antispam speed off");
-ok(cfg().automod.antiSpam.enabled === false && cfg().automod.antiMassSpam.enabled !== false, "★ &automod antispam speed off → só a parte velocidade");
+// (31 out 2026, P2) a `velocidade` juntou o antispam e o antimassspam (as duas réguas de ritmo): desliga as duas, e só elas
+ok(cfg().automod.antiSpam.enabled === false && cfg().automod.antiMassSpam.enabled === false && cfg().automod.antiDuplicata?.enabled !== false && cfg().automod.antiMassMention?.enabled !== false, "★ &automod antispam speed off → só a parte velocidade (as duas réguas de ritmo)");
 await faz("&automod antinoise caps off");
 ok(cfg().automod.antiCaps.enabled === false, "★ &automod antinoise caps off (antiruido em inglês)");
 await faz("&automod antilink domains off");
@@ -13093,7 +12260,8 @@ ok(!/Unknown command|Comando desconhecido/.test(t), "  → &silence existe (era 
 t = await faz("&help assistant");
 ok(!/Not found/.test(t), "  → &help assistant (era \"Not found\")");
 t = await faz("&help assistent");
-ok(/Did you mean `&help wizard`/.test(t) && /start, protect, customize, fun, game, diagnostics/.test(t), "★ &help com erro de digitação: \"did you mean\" e os grupos com o nome em inglês");
+// (31 out 2026, P2) o nome em inglês do assistente é `setup`; sem sugestão, a resposta aponta o índice (R1/R2: uma linha)
+ok(/Did you mean `&help setup`/.test(t) && /There's no help for `\w+`\. `&help`$/m.test(await faz("&help zzqqxx")), "★ &help com erro de digitação: \"did you mean\" com o nome em inglês; sem sugestão, o índice");
 
 // ── 3. O automod pega mensagem em inglês ──
 const engine = await import("./modulos/moderacao/automod-engine.js");
@@ -13176,7 +12344,8 @@ db.somarAviso("S1", "MEMBRO", "teste", {});
 let t = await say("ADMIN_COM_TUDO", "&reset");
 ok(/Só o dono do servidor/.test(t) && store.configDoServidor("S1").automod.antiSpam.enabled === true, "★ staff com todas as permissões NÃO pode (só o dono)");
 t = await say("DONA", "&reset");
-const codigo = (t.match(/reset confirm ([A-Z0-9]{4})/) ?? [])[1];
+// (31 out 2026, P2) o passo tem nome em cada idioma: na tela em português, `confirmar` (antes `confirm`)
+const codigo = (t.match(/&reset confirmar ([A-Z0-9]{4})`/) ?? [])[1];
 ok(!!codigo && /Volta ao padrão/.test(t) && /Fica:/.test(t), "★ o dono do servidor vê o que volta ao padrão, o que fica e um código");
 ok(store.configDoServidor("S1").automod.antiSpam.enabled === true, "  → nada muda antes de confirmar");
 t = await say("OUTRA_PESSOA", `&reset confirm ${codigo}`);
@@ -13197,7 +12366,8 @@ ok(volta.automod.antiSpam.enabled === true && volta.log.canalId === "C1" && volt
 t = await say("DONA", "&reset undo");
 ok(/Nada para desfazer/.test(t), "  → desfazer de novo: nada a desfazer");
 t = await say("DONO_BOT", "&resetar");
-ok(/reset confirm [A-Z0-9]{4}/.test(t), "★ o dono do bot também pode (e o apelido &resetar funciona)");
+// (31 out 2026, P2) `confirmar` na tela em português (antes `confirm`)
+ok(/&reset confirmar [A-Z0-9]{4}`/.test(t), "★ o dono do bot também pode (e o apelido &resetar funciona)");
 
 console.log(`\nRESET/IDIOMA (13 out): ${pass} ok, ${fail} falha(s)`);
 process.exit(fail ? 1 : 0);
@@ -13503,7 +12673,7 @@ const scorecard = await import("./modulos/moderacao/scorecard.js");
 const cmdAm = await import("./modulos/moderacao/automod-comandos.js");
 const aliases = await import("./modulos/core/aliases.js");
 const confianca = await import("./modulos/moderacao/confianca.js");
-const modIA = await import("./modulos/moderacao/moderacao-ia.js");
+// (31 out 2026, P2) moderacao-ia.js apagado (o &modia saiu) — o teste abaixo confere que ele sumiu
 const seguranca = await import("./modulos/core/seguranca.js");
 const hierarquia = await import("./modulos/core/hierarquia.js");
 const rr = await import("./modulos/ferramentas/reaction-roles.js");
@@ -13644,12 +12814,24 @@ await t("★ liberar a pessoa tira a quarentena; e com o automod desligado não 
   assert.equal(ev.deletes, 0);
 });
 await t("★ moderação por IA não apaga mensagem da staff nem de outro bot", async () => {
-  modIA.configurar({ avaliar: async () => '{"viola": true, "motivo": "x"}' });
+  // (31 out 2026, P2) o motor do &modia foi apagado: além de não existir mais quem apague, a config
+  // velha `moderacaoIA` gravada no servidor não faz o automod apagar a mensagem da staff nem a de bot.
+  const semMotorModia = () => {
+    // (31 out 2026, P2) o moderacao-ia.js (motor do &modia, esqueleto que não fazia nada) foi apagado:
+    // nenhuma mensagem passa por ele porque ele não existe — nem o main.js nem módulo nenhum o importa.
+    assert.ok(!fs.existsSync("modulos/moderacao/moderacao-ia.js"), "o motor do &modia voltou");
+    const main = fs.readFileSync("main.js", "utf8");
+    assert.doesNotMatch(main, /moderacao-ia|modIA\./, "o main.js voltou a chamar o motor do &modia");
+    const pastas = ["modulos"]; const quem = [];
+    while (pastas.length) { const d = pastas.pop(); for (const f of fs.readdirSync(d, { withFileTypes: true })) { const c = `${d}/${f.name}`; if (f.isDirectory()) pastas.push(c); else if (c.endsWith(".js") && /from ["'][^"']*moderacao-ia\.js["']|import\(["'][^"']*moderacao-ia\.js/.test(fs.readFileSync(c, "utf8"))) quem.push(c); } }
+    assert.deepEqual(quem, [], "alguém importa o motor do &modia");
+  };
+  semMotorModia();
   const cfg = cfgNova(); cfg.moderacaoIA = { ativa: true, criterios: "sem spoilers", canais: [] };
   const staff = mkMsg("spoiler: o vilão morre no fim, isso todo mundo já sabe");
-  assert.equal(await modIA.moderar(staff.m, mkCtx(cfg, { staff: true }).ctx), false);
+  assert.equal(await engine.runAutomod(staff.m, mkCtx(cfg, { staff: true }).ctx), false);
   const bot = mkMsg("spoiler: o vilão morre no fim, isso todo mundo já sabe"); bot.m.author.bot = true;
-  assert.equal(await modIA.moderar(bot.m, mkCtx(cfg).ctx), false);
+  assert.equal(await engine.runAutomod(bot.m, mkCtx(cfg).ctx), false);
   assert.equal(staff.ev.deletes + bot.ev.deletes, 0);
 });
 
@@ -13733,7 +12915,8 @@ await t("★ quem pede precisa estar acima de quem expulsa, bane ou silencia", a
 await t("★ reaction role: o servidor A não mexe na mensagem do servidor B", async () => {
   db.addReactionRole("SERVER_B", "01HZZZZZZZZZZZZZZZZZZZZZZB", "🎮", "ROLE_B", "CHAN_B");
   const saidas = [];
-  const ctxA = { sendEmbed: async (_c, e) => saidas.push(e.title), COR: {}, PREFIXO: "&", serverId: "SERVER_A",
+  // (31 out 2026, P2) as respostas são uma linha (sem título): o teste lê título e descrição
+  const ctxA = { sendEmbed: async (_c, e) => saidas.push(`${e.title ?? ""} ${e.description ?? ""}`), COR: {}, PREFIXO: "&", serverId: "SERVER_A",
     getServer: async () => ({ ownerId: "ATACANTE", roles: new Map(), channels: [] }),
     membroTemPermissao: () => true, client: { channels: { get: () => null, fetch: async () => null } }, config: {} };
   const msgA = { authorId: "ATACANTE", channelId: "CHAN_A", channel: {} };
@@ -13753,7 +12936,9 @@ await t("★ o log de um servidor não sai no canal de outro (nem definido, nem 
   assert.equal(deB.recebidas.length, 0);
   const saidas = [];
   const cfgA2 = cfgNova();
-  await log.cmdLog({ authorId: "ADM", channelId: "CANAL_A", channel: {} }, ["CANAL_B"], { client: c, serverId: "SERVER_A", config: cfgA2,
+  // (31 out 2026, P2) o &log virou `&config log`: o handler saiu do core (config-log.js)
+  const { cmdLog } = await import("./modulos/moderacao/config-log.js");
+  await cmdLog({ authorId: "ADM", channelId: "CANAL_A", channel: {} }, ["CANAL_B"], { client: c, serverId: "SERVER_A", config: cfgA2,
     sendEmbed: async (_c, e) => saidas.push(e.title), COR: { erro: 1, sucesso: 2 }, PREFIXO: "&",
     getServer: async () => ({ id: "SERVER_A" }), membroTemPermissao: () => true, salvarConfig: () => {} });
   assert.notEqual(cfgA2.log?.canalId, "CANAL_B");
@@ -13865,10 +13050,12 @@ await t("avisar continua só avisando", async () => {
 });
 
 console.log("\n── o comando ──");
-const rodar = async (args) => {
+// (31 out 2026, P2) mudar o modo virou coisa do dono do bot (a staff vê o modo): o comando roda
+// como o dono, e a recusa à staff é conferida à parte
+const rodar = async (args, autor = "DONO") => {
   const config = { banGlobal: { modo: "off", isentos: [] }, log: {}, language: "pt" };
   const saidas = [];
-  await bg.cmdBanGlobal({ authorId: "ADM", channel: {} }, args, { config, serverId: "AQUI", PREFIXO: "&", COR: {},
+  await bg.cmdBanGlobal({ authorId: autor, channel: {} }, args, { config, serverId: "AQUI", PREFIXO: "&", COR: {}, ehSuperAdmin: (u) => u === "DONO",
     sendEmbed: async (_c, e) => saidas.push(e), getServer: async () => ({ id: "AQUI" }), membroTemPermissao: () => true,
     salvarConfig: () => {}, client: { channels: { get: () => null, fetch: async () => null } } });
   return { modo: config.banGlobal.modo, texto: JSON.stringify(saidas) };
@@ -13876,15 +13063,23 @@ const rodar = async (args) => {
 await t("★ `&banglobal consenso` e `&banglobal imediato`; `banir` vira imediato", async () => {
   assert.equal((await rodar(["consenso"])).modo, "consenso");
   assert.equal((await rodar(["imediato"])).modo, "imediato");
-  assert.equal((await rodar(["banir"])).modo, "imediato");
+  assert.equal((await rodar(aliases.normalizarArgs("banglobal", ["banir"]))).modo, "imediato");
+  const staff = await rodar(["consenso"], "ADM");
+  assert.equal(staff.modo, "off"); assert.match(staff.texto, /Só o dono do bot/);
 });
 await t("★ em inglês: `&globalban consensus` / `instant`", async () => {
   assert.equal((await rodar(aliases.normalizarArgs("banglobal", ["consensus"]))).modo, "consenso");
   assert.equal((await rodar(aliases.normalizarArgs("banglobal", ["instant"]))).modo, "imediato");
 });
+// (31 out 2026, P2) o status mostra o modo DESTE servidor e o que ele faz (R1: a lista dos modos
+// fica na ajuda) — conferido nos quatro
 await t("o status mostra os quatro modos", async () => {
-  const r = await rodar([]);
-  for (const m of ["off", "avisar", "imediato", "consenso"]) assert.match(r.texto, new RegExp("`" + m + "`"));
+  for (const m of ["off", "avisar", "imediato", "consenso"]) {
+    const config = { banGlobal: { modo: m, isentos: [] }, log: {}, language: "pt" };
+    const saidas = [];
+    await bg.cmdBanGlobal({ authorId: "ADM", channel: {} }, [], { config, serverId: "AQUI", PREFIXO: "&", COR: {}, sendEmbed: async (_c, e) => saidas.push(e), getServer: async () => ({ id: "AQUI" }), membroTemPermissao: () => true });
+    assert.match(JSON.stringify(saidas), new RegExp("Modo: \\*\\*" + m + "\\*\\* — " + bg.MODOS[m].slice(0, 20).replace(/[*]/g, "\\*")), m);
+  }
 });
 
 await t("★ varredura no consenso: só bane quem tem 3+; os outros aparecem à parte", async () => {
@@ -13929,6 +13124,7 @@ SUITES["sem-nsfw-22out"] = async () => {
 const __m0 = await import("node:assert"); const assert = __m0.default;
 const __m1 = await import("node:fs"); const fs = __m1.default;
 process.env.SD_URL = "http://127.0.0.1:9";          // "há gerador" (a recusa vem antes de chamar)
+process.env.IMAGEM = "1";   // (31 out 2026, P2) IMAGEM vazio agora = gerador desligado (nem a ferramenta existe)
 process.env.LLM_MODEL_VISAO = "visao"; delete process.env.LLM_MODEL_MODERACAO;
 process.env.DB_PATH = "/tmp/snf22.db"; process.env.CONFIG_PATH = "/tmp/snf22.json";
 process.env.LLM_URL = "http://llm.teste:1"; process.env.CHAT_SERVIDORES = "SRV_CASA"; process.env.BUSCA_ATIVA = "false";
@@ -14233,7 +13429,9 @@ await t("★ o boot reconhece modelo sem trava no .env (LLM e imagem)", () => {
   assert.deepEqual(achou({ MODELO: "HauhauCS/Gemma-4-E2B-Uncensored-HauhauCS-Aggressive-GGUF:Q4_K_M" }), ["MODELO"]);
   assert.deepEqual(achou({ MODELO_VISAO: "mlabonne/gemma-3-4b-it-abliterated-GGUF:Q4_K_M" }), ["MODELO_VISAO"]);
   assert.deepEqual(achou({ MODELO: "a/x-Uncensored", LLM_MODEL: "a/x-Uncensored", MODELO_VISAO: "a/x-Uncensored" }), ["MODELO"], "o mesmo modelo, um aviso só");
-  assert.deepEqual(achou({ SD_MODELO_TIPO: "qwen-image", SD_Q_DIFUSAO_URL: "https://huggingface.co/abenzerps/Qwen-Image-2.1-Uncensored-Quantized/resolve/main/qwen-image-2.1-UC-Q8_0.gguf" }), ["imagem (difusao)"]);
+  // (31 out 2026, P2) IMAGEM vazio agora = desligado (nada é baixado): o aviso vale com IMAGEM=1, e sem IMAGEM não há o que avisar
+  assert.deepEqual(achou({ IMAGEM: "1", SD_MODELO_TIPO: "qwen-image", SD_Q_DIFUSAO_URL: "https://huggingface.co/abenzerps/Qwen-Image-2.1-Uncensored-Quantized/resolve/main/qwen-image-2.1-UC-Q8_0.gguf" }), ["imagem (difusao)"]);
+  assert.deepEqual(achou({ SD_MODELO_TIPO: "qwen-image", SD_Q_DIFUSAO_URL: "https://x/uncensored.gguf" }), [], "sem IMAGEM: não baixa nada");
   assert.deepEqual(achou({ SD_MODELO_TIPO: "qwen-image", SD_Q_DIFUSAO_URL: "https://x/uncensored.gguf", IMAGEM: "0" }), [], "IMAGEM=0: não baixa nada");
 });
 await t("★ os padrões e os recomendados são oficiais — nenhum aviso", () => {
@@ -14468,7 +13666,10 @@ await t("★ a IA da moderação, do relatório e do RSS continua ligada no boot
   const fonte = fs.readFileSync("main.js", "utf8");
   assert.match(fonte, /if \(iaLigada\(\)\) assuntos\.configurar\(\{ avaliar: chat\.avaliarModeracao \}\)/);
   assert.match(fonte, /rss\.configurarResumo\(chat\.resumirRSS\)/);
-  assert.match(fonte, /if \(conversaLigada\(\)\) \{\s*chat\.iniciarMemoria\(\);[\s\S]{0,200}chat\.iniciarComentario\(client\);[\s\S]{0,200}modIA\.configurar/);
+  // (31 out 2026, P2) o &modia saiu (o main.js não configura mais o modIA): memória e
+  // comentário só com a conversa ligada, e nada do motor do &modia no boot
+  assert.match(fonte, /if \(conversaLigada\(\)\) \{\s*chat\.iniciarMemoria\(\);[^\n]*\n\s*chat\.iniciarComentario\(client\);[^\n]*\n\s*\}/);
+  assert.doesNotMatch(fonte, /modIA\.configurar|moderacao-ia\.js/);
 });
 
 console.log("\n── no Stoat ──");
@@ -14484,10 +13685,13 @@ c.channels.set("C1", canal);
 const msg = (content, mentionIds = []) => ({ id: "M" + Math.random(), authorId: "01PESSOA000000000000000000", content, channelId: "C1", channel: canal, server,
   mentionIds, author: { username: "Ghiso", bot: false }, member: { roles: [] }, attachments: [], createdAt: new Date() });
 const titulos = () => enviados.map((p) => p?.embeds?.[0]?.title ?? p?.content ?? (typeof p === "string" ? p : "")).join(" | ");
-await t("★ `&chat` responde que não existe aqui", async () => {
+// (31 out 2026, P2) o &chat saiu como comando: sem a IA de conversa, `&chat …` é só uma
+// palavra que não existe (e nada chega ao modelo)
+await t("★ `&chat` responde que não existe (comando desconhecido)", async () => {
   enviados.length = 0;
   await silencio(() => c.emitAll("messageCreate", msg("&chat oi judy")));
-  assert.match(titulos(), /Não existe aqui|Not a command here/);
+  assert.match(titulos(), /Comando desconhecido|Unknown command/);
+  assert.doesNotMatch(titulos(), /Judy|desligada/);
 });
 await t("★ mencionar a Judy não dispara conversa", async () => {
   enviados.length = 0;
@@ -14534,10 +13738,15 @@ const t = async (nome, fn) => {
 // o contrário (nenhum canal libera) está na sem-nsfw-22out
 console.log("\n── nos outros servidores, só moderação de IA ──");
 const chat = await import("./modulos/ai/chat.js");
-await t("★ &chat só na casa; &modia (moderação) em qualquer servidor", () => {
-  assert.equal(chat.comandoIAPermitido("chat", "CASA"), true);
-  assert.equal(chat.comandoIAPermitido("chat", "OUTRO"), false);
-  assert.equal(chat.comandoIAPermitido("modia", "OUTRO"), true);
+// (31 out 2026, P2) o &chat e o &modia saíram como comandos: a conversa só onde o .env
+// deixa (a casa), e a moderação por critério livre não existe mais em lugar nenhum
+await t("★ conversa só na casa; o &modia saiu (nenhum servidor tem a moderação por critério livre)", async () => {
+  const gating = await import("./modulos/ai/gating.js");
+  assert.equal(gating.iaNoEnv("CASA"), true);
+  assert.equal(gating.iaNoEnv("OUTRO"), false);
+  assert.equal(chat.comandoIAPermitido("qualquer", "OUTRO"), false);
+  assert.equal(chat.modIAPermitida(), false);
+  assert.doesNotMatch(fs.readFileSync("modulos/ai/chat.js", "utf8"), /"modia"/);
 });
 await t("★ o resumo da Judy no RSS só nos servidores da conversa (a lista sai em todos)", () => {
   const src = fs.readFileSync("modulos/ferramentas/rss.js", "utf8");
@@ -14575,13 +13784,24 @@ await t("★ o modelo pequeno julga os OUTROS servidores; o da casa segue com o 
   } finally { globalThis.fetch = fetchAntes; }
   assert.deepEqual(pedidos, ["pequeno/juiz", "grande/conversa"]);
 });
-await t("★ temas proibidos e &modia passam o servidor ao juiz", () => {
+await t("★ temas proibidos e &modia passam o servidor ao juiz", async () => {
   const as = fs.readFileSync("modulos/moderacao/assuntos.js", "utf8");
   assert.match(as, /etiqueta: `assunto:\$\{tema\}`, serverId \}/);
   assert.match(as, /serverId: ctx\?\.serverId \?\? null \}\);/);
-  const mi = fs.readFileSync("modulos/moderacao/moderacao-ia.js", "utf8");
-  assert.match(mi, /\], \{ serverId \}\);/);
-  assert.match(mi, /avaliar\(cfg, texto, ctx\?\.serverId \?\? null\)/);
+  // (31 out 2026, P2) o &modia saiu: a moderação por IA de temas é só a do `&automod sentinela
+  // assuntos` (acima). O motor antigo não chama juiz nenhum — nem com o servidor, nem sem ele.
+  // (31 out 2026, P2) e o motor antigo foi apagado: não sobra caminho que chame o juiz sem o servidor.
+  const semMotorModia = () => {
+    // (31 out 2026, P2) o moderacao-ia.js (motor do &modia, esqueleto que não fazia nada) foi apagado:
+    // nenhuma mensagem passa por ele porque ele não existe — nem o main.js nem módulo nenhum o importa.
+    assert.ok(!fs.existsSync("modulos/moderacao/moderacao-ia.js"), "o motor do &modia voltou");
+    const main = fs.readFileSync("main.js", "utf8");
+    assert.doesNotMatch(main, /moderacao-ia|modIA\./, "o main.js voltou a chamar o motor do &modia");
+    const pastas = ["modulos"]; const quem = [];
+    while (pastas.length) { const d = pastas.pop(); for (const f of fs.readdirSync(d, { withFileTypes: true })) { const c = `${d}/${f.name}`; if (f.isDirectory()) pastas.push(c); else if (c.endsWith(".js") && /from ["'][^"']*moderacao-ia\.js["']|import\(["'][^"']*moderacao-ia\.js/.test(fs.readFileSync(c, "utf8"))) quem.push(c); } }
+    assert.deepEqual(quem, [], "alguém importa o motor do &modia");
+  };
+  semMotorModia();
 });
 const { montarConfigSwap } = await import("./modulos/core/llama-swap-config.js");
 await t("★ llama-swap: \"moderacao\" num grupo sem troca, não exclusivo e persistente (fica junto da conversa)", () => {
@@ -14599,11 +13819,15 @@ await t("moderação = conversa → apelido, sem 2ª cópia; sem visão → nenh
   const semVisao = montarConfigSwap({ conversa: "G", visao: null, moderacao: "p", comando: () => "x" });
   assert.ok(!/visao/.test(semVisao), semVisao);
 });
-await t("★ o boot baixa o modelo de moderação e aponta o juiz para \"moderacao\"", () => {
+await t("★ o boot baixa o modelo de moderação e aponta o juiz para \"moderacao\"", async () => {
   const ini = fs.readFileSync("iniciar.js", "utf8");
-  assert.match(ini, /process\.env\.MODELO_MODERACAO\)\) \{/);
+  // (31 out 2026, P2) o plano da IA (planoDaIA) decide os nomes antes de o bot subir, e
+  // o llama-swap sobe sempre (com um modelo só também): conferido de verdade
+  const { planoDaIA } = await import("./iniciar.js");
+  const plano = planoDaIA({ MODELO: "a/b:Q4", MODELO_MODERACAO: "c/d:Q4" }, { existe: () => true });
+  assert.equal(plano.moderacao, "c/d:Q4"); assert.equal(plano.nomes.moderacao, "moderacao");
   assert.match(ini, /\[conversa, visao, moderacao\]\.filter\(Boolean\)/);
-  assert.match(ini, /if \(moderacao\) process\.env\.LLM_MODEL_JUIZ = "moderacao";/);
+  assert.match(ini, /if \(plano\.moderacao\) process\.env\.LLM_MODEL_JUIZ = plano\.nomes\.moderacao;/);
   assert.match(ini, /montarConfigSwap\(\{ conversa, visao, moderacao, comando/);
 });
 
@@ -14621,42 +13845,57 @@ c.channels.set("CO", canal);
 const msg = (content) => ({ id: "M" + Math.random(), authorId: DONO_ID, content, channelId: "CO", channel: canal, server,
   mentionIds: [], author: { username: "Admin", bot: false }, member: { roles: [] }, attachments: [], createdAt: new Date() });
 const tudo = () => enviados.map((p) => JSON.stringify(p?.embeds ?? p)).join(" | ");
+// (31 out 2026, P2) o &chat saiu como comando: fora dos servidores da conversa, `&chat …`
+// é uma palavra que não existe
 await t("★ outro servidor: `&chat` não existe aqui", async () => {
   enviados.length = 0;
   await silencio(() => c.emitAll("messageCreate", msg("&chat oi")));
-  assert.match(tudo(), /Não existe aqui|Not a command here/);
+  assert.match(tudo(), /Comando desconhecido|Unknown command/);
 });
+// (31 out 2026, P2) o &modia saiu: o nome leva ao `&automod sentinela assuntos` (a moderação
+// de temas por IA de hoje), que existe em qualquer servidor — mais exigente: a resposta é a tela dos temas
 await t("★ outro servidor: `&modia` existe (é moderação)", async () => {
   enviados.length = 0;
   await silencio(() => c.emitAll("messageCreate", msg("&modia status")));
   assert.ok(enviados.length >= 1);
-  assert.doesNotMatch(tudo(), /Não existe aqui|Not a command here/);
+  assert.doesNotMatch(tudo(), /Não existe aqui|Not a command here|desconhecido|Unknown/);
+  assert.match(tudo(), /Temas proibidos|Forbidden topics/);
 });
+// (31 out 2026, P2) a moderação por IA no índice é o &automod (sentinela assuntos); `&help modia`
+// abre a página dele pelo atalho
 await t("★ outro servidor: o `&help` mostra o &modia e esconde o &chat", async () => {
   enviados.length = 0;
   await silencio(() => c.emitAll("messageCreate", msg("&help moderacao")));
   const s = tudo();
-  assert.match(s, /modia/, s.slice(0, 3000));
+  assert.match(s, /&automod/, s.slice(0, 3000));
+  assert.doesNotMatch(s, /`&chat/);
   enviados.length = 0;
   await silencio(() => c.emitAll("messageCreate", msg("&help modia")));
-  assert.doesNotMatch(tudo(), /Não existe aqui|Not a command here/);
+  assert.doesNotMatch(tudo(), /Não existe aqui|Not a command here|desconhecido|Unknown/);
+  assert.match(tudo(), /automod/);
 });
+// (31 out 2026, P2) sem o &modia, o grupo Proteger tem o &automod (temas) e os novos &unban/&untimeout:
+// continua numa página só, nos três idiomas (antes pt e en)
 await t("com o &modia à mostra, o grupo Proteger ainda cabe numa página (pt e en)", async () => {
-  const hg = await import("./modulos/moderacao/help-grupos.js");
-  const { paginarLinhas } = await import("./modulos/core/paginas.js");
-  for (const l of ["pt", "en"]) {
-    const ls = hg.grupos("&", l).proteger.linhas.map((x) => x.replace(/\u200b\[m?ia\]/, ""));
-    assert.ok(ls.some((x) => x.includes("&modia")));
-    const rod = ["", "💡 `&help <comando>` explica cada parâmetro · `&help` para o índice"];
-    assert.equal(paginarLinhas([...ls, ...rod], { titulo: "x", limite: 1300 }).length, 1, l);
+  for (const [lingua, cmd] of [["pt", "&help proteger"], ["en", "&help protect"], ["es", "&help proteger"]]) {
+    enviados.length = 0;
+    await silencio(() => c.emitAll("messageCreate", msg(lingua === "pt" ? "&idioma pt" : lingua === "en" ? "&language en" : "&idioma es")));
+    enviados.length = 0;
+    await silencio(() => c.emitAll("messageCreate", msg(cmd)));
+    const s = tudo();
+    assert.match(s, /&automod/, `${lingua}: ${s.slice(0, 300)}`);
+    assert.doesNotMatch(s, /&modia|Página \*\*1\/2|Page \*\*1\/2/, lingua);
   }
+  await silencio(() => c.emitAll("messageCreate", msg("&idioma pt")));
 });
 await t("outro servidor: o `&tutorial ia` vira só a moderação por IA", async () => {
   enviados.length = 0;
   await silencio(() => c.emitAll("messageCreate", msg("&tutorial ia")));
   const s = tudo();
-  assert.match(s, /Moderação por IA|AI moderation/);
-  assert.doesNotMatch(s, /chat livre/);
+  // (31 out 2026, P2) o &modia saiu: a moderação por IA é a dos temas do sentinela — a página dela, e nada da conversa
+  assert.match(s, /📖 Ajuda — &automod › sentinela › assuntos/);
+  assert.match(s, /a IA lê o fio/);
+  assert.doesNotMatch(s, /chat livre|&config ia|ela conversa|Judy/);
 });
 
 console.log(`\nIA SÓ NA CASA (16 out): ${ok} ok, ${falhou} falha(s)`);
@@ -14784,18 +14023,20 @@ const t = async (nome, fn) => {
 
 console.log("── IA só para moderação, em todo servidor ──");
 const chat = await import("./modulos/ai/chat.js");
-await t("★ CONVERSA=0 + juiz dedicado (MODELO_MODERACAO): o &modia vale em todo servidor; o &chat em nenhum", () => {
-  assert.equal(chat.comandoIAPermitido("modia", "QUALQUER"), true);
-  assert.equal(chat.comandoIAPermitido("chat", "CASA"), false);
+// (31 out 2026, P2) o &modia saiu: no modo enxuto fica o juiz dos temas proibidos; conversa em nenhum lugar
+await t("★ CONVERSA=0 + juiz dedicado (MODELO_MODERACAO): o juiz é o pequeno; a conversa em nenhum servidor", () => {
+  assert.equal(chat.modIAPermitida(), false);
+  assert.equal(chat.comandoIAPermitido("qualquer", "CASA"), false);
   assert.equal(chat.servidorPermitido("CASA"), false);
 });
 await t("★ no modo enxuto a casa também é julgada pelo modelo pequeno", () => {
   assert.equal(chat.modeloDoJuiz("CASA"), "moderacao");
   assert.equal(chat.modeloDoJuiz("OUTRO"), "moderacao");
 });
-await t("★ o boot liga o juiz do &modia pela regra nova (não só com a conversa ligada)", () => {
+// (31 out 2026, P2) o &modia saiu; o juiz que fica é o dos temas proibidos (assuntos)
+await t("★ o boot liga o juiz dos temas proibidos com a IA ligada (não só com a conversa)", () => {
   const src = fs.readFileSync("main.js", "utf8");
-  assert.match(src, /if \(chat\.modIAPermitida\(\)\) modIA\.configurar\(\{ avaliar: chat\.avaliarModeracao \}\)/);
+  assert.match(src, /if \(iaLigada\(\)\) assuntos\.configurar\(\{ avaliar: chat\.avaliarModeracao \}\)/);
 });
 
 console.log("\n── &tutorial ids ──");
@@ -14813,7 +14054,8 @@ const aliases = await import("./modulos/core/aliases.js");
 const ex = (t) => aliases.exibir(t, "en", "&", {});
 await t("★ título da ajuda: \"&entretenimento › briga\" → \"&entertainment › fight\"", () => {
   assert.equal(ex("📖 Ajuda — &entretenimento › briga"), "📖 Ajuda — &entertainment › fight");
-  assert.equal(ex("veja &acesso"), "veja &access");
+  // (P2) o &acesso virou parte do &config: o nome antigo na prosa mostra o caminho principal
+  assert.equal(ex("veja &acesso"), "veja &config access");
 });
 await t("★ marcadores das boas-vindas e moldes saem em inglês", () => {
   assert.equal(ex("`{usuario}` `{nome}` `{servidor}` `{membros}`"), "`{user}` `{name}` `{server}` `{members}`");
@@ -14827,7 +14069,7 @@ await t("o português não muda", () => {
   assert.equal(aliases.exibir("📖 Ajuda — &entretenimento › briga `{usuario}`", "pt", "&", {}), "📖 Ajuda — &entretenimento › briga `{usuario}`");
 });
 const cor = await import("./modulos/moderacao/cor-cargo.js");
-await t("★ &color: presets em inglês na entrada e na tela", () => {
+await t("★ &color: presets em inglês na entrada e na tela", async () => {
   assert.equal(cor.presetDe("fire"), "fogo"); assert.equal(cor.presetDe("rainbow"), "arco-iris"); assert.equal(cor.presetDe("fogo"), "fogo");
   assert.equal(cor.nomePreset("poente", true), "sunset"); assert.equal(cor.nomePreset("poente", false), "poente");
   const src = fs.readFileSync("modulos/moderacao/cor-cargo.js", "utf8");
@@ -14835,12 +14077,21 @@ await t("★ &color: presets em inglês na entrada e na tela", () => {
   assert.match(src, /createRole\(nomeDoItem\(it, en\)\)/, "o cargo novo nasce no idioma do servidor");
   assert.match(src, /it\.tipo === "s" \? nomeSolida\(it\.nome, en\) : nomePreset\(it\.nome, en\)/);
   // (21 out 2026, fim da fase 3) a citação passou a ser pelo registro: citarInterno("cor", P)
-  assert.match(src, /citarInterno\("cor", P\)\} <role> #FF00AA\\` · \\`\$\{citarInterno\("cor", P\)\} <role> purple/);
+  // (31 out 2026, P2) a cola saiu do handler (R1): a ajuda do registro ensina em inglês, e o nome da cor
+  // em inglês vale na entrada — tanto a sólida quanto o gradiente sem a palavra `gradient`
+  const { REGISTRO } = await import("./modulos/comandos/index.js");
+  const { citarNoTexto } = await import("./modulos/core/aliases.js");
+  assert.match(citarNoTexto(REGISTRO.find((c) => c.id === "cor").ajuda.desc.en, "en", "&"), /`&color VIP #FF00AA` — one color: solid \(hex or name: `purple`\)/);
+  assert.equal(cor.lerCorPedida(["purple"]).colour, cor.lerCorPedida(["roxo"]).colour);
+  assert.match(cor.lerCorPedida(["purple", "blue"]).colour, /^linear-gradient/);
 });
-await t("★ &game: \"for\" vale na oferta e o id da moeda sai em inglês", () => {
-  const src = fs.readFileSync("modulos/game/game.js", "utf8");
-  assert.match(src, /\\s\+\(\?:por\|for\)\\s\+\(\[\\d\.,\]\+\)/);
-  assert.match(src, /const MOEDA_EN = \{ ouro: "gold", cristal: "crystal" \}/);
+await t("★ &game: uma moeda só, e a aposta do duelo aceita o nome dela em pt, en e es", async () => {
+  // (31 out 2026, P2) as ofertas (`… por|for <preço>`) e o Cristal saíram do RPG: o que sobrou
+  // de "moeda digitada" é a aposta do duelo — `100`, `100 ouro`, `100 gold`, `100 oro`
+  const DU = await import("./modulos/game/duelo.js");
+  for (const a of [["100"], ["100", "ouro"], ["100", "gold"], ["100", "oro"]]) assert.deepEqual(DU.lerDesafio(["01KNXC00000000000000000002", ...a]).sobra, [], a.join(" "));
+  assert.deepEqual(DU.lerDesafio(["01KNXC00000000000000000002", "100", "cristal"]).sobra, ["cristal"]);
+  assert.equal(DU.lerDesafio(["01KNXC00000000000000000002", "100", "gold"]).qtd, 100);
 });
 const dados = await import("./modulos/ferramentas/dados-rpg.js");
 await t("★ &roll com erro responde em inglês", () => {
@@ -14921,17 +14172,19 @@ await t("★ \"linear-gradient (224 deg, …)\" é arrumado e o Stoat aceita (an
   const r = await say(`&color <%${GOOBY}> linear-gradient (224 deg, #73E696 50%, #F7EEB2 50%)`);
   assert.equal(chamadas.length, 1, r);
   assert.equal(chamadas[0].colour, "linear-gradient(224deg, #73E696 50%, #F7EEB2 50%)");
-  assert.match(r, /Color applied/); assert.match(r, /fixed the spacing/);
+// (31 out 2026, P2) saída mínima: "🎨 **cargo** → cor" no lugar de "Color applied … now uses"
+  assert.match(r, /🎨 \*\*Le Gooby\*\* → gradient/); assert.match(r, /fixed the spacing/);
 });
 await t("★ nome com espaço sem menção: \"&color Le Gooby linear-gradient(…)\" acha o cargo inteiro", async () => {
   const r = await say("&color Le Gooby linear-gradient (224 deg, #73E696 50%, #F7EEB2 50%)");
   assert.equal(chamadas.length, 1, r);
-  assert.match(r, /\*\*Le Gooby\*\* now uses/);
+  assert.match(r, /\*\*Le Gooby\*\* → gradient/);   // (31 out 2026, P2) saída mínima
 });
 await t("★ \"&color role …\" (a palavra do exemplo) não cai num cargo qualquer — explica", async () => {
   const r = await say("&color role linear-gradient(224deg, #73E696 50%, #F7EEB2 50%)");
   assert.equal(chamadas.length, 0, "nada vai à API");
-  assert.match(r, /Which role\?/); assert.match(r, /placeholder from the example/); assert.match(r, /tutorial ids/);
+  // (31 out 2026, P2) erro de uso numa linha + `&help color` (a explicação mora na ajuda)
+  assert.match(r, /❌ Which role\? · `&help color`/);
 });
 
 console.log("\n── e o que mais confundia ──");
@@ -14945,9 +14198,9 @@ await t("★ nome parcial só quando um cargo serve; dois servem → lista", asy
   let r = await say("&color Gooby #FF00AA");
   assert.equal(chamadas.length, 1); assert.match(r, /Le Gooby/);
   r = await say("&color VI #FF00AA");
-  assert.equal(chamadas.length, 0); assert.match(r, /Which role|not found/);
+  assert.equal(chamadas.length, 0); assert.match(r, /Which role|not found|Couldn't find the role `VI`/);   // (31 out 2026, P2) a linha nova
   r = await say("&color VIP #FF00AA");
-  assert.match(r, /\*\*VIP\*\* now uses/, "o nome exato vence o parcial (VIP × VIP Gold)");
+  assert.match(r, /\*\*VIP\*\* → `#FF00AA`/, "o nome exato vence o parcial (VIP × VIP Gold)");
   r = await say("&color Gol #FF00AA");
   assert.match(r, /VIP Gold/);
 });
@@ -15218,7 +14471,8 @@ await t("★ o \"Preparando…\" diz quanto leva (30 cores novas ≈ 2 min); rep
   const antes = I.msgs.length;
   await I.say("&cor painel aqui");
   const prep = I.msgs.slice(antes).map(descDe).find((d) => /Criando\/pintando/.test(d)) ?? "";
-  assert.match(prep, /Leva uns \*\*2 min\*\* — o Stoat aceita 5 mudanças no servidor a cada 10 s/);
+  // (31 out 2026, P2) sem a explicação do limite do Stoat (R2: mora na ajuda) — o tempo continua
+  assert.match(prep, /Criando\/pintando 30 cargo\(s\)\. Leva uns \*\*2 min\*\*\.$/);
   const existentes = new Map([["vermelho", { id: "R1", r: { colour: cores.CORES.vermelho } }], ["laranja", { id: "R2", r: { colour: "#000000" } }]]);
   const alvos = [{ tipo: "s", nome: "vermelho" }, { tipo: "s", nome: "laranja" }];
   const nome = (it) => it.nome, valor = (it) => cores.CORES[it.nome];
@@ -15631,19 +14885,18 @@ await t("★ nada novo liga sozinho: relatório, anúncio de novidades e comando
   const enviados = [];
   const r = await nov.anunciar({ client: c, global: { novidadesAnunciadas: "velha" }, salvarGlobal: () => {}, configDoServidor: store.configDoServidor,
     enviar: async (canal) => { enviados.push(canal.id); }, lista: [{ id: "nova", data: "2026-10-21", pt: "x", en: "x", es: "x" }, { id: "velha", data: "2026-10-20", pt: "y", en: "y", es: "y" }] });
-  assert.deepEqual(enviados, [], "o log dele não recebe o anúncio"); assert.equal(r.novas, 1);
-  // pelo store o campo vem do padrão; o anúncio, sozinho, também trata "não existe" como desligado
+  // (31 out 2026, P2, decisão do Ghieh) as novidades vão SEMPRE ao canal de log: o log dele recebe uma vez,
+  // e só ele (o relatório e os comandos livres continuam desligados)
+  assert.deepEqual(enviados.filter((x) => x === CA), [CA], "o log dele recebe o anúncio, uma vez"); assert.equal(r.novas, 1);
   const cru = db.lerConfig(SID);
-  assert.equal(cru.log.eventos.atualizacoes, undefined, "a config salva é mesmo a de antes");
-  await nov.anunciar({ client: c, global: { novidadesAnunciadas: "velha" }, salvarGlobal: () => {}, configDoServidor: (id) => (id === SID ? cru : null),
-    enviar: async (canal) => { enviados.push(canal.id); }, lista: [{ id: "nova", data: "2026-10-21", pt: "x", en: "x", es: "x" }, { id: "velha", data: "2026-10-20", pt: "y", en: "y", es: "y" }] });
-  assert.deepEqual(enviados, []);
+  assert.equal(cru.log.eventos.atualizacoes, undefined, "a config salva é mesmo a de antes (nada foi gravado)");
 });
 await t("e as telas novas abrem nele sem erro", async () => {
   let r = tudo(await diz(DONO, "&acesso"));
   assert.match(r, /Valem em qualquer canal:\*\* _nenhum_/); assert.match(r, /\*\*só\*\* em/);
   r = tudo(await diz(DONO, "&log"));
-  assert.match(r, /🔴 \*\*atualizacoes\*\*/); assert.match(r, /🔴 \*\*relatorio\*\*/);
+  // (P2) o `atualizacoes` saiu da tela (as novidades vão sempre ao log)
+  assert.doesNotMatch(r, /atualizacoes/); assert.match(r, /🔴 \*\*relatorio\*\*/);
   assert.match(tudo(await diz(ANA, "&xp sair")), /XP/);
   assert.match(tudo(await diz(ANA, "&privacidade")), /Memória da conversa/);
 });
@@ -15708,7 +14961,11 @@ await t("espanhol: os nomes de comando saem em espanhol (`entretenimiento`, `pri
     if (m) ruins.push(`${cmd} → "${m[0]}"`);
   }
   assert.deepEqual(ruins, []);
-  assert.match(tudo(await diz(DONO, "&acesso")), /`&acceso libre ‹comando› on\|off` — .*`&acceso libre entretenimiento on`/);
+  // (P2) o &acesso virou parte do &config: o caminho principal em espanhol
+  // (31 out 2026, P2 revisão, R1) a tela de estado do &acesso mostra só o estado e aponta a ajuda; o "como usar",
+  // com o caminho em espanhol, está na página `&ayuda config acceso` — os dois conferidos, em espanhol
+  assert.match(tudo(await diz(DONO, "&acesso")), /🔐 Acceso a los comandos[\s\S]*`&ayuda config acceso`/);
+  assert.match(tudo(await diz(DONO, "&ayuda config acceso")), /`&config acceso libre [‹<]comando[›>] on\|off` — .*`entretenimiento`/);
   await diz(DONO, "&idioma pt");
 });
 
@@ -15827,15 +15084,37 @@ const quieto = async (fn) => { const o = [console.log, console.info, console.war
 const main = await quieto(() => import("./main.js"));
 const paginas = await import("./modulos/core/paginas.js");
 const aliasesMod = await import("./modulos/core/aliases.js");
-const geral = await import("./modulos/moderacao/geral.js");
-const { grupos } = await import("./modulos/moderacao/help-grupos.js");
-const { parametros } = await import("./modulos/moderacao/help-parametros.js");
+// (31 out 2026, P2) a ajuda mora só no registro: a árvore (help-arvore*.js) e os parâmetros à parte
+// (help-parametros.js) saíram; o &help e o &ping saíram do geral.js (ajuda.js, info.js). As mesmas
+// leituras, pela fonte nova: `grupos` = as páginas de grupo, `arvoreDaAjuda` = as `paginas` do registro.
+const ajudaRegP2 = await import("./modulos/core/ajuda-registro.js");
+const { ORDEM: ORDEM_GRUPOS_P2 } = await import("./modulos/moderacao/help-grupos.js");
+const arvoreDaAjuda = (P, lang) => {
+  const raiz = {};
+  for (const [id, ...cam] of ajudaRegP2.todasAsPaginas()) {
+    if (!cam.length) continue;
+    let no = (raiz[id] ??= {});
+    for (const k of cam) no = (no[k] ??= {});
+    no.texto = ajudaRegP2.pagina(id, cam, lang, P).linhas.join("\n");
+  }
+  return raiz;
+};
+const geral = { ...(await import("./modulos/moderacao/geral.js")), ...(await import("./modulos/moderacao/info.js")), arvoreDaAjuda };
+const grupos = (P, lang) => {
+  const pg = ajudaRegP2.comandosPorGrupo();
+  return Object.fromEntries(ORDEM_GRUPOS_P2.map((g) => [g, { linhas: pg[g].map((id) => `\`${aliasesMod.citar(id, lang === "es" ? "es" : lang, P)}\` — ${ajudaRegP2.resumoDe(ajudaRegP2.entrada(id), lang, P)}`) }]));
+};
+const parametros = (P, lang) => ajudaRegP2.parametrosDoRegistro(P, lang);
 const c = globalThis.__client;
 await quieto(() => c.emitAll("ready"));
 const env = [];
 let nMsg = 0;
-const fazMsg = (p) => { const id = "M" + (++nMsg); env.push(p); return { id, react: async () => {}, delete: async () => {}, edit: async (q) => { env.push(q); } }; };
-const novoCanal = (sid, nome, id = ulid(sid + "#" + nome)) => ({ id, serverId: sid, name: nome, type: "TextChannel", nsfw: false, sendMessage: async (p) => fazMsg(p), fetchMessages: async () => [], deleteMessages: async () => {} });
+// (31 out 2026, P2) cada mensagem guarda de que servidor saiu: um comando lento de outro
+// servidor (o `&cor painel aqui` leva ~20 s) terminava DEPOIS do limite do `say` e a
+// mensagem dele caía na resposta do exemplo seguinte — um falso "voltou ao inglês"
+const origemDaMsg = new WeakMap();
+const fazMsg = (p, sid = null) => { const id = "M" + (++nMsg); if (sid && p && typeof p === "object") origemDaMsg.set(p, sid); env.push(p); return { id, react: async () => {}, delete: async () => {}, edit: async (q) => { if (sid && q && typeof q === "object") origemDaMsg.set(q, sid); env.push(q); } }; };
+const novoCanal = (sid, nome, id = ulid(sid + "#" + nome)) => ({ id, serverId: sid, name: nome, type: "TextChannel", nsfw: false, sendMessage: async (p) => fazMsg(p, sid), fetchMessages: async () => [], deleteMessages: async () => {} });
 const servidores = new Map();
 function servidor(sid) {
   if (servidores.has(sid)) return servidores.get(sid);
@@ -15868,7 +15147,7 @@ async function say(conteudo, sid, { limiteMs = 3000 } = {}) {
     mentionIds: [...conteudo.matchAll(/<@(\w+)>/g)].map((m) => m[1]), createdAt: new Date(), author: { id: U1, username: "Dono", bot: false }, member: dono, replyIds: [], attachments: [] };
   let estourou = false;
   await quieto(() => Promise.race([c.emitAll("messageCreate", ev), new Promise((r) => setTimeout(() => { estourou = true; r(); }, limiteMs))]));
-  const saidas = env.slice();
+  const saidas = env.filter((p) => !origemDaMsg.has(p) || origemDaMsg.get(p) === sid);
   for (let id = primeira; id <= nMsg; id++) {
     for (let k = 0; k < 12; k++) {
       env.length = 0;
@@ -15983,15 +15262,18 @@ await t("o main.js e o aliases.js não declaram comando à mão", () => {
 await t("as listas que viraram marcas no registro são as mesmas de antes", async () => {
   // as listas como estavam no main.js em 17 out 2026 (fase 0); mudar uma delas é mudar comportamento
   const tab = await registro.montarTabela();
-  assert.deepEqual(tab.COMANDOS_GERENCIAVEIS, ["ping", "repete", "userinfo", "kick", "ban", "silenciar", "limpar", "warn", "acesso", "automod", "tutorial", "assistente", "cor", "log", "banglobal", "embed", "reactionrole", "chat", "rss", "xp", "game", "autorole", "staff", "boasvindas", "adeus", "fuso", "tts", "musica", "webhook", "rolar", "iniciativa", "ticket", "economia", "entretenimento", "servidor"]);
+  // (31 out 2026, P2) as listas de agora, exatas: saíram `repete` (→ &embed), `acesso`/`log`/`comando`/`idioma`
+  // (→ partes do &config, que é essencial e vale em qualquer canal), `chat` e `modia` (área da IA),
+  // `iniciativa` (→ &rolar init), `cargomudo`; entraram `unban`/`untimeout` (moderação)
+  assert.deepEqual(tab.COMANDOS_GERENCIAVEIS, ["ping", "userinfo", "kick", "ban", "unban", "untimeout", "silenciar", "limpar", "warn", "automod", "tutorial", "assistente", "cor", "banglobal", "embed", "reactionrole", "rss", "xp", "game", "autorole", "staff", "boasvindas", "adeus", "fuso", "tts", "musica", "webhook", "rolar", "ticket", "economia", "entretenimento", "servidor"]);
   const ordenado = (x) => [...x].sort();
-  assert.deepEqual(ordenado(tab.COMANDOS_SO_IA), ["chat", "modia"]);
+  assert.deepEqual(ordenado(tab.COMANDOS_SO_IA), []);
   assert.deepEqual(ordenado(tab.COMANDOS_DE_VOZ), ["entrar", "musica", "sair", "tts"]);
-  // antes também "comandos", "command", "diagnostico": hoje são apelidos de comando/debug (o que conta é o nome interno)
-  // (20 out 2026) + privacidade: ninguém desliga o direito de ver e apagar os próprios dados
-  assert.deepEqual(ordenado(tab.ESSENCIAIS), ["comando", "debug", "help", "idioma", "privacidade"]);
-  assert.deepEqual(ordenado(tab.SEMPRE_LIBERADOS), ["acesso", "assistente", "debug", "help", "idioma", "privacidade", "tutorial"]);
-  assert.deepEqual(ordenado(tab.TEXTO_LIVRE), ordenado(["chat", "tts", "repete", "embed", "entretenimento", "servidor", "personalidade", "modia", "boasvindas", "adeus", "rolar", "musica", "webhook", "rss", "automod"]));
+  // (20 out 2026) + privacidade: ninguém desliga o direito de ver e apagar os próprios dados; (P2) o &config
+  // leva o idioma e o liga/desliga de comandos, então ele é o essencial no lugar dos dois
+  assert.deepEqual(ordenado(tab.ESSENCIAIS), ["config", "debug", "help", "privacidade"]);
+  assert.deepEqual(ordenado(tab.SEMPRE_LIBERADOS), ["assistente", "config", "debug", "help", "privacidade", "tutorial"]);
+  assert.deepEqual(ordenado(tab.TEXTO_LIVRE), ordenado(["tts", "embed", "entretenimento", "servidor", "personalidade", "boasvindas", "adeus", "rolar", "musica", "webhook", "rss", "automod"]));
 });
 await t("\"você quis dizer\": no empate, o nome do comando vence o apelido (não depende da ordem do registro)", async () => {
   const sid = ulid("parecido");
@@ -16189,7 +15471,9 @@ await t("regressão: variável de ambiente entre crases não é traduzida (SERVI
   // o caso do dono: a linha só aparece com IA ligada, então a tela do teste não a mostra —
   // confere o texto do grupo passado pela tradução da tela, sem o filtro
   const gEn = grupos("&", "en"), gPt = grupos("&", "pt");
-  assert.match(exibir(gEn.dono.linhas.join("\n"), "en"), /servers in `SERVIDOR`/);
+  // (31 out 2026, P2) o grupo do dono não tem mais a linha à mão com `SERVIDOR`: a regra vale para toda
+  // constante que uma página de ajuda cita (o laço de baixo, que lê todas as telas, em pt/en/es)
+  assert.match(exibir("o bot da casa (`SERVIDOR`) e os `SUPER_ADMINS`", "en"), /`SERVIDOR`[\s\S]*`SUPER_ADMINS`/);
   for (const k of Object.keys(gPt)) {
     const tela = exibir(gEn[k].linhas.join("\n"), "en");
     const faltam = consts(gPt[k].linhas.join("\n")).split(",").filter((c) => c && !tela.includes("`" + c + "`"));
@@ -16206,37 +15490,23 @@ await t("regressão: variável de ambiente entre crases não é traduzida (SERVI
 // (21 out 2026, etapa 4b) a árvore em espanhol: cada página tem um caminho que existe na
 // inglesa, as mesmas linhas e cita os mesmos comandos — uma página órfã (caminho errado)
 // nunca seria mostrada, e uma linha a menos é parágrafo perdido na tradução
+// (31 out 2026, P2) era a help-arvore-es.js contra a inglesa; agora toda página do registro (`paginas`)
+// tem pt/en/es no mesmo lugar — a mesma conferência, página a página: mesmas linhas, mesmos comandos citados
 await t("espanhol (etapa 4b): a árvore da ajuda em espanhol bate página a página com a inglesa", async () => {
-  const { ARVORE_ES, GRUPOS_ES, arvoreES, gruposES } = await import("./modulos/moderacao/help-arvore-es.js");
-  const en = geral.arvoreDaAjuda("&", "en"), es = arvoreES("&");
-  const paginas = [];
-  const descer = (no, cam) => {
-    if (typeof no.texto === "string") paginas.push(cam);
-    for (const [k, v] of Object.entries(no)) if (v && typeof v === "object" && !Array.isArray(v)) descer(v, [...cam, k]);
-  };
-  descer(ARVORE_ES, []);
-  assert.ok(paginas.length > 0 || Object.keys(ARVORE_ES).length === 0);
-  const pegar = (raiz, cam) => cam.reduce((n, k) => n?.[k], raiz);
   const cmds = (t) => (String(t).match(/&[\p{L}\d]+/gu) ?? []).length;
   const ruins = [];
-  for (const cam of paginas) {
-    const a = pegar(en, cam), b = pegar(es, cam), nome = cam.join(".");
-    if (!a || typeof a.texto !== "string") { ruins.push(`${nome}: não existe em inglês`); continue; }
-    const ta = a.texto.replace(/^⁣/, ""), tb = b.texto;
-    if (ta.split("\n").length !== tb.split("\n").length) ruins.push(`${nome}: ${ta.split("\n").length} linhas em inglês, ${tb.split("\n").length} em espanhol`);
-    if (cmds(ta) !== cmds(tb)) ruins.push(`${nome}: cita ${cmds(ta)} comandos em inglês, ${cmds(tb)} em espanhol`);
-    if (/\{&/.test(tb)) ruins.push(`${nome}: marca sem resolver`);
-    if (!String(b.titulo ?? "").trim()) ruins.push(`${nome}: sem título`);
+  for (const [id, ...cam] of ajudaRegP2.todasAsPaginas()) {
+    if (!cam.length) continue;
+    const no = ajudaRegP2.noDaPagina(id, cam), nome = [id, ...cam].join(".");
+    const en = ajudaRegP2.pagina(id, cam, "en", "&"), es = ajudaRegP2.pagina(id, cam, "es", "&");
+    if (typeof no.texto?.es !== "string") { ruins.push(`${nome}: sem espanhol`); continue; }
+    if (en.linhas.length !== es.linhas.length) ruins.push(`${nome}: ${en.linhas.length} linhas em inglês, ${es.linhas.length} em espanhol`);
+    if (cmds(en.linhas.join("\n")) !== cmds(es.linhas.join("\n"))) ruins.push(`${nome}: cita ${cmds(en.linhas.join("\n"))} comandos em inglês, ${cmds(es.linhas.join("\n"))} em espanhol`);
+    if (/\{&/.test(es.linhas.join("\n"))) ruins.push(`${nome}: marca sem resolver`);
   }
-  // os grupos do índice: os mesmos grupos e as mesmas linhas
-  const { grupos: gruposHelp } = await import("./modulos/moderacao/help-grupos.js");
-  const gEn = gruposHelp("&", "en"), gEs = gruposES("&");
-  for (const [k, g] of Object.entries(GRUPOS_ES)) {
-    const a = Array.isArray(gEn) ? gEn.find((x) => x.id === k || x.grupo === k) : gEn[k];
-    if (!a) { ruins.push(`grupo ${k}: não existe em inglês`); continue; }
-    if ((a.linhas ?? []).length !== g.linhas.length) ruins.push(`grupo ${k}: ${a.linhas?.length} linhas em inglês, ${g.linhas.length} em espanhol`);
-    if (gEs[k].linhas.some((l) => /\{&/.test(l))) ruins.push(`grupo ${k}: marca sem resolver`);
-  }
+  // os grupos do índice: os mesmos comandos nos três idiomas
+  const gEn = grupos("&", "en"), gEs = grupos("&", "es");
+  for (const k of Object.keys(gEn)) if (gEn[k].linhas.length !== gEs[k].linhas.length) ruins.push(`grupo ${k}: ${gEn[k].linhas.length} em inglês, ${gEs[k].linhas.length} em espanhol`);
   assert.deepEqual(ruins, []);
 });
 await t("toda tela de ajuda e de tutorial responde alguma coisa", () => {
@@ -16328,7 +15598,7 @@ await t("`&automod blocklist` sozinho é informação, não \"uso incorreto\"", 
 await t("`&staff add` com nome de cargo com espaço; sozinho, pergunta qual", async () => {
   assert.match(await comando("pt", "&staff add Le Gooby"), /Le Gooby/);
   assert.match(await comando("pt", "&staff add"), /^❓ Qual cargo\?/);
-  assert.match(await comando("pt", "&banglobal esquecer"), /^❓ Quem\?/);
+  assert.match(await comando("pt", "&banglobal esquecer"), /^\n❓ Quem\? · `&help banglobal`\n$/);   // (31 out 2026, P2) numa linha (R1)
 });
 await t("a tabela de parâmetros não ensina mais a sintaxe antiga", () => {
   const txt = JSON.stringify([parametros("&", "pt"), parametros("&", "en")]);
@@ -16337,9 +15607,10 @@ await t("a tabela de parâmetros não ensina mais a sintaxe antiga", () => {
 
 await t("\"você quis dizer\" corrige o subcomando também (antes: `&comando destivar ping`, com o erro)", async () => {
   const sid = await servidorNovo("pt");
-  assert.match((await say("&comado destivar ping", sid)).texto, /quis dizer `&comando desativar ping`/);
-  assert.match((await say("&comando destivar ping", sid)).texto, /quis dizer `&comando desativar ping`/);
-  assert.match((await say("&comando desativar pnig", sid)).texto, /quis dizer `&comando desativar ping`/);
+  // (31 out 2026, P2) o &comando virou parte do &config: a sugestão mostra o caminho principal (o atalho continua)
+  assert.match((await say("&comado destivar ping", sid)).texto, /quis dizer `&(config )?comando desativar ping`/);
+  assert.match((await say("&comando destivar ping", sid)).texto, /quis dizer `&config comando desativar ping`/);
+  assert.match((await say("&comando desativar pnig", sid)).texto, /quis dizer `&config comando desativar ping`/);
   // texto livre não é "corrigido": `&musca despacito` sugere `&musica despacito`
   assert.match((await say("&musca despacito", sid)).texto, /quis dizer `&musica despacito`/);
 });
@@ -16366,7 +15637,8 @@ await t("`&help punishment` (parte do &automod pedida sozinha) abre a página de
   assert.match((await say("&help blocklist", en)).texto, /^📖 Help — &automod › blocklist/);
   assert.match((await say("&help antispam", en)).texto, /^📖 Help — &automod\n/);
   // o que é de dentro de uma parte (`canal`) não vira página do automod por engano
-  assert.match((await say("&help canal", pt)).texto, /^❓ Não encontrado/);
+  // (31 out 2026, P2) a resposta é uma linha só, sem título (o `texto` do teste junta título\ndescrição): a linha inteira, com o nome pedido
+  assert.match((await say("&help canal", pt)).texto, /^\n❓ Não há ajuda para `canal`\. `&help`\n$/);
 });
 
 // ── 5. Português que a varredura de `…` não via (achados na conferência de 17 out) ──
@@ -16382,19 +15654,26 @@ await t("`&log` em inglês mostra o nome do evento em inglês (antes: **mensagen
   const lista = await comando("en", "&log");
   assert.match(lista, /\*\*messages\*\* — deleted and edited messages/);
   assert.ok(!/\*\*(punicoes|membros|mensagens|cargos|comandos)\*\*/.test(lista), lista);
-  assert.match(await comando("en", "&log messages off"), /^📜 Log updated\n\*\*messages\*\* — /);
-  assert.match(await comando("en", "&log teste on"), /Available events: `punishments`, `members`, `messages`, `roles`, `commands`/);
+  // (31 out 2026, P2, R1/R2) a resposta é só o resultado: o evento (no idioma) e o estado
+  assert.match(await comando("en", "&log messages off"), /^\n?📜 \*\*messages\*\*: 🔴\n?$/);
+  assert.match(await comando("en", "&log teste on"), /Couldn't find the channel `teste`\. `&help config log`/);
   assert.match(await comando("pt", "&log"), /\*\*mensagens\*\* — mensagens apagadas/);
 });
 await t("painel dos assuntos em inglês: **AI:** (antes: **IA:**)", async () => {
+  // (31 out 2026, P2) o painel encolheu (R1): a IA numa marca da linha da sensibilidade
   const p = await comando("en", "&automod sentinel topics");
-  assert.match(p, /· \*\*AI:\*\* 🟢 confirms/);
-  assert.match(await comando("pt", "&automod sentinela assuntos"), /· \*\*IA:\*\* 🟢 confirma/);
+  assert.match(p, /\nSensitivity `medium` \(4\.5\/10\) · AI 🟢\n/);
+  assert.ok(!/\bIA\b|politica|religiao|drogas/.test(p), p);
+  assert.match(await comando("pt", "&automod sentinela assuntos"), /\nSensibilidade `media` \(4\.5\/10\) · IA 🟢\n/);
 });
 await t("`&reactionrole order` em inglês ensina `order … confirm` (antes: `ordem … confirmar`)", async () => {
+  // (31 out 2026, P2) `ordem`/`order` e `recarregar` saíram da tela (o conserto é automático, PLANO-30OUT):
+  // ficaram apelidos silenciosos do conserto, que responde UMA linha no idioma e nunca em português no inglês
   const r = await comando("en", "&reactionrole order 01K000000000000000000000AA");
-  assert.match(r, /`&reactionrole order ‹message› confirm`/);
-  assert.match(await comando("pt", "&reactionrole ordem 01K000000000000000000000AA"), /`&reactionrole ordem ‹mensagem› confirmar`/);
+  assert.match(r, /^\n🔄 \d+\/\d+ message\(s\)\.\n$/, r);
+  assert.match(await comando("pt", "&reactionrole ordem 01K000000000000000000000AA"), /^\n🔄 \d+\/\d+ mensagem\(ns\)\.\n$/);
+  const [ajPt, ajEn] = [await comando("pt", "&help reactionrole"), await comando("en", "&help reactionrole")];
+  assert.ok(!/ordem|recarregar/.test(ajPt) && !/order|reload/.test(ajEn), ajEn);
 });
 await t("erro de rede do RSS em inglês (antes: **Error:** bloqueado: o domínio não resolve)", async () => {
   const { erroEmIngles } = await import("./modulos/core/seguranca.js");
@@ -16403,7 +15682,8 @@ await t("erro de rede do RSS em inglês (antes: **Error:** bloqueado: o domínio
   assert.equal(erroEmIngles("HTTP 503"), "HTTP 503");
   // o feed de mentira não carrega (sem DNS: "não resolve"; com DNS: HTTP 503) — em inglês, nenhum dos dois em português
   const add = await comando("en", "&rss add https://example.com/feed.xml");
-  assert.match(add, /^❌ Unreachable feed\n/);
+  // (31 out 2026, P2) saída mínima: o erro numa linha só, sem título
+  assert.match(add, /^\n❌ Unreachable feed: \S/);
   assert.ok(!/bloqueado|domínio|não /.test(add), add);
   // cada motivo do rodarCiclo (o `&rss now`) tem a versão em inglês
   const src = fs.readFileSync("modulos/ferramentas/rss.js", "utf8");
@@ -16414,11 +15694,13 @@ await t("erro de rede do RSS em inglês (antes: **Error:** bloqueado: o domínio
 });
 await t("`confirm` em inglês confirma (antes: `&game delete confirm` e `&xp reset confirm` só pediam de novo)", async () => {
   const en = await servidorNovo("en");
-  await say("&game create", en);
+  // (31 out 2026, P2) o nome do personagem é obrigatório: `create Kael`
+  await say("&game create Kael", en);
   const pede = (await say("&game delete", en)).texto;
   assert.match(pede, /`&game delete confirm`/);
   assert.ok(!/`&game delete confirm`/.test((await say("&game delete confirm", en)).texto), "o confirm apagou");
-  assert.match((await say("&game delete", en)).texto, /You don't have a character/);
+  // (31 out 2026, P2) a resposta sem personagem é uma só (o despacho) e ensina o `create <name>`
+  assert.match((await say("&game delete", en)).texto, /^🎭 No character\n`&game create [<‹]name[>›]`/);
   await say("&xp on", en);
   assert.match((await say("&xp reset", en)).texto, /To confirm: `&xp reset confirm`/);
   assert.match((await say("&xp reset confirm", en)).texto, /^🧹 XP reset/);
@@ -16438,20 +15720,21 @@ await t("`confirm` em inglês confirma (antes: `&game delete confirm` e `&xp res
 console.log("\n── 6. regressões sem teste próprio ──");
 const dbMod = await import("./modulos/core/db.js");
 const { MUNDO } = await import("./modulos/game/mundo.js");   // o RPG é um mundo só, de todos os servidores
-await t("`&game rest confirm` em inglês paga o descanso (antes: pedia a confirmação de novo)", async () => {
-  const en = await servidorNovo("en");
-  await say("&game create", en);
-  const cat = dbMod.listarFollowersCatalogo()[0];
-  assert.ok(cat, "o catálogo de companheiros tem alguém");
-  dbMod.recrutarFollower(MUNDO, U1, cat.id, 1);
-  for (const f of dbMod.listarFollowersDe(MUNDO, U1)) dbMod.salvarFollower(f.id, { energia: 0, energiaEm: Date.now() });
-  assert.match((await say("&game rest", en)).texto, /^🛏️ Rest paid[\s\S]*`&game rest confirm`/);
-  const r = (await say("&game rest confirm", en)).texto;
-  assert.ok(!/^🛏️ Rest paid/.test(r), r);
-  assert.match(r, /^(🛏️ They rested|💸 Not enough balance)/);
+await t("`&game rest` saiu: responde uma linha no idioma e não mexe no banco (antes: `rest confirm` pagava o descanso)", async () => {
+  // (31 out 2026, P2) o descanso saiu junto com a energia dos aliados (o RPG simplificado):
+  // a palavra antiga não some — responde que saiu, em pt, en e es, sem cobrar nada
+  for (const [lang, cmd, re] of [["en", "&game rest", /^ℹ️\nThat's no longer in the game\.$/], ["en", "&game rest confirm", /^ℹ️\nThat's no longer in the game\.$/],
+    ["pt", "&game descansar", /^ℹ️\nIsso saiu do jogo\.$/], ["es", "&game descansar", /^ℹ️\nEso ya no está en el juego\.$/]]) {
+    const sid = await servidorNovo(lang);
+    const antes = dbMod.getSaldo(MUNDO, U1, "ouro");
+    assert.match((await say(cmd, sid)).texto.trim(), re);
+    assert.equal(dbMod.getSaldo(MUNDO, U1, "ouro"), antes);
+  }
 });
 await t("`&reactionrole order <msg>` em inglês pede `order … confirm` (antes: `ordem … confirmar`)", async () => {
-  for (const [lang, cmd, re] of [["en", "&reactionrole order", /Confirm\? `&reactionrole order (\w+) confirm`/], ["pt", "&reactionrole ordem", /Confirma\? `&reactionrole ordem (\w+) confirmar`/]]) {
+  // (31 out 2026, P2) o `ordem` virou apelido silencioso do conserto automático: com uma regra gravada,
+  // a resposta conta a mensagem (1 de 1, ou 1 não encontrada) numa linha, no idioma
+  for (const [lang, cmd, re] of [["en", "&reactionrole order", /^\n🔄 [01]\/1 message\(s\)( · 1 not found)?\.\n$/], ["pt", "&reactionrole ordem", /^\n🔄 [01]\/1 mensagem\(ns\)( · 1 não encontrada\(s\))?\.\n$/]]) {
     const sid = await servidorNovo(lang);
     const { canal } = servidor(sid);
     const mid = ulid("painel-rr-" + lang);
@@ -16472,7 +15755,8 @@ await t("`&rss now` em inglês explica a falha em inglês (antes: \"canal inaces
   c.channels.delete(canal.id);   // o canal sumiu (apagado, ou o bot perdeu o acesso)
   try {
     const r = (await say("&rss now", en)).texto;
-    assert.match(r, /\n❌ Failed\nthe channel can't be reached/, r);
+    // (31 out 2026, P2) saída mínima: o motivo numa linha só (antes: título "Failed" + motivo)
+    assert.match(r, /^\n❌ the channel can't be reached\n/, r);
   } finally { c.channels.set(canal.id, canal); }
 });
 
@@ -16482,72 +15766,90 @@ await t("`&musica loop` em inglês: `track` vira `faixa` para o serviço de voz 
   const { modoDoLoop } = await import("./modulos/ferramentas/musica.js");
   assert.deepEqual(["track", "queue", "off", "", "faixa", "fila", "nao"].map(modoDoLoop), ["faixa", "fila", "nao", "nao", "faixa", "fila", "nao"]);
 });
-await t("`&game equip <item> hand2` e `&game unequip hand1` (antes: `hand1`/`hand2` viravam parte do nome do item)", async () => {
+await t("`&game equip`/`unequip` em inglês: o equipamento é automático pela build e a tela aponta para `&game build` (antes: `hand1`/`hand2` viravam parte do nome do item)", async () => {
+  // (31 out 2026, P2) equipar saiu da mão do jogador (a build decide): `equip Iron Sword hand2`
+  // não mexe em nada e cita o subcomando em inglês
   const en = await servidorNovo("en");
-  await say("&game delete confirm", en);
-  await say("&game create", en);   // personagem novo: a espada inicial na mão principal
-  assert.match((await say("&game unequip hand1", en)).texto, /^🎒 Unequipped\n\*\*Iron Sword\*\*/);
-  assert.match((await say("&game equip Iron Sword hand2", en)).texto, /^⚔️ Equipped\n🗡️ \*\*Off hand\*\*: Iron Sword/);
-  assert.match((await say("&game unequip hand2", en)).texto, /^🎒 Unequipped/);
-  assert.match((await say("&game equip Iron Sword hand1", en)).texto, /\*\*Main hand\*\*: Iron Sword/);
+  await say("&game create Kael", en);
+  const antes = JSON.stringify(dbMod.getEquipado(MUNDO, U1));
+  for (const cmd of ["&game unequip hand1", "&game equip Iron Sword hand2", "&game equip Iron Sword hand1"]) assert.match((await say(cmd, en)).texto.trim(), /^⚙️\nAutomatic from the build — `&game build`\.$/, cmd);
+  assert.equal(JSON.stringify(dbMod.getEquipado(MUNDO, U1)), antes);
+  assert.match((await say("&game equipar Espada de Ferro mao2", await servidorNovo("pt"))).texto.trim(), /^⚙️\nAutomático pela build — `&game build`\.$/);
 });
 await t("`&game admin give` sem valor ensina o próprio comando (antes: `&game admin moeda 1000`)", async () => {
   const [pt, en] = await nos2("&game admin dar", "&game admin give");
   assert.match(pt, /^❌ Quanto\?\n`&game admin dar 1000 \[@pessoa\]`/);
   assert.match(en, /^❌ How much\?\n`&game admin give 1000 \[@person\]`/);
 });
-await t("`&game respec points` em inglês ensina `respec points confirm` (antes: `resetar pontos confirmar`)", async () => {
+await t("`&game respec points` / `&game points` em inglês: os pontos são automáticos pela build (antes: `resetar pontos confirmar`)", async () => {
+  // (31 out 2026, P2) pontos e respec saíram da mão do jogador: trocar de build devolve e
+  // redistribui tudo. As palavras antigas respondem uma linha no idioma, sem mexer nos pontos
   for (const [lang, cmds, re] of [
-    ["en", ["&game admin points 3", "&game points strength 2", "&game respec points"], /`&game respec points confirm`/],
-    ["pt", ["&game admin pontos 3", "&game pontos forca 2", "&game resetar pontos"], /`&game resetar pontos confirmar`/]]) {
+    ["en", ["&game points strength 2", "&game respec points"], /^⚙️\nAutomatic from the build — `&game build`\.$/],
+    ["pt", ["&game pontos forca 2", "&game resetar pontos"], /^⚙️\nAutomático pela build — `&game build`\.$/]]) {
     const sid = await servidorNovo(lang);
-    await say(lang === "en" ? "&game delete confirm" : "&game apagar confirmar", sid);
-    await say(lang === "en" ? "&game create" : "&game criar", sid);
-    let r = "";
-    for (const x of cmds) r = (await say(x, sid)).texto;
-    assert.match(r, re, r);
+    await say(lang === "en" ? "&game create Kael" : "&game criar Kael", sid);
+    const antes = dbMod.getPersonagem(MUNDO, U1)?.forca;
+    for (const x of cmds) assert.match((await say(x, sid)).texto.trim(), re, x);
+    assert.equal(dbMod.getPersonagem(MUNDO, U1)?.forca, antes);
   }
 });
-await t("`&game companion photos` sem nome ensina `photos` (antes: `foto`)", async () => {
-  const [pt, en] = await nos2("&game follower fotos", "&game companion photos");
-  assert.match(pt, /`&game follower fotos ‹nome›`/);
-  assert.match(en, /`&game companion photos ‹name›`/);
+await t("`&game companion` / `&game follower` levam a `&game ally` (as fotos saíram; antes: `companion photos` ensinava `photos`)", async () => {
+  // (31 out 2026, P2) companheiros viraram aliados; o álbum de fotos saiu. Os nomes antigos
+  // continuam chegando à lista de aliados, no idioma, e `photos` diz que saiu
+  const [pt, en] = await nos2("&game follower", "&game companion");
+  assert.match(pt, /^👥 Aliados\n/);
+  assert.match(en, /^👥 Allies\n/);
+  const [pt2, en2] = await nos2("&game fotos", "&game photos");
+  assert.match(pt2, /^ℹ️\nIsso saiu do jogo\./);
+  assert.match(en2, /^ℹ️\nThat's no longer in the game\./);
 });
 await t("subcomando desconhecido do `&access` e do `&modia` lista as palavras do idioma (antes: `cargo`, `canal`, `criterios` em inglês)", async () => {
   const [pt, en] = await nos2("&acesso xyz", "&access xyz");
   // (P7, 20 out 2026) + `livre` / `free`
   assert.match(pt, /Use: `cargo`, `canal`, `staffignora`, `livre` ou `status`\./);
   assert.match(en, /Use: `role`, `channel`, `staffbypass`, `free` or `status`\./);
+  // (31 out 2026, P2) o &modia saiu: o nome leva ao `&automod sentinela assuntos`, e o tema desconhecido
+  // lista os temas no idioma, numa linha
   const [pt2, en2] = await nos2("&modia xyz", "&modia xyz");
-  assert.match(pt2, /Use: `on`, `off`, `criterios`, `canal`, `limpar` ou `status`\./);
-  assert.match(en2, /Use: `on`, `off`, `criteria`, `channel`, `clear` or `status`\./);
+  assert.match(pt2, /^\n❌ Tema: politica, religiao, drogas, sexual · `&help automod`\n$/);
+  assert.match(en2, /^\n❌ Topic: politics, religion, drugs, sexual · `&help automod`\n$/);
 });
 await t("uso do `&automod sentinela banir|liberar|testar|simular` com a sintaxe certa (antes: `ban <userId>`, `dismiss`, `test` na tela em português)", async () => {
-  for (const [pt, en, usoPt, usoEn] of [
-    ["banir", "ban", "banir <@pessoa|id>", "ban <@user|id>"], ["liberar", "dismiss", "liberar <@pessoa|id>", "dismiss <@user|id>"],
-    ["testar", "test", "testar ‹texto›", "test ‹text›"], ["simular", "simulate", "simular ‹texto›", "simulate ‹text›"]]) {
+  // (31 out 2026, P2) erro de uso é UMA linha + `&help` (R1): o `banir` é o &ban (a pergunta e a ajuda são as
+  // dele), o `testar` e o `simular` são o mesmo (o simular virou apelido); a sintaxe fica na ajuda do sentinela
+  const [bPt, bEn] = await nos2("&automod sentinela banir", "&automod sentinel ban");
+  assert.match(bPt, /^\n❓ Quem\? · `&help ban`\n$/);
+  assert.match(bEn, /^\n❓ Who\? · `&help ban`\n$/);
+  const [lPt, lEn] = await nos2("&automod sentinela liberar", "&automod sentinel dismiss");
+  assert.ok(lPt.includes("`&automod sentinela liberar <@pessoa|id>`"), lPt);
+  assert.ok(lEn.includes("`&automod sentinel dismiss <@user|id>`"), lEn);
+  for (const [pt, en] of [["testar", "test"], ["simular", "simulate"]]) {
     const [rPt, rEn] = await nos2(`&automod sentinela ${pt}`, `&automod sentinel ${en}`);
-    assert.ok(rPt.includes(`\`&automod sentinela ${usoPt}\``), rPt);
-    assert.ok(rEn.includes(`\`&automod sentinel ${usoEn}\``), rEn);
+    assert.match(rPt, /^\n❌ Testar o quê\? · `&help automod`\n$/);
+    assert.match(rEn, /^\n❌ Test what\? · `&help automod`\n$/);
   }
-  const [tPt, tEn] = await nos2("&automod sentinela testar oi tudo bem", "&automod sentinel test hi there");
-  assert.match(tPt, /Fluxo real no canal de avisos: `&automod sentinela simular ‹texto›`/);
-  assert.match(tEn, /Real flow in the alert channel: `&automod sentinel simulate ‹text›`/);
+  const [tPt, tEn] = await nos2("&automod sentinela testar oi tudo bem", "&automod sentinel simulate hi there");
+  assert.match(tPt, /^\n✅ \*\*0\.0\/10\*\* \(limiar 6\.5, desligado\) · —\n$/);
+  assert.match(tEn, /^\n✅ \*\*0\.0\/10\*\* \(threshold 6\.5, off\) · —\n$/);
+  const [ajPt, ajEn] = await nos2("&help automod sentinela", "&help automod sentinel");
+  assert.ok(ajPt.includes("`&automod sentinela banir <@pessoa>`") && ajPt.includes("`&automod sentinela testar ‹texto›`"), ajPt);
 });
 await t("painel do sentinela em inglês sem valor em português (antes: `<baixa|media|alta>`, **Sensitivity:** media, o modo `avisar`)", async () => {
   const PT_VALOR = /\b(baixa|media|média|alta|acumular|avisar|apagar|confirmar|banir)\b/;
+  // (31 out 2026, P2) uma tela só do sentinela (R1): o estado, sem a sintaxe (que fica na ajuda, conferida
+  // em "ajuda do sentinela ensina…"); os valores no idioma
   const [pt, en] = await nos2("&automod sentinela config", "&automod sentinel config");
-  assert.match(pt, /`&automod sentinela sensibilidade ‹baixa\|media\|alta›`/);
-  assert.match(pt, /`&automod sentinela canal <#canal\|aqui>`/);
-  assert.match(en, /`&automod sentinel sensitivity ‹low\|medium\|high›`/);
-  assert.match(en, /`&automod sentinel channel <#channel\|here>`/);
-  assert.match(en, /\*\*Sensitivity:\*\* medium/);
+  assert.match(pt, /\nSensibilidade `media` \(6\.5\/10\) · antiguidade 🟢 · alerta 🟢 · canal —\n/);
+  assert.match(en, /\nSensitivity `medium` \(6\.5\/10\) · tenure 🟢 · alerts 🟢 · channel —\n/);
+  assert.match(en, /🔴 `content` · 🔴 `hate` · 🔴 `images` · 🔴 `topics` · 🔴 `avatar`/);
   assert.ok(!PT_VALOR.test(en), en.match(PT_VALOR)?.[0]);
   const teste = await comando("en", "&automod sentinel test hi there");
   assert.ok(!PT_VALOR.test(teste), teste.match(PT_VALOR)?.[0]);
   // um texto que o filtro marcaria, com o módulo desligado: a resposta ensina a ligar
   const golpe = "Vamos gerar lucro com as contas de IA que você não está usando. Trabalhe comigo, dividimos os ganhos 50/50. Já ganho mais de R$ 10.000 por mês. Se tiver interesse me chama na DM";
-  assert.match(await comando("pt", `&automod sentinela testar ${golpe}`), /ative com `&automod sentinela on`/);
+  // (31 out 2026, P2) a nota numa linha: o "desligado" está nela (antes: "ative com `&automod sentinela on`")
+  assert.match(await comando("pt", `&automod sentinela testar ${golpe}`), /^\n🛑 \*\*\d+\.\d\/10\*\* \(limiar 6\.5, desligado\) · scam/);
 });
 await t("avisos do sentinela à staff ensinam `sentinel ban|dismiss` / `sentinela banir|liberar` (antes: `sentinela ban`, `dismiss`, `warn lista` em inglês)", async () => {
   const engine = await import("./modulos/moderacao/automod-engine.js");
@@ -16584,10 +15886,12 @@ await t("avisos do sentinela à staff ensinam `sentinel ban|dismiss` / `sentinel
   assert.equal(env3.length, 0, JSON.stringify(env3));
 });
 await t("`&globalban forget` sem ninguém pergunta quem (antes: \"não achei essa pessoa\" sem ter procurado ninguém)", async () => {
+  // (31 out 2026, P2) a pergunta numa linha só (R1), com a ajuda do comando
   const [pt, en] = await nos2("&banglobal esquecer", "&globalban forget");
-  assert.match(pt, /^❓ Quem\?\n/);
-  assert.match(en, /^❓ Who\?\n/);
-  assert.match(await comando("en", "&globalban forget NinguemComEsseNome"), /^❌ Couldn't find that person/);
+  assert.match(pt, /^\n❓ Quem\? · `&help banglobal`\n$/);
+  assert.match(en, /^\n❓ Who\? · `&help globalban`\n$/);
+  // (31 out 2026, P2) e quem não existe: uma linha com o que foi digitado e a ajuda
+  assert.match(await comando("en", "&globalban forget NinguemComEsseNome"), /^\n❌ Couldn't find `NinguemComEsseNome` · `&help globalban`\n$/);
 });
 await t("páginas de ajuda do sentinela com o nome do idioma (antes: `&help automod sentinela sensitivity`, `test`, `channel` em português)", async () => {
   for (const [pt, en] of [["sensibilidade", "sensitivity"], ["testar", "test"], ["canal", "channel"]]) {
@@ -16627,7 +15931,8 @@ const { citar, citarNoTexto } = aliasesMod;
 const ajudaReg = await import("./modulos/core/ajuda-registro.js");
 await t("citar(): o nome em cada idioma vem do registro, também dentro das famílias", () => {
   assert.equal(citar("autorole.set", "en"), "&autorole set");
-  assert.equal(citar("log.mensagens", "en", "!"), "!log messages");
+  // (P2) o &log virou parte do &config: o caminho antigo cita o novo
+  assert.equal(citar("log.mensagens", "en", "!"), "!config log messages");
   assert.equal(citar("warn.lista", "pt"), "&warn lista");
   assert.equal(citar("warn.lista", "en"), "&warn list");
   assert.equal(citar("automod.sentinela.assuntos", "en"), "&automod sentinel topics");
@@ -16646,20 +15951,22 @@ await t("citar(): referência que não existe é erro, não texto torto na tela"
 // Os comandos já migrados: a página de ajuda mora no registro (`ajuda`). A cada
 // família migrada, esta lista cresce sozinha.
 const MIGRADOS = ajudaReg.COMANDOS_COM_AJUDA;
-// `&help <estes>` não abre a página de detalhe: o automod tem a árvore própria (help-arvore),
-// o xp e o game abrem os grupos Diversão e RPG (decisão do Ghieh, 20 out) — já era assim
-// antes de as páginas irem para o registro. A página deles é conferida no montador.
-const HELP_ABRE_OUTRA = ["automod", "xp", "game"];
+// (31 out 2026, P2) o `&help xp|game|automod` abria o grupo (bug); agora abre a página do comando,
+// como todos — a lista de exceções ficou vazia (mais exigente: a página deles é lida na tela)
+const HELP_ABRE_OUTRA = [];
 const visaoMod = await import("./modulos/moderacao/visao.js");   // a ajuda esconde o SO_IA de lá (o &personalidade)
 await t(`comandos migrados (${MIGRADOS.join(", ")}): a página \`&help\` e os parâmetros vêm do registro, nos dois idiomas`, async () => {
   assert.ok(MIGRADOS.includes("autorole"));
-  const geralSrc = fs.readFileSync("modulos/moderacao/geral.js", "utf8"), paramSrc = fs.readFileSync("modulos/moderacao/help-parametros.js", "utf8");
+  // (31 out 2026, P2) o help-parametros.js e as páginas à mão do geral.js saíram de vez: nenhuma cópia pode voltar
+  assert.ok(!fs.existsSync("modulos/moderacao/help-parametros.js") && !fs.existsSync("modulos/moderacao/help-arvore.js"), "a ajuda à mão voltou");
+  const geralSrc = fs.readFileSync("modulos/moderacao/geral.js", "utf8"), paramSrc = "";
   for (const id of MIGRADOS) {
     // nenhuma cópia à mão sobrando (ela venceria em silêncio se a ordem do merge mudasse)
     // só nas funções das PÁGINAS (detalhesPT/EN): a árvore de subtópicos do mesmo arquivo
     // tem chaves iguais (`automod: {` de `automod set`) que NÃO são a página — olhar o
     // arquivo inteiro fez o script de migração apagá-las (21 out 2026)
-    const paginas = ["function detalhesPT(", "function detalhesEN("].map((ini) => { const a = geralSrc.indexOf(ini); return geralSrc.slice(a, geralSrc.indexOf("\nfunction ", a + 1)); }).join("\n");
+    assert.ok(!geralSrc.includes("function detalhesPT(") && !geralSrc.includes("function detalhesEN("), "o geral.js voltou a ter páginas à mão");
+    const paginas = "";
     assert.ok(!new RegExp(`^\\s{4}${id}: [{\\[]`, "m").test(paginas), `${id} ainda tem página escrita no geral.js`);
     assert.ok(!new RegExp(`^\\s{4}${id}: \\[`, "m").test(paramSrc), `${id} ainda tem parâmetros escritos no help-parametros.js`);
     for (const lang of ["pt", "en"]) {
@@ -16695,7 +16002,9 @@ await t("`&purge all` → `&purge confirm <código>` em inglês: o motor traduz 
   assert.ok(!/confirmar|tudo/.test(pede), pede);
   const r = (await say(`&purge confirm ${codigo}`, en)).texto;
   assert.ok(!/^(⌛|❌)/.test(r), r);
-  assert.match((await say("&purge", en)).texto, /`&purge all` — empties the whole channel/);
+  // (31 out 2026, P2) sozinho é erro de uso numa linha (R1); o `all` está na ajuda
+  assert.match((await say("&purge", en)).texto, /^\n❌ How many messages\? \(1–100\) · `&help purge`\n$/);
+  assert.match((await say("&help purge", en)).texto, /`&purge all` — empties the whole channel/);
   // e o handler não aceita mais o inglês por conta própria: quem traduz é o motor
   const src = fs.readFileSync("modulos/moderacao/limpar.js", "utf8");
   assert.ok(!/"(all|everything|confirm)"/.test(src), "limpar.js ainda tem palavra em inglês no parse");
@@ -16703,11 +16012,13 @@ await t("`&purge all` → `&purge confirm <código>` em inglês: o motor traduz 
 await t("lote 3b em inglês: `&silence remove|off`, `&initiative remove|clear` (traduzidos pelo registro) e `&roll coin`", async () => {
   const en = await servidorNovo("en");
   for (const tirar of ["remove", "off"]) {
-    assert.match((await say("&silence @Fulano 10m", en)).texto, /TIMEOUT/);
-    assert.match((await say(`&silence ${tirar} @Fulano`, en)).texto, /^🔊 Timeout lifted/);
+    // (31 out 2026, P2) uma linha (R1), com a hora pelo carimbo; o `remove`/`off` é o &untimeout
+    assert.match((await say("&silence @Fulano 10m", en)).texto, /^\n🔇 <@\w+> timed out until <t:\d+:f>\n$/);
+    assert.match((await say(`&silence ${tirar} @Fulano`, en)).texto, /^\n🔊 <@\w+> can talk again\.\n$/);
   }
   await say("&initiative add Goblin 5", en);
-  assert.match((await say("&initiative remove Goblin", en)).texto, /_empty — `&initiative add ‹name› ‹roll›`_/);
+  // (31 out 2026, P2) `&initiative` é atalho de `&roll init`; a lista vazia não ensina mais o comando (R1): só `_empty_`
+  assert.match((await say("&initiative remove Goblin", en)).texto, /^⚔️ Initiative\n_empty_\n$/);
   await say("&initiative add Orc 3", en);
   assert.match((await say("&initiative clear", en)).texto, /Initiative cleared/);
   for (let i = 0; i < 6; i++) {
@@ -16719,17 +16030,22 @@ await t("lote 3b em inglês: `&silence remove|off`, `&initiative remove|clear` (
   assert.match((await say("&rolar moeda", pt)).texto, /🪙 \*\*(cara|coroa)\*\*/);
   // os três com nome em inglês na tela (18 out 2026: antes a tela em inglês dizia &rolar, &iniciativa, &repete)
   assert.match((await say("&help roll", en)).texto, /^📖 Help — &roll\n\*\*Usage:\*\* `&roll /);
-  assert.match((await say("&help initiative", en)).texto, /^📖 Help — &initiative\n/);
-  assert.match((await say("&help repeat", en)).texto, /^📖 Help — &repeat\n\*\*Usage:\*\* `&repeat /);
-  assert.match((await say("&repeat", en)).texto, /What should I repeat\? `&repeat ‹text›`/);
+  // (31 out 2026, P2) o &iniciativa virou `&roll init` (atalho): o nome antigo abre a página da iniciativa dentro do &roll
+  assert.match((await say("&help initiative", en)).texto, /^📖 Help — &roll › initiative\nThis channel's \*\*combat order\*\*/);
+  // (31 out 2026, P2) o &repete virou o &embed (texto puro = a descrição): o nome antigo abre a ajuda dele
+  // e, sozinho, é o erro de uso do &embed numa linha
+  assert.match((await say("&help repeat", en)).texto, /^📖 Help — &embed\n\*\*Usage:\*\* `&embed ‹text› /);
+  assert.match((await say("&repeat", en)).texto, /^\n❌ What should I post\? · `&help embed`\n$/);
   assert.match((await say("&help rolar", pt)).texto, /^📖 Ajuda — &rolar\n/);
 });
 await t("lote 3c: a ajuda cita os apelidos de verdade (antes da correção: `&idioma` e `&idioma`), e `&log channel here`, `&warn list`, `&webhook test` em inglês", async () => {
+  // (31 out 2026, P2) a ajuda mostra só o nome principal (os apelidos não vão à página): o `&help idioma`
+  // abre a parte `idioma` do &config, com o caminho principal citado, nos dois idiomas
   const [pt, en] = await nos2("&help idioma", "&help language");
-  assert.match(pt, /Também responde por `language` e `lang`/);
-  assert.match(en, /Also answers to `idioma` and `lang`/);
+  assert.match(pt, /^📖 Ajuda — &config › idioma[\s\S]*`&config idioma pt`/);
+  assert.match(en, /^📖 Help — &config › language[\s\S]*`&config language en`/);
   const sid = await servidorNovo("en");
-  assert.match((await say("&log channel here", sid)).texto, /^📜 Log channel set/);
+  assert.match((await say("&log channel here", sid)).texto, /^\n?📜 Log in <#/);
   assert.match((await say("&warn list", sid)).texto, /^📋 Warnings\n/);
   await say("&webhook create gancho1", sid);
   assert.match((await say("&webhook test gancho1", sid)).texto, /^🧪 Webhook test\n/);
@@ -16794,8 +16110,8 @@ if (ATUALIZAR) {
     "| `modulos/core/nomes-automod.js` | as mesmas palavras do `&automod` que o registro tem, para os painéis — um teste garante que não se afastam |",
     "| `modulos/core/aliases.js` → `PLACEHOLDER_EN` | os moldes da ajuda (`‹nome›` → `‹name›`), comuns a todos os comandos |",
     "| cada handler (`if (sub === … )`) | o parse dos subcomandos, muitas vezes já aceitando os dois idiomas |",
-    "| `help-arvore.js`, `geral.js` (`construirSubtopicos`, `construirDetalhes`) | as páginas de ajuda, PT e EN escritas em cópias separadas |",
-    "| `help-grupos.js`, `help-parametros.js`, `tutorial.js`, `assistente.js` | índice, parâmetros, tutorial e os comandos que o assistente gera |",
+    "| `modulos/moderacao/help-grupos.js` | os grupos do índice (nome, emoji, título) — o que entra em cada um vem do `ajuda.grupo` |",
+    "| `tutorial.js`, `assistente.js` | o mini guia (conceitos) e os comandos que o assistente gera |",
     "",
     "## Subcomandos em inglês (entrada)",
     "",
@@ -16829,7 +16145,8 @@ await t("`&idioma es` põe o servidor em espanhol — e `español`, `espanol` e 
   assert.equal(storeMod.configDoServidor(sid).language, "es");
   assert.match(r, /Idioma: Español 🇪🇸/);
   // o aviso do servidor que ainda não escolheu (1º comando) oferece o espanhol também
-  assert.match(r, /🇪🇸 \*\*Español\*\* — [\s\S]*`&idioma es`/);
+  // (P2) o &idioma virou parte do &config: o aviso ensina o caminho principal
+  assert.match(r, /🇪🇸 \*\*Español\*\* — [\s\S]*`&config idioma es`/);
   assert.match((await say("&idioma", sid)).texto, /\*\*🇪🇸 Idioma actual:\*\* Español/);
   for (const [i, palavra] of ["español", "espanol", "spanish"].entries()) {
     const outro = ulid("es-idioma-" + i);
@@ -16882,7 +16199,7 @@ for (const id of ajudaReg.COMANDOS_COM_AJUDA) {
   if ((c?.soIA || c?.voz || visaoMod.SO_IA.has(id)) && /^🚫/.test(txt)) { restritosEs.push(id); continue; }
   paginaEs[id] = txt;
 }
-await t(`servidor em espanhol: as ${ajudaReg.COMANDOS_COM_AJUDA.length} páginas do registro saem em espanhol, com os nomes em espanhol`, () => {
+await t(`servidor em espanhol: as ${ajudaReg.COMANDOS_COM_AJUDA.length} páginas do registro saem em espanhol, com os nomes em espanhol`, async () => {
   const ruins = [];
   for (const [id, txt] of Object.entries(paginaEs)) {
     const ponha = (m) => ruins.push(`${id}: ${m}`);
@@ -16908,12 +16225,20 @@ await t(`servidor em espanhol: as ${ajudaReg.COMANDOS_COM_AJUDA.length} páginas
   }
   assert.deepEqual(ruins, []);
   // e é mesmo espanhol (não o inglês com os nomes trocados)
-  assert.match(paginaEs.log, /`aqui` usa el canal actual/);
+  // (31 out 2026, P2) o &log virou a parte `log` do &config: a página dela, pedida em espanhol pelo nome antigo, sai em espanhol com o `aqui` e os eventos em espanhol
+  const logEs = (await say("&ayuda log", esSid)).texto;
+  assert.match(logEs, /^📖 Ayuda — &config › log\n/);
+  assert.match(logEs, /`&config log canal [<‹]#canal\|aqui\|id[>›]` — define el canal/);
+  assert.match(logEs, /`sanciones` · `miembros`/);
   assert.match(paginaEs.adeus, /`\{usuario\}` se convierte en el \*\*nombre\*\*/);
   assert.match(paginaEs.warn, /en el modo `acumular`/);
-  assert.match(paginaEs.limpar, /\*\*Uso:\*\* `&limpiar ‹cantidad› \[@usuario\] \| todo`\n\*\*Permiso:\*\* ManageMessages/);
-  assert.match(paginaEs.limpar, /\*\*Parámetros de `&limpiar`\*\*\n• `‹n›` — cuántos mensajes borrar/);
-  assert.match(paginaEs.log, /\*\*Subtemas\*\* _\(el detalle de cada parte\)_\n`&ayuda log eventos`/);
+  // (31 out 2026, P2) o &purge mudou a ordem do uso (pessoa antes da quantidade, com a faixa): mesma exigência
+  assert.match(paginaEs.limpar, /\*\*Uso:\*\* `&limpiar \[@usuario\] ‹1–100› \| todo`\n\*\*Permiso:\*\* ManageMessages/);
+  assert.match(paginaEs.limpar, /\*\*Parámetros\*\*\n• `‹1–100›` — cuántos mensajes borrar \(los últimos\)\n• `\[@usuario\]` — solo los mensajes de esa persona/);
+  // (31 out 2026, P2) a página do log (agora `&config › log`) traz os eventos na própria página, em
+  // espanhol, em vez de um subtema à parte — e diz que as novidades vão sempre ao log
+  assert.match(logEs, /\*\*Eventos:\*\* `sanciones` · `miembros` \(entradas\/salidas\) · `mensajes` \(borrados\/editados\) · `roles` · `comandos`/);
+  assert.match(logEs, /Las \*\*novedades de Judy\*\* van siempre a este canal\./);
 });
 await t("a marca de \"texto pronto\" nunca chega à tela, em idioma nenhum", () => {
   for (const l of ["pt", "en", "es"]) assert.equal(aliasesMod.exibir(aliasesMod.marcarTraduzido("`&limpar tudo` aqui"), l), "`&limpar tudo` aqui", l);
@@ -16933,10 +16258,14 @@ await t("entrada em espanhol funciona: &limpiar todo, &advertir lista, &log sanc
   // (31 out 2026, P1) antes: a URL com o token aparecia no canal. Agora ela vai por DM:
   // o gancho é criado em espanhol, e a tela NÃO tem a URL (o membro de teste não tem DM aberta)
   const webhookEs = (await say("&webhook crear prueba", sid)).texto;
-  assert.match(webhookEs, /Gancho "prueba" creado[\s\S]*DM/);
+  // (31 out 2026, P2) uma linha com o gancho e o canal + a linha da DM, em espanhol (antes: título "Gancho … creado")
+  assert.match(webhookEs, /🪝 \*\*prueba\*\* → <#\w+>\n(📬 URL enviada por DM\.|⚠️ El DM con la URL no se entregó — abre tus DMs y pide la URL de nuevo\.)/);
   assert.doesNotMatch(webhookEs, /\/gancho\//);
   // `&comando list` caía no "uso errado" (a ajuda sempre prometeu); em espanhol, `lista`
-  assert.match((await say("&comando lista", sid)).texto, /^🎛 Comandos del servidor[\s\S]*🟢 `repetir`/);   // (etapa 4b) em espanhol
+  // (31 out 2026, P2) o &repete (`repetir` em espanhol) virou apelido do &embed e saiu da lista: dois nomes em espanhol no lugar dele, e ele não volta
+  const listaEs = (await say("&comando lista", sid)).texto;
+  assert.match(listaEs, /^🎛 Comandos del servidor[\s\S]*🟢 `limpiar`[\s\S]*🟢 `advertir`/);   // (etapa 4b) em espanhol
+  assert.doesNotMatch(listaEs, /`(repetir|repete|limpar|avisar)`/);
   const pt = await servidorNovo("pt");
   assert.match((await say("&comando list", pt)).texto, /^🎛 Comandos do servidor/);
 });
@@ -16963,22 +16292,30 @@ await t("o nível de quem vê vale para o nome da tela, em qualquer idioma (`&ro
 });
 await t("`&ayuda` em espanhol: o grupo vence o apelido (`&help fun` não vira `&ayuda entretenimiento`)", async () => {
   const idx = (await say("&ayuda", esSid)).texto;
-  assert.match(idx, /`&ayuda diversion` — XP levels/);
+  // (31 out 2026, P2) o índice lista os grupos pelo título e os comandos de cada um; o `&ayuda diversion`
+  // abre o grupo (o grupo vence o apelido `fun` do &entretenimento)
+  assert.match(idx, /🎮 \*\*Diversión\*\* — [^\n]*`&entretenimiento`/);
   assert.ok(!idx.includes("&ayuda entretenimiento"), idx);
+  assert.match((await say("&ayuda fun", esSid)).texto, /^🎮 Diversión/);
   // (etapa 4b) o grupo agora sai em espanhol
   assert.match((await say("&ayuda diversion", esSid)).texto, /^🎮 Diversión/);
 });
 await t("comando desativado: o nome que aparece é o da tela do idioma (antes: `&repete` no inglês)", async () => {
   const en = await servidorNovo("en");
-  await say("&command disable repeat", en);
-  assert.match((await say("&repeat hi", en)).texto, /The `&repeat` command is disabled/);
+  // (31 out 2026, P2) o &repete virou o &embed (moderação): o mesmo caso com o &warn, que tem nome próprio em espanhol
+  await say("&command disable warn", en);
+  assert.match((await say("&warn hi", en)).texto, /The `&warn` command is disabled/);
   const es = await servidorNovo("es");
-  await say("&comando desactivar repetir", es);
-  assert.match((await say("&repetir hola", es)).texto, /El comando `&repetir` está desactivado en este servidor/);
+  await say("&comando desactivar advertir", es);
+  assert.match((await say("&advertir hola", es)).texto, /El comando `&advertir` está desactivado en este servidor/);
 });
 await t("nomes soltos na tela em espanhol: a lista do &comando, o \"quisiste decir\" do &ayuda, os eventos do &log", async () => {
   const sid = await servidorNovo("es");
-  assert.match((await say("&comando", sid)).texto, /🟢 `expulsar`  🟢 `ban`  🟢 `silenciar`  🟢 `limpiar`  🟢 `advertir`/);
+  // (31 out 2026, P2) a lista cresceu (&unban, &untimeout): confere cada nome em espanhol, na ordem do registro
+  const lista = (await say("&comando", sid)).texto;
+  const nomesEs = ["kick", "ban", "silenciar", "limpar", "warn"].map((id) => registro.COMANDO_ES[id] ?? aliasesMod.COMANDO_EN[id] ?? id);
+  assert.match(lista, new RegExp(nomesEs.map((n) => `🟢 \`${n}\``).join("[\\s\\S]*")));
+  assert.ok(nomesEs.includes("expulsar") && nomesEs.includes("advertir"), nomesEs.join(","));
   assert.match((await say("&ayuda advertr", sid)).texto, /`&ayuda advertir`/);
   assert.match((await say("&log", sid)).texto, /🟢 \*\*sanciones\*\*[\s\S]*🟢 \*\*miembros\*\*[\s\S]*🟢 \*\*mensajes\*\*/);
 });
@@ -16987,7 +16324,10 @@ await t("servidor em espanhol: sai em espanhol, nunca em português (&economia, 
   assert.match((await say("&economia", sid)).texto, /🪙 \*\*0\*\* Moneda/);
   assert.match((await say("&ticket categories", sid)).texto, /Soporte/);
   const pedido = (await say("&reset", sid)).texto;
-  const codigo = pedido.match(/&reset confirm ([A-Z0-9]{4})/)?.[1];
+  // (31 out 2026, P2) em espanhol, `confirmar` e `deshacer` (antes `confirm`/`undo` na tela espanhola)
+  const codigo = pedido.match(/&reset confirmar ([A-Z0-9]{4})`/)?.[1];
+  assert.match(pedido, /&reset deshacer`/);
+  assert.doesNotMatch(pedido, /`&reset (confirm|undo)[ `]/);
   assert.ok(codigo, pedido);
   await say(`&reset confirm ${codigo}`, sid);
   const desfeito = (await say("&reset undo", sid)).texto;
@@ -17005,9 +16345,10 @@ await t("ninguém lê `config.language === \"en\"` direto (o espanhol cairia no 
   assert.deepEqual(ruins, []);
 });
 await t("`&help config` abre a página do &config (todas as configurações do servidor), em pt, en e es — antes abria o grupo Personalizar", async () => {
-  const casos = [["pt", ["config", "configuração", "configuracao"], /^📖 Ajuda — &config\n\*\*Uso:\*\* `&config`[\s\S]*Mostra TODAS as configurações/],
-    ["en", ["config", "settings", "configuration"], /^📖 Help — &config\n\*\*Usage:\*\* `&config`[\s\S]*Shows ALL of the server's current settings/],
-    ["es", ["config", "configuración", "configuracion"], /^📖 Ayuda — &config\n\*\*Uso:\*\* `&config`[\s\S]*Muestra TODAS las configuraciones/]];
+  // (31 out 2026, P2) a página nova do &config (que absorveu log, idioma, acesso e comando)
+  const casos = [["pt", ["config", "configurações", "configuracoes"], /^📖 Ajuda — &config\n\*\*Uso:\*\* `&config \[log\|idioma[\s\S]*mostra \*\*todas\*\* as configurações/],
+    ["en", ["config", "settings"], /^📖 Help — &config\n\*\*Usage:\*\* `&config \[log\|language[\s\S]*shows \*\*all\*\* of the server's settings/],
+    ["es", ["config", "configuración", "configuracion"], /^📖 Ayuda — &config\n\*\*Uso:\*\* `&config \[log\|idioma[\s\S]*muestra \*\*toda\*\* la configuración/]];
   for (const [lang, palavras, esperado] of casos) {
     const sid = await servidorNovo(lang);
     for (const p of palavras) assert.match((await say(`&help ${p}`, sid)).texto, esperado, `${lang} &help ${p}`);
@@ -17017,8 +16358,10 @@ await t("`&help config` abre a página do &config (todas as configurações do s
 });
 await t("`&help tutorial` em inglês: os apelidos com o nome deles (antes: \"`&tutorial` and `&tutorial`\")", async () => {
   const r = (await say("&help tutorial", await servidorNovo("en"))).texto;
-  assert.match(r, /Also answers to \*\*guide\*\* and \*\*start\*\*/);
+  // (31 out 2026, P2) a ajuda mostra só o nome principal: nenhum apelido na página (nem repetido)
+  assert.match(r, /^📖 Help — &tutorial/);
   assert.ok(!r.includes("`&tutorial` and `&tutorial`"));
+  assert.ok(!/\*\*guide\*\*|`&guide`|answers to/i.test(r), r);
 });
 // (21 out 2026, etapa 4b) os ajudantes que devolvem texto num idioma aceitam "es" — os
 // lotes do espanhol chamavam `descreverErro(e, "en")`, `nomeModo(m, "en")`… dentro do
@@ -17031,9 +16374,12 @@ await t("espanhol (etapa 4b): os ajudantes de texto falam espanhol (erro, duraç
   const { validarUrlImagem } = await import("./modulos/core/midia.js");
   assert.equal(descreverErro({ type: "NotFound" }, "es"), "miembro o rol no encontrado");
   assert.equal(duracaoTexto(2 * 86400000, "es"), "2 días");
-  // no espanhol, o nome que se digita é o do inglês — nunca o português
-  assert.equal(nomes.nomeModo("acumular", "es"), "stack");
-  assert.equal(nomes.nomeGrupo("antiruido", "es"), "antinoise");
+  // (31 out 2026, P2 revisão, R5) o espanhol tem os nomes dele no registro (e eles se digitam): nem o
+  // inglês nem o português — `acumular` é a palavra espanhola; o grupo `antiruido` também
+  assert.equal(nomes.nomeModo("acumular", "es"), "acumular");
+  assert.equal(nomes.nomeModo("banir", "es"), "banear");
+  assert.equal(nomes.nomeGrupo("sentinela", "es"), "centinela");
+  assert.equal(nomes.nomeGrupo("antiruido", "es"), "antiruido");
   assert.equal(nomes.nomeModo("acumular", "pt"), "acumular");
   assert.match(validarUrlImagem("").motivoEs, /falta el enlace/);
   assert.match(validarUrlImagem("http://exemplo.com/x.png").avisoEs, /sin cifrado/);
@@ -17050,21 +16396,25 @@ await t("espanhol (etapa 4b): os ajudantes de texto falam espanhol (erro, duraç
   });
   assert.deepEqual(ruins, []);
 });
-await t("espanhol (etapa 4b): o RPG mostra raridade, vaga e tipo em espanhol — e o embed do jogo não os devolve ao inglês", async () => {
-  const es = (await say("&game catalogo", await servidorNovo("es"))).texto;
-  assert.match(es, /\*\*Común\*\*/);
-  assert.match(es, /\*\*Poco común\*\*/);
-  // "Raro"/"Épico" são iguais em pt e es: a tradução do embed do jogo os levava a "Rare"/"Epic"
-  assert.match(es, /\*\*Raro\*\*/);
-  assert.match(es, /\*\*Épico\*\*/);
-  const en = (await say("&game catalog", await servidorNovo("en"))).texto;
-  assert.match(en, /\*\*Common\*\*/);
-  assert.match(en, /\*\*Rare\*\*/);
+await t("espanhol (etapa 4b): o RPG mostra builds, raridades e o catálogo em espanhol — e a tela não os devolve ao inglês", async () => {
+  // (31 out 2026, P2) o catálogo por raridade saiu (a loja mostra só o que melhora a build); os
+  // rótulos (raridade etc.) moram em dados/rotulos.json e as builds em dados/builds.json
+  const TL = await import("./modulos/game/telas.js");
+  assert.deepEqual(["comum", "incomum", "raro", "epico"].map((r) => TL.raridade(r, "es")), ["Común", "Poco común", "Raro", "Épico"]);
+  assert.deepEqual(["comum", "raro"].map((r) => TL.raridade(r, "en")), ["Common", "Rare"]);
+  const es = await servidorNovo("es");
+  await say("&game criar Kael", es);
+  const b = (await say("&game build", es)).texto;
+  for (const n of ["**Guerrero**", "**Paladín**", "**Pícaro**", "**Marine espacial**", "**Afortunado**"]) assert.ok(b.includes(n), n);
+  assert.doesNotMatch(b, /Warrior|Rogue|Lucky/);
+  const en = (await say("&game build", await servidorNovo("en"))).texto;
+  for (const n of ["**Warrior**", "**Paladin**", "**Rogue**"]) assert.ok(en.includes(n), n);
 });
 await t("espanhol (etapa 4b): `&idioma es` não diz mais que as respostas saem em inglês", async () => {
   const sid = await servidorNovo("pt");
   const r = (await say("&idioma es", sid)).texto;
-  assert.match(r, /respondo en \*\*español\*\*/);
+  // (31 out 2026, P2, R1/R2) só o resultado: o idioma escolhido, sem a frase de rodapé
+  assert.match(r, /^🌐 Idioma: Español 🇪🇸/);
   assert.doesNotMatch(r, /todavía salen en inglés mientras se traducen|siguen en inglés/);
 });
 // (21 out 2026, etapa 4b) a marca de "texto pronto" (U+2063/U+2064) só serve à tradução
@@ -17182,7 +16532,7 @@ await t("desligar (`&privacidade memoria off`) apaga o que a Judy sabia, em todo
   db.addFatoPessoa("OUTRO-SERVIDOR", "BIA", "mora em Madri", 0.5, "info");
   db.setCuidado(SID, "BIA", true);
   const r = await diz("BIA", "&privacidade memoria off");
-  assert.match(r, /Memória desligada[\s\S]*apaguei \d+ registro/);
+  assert.match(r, /Memória desligada — \d+ registro\(s\) apagado\(s\)\./);   // (31 out 2026, P2) saída mínima: uma linha
   assert.equal(fatos("BIA"), 0);
   assert.equal(db.getPerfil(SID, "BIA")?.cuidado, 1);
   assert.equal(db.temMemoriaConsentida("BIA"), false);
@@ -17243,13 +16593,16 @@ await t("sem consentimento, o que ficou no banco não chega ao modelo (memória 
 });
 
 console.log("\n── perfil: só o seu ──");
-await t("`&chat mapear @outra` e `&chat perfil @outra` são recusados (era o scraping de perfil que a regra do Stoat proíbe)", async () => {
+// (31 out 2026, P2) mapear e perfil foram do &chat para o &privacidade (o caminho
+// velho, `&chat mapear`, é atalho para cá — conferido na p2-ia)
+await t("`&privacidade mapear @outra` e `&privacidade perfil @outra` são recusados (era o scraping de perfil que a regra do Stoat proíbe)", async () => {
   for (const sub of ["mapear", "perfil"]) {
-    const r = await diz("BIA", `&chat ${sub} <@ANA>`);
+    const r = await diz("BIA", `&privacidade ${sub} <@ANA>`);
     assert.match(r, /🔒 Só o seu/, sub);
+    assert.match(await diz("BIA", `&privacidade ${sub} ANA`.replace("ANA", "01KHBPN31QT1THM1A0CEM8JA91")), /🔒 Só o seu/, `${sub} pelo ID`);
   }
   assert.equal(db.getPerfil(SID, "ANA"), null, "nada foi capturado");
-  assert.doesNotMatch(await diz("BIA", "&chat perfil"), /Só o seu/, "o próprio continua valendo");
+  assert.doesNotMatch(await diz("BIA", "&privacidade perfil"), /Só o seu/, "o próprio continua valendo");
 });
 
 console.log("\n── histórico: 24 h, e o fio global de quem escolheu ──");
@@ -17288,7 +16641,8 @@ await t("`&privacidade apagar` pede código; com o código certo apaga IA, XP, s
   db.gravarPunicao(SID, "ANA", { avisos: 2, motivo: "flood" });
   B.prepare("INSERT INTO bans_globais (userId, serverId, motivo, origem, criadoEm) VALUES ('ANA', ?, 'raid', 'manual', 1)").run(SID);
   const pedido = await diz("ANA", "&privacidade apagar");
-  assert.match(pedido, /Apagar tudo o que é seu\?[\s\S]*XP e nível: \*\*1\*\*[\s\S]*saldo da economia: \*\*1\*\*[\s\S]*Fica: avisos, punições/);
+  // (31 out 2026, P2) o título diz que é em todos os servidores; o prazo vem com carimbo
+  assert.match(pedido, /Apagar tudo o que é seu, em todos os servidores\?[\s\S]*XP e nível: \*\*1\*\*[\s\S]*saldo da economia: \*\*1\*\*[\s\S]*Fica: avisos, punições[\s\S]*até <t:\d+:t>/);
   const codigo = pedido.match(/apagar confirmar ([0-9A-F]{4})/)?.[1];
   assert.ok(codigo, pedido);
   assert.match(await diz("ANA", "&privacidade apagar confirmar 0000"), /Código errado/);
@@ -17403,11 +16757,12 @@ await t("a política de privacidade existe nos três idiomas e o `&privacidade` 
 console.log("\n── P3: XP com aviso, e cada membro escolhe ──");
 await t("ligar o XP avisa os membros (como sair, e o &privacidade) — uma vez, não a cada `on`", async () => {
   const r = await diz("DONO", "&xp on");
-  assert.match(r, /Sistema \*\*ativado 🟢\*\*[\s\S]*🎮 O XP foi ligado neste servidor[\s\S]*`&xp sair` — o seu XP é apagado e deixa de contar[\s\S]*`&privacidade` mostra tudo/);
+  // (31 out 2026, P2) o liga/desliga responde numa linha, e sair do XP mora no `&privacidade xp sair` (o `&xp sair` é atalho de lá)
+  assert.match(r, /🎮 XP ligado 🟢\.\n🎮 O XP foi ligado neste servidor[\s\S]*`&privacidade xp sair` — o seu XP é apagado e deixa de contar[\s\S]*`&privacidade` mostra tudo/);
   assert.doesNotMatch(await diz("DONO", "&xp on"), /O XP foi ligado neste servidor/, "já estava ligado");
   const niv = await import("./modulos/ferramentas/nivel.js");
-  assert.match(niv.avisoXpLigado("en", "&").description, /`&xp leave`[\s\S]*`&privacy`/);
-  assert.match(niv.avisoXpLigado("es", "&").description, /`&xp salir`[\s\S]*`&privacidad`/);
+  assert.match(niv.avisoXpLigado("en", "&").description, /`&privacy xp leave`[\s\S]*`&privacy`/);   // (31 out 2026, P2) o caminho novo
+  assert.match(niv.avisoXpLigado("es", "&").description, /`&privacidad xp salir`[\s\S]*`&privacidad`/);
 });
 await t("`&xp sair` apaga o XP da pessoa e ele para de contar; `&xp entrar` volta, do zero", async () => {
   await diz("CAIO", "uma mensagem qualquer que conta xp");
@@ -17416,7 +16771,10 @@ await t("`&xp sair` apaga o XP da pessoa e ele para de contar; `&xp entrar` volt
   assert.equal(db.getXp(SID, "CAIO").xp, 0);
   await diz("CAIO", "outra mensagem que não deve contar");
   assert.equal(db.getXp(SID, "CAIO").xp, 0, "fora, não conta");
-  assert.match(await diz("CAIO", "&privacidade"), /XP neste servidor: \*\*fora\*\* \(não conta\) — `&xp entrar`/);
+  // (31 out 2026, P2) o status mostra só o estado (R2: a dica do comando mora no &help)
+  const st = await diz("CAIO", "&privacidade");
+  assert.match(st, /XP neste servidor: \*\*fora\*\* \(não conta\)/);
+  assert.doesNotMatch(st, /— `&xp/);
   assert.match(await diz("CAIO", "&xp entrar"), /🎮 De volta ao XP/);
   await diz("CAIO", "e esta volta a contar");
   assert.ok(db.getXp(SID, "CAIO").xp > 0, "voltou a contar");
@@ -17440,7 +16798,8 @@ await t("`&log relatorio on|off`: começa desligado; ligado, o servidor entra no
   assert.equal(relat.modoDe(ALHEIO), "anonimo");
   c.servers.delete(ALHEIO);
   const r = await diz("DONO", "&log relatorio on");
-  assert.match(r, /Relatório de ataques ligado 🟢[\s\S]*anônimos[\s\S]*`&log relatorio off`/);
+  // (31 out 2026, P2, R1/R2) só o resultado; o que vai no relatório está no `&help config log`
+  assert.match(r, /Relatório anônimo de ataques: \*\*ligado 🟢\*\*/);
   assert.equal(storeP.configDoServidor(SID).relatorioDono, true);
   assert.match(await diz("DONO", "&log relatorio off"), /desligado 🔴/);
   assert.equal(storeP.configDoServidor(SID).relatorioDono, false);
@@ -17457,14 +16816,18 @@ await t("a lista de novidades: ids únicos, a mais nova primeiro, cada uma nos t
   // os comandos no texto viram o nome no idioma do servidor (nada de `{&…}` cru)
   const emb = (l) => nov.embedNovidades(nov.NOVIDADES.filter((n) => n.id === "2026-10-20-privacidade"), l, "&", {}).description;
   for (const l of ["pt", "en", "es"]) assert.ok(!emb(l).includes("{&"), `${l}: marcador cru`);
-  assert.ok(emb("pt").includes("`&privacidade apagar`") && emb("pt").includes("`&log relatorio on`"));
-  assert.ok(emb("en").includes("`&privacy delete`") && emb("en").includes("`&xp leave`"));
-  assert.ok(emb("es").includes("`&privacidad borrar`") && emb("es").includes("`&log actualizaciones on`"));
+  // (P2) `&log` virou `&config log`: a citação antiga mostra o caminho novo
+  assert.ok(emb("pt").includes("`&privacidade apagar`") && emb("pt").includes("`&config log relatorio on`"));
+  // (P2) o `&xp sair` virou atalho do &privacidade (área da IA): a citação antiga mostra o caminho novo
+  assert.ok(emb("en").includes("`&privacy delete`") && emb("en").includes("`&privacy xp leave`"));
+  assert.ok(emb("es").includes("`&privacidad borrar`") && emb("es").includes("`&config log actualizaciones on`"));
   // e o main.js chama na subida: nesta (a primeira deste banco) só gravou a marca
   const storeP = await import("./modulos/core/config-store.js");
   assert.equal(storeP.getGlobal().novidadesAnunciadas, nov.NOVIDADES[0].id);
 });
-await t("na subida: a 1ª vez só grava a marca; depois, anuncia o que é novo SÓ onde ligaram `&log atualizacoes on`, no idioma do servidor, uma vez", async () => {
+// (31 out 2026, P2, decisão do Ghieh) as novidades vão a TODO canal de log (saiu o `&log atualizacoes on|off`);
+// o resto da regra fica: uma vez, no idioma do servidor, nunca no canal de outro servidor
+await t("na subida: a 1ª vez só grava a marca; depois, anuncia o que é novo no log de cada servidor, no idioma dele, uma vez", async () => {
   const nov = await import("./modulos/ferramentas/novidades.js");
   const lista = [{ id: "n3", data: "2026-10-22", pt: "terceira pt", en: "third en", es: "tercera es" },
     { id: "n2", data: "2026-10-21", pt: "segunda pt", en: "second en", es: "segunda es" },
@@ -17484,22 +16847,24 @@ await t("na subida: a 1ª vez só grava a marca; depois, anuncia o que é novo S
   assert.equal(g.novidadesAnunciadas, "n3"); assert.equal(enviados.length, 0);
   g.novidadesAnunciadas = "n1";
   const r = await nov.anunciar(base);
-  assert.deepEqual(r, { enviados: 1, novas: 2 });
-  assert.equal(enviados[0][0], "CA");
+  assert.deepEqual(r, { enviados: 2, novas: 2 });
+  assert.deepEqual(enviados.map((x) => x[0]), ["CA", "CB"], "o canal de outro servidor (CC) nunca");
   assert.match(enviados[0][1].title, /Novedades de Judy/);
-  assert.match(enviados[0][1].description, /tercera es[\s\S]*segunda es[\s\S]*`&log actualizaciones off`/);
+  assert.match(enviados[0][1].description, /tercera es[\s\S]*segunda es/);
+  assert.doesNotMatch(enviados[0][1].description, /actualizaciones off/, "sem o rodapé de desligar (não há mais opção)");
+  assert.match(enviados[1][1].description, /terceira pt[\s\S]*segunda pt/);
   assert.doesNotMatch(enviados[0][1].description, /primera/);
   assert.equal(g.novidadesAnunciadas, "n3");
   assert.deepEqual(await nov.anunciar(base), { enviados: 0, novas: 0 }, "não repete");
-  assert.equal(enviados.length, 1);
+  assert.equal(enviados.length, 2);
 });
-await t("`&log atualizacoes on|off`: começa desligado e liga como os outros eventos", async () => {
-  assert.match(await diz("DONO", "&log"), /🔴 \*\*atualizacoes\*\* — novidades da Judy a cada atualização/);
-  await diz("DONO", "&log atualizacoes on");
+// (31 out 2026, P2) saiu o toggle: o `&log atualizacoes` não liga nem desliga nada (as novidades vão sempre)
+await t("`&log atualizacoes`: sai da tela do &log e não muda nada — as novidades vão sempre ao log", async () => {
   const storeP = await import("./modulos/core/config-store.js");
-  assert.equal(storeP.configDoServidor(SID).log.eventos.atualizacoes, true);
-  await diz("DONO", "&log atualizacoes off");
-  assert.equal(storeP.configDoServidor(SID).log.eventos.atualizacoes, false);
+  assert.doesNotMatch(await diz("DONO", "&log"), /atualizacoes/);
+  const antes = JSON.stringify(storeP.configDoServidor(SID).log);
+  assert.match(await diz("DONO", "&log atualizacoes off"), /As novidades da Judy vão sempre ao canal de log/);
+  assert.equal(JSON.stringify(storeP.configDoServidor(SID).log), antes, "nada foi gravado");
 });
 
 console.log("\n── P3: servidor novo com todos os módulos desligados ──");
@@ -17519,7 +16884,9 @@ await t("mesmo com um molde antigo todo ligado no banco, o servidor novo (e o &r
   for (const cfg of [store.configDoServidor("01KAAAAAAAAAAAAAAAAAAANOVO"), store.configDeFabrica()]) {
     const ligados = Object.entries(cfg.automod).filter(([, v]) => v?.enabled).map(([k]) => k);
     assert.deepEqual(ligados, []);
-    assert.equal(cfg.xp.enabled, false); assert.equal(cfg.moderacaoIA.ativa, false); assert.equal(cfg.banGlobal.modo, "off");
+    // (31 out 2026, P2) `moderacaoIA` saiu do padrão com o &modia: do molde antigo ela vem desligada; da fábrica, nem existe
+    assert.equal(cfg.xp.enabled, false); assert.equal(cfg.moderacaoIA?.ativa ?? false, false); assert.equal(cfg.banGlobal.modo, "off");
+    assert.ok(!("moderacaoIA" in store.padraoServidor), "o padrão voltou a ter a moderação por IA do &modia");
     assert.deepEqual(cfg.chatLivre.canais, []); assert.equal(cfg.comentarioEspontaneo.canalId, null);
     for (const k of ["boasVindas", "adeus", "tts"]) assert.ok(!cfg[k]?.ativo, k);
     assert.equal(cfg.relatorioDono, false, "o relatório de ataques ao dono (P4)");
@@ -17772,9 +17139,10 @@ await t("★ segue para o assistente completo SEM perguntar staff, registro, boa
   m = await A.say("sim");
   assert.match(A.titulo(m), /Resumo/);
   const r = A.desc(m);
-  assert.match(r, new RegExp(`&log canal ${A.canalPorNome("registro").id}`));
+  // (31 out 2026, P2) o assistente gera o caminho principal: `&config log canal`, `&staff add`
+  assert.match(r, new RegExp(`&config log canal ${A.canalPorNome("registro").id}`));
   assert.match(r, new RegExp(`&boasvindas canal ${A.canalPorNome("boas-vindas").id}`));
-  assert.match(r, new RegExp(`&acesso cargo add ${A.cargoPorNome("Moderação")}`));
+  assert.match(r, new RegExp(`&staff add ${A.cargoPorNome("Moderação")}`));
   assert.match(r, new RegExp(`&autorole set ${A.cargoPorNome("Membro")}`), "o cargo automático é o Membro que já existia");
   m = await A.say("confirmar");
   assert.match(A.titulo(m), /Pronto/);
@@ -17904,7 +17272,9 @@ await t("canal que não existe: avisa e não grava", async () => {
 await t("o `&config` mostra o canal de divulgação", async () => {
   await G.say("&automod whitelist add #divulgacao");
   await G.say("&config");
-  assert.match(G.tudo(), /<#01JD1VVGACA0000000000000AB> _\(convites\)_/);
+  // (P2) a tela sai do padraoServidor: o canal aparece em "Convites — canais liberados", em qualquer página
+  const { telaDoConfig } = await import("./modulos/moderacao/config-comando.js");
+  assert.match(telaDoConfig(G.config, { lang: "pt" }).linhas.join("\n"), /\*\*Convites\*\* — [^\n]*canais liberados <#01JD1VVGACA0000000000000AB>/);
 });
 await t("canal de outro servidor (molde antigo) sai da lista sozinho", () => {
   const cfg = cfgNova(); cfg.automod.antiInvite.canaisLiberados = ["CH_DE_OUTRO", "CH_DIV"];
@@ -17936,7 +17306,7 @@ for (const f of [DB, DB + "-wal", DB + "-shm", "/tmp/iaps21.json"]) fs.rmSync(f,
 const CASA = "01KCASA0000000000000000SRV";
 Object.assign(process.env, { BOT_TOKEN: "tok", DB_PATH: DB, CONFIG_PATH: "/tmp/iaps21.json", SUPER_ADMINS: "DONOBOT",
   LLM_URL: "http://localhost:8097", IA_SERVICO_URL: "http://ia.teste", CHAT_SERVIDORES: `*,${CASA}`, BUSCA_ATIVA: "false",
-  AUTUMN_URL: "http://autumn.teste", CHAT_ANTI_ABUSO: "1", CHAT_LIVRE_COOLDOWN: "0" });
+  AUTUMN_URL: "http://autumn.teste", CHAT_ANTI_ABUSO: "1", CHAT_LIVRE_COOLDOWN: "0", IMAGEM: "1" });   // (31 out 2026, P2) o gerador só existe com IMAGEM=1
 delete process.env.CHAT_PADRAO;
 // o LLM e o serviço de IA de mentira: guardam cada pedido
 const pedidosLLM = [], pedidosServico = [];
@@ -17999,6 +17369,11 @@ function montarServidor(sid, lang = "pt") {
   return { sid, canalId, canal, server, diz, config: () => store.configDoServidor(sid) };
 }
 const conversas = () => pedidosLLM.filter((p) => !p.response_format).length;
+// (31 out 2026, P2) o &chat saiu: os caminhos velhos são atalhos; a tela cita o caminho
+// NOVO, que o citar() do registro dá — a asserção segue o registro (e falha se o atalho sumir)
+const { citar: citarReg } = await import("./modulos/core/aliases.js");
+const CI = (ref, l = "pt") => citarReg(ref, l).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const paginasDe = (n0) => idsEnviados.slice(n0).map((id) => db.carregarSessaoPaginas(id)?.paginas ?? []).flat().map((e) => `${e.title ?? ""}\n${e.description ?? ""}`).join("\n");
 
 let ok = 0, falhou = 0;
 const t = async (nome, fn) => { antiAbuso._zerar(); try { await fn(); console.log(`  ✅ ${nome}`); ok++; } catch (e) { console.log(`  ❌ ${nome}\n     ${String(e.message).split("\n").join("\n     ")}`); falhou++; } };
@@ -18011,20 +17386,22 @@ await t("★ servidor que não escolheu: chat DESLIGADO — a menção nem chega
   await A.diz("ANA", `<@${BOT}> oi, tudo bem?`);
   assert.equal(conversas(), 0);
 });
-await t("`&chat <pergunta>` com o chat desligado diz como ligar (sem chamar o modelo)", async () => {
+// (31 out 2026, P2) `&chat <pergunta>` é atalho de conversa (o main.js chama o
+// conversarPorAtalho); `&chat on|off` leva ao liga/desliga do &config (conversa-config.js)
+await t("`&chat <pergunta>` com o chat desligado diz numa linha que está desligado (sem chamar o modelo)", async () => {
   pedidosLLM.length = 0;
   const r = await A.diz("ANA", "&chat oi, tudo bem?");
-  assert.match(r, /Chat desligado aqui[\s\S]*&chat on/);
+  assert.match(r, /^\n?💤 A conversa com a Judy está desligada neste servidor\.$/);
   assert.equal(conversas(), 0);
 });
-await t("membro sem ManagePermissions não liga", async () => {
+await t("membro sem ManagePermissions não liga (nem pelo caminho velho)", async () => {
   const r = await A.diz("ANA", "&chat on");
-  assert.match(r, /Permissão insuficiente/);
+  assert.match(r, /🚫 Pede \*\*ManagePermissions\*\*/);
   assert.equal(chat.chatLigadoAqui(A.sid), false);
 });
 await t("★ a staff liga com `&chat on` — e a menção passa a ser respondida", async () => {
   const r = await A.diz("DONO", "&chat on");
-  assert.match(r, /Chat ligado/);
+  assert.match(r, /💬 Conversa com a Judy: ligada\./);
   assert.equal(A.config().ia.chat, true);
   pedidosLLM.length = 0;
   await A.diz("ANA", `<@${BOT}> oi, tudo bem?`);
@@ -18050,8 +17427,10 @@ await t("CHAT_PADRAO=on: quem não escolheu começa ligado (o jeito antigo, para
 await t("o `&config` mostra o chat e a imagem do servidor", async () => {
   idsEnviados.length = 0;
   const r = (await A.diz("DONO", "&config")) + todasAsPaginas();
-  assert.match(r, /Chat: 🟢 ligado/);
-  assert.match(r, /Geração de imagem: 🔴 desligada — `&chat imagem on`/);
+  // (31 out 2026, P2) a tela do &config (gerada do padraoServidor) mostra o que vale de
+  // fato: a conversa ligada e a imagem desligada, na linha da IA; e nada cita o &chat velho
+  assert.match(r, /🤖 \*\*IA \(Judy\):\*\* conversa 🟢 · geração de imagem 🔴/);
+  assert.doesNotMatch(r, /`&chat /);
 });
 
 await t("★ o resumo da Judy no RSS segue a escolha do servidor (sem escolha: só a casa)", async () => {
@@ -18072,7 +17451,7 @@ await t("★ imagem desligada: o gerador nem é chamado, e o serviço recebe `se
 });
 await t("★ `&chat imagem on`: o gerador é chamado", async () => {
   const r = await A.diz("DONO", "&chat imagem on");
-  assert.match(r, /Geração de imagem ligada/);
+  assert.match(r, /🎨 Geração de imagem: ligada\./);
   pedidosServico.length = 0;
   await A.diz("BIA", `<@${BOT}> desenhe um gato astronauta em estilo anime`);
   assert.ok(pedidosServico.some((p) => /ferramenta/.test(p.rota) && p.corpo?.nome === "gerar_imagem"));
@@ -18089,8 +17468,8 @@ await t("o serviço de IA recusa o gerar_imagem com `semImagem`, mesmo se o mode
 
 console.log("\n── cada pessoa: \"não fale comigo\" ──");
 await t("★ `&chat sair`: a menção é ignorada e o que a pessoa escreve não vai para o fio do canal", async () => {
-  const r = await A.diz("CAIO", "&chat sair");
-  assert.match(r, /não conversa mais com você/);
+  const r = await A.diz("CAIO", "&chat sair");   // (P2) atalho do `&privacidade chat sair`
+  assert.match(r, /🤐 A Judy não conversa mais com você\./);
   pedidosLLM.length = 0;
   await A.diz("CAIO", `<@${BOT}> me responde?`);
   assert.equal(conversas(), 0);
@@ -18099,7 +17478,8 @@ await t("★ `&chat sair`: a menção é ignorada e o que a pessoa escreve não 
 });
 await t("e `&chat <pergunta>` explica (uma vez) como voltar", async () => {
   const r = await A.diz("CAIO", "&chat oi?");
-  assert.match(r, /Você pediu para eu não conversar com você[\s\S]*&chat voltar/);
+  // (31 out 2026, P2) uma linha, com o caminho novo
+  assert.match(r, /🤐 Você pediu para eu não conversar com você \(`&privacidade chat voltar`\)\./);
 });
 await t("`&chat voltar` desfaz", async () => {
   await A.diz("CAIO", "&chat voltar");
@@ -18274,45 +17654,63 @@ console.log("\n── a ajuda num servidor que ainda não ligou o chat (22 out 2
 // Ghieh testou num servidor qualquer: `&help chat` → "🚫 Não existe aqui". A ajuda
 // decidia pelo `servidorPermitido` (IA disponível E chat LIGADO); desde o opt-in o
 // chat começa desligado, e o `&chat` — o comando que liga — sumia da ajuda.
-await t("★ chat desligado: `&help chat` mostra a página (com o `&chat on`), não \"Não existe aqui\"", async () => {
+// (31 out 2026, P2) o &chat saiu: a página que explica como falar com a Judy é a do
+// &privacidade (para todos), e o liga/desliga é citado pelo caminho novo (o &config)
+await t("★ chat desligado: `&help privacidade` explica como falar com a Judy e o `chat sair` (para todos)", async () => {
+  const H = montarServidor("01KSRVH100000000000000SRVH");
+  for (const autor of ["DONO", "ANA"]) {
+    const n0 = idsEnviados.length;
+    const r = (await H.diz(autor, "&help privacidade")) + paginasDe(n0);   // (a página tem 3 folhas)
+    assert.doesNotMatch(r, /Não existe aqui|não está disponível/, autor);
+    assert.match(r, /chame-a\s+pelo\s+nome,\s+mencione-a\s+ou\s+responda\s+a\s+uma\s+mensagem\s+dela/, autor);   // (a tela quebra as linhas)
+    assert.match(r, /`&privacidade chat sair`/, autor);
+  }
+});
+await t("★ chat desligado: `&help chat sair` (o caminho velho) abre a página nova, não \"Não existe aqui\"", async () => {
   const H = montarServidor("01KSRVH000000000000000SRVH");
   assert.equal(chat.chatLigadoAqui(H.sid), false, "o servidor ainda não escolheu");
   for (const autor of ["DONO", "ANA"]) {
-    const r = await H.diz(autor, "&help chat");
+    const r = await H.diz(autor, "&help chat sair");
     assert.doesNotMatch(r, /Não existe aqui|não está disponível/, autor);
-    assert.match(r, /chat/i, autor);
+    assert.match(r, /`&privacidade chat sair`/, autor);
   }
-  assert.match(await H.diz("DONO", "&help chat"), /chat on/);
 });
 await t("★ chat desligado: o índice do `&help` lista o `&chat` para a staff, e o `&sobre` diz que a IA está aqui", async () => {
   const H = montarServidor("01KSRVI000000000000000SRVI");
-  assert.match(await H.diz("DONO", "&help"), /conversa com a Judy/, "o resumo do grupo cita a Judy");
-  await H.diz("DONO", "&help diversao");
-  assert.match(todasAsPaginas(), /`&chat <mensagem>`/);
+  // (31 out 2026, P2) o índice lista os comandos do grupo: o &privacidade (onde está o "como falar com a Judy") no Começar
+  assert.match(await H.diz("DONO", "&help"), /🚀 \*\*Começar\*\* — [^\n]*`&privacidade`/, "o índice leva ao &privacidade");
+  // (31 out 2026, P2) o &chat saiu: como falar com a Judy está no &privacidade; o
+  // liga/desliga é citado pelo caminho novo (CI: o que o registro diz para o velho)
+  assert.match(await H.diz("DONO", "&help privacidade") + todasAsPaginas(), /chame-a\s+pelo\s+nome,\s+mencione-a\s+ou\s+responda\s+a\s+uma\s+mensagem\s+dela/);
   const sobre = await H.diz("DONO", "&sobre");
-  assert.match(sobre, /IA \(Judy\)\*\* — disponível, mas desligada neste servidor: a staff liga com `&chat on`/);
+  // (o &info do registro cita o liga/desliga pelo &assistente, que chama o mesmo cmdConfigIA)
+  assert.match(sobre, new RegExp(`IA \\(Judy\\)\\*\\* — disponível, desligada neste servidor \\(\`${CI("assistente.ia")} on\`\\)`));
   assert.doesNotMatch(sobre, /habilitada aqui/);
-  // e a linha do `&chat on` só para a staff
-  const n0 = idsEnviados.length;
-  const direto = await H.diz("ANA", "&help diversao");
-  const daAna = idsEnviados.slice(n0).map((id) => db.carregarSessaoPaginas(id)?.paginas ?? []).flat().map((e) => `${e.title ?? ""}\n${e.description ?? ""}`).join("\n") + direto;
-  assert.match(daAna, /`&chat <mensagem>`/, "o membro vê o &chat");
-  assert.doesNotMatch(daAna, /`&chat on\|off`/, "mas não o liga/desliga");
+  // e o liga/desliga (o caminho novo) só para a staff; ninguém vê mais o `&chat` velho
+  const ajudaToda = async (autor) => { let s = ""; for (const g of ["comecar", "proteger", "personalizar", "diversao", "diagnostico"]) { const n = idsEnviados.length; s += (await H.diz(autor, `&help ${g}`)) + paginasDe(n); } return s; };
+  const daAna = await ajudaToda("ANA"), doDono = await ajudaToda("DONO");
+  assert.doesNotMatch(daAna + doDono, /`&chat[ `]/, "a ajuda não cita mais o &chat");
+  // (P2) a ajuda do registro é uma só para todos: o liga/desliga mora na página `&help config ia`
   const n1 = idsEnviados.length;
-  const doDono = (await H.diz("DONO", "&help diversao")) + idsEnviados.slice(n1).map((id) => db.carregarSessaoPaginas(id)?.paginas ?? []).flat().map((e) => e.description ?? "").join("\n");
-  assert.match(doDono, /`&chat on\|off` · `&chat imagem on\|off`/);
+  const pg = (await H.diz("DONO", "&help config ia")) + paginasDe(n1);
+  assert.match(pg, /`&config ia chat on\|off`/); assert.match(pg, /`&config ia imagem on\|off`/);
+  assert.match(pg, new RegExp(CI("chat.on").replace(/ on$/, "")));
   const n2 = idsEnviados.length;
-  const tut = (await H.diz("DONO", "&tutorial ia")) + idsEnviados.slice(n2).map((id) => db.carregarSessaoPaginas(id)?.paginas ?? []).flat().map((e) => e.description ?? "").join("\n");
-  assert.match(tut, /\*\*Ligar:\*\* `&chat on`/, "o tutorial da IA aparece e ensina a ligar");
+  const tut = (await H.diz("DONO", "&tutorial")) + paginasDe(n2);
+  assert.match(tut, /E a Judy conversa, se a staff ligar\./, "o guia do tutorial diz que a Judy existe e que a staff liga");
+  assert.doesNotMatch(tut, /`&chat[ `]/);
 });
-await t("e onde a IA de conversa não existe (CONVERSA=0) continua \"Não existe aqui\"", async () => {
+// (31 out 2026, P2) sem a IA de conversa, `&chat …` não é conversa: "comando desconhecido"
+await t("e onde a IA de conversa não existe (CONVERSA=0), `&chat <pergunta>` não existe", async () => {
   // (a lista do SERVIDOR é lida no arranque; CONVERSA=0 é lido na hora e tira a IA de conversa de todo lugar)
   const antes = process.env.CONVERSA;
   process.env.CONVERSA = "0";
   try {
     const H = montarServidor("01KSRVJ000000000000000SRVJ");
     assert.equal(chat.iaDisponivel(H.sid), false);
-    assert.match(await H.diz("DONO", "&help chat"), /Não existe aqui/);
+    pedidosLLM.length = 0;
+    assert.match(await H.diz("DONO", "&chat oi"), /Comando desconhecido/);
+    assert.equal(conversas(), 0);
   } finally { if (antes === undefined) delete process.env.CONVERSA; else process.env.CONVERSA = antes; }
 });
 
@@ -18325,16 +17723,24 @@ const PT = montarServidor("01KSRVPF00000000000000SRVP");
 const EN = montarServidor("01KSRVPG00000000000000SRVG", "en");
 const ESS = montarServidor("01KSRVPH00000000000000SRVH", "es");
 await t("★ &help: a privacidade no começo; o whitelist cita os canais; `&chat sair` para todos, `&chat on` e `comentar` só para a staff", async () => {
+  // (31 out 2026, P2) o índice do &help (registro) lista os comandos de cada grupo: o
+  // &privacidade no "Começar"; o resumo dele vem do registro, nos 3 idiomas
   const pt = await ver(PT, "DONO", "&help");
-  assert.match(pt, /`&privacidade` — o que o bot guarda sobre você/);
-  assert.match(pt, /`&automod whitelist` · `&automod blocklist` — convites e canais liberados/);
-  assert.match(await ver(EN, "DONO", "&help"), /`&privacy` — what the bot keeps about you/);
-  assert.match(await ver(ESS, "DONO", "&help"), /`&privacidad` — lo que el bot guarda sobre ti/);
-  for (const [S, sair, on, comentar] of [[PT, /`&chat sair` · `&chat voltar`/, /`&chat on\|off`/, /`&chat comentar/], [ESS, /`&chat salir` · `&chat volver`/, /`&chat on\|off`/, /`&chat comment/]]) {
-    const membro = await ver(S, "ANA", "&help diversao"), staff = await ver(S, "DONO", "&help diversao");
+  assert.match(pt, /🚀 \*\*Começar\*\* — [^\n]*`&privacidade`/);
+  assert.match(await ver(EN, "DONO", "&help"), /`&privacy`/);
+  assert.match(await ver(ESS, "DONO", "&help"), /`&privacidad`/);
+  assert.match(await ver(PT, "DONO", "&help comecar"), /`&privacidade`[^\n]*o que a Judy guarda sobre você/);
+  assert.match(await ver(PT, "DONO", "&help automod"), /whitelist/);
+  // (31 out 2026, P2) `chat sair` mora no &privacidade (para todos); o liga/desliga e o
+  // comentar, no caminho novo (só a staff)
+  const ajudaDe = async (S, autor) => { let s = await ver(S, autor, "&help privacidade"); for (const g of ["comecar", "proteger", "personalizar", "diversao", "diagnostico"]) s += await ver(S, autor, `&help ${g}`); return s; };
+  for (const [S, l, sair] of [[PT, "pt", /`&privacidade chat sair`/], [ESS, "es", /`&privacidad chat salir`/]]) {
+    const membro = await ajudaDe(S, "ANA"), staff = await ajudaDe(S, "DONO");
+    assert.doesNotMatch(membro + staff, /`&chat[ `]/);
     assert.match(membro, sair); assert.match(staff, sair);
-    assert.doesNotMatch(membro, on); assert.match(staff, on);
-    assert.doesNotMatch(membro, comentar); assert.match(staff, comentar);
+    // (P2) o liga/desliga e o comentar: na página `&help config ia` (a ajuda do registro é a mesma para todos)
+    const ia = await ver(S, "DONO", "&help config ia");
+    assert.match(ia, new RegExp(CI("chat.on", l).replace(/ on$/, ""))); assert.match(ia, new RegExp(CI("chat.comentar", l)));
   }
 });
 await t("★ &help: sem voz liberada, o cabeçalho \"Voz\" não fica sozinho (pt e es)", async () => {
@@ -18344,31 +17750,26 @@ await t("★ &help: sem voz liberada, o cabeçalho \"Voz\" não fica sozinho (pt
     assert.doesNotMatch(r, /`&(entrar|musica)/);
   }
 });
-await t("★ &tutorial: o wizard, o canal de divulgação e o `&chat on` nas páginas; o `&chat sair`, o ManagePermissions e o wizard nas áreas", async () => {
+// (31 out 2026, P2) o &tutorial virou o mini guia + conceitos (registro): as áreas
+// (ia, moderacao, ajustes) saíram; o que fica, nos 3 idiomas, sem o &chat velho
+await t("★ &tutorial: o guia diz que a Judy conversa se a staff ligar; permissões e canais com o wizard; nada do `&chat`", async () => {
   const guia = await ver(PT, "DONO", "&tutorial");
-  assert.match(guia, /Servidor novo, sem canais\? `&assistente servidor`/);
-  assert.match(guia, /Do zero: `&assistente servidor`/);
-  assert.match(guia, /\*\*Canal de divulgação:\*\* `&automod whitelist add #canal`/);
-  assert.match(guia, /\*\*Judy \(IA\):\*\* `&chat on` liga neste servidor/);
-  assert.match(await ver(PT, "DONO", "&tutorial ia"), /`&chat sair` — a Judy para de falar com você[\s\S]*`&privacidade`/);
+  assert.match(guia, /E a Judy conversa, se a staff ligar\./);
+  assert.match(guia, /`&assistente` — configuração guiada/);
   assert.match(await ver(PT, "DONO", "&tutorial permissoes"), /`ManagePermissions` — mexer nas permissões de canais e cargos \(`&assistente servidor`\)/);
   assert.match(await ver(PT, "DONO", "&tutorial canais"), /Servidor novo\? `&assistente servidor` cria cargos e canais já nos 3 tipos/);
-  assert.match(await ver(PT, "DONO", "&tutorial moderacao"), /\*\*Canal de divulgação:\*\* `&automod whitelist add #canal`/);
-  assert.match(await ver(PT, "DONO", "&tutorial ajustes"), /`&assistente servidor` — cria cargos e canais prontos/);
-  const en = await ver(EN, "DONO", "&tutorial");
-  assert.match(en, /Brand-new server, no channels yet\? `&assistant server`|Brand-new server, no channels yet\? `&[a-z]+ server`/);
-  assert.match(en, /\*\*Judy \(AI\):\*\* `&chat on` turns her on/);
-  const es = await ver(ESS, "DONO", "&tutorial");
-  assert.match(es, /¿Servidor nuevo, sin canales\? `&asistente servidor`/);
-  assert.match(es, /\*\*Canal de promoción:\*\* `&automod whitelist add #canal`/);
-  assert.match(await ver(ESS, "DONO", "&tutorial ia"), /`&chat salir` — Judy deja de hablarte/);
+  assert.match(await ver(EN, "DONO", "&tutorial"), /And Judy chats, if the staff turns it/);
+  assert.match(await ver(ESS, "DONO", "&tutorial"), /Y Judy conversa, si el staff lo activa/);
+  assert.match(await ver(ESS, "DONO", "&tutorial canais"), /¿Servidor nuevo\? `&asistente servidor` crea roles y canales/);
+  for (const [S, cmd] of [[PT, "&tutorial"], [EN, "&tutorial"], [ESS, "&tutorial"], [PT, "&tutorial permissoes"]]) assert.doesNotMatch(await ver(S, "DONO", cmd), /`&chat[ `]/);
 });
 await t("★ &debug: o chat e a imagem do servidor, a imagem sem visão, o ManagePermissions e o canal de divulgação", async () => {
   const antes = process.env.LLM_MODEL_VISAO; delete process.env.LLM_MODEL_VISAO; delete process.env.LLM_MODEL_MODERACAO;
   try {
     const desligado = await ver(PT, "DONO", "&debug");
-    assert.match(desligado, /chat desligado neste servidor — `&chat on` liga/);
-    assert.match(desligado, /geração de imagem desligada neste servidor — `&chat imagem on` liga/);
+    // (31 out 2026, P2) o caminho novo do liga/desliga
+    assert.match(desligado, new RegExp(`chat desligado neste servidor — \`${CI("chat.on")}\` liga`));
+    assert.match(desligado, new RegExp(`geração de imagem desligada neste servidor — \`${CI("chat.imagem")} on\` liga`));
     assert.match(desligado, /🔑 Permissões do bot\*\*\n🟢 [^\n]*`ManagePermissions`/, "a permissão do wizard está na conta");
     await PT.diz("DONO", "&chat on"); await PT.diz("DONO", "&chat imagem on");
     await PT.diz("DONO", "&automod whitelist add #geral");
@@ -18378,12 +17779,13 @@ await t("★ &debug: o chat e a imagem do servidor, a imagem sem visão, o Manag
     assert.match(ligado, /Divulgação \(convites liberados\): <#/);
     process.env.LLM_MODEL_VISAO = "visao";
     assert.match(await ver(PT, "DONO", "&debug"), /geração de imagem ligada \(cada imagem conferida pela visão\)/);
-    assert.match(await ver(ESS, "DONO", "&debug"), /chat desactivado en este servidor — `&chat on` lo activa/);
+    assert.match(await ver(ESS, "DONO", "&debug"), new RegExp(`chat desactivado en este servidor — \`${CI("chat.on", "es")}\` lo activa`));
   } finally { if (antes === undefined) delete process.env.LLM_MODEL_VISAO; else process.env.LLM_MODEL_VISAO = antes; }
 });
 await t("★ &sobre (o &info): IA disponível × ligada, e a imagem é a do servidor", async () => {
-  assert.match(await ver(EN, "DONO", "&info"), /AI \(Judy\)\*\* — available, but off on this server/);
-  assert.match(await ver(ESS, "DONO", "&sobre"), /IA \(Judy\)\*\* — disponible, pero desactivada en este servidor/);
+  // (31 out 2026, P2) o &info do registro: uma linha, com o liga/desliga pelo &assistente
+  assert.match(await ver(EN, "DONO", "&info"), new RegExp(`AI \\(Judy\\)\\*\\* — available, off on this server \\(\`${CI("assistente.ia", "en")} on\`\\)`));
+  assert.match(await ver(ESS, "DONO", "&sobre"), new RegExp(`IA \\(Judy\\)\\*\\* — disponible, desactivada en este servidor \\(\`${CI("assistente.ia", "es")} on\`\\)`));
   const ligado = await ver(PT, "DONO", "&sobre");   // (o PT ligou o chat e a imagem no teste anterior)
   assert.match(ligado, /IA \(Judy\)\*\* — habilitada aqui: .*e \*\*geração de imagens\*\*/);
   await PT.diz("DONO", "&chat imagem off");
@@ -18511,182 +17913,6 @@ await t("★ o wizard de servidor avisa quanto leva (e não avisa quando é pouc
   assert.equal(ritmo.segundosPara(5), 0); assert.equal(ritmo.segundosPara(60), 110);
 });
 console.log(`\nRITMO DA API (22 out): ${ok} ok, ${falhou} falha(s)`);
-process.exit(falhou ? 1 : 0);
-};
-
-// ════════════════════════════════════════════════════════════════════════════
-// duelo-28out — PvP no RPG: "um player pode abrir um duelo e apostar algo,
-// caso queira" (Ghieh, 28 out 2026). Respostas: no &game, aposta em moedas e/ou
-// itens, luta automática, quem perde só perde a aposta.
-// ════════════════════════════════════════════════════════════════════════════
-SUITES["duelo-28out"] = async () => {
-const fs = (await import("node:fs")).default;
-const assert = (await import("node:assert")).default;
-process.env.DB_PATH = "/tmp/duelo.db"; process.env.CONFIG_PATH = "/tmp/duelo.json";
-for (const f of ["/tmp/duelo.db", "/tmp/duelo.db-wal", "/tmp/duelo.db-shm", "/tmp/duelo.json"]) fs.rmSync(f, { force: true });
-const db = await import("./modulos/core/db.js"); db.abrirBanco(process.env.DB_PATH);
-const game = await import("./modulos/game/game.js");
-const DU = await import("./modulos/game/duelo.js");
-const { MUNDO } = await import("./modulos/game/mundo.js");
-const aliases = await import("./modulos/core/aliases.js");
-const q = [console.log, console.info, console.warn]; console.log = console.info = console.warn = () => {};
-game.iniciarCatalogo();
-[console.log, console.info, console.warn] = q;
-let ok = 0, falhou = 0;
-const t = async (nome, fn) => { try { await fn(); console.log(`  ✅ ${nome}`); ok++; } catch (e) { console.log(`  ❌ ${nome}\n     ${String(e.message).split("\n").join("\n     ")}`); falhou++; } };
-let ult = null, aleatorio = null;
-// (31 out 2026, P1) o servidor tem MEMBROS: o duelo só desafia quem é membro daqui;
-// `servidor: "S2"` joga de outro servidor (onde só a Cau e o Dio estão)
-const MEMBROS_DE = { S: null, S2: null };
-const jogar = async (uid, txt, { lang = "pt", mencoes = [], servidor = "S" } = {}) => {
-  const membros = MEMBROS_DE[servidor] ?? new Set([ANA, BIA, CAU, DIO]);
-  const ctx = { serverId: servidor, PREFIXO: "&", COR: { erro: 1, aviso: 2, sucesso: 3, info: 4, mod: 5 }, config: { language: lang },
-    sendEmbed: async (_c, e) => { ult = e; return { id: "m", react: async () => {} }; }, getServer: async () => ({ id: servidor, channels: [], fetchMember: async (id) => (membros.has(id) ? { id: { user: id, server: servidor } } : null) }),
-    ehSuperAdmin: () => false, membroTemPermissao: () => true, _aleatorioDuelo: aleatorio ?? undefined };
-  await game.cmdGame({ authorId: uid, author: { username: uid }, channel: { id: "C1" }, channelId: "C1", mentionIds: mencoes }, txt.split(" "), ctx);
-  return `${ult?.title}\n${ult?.description}`;
-};
-const ID = (n) => `01KDUELO${String(n).padStart(18, "0")}`;
-const [ANA, BIA, CAU, DIO] = [1, 2, 3, 4].map(ID);
-MEMBROS_DE.S2 = new Set([CAU, DIO]);
-for (const [u, n] of [[ANA, "Ana"], [BIA, "Bia"], [CAU, "Cau"]]) await jogar(u, `criar ${n}`);
-const ouro = (u) => db.getSaldo(MUNDO, u, "ouro");
-const umItemSolto = (u) => db.getInventario(MUNDO, u).find((i) => !db.slotDoItem(MUNDO, u, i.id));
-const umItemEquipado = (u) => Object.values(db.getEquipado(MUNDO, u))[0];
-db.creditar(MUNDO, ANA, "ouro", 500); db.creditar(MUNDO, BIA, "ouro", 500);
-
-console.log("── a luta ──");
-await t("★ dois iguais: ~50% cada, uns 10 golpes; e a luta tem começo, golpes e vidas", () => {
-  const a = { nome: "A", poder: 100, resil: 80, agilidade: 5 }, b = { nome: "B", poder: 100, resil: 80, agilidade: 5 };
-  const c = DU.chance(a, b);
-  assert.ok(c > 0.4 && c < 0.6, String(c));
-  const r = DU.simular(a, b, DU.semente(3));
-  assert.ok(r.golpes.length >= 4 && r.golpes.length <= DU.GOLPES_MAX, String(r.golpes.length));
-  assert.ok(r.vencedor === 0 || r.vencedor === 1);
-  assert.ok(r.fracao[1 - r.vencedor] <= 0 || r.golpes.length === DU.GOLPES_MAX, "acaba em nocaute ou no limite de golpes");
-});
-await t("★ mais forte ganha mais (e a chance mostrada é sempre a mesma)", () => {
-  const fraco = { nome: "F", poder: 60, resil: 60, agilidade: 0 }, forte = { nome: "G", poder: 120, resil: 90, agilidade: 0 };
-  assert.ok(DU.chance(forte, fraco) > 0.85, String(DU.chance(forte, fraco)));
-  assert.equal(DU.chance(forte, fraco), DU.chance(forte, fraco));
-});
-await t("d20 1–3 erra, 20 é crítico (1,75×)", () => {
-  const a = { nome: "A", poder: 100, resil: 100 }, b = { nome: "B", poder: 100, resil: 100 };
-  const seq = (v) => { let i = 0; return () => v[Math.min(i++, v.length - 1)]; };
-  const r1 = DU.simular(a, b, seq([0, 0.99, 0.05]));   // iniciativa: A 1, B 20 → B começa; o 1º golpe tira 2 → erra
-  assert.equal(r1.primeiro, 1); assert.equal(r1.golpes[0].tipo, "erro");
-  const r2 = DU.simular(a, b, seq([0.99, 0, 0.99]));   // A começa e tira 20
-  assert.equal(r2.golpes[0].tipo, "critico"); assert.ok(Math.abs(r2.golpes[0].dano - 100 * 1.2 * 1.75) < 1e-9);
-});
-await t("o personagem luta sozinho (sem companheiros) com equipamento e magias", () => {
-  const l = DU.lado(ANA);
-  assert.ok(l.poder > 0 && l.resil > 0 && l.nome === "Ana");
-  assert.equal(DU.lado(DIO), null, "sem personagem, sem lado");
-});
-
-console.log("\n── desafio e custódia ──");
-await t("★ desafiar com aposta em moeda: o Ouro vai para a custódia e a mensagem mostra a chance", async () => {
-  const r = await jogar(ANA, `duelo <@${BIA}> 100 ouro`);
-  assert.match(r, /Desafio de duelo/); assert.match(r, /desafia <@/); assert.match(r, /Chance estimada: \*\*Ana \d+%/);
-  assert.equal(ouro(ANA), 400);
-  assert.equal(DU.abertos().length, 1);
-});
-await t("um desafio por vez; contra si mesmo não; alvo sem personagem não", async () => {
-  assert.match(await jogar(ANA, `duelo <@${CAU}> 10 ouro`), /já tem um desafio aberto/);
-  assert.match(await jogar(CAU, `duelo <@${CAU}>`), /Contra você mesmo/);
-  assert.match(await jogar(CAU, `duelo <@${DIO}>`), /não tem personagem/);
-  assert.match(await jogar(CAU, `duelo <@${BIA}> 99999 ouro`), /Saldo insuficiente/);
-  assert.match(await jogar(CAU, `duelo <@${BIA}> 10 bananas`), /Moeda desconhecida/);
-});
-await t("★ recusar devolve a aposta", async () => {
-  assert.match(await jogar(BIA, "duelo recusar"), /recusou/);
-  assert.equal(ouro(ANA), 500); assert.equal(DU.abertos().length, 0);
-});
-await t("★ cancelar devolve; e o prazo (10 min) também", async () => {
-  await jogar(ANA, `duelo <@${BIA}> 50 ouro`); assert.equal(ouro(ANA), 450);
-  assert.match(await jogar(ANA, "duelo cancelar"), /cancelado/); assert.equal(ouro(ANA), 500);
-  await jogar(ANA, `duelo <@${BIA}> 50 ouro`);
-  assert.equal(DU.expirar(Date.now() + DU.VALIDADE_MS + 1000), 1);
-  assert.equal(ouro(ANA), 500); assert.equal(DU.abertos().length, 0);
-});
-
-console.log("\n── a luta valendo ──");
-await t("★ aceitar: a luta acontece, o vencedor leva o pote (2×) e o perdedor só perde a aposta", async () => {
-  await jogar(ANA, `duelo <@${BIA}> 100 ouro`);
-  const pa = db.getPersonagem(MUNDO, ANA), pb = db.getPersonagem(MUNDO, BIA);
-  aleatorio = DU.semente(42);
-  const r = await jogar(BIA, "duelo aceitar");
-  aleatorio = null;
-  assert.match(r, /Duelo: Ana × Bia/); assert.match(r, /Iniciativa/); assert.match(r, /venceu/); assert.match(r, /▰|▱/);
-  assert.equal(ouro(ANA) + ouro(BIA), 1000, "nada some nem nasce");
-  assert.ok([ouro(ANA), ouro(BIA)].sort().join() === "400,600", `${ouro(ANA)} / ${ouro(BIA)}`);
-  const pa2 = db.getPersonagem(MUNDO, ANA), pb2 = db.getPersonagem(MUNDO, BIA);
-  for (const k of ["nivel", "progresso", "recuperandoAte", "ultimaMissao"]) { assert.equal(pa2[k], pa[k], k); assert.equal(pb2[k], pb[k], k); }
-});
-await t("quem aceita sem saldo: não luta, e a aposta de quem desafiou continua lá", async () => {
-  db.debitar(MUNDO, CAU, "ouro", ouro(CAU));
-  await jogar(ANA, "duelo 100 ouro");   // aberto a qualquer um
-  assert.match(await jogar(CAU, "duelo aceitar"), /Saldo insuficiente/);
-  assert.equal(DU.abertos().length, 1);
-  await jogar(ANA, "duelo cancelar");
-});
-await t("★ aposta de item: quem aceita põe um item; o vencedor leva os dois", async () => {
-  const meu = umItemSolto(ANA) ?? (() => { const i = db.getInventario(MUNDO, ANA)[0]; db.desequipar(MUNDO, ANA, db.slotDoItem(MUNDO, ANA, i.id)); return i; })();
-  let dela = umItemSolto(BIA);
-  if (!dela) { const i = umItemEquipado(BIA); db.desequipar(MUNDO, BIA, db.slotDoItem(MUNDO, BIA, i.id)); dela = i; }
-  const qtd = (u, id) => db.getInventario(MUNDO, u).find((i) => i.id === id)?.quantidade ?? 0;
-  const antesAna = qtd(ANA, meu.id);
-  const r = await jogar(ANA, `duelo <@${BIA}> item ${meu.nome}`);
-  assert.match(r, /quem vencer leva os dois/);
-  assert.equal(qtd(ANA, meu.id), antesAna - 1, "o item foi para a custódia");
-  assert.match(await jogar(BIA, "duelo aceitar"), /Falta o seu item/);
-  aleatorio = DU.semente(7);
-  const fim = await jogar(BIA, `duelo aceitar item ${dela.nome}`);
-  aleatorio = null;
-  assert.match(fim, /Leva: \*\*/);
-  const vencedor = /\(<@([0-9A-Z]+)>\) venceu/.exec(fim)?.[1];
-  assert.ok(vencedor === ANA || vencedor === BIA, fim);
-  assert.ok(db.temItem(MUNDO, vencedor, meu.id) && db.temItem(MUNDO, vencedor, dela.id), "os dois itens com quem venceu");
-});
-await t("item equipado não vai para a mesa (nem de quem desafia, nem de quem aceita)", async () => {
-  const eq = umItemEquipado(CAU);
-  assert.ok(eq, "o kit inicial vem equipado");
-  assert.match(await jogar(CAU, `duelo <@${ANA}> item ${eq.nome}`), /Item equipado/);
-  assert.equal(DU.abertos().length, 0);
-});
-await t("★ sem aposta: só a glória — ninguém ganha nem perde nada", async () => {
-  const antes = [ouro(ANA), ouro(BIA), db.getInventario(MUNDO, ANA).length, db.getInventario(MUNDO, BIA).length];
-  await jogar(ANA, `duelo <@${BIA}>`);
-  const r = await jogar(BIA, "duelo aceitar");
-  assert.match(r, /venceu|Empate/); assert.doesNotMatch(r, /Leva:/);
-  assert.deepEqual([ouro(ANA), ouro(BIA), db.getInventario(MUNDO, ANA).length, db.getInventario(MUNDO, BIA).length], antes);
-});
-// (31 out 2026, P1) antes: "o aberto, qualquer um" — de QUALQUER servidor (R9). Agora:
-// qualquer um DO MESMO SERVIDOR; de outro servidor o aberto nem aparece nem é aceito.
-await t("só o desafiado aceita um desafio com @; o aberto, qualquer um DO MESMO SERVIDOR; e a lista mostra os dois", async () => {
-  await jogar(ANA, `duelo <@${BIA}>`);
-  assert.match(await jogar(CAU, "duelo aceitar"), /Não há desafio aberto para você/);
-  await jogar(BIA, "duelo recusar");
-  await jogar(ANA, "duelo 10 ouro");
-  const lista = await jogar(CAU, "duelo");
-  assert.match(lista, /<@[0-9A-Z]+> → qualquer um · 🪙10/);
-  assert.doesNotMatch(await jogar(CAU, "duelo", { servidor: "S2" }), /qualquer um · 🪙10/, "de outro servidor, o aberto não aparece");
-  assert.match(await jogar(CAU, "duelo aceitar", { servidor: "S2" }), /Não há desafio aberto para você/);
-  assert.equal(DU.abertos().length, 1, "e continua aberto");
-  await jogar(ANA, "duelo cancelar");
-});
-await t("★ o registro: duel/decline/accept viram duelo/recusar/aceitar (inglês e espanhol usam os mesmos)", async () => {
-  const reg = await import("./modulos/comandos/index.js");
-  const CANON = reg.CANONICO ?? undefined;
-  assert.deepEqual(aliases.normalizarArgs("game", ["duel", "accept", "3"], CANON).slice(0, 2), ["duelo", "aceitar"]);
-  assert.deepEqual(aliases.normalizarArgs("game", ["duel", "decline"], CANON).slice(0, 2), ["duelo", "recusar"]);
-  assert.deepEqual(aliases.normalizarArgs("game", ["pvp", "cancel"], CANON).slice(0, 2), ["duelo", "cancelar"]);
-});
-await t("em inglês e espanhol a tela sai na língua", async () => {
-  assert.match(await jogar(ANA, `duelo <@${BIA}>`, { lang: "en" }), /Duel challenge|challenges/);
-  assert.match(await jogar(BIA, "duelo recusar", { lang: "es" }), /Desafío rechazado|rechazó/);
-});
-console.log(`\nDUELO (28 out): ${ok} ok, ${falhou} falha(s)`);
 process.exit(falhou ? 1 : 0);
 };
 
@@ -18823,6 +18049,14 @@ await t("★ verificar-build: catch vazio novo derruba o build; com o motivo esc
     fs.writeFileSync(`${dir}/modulos/core/novo-p1.js`, "export function f() { try { return 1; } catch { /* nunca falha: só leitura */ } }\n");
     assert.equal(rodar().status, 0);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+await t("★ atualizar-minipc: o backup leva só o banco e a config, e restaurar não apaga o volume inteiro (31 out: 30 GB de modelos)", () => {
+  const sh = ler("scripts/atualizar-minipc.sh");
+  // (P2, revisão) e a chave dos pseudônimos do log, senão os pseudônimos mudam depois de restaurar
+  assert.match(sh, /tar czf '\/b\/\$\(basename "\$arq"\)' \\\$\(ls -d stoat\.db\* automod-config\.json log-segredo\.key 2>\/dev\/null\)/);
+  assert.doesNotMatch(sh, /tar czf "\/b\/\$\(basename "\$arq"\)" -C \/data \./, "o volume inteiro");
+  assert.doesNotMatch(sh, /find \/data -mindepth 1 -delete/, "restaurar apagava os modelos junto");
+  assert.match(sh, /rm -f \/data\/stoat\.db \/data\/stoat\.db-wal \/data\/stoat\.db-shm \/data\/automod-config\.json && tar xzf/);
 });
 await t("★ nenhum nome de máquina do tailnet (máquina.tail…​.ts.net) em arquivo do repositório", () => {
   const arquivos = spawnSync("git", ["ls-files", "--cached", "--others", "--exclude-standard"], { encoding: "utf8" }).stdout.split("\n").filter((f) => f && !f.startsWith("_notas/") && fs.existsSync(f) && fs.statSync(f).isFile() && fs.statSync(f).size < 5_000_000);
@@ -18964,7 +18198,8 @@ await t("★ URLs dos modelos de imagem: só https://huggingface.co/<u>/<repo>/r
   for (const u of ["http://huggingface.co/a/b/resolve/main/x", "https://huggingface.co.evil.com/a/b/resolve/main/x", "https://huggingface.co/a/b/resolve/main/../../x",
     "https://huggingface.co/a/b/resolve/main/x?y=1", "https://evil.com/a/b/resolve/main/x", "file:///etc/passwd", "https://huggingface.co/a/b/blob/main/x"]) assert.ok(!img.urlDeModeloValida(u), u);
   assert.throws(() => img.arquivosParaBaixar({ SD_Z_VAE_URL: "http://192.168.0.1/vae.safetensors" }), /VAE/);
-  const r = boot({ IA_MODO: "local", SD_MODELO_URL: "https://evil.com/x", SD_MODELO_TIPO: "sd" });
+  // (31 out 2026, P2) o gerador só existe com IMAGEM=1: é com ele que a URL é conferida
+  const r = boot({ IA_MODO: "local", IMAGEM: "1", SD_MODELO_URL: "https://evil.com/x", SD_MODELO_TIPO: "sd" });
   assert.equal(r.status, 1); assert.match(r.stderr, /modelo de imagem: a URL tem de ser https:\/\/huggingface\.co/);
 });
 await t("★ VOZES/PIPER_VOZ: sem `..` nem `/` (o nome vira caminho no disco e na URL)", () => {
@@ -18983,7 +18218,8 @@ await t("★ o `node --check` cobre o iniciar.js e os serviços", () => {
   const dir = fs.mkdtempSync(`${os.tmpdir()}/p1-infra-build-`);
   // (o package.json vai junto: sem o "type": "module", o node --check de um arquivo
   // com import e await no topo responde 0 mesmo com erro de sintaxe)
-  for (const a of ["main.js", "package.json", "modulos", "scripts"]) fs.cpSync(a, `${dir}/${a}`, { recursive: true });
+  // (31 out 2026, P2) o build confere também os READMEs gerados e a trava das NOVIDADES (docs/pacote.json)
+  for (const a of ["main.js", "package.json", "modulos", "scripts", "docs", "README.md", "README.pt-BR.md", "README.es.md", ".env.example"]) fs.cpSync(a, `${dir}/${a}`, { recursive: true });
   for (const d of ["ia-servico", "voz-servico"]) fs.cpSync(d, `${dir}/${d}`, { recursive: true, filter: (s) => !s.includes("node_modules") });
   fs.symlinkSync(`${process.cwd()}/node_modules`, `${dir}/node_modules`);
   fs.writeFileSync(`${dir}/iniciar.js`, iniSrc);
@@ -19306,7 +18542,8 @@ await t("★ &rss canal <canal de outro servidor> é recusado mesmo fora do cach
 await t("★ título e resumo do feed passam por textoDeFora antes de ir para o canal", async () => {
   cfgR.rss.canalId = cRss.id;
   rss._interno.parseFeed = async () => ({ titulo: "Notícias", itens: [{ guid: "novo-1", titulo: "@everyone [github.com](http://golpe.example) saiu", link: "javascript:alert(1)" }] });
-  await quieto(() => rss.rodarCiclo(SR2, ctxR));
+  // (31 out 2026, P2) o ciclo comum só enfileira para o telejornal do dia: o forçado publica na hora
+  await quieto(() => rss.rodarCiclo(SR2, ctxR, { forcado: true }));
   const saida = textoDe(cRss.enviados);
   assert.match(saida, /saiu/);
   assert.doesNotMatch(saida, /@everyone|\[github\.com\]\(|javascript:/);
@@ -19317,7 +18554,8 @@ await t("★ &rss agora tem intervalo mínimo por servidor", async () => {
   const antes = cRss.enviados.length;
   await quieto(() => rss.cmdRss(msgR, ["agora"], ctxR));
   assert.equal(cRss.enviados.length, antes, "rodou de novo na hora");
-  assert.match(textoDe(telaR.at(-1)), /tente de novo em \d+ min/);
+  // (31 out 2026, P2) saída mínima: a frase inteira numa linha
+  assert.match(textoDe(telaR.at(-1)), /"description":"❌ Acabou de rodar — tente de novo em \d+ min\."/);
 });
 await t("★ o ciclo do RSS é setTimeout encadeado (um ciclo lento não se sobrepõe ao próximo)", async () => {
   const [st, sint] = [globalThis.setTimeout, globalThis.setInterval];
@@ -19375,100 +18613,8 @@ await t("★ o descreverErro próprio do reaction-roles saiu (o do core nunca p�
 });
 
 // ── RPG ─────────────────────────────────────────────────────────────────────
-console.log("\n── RPG ──");
-const mundo = await import("./modulos/game/mundo.js");
-const MUNDO = mundo.MUNDO;
-const VET = U(90);
-await t("★ prepararMundo: marca ilegível → falha alto e NÃO apaga o jogo", () => {
-  db.criarPersonagem(MUNDO, VET, "Veterana");
-  db.getDb().prepare("INSERT OR REPLACE INTO config (serverId, json) VALUES (?, ?)").run("__rpg_mundo__", "{quebrado");
-  assert.throws(() => mundo.prepararMundo({ log: () => {} }), /ilegível/);
-  assert.ok(db.getPersonagem(MUNDO, VET), "o personagem foi apagado");
-});
-await t("★ marca sumida com o mundo já povoado: também para (antes o null virava \"falta migrar\" e zerava todos)", () => {
-  db.getDb().prepare("DELETE FROM config WHERE serverId = ?").run("__rpg_mundo__");
-  assert.throws(() => mundo.prepararMundo({ log: () => {} }), /nada foi apagado/);
-  assert.ok(db.getPersonagem(MUNDO, VET));
-});
-const game = await import("./modulos/game/game.js");
-const SG = U(91), SG2 = U(92);
-const membrosG = new Set();
-let buscasDePessoa = 0, ultG = null;
-const srvG = (id) => ({ id, channels: [], fetchMember: async (uid) => (membrosG.has(uid) && id === SG ? { id: { user: uid, server: id } } : null),
-  fetchMembers: async () => { buscasDePessoa++; return { members: [] }; }, fetchBans: async () => { buscasDePessoa++; return [{ id: { user: U(99) }, user: { username: "Fulano" } }]; } });
-const jogar = async (uid, txt, { servidor = SG, username = "ana_hacker" } = {}) => {
-  const ctx = { serverId: servidor, PREFIXO: "&", COR, config: { language: "pt" }, sendEmbed: async (_c, e) => { ultG = e; return { id: "m", react: async () => {} }; },
-    getServer: async () => srvG(servidor), ehSuperAdmin: () => false, membroTemPermissao: () => true };
-  ultG = null;
-  await game.cmdGame({ authorId: uid, author: { username }, channel: { id: "C" }, channelId: "C", mentionIds: [] }, txt.split(" "), ctx);
-  return `${ultG?.title}\n${ultG?.description}`;
-};
-await t("★ falha no boot do jogo (o mundo) fecha o RPG e vai para o log com [RPG]", async () => {
-  const log = await capturarLog(() => game.iniciarCatalogo());
-  assert.match(log, /\[RPG\]/);
-  assert.match(await jogar(VET, "ficha"), /manutenção/);
-  db.gravarConfig("__rpg_mundo__", { versao: mundo.VERSAO_MUNDO });   // a marca consertada: o jogo abre
-  await quieto(() => game.iniciarCatalogo());
-  assert.doesNotMatch(await jogar(VET, "ficha"), /manutenção/);
-});
-const [ANA, BIA, FORA] = [U(93), U(94), U(95)];
-membrosG.add(ANA); membrosG.add(BIA); membrosG.add(VET);
-await t("★ nome do personagem limpo: sem menção, @everyone, markdown nem link; até 32 caracteres", async () => {
-  await quieto(() => jogar(ANA, `criar @everyone **Rei** [x](https://golpe.example/a) <@${BIA}> discord.gg/abc do Norte Distante e Muito Além`));
-  const nome = db.getPersonagem(MUNDO, ANA).nome;
-  assert.match(nome, /Rei/);
-  assert.doesNotMatch(nome, /[@*\[\]()<>]|golpe|discord|everyone/i);
-  assert.ok(nome.length <= 32, nome);
-});
-await t("★ sem nome: \"Aventureiro\" (antes: o nome de usuário, cru)", async () => {
-  await quieto(() => jogar(BIA, "criar", { username: "**@everyone**" }));
-  assert.equal(db.getPersonagem(MUNDO, BIA).nome, "Aventureiro");
-});
-await t("★ &game <erro de digitação>: erro curto — nunca busca pessoa entre membros e banidos", async () => {
-  buscasDePessoa = 0;
-  const r = await jogar(ANA, "Fulano");
-  assert.match(r, /Subcomando desconhecido/);
-  assert.equal(buscasDePessoa, 0);
-});
-await t("★ &game ficha: só menção ou ID de MEMBRO deste servidor", async () => {
-  buscasDePessoa = 0;
-  assert.match(await jogar(ANA, "ficha Fulano"), /menção ou um ID/);
-  assert.equal(buscasDePessoa, 0);
-  assert.match(await jogar(ANA, `ficha <@${FORA}>`), /não está neste servidor/);
-  assert.match(await jogar(ANA, `ficha <@${BIA}>`), /Aventureiro/);
-});
-await t("★ o bazar não lista nem vende oferta de duelo (nem de troca)", async () => {
-  const duelo = db.criarOferta({ serverId: MUNDO, tipo: "duelo", autorId: BIA, moedaOferecida: "ouro", qtdOferecida: 50, itemPedido: SG });
-  const troca = db.criarOferta({ serverId: MUNDO, tipo: "troca", autorId: BIA, itemOferecido: null, itemPedido: null });
-  const lista = await jogar(ANA, "mercado");
-  assert.doesNotMatch(lista, new RegExp(`#${duelo.id}\\b|#${troca.id}\\b`));
-  for (const of of [duelo, troca]) {
-    assert.match(await jogar(ANA, `mercado comprar ${of.id}`), /indisponível/);
-    assert.equal(db.getOferta(of.id).estado, "aberta");
-  }
-  db.fecharOferta(duelo.id, "cancelada"); db.fecharOferta(troca.id, "cancelada");
-});
-await t("★ duelo: o alvo tem de ser membro DESTE servidor", async () => {
-  db.criarPersonagem(MUNDO, FORA, "Forasteira");
-  assert.match(await jogar(ANA, `duelo <@${FORA}>`), /não está neste servidor/);
-  assert.equal(game.rpgFechado?.() ?? null, null);
-});
-await t("★ duelo: aposta só inteiro ≥ 1", async () => {
-  await jogar(ANA, "duelo cancelar");   // independente do teste anterior
-  db.creditar(MUNDO, ANA, "ouro", 100);
-  assert.match(await jogar(ANA, `duelo <@${BIA}> 0.5 ouro`), /Não entendi a aposta/);
-  assert.match(await jogar(ANA, `duelo <@${BIA}> 1.5 ouro`), /Não entendi a aposta/);
-});
-await t("★ duelo aberto: só alguém do servidor de origem aceita", async () => {
-  await jogar(ANA, "duelo cancelar");
-  db.creditar(MUNDO, BIA, "ouro", 100);
-  assert.match(await jogar(ANA, "duelo 10 ouro"), /Desafio de duelo/);
-  assert.match(await jogar(BIA, "duelo aceitar", { servidor: SG2 }), /Não há desafio aberto para você/);
-  const [of] = (await import("./modulos/game/duelo.js")).abertos();
-  assert.equal(of?.estado, "aberta");
-  await jogar(ANA, "duelo cancelar");
-});
-
+// (31 out 2026, P2) o bloco do RPG (prepararMundo, nome do personagem, &game ficha, bazar, duelo) foi para a
+// suíte p2-rpg, reescrito para o RPG simplificado (era mundo:v5, sem bazar, duelo só de ouro) — ver _notas/rpg.md
 console.log(`\nP1 FERRAMENTAS-JOGO: ${ok} ok, ${falhou} falha(s)`);
 process.exit(falhou ? 1 : 0);
 };
@@ -19690,8 +18836,11 @@ const imagem = await import("./modulos/moderacao/imagem.js");
 const engine = await import("./modulos/moderacao/automod-engine.js");
 const amCmd = await import("./modulos/moderacao/automod-comandos.js");
 const caracteres = await import("./modulos/moderacao/caracteres.js");
-const warn = await import("./modulos/moderacao/warn.js");
-const silenciar = await import("./modulos/moderacao/silenciar.js");
+// (31 out 2026, P2) as quatro punições moram no punir.js (um handler só); o &userinfo, no userinfo.js
+const warn = await import("./modulos/moderacao/punir.js");
+const silenciar = { cmdSilenciar: (await import("./modulos/moderacao/punir.js")).cmdTimeout };
+const punirMod = await import("./modulos/moderacao/punir.js");
+const userinfoMod = await import("./modulos/moderacao/userinfo.js");
 const geral = await import("./modulos/moderacao/geral.js");
 const acesso = await import("./modulos/moderacao/acesso.js");
 const staff = await import("./modulos/moderacao/staff.js");
@@ -19702,7 +18851,7 @@ const limpar = await import("./modulos/moderacao/limpar.js");
 const assuntos = await import("./modulos/moderacao/assuntos.js");
 const servidores = await import("./modulos/moderacao/servidores.js");
 const relatorio = await import("./modulos/ferramentas/relatorio.js");
-const modIA = await import("./modulos/moderacao/moderacao-ia.js");
+// (31 out 2026, P2) moderacao-ia.js apagado (o &modia saiu) — a seção 17 confere que ele sumiu
 const { criarIndiceVazio } = await import("./modulos/moderacao/indice-dominios.js");
 
 // sem rede: quem precisa de uma resposta troca o fetch no próprio teste
@@ -19818,17 +18967,17 @@ console.log("\n── 3. `&automod … set`: tipo e faixa; o automod não derrub
 await t("★ `set` recusa 1.5, Infinity, 0, negativo e NaN — e aceita inteiro na faixa", async () => {
   config.automod.antiRepeticao = { enabled: true, maxRepeticao: 15, ignorar: "k" };
   for (const v of ["1.5", "Infinity", "0", "-3", "NaN", "1e3", "9999"]) {
-    assert.match(await rodar(amCmd.cmdAutomod, `antirepeticao set repeticao ${v}`), /Valor inválido/, v);
+    // (31 out 2026, P2) saída mínima: a linha do erro diz a faixa (antes o título "Valor inválido")
+    assert.match(await rodar(amCmd.cmdAutomod, `antirepeticao set repeticao ${v}`), /❌ Use um número \*\*inteiro\*\* entre \*\*2\*\* e \*\*200\*\*/, v);
     assert.equal(config.automod.antiRepeticao.maxRepeticao, 15, v);
   }
-  assert.match(await rodar(amCmd.cmdAutomod, "antirepeticao set repeticao 12"), /Parâmetro atualizado/);
+  assert.match(await rodar(amCmd.cmdAutomod, "antirepeticao set repeticao 12"), /`antirepeticao repeticao` = \*\*12\*\*/);
   assert.equal(config.automod.antiRepeticao.maxRepeticao, 12);
 });
 await t("★ `tempo` é uma duração legível (8s, 1m); número solto e fora da faixa são recusados", async () => {
   config.automod.antiSpam = { ...config.automod.antiSpam, windowMs: 4000 };
-  assert.match(await rodar(amCmd.cmdAutomod, "antispam set tempo 10000"), /Valor inválido/);
-  assert.match(await rodar(amCmd.cmdAutomod, "antispam set tempo 0s"), /Valor inválido/);
-  assert.match(await rodar(amCmd.cmdAutomod, "antispam set tempo 11m"), /Valor inválido/);
+  // (31 out 2026, P2) saída mínima: o erro é a linha da faixa (antes o título "Valor inválido")
+  for (const v of ["10000", "0s", "11m"]) assert.match(await rodar(amCmd.cmdAutomod, `antispam set tempo ${v}`), /❌ O tempo é uma duração entre \*\*1s\*\* e \*\*10m\*\*/, v);
   assert.equal(config.automod.antiSpam.windowMs, 4000);
   assert.match(await rodar(amCmd.cmdAutomod, "antispam set tempo 8s"), /8 s/);
   assert.equal(config.automod.antiSpam.windowMs, 8000);
@@ -19868,6 +19017,7 @@ await t("★ sem BanMembers, o degrau de ban NÃO roda: o aviso fica registrado 
   const r = await rodar(warn.cmdWarn, `<@${FULANO}> spam 2`);
   assert.ok(!acoes.some((a) => a[0] === "ban"), JSON.stringify(acoes));
   assert.match(r, /não foi aplicado/); assert.match(r, /BanMembers/);
+  assert.match(r, /avisado \(2\/2\)/, "a resposta diz o total do aviso que ficou registrado");
   assert.equal(db.contarAvisos(SRV, FULANO), 2);
 });
 await t("★ sem TimeoutMembers, o degrau de silêncio NÃO roda", async () => {
@@ -19882,7 +19032,8 @@ await t("com a permissão, o degrau roda como antes", async () => {
   permissoes.add("BanMembers");
   try {
     await rodar(warn.cmdWarn, `<@${FULANO}> a`);
-    assert.match(await rodar(warn.cmdWarn, `<@${FULANO}> b`), /usuário banido/);
+    // (31 out 2026, P2) saída mínima: "avisado (2/2) e banido" no lugar de "Limite atingido — usuário banido"
+    assert.match(await rodar(warn.cmdWarn, `<@${FULANO}> b`), /avisado \(2\/2\) e \*\*banido\*\*/);
     assert.ok(acoes.some((a) => a[0] === "ban" && a[1] === FULANO));
   } finally { permissoes.delete("BanMembers"); }
 });
@@ -19927,12 +19078,12 @@ db.somarAviso(SRV, FULANO, "teste");
 await t("★ quem não é staff não vê avisos nem histórico", async () => {
   const antes = new Set(permissoes); permissoes = new Set();
   try {
-    const r = await rodar(geral.cmdUserinfo, `<@${FULANO}>`, {}, { autor: RESP });
+    const r = await rodar(userinfoMod.cmdUserinfo, `<@${FULANO}>`, {}, { autor: RESP });
     assert.doesNotMatch(r, /aviso|Histórico|Lista global/i, r);
   } finally { permissoes = antes; }
 });
 await t("★ a staff vê \"banido em N servidores\" — sem o ID nem o motivo do outro servidor", async () => {
-  const r = await rodar(geral.cmdUserinfo, `<@${FULANO}>`);
+  const r = await rodar(userinfoMod.cmdUserinfo, `<@${FULANO}>`);
   assert.match(r, /banido em \*\*1\*\* outro\(s\) servidor/);
   assert.ok(!r.includes(OUTRO) && !/motivo escrito/.test(r), r);
 });
@@ -19942,7 +19093,9 @@ await t("★ `historico`: de outro servidor só a data — nem o ID nem o motivo
   permissoes.add("BanMembers");
   try {
     const r = await rodar(bg.cmdBanGlobal, `historico ${FULANO}`);
-    assert.match(r, /banido em \*\*1\*\* servidor/);
+    // (31 out 2026, P2) o `sentinela banir` da seção 6 agora É o &ban, que alimenta a lista
+    // (antes banía por fora dela): FULANO consta por este servidor e pelo OUTRO
+    assert.match(r, /banido em \*\*2\*\* servidor/);
     assert.ok(!r.includes(OUTRO) && !/motivo escrito/.test(r), r);
   } finally { permissoes.delete("BanMembers"); }
 });
@@ -19961,14 +19114,21 @@ await t("★ `bots confirmar` é só do dono do bot", async () => {
 await t("★ ban AUTOMÁTICO (automod/avatar) não conta para o `imediato` nem para o consenso — só alerta", async () => {
   const auto = [{ serverId: OUTRO, origem: "automod", motivo: "golpe" }];
   assert.equal(bg.bastaParaBanir("imediato", bg.forcaNaLista(auto)), false);
-  // a origem pode ter virado "propagado"/"importado": o motivo do ban no Stoat ainda diz
-  const propagado = [{ serverId: OUTRO, origem: "propagado", motivo: "[AutoMod] golpe" }, { serverId: "X2", origem: "importado", motivo: "[AutoMod] spam" }, { serverId: "X3", origem: "automod", motivo: "x" }];
-  assert.equal(bg.bastaParaBanir("imediato", bg.forcaNaLista(propagado)), false);
-  assert.equal(bg.bastaParaBanir("consenso", bg.forcaNaLista(propagado)), false);
+  // (31 out 2026, P2) só a ORIGEM gravada decide (decisão do dono): um ban manual com motivo "[AutoMod] …"
+  // é humano. Em troca, a propagação e a importação não sobrescrevem mais a origem automática
+  // (antes era por isso que o texto do motivo era lido) — conferido aqui com o banco.
+  const auto2 = [{ serverId: OUTRO, origem: "avatar", motivo: "x" }, { serverId: "X3", origem: "automod", motivo: "x" }];
+  assert.equal(bg.bastaParaBanir("imediato", bg.forcaNaLista(auto2)), false);
+  assert.equal(bg.bastaParaBanir("consenso", bg.forcaNaLista(auto2)), false);
   assert.equal(bg.bastaParaBanir("imediato", bg.forcaNaLista([{ serverId: OUTRO, origem: "manual", motivo: "x" }])), true, "ban de gente segue valendo");
+  assert.equal(bg.bastaParaBanir("imediato", bg.forcaNaLista([{ serverId: OUTRO, origem: "manual", motivo: "[AutoMod] escrito à mão" }])), true, "motivo com [AutoMod] num ban manual não vira automático");
   // na entrada de um membro, no modo imediato: alerta, não bane
   const ALVO = "01KP1MAAAA0000000000000007";
-  db.registrarBanGlobal(ALVO, OUTRO, "[AutoMod] golpe", "propagado");
+  db.registrarBanGlobal(ALVO, OUTRO, "[AutoMod] golpe", "automod");
+  // a propagação (o membro saiu banido) e a importação de 6 h regravam o registro: a origem fica
+  db.registrarBanGlobal(ALVO, OUTRO, "[AutoMod] golpe", bg.origemParaGravar(ALVO, OUTRO, "propagado"));
+  db.registrarBanGlobal(ALVO, OUTRO, "[AutoMod] golpe", bg.origemParaGravar(ALVO, OUTRO, "importado"));
+  assert.equal(db.origemDoBanGlobal(ALVO, OUTRO), "automod");
   const cfgI = structuredClone(config); cfgI.banGlobal = { modo: "imediato" }; cfgI.log = { canalId: C_ALERTA };
   saidas = []; acoes.length = 0;
   const baniu = await quieto(() => bg.verificarEntrada({ id: { server: SRV, user: ALVO }, server, user: { username: "alvo" } }, ctxBase({ config: cfgI })));
@@ -20022,11 +19182,11 @@ console.log("\n── 11. responder a uma mensagem não troca o alvo do &ban/&ki
 await t("★ `&ban fulano spam` respondendo a outra pessoa bane o FULANO (antes: o autor da mensagem respondida)", async () => {
   permissoes.add("BanMembers"); acoes.length = 0;
   try {
-    await rodar(geral.cmdBan, "fulano spam", {}, { mencoes: [RESP] });
+    await rodar(punirMod.cmdBan, "fulano spam", {}, { mencoes: [RESP] });
     assert.deepEqual(acoes.filter((a) => a[0] === "ban").map((a) => a[1]), [FULANO]);
     acoes.length = 0;
-    await rodar(geral.cmdBan, "", {}, { mencoes: [RESP] });
-    await rodar(geral.cmdKick, "", {}, { mencoes: [RESP] });
+    await rodar(punirMod.cmdBan, "", {}, { mencoes: [RESP] });
+    await rodar(punirMod.cmdKick, "", {}, { mencoes: [RESP] });
     assert.deepEqual(acoes.filter((a) => a[0] === "ban" || a[0] === "kick"), [], "sem alvo escrito, não age sobre ninguém");
   } finally { permissoes.delete("BanMembers"); }
 });
@@ -20114,7 +19274,8 @@ await t("★ `&silenciar`: se o banco não gravou, a resposta diz (sair e voltar
   const semId = novoServidor({ id: null });
   try {
     const r = await rodar(silenciar.cmdSilenciar, `<@${FULANO}> 10m teste`, { serverId: null, getServer: async () => semId });
-    assert.match(r, /SILÊNCIO/); assert.match(r, /Não consegui gravar o silêncio/);
+    // (31 out 2026, P2) saída mínima: "silenciado até <t:…>" no lugar do título "Ação executada: SILÊNCIO"
+    assert.match(r, /silenciado até <t:\d+:f>/); assert.match(r, /Não consegui gravar o silêncio/);
   } finally { permissoes.delete("TimeoutMembers"); }
 });
 await t("★ `blocklist add`: \"fonte adicionada\" só se baixou — senão ela sai da config", async () => {
@@ -20209,13 +19370,22 @@ relatorio.configurarAdesao(() => null);
 
 console.log("\n── 17. &modia ──");
 await t("★ o log da moderação por IA não marca o dono do bot", async () => {
-  const enviados = [];
-  const cfgM = structuredClone(config); cfgM.moderacaoIA = { ativa: true, criterios: "proibido falar de futebol" }; cfgM.log = { canalId: C_ALERTA };
-  modIA.configurar({ avaliar: async () => '{"viola": true, "motivo": "futebol"}' });
-  try { await quieto(() => modIA.moderar(msg("o jogo de ontem foi incrível", { autor: FULANO }), ctxBase({ config: cfgM, membroTemPermissao: () => false, sendEmbed: async (_c, e) => { enviados.push(textoDe(e)); return {}; } }))); }
-  finally { modIA.configurar({ avaliar: null }); }
-  assert.ok(enviados.length, "o log saiu");
-  assert.ok(!enviados.some((x) => x.includes(SUPER)), enviados.join(" | "));
+  // (31 out 2026, P2) o &modia saiu (a moderação de temas é a do &automod sentinela assuntos): o motor
+  // antigo não age nem escreve log nenhum — logo, não marca ninguém. Mais exigente que antes.
+  // (31 out 2026, P2) e agora o motor foi apagado: nada o importa, então não há log dele para marcar ninguém.
+  const semMotorModia = () => {
+    // (31 out 2026, P2) o moderacao-ia.js (motor do &modia, esqueleto que não fazia nada) foi apagado:
+    // nenhuma mensagem passa por ele porque ele não existe — nem o main.js nem módulo nenhum o importa.
+    assert.ok(!fs.existsSync("modulos/moderacao/moderacao-ia.js"), "o motor do &modia voltou");
+    const main = fs.readFileSync("main.js", "utf8");
+    assert.doesNotMatch(main, /moderacao-ia|modIA\./, "o main.js voltou a chamar o motor do &modia");
+    const pastas = ["modulos"]; const quem = [];
+    while (pastas.length) { const d = pastas.pop(); for (const f of fs.readdirSync(d, { withFileTypes: true })) { const c = `${d}/${f.name}`; if (f.isDirectory()) pastas.push(c); else if (c.endsWith(".js") && /from ["'][^"']*moderacao-ia\.js["']|import\(["'][^"']*moderacao-ia\.js/.test(fs.readFileSync(c, "utf8"))) quem.push(c); } }
+    assert.deepEqual(quem, [], "alguém importa o motor do &modia");
+  };
+  semMotorModia();
+  const { REGISTRO } = await import("./modulos/comandos/index.js");
+  assert.ok(!REGISTRO.some((c) => c.id === "modia"), "o &modia não está mais no registro");
 });
 
 console.log(`\nP1 MODERAÇÃO: ${ok} ok, ${falhou} falha(s)`);
@@ -20244,6 +19414,7 @@ Object.assign(process.env, {
   IA_SERVICO_URL: "http://ia.p1", IA_CHAVE: "chave-so-no-ia-chave", VOZ_SERVICO_URL: "http://voz.p1", VOZ_CHAVE: "kv",
   TTS_SERVIDORES: SID, GITHUB_REPO: "dono/repo", MUSICA_COOKIES: path.join(TMP, "cookies.txt"),
   SPOTIFY_ID: "id", SPOTIFY_SECRET: "segredo-spotify", IMAGEM_POR_DIA: "1", SD_URL: "http://sd.p1", LLM_MODEL_VISAO: "visao",
+  IMAGEM_TETO_ARQUIVO: path.join(TMP, "imagem-teto.json"),   // (31 out 2026, P2) o teto diário agora persiste: no volume do teste, não no /data
 });
 delete process.env.IA_SERVICO_CHAVE; delete process.env.IA_MODO; delete process.env.CODIGO_DIR; delete process.env.BUSCA_SEMPRE; delete process.env.BUSCA_ATIVA; delete process.env.RSS_FEEDS;
 fs.writeFileSync(process.env.MUSICA_COOKIES, "# cookies de teste\n");
@@ -20323,8 +19494,9 @@ await t("★ o bot não tem mais caminho online: pensar:false vale sempre (era s
   await quieto(() => chat.llmChat([{ role: "user", content: "x" }], { json: true, pensar: false, etiqueta: "t" }));
   assert.equal(pedidosLLM.at(-1)?.corpo?.chat_template_kwargs?.enable_thinking, false);
   assert.ok(!Object.keys(pedidosLLM.at(-1)?.headers ?? {}).some((k) => /authorization/i.test(k)));
-  const fonte = fs.readFileSync("modulos/ai/chat.js", "utf8") + fs.readFileSync("modulos/comandos/chat.js", "utf8");
-  assert.doesNotMatch(fonte, /modoIA|IA_MODO=online|modo online, env\.js|IA local|local AI|IA local \(/);
+  // (31 out 2026, P2) o registro do &chat saiu; o cliente do modelo mudou para o llm.js
+  const fonte = ["modulos/ai/chat.js", "modulos/ai/llm.js", "modulos/ai/gating.js", "modulos/ai/conversa-config.js"].map((a) => fs.readFileSync(a, "utf8")).join("\n");
+  assert.doesNotMatch(fonte, /modoIA|IA_MODO=online|modo online, env\.js|IA local|local AI|IA local \(|["']?authorization["']?\s*:|Bearer /i);
 });
 
 console.log("\n── 2. ler_codigo pelo GitHub: nada de `..` ──");
@@ -20347,15 +19519,20 @@ await t("  → e cada segmento vai codificado (`?`, `#`, `%` não mudam a rota)"
 });
 
 console.log("\n── 3. o que a tela mostra: sem endereço, sem modelo, sem nome de variável ──");
-await t("★ `&chat status` para quem não é o dono: só 🟢/🔴 e o que vale aqui (antes: LLM_URL, SEARXNG_URL e os modelos)", async () => {
-  saidas.length = 0;
-  await quieto(() => chat.cmdChat(msgDe("ANA", "&chat status"), ["status"], ctxDe()));
-  const txt = saidas.join("\n");
-  assert.match(txt, /🟢 IA disponível/); assert.match(txt, /Neste servidor:/);
-  assert.doesNotMatch(txt, /llm\.p1|searx\.p1|modelo-secreto|SearXNG|Servidor:\*\*/);
-  saidas.length = 0;
-  await quieto(() => chat.cmdChat(msgDe(DONO, "&chat status"), ["status"], ctxDe()));
-  assert.match(saidas.join("\n"), /llm\.p1[\s\S]*SearXNG:\*\* http:\/\/searx\.p1/, "o dono vê os detalhes");
+// (31 out 2026, P2) o `&chat status` saiu da tela de usuário: o caminho velho leva ao
+// `&privacidade status` (o que vale para a pessoa), e endereços/modelos só no &debug do dono
+await t("★ `&chat status` → `&privacidade status`: ninguém vê endereço, modelo nem SearXNG na tela (nem o dono)", async () => {
+  const priv = await import("./modulos/ferramentas/privacidade.js");
+  assert.equal(typeof chat.cmdChat, "undefined");
+  const { REGISTRO } = await import("./modulos/comandos/index.js");
+  assert.equal(REGISTRO.find((c) => c.id === "privacidade")?.atalhos?.["chat|ia status|estado"], "privacidade status");
+  for (const quem of ["ANA", DONO]) {
+    saidas.length = 0;
+    await quieto(() => priv.cmdPrivacidade(msgDe(quem, "&privacidade status"), ["status"], ctxDe()));
+    const txt = saidas.join("\n");
+    assert.match(txt, /Sua privacidade com a Judy[\s\S]*Conversa com a Judy:\*\* ✅ sim/, quem);
+    assert.doesNotMatch(txt, /llm\.p1|searx\.p1|modelo-secreto|SearXNG|Servidor:\*\*|LLM_|IA_MODO/, quem);
+  }
 });
 await t("★ IA fora do ar: frase curta, sem o endereço nem `IA_MODO`/`LLM_URL` (antes: tudo isso para qualquer um)", async () => {
   llmFora = true;
@@ -20436,7 +19613,9 @@ await t("★ apaga o banco e o fio DESTE servidor; o fio de outro servidor e a m
   cache.registrar(CANAL_OUTRO, { nome: "Caio", userId: "CAIO", texto: "lá no outro servidor" });
   chat.lembrarUltimaResposta(CANAL_OUTRO, { pergunta: "p", texto: "resposta de lá", cortada: true });
   saidas.length = 0;
-  await quieto(() => chat.cmdChat(msgDe("DONOSRV", "&chat esquecer tudo"), ["esquecer", "tudo"], ctxDe()));
+  // (31 out 2026, P2) o `&chat esquecer tudo` é atalho do `&privacidade esquecer tudo`
+  const priv = await import("./modulos/ferramentas/privacidade.js");
+  await quieto(() => priv.cmdPrivacidade(msgDe("DONOSRV", "&privacidade esquecer tudo"), ["esquecer", "tudo"], ctxDe()));
   assert.match(saidas.join("\n"), /Memória do servidor apagada/);
   assert.equal(db.getFatosPessoa(SID, "CAIO").length, 0);
   assert.equal(db.getFatosPessoa(OUTRO_SID, "CAIO").length, 1, "o fato do outro servidor sumiu");
@@ -20449,10 +19628,12 @@ await t("★ apaga o banco e o fio DESTE servidor; o fio de outro servidor e a m
 console.log("\n── 7. `&chat cuidado` é só para si ──");
 await t("★ `&chat cuidado <id> on` de outra pessoa é recusado, mesmo para a staff (antes: marcava terceiros sem consentimento)", async () => {
   saidas.length = 0;
-  await quieto(() => chat.cmdChat(msgDe("STAFF", `&chat cuidado ${OUTRA} on`), ["cuidado", OUTRA, "on"], ctxDe()));
-  assert.match(saidas.join("\n"), /Só para você/);
+  // (31 out 2026, P2) o `&chat cuidado` é atalho do `&privacidade cuidado`
+  const priv = await import("./modulos/ferramentas/privacidade.js");
+  await quieto(() => priv.cmdPrivacidade(msgDe("STAFF", `&privacidade cuidado ${OUTRA} on`), ["cuidado", OUTRA, "on"], ctxDe()));
+  assert.match(saidas.join("\n"), /🔒 Só o seu/);
   assert.ok(!db.getPerfil(SID, OUTRA)?.cuidado);
-  await quieto(() => chat.cmdChat(msgDe("STAFF", "&chat cuidado on"), ["cuidado", "on"], ctxDe()));
+  await quieto(() => priv.cmdPrivacidade(msgDe("STAFF", "&privacidade cuidado on"), ["cuidado", "on"], ctxDe()));
   assert.equal(db.getPerfil(SID, "STAFF")?.cuidado, 1, "para si continua valendo");
 });
 
@@ -20689,6 +19870,3050 @@ await t("★ as partes 2+ da continuação que não saem vão ao log (antes: `ca
 
 console.log(`\nP1-IA: ${ok} ok, ${falhou} falha(s)`);
 fs.rmSync(TMP, { recursive: true, force: true });
+process.exit(falhou ? 1 : 0);
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+// p2-ferramentas — P2 (31 out 2026): horários em timestamp, &fuso conversor, o
+// telejornal do &rss (urgência por regra, um timer só), &xp cargo/canal, &economia,
+// &tts estado em cache, &musica em espanhol, &webhook (dicas só para o dono),
+// &ticket (log do servidor), &rolar init (o antigo &iniciativa), saída mínima.
+// Sem rede de verdade: o DNS não resolve nada e o feed vem do gancho de teste.
+// ════════════════════════════════════════════════════════════════════════════
+SUITES["p2-ferramentas"] = async () => {
+const fs = (await import("node:fs")).default;
+const assert = (await import("node:assert")).default;
+const DB = "/tmp/p2-ferramentas.db";
+for (const f of [DB, DB + "-wal", DB + "-shm", "/tmp/p2-ferramentas.json"]) fs.rmSync(f, { force: true });
+const U = (n) => `01KP2F${String(n).padStart(20, "0")}`;   // ID com cara de ID do Stoat
+const DONO = U(1), ANA = U(2), BEA = U(3);
+Object.assign(process.env, { BOT_TOKEN: "tok", DB_PATH: DB, CONFIG_PATH: "/tmp/p2-ferramentas.json", SUPER_ADMINS: DONO,
+  VOZ_SERVICO_URL: "http://voz.teste", TTS_SERVIDORES: "*", WEBHOOK_SERVIDORES: "*" });
+for (const v of ["IA_MODO", "IA", "CHAT_SERVIDORES", "IA_SERVICO_URL", "LLM_URL", "RSS_SERVIDORES", "WEBHOOK_URL_BASE"]) delete process.env[v];
+// sem rede: o fetch responde 503 (o de voz é trocado em cada teste) e nenhum domínio resolve
+globalThis.fetch = async () => ({ ok: false, status: 503, text: async () => "", json: async () => ({}), headers: new Map() });
+(await import("node:dns/promises")).default.lookup = async () => { throw Object.assign(new Error("getaddrinfo ENOTFOUND"), { code: "ENOTFOUND" }); };
+
+let ok = 0, falhou = 0;
+const t = async (nome, fn) => { try { await fn(); console.log(`  ✅ ${nome}`); ok++; } catch (e) { console.log(`  ❌ ${nome}\n     ${String(e?.message ?? e).split("\n").join("\n     ")}`); falhou++; } };
+const quieto = async (fn) => { const o = [console.log, console.info, console.warn, console.error]; console.log = console.info = console.warn = console.error = () => {}; try { return await fn(); } finally { [console.log, console.info, console.warn, console.error] = o; } };
+const COR = { erro: "#e", aviso: "#a", sucesso: "#s", info: "#i", mod: "#m" };
+const textoDe = (e) => [e?.title, e?.description].filter(Boolean).join("\n").replace(/[\u2063\u2064]/g, "");
+
+const db = await import("./modulos/core/db.js");
+db.abrirBanco(DB);
+
+// ── tempo.carimbo ──
+console.log("── tempo.carimbo ──");
+const { carimbo, carimboComRelativo } = await import("./modulos/core/tempo.js");
+await t("carimbo: Date, número (ms) e texto ISO dão o mesmo `<t:SEGUNDOS:formato>`", () => {
+  const ms = Date.UTC(2026, 9, 31, 21, 30, 15);
+  for (const q of [new Date(ms), ms, new Date(ms).toISOString()]) assert.equal(carimbo(q, "t"), `<t:${Math.floor(ms / 1000)}:t>`);
+});
+await t("carimbo: os 7 formatos valem; sem formato é `f`; formato desconhecido cai no padrão do cliente", () => {
+  for (const f of ["t", "T", "d", "D", "f", "F", "R"]) assert.equal(carimbo(1000_000, f), `<t:1000:${f}>`);
+  assert.equal(carimbo(1000_000), "<t:1000:f>");
+  assert.equal(carimbo(1000_000, "x"), "<t:1000>");
+});
+await t("★ carimbo: valor inválido vira \"\" (nunca `<t:NaN>`)", () => {
+  for (const ruim of [null, undefined, "ontem", NaN, Infinity, new Date("x"), {}]) assert.equal(carimbo(ruim, "f"), "", String(ruim));
+  assert.equal(carimboComRelativo("lixo"), "");
+  assert.equal(carimboComRelativo(5000, "t"), "<t:5:t> (<t:5:R>)");
+});
+
+// ── fusos (P2) ──
+console.log("── core/fusos ──");
+const fz = await import("./modulos/core/fusos.js");
+await t("lerHorario: 21:30, 21h, 21h30, 9pm, 9:30 PM, 21.30, 12am", () => {
+  const casos = { "21:30": [21, 30], "21h": [21, 0], "21h30": [21, 30], "9pm": [21, 0], "9:30 PM": [21, 30], "21.30": [21, 30], "12am": [0, 0], "12pm": [12, 0], "0:05": [0, 5] };
+  for (const [e, [h, m]] of Object.entries(casos)) assert.deepEqual(fz.lerHorario(e), { h, m }, e);
+});
+await t("★ lerHorario: número solto, hora/minuto fora da faixa e lixo → null", () => {
+  for (const e of ["21", "25:00", "21:60", "13pm", "0am", "abc", "", null, "21:3", "1:2:3", "-1:00"]) assert.equal(fz.lerHorario(e), null, String(e));
+});
+await t("instanteEm: 21:30 em São Paulo e em Madrid no mesmo dia (verão europeu)", () => {
+  const base = new Date("2026-08-20T12:00:00Z");
+  assert.equal(new Date(fz.instanteEm({ h: 21, m: 30 }, "America/Sao_Paulo", base)).toISOString(), "2026-08-21T00:30:00.000Z");
+  assert.equal(new Date(fz.instanteEm({ h: 21, m: 30 }, "Europe/Madrid", base)).toISOString(), "2026-08-20T19:30:00.000Z");
+  assert.equal(new Date(fz.instanteEm({ h: 9, m: 0 }, "UTC", base)).toISOString(), "2026-08-20T09:00:00.000Z");
+});
+await t("★ instanteEm: o dia em que Madrid sai do horário de verão (25 out 2026) acerta o deslocamento", () => {
+  const base = new Date("2026-10-25T12:00:00Z");
+  assert.equal(new Date(fz.instanteEm({ h: 21, m: 0 }, "Europe/Madrid", base)).toISOString(), "2026-10-25T20:00:00.000Z");
+  assert.equal(new Date(fz.instanteEm({ h: 1, m: 0 }, "Europe/Madrid", base)).toISOString(), "2026-10-24T23:00:00.000Z");
+});
+await t("proximoInstante: sempre depois de agora (hoje, se ainda não passou; senão amanhã)", () => {
+  const agora = Date.parse("2026-08-20T12:00:00Z");
+  assert.equal(new Date(fz.proximoInstante({ h: 13, m: 0 }, "UTC", agora)).toISOString(), "2026-08-20T13:00:00.000Z");
+  assert.equal(new Date(fz.proximoInstante({ h: 11, m: 0 }, "UTC", agora)).toISOString(), "2026-08-21T11:00:00.000Z");
+  assert.equal(new Date(fz.proximoInstante({ h: 12, m: 0 }, "UTC", agora)).toISOString(), "2026-08-21T12:00:00.000Z");
+});
+await t("diaEm e deslocamento: o dia local e o fuso de meia hora", () => {
+  const q = new Date("2026-08-21T01:00:00Z");
+  assert.equal(fz.diaEm("America/Sao_Paulo", q), "2026-08-20");
+  assert.equal(fz.diaEm("Asia/Tokyo", q), "2026-08-21");
+  assert.equal(fz.deslocamento("Asia/Kolkata", q), 330);
+  assert.equal(fz.agoraEm("Asia/Kolkata", { quando: q }).offset, "UTC+05:30");
+});
+await t("★ fusoDoServidor: a cidade de referência da lista vence; sem ela, o idioma (pt → São Paulo, es → Madrid, en → UTC)", () => {
+  assert.equal(fz.fusoDoServidor({ fusos: { principal: "Asia/Tokyo" } }, "pt"), "Asia/Tokyo");
+  assert.equal(fz.fusoDoServidor({ fusos: { principal: "Nao/Existe" } }, "es"), "Europe/Madrid");
+  assert.equal(fz.fusoDoServidor({}, "pt"), "America/Sao_Paulo");
+  assert.equal(fz.fusoDoServidor({}, "en"), "UTC");
+  assert.equal(fz.fusoDoServidor(null, "xx"), "UTC");
+});
+await t("nenhum horário na tela por toLocale* nos arquivos de ferramentas (todo horário é carimbo)", () => {
+  const meus = ["fuso", "rss", "nivel", "economia", "tickets", "webhooks", "tts", "tts-filtro", "musica", "entretenimento", "jogos", "servidor-info", "dados-rpg", "boas-vindas"]
+    .map((n) => `modulos/ferramentas/${n}.js`).concat(["modulos/core/fusos.js", "modulos/core/tempo.js".replace("tempo", "abreviacoes")]);
+  const ruins = meus.filter((f) => /\.toLocale(Time|Date)?String\(/.test(fs.readFileSync(f, "utf8").replace(/Number\([^)]*\)\.toLocaleString\(/g, "")));
+  assert.deepEqual(ruins, []);
+});
+
+// ── &fuso ──
+console.log("── &fuso ──");
+const fuso = await import("./modulos/ferramentas/fuso.js");
+const ctxDe = (config, { perm = true, dono = false, serverId = U(500) } = {}) => {
+  const saidas = [];
+  return { saidas, ultima: () => textoDe(saidas.at(-1)), ctx: { config, COR, PREFIXO: "&", serverId, saidas,
+    sendEmbed: async (_c, e) => { saidas.push(e); return { id: "M" }; }, getServer: async () => null,
+    membroTemPermissao: () => perm, ehSuperAdmin: () => dono, salvarConfig: () => {}, client: { channels: { get: () => null, fetch: async () => null } } } };
+};
+const msgDe = (autor = ANA, canal = { id: U(501) }) => ({ authorId: autor, channel: canal, channelId: canal.id, author: { username: "ana" } });
+await t("converter: a linha traz o timestamp completo, o relativo e o código para copiar", () => {
+  const { instante, linha } = fuso.converter({ h: 21, m: 30 }, "Europe/Madrid", new Date("2026-08-20T12:00:00Z"));
+  const s = Math.floor(instante / 1000);
+  assert.equal(linha, `**21:30** Madrid → <t:${s}:F> (<t:${s}:R>)\n\`<t:${s}:t>\``);
+});
+await t("★ `&fuso 21:30 Madrid` → o timestamp (cada pessoa vê no próprio fuso), uma resposta só", async () => {
+  const { ctx, saidas, ultima } = ctxDe({ language: "pt" });
+  await fuso.cmdFuso(msgDe(), ["21:30", "Madrid"], ctx);
+  assert.equal(saidas.length, 1);
+  assert.match(ultima(), /^\*\*21:30\*\* Madrid → <t:\d+:F> \(<t:\d+:R>\)\n`<t:\d+:t>`$/);
+  const s = Number(ultima().match(/<t:(\d+):F>/)[1]);
+  assert.equal(new Date(s * 1000).toLocaleString("en-GB", { timeZone: "Europe/Madrid", hour: "2-digit", minute: "2-digit" }), "21:30");
+});
+await t("★ `&fuso 21:30` sem cidade usa o fuso do servidor: espanhol → Madrid, português → São Paulo", async () => {
+  for (const [lang, zona] of [["es", "Europe/Madrid"], ["pt", "America/Sao_Paulo"], ["en", "UTC"]]) {
+    const { ctx, ultima } = ctxDe({ language: lang });
+    await fuso.cmdFuso(msgDe(), ["21:30"], ctx);
+    const s = Number(ultima().match(/<t:(\d+):F>/)?.[1]);
+    assert.equal(new Date(s * 1000).toLocaleString("en-GB", { timeZone: zona, hour: "2-digit", minute: "2-digit" }), "21:30", lang);
+  }
+});
+await t("`&fuso Tokyo` → a hora agora lá, numa linha; `&fuso` sem lista → a hora no fuso do servidor (sem explicação)", async () => {
+  const { ctx, saidas, ultima } = ctxDe({ language: "pt" });
+  await fuso.cmdFuso(msgDe(), ["Tokyo"], ctx);
+  assert.match(ultima(), /^\*\*\d\d:\d\d\*\* · \S+ \d\d\/\d\d — Tokyo \(UTC\+09:00\)$/);
+  await fuso.cmdFuso(msgDe(), [], ctx);
+  assert.match(ultima(), /— Sao Paulo \(UTC-03:00\)$/);
+  assert.doesNotMatch(ultima(), /Nenhuma cidade|ManageMessages|add/);
+  assert.equal(saidas.length, 2);
+});
+await t("★ cidade que não existe: uma linha de erro (antes: título + explicação + como buscar)", async () => {
+  const { ctx, ultima } = ctxDe({ language: "es" });
+  await fuso.cmdFuso(msgDe(), ["21:30", "Narnia"], ctx);
+  assert.match(ultima(), /^❌ Ciudad no encontrada: `Narnia`\.$/);
+});
+await t("add/remove pedem ManageMessages (uma linha); com ela, a lista e a hora sem lista mudam", async () => {
+  const cfg = { language: "pt" };
+  const sem = ctxDe(cfg, { perm: false });
+  await fuso.cmdFuso(msgDe(), ["add", "Tokyo"], sem.ctx);
+  assert.equal(sem.ultima(), "🚫 Permissão insuficiente: **ManageMessages**.");   // o texto único do core/saida.js
+  assert.equal(cfg.fusos.lista.length, 0);
+  const com = ctxDe(cfg);
+  await fuso.cmdFuso(msgDe(), ["add", "Tokyo"], com.ctx);
+  assert.equal(com.ultima(), "✅ **Tokyo** adicionada.");
+  await fuso.cmdFuso(msgDe(), ["21:30"], com.ctx);   // a referência da lista vira o fuso do servidor
+  const s = Number(com.ultima().match(/<t:(\d+):F>/)[1]);
+  assert.equal(new Date(s * 1000).toLocaleString("en-GB", { timeZone: "Asia/Tokyo", hour: "2-digit", minute: "2-digit" }), "21:30");
+  await fuso.cmdFuso(msgDe(), ["remove", "Tokyo"], com.ctx);
+  assert.equal(com.ultima(), "🗑️ **Tokyo** removida.");
+  await fuso.cmdFuso(msgDe(), ["add"], com.ctx);
+  assert.equal(com.ultima(), "❌ Faltou a cidade. · `&help fuso`");
+});
+
+// ── RSS: o telejornal ──
+console.log("── &rss: telejornal ──");
+const rss = await import("./modulos/ferramentas/rss.js");
+await t("cveCritica: CVE com crítica/critical/CVSS 9+; CVE comum não", () => {
+  assert.ok(rss.cveCritica({ titulo: "CVE-2026-1234 critical RCE in Foo" }));
+  assert.ok(rss.cveCritica({ titulo: "CVE-2026-1234 em Foo", resumo: "CVSS: 9.8, execução remota" }));
+  assert.ok(rss.cveCritica({ titulo: "Falha crítica: CVE-2026-9999" }));
+  assert.ok(!rss.cveCritica({ titulo: "CVE-2026-1234 medium XSS", resumo: "CVSS 5.4" }));
+  assert.ok(!rss.cveCritica({ titulo: "Critical update for Chrome" }), "sem CVE não é CVE crítica");
+});
+await t("★ temTermo: termo literal (sem regex do usuário), sem acento nem caixa, palavra inteira", () => {
+  assert.equal(rss.temTermo({ titulo: "Nova versão do Node.js sai hoje" }, ["node.js"]), "node.js");
+  assert.equal(rss.temTermo({ titulo: "Eleição em São Paulo" }, ["sao paulo"]), "sao paulo");
+  assert.equal(rss.temTermo({ titulo: "Notebook novo" }, ["note"]), null, "pedaço de palavra não vale");
+  assert.equal(rss.temTermo({ titulo: "C++ 26 aprovado" }, ["(a+)+$", ".*"]), null, "padrão de regex não é interpretado");
+  const t0 = Date.now(); rss.temTermo({ titulo: "a".repeat(10_000) + "!" }, ["(a+)+$"]); assert.ok(Date.now() - t0 < 100);
+});
+await t("★ assuntosEmAlta: o mesmo assunto em 3 fontes diferentes; 2 fontes ou a mesma fonte 3 vezes não", () => {
+  const it = (feedId, titulo, novo = true) => ({ feedId, titulo, novo });
+  const tres = [it(1, "Apagão deixa Madrid sem energia"), it(2, "Madrid sofre apagão de energia"), it(3, "Energia volta após apagão em Madrid"), it(4, "Receita de bolo")];
+  const g = rss.assuntosEmAlta(tres);
+  assert.equal(g.length, 1); assert.deepEqual(g[0].map((x) => x.feedId).sort(), [1, 2, 3]);
+  assert.equal(rss.assuntosEmAlta(tres.slice(0, 2)).length, 0);
+  assert.equal(rss.assuntosEmAlta([it(1, "Apagão em Madrid energia"), it(1, "Madrid apagão energia"), it(1, "energia apagão Madrid")]).length, 0);
+  assert.equal(rss.assuntosEmAlta(tres.map((x) => ({ ...x, novo: false }))).length, 0, "só vale com algum item novo");
+});
+await t("separarUrgentes: CVE crítica e termo saem na hora; 3 fontes puxam também o que já esperava na fila; o resto espera", () => {
+  const novos = [
+    { feedId: 1, titulo: "CVE-2026-0001 critical bug" },
+    { feedId: 2, titulo: "Lançamento do Judy 2.0" },
+    { feedId: 3, titulo: "Apagão deixa Madrid sem energia" },
+    { feedId: 4, titulo: "Receita de bolo" },
+  ];
+  const fila = [{ _id: 10, feedId: 5, titulo: "Madrid sofre apagão de energia" }, { _id: 11, feedId: 6, titulo: "Energia volta após apagão em Madrid" }];
+  const r = rss.separarUrgentes(novos, fila, ["judy"]);
+  assert.deepEqual(r.urgentes.map((x) => x.motivo).sort(), ["cve", "fontes", "fontes", "fontes", "termo:judy"]);
+  assert.deepEqual(r.comuns.map((x) => x.titulo), ["Receita de bolo"]);
+  assert.deepEqual(r.tirarDaFila.sort(), [10, 11]);
+});
+await t("telejornalDevido: só depois do horário local do servidor, e uma vez por dia", () => {
+  const cfg = { language: "pt", rss: { horario: "21:00" } };   // São Paulo (UTC-3): 21:00 = 00:00 UTC
+  assert.equal(rss.telejornalDevido(cfg, Date.parse("2026-08-20T23:59:00Z")), false);
+  assert.equal(rss.telejornalDevido(cfg, Date.parse("2026-08-21T00:01:00Z")), true);
+  cfg.rss.ultimoTelejornal = "2026-08-20";
+  assert.equal(rss.telejornalDevido(cfg, Date.parse("2026-08-21T00:01:00Z")), false);
+  assert.equal(rss.horarioDoServidor({}).h, 21, "sem horário salvo: o padrão (21:00)");
+});
+await t("motivoNaTela: o erro guardado em português sai em inglês e em espanhol", () => {
+  assert.equal(rss.motivoNaTela("HTTP 404", "en"), "HTTP 404");
+  assert.equal(rss.motivoNaTela("tempo esgotado", "es"), "tiempo agotado");
+  assert.equal(rss.motivoNaTela("não consegui ler esse endereço como RSS/Atom", "en"), "I couldn't read that address as RSS/Atom");
+});
+await t("banco: o último erro por feed (curto) e a fila do telejornal com teto", () => {
+  const S = U(600);
+  db.addFeed(S, "https://a.example/rss", "A");
+  const f = db.listarFeeds(S)[0];
+  db.rssGuardarErro(f.id, "x".repeat(500), 1000);
+  assert.equal(db.rssErros(S).get(f.id).erro.length, 120);
+  db.rssLimparErro(f.id);
+  assert.equal(db.rssErros(S).size, 0);
+  assert.equal(db.rssErros(U(601)).size, 0, "o erro de um servidor não aparece em outro");
+  for (let i = 0; i < 3; i++) assert.equal(db.rssEnfileirar(S, f.id, { titulo: `n${i}` }, 3), true);
+  assert.equal(db.rssEnfileirar(S, f.id, { titulo: "n3" }, 3), false, "fila cheia");
+  const fila = db.rssPendentes(S);
+  assert.deepEqual(fila.map((x) => x.titulo), ["n0", "n1", "n2"]);
+  assert.equal(db.rssTirarPendentes(U(601), fila.map((x) => x._id)), 0, "outro servidor não tira da fila");
+  assert.equal(db.rssTirarPendentes(S, fila.map((x) => x._id)), 3);
+});
+
+// um servidor de RSS de mentira
+const SR = U(610), CR = U(611), CFORA = U(699);
+const canalR = { id: CR, serverId: SR, enviados: [], sendMessage: async function (p) { this.enviados.push(p.embeds?.[0] ?? p); return { id: "M" }; } };
+const srvR = { id: SR, channels: [canalR], channelIds: new Set([CR]) };
+const cfgR = { language: "pt", rss: {} };
+const telaR = [];
+const ctxR = { client: { channels: { get: (id) => (id === CR ? canalR : null), fetch: async (id) => (id === CR ? canalR : null) } }, COR, PREFIXO: "&", serverId: SR, config: cfgR,
+  configDoServidor: () => cfgR, salvarConfig: () => {}, getServer: async () => srvR, membroTemPermissao: () => true, sendEmbed: async (_c, e) => telaR.push(e) };
+const msgR = { authorId: ANA, channel: canalR, channelId: CR };
+const feeds = {};
+rss._interno.parseFeed = async (url) => { if (feeds[url] instanceof Error) throw feeds[url]; return feeds[url] ?? { titulo: "?", itens: [] }; };
+await t("★ `&rss add <url> #canal`: lê uma vez, marca o atual como visto e define o canal; canal de outro servidor é recusado", async () => {
+  feeds["https://um.example/rss"] = { titulo: "Um", itens: [{ guid: "velho", titulo: "velho" }] };
+  await quieto(() => rss.cmdRss(msgR, ["add", "https://um.example/rss", `<#${CFORA}>`], ctxR));
+  assert.equal(textoDe(telaR.at(-1)), "❌ Esse canal é de outro servidor.");
+  assert.equal(db.listarFeeds(SR).length, 0);
+  await quieto(() => rss.cmdRss(msgR, ["add", "https://um.example/rss", `<#${CR}>`], ctxR));
+  assert.equal(textoDe(telaR.at(-1)), `✅ **Um** → <#${CR}>`);
+  assert.equal(cfgR.rss.canalId, CR);
+  assert.equal(db.marcarVisto(db.listarFeeds(SR)[0].id, "velho"), false);
+});
+await t("★ ciclo fora do horário: a urgente sai na hora (sem modelo); a comum espera o telejornal", async () => {
+  feeds["https://um.example/rss"] = { titulo: "Um", itens: [{ guid: "c1", titulo: "CVE-2026-7777 critical overflow" }, { guid: "c2", titulo: "Receita de bolo de fubá" }] };
+  cfgR.rss.horario = "21:00"; cfgR.rss.ultimoTelejornal = null;
+  canalR.enviados.length = 0;
+  const antes = Date.parse("2026-08-20T15:00:00Z");   // 12:00 em São Paulo
+  const r = await quieto(() => rss.rodarCiclo(SR, ctxR, { agora: antes }));
+  assert.deepEqual([r.ok, r.urgentes, r.publicados], [true, 1, 0]);
+  assert.equal(canalR.enviados.length, 1);
+  assert.match(textoDe(canalR.enviados[0]), /^🚨 Urgente\n\*\*CVE-2026-7777 critical overflow\*\* · _CVE crítica_/);
+  assert.deepEqual(db.rssPendentes(SR).map((x) => x.titulo), ["Receita de bolo de fubá"]);
+});
+await t("★ no horário do servidor: o telejornal sai uma vez, com carimbo, e a fila esvazia", async () => {
+  canalR.enviados.length = 0;
+  const depois = Date.parse("2026-08-21T00:05:00Z");   // 21:05 em São Paulo
+  const r = await quieto(() => rss.rodarCiclo(SR, ctxR, { agora: depois }));
+  assert.equal(r.publicados, 1);
+  assert.match(textoDe(canalR.enviados.at(-1)), /^📰 Telejornal — <t:\d+:D>\n\*\*Receita de bolo de fubá\*\*/);
+  assert.equal(db.rssPendentes(SR).length, 0);
+  assert.equal(cfgR.rss.ultimoTelejornal, "2026-08-20");
+  const r2 = await quieto(() => rss.rodarCiclo(SR, ctxR, { agora: depois + 60_000 }));
+  assert.equal(r2.publicados, 0, "não sai de novo no mesmo dia");
+});
+await t("★ `&rss list` mostra o último erro de cada feed, curto e sem endereço; `testar` publica na hora", async () => {
+  feeds["https://um.example/rss"] = new Error("bloqueado: o domínio não resolve (https://um.example/rss)");
+  await quieto(() => rss.rodarCiclo(SR, ctxR, { forcado: true }));
+  await rss.cmdRss(msgR, ["list"], ctxR);
+  const l = textoDe(telaR.at(-1));
+  assert.match(l, /⚠️ bloqueado: o domínio não resolve \(<t:\d+:R>\)/);
+  assert.equal((l.match(/um\.example/g) ?? []).length, 1, "a URL aparece só uma vez (a do feed), nunca no erro");
+  cfgR.language = "es";
+  await rss.cmdRss(msgR, ["list"], ctxR);
+  assert.match(textoDe(telaR.at(-1)), /⚠️ bloqueado: el dominio no se resuelve/);
+  cfgR.language = "pt";
+});
+await t("`&rss agora` é apelido de `testar` e respeita o intervalo mínimo (uma linha)", async () => {
+  feeds["https://um.example/rss"] = { titulo: "Um", itens: [] };
+  canalR.enviados.length = 0;
+  await quieto(() => rss.cmdRss(msgR, ["agora"], ctxR));
+  assert.match(textoDe(canalR.enviados.at(-1)), /^📰 RSS\nNenhuma notícia nova\.$/, "o `agora` rodou o ciclo forçado");
+  await quieto(() => rss.cmdRss(msgR, ["testar"], ctxR));
+  assert.equal(canalR.enviados.length, 1, "rodou de novo na hora");
+  assert.match(textoDe(telaR.at(-1)), /^❌ Acabou de rodar — tente de novo em \d+ min\.$/);
+});
+await t("`&rss horario 21:00` guarda a hora local e responde com o timestamp; hora inválida é erro de uso", async () => {
+  await rss.cmdRss(msgR, ["horario", "8pm"], ctxR);
+  assert.equal(cfgR.rss.horario, "20:00");
+  assert.match(textoDe(telaR.at(-1)), /^📰 <t:\d+:t> \(<t:\d+:R>\)$/);
+  await rss.cmdRss(msgR, ["horario", "25:00"], ctxR);
+  assert.equal(textoDe(telaR.at(-1)), "❌ Horário inválido (ex.: 21:00). · `&help rss`");
+  assert.equal(cfgR.rss.horario, "20:00");
+});
+await t("`&rss urgente <termo>` liga e desliga o termo (literal, até 40 caracteres, teto de 20)", async () => {
+  await rss.cmdRss(msgR, ["urgente", "Judy"], ctxR);
+  assert.deepEqual(cfgR.rss.urgentes, ["Judy"]);
+  await rss.cmdRss(msgR, ["urgente", "judy"], ctxR);
+  assert.deepEqual(cfgR.rss.urgentes, []);
+  await rss.cmdRss(msgR, ["urgente", "x".repeat(41)], ctxR);
+  assert.match(textoDe(telaR.at(-1)), /^❌ Termo de até 40 caracteres\./);
+  for (let i = 0; i < 20; i++) await rss.cmdRss(msgR, ["urgente", `t${i}`], ctxR);
+  await rss.cmdRss(msgR, ["urgente", "mais um"], ctxR);
+  assert.equal(textoDe(telaR.at(-1)), "❌ Máximo de 20 termos.");
+  assert.equal(cfgR.rss.urgentes.length, 20);
+});
+await t("★ um timer só, e só com feed: sem feed nenhum, o agendador não arma timer", async () => {
+  const [st] = [globalThis.setTimeout]; let marcados = 0;
+  globalThis.setTimeout = () => { marcados++; return { unref() {} }; };
+  try {
+    rss._pararAgendador();
+    for (const f of db.todosOsFeeds()) db.removeFeed(f.serverId, f.id);
+    await quieto(() => rss.iniciarAgendador({ client: {}, configDoServidor: () => cfgR }));
+    assert.equal(marcados, 0, "sem feed: nenhum timer");
+    db.addFeed(SR, "https://dois.example/rss", "Dois");
+    assert.equal(rss.armarAgendador(), true);
+    assert.equal(rss.armarAgendador(), false, "já armado: não arma outro");
+    assert.equal(marcados, 1);
+  } finally { globalThis.setTimeout = st; rss._pararAgendador(); }
+});
+await t("proximoTrabalho: o telejornal antes do próximo ciclo de leitura, quando ele vem primeiro", () => {
+  const agora = Date.parse("2026-08-20T23:30:00Z");   // 20:30 em São Paulo; telejornal às 20:00 já saiu hoje? não
+  const cfg = { language: "pt", rss: { canalId: CR, horario: "20:45", ultimoTelejornal: null } };
+  const t1 = rss.proximoTrabalho(agora, () => cfg);
+  assert.equal(new Date(t1 - 1000).toISOString(), "2026-08-20T23:45:00.000Z");
+});
+
+// ── &xp ──
+console.log("── &xp ──");
+const nivel = await import("./modulos/ferramentas/nivel.js");
+const SX = U(700), RX = U(701), RALTO = U(702), CX = U(703);
+const srvX = { id: SX, ownerId: DONO, roles: new Map([[RX, { name: "Veterano", rank: 5 }], [RALTO, { name: "Admin", rank: 1 }]]), channels: [{ id: CX }], channelIds: new Set([CX]),
+  member: { roles: [] }, fetchMember: async () => ({ id: { user: ANA }, roles: [RX] }) };
+const xpCtx = (config, perm = true) => { const c = ctxDe(config, { perm, serverId: SX }); c.ctx.getServer = async () => srvX; return c; };
+await t("★ participarDoXp (o que o &privacidade chama): sair apaga o XP e para de contar; voltar recomeça do zero", () => {
+  db.setXp(SX, BEA, 500, 3, new Date().toISOString());
+  assert.deepEqual(nivel.participarDoXp(SX, BEA, false), { apagados: 1 });
+  assert.equal(db.getXp(SX, BEA).xp, 0);
+  assert.equal(nivel.participarDoXp(SX, BEA, true).apagados, 0);
+});
+await t("`&xp cargo <nível> @cargo`: confere o cargo deste servidor e a hierarquia; `off` tira", async () => {
+  const cfg = { language: "pt", xp: { enabled: true, nivelMaximo: 100 } };
+  const { ctx, ultima } = xpCtx(cfg);
+  await nivel.cmdXp({ ...msgDe(ANA), member: { roles: [RX] } }, ["cargo", "10", `<%${RX}>`], ctx);
+  assert.match(ultima(), /^🚫 /, "cargo na altura do de quem pede: recusado");
+  await nivel.cmdXp({ ...msgDe(ANA), member: { roles: [RALTO] } }, ["cargo", "10", "<%01KP2F00000000000000000999>"], ctx);
+  assert.equal(ultima(), "❌ Cargo não encontrado neste servidor. · `&help xp`");
+  srvX.fetchMember = async () => ({ id: { user: ANA }, roles: [RALTO] });
+  await nivel.cmdXp({ ...msgDe(ANA), member: { roles: [RALTO] } }, ["cargo", "10", `<%${RX}>`], ctx);
+  assert.equal(ultima(), `✅ Nível **10** → <%${RX}>`);
+  assert.equal(db.cargoDoNivel(SX, 10), RX);
+  await nivel.cmdXp(msgDe(ANA), ["cargo", "0", `<%${RX}>`], ctx);
+  assert.equal(ultima(), "❌ Nível de 1 a 100. · `&help xp`");
+  await nivel.cmdXp(msgDe(ANA), ["cargo", "10", "off"], ctx);
+  assert.equal(db.cargoDoNivel(SX, 10), null);
+});
+await t("`&xp canal #canal|aqui|off` (só canal deste servidor); sem permissão, uma linha", async () => {
+  const cfg = { language: "pt", xp: { enabled: true } };
+  const { ctx, ultima } = xpCtx(cfg);
+  await nivel.cmdXp(msgDe(ANA), ["canal", `<#${CX}>`], ctx);
+  assert.equal(cfg.xp.canalAnuncio, CX);
+  await nivel.cmdXp(msgDe(ANA), ["canal", `<#${U(799)}>`], ctx);
+  assert.match(ultima(), /^❌ Canal deste servidor/);
+  assert.equal(cfg.xp.canalAnuncio, CX);
+  await nivel.cmdXp(msgDe(ANA), ["canal", "off"], ctx);
+  assert.equal(cfg.xp.canalAnuncio, null);
+  const sem = xpCtx(cfg, false);
+  await nivel.cmdXp(msgDe(ANA), ["canal", "aqui"], sem.ctx);
+  assert.equal(sem.ultima(), "🚫 Permissão insuficiente\nVocê precisa de **ManagePermissions** para isso.");
+});
+await t("★ XP desligado: uma linha + `&help xp` (antes: título e três linhas de instrução)", async () => {
+  const { ctx, ultima } = xpCtx({ language: "pt", xp: { enabled: false } });
+  await nivel.cmdXp(msgDe(ANA), ["top"], ctx);
+  assert.equal(ultima(), "❌ O XP está desligado neste servidor. · `&help xp`");
+});
+await t("`&xp top` sem rodapé de explicação; `&xp @pessoa` mostra o perfil dela; palavra desconhecida é erro de uso", async () => {
+  const cfg = { language: "pt", xp: { enabled: true, multiplicador: 1.5, nivelMaximo: 100 } };
+  db.setXp(SX, ANA, 120, 1, new Date().toISOString());
+  const { ctx, ultima } = xpCtx(cfg);
+  await nivel.cmdXp(msgDe(BEA), ["top"], ctx);
+  assert.doesNotMatch(ultima(), /Stoat|call|mensagens/);
+  await nivel.cmdXp(msgDe(BEA), [`<@${ANA}>`], ctx);
+  assert.match(ultima(), new RegExp(`<@${ANA}>\\n\\*\\*Nível:\\*\\* 1`));
+  await nivel.cmdXp(msgDe(BEA), ["bananas"], ctx);
+  assert.equal(ultima(), "❌ Subcomando desconhecido. · `&help xp`");
+});
+
+// ── &economia ──
+console.log("── &economia ──");
+const eco = await import("./modulos/ferramentas/economia.js");
+await t("★ a espera do minerar é timestamp relativo (antes: \"Volte em 59 min\" no relógio de quem escreveu o texto)", async () => {
+  const { ctx, ultima } = ctxDe({ language: "es" }, { serverId: U(800) });
+  await eco.cmdEconomia(msgDe(ANA), ["minerar"], ctx);
+  await eco.cmdEconomia(msgDe(ANA), ["minerar"], ctx);
+  const s = Number(ultima().match(/^⛏️\nPróxima minería <t:(\d+):R>\.$/)?.[1]);
+  assert.ok(Math.abs(s * 1000 - (Date.now() + 3600e3)) < 5000, ultima());
+});
+await t("economia de cada servidor: o saldo de um servidor não vale em outro; subcomando desconhecido é uma linha", async () => {
+  assert.ok(eco.saldo(U(800), ANA) > 0);
+  assert.equal(eco.saldo(U(801), ANA), 0);
+  const { ctx, ultima } = ctxDe({ language: "pt" }, { serverId: U(800) });
+  await eco.cmdEconomia(msgDe(ANA), ["trocar"], ctx);
+  assert.equal(ultima(), "❌ Subcomando desconhecido. · `&help economia`");
+});
+
+// ── &tts e &musica ──
+console.log("── &tts e &musica ──");
+const tts = await import("./modulos/ferramentas/tts.js");
+await t("★ `&tts estado`: o teste do Piper (forcar=1) roda no máximo uma vez a cada 10 min; as calls listadas são só deste servidor", async () => {
+  const pedidos = [];
+  globalThis.fetch = async (url) => { pedidos.push(String(url)); return { ok: true, status: 200, json: async () => ({ ok: true, piper: { ok: true }, voz: { pronto: true, conexoes: [{ serverId: U(900), canalVoz: U(901), falas: 2 }, { serverId: U(950), canalVoz: U(951), falas: 9 }] } }) }; };
+  try {
+    const { ctx, ultima } = ctxDe({ language: "pt" }, { serverId: U(900) });
+    for (let i = 0; i < 3; i++) await tts.cmdTts(msgDe(ANA), ["estado"], ctx);
+    assert.equal(pedidos.filter((u) => u.includes("forcar=1")).length, 1, pedidos.join(" "));
+    assert.equal(pedidos.length, 3);
+    assert.match(ultima(), new RegExp(`<#${U(901)}>`));
+    assert.doesNotMatch(ultima(), new RegExp(U(951)));
+    assert.doesNotMatch(ultima(), /diagnostico|filtro`/);
+  } finally { globalThis.fetch = async () => ({ ok: false, status: 503, json: async () => ({}) }); }
+});
+await t("`&tts reiniciar`: sem permissão, uma linha; com ela, uma linha de resultado", async () => {
+  const sem = ctxDe({ language: "pt" }, { perm: false, serverId: U(900) });
+  sem.ctx.getServer = async () => ({});
+  await tts.cmdTts(msgDe(ANA), ["reiniciar"], sem.ctx);
+  assert.equal(sem.ultima(), "🚫 Permissão insuficiente: **ManageMessages**.");
+  globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => ({ ok: true }) });
+  try {
+    const com = ctxDe({ language: "es" }, { serverId: U(900) });
+    await tts.cmdTts(msgDe(ANA), ["reiniciar"], com.ctx);
+    assert.equal(com.ultima(), "✅ Voz reiniciada.");
+  } finally { globalThis.fetch = async () => ({ ok: false, status: 503, json: async () => ({}) }); }
+});
+const musica = await import("./modulos/ferramentas/musica.js");
+await t("★ a resposta do serviço de voz (em português) sai em inglês e em espanhol; o título da faixa fica como veio", () => {
+  const casos = [
+    ["➕ **Song A** (3:20) na fila (posição 2).", "➕ **Song A** (3:20) queued (position 2).", "➕ **Song A** (3:20) en la cola (posición 2)."],
+    ["⏸ Pausado.", "⏸ Paused.", "⏸ En pausa."],
+    ["🔊 Volume em 80%.", "🔊 Volume at 80%.", "🔊 Volumen al 80%."],
+    ["⏭ Pulei **X**.\n▶ Tocando **Y** (1:00).", "⏭ Skipped **X**.\n▶ Playing **Y** (1:00).", "⏭ Salté **X**.\n▶ Sonando **Y** (1:00)."],
+    ["⚠️ Não consegui tocar **Z** — vídeo indisponível, e nenhuma outra versão funcionou.", "⚠️ Couldn't play **Z** — video unavailable, and no other version worked.", "⚠️ No pude reproducir **Z** — vídeo no disponible, y ninguna otra versión funcionó."],
+    ["não há nada tocando.", "nothing is playing.", "no suena nada."],
+  ];
+  for (const [pt, en, es] of casos) {
+    assert.equal(musica.traduzirMusica(pt, "en"), en);
+    assert.equal(musica.traduzirMusica(pt, "es"), es);
+    assert.equal(musica.traduzirMusica(pt, "pt"), pt);
+  }
+});
+await t("`&musica` sem nada: uma linha + `&help musica` (não entra na call)", async () => {
+  const { ctx, ultima, saidas } = ctxDe({ language: "es" });
+  await musica.cmdMusica(msgDe(ANA), [], ctx);
+  assert.equal(saidas.length, 1);
+  assert.equal(ultima(), "❌ Falta el enlace o el nombre. · `&ayuda musica`");
+});
+
+// ── &webhook ──
+console.log("── &webhook ──");
+const wh = await import("./modulos/ferramentas/webhooks.js");
+const dmDe = () => { const dms = []; return { dms, author: { openDM: async () => ({ sendMessage: async (p) => dms.push(p.embeds[0]) }) } }; };
+await t("★ a DM com a URL só traz as dicas da máquina (Tailscale, ponte do Docker, WEBHOOK_URL_BASE) para o dono do bot", async () => {
+  const SW = U(1000), CW = U(1001);
+  for (const [quem, dono] of [[ANA, false], [DONO, true]]) {
+    const { dms, author } = dmDe();
+    const { ctx, ultima } = ctxDe({ language: "pt" }, { serverId: SW, dono });
+    ctx.getServer = async () => ({ id: SW, channels: [{ id: CW }], channelIds: new Set([CW]) });
+    await quieto(() => wh.cmdWebhook({ authorId: quem, author, channel: { id: CW }, channelId: CW }, ["criar", `gh${dono ? "dono" : "ana"}`], ctx));
+    assert.match(ultima(), /^🪝 \*\*gh\w+\*\* → <#\S+>\n📬 URL enviada por DM\.$/);
+    const dm = textoDe(dms[0]);
+    assert.match(dm, /\/gancho\/\d+\/[\w-]{20,}/);
+    if (dono) assert.match(dm, /tailscale funnel[\s\S]*172\.17\.0\.1[\s\S]*WEBHOOK_URL_BASE/);
+    else assert.doesNotMatch(dm, /tailscale|172\.17|WEBHOOK_URL_BASE|\.env/i);
+  }
+});
+await t("`&webhook criar <nome> [#canal] [eventos]`: os eventos entram no gancho; lixo nos eventos é erro de uso", async () => {
+  const SW = U(1010), CW = U(1011);
+  const { author } = dmDe();
+  const { ctx, ultima } = ctxDe({ language: "pt" }, { serverId: SW });
+  ctx.getServer = async () => ({ id: SW, channels: [{ id: CW }], channelIds: new Set([CW]) });
+  await quieto(() => wh.cmdWebhook({ authorId: ANA, author, channel: { id: CW }, channelId: CW }, ["criar", "ci", `<#${CW}>`, "push,", "workflow_run"], ctx));
+  assert.equal(db.listarGanchos(SW).find((g) => g.nome === "ci")?.eventos, "push,workflow_run");
+  await quieto(() => wh.cmdWebhook({ authorId: ANA, author, channel: { id: CW }, channelId: CW }, ["criar", "ruim", "<script>"], ctx));
+  assert.equal(ultima(), "❌ Eventos: nomes separados por vírgula. · `&help webhook`");
+  assert.ok(!db.listarGanchos(SW).some((g) => g.nome === "ruim"));
+});
+
+// ── &rolar init (o antigo &iniciativa) ──
+console.log("── &rolar init ──");
+const dados = await import("./modulos/ferramentas/dados-rpg.js");
+await t("★ `&rolar init add Elfa 12` (antes: `&iniciativa add`) e `next`", async () => {
+  const { ctx, ultima } = ctxDe({ language: "pt" });
+  const m = { ...msgDe(ANA, { id: U(1100) }) };
+  await dados.cmdRolar(m, ["init", "add", "Elfa", "12"], ctx);
+  assert.match(ultima(), /\*\*Elfa\*\* → `12`/);
+  await dados.cmdRolar(m, ["init", "next"], ctx);
+  assert.match(ultima(), /▶️ \*\*Elfa\*\*/);
+  await dados.cmdRolar(m, ["init", "limpar"], ctx);
+  assert.equal(dados.iniciativaDe(U(1100)).ordem.length, 0);
+});
+await t("★ iniciativa com teto: no máximo 50 por canal e 200 canais; combate parado há 12 h some sem timer", async () => {
+  const { ctx, ultima } = ctxDe({ language: "pt" });
+  const m = msgDe(ANA, { id: U(1101) });
+  for (let i = 0; i < 50; i++) await dados.cmdRolar(m, ["init", "add", `G${i}`, "5"], ctx);
+  await dados.cmdRolar(m, ["init", "add", "G50", "5"], ctx);
+  assert.equal(ultima(), "❌ Máximo de 50 na ordem.");
+  for (let i = 0; i < 300; i++) dados.iniciativaDe(`canal-${i}`);
+  assert.ok(dados._quantasIniciativas() <= dados.MAX_INICIATIVAS);
+  const velho = Date.now() - 13 * 3600_000;
+  dados.iniciativaDe("parado", velho);
+  dados.podarIniciativas();
+  assert.equal(dados.iniciativaDe("parado").ordem.length, 0);
+});
+await t("`&rolar` sem nada: uma linha + `&help rolar` (antes: a cola inteira da sintaxe)", async () => {
+  const { ctx, ultima } = ctxDe({ language: "pt" });
+  await dados.cmdRolar(msgDe(ANA), [], ctx);
+  assert.equal(ultima(), "❌ Faltou a rolagem (ex.: `2d20+5`). · `&help rolar`");
+});
+
+await t("★ DRY: o erro de uso e a falta de permissão têm uma fonte só (core/saida.js), a mesma da moderação", async () => {
+  const saida = await import("./modulos/core/saida.js");
+  const punir = await import("./modulos/moderacao/punir.js");
+  assert.equal(punir.erroDeUso, saida.erroDeUso);
+  assert.equal(punir.semPermissao, saida.semPermissao);
+  assert.equal(punir.dicaDeAjuda, saida.dicaDeAjuda);
+  assert.ok(!fs.existsSync("modulos/ferramentas/saida.js"), "a cópia das ferramentas saiu");
+  const { ctx, ultima } = ctxDe({ language: "en" });
+  await saida.erroDeUso(ctx, null, "fuso", "x", "Missing city.", "y");
+  assert.equal(ultima(), "❌ Missing city. · `&help timezone`");
+});
+
+// ── o registro ──
+console.log("── registro ──");
+const reg = await import("./modulos/comandos/index.js");
+const aliases = await import("./modulos/core/aliases.js");
+await t("★ `&iniciativa …` é atalho de `&rolar init …` (e o arquivo antigo saiu do índice)", () => {
+  const r = aliases.resolverAtalho(["iniciativa", "add", "Elfa", "12"]);
+  assert.deepEqual([r?.comando, ...(r?.args ?? [])], ["rolar", "init", "add", "Elfa", "12"]);
+  assert.equal(aliases.resolverAtalho(["init"])?.comando, "rolar");
+  assert.ok(!reg.REGISTRO.some((c) => c.id === "iniciativa"));
+});
+await t("ship e cowsay estão no registro do &entretenimento, com ajuda em pt/en/es", () => {
+  const e = reg.REGISTRO.find((c) => c.id === "entretenimento");
+  assert.equal(e.subcomandos.ship, "ship"); assert.equal(e.subcomandos.cowsay, "cowsay");
+  for (const nome of ["ship", "cowsay"]) {
+    const p = e.ajuda.parametros.find((x) => x.nome === nome);
+    assert.ok(p?.desc?.pt && p.desc.en && p.desc.es, nome);
+  }
+});
+await t("toda página de ajuda dos comandos de ferramentas tem pt, en e es (uso e descrição)", () => {
+  const ids = ["fuso", "rss", "xp", "economia", "ticket", "webhook", "tts", "musica", "entretenimento", "servidor", "rolar", "boasvindas", "adeus"];
+  const faltam = [];
+  for (const id of ids) {
+    const c = reg.REGISTRO.find((x) => x.id === id);
+    for (const k of ["uso", "desc"]) { const v = c?.ajuda?.[k]; if (typeof v !== "string" && !(v?.pt && v?.en && v?.es)) faltam.push(`${id}.${k}`); }
+  }
+  assert.deepEqual(faltam, []);
+});
+await t("★ a ajuda do &webhook não mostra variável de ambiente nem endereço interno (R10)", () => {
+  const w = JSON.stringify(reg.REGISTRO.find((x) => x.id === "webhook").ajuda);
+  assert.doesNotMatch(w, /WEBHOOK_URL_BASE|172\.17|tailscale|\.env/i);
+});
+
+// ── integração: o bot de mentira ──
+console.log("── integração (bot de mentira) ──");
+const mudo = async (fn) => { const o = [process.stdout.write, process.stderr.write]; process.stdout.write = process.stderr.write = () => true; try { return await fn(); } finally { [process.stdout.write, process.stderr.write] = o; } };
+await mudo(() => import("./main.js"));
+const store = await import("./modulos/core/config-store.js");
+const c = globalThis.__client;
+await quieto(() => c.emitAll("ready"));
+rss._pararAgendador();
+const SID = U(2000), CG = U(2001);
+const saidas = [];
+const canal = { id: CG, serverId: SID, name: "geral", type: "TextChannel", nsfw: false,
+  sendMessage: async (p) => { saidas.push(typeof p === "string" ? p : `${p?.embeds?.[0]?.title ?? ""}\n${p?.embeds?.[0]?.description ?? ""}`.trim()); return { id: "M" + saidas.length, edit: async () => {}, react: async () => {}, delete: async () => {} }; },
+  fetchMessages: async () => [] };
+const pessoa = (uid) => ({ id: { server: SID, user: uid }, roles: [], hasPermission: () => true, user: { id: uid, username: uid }, nickname: uid, joinedAt: new Date(0) });
+const server = { id: SID, ownerId: ANA, name: "P2", roles: new Map(), channels: [canal], channelIds: new Set([CG]), member: { roles: [] }, havePermission: () => true,
+  fetchMember: async (u) => pessoa(String(u?.id ?? u?.user ?? u)), fetchMembers: async () => ({ members: [], users: [] }), fetchBans: async () => [] };
+c.servers.set(SID, server); c.channels.set(CG, canal); c.users.set(ANA, { id: ANA, username: "ana", bot: false });
+let n = 0;
+async function diz(conteudo) {
+  saidas.length = 0;
+  const ev = { id: U(3000 + ++n), authorId: ANA, content: conteudo, serverId: SID, server, channel: canal, channelId: CG,
+    mentionIds: [], createdAt: new Date(), author: { id: ANA, username: "ana", bot: false }, member: pessoa(ANA), replyIds: [], attachments: [] };
+  await quieto(() => Promise.race([c.emitAll("messageCreate", ev), new Promise((r) => setTimeout(r, 6000))]));
+  return saidas.join("\n").replace(/[\u2063\u2064]/g, "");
+}
+store.configDoServidor(SID).language = "pt"; store.salvarConfigServidor(SID);
+await t("integração: `&fuso 21:30 Madrid` responde o timestamp pelo bot inteiro", async () => {
+  assert.match(await diz("&fuso 21:30 Madrid"), /\*\*21:30\*\* Madrid → <t:\d+:F>/);
+});
+await t("integração: `&timezone 9pm Tokyo` (nome em inglês) e `&huso 21:30` em espanhol", async () => {
+  assert.match(await diz("&timezone 9pm Tokyo"), /\*\*21:00\*\* Tokyo → <t:\d+:F>/);
+  store.configDoServidor(SID).language = "es";
+  assert.match(await diz("&huso 21:30"), /\*\*21:30\*\* Madrid → <t:\d+:F>/);
+  store.configDoServidor(SID).language = "pt";
+});
+await t("integração: `&rolar init add Elfa 12` e o atalho `&iniciativa add Bia 9` chegam ao mesmo combate", async () => {
+  assert.match(await diz("&rolar init add Elfa 12"), /\*\*Elfa\*\* → `12`/);
+  const r = await diz("&iniciativa add Bia 9");
+  assert.match(r, /\*\*Bia\*\* → `9`/);
+  assert.match(r, /Elfa[\s\S]*Bia/);
+});
+await t("integração: `&rss horario 21:00` guarda a hora e `&xp` desligado responde uma linha", async () => {
+  assert.match(await diz("&rss horario 21:00"), /📰 <t:\d+:t>/);
+  assert.equal(store.configDoServidor(SID).rss.horario, "21:00");
+  assert.match(await diz("&xp top"), /O XP está desligado neste servidor\. · `&help xp`/);
+});
+
+console.log(`\nP2 FERRAMENTAS: ${ok} ok, ${falhou} falha(s)`);
+process.exit(falhou ? 1 : 0);
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+// p2-registro-ajuda — P2 (31 out 2026): a superfície comum. A ajuda numa fonte só
+// (o registro), os atalhos (apelido que aponta para dentro de outra família), o
+// &config que absorveu &log/&idioma/&acesso/&comando e sai do padraoServidor, o
+// &info com o suporte, o &tutorial mini guia, as novidades sempre no log, o
+// `&servidores aviso`, a contagem de palavras tentadas e o README gerado.
+// ════════════════════════════════════════════════════════════════════════════
+SUITES["p2-registro-ajuda"] = async () => {
+const fs = (await import("node:fs")).default;
+const assert = (await import("node:assert")).default;
+const DB = "/tmp/p2-registro-ajuda.db";
+for (const f of [DB, DB + "-wal", DB + "-shm", "/tmp/p2-registro-ajuda.json"]) fs.rmSync(f, { force: true });
+const U = (n) => `01KP2R${String(n).padStart(20, "0")}`;
+const DONO = U(1), OUTRO = U(2), ANA = U(4);
+Object.assign(process.env, { BOT_TOKEN: "tok", DB_PATH: DB, CONFIG_PATH: "/tmp/p2-registro-ajuda.json", SUPER_ADMINS: DONO });
+for (const v of ["IA_MODO", "IA", "CHAT_SERVIDORES", "IA_SERVICO_URL", "LLM_URL", "LLM_MODEL_VISAO", "MODELO_VISAO", "LLM_MODEL_MODERACAO", "MODELO_MODERACAO", "RELATORIO_SERVIDOR"]) delete process.env[v];
+globalThis.fetch = async () => ({ ok: false, status: 503, text: async () => "", json: async () => ({}), headers: new Map() });
+let ok = 0, falhou = 0;
+const t = async (nome, fn) => { try { await fn(); console.log(`  ✅ ${nome}`); ok++; } catch (e) { console.log(`  ❌ ${nome}\n     ${String(e?.message ?? e).split("\n").join("\n     ")}`); falhou++; } };
+const LANGS = ["pt", "en", "es"];
+
+console.log("── registro e atalhos ──");
+const registro = await import("./modulos/comandos/index.js");
+const al = await import("./modulos/core/aliases.js");
+const aj = await import("./modulos/core/ajuda-registro.js");
+const hg = await import("./modulos/moderacao/help-grupos.js");
+await t("o registro está íntegro (atalhos inclusive)", () => assert.deepEqual(registro.problemasDoRegistro(), []));
+await t("★ atalho: problemasDoRegistro reprova destino inexistente, uma palavra que é nome de comando e chave repetida", () => {
+  const base = [...registro.REGISTRO];
+  const p = (extra) => registro.problemasDoRegistro([...base, extra]).join("\n");
+  assert.match(p({ id: "x1", funcao: () => 1, atalhos: { "zzq": "naoexiste sub" } }), /não é comando do registro/);
+  assert.match(p({ id: "x2", funcao: () => 1, atalhos: { "ping": "x2" } }), /uma palavra "ping" é nome de ping/);
+  assert.match(p({ id: "x3", funcao: () => 1, atalhos: { "log|registro": "x3" } }), /repete "log\|logs"/);
+  assert.match(p({ id: "x4", funcao: () => 1, atalhos: { "Abc def": "x4" } }), /minúsculo/);
+  // chave de duas palavras sobre um comando vivo é permitida
+  assert.equal(p({ id: "x5", funcao: () => 1, atalhos: { "ping zzz": "x5" } }), "");
+});
+await t("★ resolverAtalho: a chave mais longa vence, o resto vai no fim, alternativas com |", () => {
+  assert.deepEqual(al.resolverAtalho(["log", "canal", "#x"]) && [al.resolverAtalho(["log", "canal", "#x"]).comando, ...al.resolverAtalho(["log", "canal", "#x"]).args], ["config", "log", "canal", "#x"]);
+  const r = al.resolverAtalho(["ACESSO", "role", "add", "@Mod"]);
+  assert.deepEqual([r.comando, ...r.args], ["staff", "add", "@Mod"]);
+  const s = al.resolverAtalho(["acesso", "canal", "todos"]);
+  assert.deepEqual([s.comando, ...s.args], ["config", "acesso", "canal", "todos"]);
+  assert.deepEqual([al.resolverAtalho(["language", "es"]).comando, ...al.resolverAtalho(["language", "es"]).args], ["config", "idioma", "es"]);
+  assert.deepEqual([al.resolverAtalho(["chat", "off"]).comando, ...al.resolverAtalho(["chat", "off"]).args], ["config", "ia", "chat", "off"]);
+  assert.equal(al.resolverAtalho(["ping"]), null);
+  assert.equal(al.resolverAtalho([]), null);
+});
+await t("★ citar() pelo caminho antigo mostra o caminho novo, nos 3 idiomas (o texto antigo não quebra)", () => {
+  assert.equal(al.citar("log.canal", "pt"), "&config log canal");
+  assert.equal(al.citar("log.canal", "en"), "&config log channel");
+  assert.equal(al.citar("log.punicoes", "es"), "&config log sanciones");
+  assert.equal(al.citar("acesso.cargo.add", "en"), "&staff add");
+  assert.equal(al.citar("idioma", "en"), "&config language");
+  assert.equal(al.citar("comando.desativar", "es"), "&config comando desactivar");
+  assert.equal(al.citar("chat.on", "pt"), "&config ia chat on");
+  assert.throws(() => al.citar("naoexiste.x"), /não existe/);
+});
+await t("★ nomes em inglês: silence→timeout, about→info, wizard→setup (o antigo continua levando ao comando)", () => {
+  assert.equal(al.nomeExibido("silenciar", "en"), "timeout");
+  assert.equal(al.nomeExibido("sobre", "en"), "info");
+  assert.equal(al.nomeExibido("sobre", "es"), "info");
+  assert.equal(al.nomeExibido("assistente", "en"), "setup");
+  for (const [velho, id] of [["silence", "silenciar"], ["about", "sobre"], ["wizard", "assistente"], ["support", "sobre"], ["suporte", "sobre"], ["soporte", "sobre"]]) assert.equal(al.idDoNome(velho), id, velho);
+});
+
+console.log("── ajuda: uma fonte só ──");
+await t("★ os arquivos da árvore à mão sumiram (help-arvore, help-arvore-es, help-parametros) e o core não tem handler", () => {
+  for (const f of ["help-arvore.js", "help-arvore-es.js", "help-parametros.js"]) assert.ok(!fs.existsSync(`modulos/moderacao/${f}`), f);
+  for (const f of ["modulos/comandos/log.js", "modulos/comandos/idioma.js", "modulos/comandos/acesso.js", "modulos/comandos/comando.js"]) assert.ok(!fs.existsSync(f), f);
+  for (const f of fs.readdirSync("modulos/core")) assert.doesNotMatch(fs.readFileSync(`modulos/core/${f}`, "utf8"), /export async function cmd[A-Z]/, f);
+  const g = fs.readFileSync("modulos/moderacao/geral.js", "utf8");
+  for (const velho of ["construirSubtopicos", "mesclarNos", "ligarFamilias", "arvoreSubtopicos", "export async function cmdHelp"]) assert.ok(!g.includes(velho), velho);
+});
+await t("★ todo comando do registro tem página de ajuda (uso, desc, grupo) nos 3 idiomas, inclusive as páginas de dentro", () => {
+  const faltas = [];
+  for (const c of registro.REGISTRO) {
+    for (const f of aj.faltasDeIdioma(c)) faltas.push(`${c.id}: ${f}`);
+    if (!aj.grupoDe(c)) faltas.push(`${c.id}: sem grupo`);
+  }
+  assert.deepEqual(faltas, []);
+  // (31 out 2026, P2) integração: o mapa de transição (GRUPO_PADRAO) saiu — todo comando traz o grupo no próprio registro
+  assert.deepEqual(aj.COMANDOS_SEM_GRUPO_NO_REGISTRO(), []);
+  assert.ok(!("GRUPO_PADRAO" in hg), "o mapa de transição voltou ao help-grupos.js");
+});
+await t("★ regressão: `&help xp`, `&help game` e `&help automod` abrem a página do comando, não o grupo", () => {
+  for (const w of ["xp", "game", "automod", "levels", "config", "settings"]) {
+    const r = aj.resolverPedido([w]);
+    assert.equal(r.tipo, "comando", `${w}: ${JSON.stringify(r)}`);
+  }
+  assert.equal(aj.resolverPedido(["xp"]).id, "xp");
+  assert.equal(aj.resolverPedido(["game"]).id, "game");
+  assert.equal(aj.resolverPedido(["settings"]).id, "config");
+});
+await t("grupo pelo nome em qualquer idioma; número e nada são o índice; o resto, \"não achei\"", () => {
+  for (const [w, g] of [["proteger", "proteger"], ["protect", "proteger"], ["start", "comecar"], ["comecar", "comecar"], ["fun", "diversao"], ["diversion", "diversao"], ["rpg", "rpg"], ["owner", "dono"]]) assert.deepEqual(aj.resolverPedido([w]), { tipo: "grupo", grupo: g }, w);
+  assert.equal(aj.resolverPedido([]).tipo, "indice");
+  assert.equal(aj.resolverPedido(["2"]).tipo, "indice");
+  assert.equal(aj.resolverPedido(["zzqx"]).tipo, "nada");
+});
+await t("★ `&help <cmd> <sub>`: a parte pelo nome interno, inglês ou espanhol; o atalho leva à página de dentro", () => {
+  const ver = (args) => { const r = aj.resolverPedido(args); return [r.id, ...(r.caminho ?? [])].join(" "); };
+  assert.equal(ver(["config", "log"]), "config log");
+  assert.equal(ver(["config", "language"]), "config idioma");
+  assert.equal(ver(["config", "acceso"]), "config acesso");
+  assert.equal(ver(["log"]), "config log");
+  assert.equal(ver(["access", "channel"]), "config acesso");
+  assert.equal(ver(["servers", "report"]), "servidores relatorio");
+  assert.equal(ver(["about"]), "sobre");
+  assert.equal(ver(["support"]), "sobre");
+});
+// (31 out 2026, P2 integração) as três falhas da busca de parte solta que a moderação achou
+await t("★ regressão: `&help punishment ladder` desce a partir da parte achada (antes partia da raiz e o `ladder` sobrava)", () => {
+  for (const args of [["punishment", "ladder"], ["punicao", "escada"], ["punishment", "steps"]]) {
+    const r = aj.resolverPedido(args);
+    assert.deepEqual([r.tipo, r.id, r.caminho, r.resto], ["comando", "automod", ["punicao", "escada"], []], args.join(" "));
+    assert.ok(r.no && r.no === aj.noDaPagina("automod", ["punicao", "escada"]), "o nó devolvido é o da página");
+  }
+  // o mesmo com o caminho de partida explícito, e o vocabulário é o da parte (não o do topo)
+  assert.deepEqual(aj.resolverCaminho("automod", ["ladder"], ["punicao"]).caminho, ["punicao", "escada"]);
+  assert.deepEqual(aj.resolverCaminho("automod", ["ladder"]).caminho, []);
+  assert.match(aj.pagina("automod", ["punicao", "escada"], "pt", "&").titulo, /&automod › punicao › escada/);
+});
+await t("★ regressão: `&help topics` acha a parte pelo vocabulário de DENTRO da família (sentinela › assuntos); palavra comum de dentro (`canal`) não vira página", () => {
+  for (const w of ["topics", "subjects", "assuntos"]) {
+    const r = aj.resolverPedido([w]);
+    assert.deepEqual([r.tipo, r.id, r.caminho], ["comando", "automod", ["sentinela", "assuntos"]], w);
+  }
+  assert.deepEqual(aj.resolverPedido(["sentinel", "topics"]).caminho, ["sentinela", "assuntos"]);
+  for (const w of ["canal", "channel", "sensibilidade", "ladder", "politica"]) assert.equal(aj.resolverPedido([w]).tipo, "nada", w);
+});
+// (31 out 2026, P2 revisão) R5: sem a tabela `es.subcomandos`, o `subExibido` caía no inglês na tela espanhola
+await t("★ R5: todo subcomando (e nome de tela) com inglês diferente do interno tem o nome em espanhol — e a tela espanhola não mostra o inglês", async () => {
+  const faltam = [], ingles = [];
+  for (const c of registro.REGISTRO) {
+    const niveis = [[c.id, c]];
+    for (const [n, f] of Object.entries(c.familias ?? {})) niveis.push([`${c.id}.${n}`, f]);
+    for (const [n, f] of Object.entries(c.partes ?? {})) niveis.push([n, f]);
+    for (const [tabela, nv] of niveis) {
+      const es = nv.es?.subcomandos ?? {};
+      const pares = [...Object.entries(nv.subcomandos ?? {}).map(([pt, en]) => [pt, [].concat(en)[0]]), ...Object.entries(nv.naTela ?? {})];
+      for (const [pt, en] of pares) {
+        if (en === pt) continue;
+        if (!(pt in es)) { faltam.push(`${tabela}: ${pt} (en ${en})`); continue; }
+        const tela = al.subExibido(tabela, pt, "es");
+        if (tela === en && [].concat(es[pt])[0] !== en) ingles.push(`${tabela}: ${pt} → ${tela}`);
+      }
+    }
+  }
+  assert.deepEqual(faltam, [], "sem espanhol no registro");
+  assert.deepEqual(ingles, [], "a tela espanhola mostra o inglês");
+  // os painéis do automod (nomes-automod.js) leem o mesmo espanhol
+  const na = await import("./modulos/core/nomes-automod.js");
+  assert.deepEqual([na.nomeSens("media", "es"), na.nomeModo("acumular", "es"), na.nomeParte("conteudo", "es"), na.nomeParte("velocidade", "es"), na.nomeGrupo("sentinela", "es"), na.nomeAcaoTema("punir", "es")],
+    ["media", "acumular", "contenido", "velocidad", "centinela", "castigar"]);
+  assert.deepEqual([na.nomeSens("media", "en"), na.nomeModo("acumular", "en")], ["medium", "stack"], "o inglês não muda");
+  // e o espanhol também se digita: chega ao handler como o nome interno
+  assert.deepEqual(al.normalizarArgs("reset", ["deshacer"]), ["desfazer"]);
+  assert.equal(al.SUB["economia"]?.tienda, "loja");
+});
+await t("★ regressão: família sem página própria (`&help antispam`) abre a página do comando, não \"não há ajuda\"", () => {
+  for (const w of ["antispam", "antiruido", "antinoise", "antilink"]) {
+    const r = aj.resolverPedido([w]);
+    assert.deepEqual([r.tipo, r.id, r.caminho, r.resto], ["comando", "automod", [], []], w);
+    assert.ok(r.no === aj.noDaPagina("automod", []), w);
+  }
+  assert.match(aj.pagina("automod", [], "en", "&").titulo, /^📖 Help — &automod$/);
+});
+await t("★ toda página monta nos 3 idiomas, sem marca crua, sem [object Object]; o espanhol sai pronto", () => {
+  const ruins = [];
+  for (const [id, ...cam] of aj.todasAsPaginas()) for (const l of LANGS) {
+    const p = aj.pagina(id, cam, l, "&");
+    const txt = `${p?.titulo}\n${p?.linhas?.join("\n")}`;
+    if (!p) ruins.push(`${id} ${cam.join(" ")} [${l}]: não monta`);
+    else if (/\{&[a-z]|\[object Object\]|undefined/.test(txt)) ruins.push(`${id} ${cam.join(" ")} [${l}]: ${txt.match(/\{&[a-z.]+\}|\[object Object\]|undefined/)?.[0]}`);
+    else if (l === "es" && !p.pronto) ruins.push(`${id} ${cam.join(" ")} [es]: sem espanhol`);
+  }
+  assert.deepEqual(ruins, []);
+  const p = aj.pagina("config", [], "en", "&");
+  assert.match(p.titulo, /Help — &config/);
+  assert.ok(p.linhas.some((x) => x.includes("`&config log`")), p.linhas.join("\n"));
+  assert.ok(p.linhas.some((x) => /^\*\*Usage:\*\*/.test(x)));
+});
+await t("índice e grupos saem do registro: todo comando está em um grupo que existe", () => {
+  const { GRUPOS } = { GRUPOS: null };
+  const pg = aj.comandosPorGrupo();
+  const todos = Object.values(pg).flat();
+  for (const c of registro.REGISTRO) assert.ok(todos.includes(c.id), c.id);
+  assert.ok(pg.dono.includes("servidores"));
+  assert.ok(pg.comecar.includes("config"));
+  for (const l of LANGS) assert.ok(aj.resumoDe(registro.REGISTRO.find((c) => c.id === "config"), l).length > 5);
+});
+
+console.log("── &config: a tela sai do padraoServidor ──");
+const store = await import("./modulos/core/config-store.js");
+const rot = await import("./modulos/moderacao/config-rotulos.js");
+const { telaDoConfig } = await import("./modulos/moderacao/config-comando.js");
+const caminhos = []; const andar = (o, c) => { for (const [k, v] of Object.entries(o)) { caminhos.push([...c, k]); if (v && typeof v === "object" && !Array.isArray(v)) andar(v, [...c, k]); } }; andar(store.padraoServidor, []);
+await t("★ as chaves que o relatório de 31/10 achou fora estão no padraoServidor", () => {
+  const tem = (cam) => cam.split(".").reduce((o, k) => (o && k in o ? o[k] : undefined), store.padraoServidor) !== undefined || cam.split(".").reduce((o, k) => (o && typeof o === "object" ? (k in o ? o[k] : Symbol.for("x")) : Symbol.for("x")), store.padraoServidor) === null;
+  // (a persona saiu do servidor no P2: uma só, do dono do bot — área da IA)
+  for (const c of ["relatorioDono", "tts.canalTexto", "acesso.livres", "acesso.staffIgnoraCanais", "servidorInfo", "automod.isentarStaff", "automod.antiImagem.todos", "ia.chat", "ia.imagem"]) assert.ok(tem(c), c);
+  assert.ok(!("atualizacoes" in store.padraoServidor.log.eventos), "o toggle das novidades saiu");
+});
+await t("★ toda chave do padraoServidor tem rótulo pt/en/es e aparece na tela (nos 3 idiomas)", () => {
+  const sem = caminhos.filter((c) => LANGS.some((l) => !rot.rotulo(c, l))).map((c) => c.join("."));
+  assert.deepEqual(sem, []);
+  for (const l of LANGS) {
+    const { linhas, cobertos } = telaDoConfig(structuredClone(store.padraoServidor), { lang: l });
+    assert.deepEqual(caminhos.map((c) => c.join(".")).filter((c) => !cobertos.has(c)), [], l);
+    const txt = linhas.join("\n");
+    // cada seção aparece pelo rótulo
+    for (const k of Object.keys(store.padraoServidor)) assert.ok(txt.includes(rot.rotulo([k], l)), `${l}: ${k}`);
+    assert.doesNotMatch(txt, /undefined|\[object Object\]/);
+  }
+});
+await t("★ regressão: ✓/🟢 em imagens e foto de perfil sem o modelo de visão; o alerta do sentinela vai ao LOG", () => {
+  const cfg = structuredClone(store.padraoServidor);
+  cfg.log.canalId = U(9);
+  const txt = telaDoConfig(cfg, { lang: "pt" }).linhas.join("\n");
+  assert.match(txt, /⚫ \*\*Imagens\*\*/); assert.match(txt, /⚫ \*\*Foto de perfil\*\*/);
+  assert.match(txt, /alertas em \(o log\)/);
+  assert.doesNotMatch(txt, /canal da mensagem/);
+  process.env.LLM_MODEL_VISAO = "x";
+  try { assert.match(telaDoConfig(cfg, { lang: "pt" }).linhas.join("\n"), /🟢 \*\*Imagens\*\*/); } finally { delete process.env.LLM_MODEL_VISAO; }
+});
+await t("a config salva antiga continua no mesmo lugar (ia.chat ligado fica ligado; o mesclar preenche o resto)", async () => {
+  const db = await import("./modulos/core/db.js");
+  db.abrirBanco(DB);
+  const SID = U(500);
+  db.gravarConfig(SID, { language: "pt", ia: { chat: true }, log: { canalId: U(9), eventos: { atualizacoes: true } } });
+  store.recarregarServidor(SID);
+  const cfg = store.configDoServidor(SID);
+  assert.equal(cfg.ia.chat, true);
+  assert.equal(cfg.log.eventos.atualizacoes, true, "o valor antigo continua lá (só não é lido)");
+  assert.deepEqual(cfg.acesso.livres, []);
+  assert.equal(cfg.automod.isentarStaff, true);
+});
+
+console.log("── palavras tentadas e comandos usados ──");
+const db = await import("./modulos/core/db.js");
+db.abrirBanco(DB);
+await t("normalizarPalavra: minúscula, sem acento; número, ID, link e menção não entram", () => {
+  assert.equal(db.normalizarPalavra("Configuração"), "configuracao");
+  assert.equal(db.normalizarPalavra("BAN!"), "ban");
+  for (const ruim of ["123", U(3), "https://x.com", "<@abc>", "a", "x".repeat(30), "", null]) assert.equal(db.normalizarPalavra(ruim), null, String(ruim));
+});
+await t("★ teto: no máximo 200 palavras distintas por servidor e mês (a já contada continua somando)", () => {
+  const SID = U(600), agora = Date.UTC(2026, 9, 15);
+  const pal = (i) => "p" + String(i).replace(/[0-9]/g, (d) => "abcdefghij"[d]) + "x";
+  let aceitas = 0;
+  for (let i = 0; i < 250; i++) if (db.contarPalavraTentada(SID, pal(i), agora)) aceitas++;
+  assert.equal(aceitas, db.PALAVRAS_TETO);
+  assert.equal(db.contarPalavraTentada(SID, pal(0), agora), true, "a que já existe soma");
+  assert.equal(db.contarPalavraTentada(SID, pal(240), agora), false, "a nova passa do teto");
+  assert.equal(db.contarPalavraTentada(U(601), pal(240), agora), true, "outro servidor tem o seu teto");
+  assert.equal(db.contarPalavraTentada(SID, pal(240), Date.UTC(2026, 10, 2)), true, "mês novo, teto novo");
+  assert.equal(db.palavrasTentadas({ serverId: SID, agora }).find((x) => x.palavra === pal(0)).vezes, 2);
+  assert.equal(db.contarPalavraTentada(null, "abc", agora), false, "sem servidor (DM) não conta");
+});
+await t("★ prazo: a palavra some 30 dias depois da última vez", () => {
+  const SID = U(700), t0 = Date.UTC(2026, 0, 1);
+  db.contarPalavraTentada(SID, "velhaword", t0);
+  assert.equal(db.palavrasTentadas({ serverId: SID, agora: t0 + 29 * 86400e3 }).length, 1);
+  assert.equal(db.palavrasTentadas({ serverId: SID, agora: t0 + 31 * 86400e3 }).length, 0, "fora do prazo não aparece");
+  const apagadas = db.limparPalavrasVencidas(t0 + 31 * 86400e3, { forcar: true });
+  assert.ok(apagadas >= 1);
+  assert.equal(db.getDb().prepare("SELECT COUNT(*) AS n FROM palavras_tentadas WHERE serverId = ?").get(SID).n, 0, "e sai do banco");
+});
+await t("uso de comandos: soma por nome interno", () => {
+  db.contarUsoComando("ping"); db.contarUsoComando("ping"); db.contarUsoComando("help");
+  const u = db.usoDeComandos();
+  assert.equal(u.ping, 2); assert.equal(u.help, 1); assert.equal(u.warn, undefined);
+});
+
+console.log("── novidades e anúncio no log ──");
+const nov = await import("./modulos/ferramentas/novidades.js");
+await t("★ anunciarNoLog: todo servidor COM log recebe, no idioma dele; sem log não; canal de outro servidor nunca", async () => {
+  const cfgs = { A: { language: "es", log: { canalId: "CA" } }, B: { language: "pt", log: { canalId: null } }, C: { language: "en", log: { canalId: "CC" } }, D: { language: "pt", log: { canalId: "CD" } } };
+  const canais = { CA: { id: "CA", serverId: "A" }, CC: { id: "CC", serverId: "X" }, CD: { id: "CD", serverId: "D" } };
+  const cliente = { servers: new Map(Object.keys(cfgs).map((k) => [k, { id: k }])), channels: { get: (id) => canais[id] } };
+  const enviados = [];
+  const r = await nov.anunciarNoLog(cliente, (l) => ({ title: { pt: "Oi", en: "Hi", es: "Hola" }[l], description: l }), { configDoServidor: (id) => cfgs[id], enviar: async (canal, e, sid) => enviados.push([canal.id, e.title, sid]) });
+  assert.deepEqual(r, { enviados: 2, semLog: 2, falhas: 0 });
+  assert.deepEqual(enviados.map((x) => x[0]), ["CA", "CD"]);
+  assert.match(enviados[0][1], /Hola/); assert.ok(enviados[0][1].startsWith(al.JA_TRADUZIDO), "o espanhol sai pronto");
+  assert.equal(enviados[1][1], "Oi");
+});
+await t("★ as novidades vão a todo log, sem opção (antes: só com `&log atualizacoes on`)", async () => {
+  const lista = [{ id: "n2", data: "2026-11-01", pt: "nova pt", en: "new en", es: "nueva es" }, { id: "n1", data: "2026-10-01", pt: "a", en: "a", es: "a" }];
+  const cfgs = { A: { language: "pt", log: { canalId: "CA", eventos: { atualizacoes: false } } }, B: { language: "en", log: { canalId: "CB" } } };
+  const canais = { CA: { id: "CA", serverId: "A" }, CB: { id: "CB", serverId: "B" } };
+  const cliente = { servers: new Map([["A", { id: "A" }], ["B", { id: "B" }]]), channels: { get: (id) => canais[id] } };
+  const enviados = [];
+  const r = await nov.anunciar({ client: cliente, global: { novidadesAnunciadas: "n1" }, salvarGlobal: () => {}, configDoServidor: (id) => cfgs[id], enviar: async (c, e) => enviados.push([c.id, e.description]), lista });
+  assert.deepEqual(r, { enviados: 2, novas: 1 });
+  assert.match(enviados[0][1], /nova pt/); assert.doesNotMatch(enviados[0][1], /atualizacoes|off/);
+});
+await t("★ trava do build: o topo das NOVIDADES tem de ser do pacote de docs/pacote.json, e não mais velho", () => {
+  const pac = JSON.parse(fs.readFileSync("docs/pacote.json", "utf8"));
+  assert.equal(nov.problemaDaTrava(nov.NOVIDADES, pac), null);
+  const lista = [{ id: "x", pacote: "P2", data: "2026-10-31", pt: "a", en: "b", es: "c" }];
+  assert.equal(nov.problemaDaTrava(lista, { pacote: "P2", data: "2026-10-31" }), null);
+  assert.match(nov.problemaDaTrava(lista, { pacote: "P3", data: "2026-11-05" }), /pacote P2.*P3/);
+  assert.match(nov.problemaDaTrava([{ ...lista[0], data: "2026-10-01" }], { pacote: "P2", data: "2026-10-31" }), /mais velha/);
+  assert.match(nov.problemaDaTrava([{ ...lista[0], es: "" }], { pacote: "P2", data: "2026-10-31" }), /pt, en e es/);
+});
+
+console.log("── README gerado ──");
+const rd = await import("./scripts/gerar-readme.js");
+await t("variaveisDoEnv: nome, exemplo e a 1ª frase do comentário; repetida conta uma vez", () => {
+  // (31 out 2026, P2 revisão) o CONVERSA não herda mais o comentário do IA (era o erro): sem comentário próprio, sem descrição
+  const vs = rd.variaveisDoEnv("# ── IA ──\n# Liga a IA. Mais texto.\nIA=1\n#CONVERSA=0\n\n# Token do bot\nBOT_TOKEN=\nIA=2\n");
+  assert.deepEqual(vs.map((v) => [v.nome, v.valor, v.desc, v.secao]), [["IA", "1", "Liga a IA.", "IA"], ["CONVERSA", "0", "", "IA"], ["BOT_TOKEN", "", "Token do bot", "IA"]]);
+  assert.match(rd.tabelaDeVariaveis("AB=1 | 2\n", "pt"), /`1 \\\| 2`/);
+});
+// (31 out 2026, P2 revisão) o comentário herdado, a linha de comentário lida como variável e o valor cortado
+await t("★ regressão: o leitor do .env.example — cada comentário só descreve a variável de baixo; `# NOME=1 texto` é comentário; valor inteiro", () => {
+  const env = [
+    "# ── IA ──",
+    "# A URL do servidor de IA. Segunda frase que não entra.",
+    "LLM_URL=http://ia:8080/v1/chat/completions/um-caminho-bem-mais-longo-que-quarenta",
+    "SUPER_ADMINS=",
+    "VOZ_ATIVA=1",
+    "",
+    "# IMAGEM=1 liga (a geração de imagem fica desligada sem ela)",
+    "IMAGEM=0",
+    "#PROMPT=Você é um assistente simpático.",
+    "# CHAT_SERVIDORES=",
+    "# IA=0 desliga todos os módulos de IA.",
+  ].join("\n");
+  const vs = rd.variaveisDoEnv(env);
+  const por = Object.fromEntries(vs.map((v) => [v.nome, v]));
+  assert.deepEqual(vs.map((v) => v.nome), ["LLM_URL", "SUPER_ADMINS", "VOZ_ATIVA", "IMAGEM", "PROMPT", "CHAT_SERVIDORES"], "a linha `# IA=0 desliga…` é comentário");
+  assert.equal(por.LLM_URL.desc, "A URL do servidor de IA.");
+  assert.equal(por.SUPER_ADMINS.desc, "", "não herda o comentário da variável de cima");
+  assert.equal(por.VOZ_ATIVA.desc, "");
+  assert.equal(por.IMAGEM.desc, "IMAGEM=1 liga (a geração de imagem fica desligada sem ela)");
+  assert.equal(por.PROMPT.valor, "Você é um assistente simpático.");
+  const tab = rd.tabelaDeVariaveis(env, "pt");
+  assert.ok(tab.includes("`http://ia:8080/v1/chat/completions/um-caminho-bem-mais-longo-que-quarenta`"), "o valor sai inteiro");
+  assert.ok(!/`IA`/.test(tab));
+  // e o .env.example de verdade: nenhuma descrição repetida de uma variável para a seguinte
+  const reais = rd.variaveisDoEnv(fs.readFileSync(".env.example", "utf8"));
+  const repetidas = reais.filter((v, i) => i && v.desc && v.desc === reais[i - 1].desc).map((v) => `${reais.indexOf(v) - 1 >= 0 ? reais[reais.indexOf(v) - 1].nome : ""} → ${v.nome}`);
+  assert.deepEqual(repetidas, []);
+  assert.ok(!reais.some((v) => /\s/.test(v.valor) && v.nome !== "PROMPT" && !/^["']/.test(v.valor)), "variável com espaço no valor (era comentário)");
+});
+await t("★ os 3 READMEs estão em dia com o registro e o .env.example (e marcador ausente é erro)", async () => {
+  assert.deepEqual(await rd.conferir(process.cwd()), []);
+  assert.throws(() => rd.substituir("sem marcador", "comandos", "x"), /ausente/);
+  const en = fs.readFileSync("README.md", "utf8");
+  assert.match(en, /`&config` \| everything this server configures/);
+  assert.match(fs.readFileSync("README.es.md", "utf8"), /`&ayuda` \|/);
+  assert.match(en, /\| `BOT_TOKEN` \|/);
+  for (const f of ["README.md", "README.pt-BR.md", "README.es.md"]) assert.match(fs.readFileSync(f, "utf8"), /PRIVACIDADE\.md/, f);
+});
+
+await t("★ regressão: o protegerMarcadores deixa o timestamp do Stoat (`<t:…>`) e o carimbo() aparece na tela", async () => {
+  const { protegerMarcadores } = await import("./modulos/core/marcadores.js");
+  const { carimbo } = await import("./modulos/core/tempo.js");
+  const c0 = carimbo(Date.UTC(2026, 9, 31, 21, 30), "f");
+  assert.equal(protegerMarcadores(`às ${c0} (<t:1793482200:R>) e <t:1793482200>`), `às ${c0} (<t:1793482200:R>) e <t:1793482200>`);
+  assert.equal(protegerMarcadores("`&warn <motivo>` <t:abc> <t:12:X>"), "`&warn ‹motivo›` ‹t:abc› ‹t:12:X›", "o molde e o que não é timestamp continuam protegidos");
+});
+console.log("── no bot (main.js) ──");
+const quieto = async (fn) => { const o = [console.log, console.info, console.warn, console.error]; console.log = console.info = console.warn = console.error = () => {}; try { return await fn(); } finally { [console.log, console.info, console.warn, console.error] = o; } };
+const mudo = async (fn) => { const o = [process.stdout.write, process.stderr.write]; process.stdout.write = process.stderr.write = () => true; try { return await fn(); } finally { [process.stdout.write, process.stderr.write] = o; } };
+await mudo(() => import("./main.js"));
+const c = globalThis.__client;
+await quieto(() => c.emitAll("ready"));
+const SID = U(100), CG = U(101), CL = U(102);
+const saidas = [];
+const textoDe = (p) => typeof p === "string" ? p : `${p?.embeds?.[0]?.title ?? ""}\n${p?.embeds?.[0]?.description ?? ""}${typeof p?.content === "string" ? "\n" + p.content : ""}`;
+let nMsg = 0;
+const canal = (id, sid = SID) => ({ id, serverId: sid, name: id, type: "TextChannel", nsfw: false, enviados: [],
+  sendMessage: async function (p) { this.enviados.push(textoDe(p)); saidas.push(textoDe(p)); return { id: "M" + (++nMsg), edit: async (q) => { saidas.push(textoDe(q)); }, react: async () => {}, delete: async () => {} }; },
+  fetchMessages: async () => [], deleteMessages: async () => {} });
+const geral = canal(CG), logc = canal(CL);
+const pessoa = (uid, adm) => ({ id: { server: SID, user: uid }, roles: [], hasPermission: () => adm, user: { id: uid, username: uid }, nickname: uid, joinedAt: new Date(0) });
+const membros = { [DONO]: pessoa(DONO, true), [OUTRO]: pessoa(OUTRO, true), [ANA]: pessoa(ANA, false) };
+const server = { id: SID, ownerId: OUTRO, name: "Teste", roles: new Map(), channels: [geral, logc], channelIds: new Set([CG, CL]), member: { roles: [] }, havePermission: () => true,
+  fetchMember: async (u) => membros[String(u?.id ?? u?.user ?? u)] ?? null, fetchMembers: async () => ({ members: Object.values(membros), users: [] }), fetchBans: async () => [] };
+c.servers.set(SID, server); c.channels.set(CG, geral); c.channels.set(CL, logc);
+for (const u of Object.keys(membros)) c.users.set(u, { id: u, username: u, bot: false });
+async function diz(autor, conteudo) {
+  saidas.length = 0;
+  const ev = { id: U(1000 + ++nMsg), authorId: autor, content: conteudo, serverId: SID, server, channel: geral, channelId: CG,
+    mentionIds: [], createdAt: new Date(), author: { id: autor, username: autor, bot: false }, member: membros[autor], replyIds: [], attachments: [] };
+  await quieto(() => Promise.race([c.emitAll("messageCreate", ev), new Promise((r) => setTimeout(r, 6000))]));
+  return saidas.join("\n");
+}
+// todas as páginas da resposta (vira com ▶ cada mensagem paginada)
+const paginasMod = await import("./modulos/core/paginas.js");
+async function dizTudo(autor, conteudo) {
+  const antes = nMsg;
+  const txt = [await diz(autor, conteudo)];
+  for (let id = antes + 1; id <= nMsg; id++) for (let k = 0; k < 10; k++) {
+    saidas.length = 0;
+    const virou = await quieto(() => paginasMod.aoReagir("M" + id, autor, "▶"));
+    if (!virou || !saidas.length || /(Página|Page|Página) \*\*1\//.test(saidas[0])) break;
+    txt.push(saidas.join("\n"));
+  }
+  return txt.join("\n");
+}
+await diz(OUTRO, "&config idioma pt");
+await t("★ `&log canal #x` = `&config log canal #x` (o nome antigo, com o subcomando, é atalho)", async () => {
+  await diz(OUTRO, `&log canal <#${CL}>`);
+  assert.equal(store.configDoServidor(SID).log.canalId, CL);
+  await diz(OUTRO, "&config log off");
+  assert.equal(store.configDoServidor(SID).log.canalId, null);
+  await diz(OUTRO, `&logs channel <#${CL}>`);
+  assert.equal(store.configDoServidor(SID).log.canalId, CL);
+});
+await t("★ `&idioma es`, `&language en`, `&config idioma pt`: a mesma parte", async () => {
+  assert.match(await diz(OUTRO, "&idioma es"), /Idioma: Español/);
+  assert.equal(store.configDoServidor(SID).language, "es");
+  assert.match(await diz(OUTRO, "&language en"), /Language: English/);
+  assert.match(await diz(OUTRO, "&config idioma pt"), /Idioma: Português/);
+});
+await t("`&log atualizacoes` não liga nem desliga nada: diz que as novidades vão sempre ao log", async () => {
+  assert.match(await diz(OUTRO, "&log atualizacoes off"), /sempre ao canal de log/);
+});
+await t("★ `&config` sozinho: a tela inteira (com o que faltava), só para quem tem ManagePermissions", async () => {
+  const r = await dizTudo(OUTRO, "&config");
+  for (const x of ["Relatório anônimo de ataques", "canal lido em voz", "IA (Judy)", "livres em qualquer canal", "staff ignora a restrição", "Regras e FAQ", "staff isenta", "todas as contas"]) assert.ok(r.includes(x), x);
+  assert.match(await diz(ANA, "&config"), /ManagePermissions/);
+});
+await t("★ `&help xp` / `&help game` / `&help automod`: a página do comando (antes: o grupo)", async () => {
+  for (const w of ["xp", "game", "automod"]) assert.match(await diz(OUTRO, `&help ${w}`), new RegExp(`Ajuda — &${w}`), w);
+  const idx = await diz(OUTRO, "&help");
+  assert.match(idx, /📋 Ajuda/); assert.match(idx, /`&config`/); assert.doesNotMatch(idx, /`&servidores`/, "o grupo do dono só para o dono");
+  assert.match(await diz(DONO, "&help"), /`&servidores`/);
+  assert.match(await diz(OUTRO, "&help log"), /Ajuda — &config › log/);
+});
+await t("★ `&info` traz o suporte nos 3 idiomas; `&support`, `&suporte` e `&about` levam a ele", async () => {
+  assert.match(await dizTudo(OUTRO, "&info"), /Chame \*\*Ghiso#4419\*\* no privado/);
+  await diz(OUTRO, "&config idioma en");
+  assert.match(await dizTudo(OUTRO, "&support"), /DM \*\*Ghiso#4419\*\*/);
+  await diz(OUTRO, "&config idioma es");
+  assert.match(await dizTudo(OUTRO, "&soporte"), /Escribe a \*\*Ghiso#4419\*\* por privado/);
+  assert.match(await dizTudo(OUTRO, "&about"), /Ghiso#4419/);
+  await diz(OUTRO, "&config idioma pt");
+});
+await t("★ `&acesso cargo add` vai ao `&staff add` (mesma lista)", async () => {
+  const R = U(150);
+  server.roles.set(R, { id: R, name: "Mods", rank: 50 });
+  await diz(OUTRO, `&acesso cargo add <%${R}>`);
+  assert.ok((store.configDoServidor(SID).acesso.cargosStaff ?? []).includes(R), JSON.stringify(store.configDoServidor(SID).acesso));
+});
+await t("★ palavra tentada que não existe é contada (só a palavra); o comando usado também", async () => {
+  await diz(ANA, "&qualquercoisa com o resto da mensagem");
+  const ps = db.palavrasTentadas({ serverId: SID });
+  assert.ok(ps.some((x) => x.palavra === "qualquercoisa"));
+  assert.ok(!ps.some((x) => /resto|mensagem/.test(x.palavra)));
+  assert.ok((db.usoDeComandos().config ?? 0) >= 1);
+});
+await t("★ `&servidores palavras` e `&servidores aviso`: só o dono; prévia, ✅ do próprio dono, e vai ao log de cada servidor", async () => {
+  process.env.RELATORIO_SERVIDOR = SID;
+  try {
+    assert.match(await diz(OUTRO, "&servidores palavras"), /Só o dono do bot/);
+    assert.match(await diz(DONO, "&servidores palavras"), /Tentadas e inexistentes[\s\S]*Nunca usados/);
+    const sp = await import("./modulos/moderacao/servidores.js");
+    const previa = await diz(DONO, "&servidores aviso Manutenção às 22h @everyone");
+    assert.match(previa, /Aviso do dono da Judy/); assert.match(previa, /Manutenção às 22h/);
+    const [msgId] = [...sp._avisosPendentes.keys()].slice(-1);
+    logc.enviados.length = 0;
+    assert.equal(await sp.aoReagirAviso(msgId, OUTRO, "✅", { client: c, criarContexto: () => ({ sendEmbed: async () => {} }) }), true);
+    assert.equal(logc.enviados.length, 0, "o ✅ de outra pessoa não publica");
+    const enviados = [];
+    assert.equal(await sp.aoReagirAviso(msgId, DONO, "%E2%9C%85", { client: c, criarContexto: () => ({ sendEmbed: async () => {} }), enviar: async (canal, e) => enviados.push([canal.id, e.description]) }), true);
+    assert.ok(enviados.some(([id, d]) => id === CL && /Manutenção/.test(d)), JSON.stringify(enviados));
+    assert.ok(!enviados.some(([, d]) => /(^|\s)@everyone\b/.test(d)), "sem ping em massa");
+    assert.equal(sp._avisosPendentes.has(msgId), false, "uma vez só");
+  } finally { delete process.env.RELATORIO_SERVIDOR; }
+});
+await t("★ `&assistente ia on|off` = `&config ia chat on|off`: a chave de sempre (config.ia.chat); `&chat off` é atalho", async () => {
+  process.env.CHAT_SERVIDORES = SID;
+  try {
+    assert.match(await diz(OUTRO, "&assistente ia off"), /Conversa com a Judy: desligada/);
+    assert.equal(store.configDoServidor(SID).ia.chat, false);
+    assert.match(await diz(OUTRO, "&setup ai on"), /Conversa com a Judy: ligada/);
+    assert.equal(store.configDoServidor(SID).ia.chat, true);
+    await diz(OUTRO, "&chat off");
+    assert.equal(store.configDoServidor(SID).ia.chat, false);
+    await diz(OUTRO, "&config ia chat on");
+    assert.equal(store.configDoServidor(SID).ia.chat, true, "&config ia chat on");
+    assert.match(await diz(ANA, "&assistente ia on"), /ManagePermissions|permiss/i);
+  } finally { delete process.env.CHAT_SERVIDORES; }
+});
+await t("★ `&tutorial`: mini guia; área antiga que era um comando abre o &help dele; `rpg` é a wiki", async () => {
+  const r = await diz(OUTRO, "&tutorial");
+  assert.match(r, /Tutorial — o que dá para fazer/);
+  assert.match(await diz(OUTRO, "&tutorial canais"), /Canais: os 3 tipos/);
+  assert.match(await diz(OUTRO, "&tutorial moderacao"), /Ajuda — &automod/);
+  assert.match(await diz(OUTRO, "&tutorial protecao"), /Como a proteção age/);
+  assert.match(await diz(OUTRO, "&tutorial rpg"), /RPG|wiki/i);
+});
+
+// ── revisão independente (31 out 2026, P2) ──
+await t("★ revisão: `&chat …` sem IA não sugere ele mesmo; `&help chat` e `&help ia` abrem `&config ia`", async () => {
+  for (const cmd of ["&chat hello", "&ia hello"]) {
+    const r = await diz(OUTRO, cmd);
+    assert.match(r, /Comando desconhecido/, cmd);
+    assert.doesNotMatch(r, /Você quis dizer `&(chat|ia)[ `]/, cmd);
+  }
+  // onde a IA roda, a página do `&config ia`; onde não roda, "não há ajuda" (sem citar a IA)
+  for (const cmd of ["&help chat", "&help ia"]) assert.match(await diz(OUTRO, cmd), /^\n?❓ Não há ajuda para `(chat|ia)`/, cmd);
+  process.env.CHAT_SERVIDORES = SID;
+  try {
+    for (const cmd of ["&help chat", "&help ia"]) assert.match(await diz(OUTRO, cmd), /📖 Ajuda — &config › ia/, cmd);
+  } finally { delete process.env.CHAT_SERVIDORES; }
+  assert.match(await diz(OUTRO, "&help chat sair"), /&privacidade/);
+});
+await t("★ revisão: comando desativado com o nome antigo salvo (`repete`, `iniciativa`) continua desativado — sem regravar o banco", async () => {
+  const cfg = store.configDoServidor(SID);
+  const antes = [...(cfg.comandosDesativados ?? [])];
+  cfg.comandosDesativados = ["repete", "iniciativa", "modia", "cargomudo"];
+  try {
+    assert.match(await diz(OUTRO, "&embed oi"), /Comando desativado/, "&repete → &embed");
+    assert.match(await diz(OUTRO, "&repete oi"), /Comando desativado/);
+    assert.match(await diz(OUTRO, "&rolar init"), /Comando desativado/, "&iniciativa → &rolar init");
+    assert.match(await diz(OUTRO, "&iniciativa"), /Comando desativado/);
+    assert.doesNotMatch(await diz(OUTRO, "&rolar 1d20"), /Comando desativado/, "só a parte: o dado continua");
+    assert.match(await diz(OUTRO, "&timeout"), /Comando desativado/, "&cargomudo → apelido do &timeout");
+    assert.deepEqual(store.configDoServidor(SID).comandosDesativados, ["repete", "iniciativa", "modia", "cargomudo"], "o banco não foi regravado");
+    assert.match(await diz(OUTRO, "&config comando"), /🔴 `embed`/);
+    // reativar pelo nome de hoje tira o nome antigo também
+    await diz(OUTRO, "&config comando ativar embed");
+    assert.ok(!store.configDoServidor(SID).comandosDesativados.includes("repete"));
+    assert.doesNotMatch(await diz(OUTRO, "&embed"), /Comando desativado/);
+  } finally { store.configDoServidor(SID).comandosDesativados = antes; }
+  assert.deepEqual([al.caminhoDoDesativado("repete"), al.caminhoDoDesativado("iniciativa"), al.caminhoDoDesativado("chat")], [["embed"], ["rolar", "init"], null]);
+});
+await t("★ revisão: `&banglobal remover|apagar <pessoa>` é o `esquecer`; `isentar remover` continua o remover da isenção", () => {
+  for (const w of ["remover", "apagar", "remove", "delete"]) assert.deepEqual(al.resolverAtalho(["banglobal", w, "@x"])?.args, ["esquecer", "@x"], w);
+  assert.equal(al.resolverAtalho(["banglobal", "isentar", "remover", "@x"]), null);
+});
+await t("★ revisão: as palavras tentadas vencem no ciclo de retenção, mesmo num servidor quieto", async () => {
+  const ret = await import("./modulos/core/retencao.js");
+  const agora = Date.now(), velho = agora - 31 * 86400e3;
+  db.contarPalavraTentada(U(900), "palavravelha", velho);
+  db.contarPalavraTentada(U(900), "palavranova", agora);
+  const r = ret.limparVencidos(agora);
+  assert.ok(r.palavras >= 1, JSON.stringify(r));
+  const ficou = db.palavrasTentadas({ serverId: U(900), agora: agora + 1, limite: 50 }).map((x) => x.palavra);
+  assert.ok(!ficou.includes("palavravelha") && ficou.includes("palavranova"), ficou.join(","));
+  assert.match(fs.readFileSync("main.js", "utf8"), /retencao\.limparVencidos\(/, "o main.js chama no ciclo de 6 h");
+});
+await t("★ revisão R1: `&config acesso` mostra só o estado; `&staff add` responde uma linha", async () => {
+  const r = await diz(OUTRO, "&config acesso");
+  assert.match(r, /🔐 Acesso aos comandos\n\*\*Cargos de staff:\*\*/);
+  assert.doesNotMatch(r, /comandos em qualquer canal|mexe na lista|staffignora on\|off/);
+  assert.match(r, /`&help config acesso`$/m);
+  const st = fs.readFileSync("modulos/moderacao/staff.js", "utf8");
+  assert.doesNotMatch(st, /⚠️ (Isto|This|Esto) \*\*(dá|grants|da) acc?ess?o?/);
+});
+
+console.log(`\nP2 REGISTRO-AJUDA: ${ok} ok, ${falhou} falha(s)`);
+process.exit(falhou ? 1 : 0);
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+// p2-ia — P2 (31 out 2026), área da IA: o &chat sai como comando (os caminhos
+// velhos viram atalhos do &privacidade e do &config), o &privacidade vira o centro
+// de privacidade, o &personalidade é só do dono do bot, o verificador sai, o
+// chat.js se divide (llm.js, gating.js), um cliente só de LLM/SearXNG/GitHub, a
+// memória curta só no servidor de origem, o teto de imagens persiste e o boot
+// conecta o bot antes de baixar modelos.
+// ════════════════════════════════════════════════════════════════════════════
+SUITES["p2-ia"] = async () => {
+const fs = (await import("node:fs")).default;
+const os = (await import("node:os")).default;
+const path = (await import("node:path")).default;
+const assert = (await import("node:assert")).default;
+const { spawn } = await import("node:child_process");
+const TMP = fs.mkdtempSync(path.join(os.tmpdir(), "p2-ia-"));
+const DB = path.join(TMP, "p2ia.db");
+const U = (n) => `01KP2JA${String(n).padStart(19, "0")}`;   // ID com cara de ID do Stoat
+const DONO = U(1), CASA = U(2);
+Object.assign(process.env, { BOT_TOKEN: "tok", DB_PATH: DB, CONFIG_PATH: path.join(TMP, "p2ia.json"), SUPER_ADMINS: DONO,
+  LLM_URL: "http://llm.p2:1", IA_SERVICO_URL: "http://ia.p2", CHAT_SERVIDORES: `*,${CASA}`, SERVIDOR: CASA, BUSCA_ATIVA: "false",
+  AUTUMN_URL: "http://autumn.p2", CHAT_ANTI_ABUSO: "1", CHAT_LIVRE_COOLDOWN: "0", IMAGEM_TETO_ARQUIVO: path.join(TMP, "teto.json") });
+for (const v of ["CHAT_PADRAO", "IMAGEM", "IA_MODO", "CONVERSA", "IA", "LLM_MODEL", "LLM_MODEL_JUIZ", "LLM_MODEL_VISAO", "LLM_MODEL_LEVE", "LLM_MODEL_DECISAO", "LLM_MODEL_MODERACAO", "LLM_MODEL_RELATORIO"]) delete process.env[v];
+
+// o modelo e o serviço de IA de mentira: guardam cada pedido
+const pedidosLLM = [];
+let respostaLLM = () => "Oi! Tudo certo por aqui.";
+globalThis.fetch = async (url, op) => {
+  const u = String(url);
+  if (u.startsWith("http://llm.p2:1")) {
+    if (!op?.body) return { ok: true, status: 200, json: async () => ({ data: [{ id: "conversa" }] }), text: async () => "{}" };
+    const corpo = JSON.parse(op.body); pedidosLLM.push({ corpo, headers: op.headers ?? {} });
+    const content = corpo.response_format ? '{"buscar":false,"consultas":[]}' : respostaLLM(corpo);
+    return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content }, finish_reason: "stop" }], usage: {} }), text: async () => "" };
+  }
+  if (u.startsWith("http://ia.p2")) return { ok: true, status: 200, json: async () => ({ resposta: "Aqui está.", usos: [], anexos: [] }), text: async () => "{}" };
+  return /stoat\.chat|stoatusercontent|\/servers\/|\/channels\/|\/users\//.test(u)
+    ? { ok: true, status: 200, text: async () => "{}", json: async () => ({}), headers: new Map() }
+    : { ok: false, status: 503, text: async () => "", json: async () => ({}), headers: new Map() };
+};
+const quieto = async (fn) => { const o = [console.log, console.info, console.warn, console.error]; console.log = console.info = console.warn = console.error = () => {}; try { return await fn(); } finally { [console.log, console.info, console.warn, console.error] = o; } };
+const comEnv = async (vars, fn) => { const antes = {}; for (const k of Object.keys(vars)) { antes[k] = process.env[k]; if (vars[k] === undefined) delete process.env[k]; else process.env[k] = vars[k]; }
+  try { return await fn(); } finally { for (const [k, v] of Object.entries(antes)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; } } };
+let ok = 0, falhou = 0;
+const t = async (nome, fn) => { try { await fn(); console.log(`  ✅ ${nome}`); ok++; } catch (e) { console.log(`  ❌ ${nome}\n     ${String(e?.message ?? e).split("\n").join("\n     ")}`); falhou++; } };
+const ler = (a) => fs.readFileSync(a, "utf8");
+
+await quieto(() => import("./main.js"));
+const db = await import("./modulos/core/db.js");
+const store = await import("./modulos/core/config-store.js");
+const chat = await import("./modulos/ai/chat.js");
+const llm = await import("./modulos/ai/llm.js");
+const gating = await import("./modulos/ai/gating.js");
+const antiAbuso = await import("./modulos/ai/anti-abuso.js");
+const c = globalThis.__client;
+await quieto(() => c.emitAll("ready"));
+const BOT = c.user.id;
+
+// um servidor de mentira inteiro (o mesmo jeito da ia-por-servidor-21out)
+const saidas = [];
+const textoDe = (p) => typeof p === "string" ? p : `${p?.embeds?.[0]?.title ?? ""}\n${p?.embeds?.[0]?.description ?? ""}${typeof p?.content === "string" ? "\n" + p.content : ""}`;
+let nMsg = 0;
+function montarServidor(sid, lang = "pt") {
+  const canalId = `${sid.slice(0, 20)}CAN1`.padEnd(26, "0");
+  const canal = { id: canalId, serverId: sid, name: "geral", type: "TextChannel", nsfw: false,
+    sendMessage: async (p) => { saidas.push(textoDe(p)); return { id: "M" + (++nMsg), edit: async (q) => { saidas.push(textoDe(q)); }, react: async () => {}, delete: async () => {} }; },
+    fetchMessages: async () => [], deleteMessages: async () => {} };
+  const pessoa = (uid, staff) => ({ id: { server: sid, user: uid }, roles: [], hasPermission: () => staff, user: { id: uid, username: uid }, nickname: uid, joinedAt: new Date(0) });
+  const membros = { DONOSRV: pessoa("DONOSRV", true), ANA: pessoa("ANA", false), BIA: pessoa("BIA", false), [DONO]: pessoa(DONO, true) };
+  const server = { id: sid, ownerId: "DONOSRV", name: "Teste", roles: new Map(), channels: [canal], channelIds: new Set([canalId]), member: { roles: [] }, havePermission: () => true,
+    fetchMember: async (u) => membros[String(u?.id ?? u?.user ?? u)] ?? membros.DONOSRV, fetchMembers: async () => ({ members: Object.values(membros), users: [] }), fetchBans: async () => [] };
+  c.servers.set(sid, server); c.channels.set(canalId, canal);
+  for (const u of Object.keys(membros)) c.users.set(u, { id: u, username: u, bot: false });
+  store.configDoServidor(sid).language = lang;
+  const diz = async (autor, conteudo) => {
+    saidas.length = 0;
+    const ev = { id: "X" + (++nMsg), authorId: autor, content: conteudo, serverId: sid, server, channel: canal, channelId: canalId,
+      mentionIds: [...conteudo.matchAll(/<@(\w+)>/g)].map((m) => m[1]), createdAt: new Date(), author: { id: autor, username: autor, bot: false },
+      member: membros[autor], replyIds: [], attachments: [] };
+    antiAbuso._zerar?.();
+    await quieto(() => Promise.race([c.emitAll("messageCreate", ev), new Promise((r) => setTimeout(r, 6000))]));
+    return saidas.join("\n");
+  };
+  return { sid, canalId, canal, server, diz, config: () => store.configDoServidor(sid) };
+}
+const conversas = () => pedidosLLM.filter((p) => !p.corpo.response_format).length;
+// o contexto de um handler chamado direto (sem o main.js)
+const embeds = [];
+const ctxDe = (sid, extra = {}) => ({ sendEmbed: async (_c, e) => embeds.push(e), COR: { info: 1, erro: 2, aviso: 3, sucesso: 4 }, serverId: sid, PREFIXO: "&",
+  config: store.configDoServidor(sid), salvarConfig: () => {}, getServer: async () => c.servers.get(sid), membroTemPermissao: () => true, lang: "pt", ...extra });
+const msgDe = (autor, texto, canalId = "CANALX") => ({ id: "D" + (++nMsg), content: texto, authorId: autor, author: { id: autor, username: autor, bot: false }, channelId: canalId,
+  channel: { id: canalId, sendMessage: async (p) => { saidas.push(textoDe(p)); return { edit: async () => {} }; } }, client: c, replyIds: [], attachments: [], mentionIds: [] });
+const ultimo = () => { const e = embeds.at(-1) ?? {}; return `${e.title ?? ""}\n${e.description ?? ""}`; };
+
+// ────────────────────────────────────────────────────────────────────────────
+console.log("── o &chat saiu como comando; os caminhos velhos são atalhos ──");
+const { REGISTRO } = await import("./modulos/comandos/index.js");
+const aliases = await import("./modulos/core/aliases.js");
+const priv = REGISTRO.find((x) => x.id === "privacidade");
+await t("★ o registro não tem mais o &chat (nem o apelido &ia) como comando; a pasta não tem mais a entrada", () => {
+  assert.ok(!REGISTRO.some((x) => x.id === "chat" || (x.apelidos ?? []).some((a) => a === "chat" || a === "ia")));
+  assert.ok(!fs.existsSync("modulos/comandos/chat.js") || ler("modulos/comandos/chat.js").trim() === "", "o arquivo do registro do &chat ficou vazio (o coordenador apaga)");
+  assert.equal(typeof chat.cmdChat, "undefined");
+});
+await t("★ todo caminho de pessoa do &chat (e do &ia) leva ao &privacidade", () => {
+  for (const [digitado, destino] of [
+    ["chat sair", "privacidade chat sair"], ["chat leave", "privacidade chat sair"], ["chat salir", "privacidade chat sair"], ["ia optout", "privacidade chat sair"],
+    ["chat voltar", "privacidade chat voltar"], ["chat rejoin", "privacidade chat voltar"], ["chat volver", "privacidade chat voltar"],
+    ["chat esquecer", "privacidade esquecer"], ["chat esquecer tudo", "privacidade esquecer tudo"], ["chat forget all", "privacidade esquecer all"],
+    ["chat perfil", "privacidade perfil"], ["chat profile", "privacidade perfil"], ["chat mapear", "privacidade mapear"], ["chat map", "privacidade mapear"],
+    ["chat cuidado on", "privacidade cuidado on"], ["chat gentil off", "privacidade cuidado off"], ["chat memoria", "privacidade memoria"],
+    ["chat status", "privacidade status"], ["ia status", "privacidade status"],
+    ["xp sair", "privacidade xp sair"], ["xp leave", "privacidade xp sair"], ["xp entrar", "privacidade xp voltar"], ["xp join", "privacidade xp voltar"],
+  ]) {
+    const at = aliases.resolverAtalho(digitado.split(" "));
+    assert.ok(at, digitado);
+    assert.equal([at.comando, ...at.args].join(" "), destino, digitado);
+  }
+  assert.equal(aliases.resolverAtalho(["xp", "top"]), null, "o &xp continua o &xp");
+});
+await t("★ o texto antigo que cita o caminho velho mostra o novo (pt/en/es)", () => {
+  assert.equal(aliases.citar("chat.sair", "pt"), "&privacidade chat sair");
+  assert.equal(aliases.citar("chat.voltar", "en"), "&privacy chat back");
+  assert.equal(aliases.citar("chat.esquecer", "es"), "&privacidad olvidar");
+});
+await t("★ de ponta a ponta: `&chat sair` e `&xp sair` digitados chegam ao &privacidade", async () => {
+  const S = montarServidor(U(10));
+  assert.match(await S.diz("ANA", "&chat sair"), /🤐 A Judy não conversa mais com você\./);
+  assert.equal(db.iaSilenciada("ANA"), true);
+  assert.match(await S.diz("ANA", "&chat voltar"), /💬 A Judy volta a conversar com você\./);
+  assert.equal(db.iaSilenciada("ANA"), false);
+  assert.match(await S.diz("ANA", "&xp sair"), /🚪 Fora do XP neste servidor/);
+  assert.equal(db.xpFora(S.sid, "ANA"), true);
+  assert.match(await S.diz("ANA", "&privacidade xp voltar"), /🎮 De volta ao XP/);
+  assert.match(ler("modulos/ferramentas/privacidade.js"), /nivel\.participarDoXp\(serverId, uid, !sair\)/, "a regra do XP é a da área das ferramentas");
+  assert.equal(db.xpFora(S.sid, "ANA"), false);
+});
+
+console.log("\n── &privacidade: o centro de privacidade (saída mínima, pt/en/es) ──");
+const privMod = await import("./modulos/ferramentas/privacidade.js");
+const P = (autor, args, sid = U(11), extra = {}) => { embeds.length = 0; return quieto(() => privMod.cmdPrivacidade(msgDe(autor, `&privacidade ${args.join(" ")}`), args, ctxDe(sid, extra))); };
+await t("★ status: o que é guardado, sem dica de comando sobrando nem endereço/modelo (R1/R2/R10)", async () => {
+  await P("ANA", []);
+  const s = ultimo();
+  assert.match(s, /Sua privacidade com a Judy[\s\S]*Memória da conversa:[\s\S]*Conversa com a Judy:\*\* ✅ sim[\s\S]*O que ela guarda sobre você[\s\S]*Política de privacidade/);
+  assert.doesNotMatch(s, /`&privacidade|`&xp|llm\.p2|LLM_|SEARXNG/);
+  await P("ANA", ["status"]);
+  assert.equal(ultimo(), s, "`status` é a mesma tela");
+});
+await t("★ cada ação responde UMA linha; erro de uso: uma linha + `&help privacidade`", async () => {
+  for (const args of [["chat", "sair"], ["chat", "voltar"], ["memoria", "on"], ["fio", "global"], ["fio", "canal"], ["xp", "sair"], ["xp", "voltar"], ["cuidado", "on"], ["cuidado", "off"]]) {
+    await P("BIA", args);
+    const e = embeds.at(-1);
+    assert.ok(!e.title && e.description && !e.description.includes("\n"), `${args.join(" ")}: ${JSON.stringify(e)}`);
+  }
+  for (const args of [["chat"], ["chat", "talvez"], ["memoria", "talvez"], ["fio", "x"], ["xp"], ["inventado"], ["esquecer", "x", "y"], ["apagar", "x"]]) {
+    await P("BIA", args);
+    assert.match(ultimo(), /^\n?❓ `&help privacidade`$/, args.join(" "));
+  }
+});
+await t("★ espanhol e inglês completos nas telas do &privacidade (nada de português na tela es/en)", async () => {
+  const PT_SO = /\b(você|não|neste|ligada|desligada|apaguei|esqueci|registro\(s\) apagado|Sua privacidade|gentileza|Fio da conversa)\b/i;
+  const acoes = [[], ["chat", "sair"], ["chat", "voltar"], ["memoria", "on"], ["memoria", "off"], ["fio", "global"], ["xp", "sair"], ["xp", "voltar"],
+    ["cuidado", "on"], ["perfil"], ["esquecer"], ["apagar"], ["inventado"], ["perfil", U(98)]];
+  for (const lang of ["es", "en"]) {
+    const sid = lang === "es" ? U(13) : U(14);
+    store.configDoServidor(sid).language = lang;
+    for (const args of acoes) {
+      await P("HUGO", args, sid, { lang });
+      const s = embeds.map((e) => `${e.title ?? ""}\n${e.description ?? ""}`).join("\n");
+      assert.ok(s.trim(), `${lang} ${args.join(" ")}: vazio`);
+      assert.doesNotMatch(s, PT_SO, `${lang} ${args.join(" ")}`);
+    }
+  }
+  store.configDoServidor(U(13)).language = "es";
+  await P("HUGO", ["chat", "sair"], U(13), { lang: "es" });
+  assert.match(ultimo(), /🤐 Judy ya no conversará contigo\./);
+  await P("HUGO", ["chat", "voltar"], U(13), { lang: "es" });
+});
+await t("★ perfil, mapear e cuidado só do próprio (ID escrito ou menção de outra pessoa: recusado)", async () => {
+  for (const sub of ["perfil", "mapear", "cuidado"]) {
+    await P("BIA", [sub, U(99)]);
+    assert.match(ultimo(), /🔒 Só o seu\./, sub);
+  }
+  assert.equal(db.getPerfil(U(11), U(99)), null);
+});
+await t("★ perfil: datas com carimbo (<t:…:d>), sem toLocaleDateString", async () => {
+  db.addFatoPessoa(U(11), "CAIO", "gosta de café", 0.9, "gosto");
+  await P("CAIO", ["perfil"]);
+  assert.match(ultimo(), /Seu perfil[\s\S]*gosta de café — <t:\d+:d>/);
+  assert.doesNotMatch(ler("modulos/ferramentas/privacidade.js"), /toLocale(Date)?String/);
+});
+await t("★ esquecer: só a pessoa, só neste servidor; `esquecer tudo` pede ManageServer", async () => {
+  db.addFatoPessoa(U(11), "DAVI", "mora em Recife", 0.9, "info");
+  db.addFatoPessoa(U(12), "DAVI", "joga xadrez", 0.9, "gosto");
+  await P("DAVI", ["esquecer"]);
+  assert.match(ultimo(), /🧹 Esqueci o que sabia de você aqui \(\d+ registro\(s\)\)\./);
+  assert.equal(db.getFatosPessoa(U(11), "DAVI").length, 0);
+  assert.equal(db.getFatosPessoa(U(12), "DAVI").length, 1, "o outro servidor fica");
+  await P("DAVI", ["esquecer", "tudo"], U(11), { membroTemPermissao: () => false });
+  assert.match(ultimo(), /🚫 Pede \*\*ManageServer\*\*\./);
+});
+await t("★ apagar: lista, código e prazo com carimbo; confirmar apaga e chama o RPG de todas as eras quando ele existir", async () => {
+  await P("EVA", ["apagar"]);
+  const s = ultimo();
+  assert.match(s, /Apagar tudo o que é seu, em todos os servidores\?/);
+  const cod = s.match(/apagar confirmar ([0-9A-F]{4})/)?.[1];
+  assert.ok(cod, s);
+  assert.match(s, /até <t:\d+:t>/);
+  await P("EVA", ["apagar", "confirmar", cod]);
+  assert.match(ultimo(), /🗑️ Apaguei \*\*\d+\*\* registro\(s\) seus\./);
+  assert.equal(privMod.FUNCAO_RPG, "apagarJogadorTodasAsEras");
+  assert.match(ler("modulos/ferramentas/privacidade.js"), /m\[FUNCAO_RPG\]\(userId\)/);
+});
+await t("a ajuda do &privacidade (pt/en/es) cobre o que veio do &chat e do &xp", async () => {
+  const { detalhesDoRegistro } = await import("./modulos/core/ajuda-registro.js").catch(() => ({}));
+  for (const l of ["pt", "en", "es"]) {
+    const d = priv.ajuda.desc[l];
+    for (const ref of ["privacidade.chat.sair", "privacidade.xp.sair", "privacidade.perfil", "privacidade.mapear", "privacidade.cuidado", "privacidade.esquecer.tudo", "privacidade.apagar"]) assert.ok(d.includes(`{&${ref}}`), `${l}: ${ref}`);
+    assert.ok(priv.ajuda.uso[l] && priv.ajuda.resumo[l] && priv.ajuda.perm[l], l);
+    for (const p of Object.values(priv.ajuda.paginas)) assert.ok(p.texto[l], l);
+  }
+  assert.equal(priv.ajuda.grupo, "comecar");
+  if (detalhesDoRegistro) for (const l of ["pt", "en", "es"]) assert.ok(detalhesDoRegistro("&", l).privacidade, l);
+});
+
+console.log("\n── a conversa: `&chat <pergunta>` (o atalho do main.js) e o liga/desliga do servidor ──");
+await t("★ conversarPorAtalho: só `chat`/`ia`; desligada aqui → uma linha, sem chamar o modelo", async () => {
+  const sid = U(20);
+  const cfg = store.configDoServidor(sid);
+  assert.equal(await chat.conversarPorAtalho(msgDe("ANA", "&rss oi"), "rss", ctxDe(sid)), false);
+  pedidosLLM.length = 0; embeds.length = 0;
+  assert.equal(await quieto(() => chat.conversarPorAtalho(msgDe("ANA", "&chat oi, tudo bem?"), "chat", ctxDe(sid))), true);
+  assert.match(ultimo(), /💤 A conversa com a Judy está desligada neste servidor\./);
+  assert.equal(conversas(), 0);
+  gating.definirConversa(cfg, true);
+  pedidosLLM.length = 0;
+  assert.equal(await quieto(() => chat.conversarPorAtalho(msgDe("ANA", "&ia all good? tell me about the moon"), "ia", ctxDe(sid))), true);
+  assert.ok(conversas() >= 1);
+  assert.match(JSON.stringify(pedidosLLM.map((p) => p.corpo.messages)), /all good\? tell me about the moon/, "a pergunta como foi escrita");
+  await comEnv({ CONVERSA: "0" }, async () => assert.equal(await chat.conversarPorAtalho(msgDe("ANA", "&chat oi"), "chat", ctxDe(sid)), false, "sem IA de conversa: o main.js diz \"comando desconhecido\""));
+});
+await t("★ de ponta a ponta: `&chat <pergunta>` conversa (o main.js chama o atalho) e respeita o liga/desliga", async () => {
+  const S = montarServidor(U(21));
+  pedidosLLM.length = 0;
+  assert.match(await S.diz("ANA", "&chat oi, tudo bem?"), /conversa com a Judy está desligada/);
+  assert.equal(conversas(), 0);
+  gating.definirConversa(S.config(), true);
+  pedidosLLM.length = 0;
+  assert.match(await S.diz("ANA", "&chat qual a capital da França?"), /Oi! Tudo certo por aqui/);
+  assert.ok(conversas() >= 1);
+});
+const cfgIA = await import("./modulos/ai/conversa-config.js");
+await t("★ liga/desliga do servidor (as chaves de sempre: ia.chat, ia.imagem, chatLivre, comentarioEspontaneo)", async () => {
+  const sid = U(22), cfg = store.configDoServidor(sid);
+  const C = (args, extra) => { embeds.length = 0; return quieto(() => cfgIA.cmdConfigIA(msgDe("DONOSRV", "&config ia", "CANAL22"), args, ctxDe(sid, extra))); };
+  await C(["chat", "on"], { membroTemPermissao: () => false });
+  assert.match(ultimo(), /🚫 Pede \*\*ManagePermissions\*\*/); assert.equal(cfg.ia?.chat, undefined);
+  await C(["chat", "on"]); assert.equal(cfg.ia.chat, true); assert.match(ultimo(), /Conversa com a Judy: ligada/);
+  assert.equal(gating.conversaAqui(sid, cfg), true);
+  await C(["chat", "off"]); assert.equal(cfg.ia.chat, false); assert.equal(gating.conversaAqui(sid, cfg), false);
+  await C(["imagem", "on"]); assert.equal(cfg.ia.imagem, true); assert.match(ultimo(), /desligada no bot inteiro/, "sem IMAGEM=1 no .env, avisa");
+  await C(["livre", "on"]); assert.deepEqual(cfg.chatLivre.canais, ["CANAL22"]);
+  await C(["livre", "todas"]); assert.equal(cfg.chatLivre.modo, "todas");
+  await C(["livre", "off"]); assert.deepEqual(cfg.chatLivre.canais, []);
+  await C(["comentar", "aqui"]); assert.equal(cfg.comentarioEspontaneo.canalId, "CANAL22");
+  await C(["comentar", "pordia", "7"]); assert.equal(cfg.comentarioEspontaneo.porDia, 7);
+  await C(["comentar", "99"]); assert.match(ultimo(), /❓ `&help config`/); assert.equal(cfg.comentarioEspontaneo.porDia, 7);
+  await C(["comentar", "off"]); assert.equal(cfg.comentarioEspontaneo.canalId, null);
+  for (const e of embeds) assert.ok(!String(e.description).includes("\n"));
+});
+// (revisão do P2) ligar a conversa onde o .env não deixa gravava e dizia "ligada"
+await t("★ fora do CHAT_SERVIDORES: `chat on`, `livre on` e `comentar aqui` recusam em uma linha e NÃO gravam; desligar pode", async () => {
+  const sid = U(26), cfg = store.configDoServidor(sid);
+  await comEnv({ CHAT_SERVIDORES: CASA }, async () => {
+    const C = (args) => { embeds.length = 0; return quieto(() => cfgIA.cmdConfigIA(msgDe("DONOSRV", "&config ia", "CANAL26"), args, ctxDe(sid))); };
+    for (const args of [["chat", "on"], ["livre", "on"], ["comentar", "aqui"]]) {
+      await C(args);
+      assert.match(ultimo(), /^\n?🚫 A conversa com a Judy não está disponível neste servidor\.$/, args.join(" "));
+      assert.doesNotMatch(ultimo(), /CHAT_SERVIDORES|SERVIDOR|\.env/);
+    }
+    assert.equal(cfg.ia?.chat, undefined, "nada gravado");
+    assert.ok(!(cfg.chatLivre?.canais ?? []).includes("CANAL26"));
+    assert.ok(cfg.comentarioEspontaneo?.canalId == null);
+    await C(["chat", "status"]); assert.match(ultimo(), /Conversa com a Judy: desligada\./);
+    await C(["chat", "off"]); assert.equal(cfg.ia.chat, false); assert.match(ultimo(), /Conversa com a Judy: desligada\./);
+  });
+  for (const l of ["Chatting with Judy isn't available on this server", "La conversación con Judy no está disponible en este servidor"]) assert.ok(ler("modulos/ai/conversa-config.js").includes(l), l);
+});
+await t("★ quem tinha a conversa ligada continua ligado; o `&comando desativar chat` de antes continua valendo até ligar de novo", async () => {
+  const sid = U(23), cfg = store.configDoServidor(sid);
+  cfg.ia = { chat: true };
+  assert.equal(gating.conversaAqui(sid, cfg), true);
+  cfg.comandosDesativados = ["chat", "rss"];
+  assert.equal(gating.conversaAqui(sid, cfg), false);
+  gating.definirConversa(cfg, true);
+  assert.deepEqual(cfg.comandosDesativados, ["rss"]);
+  assert.equal(gating.conversaAqui(sid, cfg), true);
+  assert.equal(gating.conversaAqui(CASA, {}), true, "a casa começa ligada");
+  assert.equal(gating.conversaAqui(U(24), {}), false, "sem escolha: desligada");
+  await comEnv({ CHAT_PADRAO: "on" }, () => assert.equal(gating.conversaAqui(U(24), {}), true));
+});
+await t("★ 8 predicados → 3 (conversaAqui, imagemAqui, falaCom); os nomes velhos seguem exportados do chat.js para os outros módulos", async () => {
+  const exp = Object.keys(gating);
+  for (const f of ["conversaAqui", "imagemAqui", "falaCom", "iaNoEnv"]) assert.ok(exp.includes(f), f);
+  for (const velho of ["iaDisponivel", "chatLigadoAqui", "imagemLigadaAqui", "imagemNoBot", "servidorPermitido", "naoFalarCom", "modIAPermitida", "comandoIAPermitido"]) assert.ok(!exp.includes(velho), velho);
+  db.setIaSilenciada("FEL", true); assert.equal(gating.falaCom("FEL"), false); assert.equal(chat.naoFalarCom("FEL"), true); db.setIaSilenciada("FEL", false);
+  assert.equal(chat.servidorPermitido(CASA), gating.conversaAqui(CASA));
+});
+await t("★ imagem: só com IMAGEM=1 no .env (vazio = desligado)", async () => {
+  assert.equal(gating.imagemAqui(CASA), false);
+  await comEnv({ IMAGEM: "1" }, () => { assert.equal(gating.imagemAqui(CASA), true); assert.equal(gating.imagemAqui(U(25), { ia: { imagem: false } }), false); });
+  const img = await import("./modulos/core/imagem-modelo.js");
+  assert.equal(img.imagemPedida({}), false); assert.equal(img.imagemPedida({ IMAGEM: "1" }), true); assert.equal(img.imagemPedida({ IMAGEM: "off" }), false);
+});
+
+console.log("\n── &personalidade: só o dono do bot, a mesma em todo lugar ──");
+const persona = await import("./modulos/ai/persona.js");
+await t("★ quem não é o dono do bot ouve não (mesmo o dono do servidor), nos 3 idiomas", async () => {
+  embeds.length = 0;
+  await persona.cmdPersonalidade(msgDe("DONOSRV", "&personalidade definir pirata"), ["definir", "pirata"], ctxDe(U(30)));
+  assert.match(ultimo(), /🚫 Só o dono do bot muda a personalidade da Judy\./);
+  assert.equal(persona.personaGlobal(), null);
+  const fonte = ler("modulos/ai/persona.js");
+  assert.match(fonte, /Only the bot owner changes Judy's personality/); assert.match(fonte, /Solo el dueño del bot cambia la personalidad de Judy/);
+});
+await t("★ o dono define, vale em TODO servidor; a persona que um servidor tinha salvo fica no banco e não vai ao prompt", async () => {
+  const sid = U(31);
+  store.configDoServidor(sid).persona = "persona antiga só deste servidor";
+  await persona.cmdPersonalidade(msgDe(DONO, "&personalidade definir fala como pirata"), ["definir", "fala", "como", "pirata"], ctxDe(sid));
+  assert.match(ultimo(), /🎭 Personalidade definida \(16 caracteres\)\./);
+  assert.deepEqual(persona.linhasPersona(sid, "pt"), ["fala como pirata"]);
+  assert.deepEqual(persona.linhasPersona(U(32), "en"), ["fala como pirata"]);
+  assert.equal(store.configDoServidor(sid).persona, "persona antiga só deste servidor", "nada apagado do servidor");
+  await persona.cmdPersonalidade(msgDe(DONO, "&personalidade resetar"), ["resetar"], ctxDe(sid));
+  assert.equal(persona.personaGlobal(), null);
+  assert.equal(persona.linhasPersona(sid, "pt")[0], persona.PADRAO.pt[0]);
+  await persona.cmdPersonalidade(msgDe(DONO, "&personalidade definir"), ["definir", "x".repeat(2001)], ctxDe(sid));
+  assert.match(ultimo(), /Máximo de 2000 caracteres \(recebi 2001\)/);
+  const reg = REGISTRO.find((x) => x.id === "personalidade");
+  assert.equal(reg.ajuda.grupo, "dono");
+  for (const l of ["pt", "en", "es"]) assert.ok(reg.ajuda.desc[l] && reg.ajuda.perm[l] && reg.ajuda.uso[l]);
+});
+
+console.log("\n── o verificador saiu ──");
+await t("★ nenhuma chamada de LLM só para log: o verificar.js está vazio e ninguém o importa", () => {
+  assert.ok(!fs.existsSync("modulos/ai/verificar.js") || ler("modulos/ai/verificar.js").trim() === "");
+  const ia = fs.readdirSync("modulos/ai").filter((f) => f.endsWith(".js")).map((f) => ler(`modulos/ai/${f}`)).join("\n");
+  assert.doesNotMatch(ia, /from "\.\/verificar\.js"|comandosParaVerificar|VERIF_EDITAR|etiqueta: "verificador"/);
+  assert.doesNotMatch(ler("modulos/ai/llm.js"), /new Set\(\[[^\]]*"verificador"/);
+});
+
+console.log("\n── um cliente só: LLM, SearXNG, GitHub ──");
+await t("★ só o llm.js chama /v1/chat/completions no bot (o relatorio.js usa o cliente único)", () => {
+  const js = (d) => fs.readdirSync(d, { withFileTypes: true }).flatMap((e) => e.isDirectory() ? js(`${d}/${e.name}`) : e.name.endsWith(".js") ? [`${d}/${e.name}`] : []);
+  const donos = js("modulos").filter((a) => /\/v1\/chat\/completions/.test(ler(a)));
+  assert.deepEqual(donos, ["modulos/ai/llm.js"]);
+  assert.match(ler("modulos/ferramentas/relatorio.js"), /import \{ llmChat, llmUrl, modeloConversa \} from "\.\.\/ai\/llm\.js"/);
+});
+await t("★ o relatório vai pelo cliente único: modelo LLM_MODEL, sem token, sem o <think>, e o LLM_MODEL_RELATORIO vale como sinônimo", async () => {
+  const rel = await import("./modulos/ferramentas/relatorio.js");
+  const vistos = [];
+  const fetcher = async (u, op) => { vistos.push({ u, corpo: JSON.parse(op.body), headers: op.headers }); return { ok: true, json: async () => ({ choices: [{ message: { content: "<think>hmm</think>Tudo calmo." }, finish_reason: "stop" }] }) }; };
+  await comEnv({ LLM_MODEL: "conversa", TOKEN_IA: "segredo" }, async () => {
+    assert.equal(await quieto(() => rel.redigir("relate", { fetcher })), "Tudo calmo.");
+  });
+  assert.equal(vistos[0].corpo.model, "conversa"); assert.equal(vistos[0].corpo.max_tokens, 1500); assert.equal(vistos[0].corpo.temperature, 0.3);
+  assert.ok(!JSON.stringify(vistos[0].headers).includes("segredo"));
+  const env = await import("./modulos/core/env.js");
+  const e = { LLM_MODEL_RELATORIO: "rel" }; env.modelosAntigos(e); assert.equal(e.LLM_MODEL, "rel");
+});
+await t("★ modelos: LEVE/CODIGO/LOGICA/DECISAO/RELATORIO → LLM_MODEL; MODERACAO (imagem) → VISAO; sem sobrescrever; o boot só avisa", async () => {
+  const env = await import("./modulos/core/env.js");
+  const e = { LLM_MODEL_LEVE: "leve", LLM_MODEL_DECISAO: "dec", LLM_MODEL_MODERACAO: "olho" };
+  assert.deepEqual(env.modelosAntigos(e).sort(), ["LLM_MODEL_DECISAO", "LLM_MODEL_LEVE", "LLM_MODEL_MODERACAO"]);
+  assert.equal(e.LLM_MODEL, "leve"); assert.equal(e.LLM_MODEL_VISAO, "olho", "o MODERACAO era o modelo da moderação de imagem");
+  const local = { IA_MODO: "local", LLM_MODEL_MODERACAO: "x" }; env.modelosAntigos(local);
+  assert.equal(local.LLM_MODEL_VISAO, undefined, "no modo local, os nomes são do llama-swap (o boot não baixa um \"modelo\" com esse nome)");
+  assert.doesNotMatch(ler("ia-servico/ferramentas/ver-imagem.js"), /process\.env\.LLM_MODEL_MODERACAO/);
+  const f = { LLM_MODEL: "principal", LLM_MODEL_LOGICA: "outro" }; env.modelosAntigos(f); assert.equal(f.LLM_MODEL, "principal");
+  await comEnv({ LLM_MODEL_CODIGO: "x" }, () => {
+    assert.ok(!env.problemasDoEnv().some((p) => /LLM_MODEL_CODIGO/.test(p)), "não para o boot");
+    assert.ok(env.avisosDoEnv().some((p) => /^LLM_MODEL_CODIGO saiu \(P2\): vale como LLM_MODEL/.test(p)));
+  });
+  const semComentario = (a) => ler(a).split("\n").filter((l) => !/^\s*\/\//.test(l)).join("\n");
+  for (const v of ["LLM_MODEL_LEVE", "LLM_MODEL_CODIGO", "LLM_MODEL_LOGICA", "LLM_MODEL_DECISAO", "LLM_MODEL_RELATORIO"]) {
+    assert.doesNotMatch(["modulos/ai/chat.js", "modulos/ai/llm.js", "modulos/ai/ficha.js", "modulos/ferramentas/relatorio.js"].map(semComentario).join("\n"), new RegExp(v));
+  }
+});
+await t("★ llmChat com fetcher: 429 espera e repete; contexto estourado reenvia cortado; json vai sem raciocínio", async () => {
+  let n = 0; const corpos = [];
+  const fetcher = async (_u, op) => {
+    corpos.push(JSON.parse(op.body)); n++;
+    if (n === 1) return { ok: false, status: 429, text: async () => "concurrency_limit" };
+    if (n === 2) return { ok: false, status: 400, text: async () => '{"error":"exceed_context_size","n_ctx":1024}' };
+    return { ok: true, json: async () => ({ choices: [{ message: { content: '{"ok":true}' }, finish_reason: "stop" }] }) };
+  };
+  const r = await comEnv({ LLM_ESPERAS_429: "1" }, () => quieto(() => llm.llmChat([{ role: "system", content: "s".repeat(9000) }, { role: "user", content: "oi" }], { json: true, fetcher, etiqueta: "teste" })));
+  assert.equal(r, '{"ok":true}');
+  assert.equal(n, 3);
+  assert.equal(corpos[0].chat_template_kwargs?.enable_thinking, false);
+  assert.ok(JSON.stringify(corpos[2].messages).length < JSON.stringify(corpos[0].messages).length, "reenviado cortado");
+});
+await t("★ SearXNG: um cliente (searxng.js) para o bot e para o buscar_web — URL, idioma, formato e erro iguais", async () => {
+  const sx = await import("./modulos/ai/searxng.js");
+  const busca = await import("./modulos/ai/busca.js");
+  const web = await import("./ia-servico/ferramentas/buscar-web.js");
+  const urls = [];
+  const fetcher = async (u) => { urls.push(u); return { ok: true, json: async () => ({ results: [{ title: " A ", url: "https://a.example/x", content: "trecho   longo", publishedDate: "2026-10-01" }, { title: "sem url" }] }) }; };
+  await comEnv({ SEARXNG_URL: "http://searx.p2/", SEARXNG_IDIOMA: undefined }, async () => {
+    const r = await sx.buscarNoSearxng("lua", { fetcher, idioma: "en" });
+    assert.deepEqual(r, [{ titulo: "A", url: "https://a.example/x", trecho: "trecho longo", data: "2026-10-01" }]);
+    assert.equal(urls[0], "http://searx.p2/search?q=lua&format=json&language=en");
+    const r2 = await busca.buscarSearx("capital da França", { fetcher });
+    assert.equal(r2.length, 1); assert.match(urls[1], /language=pt-BR/);
+    await assert.rejects(sx.buscarNoSearxng("x", { fetcher: async () => ({ ok: false, status: 403 }) }), /formato JSON pode estar desabilitado/);
+    const f0 = globalThis.fetch;
+    globalThis.fetch = async () => ({ ok: false, status: 502, json: async () => ({}) });
+    try { assert.deepEqual(await web.executar({ consulta: "x" }), { erro: "SearXNG HTTP 502" }); } finally { globalThis.fetch = f0; }
+  });
+  await comEnv({ SEARXNG_URL: undefined }, () => assert.rejects(sx.buscarNoSearxng("x", { fetcher }), /SEARXNG_URL não configurado/));
+  const js = (d) => fs.readdirSync(d, { withFileTypes: true }).flatMap((e) => e.name === "node_modules" ? [] : e.isDirectory() ? js(`${d}/${e.name}`) : e.name.endsWith(".js") ? [`${d}/${e.name}`] : []);
+  assert.deepEqual([...js("modulos"), ...js("ia-servico")].filter((a) => /\/search\?q=/.test(ler(a))), ["modulos/ai/searxng.js"]);
+});
+await t("★ GitHub: um cliente (github-api.js) para o histórico da Judy e para o ler_codigo — cabeçalhos, token e erro por status", async () => {
+  const gh = await import("./modulos/ai/github-api.js");
+  assert.equal(gh.cabecalhosGithub("tk").authorization, "Bearer tk");
+  assert.equal(gh.cabecalhosGithub("").authorization, undefined);
+  const resp = (status, corpo = "{}") => async () => ({ ok: status < 400, status, text: async () => corpo, body: null });
+  assert.deepEqual(await gh.pedirGithub("/repos/a/b", { buscar: resp(200, '{"x":1}') }), { x: 1 });
+  await assert.rejects(gh.pedirGithub("/repos/a/b", { buscar: resp(404) }), (e) => e.naoAchou === true && e.status === 404);
+  await assert.rejects(gh.pedirGithub("/repos/a/b", { buscar: resp(401) }), /GITHUB_TOKEN inválido/);
+  await assert.rejects(gh.pedirGithub("/repos/a/b", { buscar: resp(429) }), /limite da API do GitHub/);
+  const js = (d) => fs.readdirSync(d, { withFileTypes: true }).flatMap((e) => e.name === "node_modules" ? [] : e.isDirectory() ? js(`${d}/${e.name}`) : e.name.endsWith(".js") ? [`${d}/${e.name}`] : []);
+  const clientes = [...js("modulos"), ...js("ia-servico")].filter((a) => /application\/vnd\.github\+json/.test(ler(a)));
+  assert.deepEqual(clientes, ["modulos/ai/github-api.js"]);
+  assert.match(ler("modulos/ai/github.js"), /pedirGithub\(caminho, \{ buscar \}\)/);
+  assert.match(ler("ia-servico/ferramentas/ler-codigo.js"), /e\?\.status === 404 \? erro404\(sobre\) : e/);
+});
+
+console.log("\n── refazer() e limparFontes(): uma função cada ──");
+await t("★ refazer: a ordem vai depois da fala que deu errado; aceita ou devolve null; erro do modelo = null", async () => {
+  const vistos = [];
+  const chamar = async (msgs) => { vistos.push(msgs); return "  resposta nova  "; };
+  assert.equal(await chat.refazer({ pergunta: "p", anterior: "velha", ordem: "ORDEM", chamar }), "resposta nova");
+  assert.deepEqual(vistos[0].map((m) => m.role), ["user", "assistant", "system"]);
+  assert.equal(vistos[0][2].content, "ORDEM");
+  assert.equal(await chat.refazer({ pergunta: "p", ordem: "O", chamar, aceitar: () => false }), null);
+  assert.equal(await chat.refazer({ pergunta: "p", ordem: "O", chamar: async () => { throw new Error("caiu"); } }), null);
+  const fonte = ler("modulos/ai/chat.js");
+  assert.equal((fonte.match(/await refazer\(\{/g) ?? []).length, 5, "os 5 desvios usam a mesma função");
+  assert.equal((fonte.match(/\/\/ `messages` vive dentro do responder/g) ?? []).length, 0, "as 5 cópias saíram");
+});
+await t("★ limparFontes: sem pedido de busca saem [n], frases da busca e links dos resultados; a lista \"Fontes:\" do modelo sai sempre", async () => {
+  const busca = await import("./modulos/ai/busca.js");
+  const resultados = [{ url: "https://ge.globo.com/x", titulo: "t" }];
+  const txt = "Segundo a pesquisa, o Brasil venceu [1]. Leia [esta matéria](https://ge.globo.com/x).\n\nFontes:\n[1] ge.globo.com";
+  const sem = busca.limparFontes(txt, { resultados, comLinks: false });
+  assert.doesNotMatch(sem, /\[1\]|ge\.globo|Segundo a pesquisa|Fontes:/);
+  assert.match(sem, /O Brasil venceu\./);
+  const com = busca.limparFontes(txt, { resultados, comLinks: true });
+  assert.match(com, /venceu \[1\]/); assert.doesNotMatch(com, /Fontes:\n/);
+  assert.equal(busca.limparFontes("só texto", {}), "só texto");
+  assert.equal((ler("modulos/ai/chat.js").match(/busca\.(semCitacoes|semMencaoDaBusca|semLinksDaBusca|semFontesDoModelo)\(/g) ?? []).length, 0);
+});
+
+console.log("\n── a memória curta só no servidor de origem (pendência do P1) ──");
+await t("★ \"perguntou sobre: …\" leva o servidor; o prompt de um servidor não vê o do outro; o antigo fica no banco", async () => {
+  db.setMemoria("GIL", { nome: "Gil", fatos: ["perguntou sobre: algo antigo sem marca"] });
+  db.lembrarNoServidor("GIL", U(40), { fato: "perguntou sobre: receita de bolo" });
+  db.lembrarNoServidor("GIL", U(41), { fato: "perguntou sobre: segredo do outro servidor" });
+  assert.deepEqual(db.memoriaDoServidor("GIL", U(40)), ["perguntou sobre: receita de bolo"]);
+  assert.equal(db.getMemoria("GIL").fatos.length, 3, "nada apagado");
+  db.setConsentimento("GIL", { memoria: true, respondido: true });
+  const S = montarServidor(U(40));
+  gating.definirConversa(S.config(), true);
+  pedidosLLM.length = 0;
+  await S.diz("GIL", `<@${BOT}> me lembra do que eu perguntei?`);
+  const prompt = JSON.stringify(pedidosLLM.map((p) => p.corpo.messages));
+  assert.match(prompt, /receita de bolo/);
+  assert.doesNotMatch(prompt, /segredo do outro servidor|algo antigo sem marca/);
+  assert.ok(db.memoriaDoServidor("GIL", U(40)).some((f) => /me lembra do que eu perguntei/.test(f)), "a pergunta nova entra marcada com este servidor");
+  assert.equal(db.apagarMemoriaGlobalDoServidor(U(41)), 1);
+  assert.deepEqual(db.memoriaDoServidor("GIL", U(41)), []);
+  assert.ok(db.getMemoria("GIL").fatos.includes("perguntou sobre: algo antigo sem marca"));
+});
+
+console.log("\n── o teto diário de imagens persiste ──");
+await t("★ reiniciar o serviço não zera o teto (arquivo no volume); outro dia não conta; sem o arquivo, segue na memória", async () => {
+  const gi = await import("./ia-servico/ferramentas/gerar-imagem.js");
+  const arq = process.env.IMAGEM_TETO_ARQUIVO;
+  fs.rmSync(arq, { force: true });
+  await comEnv({ IMAGEM_POR_DIA: "2" }, async () => {
+    gi._zerarTetoDiario({ recarregar: true });
+    const hoje = new Date("2026-10-31T12:00:00Z");
+    assert.equal(gi.consumirTetoDiario("S1", hoje), true);
+    assert.equal(gi.consumirTetoDiario("S1", hoje), true);
+    assert.deepEqual(JSON.parse(ler(arq)), { "2026-10-31:S1": 2 });
+    gi._zerarTetoDiario({ recarregar: true });          // "reinício": a memória zera, o arquivo fica
+    assert.equal(gi.consumirTetoDiario("S1", hoje), false, "o teto continua batido depois do reinício");
+    assert.equal(gi.consumirTetoDiario("S2", hoje), true, "outro servidor tem o seu");
+    gi._zerarTetoDiario({ recarregar: true });
+    assert.equal(gi.consumirTetoDiario("S1", new Date("2026-11-01T00:01:00Z")), true, "dia novo, conta nova");
+    await comEnv({ IMAGEM_TETO_ARQUIVO: path.join(TMP, "nao-existe", "x", "teto.json") }, async () => {
+      gi._zerarTetoDiario({ recarregar: true });
+      assert.equal(await quieto(() => gi.consumirTetoDiario("S9", hoje)), true);
+      assert.equal(gi.consumirTetoDiario("S9", hoje), true);
+      assert.equal(gi.consumirTetoDiario("S9", hoje), false, "sem o arquivo, o teto ainda vale na memória");
+    });
+  });
+  assert.doesNotMatch(ler(arq), /prompt|userId|ANA|gato/, "só dia, servidor e número");
+});
+
+console.log("\n── o boot: o bot conecta antes de baixar modelos; sempre o llama-swap; imagem só com IMAGEM=1 ──");
+const ini = await import("./iniciar.js");
+await t("planoDaIA: com o llama-swap, os nomes estáveis (conversa/visao/moderacao); sem ele, o llama-server direto", async () => {
+  await comEnv({ IA_MODO: "local", IA: undefined, CONVERSA: undefined }, () => {
+    const p = ini.planoDaIA({ MODELO: "a/b:Q4", MODELO_MODERACAO: "c/d:Q4" }, { existe: () => true });
+    assert.equal(p.swap, true); assert.equal(p.conversa, "a/b:Q4"); assert.equal(p.moderacao, "c/d:Q4"); assert.equal(p.visao, null);
+    assert.deepEqual(p.nomes, { conversa: "conversa", visao: "visao", moderacao: "moderacao" });
+    assert.equal(p.imagem, false, "sem IMAGEM=1, nada de gerador");
+    const sem = ini.planoDaIA({ MODELO: "a/b:Q4", MODELO_MODERACAO: "c/d:Q4" }, { existe: () => false });
+    assert.equal(sem.swap, false); assert.equal(sem.moderacao, null);
+  });
+  await comEnv({ IA_MODO: undefined }, () => assert.equal(ini.planoDaIA({}), null));
+});
+await t("★ de verdade: o bot sobe ANTES do download terminar; um modelo só já vai pelo llama-swap com TTL; sem IMAGEM=1, nada de curl", async () => {
+  const dir = fs.mkdtempSync(path.join(TMP, "boot-"));
+  fs.writeFileSync(`${dir}/package.json`, '{"type":"commonjs"}');
+  fs.writeFileSync(`${dir}/main.js`, `require("fs").writeFileSync(__dirname + "/bot.txt", String(Date.now())); setTimeout(() => {}, 30000);`);
+  fs.writeFileSync(`${dir}/llama.sh`, `#!/bin/sh\nnode -e 'require("fs").appendFileSync("${dir}/llama.txt", Date.now() + " " + process.argv.slice(1).join(" ") + "\\n")' -- "$@"\nsleep 2\nnode -e 'require("fs").writeFileSync("${dir}/fim-download.txt", String(Date.now()))'\nexit 1\n`, { mode: 0o755 });
+  fs.writeFileSync(`${dir}/swap.sh`, `#!/bin/sh\nnode -e 'require("fs").writeFileSync("${dir}/swap.txt", Date.now() + " " + process.argv.slice(1).join(" "))' -- "$@"\nexec sleep 30\n`, { mode: 0o755 });
+  fs.writeFileSync(`${dir}/curl`, `#!/bin/sh\ntouch ${dir}/curl.txt\nexit 1\n`, { mode: 0o755 });
+  const p = spawn(process.execPath, [`${process.cwd()}/iniciar.js`], { cwd: dir, stdio: "ignore",
+    env: { PATH: `${dir}:${process.env.PATH}`, HOME: dir, IA_MODO: "local", IA_EMBUTIDA: "0", MODELO: "a/b:Q4", LLAMA_BIN: `${dir}/llama.sh`, SWAP_BIN: `${dir}/swap.sh`,
+      LLAMA_CACHE: `${dir}/cache`, LLAMA_SWAP_YAML: `${dir}/swap.yaml`, IA_TTL: "120" } });
+  try {
+    for (let i = 0; i < 150 && !fs.existsSync(`${dir}/swap.txt`); i++) await new Promise((r) => setTimeout(r, 100));
+    const bot = Number(ler(`${dir}/bot.txt`)), fimDownload = Number(ler(`${dir}/fim-download.txt`));
+    assert.ok(bot < fimDownload, `o bot (${bot}) subiu antes do fim do download (${fimDownload})`);
+    assert.match(ler(`${dir}/llama.txt`), /-hf a\/b:Q4 --host 127\.0\.0\.1 --port 8199/);
+    assert.match(ler(`${dir}/swap.txt`), /-config .*swap\.yaml -listen 127\.0\.0\.1:8082/);
+    assert.match(ler(`${dir}/swap.yaml`), /models:\n {2}conversa:\n {4}cmd: .*-hf a\/b:Q4 --host 127\.0\.0\.1 --port \$\{PORT\}[^\n]*\n {4}ttl: 120\n/);
+    assert.ok(!fs.existsSync(`${dir}/curl.txt`), "o gerador de imagem não foi baixado sem IMAGEM=1");
+  } finally { p.kill("SIGTERM"); }
+});
+await t("o iniciar.js não espera mais os downloads para subir o bot (a ordem no código)", () => {
+  const src = ler("iniciar.js");
+  const corpo = src.slice(src.indexOf("if (PRINCIPAL) {"));
+  assert.ok(corpo.indexOf('subir("bot"') < corpo.indexOf("await subirIA(plano)"), "o bot antes da IA");
+  assert.ok(corpo.indexOf('subir("bot"') < corpo.indexOf("if (VOZ_ATIVA) {"), "e antes das vozes");
+  assert.doesNotMatch(src, /process\.env\.IMAGEM \?\? "1"/);
+});
+
+console.log(`\nP2-IA: ${ok} ok, ${falhou} falha(s)`);
+fs.rmSync(TMP, { recursive: true, force: true });
+process.exit(falhou ? 1 : 0);
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+// p2-rpg — P2 (31 out 2026), Fase 4: o RPG simplificado. 10 comandos + admin,
+// builds em JSON (pontos, equipamento e magias automáticos, evolucionador com
+// teto), a Sorte num `rolar` único (fora da luta), uma moeda, aliados com bônus
+// fixo, co-op e duelo só do mesmo servidor (✅ só de quem foi convidado), a era
+// `mundo:v5` sem apagar a antiga, a wiki gerada dos dados e o catálogo em espanhol.
+// Recebe as checagens que ainda valem das suítes do RPG v4 que saíram (rpg-v4,
+// rpg-mundo, jogo-4out, coop-respec, follower-ficha, wiki-rpg, duelo-28out e o
+// bloco RPG da p1-ferramentas-jogo) — ver _notas/rpg.md.
+// ════════════════════════════════════════════════════════════════════════════
+SUITES["p2-rpg"] = async () => {
+const fs = (await import("node:fs")).default;
+const assert = (await import("node:assert")).default;
+const DB = "/tmp/p2-rpg.db";
+for (const f of [DB, DB + "-wal", DB + "-shm", "/tmp/p2-rpg.json"]) fs.rmSync(f, { force: true });
+Object.assign(process.env, { DB_PATH: DB, CONFIG_PATH: "/tmp/p2-rpg.json" });
+const U = (n) => `01KNXR${String(n).padStart(20, "0")}`;
+const DONO = U(1);
+let ok = 0, falhou = 0;
+const t = async (nome, fn) => { try { await fn(); console.log(`  ✅ ${nome}`); ok++; } catch (e) { console.log(`  ❌ ${nome}\n     ${String(e?.message ?? e).split("\n").join("\n     ")}`); falhou++; } };
+const quieto = async (fn) => { const o = [console.log, console.info, console.warn, console.error]; console.log = console.info = console.warn = console.error = () => {}; try { return await fn(); } finally { [console.log, console.info, console.warn, console.error] = o; } };
+const perto = (a, b, tol) => Math.abs(a - b) <= tol;
+// gerador com semente (os sorteios dos testes não dependem da sorte do dia)
+const rng = (s) => () => { s = (Math.imul(s, 1664525) + 1013904223) >>> 0; return s / 4294967296; };
+const sempre = (x) => () => x;
+
+const db = await import("./modulos/core/db.js");
+await quieto(() => db.abrirBanco(DB));
+// ★ antes do primeiro boot do jogo: falha no boot fecha o RPG (Regra do Reparo)
+db.getDb().exec("ALTER TABLE rpg_moedas RENAME TO rpg_moedas_fora");
+const game = await import("./modulos/game/game.js");
+const R = await import("./modulos/game/regras.js");
+const CB = await import("./modulos/game/combate.js");
+const MISS = await import("./modulos/game/missoes.js");
+const TS = await import("./modulos/game/tesouro.js");
+const EV = await import("./modulos/game/evolucionador.js");
+const S = await import("./modulos/game/sorte.js");
+const E = await import("./modulos/game/era.js");
+const B = await import("./modulos/game/builds.js");
+const L = await import("./modulos/game/lutas.js");
+const J = await import("./modulos/game/jogador.js");
+const DU = await import("./modulos/game/duelo.js");
+const TL = await import("./modulos/game/telas.js");
+const W = await import("./modulos/game/wiki.js");
+const C = await import("./modulos/game/conteudo.js");
+const IMG = await import("./modulos/game/imagens.js");
+const { ERA } = E;
+const COR = { erro: 1, aviso: 2, sucesso: 3, info: 4, mod: 5 };
+
+// ── a conversa com o jogo (sem o bot inteiro): servidores com membros ──
+const MEMBROS = { S1: new Set(), S2: new Set() };
+let saidas = [], nMsg = 0;
+const ctxDe = (serverId, lang, { dono = false } = {}) => ({ serverId, PREFIXO: "&", COR, config: { language: lang },
+  sendEmbed: async (_c, e) => { saidas.push(e); return { id: `M${++nMsg}`, react: async () => {} }; },
+  getServer: async () => ({ id: serverId, channels: [], fetchMember: async (u) => (MEMBROS[serverId]?.has(String(u?.id ?? u)) ? { id: { user: u, server: serverId } } : null) }),
+  ehSuperAdmin: (u) => dono && u === DONO, membroTemPermissao: () => true });
+const texto = (e) => `${e?.title ?? ""}\n${e?.description ?? ""}`.replace(/[\u2063\u2064]/g, "");
+async function jogar(uid, txt, { lang = "pt", servidor = "S1", canal = "C1" } = {}) {
+  saidas = [];
+  const args = txt.split(" ").filter(Boolean);
+  const mentionIds = [...txt.matchAll(/<@(\w+)>/g)].map((m) => m[1]);
+  await game.cmdGame({ authorId: uid, author: { username: uid }, channel: { id: canal }, channelId: canal, serverId: servidor, mentionIds, attachments: [] }, args, ctxDe(servidor, lang, { dono: true }));
+  return saidas.map(texto).join("\n---\n");
+}
+const descansar = (uid) => db.salvarPersonagem(ERA, uid, { ultimaMissao: 0, recuperandoAte: 0 });
+const ouro = (uid) => TS.saldo(uid);
+// "Resposta em inglês" — a mesma régua da comandos-17out
+const SO_INGLES = /\b(the|you|your|is|are|was|were|with|this|that|these|those|to|of|for|its|be|been|not|can|will|would|should|have|has|don't|doesn't|isn't|can't|won't|there|here|what|which|who|when|where|how|only|also|than|then|from|into|about|after|before|again|already|nothing|anyone|everyone|someone|yet|still|first|now)\b/gi;
+const emIngles = (x) => new Set((String(x).replace(/`[^`\n]*`/g, " ").replace(/<[^>]*>/g, " ").match(SO_INGLES) ?? []).map((w) => w.toLowerCase())).size >= 3;
+
+console.log("── boot ──");
+await t("★ falha no boot do jogo fecha o RPG (vai para o log com [RPG]); consertado, abre", async () => {
+  const linhas = []; const o = console.error; console.error = (...a) => linhas.push(a.join(" "));
+  try { game.iniciarCatalogo(); } finally { console.error = o; }
+  assert.match(linhas.join("\n"), /\[RPG\]/);
+  assert.match(await jogar(U(2), ""), /manutenção/);
+  db.getDb().exec("ALTER TABLE rpg_moedas_fora RENAME TO rpg_moedas");
+  await quieto(() => game.iniciarCatalogo());
+  assert.equal(game.rpgFechado(), null);
+  assert.doesNotMatch(await jogar(U(2), ""), /manutenção/);
+});
+
+console.log("\n── sorte: um rolar(chance, sorte) só ──");
+await t("★ na sorte média a chance não muda; acima sobe até o teto; nunca passa de 1", () => {
+  for (const c of [0, 0.01, 0.07, 0.25, 0.5, 0.9, 1]) assert.equal(S.chanceComSorte(c, 1), c, `c=${c}`);
+  assert.ok(perto(S.chanceComSorte(0.1, 4), 0.2, 1e-12), "4× a média → 2× a chance");
+  assert.ok(S.chanceComSorte(0.1, 2) > 0.1 && S.chanceComSorte(0.1, 2) < 0.2);
+  assert.equal(S.chanceComSorte(0.1, 1e9), 0.1 * S.SORTE.teto, "teto");
+  assert.equal(S.chanceComSorte(0.1, Infinity), 0.1 * S.SORTE.teto);
+  for (const c of [0.5, 0.6, 0.9, 1]) for (const s of [1, 2, 4, 100, 1e9]) assert.ok(S.chanceComSorte(c, s) <= 1, `c=${c} s=${s}`);
+  assert.equal(S.chanceComSorte(0.4, 0), 0.4 * S.SORTE.piso, "sem sorte nenhuma: o piso");
+  assert.equal(S.chanceComSorte(0.4, NaN), 0.4 * S.SORTE.piso);
+  assert.equal(S.chanceComSorte(1.7, 1), 1); assert.equal(S.chanceComSorte(-1, 1), 0);
+});
+await t("★ rolar na sorte média = o sorteio de sempre (mesma sequência, mesmo resultado)", () => {
+  const a = rng(7), b = rng(7);
+  for (let i = 0; i < 500; i++) { const c = (i % 10) / 10; assert.equal(S.rolar(c, 1, a), b() < c); }
+});
+await t("★ o sorteio de loot: na média é o regras.sortearLoot; com sorte alta cai mais item (e de raridade maior)", () => {
+  for (const nv of [1, 17, 58]) { const a = rng(nv), b = rng(nv); for (let i = 0; i < 300; i++) assert.equal(S.sortear(R.loot(nv), 1, a), R.sortearLoot(nv, b)); }
+  const conta = (sorte) => { const r = rng(99); let n = 0, alta = 0; for (let i = 0; i < 20000; i++) { const x = S.sortear(R.loot(18), sorte, r); if (x) n++; if (x && R.ORDEM.indexOf(x) >= 2) alta++; } return { n, alta }; };
+  const media = conta(1), sortudo = conta(4);
+  assert.ok(sortudo.n > media.n * 1.2 && sortudo.alta > media.alta * 1.8, JSON.stringify({ media, sortudo }));
+});
+await t("sorte média sobe com o nível; a party de referência tem sorte relativa 1", () => {
+  assert.ok(S.sorteMedia(1) >= 1 && S.sorteMedia(50) > S.sorteMedia(10));
+  for (const n of [1, 20, 77]) { const { base, pts } = R.pontosAte(n); assert.ok(perto(S.sorteRelativa(base + pts / 9, n), 1, 1e-12)); }
+});
+await t("★ a Sorte fica FORA da luta: as missões continuam em 40/70 (resolverLuta não recebe sorte)", () => {
+  const src = fs.readFileSync("modulos/game/lutas.js", "utf8");
+  assert.match(src, /R\.resolverLuta\(pv, aleatorio\)/);
+  for (const f of ["regras.js", "combate.js", "duelo.js"]) assert.doesNotMatch(fs.readFileSync(`modulos/game/${f}`, "utf8"), /sorte\.js/, f);
+});
+
+console.log("\n── builds (dados/builds.json) ──");
+await t("★ 18 builds, com as que o dono pediu, nome e descrição em pt/en/es", () => {
+  assert.equal(B.LISTA.length, 18);
+  for (const id of ["paladino", "ladino", "battlemage", "atirador", "space_marine", "sortudo", "guerreiro", "berserker", "mago", "clerigo", "arqueiro", "bardo", "tanque", "necromante", "duelista", "monge", "druida", "pistoleiro"]) assert.ok(B.BUILDS[id], id);
+  for (const b of B.LISTA) { assert.deepEqual(B.validarBuild(b), [], b.id); for (const l of ["pt", "en", "es"]) assert.ok(b.nome[l] && b.desc[l].length > 20, `${b.id}.${l}`); }
+  assert.equal(new Set(B.LISTA.map((b) => b.nome.es)).size, 18, "nomes em espanhol únicos");
+  assert.ok(B.LISTA.some((b) => b.dist.sorte >= 0.5), "a build Sortudo vive de Sorte");
+});
+await t("acharBuild: pelo nome em qualquer idioma, sem acento, e as classes do v4 levam à build certa", () => {
+  for (const [txt, id] of [["Paladín", "paladino"], ["rogue", "ladino"], ["Pícaro", "ladino"], ["space marine", "space_marine"], ["Marine espacial", "space_marine"], ["lucky", "sortudo"],
+    ["templario", "paladino"], ["guardiao", "tanque"], ["andarilho", "battlemage"], ["clerigo", "clerigo"], ["Nigromante", "necromante"], ["gunslinger", "pistoleiro"]]) assert.equal(B.acharBuild(txt)?.id, id, txt);
+  assert.equal(B.acharBuild("xy"), null); assert.equal(B.acharBuild(""), null);
+});
+await t("validarBuild pega JSON errado (soma, atributo, idioma, arma)", () => {
+  const base = B.BUILDS.guerreiro;
+  assert.ok(B.validarBuild({ ...base, dist: { forca: 0.5 } }).length);
+  assert.ok(B.validarBuild({ ...base, dist: { forca: 0.5, poder: 0.5 } }).length);
+  assert.ok(B.validarBuild({ ...base, nome: { pt: "X", en: "X" } }).length);
+  assert.ok(B.validarBuild({ ...base, armas: ["laser"] }).length);
+});
+await t("os rótulos do motor em JSON: 9 atributos (nome e efeito), 10 raridades, 10 faixas, 4 classes — pt/en/es", () => {
+  for (const k of R.ATR) for (const l of ["pt", "en", "es"]) { assert.ok(TL.atributo(k, l)); assert.ok(TL.efeitoAtributo(k, l).length >= 25, `${k}.${l}`); }
+  for (const r of R.ORDEM) for (const l of ["pt", "en", "es"]) assert.ok(TL.raridade(r, l) !== r || r === "celestial" || r === "primordial", r);
+  assert.equal(TL.raridade("incomum", "es"), "Poco común"); assert.equal(TL.raridade("raro", "en"), "Rare"); assert.equal(TL.raridade("epico", "es"), "Épico");
+  for (const f of R.FAIXAS) for (const l of ["pt", "en", "es"]) assert.ok(TL.faixa(f.n, l));
+  for (const c of Object.keys(R.CLASSES)) for (const l of ["pt", "en", "es"]) assert.ok(TL.classeAliado(c, l) && TL.efeitoClasse(c, l));
+});
+
+console.log("\n── evolucionador: pontos, equipamento e magias pela build ──");
+await t("os pontos seguem a build (mago: Inteligência; berserker: Força)", () => {
+  const p = { nivel: 30, pontos: 100, ...Object.fromEntries(R.ATR.map((a) => [a, 1 + R.baseDoNivel(30)])) };
+  const g = (b) => EV.distribuirPontos(p, b).gastos;
+  const maior = (x) => Object.entries(x).sort((a, b) => b[1] - a[1])[0][0];
+  assert.equal(maior(g("mago")), "inteligencia"); assert.equal(maior(g("berserker")), "forca"); assert.equal(maior(g("sortudo")), "sorte");
+  assert.equal(Object.values(g("ladino")).reduce((s, x) => s + x, 0), 100, "gasta tudo");
+});
+const BIG = U(50);
+db.criarPersonagem(ERA, BIG, "Mochileira"); db.salvarPersonagem(ERA, BIG, { nivel: 30, pontos: 80, classe: "battlemage" });
+for (const it of C.ITENS.values()) if (!["contrato", "pergaminho"].includes(it.slot) && it.dif <= 4) db.darItem(ERA, BIG, it.id, 3);
+await t(`★ teto de avaliações: mochila de ${db.getInventario(ERA, BIG).length} itens, toda build ≤ ${EV.TETO_AVALIACOES} avaliações e bem menos que os 153 ms de antes`, () => {
+  for (const b of B.LISTA.map((x) => x.id)) {
+    const t0 = performance.now(), r = EV.trocarBuild(BIG, b), ms = performance.now() - t0;
+    assert.ok(r.avaliacoes <= EV.TETO_AVALIACOES, `${b}: ${r.avaliacoes}`);
+    assert.ok(ms < 150, `${b}: ${ms.toFixed(0)} ms`);
+  }
+  const r = EV.trocarBuild(BIG, "guerreiro", { teto: 10 });
+  assert.ok(r.avaliacoes <= 10, "o teto vale também quando é pequeno");
+});
+await t("★ item novo compara só com a vaga dele (até 4 avaliações); arma que a build não usa nem é avaliada", () => {
+  EV.trocarBuild(BIG, "mago");
+  const p = db.getPersonagem(ERA, BIG), eq = db.getEquipado(ERA, BIG), party = CB.partyDe(ERA, BIG, p), attr = Object.fromEntries(R.ATR.map((k) => [k, p[k]]));
+  for (const it of [...C.ITENS.values()].filter((i) => !["contrato", "pergaminho"].includes(i.slot)).slice(0, 120)) {
+    const c = EV.compararNaVaga(p, attr, eq, party, B.BUILDS.mago, it);
+    assert.ok(c.avaliacoes <= 4, `${it.id}: ${c.avaliacoes}`);
+  }
+  const espada = C.ITENS.get("g_espada_ferro");
+  assert.deepEqual([EV.compararNaVaga(p, attr, eq, party, B.BUILDS.mago, espada).avaliacoes, EV.vagasDoItem(B.BUILDS.mago, espada).length], [0, 0]);
+  // cyberware: uma peça por região — a da mesma região é a única vaga
+  const eq2 = { ciber2: C.ITENS.get("i_c_lamina_1") };
+  assert.deepEqual(EV.vagasDoItem(B.BUILDS.mago, C.ITENS.get("i_c_lamina_2"), eq2), ["ciber2"]);
+});
+await t("★ trocar de build: os pontos voltam e se gastam de novo; as magias são as da escola dela (as únicas ficam)", () => {
+  db.aprenderMagia(ERA, BIG, "m_e_eco_radio");
+  EV.trocarBuild(BIG, "mago");
+  const p = db.getPersonagem(ERA, BIG);
+  assert.ok(p.pontos < 1, `sobrou ${p.pontos}`);
+  const mags = db.listarMagias(ERA, BIG).map((m) => C.MAGIAS.find((x) => x.id === m.magiaId));
+  assert.ok(mags.some((m) => m.tipo === "ataque" && !m.unica) && !mags.some((m) => m.tipo === "suporte" && !m.unica), mags.map((m) => m.id).join());
+  assert.ok(mags.some((m) => m.id === "m_e_eco_radio"), "a única ficou");
+  EV.trocarBuild(BIG, "clerigo");
+  const m2 = db.listarMagias(ERA, BIG).map((m) => C.MAGIAS.find((x) => x.id === m.magiaId));
+  assert.ok(m2.some((m) => m.tipo === "suporte" && !m.unica) && !m2.some((m) => m.tipo === "ataque" && !m.unica));
+  const antes = R.ATR.reduce((s, k) => s + p[k], 0) + p.pontos, depois = db.getPersonagem(ERA, BIG);
+  assert.ok(perto(R.ATR.reduce((s, k) => s + depois[k], 0) + depois.pontos, antes, 1.01), "nenhum ponto some nem aparece");
+});
+
+console.log("\n── a era mundo:v5 (sem apagar a antiga) ──");
+const VET = U(3);
+db.criarPersonagem("mundo", VET, "Veterana");
+db.salvarPersonagem("mundo", VET, { nivel: 43 });
+db.darItem("mundo", VET, "g_espada_ferro");
+db.creditar("mundo", VET, "ouro", 777);
+db.marcarUnico(VET, "kit"); db.marcarUnico(VET, "chefe:b_rei_ratos");
+MEMBROS.S1.add(VET);
+await t("★ a era é mundo:v5; o mundo.js continua exportando MUNDO (o &info lê de lá)", async () => {
+  assert.equal(ERA, "mundo:v5");
+  assert.equal((await import("./modulos/game/mundo.js")).MUNDO, ERA);
+});
+await t("★ o personagem antigo fica no banco, invisível: a pessoa recomeça do zero com `criar`", async () => {
+  assert.match(await jogar(VET, ""), /Sem personagem/);
+  assert.match(await jogar(VET, "criar Nova"), /🎉 Nova/);
+  const novo = db.getPersonagem(ERA, VET), velho = db.getPersonagem("mundo", VET);
+  assert.equal(novo.nivel, 1);
+  assert.equal(velho.nivel, 43); assert.equal(velho.nome, "Veterana");
+  assert.equal(db.getSaldo("mundo", VET, "ouro"), 777); assert.ok(db.temItem("mundo", VET, "g_espada_ferro"));
+  assert.ok(db.getEquipado(ERA, VET).mao1, "o kit desta era veio (o único `kit` antigo, sem prefixo, não bloqueia)");
+  assert.ok(db.temUnico(VET, "chefe:b_rei_ratos") && !E.temUnico(VET, "chefe:b_rei_ratos"), "únicos e esperas são por era");
+});
+await t("★ `&game apagar confirmar` apaga só a era atual; a antiga continua", async () => {
+  await jogar(VET, "apagar confirmar");
+  assert.equal(db.getPersonagem(ERA, VET), null);
+  assert.equal(db.getInventario(ERA, VET).length, 0); assert.equal(db.listarFollowersDe(ERA, VET).length, 0);
+  assert.equal(E.temUnico(VET, "kit"), false, "os únicos desta era saem junto");
+  assert.ok(db.getPersonagem("mundo", VET) && db.temUnico(VET, "kit"));
+});
+await t("★ (revisão) `&game apagar`: o desafio de duelo que a pessoa abriu some (o alvo não aceita e ninguém recebe ouro sem personagem); o feito a ela volta ao autor; itens dos aliados e dungeons desta era saem; a era antiga fica", async () => {
+  const P1 = U(30), P2 = U(31);
+  MEMBROS.S1.add(P1); MEMBROS.S1.add(P2);
+  await jogar(P1, "criar Um"); await jogar(P2, "criar Dois");
+  db.creditar(ERA, P1, "ouro", 300); db.creditar(ERA, P2, "ouro", 300);
+  assert.match(await jogar(P1, `duelo <@${P2}> 100`), /Desafio de duelo/);
+  const idMsg = `M${nMsg}`;
+  // um desafio de outra pessoa (P2) a P1 — em outro "canal" da custódia: o mesmo banco de ofertas
+  db.debitar(ERA, P2, "ouro", 50);
+  db.criarOferta({ serverId: ERA, tipo: "duelo", autorId: P2, alvoId: P1, itemPedido: "S1", moedaOferecida: "ouro", qtdOferecida: 50 });
+  const f = db.listarFollowersDe(ERA, P1)[0];
+  db.getDb().prepare("INSERT INTO rpg_follower_itens (followerId, itemId, criadoEm) VALUES (?, 'g_espada_ferro', ?)").run(f.id, Date.now());
+  TS.marcarAtivo("dg_esgotos_cidade_velha", P1, 3);
+  db.marcarAtivoDungeon("dg_esgotos_cidade_velha", P1, 9);   // a era antiga (id sem prefixo)
+  db.criarPersonagem("mundo", P1, "Antiga");
+  const ouroP2 = ouro(P2);
+  await jogar(P1, "apagar confirmar");
+  const conta = (sql, ...a) => db.getDb().prepare(sql).get(...a).n;
+  assert.equal(conta("SELECT COUNT(*) n FROM rpg_ofertas WHERE serverId = ? AND autorId = ?", ERA, P1), 0, "o desafio dela saiu");
+  assert.equal(conta("SELECT COUNT(*) n FROM rpg_ofertas WHERE alvoId = ? AND estado = 'aberta'", P1), 0, "o feito a ela foi cancelado");
+  assert.equal(ouro(P2), ouroP2 + 50, "a aposta de quem a desafiou voltou");
+  assert.equal(conta("SELECT COUNT(*) n FROM rpg_follower_itens WHERE followerId = ?", f.id), 0);
+  assert.equal(conta("SELECT COUNT(*) n FROM rpg_dungeon_ativos WHERE userId = ? AND dungeonId LIKE 'v5:%'", P1), 0);
+  assert.equal(conta("SELECT COUNT(*) n FROM rpg_dungeon_ativos WHERE userId = ? AND dungeonId NOT LIKE 'v5:%'", P1), 1, "a era antiga fica");
+  assert.ok(db.getPersonagem("mundo", P1));
+  // o alvo tenta aceitar: não há desafio; o ✅ na mensagem velha também não faz nada
+  assert.match(await jogar(P2, "duelo aceitar"), /Ninguém desafiou você aqui/);
+  saidas = []; await game.aoReagir(idMsg, P2, "✅");
+  assert.equal(saidas.length, 0);
+  assert.equal(db.getSaldo(ERA, P1, "ouro"), 0, "nenhum ouro para quem não tem personagem");
+  assert.equal(ouro(P2), ouroP2 + 50);
+});
+await t("★ (revisão) apagarJogadorTodasAsEras faz o mesmo em todas as eras, e não credita ouro a autor sem personagem", async () => {
+  const P3 = U(32), P4 = U(33), P5 = U(34);
+  MEMBROS.S1.add(P3); MEMBROS.S1.add(P4);
+  await jogar(P3, "criar Tres"); await jogar(P4, "criar Quatro");
+  db.creditar(ERA, P3, "ouro", 300); db.creditar(ERA, P4, "ouro", 300);
+  await jogar(P3, `duelo <@${P4}> 100`);
+  // desafios feitos a P3 por quem tem personagem (P4) e por quem não tem mais (P5), nas duas eras
+  db.debitar(ERA, P4, "ouro", 40);
+  db.criarOferta({ serverId: ERA, tipo: "duelo", autorId: P4, alvoId: P3, itemPedido: "S1", moedaOferecida: "ouro", qtdOferecida: 40 });
+  db.criarOferta({ serverId: ERA, tipo: "duelo", autorId: P5, alvoId: P3, itemPedido: "S1", moedaOferecida: "ouro", qtdOferecida: 70 });
+  db.criarOferta({ serverId: "mundo", tipo: "duelo", autorId: P5, alvoId: P3, itemPedido: "S1", moedaOferecida: "ouro", qtdOferecida: 70 });
+  const f = db.listarFollowersDe(ERA, P3)[0];
+  db.getDb().prepare("INSERT INTO rpg_follower_itens (followerId, itemId, criadoEm) VALUES (?, 'g_espada_ferro', ?)").run(f.id, Date.now());
+  db.criarPersonagem("mundo", P3, "Velha"); db.recrutarFollower("mundo", P3, "f_mercenario_novato", 1);
+  TS.marcarAtivo("dg_esgotos_cidade_velha", P3, 3); db.marcarAtivoDungeon("dg_esgotos_cidade_velha", P3, 9);
+  const o4 = ouro(P4);
+  game.apagarJogadorTodasAsEras(P3);
+  const conta = (sql, ...a) => db.getDb().prepare(sql).get(...a).n;
+  for (const [tb, col] of [["rpg_personagem", "userId"], ["rpg_followers", "donoId"], ["rpg_ofertas", "autorId"], ["rpg_dungeon_ativos", "userId"], ["rpg_carteira", "userId"]]) assert.equal(conta(`SELECT COUNT(*) n FROM ${tb} WHERE ${col} = ?`, P3), 0, tb);
+  assert.equal(conta("SELECT COUNT(*) n FROM rpg_follower_itens WHERE followerId = ?", f.id), 0);
+  assert.equal(conta("SELECT COUNT(*) n FROM rpg_ofertas WHERE alvoId = ? AND estado = 'aberta'", P3), 0);
+  assert.equal(ouro(P4), o4 + 40, "quem tem personagem recebe a aposta de volta");
+  assert.equal(conta("SELECT COUNT(*) n FROM rpg_carteira WHERE userId = ?", P5), 0, "quem não tem personagem não ganha carteira");
+  assert.match(await jogar(P4, "duelo aceitar"), /Ninguém desafiou você aqui/);
+});
+await t("resumo das eras (o &game admin) e o prazo da purga: 90 dias depois do recomeço, nada apagado hoje", () => {
+  const r = E.resumoDasEras();
+  assert.ok(r.antigas.some((x) => x.era === "mundo" && x.n >= 1));
+  assert.equal((Date.parse(E.PURGA.prazo) - Date.parse(E.PURGA.recomeco)) / 86400000, E.PURGA.dias);
+  assert.ok(E.ERAS_ANTIGAS.includes("mundo"));
+});
+await t("★ apagarJogadorTodasAsEras (o &privacidade apagar): a pessoa some de TODAS as eras; os outros ficam", async () => {
+  assert.equal(game.apagarJogadorTodasAsEras, E.apagarJogadorTodasAsEras, "exportada também pelo game.js");
+  const OUTRA = U(4);
+  db.criarPersonagem("mundo", OUTRA, "Outra"); db.creditar("mundo", OUTRA, "ouro", 50);
+  await jogar(VET, "criar Nova");
+  // um desafio que outra pessoa fez a ela: a aposta volta ao autor
+  db.criarPersonagem(ERA, OUTRA, "Outra"); db.creditar(ERA, OUTRA, "ouro", 100);
+  db.debitar(ERA, OUTRA, "ouro", 40);
+  db.criarOferta({ serverId: ERA, tipo: "duelo", autorId: OUTRA, alvoId: VET, itemPedido: "S1", moedaOferecida: "ouro", qtdOferecida: 40 });
+  E.marcarEspera(VET, "chefe:x", Date.now() + 1e6);
+  const n = game.apagarJogadorTodasAsEras(VET);
+  assert.ok(n > 5, String(n));
+  for (const tb of ["rpg_personagem", "rpg_inventario", "rpg_equipado", "rpg_carteira", "rpg_magias"]) assert.equal(db.getDb().prepare(`SELECT COUNT(*) n FROM ${tb} WHERE userId = ?`).get(VET).n, 0, tb);
+  for (const tb of ["rpg_unicos", "rpg_espera"]) assert.equal(db.getDb().prepare(`SELECT COUNT(*) n FROM ${tb} WHERE userId = ?`).get(VET).n, 0, tb);
+  assert.equal(db.getDb().prepare("SELECT COUNT(*) n FROM rpg_followers WHERE donoId = ?").get(VET).n, 0);
+  assert.equal(ouro(OUTRA), 100, "a aposta em custódia voltou para quem desafiou");
+  assert.ok(db.getPersonagem("mundo", OUTRA) && db.getPersonagem(ERA, OUTRA), "a outra pessoa ficou");
+  assert.equal(game.apagarJogadorTodasAsEras(""), 0);
+});
+
+console.log("\n── o despacho: um mapa, apelidos, o que saiu ──");
+const ANA = U(10), BIA = U(11), CAU = U(12), DUD = U(13), FORA = U(14), EVA = U(15);
+for (const u of [ANA, BIA, CAU, DUD, EVA, DONO]) MEMBROS.S1.add(u);
+MEMBROS.S2.add(FORA); MEMBROS.S2.add(BIA);
+await t("★ 10 subcomandos + admin, num mapa só; o game.js só despacha (sem a fila de `if ([...].includes(sub))`)", () => {
+  assert.deepEqual(game.SUBCOMANDOS, ["ficha", "criar", "build", "missao", "chefe", "comprar", "aliado", "duelo", "top", "apagar", "admin"]);
+  const src = fs.readFileSync("modulos/game/game.js", "utf8");
+  assert.equal((src.match(/\.includes\(sub\)/g) ?? []).length, 0);
+  assert.ok(src.split("\n").length < 200, `${src.split("\n").length} linhas`);
+  assert.equal((src.match(/const semPersonagem = /g) ?? []).length, 1, "semPersonagem uma vez, no despacho");
+  for (const f of ["jogador.js", "lutas.js", "duelo.js", "admin.js"]) assert.doesNotMatch(fs.readFileSync(`modulos/game/${f}`, "utf8"), /semPersonagem\s*=/, f);
+});
+await t("★ todo subcomando antigo do registro tem destino: comando, apelido, \"saiu\", \"automático\" ou palavra de dentro (admin, duelo, apagar)", async () => {
+  const reg = (await import("./modulos/comandos/game.js")).default;
+  const DENTRO = new Set(["aceitar", "recusar", "cancelar", "confirmar", "dar", "nivel", "teste", "simular", "reset", "eco", "servidor", "tudo", "modelo", "ver", "detalhe", "padrao", "mundo", "fantasia", "simples", "levar", "adicionar", "dispensar", "pegar", "anunciar", "entrar", "sair"]);
+  const sem = Object.keys(reg.subcomandos).filter((k) => !game.subDe(k) && !game.SAIU.has(k) && !game.AUTOMATICO.has(k) && !["ajuda", "comandos"].includes(k) && !DENTRO.has(k));
+  assert.deepEqual(sem, []);
+});
+await t("★ (revisão) TODO subcomando de primeiro nível do game.js antigo (beed6a8) chega a algum lugar — nenhum responde \"Subcomando desconhecido\"", async () => {
+  // a lista inteira do despacho antigo (os `[...].includes(sub)`, o SUBS do aventura.js e do duelo.js e a ficha)
+  const ANTIGOS = ["criar","novo","start","começar","comecar","apagar","deletar","resetar","pontos","ponto","distribuir","upar","itens","inventario","inventário","mochila","bag","items","inventory","equipar","usar","vestir","use","equip","desequipar","tirar","remover","catalogo","catálogo","itens-jogo","loja","admin","debug","carteira","saldo","moedas","mercado","bazar","p2p","cambio","câmbio","trocar","escambo","permuta","item","ficha-item","preco","preço","price","magias","magia","grimorio","grimório","aprender","spells","spell","learn","comprar","vender","respec","redistribuir","reset","contratar","recrutar","descansar","descanso","follower","followers","companheiro","companheiros","party","equipe","recrutas","mercenarios","mercenários","top","ranking","rank","classe","class","evoluir","evolve","auto","ajuda","help","comandos","missao","missão","missoes","missões","quest","contrato","contratos","bico","bicos","especial","especiais","dungeon","dungeons","resgate","resgatar","chefe","chefes","boss","coop","co-op","grupo","chamado","group","historia","história","story","duelo","duelar","duel","pvp","desafiar","desafio","ficha","perfil","status"];
+  const reg = (await import("./modulos/comandos/game.js")).default;
+  const EN = Object.fromEntries(Object.entries(reg.subcomandos).flatMap(([pt, en]) => [].concat(en).map((e) => [e, pt])));   // o que o registro traduz antes do handler
+  const ruins = [];
+  for (const w of ANTIGOS) {
+    const interno = EN[w] ?? w;
+    if (!game.subDe(interno) && !game.SAIU.has(interno) && !game.AUTOMATICO.has(interno) && !["ajuda", "comandos"].includes(interno)) ruins.push(w);
+    for (const lang of ["pt", "en", "es"]) if (/desconhecido|Unknown subcommand|desconocido/.test(await jogar(EVA, interno, { lang }))) ruins.push(`${w} [${lang}]`);
+  }
+  assert.deepEqual(ruins, []);
+  for (const [w, s] of [["start", "criar"], ["moedas", "ficha"], ["preco", "comprar"], ["price", "comprar"], ["ficha-item", "comprar"], ["itens-jogo", "comprar"], ["debug", "admin"], ["misión", "missao"], ["chamado", "missao"]]) assert.equal(game.subDe(w), s, w);
+  assert.match(await jogar(EVA, "auto"), /^⚙️/);
+});
+await t("★ os nomes antigos que saíram respondem uma linha (pt/en/es); os automáticos mandam para a build", async () => {
+  for (const w of ["mercado", "cambio", "trocar", "escambo", "vender", "bazar"]) {
+    assert.equal(await jogar(ANA, w), "ℹ️\nIsso saiu do jogo.");
+    assert.equal(await jogar(ANA, w, { lang: "en" }), "ℹ️\nThat's no longer in the game.");
+    assert.equal(await jogar(ANA, w, { lang: "es" }), "ℹ️\nEso ya no está en el juego.");
+  }
+  for (const w of ["pontos", "equipar", "desequipar", "usar", "aprender", "evoluir", "respec"]) assert.match(await jogar(ANA, w), /^⚙️\nAutomático pela build — `&game build`\.$/);
+});
+await t("★ apelidos: contratos/dungeon/especial → missão; recrutas/followers → aliado; loja/catalogo → comprar; classe → build; ranking → top", () => {
+  for (const [a, s] of [["contratos", "missao"], ["dungeon", "missao"], ["especiais", "missao"], ["coop", "missao"], ["chefes", "chefe"], ["recrutas", "aliado"], ["followers", "aliado"],
+    ["contratar", "aliado"], ["loja", "comprar"], ["catalogo", "comprar"], ["classe", "build"], ["ranking", "top"], ["itens", "ficha"], ["carteira", "ficha"], ["magias", "ficha"], ["perfil", "ficha"], ["pvp", "duelo"]]) assert.equal(game.subDe(a), s, a);
+});
+await t("★ subcomando desconhecido: uma linha + `&help game` — nunca busca pessoa pelo nome", async () => {
+  assert.equal(await jogar(ANA, "Fulano"), "❌\nSubcomando desconhecido — `&help game`.");
+});
+await t("★ sem personagem: a mesma resposta curta para todo comando que precisa de um", async () => {
+  const r = await jogar(EVA, "missao");
+  assert.equal(r, "🎭 Sem personagem\n`&game criar <nome>`");
+  for (const s of ["build", "chefe", "comprar", "aliado", "apagar", "contratos"]) assert.equal(await jogar(EVA, s), r, s);
+  assert.equal(await jogar(EVA, ""), r);
+});
+
+console.log("\n── criar: nome obrigatório e limpo ──");
+await t("★ sem nome não cria (antes: \"Aventureiro\"); nome que vira vazio depois de limpo também não", async () => {
+  assert.equal(await jogar(ANA, "criar"), "❌\n`&game criar <nome>`");
+  assert.match(await jogar(ANA, "criar **@everyone** <@" + BIA + ">"), /^❌/);
+  assert.equal(db.getPersonagem(ERA, ANA), null);
+});
+await t("★ nome limpo: sem menção, @everyone, markdown nem link; até 32 caracteres", async () => {
+  await jogar(ANA, `criar @everyone **Rei** [x](https://golpe.example/a) <@${BIA}> discord.gg/abc do Norte Distante e Muito Além`);
+  const nome = db.getPersonagem(ERA, ANA).nome;
+  assert.match(nome, /Rei/); assert.doesNotMatch(nome, /[@*\[\]()<>]|golpe|discord|everyone/i); assert.ok(nome.length <= 32, nome);
+  assert.match(await jogar(ANA, "criar Outro"), /já tem personagem/);
+});
+await t("★ o kit inicial: arma (nas duas mãos), armaduras, acessórios e dois aliados — a missão do nível 1 perto da chance-base", () => {
+  const party = CB.partyDe(ERA, ANA);
+  assert.equal(party.companheiros.length, 2);
+  assert.equal(party.jogador.maos.length, 1); assert.equal(party.jogador.maos[0].modo, "2m");
+  const pv = CB.prever([party], { ...R.missao(1), base: R.BASE.normal });
+  assert.ok(pv.exito > 0.2 && pv.exito < 0.6 && pv.sobrevivencia > 0.5, `${pv.exito} / ${pv.sobrevivencia}`);
+  assert.equal(db.getPersonagem(ERA, ANA).classe, B.PADRAO);
+});
+await t("o mesmo personagem em dois servidores (um mundo só)", async () => {
+  assert.match(await jogar(ANA, "", { servidor: "S2" }), new RegExp(db.getPersonagem(ERA, ANA).nome.split(" ")[0]));
+  assert.equal(db.getPersonagem("S1", ANA), null);
+});
+
+console.log("\n── saída mínima (R1/R2) e horários ──");
+await t("★ a ficha é curta (≤ 4 linhas) e o horário é timestamp do Stoat", async () => {
+  descansar(ANA);
+  const f = await jogar(ANA, "");
+  assert.ok(f.split("\n").length <= 4, f);
+  assert.match(f, /🪙/); assert.match(f, /👥 2/);
+  db.salvarPersonagem(ERA, ANA, { ultimaMissao: Date.now() });
+  assert.match(await jogar(ANA, ""), /⏳ <t:\d+:R>/);
+  descansar(ANA);
+  const src = fs.readdirSync("modulos/game").filter((x) => x.endsWith(".js")).map((x) => fs.readFileSync(`modulos/game/${x}`, "utf8")).join("\n");
+  assert.doesNotMatch(src, /toLocale(Time|Date)String|timeZone/);
+});
+await t("★ a ficha de outro: só menção/ID de membro DESTE servidor", async () => {
+  await jogar(BIA, "criar Bia");
+  assert.match(await jogar(ANA, "ficha Fulano"), /menção ou um ID/);
+  assert.match(await jogar(ANA, `ficha <@${FORA}>`), /não está neste servidor/);
+  assert.match(await jogar(ANA, `ficha <@${BIA}>`), /🎭 Bia/);
+  assert.match(await jogar(ANA, `<@${BIA}>`), /🎭 Bia/);
+});
+await t("★ o resultado da missão é só o resultado: sem dica, sem lista de comandos (nenhum `&…` na tela)", async () => {
+  descansar(ANA);
+  const r = await jogar(ANA, "missao");
+  assert.match(r, /^(🏆|😐|💀) /);
+  assert.doesNotMatch(r, /`&/);
+  assert.ok(r.split("\n").length <= 9, r);
+});
+
+console.log("\n── as lutas (motor do v4, mantido) ──");
+await t("a party de referência tem a chance-base: 40/70 no próprio nível; especial 30/60", () => {
+  for (const n of [1, 10, 37, 73, 100]) { const p = R.ref(n), pv = R.preverLuta(p.membros, p.magias, { ...R.missao(n), base: R.BASE.normal }); assert.ok(perto(pv.exito, 0.4, 0.06) && perto(pv.sobrevivencia, 0.7, 0.06), `${n}`); }
+  const p = R.ref(50), pv = R.preverLuta(p.membros, p.magias, { ...R.missao(50, R.BASE.especial), base: R.BASE.especial });
+  assert.ok(perto(pv.exito, 0.3, 0.06) && perto(pv.sobrevivencia, 0.6, 0.06));
+});
+await t("um êxito no próprio nível vale 80% de um nível; o que sobra passa adiante", () => {
+  for (const n of [1, 20, 60]) { const s = R.subirForca(n, 0, R.missao(n).poder); assert.ok(s.nivel === n && perto(s.progresso, 0.8, 0.001)); }
+  const d = R.subirForca(5, 0.5, R.missao(5).poder); assert.ok(d.nivel === 6 && d.progresso > 0 && d.progresso < 0.5);
+});
+await t("folga pela força (3× = garantida, nunca pelo nível) e perigo só na sobrevivência", () => {
+  const forte = R.ref(20), pv = R.preverLuta(forte.membros, forte.magias, { ...R.missao(2), base: R.BASE.normal });
+  assert.ok(pv.exito === 1 && pv.sobrevivencia === 1);
+  const nada = R.preverLuta([{ attr: Object.fromEntries(R.ATR.map((a) => [a, 1])), nivel: 20 }], [], { ...R.missao(2), base: R.BASE.normal });
+  assert.ok(nada.exito < 0.5);
+  const r20 = R.ref(20), m = (pg) => R.preverLuta(r20.membros, r20.magias, { ...R.missao(20), base: R.BASE.normal, perigo: pg });
+  assert.ok(m("baixo").sobrevivencia > m("normal").sobrevivencia && m("normal").sobrevivencia > m("alto").sobrevivencia && m("baixo").exito === m("normal").exito);
+});
+await t("arma única rende +80%; escudo soma defesa e +10%", () => {
+  const forte = { attr: Object.fromEntries(R.ATR.map((a) => [a, 30])), nivel: 30 }, esp = R.ARMAS.branca_pesada;
+  const uma = R.poderMembro({ ...forte, maos: [{ arma: esp, raridade: "raro", modo: "1m" }] }), duas = R.poderMembro({ ...forte, maos: [{ arma: esp, raridade: "raro", modo: "1m" }, { arma: esp, raridade: "raro", modo: "1m" }] }), nada = R.poderMembro({ ...forte, maos: [] });
+  assert.ok(perto((uma - nada) * 2 / 1.8, duas - nada, (duas - nada) * 0.02));
+  assert.ok(R.defesaMembro({ ...forte, defesa: [{ tipo: "armadura", raridade: "raro" }, { tipo: "escudo", raridade: "raro" }] }) > R.defesaMembro({ ...forte, defesa: [{ tipo: "armadura", raridade: "raro" }] }) * 1.1);
+});
+await t("★ quem paga: o banco (uma moeda só) e o tesouro da dungeon desta era; cair deixa ouro onde caiu", () => {
+  TS.garantirOuro();
+  assert.deepEqual(db.listarMoedas(ERA).map((m) => m.id), ["ouro"], "uma moeda");
+  db.salvarMoeda(ERA, "ouro", { mercado: 1_000_000 });
+  const s0 = ouro(ANA), q = TS.pagarDoBanco(ANA, 10);
+  assert.ok(q > 0 && db.getMoeda(ERA, "ouro").mercado === 1_000_000 - q && ouro(ANA) === s0 + q);
+  db.salvarMoeda(ERA, "ouro", { mercado: 0 });
+  assert.equal(TS.pagarDoBanco(ANA, 10), 0, "banco vazio não cria ouro");
+  assert.ok(TS.cobrar(ANA, 100) && db.getMoeda(ERA, "ouro").mercado === 50, "metade do que se gasta volta ao banco");
+  assert.equal(TS.cobrar(ANA, 1e12), false);
+  const dg = [...MISS.DUNGEONS.values()][0];
+  TS.porNoTesouro(dg.id, 50000);
+  assert.ok(db.getDungeon(`v5:${dg.id}`)?.ouro >= 50000, "o tesouro é desta era");
+  const pd = TS.pagarDaDungeon(dg.id, ANA, 10);
+  assert.ok(pd > 0 && TS.tesouro(dg.id) < 50000);
+  db.creditar(ERA, ANA, "ouro", 1000);
+  const antes = TS.tesouro(dg.id), perdeu = TS.cair(ANA, dg.id);
+  assert.ok(perdeu > 0 && perto(TS.tesouro(dg.id), antes + perdeu, 1e-6));
+  assert.equal(perdeu, Math.floor((ouro(ANA) + perdeu) * R.ECO.perdaAoCair));
+  db.salvarMoeda(ERA, "ouro", { mercado: 200000 });
+});
+await t("★ a missão é sorteada: contrato (no nível do grupo), encontro de dungeon ou especial — e a Sorte puxa a especial", () => {
+  const tipos = new Set();
+  const a = rng(5);
+  for (let i = 0; i < 400; i++) { const m = L.sortearMissao(ANA, 20, 1, a); tipos.add(m.tipo); }
+  assert.deepEqual([...tipos].sort(), ["contrato", "dungeon-encontro", "especial"]);
+  const conta = (sorte) => { const r = rng(11); let n = 0; for (let i = 0; i < 4000; i++) if (L.sortearMissao(ANA, 20, sorte, r).tipo === "especial") n++; return n; };
+  assert.ok(conta(4) > conta(1) * 1.5, `${conta(1)} → ${conta(4)}`);
+  const ct = MISS.CONTRATOS[0];
+  assert.equal(L.montarAlvo(ct, 37).alvo.nivel, 37, "o contrato é jogado no nível do grupo");
+  for (let i = 0; i < 50; i++) { const m = L.sortearMissao(ANA, 7, 1, a); if (m.tipo === "especial") assert.ok(m.nivel <= 7); }
+});
+await t("★ item pior vira ouro; melhor é equipado (o que sai fica na mochila); o único fica guardado", () => {
+  descansar(ANA);
+  const fraco = C.ITENS.get("g_adaga_simples"), out = L.resumoVazio(ANA, db.getPersonagem(ERA, ANA));
+  const s0 = ouro(ANA);
+  L.entregarItem(ANA, fraco, out);
+  if (out.vendidos.length) { assert.equal(ouro(ANA), s0 + out.vendido); assert.equal(out.vendido, L.valorDeRevenda(fraco)); assert.ok(!db.temItem(ERA, ANA, fraco.id)); }
+  else assert.ok(out.equipados.length, "ou equipou ou vendeu");
+  const forte = [...C.ITENS.values()].find((i) => i.raridade === "lendario" && i.slot === "armadura");
+  const antes = db.getEquipado(ERA, ANA).armadura, o2 = L.resumoVazio(ANA, null);
+  L.entregarItem(ANA, forte, o2);
+  assert.equal(db.getEquipado(ERA, ANA).armadura?.id, forte.id);
+  assert.ok(db.temItem(ERA, ANA, antes.id), "a armadura de antes ficou na mochila");
+  const unico = C.ITENS.get("g_e_relogio_avo"), o3 = L.resumoVazio(ANA, null);
+  L.entregarItem(ANA, unico, o3);
+  assert.ok(db.temItem(ERA, ANA, unico.id));
+});
+await t("★ especial: a recompensa única uma vez por pessoa", () => {
+  const esp = MISS.ESPECIAIS.find((e) => e.id === "e_relogio");
+  db.tirarItem(ERA, ANA, "g_e_relogio_avo", 9);
+  db.salvarPersonagem(ERA, ANA, { nivel: esp.nivel, ...Object.fromEntries(R.ATR.map((a) => [a, 2000])) }); descansar(ANA);
+  let res = L.lutar([ANA], esp, { aleatorio: sempre(0.001) });
+  assert.equal(res.r.desfecho, "sucesso");
+  assert.ok(db.temItem(ERA, ANA, "g_e_relogio_avo") || db.getEquipado(ERA, ANA).acessorio1?.id === "g_e_relogio_avo" || res.resultados[0].unicos.length === 1);
+  descansar(ANA);
+  res = L.lutar([ANA], esp, { aleatorio: sempre(0.001) });
+  assert.equal(res.resultados[0].unicos.length, 0, "o segundo não dá outro");
+});
+await t("★ chefe: 24 h por pessoa; o contrato do chefe vira ALIADO sozinho (não fica na mochila)", () => {
+  const harkon = MISS.CHEFES.get("b_tes_harkon");
+  db.salvarPersonagem(ERA, ANA, { nivel: harkon.nivel }); descansar(ANA);
+  const res = L.lutar([ANA], harkon, { aleatorio: sempre(0.001) });
+  assert.equal(res.r.desfecho, "sucesso");
+  assert.ok(db.listarFollowersDe(ERA, ANA).some((f) => f.catalogoId === "f_tes_serana") && !db.temItem(ERA, ANA, "c_f_tes_serana"));
+  assert.ok(db.getParty(ERA, ANA).length <= 2, "no máximo dois vão junto");
+  descansar(ANA);
+  const imp = L.impedimento(ANA, L.montarAlvo(harkon, harkon.nivel));
+  assert.equal(imp?.motivo, "chefe"); assert.ok(imp.ate > Date.now() + 23 * 3600e3);
+  assert.notEqual(L.escolherChefe([ANA], harkon.nivel)?.id, "b_tes_harkon", "o chefe em espera não é escolhido");
+});
+await t("pergaminho vira magia sozinho; contrato repetido não dá aliado repetido", () => {
+  const o = L.resumoVazio(ANA, null);
+  L.entregarItem(ANA, db.getItem("p_m_e_eco_radio"), o);
+  assert.ok(db.listarMagias(ERA, ANA).some((m) => m.magiaId === "m_e_eco_radio") && o.magias.length === 1);
+  const n = db.listarFollowersDe(ERA, ANA).length;
+  L.entregarItem(ANA, db.getItem("c_f_tes_serana"), L.resumoVazio(ANA, null));
+  assert.equal(db.listarFollowersDe(ERA, ANA).length, n);
+});
+await t("no máximo 2 níveis por vitória (nível 1 contra um chefe do nível 60)", async () => {
+  await jogar(CAU, "criar Cau");
+  db.salvarPersonagem(ERA, CAU, Object.fromEntries(R.ATR.map((a) => [a, 5000])));
+  const c60 = [...MISS.CHEFES.values()].find((c) => c.nivel === 60);
+  const res = L.lutar([CAU], c60, { aleatorio: sempre(0.001) });
+  assert.equal(res.r.desfecho, "sucesso"); assert.equal(db.getPersonagem(ERA, CAU).nivel, 1 + MISS.NIVEIS_POR_LUTA);
+  assert.ok(db.getPersonagem(ERA, CAU).pontos < 1, "os pontos do nível novo já foram gastos pela build");
+});
+await t("★ a Sorte puxa o loot: com Sorte alta cai mais item e mais aliado (mesmas rolagens)", () => {
+  const conta = (sorte) => { let it = 0; const r = rng(3); for (let i = 0; i < 3000; i++) { if (S.sortear(R.loot(25), sorte, r)) it++; } let al = 0; for (let i = 0; i < 3000; i++) if (S.rolar(MISS.COMPANHEIRO_LOOT, sorte, r)) al++; return [it, al]; };
+  const [i1, a1] = conta(1), [i4, a4] = conta(4);
+  assert.ok(i4 > i1 && a4 > a1 * 1.5, `${i1}/${a1} → ${i4}/${a4}`);
+});
+
+console.log("\n── co-op: só quem foi convidado, só deste servidor ──");
+for (const u of [DUD, EVA]) await jogar(u, `criar P${u.slice(-2)}`);
+for (const u of [ANA, BIA, CAU, DUD, EVA]) { db.salvarPersonagem(ERA, u, { nivel: 5 }); descansar(u); }
+await t("★ convidar alguém de outro servidor (ou sem personagem) não abre convite", async () => {
+  assert.match(await jogar(ANA, `missao <@${FORA}>`), /não está neste servidor/);
+  assert.equal(L.convitesAbertos(), 0);
+  assert.match(await jogar(ANA, `missao <@${U(77)}>`), /não está neste servidor/);
+  assert.match(await jogar(ANA, `missao <@${BIA}> <@${CAU}> <@${DUD}> <@${EVA}>`), /No máximo 3/);
+});
+await t("★ ✅ de quem NÃO foi convidado não conta; o de quem foi, conta; com todos, o grupo parte", async () => {
+  const r = await jogar(ANA, `missao <@${BIA}> <@${CAU}>`);
+  assert.match(r, /Missão em grupo/); assert.match(r, /<t:\d+:R>/);
+  const id = `M${nMsg}`;
+  assert.equal(L.convitesAbertos(), 1);
+  saidas = [];
+  assert.equal(await game.aoReagir(id, DUD, "✅"), true, "consumida (é do jogo)");
+  assert.equal(await game.aoReagir(id, BIA, "❌"), true);
+  assert.equal(await game.aoReagir(id, BIA, encodeURIComponent("✅")), true);
+  assert.equal(saidas.length, 0, "falta a Cau: ninguém partiu");
+  const antes = Object.fromEntries([ANA, BIA, CAU, DUD].map((u) => [u, db.getPersonagem(ERA, u).ultimaMissao]));
+  await game.aoReagir(id, CAU, "✅");
+  const fim = saidas.map(texto).join("\n");
+  assert.match(fim, /^(🏆|😐|💀) /);
+  for (const u of [ANA, BIA, CAU]) { assert.ok(fim.includes(`<@${u}>`), u); assert.ok(db.getPersonagem(ERA, u).ultimaMissao > antes[u], u); }
+  assert.equal(db.getPersonagem(ERA, DUD).ultimaMissao, antes[DUD], "quem não foi convidado não foi");
+  assert.equal(L.convitesAbertos(), 0);
+  assert.equal(await game.aoReagir("M-nada", ANA, "✅"), false, "mensagem que não é do jogo: segue para os outros");
+});
+await t("★ quem foi convidado e digita o comando entra (vale como ✅); no prazo, parte com quem aceitou", async () => {
+  for (const u of [ANA, BIA, CAU, DUD]) descansar(u);
+  await jogar(ANA, `chefe <@${BIA}> <@${DUD}>`);
+  const id = `M${nMsg}`;
+  saidas = [];
+  assert.equal(await jogar(DUD, "missao"), "", "aceitou sem resposta própria");
+  assert.equal(L.convitePara(DUD, "C1"), null);
+  const antesB = db.getPersonagem(ERA, BIA).ultimaMissao;
+  await L.partirAgora(id);
+  const fim = saidas.map(texto).join("\n");
+  assert.ok(fim.includes(`<@${DUD}>`) && !fim.includes(`<@${BIA}>`), fim);
+  assert.equal(db.getPersonagem(ERA, BIA).ultimaMissao, antesB, "quem não aceitou ficou");
+});
+
+console.log("\n── duelo: só ouro, inteiro, mesmo servidor, só o desafiado aceita ──");
+const lado = (nome, poder, resil, agilidade = 0) => ({ nome, poder, resil, agilidade });
+await t("★ dois iguais: ~50% cada, uns 10 golpes; mais forte ganha mais; a chance mostrada é fixa", () => {
+  const c = DU.chance(lado("A", 100, 100), lado("B", 100, 100)); assert.ok(c > 0.4 && c < 0.6, String(c));
+  const r = DU.simular(lado("A", 100, 100), lado("B", 100, 100), rng(1)); assert.ok(r.golpes.length >= 4 && r.golpes.length <= DU.GOLPES_MAX);
+  assert.ok(DU.chance(lado("F", 300, 300), lado("f", 100, 100)) > 0.85);
+  assert.equal(DU.chance(lado("A", 120, 90), lado("B", 100, 100)), DU.chance(lado("A", 120, 90), lado("B", 100, 100)));
+});
+await t("d20 1–3 erra, 20 é crítico (1,75×); o personagem luta sozinho, com equipamento e magias", () => {
+  const seq = (xs) => { let i = 0; return () => xs[i++ % xs.length]; };
+  const r1 = DU.simular(lado("A", 100, 100), lado("B", 100, 100), seq([0.99, 0.0, 0.0])); assert.equal(r1.golpes[0].tipo, "erro");
+  const r2 = DU.simular(lado("A", 100, 100), lado("B", 100, 100), seq([0.99, 0.0, 0.99])); assert.equal(r2.golpes[0].tipo, "critico"); assert.ok(perto(r2.golpes[0].dano, 100 * 1.2 * 1.75, 1e-9));
+  const l = DU.lado(ANA); assert.ok(l.poder > 0 && l.resil > 0 && l.nome);
+});
+await t("★ aposta só ouro inteiro ≥ 1 (sem item, sem fração); alvo de outro servidor, si mesmo e sem personagem não", async () => {
+  await jogar(ANA, "duelo cancelar");
+  db.creditar(ERA, ANA, "ouro", 1000);
+  for (const a of ["0.5", "1.5 ouro", "-2", "1e3", "item Espada de Ferro"]) assert.match(await jogar(ANA, `duelo <@${BIA}> ${a}`), /^❌\n`&game duelo @pessoa \[100\]`/, a);
+  assert.match(await jogar(ANA, `duelo <@${FORA}> 10`), /não está neste servidor/);
+  assert.match(await jogar(ANA, `duelo <@${ANA}>`), /Escolha outra pessoa/);
+  assert.match(await jogar(ANA, `duelo <@${U(1)}>`), /não tem personagem/);
+  assert.equal(DU.abertos().length, 0);
+});
+await t("★ desafio: o ouro vai para a custódia; ✅ de outra pessoa não conta; o do desafiado luta; o vencedor leva 2×", async () => {
+  db.debitar(ERA, ANA, "ouro", ouro(ANA)); db.debitar(ERA, BIA, "ouro", ouro(BIA));
+  db.creditar(ERA, ANA, "ouro", 500); db.creditar(ERA, BIA, "ouro", 500);
+  const r = await jogar(ANA, `duelo <@${BIA}> 100`);
+  assert.match(r, /Desafio de duelo/); assert.match(r, /<t:\d+:t>/);
+  const id = `M${nMsg}`;
+  assert.equal(ouro(ANA), 400);
+  saidas = [];
+  assert.equal(await game.aoReagir(id, CAU, "✅"), true); assert.equal(saidas.length, 0);
+  await game.aoReagir(id, BIA, "✅");
+  assert.equal(saidas.length, 1);
+  assert.deepEqual([ouro(ANA), ouro(BIA)].sort(), [400, 600]);
+  assert.equal(DU.abertos().length, 0);
+});
+await t("★ recusar, cancelar e o prazo devolvem; aceitar de outro servidor não acha o desafio", async () => {
+  await jogar(ANA, `duelo <@${BIA}> 50`); const s = ouro(ANA);
+  assert.match(await jogar(BIA, "duelo aceitar", { servidor: "S2" }), /Ninguém desafiou você aqui/);
+  await jogar(BIA, "duelo recusar"); assert.equal(ouro(ANA), s + 50);
+  await jogar(ANA, `duelo <@${BIA}> 50`); await jogar(ANA, "duelo cancelar"); assert.equal(ouro(ANA), s + 50);
+  await jogar(ANA, `duelo <@${BIA}> 50`); assert.equal(DU.expirar(Date.now() + DU.VALIDADE_MS + 1), 1); assert.equal(ouro(ANA), s + 50);
+});
+await t("aceitar por texto também luta (sem saldo: não luta, e a aposta continua lá)", async () => {
+  await jogar(ANA, `duelo <@${CAU}> 50`);
+  db.debitar(ERA, CAU, "ouro", ouro(CAU));
+  assert.match(await jogar(CAU, "duelo aceitar"), /A aposta é 🪙 50/);
+  assert.equal(DU.abertos().length, 1);
+  db.creditar(ERA, CAU, "ouro", 50);
+  assert.match(await jogar(CAU, "duelo aceitar"), /⚔️ .+ × .+/);
+});
+
+console.log("\n── comprar e aliado ──");
+await t("★ a loja só mostra o que melhora a build; comprar sem ouro diz o preço e não muda nada; com ouro, equipa", async () => {
+  await jogar(EVA, "build ladino");
+  db.salvarPersonagem(ERA, EVA, { nivel: 5 });
+  db.debitar(ERA, EVA, "ouro", ouro(EVA));
+  const l = await jogar(EVA, "comprar");
+  const ofertas = J.ofertasDaLoja(EVA);
+  assert.ok(ofertas.length > 0 && ofertas.every((o) => o.melhora && o.ganho > 0));
+  assert.match(l, /`1` .+ — 🪙 \d+/);
+  const banco0 = db.getMoeda(ERA, "ouro").mercado;
+  assert.match(await jogar(EVA, "comprar 1"), /custa 🪙/);
+  assert.equal(db.getMoeda(ERA, "ouro").mercado, banco0);
+  const o = ofertas[0];
+  db.creditar(ERA, EVA, "ouro", o.item.precoBase);
+  assert.match(await jogar(EVA, "comprar 1"), /🛒 Comprado/);
+  assert.equal(ouro(EVA), 0);
+  assert.ok(Object.values(db.getEquipado(ERA, EVA)).some((x) => x.id === o.item.id));
+  assert.equal(db.getMoeda(ERA, "ouro").mercado, banco0 + Math.floor(o.item.precoBase * R.ECO.voltaAoBanco));
+});
+await t("comprar pelo nome em inglês e espanhol; o que não melhora é recusado sem cobrar; o único não se vende", async () => {
+  db.creditar(ERA, EVA, "ouro", 10000);
+  const s = ouro(EVA);
+  assert.match(await jogar(EVA, "comprar Simple Dagger", { lang: "en" }), /Simple Dagger/);
+  assert.match(await jogar(EVA, "comprar Escudo de Tábuas"), /não melhora a sua build/);
+  assert.match(await jogar(EVA, "comprar Reloj del abuelo", { lang: "es" }), /no se vende/);
+  assert.ok(ouro(EVA) <= s);
+});
+await t("★ aliado: contratar cobra e o mais forte vai junto sozinho (⭐ = os dois da party)", async () => {
+  db.creditar(ERA, EVA, "ouro", 5000);
+  const lista = await jogar(EVA, "aliado");
+  assert.match(lista, /⭐/);
+  const merc = J.mercenarios(db.getPersonagem(ERA, EVA))[0];
+  const s = ouro(EVA);
+  assert.match(await jogar(EVA, `aliado ${merc.nome}`), /👥 Contratado/);
+  assert.equal(ouro(EVA), s - merc.preco);
+  assert.ok(db.getParty(ERA, EVA).length === 2);
+  assert.match(await jogar(EVA, "aliado Serana"), /não está para contratar/);
+});
+
+console.log("\n── espanhol e inglês ──");
+await t("★ o catálogo inteiro tem nome em espanhol (itens, aliados, magias, missões, chefes, dungeons)", () => {
+  assert.deepEqual(TL.idsSemEspanhol(C), []);
+  assert.equal(TL.nomeItem(db.getItem("c_f_tes_serana"), "es"), "Contrato: Serana");
+  assert.equal(TL.nomeItem(db.getItem("p_m_e_eco_radio"), "es"), "Pergamino: Eco de radio");
+  assert.equal(TL.nomeMissao({ tipo: "dungeon", dungeon: "dg_esgotos_cidade_velha" }, "es"), "Alcantarillas de la ciudad vieja");
+});
+await t("★ as telas do jogo num servidor em espanhol saem em espanhol (nada em inglês)", async () => {
+  const ruins = [];
+  for (const c of ["", "build", "comprar", "aliado", "top", "apagar", "mercado", "pontos", "xyz", "criar", "missao", `duelo <@${CAU}> 5`, "duelo cancelar"]) {
+    descansar(EVA);
+    const r = await jogar(EVA, c, { lang: "es" });
+    if (emIngles(r)) ruins.push(`${c}: ${r.slice(0, 120)}`);
+  }
+  assert.deepEqual(ruins, []);
+  const bes = await jogar(EVA, "build", { lang: "es" }), ben = await jogar(EVA, "build", { lang: "en" });
+  for (const n of ["Pícaro", "Paladín", "Guerrero", "Marine espacial", "Afortunado"]) assert.ok(bes.includes(n), n);
+  for (const n of ["Rogue", "Paladin", "Warrior", "Marksman", "Lucky"]) assert.ok(ben.includes(n), n);
+  assert.ok(!/Warrior|Rogue|Lucky/.test(bes));
+});
+
+console.log("\n── a wiki (paginasWikiRpg), gerada dos dados ──");
+await t("★ pt/en/es: as mesmas páginas, título e texto, sem marca crua, e o espanhol em espanhol", () => {
+  const p = W.paginasWikiRpg("pt"), e = W.paginasWikiRpg("en"), s = W.paginasWikiRpg("es");
+  assert.ok(p.length >= 8 && p.length === e.length && e.length === s.length);
+  for (const x of [...p, ...e, ...s]) { assert.ok(x.titulo && x.texto.length > 80, x.titulo); assert.doesNotMatch(x.texto, /\{&|undefined|NaN/); }
+  for (const x of s) assert.ok(!emIngles(x.texto), x.titulo);
+});
+await t("★ a wiki explica os 9 atributos e tem as seções de uma wiki (como jogar, builds, missões, co-op, sorte, aliados, ouro, duelo, níveis)", () => {
+  for (const [l, secoes] of [["pt", ["como jogar", "Builds", "Atributos", "Missões", "Co-op", "Sorte", "Aliados", "Ouro", "Duelo", "Níveis"]], ["en", ["how to play", "Builds", "Attributes", "Missions", "Co-op", "Luck", "Allies", "Gold", "Duel", "Levels"]]]) {
+    const w = W.paginasWikiRpg(l).map((x) => `${x.titulo}\n${x.texto}`).join("\n");
+    for (const a of R.ATR) assert.match(w, new RegExp(`\\*\\*${TL.atributo(a, l)}\\*\\*[^\\n]* — .{25,}`), `${l}: ${a}`);
+    for (const x of secoes) assert.ok(w.includes(x), `${l}: ${x}`);
+    for (const b of B.LISTA) assert.ok(w.includes(TL.nomeBuild(b, l)), b.id);
+  }
+});
+await t("★ nenhum número copiado à mão: os números da wiki são os do código", () => {
+  const w = W.paginasWikiRpg("pt").map((x) => x.texto).join("\n");
+  for (const n of [`${Math.round(R.BASE.normal.exito * 100)}%`, `${Math.round(R.BASE.normal.sobrev * 100)}%`, `${Math.round(R.BASE.especial.exito * 100)}%`, `${MISS.CHEFE_ESPERA_H} h`,
+    `${MISS.ESPERA_MIN.contrato} min`, `${L.RECUPERACAO_MS / 60000} min`, `${S.SORTE.teto}×`, `${B.LISTA.length} builds`, `${Math.round(R.ECO.perdaAoCair * 100)}%`]) assert.ok(w.includes(n), n);
+  const src = fs.readFileSync("modulos/game/wiki.js", "utf8");
+  assert.doesNotMatch(src.replace(/\/\/.*$/gm, ""), /\b\d+\s*(%|min\b|h\b|×)/, "número escrito à mão na wiki");
+});
+
+console.log("\n── registro, admin e o que veio das suítes antigas ──");
+await t("★ a ajuda do &game no registro: uma página por subcomando (`ajuda.paginas`: uso, o que faz, exemplo) em pt/en/es; o admin marcado como só do dono", async () => {
+  const reg = (await import("./modulos/comandos/game.js")).default;
+  const pags = reg.ajuda.paginas;
+  assert.equal(reg.ajuda.grupo, "rpg");
+  assert.deepEqual(Object.keys(pags), game.SUBCOMANDOS);
+  for (const [k, v] of Object.entries(pags)) for (const l of ["pt", "en", "es"]) {
+    assert.ok(v.titulo?.[l], `${k}.titulo.${l}`);
+    assert.match(v.texto?.[l] ?? "", /^`\{&game[^`]*`\n\n.{20,}\n\n\S+: `\{&game/s, `${k}.texto.${l}: uso, o que faz e exemplo`);
+  }
+  assert.equal(pags.admin.soDono, true);
+  assert.ok(!Object.entries(pags).some(([k, v]) => k !== "admin" && v.soDono));
+  for (const l of ["pt", "en", "es"]) assert.doesNotMatch(reg.ajuda.desc[l], /admin/);
+  const { citarNoTexto } = await import("./modulos/core/aliases.js");
+  for (const v of Object.values(pags)) for (const l of ["pt", "en", "es"]) assert.doesNotMatch(citarNoTexto(v.texto[l], l, "&"), /\{&/);
+});
+await t("só o dono do bot usa o admin; `admin dar` sem valor ensina o próprio comando", async () => {
+  saidas = [];
+  await game.cmdGame({ authorId: ANA, channel: {}, channelId: "C1", mentionIds: [] }, ["admin", "dar", "10"], ctxDe("S1", "pt"));
+  assert.match(texto(saidas[0]), /Restrito/);
+  assert.match(await jogar(DONO, "admin dar"), /^❌ Quanto\?\n`&game admin dar 1000 \[@pessoa\]`/);
+  await jogar(DONO, "criar Dono");
+  const s = ouro(DONO); await jogar(DONO, "admin dar 50"); assert.equal(ouro(DONO), s + 50);
+  await jogar(DONO, `admin nivel 12 <@${DONO}>`); assert.equal(db.getPersonagem(ERA, DONO).nivel, 12); assert.ok(db.getPersonagem(ERA, DONO).pontos < 1);
+  assert.match(await jogar(DONO, "admin"), /mundo:v5[\s\S]*mundo/);
+});
+await t("admin imagem: liga por id e link (o link fica no banco, não no JSON); javascript: não entra; remover tira", async () => {
+  assert.match(await jogar(DONO, "admin imagem b_tes_harkon https://cdn.stoatusercontent.com/attachments/01JABCDEFGHJKMNPQRSTVWXYZ1"), /Imagem salva/);
+  assert.ok(IMG.imagemDe("b_tes_harkon")?.startsWith("https://"));
+  await jogar(DONO, "admin imagem b_tes_harkon javascript:alert(1)");
+  assert.ok(IMG.imagemDe("b_tes_harkon")?.startsWith("https://"));
+  assert.match(await jogar(DONO, "admin imagem Harkon remover"), /removida/);
+  assert.equal(IMG.imagemDe("b_tes_harkon"), null);
+  assert.ok(!/imagem/.test(fs.readFileSync("modulos/game/conteudo/skyrim.json", "utf8")));
+});
+await t("o RPG não tem nada chamado \"economia\" (o nome é da moeda do servidor, &economia)", () => {
+  const arquivos = fs.readdirSync("./modulos/game", { recursive: true }).map((f) => `./modulos/game/${f}`).filter((f) => fs.statSync(f).isFile());
+  for (const a of arquivos) assert.doesNotMatch(fs.readFileSync(a, "utf8"), /econom/i, a);
+});
+await t("saíram mercado.js, migracao.js, aventura.js, ui.js, traducao.js, historia.js, teste-geral.js (e o prepararMundo)", () => {
+  for (const f of ["mercado", "migracao", "aventura", "ui", "traducao", "historia", "teste-geral", "followers", "magias"]) assert.ok(!fs.existsSync(`modulos/game/${f}.js`), f);
+  assert.doesNotMatch(fs.readFileSync("modulos/game/mundo.js", "utf8"), /prepararMundo|DELETE/);
+});
+await t("\"<parâmetro>\" vira ‹parâmetro› (o Stoat escondia); menções e links ficam como estão", async () => {
+  const { protegerMarcadores } = await import("./modulos/core/marcadores.js");
+  assert.equal(protegerMarcadores("`&game criar <nome>`"), "`&game criar ‹nome›`");
+  assert.equal(protegerMarcadores("<@01KHBPN31QT1THM1A0CEM8JA91> <#01KHBPN31QT1THM1A0CEM8JA91> [x](<https://a.com>) a < b > c"), "<@01KHBPN31QT1THM1A0CEM8JA91> <#01KHBPN31QT1THM1A0CEM8JA91> [x](<https://a.com>) a < b > c");
+});
+
+console.log(`\nP2 RPG: ${ok} ok, ${falhou} falha(s)`);
+process.exit(falhou ? 1 : 0);
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+// p2-moderacao — P2 (31 out 2026), área da moderação: o handler único das
+// punições (&warn/&timeout/&kick/&ban), &unban/&untimeout (número, resposta, ↩️),
+// &purge, &cor, &embed (com o &repete), &banglobal, &automod (filter e fusões),
+// &reactionrole/&autorole, &debug e &userinfo. Unidade com um contexto de
+// mentira; integração pelo main.js com o Stoat de mentira (como a p1-nucleo).
+// ════════════════════════════════════════════════════════════════════════════
+SUITES["p2-moderacao"] = async () => {
+const fs = (await import("node:fs")).default;
+const assert = (await import("node:assert")).default;
+const DB = "/tmp/p2-moderacao.db";
+for (const f of [DB, DB + "-wal", DB + "-shm", "/tmp/p2-moderacao.json"]) fs.rmSync(f, { force: true });
+const U = (n) => `01KP2M${String(n).padStart(20, "0")}`;
+const SUPER = U(9), DONO = U(1), MOD = U(2), ALTO = U(3), FULANO = U(4), RESP = U(5), FORA = U(6), BANIDO = U(7), BOT = U(8);
+const SRV = U(100), OUTRO = U(101), C1 = U(110), C2 = U(111), CLOG = U(112), C_OUTRO = U(113);
+const R_ADMIN = U(120), R_MOD = U(121), R_MEMBRO = U(122);
+Object.assign(process.env, { BOT_TOKEN: "tok", DB_PATH: DB, CONFIG_PATH: "/tmp/p2-moderacao.json", SUPER_ADMINS: SUPER });
+for (const v of ["IA_MODO", "IA", "CHAT_SERVIDORES", "IA_SERVICO_URL", "LLM_URL", "SEARXNG_URL", "RELATORIO_SERVIDOR"]) delete process.env[v];
+globalThis.fetch = async () => ({ ok: false, status: 503, text: async () => "", json: async () => ({}), headers: new Map() });
+
+let ok = 0, falhou = 0;
+const t = async (nome, fn) => { try { await fn(); console.log(`  ✅ ${nome}`); ok++; } catch (e) { console.log(`  ❌ ${nome}\n     ${String(e?.message ?? e).split("\n").join("\n     ")}`); falhou++; } };
+const quieto = async (fn) => { const o = [console.log, console.info, console.warn, console.error]; console.log = console.info = console.warn = console.error = () => {}; try { return await fn(); } finally { [console.log, console.info, console.warn, console.error] = o; } };
+
+const db = await import("./modulos/core/db.js"); db.abrirBanco(DB);
+const store = await import("./modulos/core/config-store.js");
+const punir = await import("./modulos/moderacao/punir.js");
+const limpar = await import("./modulos/moderacao/limpar.js");
+const cor = await import("./modulos/moderacao/cor-cargo.js");
+const embed = await import("./modulos/moderacao/embed.js");
+const bg = await import("./modulos/moderacao/ban-global.js");
+const am = await import("./modulos/moderacao/automod-comandos.js");
+const engine = await import("./modulos/moderacao/automod-engine.js");
+const rajada = await import("./modulos/moderacao/rajada.js");
+const dbg = await import("./modulos/moderacao/debug-comando.js");
+const ui = await import("./modulos/moderacao/userinfo.js");
+const rr = await import("./modulos/ferramentas/reaction-roles.js");
+const ar = await import("./modulos/ferramentas/autorole.js");
+const { REGISTRO, problemasDoRegistro } = await import("./modulos/comandos/index.js");
+const aliases = await import("./modulos/core/aliases.js");
+const { detalhesDoRegistro } = await import("./modulos/core/ajuda-registro.js");
+
+// ── o servidor de mentira ──
+const acoes = [];
+const msgs = new Map();   // id → { id, authorId, channelId }
+const canal = (id, sid = SRV) => ({ id, serverId: sid, name: id, type: "TextChannel",
+  sendMessage: async (p) => { const m = { id: "P" + (acoes.length + 1), channelId: id, react: async (e) => { acoes.push(["reagiu", decodeURIComponent(e)]); }, delete: async () => {} }; acoes.push(["publicou", id, p]); return m; },
+  fetchMessage: async (mid) => msgs.get(mid) ?? null,
+  fetchMessages: async ({ limit }) => [...msgs.values()].filter((m) => m.channelId === id).slice(-limit).reverse(),
+  deleteMessages: async (ids) => { acoes.push(["apagou", ids.length]); for (const x of ids) msgs.delete(x); } });
+const CANAIS = { [C1]: canal(C1), [C2]: canal(C2), [CLOG]: canal(CLOG), [C_OUTRO]: canal(C_OUTRO, OUTRO) };
+const pessoa = (id, nome, roles, extra = {}) => ({ id: { server: SRV, user: id }, roles, user: { id, username: nome, avatar: { _id: "AV" + id.slice(-4), tag: "avatars" } }, nickname: nome, joinedAt: new Date(Date.UTC(2026, 0, 2)),
+  hasPermission: (alvo, p) => !(alvo?.id === C2 && p === "SendMessage"),
+  edit: async (o) => { acoes.push(["edit", id, o]); if (o.timeout) MEMBROS.get(id).timeout = o.timeout; if (o.remove?.includes("Timeout")) MEMBROS.get(id).timeout = null; }, ...extra });
+const MEMBROS = new Map([[DONO, pessoa(DONO, "dono", [])], [MOD, pessoa(MOD, "moderador", [R_MOD])], [ALTO, pessoa(ALTO, "chefe", [R_ADMIN])],
+  [FULANO, pessoa(FULANO, "fulano", [R_MEMBRO])], [RESP, pessoa(RESP, "respondido", [R_MEMBRO])]]);
+const BANS = new Map([[BANIDO, { id: { server: SRV, user: BANIDO }, reason: "spam", user: { username: "banidao" } }]]);
+const server = { id: SRV, ownerId: DONO, name: "Teste",
+  roles: new Map([[R_ADMIN, { name: "Admin", rank: 1 }], [R_MOD, { name: "Mod", rank: 5 }], [R_MEMBRO, { name: "Membro", rank: 10 }]]),
+  channels: [CANAIS[C1], CANAIS[C2], CANAIS[CLOG]], channelIds: new Set([C1, C2, CLOG]),
+  fetchMember: async (u) => MEMBROS.get(String(u?.user ?? u)) ?? null,
+  fetchMembers: async () => ({ members: [...MEMBROS.values()] }),
+  fetchBans: async () => [...BANS.values()],
+  banUser: async (id, o) => { acoes.push(["ban", id, o?.reason]); BANS.set(id, { id: { server: SRV, user: id }, reason: o?.reason }); },
+  unbanUser: async (id) => { acoes.push(["unban", id]); BANS.delete(id); },
+  kickUser: async (id) => { acoes.push(["kick", id]); },
+  havePermission: () => true };
+const client = { user: { id: BOT }, users: new Map(), messages: new Map(), servers: new Map([[SRV, server]]),
+  channels: { get: (id) => CANAIS[id] ?? null, fetch: async (id) => CANAIS[id] ?? null } };
+let permissoes = new Set(["ManageMessages", "ManagePermissions", "ManageRole", "KickMembers", "BanMembers", "TimeoutMembers"]);
+const config = store.configDeFabrica(); config.language = "pt"; config.log = { canalId: CLOG };
+let saidas = [];
+const textoDe = (e) => `${e?.title ?? ""}\n${e?.description ?? ""}`;
+const ultima = () => textoDe(saidas.at(-1));
+let nE = 0;
+const ctxBase = (extra = {}) => ({ serverId: SRV, config, cfgGlobal: { linkBlocklistSources: [], linkBlocklistManual: [], debug: false }, PREFIXO: "&", client,
+  COR: { erro: 1, aviso: 2, sucesso: 3, info: 4, mod: 5 }, estado: { spamData: new Map(), ecoData: new Map(), blockedDomains: engine.criarIndiceVazio() },
+  sendEmbed: async (_c, e) => { saidas.push(e); const id = "E" + (++nE); return { id, channelId: _c?.id, react: async (x) => { acoes.push(["reagiu", decodeURIComponent(x), id]); }, delete: async () => {} }; },
+  getServer: async () => server, salvarConfig: () => {}, salvarGlobal: () => {},
+  membroTemPermissao: (m, _s, p) => m.authorId === DONO || m.authorId === SUPER || permissoes.has(p),
+  ehSuperAdmin: (id) => id === SUPER, configDoServidor: () => config,
+  criarContexto: (sid) => ctxBase({ serverId: sid }), ...extra });
+const msg = (texto, { autor = MOD, mencoes = [], canalId = C1, resposta = null } = {}) => ({ id: "M" + Math.random().toString(36).slice(2), authorId: autor, content: texto, serverId: SRV,
+  channelId: canalId, channel: CANAIS[canalId], mentionIds: mencoes, replyIds: resposta ? [resposta] : [], member: MEMBROS.get(autor) ?? pessoa(autor, "x", []), author: { id: autor } });
+const rodar = async (fn, texto, extra = {}, opMsg = {}) => { saidas = []; await quieto(() => fn(msg(texto, opMsg), texto.split(/\s+/).filter(Boolean), ctxBase(extra))); return ultima(); };
+const comPerm = async (lista, fn) => { const antes = permissoes; permissoes = new Set(lista); try { return await fn(); } finally { permissoes = antes; } };
+
+console.log("── 1. o alvo (resolverAlvo) ──");
+msgs.set("MR1", { id: "MR1", authorId: RESP, channelId: C1 });
+await t("★ menção, ID e nome valem; o alvo é o 1º argumento e o resto é o motivo", async () => {
+  for (const e of [`<@${FULANO}>`, FULANO, "fulano"]) {
+    const r = await punir.resolverAlvo(msg(""), [e, "flood", "no", "chat"], server, ctxBase());
+    assert.equal(r.id, FULANO, e); assert.deepEqual(r.resto, ["flood", "no", "chat"]);
+  }
+});
+await t("★ respondendo SEM nada escrito, o alvo é o autor da mensagem respondida", async () => {
+  const r = await punir.resolverAlvo(msg("", { resposta: "MR1" }), [], server, ctxBase());
+  assert.equal(r.id, RESP); assert.equal(r.porResposta, true);
+});
+await t("★ respondendo com um nome que não existe: erro — nunca cai no autor respondido", async () => {
+  const r = await punir.resolverAlvo(msg("", { resposta: "MR1", mencoes: [RESP] }), ["ninguemassim", "spam"], server, ctxBase());
+  assert.equal(r.id, undefined); assert.equal(r.erro, "nao-encontrado");
+});
+await t("o mentionIds sozinho (sem resposta e sem nada escrito) não vira alvo", async () => {
+  const r = await punir.resolverAlvo(msg("", { mencoes: [RESP] }), [], server, ctxBase());
+  assert.equal(r.erro, "vazio");
+});
+await t("&timeout respondendo: `10m` não é alvo, então vale o autor respondido", async () => {
+  const r = await punir.resolverAlvo(msg("", { resposta: "MR1" }), ["10m"], server, ctxBase(), { livre: (x) => x === "10m" });
+  assert.equal(r.id, RESP); assert.deepEqual(r.resto, ["10m"]);
+});
+
+console.log("── 2. as quatro punições ──");
+await t("★ &kick e &ban: uma linha de resultado, log, e o mesmo caminho de checagem", async () => {
+  acoes.length = 0;
+  assert.match(await rodar(punir.cmdKick, `<@${FULANO}> spam`), /^\n👢 <@.+> expulso — spam$/);
+  assert.ok(acoes.some((a) => a[0] === "kick" && a[1] === FULANO));
+  assert.match(await rodar(punir.cmdBan, `<@${FULANO}> divulgação`), /^\n🔨 <@.+> banido — divulgação$/);
+  assert.ok(acoes.some((a) => a[0] === "reagiu" && a[1] === "↩️"), "o ban ganha o ↩️ para desfazer");
+  assert.ok(db.historicoBans(FULANO).some((b) => b.serverId === SRV && b.origem === "manual"), "o ban entrou na lista global");
+});
+await t("★ respondendo: `&ban` sozinho bane o autor respondido (igual nos quatro)", async () => {
+  acoes.length = 0;
+  await rodar(punir.cmdBan, "", {}, { resposta: "MR1" });
+  assert.ok(acoes.some((a) => a[0] === "ban" && a[1] === RESP), JSON.stringify(acoes));
+  BANS.delete(RESP);
+  acoes.length = 0;
+  await rodar(punir.cmdKick, "", {}, { resposta: "MR1" });
+  assert.ok(acoes.some((a) => a[0] === "kick" && a[1] === RESP));
+});
+await t("★ sem permissão, acima de quem pede, dono do servidor, a si mesmo e o bot: recusados sem agir", async () => {
+  acoes.length = 0;
+  await comPerm([], async () => assert.match(await rodar(punir.cmdBan, `<@${FULANO}>`), /^\n🚫 Permissão insuficiente: \*\*BanMembers\*\*\.$/));
+  assert.match(await rodar(punir.cmdKick, `<@${ALTO}>`), /Acima de você/);
+  assert.match(await rodar(punir.cmdBan, `<@${DONO}>`), /dono do servidor/);
+  assert.match(await rodar(punir.cmdBan, `<@${MOD}>`), /Não em você/);
+  assert.match(await rodar(punir.cmdBan, `<@${BOT}>`), /Não em mim/);
+  assert.ok(!acoes.some((a) => a[0] === "ban" || a[0] === "kick"), JSON.stringify(acoes));
+});
+await t("★ erro de uso é UMA linha que termina em `&help <comando>` (R1)", async () => {
+  for (const [fn, cmd] of [[punir.cmdWarn, "warn"], [punir.cmdKick, "kick"], [punir.cmdBan, "ban"], [punir.cmdTimeout, "silenciar"]]) {
+    const r = await rodar(fn, "");
+    assert.match(r, new RegExp(`^\\n❓ Quem\\? · \`&help ${cmd}\`$`), r);   // a pergunta (sem alvo) usa ❓, como o &staff
+  }
+  assert.match(await rodar(punir.cmdTimeout, `<@${FULANO}> depois`), /^\n❌ Por quanto tempo\? .* · `&help silenciar`$/);
+});
+await t("★ &timeout: timeout nativo, hora pelo carimbo <t:…:f> (nada de toLocaleString) e ↩️", async () => {
+  acoes.length = 0;
+  const r = await rodar(punir.cmdTimeout, `<@${FULANO}> 10m flood`);
+  assert.match(r, /🔇 <@.+> silenciado até <t:\d+:f> — flood/);
+  assert.ok(acoes.some((a) => a[0] === "edit" && a[1] === FULANO && a[2].timeout));
+  assert.ok(acoes.some((a) => a[0] === "reagiu" && a[1] === "↩️"));
+});
+await t("★ &warn: o total e o degrau numa linha; sem rodapé de \"próximo passo\"/\"zeram em 30 dias\" (R2)", async () => {
+  config.automod.punicao = { modo: "acumular", escada: "aviso,10m,ban", validadeDias: 30 };
+  db.limparPunicao(SRV, FULANO);
+  const r1 = await rodar(punir.cmdWarn, `<@${FULANO}> a`);
+  assert.match(r1, /^\n⚠️ <@.+> avisado \(1\/3\) — a$/);
+  const r2 = await rodar(punir.cmdWarn, `<@${FULANO}> b`);
+  assert.match(r2, /avisado \(2\/3\) e silenciado até <t:\d+:f> — b/);
+  assert.doesNotMatch(r1 + r2, /Próximo passo|zeram/);
+  config.automod.punicao = { modo: "avisar" };
+});
+
+console.log("── 3. &unban e &untimeout ──");
+await t("★ &unban sem nada: a lista numerada; `&unban 1` desbane o 1º dela", async () => {
+  BANS.clear(); BANS.set(BANIDO, { id: { server: SRV, user: BANIDO }, reason: "spam", user: { username: "banidao" } });
+  const lista = await rodar(punir.cmdUnban, "");
+  assert.match(lista, /\*\*1\.\*\* \*\*banidao\*\* `01KP2M/);
+  acoes.length = 0;
+  assert.match(await rodar(punir.cmdUnban, "1"), /desbanido/);
+  assert.ok(acoes.some((a) => a[0] === "unban" && a[1] === BANIDO));
+});
+await t("★ &unban tira o registro DESTE servidor da lista global (e só ele), e registra no log", async () => {
+  BANS.set(BANIDO, { id: { server: SRV, user: BANIDO }, reason: "x" });
+  db.registrarBanGlobal(BANIDO, SRV, "x", "manual"); db.registrarBanGlobal(BANIDO, OUTRO, "y", "manual");
+  config.banGlobal = { modo: "off", isentos: [] };
+  acoes.length = 0;
+  await rodar(punir.cmdUnban, BANIDO);
+  const h = db.historicoBans(BANIDO).map((b) => b.serverId);
+  assert.ok(!h.includes(SRV) && h.includes(OUTRO), JSON.stringify(h));
+  assert.ok(saidas.some((e) => /Ban retirado/.test(textoDe(e)) && /registro deste servidor tirado da lista global/.test(textoDe(e))), "o log diz");
+});
+await t("★ &unban no modo `imediato` com a pessoa ainda listada por outro servidor: fica isenta aqui", async () => {
+  BANS.set(BANIDO, { id: { server: SRV, user: BANIDO }, reason: "x" });
+  config.banGlobal = { modo: "imediato", isentos: [] };
+  await rodar(punir.cmdUnban, BANIDO);
+  assert.ok(config.banGlobal.isentos.includes(BANIDO));
+  config.banGlobal = { modo: "off", isentos: [] };
+});
+await t("&unban de quem não está banido, e número fora da lista: uma linha, sem agir", async () => {
+  acoes.length = 0;
+  assert.match(await rodar(punir.cmdUnban, FULANO), /não está banido/);
+  assert.match(await rodar(punir.cmdUnban, "42"), /Não há o número 42 na lista · `&help unban`/);
+  assert.ok(!acoes.some((a) => a[0] === "unban"));
+});
+await t("★ &untimeout: lista, número, e devolve a voz (o banco também)", async () => {
+  MEMBROS.get(FULANO).timeout = new Date(Date.now() + 600_000).toISOString();
+  db.silenciarAte(SRV, FULANO, Date.now() + 600_000, "x");
+  assert.match(await rodar(punir.cmdUntimeout, ""), /\*\*1\.\*\* <@01KP2M.+> — <t:\d+:R>/);
+  assert.match(await rodar(punir.cmdUntimeout, "1"), /pode falar de novo/);
+  assert.equal(MEMBROS.get(FULANO).timeout, null);
+  assert.equal(db.estaSilenciado(SRV, FULANO), false);
+});
+await t("★ ↩️ na mensagem do ban: só quem tem BanMembers e está acima desfaz", async () => {
+  BANS.delete(FULANO);
+  saidas = [];
+  const sent = await quieto(() => punir.cmdBan(msg(`<@${FULANO}> x`), [`<@${FULANO}>`, "x"], ctxBase()));
+  const id = sent?.id;
+  assert.ok(id && punir.punicaoDaMensagem(id)?.tipo === "ban");
+  acoes.length = 0;
+  // FULANO (sem permissão) reage: nada
+  await comPerm([], () => quieto(() => punir.aoReagirDesfazer({ id }, RESP, "%E2%86%A9%EF%B8%8F", ctxBase())));
+  assert.ok(!acoes.some((a) => a[0] === "unban"));
+  // o moderador reage: desfaz
+  await quieto(() => punir.aoReagirDesfazer({ id }, MOD, "↩️", ctxBase()));
+  assert.ok(acoes.some((a) => a[0] === "unban" && a[1] === FULANO), JSON.stringify(acoes));
+  assert.equal(punir.punicaoDaMensagem(id), null, "uma vez só");
+  assert.equal(await punir.aoReagirDesfazer({ id: "outra" }, MOD, "↩️", ctxBase()), false, "mensagem que não é de punição: não é comigo");
+});
+
+console.log("── 4. &purge ──");
+const encher = (n, autor = FULANO) => { for (let i = 0; i < n; i++) { const id = "H" + Math.random().toString(36).slice(2); msgs.set(id, { id, authorId: autor, channelId: C1 }); } };
+await t("★ `&purge @pessoa 5` e `&purge 5 @pessoa`: só as dela", async () => {
+  msgs.clear(); encher(4, FULANO); encher(6, RESP);
+  acoes.length = 0;
+  await rodar(limpar.cmdLimpar, `<@${FULANO}> 5`);
+  assert.match(textoDe(acoes.find((a) => a[0] === "publicou" && a[1] === C1)?.[2]?.embeds?.[0]), /4 mensagem\(ns\) apagada\(s\) de <@/);
+  assert.equal([...msgs.values()].filter((m) => m.authorId === FULANO).length, 0);
+  encher(2, FULANO);
+  await rodar(limpar.cmdLimpar, `5 <@${FULANO}>`);
+  assert.equal([...msgs.values()].filter((m) => m.authorId === RESP).length, 6, "as dos outros ficaram");
+});
+await t("&purge sem número ou acima de 100: uma linha + &help", async () => {
+  assert.match(await rodar(limpar.cmdLimpar, "muitas"), /^\n❌ Quantas mensagens\? \(1–100\) · `&help limpar`$/);
+  assert.match(await rodar(limpar.cmdLimpar, "500"), /O máximo é 100 · `&help limpar`/);
+});
+await t("★ `&purge tudo`: só o dono do servidor — o dono do bot num servidor alheio, não", async () => {
+  assert.match(await rodar(limpar.cmdLimpar, "tudo", {}, { autor: SUPER }), /Só o dono do servidor/);
+  assert.match(await rodar(limpar.cmdLimpar, "tudo", {}, { autor: MOD }), /Só o dono do servidor/);
+  assert.match(await rodar(limpar.cmdLimpar, "tudo", {}, { autor: DONO }), /confirmar [A-Z2-9]{4}/);
+});
+await t("★ código errado na confirmação NÃO mostra o código certo (achado de 30/10)", async () => {
+  const pedido = await rodar(limpar.cmdLimpar, "tudo", {}, { autor: DONO });
+  const codigo = pedido.match(/confirmar ([A-Z2-9]{4})/)[1];
+  const r = await rodar(limpar.cmdLimpar, "confirmar ZZZZ", {}, { autor: DONO });
+  assert.match(r, /Código errado/); assert.ok(!r.includes(codigo), r);
+  msgs.clear(); encher(3, RESP);
+  await rodar(limpar.cmdLimpar, `confirmar ${codigo}`, {}, { autor: DONO });
+  assert.equal([...msgs.values()].length, 0);
+});
+
+console.log("── 5. &cor ──");
+await t("★ uma cor = sólida; duas ou mais = gradiente; nome de preset = preset", () => {
+  assert.equal(cor.lerCorPedida(["#ff0000"]).colour, "#FF0000");
+  assert.match(cor.lerCorPedida(["roxo", "azul"]).colour, /^linear-gradient\(90deg, #[0-9A-F]{6} 0%, #[0-9A-F]{6} 100%\)$/);
+  assert.match(cor.lerCorPedida(["45", "#f00", "#00f", "#0f0"]).colour, /^linear-gradient\(45deg,/);
+  assert.equal(cor.lerCorPedida(["fogo"]).colour, cor.PRESETS.fogo);
+  assert.equal(cor.lerCorPedida(["preset", "fogo"]).colour, cor.PRESETS.fogo);
+  assert.equal(cor.lerCorPedida(["remover"]).colour, null);
+  assert.ok(cor.lerCorPedida(["gradiente", "#f00"]).erro, "gradiente de 1 cor é erro");
+  assert.ok(cor.lerCorPedida(["xyz"]).erro);
+});
+await t("★ &cor sem nada mostra a lista (o estado), não um manual; o resultado é uma linha sem o aviso do gradiente (R2)", async () => {
+  const lista = await rodar(cor.cmdCor, "");
+  assert.match(lista, /Cores dos cargos[\s\S]*\*\*Admin\*\*/); assert.doesNotMatch(lista, /Gradiente\*\* \(2 ou mais/);
+  globalThis.fetch = async () => new Response("{}", { status: 200 });
+  try { assert.match(await rodar(cor.cmdCor, `<%${R_MEMBRO}> #FF0000 #0000FF`), /^\n🎨 \*\*Membro\*\* → gradiente de 2 cores$/); }
+  finally { globalThis.fetch = async () => ({ ok: false, status: 503, text: async () => "", json: async () => ({}), headers: new Map() }); }
+  const { default: registroCor } = await import("./modulos/comandos/cor.js");
+  assert.doesNotMatch(JSON.stringify(registroCor.ajuda), /não oferece|doesn't offer|no ofrece/, "sai o texto sobre o gradiente do cliente");
+});
+
+console.log("── 6. &embed absorve o &repete ──");
+await t("★ texto sem `campo:` vira a descrição, como está (o &repete); `&repete` leva ao &embed", async () => {
+  acoes.length = 0;
+  await rodar(embed.cmdEmbed, "&embed Atenção: amanhã tem evento!");
+  const p = acoes.find((a) => a[0] === "publicou")?.[2];
+  assert.equal(p?.embeds?.[0]?.description, "Atenção: amanhã tem evento!");
+  acoes.length = 0;
+  saidas = [];
+  await quieto(() => embed.cmdEmbed(msg("&repete Bem-vindos!"), ["Bem-vindos!"], ctxBase()));
+  assert.equal(acoes.find((a) => a[0] === "publicou")?.[2]?.embeds?.[0]?.description, "Bem-vindos!");
+  assert.equal(aliases.COMANDO_EXTRA.repete, "embed"); assert.equal(aliases.COMANDO_EXTRA.repeat, "embed");
+  assert.ok(!REGISTRO.some((c) => c.id === "repete"));
+});
+await t("&embed: título acima de 100 caracteres recusado; sem nada, uma linha", async () => {
+  assert.match(await rodar(embed.cmdEmbed, `&embed titulo: ${"x".repeat(101)}`), /Título com mais de 100 caracteres · `&help embed`/);
+  assert.match(await rodar(embed.cmdEmbed, "&embed"), /^\n❌ O que publicar\? · `&help embed`$/);
+});
+
+console.log("── 7. &banglobal ──");
+await t("★ a staff vê o modo, isenta e consulta o histórico; o resto é do dono do bot", async () => {
+  config.banGlobal = { modo: "avisar", isentos: [] };
+  assert.match(await rodar(bg.cmdBanGlobal, ""), /Modo: \*\*avisar\*\*/);
+  for (const s of ["imediato", "lista", "varrer", "revisar", "add 01KP2M00000000000000000077", "esquecer x", "lembrar x", "ignorados", "bots", "desfazer"]) {
+    assert.match(await rodar(bg.cmdBanGlobal, s), /Só o dono do bot/, s);
+  }
+  assert.equal(config.banGlobal.modo, "avisar");
+  assert.match(await rodar(bg.cmdBanGlobal, `isentar <@${FULANO}>`), /isento aqui/);
+  assert.match(await rodar(bg.cmdBanGlobal, `historico <@${BANIDO}>`), /banido em \*\*1\*\* servidor/);
+  assert.match(await rodar(bg.cmdBanGlobal, "imediato", {}, { autor: SUPER }), /Modo: \*\*imediato\*\*/);
+  assert.equal(config.banGlobal.modo, "imediato");
+  config.banGlobal = { modo: "off", isentos: [] };
+});
+await t("★ `bots` sem `confirmar` não é mais aberto a quem só tem BanMembers", async () => {
+  assert.match(await rodar(bg.cmdBanGlobal, "bots"), /Só o dono do bot/);
+});
+await t("★ os sinônimos de modo são apelidos do registro (o handler só vê o nome interno)", () => {
+  const n = (x) => aliases.normalizarArgs("banglobal", [x])[0];
+  assert.equal(n("instant"), "imediato"); assert.equal(n("banir"), "imediato"); assert.equal(n("consensus"), "consenso"); assert.equal(n("review"), "revisar");
+  assert.equal(bg.lerModo("banir"), "imediato", "config gravada com o nome antigo continua lida");
+});
+await t("★ ban manual com motivo \"[AutoMod] …\" é humano; a origem automática gravada não é sobrescrita", () => {
+  assert.equal(bg.ehAutomatico({ origem: "manual", motivo: "[AutoMod] escrito à mão" }), false);
+  assert.equal(bg.ehAutomatico({ origem: "automod", motivo: "x" }), true);
+  const A = U(77);
+  db.registrarBanGlobal(A, OUTRO, "[AutoMod] golpe", "automod");
+  db.registrarBanGlobal(A, OUTRO, "[AutoMod] golpe", bg.origemParaGravar(A, OUTRO, "importado"));
+  assert.equal(db.origemDoBanGlobal(A, OUTRO), "automod");
+  db.registrarBanGlobal(A, SRV, "x", bg.origemParaGravar(A, SRV, "propagado"));
+  assert.equal(db.origemDoBanGlobal(A, SRV), "propagado", "sem origem automática antes, grava a nova");
+});
+await t("nomeModoBG: português no pt, inglês no en e no es", () => {
+  assert.equal(bg.nomeModoBG("imediato", "pt"), "imediato");
+  assert.equal(bg.nomeModoBG("imediato", "en"), "instant");
+  assert.equal(bg.nomeModoBG("consenso", "es"), "consensus");
+});
+
+console.log("── 8. &automod ──");
+await t("★ `filter`: termo literal (caracteres de regex não viram padrão), 20 × 40, e casa na mensagem", async () => {
+  config.automod.antiOdio = { enabled: true, termos: [] };
+  assert.match(await rodar(am.cmdAutomod, "filtro add pal.a*vra+ruim"), /no filtro \(1\/20\)/);
+  assert.deepEqual(config.automod.antiOdio.termos, ["pal a vra ruim"]);
+  assert.equal(rajada.acharOdio("isso é palavra ruim", config.automod.antiOdio.termos), null, "o `.` e o `*` não viraram curinga");
+  assert.equal(rajada.acharOdio("ele disse pal a vra ruim ontem", config.automod.antiOdio.termos), "pal a vra ruim");
+  for (let i = 0; i < 25; i++) await rodar(am.cmdAutomod, `filtro add termo${String.fromCharCode(97 + (i % 26))}${String.fromCharCode(97 + Math.floor(i / 26))}xx`);
+  assert.equal(config.automod.antiOdio.termos.length, 20);
+  assert.match(await rodar(am.cmdAutomod, `filtro add ${"y".repeat(41)}`), /longo demais/);
+  assert.match(await rodar(am.cmdAutomod, "filtro add ab"), /Termo de 3 a 40 letras · `&help automod`/);
+  assert.match(await rodar(am.cmdAutomod, "filtro remover pal a vra ruim"), /fora do filtro/);
+  assert.match(await rodar(am.cmdAutomod, "filtro"), /Filtro \(19\/20\)/);
+});
+await t("★ os nomes antigos do filter levam a ele (`antiodio add`, `sentinela odio add`)", async () => {
+  config.automod.antiOdio = { enabled: true, termos: [] };
+  await rodar(am.cmdAutomod, "antiodio add coisafeia");
+  await rodar(am.cmdAutomod, "sentinela odio add outracoisa");
+  assert.deepEqual(config.automod.antiOdio.termos, ["coisafeia", "outracoisa"]);
+});
+await t("★ `velocidade` liga, desliga e pune as duas réguas (a `rajada` virou apelido dela)", async () => {
+  config.automod.antiSpam = { enabled: false }; config.automod.antiMassSpam = { enabled: false };
+  await rodar(am.cmdAutomod, "antispam velocidade on");
+  assert.equal(config.automod.antiSpam.enabled, true); assert.equal(config.automod.antiMassSpam.enabled, true);
+  await rodar(am.cmdAutomod, "antispam rajada off");
+  assert.equal(config.automod.antiSpam.enabled, false); assert.equal(config.automod.antiMassSpam.enabled, false);
+  await rodar(am.cmdAutomod, "antispam velocidade punicao banir");
+  assert.equal(config.automod.antiMassSpam.punicao?.modo, "banir");
+  assert.ok(!Object.keys(engine.GRUPOS_AUTOMOD.antispam.partes).includes("rajada"));
+});
+await t("★ telas mínimas: on/off numa linha; erro numa linha + &help (sem guia dos grupos)", async () => {
+  assert.match(await rodar(am.cmdAutomod, "antiruido off"), /^\n🛡 \*\*antiruido\*\* 🔴 desligado\.$/);
+  assert.match(await rodar(am.cmdAutomod, "naoexiste"), /^\n❌ `naoexiste` não é um grupo.* · `&help automod`$/);
+  assert.match(await rodar(am.cmdAutomod, "antiruido caps on"), /^\n🛡 \*\*caps\*\* 🟢 ligado\.$/);
+});
+await t("★ uma tela só para o sentinela (`sentinela`, `sentinela config`, `sentinela status`, `sentinela conteudo`)", async () => {
+  const a = await rodar(am.cmdAutomod, "sentinela"), b = await rodar(am.cmdAutomod, "sentinela config"), c = await rodar(am.cmdAutomod, "sentinela status");
+  assert.equal(a, b); assert.equal(b, c);
+  assert.match(a, /Sensibilidade `media`/);
+});
+await t("★ `simular` = `testar` (a nota, sem punir); `sentinela banir` é o &ban", async () => {
+  assert.equal(aliases.normalizarArgs("automod", ["sentinela", "simular", "x"])[1], "testar");
+  const r = await rodar(am.cmdScam, "simular free nitro giveaway click here");
+  assert.match(r, /\*\*\d+\.\d\/10\*\*/);
+  acoes.length = 0;
+  await comPerm(["ManagePermissions"], async () => assert.match(await rodar(am.cmdScam, `banir <@${FULANO}>`), /BanMembers/));
+  assert.ok(!acoes.some((a) => a[0] === "ban"));
+});
+await t("★ os 16 nomes antigos dos filtros e o &modia são atalhos do registro", () => {
+  for (const [velho, novo] of [["anticaps", ["antiruido", "caps"]], ["antiinvite", ["antilink", "convites"]], ["antiassuntos", ["sentinela", "assuntos"]], ["antimassspam", ["antispam", "velocidade"]]]) {
+    const r = aliases.resolverAtalho(["automod", velho, "off"]);
+    assert.deepEqual([r?.comando, ...(r?.args ?? [])], ["automod", ...novo, "off"], velho);
+  }
+  assert.equal(aliases.resolverAtalho(["modia"])?.comando, "automod");
+});
+await t("convite e link bloqueado seguem a mesma rota de punição (regra fixa, sem o \"toque\")", () => {
+  const src = fs.readFileSync("modulos/moderacao/automod-engine.js", "utf8");
+  assert.match(src, /return barrar\(am\.antiInvite\.punicao/);
+  assert.match(src, /return barrar\(am\.antiLink\.punicao/);
+});
+
+console.log("── 9. &debug ──");
+await t("★ a punição de cada módulo: acusa a falta de TimeoutMembers/KickMembers/BanMembers", async () => {
+  const cfg = store.configDeFabrica();
+  cfg.automod.punicao = { modo: "acumular", escada: "aviso,10m,ban" };
+  cfg.automod.antiAvatar = { enabled: true, acao: "expulsar" };
+  cfg.banGlobal = { modo: "consenso" };
+  const uso = dbg.punicoesPorModulo(cfg);
+  assert.ok(uso.TimeoutMembers.length && uso.BanMembers.some((r) => r[0] === "banglobal") && uso.KickMembers.some((r) => r[0] === "avatar"), JSON.stringify(uso));
+  const semKick = { ...server, havePermission: (p) => p !== "KickMembers" };
+  const d = await dbg.coletar({ server: semKick, client, config: cfg, serverId: SRV, botMember: MEMBROS.get(DONO) });
+  const r = await dbg.relatorioCompleto(d, "pt", "pt");
+  assert.match(r.texto, /🔴 `KickMembers` falta — avatar/);
+  assert.deepEqual([...dbg.permsDaPolitica({ modo: "confirmar" })], ["TimeoutMembers"]);
+  assert.deepEqual([...dbg.permsDaPolitica({ modo: "avisar" })], []);
+});
+await t("★ horários na tela pelo carimbo `<t:…>` (antes: data em texto, \"… UTC\" no &debug e dd/mm/aaaa na lista global)", async () => {
+  const d = await dbg.coletar({ server, client, config: store.configDeFabrica(), serverId: SRV, botMember: MEMBROS.get(DONO) });
+  const ate = Date.now() + 3_600_000;
+  const p = dbg.relatorioPessoa(d, { ...MEMBROS.get(FULANO), timeout: new Date(ate).toISOString() }, FULANO, "pt", "pt");
+  assert.ok(p.texto.includes(`🔇 silenciada agora, até <t:${Math.floor(ate / 1000)}:f>`), p.texto);
+  assert.ok(!/UTC|\d{1,2}\/\d{1,2}\/\d{2,4}|\d{4}-\d{2}-\d{2}/.test(p.texto), p.texto);
+  const h = await rodar(bg.cmdBanGlobal, `historico <@${BANIDO}>`);
+  assert.match(h, /<t:\d+:d>/, h);
+  assert.ok(!/\d{1,2}\/\d{1,2}\/\d{2,4}|\d{4}-\d{2}-\d{2}/.test(h), h);
+});
+await t("★ a busca: \"ligada\" só com SEARXNG_URL E o chat deste servidor (antes bastava a variável)", async () => {
+  process.env.SEARXNG_URL = "http://127.0.0.1:9";
+  try {
+    const d = await dbg.coletar({ server, client, config: store.configDeFabrica(), serverId: SRV, botMember: MEMBROS.get(DONO) });
+    d.iaExiste = true; d.iaAqui = false;
+    const r = await dbg.relatorioCompleto(d, "pt", "pt");
+    assert.match(r.texto, /busca na web desligada \(o chat está desligado aqui\)/);
+    assert.doesNotMatch(r.texto, /SEARXNG_URL|docker compose/, "nome de variável e comando de servidor só para o dono");
+  } finally { delete process.env.SEARXNG_URL; }
+});
+await t("★ webhooks, RSS e RPG deste servidor aparecem (e o rodapé de dica saiu)", async () => {
+  db.criarGancho(SRV, "ci", U(999), "tok");
+  const d = await dbg.coletar({ server, client, config: store.configDeFabrica(), serverId: SRV, botMember: MEMBROS.get(DONO) });
+  const r = await dbg.relatorioCompleto(d, "pt", "pt");
+  assert.match(r.texto, /Webhooks, RSS e RPG[\s\S]*webhooks: `ci` apontam para canal apagado/);
+  assert.doesNotMatch(r.texto, /_Detalhes:/);
+});
+
+console.log("── 10. &userinfo, &reactionrole, &autorole ──");
+await t("★ &userinfo mostra a foto de perfil (CDN do Stoat) e a data como carimbo; o histórico só para a staff", async () => {
+  const r = await rodar(ui.cmdUserinfo, `<@${FULANO}>`);
+  assert.match(r, /\*\*Foto:\*\* https:\/\/cdn\.stoatusercontent\.com\/avatars\/AV/);
+  assert.match(r, /\*\*Entrou:\*\* <t:\d+:D>/);
+  assert.match(r, /Histórico de moderação/);
+  await comPerm([], async () => assert.doesNotMatch(await rodar(ui.cmdUserinfo, `<@${FULANO}>`, {}, { autor: RESP }), /Histórico/));
+});
+await t("★ &rr: `remove <mensagem> <emoji>` tira só aquele emoji; `list` em uma linha por mensagem", async () => {
+  const MSGRR = U(300);
+  db.addReactionRole(SRV, MSGRR, "🔥", R_MEMBRO, C1); db.addReactionRole(SRV, MSGRR, "🎮", R_MOD, C1);
+  assert.match(await rodar(rr.cmdReactionRole, "list"), new RegExp("`" + MSGRR + "`\\n🔥 <%.+> · 🎮 <%.+>"));
+  assert.match(await rodar(rr.cmdReactionRole, `remove ${MSGRR} 🔥`), /1 ligação/);
+  assert.deepEqual(db.listReactionRoles(MSGRR).map((r) => r.emoji), ["🎮"]);
+  assert.match(await rodar(rr.cmdReactionRole, `exclusivo ${MSGRR} on`), /um cargo por vez/);
+});
+await t("&rr add aceita o cargo pelo nome (abaixo de quem pede) e responde uma linha", async () => {
+  const MSGRR2 = U(301);
+  msgs.set(MSGRR2, { id: MSGRR2, authorId: MOD, channelId: C1, channel: CANAIS[C1], react: async () => {} });
+  assert.match(await rodar(rr.cmdReactionRole, `add ${MSGRR2} 🍕 Membro`), /^\n🎭 🍕 → <%01KP2M/);
+  assert.match(await rodar(rr.cmdReactionRole, `add ${MSGRR2} 👑 Admin`), /Acima de você/);
+});
+await t("★ &autorole @cargo | off — uma linha cada; `set` antigo continua valendo", async () => {
+  config.autorole = { roleId: null };
+  assert.match(await rodar(ar.cmdAutorole, `<%${R_MEMBRO}>`), /Quem entra recebe <%/);
+  assert.equal(config.autorole.roleId, R_MEMBRO);
+  assert.match(await rodar(ar.cmdAutorole, "off"), /desligado/);
+  await rodar(ar.cmdAutorole, "set Membro");
+  assert.equal(config.autorole.roleId, R_MEMBRO);
+  assert.match(await rodar(ar.cmdAutorole, `<%${R_ADMIN}>`), /Acima de você/);
+});
+
+console.log("── 11. o registro ──");
+await t("★ &unban e &untimeout soltos no topo; &modia e &cargomudo saíram; os nomes antigos levam a algo útil", () => {
+  assert.deepEqual(problemasDoRegistro(), []);
+  for (const id of ["unban", "untimeout"]) assert.ok(REGISTRO.some((c) => c.id === id), id);
+  for (const id of ["modia", "cargomudo", "repete"]) assert.ok(!REGISTRO.some((c) => c.id === id), id);
+  assert.equal(aliases.COMANDO_EXTRA.cargomudo, "silenciar");
+  assert.equal(aliases.COMANDO_EN.silenciar, "timeout"); assert.equal(aliases.COMANDO_EXTRA.silence, "silenciar");
+  assert.equal(aliases.COMANDO_EN.limpar, "purge"); assert.equal(aliases.COMANDO_ES.limpar, "limpiar");
+  assert.equal(aliases.COMANDO_ES.unban, "desbanear"); assert.equal(aliases.COMANDO_ES.untimeout, "untimeout");
+  assert.equal(aliases.COMANDO_EXTRA.limpar ?? "limpar", "limpar");
+});
+await t("★ toda página de ajuda da moderação tem grupo e texto em pt, en e es", () => {
+  const meus = ["warn", "silenciar", "kick", "ban", "unban", "untimeout", "limpar", "userinfo", "banglobal", "automod", "cor", "embed", "reactionrole", "autorole", "debug"];
+  for (const id of meus) {
+    const a = REGISTRO.find((c) => c.id === id)?.ajuda;
+    assert.ok(a?.grupo, `${id}: sem grupo`);
+    for (const campo of ["uso", "desc"]) for (const l of ["pt", "en", "es"]) assert.ok(typeof a[campo] === "string" || a[campo]?.[l], `${id}.${campo}.${l}`);
+  }
+  for (const l of ["pt", "en", "es"]) { const d = detalhesDoRegistro("&", l); for (const id of meus) assert.ok(d[id]?.desc, `${id} ${l}`); }
+});
+
+console.log("── 12. integração pelo main.js (Stoat de mentira) ──");
+const mudo = async (fn) => { const o = [process.stdout.write, process.stderr.write]; process.stdout.write = process.stderr.write = () => true; try { return await fn(); } finally { [process.stdout.write, process.stderr.write] = o; } };
+let principal = null;
+try { await mudo(() => import("./main.js")); principal = globalThis.__client; } catch (e) { console.log("  (main.js não carregou: " + String(e?.message ?? e).slice(0, 120) + ")"); }
+if (principal) {
+  await quieto(() => principal.emitAll("ready"));
+  const SID = U(200), CG = U(201), CL = U(202);
+  const saidasM = [];
+  const tx = (p) => typeof p === "string" ? p : `${p?.embeds?.[0]?.title ?? ""}\n${p?.embeds?.[0]?.description ?? ""}`;
+  const canalM = (id) => ({ id, serverId: SID, name: id, type: "TextChannel", nsfw: false, sendMessage: async (p) => { saidasM.push(tx(p)); return { id: "MM" + saidasM.length, react: async () => {}, delete: async () => {}, edit: async () => {} }; }, fetchMessages: async () => [], deleteMessages: async () => {}, fetchMessage: async () => null });
+  const g = canalM(CG), lg = canalM(CL);
+  const pM = (uid, roles = []) => ({ id: { server: SID, user: uid }, roles, hasPermission: () => false, user: { id: uid, username: "u" + uid.slice(-3) }, nickname: "u" + uid.slice(-3), joinedAt: new Date(0), edit: async () => {} });
+  const membrosM = { [DONO]: pM(DONO), [FULANO]: pM(FULANO), [MOD]: pM(MOD) };
+  const bansM = [];
+  const srvM = { id: SID, ownerId: DONO, name: "Integração", roles: new Map(), channels: [g, lg], channelIds: new Set([CG, CL]), member: { roles: [] }, havePermission: () => true,
+    fetchMember: async (u) => membrosM[String(u?.id ?? u?.user ?? u)] ?? null, fetchMembers: async () => ({ members: Object.values(membrosM) }), fetchBans: async () => bansM,
+    banUser: async (id) => { bansM.push({ id: { server: SID, user: id } }); }, unbanUser: async (id) => { bansM.splice(bansM.findIndex((b) => b.id.user === id), 1); }, kickUser: async () => {} };
+  principal.servers.set(SID, srvM); principal.channels.set(CG, g); principal.channels.set(CL, lg);
+  let k = 0;
+  const diz = async (autor, conteudo) => {
+    saidasM.length = 0;
+    const ev = { id: U(3000 + ++k), authorId: autor, content: conteudo, serverId: SID, server: srvM, channel: g, channelId: CG, mentionIds: [], createdAt: new Date(), author: { id: autor, username: "x", bot: false }, member: membrosM[autor], replyIds: [], attachments: [] };
+    await quieto(() => Promise.race([principal.emitAll("messageCreate", ev), new Promise((r) => setTimeout(r, 6000))]));
+    return saidasM.join("\n");
+  };
+  const cfgM = store.configDoServidor(SID); cfgM.language = "pt"; cfgM.log = { ...(cfgM.log ?? {}), canalId: CL }; store.salvarConfigServidor(SID);
+  await t("★ &ban → &unban 1 pelo main.js: o mesmo caminho do registro", async () => {
+    assert.match(await diz(DONO, `&ban <@${FULANO}> teste`), /banido — teste/);
+    assert.match(await diz(DONO, "&unban"), /\*\*1\.\*\*/);
+    assert.match(await diz(DONO, "&unban 1"), /desbanido/);
+    assert.equal(bansM.length, 0);
+  });
+  await t("★ &purge, &timeout (EN) e &cargomudo chegam aos handlers novos", async () => {
+    assert.match(await diz(DONO, "&purge muitas"), /Quantas mensagens/);
+    assert.match(await diz(DONO, "&timeout"), /Quem\?/);
+    assert.match(await diz(DONO, "&cargomudo"), /Quem\?/);
+  });
+  await t("★ &modia (saiu) leva ao &automod sentinela assuntos", async () => {
+    assert.match(await diz(DONO, "&modia"), /Temas proibidos/);
+  });
+  await t("&automod anticaps off (nome antigo) pelo main.js desliga a parte `caps` do antiruido", async () => {
+    store.configDoServidor(SID).automod.antiCaps = { enabled: true };
+    await diz(DONO, "&automod anticaps off");
+    assert.equal(store.configDoServidor(SID).automod.antiCaps.enabled, false);
+  });
+  await t("★ `&automod filter` (inglês) e `&automod filtro` chegam ao mesmo lugar; a tela em português diz `filtro`", async () => {
+    store.configDoServidor(SID).automod.antiOdio = { enabled: true, termos: [] };
+    assert.match(await diz(DONO, "&automod filter add coisaruim"), /no filtro \(1\/20\)/);
+    assert.match(await diz(DONO, "&automod filtro add outraruim"), /no filtro \(2\/20\)/);
+    assert.deepEqual(store.configDoServidor(SID).automod.antiOdio.termos, ["coisaruim", "outraruim"]);
+    const ajuda = await diz(DONO, "&help automod");
+    assert.match(ajuda, /`&automod filtro add/);
+    assert.ok(!/`&automod filter/.test(ajuda), ajuda);
+  });
+} else {
+  await t("o main.js carrega (a integração depende dele)", () => { throw new Error("main.js não carregou"); });
+}
+
+console.log(`\nP2 MODERAÇÃO: ${ok} ok, ${falhou} falha(s)`);
 process.exit(falhou ? 1 : 0);
 };
 

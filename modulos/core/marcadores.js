@@ -6,7 +6,7 @@
 // <moeda>`), e na tela aparecia "&game pontos [quantos]" e "&game cambio
 // para". Aqui o marcador vira ‹atributo› (aspas angulares simples, que o
 // Stoat mostra). Menções (<@id>, <#id>, <%id>), links (<https://…>) e emoji
-// personalizado ficam como estão.
+// personalizado ficam como estão — e o timestamp do Stoat (<t:SEGUNDOS:f>).
 
 const MENCAO = /^[@#%][0-9A-HJKMNP-TV-Z]{26}$/i;
 export function protegerMarcadores(texto) {
@@ -17,6 +17,9 @@ export function protegerMarcadores(texto) {
     if (/^(https?:\/\/|mailto:)/i.test(dentro)) return todo;     // <https://…> (link sem prévia)
     if (/^a?:[\w~-]+:[\w-]+$/.test(dentro)) return todo;         // <:emoji:id>
     if (/^@everyone$|^@online$/i.test(dentro)) return todo;
+    // (P2, 31 out 2026) <t:SEGUNDOS[:formato]> é o timestamp do Stoat (o carimbo() de
+    // core/tempo.js): o cliente o desenha no fuso de quem lê — virar ‹t:…› o apagava
+    if (/^t:\d{1,12}(?::[tTdDfFR])?$/.test(dentro)) return todo;
     return `‹${dentro}›`;
   });
 }

@@ -35,7 +35,7 @@ const PARA_QUE = {
   SendMessage: "responder",
   SendEmbeds: "enviar os cartões de resposta",
   React: "reagir (cargos por reação, 👀)",
-  ManageMessages: "apagar mensagens (automod, {&limpar}, {&modia})",
+  ManageMessages: "apagar mensagens (automod, {&limpar})",
   ManageChannel: "editar o canal",
 };
 const PARA_QUE_EN = {
@@ -44,7 +44,7 @@ const PARA_QUE_EN = {
   SendMessage: "reply",
   SendEmbeds: "send the reply cards",
   React: "react (reaction roles, 👀)",
-  ManageMessages: "delete messages (automod, {&limpar}, {&modia})",
+  ManageMessages: "delete messages (automod, {&limpar})",
   ManageChannel: "edit the channel",
 };
 const PARA_QUE_ES = {
@@ -53,7 +53,7 @@ const PARA_QUE_ES = {
   SendMessage: "responder",
   SendEmbeds: "enviar las tarjetas de respuesta",
   React: "reaccionar (roles por reacción, 👀)",
-  ManageMessages: "borrar mensajes (automod, {&limpar}, {&modia})",
+  ManageMessages: "borrar mensajes (automod, {&limpar})",
   ManageChannel: "editar el canal",
 };
 

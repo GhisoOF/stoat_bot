@@ -52,13 +52,13 @@ import * as jogos     from "./modulos/ferramentas/jogos.js";
 import * as servidorInfo from "./modulos/ferramentas/servidor-info.js";
 import * as srvStats   from "./modulos/core/metricas.js";
 import * as rpg        from "./modulos/game/game.js";
-import * as modIA      from "./modulos/moderacao/moderacao-ia.js";
 import * as assuntos   from "./modulos/moderacao/assuntos.js";
 import { iaLigada, conversaLigada } from "./modulos/core/env.js";
 import * as avatarMod from "./modulos/moderacao/avatar.js";
 import { dirigidoAoBot } from "./modulos/ai/destinatario.js";
 import { protegerMarcadores } from "./modulos/core/marcadores.js";
 import * as chat      from "./modulos/ai/chat.js";
+import * as gating    from "./modulos/ai/gating.js";   // (P2) quando a Judy conversa: conversaAqui, falaCom
 import * as rss       from "./modulos/ferramentas/rss.js";
 import * as nivel     from "./modulos/ferramentas/nivel.js";
 import * as i18n      from "./modulos/core/i18n.js";
@@ -66,6 +66,7 @@ import * as consentimento from "./modulos/ai/consentimento.js";
 import * as dbIA     from "./modulos/core/db.js";
 import * as retencao from "./modulos/core/retencao.js";
 import * as novidades from "./modulos/ferramentas/novidades.js";
+import * as servidoresPainel from "./modulos/moderacao/servidores.js";
 import * as aliases   from "./modulos/core/aliases.js";
 import * as registroComandos from "./modulos/comandos/index.js";
 import { maisParecido } from "./modulos/core/parecido.js";
@@ -417,6 +418,11 @@ client.on("ready", async () => {
         console.info(`[PRIVACIDADE] servidor ${x.serverId}: dados apagados (${x.linhas} registro(s)) — a Judy saiu há mais de ${retencao.DIAS_APOS_SAIDA} dias`);
       }
     } catch (e) { console.error("[PRIVACIDADE] limpeza de servidores:", e?.message); }
+    // (revisão P2) o que vence sozinho (as palavras tentadas, 30 dias), no mesmo ciclo
+    try {
+      const v = retencao.limparVencidos(Date.now());
+      if (v.palavras) console.info(`[PRIVACIDADE] ${v.palavras} palavra(s) tentada(s) com mais de 30 dias apagada(s)`);
+    } catch (e) { console.error("[PRIVACIDADE] vencidos:", e?.message); }
   };
   limparSaidas();
   setInterval(limparSaidas, 6 * 3600_000).unref?.();
@@ -425,10 +431,10 @@ client.on("ready", async () => {
 
   reactionRoles.precarregarMensagens(client).catch((e) => console.error("[REACTIONROLE][boot]", e?.message));
 
-  rpg.iniciarCatalogo();   // semeia os itens genéricos e prepara o mundo (idempotente)
+  rpg.iniciarCatalogo();   // semeia o catálogo e o ouro da era (idempotente)
 
   srvStats.marcarInicio();
-  // As novidades deste pacote, nos servidores que ligaram `&log atualizacoes on` (P5)
+  // As novidades deste pacote, no canal de log de cada servidor (P2: sempre, sem opção)
   novidades.anunciar({ client, global: store.getGlobal(), salvarGlobal: store.salvarGlobal, configDoServidor: store.configDoServidor,
     enviar: (canal, emb) => sendEmbed(canal, emb), P: PREFIXO, COR })
     .then((r) => { if (r.enviados || r.primeira) console.info(`[NOVIDADES] ${r.primeira ? "marca inicial gravada" : `${r.novas} novidade(s) anunciada(s) em ${r.enviados} servidor(es)`}`); })
@@ -458,16 +464,12 @@ client.on("ready", async () => {
 
   engine.iniciarVigiaDeSilencios(criarContexto());
 
-  // CONVERSA=0 (modo enxuto): nada de IA rodando em segundo plano — memória,
-  // comentário espontâneo e o juiz do &modia (que lê TODA mensagem) ficam
-  // parados. Ficam: temas proibidos, visão de imagens, relatório e RSS.
+  // CONVERSA=0 (modo enxuto): nada de IA rodando em segundo plano — memória
+  // e comentário espontâneo ficam parados. Ficam: temas proibidos, visão de imagens, relatório e RSS.
   if (conversaLigada()) {
     chat.iniciarMemoria();          // liga o agente de memória (extração em background)
     chat.iniciarComentario(client); // liga o comentário espontâneo
   }
-  // &modia: com a conversa ligada, ou no modo enxuto com o juiz dedicado
-  // (MODELO_MODERACAO) — ver chat.modIAPermitida
-  if (chat.modIAPermitida()) modIA.configurar({ avaliar: chat.avaliarModeracao });
   // temas proibidos: o mesmo juiz (JSON, sem raciocínio, fila da conversa)
   if (iaLigada()) assuntos.configurar({ avaliar: chat.avaliarModeracao });
   rss.configurarResumo(chat.resumirRSS);   // RSS agendado passa a resumir com o tom da Judy
@@ -562,7 +564,8 @@ async function tratarMensagem(message) {
   // filtros de ritmo ficam de fora (dez comandos seguidos não são flood).
   if (!message.__lote && message.content?.startsWith(PREFIXO)) {
     const primeira = message.content.slice(PREFIXO.length).trim().split(/\s+/)[0]?.toLowerCase();
-    if (primeira && rotas[primeira] && await engine.runAutomod(message, ctx, { soConteudo: true })) return;
+    // (P2) o nome antigo que virou atalho (`&log …`, `&acesso …`) também é comando
+    if (primeira && (rotas[primeira] || aliases.NOMES_DE_ATALHO.has(primeira)) && await engine.runAutomod(message, ctx, { soConteudo: true })) return;
   }
 
   // ── Vários comandos numa mensagem (um por linha) ──
@@ -583,6 +586,11 @@ async function tratarMensagem(message) {
     const parts = message.content.slice(PREFIXO.length).trim().split(/\s+/);
     command = parts[0]?.toLowerCase();
     args    = parts.slice(1);
+    // (P2, 31 out 2026) atalho: apelido que aponta para DENTRO de outra família
+    // (`&log canal #x` → `&config log canal #x`, `&acesso cargo add` → `&staff add`).
+    // Declarado no registro (`atalhos`); vence a chave mais longa. Ver aliases.js.
+    const atalho = command ? aliases.resolverAtalho([command, ...args]) : null;
+    if (atalho) { command = atalho.comando; args = atalho.args; }
   }
   const handler = command ? rotas[command] : null;
 
@@ -594,7 +602,7 @@ async function tratarMensagem(message) {
   if (!command) {
     // A resposta à pergunta da memória ("posso lembrar de você?"): um sim/não logo
     // depois, no mesmo canal, com ou sem mencioná-la (privacidade, 20 out 2026)
-    if (chat.servidorPermitido(serverId)) {
+    if (gating.conversaAqui(serverId, ctx.config)) {
       try { if (await consentimento.tratarResposta(message, ctx)) return; }
       catch (e) { console.error("[CONSENTIMENTO]", e.message); }
     }
@@ -603,7 +611,7 @@ async function tratarMensagem(message) {
     // outra pessoa — o "ping" da resposta não conta (ver destinatario.js).
     const mencionado = dirigidoAoBot({ conteudo: message.content, mentionIds: message.mentionIds, botId: meuId });
     // (21 out 2026) quem pediu "não fale comigo" (`&chat sair`) é ignorado pela IA em silêncio
-    if (mencionado && chat.servidorPermitido(serverId) && !chat.naoFalarCom(message.authorId) && !(ctx.config.comandosDesativados ?? []).includes("chat")) {
+    if (mencionado && gating.conversaAqui(serverId, ctx.config) && gating.falaCom(message.authorId)) {
       // O AUTOMOD VEM ANTES DA IA. Antes, mencionar a Judy pulava a moderação
       // inteira — o ataque de 2 out 2026 colava "@Judy" em cada mensagem de
       // emoji + ofensa racial, e nenhum filtro rodava (e ainda ganhava XP).
@@ -625,10 +633,7 @@ async function tratarMensagem(message) {
 
   if (!handler) {
     if (await engine.runAutomod(message, ctx)) return;
-    // Moderação por IA (critérios em texto livre). Se apagou, para aqui.
-    try {
-      if (await modIA.moderar(message, { ...ctx, client })) return;
-    } catch (e) { console.error("[MOD-IA]", e.message); }
+    // (P2, 31 out 2026) o &modia saiu: temas por IA são do `&automod sentinela assuntos` (dentro do runAutomod)
   }
 
   if (!command) {
@@ -639,7 +644,7 @@ async function tratarMensagem(message) {
     catch (e) { console.error("[TTS]", e.message); }
 
     // o que quem pediu silêncio escreve não vai para a IA (nem memória, nem o fio do canal)
-    if (chat.servidorPermitido(serverId) && !chat.naoFalarCom(message.authorId)) {
+    if (gating.conversaAqui(serverId, ctx.config) && gating.falaCom(message.authorId)) {
       const nome = message.author?.username ?? message.member?.nickname ?? message.authorId;
       // (31 out 2026) a memória só aprende do que é dito à Judy: a resposta a uma
       // mensagem dela (mesmo sem o ping) conta. Só o cache local, sem ir à API.
@@ -666,29 +671,43 @@ async function tratarMensagem(message) {
 
   if (!command) return;            // mensagem normal, sem prefixo
 
+  // (P2, pedido da IA) `&chat <pergunta>` / `&ia <pergunta>`: o &chat saiu como comando, a conversa fica
+  if (!handler && command && await chat.conversarPorAtalho(message, command, ctx)) return;
+
   if (!handler) {                  // tinha prefixo, mas o comando não existe
+    // (P2) o bot cresce pelo uso: a palavra (normalizada, sem o resto da mensagem) entra
+    // na contagem mensal deste servidor — teto por servidor, some em 30 dias
+    if (!message.author?.bot) {
+      try { dbIA.contarPalavraTentada(serverId, command); }
+      catch (e) { console.error("[PALAVRAS]", e?.message); }
+    }
     // "&gams follower ficha" → "você quis dizer &game?" (o mais parecido, até 2 letras de diferença)
     // "&ship @a @b" → "&entretenimento ship @a @b": o subcomando só existe dentro da família
     // "&regras" → "&servidor regras" (idem cargos, canais, faq)
     const daFamilia = entretenimento.subcomandoDe(command) ? `entretenimento ${command}`
       : servidorInfo.subcomandoDe(command) ? `servidor ${command}` : null;
-    const parecido = daFamilia ?? comandoParecido(command, Object.keys(rotas));
+    // (P2) os nomes antigos que viraram atalho (`&comando`, `&log`) também são sugeridos
+    // (revisão P2) nunca o próprio nome: `&chat oi` sem IA sugeria `&chat oi` (o `chat` é cabeça de atalho)
+    const parecido = daFamilia ?? comandoParecido(command, [...Object.keys(rotas), ...aliases.NOMES_DE_ATALHO].filter((n) => n !== command));
     // o resto também: `&comado destivar ping` sugeria `&comando destivar ping`,
     // com o erro do subcomando intacto (17 out 2026)
     let resto = message.content.slice(PREFIXO.length + command.length);
     if (parecido && !daFamilia && !TEXTO_LIVRE.has(CANONICO[parecido] ?? parecido)) {
       const [, espaco, primeiro, depois] = resto.match(/^(\s+)(\S+)([\s\S]*)$/) ?? [];
-      const certo = primeiro && aliases.corrigirSubcomando(CANONICO[parecido] ?? parecido, primeiro);
+      // o subcomando é conferido na tabela do destino (o atalho `comando` → `config.comando`)
+      const at = aliases.resolverAtalho([parecido]);
+      const tabela = at ? [at.comando, ...at.args].join(".") : (CANONICO[parecido] ?? parecido);
+      const certo = primeiro && aliases.corrigirSubcomando(tabela, primeiro);
       if (certo) resto = `${espaco}${certo}${depois}`;
     }
     const sugestao = parecido ? `${PREFIXO}${parecido}${resto}` : null;
     await sendEmbed(message.channel, tr(ctx, {
       title: "❓ Comando desconhecido",
-      description: (sugestao ? `Você quis dizer \`${sugestao.trim().slice(0, 120)}\`?\n\n` : "") + `Use \`${PREFIXO}help\` para ver os comandos disponíveis.`,
+      description: (sugestao ? `Você quis dizer \`${sugestao.trim().slice(0, 120)}\`?\n\n` : "") + `Use \`${aliases.citar("help", "pt", PREFIXO)}\` para ver os comandos disponíveis.`,
       colour: COR.aviso,
     }, {
       title: "❓ Unknown command",
-      description: (sugestao ? `Did you mean \`${sugestao.trim().slice(0, 120)}\`?\n\n` : "") + `Use \`${PREFIXO}help\` to see the available commands.`,
+      description: (sugestao ? `Did you mean \`${sugestao.trim().slice(0, 120)}\`?\n\n` : "") + `Use \`${aliases.citar("help", "en", PREFIXO)}\` to see the available commands.`,
       colour: COR.aviso,
     }, {
       title: "❓ Comando desconocido",
@@ -705,7 +724,7 @@ async function tratarMensagem(message) {
 
   const canonico = CANONICO[command] ?? command;
 
-  // &chat só nos servidores da conversa; &modia (moderação) em todos
+  // comandos da IA só nos servidores da conversa
   if (COMANDOS_SO_IA.has(canonico) && !chat.comandoIAPermitido(canonico, serverId)) {
     return sendEmbed(message.channel, tr(ctx, {
       title: "🚫 Não existe aqui",
@@ -721,7 +740,8 @@ async function tratarMensagem(message) {
       colour: COR.aviso,
     }));
   }
-  if (!ESSENCIAIS.has(canonico) && (ctx.config.comandosDesativados ?? []).includes(canonico)) {
+  // (revisão P2) o nome salvo pode ser o antigo (`repete` → `&embed`, `iniciativa` → `&rolar init`)
+  if (!ESSENCIAIS.has(canonico) && aliases.estaDesativado(ctx.config.comandosDesativados, canonico, aliases.normalizarArgs(canonico, args, CANONICO))) {
     await log.registrar(ctx, "comandos", {
       titulo: "🚫 Comando desativado",
       descricao: `<@${message.authorId}> tentou usar \`${PREFIXO}${command}\`, que está desativado neste servidor.`,
@@ -836,17 +856,23 @@ function ehCanalDeVoz(message) {
   if (marcador) {
     return sendEmbed(message.channel, tr(ctx, {
       title: "✏️ Troque o ‹…› por um valor",
-      description: `\`${marcador}\` na ajuda é um **espaço para preencher** — não é para digitar com os sinais.\n\nEx.: em \`${aliases.citar("warn", "pt", PREFIXO)} <@pessoa>\`, mencione a pessoa: \`${aliases.citar("warn", "pt", PREFIXO)} @Ana\`.\nOs valores que \`${PREFIXO}${canonico}\` aceita: \`${PREFIXO}help ${canonico}\``,
+      description: `\`${marcador}\` na ajuda é um **espaço para preencher** — não é para digitar com os sinais.\n\nEx.: em \`${aliases.citar("warn", "pt", PREFIXO)} <@pessoa>\`, mencione a pessoa: \`${aliases.citar("warn", "pt", PREFIXO)} @Ana\`.\nOs valores que \`${aliases.citar(canonico, "pt", PREFIXO)}\` aceita: \`${aliases.citar("help", "pt", PREFIXO)} ${canonico}\``,
       colour: COR.aviso,
     }, {
       title: "✏️ Replace the ‹…› with a value",
-      description: `\`${marcador}\` in the help is a **blank to fill in** — not something to type with the brackets.\n\nE.g.: in \`${aliases.citar("warn", "en", PREFIXO)} <@user>\`, mention the person: \`${aliases.citar("warn", "en", PREFIXO)} @Ana\`.\nThe values \`${PREFIXO}${canonico}\` accepts: \`${PREFIXO}help ${canonico}\``,
+      description: `\`${marcador}\` in the help is a **blank to fill in** — not something to type with the brackets.\n\nE.g.: in \`${aliases.citar("warn", "en", PREFIXO)} <@user>\`, mention the person: \`${aliases.citar("warn", "en", PREFIXO)} @Ana\`.\nThe values \`${aliases.citar(canonico, "en", PREFIXO)}\` accepts: \`${aliases.citar("help", "en", PREFIXO)} ${aliases.citar(canonico, "en", "")}\``,
       colour: COR.aviso,
     }, {
       title: "✏️ Cambia el ‹…› por un valor",
       description: `\`${marcador}\` en la ayuda es un **espacio para rellenar** — no hay que escribirlo con los signos.\n\nEj.: en \`${aliases.citar("warn", "es", PREFIXO)} <@usuario>\`, menciona a la persona: \`${aliases.citar("warn", "es", PREFIXO)} @Ana\`.\nLos valores que acepta \`${aliases.citar(canonico, "es", PREFIXO)}\`: \`${aliases.citar("help", "es", PREFIXO)} ${aliases.citar(canonico, "es", "")}\``,
       colour: COR.aviso,
     }));
+  }
+
+  // (P2) uso de cada comando (o nome interno): acha os nunca usados (&servidores palavras)
+  if (!message.author?.bot) {
+    try { dbIA.contarUsoComando(canonico); }
+    catch (e) { console.error("[PALAVRAS]", e?.message); }
   }
 
   try {
@@ -901,6 +927,10 @@ client.on("messageReactionAdd", async (...a) => {
     if (await paginas.aoReagir(msgId, userId, emoji, a0)) return;
     // Jogo da velha (&entretenimento velha): 1️⃣–9️⃣ no tabuleiro é a jogada.
     if (await jogos.aoReagir(msgId, userId, emoji)) return;
+    // RPG (&game): ✅ no convite de co-op e no desafio de duelo (só quem foi convidado conta)
+    if (await rpg.aoReagir(msgId, userId, emoji)) return;
+    // (P2) ✅ do dono do bot na prévia do `&servidores aviso`: publica no log de cada servidor
+    if (await servidoresPainel.aoReagirAviso(msgId, userId, emoji, { client, criarContexto })) return;
 
     const msgObj = (a0 && typeof a0 === "object") ? a0 : { id: msgId };
     // Tickets: painel (🎫 abre), controle (🔒 fecha), fechado (🗑️ apaga).
@@ -925,6 +955,7 @@ client.events.on("event", async (ev) => {
     const editor = { id: ev.id, channelId: ev.channel_id,
       edit: (data) => client.api.patch(`/channels/${ev.channel_id}/messages/${ev.id}`, data) };
     if (ev.type === "MessageReact" && await tickets.aoReagir({ id: ev.id }, ev.user_id, ev.emoji_id, { client, criarContexto })) return;
+    if (ev.type === "MessageReact" && await rpg.aoReagir(ev.id, ev.user_id, ev.emoji_id)) return;
     await paginas.aoReagir(ev.id, ev.user_id, ev.emoji_id, editor);
   } catch (err) {
     console.error("[REAÇÃO][fora do cache]", err?.message ?? err);

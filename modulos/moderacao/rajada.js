@@ -111,8 +111,17 @@ function casaTermo(p, alvo) {
   }
   return false;
 }
-// Teto dos termos que a staff acrescenta (`&automod antiodio add`): 20 × 40.
+// Teto dos termos que a staff acrescenta (`&automod filter add`): 20 × 40.
 export const TERMOS_MAX = 20, TERMO_MAX = 40;
+// O termo como ele é guardado e casado (P2, `&automod filter`): minúsculo, sem
+// acento, só letras e espaço; null se sobrar menos de 3 letras (não casaria nada)
+// ou se passar de TERMO_MAX. É o mesmo texto que o padrão literal usa.
+export function termoDoFiltro(bruto) {
+  const t = String(bruto ?? "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z\s]/g, " ").replace(/\s+/g, " ").trim();
+  if (t.replace(/\s/g, "").length < 3 || t.length > TERMO_MAX) return null;
+  return t;
+}
 export function acharOdio(texto, extras = []) {
   const norm = normalizarOdio(texto);
   if (!norm) return null;

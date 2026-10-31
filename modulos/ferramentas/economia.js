@@ -21,6 +21,8 @@ import { planejarCargos } from "./nivel.js";
 import { lerDuracao, duracaoTexto } from "../core/duracao.js";
 import { quantiaValida } from "../core/seguranca.js";
 import { editarCargos, podeUsarCargo } from "../core/hierarquia.js";
+import { carimbo } from "../core/tempo.js";
+import { erroDeUso, semPermissao } from "../core/saida.js";
 
 export const PADRAO = { nome: "Moeda", simbolo: "🪙", ganhoMin: 10, ganhoMax: 30, intervaloMs: 3600e3 };
 
@@ -129,35 +131,15 @@ export async function cmdEconomia(message, args, ctx) {
   const enviar = (title, description, colour = COR.info) => sendEmbed(message.channel, { title, description, colour });
   const server = await getServer(message).catch(() => null);
   const staff = () => membroTemPermissao(message, server, "ManageServer");
-  const negar = () => enviar(T("🚫 Permissão insuficiente", "🚫 Missing permission", "🚫 Permiso insuficiente"),
-    T("Isso é da staff: precisa de **ManageServer**.", "That's for staff: it needs **ManageServer**.", "Esto es del staff: hace falta **ManageServer**."), COR.erro);
+  const negar = () => semPermissao(ctx, message.channel, "ManageServer");
+  const uso = (pt, en_, es) => erroDeUso(ctx, message.channel, "economia", pt, en_, es);
 
-  if (!v || v === "ajuda") {
-    return enviar(T(`${cfg.simbolo} Economia do servidor`, `${cfg.simbolo} Server economy`, `${cfg.simbolo} Economía del servidor`), [
-      T(`A moeda daqui é ${cfg.simbolo} **${cfg.nome}**.`, `This server's currency is ${cfg.simbolo} **${cfg.nome}**.`, `La moneda de aquí es ${cfg.simbolo} **${cfg.nome}**.`),
-      "",
-      T(`\`${citarInterno("economia.minerar", P)}\` — ganha de ${cfg.ganhoMin} a ${cfg.ganhoMax}, a cada ${duracaoTexto(cfg.intervaloMs)}`,
-        `\`${citarInterno("economia.minerar", P)}\` — earn ${cfg.ganhoMin} to ${cfg.ganhoMax}, every ${duracaoTexto(cfg.intervaloMs, "en")}`,
-        `\`${ce("economia.minerar")}\` — ganas de ${cfg.ganhoMin} a ${cfg.ganhoMax}, cada ${duracaoTexto(cfg.intervaloMs, "es")}`),
-      T(`\`${citarInterno("economia.saldo", P)} [@pessoa]\` · \`${citarInterno("economia", P)} top\``,
-        `\`${citarInterno("economia.saldo", P)} [@pessoa]\` · \`${citarInterno("economia", P)} top\``,
-        `\`${ce("economia.saldo")} [@usuario]\` · \`${ce("economia")} top\``),
-      T(`\`${citarInterno("economia.loja", P)}\` · \`${citarInterno("economia.comprar", P)} <cargo>\``,
-        `\`${citarInterno("economia.loja", P)}\` · \`${citarInterno("economia.comprar", P)} <cargo>\``,
-        `\`${ce("economia.loja")}\` · \`${ce("economia.comprar")} <rol>\``),
-      T(`\`${citarInterno("economia.pagar", P)} @pessoa <quantia>\``, `\`${citarInterno("economia.pagar", P)} @pessoa <quantia>\``,
-        `\`${ce("economia.pagar")} @usuario <cantidad>\``),
-      "",
-      T(`_Staff: \`${citarInterno("economia", P)} config\` · \`${citarInterno("economia.loja", P)} add <cargo> <preço>\` · \`${citarInterno("economia.dar", P)}|tirar @pessoa <quantia>\`_`,
-        `_Staff: \`${citarInterno("economia", P)} config\` · \`${citarInterno("economia.loja", P)} add <role> <price>\` · \`${citarInterno("economia.dar", P)}|tirar @user <amount>\`_`,
-        `_Staff: \`${ce("economia")} config\` · \`${ce("economia.loja")} add <rol> <precio>\` · \`${ce("economia.dar")} @usuario <cantidad>\` · \`${ce("economia.tirar")} @usuario <cantidad>\`_`),
-    ].join("\n"));
-  }
+  if (!v || v === "ajuda") return erroDeUso(ctx, message.channel, "economia", "Subcomando desconhecido.", "Unknown subcommand.", "Subcomando desconocido.");
 
   if (v === "minerar") {
     const r = minerar(sid, eu, cfg);
-    if (!r.ok) return enviar("⛏️", T(`Ainda cansado da última. Volte em **${duracaoTexto(r.faltaMs)}**.`, `Still tired from the last one. Come back in **${duracaoTexto(r.faltaMs, "en")}**.`,
-      `Todavía cansado de la última. Vuelve en **${duracaoTexto(r.faltaMs, "es")}**.`), COR.aviso);
+    if (!r.ok) return enviar("⛏️", T(`Próxima mineração ${carimbo(Date.now() + r.faltaMs, "R")}.`, `Next mining ${carimbo(Date.now() + r.faltaMs, "R")}.`,
+      `Próxima minería ${carimbo(Date.now() + r.faltaMs, "R")}.`), COR.aviso);
     return enviar("⛏️", T(`Você minerou ${$(r.ganho)}.\nSaldo: ${$(r.saldo)}`, `You mined ${$(r.ganho)}.\nBalance: ${$(r.saldo)}`, `Minaste ${$(r.ganho)}.\nSaldo: ${$(r.saldo)}`), COR.sucesso);
   }
 
@@ -171,24 +153,18 @@ export async function cmdEconomia(message, args, ctx) {
     return enviar(T(`${cfg.simbolo} Saldo`, `${cfg.simbolo} Balance`, `${cfg.simbolo} Saldo`), [
       `<@${quem}>: ${$(l.saldo)}`,
       pos ? T(`🏆 ${pos}º lugar no servidor`, `🏆 #${pos} on the server`, `🏆 ${pos}º puesto en el servidor`) : null,
-      quem === eu ? (pronto ? T(`⛏️ Dá para minerar agora: \`${citarInterno("economia.minerar", P)}\``, `⛏️ You can mine now: \`${citarInterno("economia.minerar", P)}\``, `⛏️ Ya puedes minar: \`${ce("economia.minerar")}\``)
-        : T(`⛏️ Próxima mineração em ${duracaoTexto(l.ultimaMineracao + cfg.intervaloMs - Date.now())}`, `⛏️ Next mining in ${duracaoTexto(l.ultimaMineracao + cfg.intervaloMs - Date.now(), "en")}`,
-          `⛏️ Próxima minería en ${duracaoTexto(l.ultimaMineracao + cfg.intervaloMs - Date.now(), "es")}`)) : null,
+      quem === eu && !pronto ? `⛏️ ${carimbo(l.ultimaMineracao + cfg.intervaloMs, "R")}` : null,
     ].filter(Boolean).join("\n"));
   }
 
   if (v === "top") {
     const lista = ranking(sid, 10);
-    if (!lista.length) return enviar(T("🏆 Ranking", "🏆 Leaderboard", "🏆 Ranking"), T(`Ninguém tem ${cfg.nome} ainda. \`${citarInterno("economia.minerar", P)}\` para começar.`, `Nobody has any ${cfg.nome} yet. \`${citarInterno("economia.minerar", P)}\` to start.`,
-      `Nadie tiene ${cfg.nome} todavía. \`${ce("economia.minerar")}\` para empezar.`));
+    if (!lista.length) return enviar(T("🏆 Ranking", "🏆 Leaderboard", "🏆 Ranking"), T(`Ninguém tem ${cfg.nome} ainda.`, `Nobody has any ${cfg.nome} yet.`, `Nadie tiene ${cfg.nome} todavía.`));
     const medalha = ["🥇", "🥈", "🥉"];
     const meu = posicao(sid, eu);
-    const tot = totalEmCirculacao(sid);
     return enviar(T(`🏆 Quem tem mais ${cfg.nome}`, `🏆 Who has the most ${cfg.nome}`, `🏆 Quién tiene más ${cfg.nome}`), [
       ...lista.map((x, i) => `${medalha[i] ?? `**${i + 1}.**`} <@${x.userId}> — ${$(x.saldo)}`),
-      "",
       meu && meu > 10 ? T(`Você: ${meu}º, com ${$(saldo(sid, eu))}`, `You: #${meu}, with ${$(saldo(sid, eu))}`, `Tú: ${meu}º, con ${$(saldo(sid, eu))}`) : null,
-      T(`_Em circulação: ${$(tot.t)} com ${tot.n} pessoa(s)._`, `_In circulation: ${$(tot.t)} across ${tot.n} people._`, `_En circulación: ${$(tot.t)} entre ${tot.n} persona(s)._`),
     ].filter((x) => x !== null).join("\n"));
   }
 
@@ -198,18 +174,16 @@ export async function cmdEconomia(message, args, ctx) {
       if (!staff()) return negar();
       const preco = inteiro(resto.at(-1));
       const cargo = resolverCargo(resto.slice(1, -1).join(" "), server);
-      if (!cargo || !Number.isInteger(preco) || preco <= 0) return enviar(T("❌ Uso", "❌ Usage", "❌ Uso"), T(`\`${citarInterno("economia.loja", P)} add <cargo> <preço>\``, `\`${citarInterno("economia.loja", P)} add <cargo> <preço>\``,
-        `\`${ce("economia.loja")} add <rol> <precio>\``), COR.erro);
+      if (!cargo || !Number.isInteger(preco) || preco <= 0) return uso("Use `loja add <cargo> <preço>`.", "Use `shop add <role> <price>`.", "Usa `shop add <rol> <precio>`.");
       // quem põe na loja precisa estar ACIMA do cargo (15 out 2026)
       const pode = await podeUsarCargo(server, message, cargo.id, ctx);
-      if (!pode.ok) return enviar(T("🚫 Cargo acima do seu", "🚫 Role above yours", "🚫 Rol por encima del tuyo"), T(`${pode.pt}.`, `${pode.en}.`, `${pode.es ?? pode.en}.`), COR.erro);
+      if (!pode.ok) return ctx.sendEmbed(message.channel, { description: `🚫 ${T(pode.pt, pode.en, pode.es ?? pode.en)}.`, colour: COR.erro });
       tabelas().prepare("INSERT INTO eco_loja (serverId, roleId, preco, criadoEm) VALUES (?, ?, ?, ?) ON CONFLICT(serverId, roleId) DO UPDATE SET preco=excluded.preco")
         .run(sid, cargo.id, preco, Date.now());
       // Avisa já se o bot não consegue entregar esse cargo
       const plano = planejarCargos({ server, botMember: server?.member ?? null, member: { roles: [] }, faltando: [cargo.id] });
       const aviso = plano.botSemCargo || plano.acimaDoBot.length
-        ? T("\n\n⚠️ Esse cargo está **acima do cargo do bot** — ninguém vai conseguir comprar até você subir o cargo do bot.", "\n\n⚠️ This role is **above the bot's role** — nobody can buy it until you move the bot's role up.",
-          "\n\n⚠️ Este rol está **por encima del rol del bot** — nadie podrá comprarlo hasta que subas el rol del bot.") : "";
+        ? T("\n⚠️ Está acima do cargo do bot: ninguém consegue comprar.", "\n⚠️ It's above the bot's role: nobody can buy it.", "\n⚠️ Está por encima del rol del bot: nadie puede comprarlo.") : "";
       return enviar(T("🛒 Na loja", "🛒 In the shop", "🛒 En la tienda"), `<%${cargo.id}> — ${$(preco)}${aviso}`, aviso ? COR.aviso : COR.sucesso);
     }
     if (["remover", "tirar", "remove", "del"].includes(sub)) {
@@ -220,17 +194,14 @@ export async function cmdEconomia(message, args, ctx) {
     }
     const itens = loja(sid);
     return enviar(T("🛒 Loja de cargos", "🛒 Role shop", "🛒 Tienda de roles"), itens.length
-      ? [...itens.map((x) => `<%${x.roleId}> — ${$(x.preco)}`), "", T(`\`${citarInterno("economia.comprar", P)} <cargo>\` · seu saldo: ${$(saldo(sid, eu))}`,
-        `\`${citarInterno("economia.comprar", P)} <cargo>\` · your balance: ${$(saldo(sid, eu))}`, `\`${ce("economia.comprar")} <rol>\` · tu saldo: ${$(saldo(sid, eu))}`)].join("\n")
-      : T(`A loja está vazia.${staff() ? `\n\n\`${citarInterno("economia.loja", P)} add <cargo> <preço>\`` : ""}`, `The shop is empty.${staff() ? `\n\n\`${citarInterno("economia.loja", P)} add <role> <price>\`` : ""}`,
-        `La tienda está vacía.${staff() ? `\n\n\`${ce("economia.loja")} add <rol> <precio>\`` : ""}`));
+      ? itens.map((x) => `<%${x.roleId}> — ${$(x.preco)}`).join("\n")
+      : T("A loja está vazia.", "The shop is empty.", "La tienda está vacía."));
   }
 
   if (v === "comprar") {
     const cargo = resolverCargo(resto.join(" "), server);
     const item = cargo ? loja(sid).find((x) => x.roleId === cargo.id) : null;
-    if (!item) return enviar(T("❓ Qual cargo?", "❓ Which role?", "❓ ¿Qué rol?"), T(`Esse cargo não está à venda. Veja \`${citarInterno("economia.loja", P)}\`.`, `That role isn't for sale. See \`${citarInterno("economia.loja", P)}\`.`,
-      `Ese rol no está a la venta. Mira \`${ce("economia.loja")}\`.`), COR.aviso);
+    if (!item) return uso("Esse cargo não está à venda.", "That role isn't for sale.", "Ese rol no está a la venta.");
     const member = await server?.fetchMember?.(eu).catch(() => null);
     if (!member) return enviar("❌", T("Não consegui te achar no servidor.", "I couldn't find you on the server.", "No te encontré en el servidor."), COR.erro);
     const atuais = (member.roles ?? []).map((r) => r?.id ?? r);
@@ -242,8 +213,8 @@ export async function cmdEconomia(message, args, ctx) {
       return enviar("🛒", plano.membroAcima
         ? T("Seu cargo está na altura do cargo do bot ou acima — o Stoat não deixa ele te dar cargos. Nada foi cobrado.", "Your role sits at or above the bot's — the Stoat won't let it give you roles. Nothing was charged.",
           "Tu rol está a la altura del rol del bot o por encima — Stoat no le deja darte roles. No se cobró nada.")
-        : T("O bot não consegue entregar esse cargo (ele está acima do cargo do bot). Nada foi cobrado — avise a staff.", "The bot can't hand out that role (it's above the bot's role). Nothing was charged — tell the staff.",
-          "El bot no puede entregar ese rol (está por encima del rol del bot). No se cobró nada — avisa al staff."), COR.aviso);
+        : T("O cargo está acima do cargo do bot. Nada foi cobrado.", "The role is above the bot's role. Nothing was charged.",
+          "El rol está por encima del rol del bot. No se cobró nada."), COR.aviso);
     }
     if (!debitar(sid, eu, item.preco)) return enviar("🛒", T("Seu saldo mudou no meio do caminho. Tente de novo.", "Your balance changed midway. Try again.", "Tu saldo cambió a mitad de camino. Inténtalo de nuevo."), COR.aviso);
     try {
@@ -262,8 +233,7 @@ export async function cmdEconomia(message, args, ctx) {
   if (v === "pagar") {
     const alvo = (resto[0] ? await resolverUsuario(resto[0], { message, server, client }).catch(() => null) : null) ?? message.mentionIds?.[0] ?? null;
     const qtd = inteiro(resto.at(-1));
-    if (!alvo || !Number.isInteger(qtd) || qtd <= 0) return enviar(T("❌ Uso", "❌ Usage", "❌ Uso"), T(`\`${citarInterno("economia.pagar", P)} @pessoa <quantia>\``, `\`${citarInterno("economia.pagar", P)} @pessoa <quantia>\``,
-      `\`${ce("economia.pagar")} @usuario <cantidad>\``), COR.erro);
+    if (!alvo || !Number.isInteger(qtd) || qtd <= 0) return uso("Use `pagar @pessoa <quantia>`.", "Use `pay @user <amount>`.", "Usa `pay @usuario <cantidad>`.");
     if (alvo === eu) return enviar("🤨", T("Pagar a si mesmo não muda nada.", "Paying yourself changes nothing.", "Pagarte a ti mismo no cambia nada."), COR.aviso);
     if (!debitar(sid, eu, qtd)) return enviar("💸", T(`Você só tem ${$(saldo(sid, eu))}.`, `You only have ${$(saldo(sid, eu))}.`, `Solo tienes ${$(saldo(sid, eu))}.`), COR.aviso);
     creditar(sid, alvo, qtd);
@@ -274,8 +244,7 @@ export async function cmdEconomia(message, args, ctx) {
     if (!staff()) return negar();
     const alvo = message.mentionIds?.[0] ?? await resolverUsuario(resto[0] ?? "", { message, server, client }).catch(() => null);
     const qtd = inteiro(resto.at(-1));
-    if (!alvo || !Number.isInteger(qtd) || qtd <= 0) return enviar(T("❌ Uso", "❌ Usage", "❌ Uso"), T(`\`${citarInterno("economia", P)} ${v} @pessoa <quantia>\``, `\`${citarInterno("economia", P)} ${v} @pessoa <quantia>\``,
-      `\`${ce(`economia.${v}`)} @usuario <cantidad>\``), COR.erro);
+    if (!alvo || !Number.isInteger(qtd) || qtd <= 0) return uso("Falta @pessoa e quantia.", "Missing @user and amount.", "Faltan @usuario y cantidad.");
     if (v === "dar") creditar(sid, alvo, qtd);
     else { const tem = saldo(sid, alvo); debitar(sid, alvo, Math.min(tem, qtd)); }
     return enviar("🏦", T(`${v === "dar" ? "Dei" : "Tirei"} ${$(qtd)} ${v === "dar" ? "a" : "de"} <@${alvo}>. Saldo: ${$(saldo(sid, alvo))}`,
@@ -287,8 +256,8 @@ export async function cmdEconomia(message, args, ctx) {
     if (!staff()) return negar();
     if (!resto.includes("confirmar") && !resto.includes("confirm")) {
       const tot = totalEmCirculacao(sid);
-      return enviar(T("⚠️ Zerar a economia", "⚠️ Reset the economy", "⚠️ Reiniciar la economía"), T(`Apaga ${$(tot.t)} de ${tot.n} pessoa(s). A loja fica.\n\n\`${citarInterno("economia.zerar.confirmar", P)}\``, `Erases ${$(tot.t)} from ${tot.n} people. The shop stays.\n\n\`${citarInterno("economia.zerar.confirmar", P)}\``,
-        `Borra ${$(tot.t)} de ${tot.n} persona(s). La tienda se queda.\n\n\`${ce("economia.zerar.confirmar")}\``), COR.aviso);
+      return enviar(T("⚠️ Zerar a economia", "⚠️ Reset the economy", "⚠️ Reiniciar la economía"), T(`Apaga ${$(tot.t)} de ${tot.n} pessoa(s). Confirme: \`${citarInterno("economia.zerar.confirmar", P)}\``, `Erases ${$(tot.t)} from ${tot.n} people. Confirm: \`${citarInterno("economia.zerar.confirmar", P)}\``,
+        `Borra ${$(tot.t)} de ${tot.n} persona(s). Confirma: \`${ce("economia.zerar.confirmar")}\``), COR.aviso);
     }
     const n = tabelas().prepare("DELETE FROM eco_saldos WHERE serverId=?").run(sid).changes;
     return enviar("🔄", T(`Economia zerada (${n} carteira(s)).`, `Economy reset (${n} wallet(s)).`, `Economía reiniciada (${n} cartera(s)).`), COR.sucesso);
@@ -302,16 +271,14 @@ export async function cmdEconomia(message, args, ctx) {
     else if (campo === "simbolo" || campo === "símbolo" || campo === "symbol") { if (valor[0]) cfg.simbolo = valor[0].slice(0, 16); }
     else if (campo === "ganho" || campo === "gain") {
       const a = inteiro(valor[0]), b = inteiro(valor[1] ?? valor[0]);
-      if (!(a >= 1 && b >= a)) return enviar(T("❌ Uso", "❌ Usage", "❌ Uso"), T(`\`${citarInterno("economia", P)} config ganho <mín> <máx>\``, `\`${citarInterno("economia", P)} config ganho <mín> <máx>\``,
-        `\`${ce("economia")} config gain <mín> <máx>\``), COR.erro);
+      if (!(a >= 1 && b >= a)) return uso("Ganho: <mín> <máx>.", "Gain: <min> <max>.", "Ganancia: <mín> <máx>.");
       cfg.ganhoMin = a; cfg.ganhoMax = b;
     } else if (campo === "intervalo" || campo === "espera" || campo === "cooldown") {
       const ms = lerDuracao(valor.join(""));
-      if (!ms || ms < 60e3) return enviar(T("❌ Uso", "❌ Usage", "❌ Uso"), T(`\`${citarInterno("economia", P)} config intervalo <tempo>\` — ex.: \`30m\`, \`2h\`, \`1d\` (mínimo 1 min)`, `\`${citarInterno("economia", P)} config intervalo <time>\` — e.g. \`30m\`, \`2h\`, \`1d\` (1 min minimum)`,
-        `\`${ce("economia")} config interval <tiempo>\` — p. ej.: \`30m\`, \`2h\`, \`1d\` (mínimo 1 min)`), COR.erro);
+      if (!ms || ms < 60e3) return uso("Intervalo: `30m`, `2h`, `1d` (mínimo 1 min).", "Interval: `30m`, `2h`, `1d` (1 min minimum).", "Intervalo: `30m`, `2h`, `1d` (mínimo 1 min).");
       cfg.intervaloMs = ms;
     } else if (campo) {
-      return enviar(T("❓ Campo desconhecido", "❓ Unknown field", "❓ Campo desconocido"), T("`nome` · `simbolo` · `ganho` · `intervalo`", "`nome` · `simbolo` · `ganho` · `intervalo`", "`name` · `symbol` · `gain` · `interval`"), COR.aviso);
+      return uso("Campo desconhecido.", "Unknown field.", "Campo desconocido.");
     }
     if (campo) salvarConfig?.();
     return enviar(T(`${cfg.simbolo} Configuração da economia`, `${cfg.simbolo} Economy settings`, `${cfg.simbolo} Configuración de la economía`), [
@@ -319,10 +286,6 @@ export async function cmdEconomia(message, args, ctx) {
       T(`**Mineração:** ${cfg.ganhoMin}–${cfg.ganhoMax} a cada ${duracaoTexto(cfg.intervaloMs, en ? "en" : "pt")}`, `**Mining:** ${cfg.ganhoMin}–${cfg.ganhoMax} every ${duracaoTexto(cfg.intervaloMs, en ? "en" : "pt")}`,
         `**Minería:** ${cfg.ganhoMin}–${cfg.ganhoMax} cada ${duracaoTexto(cfg.intervaloMs, "es")}`),
       T(`**Loja:** ${loja(sid).length} cargo(s)`, `**Shop:** ${loja(sid).length} role(s)`, `**Tienda:** ${loja(sid).length} rol(es)`),
-      "",
-      T(`\`${citarInterno("economia", P)} config nome <nome>\` · \`simbolo <emoji>\` · \`ganho <mín> <máx>\` · \`intervalo <tempo>\``,
-        `\`${citarInterno("economia", P)} config nome <nome>\` · \`simbolo <emoji>\` · \`ganho <mín> <máx>\` · \`intervalo <tempo>\``,
-        `\`${ce("economia")} config name <nombre>\` · \`symbol <emoji>\` · \`gain <mín> <máx>\` · \`interval <tiempo>\``),
     ].join("\n"), campo ? COR.sucesso : COR.info);
   }
 }

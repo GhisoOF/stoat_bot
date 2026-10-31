@@ -2,17 +2,18 @@
 
 export default {
   id: "kick",
-  modulo: "../moderacao/geral.js",
+  modulo: "../moderacao/punir.js",
   funcao: "cmdKick",
-  es: { nome: "expulsar" },   // espanhol (etapa 4)
+  es: { nome: "expulsar" },
   gerenciavel: true,
   ajuda: {
+    grupo: "proteger",
     perm: "KickMembers",
-    uso: { pt: "{&kick} @usuário [motivo]", en: "{&kick} @user [reason]", es: "{&kick} @usuario [motivo]" },
+    uso: { pt: "{&kick} <@pessoa|id|nome> [motivo]", en: "{&kick} <@user|id|name> [reason]", es: "{&kick} <@usuario|id|nombre> [motivo]" },
     desc: {
-      pt: "Expulsa o usuário mencionado. Ele pode voltar com um novo convite.\n\n_Só vale sobre quem tem cargo **abaixo** do seu (o dono do servidor passa sempre)._",
-      en: "Kicks the mentioned user. They can come back with a new invite.\n\n_Only works on people whose roles are **below** yours (the server owner always can)._",
-      es: "Expulsa al usuario mencionado. Puede volver con una invitación nueva.\n\n_Solo funciona con quien tiene roles **por debajo** de los tuyos (el dueño del servidor siempre puede)._",
+      pt: "Expulsa alguém. A pessoa pode voltar com um novo convite.\nRespondendo a uma mensagem, `{&kick}` sozinho expulsa o autor dela.\n\n_Só vale sobre quem tem cargo **abaixo** do seu._",
+      en: "Kicks someone. They can come back with a new invite.\nReplying to a message, `{&kick}` alone kicks its author.\n\n_Only works on people whose roles are **below** yours._",
+      es: "Expulsa a alguien. Puede volver con una invitación nueva.\nRespondiendo a un mensaje, `{&kick}` solo expulsa a su autor.\n\n_Solo funciona con quien tiene roles **por debajo** de los tuyos._",
     },
     ex: { pt: "{&kick} @fulano spam", en: "{&kick} @someone spam", es: "{&kick} @alguien spam" },
   },

@@ -1,13 +1,24 @@
-import * as visaoMod from "./visao.js";
-// (22 out 2026) a ajuda mostra a IA onde ela EXISTE (`iaDisponivel`), e não só onde o
-// chat já está ligado — o `&chat on` é justamente o que liga
-import { iaDisponivel as temIA, comandoIAPermitido } from "../ai/chat.js";
-import { citar, citarInterno, subExibido, trechoPronto } from "../core/aliases.js";
-import { idiomaDe, lingua, tr } from "../core/i18n.js";
-import { enviarPaginado, paginarLinhas } from "../core/paginas.js";
+// &tutorial — o mini guia (P2, 31 out 2026).
+//
+// Só o que nenhum `&help <comando>` explica sozinho:
+//   &tutorial            o que dá para fazer e por onde começar (a 1ª página)
+//   &tutorial <n>        uma página do guia: a abertura e os conceitos, em ordem
+//   &tutorial <conceito> permissoes · ids · canais · protecao — o que atravessa os comandos
+//   &tutorial rpg        a wiki do RPG, gerada dos dados do jogo (modulos/game/wiki.js)
+// As áreas antigas que só repetiam um comando (moderacao, logs, cargos, xp, mensagens,
+// noticias, aventura, economia, ajustes, ia) levam à página do `&help` do comando.
 
-function AREAS(P, lang = "pt", comIA = false) {
-  // ── es (etapa 4b) — sai pronto: cmdTutorial marca as linhas depois de filtrar ──
+import * as visaoMod from "./visao.js";
+import { citar, citarInterno, trechoPronto, subExibido } from "../core/aliases.js";
+import { idiomaDe } from "../core/i18n.js";
+import { enviarPaginado, paginarLinhas } from "../core/paginas.js";
+import { cmdHelp } from "./ajuda.js";
+// (namespace: a wiki é da área do RPG; se a função ainda não existir, a área diz que está vazia)
+import * as wikiRpg from "../game/game.js";
+import { iaNoEnv } from "../ai/gating.js";
+
+// Os conceitos, nos três idiomas (as citações valem no idioma da tela; o espanhol sai pronto)
+function CONCEITOS(P, lang = "pt", comIA = false) {
   if (lang === "es") return {
     permissoes: {
       titulo: "🔑 Permisos del bot",
@@ -102,327 +113,22 @@ function AREAS(P, lang = "pt", comIA = false) {
       ],
     },
 
-    moderacao: {
-      titulo: "🛡️ Moderación automática",
-      ordem: 1,
-      resumo: "Los filtros que actúan solos y qué le pasa a quien infringe.",
+    protecao: {
+      titulo: "🛡️ Cómo actúa la protección",
+      resumo: "Lo que pasa con un mensaje, del filtro a la sanción.",
       corpo: [
-        `**1. Mira el estado actual:** \`${citar("automod", "es", P)}\``,
-        "Muestra los 4 grupos — antispam (avalanchas), antinoise (texto ruidoso), antilink (enlaces e invitaciones), sentinel (contenido dañino) — y las partes de cada uno.",
+        "Todo mensaje pasa por el **automod** antes que nada (los comandos también).",
         "",
-        `**2. Activa/desactiva lo que quieras:** \`${citar("automod", "es", P)} <grupo> on|off\` · solo una parte: \`${citar("automod", "es", P)} <grupo> <parte> on|off\``,
-        `**3. Profundiza:** \`${citar("automod", "es", P)} blocklist\`, \`${citar("automod.sentinela", "es", P)}\`, \`${citar("automod.punicao", "es", P)}\` — toda la familia vive bajo \`${citar("automod", "es", P)}\`, y \`${citar("help", "es", P)} automod\` la recorre`,
-        `Ej.: \`${citar("automod", "es", P)} antilink on\` · \`${citar("automod.antiruido", "es", P)} caps off\``,
+        "**1. Medir o juzgar.** La mayoría de los filtros **mide** algo exacto: velocidad, mayúsculas, enlaces, menciones. El **centinela** **juzga** el contenido (estafas, +18, odio) con una nota de sospecha — y es más estricto con quien acaba de llegar.",
+        "**2. Sancionar.** Quien pasa del límite recibe la sanción del servidor: solo avisar, borrar, silenciar y llamar al staff, subir una escalera (aviso → silencio → ban) o banear en el acto. El silencio es el timeout nativo de Stoat.",
+        "**3. Registrar.** Todo va al canal de registro — y solo el staff de este servidor lo ve.",
         "",
-        `**4. Define la sanción:** \`${citar("automod.punicao", "es", P)} mode <warn|delete|confirm|stack|ban>\``,
-        "• `warn` — solo avisa (bueno para probar)",
-        "• `delete` — quita el mensaje, no sanciona a la persona",
-        "• `confirm` — borra, silencia y llama a un moderador",
-        "• `stack` — sube una escalera de sanciones con cada reincidencia",
-        "• `ban` — banea al momento",
+        "**El staff** pasa los filtros sin sanción. Los **avisos** caducan tras un tiempo sin uno nuevo. La **lista global** avisa (o banea) a quien ya fue baneado en otros servidores.",
         "",
-        `**5. Si usas \`stack\`:** \`${citar("automod.punicao", "es", P)} ladder\``,
-        "La escalera por defecto es **aviso → 5 min de silencio → 1 h de silencio → ban**.",
-        "Quien se queda en el primer escalón nunca llega al último; quien insiste sube solo.",
-        "**Filtros de ruido** (repetición, mayúsculas, emoji, velocidad): el 1.er desliz en 10 min es solo un toque, sin aviso — salvo cuentas nuevas y durante un raid.",
-        `Los avisos se reinician tras **30 días** sin uno nuevo (\`${citar("automod.punicao.validade", "es", P)} <días|0>\`).`,
-        `Cámbiala con \`${citar("automod.punicao", "es", P)} ladder warn,10m,2h,ban\`. El silencio es el timeout nativo de Stoat: el bot necesita **TimeoutMembers**.`,
-        `**6. Si usas \`confirm\`:** la persona queda en timeout hasta que el staff decida (24 h como máximo) — el bot necesita **TimeoutMembers**.`,
-        "",
-        `**Centinela** (\`${citar("automod.sentinela", "es", P)}\`, antes \`scam\`): el único módulo que **juzga** en vez de medir —`,
-        "le pone una nota de sospecha al contenido. Y como juzga, se adapta:",
-        "• **más estricto con quien acaba de llegar** — el umbral sigue el nivel de XP del miembro, así que",
-        "  una cuenta recién creada se mira de cerca y quien lleva semanas hablando aquí gana margen",
-        "• **avisa al staff** ante un *patrón* repetido, antes de sancionar nada",
-        `\`${citar("automod.sentinela", "es", P)} on\` · \`${citar("automod.sentinela.sensibilidade", "es", P)} <low|medium|high>\` · \`${citar("automod.sentinela.antiguidade", "es", P)} on|off\``,
-        `**Enlaces permitidos:** \`${citar("automod", "es", P)} whitelist add <dominio>\` (o un enlace de invitación).`,
-        `**Canal de promoción:** \`${citar("automod", "es", P)} whitelist add #canal\` — allí se puede publicar **cualquier** invitación; el resto del automod sigue valiendo.`,
-        "",
-        `**Aviso manual:** \`${citar("warn", "es", P)} @usuario <motivo>\` — sube la misma escalera que el automod. \`${citar("warn.lista", "es", P)} @usuario\` · \`${citar("warn.limpar", "es", P)} @usuario\`.`,
-        `**Quién puede moderar:** \`${citar("acesso.cargo.add", "es", P)} <@rol>\` da poder de moderación a un rol, sin tocar los permisos de Stoat.`,
-        `**Dónde valen los comandos:** \`${citar("acesso.canal.somente", "es", P)}\` + \`${citar("acesso.canal.add", "es", P)}\` limita **todos** los comandos de quien no es staff a los canales elegidos (el RPG incluido — así se elige dónde se juega).`,
-      ],
-    },
-
-    logs: {
-      titulo: "📋 Registro (logs)",
-      ordem: 2,
-      resumo: "Donde el bot apunta lo que pasó.",
-      corpo: [
-        "Crea un canal (ej.: **#log**) visible solo para el equipo. Después, **dentro de él**:",
-        "",
-        `\`${citar("log.canal.aqui", "es", P)}\` — define este canal como el de registro`,
-        `\`${citar("log", "es", P)}\` — muestra lo que se está registrando`,
-        `\`${citar("log", "es", P)} <punishments|members|messages|roles|commands> on|off\``,
-        "",
-        "Vale la pena registrar sanciones y entradas/salidas; `commands` es ruidoso y empieza desactivado.",
-        "",
-        ...(comIA ? ["💡 Es en el canal de log donde Judy te etiqueta cuando la moderación por IA borra algo."] : []),
-      ],
-    },
-
-    cargos: {
-      titulo: "🎭 Roles",
-      ordem: 3,
-      resumo: "Rol al entrar y roles por reacción.",
-      corpo: [
-        `**Rol automático para quien entra:** \`${citar("autorole.set", "es", P)} @Rol\``,
-        "El rol puede ir mencionado, por el nombre o por el ID (Ajustes → Roles → *Copy role ID*).",
-        "",
-        `**Roles por reacción** (la persona reacciona y recibe el rol):`,
-        `1. Publica el mensaje: \`${citar("embed", "es", P)} title: Elige tus roles | description: 🎮 Juegos · 📢 Anuncios\``,
-        `2. Conecta emoji → rol: \`${citar("reactionrole.add", "es", P)} <mensaje> 🎮 <id-del-rol>\``,
-        "   El **mensaje** puede ser el ID **o el enlace** (menú `...` → *Copiar enlace*).",
-        `3. Compruébalo con \`${citar("reactionrole.list", "es", P)}\``,
-        `4. Si solo puede valer una opción (color, equipo, edad): \`${citar("reactionrole.exclusivo", "es", P)} <mensaje> on\``,
-        "   Así, elegir un emoji **cambia** el rol anterior en vez de acumular.",
-        "",
-        `**Silencio** (\`${citar("silenciar", "es", P)}\`): timeout nativo de Stoat — sin rol; el bot necesita **TimeoutMembers**`,
-        "",
-        `**Color de los roles:** \`${citar("cor", "es", P)} <rol> <color>\``,
-        `Acepta hex, nombres y hasta **degradados** — que el cliente de Stoat no ofrece:`,
-        `\`${citar("cor", "es", P)} VIP gradient #FF71CE #01CDFE #05FFA1\``,
-        `\`${citar("cor", "es", P)} VIP preset vaporwave\` · \`${citar("cor.presets", "es", P)}\` lista los ya hechos`,
-        `\`${citar("cor.painel.aqui", "es", P)}\` — **lo hace todo**: crea los roles de colores, publica el mensaje para elegir, reacciona y conecta los roles por reacción`,
-        "",
-        `**Recibir a quien llega:** \`${citar("boasvindas.canal.aqui", "es", P)}\``,
-        `Después escríbelo a tu manera: \`${citar("boasvindas.texto", "es", P)} Hola {usuario}, ¡bienvenido a {servidor}!\``,
-        `\`${citar("boasvindas.testar", "es", P)}\` lo publica usándote de ejemplo. \`${citar("adeus", "es", P)}\` hace lo mismo para quien se va.`,
-        "",
-        `**Husos horarios:** \`${citar("fuso.add", "es", P)} São Paulo\` · \`${citar("fuso.add", "es", P)} Madrid\``,
-        `Después basta con \`${citar("fuso", "es", P)}\` para ver la hora de los dos a la vez.`,
-        "",
-        `**Quién es del equipo:** \`${citar("staff", "es", P)}\``,
-        `Lee los roles de \`${citar("acesso.cargo", "es", P)}\`, así que \`${citar("staff.add", "es", P)} <@rol>\` también da acceso a los comandos de moderación.`,
-      ],
-    },
-
-    xp: {
-      titulo: "🎮 XP y niveles",
-      ordem: 4,
-      resumo: "La gente gana XP charlando y sube de nivel.",
-      corpo: [
-        `**Activar:** \`${citar("xp", "es", P)} on\``,
-        `**Crear los roles de nivel:** \`${citar("xp.criarcargos", "es", P)}\` (uno cada 10 niveles)`,
-        `**Ajustar:** \`${citar("xp.setup", "es", P)}\` muestra todo lo que se puede cambiar:`,
-        `• \`${citar("xp.setup.intervalo", "es", P)} <5|10>\` — cada cuántos niveles dar un rol`,
-        `• \`${citar("xp.setup", "es", P)} xp <min> <max>\` — cuánto da cada mensaje`,
-        `• \`${citar("xp.setup", "es", P)} cooldown <segundos>\` — evita farmear con spam`,
-        `• \`${citar("xp.setup.canal.aqui", "es", P)}|off\` — dónde anunciar la subida de nivel`,
-        "",
-        `**Ver el ranking:** \`${citar("xp.top", "es", P)}\` · **tu perfil:** \`${citar("xp", "es", P)}\``,
-      ],
-    },
-
-    ia: {
-      titulo: "🤖 Judy (IA)",
-      ordem: 5,
-      soComIA: true,
-      resumo: "Charla, memoria, participación y moderación por IA.",
-      corpo: [
-        `**Activar:** \`${citar("chat.on", "es", P)}\` (y \`${citar("chat.imagem", "es", P)} on\` para generar imágenes) — empiezan desactivados en cada servidor *(ManagePermissions)*.`,
-        `**Probar:** \`${citar("chat.status", "es", P)}\` muestra si el servicio de IA está en marcha.`,
-        "Después basta con mencionar al bot o usar `" + citar("chat", "es", P) + " <mensaje>`.",
-        "También **ve imágenes**: adjunta una y pregunta (\"¿qué sale aquí?\").",
-        "",
-        `**Dejar que participe sola:** \`${citar("chat.livre", "es", P)} on\` (en este canal)`,
-        `• \`${citar("chat.livre.modo.relevante", "es", P)}\` — solo cuando el tema lo vale`,
-        `• \`${citar("chat.livre.modo.todas", "es", P)}\` — responde a todo`,
-        "",
-        `**Comentarios por iniciativa propia:** \`${citar("chat.comentar.aqui", "es", P)}\` · \`${citar("chat.comentar.pordia", "es", P)} <n>\``,
-        "",
-        `**Perfil y memoria:** \`${citar("chat.perfil", "es", P)}\` muestra lo que sabe de ti.`,
-        `\`${citar("chat.cuidado", "es", P)} @usuario on\` — trata a alguien con amabilidad extra.`,
-        `\`${citar("chat.esquecer", "es", P)}\` borra lo tuyo; \`${citar("chat.esquecer.tudo", "es", P)}\` borra lo de todo el servidor.`,
-        `\`${citar("chat.sair", "es", P)}\` — Judy deja de hablarte (en todos los servidores); \`${citar("chat.voltar", "es", P)}\` lo deshace. \`${citar("privacidade", "es", P)}\` muestra lo que guarda.`,
-        "",
-        `**Moderación por IA:** \`${citar("modia.criterios", "es", P)} <qué moderar, en texto libre>\` y después \`${citar("modia", "es", P)} on\`.`,
-        "Borra lo que los incumpla y etiqueta al dueño en el log — nunca banea sola.",
-      ],
-    },
-
-    noticias: {
-      titulo: "📰 Noticias (RSS)",
-      ordem: 6,
-      resumo: "El bot publica las novedades de los feeds cada hora.",
-      corpo: [
-        "Crea un canal (ej.: **#noticias**) y, **dentro de él**:",
-        "",
-        `\`${citar("rss.canal.aqui", "es", P)}\` — define dónde publicar`,
-        `\`${citar("rss.add", "es", P)} <url-del-feed>\` — ej.: \`${citar("rss.add", "es", P)} https://g1.globo.com/rss/g1/\``,
-        `\`${citar("rss.list", "es", P)}\` — feeds registrados`,
-        `\`${citar("rss.agora", "es", P)}\` — fuerza un ciclo para probar`,
-        "",
-        "Cada hora el bot publica las novedades." + (comIA ? " Judy también escribe un resumen general con su propio estilo." : ""),
-      ],
-    },
-
-    mensagens: {
-      titulo: "✉️ Mensajes bonitos",
-      ordem: 7,
-      resumo: "Publicar anuncios y reglas con aspecto de embed.",
-      corpo: [
-        `\`${citar("embed", "es", P)}\` solo muestra la ayuda. El formato es \`campo: valor\`, uno por línea:`,
-        "```",
-        `${citar("embed", "es", P)}`,
-        "titulo: Reglas",
-        "descricao: Sé amable con todos.",
-        "cor: #5865F2",
-        "```",
-        "",
-        `O todo en una línea: \`${citar("embed", "es", P)} title: Reglas | description: Sé amable | color: blue\``,
-        "",
-        "**Campos:** `title` `description` `color` `footer` `image` `channel`.",
-      ],
-    },
-
-    economia: {
-      titulo: "💰 La economía del servidor",
-      ordem: 7.5,
-      resumo: "Una moneda propia de este servidor: minería, ranking y tienda de roles.",
-      corpo: [
-        "_Aparte del RPG: cada servidor tiene **una** moneda propia._",
-        "",
-        "**Para todo el mundo**",
-        `\`${citar("economia.minerar", "es", P)}\` — ganas un puñado y esperas (1 h por defecto)`,
-        `\`${citar("economia.saldo", "es", P)}\` · \`${citar("economia", "es", P)} top\` — quién tiene más`,
-        `\`${citar("economia.loja", "es", P)}\` · \`${citar("economia.comprar", "es", P)} <rol>\` — roles a la venta`,
-        `\`${citar("economia.pagar", "es", P)} @usuario <cantidad>\``,
-        "",
-        "**Montarla** _(ManageServer)_",
-        `\`${citar("economia", "es", P)} config name Pétalo\` · \`config symbol 🌸\``,
-        `\`${citar("economia", "es", P)} config gain 10 30\` · \`config interval 1h\` — cuánto y cada cuánto tiempo`,
-        `\`${citar("economia.loja", "es", P)} add VIP 500\` — pone un rol a la venta`,
-        "",
-        "_El bot solo entrega roles **por debajo del suyo** — y solo cobra si el rol se entrega._",
-      ],
-    },
-
-    rpg: {
-      titulo: "🎲 Wiki del RPG",
-      ordem: 9,
-      resumo: "_(para los jugadores)_ cómo funciona todo: atributos, misiones, hechizos, objetos, compañeros, monedas.",
-      corpo: [
-        "_Un solo mundo: el mismo personaje en todos los servidores donde está Judy. Reacciona ◀ ▶ para pasar las páginas._",
-        "",
-        "**🎭 Personaje y niveles**",
-        `\`${citar("game.criar", "es", P)} [nombre]\` — lo crea (con un kit inicial y dos compañeros) · \`${citar("game", "es", P)}\` — tu ficha · \`${citar("game.ficha", "es", P)} @usuario\``,
-        "10 dificultades × 10 niveles: 1–10 Humano, 11–20 Sobrehumano … 91–100+ Hiperversal — una rareza por dificultad, de Común a Supremo.",
-        "**La misión paga su fuerza, igual para todos.** Una victoria en tu nivel vale **el 80% de un nivel**; una misión el doble de fuerte paga el 160%. Fallar no paga nada.",
-        "Cada nivel da **puntos libres**; cada **2 niveles** todos los atributos suben 1 solos.",
-        `\`${citar("game.pontos", "es", P)} <atributo> [cuántos]\` — gasta los puntos (acepta \`str\`, \`dex\`, \`int\`, \`luk\`…)`,
-        `\`${citar("game.classe", "es", P)}\` + \`${citar("game.evoluir", "es", P)}\` — elige una clase y el bot gasta los puntos y equipa lo mejor de tu mochila (\`${citar("game.evoluir", "es", P)} auto on\`: en cada nivel)`,
-        `\`${citar("game", "es", P)} respec points\` — devuelve todos los puntos gastados para repartirlos de nuevo; cuesta Oro (sube con el nivel)`,
-        `\`${citar("game.top", "es", P)}\` — ranking · \`${citar("game.apagar.confirmar", "es", P)}\` — empezar de cero`,
-        `_\`${citar("xp", "es", P)}\` es otra cosa: el nivel por mensajes del servidor._`,
-        "",
-        "**📊 Los 9 atributos — qué hace cada uno**",
-        "💪 **Fuerza** — daño cuerpo a cuerpo: cada punto suma al ataque, y escala las armas de golpear (espadas, martillos).",
-        "🎯 **Destreza** — la **precisión** de todos (del 70% hasta casi el 100%), y escala las armas de apuntar (armas de fuego, arcos).",
-        "🧠 **Inteligencia** — daño mágico (0,7 por punto), escala las armas místicas y **desbloquea los hechizos** (sin nivel mínimo).",
-        "✨ **Carisma** — algo de ataque (0,3 por punto); **fortalece a tus compañeros**, abarata hechizos y mercenarios, y el mercado te paga mejor.",
-        "❤️ **Vida** · 🛡️ **Resistencia** · 💨 **Agilidad** — la **defensa**. Se multiplican entre sí: repartir rinde más que apilar en una sola. Vida es el requisito del bioware; Resistencia, el del cyberware.",
-        "🍀 **Suerte** — suma 0,6 por punto a la defensa del grupo y, con la Inteligencia, aumenta los puntos por nivel.",
-        "🔷 **Maná** — cuánta **magia** queda activa: los hechizos entran del más fuerte al más débil mientras dure el maná.",
-        "",
-        "**Cuentas que ayudan a montar la build**",
-        "Puntos por nivel = 1 + ¼ × √(Inteligencia + Suerte) — con 16 sumados, 2 puntos por nivel.",
-        "Daño del arma = base × (1 + Σ letra × curva(atributo)) — E 0,15 · D 0,35 · C 0,6 · B 0,9 · A 1,25 · S 1,6, con rendimiento decreciente.",
-        "Por debajo del requisito, el arma rinde el 40%. Sostenerla con las dos manos hace que la Fuerza cuente ×1,5 y reduce a la mitad el requisito de Fuerza.",
-        "",
-        "**⚔️ Misiones**",
-        `\`${citar("game.contratos", "es", P)}\` — el **tablón del gremio** (paga el banco) · \`${citar("game.contrato", "es", P)} <nombre>\` — sales`,
-        `\`${citar("game.dungeons", "es", P)}\` — mundo abierto, un encuentro en tu nivel (paga el tesoro de la mazmorra) · \`${citar("game.chefes", "es", P)}\` · \`${citar("game.especiais", "es", P)}\``,
-        "Toda misión es justa en su propio nivel: **40% de ganar y 70% de sobrevivir** para un grupo bien equipado. Con **3× la fuerza** para la que se hizo, está garantizada — nunca por el nivel.",
-        "Recolectar, entregar e investigar tienen **peligro bajo**: 1/4 del riesgo.",
-        "✅ **Victoria** — XP, Oro y Cristal, opción de botín · ❌ **Fallo** — nada · 💀 **Caída** — ~30 min recuperándote y parte de las monedas que llevas. **El nivel y el equipo nunca se pierden.**",
-        "",
-        "**🤝 Co-op**",
-        `\`${citar("game", "es", P)} coop open <contract | dungeon X | chefe X>\` · \`${citar("game", "es", P)} coop join\` · \`${citar("game", "es", P)} coop go\``,
-        "Hasta **4 personas**, cada una con los compañeros que lleve; caduca en 10 min. **Un solo desenlace para el grupo** — se suman el ataque y la defensa de todos — y la misión paga su fuerza a **cada uno** (como mucho 2 niveles por victoria).",
-        "",
-        "**✨ Hechizos**",
-        `\`${citar("game.magias", "es", P)}\` — el grimorio · \`${citar("game.aprender", "es", P)} <nombre>\``,
-        "20 hechizos, uno de ataque y uno de apoyo por rareza: 🔥 el de ataque multiplica el daño del grupo, 🛡️ el de apoyo, su defensa. Cada uno pide **Inteligencia ≥ 5 × dificultad − 4** y cuesta maná.",
-        "",
-        "**🎒 Objetos**",
-        `\`${citar("game.itens", "es", P)}\` · \`${citar("game.equipar", "es", P)} <objeto> [hand1|hand2]\` · \`${citar("game.catalogo", "es", P)} [rareza] [tipo]\` · \`${citar("game.item", "es", P)} <nombre>\``,
-        "Dos manos, cabeza, cuerpo, 3 accesorios, **3 de bioware y 3 de cyberware**. El arma da **daño** y escala con los atributos; cabeza, cuerpo y escudo dan **defensa**; los accesorios dan atributos.",
-        "**Un arma única** (en una mano, en las dos o con escudo) gana **+80%** de daño. El escudo da defensa y **+10%** de defensa.",
-        "**Sinergia:** mezclar daño cuerpo a cuerpo, a distancia y mágico — en un solo jugador o repartido por el grupo — suma daño, sin techo.",
-        "🧬 **Bioware** escala con el atributo de su color y resuena con otros del mismo color · 🦾 **Cyberware** tiene valor fijo, una pieza por zona del cuerpo.",
-        "",
-        "**👥 Compañeros**",
-        `\`${citar("game.recrutas", "es", P)}\` · \`${citar("game.contratar", "es", P)} [nombre]\` · \`${citar("game.followers", "es", P)}\` · \`${citar("game.follower.levar", "es", P)} <nombre>\` (hasta 2)`,
-        "⚔️ Luchador · 🛡️ Tanque · 🔮 Mago · ✨ Apoyo — cada uno con un hechizo. **Suben con tu nivel** y no usan objetos: el kit de la clase ya va en ellos.",
-        `Los personajes con nombre salen como **contrato** (de un jefe o de una misión especial), una vez por persona: \`${citar("game.usar", "es", P)} <contrato>\`.`,
-        `Gastan ⚡energía por misión (vuelve 1 por hora; \`${citar("game.descansar", "es", P)}\` la recupera por monedas).`,
-        "",
-        "**💰 Monedas y mercado**",
-        "🪙 **Oro** y 💎 **Cristal** — cada victoria paga los dos. Los **contratos** los paga el banco (el gremio); las **mazmorras**, su tesoro, que se renueva con quien juega allí.",
-        `\`${citar("game.carteira", "es", P)}\` — saldo y estado de las monedas · \`${citar("game.comprar", "es", P)} [rareza] [tipo]\` · \`${citar("game.vender", "es", P)} <objeto>\``,
-        "La mitad de lo que gastas en el mercader vuelve al banco; la otra mitad sale del juego.",
-        `\`${citar("game.cambio", "es", P)} 200 gold to crystal\` — cambio con el banco (3% de comisión) · \`${citar("game.cambio", "es", P)} 100 gold for 2 crystal\` — oferta a otro jugador · \`${citar("game.mercado", "es", P)}\` — bazar entre jugadores`,
-        `\`${citar("game.trocar", "es", P)} @usuario <tu objeto> for <su objeto>\` — trueque. Todo en **custodia**. Objetos únicos: nunca con el mercader; entre jugadores, vale todo.`,
-        `\`${citar("game.duelo", "es", P)} @‹usuario› [100 gold] [item <nombre>]\` — **duelo PvP**: pelea automática 1×1 (sin compañeros), la apuesta en custodia; quien pierde solo pierde la apuesta. \`${citar("help", "es", P)} game duel\` lo explica.`,
-        "",
-        "**🕳️ Mazmorra**",
-        "Cada una paga de **su propio tesoro** (el único dinero nuevo del juego), el 70% de su botín es temático, y allí los compañeros pueden ser **capturados** (20% cada uno, si caes).",
-        `\`${citar("game.dungeon", "es", P)}\` muestra quién está preso. El rescate es automático: cada vuelta de esa mazmorra es un intento (ganar lo duplica). El dueño tiene prioridad las primeras 6 h.`,
-      ],
-    },
-
-    aventura: {
-      titulo: "⚔️ RPG — misiones y compañeros",
-      ordem: 10,
-      resumo: "_(para los jugadores)_ contratos, mazmorras, jefes, objetos y grupo.",
-      corpo: [
-        "**Misiones**",
-        `\`${citar("game.contratos", "es", P)}\` — el tablón del gremio, con tus probabilidades · \`${citar("game.contrato", "es", P)} <nombre>\` — sales`,
-        `\`${citar("game.dungeons", "es", P)}\` · \`${citar("game.dungeon", "es", P)} <nombre>\` — un encuentro en tu nivel · \`${citar("game.dungeon", "es", P)} <nombre> boss\``,
-        `\`${citar("game.chefes", "es", P)}\` · \`${citar("game.especiais", "es", P)}\` — recompensas únicas, una vez por persona`,
-        "Los trabajillos (sin riesgo) pagan poco y ayudan al principio.",
-        "Caer **no** cuesta niveles ni equipo — solo tiempo recuperándote.",
-        "",
-        "**Objetos**",
-        `\`${citar("game.itens", "es", P)}\` · \`${citar("game.equipar", "es", P)} <objeto>\` · \`${citar("game.catalogo", "es", P)}\` · \`${citar("game.item", "es", P)} <nombre>\``,
-        `13 huecos: dos manos, cabeza, cuerpo, 💍×3, 🧬×3 y 🦾×3 — tu ficha (\`${citar("game", "es", P)}\`) los muestra todos.`,
-        "Los comunes (♾️) nunca se acaban — nadie se queda sin equipo.",
-        "",
-        "**Magia**",
-        `\`${citar("game.magias", "es", P)}\` — el grimorio · \`${citar("game.aprender", "es", P)} <nombre>\``,
-        "Cuestan **Maná**, piden **Inteligencia** y entran del más fuerte al más débil.",
-        "",
-        "**Compañeros**",
-        `\`${citar("game.followers", "es", P)}\` · \`${citar("game.follower.levar", "es", P)} <nombre>\` (hasta 2) · \`${citar("game.follower.ficha", "es", P)} <nombre>\``,
-        "⚔️ Luchador · 🛡️ Tanque · 🔮 Mago · ✨ Apoyo — cada uno con un hechizo; suben con tu nivel.",
-        "Gastan ⚡energía por misión (vuelve 1 por hora).",
-        "",
-        "**Mazmorra**",
-        `Si el grupo cae en una mazmorra, pueden ser capturados. \`${citar("game.dungeon", "es", P)}\` muestra quién está preso.`,
-        "**El rescate es automático:** cada vuelta de esa mazmorra es un intento.",
-        "El dueño tiene prioridad las primeras 6 h; después, cualquiera puede liberarlos.",
-      ],
-    },
-
-    ajustes: {
-      titulo: "⚙️ Ajustes generales",
-      ordem: 12,
-      resumo: "Panorama, comandos desactivados y lista global.",
-      corpo: [
-        `\`${citar("config", "es", P)}\` — panorama de todo lo configurado en este servidor`,
-        `\`${citar("assistente", "es", P)}\` — configuración guiada · \`${citar("assistente.servidor", "es", P)}\` — crea roles y canales listos`,
-        `\`${citar("comando.desativar", "es", P)} <nombre>\` · \`${citar("comando.ativar", "es", P)} <nombre>\` — desactiva/activa un comando aquí`,
-        `\`${citar("banglobal", "es", P)} <off|warn|instant|consensus>\` — qué hacer cuando entra alguien baneado en otro servidor`,
-        `\`${citar("idioma", "es", P)} pt|en|es\` — en qué idioma respondo en este servidor`,
-        `\`${citar("debug", "es", P)}\` — diagnóstico completo: qué está roto y cómo arreglarlo`,
-        `\`${citar("debug", "es", P)} @usuario\` · \`${citar("debug", "es", P)} #canal\` — una persona, un canal`,
-        "",
-        `Y \`${citar("help", "es", P)}\` lo lista todo, con \`${citar("help", "es", P)} <comando>\` para los detalles.`,
+        `Ver lo que está activado: \`${citar("automod", "es", P)}\` · Los detalles: \`${citar("help", "es", P)} automod\``,
       ],
     },
   };
-
   if (lang === "en") return {
     permissoes: {
       titulo: "🔑 Bot permissions",
@@ -517,334 +223,22 @@ function AREAS(P, lang = "pt", comIA = false) {
       ],
     },
 
-    moderacao: {
-      titulo: "🛡️ Automatic moderation",
-      ordem: 1,
-      resumo: "The filters that act on their own and what happens to offenders.",
+    protecao: {
+      titulo: "🛡️ How protection acts",
+      resumo: "What happens to a message, from the filter to the punishment.",
       corpo: [
-        `**1. See the current state:** \`${citarInterno("automod", P)}\``,
-        "Shows the 4 groups — antispam (floods), antinoise (noisy text), antilink (links and invites), sentinel (harmful content) — and each one's parts.",
+        "Every message goes through the **automod** before anything else (commands included).",
         "",
-        `**2. Toggle whatever you want:** \`${citarInterno("automod", P)} <group> on|off\` · one part only: \`${citarInterno("automod", P)} <group> <part> on|off\``,
-        `**3. Go deeper:** \`${citarInterno("automod", P)} blocklist\`, \`${citarInterno("automod.sentinela", P)}\`, \`${citarInterno("automod.punicao", P)}\` — the whole family lives under \`${citarInterno("automod", P)}\`, and \`${P}help automod\` walks it`,
-        `E.g.: \`${citarInterno("automod", P)} antilink on\` · \`${citarInterno("automod.antiruido", P)} caps off\``,
+        "**1. Measure or judge.** Most filters **measure** something exact: speed, caps, links, mentions. The **sentinel** **judges** the content (scams, NSFW, hate) with a suspicion score — and is stricter with newcomers.",
+        "**2. Punish.** Whoever crosses the line gets the server's punishment: just warn, delete, time out and call the staff, climb a ladder (warning → timeout → ban) or ban on the spot. The timeout is Stoat's native one.",
+        "**3. Record.** Everything goes to the log channel — and only this server's staff sees it.",
         "",
-        `**4. Set the punishment:** \`${citarInterno("automod.punicao", P)} modo <avisar|apagar|confirmar|acumular|banir>\``,
-        "• `avisar` — warn only (good for testing)",
-        "• `apagar` — removes the message, doesn't punish the person",
-        "• `confirmar` — deletes, silences and calls a moderator",
-        "• `acumular` — climbs a ladder of punishments per repeat offence",
-        "• `banir` — bans on the spot",
+        "**Staff** passes the filters unpunished. **Warnings** expire after a while without a new one. The **global list** alerts on (or bans) people already banned on other servers.",
         "",
-        `**5. If you use \`acumular\`:** \`${citarInterno("automod.punicao", P)} escada\``,
-        "The default ladder is **warning → 5 min silence → 1 h silence → ban**.",
-        "Whoever stops at the first step never reaches the last; whoever insists climbs on their own.",
-        "**Noise filters** (repeat, caps, emoji, speed): the 1st slip in 10 min is just a heads-up, with no warning — except new accounts and during a raid.",
-        `Warnings reset after **30 days** without a new one (\`${citarInterno("automod.punicao.validade", P)} <days|0>\`).`,
-        `Change it with \`${citarInterno("automod.punicao", P)} escada aviso,10m,2h,ban\`. Mutes are the Stoat's native timeout: the bot needs **TimeoutMembers**.`,
-        `**6. If you use \`confirmar\`:** the person is timed out until the staff decides (24 h at most) — the bot needs **TimeoutMembers**.`,
-        "",
-        `**Sentinel** (\`${citarInterno("automod.sentinela", P)}\`, formerly \`scam\`): the only module that **judges** instead of measuring —`,
-        "it scores the content for suspicion. Because it judges, it adapts:",
-        "• **stricter with newcomers** — the threshold follows the member's XP level, so a brand new account",
-        "  gets a closer look than someone who's been talking here for weeks",
-        "• **alerts the staff** on a repeated *pattern*, before punishing anything",
-        `\`${citarInterno("automod.sentinela", P)} on\` · \`${citarInterno("automod.sentinela.sensibilidade", P)} <low|medium|high>\` · \`${citarInterno("automod.sentinela.antiguidade", P)} on|off\``,
-        `**Allowed links:** \`${citarInterno("automod", P)} whitelist add <domain>\` (or an invite link).`,
-        `**Promotion channel:** \`${citarInterno("automod", P)} whitelist add #channel\` — **any** invite can be posted there; the rest of automod still applies.`,
-        "",
-        `**Manual warning:** \`${citar("warn", "en", P)} @user <reason>\` — climbs the same ladder as the automod. \`${citar("warn.lista", "en", P)} @user\` · \`${citar("warn.limpar", "en", P)} @user\`.`,
-        `**Who can moderate:** \`${citarInterno("acesso.cargo.add", P)} <@role>\` gives moderation power to a role without touching Stoat's permissions.`,
-        `**Where commands work:** \`${citarInterno("acesso.canal.somente", P)}\` + \`${citarInterno("acesso.canal.add", P)}\` limits **every** command of non-staff to the chosen channels (the RPG included — that's where you pick where it's played).`,
-      ],
-    },
-
-    logs: {
-      titulo: "📋 Logging",
-      ordem: 2,
-      resumo: "Where the bot writes down what happened.",
-      corpo: [
-        "Create a channel (e.g. **#log**) visible only to the team. Then, **inside it**:",
-        "",
-        `\`${citar("log.canal.here", "en", P)}\` — sets this channel as the log channel`,
-        `\`${citar("log", "en", P)}\` — shows what's being logged`,
-        `\`${citar("log", "en", P)} <punicoes|membros|mensagens|cargos|comandos> on|off\``,
-        "",
-        "Logging punishments and joins/leaves is worth it; `comandos` is noisy and starts disabled.",
-        "",
-        ...(comIA ? ["💡 The log channel is where Judy pings you when AI moderation deletes something."] : []),
-      ],
-    },
-
-    cargos: {
-      titulo: "🎭 Roles",
-      ordem: 3,
-      resumo: "Role on join and reaction roles.",
-      corpo: [
-        `**Automatic role on join:** \`${citar("autorole.set", "en", P)} @Role\``,
-        "The role can be mentioned, named or given by ID (Settings → Roles → *Copy role ID*).",
-        "",
-        `**Reaction roles** (react and get the role):`,
-        `1. Post the message: \`${citar("embed", "en", P)} title: Pick your roles | description: 🎮 Games · 📢 News\``,
-        `2. Wire emoji → role: \`${citarInterno("reactionrole.add", P)} <message> 🎮 <role-id>\``,
-        "   The **message** can be the ID **or the link** (`...` menu → *Copy link*).",
-        `3. Check it with \`${citarInterno("reactionrole.list", P)}\``,
-        `4. If only one option can apply (color, team, age): \`${citarInterno("reactionrole.exclusivo", P)} <message> on\``,
-        "   Then picking one emoji **swaps** the previous role instead of stacking.",
-        "",
-        `**Silencing** (\`${citar("silenciar", "en", P)}\`): Stoat's native timeout — no role needed, the bot needs **TimeoutMembers**`,
-        "",
-        `**Role colors:** \`${citarInterno("cor", P)} <role> <color>\``,
-        `Takes hex, names, and even **gradients** — which the Stoat client doesn't offer:`,
-        `\`${citarInterno("cor", P)} VIP gradiente #FF71CE #01CDFE #05FFA1\``,
-        `\`${citarInterno("cor", P)} VIP preset vaporwave\` · \`${citarInterno("cor.presets", P)}\` lists the ready-made ones`,
-        `\`${citarInterno("cor.painel.aqui", P)}\` — **does everything**: creates the colored roles, posts the picker message, reacts and wires the reaction roles`,
-        "",
-        `**Greeting new members:** \`${citarInterno("boasvindas.canal.aqui", P)}\``,
-        `Then write it your way: \`${citarInterno("boasvindas.texto", P)} Hi {usuario}, welcome to {servidor}!\``,
-        `\`${citarInterno("boasvindas.testar", P)}\` posts it using you as the example. \`${citar("adeus", "en", P)}\` does the same for people leaving.`,
-        "",
-        `**Timezones:** \`${citarInterno("fuso.add", P)} São Paulo\` · \`${citarInterno("fuso.add", P)} Madrid\``,
-        `Then just \`${citarInterno("fuso", P)}\` to see both times at once.`,
-        "",
-        `**Who's on the team:** \`${citarInterno("staff", P)}\``,
-        `It reads the roles from \`${citarInterno("acesso.cargo", P)}\`, so \`${citarInterno("staff.add", P)} <@role>\` also grants the moderation commands.`,
-      ],
-    },
-
-    xp: {
-      titulo: "🎮 XP and levels",
-      ordem: 4,
-      resumo: "People earn XP by chatting and level up.",
-      corpo: [
-        `**Enable:** \`${citarInterno("xp", P)} on\``,
-        `**Create the level roles:** \`${citarInterno("xp.criarcargos", P)}\` (one every 10 levels)`,
-        `**Adjust:** \`${citarInterno("xp.setup", P)}\` shows everything you can change:`,
-        `• \`${citarInterno("xp.setup.intervalo", P)} <5|10>\` — how many levels between roles`,
-        `• \`${citarInterno("xp.setup", P)} xp <min> <max>\` — how much a message earns`,
-        `• \`${citarInterno("xp.setup", P)} cooldown <seconds>\` — prevents spam farming`,
-        `• \`${citarInterno("xp.setup.canal.aqui", P)}|off\` — where to announce level ups`,
-        "",
-        `**See the ranking:** \`${citarInterno("xp.top", P)}\` · **your profile:** \`${citarInterno("xp", P)}\``,
-      ],
-    },
-
-    ia: {
-      titulo: "🤖 Judy (the AI)",
-      ordem: 5,
-      soComIA: true,
-      resumo: "Chat, memory, participation and AI moderation.",
-      corpo: [
-        `**Turn it on:** \`${citarInterno("chat.on", P)}\` (and \`${citarInterno("chat.imagem", P)} on\` for image generation) — both start off on each server *(ManagePermissions)*.`,
-        `**Test it:** \`${citarInterno("chat.status", P)}\` shows whether the AI service is up.`,
-        "Then just mention the bot or use `" + citarInterno("chat") + " <message>`.",
-        "She can also **see images**: attach one and ask (\"what's in this?\").",
-        "",
-        `**Let her join on her own:** \`${citarInterno("chat.livre", P)} on\` (in this channel)`,
-        `• \`${citarInterno("chat.livre.modo.relevante", P)}\` — only when the topic is worth it`,
-        `• \`${citarInterno("chat.livre.modo.todas", P)}\` — replies to everything`,
-        "",
-        `**Comments on her own initiative:** \`${citarInterno("chat.comentar.aqui", P)}\` · \`${citarInterno("chat.comentar.pordia", P)} <n>\``,
-        "",
-        `**Profile and memory:** \`${citarInterno("chat.perfil", P)}\` shows what she knows about you.`,
-        `\`${citarInterno("chat.cuidado", P)} @user on\` — treats someone with extra kindness.`,
-        `\`${citarInterno("chat.esquecer", P)}\` erases yours; \`${citarInterno("chat.esquecer.tudo", P)}\` wipes the server's.`,
-        `\`${citarInterno("chat.sair", P)}\` — Judy stops talking to you (on every server); \`${citarInterno("chat.voltar", P)}\` undoes it. \`${citar("privacidade", "en", P)}\` shows what she keeps.`,
-        "",
-        `**AI moderation:** \`${citarInterno("modia.criterios", P)} <what to moderate, in free text>\` then \`${citarInterno("modia", P)} on\`.`,
-        "She deletes whatever violates them and pings the owner in the log — she never bans on her own.",
-      ],
-    },
-
-    noticias: {
-      titulo: "📰 News (RSS)",
-      ordem: 6,
-      resumo: "The bot posts the feeds' updates every hour.",
-      corpo: [
-        "Create a channel (e.g. **#news**) and, **inside it**:",
-        "",
-        `\`${citarInterno("rss.canal.aqui", P)}\` — sets where to publish`,
-        `\`${citarInterno("rss.add", P)} <feed-url>\` — e.g.: \`${citarInterno("rss.add", P)} https://g1.globo.com/rss/g1/\``,
-        `\`${citarInterno("rss.list", P)}\` — registered feeds`,
-        `\`${citarInterno("rss.agora", P)}\` — forces a cycle to test`,
-        "",
-        "Every hour the bot posts the new items." + (comIA ? " Judy also writes an overall summary in her own voice." : ""),
-      ],
-    },
-
-    mensagens: {
-      titulo: "✉️ Pretty messages",
-      ordem: 7,
-      resumo: "Publishing announcements and rules with embed styling.",
-      corpo: [
-        `\`${citar("embed", "en", P)}\` on its own shows the help. The format is \`field: value\`, one per line:`,
-        "```",
-        `${citar("embed", "en", P)}`,
-        "titulo: Rules",
-        "descricao: Be kind to everyone.",
-        "cor: #5865F2",
-        "```",
-        "",
-        `Or everything on one line: \`${citar("embed", "en", P)} title: Rules | description: Be kind | color: blue\``,
-        "",
-        "**Fields:** `title` `description` `color` `footer` `image` `channel`.",
-      ],
-    },
-
-    economia: {
-      titulo: "💰 The server's economy",
-      ordem: 7.5,
-      resumo: "A currency of this server's own: mining, ranking and a role shop.",
-      corpo: [
-        "_Separate from the RPG: each server has **one** currency of its own._",
-        "",
-        "**For everyone**",
-        `\`${citarInterno("economia.minerar", P)}\` — earn a handful, then wait (1 h by default)`,
-        `\`${citarInterno("economia.saldo", P)}\` · \`${citarInterno("economia", P)} top\` — who has the most`,
-        `\`${citarInterno("economia.loja", P)}\` · \`${citarInterno("economia.comprar", P)} <role>\` — roles for sale`,
-        `\`${citarInterno("economia.pagar", P)} @user <amount>\``,
-        "",
-        "**Setting it up** _(ManageServer)_",
-        `\`${citarInterno("economia", P)} config nome Petal\` · \`config simbolo 🌸\``,
-        `\`${citarInterno("economia", P)} config ganho 10 30\` · \`config intervalo 1h\` — how much and how often`,
-        `\`${citarInterno("economia.loja", P)} add VIP 500\` — puts a role up for sale`,
-        "",
-        "_The bot only hands out roles **below its own** — and only charges if the role is delivered._",
-      ],
-    },
-
-
-
-
-    rpg: {
-      titulo: "🎲 RPG wiki",
-      ordem: 9,
-      resumo: "_(for players)_ how everything works: attributes, missions, spells, items, companions, currencies.",
-      corpo: [
-        "_One world: the same character on every server where Judy is. React ◀ ▶ to turn the pages._",
-        "",
-        "**🎭 Character and levels**",
-        `\`${citarInterno("game.criar", P)} [name]\` — creates (with a starter kit and two companions) · \`${citarInterno("game", P)}\` — your sheet · \`${citarInterno("game.ficha", P)} @user\``,
-        "10 difficulties × 10 levels: 1–10 Human, 11–20 Superhuman … 91–100+ Hyperversal — one rarity per difficulty, from Common to Supreme.",
-        "**A mission pays its strength, the same for everyone.** One win at your level is **80% of a level**; a mission twice as strong pays 160%. A failure pays nothing.",
-        "Every level gives **free points**; every **2 levels** all attributes go up by 1 on their own.",
-        `\`${citarInterno("game.pontos", P)} <attribute> [how many]\` — spends points (accepts \`str\`, \`dex\`, \`int\`, \`luk\`…)`,
-        `\`${citarInterno("game.classe", P)}\` + \`${citarInterno("game.evoluir", P)}\` — pick a class and the bot spends the points and equips the best of your bag (\`${citarInterno("game.evoluir", P)} auto on\`: every level)`,
-        `\`${citarInterno("game", P)} respec points\` — gives back every spent point to redistribute; costs Gold (grows with level)`,
-        `\`${citarInterno("game.top", P)}\` — ranking · \`${citarInterno("game.apagar.confirmar", P)}\` — start over`,
-        `_\`${citarInterno("xp", P)}\` is something else: the server's message level._`,
-        "",
-        "**📊 The 9 attributes — what each one does**",
-        "💪 **Strength** — melee damage: each point adds to attack, and it scales the weapons that hit (swords, hammers).",
-        "🎯 **Dexterity** — **accuracy** for everyone (70% up to nearly 100%), and it scales the weapons that aim (guns, bows).",
-        "🧠 **Intelligence** — magic damage (0.7 per point), scales mystic weapons and **unlocks spells** (no level minimum).",
-        "✨ **Charisma** — a little attack (0.3 per point); it **strengthens your companions**, discounts spells and mercenaries, and the market pays you better.",
-        "❤️ **Health** · 🛡️ **Resistance** · 💨 **Agility** — **defense**. They multiply each other: spreading points survives more than stacking one. Health is the bioware requirement; Resistance, the cyberware one.",
-        "🍀 **Luck** — adds 0.6 per point to the party's defense and, with Intelligence, raises the points per level.",
-        "🔷 **Mana** — how much **magic** stays active: spells kick in from strongest to weakest while the mana lasts.",
-        "",
-        "**Numbers that help with a build**",
-        "Points per level = 1 + ¼ × √(Intelligence + Luck) — with 16 combined, 2 points per level.",
-        "Weapon damage = base × (1 + Σ letter × curve(attribute)) — E 0.15 · D 0.35 · C 0.6 · B 0.9 · A 1.25 · S 1.6, with diminishing returns.",
-        "Below a weapon's requirement it deals 40%. Holding one in both hands makes Strength count ×1.5 and halves the Strength requirement.",
-        "",
-        "**⚔️ Missions**",
-        `\`${citarInterno("game.contratos", P)}\` — the **guild board** (paid by the bank) · \`${citarInterno("game.contrato", P)} <name>\` — go`,
-        `\`${citarInterno("game.dungeons", P)}\` — open world, one encounter at your level (paid by the dungeon's own treasury) · \`${citarInterno("game.chefes", P)}\` · \`${citarInterno("game.especiais", P)}\``,
-        "Every mission is fair at its own level: **40% to win and 70% to survive** for a well-equipped party. With **3× the strength** it was made for, it's guaranteed — never by level.",
-        "Gathering, delivering and investigating are **low danger**: 1/4 of the risk.",
-        "✅ **Win** — XP, Gold and Crystal, a loot chance · ❌ **Failure** — nothing · 💀 **Fall** — ~30 min recovering and part of the coins you carry. **Levels and gear are never lost.**",
-        "",
-        "**🤝 Playing together (co-op)**",
-        `\`${citarInterno("game", P)} coop abrir <contract | dungeon X | chefe X>\` · \`${citarInterno("game", P)} coop entrar\` · \`${citarInterno("game", P)} coop partir\``,
-        "Up to **4 people**, each with the companions they bring; it expires in 10 min. **One outcome for the group** — everyone's attack and defense add up — and the mission pays its strength to **each one** (at most 2 levels per win).",
-        "",
-        "**✨ Spells**",
-        `\`${citarInterno("game.magias", P)}\` — the spellbook · \`${citarInterno("game.aprender", P)} <name>\``,
-        "20 spells, one attack and one support per rarity: 🔥 attack multiplies the party's damage, 🛡️ support its defense. Each needs **Intelligence ≥ 5 × difficulty − 4** and costs mana.",
-        "",
-        "**🎒 Items**",
-        `\`${citarInterno("game.itens", P)}\` · \`${citarInterno("game.equipar", P)} <item> [mao1|mao2]\` · \`${citarInterno("game.catalogo", P)} [rarity] [type]\` · \`${citarInterno("game.item", P)} <name>\``,
-        "Two hands, head, body, 3 accessories, **3 bioware and 3 cyberware**. Weapons deal **damage** and scale with attributes; head, body and shield give **defense**; accessories give attributes.",
-        "**A single weapon** (one hand, both hands, or with a shield) gets **+80%** damage. A shield gives defense and **+10%** defense.",
-        "**Synergy:** mixing melee, ranged and magic damage — in one player or across the party — adds damage, with no ceiling.",
-        "🧬 **Bioware** scales with its color's attribute and resonates with others of the same color · 🦾 **Cyberware** is fixed, one piece per body part.",
-        "",
-        "**👥 Companions**",
-        `\`${citarInterno("game.recrutas", P)}\` · \`${citarInterno("game.contratar", P)} [name]\` · \`${citarInterno("game.followers", P)}\` · \`${citarInterno("game.follower.levar", P)} <name>\` (up to 2)`,
-        "⚔️ Fighter · 🛡️ Tank · 🔮 Mage · ✨ Support — each with a spell. They **rise with your level** and use no items: the class kit is already in them.",
-        `Named characters come as a **contract** (from a boss or a special mission), once per person: \`${citarInterno("game.usar", P)} <contract>\`.`,
-        `They spend ⚡energy per mission (1 back per hour; \`${citarInterno("game.descansar", P)}\` restores it for coins).`,
-        "",
-        "**💰 Currencies and market**",
-        "🪙 **Gold** and 💎 **Crystal** — every win pays both. **Contracts** are paid by the bank (the guild); **dungeons** by their treasury, which refills as people play there.",
-        `\`${citarInterno("game.carteira", P)}\` — balance and currency state · \`${citarInterno("game.comprar", P)} [rarity] [type]\` · \`${citarInterno("game.vender", P)} <item>\``,
-        "Half of what you spend at the merchant goes back to the bank; the other half leaves the game.",
-        `\`${citarInterno("game.cambio", P)} 200 gold to crystal\` — exchange with the bank (3% fee) · \`${citarInterno("game.cambio", P)} 100 gold for 2 crystal\` — offer to another player · \`${citarInterno("game.mercado", P)}\` — player bazaar`,
-        `\`${citarInterno("game.trocar", P)} @user <your item> for <their item>\` — barter. Everything in **escrow**. Unique items: never with the merchant, anything goes between players.`,
-        `\`${citarInterno("game.duelo", P)} @‹user› [100 gold] [item <name>]\` — **PvP duel**: automatic 1-on-1 fight (no companions), the bet in escrow; the loser only loses the bet. \`${P}help game duel\` explains.`,
-        "",
-        "**🕳️ Dungeon**",
-        "Each one pays from **its own treasury** (the only new money in the game), 70% of its loot is themed, and companions can be **captured** there (20% each if you fall).",
-        `\`${citarInterno("game.dungeon", P)}\` shows who's held. Rescue is automatic: every return from that dungeon is an attempt (a win doubles it). The owner has priority for the first 6 h.`,
-      ],
-    },
-
-
-    aventura: {
-      titulo: "⚔️ RPG — missions and companions",
-      ordem: 10,
-      resumo: "_(for the players)_ contracts, dungeons, bosses, items and party.",
-      corpo: [
-        "**Missions**",
-        `\`${citarInterno("game.contratos", P)}\` — the guild board, with your odds · \`${citarInterno("game.contrato", P)} <name>\` — sets off`,
-        `\`${citarInterno("game.dungeons", P)}\` · \`${citarInterno("game.dungeon", P)} <name>\` — one encounter at your level · \`${citarInterno("game.dungeon", P)} <name> chefe\``,
-        `\`${citarInterno("game.chefes", P)}\` · \`${citarInterno("game.especiais", P)}\` — unique rewards, once per person`,
-        "Jobs (no risk) pay a little and help at the start.",
-        "Falling does **not** cost levels or gear — only time recovering.",
-        "",
-        "**Items**",
-        `\`${citarInterno("game.itens", P)}\` · \`${citarInterno("game.equipar", P)} <item>\` · \`${citarInterno("game.catalogo", P)}\` · \`${citarInterno("game.item", P)} <name>\``,
-        `13 slots: two hands, head, body, 💍×3, 🧬×3 and 🦾×3 — your sheet (\`${citarInterno("game", P)}\`) lists them.`,
-        "The commons (♾️) never run out — nobody goes without equipment.",
-        "",
-        "**Magic**",
-        `\`${citarInterno("game.magias", P)}\` — the grimoire · \`${citarInterno("game.aprender", P)} <name>\``,
-        "They cost **Mana**, need **Intelligence** and enter from the strongest down.",
-        "",
-        "**Companions**",
-        `\`${citarInterno("game.followers", P)}\` · \`${citarInterno("game.follower.levar", P)} <name>\` (up to 2) · \`${citarInterno("game.follower.ficha", P)} <name>\``,
-        "⚔️ Fighter · 🛡️ Tank · 🔮 Mage · ✨ Support — each with one spell; they rise with your level.",
-        "They spend ⚡energy per mission (1 comes back per hour).",
-        "",
-        "**Dungeon**",
-        `If the party falls in a dungeon, they can be captured. \`${citarInterno("game.dungeon", P)}\` shows who's held.`,
-        "**The rescue is automatic:** every return from that dungeon is an attempt.",
-        "The owner has priority for the first 6h; after that, anyone can free them.",
-      ],
-    },
-
-
-
-    ajustes: {
-      titulo: "⚙️ General settings",
-      ordem: 12,
-      resumo: "Overview, disabled commands and the global list.",
-      corpo: [
-        `\`${citar("config", "en", P)}\` — overview of everything configured on this server`,
-        `\`${citarInterno("assistente", P)}\` — guided setup · \`${citarInterno("assistente.servidor", P)}\` — creates ready-made roles and channels`,
-        `\`${citar("comando.desativar", "en", P)}|enable <name>\` — toggles a command here`,
-        `\`${citarInterno("banglobal", P)} <off|avisar|imediato|consenso>\` — what to do when someone banned elsewhere joins`,
-        `\`${citar("idioma", "en", P)} pt|en|es\` — the language I reply in on this server`,
-        `\`${citarInterno("debug", P)}\` — full diagnostics: what's broken, and how to fix it`,
-        `\`${citarInterno("debug", P)} @user\` · \`${citarInterno("debug", P)} #channel\` — one person, one channel`,
-        "",
-        `And \`${P}help\` lists everything, with \`${P}help <command>\` for details.`,
+        `See what's on: \`${citarInterno("automod", P)}\` · The details: \`${citarInterno("help", P)} automod\``,
       ],
     },
   };
-
-  // ── pt ──
   return {
     permissoes: {
       titulo: "🔑 Permissões do bot",
@@ -939,813 +333,139 @@ function AREAS(P, lang = "pt", comIA = false) {
       ],
     },
 
-    moderacao: {
-      titulo: "🛡️ Moderação automática",
-      ordem: 1,
-      resumo: "Os filtros que agem sozinhos e o que acontece com quem infringe.",
+    protecao: {
+      titulo: "🛡️ Como a proteção age",
+      resumo: "O que acontece com uma mensagem, do filtro à punição.",
       corpo: [
-        `**1. Veja o estado atual:** \`${citarInterno("automod", P)}\``,
-        "Mostra os 4 grupos — antispam (enxurrada), antiruido (texto poluído), antilink (links e convites), sentinela (conteúdo nocivo) — e as partes de cada um.",
+        "Toda mensagem passa pelo **automod** antes de qualquer outra coisa (comandos inclusive).",
         "",
-        `**2. Ligue/desligue o que quiser:** \`${citarInterno("automod", P)} <grupo> on|off\` · só uma parte: \`${citarInterno("automod", P)} <grupo> <parte> on|off\``,
-        `**3. Aprofunde:** \`${citarInterno("automod", P)} blocklist\`, \`${citarInterno("automod.sentinela", P)}\`, \`${citarInterno("automod.punicao", P)}\` — a família toda mora sob \`${citarInterno("automod", P)}\`, e o \`${P}help automod\` desce por ela`,
-        `Ex.: \`${citarInterno("automod", P)} antilink on\` · \`${citarInterno("automod.antiruido", P)} caps off\``,
+        "**1. Medir ou julgar.** A maioria dos filtros **mede** algo exato: velocidade, caixa alta, links, menções. O **sentinela** **julga** o conteúdo (golpe, +18, ódio) com uma nota de suspeita — e é mais rígido com quem acabou de chegar.",
+        "**2. Punir.** Quem passa do limite recebe a punição do servidor: só avisar, apagar, silenciar e chamar a staff, subir uma escada (aviso → silêncio → ban) ou banir na hora. O silêncio é o timeout nativo do Stoat.",
+        "**3. Registrar.** Tudo vai ao canal de log — e só a staff deste servidor vê.",
         "",
-        `**4. Defina a punição:** \`${citarInterno("automod.punicao", P)} modo <avisar|apagar|confirmar|acumular|banir>\``,
-        "• `avisar` — só avisa (bom para testar)",
-        "• `apagar` — remove a mensagem, não pune a pessoa",
-        "• `confirmar` — apaga, silencia e chama um moderador",
-        "• `acumular` — sobe uma escada de punições a cada reincidência",
-        "• `banir` — bane na hora",
+        "**A staff** passa pelos filtros sem punição. **Avisos** vencem depois de um tempo sem um novo. A **lista global** avisa (ou bane) quem já foi banido em outros servidores.",
         "",
-        `**5. Se usar \`acumular\`:** \`${citarInterno("automod.punicao", P)} escada\``,
-        "A escada padrão é **aviso → 5 min de silêncio → 1 h de silêncio → ban**.",
-        "Quem para no primeiro degrau nunca chega ao último; quem insiste sobe sozinho.",
-        "**Filtros de ruído** (repetição, caixa alta, emoji, velocidade): o 1º deslize em 10 min é só um toque, sem aviso — menos conta nova e durante raid.",
-        `Os avisos zeram depois de **30 dias** sem um novo (\`${citarInterno("automod.punicao.validade", P)} <dias|0>\`).`,
-        `Mude com \`${citarInterno("automod.punicao", P)} escada aviso,10m,2h,ban\`. O mute é o timeout nativo do Stoat: o bot precisa de **TimeoutMembers**.`,
-        `**6. Se usar \`confirmar\`:** a pessoa fica em timeout até a staff decidir (no máximo 24 h) — o bot precisa de **TimeoutMembers**.`,
-        "",
-        `**Sentinela** (\`${citarInterno("automod.sentinela", P)}\`, antigo \`scam\`): o único módulo que **julga** em vez de medir —`,
-        "ele dá uma nota de suspeita ao conteúdo. E porque julga, ele se adapta:",
-        "• **mais rígido com quem chegou agora** — o limiar acompanha o nível de XP do membro, então",
-        "  uma conta recém-criada é olhada de perto e quem conversa aqui há semanas ganha margem",
-        "• **avisa a staff** diante de um *padrão* repetido, antes de punir qualquer coisa",
-        `\`${citarInterno("automod.sentinela", P)} on\` · \`${citarInterno("automod.sentinela.sensibilidade", P)} <baixa|media|alta>\` · \`${citarInterno("automod.sentinela.antiguidade", P)} on|off\``,
-        `**Links permitidos:** \`${citarInterno("automod", P)} whitelist add <domínio>\` (ou um link de convite).`,
-        `**Canal de divulgação:** \`${citarInterno("automod", P)} whitelist add #canal\` — lá **qualquer** convite pode ser postado; o resto do automod continua valendo.`,
-        "",
-        `**Aviso manual:** \`${citar("warn", "pt", P)} @pessoa <motivo>\` — sobe a mesma escada do automod. \`${citar("warn.lista", "pt", P)} @pessoa\` · \`${citar("warn.limpar", "pt", P)} @pessoa\`.`,
-        `**Quem pode moderar:** \`${citarInterno("acesso.cargo.add", P)} <@cargo>\` dá poder de moderação a um cargo, sem precisar mexer nas permissões do Stoat.`,
-        `**Onde os comandos valem:** \`${citarInterno("acesso.canal.somente", P)}\` + \`${citarInterno("acesso.canal.add", P)}\` limita **todos** os comandos de quem não é staff aos canais escolhidos (o RPG inclusive — é assim que se escolhe onde ele é jogado).`,
-      ],
-    },
-
-    logs: {
-      titulo: "📋 Registro (logs)",
-      ordem: 2,
-      resumo: "Onde o bot anota o que aconteceu.",
-      corpo: [
-        "Crie um canal (ex.: **#log**) visível só para a equipe. Depois, **dentro dele**:",
-        "",
-        `\`${citar("log.canal.aqui", "pt", P)}\` — define este canal como o de registro`,
-        `\`${citar("log", "pt", P)}\` — mostra o que está sendo registrado`,
-        `\`${citar("log", "pt", P)} <punicoes|membros|mensagens|cargos|comandos> on|off\``,
-        "",
-        "Vale registrar punições e entradas/saídas; `comandos` é ruidoso e começa desligado.",
-        "",
-        ...(comIA ? ["💡 É no canal de log que a Judy te marca quando a moderação por IA apaga algo."] : []),
-      ],
-    },
-
-    cargos: {
-      titulo: "🎭 Cargos",
-      ordem: 3,
-      resumo: "Cargo ao entrar e cargos por reação.",
-      corpo: [
-        `**Cargo automático para quem entra:** \`${citar("autorole.set", "pt", P)} @Cargo\``,
-        "O cargo pode ser mencionado, pelo nome ou pelo ID (Configurações → Cargos → *Copy role ID*).",
-        "",
-        `**Cargos por reação** (a pessoa reage e ganha o cargo):`,
-        `1. Publique a mensagem: \`${citar("embed", "pt", P)} titulo: Escolha seus cargos | descricao: 🎮 Jogos · 📢 Avisos\``,
-        `2. Ligue emoji → cargo: \`${citarInterno("reactionrole.add", P)} <mensagem> 🎮 <id-do-cargo>\``,
-        "   A **mensagem** pode ser o ID **ou o link** (menu `...` → *Copiar link*).",
-        `3. Confira com \`${citarInterno("reactionrole.list", P)}\``,
-        `4. Se só uma opção pode valer (cor, time, idade): \`${citarInterno("reactionrole.exclusivo", P)} <mensagem> on\``,
-        "   Aí escolher um emoji **troca** o cargo anterior em vez de acumular.",
-        "",
-        `**Silêncio** (\`${citar("silenciar", "pt", P)}\`): timeout nativo do Stoat — sem cargo; o bot precisa de **TimeoutMembers**`,
-        "",
-        `**Cor dos cargos:** \`${citarInterno("cor", P)} <cargo> <cor>\``,
-        `Aceita hex, nome, e até **gradiente** — que o cliente do Stoat não oferece:`,
-        `\`${citarInterno("cor", P)} VIP gradiente #FF71CE #01CDFE #05FFA1\``,
-        `\`${citarInterno("cor", P)} VIP preset vaporwave\` · \`${citarInterno("cor.presets", P)}\` lista os prontos`,
-        `\`${citarInterno("cor.painel.aqui", P)}\` — **faz tudo**: cria os cargos coloridos, publica a mensagem de escolha, reage e liga os cargos por reação`,
-        "",
-        `**Receber quem chega:** \`${citarInterno("boasvindas.canal.aqui", P)}\``,
-        `Depois escreva do seu jeito: \`${citarInterno("boasvindas.texto", P)} Olá {usuario}, boas-vindas a {servidor}!\``,
-        `\`${citarInterno("boasvindas.testar", P)}\` publica usando você de exemplo. O \`${citar("adeus", "pt", P)}\` faz o mesmo para quem sai.`,
-        "",
-        `**Fusos horários:** \`${citarInterno("fuso.add", P)} São Paulo\` · \`${citarInterno("fuso.add", P)} Madrid\``,
-        `Depois é só \`${citarInterno("fuso", P)}\` para ver a hora nas duas ao mesmo tempo.`,
-        "",
-        `**Quem é da equipe:** \`${citarInterno("staff", P)}\``,
-        `Ele lê os cargos do \`${citarInterno("acesso.cargo", P)}\`, então \`${citarInterno("staff.add", P)} <@cargo>\` também dá acesso aos comandos de moderação.`,
-      ],
-    },
-
-    xp: {
-      titulo: "🎮 XP e níveis",
-      ordem: 4,
-      resumo: "As pessoas ganham XP conversando e sobem de nível.",
-      corpo: [
-        `**Ligar:** \`${citarInterno("xp", P)} on\``,
-        `**Criar os cargos de nível:** \`${citarInterno("xp.criarcargos", P)}\` (um a cada 10 níveis)`,
-        `**Ajustar:** \`${citarInterno("xp.setup", P)}\` mostra tudo que dá para mudar:`,
-        `• \`${citarInterno("xp.setup.intervalo", P)} <5|10>\` — de quantos em quantos níveis dar cargo`,
-        `• \`${citarInterno("xp.setup", P)} xp <min> <max>\` — quanto ganha por mensagem`,
-        `• \`${citarInterno("xp.setup", P)} cooldown <segundos>\` — evita farm por spam`,
-        `• \`${citarInterno("xp.setup.canal.aqui", P)}|off\` — onde anunciar o level up`,
-        "",
-        `**Ver o ranking:** \`${citarInterno("xp.top", P)}\` · **seu perfil:** \`${citarInterno("xp", P)}\``,
-      ],
-    },
-
-    ia: {
-      titulo: "🤖 A Judy (IA)",
-      ordem: 5,
-      soComIA: true,
-      resumo: "Conversa, memória, participação e moderação por IA.",
-      corpo: [
-        `**Ligar:** \`${citarInterno("chat.on", P)}\` (e \`${citarInterno("chat.imagem", P)} on\` para gerar imagens) — começam desligados em cada servidor *(ManagePermissions)*.`,
-        `**Testar:** \`${citarInterno("chat.status", P)}\` mostra se o serviço de IA está no ar.`,
-        "Depois é só mencionar o bot ou usar `" + citarInterno("chat") + " <mensagem>`.",
-        "Ela também **vê imagens**: anexa uma e pergunta (\"o que aparece aqui?\").",
-        "",
-        `**Deixar ela participar sozinha:** \`${citarInterno("chat.livre", P)} on\` (neste canal)`,
-        `• \`${citarInterno("chat.livre.modo.relevante", P)}\` — só quando o assunto vale`,
-        `• \`${citarInterno("chat.livre.modo.todas", P)}\` — responde tudo`,
-        "",
-        `**Comentários por iniciativa:** \`${citarInterno("chat.comentar.aqui", P)}\` · \`${citarInterno("chat.comentar.pordia", P)} <n>\``,
-        "",
-        `**Perfil e memória:** \`${citarInterno("chat.perfil", P)}\` mostra o que ela sabe de você.`,
-        `\`${citarInterno("chat.cuidado", P)} @pessoa on\` — trata alguém com gentileza extra.`,
-        `\`${citarInterno("chat.esquecer", P)}\` apaga o seu; \`${citarInterno("chat.esquecer.tudo", P)}\` zera o servidor.`,
-        `\`${citarInterno("chat.sair", P)}\` — a Judy para de falar com você (em todo servidor); \`${citarInterno("chat.voltar", P)}\` desfaz. \`${citar("privacidade", "pt", P)}\` mostra o que ela guarda.`,
-        "",
-        `**Moderação por IA:** \`${citarInterno("modia.criterios", P)} <o que moderar, em texto livre>\` e depois \`${citarInterno("modia", P)} on\`.`,
-        "Ela apaga o que violar e marca o dono no log — nunca bane sozinha.",
-      ],
-    },
-
-    noticias: {
-      titulo: "📰 Notícias (RSS)",
-      ordem: 6,
-      resumo: "O bot posta as novidades dos feeds a cada hora.",
-      corpo: [
-        "Crie um canal (ex.: **#noticias**) e, **dentro dele**:",
-        "",
-        `\`${citarInterno("rss.canal.aqui", P)}\` — define onde publicar`,
-        `\`${citarInterno("rss.add", P)} <url-do-feed>\` — ex.: \`${citarInterno("rss.add", P)} https://g1.globo.com/rss/g1/\``,
-        `\`${citarInterno("rss.list", P)}\` — feeds cadastrados`,
-        `\`${citarInterno("rss.agora", P)}\` — força um ciclo para testar`,
-        "",
-        "A cada hora o bot posta os itens novos." + (comIA ? " A Judy escreve também um resumo geral no tom dela." : ""),
-      ],
-    },
-
-    mensagens: {
-      titulo: "✉️ Mensagens bonitas",
-      ordem: 7,
-      resumo: "Publicar avisos e regras com visual de embed.",
-      corpo: [
-        `\`${citar("embed", "pt", P)}\` sozinho mostra a ajuda. O formato é \`campo: valor\`, um por linha:`,
-        "```",
-        `${citar("embed", "pt", P)}`,
-        "titulo: Regras",
-        "descricao: Seja legal com todos.",
-        "cor: #5865F2",
-        "```",
-        "",
-        `Ou tudo numa linha: \`${citar("embed", "pt", P)} titulo: Regras | descricao: Seja legal | cor: azul\``,
-        "",
-        "**Campos:** `titulo` `descricao` `cor` `rodape` `imagem` `canal`.",
-      ],
-    },
-
-    economia: {
-      titulo: "💰 A economia do servidor",
-      ordem: 7.5,
-      resumo: "Uma moeda só deste servidor: mineração, ranking e loja de cargos.",
-      corpo: [
-        "_À parte do RPG: cada servidor tem **uma** moeda própria._",
-        "",
-        "**Para todo mundo**",
-        `\`${citarInterno("economia.minerar", P)}\` — ganha um punhado e espera (1 h por padrão)`,
-        `\`${citarInterno("economia.saldo", P)}\` · \`${citarInterno("economia", P)} top\` — quem tem mais`,
-        `\`${citarInterno("economia.loja", P)}\` · \`${citarInterno("economia.comprar", P)} <cargo>\` — cargos à venda`,
-        `\`${citarInterno("economia.pagar", P)} @pessoa <quantia>\``,
-        "",
-        "**Montar** _(ManageServer)_",
-        `\`${citarInterno("economia", P)} config nome Pétala\` · \`config simbolo 🌸\``,
-        `\`${citarInterno("economia", P)} config ganho 10 30\` · \`config intervalo 1h\` — quanto e de quanto em quanto tempo`,
-        `\`${citarInterno("economia.loja", P)} add VIP 500\` — põe um cargo à venda`,
-        "",
-        "_O bot só entrega cargos **abaixo do dele** — e só cobra se o cargo for entregue._",
-      ],
-    },
-
-
-
-
-    rpg: {
-      titulo: "🎲 Wiki do RPG",
-      ordem: 9,
-      resumo: "_(para os jogadores)_ como tudo funciona: atributos, missões, magias, itens, companheiros, moedas.",
-      corpo: [
-        "_Um mundo só: o mesmo personagem em todo servidor onde a Judy está. Reaja ◀ ▶ para virar as páginas._",
-        "",
-        "**🎭 Personagem e níveis**",
-        `\`${citarInterno("game.criar", P)} [nome]\` — cria (com um kit inicial e dois companheiros) · \`${citarInterno("game", P)}\` — sua ficha · \`${citarInterno("game.ficha", P)} @pessoa\``,
-        "10 dificuldades × 10 níveis: 1–10 Humano, 11–20 Sobre-humano … 91–100+ Hiperversal — uma raridade por dificuldade, de Comum a Supremo.",
-        "**A missão paga a força dela, igual para todos.** Um êxito no seu nível vale **80% de um nível**; uma missão duas vezes mais forte paga 160%. Falhar não paga nada.",
-        "A cada nível você ganha **pontos livres**; a cada **2 níveis** todos os atributos sobem 1 sozinhos.",
-        `\`${citarInterno("game.pontos", P)} <atributo> [quantos]\` — gasta os pontos (aceita \`for\`, \`des\`, \`int\`, \`sor\`…)`,
-        `\`${citarInterno("game.classe", P)}\` + \`${citarInterno("game.evoluir", P)}\` — escolhe uma classe e o bot gasta os pontos e equipa o melhor da mochila (\`${citarInterno("game.evoluir", P)} auto on\`: a cada nível)`,
-        `\`${citarInterno("game", P)} resetar pontos\` — devolve todos os pontos gastos para redistribuir; custa Ouro (cresce com o nível)`,
-        `\`${citarInterno("game.top", P)}\` — ranking · \`${citarInterno("game.apagar.confirmar", P)}\` — recomeça do zero`,
-        `_O \`${citarInterno("xp", P)}\` é outra coisa: o nível por mensagens do servidor._`,
-        "",
-        "**📊 Os 9 atributos — o que cada um faz**",
-        "💪 **Força** — dano corpo a corpo: cada ponto soma no ataque, e ela escala as armas de bater (espadas, martelos).",
-        "🎯 **Destreza** — a **precisão** de todos (de 70% até perto de 100%), e escala as armas de mirar (armas de fogo, arcos).",
-        "🧠 **Inteligência** — dano mágico (0,7 por ponto), escala as armas místicas e **libera as magias** (sem nível mínimo).",
-        "✨ **Carisma** — um pouco de ataque (0,3 por ponto); **fortalece os seus companheiros**, dá desconto em magias e mercenários, e o mercado te paga melhor.",
-        "❤️ **Vida** · 🛡️ **Resistência** · 💨 **Agilidade** — a **defesa**. Elas se multiplicam: espalhar rende mais que empilhar numa só. Vida é o requisito da bioware; Resistência, o do cyberware.",
-        "🍀 **Sorte** — soma 0,6 por ponto na defesa da party e, com a Inteligência, aumenta os pontos por nível.",
-        "🔷 **Mana** — quanta **magia** fica ativa: elas entram da mais forte para a mais fraca enquanto a mana der.",
-        "",
-        "**Contas que ajudam a montar a build**",
-        "Pontos por nível = 1 + ¼ × √(Inteligência + Sorte) — com 16 somados, 2 pontos por nível.",
-        "Dano da arma = base × (1 + Σ letra × curva(atributo)) — E 0,15 · D 0,35 · C 0,6 · B 0,9 · A 1,25 · S 1,6, com retorno decrescente.",
-        "Abaixo do requisito, a arma rende 40%. Segurar com as duas mãos faz a Força contar ×1,5 e corta o requisito de Força pela metade.",
-        "",
-        "**⚔️ Missões**",
-        `\`${citarInterno("game.contratos", P)}\` — o **quadro da guilda** (paga o banco) · \`${citarInterno("game.contrato", P)} <nome>\` — parte`,
-        `\`${citarInterno("game.dungeons", P)}\` — mundo aberto, um encontro no seu nível (paga o tesouro da dungeon) · \`${citarInterno("game.chefes", P)}\` · \`${citarInterno("game.especiais", P)}\``,
-        "Toda missão é justa no próprio nível: **40% de vencer e 70% de sobreviver** para uma party bem equipada. Com **3× a força** para a qual ela foi feita, é garantida — nunca pelo nível.",
-        "Colher, entregar e investigar têm **perigo baixo**: 1/4 do risco.",
-        "✅ **Vitória** — XP, Ouro e Cristal, chance de loot · ❌ **Falha** — nada · 💀 **Queda** — ~30 min se recuperando e parte das moedas que você carrega. **Nível e equipamento nunca se perdem.**",
-        "",
-        "**🤝 Co-op**",
-        `\`${citarInterno("game", P)} coop abrir <contrato | dungeon X | chefe X>\` · \`${citarInterno("game", P)} coop entrar\` · \`${citarInterno("game", P)} coop partir\``,
-        "Até **4 pessoas**, cada uma com os companheiros que leva; expira em 10 min. **Um desfecho para o grupo** — o ataque e a defesa de todos somam — e a missão paga a força dela a **cada um** (no máximo 2 níveis por vitória).",
-        "",
-        "**✨ Magias**",
-        `\`${citarInterno("game.magias", P)}\` — o grimório · \`${citarInterno("game.aprender", P)} <nome>\``,
-        "20 magias, uma de ataque e uma de suporte por raridade: 🔥 ataque multiplica o dano da party, 🛡️ suporte a defesa. Cada uma pede **Inteligência ≥ 5 × dificuldade − 4** e custa mana.",
-        "",
-        "**🎒 Itens**",
-        `\`${citarInterno("game.itens", P)}\` · \`${citarInterno("game.equipar", P)} <item> [mao1|mao2]\` · \`${citarInterno("game.catalogo", P)} [raridade] [tipo]\` · \`${citarInterno("game.item", P)} <nome>\``,
-        "Duas mãos, cabeça, corpo, 3 acessórios, **3 de bioware e 3 de cyberware**. Arma dá **dano** e escala com os atributos; cabeça, corpo e escudo dão **defesa**; acessórios dão atributo.",
-        "**Arma única** (numa mão, nas duas, ou com escudo) ganha **+80%** de dano. O escudo dá defesa e **+10%** de defesa.",
-        "**Sinergia:** misturar corpo a corpo, à distância e mágico — num jogador só ou espalhado pela party — soma dano, sem teto.",
-        "🧬 **Bioware** escala com o atributo da cor e ressoa com outras da mesma cor · 🦾 **Cyberware** tem valor fixo, uma peça por região do corpo.",
-        "",
-        "**👥 Companheiros**",
-        `\`${citarInterno("game.recrutas", P)}\` · \`${citarInterno("game.contratar", P)} [nome]\` · \`${citarInterno("game.followers", P)}\` · \`${citarInterno("game.follower.levar", P)} <nome>\` (até 2)`,
-        "⚔️ Combatente · 🛡️ Tank · 🔮 Mago · ✨ Suporte — cada um com uma magia. **Sobem com o seu nível** e não usam item: o kit da classe já está neles.",
-        `Personagens com nome saem como **contrato** (de um chefe ou de uma missão especial), uma vez por pessoa: \`${citarInterno("game.usar", P)} <contrato>\`.`,
-        `Gastam ⚡energia por missão (volta 1 por hora; \`${citarInterno("game.descansar", P)}\` recupera por moeda).`,
-        "",
-        "**💰 Moedas e mercado**",
-        "🪙 **Ouro** e 💎 **Cristal** — toda vitória paga os dois. **Contratos** são pagos pelo banco (a guilda); **dungeons**, pelo tesouro delas, que se renova com quem joga lá.",
-        `\`${citarInterno("game.carteira", P)}\` — saldo e o estado das moedas · \`${citarInterno("game.comprar", P)} [raridade] [tipo]\` · \`${citarInterno("game.vender", P)} <item>\``,
-        "Metade do que você gasta no mercador volta ao banco; a outra metade sai do jogo.",
-        `\`${citarInterno("game.cambio", P)} 200 ouro para cristal\` — troca com o banco (3% de taxa) · \`${citarInterno("game.cambio", P)} 100 ouro por 2 cristal\` — oferta a outro jogador · \`${citarInterno("game.mercado", P)}\` — bazar entre jogadores`,
-        `\`${citarInterno("game.trocar", P)} @pessoa <seu item> por <item dela>\` — escambo. Tudo em **custódia**. Itens únicos: nunca com o mercador, entre jogadores vale tudo.`,
-        `\`${citarInterno("game.duelo", P)} @‹pessoa› [100 ouro] [item <nome>]\` — **duelo PvP**: luta automática 1×1 (sem companheiros), a aposta em custódia; quem perde só perde a aposta. \`${P}help game duelo\` explica.`,
-        "",
-        "**🕳️ Dungeon**",
-        "Cada uma paga do **tesouro dela** (a única moeda nova do jogo), 70% do loot é do tema, e lá os companheiros podem ser **capturados** (20% cada, se você cair).",
-        `\`${citarInterno("game.dungeon", P)}\` mostra quem está preso. O resgate é automático: toda volta daquela dungeon é uma tentativa (vencer dobra a chance). O dono tem prioridade nas primeiras 6 h.`,
-      ],
-    },
-
-
-    aventura: {
-      titulo: "⚔️ RPG — missões e companheiros",
-      ordem: 10,
-      resumo: "_(para os jogadores)_ contratos, dungeons, chefes, itens e party.",
-      corpo: [
-        "**Missões**",
-        `\`${citarInterno("game.contratos", P)}\` — o quadro da guilda, com sua chance · \`${citarInterno("game.contrato", P)} <nome>\` — parte`,
-        `\`${citarInterno("game.dungeons", P)}\` · \`${citarInterno("game.dungeon", P)} <nome>\` — um encontro no seu nível · \`${citarInterno("game.dungeon", P)} <nome> chefe\``,
-        `\`${citarInterno("game.chefes", P)}\` · \`${citarInterno("game.especiais", P)}\` — recompensas únicas, uma vez por pessoa`,
-        "Os bicos (sem risco) pagam pouco e ajudam no começo.",
-        "Cair **não** custa nível nem equipamento — só tempo se recuperando.",
-        "",
-        "**Itens**",
-        `\`${citarInterno("game.itens", P)}\` · \`${citarInterno("game.equipar", P)} <item>\` · \`${citarInterno("game.catalogo", P)}\` · \`${citarInterno("game.item", P)} <nome>\``,
-        `13 vagas: duas mãos, cabeça, corpo, 💍×3, 🧬×3 e 🦾×3 — sua ficha (\`${citarInterno("game", P)}\`) mostra todas.`,
-        "Os comuns (♾️) nunca acabam — ninguém fica sem equipamento.",
-        "",
-        "**Magia**",
-        `\`${citarInterno("game.magias", P)}\` — o grimório · \`${citarInterno("game.aprender", P)} <nome>\``,
-        "Custam **Mana**, pedem **Inteligência** e entram da mais forte para a mais fraca.",
-        "",
-        "**Companheiros**",
-        `\`${citarInterno("game.followers", P)}\` · \`${citarInterno("game.follower.levar", P)} <nome>\` (até 2) · \`${citarInterno("game.follower.ficha", P)} <nome>\``,
-        "⚔️ Combatente · 🛡️ Tank · 🔮 Mago · ✨ Suporte — cada um com uma magia; sobem com o seu nível.",
-        "Gastam ⚡energia por missão (volta 1 por hora).",
-        "",
-        "**Dungeon**",
-        `Se a party cair numa dungeon, eles podem ser capturados. \`${citarInterno("game.dungeon", P)}\` mostra quem está preso.`,
-        "**O resgate é automático:** toda volta daquela dungeon é uma tentativa.",
-        "O dono tem prioridade nas primeiras 6h; depois, qualquer um solta.",
-      ],
-    },
-
-
-
-    ajustes: {
-      titulo: "⚙️ Ajustes gerais",
-      ordem: 12,
-      resumo: "Panorama, comandos desativados e lista global.",
-      corpo: [
-        `\`${citar("config", "pt", P)}\` — panorama de tudo que está configurado neste servidor`,
-        `\`${citarInterno("assistente", P)}\` — configuração guiada · \`${citarInterno("assistente.servidor", P)}\` — cria cargos e canais prontos`,
-        `\`${citar("comando.desativar", "pt", P)}|ativar <nome>\` — liga/desliga um comando aqui`,
-        `\`${citarInterno("banglobal", P)} <off|avisar|imediato|consenso>\` — o que fazer quando entra alguém banido em outro servidor`,
-        `\`${citar("idioma", "pt", P)} pt|en|es\` — em que idioma eu respondo neste servidor`,
-        `\`${citarInterno("debug", P)}\` — diagnóstico completo: o que está quebrado e como resolver`,
-        `\`${citarInterno("debug", P)} @pessoa\` · \`${citarInterno("debug", P)} #canal\` — uma pessoa, um canal`,
-        "",
-        `E \`${P}help\` lista tudo, com \`${P}help <comando>\` para detalhes.`,
+        `Ver o que está ligado: \`${citarInterno("automod", P)}\` · Os detalhes: \`${citarInterno("help", P)} automod\``,
       ],
     },
   };
 }
+export const ORDEM_CONCEITOS = ["permissoes", "ids", "canais", "protecao"];
 
-const APELIDOS = {
-  ids: "ids", id: "ids", mencao: "ids", "menção": "ids", mencoes: "ids", "menções": "ids", mention: "ids", mentions: "ids", "copiar-id": "ids",
-  canal: "canais", channels: "canais", channel: "canais", tipos: "canais", types: "canais",
-  permissao: "permissoes", permissões: "permissoes", perms: "permissoes", bot: "permissoes",
-  permissions: "permissoes",
-  automod: "moderacao", moderação: "moderacao", punicao: "moderacao", punição: "moderacao", filtros: "moderacao",
-  moderation: "moderacao", filters: "moderacao",
-  log: "logs", registro: "logs", logging: "logs",
-  cargo: "cargos", autorole: "cargos", reactionrole: "cargos", roles: "cargos",
-  nivel: "xp", niveis: "xp", "níveis": "xp", level: "xp", levels: "xp",
-  personagem: "rpg", jogo: "rpg", ficha: "rpg", character: "rpg",
-  missao: "aventura", missoes: "aventura", itens: "aventura",
-  missions: "aventura", adventure: "aventura", items: "aventura",
-  // o mercado e as moedas do RPG estão DENTRO do rpg; "economia" é a moeda do SERVIDOR (&economia)
-  // (4 out 2026) "&tutorial game" é o jeito natural de pedir a wiki do jogo
-  game: "rpg", jogo: "rpg", wiki: "rpg", personagem: "rpg", atributos: "rpg", character: "rpg", attributes: "rpg",
-  coop: "rpg", "co-op": "rpg", magias: "rpg", spells: "rpg", itens: "rpg", items: "rpg", dungeon: "rpg",
-  missao: "aventura", "missão": "aventura", missoes: "aventura", "missões": "aventura", missions: "aventura", followers: "aventura", companheiros: "aventura",
-  mercado: "rpg", market: "rpg", carteira: "rpg", wallet: "rpg", cambio: "rpg", "câmbio": "rpg", moeda: "rpg",
-  economy: "economia", minerar: "economia", mine: "economia",
-  followers: "aventura", party: "aventura", dungeon: "aventura",
-  judy: "ia", chat: "ia", modia: "ia", ai: "ia",
-  rss: "noticias", feed: "noticias", "notícias": "noticias", news: "noticias",
-  embed: "mensagens", avisos: "mensagens", messages: "mensagens", embeds: "mensagens",
-  config: "ajustes", geral: "ajustes", settings: "ajustes", general: "ajustes",
+// A abertura do guia
+function ABERTURA(P, lang = "pt", comIA = false) {
+  if (lang === "es") return [
+    { title: "📚 Tutorial — lo que puedes hacer",
+      linhas: [
+        `El bot modera (filtros automáticos, avisos, bans), recibe a quien llega (bienvenida, roles) y anima el servidor (XP, economía, juegos, RPG, música)${comIA ? ". Y Judy conversa, si el staff lo activa" : ""}.`,
+        "",
+        "**Por dónde empezar**",
+        `1. \`${citar("assistente", "es", P)}\` — configuración guiada: yo pregunto, tú respondes`,
+        `2. \`${citar("debug", "es", P)}\` — lo que falta (permisos, canales)`,
+        `3. \`${citar("config", "es", P)}\` — cómo quedó todo`,
+        "",
+        "**Conceptos**",
+        `\`${citar("tutorial", "es", P)} permisos\` · \`${citar("tutorial", "es", P)} ids\` · \`${citar("tutorial", "es", P)} canales\` · \`${citar("tutorial", "es", P)} proteccion\``,
+        `**RPG:** \`${citar("tutorial", "es", P)} rpg\` · **Comandos:** \`${citar("help", "es", P)}\``,
+      ] },
+  ];
+  if (lang === "en") return [
+    { title: "📚 Tutorial — what you can do",
+      linhas: [
+        `The bot moderates (automatic filters, warnings, bans), welcomes newcomers (welcome messages, roles) and livens up the server (XP, economy, games, RPG, music)${comIA ? ". And Judy chats, if the staff turns it on" : ""}.`,
+        "",
+        "**Where to start**",
+        `1. \`${citarInterno("assistente", P)}\` — guided setup: I ask, you answer`,
+        `2. \`${citarInterno("debug", P)}\` — what's missing (permissions, channels)`,
+        `3. \`${citarInterno("config", P)}\` — how everything turned out`,
+        "",
+        "**Concepts**",
+        `\`${citarInterno("tutorial", P)} permissions\` · \`${citarInterno("tutorial", P)} ids\` · \`${citarInterno("tutorial", P)} channels\` · \`${citarInterno("tutorial", P)} protection\``,
+        `**RPG:** \`${citarInterno("tutorial", P)} rpg\` · **Commands:** \`${citarInterno("help", P)}\``,
+      ] },
+  ];
+  return [
+    { title: "📚 Tutorial — o que dá para fazer",
+      linhas: [
+        `O bot modera (filtros automáticos, avisos, bans), recebe quem chega (boas-vindas, cargos) e anima o servidor (XP, economia, jogos, RPG, música)${comIA ? ". E a Judy conversa, se a staff ligar" : ""}.`,
+        "",
+        "**Por onde começar**",
+        `1. \`${citarInterno("assistente", P)}\` — configuração guiada: eu pergunto, você responde`,
+        `2. \`${citarInterno("debug", P)}\` — o que está faltando (permissões, canais)`,
+        `3. \`${citarInterno("config", P)}\` — como ficou tudo`,
+        "",
+        "**Conceitos**",
+        `\`${citarInterno("tutorial", P)} permissoes\` · \`${citarInterno("tutorial", P)} ids\` · \`${citarInterno("tutorial", P)} canais\` · \`${citarInterno("tutorial", P)} protecao\``,
+        `**RPG:** \`${citarInterno("tutorial", P)} rpg\` · **Comandos:** \`${citarInterno("help", P)}\``,
+      ] },
+  ];
+}
+
+// área antiga → o `&help` que explica (o tutorial não repete o comando)
+export const AREAS_QUE_SAO_COMANDO = {
+  moderacao: ["automod"], logs: ["config", "log"], cargos: ["reactionrole"], xp: ["xp"], mensagens: ["boasvindas"],
+  noticias: ["rss"], aventura: ["game"], economia: ["economia"], ajustes: ["config"], ia: ["config", "ia"],
+};
+// nome digitado (inglês, espanhol, apelido) → chave
+const NOMES = {
+  permissions: "permissoes", permisos: "permissoes", "permissões": "permissoes", perms: "permissoes",
+  channels: "canais", canales: "canais", canal: "canais",
+  protection: "protecao", proteccion: "protecao", "protección": "protecao", "proteção": "protecao", protect: "protecao", proteger: "protecao",
+  wiki: "rpg", jogo: "rpg", juego: "rpg", game: "rpg", mercado: "rpg", market: "rpg",
+  mention: "ids", mentions: "ids", mencoes: "ids", "menções": "ids", mencion: "ids", menciones: "ids", id: "ids",
+  moderation: "moderacao", "moderação": "moderacao", moderacion: "moderacao", log: "logs", roles: "cargos", levels: "xp", nivel: "xp",
+  messages: "mensagens", mensajes: "mensagens", news: "noticias", "notícias": "noticias", adventure: "aventura", economy: "economia",
+  settings: "ajustes", ai: "ia", rpgwiki: "rpg",
 };
 
-function GUIA(P, lang = "pt", comIA = false) {
-  // ── es (etapa 4b) — sai pronto: cmdTutorial marca as linhas depois de filtrar ──
-  if (lang === "es") return [
-    { title: "📚 Por dónde empezar — Antes que nada",
-      description: [
-        "Esta guía tiene **6 páginas**: reacciona ◀ ▶ para pasar, o escribe `" + citar("tutorial", "es", P) + " <número>`.",
-        `🧙 **La forma más rápida:** \`${citar("assistente", "es", P)}\` — yo pregunto y lo configuro por ti (\`${citar("assistente.rapido", "es", P)}\` son 5 preguntas). Esta guía es para quien prefiere ver cada paso.`,
-        `🏗️ ¿Servidor nuevo, sin canales? \`${citar("assistente.servidor", "es", P)}\` crea roles y canales con los permisos puestos y sigue con la configuración guiada.`,
-        "",
-        "**Primero: los permisos del bot** (Ajustes del servidor → Roles → rol del bot)",
-        "• `ViewChannel`, `ReadMessageHistory`, `SendMessage`, `SendEmbeds`, `React` — lo básico",
-        "• `ManageMessages`, `KickMembers`, `BanMembers`, `TimeoutMembers` — para moderar",
-        "• `ManageRole` **y** `AssignRoles` — uno crea roles y el otro los entrega. El bot necesita **los dos**",
-        "",
-        "⚠️ El rol del bot tiene que estar **por encima** de todo rol que vaya a tocar, en la lista de roles.",
-        "",
-        `Comprobar: \`${citar("debug", "es", P)}\` dice qué falta · Profundizar: \`${citar("tutorial.permissoes", "es", P)}\``,
-        "",
-        `🆔 ¿No sabes cómo señalar a una persona, un rol o un canal (mención, nombre o ID)? \`${citar("tutorial", "es", P)} ids\``,
-      ].join("\n") },
-
-    { title: "🔀 Por dónde empezar — Canales (la regla de oro)",
-      description: [
-        "**El permiso del canal gana al del rol.** Si el canal lo niega, ningún rol lo salva. Deja los roles al mínimo y abre excepciones canal por canal.",
-        "",
-        "Pon **cada** canal en uno de 3 tipos:",
-        "",
-        "**🔒 Solo el staff ve** (logs, alertas) — *Por defecto*: niega **Ver canal** → en cada rol de staff: permite **Ver canal**",
-        "**📢 Solo el staff escribe** (reglas, anuncios, paneles) — *Por defecto*: niega **Enviar mensajes** → en cada rol de staff: permite **Enviar mensajes**",
-        "**💬 General** — no toques nada",
-        "",
-        "El rol del bot necesita *Ver* + *Enviar* también en los dos primeros tipos.",
-        "",
-        `Quién es staff para el bot: \`${citar("acesso.cargo.add", "es", P)} @Rol\` (o \`${citar("staff.add", "es", P)}\`).`,
-        "",
-        `Comprobar: \`${citar("debug", "es", P)}\` · Guiado: \`${citar("assistente.canais", "es", P)}\` · Desde cero: \`${citar("assistente.servidor", "es", P)}\` · Profundizar: \`${citar("tutorial.canais", "es", P)}\``,
-      ].join("\n") },
-
-    { title: "🛡️ Por dónde empezar — Protección",
-      description: [
-        `**Mira los filtros:** \`${citar("automod", "es", P)}\` — spam, invitaciones, enlaces, mayúsculas, menciones masivas, caracteres raros.`,
-        `**Actívalos:** \`${citar("automod", "es", P)} antispam on\` (y así con cada grupo: antinoise, antilink, sentinel)`,
-        "",
-        `**Centinela** \`${citar("automod.sentinela", "es", P)} on\` — el grupo que *juzga* el contenido: estafas, +18, gore, odio e imágenes de cuentas nuevas.`,
-        `• \`${citar("automod.sentinela.antiguidade", "es", P)} on\` — más estricto con quien acaba de llegar`,
-        `• \`${citar("automod.sentinela.alerta", "es", P)} on\` — avisa al staff ante un *patrón* sospechoso`,
-        `• \`${citar("automod.sentinela.assuntos.politica.apagar", "es", P)}\` — un tema que las reglas prohíben: la IA distingue una discusión de una broma (también \`religion\`, \`drugs\`, \`sexual\`)`,
-        `• \`${citar("automod.sentinela.avatar", "es", P)}\` — foto de perfil al entrar/cambiarla (por defecto: silencio de 24 h y aviso al staff)`,
-        "",
-        `**Sanción:** \`${citar("automod.punicao", "es", P)} mode stack\` — aviso → silencio 5 min → silencio 1 h → ban (cámbiala con \`${citar("automod.punicao", "es", P)} ladder\`). El silencio usa el timeout nativo (**TimeoutMembers**).`,
-        "",
-        `**Registro:** crea un canal 🔒 que solo vea el staff y, dentro de él, \`${citar("log.canal.aqui", "es", P)}\`.`,
-        `**Canal de promoción:** \`${citar("automod", "es", P)} whitelist add #canal\` — ahí se puede publicar cualquier invitación.`,
-        `**Lista global:** \`${citar("banglobal.avisar", "es", P)}\` avisa cuando entra alguien baneado en otro servidor.`,
-        "",
-        `Guiado: \`${citar("assistente.protecao", "es", P)}\` · Profundizar: \`${citar("tutorial.moderacao", "es", P)}\``,
-      ].join("\n") },
-
-    { title: "🎨 Por dónde empezar — Bienvenida y roles",
-      description: [
-        `**Embed de bienvenida:** ve al canal y \`${citar("boasvindas.canal.aqui", "es", P)}\`. Después:`,
-        `• \`${citar("boasvindas.texto", "es", P)} ¡Bienvenido, {usuario}! Eres el miembro n.º {miembros}.\``,
-        `• \`${citar("boasvindas.testar", "es", P)}\` — míralo ya`,
-        `Marcadores: \`{usuario}\` mención · \`{nombre}\` nombre · \`{servidor}\` · \`{miembros}\`. \`${citar("help", "es", P)} ${citar("boasvindas", "es", "")}\` explica cada parámetro.`,
-        `**Despedida:** lo mismo con \`${citar("adeus", "es", P)}\`.`,
-        "",
-        `**Rol para quien entra:** \`${citar("autorole.set", "es", P)} @Miembro\``,
-        "",
-        "**Roles por reacción:**",
-        `1. \`${citar("embed", "es", P)} title: Elige tus roles | description: 🎮 Juegos · 📢 Anuncios\``,
-        `2. \`${citar("reactionrole.add", "es", P)} <enlace del mensaje> 🎮 Juegos\``,
-        `3. \`${citar("reactionrole.exclusivo", "es", P)} <enlace del mensaje> on\` — si solo puede valer uno`,
-        `**Colores de una vez:** \`${citar("cor.painel.aqui", "es", P)}\` monta el panel "elige tu color".`,
-        "",
-        `Profundizar: \`${citar("tutorial.cargos", "es", P)}\` · \`${citar("tutorial.mensagens", "es", P)}\``,
-      ].join("\n") },
-
-    { title: "🎮 Por dónde empezar — XP y RPG",
-      description: [
-        `**Niveles por mensaje:** \`${citar("xp", "es", P)} on\`, después \`${citar("xp.setup", "es", P)}\` para elegir roles por nivel, multiplicador y canal de anuncios. \`${citar("xp.criarcargos", "es", P)}\` crea los roles.`,
-        "",
-        `**RPG (personaje, misiones, mercado):** un sistema aparte. \`${citar("tutorial", "es", P)} rpg\` es la wiki de quien juega; después los jugadores usan \`${citar("game.criar", "es", P)}\`.`,
-        "",
-        ...(comIA ? [
-          `**Judy (IA):** \`${citar("chat.on", "es", P)}\` la activa en este servidor (y \`${citar("chat.imagem", "es", P)} on\` las imágenes); después menciona al bot o \`${citar("chat", "es", P)} <mensaje>\`. \`${citar("chat.livre", "es", P)} on\` deja que entre en la charla de un canal; \`${citar("modia", "es", P)}\` modera con criterios en texto libre.`,
-          "",
-        ] : []),
-        `**Reloj:** \`${citar("fuso.add", "es", P)} Madrid\` · **Noticias:** \`${citar("rss.add", "es", P)} <url>\` · **Voz:** \`${citar("entrar", "es", P)}\` estando en una llamada (desde cualquier canal) — entra y lee el chat; \`${citar("musica", "es", P)} <enlace>\` pone música (baja sola cuando habla el TTS) y \`${citar("sair", "es", P)}\` sale`,
-        `**Soporte:** \`${citar("ticket.painel", "es", P)} #canal\` — la gente reacciona para abrir un canal privado con el staff · **Integraciones:** \`${citar("webhook.criar", "es", P)} <nombre>\` trae GitHub/Crafty/etc a tus canales`,
-        `**Juegos:** \`${citar("entretenimento", "es", P)}\` — ship, peleas, cowsay, bola 8 y más; no hace falta configurar nada`,
-        `**El servidor:** \`${citar("servidor.regras", "es", P)}\` — reglas (del canal #reglas o un texto tuyo: \`${citar("servidor.regras", "es", P)} set\`), y además canales, roles y FAQ — Judy también responde con eso`,
-        "",
-        `Profundizar: \`${citar("tutorial", "es", P)} xp\` · \`${citar("tutorial", "es", P)} rpg\``,
-      ].join("\n") },
-
-    { title: "✅ Por dónde empezar — Checklist",
-      description: [
-        "Antes de abrir las puertas, repasa esto:",
-        "",
-        `☐ \`${citar("debug", "es", P)}\` no marca nada por arreglar (🔴)`,
-        `☐ \`${citar("staff", "es", P)}\` lista los roles correctos`,
-        `☐ \`${citar("log", "es", P)}\` apunta a un canal 🔒 que solo ve el staff`,
-        `☐ \`${citar("automod.status", "es", P)}\` y \`${citar("automod.sentinela", "es", P)}\` están como quieres`,
-        `☐ \`${citar("automod.punicao", "es", P)}\` — el modo tiene sentido y el bot tiene **TimeoutMembers**`,
-        `☐ \`${citar("boasvindas.testar", "es", P)}\` quedó bien`,
-        `☐ \`${citar("config", "es", P)}\` — el panorama coincide con lo que esperabas`,
-        "",
-        `¿Algo raro? \`${citar("help", "es", P)} <comando>\` explica cada parámetro; \`${citar("help", "es", P)} diagnostics\` lista a los culpables de siempre.`,
-        "",
-        `🎉 Eso es todo. Para rehacer cualquier parte con ayuda: \`${citar("assistente", "es", P)}\`.`,
-      ].join("\n") },
-  ];
-
-  if (lang === "en") return [
-    { title: "📚 Getting started — Before anything",
-      description: [
-        "This guide has **6 pages**: react ◀ ▶ to turn, or type `" + citarInterno("tutorial") + " <number>`.",
-        `🧙 **Fastest way:** \`${citarInterno("assistente", P)}\` — I ask and set it up for you (\`${citarInterno("assistente.rapido", P)}\` is 5 questions). This guide is for those who'd rather see each step.`,
-        `🏗️ Brand-new server, no channels yet? \`${citarInterno("assistente.servidor", P)}\` creates roles and channels with the permissions set, then continues with the guided setup.`,
-        "",
-        "**First: the bot's permissions** (Server settings → Roles → the bot's role)",
-        "• `ViewChannel`, `ReadMessageHistory`, `SendMessage`, `SendEmbeds`, `React` — the basics",
-        "• `ManageMessages`, `KickMembers`, `BanMembers`, `TimeoutMembers` — to moderate",
-        "• `ManageRole` **and** `AssignRoles` — one creates roles, the other hands them out. The bot needs **both**",
-        "",
-        "⚠️ The bot's role must sit **above** every role it will manage in the role list.",
-        "",
-        `Check it: \`${citarInterno("debug", P)}\` says what's missing · Deep dive: \`${citarInterno("tutorial.permissoes", P)}\``,
-        "",
-        `🆔 Not sure how to point at a person, a role or a channel (mention, name or ID)? \`${citarInterno("tutorial", P)} ids\``,
-      ].join("\n") },
-
-    { title: "🔀 Getting started — Channels (the golden rule)",
-      description: [
-        "**A channel's permissions beat a role's.** If the channel denies it, no role can save it. Keep role permissions minimal and open exceptions per channel.",
-        "",
-        "Sort **every** channel into one of 3 types:",
-        "",
-        "**🔒 Staff-only to see** (logs, alerts) — *Default*: deny **View channel** → each staff role: allow **View channel**",
-        "**📢 Staff-only to write** (rules, announcements, panels) — *Default*: deny **Send messages** → each staff role: allow **Send messages**",
-        "**💬 General** — change nothing",
-        "",
-        "The bot's role needs *View* + *Send* in the first two types as well.",
-        "",
-        `Who's staff for the bot: \`${citarInterno("acesso.cargo.add", P)} @Role\` (or \`${citarInterno("staff.add", P)}\`).`,
-        "",
-        `Check it: \`${citarInterno("debug", P)}\` · Guided: \`${citarInterno("assistente.canais", P)}\` · From scratch: \`${citarInterno("assistente.servidor", P)}\` · Deep dive: \`${citarInterno("tutorial.canais", P)}\``,
-      ].join("\n") },
-
-    { title: "🛡️ Getting started — Protection",
-      description: [
-        `**See the filters:** \`${citarInterno("automod", P)}\` — spam, invites, links, caps, mass mentions, odd characters.`,
-        `**Toggle:** \`${citarInterno("automod", P)} antispam on\` (and so on for each group: antinoise, antilink, sentinel)`,
-        "",
-        `**Sentinel** \`${citarInterno("automod.sentinela", P)} on\` — the group that *judges* content: scams, NSFW, gore, hate speech and new accounts' images.`,
-        `• \`${citarInterno("automod.sentinela.antiguidade", P)} on\` — stricter with newcomers`,
-        `• \`${citarInterno("automod.sentinela.alerta", P)} on\` — pings the staff on a suspicious *pattern*`,
-        `• \`${citarInterno("automod.sentinela.assuntos.politica.apagar", P)}\` — a topic the rules forbid: the AI tells a real discussion from banter (also \`religiao\`, \`drogas\`, \`sexual\`)`,
-        `• \`${citarInterno("automod.sentinela.avatar", P)}\` — profile pictures on join/change (default: 24 h silence + staff alert)`,
-        "",
-        `**Punishment:** \`${citarInterno("automod.punicao", P)} modo acumular\` — warning → 5 min mute → 1 h mute → ban (change it with \`${citarInterno("automod.punicao", P)} escada\`). Mutes use the native timeout (**TimeoutMembers**).`,
-        "",
-        `**Logging:** create a 🔒 staff-only channel and, inside it, \`${citar("log.canal.aqui", "en", P)}\`.`,
-        `**Promotion channel:** \`${citarInterno("automod", P)} whitelist add #channel\` — any invite can be posted there.`,
-        `**Global list:** \`${citarInterno("banglobal.avisar", P)}\` warns when someone banned elsewhere joins.`,
-        "",
-        `Guided: \`${citarInterno("assistente.protecao", P)}\` · Deep dive: \`${citarInterno("tutorial.moderacao", P)}\``,
-      ].join("\n") },
-
-    { title: "🎨 Getting started — Welcome and roles",
-      description: [
-        `**Welcome embed:** go to the channel and \`${citarInterno("boasvindas.canal.aqui", P)}\`. Then:`,
-        `• \`${citarInterno("boasvindas.texto", P)} Welcome, {usuario}! You're member #{membros}.\``,
-        `• \`${citarInterno("boasvindas.testar", P)}\` — see it now`,
-        `Markers: \`{usuario}\` mention · \`{nome}\` name · \`{servidor}\` · \`{membros}\`. \`${P}help boasvindas\` explains every parameter.`,
-        `**Goodbye:** same thing with \`${citar("adeus", "en", P)}\`.`,
-        "",
-        `**Role on join:** \`${citar("autorole.set", "en", P)} @Member\``,
-        "",
-        "**Reaction roles:**",
-        `1. \`${citar("embed", "en", P)} title: Pick your roles | description: 🎮 Games · 📢 News\``,
-        `2. \`${citarInterno("reactionrole.add", P)} <message link> 🎮 Games\``,
-        `3. \`${citarInterno("reactionrole.exclusivo", P)} <message link> on\` — if only one may apply`,
-        `**Colors in one go:** \`${citarInterno("cor.painel.aqui", P)}\` builds a "pick your color" panel.`,
-        "",
-        `Deep dive: \`${citarInterno("tutorial.cargos", P)}\` · \`${citarInterno("tutorial.mensagens", P)}\``,
-      ].join("\n") },
-
-    { title: "🎮 Getting started — XP and RPG",
-      description: [
-        `**Levels by message:** \`${citarInterno("xp", P)} on\`, then \`${citarInterno("xp.setup", P)}\` to choose roles per level, multiplier and the announcement channel. \`${citarInterno("xp.criarcargos", P)}\` creates the roles.`,
-        "",
-        `**RPG (character, missions, market):** a separate system. \`${citarInterno("tutorial", P)} rpg\` is the players' wiki; players then use \`${citarInterno("game.criar", P)}\`.`,
-        "",
-        ...(comIA ? [
-          `**Judy (AI):** \`${citarInterno("chat.on", P)}\` turns her on for this server (and \`${citarInterno("chat.imagem", P)} on\` images); then mention the bot or \`${citarInterno("chat", P)} <message>\`. \`${citarInterno("chat.livre", P)} on\` lets her join a channel's conversation; \`${citarInterno("modia", P)}\` moderates with free-text criteria.`,
-          "",
-        ] : []),
-        `**Clock:** \`${citarInterno("fuso.add", P)} London\` · **News:** \`${citarInterno("rss.add", P)} <url>\` · **Voice:** \`${citarInterno("entrar", P)}\` while in a call (from any channel) — she joins and reads the chat; \`${citarInterno("musica", P)} <link>\` plays music (auto-ducks under TTS) and \`${citarInterno("sair", P)}\` leaves`,
-        `**Support:** \`${citarInterno("ticket.painel", P)} #channel\` — people react to open a private channel with staff · **Integrations:** \`${citar("webhook.criar", "en", P)} <name>\` brings GitHub/Crafty/etc into your channels`,
-        `**Games:** \`${citarInterno("entretenimento", P)}\` — ship, fights, cowsay, 8-ball and more; nothing to set up`,
-        `**The server:** \`${citarInterno("servidor.regras", P)}\` — rules (from the #rules channel or your own text: \`${citarInterno("servidor.regras", P)} set\`), plus channels, roles and FAQ — Judy answers from it too`,
-        "",
-        `Deep dive: \`${citarInterno("tutorial", P)} xp\` · \`${citarInterno("tutorial", P)} rpg\``,
-      ].join("\n") },
-
-    { title: "✅ Getting started — Checklist",
-      description: [
-        "Before opening the doors, run through this:",
-        "",
-        `☐ \`${citarInterno("debug", P)}\` shows nothing to fix (🔴)`,
-        `☐ \`${citarInterno("staff", P)}\` lists the right roles`,
-        `☐ \`${citar("log", "en", P)}\` points at a 🔒 staff-only channel`,
-        `☐ \`${citarInterno("automod.status", P)}\` and \`${citarInterno("automod.sentinela", P)}\` are the way you want`,
-        `☐ \`${citarInterno("automod.punicao", P)}\` — the mode makes sense and the bot has **TimeoutMembers**`,
-        `☐ \`${citarInterno("boasvindas.testar", P)}\` looks right`,
-        `☐ \`${citar("config", "en", P)}\` — the overview matches what you expected`,
-        "",
-        `Anything off? \`${P}help <command>\` explains every parameter; \`${P}help diagnostico\` lists the usual suspects.`,
-        "",
-        `🎉 That's it. To redo any part with guidance: \`${citarInterno("assistente", P)}\`.`,
-      ].join("\n") },
-  ];
-
+// As páginas do guia (abertura + conceitos) e a wiki, no idioma; para o teste e o README
+export function paginasDoGuia(P = "&", lang = "pt", comIA = false) {
+  const c = CONCEITOS(P, lang, comIA);
   return [
-    { title: "📚 Por onde começar — Antes de tudo",
-      description: [
-        "Este guia tem **6 páginas**: reaja ◀ ▶ para virar, ou digite `" + citarInterno("tutorial") + " <número>`.",
-        `🧙 **Jeito mais rápido:** \`${citarInterno("assistente", P)}\` — eu pergunto e configuro por você (o \`${citarInterno("assistente.rapido", P)}\` são 5 perguntas). Este guia é para quem prefere ver cada passo.`,
-        `🏗️ Servidor novo, sem canais? \`${citarInterno("assistente.servidor", P)}\` cria cargos e canais com as permissões prontas e segue para a configuração guiada.`,
-        "",
-        "**Primeiro: as permissões do bot** (Configurações do servidor → Cargos → cargo do bot)",
-        "• `ViewChannel`, `ReadMessageHistory`, `SendMessage`, `SendEmbeds`, `React` — o básico",
-        "• `ManageMessages`, `KickMembers`, `BanMembers`, `TimeoutMembers` — para moderar",
-        "• `ManageRole` **e** `AssignRoles` — um cria cargos, o outro entrega. O bot precisa dos **dois**",
-        "",
-        "⚠️ O cargo do bot precisa estar **acima** de todo cargo que ele vai mexer, na lista de cargos.",
-        "",
-        `Conferir: \`${citarInterno("debug", P)}\` diz o que falta · Aprofundar: \`${citarInterno("tutorial.permissoes", P)}\``,
-        "",
-        `🆔 Não sabe apontar uma pessoa, um cargo ou um canal (menção, nome ou ID)? \`${citarInterno("tutorial", P)} ids\``,
-      ].join("\n") },
-
-    { title: "🔀 Por onde começar — Canais (a regra de ouro)",
-      description: [
-        "**A permissão do canal vence a do cargo.** Se o canal nega, nenhum cargo salva. Deixe os cargos no mínimo e abra exceções canal por canal.",
-        "",
-        "Separe **todo** canal em um de 3 tipos:",
-        "",
-        "**🔒 Só staff vê** (logs, alertas) — *Padrão*: negue **Ver canal** → em cada cargo de staff: permita **Ver canal**",
-        "**📢 Só staff escreve** (regras, avisos, painéis) — *Padrão*: negue **Enviar mensagens** → em cada cargo de staff: permita **Enviar mensagens**",
-        "**💬 Geral** — não mexa em nada",
-        "",
-        "O cargo do bot precisa de *Ver* + *Enviar* também nos dois primeiros tipos.",
-        "",
-        `Quem é staff para o bot: \`${citarInterno("acesso.cargo.add", P)} @Cargo\` (ou \`${citarInterno("staff.add", P)}\`).`,
-        "",
-        `Conferir: \`${citarInterno("debug", P)}\` · Guiado: \`${citarInterno("assistente.canais", P)}\` · Do zero: \`${citarInterno("assistente.servidor", P)}\` · Aprofundar: \`${citarInterno("tutorial.canais", P)}\``,
-      ].join("\n") },
-
-    { title: "🛡️ Por onde começar — Proteção",
-      description: [
-        `**Veja os filtros:** \`${citarInterno("automod", P)}\` — spam, convites, links, caps, menções em massa, caracteres estranhos.`,
-        `**Ligue:** \`${citarInterno("automod", P)} antispam on\` (e assim por diante para cada grupo: antiruido, antilink, sentinela)`,
-        "",
-        `**Sentinela** \`${citarInterno("automod.sentinela", P)} on\` — o grupo que *julga* conteúdo: golpe, +18, gore, ódio e imagens de conta nova.`,
-        `• \`${citarInterno("automod.sentinela.antiguidade", P)} on\` — mais rígido com quem acabou de chegar`,
-        `• \`${citarInterno("automod.sentinela.alerta", P)} on\` — avisa a staff num *padrão* suspeito`,
-        `• \`${citarInterno("automod.sentinela.assuntos.politica.apagar", P)}\` — tema proibido pela regra: a IA separa discussão de zoeira (também \`religiao\`, \`drogas\`, \`sexual\`)`,
-        `• \`${citarInterno("automod.sentinela.avatar", P)}\` — foto de perfil ao entrar/trocar (padrão: silencia 24 h e avisa a staff)`,
-        "",
-        `**Punição:** \`${citarInterno("automod.punicao", P)} modo acumular\` — aviso → mute 5 min → mute 1 h → ban (mude com \`${citarInterno("automod.punicao", P)} escada\`). O mute usa o timeout nativo (**TimeoutMembers**).`,
-        "",
-        `**Registro:** crie um canal 🔒 só-staff-vê e, dentro dele, \`${citar("log.canal.aqui", "pt", P)}\`.`,
-        `**Canal de divulgação:** \`${citarInterno("automod", P)} whitelist add #canal\` — lá qualquer convite pode ser postado.`,
-        `**Lista global:** \`${citarInterno("banglobal.avisar", P)}\` avisa quando entra alguém banido em outro servidor.`,
-        "",
-        `Guiado: \`${citarInterno("assistente.protecao", P)}\` · Aprofundar: \`${citarInterno("tutorial.moderacao", P)}\``,
-      ].join("\n") },
-
-    { title: "🎨 Por onde começar — Boas-vindas e cargos",
-      description: [
-        `**Embed de boas-vindas:** vá ao canal e \`${citarInterno("boasvindas.canal.aqui", P)}\`. Depois:`,
-        `• \`${citarInterno("boasvindas.texto", P)} Bem-vindo, {usuario}! Você é o membro nº {membros}.\``,
-        `• \`${citarInterno("boasvindas.testar", P)}\` — veja agora`,
-        `Marcadores: \`{usuario}\` menção · \`{nome}\` nome · \`{servidor}\` · \`{membros}\`. \`${P}help boasvindas\` explica cada parâmetro.`,
-        `**Despedida:** a mesma coisa com \`${citar("adeus", "pt", P)}\`.`,
-        "",
-        `**Cargo a quem entra:** \`${citar("autorole.set", "pt", P)} @Membro\``,
-        "",
-        "**Cargos por reação:**",
-        `1. \`${citar("embed", "pt", P)} titulo: Escolha seus cargos | descricao: 🎮 Jogos · 📢 Avisos\``,
-        `2. \`${citarInterno("reactionrole.add", P)} <link da mensagem> 🎮 Jogos\``,
-        `3. \`${citarInterno("reactionrole.exclusivo", P)} <link da mensagem> on\` — se só pode valer um`,
-        `**Cores de uma vez:** \`${citarInterno("cor.painel.aqui", P)}\` monta o painel "escolha sua cor".`,
-        "",
-        `Aprofundar: \`${citarInterno("tutorial.cargos", P)}\` · \`${citarInterno("tutorial.mensagens", P)}\``,
-      ].join("\n") },
-
-    { title: "🎮 Por onde começar — XP e RPG",
-      description: [
-        `**Níveis por mensagem:** \`${citarInterno("xp", P)} on\`, depois \`${citarInterno("xp.setup", P)}\` para escolher cargos por nível, multiplicador e canal de anúncio. \`${citarInterno("xp.criarcargos", P)}\` cria os cargos.`,
-        "",
-        `**RPG (personagem, missões, mercado):** um sistema à parte. \`${citarInterno("tutorial", P)} rpg\` é a wiki de quem joga; os jogadores então usam \`${citarInterno("game.criar", P)}\`.`,
-        "",
-        ...(comIA ? [
-          `**Judy (IA):** \`${citarInterno("chat.on", P)}\` liga neste servidor (e \`${citarInterno("chat.imagem", P)} on\` as imagens); depois mencione o bot ou \`${citarInterno("chat", P)} <mensagem>\`. \`${citarInterno("chat.livre", P)} on\` deixa ela entrar na conversa de um canal; \`${citarInterno("modia", P)}\` modera com critérios em texto livre.`,
-          "",
-        ] : []),
-        `**Relógio:** \`${citarInterno("fuso.add", P)} Lisboa\` · **Notícias:** \`${citarInterno("rss.add", P)} <url>\` · **Voz:** \`${citarInterno("entrar", P)}\` estando numa call (de qualquer canal) — ela entra e lê o chat; \`${citarInterno("musica", P)} <link>\` toca música (abaixa sozinha quando o TTS fala) e \`${citarInterno("sair", P)}\` sai`,
-        `**Suporte:** \`${citarInterno("ticket.painel", P)} #canal\` — as pessoas reagem para abrir um canal privado com a staff · **Integrações:** \`${citar("webhook.criar", "pt", P)} <nome>\` traz GitHub/Crafty/etc para seus canais`,
-        `**Brincadeiras:** \`${citarInterno("entretenimento", P)}\` — ship, briga, cowsay, bola 8 e mais; não precisa configurar nada`,
-        `**O servidor:** \`${citarInterno("servidor.regras", P)}\` — regras (do canal #regras ou um texto seu: \`${citarInterno("servidor.regras", P)} definir\`), e ainda canais, cargos e FAQ — a Judy responde com isso também`,
-        "",
-        `Aprofundar: \`${citarInterno("tutorial", P)} xp\` · \`${citarInterno("tutorial", P)} rpg\``,
-      ].join("\n") },
-
-    { title: "✅ Por onde começar — Checklist",
-      description: [
-        "Antes de abrir as portas, passe por isto:",
-        "",
-        `☐ \`${citarInterno("debug", P)}\` não acusa nada a resolver (🔴)`,
-        `☐ \`${citarInterno("staff", P)}\` lista os cargos certos`,
-        `☐ \`${citar("log", "pt", P)}\` aponta para um canal 🔒 só-staff-vê`,
-        `☐ \`${citarInterno("automod.status", P)}\` e \`${citarInterno("automod.sentinela", P)}\` estão do jeito que você quer`,
-        `☐ \`${citarInterno("automod.punicao", P)}\` — o modo faz sentido e o bot tem **TimeoutMembers**`,
-        `☐ \`${citarInterno("boasvindas.testar", P)}\` ficou bonito`,
-        `☐ \`${citar("config", "pt", P)}\` — o panorama bate com o que você esperava`,
-        "",
-        `Algo estranho? \`${P}help <comando>\` explica cada parâmetro; \`${P}help diagnostico\` lista os culpados de sempre.`,
-        "",
-        `🎉 É isso. Para refazer qualquer parte com ajuda: \`${citarInterno("assistente", P)}\`.`,
-      ].join("\n") },
+    ...ABERTURA(P, lang, comIA).map((p) => ({ chave: null, titulo: p.title, linhas: p.linhas })),
+    ...ORDEM_CONCEITOS.map((k) => ({ chave: k, titulo: c[k].titulo, linhas: c[k].corpo })),
   ];
+}
+export function paginasDaWiki(P = "&", lang = "pt") {
+  try { return (wikiRpg.paginasWikiRpg?.(lang, P) ?? []).map((p) => ({ chave: "rpg", titulo: p.titulo, linhas: String(p.texto ?? "").split("\n") })); }
+  catch (e) { console.error("[TUTORIAL] wiki do RPG:", e?.message); return []; }
 }
 
 export async function cmdTutorial(message, args, ctx) {
   const { sendEmbed, COR, PREFIXO: P } = ctx;
-  const lang = lingua(ctx);
-  // (etapa 4b) espanhol: as páginas vêm prontas. As linhas são marcadas DEPOIS do
-  // filtro do visao.js (a marca invisível atrapalharia achar cabeçalho e linha vazia).
-  const es = idiomaDe(ctx) === "es";
+  const lang = idiomaDe(ctx);
+  const es = lang === "es";
+  // o espanhol vem pronto; as linhas são marcadas DEPOIS do filtro do visao.js
   const pronta = (l) => (es && String(l).trim() !== "" ? trechoPronto(l) : l);
-  const areaEs = (k) => { try { return citar(`tutorial.${k}`, "es", P); } catch { return `${citar("tutorial", "es", P)} ${k}`; } };
-
-  const comIA = (() => { try { return temIA(ctx.serverId); } catch { return false; } })();
-
-  // Membro vê o guia de quem joga e usa; a staff vê a configuração inteira
-  // (ver visao.js). E ninguém vê IA/voz onde elas não estão liberadas.
   const visao = await visaoMod.quemVe(message, ctx);
-  const membro = visao.nivel === "membro";
-  const todas = AREAS(P, es ? "es" : lang, comIA);
-  // Fora dos servidores da conversa (16 out 2026) a área "ia" vira só a
-  // moderação por IA — as duas últimas linhas dela são as do &modia.
-  const comModIA = (() => { try { return comandoIAPermitido("modia", ctx.serverId); } catch { return false; } })();
-  if (!comIA && comModIA && todas.ia) {
-    todas.ia = { ...todas.ia, soComIA: false,
-      titulo: es ? "🤖 Moderación por IA" : lang === "en" ? "🤖 AI moderation" : "🤖 Moderação por IA",
-      resumo: es ? "Moderación por IA con criterios en texto libre." : lang === "en" ? "AI moderation with free-text criteria." : "Moderação por IA com critérios em texto livre.",
-      corpo: todas.ia.corpo.slice(-2) };
-  }
-  const areas = {};
-  for (const [k, v] of Object.entries(todas)) {
-    if (v.soComIA && !comIA) continue;
-    if (membro && !visaoMod.AREAS_DO_MEMBRO.has(k)) continue;
-    areas[k] = { ...v, corpo: visaoMod.filtrarLinhas(v.corpo, visao) };
-  }
-  const pedido = args[0]?.toLowerCase();
+  const pedido = String(args[0] ?? "").toLowerCase();
+  const chave = pedido && !/^\d+$/.test(pedido) ? (NOMES[pedido] ?? pedido) : null;
+  const enviar = (paginas, inicial = 0, comandoPagina = null) => {
+    const pgs = paginas.flatMap((p) => paginarLinhas(visaoMod.filtrarLinhas(p.linhas, visao).map(pronta), { titulo: pronta(p.titulo), limite: 1300 }));
+    // o número pedido conta as páginas como saem (um conceito longo vira duas)
+    return enviarPaginado(ctx, message.channel, { paginas: pgs, autorId: message.authorId, paginaInicial: Math.min(Math.max(inicial, 0), pgs.length - 1), comandoPagina, colour: COR.info });
+  };
 
-  // O membro que pede uma área da staff (ou o guia de configuração em páginas)
-  const chavePedida = pedido && !/^\d+$/.test(pedido) ? (todas[pedido] ? pedido : APELIDOS[pedido]) : null;
-  if (membro && (!pedido || /^\d+$/.test(pedido) || (chavePedida && todas[chavePedida] && !areas[chavePedida]))) {
-    const lista = Object.entries(areas).sort((a, b) => a[1].ordem - b[1].ordem)
-      .map(([k, v]) => `\`${es ? areaEs(k) : `${citarInterno("tutorial", P)} ${k}`}\` — ${v.titulo}${v.resumo ? `: ${v.resumo}` : ""}`);
-    if (es) return sendEmbed(message.channel, {
-      title: trechoPronto("📚 Tutorial"),
-      description: trechoPronto([
-        chavePedida && todas[chavePedida] && !areas[chavePedida]
-          ? `🔒 \`${citar("tutorial", "es", P)} ${pedido}\` es la guía de configuración del staff.\n`
-          : null,
-        "Lo que puedes aprender por aquí:",
-        "",
-        ...lista,
-        "",
-        `_\`${citar("help", "es", P)}\` lista los comandos que puedes usar._`,
-      ].filter((x) => x !== null).join("\n")),
-      colour: COR.info,
-    });
-    return sendEmbed(message.channel, {
-      title: lang === "en" ? "📚 Tutorial" : "📚 Tutorial",
-      description: [
-        chavePedida && todas[chavePedida] && !areas[chavePedida]
-          ? (lang === "en" ? `🔒 \`${citarInterno("tutorial", P)} ${pedido}\` is the staff's setup guide.\n` : `🔒 \`${citarInterno("tutorial", P)} ${pedido}\` é o guia de configuração da staff.\n`)
-          : null,
-        lang === "en" ? "What you can learn here:" : "O que dá para aprender por aqui:",
-        "",
-        ...lista,
-        "",
-        lang === "en" ? `_\`${P}help\` lists the commands you can use._` : `_\`${P}help\` lista os comandos que você pode usar._`,
-      ].filter((x) => x !== null).join("\n"),
-      colour: COR.info,
-    });
+  // área antiga que é um comando: a página do &help dele. A `ia` onde a conversa não existe
+  // (o .env não a deixa rodar neste servidor) é só a moderação por IA: os temas do sentinela.
+  if (chave === "ia" && !iaNoEnv(ctx.serverId)) return cmdHelp(message, ["automod", "sentinela", "assuntos"], ctx);
+  if (chave && AREAS_QUE_SAO_COMANDO[chave]) return cmdHelp(message, AREAS_QUE_SAO_COMANDO[chave], ctx);
+
+  if (chave === "rpg") {
+    const wiki = paginasDaWiki(P, lang);
+    if (!wiki.length) return sendEmbed(message.channel, { colour: COR.aviso, description: ({ pt: "📭 A wiki do RPG ainda está vazia.", en: "📭 The RPG wiki is still empty.", es: "📭 La wiki del RPG aún está vacía." })[lang] });
+    return enviar(wiki);
   }
 
-  // ── Página de uma área (aprofundamento) ──
-  if (pedido && !/^\d+$/.test(pedido)) {
-    const chave = areas[pedido] ? pedido : APELIDOS[pedido];
-    const area = chave ? areas[chave] : null;
-    if (!area) {
-      const nomes = Object.keys(areas).map((k) => `\`${k}\``).join(" · ");
-      const nomesEs = Object.keys(areas).map((k) => `\`${subExibido("tutorial", k, "es")}\``).join(" · ");
-      return sendEmbed(message.channel, tr(ctx, {
-        title: "❓ Área desconhecida",
-        description: `Não conheço essa área. As que existem:\n${nomes}\n\nOu use \`${citarInterno("tutorial", P)}\` para o guia em páginas.`,
-        colour: COR.aviso,
-      }, {
-        title: "❓ Unknown area",
-        description: `I don't know that area. The existing ones:\n${nomes}\n\nOr use \`${citarInterno("tutorial", P)}\` for the paged guide.`,
-        colour: COR.aviso,
-      }, {
-        title: "❓ Área desconocida",
-        description: `No conozco esa área. Las que hay:\n${nomesEs}\n\nO usa \`${citar("tutorial", "es", P)}\` para la guía por páginas.`,
-        colour: COR.aviso,
-      }));
+  const guia = paginasDoGuia(P, lang, visao.ia);
+  if (chave) {
+    const i = guia.findIndex((p) => p.chave === chave);
+    if (i < 0) {
+      const nomes = [...ORDEM_CONCEITOS, "rpg"].map((k) => `\`${subExibido("tutorial", k, lang)}\``).join(" · ");
+      return sendEmbed(message.channel, { colour: COR.aviso, description: pronta(({ pt: `❓ Não conheço \`${pedido.slice(0, 30)}\`. ${nomes}`, en: `❓ I don't know \`${pedido.slice(0, 30)}\`. ${nomes}`, es: `❓ No conozco \`${pedido.slice(0, 30)}\`. ${nomes}` })[lang]) });
     }
-    const ordem = Object.entries(areas).sort((a, b) => a[1].ordem - b[1].ordem).map(([k]) => k);
-    const i = ordem.indexOf(chave);
-    const prox = ordem[i + 1];
-    const rodape = es
-      ? (prox
-        ? `➡️ Siguiente área: \`${areaEs(prox)}\` (${areas[prox].titulo})`
-        : `✅ Esta es la última área. \`${citar("config", "es", P)}\` muestra cómo quedó todo.`)
-      : prox
-      ? (lang === "en"
-        ? `➡️ Next area: \`${citarInterno("tutorial", P)} ${prox}\` (${areas[prox].titulo})`
-        : `➡️ Próxima área: \`${citarInterno("tutorial", P)} ${prox}\` (${areas[prox].titulo})`)
-      : (lang === "en"
-        ? `✅ That's the last area. \`${citar("config", "en", P)}\` shows how everything turned out.`
-        : `✅ Essa é a última área. \`${citar("config", "pt", P)}\` mostra como tudo ficou.`);
-    // Uma área longa vira duas páginas, em vez de ser cortada no meio.
-    const paginas = paginarLinhas([...area.corpo, "", rodape].map(pronta), { titulo: pronta(area.titulo), limite: 1300 });
-    return enviarPaginado(ctx, message.channel, {
-      paginas, autorId: message.authorId, comandoPagina: null,
-    });
+    return enviar([guia[i]]);
   }
-
-  // ── O guia em páginas (&tutorial, &tutorial <n>) ──
-  const paginas = GUIA(P, es ? "es" : lang, comIA).map((pg) => ({ ...pg, title: pronta(pg.title), description: visaoMod.filtrarLinhas(String(pg.description ?? "").split("\n"), visao).map(pronta).join("\n"), colour: COR.info }));
-  const n = pedido ? parseInt(pedido, 10) : 0;
-  return enviarPaginado(ctx, message.channel, {
-    paginas, autorId: message.authorId,
-    paginaInicial: Math.min(Math.max(n - 1, 0), paginas.length - 1),
-    comandoPagina: `${citarInterno("tutorial", P)}`,
-  });
+  const n = pedido ? parseInt(pedido, 10) : 1;
+  return enviar(guia, n - 1, es ? citar("tutorial", "es", P) : citarInterno("tutorial", P));
 }

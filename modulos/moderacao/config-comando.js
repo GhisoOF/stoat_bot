@@ -1,257 +1,227 @@
-import { iaDisponivel as temIA, comandoIAPermitido, chatLigadoAqui, imagemLigadaAqui } from "../ai/chat.js";
-import { citar, citarInterno, trechoPronto } from "../core/aliases.js";
-
+// &config — tudo o que o servidor configura (P2, 31 out 2026).
+//
+// `&config log|idioma|acesso|comando …` são as partes que eram comandos soltos (os
+// nomes antigos são atalhos, ver modulos/comandos/config.js). O `&config` sozinho
+// mostra a configuração INTEIRA, gerada do `padraoServidor` (core/config-store.js):
+// cada chave de lá vira uma linha com o rótulo de config-rotulos.js — chave nova no
+// molde aparece aqui sem ninguém lembrar de escrever a linha (o teste confere).
+import { citar, trechoPronto } from "../core/aliases.js";
+import { tr, idiomaDe } from "../core/i18n.js";
+import { padraoServidor } from "../core/config-store.js";
+import { paginarLinhas, enviarPaginado } from "../core/paginas.js";
+import { SECOES, rotulo } from "./config-rotulos.js";
+import { cmdLog } from "./config-log.js";
+import { cmdIdioma } from "./config-idioma.js";
+import { cmdAcesso } from "./acesso.js";
+import { cmdComando } from "./comandos-admin.js";
+import { nomeModo, nomeSens, nomeAcaoTema, nomeAcaoAvatar } from "../core/nomes-automod.js";
+import { subExibido } from "../core/aliases.js";
 import * as db from "../core/db.js";
-import { EVENTOS } from "../core/log.js";
-import { nomeGrupo, nomeParte, nomeModo, nomeEventoLog } from "../core/nomes-automod.js";
-import { MODOS as MODOS_BG, MODOS_EN as MODOS_BG_EN, modoDe as modoBanGlobal, MINIMO_CONSENSO } from "./ban-global.js";
-import { escadaDePunicao, rotuloDegrau, GRUPOS_AUTOMOD, estadoDoGrupo, validadeDosAvisos } from "./automod-engine.js";
-import { tr, lingua } from "../core/i18n.js";
 import { servidorNaLista } from "../core/env.js";
-import { loja as ecoLoja, totalEmCirculacao as ecoCirc, configDe as ecoConfigDe } from "../ferramentas/economia.js";
-
-const on  = (v) => (v ? "🟢" : "🔴");
-const sim = (v) => (v ? "sim" : "não");
-
-// Rótulos legíveis dos modos de punição
-const MODOS = {
-  avisar:    "apenas avisa (não remove nem pune)",
-  apagar:    "remove a mensagem, não pune a pessoa",
-  confirmar: "remove, silencia e espera um moderador",
-  acumular:  "soma avisos até banir",
-  banir:     "ban imediato",
-};
-const MODOS_EN = {
-  avisar:    "warn only (doesn't remove or punish)",
-  apagar:    "removes the message, doesn't punish the person",
-  confirmar: "removes, silences and waits for a moderator",
-  acumular:  "stacks warnings until a ban",
-  banir:     "instant ban",
-};
-const MODOS_ES = {
-  avisar:    "solo avisa (no borra ni castiga)",
-  apagar:    "borra el mensaje, no castiga a la persona",
-  confirmar: "borra, silencia y espera a un moderador",
-  acumular:  "suma avisos hasta banear",
-  banir:     "ban inmediato",
-};
+// (namespace: módulos de outras áreas mudam no P2; um nome que sumir não derruba o boot)
+import * as economiaMod from "../ferramentas/economia.js";
+import * as gating from "../ai/gating.js";
+import * as iaMod from "../ai/conversa-config.js";   // &config ia (o handler é da área da IA)
+// a CHAVE do padraoServidor (`config.language`), não o subcomando em inglês (o registro traduz `language` → `idioma`)
+const CHAVE_IDIOMA = "language";
+const ECO_PADRAO = economiaMod.PADRAO ?? { nome: "Moeda", simbolo: "🪙", ganhoMin: 10, ganhoMax: 30, intervaloMs: 3600e3 };
+const iaNoEnv = (sid) => !!gating.iaNoEnv?.(sid), conversaAqui = (sid, c) => !!gating.conversaAqui?.(sid, c), imagemAqui = (sid, c) => !!gating.imagemAqui?.(sid, c);
 
 const SENSIBILIDADE = { baixa: "baixa (limiar 7,5/10)", media: "média (limiar 6,5/10)", alta: "alta (limiar 5,5/10)" };
 const SENSIBILIDADE_EN = { baixa: "low (threshold 7.5/10)", media: "medium (threshold 6.5/10)", alta: "high (threshold 5.5/10)" };
 const SENSIBILIDADE_ES = { baixa: "baja (umbral 7,5/10)", media: "media (umbral 6,5/10)", alta: "alta (umbral 5,5/10)" };
 
-// O espanhol do que mora em outros arquivos (a descrição dos grupos do automod e
-// os modos da lista global, que só têm pt e en)
-const GRUPO_DESC_ES = {
-  antispam: "avalancha de mensajes",
-  antiruido: "texto contaminado",
-  antilink: "enlaces e invitaciones",
-  sentinela: "contenido dañino (estafas, +18, gore, odio, imágenes, temas prohibidos, foto de perfil)",
-};
-const MODOS_BG_ES = {
-  off:      "ignora la lista global",
-  avisar:   "alerta a los moderadores cuando entra un baneado",
-  imediato: "banea a quien fue baneado en **cualquier** otro servidor (basta 1 ban)",
-  consenso: `banea solo a quien fue baneado en **${MINIMO_CONSENSO}+ servidores distintos**; con menos, solo avisa al staff`,
-};
-// um mapa de rótulos com o espanhol marcado como pronto
-const prontos = (m) => Object.fromEntries(Object.entries(m).map(([k, v]) => [k, trechoPronto(v)]));
+// ── As partes (os comandos que o &config absorveu) ──
+const PARTES = { log: cmdLog, idioma: cmdIdioma, acesso: cmdAcesso, comando: cmdComando, ia: (m, a, c) => iaMod.cmdConfigIA(m, a, c) };
 
 export async function cmdConfig(message, args, ctx) {
-  const { config, cfgGlobal, estado, sendEmbed, COR, getServer, membroTemPermissao, PREFIXO, serverId } = ctx;
-  const lang = lingua(ctx);
-  const en = lang === "en";
-  const L_MODOS = tr(ctx, MODOS, MODOS_EN, prontos(MODOS_ES));
-  const L_SENS = en ? SENSIBILIDADE_EN : SENSIBILIDADE;
-  const L_BG = tr(ctx, MODOS_BG, MODOS_BG_EN, prontos(MODOS_BG_ES));
-  const simL = (v) => tr(ctx, v ? "sim" : "não", v ? "yes" : "no", v ? "sí" : "no");
+  const parte = String(args[0] ?? "").toLowerCase();
+  if (PARTES[parte]) return PARTES[parte](message, args.slice(1), ctx);
 
+  const { config, sendEmbed, COR, getServer, membroTemPermissao, PREFIXO: P } = ctx;
+  const lang = idiomaDe(ctx);
+  if (args.length) {
+    const ajuda = `\`${citar("help", lang, P)} ${citar("config", lang, "")}\``;
+    return sendEmbed(message.channel, { colour: COR.erro, description: tr(ctx,
+      `❓ \`${String(args[0]).slice(0, 30)}\` não é parte do config. ${ajuda}`,
+      `❓ \`${String(args[0]).slice(0, 30)}\` isn't part of config. ${ajuda}`,
+      `❓ \`${String(args[0]).slice(0, 30)}\` no es parte de config. ${ajuda}`) });
+  }
   const server = await getServer(message);
   if (!membroTemPermissao(message, server, "ManagePermissions")) {
-    return sendEmbed(message.channel, tr(ctx, {
-      title: "🚫 Permissão insuficiente",
-      description: "Você precisa da permissão **ManagePermissions** para ver as configurações.",
-      colour: COR.erro,
-    }, {
-      title: "🚫 Missing permission",
-      description: "You need the **ManagePermissions** permission to view the settings.",
-      colour: COR.erro,
-    }, {
-      title: "🚫 Permiso insuficiente",
-      description: "Necesitas el permiso **ManagePermissions** para ver la configuración.",
-      colour: COR.erro,
-    }));
+    return sendEmbed(message.channel, { colour: COR.erro, description: tr(ctx,
+      "🚫 Ver as configurações pede **ManagePermissions**.",
+      "🚫 Viewing the settings needs **ManagePermissions**.",
+      "🚫 Ver la configuración requiere **ManagePermissions**.") });
   }
-
-  const am  = config.automod;
-  const pol = am.punicao;
-  const lg  = config.log ?? { canalId: null, eventos: {} };
-
-  // Os dois idiomas lado a lado, linha por linha: com duas cópias separadas, o
-  // inglês tinha perdido a seção de tickets/webhooks/voz.
-  const T = (pt, enTxt, es) => tr(ctx, pt, enTxt, es);
-  const seg = (ms) => `${Math.round((ms ?? 0) / 100) / 10}s`;
-
-
-  // Os quatro grupos, cada um com as partes (o detalhe de cada parte é o do filtro de antes)
-  const modulos = Object.entries(GRUPOS_AUTOMOD).flatMap(([grupo, def]) => {
-    const st = estadoDoGrupo(am, grupo);
-    return [
-      `${st.ligadas === st.total ? "🟢" : st.ligadas ? "🟡" : "🔴"} **${nomeGrupo(grupo, lang)}** — ${T(def.pt, def.en, def.es ?? GRUPO_DESC_ES[grupo])} · ${st.ligadas}/${st.total}`
-        // punição própria do grupo (quando alguma parte não herda a geral)
-        + (() => { const ms = [...new Set(st.partes.map((x) => am[x.chave]?.punicao?.modo).filter(Boolean))]; return ms.length ? ` · ${T("punição", "punishment", "castigo")} ${ms.map((m) => `\`${nomeModo(m, lang)}\``).join("/")}` : ""; })(),
-      // as partes numa linha só (o detalhe de cada uma fica no `&automod <grupo>`)
-      `   ${st.partes.map((x) => `${x.ligada ? "✓" : "✗"} \`${nomeParte(x.parte, lang)}\``).join(" · ")}`,
-    ];
-  });
-
-  // ── Punição ──
-  const punicao = [
-    `${T("**Modo:**", "**Mode:**", "**Modo:**")} \`${nomeModo(pol.modo, lang)}\` — ${L_MODOS[pol.modo] ?? "?"}`,
-    pol.modo === "acumular"
-      ? `${T("**Escada:**", "**Ladder:**", "**Escalera:**")} ${escadaDePunicao(pol).map((d) => rotuloDegrau(d, lang)).join(" → ")}`
-      : null,
-    pol.modo === "acumular"
-      ? (validadeDosAvisos(pol)
-        ? T(`**Avisos vencem:** ${Math.round(validadeDosAvisos(pol) / 86_400_000)} dias sem um novo · **ruído:** 1º deslize = só um toque`,
-            `**Warnings expire:** ${Math.round(validadeDosAvisos(pol) / 86_400_000)} days without a new one · **noise:** 1st slip = just a heads-up`,
-            `**Los avisos vencen:** ${Math.round(validadeDosAvisos(pol) / 86_400_000)} días sin uno nuevo · **ruido:** 1.er desliz = solo un toque`)
-        : T("**Avisos vencem:** nunca · **ruído:** 1º deslize = só um toque", "**Warnings expire:** never · **noise:** 1st slip = just a heads-up", "**Los avisos vencen:** nunca · **ruido:** 1.er desliz = solo un toque"))
-      : null,
-    T("**Silêncio:** timeout nativo (precisa de **TimeoutMembers**)", "**Silence:** native timeout (needs **TimeoutMembers**)", "**Silencio:** timeout nativo (necesita **TimeoutMembers**)"),
-    `${T("**Sentinela — mais rígido com novatos:**", "**Sentinel — stricter with newcomers:**", "**Centinela — más estricto con los recién llegados:**")} ${am.antiScam.porAntiguidade !== false ? T("🟢 ligado", "🟢 on", "🟢 activado") : T("🔴 desligado", "🔴 off", "🔴 desactivado")}`,
-    `${T("**Sentinela — alerta à staff:**", "**Sentinel — staff alerts:**", "**Centinela — alerta al staff:**")} ${am.antiScam.alertarAdmin !== false ? T("🟢 ligado", "🟢 on", "🟢 activado") : T("🔴 desligado", "🔴 off", "🔴 desactivado")}`,
-    `${T("**Canal de avisos:**", "**Alert channel:**", "**Canal de alertas:**")} ${am.antiScam.alertChannelId ? `<#${am.antiScam.alertChannelId}>` : (config.log?.canalId ? T("_(o canal de logs)_", "_(the log channel)_", "_(el canal de registro)_") : T("_(nenhum — os alertas não são enviados)_", "_(none — alerts aren't sent)_", "_(ninguno — las alertas no se envían)_"))}`,
-  ].filter(Boolean);
-
-  // ── Canal de log ──
-  const logs = [
-    `${T("**Canal:**", "**Channel:**", "**Canal:**")} ${lg.canalId ? `<#${lg.canalId}>` : T("_(desativado)_", "_(disabled)_", "_(desactivado)_")}`,
-    // o nome da categoria é o que se digita em `&log <categoria> on|off` — vai como código
-    Object.keys(EVENTOS).map((k) => `${on(lg.eventos?.[k] !== false)} \`${nomeEventoLog(k, lang)}\``).join(" · "),
-  ];
-
-  // (2 out 2026) O RPG saiu do &config: ele é um mundo só, configurado pelo dono
-  // do bot — nada ali é ajuste deste servidor. Onde se joga é o &acesso; quem
-  // quer tirar o jogo daqui usa `&comando desativar game` (aparece nos comandos).
-  let ativas = T("_(nenhuma)_", "_(none)_", "_(ninguna)_");
-  try {
-    // Só quem tem aviso ou está silenciado AGORA (o registro antigo de quem
-    // já cumpriu o silêncio ficava aparecendo como "silenciado").
-    const agora = Date.now();
-    const linhas = db.getDb()
-      .prepare("SELECT userId, avisos, silenciado, silencioAte FROM punicoes WHERE serverId = ? AND (avisos > 0 OR silenciado = 1) ORDER BY avisos DESC LIMIT 5")
-      .all(serverId);
-    const vivas = linhas.map((p) => ({ ...p, calado: p.silenciado && (!p.silencioAte || p.silencioAte > agora) }))
-      .filter((p) => p.avisos > 0 || p.calado);
-    if (vivas.length) {
-      ativas = vivas.map((p) => `• <@${p.userId}> — ${p.avisos} ${T("aviso(s)", "warning(s)", "aviso(s)")}${p.calado ? T(" · 🔇 silenciado", " · 🔇 silenced", " · 🔇 silenciado") : ""}`).join("\n");
-    }
-  } catch { /* banco indisponível: segue sem essa seção */ }
-
-  // ── Lista de permitidos: domínios (anti-link) e convites (anti-invite) ──
-  const wlItens = [
-    ...(config.dominiosPermitidos ?? []).map((d) => `\`${d}\``),
-    ...(config.inviteWhitelist ?? []).map((cv) => `\`stt.gg/${cv}\``),
-    // (21 out 2026) os canais de divulgação: lá, convites podem
-    ...(config.automod?.antiInvite?.canaisLiberados ?? []).map((c) => `<#${c}> ${T("_(convites)_", "_(invites)_", "_(invitaciones)_")}`),
-  ];
-  const wl = wlItens.length ? wlItens.join(", ") : T("_(vazia)_", "_(empty)_", "_(vacía)_");
-
-  // ── O resto que o servidor configura (antes não aparecia aqui) ──
-  const nCargosNivel = (() => { try { return db.listarCargosNivel(serverId).length; } catch { return 0; } })();
-  const nFeeds = (() => { try { return db.listarFeeds(serverId).length; } catch { return 0; } })();
-  const nReacoes = (() => { try { return db.listReactionRolesServidor(serverId).length; } catch { return 0; } })();
-  const nFusos = config.fusos?.lista?.length ?? 0;
-  const vozAqui = servidorNaLista("TTS_SERVIDORES", serverId);
-  const nTickets = (() => { try { return db.listarTickets(serverId).length; } catch { return 0; } })();
-  const nGanchos = (() => { try { return db.listarGanchos(serverId).length; } catch { return 0; } })();
-
-  const recursos = [
-    `${T("**Idioma:**", "**Language:**", "**Idioma:**")} ${tr(ctx, "Português", "English", "Español")} — \`${citar("idioma", lang, PREFIXO)}\``,
-    `${on(config.xp?.enabled)} ${T("**Níveis (XP)**", "**Levels (XP)**", "**Niveles (XP)**")} — ${nCargosNivel} ${T("cargo(s) de nível", "level role(s)", "rol(es) de nivel")}${config.xp?.canalAnuncio ? ` · ${T("anúncio em", "announced in", "anuncio en")} <#${config.xp.canalAnuncio}>` : ""}`,
-    `${on(config.autorole?.roleId)} ${T("**Cargo automático**", "**Auto role**", "**Rol automático**")} — ${config.autorole?.roleId ? `<%${config.autorole.roleId}>` : T("_(nenhum)_", "_(none)_", "_(ninguno)_")}`,
-    `${on(nReacoes)} ${T("**Cargos por reação**", "**Reaction roles**", "**Roles por reacción**")} — ${nReacoes} ${T("regra(s)", "rule(s)", "regla(s)")}`,
-    `${on(config.rss?.canalId && nFeeds)} **RSS** — ${nFeeds} feed(s)${config.rss?.canalId ? ` → <#${config.rss.canalId}>` : T(" _(sem canal)_", " _(no channel)_", " _(sin canal)_")}`,
-    `${on(nFusos)} ${T("**Fusos horários**", "**Time zones**", "**Husos horarios**")} — ${nFusos}`,
-    (() => {
-      let nLoja = 0, circ = { t: 0, n: 0 };
-      try { nLoja = ecoLoja(serverId).length; circ = ecoCirc(serverId); } catch {}
-      const e = ecoConfigDe(config);
-      return `${on(circ.n || nLoja)} ${T("**Economia**", "**Economy**", "**Economía**")} — ${e.simbolo} ${e.nome} · ${circ.n} ${T("carteira(s)", "wallet(s)", "cartera(s)")} · ${nLoja} ${T("cargo(s) na loja", "role(s) in the shop", "rol(es) en la tienda")}`;
-    })(),
-  ];
-  const tickVoz = [
-    `${T("**Tickets:**", "**Tickets:**", "**Tickets:**")} ${config.tickets?.painel?.canalId ? `${T("painel", "panel", "panel")} <#${config.tickets.painel.canalId}> · ` : ""}${config.tickets?.logCanal ? `log <#${config.tickets.logCanal}> · ${nTickets} ${T("aberto(s)", "open", "abierto(s)")}${config.tickets?.cargoEquipe ? ` · ${T("equipe", "team", "equipo")} <%${config.tickets.cargoEquipe}>` : ""}` : T(`_(não configurado — \`${citarInterno("ticket", PREFIXO)} log #canal\`)_`, `_(not set up — \`${citarInterno("ticket", PREFIXO)} log #channel\`)_`, `_(sin configurar — \`${citar("ticket", "es", PREFIXO)} log #canal\`)_`)}`,
-    `**Webhooks:** ${nGanchos} ${T("gancho(s)", "hook(s)", "gancho(s)")} — \`${citar("webhook.lista", lang, PREFIXO)}\``,
-    `${T("**Voz e música:**", "**Voice and music:**", "**Voz y música:**")} ${!vozAqui
-      ? T("_indisponível neste servidor (quem libera é o dono do bot)_", "_not available on this server (the bot owner enables it)_", "_no disponible en este servidor (lo habilita el dueño del bot)_")
-      : config.tts?.ativo && config.tts?.canalVoz ? `🟢 <#${config.tts.canalVoz}>` : T(`🔴 fora da call — \`${citarInterno("entrar", PREFIXO)}\``, `🔴 not in a call — \`${citarInterno("entrar", PREFIXO)}\``, `🔴 fuera de la llamada — \`${citar("entrar", "es", PREFIXO)}\``)}`,
-  ];
-
-  await sendEmbed(message.channel, {
-    title: T("⚙️ Configurações deste servidor", "⚙️ This server's settings", "⚙️ Configuración de este servidor"),
-    description: [
-      T("**🛡 AutoMod — 4 grupos**", "**🛡 AutoMod — 4 groups**", "**🛡 AutoMod — 4 grupos**"),
-      ...modulos,
-      "",
-      T("**⚖️ Punição** *(vale para todos os grupos, se não tiverem a própria)*", "**⚖️ Punishment** *(applies to every group that doesn't have its own)*", "**⚖️ Castigo** *(vale para todos los grupos que no tengan uno propio)*"),
-      ...punicao,
-      "",
-      T("**📜 Canal de log**", "**📜 Log channel**", "**📜 Canal de registro**"),
-      ...logs,
-      "",
-      `${T("**✅ Lista de permitidos**", "**✅ Allow list**", "**✅ Lista de permitidos**")} _(\`${citarInterno("automod", PREFIXO)} whitelist\`)_`,
-      wl,
-      "",
-      T("**🌐 Lista global de banimentos**", "**🌐 Global ban list**", "**🌐 Lista global de bans**"),
-      `${T("**Modo:**", "**Mode:**", "**Modo:**")} \`${modoBanGlobal(config)}\` — ${L_BG[modoBanGlobal(config)]}`,
-      `${T("**Na lista:**", "**Listed:**", "**En la lista:**")} ${db.usuariosBanidosDistintos()} ${T("usuário(s) em", "user(s) in", "usuario(s) en")} ${db.totalBansGlobais()} ${T("registro(s)", "record(s)", "registro(s)")}`,
-      "",
-      T("**🎛 Comandos desativados**", "**🎛 Disabled commands**", "**🎛 Comandos desactivados**"),
-      (config.comandosDesativados?.length ? config.comandosDesativados.map((c) => `\`${c}\``).join(", ") : T("_(nenhum)_", "_(none)_", "_(ninguno)_")),
-      "",
-      T("**🚨 Punições ativas** *(top 5)*", "**🚨 Active punishments** *(top 5)*", "**🚨 Castigos activos** *(top 5)*"),
-      ativas,
-      "",
-      T("**🔐 Acesso aos comandos**", "**🔐 Command access**", "**🔐 Acceso a los comandos**"),
-      `${T("Cargos de staff:", "Staff roles:", "Roles de staff:")} ${config.acesso?.cargosStaff?.length ? config.acesso.cargosStaff.map((r) => `<%${r}>`).join(" ") : T("_(só permissões nativas)_", "_(native permissions only)_", "_(solo permisos nativos)_")}`,
-      `${T("Canais:", "Channels:", "Canales:")} ${(config.acesso?.canais?.modo ?? "todos") === "todos" ? T("qualquer um", "any", "cualquiera") : `\`${config.acesso.canais.modo}\` ${config.acesso.canais.lista?.length ? config.acesso.canais.lista.map((c) => `<#${c}>`).join(", ") : T("_(lista vazia)_", "_(empty list)_", "_(lista vacía)_")}`}`,
-      "",
-      T("**👋 Entrada e saída**", "**👋 Join and leave**", "**👋 Entrada y salida**"),
-      `${T("Boas-vindas:", "Welcome:", "Bienvenida:")} ${config.boasVindas?.ativo && config.boasVindas?.canalId ? `🟢 <#${config.boasVindas.canalId}>` : T("🔴 desligadas", "🔴 off", "🔴 desactivada")}`,
-      `${T("Despedida:", "Farewell:", "Despedida:")} ${config.adeus?.ativo && config.adeus?.canalId ? `🟢 <#${config.adeus.canalId}>` : T("🔴 desligada", "🔴 off", "🔴 desactivada")}`,
-      "",
-      T("**🧩 Recursos**", "**🧩 Features**", "**🧩 Funciones**"),
-      ...recursos,
-      "",
-      T("**🎫 Tickets · 🪝 Webhooks · 🔊 Voz**", "**🎫 Tickets · 🪝 Webhooks · 🔊 Voice**", "**🎫 Tickets · 🪝 Webhooks · 🔊 Voz**"),
-      ...tickVoz,
-      "",
-      ...(temIA(serverId) ? [
-        T("**🤖 IA (Judy)**", "**🤖 AI (Judy)**", "**🤖 IA (Judy)**"),
-        // (21 out 2026) o servidor escolhe: começam desligados
-        `${T("Chat:", "Chat:", "Chat:")} ${chatLigadoAqui(serverId, config) ? T("🟢 ligado", "🟢 on", "🟢 activado") : `${T("🔴 desligado", "🔴 off", "🔴 desactivado")} — \`${T(citarInterno("chat.on", PREFIXO), citarInterno("chat.on", PREFIXO), citar("chat.on", "es", PREFIXO))}\``}`,
-        `${T("Geração de imagem:", "Image generation:", "Generación de imágenes:")} ${imagemLigadaAqui(serverId, config) ? T("🟢 ligada", "🟢 on", "🟢 activada") : `${T("🔴 desligada", "🔴 off", "🔴 desactivada")} — \`${T(citarInterno("chat.imagem", PREFIXO), citarInterno("chat.imagem", PREFIXO), citar("chat.imagem", "es", PREFIXO))} on\``}`,
-        `${T("Conversa livre:", "Free chat:", "Conversación libre:")} ${config.chatLivre?.canais?.length ? config.chatLivre.canais.map((c) => `<#${c}>`).join(", ") + ` (${T("modo", "mode", "modo")} \`${config.chatLivre.modo ?? "relevante"}\`)` : T("_(desligada)_", "_(off)_", "_(desactivada)_")}`,
-        `${T("Comentários espontâneos:", "Spontaneous comments:", "Comentarios espontáneos:")} ${config.comentarioEspontaneo?.canalId ? `<#${config.comentarioEspontaneo.canalId}> (${T("até", "up to", "hasta")} ${config.comentarioEspontaneo.porDia ?? 4}/${T("dia", "day", "día")})` : T("_(desligados)_", "_(off)_", "_(desactivados)_")}`,
-        `${T("Moderação por IA:", "AI moderation:", "Moderación por IA:")} ${config.moderacaoIA?.ativa ? T("🟢 ativa", "🟢 active", "🟢 activa") : T("🔴 desligada", "🔴 off", "🔴 desactivada")}${config.moderacaoIA?.criterios ? "" : T(" _(sem critérios)_", " _(no criteria)_", " _(sin criterios)_")}`,
-        "",
-      ] : comandoIAPermitido("modia", serverId) ? [
-        // fora dos servidores da conversa, só a moderação por IA (16 out 2026)
-        T("**🤖 Moderação por IA**", "**🤖 AI moderation**", "**🤖 Moderación por IA**"),
-        `${T("Moderação por IA:", "AI moderation:", "Moderación por IA:")} ${config.moderacaoIA?.ativa ? T("🟢 ativa", "🟢 active", "🟢 activa") : T("🔴 desligada", "🔴 off", "🔴 desactivada")}${config.moderacaoIA?.criterios ? "" : T(" _(sem critérios)_", " _(no criteria)_", " _(sin criterios)_")}`,
-        "",
-      ] : []),
-      T("**🌐 Global** *(compartilhado entre servidores)*", "**🌐 Global** *(shared across servers)*", "**🌐 Global** *(compartido entre servidores)*"),
-      `Debug: ${simL(cfgGlobal.debug === true)} · ${T("Listas anti-link:", "Anti-link lists:", "Listas anti-link:")} ${cfgGlobal.linkBlocklistSources.length} ${T("fonte(s)", "source(s)", "fuente(s)")}, ${cfgGlobal.linkBlocklistManual.length} ${T("domínio(s) manual(is)", "manual domain(s)", "dominio(s) manual(es)")}`,
-      "",
-      T(`💡 Ajuste com \`${citarInterno("automod", PREFIXO)}\` (que reúne blocklist, whitelist, sentinela e punicao) e \`${citar("log", "pt", PREFIXO)}\` — \`${citarInterno("tutorial", PREFIXO)}\` mostra o caminho, \`${citarInterno("assistente", PREFIXO)}\` percorre com você.`,
-        `💡 Adjust with \`${citarInterno("automod", PREFIXO)}\` (holds blocklist, whitelist, sentinel and punishment) and \`${citar("log", "en", PREFIXO)}\` — \`${citarInterno("tutorial", PREFIXO)}\` shows the path, \`${citarInterno("assistente", PREFIXO)}\` walks it with you.`,
-        `💡 Ajusta con \`${citar("automod", "es", PREFIXO)}\` (que reúne blocklist, whitelist, centinela y castigo) y \`${citar("log", "es", PREFIXO)}\` — \`${citar("tutorial", "es", PREFIXO)}\` muestra el camino, \`${citar("assistente", "es", PREFIXO)}\` lo recorre contigo.`),
-    ].join("\n"),
+  const { linhas } = telaDoConfig(config, { lang, serverId: ctx.serverId, P: ctx.PREFIXO });
+  const titulo = tr(ctx, "⚙️ Configurações deste servidor", "⚙️ This server's settings", "⚙️ Configuración de este servidor");
+  // o espanhol sai pronto (a tradução da tela é feita para o inglês)
+  const marca = lang === "es" ? (t) => trechoPronto(t) : (t) => t;
+  return enviarPaginado(ctx, message.channel, {
+    paginas: paginarLinhas(linhas.map(marca), { titulo }),
+    autorId: message.authorId,
     colour: COR.info,
   });
+}
+
+// ── A tela inteira, gerada do padraoServidor ──
+// Devolve as linhas e os caminhos cobertos (o teste confere que são TODOS os do molde).
+const BANDEIRAS = ["enabled", "ativo", "ativa"];
+const ehObj = (v) => v && typeof v === "object" && !Array.isArray(v);
+const ID = /^[0-9A-Z]{20,32}$/;
+const ehCanal = (k) => /^(canal|canais|canaisLiberados|alertChannelId|logCanal|canalAnuncio|canalId|canalVoz|canalTexto|regrasCanal)$/.test(k);
+const ehCargo = (k) => /^(roleId|silenceRoleId|cargoEquipe|cargosStaff|cargos)$/.test(k);
+const visaoNoEnv = () => !!(process.env.LLM_MODEL_VISAO || process.env.MODELO_VISAO || process.env.LLM_MODEL_MODERACAO || process.env.MODELO_MODERACAO);
+
+export function telaDoConfig(config, { lang = "pt", serverId = null, P = "&" } = {}) {
+  const T = (pt, en, es) => (lang === "es" ? es : lang === "en" ? en : pt);
+  const cobertos = new Set();
+  const nada = "—";
+  const listaIds = (ids, f) => (ids.length ? ids.slice(0, 5).map(f).join(" ") + (ids.length > 5 ? ` +${ids.length - 5}` : "") : nada);
+
+  const valor = (cam, v) => {
+    const k = cam.at(-1);
+    if (v === undefined || v === null || v === "") {
+      if (k === "punicao") return T("a geral", "the global one", "el general");
+      // (P2) sem canal próprio, o alerta vai ao LOG (a tela antiga dizia "o canal da mensagem")
+      if (k === "alertChannelId") return config?.log?.canalId ? T("(o log)", "(the log)", "(el registro)") : T("— (sem log, não há alerta)", "— (no log, no alerts)", "— (sin registro, no hay alertas)");
+      return nada;
+    }
+    if (typeof v === "boolean") return v ? "🟢" : "🔴";
+    if (typeof v === "number") {
+      if (/Ms$/.test(k) || k === "cooldown") return `${Math.round(v / 100) / 10}s`;
+      if (k === "threshold" || k === "limiteZalgo") return `${Math.round(v * 100)}%`;
+      return String(v);
+    }
+    if (typeof v === "string") {
+      if (ehCanal(k) && ID.test(v)) return `<#${v}>`;
+      if (ehCargo(k) && ID.test(v)) return `<%${v}>`;
+      // (P2) o valor guardado é o nome interno (português): na tela, o nome do idioma (o que se digita)
+      const L = lang === "es" ? "es" : lang;
+      if (k === "modo" && cam[1] === "punicao") return `\`${nomeModo(v, L)}\``;
+      if (k === "modo" && cam[0] === "acesso") return `\`${subExibido("config.acesso", v, L)}\``;
+      if (k === "modo" && cam[0] === "chatLivre") return `\`${subExibido("config.ia", v, L)}\``;
+      if (k === "acao" && cam[1] === "antiAvatar") return `\`${nomeAcaoAvatar(v, L)}\``;
+      if (k === "sensibilidade" || k === "sensitivity") return `\`${nomeSens(v, L)}\``;
+      if (cam[2] === "acoes") return `\`${nomeAcaoTema(v, L)}\``;
+      if (k === "escada") return `\`${v.split(",").map((d) => (d.trim() === "aviso" ? T("aviso", "warn", "warn") : d.trim())).join(",")}\``;
+      if (v.length > 40) return T(`✓ (${v.length} caracteres)`, `✓ (${v.length} characters)`, `✓ (${v.length} caracteres)`);
+      return `\`${v}\``;
+    }
+    if (Array.isArray(v)) {
+      if (!v.length) return nada;
+      if (ehCanal(k) || (k === "lista" && cam[0] === "acesso")) return listaIds(v.filter((x) => typeof x === "string"), (x) => `<#${x}>`);
+      if (ehCargo(k)) return listaIds(v.filter((x) => typeof x === "string"), (x) => `<%${x}>`);
+      if (k === "comandosDesativados" || k === "livres" || k === "inviteWhitelist" || k === "dominiosPermitidos") return v.slice(0, 8).map((x) => `\`${String(x).slice(0, 30)}\``).join(" ") + (v.length > 8 ? ` +${v.length - 8}` : "");
+      return String(v.length);
+    }
+    if (ehObj(v)) {
+      if (k === "punicao") return v.modo ? `\`${nomeModo(v.modo, lang === "es" ? "es" : lang)}\`` : T("a geral", "the global one", "el general");
+      const n = Object.keys(v).length;
+      return n ? String(n) : nada;
+    }
+    return String(v);
+  };
+
+  // uma linha "rótulo valor · rótulo valor" com as folhas de um objeto (desce nos objetos de dentro)
+  const folhas = (cam, padrao, atual) => {
+    const partes = [];
+    for (const [k, p] of Object.entries(padrao)) {
+      const c = [...cam, k];
+      cobertos.add(c.join("."));
+      if (BANDEIRAS.includes(k)) continue;   // o 🟢/🔴 do começo da linha
+      const v = atual?.[k];
+      if (ehObj(p) && Object.keys(p).length && k !== "punicao") {
+        // um objeto com chaves conhecidas (os eventos do log, as ações dos assuntos): cada uma
+        const dentro = Object.entries(p).map(([k2]) => { cobertos.add([...c, k2].join(".")); return `${rotulo([...c, k2], lang)} ${valor([...c, k2], v?.[k2])}`; });
+        partes.push(`${rotulo(c, lang)}: ${dentro.join(", ")}`);
+        continue;
+      }
+      if (ehObj(p) && k === "punicao") for (const k2 of Object.keys(p)) cobertos.add([...c, k2].join("."));
+      // a punição própria de um módulo só aparece quando existe (sem ela, vale a geral, logo abaixo)
+      if (k === "punicao" && cam.length > 1 && !v) continue;
+      partes.push(`${rotulo(c, lang)} ${valor(c, v)}`);
+    }
+    return partes.join(" · ");
+  };
+  const bandeira = (padrao, atual) => { const k = BANDEIRAS.find((b) => b in padrao); return k ? (atual?.[k] === true ? "🟢" : "🔴") : "•"; };
+
+  // as partes que não funcionam sem o modelo de visão: nem ✓ nem 🟢 (estavam "ligadas" mortas)
+  const semVisao = !visaoNoEnv();
+  const morto = (cam) => semVisao && (cam === "automod.antiImagem" || cam === "automod.antiAvatar");
+
+  // as chaves cujo padrão depende do idioma do servidor (o módulo preenche): um resumo próprio
+  const resumoProprio = {
+    boasVindas: (v) => (v?.ativo && v?.canalId ? `🟢 <#${v.canalId}>` : "🔴"),
+    adeus: (v) => (v?.ativo && v?.canalId ? `🟢 <#${v.canalId}>` : "🔴"),
+    // a escolha do servidor (null = o padrão de quem hospeda): mostra o que vale de fato
+    ia: () => (!iaNoEnv(serverId) ? T("_indisponível neste servidor_", "_not available on this server_", "_no disponible en este servidor_")
+      : `${rotulo(["ia", "chat"], lang)} ${conversaAqui(serverId, config) ? "🟢" : "🔴"} · ${rotulo(["ia", "imagem"], lang)} ${imagemAqui(serverId, config) ? "🟢" : "🔴"}`),
+    economia: (v) => { const e = { ...ECO_PADRAO, ...(v ?? {}) }; return `${e.simbolo} ${v?.nome ?? T(ECO_PADRAO.nome, "Coin", "Moneda")} · +${e.ganhoMin}–${e.ganhoMax} / ${Math.round(e.intervaloMs / 60000)} min`; },
+  };
+
+  // o que não é chave de config mas mora junto (contagens do banco): no fim da linha da seção
+  const conta = (f) => { try { return f() ?? 0; } catch (e) { void e; return 0; } };
+  const extras = {
+    rss: () => ` · ${conta(() => db.listarFeeds(serverId).length)} feed(s)`,
+    xp: () => ` · ${T("cargos de nível", "level roles", "roles de nivel")} ${conta(() => db.listarCargosNivel(serverId).length)}`,
+    autorole: () => `\n🎭 **${T("Cargos por reação", "Reaction roles", "Roles por reacción")}** — ${conta(() => db.listReactionRolesServidor(serverId).length)} ${T("regra(s)", "rule(s)", "regla(s)")}`,
+    tickets: () => ` · ${T("abertos agora", "open now", "abiertos ahora")} ${conta(() => db.listarTickets(serverId).length)}`,
+  };
+  const linhas = [];
+  for (const [k, p] of Object.entries(padraoServidor)) {
+    const sec = SECOES[k];
+    const nome = sec?.[lang] ?? k;
+    const v = config?.[k];
+    cobertos.add(k);
+    if (resumoProprio[k]) {
+      for (const k2 of Object.keys(p)) cobertos.add(`${k}.${k2}`);
+      linhas.push(`${sec.emoji} **${nome}:** ${resumoProprio[k](v)}`);
+      continue;
+    }
+    if (k === CHAVE_IDIOMA) { linhas.push(`${sec.emoji} **${nome}:** ${({ pt: "Português", en: "English", es: "Español" })[v] ?? v}`); continue; }
+    if (!ehObj(p)) { linhas.push(`${sec.emoji} **${nome}:** ${valor([k], v)}`); continue; }
+    const temSubsecoes = Object.values(p).some((x) => ehObj(x) && BANDEIRAS.some((b) => b in x));
+    if (!temSubsecoes) {
+      // a voz só existe nos servidores de TTS_SERVIDORES: fora deles, nem 🟢 nem 🔴
+      const semVoz = k === "tts" && !servidorNaLista("TTS_SERVIDORES", serverId);
+      const b = semVoz ? "⚫" : bandeira(p, v);
+      const nota = semVoz ? ` ${T("_(indisponível neste servidor)_", "_(not available on this server)_", "_(no disponible en este servidor)_")}`
+        : k === "tts" && !(v?.ativo && v?.canalVoz) ? ` ${T(`_(fora da call — \`${citar("entrar", "pt", P)}\`)_`, `_(not in a call — \`${citar("entrar", "en", P)}\`)_`, `_(fuera de la llamada — \`${citar("entrar", "es", P)}\`)_`)}` : "";
+      linhas.push(`${sec.emoji}${b === "•" ? "" : ` ${b}`} **${nome}**${nota} — ${folhas([k], p, v)}${extras[k]?.() ?? ""}`);
+      continue;
+    }
+    // uma seção com módulos (o automod): cabeçalho, uma linha por módulo, e o resto numa linha
+    linhas.push("", `**${sec.emoji} ${nome}**`);
+    const resto = {};
+    for (const [k2, p2] of Object.entries(p)) {
+      const c = `${k}.${k2}`;
+      if (!(ehObj(p2) && BANDEIRAS.some((b) => b in p2))) { resto[k2] = p2; continue; }
+      cobertos.add(c);
+      const st = morto(c) ? "⚫" : bandeira(p2, v?.[k2]);
+      const extra = morto(c) ? ` ${T("_(sem o modelo de visão)_", "_(no vision model)_", "_(sin el modelo de visión)_")}` : "";
+      linhas.push(`${st} **${rotulo([k, k2], lang)}**${extra} — ${folhas([k, k2], p2, v?.[k2])}`);
+    }
+    if (Object.keys(resto).length) {
+      for (const [k2, p2] of Object.entries(resto)) {
+        const c = [k, k2];
+        cobertos.add(c.join("."));
+        if (ehObj(p2) && Object.keys(p2).length) linhas.push(`• **${rotulo(c, lang)}** — ${folhas(c, p2, v?.[k2])}`);
+        else linhas.push(`• **${rotulo(c, lang)}:** ${valor(c, v?.[k2])}`);
+      }
+    }
+    linhas.push("");
+  }
+  // as punições ativas agora (não é configuração, mas é o que a staff procura aqui)
+  try {
+    const agora = Date.now();
+    const vivas = db.getDb().prepare("SELECT userId, avisos, silenciado, silencioAte FROM punicoes WHERE serverId = ? AND (avisos > 0 OR silenciado = 1) ORDER BY avisos DESC LIMIT 5").all(serverId)
+      .map((x) => ({ ...x, calado: x.silenciado && (!x.silencioAte || x.silencioAte > agora) })).filter((x) => x.avisos > 0 || x.calado);
+    if (vivas.length) linhas.push("", `**🚨 ${T("Punições ativas", "Active punishments", "Castigos activos")}**`,
+      ...vivas.map((x) => `• <@${x.userId}> — ${x.avisos} ${T("aviso(s)", "warning(s)", "aviso(s)")}${x.calado ? T(" · 🔇 silenciado", " · 🔇 timed out", " · 🔇 silenciado") : ""}`));
+  } catch (e) { void e; /* banco fechado (testes de tela): segue sem a seção */ }
+  return { linhas: linhas.filter((l, i, a) => !(l === "" && (i === 0 || a[i - 1] === ""))), cobertos };
 }
 
 

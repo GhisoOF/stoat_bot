@@ -1,5 +1,6 @@
 
 import { buscar, explicarErroDeRede, ehTransitorio } from "./rede.js";
+import { pedirGithub } from "../../modulos/ai/github-api.js";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -70,11 +71,6 @@ const PROIBIDOS = [/\.env/i, /token/i, /secret/i, /senha/i, /password/i, /\.db$/
 const extDe = (p) => { const i = p.lastIndexOf("."); return i < 0 ? "" : p.slice(i).toLowerCase(); };
 const proibido = (p) => PROIBIDOS.some((re) => re.test(p));
 
-function cabecalhos() {
-  const h = { "Accept": "application/vnd.github+json", "User-Agent": "judy-ia" };
-  if (TOKEN) h["Authorization"] = `Bearer ${TOKEN}`;
-  return h;
-}
 
 // (31 out 2026, P1) O caminho vira URL segmento por segmento: `..` (ou `.`) não
 // passa — `contents/../../../../repos/X/Y/contents/a.js` lia OUTRO repositório com
@@ -85,25 +81,20 @@ export function caminhoParaApi(caminho) {
   return partes.map(encodeURIComponent).join("/");
 }
 
+// (P2) o pedido é o do cliente único (modulos/ai/github-api.js, o mesmo do bot);
+// aqui fica só o que dizer de um 404 (repo privado sem token, token vencido…)
+const doGithub = (caminho, sobre = "") => pedirGithub(caminho, { buscar, timeoutMs: 15000, limite: 8 * 1024 * 1024 })
+  .catch((e) => { throw e?.status === 404 ? erro404(sobre) : e; });
+
 async function api(caminho) {
   const seguro = caminhoParaApi(caminho);
   if (seguro === null) throw Object.assign(new Error("Caminho fora do repositório — não posso ler."), { amigavel: true });
-  const url = `https://api.github.com/repos/${REPO}/contents/${seguro}?ref=${encodeURIComponent(BRANCH)}`;
-  const r = await buscar(url, { headers: cabecalhos(), signal: AbortSignal.timeout(15000) });
-  if (r.status === 403) throw new Error("limite de requisições do GitHub atingido (adicione GITHUB_TOKEN).");
-  if (r.status === 404) throw erro404(caminho);
-  if (!r.ok) throw new Error(`GitHub HTTP ${r.status}`);
-  return r.json();
+  return doGithub(`/repos/${REPO}/contents/${seguro}?ref=${encodeURIComponent(BRANCH)}`, caminho);
 }
 
 // Árvore recursiva (uma chamada) — boa para listar e estatísticas.
 async function arvore() {
-  const url = `https://api.github.com/repos/${REPO}/git/trees/${BRANCH}?recursive=1`;
-  const r = await buscar(url, { headers: cabecalhos(), signal: AbortSignal.timeout(15000) });
-  if (r.status === 404) throw erro404();
-  if (r.status === 403) throw new Error("limite de requisições do GitHub atingido (adicione GITHUB_TOKEN).");
-  if (!r.ok) throw new Error(`GitHub HTTP ${r.status}`);
-  const data = await r.json();
+  const data = await doGithub(`/repos/${REPO}/git/trees/${encodeURIComponent(BRANCH)}?recursive=1`);
   return (data.tree || []).filter((n) => n.type === "blob" && !proibido(n.path));
 }
 

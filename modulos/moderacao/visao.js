@@ -8,7 +8,7 @@
 
 // (22 out 2026) IA visível onde ela EXISTE, com o chat ligado ou não: desde o opt-in
 // (21 out) o chat começa desligado, e o `&chat` — que o liga — sumia da ajuda
-import { iaDisponivel as temIA, comandoIAPermitido } from "../ai/chat.js";
+import { iaDisponivel as temIA } from "../ai/chat.js";
 import { servidorPermitido as temVoz } from "../ferramentas/tts.js";
 import { idDoNome, normalizarArgs } from "../core/aliases.js";
 
@@ -24,10 +24,8 @@ export async function quemVe(message, ctx) {
     } catch {}
   }
   const ia = (() => { try { return temIA(ctx.serverId); } catch { return false; } })();
-  // o &modia é moderação: aparece também fora dos servidores da conversa (16 out 2026)
-  const modIA = (() => { try { return comandoIAPermitido("modia", ctx.serverId); } catch { return false; } })();
   const voz = (() => { try { return temVoz(ctx.serverId); } catch { return false; } })();
-  return { nivel: dono ? "dono" : staff ? "staff" : "membro", ia, voz, modIA };
+  return { nivel: dono ? "dono" : staff ? "staff" : "membro", ia, voz };
 }
 
 // Nível de cada comando (e das partes que fogem do padrão do comando).
@@ -46,11 +44,12 @@ const MAPA = {
   entrar: { padrao: "membro" }, sair: { padrao: "membro" }, musica: { padrao: "membro" },
   chat: { padrao: "membro", subs: { on: "staff", off: "staff", imagem: "staff", comentar: "staff", livre: "staff", esquecer: "staff", projeto: "staff", espontaneo: "staff", "espontâneo": "staff" } },
   servidores: { padrao: "dono" },
-  banglobal: { padrao: "staff", subs: { esquecer: "dono", lembrar: "dono", add: "dono" } },
+  // (P2) a staff vê o modo, isenta e consulta o histórico; o resto é do dono do bot
+  banglobal: { padrao: "staff", subs: Object.fromEntries(["off", "avisar", "imediato", "consenso", "lista", "varrer", "revisar", "desfazer", "add", "esquecer", "lembrar", "ignorados", "bots"].map((s) => [s, "dono"])) },
   entretenimento: { padrao: "membro" },
   servidor: { padrao: "membro", subs: { "regras definir": "staff", "regras canal": "staff", "regras limpar": "staff", "faq add": "staff", "faq remover": "staff", "faq limpar": "staff" } },
 };
-export const SO_IA = new Set(["chat", "modia", "personalidade"]);
+export const SO_IA = new Set(["chat", "personalidade"]);
 export const SO_VOZ = new Set(["tts", "entrar", "sair", "musica"]);
 
 export function nivelDoComando(cmd, sub = "", sub2 = "") {
@@ -68,7 +67,7 @@ export function podeVer(visao, cmd, sub = "", sub2 = "") {
   cmd = idDoNome(cmd);
   if (sub && MAPA[cmd]?.subs) [sub = "", sub2 = ""] = normalizarArgs(cmd, [sub, sub2].filter(Boolean)).map((s) => String(s).toLowerCase());
   const r = recursoDoComando(cmd);
-  if (r === "ia" && !(cmd === "modia" ? (visao.modIA ?? visao.ia) : visao.ia)) return false;
+  if (r === "ia" && !visao.ia) return false;
   if (r === "voz" && !visao.voz) return false;
   return NIVEIS[visao.nivel] >= NIVEIS[nivelDoComando(cmd, sub, sub2)];
 }
@@ -104,9 +103,6 @@ export function filtrarLinhas(linhas, visao) {
   return saida.filter((l, i, a) => !(String(l).trim() === "" && String(a[i - 1] ?? "").trim() === ""));
 }
 
-export function temComandoVisivel(linhas, visao) {
-  return linhas.some((l) => { const m = String(l).match(RE_CMD); return m && podeVer(visao, m[1].toLowerCase(), (m[2] ?? "").toLowerCase(), (m[3] ?? "").toLowerCase()); });
-}
 
 // Tutorial: para quem é cada área
 export const AREAS_DO_MEMBRO = new Set(["rpg", "aventura", "economia", "ids"]);

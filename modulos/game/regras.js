@@ -272,9 +272,6 @@ export const IMPLANTES = {
   b_ceruleo_atr: { fam: "bio", cor: "ceruleo", papel: "atributo" },
   b_verde_atr:   { fam: "bio", cor: "verde",   papel: "atributo" },
 };
-export const REGIOES = { bracos: ["braços", "arms"], sistema: ["sistema", "operating system"], esqueleto: ["esqueleto", "skeleton"], pele: ["pele", "skin"],
-  nervoso: ["sistema nervoso", "nervous system"], pernas: ["pernas", "legs"], olhos: ["olhos", "eyes"], cortex: ["córtex", "cortex"],
-  circulatorio: ["circulatório", "circulatory"], musculos: ["músculos", "muscles"], maos: ["mãos", "hands"], imunologico: ["imunológico", "immune"] };
 export const ATR_DA_COR = { rubro: ["forca"], ambar: ["destreza"], ceruleo: ["inteligencia"], verde: ["vida", "resistencia"] };
 export const IMPL = { potencia: 4, reforco: (b) => 0.04 + 0.008 * b, atributo: 1.0, bio: 0.7, escBio: LETRA.B, resson: 0.25, req: 5 };
 // Um implante equipado: { id: <base em IMPLANTES>, raridade, mult (único: 1,2) }
@@ -498,8 +495,11 @@ export function resolverLuta(prev, aleatorio = Math.random) {
 // ── 8. Moeda: quem paga e quanto (D8, D12) ───────────────────────────────────
 // CONTRATO paga do BANCO (não cria moeda); DUNGEON paga do TESOURO dela, que se
 // renova — a única fonte de moeda nova. pago = alvo × f(x), x = estoque ÷ (alvo × K).
+// (P2, 31 out 2026) uma moeda só: perdaAoCair = a fração do ouro que se perde ao cair
+// (antes seguia o P do mercado, que saiu); revenda = quanto do preço o NPC paga pelo
+// item pior que vira ouro sozinho.
 export const ECO = { kBanco: 400, kDungeon: 50, valorCristal: 40, fracCristal: 0.25,
-  regenPorJogador: 3, capacidade: 1.5, gastoOuro: 0.8, gastoCristal: 0.3, voltaAoBanco: 0.5 };
+  regenPorJogador: 3, capacidade: 1.5, gastoOuro: 0.8, gastoCristal: 0.3, voltaAoBanco: 0.5, perdaAoCair: 0.1, revenda: 0.4 };
 export const alvoOuro = (n) => 60 * Math.pow(1.141, Math.max(1, n) - 1);
 export const alvoCristal = (n) => alvoOuro(n) * ECO.fracCristal / ECO.valorCristal;
 export const fEstoque = (x) => 2 * x / (1 + x);

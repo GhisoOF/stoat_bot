@@ -9,6 +9,12 @@ import * as filtro from "./tts-filtro.js";
 import { donosDoBot } from "../core/prioridade.js";
 import { canalDoServidor } from "../moderacao/pertence.js";
 import { descreverErro, registrarErro } from "../core/erros.js";
+import { erroDeUso, semPermissao } from "../core/saida.js";
+
+// (P2, 31 out 2026) o `&tts estado` refaz o teste do Piper (uma síntese de verdade) no
+// máximo uma vez a cada 10 min; no meio tempo, usa o diagnóstico guardado pelo serviço.
+const ESTADO_FORCAR_MS = 10 * 60_000;
+let ultimoEstadoForcado = 0;
 
 const VOZ_URL   = (process.env.VOZ_SERVICO_URL || "").replace(/\/$/, "");
 const VOZ_CHAVE = process.env.VOZ_CHAVE || "";
@@ -435,19 +441,17 @@ export async function cmdTts(message, args, ctx) {
   const resto = args.slice(1).join(" ").trim();
 
   if (!servidorPermitido(serverId)) {
-    return sendEmbed(message.channel, tr(ctx,
-      { title: "🚫 Indisponível aqui",
-        description: `A voz da Judy não está habilitada neste servidor.`, colour: COR.aviso },
-      { title: "🚫 Unavailable here",
-        description: `Judy's voice isn't enabled on this server.`, colour: COR.aviso },
-      { title: "🚫 No disponible aquí",
-        description: `La voz de Judy no está habilitada en este servidor.`, colour: COR.aviso }));
+    return sendEmbed(message.channel, { description: tr(ctx,
+      "🚫 A voz não está habilitada neste servidor.", "🚫 Voice isn't enabled on this server.", "🚫 La voz no está habilitada en este servidor."), colour: COR.aviso });
   }
 
   // ── estado (público) ──
   if (sub === "estado" || sub === "status" || sub === "saude" || sub === "health") {
     let saude = null, erroSaude = null;
-    try { saude = await chamar("/saude?forcar=1", null, "GET"); }   // o estado refaz o teste do Piper
+    // (P2, 31 out 2026) o teste do Piper (síntese de verdade) é refeito no máximo uma vez a
+    // cada ESTADO_FORCAR_MS; no meio tempo, o diagnóstico guardado pelo serviço
+    const forcar = Date.now() - ultimoEstadoForcado >= ESTADO_FORCAR_MS;
+    try { saude = await chamar(forcar ? "/saude?forcar=1" : "/saude", null, "GET"); if (forcar) ultimoEstadoForcado = Date.now(); }
     catch (e) { erroSaude = motivoDaVoz(e, ctx, message); }
     // (31 out 2026, P1) os detalhes técnicos (versão, Piper, biblioteca) são do dono do
     // bot; e as calls listadas são só as DESTE servidor (antes, as de todos)
@@ -463,7 +467,7 @@ export async function cmdTts(message, args, ctx) {
         tetoTxt(c, "pt"), tetoTxt(c, "en"), tetoTxt(c, "es"))}${(() => {
           const e = c.canalTexto ? filtro.estadoDoCanal(c.canalTexto) : null;
           return e?.silenciado ? ` · 🤫 ${Math.ceil(e.faltamMs / 1000)}s` : "";
-        })()} _(\`${tr(ctx, citarInterno("tts.filtro", PREFIXO), citarInterno("tts.filtro", PREFIXO), citar("tts.filtro", "es", PREFIXO))}\`)_`,
+        })()}`,
       "",
       `**${tr(ctx, "Serviço de voz", "Voice service", "Servicio de voz")}:** ${saude ? "🟢 ok" : `🔴 ${erroSaude}`}`,
     ];
@@ -485,10 +489,6 @@ export async function cmdTts(message, args, ctx) {
         ? con.map((x) => `<#${x.canalVoz}> (${x.falas} ${tr(ctx, "falas", "utterances", "frases")})`).join(", ")
         : "_—_"}`);
     }
-    linhas.push("", tr(ctx,
-      `_Não consegue entrar? \`${citarInterno("tts.diagnostico", PREFIXO)}\` diz em qual etapa trava._`,
-      `_Can't join? \`${citarInterno("tts.diagnostico", PREFIXO)}\` says at which step it jams._`,
-      `_¿No logras entrar? \`${citar("tts.diagnostico", "es", PREFIXO)}\` dice en qué paso se atasca._`));
     return sendEmbed(message.channel, {
       title: tr(ctx, "🔊 Estado da voz", "🔊 Voice status", "🔊 Estado de la voz"),
       description: linhas.join("\n"),
@@ -775,42 +775,17 @@ export async function cmdTts(message, args, ctx) {
 
   if (["reiniciar", "restart", "destravar", "reset"].includes(sub)) {
     if (!membroTemPermissao(message, await getServer(message).catch(() => null), "ManageMessages")) {
-      return sendEmbed(message.channel, tr(ctx,
-        { title: "🚫 Permissão insuficiente",
-          description: "Você precisa de **ManageMessages** para reiniciar a voz.", colour: COR.erro },
-        { title: "🚫 Missing permission",
-          description: "You need **ManageMessages** to restart the voice service.", colour: COR.erro },
-        { title: "🚫 Permiso insuficiente",
-          description: "Necesitas **ManageMessages** para reiniciar la voz.", colour: COR.erro }));
+      return semPermissao(ctx, message.channel, "ManageMessages");
     }
     filtro.limpar(c.canalTexto ?? null);
     try {
       const r = await chamar("/reiniciar", {});
       const falhaTxt = r?.ok ? "" : motivoDaVoz(new Error(r?.erro ?? "?"), ctx, message);
-      return sendEmbed(message.channel, tr(ctx,
-        { title: r?.ok ? "✅ Voz reiniciada" : "⚠️ Reiniciei, mas com problema",
-          description: r?.ok
-            ? `Saí de todas as calls e recriei a conexão.\n\nAgora: \`${citarInterno("entrar", PREFIXO)}\``
-            : `${falhaTxt}\n\nVeja \`${citarInterno("tts.estado", PREFIXO)}\`.`,
-          colour: r?.ok ? COR.sucesso : COR.aviso },
-        { title: r?.ok ? "✅ Voice restarted" : "⚠️ Restarted, but with a problem",
-          description: r?.ok
-            ? `I left every call and rebuilt the connection.\n\nNow: \`${citarInterno("entrar", PREFIXO)}\``
-            : `${falhaTxt}\n\nSee \`${citarInterno("tts.estado", PREFIXO)}\`.`,
-          colour: r?.ok ? COR.sucesso : COR.aviso },
-        { title: r?.ok ? "✅ Voz reiniciada" : "⚠️ Reinicié, pero con un problema",
-          description: r?.ok
-            ? `Salí de todas las llamadas y recreé la conexión.\n\nAhora: \`${citar("entrar", "es", PREFIXO)}\``
-            : `${falhaTxt}\n\nMira \`${citar("tts.estado", "es", PREFIXO)}\`.`,
-          colour: r?.ok ? COR.sucesso : COR.aviso }));
+      return sendEmbed(message.channel, { description: r?.ok
+        ? tr(ctx, "✅ Voz reiniciada.", "✅ Voice restarted.", "✅ Voz reiniciada.")
+        : `⚠️ ${falhaTxt}`, colour: r?.ok ? COR.sucesso : COR.aviso });
     } catch (e) {
-      return sendEmbed(message.channel, {
-        title: tr(ctx, "❌ Não consegui reiniciar", "❌ Couldn't restart", "❌ No pude reiniciar"),
-        description: `${motivoDaVoz(e, ctx, message)}\n\n${tr(ctx,
-          "O serviço de voz pode estar fora do ar — aí precisa de mão na máquina.",
-          "The voice service itself may be down — it needs a hand on the machine.",
-          "Puede que el servicio de voz esté caído — entonces hay que intervenir en la máquina.")}`,
-        colour: COR.erro });
+      return sendEmbed(message.channel, { description: `❌ ${motivoDaVoz(e, ctx, message)}`, colour: COR.erro });
     }
   }
 
@@ -1316,25 +1291,14 @@ export async function cmdTts(message, args, ctx) {
     if (!ehTom) {
       try { saude = await chamar("/saude", null, "GET"); }
       catch (e) {
-        return sendEmbed(message.channel, {
-          title: tr(ctx, "❌ O serviço de voz não respondeu", "❌ The voice service didn't answer", "❌ El servicio de voz no respondió"),
-          description: `${motivoDaVoz(e, ctx, message)}\n\n\`${tr(ctx, citarInterno("tts.estado", PREFIXO), citarInterno("tts.estado", PREFIXO), citar("tts.estado", "es", PREFIXO))}\``, colour: COR.erro });
+        return sendEmbed(message.channel, { description: `❌ ${motivoDaVoz(e, ctx, message)}`, colour: COR.erro });
       }
     }
     const opcoes = ehVoz ? (saude?.piper?.vozes ?? []) : (saude?.efeitos ?? []);
     const atual = ehVoz ? (c.voz ?? saude?.piper?.vozAtual) : (c.efeito ?? null);
 
     if (ehTom && !resto) {
-      return sendEmbed(message.channel, tr(ctx,
-        { title: "🎚️ Tom da voz",
-          description: `Agora: **${c.tom ?? 1}** _(1.0 = original)_\n\n\`${citarInterno("tts.tom", PREFIXO)} 1.05\` — sobe tom **e formantes** juntos, então uma voz masculina vira feminina de verdade. Se a base já é feminina, mexa pouco: acima de 1.05 soa infantil.\n\`${citarInterno("tts.tom", PREFIXO)} 1\` volta ao original.`,
-          colour: COR.info },
-        { title: "🎚️ Voice pitch",
-          description: `Currently: **${c.tom ?? 1}** _(1.0 = original)_\n\n\`${citarInterno("tts.tom", PREFIXO)} 1.05\` — raises pitch **and formants** together, so a male voice turns properly female. If the base voice is already female, go easy: above 1.05 it sounds childish.\n\`${citarInterno("tts.tom", PREFIXO)} 1\` restores the original.`,
-          colour: COR.info },
-        { title: "🎚️ Tono de la voz",
-          description: `Ahora: **${c.tom ?? 1}** _(1.0 = original)_\n\n\`${citar("tts.tom", "es", PREFIXO)} 1.05\` — sube el tono **y los formantes** juntos, así que una voz masculina se vuelve femenina de verdad. Si la base ya es femenina, cámbialo poco: por encima de 1.05 suena infantil.\n\`${citar("tts.tom", "es", PREFIXO)} 1\` vuelve al original.`,
-          colour: COR.info }));
+      return sendEmbed(message.channel, { description: `🎚️ **${c.tom ?? 1}**`, colour: COR.info });
     }
     if (!ehTom && !resto) {
       return sendEmbed(message.channel, {
@@ -1344,41 +1308,27 @@ export async function cmdTts(message, args, ctx) {
           "",
           opcoes.length ? opcoes.map((o) => (o === atual ? `**${o}**` : `\`${o}\``)).join(" · ")
             : tr(ctx, "_o serviço não listou nenhum_", "_the service listed none_", "_el servicio no listó ninguno_"),
-          "",
-          tr(ctx,
-            ehVoz ? `\`${citarInterno("tts.voz", PREFIXO)} <nome>\`` : `\`${citarInterno("tts.efeito", PREFIXO)} <nome>\` · \`${citarInterno("tts.efeito", PREFIXO)} nenhum\` tira`,
-            ehVoz ? `\`${citarInterno("tts.voz", PREFIXO)} <nome>\`` : `\`${citarInterno("tts.efeito", PREFIXO)} <nome>\` · \`${citarInterno("tts.efeito", PREFIXO)} nenhum\` tira`,
-            ehVoz ? `\`${citar("tts.voz", "es", PREFIXO)} <nombre>\`` : `\`${citar("tts.efeito", "es", PREFIXO)} <nombre>\` · \`${citar("tts.efeito", "es", PREFIXO)} none\` lo quita`),
         ].join("\n"), colour: COR.info });
     }
 
     if (!ehStaff) {
-      return sendEmbed(message.channel, tr(ctx,
-        { title: "🚫 Permissão insuficiente", description: "Você precisa de **ManageMessages**.", colour: COR.erro },
-        { title: "🚫 Missing permission", description: "You need **ManageMessages**.", colour: COR.erro },
-        { title: "🚫 Permiso insuficiente", description: "Necesitas **ManageMessages**.", colour: COR.erro }));
+      return semPermissao(ctx, message.channel, "ManageMessages");
     }
 
     if (ehTom) {
       const n = Number(String(resto).replace(",", "."));
       if (!Number.isFinite(n) || n < 0.5 || n > 2) {
-        return sendEmbed(message.channel, tr(ctx,
-          { title: "❌ Valor inválido", description: "Um número entre 0.5 e 2 — `1` é o original.", colour: COR.erro },
-          { title: "❌ Invalid value", description: "A number between 0.5 and 2 — `1` is the original.", colour: COR.erro },
-          { title: "❌ Valor no válido", description: "Un número entre 0.5 y 2 — `1` es el original.", colour: COR.erro }));
+        return erroDeUso(ctx, message.channel, "tts", "Um número entre 0.5 e 2.", "A number between 0.5 and 2.", "Un número entre 0.5 y 2.");
       }
       c.tom = n;
       salvarConfig?.();
-      return sendEmbed(message.channel, {
-        title: tr(ctx, "🎚️ Tom atualizado", "🎚️ Pitch updated", "🎚️ Tono actualizado"),
-        description: `**${n}**\n\n${tr(ctx, "Ouça:", "Hear it:", "Escúchalo:")} \`${tr(ctx, citarInterno("tts", PREFIXO), citarInterno("tts", PREFIXO), citar("tts", "es", PREFIXO))} ${tr(ctx, "testando um dois três", "testing one two three", "probando uno dos tres")}\``,
-        colour: COR.sucesso });
+      return sendEmbed(message.channel, { description: `🎚️ **${n}**`, colour: COR.sucesso });
     }
 
     const escolha = resto.toLowerCase();
     if (!ehVoz && ["nenhum", "none", "off", "limpar", "clear"].includes(escolha)) {
       c.efeito = null; salvarConfig?.();
-      return sendEmbed(message.channel, { title: tr(ctx, "🎛️ Efeito removido", "🎛️ Effect removed", "🎛️ Efecto quitado"), colour: COR.sucesso });
+      return sendEmbed(message.channel, { description: tr(ctx, "🎛️ Efeito removido.", "🎛️ Effect removed.", "🎛️ Efecto quitado."), colour: COR.sucesso });
     }
     const achado = opcoes.find((o) => String(o).toLowerCase() === escolha)
       ?? opcoes.find((o) => semAcento(String(o)) === semAcento(escolha));
@@ -1392,27 +1342,15 @@ export async function cmdTts(message, args, ctx) {
     }
     if (ehVoz) c.voz = achado; else c.efeito = achado;
     salvarConfig?.();
-    return sendEmbed(message.channel, {
-      title: ehVoz ? tr(ctx, "🎙️ Voz trocada", "🎙️ Voice changed", "🎙️ Voz cambiada") : tr(ctx, "🎛️ Efeito aplicado", "🎛️ Effect applied", "🎛️ Efecto aplicado"),
-      description: `**${achado}**\n\n${tr(ctx, "Ouça:", "Hear it:", "Escúchalo:")} \`${tr(ctx, citarInterno("tts", PREFIXO), citarInterno("tts", PREFIXO), citar("tts", "es", PREFIXO))} ${tr(ctx, "testando um dois três", "testing one two three", "probando uno dos tres")}\``,
-      colour: COR.sucesso });
+    return sendEmbed(message.channel, { description: `${ehVoz ? "🎙️" : "🎛️"} **${achado}**`, colour: COR.sucesso });
   }
 
   const talvez = quaseSubcomando(args);
   if (talvez) {
-    return sendEmbed(message.channel, tr(ctx, {
-      title: "🤔 Você quis dizer um comando?",
-      description: `\`${citarInterno("tts", PREFIXO)} ${args[0]}\` não é um subcomando — o mais parecido é \`${citarInterno("tts", PREFIXO)} ${talvez}\`.\n\nSe era mesmo para eu **falar** essa palavra, mande \`${citarInterno("tts", PREFIXO)} falar ${args[0]}\`.`,
-      colour: COR.aviso,
-    }, {
-      title: "🤔 Did you mean a command?",
-      description: `\`${citarInterno("tts", PREFIXO)} ${args[0]}\` isn't a subcommand — the closest one is \`${citarInterno("tts", PREFIXO)} ${talvez}\`.\n\nIf you really wanted me to **say** that word, send \`${citarInterno("tts", PREFIXO)} falar ${args[0]}\`.`,
-      colour: COR.aviso,
-    }, {
-      title: "🤔 ¿Querías decir un comando?",
-      description: `\`${citar("tts", "es", PREFIXO)} ${args[0]}\` no es un subcomando — el más parecido es \`${citar("tts", "es", PREFIXO)} ${talvez}\`.\n\nSi de verdad querías que **dijera** esa palabra, envía \`${citar("tts", "es", PREFIXO)} say ${args[0]}\`.`,
-      colour: COR.aviso,
-    }));
+    return sendEmbed(message.channel, { description: tr(ctx,
+      `🤔 \`${citarInterno("tts", PREFIXO)} ${talvez}\`?`,
+      `🤔 \`${citarInterno("tts", PREFIXO)} ${talvez}\`?`,
+      `🤔 \`${citar("tts", "es", PREFIXO)} ${talvez}\`?`), colour: COR.aviso });
   }
   // `falar` é a saída explícita: força a fala do que vier depois, mesmo que
   // pareça um comando.

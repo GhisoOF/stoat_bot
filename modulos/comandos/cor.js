@@ -1,4 +1,4 @@
-// &cor — cores e gradientes de cargo, painel de cores
+// &cor — cor sólida, gradiente ou preset num cargo; painel de cores; lista
 
 export default {
   id: "cor",
@@ -6,27 +6,41 @@ export default {
   funcao: "cmdCor",
   nomes: { en: "color" },
   apelidos: ["cores", "cargocor", "color", "colour"],
-  es: { nome: "color" },   // espanhol (etapa 4)
+  es: { nome: "color", subcomandos: { painel: "panel", criar: "crear", gerar: "generar", gradiente: "degradado", lista: "lista", remover: "quitar", limpar: "limpiar", padrao: "predeterminado", aqui: "aqui", ajuda: "ayuda" } },
   subcomandos: {
     painel: "panel", criar: "create", gerar: "generate", gradiente: "gradient", preset: "preset",
-    presets: "presets", lista: "list", cargos: "roles", remover: "remove", limpar: "clear",
+    presets: "presets", lista: ["list", "roles", "cargos"], remover: "remove", limpar: "clear",
     padrao: "default", aqui: "here", ajuda: "help",
   },
   aninhados: ["painel", "criar", "gerar"],
   gerenciavel: true,
   ajuda: {
+    grupo: "personalizar",
     perm: "ManageRole",
-    uso: { pt: "{&cor} <cargo> <cor|gradiente|preset>", en: "{&cor} <role> <color|gradient|preset>", es: "{&cor} <rol> <color|gradient|preset>" },
-    desc: { pt: "Customiza a cor dos cargos — inclusive com **gradiente**, que o cliente do Stoat não oferece na interface.\n\n**Sólida:** `{&cor} VIP #FF00AA` ou `{&cor} VIP roxo`\n**Gradiente:** `{&cor} VIP gradiente #FF0000 #0000FF` (aceita 2+ cores; um número no início vira o ângulo)\n**Pronto:** `{&cor} VIP preset vaporwave` — veja todos com `{&cor.presets}`\n**Automático:** `{&cor.painel.aqui}` — cria os cargos, publica a mensagem de escolha (mencionando os cargos), reage com os emojis, liga os cargos por reação e ativa o modo exclusivo. Tudo num comando. Vêm 10 cores sólidas e 20 gradientes (`{&cor.painel.aqui} solidas` ou `gradientes` para só um grupo).\n**Só os cargos:** `{&cor.criar}` — cria/pinta sem publicar nada\n**CSS na mão:** `{&cor} VIP linear-gradient(90deg, #f00 0%, #00f 100%)`\n**Limpar:** `{&cor} VIP remover` · **Ver:** `{&cor.lista}`\n\nO cargo pode ser pelo nome (mesmo parcial) ou pelo ID. O cargo do bot precisa de **ManageRole** e estar **acima** do cargo editado.", en: "Customizes role colors — including **gradients**, which the Stoat client doesn't offer in its UI.\n\n**Solid:** `{&cor} VIP #FF00AA` or `{&cor} VIP purple`\n**Gradient:** `{&cor} VIP gradient #FF0000 #0000FF` (2+ colors; a leading number sets the angle)\n**Preset:** `{&cor} VIP preset vaporwave` — see them all with `{&cor.presets}`\n**Automatic:** `{&cor.painel.aqui}` — creates the roles, posts the picker message (mentioning the roles), adds the emoji reactions, wires up reaction roles and enables exclusive mode. All in one command. It brings 10 solid colors and 20 gradients (`{&cor.painel.aqui} solid` or `gradients` for only one group).\n**Roles only:** `{&cor.criar}` — creates/paints without posting anything\n**Raw CSS:** `{&cor} VIP linear-gradient(90deg, #f00 0%, #00f 100%)`\n**Clear:** `{&cor} VIP remove` · **View:** `{&cor.lista}`\n\nThe role can be given by name (even partial) or by ID. The bot's role needs **ManageRole** and must sit **above** the edited role.", es: "Personaliza el color de los roles — incluso con **degradado**, que el cliente de Stoat no ofrece en su interfaz.\n\n**Sólido:** `{&cor} VIP #FF00AA` o `{&cor} VIP purple`\n**Degradado:** `{&cor} VIP gradient #FF0000 #0000FF` (acepta 2+ colores; un número al principio se vuelve el ángulo)\n**Predefinido:** `{&cor} VIP preset vaporwave` — míralos todos con `{&cor.presets}`\n**Automático:** `{&cor.painel.aqui}` — crea los roles, publica el mensaje para elegir (mencionando los roles), reacciona con los emojis, conecta los roles por reacción y activa el modo exclusivo. Todo en un comando. Trae 10 colores sólidos y 20 degradados (`{&cor.painel.aqui} solid` o `gradients` para un solo grupo).\n**Solo los roles:** `{&cor.criar}` — crea/pinta sin publicar nada\n**CSS a mano:** `{&cor} VIP linear-gradient(90deg, #f00 0%, #00f 100%)`\n**Quitar:** `{&cor} VIP remove` · **Ver:** `{&cor.lista}`\n\nEl rol se puede indicar por nombre (aunque sea parcial) o por ID. El rol del bot necesita **ManageRole** y estar **por encima** del rol editado." },
-    ex: { pt: "{&cor} VIP gradiente #FF71CE #01CDFE #05FFA1", en: "{&cor} VIP gradient #FF71CE #01CDFE #05FFA1", es: "{&cor} VIP gradient #FF71CE #01CDFE #05FFA1" },
-    parametros: [
-      { nome: { pt: "<cargo> <cor>", en: "<role> <color>", es: "<rol> <color>" }, desc: { pt: "cor sólida: `#FF00AA` ou um nome (`roxo`, `azul`…)", en: "solid color: `#FF00AA` or a name (`purple`, `blue`…)", es: "color sólido: `#FF00AA` o un nombre (`purple`, `blue`…)" } },
-      { nome: { pt: "<cargo> gradiente", en: "<role> gradient", es: "<rol> gradient" }, valor: { pt: "<cor> <cor> [...]", en: "<color> <color> [...]", es: "<color> <color> [...]" }, desc: { pt: "duas ou mais cores; um número no início vira o ângulo", en: "two or more colors; a leading number becomes the angle", es: "dos o más colores; un número al principio se vuelve el ángulo" } },
-      { nome: { pt: "<cargo> preset", en: "<role> preset", es: "<rol> preset" }, valor: { pt: "<nome>", en: "<name>", es: "<nombre>" }, desc: { pt: "paleta pronta (`{&cor.presets}` lista)", en: "ready-made palette (`{&cor.presets}` lists them)", es: "paleta predefinida (`{&cor.presets}` las lista)" } },
-      { nome: { pt: "<cargo> remover", en: "<role> remove", es: "<rol> remove" }, desc: { pt: "tira a cor", en: "removes the color", es: "quita el color" } },
-      { nome: { pt: "painel aqui", en: "panel here", es: "panel here" }, desc: { pt: "cria os cargos de cor (sólidas e gradientes), publica o painel, reage e liga os cargos por reação — tudo de uma vez. `solidas` ou `gradientes` no fim: só um grupo", en: "creates the color roles (solid and gradients), posts the panel, reacts and wires the reaction roles — all at once. `solid` or `gradients` at the end: only one group", es: "crea los roles de color (sólidos y degradados), publica el panel, reacciona y conecta los roles por reacción — todo de una vez. `solid` o `gradients` al final: solo un grupo" } },
-      { nome: { pt: "criar", en: "create", es: "create" }, desc: { pt: "só cria/pinta os cargos, sem publicar nada", en: "only creates/paints the roles, posts nothing", es: "solo crea/pinta los roles, sin publicar nada" } },
-      { nome: { pt: "lista | presets", en: "list | presets", es: "list | presets" }, desc: { pt: "o que existe", en: "what exists", es: "lo que hay" } },
-    ],
+    uso: { pt: "{&cor} <cargo> <cor> [cor…] | painel | lista", en: "{&cor} <role> <color> [color…] | panel | list", es: "{&cor} <rol> <color> [color…] | panel | list" },
+    desc: {
+      pt: "Pinta um cargo.\n\n`{&cor} VIP #FF00AA` — uma cor: sólida (hex ou nome: `roxo`)\n`{&cor} VIP #FF0000 #0000FF` — duas ou mais: gradiente (um número antes é o ângulo)\n`{&cor} VIP fogo` — um preset (`{&cor.presets}`)\n`{&cor} VIP remover` — volta à cor padrão\n`{&cor.painel.aqui}` — cria os cargos de cor e publica o painel para escolher por reação\n`{&cor.lista}` — os cargos e as cores\n\nO cargo: menção, nome exato ou ID; só cargos abaixo do seu.",
+      en: "Paints a role.\n\n`{&cor} VIP #FF00AA` — one color: solid (hex or name: `purple`)\n`{&cor} VIP #FF0000 #0000FF` — two or more: gradient (a number before them is the angle)\n`{&cor} VIP fire` — a preset (`{&cor.presets}`)\n`{&cor} VIP remove` — back to the default color\n`{&cor.painel.aqui}` — creates the color roles and posts the panel to pick by reaction\n`{&cor.lista}` — the roles and their colors\n\nThe role: mention, exact name or ID; only roles below yours.",
+      es: "Pinta un rol.\n\n`{&cor} VIP #FF00AA` — un color: sólido (hex o nombre: `purple`)\n`{&cor} VIP #FF0000 #0000FF` — dos o más: degradado (un número antes es el ángulo)\n`{&cor} VIP fire` — un predefinido (`{&cor.presets}`)\n`{&cor} VIP remove` — vuelve al color predeterminado\n`{&cor.painel.aqui}` — crea los roles de color y publica el panel para elegir por reacción\n`{&cor.lista}` — los roles y sus colores\n\nEl rol: mención, nombre exacto o ID; solo roles por debajo del tuyo.",
+    },
+    ex: { pt: "{&cor} VIP #FF71CE #01CDFE #05FFA1", en: "{&cor} VIP #FF71CE #01CDFE #05FFA1", es: "{&cor} VIP #FF71CE #01CDFE #05FFA1" },
+    paginas: {
+      painel: {
+        titulo: { pt: "cor painel", en: "color panel", es: "color panel" },
+        texto: {
+          pt: "`{&cor.painel.aqui}` — painel neste canal, com as 10 sólidas e os 20 gradientes\n`{&cor.painel} <#canal>` — em outro canal deste servidor\n`{&cor.painel.aqui} fogo gelo neon` — só essas cores · `solidas` · `gradientes` — só um grupo\n`{&cor.criar}` — só cria e pinta os cargos\n\nEscolher uma cor tira a anterior. Cargo com o nome da cor que **tem permissões** fica de fora.\n_O bot precisa de **ManageRole**, **React** no canal e estar acima dos cargos de cor._",
+          en: "`{&cor.painel.aqui}` — panel in this channel, with the 10 solid colors and 20 gradients\n`{&cor.painel} <#channel>` — in another channel of this server\n`{&cor.painel.aqui} fire ice neon` — only those colors · `solid` · `gradients` — only one group\n`{&cor.criar}` — only creates and paints the roles\n\nPicking a color removes the previous one. A role with the color's name that **has permissions** is left out.\n_The bot needs **ManageRole**, **React** in the channel and to sit above the color roles._",
+          es: "`{&cor.painel.aqui}` — panel en este canal, con los 10 sólidos y los 20 degradados\n`{&cor.painel} <#canal>` — en otro canal de este servidor\n`{&cor.painel.aqui} fire ice neon` — solo esos colores · `solid` · `gradients` — solo un grupo\n`{&cor.criar}` — solo crea y pinta los roles\n\nElegir un color quita el anterior. Un rol con el nombre del color que **tiene permisos** se deja fuera.\n_El bot necesita **ManageRole**, **React** en el canal y estar por encima de los roles de color._",
+        },
+      },
+      gradiente: {
+        titulo: { pt: "cor gradiente", en: "color gradient", es: "color gradient" },
+        texto: {
+          pt: "`{&cor} <cargo> #FF0000 #0000FF` — de uma cor à outra · `{&cor} <cargo> 45 vermelho azul` — com ângulo\n`{&cor} <cargo> linear-gradient(224deg, #73E696 50%, #F7EEB2 50%)` — CSS na mão\n\nO Stoat aceita: ângulo como `224deg`, paradas em `%` inteiro, cores em hex, `rgb()` ou nome, até **128 caracteres**, sem `hsl()`.",
+          en: "`{&cor} <role> #FF0000 #0000FF` — from one color to the other · `{&cor} <role> 45 red blue` — with an angle\n`{&cor} <role> linear-gradient(224deg, #73E696 50%, #F7EEB2 50%)` — raw CSS\n\nStoat accepts: angle as `224deg`, stops as whole `%`, colors in hex, `rgb()` or a name, up to **128 characters**, no `hsl()`.",
+          es: "`{&cor} <rol> #FF0000 #0000FF` — de un color a otro · `{&cor} <rol> 45 red blue` — con ángulo\n`{&cor} <rol> linear-gradient(224deg, #73E696 50%, #F7EEB2 50%)` — CSS a mano\n\nStoat acepta: ángulo como `224deg`, paradas en `%` enteros, colores en hex, `rgb()` o nombre, hasta **128 caracteres**, sin `hsl()`.",
+        },
+      },
+    },
   },
 };

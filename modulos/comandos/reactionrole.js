@@ -1,30 +1,41 @@
-// &reactionrole — cargos por reação
+// &reactionrole (&rr) — cargos por reação
 
 export default {
   id: "reactionrole",
   modulo: "../ferramentas/reaction-roles.js",
   funcao: "cmdReactionRole",
   apelidos: ["rr", "reactionroles"],
-  es: { nome: "reactionrole" },   // espanhol (etapa 4)
+  es: { nome: "reactionrole", subcomandos: { add: "add", remove: "quitar", list: "lista", exclusivo: "exclusivo", recarregar: "recargar", ordem: "orden" } },
+  // (P2) o conserto é automático no boot: `recarregar` e `ordem` ficam só como apelidos silenciosos
   subcomandos: {
-    exclusivo: "exclusive", unico: "unique", add: "add", remove: "remove", list: "list",
-    recarregar: "reload", reparar: "repair",
+    add: ["add", "adicionar"], remove: ["remove", "remover"], list: ["list", "lista"],
+    exclusivo: ["exclusive", "unico", "unique"], recarregar: ["reload", "reparar", "repair"], ordem: ["order", "reordenar"],
   },
-  aninhados: ["exclusivo", "unico"],
-  naTela: { ordem: "order" },   // o handler já aceita `order` e `reordenar`
+  aninhados: ["exclusivo"],
   gerenciavel: true,
   ajuda: {
+    grupo: "personalizar",
     perm: "ManageRole",
-    uso: "{&reactionrole} <add|remove|list>",
-    desc: { pt: "Cargos por reação: quem reagir com o emoji ganha o cargo; quem tirar a reação perde.\n\n`{&reactionrole.add} <mensagem> <emoji> <idCargo>`\n`{&reactionrole.remove} <mensagem>` — remove as regras daquela mensagem\n`{&reactionrole.exclusivo} <mensagem> on|off` — **on**: escolher um emoji troca o cargo anterior (ex.: cor); **off**: acumula (ex.: interesses)\n`{&reactionrole.recarregar}` — se os cargos pararem de ser entregues após um restart\n`{&reactionrole.list}` — regras deste servidor\n\n**A mensagem** pode ser o **ID** ou o **link** dela (menu `...` → *Copiar link*) — os dois funcionam.\n**O cargo** pode ser **mencionado** (`<%Cargo>`) ou o ID (Configurações → Cargos → *Copy role ID*).\n\nO bot precisa de `React`, `ViewChannel`, `ReadMessageHistory` e **AssignRoles**, e o cargo dele deve estar acima do cargo entregue.", en: "Reaction roles: whoever reacts with the emoji gets the role; removing the reaction removes the role.\n\n`{&reactionrole.add} <message> <emoji> <roleId>`\n`{&reactionrole.remove} <message>` — removes that message's rules\n`{&reactionrole.exclusivo} <message> on|off` — **on**: picking one emoji swaps out the previous role (e.g. colors); **off**: they stack (e.g. interests)\n`{&reactionrole.recarregar}` — if roles stop being handed out after a restart\n`{&reactionrole.list}` — this server's rules\n\n**The message** can be its **ID** or its **link** (`...` menu → *Copy link*) — both work.\n**The role** can be **mentioned** (`<%Role>`) or given by ID (Settings → Roles → *Copy role ID*).\n\nThe bot needs `React`, `ViewChannel`, `ReadMessageHistory` and **AssignRoles**, and its role must be above the role being handed out.", es: "Roles por reacción: quien reaccione con el emoji recibe el rol; quien quite la reacción lo pierde.\n\n`{&reactionrole.add} <mensaje> <emoji> <idDelRol>`\n`{&reactionrole.remove} <mensaje>` — elimina las reglas de ese mensaje\n`{&reactionrole.exclusivo} <mensaje> on|off` — **on**: elegir un emoji cambia el rol anterior (p. ej., colores); **off**: se acumulan (p. ej., intereses)\n`{&reactionrole.recarregar}` — si los roles dejan de entregarse tras un reinicio\n`{&reactionrole.list}` — reglas de este servidor\n\n**El mensaje** puede ser su **ID** o su **enlace** (menú `...` → *Copiar enlace*) — los dos funcionan.\n**El rol** puede **mencionarse** (`<%Rol>`) o indicarse por ID (Configuración → Roles → *Copy role ID*).\n\nEl bot necesita `React`, `ViewChannel`, `ReadMessageHistory` y **AssignRoles**, y su rol debe estar por encima del rol que entrega." },
-    ex: "{&reactionrole.add} https://stoat.chat/server/.../01ABC... 🎮 01XYZ...",
-    parametros: [
-      { nome: "add", valor: { pt: "<mensagem> <emoji> <cargo>", en: "<message> <emoji> <role>", es: "<mensaje> <emoji> <rol>" }, desc: { pt: "liga emoji → cargo. A mensagem pode ser o **link** (`...` → Copiar link) ou o ID", en: "wires emoji → role. The message can be the **link** (`...` → Copy link) or the ID", es: "vincula emoji → rol. El mensaje puede ser el **enlace** (`...` → Copiar enlace) o el ID" } },
-      { nome: "remove", valor: { pt: "<mensagem> <emoji>", en: "<message> <emoji>", es: "<mensaje> <emoji>" }, desc: { pt: "desfaz uma ligação", en: "undoes a wiring", es: "deshace un vínculo" } },
-      { nome: "list", desc: { pt: "tudo que está ligado neste servidor", en: "everything wired on this server", es: "todo lo que está vinculado en este servidor" } },
-      { nome: { pt: "exclusivo", en: "exclusive", es: "exclusive" }, valor: { pt: "<mensagem> on|off", en: "<message> on|off", es: "<mensaje> on|off" }, desc: { pt: "nessa mensagem só vale um cargo por vez (cor, time): escolher um troca o anterior", en: "only one role at a time on that message (color, team): picking one swaps the previous", es: "en ese mensaje solo vale un rol a la vez (color, equipo): elegir uno cambia el anterior" } },
-      { nome: { pt: "recarregar", en: "reload", es: "reload" }, desc: { pt: "se os cargos pararam de ser dados depois de um reinício. Também **repõe** emojis que sumiram do painel (entram no fim da fila)", en: "if roles stopped being handed out after a restart. It also **puts back** emojis that vanished from the panel (they go to the end of the row)", es: "si los roles dejaron de entregarse tras un reinicio. También **repone** los emojis que desaparecieron del panel (entran al final de la fila)" } },
-      { nome: { pt: "ordem", en: "order", es: "order" }, valor: { pt: "<mensagem> confirmar", en: "<message> confirm", es: "<mensaje> confirm" }, desc: { pt: "recompõe o painel na ordem configurada. Limpa as reações de todos e reage de novo, uma a uma — os cargos ficam, só o ✓ some. Painel grande leva ~1s por emoji: o Stoat só aceita 15 requisições por janela", en: "rebuilds the panel in the configured order. Clears everyone's reactions and reacts again one by one — roles stay, only the ✓ goes. A big panel takes ~1s per emoji: Stoat only accepts 15 requests per window", es: "rehace el panel en el orden configurado. Borra las reacciones de todos y vuelve a reaccionar una a una — los roles se mantienen, solo desaparece el ✓. Un panel grande tarda ~1 s por emoji: Stoat solo acepta 15 peticiones por ventana" } },
-    ],
+    uso: { pt: "{&reactionrole} add|remove|list|exclusivo", en: "{&reactionrole} add|remove|list|exclusive", es: "{&reactionrole} add|quitar|lista|exclusivo" },
+    desc: {
+      pt: "Quem reage com o emoji ganha o cargo; quem tira a reação perde.\n\n`{&reactionrole.add} <mensagem> <emoji> <cargo>` — a mensagem pelo link ou ID; o cargo por menção, nome ou ID (abaixo do seu)\n`{&reactionrole.remove} <mensagem> [emoji]`\n`{&reactionrole.list}`\n`{&reactionrole.exclusivo} <mensagem> on|off` — um cargo por vez nessa mensagem (escolher um troca o anterior)",
+      en: "Whoever reacts with the emoji gets the role; removing the reaction takes it away.\n\n`{&reactionrole.add} <message> <emoji> <role>` — the message by link or ID; the role by mention, name or ID (below yours)\n`{&reactionrole.remove} <message> [emoji]`\n`{&reactionrole.list}`\n`{&reactionrole.exclusivo} <message> on|off` — one role at a time on that message (picking one swaps the previous)",
+      es: "Quien reacciona con el emoji recibe el rol; quien quita la reacción lo pierde.\n\n`{&reactionrole.add} <mensaje> <emoji> <rol>` — el mensaje por enlace o ID; el rol por mención, nombre o ID (por debajo del tuyo)\n`{&reactionrole.remove} <mensaje> [emoji]`\n`{&reactionrole.list}`\n`{&reactionrole.exclusivo} <mensaje> on|off` — un rol a la vez en ese mensaje (elegir uno cambia el anterior)",
+    },
+    ex: { pt: "{&reactionrole.list}", en: "{&reactionrole.list}", es: "{&reactionrole.list}" },
+    paginas: {
+      exclusivo: {
+        titulo: {
+          pt: "reactionrole exclusivo",
+          en: "reactionrole exclusivo",
+          es: "reactionrole exclusive",
+        },
+        texto: {
+          pt: "Define se a pessoa pode acumular os cargos daquela mensagem ou se escolher\num **troca** o anterior.\n\n`{&reactionrole.exclusivo} <mensagem> on` — troca (cor, idade, time)\n`{&reactionrole.exclusivo} <mensagem> off` — acumula (interesses, jogos)\n\nNo modo exclusivo o bot também **tira a reação antiga** da pessoa, para o\npainel refletir a escolha atual.\n\n_A mensagem pode ser o ID ou o link. Ela precisa já ter regras registradas._",
+          en: "Sets whether a person can stack that message's roles or whether picking one\n**swaps** the previous.\n\n`{&reactionrole.exclusivo} <message> on` — swaps (color, age, team)\n`{&reactionrole.exclusivo} <message> off` — stacks (interests, games)\n\nIn exclusive mode the bot also **removes the old reaction**, so the panel\nreflects the current choice.\n\n_The message can be its ID or link. It must already have rules registered._",
+          es: "Define si una persona puede acumular los roles de ese mensaje o si elegir uno\n**sustituye** al anterior.\n\n`{&reactionrole.exclusivo} <mensaje> on` — sustituye (color, edad, equipo)\n`{&reactionrole.exclusivo} <mensaje> off` — acumula (intereses, juegos)\n\nEn el modo exclusivo el bot también **quita la reacción antigua**, para que el panel\nrefleje la elección actual.\n\n_El mensaje puede ser su ID o su enlace. Debe tener ya reglas registradas._",
+        },
+      },
+    },
   },
 };

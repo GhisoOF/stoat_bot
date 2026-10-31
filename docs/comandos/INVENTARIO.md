@@ -4,7 +4,7 @@ Gerado por `INVENTARIO=1 node testes.mjs comandos-17out` — **não edite à mã
 reestruturação dos comandos num registro central (fase 0). A suíte `comandos-17out` compara o bot com o
 `inventario.json` desta pasta: nome que some ou muda de destino faz o teste falhar.
 
-**42 comandos · 165 nomes · 923 subcomandos em inglês · 294 telas de ajuda · 717 exemplos executados**
+**42 comandos · 165 nomes · 923 subcomandos em inglês · 294 telas de ajuda · 721 exemplos executados**
 
 ## Comandos
 
@@ -25,7 +25,7 @@ reestruturação dos comandos num registro central (fase 0). A suíte `comandos-
 | `entrar` | `join` | `entrar` | `call` `join` | `entrar` | — | 2 |
 | `entretenimento` | `entertainment` | `entretenimiento` | `ent` `entertainment` `entretenimiento` `entreterimento` `fun` | `cmdEntretenimento` | sim | 50 |
 | `fuso` | `timezone` | `huso` | `clock` `fusos` `hora` `huso` `timezone` `timezones` `tz` | `cmdFuso` | sim | 10 |
-| `game` | `game` | `juego` | `character` `juego` `personagem` `rpg` | `cmdGame` | sim | 48 |
+| `game` | `game` | `juego` | `character` `juego` `personagem` `rpg` | `cmdGame` | sim | 52 |
 | `help` | `help` | `ayuda` | `ajuda` `ayuda` | `cmdHelp` | — | 140 |
 | `kick` | — | `expulsar` | `expulsar` | `cmdKick` | sim | 6 |
 | `limpar` | `purge` | `limpiar` | `clear` `limpiar` `purge` | `cmdLimpar` | sim | 8 |

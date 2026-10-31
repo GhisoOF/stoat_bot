@@ -16404,10 +16404,14 @@ await t("espanhol (etapa 4b): o RPG mostra builds, raridades e o catálogo em es
   assert.deepEqual(["comum", "raro"].map((r) => TL.raridade(r, "en")), ["Common", "Rare"]);
   const es = await servidorNovo("es");
   await say("&game criar Kael", es);
-  const b = (await say("&game build", es)).texto;
+  // (31 out 2026, P2.5) `build` sozinho é a montagem (em espanhol); a lista é `build lista`
+  const mont = (await say("&game build", es)).texto;
+  for (const n of ["Atributos:", "Equipo:", "Hechizos:", "Aliados:"]) assert.ok(mont.includes(n), n);
+  assert.doesNotMatch(mont, /Attributes|Gear|Spells|Allies/);
+  const b = (await say("&game build lista", es)).texto;
   for (const n of ["**Guerrero**", "**Paladín**", "**Pícaro**", "**Marine espacial**", "**Afortunado**"]) assert.ok(b.includes(n), n);
   assert.doesNotMatch(b, /Warrior|Rogue|Lucky/);
-  const en = (await say("&game build", await servidorNovo("en"))).texto;
+  const en = (await say("&game build list", await servidorNovo("en"))).texto;
   for (const n of ["**Warrior**", "**Paladin**", "**Rogue**"]) assert.ok(en.includes(n), n);
 });
 await t("espanhol (etapa 4b): `&idioma es` não diz mais que as respostas saem em inglês", async () => {
@@ -22006,7 +22010,8 @@ await t("★ os nomes antigos que saíram respondem uma linha (pt/en/es); os aut
 });
 await t("★ apelidos: contratos/dungeon/especial → missão; recrutas/followers → aliado; loja/catalogo → comprar; classe → build; ranking → top", () => {
   for (const [a, s] of [["contratos", "missao"], ["dungeon", "missao"], ["especiais", "missao"], ["coop", "missao"], ["chefes", "chefe"], ["recrutas", "aliado"], ["followers", "aliado"],
-    ["contratar", "aliado"], ["loja", "comprar"], ["catalogo", "comprar"], ["classe", "build"], ["ranking", "top"], ["itens", "ficha"], ["carteira", "ficha"], ["magias", "ficha"], ["perfil", "ficha"], ["pvp", "duelo"]]) assert.equal(game.subDe(a), s, a);
+    ["contratar", "aliado"], ["loja", "comprar"], ["catalogo", "comprar"], ["classe", "build"], ["ranking", "top"], ["itens", "build"], ["carteira", "ficha"], ["magias", "build"], ["perfil", "ficha"], ["pvp", "duelo"], ["builds", "build"]]) assert.equal(game.subDe(a), s, a);
+  // (31 out 2026, P2.5) itens e magias (o que a pessoa leva) agora abrem a montagem da build
 });
 await t("★ subcomando desconhecido: uma linha + `&help game` — nunca busca pessoa pelo nome", async () => {
   assert.equal(await jogar(ANA, "Fulano"), "❌\nSubcomando desconhecido — `&help game`.");
@@ -22338,18 +22343,31 @@ await t("★ o catálogo inteiro tem nome em espanhol (itens, aliados, magias, m
 });
 await t("★ as telas do jogo num servidor em espanhol saem em espanhol (nada em inglês)", async () => {
   const ruins = [];
-  for (const c of ["", "build", "comprar", "aliado", "top", "apagar", "mercado", "pontos", "xyz", "criar", "missao", `duelo <@${CAU}> 5`, "duelo cancelar"]) {
+  for (const c of ["", "build", "build lista", "comprar", "aliado", "top", "apagar", "mercado", "pontos", "xyz", "criar", "missao", `duelo <@${CAU}> 5`, "duelo cancelar"]) {
     descansar(EVA);
     const r = await jogar(EVA, c, { lang: "es" });
     if (emIngles(r)) ruins.push(`${c}: ${r.slice(0, 120)}`);
   }
   assert.deepEqual(ruins, []);
-  const bes = await jogar(EVA, "build", { lang: "es" }), ben = await jogar(EVA, "build", { lang: "en" });
+  // (31 out 2026, P2.5) `build` sozinho virou a montagem; a lista é `build lista` (mesma exigência sobre ela)
+  const bes = await jogar(EVA, "build lista", { lang: "es" }), ben = await jogar(EVA, "build list", { lang: "en" });
   for (const n of ["Pícaro", "Paladín", "Guerrero", "Marine espacial", "Afortunado"]) assert.ok(bes.includes(n), n);
   for (const n of ["Rogue", "Paladin", "Warrior", "Marksman", "Lucky"]) assert.ok(ben.includes(n), n);
   assert.ok(!/Warrior|Rogue|Lucky/.test(bes));
 });
 
+await t("★ `&game build` sem nada mostra a montagem da SUA build (atributos, equipamento, magias, aliados); `lista`/`builds` mostram as 18 (P2.5)", async () => {
+  descansar(EVA);
+  const r = await jogar(EVA, "build");
+  for (const s of ["Atributos:", "Equipamento:", "Magias:", "Aliados:"]) assert.ok(r.includes(s), `${s}\n${r}`);
+  assert.match(r, /mão 1: \S+ /, "a arma do kit aparece na vaga");
+  assert.doesNotMatch(r, /➡️/, "não é a lista");
+  for (const w of ["build lista", "builds"]) {
+    const lst = await jogar(EVA, w);
+    assert.equal((lst.match(/\*\*[^*]+\*\* — /g) ?? []).length, 18, w);
+  }
+  assert.equal(await jogar(EVA, "itens"), r, "itens → a montagem");
+});
 console.log("\n── a wiki (paginasWikiRpg), gerada dos dados ──");
 await t("★ pt/en/es: as mesmas páginas, título e texto, sem marca crua, e o espanhol em espanhol", () => {
   const p = W.paginasWikiRpg("pt"), e = W.paginasWikiRpg("en"), s = W.paginasWikiRpg("es");

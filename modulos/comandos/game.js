@@ -16,10 +16,10 @@ const SUB = {
       es: "Crea el personaje: kit inicial, dos aliados y la build Guerrero (cámbiala con {&game.build}). El nombre es obligatorio y lo ve todo el mundo — sin menciones, enlaces ni formato, hasta 32 letras." },
     ex: "{&game.criar} Kael" },
   build: {
-    uso: { pt: "{&game.build} [build]", en: "{&game.build} [build]", es: "{&game.build} [build]" },
-    desc: { pt: "Sem nome, lista as builds. Com nome, troca: os pontos voltam e se redistribuem, o equipamento e as magias se refazem para ela. Pontos, equipamento e magias são sempre automáticos.",
-      en: "Without a name, lists the builds. With one, switches: points come back and are spent again, gear and spells are redone for it. Points, gear and spells are always automatic.",
-      es: "Sin nombre, lista las builds. Con nombre, la cambia: los puntos vuelven y se reparten de nuevo, el equipo y los hechizos se rehacen para ella. Puntos, equipo y hechizos son siempre automáticos." },
+    uso: { pt: "{&game.build} [lista|build]", en: "{&game.build} [list|build]", es: "{&game.build} [lista|build]" },
+    desc: { pt: "Sem nada, mostra como a **sua** build está montada: atributos, equipamento, magias e aliados. `lista` (ou `&game builds`) mostra as builds. Com o nome de uma, troca: os pontos voltam e se redistribuem, o equipamento e as magias se refazem para ela. Pontos, equipamento e magias são sempre automáticos.",
+      en: "On its own, shows how **your** build is put together: attributes, gear, spells and allies. `list` (or `&game builds`) shows the builds. With a build's name, switches: points come back and are spent again, gear and spells are redone for it. Points, gear and spells are always automatic.",
+      es: "Sola, muestra cómo está armada **tu** build: atributos, equipo, hechizos y aliados. `lista` (o `&game builds`) muestra las builds. Con el nombre de una, la cambia: los puntos vuelven y se reparten de nuevo, el equipo y los hechizos se rehacen para ella. Puntos, equipo y hechizos son siempre automáticos." },
     ex: "{&game.build} paladino" },
   missao: {
     uso: { pt: "{&game.missao} [@amigos]", en: "{&game.missao} [@friends]", es: "{&game.missao} [@amigos]" },
@@ -29,9 +29,9 @@ const SUB = {
     ex: "{&game.missao}" },
   chefe: {
     uso: { pt: "{&game.chefe} [@amigos]", en: "{&game.chefe} [@friends]", es: "{&game.chefe} [@amigos]" },
-    desc: { pt: "O próximo chefe do seu nível. Feito para 4 jogadores: chame amigos como na missão. 24 h por pessoa, por chefe.",
-      en: "The next boss for your level. Made for 4 players: call friends like in a mission. 24 h per person, per boss.",
-      es: "El próximo jefe de tu nivel. Hecho para 4 jugadores: llama a amigos como en la misión. 24 h por persona, por jefe." },
+    desc: { pt: "O próximo chefe do seu nível. Feito para 4 jogadores: chame amigos como na missão. 1 h por pessoa, por chefe.",
+      en: "The next boss for your level. Made for 4 players: call friends like in a mission. 1 h per person, per boss.",
+      es: "El próximo jefe de tu nivel. Hecho para 4 jugadores: llama a amigos como en la misión. 1 h por persona, por jefe." },
     ex: "{&game.chefe}" },
   comprar: {
     uso: { pt: "{&game.comprar} [número|item]", en: "{&game.comprar} [number|item]", es: "{&game.comprar} [número|objeto]" },

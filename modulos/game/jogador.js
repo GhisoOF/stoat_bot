@@ -13,7 +13,7 @@ import * as E from "./era.js";
 import { ERA } from "./era.js";
 import { LISTA as BUILDS, PADRAO, acharBuild, buildDe } from "./builds.js";
 import { ajustarParty, recrutar, resumoVazio, entregarItem } from "./lutas.js";
-import { T, cmd, nomeBuild, descBuild, nomeItem, nomeAliado, classeAliado, emojiClasse, emojiRaridade, fmt, pct, barra, CATALOGO_ES } from "./telas.js";
+import { T, cmd, nomeBuild, descBuild, nomeItem, nomeAliado, classeAliado, emojiClasse, emojiRaridade, fmt, pct, barra, CATALOGO_ES, atributo, emojiAtributo, nomeMagia } from "./telas.js";
 
 const semAcento = (t) => String(t ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
 
@@ -78,11 +78,41 @@ export async function criar({ args, eu, l, P, COR, responder, erro }) {
   return responder({ ...f, title: `🎉 ${nome}`, colour: COR.sucesso });
 }
 
+// ── A montagem da build (P2.5, pedido do Ghieh): atributos, equipamento, magias e
+// aliados, tudo o que a build escolheu sozinha ────────────────────────────────
+const VAGAS = [
+  ["mao1", "🗡️", "mão 1", "hand 1", "mano 1"], ["mao2", "🛡️", "mão 2", "hand 2", "mano 2"],
+  ["capacete", "⛑️", "cabeça", "head", "cabeza"], ["armadura", "🥋", "corpo", "body", "cuerpo"],
+  ["acessorio1", "💍", "acessório", "accessory", "accesorio"], ["acessorio2", "💍", "acessório", "accessory", "accesorio"], ["acessorio3", "💍", "acessório", "accessory", "accesorio"],
+  ["bio1", "🧬", "bio", "bio", "bio"], ["bio2", "🧬", "bio", "bio", "bio"], ["bio3", "🧬", "bio", "bio", "bio"],
+  ["ciber1", "🦾", "ciber", "cyber", "ciber"], ["ciber2", "🦾", "ciber", "cyber", "ciber"], ["ciber3", "🦾", "ciber", "cyber", "ciber"],
+];
+export function montagem(p, l, COR) {
+  const b = buildDe(p), party = CB.partyDe(ERA, p.userId, p), eq = party.eq ?? db.getEquipado(ERA, p.userId);
+  const attr = party.attr ?? Object.fromEntries(R.ATR.map((k) => [k, p[k] ?? 0]));
+  const atr = R.ATR.map((k) => `${emojiAtributo(k)} ${atributo(k, l)} **${Math.round(attr[k] ?? 0)}**`).join(" · ");
+  const vagas = VAGAS.filter(([v]) => eq[v]).map(([v, e, pt, en, es]) => `${e} ${T(l, pt, en, es)}: ${emojiRaridade(eq[v].raridade)} ${nomeItem(eq[v], l)}`);
+  const magias = (party.doGrimorio ?? []).map((m) => nomeMagia(m, l));
+  const aliados = (party.companheiros ?? []).map((c) => `${emojiClasse(c.cat.classe)} ${nomeAliado(c.cat, l)}`);
+  const vazio = T(l, "_nenhum_", "_none_", "_ninguno_");
+  const L = [
+    `**${T(l, "Atributos", "Attributes", "Atributos")}:** ${atr}`,
+    `**${T(l, "Equipamento", "Gear", "Equipo")}:**`, ...(vagas.length ? vagas : [vazio]),
+    `**${T(l, "Magias", "Spells", "Hechizos")}:** ${magias.length ? magias.join(" · ") : vazio}`,
+    `**${T(l, "Aliados", "Allies", "Aliados")}:** ${aliados.length ? aliados.join(" · ") : vazio}`,
+  ];
+  return { title: `${b.emoji} ${nomeBuild(b, l)} — ${p.nome}`, description: L.join("\n"), colour: COR.info };
+}
+// "lista" em pt/en/es (e `&game builds`): as 18 builds
+const LISTAR = new Set(["lista", "list", "listar", "todas", "all", "builds", "classes"]);
+
 // ── build ────────────────────────────────────────────────────────────────────
-export async function build({ args, eu, p, l, P, COR, responder, erro }) {
+export async function build({ args, eu, p, l, P, COR, responder, erro, palavra }) {
   const pedido = args.slice(1).join(" ").trim();
   const atual = buildDe(p);
-  if (!pedido) {
+  // (P2.5) sem nada: como a SUA build está montada; `lista` (ou `&game builds`): as builds
+  if (!pedido && !LISTAR.has(palavra)) return responder(montagem(p, l, COR));
+  if (!pedido || LISTAR.has(semAcento(pedido))) {
     const L = BUILDS.map((b) => `${b.id === atual.id ? "➡️" : b.emoji} **${nomeBuild(b, l)}** — ${descBuild(b, l)}`);
     return responder({ title: T(l, "🧭 Builds", "🧭 Builds", "🧭 Builds"), colour: COR.info, description: L.join("\n") });
   }

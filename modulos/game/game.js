@@ -60,8 +60,12 @@ const HANDLERS = {
 export const SUBCOMANDOS = Object.keys(HANDLERS);
 // Os nomes de antes que ainda têm para onde ir (a ajuda mostra só o nome principal)
 export const APELIDOS = {
-  perfil: "ficha", status: "ficha", itens: "ficha", inventario: "ficha", "inventário": "ficha", mochila: "ficha", item: "ficha",
-  carteira: "ficha", saldo: "ficha", magia: "ficha", magias: "ficha", grimorio: "ficha", "grimório": "ficha", historia: "ficha", "história": "ficha", energia: "ficha",
+  perfil: "ficha", status: "ficha",
+  // (P2.5) o que a pessoa leva (itens, magias) está na montagem da build
+  itens: "build", inventario: "build", "inventário": "build", mochila: "build", item: "build", equipamento: "build", equipo: "build", gear: "build",
+  magia: "build", magias: "build", grimorio: "build", "grimório": "build", hechizos: "build", spells: "build",
+  builds: "build", classes: "build", montagem: "build",
+  carteira: "ficha", saldo: "ficha", historia: "ficha", "história": "ficha", energia: "ficha",
   moedas: "ficha", story: "ficha",
   novo: "criar", comecar: "criar", "começar": "criar", start: "criar", crear: "criar",
   classe: "build",
